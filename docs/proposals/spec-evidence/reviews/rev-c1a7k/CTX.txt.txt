@@ -1,0 +1,22 @@
+C1 (branch wip/spec-c1-audit) round 7, written by Codex. Base eb046cec7 (seven gates pass) -> head f6f3683ff. Files: ConcreteSpec/Spec/Exec.lean and ConcreteSpec/Proofs/Exec.lean.
+
+The round carries out the owner's Q-SUBJ decision of 2026-11-09, option (a), which is quoted in PROMPT.md. The owner's words: "ok tell me again the options choose the best long term options for everything". Under the decision:
+- inductive-relation subjects are allowed, with a same-signature inductive mutant;
+- `step_deterministic` and `step_silent_deterministic` become Representation lemmas;
+- determinism is proved over independently specified operational rules;
+- the held Step/Steps/AnswerStep laws are released, and their N2 results wait for a gate change by another worker.
+
+The writer reports:
+- 42 operational rules (`Rules`, with the auxiliary judgments `Arguments`, `Registered` and `Destination`);
+- correspondence with `step`/`AnswerStep`/`Step` in both directions;
+- determinism by rule inversion (`rules_deterministic`, `rules_silent_deterministic`);
+- inductive Planted evidence for the other 34 released Laws.
+
+Check, with the best long-term design as the only standard:
+- Independence. The rules and the auxiliary judgments must be specified without `step`, its continuation, `evalArgs`, `register`, `bindLife`, `bindDst` or any other executable function, so that determinism is not obtained by construction. Report any constructor premise that calls an executable function whose result decides the transition, and whether that is acceptable (for example, a pure operand oracle from `Operands`) or the by-construction shortcut again.
+- The correspondence theorems are complete in both directions and exact (a bijection on transitions at the same granularity).
+- `rules_deterministic` and `rules_silent_deterministic` are proved by inversion on the rules, not by going through `step`.
+- No existing Law about Step/Steps was weakened or restated without need, and the meaning of `step` is unchanged.
+- The inductive mutants (for example `CoreEvidence.CompetingRules`) have exactly the subject's type and are premise-preserving.
+- Vacuity of every Law in ConcreteSpec/Proofs/Exec.lean, with a verdict and witness each.
+- For each Helper or Representation lemma marked approved: PENDING (16), an explicit APPROVE or REJECT by fully qualified name, with the reason.

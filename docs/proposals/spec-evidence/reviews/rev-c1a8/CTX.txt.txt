@@ -1,0 +1,9 @@
+C1 (branch wip/spec-c1-audit) round 8, written by Codex. Base 7031e101c (round 7 with its regenerated axioms golden; seven gates pass) -> head f18c2d546.
+
+The round records approvals and nothing else. It replaces `(approved: PENDING)` with `(approved: REV-C1-agy-f6f3683ff)` on the 20 Helper and Representation lemma declarations that an independent, contract-valid agy review of round 7 approved. That review is quoted in PROMPT.md.
+
+Check:
+- every replaced reference sits on a declaration that review approves, matched by fully qualified name and tag line;
+- no other text changed;
+- no PENDING remains in ConcreteSpec/Proofs/Exec.lean or ConcreteSpec/Proofs/Scalar.lean.
+Also re-audit the determinism Laws ConcreteSpec.Core.Exec.rules_deterministic and ConcreteSpec.Core.Exec.rules_silent_deterministic, and the independence of the Rules relation from the executable step function, and report any defect.

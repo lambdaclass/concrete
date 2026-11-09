@@ -1,0 +1,50 @@
+Implemented all round-3 items in five commits. All six review findings are addressed, eight approvals recorded, and all 19 blocked cases now have paired evidence. Preferences 4–6 were applied to cover calls, capability violations, execution failures and status bounds, and to name main’s containment postcondition.
+
+Counts: **94 Laws, 98 Instances, 109 Planted examples**; changes are +12, +16 and +43 respectively. Two pre-existing exemptions remain PENDING. No Laws were weakened or reclassified.
+
+Each restatement preserves the old universal guarantee. Below, `H` denotes the original premises and `G` the original conclusion; the new quantifiers belong to a named conclusion predicate.
+
+| Law | Old → new statement | Instance/Planted case |
+|---|---|---|
+| `exec_ne_outOfFuel` | `Exec … o ⊢ o ≠ outOfFuel` → `∀ o, Exec … o → o ≠ outOfFuel` | `return` |
+| `exec_deterministic` | `h₁, h₂ ⊢ o₁ = o₂` → `h₁ ⊢ ∀ o₂, h₂ → o₁ = o₂` | `return` |
+| `Borrow.ok_det` | `h ⊢ ∀ Γ₂, Ok … Γ₂ → Γ₁ = Γ₂` → same quantified formula inside `UniqueContext` | `read` |
+| `Borrow.ok_keeps_locked` | `H ⊢ locked lookup preserved` → `∀ Γ′, H → locked lookup preserved` | `otherRootRead` |
+| `Borrow.excl_untouched` | `H ⊢ exclusive place untouched` → `∀ ss Γ′, H → exclusive place untouched` | `otherRootRead` |
+| `Borrow.open_mut_freezes_root` | `H ⊢ old root untouched in body` → `∀ body rest q Γ′, H → G` | `writeThroughView` |
+| `Borrow.noWrite_sound` | `H ⊢ NoWrite r Γ → ¬ WritesRoot r Γ ss` → `∀ ss Γ′, H → G` | `readOnly` |
+| `Borrow.shared_open_grants_no_write` | `H ⊢ body cannot write root` → `∀ body rest q Γ′, H → G` | `readThroughView` |
+| `Borrow.range_open_mut_freezes_root` | `H ⊢ old root untouched` → `∀ body els rest Γ′ q, H → G` | `writeThroughView` |
+| `Borrow.fresh_not_used` | `H ⊢ absent name unused` → `∀ ss Γ′, H → G` | `readOtherName` |
+| `Borrow.view_not_used_after` | `H ⊢ ¬ FreeUse v rest` → `∀ body rest Γ′, H → G` | `writeThroughView` |
+| `Brand.reset_requires_no_old` | `H ⊢ no old-brand heap binding` → `∀ Γ a′ a β′ rest Γ′ β, H → G` | `reset` |
+| `Brand.reset_refuses_old` | `H ⊢ brand mismatch and use/free refusal` → `∀ Γ a′ a β′ rest Γ′ hv βh, H → G` | `otherLiveBrand` |
+| `Brand.run_inv` | `Run s ss s′ ⊢ Inv s → Inv s′` → `∀ s′, Run s ss s′ → Inv s → Inv s′` | `firstAllocation` |
+| `Brand.reset_fresh_nodup` | `Run init prog s′ ⊢ s′.gen.Nodup` → `∀ s′, Run init prog s′ → s′.gen.Nodup` | `firstAllocation` |
+| `Cleanup.reg_inv` | `Reg live st ⊢ RegInv live st` → `∀ st, Reg live st → RegInv live st` | `registeredStack` |
+| `Cleanup.defer_cleanup_releases_before` | `H ⊢ dependent call precedes dependency` → `∀ st e fs d da, H → G` | `allocatorDependency` |
+| `Cleanup.defer_cleanup_releases_nodup` | `H ⊢ exited targets are unique` → `∀ st e fs, H → G` | `returnStack` |
+| `Cleanup.defer_cleanup_releases_needs` | `H ⊢ dependencies unconsumed and available` → `∀ st e fs pre post d r, H → G` | `loanSource` |
+
+These cases use `AnyExec`, `PermissiveBorrow`, `PermissiveOk`, `PermissiveRun` and `AnyRegistration` respectively. Every original concrete derivation remains as a specialization example.
+
+The ten checker correspondence Laws each have a `checkerNameAccepted` Instance and matching `rejectCheckerName` mutant. Representation evidence covers `twoBytes`, `negativeSigned` (`i16 -2`) and `emptyStruct`, including every declared representation subject. Authority adds `polymorphicCalls`; observation’s `literal` case adds `stuckRun` and `overflowStatus`.
+
+Validation at `8601f966a`:
+
+- Prescribed build: **PASS**
+- Rules: **32 passed**
+- Trust-ban: **23 passed**, checking 590 examples
+- Eleven-module N2: **FAIL** — 32 known subject-kind failures, 14 known false-discharge failures, two PENDING approvals, and cascades: 12 missing-instance, 14 unpaired-planted, 14 planted-proposition. **No other independent failures remain.**
+
+Commits:
+
+- `adf3d640e` — checker and integer representation evidence
+- `31966a452` — authority calls and observation subjects
+- `dedf70458` — nineteen quantified contracts
+- `f462a6c95` — nineteen inductive counterexamples
+- `8601f966a` — complete encoder coverage and formatting
+
+QUESTIONS: No new language decisions. The coordinator’s assumed-yes authorization remains pending owner confirmation; the known gate defects and two exemption approvals remain external blockers.
+
+Full details and witness mappings: [_review/ROUND3_RESULTS.txt](_review/ROUND3_RESULTS.txt). Worktree clean; no push, reviewers or git notes.

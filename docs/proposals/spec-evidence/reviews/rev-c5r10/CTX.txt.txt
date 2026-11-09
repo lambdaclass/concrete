@@ -1,0 +1,16 @@
+C5 (branch wip/spec-c5) round 10, written by agy. Base cc0bed24 (round 9 with its regenerated axioms golden; seven gates pass) -> head 6efdce61. Files: ConcreteSpec/Proofs/Grant.lean and ConcreteSpec/Proofs/Own.lean.
+
+The round acts on a contract-valid Codex review of round 9 (REV-C5-codex-a76584c6, quoted in PROMPT.md with the round brief). That review found three major REAL DEFECTs, all of them gate workarounds:
+- custom Decidable instances and their overrides;
+- manual Eq.rec/Decidable.rec eliminators;
+- five reducible conclusion predicates.
+It also rejected approvals carried over to reshaped proofs, and it accepted the folding of 60 helpers and the 4 promoted Laws.
+
+The writer reports that all three workarounds are removed and that every Helper is restored to its 902ce88a approved form, with 132 approvals kept and 0 PENDING. It also reports that N2 now shows only the gate-defect findings and their cascade: instance-false-discharge 60, instance-application 5, and the cascade missing-instance 64, planted-proposition 65, unpaired-planted 65. Those N2 results are expected until the gates worker fixes the gate.
+
+Check, with the best long-term design as the only standard:
+- No workaround remains: no custom decision procedures or instance overrides, no manual recursor proofs of impossible branches, and no gate-oriented reducible predicates.
+- Each formerly rejected Helper (step_det_next_inv, step_det_none_inv, acceptedMove_checkerAccepted_inv, primFrameStuck_checkerAccepted_inv, bindMove_checkerAccepted_inv) now matches exactly what APPR-C5-codex-902ce88a approved, apart from the accepted folding. If not, its approval reference is wrong.
+- Every remaining approval sits on a declaration the approval review approved, in its approved form.
+- The folding and the promoted Laws are still as the round-9 review accepted them.
+- Vacuity of every Law in the two files, with a verdict and witness each.

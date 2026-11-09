@@ -1,0 +1,114 @@
+No REAL DEFECT or PREFERENCE findings. The changes remove the gate workarounds and restore direct conclusions and ordinary constructor inversion; representative restored proofs are at ConcreteSpec/Proofs/Own.lean:3667-3690,4103-4151.
+
+No files were modified. No network connections, builds, gates, or Git writes were performed. Exact historical proof equality could not be independently verified: this archive contains neither Git metadata nor the original approval snapshot.
+
+All 74 Laws pass the stated source-level vacuity convention: one classification per theorem, no projection Law, closed full Instance applications, and corresponding Planted propositions retaining the hypotheses with subject substitution at the exact arguments. This is a source audit, not an elaboration result.
+
+Each range below contains the Instance and its Planted witness.
+
+Namespace: ConcreteSpec.Core.Generative.
+
+| Law | Verdict | Witness |
+|---|---|---|
+| fresh_preserves | PASS | ConcreteSpec/Proofs/Grant.lean:498-504 |
+| depend_preserves | PASS | ConcreteSpec/Proofs/Grant.lean:506-512 |
+| consume_preserves | PASS | ConcreteSpec/Proofs/Grant.lean:514-520 |
+| release_preserves | PASS | ConcreteSpec/Proofs/Grant.lean:522-528 |
+| reset_preserves | PASS | ConcreteSpec/Proofs/Grant.lean:530-536 |
+| endScope_preserves | PASS | ConcreteSpec/Proofs/Grant.lean:538-544 |
+| allocations_have_live_allocator | PASS | ConcreteSpec/Proofs/Grant.lean:642-654 |
+| run_erasure | PASS | ConcreteSpec/Proofs/Grant.lean:693-700 |
+| lifetime_retired_step | PASS | ConcreteSpec/Proofs/Grant.lean:837-843 |
+| retired_never_revives | PASS | ConcreteSpec/Proofs/Grant.lean:845-851 |
+| fresh_nominal | PASS | ConcreteSpec/Proofs/Grant.lean:853-873 |
+| lifetime_wf | PASS | ConcreteSpec/Proofs/Grant.lean:978-984 |
+| scope_exit_lifetime | PASS | ConcreteSpec/Proofs/Grant.lean:986-996 |
+
+Namespace: ConcreteSpec.Core.Grants.
+
+| Law | Verdict | Witness |
+|---|---|---|
+| issue_keeps_dead | PASS | ConcreteSpec/Proofs/Grant.lean:1461-1467 |
+| narrow_bounded | PASS | ConcreteSpec/Proofs/Grant.lean:1469-1475 |
+| acquire_bounded | PASS | ConcreteSpec/Proofs/Grant.lean:1477-1484 |
+| close_bounded | PASS | ConcreteSpec/Proofs/Grant.lean:1486-1494 |
+| rights_never_grow | PASS | ConcreteSpec/Proofs/Grant.lean:1496-1502 |
+| narrow_fresh | PASS | ConcreteSpec/Proofs/Grant.lean:1504-1510 |
+| acquire_fresh | PASS | ConcreteSpec/Proofs/Grant.lean:1512-1518 |
+| close_fresh | PASS | ConcreteSpec/Proofs/Grant.lean:1520-1528 |
+| close_consumes | PASS | ConcreteSpec/Proofs/Grant.lean:1538-1545 |
+| narrow_consumes | PASS | ConcreteSpec/Proofs/Grant.lean:1547-1554 |
+| consumed_never_revives | PASS | ConcreteSpec/Proofs/Grant.lean:1556-1565 |
+| acquire_keeps_parent | PASS | ConcreteSpec/Proofs/Grant.lean:1585-1593 |
+| narrow_permissions | PASS | ConcreteSpec/Proofs/Grant.lean:1618-1632 |
+
+Namespace: ConcreteSpec.Core.Own.
+
+| Law | Verdict | Witness |
+|---|---|---|
+| move_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4565-4570 |
+| reinitialize_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4572-4577 |
+| borrow_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4579-4584 |
+| reborrowTo_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4586-4591 |
+| reborrow_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4593-4598 |
+| endLoan_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4600-4605 |
+| bind_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4621-4626 |
+| drop_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4628-4633 |
+| enter_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4635-4640 |
+| endLocals_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4642-4647 |
+| leave_no_activation_slot | PASS | ConcreteSpec/Proofs/Own.lean:4754-4759 |
+| leave_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4649-4654 |
+| enterDown_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4656-4661 |
+| life_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4663-4668 |
+| enter_progress | PASS | ConcreteSpec/Proofs/Own.lean:4848-4855 |
+| adoptDown_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4670-4675 |
+| passDown_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4677-4682 |
+| passDown_call_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4684-4689 |
+| callLife_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4691-4696 |
+| callLife_call_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4698-4703 |
+| leave_no_local_loan | PASS | ConcreteSpec/Proofs/Own.lean:4745-4750 |
+| passOwner_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4705-4710 |
+| passOwner_call_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4712-4717 |
+| passOwner_freezes | PASS | ConcreteSpec/Proofs/Own.lean:4763-4768 |
+| leave_retains_caller | PASS | ConcreteSpec/Proofs/Own.lean:4772-4777 |
+| leave_no_activation_loan | PASS | ConcreteSpec/Proofs/Own.lean:4781-4786 |
+| directOwner_roundtrip | PASS | ConcreteSpec/Proofs/Own.lean:4869-4891 |
+| reborrowTo_live | PASS | ConcreteSpec/Proofs/Own.lean:4790-4795 |
+| adoptDown_live | PASS | ConcreteSpec/Proofs/Own.lean:4799-4804 |
+| leave_live | PASS | ConcreteSpec/Proofs/Own.lean:4808-4813 |
+| evalArgs_ok_erasure | PASS | ConcreteSpec/Proofs/Own.lean:4917-4928 |
+| evalArgs_trap_erasure | PASS | ConcreteSpec/Proofs/Own.lean:4930-4941 |
+| step_next_erasure | PASS | ConcreteSpec/Proofs/Own.lean:4223-4234 |
+| step_request_erasure | PASS | ConcreteSpec/Proofs/Own.lean:4236-4255 |
+| Step_erasure | PASS | ConcreteSpec/Proofs/Own.lean:4257-4279 |
+| Steps_erasure | PASS | ConcreteSpec/Proofs/Own.lean:4299-4323 |
+| runFrom_erasure | PASS | ConcreteSpec/Proofs/Own.lean:4325-4335 |
+| run_erasure | PASS | ConcreteSpec/Proofs/Own.lean:4337-4347 |
+| step_stuck_iff_of_accepted | PASS | ConcreteSpec/Proofs/Own.lean:4368-4378 |
+| runFrom_erasure_of_accepted | PASS | ConcreteSpec/Proofs/Own.lean:4380-4391 |
+| run_stuck_iff_of_accepted | PASS | ConcreteSpec/Proofs/Own.lean:4393-4403 |
+| loan_has_owned_root | PASS | ConcreteSpec/Proofs/Own.lean:5413-5421 |
+| moved_no_loan | PASS | ConcreteSpec/Proofs/Own.lean:5431-5439 |
+| downward_reborrow_protocol | PASS | ConcreteSpec/Proofs/Own.lean:5731-5745 |
+| deferred_call_lifetime — registration | PASS | ConcreteSpec/Proofs/Own.lean:5879-5896 |
+| deferred_call_lifetime — return | PASS | ConcreteSpec/Proofs/Own.lean:5898-5913 |
+| move_reinitialize_protocol | PASS | ConcreteSpec/Proofs/Own.lean:5981-5992 |
+| loanSequence_retired_step | PASS | ConcreteSpec/Proofs/Own.lean:6083-6091 |
+| ended_loans_never_revive | PASS | ConcreteSpec/Proofs/Own.lean:6097-6103 |
+
+There are no pending Helper approvals and no Representation tags in either file. The 132 existing approval tags remain. Independently assessing the five restored Helpers gives:
+
+| Fully qualified declaration | Tag | Judgment |
+|---|---|---|
+| ConcreteSpec.Core.Own.ExecErasureWitnesses.step_det_next_inv | ConcreteSpec/Proofs/Own.lean:3668 | APPROVE: constructor inversion identifies the unique next target. |
+| ConcreteSpec.Core.Own.ExecErasureWitnesses.step_det_none_inv | ConcreteSpec/Proofs/Own.lean:3683 | APPROVE: constructor inversion proves that a refused configuration cannot step. |
+| ConcreteSpec.Core.Own.ExecErasureWitnesses.acceptedMove_checkerAccepted_inv | ConcreteSpec/Proofs/Own.lean:3705 | APPROVE: enumerates reachable configurations and extracts the actual evaluation result. |
+| ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuck_checkerAccepted_inv | ConcreteSpec/Proofs/Own.lean:4103 | APPROVE: inverts the request and continuation, retaining the primitive ownership constraint. |
+| ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMove_checkerAccepted_inv | ConcreteSpec/Proofs/Own.lean:4350 | APPROVE: checks the initial evaluation and its sole successor through ordinary inversion. |
+
+READ: PROMPT.md
+READ: REVIEW.diff
+READ: ConcreteSpec/Proofs/Grant.lean
+READ: ConcreteSpec/Proofs/Own.lean
+REPOSITORY: readable
+VERDICT: ACCEPT

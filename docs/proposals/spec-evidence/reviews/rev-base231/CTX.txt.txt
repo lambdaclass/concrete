@@ -1,0 +1,19 @@
+Base migration (branch wip/spec-base-migration) rounds 2 and 3, written by Codex. Base 4f68b10a7 (round 1 with its regenerated golden; seven gates pass) -> head 8601f966a. This review covers only these files: ConcreteSpec/Proofs/Slice0.lean ConcreteSpec/Proofs/Slice1.lean ConcreteSpec/Proofs/Examples.lean ConcreteSpec/Proofs/Basics.lean  and the spec definitions they use. Other reviewers cover the other base modules.
+
+What the two rounds did:
+- Round 2 fixed the findings of three scoped agy reviews of round 1 (REV-base1a, REV-base1b and REV-base1c, all on 01025713b) and recorded their approvals.
+- Round 2 also added same-signature inductive mutants for the released inductive-subject Laws, under the owner's Q-SUBJ decision, which is quoted in PROMPT.md.
+- Round 3 restated 19 Laws whose outputs were theorem parameters. A Planted example at the Instance's exact arguments could not refute them, because the conclusion was trivially true there. Each was restated in the logically equivalent form that quantifies the constrained outputs in the conclusion, as C1's rules_deterministic does with InputDeterministic. This is an assumed-yes coordinator resolution, pending owner confirmation.
+
+Check, with the best long-term design as the only standard:
+- Every restated Law in your files is logically equivalent to its old statement and never weaker. Check that old uses still follow.
+- A restatement must not move so many quantifiers into the conclusion that the Instance no longer closes anything, which was a round-1 blocker for reset_fresh. Say for each restated Law whether its Instance still supplies closed inputs and a real derivation, and whether the Planted example at those arguments meaningfully tests the subject.
+- Each round-1 finding in your files is fixed as its review asked.
+- Inductive mutants have exactly the subject's type and are premise-preserving.
+- Tags against the final convention.
+- Vacuity of every Law in your files, with a verdict and witness each.
+- For each Helper or Representation lemma in your files marked approved: PENDING, an explicit APPROVE or REJECT by fully qualified name. Also confirm that each recorded approval reference sits on a declaration that the cited review approved, in an unchanged form.
+
+Known gate-side N2 findings (subject-kind on inductive subjects, which awaits the gate change; instance-false-discharge; and their cascades) are not spec defects.
+
+Citation discipline (binding): every identifier you write in backticks must be one you found with grep in this tree, with its real namespace. Core-library names (for example Iff.mp) are not declarations of this tree, so never put them in backticks. Every file:line range must lie inside the file. Never cite a name you did not see.

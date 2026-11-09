@@ -1,0 +1,20 @@
+Implemented the review fixes in three build-gated commits:
+
+- `750ce74b1`: recorded scoped approvals; made `corr_mark_move` a Law with evidence.
+- `e4c1ffa92`: split reset and cleanup obligations, supplied closed Instances, removed dead premises, and documented derived examples.
+- `36f5a3c58`: added same-signature inductive mutants.
+
+Counts: **87 approvals retained, 2 helpers PENDING, 14 new Planted examples**. Of the 32 inductive laws after splitting, 13 have Planted evidence; **19 remain blocked**.
+
+Validation at `36f5a3c58`:
+
+- Prescribed Lean build: PASS.
+- Rules: 32 passed.
+- Trust ban: 23 passed.
+- N2: FAIL only for pending approvals, known gate defects, and their cascades. No other failure category appeared.
+
+QUESTIONS: The exact-instance convention makes the remaining 19 cases impossible: their fixed conclusions are independently true—for example, `exit 42 = exit 42`. A relation mutant cannot falsify them. I preserved the Instances and convention pending your answer about allowing separate mutation-exposing cases.
+
+[Detailed results, theorem statements, per-law evidence cases, and all 19 blockers](/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/base/_review/ROUND2_RESULTS.txt).
+
+Working tree clean. No push, reviewers, or git notes.
