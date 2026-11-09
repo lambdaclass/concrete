@@ -1,0 +1,62 @@
+N2 round 6 phase B lead reproduction
+Baseline HEAD: 25907fb41b1e1ec0417507d2f81d6716f3a5bf7d
+Toolchain: Lean 4.34.1 from inherited cached Nix development PATH.
+Consumer scripts/proofs/vacuity.lean unchanged from baseline throughout these checks.
+No review tooling, push, whole-tree build, or full suite.
+
+bash scripts/checks/lib/bounded.sh 160 python3 -u scripts/proofs/vacuity_round5.py controls
+PASS control joint-branch-decide-repro
+PASS control false-discharge
+PASS control absurd-discharge
+PASS control nomatch-discharge
+PASS control helper-false
+PASS control false-cases
+PASS control empty-elimination
+PASS control pempty-elimination
+PASS control helper-nomatch
+PASS control decide-hypothesis-positive
+PASS control nested-decide-discharge-1
+PASS control nested-decide-discharge-4
+PASS control nested-decide-discharge-12
+PASS control hypothetical-false-positive
+PASS control hypothetical-empty-positive
+PASS control hypothetical-pempty-positive
+PASS control open-helper-false
+PASS control open-helper-empty
+PASS control open-helper-pempty
+PASS control joint-hypothetical-positive
+PASS control joint-supplied-negative
+PASS control joint-open-supplied-negative
+PASS control reachable-open-impossible-negative
+PASS control reachable-joint-helper-negative
+PASS control unreachable-closed-supplier-positive
+PASS control context-cache-supplied-negative
+N2 selected controls: 26 PASS, 0 FAIL
+
+Additional six controls, same compiled_consumer/run and exact-finding controls runner,
+under bash scripts/checks/lib/bounded.sh 140 python3 -u (labels listed below):
+PASS control data-subtype-discharge
+PASS control data-psigma-discharge
+PASS control data-pprod-discharge
+PASS control finite-collection-decide-positive
+PASS control finite-collection-simp-positive
+PASS control finite-collection-cases-positive
+N2 selected controls: 6 PASS, 0 FAIL
+
+Each data negative preserves the valid paired Instance and Planted witness and
+requires the sole diagnostic FAIL instance-false-discharge on the unique retained
+bad Instance identity. No alternative failure or INCOMPLETE is accepted.
+Each finite-collection positive requires no FAIL/INCOMPLETE and exit 0.
+The accepted hypothetical-domain convention is preserved: the old review's
+proposal to reject unsupplied impossible binders is superseded by the accepted
+phase-A design. No convention or language decision was taken here.
+
+F1: NOT REPRODUCED for the reproduced named shapes at the baseline consumer.
+This is not evidence of historical whole-scope completion.
+F2: REPRODUCED by workflow inspection at baseline: daily had checkout followed
+by nix develop .#gates and no lean-action setup. #gates omits Lean/Lake.
+F2 fix 852664bf7: shared action used by PR, manual and daily jobs.
+PASS parse all workflow YAML and new composite action YAML.
+PASS shared setup precedes every nix develop invocation in those three jobs.
+PASS git diff --check.
+Scheduled execution and action downloads were not exercised locally.

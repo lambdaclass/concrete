@@ -219,6 +219,34 @@ end ConcreteSpecControl
             "end ConcreteSpecControl")
         add(label, fixture, bad("instance-false-discharge"))
 
+    # N4a F1: carry the impossible supplier through a non-Prop data argument.
+    # The original paired case remains, so only the bad Instance may fail.
+    for label, carrier, result, proof in [
+        ("data-subtype-discharge", "{ m : Nat // m = 2 }", "s.val = 2", "s.property"),
+        ("data-psigma-discharge", "PSigma (fun m : Nat => m = 2)", "s.fst = 2", "s.snd"),
+        ("data-pprod-discharge", "PProd Nat (2 = 2)", "2 = 2", "s.snd"),
+    ]:
+        helper = ("axiom impossible : False\n"
+                  "/-- Helper (computation). Data-carried supplier control (approved: independent:r6). -/\n"
+                  f"theorem dataDischarge (_k : Nat) (s : {carrier}) : {result} := {proof}\n")
+        fixture = universal_hyp.replace("/-- Law", helper + "/-- Law", 1)
+        fixture = fixture.replace("end ConcreteSpecControl", tag +
+            "\nexample : 2 < S 2 := growth 2 (fun k => dataDischarge k ⟨2, False.elim impossible⟩)\n"
+            "end ConcreteSpecControl")
+        add(label, fixture, bad("instance-false-discharge"))
+
+    # N4a F1: legitimate closed proofs for an inhabited finite collection.
+    for label, proof in [
+        ("finite-collection-decide-positive", "by decide"),
+        ("finite-collection-simp-positive", "by simp"),
+        ("finite-collection-cases-positive", "by intro x hx; cases hx with | head => rfl | tail _ hnil => nomatch hnil"),
+    ]:
+        fixture = base.replace("_h : n = 2", "_h : ∀ x, x ∈ [n] → x = n")
+        fixture = fixture.replace("growth 2 rfl", f"growth 2 ({proof})")
+        fixture = fixture.replace("2 = 2 ∧ ¬ 2 < mutant 2 := by decide",
+            "(∀ x, x ∈ [2] → x = 2) ∧ ¬ 2 < mutant 2 := by constructor; simp; decide")
+        add(label, fixture, set(), status=0)
+
     # Jointly contradictory *hypothetical* binders are an unreachable branch.
     # Supplied inhabitants of the same two domains are actual discharges.
     joint_hyp = base.replace("_h : n = 2", "_h : ∀ p : Prop, p → ¬ p → n = 2")

@@ -38,7 +38,10 @@ def main():
             hypothetical-pempty-positive decide-hypothesis-positive
             nested-decide-discharge-1 nested-decide-discharge-4
             nested-decide-discharge-12 unreachable-closed-supplier-positive
-            context-cache-supplied-negative""".split())
+            context-cache-supplied-negative data-subtype-discharge
+            data-psigma-discharge data-pprod-discharge
+            finite-collection-decide-positive finite-collection-simp-positive
+            finite-collection-cases-positive""".split())
         with compiled_consumer() as meta:
             return controls(functools.partial(run, meta_path=meta), ROOT, labels=labels)
     commit, module, names = CASES[args.case]

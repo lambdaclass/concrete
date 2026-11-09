@@ -1,0 +1,1 @@
+N2 (R-0219): add exact-diagnostic discharge controls for impossible suppliers carried through Subtype, PSigma and PProd, and positive finite-collection controls using decide, simp and constructor cases. Include these in the focused discharge runner; record baseline lead reproduction without claiming solver or whole-scope completion.
