@@ -1,0 +1,26 @@
+Design review of ISS-0044 ("pre-foundation base models restate Core facts without a link"), on branch wip/spec-base-migration. Base 9e48fdb06 -> head 5e10d44f9, written by Codex (round 2 of the design).
+
+The change adds one ISSUES.tsv row and the design note docs/proposals/ISS-0044-BASE-MODELS.md. No Lean changed. The audit finding and its independent confirmation are quoted in PROMPT.md.
+
+The coordinator's binding constraints:
+- For each base model, either RETIRE it (it only duplicates Core) or restate it as a VIEW over Core, with a proved correspondence law and a premise-preserving mutant. Never keep two independent copies.
+- Part 4 (checkedAdd) must follow Core's decided arithmetic.
+- Part 3 (Rep byte order) must take Target.
+
+Review the design, with the best long-term design as the only standard. For each of the 8 parts, check:
+- whether RETIRE or VIEW is right;
+- whether each VIEW's correspondence law is strong enough to rule out drift (a law about one operation is not a link for the whole model), names a real subject, and has a mutant of the subject's exact type that the law refutes with its premises kept;
+- whether every user of a retired definition is listed;
+- whether the migration order is sound.
+Also check:
+- that the ISSUES.tsv row follows the header's columns exactly, states only what the confirmation confirmed, and has a checkable closure condition;
+- that no language or owner question is decided in the note. The note defers two (nonempty aggregate layout, whole-pointer representation); confirm they are genuinely undecided, and list any other hidden decision.
+Cite the note and the Lean files by path:line.
+
+Round 2. The previous design review (agy, at 811ec53a1, verdict CHANGES, 10 findings) is inlined below as REV-iss44-agy-811ec53a1.md. Codex revised the note in 5e10d44f9, and the note ends with a "Review disposition" section that answers each finding. REVIEW.diff covers the whole range 9e48fdb06..5e10d44f9, so the note is reviewed in full. Check that:
+- each of the 10 findings is really fixed, or that its dispute is justified by the code;
+- the fixes introduce no new defect: no second runner, evaluator or checker beside Core; every law has its subject in the conclusion and a same-type mutant that is refuted with the premises kept; traps are simulated non-vacuously;
+- every path:line in the note is correct at 5e10d44f9;
+- every QUESTION is truly an owner question, and no language or checker-acceptance rule is decided in the note.
+
+SCOPE OF THIS REVIEW (split to keep citations verifiable): Parts 1 to 4 of the note, the ISSUES.tsv row ISS-0044, and round-1 findings 1 to 5, 9 and 10. Do not review the other parts.

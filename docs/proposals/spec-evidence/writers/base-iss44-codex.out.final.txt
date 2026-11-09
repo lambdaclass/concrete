@@ -1,0 +1,18 @@
+Committed `811ec53a19616f8f612d1606d48cea2dcc0652fc` — file ISS-0044 and its Core integration design.
+
+| Part | Decision |
+|---|---|
+| 1 Variables/integers | RETIRE |
+| 2 Scalars/typing | RETIRE |
+| 3 Representation | VIEW |
+| 4 Results/arithmetic | VIEW |
+| 5 Hosted observations | RETIRE |
+| 6 Cleanup | VIEW |
+| 7 Ownership/borrows | VIEW |
+| 8 Brands | VIEW |
+
+The design specifies correspondence statements, witness/mutant cases, migration order and dependencies. No Lean implementation or theorems were added, as requested. `Own`/`Generative` integration remains a dependency.
+
+Validation passed: slotted ConcreteSpec build and rules check (32/32). Working tree clean; no push, reviewers or git notes.
+
+**QUESTIONS:** Nonempty aggregate layout and whole-pointer representation remain deferred to owner decisions; neither is chosen by this design.

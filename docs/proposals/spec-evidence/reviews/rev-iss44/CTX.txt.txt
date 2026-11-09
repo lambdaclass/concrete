@@ -1,0 +1,18 @@
+Design review of ISS-0044 ("pre-foundation base models restate Core facts without a link"), on branch wip/spec-base-migration. Base 9e48fdb06 -> head 811ec53a1, written by Codex.
+
+The change adds one ISSUES.tsv row and the design note docs/proposals/ISS-0044-BASE-MODELS.md. No Lean changed. The audit finding and its independent confirmation are quoted in PROMPT.md.
+
+The coordinator's binding constraints:
+- For each base model, either RETIRE it (it only duplicates Core) or restate it as a VIEW over Core, with a proved correspondence law and a premise-preserving mutant. Never keep two independent copies.
+- Part 4 (checkedAdd) must follow Core's decided arithmetic.
+- Part 3 (Rep byte order) must take Target.
+
+Review the design, with the best long-term design as the only standard. For each of the 8 parts, check:
+- whether RETIRE or VIEW is right;
+- whether each VIEW's correspondence law is strong enough to rule out drift (a law about one operation is not a link for the whole model), names a real subject, and has a mutant of the subject's exact type that the law refutes with its premises kept;
+- whether every user of a retired definition is listed;
+- whether the migration order is sound.
+Also check:
+- that the ISSUES.tsv row follows the header's columns exactly, states only what the confirmation confirmed, and has a checkable closure condition;
+- that no language or owner question is decided in the note. The note defers two (nonempty aggregate layout, whole-pointer representation); confirm they are genuinely undecided, and list any other hidden decision.
+Cite the note and the Lean files by path:line.

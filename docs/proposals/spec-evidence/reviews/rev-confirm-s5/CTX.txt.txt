@@ -1,0 +1,12 @@
+Confirmation of audit findings, under the coordinator's confirm-every-bug rule. Tree: the integration head aa44140a3.
+
+An agy audit of the base models (scope s5) reported 8 findings, quoted in PROMPT.md as s5-findings.md. Each is a pre-foundation base model that restates a Core fact with no link to the Core owner. You are the independent confirmer. Codex did not write that audit.
+
+For EACH of the 8 findings, give a verdict: CONFIRMED, PARTLY CONFIRMED (say which part) or NOT CONFIRMED.
+
+Evidence for each finding:
+- For a duplication: the exact duplicate pair, i.e. the base declaration and the Core declaration, each with file:line. Say whether they are definitionally the same concept, whether the base one references the Core one anywhere (grep for uses or imports), and whether any proved correspondence law links them.
+- For a contradiction (finding 4, checkedAdd, and finding 3, byte order): the exact definitions on both sides with file:line, and a concrete input on which the two give different results, written as a Lean example the coordinator can run (you cannot build here).
+- Say whether the finding is overstated. For example, a model that is a deliberately separate toy with a different scope is not a duplicate unless it states the same fact.
+
+Be strict both ways: confirm only what the tree shows, and reject anything the audit inflated.

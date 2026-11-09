@@ -1,0 +1,159 @@
+VERDICT-1: CONFIRMED
+
+The exact pairs are the slice variable structure at ConcreteSpec/Spec/Slice1Syntax.lean:87-90 and Core variable structure at ConcreteSpec/Spec/Ident.lean:41-44; the integer universes and width, signedness, bounds and range definitions at ConcreteSpec/Spec/Slice1Syntax.lean:96-122 and ConcreteSpec/Spec/Scalar.lean:58-87.
+
+These express the same concepts, but the independently declared types are not definitionally equal. The range interfaces also differ: Boolean versus proposition. The slice imports only Basics and does not reference the Core counterparts; no correspondence law was found. ConcreteSpec/Spec/Slice1Syntax.lean:1. This confirms duplication and missing integration, rather than a demonstrated difference in integer bounds.
+
+VERDICT-2: PARTLY CONFIRMED
+
+The duplicate pairs are the slice scalar types and values at ConcreteSpec/Spec/Slice1Syntax.lean:129-132,163-166 versus the Core scalar types and values at ConcreteSpec/Spec/Scalar.lean:395-406. Slice scalar typing at ConcreteSpec/Spec/Slice1Semantics.lean:193-195 corresponds conceptually to combining Core value type equality with validity at ConcreteSpec/Spec/Scalar.lean:409-417.
+
+They are not definitionally identical: Core additionally includes unit, and its validity predicate does not itself specify an expected type. Hybrid explicitly aliases the Core universe and separately excludes unit from storage. ConcreteSpec/Spec/Hybrid.lean:30-41. Neither slice module imports the Core scalar module, and no correspondence law was found. ConcreteSpec/Spec/Slice1Syntax.lean:1; ConcreteSpec/Spec/Slice1Semantics.lean:1.
+
+Thus the overlapping integer/Boolean model is duplicated; claiming that these entire interfaces are interchangeable overstates the finding.
+
+VERDICT-3: PARTLY CONFIRMED
+
+The exact overlapping pairs are:
+
+- Slice bytes versus provenance-bearing Core bytes: ConcreteSpec/Spec/Rep.lean:28-31; ConcreteSpec/Spec/Memory.lean:78-81.
+- Scalar size versus Core scalar layout: ConcreteSpec/Spec/Rep.lean:34-36; ConcreteSpec/Spec/Hybrid.lean:48-51.
+- Two’s-complement decoding: ConcreteSpec/Spec/Rep.lean:65-66; ConcreteSpec/Spec/Scalar.lean:102-103.
+- Radix encoding and decoding: ConcreteSpec/Spec/Rep.lean:47-55; ConcreteSpec/Spec/Memory.lean:240-247.
+- Scalar encoding and decoding: ConcreteSpec/Spec/Rep.lean:59-75; ConcreteSpec/Spec/Memory.lean:260-283; ConcreteSpec/Spec/Hybrid.lean:57-66.
+- Representation proofs: ConcreteSpec/Proofs/Rep.lean:13-27,55-72; ConcreteSpec/Proofs/Memory.lean:24-27,68-74,111-123; ConcreteSpec/Proofs/Hybrid.lean:18-28.
+
+These are overlapping concepts, not definitionally identical interfaces. The slice lacks provenance and target parameters. Its import and proofs do not delegate to Core, and no cross-model correspondence law was found. ConcreteSpec/Spec/Rep.lean:1; ConcreteSpec/Proofs/Rep.lean:1,59-72.
+
+The byte-order disagreement is concrete. The slice explicitly chooses little endian; Core reverses bytes for big endian. ConcreteSpec/Spec/Rep.lean:18-24,47-55; ConcreteSpec/Spec/Memory.lean:250-261,272-275. Coordinator-runnable examples, not executed here:
+
+```lean
+example :
+    ConcreteSpec.Rep.encodeScalar (.int .u16 258) =
+      [.byte 2, .byte 1] := by decide
+
+example :
+    ConcreteSpec.Core.Mem.encodeInt
+      { ConcreteSpec.Core.linuxX8664 with byteOrder := .big } .u16 258 =
+      [.init 1 none, .init 2 none] := by decide
+
+example :
+    ConcreteSpec.Rep.decodeScalar (.int .u16) [.byte 2, .byte 1] =
+      some (.int .u16 258) := by decide
+
+example :
+    ConcreteSpec.Core.Mem.decodeInt
+      { ConcreteSpec.Core.linuxX8664 with byteOrder := .big } .u16
+      [.init 2 none, .init 1 none] = some 513 := by decide
+```
+
+The target used above is declared at ConcreteSpec/Spec/Target.lean:92-100. Calling this an unconditional contradiction overstates the scope: the old fragment explicitly fixes little endian, and the existing hosted target is little endian. The missing target-aware integration remains real.
+
+The struct issue is also real at the function boundary: every struct encodes as an empty list, while size and decoding reject declarations with fields. ConcreteSpec/Spec/Rep.lean:40-44,78-88. However, the round-trip theorem explicitly requires a representation predicate admitting only scalars and empty structs, so this does not falsify that theorem. ConcreteSpec/Spec/Rep.lean:90-94; ConcreteSpec/Proofs/Rep.lean:55-60.
+
+VERDICT-4: PARTLY CONFIRMED
+
+The overlapping result models are the slice trap, stuckness, operand result and execution outcome at ConcreteSpec/Spec/Slice1Semantics.lean:33-60 versus Core traps and operand results at ConcreteSpec/Spec/Outcome.lean:45-75 and execution endings at ConcreteSpec/Spec/Exec.lean:245-257,828-839.
+
+They are not definitionally the same: the slice records stuckness reasons, while Core execution retains sites and configurations and distinguishes additional endings. The slice imports only its syntax module; no correspondence law was found. ConcreteSpec/Spec/Slice1Semantics.lean:1.
+
+The reported arithmetic results differ exactly as claimed: slice addition traps, whereas Core checked addition returns an ordinary error. ConcreteSpec/Spec/Slice1Semantics.lean:105-108; ConcreteSpec/Spec/Scalar.lean:183-195.
+
+```lean
+example :
+    (match ConcreteSpec.checkedAdd .u8 200 56 with
+     | .trap .arithmeticOverflow => true
+     | _ => false) = true := by decide
+
+example :
+    ConcreteSpec.Core.checked .u8 .add 200 56 =
+      .error .overflow := by decide
+
+example :
+    ConcreteSpec.Core.plain .u8 .add 200 56 =
+      .trap .overflow := by decide
+```
+
+However, this is not evidence that the slice implements the wrong addition behavior. Its documented operation is integer plus that traps on overflow, so its semantic counterpart is Core plain addition. ConcreteSpec/Spec/Slice1Syntax.lean:18-21; ConcreteSpec/Spec/Scalar.lean:215-219. The duplication and misleading naming are confirmed; the asserted behavioral contradiction with the corresponding Core operation is not.
+
+VERDICT-5: PARTLY CONFIRMED
+
+The examples import the old observation module and exercise its observations. ConcreteSpec/Spec/Examples.lean:1-3,464-474. The exact duplicate status rules are ConcreteSpec/Spec/Observation.lean:47-50 and ConcreteSpec/Spec/Observe.lean:322-325; startup refusal is independently implemented at ConcreteSpec/Spec/Observation.lean:54-61 and ConcreteSpec/Spec/Observe.lean:348-351.
+
+These share the status policy but are not definitionally identical observation models. Core retains trap kind, site, span and rendered line; the old observation stores only its slice trap. ConcreteSpec/Spec/Observe.lean:311-319; ConcreteSpec/Spec/Observation.lean:37-43. The old module imports only slice semantics, and no correspondence law was found. ConcreteSpec/Spec/Observation.lean:1.
+
+The omission is confirmed, but it is explicitly disclosed rather than concealed: the old fragment excludes diagnostic bytes and source locations. ConcreteSpec/Spec/Observation.lean:28-33. These examples prove the smaller model’s behavior, not complete hosted diagnostics.
+
+VERDICT-6: PARTLY CONFIRMED
+
+The exact overlapping pairs are:
+
+- Deferred calls and frames: ConcreteSpec/Spec/Cleanup.lean:48-73 versus ConcreteSpec/Spec/Exec.lean:174-180,206-212.
+- Pending cleanup order: ConcreteSpec/Spec/Cleanup.lean:75-77 versus ConcreteSpec/Spec/Exec.lean:699-704.
+- Exit unwinding and execution: ConcreteSpec/Spec/Cleanup.lean:80-106,123-127 versus ConcreteSpec/Spec/Exec.lean:183-193,333-350,722-744.
+- Dependency admission and loan release: ConcreteSpec/Spec/Cleanup.lean:135-158 versus ConcreteSpec/Spec/Grant.lean:63-84 and ConcreteSpec/Spec/Own.lean:268-279.
+
+The standalone cleanup model imports no Core machinery, and no bridge was found. It restates cleanup order and dependency requirements, but is not definitionally equivalent to the execution machine: calls are abstract resource records with a Boolean success oracle, rather than executable functions with arguments, sites and stores. ConcreteSpec/Spec/Cleanup.lean:20-27,48-53,120-127; ConcreteSpec/Spec/Exec.lean:174-180,716-738.
+
+The missing integration is confirmed. Treating every abstract cleanup declaration as a redundant Core definition overstates the finding; some are proof abstractions requiring a justified interpretation.
+
+VERDICT-7: PARTLY CONFIRMED
+
+The overlapping ownership pairs are slice live-state and move checking at ConcreteSpec/Spec/Slice1Ownership.lean:19-50 versus Core slots and move transitions at ConcreteSpec/Spec/Own.lean:43-48,150-154; whole-root borrow locks and access rules at ConcreteSpec/Spec/Borrow.lean:27-87 versus Core loan compatibility, owner access and borrowing at ConcreteSpec/Spec/Own.lean:82-95,136-147,165-174.
+
+These are not definitionally identical models. Static contexts track different information from runtime ownership state. The base modules import Basics or slice statics, and no proof connecting their acceptance judgments to the Core checker obligation was found. ConcreteSpec/Spec/Borrow.lean:1; ConcreteSpec/Spec/Slice1Ownership.lean:1; ConcreteSpec/Spec/Own.lean:690-699. The README explicitly confirms that discharging this obligation remains open. ConcreteSpec/README.md:72-76.
+
+The trap-information loss is concrete: range opening has an untyped trap constructor, and the runtime merges failed range opening and failed indexing into one trap result. ConcreteSpec/Spec/Borrow.lean:151-162,427-431,440-479. Core distinguishes out-of-bounds indexing from invalid ranges. ConcreteSpec/Spec/Outcome.lean:45-51.
+
+The integration gap and loss of trap distinctions are confirmed; direct replacement of static judgments by runtime transitions would not itself establish checker soundness.
+
+VERDICT-8: PARTLY CONFIRMED
+
+The exact overlapping pairs are brand state and generation at ConcreteSpec/Spec/Brand.lean:111-119 versus ConcreteSpec/Spec/Grant.lean:36-40,54-60; release/reset at ConcreteSpec/Spec/Brand.lean:123-140,176-180 versus ConcreteSpec/Spec/Grant.lean:77-102; and ghost/erased execution at ConcreteSpec/Spec/Brand.lean:162-187,195-243 versus ConcreteSpec/Spec/Grant.lean:104-132.
+
+The base module imports only Basics, and no interpretation or correspondence theorem linking these models was found. ConcreteSpec/Spec/Brand.lean:1.
+
+Nevertheless, they are not definitionally identical. The base model supplies a static checker and abstract loop interpreter; Core tracks lineage, lexical scope, phantom dependencies and concrete allocator callbacks. ConcreteSpec/Spec/Brand.lean:68-92,155-162; ConcreteSpec/Spec/Grant.lean:22-50,86-110. Notably, base runtime release/reset relies on static admission to exclude live heap values, whereas Core transitions enforce dependency guards directly. ConcreteSpec/Spec/Brand.lean:83-87,134-137; ConcreteSpec/Spec/Grant.lean:79-93.
+
+Thus the absent bridge is confirmed; calling the entire brand model redundant overstates the overlap.
+
+Across these findings, separate fragments are expressly documented, with integration required before freeze. ConcreteSpec/Spec.lean:58-68; ROADMAP.md:177-178,366. That explains their current separation but does not satisfy the long-term obligation: shared concepts need common definitions or proved interpretations. Merely renaming declarations or swapping imports would leave the substantive integration gaps unresolved.
+
+READ: PROMPT.md
+READ: ConcreteSpec/Spec.lean
+READ: ConcreteSpec/README.md
+READ: ROADMAP.md
+READ: ConcreteSpec/Spec/Slice1Syntax.lean
+READ: ConcreteSpec/Spec/Slice1Semantics.lean
+READ: ConcreteSpec/Spec/Slice1Ownership.lean
+READ: ConcreteSpec/Spec/Slice1Checker.lean
+READ: ConcreteSpec/Spec/Slice0.lean
+READ: ConcreteSpec/Spec/Statics.lean
+READ: ConcreteSpec/Spec/Ident.lean
+READ: ConcreteSpec/Spec/Scalar.lean
+READ: ConcreteSpec/Spec/Rep.lean
+READ: ConcreteSpec/Spec/Memory.lean
+READ: ConcreteSpec/Spec/Target.lean
+READ: ConcreteSpec/Spec/Hybrid.lean
+READ: ConcreteSpec/Spec/Outcome.lean
+READ: ConcreteSpec/Spec/Observation.lean
+READ: ConcreteSpec/Spec/Observe.lean
+READ: ConcreteSpec/Spec/Examples.lean
+READ: ConcreteSpec/Spec/Cleanup.lean
+READ: ConcreteSpec/Spec/Borrow.lean
+READ: ConcreteSpec/Spec/Own.lean
+READ: ConcreteSpec/Spec/Grant.lean
+READ: ConcreteSpec/Spec/Brand.lean
+READ: ConcreteSpec/Spec/Exec.lean
+READ: ConcreteSpec/Spec/Frame.lean
+READ: ConcreteSpec/Proofs/Rep.lean
+READ: ConcreteSpec/Proofs/Memory.lean
+READ: ConcreteSpec/Proofs/Hybrid.lean
+READ: ConcreteSpec/Proofs/Examples.lean
+READ: ConcreteSpec/Proofs/Cleanup.lean
+READ: ConcreteSpec/Proofs/Borrow.lean
+READ: ConcreteSpec/Proofs/Brand.lean
+READ: ConcreteSpec/Proofs/Slice1.lean
+
+REPOSITORY: readable
+VERDICT: CHANGES

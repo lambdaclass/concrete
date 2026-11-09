@@ -1,0 +1,28 @@
+- `evalArgs_ok_erasure`: **NOT CONFIRMED — gate defect.**
+- `evalArgs_trap_erasure`: **NOT CONFIRMED — gate defect.**
+
+[Repro.lean](_review/confirm/Repro.lean) completed successfully, exit **0**. Full evidence: [repro.out](_review/confirm/repro.out).
+
+Key results for both laws:
+
+```text
+Restated Instance:
+closedValue=true, closedType=true, noLevels=true
+telescope=true, closedTail=true
+ordinaryEq=true, protectedEq=false
+
+Exact-type theorem Instance:
+closedValue=true, closedType=true, noLevels=true
+telescope=true, closedTail=true
+ordinaryEq=true, protectedEq=true
+```
+
+The closed theorem witnesses have the law itself as their application head. They disprove the claim that no closed Instance can have the required form.
+
+The structural cause is the gate’s handling of generated matchers. Restating each match creates a distinct matcher and sparse recursor. Lean accepts the statements as definitionally equal, but the gate’s dependency expansion and subject abstraction produce a comparison that fails across those auxiliaries. Preserving the instantiated law’s exact type passes that same protected comparison.
+
+There is also an independent gate issue: the supplied code calls `ConstantInfo.value?` with its default `allowOpaque := false`, which excludes theorem bodies in this Lean version. The reproducer explicitly enables theorem-body inspection.
+
+No law restatement is warranted by these results. The long-term repair belongs in the gate: preserve typing through subject abstraction and handle generated matcher dependencies consistently. No tracked files were changed; no commits, pushes, reviewers, or git notes.
+
+**QUESTIONS:** None.

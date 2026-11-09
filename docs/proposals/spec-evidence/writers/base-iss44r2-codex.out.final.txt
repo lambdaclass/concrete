@@ -1,0 +1,18 @@
+Committed `5e10d44f9` — repair ISS-0044 Core migration design after round 2. All ten findings have dispositions in the note.
+
+| Part | Decision |
+|---|---|
+| 1. Identities/integers | RETIRE |
+| 2. Scalars/typing | RETIRE |
+| 3. Representation | VIEW |
+| 4. Execution/results | VIEW |
+| 5. Hosted observation | RETIRE |
+| 6. Cleanup | VIEW |
+| 7. Ownership/borrows | VIEW |
+| 8. Brands | VIEW |
+
+Passed: prescribed slotted Lean build, rules check (32/32), issues check (5/5), and diff whitespace check.
+
+Design only: no Lean theorems implemented. The note specifies proposed laws and their instance/mutant evidence. No reviewers, git notes, or push; working tree clean.
+
+QUESTIONS: reason preservation blocks implementation if Core cannot support the proposed failure witness. Nonempty aggregate layout and whole-pointer representation remain deferred owner decisions.

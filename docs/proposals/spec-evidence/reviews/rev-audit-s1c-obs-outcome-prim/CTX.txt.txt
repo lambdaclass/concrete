@@ -1,0 +1,27 @@
+Unscoped full audit of the integration head wip/spec-integration-head at aa44140a3, run as module-scoped parts.
+
+The head merges every accepted spec head, each already reviewed on its own:
+- C1 (Exec, Scalar)
+- C2 (Const)
+- C4 (Memory)
+- C5 (Grant, Own)
+- C6 (Observe and its proof modules)
+- C7
+- C8 (Adequacy, from the accepted integration branch)
+- C9 (Ident, Prim, the source loader, the site table, the C9 part of Observe2)
+- C10 (Frame: ABI, launcher, artifact)
+- the base migration (Borrow, Brand, Cleanup, Rep and other base models)
+
+This audit is NOT a re-review of each part. Its job is the semantic consistency of the parts now that they are combined:
+1. ONE OWNER PER DEFINITION. Each concept (span, source path, site table, trap line, exit status, ending or final result, store, event, step, environment, program, loader) has exactly one normative definition. Every other module references it. Report any concept defined twice, by a parallel structure, a copied predicate, a second validity condition, or a restated fact that could drift. Legitimate separate models (for example a base toy model's own Stmt or Ctx inside its namespace) are not duplicates unless they state a fact the core also states, with no link between the two.
+2. NO DUPLICATE FACTS. In particular: a single SiteTable validity; a single Span with its offset and line or column facts; a single trap-line format and its exit statuses (125 and 134); a single definition of an ending or final result with its store.
+3. NO WEAKENED LAW. Where one part's law depends on another part's definition, check that the merged definitions still give each law its intended meaning. Look for laws that became trivially true, vacuous or weaker because a definition they use changed in another part (for example a premise now always false, or a conclusion that no longer pins what it used to).
+4. NO CONTRADICTION between parts: two definitions or laws that cannot both hold for the same program, or that give the same input different meanings.
+
+The golden (scripts/proofs/axioms.golden) is stale by design. Its regeneration is blocked on an owner decision; do not report it.
+
+Background data (not conclusions): same-short-names.txt, quoted below, lists definitions in ConcreteSpec/Spec that share a final name component. Most are legitimate namespaced models. Use it only as a starting index.
+
+YOUR SCOPE (s1c-obs-outcome-prim): ConcreteSpec/Spec/Observation.lean, ConcreteSpec/Spec/Outcome.lean, ConcreteSpec/Spec/Prim.lean
+Focus: Observation and its status against Spec/Observe.lean's Terminal and status; Outcome's trap kinds against Observe's trap kinds; Prim's operands, Stmt, start and erase against Spec/Exec.lean and Spec/Own.lean
+Read every file in your scope completely. Follow references into other modules only as far as needed to identify a definition's owner, and open that file before you cite it.
