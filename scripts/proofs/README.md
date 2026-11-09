@@ -558,7 +558,7 @@ and the ordered local-instance entries. FVarIds alone are insufficient: Lean's
 `LocalContext.setType` can replace a declaration while retaining its ID. The new
 same-ID Nat-to-False control must still discover the contradiction; erasing raw
 types must fail with exactly `CONTROL raw-context-cache-crossed-type`. Together
-with the alpha-renaming/distinct-context controls this performs four real
+with the fresh-FVarId/distinct-context controls this performs four real
 refutation searches. Both the front and canonical keys now preserve the full
 context, rather than relying on a caller never updating it.
 

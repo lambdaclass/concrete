@@ -321,7 +321,7 @@ Forward implementation commits: `cb46908dc` (completed negative closures),
 control), `031b5cbf4` (alpha-canonical refutation memoization), `14b33ee83`
 (complete raw declaration keys and same-ID replacement control), and
 `ecc9c5509976aed317459314614b20188969dd8d` (one immutable snapshot per proof node).
-Final consumer blob: `2cea36f37ddd3eeb38b1b68c6a8ac113cada5558`.
+Final consumer blob: `68e722750082236752b5c597d1a7b607a0a00f77`.
 
 The implementation was committed as focused checks passed, with no history
 rewrite, push, review-tool invocation, spec edit, ROADMAP edit or ID allocation.
@@ -397,7 +397,7 @@ bash scripts/checks/lib/bounded.sh 960 nix develop --command \
   bash scripts/checks/lib/bounded.sh 900 bash -c '
     set -euo pipefail
     git rev-parse HEAD
-    test "$(git rev-parse HEAD:scripts/proofs/vacuity.lean)" = 2cea36f37ddd3eeb38b1b68c6a8ac113cada5558
+    test "$(git rev-parse HEAD:scripts/proofs/vacuity.lean)" = 68e722750082236752b5c597d1a7b607a0a00f77
     scratch=$(mktemp -d)
     trap '\''rm -rf "$scratch"'\'' EXIT
     git archive --format=tar 6efdce6136752d51fc74265d61278d90937f24cd > "$scratch/source.tar"

@@ -55,25 +55,27 @@ def witnessReverse : True := reverse b2 b1
 
 #eval show MetaM Unit from do
   let base := mkForall `x .default (mkConst ``Nat) (mkConst ``Nat)
-  let variants := #[
-    mkForall `x .implicit (mkConst ``Nat) (mkConst ``Nat),
-    mkForall `renamed .default (mkConst ``Nat) (mkConst ``Nat),
-    mkForall `x .default (mkSort (.succ .zero)) (mkConst ``Nat)]
-  for variant in variants do
-    let (_, graph) := (do
+  let pairs := #[
+    (base, mkForall `x .implicit (mkConst ``Nat) (mkConst ``Nat)),
+    (base, mkForall `renamed .default (mkConst ``Nat) (mkConst ``Nat)),
+    (mkConst ``List [.zero], mkConst ``List [.succ .zero])]
+  for (base, variant) in pairs do
+    let ((a, b), graph) := (do
       let a ← Discharge.internTerm base
       let b ← Discharge.internTerm variant
-      if a == b then panic! "interning-collapsed-syntax").run ({} : Discharge.Graph)
-    unless graph.terms.size == 2 do throwError "interning-collapsed-syntax"
+      pure (a, b)).run ({} : Discharge.Graph)
+    unless a != b && graph.terms.size == 2 do throwError "interning-collapsed-syntax"
     let budget ← IO.mkRef ({} : AnalysisUsage)
     let (a, _) ← (mutate base `absent `alsoAbsent #[] (some budget)).run 0
     let (b, _) ← (mutate variant `absent `alsoAbsent #[] (some budget)).run 0
     unless Expr.equal a base && Expr.equal b variant do throwError "mutation-collapsed-syntax"
+    let separated ← withProtected base variant #[``Nat] (fun a b => pure (!Expr.equal a b)) (some budget)
+    unless separated do throwError "replacement-collapsed-syntax"
     let ((_, projection), _) ← ((do
       discard <| direct `absent base
       discard <| direct `absent variant).run { remaining := 64 }).run {}
     unless projection.answers.size == 2 do throwError "projection-collapsed-syntax"
-  IO.println "KEYS interning mutation projection binder-info binder-name universe distinct"
+  IO.println "KEYS interning mutation replacement projection binder-info binder-name universe distinct"
 #eval show MetaM Unit from do
   let a ← dischargeRawContext
   let b ← withOptions (fun o => o.setBool `smartUnfolding false) dischargeRawContext
@@ -131,7 +133,7 @@ def controls(meta):
         'ROOT [b2, b3] b2 bad=true', 'ROOT [b2, b3] b3 bad=false',
         'SETTYPE before=true after=false fresh=false',
         'VISITED setType before=false after=true',
-        'KEYS interning mutation projection binder-info binder-name universe distinct',
+        'KEYS interning mutation replacement projection binder-info binder-name universe distinct',
         'KEYS options mode distinct',
         'MODULES import-order checked forward=false backward=true self=true',
         'DEMAND harmless-body searches=0',
@@ -141,6 +143,30 @@ def controls(meta):
     for line in expected: print('PASS identity ' + line, flush=True)
     return 0
 
+def planted_controls():
+    from vacuity_driver import HERE
+    consumer = (HERE / 'vacuity.lean').read_text()
+    ordinary = consumer.replace('local instance auditExprBEq : BEq Expr := ⟨Expr.equal⟩', '')
+    visited = consumer.replace('visited : Std.HashSet (Expr × DischargeRawContext)',
+                               'visited : Std.HashSet (Expr × Array FVarId)')
+    visited = visited.replace('  let key := (e, context)', '  let key := (e, (← getLCtx).getFVarIds)')
+    for label, text in [('ordinary-expr-equality', ordinary), ('fvar-only-visited', visited)]:
+        assert text != consumer
+        with compiled_consumer(consumer_text=text) as meta, tempfile.TemporaryDirectory(prefix='n2-identity-plant-') as temp:
+            path = Path(temp) / 'Identity.lean'
+            path.write_text(D)
+            result = command(['lean', path], temp, dict(os.environ, LEAN_PATH=str(meta)), seconds=60)
+        if label == 'ordinary-expr-equality':
+            # These are the planted unsound answers, not an arbitrary Lean failure.
+            assert 'ROOT [b3, b2] b2 bad=false' in result.stdout.splitlines(), result.stdout
+            assert 'SETTYPE before=true after=true fresh=false' in result.stdout.splitlines(), result.stdout
+        else:
+            assert result.returncode == 1, result.stdout
+            errors = [line.split('error: ', 1)[1] for line in result.stdout.splitlines() if 'error: ' in line]
+            assert errors == ['visited-context-collapsed'], result.stdout
+        print('PASS identity planted ' + label + ': exact stale-result diagnostic', flush=True)
+
 if __name__ == '__main__':
     with compiled_consumer() as meta:
-        raise SystemExit(controls(meta))
+        controls(meta)
+    planted_controls()
