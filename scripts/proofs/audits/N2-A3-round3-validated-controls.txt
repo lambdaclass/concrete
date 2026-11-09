@@ -1,0 +1,170 @@
+Authoritative final standalone receipts after preserving result refutation
+Consumer code: e07d3c6cf2cb823ec1183ac1cedc5ab516666d93
+Consumer blob: cda204c1bd45de5f8716c804b367dc00c68770e5
+Consumer SHA256: d44ab851226f4ab4bd4b16bd606899e2c009eb30b8d22bd0089df5943e683dd5
+Every invocation below exited 0 in nix develop, under an outer timeout and the
+unchanged per-probe watchdogs. Full driver controls are pending separately.
+These supersede earlier intermediate consumer receipts.
+
+=== preserved-budget ===
+PASS DAG memoized: DAG depth=10 work=41 cached=22 root=true
+PASS DAG early-exit: DAG depth=10 work=4093 cached=2 root=false
+PASS dependency memoized: /tmp/nix-shell.j5quUl/n2-dependencies-hctikbz5/Dependencies.lean:111:0: warning: Definition `witness` is a proposition; use `theorem` instead of `def`
+PASS dependency uncached: /tmp/nix-shell.j5quUl/n2-dependencies-w1mdcv6i/Dependencies.lean:111:0: warning: Definition `witness` is a proposition; use `theorem` instead of `def`
+PASS refutation memoized: CONTEXT SEARCH
+PASS refutation context-erased: CONTEXT SEARCH
+PASS refutation raw-type-erased: CONTEXT SEARCH
+PASS identity PIPE FAIL instance-false-discharge witnessForward
+PASS identity PIPE FAIL instance-false-discharge witnessReverse
+PASS identity ORDER [b1, b2] b1 bad=false
+PASS identity ORDER [b1, b2] b2 bad=true
+PASS identity ORDER [b2, b1] b2 bad=true
+PASS identity ORDER [b2, b1] b1 bad=false
+PASS identity ROOT [b3, b2] b3 bad=false
+PASS identity ROOT [b3, b2] b2 bad=true
+PASS identity ROOT [b2, b3] b2 bad=true
+PASS identity ROOT [b2, b3] b3 bad=false
+PASS identity SETTYPE before=true after=false fresh=false
+PASS identity VISITED setType before=false after=true
+PASS identity KEYS interning mutation replacement projection binder-info binder-name universe distinct
+PASS identity KEYS options mode distinct
+PASS identity MODULES import-order checked forward=false backward=true self=true
+PASS identity DEMAND harmless-body context-searches=0
+PASS identity KEYS declaration-name binder-info kind distinct
+PASS identity KEYS projection same-FVarId context distinct
+PASS identity KEYS raw-refuted-types closed-refuted-types binder-info distinct
+PASS identity TRANSPORT bad=true exact=FAIL-instance-false-discharge
+PASS budget heavy-alone
+PASS budget bad-alone
+PASS budget repeated-instance-finding
+PASS budget starvation
+PASS budget reverse
+PASS budget heartbeat-starvation
+PASS budget cap-baseline
+PASS budget cap-population
+PASS budget cap-zero
+PASS budget empty
+PASS budget nested-reset-mentions
+PASS budget nested-reset-mutate
+PASS budget nested-reset-withProtected
+Budget controls: 13 PASS, 0 FAIL
+
+=== preserved-round5 ===
+PASS control joint-branch-decide-repro
+PASS control false-discharge
+PASS control absurd-discharge
+PASS control nomatch-discharge
+PASS control helper-false
+PASS control false-cases
+PASS control empty-elimination
+PASS control pempty-elimination
+PASS control helper-nomatch
+PASS control decide-hypothesis-positive
+PASS control nested-decide-discharge-1
+PASS control nested-decide-discharge-4
+PASS control nested-decide-discharge-12
+PASS control hypothetical-false-positive
+PASS control hypothetical-empty-positive
+PASS control hypothetical-pempty-positive
+PASS control open-helper-false
+PASS control open-helper-empty
+PASS control open-helper-pempty
+PASS control data-subtype-discharge
+PASS control data-psigma-discharge
+PASS control data-pprod-discharge
+PASS control finite-collection-decide-positive
+PASS control finite-collection-simp-positive
+PASS control finite-collection-cases-positive
+PASS control joint-hypothetical-positive
+PASS control joint-supplied-negative
+PASS control joint-open-supplied-negative
+PASS control reachable-open-impossible-negative
+PASS control reachable-joint-helper-negative
+PASS control unreachable-closed-supplier-positive
+PASS control context-cache-supplied-negative
+N2 selected controls: 32 PASS, 0 FAIL
+CERTIFICATE origin: rejected-supplied-contradiction supplier=impossible
+CERTIFICATE non-circular: rejected-supplied-contradiction supplier=impossible
+CERTIFICATE library-decide-matcher: admitted
+CERTIFICATE dependency-chain-baseline: admitted
+CERTIFICATE shared-budget: INCOMPLETE analysis-budget-or-error CertificateControl.instance stage=certificate-dependencies law=CertificateControl.law case=shared-budget false-discharge-budget
+Certificate controls: 5 PASS, 0 FAIL
+
+=== preserved-reporting ===
+PASS reporting retry-journal: earlier completed FAIL survives less-progress retry and torn record
+PASS reporting wall-watchdog: earlier exact FAIL, named interrupted/unrun analyses, population equations
+PASS reporting work-budget: exact named INCOMPLETE and unrelated FAIL retained
+PASS reporting analysis-error: exact named INCOMPLETE and unrelated FAIL retained
+PASS reporting heartbeat: exact named INCOMPLETE and unrelated FAIL retained
+PASS reporting scheduler-error: exact named scheduler INCOMPLETE and no partial population
+PASS reporting planted-error: exact Planted and paired Instance named; unrelated FAIL retained
+PASS reporting classification-unknown cap=None
+PASS reporting classification-unknown cap=100000
+PASS reporting repeated-job-findings
+PASS budget heavy-alone
+PASS budget bad-alone
+PASS budget repeated-instance-finding
+PASS budget starvation
+PASS budget reverse
+PASS budget heartbeat-starvation
+PASS budget cap-baseline
+PASS budget cap-population
+PASS budget cap-zero
+PASS budget empty
+PASS budget nested-reset-mentions
+PASS budget nested-reset-mutate
+PASS budget nested-reset-withProtected
+Budget controls: 13 PASS, 0 FAIL
+PASS control positive
+PASS control false-discharge
+PASS control positive-budget-chain
+N2 selected controls: 3 PASS, 0 FAIL
+PASS reporting replay-validator: exactly FAIL report-incomplete c9-new
+
+=== preserved-certificates ===
+CERTIFICATE origin: rejected-supplied-contradiction supplier=impossible
+CERTIFICATE non-circular: rejected-supplied-contradiction supplier=impossible
+CERTIFICATE library-decide-matcher: admitted
+CERTIFICATE dependency-chain-baseline: admitted
+CERTIFICATE shared-budget: INCOMPLETE analysis-budget-or-error CertificateControl.instance stage=certificate-dependencies law=CertificateControl.law case=shared-budget false-discharge-budget
+Certificate controls: 5 PASS, 0 FAIL
+
+=== preserved-inline ===
+PASS control inline-match-positive
+PASS control inline-match-changed-branch
+N2 selected controls: 2 PASS, 0 FAIL
+
+=== preserved-fixtures ===
+PASS real fixture provenance: 10 byte-for-byte excerpts
+
+=== preserved-identity ===
+PASS identity PIPE FAIL instance-false-discharge witnessForward
+PASS identity PIPE FAIL instance-false-discharge witnessReverse
+PASS identity ORDER [b1, b2] b1 bad=false
+PASS identity ORDER [b1, b2] b2 bad=true
+PASS identity ORDER [b2, b1] b2 bad=true
+PASS identity ORDER [b2, b1] b1 bad=false
+PASS identity ROOT [b3, b2] b3 bad=false
+PASS identity ROOT [b3, b2] b2 bad=true
+PASS identity ROOT [b2, b3] b2 bad=true
+PASS identity ROOT [b2, b3] b3 bad=false
+PASS identity SETTYPE before=true after=false fresh=false
+PASS identity VISITED setType before=false after=true
+PASS identity KEYS interning mutation replacement projection binder-info binder-name universe distinct
+PASS identity KEYS options mode distinct
+PASS identity MODULES import-order checked forward=false backward=true self=true
+PASS identity DEMAND harmless-body context-searches=0
+PASS identity KEYS declaration-name binder-info kind distinct
+PASS identity KEYS projection same-FVarId context distinct
+PASS identity KEYS raw-refuted-types closed-refuted-types binder-info distinct
+PASS identity TRANSPORT bad=true exact=FAIL-instance-false-discharge
+PASS identity planted ordinary-expr-equality: exact stale-result diagnostic
+PASS identity planted fvar-only-visited: exact stale-result diagnostic
+PASS identity planted expression-only-projection: exact stale-result diagnostic
+PASS identity planted missing-result-obligation: exact stale-result diagnostic
+
+Planted controls require these exact observations, never any arbitrary failure:
+ordinary-expr-equality: ROOT [b3, b2] b2 bad=false AND SETTYPE before=true after=true fresh=false
+fvar-only-visited: exactly error visited-context-collapsed
+expression-only-projection: exactly error projection-context-collapsed
+missing-result-obligation: exactly error transport-false-discharge-missed

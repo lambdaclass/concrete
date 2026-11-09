@@ -596,7 +596,7 @@ Round-3 refutation scheduling checks each result type before following producers
 and requests hypothetical-context certificates only for suspicious discharges. It
 retains certificate checks and never treats missing certificates as exemptions.
 This removes thousands of consistency searches on harmless lambdas. Own:4381
-drops from ~70s to ~18s in diagnostic single-example probes, but still exhausts
+drops from ~70s to ~20s in diagnostic single-example probes, but still exhausts
 20,000 proof/context visits; the other heavy examples likewise remain explicitly
 INCOMPLETE. R-0219 and slice-2a own structural proof-state sharing, including
 reconciling certificate dependency context identities with the complete keys used

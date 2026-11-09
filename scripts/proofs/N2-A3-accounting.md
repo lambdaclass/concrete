@@ -496,7 +496,7 @@ hypothetical variable: the focused `reachable-open-impossible-negative` and
 The refutation demand change must retain that rule; a local four-case rerun
 passes both negatives and both hypothetical positives.
 
-### Final round-3 receipts
+### Intermediate round-3 receipts (before projection context repair)
 
 Consumer code commit `e5b2dc3c1fcb77ddf7532eb39c00769979cb70bd`, blob
 `68e722750082236752b5c597d1a7b607a0a00f77`, SHA256
@@ -566,7 +566,7 @@ This final cache-contract addition changes projection analyses; instance/planted
 algorithms and their measured work are unchanged. Final-byte focused reruns are
 recorded separately below.
 
-Final consumer code: `37b2a0b1a3153493423d90e6070c8da9cec5718a`, blob
+Projection-context checkpoint code: `37b2a0b1a3153493423d90e6070c8da9cec5718a`, blob
 `dfee7d3d639677deb628526c54449ea85c6d90d1`, SHA256
 `ad9abbba26ebb0fabaeffe1096cfd6c6b764aed2cdd93f08fd6451789f2795b7`.
 The last identity controls are committed at `2219b4add4e566d46cbfd4fb08b9465f06407fb5`.
@@ -603,3 +603,39 @@ The new exact control requires both `falseDischarge = true` and one
 obligation in a private consumer must fail with exactly
 `transport-false-discharge-missed`. This prevents gaining speed by missing
 joint supplied contradictions hidden by nonempty recursors.
+
+### Authoritative final code and measurements
+
+Code `e07d3c6cf2cb823ec1183ac1cedc5ab516666d93`; blob `cda204c1bd45de5f8716c804b367dc00c68770e5`; SHA256
+`d44ab851226f4ab4bd4b16bd606899e2c009eb30b8d22bd0089df5943e683dd5`. Result-type refutation is preserved before unfolding; only context
+certificate search is demand-driven. The transport regression is repaired and
+all four planted cache/obligation variants fail for their exact intended reasons.
+All requested standalone focused checks pass on these final bytes, with 24
+standalone identity/transport checks (20 production checks plus 4 planted variants).
+Per-control results are in
+[audits/N2-A3-round3-validated-controls.txt](audits/N2-A3-round3-validated-controls.txt).
+The complete driver invocation is still pending, not counted as passed.
+
+The following ten single-example samples all use these final consumer bytes.
+They are instrumented diagnostics, not a whole-scope gate result.
+
+| Source | Stage | Result | Work / 20,000 | HB / 2,000,000 | Analysis ms |
+|---|---|---|---:|---:|---:|
+| Own:4381 | instance | INCOMPLETE | 20000 | 685930 | 19849 |
+| Own:4269 | planted | PASS | 12941 | 680 | 35 |
+| Own:4258 | instance | PASS | 12324 | 4510 | 265 |
+| Own:4394 | instance | INCOMPLETE | 20000 | 685930 | 19466 |
+| Own:4369 | instance | INCOMPLETE | 20000 | 558386 | 16206 |
+| Grant:1478 | instance | INCOMPLETE | 20000 | 447040 | 13144 |
+| Own:4230 | planted | PASS | 12418 | 624 | 32 |
+| Own:4247 | planted | PASS | 13224 | 697 | 36 |
+| Own:4224 | instance | PASS | 12044 | 4486 | 252 |
+| Own:4237 | instance | PASS | 12534 | 4520 | 257 |
+
+All heavy INCOMPLETEs have exactly `false-discharge-budget`; none is passed
+or omitted. Own:4381 improves from 70,227 ms / 2,000,014 heartbeats to 19,849 ms /
+685,930 heartbeats while preserving the result obligation; context search calls
+fall from 3,025 to zero on that harmless prefix. Further structural sharing
+remains with R-0219 and slice-2a. Neither per-analysis interpretation nor wall
+policy is decided here; both remain pending owner. The pinned ci-2 command is
+`bash scripts/proofs/audits/N2-A3-round3-ci2.sh` on concrete-ci-2.
