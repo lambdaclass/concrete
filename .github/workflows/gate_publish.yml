@@ -34,7 +34,7 @@ jobs:
           state=$(mktemp -d)
           trap 'rm -rf "$state"' EXIT
           BOUNDED_PARENT="$state"
-          source scripts/checks/lib/bounded.sh
+          source scripts/checks/lib/scheduled_process.sh
           bounded_run 20 -- git config user.name concrete-scheduled
           bounded_run 20 -- git config user.email concrete-scheduled@users.noreply.github.com
           rc=0

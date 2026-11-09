@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """The sole gate-registry reader/validator and CI command executor."""
+from scheduled_process import run as process_run
 import argparse
 import copy
 import json
@@ -156,8 +157,8 @@ def execute(gid,tier,environment):
         with open(environment['GITHUB_OUTPUT'],'a') as stream:
             stream.write('artifact_paths<<'+delimiter+'\n'+'\n'.join(a['path'] for a in row['artifacts'])+'\n'+delimiter+'\n')
     # The same bounded runner owns CI and scheduled budgets; no command in YAML.
-    return subprocess.run(['bash',str(ROOT/'scripts/checks/lib/bounded.sh'),str(row['budget_seconds']),*row['command']],
-                          timeout=row['budget_seconds']*3+60, env=environment).returncode
+    return process_run(['bash',str(ROOT/'scripts/checks/lib/bounded.sh'),str(row['budget_seconds']),*row['command']],
+                          cwd=ROOT, timeout=row['budget_seconds']*3+60, env=environment).returncode
 
 def main():
     environment = dict(os.environ)

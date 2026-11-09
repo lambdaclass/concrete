@@ -9,6 +9,7 @@ import tempfile
 import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from protocol import clean_env, git
+from process_adapter import process_run
 
 ROOT = Path(__file__).resolve().parent
 PREFIXES = ('GITHUB_', 'SELECTED_', 'SCHEDULED_', 'RUNNER_')
@@ -51,6 +52,8 @@ class Results(unittest.TextTestResult):
 
 
 def child(destination):
+    if sys.stdin.buffer.read() != b'':
+        raise ValueError('FAIL scheduled process stdin: unexpected payload')
     suite = unittest.defaultTestLoader.discover(str(ROOT), pattern='test_*.py')
     result = unittest.TextTestRunner(resultclass=Results).run(suite)
     Path(destination).write_text(json.dumps(sorted(result.outcomes)))
@@ -76,7 +79,7 @@ def main(environment):
                            GIT_INDEX_FILE=str(canary / '.git/index'),
                            GIT_OBJECT_DIRECTORY=str(canary / '.git/objects'))
             destination = str(Path(scratch) / (name + '.json'))
-            result = subprocess.run([sys.executable, '-I', str(Path(__file__).resolve()), '--child', destination],
+            result = process_run([sys.executable, '-I', str(Path(__file__).resolve()), '--child', destination],
                                     env=env, capture_output=True, text=True, timeout=45)
             if result.returncode:
                 print(result.stdout, end=''); print(result.stderr, end='', file=sys.stderr)

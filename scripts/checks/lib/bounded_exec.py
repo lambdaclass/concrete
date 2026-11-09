@@ -62,24 +62,13 @@ def usage(msg):
     return 2
 
 
-def main(argv):
-    try:
-        i = argv.index("--")
-    except ValueError:
-        return usage("missing --")
-    opts, cmd = argv[:i], argv[i + 1:]
-    if len(opts) != 6 or opts[0::2] != ["--timeout", "--kill-after", "--status"] or not cmd:
-        return usage("expected --timeout SECS --kill-after SECS --status FILE -- CMD...")
-    budget, kill_after, status = duration(opts[1], True), duration(opts[3], False), opts[5]
-    if budget is None or kill_after is None:
-        return usage(f"invalid duration: --timeout {opts[1]} --kill-after {opts[3]}")
-
+def supervise(cmd, budget, kill_after, *, on_started=None, **process_options):
+    """Single process-tree supervisor, shared by generic and scheduled callers."""
     def cancel(sig, _frame):
         raise Cancelled(sig)
 
     cancel_sigs = {signal.SIGTERM, signal.SIGHUP, signal.SIGINT}
-    for s in cancel_sigs:
-        signal.signal(s, cancel)
+    previous = {s: signal.signal(s, cancel) for s in cancel_sigs}
     pgid = None
     try:
         # Cancellation is held off while the child is created, so it can never arrive between the
@@ -96,7 +85,7 @@ def main(argv):
                     inherited = (int(slot_fd),)
                 except OSError:
                     pass  # the child's acquisition reports the invalid inheritance
-            proc = subprocess.Popen(cmd, start_new_session=True, pass_fds=inherited,
+            proc = subprocess.Popen(cmd, start_new_session=True, pass_fds=inherited, **process_options,
                                     preexec_fn=lambda: signal.pthread_sigmask(signal.SIG_UNBLOCK, cancel_sigs))
         except OSError as e:
             proc = None
@@ -107,6 +96,8 @@ def main(argv):
         finally:
             signal.pthread_sigmask(signal.SIG_UNBLOCK, cancel_sigs)  # a held signal is delivered here
         if proc is not None:
+            if on_started is not None:
+                on_started(proc.pid)
             try:
                 rc = proc.wait(timeout=budget)
                 outcome = f"exit {rc if rc >= 0 else 128 - rc}"
@@ -127,6 +118,28 @@ def main(argv):
                 proc.wait(timeout=5)
             except Exception:
                 pass
+        raise
+    finally:
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
+    return outcome
+
+
+def main(argv):
+    try:
+        i = argv.index("--")
+    except ValueError:
+        return usage("missing --")
+    opts, cmd = argv[:i], argv[i + 1:]
+    if len(opts) != 6 or opts[0::2] != ["--timeout", "--kill-after", "--status"] or not cmd:
+        return usage("expected --timeout SECS --kill-after SECS --status FILE -- CMD...")
+    budget, kill_after, status = duration(opts[1], True), duration(opts[3], False), opts[5]
+    if budget is None or kill_after is None:
+        return usage(f"invalid duration: --timeout {opts[1]} --kill-after {opts[3]}")
+
+    try:
+        outcome = supervise(cmd, budget, kill_after)
+    except Cancelled as c:
         return 128 + c.sig
     with open(status, "w") as fh:
         fh.write(outcome + "\n")

@@ -20,7 +20,7 @@ jobs:
       - name: Observe main history independently
         run: |
           set -euo pipefail
-          source scripts/checks/lib/bounded.sh
+          source scripts/checks/lib/scheduled_process.sh
           for tier in daily weekly; do
             ref="refs/notes/concrete-gates-$tier"
             exists=$(bounded_run 30 -- git ls-remote origin "$ref")

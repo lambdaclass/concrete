@@ -24,7 +24,7 @@ class Integrated(unittest.TestCase):
             scratch=Path(work); controller=scratch/'controller'; controller.mkdir()
             lib=controller/'scripts/checks/lib'; lib.mkdir(parents=True)
             scheduled=controller/'scripts/checks/scheduled'; scheduled.mkdir()
-            for name in ('bounded.sh','bounded_exec.py','heavy_slots.sh','gate_outcome.py','gate_env.sh','has_match.sh'):
+            for name in ('bounded.sh','bounded_exec.py','scheduled_process.py','scheduled_process.sh','heavy_slots.sh','gate_outcome.py','gate_env.sh','has_match.sh'):
                 shutil.copy(ROOT/'scripts/checks/lib'/name,lib/name)
             shutil.copy(ROOT/'scripts/checks/scheduled/with_slot.sh',scheduled)
             pool=scratch/'pool'; pool.mkdir()
@@ -139,7 +139,7 @@ printf 'depth=128\\n' > report-{n}/depth.txt
     def test_internal_timeouts_and_failure_precedence(self):
         for stage,command in (('measurement', "python3 -c 'import time; time.sleep(1)'"),
                               ('build', "bash -c 'sleep 1'")):
-            program=self.report()+f'''source scripts/checks/lib/bounded.sh
+            program=self.report()+f'''source scripts/checks/lib/scheduled_process.sh
 bounded_run 0.02 -- {command}; rc=$?
 if bounded_is_incomplete "$rc"; then python3 "$SCHEDULED_OUTCOME_HELPER" INCOMPLETE "measurement unavailable"; exit 1; fi
 [ "$rc" = 0 ] || exit 1
@@ -147,13 +147,13 @@ if bounded_is_incomplete "$rc"; then python3 "$SCHEDULED_OUTCOME_HELPER" INCOMPL
             code,index,files,_=self.invoke([program])
             self.assertEqual((code,index['status']),(1,'INCOMPLETE'),stage)
             self.assertEqual(files['gate-0.log'],b'INCOMPLETE scheduled gate: nested watchdog or gate incomplete\n',stage)
-        control=['bash','-c', "source scripts/checks/lib/bounded.sh; bounded_run 0.02 -- bash -c 'sleep 1'; rc=$?; if bounded_is_incomplete \"$rc\"; then python3 \"$SCHEDULED_OUTCOME_HELPER\" INCOMPLETE 'control unavailable'; fi; exit 1"]
+        control=['bash','-c', "source scripts/checks/lib/scheduled_process.sh; bounded_run 0.02 -- bash -c 'sleep 1'; rc=$?; if bounded_is_incomplete \"$rc\"; then python3 \"$SCHEDULED_OUTCOME_HELPER\" INCOMPLETE 'control unavailable'; fi; exit 1"]
         code,index,_,_=self.invoke([self.report()],control_command=control)
         self.assertEqual((code,index['status']),(1,'INCOMPLETE'))
         self.assertEqual(index['gates'][0]['controls'][0],dict(id='refusal',status='INCOMPLETE',
                          diagnostic='INCOMPLETE scheduled gate: nested watchdog or gate incomplete'))
         failure=self.report()+'''python3 "$SCHEDULED_OUTCOME_HELPER" FAIL 'real measurement mismatch'
-source scripts/checks/lib/bounded.sh
+source scripts/checks/lib/scheduled_process.sh
 bounded_run 0.02 -- python3 -c 'import time; time.sleep(1)'
 exit 1
 '''

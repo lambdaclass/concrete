@@ -1,4 +1,5 @@
 """Exact-SHA append-only scheduled evidence. No gate list lives here."""
+from process_adapter import process_run
 import os
 import copy
 import datetime as dt
@@ -34,12 +35,9 @@ def require(ok, message):
 def clean_env(environment):
     return {k: v for k, v in environment.items() if not k.startswith("GIT_")}
 
-GIT_ENVIRONMENT = {k: v for k, v in clean_env(os.environ).items()
-                   if not k.startswith(("GITHUB_", "SELECTED_", "SCHEDULED_", "RUNNER_"))}
-
 def git(*args, environment=None):
-    return subprocess.run(["git", *args], check=True, capture_output=True,
-                          text=True, timeout=60, env=GIT_ENVIRONMENT if environment is None else clean_env(environment)).stdout.strip()
+    return process_run(["git", *args], check=True, capture_output=True,
+                          text=True, timeout=60, env=clean_env(dict(os.environ) if environment is None else environment)).stdout.strip()
 
 def timestamp(value):
     try:

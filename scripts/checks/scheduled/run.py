@@ -18,28 +18,7 @@ ROOT = Path(__file__).resolve().parents[3]
 def now():
     return dt.datetime.now(dt.timezone.utc).isoformat()
 
-def call(argv, **kwargs):
-    budget = kwargs.pop("timeout", 120)
-    check = kwargs.pop("check", False)
-    if kwargs.pop("capture_output", False):
-        kwargs["stdout"] = subprocess.PIPE
-        kwargs["stderr"] = subprocess.PIPE
-    kwargs.setdefault("env", {})
-    process = subprocess.Popen(argv, start_new_session=True, **kwargs)
-    try:
-        stdout, stderr = process.communicate(timeout=budget)
-    except subprocess.TimeoutExpired:
-        os.killpg(process.pid, signal.SIGTERM)
-        try:
-            process.communicate(timeout=10)
-        except subprocess.TimeoutExpired:
-            os.killpg(process.pid, signal.SIGKILL)
-            process.communicate(timeout=10)
-        raise
-    result = subprocess.CompletedProcess(argv, process.returncode, stdout, stderr)
-    if check:
-        result.check_returncode()
-    return result
+from process_adapter import process_run as call
 
 def preserve_artifacts(row, checkout, output, number, sha, required, saved):
     """Preserve regular report trees before private-checkout cleanup, including partial runs."""

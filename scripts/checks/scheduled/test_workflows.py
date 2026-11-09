@@ -1,4 +1,5 @@
 """Execute the publisher timeout path with short real bounded attempts."""
+from process_adapter import process_run
 from pathlib import Path
 import re
 import subprocess
@@ -21,13 +22,13 @@ class Workflows(unittest.TestCase):
     def test_real_timeout_is_explicit_and_cleaned(self):
         script = publisher_script()
         check_budget(script)
-        script = script.replace("source scripts/checks/lib/bounded.sh", f"source {ROOT}/scripts/checks/lib/bounded.sh")
+        script = script.replace("source scripts/checks/lib/scheduled_process.sh", f"source {ROOT}/scripts/checks/lib/scheduled_process.sh")
         script = re.sub(r"bounded_run 20 -- git config[^\n]+", "true", script)
         script = script.replace("bounded_run -r 300 300 -- python3 scripts/checks/scheduled/collect.py", "bounded_run -r 0.05 0.05 -- python3 -c 'import time; time.sleep(5)'")
         with tempfile.TemporaryDirectory() as scratch:
             import os
             env = dict(runtime_environment(), TMPDIR=scratch)
-            result = subprocess.run(["bash", "-c", script], cwd=scratch, env=env, capture_output=True, text=True, timeout=10)
+            result = process_run(["bash", "-c", script], cwd=scratch, env=env, capture_output=True, text=True, timeout=10)
             self.assertEqual(result.returncode, 1)
             self.assertEqual(result.stdout.strip(), "INCOMPLETE scheduled collection: bounded attempts exhausted")
             self.assertEqual(result.stderr, "")

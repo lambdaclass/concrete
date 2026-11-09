@@ -1,4 +1,5 @@
 """Trusted publisher: immutable attempts, idempotent retry, leased notes updates."""
+from process_adapter import process_run
 import json
 import subprocess
 import sys
@@ -27,11 +28,11 @@ def publish(record, runners, repository, environment):
                 return  # Lost response after successful push, or identical collector retry.
         history = append(history, record, sha, tier, runners, repository)
         body = "\n".join(json.dumps(item, sort_keys=True) for item in history) + "\n"
-        subprocess.run(["git", "notes", "--ref=" + ref, "add", "-f", "-F", "-", sha],
+        process_run(["git", "notes", "--ref=" + ref, "add", "-f", "-F", "-", sha],
                        input=body, text=True, check=True, timeout=60, env=clean_env(environment))
         local = git("rev-parse", ref, environment=environment)
         try:
-            subprocess.run(["git", "push", "--force-with-lease=" + ref + ":" + expected,
+            process_run(["git", "push", "--force-with-lease=" + ref + ":" + expected,
                         "origin", ref + ":" + ref], timeout=120, env=clean_env(environment))
         except subprocess.TimeoutExpired:
             pass  # Remote readback, then identical-attempt recovery on the next iteration.

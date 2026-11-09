@@ -1,4 +1,5 @@
 """The environment control must detect changed outcomes, not merely two exits."""
+from process_adapter import process_run
 import unittest
 from hermetic_suite import compare, compare_canary, environments, PREFIXES
 
@@ -32,10 +33,10 @@ class Hermeticity(unittest.TestCase):
             environment = dict(os.environ, PATH=scratch + os.pathsep + os.environ['PATH'],
                                GIT_DIR='/foreign', SELECTED_SHA='foreign')
             program = ("import sys; sys.path.insert(0, sys.argv[1]); import protocol; "
-                       "assert 'GIT_DIR' not in protocol.GIT_ENVIRONMENT; "
-                       "assert 'SELECTED_SHA' not in protocol.GIT_ENVIRONMENT; "
+                       "assert not hasattr(protocol, 'GIT_ENVIRONMENT'); "
+                       "assert sys.stdin.buffer.read() == b''; "
                        "print(protocol.git('--version'))")
-            result = subprocess.run([sys.executable, '-I', '-c', program, str(Path(__file__).resolve().parent)],
+            result = process_run([sys.executable, '-I', '-c', program, str(Path(__file__).resolve().parent)],
                                     env=environment, text=True, capture_output=True, timeout=10, check=True)
             self.assertEqual(result.stdout, 'selected gate git\n')
 

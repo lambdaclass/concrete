@@ -39,7 +39,7 @@ jobs:
           CRON: ${{ github.event.schedule }}
         run: |
           set -euo pipefail
-          source scripts/checks/lib/bounded.sh
+          source scripts/checks/lib/scheduled_process.sh
           if [ "$EVENT" = schedule ]; then
             tier=daily
             if [ "$CRON" = '43 3 * * 0' ]; then tier=weekly; fi
@@ -86,9 +86,7 @@ jobs:
           set -euo pipefail
           state=$(mktemp -d)
           trap 'rm -rf "$state"' EXIT
-          python3 scripts/checks/lib/bounded_exec.py --timeout 80000 --kill-after 10 --status "$state/outcome" -- nix develop --command python3 scripts/checks/scheduled/run.py "$SELECTED_SHA" "$SELECTED_TIER" result-index
-          outcome=$(cat "$state/outcome")
-          [ "$outcome" = 'exit 0' ]
+          python3 scripts/checks/lib/scheduled_process.py --cwd "$PWD" --timeout 80000 -- nix develop --command python3 scripts/checks/scheduled/run.py "$SELECTED_SHA" "$SELECTED_TIER" result-index
       - name: Upload bounded metadata for trusted collection
         uses: actions/upload-artifact@v4
         if: always()

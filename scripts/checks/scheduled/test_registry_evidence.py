@@ -54,7 +54,7 @@ class RegistryEvidence(unittest.TestCase):
 
     def publication(self, payload):
         """Exercise the real publication validator and JSON serialization, without a push."""
-        real_run = subprocess.run
+        real_run = publish.process_run
         saved = []
         def command(argv, **kwargs):
             if argv[:2] == ['git', 'notes']:
@@ -64,7 +64,7 @@ class RegistryEvidence(unittest.TestCase):
                 return subprocess.CompletedProcess(argv, 0)
             return real_run(argv, **kwargs)
         with patch.object(publish, 'git', side_effect=['', '', 'local', 'local ref']), \
-             patch.object(publish.subprocess, 'run', side_effect=command):
+             patch.object(publish, 'process_run', side_effect=command):
             publish.publish(payload, RUNNERS, 'example/repo', {})
         self.assertEqual(len(saved), 1)
         return saved[0]

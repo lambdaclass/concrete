@@ -1,4 +1,5 @@
 """Exercise the real slot wrapper and bounded runner in a private controller tree."""
+from process_adapter import process_run
 import os
 from pathlib import Path
 import shutil
@@ -17,7 +18,7 @@ class Slot(unittest.TestCase):
             root = Path(work) / "controller"
             lib = root / "scripts/checks/lib"; lib.mkdir(parents=True)
             scheduled = root / "scripts/checks/scheduled"; scheduled.mkdir()
-            for name in ("bounded.sh", "bounded_exec.py", "heavy_slots.sh", "gate_outcome.py"):
+            for name in ("bounded.sh", "bounded_exec.py", "scheduled_process.py", "scheduled_process.sh", "heavy_slots.sh", "gate_outcome.py"):
                 shutil.copy(ROOT / "scripts/checks/lib" / name, lib / name)
             (lib / "gate_env.sh").write_text(":\n")
             if acquire is not None:
@@ -30,7 +31,7 @@ class Slot(unittest.TestCase):
             # Sourcing replayed libraries would produce this exact planted diagnostic.
             replay = Path(work) / "replay/scripts/checks/lib"; replay.mkdir(parents=True)
             (replay / "gate_env.sh").write_text("echo 'untrusted replay controller sourced'; exit 77\n")
-            return subprocess.run(["bash", str(scheduled / "with_slot.sh"), budget, *command],
+            return process_run(["bash", str(scheduled / "with_slot.sh"), budget, *command],
                                   cwd=replay.parents[2], capture_output=True, text=True, timeout=15, env=env)
 
     def test_replayed_libraries_not_sourced(self):
@@ -50,7 +51,7 @@ class Slot(unittest.TestCase):
         self.assertEqual((result.returncode, result.stdout, result.stderr), (125, "", "INCOMPLETE scheduled gate: nested watchdog or gate incomplete\n"))
 
     def test_real_pool_missing(self):
-        result = subprocess.run(["bash", "-c", 'source "$1"; heavy_slot_acquire', "bash",
+        result = process_run(["bash", "-c", 'source "$1"; heavy_slot_acquire', "bash",
                                  str(ROOT / "scripts/checks/lib/heavy_slots.sh")],
                                 env={**runtime_environment(), "CONCRETE_HEAVY_SLOT_DIR": "/nonexistent/concrete-slot-control"},
                                 capture_output=True, text=True, timeout=5)
@@ -67,12 +68,12 @@ class Slot(unittest.TestCase):
             argv = ["bash", "-c", 'source "$1"; heavy_slot_acquire || exit 125; heavy_slot_release',
                     "bash", str(ROOT / "scripts/checks/lib/heavy_slots.sh")]
             env = {**runtime_environment(), "CONCRETE_HEAVY_SLOT_DIR": work}
-            result = subprocess.run(argv, env=env, capture_output=True, text=True, timeout=5)
+            result = process_run(argv, env=env, capture_output=True, text=True, timeout=5)
             self.assertEqual((result.returncode, result.stderr),
                              (125, "INCOMPLETE heavy slots: both host slots occupied\n"))
             handles[0].close()
             for _ in range(2):
-                result = subprocess.run(argv, env=env, capture_output=True, text=True, timeout=5)
+                result = process_run(argv, env=env, capture_output=True, text=True, timeout=5)
                 self.assertEqual((result.returncode, result.stderr), (0, ""))
             handles[1].close()
 
@@ -107,7 +108,7 @@ echo inherited-slot
 '''
         with tempfile.TemporaryDirectory() as work:
             for n in (1, 2): (Path(work) / f'slot-{n}').touch()
-            result = subprocess.run(['bash', '-c', script, 'bash', str(ROOT / 'scripts/checks/lib/heavy_slots.sh')],
+            result = process_run(['bash', '-c', script, 'bash', str(ROOT / 'scripts/checks/lib/heavy_slots.sh')],
                 env={**runtime_environment(), 'CONCRETE_HEAVY_SLOT_DIR': work}, capture_output=True, text=True, timeout=5)
         self.assertEqual((result.returncode, result.stdout, result.stderr), (0, 'inherited-slot\n', ''))
 
