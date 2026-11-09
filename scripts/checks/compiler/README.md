@@ -339,7 +339,9 @@ controls in `scripts/checks/compiler/slice0_trusted_base.sh`.
 The examples audit is launched through `trusted_memory_bound.py`, on Linux cgroup
 v2 with **MemoryMax=8589934592 bytes (8 GiB)** and **MemorySwapMax=0** for the
 whole frontend process tree. The bound includes descendants and file cache;
-systemd kills the cgroup on OOM. Its exact diagnostic is
+systemd kills the cgroup on OOM. OOM classification also requires the manager's
+retained MemoryPeak to have reached the configured bound; a host OOM below the
+bound, or missing peak evidence, is INCOMPLETE. Its exact diagnostic is
 `FAIL examples memory: cgroup MemoryMax exceeded (8589934592 bytes)`.
 The launcher reconnects only to the kernel-uid-owned local user manager; when
 none exists (GitHub runners), it uses the system manager through noninteractive
@@ -352,8 +354,9 @@ and reset in a finally block.
 
 Systemd services do not inherit caller resource limits: inside the service,
 `limited_exec.sh 65536` explicitly reestablishes the hard 64 GiB RLIMIT_AS as a
-second layer before strace/Lean starts. The real small-allocation control asserts
-this hard limit; the real over-limit control uses the same launcher with a
+second layer before strace/Lean starts. The real small-allocation control runs at the production 8 GiB setting and
+reads its own kernel cgroup memory.max / memory.swap.max as well as asserting
+the hard address-space limit; the real over-limit control uses the same launcher with a
 64 MiB cgroup and requires the exact OOM diagnostic, exercising both manager
 selection and enforcement without an 8 GiB local allocation. The complete
 8 GiB over-limit control (`trusted_memory_bound_controls.py --full`) is invoked by
@@ -389,7 +392,9 @@ must reject the parent clone with `untraced clone child has no audited identity`
 ## Control timeouts (round 14, item 8)
 
 Every semantic control subprocess emits `control-timing` JSON with its command,
-elapsed seconds and bound. A timeout kills and reaps its process group and exits
+elapsed seconds and bound. Repeated commands have sequence IDs; batched
+frontend controls also report each file's measured time and assert that none
+was omitted. The batch bound applies to their combined cost. A timeout kills and reaps its process group and exits
 2 with `INCOMPLETE trusted-base control: NAME (timeout Ns)`, never a traceback or
 PASS. Controls consume existing local artifacts without invoking Lake; missing
 artifacts are INCOMPLETE. No controls are sampled or dropped.
@@ -402,3 +407,29 @@ old 60 s limit exceeded on ci-2 D14). The coordinator must collect every timing
 on ci-2, repeat under shared load, and record the measured maximum plus margin
 before accepting item 8. This remaining calibration belongs to R-0678 / R-0509;
 no new roadmap ID is allocated by this writer.
+
+### Round-14 acceptance still required on ci-2
+
+Record the exact final SHA (`git rev-parse HEAD`) in every result. In the pinned
+clean environment from `slice0_gate_environment`, run:
+
+- `bounded_run 900 -- python3 -I scripts/checks/tests/trusted_base_controls.py`
+  twice under ordinary shared load, retaining every `control-timing` row; set
+  final per-command, batch and enclosing bounds from those measurements with
+  explicit margin (item 8 is not complete until this is recorded).
+- `bounded_run 180 -- python3 -I scripts/checks/tests/trusted_memory_bound_controls.py --full`
+  to exercise the actual 8 GiB OOM limit, and the cheap form without `--full`
+  on ci-2 and GitHub to check both launch paths and kernel-reported limits.
+- `bounded_run 60 -- python3 -I scripts/checks/tests/trusted_approval_controls.py`
+  and `bounded_run 90 -- python3 -I scripts/checks/tests/trusted_policy_controls.py`.
+- `bounded_run 3600 -- bash scripts/checks/compiler/slice0_trusted_base.sh` for
+  the integrated D14 run. While the owner key is absent, the only intended
+  blocker is exactly `FAIL approval: awaiting owner key`; this is not a PASS.
+  Gate 9 stops there before its later examples audits, so the separate memory
+  controls above are required rather than inferred from that integrated run.
+
+The daily full-memory control is executable in `slice0_trusted_fresh.sh`; wiring
+that existing daily script into scheduled CI remains R-0676 / R-0509. No full
+local suite or 8 GiB local allocation is authorized. Reviews of record belong
+to the coordinator and must choose the best long-term design without cutting
+corners for speed, diff size or round count.

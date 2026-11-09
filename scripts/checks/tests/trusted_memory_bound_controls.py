@@ -12,7 +12,17 @@ bound = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(bound)
 try:
     limit = bound.LIMIT if "--full" in sys.argv else 64*1024**2
-    assert bound.run([sys.executable, "-I", "-c", "import resource; soft,hard=resource.getrlimit(resource.RLIMIT_AS); assert 0 < soft <= hard <= 64*1024**3; x=bytearray(1024*1024)"], limit=64*1024**2, seconds=15) == 0
+    positive = f"""import resource
+from pathlib import Path
+soft,hard=resource.getrlimit(resource.RLIMIT_AS)
+assert 0 < soft <= hard <= 64*1024**3, (soft, hard)
+path=next(line[3:] for line in Path('/proc/self/cgroup').read_text().splitlines() if line.startswith('0::'))
+cgroup=Path('/sys/fs/cgroup') / path.lstrip('/')
+assert int((cgroup/'memory.max').read_text()) == {bound.LIMIT}
+assert int((cgroup/'memory.swap.max').read_text()) == 0
+x=bytearray(1024*1024)
+"""
+    assert bound.run([sys.executable, "-I", "-c", positive], seconds=15) == 0
     try:
         bound.run([sys.executable, "-I", "-c", f"x=bytearray({limit + 192*1024**2})"], limit=limit, seconds=60)
     except ValueError as error:
