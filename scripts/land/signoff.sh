@@ -273,12 +273,12 @@ cmd_collect() {
   c_out="$(validate_reviewer_output "$repo_root" "$sha" "$tree" "$manifest" "$out" "$log" "ACCEPT,REJECT" "$rc" "$base")" || die "collect: validate_reviewer_output failed"
   c_status="$(printf '%s\n' "$c_out" | sed -n 's/^status: //p' | head -1)"
   c_reason="$(printf '%s\n' "$c_out" | sed -n 's/^reason: //p' | head -1)"
-  if [ "$c_status" = invalid ]; then
-    echo "signoff: collect invalid reviewer evidence ($c_reason)" >&2
-    return 1
-  fi
   if [ "$rc" -ne 0 ] || { [ "$c_status" != ACCEPT ] && [ "$c_status" != REJECT ]; }; then
     rm -f "$out"
+    if [ "$c_status" = invalid ]; then
+      echo "signoff: collect invalid reviewer evidence ($c_reason)" >&2
+      return 1
+    fi
     echo "signoff: collect ($reviewer on ${sha:0:10}) failed: status=$c_status ($c_reason, exit $rc)" >&2
     return 1
   fi

@@ -72,6 +72,18 @@ else: sys.exit('unexpected git command: '+repr(args))
         code += 'validate_reviewer_output . HEAD tree manifest ' + shlex.quote(str(tmp / 'out')) + ' ' + shlex.quote(str(tmp / 'log')) + ' clean,findings 0'
         expected = 'status: invalid\nreason: planted invalid' if status == 'invalid' else 'status: error\nreason: unknown reviewer-output status: future-status'
         shell(code, diagnostic=expected, env=env)
+# Exercise the production collection tail: every rejected status removes --out.
+with tempfile.TemporaryDirectory() as directory:
+    out = Path(directory) / 'rejected.out'
+    a = signoff.index('  if [ "$rc" -ne 0 ]', signoff.index('cmd_collect()'))
+    b = signoff.index('  echo "signoff: collected', a)
+    for status in ('invalid', 'blocked', 'future-status'):
+        out.write_text('planted rejected evidence')
+        diagnostic = ('signoff: collect invalid reviewer evidence (planted invalid)' if status == 'invalid'
+                      else 'failed: status=' + status + ' (planted invalid, exit 0)')
+        shell('out=' + shlex.quote(str(out)) + '; rc=0; c_status=' + status + '; c_reason="planted invalid"; reviewer=codex; sha=1111111111111111111111111111111111111111\n'
+              + 'collect_tail() {\n' + signoff[a:b] + '\n}\ncollect_tail', 1, diagnostic)
+        assert not out.exists(), status
 # Readiness's reporting tail must retain failure after notes readiness rejects invalid.
 ready = source('scripts/land/ready.sh')
 tail = ready[ready.index('verdict="$(bash'):]
