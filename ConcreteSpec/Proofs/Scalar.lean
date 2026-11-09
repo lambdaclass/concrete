@@ -74,7 +74,7 @@ theorem wrap_inRange (t : IntTy) (n : Int) : t.InRange (wrap t n) :=
 theorem wrap_of_inRange (t : IntTy) (n : Int) (h : t.InRange n) : wrap t n = n :=
   ofBits_toBits t n h
 
-/-- Helper (arithmetic). Finite endpoint ordering used by interval arguments (approved: PENDING). -/
+/-- Helper (arithmetic). Finite endpoint ordering used by interval arguments (approved: APPR-C1-codex-5531d9e34). -/
 theorem IntTy.min_le_max (t : IntTy) : t.min ≤ t.max := by
   cases t <;> decide
 
@@ -113,14 +113,14 @@ theorem bitNot_inRange (t : IntTy) (a : Int) : t.InRange (bitNot t a) := by
 
 /-! ### Checked operations stay in range -/
 
-/-- Helper (inversion). Extracts the explicit range validator result (approved: PENDING). -/
+/-- Helper (inversion). Extracts the explicit range validator result (approved: APPR-C1-codex-5531d9e34). -/
 theorem inRangeOr_inRange {t : IntTy} {r s : Int} (h : inRangeOr t r = .ok s) : t.InRange s := by
   unfold inRangeOr at h
   split at h
   · cases h; assumption
   · cases h
 
-/-- Helper (arithmetic). Internal integer division bound used in checked shift preservation (approved: PENDING). -/
+/-- Helper (arithmetic). Internal integer division bound used in checked shift preservation (approved: APPR-C1-codex-5531d9e34). -/
 theorem shr_inRange (t : IntTy) (a : Int) (d : Nat) (ha : t.InRange a) :
     t.InRange (a / (2 : Int) ^ d) := by
   have hd : (0 : Int) < 2 ^ d := Int.pow_pos (by decide)
@@ -139,7 +139,7 @@ theorem shr_inRange (t : IntTy) (a : Int) (d : Nat) (ha : t.InRange a) :
     · exact Int.le_trans (Int.ediv_le_self _ ha0) h2
     · exact Int.le_trans (Int.le_of_lt (Int.ediv_neg_of_neg_of_pos (Int.lt_of_not_ge ha0) hd)) hmax
 
-/-- Helper (arithmetic). Internal remainder bound used in checked arithmetic preservation (approved: PENDING). -/
+/-- Helper (arithmetic). Internal remainder bound used in checked arithmetic preservation (approved: APPR-C1-codex-5531d9e34). -/
 theorem tmod_inRange (t : IntTy) (a b : Int) (ha : t.InRange a) : t.InRange (a.tmod b) := by
   have hmin : t.min ≤ 0 := by cases t <;> decide
   have hmax : 0 ≤ t.max := by cases t <;> decide
@@ -152,7 +152,7 @@ theorem tmod_inRange (t : IntTy) (a b : Int) (ha : t.InRange a) : t.InRange (a.t
     rw [Int.neg_tmod] at hnp
     constructor <;> omega
 
-/-- Helper (inversion). Checked result bound combining validator inversion and the independent division and remainder bounds (approved: PENDING). -/
+/-- Helper (inversion). Checked result bound combining validator inversion and the independent division and remainder bounds (approved: APPR-C1-codex-5531d9e34). -/
 theorem checked_inRange (t : IntTy) (op : ArithOp) (a b r : Int) (ha : t.InRange a)
     (h : checked t op a b = .ok r) : t.InRange r := by
   cases op <;> simp only [checked] at h
@@ -176,19 +176,19 @@ theorem checked_inRange (t : IntTy) (op : ArithOp) (a b r : Int) (ha : t.InRange
 
 /-! ### Plain, wrapping and saturating -/
 
-/-- Representation lemma. Plain/checked adapter representation (approved: PENDING). -/
+/-- Representation lemma. Plain/checked adapter representation (approved: APPR-C1-codex-5531d9e34). -/
 theorem plain_ok_iff (t : IntTy) (op : ArithOp) (a b r : Int) :
     plain t op a b = .ok r ↔ checked t op a b = .ok r := by
   unfold plain
   cases checked t op a b <;> simp
 
-/-- Representation lemma. Plain/checked error adapter representation (approved: PENDING). -/
+/-- Representation lemma. Plain/checked error adapter representation (approved: APPR-C1-codex-5531d9e34). -/
 theorem plain_trap_iff (t : IntTy) (op : ArithOp) (a b : Int) (k : TrapKind) :
     plain t op a b = .trap k ↔ ∃ e, checked t op a b = .error e ∧ e.trapKind = k := by
   unfold plain
   cases checked t op a b <;> simp
 
-/-- Helper (inversion). Adapter result-shape inversion (approved: PENDING). -/
+/-- Helper (inversion). Adapter result-shape inversion (approved: APPR-C1-codex-5531d9e34). -/
 theorem plain_not_stuck (t : IntTy) (op : ArithOp) (a b : Int) : plain t op a b ≠ .stuck := by
   unfold plain
   cases checked t op a b <;> simp
@@ -199,7 +199,7 @@ def WrapOp.arith : WrapOp → ArithOp
   | .sub => .sub
   | .mul => .mul
 
-/-- Helper (computation). Unfolds the checked arithmetic adapter (approved: PENDING). -/
+/-- Helper (computation). Unfolds the checked arithmetic adapter (approved: APPR-C1-codex-5531d9e34). -/
 theorem checked_wrapOp (t : IntTy) (op : WrapOp) (a b : Int) :
     checked t op.arith a b = inRangeOr t (op.exact a b) := by
   cases op <;> rfl
@@ -239,7 +239,7 @@ theorem lossless_iff (s t : IntTy) : Lossless s t ↔ ∀ n, s.InRange n → t.I
 theorem boolToInt_inRange (t : IntTy) (b : Bool) : t.InRange (boolToInt b) := by
   cases t <;> cases b <;> decide
 
-/-- Representation lemma. Explicit conversion validator characterization (approved: PENDING). -/
+/-- Representation lemma. Explicit conversion validator characterization (approved: APPR-C1-codex-5531d9e34). -/
 theorem tryConvert_ok_iff (t : IntTy) (n r : Int) :
     tryConvert t n = .ok r ↔ t.InRange n ∧ r = n := by
   unfold tryConvert
@@ -249,7 +249,7 @@ theorem tryConvert_ok_iff (t : IntTy) (n r : Int) :
 
 /-! ### Machine and exact arithmetic in contracts -/
 
-/-- Helper (computation). Unfolds exact-term evaluation after successful operands (approved: PENDING). -/
+/-- Helper (computation). Unfolds exact-term evaluation after successful operands (approved: APPR-C1-codex-5531d9e34). -/
 theorem exact_defined (ρ : Var → Option Int) (op : WrapOp) (a b : CTerm) (x y : Int)
     (ha : a.eval ρ = some x) (hb : b.eval ρ = some y) :
     (CTerm.exact op a b).eval ρ = some (op.exact x y) := by
@@ -277,7 +277,7 @@ theorem machine_plain_eq_exact (ρ : Var → Option Int) (t : IntTy) (op : WrapO
         · simp [hr] at h; subst h; rfl
         · simp [hr] at h
 
-/-- Helper (inversion). Extracts the runtime operand guard; not independent typing soundness (approved: PENDING). -/
+/-- Helper (inversion). Extracts the runtime operand guard; not independent typing soundness (approved: APPR-C1-codex-5531d9e34). -/
 theorem machine_operands_inv (ρ : Var → Option Int) (t : IntTy) (op : MachineOp) (a b : CTerm)
     (r : Int) (h : (CTerm.machine t op a b).eval ρ = some r) :
     ∃ x y, a.eval ρ = some x ∧ b.eval ρ = some y ∧ t.InRange x ∧
@@ -298,7 +298,7 @@ theorem machine_operands_inv (ρ : Var → Option Int) (t : IntTy) (op : Machine
           Bool.or_eq_true] at hok
         exact ⟨x, y, rfl, rfl, hok.1, hok.2⟩
 
-/-- Helper (inversion). Combines evaluator guard inversion with checked arithmetic bounds; independent soundness is typed_eval_range (approved: PENDING). -/
+/-- Helper (inversion). Combines evaluator guard inversion with checked arithmetic bounds; independent soundness is typed_eval_range (approved: APPR-C1-codex-5531d9e34). -/
 theorem machine_inRange_inv (ρ : Var → Option Int) (t : IntTy) (op : MachineOp) (a b : CTerm)
     (r : Int) (h : (CTerm.machine t op a b).eval ρ = some r) : t.InRange r := by
   obtain ⟨x, y, ha, hb, hx, _⟩ := machine_operands_inv ρ t op a b r h
@@ -314,7 +314,7 @@ theorem machine_inRange_inv (ρ : Var → Option Int) (t : IntTy) (op : MachineO
     | wrapping o => cases h; exact wrap_inRange t _
     | saturating o => cases h; exact saturate_inRange t _
 
-/-- Helper (inversion). Decodes the machine-operation representation (approved: PENDING). -/
+/-- Helper (inversion). Decodes the machine-operation representation (approved: APPR-C1-codex-5531d9e34). -/
 theorem exactOf?_some {op : MachineOp} {w : WrapOp} (h : op.exactOf? = some w) :
     op = .plain w.arith := by
   cases op with
@@ -458,7 +458,7 @@ namespace ScalarEvidence
 def wideEval (_ρ : Var → Option Int) (_e : CTerm) : Option Int := some 300
 
 /-- Helper (inversion). The closed empty width environment has no assigned variables
-(approved: PENDING). -/
+(approved: APPR-C1-codex-5531d9e34). -/
 private theorem empty_width_env : WidthEnv (fun _ => none) (fun _ => none) := by
   intro x t n hx
   cases hx
@@ -514,18 +514,18 @@ end ScalarEvidence
 
 /-! ### Negation, `bool` patterns, lossy conversion -/
 
-/-- Representation lemma. Negation success adapter representation (approved: PENDING). -/
+/-- Representation lemma. Negation success adapter representation (approved: APPR-C1-codex-5531d9e34). -/
 theorem plainNeg_ok_iff (t : IntTy) (a r : Int) : plainNeg t a = .ok r ↔ checkedNeg t a = .ok r := by
   unfold plainNeg
   cases checkedNeg t a <;> simp
 
-/-- Representation lemma. Negation error adapter representation (approved: PENDING). -/
+/-- Representation lemma. Negation error adapter representation (approved: APPR-C1-codex-5531d9e34). -/
 theorem plainNeg_trap_iff (t : IntTy) (a : Int) (k : TrapKind) :
     plainNeg t a = .trap k ↔ ∃ e, checkedNeg t a = .error e ∧ e.trapKind = k := by
   unfold plainNeg
   cases checkedNeg t a <;> simp
 
-/-- Representation lemma. Extracts the checked-negation range validator (approved: PENDING). -/
+/-- Representation lemma. Extracts the checked-negation range validator (approved: APPR-C1-codex-5531d9e34). -/
 theorem checkedNeg_inRange {t : IntTy} {a r : Int} (h : checkedNeg t a = .ok r) : t.InRange r :=
   inRangeOr_inRange h
 
@@ -533,17 +533,17 @@ theorem checkedNeg_inRange {t : IntTy} {a r : Int} (h : checkedNeg t a = .ok r) 
 theorem boolOfBits_boolToBits (b : Bool) : boolOfBits (boolToBits b) = some b := by
   cases b <;> rfl
 
-/-- Representation lemma. Finite Boolean decoder characterization (approved: PENDING). -/
+/-- Representation lemma. Finite Boolean decoder characterization (approved: APPR-C1-codex-5531d9e34). -/
 theorem boolOfBits_some_iff (m : Nat) (b : Bool) : boolOfBits m = some b ↔ m = boolToBits b := by
   match m with
   | 0 => cases b <;> simp [boolOfBits, boolToBits]
   | 1 => cases b <;> simp [boolOfBits, boolToBits]
   | m + 2 => cases b <;> simp [boolOfBits, boolToBits]
 
-/-- Helper (computation). Alias consequence of wrap_inRange; no additional conversion semantics (approved: PENDING). -/
+/-- Helper (computation). Alias consequence of wrap_inRange; no additional conversion semantics (approved: APPR-C1-codex-5531d9e34). -/
 theorem lossyConvert_inRange (t : IntTy) (n : Int) : t.InRange (lossyConvert t n) := wrap_inRange t n
 
-/-- Helper (computation). Alias consequence of wrap_of_inRange; no additional conversion semantics (approved: PENDING). -/
+/-- Helper (computation). Alias consequence of wrap_of_inRange; no additional conversion semantics (approved: APPR-C1-codex-5531d9e34). -/
 theorem lossyConvert_of_inRange (t : IntTy) (n : Int) (h : t.InRange n) : lossyConvert t n = n :=
   wrap_of_inRange t n h
 

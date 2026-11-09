@@ -49,13 +49,13 @@ variable {O : Operands} {V : Type}
 /-! ### Many steps -/
 
 /-- Representation lemma. Lifts a single labeled step into a one-step execution trace
-(approved: PENDING). -/
+(approved: APPR-C1-codex-5531d9e34). -/
 theorem Steps.single {P : Program O} {c c' : Config O} {l : Label O} (h : Step P c l c') :
     Steps P c l.events c' := by
   have := Steps.step h (Steps.refl c')
   simpa using this
 
-/-- Representation lemma. Concatenates two multi-step execution traces (approved: PENDING). -/
+/-- Representation lemma. Concatenates two multi-step execution traces (approved: APPR-C1-codex-5531d9e34). -/
 theorem Steps.trans {P : Program O} {c c' c'' : Config O} {tr tr' : List O.Event}
     (h : Steps P c tr c') (h' : Steps P c' tr' c'') : Steps P c (tr ++ tr') c'' := by
   induction h with
@@ -63,13 +63,13 @@ theorem Steps.trans {P : Program O} {c c' c'' : Config O} {tr tr' : List O.Event
   | step hs _ ih => simpa [List.append_assoc] using Steps.step hs (ih h')
 
 /-- Representation lemma. Prepends a silent machine step to a multi-step execution trace
-(approved: PENDING). -/
+(approved: APPR-C1-codex-5531d9e34). -/
 theorem steps_next {P : Program O} {c c' c'' : Config O} {tr : List O.Event}
     (h : step P c = some (.next c')) (h' : Steps P c' tr c'') : Steps P c tr c'' := by
   simpa [Label.events] using Steps.step (Step.silent h) h'
 
 /-- Representation lemma. Prepends a primitive request/response step to a multi-step execution
-trace (approved: PENDING). -/
+trace (approved: APPR-C1-codex-5531d9e34). -/
 private theorem steps_request_inv {P : Program O} {c c'' : Config O} {p : O.Prim} {vs : List O.Val}
     {site : SiteId} {st : O.Store} {k : Answer O.Val O.Event O.Store → Option (Config O)}
     {a : Answer O.Val O.Event O.Store} {tr : List O.Event}
@@ -93,24 +93,24 @@ theorem steps_request (P : Program O) (dst : Option Var) (p : O.Prim) (args : Li
 
 /-! ### Sequencing -/
 
-/-- Helper (computation). Definitional unfolding of `step` on `Stmt.seq` s t (approved: PENDING). -/
+/-- Helper (computation). Definitional unfolding of `step` on `Stmt.seq` s t (approved: APPR-C1-codex-5531d9e34). -/
 theorem step_seq (P : Program O) (s t : Stmt O) (L : AList Var O.Val) (st : O.Store)
     (k : List (Frame O)) :
     step P ⟨.exec (.seq s t), L, st, k⟩ = some (.next ⟨.exec s, L, st, .seq t :: k⟩) := rfl
 
 /-- Helper (computation). Definitional unfolding of `step` at `Ctrl.done` on `Frame.seq` t
-(approved: PENDING). -/
+(approved: APPR-C1-codex-5531d9e34). -/
 theorem step_done_seq (P : Program O) (t : Stmt O) (L : AList Var O.Val) (st : O.Store)
     (k : List (Frame O)) :
     step P ⟨.done, L, st, .seq t :: k⟩ = some (.next ⟨.exec t, L, st, k⟩) := rfl
 
 /-- Helper (computation). Definitional unfolding of `step` at `Ctrl.exiting` e on `Frame.seq` t
-(approved: PENDING). -/
+(approved: APPR-C1-codex-5531d9e34). -/
 theorem step_exit_seq (P : Program O) (e : Exit O.Val) (t : Stmt O) (L : AList Var O.Val)
     (st : O.Store) (k : List (Frame O)) :
     step P ⟨.exiting e, L, st, .seq t :: k⟩ = some (.next ⟨.exiting e, L, st, k⟩) := rfl
 
-/-- Helper (computation). Definitional unfolding of `step` on `Stmt.block` b s (approved: PENDING). -/
+/-- Helper (computation). Definitional unfolding of `step` on `Stmt.block` b s (approved: APPR-C1-codex-5531d9e34). -/
 theorem step_block (P : Program O) (b : BlockId) (s : Stmt O) (L : AList Var O.Val)
     (st : O.Store) (k : List (Frame O)) :
     step P ⟨.exec (.block b s), L, st, k⟩ =
@@ -147,12 +147,12 @@ theorem restrict_dom_drops (L₀ L : AList Var V) (x : Var) (hx : x ∉ dom L₀
 
 /-! ### Registration -/
 
-/-- Helper (computation). Definitional unfolding of `register` at `Frame.scope` (approved: PENDING). -/
+/-- Helper (computation). Definitional unfolding of `register` at `Frame.scope` (approved: APPR-C1-codex-5531d9e34). -/
 theorem register_scope (d : Deferred O) (b : BlockId) (dm : List Var) (ds : List (Deferred O))
     (k : List (Frame O)) : register d (.scope b dm ds :: k) = some (.scope b dm (d :: ds) :: k) :=
   rfl
 
-/-- Helper (computation). Definitional unfolding of `register` at `Frame.seq` (approved: PENDING). -/
+/-- Helper (computation). Definitional unfolding of `register` at `Frame.seq` (approved: APPR-C1-codex-5531d9e34). -/
 theorem register_seq (d : Deferred O) (t : Stmt O) (k : List (Frame O)) :
     register d (.seq t :: k) = (register d k).map (.seq t :: ·) := rfl
 
@@ -176,7 +176,7 @@ theorem step_ret (P : Program O) (e : O.Expr) (site : SiteId) (L : AList Var O.V
   simp [step, onRes, hv]
 
 /-- Helper (computation). Definitional unfolding of `step` at `Ctrl.exiting` (`Exit.brk` l) on matching
-`Frame.body` l (approved: PENDING). -/
+`Frame.body` l (approved: APPR-C1-codex-5531d9e34). -/
 theorem step_break_loop (P : Program O) (l : LoopId) (cr b : Stmt O) (t : O.Expr) (site : SiteId)
     (L : AList Var O.Val) (st : O.Store) (k : List (Frame O)) :
     step P ⟨.exiting (.brk l), L, st, .body l cr t b site :: k⟩ =
@@ -184,7 +184,7 @@ theorem step_break_loop (P : Program O) (l : LoopId) (cr b : Stmt O) (t : O.Expr
   simp [step, stepExit]
 
 /-- Helper (computation). Definitional unfolding of `step` at `Ctrl.exiting` (`Exit.cont` l) on matching
-`Frame.body` l (approved: PENDING). -/
+`Frame.body` l (approved: APPR-C1-codex-5531d9e34). -/
 theorem step_continue_loop (P : Program O) (l : LoopId) (cr b : Stmt O) (t : O.Expr)
     (site : SiteId) (L : AList Var O.Val) (st : O.Store) (k : List (Frame O)) :
     step P ⟨.exiting (.cont l), L, st, .body l cr t b site :: k⟩ =
@@ -296,7 +296,7 @@ theorem unwind_runs_plan (P : Program O) (e : Exit O.Val) (k pre : List (Frame O
     | ret v => exact steps_next rfl ih'
 
 /-- Helper (computation). Definitional unfolding of `plan` on nested `Frame.scope` frames
-(approved: PENDING). -/
+(approved: APPR-C1-codex-5531d9e34). -/
 theorem plan_scopes (b₁ b₂ : BlockId) (d₁ d₂ : List Var) (ds₁ ds₂ : List (Deferred O))
     (k : List (Frame O)) :
     plan (.scope b₁ d₁ ds₁ :: .scope b₂ d₂ ds₂ :: k) = ds₁ ++ (ds₂ ++ plan k) := rfl
@@ -398,7 +398,7 @@ inductive RunsEach (P : Program O) : List (CleanAct O) → O.Store → List O.Ev
       RunsEach P (.drop dm L (restrict dm L) :: rest) st tr st'
 
 /-- Helper (inversion). Composes a `RunsAll` call certificate sequence with a `RunsEach` suffix
-(approved: PENDING). -/
+(approved: APPR-C1-codex-5531d9e34). -/
 theorem RunsAll.each {P : Program O} {L : AList Var O.Val} {ds : List (Deferred O)}
     {st st₁ st₂ : O.Store} {tr₁ tr₂ : List O.Event} {rest : List (CleanAct O)}
     (h : RunsAll P L ds st tr₁ st₁) (h' : RunsEach P rest st₁ tr₂ st₂) :
@@ -408,7 +408,7 @@ theorem RunsAll.each {P : Program O} {L : AList Var O.Val} {ds : List (Deferred 
   | cons hd _ ih => simpa [List.append_assoc] using RunsEach.call hd (ih h')
 
 /-- Helper (inversion). Splits a `RunsEach` over mapped calls and a suffix
-(approved: PENDING). -/
+(approved: APPR-C1-codex-5531d9e34). -/
 theorem RunsEach.split_calls {P : Program O} {L : AList Var O.Val} :
     ∀ {ds : List (Deferred O)} {rest : List (CleanAct O)} {st st₂ : O.Store} {tr : List O.Event},
     RunsEach P (ds.map (.call L) ++ rest) st tr st₂ →
@@ -427,7 +427,7 @@ def Frame.passable : Frame O → Bool
   | _ => true
 
 /-- Helper (inversion). Relates two cleanup certificates; not a law about actual runs
-(approved: PENDING). -/
+(approved: APPR-C1-codex-5531d9e34). -/
 theorem cleans_iff_runs_plan_inv {P : Program O} :
     ∀ {pre : List (Frame O)} {L : AList Var O.Val} {st st' : O.Store} {tr : List O.Event},
     (∀ f ∈ pre, f.passable = true) →
@@ -468,7 +468,7 @@ theorem cleans_iff_runs_plan_inv {P : Program O} :
   | .resume _ :: _, _, _, _, _, hp => absurd (hp _ List.mem_cons_self) (by simp [Frame.passable])
   | .ret .. :: _, _, _, _, _, hp => absurd (hp _ List.mem_cons_self) (by simp [Frame.passable])
 
-/-- Helper (inversion). Every frame an exit passes is passable (approved: PENDING). -/
+/-- Helper (inversion). Every frame an exit passes is passable (approved: APPR-C1-codex-5531d9e34). -/
 theorem Passes.passable {e : Exit O.Val} : ∀ {f : Frame O}, Passes e f → f.passable = true
   | .seq _, _ | .scope .., _ | .test .., _ | .body .., _ => rfl
   | .resume _, h => h.elim
@@ -492,7 +492,7 @@ inductive FirstSteps (R : Config O → Label O → Config O → Prop) (stop : Co
       FirstSteps R stop c (l.events ++ tr) c''
 
 /-- Helper (inversion). Forgetting first-arrival information preserves the actual execution
-(approved: PENDING). -/
+(approved: APPR-C1-codex-5531d9e34). -/
 theorem FirstSteps.steps_inv {P : Program O} {stop : Config O → Prop} {c c' : Config O}
     {tr : List O.Event} (h : FirstSteps (Step P) stop c tr c') : Steps P c tr c' := by
   induction h with
@@ -547,7 +547,7 @@ inductive Performed (P : Program O) :
       Performed P rest (restrict dm L) stDrop tr L' st' →
       Performed P (.drop dm L (restrict dm L) :: rest) L st tr L' st'
 
-/-- Helper (inversion). Compose independent action executions (approved: PENDING). -/
+/-- Helper (inversion). Compose independent action executions (approved: APPR-C1-codex-5531d9e34). -/
 private theorem performed_append_inv {P : Program O} {as bs : List (CleanAct O)}
     {L L₁ L₂ : AList Var O.Val} {st st₁ st₂ : O.Store} {tr₁ tr₂ : List O.Event}
     (ha : Performed P as L st tr₁ L₁ st₁) (hb : Performed P bs L₁ st₁ tr₂ L₂ st₂) :
@@ -558,7 +558,7 @@ private theorem performed_append_inv {P : Program O} {as bs : List (CleanAct O)}
   | drop hd _ ih => exact .drop hd (ih hb)
 
 /-- Helper (inversion). Internal dispatcher decomposition supporting the observable silence
-law `exit_label`; not an independent soundness claim (approved: PENDING). -/
+law `exit_label`; not an independent soundness claim (approved: APPR-C1-codex-5531d9e34). -/
 private theorem stepExit_no_request_inv (L : AList Var O.Val) (st : O.Store) (e : Exit O.Val)
     (frames : List (Frame O)) (p : O.Prim) (vs : List O.Val) (site : SiteId) (st' : O.Store)
     (cont : Answer O.Val O.Event O.Store → Option (Config O)) :
@@ -590,7 +590,7 @@ private theorem stepExit_no_request_inv (L : AList Var O.Val) (st : O.Store) (e 
         | some stLeave =>
           cases hb : bindLife O dst stLeave <;> simp [stepExit, hl, hb]
 
-/-- Helper (inversion). Converts the transition representation using the separately proved exit-silence restriction (approved: PENDING). -/
+/-- Helper (inversion). Converts the transition representation using the separately proved exit-silence restriction (approved: APPR-C1-codex-5531d9e34). -/
 private theorem exit_step_next_inv {P : Program O} {e : Exit O.Val} {L : AList Var O.Val}
     {st : O.Store} {frames : List (Frame O)} {label : Label O} {c : Config O}
     (h : Step P ⟨.exiting e, L, st, frames⟩ label c) :
@@ -600,7 +600,7 @@ private theorem exit_step_next_inv {P : Program O} {e : Exit O.Val} {L : AList V
   | prim h _ _ => exact False.elim (stepExit_no_request_inv L st e frames _ _ _ _ _ h)
 
 /-- Helper (inversion). A directly passing exit step removes precisely the top frame,
-restores its saved locals, and performs its local drop (approved: PENDING). -/
+restores its saved locals, and performs its local drop (approved: APPR-C1-codex-5531d9e34). -/
 private theorem exit_pass_plan_inv {P : Program O} {e : Exit O.Val} {k pre pre' : List (Frame O)}
     {L L' : AList Var O.Val} {st st' : O.Store} {label : Label O}
     (h : Step P ⟨.exiting e, L, st, pre ++ k⟩ label
@@ -708,7 +708,7 @@ private theorem exit_pass_plan_inv {P : Program O} {e : Exit O.Val} {k pre pre' 
 
 
 /-- Helper (inversion). A cleanup dispatch step selects the head registration and preserves
-its scope with the remaining registrations (approved: PENDING). -/
+its scope with the remaining registrations (approved: APPR-C1-codex-5531d9e34). -/
 private theorem exit_call_plan_inv {P : Program O} {e : Exit O.Val} {k pre rest : List (Frame O)}
     {L : AList Var O.Val} {st : O.Store} {d : Deferred O} {label : Label O}
     (h : Step P ⟨.exiting e, L, st, pre ++ k⟩ label
@@ -874,7 +874,7 @@ def Blocked (R : Config O → Label O → Config O → Prop) (c : Config O) : Pr
   ∀ l c', ¬ R c l c'
 
 /-- Helper (inversion). A missing implementation result has no relational transition
-(approved: PENDING). -/
+(approved: APPR-C1-codex-5531d9e34). -/
 private theorem no_step_of_none_inv {P : Program O} {c : Config O} (h : step P c = none) :
     Blocked (Step P) c := by
   intro l c' hs
@@ -1082,7 +1082,7 @@ inductive FirstStepsN (R : Config O → Label O → Config O → Prop) (stop : C
   | step {c l c' tr c'' n} : ¬ stop c → R c l c' → FirstStepsN R stop c' tr c'' n →
       FirstStepsN R stop c (l.events ++ tr) c'' (n + 1)
 
-/-- Helper (inversion). Adds an induction index to the first-arrival certificate without changing its execution (approved: PENDING). -/
+/-- Helper (inversion). Adds an induction index to the first-arrival certificate without changing its execution (approved: APPR-C1-codex-5531d9e34). -/
 private theorem FirstSteps.sized_inv {P : Program O} {stop : Config O → Prop}
     {c c' : Config O} {tr : List O.Event} (h : FirstSteps (Step P) stop c tr c') :
     ∃ n, FirstStepsN (Step P) stop c tr c' n := by
@@ -1090,7 +1090,7 @@ private theorem FirstSteps.sized_inv {P : Program O} {stop : Config O → Prop}
   | stop hs => exact ⟨0, .stop hs⟩
   | step hn hs _ ih => obtain ⟨n, ih⟩ := ih; exact ⟨n + 1, .step hn hs ih⟩
 
-/-- Helper (inversion). Erases only the induction index of a first-arrival certificate (approved: PENDING). -/
+/-- Helper (inversion). Erases only the induction index of a first-arrival certificate (approved: APPR-C1-codex-5531d9e34). -/
 private theorem FirstStepsN.unsized_inv {P : Program O} {stop : Config O → Prop}
     {c c' : Config O} {tr : List O.Event} {n : Nat} (h : FirstStepsN (Step P) stop c tr c' n) :
     FirstSteps (Step P) stop c tr c' := by
@@ -1098,14 +1098,14 @@ private theorem FirstStepsN.unsized_inv {P : Program O} {stop : Config O → Pro
   | stop hs => exact .stop hs
   | step hn hs _ ih => exact .step hn hs ih
 
-/-- Helper (inversion). List-length consequence of the saved-boundary predicate used in return segmentation (approved: PENDING). -/
+/-- Helper (inversion). List-length consequence of the saved-boundary predicate used in return segmentation (approved: APPR-C1-codex-5531d9e34). -/
 private theorem protected_height_inv {caller : AList Var O.Val} {q : List (Frame O)}
     {c : Config O} (h : Protected caller q c) : q.length < c.frames.length := by
   obtain ⟨pre, he⟩ := h
   simp only [he, List.length_append, List.length_cons]
   omega
 
-/-- Helper (inversion). Length contradiction excluding an already returned configuration while its saved frame remains (approved: PENDING). -/
+/-- Helper (inversion). Length contradiction excluding an already returned configuration while its saved frame remains (approved: APPR-C1-codex-5531d9e34). -/
 private theorem protected_not_return_inv {caller : AList Var O.Val} {q : List (Frame O)}
     {c : Config O} (h : Protected caller q c) : ¬ (c.ctrl = .done ∧ c.frames = q) := by
   intro hr
@@ -1167,14 +1167,14 @@ theorem call_protects {P : Program O} {L : AList Var O.Val} {st : O.Store}
     simp only [step, Deferred.stmt, onRes, Option.bind, Option.map] at h
     repeat' first | simp_all | split at h
 
-/-- Helper (inversion). Extracts the endpoint predicate from the first-arrival certificate (approved: PENDING). -/
+/-- Helper (inversion). Extracts the endpoint predicate from the first-arrival certificate (approved: APPR-C1-codex-5531d9e34). -/
 private theorem FirstStepsN.end_stop_inv {P : Program O} {stop : Config O → Prop}
     {c c' : Config O} {tr : List O.Event} {n : Nat} (h : FirstStepsN (Step P) stop c tr c' n) : stop c' := by
   induction h with
   | stop hs => exact hs
   | step _ _ _ ih => exact ih
 
-/-- Helper (inversion). Combines the retained trapped-run law with the endpoint bound; no additional trap semantics (approved: PENDING). -/
+/-- Helper (inversion). Combines the retained trapped-run law with the endpoint bound; no additional trap semantics (approved: APPR-C1-codex-5531d9e34). -/
 private theorem FirstStepsN.trap_impossible_inv {P : Program O} {bound : Nat}
     {kd : TrapKind} {site : SiteId} {L : AList Var O.Val} {st : O.Store}
     {q : List (Frame O)} {tr : List O.Event} {endC : Config O} {n : Nat}
@@ -1223,7 +1223,7 @@ theorem exit_label {P : Program O} {e : Exit O.Val} {L : AList Var O.Val}
   | silent _ => rfl
   | prim h _ _ => exact False.elim (stepExit_no_request_inv L st e frames _ _ _ _ _ h)
 
-/-- Helper (computation). Computes the resume dispatcher result to convert its representation inside raw-run completeness (approved: PENDING). -/
+/-- Helper (computation). Computes the resume dispatcher result to convert its representation inside raw-run completeness (approved: APPR-C1-codex-5531d9e34). -/
 private theorem resume_step_inv {P : Program O} {e : Exit O.Val} {L : AList Var O.Val}
     {st : O.Store} {frames : List (Frame O)} {label : Label O} {c : Config O}
     (h : Step P ⟨.done, L, st, .resume (.exit e) :: frames⟩ label c) :
@@ -1400,12 +1400,12 @@ theorem evalArgs_first_trap (L : AList Var O.Val) (e : O.Expr) (kd : TrapKind)
     | trap _ => simp [evalArgs, h₁, Res.bind] at h
     | stuck => simp [evalArgs, h₁, Res.bind] at h
 
-/-- Helper (congruence). Function injectivity on `step` (approved: PENDING). -/
+/-- Helper (congruence). Function injectivity on `step` (approved: APPR-C1-codex-5531d9e34). -/
 private theorem step_silent_deterministic_inv {P : Program O} {c c₁ c₂ : Config O}
     (h₁ : step P c = some (.next c₁)) (h₂ : step P c = some (.next c₂)) : c₁ = c₂ := by
   rw [h₁] at h₂; cases h₂; rfl
 
-/-- Representation lemma. Function/relation bridge, not determinism evidence (approved: PENDING). When the step function returns `Out.next` c₁, a
+/-- Representation lemma. Function/relation bridge, not determinism evidence (approved: APPR-C1-codex-5531d9e34). When the step function returns `Out.next` c₁, a
 relational `Step` from c occurs if and only if the label is `Label.silent` and the target is c₁. -/
 theorem step_silent_representation (P : Program O) (c c₁ c₂ : Config O) (l : Label O)
     (h : step P c = some (.next c₁)) :
@@ -1419,7 +1419,7 @@ theorem step_silent_representation (P : Program O) (c c₁ c₂ : Config O) (l :
     exact .silent h
 
 /-- Helper (inversion). The function-backed representation of `Step` separates machine steps
-from answers (approved: PENDING). -/
+from answers (approved: APPR-C1-codex-5531d9e34). -/
 private theorem step_deterministic_inv {P : Program O} {c c₁ c₂ : Config O} {l₁ l₂ : Label O}
     (h₁ : Step P c l₁ c₁) (h₂ : Step P c l₂ c₂) :
     (l₁ = l₂ ∧ c₁ = c₂) ∨ ∃ p vs site st k a₁ a₂, step P c = some (.request p vs site st k) ∧
@@ -1437,7 +1437,7 @@ private theorem step_deterministic_inv {P : Program O} {c c₁ c₂ : Config O} 
       rw [h] at h'; cases h'
       exact .inr ⟨_, _, _, _, _, _, _, h, ha, ha', rfl, rfl, hk, hk'⟩
 
-/-- Representation lemma. Constructor decomposition, not determinism evidence (approved: PENDING). Two relational transitions from c occur if and
+/-- Representation lemma. Constructor decomposition, not determinism evidence (approved: APPR-C1-codex-5531d9e34). Two relational transitions from c occur if and
 only if either they come from the same silent `Out.next` step or both arise from the same `Out.request`
 by allowed oracle answers whose continuations succeed. -/
 theorem step_pair_representation (P : Program O) (c c₁ c₂ : Config O) (l₁ l₂ : Label O) :
@@ -1473,7 +1473,7 @@ inductive AnswerStep (P : Program O) : Config O → Option (Answer O.Val O.Event
       O.allows p vs st a = true → k a = some c' → AnswerStep P c (some a) a.label c'
 
 /-- Representation lemma. Erases the input index to recover the observable transition
-(approved: PENDING). -/
+(approved: APPR-C1-codex-5531d9e34). -/
 theorem AnswerStep.step_inv {P : Program O} {c c' : Config O}
     {a : Option (Answer O.Val O.Event O.Store)} {l : Label O}
     (h : AnswerStep P c a l c') : Step P c l c' := by
@@ -1532,7 +1532,7 @@ those successful continuations explicitly. All other laws retain their premises.
 -/
 
 /-- Helper (inversion). For a silent lifecycle operation, absence of all transitions is exactly
-refusal (approved: PENDING). -/
+refusal (approved: APPR-C1-codex-5531d9e34). -/
 private theorem blocked_map_inv {P : Program O} {c : Config O} (r : Option O.Store)
     (f : O.Store → Config O) (h : step P c = r.map (fun st => .next (f st))) :
     Blocked (Step P) c ↔ r = none := by
@@ -1630,7 +1630,7 @@ theorem return_refused (P : Program O) (dst : Option Var) (v : O.Val)
   · apply blocked_map_inv _ (fun st => ⟨.done, bindDst dst O.unitVal caller, st, k⟩)
     cases hl : O.life .leave st <;> simp [step, hl]
 
-/-- Helper (inversion). A zero-fuel run never reports `Ending.stuck` (approved: PENDING). -/
+/-- Helper (inversion). A zero-fuel run never reports `Ending.stuck` (approved: APPR-C1-codex-5531d9e34). -/
 private theorem runFrom_zero_ne_stuck_inv (P : Program O) (ρ : Oracle O)
     (hist' hist : List O.Event) (c' c : Config O) :
     runFrom P ρ 0 hist' c' ≠ ⟨hist, .stuck c⟩ := by
@@ -1728,12 +1728,12 @@ theorem prim_error_bypasses_bind (P : Program O) (x : Var) (p : O.Prim) (args : 
 /-! ### Destruction -/
 
 /-- Helper (projection). Extracts the protocol admission obligation from `DestroyProtocol`
-(approved: PENDING). -/
+(approved: APPR-C1-codex-5531d9e34). -/
 private theorem destroy_not_copy_proj {P : Program O} (D : DestroyProtocol P) (T : O.Ty) (f : FnId)
     (h : D.impl T = some f) : O.isCopy T = false := D.notCopy T f h
 
 /-- Representation lemma. Characterizes the validator checks, not admission soundness
-(approved: PENDING). The executable destroy-function
+(approved: APPR-C1-codex-5531d9e34). The executable destroy-function
 validator accepts (T, f) if and only if T is non-Copy (`Operands.isCopy` T = false) and f is in the
 program table taking a single parameter of type T and returning `Operands.unitTy`. -/
 theorem destroy_not_copy [DecidableEq O.Ty] (P : Program O) (T : O.Ty) (f : FnId) :
@@ -1764,7 +1764,7 @@ theorem destroy_not_copy [DecidableEq O.Ty] (P : Program O) (T : O.Ty) (f : FnId
     simp [validDestroyFn, hc, hl, hp, hr]
 
 /-- Representation lemma. Characterizes the checked builder, not admission soundness
-(approved: PENDING). The executable checked destroy-call
+(approved: APPR-C1-codex-5531d9e34). The executable checked destroy-call
 builder produces `some` d if and only if impl T = `some` (`Deferred.f` d), `Deferred.args` d = [arg], `Deferred.site` d = site,
 T is non-Copy, and `Deferred.f` d has signature (x : T) -> Unit in `Program.fns` P. -/
 theorem destroyCall_sig [DecidableEq O.Ty] (P : Program O) (impl : O.Ty → Option FnId) (T : O.Ty)
@@ -1832,18 +1832,18 @@ theorem seqDestroyOrder_storage (n : Nat) :
 /-- The entries of a map, in visiting order. -/
 private def entryParts (n : Nat) : List Part := (List.range n).flatMap fun i => [.key i, .value i]
 
-/-- Helper (arithmetic). Appending an entry adds its key and value visits (approved: PENDING). -/
+/-- Helper (arithmetic). Appending an entry adds its key and value visits (approved: APPR-C1-codex-5531d9e34). -/
 private theorem entryParts_succ (n : Nat) :
     entryParts (n + 1) = entryParts n ++ [.key n, .value n] := by
   simp [entryParts, List.range_succ, List.flatMap_append]
 
-/-- Helper (arithmetic). Each map entry contributes two visits (approved: PENDING). -/
+/-- Helper (arithmetic). Each map entry contributes two visits (approved: APPR-C1-codex-5531d9e34). -/
 private theorem entryParts_length : ∀ n, (entryParts n).length = 2 * n
   | 0 => rfl
   | n + 1 => by rw [entryParts_succ]; simp [entryParts_length n]; omega
 
 /-- Helper (arithmetic). Locate the key and value in the alternating entry schedule
-(approved: PENDING). -/
+(approved: APPR-C1-codex-5531d9e34). -/
 private theorem entryParts_get : ∀ (n i : Nat), i < n →
     (entryParts n)[2 * i]? = some (.key i) ∧ (entryParts n)[2 * i + 1]? = some (.value i)
   | 0, _, h => absurd h (Nat.not_lt_zero _)
@@ -1888,7 +1888,7 @@ on any frames, emitting `1` (its parameter is a fresh local of a new activation)
 `bump()` completes silently and adds one to the counter. -/
 
 /-- Representation lemma. In the demo language, a deferred `Demo.logF` call on 1 completes from any locals,
-store, and frame stack, emitting [1] (approved: PENDING). -/
+store, and frame stack, emitting [1] (approved: APPR-C1-codex-5531d9e34). -/
 theorem demo_log_completes (L : AList Var Demo.ops.Val) (st : Demo.ops.Store) :
     Completes Demo.prog L ⟨Demo.logF, [.lit 1], Demo.s⟩ st [1] st := by
   intro k
@@ -1898,7 +1898,7 @@ theorem demo_log_completes (L : AList Var Demo.ops.Val) (st : Demo.ops.Store) :
   exact steps_next rfl (steps_next rfl (Steps.refl _))
 
 /-- Representation lemma. In the demo language, a deferred `Demo.bumpF` call completes from any locals,
-store, and frame stack, incrementing the counter (approved: PENDING). -/
+store, and frame stack, incrementing the counter (approved: APPR-C1-codex-5531d9e34). -/
 theorem demo_bump_completes (L : AList Var Demo.ops.Val) (st : Demo.ops.Store) :
     Completes Demo.prog L ⟨Demo.bumpF, [], Demo.s⟩ st [] { st with counter := st.counter + 1 } := by
   intro k
@@ -1913,7 +1913,7 @@ namespace CleanupEvidence
 open Demo
 
 /-- Representation lemma. A concrete first-return segment for an ordinary deferred call
-(approved: PENDING). -/
+(approved: APPR-C1-codex-5531d9e34). -/
 private theorem logSegment (n : Int) (e : Exit Int) (L : AList Var Int)
     (rest : List (Frame ops)) :
     FirstSteps (Step prog) (fun c => c.ctrl = .done ∧ c.frames = .resume (.exit e) :: rest)
@@ -2149,7 +2149,7 @@ example : ¬ (BoundaryRun prog (MissingRestrictStep prog) (.ret 7) [] [emptyScop
   cases hL
 
 /-- Representation lemma. Extend a raw run with a concrete deferred log's complete execution
-(approved: PENDING). -/
+(approved: APPR-C1-codex-5531d9e34). -/
 private theorem logContinue_inv (n : Int) (e : Exit Int) (L : AList Var Int)
     (rest : List (Frame ops)) {tr : List Int} {endC : Config ops}
     (tail : FirstSteps (Step prog) (fun c => c.frames.length ≤ 0)
@@ -2171,7 +2171,7 @@ private theorem logContinue_inv (n : Int) (e : Exit Int) (L : AList Var Int)
   simpa [Label.events] using FirstSteps.step (R := Step prog) (by simp [q])
     (Step.silent (P := prog) (c' := ⟨.done, L, .init, q⟩) rfl) tail
 
-/-- Representation lemma. Concrete raw first-arrival execution of `inner` (approved: PENDING). -/
+/-- Representation lemma. Concrete raw first-arrival execution of `inner` (approved: APPR-C1-codex-5531d9e34). -/
 private theorem inner_raw_run : FirstSteps (Step prog) (fun c => c.frames.length ≤ 0)
     ⟨.exiting (.ret 7), [], .init, [inner]⟩ [1] ⟨.exiting (.ret 7), [], .init, []⟩ := by
   refine FirstSteps.step (R := Step prog)
@@ -2207,7 +2207,7 @@ inductive EscapeStep (P : Program O) : Config O → Label O → Config O → Pro
         ⟨.exiting e, L, st, k⟩
 
 /-- Helper (computation). The concrete singleton cleanup frame passes a return
-(approved: PENDING). -/
+(approved: APPR-C1-codex-5531d9e34). -/
 private theorem inner_passes : ∀ (f : Frame ops), f ∈ ([inner] : List (Frame ops)) →
     Passes (O := ops) (.ret 7) f := by
   intro f hf
@@ -2249,14 +2249,14 @@ def NoDispatchStep (P : Program O) (c : Config O) (l : Label O) (c' : Config O) 
     | .exiting _, .scope _ _ (_ :: _) :: _ => False
     | _, _ => True
 
-/-- Helper (inversion). Concrete singleton passability certificate (approved: PENDING). -/
+/-- Helper (inversion). Concrete singleton passability certificate (approved: APPR-C1-codex-5531d9e34). -/
 private theorem empty_passes : ∀ f ∈ [emptyScope], Passes (O := ops) (.ret 7) f := by
   intro f hf
   cases hf with
   | head => trivial
   | tail _ hf => cases hf
 
-/-- Representation lemma. Concrete independent drop execution (approved: PENDING). -/
+/-- Representation lemma. Concrete independent drop execution (approved: APPR-C1-codex-5531d9e34). -/
 private theorem drop_performed : Performed prog [.drop [] [] []] [] .init [] [] .init :=
   .drop rfl .nil
 
@@ -2280,13 +2280,13 @@ example : (∀ f ∈ [emptyScope], Passes (O := ops) (.ret 7) f) ∧
   | call _ hs _ _ _ => cases hs
 
 /-- Representation lemma. Concrete action sequence with its first-return call certificate
-(approved: PENDING). -/
+(approved: APPR-C1-codex-5531d9e34). -/
 private theorem single_performed : Performed prog
     ([d 1].map (.call []) ++ [.drop [] [] []]) [] .init [1] [] .init :=
   .call (logSegment 1 (.ret 7) [] [emptyScope]) (.drop rfl .nil)
 
 /-- Representation lemma. Production execution of an empty scope from an independently
-performed drop, used as a closed higher-order premise (approved: PENDING). -/
+performed drop, used as a closed higher-order premise (approved: APPR-C1-codex-5531d9e34). -/
 private theorem base_execution : ∀ st₁ tr₂,
     Performed prog [.drop [] [] []] [] st₁ tr₂ [] .init →
     BoundaryRun prog (Step prog) (.ret 7) [] [emptyScope] [] st₁ [.drop [] [] []] tr₂ [] .init := by
@@ -2294,7 +2294,7 @@ private theorem base_execution : ∀ st₁ tr₂,
   exact boundary_of_performed (P := prog) (e := .ret 7) (k := []) [emptyScope] empty_passes hp
 
 /-- Representation lemma. The no-dispatch mutant retains successful empty-scope drops
-(approved: PENDING). -/
+(approved: APPR-C1-codex-5531d9e34). -/
 private theorem mutant_base_execution : ∀ st₁ tr₂,
     Performed prog [.drop [] [] []] [] st₁ tr₂ [] .init →
     BoundaryRun prog (NoDispatchStep prog) (.ret 7) [] [emptyScope] [] st₁ [.drop [] [] []] tr₂ [] .init := by
@@ -2335,7 +2335,7 @@ def SkipReturnStep (_P : Program O) (_c : Config O) (l : Label O) (c' : Config O
   l = .silent ∧ c'.ctrl ≠ .done
 
 /-- Helper (inversion). A shape invariant of the planted relation: no positive-length path
-can introduce `Ctrl.done` (approved: PENDING). -/
+can introduce `Ctrl.done` (approved: APPR-C1-codex-5531d9e34). -/
 private theorem skip_no_done {P : Program O} {stop : Config O → Prop}
     {c c' : Config O} {tr : List O.Event} {n : Nat}
     (h : FirstStepsN (SkipReturnStep P) stop c tr c' n) : c.ctrl ≠ .done → c'.ctrl ≠ .done := by
@@ -2349,7 +2349,7 @@ def savedStart : Config ops := ⟨.exec .skip, [], .init, .ret none [(x, 7)] :: 
 def savedEnd : Config ops := ⟨.exiting (.ret 7), [(x, 7)], .init, []⟩
 
 /-- Representation lemma. A concrete three-step return/restoration execution
-(approved: PENDING). -/
+(approved: APPR-C1-codex-5531d9e34). -/
 private theorem saved_three : FirstStepsN (Step prog) (fun c => c.frames.length ≤ 0)
     savedStart [] savedEnd 3 := by
   refine FirstStepsN.step (O := ops) (stop := fun c => c.frames.length ≤ 0) (l := .silent) (by decide) (Step.silent (P := prog) (c' :=
@@ -2359,7 +2359,7 @@ private theorem saved_three : FirstStepsN (Step prog) (fun c => c.frames.length 
   exact FirstStepsN.step (O := ops) (stop := fun c => c.frames.length ≤ 0) (l := .silent) (by decide) (Step.silent (P := prog) rfl) (.stop (by decide))
 
 /-- Representation lemma. A three-step mutant path crosses the same boundary while never
-reaching the required restored return configuration (approved: PENDING). -/
+reaching the required restored return configuration (approved: APPR-C1-codex-5531d9e34). -/
 private theorem skipped_three : FirstStepsN (SkipReturnStep prog) (fun c => c.frames.length ≤ 0)
     savedStart [] savedEnd 3 := by
   let mid : Config ops := ⟨.exiting (.ret 7), [], .init, returnQ⟩
@@ -2393,7 +2393,7 @@ def bumpD : Deferred ops := ⟨bumpF, [], s⟩
 def bumpEnd : Config ops := ⟨.exiting (.ret 7), [(x, 7)], ⟨1, []⟩, []⟩
 
 /-- Representation lemma. A complete five-step deferred bump and boundary crossing
-(approved: PENDING). -/
+(approved: APPR-C1-codex-5531d9e34). -/
 private theorem bump_five : FirstStepsN (Step prog) (fun c => c.frames.length ≤ 0)
     ⟨.exec bumpD.stmt, [(x, 7)], .init, returnQ⟩ [] bumpEnd 5 := by
   refine FirstStepsN.step (O := ops) (stop := fun c => c.frames.length ≤ 0) (l := .silent) (by decide) (Step.silent (P := prog) (c' :=
@@ -2408,7 +2408,7 @@ private theorem bump_five : FirstStepsN (Step prog) (fun c => c.frames.length �
   exact FirstStepsN.step (O := ops) (stop := fun c => c.frames.length ≤ 0) (l := .silent) (by decide) (Step.silent (P := prog) rfl) (.stop (by decide))
 
 /-- Representation lemma. The mutant completes five steps without a restored return
-(approved: PENDING). -/
+(approved: APPR-C1-codex-5531d9e34). -/
 private theorem skipped_five : FirstStepsN (SkipReturnStep prog) (fun c => c.frames.length ≤ 0)
     ⟨.exec bumpD.stmt, [(x, 7)], .init, returnQ⟩ [] bumpEnd 5 := by
   let mid : Config ops := ⟨.exiting (.ret 7), [], .init, returnQ⟩
@@ -2448,14 +2448,14 @@ inductive PaddedEscape (P : Program O) : Config O → Label O → Config O → P
       ⟨.done, L, st, .resume (.exit e) :: k⟩ .silent ⟨.exiting e, L, st, k⟩
 
 
-/-- Helper (inversion). The concrete two-frame boundary passes a return (approved: PENDING). -/
+/-- Helper (inversion). The concrete two-frame boundary passes a return (approved: APPR-C1-codex-5531d9e34). -/
 private theorem two_passes : ∀ f ∈ [.seq .skip, emptyScope], Passes (O := ops) (.ret 7) f := by
   intro f hf
   cases hf with
   | head => trivial
   | tail _ hf => exact empty_passes f hf
 
-/-- Representation lemma. A concrete two-step raw exit (approved: PENDING). -/
+/-- Representation lemma. A concrete two-step raw exit (approved: APPR-C1-codex-5531d9e34). -/
 private theorem drop_two : FirstStepsN (Step prog) (fun c => c.frames.length ≤ 0)
     ⟨.exiting (.ret 7), [], .init, [.seq .skip, emptyScope]⟩ [] ⟨.exiting (.ret 7), [], .init, []⟩ 2 := by
   exact FirstStepsN.step (R := Step prog) (l := .silent) (by decide)
@@ -3375,7 +3375,7 @@ example : RunsAll prog [] [d1, d2] .init ([] ++ [1]) afterBumpLog ∧
   cases h
 
 /-- Helper (inversion). Every element of the singleton scope prefix is passable
-(approved: PENDING). -/
+(approved: APPR-C1-codex-5531d9e34). -/
 private theorem passes_single_scope (e : Exit Int) :
     ∀ (f : Frame ops), f ∈ ([.scope ⟨1⟩ [] [d2]] : List (Frame ops)) → Passes e f := by
   intro f hf
