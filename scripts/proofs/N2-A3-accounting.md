@@ -614,7 +614,9 @@ All requested standalone focused checks pass on these final bytes, with 24
 standalone identity/transport checks (20 production checks plus 4 planted variants).
 Per-control results are in
 [audits/N2-A3-round3-validated-controls.txt](audits/N2-A3-round3-validated-controls.txt).
-The complete driver invocation is still pending, not counted as passed.
+The complete final driver invocation exited 0: 127 core controls PASS, followed
+by all reporting controls PASS. Its terminal receipt is included in the linked
+validated-controls file.
 
 The following ten single-example samples all use these final consumer bytes.
 They are instrumented diagnostics, not a whole-scope gate result.
@@ -639,3 +641,18 @@ fall from 3,025 to zero on that harmless prefix. Further structural sharing
 remains with R-0219 and slice-2a. Neither per-analysis interpretation nor wall
 policy is decided here; both remain pending owner. The pinned ci-2 command is
 `bash scripts/proofs/audits/N2-A3-round3-ci2.sh` on concrete-ci-2.
+
+Final terminal command (local focused controls only):
+
+```bash
+timeout 1500 nix develop -c python3 -u scripts/proofs/vacuity_driver.py --controls
+```
+
+Exit 0, `N2 controls: 127 PASS, 0 FAIL`, plus reporting PASS. Every requested
+focused check has now completed on the final consumer bytes. The 1,500s bound
+is test-harness infrastructure, not a production budget change. The code and
+identity/transport controls remain at e07d3c6cf; later commits contain records only.
+No local whole-scope census, publication, review tooling, language/spec decision,
+or owner budget/wall policy decision was performed. The reserved certificate
+region remains byte-identical to 296cbad05. Full scope goes to the coordinator
+on concrete-ci-2 with the pinned command above.

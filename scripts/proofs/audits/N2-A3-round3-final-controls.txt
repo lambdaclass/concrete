@@ -161,4 +161,3 @@ PASS identity KEYS raw-refuted-types closed-refuted-types binder-info distinct
 PASS identity planted ordinary-expr-equality: exact stale-result diagnostic
 PASS identity planted fvar-only-visited: exact stale-result diagnostic
 PASS identity planted expression-only-projection: exact stale-result diagnostic
-

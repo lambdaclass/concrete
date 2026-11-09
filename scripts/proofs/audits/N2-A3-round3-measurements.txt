@@ -245,4 +245,3 @@ PROFILE charges=[(moduleDepends, 231), (mayMention, 354), (mutate, 204), (workCo
 PROFILE times-raw-heartbeats=[]
 PROFILE elapsed-ms=257
 NOTE analysis-result ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4237» stage=instance law=ConcreteSpec.Core.Own.step_request_erasure case=ConcreteSpec.Core.Own.ExecErasureWitnesses.primOneConfig result=PASS heartbeats=4520/2000000 work=12534/20000 projection=0/4096
-

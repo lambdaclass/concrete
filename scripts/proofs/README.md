@@ -615,3 +615,10 @@ jointly contradictory without any one supplier type being decidably refutable.
 Result-type refutation therefore runs before unfolding every node. Only context
 certificate searches are demand-driven. The exact transport negative and a
 planted missing-result-obligation variant enforce this independently.
+
+The completed round-3 receipts, including 127 driver controls, the reporting
+controls, 24 identity/obligation checks and final named profiles, are in
+[audits/N2-A3-round3-validated-controls.txt](audits/N2-A3-round3-validated-controls.txt)
+and [N2-A3-accounting.md](N2-A3-accounting.md#authoritative-final-code-and-measurements).
+These are focused controls; the coordinator's pinned full-scope ci-2 command
+remains necessary. Both budget interpretation and wall policy remain pending owner.
