@@ -38,7 +38,7 @@ jobs:
           bounded_run 20 -- git config user.name concrete-scheduled
           bounded_run 20 -- git config user.email concrete-scheduled@users.noreply.github.com
           rc=0
-          bounded_run -r 300 300 -- python3 scripts/checks/scheduled/collect.py || rc=$?
+          bounded_run -r 300 300 --role publisher -- python3 scripts/checks/scheduled/collect.py || rc=$?
           if bounded_is_incomplete "$rc"; then
             echo 'INCOMPLETE scheduled collection: bounded attempts exhausted'
             exit 1

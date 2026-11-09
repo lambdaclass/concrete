@@ -14,7 +14,7 @@ def publisher_script():
     return "\n".join(line[10:] for line in text.split("        run: |\n", 1)[1].splitlines()) + "\n"
 
 def check_budget(script, job_seconds=1200):
-    match = re.search(r"bounded_run -r ([0-9]+) ([0-9]+) -- python3", script)
+    match = re.search(r"bounded_run -r ([0-9]+) ([0-9]+) --role publisher -- python3", script)
     if not match or sum(map(int, match.groups())) + 160 >= job_seconds:
         raise ValueError("publisher retry budgets exceed job timeout reserve")
 
@@ -24,7 +24,7 @@ class Workflows(unittest.TestCase):
         check_budget(script)
         script = script.replace("source scripts/checks/lib/scheduled_process.sh", f"source {ROOT}/scripts/checks/lib/scheduled_process.sh")
         script = re.sub(r"bounded_run 20 -- git config[^\n]+", "true", script)
-        script = script.replace("bounded_run -r 300 300 -- python3 scripts/checks/scheduled/collect.py", "bounded_run -r 0.05 0.05 -- python3 -c 'import time; time.sleep(5)'")
+        script = script.replace("bounded_run -r 300 300 --role publisher -- python3 scripts/checks/scheduled/collect.py", "bounded_run -r 0.05 0.05 -- python3 -c 'import time; time.sleep(5)'")
         with tempfile.TemporaryDirectory() as scratch:
             import os
             env = dict(runtime_environment(), TMPDIR=scratch)

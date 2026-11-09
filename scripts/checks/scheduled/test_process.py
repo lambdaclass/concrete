@@ -119,3 +119,145 @@ class ProcessStdin(unittest.TestCase):
         finally:
             os.dup2(previous, 0)
             os.close(previous); os.close(reader); os.close(writer)
+
+
+class ProcessContext(unittest.TestCase):
+    def test_context_and_exact_plants(self):
+        helper = ROOT / 'scripts/checks/lib/scheduled_process.py'
+        source = helper.read_text()
+        plants = {
+            'env.SCHEDULER_FOREIGN': ("yield environment", "environment['SCHEDULER_FOREIGN'] = 'planted'\n        yield environment"),
+            'cwd': ("cwd=spec['cwd'],", "cwd='/',"),
+            'HOME': ("HOME=str(home)", "HOME='/'"),
+            'umask': ('umask=0o077,', 'umask=0o022,'),
+            'locale': ("LC_ALL='C'", "LC_ALL='POSIX'"),
+            'timezone': ("TZ='UTC'", "TZ='Pacific/Honolulu'"),
+            'temp': ("TMPDIR=str(temporary)", "TMPDIR='/'"),
+            'fd.9': ('pass_fds=slot_descriptors(environment),',
+                     "pass_fds=(9,),"),
+            'credential scope': ("yield environment", "environment['GH_TOKEN'] = 'publisher-control-token'\n        yield environment"),
+        }
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            shutil.copy(ROOT / 'scripts/checks/lib/bounded_exec.py', root)
+            for field in [None, *plants]:
+                with self.subTest(field=field):
+                    planted = root / 'scheduled_process.py'
+                    text = source
+                    if field:
+                        before, after = plants[field]
+                        self.assertEqual(text.count(before), 1)
+                        text = text.replace(before, after)
+                    if field == 'fd.9':
+                        # Plant a real unrelated descriptor, not a made-up report.
+                        text = text.replace('outcome = supervise(argv,',
+                            "os.dup2(source.fileno(), 9)\n        outcome = supervise(argv,")
+                    planted.write_text(text)
+                    result = process_run([sys.executable, str(ROOT / 'scripts/checks/scheduled/context_control.py'),
+                                          str(planted), scratch], capture_output=True, text=True, timeout=5)
+                    expected = (1, '', 'FAIL scheduled process context: ' + field + '\n') if field else (0, '', '')
+                    self.assertEqual((result.returncode, result.stdout, result.stderr), expected)
+
+    def test_same_probe_through_adapters(self):
+        import os
+        import run
+        from context_control import PROBE, detect
+        from test_slot import Slot
+        from protocol import _registry
+        from unittest.mock import patch
+        command = [sys.executable, '-I', '-c', PROBE]
+        reader, writer = os.pipe()
+        previous = os.dup(9) if Path('/proc/self/fd/9').exists() else None
+        try:
+            os.dup2(reader, 9)
+            environment = dict(runtime_environment(), SCHEDULER_FOREIGN='planted',
+                               GH_TOKEN='publisher-control-token', HOME='/', TMPDIR='/',
+                               LC_ALL='POSIX', TZ='Pacific/Honolulu')
+            for adapter in (process_run, run.call):
+                result = adapter(command, cwd=ROOT, env=environment,
+                                 capture_output=True, text=True, timeout=5)
+                self.assertEqual((result.returncode, result.stderr), (0, ''))
+                detect(json.loads(result.stdout), ROOT)
+            for argv in (
+                [sys.executable, '-I', str(ROOT / 'scripts/checks/lib/scheduled_process.py'), '--cwd', str(ROOT), '--timeout', '3', '--', *command],
+                ['bash', '-c', 'source "$1"; bounded_run 3 -- "${@:2}"', 'bash', str(ROOT / 'scripts/checks/lib/scheduled_process.sh'), *command],
+            ):
+                result = process_run(argv, cwd=ROOT, env=environment, capture_output=True, text=True, timeout=5)
+                self.assertEqual((result.returncode, result.stderr), (0, ''))
+                detect(json.loads(result.stdout), ROOT)
+            # Slot.invoke owns a separate cwd; have the child report its explicit cwd.
+            result = Slot().invoke(command)
+            self.assertEqual((result.returncode, result.stderr), (0, ''))
+            observed = json.loads(result.stdout)
+            detect(observed, observed['cwd'])
+            with tempfile.TemporaryDirectory() as scratch:
+                report = Path(scratch) / 'observation.json'
+                program = ('import contextlib,sys; from pathlib import Path\n'
+                           'with Path(sys.argv[1]).open("w") as f, contextlib.redirect_stdout(f):\n' +
+                           '\n'.join(' ' + line for line in PROBE.splitlines()))
+                row = dict(id='context-probe', command=[sys.executable, '-c', program, str(report)], budget_seconds=3, artifacts=[])
+                with patch.object(_registry, 'tier_rows', return_value=[row]):
+                    self.assertEqual(_registry.execute('context-probe', 'daily', environment), 0)
+                detect(json.loads(report.read_text()), ROOT)
+        finally:
+            if previous is not None:
+                os.dup2(previous, 9); os.close(previous)
+            else:
+                os.close(9)
+            os.close(reader); os.close(writer)
+
+    def test_gate_credentials_are_removed_at_selection(self):
+        from run import gate_environment
+        self.assertFalse({'GH_TOKEN', 'GITHUB_TOKEN'} & gate_environment('a'*40, 'daily', '1/1',
+                         {'GH_TOKEN': 'secret', 'GITHUB_TOKEN': 'secret'}).keys())
+
+
+    def test_private_git_config_hooks_and_publisher_transport(self):
+        from protocol import git
+        import os
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            home = root / 'hostile-home'; home.mkdir()
+            hooks = root / 'hooks'; hooks.mkdir()
+            marker = root / 'hook-ran'
+            hook = hooks / 'pre-commit'
+            hook.write_text('#!/bin/sh\ntouch "' + str(marker) + '"\nexit 73\n'); hook.chmod(0o755)
+            config = home / '.gitconfig'
+            config.write_text('[scheduled]\n foreign = global-secret\n[core]\n hooksPath = ' + str(hooks) + '\n')
+            env = dict(runtime_environment(), HOME=str(home), GIT_CONFIG_GLOBAL=str(config),
+                       GIT_CONFIG_COUNT='1', GIT_CONFIG_KEY_0='scheduled.foreign', GIT_CONFIG_VALUE_0='injected')
+            repo = root / 'repo'; repo.mkdir()
+            git('-C', str(repo), 'init', '-q')
+            git('-C', str(repo), 'config', 'core.hooksPath', str(hooks))
+            git('-C', str(repo), 'config', 'remote.origin.url', 'https://github.com/example/repo')
+            git('-C', str(repo), 'config', 'http.https://github.com/.extraheader', 'AUTHORIZATION: control-transport')
+            for role in ('gate', 'publisher'):
+                result = process_run(['git', '-C', str(repo), 'config', '--get', 'scheduled.foreign'],
+                                     env=env, role=role, capture_output=True, text=True, timeout=3)
+                self.assertEqual((result.returncode, result.stdout, result.stderr), (1, '', ''))
+            # The trusted publisher declares its checkout transport locally (as
+            # actions/checkout does). Private global config must not erase it.
+            for key, expected in (('remote.origin.url', 'https://github.com/example/repo'),
+                                  ('http.https://github.com/.extraheader', 'AUTHORIZATION: control-transport')):
+                result = process_run(['git', '-C', str(repo), 'config', '--get', key], role='publisher',
+                                     env=env, capture_output=True, text=True, timeout=3)
+                self.assertEqual((result.returncode, result.stdout, result.stderr), (0, expected + '\n', ''))
+            result = process_run(['git', '-C', str(repo), '-c', 'user.name=Control', '-c',
+                                  'user.email=control@example.invalid', 'commit', '--allow-empty', '-qm', 'control'],
+                                 env=env, role='publisher', capture_output=True, text=True, timeout=3)
+            self.assertEqual((result.returncode, result.stdout, result.stderr), (0, '', ''))
+            self.assertFalse(marker.exists())
+
+    def test_publisher_credentials_require_explicit_role(self):
+        import os
+        command = [sys.executable, '-c', 'import os; print(os.environ.get("GH_TOKEN", "absent"))']
+        env = dict(runtime_environment(), GH_TOKEN='publisher-control-token')
+        for role, expected in (('gate', 'absent'), ('publisher', 'publisher-control-token')):
+            adapters = [command,
+                [sys.executable, '-I', str(ROOT / 'scripts/checks/lib/scheduled_process.py'),
+                 '--cwd', str(ROOT), '--timeout', '3', '--role', role, '--', *command],
+                ['bash', '-c', 'source "$1"; bounded_run 3 --role "$2" -- "${@:3}"',
+                 'bash', str(ROOT / 'scripts/checks/lib/scheduled_process.sh'), role, *command]]
+            for argv in adapters:
+                result = process_run(argv, role=role, env=env, capture_output=True, text=True, timeout=5)
+                self.assertEqual((result.returncode, result.stdout, result.stderr), (0, expected + '\n', ''))

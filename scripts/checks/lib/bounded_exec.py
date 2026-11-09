@@ -85,7 +85,7 @@ def supervise(cmd, budget, kill_after, *, on_started=None, **process_options):
                     inherited = (int(slot_fd),)
                 except OSError:
                     pass  # the child's acquisition reports the invalid inheritance
-            proc = subprocess.Popen(cmd, start_new_session=True, pass_fds=inherited, **process_options,
+            proc = subprocess.Popen(cmd, start_new_session=True, **dict(dict(pass_fds=inherited), **process_options),
                                     preexec_fn=lambda: signal.pthread_sigmask(signal.SIG_UNBLOCK, cancel_sigs))
         except OSError as e:
             proc = None

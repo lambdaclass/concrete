@@ -423,7 +423,7 @@ The enforcement helper is `lib/scheduled_process.py`; `Invocation` owns the
 materialized process specification and `bounded_exec.supervise` owns lifecycle.
 `process_adapter.py` and `lib/scheduled_process.sh` project Python and shell calls
 into that same specification. The census migration is implemented; the broader
-context fields below remain the step 3 obligation (MISSING controls).
+context fields are materialized by the same helper (step 3 controls below).
 It owns a validated process specification: resolved argv/tool, explicit cwd, complete
 allowlisted env, private HOME/git configuration/temp root, fixed umask, locale and
 TZ, stdin EOF by default or explicit bytes, stdout/stderr sinks, closed unrelated
@@ -459,8 +459,8 @@ must retain or narrow that context, never reconstruct it from ambient state.
 
 ### Ordered structural implementation and exact controls
 
-Steps 1–2 are implemented and controlled as recorded below. Steps 3–6 remain
-MISSING; no whole-context isolation claim is made. Each
+Steps 1–2 and step 3 process fields are implemented and controlled below.
+The step 3 clock and steps 4–6 remain MISSING. Each
 must assert the expected exit/status and complete diagnostic, not just any failure.
 Use isolated copies for planted regressions and compare canonical IDs, not counts.
 The listed FAIL strings are required future control diagnostics, not existing output.
@@ -553,7 +553,9 @@ bytes for note writes. The import-time Git environment snapshot is gone.
 | EOF through Python, CLI, shell, slot, registry and real Git mktree adapters | IMPLEMENTED | `ProcessStdin.test_eof_through_adapters`: writer held open through all checks, no timed EOF; real empty-tree `mktree` retained. Hermetic child entry also reads EOF. |
 | Isolated helper stdin-inheritance plant | IMPLEMENTED | `ProcessStdin.test_production_and_planted_inheritance`: production exit 0 with empty streams; plant exit 1, stderr exactly `FAIL scheduled process stdin: inherited open pipe\n`, empty stdout. Independent short supervisor identifies the exact pipe inode and blocked-read kernel wait channel before cancelling/reaping the group; writer closes only afterward. |
 | Unrelated timeout | IMPLEMENTED | `ProcessStdin.test_unrelated_timeout_is_incomplete`: exit 124, stderr exactly `INCOMPLETE scheduled process stdin: unproven timeout\n`, empty stdout. Missing Linux `/proc` proof is likewise INCOMPLETE, never a planted-control pass. |
-| Context fields/credential/clock isolation (step 3) | MISSING | Complete the accepted field controls; current explicit environment remains a captured stage input, not a claimed allowlist. |
+| Context fields/credential isolation (step 3) | IMPLEMENTED | `ProcessContext`: common child probe through Python, CLI, shell, slot and registry; isolated helper plants each exit 1 with empty stdout and exactly `FAIL scheduled process context: FIELD\n` for `env.SCHEDULER_FOREIGN`, `cwd`, `HOME`, `umask`, `locale`, `timezone`, `temp`, `fd.9`, `credential scope`. Existing `Slot` positive/forged descriptor controls remain. |
+| Private Git config and publisher transport (step 3) | IMPLEMENTED | `ProcessContext.test_private_git_config_hooks_and_publisher_transport`: hostile global config ignored, local hooks cannot run, declared checkout-local remote and HTTP extraheader retained. Explicit publisher role alone carries GH_TOKEN; gate selection removes tokens. |
+| Clock isolation (step 3) | MISSING | Single injected observation and monotonic deadline controls remain in this slice. |
 | Direct/discovery inventory parity (step 4) | MISSING | Premature main dispatch remains for its owning slice. |
 | Shared derived policy values (step 5) | MISSING | Accepted ownership controls remain required. |
 | Common outcome reducer (step 6) | MISSING | Accepted equivalence controls remain required. |
@@ -562,3 +564,20 @@ The short stdin proof uses Linux wait-channel evidence because the required live
 scheduler host is CI2. A host without that evidence returns INCOMPLETE. CI2 must
 qualify the helper with real Nix campaigns, slot transfer, cancellation and
 partial-artifact retention; the light PR controls do not substitute for those runs.
+
+
+### Round 14, implementation slice 2: step 3
+
+The same R-0676 process owner now filters a named environment allowlist by role,
+creates private HOME/config/temp roots for each execution, fixes umask to 077 and
+locale/TZ to C/UTC, and closes unrelated descriptors. Only an inode-checked,
+lock-validated host slot transfers; generic bounded users retain their existing
+policy. The publisher shell call explicitly declares its role; gates never receive
+publisher tokens. Git ignores system/global configuration and disables local hooks
+while retaining the trusted checkout's declared local transport (including the
+Actions checkout HTTP extraheader). No global Git identity/config is required.
+The resolved PATH remains an explicit tool-stage input, including test shims and
+Nix's selected tools; loader and shell startup variables are not inherited.
+Each context plant runs an isolated helper copy and is judged by the common real
+child probe, with exact return code and complete stderr checked. Steps 4–6 have
+not been started. CI2 qualification remains owned by R-0690.

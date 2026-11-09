@@ -60,7 +60,8 @@ def preserve_artifacts(row, checkout, output, number, sha, required, saved):
     return saved
 
 def gate_environment(sha, tier, attempt, environment):
-    env = clean_env(environment)
+    from scheduled_process import role_environment
+    env = role_environment(clean_env(environment), 'gate')
     env.update(SELECTED_SHA=sha, SELECTED_TIER=tier, SCHEDULED_ATTEMPT_ID=attempt)
     return env
 

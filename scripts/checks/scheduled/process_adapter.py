@@ -8,5 +8,5 @@ from scheduled_process import Invocation, execute
 
 def process_run(argv, **options):
     context = Invocation.capture(options.pop('env', dict(os.environ)),
-                                 options.pop('cwd', Path.cwd()))
+                                 options.pop('cwd', Path.cwd()), options.pop('role', 'gate'))
     return execute(context.specification(argv, **options))
