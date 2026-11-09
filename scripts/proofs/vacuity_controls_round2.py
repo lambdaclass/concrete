@@ -160,3 +160,29 @@ end ConcreteSpecControl
     universal = positive.replace("/-- Law", "def Nonzero (n : Nat) : Prop := ∀ _k : Nat, S n ≠ 0\n/-- Law", 1).replace("theorem nonzero (n : Nat) : S n ≠ 0 := Nat.succ_ne_zero n", "theorem nonzero (n : Nat) : Nonzero n := fun _ => Nat.succ_ne_zero n").replace("example : S 0 ≠ 0", "example : Nonzero 0").replace("¬ (mutant 0 ≠ 0) := by decide", "¬ (∀ _k : Nat, mutant 0 ≠ 0) := by intro h; exact h 0 rfl")
     add("forall-alias-full-application", universal, set(), status=0)
     add("decide-hypothesis-positive", base.replace("growth 2 rfl", "growth 2 (by decide)"), set(), status=0)
+
+    add("recursive-law-positive", extra("/-- Law (subject `ConcreteSpecControl.S`). -/", "theorem recursiveLaw (n : Nat) : n < S n := match n with\n  | 0 => Nat.zero_lt_succ 0\n  | n + 1 => Nat.succ_lt_succ (recursiveLaw n)"), bad("missing-instance", "ConcreteSpecControl.recursiveLaw"))
+    add("namespace-components", base + "namespace Left.Right\nopen ConcreteSpecControl\n/-- Helper (computation). References `S` (approved: independent:r3). -/\ntheorem marker : True := trivial\nend Left.Right\n", set(), status=0)
+    add("root-and-open-ambiguous", base + "def S : Nat := 0\nopen ConcreteSpecControl\n/-- Helper (computation). Ambiguous reference `S` (approved: independent:r3). -/\ntheorem Other.marker : True := trivial\n", bad("ambiguous-name", "Other.marker"))
+
+    add("generated-recursor-provenance", base, set(), status=0)
+
+    multiple = """
+namespace ConcreteSpecControl
+def S (n : Nat) := n + 1
+def T (n : Nat) := S n + 1
+def badS (n : Nat) := n
+def badT (n : Nat) := n
+/-- Law (subject `S`, `T`). -/
+theorem together (n : Nat) : n < S n ∧ n < T n :=
+  ⟨Nat.lt_succ_self n, Nat.lt_trans (Nat.lt_succ_self n) (Nat.lt_succ_self _)⟩
+/-- Instance (law `together`, case `zero`). -/
+example : 0 < S 0 ∧ 0 < T 0 := together 0
+/-- Planted (law `together`, case `zero`, subject `S`, mutant `badS`). -/
+example : ¬ (0 < badS 0 ∧ 0 < T 0) := by decide
+/-- Planted (law `together`, case `zero`, subject `T`, mutant `badT`). -/
+example : ¬ (0 < S 0 ∧ 0 < badT 0) := by decide
+end ConcreteSpecControl
+"""
+    add("multiple-subjects-positive", multiple, set(), status=0)
+    add("sibling-subject-erased", multiple.replace("0 < badS 0 ∧ 0 < T 0", "0 < badS 0 ∧ 0 < (badS 0 + 1)"), bad("planted-proposition"))

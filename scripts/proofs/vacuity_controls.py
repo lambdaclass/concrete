@@ -112,7 +112,7 @@ def controls(run, source, labels=None):
     failed = 0
     for label, fixture, budget, expected, status in cases:
         options = {}
-        if label == "missing-provenance":
+        if label in {"missing-provenance", "generated-recursor-provenance"}:
             from pathlib import Path
             driver = Path(__file__).with_name("theorems.lean").read_text()
             driver += """
@@ -124,6 +124,9 @@ def controls(run, source, labels=None):
     value := mkConst ``True.intro
   }
 """
+            if label == "generated-recursor-provenance":
+                driver = driver.replace("`ConcreteSpecControl.missingMetadata", "((Name.num `_private.ConcreteSpec 0) ++ `PSigma.casesOn.generatedChild)")
+                driver = driver.replace("  match env.getModuleIdxFor? n with", "  if privateToUserName n == `PSigma.casesOn.generatedChild then true else\n  match env.getModuleIdxFor? n with", 1)
             options["driver_text"] = driver
         scope = "ConcreteSpec.Owed" if label == "scoped-obligation-only" else ""
         try:

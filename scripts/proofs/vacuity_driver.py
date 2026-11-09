@@ -7,6 +7,7 @@ import argparse
 import contextlib
 import io
 import functools
+import hashlib
 import os
 from pathlib import Path
 import subprocess
@@ -67,6 +68,7 @@ def _run(source, scope, fixture=None, budget=64, inventory=False, *, driver_text
                 examples(work, work, ["ConcreteSpec.lean"])
         (work / "ROADMAP.md").write_text((source / "ROADMAP.md").read_text())
         env = dict(os.environ, LEAN_PATH=os.pathsep.join(map(str, [work, meta_path] if meta_path else [work])), VACUITY_SCOPE=scope,
+                   VACUITY_TRACE=str(work / "audit-trace.tsv"),
                    VACUITY_BUDGET=str(budget), PROOF_MODE=proof_mode or ("theorems" if inventory else "vacuity"))
         visited = set()
 
@@ -134,7 +136,9 @@ set_option maxHeartbeats 2000000 in
         path.write_text(driver)
         result = command(["lean", path], work, env)
         if result.returncode:
-            return 2, "INCOMPLETE enumerator\n" + result.stdout
+            trace = work / "audit-trace.tsv"
+            tail = "\n".join(trace.read_text().splitlines()[-20:]) if trace.exists() else "no audit progress"
+            return 2, "INCOMPLETE enumerator\n" + result.stdout + "\nN2 LAST PROGRESS\n" + tail + "\n"
         output = result.stdout
         if inventory:
             return 0, output
@@ -172,7 +176,14 @@ def main():
         with compiled_consumer() as meta_path:
             return controls(functools.partial(run, meta_path=meta_path), args.source)
     print("N2 SCOPE " + (args.scope or "ALL ConcreteSpec authored theorems"))
-    code, output = run(args.source, args.scope)
+    print("N2 CHECKER " + hashlib.sha256((HERE / "vacuity.lean").read_bytes()).hexdigest())
+    paths = ([args.source / (module.replace(".", "/") + ".lean")
+              for module in args.scope.split(",")] if args.scope else
+             [args.source / "ConcreteSpec.lean", *sorted((args.source / "ConcreteSpec").rglob("*.lean"))])
+    for path in paths:
+        print(f"N2 SOURCE-FILE {path.relative_to(args.source)} {hashlib.sha256(path.read_bytes()).hexdigest()}")
+    with compiled_consumer() as meta_path:
+        code, output = run(args.source, args.scope, meta_path=meta_path)
     print(output, end="")
     return code
 

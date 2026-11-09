@@ -26,12 +26,19 @@ structure Finding where
   detail : String
   deriving BEq
 
-abbrev Audit := StateRefT (Array Finding) MetaM
+structure AuditState where
+  findings : Array Finding := #[]
+  sources : Std.HashMap String String := {}
+  contexts : Std.HashMap Name (Name × List OpenDecl) := {}
+  resolutions : Std.HashMap (Name × String) (Option Name) := {}
+
+abbrev Audit := StateRefT AuditState MetaM
 
 def emit (status code : String) (n : Name) (detail : String := "") : Audit Unit :=
-  modify fun found =>
+  modify fun state =>
     let f := { status, code, name := n, detail : Finding }
-    if found.contains f then found else found.push f
+    if state.findings.contains f then state
+    else { state with findings := state.findings.push f }
 
 def fail (code : String) (n : Name) (detail : String := "") : Audit Unit := emit "FAIL" code n detail
 
@@ -71,15 +78,30 @@ def closed (e : Expr) : Bool :=
 
 /-- Recover command-level namespace/open context with Lean's parser, not a prose scan.
     Tags still come exclusively from the shared environment population. -/
-def sourceOpens (owner : Name) : MetaM (Name × List OpenDecl) := do
+def sourceFile (path : String) : Audit String := do
+  if let some source := (← get).sources[path]? then return source
+  let source ← IO.FS.readFile path
+  modify fun state => { state with sources := state.sources.insert path source }
+  return source
+
+def sourceOpens (owner : Name) : Audit (Name × List OpenDecl) := do
+  if let some cached := (← get).contexts[owner]? then return cached
   let env ← getEnv
   let some ranges ← findDeclarationRanges? owner | throwError "resolution-provenance"
   let path := match env.getModuleIdxFor? owner with
     | some i => (toString env.header.moduleNames[i.toNat]!).replace "." "/" ++ ".lean"
     | none => "ConcreteSpec.lean"
-  let input := Parser.mkInputContext (← IO.FS.readFile path) path.toString
+  let input := Parser.mkInputContext (← sourceFile path) path
   let (_, initial, initialMessages) ← Parser.parseHeader input
   let target := input.fileMap.ofPosition ranges.selectionRange.pos
+  let mut targets : Array (Nat × Name) := #[]
+  for (name, _) in env.constants.map₁.toList ++ env.constants.map₂.toList do
+    if env.getModuleIdxFor? name == env.getModuleIdxFor? owner then
+      if let some range ← findDeclarationRanges? name then
+        targets := targets.push ((input.fileMap.ofPosition range.selectionRange.pos).byteIdx, name)
+  targets := targets.qsort (fun a b => a.1 < b.1)
+  let mut index := 0
+  let mut contexts := (← get).contexts
   let mut state := initial
   let mut messages := initialMessages
   let mut current := Name.anonymous
@@ -112,15 +134,14 @@ def sourceOpens (owner : Name) : MetaM (Name × List OpenDecl) := do
     let (parsed, next, log) := Parser.parseCommand input context state messages
     if log.hasErrors then throwError "resolution-source-parser"
     let ending := parsed.getTailPos?.getD next.pos
+    let mut commandOpens := opens
     if parsed.isOfKind ``Parser.Command.«in» then
-      if ending >= target then
-        let mut nested := parsed
-        while nested.isOfKind ``Parser.Command.«in» do
-          let leading := nested[0]
-          if leading.isOfKind ``Parser.Command.«open» then
-            opens ← addOpens current opens leading[1]
-          nested := nested[2]
-        break
+      let mut nested := parsed
+      while nested.isOfKind ``Parser.Command.«in» do
+        let leading := nested[0]
+        if leading.isOfKind ``Parser.Command.«open» then
+          commandOpens ← addOpens current commandOpens leading[1]
+        nested := nested[2]
     else if parsed.isOfKind ``Parser.Command.«namespace» then
       stack := stack.push (current, opens)
       let id := parsed[1].getId
@@ -133,45 +154,68 @@ def sourceOpens (owner : Name) : MetaM (Name × List OpenDecl) := do
         stack := stack.pop
     else if parsed.isOfKind ``Parser.Command.«open» then
       opens ← addOpens current opens parsed[1]
-    if ending >= target || Parser.isTerminalCommand parsed then break
+    let visibleOpens := if parsed.isOfKind ``Parser.Command.«in» then commandOpens else opens
+    while index < targets.size && targets[index]!.1 <= ending.byteIdx do
+      contexts := contexts.insert targets[index]!.2 (current, visibleOpens)
+      index := index + 1
+    if Parser.isTerminalCommand parsed then break
     if next.pos <= state.pos then throwError "resolution-source-progress"
     state := next
     messages := log
-  return (current, opens)
+  modify fun state => { state with contexts }
+  let _ := target
+  match contexts[owner]? with
+  | some context => return context
+  | none => throwError "resolution-context-missing"
 
-def resolve (all : List (Name × ConstantInfo)) (owner : Name) (s : String) : Audit (Option Name) := do
+def resolveUncached (all : List (Name × ConstantInfo)) (owner : Name) (s : String) : Audit (Option Name) := do
   let .ok stx := Parser.runParserCategory (← getEnv) `term s
     | fail "unknown-name" owner s; return none
   unless stx.isIdent do fail "unknown-name" owner s; return none
   let requested := stx.getId.replacePrefix (Name.mkSimple "_root_") .anonymous
   let env ← getEnv
-  let mut namespacePrefix := if (Name.mkSimple "_root_").isPrefixOf stx.getId then .anonymous else (privateToUserName owner).getPrefix
+  let context ← match (← get).contexts[owner]? with
+    | some value => pure value
+    | none =>
+      let value ← sourceOpens owner
+      modify fun state => { state with contexts := state.contexts.insert owner value }
+      pure value
+  let (ns, opens) := context
+  let hits := (Lean.ResolveName.resolveGlobalName env (← getOptions) ns opens stx.getId).filter fun (n, projections) =>
+    projections.isEmpty && (!isPrivateName n || env.getModuleIdxFor? n == env.getModuleIdxFor? owner)
+  match hits.eraseDups with
+  | [(n, _)] => return some n
+  | [] => pure ()
+  | _ => fail "ambiguous-name" owner s; return none
+  -- Private source names are intentionally absent from the public resolver index.
+  -- Search only private declarations in this module after normal Lean resolution.
+  let mut namespacePrefix := if (Name.mkSimple "_root_").isPrefixOf stx.getId then .anonymous else ns
   repeat
     let candidate := namespacePrefix ++ requested
     let hits := all.filter fun (n, _) =>
-      privateToUserName n == candidate &&
-      (!isPrivateName n || env.getModuleIdxFor? n == env.getModuleIdxFor? owner)
+      isPrivateName n && privateToUserName n == candidate &&
+      env.getModuleIdxFor? n == env.getModuleIdxFor? owner
     match hits with
     | [(n, _)] => return some n
     | [] => pure ()
     | _ => fail "ambiguous-name" owner s; return none
     if namespacePrefix.isAnonymous then break
     namespacePrefix := namespacePrefix.getPrefix
-  let (ns, opens) ← sourceOpens owner
-  let hits := (Lean.ResolveName.resolveGlobalName env (← getOptions) ns opens stx.getId).filter fun (n, projections) =>
-    projections.isEmpty && (!isPrivateName n || env.getModuleIdxFor? n == env.getModuleIdxFor? owner)
-  match hits.eraseDups with
-  | [(n, _)] => return some n
-  | [] => fail "unknown-name" owner s
-  | _ => fail "ambiguous-name" owner s
+  fail "unknown-name" owner s
   return none
+
+def resolve (all : List (Name × ConstantInfo)) (owner : Name) (s : String) : Audit (Option Name) := do
+  if let some cached := (← get).resolutions[(owner, s)]? then return cached
+  let result ← resolveUncached all owner s
+  modify fun state => { state with resolutions := state.resolutions.insert (owner, s) result }
+  return result
 
 /-- Provenance: the selection range must spell this declaration, not its generated parent.
     Fresh source compilation emits selection ranges for authored declarations. Generated
     proof/equation auxiliaries have no source selection (or inherit a different name).
     vacuity_driver.py compiles the sources afresh, including their range extension;
     no pre-existing (possibly stripped) environment is accepted. -/
-def authored (n : Name) : MetaM (Option Bool) := do
+def authored (n : Name) : Audit (Option Bool) := do
   if (← getProjectionFnInfo? n).isSome then return some false
   if (← getMatcherInfo? n).isSome || (← isEqnThm n) then return some false
   let some r ← findDeclarationRanges? n | do
@@ -188,7 +232,7 @@ def authored (n : Name) : MetaM (Option Bool) := do
   let path ← match env.getModuleIdxFor? n with
     | some i => pure ((toString env.header.moduleNames[i.toNat]!).replace "." "/" ++ ".lean")
     | none => pure (← getFileName)
-  let src ← try IO.FS.readFile path catch _ => return none
+  let src ← try sourceFile path catch _ => return none
   let lines := src.splitOn "\n"
   let a := r.selectionRange.pos
   let b := r.selectionRange.endPos
@@ -218,15 +262,18 @@ partial def direct (n : Name) (e : Expr) : StateRefT Nat Audit Bool := do
   set (fuel - 1)
   let e := cleanSpine e
   if e.getAppFn'.isFVar then return true
-  if e.getAppFn' matches .proj .. then return true
+  if let .proj _ _ receiver := e.getAppFn' then return ← direct n receiver
   match e with
   | .lam _ _ _ _ => lambdaTelescope e fun _ body => direct n body
   | .letE _ _ v b _ => direct n (b.instantiate1 v)
   | .fvar _ => return true
-  | .proj .. => return true
+  | .proj _ _ receiver => direct n receiver
   | _ =>
     if let .const h _ := e.getAppFn' then
-      if (← getProjectionFnInfo? h).isSome then return true
+      if let some projection ← getProjectionFnInfo? h then
+        if let some receiver := e.getAppArgs[projection.numParams]? then
+          return ← direct n receiver
+        return false
       if [``Eq.refl, ``rfl, ``HEq.refl, ``Iff.refl].contains h then return true
       if let some (.recInfo r) := (← getEnv).find? h then
         if r.numMinors == 1 then
@@ -257,7 +304,7 @@ partial def falseDischarge (e : Expr) : StateRefT (Nat × Std.HashSet Expr) Meta
   let (fuel, visited) ← get
   if fuel == 0 then throwError "false-discharge-budget"
   set (fuel - 1, visited)
-  if let .const n _ := e.getAppFn' then
+  if let .const n levels := e.getAppFn' then
     if [``False.elim, ``False.casesOn, ``absurd, ``Empty.elim, ``Empty.casesOn,
         ``PEmpty.elim, ``PEmpty.casesOn].contains n then return true
     if let some matcher ← getMatcherInfo? n then
@@ -268,7 +315,7 @@ partial def falseDischarge (e : Expr) : StateRefT (Nat × Std.HashSet Expr) Meta
       modify fun (left, seen) => (left, seen.insert e)
       if let some ci := (← getEnv).find? n then
         if let some value := ci.value? (allowOpaque := true) then
-          let applied := (mkAppN value e.getAppArgs).headBeta
+          let applied := (mkAppN (value.instantiateLevelParams ci.levelParams levels) e.getAppArgs).headBeta
           let reduced ← whnfD applied
           if ← falseDischarge reduced then return true
   match e with
@@ -398,6 +445,14 @@ def approval (t : Tagged) : Audit Unit := do
   | none, none => pure ()
   | _, _ => fail "approval-identity-missing" t.name "an identity attestation needs both writer and reviewer"
 
+/-- Private driver trace survives a killed audit process, so a budget failure names
+    the exact stage/declaration in flight rather than only `audit.lean`. -/
+def progress (stage : String) (name : Name) : MetaM Unit := do
+  if let some path ← IO.getEnv "VACUITY_TRACE" then
+    IO.FS.withFile path .append fun handle => do
+      handle.putStrLn s!"{← IO.monoMsNow}\t{stage}\t{name}"
+
+
 def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := do
   let env ← getEnv
   let all := env.constants.map₁.toList ++ env.constants.map₂.toList
@@ -412,6 +467,7 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
     for (n, ci) in population do
       let module := (env.getModuleIdxFor? n).map fun i => toString env.header.moduleNames[i.toNat]!
       if scope != "" && !module.any scopes.contains && !(toString n).startsWith "ConcreteSpecControl." then continue
+      progress "classification" n
       let doc := (← findDocString? env n).getD ""
       let isExample := ((toString n).splitOn "⟪example⟫").length > 1
       if ci.isTheorem || (!isExample && (ci.value? (allowOpaque := true)).isSome && (← isProof (mkConst n (ci.levelParams.map Level.param)))) then
@@ -524,6 +580,7 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
     let mut instances : Array InstanceCase := #[]
     for t in evidence do
       if !(t.doc.splitOn "Instance (").length > 1 then continue
+      progress "instance" t.name
       let law := t.law
       let key := t.key
       let some value := t.info.value? | fail "instance-application" t.name s!"law={law} case={key}"; continue
@@ -563,6 +620,7 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
             fail "planted-proposition" p.name s!"law={p.law} case={p.key} no-valid-closed-instance"
     for law in tags do
       unless (law.doc.splitOn "Law (subject ").length > 1 do continue
+      progress "law" law.name
       unless law.info.isTheorem do fail "law-kind" law.name; continue
       let trivialStatement ← forallTelescopeReducing law.info.type fun xs conclusion => do
         for x in xs do
@@ -614,7 +672,7 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
   let safe : Audit Unit := do
     try run
     catch e => emit "INCOMPLETE" "analysis-budget-or-error" .anonymous (← e.toMessageData.toString)
-  let (_, findings) ← safe.run #[]
-  return findings
+  let (_, state) ← safe.run {}
+  return state.findings
 
 end Vacuity
