@@ -165,4 +165,8 @@ exit 1
         self.assertEqual((code,index['status']),(1,'FAIL'))
         self.assertEqual(index['gates'][0]['controls'][0]['status'],'INCOMPLETE')
 
-if __name__=='__main__':unittest.main()
+
+
+if __name__ == "__main__":
+    from suite_adapter import direct_main
+    direct_main()

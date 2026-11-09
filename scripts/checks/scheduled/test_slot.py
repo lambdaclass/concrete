@@ -6,7 +6,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
-from test_support import runtime_environment
+from runtime_support import runtime_environment
 import run
 from protocol import clean_env, git
 
@@ -188,5 +188,8 @@ except Cancelled:
             result = run.call(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True, check=True, env=clean_env(dict(os.environ)), cwd=Path(__file__).resolve().parents[3], timeout=120)
             self.assertRegex(result.stdout.strip(), r"^[0-9a-f]{40}$")
 
+
+
 if __name__ == "__main__":
-    unittest.main()
+    from suite_adapter import direct_main
+    direct_main()

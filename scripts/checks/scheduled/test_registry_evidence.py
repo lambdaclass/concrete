@@ -205,3 +205,8 @@ class RegistryEvidence(unittest.TestCase):
         with self.assertRaises(protocol.EvidenceError) as caught:
             protocol.observe([partial, complete], self.sha, 'daily', NOW, RUNNERS, 'example/repo')
         self.assertEqual(str(caught.exception), f'FAIL daily {self.sha}: FAIL registry: wrong command scaling-daily')
+
+
+if __name__ == "__main__":
+    from suite_adapter import direct_main
+    direct_main()

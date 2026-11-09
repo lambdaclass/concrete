@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from process_adapter import process_run
 from process_coverage import check, ROOT
-from test_support import runtime_environment
+from runtime_support import runtime_environment
 from protocol import clean_env
 
 
@@ -479,3 +479,8 @@ class ProcessClock(unittest.TestCase):
             self.assertEqual(outcome, 'timeout')
             self.assertTrue(marker.exists())
             self.assertLess(time.monotonic() - began, 1)
+
+
+if __name__ == "__main__":
+    from suite_adapter import direct_main
+    direct_main()

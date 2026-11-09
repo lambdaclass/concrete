@@ -154,5 +154,8 @@ class Collector(RegistryFixture, unittest.TestCase):
             with self.assertRaisesRegex(EvidenceError, "^INCOMPLETE: missing trusted schedule tier$"):
                 collect.selected("/base", jobs, self.run, token="test-token")
 
+
+
 if __name__ == "__main__":
-    unittest.main()
+    from suite_adapter import direct_main
+    direct_main()

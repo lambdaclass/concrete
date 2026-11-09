@@ -400,7 +400,7 @@ tests using fixture data are controls, not alternate production authorities.
 
 | Fact | Single owner (current or required) | Consumers today | Duplicate or ambient read today | Control and residual |
 |---|---|---|---|---|
-| Eligible main set, resolved tip, topological and first-parent orders | `history.py:10` (`MAIN` at `history.py:7`) | `history.py:19`, `observe.py:51`, replay adapter `workflows/gate_schedule.yml:51` | No second ancestry predicate; `observe.py:53` separately assembles presentation order. Scheduled selection uses event SHA at `workflows/gate_schedule.yml:46`, deliberately distinct from replay's current-main tip. | `test_observe.py:109` checks real merge authorization and exact FAIL output; `test_observe.py:162` checks freshness scope. S11a P1 is covered by the step 2 EOF control; P2 still skips it on direct execution. Return a named history value with explicit ordering roles. |
+| Eligible main set, resolved tip, topological and first-parent orders | `history.py:10` (`MAIN` at `history.py:7`) | `history.py:19`, `observe.py:51`, replay adapter `workflows/gate_schedule.yml:51` | No second ancestry predicate; `observe.py:53` separately assembles presentation order. Scheduled selection uses event SHA at `workflows/gate_schedule.yml:46`, deliberately distinct from replay's current-main tip. | `test_observe.py:109` checks real merge authorization and exact FAIL output; `test_observe.py:162` checks freshness scope. S11a P1 is covered by the step 2 EOF control; P2 is covered by the step-4 premature-main control. Return a named history value with explicit ordering roles. |
 | Repository, main ref, selected SHA/tier, controller and checkout identity | Trusted selection adapter `workflows/gate_schedule.yml:34`; history authority above; verification `run.py:102` | `run.py:88`, `collect.py:51`, `collect.py:67`, `protocol.py:160`, `publish.py:7`, `observe.py:50` | CLI snapshots at `run.py:180`, `collect.py:177`, `publish.py:45`, `observe.py:47`, `history.py:29`; The former Git import snapshot is removed; `process_adapter.py` captures the explicit invocation. Main literals at `collect.py:108`, `collect.py:149` and workflow checkout/ref guards are independently maintained. | `test_execution.py:45`, `test_collect.py:120`, `test_protocol.py:159`; MISSING shared identity/context ownership control. Residual: construct explicit trusted invocation identity once, retain event SHA versus history tip distinction. |
 | Attempt/occurrence identity, immutable closure, event/job state | Authoritative Actions reconstruction `collect.py:67`; append invariant `protocol.py:221` | `run.py:91`, `collect.py:106`, `publish.py:23`, `protocol.py:174`, `protocol.py:244` | Occurrence is cron/replay plus run ID at `run.py:94`, event plus run ID at `collect.py:73`; collector overrides worker identity intentionally but the occurrence meanings differ. | `test_collect.py:79`, `test_publish.py:17`, `test_protocol.py:166`; MISSING occurrence parity control. Residual: name execution identity versus schedule occurrence and use one encoding for each. |
 | Child environment, tool resolution, credentials and host configuration | Process-context owner: `lib/scheduled_process.py` | `protocol.py:40`, `run.py:83`, `publish.py:30`, `publish.py:34`, `hermetic_suite.py:17`, `lib/gate_manifest.py:159` | Named environment allowlist and explicit publisher role; PATH is a declared resolved tool-stage input, HOME is private, loader/shell startup settings are dropped. | `ProcessContext` real boundary probe and exact context/credential plants; explicit publisher capability tested through Python, CLI and shell. |
@@ -414,7 +414,7 @@ tests using fixture data are controls, not alternate production authorities.
 | Runner membership, host slots and resource capability | Binding adapter `lib/ci2_binding.py:11`, verifier `lib/ci2_binding.py:22`; host lease `lib/heavy_slots.sh:4` | `protocol.py:56`, `run.py:106`, `protocol.py:160`, `collect.py:158`, `publish.py:48`, `observe.py:69`, `with_slot.sh:19`, `lib/bounded_exec.py:91` | Workflow labels are routing rather than proof; slot directory override/fd enter via ambient environment; inventory dependency remains unavailable on this base. | `test_execution.py:30`, `test_protocol.py:145`, `test_slot.py:52`, `test_slot.py:60`, `test_slot.py:119`. Residual: explicit validated host capability, actual shared provisioning and ISS-0029 integration under R-0690. |
 | API provenance, selection log, pagination/size bounds, authentication and redirects | `collect.py:19`, `collect.py:22`, `collect.py:29`, `collect.py:39`, `collect.py:51` | `collect.py:106`, `collect.py:141`, `collect.py:67` | Proxy/CA/network configuration is ambient urllib input; schedule tier fallback depends on independently authored workflow title at `workflows/gate_schedule.yml:2`. | `test_collect.py:21`, `test_collect.py:29`, `test_collect.py:98`, `test_collect.py:120`; MISSING explicit network context/title derivation control. Residual: declared HTTPS transport policy and shared selection encoding; API data remains an external observation. |
 | Artifact binding, report bytes/digests, index/log retention and durable evidence | Preservation `run.py:44`, qualification `protocol.py:72`, archive bounds `collect.py:97` | `run.py:139`, `run.py:161`, `collect.py:120`, `collect.py:131`, `collect.py:139`, `protocol.py:214`; uploads `workflows/gate_schedule.yml:92` | Retention 90 repeated at `workflows/gate_schedule.yml:99` and `workflows/gate_schedule.yml:107`; stored digest and declared tool metadata alone do not establish durable independent attestation. | `test_registry_evidence.py:121`, `test_registry_evidence.py:129`, `test_registry_evidence.py:168`. Residual: durable archive and live partial/cancelled upload qualification under R-0690; shared retention policy. |
-| Test inventory, IDs, skips and results for every runner (S11a P2) | Required single inventory enumerator; current discovery `hermetic_suite.py:53` | `hermetic_suite.py:79`, `hermetic_suite.py:86`, `checks/scheduled_gates.sh:9`, direct main blocks `test_observe.py:81`, `test_protocol.py:156`, other test module main blocks | Direct execution exits before later classes at `test_observe.py:84`, `test_observe.py:109`, `test_observe.py:162`, `test_protocol.py:159`; clean/hostile comparison sees discovery only. Results recorder `hermetic_suite.py:39` records successes/skips, child exit records suite failure. | `test_hermetic.py:7` detects result drift; MISSING direct/discovery inventory parity. Residual: one canonical complete ID inventory consumed by each runner, compare IDs and outcomes without fixed counts; remove premature mains as part of that structural repair. |
+| Test inventory, IDs, skips and results for every runner (S11a P2) | `suite_adapter.inventory` | `suite_adapter.execute`, direct module mains, `hermetic_suite.child` | One imported complete inventory per module is compared against both adapters' inventories, actually started IDs and complete outcomes; direct main dispatch follows all definitions. | `test_inventory.Inventory` plants both early dispatches, a failed module, zero tests and matching truncated reports; skip IDs are explicit. `test_hermetic` retains result-drift and canary controls. Steps 5–6 remain separate obligations. |
 | Trigger cadence, queue age, observer coverage and required-check independence | Cadence `workflows/gate_schedule.yml:3`, `workflows/gate_publish.yml:7`, `workflows/gate_freshness.yml:3`; queue policy `collect.py:20` | Selector `workflows/gate_schedule.yml:43`, collector `collect.py:116`, `collect.py:150`, `collect.py:164`, freshness `observe.py:13` | Cron-to-tier mapping repeated in workflow title and selector; no persisted independent observer-occurrence ledger. | `test_collect.py:73`, `test_collect.py:79`; MISSING missed-observer control. Residual: one schedule policy with generated adapters and independent occurrence monitoring under R-0690, outside unrelated PR/landing qualification. |
 
 ### Process-boundary contract and bypass census
@@ -459,8 +459,8 @@ must retain or narrow that context, never reconstruct it from ambient state.
 
 ### Ordered structural implementation and exact controls
 
-Steps 1–2 and step 3 process fields are implemented and controlled below.
-Step 3 is implemented; steps 4–6 remain MISSING. Each
+Steps 1–4 are implemented and controlled below.
+Steps 5–6 remain MISSING. Each
 must assert the expected exit/status and complete diagnostic, not just any failure.
 Use isolated copies for planted regressions and compare canonical IDs, not counts.
 The listed FAIL strings are required future control diagnostics, not existing output.
@@ -556,7 +556,7 @@ bytes for note writes. The import-time Git environment snapshot is gone.
 | Context fields/credential isolation (step 3) | IMPLEMENTED | `ProcessContext`: common child probe through Python, CLI, shell, slot and registry; isolated helper plants each exit 1 with empty stdout and exactly `FAIL scheduled process context: FIELD\n` for `env.SCHEDULER_FOREIGN`, `cwd`, `HOME`, `umask`, `locale`, `timezone`, `temp`, `fd.9`, `credential scope`. Existing `Slot` positive/forged descriptor controls remain. |
 | Private Git config and publisher transport (step 3) | IMPLEMENTED | `ProcessContext.test_private_git_config_hooks_and_publisher_transport`: hostile global config ignored, local hooks cannot run, declared checkout-local remote and HTTP extraheader retained; real `ls-remote` uses the declared local fixture transport despite a hostile global URL rewrite. Explicit publisher role alone carries GH_TOKEN; gate selection removes tokens. |
 | Single observation and absolute deadline (step 3) | IMPLEMENTED | `ProcessClock.test_single_observation_and_second_read_plant`: production exit 0, empty streams; isolated second-read plant exit 1, empty stdout, stderr exactly `FAIL scheduled clock: undeclared read\n`. `test_no_unmediated_wall_clock_reads` rejects raw wall reads outside the owner with that same diagnostic. `test_deadline_does_not_restart_at_execution` proves only remaining monotonic budget is used and expired work never launches. `Collector.test_sweep_injects_one_observation_into_every_record` proves sweep propagation without recapture. |
-| Direct/discovery inventory parity (step 4) | MISSING | Premature main dispatch remains for its owning slice. |
+| Direct/discovery inventory parity (step 4) | IMPLEMENTED | `suite_adapter.inventory` owns complete normalized IDs; `check_module` compares imported inventory against direct and discovery inventories, actually started IDs and outcomes. `Inventory` plants premature main before MergeHistory/ExplicitIdentity in isolated real module copies: exit 1 with exactly `FAIL scheduled inventory: direct/discovery mismatch test_observe` / `test_protocol` as the terminal diagnostic. Failed module, zero-test and matching-truncated-report plants each require exit 1 and their exact separate diagnostics below. Skip, result-drift, canary, open-pipe and sandbox controls remain. |
 | Shared derived policy values (step 5) | MISSING | Accepted ownership controls remain required. |
 | Common outcome reducer (step 6) | MISSING | Accepted equivalence controls remain required. |
 
@@ -689,3 +689,42 @@ Light Nix probes after the repair measured 6.13 ms/root Git call and
 qualification or portable timing assertions. The coordinator must repeat the
 original authorization workload on concrete-ci-2 against the final SHA. No
 budget, timeout, isolation or check was relaxed.
+
+
+### Round 17, implementation slice 3: step 4
+
+`suite_adapter.py` is the sole inventory and execution/reporting adapter. It
+normalizes imported and `__main__` IDs to the module filename and preserves skip
+reasons. Every test module dispatches after its definitions. The former
+`test_support.py` contains no tests and is now named `runtime_support.py`, so every
+`test_*.py` module must provide a nonempty inventory; no helper exception can mask
+an empty test module. Hermetic discovery imports each module completely, obtains
+its expected IDs from the enumerator, runs the common execution adapter, and
+launches the real direct module via isolated runpy execution through
+`process_adapter.process_run`. Runpy supplies the module directory explicitly
+under `-I`; the module's own main block decides when execution happens. The
+comparison uses the report written by that actual execution, never a second
+import masquerading as direct execution. There is no new launch exception in the
+process census. Clean and hostile contexts compare the complete per-module
+reports, including outcomes, after direct/discovery parity; canary snapshots and
+the actual child's EOF assertion remain.
+
+`test_inventory.py` uses isolated copies, with read-only dependency links. Its
+controls require exit 1 and an exact terminal diagnostic (unittest progress and
+tracebacks remain a separate stderr preamble):
+
+| Plant | Required diagnostic | Focused result |
+| --- | --- | --- |
+| Main before MergeHistory in test_observe | `FAIL scheduled inventory: direct/discovery mismatch test_observe` | PASS |
+| Main before ExplicitIdentity in test_protocol | `FAIL scheduled inventory: direct/discovery mismatch test_protocol` | PASS |
+| Real failing test in a module | `FAIL scheduled inventory: module failed test_hermetic` | PASS |
+| Empty module in both runners | `FAIL scheduled inventory: zero tests test_hermetic` | PASS |
+| Same truncated inventories/observations/results from both execution adapters | `FAIL scheduled inventory: direct/discovery mismatch test_hermetic` | PASS |
+| Skipped test | Complete normalized inventory, observed ID and SKIP/reason agree | PASS |
+
+The local Nix scheduled gate passed with 151 identical clean/hostile results
+before commit; final-SHA focused-check evidence is reported by the writer to the
+coordinator. The coordinator owns reviews and pushes, and concrete-ci-2 must run
+the impact gates plus the scheduled clean/hostile and stdin-open-pipe matrix on
+the final SHA, including the latency workload. R-0676 owns this structural repair;
+R-0690 qualification remains outstanding. Steps 5–6 are not started.

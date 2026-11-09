@@ -38,5 +38,8 @@ class Publication(RegistryFixture, unittest.TestCase):
             publish.publish(record(), RUNNERS, "example/repo", {})
             self.assertIn("--force-with-lease=" + ref + ":old", execute.call_args_list[-1].args[0])
 
+
+
 if __name__ == "__main__":
-    unittest.main()
+    from suite_adapter import direct_main
+    direct_main()

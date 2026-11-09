@@ -5,7 +5,7 @@ import re
 import subprocess
 import tempfile
 import unittest
-from test_support import runtime_environment
+from runtime_support import runtime_environment
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -46,5 +46,8 @@ class Workflows(unittest.TestCase):
         self.assertIn("path: result-index/", text)
         self.assertEqual(text.count("if: always()"), 2)
 
+
+
 if __name__ == "__main__":
-    unittest.main()
+    from suite_adapter import direct_main
+    direct_main()

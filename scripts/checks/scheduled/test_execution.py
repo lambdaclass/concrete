@@ -55,5 +55,8 @@ class Execution(unittest.TestCase):
             self.assertEqual((Path(work) / "incomplete.log").read_text(), "wrong checked-out revision\n")
             self.assertEqual(execute.call_count, 2)
 
+
+
 if __name__ == "__main__":
-    unittest.main()
+    from suite_adapter import direct_main
+    direct_main()

@@ -152,8 +152,6 @@ class Controls(RegistryFixture, unittest.TestCase):
                 _binding.read_inventory(work)
             self.assertEqual(str(caught.exception),'INCOMPLETE dependency: ISS-0029 runner binding unavailable')
 
-if __name__ == "__main__":
-    unittest.main()
 
 class ExplicitIdentity(RegistryFixture, unittest.TestCase):
     def test_repository_is_target_not_inventory_membership(self):
@@ -167,3 +165,8 @@ class ExplicitIdentity(RegistryFixture, unittest.TestCase):
         from protocol import validate
         with self.assertRaisesRegex(EvidenceError, "^wrong attempt$"):
             validate(record(), SHA, "daily", RUNNERS, "example/repo", "999/1")
+
+
+if __name__ == "__main__":
+    from suite_adapter import direct_main
+    direct_main()

@@ -37,27 +37,17 @@ def compare_canary(before, after):
         raise ValueError('FAIL scheduled hermeticity: canary repository changed')
 
 
-class Results(unittest.TextTestResult):
-    def __init__(self, *args):
-        super().__init__(*args)
-        self.outcomes = []
-
-    def addSuccess(self, test):
-        super().addSuccess(test)
-        self.outcomes.append([test.id(), 'PASS'])
-
-    def addSkip(self, test, reason):
-        super().addSkip(test, reason)
-        self.outcomes.append([test.id(), 'SKIP', reason])
-
-
 def child(destination):
+    import importlib
+    from suite_adapter import check_module
     if sys.stdin.buffer.read() != b'':
         raise ValueError('FAIL scheduled process stdin: unexpected payload')
-    suite = unittest.defaultTestLoader.discover(str(ROOT), pattern='test_*.py')
-    result = unittest.TextTestRunner(resultclass=Results).run(suite)
-    Path(destination).write_text(json.dumps(sorted(result.outcomes)))
-    return int(not result.wasSuccessful())
+    reports = {}
+    for path in sorted(ROOT.glob('test_*.py')):
+        module = importlib.import_module(path.stem)
+        reports[path.stem] = check_module(module, ROOT)
+    Path(destination).write_text(json.dumps(reports, sort_keys=True))
+    return 0
 
 
 def main(environment):
@@ -87,7 +77,7 @@ def main(environment):
             compare_canary(before, snapshot())
             reports.append(json.loads(Path(destination).read_text()))
         compare(*reports)
-        print(f'PASS scheduled hermeticity: {len(reports[0])} identical clean/hostile results')
+        print(f'PASS scheduled hermeticity: {sum(len(r['inventory']) for r in reports[0].values())} identical clean/hostile results')
     return 0
 
 

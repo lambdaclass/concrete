@@ -67,5 +67,8 @@ class Registry(unittest.TestCase):
         for tier in ('daily','weekly'):
             self.assertIn('future-campaign', [r['id'] for r in registry.scheduled_rows(tier, self.data)])
 
-if __name__ == '__main__':
-    unittest.main()
+
+
+if __name__ == "__main__":
+    from suite_adapter import direct_main
+    direct_main()

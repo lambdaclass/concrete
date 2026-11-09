@@ -77,8 +77,6 @@ class History(RegistryFixture, unittest.TestCase):
             self.assertEqual(observe.main(), 1)
             output.assert_called_once_with("INCOMPLETE observer: Command 'git' timed out after 60 seconds")
 
-if __name__ == "__main__":
-    unittest.main()
 
 class RecoveryControls(RegistryFixture, unittest.TestCase):
     def test_realistic_operational_ancestors_recover(self):
@@ -165,3 +163,8 @@ class FreshnessScope(RegistryFixture, unittest.TestCase):
         self.assertEqual(observe.observe_main([TIP, SHA], {SHA: [record()]},
                          'daily', NOW, RUNNERS, 'example/repo', freshness=[TIP]),
                          [f'STALE daily {SHA}: no fresh PASS'])
+
+
+if __name__ == "__main__":
+    from suite_adapter import direct_main
+    direct_main()

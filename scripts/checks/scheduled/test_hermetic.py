@@ -1,4 +1,4 @@
-from test_support import runtime_environment
+from runtime_support import runtime_environment
 """The environment control must detect changed outcomes, not merely two exits."""
 from process_adapter import process_run
 import unittest
@@ -44,3 +44,8 @@ class Hermeticity(unittest.TestCase):
     def test_planted_canary_index_corruption(self):
         with self.assertRaisesRegex(ValueError, '^FAIL scheduled hermeticity: canary repository changed$'):
             compare_canary({'.git/index': b'original'}, {'.git/index': b'corrupted'})
+
+
+if __name__ == "__main__":
+    from suite_adapter import direct_main
+    direct_main()
