@@ -126,3 +126,26 @@ PROFILE elapsed-ms=242
 NOTE analysis-result ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4258» stage=instance law=ConcreteSpec.Core.Own.Step_erasure case=ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig result=PASS heartbeats=4510/2000000 work=12324/20000 projection=0/4096
 
 NOTE: final-profiles batch outer timeout=240 during ninth sample preparation; last two individual reruns completed.
+
+=== Final projection-cache consumer 37b2a0b1a, three bounded spot checks (exit 0) ===
+CONSUMER sha256=ad9abbba26ebb0fabaeffe1096cfd6c6b764aed2cdd93f08fd6451789f2795b7
+SAMPLE Own.lean:4381» stage=instance
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=18.972
+PROFILE charges=[(falseDischarge, 20001)]
+PROFILE times-raw-heartbeats=[(refutableType, (27041, 80222660))]
+PROFILE elapsed-ms=17863
+INCOMPLETE analysis-budget-or-error ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4381» stage=instance law=ConcreteSpec.Core.Own.runFrom_erasure_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig reason=false-discharge-budget heartbeats=632755/2000000 work=20000/20000 projection=0/4096
+DETAIL analysis-error ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4381» stage=instance law=ConcreteSpec.Core.Own.runFrom_erasure_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig false-discharge-budget
+NOTE analysis-result ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4381» stage=instance law=ConcreteSpec.Core.Own.runFrom_erasure_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig result=INCOMPLETE heartbeats=632756/2000000 work=20000/20000 projection=0/4096
+SAMPLE Own.lean:4269» stage=planted
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=1.697
+PROFILE charges=[(moduleDepends, 263), (mayMention, 417), (mutate, 651), (workConstants, 10841), (withProtected, 354), (mentionsVisit, 157), (mentions, 258)]
+PROFILE times-raw-heartbeats=[]
+PROFILE elapsed-ms=35
+NOTE analysis-result ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4269» stage=planted law=ConcreteSpec.Core.Own.Step_erasure case=profile result=PASS heartbeats=680/2000000 work=12941/20000 projection=0/4096
+SAMPLE Own.lean:4258» stage=instance
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=1.348
+PROFILE charges=[(moduleDepends, 232), (mayMention, 355), (mutate, 172), (workConstants, 10837), (withProtected, 346), (mentionsVisit, 156), (mentions, 226)]
+PROFILE times-raw-heartbeats=[]
+PROFILE elapsed-ms=266
+NOTE analysis-result ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4258» stage=instance law=ConcreteSpec.Core.Own.Step_erasure case=ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig result=PASS heartbeats=4510/2000000 work=12324/20000 projection=0/4096

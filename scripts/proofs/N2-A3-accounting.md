@@ -566,3 +566,23 @@ The preceding receipts/profiles remain explicitly tied to consumer commit e5b2dc
 This final cache-contract addition changes projection analyses; instance/planted
 algorithms and their measured work are unchanged. Final-byte focused reruns are
 recorded separately below.
+
+Final consumer code: `37b2a0b1a3153493423d90e6070c8da9cec5718a`, blob
+`dfee7d3d639677deb628526c54449ea85c6d90d1`, SHA256
+`ad9abbba26ebb0fabaeffe1096cfd6c6b764aed2cdd93f08fd6451789f2795b7`.
+The last identity controls are committed at `2219b4add4e566d46cbfd4fb08b9465f06407fb5`.
+Every standalone requested focused check passed on these consumer bytes:
+reporting; budget (20 original probes and 18 identity checks); round-5
+(32 controls plus 5 certificates); standalone certificates (5); inline match (2);
+fixture provenance (10 exact excerpts). The final standalone identity invocation
+passes 19 positive/negative checks plus 3 planted variants, including both
+refuted-type caches and the projection context key. Exact per-control results:
+[audits/N2-A3-round3-final-controls.txt](audits/N2-A3-round3-final-controls.txt).
+The complete driver control invocation is pending and is not counted as passed.
+
+Three final-byte instrumented spot checks confirm unchanged instance/planted
+work: Own:4381 INCOMPLETE at 20,000 work / 632,756 heartbeats (17,863 ms);
+Own:4269 planted PASS at 12,941 / 680 (35 ms); Own:4258 instance PASS at
+12,324 / 4,510 (266 ms). Protected region SHA256 remains
+`474a74f351984565847d5239a86707b389970bf1eba33d2b45c4486c1ec11fd4`,
+byte-identical to `296cbad05`. The ci-2 command script now pins the final blob.
