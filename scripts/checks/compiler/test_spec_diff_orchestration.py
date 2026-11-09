@@ -21,7 +21,7 @@ class Orchestration(unittest.TestCase):
                 'parse_replay', 'replay_command', 'register_candidate', 'register_generation', 'candidate_bundle_path', 'persist_candidate_bundle',
                 'record_candidate_failure', 'report_mismatch', 'judge_evaluator',
                 'judge_available', 'reset_observations', 'control_candidate', 'native_one', 'absorb_native_result', 'collect_available',
-                'finish_diff', 'run_control', 'run_replay', 'first_outcome_index',
+                'reconcile_worker_exit', 'finish_diff', 'run_control', 'run_replay', 'first_outcome_index',
                 'control_drop_overflow', 'control_lcb_off_by_one', 'control_spec_oracle'))
             setup = f'''set -euo pipefail
 work={work}
@@ -66,6 +66,48 @@ record_judged() {{ :; }}
         self.assertTrue(replay_sh.startswith('SPEC_DIFF_REPLAY='), replay_sh)
         for art in artifacts:
             self.assertTrue((bundle / art).exists(), f'missing {art} in {bundle}')
+
+    def test_unrelated_exit_cannot_reclassify_timed_out_candidate(self):
+        self.run_shell('''
+trap 'finish_diff $?' EXIT
+d="$work/bir/p0"
+register_candidate bir test 0 "$d"
+printf 'emission\\tstarted\\n' >"$d/stage-journal.tsv"
+echo 3 >"$d/worker-result"
+reconcile_worker_exit 7
+[ "$fail" -eq 0 ] && [ ! -f "$d/failure-kinds.txt" ] || exit 9
+echo 'ok timeout candidate retains its worker outcome'
+exit 1
+''', 1, 'ok timeout candidate retains its worker outcome')
+
+    def test_completed_retry_does_not_inherit_interrupted_stage(self):
+        self.run_shell('''
+trap 'finish_diff $?' EXIT
+d="$work/bir/p0"
+register_candidate bir test 0 "$d"
+printf 'emission\\tstarted\\t100\\nemission\\tstarted\\t101\\nemission\\tcompleted\\t101\\n' >"$d/stage-journal.tsv"
+reconcile_worker_exit 7
+[ "$fail" -eq 0 ] || exit 9
+echo 'ok completed retry has no active stage'
+''', 0, 'ok completed retry has no active stage')
+
+    def test_unmarked_worker_exit(self):
+        for stage in ('lowering', 'emission', 'assembly'):
+            for later_timeout in (False, True):
+                with self.subTest(stage=stage, later_timeout=later_timeout):
+                    diag = f'FAIL bir seed test index 0 [{stage}]: unexpected worker exit (rc 7)'
+                    def check(work, regressions):
+                        self.assertFalse(work.exists())
+                        self.assert_bundle(regressions, 'bir', 'test', 0, stage,
+                                           (diag,), ('stage-journal.tsv', 'program.lean.txt'))
+                    self.run_shell('''
+trap 'finish_diff $?' EXIT
+d="$work/bir/p0"
+register_candidate bir test 0 "$d"
+echo term >"$d/program.lean.txt"
+''' + f"printf '{stage}\\tstarted\\n' >\"$d/stage-journal.tsv\"\n" +
+                        ('reconcile_worker_exit 7\nexit 3\n' if later_timeout else 'exit 7\n'),
+                        1, diag, check)
 
     def test_mismatch_timeout_lifecycle(self):
         for path in ('candidate', 'wrong-result', 'off-by-one', 'spec-oracle',

@@ -584,7 +584,29 @@ def recordCandidateFailure (ctx : CandidateCtx) (kind : String) (subject : Strin
   IO.FS.writeFile recPath (existingRec ++ s!"{kind}\t{subject}\t{diagnostic}\n")
   IO.eprintln diagnostic
 
-def writeLcb (ctx : CandidateCtx) (emitted : Source.Function × SiteTable)
+/-- An append-only, flushed stage journal survives an uncatchable worker exit. Ordinary IO
+exceptions also record candidate context; the shell coordinator owns process termination. -/
+def candidateStage (ctx : CandidateCtx) (stage : String) (action : Unit → IO α) : IO α := do
+  IO.FS.createDirAll ctx.dir
+  let append (state : String) : IO Unit := do
+    let h ← IO.FS.Handle.mk (ctx.dir / "stage-journal.tsv") .append
+    h.putStr s!"{stage}\t{state}\t{← IO.Process.getPID}\n"
+    h.flush
+  append "started"
+  if (← IO.getEnv "SPEC_DIFF_WORKER_CONTROL") == some "SPEC_DIFF_PLANTED_CONTROL" &&
+      (← IO.getEnv "SPEC_DIFF_WORKER_EXIT_STAGE") == some stage && ctx.index == 0 then
+    IO.Process.exit 7
+  try
+    let result ← action ()
+    append "completed"
+    return result
+  catch e =>
+    recordCandidateFailure ctx stage "driver_exception"
+      s!"FAIL {ctx.leg} seed {ctx.seed} index {ctx.index} [{stage}]: driver exception: {e}"
+    append "exception"
+    throw e
+
+def writeLcbImpl (ctx : CandidateCtx) (emitted : Source.Function × SiteTable)
     (planted : PlantedFailure := .none) : IO Bool := do
   let (f, sites) := emitted
   IO.FS.createDirAll ctx.dir
@@ -610,6 +632,10 @@ def writeLcb (ctx : CandidateCtx) (emitted : Source.Function × SiteTable)
   | .ok asm =>
     IO.FS.writeFile (ctx.dir / "lcb_body.s") asm
     return true
+
+def writeLcb (ctx : CandidateCtx) (emitted : Source.Function × SiteTable)
+    (planted : PlantedFailure := .none) : IO Bool :=
+  candidateStage ctx "assembly" (fun _ => writeLcbImpl ctx emitted planted)
 
 def writeBackends (ctx : CandidateCtx) (p : Program)
     (emitted : Source.Function × SiteTable) (planted : PlantedFailure := .none) : IO Bool := do
@@ -709,7 +735,7 @@ def writeSpecRegressionMetadata (dir : System.FilePath) (seed : String) (index :
 
 /-- Emit exactly the files consumed by slice0_native.sh, plus the evaluator's observation and the
 same judge inputs as the manifest runner. The expectation is supplied separately for the spec leg. -/
-def emitArtifacts (ctx : CandidateCtx) (p : Program) (mutation : Mutation)
+def emitArtifactsImpl (ctx : CandidateCtx) (p : Program) (mutation : Mutation)
     (planted : PlantedFailure := .none) : IO Bool := do
   let lcbProgram := if mutation = .lcbOffByOne then lcbOffByOne p else p
   IO.FS.createDirAll ctx.dir
@@ -743,7 +769,11 @@ def emitArtifacts (ctx : CandidateCtx) (p : Program) (mutation : Mutation)
       writeEvaluator ctx.dir f sites
     return true
 
-def initBirCandidateDir (ctx : CandidateCtx) (g : BirGen.Generated) (outcome : Outcome) : IO Bool := do
+def emitArtifacts (ctx : CandidateCtx) (p : Program) (mutation : Mutation)
+    (planted : PlantedFailure := .none) : IO Bool :=
+  candidateStage ctx "emission" (fun _ => emitArtifactsImpl ctx p mutation planted)
+
+def initBirCandidateDirImpl (ctx : CandidateCtx) (g : BirGen.Generated) (outcome : Outcome) : IO Bool := do
   IO.FS.createDirAll ctx.dir
   IO.FS.writeFile (ctx.dir / "program.lean.txt") (reprStr g.program ++ "\n")
   IO.FS.writeFile (ctx.dir / "bir.txt") (reprStr g.program ++ "\n")
@@ -755,7 +785,10 @@ def initBirCandidateDir (ctx : CandidateCtx) (g : BirGen.Generated) (outcome : O
     return false
   writeOutcome ctx outcome g.program.sites
 
-def emitBirCandidate (seed : String) (index : Nat) (dir : System.FilePath) (target : LCB.Target)
+def initBirCandidateDir (ctx : CandidateCtx) (g : BirGen.Generated) (outcome : Outcome) : IO Bool :=
+  candidateStage ctx "initialization" (fun _ => initBirCandidateDirImpl ctx g outcome)
+
+def emitBirCandidateImpl (seed : String) (index : Nat) (dir : System.FilePath) (target : LCB.Target)
     (mutation : Mutation) (planted : PlantedFailure := .none) : IO UInt32 := do
   let g := BirGen.generate seed index
   unless wf g.program do
@@ -787,6 +820,12 @@ def emitBirCandidate (seed : String) (index : Nat) (dir : System.FilePath) (targ
   IO.println s!"seed {seed} index {index}: {outcomeName outcome} {BirGen.Production.name g.production}"
   return 0
 
+/-- Keep candidate context active across initialization and the gaps between backend stages. -/
+def emitBirCandidate (seed : String) (index : Nat) (dir : System.FilePath) (target : LCB.Target)
+    (mutation : Mutation) (planted : PlantedFailure := .none) : IO UInt32 :=
+  candidateStage ⟨"bir", seed, index, dir, target⟩ "generation"
+    (fun _ => emitBirCandidateImpl seed index dir target mutation planted)
+
 abbrev Counts := List (String × Nat)
 
 def bump (key : String) : Counts → Counts
@@ -812,17 +851,17 @@ def genBir (seed : String) (n : Nat) (dir : System.FilePath) (target : LCB.Targe
   let mut exits := 0
   let mut traps := 0
   for index in List.range n do
-    let g := BirGen.generate seed index
-    if !wf g.program then
+    let ctx : CandidateCtx := ⟨"bir", seed, index, dir / s!"p{index}", target⟩
+    let (g, wellFormed, outcome) ← candidateStage ctx "generation" fun _ => do
+      let g := BirGen.generate seed index
+      return (g, wf g.program, run g.program 1000)
+    if !wellFormed then
       rejected := rejected + 1
       rejects := rejects ++ s!"reject\t{index}\tnot well formed\n"
     else
-      let outcome := run g.program 1000
       let child := dir / s!"p{index}"
-      let ctx : CandidateCtx := ⟨"bir", seed, index, child, target⟩
       let candPlanted := if plantIndex == some index then planted else .none
-      unless ← initBirCandidateDir ctx g outcome do return 1
-      unless ← emitArtifacts ctx g.program .none candPlanted do return 1
+      unless (← emitBirCandidate seed index child target .none candPlanted) == 0 do return 1
       accepted := accepted + 1
       constructs := addConstructs constructs g.constructs
       if outcomeName outcome = "exit" then exits := exits + 1 else traps := traps + 1
@@ -862,7 +901,7 @@ def writeSpecOutcome (ctx : CandidateCtx) (p : Program) (o : ConcreteSpec.Outcom
 def specOutcomeName : ConcreteSpec.Outcome → String
   | .exit _ => "exit" | .trap _ => "trap" | .stuck _ => "stuck" | .outOfFuel => "out_of_fuel"
 
-def compileSpecCandidate (ctx : CandidateCtx) (avail : Bool)
+def compileSpecCandidateImpl (ctx : CandidateCtx) (avail : Bool)
     (compiler : ConcreteSpec.Program → Except String Program)
     (g : SpecGen.Generated) (core : ConcreteSpec.Program)
     (planted : PlantedFailure := .none) : IO (Except UInt32 (ConcreteSpec.Outcome × Bool)) := do
@@ -915,6 +954,12 @@ def compileSpecCandidate (ctx : CandidateCtx) (avail : Bool)
       s!"FAIL spec seed {ctx.seed} index {ctx.index} [lowering]: spec oracle gives {repr outcome}"
     return .error 1
 
+def compileSpecCandidate (ctx : CandidateCtx) (avail : Bool)
+    (compiler : ConcreteSpec.Program → Except String Program)
+    (g : SpecGen.Generated) (core : ConcreteSpec.Program)
+    (planted : PlantedFailure := .none) : IO (Except UInt32 (ConcreteSpec.Outcome × Bool)) :=
+  candidateStage ctx "lowering" (fun _ => compileSpecCandidateImpl ctx avail compiler g core planted)
+
 /-- Generate accepted slice-0 Core programs, run the spec oracle, and enforce the lowering
 capability contract (X3):
 - When `avail = false`, `compiler` must return `.error unwiredMessage` on every accepted candidate
@@ -937,9 +982,12 @@ def genSpecWith (avail : Bool) (compiler : ConcreteSpec.Program → Except Strin
   let mut exits := 0
   let mut traps := 0
   for index in List.range n do
-    let g := generate seed index
-    let core := ConcreteSpec.Slice0.toCore g.program
-    if !ConcreteSpec.check core then
+    let ctx : CandidateCtx := ⟨"spec", seed, index, dir / s!"p{index}", target⟩
+    let (g, core, acceptedByChecker) ← candidateStage ctx "generation" fun _ => do
+      let g := generate seed index
+      let core := ConcreteSpec.Slice0.toCore g.program
+      return (g, core, ConcreteSpec.check core)
+    if !acceptedByChecker then
       rejected := rejected + 1
       let reason := g.rejection.getD "spec_check"
       rejections := bump reason rejections
@@ -1004,7 +1052,7 @@ def controlPartialLowering (seed : String) (_n : Nat) (dir : System.FilePath) (t
 /-- Replay one accepted spec candidate through the shared spec candidate compiler. While
 `compileCore` is unwired this writes the generated oracle inputs and refuses to claim a native
 comparison. -/
-def replaySpecWith (avail : Bool) (compiler : ConcreteSpec.Program → Except String Program)
+def replaySpecWithImpl (avail : Bool) (compiler : ConcreteSpec.Program → Except String Program)
     (seed : String) (index : Nat) (dir : System.FilePath) (target : LCB.Target)
     (generate : String → Nat → SpecGen.Generated := SpecGen.generate)
     (planted : PlantedFailure := .none) : IO UInt32 := do
@@ -1020,6 +1068,13 @@ def replaySpecWith (avail : Bool) (compiler : ConcreteSpec.Program → Except St
   | .ok (_, false) =>
     IO.eprintln s!"spec leg: 0 programs compiled ({unwiredMessage})"
     return 4
+
+def replaySpecWith (avail : Bool) (compiler : ConcreteSpec.Program → Except String Program)
+    (seed : String) (index : Nat) (dir : System.FilePath) (target : LCB.Target)
+    (generate : String → Nat → SpecGen.Generated := SpecGen.generate)
+    (planted : PlantedFailure := .none) : IO UInt32 :=
+  candidateStage ⟨"spec", seed, index, dir, target⟩ "generation"
+    (fun _ => replaySpecWithImpl avail compiler seed index dir target generate planted)
 
 def replaySpec (seed : String) (index : Nat) (dir : System.FilePath) (target : LCB.Target) :
     IO UInt32 :=

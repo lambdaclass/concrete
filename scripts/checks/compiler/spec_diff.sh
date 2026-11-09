@@ -95,6 +95,7 @@ PLANTED_FAIL_RC=99
 # artifacts: a killed generator need not have reached its metadata writes.
 register_candidate() { # LEG SEED INDEX DIR [SCENARIO]
   local leg=$1 cand_seed=$2 index=$3 d=$4 scenario=${5:-}
+  if declare -p generation_dirs >/dev/null 2>&1; then generation_dirs+=("$d"); fi
   mkdir -p "$d"
   printf '%s\n' "$leg" >"$d/leg"
   printf '%s\n' "$cand_seed" >"$d/seed"
@@ -148,7 +149,8 @@ register_generation() { # Driver argv, called before the bounded launch (and any
 # Run one command with per-step capped first and retry budgets, reserving termination grace inside
 # the monotonic deadline.
 bounded_remaining() {
-  local total grace usable first retry rc=0
+  local total grace usable first retry rc=0 d
+  local -a generation_dirs=()
   register_generation "$@" || return $?
   total=$(remaining)
   grace=$((2 * BOUNDED_KILL_AFTER))
@@ -168,12 +170,39 @@ bounded_remaining() {
   [ "$retry" -le "$step_retry_cap" ] || retry=$step_retry_cap
   bounded_run -i /dev/null -r "$retry" "$first" -- "${capped[@]}" "$@" || rc=$?
   if [ "$rc" -ne 0 ] && bounded_is_incomplete "$rc"; then
+    for d in "${generation_dirs[@]}"; do printf '3\n' >"$d/worker-result"; done
     echo "INCOMPLETE: bounded command timed out: $*" >&2
     return 3
   fi
   # Reserve 3 for watchdog incompletion; a child exiting 3 is a real failure.
   [ "$rc" -ne 3 ] || rc=4
+  for d in "${generation_dirs[@]}"; do printf '%s\n' "$rc" >"$d/worker-result"; done
+  reconcile_worker_exit "$rc"
   return "$rc"
+}
+
+# Reconcile while the worker result is still known, before any later timeout or
+# scratch cleanup. Nested stages form a stack; only the innermost active stage
+# owns an unmarked exit. Completed/rejected and never-started candidates are inert.
+reconcile_worker_exit() { # RC (3 denotes watchdog incompletion)
+  local rc=$1 d stage leg cand_seed index
+  [ "$rc" -ne 0 ] && [ "$rc" -ne 3 ] || return 0
+  while IFS= read -r d; do
+    [ -f "$d/stage-journal.tsv" ] || continue
+    case "$(cat "$d/worker-result" 2>/dev/null)" in 0|3) continue ;; esac
+    stage=$(awk -F '\t' 'NR > 1 && $3 != pid {delete s; n=0}
+      {pid=$3}
+      $2 == "started" {s[++n]=$1}
+      $2 == "completed" || $2 == "exception" {delete s[n]; n--}
+      END {if (n > 0) print s[n]}' "$d/stage-journal.tsv")
+    [ -n "$stage" ] || continue
+    [ ! -f "$d/worker-exit-recorded" ] || continue
+    leg=$(cat "$d/leg"); cand_seed=$(cat "$d/seed"); index=$(cat "$d/index")
+    record_candidate_failure "$leg" "$cand_seed" "$index" "$d" "$stage" worker_exit \
+      "FAIL $leg seed $cand_seed index $index [$stage]: unexpected worker exit (rc $rc)"
+    printf '%s\n' "$rc" >"$d/worker-exit-recorded"
+    fail=1
+  done < <(cat "$work/lifecycle-dirs" 2>/dev/null | LC_ALL=C sort -u)
 }
 
 require_bounded() {
@@ -714,6 +743,7 @@ finish_diff() {
   local rc=$1
   trap - EXIT
   set +e
+  reconcile_worker_exit "$rc"
   collect_available
   bounded_summary
   if [ "$fail" -ne 0 ] || { [ "$rc" -ne 0 ] && [ "$rc" -ne 3 ]; }; then
@@ -814,12 +844,78 @@ first_outcome_index() { # first_outcome_index SUMMARY exit|trap [below-255]
   return 1
 }
 
+worker_exit_command() { # MODE SCENARIO LEG SEED INDEX DIR
+  local mode=$1 scenario=$2 leg=$3 cand_seed=$4 index=$5 d=$6 rc=0
+  local stage=${scenario%%+*} cmd=replay
+  [ "$leg" != spec ] || cmd=replay-spec
+  local -a args=("$cmd" "$cand_seed" "$index" "$d" "$target")
+  if [ "$mode" = batch ]; then
+    cmd=gen-bir; [ "$leg" != spec ] || cmd=gen-spec
+    args=("$cmd" "$cand_seed" 16 "$d")
+    [ "$leg" != bir ] || args+=("$target")
+    register_candidate "$leg" "$cand_seed" 0 "$d/p0" "worker-exit-$scenario"
+  fi
+  bounded_remaining env SPEC_DIFF_WORKER_CONTROL=SPEC_DIFF_PLANTED_CONTROL \
+    SPEC_DIFF_WORKER_EXIT_STAGE="$stage" "${driver[@]}" "${args[@]}" || rc=$?
+  [ "$rc" -eq 7 ] || { echo "control setup: expected worker exit 7, got $rc" >&2; return 1; }
+  case "$scenario" in
+    *+timeout)
+      local step_first_cap=1 step_retry_cap=1 BOUNDED_KILL_AFTER=0
+      local BOUNDED_LOG="$work/expected-worker-timeout.log"
+      rc=0
+      bounded_remaining python3 -c 'import time; time.sleep(30)' || rc=$?
+      [ "$rc" -eq 3 ] || { echo "control setup: expected subsequent timeout" >&2; return 1; }
+      echo 'INCOMPLETE: planted timeout after worker exit' >&2 ;;
+  esac
+  return 1
+}
+
+control_worker_journal() {
+  local stage mode suffix leg scenario d rc saved out log diag
+  for stage in lowering emission assembly; do
+    leg=bir; [ "$stage" != lowering ] || leg=spec
+    for mode in batch replay; do
+      for suffix in '' +timeout; do
+        scenario="$stage$suffix"
+        d="$work/journal-$mode-$scenario"
+        rc=0
+        (
+          work="$d/work"; mkdir -p "$work"
+          regressions="$d/saved"; fail=0; deadline_stopped=0
+          trap 'finish_diff $?' EXIT
+          register_candidate "$leg" journal-control 0 "$work/replay" "worker-exit-$scenario"
+          worker_exit_command "$mode" "$scenario" "$leg" journal-control 0 "$work/replay"
+        ) >"$d.log" 2>&1 || rc=$?
+        diag="FAIL $leg seed journal-control index 0 [$stage]: unexpected worker exit (rc 7)"
+        saved=$(find "$d/saved" -name failure-record.tsv -print | head -1)
+        saved=${saved%/failure-record.tsv}
+        [ "$rc" -eq 1 ] && [ ! -e "$d/work" ] &&
+          grep -qxF "$diag" "$d.log" && grep -qxF "$diag" "$saved/diagnostics.txt" &&
+          grep -qxF "$stage" "$saved/failure-kinds.txt" &&
+          [ -s "$saved/stage-journal.tsv" ] || {
+            echo "control setup: $mode $scenario lost worker failure" >&2; cat "$d.log" >&2; return 1;
+          }
+        verify_saved_replay "$saved" "$d/reproduced" "$d/replayed.log" || return $?
+        if [ -n "$suffix" ]; then
+          grep -qxF 'INCOMPLETE: planted timeout after worker exit' "$d.log" &&
+            grep -qxF 'INCOMPLETE: planted timeout after worker exit' "$d/replayed.log" || return 1
+        fi
+      done
+    done
+  done
+  echo 'FAIL worker-journal: every unmarked stage exit persisted and replayed, including later timeout'
+  return "$PLANTED_FAIL_RC"
+}
+
 run_replay() {
   parse_replay "$replay"
   local d="$work/replay" rc=0
   driver_extra_args=()
   register_candidate "$replay_leg" "$replay_seed" "$replay_index" "$d" "${SPEC_DIFF_REPLAY_CONTROL:-}"
   case "${SPEC_DIFF_REPLAY_CONTROL:-}" in
+    worker-exit-*)
+      worker_exit_command replay "${SPEC_DIFF_REPLAY_CONTROL#worker-exit-}" "$replay_leg" "$replay_seed" "$replay_index" "$d"
+      exit 1 ;;
     ""|spec-oracle|native-compilation|observation|report-mismatch) ;;
     emission|assembly|native-setup|lowering)
       driver_extra_args=(--plant-failure "$SPEC_DIFF_REPLAY_CONTROL" --control SPEC_DIFF_PLANTED_CONTROL) ;;
@@ -1500,6 +1596,9 @@ check_generation "spec leg" "$work/spec/summary.tsv"
 check_generation "BIR leg" "$work/bir/summary.tsv"
 
 control_determinism
+run_control worker-journal \
+  '^FAIL worker-journal: every unmarked stage exit persisted and replayed, including later timeout$' \
+  control_worker_journal
 run_control selective-refusal \
   '^FAIL selective-refusal: admitted candidate refused despite intact aggregate coverage$' \
   control_selective_refusal
