@@ -1,0 +1,44 @@
+PASS control joint-branch-decide-repro
+PASS control false-discharge
+PASS control absurd-discharge
+PASS control nomatch-discharge
+PASS control helper-false
+PASS control false-cases
+PASS control empty-elimination
+PASS control pempty-elimination
+PASS control helper-nomatch
+PASS control decide-hypothesis-positive
+PASS control nested-decide-discharge-1
+PASS control nested-decide-discharge-4
+PASS control nested-decide-discharge-12
+PASS control hypothetical-false-positive
+PASS control hypothetical-empty-positive
+PASS control hypothetical-pempty-positive
+PASS control open-helper-false
+PASS control open-helper-empty
+PASS control open-helper-pempty
+PASS control data-subtype-discharge
+PASS control data-psigma-discharge
+PASS control data-pprod-discharge
+PASS control finite-collection-decide-positive
+PASS control finite-collection-simp-positive
+PASS control finite-collection-cases-positive
+PASS control joint-hypothetical-positive
+PASS control joint-supplied-negative
+PASS control joint-open-supplied-negative
+PASS control reachable-open-impossible-negative
+PASS control reachable-joint-helper-negative
+PASS control unreachable-closed-supplier-positive
+PASS control context-cache-supplied-negative
+N2 selected controls: 32 PASS, 0 FAIL
+REPRO baseline: no context refutation
+REPRO kernel-checked certificate: of_eq_true injectedFalse._simp_1
+REPRO certificate type: False; local assumptions: 0
+REPRO supplied dependency: injectedFalse := impossible
+CERTIFICATE origin: rejected-supplied-contradiction supplier=impossible
+CERTIFICATE non-circular: rejected-supplied-contradiction supplier=impossible
+CERTIFICATE library-decide-matcher: admitted
+CERTIFICATE dependency-chain-baseline: admitted
+CERTIFICATE shared-budget: INCOMPLETE analysis-budget-or-error CertificateControl.instance stage=certificate-dependencies law=CertificateControl.law case=shared-budget false-discharge-budget
+Certificate controls: 5 PASS, 0 FAIL
+warning: Git tree '/home/unbalancedparen/projects/gates-vacuity' is dirty

@@ -1,0 +1,7 @@
+CHECKER f85c2151ecfa35e916f9ee96714997d090438ed5
+FAIL instance-application ConcreteSpec.Repro.«⟪example⟫ConcreteSpec.lean:16» law=ConcreteSpec.Repro.growth case=two
+FAIL unpaired-planted ConcreteSpec.Repro.«⟪example⟫ConcreteSpec.lean:21»
+FAIL planted-proposition ConcreteSpec.Repro.«⟪example⟫ConcreteSpec.lean:21» law=ConcreteSpec.Repro.growth case=two no-valid-closed-instance
+NOTE projection-cost ConcreteSpec.Repro.growth visited=4 limit=4096 cached=4
+FAIL missing-instance ConcreteSpec.Repro.growth
+N2 FAIL

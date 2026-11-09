@@ -21,6 +21,18 @@ def controls(run, source, labels=None):
 
     from pathlib import Path
     repro = Path(__file__).with_name("fixtures") / "F3b-Repro.lean"
+    inline_match = (Path(__file__).with_name("fixtures") / "N2-Inline-Match-Repro.lean").read_text()
+    add("inline-match-positive", inline_match, set(), status=0)
+    # Kernel conversion at the concrete operation result hides this changed
+    # branch, but protected conversion must retain the law's actual contract.
+    negative = inline_match.replace("end ConcreteSpec.Repro", """/-- Instance (law `ConcreteSpec.Repro.growth`, case `changed-branch`). -/
+example : (match S 2 with
+    | .ok (y, n) => y = y ∧ 0 < n
+    | _ => True) := growth 2
+
+end ConcreteSpec.Repro""")
+    add("inline-match-changed-branch", negative,
+        {("FAIL", "instance-application", "EXAMPLE")})
     add("joint-branch-decide-repro", {
         "ConcreteSpec.lean": "import ConcreteSpec.Repro\n",
         "ConcreteSpec/Repro.lean": repro.read_text(),
@@ -153,6 +165,13 @@ def controls(run, source, labels=None):
                 identities.setdefault(key, set()).add(words[2])
                 found.add(key)
         report_ok = True
+        if label == "inline-match-changed-branch":
+            line = next(i for i, text in enumerate(fixture.splitlines(), 1)
+                        if text.startswith("example :")
+                        and "case `changed-branch`" in fixture.splitlines()[i - 2])
+            exact = (f"FAIL instance-application ConcreteSpec.Repro.«⟪example⟫ConcreteSpec.lean:{line}» "
+                     "law=ConcreteSpec.Repro.growth case=changed-branch")
+            report_ok = [row for row in output.splitlines() if row.startswith(("FAIL ", "INCOMPLETE "))] == [exact]
         if label == "non-law-positive":
             report_ok = all(row in output for row in [
                 "REPORT Helper ( _private.ConcreteSpec.0.ConcreteSpecControl.helper ",

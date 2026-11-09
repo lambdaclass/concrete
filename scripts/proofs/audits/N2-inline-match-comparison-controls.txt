@@ -1,0 +1,14 @@
+COMMAND bounded_run 180 -- nix develop --command python3 (compiled_consumer + selected vacuity_controls)
+PASS control positive
+PASS control inline-match-positive
+PASS control inline-match-changed-branch
+PASS control partial
+PASS control restated
+PASS control hidden-partial
+PASS control wrapper-positive
+PASS control wrapper-fresh-argument
+PASS control wrapper-erased-mutant
+PASS control forall-alias-full-application
+PASS control multiple-subjects-positive
+PASS control sibling-subject-erased
+N2 selected controls: 12 PASS, 0 FAIL

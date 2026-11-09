@@ -58,6 +58,12 @@ subjects while preserving all named subjects/mutants simultaneously, then replac
 each subject/mutant constant at its actual universe levels
 with a fresh local variable. Definitional equality can normalize surrounding
 contracts but cannot erase operation arguments or replace a mutant by its result.
+The shared `protectedEq` comparison disables smart unfolding only inside the
+protected conversion: ordinary definitional unfolding compares contract definitions
+even when protected discriminants prevent computation. This applies uniformly to
+Instance and Planted comparisons, including generated polymorphic/specialized
+matchers; it grants no declaration exemption. See
+[N2 inline-match diagnosis and reproducer](N2-inline-match.md).
 Mutants must also be definitionally different from their subjects, independently
 of their distinct names. Negation and inequality conclusions are accepted.
 A wrapper matching on the opaque operation result remains a contract conclusion;

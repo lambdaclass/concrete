@@ -1,0 +1,4 @@
+PASS control inline-match-positive
+PASS control inline-match-changed-branch
+N2 selected controls: 2 PASS, 0 FAIL
+warning: Git tree '/home/unbalancedparen/projects/gates-vacuity' is dirty

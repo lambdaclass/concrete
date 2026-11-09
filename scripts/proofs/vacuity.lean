@@ -910,7 +910,11 @@ def withProtected (a b : Expr) (subjects : Array Name) (check : Expr â†’ Expr â†
 
 
 def protectedEq (a b : Expr) (subjects : Array Name) : MetaM Bool :=
-  withProtected a b subjects isDefEq
+  -- Smart unfolding intentionally leaves compiled matchers stuck on abstract
+  -- discriminants. Protection makes subject applications abstract, so compare
+  -- contracts using ordinary definitional unfolding after protection instead.
+  withProtected a b subjects fun x y =>
+    withOptions (fun opts => opts.setBool `smartUnfolding false) (isDefEq x y)
 
 /-- Only syntactic binders belong to the declaration telescope. Unfolding a
     closed conclusion may expose quantifiers belonging to its predicate. -/
