@@ -9,7 +9,7 @@ PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `Concret
 namespace ConcreteSpec.Brand
 open Core (AList)
 
-/-- Brand equality is nominal (Q1.4): an operation that pairs a value of one brand with an
+/-- Law (subject `ConcreteSpec.Brand.Ok`). Brand equality is nominal (Q1.4): an operation that pairs a value of one brand with an
 allocator of another is refused. -/
 theorem brand_mismatch_refused {B Γ h a β1 β2 r Γ'} (hh : AList.lookup Γ h = some (.heap β1))
     (ha : AList.lookup Γ a = some (.alloc β2)) (hne : β1 ≠ β2) :
@@ -20,7 +20,7 @@ theorem brand_mismatch_refused {B Γ h a β1 β2 r Γ'} (hh : AList.lookup Γ h 
   · cases hok with
     | free h1 h2 _ => rw [hh] at h1; rw [ha] at h2; cases h1; cases h2; exact hne rfl
 
-/-- A checked reset leaves no value of the old brand (Q1.5): none is live at the reset. -/
+/-- Law (subject `ConcreteSpec.Brand.Ok`). A checked reset leaves no value of the old brand (Q1.5): none is live at the reset. -/
 theorem reset_requires_no_old {B Γ a' a β' rest Γ' β} (h : Ok B Γ (.reset a' a β' :: rest) Γ')
     (ha : AList.lookup Γ a = some (.alloc β)) : ∀ hv, AList.lookup Γ hv ≠ some (.heap β) := by
   intro hv hh
@@ -29,11 +29,11 @@ theorem reset_requires_no_old {B Γ a' a β' rest Γ' β} (h : Ok B Γ (.reset a
     rw [ha] at ha'; cases ha'
     exact hno _ (AList.lookup_mem hh) rfl
 
-/-- **`reset_fresh`, static part** (Q1.2, Q1.4). The brand of a reset allocator differs from the
+/-- Law (subject `ConcreteSpec.Brand.Ok`). **reset_fresh, static part** (Q1.2, Q1.4). The brand of a reset allocator differs from the
 brand of every value live before the reset, so each operation of the new allocator on such a
-value (`use`, `free`) is refused. Values of the old brand cannot be live at a checked reset
-(`reset_requires_no_old`); one that reached the new allocator anyway would be refused by
-`brand_mismatch_refused`, and the ghost run refuses it too (`reset_fresh`, part 3). -/
+value (use, free) is refused. Values of the old brand cannot be live at a checked reset
+(reset_requires_no_old); one that reached the new allocator anyway would be refused by
+brand_mismatch_refused, and the ghost run refuses it too (reset_fresh, part 3). -/
 theorem reset_refuses_old {B Γ a' a β' rest Γ'} (hw : BrandsIn B Γ)
     (h : Ok B Γ (.reset a' a β' :: rest) Γ') {hv βh} (hh : AList.lookup Γ hv = some (.heap βh)) :
     βh ≠ β' ∧ ∀ r, rest = .use hv a' :: r ∨ rest = .free hv a' :: r → False := by
@@ -63,6 +63,7 @@ are pairwise distinct. -/
 def Inv (s : State) : Prop :=
   (∀ e ∈ s.env, brandOf e.2 < s.next) ∧ (∀ b ∈ s.gen, b < s.next) ∧ s.gen.Nodup
 
+/-- Helper (inversion). Extend a no-duplicate list with a member excluded by the freshness premise. (approved: PENDING). -/
 theorem nodup_snoc : ∀ {l : List Nat} {x : Nat}, l.Nodup → x ∉ l → (l ++ [x]).Nodup
   | [], _, _, _ => by simp
   | y :: l, x, h, hx => by
@@ -73,6 +74,7 @@ theorem nodup_snoc : ∀ {l : List Nat} {x : Nat}, l.Nodup → x ∉ l → (l ++
     simp only [List.mem_append, List.mem_singleton, not_or]
     exact ⟨h.1, fun e => hx (by simp [e])⟩
 
+/-- Law (subject `ConcreteSpec.Brand.State.bind`). -/
 theorem inv_bind {s : State} (a : Nat) {env : AList Nat Val} (hi : Inv s)
     (henv : ∀ e ∈ env, brandOf e.2 < s.next) : Inv (s.bind a env) := by
   obtain ⟨_, hg, hn⟩ := hi
@@ -89,7 +91,7 @@ theorem inv_bind {s : State} (a : Nat) {env : AList Nat Val} (hi : Inv s)
     · omega
   · exact nodup_snoc hn (fun hm => by have := hg _ hm; omega)
 
-/-- The ghost run keeps the invariant. -/
+/-- Law (subject `ConcreteSpec.Brand.Run`). The ghost run keeps the invariant. -/
 theorem run_inv {s ss s'} (h : Run s ss s') : Inv s → Inv s' := by
   induction h with
   | nil => exact id
@@ -108,17 +110,18 @@ theorem run_inv {s ss s'} (h : Run s ss s') : Inv s → Inv s' := by
   | whileExit _ ih => exact ih
   | whileIter _ ih => exact ih
 
+/-- Representation lemma. The empty initialization fields reduce the bookkeeping invariant to empty-list identities. (approved: PENDING). -/
 theorem inv_init : Inv State.init := ⟨by simp [State.init], by simp [State.init], by simp [State.init]⟩
 
-/-- **`reset_fresh`** (Q9.14, Q1.2, Q1.4, Q1.5).
+/-- Law (subject `ConcreteSpec.Brand.Run`). **reset_fresh** (Q9.14, Q1.2, Q1.4, Q1.5).
 
 1. The brand a reset gives the new allocator differs from the brand of every value live at the
    reset, in any reachable ghost state.
-2. Every brand a run generates (each `new` and each `reset`, in every iteration of every loop,
+2. Every brand a run generates (each new and each reset, in every iteration of every loop,
    for every outcome of the loop conditions) differs from every other: the generated brands are
    pairwise distinct.
-3. The new allocator's operations refuse the old brand: statically (`reset_refuses_old`,
-   `brand_mismatch_refused`), and in the ghost run, where `use` or `free` through the new
+3. The new allocator's operations refuse the old brand: statically (reset_refuses_old,
+   brand_mismatch_refused), and in the ghost run, where use or free through the new
    allocator of any value live before the reset, of the old brand or any other, is stuck. -/
 theorem reset_fresh :
     (∀ {s a' a β' rest s'}, Inv s → Run s (.reset a' a β' :: rest) s' →
@@ -161,27 +164,29 @@ theorem reset_fresh :
 
 /-! ### Erasure (Q1.1): a checked program passes every ghost brand check -/
 
-/-- A static type's run-time value under the brand assignment `φ`. -/
+/-- A static type's run-time value under the brand assignment φ. -/
 def emb (φ : Nat → Nat) : STy → Val
   | .alloc β => .allocV (φ β)
   | .heap β => .heapV (φ β)
 
-/-- The run-time values match the static context under the brand assignment `φ`: the same
-names, and an allocator or value of brand `β` carries the run-time brand `φ β`. -/
+/-- The run-time values match the static context under the brand assignment φ: the same
+names, and an allocator or value of brand β carries the run-time brand φ β. -/
 def Rel (φ : Nat → Nat) (Γ : Ctx) (env : AList Nat Val) : Prop :=
   ∀ x, AList.lookup env x = (AList.lookup Γ x).map (emb φ)
 
-/-- `φ` with brand `β` assigned `v`. -/
+/-- φ with brand β assigned v. -/
 def upd (φ : Nat → Nat) (β v : Nat) : Nat → Nat := fun γ => if γ = β then v else φ γ
 
+/-- Representation lemma. Transport the static-to-ghost representation across context extension, erasure or fresh brand renaming; no operational soundness is claimed here. (approved: PENDING). -/
 theorem rel_cons {φ Γ env} (x : Nat) (t : STy) (h : Rel φ Γ env) :
     Rel φ ((x, t) :: Γ) ((x, emb φ t) :: env) := by
   intro y; by_cases hx : x = y <;> simp [AList.lookup, hx, h y]
 
+/-- Representation lemma. Transport the static-to-ghost representation across context extension, erasure or fresh brand renaming; no operational soundness is claimed here. (approved: PENDING). -/
 theorem rel_erase {φ Γ env} (p : Nat) (h : Rel φ Γ env) : Rel φ (AList.erase Γ p) (AList.erase env p) := by
   intro y; rw [AList.lookup_erase, AList.lookup_erase]; by_cases hy : y = p <;> simp [hy, h y]
 
-/-- Reassigning a brand no binding has changes no binding's run-time value. -/
+/-- Representation lemma. Transport the static-to-ghost representation across context extension, erasure or fresh brand renaming; no operational soundness is claimed here. (approved: PENDING). Reassigning a brand no binding has changes no binding's run-time value. -/
 theorem emb_upd {B Γ} {φ : Nat → Nat} {β v x : Nat} {t : STy} (hb : BrandsIn B Γ) (hβ : β ∉ B)
     (hf : AList.lookup Γ x = some t) : emb (upd φ β v) t = emb φ t := by
   have hm := AList.lookup_mem hf
@@ -193,6 +198,7 @@ theorem emb_upd {B Γ} {φ : Nat → Nat} {β v x : Nat} {t : STy} (hb : BrandsI
     have : γ ≠ β := fun e => hβ (e ▸ hb _ hm γ (.inr rfl))
     simp [emb, upd, this]
 
+/-- Representation lemma. Transport the static-to-ghost representation across context extension, erasure or fresh brand renaming; no operational soundness is claimed here. (approved: PENDING). -/
 theorem rel_upd {φ Γ env} {B : List Nat} {β : Nat} (v : Nat) (h : Rel φ Γ env) (hb : BrandsIn B Γ)
     (hβ : β ∉ B) : Rel (upd φ β v) Γ env := by
   intro y
@@ -201,12 +207,15 @@ theorem rel_upd {φ Γ env} {B : List Nat} {β : Nat} (v : Nat) (h : Rel φ Γ e
   | none => rfl
   | some t => simp [emb_upd hb hβ hf]
 
+/-- Representation lemma. Transport the static-to-ghost representation across context extension, erasure or fresh brand renaming; no operational soundness is claimed here. (approved: PENDING). -/
 theorem brandsIn_erase {B Γ} (p : Nat) (h : BrandsIn B Γ) : BrandsIn B (AList.erase Γ p) :=
   fun e he => h e (AList.mem_of_mem_erase p he)
 
+/-- Representation lemma. Transport the static-to-ghost representation across context extension, erasure or fresh brand renaming; no operational soundness is claimed here. (approved: PENDING). -/
 theorem brandsIn_mono {B Γ} (β : Nat) (h : BrandsIn B Γ) : BrandsIn (β :: B) Γ :=
   fun e he γ hγ => List.mem_cons_of_mem _ (h e he γ hγ)
 
+/-- Representation lemma. Transport the static-to-ghost representation across context extension, erasure or fresh brand renaming; no operational soundness is claimed here. (approved: PENDING). -/
 theorem brandsIn_cons {B Γ} {x : Nat} {t : STy} (h : BrandsIn B Γ)
     (ht : ∀ β, (t = .alloc β ∨ t = .heap β) → β ∈ B) : BrandsIn B ((x, t) :: Γ) := by
   intro e he β hβ
@@ -214,12 +223,12 @@ theorem brandsIn_cons {B Γ} {x : Nat} {t : STy} (h : BrandsIn B Γ)
   · exact ht β hβ
   · exact h e he β hβ
 
-/-- A fresh allocator binding keeps the brands in use. -/
+/-- Representation lemma. Transport the static-to-ghost representation across context extension, erasure or fresh brand renaming; no operational soundness is claimed here. (approved: PENDING). A fresh allocator binding keeps the brands in use. -/
 theorem brandsIn_new {B Γ} (x β : Nat) (h : BrandsIn B Γ) : BrandsIn (β :: B) ((x, .alloc β) :: Γ) :=
   brandsIn_cons (brandsIn_mono β h) (fun γ hγ => by
     rcases hγ with hγ | hγ <;> cases hγ; exact List.mem_cons_self ..)
 
-/-- Opening allocator `a`, now of brand `γ`, under the new name `β`: what each loop iteration,
+/-- Representation lemma. Transport the static-to-ghost representation across context extension, erasure or fresh brand renaming; no operational soundness is claimed here. (approved: PENDING). Opening allocator a, now of brand γ, under the new name β: what each loop iteration,
 and the code after the loop, starts from (Q1.3). -/
 theorem rel_reopen {φ Γ env} {B : List Nat} {a γ β : Nat}
     (h : Rel φ ((a, .alloc γ) :: AList.erase Γ a) env) (hb : BrandsIn B Γ) (hβ : β ∉ B) :
@@ -233,7 +242,7 @@ theorem rel_reopen {φ Γ env} {B : List Nat} {a γ β : Nat}
     | none => rfl
     | some t => simp [emb_upd (brandsIn_erase a hb) hβ hf]
 
-/-- Entering a loop: the allocator's current binding becomes the loop's. -/
+/-- Representation lemma. Transport the static-to-ghost representation across context extension, erasure or fresh brand renaming; no operational soundness is claimed here. (approved: PENDING). Entering a loop: the allocator's current binding becomes the loop's. -/
 theorem rel_split {φ Γ env} {a γ : Nat} (h : Rel φ Γ env) (ha : AList.lookup Γ a = some (.alloc γ)) :
     Rel φ ((a, .alloc γ) :: AList.erase Γ a) env := by
   intro y
@@ -242,7 +251,7 @@ theorem rel_split {φ Γ env} {a γ : Nat} (h : Rel φ Γ env) (ha : AList.looku
   · subst hy; simp [AList.lookup, ha]
   · simp only [AList.lookup, hy, ↓reduceIte, AList.lookup_erase, show ¬ y = a from fun e => hy e.symm]
 
-/-- What a checked statement list does in the ghost run: it runs out of fuel, or finishes in a
+/-- Law (subject `ConcreteSpec.Brand.ghost`). What a checked statement list does in the ghost run: it runs out of fuel, or finishes in a
 state that matches its final context. It never gets stuck. -/
 theorem ghost_ok {σ : Nat → Bool} {B Γ ss Γ'} (h : Ok B Γ ss Γ') :
     ∀ (n k : Nat) (φ : Nat → Nat) (s : State), Rel φ Γ s.env → BrandsIn B Γ →
@@ -335,14 +344,14 @@ theorem ghost_ok {σ : Nat → Bool} {B Γ ss Γ'} (h : Ok B Γ ss Γ') :
         · exact ihr n (k + 1) _ s (rel_reopen hr hb hβx) (brandsIn_new a βx (brandsIn_erase a hb))
     exact loop n₀ k₀ φ₀ β0 s₀ (rel_split hr₀ ha)
 
-/-- **Checked programs pass every brand check** (Q1.1). The ghost run of a checked program never
+/-- Law (subject `ConcreteSpec.Brand.ghost`). **Checked programs pass every brand check** (Q1.1). The ghost run of a checked program never
 gets stuck, for every outcome of its loop tests and any fuel. -/
 theorem checked_passes_brand_checks {ss Γ'} (h : Ok [] [] ss Γ') (σ : Nat → Bool) (n : Nat) :
     ghost σ n 0 State.init ss ≠ .stuck := by
   rcases ghost_ok (σ := σ) h n 0 id State.init (fun _ => rfl) (fun _ he => nomatch he) with
     h | ⟨s', _, _, h, _⟩ <;> rw [h] <;> simp
 
-/-- The erased run simulates the ghost run: wherever the ghost run does not get stuck, the
+/-- Law (subject `ConcreteSpec.Brand.erased`). The erased run simulates the ghost run: wherever the ghost run does not get stuck, the
 erased run does the same thing with the brands removed. -/
 theorem erased_sim {σ : Nat → Bool} : ∀ (n k : Nat) (s : State) (ss : List Stmt),
     ghost σ n k s ss ≠ .stuck → erased σ n k (AList.map Val.erase s.env) ss = (ghost σ n k s ss).erase := by
@@ -444,15 +453,15 @@ theorem erased_sim {σ : Nat → Bool} : ∀ (n k : Nat) (s : State) (ss : List 
       · simp only [hσ, Bool.false_eq_true, ↓reduceIte] at hns ⊢
         exact ih (k + 1) s rest hns
 
-/-- **Brand erasure** (Q1.1). A checked program run with its brands erased does exactly what its
+/-- Law (subject `ConcreteSpec.Brand.erased`). **Brand erasure** (Q1.1). A checked program run with its brands erased does exactly what its
 ghost run does, brands removed, for every outcome of its loop tests and any fuel; and the ghost
-run never fails a brand check (`checked_passes_brand_checks`). Erasing the brands changes no
+run never fails a brand check (checked_passes_brand_checks). Erasing the brands changes no
 behaviour. -/
 theorem brand_erasure {ss Γ'} (h : Ok [] [] ss Γ') (σ : Nat → Bool) (n : Nat) :
     erased σ n 0 [] ss = (ghost σ n 0 State.init ss).erase :=
   erased_sim n 0 State.init ss (checked_passes_brand_checks h σ n)
 
-/-- A run of `l₁` and then `l₂` is a run of `l₁ ++ l₂`. -/
+/-- Law (subject `ConcreteSpec.Brand.Run`). A run of l₁ and then l₂ is a run of l₁ ++ l₂. -/
 theorem run_append {s l₁ s₁} (h : Run s l₁ s₁) : ∀ {l₂ s₂}, Run s₁ l₂ s₂ → Run s (l₁ ++ l₂) s₂ := by
   induction h with
   | nil => intro _ _ h; exact h
@@ -465,7 +474,7 @@ theorem run_append {s l₁ s₁} (h : Run s l₁ s₁) : ∀ {l₂ s₂}, Run s�
   | whileExit _ ih => intro _ _ h; exact .whileExit (ih h)
   | whileIter _ ih => intro _ _ h; exact .whileIter (by simpa using ih h)
 
-/-- The executable ghost run agrees with `Run`: a finished ghost run is a `Run`. -/
+/-- Law (subject `ConcreteSpec.Brand.Run`). The executable ghost run agrees with Run: a finished ghost run is a Run. -/
 theorem ghost_run {σ : Nat → Bool} : ∀ {n k : Nat} {s : State} {ss : List Stmt} {s' : State}
     {k' : Nat}, ghost σ n k s ss = .done s' k' → Run s ss s' := by
   intro n
@@ -515,5 +524,67 @@ theorem ghost_run {σ : Nat → Bool} : ∀ {n k : Nat} {s : State} {ss : List S
           exact .whileIter (run_append (ih hb) (ih h))
         · rename_i hr; exact (hr s' k' h).elim
       · exact .whileExit (ih h)
+
+namespace Evidence
+
+/-- Reusing the counter leaves the newly allocated brand outside its strict upper bound. -/
+def reuseCounter (s : State) (a : Nat) (env : AList Nat Val) : State :=
+  { env := (a, .allocV s.next) :: env, next := s.next, gen := s.gen ++ [s.next] }
+
+def stuckGhost : (Nat → Bool) → Nat → Nat → State → List Stmt → GR := fun _ _ _ _ _ => .stuck
+
+def stuckErased : (Nat → Bool) → Nat → Nat → AList Nat EVal → List Stmt → ER := fun _ _ _ _ _ => .stuck
+
+/-- Instance (law `ConcreteSpec.Brand.inv_bind`, case `firstAllocation`). -/
+example := @inv_bind State.init 0 [] inv_init (by intro e he; cases he)
+
+/-- Planted (law `ConcreteSpec.Brand.inv_bind`, case `firstAllocation`, subject `ConcreteSpec.Brand.State.bind`, mutant `ConcreteSpec.Brand.Evidence.reuseCounter`). -/
+example : Inv State.init ∧ (∀ e ∈ ([] : AList Nat Val), brandOf e.2 < State.init.next) ∧
+    ¬ Inv (reuseCounter State.init 0 []) := by
+  refine ⟨inv_init, (by intro e he; cases he), ?_⟩
+  intro hi
+  have := hi.1 (0, .allocV 0) (by simp [reuseCounter, State.init])
+  simp [reuseCounter, State.init, brandOf] at this
+
+/-- Instance (law `ConcreteSpec.Brand.ghost_ok`, case `firstAllocation`). -/
+example := @ghost_ok (fun _ => false) [] [] [.newAlloc 0 0] [(0, .alloc 0)]
+  (.newAlloc rfl (by simp) .nil) 2 0 id State.init (fun _ => rfl) (by intro e he; cases he)
+
+/-- Planted (law `ConcreteSpec.Brand.ghost_ok`, case `firstAllocation`, subject `ConcreteSpec.Brand.ghost`, mutant `ConcreteSpec.Brand.Evidence.stuckGhost`). -/
+example : Ok [] [] [.newAlloc 0 0] [(0, .alloc 0)] ∧ Rel id [] State.init.env ∧ BrandsIn [] [] ∧
+    ¬ (stuckGhost (fun _ => false) 2 0 State.init [.newAlloc 0 0] = .outOfFuel ∨
+      ∃ s' k' φ', stuckGhost (fun _ => false) 2 0 State.init [.newAlloc 0 0] = .done s' k' ∧
+        Rel φ' [(0, .alloc 0)] s'.env) :=
+  ⟨.newAlloc rfl (by simp) .nil, (fun _ => rfl), (by intro e he; cases he), by simp [stuckGhost]⟩
+
+/-- Instance (law `ConcreteSpec.Brand.checked_passes_brand_checks`, case `firstAllocation`). -/
+example := @checked_passes_brand_checks [.newAlloc 0 0] [(0, .alloc 0)]
+  (.newAlloc rfl (by simp) .nil) (fun _ => false) 2
+
+/-- Planted (law `ConcreteSpec.Brand.checked_passes_brand_checks`, case `firstAllocation`, subject `ConcreteSpec.Brand.ghost`, mutant `ConcreteSpec.Brand.Evidence.stuckGhost`). -/
+example : Ok [] [] [.newAlloc 0 0] [(0, .alloc 0)] ∧
+    ¬ (stuckGhost (fun _ => false) 2 0 State.init [.newAlloc 0 0] ≠ .stuck) :=
+  ⟨.newAlloc rfl (by simp) .nil, by simp [stuckGhost]⟩
+
+/-- Instance (law `ConcreteSpec.Brand.erased_sim`, case `firstAllocation`). -/
+example := @erased_sim (fun _ => false) 2 0 State.init [.newAlloc 0 0] (by decide)
+
+/-- Planted (law `ConcreteSpec.Brand.erased_sim`, case `firstAllocation`, subject `ConcreteSpec.Brand.erased`, mutant `ConcreteSpec.Brand.Evidence.stuckErased`). -/
+example : ghost (fun _ => false) 2 0 State.init [.newAlloc 0 0] ≠ .stuck ∧
+    ¬ (stuckErased (fun _ => false) 2 0 (AList.map Val.erase State.init.env) [.newAlloc 0 0] =
+      (ghost (fun _ => false) 2 0 State.init [.newAlloc 0 0]).erase) := by
+  constructor <;> decide
+
+/-- Instance (law `ConcreteSpec.Brand.brand_erasure`, case `firstAllocation`). -/
+example := @brand_erasure [.newAlloc 0 0] [(0, .alloc 0)]
+  (.newAlloc rfl (by simp) .nil) (fun _ => false) 2
+
+/-- Planted (law `ConcreteSpec.Brand.brand_erasure`, case `firstAllocation`, subject `ConcreteSpec.Brand.erased`, mutant `ConcreteSpec.Brand.Evidence.stuckErased`). -/
+example : Ok [] [] [.newAlloc 0 0] [(0, .alloc 0)] ∧
+    ¬ (stuckErased (fun _ => false) 2 0 [] [.newAlloc 0 0] =
+      (ghost (fun _ => false) 2 0 State.init [.newAlloc 0 0]).erase) :=
+  ⟨.newAlloc rfl (by simp) .nil, by decide⟩
+
+end Evidence
 
 end ConcreteSpec.Brand
