@@ -1,0 +1,1 @@
+Remove ambient scheduler identity from evidence validation, execution, collection, publication and shared adapters. Pass target identities and operational environments explicitly from CLI snapshots. Run the lightweight scheduled suite with clean and hostile GitHub/scheduler environments and require identical individual outcomes.

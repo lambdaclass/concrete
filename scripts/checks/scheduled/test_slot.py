@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from test_support import runtime_environment
 import run
 from protocol import clean_env, git
 
@@ -24,7 +25,7 @@ class Slot(unittest.TestCase):
             pool = Path(work) / "pool"; pool.mkdir()
             for number in (1, 2):
                 (pool / f"slot-{number}").touch()
-            env = clean_env(); env["CONCRETE_HEAVY_SLOT_DIR"] = str(pool)
+            env = runtime_environment(); env["CONCRETE_HEAVY_SLOT_DIR"] = str(pool)
             shutil.copy(ROOT / "scripts/checks/scheduled/with_slot.sh", scheduled)
             # Sourcing replayed libraries would produce this exact planted diagnostic.
             replay = Path(work) / "replay/scripts/checks/lib"; replay.mkdir(parents=True)
@@ -51,7 +52,7 @@ class Slot(unittest.TestCase):
     def test_real_pool_missing(self):
         result = subprocess.run(["bash", "-c", 'source "$1"; heavy_slot_acquire', "bash",
                                  str(ROOT / "scripts/checks/lib/heavy_slots.sh")],
-                                env={**clean_env(), "CONCRETE_HEAVY_SLOT_DIR": "/nonexistent/concrete-slot-control"},
+                                env={**runtime_environment(), "CONCRETE_HEAVY_SLOT_DIR": "/nonexistent/concrete-slot-control"},
                                 capture_output=True, text=True, timeout=5)
         self.assertEqual((result.returncode, result.stderr),
                          (1, "INCOMPLETE heavy slots: host pool is not provisioned\n"))
@@ -65,7 +66,7 @@ class Slot(unittest.TestCase):
                 fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
             argv = ["bash", "-c", 'source "$1"; heavy_slot_acquire || exit 125; heavy_slot_release',
                     "bash", str(ROOT / "scripts/checks/lib/heavy_slots.sh")]
-            env = {**clean_env(), "CONCRETE_HEAVY_SLOT_DIR": work}
+            env = {**runtime_environment(), "CONCRETE_HEAVY_SLOT_DIR": work}
             result = subprocess.run(argv, env=env, capture_output=True, text=True, timeout=5)
             self.assertEqual((result.returncode, result.stderr),
                              (125, "INCOMPLETE heavy slots: both host slots occupied\n"))
@@ -107,7 +108,7 @@ echo inherited-slot
         with tempfile.TemporaryDirectory() as work:
             for n in (1, 2): (Path(work) / f'slot-{n}').touch()
             result = subprocess.run(['bash', '-c', script, 'bash', str(ROOT / 'scripts/checks/lib/heavy_slots.sh')],
-                env={**clean_env(), 'CONCRETE_HEAVY_SLOT_DIR': work}, capture_output=True, text=True, timeout=5)
+                env={**runtime_environment(), 'CONCRETE_HEAVY_SLOT_DIR': work}, capture_output=True, text=True, timeout=5)
         self.assertEqual((result.returncode, result.stdout, result.stderr), (0, 'inherited-slot\n', ''))
 
     def test_watchdog_child_reuses_slot(self):
@@ -124,9 +125,9 @@ echo inherited-slot
     def test_git_environment_sanitized(self):
         from unittest.mock import patch
         with patch.dict(os.environ, {"GIT_DIR": "/nonexistent/planted-git-dir", "GIT_WORK_TREE": "/nonexistent/planted-work-tree"}):
-            self.assertNotIn("GIT_DIR", clean_env())
-            self.assertRegex(git("-C", str(ROOT), "rev-parse", "HEAD"), r"^[0-9a-f]{40}$")
-            result = run.call(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True, check=True)
+            self.assertNotIn("GIT_DIR", clean_env(dict(os.environ)))
+            self.assertRegex(git("-C", str(ROOT), "rev-parse", "HEAD", environment=dict(os.environ)), r"^[0-9a-f]{40}$")
+            result = run.call(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True, check=True, env=clean_env(dict(os.environ)))
             self.assertRegex(result.stdout.strip(), r"^[0-9a-f]{40}$")
 
 if __name__ == "__main__":

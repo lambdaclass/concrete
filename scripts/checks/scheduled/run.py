@@ -24,7 +24,7 @@ def call(argv, **kwargs):
     if kwargs.pop("capture_output", False):
         kwargs["stdout"] = subprocess.PIPE
         kwargs["stderr"] = subprocess.PIPE
-    kwargs.setdefault("env", clean_env())
+    kwargs.setdefault("env", {})
     process = subprocess.Popen(argv, start_new_session=True, **kwargs)
     try:
         stdout, stderr = process.communicate(timeout=budget)
@@ -80,34 +80,35 @@ def preserve_artifacts(row, checkout, output, number, sha, required, saved):
         artifact.update(sha=sha, binding_status="PASS")
     return saved
 
-def gate_environment(sha, tier, attempt):
-    env = clean_env()
+def gate_environment(sha, tier, attempt, environment):
+    env = clean_env(environment)
     env.update(SELECTED_SHA=sha, SELECTED_TIER=tier, SCHEDULED_ATTEMPT_ID=attempt)
     return env
 
-def run(sha, tier, output):
+def run(sha, tier, output, environment):
+    environment = dict(environment)
     output = Path(output).resolve(); output.mkdir(parents=True, exist_ok=True)
-    attempt = os.environ["GITHUB_RUN_ID"] + "/" + os.environ["GITHUB_RUN_ATTEMPT"]
-    record = dict(sha=sha, tier=tier, repository=os.environ["GITHUB_REPOSITORY"],
-                  runner_name=os.environ.get("RUNNER_NAME"), runner_environment=os.environ.get("RUNNER_ENVIRONMENT"),
-                  attempt=attempt, occurrence=os.environ.get("OCCURRENCE", tier) + "/" + os.environ["GITHUB_RUN_ID"],
+    attempt = environment["GITHUB_RUN_ID"] + "/" + environment["GITHUB_RUN_ATTEMPT"]
+    record = dict(sha=sha, tier=tier, repository=environment["GITHUB_REPOSITORY"],
+                  runner_name=environment.get("RUNNER_NAME"), runner_environment=environment.get("RUNNER_ENVIRONMENT"),
+                  attempt=attempt, occurrence=environment.get("OCCURRENCE", tier) + "/" + environment["GITHUB_RUN_ID"],
                   controller_revision=None,
                   gate_revision=None, started=now(), status="INCOMPLETE", conclusion="incomplete",
-                  artifact=os.environ["GITHUB_SERVER_URL"] + "/" + os.environ["GITHUB_REPOSITORY"] +
-                  "/actions/runs/" + os.environ["GITHUB_RUN_ID"], gates=[])
+                  artifact=environment["GITHUB_SERVER_URL"] + "/" + environment["GITHUB_REPOSITORY"] +
+                  "/actions/runs/" + environment["GITHUB_RUN_ID"], gates=[])
     with tempfile.TemporaryDirectory(prefix="concrete-scheduled-") as scratch:
         checkout = Path(scratch) / "source"
         try:
-            record["controller_revision"] = git("-C", str(ROOT), "rev-parse", "HEAD")
-            require(git("-C", str(ROOT), "rev-parse", sha + "^{commit}") == sha, "wrong SHA")
-            require(os.environ.get("RUNNER_ENVIRONMENT") == "self-hosted",
+            record["controller_revision"] = git("-C", str(ROOT), "rev-parse", "HEAD", environment=environment)
+            require(git("-C", str(ROOT), "rev-parse", sha + "^{commit}", environment=environment) == sha, "wrong SHA")
+            require(environment.get("RUNNER_ENVIRONMENT") == "self-hosted",
                     "forged runner: expected RUNNER_ENVIRONMENT=self-hosted")
             runners = inventory()
-            _binding.verify(os.environ.get("GITHUB_REPOSITORY"), os.environ.get("RUNNER_ENVIRONMENT"),
-                            os.environ.get("RUNNER_NAME"), runners)
-            call(["git", "clone", "--shared", "--no-checkout", str(ROOT), str(checkout)], check=True)
-            call(["git", "-C", str(checkout), "checkout", "--detach", sha], check=True)
-            record["checkout_revision"] = git("-C", str(checkout), "rev-parse", "HEAD")
+            _binding.verify(environment.get("GITHUB_REPOSITORY"), environment.get("RUNNER_ENVIRONMENT"),
+                            environment.get("RUNNER_NAME"), runners)
+            call(["git", "clone", "--shared", "--no-checkout", str(ROOT), str(checkout)], check=True, env=clean_env(environment))
+            call(["git", "-C", str(checkout), "checkout", "--detach", sha], check=True, env=clean_env(environment))
+            record["checkout_revision"] = git("-C", str(checkout), "rev-parse", "HEAD", environment=environment)
             require(record["checkout_revision"] == sha, "wrong checked-out revision")
             record["gate_revision"] = record["checkout_revision"]
             registry_path = checkout / "scripts/checks/gates.json"
@@ -117,7 +118,7 @@ def run(sha, tier, output):
             # Parse selected data using trusted controller code, never execute its validator.
             rows = _registry.scheduled_rows(tier, _registry.load(registry_path))
             require(rows, "INCOMPLETE dependency: tier has no registered gates")
-            gate_env = gate_environment(sha, tier, attempt)
+            gate_env = gate_environment(sha, tier, attempt, environment)
             for number, row in enumerate(rows):
                 log = output / f"gate-{number}.log"
                 gate = dict(id=row["id"], status="INCOMPLETE", command=row["command"],
@@ -177,6 +178,6 @@ def run(sha, tier, output):
 
 if __name__ == "__main__":
     try:
-        sys.exit(run(*sys.argv[1:]))
+        sys.exit(run(*sys.argv[1:], dict(os.environ)))
     except EvidenceError as error:
         sys.exit(str(error))

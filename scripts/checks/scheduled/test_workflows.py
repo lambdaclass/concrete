@@ -4,6 +4,7 @@ import re
 import subprocess
 import tempfile
 import unittest
+from test_support import runtime_environment
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -25,7 +26,7 @@ class Workflows(unittest.TestCase):
         script = script.replace("bounded_run -r 300 300 -- python3 scripts/checks/scheduled/collect.py", "bounded_run -r 0.05 0.05 -- python3 -c 'import time; time.sleep(5)'")
         with tempfile.TemporaryDirectory() as scratch:
             import os
-            env = dict(os.environ, TMPDIR=scratch)
+            env = dict(runtime_environment(), TMPDIR=scratch)
             result = subprocess.run(["bash", "-c", script], cwd=scratch, env=env, capture_output=True, text=True, timeout=10)
             self.assertEqual(result.returncode, 1)
             self.assertEqual(result.stdout.strip(), "INCOMPLETE scheduled collection: bounded attempts exhausted")
