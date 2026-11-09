@@ -1256,10 +1256,14 @@ ConcreteSpec.Core.Frame.ABI.KeptPair.mk.injEq	propext
 ConcreteSpec.Core.Frame.ABI.KeptPair.mk.sizeOf_spec	
 ConcreteSpec.Core.Frame.ABI.KeptStep._sparseCasesOn_1.else_eq	propext
 ConcreteSpec.Core.Frame.ABI.KeptStep._sparseCasesOn_2.else_eq	propext
+ConcreteSpec.Core.Frame.ABI.Launcher.Outcome.eq_1	
+ConcreteSpec.Core.Frame.ABI.Launcher.Outcome.eq_2	
 ConcreteSpec.Core.Frame.ABI.Launcher.Run.adequateStack	
 ConcreteSpec.Core.Frame.ABI.Launcher.Run.closure	
 ConcreteSpec.Core.Frame.ABI.Launcher.Run.entry	
 ConcreteSpec.Core.Frame.ABI.Launcher.Run.exit	
+ConcreteSpec.Core.Frame.ABI.Launcher.Run.matchesResult	
+ConcreteSpec.Core.Frame.ABI.Launcher.Run.matchesRoot	
 ConcreteSpec.Core.Frame.ABI.Launcher.mk.inj	
 ConcreteSpec.Core.Frame.ABI.Launcher.mk.injEq	propext
 ConcreteSpec.Core.Frame.ABI.Launcher.mk.sizeOf_spec	
@@ -1296,10 +1300,15 @@ ConcreteSpec.Core.Frame.ABI.Signature.Call.arguments	propext
 ConcreteSpec.Core.Frame.ABI.Signature.Call.clobbers	
 ConcreteSpec.Core.Frame.ABI.Signature.Call.preserved	
 ConcreteSpec.Core.Frame.ABI.Signature.Call.result	
+ConcreteSpec.Core.Frame.ABI.Signature.Call.traceSafe	
 ConcreteSpec.Core.Frame.ABI.Signature.mk.inj	
 ConcreteSpec.Core.Frame.ABI.Signature.mk.injEq	propext
 ConcreteSpec.Core.Frame.ABI.Signature.mk.sizeOf_spec	
 ConcreteSpec.Core.Frame.ABI.StackCode.brecOn.eq	
+ConcreteSpec.Core.Frame.ABI.StackCode.compile.eq_1	
+ConcreteSpec.Core.Frame.ABI.StackCode.compile.eq_2	
+ConcreteSpec.Core.Frame.ABI.StackCode.compile.eq_3	
+ConcreteSpec.Core.Frame.ABI.StackCode.compile.eq_def	
 ConcreteSpec.Core.Frame.ABI.StackCode.done.sizeOf_spec	
 ConcreteSpec.Core.Frame.ABI.StackCode.frame.inj	
 ConcreteSpec.Core.Frame.ABI.StackCode.frame.injEq	propext
@@ -1307,10 +1316,24 @@ ConcreteSpec.Core.Frame.ABI.StackCode.frame.sizeOf_spec
 ConcreteSpec.Core.Frame.ABI.StackCode.seq.inj	
 ConcreteSpec.Core.Frame.ABI.StackCode.seq.injEq	propext
 ConcreteSpec.Core.Frame.ABI.StackCode.seq.sizeOf_spec	
+ConcreteSpec.Core.Frame.ABI.StackEvent.Safe.eq_1	
+ConcreteSpec.Core.Frame.ABI.StackEvent.Safe.eq_2	
+ConcreteSpec.Core.Frame.ABI.StackEvent.Safe.eq_3	
+ConcreteSpec.Core.Frame.ABI.StackEvent.none.sizeOf_spec	
+ConcreteSpec.Core.Frame.ABI.StackEvent.release.inj	
+ConcreteSpec.Core.Frame.ABI.StackEvent.release.injEq	propext
+ConcreteSpec.Core.Frame.ABI.StackEvent.release.sizeOf_spec	
+ConcreteSpec.Core.Frame.ABI.StackEvent.slotAccess.inj	
+ConcreteSpec.Core.Frame.ABI.StackEvent.slotAccess.injEq	propext
+ConcreteSpec.Core.Frame.ABI.StackEvent.slotAccess.sizeOf_spec	
 ConcreteSpec.Core.Frame.ABI.Startup.entered.inj	
 ConcreteSpec.Core.Frame.ABI.Startup.entered.injEq	propext
 ConcreteSpec.Core.Frame.ABI.Startup.entered.sizeOf_spec	
 ConcreteSpec.Core.Frame.ABI.Startup.refused125.sizeOf_spec	
+ConcreteSpec.Core.Frame.ABI.ToyInstruction.StackNeutral._sparseCasesOn_1.else_eq	propext
+ConcreteSpec.Core.Frame.ABI.ToyInstruction.StackNeutral.eq_1	propext
+ConcreteSpec.Core.Frame.ABI.ToyInstruction.StackNeutral.eq_2	propext
+ConcreteSpec.Core.Frame.ABI.ToyInstruction.StackNeutral.eq_3	propext
 ConcreteSpec.Core.Frame.ABI.ToyInstruction.register.inj	
 ConcreteSpec.Core.Frame.ABI.ToyInstruction.register.injEq	propext
 ConcreteSpec.Core.Frame.ABI.ToyInstruction.register.sizeOf_spec	
@@ -1329,11 +1352,10 @@ ConcreteSpec.Core.Frame.ABI.ToyInstruction.save.sizeOf_spec
 ConcreteSpec.Core.Frame.ABI.ToyInstruction.slot.inj	
 ConcreteSpec.Core.Frame.ABI.ToyInstruction.slot.injEq	propext
 ConcreteSpec.Core.Frame.ABI.ToyInstruction.slot.sizeOf_spec	
-ConcreteSpec.Core.Frame.ABI.ToyLaunchCorrect.eq_1	
-ConcreteSpec.Core.Frame.ABI.ToyLaunchCorrect.eq_2	
 ConcreteSpec.Core.Frame.ABI.ToyRun.mk.inj	
 ConcreteSpec.Core.Frame.ABI.ToyRun.mk.injEq	propext
 ConcreteSpec.Core.Frame.ABI.ToyRun.mk.sizeOf_spec	
+ConcreteSpec.Core.Frame.ABI.ToyTraceSafe.stepsSafe	
 ConcreteSpec.Core.Frame.ABI.TransferCorrect.eq_1	propext
 ConcreteSpec.Core.Frame.ABI.TransferCorrect.eq_2	propext
 ConcreteSpec.Core.Frame.ABI.checkKeptPair._sparseCasesOn_1.else_eq	propext
@@ -1351,6 +1373,7 @@ ConcreteSpec.Core.Frame.ABI.encodeToyExit.eq_1
 ConcreteSpec.Core.Frame.ABI.encodeToyExit.eq_2	
 ConcreteSpec.Core.Frame.ABI.encodeToyExit.eq_def	
 ConcreteSpec.Core.Frame.ABI.encodeToyExit_correct	propext
+ConcreteSpec.Core.Frame.ABI.executeToy.eq_1	propext
 ConcreteSpec.Core.Frame.ABI.extern_result_rejects_unrelated_retention	
 ConcreteSpec.Core.Frame.ABI.instDecidableEqLocation.decEq._proof_1	
 ConcreteSpec.Core.Frame.ABI.instDecidableEqLocation.decEq._proof_2	
@@ -1362,6 +1385,16 @@ ConcreteSpec.Core.Frame.ABI.instDecidableEqRetention._proof_1
 ConcreteSpec.Core.Frame.ABI.instDecidableEqRetention._proof_2	
 ConcreteSpec.Core.Frame.ABI.instDecidableEqRetentionInstruction._proof_1	
 ConcreteSpec.Core.Frame.ABI.instDecidableEqRetentionInstruction._proof_2	
+ConcreteSpec.Core.Frame.ABI.instDecidableEqStackEvent.decEq._proof_1	
+ConcreteSpec.Core.Frame.ABI.instDecidableEqStackEvent.decEq._proof_10	
+ConcreteSpec.Core.Frame.ABI.instDecidableEqStackEvent.decEq._proof_2	
+ConcreteSpec.Core.Frame.ABI.instDecidableEqStackEvent.decEq._proof_3	
+ConcreteSpec.Core.Frame.ABI.instDecidableEqStackEvent.decEq._proof_4	
+ConcreteSpec.Core.Frame.ABI.instDecidableEqStackEvent.decEq._proof_5	
+ConcreteSpec.Core.Frame.ABI.instDecidableEqStackEvent.decEq._proof_6	
+ConcreteSpec.Core.Frame.ABI.instDecidableEqStackEvent.decEq._proof_7	
+ConcreteSpec.Core.Frame.ABI.instDecidableEqStackEvent.decEq._proof_8	
+ConcreteSpec.Core.Frame.ABI.instDecidableEqStackEvent.decEq._proof_9	
 ConcreteSpec.Core.Frame.ABI.instDecidableEqStartup.decEq._proof_1	
 ConcreteSpec.Core.Frame.ABI.instDecidableEqStartup.decEq._proof_2	
 ConcreteSpec.Core.Frame.ABI.instDecidableEqStartup.decEq._proof_3	
@@ -1372,6 +1405,9 @@ ConcreteSpec.Core.Frame.ABI.instDecidableKeptStepOfDecidableEq._proof_2
 ConcreteSpec.Core.Frame.ABI.instDecidableKeptStepOfDecidableEq._proof_3	
 ConcreteSpec.Core.Frame.ABI.instDecidableKeptStepOfDecidableEq._proof_4	
 ConcreteSpec.Core.Frame.ABI.instDecidableKeptStepOfDecidableEq._proof_5	
+ConcreteSpec.Core.Frame.ABI.instDecidableSafe._proof_1	
+ConcreteSpec.Core.Frame.ABI.instDecidableSafe._proof_2	
+ConcreteSpec.Core.Frame.ABI.instDecidableToyTraceSafe._proof_1	
 ConcreteSpec.Core.Frame.ABI.instDecidableValid._proof_1	
 ConcreteSpec.Core.Frame.ABI.instDecidableValid._proof_2	
 ConcreteSpec.Core.Frame.ABI.instDecidableValid._proof_3	
@@ -1422,17 +1458,27 @@ ConcreteSpec.Core.Frame.ABI.submit_produces_paired_receipt	propext
 ConcreteSpec.Core.Frame.ABI.toyBody.eq_1	
 ConcreteSpec.Core.Frame.ABI.toyBodyAt.eq_1	
 ConcreteSpec.Core.Frame.ABI.toyBodyAt_preserved	Classical.choice Quot.sound propext
-ConcreteSpec.Core.Frame.ABI.toyBodyAt_preserved._proof_1_12	Quot.sound propext
-ConcreteSpec.Core.Frame.ABI.toyBodyAt_preserved._proof_1_13	Quot.sound propext
+ConcreteSpec.Core.Frame.ABI.toyBodyAt_preserved._proof_1_18	Quot.sound propext
+ConcreteSpec.Core.Frame.ABI.toyBodyAt_preserved._proof_1_19	Quot.sound propext
 ConcreteSpec.Core.Frame.ABI.toyBodyAt_preserved._simp_1_1	propext
 ConcreteSpec.Core.Frame.ABI.toyBodyAt_preserved._simp_1_2	propext
-ConcreteSpec.Core.Frame.ABI.toyBody_stack_model	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Frame.ABI.toyBody_stack_model	propext
+ConcreteSpec.Core.Frame.ABI.toyBody_stack_model._simp_1_13	propext
+ConcreteSpec.Core.Frame.ABI.toyBody_stack_model._simp_1_30	propext
+ConcreteSpec.Core.Frame.ABI.toyBody_stack_model._simp_1_8	propext
 ConcreteSpec.Core.Frame.ABI.toyBody_stack_safe	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Frame.ABI.toyBody_stack_safe._proof_1_10	Quot.sound propext
+ConcreteSpec.Core.Frame.ABI.toyBody_stack_safe._proof_1_9	Quot.sound propext
+ConcreteSpec.Core.Frame.ABI.toyBody_stack_safe._simp_1_6	propext
+ConcreteSpec.Core.Frame.ABI.toyBody_stack_safe._simp_1_7	propext
+ConcreteSpec.Core.Frame.ABI.toyBody_stack_safe._simp_1_8	propext
+ConcreteSpec.Core.Frame.ABI.toyCall.eq_1	propext
 ConcreteSpec.Core.Frame.ABI.toyCallSeq_conforms	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Frame.ABI.toyCallSeq_conforms._simp_1_8	propext
 ConcreteSpec.Core.Frame.ABI.toyCall_conforms	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Frame.ABI.toyFrameOps.eq_1	
 ConcreteSpec.Core.Frame.ABI.toyInput.eq_1	
 ConcreteSpec.Core.Frame.ABI.toyLaunch.eq_1	
-ConcreteSpec.Core.Frame.ABI.toyLaunchExecution.eq_1	
 ConcreteSpec.Core.Frame.ABI.toyLaunchExecution_conforms	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Frame.ABI.toyLaunch_conforms	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Frame.ABI.toySignature.eq_1	
@@ -1440,12 +1486,14 @@ ConcreteSpec.Core.Frame.ABI.toySignature_wellFormed	Quot.sound propext
 ConcreteSpec.Core.Frame.ABI.toySignature_wellFormed._proof_1_4	Quot.sound propext
 ConcreteSpec.Core.Frame.ABI.toySignature_wellFormed._simp_1_2	propext
 ConcreteSpec.Core.Frame.ABI.toySignature_wellFormed._simp_1_3	propext
+ConcreteSpec.Core.Frame.ABI.toyStackCode.eq_1	
 ConcreteSpec.Core.Frame.ABI.toyTrace._sparseCasesOn_1.else_eq	propext
 ConcreteSpec.Core.Frame.ABI.toyTrace.eq_1	propext
 ConcreteSpec.Core.Frame.ABI.toyTrace.eq_2	propext
 ConcreteSpec.Core.Frame.ABI.toyTrace.eq_3	propext
 ConcreteSpec.Core.Frame.ABI.toyTrace.eq_4	propext
 ConcreteSpec.Core.Frame.ABI.toyTrace.eq_5	propext
+ConcreteSpec.Core.Frame.ABI.toyTrace.eq_6	propext
 ConcreteSpec.Core.Frame.ABI.toyTrace.eq_def	propext
 ConcreteSpec.Core.Frame.ABI.toyTransition_conforms	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Frame.ABI.transferKept.eq_1	propext
@@ -3199,22 +3247,28 @@ _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Res.bind.match_1.eq_3
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.ArgumentsHold.match_1.eq_1	propext
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.ArgumentsHold.match_1.eq_2	propext
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.ArgumentsHold.match_1.eq_3	propext
+_private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.Launcher.Outcome.match_1.eq_1	
+_private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.Launcher.Outcome.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.RetentionInstruction.Matches.match_1.eq_1	propext
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.RetentionInstruction.Matches.match_1.eq_2	propext
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.RetentionInstruction.Matches.match_1.eq_3	propext
-_private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.ToyLaunchCorrect.match_1.eq_1	
-_private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.ToyLaunchCorrect.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.StackCode.compile.match_1.eq_1	
+_private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.StackCode.compile.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.StackCode.compile.match_1.eq_3	
+_private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.ToyInstruction.StackNeutral.match_1.eq_1	propext
+_private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.ToyInstruction.StackNeutral.match_1.eq_2	propext
+_private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.ToyInstruction.StackNeutral.match_1.eq_3	propext
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.TransferCorrect.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.TransferCorrect.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.checkKeptPair.match_1.eq_1	propext
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.checkKeptPair.match_1.eq_2	propext
-_private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.computedStackBound.match_1.eq_1	
-_private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.computedStackBound.match_1.eq_2	
-_private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.computedStackBound.match_1.eq_3	
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.encodeToyExit.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.encodeToyExit.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.instReprLocation.repr.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.instReprLocation.repr.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.instReprStackEvent.repr.match_1.eq_1	
+_private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.instReprStackEvent.repr.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.instReprStackEvent.repr.match_1.eq_3	
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.retainChain.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.retainChain.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.runToy.match_1.eq_1	
@@ -3232,6 +3286,7 @@ _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.toyTrace.match_
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.toyTrace.match_1.eq_2	propext
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.toyTrace.match_1.eq_3	propext
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.toyTrace.match_1.eq_4	propext
+_private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.ABI.toyTrace.match_1.eq_5	propext
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.EffectCommand.Defined.match_3.eq_1	
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.EffectCommand.Defined.match_3.eq_2	
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.EffectCommand.Defined.match_3.eq_3	
