@@ -573,10 +573,28 @@ receives independent acceptance. No OD/spec decision is made here.
 
 A primitive application is a constant application whose environment declaration
 is `axiomInfo` with no value, at its exact universe instantiation. Classify from
-the declaration, never its printed name, namespace, library, or proposition shape.
-This includes user-declared axioms. An opaque theorem/definition whose value
-cannot be obtained remains an unavailable implementation; it is not reclassified
-as a primitive axiom. Constructors and recursors retain their metadata rules.
+the kernel declaration kind, not a printed name, namespace, library, or proposition
+shape. This classification includes user-declared axioms; it does not grant them
+the transfer semantics of a standard axiom. An opaque theorem/definition whose
+value cannot be obtained remains an unavailable implementation. Classify
+`inductInfo`, `ctorInfo`, `recInfo` and `quotInfo` by kernel metadata, retaining
+the inductive, constructor, recursor and quotient rules respectively. `quotInfo`
+identifies `Quot`, `Quot.mk`, `Quot.lift` and `Quot.ind`; it is distinct from
+`axiomInfo` and is not an arbitrary unavailable implementation.
+
+A bounded Lean 4.34.1 trace on `22f30020360906ad705f6c7a62041606eed0b747`
+walked all constants in the boundary certificate's expression, declaration types
+and available bodies (including opaque bodies), deduplicated by declaration.
+It completed after 111 declarations under 2,000,000 heartbeats and a 20,000-step
+cap. Excluding structural inductive/constructor/recursor declarations, its full
+bodyless closure was exactly `propext`, `Quot.sound` (`axiomInfo`) and `Quot`,
+`Quot.mk`, `Quot.lift` (`quotInfo`). `forall_congr` unfolds through `funext`;
+`funext` applies an evaluation function defined with quotient lifting to an
+equality supplied by `Quot.sound`. The current argument-first validator stops
+at `propext` before reaching these quotient dependencies. Kernel reduction of
+`Quot.lift` on `Quot.mk` does not eliminate a transport over `Quot.sound`:
+the quotient equality and its actual relation witness still require the chosen
+provenance rule. Quotient metadata alone cannot close that axiom-dependent demand.
 
 The pending relation is
 `PrimitiveApp(consumer, a, levels, Γ, σ, args, resultType, resultOrigin, inputOrigins)`.
@@ -604,34 +622,90 @@ axiom as a safe transport. Honest trust boundaries require naming the assumption
 rather than inferring safety from trusted-base membership
 (docs/PHILOSOPHY.md:116).
 
-**Question to the owner:** may an N2 safety-bearing transport use the logical
-content of a bodyless axiom as evidence, or must its effect on each demanded
-observation be independently justified without that axiom?
+### Solver-generated certificates versus authored proofs
 
-The options are:
+`refutableContext` currently calls `simpAll` after `contradictionCore` fails.
+The former introduces axioms into the gate's own branch-exclusion certificate
+for `unreachable-closed-supplier-positive`. This is separate from the authored
+Instance premise `by simp` in `finite-collection-simp-positive`, whose elaborated
+proof is the term being audited. A bounded Lean check on the same SHA verified:
 
-1. Require independent constructive evidence for every demanded observation.
-   Such evidence must simulate the actual transport, preserve actual suppliers
-   and validate under A2; merely reproving the final proposition cannot erase a
-   supplied contradiction. This would treat standard and user axioms generically,
-   with no privileged names. A completed amendment must specify the finite
-   simulation judgment and its checking rules, including how the required simp
-   transports obtain that evidence. Those rules have not yet been established;
-   this option does not claim that the positive already completes.
-2. Authorize an explicit logical-axiom trust premise for N2 transports, with the
-   owner defining its scope. The existing three-name authoritative-proof policy
-   alone cannot provide the required generic rule for same-shaped user axioms.
-   The owner must say whether and on what evidence those applications qualify.
-   Kernel acceptance by itself cannot be the evidence: Lean accepts a declaration
-   of an inconsistent axiom too. This option would amend the N2 trust boundary.
+```lean
+theorem constructiveExclusion (p : Prop) [Decidable p]
+    (h : decide p = true) (hn : ¬p) : False :=
+  hn (of_decide_eq_true h)
+#print axioms constructiveExclusion
+-- 'constructiveExclusion' does not depend on any axioms
+```
 
-**Recommendation:** option 1, because it preserves A2's application-sensitive
-provenance claim and the generic treatment required here without expanding the
-trusted base. This is a recommendation, not an owner answer. Do not implement
-or provisionally admit either option. The missing finite evidence, its soundness
-argument, and exact backward demand/transport propagation rules must be completed
-and independently accepted after the answer. Choosing a trust premise now would
-violate the stop rule at scripts/proofs/N2-discharge-solver.md:213.
+Thus an axiom-free construction exists for this generated exclusion. Whether the
+gate generates certificates using axioms where constructive refutations (including
+constructor discrimination) suffice is an N2 solver design choice, not an owner
+question. The long-term solver design should synthesize such certificates
+constructively and check their exact provenance; this record implements nothing.
+The owner question below concerns only authored proofs being audited.
+
+**Question to the owner:** for authored Instance premise proofs that transport
+through standard logical axioms, which of the following N2 provenance policies
+should apply?
+
+1. **Constructive simulation of extensionality transports.** Specify a finite,
+   checked simulation of the actual demanded observations through propositional
+   and functional extensionality and their quotient implementation. Preserve each
+   actual supplier; independently reproving the final proposition cannot erase a
+   supplied contradiction. Directional implication projections and pointwise
+   equality application are candidate constructions, not established rules here.
+   A bodyless axiom has no body to simulate: this option necessarily identifies
+   the standard operation and inspects its type/application shape. It cannot be
+   generic while forbidding both identity and shape inspection. User-declared
+   axioms remain unproved supplied assumptions even with identical types.
+   **Soundness cost:** a new simulation judgment and preservation argument must
+   establish that demanded observations retain all suppliers; existence of a
+   constructive final proof alone is insufficient. **Generality cost:** limited
+   to observations admitting constructive simulation; choice and other unsupported
+   uses remain INCOMPLETE. **Effort cost:** high, especially dependent equality
+   and quotient transports within the unchanged work and heartbeat budgets.
+2. **Explicit provenance-preserving standard-axiom transfer contracts.** Name
+   exactly `propext`, `Quot.sound`, and `Classical.choice`, already admitted by
+   docs/decisions.md:462 and `STANDARD_AXIOMS` in scripts/proofs/lib.sh. Specify
+   application-sensitive input-to-result provenance, backward demanded observations,
+   equality transports and kernel quotient metadata/reduction rules. No helper
+   theorem allowlist follows. User-declared axioms always remain unproved supplied
+   assumptions: refutable results are supplied contradictions, and required
+   non-refutable transfers lacking evidence remain unresolved. Same-shaped types
+   do not confer standard-axiom status.
+   **Soundness cost:** an explicit logical-axiom trust premise plus independently
+   justified provenance contracts; project axiom permission or kernel validity
+   alone is insufficient. **Generality cost:** potentially covers ordinary simp,
+   funext, quotient and choice proofs, but only where an exact contract handles
+   the demand; unsupported uses still remain INCOMPLETE. **Effort cost:** substantial
+   contract and soundness work, likely less constructive simulation work than
+   option 1; no claim that choice has a completed contract is made here.
+3. **Strictly constructive N2.** Keep axiom-dependent authored transports unresolved
+   and require constructive premise witnesses for completion. An authored proof
+   transporting through `propext`, including `finite-collection-simp-positive`,
+   stays INCOMPLETE; revise that control's expectation explicitly rather than
+   silently accepting it or counting INCOMPLETE as PASS.
+   **Soundness cost:** no additional axiom-transfer trust, but the existing
+   constructive provenance rules still require their soundness argument.
+   **Generality cost:** excludes authored proofs whose demanded transfers depend
+   on axioms, including otherwise authoritative simp proofs. **Effort cost:**
+   lowest primitive-rule complexity, with ongoing proof migration and control
+   maintenance costs. Kernel quotient metadata does not authorize `Quot.sound`
+   transports under this option.
+
+All three options retain constructive synthesis for the gate-generated exclusion
+above. None equates a user axiom with a standard one or treats every unavailable
+non-refutable result as safe.
+
+**Recommendation:** option 2, because it exposes exactly the logical assumptions
+already admitted by project policy while requiring explicit provenance preservation
+across actual transports, and supports authored standard Lean proofs. This is a
+recommendation, not an owner answer or a completed soundness argument. Do not
+implement or provisionally admit an option. Complete the finite evidence,
+backward demand/transport rules and independent acceptance after the answer;
+R-0219 owns that work. The stop rule at scripts/proofs/N2-discharge-solver.md:213
+remains in force.
 
 Until then, retain the exact existing unresolved result for the boundary probe:
 
@@ -654,16 +728,22 @@ commit. No control is added, removed, implemented or claimed complete. Once the
 owner answers, the completed design must enumerate any added controls and give
 its resulting total before implementation. In particular it must specify:
 
-- The required `∀ x : Nat, x ∈ [2] → x = 2 := by simp` positive and the
-  simp-generated exclusion in `unreachable-closed-supplier-positive`: complete
-  PASS, with no FAIL or INCOMPLETE, by the accepted evidence rule.
+- The authored `∀ x : Nat, x ∈ [2] → x = 2 := by simp` control: complete
+  PASS with no FAIL or INCOMPLETE under an accepted rule in options 1 or 2;
+  under option 3 explicitly revise its expectation to the exact unresolved
+  diagnostic. The existing positive target remains unchanged until that decision.
+- The gate-generated exclusion in `unreachable-closed-supplier-positive`:
+  construct an axiom-free certificate and complete PASS without FAIL or INCOMPLETE;
+  this does not require the owner's authored-proof policy answer.
 - Supplied contradictory-equality and transport negatives: each live planted
   impossible discharge must yield exactly `FAIL instance-false-discharge EXAMPLE`,
   rather than count an arbitrary error or unfinished analysis as a rejection.
 - A fresh user-declared axiom with the same dependent type as the primitive in
-  the positive, with the same actual arguments and demand: identical rule and
-  evidence obligations after renaming the supplied origin. Its exact expected
-  verdict cannot be selected before the trust-policy answer. No name privilege.
+  the positive, with the same actual arguments and demand: retain its identity
+  as an unproved supplied assumption, never a standard-axiom transport. Specify
+  the exact supplied-contradiction diagnostic for refutable results and the exact
+  unresolved diagnostic for required transfers without evidence. An arbitrary
+  failure is not a valid planted-control result.
 
 These are requirements for the resumed design, not a substitute for the missing
 finite evidence or executable control specifications. Phase B stays stopped.

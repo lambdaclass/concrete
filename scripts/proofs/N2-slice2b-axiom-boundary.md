@@ -110,11 +110,48 @@ Focused results on the unchanged production implementation at
 ## Design amendment 2 disposition
 
 The owning [design amendment 2](N2-discharge-solver.md#design-amendment-2-primitive-axiom-applications--owner-decision-required)
-records the generic kernel classification and retained typed relation, then stops
-at an explicit owner trust-policy question. It gives options and a recommendation,
-not a chosen policy or an implementation-ready transfer rule. The existing
-three-axiom authoritative-proof permission does not itself settle the N2 provenance
-question for same-shaped user axioms. No positive completion, new control count,
-or primitive transport admission is claimed. R-0219 remains the owner; resume the
-finite-evidence and backward-propagation design only after the owner's answer,
-then obtain the coordinator's independent acceptance before implementation.
+retains the typed `PrimitiveApp` representation contract without admitting a
+transfer. Its round-2 bounded Lean trace at
+`22f30020360906ad705f6c7a62041606eed0b747` visited 111 declarations, following
+expression constants, types and all available bodies, under 2,000,000 heartbeats
+and a 20,000-step cap. The full nonstructural bodyless closure of
+`singletonCertificate` is `propext`, `Quot.sound` (`axiomInfo`) and `Quot`,
+`Quot.mk`, `Quot.lift` (`quotInfo`). `forall_congr` unfolds through `funext` to
+the quotient construction. The first `propext` diagnostic masks these later
+dependencies. Classify quotient primitives by kernel `quotInfo` metadata alongside
+`inductInfo`, `ctorInfo` and `recInfo` (including the general `Quot.ind` rule,
+although it is not in this certificate's closure). `Quot.lift` reduces on
+`Quot.mk`, but lifting across equality supplied by `Quot.sound` still needs the
+selected axiom-dependent provenance rule; metadata does not settle that demand.
+
+The amendment corrects the earlier grouping of two situations above.
+`refutableContext` generates the gate's own certificate using `simpAll`, whereas
+`finite-collection-simp-positive` supplies an authored Instance premise proof.
+The same bounded Lean check established that
+`hn (of_decide_eq_true h) : False` for `h : decide p = true` and `hn : ¬p`
+has no axiom dependencies. Constructive synthesis for this generated exclusion
+is an N2 design choice, not an owner question. It should complete
+`unreachable-closed-supplier-positive` without axioms; nothing is implemented here.
+
+Only authored axiom-dependent transports need the owner's policy answer. The
+amendment presents three options with explicit soundness, generality and effort
+costs: (1) checked constructive simulation of extensionality transports, with high
+simulation/provenance proof effort and limited observations; (2) explicit
+provenance-preserving contracts for exactly `STANDARD_AXIOMS` (`propext`,
+`Quot.sound`, `Classical.choice`), with a named trust premise and substantial
+contract work but broader standard-proof coverage; (3) strictly constructive N2,
+with no added axiom-transfer trust, lower solver complexity and narrower authored
+proof coverage. Option 3 keeps authored `propext` transports INCOMPLETE and requires
+an explicit revision of the affected control expectation. Option 1 necessarily
+inspects standard-operation identity and application/type shape: a bodyless axiom
+cannot be simulated while both are forbidden. Under every option, user-declared
+axioms are unproved supplied assumptions, never standard axioms merely because
+their types match. The three-axiom permission in docs/decisions.md:462 and
+scripts/proofs/lib.sh does not itself establish a provenance contract.
+
+The recommendation is option 2, explicitly not a choice. No positive completion,
+new control count or primitive transport admission is claimed. The interim exact
+INCOMPLETE, retained `PrimitiveApp` contract and fixed phase-B exit criterion
+remain unchanged. R-0219 owns the finite-evidence and backward-propagation design;
+resume the authored-transfer policy design after the owner's answer, then obtain
+the coordinator's independent acceptance before implementation.
