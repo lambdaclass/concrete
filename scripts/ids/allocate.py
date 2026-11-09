@@ -130,23 +130,80 @@ def raw_tree_records(repo, sha):
     return records(lambda p: blob(repo, paths[p]), paths)
 
 
-@functools.lru_cache(maxsize=None)
 def tree_records(repo, sha):
-    result = dict(raw_tree_records(repo, sha))
-    header = git(repo, 'show', f'{sha}:ISSUES.tsv', check=False).stdout
-    if header and 'id\ttitle\t' not in header:
-        # Old branches have no immutable title. Recover it from the first introduction in
-        # their history, rather than treating later evidence edits as new identities.
-        history = git(repo, 'log', '--reverse', '--topo-order', '--format=%H', sha,
-                      '--', 'ISSUES.tsv').stdout.splitlines()
-        first = {}
-        for revision in history:
-            for key, value in raw_tree_records(repo, revision).items():
-                if key.startswith('ISS-'):
-                    first.setdefault(key, value)
-        for key in result.keys() & first.keys():
-            result[key] = first[key]
+    return raw_tree_records(repo, sha)
+
+
+@functools.lru_cache(maxsize=None)
+def historical_keys(repo, sha):
+    # Old history predates today's schema and may contain then-unfixed duplicates.
+    # Presence, not present-day validity or wording, is all provenance needs.
+    paths = git(repo, 'ls-tree', '-r', '--format=%(path)', sha).stdout.splitlines()
+    keys = set()
+    for path in ('ISSUES.tsv', 'ROADMAP.md'):
+        if path in paths:
+            text = git(repo, 'show', f'{sha}:{path}').stdout
+            pattern = r'^(ISS-\d{4})\t' if path == 'ISSUES.tsv' else r'^\|\s*(R-\d{4})\s*\|'
+            keys.update(re.findall(pattern, text, re.M))
+    for path in paths:
+        match = re.fullmatch(r'(?:legacy/)?docs/bugs/(\d{3,})_[^/]+\.md', path)
+        if match:
+            keys.add('BUG-' + match[1])
+    return keys
+
+
+@functools.lru_cache(maxsize=None)
+def introductions(repo, sha):
+    """ID -> introduction commits reachable from sha, independent of mutable wording.
+
+    Read all ledger patches once. A candidate introduces an ID only when no parent
+    contains it. Inspect every merge parent, so integration cannot hide a second
+    independent introduction by selecting one side's row.
+    """
+    patch = git(repo, 'log', '--full-history', '-m', '--format=COMMIT %H %P',
+                '--no-ext-diff', '--no-renames', '-p', sha, '--', 'ISSUES.tsv',
+                'ROADMAP.md', 'docs/bugs', 'legacy/docs/bugs').stdout
+    candidates = {}
+    revision = None
+    for line in patch.splitlines():
+        if line.startswith('COMMIT '):
+            fields = line.split()
+            revision, parents = fields[1], fields[2:]
+            candidates.setdefault(revision, (parents, set(), set()))
+        elif revision and line[:1] in ('+', '-') and not line.startswith(('+++', '---')):
+            text = line[1:]
+            match = (re.match(r'^(ISS-\d{4})\t', text) or
+                     re.match(r'^\|\s*(R-\d{4})\s*\|', text))
+            bug = re.match(r'^# Bug (\d{3,})\s*[:—–-]', text, re.I)
+            key = match[1] if match else ('BUG-' + bug[1] if bug else None)
+            if key:
+                candidates[revision][1 if line[0] == '+' else 2].add(key)
+    result = {}
+    for revision, (parents, added, removed) in candidates.items():
+        for key in added - removed:
+            if not any(key in historical_keys(repo, parent) for parent in parents):
+                result.setdefault(key, set()).add(revision)
     return result
+
+
+def identity_error(snapshot, key, sha, branch):
+    """Main owns existing introductions; reservations own new branch introductions."""
+    roots = introductions(snapshot.repo, sha).get(key, set())
+    main_roots = introductions(snapshot.repo, snapshot.remote_heads['main']).get(key, set())
+    if main_roots:
+        if not roots or not roots <= main_roots:
+            return f'{key}: independent introduction conflicts with origin/main:{snapshot.trees["main"].get(key, ("", "history"))[1]} (main {sorted(main_roots)}, branch {sorted(roots)})'
+    elif len(roots) > 1:
+        return f'{key}: multiple independent introductions {sorted(roots)}'
+    else:
+        reservation = snapshot.reservation(key)
+        if reservation and 'schema' in reservation:
+            owner = reservation['branch']
+            owner_sha = snapshot.remote_heads.get(owner)
+            inherited = owner_sha and roots and roots <= introductions(snapshot.repo, owner_sha).get(key, set())
+            if branch != owner and not inherited:
+                return f'{key}: new introduction is not owned by reservation {ref_for(key)} on {owner}'
+    return None
 
 
 def work_records(root):
@@ -279,16 +336,16 @@ def publish(root, updates):
     raise Refused('reservation not acquired; do not file; retry after a fresh snapshot. ' + result.stderr.strip())
 
 
-def check_entries(snapshot, entries, label):
-    for key, (title, _) in entries.items():
-        main = snapshot.trees.get('main', {}).get(key)
-        if main and main[0] != title:
-            raise Refused(f'{label}: {key} title {title!r} collides with origin/main:{main[1]} {key} title {main[0]!r}')
+def check_entries(snapshot, entries, label, sha=None, branch=None):
+    sha = sha or snapshot.remote_heads.get(label, snapshot.local_head)
+    branch = branch or label
+    for key in entries:
+        error = identity_error(snapshot, key, sha, branch)
+        if error:
+            raise Refused(f'{label}: {error}')
         reservation = snapshot.reservation(key)
         if not reservation or 'schema' not in reservation:
             raise Refused(f'{label}: {key} has no schema-1 reservation at {ref_for(key)}; run backfill')
-        if reservation['title'] != title:
-            raise Refused(f'{label}: {key} title {title!r} differs from {ref_for(key)} title {reservation["title"]!r}')
 
 
 def check_snapshot(snapshot):
@@ -302,13 +359,16 @@ def check_snapshot(snapshot):
 
 
 def check_change(root, snapshot):
-    # Enforcement is activated by landing the tools only AFTER the metadata backfill.
-    # There are no historical exemptions once active, and unstaged edits cannot hide HEAD.
+    # Activation requires the complete authoritative backfill; no historical exemptions.
     if 'main' in snapshot.tree_errors:
         raise Incomplete('origin/main: ' + snapshot.tree_errors['main'])
-    check_entries(snapshot, snapshot.trees['main'], 'origin/main')
-    check_entries(snapshot, tree_records(snapshot.repo, 'refs/local/head'), 'HEAD')
-    check_entries(snapshot, work_records(root), 'worktree')
+    branch = git(root, 'symbolic-ref', '--short', 'HEAD', check=False).stdout.strip()
+    branch = branch or git(root, 'config', 'id.branch', check=False).stdout.strip()
+    # Detached candidates can inherit recorded introductions without claiming new ones.
+    branch = canonical_branch(branch) if branch else 'detached'
+    check_entries(snapshot, snapshot.trees['main'], 'origin/main', snapshot.remote_heads['main'], 'main')
+    check_entries(snapshot, tree_records(snapshot.repo, snapshot.local_head), 'HEAD', snapshot.local_head, branch)
+    check_entries(snapshot, work_records(root), 'worktree', snapshot.local_head, branch)
 
 
 def attributed_branch(snapshot, branch):
@@ -333,24 +393,21 @@ def make_plan(root, snapshot, local, branch, scope='all'):
     uses = {}
     for name, entries in inventory:
         for key, (title, _) in entries.items():
-            uses.setdefault(key, []).append((name, title))
+            uses.setdefault(key, []).append((name, title, snapshot.local_head if entries is local else snapshot.remote_heads[name]))
     conflicts = [f'{b}: {error}' for b, error in snapshot.tree_errors.items()
                  if scope == 'all' or b == 'main']
     updates = []
     for key, rows in sorted(uses.items()):
-        titles = {title for _, title in rows}
-        # History already recovers first-introduction titles. Distinct remaining titles
-        # require operator reconciliation; no signature or majority can prove identity.
-        if len(titles) != 1:
-            conflicts.append(f'{key}: ' + repr(rows))
+        errors = [identity_error(snapshot, key, sha, name) for name, _, sha in rows]
+        roots = set().union(*(introductions(snapshot.repo, sha).get(key, set()) for _, _, sha in rows))
+        if not snapshot.reservation(key) and len(roots) > 1:
+            errors.append(f'{key}: independent unreserved introductions {sorted(roots)}')
+        if any(errors):
+            conflicts.append(f'{key}: ' + repr([(name, title) for name, title, _ in rows]) + '; ' + '; '.join(sorted(set(filter(None, errors)))))
             continue
-        title = next(iter(titles))
-        # Reservation provenance is stable metadata, independent of commit ancestry.
-        owner = sorted((b for b, _ in rows), key=lambda b: (b != 'main', b))[0]
+        owner, title, _ = min(rows, key=lambda row: (row[0] != 'main', row[0]))
         old = snapshot.reservation(key)
         if old and 'schema' in old:
-            if old['title'] != title:
-                conflicts.append(f'{key}: existing reservation disagrees')
             continue
         value = metadata(root, key, title, owner)
         if old:

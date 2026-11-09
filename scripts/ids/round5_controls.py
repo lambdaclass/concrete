@@ -48,17 +48,20 @@ def collision(root, kind):
         if phase == 'branch':
             a.git(root, 'switch', '-qc', 'candidate', 'main')
             a.git(root, 'merge', '--no-ff', '-X', 'theirs', '-m', 'integrate stale branch', 'stale-writer')
-    # Same ID/title on an independent branch is the same transferable identity.
-    a.git(root, 'switch', '-qc', 'positive', base)
-    save(root, kind, 'main identity')
+    # Edits inherit the introduction, regardless of title wording or row line number.
+    a.git(root, 'switch', '-qc', 'positive', 'main')
+    save(root, kind, 'reworded existing item')
     ok(cli(root, 'check'))
     if kind == 'roadmap':
         p = root / 'ROADMAP.md'
-        p.write_text(p.read_text().replace('mutable obligation', 'updated acceptance and status'))
+        p.write_text('new prose\n' + p.read_text())
         ok(cli(root, 'check'))
-        p.write_text(p.read_text().replace('main identity', 'different subject'))
-        result = cli(root, 'check')
-        assert result.returncode == 1 and 'origin/main:ROADMAP.md R-0620' in result.stderr, result.stderr
+    a.git(root, 'restore', '.')
+    # Identical wording cannot launder an independent introduction either.
+    a.git(root, 'switch', '-qc', 'same-text-reuse', base)
+    save(root, kind, 'main identity')
+    a.git(root, 'commit', '--amend', '-qm', 'independent identical wording introduction')
+    assert cli(root, 'check').returncode == 1
 
 
 def race(root):
@@ -95,19 +98,11 @@ def backfill(root):
     a.git(root, 'push', '-q', 'origin', 'HEAD:refs/heads/wip/conflicting')
     a.git(root, 'switch', '-q', 'main')
     ok(cli(root, 'check'))
-    p = cli(root, 'audit-wip')
-    assert p.returncode == 1 and 'R-0620' in p.stderr and 'origin/main:ROADMAP.md' in p.stderr, p.stderr
-    p = cli(root, 'backfill', '--output', str(path))
-    assert p.returncode == 1 and json.loads(path.read_text())['conflicts']
-    # Draft reconciliation is separate from authoritative bootstrap, avoiding a flag day.
+    ok(cli(root, 'audit-wip'))
+    ok(cli(root, 'backfill', '--output', str(path)))
+    assert json.loads(path.read_text())['conflicts'] == []
+    save(root, 'roadmap', 'local main wording edit')
     ok(cli(root, 'backfill', '--scope', 'authoritative', '--output', str(path)))
-    assert json.loads(path.read_text())['updates'] == []
-    ok(cli(root, 'publish-plan', str(path)))
-    ok(cli(root, 'check'))
-    assert cli(root, 'audit-wip').returncode == 1
-    save(root, 'roadmap', 'local main divergence')
-    p = cli(root, 'backfill', '--scope', 'authoritative', '--output', str(path))
-    assert p.returncode == 1 and json.loads(path.read_text())['conflicts'], 'local main masked origin/main'
 
 
 def unreserved(root):
@@ -129,7 +124,7 @@ def metadata(root):
     ok(cli(root, 'reserve', 'roadmap', 'held task', '--number', '620'))
     save(root, 'roadmap', 'another task')
     p = cli(root, 'check')
-    assert p.returncode == 1 and 'refs/reserved/roadmap/0620' in p.stderr and 'held task' in p.stderr, p.stderr
+    ok(p)  # reservation title is immutable provenance, never current wording
 
 
 def incomplete(root):

@@ -96,18 +96,18 @@ def main():
         p = writer / 'ISSUES.tsv'
         p.write_text(p.read_text().replace('\tevidence\tR-', '\tupdated evidence\tR-'))
         run(writer, 'check')
-        p.write_text(p.read_text().replace('\tfirst\t', '\twrong title\t'))
-        run(writer, 'check', expect=1)
-        print('PASS: title mismatch refused; evidence remains editable')
+        p.write_text(p.read_text().replace('\tfirst\t', '\treworded title\t'))
+        run(writer, 'check')
+        print('PASS: inherited title and evidence remain editable')
         a.git(writer, 'restore', 'ISSUES.tsv')
         a.git(writer, 'switch', '-qc', 'wip/duplicate', 'main')
         save(writer, 'ISS-0001', 'first')
-        run(writer, 'check')
-        print('PASS: rebased/cherry-picked same identity needs no shared introduction ancestry')
+        run(writer, 'check', expect=1)
+        print('PASS: independent introduction refused even with identical title')
         save(writer, 'ISS-0001', 'different identity')
         a.git(writer, 'push', '-q', 'origin', 'HEAD:refs/heads/wip/duplicate')
         run(writer, 'check', expect=1)
-        print('PASS: different titles for the same ID refused')
+        print('PASS: independent introduction stays refused after rewording')
         conflict_plan = base / 'conflict-plan.json'
         before = a.git(writer, 'ls-remote', 'origin').stdout
         run(writer, 'backfill', '--output', str(conflict_plan), expect=1)
@@ -299,6 +299,8 @@ def main():
     assert result.returncode == 0, 'round 4 regression controls failed'
     result = subprocess.run(['python3', '-I', '-B', str(SOURCE / 'round5_controls.py')])
     assert result.returncode == 0, 'round 5 regression controls failed'
+    result = subprocess.run(['python3', '-I', '-B', str(SOURCE / 'round6_controls.py')])
+    assert result.returncode == 0, 'round 6 regression controls failed'
     print('ID reservation controls: PASS')
 
 
