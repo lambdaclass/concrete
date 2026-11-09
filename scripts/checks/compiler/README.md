@@ -80,3 +80,14 @@ coordinator must name/file the ISS-0029 runner-binding roadmap row in its sweep
 before calling this staged work complete; no R ID for that dependency is present
 in this checkout. R-0676 owns scheduled evidence integration, not a replacement
 inventory. No real qualification or daily measurement has been run here.
+
+Determinism consumes B's public `test_manifest.py rows MANIFEST` interface and
+selects `bir:` rows by column two, as `slice0_common.sh manifest_rows` does. It
+never parses the source manifest. `determinism.sh --check-manifest` exercises the
+production loader without building; `manifest_controls.py` checks mixed BIR/source
+selection and plants the removed `--kind` option in a private script copy. The
+plant must return status 1 with exactly `FAIL slice0_determinism: manifest rows
+interface failed`; reader details remain in the campaign diagnostic log. These
+controls run in the PR hermetic controls; full native determinism retains its
+registry tier. After merging a dependency, run every C gate consuming its changed
+interface, including determinism, before reporting integration validation.

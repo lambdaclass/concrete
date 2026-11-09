@@ -41,12 +41,32 @@ campaign_runner_environment=${RUNNER_ENVIRONMENT:-local}
 campaign_runner_name=${RUNNER_NAME:-local}
 source scripts/checks/compiler/campaign.sh
 
+# Consume B's validated public rows; selection is the same as manifest_rows.
+manifest=${CONCRETE_TEST_MANIFEST:-tests/manifest.tsv}
+manifest_rows_bir() {
+  local rc=0
+  bounded 30 python3 -I "$root/scripts/checks/lib/test_manifest.py" rows "$manifest" >"$work/all-rows" 2>"$work/manifest-reader.log" || rc=$?
+  if [ "$rc" != 0 ]; then
+    echo 'FAIL slice0_determinism: manifest rows interface failed' >&2
+    return 1
+  fi
+  awk -F '\t' '$2 ~ /^bir:/' "$work/all-rows" >"$work/rows"
+  [ -s "$work/rows" ] || { echo 'FAIL slice0_determinism: no bir tests' >&2; return 1; }
+}
+# Exercise the production interface without starting a compiler build.
+if [ "${1:-}" = --check-manifest ]; then
+  manifest_rows_bir
+  cat "$work/rows"
+  exit 0
+fi
+
 report=${1:-$work/report}
 head_sha=$(git rev-parse HEAD)
 expected_sha=${SELECTED_SHA:-$head_sha}
 [[ "$expected_sha" =~ ^[0-9a-f]{40}$ ]] && [ "$head_sha" = "$expected_sha" ] ||
   { echo 'FAIL slice0_determinism: selected SHA does not match HEAD' >&2; exit 1; }
 campaign_identity "$report" "$expected_sha"
+manifest_rows_bir
 emit_only=${DETERMINISM_EMIT_ONLY:-0}
 case "$emit_only" in 0|1) ;; *) echo "determinism: DETERMINISM_EMIT_ONLY must be 0 or 1" >&2; exit 2 ;; esac
 if [ "$emit_only" = 1 ]; then
@@ -76,9 +96,6 @@ for cwd in "$root" "$root/scripts"; do
 done
 [ "$root" != "$root/scripts" ] || exit 1
 echo "ok slice0_determinism: effective Lean child CWDs distinct: $root / $root/scripts"
-manifest=${CONCRETE_TEST_MANIFEST:-tests/manifest.tsv}
-bounded 30 python3 -I "$root/scripts/checks/lib/test_manifest.py" rows --kind bir "$manifest" >"$work/rows"
-[ -s "$work/rows" ] || { echo "determinism: no bir tests" >&2; exit 1; }
 awk -F '\t' '{print $1}' "$work/rows" >"$work/names"
 awk -F '\t' '{sub(/^bir:/, "", $2); print $2}' "$work/rows" | LC_ALL=C sort >"$work/manifest-programs"
 bounded 120 "$lake_cmd" --dir "$root" env lean --run "$driver" list | LC_ALL=C sort >"$work/emitter-programs"

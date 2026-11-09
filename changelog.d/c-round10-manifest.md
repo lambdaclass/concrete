@@ -1,0 +1,1 @@
+Gate C determinism now selects BIR tests from B’s public manifest rows interface; PR controls plant the removed option and require the exact interface diagnostic. Qualification remains INCOMPLETE on ISS-0029 (R-0690).

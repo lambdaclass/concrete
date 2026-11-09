@@ -17,7 +17,7 @@ def main(environment):
             keys.update(re.findall(r'((?:GITHUB_|SELECTED_|SCHEDULED_|RUNNER_)[A-Z_]+)', path.read_text()))
     keys.update(prefix+'FOREIGN_CONTROL' for prefix in PREFIXES)
     hostile = dict(clean, **{key: 'foreign/'+key for key in keys})
-    for script in ('campaign_wiring.py', 'campaign_controls.py', 'mode_controls.py', 'scheduled_evidence_controls.py'):
+    for script in ('campaign_wiring.py', 'campaign_controls.py', 'mode_controls.py', 'manifest_controls.py', 'scheduled_evidence_controls.py'):
         results = []
         for env in (clean, hostile):
             result = subprocess.run([sys.executable, '-I', str(ROOT/'scripts/checks/compiler'/script)],
