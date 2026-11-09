@@ -1,0 +1,441 @@
+Consumer blob 0dc43c1028dc684f04a83851ffac52432dc511a9 (dc61c7cd3); final working bytes.
+HEAD at launch 31c413a2c; restored independent scripts committed unchanged as fe7771bfd.
+Bounded nix develop runs; first sequence stopped at round5 argument error, corrected sequence resumes there.
+
+CHECK vacuity_reporting
+PASS reporting retry-journal: earlier completed FAIL survives less-progress retry and torn record
+PASS reporting wall-watchdog: earlier exact FAIL, named interrupted/unrun analyses, population equations
+PASS reporting work-budget: exact named INCOMPLETE and unrelated FAIL retained
+PASS reporting analysis-error: exact named INCOMPLETE and unrelated FAIL retained
+PASS reporting heartbeat: exact named INCOMPLETE and unrelated FAIL retained
+PASS reporting scheduler-error: exact named scheduler INCOMPLETE and no partial population
+PASS reporting planted-error: exact Planted and paired Instance named; unrelated FAIL retained
+PASS reporting classification-unknown cap=None
+PASS reporting classification-unknown cap=100000
+PASS reporting repeated-job-findings
+PASS budget heavy-alone
+PASS budget bad-alone
+PASS budget repeated-instance-finding
+PASS budget starvation
+PASS budget reverse
+PASS budget heartbeat-starvation
+PASS budget cap-baseline
+PASS budget cap-population
+PASS budget cap-zero
+PASS budget empty
+PASS budget nested-reset-mentions
+PASS budget nested-reset-mutate
+PASS budget nested-reset-withProtected
+Budget controls: 13 PASS, 0 FAIL
+PASS control positive
+PASS control false-discharge
+PASS control positive-budget-chain
+N2 selected controls: 3 PASS, 0 FAIL
+PASS reporting replay-validator: exactly FAIL report-incomplete c9-new
+CHECK vacuity_budget
+PASS DAG memoized: DAG depth=10 work=41 cached=22 root=true
+DAG depth=15 work=61 cached=32 root=true
+PASS DAG early-exit: DAG depth=10 work=4093 cached=2 root=false
+CONTROL dag-root-not-cached
+CONTROL work-budget
+PASS dependency memoized: /tmp/nix-shell.J9qTwg/n2-dependencies-s9854d6k/Dependencies.lean:111:0: warning: Definition `witness` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.J9qTwg/n2-dependencies-s9854d6k/Dependencies.lean:114:0: warning: Definition `changed` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+DEPENDENCIES complete work=2330
+NOTE analysis-result DependencyControls.witness stage=instance law=DependencyControls.law case=inline result=PASS heartbeats=816/2000000 work=1220/20000 projection=0/4096
+FAIL instance-application DependencyControls.changed law=DependencyControls.law case=inline
+NOTE analysis-result DependencyControls.changed stage=instance law=DependencyControls.law case=inline result=FAIL heartbeats=817/2000000 work=1246/20000 projection=0/4096
+PASS dependency uncached: /tmp/nix-shell.J9qTwg/n2-dependencies-_xmmxuz4/Dependencies.lean:111:0: warning: Definition `witness` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.J9qTwg/n2-dependencies-_xmmxuz4/Dependencies.lean:114:0: warning: Definition `changed` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+CONTROL work-budget work=20000
+NOTE analysis-result DependencyControls.witness stage=instance law=DependencyControls.law case=inline result=PASS heartbeats=803/2000000 work=1112/20000 projection=0/4096
+FAIL instance-application DependencyControls.changed law=DependencyControls.law case=inline
+NOTE analysis-result DependencyControls.changed stage=instance law=DependencyControls.law case=inline result=FAIL heartbeats=804/2000000 work=1138/20000 projection=0/4096
+PASS refutation memoized: CONTEXT SEARCH
+CONTEXT SEARCH
+CONTEXT SEARCH
+CONTEXT SEARCH
+CONTEXT CACHE complete shared=1 distinct=2 mutable=uncached
+PASS refutation context-erased: CONTEXT SEARCH
+CONTROL context-cache-crossed-context
+PASS refutation raw-type-erased: CONTEXT SEARCH
+CONTEXT SEARCH
+CONTEXT SEARCH
+CONTROL raw-context-cache-crossed-type
+PASS identity PIPE FAIL instance-false-discharge witnessForward
+PASS identity PIPE FAIL instance-false-discharge witnessReverse
+PASS identity ORDER [b1, b2] b1 bad=false
+PASS identity ORDER [b1, b2] b2 bad=true
+PASS identity ORDER [b2, b1] b2 bad=true
+PASS identity ORDER [b2, b1] b1 bad=false
+PASS identity ROOT [b3, b2] b3 bad=false
+PASS identity ROOT [b3, b2] b2 bad=true
+PASS identity ROOT [b2, b3] b2 bad=true
+PASS identity ROOT [b2, b3] b3 bad=false
+PASS identity SETTYPE before=true after=false fresh=false
+PASS identity VISITED setType before=false after=true
+PASS identity KEYS interning mutation replacement projection binder-info binder-name universe distinct
+PASS identity KEYS options mode distinct
+PASS identity MODULES import-order checked forward=false backward=true self=true
+PASS identity DEMAND harmless-body context-searches=0
+PASS identity KEYS declaration-name binder-info kind distinct
+PASS identity KEYS projection same-FVarId context distinct
+PASS identity KEYS raw-refuted-types closed-refuted-types binder-info distinct
+PASS identity TRANSPORT bad=true exact=FAIL-instance-false-discharge
+PASS budget heavy-alone
+PASS budget bad-alone
+PASS budget repeated-instance-finding
+PASS budget starvation
+PASS budget reverse
+PASS budget heartbeat-starvation
+PASS budget cap-baseline
+PASS budget cap-population
+PASS budget cap-zero
+PASS budget empty
+PASS budget nested-reset-mentions
+PASS budget nested-reset-mutate
+PASS budget nested-reset-withProtected
+Budget controls: 13 PASS, 0 FAIL
+CHECK vacuity_round5
+warning: Git tree '/home/unbalancedparen/projects/gates-vacuity' is dirty
+usage: vacuity_round5.py [-h] [--baseline] {c1,c2,controls}
+vacuity_round5.py: error: the following arguments are required: case
+
+CORRECTED RESUMPTION (exit 0)
+CHECK vacuity_round5
+PASS control joint-branch-decide-repro
+PASS control false-discharge
+PASS control absurd-discharge
+PASS control nomatch-discharge
+PASS control helper-false
+PASS control false-cases
+PASS control empty-elimination
+PASS control pempty-elimination
+PASS control helper-nomatch
+PASS control decide-hypothesis-positive
+PASS control nested-decide-discharge-1
+PASS control nested-decide-discharge-4
+PASS control nested-decide-discharge-12
+PASS control hypothetical-false-positive
+PASS control hypothetical-empty-positive
+PASS control hypothetical-pempty-positive
+PASS control open-helper-false
+PASS control open-helper-empty
+PASS control open-helper-pempty
+PASS control data-subtype-discharge
+PASS control data-psigma-discharge
+PASS control data-pprod-discharge
+PASS control finite-collection-decide-positive
+PASS control finite-collection-simp-positive
+PASS control finite-collection-cases-positive
+PASS control joint-hypothetical-positive
+PASS control joint-supplied-negative
+PASS control joint-open-supplied-negative
+PASS control reachable-open-impossible-negative
+PASS control reachable-joint-helper-negative
+PASS control unreachable-closed-supplier-positive
+PASS control context-cache-supplied-negative
+N2 selected controls: 32 PASS, 0 FAIL
+REPRO baseline: no context refutation
+REPRO kernel-checked certificate: of_eq_true injectedFalse._simp_1
+REPRO certificate type: False; local assumptions: 0
+REPRO supplied dependency: injectedFalse := impossible
+CERTIFICATE origin: rejected-supplied-contradiction supplier=impossible
+CERTIFICATE non-circular: rejected-supplied-contradiction supplier=impossible
+CERTIFICATE library-decide-matcher: admitted
+CERTIFICATE dependency-chain-baseline: admitted
+CERTIFICATE shared-budget: INCOMPLETE analysis-budget-or-error CertificateControl.instance stage=certificate-dependencies law=CertificateControl.law case=shared-budget false-discharge-budget
+Certificate controls: 5 PASS, 0 FAIL
+CHECK vacuity_certificates
+REPRO baseline: no context refutation
+REPRO kernel-checked certificate: of_eq_true injectedFalse._simp_1
+REPRO certificate type: False; local assumptions: 0
+REPRO supplied dependency: injectedFalse := impossible
+CERTIFICATE origin: rejected-supplied-contradiction supplier=impossible
+CERTIFICATE non-circular: rejected-supplied-contradiction supplier=impossible
+CERTIFICATE library-decide-matcher: admitted
+CERTIFICATE dependency-chain-baseline: admitted
+CERTIFICATE shared-budget: INCOMPLETE analysis-budget-or-error CertificateControl.instance stage=certificate-dependencies law=CertificateControl.law case=shared-budget false-discharge-budget
+Certificate controls: 5 PASS, 0 FAIL
+CHECK vacuity_inline_match
+PASS control inline-match-positive
+PASS control inline-match-changed-branch
+N2 selected controls: 2 PASS, 0 FAIL
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=2.295
+/tmp/nix-shell.aIgWOI/vacuity-3uzghkg7/audit.lean:13:0: warning: Definition `inferredOk` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.aIgWOI/vacuity-3uzghkg7/audit.lean:15:0: warning: Definition `inferredTrap` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.aIgWOI/vacuity-3uzghkg7/audit.lean:18:0: warning: Definition `restatedOk` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.aIgWOI/vacuity-3uzghkg7/audit.lean:26:15: warning: Variable name `t` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _t
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+/tmp/nix-shell.aIgWOI/vacuity-3uzghkg7/audit.lean:25:0: warning: Definition `changedStoreOk` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.aIgWOI/vacuity-3uzghkg7/audit.lean:31:0: warning: Definition `restatedTrap` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.aIgWOI/vacuity-3uzghkg7/audit.lean:38:0: warning: Definition `unselectedRestatedOk` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.aIgWOI/vacuity-3uzghkg7/audit.lean:46:15: warning: Variable name `t` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _t
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+/tmp/nix-shell.aIgWOI/vacuity-3uzghkg7/audit.lean:45:0: warning: Definition `unselectedChangedStoreOk` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+TYPED Confirm.inferredOk elapsed-ms=227
+NOTE analysis-result Confirm.inferredOk stage=instance law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed result=PASS heartbeats=4301/2000000 work=5584/20000 projection=0/4096
+TYPED Confirm.restatedOk elapsed-ms=230
+NOTE analysis-result Confirm.restatedOk stage=instance law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed result=PASS heartbeats=4367/2000000 work=6577/20000 projection=0/4096
+TYPED Confirm.inferredTrap elapsed-ms=240
+NOTE analysis-result Confirm.inferredTrap stage=instance law=ConcreteSpec.Core.Own.evalArgs_trap_erasure case=typed result=PASS heartbeats=4260/2000000 work=5102/20000 projection=0/4096
+TYPED Confirm.restatedTrap elapsed-ms=227
+NOTE analysis-result Confirm.restatedTrap stage=instance law=ConcreteSpec.Core.Own.evalArgs_trap_erasure case=typed result=PASS heartbeats=4316/2000000 work=5837/20000 projection=0/4096
+TYPED Confirm.changedStoreOk elapsed-ms=230
+FAIL instance-application Confirm.changedStoreOk law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed
+NOTE analysis-result Confirm.changedStoreOk stage=instance law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed result=FAIL heartbeats=4371/2000000 work=6585/20000 projection=0/4096
+TYPED Confirm.unselectedRestatedOk elapsed-ms=231
+NOTE analysis-result Confirm.unselectedRestatedOk stage=instance law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed result=PASS heartbeats=4362/2000000 work=6529/20000 projection=0/4096
+TYPED Confirm.unselectedChangedStoreOk elapsed-ms=231
+FAIL instance-application Confirm.unselectedChangedStoreOk law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed
+NOTE analysis-result Confirm.unselectedChangedStoreOk stage=instance law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed result=FAIL heartbeats=4366/2000000 work=6537/20000 projection=0/4096
+Typed contract controls: 7 PASS, 0 FAIL
+CHECK vacuity_fixtures
+PASS real fixture provenance: 10 byte-for-byte excerpts
+CHECK vacuity_typed_contracts
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=2.349
+/tmp/nix-shell.aIgWOI/vacuity-z9xxoq6h/audit.lean:13:0: warning: Definition `inferredOk` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.aIgWOI/vacuity-z9xxoq6h/audit.lean:15:0: warning: Definition `inferredTrap` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.aIgWOI/vacuity-z9xxoq6h/audit.lean:18:0: warning: Definition `restatedOk` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.aIgWOI/vacuity-z9xxoq6h/audit.lean:26:15: warning: Variable name `t` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _t
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+/tmp/nix-shell.aIgWOI/vacuity-z9xxoq6h/audit.lean:25:0: warning: Definition `changedStoreOk` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.aIgWOI/vacuity-z9xxoq6h/audit.lean:31:0: warning: Definition `restatedTrap` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.aIgWOI/vacuity-z9xxoq6h/audit.lean:38:0: warning: Definition `unselectedRestatedOk` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.aIgWOI/vacuity-z9xxoq6h/audit.lean:46:15: warning: Variable name `t` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _t
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+/tmp/nix-shell.aIgWOI/vacuity-z9xxoq6h/audit.lean:45:0: warning: Definition `unselectedChangedStoreOk` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+TYPED Confirm.inferredOk elapsed-ms=236
+NOTE analysis-result Confirm.inferredOk stage=instance law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed result=PASS heartbeats=4301/2000000 work=5584/20000 projection=0/4096
+TYPED Confirm.restatedOk elapsed-ms=236
+NOTE analysis-result Confirm.restatedOk stage=instance law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed result=PASS heartbeats=4367/2000000 work=6577/20000 projection=0/4096
+TYPED Confirm.inferredTrap elapsed-ms=235
+NOTE analysis-result Confirm.inferredTrap stage=instance law=ConcreteSpec.Core.Own.evalArgs_trap_erasure case=typed result=PASS heartbeats=4260/2000000 work=5102/20000 projection=0/4096
+TYPED Confirm.restatedTrap elapsed-ms=239
+NOTE analysis-result Confirm.restatedTrap stage=instance law=ConcreteSpec.Core.Own.evalArgs_trap_erasure case=typed result=PASS heartbeats=4316/2000000 work=5837/20000 projection=0/4096
+TYPED Confirm.changedStoreOk elapsed-ms=240
+FAIL instance-application Confirm.changedStoreOk law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed
+NOTE analysis-result Confirm.changedStoreOk stage=instance law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed result=FAIL heartbeats=4371/2000000 work=6585/20000 projection=0/4096
+TYPED Confirm.unselectedRestatedOk elapsed-ms=245
+NOTE analysis-result Confirm.unselectedRestatedOk stage=instance law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed result=PASS heartbeats=4362/2000000 work=6529/20000 projection=0/4096
+TYPED Confirm.unselectedChangedStoreOk elapsed-ms=239
+FAIL instance-application Confirm.unselectedChangedStoreOk law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed
+NOTE analysis-result Confirm.unselectedChangedStoreOk stage=instance law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed result=FAIL heartbeats=4366/2000000 work=6537/20000 projection=0/4096
+Typed contract controls: 7 PASS, 0 FAIL
+CHECK vacuity_body_access
+PASS control projection-helper-def
+PASS control projection-helper-theorem
+PASS control projection-helper-opaque
+PASS control projection-unavailable
+PASS control hidden-law-body
+PASS control hidden-planted-body
+PASS control unclassified
+PASS control obligation-theorem
+PASS control false-discharge
+PASS control helper-false
+PASS control unclassified-opaque
+PASS control opaque-helper-positive
+N2 selected controls: 12 PASS, 0 FAIL
+BODY theorem-instance exit=1
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=5.600
+NOTE scheduler-usage [anonymous] heartbeats=2342/2000000 work=14/20000
+NOTE analysis-population [anonymous] N=16 C=320000 K=16
+NOTE analysis-result ConcreteSpecControl.S stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.growth stage=classification law=none case=none result=PASS heartbeats=639/2000000 work=0/20000 projection=0/4096
+FAIL classification-count ConcreteSpecControl.instanceTwo 0
+NOTE analysis-result ConcreteSpecControl.instanceTwo stage=classification law=none case=none result=FAIL heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.mutant stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:10» stage=classification law=none case=none result=PASS heartbeats=1/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result [anonymous] stage=scope law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.growth stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.instanceTwo stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:10» stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+FAIL evidence-not-example ConcreteSpecControl.instanceTwo 
+NOTE analysis-result ConcreteSpecControl.instanceTwo stage=evidence-kind law=ConcreteSpecControl.growth case=two result=FAIL heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:10» stage=evidence-kind law=ConcreteSpecControl.growth case=two result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096 subject=ConcreteSpecControl.S mutant=ConcreteSpecControl.mutant
+FAIL instance-application ConcreteSpecControl.instanceTwo law=ConcreteSpecControl.growth case=two
+NOTE analysis-result ConcreteSpecControl.instanceTwo stage=instance law=ConcreteSpecControl.growth case=two result=FAIL heartbeats=0/2000000 work=0/20000 projection=0/4096
+FAIL unpaired-planted ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:10» 
+FAIL planted-proposition ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:10» law=ConcreteSpecControl.growth case=two no-valid-closed-instance
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:10» stage=pairing law=ConcreteSpecControl.growth case=two result=FAIL heartbeats=0/2000000 work=0/20000 projection=0/4096 subject=ConcreteSpecControl.S mutant=ConcreteSpecControl.mutant
+FAIL missing-instance ConcreteSpecControl.growth 
+NOTE analysis-result ConcreteSpecControl.growth stage=law law=ConcreteSpecControl.growth case=none result=FAIL heartbeats=2/2000000 work=31/20000 projection=0/4096
+NOTE projection-cost ConcreteSpecControl.growth visited=5 limit=4096 cached=5
+NOTE analysis-result ConcreteSpecControl.growth stage=projection law=ConcreteSpecControl.growth case=none result=PASS heartbeats=10/2000000 work=0/20000 projection=5/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:10» stage=planted law=ConcreteSpecControl.growth case=two result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096 instance=ConcreteSpecControl.instanceTwo subject=ConcreteSpecControl.S mutant=ConcreteSpecControl.mutant
+NOTE analysis-summary [anonymous] N=16 C=320000 K=16 reserved=320000 cap-hit=none attempted=16 unrun=0 completed=16 incomplete=0 reported=16 work=31 projection=5 heartbeats=652 heartbeat-bound=32000000 work-bound=320000 projection-bound=65536
+NOTE scheduler-total [anonymous] heartbeats=2343/2000000 work=32/20000
+N2 FAIL
+BODY hidden-false-discharge exit=1
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=5.602
+NOTE scheduler-usage [anonymous] heartbeats=2349/2000000 work=17/20000
+NOTE analysis-population [anonymous] N=19 C=380000 K=19
+NOTE analysis-result ConcreteSpecControl.S stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.growth stage=classification law=none case=none result=PASS heartbeats=641/2000000 work=0/20000 projection=0/4096
+REPORT Helper ( ConcreteSpecControl.hidden Helper (computation). Inventory control (approved: independent:confirm). 
+NOTE analysis-result ConcreteSpecControl.hidden stage=classification law=none case=none result=PASS heartbeats=1/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.impossible stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.mutant stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:11» stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:13» stage=classification law=none case=none result=PASS heartbeats=1/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result [anonymous] stage=scope law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.growth stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.hidden stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:11» stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:13» stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:11» stage=evidence-kind law=ConcreteSpecControl.growth case=two result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:13» stage=evidence-kind law=ConcreteSpecControl.growth case=two result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096 subject=ConcreteSpecControl.S mutant=ConcreteSpecControl.mutant
+FAIL instance-false-discharge ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:11» 
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:11» stage=instance law=ConcreteSpecControl.growth case=two result=FAIL heartbeats=24/2000000 work=102/20000 projection=0/4096
+FAIL unpaired-planted ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:13» 
+FAIL planted-proposition ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:13» law=ConcreteSpecControl.growth case=two no-valid-closed-instance
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:13» stage=pairing law=ConcreteSpecControl.growth case=two result=FAIL heartbeats=0/2000000 work=0/20000 projection=0/4096 subject=ConcreteSpecControl.S mutant=ConcreteSpecControl.mutant
+FAIL missing-instance ConcreteSpecControl.growth 
+NOTE analysis-result ConcreteSpecControl.growth stage=law law=ConcreteSpecControl.growth case=none result=FAIL heartbeats=2/2000000 work=31/20000 projection=0/4096
+NOTE projection-cost ConcreteSpecControl.growth visited=5 limit=4096 cached=5
+NOTE analysis-result ConcreteSpecControl.growth stage=projection law=ConcreteSpecControl.growth case=none result=PASS heartbeats=9/2000000 work=0/20000 projection=5/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:13» stage=planted law=ConcreteSpecControl.growth case=two result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096 instance=ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:11» subject=ConcreteSpecControl.S mutant=ConcreteSpecControl.mutant
+NOTE analysis-summary [anonymous] N=19 C=380000 K=19 reserved=380000 cap-hit=none attempted=19 unrun=0 completed=19 incomplete=0 reported=19 work=133 projection=5 heartbeats=678 heartbeat-bound=38000000 work-bound=380000 projection-bound=77824
+NOTE scheduler-total [anonymous] heartbeats=2350/2000000 work=38/20000
+N2 FAIL
+BODY theorem-subject exit=1
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=5.301
+NOTE scheduler-usage [anonymous] heartbeats=1056/2000000 work=5/20000
+NOTE analysis-population [anonymous] N=7 C=140000 K=7
+REPORT Helper ( ConcreteSpecControl.S Helper (computation). Inventory control (approved: independent:confirm). 
+NOTE analysis-result ConcreteSpecControl.S stage=classification law=none case=none result=PASS heartbeats=2/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.growth stage=classification law=none case=none result=PASS heartbeats=635/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result [anonymous] stage=scope law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.S stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.growth stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+FAIL missing-instance ConcreteSpecControl.growth 
+FAIL subject-kind ConcreteSpecControl.growth ConcreteSpecControl.S
+NOTE analysis-result ConcreteSpecControl.growth stage=law law=ConcreteSpecControl.growth case=none result=FAIL heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE projection-cost ConcreteSpecControl.growth visited=4 limit=4096 cached=4
+NOTE analysis-result ConcreteSpecControl.growth stage=projection law=ConcreteSpecControl.growth case=none result=PASS heartbeats=7/2000000 work=0/20000 projection=4/4096
+NOTE analysis-summary [anonymous] N=7 C=140000 K=7 reserved=140000 cap-hit=none attempted=7 unrun=0 completed=7 incomplete=0 reported=7 work=0 projection=4 heartbeats=644 heartbeat-bound=14000000 work-bound=140000 projection-bound=28672
+NOTE scheduler-total [anonymous] heartbeats=1057/2000000 work=14/20000
+N2 FAIL
+BODY subject-proof-only exit=1
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=5.301
+NOTE scheduler-usage [anonymous] heartbeats=1059/2000000 work=6/20000
+NOTE analysis-population [anonymous] N=8 C=160000 K=8
+NOTE analysis-result ConcreteSpecControl.S stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.growth stage=classification law=none case=none result=PASS heartbeats=637/2000000 work=0/20000 projection=0/4096
+REPORT Helper ( ConcreteSpecControl.selfEq Helper (computation). Inventory control (approved: independent:confirm). 
+NOTE analysis-result ConcreteSpecControl.selfEq stage=classification law=none case=none result=PASS heartbeats=1/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result [anonymous] stage=scope law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.growth stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.selfEq stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+FAIL missing-instance ConcreteSpecControl.growth 
+FAIL subject-absent ConcreteSpecControl.growth ConcreteSpecControl.S
+NOTE analysis-result ConcreteSpecControl.growth stage=law law=ConcreteSpecControl.growth case=none result=FAIL heartbeats=4/2000000 work=63/20000 projection=0/4096
+NOTE projection-cost ConcreteSpecControl.growth visited=5 limit=4096 cached=5
+NOTE analysis-result ConcreteSpecControl.growth stage=projection law=ConcreteSpecControl.growth case=none result=PASS heartbeats=9/2000000 work=0/20000 projection=5/4096
+NOTE analysis-summary [anonymous] N=8 C=160000 K=8 reserved=160000 cap-hit=none attempted=8 unrun=0 completed=8 incomplete=0 reported=8 work=63 projection=5 heartbeats=651 heartbeat-bound=16000000 work-bound=160000 projection-bound=32768
+NOTE scheduler-total [anonymous] heartbeats=1059/2000000 work=16/20000
+N2 FAIL
+BODY theorem-mutant exit=1
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=5.552
+NOTE scheduler-usage [anonymous] heartbeats=2344/2000000 work=15/20000
+NOTE analysis-population [anonymous] N=17 C=340000 K=17
+NOTE analysis-result ConcreteSpecControl.S stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.growth stage=classification law=none case=none result=PASS heartbeats=639/2000000 work=0/20000 projection=0/4096
+REPORT Helper ( ConcreteSpecControl.mutant Helper (computation). Inventory control (approved: independent:confirm). 
+NOTE analysis-result ConcreteSpecControl.mutant stage=classification law=none case=none result=PASS heartbeats=1/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:11» stage=classification law=none case=none result=PASS heartbeats=1/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:9» stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result [anonymous] stage=scope law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.growth stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.mutant stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:11» stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:9» stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:11» stage=evidence-kind law=ConcreteSpecControl.growth case=two result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096 subject=ConcreteSpecControl.S mutant=ConcreteSpecControl.mutant
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:9» stage=evidence-kind law=ConcreteSpecControl.growth case=two result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:9» stage=instance law=ConcreteSpecControl.growth case=two result=PASS heartbeats=23/2000000 work=101/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:11» stage=pairing law=ConcreteSpecControl.growth case=two result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096 subject=ConcreteSpecControl.S mutant=ConcreteSpecControl.mutant
+NOTE analysis-result ConcreteSpecControl.growth stage=law law=ConcreteSpecControl.growth case=none result=PASS heartbeats=2/2000000 work=31/20000 projection=0/4096
+NOTE projection-cost ConcreteSpecControl.growth visited=5 limit=4096 cached=5
+NOTE analysis-result ConcreteSpecControl.growth stage=projection law=ConcreteSpecControl.growth case=none result=PASS heartbeats=9/2000000 work=0/20000 projection=5/4096
+FAIL mutant-kind ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:11» 
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:11» stage=planted law=ConcreteSpecControl.growth case=two result=FAIL heartbeats=0/2000000 work=0/20000 projection=0/4096 instance=ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:9» subject=ConcreteSpecControl.S mutant=ConcreteSpecControl.mutant
+NOTE analysis-summary [anonymous] N=17 C=340000 K=17 reserved=340000 cap-hit=none attempted=17 unrun=0 completed=17 incomplete=0 reported=17 work=132 projection=5 heartbeats=675 heartbeat-bound=34000000 work-bound=340000 projection-bound=69632
+NOTE scheduler-total [anonymous] heartbeats=2345/2000000 work=34/20000
+N2 FAIL
+BODY mentionsVisit/cache: proof-only subject absent (twice)
+INCOMPLETE analysis-budget-or-error BodyAccess.mutation stage=planted law=none case=none reason=analysis-error heartbeats=12/2000000 work=24/20000 projection=0/4096
+DETAIL analysis-error BodyAccess.mutation stage=planted law=none case=none invalid let declaration, term
+  BodyAccess.selfEq 2
+has type
+  BodyAccess.subject 2 = BodyAccess.subject 2
+but is expected to have type
+  BodyAccess.mutant 2 = BodyAccess.mutant 2
+NOTE analysis-result BodyAccess.mutation stage=planted law=none case=none result=INCOMPLETE heartbeats=12/2000000 work=24/20000 projection=0/4096
+BODY compileTemplate: raw theorem body retained
+INCOMPLETE analysis-budget-or-error BodyAccess.illTyped stage=instance law=none case=none reason=analysis-error heartbeats=4/2000000 work=5/20000 projection=0/4096
+DETAIL analysis-error BodyAccess.illTyped stage=instance law=none case=none Application type mismatch: The argument
+  True.intro
+has type
+  True
+of sort `Prop` but is expected to have type
+  Nat
+of sort `Type` in the application
+  Nat.succ True.intro
+NOTE analysis-result BodyAccess.illTyped stage=instance law=none case=none result=INCOMPLETE heartbeats=4/2000000 work=5/20000 projection=0/4096
+INCOMPLETE analysis-budget-or-error BodyAccess.typeSubject stage=instance law=none case=none reason=analysis-error heartbeats=0/2000000 work=6/20000 projection=0/4096
+DETAIL analysis-error BodyAccess.typeSubject stage=instance law=none case=none protected-type-valued-subject
+NOTE analysis-result BodyAccess.typeSubject stage=instance law=none case=none result=INCOMPLETE heartbeats=0/2000000 work=6/20000 projection=0/4096
+CERTIFICATE hidden-theorem: rejected-supplied-contradiction supplier=impossible
+Body-access controls: PASS
+warning: Git tree '/home/unbalancedparen/projects/gates-vacuity' is dirty

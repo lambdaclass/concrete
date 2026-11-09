@@ -19,6 +19,10 @@ def extend(add, base, extra):
     ]:
         text, expected = law(decl, label not in {"unfolded-hypothesis", "wrapped-rfl"})
         add(label, text, expected)
+    text, expected = law("theorem projection (p q : Prop) (h : p ↔ q) : p = q := propext h")
+    expected.remove(("FAIL", "projection-law", "ConcreteSpecControl.projection"))
+    expected.add(("INCOMPLETE", "analysis-budget-or-error", "ConcreteSpecControl.projection"))
+    add("propext-hypothesis", text, expected, status=2)
     tag = "/-- Instance (law `ConcreteSpecControl.growth`, case `bad`). -/"
     for label, helper in [
         ("helper-false", "private def discharge (h : False) : 2 = 2 := False.elim h"),

@@ -736,89 +736,143 @@ checks are recorded in the confirmation brief. No budget was changed to obtain
 these results. `certificateDependency` through `end Discharge` remains untouched.
 
 
-Final consumer code is `e479e550d`, blob
-`912abf404b52ae8080bcb058c24bdc0d0248a1d9`, SHA256
-`76986f8609887277c0b0ffad57f98bd3733369534bd47bfe64d05aae507b2aca`.
-The round-4 ci-2 script pins this blob. The preceding eight instance/planted
-samples are honestly attached to `dc61c7cd3`; only projection changes after them.
-The integrated inline-match command passed its two original controls and all
-seven typed contracts on these final bytes. Final-byte budget checks also pass
-all DAG/dependency/refutation/identity probes and the 13 scheduler/budget cases.
+### Final-byte single-example measurements and reconciliation inventory
 
-The complete final accessor suite exits 0; its transcript is
-[audits/N2-A3-round4-body-access.txt](audits/N2-A3-round4-body-access.txt).
-It includes all 12 selected classification/projection/open-C controls, five
-explicit gate fixtures (theorem Instance, hidden theorem false discharge,
-theorem subject, proof-only subject, theorem mutant), computational
-mentions/cache and ill-typed mutation probes, exact theorem template-body
-identity, ill-typed and unsupported-type protection probes, and the independent
-hidden-theorem certificate rejection. Each negative checks its exact diagnostic,
-not an arbitrary failure. The hidden Law/Planted controls both still give N2 PASS.
-No all-proof contradiction rule was implemented. R-0219 remains the machinery
-owner; the coordinator assigns a new contract row only after an owner answer.
+Consumer code commit `dc61c7cd3`, blob
+`0dc43c1028dc684f04a83851ffac52432dc511a9`. Eight isolated production
+analyses on the same pinned source follow. These are uninstrumented;
+round-3 diagnostic heartbeat counts included instrumentation, so compare work
+and verdict directly, not heartbeat differences as a throughput claim.
 
+| Own line | Stage | Result | Work / 20,000 | HB / 2,000,000 | ms |
+|---|---|---|---:|---:|---:|
+| 4224 | instance | PASS | 12162 | 4505 | 244 |
+| 4237 | instance | PASS | 12652 | 4556 | 258 |
+| 4258 | instance | PASS | 12458 | 4540 | 255 |
+| 4918 | instance | PASS | 6526 | 4379 | 274 |
+| 4931 | instance | PASS | 5786 | 4328 | 243 |
+| 4230 | planted | PASS | 12554 | 644 | 31 |
+| 4247 | planted | PASS | 13360 | 733 | 39 |
+| 4269 | planted | PASS | 13093 | 711 | 33 |
 
-### Final standalone check receipts
+The earlier Own:4918/4931 application FAILs are superseded: both now PASS with
+the real retained anonymous example and exact law head. The four prior heavy
+false-discharge samples are not relabeled as final measurements: their discharge
+algorithm precedes protection and did not change in this round. No whole-scope
+census or heavy suite was run locally. Per-analysis interpretation and wall
+policy remain pending owner; ci-2's census is the coordinator's result.
 
-All requested standalone commands complete successfully on consumer `e479e550d`:
+The three final differential projection jobs each reject with the exact
+`FAIL projection-law ConcreteSpecControl.growth`, at 4 visited nodes, 4 cache
+entries, 7 heartbeats, zero general work. Baseline def was already 4 nodes;
+theorem/opaque incorrectly completed negative at 2 nodes. New unavailable-body
+control requires INCOMPLETE and the exact `projection-body-unavailable` detail.
 
-| Check | Result |
+| Body access site | Current scope and control |
 |---|---|
-| reporting | all exact fault/watchdog/replay controls PASS |
-| budget | all DAG, dependency, refutation and identity controls PASS; 13 scheduler/budget cases PASS |
-| round-5 controls | 32 PASS / 0 FAIL, plus 5 certificate controls PASS |
-| standalone certificates | 5 PASS / 0 FAIL |
-| inline-match | 2 PASS / 0 FAIL, plus 7 typed contract controls PASS |
-| fixture provenance | 10 byte-exact excerpts PASS |
-| body-access inventory | 12 selected gate controls plus all accessor/kind/typing/certificate probes PASS |
+| directStep / projection root | Fixed by A; def/theorem/opaque each exact projection-law FAIL; root reads theorem bodies explicitly; unavailable axiom helper INCOMPLETE with named dependency |
+| mentionsVisit | Computational occurrence analysis, intentionally not proof-dependency validation; proof-only references queried twice remain absent; proof-only Law control emits exact subject-absent |
+| mentions negative cache | Only complete computational negatives published; repeated same theorem reference is false both times, with a cached negative; existing partial-DFS and complete-closure controls retained |
+| mutate | Does not rewrite theorem evidence; changing a proof-dependent let's declared type is rejected by Meta.check as INCOMPLETE, with exact invalid-let/selfEq type-mismatch detail |
+| compileTemplate | Explicit raw theorem/opaque bodies; control asserts the compiled root is the theorem's actual body, not its constant |
+| falseDischarge | Explicit raw theorem/opaque bodies; contradiction only in helper theorem yields exact instance-false-discharge, not a false negative |
+| checkInstance default value? | Deliberate definition-only application evidence; named theorem emits exact instance-application; evidence-kind/closed argument/telescope checks preserved |
+| classification | isTheorem or explicit opaque-body access; unclassified theorem/opaque FAIL classification-count; approved opaque helper passes |
+| certificateDependency / validator | Unchanged; independent consumer of hidden theorem certificate rejects supplier=impossible; existing five certificate controls pass |
+| LocalDecl.value? sites | Local lets/assumptions, not ConstantInfo body access; unchanged closure/context identity controls cover local values |
+| Obligation / subject / mutant kind checks | Definitions required explicitly; theorem controls emit exact obligation-kind, subject-kind and mutant-kind |
 
-The complete driver on the final bytes is still running at this receipt; it is
-not counted as passed yet. Standalone receipts:
-[audits/N2-A3-round4-standalone-controls.txt](audits/N2-A3-round4-standalone-controls.txt).
-The complete earlier checkpoint ended at 128 PASS / 5 FAIL, all the same propext
-unsupported-transfer cause (two basic positives, negation partial-application,
-negation alias and universal alias). Its explicit failing receipt is preserved in
-[audits/N2-A3-round4-checkpoint-driver.txt](audits/N2-A3-round4-checkpoint-driver.txt).
-No timeout, partial run or INCOMPLETE analysis is reported as a passing audit.
-
-
-Additional final-byte projection measurements cover all five propext-affected
-checkpoint cases and the new negative transfer control:
-
-| Control | Projection result | Nodes / cache entries | HB | General work |
-|---|---|---:|---:|---:|
-| propext-hypothesis | FAIL projection-law | 3 / 3 | 5 | 0 |
-| inequality-positive | PASS | 19 / 19 | 33 | 0 |
-| negation-positive | PASS | 19 / 19 | 33 | 0 |
-| partial-negation | PASS (projection only; Instance correctly FAILs application) | 19 / 19 | 34 | 0 |
-| negation-alias-positive | PASS | 19 / 19 | 33 | 0 |
-| forall-alias-full-application | PASS | 19 / 19 | 36 | 0 |
-
-The controls retain their original 64-node fixture allowance under the unchanged
-4,096-node production ceiling. The unsupported checkpoint stopped at 11 nodes
-on propext; the final traversal follows its supplied Iff evidence instead. All six
-control assertions PASS, with exact intended negative diagnostics. Full counters:
-[audits/N2-A3-round4-primitive-measurements.txt](audits/N2-A3-round4-primitive-measurements.txt).
+`vacuity_body_access.py` retains the accessor controls, both open-question C
+controls, and ill-typed/type-valued protection controls. The latter require
+INCOMPLETE with exact application-type-mismatch or protected-type-valued-subject
+detail. They cannot succeed by comparing identical ill-typed terms.
+The reserved region SHA256 is still
+`474a74f351984565847d5239a86707b389970bf1eba33d2b45c4486c1ec11fd4`,
+verified byte-for-byte against `30c57a17c`. Slice-2a reconciliation must carry
+both A's proof traversal and B's typed protection/computation sharing, while
+retaining its separate origin-sensitive certificate evaluator. No OD is decided.
 
 
-### Authoritative round-4 terminal receipt
+### Round 4r: authoritative disposition
 
-The final-byte complete command
+Normal revert commit `31c413a2c` removes `e479e550d`. Final consumer blob is
+`0dc43c1028dc684f04a83851ffac52432dc511a9`, identical to `dc61c7cd3`.
+The original round-4 standalone, body-access, primitive-measurement and final
+control transcripts in `audits/N2-A3-round4-*` are historical receipts for the
+candidate now preserved on `wip/gate-vacuity-propext-q8`. Their PASS claims do
+not apply to this branch. The old ci-2 script pins that candidate; use the new
+round4r script for this branch. No whole-scope result is claimed here.
+
+Pending-owner list:
+
+- `propext: pending owner question 8`. The genuine nonzero and negation laws
+  (driver controls `inequality-positive` and `negation-positive`, both named
+  `ConcreteSpecControl.nonzero`) report INCOMPLETE through the generic
+  unavailable-body path, naming `propext`. The candidate rule is on
+  `wip/gate-vacuity-propext-q8`; it is absent from this branch.
+- The open Law/Planted supplied-contradiction contract (question C), per-analysis
+  budget interpretation and whole-scope wall policy remain pending owner.
+
+There is no constant-specific production rule for propext. The retained
+`propext-hypothesis` fixture exits 2 with `INCOMPLETE analysis-budget-or-error
+ConcreteSpecControl.projection` and exact detail
+`DETAIL analysis-error ConcreteSpecControl.projection stage=projection law=ConcreteSpecControl.projection case=none projection-body-unavailable propext`.
+It also retains `FAIL subject-absent` and `FAIL missing-instance` for that law;
+it does not produce `FAIL projection-law` or an N2 PASS.
+
+The same projection INCOMPLETE (exit 2), with exact detail naming the unavailable
+constant `propext`, is required by `inequality-positive`, `negation-positive`,
+`negation-alias-positive`, `forall-alias-full-application` (law
+`ConcreteSpecControl.nonzero`) and `partial-negation` (law
+`ConcreteSpecControl.negationPartial`). The latter retains its exact
+`FAIL instance-application` and `FAIL missing-instance` findings.
+
+The accessor inventory is independent of any propext rule: it exercises raw
+proof bodies, kind/classification, typed protection, computational occurrences,
+and supplied-contradiction certificates. It is retained, as is inline-match's
+shared compiled-consumer wiring for all seven typed-contract controls.
+Both A (`b2c674900`) and B (`dc61c7cd3`) remain intact. R-0219 owns the current
+machinery; the coordinator assigns any new roadmap row after the owner answer.
+Reviews of record belong to the coordinator; reviewers must do the best
+long-term thing rather than cut corners.
+
+The coordinator command on concrete-ci-2, after pushing the final commit, is:
 
 ```bash
-timeout 1500 nix develop -c python3 -u scripts/proofs/vacuity_driver.py --controls
+bash scripts/proofs/audits/N2-A3-round4r-ci2.sh
 ```
 
-exited **0**: **134 core controls PASS, 0 FAIL**, followed by all reporting
-controls PASS, including its 13 budget cases, three selected consumer controls,
-and exact replay rejection. This supersedes the earlier explicit pending-driver
-notes, not their historical checkpoint results. The full terminal transcript is
-[audits/N2-A3-round4-final-controls.txt](audits/N2-A3-round4-final-controls.txt).
-Every requested focused check has now completed on final consumer blob
-`912abf404b52ae8080bcb058c24bdc0d0248a1d9` (code commit `e479e550d`);
-subsequent commits are records only. The final protected-region comparison
-against `30c57a17c` is byte-identical, with the SHA256 recorded above. Both C
-controls and both budget/wall contract interpretations remain pending owner.
-There was no push, review invocation, local whole-scope census, full suite,
-ROADMAP/ISS allocation, ConcreteSpec edit, or OD decision. The coordinator owns
-publication, independent reviews and the pinned concrete-ci-2 census command.
+It prints HEAD, pins the final consumer blob and original source archive, and
+retains the 960/900-second infrastructure bounds and production watchdog.
+
+
+### Round 4r focused validation
+
+Consumer blob `0dc43c1028dc684f04a83851ffac52432dc511a9` is unchanged from
+`dc61c7cd3`. The checks launched from HEAD `31c413a2c` with the final restored
+scripts and revised control expectations in the working tree; independent
+scripts were committed unchanged as `fe7771bfd` while the driver finished.
+No consumer or harness bytes changed during either run.
+
+The driver core completed **134 PASS / 0 FAIL**. These are harness assertions:
+the six propext-affected fixtures have the INCOMPLETE outcomes recorded above,
+not successful law audits. Standalone reporting, budget (including 13 scheduler
+cases), round-5 (32 cases plus five certificates), certificates (five cases),
+inline-match (two cases plus seven typed contracts), fixture provenance (ten
+byte-exact excerpts), standalone typed contracts (seven cases), and body access
+(12 selected controls plus kind/typing/accessor/certificate probes) all passed.
+The def/theorem/opaque differential requires the same exact
+`FAIL projection-law ConcreteSpecControl.growth` for all three kinds.
+
+Standalone receipts, including the corrected round5 invocation after an initial
+CLI argument error, are in
+[audits/N2-A3-round4r-standalone-controls.txt](audits/N2-A3-round4r-standalone-controls.txt).
+All commands used the repository bounded runner inside `nix develop`. No
+whole-scope census, heavy suite, review tooling, push, history rewrite,
+ConcreteSpec change, or ID allocation was performed.
+
+The complete driver command exited **0**, including all automatic reporting
+checks. Its terminal receipt is
+[audits/N2-A3-round4r-driver-controls.txt](audits/N2-A3-round4r-driver-controls.txt).
+The complete driver receipt and standalone receipts supersede candidate-branch
+claims for this branch; all exact INCOMPLETE expectations remain explicit.

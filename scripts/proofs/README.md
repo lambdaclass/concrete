@@ -686,13 +686,46 @@ nodes; neither early return may bypass cache publication. This is the long-term
 comparison design, not a budget exemption or a matcher-name accommodation.
 
 
-Round-4 final validation: 134 driver controls and its reporting checks PASS;
-all requested standalone focused checks PASS. Exact accessor outcomes, isolated
-measurements and pending-owner questions are in
-[N2-A3-accounting.md](N2-A3-accounting.md); per-control terminal results are in
-[audits/N2-A3-round4-final-controls.txt](audits/N2-A3-round4-final-controls.txt).
-The coordinator's exact concrete-ci-2 command is
-`bash scripts/proofs/audits/N2-A3-round4-ci2.sh`; it pins the final consumer blob
-and preserves the original source/watchdog bounds. No whole-scope result is
-claimed by these focused checks. Reviews of record remain with the coordinator;
-reviewers must do the best long-term thing rather than cut corners.
+#### Round 4r: owner question 8 remains open
+
+Pending-owner list:
+
+- `propext: pending owner question 8`. The genuine nonzero and negation laws
+  (driver controls `inequality-positive` and `negation-positive`, both named
+  `ConcreteSpecControl.nonzero`) report INCOMPLETE through the generic
+  unavailable-body path, naming `propext`. The candidate rule is on
+  `wip/gate-vacuity-propext-q8`; it is absent from this branch.
+- The open Law/Planted supplied-contradiction contract (question C), per-analysis
+  budget interpretation and whole-scope wall policy remain pending owner.
+
+There is no constant-specific production rule for propext. The retained
+`propext-hypothesis` fixture exits 2 with `INCOMPLETE analysis-budget-or-error
+ConcreteSpecControl.projection` and exact detail
+`DETAIL analysis-error ConcreteSpecControl.projection stage=projection law=ConcreteSpecControl.projection case=none projection-body-unavailable propext`.
+It also retains `FAIL subject-absent` and `FAIL missing-instance` for that law;
+it does not produce `FAIL projection-law` or an N2 PASS.
+
+The same projection INCOMPLETE (exit 2), with exact detail naming the unavailable
+constant `propext`, is required by `inequality-positive`, `negation-positive`,
+`negation-alias-positive`, `forall-alias-full-application` (law
+`ConcreteSpecControl.nonzero`) and `partial-negation` (law
+`ConcreteSpecControl.negationPartial`). The latter retains its exact
+`FAIL instance-application` and `FAIL missing-instance` findings.
+
+The accessor inventory is independent of any propext rule: it exercises raw
+proof bodies, kind/classification, typed protection, computational occurrences,
+and supplied-contradiction certificates. It is retained, as is inline-match's
+shared compiled-consumer wiring for all seven typed-contract controls.
+Both A (`b2c674900`) and B (`dc61c7cd3`) remain intact. R-0219 owns the current
+machinery; the coordinator assigns any new roadmap row after the owner answer.
+Reviews of record belong to the coordinator; reviewers must do the best
+long-term thing rather than cut corners.
+
+The coordinator's pinned census command on concrete-ci-2 is
+`bash scripts/proofs/audits/N2-A3-round4r-ci2.sh`.
+The older round-4 receipts describe the reverted candidate, not this branch.
+
+Round-4r focused validation: all 134 core driver assertions and all requested
+standalone checks passed on the pinned consumer blob. These assertions require
+the six INCOMPLETE outcomes above. Exact receipts and commit accounting are in
+[N2-A3-accounting.md](N2-A3-accounting.md).

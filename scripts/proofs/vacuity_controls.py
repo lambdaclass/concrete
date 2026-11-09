@@ -155,6 +155,19 @@ end ConcreteSpec.Repro""")
             code in {"instance-application", "instance-false-discharge"}
             for status, code, name in expected):
             expected.add(("FAIL", "planted-proposition", "EXAMPLE"))
+    # Pending owner question 8: generic unavailable-body analysis, no transfer rule.
+    unavailable_laws = {
+        "propext-hypothesis": "ConcreteSpecControl.projection",
+        "inequality-positive": "ConcreteSpecControl.nonzero",
+        "negation-positive": "ConcreteSpecControl.nonzero",
+        "partial-negation": "ConcreteSpecControl.negationPartial",
+        "negation-alias-positive": "ConcreteSpecControl.nonzero",
+        "forall-alias-full-application": "ConcreteSpecControl.nonzero",
+    }
+    cases = [(label, fixture, budget,
+              expected | {("INCOMPLETE", "analysis-budget-or-error", unavailable_laws[label])}, 2)
+             if label in unavailable_laws else (label, fixture, budget, expected, status)
+             for label, fixture, budget, expected, status in cases]
     if labels is not None:
         cases = [case for case in cases if case[0] in labels]
     failed = 0
@@ -196,6 +209,10 @@ end ConcreteSpec.Repro""")
         report_ok = True
         if label == "projection-unavailable":
             report_ok = ("DETAIL analysis-error ConcreteSpecControl.growth stage=projection law=ConcreteSpecControl.growth case=none projection-body-unavailable ConcreteSpecControl.unavailable" in output)
+        if label in unavailable_laws:
+            law = unavailable_laws[label]
+            report_ok = (f"DETAIL analysis-error {law} stage=projection law={law} case=none projection-body-unavailable propext"
+                         in output.splitlines())
         if label == "missing-provenance":
             report_ok = {row for row in output.splitlines() if row.startswith(("FAIL ", "INCOMPLETE "))} == {
                 'INCOMPLETE missing-provenance ConcreteSpecControl.missingMetadata ',
