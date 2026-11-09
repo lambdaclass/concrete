@@ -804,8 +804,8 @@ controls formerly reported carrier-unavailable and now require the exact
 
 Round-5 provenance refinement separates trivial leaves from premise transfer in
 unresolved recursor branches. Constructor fields have lazy, per-constructor
-source queries; induction hypotheses are derived results rather than fields
-projected out of the major. Both provenance and the branch-analysis mode are
+source queries. Induction hypotheses resume the actual recursive source from
+the checked kernel rule; being derived is not negative evidence. Both provenance and the branch-analysis mode are
 part of cache identity. PSum controls pair an actually projected proof with an
 independently generated proof beside a data field, preventing whole-major
 provenance from contaminating an unrelated field. Constructor-field queries
@@ -853,3 +853,24 @@ nested demand still consumes the existing shared projection allowance. This
 keeps the inline-match and genuine induction controls within their unchanged
 64-visit fixture bounds while retaining actual branch selection and all
 unavailable-proof checks. The Discharge region is unchanged.
+
+Recursive source arguments are read from the checked recursor rule under formal
+parameters and constructor fields, then substituted into the actual minor
+context. Their types are checked against the minor binders. This handles
+multiple IHs without guessing positions. A recursive call retains its actual
+arguments and residual demand. A projected branch is a sufficient rejection
+witness; every branch must complete before a negative answer can be accepted.
+
+Computational recursion can be certified independent using a separate strong
+inductive invariant: inspect every proof-carrying constructor field (including
+fields of data carriers), and inspect function results under arbitrary output
+hypotheses. Generalize the major to an arbitrary value before checking all
+kernel rules, so a computed carrier's outer shape cannot hide a recursive
+child's premise. Only within this checked induction are recursive results
+assumed strongly independent. A successful invariant can justify a complete
+proof query; it cannot answer a later selected-field demand using aggregate
+provenance. Otherwise the actual recursive source is followed. Validation,
+source traversal and caches share the existing allowance without a fresh
+budget. Cache identity includes this analysis strength and the source maps.
+The paired recursive-transfer, independent-base, two-IH and cast controls are
+permanent, with exact outcomes. R-0219 owns this structural implementation.

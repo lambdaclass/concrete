@@ -362,7 +362,10 @@ def representationField (type : Expr) : MetaM Bool :=
 structure ProjectionOrigins where
   minorOrigins : Array (FVarId × Bool) := #[]
   fieldOrigins : Array (FVarId × Name × Nat × Expr) := #[]
+  derivedOrigins : Array (FVarId × Expr) := #[]
+  recursiveOrigins : Array (FVarId × Expr × Expr) := #[]
   premiseOnly : Bool := false
+  strong : Bool := false
   deriving Inhabited, BEq, Hashable
 
 structure ProjectionState where
@@ -373,11 +376,16 @@ structure ProjectionState where
   fieldAnswers : Std.HashMap (Expr × Name × Nat × DischargeRawContext × ProjectionOrigins) Bool := {}
   carrierTypes : Std.HashMap (Expr × DischargeRawContext) Bool := {}
   heads : Std.HashMap (Expr × DischargeRawContext) Expr := {}
+  independence : Std.HashMap (Expr × DischargeRawContext × ProjectionOrigins) Bool := {}
 
 def projectionCacheable (context : DischargeRawContext) (e : Expr)
     (origins : ProjectionOrigins) : MetaM Bool := do
   for (_, _, _, major) in origins.fieldOrigins do
     if major.hasMVar || major.hasLevelMVar then return false
+  for (_, value) in origins.derivedOrigins do
+    if value.hasMVar || value.hasLevelMVar then return false
+  for (_, value, question) in origins.recursiveOrigins do
+    if value.hasMVar || value.hasLevelMVar || question.hasMVar || question.hasLevelMVar then return false
   dischargeCacheable context e
 
 def chargeProjection : StateRefT ProjectionState Audit Unit := do
@@ -398,6 +406,49 @@ def projectionIota (r : RecursorVal) (levels : List Level) (args : Array Expr)
   let rhs := mkAppN rhs (args.extract 0 (r.numParams + r.numMotives + r.numMinors))
   let rhs := mkAppN rhs (fields.extract (fields.size - rule.nfields) fields.size)
   return some (mkAppN rhs (args.extract (r.getMajorIdx + 1) args.size)).headBeta
+
+inductive ProjectionSource where
+  | field (index : Nat)
+  | derived (value : Expr)
+  | recur (value : Expr)
+  deriving Inhabited
+
+/-- Read each minor argument from the kernel rule, rather than inferring
+    constructor-field and IH positions from a telescope count.
+    Temporary formals are all replaced and the resulting source is checked. -/
+def projectionSources (r : RecursorVal) (levels : List Level) (args : Array Expr)
+    (rule : RecursorRule) (minorIndex : Nat) (fields : Array Expr) : MetaM (Array ProjectionSource) := do
+  unless r.levelParams.length == levels.length do throwError "projection-universe-arity {r.name}"
+  forallBoundedTelescope (← inferType (mkConst r.name levels)) (some (r.getMajorIdx + 1)) fun formal _ => do
+    let majorType ← whnfD (← inferType formal[r.getMajorIdx]!)
+    let .const induct ctorLevels := majorType.getAppFn' | throwError "projection-major-type {r.name}"
+    let ctor ← getConstInfoCtor rule.ctor
+    unless induct == ctor.induct do throwError "projection-rule-inductive {r.name}"
+    let constructor := mkAppN (mkConst rule.ctor ctorLevels) (majorType.getAppArgs.extract 0 ctor.numParams)
+    forallTelescopeReducing (← inferType constructor) fun ctorFields _ => do
+      unless ctorFields.size == rule.nfields do throwError "projection-rule-field-count {r.name}"
+      let rhs := rule.rhs.instantiateLevelParams r.levelParams levels
+      let rhs := (mkAppN (mkAppN rhs (formal.extract 0 (r.numParams + r.numMotives + r.numMinors))) ctorFields).headBeta
+      unless rhs.getAppFn' == formal[r.numParams + r.numMotives + minorIndex]! do
+        throwError "projection-rule-minor-head {r.name}"
+      let sourceArgs := rhs.getAppArgs
+      unless sourceArgs.size == fields.size do throwError "projection-rule-minor-arity {r.name}"
+      let mut actualFields := #[]
+      for field in ctorFields do
+        let some index := sourceArgs.findIdx? (· == field) | throwError "projection-rule-field-map {r.name}"
+        actualFields := actualFields.push fields[index]!
+      let mut sources := #[]
+      for j in [:sourceArgs.size] do
+        let arg := sourceArgs[j]!
+        if let some index := ctorFields.findIdx? (· == arg) then
+          sources := sources.push (.field index)
+        else
+          let value := (arg.replaceFVars formal (args.extract 0 formal.size)).replaceFVars ctorFields actualFields
+          Lean.Meta.check value
+          unless ← withNewMCtxDepth (isDefEq (← inferType value) (← inferType fields[j]!)) do
+            throwError "projection-rule-source-type {r.name} {j}"
+          sources := sources.push (if arg.getUsedConstants.contains r.name then .recur value else .derived value)
+      pure sources
 
 mutual
 /-- Inspect the complete proof DAG under one declared distinct-expression bound.
@@ -424,8 +475,10 @@ partial def directStep (n : Name) (e : Expr) : StateRefT ProjectionState Audit B
   let proof ← isProof e
   -- A data major can carry premise evidence. Types themselves are not evidence.
   if ← representationField (← inferType e) then return false
+  if (← get).origins.strong && !proof then
+    if !(← projectionCarriesProof (← inferType e)) then return false
   if let .fvar id := e.getAppFn' then
-    return ← throughProjectionOrigin n id e.getAppArgs (direct n)
+    return ← throughProjectionOrigin n id e.getAppArgs (direct n) true
   if let .proj name i receiver := e.getAppFn' then
     return ← directField n name i receiver e.getAppArgs
   match e with
@@ -445,7 +498,7 @@ partial def directStep (n : Name) (e : Expr) : StateRefT ProjectionState Audit B
       if [``Eq.refl, ``rfl, ``HEq.refl, ``Iff.refl, ``True.intro].contains h then
         return !(← get).origins.premiseOnly
       if let some (.recInfo _) := (← getEnv).find? h then
-        return ← directEliminator n e (direct n)
+        return ← directEliminator n e (direct n) false true
       if let some (.ctorInfo c) := (← getEnv).find? h then
         let mut all := true
         let mut hasEvidence := false
@@ -456,11 +509,15 @@ partial def directStep (n : Name) (e : Expr) : StateRefT ProjectionState Audit B
             let found ← direct n arg
             dataEvidence := dataEvidence || found
             if !found then all := false
+          else if (← get).origins.strong then
+            if ← projectionCarriesProof (← inferType arg) then
+              dataEvidence := dataEvidence || (← direct n arg)
           else if !proof && !(← whnfD (← inferType arg)).isSort then
             dataEvidence := dataEvidence || (← direct n arg)
         -- A nullary proof constructor can establish real computational facts
         -- (e.g. Nat.le.refl). It is not evidence projected from a premise.
-        return if proof then hasEvidence && all else dataEvidence
+        return if (← get).origins.strong then dataEvidence
+          else if proof then hasEvidence && all else dataEvidence
     -- Proof evidence has explicit theorem/opaque access. This is NOT the
     -- transparency policy for computational conversion or subject mutation.
     -- Instantiate actual universes and arguments before memoizing the query.
@@ -488,7 +545,8 @@ partial def directStep (n : Name) (e : Expr) : StateRefT ProjectionState Audit B
     type, before instantiating its motives. A motive may itself return a function;
     its binders are not constructor fields. Extra applications are preserved. -/
 partial def directEliminator (n : Name) (e : Expr)
-    (finish : Expr → StateRefT ProjectionState Audit Bool) : StateRefT ProjectionState Audit Bool := do
+    (finish : Expr → StateRefT ProjectionState Audit Bool) (assuming := false) (complete := false)
+    : StateRefT ProjectionState Audit Bool := do
   let .const head levels := e.getAppFn' | throwError "projection-recursor-head"
   let .recInfo r ← getConstInfo head | throwError "projection-recursor-kind {head}"
   let args := e.getAppArgs
@@ -510,31 +568,43 @@ partial def directEliminator (n : Name) (e : Expr)
       let arity ← forallTelescopeReducing (← inferType minor) fun fields _ => pure fields.size
       arities := arities.push arity
     pure arities
-  let mut projected := false
   unless r.rules.length == r.numMinors do throwError "projection-mutual-recursor {head}"
   let rules := r.rules.toArray
+  let question := mkAppN e.getAppFn' (args.extract 0 (r.getMajorIdx + 1))
   for i in [:r.numMinors] do
     let minor := args[r.numParams + r.numMotives + i]!
     if r.k && majorEvidence then
-      if ← direct n minor then projected := true
-    let found ← forallBoundedTelescope (← inferType minor) arities[i]! fun fields _ => do
+      if ← finish (mkAppN minor (args.extract (r.getMajorIdx + 1) args.size)).headBeta then return true
+    let (found, certified) ← forallBoundedTelescope (← inferType minor) arities[i]! fun fields _ => do
       let origins := (← get).origins
       let mut minorOrigins := origins.minorOrigins
       let mut fieldOrigins := origins.fieldOrigins
+      let mut derivedOrigins := origins.derivedOrigins
+      let mut recursiveOrigins := origins.recursiveOrigins
+      let sources ← projectionSources r levels args rules[i]! i fields
       for j in [:fields.size] do
-        if j < rules[i]!.nfields then
-          fieldOrigins := fieldOrigins.push (fields[j]!.fvarId!, rules[i]!.ctor, j, major)
-        else
-          -- IHs are derived results, not constructor fields of the premise.
-          minorOrigins := minorOrigins.push (fields[j]!.fvarId!, false)
-      modify fun s => { s with origins := { minorOrigins, fieldOrigins, premiseOnly := true } }
+        match sources[j]! with
+        | .field index => fieldOrigins := fieldOrigins.push (fields[j]!.fvarId!, rules[i]!.ctor, index, major)
+        | .derived value => derivedOrigins := derivedOrigins.push (fields[j]!.fvarId!, value)
+        | .recur value =>
+          if assuming then
+            minorOrigins := minorOrigins.push (fields[j]!.fvarId!, false)
+          else
+            recursiveOrigins := recursiveOrigins.push (fields[j]!.fvarId!, value, question)
+      modify fun s => { s with origins := { origins with minorOrigins, fieldOrigins, derivedOrigins, recursiveOrigins, premiseOnly := true } }
       try
-        finish (mkAppN (mkAppN minor fields) (args.extract (r.getMajorIdx + 1) args.size)).headBeta
+        let body := (mkAppN (mkAppN minor fields) (args.extract (r.getMajorIdx + 1) args.size)).headBeta
+        if complete && !assuming then
+          if sources.zip fields |>.any (fun (source, field) => match source with
+              | .recur _ => body.containsFVar field.fvarId!
+              | _ => false) then
+            if ← projectionIndependent n question then return (false, true)
+        return (← finish body, false)
       finally
         modify fun s => { s with origins }
-
-    projected := projected || found
-  return projected
+    if certified then return false
+    if found then return true
+  return false
 
 /-- Expose constructor heads by charged raw beta/delta/projection/iota only.
     Unlike Meta.whnf this never invents a constructor using K or structure eta.
@@ -586,13 +656,14 @@ partial def projectionHeadStep (n : Name) (e : Expr) : StateRefT ProjectionState
 /-- Resolve field origins only when the proof actually demands them. Unused
     constructor fields cannot consume the budget or contaminate other fields. -/
 partial def projectionOrigin (n : Name) (id : FVarId) : StateRefT ProjectionState Audit Bool :=
-  throughProjectionOrigin n id #[] (direct n)
+  throughProjectionOrigin n id #[] (direct n) true
 
 /-- Keep the complete remaining demand through an eliminator's local alias.
     A field's aggregate provenance cannot answer a query about one of its fields
     or about its value after application. -/
 partial def throughProjectionOrigin (n : Name) (id : FVarId) (args : Array Expr)
-    (finish : Expr → StateRefT ProjectionState Audit Bool) : StateRefT ProjectionState Audit Bool := do
+    (finish : Expr → StateRefT ProjectionState Audit Bool) (complete := false)
+    : StateRefT ProjectionState Audit Bool := do
   let origins := (← get).origins
   if let some value := origins.minorOrigins.findSomeRev? (fun (key, value) =>
       if key == id then some value else none) then return value
@@ -600,7 +671,46 @@ partial def throughProjectionOrigin (n : Name) (id : FVarId) (args : Array Expr)
       if key == id then some (ctor, i, major) else none) then
     return ← directConstructorFieldAlong n ctor i major
       (fun field => finish (mkAppN field args).headBeta) true
+  if let some value := origins.derivedOrigins.findSomeRev? (fun (key, value) =>
+      if key == id then some value else none) then
+    return ← finish (mkAppN value args).headBeta
+  if let some (value, question) := origins.recursiveOrigins.findSomeRev? (fun (key, value, question) =>
+      if key == id then some (value, question) else none) then
+    if complete then
+      if ← projectionIndependent n question then return false
+    return ← finish (mkAppN value args).headBeta
   return true
+
+/-- Check an inductive invariant, not a guessed answer for IHs. In strong mode
+    every accessible proof-carrying constructor field counts (including data
+    carriers), and function results are checked under arbitrary hypotheses.
+    Only a completed check with all recursive assumptions discharged by the
+    kernel rules can certify independence. Failures and budgets propagate. -/
+partial def projectionIndependent (n : Name) (question : Expr)
+    : StateRefT ProjectionState Audit Bool := do
+  let context ← dischargeRawContext
+  let origins := (← get).origins
+  let key := (question, context, origins)
+  let cacheable ← projectionCacheable context question origins
+  if cacheable then
+    if let some answer := (← get).independence[key]? then return answer
+  chargeProjection
+  modify fun s => { s with origins := { origins with premiseOnly := true, strong := true } }
+  let answer ← try
+      let .const head _ := question.getAppFn' | throwError "projection-independence-head"
+      let .recInfo r ← getConstInfo head | throwError "projection-independence-kind"
+      let args := question.getAppArgs
+      let some major := args[r.getMajorIdx]? | throwError "projection-independence-major"
+      -- The induction invariant must hold for arbitrary recursive inputs, not
+      -- just the original computed carrier's top-level constructor fields.
+      withLocalDeclD `projectionMajor (← inferType major) fun arbitrary => do
+        let generalized := mkAppN question.getAppFn' (args.set! r.getMajorIdx arbitrary)
+        let projected ← directEliminator n generalized (direct n) true true
+        pure (!projected)
+    finally
+      modify fun s => { s with origins }
+  if cacheable then modify fun s => { s with independence := s.independence.insert key answer }
+  return answer
 
 /-- A type capability, not a trust rule: inspect the actual constructor field
     telescopes. Recursive occurrences add no new fields; unknown types remain
@@ -636,7 +746,7 @@ partial def projectionCarriesProof (type : Expr) (seen : Array Expr := #[])
     modify fun s => { s with carrierTypes := s.carrierTypes.insert (type, context) answer }
   return answer
 
-partial def projectionMayUsePremise (n : Name) (e : Expr)
+partial def projectionMayUsePremise (_n : Name) (e : Expr)
     : StateRefT ProjectionState Audit Bool := do
   let mut needed := collectFVars {} e
   let mut i := 0
@@ -646,7 +756,11 @@ partial def projectionMayUsePremise (n : Name) (e : Expr)
     i := i + 1
     let type ← inferType (mkFVar id)
     if ← projectionCarriesProof type then
-      if ← projectionOrigin n id then return true
+      -- Aggregate non-projection of a package does not imply that each field
+      -- is independent. Only a certified strong recursive assumption may be
+      -- absent here; aliases and recursive sources remain potential inputs.
+      let absent := (← get).origins.minorOrigins.any (fun (key, value) => key == id && !value)
+      if !absent then return true
     -- A local's dependent type may itself contain premise evidence, even if
     -- normalization of its data shape discards an equality transport.
     needed := collectFVars needed type

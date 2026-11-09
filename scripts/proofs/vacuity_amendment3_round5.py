@@ -22,6 +22,7 @@ PROJECTIONS = {
     "psum-carrier": "PSum.casesOn (motive := fun _ : PSum Nat (n < n+1) => n < n+1) (if n == 0 then PSum.inl n else PSum.inr h.1) (fun _ => Nat.lt_succ_self n) (fun hp => hp)",
     "nested-exists-field": "Exists.elim " + NESTED_EXISTS + " (fun _ hp => hp.1)",
     "minor-function-application": "Exists.elim " + FUNCTION_EXISTS + " (fun _ f => f h.1)",
+    "recursive-ih-transfer": "Nat.rec (motive := fun _ => (n < n+1) → n < n+1) (fun hp => hp) (fun _ ih _ => ih h.1) n (Nat.lt_succ_self n)",
     "cast-let": "let carrier : {_k : Nat // n < n+1} := ⟨0, h.1⟩; Eq.mp rfl carrier.2",
     "iff-field": "((Iff.intro (fun _ : True => h.1) (fun _ => True.intro)).mp True.intro)",
     "exists-carrier": "Exists.elim (⟨0, h.1⟩ : ∃ _ : Nat, n < n+1) (fun _ hp => hp)",
@@ -60,7 +61,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--group", choices=["fields", "eliminators", "dependent", "all"], default="all")
     args = parser.parse_args()
-    eliminators = {"cases-bool", "cases-nat", "matcher", "nested-matcher", "mixed-minors", "recursor-function", "match-carrier", "psum-carrier", "nested-exists-field", "minor-function-application"}
+    eliminators = {"cases-bool", "cases-nat", "matcher", "nested-matcher", "mixed-minors", "recursor-function", "match-carrier", "psum-carrier", "nested-exists-field", "minor-function-application", "recursive-ih-transfer"}
     with compiled_consumer() as meta:
         for label, body in PROJECTIONS.items():
             if args.group == "dependent" or (args.group == "fields" and label in eliminators) or (args.group == "eliminators" and label not in eliminators):
@@ -71,6 +72,16 @@ def main():
             assert [r for r in output.splitlines() if r.startswith(("FAIL ", "INCOMPLETE "))] == [
                 "FAIL projection-law ConcreteSpecControl.growth "], output
         if args.group in {"fields", "all"}:
+            for kind in ["def", "opaque"]:
+                for label, domain, value, body in [
+                    ("data-projection", "{_k : Nat // n < n+1}", "⟨0, h.1⟩", "(carrierPack n h).2"),
+                    ("data-elimination", "PSum Nat (n < n+1)", "if n == 0 then PSum.inl n else PSum.inr h.1", "PSum.casesOn (motive := fun _ => n < n+1) (carrierPack n h) (fun _ => Nat.lt_succ_self n) (fun hp => hp)"),
+                ]:
+                    declaration = kind + " carrierPack (n : Nat) (h : n < n+1 ∧ True) : " + domain + " := " + value
+                    fixture = projection(body).replace("/-- Helper", declaration + "\n/-- Helper", 1)
+                    code, output = run(ROOT, "", fixture, 4096, meta_path=meta)
+                    print(f"ROUND5 {kind}-{label} exit={code}\n{output}", flush=True)
+                    assert code == 1 and [r for r in output.splitlines() if r.startswith(("FAIL ", "INCOMPLETE "))] == ["FAIL projection-law ConcreteSpecControl.growth "], output
             for label, declaration, body in [
                 ("unavailable-carrier", "axiom unavailableCarrier (n : Nat) (h : n < n+1 ∧ True) : {_k : Nat // n < n+1}", "(unavailableCarrier n h).2"),
                 ("unavailable-sum", "axiom unavailableCarrier (n : Nat) (h : n < n+1 ∧ True) : PSum Nat (n < n+1)", "PSum.casesOn (motive := fun _ => n < n+1) (unavailableCarrier n h) (fun _ => Nat.lt_succ_self n) (fun hp => hp)"),
@@ -97,6 +108,7 @@ def main():
                 "psum-independent-origin": "PSum.casesOn (motive := fun _ : PSum Nat (n < n+1) => n < n+1) (if n == 0 then PSum.inl n else PSum.inr (Nat.lt_succ_self n)) (fun _ => Nat.lt_succ_self n) (fun hp => hp)",
                 "nested-exists-independent-field": "Exists.elim " + NESTED_EXISTS + " (fun _ hp => hp.2)",
                 "minor-function-independent-argument": "Exists.elim " + FUNCTION_EXISTS + " (fun _ f => f (Nat.lt_succ_self n))",
+                "recursive-independent-base": "Nat.rec (motive := fun _ => (n < n+1) → n < n+1) (fun _ => Nat.lt_succ_self n) (fun _ ih _ => ih h.1) n (Nat.lt_succ_self n)",
             }.items():
                 fixture = projection(body)
                 if label in {"minor-independent-origin", "psum-independent-origin", "minor-function-independent-argument"}:
@@ -104,6 +116,29 @@ def main():
                 code, output = run(ROOT, "", fixture, 4096, meta_path=meta)
                 print(f"ROUND5 {label} exit={code}\n{output}", flush=True)
                 assert code == 0 and "N2 PASS" in output, output
+            tree = "inductive CarrierTree (p : Prop) : Type where\n | leaf : p → CarrierTree p\n | node : CarrierTree p → CarrierTree p → CarrierTree p\n"
+            for label, leaf, branch, expected in [
+                ("two-ih-projection", "fun hp => hp", "fun _ _ leftIH _ => leftIH", 1),
+                ("two-ih-independent", "fun _ => Nat.lt_succ_self n", "fun _ _ _ rightIH => rightIH", 0),
+            ]:
+                body = ("CarrierTree.rec (motive := fun _ => n < n+1) (" + leaf + ") (" + branch + ") "
+                        "(if n == 0 then CarrierTree.leaf (Nat.lt_succ_self n) else CarrierTree.node (CarrierTree.leaf h.1) (CarrierTree.leaf (Nat.lt_succ_self n)))")
+                fixture = projection(body).replace("/-- Helper", tree + "/-- Helper", 1)
+                code, output = run(ROOT, "", fixture, 4096, meta_path=meta)
+                print(f"ROUND5 {label} exit={code}\n{output}", flush=True)
+                assert code == expected, output
+                assert [r for r in output.splitlines() if r.startswith(("FAIL ", "INCOMPLETE "))] == (
+                    ["FAIL projection-law ConcreteSpecControl.growth "] if expected else []), output
+            for field, expected in [("1", 1), ("2", 0)]:
+                body = "((Eq.ndrec (motive := fun k => PProd Nat (k < k+1 ∧ k < k+1)) (⟨n, ⟨h.1, Nat.lt_succ_self n⟩⟩ : PProd Nat (n < n+1 ∧ n < n+1)) h.2).2)." + field
+                fixture = (projection(body).replace("n < n+1 ∧ True", "n < n+1 ∧ n = n")
+                           .replace("⟨by decide, trivial⟩", "⟨by decide, rfl⟩")
+                           .replace("2 < 2+1 ∧ True", "2 < 2+1 ∧ 2 = 2"))
+                code, output = run(ROOT, "", fixture, 4096, meta_path=meta)
+                print(f"ROUND5 cast-field-{field} exit={code}\n{output}", flush=True)
+                assert code == expected, output
+                assert [r for r in output.splitlines() if r.startswith(("FAIL ", "INCOMPLETE "))] == (
+                    ["FAIL projection-law ConcreteSpecControl.growth "] if expected else []), output
         if args.group in {"dependent", "all"}:
             code, output = run(ROOT, "", DEPENDENT, 4096, meta_path=meta)
             print(f"ROUND5 dependent exit={code}\n{output}", flush=True)

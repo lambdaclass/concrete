@@ -44,3 +44,46 @@ Instance measurement: heartbeats 33/2000000, work 302/20000; projection visits 6
 Projection source and assertions are in `vacuity_amendment3_round5.py`;
 empty-list contracts are in `fixtures/N2-Typed-Contracts.lean` and use the
 pinned single-contract harness `vacuity_typed_contracts.py`.
+
+## Additional carrier audit confirmations
+
+- Premise functions returning Subtype and nested Sigma/PLift fields initially
+  reported `projection-carrier-unavailable Subtype 1` and
+  `projection-carrier-unavailable PLift 0`. The selected-demand repair now
+  requires exact `FAIL projection-law` for both.
+- A PSum computed from a data branch and an independently proved proof branch
+  incorrectly reported `FAIL projection-law` under the whole-major provenance
+  implementation (`1e25579d3`, 115 projection visits). Per-constructor field
+  origins now distinguish it from the paired projected PSum.
+- At `625bab0d9` (consumer `4b8764ee47a87e4c30df0714198cf2a0aff6ce37`),
+  selecting `.1` from an And stored inside an Exists produced by a Bool matcher
+  incorrectly returned N2 PASS (44 projection visits, 91 heartbeats). The
+  preserved residual-demand repair rejects `.1` and keeps the independently
+  proved `.2` PASS. Function-field controls additionally check that actual
+  arguments survive the eliminator alias.
+- The existing type-constructor/cache-identity probe exposed unsupported `List`
+  traversal when replacing the isProof guard. Type-valued functions are now
+  recognized structurally. All planted cache mutations retain exact stale-cache
+  outcomes, including the expanded context/mode/origin diagnostics.
+
+The final regression script has strict assertions in every group; its earlier
+reproduction-only baseline mode is not part of the gate interface. Baseline
+per-analysis measurements are in `N2-A3-round5-baseline-measurements.tsv`.
+
+## Recursive and cast audit confirmations
+
+At `1800c4f1b` (consumer `066a20466efa77ab6f59a88931851271a3da27fb`):
+
+- A Nat recursor with an identity base function and a step applying its IH to
+  `h.1` incorrectly passed (8 projection visits). Kernel-rule recursive sources
+  now preserve that actual argument and require exact `FAIL projection-law`.
+- Selecting the independent second proof from an Eq.ndrec-cast PProd incorrectly
+  failed (22 projection visits) because the K-shaped shortcut inspected the
+  entire carrier. The shortcut now applies the residual demand. The projected
+  first field fails exactly; the independent second field passes.
+
+The universal recursive-independence invariant generalizes the input major and
+checks all proof-bearing fields and function outputs. Paired independent-base
+and two-IH controls ensure that recursion is not rejected merely because it
+uses an IH. Failed or unfinished checks cannot certify a negative answer, and
+all validation consumes the same original budget.

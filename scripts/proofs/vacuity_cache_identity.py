@@ -147,6 +147,14 @@ def witnessReverse : True := reverse b2 b1
   IO.println "KEYS projection premise-only mode distinct"
 
 #eval show MetaM Unit from do
+  withLocalDeclD `strongMode (mkConst ``Nat) fun x => do
+    let ((before, state), _) ← ((direct `absent x).run { remaining := 64 }).run {}
+    let changed := { state with origins := { state.origins with strong := true } }
+    let ((after, _), _) ← ((direct `absent x).run changed).run {}
+    unless before && !after do throwError "projection-strong-mode-collapsed"
+  IO.println "KEYS projection strong-mode distinct"
+
+#eval show MetaM Unit from do
   withLocalDeclD `sameOrigin (mkConst ``True) fun x => do
     let ((before, state), _) ← ((direct `absent x).run { remaining := 64 }).run {}
     let changed := { state with origins := { state.origins with minorOrigins := #[(x.fvarId!, false)] } }
@@ -163,6 +171,19 @@ def witnessReverse : True := reverse b2 b1
     let ((after, _), _) ← ((directConstructorField `absent ``And.intro 0 carrier).run changed).run {}
     unless before && !after do throwError "projection-field-origin-collapsed"
   IO.println "KEYS constructor-field origin distinct"
+
+#eval show MetaM Unit from do
+  withLocalDeclD `derived (mkConst ``True) fun x =>
+    withLocalDeclD `premise (mkConst ``True) fun y => do
+      let initial : ProjectionState := {
+        remaining := 64
+        origins := { premiseOnly := true, derivedOrigins := #[(x.fvarId!, mkConst ``True.intro)] }
+      }
+      let ((before, state), _) ← ((direct `absent x).run initial).run {}
+      let changed := { state with origins := { state.origins with derivedOrigins := #[(x.fvarId!, y)] } }
+      let ((after, _), _) ← ((direct `absent x).run changed).run {}
+      unless !before && after do throwError "projection-derived-source-collapsed"
+  IO.println "KEYS projection derived-source distinct"
 
 #eval show MetaM Unit from do
   let tail ← mkArrow (mkConst ``Nat) (mkSort .zero)
@@ -213,8 +234,10 @@ def controls(meta):
         'KEYS declaration-name binder-info kind distinct',
         'KEYS projection same-FVarId context distinct',
         'KEYS projection premise-only mode distinct',
+        'KEYS projection strong-mode distinct',
         'KEYS projection same-FVarId origin distinct',
         'KEYS constructor-field origin distinct',
+        'KEYS projection derived-source distinct',
         'KEYS raw-refuted-types closed-refuted-types binder-info distinct',
         'TRANSPORT bad=true exact=FAIL-instance-false-discharge',
     ]
@@ -250,7 +273,7 @@ def planted_controls():
             assert result.returncode == 1, result.stdout
             errors = [line.split('error: ', 1)[1] for line in result.stdout.splitlines() if 'error: ' in line]
             expected = {'fvar-only-visited': ['visited-context-collapsed'],
-                        'expression-only-projection': ['projection-context-collapsed', 'projection-mode-collapsed', 'projection-origin-collapsed', 'projection-field-origin-collapsed'],
+                        'expression-only-projection': ['projection-context-collapsed', 'projection-mode-collapsed', 'projection-strong-mode-collapsed', 'projection-origin-collapsed', 'projection-field-origin-collapsed', 'projection-derived-source-collapsed'],
                         'missing-result-obligation': ['transport-false-discharge-missed']}[label]
             assert errors == expected, result.stdout
         print('PASS identity planted ' + label + ': exact stale-result diagnostic', flush=True)
