@@ -539,26 +539,18 @@ def dropOverflowBir (p : Program) : Program :=
     { b with insts := insts, term := term }
   { p with blocks := blocks }
 
-def hexDigit (n : Nat) : Char :=
-  if n < 10 then Char.ofNat ('0'.toNat + n) else Char.ofNat ('a'.toNat + (n - 10))
-
-def hexUInt64 (x : UInt64) : String :=
-  String.ofList <| (List.range 16).reverse.map fun i =>
-    hexDigit ((UInt64.shiftRight x (UInt64.ofNat (i * 4))).toNat % 16)
-
-/-- Collision-resistant, manifest-valid (`[a-z0-9_]+`) seed identifier combining a lowercase
-sanitized prefix with the 64-bit FNV-1a hex digest of the raw seed string. -/
-def safeSeed (seed : String) : String :=
-  let cleaned := (seed.toList.take 24).map fun c =>
-    if c.isAlpha then c.toLower
-    else if c.isDigit || c = '_' then c
-    else '_'
-  let prefixStr := String.ofList cleaned
-  let prefixStr := if prefixStr.isEmpty then "seed" else prefixStr
-  s!"{prefixStr}_{hexUInt64 (Random.seedHash seed)}"
-
-def regressionName (leg : String) (seed : String) (index : Nat) : String :=
-  s!"regression_{leg}_{safeSeed seed}_{index}"
+/-- Shared registration runs before any worker stage, including standalone driver invocations.
+The shell registers the entire batch before launch; Lean validates and consumes that identity. -/
+def registerIdentity (dir : System.FilePath) (leg seed : String) (index : Nat) : IO String := do
+  unless ← (dir / "regression-name.txt").pathExists do
+    let result ← IO.Process.output { cmd := "python3", args := #["-I",
+      "scripts/checks/compiler/spec_diff_identity.py", dir.toString, leg, seed, toString index] }
+    unless result.exitCode == 0 do
+      throw (IO.userError result.stderr)
+  for (file, value) in [("leg", leg), ("seed", seed), ("index", toString index)] do
+    unless (← IO.FS.readFile (dir / file)) == value ++ "\n" do
+      throw (IO.userError s!"FAIL candidate registration conflict: {dir / file}")
+  return (← IO.FS.readFile (dir / "regression-name.txt")).trimAscii.toString
 
 /-- Write the one durable failure record into the candidate scratch directory before returning any
 failure. `collect_available` in `spec_diff.sh` persists every directory carrying `failure-kinds.txt`
@@ -566,11 +558,7 @@ into `SPEC_DIFF_REGRESSIONS` before scratch cleanup. -/
 def recordCandidateFailure (ctx : CandidateCtx) (kind : String) (subject : String)
     (diagnostic : String) : IO Unit := do
   IO.FS.createDirAll ctx.dir
-  IO.FS.writeFile (ctx.dir / "leg") (ctx.leg ++ "\n")
-  IO.FS.writeFile (ctx.dir / "seed") (ctx.seed ++ "\n")
-  IO.FS.writeFile (ctx.dir / "safe-seed.txt") (safeSeed ctx.seed ++ "\n")
-  IO.FS.writeFile (ctx.dir / "index") (toString ctx.index ++ "\n")
-  IO.FS.writeFile (ctx.dir / "regression-name.txt") (regressionName ctx.leg ctx.seed ctx.index ++ "\n")
+  let _ ← registerIdentity ctx.dir ctx.leg ctx.seed ctx.index
   let kindsPath := ctx.dir / "failure-kinds.txt"
   let existingKinds ← if ← kindsPath.pathExists then IO.FS.readFile kindsPath else pure ""
   unless (existingKinds.splitOn "\n").contains kind do
@@ -587,7 +575,7 @@ def recordCandidateFailure (ctx : CandidateCtx) (kind : String) (subject : Strin
 /-- An append-only, flushed stage journal survives an uncatchable worker exit. Ordinary IO
 exceptions also record candidate context; the shell coordinator owns process termination. -/
 def candidateStage (ctx : CandidateCtx) (stage : String) (action : Unit → IO α) : IO α := do
-  IO.FS.createDirAll ctx.dir
+  let _ ← registerIdentity ctx.dir ctx.leg ctx.seed ctx.index
   let append (state : String) : IO Unit := do
     let h ← IO.FS.Handle.mk (ctx.dir / "stage-journal.tsv") .append
     h.putStr s!"{stage}\t{state}\t{← IO.Process.getPID}\n"
@@ -706,29 +694,19 @@ def writeEvaluator (dir : System.FilePath) (f : Source.Function) (sites : SiteTa
 
 def writeBirRegressionMetadata (dir : System.FilePath) (seed : String) (index : Nat)
     (outcome : Outcome) (sites : SiteTable) : IO Unit := do
-  let name := regressionName "bir" seed index
+  let name ← registerIdentity dir "bir" seed index
   let expectation ← match outcome with
     | .exited c => pure s!"exit {c}"
     | .trapped s => match sites[s]? with
       | some e => pure s!"trap {trapKindName e.kind} site {s}"
       | none => pure "INVALID"
     | _ => pure "INVALID"
-  IO.FS.writeFile (dir / "leg") "bir\n"
-  IO.FS.writeFile (dir / "seed") (seed ++ "\n")
-  IO.FS.writeFile (dir / "safe-seed.txt") (safeSeed seed ++ "\n")
-  IO.FS.writeFile (dir / "index") (toString index ++ "\n")
-  IO.FS.writeFile (dir / "regression-name.txt") (name ++ "\n")
   IO.FS.writeFile (dir / "manifest-row.txt")
     s!"{name}\tbir:{name}\t{expectation}\tslice0\n"
 
 def writeSpecRegressionMetadata (dir : System.FilePath) (seed : String) (index : Nat)
     (q : ConcreteSpec.Slice0.Program) (exitCode : Nat) : IO Unit := do
-  let name := regressionName "spec" seed index
-  IO.FS.writeFile (dir / "leg") "spec\n"
-  IO.FS.writeFile (dir / "seed") (seed ++ "\n")
-  IO.FS.writeFile (dir / "safe-seed.txt") (safeSeed seed ++ "\n")
-  IO.FS.writeFile (dir / "index") (toString index ++ "\n")
-  IO.FS.writeFile (dir / "regression-name.txt") (name ++ "\n")
+  let name ← registerIdentity dir "spec" seed index
   IO.FS.writeFile (dir / "program.con") (renderSlice0 q)
   IO.FS.writeFile (dir / "manifest-row.txt")
     s!"{name}\tcon:tests/slice0/{name}.con\texit {exitCode}\tslice0\n"

@@ -96,10 +96,7 @@ PLANTED_FAIL_RC=99
 register_candidate() { # LEG SEED INDEX DIR [SCENARIO]
   local leg=$1 cand_seed=$2 index=$3 d=$4 scenario=${5:-}
   if declare -p generation_dirs >/dev/null 2>&1; then generation_dirs+=("$d"); fi
-  mkdir -p "$d"
-  printf '%s\n' "$leg" >"$d/leg"
-  printf '%s\n' "$cand_seed" >"$d/seed"
-  printf '%s\n' "$index" >"$d/index"
+  python3 -I scripts/checks/compiler/spec_diff_identity.py "$d" "$leg" "$cand_seed" "$index" || return 1
   if ! grep -qxF "$d" "$work/lifecycle-dirs" 2>/dev/null; then
     printf '%s\n' "$d" >>"$work/lifecycle-dirs"
   fi
@@ -129,9 +126,9 @@ register_generation() { # Driver argv, called before the bounded launch (and any
       esac
       for ((i=0; i<n; i++)); do
         if [ "$i" -eq "$plant_index" ]; then
-          register_candidate "$leg" "$cand_seed" "$i" "$d/p$i" "$scenario"
+          register_candidate "$leg" "$cand_seed" "$i" "$d/p$i" "$scenario" || return 1
         else
-          register_candidate "$leg" "$cand_seed" "$i" "$d/p$i"
+          register_candidate "$leg" "$cand_seed" "$i" "$d/p$i" || return 1
         fi
       done ;;
     replay|replay-spec|control-emit)
@@ -139,9 +136,9 @@ register_generation() { # Driver argv, called before the bounded launch (and any
       cand_seed=$1; index=$2; d=$3
       [ "$cmd" != replay-spec ] || leg=spec
       if [ "${5:-}" = --plant-failure ] || [ "${5:-}" = --mutate ]; then scenario=$6; fi
-      register_candidate "$leg" "$cand_seed" "$index" "$d" "$scenario" ;;
+      register_candidate "$leg" "$cand_seed" "$index" "$d" "$scenario" || return 1 ;;
     control-spec-oracle)
-      register_candidate spec control-spec-oracle 0 "$1" spec-oracle ;;
+      register_candidate spec control-spec-oracle 0 "$1" spec-oracle || return 1 ;;
     *) echo "FAIL unregistered differential driver command: $cmd" >&2; return 1 ;;
   esac
 }
@@ -398,8 +395,8 @@ check_judged() { # check_judged LEG COUNT MIN EXPECTED_TOTAL OUTCOME-GUARD REQUI
 candidate_bundle_path() { # LEG DIR: plant scenarios are separate regression identities.
   local leg=$1 d=$2 scenario=""
   if [ -f "$d/control-replay" ]; then
-    scenario=$(LC_ALL=C tr -c 'a-z0-9+_-' '_' <"$d/control-replay")
-    scenario=${scenario%_}
+    scenario=$(cat "$d/control-replay")
+    [[ "$scenario" =~ ^[a-z0-9+_-]+$ ]] || { echo 'FAIL invalid regression control identity' >&2; return 1; }
     printf '%s/controls/%s/%s/%s-%s\n' "$regressions" "$scenario" "$leg" "$(cat "$d/safe-seed.txt")" "$(cat "$d/index")"
   else
     printf '%s/%s/%s-%s\n' "$regressions" "$leg" "$(cat "$d/safe-seed.txt")" "$(cat "$d/index")"
@@ -412,31 +409,26 @@ persist_candidate_bundle() { # persist_candidate_bundle LEG CAND_SEED INDEX DIR
   if [ -f "$d/leg" ]; then leg=$(cat "$d/leg"); fi
   if [ -f "$d/seed" ]; then cand_seed=$(cat "$d/seed"); fi
   if [ -f "$d/index" ]; then index=$(cat "$d/index"); fi
-  if [ -f "$d/safe-seed.txt" ]; then
-    cand_safe_seed=$(cat "$d/safe-seed.txt")
-  else
-    cand_safe_seed=$(printf '%s' "$cand_seed" | LC_ALL=C tr '[:upper:]' '[:lower:]' | LC_ALL=C sed 's/[^a-z0-9_]/_/g' | cut -c1-24)
-    [ -n "$cand_safe_seed" ] || cand_safe_seed=seed
-    printf '%s\n' "$cand_safe_seed" >"$d/safe-seed.txt"
-  fi
-  if [ -f "$d/regression-name.txt" ]; then
-    name=$(cat "$d/regression-name.txt")
-  else
-    name="regression_${leg}_${cand_safe_seed}_${index}"
-    printf '%s\n' "$name" >"$d/regression-name.txt"
-  fi
-  printf '%s\n' "$leg" >"$d/leg"
-  printf '%s\n' "$cand_seed" >"$d/seed"
-  printf '%s\n' "$index" >"$d/index"
+  python3 -I scripts/checks/compiler/spec_diff_identity.py "$d" "$leg" "$cand_seed" "$index" || { fail=1; return 1; }
+  cand_safe_seed=$(cat "$d/safe-seed.txt")
+  name=$(cat "$d/regression-name.txt")
   replay_text=$(replay_command "$leg" "$cand_seed" "$index")
   if [ -f "$d/control-replay" ]; then
     replay_text=$(printf 'SPEC_DIFF_REPLAY=%q SPEC_DIFF_REPLAY_CONTROL=%q bash scripts/checks/compiler/spec_diff.sh' \
       "$leg:$cand_seed:$index" "$(cat "$d/control-replay")")
   fi
   printf '%s\n' "$replay_text" >"$d/replay.sh"
-  bundle=$(candidate_bundle_path "$leg" "$d")
-  rm -rf "${bundle:?}"
-  mkdir -p "$bundle"
+  bundle=$(candidate_bundle_path "$leg" "$d") || { fail=1; return 1; }
+  mkdir -p "${bundle%/*}"
+  if ! mkdir "$bundle" 2>/dev/null; then
+    if ! cmp -s "$d/bundle-owner" "$bundle/bundle-owner"; then
+      echo "FAIL regression bundle collision: $bundle" >&2
+      fail=1
+      return 1
+    fi
+  fi
+  # Only the registration that claimed this destination may update its snapshot.
+  cp "$d/bundle-owner" "$bundle/bundle-owner"
   cp -R "$d/." "$bundle/"
   printf '%s\n' "$cand_seed" >"$bundle/seed"
   printf '%s\n' "$cand_safe_seed" >"$bundle/safe-seed"
@@ -524,7 +516,7 @@ record_candidate_failure() { # record_candidate_failure LEG CAND_SEED INDEX DIR 
     fi
   fi
   : >"$d/bundle-reported"
-  persist_candidate_bundle "$leg" "$cand_seed" "$index" "$d"
+  persist_candidate_bundle "$leg" "$cand_seed" "$index" "$d" || return 1
   cand_safe_seed=$(cat "$d/safe-seed.txt")
   bundle=$(candidate_bundle_path "$leg" "$d")
   replay_text=$(cat "$bundle/replay.sh")
@@ -607,7 +599,7 @@ native_one() { # Result axes: native_failed (sticky), native_incomplete, native_
   cand_seed=$2
   index=$3
   d=$4
-  register_candidate "$leg" "$cand_seed" "$index" "$d"
+  register_candidate "$leg" "$cand_seed" "$index" "$d" || { fail=1; return 4; }
   rm -f "$d/control-verified"
   native_failed=0
   if [ -f "$d/failure-kinds.txt" ]; then native_failed=1; bad=1; fi
@@ -713,7 +705,7 @@ collect_available() {
         case "$rc" in 0) ;; 3) deadline_stopped=1 ;; *) fail=1 ;; esac
       done
       if [ -f "$d/failure-kinds.txt" ]; then
-        persist_candidate_bundle "$cand_leg" "$cand_seed" "$index" "$d"
+        persist_candidate_bundle "$cand_leg" "$cand_seed" "$index" "$d" || { fail=1; continue; }
         cand_safe_seed=$(cat "$d/safe-seed.txt")
         bundle=$(candidate_bundle_path "$cand_leg" "$d")
         replay_text=$(cat "$bundle/replay.sh")
@@ -872,7 +864,7 @@ worker_exit_command() { # MODE SCENARIO LEG SEED INDEX DIR
 
 control_worker_journal() {
   local stage mode suffix leg scenario d rc saved out log diag
-  for stage in lowering emission assembly; do
+  for stage in generation lowering emission assembly; do
     leg=bir; [ "$stage" != lowering ] || leg=spec
     for mode in batch replay; do
       for suffix in '' +timeout; do
@@ -903,6 +895,34 @@ control_worker_journal() {
       done
     done
   done
+  # Both early exits share one regression root. Neither reaches term/manifest metadata.
+  d="$work/journal-colliding-seeds"
+  rc=0
+  (
+    work="$d/work"; mkdir -p "$work"
+    regressions="$d/saved"; fail=0; deadline_stopped=0
+    trap 'finish_diff $?' EXIT
+    for cand_seed in 'Early:A' 'Early?A'; do
+      local candidate_dir="$work/early-$cand_seed"
+      register_candidate bir "$cand_seed" 0 "$candidate_dir" worker-exit-generation
+      worker_exit_command replay generation bir "$cand_seed" 0 "$candidate_dir" || :
+    done
+    exit 1
+  ) >"$d.log" 2>&1 || rc=$?
+  [ "$rc" -eq 1 ] && [ ! -e "$d/work" ] || return 1
+  local count=0 saved_seed
+  while IFS= read -r saved; do
+    saved=${saved%/failure-record.tsv}
+    saved_seed=$(cat "$saved/seed")
+    case "$saved_seed" in 'Early:A'|'Early?A') ;; *) return 1 ;; esac
+    diag="FAIL bir seed $saved_seed index 0 [generation]: unexpected worker exit (rc 7)"
+    grep -qxF "$diag" "$d.log" && grep -qxF "$diag" "$saved/diagnostics.txt" || return 1
+    [ ! -e "$saved/program.lean.txt" ] || return 1
+    verify_saved_replay "$saved" "$d/reproduced-$count" "$d/replayed-$count.log" || return $?
+    grep -qxF "$diag" "$d/replayed-$count.log" || return 1
+    count=$((count + 1))
+  done < <(find "$d/saved" -name failure-record.tsv -print)
+  [ "$count" -eq 2 ] || { echo 'control setup: early seed collision lost a bundle' >&2; return 1; }
   echo 'FAIL worker-journal: every unmarked stage exit persisted and replayed, including later timeout'
   return "$PLANTED_FAIL_RC"
 }

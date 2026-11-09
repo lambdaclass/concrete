@@ -586,13 +586,24 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
    Replay splits the numeric index from the final colon, preserving colons within the seed. Saved commands use Bash `%q` quoting; controls execute those saved commands through the production parser and check seed, leg and index, including a seed containing both a colon and a single quote. The shared watchdog's opt-in deadline never increases an attempt's requested execution budget; cleanup is independently bounded by the absolute deadline. `scripts/checks/lib/test_bounded_exec.py` runs cheap process controls for short execution budgets with longer grace, stubborn-child deadline cleanup, and unchanged behavior without deadline opt-in; the differential runs these controls before generation.
 
    The differential driver flushes an append-only per-candidate `stage-journal.tsv` before
-   initialization, lowering, emission and assembly, and records completion or an ordinary IO
+   generation, initialization, lowering, emission and assembly, and records completion or an ordinary IO
    exception with candidate context. Worker PID boundaries distinguish watchdog retries. The
    coordinator reconciles uncompleted stages on abnormal worker return immediately, and again
    on gate exit, preserving available artifacts before scratch cleanup. A timeout alone remains
    INCOMPLETE; an already recorded worker failure takes precedence over a subsequent timeout.
    The worker-journal controls require exit 7 with the exact stage diagnostic in batch and replay,
    then execute each saved bundle's replay command in a fresh shell, also with a later timeout.
+   Registration establishes the regression identity before launching any worker, through
+   `scripts/checks/compiler/spec_diff_identity.py`: the full SHA-256 of the UTF-8 seed,
+   with leg and index in the regression name and control scenario in the bundle path.
+   Lean consumes the registered identity, including for manifests and Examples entries;
+   standalone driver invocations use the same registrar before their first stage.
+   Each registration also owns its bundle with a unique token. Persistence refuses an existing
+   destination owned by another registration with `FAIL regression bundle collision: <path>`;
+   it never deletes that destination. Repeated persistence by the same registration retains
+   accumulated artifacts and failure records. Controls kill generation for both `Early:A` and
+   `Early?A` before metadata emission, require two surviving bundles in one regression root,
+   and replay each to its own exact generation failure.
 
 6a. **AArch64:** a GitHub-hosted AArch64 macOS job (`macos-15`) builds the LCB output for `aarch64-macos`, runs gates 4 and 6 there natively, and compares against Lean. LLVM-native also runs there, as a third cross-check. Gates 4 and 6 for x86-64 run on concrete-ci-2.
 7. **Certificates:** the kernel checks every acceptance and refusal certificate, with measured budgets.

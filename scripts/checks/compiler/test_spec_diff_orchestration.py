@@ -1,8 +1,12 @@
 """Cheap controls execute production orchestration with native toolchain stubs."""
+import hashlib
 import pathlib
 import subprocess
 import tempfile
 import unittest
+
+def safe(seed):
+    return 'seed_' + hashlib.sha256(seed.encode()).hexdigest()
 
 SOURCE = pathlib.Path(__file__).with_name('spec_diff.sh').read_text()
 
@@ -49,7 +53,7 @@ record_judged() {{ :; }}
                 check_fn(work, regressions)
 
     def assert_bundle(self, regressions, leg, seed, index, kind, diag_lines, artifacts=()):
-        matches = [p for p in regressions.rglob(f'{seed}-{index}') if p.parent.name == leg]
+        matches = [p for p in regressions.rglob(f'{safe(seed)}-{index}') if p.parent.name == leg]
         self.assertEqual(len(matches), 1, matches)
         bundle = matches[0]
         self.assertTrue(bundle.is_dir(), f'missing bundle {bundle}')
@@ -200,7 +204,7 @@ exit 3
                 def check(work, regressions):
                     self.assertFalse(work.exists())
                     self.assert_bundle(regressions, 'bir', 'test', 0, kind, (diag,))
-                    self.assertTrue((regressions / 'bir/test-0/control-owner').is_file())
+                    self.assertTrue((regressions / f'bir/{safe("test")}-0/control-owner').is_file())
                 plant = (f'''echo emission >"$d/failure-kinds.txt"
 printf 'emission\\tsubject\\t{diag}\\n' >"$d/failure-record.tsv"
 echo '{diag}' >"$d/diagnostics.txt"
@@ -301,7 +305,7 @@ exit "$fail"
         def check(work, regressions):
             self.assertFalse(work.exists())
             self.assert_bundle(regressions, 'bir', 'test', 0, 'native_setup', (diag,))
-            bundle = regressions / 'bir/test-0'
+            bundle = regressions / f'bir/{safe("test")}-0'
             self.assertNotIn('mismatch', (bundle / 'failure-kinds.txt').read_text().splitlines())
         self.run_shell('''
 trap 'finish_diff $?' EXIT
@@ -323,24 +327,66 @@ exit 1
         def check(work, regressions):
             self.assertFalse(work.exists())
             for scenario in ('emission', 'assembly'):
-                bundle = regressions / f'controls/{scenario}/bir/test-0'
+                bundle = regressions / f'controls/{scenario}/bir/{safe("test")}-0'
                 self.assertTrue(bundle.is_dir())
                 self.assertEqual((bundle / 'failure-kinds.txt').read_text().strip(), scenario)
                 self.assertIn(f'SPEC_DIFF_REPLAY_CONTROL={scenario}',
                               (bundle / 'replay.sh').read_text())
-                self.assertFalse((bundle / 'stale-artifact').exists())
         self.run_shell('''
 trap 'finish_diff $?' EXIT
 for scenario in emission assembly; do
  d="$work/control-$scenario"
  register_candidate bir test 0 "$d" "$scenario"
- echo test >"$d/safe-seed.txt"
- old=$(candidate_bundle_path bir "$d")
- mkdir -p "$old"; touch "$old/stale-artifact"
  record_candidate_failure bir test 0 "$d" "$scenario" stage "FAIL planted $scenario"
 done
 exit 1
 ''', 1, ('FAIL planted emission', 'FAIL planted assembly'), check)
+
+    def test_bundle_collision_refused_without_touching_original(self):
+        self.run_shell('''
+register_candidate bir test 0 "$work/first"
+record_candidate_failure bir test 0 "$work/first" generation worker_exit 'FAIL first generation'
+bundle=$(candidate_bundle_path bir "$work/first")
+cp -R "$bundle" "$work/snapshot"
+register_candidate bir test 0 "$work/second"
+rc=0
+record_candidate_failure bir test 0 "$work/second" generation worker_exit 'FAIL second generation' 2>"$work/collision.log" || rc=$?
+[ "$rc" -eq 1 ] && [ "$fail" -eq 1 ] || exit 9
+grep -qxF "FAIL regression bundle collision: $bundle" "$work/collision.log" || exit 9
+diff -r "$work/snapshot" "$bundle" || exit 9
+echo 'ok collision preserved original bundle'
+''', 0, ('FAIL first generation',
+                'ok collision preserved original bundle'),
+            lambda work, regressions: None)
+
+    def test_control_identity_is_not_sanitized(self):
+        self.run_shell('''
+register_candidate bir test 0 "$work/control" 'Early:A'
+rc=0
+candidate_bundle_path bir "$work/control" >"$work/path" 2>"$work/error" || rc=$?
+[ "$rc" -eq 1 ] && [ ! -s "$work/path" ] || exit 9
+cat "$work/error"
+''', 0, 'FAIL invalid regression control identity')
+
+    def test_early_generation_colliding_seeds_preserve_both(self):
+        seeds = ('Early:A', 'Early?A')
+        diags = tuple(f'FAIL bir seed {s} index 0 [generation]: unexpected worker exit (rc 7)'
+                      for s in seeds)
+        def check(work, regressions):
+            for seed, diag in zip(seeds, diags):
+                self.assert_bundle(regressions, 'bir', seed, 0, 'generation', (diag,))
+        self.run_shell('''
+for item in A B; do
+ d="$work/$item"
+ s='Early:A'; [ "$item" = A ] || s='Early?A'
+ register_candidate bir "$s" 0 "$d"
+ [ -s "$d/safe-seed.txt" ] && [ -s "$d/regression-name.txt" ] && [ -s "$d/bundle-owner" ] || exit 9
+ printf 'generation\\tstarted\\t123\\n' >"$d/stage-journal.tsv"
+ echo 7 >"$d/worker-result"
+done
+reconcile_worker_exit 7
+[ "$(find "$regressions" -name failure-record.tsv | wc -l)" -eq 2 ] || exit 9
+''', 0, diags, check)
 
     def test_failure_log_cannot_claim_timeout(self):
         self.run_shell('''
