@@ -178,7 +178,9 @@ def authored (n : Name) : MetaM (Option Bool) := do
     -- A generated child inherits ownership from its source-declared parent.
     let mut parent := n.getPrefix
     while !parent.isAnonymous do
-      if (← getMatcherInfo? parent).isSome || (← getMatcherInfo? (privateToUserName parent)).isSome then return some false
+      let userParent := privateToUserName parent
+      if (← getMatcherInfo? parent).isSome || (← getMatcherInfo? userParent).isSome ||
+          isAuxRecursor (← getEnv) userParent || ((← getEnv).find? userParent).any (· matches .recInfo _) then return some false
       if (← findDeclarationRangesCore? parent).isSome then return some false
       parent := parent.getPrefix
     return none
@@ -250,8 +252,8 @@ partial def direct (n : Name) (e : Expr) : StateRefT Nat Audit Bool := do
 
 /-- Follow only the supplied hypothesis proof, including opaque proof helpers.
     The visited set and shared budget bound the entire dependency traversal. -/
-partial def falseDischarge (e : Expr) : StateRefT (Nat × Std.HashSet Name) MetaM Bool := do
-  let e := cleanSpine e
+partial def falseDischarge (e : Expr) : StateRefT (Nat × Std.HashSet Expr) MetaM Bool := do
+  let e ← whnfD (cleanSpine e)
   let (fuel, visited) ← get
   if fuel == 0 then throwError "false-discharge-budget"
   set (fuel - 1, visited)
@@ -262,11 +264,13 @@ partial def falseDischarge (e : Expr) : StateRefT (Nat × Std.HashSet Name) Meta
       if matcher.numAlts == 0 then return true
     if let some (.recInfo r) := (← getEnv).find? n then
       if r.rules.isEmpty then return true
-    unless (← get).2.contains n do
-      modify fun (left, seen) => (left, seen.insert n)
+    unless (← get).2.contains e do
+      modify fun (left, seen) => (left, seen.insert e)
       if let some ci := (← getEnv).find? n then
         if let some value := ci.value? (allowOpaque := true) then
-          if ← falseDischarge value then return true
+          let applied := (mkAppN value e.getAppArgs).headBeta
+          let reduced ← whnfD applied
+          if ← falseDischarge reduced then return true
   match e with
   | .app .. =>
     for arg in e.getAppArgs do
@@ -324,9 +328,9 @@ structure InstanceCase where
 /-- Consume the complete telescope, exposing definition aliases as necessary. Proof arguments
     are hypotheses; other arguments are parameters. Mutate the statement before substituting
     the closed Instance arguments, preserving their exact values. -/
-def counterexample (law : ConstantInfo) (ic : InstanceCase) (s m : Name) : MetaM Expr := do
+def counterexample (law : ConstantInfo) (ic : InstanceCase) (s m : Name) (subjects : Array Name) : MetaM Expr := do
   let mut original := law.type.instantiateLevelParams law.levelParams ic.levels
-  let (changed, _) ← (mutate original s m).run 20000
+  let (changed, _) ← (mutate original s m subjects).run 20000
   let mut mutated := changed
   let mut hyps : Array Expr := #[]
   for arg in ic.args do
@@ -371,17 +375,10 @@ def withProtected (a b : Expr) (subjects : Array Name) (check : Expr → Expr �
 def protectedEq (a b : Expr) (subjects : Array Name) : MetaM Bool :=
   withProtected a b subjects isDefEq
 
-/-- A contract matching on an opaque operation is a conclusion, not an open case.
-    Universals exposed independently of that operation still need closed arguments. -/
-def closedTail (ty : Expr) (subjects : Array Name) : MetaM Bool := do
-  -- A literal remaining binder belongs to the law telescope, even when its
-  -- function type happens to be definitionally equal to a negation.
-  if ty.consumeMData matches .forallE .. then return false
-  withProtected ty ty subjects fun visible _ => do
-    let reduced ← whnfD visible
-    if let .forallE _ domain body _ := reduced then
-      return body.isConstOf ``False && (← isProp domain)
-    return true
+/-- Only syntactic binders belong to the declaration telescope. Unfolding a
+    closed conclusion may expose quantifiers belonging to its predicate. -/
+def closedTail (ty : Expr) (_subjects : Array Name) : MetaM Bool :=
+  pure (!(ty.consumeMData matches .forallE ..))
 
 def approval (t : Tagged) : Audit Unit := do
   let some ref := between t.doc "(approved: " ")" | fail "missing-approval" t.name; return
@@ -529,18 +526,18 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
       if !(t.doc.splitOn "Instance (").length > 1 then continue
       let law := t.law
       let key := t.key
-      let some value := t.info.value? | fail "instance-application" t.name; continue
+      let some value := t.info.value? | fail "instance-application" t.name s!"law={law} case={key}"; continue
       let value := cleanSpine value
-      let .const head levels := value.getAppFn' | fail "instance-application" t.name; continue
+      let .const head levels := value.getAppFn' | fail "instance-application" t.name s!"law={law} case={key}"; continue
       unless head == law && closed value && closed t.info.type && t.info.levelParams.isEmpty do
-        fail "instance-application" t.name; continue
+        fail "instance-application" t.name s!"law={law} case={key}"; continue
       let args := value.getAppArgs
       let lawInfo := (env.find? law).get!
       let mut ty := lawInfo.type.instantiateLevelParams lawInfo.levelParams levels
       let mut valid := true
       let mut falseHyp := false
       for arg in args do
-        ty ← whnfD ty
+        ty := ty.consumeMData
         if let .forallE _ domain body _ := ty then
           if ← isProp domain then
             let (bad, _) ← (falseDischarge arg).run (20000, {})
@@ -551,7 +548,7 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
       if let some l := tags.find? (·.name == law) then
         for st in quoted ((between l.doc "Law (subject " ").").getD "") do
           if let some n ← resolve all l.name st then protectedNames := protectedNames.push n
-      unless valid && (← closedTail ty protectedNames) && (← protectedEq ty t.info.type protectedNames) do fail "instance-application" t.name; continue
+      unless valid && (← closedTail ty protectedNames) && (← protectedEq ty t.info.type protectedNames) do fail "instance-application" t.name s!"law={law} case={key}"; continue
       if falseHyp then
         fail "instance-false-discharge" t.name
         continue
@@ -561,6 +558,9 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
       if (p.doc.splitOn "Planted (").length > 1 then
         unless instances.any (fun i => p.law == i.law && p.key == i.key) do
           fail "unpaired-planted" p.name
+          if evidence.any (fun i => i.law == p.law && i.key == p.key &&
+              (i.doc.splitOn "Instance (").length > 1) then
+            fail "planted-proposition" p.name s!"law={p.law} case={p.key} no-valid-closed-instance"
     for law in tags do
       unless (law.doc.splitOn "Law (subject ").length > 1 do continue
       unless law.info.isTheorem do fail "law-kind" law.name; continue
@@ -604,9 +604,12 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
               fail "mutant-defeq" p.name; continue
             let mt := mi.type.instantiateLevelParams mi.levelParams (si.levelParams.map Level.param)
             unless ← isDefEq si.type mt do fail "mutant-type" p.name; continue
-            let expected ← counterexample law.info ic subject mutant
+            let mut boundaries := #[]
+            for name in subjects do
+              if let some resolved ← resolve all law.name name then boundaries := boundaries.push resolved
+            let expected ← counterexample law.info ic subject mutant boundaries
             Lean.Meta.check expected
-            unless closed p.info.type && (← protectedEq p.info.type expected #[subject, mutant]) do
+            unless closed p.info.type && (← protectedEq p.info.type expected (boundaries.push mutant)) do
               fail "planted-proposition" p.name s!"law={law.name} case={ic.key}"
   let safe : Audit Unit := do
     try run

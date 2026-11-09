@@ -102,6 +102,11 @@ def controls(run, source, labels=None):
             for line, text in enumerate(lines, 1):
                 if text.startswith("example :"):
                     expected.add(("FAIL", "evidence-law-kind", f"ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:{line}»"))
+    for _, _, _, expected, _ in cases:
+        if ("FAIL", "unpaired-planted", "EXAMPLE") in expected and any(
+            code in {"instance-application", "instance-false-discharge"}
+            for status, code, name in expected):
+            expected.add(("FAIL", "planted-proposition", "EXAMPLE"))
     if labels is not None:
         cases = [case for case in cases if case[0] in labels]
     failed = 0

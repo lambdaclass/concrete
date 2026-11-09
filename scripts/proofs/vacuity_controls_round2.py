@@ -156,3 +156,7 @@ end ConcreteSpecControl
     add("rooted-name-no-local-fallback", rooted, bad("unknown-name", "ConcreteSpecControl.growth") | bad("planted-subject"))
     rooted = base.replace("Law (subject `ConcreteSpecControl.S`)", "Law (subject `_root_.ConcreteSpecControl.S`)")
     add("rooted-name-positive", rooted, set(), status=0)
+
+    universal = positive.replace("/-- Law", "def Nonzero (n : Nat) : Prop := ∀ _k : Nat, S n ≠ 0\n/-- Law", 1).replace("theorem nonzero (n : Nat) : S n ≠ 0 := Nat.succ_ne_zero n", "theorem nonzero (n : Nat) : Nonzero n := fun _ => Nat.succ_ne_zero n").replace("example : S 0 ≠ 0", "example : Nonzero 0").replace("¬ (mutant 0 ≠ 0) := by decide", "¬ (∀ _k : Nat, mutant 0 ≠ 0) := by intro h; exact h 0 rfl")
+    add("forall-alias-full-application", universal, set(), status=0)
+    add("decide-hypothesis-positive", base.replace("growth 2 rfl", "growth 2 (by decide)"), set(), status=0)
