@@ -8,6 +8,116 @@ PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `Concret
 
 namespace ConcreteSpec.Core
 
+/-- Representation lemma. Splitting the unique rendering recovers the stored components.
+(approved: PENDING). -/
+theorem SourcePath.split_render (path : SourcePath) :
+    path.render.toList.splitOn '/' = path.components := by
+  simp only [SourcePath.render, String.toList_ofList]
+  exact List.splitOn_intercalate '/' (fun cs h => (path.valid cs h).2.2.2.1) path.nonempty
+
+/-- Representation lemma. Equality of the sole rendering is equality of structured identities.
+(approved: PENDING). -/
+theorem SourcePath.render_injective (a b : SourcePath) (h : a.render = b.render) : a = b := by
+  have parts := congrArg (fun s : String => s.toList.splitOn '/') h
+  rw [a.split_render, b.split_render] at parts
+  cases a; cases b
+  cases parts
+  rfl
+
+/-- Representation lemma. The renderer has no root, traversal spelling, drive introducer or
+backslash; this follows from the component representation. (approved: PENDING). -/
+theorem SourcePath.render_safe (path : SourcePath) :
+    path.render.toList ≠ [] ∧ path.render ≠ "." ∧ path.render ≠ ".." ∧
+      path.render.toList.head? ≠ some '/' ∧
+      ¬ SourcePath.DrivePrefix path.render.toList ∧ '\\' ∉ path.render.toList := by
+  have joinSafe : ∀ parts : List (List Char), parts ≠ [] →
+      (∀ cs ∈ parts, SourcePath.ComponentOk cs) →
+      let chars := ['/'].intercalate parts
+      chars ≠ [] ∧ chars ≠ ['.'] ∧ chars ≠ ['.', '.'] ∧
+        chars.head? ≠ some '/' ∧ ¬ SourcePath.DrivePrefix chars ∧ '\\' ∉ chars := by
+    intro parts nonempty valid
+    induction parts with
+    | nil => exact False.elim (nonempty rfl)
+    | cons first rest ih =>
+      have hf := valid first (by simp)
+      rcases hf with ⟨hne, hdot, hdotdot, hslash, hback, hdrive⟩
+      have headSafe : first.head? ≠ some '/' := by
+        cases first with
+        | nil => contradiction
+        | cons c cs => simpa using (fun h => hslash (by simp [h]))
+      cases rest with
+      | nil => simpa using And.intro hne ⟨hdot, hdotdot, headSafe, hdrive, hback⟩
+      | cons next tail =>
+        have ht := ih (by simp) (fun cs h => valid cs (by simp [h]))
+        simp only [List.intercalate_cons_cons]
+        have prefixSafe : ∀ suffix : List Char,
+            first ++ '/' :: suffix ≠ [] ∧ first ++ '/' :: suffix ≠ ['.'] ∧
+              first ++ '/' :: suffix ≠ ['.', '.'] ∧
+              (first ++ '/' :: suffix).head? ≠ some '/' ∧
+              ¬ SourcePath.DrivePrefix (first ++ '/' :: suffix) := by
+          intro suffix
+          cases first with
+          | nil => contradiction
+          | cons c cs =>
+            cases cs with
+            | nil => simp_all [SourcePath.DrivePrefix]
+            | cons d ds =>
+              cases ds with
+              | nil =>
+                by_cases hd : d = ':'
+                · subst d; simp_all [SourcePath.DrivePrefix]
+                · simp_all [SourcePath.DrivePrefix]
+              | cons e es =>
+                by_cases hd : d = ':'
+                · subst d; simp_all [SourcePath.DrivePrefix]
+                · simp_all [SourcePath.DrivePrefix]
+        have hp := prefixSafe (['/'].intercalate (next :: tail))
+        have hb : '\\' ∉ first ++ '/' :: ['/'].intercalate (next :: tail) := by
+          simpa using And.intro hback ht.2.2.2.2.2
+        have full := And.intro hp.1 (And.intro hp.2.1 (And.intro hp.2.2.1
+          (And.intro hp.2.2.2.1 (And.intro hp.2.2.2.2 hb))))
+        simpa only [List.append_assoc, List.cons_append, List.nil_append] using full
+  have h := joinSafe path.components path.nonempty path.valid
+  simp only [SourcePath.render, String.toList_ofList]
+  exact ⟨h.1, (fun eq => h.2.1 (by simpa only [String.toList_ofList] using (congrArg String.toList eq).trans (by decide))),
+    (fun eq => h.2.2.1 (by simpa only [String.toList_ofList] using (congrArg String.toList eq).trans (by decide))), h.2.2.2⟩
+
+/-- Law (subject `ConcreteSpec.Core.SourcePath.parse`). Parsing the sole spelling recovers the
+same structured path, with no normalization or loss of components. -/
+theorem SourcePath.parse_render (path : SourcePath) :
+    SourcePath.parse path.render = .ok path := by
+  have safe := path.render_safe
+  unfold SourcePath.parse
+  simp only [safe.1, safe.2.2.2.1, ↓reduceIte, path.split_render]
+  rw [dite_eq_left path.valid]
+
+/-- Helper (inversion). Every admitted raw string is exactly
+the sole rendering of the returned identity; acceptance cannot silently normalize.
+(approved: PENDING). -/
+theorem SourcePath.accepted_render (raw : String) (path : SourcePath)
+    (accepted : SourcePath.parse raw = .ok path) : path.render = raw := by
+  unfold SourcePath.parse at accepted
+  dsimp only at accepted
+  split at accepted <;> try contradiction
+  split at accepted <;> try contradiction
+  split at accepted
+  · cases accepted
+    simp [SourcePath.render, List.intercalate_splitOn]
+  · contradiction
+
+/-- A parser mutant that discards all source identities. -/
+def SourcePath.refuseAll (raw : String) : Except Refusal SourcePath :=
+  .error ⟨raw, [], .empty⟩
+
+/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_render`, case `ConcreteSpec.Core.mainSourcePath`). -/
+example : SourcePath.parse mainSourcePath.render = .ok mainSourcePath :=
+  SourcePath.parse_render mainSourcePath
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.parse_render`, case `ConcreteSpec.Core.mainSourcePath`, subject `ConcreteSpec.Core.SourcePath.parse`, mutant `ConcreteSpec.Core.SourcePath.refuseAll`). -/
+example : ¬ (SourcePath.refuseAll mainSourcePath.render = .ok mainSourcePath) := by
+  intro h; cases h
+
+
 /-- Law (subject `ConcreteSpec.Core.SiteKeyTable.renumber`, `ConcreteSpec.Core.SiteKeyTable.NoDupSites`).
 **Injective renumbering preserves site-table well-formedness.** No two distinct old sites can
 become one new site, so the renamed table still has no duplicate sites. -/

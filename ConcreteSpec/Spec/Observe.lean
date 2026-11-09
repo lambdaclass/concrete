@@ -113,7 +113,7 @@ abbrev InfiniteTrace (S : EventSignature) := Nat → Event S
 abbrev SiteTable := AList SiteId Span
 
 /-- Source files by their project-relative paths, used to validate stored diagnostic coordinates. -/
-abbrev SourceTable := AList String SourceText
+abbrev SourceTable := AList SourcePath SourceText
 
 /-- A well-formed site table gives every resolved site a project-relative, forward-slash path and
 checks its range, line and byte column against that path's actual source bytes. Elaboration's
@@ -125,7 +125,7 @@ def SiteTable.Valid (sources : SourceTable) (sites : SiteTable) : Prop :=
 /-- The character form of the decided trap line (OD101, Q7.10, runtime decision 2026-11-06).
 Keeping the append structure explicit also makes the exact delimiter bytes auditable. -/
 def trapLineChars (kind : TrapKind) (site : SiteId) (sp : Span) : List Char :=
-  "concrete: trap: ".toList ++ kind.name.toList ++ " at ".toList ++ sp.path.toList ++
+  "concrete: trap: ".toList ++ kind.name.toList ++ " at ".toList ++ sp.path.render.toList ++
     ":".toList ++ (toString sp.line).toList ++ ":".toList ++ (toString sp.col).toList ++
     " (site ".toList ++ (toString site.id).toList ++ ")".toList
 
@@ -402,7 +402,7 @@ example : ¬ SameObservation (S := signature) (.infinite (fun _ => Step.silent))
   simp [SameObservation]
 
 def site : SiteId := ⟨7⟩
-def sp : Span := ⟨"src/main.con", 40, 50, by decide, 3, 9, by decide, by decide⟩
+def sp : Span := ⟨mainSourcePath, 40, 50, by decide, 3, 9, by decide, by decide⟩
 def sites : SiteTable := [(site, sp)]
 
 /-- The actual bytes behind the demo path and a span whose stored coordinates agree with them. -/
@@ -443,7 +443,7 @@ example : (Terminal.exited 134).status = 134 ∧ Terminal.exited 134 ≠
 example : byteColumn "a\té" = 5 := by decide
 
 example : Span.HasByteColumn
-    (Span.mk "src/main.con" 4 4 (by decide) 1 5 (by decide) (by decide)) "a\té" := rfl
+    (Span.mk mainSourcePath 4 4 (by decide) 1 5 (by decide) (by decide)) "a\té" := rfl
 
 /-- Refusing result binding through lifecycle instrumentation; all other demo operations are
 unchanged. -/
