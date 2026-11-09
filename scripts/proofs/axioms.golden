@@ -1258,19 +1258,6 @@ ConcreteSpec.Core.Generative.allocations_have_live_allocator_of_wf
 ConcreteSpec.Core.Generative.consume.eq_1	
 ConcreteSpec.Core.Generative.consume_preserves	propext
 ConcreteSpec.Core.Generative.consume_progress	Quot.sound propext
-ConcreteSpec.Core.Generative.decidableBAllSafe._proof_1	
-ConcreteSpec.Core.Generative.decidableBAllSafe._proof_2	
-ConcreteSpec.Core.Generative.decidableBAllSafe._proof_3	
-ConcreteSpec.Core.Generative.decidableBAllSafe._proof_4	
-ConcreteSpec.Core.Generative.decidableBExSafe._proof_1	
-ConcreteSpec.Core.Generative.decidableBExSafe._proof_2	
-ConcreteSpec.Core.Generative.decidableBExSafe._proof_3	
-ConcreteSpec.Core.Generative.decidableBExSafe._proof_4	
-ConcreteSpec.Core.Generative.decidableMemSafe._proof_1	
-ConcreteSpec.Core.Generative.decidableMemSafe._proof_2	
-ConcreteSpec.Core.Generative.decidableMemSafe._proof_3	
-ConcreteSpec.Core.Generative.decidablePairwiseSafe._proof_1	
-ConcreteSpec.Core.Generative.decidablePairwiseSafe._proof_2	
 ConcreteSpec.Core.Generative.depend_preserves	Quot.sound propext
 ConcreteSpec.Core.Generative.depend_preserves._simp_1_1	propext
 ConcreteSpec.Core.Generative.depend_progress	Quot.sound propext
@@ -1992,24 +1979,6 @@ ConcreteSpec.Core.Own.callLife_erasure	Quot.sound propext
 ConcreteSpec.Core.Own.callLife_erasure_result	Quot.sound propext
 ConcreteSpec.Core.Own.callLife_preserves	Quot.sound propext
 ConcreteSpec.Core.Own.callSnapshot.eq_1	propext
-ConcreteSpec.Core.Own.decidableBAllSafe._proof_1	
-ConcreteSpec.Core.Own.decidableBAllSafe._proof_2	
-ConcreteSpec.Core.Own.decidableBAllSafe._proof_3	
-ConcreteSpec.Core.Own.decidableBAllSafe._proof_4	
-ConcreteSpec.Core.Own.decidableBExSafe._proof_1	
-ConcreteSpec.Core.Own.decidableBExSafe._proof_2	
-ConcreteSpec.Core.Own.decidableBExSafe._proof_3	
-ConcreteSpec.Core.Own.decidableBExSafe._proof_4	
-ConcreteSpec.Core.Own.decidableIsPrefixSafe._proof_1	
-ConcreteSpec.Core.Own.decidableIsPrefixSafe._proof_2	
-ConcreteSpec.Core.Own.decidableIsPrefixSafe._proof_3	
-ConcreteSpec.Core.Own.decidableIsPrefixSafe._proof_4	
-ConcreteSpec.Core.Own.decidableIsPrefixSafe._proof_5	
-ConcreteSpec.Core.Own.decidableMemSafe._proof_1	
-ConcreteSpec.Core.Own.decidableMemSafe._proof_2	
-ConcreteSpec.Core.Own.decidableMemSafe._proof_3	
-ConcreteSpec.Core.Own.decidablePairwiseSafe._proof_1	
-ConcreteSpec.Core.Own.decidablePairwiseSafe._proof_2	
 ConcreteSpec.Core.Own.defer_keeps_store	Quot.sound propext
 ConcreteSpec.Core.Own.defer_keeps_store_result	Quot.sound propext
 ConcreteSpec.Core.Own.deferredStep.eq_1	propext
@@ -2126,9 +2095,6 @@ ConcreteSpec.Core.Own.instDecidableEqStore.decEq._proof_3
 ConcreteSpec.Core.Own.instDecidableParentValid._proof_1	
 ConcreteSpec.Core.Own.instDecidableParentValid._proof_2	
 ConcreteSpec.Core.Own.instDecidableParentValid._proof_3	
-ConcreteSpec.Core.Own.instDecidableParentValid_1._proof_1	
-ConcreteSpec.Core.Own.instDecidableParentValid_1._proof_2	
-ConcreteSpec.Core.Own.instDecidableParentValid_1._proof_3	
 ConcreteSpec.Core.Own.instDecidableResultSatisfies._proof_1	
 ConcreteSpec.Core.Own.instDecidableResultSatisfies._proof_2	
 ConcreteSpec.Core.Own.instDecidableResultSatisfies._proof_3	
@@ -3651,11 +3617,11 @@ _private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.Own.Examples.eval.match_6.e
 _private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.Own.Examples.eval.match_6.eq_6	
 _private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.Own.Examples.eval.match_6.eq_7	
 _private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.Own.Examples.eval.match_6.eq_8	
-_private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.Own.ExecErasureWitnesses.acceptedMove_checkerAccepted_inv	propext
-_private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.Own.ExecErasureWitnesses.acceptedStuck_checkerAccepted_inv	propext
-_private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMove_checkerAccepted_inv	propext
+_private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.Own.ExecErasureWitnesses.acceptedMove_checkerAccepted_inv	Quot.sound propext
+_private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.Own.ExecErasureWitnesses.acceptedStuck_checkerAccepted_inv	Quot.sound propext
+_private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMove_checkerAccepted_inv	Quot.sound propext
 _private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.Own.ExecErasureWitnesses.move_not_checkerAccepted_inv	propext
-_private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuck_checkerAccepted_inv	propext
+_private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuck_checkerAccepted_inv	Quot.sound propext
 _private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.Own.ExecErasureWitnesses.step_det_next_inv	propext
 _private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.Own.ExecErasureWitnesses.step_det_none_inv	propext
 _private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.Own.ExecErasureWitnesses.traceSteps	propext
