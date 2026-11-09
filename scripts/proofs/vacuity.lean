@@ -208,8 +208,8 @@ def cleanSpine : Expr → Expr
   | .app f a => mkApp (cleanSpine f) a
   | e => e
 
-/-- Only the proof head and constructor fields are inspected. Each normalization spends a
-    separate explicit unit; the Meta heartbeat additionally bounds whnfR itself. -/
+/-- Inspect the proof head, recursor branches and constructor proof fields. One shared
+    counter bounds traversal and every raw definition unfolding; heartbeats bound meta work. -/
 partial def direct (n : Name) (e : Expr) : StateRefT Nat Audit Bool := do
   let fuel ← get
   if fuel == 0 then emit "INCOMPLETE" "projection-budget" n; return false
@@ -416,7 +416,7 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
       if scope != "" && !module.any scopes.contains && !(toString n).startsWith "ConcreteSpecControl." then continue
       let doc := (← findDocString? env n).getD ""
       let isExample := ((toString n).splitOn "⟪example⟫").length > 1
-      if ci.isTheorem || (!isExample && (ci matches .defnInfo _) && (← isProof (mkConst n (ci.levelParams.map Level.param)))) then
+      if ci.isTheorem || (!isExample && (ci.value? (allowOpaque := true)).isSome && (← isProof (mkConst n (ci.levelParams.map Level.param)))) then
         match ← authored n with
         | none => emit "INCOMPLETE" "missing-provenance" n
         | some false =>

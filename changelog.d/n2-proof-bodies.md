@@ -1,0 +1,1 @@
+N2 (R-0219): classify every authored declaration carrying a proof body, including opaque proofs, so changing the declaration command cannot bypass the proof-definition classification check. Axioms and constructors retain their separate kinds.

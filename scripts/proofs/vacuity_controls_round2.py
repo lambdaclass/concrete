@@ -140,3 +140,6 @@ end ConcreteSpecControl
     add("ambiguous-open", ambiguous, bad("ambiguous-name", "Other.marker"))
     nested = base + "open ConcreteSpecControl in\nopen Nat in\n/-- Helper (computation). References `S` and `succ` in nested opens (approved: independent:r2). -/\ntheorem Other.marker : True := trivial\n"
     add("nested-open-in", nested, set(), status=0)
+
+    add("unclassified-opaque", extra("", "opaque proofOpaque : True := trivial"), bad("classification-count", "ConcreteSpecControl.proofOpaque"))
+    add("opaque-helper-positive", extra("/-- Helper (computation). Opaque support proof (approved: independent:r2). -/", "opaque proofOpaque : True := trivial"), set(), status=0)

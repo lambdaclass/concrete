@@ -65,8 +65,9 @@ Obligation headers validate slice and roadmap-row syntax. Every selected module
 must contribute authored classified content, including Obligation-only modules.
 Unscoped audits reject source modules outside the import closure. Missing source
 provenance is INCOMPLETE; matcher/equation metadata and source-parent ranges identify
-generated children without suffix exclusions. Authored proof-valued definitions
-must be classified as well as theorems.
+generated children without suffix exclusions. Authored declarations carrying proof bodies, including `def` and `opaque` proofs,
+must be classified as well as theorems. Axioms and data constructors are handled
+by their own kinds and do not acquire proof-body classifications.
 
 Approval references must be nonempty and resolved (`PENDING` fails). The final
 carrier is `(approved: review reference)`; it does not require extra identity tags.
