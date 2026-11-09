@@ -11,6 +11,11 @@
 #      removed or renamed, or one that starts or stops using an axiom, changes the golden in the same
 #      commit, where review sees it. `--update` rewrites it from the build.
 #
+# DESIGN ONLY: README.md in this directory specifies the proposed explicit-baseline helper
+# comparison. It is not implemented or enabled here; G above remains the executable contract.
+# Lean 4.34.1 lacks persistent origin/parent metadata for general _proof_/_simp_ helpers;
+# see the design's blocking question before implementation.
+#
 # NEGATIVE CONTROLS run the same code on bad inputs and require the failure: an axiom declared and
 # used by a control theorem fails A naming it; new theorems, a private one included, differ from the
 # golden; a golden missing a theorem, carrying an extra one, or
