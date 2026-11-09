@@ -181,14 +181,18 @@ theorem exec_contained {P : Prog} (hP : ∀ f ∈ P, FnOk P f) :
   intro n f ss hss ρ env gty henv
   exact List.all_eq_true.mpr (fun e he => decide_eq_true (contain n f ss hss ρ env gty henv e he))
 
+/-- Every main event uses a launch grant of the right kind and a declared capability. -/
+def MainTraceSafe (m : Fn) (launch : List Nat) (gty : Nat → GrantTy) (tr : Trace) : Prop :=
+  tr.events.all (fun e => decide (e.grant ∈ launch ∧ gty e.grant = e.op.grant ∧
+    ∀ c ∈ e.op.caps, c ∈ m.perms.caps)) = true
+
 /-- Law (subject `ConcreteSpec.Authority.runMain`). **Authority containment.** In a permitted program, every event of a run of main, whether
 or not the run finishes, is an operation on one of the grants the launcher minted for main's
 parameters, of the operation's grant type, and every capability the operation needs is one that
 main declares. -/
 theorem authority_contained {P : Prog} (hP : ProgOk P) {m : Fn} (hm : P.find "main" = some m)
     {gty : Nat → GrantTy} {launch : List Nat} (hl : launch.map gty = m.grants) (fuel : Nat) :
-    (runMain P fuel launch).events.all (fun e => decide (e.grant ∈ launch ∧
-      gty e.grant = e.op.grant ∧ ∀ c ∈ e.op.caps, c ∈ m.perms.caps)) = true := by
+    MainTraceSafe m launch gty (runMain P fuel launch) := by
   have contain : ∀ e ∈ (runMain P fuel launch).events,
       e.grant ∈ launch ∧ gty e.grant = e.op.grant ∧ ∀ c ∈ e.op.caps, c ∈ m.perms.caps := by
     obtain ⟨_, hall, m', hm', h0⟩ := hP
@@ -256,10 +260,39 @@ example := @authority_contained [mainFn] (by decide) mainFn rfl (fun _ => .stdou
 /-- Planted (law `ConcreteSpec.Authority.authority_contained`, case `stdout`, subject `ConcreteSpec.Authority.runMain`, mutant `ConcreteSpec.Authority.Evidence.forgedMain`). -/
 example : ProgOk [mainFn] ∧ Prog.find [mainFn] "main" = some mainFn ∧
     [7].map (fun _ => GrantTy.stdout) = mainFn.grants ∧
-    ¬ ((forgedMain [mainFn] 2 [7]).events.all (fun e => decide (e.grant ∈ [7] ∧
-      (fun _ => GrantTy.stdout) e.grant = e.op.grant ∧ ∀ c ∈ e.op.caps, c ∈ mainFn.perms.caps)) = true) := by
+    ¬ MainTraceSafe mainFn [7] (fun _ => .stdout) (forgedMain [mainFn] 2 [7]) := by
   refine ⟨by decide, rfl, rfl, ?_⟩
+  unfold MainTraceSafe
   decide
+
+/-- The forged event keeps the bound grant but violates both its kind and the permissions. -/
+def unpermittedExec : Prog → Nat → List Nat → List Stmt → Trace :=
+  fun _ _ _ _ => ⟨[⟨.openDir, 7⟩], true⟩
+def unpermittedMain : Prog → Nat → List Nat → Trace :=
+  fun _ _ _ => ⟨[⟨.openDir, 7⟩], true⟩
+
+/-- Instance (law `ConcreteSpec.Authority.exec_contained`, case `polymorphicCalls`). -/
+example := @exec_contained prog (by decide) 4 ConcreteSpec.Authority.mainFn
+  ConcreteSpec.Authority.mainFn.body (by decide) (fun _ => []) [7] (fun _ => .stdout) rfl
+
+/-- Planted (law `ConcreteSpec.Authority.exec_contained`, case `polymorphicCalls`, subject `ConcreteSpec.Authority.exec`, mutant `ConcreteSpec.Authority.Evidence.unpermittedExec`). -/
+example : (∀ f ∈ prog, FnOk prog f) ∧
+    (∀ s ∈ ConcreteSpec.Authority.mainFn.body, StmtOk prog ConcreteSpec.Authority.mainFn s) ∧
+    [7].map (fun _ => GrantTy.stdout) = ConcreteSpec.Authority.mainFn.grants ∧
+    ¬ TraceSafe ConcreteSpec.Authority.mainFn (fun _ => []) [7] (fun _ => .stdout)
+      (unpermittedExec prog 4 [7] ConcreteSpec.Authority.mainFn.body) := by
+  exact ⟨by decide, by decide, rfl, by unfold TraceSafe; decide⟩
+
+/-- Instance (law `ConcreteSpec.Authority.authority_contained`, case `polymorphicCalls`). -/
+example := @authority_contained prog (by decide) ConcreteSpec.Authority.mainFn rfl
+  (fun _ => .stdout) [7] rfl 4
+
+/-- Planted (law `ConcreteSpec.Authority.authority_contained`, case `polymorphicCalls`, subject `ConcreteSpec.Authority.runMain`, mutant `ConcreteSpec.Authority.Evidence.unpermittedMain`). -/
+example : ProgOk prog ∧ Prog.find prog "main" = some ConcreteSpec.Authority.mainFn ∧
+    [7].map (fun _ => GrantTy.stdout) = ConcreteSpec.Authority.mainFn.grants ∧
+    ¬ MainTraceSafe ConcreteSpec.Authority.mainFn [7] (fun _ => .stdout)
+      (unpermittedMain prog 4 [7]) := by
+  exact ⟨by decide, rfl, rfl, by unfold MainTraceSafe; decide⟩
 
 end Evidence
 

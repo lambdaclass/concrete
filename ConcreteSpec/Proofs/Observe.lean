@@ -71,7 +71,7 @@ end ConcreteSpec
 namespace ConcreteSpec.Observe
 open ConcreteSpec
 
-/-- Law (subject `ConcreteSpec.Observe.observe`). **What a checked program shows its parent.** With any fuel, the run of a checked slice-1
+/-- Law (subject `ConcreteSpec.Observe.observe`, `ConcreteSpec.run`). **What a checked program shows its parent.** With any fuel, the run of a checked slice-1
 program either has not ended yet, or the parent observes an exit with the unsigned-byte code main
 returned, or a trap (status 134 and the trap's message). It is never stuck. -/
 theorem checked_observation {p : Program} (h : Checked p) (n : Nat) :
@@ -88,7 +88,7 @@ theorem checked_observation {p : Program} (h : Checked p) (n : Nat) :
   | trap k => exact .inr (.inr ⟨k, by simp [observe]⟩)
   | stuck w => exact absurd ho (checked_never_stuck h n w)
 
-/-- Law (subject `ConcreteSpec.Observe.observe`). With enough fuel (one unit per statement and one for return), a checked program's run ends,
+/-- Law (subject `ConcreteSpec.Observe.observe`, `ConcreteSpec.run`, `ConcreteSpec.Observe.Observation.status`). With enough fuel (one unit per statement and one for return), a checked program's run ends,
 and the parent observes a status below 256 that is the returned code, or 134 for a trap. -/
 theorem checked_observable {p : Program} (h : Checked p) :
     ∃ obs, observe true (run p (p.body.length + 1)) = some obs ∧ obs.status < 256 := by
@@ -127,6 +127,25 @@ example : ∃ obs, observe true (run literal (literal.body.length + 1)) = some o
 example : Checked literal ∧ ¬ (∃ obs,
     noObservation true (run literal (literal.body.length + 1)) = some obs ∧ obs.status < 256) :=
   ⟨⟨by decide, .ret (.int (by decide)) (.atom .int) (by decide)⟩, by simp [noObservation]⟩
+
+def stuckRun : Program → Nat → Outcome := fun _ _ => .stuck .movedRead
+def overflowStatus : Observation → Nat := fun _ => 300
+
+/-- Planted (law `ConcreteSpec.Observe.checked_observation`, case `literal`, subject `ConcreteSpec.run`, mutant `ConcreteSpec.Observe.CheckedEvidence.stuckRun`). -/
+example : Checked literal ∧ ¬ (stuckRun literal 1 = .outOfFuel ∨
+    (∃ c, c < 256 ∧ observe true (stuckRun literal 1) = some (.exited c)) ∨
+    ∃ k, observe true (stuckRun literal 1) = some (.trapped k)) :=
+  ⟨⟨by decide, .ret (.int (by decide)) (.atom .int) (by decide)⟩, by simp [stuckRun, observe]⟩
+
+/-- Planted (law `ConcreteSpec.Observe.checked_observable`, case `literal`, subject `ConcreteSpec.run`, mutant `ConcreteSpec.Observe.CheckedEvidence.stuckRun`). -/
+example : Checked literal ∧ ¬ (∃ obs,
+    observe true (stuckRun literal (literal.body.length + 1)) = some obs ∧ obs.status < 256) :=
+  ⟨⟨by decide, .ret (.int (by decide)) (.atom .int) (by decide)⟩, by simp [stuckRun, observe]⟩
+
+/-- Planted (law `ConcreteSpec.Observe.checked_observable`, case `literal`, subject `ConcreteSpec.Observe.Observation.status`, mutant `ConcreteSpec.Observe.CheckedEvidence.overflowStatus`). -/
+example : Checked literal ∧ ¬ (∃ obs,
+    observe true (run literal (literal.body.length + 1)) = some obs ∧ overflowStatus obs < 256) :=
+  ⟨⟨by decide, .ret (.int (by decide)) (.atom .int) (by decide)⟩, by simp [overflowStatus]⟩
 
 end CheckedEvidence
 
