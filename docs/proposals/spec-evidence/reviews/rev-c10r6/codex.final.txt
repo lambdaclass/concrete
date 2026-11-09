@@ -1,0 +1,98 @@
+CHANGES. The C1 well-formedness repair is substantive, and the formerly unconditional failure cases have been strengthened. Three contract gaps and one evidence-tag defect remain.
+
+This was a source-only review of `REVIEW.diff` and the current files. I modified nothing, ran no git commands, used no network, and ran no builds or gates. Proof elaboration remains the coordinator’s check.
+
+1. **ConcreteSpec/Spec/Frame.lean:823 — major — REAL DEFECT: launcher correctness loses the requested root and result.**
+
+   `ToyLaunchCorrect` receives only `reserved`. In the successful branch, it checks the artifact and result supplied by the launcher itself. Consequently, the mutant
+
+   ```lean
+   fun root reserved result => toyLaunch (root + 1) reserved (result + 1)
+   ```
+
+   still satisfies this correctness predicate for every input. It launches the wrong root and returns the wrong result, while supplying internally consistent closure, entry and exit data. The existing exit mutant changes only the observation, so it misses this weakness.
+
+   **Concrete fix:** parameterize `ToyLaunchCorrect` by the requested root and result. Require the returned artifact’s root and returned result to equal those inputs, alongside `Launcher.Run`. Add separate planted wrong-root and wrong-result executions.
+
+2. **ConcreteSpec/Proofs/Frame.lean:1176 — major — REAL DEFECT: the advertised in-frame spilling property is absent from the ABI contract.**
+
+   The revised instructions actually spill inside the reserved frame. However, `toyCall_conforms` proves only final-state `Signature.Call` properties. Those properties allow arbitrary writes at or above the caller’s initial stack pointer.
+
+   Replacing the private `.slot 7 99` with `.slot 0 99` writes at `base.stackPointer + 8`, just outside the reserved interval, while preserving every property in the theorem. Likewise, a body can temporarily reserve substantially more than `toySignature.stackBound`, release it, and satisfy the same theorem.
+
+   `stackSamples_bounded` concerns the separate `StackCode` language; there is no correspondence connecting its samples to `runToy`.
+
+   **Concrete fix:** give toy instruction execution an operational trace of stack depths and accessed addresses. Prove that accesses stay within the active allocation and that peak depth respects the signature bound. Connect any `StackCode` abstraction to those actual executions. Plant both an out-of-frame spill and a temporary over-budget reservation. This toy-level connection can be proved now; native code generation is not required.
+
+3. **ConcreteSpec/Spec/Frame.lean:208 — major — REAL DEFECT: an effect executor can authorize its own corruption by enlarging its returned footprint.**
+
+   `EffectResult` checks preservation against the footprint returned by the operation under review. It never establishes that this footprint is the command’s permitted footprint.
+
+   For the closed byte-store fixture, a mutant can perform the existing liveness corruption and add block `0` to the returned metadata permissions. The store remains defined and the enlarged footprint permits that corruption, so `EffectResult` accepts it. The existing `corruptEffect` mutant preserves the original footprint and therefore does not expose this weakness.
+
+   **Concrete fix:** derive command permissions independently from the pre-state and command, with an independently specified allocation identity where necessary. Require the returned footprint to equal those permissions, or establish an appropriate inclusion restricting it to them. Add a mutant that corrupts metadata and enlarges its reported permissions.
+
+4. **ConcreteSpec/Proofs/Frame.lean:1551, :1608, :1626 — minor — REAL DEFECT: three planted mutants do not have their subject’s type.**
+
+   The final convention explicitly requires identical subject and mutant types, including implicit arguments.
+
+   - `rejectingKeptChecker` omits `[DecidableEq F] [DecidableEq H]` present on `checkKeptPair`.
+   - `untrackedKeptTransfer` and `droppingKeptTransfer` omit `[DecidableEq H]` present on `transferKept`.
+
+   Their concrete examples express useful counterexamples, but these tags fail the stipulated substitution convention.
+
+   **Concrete fix:** retain the subjects’ complete implicit and instance parameter lists on these mutant definitions, even when unused.
+
+The round-5 fixes are otherwise real:
+
+- `C1EffectImplementation` now ranges over reachable transitions with well-formed memory. Well-formedness is preserved and threaded through execution.
+- `storingImplementation` and `storingExplicitCall` supply a full closed application of `c1_call_frame`; the former disconnected fuel-based witness is gone.
+- Hybrid writes participate in executable effects and their proofs.
+- Layout now rounds actual byte sizes and proves both coverage and alignment.
+- Retention rejects untracked handles; its correctness statement checks refusal completeness and endpoint exclusivity.
+- Launcher correctness covers both admission and refusal.
+- `C1CallContract` and the obsolete projection wrappers were removed.
+- The toy machines execute instructions independently of their specification predicates. The remaining issue is contract strength, as described above.
+
+The following covers **every declaration tagged Law in C10**. “Pass” means the inspected instance is closed, the planted example preserves the stated premises, and the proof requires operational or mathematical reasoning rather than merely returning its premise.
+
+| Law | Vacuity verdict and witnesses |
+|---|---|
+| `alloc_fresh_disjoint` | **Pass.** `fresh_block` allocates a nonempty fresh block beside an existing block; `aliasingFullBlock` creates overlap. |
+| `caller_restoration` | **Pass.** `explicit_return` has a saved caller local and destination binding; `dropCallerBindDst` loses the saved local. Entry and final return steps are evaluated. |
+| `runEffect_frame` | **Non-vacuous, weakened contract.** `byte_store` performs a real modification; `corruptEffect` and `droppingEffect` fail. Finding 3 identifies an additional corrupt executor that passes. |
+| `c4_effects_frame` | **Pass.** `store_then_set` performs two distinct effects; `leftOnlyUnion` omits the second permission and fails. |
+| `c1_call_frame` | **Pass.** `storing_callee` closes the well-formedness, implementation and completed-call premises; `droppingBodyUnion` fails on its modified byte. |
+| `layout_aligned` | **Pass.** `[3,6]` at alignment `8` requires rounding; unrounded and truncating calculators fail. Positivity supports the coverage proof. |
+| `stackSamples_bounded` | **Pass within `StackCode`.** `nested_call` reaches depth `48`; `unnestedStackBound` reports only the outer frame and fails. This does not establish the missing toy-machine correspondence. |
+| `toyCall_conforms` | **Non-vacuous, incomplete advertised contract.** `spill` has populated registers and caller stack; saved-register, caller-slot, pointer and result mutants fail. Finding 2 covers missing intermediate access and peak-stack properties. |
+| `toyCallSeq_conforms` | **Pass for its stated preservation contract.** `two_calls` composes actual bodies; saved-register and undeclared-register mutants fail. It inherits the stack-access limitation above. |
+| `checkKeptPair_sound` | **Non-vacuous; one invalid mutant tag.** `paired` fully applies the law; aliased endpoints fail. Constant rejection also fails semantically, but its mutant type needs correction under finding 4. |
+| `transferKept_sound` | **Non-vacuous; two invalid mutant tags.** `completion` and `untracked_handle` are closed applications; wrong endpoint and wrong returned state fail. Untracked acceptance and constant rejection counterexamples need the type corrections in finding 4. |
+| `toyLaunch_conforms` | **Non-vacuous, weakened contract.** `dependency_chain` and `under_reserved` are closed applications. Wrong observation, over/under-retention, unconditional refusal and inadequate admission fail. Wrong root/result remain accepted under finding 1. |
+
+I found no tagged Law proved solely by a returned hypothesis, record projection, or reflexivity. The examples’ `rfl` proofs establish concrete execution equations; they do not discharge an assumed frame or ABI postcondition. The checker’s runtime comparisons now support a sound-and-complete statement rather than an acceptance-only tautology.
+
+For **every `approved: PENDING` exemption**, my source-review decision is **approve as a supporting Helper**, with these individual declarations grouped by their shared reason:
+
+| Reason for approval | Declarations |
+|---|---|
+| Elementary relation reasoning used by execution proofs | `preserves_refl`, `byteOutside_union`, `blockOutside_union`, `placeOutside_union`, `blockOutside_block`, `preserves_seq`, `preserves_covers`, `preserves_trans`, `covers_of_or` |
+| Primitive operational cases integrated into the executable framing proofs | `store_frame`, `free_frame`, `expose_frame`, `alloc_frame`, `set_frame`, `write_structured_frame`, `write_materialized_frame`, `rawWrite_frame` |
+| Closed fixture or execution evidence, without assumed postconditions | `metadataStoreWellFormed`, `c1ExplicitCall`, `metadataStoreExecution`, `metadataSetExecution`, `storingImplementation`, `storingExplicitCall` |
+| C1 operational computation, inversion or reachability induction | `step_call_saves_caller`, `step_return_restores_caller`, `c1Call_restores_caller`, `storing_step_inv`, `storing_steps_reachable` |
+| Structural execution proofs supporting the tagged framing laws | `c4Execution_frame`, `c4Execution_wellFormed`, `c1_steps_frame`, `c1_call_frame_of_implementation` |
+| Supporting stack/ABI calculations and execution proofs | `stackCode_conforms`, `toySignature_wellFormed`, `toyBodyAt_preserved`, `toyTransition_conforms` |
+| Observation composition used by the sequential executable law | `machine_preserved_trans`, `machine_registerFrame_union` |
+| Specification inversion used within the executable retention/checker laws | `extern_result_rejects_unrelated_retention`, `keptPair_results_valid`, `kept_only_paired_completion`, `submit_produces_paired_receipt`, `kept_receipt_rejects_submission`, `kept_receipt_rejects_other_extern` |
+| Checker branch inversion and completeness | `checkKeptPair_result`, `checkKeptPair_complete` |
+| Relation adapter used by the executable retention law | `transferTransition_conforms` |
+| Admission branch computation | `stack_under_reservation`, `stack_adequate` |
+| Independent loader and encoder inductions | `retainChain_membership`, `retainChain_length`, `encodeToyExit_correct` |
+| Execution-relation adapter used by the launcher law | `toyLaunchExecution_conforms` |
+
+These approvals recognize their supporting role; they do not certify the stronger properties missing from their enclosing contracts. There are no pending Representation-lemma exemptions in these files.
+
+The **native deferrals are legitimate**: actual `Signature.WellFormed` and `TransitionConforms` at slice 0/R-0580; actual artifact stack evidence at slice 0/R-0575; native retention integration at slice 25/R-0580; and launcher integration through R-0503/R-0505/R-0584. Those roadmap tasks exist, and the source distinguishes toy evidence from native assurance. The toy instantiations now exist. None of those deferrals justifies postponing findings 1–3, which concern models already present here.
+
+VERDICT: CHANGES

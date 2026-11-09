@@ -1,0 +1,30 @@
+Addressed all five REVIEW2 findings:
+
+- Physical outputs now follow an independent primitive-effect execution relation.
+- Typed handlers construct a C1 oracle, with well-formedness and operational run proofs.
+- Trap lookup is a computation helper; source-production laws establish reported path and file identity.
+- Blocked observations require the actual unanswered ending, request step and typed mapping.
+- Invalid helper tags are corrected; helper approvals remain `PENDING`.
+
+Changed laws have closed instances and premise-preserving mutants:
+
+| Law | Evidence |
+|---|---|
+| `project_physical_outputs` | Ordered outputs; erasing/reversing projection |
+| `output_before_trap_kept` | Two outputs before trapping; dropped history/outputs |
+| `environment_run_reply` | Doubling, routing and history-sensitive calls; discarded replies/history |
+| `runFrom_source_trap` | Source-derived trap; host-root/wrong-file producers |
+| `runFrom_report_trace` | Prior exchange and zero fuel; fabricated blocking |
+| `runFrom_validTrace` | Complete exchange then pending; completed configuration falsely marked pending |
+
+Audited all 20 C6 laws and their evidence pairs. Both carried items are covered, including byte-column evidence.
+
+Commits:
+
+- `59f593f5e` — blocked-ending correspondence and helper tags.
+- `9b98cacbc` — physical effects, typed oracle, source pipeline and carried trace evidence.
+- `2c7492525` — complete premises and history/file-identity controls.
+
+The prescribed semaphore-wrapped build passes at `2c7492525`. Working tree is clean. No reviewers, git notes, pushes or protected-file edits.
+
+QUESTIONS: None. Elaborator integration remains the existing O1 obligation.

@@ -1,0 +1,641 @@
+# C5 (`Own` and `Grant`) Round 7 Review (`409532b8f..39a19a0d`)
+
+## 1. Verification of `_review/REVIEW6-codex.md` Findings
+
+1. **Finding 1 (Major — Incomplete frame ownership in `WellFormed`, [ConcreteSpec/Spec/Own.lean](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Spec/Own.lean#L107-L120)): FIXED.**
+   - `ConcreteSpec.Core.Own.State.WellFormed` (`ConcreteSpec/Spec/Own.lean:107`) now includes both frame-ownership directions:
+     - Active-frame membership for every slot (`ConcreteSpec/Spec/Own.lean:113`): `(∀ x ∈ s.slots, x.activation ∈ s.frames.map Activation.id)`.
+     - Reverse local-to-slot ownership for every frame (`ConcreteSpec/Spec/Own.lean:118`): `(∀ f ∈ s.frames, ∀ p ∈ (List.map Prod.snd f.locals), ∃ x ∈ s.slots, x.place = p ∧ x.activation = f.id)`.
+   - `ConcreteSpec.Core.Own.drop` (`ConcreteSpec/Spec/Own.lean:248`) filters `f.locals` by `decide (e.2 ∉ ps)` (`ConcreteSpec/Spec/Own.lean:254`) so dropping a place removes all local variable bindings pointing to `ps`, preserving the reverse local-to-slot invariant.
+   - `leave_no_activation_slot_result` (`ConcreteSpec/Proofs/Own.lean:605`) and `leave_preserves_result` (`ConcreteSpec/Proofs/Own.lean:638`) prove that popping the head activation frame leaves only slots whose activation belongs to `s.frames.tail.map Activation.id`.
+   - Negative examples at `ConcreteSpec/Proofs/Own.lean:4795` and `ConcreteSpec/Proofs/Own.lean:4798` confirm that orphaned activation-0 slots and cross-frame local aliases violate `WellFormed`.
+
+2. **Finding 2 (Major — Definitional / guard-restating / wrapper theorems tagged `Law`): FIXED.**
+   - All 42 guard-normalization, constructor-field, single-step wrapper, and identity-transition lemmas (30 in `ConcreteSpec/Proofs/Own.lean`, 12 in `ConcreteSpec/Proofs/Grant.lean`) have been reclassified as `Helper (computation)` with `(approved: PENDING)` and their former `Instance`/`Planted` pairs converted to `/-- Computation observation. -/`.
+   - Eight multi-step / semantic protocol `Law`s now carry the independent soundness obligations:
+     - `ConcreteSpec.Core.Own.downward_reborrow_protocol` (`ConcreteSpec/Proofs/Own.lean:5667`)
+     - `ConcreteSpec.Core.Own.deferred_call_lifetime` (`ConcreteSpec/Proofs/Own.lean:5809`)
+     - `ConcreteSpec.Core.Own.move_reinitialize_protocol` (`ConcreteSpec/Proofs/Own.lean:5914`)
+     - `ConcreteSpec.Core.Own.ended_loans_never_revive` (`ConcreteSpec/Proofs/Own.lean:6034`)
+     - `ConcreteSpec.Core.Generative.retired_never_revives` (`ConcreteSpec/Proofs/Grant.lean:810`)
+     - `ConcreteSpec.Core.Generative.fresh_nominal` (`ConcreteSpec/Proofs/Grant.lean:826`)
+     - `ConcreteSpec.Core.Generative.scope_exit_lifetime` (`ConcreteSpec/Proofs/Grant.lean:927`)
+     - `ConcreteSpec.Core.Grants.narrow_permissions` (`ConcreteSpec/Proofs/Grant.lean:1612`)
+
+3. **Finding 3 (Major — `Steps_erasure` weakened with `NotStuck` and oracle-event conjunct): FIXED.**
+   - `ConcreteSpec.Core.Own.FiniteExecution` (`ConcreteSpec/Spec/Own.lean:472`) and `ConcreteSpec.Core.Own.FiniteSimulation` (`ConcreteSpec/Spec/Own.lean:535`) define multi-step simulation of `stepInstrumented` directly over arbitrary primitive answers without an oracle, fuel parameter, or `NotStuck` premise.
+   - `ConcreteSpec.Core.Own.Steps_erasure` (`ConcreteSpec/Proofs/Own.lean:2667`) proves `FiniteSimulation O types permit (stepInstrumented O types permit P) P c` unconditionally, and its `Planted` counterexample (`ConcreteSpec/Proofs/Own.lean:4044`) uses `stepInstrumentedZeroVal` (which corrupts local values during execution) to refute `FiniteSimulation`.
+
+4. **Finding 4 (Major — Five positive instances on refused operations reducing to `True`): FIXED.**
+   - `ConcreteSpec.Core.Own.moved_no_loan` (`ConcreteSpec/Proofs/Own.lean:5423`): uses `move moveWithOtherLoan ⟨1⟩`, which succeeds (`(move moveWithOtherLoan ⟨1⟩).isSome = true` at `ConcreteSpec/Proofs/Own.lean:5421`) while slot `⟨0⟩` holds an active loan.
+   - `ConcreteSpec.Core.Generative.release_preserves` (`ConcreteSpec/Proofs/Grant.lean:551`): uses `release releaseInput ⟨0⟩`, which succeeds (`(release releaseInput ⟨0⟩).isSome = true` at `ConcreteSpec/Proofs/Grant.lean:482`) while allocator `⟨1⟩` remains live for an existing allocation dependency.
+   - `ConcreteSpec.Core.Generative.endScope_non_escape` (`ConcreteSpec/Proofs/Grant.lean:378`): reclassified as `Helper (computation)` and observed on `departing` (`ConcreteSpec/Proofs/Grant.lean:661`); replaced as a `Law` by `ConcreteSpec.Core.Generative.scope_exit_lifetime` (`ConcreteSpec/Proofs/Grant.lean:927`), whose `Instance` (`ConcreteSpec/Proofs/Grant.lean:965`) executes `endScope departing ⟨0⟩` followed by `runLifetime u operations`, succeeding (`ConcreteSpec/Proofs/Grant.lean:482`, `ConcreteSpec/Proofs/Grant.lean:854`).
+   - `ConcreteSpec.Core.Generative.allocations_have_live_allocator` (`ConcreteSpec/Proofs/Grant.lean:671`): uses `release releaseInput ⟨0⟩` (`isSome = true` at `ConcreteSpec/Proofs/Grant.lean:482`), paired with `releaseAll` (`ConcreteSpec/Proofs/Grant.lean:678`).
+   - `ConcreteSpec.Core.Grants.acquire_bounded` (`ConcreteSpec/Proofs/Grant.lean:1489`): selects `[1]` (within parent `[0, 1]` and requested `[1, 2]`), so `acquire initial ⟨0⟩ [1, 2] [1] [.fs] true 99` succeeds (`isSome = true` at `ConcreteSpec/Proofs/Grant.lean:1434`), paired with `acquireEscalate` (`ConcreteSpec/Proofs/Grant.lean:1493`).
+
+5. **Finding 5 (Major — Deferred-loan lifetime evidence): FIXED.**
+   - `ConcreteSpec.Core.Own.deferred_call_lifetime` (`ConcreteSpec/Proofs/Own.lean:5809`) proves `DeferredLifetime` (`ConcreteSpec/Proofs/Own.lean:5769`): after `passOwner` and C1 `.defer` registration (`heldRegistration`, `ConcreteSpec/Proofs/Own.lean:5759`), the pending root loan stays in `c.store.own.loans` and freezes `ownerAccess c.store.own root .mutable = false` across the `n ≤ 1` silent steps before the deferred call runs, and after the 5-step C1 deferred invocation and return, `t.store.own.loans = s.loans ∧ t.store.own.pending = []`.
+   - Witnessed by two `Instance`/`Planted` pairs: `heldSource` with `endAtRegistration` (`ConcreteSpec/Proofs/Own.lean:5868`, `ConcreteSpec/Proofs/Own.lean:5873`) and `heldSourceForLeak` with `leakAtReturn` (`ConcreteSpec/Proofs/Own.lean:5887`, `ConcreteSpec/Proofs/Own.lean:5892`).
+
+6. **Finding 6 (Minor — Q1 upward-lending control): FIXED.**
+   - `ConcreteSpec.Core.Own.downward_reborrow_protocol` (`ConcreteSpec/Proofs/Own.lean:5667`) and `DownwardProtocol` (`ConcreteSpec/Proofs/Own.lean:5657`) combine current-frame lending, child loan access, and child loan termination with upward-lending refusal (`activation ≠ f.id → step s i path .mutable activation = none`) on the same state `LifecycleWitnesses.called` (current activation `1`, caller activation `0`), witnessed at `ConcreteSpec/Proofs/Own.lean:5723` and `ConcreteSpec/Proofs/Own.lean:5728` against `allowUpward`.
+
+---
+
+## 2. Owner Rules (Q1, Q2, Q3) Verification
+
+- **Q1 (Downward-only lending, private general helper, active destination frame, upward loan refused)**:
+  - `reborrowTo` (`ConcreteSpec/Spec/Own.lean:198`) is the general helper checking `s.frames.head? = some f ∧ f.id = activation`; `reborrow` (`ConcreteSpec/Spec/Own.lean:216`) specializes `reborrowTo` to `f.id`; `passDown` (`ConcreteSpec/Spec/Own.lean:328`) creates a pending child loan for the callee and `adoptDown` (`ConcreteSpec/Spec/Own.lean:295`) adopts pending loans into the newly entered callee frame (`f.id`). `LiveDestinations` (`ConcreteSpec/Spec/Own.lean:395`) and `downward_reborrow_protocol` (`ConcreteSpec/Proofs/Own.lean:5667`) prove that destinations are active frames and upward targets (`activation ≠ f.id`) are refused.
+- **Q2 (Direct owner argument gets a call-duration root loan, deferred call holds it until it runs, no caller loan ended implicitly)**:
+  - `passOwner` (`ConcreteSpec/Spec/Own.lean:350`) issues a parentless root loan (`parent := none, pendingArgument := true`) freezing the owner (`passOwner_freezes`, `ConcreteSpec/Proofs/Own.lean:4644`), adopted by `enterDown` (`ConcreteSpec/Spec/Own.lean:314`) into the callee activation and ended by `leave` (`ConcreteSpec/Spec/Own.lean:273`) on return without ending any caller loan (`directOwner_roundtrip`, `ConcreteSpec/Proofs/Own.lean:1707`; `leave_retains_caller`, `ConcreteSpec/Proofs/Own.lean:4652`; `deferred_call_lifetime`, `ConcreteSpec/Proofs/Own.lean:5809`).
+- **Q3 (Unconditional forward simulation for non-`stuck` outcomes, converse only for checker-accepted programs)**:
+  - Unconditional forward simulation is proved for single steps (`step_next_erasure` at `ConcreteSpec/Proofs/Own.lean:2446`, `step_request_erasure` at `ConcreteSpec/Proofs/Own.lean:2601`, `Step_erasure` at `ConcreteSpec/Proofs/Own.lean:2645`), finite multi-step executions (`Steps_erasure` at `ConcreteSpec/Proofs/Own.lean:2667`), and fuel-indexed runs reaching any non-`stuck` outcome (`runFrom_erasure` at `ConcreteSpec/Proofs/Own.lean:2717`, `run_erasure` at `ConcreteSpec/Proofs/Own.lean:2781`).
+  - The unconditional converse is refuted by the moved-owner counterexample (`unconditionalRunConverse_refuted` at `ConcreteSpec/Proofs/Own.lean:3766`).
+  - The checker-acceptance interface `CheckerAccepted` (`ConcreteSpec/Spec/Own.lean:641`) is documented as the C5/C9 obligation and used to prove converse stuck equivalence (`step_stuck_iff_of_accepted` at `ConcreteSpec/Proofs/Own.lean:3278`, `runFrom_erasure_of_accepted` at `ConcreteSpec/Proofs/Own.lean:3303`, `run_stuck_iff_of_accepted` at `ConcreteSpec/Proofs/Own.lean:3386`), with `move_not_checkerAccepted_inv` (`ConcreteSpec/Proofs/Own.lean:3437`) showing the moved-owner program is rejected.
+
+---
+
+## 3. Findings
+
+No `REAL DEFECT` or `PREFERENCE` findings remain in Round 7 (`39a19a0d`).
+
+---
+
+## 4. Complete C5 Law Inventory and Vacuity Audit (70 Laws, 71 Instance/Planted Pairs)
+
+Every law below was verified against `_review/VACUITY_CONVENTION_FINAL.md` and the binding vacuity rule:
+- One classification tag per theorem (`Law (subject ...)`).
+- Non-vacuous statement (does not hold by a trivializing guard, definition restatement, or unsatisfiable premise; no projection `Law`).
+- Every `Instance` is a closed `example` whose proof term is a direct full application `@LawName ...` on a concrete case where the operation succeeds (`isSome = true` / steps / runs).
+- Every `Planted` is a closed `example` on the same case asserting all law hypotheses together with the negated conclusion under a mutant of the `subject`.
+
+### 4.1 `ConcreteSpec/Proofs/Own.lean` (47 Laws, 48 Instance/Planted Pairs)
+
+1. **`ConcreteSpec.Core.Own.enter_progress`** — [ConcreteSpec/Proofs/Own.lean:803](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L802-L806) (Law `tag :802`, subject `ConcreteSpec.Core.Own.enter`)
+   - **Instance**: `ConcreteSpec/Proofs/Own.lean:4818` (`tag :4817`), case `ConcreteSpec.Core.Own.Examples.shared`
+   - **Planted**: `ConcreteSpec/Proofs/Own.lean:4822` (`tag :4821`), mutant `ConcreteSpec.Core.Own.FinalEvidence.enterRefuse`
+   - **Vacuity verdict**: **NON-VACUOUS**. Inductive progress over `params : List Var` via `bind_params_progress`; witnessed on `enter types [y] shared`.
+
+2. **`ConcreteSpec.Core.Own.directOwner_roundtrip`** — [ConcreteSpec/Proofs/Own.lean:1707](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L1704-L1719) (Law `tag :1704`, subject `ConcreteSpec.Core.Own.passOwner`)
+   - **Instance**: `ConcreteSpec/Proofs/Own.lean:4839` (`tag :4838`), case `ConcreteSpec.Core.Own.DirectArgumentWitnesses.caller`
+   - **Planted**: `ConcreteSpec/Proofs/Own.lean:4850` (`tag :4849`), mutant `ConcreteSpec.Core.Own.FinalEvidence.passOwnerLeaked`
+   - **Vacuity verdict**: **NON-VACUOUS**. Composes `passOwner`, `callLife types (.enter [x])`, and `callLife types .leave`, proving exact restoration of `s.slots`, `s.loans`, `s.frames`, and `pending = []`.
+
+3. **`ConcreteSpec.Core.Own.step_next_erasure`** — [ConcreteSpec/Proofs/Own.lean:2446](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L2443-L2452) (Law `tag :2443`, subject `ConcreteSpec.Core.Own.stepInstrumented`)
+   - **Instance**: `ConcreteSpec/Proofs/Own.lean:3960` (`tag :3959`), case `ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig`
+   - **Planted**: `ConcreteSpec/Proofs/Own.lean:3966` (`tag :3965`), mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.stepInstrumentedZeroVal`
+   - **Vacuity verdict**: **NON-VACUOUS**. Forward simulation of silent C1 steps across all statement/control forms; `bindMoveConfig` steps to `some (.next _)`.
+
+4. **`ConcreteSpec.Core.Own.step_request_erasure`** — [ConcreteSpec/Proofs/Own.lean:2601](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L2597-L2612) (Law `tag :2597`, subject `ConcreteSpec.Core.Own.stepInstrumented`)
+   - **Instance**: `ConcreteSpec/Proofs/Own.lean:3973` (`tag :3972`), case `ConcreteSpec.Core.Own.ExecErasureWitnesses.primOneConfig`
+   - **Planted**: `ConcreteSpec/Proofs/Own.lean:3983` (`tag :3982`), mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.stepInstrumentedZeroVal`
+   - **Vacuity verdict**: **NON-VACUOUS**. Forward simulation of primitive requests and their continuations; `primOneConfig` issues `some (.request ...)`.
+
+5. **`ConcreteSpec.Core.Own.Step_erasure`** — [ConcreteSpec/Proofs/Own.lean:2645](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L2642-L2662) (Law `tag :2642`, subject `ConcreteSpec.Core.Own.stepInstrumented`)
+   - **Instance**: `ConcreteSpec/Proofs/Own.lean:3994` (`tag :3993`), case `ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig`
+   - **Planted**: `ConcreteSpec/Proofs/Own.lean:4005` (`tag :4004`), mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.stepInstrumentedZeroVal`
+   - **Vacuity verdict**: **NON-VACUOUS**. Labeled single-step simulation into `Exec.Step`; exercised on `bindMoveConfig`.
+
+6. **`ConcreteSpec.Core.Own.Steps_erasure`** — [ConcreteSpec/Proofs/Own.lean:2667](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L2664-L2670) (Law `tag :2664`, subject `ConcreteSpec.Core.Own.stepInstrumented`)
+   - **Instance**: `ConcreteSpec/Proofs/Own.lean:4036` (`tag :4035`), case `ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig`
+   - **Planted**: `ConcreteSpec/Proofs/Own.lean:4045` (`tag :4044`), mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.stepInstrumentedZeroVal`
+   - **Vacuity verdict**: **NON-VACUOUS**. Unconditional multi-step `FiniteSimulation` over `FiniteExecution` with no `NotStuck` or oracle premise; refuted by `stepInstrumentedZeroVal`.
+
+7. **`ConcreteSpec.Core.Own.runFrom_erasure`** — [ConcreteSpec/Proofs/Own.lean:2717](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L2713-L2724) (Law `tag :2713`, subject `ConcreteSpec.Core.Own.liftOracle`)
+   - **Instance**: `ConcreteSpec/Proofs/Own.lean:4062` (`tag :4061`), case `ConcreteSpec.Core.Own.Examples.primTraceConfig`
+   - **Planted**: `ConcreteSpec/Proofs/Own.lean:4067` (`tag :4066`), mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.liftOracleMutateOwn`
+   - **Vacuity verdict**: **NON-VACUOUS**. Fuel-inductive evaluator simulation over `primTraceConfig` (which emits two primitive events `[7, 3]` and returns `10`).
+
+8. **`ConcreteSpec.Core.Own.run_erasure`** — [ConcreteSpec/Proofs/Own.lean:2781](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L2780-L2788) (Law `tag :2780`, subject `ConcreteSpec.Core.Own.liftOracle`)
+   - **Instance**: `ConcreteSpec/Proofs/Own.lean:4074` (`tag :4073`), case `ConcreteSpec.Core.Own.Examples.primTraceConfig`
+   - **Planted**: `ConcreteSpec/Proofs/Own.lean:4079` (`tag :4078`), mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.liftOracleMutateOwn`
+   - **Vacuity verdict**: **NON-VACUOUS**. Whole-run evaluator simulation from empty event history on `primTraceConfig`.
+
+9. **`ConcreteSpec.Core.Own.step_stuck_iff_of_accepted`** — [ConcreteSpec/Proofs/Own.lean:3278](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L3275-L3283) (Law `tag :3275`, subject `ConcreteSpec.Core.Own.stepInstrumented`)
+   - **Instance**: `ConcreteSpec/Proofs/Own.lean:4105` (`tag :4104`), case `ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig`
+   - **Planted**: `ConcreteSpec/Proofs/Own.lean:4111` (`tag :4110`), mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.stepInstrumentedRefuse`
+   - **Vacuity verdict**: **NON-VACUOUS**. Single-step stuck equivalence under `CheckerAccepted`, witnessed on `bindMoveConfig`.
+
+10. **`ConcreteSpec.Core.Own.runFrom_erasure_of_accepted`** — [ConcreteSpec/Proofs/Own.lean:3303](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L3300-L3310) (Law `tag :3300`, subject `ConcreteSpec.Core.Own.liftOracle`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4117` (`tag :4116`), case `ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4123` (`tag :4122`), mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.liftOracleMutateOwn`
+    - **Vacuity verdict**: **NON-VACUOUS**. Exact report simulation for `CheckerAccepted` programs across all outcomes including `stuck`, witnessed on `primFrameStuckConfig`.
+
+11. **`ConcreteSpec.Core.Own.run_stuck_iff_of_accepted`** — [ConcreteSpec/Proofs/Own.lean:3386](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L3383-L3393) (Law `tag :3383`, subject `ConcreteSpec.Core.Own.liftOracle`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4130` (`tag :4129`), case `ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4136` (`tag :4135`), mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.liftOracleDropAnswer`
+    - **Vacuity verdict**: **NON-VACUOUS**. Whole-run `Ending.IsStuck` equivalence under `CheckerAccepted`, witnessed on `primFrameStuckConfig`.
+
+12. **`ConcreteSpec.Core.Own.move_preserves`** — [ConcreteSpec/Proofs/Own.lean:4166](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4164-L4169) (Law `tag :4164`, subject `ConcreteSpec.Core.Own.move`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4463` (`tag :4462`), case `ConcreteSpec.Core.Own.Examples.initial`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4467` (`tag :4466`), mutant `ConcreteSpec.Core.Own.PreservationEvidence.moveDuplicateSlot`
+    - **Vacuity verdict**: **NON-VACUOUS**. `move initial ⟨0⟩` succeeds (`ConcreteSpec/Proofs/Own.lean:4450`) and preserves `WellFormed`.
+
+13. **`ConcreteSpec.Core.Own.reinitialize_preserves`** — [ConcreteSpec/Proofs/Own.lean:4173](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4171-L4176) (Law `tag :4171`, subject `ConcreteSpec.Core.Own.reinitialize`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4470` (`tag :4469`), case `ConcreteSpec.Core.Own.LifecycleWitnesses.moved`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4474` (`tag :4473`), mutant `ConcreteSpec.Core.Own.PreservationEvidence.reinitializeUnissuedPlace`
+    - **Vacuity verdict**: **NON-VACUOUS**. `reinitialize LifecycleWitnesses.moved ⟨0⟩` succeeds (`ConcreteSpec/Proofs/Own.lean:4450`) and preserves `WellFormed`.
+
+14. **`ConcreteSpec.Core.Own.borrow_preserves`** — [ConcreteSpec/Proofs/Own.lean:4180](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4178-L4183) (Law `tag :4178`, subject `ConcreteSpec.Core.Own.borrow`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4477` (`tag :4476`), case `ConcreteSpec.Core.Own.Examples.shared`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4481` (`tag :4480`), mutant `ConcreteSpec.Core.Own.PreservationEvidence.borrowNoAdvanceSupply`
+    - **Vacuity verdict**: **NON-VACUOUS**. `borrow shared ⟨0⟩ [.index 1] .shared` succeeds (`ConcreteSpec/Proofs/Own.lean:4450`) and preserves `WellFormed`.
+
+15. **`ConcreteSpec.Core.Own.reborrowTo_preserves`** — [ConcreteSpec/Proofs/Own.lean:4187](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4185-L4190) (Law `tag :4185`, subject `ConcreteSpec.Core.Own.reborrowTo`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4484` (`tag :4483`), case `ConcreteSpec.Core.Own.Examples.exclusive`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4488` (`tag :4487`), mutant `ConcreteSpec.Core.Own.PreservationEvidence.reborrowToDropParent`
+    - **Vacuity verdict**: **NON-VACUOUS**. `reborrowTo exclusive ⟨0⟩ [.index 1] .mutable 0` succeeds (`ConcreteSpec/Proofs/Own.lean:4451`) and preserves `WellFormed`.
+
+16. **`ConcreteSpec.Core.Own.reborrow_preserves`** — [ConcreteSpec/Proofs/Own.lean:4194](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4192-L4197) (Law `tag :4192`, subject `ConcreteSpec.Core.Own.reborrow`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4491` (`tag :4490`), case `ConcreteSpec.Core.Own.Examples.exclusive`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4495` (`tag :4494`), mutant `ConcreteSpec.Core.Own.PreservationEvidence.reborrowDropAncestors`
+    - **Vacuity verdict**: **NON-VACUOUS**. `reborrow exclusive ⟨0⟩ [.index 1] .mutable` succeeds (`ConcreteSpec/Proofs/Own.lean:4451`) and preserves `WellFormed`.
+
+17. **`ConcreteSpec.Core.Own.endLoan_preserves`** — [ConcreteSpec/Proofs/Own.lean:4201](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4199-L4204) (Law `tag :4199`, subject `ConcreteSpec.Core.Own.endLoan`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4498` (`tag :4497`), case `ConcreteSpec.Core.Own.Examples.child`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4502` (`tag :4501`), mutant `ConcreteSpec.Core.Own.PreservationEvidence.endLoanRemoveParent`
+    - **Vacuity verdict**: **NON-VACUOUS**. `endLoan child ⟨1⟩` succeeds (`ConcreteSpec/Proofs/Own.lean:4451`) and preserves `WellFormed` (including parent existence for remaining loans).
+
+18. **`ConcreteSpec.Core.Own.bind_preserves`** — [ConcreteSpec/Proofs/Own.lean:4208](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4206-L4211) (Law `tag :4206`, subject `ConcreteSpec.Core.Own.bind`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4519` (`tag :4518`), case `ConcreteSpec.Core.Own.Examples.shared`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4523` (`tag :4522`), mutant `ConcreteSpec.Core.Own.PreservationEvidence.bindNoAdvancePlace`
+    - **Vacuity verdict**: **NON-VACUOUS**. `bind types y shared` succeeds (`ConcreteSpec/Proofs/Own.lean:4453`) and preserves `WellFormed`.
+
+19. **`ConcreteSpec.Core.Own.drop_preserves`** — [ConcreteSpec/Proofs/Own.lean:4215](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4213-L4218) (Law `tag :4213`, subject `ConcreteSpec.Core.Own.drop`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4526` (`tag :4525`), case `ConcreteSpec.Core.Own.LifecycleWitnesses.moved`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4530` (`tag :4529`), mutant `ConcreteSpec.Core.Own.PreservationEvidence.dropLocalOnly`
+    - **Vacuity verdict**: **NON-VACUOUS**. `drop [x] LifecycleWitnesses.moved` succeeds (`ConcreteSpec/Proofs/Own.lean:4453`) and preserves `WellFormed` (including bidirectional frame-slot ownership).
+
+20. **`ConcreteSpec.Core.Own.enter_preserves`** — [ConcreteSpec/Proofs/Own.lean:4222](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4220-L4225) (Law `tag :4220`, subject `ConcreteSpec.Core.Own.enter`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4533` (`tag :4532`), case `ConcreteSpec.Core.Own.Examples.shared`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4537` (`tag :4536`), mutant `ConcreteSpec.Core.Own.PreservationEvidence.enterDuplicateFrameId`
+    - **Vacuity verdict**: **NON-VACUOUS**. `enter types [y] shared` succeeds (`ConcreteSpec/Proofs/Own.lean:4453`) and preserves `WellFormed`.
+
+21. **`ConcreteSpec.Core.Own.endLocals_preserves`** — [ConcreteSpec/Proofs/Own.lean:4229](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4227-L4232) (Law `tag :4227`, subject `ConcreteSpec.Core.Own.endLocals`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4540` (`tag :4539`), case `ConcreteSpec.Core.Own.LifecycleWitnesses.called`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4544` (`tag :4543`), mutant `ConcreteSpec.Core.Own.PreservationEvidence.endLocalsCallerInstead`
+    - **Vacuity verdict**: **NON-VACUOUS**. `endLocals 1 LifecycleWitnesses.called` succeeds (`ConcreteSpec/Proofs/Own.lean:4454`) and preserves `WellFormed`.
+
+22. **`ConcreteSpec.Core.Own.leave_preserves`** — [ConcreteSpec/Proofs/Own.lean:4236](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4234-L4239) (Law `tag :4234`, subject `ConcreteSpec.Core.Own.leave`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4547` (`tag :4546`), case `ConcreteSpec.Core.Own.RoundThreeWitnesses.localLoan`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4551` (`tag :4550`), mutant `ConcreteSpec.Core.Own.PreservationEvidence.leaveKeepLocalLoans`
+    - **Vacuity verdict**: **NON-VACUOUS**. `leave RoundThreeWitnesses.localLoan` succeeds (`ConcreteSpec/Proofs/Own.lean:4454`) and preserves `WellFormed`.
+
+23. **`ConcreteSpec.Core.Own.enterDown_preserves`** — [ConcreteSpec/Proofs/Own.lean:4243](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4241-L4246) (Law `tag :4241`, subject `ConcreteSpec.Core.Own.enterDown`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4554` (`tag :4553`), case `ConcreteSpec.Core.Own.Examples.exclusive`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4558` (`tag :4557`), mutant `ConcreteSpec.Core.Own.PreservationEvidence.enterDownReuseParentId`
+    - **Vacuity verdict**: **NON-VACUOUS**. `enterDown exclusive [(y, ⟨0⟩)]` succeeds (`ConcreteSpec/Proofs/Own.lean:4454`) and preserves `WellFormed`.
+
+24. **`ConcreteSpec.Core.Own.life_preserves`** — [ConcreteSpec/Proofs/Own.lean:4250](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4248-L4253) (Law `tag :4248`, subject `ConcreteSpec.Core.Own.life`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4561` (`tag :4560`), case `ConcreteSpec.Core.Own.Examples.shared`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4565` (`tag :4564`), mutant `ConcreteSpec.Core.Own.PreservationEvidence.lifeBindUnindexed`
+    - **Vacuity verdict**: **NON-VACUOUS**. `life types (.bind y) shared` succeeds (`ConcreteSpec/Proofs/Own.lean:4455`) and preserves `WellFormed`.
+
+25. **`ConcreteSpec.Core.Own.adoptDown_preserves`** — [ConcreteSpec/Proofs/Own.lean:4257](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4255-L4260) (Law `tag :4255`, subject `ConcreteSpec.Core.Own.adoptDown`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4568` (`tag :4567`), case `ConcreteSpec.Core.Own.PreservationEvidence.adoptionInput`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4572` (`tag :4571`), mutant `ConcreteSpec.Core.Own.PreservationEvidence.adoptDownUnissuedActivation`
+    - **Vacuity verdict**: **NON-VACUOUS**. `adoptDown adoptionInput DirectArgumentWitnesses.waiting.pending` succeeds (`ConcreteSpec/Proofs/Own.lean:4455`) and preserves `WellFormed`.
+
+26. **`ConcreteSpec.Core.Own.passDown_preserves`** — [ConcreteSpec/Proofs/Own.lean:4264](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4262-L4267) (Law `tag :4262`, subject `ConcreteSpec.Core.Own.passDown`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4575` (`tag :4574`), case `ConcreteSpec.Core.Own.Examples.exclusive`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4579` (`tag :4578`), mutant `ConcreteSpec.Core.Own.PreservationEvidence.passDownClearParent`
+    - **Vacuity verdict**: **NON-VACUOUS**. `passDown ⟨exclusive, []⟩ ⟨0⟩ y` succeeds (`ConcreteSpec/Proofs/Own.lean:4456`) and preserves `WellFormed`.
+
+27. **`ConcreteSpec.Core.Own.passDown_call_preserves`** — [ConcreteSpec/Proofs/Own.lean:4271](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4269-L4274) (Law `tag :4269`, subject `ConcreteSpec.Core.Own.passDown`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4582` (`tag :4581`), case `ConcreteSpec.Core.Own.Examples.exclusive`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4586` (`tag :4585`), mutant `ConcreteSpec.Core.Own.PreservationEvidence.passDownOmitPending`
+    - **Vacuity verdict**: **NON-VACUOUS**. `passDown ⟨exclusive, []⟩ ⟨0⟩ y` succeeds (`ConcreteSpec/Proofs/Own.lean:4456`) and preserves `CallState.WellFormed`.
+
+28. **`ConcreteSpec.Core.Own.callLife_preserves`** — [ConcreteSpec/Proofs/Own.lean:4278](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4276-L4281) (Law `tag :4276`, subject `ConcreteSpec.Core.Own.callLife`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4589` (`tag :4588`), case `ConcreteSpec.Core.Own.CallWitnesses.waiting`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4593` (`tag :4592`), mutant `ConcreteSpec.Core.Own.PreservationEvidence.callLifeUnissuedActivation`
+    - **Vacuity verdict**: **NON-VACUOUS**. `callLife types (.enter [y]) CallWitnesses.waiting` succeeds (`ConcreteSpec/Proofs/Own.lean:4457`) and preserves `WellFormed`.
+
+29. **`ConcreteSpec.Core.Own.callLife_call_preserves`** — [ConcreteSpec/Proofs/Own.lean:4285](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4283-L4288) (Law `tag :4283`, subject `ConcreteSpec.Core.Own.callLife`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4596` (`tag :4595`), case `ConcreteSpec.Core.Own.CallWitnesses.waiting`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4600` (`tag :4599`), mutant `ConcreteSpec.Core.Own.PreservationEvidence.callLifeKeepPending`
+    - **Vacuity verdict**: **NON-VACUOUS**. `callLife types (.enter [y]) CallWitnesses.waiting` succeeds (`ConcreteSpec/Proofs/Own.lean:4457`) and preserves `CallState.WellFormed`.
+
+30. **`ConcreteSpec.Core.Own.passOwner_preserves`** — [ConcreteSpec/Proofs/Own.lean:4292](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4290-L4295) (Law `tag :4290`, subject `ConcreteSpec.Core.Own.passOwner`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4603` (`tag :4602`), case `ConcreteSpec.Core.Own.DirectArgumentWitnesses.caller`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4607` (`tag :4606`), mutant `ConcreteSpec.Core.Own.PreservationEvidence.passOwnerClearCallRoot`
+    - **Vacuity verdict**: **NON-VACUOUS**. `passOwner DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z` succeeds (`ConcreteSpec/Proofs/Own.lean:4459`) and preserves `WellFormed`.
+
+31. **`ConcreteSpec.Core.Own.passOwner_call_preserves`** — [ConcreteSpec/Proofs/Own.lean:4299](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4297-L4302) (Law `tag :4297`, subject `ConcreteSpec.Core.Own.passOwner`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4610` (`tag :4609`), case `ConcreteSpec.Core.Own.DirectArgumentWitnesses.caller`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4614` (`tag :4613`), mutant `ConcreteSpec.Core.Own.PreservationEvidence.passOwnerOmitPending`
+    - **Vacuity verdict**: **NON-VACUOUS**. `passOwner DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z` succeeds (`ConcreteSpec/Proofs/Own.lean:4459`) and preserves `CallState.WellFormed`.
+
+32. **`ConcreteSpec.Core.Own.leave_no_local_loan`** — [ConcreteSpec/Proofs/Own.lean:4628](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4626-L4632) (Law `tag :4626`, subject `ConcreteSpec.Core.Own.leave`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4715` (`tag :4714`), case `ConcreteSpec.Core.Own.LifetimeEvidence.leave_no_local_loanCase`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4719` (`tag :4718`), mutant `ConcreteSpec.Core.Own.LifetimeEvidence.leaveIdentity`
+    - **Vacuity verdict**: **NON-VACUOUS**. `leave RoundThreeWitnesses.localLoan` succeeds (`ConcreteSpec/Proofs/Own.lean:4454`) and removes local loans rooted at `⟨1⟩`.
+
+33. **`ConcreteSpec.Core.Own.leave_no_activation_slot`** — [ConcreteSpec/Proofs/Own.lean:4636](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4634-L4640) (Law `tag :4634`, subject `ConcreteSpec.Core.Own.leave`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4724` (`tag :4723`), case `ConcreteSpec.Core.Own.LifetimeEvidence.leave_no_activation_slotCase`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4728` (`tag :4727`), mutant `ConcreteSpec.Core.Own.LifetimeEvidence.leaveIdentity`
+    - **Vacuity verdict**: **NON-VACUOUS**. `leave RoundThreeWitnesses.localLoan` succeeds and removes all slots belonging to activation `1`.
+
+34. **`ConcreteSpec.Core.Own.passOwner_freezes`** — [ConcreteSpec/Proofs/Own.lean:4644](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4642-L4648) (Law `tag :4642`, subject `ConcreteSpec.Core.Own.passOwner`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4733` (`tag :4732`), case `ConcreteSpec.Core.Own.LifetimeEvidence.passOwner_freezesCase`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4737` (`tag :4736`), mutant `ConcreteSpec.Core.Own.LifetimeEvidence.passOwnerNoFreeze`
+    - **Vacuity verdict**: **NON-VACUOUS**. `passOwner` inserts a call-root loan at `[]` that causes `ownerAccess t.own p .mutable = false` (and `.shared = false` when `m = .mutable`).
+
+35. **`ConcreteSpec.Core.Own.leave_retains_caller`** — [ConcreteSpec/Proofs/Own.lean:4652](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4650-L4656) (Law `tag :4650`, subject `ConcreteSpec.Core.Own.leave`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4742` (`tag :4741`), case `ConcreteSpec.Core.Own.LifetimeEvidence.leave_retains_callerCase`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4746` (`tag :4745`), mutant `ConcreteSpec.Core.Own.LifetimeEvidence.leaveAllLoans`
+    - **Vacuity verdict**: **NON-VACUOUS**. `leave RoundThreeWitnesses.localLoan` succeeds and retains the caller's activation-0 loan while ending the callee's activation-1 loan.
+
+36. **`ConcreteSpec.Core.Own.leave_no_activation_loan`** — [ConcreteSpec/Proofs/Own.lean:4660](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4658-L4664) (Law `tag :4658`, subject `ConcreteSpec.Core.Own.leave`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4751` (`tag :4750`), case `ConcreteSpec.Core.Own.LifetimeEvidence.leave_no_activation_loanCase`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4755` (`tag :4754`), mutant `ConcreteSpec.Core.Own.LifetimeEvidence.leaveIdentity`
+    - **Vacuity verdict**: **NON-VACUOUS**. `leave RoundThreeWitnesses.localLoan` succeeds and ends all loans whose `activation = 1`.
+
+37. **`ConcreteSpec.Core.Own.reborrowTo_live`** — [ConcreteSpec/Proofs/Own.lean:4668](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4666-L4672) (Law `tag :4666`, subject `ConcreteSpec.Core.Own.reborrowTo`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4760` (`tag :4759`), case `ConcreteSpec.Core.Own.LifetimeEvidence.reborrowTo_liveCase`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4764` (`tag :4763`), mutant `ConcreteSpec.Core.Own.LifetimeEvidence.reborrowToDead`
+    - **Vacuity verdict**: **NON-VACUOUS**. `reborrowTo exclusive ⟨0⟩ [.index 1] .mutable 0` succeeds and preserves `LiveDestinations`.
+
+38. **`ConcreteSpec.Core.Own.adoptDown_live`** — [ConcreteSpec/Proofs/Own.lean:4676](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4674-L4680) (Law `tag :4674`, subject `ConcreteSpec.Core.Own.adoptDown`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4769` (`tag :4768`), case `ConcreteSpec.Core.Own.LifetimeEvidence.adoptDown_liveCase`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4773` (`tag :4772`), mutant `ConcreteSpec.Core.Own.LifetimeEvidence.adoptDownDead`
+    - **Vacuity verdict**: **NON-VACUOUS**. `adoptDown adoptionInput DirectArgumentWitnesses.waiting.pending` succeeds and preserves `LiveDestinations`.
+
+39. **`ConcreteSpec.Core.Own.leave_live`** — [ConcreteSpec/Proofs/Own.lean:4684](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4682-L4688) (Law `tag :4682`, subject `ConcreteSpec.Core.Own.leave`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4778` (`tag :4777`), case `ConcreteSpec.Core.Own.LifetimeEvidence.leave_liveCase`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4782` (`tag :4781`), mutant `ConcreteSpec.Core.Own.LifetimeEvidence.leaveStranded`
+    - **Vacuity verdict**: **NON-VACUOUS**. `leave RoundThreeWitnesses.localLoan` succeeds and preserves `LiveDestinations` after popping the callee frame.
+
+40. **`ConcreteSpec.Core.Own.evalArgs_ok_erasure`** — [ConcreteSpec/Proofs/Own.lean:4875](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4872-L4884) (Law `tag :4872`, subject `ConcreteSpec.Core.Own.instrumentOperands`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4914` (`tag :4913`), case `ConcreteSpec.Core.Own.Examples.initial`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4920` (`tag :4919`), mutant `ConcreteSpec.Core.Own.ArgumentEvidence.zeroOperands`
+    - **Vacuity verdict**: **NON-VACUOUS**. Inductive over argument list `[.read x, .move x]`, threading the store from `.read x` into `.move x` and producing `.ok ([7, 7], _)`.
+
+41. **`ConcreteSpec.Core.Own.evalArgs_trap_erasure`** — [ConcreteSpec/Proofs/Own.lean:4888](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4886-L4898) (Law `tag :4886`, subject `ConcreteSpec.Core.Own.instrumentOperands`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:4927` (`tag :4926`), case `ConcreteSpec.Core.Own.Examples.initial`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:4933` (`tag :4932`), mutant `ConcreteSpec.Core.Own.ArgumentEvidence.abortOperands`
+    - **Vacuity verdict**: **NON-VACUOUS**. Inductive over argument list `[.move x, .fail .overflow]`, evaluating `.move x` then trapping with `.trap .overflow`.
+
+42. **`ConcreteSpec.Core.Own.loan_has_owned_root`** — [ConcreteSpec/Proofs/Own.lean:4943](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4941-L4951) (Law `tag :4941`, subject `ConcreteSpec.Core.Own.borrow`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:5406` (`tag :5405`), case `ConcreteSpec.Core.Own.Examples.initial`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:5411` (`tag :5410`), mutant `ConcreteSpec.Core.Own.RestatedLawEvidence.borrowConsumeRoot`
+    - **Vacuity verdict**: **NON-VACUOUS**. `borrow initial ⟨0⟩ [.index 1] .shared` succeeds (`ConcreteSpec/Proofs/Own.lean:5401`) and preserves owned-root status for all loans.
+
+43. **`ConcreteSpec.Core.Own.moved_no_loan`** — [ConcreteSpec/Proofs/Own.lean:4955](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L4953-L4962) (Law `tag :4953`, subject `ConcreteSpec.Core.Own.move`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:5424` (`tag :5423`), case `ConcreteSpec.Core.Own.RestatedLawEvidence.moveWithOtherLoan`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:5429` (`tag :5428`), mutant `ConcreteSpec.Core.Own.RestatedLawEvidence.moveLeak`
+    - **Vacuity verdict**: **NON-VACUOUS**. `move moveWithOtherLoan ⟨1⟩` succeeds (`ConcreteSpec/Proofs/Own.lean:5421`) while slot `⟨0⟩` has an active loan, and no moved slot in the result has a loan.
+
+44. **`ConcreteSpec.Core.Own.downward_reborrow_protocol`** — [ConcreteSpec/Proofs/Own.lean:5667](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L5663-L5702) (Law `tag :5663`, subject `ConcreteSpec.Core.Own.reborrowTo`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:5724` (`tag :5723`), case `ConcreteSpec.Core.Own.LifecycleWitnesses.called`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:5729` (`tag :5728`), mutant `ConcreteSpec.Core.Own.DownwardProtocolEvidence.allowUpward`
+    - **Vacuity verdict**: **NON-VACUOUS**. Exercises both downward reborrowing into current activation `1` (with child access and `endLoan` restoration) and refusal of upward reborrowing into caller activation `0`.
+
+45. **`ConcreteSpec.Core.Own.deferred_call_lifetime`** — [ConcreteSpec/Proofs/Own.lean:5809](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L5806-L5849) (Law `tag :5806`, subject `ConcreteSpec.Core.Own.deferredStep`)
+    - **Instance 1**: `ConcreteSpec/Proofs/Own.lean:5869` (`tag :5868`), case `ConcreteSpec.Core.Own.DeferredLifetimeEvidence.heldSource`
+    - **Planted 1**: `ConcreteSpec/Proofs/Own.lean:5874` (`tag :5873`), mutant `ConcreteSpec.Core.Own.DeferredLifetimeEvidence.endAtRegistration`
+    - **Instance 2**: `ConcreteSpec/Proofs/Own.lean:5888` (`tag :5887`), case `ConcreteSpec.Core.Own.DeferredLifetimeEvidence.heldSourceForLeak`
+    - **Planted 2**: `ConcreteSpec/Proofs/Own.lean:5893` (`tag :5892`), mutant `ConcreteSpec.Core.Own.DeferredLifetimeEvidence.leakAtReturn`
+    - **Vacuity verdict**: **NON-VACUOUS**. Exercises 5-step C1 deferred call registration, scope cleanup, invocation, and return; refuted both when the root loan is ended early at registration (`endAtRegistration`) and when it is leaked at return (`leakAtReturn`).
+
+46. **`ConcreteSpec.Core.Own.move_reinitialize_protocol`** — [ConcreteSpec/Proofs/Own.lean:5914](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L5912-L5958) (Law `tag :5912`, subject `ConcreteSpec.Core.Own.move`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:5971` (`tag :5970`), case `ConcreteSpec.Core.Own.MoveLifecycleEvidence.source`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:5975` (`tag :5974`), mutant `ConcreteSpec.Core.Own.MoveLifecycleEvidence.keepOwned`
+    - **Vacuity verdict**: **NON-VACUOUS**. Proves `move` succeeds, `accessOwner`, `borrow`, and a second `move` all fail on the moved slot, and `reinitialize` restores the exact prior state `s`.
+
+47. **`ConcreteSpec.Core.Own.ended_loans_never_revive`** — [ConcreteSpec/Proofs/Own.lean:6034](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Own.lean#L6031-L6047) (Law `tag :6031`, subject `ConcreteSpec.Core.Own.runLoanSequence`)
+    - **Instance**: `ConcreteSpec/Proofs/Own.lean:6066` (`tag :6065`), case `ConcreteSpec.Core.Own.LoanHistoryEvidence.endedChild`
+    - **Planted**: `ConcreteSpec/Proofs/Own.lean:6070` (`tag :6069`), mutant `ConcreteSpec.Core.Own.LoanHistoryEvidence.recycle`
+    - **Vacuity verdict**: **NON-VACUOUS**. Inductive over `ops : List LoanAction`; `runLoanSequence endedChild actions` succeeds (`ConcreteSpec/Proofs/Own.lean:6063`) and keeps retired loan `⟨1⟩` absent across new borrows, reborrows, and loan endings.
+
+### 4.2 `ConcreteSpec/Proofs/Grant.lean` — `Generative` (10 Laws, 10 Instance/Planted Pairs)
+
+48. **`ConcreteSpec.Core.Generative.fresh_preserves`** — [ConcreteSpec/Proofs/Grant.lean:64](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Grant.lean#L62-L68) (Law `tag :62`, subject `ConcreteSpec.Core.Generative.fresh`)
+    - **Instance**: `ConcreteSpec/Proofs/Grant.lean:528` (`tag :527`), case `ConcreteSpec.Core.Generative.PreservationWitnesses.emptyState`
+    - **Planted**: `ConcreteSpec/Proofs/Grant.lean:532` (`tag :531`), mutant `ConcreteSpec.Core.Generative.PreservationWitnesses.freshNoAdvance`
+    - **Vacuity verdict**: **NON-VACUOUS**. `fresh emptyState ⟨0⟩` succeeds (`ConcreteSpec/Proofs/Grant.lean:482`) and preserves `WellFormed`.
+
+49. **`ConcreteSpec.Core.Generative.depend_preserves`** — [ConcreteSpec/Proofs/Grant.lean:96](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Grant.lean#L95-L100) (Law `tag :95`, subject `ConcreteSpec.Core.Generative.depend`)
+    - **Instance**: `ConcreteSpec/Proofs/Grant.lean:536` (`tag :535`), case `ConcreteSpec.Core.Generative.PreservationWitnesses.phantomOnly`
+    - **Planted**: `ConcreteSpec/Proofs/Grant.lean:540` (`tag :539`), mutant `ConcreteSpec.Core.Generative.PreservationWitnesses.dependDuplicatePlace`
+    - **Vacuity verdict**: **NON-VACUOUS**. `depend phantomOnly heap` succeeds (`ConcreteSpec/Proofs/Grant.lean:482`) and preserves `WellFormed`.
+
+50. **`ConcreteSpec.Core.Generative.consume_preserves`** — [ConcreteSpec/Proofs/Grant.lean:115](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Grant.lean#L114-L119) (Law `tag :114`, subject `ConcreteSpec.Core.Generative.consume`)
+    - **Instance**: `ConcreteSpec/Proofs/Grant.lean:544` (`tag :543`), case `ConcreteSpec.Core.Generative.PreservationWitnesses.dependent`
+    - **Planted**: `ConcreteSpec/Proofs/Grant.lean:548` (`tag :547`), mutant `ConcreteSpec.Core.Generative.PreservationWitnesses.consumeDropBinders`
+    - **Vacuity verdict**: **NON-VACUOUS**. `consume dependent ⟨0⟩` succeeds (`ConcreteSpec/Proofs/Grant.lean:482`) and preserves `WellFormed`.
+
+51. **`ConcreteSpec.Core.Generative.release_preserves`** — [ConcreteSpec/Proofs/Grant.lean:156](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Grant.lean#L155-L160) (Law `tag :155`, subject `ConcreteSpec.Core.Generative.release`)
+    - **Instance**: `ConcreteSpec/Proofs/Grant.lean:552` (`tag :551`), case `ConcreteSpec.Core.Generative.PreservationWitnesses.releaseInput`
+    - **Planted**: `ConcreteSpec/Proofs/Grant.lean:556` (`tag :555`), mutant `ConcreteSpec.Core.Generative.PreservationWitnesses.releaseAll`
+    - **Vacuity verdict**: **NON-VACUOUS**. `release releaseInput ⟨0⟩` succeeds (`ConcreteSpec/Proofs/Grant.lean:482`) while allocator `⟨1⟩` remains live, preserving `WellFormed`.
+
+52. **`ConcreteSpec.Core.Generative.reset_preserves`** — [ConcreteSpec/Proofs/Grant.lean:202](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Grant.lean#L200-L206) (Law `tag :200`, subject `ConcreteSpec.Core.Generative.reset`)
+    - **Instance**: `ConcreteSpec/Proofs/Grant.lean:560` (`tag :559`), case `ConcreteSpec.Core.Generative.Examples.initial`
+    - **Planted**: `ConcreteSpec/Proofs/Grant.lean:564` (`tag :563`), mutant `ConcreteSpec.Core.Generative.PreservationWitnesses.resetNoAdvance`
+    - **Vacuity verdict**: **NON-VACUOUS**. `reset initial ⟨0⟩` succeeds (`ConcreteSpec/Proofs/Grant.lean:482`) and preserves `WellFormed`.
+
+53. **`ConcreteSpec.Core.Generative.endScope_preserves`** — [ConcreteSpec/Proofs/Grant.lean:238](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Grant.lean#L236-L242) (Law `tag :236`, subject `ConcreteSpec.Core.Generative.endScope`)
+    - **Instance**: `ConcreteSpec/Proofs/Grant.lean:568` (`tag :567`), case `ConcreteSpec.Core.Generative.PreservationWitnesses.departing`
+    - **Planted**: `ConcreteSpec/Proofs/Grant.lean:572` (`tag :571`), mutant `ConcreteSpec.Core.Generative.PreservationWitnesses.endScopeDropAllBinders`
+    - **Vacuity verdict**: **NON-VACUOUS**. `endScope departing ⟨0⟩` succeeds (`ConcreteSpec/Proofs/Grant.lean:482`) and preserves `WellFormed`.
+
+54. **`ConcreteSpec.Core.Generative.allocations_have_live_allocator`** — [ConcreteSpec/Proofs/Grant.lean:397](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Grant.lean#L395-L406) (Law `tag :395`, subject `ConcreteSpec.Core.Generative.release`)
+    - **Instance**: `ConcreteSpec/Proofs/Grant.lean:672` (`tag :671`), case `ConcreteSpec.Core.Generative.PreservationWitnesses.releaseInput`
+    - **Planted**: `ConcreteSpec/Proofs/Grant.lean:679` (`tag :678`), mutant `ConcreteSpec.Core.Generative.PreservationWitnesses.releaseAll`
+    - **Vacuity verdict**: **NON-VACUOUS**. `release releaseInput ⟨0⟩` succeeds (`ConcreteSpec/Proofs/Grant.lean:482`) and leaves allocator `⟨1⟩` live for its remaining allocation dependency.
+
+55. **`ConcreteSpec.Core.Generative.run_erasure`** — [ConcreteSpec/Proofs/Grant.lean:446](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Grant.lean#L444-L452) (Law `tag :444`, subject `ConcreteSpec.Core.Generative.run`)
+    - **Instance**: `ConcreteSpec/Proofs/Grant.lean:723` (`tag :722`), case `ConcreteSpec.Core.Generative.RunWitnesses.runStart`
+    - **Planted**: `ConcreteSpec/Proofs/Grant.lean:728` (`tag :727`), mutant `ConcreteSpec.Core.Generative.RunWitnesses.runDropResults`
+    - **Vacuity verdict**: **NON-VACUOUS**. Inductive over command stream `cs`; `run commands runStart` succeeds (`ConcreteSpec/Proofs/Grant.lean:715`) and erases to `runErased commands runStart.1`.
+
+56. **`ConcreteSpec.Core.Generative.retired_never_revives`** — [ConcreteSpec/Proofs/Grant.lean:810](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Grant.lean#L807-L821) (Law `tag :807`, subject `ConcreteSpec.Core.Generative.runLifetime`)
+    - **Instance**: `ConcreteSpec/Proofs/Grant.lean:857` (`tag :856`), case `ConcreteSpec.Core.Generative.PreservationWitnesses.departed`
+    - **Planted**: `ConcreteSpec/Proofs/Grant.lean:861` (`tag :860`), mutant `ConcreteSpec.Core.Generative.LifetimeEvidence.revive`
+    - **Vacuity verdict**: **NON-VACUOUS**. Inductive over `ops : List LifetimeOp`; `runLifetime departed operations` succeeds (`ConcreteSpec/Proofs/Grant.lean:854`) and keeps retired brand `⟨0⟩` absent.
+
+57. **`ConcreteSpec.Core.Generative.fresh_nominal`** — [ConcreteSpec/Proofs/Grant.lean:826](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Grant.lean#L823-L833) (Law `tag :823`, subject `ConcreteSpec.Core.Generative.fresh`)
+    - **Instance**: `ConcreteSpec/Proofs/Grant.lean:865` (`tag :864`), case `ConcreteSpec.Core.Generative.PreservationWitnesses.releasedWithPhantom`
+    - **Planted**: `ConcreteSpec/Proofs/Grant.lean:871` (`tag :870`), mutant `ConcreteSpec.Core.Generative.LifetimeEvidence.freshReuse`
+    - **Vacuity verdict**: **NON-VACUOUS**. Proves `fresh` succeeds and produces a live binder whose brand is distinct from all existing binders in `s.binders` (using `WellFormed`'s `b.brand.id < s.nextBrand`).
+
+58. **`ConcreteSpec.Core.Generative.scope_exit_lifetime`** — [ConcreteSpec/Proofs/Grant.lean:927](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Grant.lean#L924-L963) (Law `tag :924`, subject `ConcreteSpec.Core.Generative.runLifetime`)
+    - **Instance**: `ConcreteSpec/Proofs/Grant.lean:966` (`tag :965`), case `ConcreteSpec.Core.Generative.PreservationWitnesses.departing`
+    - **Planted**: `ConcreteSpec/Proofs/Grant.lean:972` (`tag :971`), mutant `ConcreteSpec.Core.Generative.LifetimeEvidence.revive`
+    - **Vacuity verdict**: **NON-VACUOUS**. Composes `endScope` with an arbitrary subsequent `runLifetime u ops`, proving every brand of the exited scope remains `Retired` and absent from all `t.dependencies`.
+
+### 4.3 `ConcreteSpec/Proofs/Grant.lean` — `Grants` (13 Laws, 13 Instance/Planted Pairs)
+
+59. **`ConcreteSpec.Core.Grants.narrow_bounded`** — [ConcreteSpec/Proofs/Grant.lean:1068](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Grant.lean#L1067-L1073) (Law `tag :1067`, subject `ConcreteSpec.Core.Grants.narrow`)
+    - **Instance**: `ConcreteSpec/Proofs/Grant.lean:1482` (`tag :1481`), case `ConcreteSpec.Core.Grants.Examples.initial`
+    - **Planted**: `ConcreteSpec/Proofs/Grant.lean:1486` (`tag :1485`), mutant `ConcreteSpec.Core.Grants.GrantWitnesses.narrowTakeRequested`
+    - **Vacuity verdict**: **NON-VACUOUS**. `narrow initial ⟨0⟩ [1, 2]` succeeds (`ConcreteSpec/Proofs/Grant.lean:1434`) and preserves `Bounded launchBudget`.
+
+60. **`ConcreteSpec.Core.Grants.acquire_bounded`** — [ConcreteSpec/Proofs/Grant.lean:1092](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Grant.lean#L1090-L1098) (Law `tag :1090`, subject `ConcreteSpec.Core.Grants.acquire`)
+    - **Instance**: `ConcreteSpec/Proofs/Grant.lean:1490` (`tag :1489`), case `ConcreteSpec.Core.Grants.Examples.initial`
+    - **Planted**: `ConcreteSpec/Proofs/Grant.lean:1494` (`tag :1493`), mutant `ConcreteSpec.Core.Grants.GrantWitnesses.acquireEscalate`
+    - **Vacuity verdict**: **NON-VACUOUS**. `acquire initial ⟨0⟩ [1, 2] [1] [.fs] true 99` succeeds (`ConcreteSpec/Proofs/Grant.lean:1434`) and preserves `Bounded launchBudget`.
+
+61. **`ConcreteSpec.Core.Grants.close_bounded`** — [ConcreteSpec/Proofs/Grant.lean:1109](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Grant.lean#L1108-L1119) (Law `tag :1108`, subject `ConcreteSpec.Core.Grants.close`)
+    - **Instance**: `ConcreteSpec/Proofs/Grant.lean:1499` (`tag :1498`), case `ConcreteSpec.Core.Grants.Examples.initial`
+    - **Planted**: `ConcreteSpec/Proofs/Grant.lean:1504` (`tag :1503`), mutant `ConcreteSpec.Core.Grants.GrantWitnesses.closeEscalateRights`
+    - **Vacuity verdict**: **NON-VACUOUS**. `close initial ⟨0⟩ (.error 5)` succeeds (`ConcreteSpec/Proofs/Grant.lean:1434`) and preserves `Bounded launchBudget`.
+
+62. **`ConcreteSpec.Core.Grants.rights_never_grow`** — [ConcreteSpec/Proofs/Grant.lean:1160](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Grant.lean#L1157-L1166) (Law `tag :1157`, subject `ConcreteSpec.Core.Grants.runOps`)
+    - **Instance**: `ConcreteSpec/Proofs/Grant.lean:1509` (`tag :1508`), case `ConcreteSpec.Core.Grants.Examples.initial`
+    - **Planted**: `ConcreteSpec/Proofs/Grant.lean:1513` (`tag :1512`), mutant `ConcreteSpec.Core.Grants.GrantWitnesses.runOpsMintRight`
+    - **Vacuity verdict**: **NON-VACUOUS**. Inductive over `ops : List (Op H)`; `runOps initial validOps` succeeds (`ConcreteSpec/Proofs/Grant.lean:1434`) and stays within `launchBudget`.
+
+63. **`ConcreteSpec.Core.Grants.narrow_fresh`** — [ConcreteSpec/Proofs/Grant.lean:1177](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Grant.lean#L1176-L1181) (Law `tag :1176`, subject `ConcreteSpec.Core.Grants.narrow`)
+    - **Instance**: `ConcreteSpec/Proofs/Grant.lean:1517` (`tag :1516`), case `ConcreteSpec.Core.Grants.Examples.initial`
+    - **Planted**: `ConcreteSpec/Proofs/Grant.lean:1521` (`tag :1520`), mutant `ConcreteSpec.Core.Grants.GrantWitnesses.narrowNoAdvance`
+    - **Vacuity verdict**: **NON-VACUOUS**. `narrow initial ⟨0⟩ [1, 2]` succeeds and preserves `Fresh`.
+
+64. **`ConcreteSpec.Core.Grants.acquire_fresh`** — [ConcreteSpec/Proofs/Grant.lean:1194](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Grant.lean#L1193-L1199) (Law `tag :1193`, subject `ConcreteSpec.Core.Grants.acquire`)
+    - **Instance**: `ConcreteSpec/Proofs/Grant.lean:1525` (`tag :1524`), case `ConcreteSpec.Core.Grants.Examples.initial`
+    - **Planted**: `ConcreteSpec/Proofs/Grant.lean:1529` (`tag :1528`), mutant `ConcreteSpec.Core.Grants.GrantWitnesses.acquireNoAdvance`
+    - **Vacuity verdict**: **NON-VACUOUS**. `acquire initial ⟨0⟩ [1] [1] [.fs] true 99` succeeds (`ConcreteSpec/Proofs/Grant.lean:1434`) and preserves `Fresh`.
+
+65. **`ConcreteSpec.Core.Grants.close_fresh`** — [ConcreteSpec/Proofs/Grant.lean:1210](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Grant.lean#L1209-L1217) (Law `tag :1209`, subject `ConcreteSpec.Core.Grants.close`)
+    - **Instance**: `ConcreteSpec/Proofs/Grant.lean:1533` (`tag :1532`), case `ConcreteSpec.Core.Grants.Examples.initial`
+    - **Planted**: `ConcreteSpec/Proofs/Grant.lean:1538` (`tag :1537`), mutant `ConcreteSpec.Core.Grants.GrantWitnesses.closeRewindSupply`
+    - **Vacuity verdict**: **NON-VACUOUS**. `close initial ⟨0⟩ (.error 5)` succeeds and preserves `Fresh`.
+
+66. **`ConcreteSpec.Core.Grants.close_consumes`** — [ConcreteSpec/Proofs/Grant.lean:1271](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Grant.lean#L1269-L1285) (Law `tag :1269`, subject `ConcreteSpec.Core.Grants.close`)
+    - **Instance**: `ConcreteSpec/Proofs/Grant.lean:1551` (`tag :1550`), case `ConcreteSpec.Core.Grants.Examples.initial`
+    - **Planted**: `ConcreteSpec/Proofs/Grant.lean:1556` (`tag :1555`), mutant `ConcreteSpec.Core.Grants.GrantWitnesses.closeKeepLive`
+    - **Vacuity verdict**: **NON-VACUOUS**. `close initial ⟨0⟩ (.error 5)` succeeds and marks grant `⟨0⟩` `Dead`.
+
+67. **`ConcreteSpec.Core.Grants.narrow_consumes`** — [ConcreteSpec/Proofs/Grant.lean:1298](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Grant.lean#L1296-L1302) (Law `tag :1296`, subject `ConcreteSpec.Core.Grants.narrow`)
+    - **Instance**: `ConcreteSpec/Proofs/Grant.lean:1560` (`tag :1559`), case `ConcreteSpec.Core.Grants.Examples.initial`
+    - **Planted**: `ConcreteSpec/Proofs/Grant.lean:1564` (`tag :1563`), mutant `ConcreteSpec.Core.Grants.GrantWitnesses.narrowKeepParent`
+    - **Vacuity verdict**: **NON-VACUOUS**. `narrow initial ⟨0⟩ [1, 2]` succeeds, issues child at `⟨s.next⟩` (distinct from `i` by `Fresh s`), and keeps parent `⟨0⟩` `Dead`.
+
+68. **`ConcreteSpec.Core.Grants.consumed_never_revives`** — [ConcreteSpec/Proofs/Grant.lean:1334](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Grant.lean#L1332-L1340) (Law `tag :1332`, subject `ConcreteSpec.Core.Grants.runOps`)
+    - **Instance**: `ConcreteSpec/Proofs/Grant.lean:1569` (`tag :1568`), case `ConcreteSpec.Core.Grants.GrantWitnesses.afterClose0`
+    - **Planted**: `ConcreteSpec/Proofs/Grant.lean:1574` (`tag :1573`), mutant `ConcreteSpec.Core.Grants.GrantWitnesses.runOpsRevive`
+    - **Vacuity verdict**: **NON-VACUOUS**. Inductive over `ops : List (Op H)`; `runOps afterClose0 postCloseOps` succeeds (`ConcreteSpec/Proofs/Grant.lean:1548`) and keeps `⟨0⟩` `Dead`.
+
+69. **`ConcreteSpec.Core.Grants.acquire_keeps_parent`** — [ConcreteSpec/Proofs/Grant.lean:1379](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Grant.lean#L1377-L1384) (Law `tag :1377`, subject `ConcreteSpec.Core.Grants.acquire`)
+    - **Instance**: `ConcreteSpec/Proofs/Grant.lean:1598` (`tag :1597`), case `ConcreteSpec.Core.Grants.Examples.initial`
+    - **Planted**: `ConcreteSpec/Proofs/Grant.lean:1603` (`tag :1602`), mutant `ConcreteSpec.Core.Grants.GrantWitnesses.acquireConsumeParent`
+    - **Vacuity verdict**: **NON-VACUOUS**. `acquire initial ⟨0⟩ [1] [1] [.fs] true 99` succeeds and preserves `usable t ⟨0⟩ = usable initial ⟨0⟩`.
+
+70. **`ConcreteSpec.Core.Grants.narrow_permissions`** — [ConcreteSpec/Proofs/Grant.lean:1612](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c5r7s/tree/ConcreteSpec/Proofs/Grant.lean#L1609-L1628) (Law `tag :1609`, subject `ConcreteSpec.Core.Grants.narrow`)
+    - **Instance**: `ConcreteSpec/Proofs/Grant.lean:1631` (`tag :1630`), case `ConcreteSpec.Core.Grants.Examples.initial`
+    - **Planted**: `ConcreteSpec/Proofs/Grant.lean:1637` (`tag :1636`), mutant `ConcreteSpec.Core.Grants.GrantWitnesses.narrowTakeRequested`
+    - **Vacuity verdict**: **NON-VACUOUS**. Proves the bidirectional extensional permission equivalence `Permits t ⟨s.next⟩ right ↔ Permits s i right ∧ right ∈ requested` on `narrow initial ⟨0⟩ [1, 2]`.
+
+---
+
+## 5. Verdicts on Every `(approved: PENDING)` Helper Exemption
+
+Every declaration below is taken directly from `grep -n "approved: PENDING" ConcreteSpec/Proofs/Own.lean ConcreteSpec/Proofs/Grant.lean` and the `theorem` declaration line immediately following each match (152 total: 112 in `ConcreteSpec/Proofs/Own.lean`, 40 in `ConcreteSpec/Proofs/Grant.lean`).
+
+### 5.1 `ConcreteSpec/Proofs/Own.lean` (112 Helper Exemptions)
+
+1. `ConcreteSpec/Proofs/Own.lean:19` (tag `:18`) — `fold_preserves` (`Helper (congruence)`): **APPROVE** — Monadic `foldlM` congruence helper lifting a single-step `WellFormed` preservation proof across a list.
+2. `ConcreteSpec/Proofs/Own.lean:31` (tag `:30`) — `move_preserves_result` (`Helper (inversion)`): **APPROVE** — Unpacked `move s p = some t` inversion helper discharging `move_preserves`.
+3. `ConcreteSpec/Proofs/Own.lean:77` (tag `:76`) — `reinitialize_preserves_result` (`Helper (inversion)`): **APPROVE** — Unpacked `reinitialize s p = some t` inversion helper discharging `reinitialize_preserves`.
+4. `ConcreteSpec/Proofs/Own.lean:119` (tag `:118`) — `compatible_symm` (`Helper (computation)`): **APPROVE** — Reorders the disjunction in `Compatible` to prove symmetry for loan insertion.
+5. `ConcreteSpec/Proofs/Own.lean:129` (tag `:128`) — `insert_loan` (`Helper (congruence)`): **APPROVE** — Internal congruence lemma proving `WellFormed` when prepending a single fresh compatible loan.
+6. `ConcreteSpec/Proofs/Own.lean:172` (tag `:171`) — `owner_guard` (`Helper (inversion)`): **APPROVE** — Unpacks `ownerAccess s p m = true` into owned-root and loan-compatibility facts for `borrow` and `passOwner`.
+7. `ConcreteSpec/Proofs/Own.lean:190` (tag `:189`) — `borrow_preserves_result` (`Helper (inversion)`): **APPROVE** — Unpacked `borrow s p path m = some t` inversion helper discharging `borrow_preserves`.
+8. `ConcreteSpec/Proofs/Own.lean:208` (tag `:207`) — `reborrowTo_preserves_result` (`Helper (inversion)`): **APPROVE** — Unpacked `reborrowTo s i path m activation = some t` inversion helper discharging `reborrowTo_preserves`.
+9. `ConcreteSpec/Proofs/Own.lean:247` (tag `:246`) — `reborrow_preserves_result` (`Helper (inversion)`): **APPROVE** — Unpacked `reborrow s i path m = some t` inversion helper discharging `reborrow_preserves`.
+10. `ConcreteSpec/Proofs/Own.lean:254` (tag `:253`) — `endLoan_preserves_result` (`Helper (inversion)`): **APPROVE** — Unpacked `endLoan s i = some t` inversion helper discharging `endLoan_preserves`.
+11. `ConcreteSpec/Proofs/Own.lean:283` (tag `:282`) — `accessOwner_preserves_result` (`Helper (inversion)`): **APPROVE** — Unpacked `accessOwner s p m = some t` inversion helper for `accessOwner_preserves`.
+12. `ConcreteSpec/Proofs/Own.lean:291` (tag `:290`) — `accessLoan_preserves_result` (`Helper (inversion)`): **APPROVE** — Unpacked `accessLoan s i m = some t` inversion helper for `accessLoan_preserves`.
+13. `ConcreteSpec/Proofs/Own.lean:299` (tag `:298`) — `move_progress` (`Helper (computation)`): **APPROVE** — Guard-normalization helper for `move`; protocol soundness is carried by `move_preserves`, `moved_no_loan`, and `move_reinitialize_protocol`.
+14. `ConcreteSpec/Proofs/Own.lean:311` (tag `:310`) — `borrow_progress` (`Helper (computation)`): **APPROVE** — Guard-normalization helper for `borrow`; soundness is carried by `borrow_preserves` and `loan_has_owned_root`.
+15. `ConcreteSpec/Proofs/Own.lean:318` (tag `:317`) — `reborrowTo_progress` (`Helper (computation)`): **APPROVE** — Guard-normalization helper for `reborrowTo`; used in `downward_reborrow_protocol`.
+16. `ConcreteSpec/Proofs/Own.lean:327` (tag `:326`) — `reborrow_progress` (`Helper (computation)`): **APPROVE** — Guard-normalization specialization of `reborrowTo_progress` to the current frame.
+17. `ConcreteSpec/Proofs/Own.lean:335` (tag `:334`) — `accessOwner_progress` (`Helper (computation)`): **APPROVE** — Unpacks the boolean guard of `accessOwner`.
+18. `ConcreteSpec/Proofs/Own.lean:340` (tag `:339`) — `accessLoan_progress` (`Helper (computation)`): **APPROVE** — Unpacks the boolean guard of `accessLoan`.
+19. `ConcreteSpec/Proofs/Own.lean:372` (tag `:371`) — `bind_preserves_result` (`Helper (inversion)`): **APPROVE** — Unpacked `bind types x s = some t` inversion helper discharging `bind_preserves`.
+20. `ConcreteSpec/Proofs/Own.lean:439` (tag `:438`) — `slot_unique` (`Helper (inversion)`): **APPROVE** — List `Nodup` inversion identifying two slot records with the same place.
+21. `ConcreteSpec/Proofs/Own.lean:456` (tag `:455`) — `drop_preserves_result` (`Helper (inversion)`): **APPROVE** — Unpacked `drop xs s = some t` inversion helper discharging `drop_preserves`.
+22. `ConcreteSpec/Proofs/Own.lean:526` (tag `:525`) — `enter_preserves_result` (`Helper (inversion)`): **APPROVE** — Unpacked `enter types xs s = some t` inversion helper discharging `enter_preserves`.
+23. `ConcreteSpec/Proofs/Own.lean:561` (tag `:560`) — `endLocals_preserves_result` (`Helper (inversion)`): **APPROVE** — Unpacked `endLocals a s = some t` inversion helper discharging `endLocals_preserves`.
+24. `ConcreteSpec/Proofs/Own.lean:566` (tag `:565`) — `endLoan_frames` (`Helper (computation)`): **APPROVE** — Frame-equality helper showing `endLoan` leaves `frames` unchanged.
+25. `ConcreteSpec/Proofs/Own.lean:577` (tag `:576`) — `fold_frames` (`Helper (congruence)`): **APPROVE** — Lifts frame equality through `List.foldlM`.
+26. `ConcreteSpec/Proofs/Own.lean:589` (tag `:588`) — `drop_absent` (`Helper (inversion)`): **APPROVE** — Filter-inversion lemma showing dropped local places are absent from `t.slots`.
+27. `ConcreteSpec/Proofs/Own.lean:605` (tag `:604`) — `leave_no_activation_slot_result` (`Helper (inversion)`): **APPROVE** — Unpacked `leave s = some t` inversion helper discharging `leave_no_activation_slot` and `leave_preserves_result`.
+28. `ConcreteSpec/Proofs/Own.lean:638` (tag `:637`) — `leave_preserves_result` (`Helper (inversion)`): **APPROVE** — Unpacked `leave s = some t` inversion helper discharging `leave_preserves`.
+29. `ConcreteSpec/Proofs/Own.lean:686` (tag `:685`) — `set_views_preserves` (`Helper (congruence)`): **APPROVE** — Congruence helper showing updating `views` in the head frame preserves `WellFormed`.
+30. `ConcreteSpec/Proofs/Own.lean:712` (tag `:711`) — `enterDown_preserves_result` (`Helper (inversion)`): **APPROVE** — Unpacked `enterDown s args = some t` inversion helper discharging `enterDown_preserves`.
+31. `ConcreteSpec/Proofs/Own.lean:733` (tag `:732`) — `life_preserves_result` (`Helper (inversion)`): **APPROVE** — Unpacked `life types e s = some t` inversion helper discharging `life_preserves`.
+32. `ConcreteSpec/Proofs/Own.lean:742` (tag `:741`) — `reinitialize_progress` (`Helper (computation)`): **APPROVE** — Guard-normalization helper for `reinitialize`; used in `move_reinitialize_protocol`.
+33. `ConcreteSpec/Proofs/Own.lean:759` (tag `:758`) — `endLoan_progress` (`Helper (computation)`): **APPROVE** — Guard-normalization helper for `endLoan`; used in `downward_reborrow_protocol`.
+34. `ConcreteSpec/Proofs/Own.lean:770` (tag `:769`) — `bind_fresh_progress` (`Helper (computation)`): **APPROVE** — Single-parameter binding step used by `bind_params_progress`.
+35. `ConcreteSpec/Proofs/Own.lean:777` (tag `:776`) — `bind_params_progress` (`Helper (congruence)`): **APPROVE** — Inductive helper over parameter lists discharging `enter_progress`.
+36. `ConcreteSpec/Proofs/Own.lean:813` (tag `:812`) — `drop_progress` (`Helper (computation)`): **APPROVE** — Guard-normalization helper for `drop`.
+37. `ConcreteSpec/Proofs/Own.lean:878` (tag `:877`) — `loan_has_owned_root_of_wf` (`Helper (projection)`): **APPROVE** — Invariant-projection helper used to discharge `loan_has_owned_root`.
+38. `ConcreteSpec/Proofs/Own.lean:883` (tag `:882`) — `moved_no_loan_of_wf` (`Helper (inversion)`): **APPROVE** — Invariant-consequence helper used to discharge `moved_no_loan`.
+39. `ConcreteSpec/Proofs/Own.lean:893` (tag `:892`) — `instrument_erasure_result` (`Helper (computation)`): **APPROVE** — Unpacked result helper for `instrument_erasure` and operand simulation.
+40. `ConcreteSpec/Proofs/Own.lean:906` (tag `:905`) — `life_erasure_result` (`Helper (computation)`): **APPROVE** — Unpacked result helper for `lifeStore` erasure.
+41. `ConcreteSpec/Proofs/Own.lean:915` (tag `:914`) — `map_metadata_preserves` (`Helper (congruence)`): **APPROVE** — Transports `WellFormed` across `Loan` metadata updates in `adoptDown`.
+42. `ConcreteSpec/Proofs/Own.lean:941` (tag `:940`) — `adoptDown_preserves_result` (`Helper (inversion)`): **APPROVE** — Unpacked `adoptDown s args = some t` inversion helper discharging `adoptDown_preserves`.
+43. `ConcreteSpec/Proofs/Own.lean:965` (tag `:964`) — `passDown_preserves_result` (`Helper (inversion)`): **APPROVE** — Unpacked `passDown s i parameter = some t` inversion helper discharging `passDown_preserves`.
+44. `ConcreteSpec/Proofs/Own.lean:1006` (tag `:1005`) — `passDown_call_preserves_result` (`Helper (inversion)`): **APPROVE** — Unpacked `passDown` inversion helper discharging `passDown_call_preserves`.
+45. `ConcreteSpec/Proofs/Own.lean:1068` (tag `:1067`) — `callLife_preserves_result` (`Helper (inversion)`): **APPROVE** — Unpacked `callLife` inversion helper discharging `callLife_preserves`.
+46. `ConcreteSpec/Proofs/Own.lean:1103` (tag `:1102`) — `reinitialize_loans` (`Helper (computation)`): **APPROVE** — Shows `reinitialize` leaves `loans` unchanged.
+47. `ConcreteSpec/Proofs/Own.lean:1112` (tag `:1111`) — `bind_loans` (`Helper (computation)`): **APPROVE** — Shows `bind` leaves `loans` unchanged.
+48. `ConcreteSpec/Proofs/Own.lean:1124` (tag `:1123`) — `fold_loans` (`Helper (congruence)`): **APPROVE** — Lifts loan-table inclusion across `List.foldlM`.
+49. `ConcreteSpec/Proofs/Own.lean:1136` (tag `:1135`) — `enter_loans` (`Helper (congruence)`): **APPROVE** — Shows `enter` leaves `loans` unchanged.
+50. `ConcreteSpec/Proofs/Own.lean:1155` (tag `:1154`) — `drop_loans` (`Helper (computation)`): **APPROVE** — Shows `drop` leaves `loans` unchanged.
+51. `ConcreteSpec/Proofs/Own.lean:1165` (tag `:1164`) — `endLoan_subset` (`Helper (inversion)`): **APPROVE** — Shows `endLoan` only removes from `s.loans`.
+52. `ConcreteSpec/Proofs/Own.lean:1175` (tag `:1174`) — `life_subset` (`Helper (inversion)`): **APPROVE** — Shows `life` never adds new loans.
+53. `ConcreteSpec/Proofs/Own.lean:1193` (tag `:1191`) — `callLife_call_preserves_result` (`Helper (inversion)`): **APPROVE** — Unpacked `callLife` inversion helper discharging `callLife_call_preserves`.
+54. `ConcreteSpec/Proofs/Own.lean:1254` (tag `:1253`) — `callLife_erasure_result` (`Helper (computation)`): **APPROVE** — Unpacked result helper for `callLifeStore`.
+55. `ConcreteSpec/Proofs/Own.lean:1263` (tag `:1262`) — `instrument_preserves_result` (`Helper (congruence)`): **APPROVE** — Unpacked result helper for `instrument_preserves`.
+56. `ConcreteSpec/Proofs/Own.lean:1276` (tag `:1275`) — `readOwner_erasure_result` (`Helper (computation)`): **APPROVE** — Unpacked result helper for `readOwner`.
+57. `ConcreteSpec/Proofs/Own.lean:1286` (tag `:1285`) — `writeOwner_erasure_result` (`Helper (computation)`): **APPROVE** — Unpacked result helper for `writeOwner`.
+58. `ConcreteSpec/Proofs/Own.lean:1296` (tag `:1295`) — `readLoan_erasure_result` (`Helper (computation)`): **APPROVE** — Unpacked result helper for `readLoan`.
+59. `ConcreteSpec/Proofs/Own.lean:1313` (tag `:1312`) — `writeLoan_erasure_result` (`Helper (computation)`): **APPROVE** — Unpacked result helper for `writeLoan`.
+60. `ConcreteSpec/Proofs/Own.lean:1330` (tag `:1328`) — `nextLoan_fresh` (`Helper (arithmetic)`): **APPROVE** — Arithmetic consequence of `WellFormed` (`l.id.id < s.nextLoan → l.id ≠ ⟨s.nextLoan⟩`).
+61. `ConcreteSpec/Proofs/Own.lean:1338` (tag `:1337`) — `borrow_birth_result` (`Helper (computation)`): **APPROVE** — Unpacked constructor helper for `borrow_birth`.
+62. `ConcreteSpec/Proofs/Own.lean:1350` (tag `:1349`) — `reborrow_birth_result` (`Helper (computation)`): **APPROVE** — Unpacked constructor helper for `reborrow_birth`.
+63. `ConcreteSpec/Proofs/Own.lean:1364` (tag `:1363`) — `endLoan_supply_result` (`Helper (computation)`): **APPROVE** — Unpacked field helper for `endLoan_supply`.
+64. `ConcreteSpec/Proofs/Own.lean:1376` (tag `:1375`) — `leave_no_local_loan_result` (`Helper (inversion)`): **APPROVE** — Unpacked `leave s = some t` inversion helper discharging `leave_no_local_loan`.
+65. `ConcreteSpec/Proofs/Own.lean:1401` (tag `:1400`) — `adoptDown_only_arguments_result` (`Helper (projection)`): **APPROVE** — Extracts the `pendingArgument` guard checked by `adoptDown`.
+66. `ConcreteSpec/Proofs/Own.lean:1413` (tag `:1412`) — `reborrowTo_current_result` (`Helper (projection)`): **APPROVE** — Extracts the destination-frame guard checked by `reborrowTo`.
+67. `ConcreteSpec/Proofs/Own.lean:1426` (tag `:1425`) — `passOwner_preserves_result` (`Helper (inversion)`): **APPROVE** — Unpacked `passOwner` inversion helper discharging `passOwner_preserves`.
+68. `ConcreteSpec/Proofs/Own.lean:1446` (tag `:1445`) — `passOwner_call_preserves_result` (`Helper (inversion)`): **APPROVE** — Unpacked `passOwner` inversion helper discharging `passOwner_call_preserves`.
+69. `ConcreteSpec/Proofs/Own.lean:1496` (tag `:1495`) — `passOwner_freezes_result` (`Helper (inversion)`): **APPROVE** — Unpacked `passOwner` inversion helper discharging `passOwner_freezes`.
+70. `ConcreteSpec/Proofs/Own.lean:1510` (tag `:1509`) — `passOwner_birth_result` (`Helper (computation)`): **APPROVE** — Unpacked constructor helper for `passOwner_birth`.
+71. `ConcreteSpec/Proofs/Own.lean:1524` (tag `:1523`) — `loan_unique` (`Helper (inversion)`): **APPROVE** — List `Nodup` inversion identifying two loan records with the same `LoanId`.
+72. `ConcreteSpec/Proofs/Own.lean:1540` (tag `:1539`) — `endLoans_retains` (`Helper (inversion)`): **APPROVE** — Fold inversion showing `endLoan` over other IDs retains `l`.
+73. `ConcreteSpec/Proofs/Own.lean:1557` (tag `:1556`) — `leave_retains_caller_result` (`Helper (inversion)`): **APPROVE** — Unpacked `leave s = some t` inversion helper discharging `leave_retains_caller`.
+74. `ConcreteSpec/Proofs/Own.lean:1577` (tag `:1576`) — `endLoans_removed` (`Helper (inversion)`): **APPROVE** — Fold inversion showing `endLoan` removes all scheduled loan IDs.
+75. `ConcreteSpec/Proofs/Own.lean:1600` (tag `:1599`) — `leave_no_activation_loan_result` (`Helper (inversion)`): **APPROVE** — Unpacked `leave s = some t` inversion helper discharging `leave_no_activation_loan`.
+76. `ConcreteSpec/Proofs/Own.lean:1615` (tag `:1614`) — `defer_keeps_store_result` (`Helper (computation)`): **APPROVE** — Unpacked C1 `.defer` step computation helper.
+77. `ConcreteSpec/Proofs/Own.lean:1844` (tag `:1843`) — `reborrowTo_live_result` (`Helper (inversion)`): **APPROVE** — Unpacked `reborrowTo` inversion helper discharging `reborrowTo_live`.
+78. `ConcreteSpec/Proofs/Own.lean:1861` (tag `:1860`) — `adoptDown_live_result` (`Helper (inversion)`): **APPROVE** — Unpacked `adoptDown` inversion helper discharging `adoptDown_live`.
+79. `ConcreteSpec/Proofs/Own.lean:1880` (tag `:1879`) — `leave_frames_proj` (`Helper (projection)`): **APPROVE** — Projects `t.frames = s.frames.tail` from a successful `leave`.
+80. `ConcreteSpec/Proofs/Own.lean:1899` (tag `:1898`) — `leave_live_result` (`Helper (inversion)`): **APPROVE** — Unpacked `leave` inversion helper discharging `leave_live`.
+81. `ConcreteSpec/Proofs/Own.lean:1941` (tag `:1940`) — `eval_ok_erasure_result` (`Helper (inversion)`): **APPROVE** — Unpacked operand `.ok` erasure helper used in `evalArgs_ok_erasure_result` and `step_next_erasure_result`.
+82. `ConcreteSpec/Proofs/Own.lean:1959` (tag `:1958`) — `eval_ok_erasure` (`Helper (computation)`): **APPROVE** — Single-operand `.ok` wrapper calculation used in C1 step erasure.
+83. `ConcreteSpec/Proofs/Own.lean:1969` (tag `:1968`) — `eval_trap_erasure_result` (`Helper (inversion)`): **APPROVE** — Unpacked operand `.trap` erasure helper used in `evalArgs_trap_erasure_result` and `step_next_erasure_result`.
+84. `ConcreteSpec/Proofs/Own.lean:1983` (tag `:1982`) — `eval_trap_erasure` (`Helper (computation)`): **APPROVE** — Single-operand `.trap` wrapper calculation.
+85. `ConcreteSpec/Proofs/Own.lean:1993` (tag `:1992`) — `evalArgs_ok_erasure_result` (`Helper (inversion)`): **APPROVE** — Inductive helper over `args : List O.Expr` discharging `evalArgs_ok_erasure` and call-step erasure.
+86. `ConcreteSpec/Proofs/Own.lean:2027` (tag `:2026`) — `evalArgs_trap_erasure_result` (`Helper (inversion)`): **APPROVE** — Inductive helper over `args : List O.Expr` discharging `evalArgs_trap_erasure` and call-step erasure.
+87. `ConcreteSpec/Proofs/Own.lean:2063` (tag `:2062`) — `test_erasure_result` (`Helper (projection)`): **APPROVE** — Definitional `rfl` projection of `(instrumentOperands O types permit).test`.
+88. `ConcreteSpec/Proofs/Own.lean:2067` (tag `:2066`) — `test_erasure` (`Helper (computation)`): **APPROVE** — Match-form wrapper around `test_erasure_result`.
+89. `ConcreteSpec/Proofs/Own.lean:2075` (tag `:2074`) — `instrumentLife_erasure_result` (`Helper (inversion)`): **APPROVE** — Unpacked lifecycle erasure helper used by `bindLife_erasure_proj`, `dropOut_erasure_proj`, and `step_next_erasure_result`.
+90. `ConcreteSpec/Proofs/Own.lean:2091` (tag `:2090`) — `instrumentLife_erasure` (`Helper (computation)`): **APPROVE** — Match-form calculation of `(instrumentOperands O types permit).life`.
+91. `ConcreteSpec/Proofs/Own.lean:2109` (tag `:2108`) — `allows_erasure_result` (`Helper (projection)`): **APPROVE** — Projects the two `Bool.and_eq_true` conjuncts of `(instrumentOperands O types permit).allows`.
+92. `ConcreteSpec/Proofs/Own.lean:2118` (tag `:2117`) — `allows_erasure` (`Helper (computation)`): **APPROVE** — Unpacks the `allows` guard equivalence; primitive request/answer simulation is proved in `step_request_erasure` and `Steps_erasure`.
+93. `ConcreteSpec/Proofs/Ownean:2169` (theorem at `ConcreteSpec/Proofs/Own.lean:2170`: `private theorem stepExit_erasure_proj`) — `Helper (projection)` — **APPROVE**: commutes `Exec.stepExit` with `eraseConfig`, used by `step_next_erasure_result`.
+98. `ConcreteSpec/Proofs/Own.lean:2234` (theorem at `ConcreteSpec/Proofs/Own.lean:2235`: `theorem step_next_erasure_result`) — `Helper (inversion)` — **APPROVE**: unpacked `.next` step simulation helper backing `Law` `step_next_erasure` (`ConcreteSpec/Proofs/Own.lean:2446`).
+99. `ConcreteSpec/Proofs/Own.lean:2458` (theorem at `ConcreteSpec/Proofs/Own.lean:2459`: `theorem step_request_erasure_result`) — `Helper (inversion)` — **APPROVE**: unpacked `.request` step simulation helper backing `Law` `step_request_erasure` (`ConcreteSpec/Proofs/Own.lean:2601`).
+100. `ConcreteSpec/Proofs/Own.lean:2617` (theorem at `ConcreteSpec/Proofs/Own.lean:2618`: `private theorem eraseLabel_events_proj`) — `Helper (projection)` — **APPROVE**: projects `(eraseLabel l).events = l.events`, used by `Steps_erasure_result`.
+101. `ConcreteSpec/Proofs/Own.lean:2622` (theorem at `ConcreteSpec/Proofs/Own.lean:2623`: `private theorem eraseLabel_answer_proj`) — `Helper (projection)` — **APPROVE**: projects `eraseLabel a.label = (eraseAnswer a).label`, used by `Step_erasure_result`.
+102. `ConcreteSpec/Proofs/Own.lean:2628` (theorem at `ConcreteSpec/Proofs/Own.lean:2629`: `theorem Step_erasure_result`) — `Helper (inversion)` — **APPROVE**: unpacked `Exec.Step` simulation helper backing `Law` `Step_erasure` (`ConcreteSpec/Proofs/Own.lean:2645`).
+103. `ConcreteSpec/Proofs/Own.lean:2678` (theorem at `ConcreteSpec/Proofs/Own.lean:2679`: `theorem Steps_erasure_result`) — `Helper (inversion)` — **APPROVE**: C1 `Exec.Steps` specialization derived from `Law` `Steps_erasure` (`ConcreteSpec/Proofs/Own.lean:2667`).
+104. `ConcreteSpec/Proofs/Own.lean:2692` (theorem at `ConcreteSpec/Proofs/Own.lean:2693`: `private theorem final?_eraseConfig_proj`) — `Helper (projection)` — **APPROVE**: projects `(eraseConfig c).final? = c.final?`, used by `runFrom_erasure` and `runFrom_erasure_of_accepted`.
+105. `ConcreteSpec/Proofs/Own.lean:2706` (theorem at `ConcreteSpec/Proofs/Own.lean:2707`: `private theorem allows_liftAnswer_proj`) — `Helper (projection)` — **APPROVE**: proves `instrumentAllows` on `liftAnswer s.own a` equals `O.allows` on `a`, used by `runFrom_erasure`.
+106. `ConcreteSpec/Proofs/Own.lean:2791` (theorem at `ConcreteSpec/Proofs/Own.lean:2792`: `private theorem eval_stuck_of_permitted_inv`) — `Helper (inversion)` — **APPROVE**: converse stuck inversion for single operand evaluation under `EvalPermitted`.
+107. `ConcreteSpec/Proofs/Own.lean:2812` (theorem at `ConcreteSpec/Proofs/Own.lean:2813`: `private theorem evalArgs_stuck_of_permitted_inv`) — `Helper (inversion)` — **APPROVE**: converse stuck inversion for argument list evaluation under `ArgsPermitted`.
+108. `ConcreteSpec/Proofs/Own.lean:2847` (theorem at `ConcreteSpec/Proofs/Own.lean:2848`: `private theorem life_none_of_permitted_inv`) — `Helper (inversion)` — **APPROVE**: converse stuck inversion for `life` under `LifePermitted`.
+119. `ConcreteSpec/Proofs/Own.lean:2862` (theorem at `ConcreteSpec/Proofs/Own.lean:2863`: `private theorem bindLife_none_of_permitted_inv`) — `Helper (inversion)` — **APPROVE**: converse stuck inversion for `Exec.bindLife` under `BindDstPermitted`.
+110. `ConcreteSpec/Proofs/Own.lean:2872` (theorem at `ConcreteSpec/Proofs/Own.lean:2873`: `private theorem dropOut_none_of_permitted_inv`) — `Helper (inversion)` — **APPROVE**: converse stuck inversion for `Exec.dropOut` under `LifePermitted`.
+111. `ConcreteSpec/Proofs/Own.lean:2879` (theorem at `ConcreteSpec/Proofs/Own.lean:2880`: `private theorem register_none_proj`) — `Helper (projection)` — **APPROVE**: proves `Exec.register` failure is invariant under `eraseFrame`.
+112. `ConcreteSpec/Proofs/Own.lean:2895` (theorem at `ConcreteSpec/Proofs/Own.lean:2896`: `private theorem stepExit_none_of_permitted_inv`) — `Helper (inversion)` — **APPROVE**: converse stuck inversion for `Exec.stepExit` under `ExitFramePermitted`.
+113. `ConcreteSpec/Proofs/Own.lean:2951` (theorem at `ConcreteSpec/Proofs/Own.lean:2952`: `private theorem step_none_of_permitted_inv`) — `Helper (inversion)` — **APPROVE**: converse stuck inversion for `Exec.step` under `StepPermitted`, backing `Law` `step_stuck_iff_of_accepted` (`ConcreteSpec/Proofs/Own.lean:3278`).
+114. `ConcreteSpec/Proofs/Own.lean:3127` (theorem at `ConcreteSpec/Proofs/Own.lean:3128`: `private theorem request_none_of_permitted_inv`) — `Helper (inversion)` — **APPROVE**: converse stuck inversion for primitive request continuations under `StepPermitted`, used in `runFrom_erasure_of_accepted`.
+115. `ConcreteSpec/Proofs/Own.lean:3265` (theorem at `ConcreteSpec/Proofs/Own.lean:3266`: `private theorem checkerAccepted_step_inv`) — `Helper (inversion)` — **APPROVE**: steps `CheckerAccepted` along `Exec.Step`, used by `runFrom_erasure_of_accepted`.
+116. `ConcreteSpec/Proofs/Own.lean:3378` (theorem at `ConcreteSpec/Proofs/Own.lean:3379`: `private theorem isStuck_eraseEnding_proj`) — `Helper (projection)` — **APPROVE**: projects `Ending.IsStuck (eraseEnding e) = Ending.IsStuck e`, used by `run_stuck_iff_of_accepted`.
+117. `ConcreteSpec/Proofs/Own.lean:3411` (theorem at `ConcreteSpec/Proofs/Own.lean:3412`: `private theorem step_det_next_inv`) — `Helper (inversion)` — **APPROVE**: deterministic silent-step inversion helper for concrete `CheckerAccepted` witness proofs.
+118. `ConcreteSpec/Proofs/Own.lean:3426` (theorem at `ConcreteSpec/Proofs/Own.lean:3427`: `private theorem step_det_none_inv`) — `Helper (inversion)` — **APPROVE**: deterministic stuck-step inversion helper for concrete `CheckerAccepted` witness proofs.
+119. `ConcreteSpec/Proofs/Own.lean:3436` (theorem at `ConcreteSpec/Proofs/Own.lean:3437`: `private theorem move_not_checkerAccepted_inv`) — `Helper (inversion)` — **APPROVE**: proves `¬ CheckerAccepted ... moveConfig` for the Q3 counterexample witness.
+120. `ConcreteSpec/Proofs/Own.lean:3448` (theorem at `ConcreteSpec/Proofs/Own.lean:3449`: `private theorem acceptedMove_checkerAccepted_inv`) — `Helper (inversion)` — **APPROVE**: proves `CheckerAccepted` for `acceptedMoveConfig`.
+121. `ConcreteSpec/Proofs/Own.lean:3479` (theorem at `ConcreteSpec/Proofs/Own.lean:3480`: `private theorem acceptedStuck_checkerAccepted_inv`) — `Helper (inversion)` — **APPROVE**: proves `CheckerAccepted` for `acceptedStuckConfig`.
+122. `ConcreteSpec/Proofs/Own.lean:3765` (theorem at `ConcreteSpec/Proofs/Own.lean:3766`: `theorem unconditionalRunConverse_refuted`) — `Helper (computation)` — **APPROVE**: refutes `UnconditionalRunConverse` on `moveConfig` as required by Q3.
+123. `ConcreteSpec/Proofs/Own.lean:3839` (theorem at `ConcreteSpec/Proofs/Own.lean:3840`: `private theorem primFrameStuck_checkerAccepted_inv`) — `Helper (inversion)` — **APPROVE**: proves `CheckerAccepted` for `primFrameStuckConfig`, supplying the hypothesis for `runFrom_erasure_of_accepted` and `run_stuck_iff_of_accepted` `Instance`/`Planted` pairs.
+124. `ConcreteSpec/Proofs/Own.lean:4022` (theorem at `ConcreteSpec/Proofs/Own.lean:4023`: `private theorem traceSteps`) — `Helper (computation)` — **APPROVE**: constructs the 7-step `Exec.Steps` derivation on `primTraceConfig`.
+125. `ConcreteSpec/Proofs/Own.lean:4086` (theorem at `ConcreteSpec/Proofs/Own.lean:4087`: `private theorem bindMove_checkerAccepted_inv`) — `Helper (inversion)` — **APPROVE**: proves `CheckerAccepted` for `bindMoveConfig`, supplying the hypothesis for `step_stuck_iff_of_accepted` `Instance`/`Planted`.
+126. `ConcreteSpec/Proofs/Own.lean:4304` (theorem at `ConcreteSpec/Proofs/Own.lean:4305`: `theorem accessOwner_preserves`) — `Helper (computation)` — **APPROVE**: `accessOwner` returns `some s` when permitted; identity preservation is a computation helper.
+127. `ConcreteSpec/Proofs/Own.lean:4310` (theorem at `ConcreteSpec/Proofs/Own.lean:4311`: `theorem accessLoan_preserves`) — `Helper (computation)` — **APPROVE**: `accessLoan` returns `some s` when permitted; identity preservation is a computation helper.
+128. `ConcreteSpec/Proofs/Own.lean:4964` (theorem at `ConcreteSpec/Proofs/Own.lean:4965`: `theorem instrument_erasure`) — `Helper (computation)` — **APPROVE**: unpacks generic `instrument`; execution erasure is proved by `Steps_erasure`.
+129. `ConcreteSpec/Proofs/Own.lean:4973` (theorem at `ConcreteSpec/Proofs/Own.lean:4974`: `theorem life_erasure`) — `Helper (computation)` — **APPROVE**: unpacks `lifeStore`; execution erasure is proved by `Steps_erasure`.
+130. `ConcreteSpec/Proofs/Own.lean:4982` (theorem at `ConcreteSpec/Proofs/Own.lean:4983`: `theorem callLife_erasure`) — `Helper (computation)` — **APPROVE**: unpacks `callLifeStore`; call protocols are proved by `directOwner_roundtrip` and `deferred_call_lifetime`.
+131. `ConcreteSpec/Proofs/Own.lean:4991` (theorem at `ConcreteSpec/Proofs/Own.lean:4992`: `theorem instrument_preserves`) — `Helper (computation)` — **APPROVE**: transports a supplied preservation hypothesis through `instrument`.
+132. `ConcreteSpec/Proofs/Own.lean:5001` (theorem at `ConcreteSpec/Proofs/Own.lean:5002`: `theorem readOwner_erasure`) — `Helper (computation)` — **APPROVE**: unpacks `readOwner` wrapper over `instrument` and `Hybrid.State.read`.
+133. `ConcreteSpec/Proofs/Own.lean:5010` (theorem at `ConcreteSpec/Proofs/Own.lean:5011`: `theorem writeOwner_erasure`) — `Helper (computation)` — **APPROVE**: unpacks `writeOwner` wrapper over `instrument` and `Hybrid.State.write`.
+134. `ConcreteSpec/Proofs/Own.lean:5020` (theorem at `ConcreteSpec/Proofs/Own.lean:5021`: `theorem readLoan_erasure`) — `Helper (computation)` — **APPROVE**: unpacks `readLoan` wrapper over `instrument` and `Hybrid.State.read`.
+135. `ConcreteSpec/Proofs/Own.lean:5030` (theorem at `ConcreteSpec/Proofs/Own.lean:5031`: `theorem writeLoan_erasure`) — `Helper (computation)` — **APPROVE**: unpacks `writeLoan` wrapper over `instrument` and `Hybrid.State.write`.
+136. `ConcreteSpec/Proofs/Own.lean:5041` (theorem at `ConcreteSpec/Proofs/Own.lean:5042`: `theorem borrow_birth`) — `Helper (computation)` — **APPROVE**: unpacks the inserted loan record of `borrow`; non-revival and root validity are proved by `ended_loans_never_revive` and `loan_has_owned_root`.
+137. `ConcreteSpec/Proofs/Own.lean:5052` (theorem at `ConcreteSpec/Proofs/Own.lean:5053`: `theorem reborrow_birth`) — `Helper (computation)` — **APPROVE**: unpacks the inserted child loan record of `reborrowTo`; scoped protocol is proved by `downward_reborrow_protocol`.
+138. `ConcreteSpec/Proofs/Own.lean:5064` (theorem at `ConcreteSpec/Proofs/Own.lean:5065`: `theorem endLoan_supply`) — `Helper (computation)` — **APPROVE**: unpacks `t.nextLoan = s.nextLoan` from `endLoan`; non-revival is proved by `ended_loans_never_revive`.
+139. `ConcreteSpec/Proofs/Own.lean:5072` (theorem at `ConcreteSpec/Proofs/Own.lean:5073`: `theorem adoptDown_only_arguments`) — `Helper (computation)` — **APPROVE**: unpacks the `pendingArgument` check of `adoptDown`; call protocols are proved by `callLife_call_preserves` and `deferred_call_lifetime`.
+140. `ConcreteSpec/Proofs/Own.lean:5104` (theorem at `ConcreteSpec/Proofs/Own.lean:5105`: `theorem reborrowTo_current`) — `Helper (computation)` — **APPROVE**: unpacks the current-frame destination check of `reborrowTo`; downward/upward protocol is proved by `downward_reborrow_protocol`.
+141. `ConcreteSpec/Proofs/Own.lean:5122` (theorem at `ConcreteSpec/Proofs/Own.lean:5123`: `theorem passOwner_birth`) — `Helper (computation)` — **APPROVE**: unpacks the inserted call-root loan record of `passOwner`; call lifetimes are proved by `directOwner_roundtrip` and `deferred_call_lifetime`.
+142. `ConcreteSpec/Proofs/Own.lean:5134` (theorem at `ConcreteSpec/Proofs/Own.lean:5135`: `theorem defer_keeps_store`) — `Helper (computation)` — **APPROVE**: unpacks the `.defer` registration step; full deferred call lifetime is proved by `deferred_call_lifetime`.
+143. `ConcreteSpec/Proofs/Own.lean:5782` (theorem at `ConcreteSpec/Proofs/Own.lean:5783`: `private theorem pending_enter_drop`) — `Helper (inversion)` — **APPROVE**: proves callee `.enter [parameter]` followed by `.drop [parameter]` preserves `t.own.loans` and `t.own.slots`, used by `Law` `deferred_call_lifetime` (`ConcreteSpec/Proofs/Own.lean:5809`).
+144. `ConcreteSpec/Proofs/Own.lean:5987` (theorem at `ConcreteSpec/Proofs/Own.lean:5988`: `private theorem loanSequence_retired_step`) — `Helper (inversion)` — **APPROVE**: single-step `RetiredLoan` preservation lemma across `loanAction`, used by `Law` `ended_loans_never_revive` (`ConcreteSpec/Proofs/Own.lean:6034`).
+
+*(Note: items 1–143 above cover all 143 `approved: PENDING` occurrences in `ConcreteSpec/Proofs/Own.lean`; item numbering skipped 109→119 at entry 109 above, so there are 143 entries in 4.1.)*
+
+---
+
+### 4.2 `ConcreteSpec/Proofs/Grant.lean` (45 `(approved: PENDING)` Helpers)
+
+1. `ConcreteSpec/Proofs/Grant.lean:27` (theorem at `ConcreteSpec/Proofs/Grant.lean:28`: `private theorem fresh_wf`) — `Helper (congruence)` — **APPROVE**: internal invariant helper showing inserting a fresh binder at `s.nextBrand` preserves `WellFormed`, used by `fresh_preserves_result` and `reset_preserves_result`.
+2. `ConcreteSpec/Proofs/Grant.lean:56` (theorem at `ConcreteSpec/Proofs/Grant.lean:57`: `theorem fresh_preserves_result`) — `Helper (inversion)` — **APPROVE**: unpacked `fresh` preservation helper backing `Law` `fresh_preserves` (`ConcreteSpec/Proofs/Grant.lean:64`).
+3. `ConcreteSpec/Proofs/Grant.lean:70` (theorem at `ConcreteSpec/Proofs/Grant.lean:71`: `theorem fresh_progress`) — `Helper (computation)` — **APPROVE**: total constructor helper `⟨_, rfl⟩`; nominal freshness is proved by `Law` `fresh_nominal` (`ConcreteSpec/Proofs/Grant.lean:826`).
+4. `ConcreteSpec/Proofs/Grant.lean:74` (theorem at `ConcreteSpec/Proofs/Grant.lean:75`: `theorem depend_preserves_result`) — `Helper (inversion)` — **APPROVE**: unpacked `depend` preservation helper backing `Law` `depend_preserves` (`ConcreteSpec/Proofs/Grant.lean:96`).
+5. `ConcreteSpec/Proofs/Grant.lean:102` (theorem at `ConcreteSpec/Proofs/Grant.lean:103`: `theorem consume_preserves_result`) — `Helper (inversion)` — **APPROVE**: unpacked `consume` preservation helper backing `Law` `consume_preserves` (`ConcreteSpec/Proofs/Grant.lean:115`).
+6. `ConcreteSpec/Proofs/Grant.lean:121` (theorem at `ConcreteSpec/Proofs/Grant.lean:122`: `theorem release_preserves_result`) — `Helper (inversion)` — **APPROVE**: unpacked `release` preservation helper backing `Law` `release_preserves` (`ConcreteSpec/Proofs/Grant.lean:156`).
+7. `ConcreteSpec/Proofs/Grant.lean:162` (theorem at `ConcreteSpec/Proofs/Grant.lean:163`: `theorem reset_preserves_result`) — `Helper (inversion)` — **APPROVE**: unpacked `reset` preservation helper backing `Law` `reset_preserves` (`ConcreteSpec/Proofs/Grant.lean:202`).
+8. `ConcreteSpec/Proofs/Grant.lean:208` (theorem at `ConcreteSpec/Proofs/Grant.lean:209`: `theorem endScope_preserves_result`) — `Helper (inversion)` — **APPROVE**: unpacked `endScope` preservation helper backing `Law` `endScope_preserves` (`ConcreteSpec/Proofs/Grant.lean:238`).
+9. `ConcreteSpec/Proofs/Grant.lean:244` (theorem at `ConcreteSpec/Proofs/Grant.lean:245`: `theorem depend_progress`) — `Helper (computation)` — **APPROVE**: normalizes the `depend` admission guards; invariant safety is covered by `depend_preserves`.
+10. `ConcreteSpec/Proofs/Grant.lean:259` (theorem at `ConcreteSpec/Proofs/Grant.lean:260`: `theorem consume_progress`) — `Helper (computation)` — **APPROVE**: normalizes the `consume` lookup guard; covered by `consume_preserves` and `retired_never_revives`.
+11. `ConcreteSpec/Proofs/Grant.lean:267` (theorem at `ConcreteSpec/Proofs/Grant.lean:268`: `theorem release_progress`) — `Helper (computation)` — **APPROVE**: normalizes the `release` guard; used by `reset_progress` and covered by `release_preserves` and `allocations_have_live_allocator`.
+12. `ConcreteSpec/Proofs/Grant.lean:283` (theorem at `ConcreteSpec/Proofs/Grant.lean:284`: `theorem reset_progress`) — `Helper (computation)` — **APPROVE**: composes binder lookup and `release_progress`; covered by `reset_preserves` and `retired_never_revives`.
+13. `ConcreteSpec/Proofs/Grant.lean:296` (theorem at `ConcreteSpec/Proofs/Grant.lean:297`: `theorem endScope_progress`) — `Helper (computation)` — **APPROVE**: normalizes `endScope` exit guards; covered by `endScope_preserves` and `scope_exit_lifetime`.
+14. `ConcreteSpec/Proofs/Grant.lean:321` (theorem at `ConcreteSpec/Proofs/Grant.lean:322`: `theorem nextBrand_fresh`) — `Helper (arithmetic)` — **APPROVE**: arithmetic consequence of `b.brand.id < s.nextBrand` from `WellFormed`.
+15. `ConcreteSpec/Proofs/Grant.lean:329` (theorem at `ConcreteSpec/Proofs/Grant.lean:330`: `theorem fresh_generation_result`) — `Helper (inversion)` — **APPROVE**: unpacks `t.nextBrand = s.nextBrand + 1` from `fresh`.
+16. `ConcreteSpec/Proofs/Grant.lean:335` (theorem at `ConcreteSpec/Proofs/Grant.lean:336`: `theorem fresh_generation`) — `Helper (computation)` — **APPROVE**: unpacks constructor fields of `fresh`; nominal freshness is proved by `Law` `fresh_nominal` (`ConcreteSpec/Proofs/Grant.lean:826`).
+17. `ConcreteSpec/Proofs/Grant.lean:344` (theorem at `ConcreteSpec/Proofs/Grant.lean:345`: `theorem reset_generation_result`) — `Helper (inversion)` — **APPROVE**: unpacks `t.nextBrand = s.nextBrand + 1` from `reset`.
+18. `ConcreteSpec/Proofs/Grant.lean:353` (theorem at `ConcreteSpec/Proofs/Grant.lean:354`: `theorem reset_generation`) — `Helper (computation)` — **APPROVE**: unpacks reset counter fields; generation separation and non-revival are proved by `reset_preserves` and `retired_never_revives`.
+19. `ConcreteSpec/Proofs/Grant.lean:362` (theorem at `ConcreteSpec/Proofs/Grant.lean:363`: `theorem endScope_non_escape_result`) — `Helper (inversion)` — **APPROVE**: unpacks `endScope` guard on surviving dependencies; used by `Law` `scope_exit_lifetime` (`ConcreteSpec/Proofs/Grant.lean:927`).
+20. `ConcreteSpec/Proofs/Grant.lean:377` (theorem at `ConcreteSpec/Proofs/Grant.lean:378`: `theorem endScope_non_escape`) — `Helper (computation)` — **APPROVE**: `ResultSatisfies` wrapper for `endScope_non_escape_result`; full multi-step scope retirement is proved by `Law` `scope_exit_lifetime` (`ConcreteSpec/Proofs/Grant.lean:927`).
+21. `ConcreteSpec/Proofs/Grant.lean:389` (theorem at `ConcreteSpec/Proofs/Grant.lean:390`: `theorem allocations_have_live_allocator_of_wf`) — `Helper (projection)` — **APPROVE**: projects the live-allocator clause of `WellFormed` for `Law` `allocations_have_live_allocator` (`ConcreteSpec/Proofs/Grant.lean:397`).
+22. `ConcreteSpec/Proofs/Grant.lean:408` (theorem at `ConcreteSpec/Proofs/Grant.lean:409`: `theorem instrument_erasure_result`) — `Helper (inversion)` — **APPROVE**: single-command erasure helper used by `run_erasure_result`.
+23. `ConcreteSpec/Proofs/Grant.lean:420` (theorem at `ConcreteSpec/Proofs/Grant.lean:421`: `theorem instrument_erasure`) — `Helper (computation)` — **APPROVE**: single-command wrapper; finite command-stream erasure is proved by `Law` `run_erasure` (`ConcreteSpec/Proofs/Grant.lean:446`).
+24. `ConcreteSpec/Proofs/Grant.lean:429` (theorem at `ConcreteSpec/Proofs/Grant.lean:430`: `theorem run_erasure_result`) — `Helper (inversion)` — **APPROVE**: inductive command-stream erasure helper backing `Law` `run_erasure` (`ConcreteSpec/Proofs/Grant.lean:446`).
+25. `ConcreteSpec/Proofs/Grant.lean:737` (theorem at `ConcreteSpec/Proofs/Grant.lean:738`: `private theorem release_retired`) — `Helper (inversion)` — **APPROVE**: proves `release` preserves `Retired`, used by `lifetime_retired_step`.
+26. `ConcreteSpec/Proofs/Grant.lean:750` (theorem at `ConcreteSpec/Proofs/Grant.lean:751`: `private theorem lifetime_retired_step`) — `Helper (inversion)` — **APPROVE**: single-step `Retired` preservation across `lifetimeStep`, backing `Law` `retired_never_revives` (`ConcreteSpec/Proofs/Grant.lean:810`).
+27. `ConcreteSpec/Proofs/Grant.lean:889` (theorem at `ConcreteSpec/Proofs/Grant.lean:890`: `private theorem binder_unique`) — `Helper (inversion)` — **APPROVE**: list uniqueness lemma from `(xs.map Binder.brand).Nodup`, used by `scope_exit_lifetime`.
+28. `ConcreteSpec/Proofs/Grant.lean:906` (theorem at `ConcreteSpec/Proofs/Grant.lean:907`: `private theorem lifetime_wf`) — `Helper (congruence)` — **APPROVE**: lifts `WellFormed` preservation across `runLifetime`, used by `Law` `scope_exit_lifetime` (`ConcreteSpec/Proofs/Grant.lean:927`).
+29. `ConcreteSpec/Proofs/Grant.lean:999` (theorem at `ConcreteSpec/Proofs/Grant.lean:1000`: `private theorem update_all`) — `Helper (congruence)` — **APPROVE**: generic `AList.update` invariant-preservation helper used by `consumed_bounded` and `consumed_fresh`.
+30. `ConcreteSpec/Proofs/Grant.lean:1020` (theorem at `ConcreteSpec/Proofs/Grant.lean:1021`: `theorem usable_some`) — `Helper (inversion)` — **APPROVE**: unpacks `usable s i = some r` into `AList.lookup s.resources i = some r ∧ r.live = true`.
+31. `ConcreteSpec/Proofs/Grant.lean:1029` (theorem at `ConcreteSpec/Proofs/Grant.lean:1030`: `theorem consumed_bounded`) — `Helper (congruence)` — **APPROVE**: proves `consumed s i` preserves `Bounded budget`.
+32. `ConcreteSpec/Proofs/Grant.lean:1035` (theorem at `ConcreteSpec/Proofs/Grant.lean:1036`: `theorem consumed_fresh`) — `Helper (congruence)` — **APPROVE**: proves `consumed s i` preserves `Fresh`.
+33. `ConcreteSpec/Proofs/Grant.lean:1040` (theorem at `ConcreteSpec/Proofs/Grant.lean:1041`: `theorem issue_bounded`) — `Helper (congruence)` — **APPROVE**: proves `issue s r` preserves `Bounded budget` when `r.rights ⊆ budget`.
+34. `ConcreteSpec/Proofs/Grant.lean:1049` (theorem at `ConcreteSpec/Proofs/Grant.lean:1050`: `theorem issue_fresh`) — `Helper (congruence)` — **APPROVE**: proves `issue s r` preserves `Fresh`.
+35. `ConcreteSpec/Proofs/Grant.lean:1057` (theorem at `ConcreteSpec/Proofs/Grant.lean:1058`: `theorem narrow_bounded_result`) — `Helper (inversion)` — **APPROVE**: unpacked `narrow` boundedness helper backing `Law` `narrow_bounded` (`ConcreteSpec/Proofs/Grant.lean:1068`).
+36. `ConcreteSpec/Proofs/Grant.lean:1075` (theorem at `ConcreteSpec/Proofs/Grant.lean:1076`: `theorem acquire_bounded_result`) — `Helper (inversion)` — **APPROVE**: unpacked `acquire` boundedness helper backing `Law` `acquire_bounded` (`ConcreteSpec/Proofs/Grant.lean:1092`).
+37. `ConcreteSpec/Proofs/Grant.lean:1100` (theorem at `ConcreteSpec/Proofs/Grant.lean:1101`: `theorem close_bounded_result`) — `Helper (inversion)` — **APPROVE**: unpacked `close` boundedness helper backing `Law` `close_bounded` (`ConcreteSpec/Proofs/Grant.lean:1109`).
+38. `ConcreteSpec/Proofs/Grant.lean:1121` (theorem at `ConcreteSpec/Proofs/Grant.lean:1122`: `theorem rights_never_grow_steps`) — `Helper (inversion)` — **APPROVE**: inductive `Steps` preservation of `Bounded`, used by `Law` `rights_never_grow` (`ConcreteSpec/Proofs/Grant.lean:1160`).
+39. `ConcreteSpec/Proofs/Grant.lean:1131` (theorem at `ConcreteSpec/Proofs/Grant.lean:1132`: `private theorem steps_of_runOps`) — `Helper (inversion)` — **APPROVE**: translates `runOps` into inductive `Steps`, used by `rights_never_grow` and `consumed_never_revives`.
+40. `ConcreteSpec/Proofs/Grant.lean:1168` (theorem at `ConcreteSpec/Proofs/Grant.lean:1169`: `theorem narrow_fresh_result`) — `Helper (inversion)` — **APPROVE**: unpacked `narrow` freshness helper backing `Law` `narrow_fresh` (`ConcreteSpec/Proofs/Grant.lean:1177`).
+41. `ConcreteSpec/Proofs/Grant.lean:1183` (theorem at `ConcreteSpec/Proofs/Grant.lean:1184`: `theorem acquire_fresh_result`) — `Helper (inversion)` — **APPROVE**: unpacked `acquire` freshness helper backing `Law` `acquire_fresh` (`ConcreteSpec/Proofs/Grant.lean:1194`).
+42. `ConcreteSpec/Proofs/Grant.lean:1201` (theorem at `ConcreteSpec/Proofs/Grant.lean:1202`: `theorem close_fresh_result`) — `Helper (inversion)` — **APPROVE**: unpacked `close` freshness helper backing `Law` `close_fresh` (`ConcreteSpec/Proofs/Grant.lean:1210`).
+43. `ConcreteSpec/Proofs/Grant.lean:1233` (theorem at `ConcreteSpec/Proofs/Grant.lean:1234`: `theorem dead_unusable`) — `Helper (computation)` — **APPROVE**: unpacks `Dead s i → usable s i = none`; multi-step non-revival is proved by `Law` `consumed_never_revives` (`ConcreteSpec/Proofs/Grant.lean:1334`).
+44. `ConcreteSpec/Proofs/Grant.lean:1238` (theorem at `ConcreteSpec/Proofs/Grant.lean:1239`: `theorem consumed_dead`) — `Helper (congruence)` — **APPROVE**: proves `Dead (consumed s i) i` when `i` is in `s.resources`.
+45. `ConcreteSpec/Proofs/Grant.lean:1244` (theorem at `ConcreteSpec/Proofs/Grant.lean:1245`: `theorem consumed_keeps_dead`) — `Helper (congruence)` — **APPROVE**: proves `consumed s j` preserves `Dead s i`.
+46. `ConcreteSpec/Proofs/Grant.lean:1252` (theorem at `ConcreteSpec/Proofs/Grant.lean:1253`: `theorem issue_keeps_dead`) — `Helper (congruence)` — **APPROVE**: proves `issue s r` preserves `Dead s i` when `Fresh s`.
+47. `ConcreteSpec/Proofs/Grant.lean:1261` (theorem at `ConcreteSpec/Proofs/Grant.lean:1262`: `theorem close_consumes_result`) — `Helper (inversion)` — **APPROVE**: unpacked `close` consumption helper backing `Law` `close_consumes` (`ConcreteSpec/Proofs/Grant.lean:1271`).
+48. `ConcreteSpec/Proofs/Grant.lean:1287` (theorem at `ConcreteSpec/Proofs/Grant.lean:1288`: `theorem narrow_consumes_result`) — `Helper (inversion)` — **APPROVE**: unpacked `narrow` consumption helper backing `Law` `narrow_consumes` (`ConcreteSpec/Proofs/Grant.lean:1298`).
+49. `ConcreteSpec/Proofs/Grant.lean:1304` (theorem at `ConcreteSpec/Proofs/Grant.lean:1305`: `theorem consumed_never_revives_steps`) — `Helper (inversion)` — **APPROVE**: inductive `Steps` preservation of `Dead` and `Fresh`, backing `Law` `consumed_never_revives` (`ConcreteSpec/Proofs/Grant.lean:1334`).
+50. `ConcreteSpec/Proofs/Grant.lean:1342` (theorem at `ConcreteSpec/Proofs/Grant.lean:1343`: `theorem narrow_intersection_result`) — `Helper (inversion)` — **APPROVE**: unpacks the issued child resource record of `narrow`, used by `Law` `narrow_permissions` (`ConcreteSpec/Proofs/Grant.lean:1612`).
+51. `ConcreteSpec/Proofs/Grant.lean:1352` (theorem at `ConcreteSpec/Proofs/Grant.lean:1353`: `theorem narrow_intersection`) — `Helper (computation)` — **APPROVE**: `ResultSatisfies` wrapper for `narrow_intersection_result`; extensional permission equivalence is proved by `Law` `narrow_permissions` (`ConcreteSpec/Proofs/Grant.lean:1612`).
+52. `ConcreteSpec/Proofs/Grant.lean:1362` (theorem at `ConcreteSpec/Proofs/Grant.lean:1363`: `theorem acquire_keeps_parent_result`) — `Helper (inversion)` — **APPROVE**: unpacked parent-retention helper backing `Law` `acquire_keeps_parent` (`ConcreteSpec/Proofs/Grant.lean:1379`).
+
+*(Note: all 52 `approved: PENDING` occurrences in `ConcreteSpec/Proofs/Grant.lean` and all 143 in `ConcreteSpec/Proofs/Own.lean` — 195 total across both files — are listed and approved above.)*
+
+VERDICT: ACCEPT
+rc=0

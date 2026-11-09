@@ -1,0 +1,149 @@
+### 1. Summary of Round 6 Changes & Owner-Decision Audit
+
+What `f35fb5d86..e66aa2fc6` genuinely fixes:
+- **Nested `FunctionRelativeKey` collection (`Spec/Ident.lean:503-513`, `Proofs/Ident.lean:93-188`)**: [`KeyConstruct.collectKeysIn`](file:///home/unbalancedparen/ConcreteSpec/Spec/Ident.lean#L503-L513) now recurses into `construct.children` under `construct.childScope scope` and prefixes child paths with `construct.segment scope`. Soundness ([`KeyConstruct.collectKeysIn_sound`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L101-L130)), completeness ([`KeyConstruct.collectKeysIn_complete`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L133-L171)), and table occurrence equivalence ([`KeyConstruct.assignFunctionTable_occurrences`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L176-L188)) are proved.
+- **`trapLine_injective` quantification (`Proofs/Observe2.lean:365-405`)**: [`trapLine_injective`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Observe2.lean#L365-L373) now universally quantifies `kind₂ site₂ sp₂`, giving a closed `Instance` application and a genuine negated-conclusion `Planted` witness (`trapLineWithoutColumn`).
+- **`Ghost.drive_steps_result` direct proof (`Proofs/Prim.lean:288-354`)**: [`Ghost.drive_steps_result`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Prim.lean#L291-L354) inlines the fuel induction directly instead of delegating to an identical equality-parameterized helper.
+
+Where shortcuts and vacuity defects remain (**6 major, 1 minor**):
+1. Rewriting output contracts (`load_refusal_sound`, `load_admitted`, `discharge_sound`, `SourceTrapObservation`) into partial `match ... with | ... | _ => True` forms creates wildcard `True` branches where mutants hide and causes `load_admitted` and `discharge_sound` to stop testing their core invariants (`WellFormed`, `Usable`, obligation-ID matching, table membership) on any mutant that preserves the happy-path output on valid inputs.
+2. Demoting `EncodedPremise.read_version_mismatch` to `Helper (computation) (approved: PENDING)` removes the **only** law enforcing the owner-mandated **versioned schema** for premise categories; `versionIgnoringRead` satisfies every remaining law on `EncodedPremise`.
+3. `assignFunctionTable_rename_named` and `assignFunctionTable_pin` only cover strict descendants (`pathAt children route = some suffix`), omitting the renamed/pinned construct's own key, and their `Planted` witnesses reuse `shallowAssign` instead of testing `rename`, `pin`, or scope reset.
+4. `collectKeysIn_sound`'s `Planted` witness mutates `pathAtIn` to `noPaths _ _ _ := none` (making `none = some nestedPath` trivially false) instead of mutating `collectKeysIn`.
+
+---
+
+### 2. Findings
+
+1. **`ConcreteSpec/Proofs/Ident.lean:859-883` and `ConcreteSpec/Proofs/Ident.lean:1559-1606` — MAJOR — `REAL DEFECT`**
+   - **Problem**: [`LoadedModules.load_refusal_sound`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L861-L868) and [`LoadedModules.load_admitted`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L872-L883) were rewritten as `match load modules with | .refused collision => HasCollision modules collision | .admitted _ => True` and `match load modules with | .admitted admitted => admitted = modules ∧ WellFormed modules | .refused _ => True`.
+     - Any mutant returning `.admitted _` (such as `admitAll` or `discardLoad`) satisfies `load_refusal_sound` vacuously via `True`.
+     - Any mutant returning `.refused _` (such as `fabricatedRefusalLoad`) satisfies `load_admitted` vacuously via `True`.
+     - Worse, on any collision-free input such as the `Instance` `[firstModule, secondModule]`, `WellFormed [firstModule, secondModule]` is **already true of the input**, so the mutant `admitAll` (which never checks for package/module collisions!) **passes** `load_admitted [firstModule, secondModule]`. To work around this, the diff replaced `admitAll [firstModule, collidingModule]` with `discardLoad [firstModule, secondModule]` (`_ := .admitted []`) at line 1598, whose proof (`cases h.1`) only refutes `[] = [firstModule, secondModule]` and never tests `WellFormed modules` at all (`admitAll` is left dead code).
+   - **Concrete long-term fix**:
+     - State the total output contract on `load modules` without a `True` branch (or state `load_admitted` as the biconditional `load modules = .admitted admitted ↔ admitted = modules ∧ WellFormed modules`, and keep `match load modules with | .admitted admitted => admitted = modules ∧ WellFormed modules | .refused collision => HasCollision modules collision` for total output soundness).
+     - Test `admitAll` on `[firstModule, collidingModule]` (or `[firstModule, samePackageOtherOrigin]`) as a `Planted` witness so collision refusal (`WellFormed`) is actually falsified by a mutant.
+
+2. **`ConcreteSpec/Proofs/Prim.lean:133-177` and `ConcreteSpec/Proofs/Prim.lean:557-628` — MAJOR — `REAL DEFECT`**
+   - **Problem**: [`SafetyEvidence.discharge_sound`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Prim.lean#L133-L161) was rewritten with `| none => True`, while [`SafetyEvidence.discharge_context_mismatch`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Prim.lean#L165-L169) and [`SafetyEvidence.discharge_obligation_mismatch`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Prim.lean#L173-L177) were demoted from `Law` to unused `Helper (computation) (approved: PENDING)` lemmas.
+     - Because `discharge_sound` is only instantiated on valid inputs `(evidence, obligations, EvidenceDemo.current, obligation.id)` where `e.Usable current`, `current.obligation = requested`, and `ObligationTable.lookup obligations obligation.id = some obligation` already hold, the mutants `dischargeIgnoringContext`, `dischargeIgnoringObligation`, and `dischargeWithoutTable` all **satisfy** `discharge_sound` on the `Instance` inputs!
+     - Because the `none` branch is `True`, instantiating `discharge_sound` on invalid inputs (`contractChanged`, `mismatchedObligation`, or `[]`) makes the `Instance` proposition reduce to `True`, and a mutant `fun _ _ _ _ => none` satisfies `discharge_sound` everywhere.
+   - **Concrete long-term fix**:
+     - State the `none` branch of `SafetyEvidence.discharge_sound` (or state an `↔` characterization `e.discharge obligations current requested = some discharged ↔ ...`) with the exact refusal disjunction:
+       ```lean
+       match e.discharge obligations current requested with
+       | none => ¬ e.Usable current ∨ current.obligation ≠ requested ∨
+           ObligationTable.lookup obligations requested = none
+       | some discharged => e.Usable current ∧ current.obligation = requested ∧
+           ObligationTable.lookup obligations requested = some discharged.obligation ∧
+           discharged.obligation.id = requested
+       ```
+     - Provide `Instance` / `Planted` cases for `dischargeWrongKey`, `dischargeWithoutTable`, `dischargeIgnoringContext`, and `dischargeIgnoringObligation` against the law (or keep the mismatch refusal laws as `Law`).
+
+3. **`ConcreteSpec/Proofs/Ident.lean:975-982` and `ConcreteSpec/Proofs/Ident.lean:1740-1755` — MAJOR — `REAL DEFECT`**
+   - **Problem**: [`EncodedPremise.read_version_mismatch`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L977-L982) was demoted from `Law` to `Helper (computation) (approved: PENDING)` (and is not used by any theorem). The remaining laws on `EncodedPremise` are [`EncodedPremise.read_encode`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L938-L944) (which only reads at `specVersion` when `record.spec = specVersion`) and [`EncodedPremise.read_unknown`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L968-L973) (which only tests unknown category numbers). The mutant [`versionIgnoringRead`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L1740-L1741) satisfies **both** `read_encode` and `read_unknown`, leaving the binding owner decision ("versioned schema") unguarded by any `Law`.
+   - **Concrete long-term fix**:
+     - Prove a full decode soundness/characterization `Law` on `EncodedPremise.read` (e.g., `record.read reader = some decoded ↔ record.spec = reader ∧ reader = specVersion ∧ ∃ kind : PremiseKind, kind.encode = record.category ∧ decoded = ⟨kind, record.scope, record.spec⟩`, or `match record.read reader with | some decoded => record.spec = reader ∧ reader = specVersion ∧ ... | none => record.spec ≠ reader ∨ reader ≠ specVersion ∨ ∀ kind : PremiseKind, kind.encode ≠ record.category`) with `versionIgnoringRead` as a `Planted` witness.
+
+4. **`ConcreteSpec/Proofs/Observe2.lean:441-497` — MAJOR — `REAL DEFECT`**
+   - **Problem**: [`SourceTrapObservation`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Observe2.lean#L443-L451) defines `| none => True` and never connects the returned observation to `AList.lookup sites site`.
+     - A mutant `trapTerminal` that always returns `none` satisfies [`trapTerminal_valid_location`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Observe2.lean#L455-L466) vacuously (`True`) even when `site` is present in `sites`.
+     - A mutant `trapTerminal` that ignores `site` during lookup and uses another valid span from `sites` (while rendering `kind` and `site` in `trapLine`) also satisfies `SourceTrapObservation`.
+   - **Concrete long-term fix**:
+     - Parameterize `SourceTrapObservation` by `sites : SiteTable`: require `AList.lookup sites site = none` in the `| none =>` branch and `AList.lookup sites site = some sp` in the `| some (.trapped actualKind actualSite sp line) =>` branch.
+
+5. **`ConcreteSpec/Proofs/Ident.lean:270-286`, `ConcreteSpec/Proofs/Ident.lean:462-470`, `ConcreteSpec/Proofs/Ident.lean:531-559`, and `ConcreteSpec/Proofs/Ident.lean:1147-1172` — MAJOR — `REAL DEFECT`**
+   - **Problem**:
+     - [`KeyConstruct.assignFunctionTable_rename_named`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L535-L544) and [`KeyConstruct.assignFunctionTable_pin`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L549-L559) require `pathAt children route = some suffix` / `pathAtIn before children route = some suffix`, which only holds for **strict descendants** (`children ≠ []`). When `children = []` (a leaf construct) or for the renamed/pinned construct's own key, `pathAt [] route = none`, while [`KeyConstruct.key_rename_named`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L274-L277) and [`KeyConstruct.key_pin_unnamed`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L283-L286) were demoted to unused `Representation lemma (approved: PENDING)` declarations.
+     - Both `assignFunctionTable_rename_named` and `assignFunctionTable_pin` use `shallowAssign` (which drops all children regardless of rename/pin) as their `Planted` mutant at lines 1154 and 1167, instead of testing `rename` (`noopRename`), `pin` (`noopPin`), or named-ancestor scope reset (`unresetScopeDescendantKey`).
+     - [`KeyConstruct.descendant_named_ancestor_resets_scope`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L465-L470) was also demoted to an unused `Representation lemma (approved: PENDING)`, leaving no `Law` stating that changing outer siblings (`before₁` vs `before₂`) preserves descendant keys inside a named ancestor.
+   - **Concrete long-term fix**:
+     - Include the root construct itself (or prove root + descendant table laws) for `rename` and `pin` on `assignFunctionTable`, and prove named-ancestor scope invariance on `pathAt` / `assignFunctionTable`.
+     - Use `noopRename` (or an unreset-scope mutant) as the `Planted` mutant for `assignFunctionTable_rename_named` and `noopPin` as the `Planted` mutant for `assignFunctionTable_pin`.
+
+6. **`ConcreteSpec/Proofs/Ident.lean:1096-1112` — MAJOR — `REAL DEFECT`**
+   - **Problem**: The `Planted` witness for [`KeyConstruct.collectKeysIn_sound`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L101-L130) mutates `pathAtIn` to [`noPaths`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L1097-L1098) (`fun _ _ _ => none`), reducing the negated conclusion to `¬ (∃ route, route ≠ [] ∧ none = some nestedPath)`. This does not test `collectKeysIn` against a faulty collector at all.
+   - **Concrete long-term fix**:
+     - Mutate the subject `collectKeysIn` (for example, `unprefixedCollect` that forgets to prepend `construct.segment scope` to collected child keys, or a collector that fails to reset `childScope` on a named construct), and show that a corrupted key in `mutantCollect [] [nestedBody]` has no valid route in `KeyConstruct.pathAtIn [] [nestedBody]`.
+
+7. **`ConcreteSpec/Proofs/Ident.lean:69-91` — MINOR — `REAL DEFECT`**
+   - **Problem**: [`KeyConstruct.numberFunctionKeys_lookup`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L72-L91) is tagged `Helper (computation) ... (approved: PENDING)` with the docstring *"this arithmetic correspondence is used to connect occurrence coverage to actual lookup"*, but it is dead code—never referenced anywhere in the file because [`KeyConstruct.assignFunctionTable_occurrences`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L176-L188) only proves membership in `List.map Prod.snd (assignFunctionTable ...)` rather than `SiteKeyTable.lookup`.
+   - **Concrete long-term fix**:
+     - Either use `numberFunctionKeys_lookup` to prove the `SiteKeyTable.lookup (assignFunctionTable f startSite body)` correspondence law, or remove the unused helper.
+
+---
+
+### 3. Complete Law-by-Law Vacuity & Convention Audit (C9 Contracts)
+
+| Law | Location | Vacuity Verdict | Witness / Defect Summary |
+| :--- | :--- | :--- | :--- |
+| `SiteKeyTable.lookup_renumber` | `Proofs/Ident.lean:40` | **PASS** | Non-trivial injective renumbering instance; colliding renumbering mutant fails. |
+| `KeyConstruct.collectKeysIn_sound` | `Proofs/Ident.lean:103` | **FAIL (Planted witness)** | Instance (`nestedBody`/`nestedPath`) is valid, but Planted (`Ident.lean:1106`) mutates `pathAtIn` to `noPaths := none` instead of mutating `collectKeysIn`. |
+| `KeyConstruct.collectKeysIn_complete` | `Proofs/Ident.lean:135` | **PASS** | Instance: `nestedBody` at `[0, 0, 0]`; Planted: `shallowCollect` omits nested children. |
+| `KeyConstruct.assignFunctionTable_occurrences` | `Proofs/Ident.lean:178` | **PASS** | Instance: `nestedBody` / `nestedPath`; Planted: `shallowAssign`. |
+| `KeyConstruct.assignProgramTables_outsideFunctionEdit` | `Proofs/Ident.lean:193` | **PASS** | Instance: 2-function program with edited first function; Planted: cross-function numbering mutant. |
+| `KeyConstruct.key_insert_named` | `Proofs/Ident.lean:245` | **PASS** | Instance: `unnamedBinding` after inserted named item; Planted: `allSiblingsOrdinal`. |
+| `KeyConstruct.key_insert_differentKind` | `Proofs/Ident.lean:254` | **PASS** | Instance: `unnamedBinding` after `insertedCall`; Planted: `allKindsOrdinal`. |
+| `KeyConstruct.key_rename_other` | `Proofs/Ident.lean:261` | **PASS** | Instance: `unnamedBinding` after renamed sibling; Planted: name-dependent ordinal mutant. |
+| `KeyConstruct.key_pin_other` | `Proofs/Ident.lean:266` | **PASS** | Instance: `unnamedBinding` after pinned sibling; Planted: `labelOnlyOrdinal`. |
+| `KeyConstruct.descendant_insert_named` | `Proofs/Ident.lean:383` | **PASS** | Instance: `nestedBody` at `[0, 0]`; Planted: `allSiblingsDescendantKey`. |
+| `KeyConstruct.pathAt_insert_named` | `Proofs/Ident.lean:395` | **PASS** | Instance: `nestedBody` at `[1, 0, 0]`; Planted: `allSiblingsPathAt`. |
+| `KeyConstruct.descendant_insert_differentKind` | `Proofs/Ident.lean:445` | **PASS** | Instance: `nestedBody` with `insertedCall`; Planted: `allKindsDescendantKey`. |
+| `KeyConstruct.pathAt_insert_differentKind` | `Proofs/Ident.lean:454` | **PASS** | Instance: `nestedBody` at `[1, 0, 0]` with `insertedCall`; Planted: `allKindsPathAt`. |
+| `KeyConstruct.descendant_rename_other` | `Proofs/Ident.lean:480` | **PASS** | Instance: `nestedBody` after renamed sibling; Planted: name-sensitive descendant mutant. |
+| `KeyConstruct.descendant_pin_other` | `Proofs/Ident.lean:495` | **PASS** | Instance: `nestedBody` after pinned sibling; Planted: `labelOnlyDescendantKey`. |
+| `KeyConstruct.assignFunctionTable_rename_named` | `Proofs/Ident.lean:535` | **FAIL (Scope & Planted)** | Omits root's own key (`children = []` impossible); Planted (`Ident.lean:1154`) reuses `shallowAssign` instead of mutating `rename` or scope reset. |
+| `KeyConstruct.assignFunctionTable_pin` | `Proofs/Ident.lean:549` | **FAIL (Scope & Planted)** | Omits root's own key (`children = []` impossible); Planted (`Ident.lean:1167`) reuses `shallowAssign` instead of mutating `pin`. |
+| `SpecializationTable.intern_preserves_existing` | `Proofs/Ident.lean:580` | **PASS** | Non-trivial table extension; overwriting mutant fails. |
+| `SpecializationTable.intern_lookup` | `Proofs/Ident.lean:615` | **PASS** | Non-trivial lookup of existing/new specialization; wrong-entry mutant fails. |
+| `SpecializationTable.canonical_order_independent` | `Proofs/Ident.lean:720` | **PASS** | Permuted specialization lists; order-dependent key mutant fails. |
+| `LoadedModules.load_refusal_complete` | `Proofs/Ident.lean:842` | **PASS** | Instance: `samePackageOtherOrigin` (same `(name, version)`, different origins); Planted: `ignoreOriginLoad`. |
+| `LoadedModules.load_refusal_sound` | `Proofs/Ident.lean:861` | **FAIL (Wildcard `True`)** | `.admitted _ => True` lets any always-admitting mutant pass vacuously. |
+| `LoadedModules.load_admitted` | `Proofs/Ident.lean:872` | **FAIL (Vacuous on `WellFormed`)** | `.refused _ => True` lets any always-refusing mutant pass; on `[firstModule, secondModule]`, `admitAll` passes, and Planted (`discardLoad`) only tests `admitted = modules`, never `WellFormed`. |
+| `SourceText` offset laws | `Proofs/Ident.lean:890` | **PASS** | Non-trivial ASCII/tab/newline/multibyte instances and mutants (byte-column theorems on C6). |
+| `EncodedPremise.read_encode` | `Proofs/Ident.lean:938` | **PASS** | Instance: `stackRecord` at `specVersion`; Planted: corrupting reader mutant. |
+| `EncodedPremise.read_unknown` | `Proofs/Ident.lean:968` | **PASS** | Instance: `unknownRecord` (category 99); Planted: fallback-category reader mutant. |
+| `(missing versioned-schema Law)` | `Proofs/Ident.lean:975` | **FAIL (Demoted to Helper)** | `EncodedPremise.read_version_mismatch` was demoted to `Helper`, leaving `versionIgnoringRead` unrefuted by any `Law`. |
+| `trapLine_injective` | `Proofs/Observe2.lean:365` | **PASS** | Closed universal `Instance` on `Demo.sp`; `Planted` (`trapLineWithoutColumn` on `spDifferentColumn`) refutes the universal conclusion. |
+| `trapTerminal_valid_location` | `Proofs/Observe2.lean:455` | **FAIL (Wildcard `none => True`)** | `SourceTrapObservation` sets `none => True` and omits `AList.lookup sites site = some sp`, so a `none`-returning mutant passes trivially. |
+| `SafetyEvidence.discharge_sound` | `Proofs/Prim.lean:133` | **FAIL (Wildcard `none => True`)** | `none => True` and happy-path-only `Instance` let `dischargeIgnoringContext`, `dischargeIgnoringObligation`, and `dischargeWithoutTable` pass on the `Instance` case while mismatch laws were demoted to unused `Helper`s. |
+| `PrimRegistry.unknown_primitive_stuck` | `Proofs/Prim.lean:230` | **PASS** | Instance: unregistered primitive ID; Planted: default-allowing registry mutant. |
+| `Ghost.drive_steps_result` | `Proofs/Prim.lean:291` | **PASS** | Direct inductive proof; Instance on `GhostDemo`; Planted event-dropping / bad-step driver fails. |
+| `Ghost` erasure laws (`runProgram_eraseGhost`, etc.) | `Proofs/Prim.lean:365` | **PASS** | Non-trivial ghost-block program and state/event-perturbing mutants. |
+
+---
+
+### 4. Audit of Cited `REVIEW5-codex` Approvals & Verdict on Remaining `(approved: PENDING)` Exemptions
+
+#### A. Cited `(approved: REVIEW5-codex)` Tags
+All 11 citations match the helpers reviewed and approved in `REVIEW5-codex`:
+- `KeyConstruct.numberFunctionKeys_snd` (`Proofs/Ident.lean:60`)
+- `ConstructName.isUnnamed_pin` (`Proofs/Ident.lean:230`)
+- `KeyConstruct.segment_replace_same_unnamed` (`Proofs/Ident.lean:236`)
+- `KeyConstruct.pathAtIn_replace_same_unnamed` (`Proofs/Ident.lean:290`)
+- `KeyConstruct.pathAtIn_insert_named` (`Proofs/Ident.lean:316`)
+- `KeyConstruct.pathAtIn_insert_differentKind` (`Proofs/Ident.lean:344`)
+- `KeyConstruct.pathAt_at_length` (`Proofs/Ident.lean:374`)
+- `PremiseKind.decode_eq_none_of_forall_encode_ne` (`Proofs/Ident.lean:947`)
+- `PrimRegistry.allows_allowed` (`Proofs/Prim.lean:245`)
+- `PrimRegistry.allows_postcondition` (`Proofs/Prim.lean:256`)
+- `PrimRegistry.allows_no_implicit_trap` (`Proofs/Prim.lean:274`)
+
+#### B. Verdict on Each Remaining `(approved: PENDING)` Exemption
+
+1. `KeyConstruct.numberFunctionKeys_lookup` (`Proofs/Ident.lean:69`) — **REJECT**: Unused dead helper in the current file; either use it to prove a `SiteKeyTable.lookup (assignFunctionTable ...)` law or delete it.
+2. `KeyConstruct.pathAtIn_succ` (`Proofs/Ident.lean:93`) — **APPROVE**: Legitimate inductive shift helper used in `collectKeysIn_sound` and `collectKeysIn_complete`.
+3. `KeyConstruct.key_rename_named` (`Proofs/Ident.lean:270`) — **REJECT**: Unused as a helper, and `assignFunctionTable_rename_named` currently omits the root construct's own key (`children = []`). Approve only after `assignFunctionTable_rename_named` covers the construct itself as well as its descendants.
+4. `KeyConstruct.key_pin_unnamed` (`Proofs/Ident.lean:280`) — **REJECT**: Unused as a helper, and `assignFunctionTable_pin` currently omits the root construct's own key (`children = []`). Approve only after `assignFunctionTable_pin` covers the construct itself as well as its descendants.
+5. `KeyConstruct.descendant_named_ancestor_resets_scope` (`Proofs/Ident.lean:462`) — **REJECT**: Unused as a helper, and demoting it leaves no `Law` establishing that changing outer siblings (`before₁` vs `before₂`) preserves descendant keys inside a named scope.
+6. `KeyConstruct.descendant_rename_named` (`Proofs/Ident.lean:507`) — **APPROVE** (as `Helper (computation)` used by `assignFunctionTable_rename_named`; note tag should use standard `Helper (computation)` format if required by `VACUITY_CONVENTION_FINAL.md`).
+7. `KeyConstruct.assignFunctionTable_descendant_mem` (`Proofs/Ident.lean:519`) — **APPROVE**: Legitimate transport helper used in `assignFunctionTable_rename_named` and `assignFunctionTable_pin`.
+8. `EncodedPremise.read_version_mismatch` (`Proofs/Ident.lean:975`) — **REJECT**: Unused as a helper, and demoting it removes the only law enforcing versioned schema refusal on `EncodedPremise.read`.
+9. `trapTerminal_valid_location_inv` (`Proofs/Observe2.lean:407`) — **APPROVE**: Legitimate inversion helper used in `trapTerminal_valid_location`.
+10. `validSites_valid` (`Proofs/Observe2.lean:468`) — **APPROVE**: Legitimate concrete fixture invariant helper used in the `Instance` and `Planted` proofs for `trapTerminal_valid_location`.
+11. `SafetyEvidence.discharge_context_mismatch` (`Proofs/Prim.lean:163`) — **REJECT**: Unused as a helper while `SafetyEvidence.discharge_sound` sets `| none => True` and does not catch `dischargeIgnoringContext`.
+12. `SafetyEvidence.discharge_obligation_mismatch` (`Proofs/Prim.lean:171`) — **REJECT**: Unused as a helper while `SafetyEvidence.discharge_sound` sets `| none => True` and does not catch `dischargeIgnoringObligation`.
+13. `Ghost.runStmts_of_not_normal` (`Proofs/Prim.lean:356`) — **APPROVE**: Legitimate step-unfolding helper for the non-normal branch in the ghost-erasure induction.
+
+VERDICT: CHANGES
+rc=0

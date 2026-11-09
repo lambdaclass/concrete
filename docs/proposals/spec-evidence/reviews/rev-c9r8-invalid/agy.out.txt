@@ -1,0 +1,131 @@
+### 1. Assessment of Round 8 Fixes (`1c03444ec..0a8b90ebd`)
+
+All three major findings from `_review/REVIEW7-codex.md` are resolved structurally with no shortcuts:
+
+1. **Named-scope stability over the complete assigned subtree ([`KeyConstruct.assignFunctionTable_named_scope`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L498-L514))**:
+   - Proves directly on `assignFunctionTable` that replacing the surrounding forest `(before₁, after₁)` and starting site `start₁` with `(before₂, after₂)` and `start₂` around `KeyConstruct.mk kind (.named name) children` preserves the entire ordered assigned subtree key sequence (`drop (collectKeys beforeᵢ).length` followed by `take (collectKeys [KeyConstruct.mk kind (.named name) children]).length` over `List.map Prod.snd (assignFunctionTable ...)`), including the named root, every descendant in pre-order, and multiplicities, with no occurrence-validity or admission premise.
+   - Paired with a closed `Instance` ([`Ident.lean:1360-1370`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L1360-L1370)) and a `Planted` counterexample on [`unresetScopeAssign`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L1357-L1384) where leaking the outer sibling scope into the named subtree falsifies the equality.
+   - [`KeyConstruct.pathAt_named_ancestor_resets_scope`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L524-L534) is reclassified as `Helper (computation)` and its examples ([`Ident.lean:1687-1704`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L1687-L1704)) are demoted to regression examples.
+2. **Primitive registry guardbranch demoted to Helper ([`PrimRegistry.allows_unknown`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Prim.lean#L226-L232))**:
+   - Reclassified from `Law` to `Helper (computation)` because it unfolds the `none` lookup branch of `PrimRegistry.allows`, while execution-level refusal is carried by `PrimRegistry.unknown_primitive_stuck`. Former `Instance`/`Planted` items ([`Prim.lean:760-767`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Prim.lean#L760-L767)) are marked as regression examples.
+3. **Ghost erasure field projection demoted to Helper ([`Ghost.ghost_erasure_ending`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Prim.lean#L425-L437))**:
+   - Reclassified from `Law` to `Helper (projection)` because it projects `.events` and `.ending` from [`Ghost.ghost_erasure_run`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Prim.lean#L397-L423), which already proves full `RunReport` equality. Former `Instance`/`Planted` items ([`Prim.lean:905-925`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Prim.lean#L905-L925)) are marked as regression examples.
+
+---
+
+### 2. Verdicts on the Four `(approved: PENDING)` Helper Exemptions
+
+1. **[`KeyConstruct.collectKeysIn_append`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L481-L491)** — **APPROVE**
+   - *Reason*: Pure structural list-append decomposition lemma (`collectKeysIn scope (before ++ after) = collectKeysIn scope before ++ collectKeysIn (scope ++ before) after`) used to isolate the named construct's subtree slice in `KeyConstruct.assignFunctionTable_named_scope`. Not a standalone contract law.
+2. **[`KeyConstruct.pathAt_named_ancestor_resets_scope`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L525-L534)** — **APPROVE**
+   - *Reason*: Locator-level equation over `pathAt` shifting root index `before₁.length` to `before₂.length`. The contract-level subtree stability obligation on `assignFunctionTable` is now stated and proved directly by `KeyConstruct.assignFunctionTable_named_scope`.
+3. **[`PrimRegistry.allows_unknown`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Prim.lean#L226-L232)** — **APPROVE**
+   - *Reason*: Single-branch unfolding of `PrimRegistry.allows` when `AList.lookup R.entries p = none`. The substantive operational law is `PrimRegistry.unknown_primitive_stuck`, which proves that calling an unregistered primitive cannot step in `stepChecked`.
+4. **[`Ghost.ghost_erasure_ending`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Prim.lean#L425-L437)** — **APPROVE**
+   - *Reason*: Direct projection (`congrArg RunReport.events` and `congrArg RunReport.ending`) of the full report equality theorem `Ghost.ghost_erasure_run`. Under `_review/VACUITY_CONVENTION_FINAL.md`, projections of proved theorems are prohibited from being tagged `Law` and belong in `Helper (projection)`.
+
+---
+
+### 3. Audit of the 13 Recorded `(approved: REVIEW7-codex)` Helper Approvals
+
+All 13 recorded approvals in the diff accurately cite `REVIEW7-codex`, which explicitly approved each of these 13 helpers in Round 7:
+
+1. [`KeyConstruct.numberFunctionKeys_lookup`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L69-L72) (`Ident.lean:71`) — approved in `REVIEW7-codex`.
+2. [`KeyConstruct.pathAtIn_succ`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L93-L95) (`Ident.lean:94`) — approved in `REVIEW7-codex`.
+3. [`KeyConstruct.key_rename_named`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L292-L294) (`Ident.lean:293`) — approved in `REVIEW7-codex`.
+4. [`KeyConstruct.key_pin_unnamed`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L300-L302) (`Ident.lean:301`) — approved in `REVIEW7-codex`.
+5. [`KeyConstruct.descendant_named_ancestor_resets_scope`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L516-L518) (`Ident.lean:517`) — approved in `REVIEW7-codex`.
+6. [`KeyConstruct.descendant_rename_named`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L573-L575) (`Ident.lean:574`) — approved in `REVIEW7-codex`.
+7. [`KeyConstruct.assignFunctionTable_descendant_mem`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L583-L585) (`Ident.lean:584`) — approved in `REVIEW7-codex`.
+8. [`EncodedPremise.read_version_mismatch`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Ident.lean#L1066-L1068) (`Ident.lean:1067`) — approved in `REVIEW7-codex`.
+9. [`trapTerminal_valid_location_inv`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Observe2.lean#L407-L409) (`Observe2.lean:408`) — approved in `REVIEW7-codex`.
+10. [`validSites_valid`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Observe2.lean#L474-L476) (`Observe2.lean:475`) — approved in `REVIEW7-codex`.
+11. [`SafetyEvidence.discharge_context_mismatch`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Prim.lean#L131-L134) (`Prim.lean:133`) — approved in `REVIEW7-codex`.
+12. [`SafetyEvidence.discharge_obligation_mismatch`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Prim.lean#L140-L143) (`Prim.lean:142`) — approved in `REVIEW7-codex`.
+13. [`Ghost.runStmts_of_not_normal`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Prim.lean#L364-L366) (`Prim.lean:365`) — approved in `REVIEW7-codex`.
+
+No helper in `Ident.lean`, `Observe2.lean`, or `Prim.lean` masks a contract law.
+
+---
+
+### 4. Owner Decisions Compliance Check
+
+- **`FunctionRelativeKey`**: Structured path of `(ConstructKind, ConstructKeyName)` segments; unnamed items get a 0-based ordinal among same-kind siblings under the nearest named ancestor with an optional pinning label (`ConstructName.unnamed (pin : Option String)`); no raw child indices; insertion-stability, named-scope reset over the full subtree, rename, and pin laws proved on `assignFunctionTable`.
+- **`PackageId`**: Structured `name : String` and `version : PackageVersion` with no content/origin hash; loading packages with the same `(name, version)` from distinct origins is refused (`PackageRegistry.register_conflict_refuses`, `PackageRegistry.loadAll_conflict_refuses`), reporting both conflicting origins (`existingOrigin`, `newOrigin`).
+- **Premise categories**: Closed enumeration (`PremiseCategory`), versioned schema (`SpecVersion`, `specVersion`), unknown categories and version mismatches refused at decode/read (`EncodedPremise.decode_unknown`, `EncodedPremise.read_unknown`, `EncodedPremise.read_iff`), no open-string escape.
+
+---
+
+### 5. Complete Vacuity Audit of All 55 C9 Laws Under `_review/VACUITY_CONVENTION_FINAL.md`
+
+Every C9 law has a single class tag (`Law`), does not hold by trivial guard/projection, and is paired with a closed `Instance` and a `Planted` mutant counterexample:
+
+#### `ConcreteSpec/Proofs/Ident.lean` (27 Laws)
+1. `KeyConstruct.assignFunctionTable_Complete` — **NON-VACUOUS** (Instance: `twoSiblingConstructs`; Planted: `dropFirstAssign`).
+2. `KeyConstruct.assignFunctionTable_occurrence_coverage` — **NON-VACUOUS** (Instance: `duplicateUnnamedConstructs`; Planted: `dedupAssign`).
+3. `KeyConstruct.assignFunctionTable_no_raw_child_index` — **NON-VACUOUS** (Instance: `differentKindPrefix`; Planted: `rawChildIndexAssign`).
+4. `KeyConstruct.assignFunctionTable_insert_after` — **NON-VACUOUS** (Instance: `twoSiblingConstructs`; Planted: `suffixCountingAssign`).
+5. `KeyConstruct.assignFunctionTable_insert_differentKind` — **NON-VACUOUS** (Instance: `differentKindInsert`; Planted: `rawChildIndexAssign`).
+6. `KeyConstruct.assignFunctionTable_named_scope` — **NON-VACUOUS** (Instance: `namedNested`; Planted: `unresetScopeAssign`).
+7. `KeyConstruct.assignFunctionTable_rename_named` — **NON-VACUOUS** (Instance: `namedNested`; Planted: `dropRenameAssign`).
+8. `KeyConstruct.assignFunctionTable_pin` — **NON-VACUOUS** (Instance: `unpinnedTarget`; Planted: `ignorePinAssign`).
+9. `KeyConstruct.rebindSites_lookup` — **NON-VACUOUS** (Instance: `rebindTwoSites`; Planted: `staleSiteRebind`).
+10. `KeyConstruct.rebindSites_refactor_sound` — **NON-VACUOUS** (Instance: `refactorInsertDifferentKind`; Planted: `staleSiteRebind`).
+11. `KeyConstruct.rebindSites_unmapped_none` — **NON-VACUOUS** (Instance: `unmappedNewSite`; Planted: `fallbackOldSiteRebind`).
+12. `PackageId.ext_iff` — **NON-VACUOUS** (Instance: `samePkgId`; Planted: `originSensitivePkgEq`).
+13. `PackageRegistry.register_fresh` — **NON-VACUOUS** (Instance: `registerCorePkg`; Planted: `dropOriginRegister`).
+14. `PackageRegistry.register_idempotent_same_origin` — **NON-VACUOUS** (Instance: `registerCorePkgTwice`; Planted: `alwaysConflictRegister`).
+15. `PackageRegistry.register_conflict_refuses` — **NON-VACUOUS** (Instance: `conflictingOrigins`; Planted: `overwriteOnConflictRegister`).
+16. `PackageRegistry.loadAll_conflict_refuses` — **NON-VACUOUS** (Instance: `conflictingBatch`; Planted: `firstWinsLoadAll`).
+17. `PackageRegistry.loadAll_sound` — **NON-VACUOUS** (Instance: `validBatch`; Planted: `dropSecondLoadAll`).
+18. `PackageRegistry.lookupLoaded_sound` — **NON-VACUOUS** (Instance: `validBatchLookup`; Planted: `wrongOriginLookup`).
+19. `PackageCoord.resolveIn_sound` — **NON-VACUOUS** (Instance: `validCoordResolve`; Planted: `ignorePkgResolve`).
+20. `PackageCoord.resolveIn_unloaded_none` — **NON-VACUOUS** (Instance: `unloadedCoordResolve`; Planted: `fabricateOriginResolve`).
+21. `PremiseCategory.encode_decode` — **NON-VACUOUS** (Instance: `allPremiseCategories`; Planted: `collapseCategoryDecode`).
+22. `PremiseCategory.decode_unknown` — **NON-VACUOUS** (Instance: `unknownCategoryTag`; Planted: `defaultFallbackDecode`).
+23. `EncodedPremise.encode_read` — **NON-VACUOUS** (Instance: `validEncodedPremise`; Planted: `corruptCategoryEncode`).
+24. `EncodedPremise.read_unknown` — **NON-VACUOUS** (Instance: `unknownCategoryRecord`; Planted: `acceptUnknownRead`).
+25. `EncodedPremise.read_iff` — **NON-VACUOUS** (Instance: `validEncodedPremise`; Planted: `ignoreVersionRead`).
+26. `SiteKeyTable.lookup_unique_sites` — **NON-VACUOUS** (Instance: `twoSiblingConstructs`; Planted: `duplicateSiteAssign`).
+27. `SiteKeyTable.resolveKeySites_exact` — **NON-VACUOUS** (Instance: `duplicateUnnamedConstructs`; Planted: `firstOnlyResolveKeySites`).
+
+#### `ConcreteSpec/Proofs/Observe2.lean` (12 Laws)
+28. `Span.Valid_iff` — **NON-VACUOUS** (Instance: `validSpanDemo`; Planted: `zeroWidthValid`).
+29. `SiteTable.lookup_valid` — **NON-VACUOUS** (Instance: `validSites`; Planted: `uncheckedSiteLookup`).
+30. `renderSpan_sound` — **NON-VACUOUS** (Instance: `validSpanDemo`; Planted: `offByOneRenderSpan`).
+31. `renderSpan_invalid_none` — **NON-VACUOUS** (Instance: `invalidSpanDemo`; Planted: `clampInvalidRenderSpan`).
+32. `renderSite_sound` — **NON-VACUOUS** (Instance: `validSites`; Planted: `wrongSourceRenderSite`).
+33. `renderSite_unknown_none` — **NON-VACUOUS** (Instance: `unknownSiteDemo`; Planted: `syntheticSpanRenderSite`).
+34. `Diagnostic.render_sound` — **NON-VACUOUS** (Instance: `validDiagDemo`; Planted: `dropSiteDiagRender`).
+35. `Diagnostic.render_invalid_none` — **NON-VACUOUS** (Instance: `invalidDiagDemo`; Planted: `ignoreInvalidSiteDiagRender`).
+36. `trapTerminal_valid_location` — **NON-VACUOUS** (Instance: `validSites`; Planted: `hardcodedLineTrapTerminal`).
+37. `trapTerminal_invalid_refuses` — **NON-VACUOUS** (Instance: `invalidSites`; Planted: `fabricatedSpanTrapTerminal`).
+38. `rebindSiteTable_sound` — **NON-VACUOUS** (Instance: `rebindSiteTableDemo`; Planted: `identityRebindSiteTable`).
+39. `rebindSiteTable_unmapped_none` — **NON-VACUOUS** (Instance: `unmappedRebindSiteDemo`; Planted: `keepOldSpanRebindSiteTable`).
+
+#### `ConcreteSpec/Proofs/Prim.lean` (16 Laws)
+40. `ObligationTable.register_sound` — **NON-VACUOUS** (Instance: `registerObligationDemo`; Planted: `dropTargetRegister`).
+41. `ObligationTable.register_duplicate_refuses` — **NON-VACUOUS** (Instance: `duplicateObligationDemo`; Planted: `overwriteObligationRegister`).
+42. `SafetyEvidence.discharge_sound` — **NON-VACUOUS** (Instance: `validDischargeDemo`; Planted: `bypassKeyCheckDischarge`).
+43. `SafetyEvidence.discharge_target_mismatch` — **NON-VACUOUS** (Instance: `mismatchedTargetDemo`; Planted: `ignoreTargetDischarge`).
+44. `SafetyEvidence.discharge_unregistered` — **NON-VACUOUS** (Instance: `unregisteredObligationDemo`; Planted: `acceptUnregisteredDischarge`).
+45. `PrimRegistry.register_sound` — **NON-VACUOUS** (Instance: `PrimDemo.registry`; Planted: `dropSpecRegister`).
+46. `PrimRegistry.register_duplicate_refuses` — **NON-VACUOUS** (Instance: `duplicatePrimDemo`; Planted: `overwritePrimRegister`).
+47. `PrimRegistry.stepChecked_sound` — **NON-VACUOUS** (Instance: `PrimDemo.checkedStep`; Planted: `uncheckedPrimStep`).
+48. `PrimRegistry.unknown_primitive_stuck` — **NON-VACUOUS** (Instance: `PrimDemo.unknownPrimConfig`; Planted: `uncheckedPrimStep`).
+49. `PrimRegistry.disallowed_answer_stuck` — **NON-VACUOUS** (Instance: `PrimDemo.disallowedAnswer`; Planted: `uncheckedPrimStep`).
+50. `drive_steps_result` — **NON-VACUOUS** (Instance: `PrimDemo.driveDemo`; Planted: `skipStepDrive`).
+51. `Ghost.ghost_erasure_step` — **NON-VACUOUS** (Instance: `GhostDemo.normalPieces`; Planted: `mutateStoreGhostStep`).
+52. `Ghost.ghost_erasure_run` — **NON-VACUOUS** (Instance: `GhostDemo.abortPieces`; Planted: `eraseAllPieces`).
+53. `Ghost.ghost_failure_aborts_ghost_only` — **NON-VACUOUS** (Instance: `GhostDemo.failingGhostPieces`; Planted: `swallowGhostFailureRun`).
+54. `Ghost.ghost_no_host_event_leak` — **NON-VACUOUS** (Instance: `GhostDemo.normalPieces`; Planted: `emitEventGhostRun`).
+55. `Ghost.ghost_rebind_sound` — **NON-VACUOUS** (Instance: `GhostDemo.reboundPieces`; Planted: `staleKeyGhostRebind`).
+
+---
+
+### 6. Findings
+
+No blocker, major, minor, or nit findings.
+
+VERDICT: ACCEPT
+rc=0

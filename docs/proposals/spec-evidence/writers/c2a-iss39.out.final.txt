@@ -1,0 +1,3 @@
+Committed `9cb0ef7fe4f23ac13745717e2e4854410cbf36d1` — added ISS-0039 to `ISSUES.tsv` only.
+
+`issues.sh` passed inside `nix develop`: **PASS=5 FAIL=0**. No push, reviewers, or git notes.

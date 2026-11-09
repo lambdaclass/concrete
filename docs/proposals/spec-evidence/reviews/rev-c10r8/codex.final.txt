@@ -1,0 +1,111 @@
+CHANGES. The substantive round-7 repairs are real, but the two gate-driven definition reshapes are shortcuts under the binding review rule.
+
+This was a read-only, offline source review. I changed nothing, ran no git commands, and ran no builds or gates. Elaboration remains the coordinator’s check.
+
+1. **ConcreteSpec/Spec/Frame.lean:465 — major — REAL DEFECT: the single-field `ToyTraceSafe` structure shields the proposition from the gate.**
+
+   The structure adds only `stepsSafe`, containing the previous universal proposition. It introduces no independently justified contract decomposition. Given the stated purpose—stopping `whnfD` at a structure head—this bends the specification around the gate’s normalization behavior.
+
+   **Meaning:** the old predicate and new structure are logically equivalent: construct the structure from the universal proof, or recover that proof through `stepsSafe`. This does **not** weaken stack safety or make `toyBody_stack_safe` vacuous. Nevertheless, logical equivalence does not justify a gate workaround.
+
+   **Long-term fix:** retain the direct predicate and repair the gate so that unfolding a conclusion predicate does not invent additional theorem premises. Add gate regression coverage for the original predicate, its closed application, and its planted negation. A record interface should be introduced only for an independently justified specification design.
+
+2. **ConcreteSpec/Spec/Frame.lean:819 — major — REAL DEFECT: rejection is restated as an equivalence solely to evade the same gate limitation.**
+
+   `instruction.Matches pair before ↔ False` is a less direct spelling of rejection than `¬ instruction.Matches pair before`. Nothing in the retention contract needs the reverse implication from `False`; its purpose here is to alter the head encountered by the gate.
+
+   **Meaning:** these propositions are constructively equivalent. The change neither admits an invalid transfer nor permits rejection of a matching token. The completion and untracked-handle witnesses remain meaningful.
+
+   **Long-term fix:** restore the negation and fix the gate’s distinction between theorem hypotheses and implications inside the conclusion. Cover both successful and rejected transfer applications in gate regressions.
+
+3. **ConcreteSpec/Proofs/Frame.lean:1735 — minor — REAL DEFECT: several recorded approvals overstate what round 7 explicitly approved.**
+
+   The round-7 citation is repeated on `keptPair_results_valid`, `kept_only_paired_completion`, `submit_produces_paired_receipt`, `kept_receipt_rejects_submission`, and `kept_receipt_rejects_other_extern`, at lines 1735, 1756, 1777, 1798, and 1810.
+
+   `_review/REVIEW7-agy.md:91` approves a singular:
+
+   > “Retention specification characterization lemma”
+
+   It identifies the former line 1430, corresponding to the first characterization helper, rather than explicitly approving all six declarations.
+
+   **Concrete fix:** remove the unsupported additional round-7 attribution from those five helpers. Their round-6 approval is explicit and sufficient: `_review/REVIEW6-codex.md:87` individually names all six under:
+
+   > “Specification inversion used within the executable retention/checker laws”
+
+   This is a provenance defect, not an unapproved-exemption defect.
+
+The five round-7 findings have these dispositions:
+
+| Round-7 finding | Assessment |
+|---|---|
+| Underflow masked by truncated subtraction | **Fixed.** `StackEvent.Safe` checks raw offsets and release sizes before accepting the subtracted address (`ConcreteSpec/Spec/Frame.lean:453`). The zero-origin planted cases reject offsets 9 and 100 and release 100 (`ConcreteSpec/Proofs/Frame.lean:1419`, `:1425`, `:1431`). Execution still uses natural subtraction, but the trace preserves the information needed to reject underflow. |
+| Trace safety outside the reusable call contract | **Fixed.** `Signature.Call.traceSafe` carries it (`ConcreteSpec/Spec/Frame.lean:485`), and `TransitionConforms` includes samples. Sequential execution records the complete instruction stream and proves its combined trace safe (`ConcreteSpec/Proofs/Frame.lean:1602`). |
+| Hardcoded stack-model comparison | **Fixed.** `StackCode.compile` is structural (`ConcreteSpec/Spec/Frame.lean:561`); `toyBody_stack_model` is general over code, neutral leaves, and initial machines (`ConcreteSpec/Proofs/Frame.lean:1211`). `toyBody_stack_safe` obtains its upper bound through that correspondence and `stackSamples_bounded`. Its instance retains both execution and trace correspondence (`ConcreteSpec/Proofs/Frame.lean:1437`). |
+| Root/result binding outside the launcher contract | **Fixed.** `Launcher.Run` binds both identities, and `Launcher.Outcome` covers refusal and entry (`ConcreteSpec/Spec/Frame.lean:882`, `:897`). |
+| Duplicated effect-permission expressions | **Left unchanged.** The preference remains visible in `ConcreteSpec/Spec/Frame.lean:197`. Returned permissions are independently checked against command permissions, so the duplication does not reopen self-authorization. This remains a **PREFERENCE**, not a blocking defect. |
+
+The following audits **all 14 tagged C10 laws**. Locations below are in `ConcreteSpec/Proofs/Frame.lean`. “Pass” means non-vacuous on source inspection, with a full closed application and a same-typed, premise-preserving planted counterexample. It does not certify gate execution.
+
+| Law | Instance and planted witness | Vacuity verdict |
+|---|---|---|
+| `alloc_fresh_disjoint`, line 345 | `fresh_block`, line 357; `aliasingFullBlock`, line 366. Well-formedness, successful allocation, and existing-block premises are retained. | **Pass** |
+| `caller_restoration`, line 531 | `explicit_return`, line 543; `dropCallerBindDst`, line 563. The planted example retains `C1Call` and negates the complete existential conclusion. | **Pass** |
+| `runEffect_frame`, line 592 | `byte_store`, line 668; corruption, enlarged self-authorized permissions, and dropping execution at lines 681, 700, 716. | **Pass** |
+| `c4_effects_frame`, line 828 | `store_then_set`, line 850; `leftOnlyUnion`, line 859. Both actual execution premises remain present. | **Pass** |
+| `c1_call_frame`, line 947 | `storing_callee`, line 1049; `droppingBodyUnion`, line 1060. The application closes well-formedness, implementation, and completed-call evidence. | **Pass** |
+| `layout_aligned`, line 1084 | `two_slots`, line 1093; unrounded and rounding-down calculators at lines 1101, 1112. Positive alignment remains a planted premise; coverage prevents alignment alone from being the whole claim. | **Pass** |
+| `stackSamples_bounded`, line 1152 | `nested_call`, line 1157 reaches depth 48; `unnestedStackBound`, line 1166 retains sample membership and undercounts nesting. | **Pass** |
+| `toyBody_stack_model`, line 1211 | `spill`, line 1437; `ignoringStackSamples` and `overReservingCompile`, lines 1455, 1465. Both retain the neutral-leaf premise. | **Pass** |
+| `toyBody_stack_safe`, line 1319 | `spill` and `zero_origin`, lines 1371, 1376; outside-frame, over-budget, underflowing-access, and underflowing-release mutants, lines 1401–1431. | **Pass semantically; finding 1 concerns the definition workaround.** |
+| `toyCall_conforms`, line 1358 | `spill`, line 1365; saved-register, caller-slot, pointer, result, access, budget, and underflow mutants, lines 1489–1562. | **Pass** |
+| `toyCallSeq_conforms`, line 1602 | `two_calls`, line 1648; saved-register, undeclared-clobber, access, and budget mutants, lines 1660, 1676, 1692, 1708. | **Pass** |
+| `checkKeptPair_sound`, line 1869 | `paired`, line 1961; aliased endpoints and unconditional rejection, lines 1974, 1987. Mutants retain the subject’s typeclass parameters. | **Pass** |
+| `transferKept_sound`, line 1914 | `completion` and `untracked_handle`, lines 1995, 2000; wrong endpoint/state, untracked acceptance, and unconditional rejection, lines 2012–2062. Endpoint distinctness remains present. | **Pass semantically; finding 2 concerns the definition workaround.** |
+| `toyLaunch_conforms`, line 2101 | `dependency_chain` and `under_reserved`, lines 2120, 2123; observation, root, result, closure, refusal, and inadequate-admission mutants, lines 2133–2214. | **Pass** |
+
+I found no tagged Law whose proof merely returns an assumed postcondition, projects an assumed contract, or restates its subject definition. The checker’s runtime comparisons support a complete acceptance/rejection contract; unconditional rejection is explicitly refuted. The neutral-leaf premise restricts the compilation correspondence to stack-neutral leaves, rather than assuming its conclusion.
+
+Classification and exemption audit:
+
+- Every authored theorem in the two Frame files has exactly one class: **14 Laws and 53 Helpers**. There are no Representation lemmas and **no remaining `approved: PENDING` exemptions**.
+- All 53 Helpers have an explicit individual approval in `_review/REVIEW6-codex.md`. Its controlling statement at line 76 is:
+
+  > “approve as a supporting Helper”
+
+  The declaration lists and reasons are at these resolving locations:
+
+| Approval location | Approved supporting role |
+|---|---|
+| `_review/REVIEW6-codex.md:80` | Elementary preservation and footprint relation reasoning |
+| `_review/REVIEW6-codex.md:81` | Primitive operational frame cases, including both Hybrid write helpers |
+| `_review/REVIEW6-codex.md:82` | Closed memory and execution fixtures |
+| `_review/REVIEW6-codex.md:83` | C1 computation, inversion, and reachability |
+| `_review/REVIEW6-codex.md:84` | Structural execution proofs |
+| `_review/REVIEW6-codex.md:85` | Supporting stack and ABI proofs |
+| `_review/REVIEW6-codex.md:86` | Sequential machine-observation composition |
+| `_review/REVIEW6-codex.md:87` | All six retention characterization helpers |
+| `_review/REVIEW6-codex.md:88` | Checker inversion and completeness |
+| `_review/REVIEW6-codex.md:89` | Retention relation adapter |
+| `_review/REVIEW6-codex.md:90` | Both admission computations |
+| `_review/REVIEW6-codex.md:91` | Loader and encoder inductions |
+| `_review/REVIEW6-codex.md:92` | Launcher relation adapter |
+
+I reaffirm those supporting-role exemptions. They do not excuse weakened enclosing contracts or the definition workarounds above.
+
+The additional round-5 citations correspond to its approved list at `_review/REVIEW5-agy.md:114`. Its conditional approval for `stack_under_reservation`, at line 165, says:
+
+> “approve once `toyLaunch_conforms` drops `adequate` and uses `stack_under_reservation`”
+
+That condition is now satisfied by `ConcreteSpec/Proofs/Frame.lean:2105`. Round 7 explicitly approves the two machine-composition helpers at `_review/REVIEW7-agy.md:89` and `:90`, and the primitive case helpers and `toyBodyAt_preserved` at `:92`. The overextended retention attribution is finding 3.
+
+All five Obligations are `def … : Prop`, not theorems: signature well-formedness, transition conformance, artifact stack conformance, retention conformance, and launcher conformance. Their cited roadmap rows exist at `ROADMAP.md:391`, `:403`, and `:485`, with launcher dependencies at `:389` and `:486`. The native deferrals remain legitimate; the toy proofs establish their own instances.
+
+For the carried N2 diagnostics, the formerly open composition instances are now closed; caller restoration and stack-bound planted examples preserve their actual premises; and stack-safety instances now exist. Ordinary prose backticks remain a gate parsing issue. The two specification reshapes should be replaced by gate fixes, as above.
+
+The supplied tree does not contain the referenced raw N2 transcript, so I could not independently reconcile its exact diagnostic list:
+
+ABSENT: _review/N2-GATE-adc0656fc.txt
+
+QUESTIONS: None. These findings require no language-policy decision.
+
+VERDICT: CHANGES

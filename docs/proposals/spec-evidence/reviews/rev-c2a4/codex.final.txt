@@ -1,0 +1,47 @@
+Read-only review completed. No files changed, git writes, network connections, builds, or gates run.
+
+No REAL DEFECT or PREFERENCE findings.
+
+The round-3 fixes are substantive:
+
+- `ConstEval` is now an independent, syntax-directed inductive relation over immediate children and scalar primitives. It does not call `CExpr.eval` or duplicate its executable dispatch through `nodeResult`.
+- `evalConsts_sound` and `admitted_copy` require successful typing and evaluation explicitly. Their closed division Instances satisfy both premises; neither reduces to a `True` escape.
+- The unused-failure witnesses construct relational derivations directly. Separate planted examples test declaration skipping through `evalConsts` and through `ConstsAdmitted`.
+- `CTy` remains unchanged; the open Result constant-type question is not decided.
+
+Every C2 law was audited:
+
+| Law | Vacuity verdict | Closed Instance / planted witness |
+|---|---|---|
+| `eval_agrees` | Pass: substantive agreement with independent semantics | `division_failure` / `swallowFailure`; `division_success` / `fabricateFailure` |
+| `eval_wellTyped_progress` | Pass: satisfiable typing, environment, and fuel premises | `div_zero` / `noConstValues` |
+| `eval_total` | Pass: appropriate restriction to the old fragment, alongside full-fragment laws | `wrap` / `noConstValues` |
+| `evalConsts_sound` | Pass: successful nonempty evaluation; declared-type and validity conclusions require proof | `division` / `boolConstValues` |
+| `typed_evalConsts_refusal` | Pass: full-fragment progress without an admission guard | `unused_div_zero` / `invalidRefusalEvalConsts` |
+| `admitted_copy` | Pass: static and evaluated types are connected to declarations structurally | `division_type` / `unitTypeConsts`; `division_value` / `boolConstValues` |
+| `typeConsts_refuses_nonCopy` | Pass: satisfiable non-Copy premise; refusal follows from scalar-type agreement | `mixed_declarations` / `uncheckedTypeConsts` |
+| `semantic_failure_refuses` | Pass: independent failure derivation forces refusal, including unused declarations | `unused_after_prefix` / `skipUnusedEvalConsts`; `unused_after_prefix_admitted` / `skipUnusedConstsAdmitted` |
+| `cycle_excludes_dependencyOrder` | Pass: real cycle contradicts strictly ordered reference positions | `two_constants` / `unsortedPermOrder` |
+| `DependencySortingComplete` | Pass: constructive sorting proof, not a certificate assumed as a premise | `forward_ref` / `sourceOrderOnly` |
+| `ConstOrderIndependent` | Pass: transfers typing, evaluation success, admission, and values | `admission` / `firstIdAdmitted`; `values` / `orderSensitiveEvalConsts` |
+| `checkedNeg_ok_arithmetic` | Pass: independent mathematical characterization | `signed` / `identityNeg` |
+| `checkedNeg_error_iff` | Pass: independent overflow characterization | `minimum` / `uncheckedNeg` |
+
+The tagged Instances are full closed applications. The paired Planted examples preserve the corresponding hypotheses and negate the mutated conclusion at the same arguments. I found no projection Law, impossible-premise Instance, invariant recheck shortcut, or definition-restatement Law.
+
+I approve every pending exemption below. Approval applies to the helper or representation role, not to counting it as independent law evidence.
+
+| Decision and reason | Declarations |
+|---|---|
+| **Approve:** elementary environment and operand inversion | `agree_nil`, `bind_value_inv`, `sameInt_some_inv`, `twoBools_some_inv`, `CVal.int_of_ty`, `CVal.bool_of_ty`, `sameIntTy_some`, `bothBool_true`, `not_inExpr_of_fallibleFree` |
+| **Approve:** structural bridges between independent derivations and execution | `eval_derivation_inv`, `eval_derivation_unique_inv`, `constsRun_eval_inv`, `evalConsts_append_inv` |
+| **Approve:** generalized induction supporting public soundness and refusal laws | `eval_sound_inv`, `typeConsts_mono_inv`, `typeConsts_decls_inv`, `typed_eval_matches_inv`, `evalConsts_sound_inv`, `typed_evalConsts_refusal_inv` |
+| **Approve:** reference reflection and positional cycle reasoning | `dependsOn_reference_inv`, `referencesEarlier_idPos_inv`, `sourceReference_idPos_lt`, `actualRefChain_idPos_lt`, `acyclic_of_dependencyOrder` |
+| **Approve as representation only:** Boolean chain checking reflects source references | `cycle_chain_real` |
+| **Approve:** constructive sorting and finite-walk support | `readyDecl_iff`, `takeReady_some_inv`, `takeReady_none_inv`, `refChain_snoc`, `refChain_suffix`, `mem_split_at`, `length_filter_ne_lt`, `walk_finds_cycle`, `exists_not_mem_of_not_all`, `sortConstsAux_spec`, `sortConsts_dependencyOrder` |
+| **Approve:** reference congruence, binding preservation, and order-transfer induction | `ty?_congr_refs`, `eval_congr_refs`, `typeConsts_lookup_not_mem`, `evalConsts_lookup_not_mem`, `typeConsts_fixedPoint_inv`, `typeConsts_from_fixedPoint_inv`, `evalConsts_fixedPoint_inv`, `evalConsts_from_fixedPoint_inv`, `typeConsts_order_transfer`, `evalConsts_order_transfer` |
+| **Approve:** scalar computation and representability support | `plainNeg_not_stuck`, `neg_inRange_iff` |
+
+These are source-review conclusions; build and gate validation remain with the coordinator.
+
+VERDICT: ACCEPT

@@ -1,0 +1,14 @@
+All three findings fixed:
+
+- `4a5a3441c`: restored direct `ToyTraceSafe` and negated transfer rejection; adapted proofs without weakening their statements.
+- `88d6f1785`: removed unsupported round-7 citations from five helpers, retaining explicit round-6 approvals under “Specification inversion used within the executable retention/checker laws.”
+
+Audited all 14 laws and their closed Instances and premise-preserving Planted witnesses. All 53 helpers retain approvals; CARRY fixes remain intact. The permission-expression duplication remains a preference.
+
+Both prescribed builds passed. Rules: 32 passed. Trust ban: 23 passed. Working tree clean.
+
+Expected diagnostics from the confirmed N2 defect affect `ABI.toyBody_stack_safe` (`spill`, `zero_origin`) and `ABI.transferKept_sound` (`untracked_handle`), including paired planted diagnostics.
+
+No reviewers, git notes, pushes, or prohibited-file edits.
+
+QUESTIONS: None.

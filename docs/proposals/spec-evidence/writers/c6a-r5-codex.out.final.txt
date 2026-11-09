@@ -1,0 +1,24 @@
+Findings **1, 3 and 4 are done**. Finding **2 remains open**, as instructed; `sourceSites` semantics are unchanged.
+
+Commits:
+
+- `c7f345e3b` — polymorphic blocking-oracle mutant with a history-sensitive fixture.
+- `21a628227` — authoritative physical operand/oracle/effect bundles used by execution and adapter admission.
+- `b341c56d3` — general ASCII and multibyte source-column laws.
+- `8f2343178` — fixed 11 additional mutant parameter-order mismatches; added the local zero-effect rejection control and reconciled documentation.
+
+Law evidence:
+
+| Law | Property and Instance / Planted evidence |
+|---|---|
+| `project_physical_outputs` | Ordered physical outputs at the exact evaluator ending; `ordered_physical_outputs_on_run` / erase and reverse mutants. |
+| `output_before_trap_kept` | Physical outputs survive trap reporting; `two_outputs_then_trap_report` / dropped-history and erase mutants. |
+| `environment_run_reply` | Blocking reaches the actual blocked report; `blocking_c1_call` / polymorphic fabricated-reply mutant. |
+| `sourceSpan_ascii_eq_char_col` | ASCII byte and scalar columns agree; `ascii_tab` / tab-expansion mutant. |
+| `sourceSpan_multibyte_gt_char_col` | Multibyte byte columns exceed scalar columns; `multibyte_tab` / scalar-counting mutant. |
+
+Encoding helpers establish byte/scalar length comparisons. `sourcePrefixSpan_hasByteColumn` remains a computation helper, with approval pending.
+
+Checked all 22 C6 laws and compiled type compatibility for all 35 distinct subject/mutant pairs. The prescribed build passed at **`8f23431783cd75a7def3ae5b7faa47497b3d43c0`**. Source scan and whitespace checks passed. Working tree is clean; nothing was pushed, and no reviewers or git notes were used.
+
+**QUESTIONS:** What disposition should invalid source paths receive, and how should duplicate site keys be handled? These owner decisions still block finding 2.

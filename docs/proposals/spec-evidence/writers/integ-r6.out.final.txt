@@ -1,0 +1,18 @@
+Implemented round 6 in three commits:
+
+- `608f2173b` — separate semantic uniqueness from representation equality.
+- `59459b758` — flatten transition blocks and prove execution-trace validity.
+- `61bc6635b` — prove strict boundary embedding and exact block intervals.
+
+Per finding:
+
+1. **Done:** each transition has its own finite block, with silent blocks for silent/erased transitions. `toObserveSteps_blocks` proves exact event correspondence. The `doubleAdapter` Instance and `crossBoundarySteps` Planted witness detect events crossing boundaries.
+2. **Done:** `projected_completeTrace` is a Helper. The independent `projectedTrace_valid` Law follows execution transitions; its `keepingAdapter` Instance and `pendingTrace` mutant use unchanged `CompleteTrace` semantics.
+3. **Done:** uniqueness constrains the execution relation. The `spin_infinite` Instance rejects `stationaryOrMove`, which admits two different state sequences.
+4. **Left to C6, as instructed:** `Observe2.lean` is untouched. `runFrom_validTrace` still needs classification, a full closed Instance, and a premise-preserving mutant violating its complete conclusion. C8 now proves trace validity independently; its remaining C6 dependencies need Helper classifications, including `visiblePrefix_prefix`.
+5. **Done:** remaining exemptions retain individual reasons and PENDING approval.
+6. **Done:** audited all 22 C8 Laws and their C6 dependencies. All C8 laws have matching Instance/Planted tags; this was a source audit, not an automated convention-gate result.
+
+Validation passed: prescribed Lean build, rules **32/32**, trust ban **23/23**, and `git diff --check`. Final HEAD is `61bc6635b`; working tree is clean. No push, reviewers, git notes, or protected-file edits.
+
+QUESTIONS: None.

@@ -1,0 +1,62 @@
+### Verification of Round 6 Fixes & Invariants
+
+1. **Security Instances and Mutants Closed at Exact Run Arguments (`ConcreteSpec/Proofs/Leak.lean` lines 1644–1691)**:
+   - **Verified**: The `Instance` and `Planted` examples for [`secure_ni`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L1644-L1659), [`secure_ct`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L1660-L1674), and [`timing_ni`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L1676-L1691) are now fully applied to the concrete run arguments (`secureRun 6 1` and `secureRun 5 2`, `exposingRun 6 1` and `exposingRun 5 2`, `timingRun 1` and `timingRun 2`, `leakyRun 1` and `leakyRun 2`) instead of leaving universal quantifiers `∀ r₁ r₂` open in the conclusion.
+   - **NI/CT Meaning Unchanged**: All security definitions in [`ConcreteSpec/Spec/Leak.lean`](file:///home/unbalancedparen/ConcreteSpec/Spec/Leak.lean) (`DelimitedReleaseNI`, `ConstantTime`, `LowEquivalent`, `ReleasePolicy.Permits`, `ReleasePolicy.Authorized`, `ReleasePolicy.ForbidsRelease`, `WipePreservation`) and the theorem statements of [`secure_ni`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean), [`secure_ct`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean), [`timing_ni`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean), [`timing_not_ct`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean), and [`leaky_not_ni`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean) are untouched.
+
+2. **`Account.enter` Law Replacement (`ConcreteSpec/Proofs/Leak.lean` lines 804–808, 1100–1123, 1346–1361)**:
+   - **Verified**: [`Account.enter_wf`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L804-L808) is reclassified as `Helper (arithmetic)` (`approved: PENDING`), and replaced as the law for subject `Account.enter` by [`function_entry_peak`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L1100-L1123):
+     $$\exists m',\; \mathrm{run}\;(\lambda l \Rightarrow (m\;l).\mathrm{enter})\;\mathrm{actions} = \mathrm{some}\;m' \land (m'\;\mathrm{lineage}).\mathrm{functionPeak} = \mathrm{observedPeak}\;\mathrm{lineage}\;(\lambda l \Rightarrow (m\;l).\mathrm{enter})\;\mathrm{actions}$$
+   - Unlike a projection or single-step `WF` restatement, `function_entry_peak` relates multi-step execution starting from `enter`-initialized memory to the independent trajectory maximum `observedPeak`, proving that caller-frame historical `functionPeak` values do not pollute the callee's local peak even when the callee immediately frees bytes (`[.free ⟨0⟩ 3]` from `memoryA`, where historical `peak = 8` and entry `live = 5`).
+
+3. **`free_conservation` Independent Byte-Balance Law (`ConcreteSpec/Proofs/Leak.lean` lines 879–910, 1379–1400)**:
+   - **Verified**: [`free_update`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L879-L894) is kept as a `Helper (computation)` (`approved: PENDING`) for unfolding the post-state fields, while [`free_conservation`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L896-L910) states the additive conservation identity `(m' lineage).live + bytes = (m lineage).live` alongside request history, peak preservation, and frame preservation across all `l ≠ lineage`.
+
+4. **Accuracy of Recorded `REVIEW5-codex.md` Exemption Approvals**:
+   - **Verified**: All 63 tags updated from `(approved: PENDING)` to `(approved: REVIEW5-codex.md)` (18 `Representation lemma`s in [`ConcreteSpec/Spec/Leak.lean`](file:///home/unbalancedparen/ConcreteSpec/Spec/Leak.lean) and 45 `Helper` / `Representation lemma`s in [`ConcreteSpec/Proofs/Leak.lean`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean)) correspond 1-for-1 to the exact theorems and examples approved in `REVIEW5-codex.md`, with no changes to their statements or proofs. The 2 reclassified/split helpers ([`Account.enter_wf`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L804-L808) and [`free_update`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L879-L894)) accurately remain `(approved: PENDING)`.
+
+---
+
+### Vacuity & Convention Audit of All C7 Laws (`ConcreteSpec/Proofs/Leak.lean`)
+
+Every `Law` in C7 has a single classification tag, a closed ground `Instance` applying the theorem to concrete arguments, and a `Planted` mutant establishing the law's hypotheses under the mutated subject while negating the closed conclusion:
+
+| Law | Subject | Verdict | Non-Trivial Instance & Planted Counter-Example Witness |
+| :--- | :--- | :--- | :--- |
+| [`step_unique`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L290-L295) | `Demo.ops` | **Non-vacuous** | **Instance**: `Demo.ops` at `.output`, `7`, store `0`, site `⟨0⟩` yields a unique step. **Planted**: `opsWith permissiveAllowed` satisfies existence of a step at the same arguments but fails uniqueness (`7 ≠ 8`). |
+| [`secure_ni`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L365-L385) | `Demo.start` | **Non-vacuous** | **Instance**: Closed at `secureRun 6 1` and `secureRun 5 2` (`publicObservations` agree). **Planted**: `exposingStart` satisfies `LowEquivalent` and matching choices/releases for `(6, 1)` and `(5, 2)`, but `(exposingRun 6 1).publicObservations ≠ (exposingRun 5 2).publicObservations`. |
+| [`secure_ct`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L387-L407) | `Demo.start` | **Non-vacuous** | **Instance**: Closed at `secureRun 6 1` and `secureRun 5 2` (`leakage` agrees). **Planted**: `exposingStart` satisfies `LowEquivalent` and matching choices/releases, but `(exposingRun 6 1).leakage ≠ (exposingRun 5 2).leakage`. |
+| [`leaky_not_ni`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L502-L515) | `Demo.leakyStart` | **Non-vacuous** | **Instance**: `leakyStart` with policy `Demo.policy` refutes `DelimitedReleaseNI`. **Planted**: Mutant `ctStart` satisfies the same `LowEquivalent`, `1 ≠ 2`, and `RunsAuthorized` hypotheses while satisfying `DelimitedReleaseNI`. |
+| [`timing_ni`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L628-L645) | `Demo.timingStart` | **Non-vacuous** | **Instance**: Closed at `timingRun 1` and `timingRun 2` (`publicObservations` agree). **Planted**: Mutant `leakyStart` satisfies `LowEquivalent` and matching choices/releases at `1` and `2`, but `(leakyRun 1).publicObservations ≠ (leakyRun 2).publicObservations`. |
+| [`timing_not_ct`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L647-L660) | `Demo.timingStart` | **Non-vacuous** | **Instance**: `timingStart` refutes `ConstantTime` while `RunsAuthorized` holds. **Planted**: Mutant `ctStart` satisfies `LowEquivalent`, `1 ≠ 2`, and `RunsAuthorized`, while satisfying `ConstantTime`. |
+| [`forbidsRelease_not_authorized`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L760-L770) | `ReleasePolicy.ForbidsRelease` | **Non-vacuous** | **Instance**: Empty policy with `[releaseZero]` is not authorized. **Planted**: Mutant `vacuousForbidsRelease` (`fun _ => True`) holds on `Demo.policy` with `[releaseZero] ≠ []`, while `Demo.policy.Authorized [releaseZero]` holds. |
+| [`Memory.set_same`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L799-L802) | `Memory.set` | **Non-vacuous** | **Instance**: `Memory.set memoryA ⟨0⟩ (memoryA ⟨0⟩) = memoryA`. **Planted**: `corruptSetter` fails `corruptSetter memoryA ⟨0⟩ (memoryA ⟨0⟩) = memoryA`. |
+| [`Account.alloc_zero`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L859-L866) | `Account.alloc` | **Non-vacuous** | **Instance**: `accountA.alloc 0 = accountA` under `accountA.WF`. **Planted**: `badPeakAccount` (not `WF`) or mutant `allocBumpsRequested` with `accountA.WF` fails `allocBumpsRequested accountA 0 = accountA`. |
+| [`apply_alloc_zero`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L875-L877) | `apply` | **Non-vacuous** | **Instance**: `apply memoryA (.alloc ⟨0⟩ 0) = some memoryA` under `memoryA_wf`. **Planted**: Mutant `applyCorruptsOther` under `memoryA_wf` fails `applyCorruptsOther memoryA (.alloc ⟨0⟩ 0) = some memoryA`. |
+| [`free_conservation`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L897-L910) | `apply` | **Non-vacuous** | **Instance**: `apply memoryA (.free ⟨0⟩ 3)` satisfies `(m' ⟨0⟩).live + 3 = (memoryA ⟨0⟩).live` and preserves history, peaks, and other lineages. **Planted**: `applyCorruptsOther` satisfies `3 ≤ (memoryA ⟨0⟩).live` and negates the conservation conjunction. |
+| [`reset_conservation`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L914-L923) | `apply` | **Non-vacuous** | **Instance**: `apply memoryA (.reset ⟨0⟩)` satisfies `ResetConservation` and frame preservation. **Planted**: `applyResetDropsPeaks` fails `ResetConservation` on `memoryA`. |
+| [`run_wf`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L940-L950) | `run` | **Non-vacuous** | **Instance**: `run memoryA conservationActions` preserves `∀ l, (m' l).WF`. **Planted**: `brokenRun` satisfies `memoryA_wf` and `isSome = true` on `conservationActions`, but produces a state failing `WF`. |
+| [`run_conservation`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L956-L985) | `run` | **Non-vacuous** | **Instance**: `run memoryA conservationActions` satisfies multi-step `Conservation` at `⟨0⟩` and `⟨1⟩`. **Planted**: `brokenRun` satisfies `isSome = true` on `conservationActions`, but violates `Conservation` at `⟨0⟩`. |
+| [`run_peak_monotone`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L1024-L1036) | `run` | **Non-vacuous** | **Instance**: `run memoryA conservationActions` preserves `peak` and `functionPeak` monotonicity. **Planted**: `brokenRun` satisfies `isSome = true` on `conservationActions`, but lowers peaks from `8` to `0`. |
+| [`run_peak_exact`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L1052-L1098) | `run` | **Non-vacuous** | **Instance**: `run memoryA conservationActions` records `max (memoryA ⟨0⟩).functionPeak (observedPeak ...)`. **Planted**: `brokenRun` satisfies `memoryA_wf` and `isSome = true`, but yields `0 ≠ 13`. |
+| [`function_entry_peak`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L1101-L1123) | `Account.enter` | **Non-vacuous** | **Instance**: `run (fun l => (memoryA l).enter) [.free ⟨0⟩ 3]` records `observedPeak` (`5`, ignoring caller peak `8`). **Planted**: `enterLowersPeak` satisfies `memoryA_wf` and `isSome = true`, but records `functionPeak = 0 ≠ 5`. |
+| [`report_certified`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L1129-L1149) | `run` | **Non-vacuous** | **Instance**: Covers `establishedReport`, `mixedReport`, and `emptyFunctionReport`. **Planted**: `runDropsFinalLive` satisfies `WF`, `isSome = true`, and all `Bound.Sound` / `Bound.SoundOptional` hypotheses across all three cases, while negating `LineageReport.Sound`. |
+| [`erasePure_preserves_wipes`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L1729-L1737) | `erasePure` | **Non-vacuous** | **Instance**: `wipes (erasePure source) = wipes source`. **Planted**: `dropWipes`, `changeWipes`, and `reorderWipes` each negate `wipes (mutant source) = wipes source`. |
+
+---
+
+### Verdict on Remaining `(approved: PENDING)` Exemptions
+
+1. [`Account.enter_wf`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L804-L808) — `Helper (arithmetic). Initializes the local peak at live bytes and retains the historical peak bound; used to initialize function_entry_peak (approved: PENDING).`
+   - **APPROVE**: Pure single-step invariant preservation helper used to discharge the `hwf` premise of `run_peak_exact` inside `function_entry_peak`, matching the already-approved single-step helpers `Account.alloc_wf`, `Account.free_wf`, and `Account.reset_wf`.
+2. [`free_update`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L879-L894) — `Helper (computation). Exposes the fields of a successful free and its frame for the independent byte-balance theorem free_conservation (approved: PENDING).`
+   - **APPROVE**: Internal computation helper that unfolds `apply m (.free lineage bytes)` and `Memory.set` so `free_conservation` can prove the additive conservation law `(m' lineage).live + bytes = (m lineage).live`.
+
+---
+
+### Findings
+
+None.
+
+VERDICT: ACCEPT
+rc=0

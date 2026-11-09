@@ -48,3 +48,16 @@ Round 3 introduces two blocker-level shortcuts that violate the owner’s best-l
 | Cycle & elaboration laws (`findCycle_sound`, `validCycle_no_depOrder`, `elaborateConsts` laws in `Proofs/Const.lean:1056+`) | `findCycle`, `ValidCycle`, `topoSort`, `elaborateConsts` | One `Law` tag each; closed `Instance` + `Planted` witnesses | **NON-VACUOUS** (unchanged in R3; audited in R2). |
 
 ---
+
+### Verdicts on `(approved: PENDING)` Helper Exemptions in Diff
+
+1. **`eval_node_inv` (`ConcreteSpec/Proofs/Const.lean:46`)** — **REJECT (`approved: NO`)**: Exists only because `CExpr.nodeResult` is a copy-paste of `CExpr.eval`. Remove along with `CExpr.nodeResult`.
+2. **`eval_derivation_inv` (`ConcreteSpec/Proofs/Const.lean:52`)** — **REJECT CURRENT FORM (`approved: NO`)**: Once `ConstEval` is refactored into a true syntax-directed inductive relation without `nodeResult`, this completeness helper is eligible for approval.
+3. **`eval_derivation_unique_inv` (`ConcreteSpec/Proofs/Const.lean:63`)** — **REJECT CURRENT FORM (`approved: NO`)**: Same as above; eligible for approval once `ConstEval` is an independent inductive relation and the proof inducts on that relation without `eval_node_inv`.
+4. **`admitted_copy_inv` (`ConcreteSpec/Proofs/Const.lean:862`)** — **REJECT (`approved: NO`)**: This is the real `admitted_copy` theorem demoted to a private helper so the public law could wrap it in `match typeConsts U ds [] with | none => True`. Promote the explicit-hypothesis form back to `admitted_copy` and remove the wrapper.
+5. **`constsRun_eval_inv` (`ConcreteSpec/Proofs/Const.lean:930`)** — **APPROVE (`approved: YES`, once `ConstEval` is fixed)**: Clean structural induction relating `ConstsRun` to `evalConsts`.
+6. **`evalConsts_append_inv` (`ConcreteSpec/Proofs/Const.lean:943`)** — **APPROVE (`approved: YES`)**: Standard computation lemma for `evalConsts` over list append when the prefix succeeds.
+7. **`failurePrefix_run_inv` (`ConcreteSpec/Proofs/Const.lean:1028`) and `unusedFailure_run_inv` (`ConcreteSpec/Proofs/Const.lean:1034`)** — **REJECT (`approved: NO`)**: Single-instance witness definitions that cheat by calling `eval_derivation_inv` (the executable evaluator) instead of constructing derivations from `ConstEval` rules.
+
+VERDICT: CHANGES
+rc=0

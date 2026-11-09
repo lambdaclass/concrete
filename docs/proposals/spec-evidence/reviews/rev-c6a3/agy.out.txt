@@ -1,0 +1,102 @@
+### Overview
+
+Round 3 addresses the Round 2 findings only partially and introduces new shortcuts and convention defects:
+
+1. **Physical output independence (`PhysicalEffects`, `project_physical_outputs`, `output_before_trap_kept`)**: `PhysicalEffects` is passed as an unconstrained parameter (`F : PhysicalEffects O S.Output`) rather than fixed by the operand/signature semantics, so an erasing adapter still satisfies both `OutputCorrespondence A F.past` and `F.OracleFaithful ρ` under the trivial zero-effect instance (`F.emit := []`, `F.past := []`). Furthermore, `PhysicalEffects.Execution.refl` has no termination/blocking guard, so `F.Execution` can stop early at any intermediate configuration after the last event-emitting step, and `finalConfig` in `project_physical_outputs` / `output_before_trap_kept` is unconstrained.
+2. **Typed environment execution in C1 (`environment_run_reply`)**: Instead of connecting `Environment` to general C1 operands or `reportObservation`, the patch defines a synthetic toy operand instance `Environment.operands S` (with `Store := Unit`) and a single-instruction configuration `Environment.call` whose destination variable is `none : Option Var`. Because `dst = none`, `Exec.onRes` discards the C1 return value `.ok (some ⟨q.1, reply⟩)` and leaves locals empty; a mutant oracle returning `.ok none` as its C1 value while logging the event still satisfies `environment_run_reply`. Blocking (`E.reply = none`) is also switched off by the `answered` premise (`= some reply`) rather than covered operationally.
+3. **Source-to-trap pipeline (`SourcePosition`, `sourceSites`, `runFrom_source_trap`)**: `SourcePosition` still bundles `pathOk : PathOk path` as a premise field, and the second conjunct of `runFrom_source_trap` (`(sourcePrefixSpan src.path src.pathOk src.prefixText).PathOk`) is proved literally by `exact src.pathOk` (a premise projection). Worse, the conclusion of `runFrom_source_trap` hardcodes `sourcePrefixSpan src.path src.pathOk src.prefixText` verbatim on the RHS instead of specifying the target span properties (`sp.path = src.path`, 1-based line, byte column), so `runFrom_source_trap` merely unfolds `sourceSites = AList.map (sourcePrefixSpan ...)` on a lookup.
+
+---
+
+### Findings (`file:line`, severity, classification, fix)
+
+1. **[ConcreteSpec/Spec/Observe.lean](file:///home/unbalancedparen/ConcreteSpec/Spec/Observe.lean#L404-L430) & [ConcreteSpec/Proofs/ObserveOutput.lean](file:///home/unbalancedparen/ConcreteSpec/Proofs/ObserveOutput.lean#L91-L137) — major — REAL DEFECT**
+   - **Problem**:
+     1. `PhysicalEffects.Execution.refl` (`Spec/Observe.lean:421`) is unguarded: `F.Execution P ρ hist c [] hist c` holds for any configuration `c`, even when `c` can still step. In `project_physical_outputs` and `output_before_trap_kept`, `finalConfig` is existentially quantified and completely unconstrained (`∃ outputs finalConfig, physical.Execution P ρ hist c outputs (Exec.runFrom P ρ fuel hist c).events finalConfig`). Any suffix of silent steps or eventless primitive steps (`a.event = none`) can be skipped by `refl`, and `finalConfig` need not match the configuration reached by `Exec.runFrom`.
+     2. `physical : PhysicalEffects O S.Output` is a free theorem parameter in `project_physical_outputs` and `output_before_trap_kept`. If an adapter erases all outputs (`A.events _ = []`), choosing `physical := ⟨fun _ _ _ _ => [], fun _ => []⟩` satisfies both `ExecAdapter.OutputCorrespondence A physical.past` and `physical.OracleFaithful ρ` trivially.
+   - **Concrete fix**:
+     1. Tie `PhysicalEffects` to the operand/signature bundle (or require `F.Execution` to reach the exact report ending of `Exec.runFrom`, guarding terminal/stopped configurations in `Execution` rather than leaving `refl` unguarded and `finalConfig` unconstrained).
+     2. In `project_physical_outputs` and `output_before_trap_kept`, tie `finalConfig` to the actual ending configuration/state of `Exec.runFrom P ρ fuel hist c` (or parameterize `Execution` by the `Exec.Ending O` produced when fuel > 0 / terminal / blocked).
+
+2. **[ConcreteSpec/Spec/Observe.lean](file:///home/unbalancedparen/ConcreteSpec/Spec/Observe.lean#L515-L556) & [ConcreteSpec/Proofs/ObserveEnvironment.lean](file:///home/unbalancedparen/ConcreteSpec/Proofs/ObserveEnvironment.lean#L77-L100) — major — REAL DEFECT**
+   - **Problem**:
+     1. `environment_run_reply` claims in its docstring that executing a typed handler call in C1 *"passes the same reply as the result, preserves the C1 store"*, but `Environment.call S q site` is `⟨.exec (.prim none q [] site), [], (), []⟩` where `dst := none` and `Store := Unit`. Because `dst = none`, `Exec.onRes` discards the returned value `.ok (some ⟨q.1, reply⟩)` and transitions to `.final .normal ()` with empty locals. If `E.oracle` is mutated to return `.ok none` (wrong C1 return value) while still recording `some (q, ⟨q.1, reply⟩)` in `a.event`, `Exec.runFrom` still evaluates to `⟨hist ++ [(q, ⟨q.1, reply⟩)], .final .normal ()⟩` and `environment_run_reply` still holds!
+     2. `environment_run_reply` switches off the blocking case via the premise `answered : E.reply ... = some reply`, and never connects `E.oracle` to `reportObservation` (for both answered and `.noAnswer` / `.blocked` runs).
+   - **Concrete fix**:
+     Bind the primitive call result in `Environment.call` (or store it in a non-unit `Store` / local variable inspected by the theorem conclusion) so the C1 return value `some ⟨q.1, reply⟩` is actually observed in the resulting state, and prove the full `reportObservation` law for `E.oracle` covering both `E.reply = some reply` and `E.reply = none` (`.blocked`).
+
+3. **[ConcreteSpec/Spec/Observe.lean](file:///home/unbalancedparen/ConcreteSpec/Spec/Observe.lean#L214-L221) & [ConcreteSpec/Proofs/ObserveReport.lean](file:///home/unbalancedparen/ConcreteSpec/Proofs/ObserveReport.lean#L334-L353) — major — REAL DEFECT**
+   - **Problem**:
+     1. `SourcePosition` still bundles `pathOk : PathOk path` as an input proof field, and the second conjunct of `runFrom_source_trap` (`(sourcePrefixSpan src.path src.pathOk src.prefixText).PathOk`) is proved by `exact src.pathOk` (`ObserveReport.lean:349, 353`), which is a direct projection of the input structure field.
+     2. The first conjunct of `runFrom_source_trap` writes `sourcePrefixSpan src.path src.pathOk src.prefixText` verbatim on the RHS. Because `sourceSites` is defined as `AList.map (fun src => sourcePrefixSpan src.path src.pathOk src.prefixText) sources`, `runFrom_source_trap` merely restates `sourceSites_lookup` inside `reportObservation` without stating the semantic properties of the reported span `sp` (`sp.path = src.path`, `sp.line = (scanSourcePrefix ...).1 + 1`, `sp.HasByteColumn ...`, and `Terminal.status = 134`). If `sourcePrefixSpan` computed bogus lines/columns, `runFrom_source_trap` would still hold by `rfl`.
+   - **Concrete fix**:
+     State `runFrom_source_trap` in terms of the reported span `sp` extracted from `reportObservation`: `∃ sp, reportObservation ... = some (.terminal ⟨..., .trapped kind site sp (trapLine kind site sp), A.state store⟩) ∧ sp.path = src.path ∧ sp.PathOk ∧ sp.line = (scanSourcePrefix src.prefixText.toList 0 []).1 + 1 ∧ sp.HasByteColumn (String.ofList (scanSourcePrefix src.prefixText.toList 0 []).2)`.
+
+4. **[ConcreteSpec/Proofs/ObserveOutput.lean](file:///home/unbalancedparen/ConcreteSpec/Proofs/ObserveOutput.lean#L266-L289) & [ConcreteSpec/Proofs/ObserveOutput.lean](file:///home/unbalancedparen/ConcreteSpec/Proofs/ObserveOutput.lean#L304-L350) & [ConcreteSpec/Proofs/ObserveReport.lean](file:///home/unbalancedparen/ConcreteSpec/Proofs/ObserveReport.lean#L815-L865) — minor — REAL DEFECT**
+   - **Problem**: Duplicate `Instance` declarations with identical statements and proof terms where only the `case` label in the doc comment differs:
+     - `ObserveOutput.lean:266-271` (`ordered_physical_outputs_on_run`) and `284-288` (`reverse_projected_outputs_on_run`)
+     - `ObserveOutput.lean:304-314` (`two_outputs_then_trap_report`) and `340-350` (`two_outputs_then_trap_project`)
+     - `ObserveReport.lean:815-827` (`source_path_to_trap`) and `852-864` (`source_identity_preserved`)
+   - **Concrete fix**: Keep one `Instance` per closed case name (multiple `Planted` mutants can reference the same `case` name when testing different subjects or mutants on the same instance), or give genuinely distinct instances.
+
+---
+
+### Check of CARRY.md Items & Decided Rules
+
+- **`runFrom_validTrace` promoted to `Law` with `Instance` and `Planted`**: Done in `Observe2.lean:486-490` and `ObserveReport.lean:390-421` (`completedAsPendingRun`).
+- **Byte-column theorems (`byteColumn_ascii_eq_char_col`, `byteColumn_multibyte_gt_char_col`, `sourcePrefixSpan_hasByteColumn`)**: Present and audited in `Observe.lean`.
+- **C6 helpers C8 depends on (`visiblePrefix_prefix`, `project_append`, `runFrom_events_prefix`, `runFrom_final_complete`, `runFrom_noAnswer_pending_valid`, `runFrom_blockingPermitted`)**: Present in `Observe2.lean`.
+- **Decided rules**:
+  - Trap line `concrete: trap: <kind> at <path>:<line>:<col> (site <id>)`: Exact (`trapLine` in `Spec/Observe.lean`).
+  - Project-relative forward-slash path (`PathOk`): Exact, except `runFrom_source_trap` projects `src.pathOk` rather than validating raw source paths or stating `sp.path = src.path` (Finding 3).
+  - 1-based line and byte column: Exact in `Observe.lean`, but not connected in `runFrom_source_trap`'s conclusion (Finding 3).
+  - Trap exit `134` vs normal exit: Exact (`Terminal.status`).
+  - Exit `125` for missing launch grants: Exact (`launch_missing_grant_status_125`).
+  - Fuel exhaustion is an evaluator report (`none`), never an external event: Exact (`runFrom_outOfFuel_report_none` and `fuel_is_not_blocking` case on `runFrom_report_trace`).
+  - Externally visible concrete state is adapter-supplied (`A.state store`): Exact.
+
+---
+
+### Full C6 Law Vacuity Audit (All 20 Laws)
+
+| # | File | Law | Vacuity Verdict | Witness (`Instance` / `Planted`) |
+|---|---|---|---|---|
+| 1 | `Proofs/Observe.lean` | `byteColumn_ascii_eq_char_col` | **Non-vacuous** | `ascii_line` (`"let x = 1;"`) / `zeroBasedByteColumn` |
+| 2 | `Proofs/Observe.lean` | `byteColumn_multibyte_gt_char_col` | **Non-vacuous** | `utf8_accent_and_tab` (`"a\té"`) / `charCountColumn` |
+| 3 | `Proofs/Observe.lean` | `sourcePrefixSpan_hasByteColumn` | **Non-vacuous** | `multiline_utf8_prefix` (`"first\na\té"`) / `charSourcePrefixSpan`, `zeroLineSourcePrefixSpan` |
+| 4 | `Proofs/Observe.lean` | `traceEquivalent_refl` | **Non-vacuous** | `nonempty_trace` / `dropEventsTraceEquiv` |
+| 5 | `Proofs/Observe.lean` | `traceEquivalent_symm` | **Non-vacuous** | `stutter_step_symm` / `asymmetricTraceEquiv` |
+| 6 | `Proofs/Observe.lean` | `traceEquivalent_trans` | **Non-vacuous** | `two_step_stutter_chain` / `oneStepOnlyTraceEquiv` |
+| 7 | `Proofs/Observe.lean` | `observationEquivalent_terminal_iff` | **Non-vacuous** | `terminal_stutter_and_state` / `ignoreStateObsEquiv` |
+| 8 | `Proofs/Observe.lean` | `observationEquivalent_refl` | **Non-vacuous** | `terminal_observation` / `dropStateObsEquiv` |
+| 9 | `Proofs/Observe.lean` | `observationEquivalent_symm` | **Non-vacuous** | `terminal_stutter_symm` / `asymmetricObsEquiv` |
+| 10 | `Proofs/Observe.lean` | `observationEquivalent_trans` | **Non-vacuous** | `terminal_two_step_chain` / `oneStepOnlyObsEquiv` |
+| 11 | `Proofs/Observe2.lean` | `ValidTrace.response_matches_pending` | **Non-vacuous** | `matched_double_exchange` / `acceptMismatchedResponseTrace` |
+| 12 | `Proofs/Observe2.lean` | `ValidTrace.no_event_after_unanswered` | **Non-vacuous** | `pending_double_request` / `appendOutputWhilePending` |
+| 13 | `Proofs/Observe2.lean` | `visiblePrefix_valid` | **Non-vacuous** | `completed_plus_pending_tail` / `keepBlockedTailVisiblePrefix` |
+| 14 | `Proofs/Observe2.lean` | `runFrom_validTrace` | **Non-vacuous** | `complete_exchange_then_pending` / `completedAsPendingRun` |
+| 15 | `Proofs/ObserveEnvironment.lean` | `environment_run_reply` | **DEFECT (Partial vacuity / weakened)** | `doubling_c1_call`, `history_sensitive_c1_call`, `routed_c1_call` / `noReplyOracle`, `forgetHistoryOracle`. Does not observe C1 return value (`dst = none`), trivializes `Store := Unit`, and excludes blocking (`answered` premise). |
+| 16 | `Proofs/ObserveEnvironment.lean` | `environment_step_trace` | **Non-vacuous** | `answered_and_blocked_steps`, `routed_fourTimes_step` / `appendWrongKindStep`, `unpermittedBlockStep` |
+| 17 | `Proofs/ObserveOutput.lean` | `project_physical_outputs` | **DEFECT (Weakened / unguarded `refl`)** | `ordered_physical_outputs_on_run` / `eraseProjection`, `reverseProjection`. `PhysicalEffects` is an unconstrained parameter and `Execution.refl` is unguarded (`finalConfig` unconstrained). |
+| 18 | `Proofs/ObserveOutput.lean` | `output_before_trap_kept` | **DEFECT (Weakened / unguarded `refl`)** | `two_outputs_then_trap_report` / `dropTrapHistoryReport`, `eraseProjection`. Inherits the `PhysicalEffects` and `Execution.refl` defect. |
+| 19 | `Proofs/ObserveReport.lean` | `runFrom_report_trace` | **Non-vacuous** | `prior_exchange_block`, `refuse_always_none`, `fuel_is_not_blocking` / `dropBlockedHistory`, `alwaysNoneReport`, `fabricatedBlockingReport` |
+| 20 | `Proofs/ObserveReport.lean` | `runFrom_outOfFuel_report_none` | **Non-vacuous** | `zero_fuel_at_request` / `outOfFuelAsBlockedReport` |
+| 21 | `Proofs/ObserveReport.lean` | `launch_missing_grant_status_125` | **Non-vacuous** | `missing_grant_refuses_startup`, `missing_grant_status_code` / `ignoreGrantsLaunchObservation`, `wrongStartupStatus` |
+| 22 | `Proofs/ObserveReport.lean` | `runFrom_trap_status_134` | **Non-vacuous** | `abort_trap_report`, `abort_trap_status_code` / `trapAsNormalReport`, `wrongTrapStatus` |
+| 23 | `Proofs/ObserveReport.lean` | `runFrom_source_trap` | **DEFECT (Projection / restatement)** | `source_path_to_trap`, `source_identity_preserved` / `hostRootSourceSites`, `wrongFileSourceSites`. Projects `src.pathOk` and hardcodes `sourcePrefixSpan` on RHS instead of stating span line/byte-column/path properties. |
+
+---
+
+### Verdicts on `(approved: PENDING)` Exemptions
+
+1. **Approve**:
+   - `Proofs/Observe.lean`: ` utf8ByteCount_pos`, `byteColumnAux_pos`, `scanSourcePrefix_newline`, `scanSourcePrefix_other`, `sourceSpan_hasByteColumn`, `StutterEquivalent.refl`, `StutterEquivalent.symm`, `StutterEquivalent.trans`, `Demo.first_exchange_complete`
+   - `Proofs/Observe2.lean`: `ValidTrace.append_outputs`, `visiblePrefix_complete_eq`, `visiblePrefix_append_PendingTail`, `visiblePrefix_prefix`, `ExecAdapter.project_append`, `runFrom_events_prefix`, `runFrom_final_complete`, `runFrom_noAnswer_pending_valid`, `runFrom_blockingPermitted`, `AdapterDemo.permittingWellFormed`, `AdapterDemo.blockingWellFormed`
+   - `Proofs/ObserveEnvironment.lean`: `environment_respond_valid`, `environment_oracle_wellFormed`, `Demo.envHandler_valid`, `HistoryDemo.handler_valid`, `HistoryDemo.prior_valid`, `RoutingDemo.envHandler_valid`
+   - `Proofs/ObserveOutput.lean`: `project_physical_outputs_list`, `physical_execution_outputs`, `OutputDemo.oracle_faithful`, `OutputDemo.adapter_correspondence`, `OutputDemo.run_writes`, `OutputDemo.permitted`, `OutputDemo.cannot_erase`
+   - `Proofs/ObserveReport.lean`: `runFrom_outOfFuel_not_final`, `trapTerminal_eq_some_iff`, `sourceSites_lookup`, `ReportDemo.prior_complete`, `ReportDemo.blockedPermitted`, `ReportDemo.abortingWellFormed`, `ReportDemo.relativePathWellFormed`, `ReportDemo.sourcePermitted`
+2. **Do Not Approve (Requires revision per Finding 1)**:
+   - `Proofs/ObserveOutput.lean:34`: `physical_run_execution` — relies on the unguarded `PhysicalEffects.Execution.refl` constructor on stalled/error/out-of-fuel branches instead of tying `Execution` to actual stopping conditions.
+
+VERDICT: CHANGES
+rc=0

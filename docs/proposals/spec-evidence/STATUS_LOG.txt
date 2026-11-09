@@ -47,3 +47,48 @@ Goldens: golden-and-gates retired; golden-flow.sh = coordinator runs generator o
 22:37 intg5 PASS 18747a8ef, codex CHANGES (1 blocker 3 major) -> r6 codex queued; C4 r3 agy ACCEPT (all exemptions approved), c4ag3 gates running; C6 carry list written
 22:39 C4 ACCEPTED (agy; pending Kimi) at 78ee5a2db, gates c4ag3 7/7, pushed both remotes. C1 r3 675735149 (codex) -> lane c1ag3 + agy rev-c1a3
 22:42 C1 r3 agy ACCEPT (c1ag3 gates running). C6a r2 ad3f1ba85 (agy) -> codex rev-c6a2; C2 r3 09544ad19 (codex) -> agy rev-c2a3; lane-c62 (c6ag2, c2ag3)
+22:46 C7 r6 7fe2bdb1e (codex) -> lane c7g6 + agy rev-c7r6; c1ag3 gates running at ccca4abaa
+22:46 lane-c7 deferred behind lane-c1a (keep <=2 heavy runs on ci-2); orphan c7g6 axioms --update left to finish on ci-2
+22:51 C1 ACCEPTED (agy; pending Kimi) at ccca4abaa gates 7/7, pushed. C7 r6 agy ACCEPT (gates c7g6b pending). C6a r2 codex CHANGES (4 major 1 minor) -> r3 codex queued; C2 r3 agy CHANGES (2 blocker 1 major 1 minor) -> r4 agy queued (both after lane-c62)
+22:56 c6ag2 PASS 6197726c3. C9 r6 e66aa2fc6 + integ r6 61bc6635b (codex) -> agy rev-c9r6/rev-intg6; lane-c9i queued behind lane-c62
+23:02 C7 ACCEPTED (agy; pending Kimi) at 5d94c4b4d gates c7g6b 7/7. c2ag3 PASS 885f69937. integ r6 agy ACCEPT (gates intg6 pending in lane-c9i). C10 r6 01b224a75 (agy) -> codex rev-c10r6 + lane c10g6
+23:04 C9 r6 agy CHANGES (6 major 1 minor) -> r7 agy queued after lane-c9i; C10 r6 codex CHANGES (3 major 1 minor) -> r7 codex queued after lane-c10
+23:17 c10g6 PASS fa9fec18e (codex CHANGES; r7 codex running). C6 r3 2c7492525 (codex) -> agy rev-c6a3 + lane c6ag3. N2 gate (wip/gate-vacuity 6c76ac3c4) running on C10 54c71fc02 (gate-c10)
+23:19 N2 gate on C10 54c71fc02: FAIL (53 PENDING, 13 unknown-name, 2 inst-app, 1 missing-inst, 1 planted-prop, 3 unpaired) -> C10 CARRY. c9g6 PASS. C2 r4 294bae9a0 (agy) -> codex rev-c2a4 + lane-c2a behind lane-c9i
+23:22 wip/spec-core ADVANCED 07c16bb5f -> 0dbeba29e (integ r6 agy ACCEPT, intg6 7/7), both remotes. CTy consult launched (codex+agy)
+23:27 CTy consult: codex a, agy a; new: CExpr.tryConvert vs OD106 Result -> asked coordinator (recommend drop under a)
+23:27 c6ag3 PASS e7b5fa26a (agy CHANGES; r4 agy queued). C2 r4 codex ACCEPT (c2ag4 running; conditional on owner Q + ISS tryConvert). C10 r7 adc0656fc (codex) -> agy rev-c10r7 + lane c10g7 + N2 gate rerun
+23:28 ISS-0039 (tryConvert vs OD106) filing queued for codex after lane-c2a; C2 acceptance conditional on ISS-0039 + owner answer
+23:29 C2 ACCEPTED CONDITIONALLY (codex; pending Kimi; conditional on ISS-0039 + owner CTy answer) gates c2ag4 7/7 at 7464e2186; ISS-0039 committed 9cb0ef7fe (issues.sh 5/0; ISSUES.tsv only), pushed both. N2 on C10 adc0656fc unchanged FAIL
+23:37 C10 r7 agy CHANGES (3 major 1 minor 1 nit; N2 diagnostics classified) -> r8 agy queued after lane-c10. C5 r6 448b286b (agy) -> codex rev-c5r6 + lane c5g6
+23:38 c10g7 PASS c27abeda2 (agy CHANGES; r8 agy running)
+23:39 C10 CARRY updated with agy N1 gate review (real: approvals + 4 instance shapes; FPs: backtick names)
+23:42 C5 r6 codex CHANGES (5 major 1 minor) -> r7 codex queued after lane-c5. C9 r7 715b2c9fe (agy) -> codex rev-c9r7 + lane c9g7
+23:47 c5g6 PASS 409532b8f (codex CHANGES; r7 codex). C9 r7 codex CHANGES -> r8 codex queued after lane-c9
+23:51 c9g7 PASS 1c03444ec; C9 r8 codex queued
+23:57 C6a r4 agy done head 3dbe0be8b; rev-c6a4 codex + lane c6ag4 launched
+23:59 C9 r8 codex done head 0a8b90ebd; rev-c9r8 agy + lane c9g8 launched
+23:59 lane-c9 held (gates worker gx C6 + c6ag4 = 2 on ci-2); lane-c9q queued
+00:01 rev-c9r8b agy ACCEPT INVALID (fabricated law/instance names; moved to rev-c9r8-invalid); rerun rev-c9r8c
+00:06 chain-c6a5: ROUND5 written at caa4b3624; queueing codex writer
+00:06 rev-c4a3s: ; SUMMARY rev-c4a3s: 0 locations ok, 0 identifiers ok, 0 unresolved
+00:09 c6ag4 PASS caa4b3624 (7/7); C6 r5 codex relaunched (out-path fix)
+00:10 C10 r8 agy done e7a7c4041 (gate-gaming reshape flagged); rev-c10r8 codex + lane-c10q (after lane-c9q + slot). consult-c6path done: both (a), sent to coordinator
+00:11 gates worker CONFIRMS N2 whnfD/.forallE false positive (vacuity.lean ~348-349); gate round 2 fixes it with positive controls. C10 r9 brief must: revert ToyTraceSafe-structure / '<-> False' reshapes unless the C10 review approves them on their own merits; rerun N2 after gate round 2.
+00:12 rev-c9r8s: VERDICT: ACCEPT; SUMMARY rev-c9r8s: 304 locations ok, 243 identifiers ok, 0 unresolved
+00:17 C9 ACCEPTED (strict agy rev-c9r8s, 0 unresolved, 170/170 pairs) at a97e361f1 c9g8 7/7, pushed; pending Kimi. C10 r8 codex CHANGES (2 major gate-workaround reshapes, 1 minor provenance); chain-c10r9 queued
+00:17 rev-c4a3s: VERDICT: ACCEPT; SUMMARY rev-c4a3s: 278 locations ok, 315 identifiers ok, 1 unresolved
+00:23 c10g8 PASS 59a95ea9a (7/7)
+00:23 chain c10g8: ROUND9 written at 59a95ea9a; queueing Codex writer spec-c10-codex-r9
+00:24 C4 strict agy ACCEPT VERIFIED (rev-c4a3s: 1 benign wrap, 119/119 pairs, 54 laws) -> C4 accepted again at 78ee5a2db pending Kimi. C5 r7 codex done 39a19a0d; rev-c5r7 agy + lane-c5q
+00:25 C6 r5 codex done 8f2343178 (finding 2 open on owner Q); rev-c6a5 agy + lane-c6aq (after lane-c5q)
+00:28 C10 r9 codex done 88d6f1785 (reshapes reverted, provenance fixed); rev-c10r9 agy + lane-c10q2 (after lane-c6aq)
+00:29 rev-intg6s: VERDICT: ACCEPT; SUMMARY rev-intg6s: 560 locations ok, 340 identifiers ok, 2 unresolved
+00:31 rev-intg6s agy ACCEPT INVALID (Observe.ValidReturn/ValidCost invented in a side remark; C8 law audit itself 22/22 laws, 52 tags match); strict rerun rev-intg6t queued after strict-reruns2
+00:31 C6 r5 agy ACCEPT VERIFIED (0 unresolved, 22 laws, 67/67 tags; 58 PENDING approved) at 8f2343178; finding 2 open on owner Q; c6ag5 lane queued. Approvals to be recorded in source by the next writer round.
+00:32 C10 r9 agy ACCEPT VERIFIED (whnfD only, from CTX; 14 laws 59/59 tags) at 88d6f1785; acceptance pending c10g9 gates + N2 rerun after gate round 2 + Kimi
+00:34 rev-c5r7 agy ACCEPT INVALID (63 invented helper names/lines in exemption list); strict rerun rev-c5r7s
+00:34 c5g7 PASS 02074d4f (7/7); C5 r7 review pending strict rerun rev-c5r7s
+00:37 rev-c7r6s: VERDICT: ACCEPT; SUMMARY rev-c7r6s: 316 locations ok, 193 identifiers ok, 0 unresolved
+00:37 C7 strict agy ACCEPT VERIFIED (rev-c7r6s: 0 unresolved, 20 laws, all cited tags name their law) -> C7 accepted again at 5d94c4b4d pending Kimi
+00:43 c6ag5 PASS 6477c65a7 (7/7). C6 audit accepted (agy verified) except finding 2 (owner Q); next C6 round = owner answer + record 58 approvals from REVIEW5-agy

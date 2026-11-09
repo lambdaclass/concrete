@@ -1,0 +1,229 @@
+### Round 5 Verification Summary
+
+1. **Finding 1 of REVIEW4 (authoritative physical operand/oracle/effect bundle — FIXED):**
+   - [`PhysicalOperands`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c6a5/tree/ConcreteSpec/Spec/Observe.lean#L428-L432) (`ConcreteSpec/Spec/Observe.lean:428`) bundles `operands : Exec.Operands`, `effects : PhysicalEffects operands Output`, `oracle : Exec.Oracle operands`, and `faithful : @PhysicalEffects.OracleFaithful operands Output effects oracle`.
+   - [`PhysicalOperands.runFrom`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c6a5/tree/ConcreteSpec/Spec/Observe.lean#L435-L438) (`ConcreteSpec/Spec/Observe.lean:435`) and [`PhysicalOperands.Admits`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c6a5/tree/ConcreteSpec/Spec/Observe.lean#L442-L444) (`ConcreteSpec/Spec/Observe.lean:442`) bind both execution and adapter admission to `M.oracle` and `M.effects`.
+   - [`project_physical_outputs`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c6a5/tree/ConcreteSpec/Proofs/ObserveOutput.lean#L122-L143) (`ConcreteSpec/Proofs/ObserveOutput.lean:122`) and [`output_before_trap_kept`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c6a5/tree/ConcreteSpec/Proofs/ObserveOutput.lean#L158-L181) (`ConcreteSpec/Proofs/ObserveOutput.lean:158`) take `(M : PhysicalOperands S.Output)` and `(corresponds : M.Admits A)` and bind `letI := M.effects`. An adapter can no longer satisfy correspondence or the operational laws by selecting an ambient zero-effect `PhysicalEffects` instance.
+   - [`OutputDemo.model`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c6a5/tree/ConcreteSpec/Proofs/ObserveOutput.lean#L250) (`ConcreteSpec/Proofs/ObserveOutput.lean:250`) fixes the concrete bundle prior to adapter admission, and the local [`OutputDemo.zeroEffects`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c6a5/tree/ConcreteSpec/Proofs/ObserveOutput.lean#L427-L437) (`ConcreteSpec/Proofs/ObserveOutput.lean:427`) rejection control at `ConcreteSpec/Proofs/ObserveOutput.lean:433` confirms that an ambient zero-effect instance does not admit `{ adapter with events := fun _ => [] }` against `model`.
+
+2. **Finding 2 of REVIEW4 (source-path validity — LEFT OPEN per round brief):**
+   - Verified that [`sourceSites`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c6a5/tree/ConcreteSpec/Spec/Observe.lean#L223-L230) (`ConcreteSpec/Spec/Observe.lean:223`) and [`runFrom_source_trap`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c6a5/tree/ConcreteSpec/Proofs/ObserveReport.lean#L362-L387) (`ConcreteSpec/Proofs/ObserveReport.lean:362`) are untouched in `REVIEW.diff` and their semantics are unchanged while blocked on the owner question. Not counted against this round per instructions.
+
+3. **Finding 3 of REVIEW4 (polymorphic blocking-oracle mutant — FIXED):**
+   - [`BlockingEnvDemo.fabricateReplyOnBlockOracle`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c6a5/tree/ConcreteSpec/Proofs/ObserveEnvironment.lean#L659-L663) (`ConcreteSpec/Proofs/ObserveEnvironment.lean:659`) now has the exact polymorphic type `{S : EventSignature} → {Input : Type} → Environment S Input → Input → Exec.Oracle (Environment.operands S)` of [`Environment.oracle`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c6a5/tree/ConcreteSpec/Spec/Observe.lean#L605-L609) (`ConcreteSpec/Spec/Observe.lean:605`), and [`BlockingEnvDemo.blockingHandler`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c6a5/tree/ConcreteSpec/Proofs/ObserveEnvironment.lean#L638-L639) (`ConcreteSpec/Proofs/ObserveEnvironment.lean:638`) blocks on the actual non-empty request history while answering an empty-history probe.
+   - All 11 additional implicit-binder-order mismatches between subjects (`{S : EventSignature} {O : Exec.Operands}`) and mutants in `ConcreteSpec/Proofs/ObserveOutput.lean` (`:146`, `:150`, `:184`) and `ConcreteSpec/Proofs/ObserveReport.lean` (`:99`, `:109`, `:119`, `:190`, `:199`, `:230`, `:274`, `:411`) are fixed.
+
+4. **Finding 4 of REVIEW4 (ASCII and multibyte source-column laws and carry reconciliation — FIXED):**
+   - The previously carried nonexistent names are reconciled in `_review/CARRY.md:3`:
+ABSENT: byteColumn_ascii_eq_char_col
+ABSENT: byteColumn_multibyte_gt_char_col
+   - Producer-level laws [`sourceSpan_ascii_eq_char_col`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c6a5/tree/ConcreteSpec/Proofs/ObserveSource.lean#L163-L168) (`ConcreteSpec/Proofs/ObserveSource.lean:163`) and [`sourceSpan_multibyte_gt_char_col`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c6a5/tree/ConcreteSpec/Proofs/ObserveSource.lean#L172-L179) (`ConcreteSpec/Proofs/ObserveSource.lean:172`) are proved over `sourceSpan` with closed `Instance` (`:188`, `:200`) and premise-preserving `Planted` (`:193`, `:205`) witnesses.
+   - [`sourcePrefixSpan_hasByteColumn`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c6a5/tree/ConcreteSpec/Proofs/ObserveSource.lean#L215-L220) (`ConcreteSpec/Proofs/ObserveSource.lean:215`, tag `:212`) is classified as `Helper (computation)` with `(approved: PENDING)`.
+
+5. **Decided Owner Rules for C6:**
+   - Trap line format (`trapLineChars` at `ConcreteSpec/Spec/Observe.lean:168`, `trapLine` at `ConcreteSpec/Spec/Observe.lean:174`), forward-slash project-relative path (`PathOk` at `ConcreteSpec/Spec/Observe.lean:182`), 1-based line and UTF-8 byte column with 1-byte tab (`byteColumn` at `ConcreteSpec/Spec/Observe.lean:178`, `sourceSpan` at `ConcreteSpec/Spec/Observe.lean:192`), exit codes `134` and `125` (`Terminal.status` at `ConcreteSpec/Spec/Observe.lean:252`), fuel exhaustion as an evaluator report returning `none` (`reportObservation` at `ConcreteSpec/Spec/Observe.lean:544`), and adapter-supplied externally visible state (`EventSignature.State` at `ConcreteSpec/Spec/Observe.lean:43`, `ExecAdapter.state` at `ConcreteSpec/Spec/Observe.lean:388`) all match the owner decisions.
+
+---
+
+### Complete C6 Law Inventory and Vacuity Audit (22 Laws)
+
+1. **`ConcreteSpec.Core.Observe.silent_internal_steps`** (`ConcreteSpec/Proofs/Observe2.lean:60`, Law `tag :57`, subject `ConcreteSpec.Core.Observe.visible` at `ConcreteSpec/Spec/Observe.lean:329`)
+   - **Instance:** `ConcreteSpec/Proofs/ObserveEvidence.lean` `tag :21` (`case leading_silence`)
+   - **Planted:** `ConcreteSpec/Proofs/ObserveEvidence.lean` `tag :25` (`case leading_silence`, subject `ConcreteSpec.Core.Observe.visible`, mutant `ConcreteSpec.Core.Observe.Evidence.firstStepVisible` at `ConcreteSpec/Proofs/ObserveEvidence.lean:18`)
+   - **Vacuity verdict:** **Non-vacuous (Pass).** Full closed application on `Evidence.insertion`; mutant `firstStepVisible` drops visible output after a leading `.silent` step.
+
+2. **`ConcreteSpec.Core.Observe.blocked_silent_internal_steps`** (`ConcreteSpec/Proofs/Observe2.lean:67`, Law `tag :65`, subject `ConcreteSpec.Core.Observe.visible` at `ConcreteSpec/Spec/Observe.lean:329`)
+   - **Instance:** `ConcreteSpec/Proofs/ObserveEvidence.lean` `tag :61` (`case pending_silence`)
+   - **Planted:** `ConcreteSpec/Proofs/ObserveEvidence.lean` `tag :66` (`case pending_silence`, subject `ConcreteSpec.Core.Observe.visible`, mutant `ConcreteSpec.Core.Observe.Evidence.firstStepVisible` at `ConcreteSpec/Proofs/ObserveEvidence.lean:18`)
+   - **Vacuity verdict:** **Non-vacuous (Pass).** Full closed application on `Evidence.insertion` with pending request `⟨Demo.Op.double, 3⟩`; mutant `firstStepVisible` loses prior output.
+
+3. **`ConcreteSpec.Core.Observe.infinite_stuttering`** (`ConcreteSpec/Proofs/Observe2.lean:233`, Law `tag :229`, subject `ConcreteSpec.Core.Observe.visiblePrefix` at `ConcreteSpec/Spec/Observe.lean:332`)
+   - **Instance:** `ConcreteSpec/Proofs/ObserveEvidence.lean` `tag :100` (`case delayed_emissions`)
+   - **Planted:** `ConcreteSpec/Proofs/ObserveEvidence.lean` `tag :104` (`case delayed_emissions`, subject `ConcreteSpec.Core.Observe.visiblePrefix`, mutant `ConcreteSpec.Core.Observe.Evidence.firstPrefix` at `ConcreteSpec/Proofs/ObserveEvidence.lean:97`)
+   - **Vacuity verdict:** **Non-vacuous (Pass).** Proves bidirectional eventual-prefix equivalence via `InfiniteStuttering.visiblePrefix_at` and `InfiniteStuttering.prefix_indices`; closed on `Evidence.shifted` and refuted on `firstPrefix`.
+
+4. **`ConcreteSpec.Core.Observe.full_observation_preservation`** (`ConcreteSpec/Proofs/Observe2.lean:275`, Law `tag :269`, subject `ConcreteSpec.Core.Observe.HasFullObservation` at `ConcreteSpec/Spec/Observe.lean:366`)
+   - **Instance:** `ConcreteSpec/Proofs/ObserveEvidence.lean` `tag :44` (`case stuttered_terminal_state`)
+   - **Planted:** `ConcreteSpec/Proofs/ObserveEvidence.lean` `tag :50` (`case stuttered_terminal_state`, subject `ConcreteSpec.Core.Observe.HasFullObservation`, mutant `ConcreteSpec.Core.Observe.Evidence.firstStepHasFullObservation` at `ConcreteSpec/Proofs/ObserveEvidence.lean:39`)
+   - **Vacuity verdict:** **Non-vacuous (Pass).** Transports `HasFullObservation` across `SameObservation`; mutant `firstStepHasFullObservation` satisfies the source premise on `before` and fails the target conclusion on `after`.
+
+5. **`ConcreteSpec.Core.Observe.trapLine_injective`** (`ConcreteSpec/Proofs/Observe2.lean:427`, Law `tag :423`, subject `ConcreteSpec.Core.Observe.trapLine` at `ConcreteSpec/Spec/Observe.lean:174`)
+   - **Instance:** `ConcreteSpec/Proofs/ObserveEvidence.lean` `tag :142` (`case distinct_sites_punctuated_path`), `ConcreteSpec/Proofs/ObserveEvidence.lean` `tag :155` (`case distinct_columns_punctuated_path`)
+   - **Planted:** `ConcreteSpec/Proofs/ObserveEvidence.lean` `tag :148` (`case distinct_sites_punctuated_path`, subject `ConcreteSpec.Core.Observe.trapLine`, mutant `ConcreteSpec.Core.Observe.Evidence.trapLineWithoutSite` at `ConcreteSpec/Proofs/ObserveEvidence.lean:130`), `ConcreteSpec/Proofs/ObserveEvidence.lean` `tag :161` (`case distinct_columns_punctuated_path`, subject `ConcreteSpec.Core.Observe.trapLine`, mutant `ConcreteSpec.Core.Observe.Evidence.trapLineWithoutCol` at `ConcreteSpec/Proofs/ObserveEvidence.lean:137`)
+   - **Vacuity verdict:** **Non-vacuous (Pass).** Proved via right-to-left parser inversion (`decodeTrapLine_render`) without restricting path punctuation; both mutants create collisions on `punctuatedSpan` / `shiftedColSpan`.
+
+6. **`ConcreteSpec.Core.Observe.byteColumn_tab`** (`ConcreteSpec/Proofs/Observe2.lean:441`, Law `tag :439`, subject `ConcreteSpec.Core.Observe.byteColumn` at `ConcreteSpec/Spec/Observe.lean:178`)
+   - **Instance:** `ConcreteSpec/Proofs/ObserveEvidence.lean` `tag :118` (`case utf8_then_tab`)
+   - **Planted:** `ConcreteSpec/Proofs/ObserveEvidence.lean` `tag :121` (`case utf8_then_tab`, subject `ConcreteSpec.Core.Observe.byteColumn`, mutant `ConcreteSpec.Core.Observe.Evidence.doubleTabColumn` at `ConcreteSpec/Proofs/ObserveEvidence.lean:116`)
+   - **Vacuity verdict:** **Non-vacuous (Pass).** Closed instance on `"é"` and planted counterexample `doubleTabColumn`.
+
+7. **`ConcreteSpec.Core.Observe.runFrom_validTrace`** (`ConcreteSpec/Proofs/Observe2.lean:490`, Law `tag :486`, subject `ConcreteSpec.Core.Exec.runFrom` at `ConcreteSpec/Spec/Exec.lean:599`)
+   - **Instance:** `ConcreteSpec/Proofs/ObserveReport.lean` `tag :431` (`case complete_exchange_then_pending`)
+   - **Planted:** `ConcreteSpec/Proofs/ObserveReport.lean` `tag :445` (`case complete_exchange_then_pending`, subject `ConcreteSpec.Core.Exec.runFrom`, mutant `ConcreteSpec.Core.Observe.completedAsPendingRun` at `ConcreteSpec/Proofs/Observe2.lean:609`)
+   - **Vacuity verdict:** **Non-vacuous (Pass).** Full conjunction applied to a run with prior completed exchange `[1]` followed by pending request `requesting 3`; mutant `completedAsPendingRun` fails the pending-request step obligation.
+
+8. **`ConcreteSpec.Core.Observe.environment_run_reply`** (`ConcreteSpec/Proofs/ObserveEnvironment.lean:82`, Law `tag :74`, subject `ConcreteSpec.Core.Observe.Environment.oracle` at `ConcreteSpec/Spec/Observe.lean:605`)
+   - **Instance:** `ConcreteSpec/Proofs/ObserveEnvironment.lean` `tag :254` (`case doubling_c1_call`), `ConcreteSpec/Proofs/ObserveEnvironment.lean` `tag :402` (`case history_sensitive_c1_call`), `ConcreteSpec/Proofs/ObserveEnvironment.lean` `tag :516` (`case routed_c1_call`), `ConcreteSpec/Proofs/ObserveEnvironment.lean` `tag :665` (`case blocking_c1_call`)
+   - **Planted:** `ConcreteSpec/Proofs/ObserveEnvironment.lean` `tag :280` (`case doubling_c1_call`, subject `ConcreteSpec.Core.Observe.Environment.oracle`, mutant `ConcreteSpec.Core.Observe.dropReturnValueOracle` at `ConcreteSpec/Proofs/ObserveEnvironment.lean:161`), `ConcreteSpec/Proofs/ObserveEnvironment.lean` `tag :427` (`case history_sensitive_c1_call`, subject `ConcreteSpec.Core.Observe.Environment.oracle`, mutant `ConcreteSpec.Core.Observe.forgetHistoryOracle` at `ConcreteSpec/Proofs/ObserveEnvironment.lean:173`), `ConcreteSpec/Proofs/ObserveEnvironment.lean` `tag :542` (`case routed_c1_call`, subject `ConcreteSpec.Core.Observe.Environment.oracle`, mutant `ConcreteSpec.Core.Observe.noReplyOracle` at `ConcreteSpec/Proofs/ObserveEnvironment.lean:168`), `ConcreteSpec/Proofs/ObserveEnvironment.lean` `tag :691` (`case blocking_c1_call`, subject `ConcreteSpec.Core.Observe.Environment.oracle`, mutant `ConcreteSpec.Core.Observe.BlockingEnvDemo.fabricateReplyOnBlockOracle` at `ConcreteSpec/Proofs/ObserveEnvironment.lean:659`)
+   - **Vacuity verdict:** **Non-vacuous (Pass).** Exercises both answered and blocked branches through C1 execution and `reportObservation`; all four mutants (including `fabricateReplyOnBlockOracle`) now have the exact polymorphic type of `Environment.oracle`.
+
+9. **`ConcreteSpec.Core.Observe.environment_stepHistory_valid`** (`ConcreteSpec/Proofs/ObserveEnvironment.lean:189`, Law `tag :184`, subject `ConcreteSpec.Core.Observe.Environment.stepHistory` at `ConcreteSpec/Spec/Observe.lean:145`)
+   - **Instance:** `ConcreteSpec/Proofs/ObserveEnvironment.lean` `tag :338` (`case doubling_exchange_step`), `ConcreteSpec/Proofs/ObserveEnvironment.lean` `tag :598` (`case routed_exchange_step`)
+   - **Planted:** `ConcreteSpec/Proofs/ObserveEnvironment.lean` `tag :349` (`case doubling_exchange_step`, subject `ConcreteSpec.Core.Observe.Environment.stepHistory`, mutant `ConcreteSpec.Core.Observe.dropRequestStepHistory` at `ConcreteSpec/Proofs/ObserveEnvironment.lean:219`), `ConcreteSpec/Proofs/ObserveEnvironment.lean` `tag :608` (`case routed_exchange_step`, subject `ConcreteSpec.Core.Observe.Environment.stepHistory`, mutant `ConcreteSpec.Core.Observe.leavePendingOnAnswerStepHistory` at `ConcreteSpec/Proofs/ObserveEnvironment.lean:227`)
+   - **Vacuity verdict:** **Non-vacuous (Pass).** Verifies trace extension and pending-state clearing; refuted by dropping the request or leaving the request pending.
+
+10. **`ConcreteSpec.Core.Observe.project_physical_outputs`** (`ConcreteSpec/Proofs/ObserveOutput.lean:122`, Law `tag :117`, subject `ConcreteSpec.Core.Observe.ExecAdapter.project` at `ConcreteSpec/Spec/Observe.lean:394`)
+    - **Instance:** `ConcreteSpec/Proofs/ObserveOutput.lean` `tag :320` (`case ordered_physical_outputs_on_run`)
+    - **Planted:** `ConcreteSpec/Proofs/ObserveOutput.lean` `tag :329` (`case ordered_physical_outputs_on_run`, subject `ConcreteSpec.Core.Observe.ExecAdapter.project`, mutant `ConcreteSpec.Core.Observe.eraseProjection` at `ConcreteSpec/Proofs/ObserveOutput.lean:146`), `ConcreteSpec/Proofs/ObserveOutput.lean` `tag :342` (`case ordered_physical_outputs_on_run`, subject `ConcreteSpec.Core.Observe.ExecAdapter.project`, mutant `ConcreteSpec.Core.Observe.reverseProjection` at `ConcreteSpec/Proofs/ObserveOutput.lean:150`)
+    - **Vacuity verdict:** **Non-vacuous (Pass).** Bound to the authoritative `M : PhysicalOperands S.Output` bundle (`OutputDemo.model`), closing the zero-effect instance escape and rejecting both `eraseProjection` and `reverseProjection`.
+
+11. **`ConcreteSpec.Core.Observe.output_before_trap_kept`** (`ConcreteSpec/Proofs/ObserveOutput.lean:158`, Law `tag :154`, subjects `ConcreteSpec.Core.Observe.reportObservation` at `ConcreteSpec/Spec/Observe.lean:544`, `ConcreteSpec.Core.Observe.ExecAdapter.project` at `ConcreteSpec/Spec/Observe.lean:394`)
+    - **Instance:** `ConcreteSpec/Proofs/ObserveOutput.lean` `tag :358` (`case two_outputs_then_trap_report`)
+    - **Planted:** `ConcreteSpec/Proofs/ObserveOutput.lean` `tag :373` (`case two_outputs_then_trap_report`, subject `ConcreteSpec.Core.Observe.reportObservation`, mutant `ConcreteSpec.Core.Observe.dropTrapHistoryReport` at `ConcreteSpec/Proofs/ObserveOutput.lean:184`), `ConcreteSpec/Proofs/ObserveOutput.lean` `tag :399` (`case two_outputs_then_trap_report`, subject `ConcreteSpec.Core.Observe.ExecAdapter.project`, mutant `ConcreteSpec.Core.Observe.eraseProjection` at `ConcreteSpec/Proofs/ObserveOutput.lean:146`)
+    - **Vacuity verdict:** **Non-vacuous (Pass).** Bound to `M : PhysicalOperands S.Output` (`OutputDemo.model`), preserving ordered outputs emitted before a trap in both `reportObservation` and `ExecAdapter.project`.
+
+12. **`ConcreteSpec.Core.Observe.runFrom_report_trace`** (`ConcreteSpec/Proofs/ObserveReport.lean:44`, Law `tag :40`, subject `ConcreteSpec.Core.Observe.reportObservation` at `ConcreteSpec/Spec/Observe.lean:544`)
+    - **Instance:** `ConcreteSpec/Proofs/ObserveReport.lean` `tag :464` (`case prior_exchange_block`), `ConcreteSpec/Proofs/ObserveReport.lean` `tag :595` (`case fuel_is_not_blocking`)
+    - **Planted:** `ConcreteSpec/Proofs/ObserveReport.lean` `tag :474` (`case prior_exchange_block`, subject `ConcreteSpec.Core.Observe.reportObservation`, mutant `ConcreteSpec.Core.Observe.dropBlockedHistory` at `ConcreteSpec/Proofs/ObserveReport.lean:109`), `ConcreteSpec/Proofs/ObserveReport.lean` `tag :492` (`case prior_exchange_block`, subject `ConcreteSpec.Core.Observe.reportObservation`, mutant `ConcreteSpec.Core.Observe.alwaysNoneReport` at `ConcreteSpec/Proofs/ObserveReport.lean:119`), `ConcreteSpec/Proofs/ObserveReport.lean` `tag :605` (`case fuel_is_not_blocking`, subject `ConcreteSpec.Core.Observe.reportObservation`, mutant `ConcreteSpec.Core.Observe.fabricatedBlockingReport` at `ConcreteSpec/Proofs/ObserveReport.lean:411`)
+    - **Vacuity verdict:** **Non-vacuous (Pass).** Establishes `ReportTraceValid` across evaluator endings and refutes history-dropping, always-`none`, and fuel-confused blocking mutants.
+
+13. **`ConcreteSpec.Core.Observe.runFrom_blocked_report`** (`ConcreteSpec/Proofs/ObserveReport.lean:76`, Law `tag :71`, subject `ConcreteSpec.Core.Observe.reportObservation` at `ConcreteSpec/Spec/Observe.lean:544`)
+    - **Instance:** `ConcreteSpec/Proofs/ObserveReport.lean` `tag :524` (`case preserve_prior_exchange`)
+    - **Planted:** `ConcreteSpec/Proofs/ObserveReport.lean` `tag :539` (`case preserve_prior_exchange`, subject `ConcreteSpec.Core.Observe.reportObservation`, mutant `ConcreteSpec.Core.Observe.onlyPendingHistory` at `ConcreteSpec/Proofs/ObserveReport.lean:99`)
+    - **Vacuity verdict:** **Non-vacuous (Pass).** Closed on `ReportDemo.continuation` and `ReportDemo.pending_step`; rejects `onlyPendingHistory` which drops the prior completed exchange `[1]`.
+
+14. **`ConcreteSpec.Core.Observe.runFrom_outOfFuel_report_none`** (`ConcreteSpec/Proofs/ObserveReport.lean:174`, Law `tag :170`, subject `ConcreteSpec.Core.Observe.reportObservation` at `ConcreteSpec/Spec/Observe.lean:544`)
+    - **Instance:** `ConcreteSpec/Proofs/ObserveReport.lean` `tag :620` (`case zero_fuel_at_request`)
+    - **Planted:** `ConcreteSpec/Proofs/ObserveReport.lean` `tag :632` (`case zero_fuel_at_request`, subject `ConcreteSpec.Core.Observe.reportObservation`, mutant `ConcreteSpec.Core.Observe.divergeOnOutOfFuelReport` at `ConcreteSpec/Proofs/ObserveReport.lean:190`), `ConcreteSpec/Proofs/ObserveReport.lean` `tag :652` (`case zero_fuel_at_request`, subject `ConcreteSpec.Core.Observe.reportObservation`, mutant `ConcreteSpec.Core.Observe.exitZeroOnOutOfFuelReport` at `ConcreteSpec/Proofs/ObserveReport.lean:199`)
+    - **Vacuity verdict:** **Non-vacuous (Pass).** Proves `c'.final? = none`, trace validity of prior events, and `reportObservation = none`; rejects fabricating divergence or normal exit on fuel exhaustion.
+
+15. **`ConcreteSpec.Core.Observe.launch_missing_grant_status_125`** (`ConcreteSpec/Proofs/ObserveReport.lean:212`, Law `tag :207`, subjects `ConcreteSpec.Core.Observe.launchObservation` at `ConcreteSpec/Spec/Observe.lean:565`, `ConcreteSpec.Core.Observe.Terminal.status` at `ConcreteSpec/Spec/Observe.lean:252`)
+    - **Instance:** `ConcreteSpec/Proofs/ObserveReport.lean` `tag :672` (`case missing_grant_refuses_startup`)
+    - **Planted:** `ConcreteSpec/Proofs/ObserveReport.lean` `tag :682` (`case missing_grant_refuses_startup`, subject `ConcreteSpec.Core.Observe.launchObservation`, mutant `ConcreteSpec.Core.Observe.ignoreGrantsLaunchObservation` at `ConcreteSpec/Proofs/ObserveReport.lean:230`), `ConcreteSpec/Proofs/ObserveReport.lean` `tag :700` (`case missing_grant_refuses_startup`, subject `ConcreteSpec.Core.Observe.Terminal.status`, mutant `ConcreteSpec.Core.Observe.wrongStartupStatus` at `ConcreteSpec/Proofs/ObserveReport.lean:240`)
+    - **Vacuity verdict:** **Non-vacuous (Pass).** Refuses startup with empty trace, status `125`, and no trap line when `"Net"` is missing; rejects both mutants.
+
+16. **`ConcreteSpec.Core.Observe.runFrom_trapped_status_134`** (`ConcreteSpec/Proofs/ObserveReport.lean:251`, Law `tag :245`, subjects `ConcreteSpec.Core.Observe.reportObservation` at `ConcreteSpec/Spec/Observe.lean:544`, `ConcreteSpec.Core.Observe.Terminal.status` at `ConcreteSpec/Spec/Observe.lean:252`)
+    - **Instance:** `ConcreteSpec/Proofs/ObserveReport.lean` `tag :720` (`case trapped_report_not_exited_134`)
+    - **Planted:** `ConcreteSpec/Proofs/ObserveReport.lean` `tag :738` (`case trapped_report_not_exited_134`, subject `ConcreteSpec.Core.Observe.reportObservation`, mutant `ConcreteSpec.Core.Observe.exit134OnTrapReport` at `ConcreteSpec/Proofs/ObserveReport.lean:274`), `ConcreteSpec/Proofs/ObserveReport.lean` `tag :768` (`case trapped_report_not_exited_134`, subject `ConcreteSpec.Core.Observe.Terminal.status`, mutant `ConcreteSpec.Core.Observe.wrongTrapStatus` at `ConcreteSpec/Proofs/ObserveReport.lean:284`)
+    - **Vacuity verdict:** **Non-vacuous (Pass).** Establishes trapped report, status `134`, trap line, and inequality with `.exited 134`; rejects collapsing to `.exited 134` or returning status `1`.
+
+17. **`ConcreteSpec.Core.Observe.runFrom_source_trap`** (`ConcreteSpec/Proofs/ObserveReport.lean:362`, Law `tag :356`, subject `ConcreteSpec.Core.Observe.sourceSites` at `ConcreteSpec/Spec/Observe.lean:223`)
+    - **Instance:** `ConcreteSpec/Proofs/ObserveReport.lean` `tag :806` (`case source_path_to_trap`)
+    - **Planted:** `ConcreteSpec/Proofs/ObserveReport.lean` `tag :823` (`case source_path_to_trap`, subject `ConcreteSpec.Core.Observe.sourceSites`, mutant `ConcreteSpec.Core.Observe.hostRootSourceSites` at `ConcreteSpec/Proofs/ObserveReport.lean:390`), `ConcreteSpec/Proofs/ObserveReport.lean` `tag :848` (`case source_path_to_trap`, subject `ConcreteSpec.Core.Observe.sourceSites`, mutant `ConcreteSpec.Core.Observe.wrongFileSourceSites` at `ConcreteSpec/Proofs/ObserveReport.lean:395`), `ConcreteSpec/Proofs/ObserveReport.lean` `tag :880` (`case source_path_to_trap`, subject `ConcreteSpec.Core.Observe.sourceSites`, mutant `ConcreteSpec.Core.Observe.scalarSourceSites` at `ConcreteSpec/Proofs/ObserveReport.lean:399`)
+    - **Vacuity verdict:** **Non-vacuous for path preservation (`sp.path = src.path`), 1-based line, and UTF-8 byte column (`wrongFileSourceSites` and `scalarSourceSites` are refuted without relying on the runtime filter); `PathOk` filter/premise disposition remains open under Finding 2 of REVIEW4 per round-5 instructions.**
+
+18. **`ConcreteSpec.Core.Observe.source_trap_column`** (`ConcreteSpec/Proofs/ObserveSource.lean:18`, Law `tag :14`, subject `ConcreteSpec.Core.Observe.sourceSpan` at `ConcreteSpec/Spec/Observe.lean:192`)
+    - **Instance:** `ConcreteSpec/Proofs/ObserveSource.lean` `tag :33` (`case utf8_tab`)
+    - **Planted:** `ConcreteSpec/Proofs/ObserveSource.lean` `tag :39` (`case utf8_tab`, subject `ConcreteSpec.Core.Observe.sourceSpan`, mutant `ConcreteSpec.Core.Observe.scalarColumnSpan` at `ConcreteSpec/Proofs/ObserveSource.lean:29`)
+    - **Vacuity verdict:** **Non-vacuous (Pass).** Distinguishes rendered trap line at UTF-8 byte column `5` on `"a\té"` from scalar column `4`.
+
+19. **`ConcreteSpec.Core.Observe.sourcePrefixSpan_second_line`** (`ConcreteSpec/Proofs/ObserveSource.lean:64`, Law `tag :60`, subject `ConcreteSpec.Core.Observe.sourcePrefixSpan` at `ConcreteSpec/Spec/Observe.lean:208`)
+    - **Instance:** `ConcreteSpec/Proofs/ObserveSource.lean` `tag :94` (`case multiline_utf8_tab`)
+    - **Planted:** `ConcreteSpec/Proofs/ObserveSource.lean` `tag :100` (`case multiline_utf8_tab`, subject `ConcreteSpec.Core.Observe.sourcePrefixSpan`, mutant `ConcreteSpec.Core.Observe.scalarPrefixSpan` at `ConcreteSpec/Proofs/ObserveSource.lean:86`), `ConcreteSpec/Proofs/ObserveSource.lean` `tag :107` (`case multiline_utf8_tab`, subject `ConcreteSpec.Core.Observe.sourcePrefixSpan`, mutant `ConcreteSpec.Core.Observe.singleLinePrefixSpan` at `ConcreteSpec/Proofs/ObserveSource.lean:91`)
+    - **Vacuity verdict:** **Non-vacuous (Pass).** Proves newline increment and line-accumulator reset on `firstLine ++ "\n" ++ before`; rejects both scalar-column and single-line mutants.
+
+20. **`ConcreteSpec.Core.Observe.sourceSpan_ascii_eq_char_col`** (`ConcreteSpec/Proofs/ObserveSource.lean:163`, Law `tag :160`, subject `ConcreteSpec.Core.Observe.sourceSpan` at `ConcreteSpec/Spec/Observe.lean:192`)
+    - **Instance:** `ConcreteSpec/Proofs/ObserveSource.lean` `tag :188` (`case ascii_tab`)
+    - **Planted:** `ConcreteSpec/Proofs/ObserveSource.lean` `tag :193` (`case ascii_tab`, subject `ConcreteSpec.Core.Observe.sourceSpan`, mutant `ConcreteSpec.Core.Observe.expandedTabSpan` at `ConcreteSpec/Proofs/ObserveSource.lean:182`)
+    - **Vacuity verdict:** **Non-vacuous (Pass).** Proves that for ASCII source text (`∀ c ∈ before.toList, c.val ≤ 127`), `(sourceSpan ...).col = before.toList.length + 1`; closed on `"a\tb"` and refuted by tab expansion (`expandedTabSpan`).
+
+21. **`ConcreteSpec.Core.Observe.sourceSpan_multibyte_gt_char_col`** (`ConcreteSpec/Proofs/ObserveSource.lean:172`, Law `tag :170`, subject `ConcreteSpec.Core.Observe.sourceSpan` at `ConcreteSpec/Spec/Observe.lean:192`)
+    - **Instance:** `ConcreteSpec/Proofs/ObserveSource.lean` `tag :200` (`case multibyte_tab`)
+    - **Planted:** `ConcreteSpec/Proofs/ObserveSource.lean` `tag :205` (`case multibyte_tab`, subject `ConcreteSpec.Core.Observe.sourceSpan`, mutant `ConcreteSpec.Core.Observe.scalarColumnSpan` at `ConcreteSpec/Proofs/ObserveSource.lean:29`)
+    - **Vacuity verdict:** **Non-vacuous (Pass).** Proves that any non-ASCII scalar (`∃ c ∈ before.toList, 127 < c.val`) forces `before.toList.length + 1 < (sourceSpan ...).col`; closed on `"a\té"` and refuted by `scalarColumnSpan`.
+
+22. **`ConcreteSpec.Core.Observe.delay_preserves_observation`** (`ConcreteSpec/Proofs/ObserveTransform.lean:16`, Law `tag :12`, subject `ConcreteSpec.Core.Observe.delayExecution` at `ConcreteSpec/Spec/Observe.lean:301`)
+    - **Instance:** `ConcreteSpec/Proofs/ObserveTransform.lean` `tag :48` (`case silent_divergence`), `ConcreteSpec/Proofs/ObserveTransform.lean` `tag :60` (`case finite_final_state`)
+    - **Planted:** `ConcreteSpec/Proofs/ObserveTransform.lean` `tag :53` (`case silent_divergence`, subject `ConcreteSpec.Core.Observe.delayExecution`, mutant `ConcreteSpec.Core.Observe.terminateInfinite` at `ConcreteSpec/Proofs/ObserveTransform.lean:38`), `ConcreteSpec/Proofs/ObserveTransform.lean` `tag :65` (`case finite_final_state`, subject `ConcreteSpec.Core.Observe.delayExecution`, mutant `ConcreteSpec.Core.Observe.resetDelayedState` at `ConcreteSpec/Proofs/ObserveTransform.lean:44`)
+    - **Vacuity verdict:** **Non-vacuous (Pass).** Proves observation equivalence across finite, blocked, and infinite delayed executions; rejects fabricating termination on silent divergence or resetting final state.
+
+---
+
+### Exemption Verdicts for All `(approved: PENDING)` Declarations (58 Total)
+
+Every `(approved: PENDING)` declaration in C6 is **APPROVED** as a `Helper` or `Representation lemma` (never independent contract-law soundness evidence):
+
+- **`ConcreteSpec/Spec/Observe.lean`:**
+  - `ConcreteSpec.Core.Observe.Demo.refusedReportPermitted` (`ConcreteSpec/Spec/Observe.lean:743`, `tag :741`, `Helper (computation)`): **APPROVE** — impossible-branch bookkeeping for a stuck demo report.
+- **`ConcreteSpec/Proofs/Observe2.lean`:**
+  - `ConcreteSpec.Core.Observe.RequestResponse.kind` (`ConcreteSpec/Proofs/Observe2.lean:24`, `tag :22`, `Helper (inversion)`): **APPROVE** — constructor inversion.
+  - `ConcreteSpec.Core.Observe.Responds.allows` (`ConcreteSpec/Proofs/Observe2.lean:31`, `tag :29`, `Helper (inversion)`): **APPROVE** — admission inversion.
+  - `ConcreteSpec.Core.Observe.Responds.matches` (`ConcreteSpec/Proofs/Observe2.lean:39`, `tag :37`, `Helper (inversion)`): **APPROVE** — admission inversion.
+  - `ConcreteSpec.Core.Observe.SilentInsertion.visible` (`ConcreteSpec/Proofs/Observe2.lean:49`, `tag :45`, `Helper (computation)`): **APPROVE** — inductive trace computation feeding `silent_internal_steps` and `blocked_silent_internal_steps`.
+  - `ConcreteSpec.Core.Observe.PrefixEventually.refl` (`ConcreteSpec/Proofs/Observe2.lean:75`, `tag :72`, `Representation lemma`): **APPROVE** — equivalence-relation algebra.
+  - `ConcreteSpec.Core.Observe.PrefixEventually.trans` (`ConcreteSpec/Proofs/Observe2.lean:82`, `tag :79`, `Representation lemma`): **APPROVE** — equivalence-relation algebra.
+  - `ConcreteSpec.Core.Observe.SameInfiniteObservation.refl` (`ConcreteSpec/Proofs/Observe2.lean:91`, `tag :89`, `Representation lemma`): **APPROVE** — equivalence-relation algebra.
+  - `ConcreteSpec.Core.Observe.SameInfiniteObservation.symm` (`ConcreteSpec/Proofs/Observe2.lean:97`, `tag :94`, `Representation lemma`): **APPROVE** — equivalence-relation algebra.
+  - `ConcreteSpec.Core.Observe.SameInfiniteObservation.trans` (`ConcreteSpec/Proofs/Observe2.lean:102`, `tag :100`, `Representation lemma`): **APPROVE** — equivalence-relation algebra.
+  - `ConcreteSpec.Core.Observe.visiblePrefix_succ` (`ConcreteSpec/Proofs/Observe2.lean:110`, `tag :106`, `Helper (computation)`): **APPROVE** — one-step unfolding of `visiblePrefix`.
+  - `ConcreteSpec.Core.Observe.visiblePrefix_prefix` (`ConcreteSpec/Proofs/Observe2.lean:119`, `tag :115`, `Helper (computation)`): **APPROVE** — prefix extension helper feeding `infinite_stuttering` (and C8).
+  - `ConcreteSpec.Core.Observe.StepIndexIncreasing.monotone` (`ConcreteSpec/Proofs/Observe2.lean:133`, `tag :129`, `Helper (arithmetic)`): **APPROVE** — index monotonicity helper.
+  - `ConcreteSpec.Core.Observe.StepIndexIncreasing.strict` (`ConcreteSpec/Proofs/Observe2.lean:146`, `tag :142`, `Helper (arithmetic)`): **APPROVE** — strict index monotonicity helper.
+  - `ConcreteSpec.Core.Observe.StepIndexIncreasing.apply_le` (`ConcreteSpec/Proofs/Observe2.lean:155`, `tag :152`, `Helper (arithmetic)`): **APPROVE** — index lower bound helper.
+  - `ConcreteSpec.Core.Observe.InfiniteStuttering.prefix_indices` (`ConcreteSpec/Proofs/Observe2.lean:166`, `tag :161`, `Helper (computation)`): **APPROVE** — index correspondence computation feeding `infinite_stuttering`.
+  - `ConcreteSpec.Core.Observe.InfiniteStuttering.visiblePrefix_at` (`ConcreteSpec/Proofs/Observe2.lean:210`, `tag :205`, `Helper (computation)`): **APPROVE** — specializes `prefix_indices` at `f n` for `infinite_stuttering`.
+  - `ConcreteSpec.Core.Observe.SameObservation.refl` (`ConcreteSpec/Proofs/Observe2.lean:247`, `tag :245`, `Representation lemma`): **APPROVE** — equivalence-relation algebra.
+  - `ConcreteSpec.Core.Observe.SameObservation.symm` (`ConcreteSpec/Proofs/Observe2.lean:255`, `tag :253`, `Representation lemma`): **APPROVE** — equivalence-relation algebra.
+  - `ConcreteSpec.Core.Observe.SameObservation.trans` (`ConcreteSpec/Proofs/Observe2.lean:262`, `tag :260`, `Representation lemma`): **APPROVE** — equivalence-relation algebra.
+  - `ConcreteSpec.Core.Observe.infinite_not_termination` (`ConcreteSpec/Proofs/Observe2.lean:316`, `tag :313`, `Representation lemma`): **APPROVE** — constructor disjointness.
+  - `ConcreteSpec.Core.Observe.infinite_silent_not_termination` (`ConcreteSpec/Proofs/Observe2.lean:323`, `tag :321`, `Representation lemma`): **APPROVE** — specialization of `infinite_not_termination`.
+  - `ConcreteSpec.Core.Observe.stripPrefix_append` (`ConcreteSpec/Proofs/Observe2.lean:336`, `tag :334`, `Helper (computation)`): **APPROVE** — parser helper for `trapLine_injective`.
+  - `ConcreteSpec.Core.Observe.parseRevNat_digits` (`ConcreteSpec/Proofs/Observe2.lean:351`, `tag :348`, `Helper (computation)`): **APPROVE** — reversed decimal parser helper for `trapLine_injective`.
+  - `ConcreteSpec.Core.Observe.decodeKind_render` (`ConcreteSpec/Proofs/Observe2.lean:372`, `tag :370`, `Helper (computation)`): **APPROVE** — kind decoder helper for `trapLine_injective`.
+  - `ConcreteSpec.Core.Observe.trapLineChars_prefix` (`ConcreteSpec/Proofs/Observe2.lean:400`, `tag :398`, `Helper (computation)`): **APPROVE** — list reassociation helper for `trapLine_injective`.
+  - `ConcreteSpec.Core.Observe.decodeWithKind_render` (`ConcreteSpec/Proofs/Observe2.lean:409`, `tag :406`, `Helper (computation)`): **APPROVE** — span/site decoder helper for `trapLine_injective`.
+  - `ConcreteSpec.Core.Observe.decodeTrapLine_render` (`ConcreteSpec/Proofs/Observe2.lean:419`, `tag :417`, `Helper (computation)`): **APPROVE** — left-inverse decoder helper for `trapLine_injective`.
+  - `ConcreteSpec.Core.Observe.ValidTrace.outputs` (`ConcreteSpec/Proofs/Observe2.lean:453`, `tag :449`, `Helper (computation)`): **APPROVE** — output-only trace extension helper.
+  - `ConcreteSpec.Core.Observe.ValidTrace.answer_projection` (`ConcreteSpec/Proofs/Observe2.lean:465`, `tag :461`, `Helper (computation)`): **APPROVE** — answered-step trace extension helper.
+  - `ConcreteSpec.Core.Observe.ExecAdapter.project_append` (`ConcreteSpec/Proofs/Observe2.lean:482`, `tag :479`, `Helper (computation)`): **APPROVE** — `flatMap` distribution over append.
+  - `ConcreteSpec.Core.Observe.runFrom_noAnswer_pending_valid` (`ConcreteSpec/Proofs/Observe2.lean:555`, `tag :550`, `Helper (projection)`): **APPROVE** — packages `runFrom_validTrace` for blocked reports.
+  - `ConcreteSpec.Core.Observe.runFrom_blockingPermitted` (`ConcreteSpec/Proofs/Observe2.lean:579`, `tag :576`, `Helper (projection)`): **APPROVE** — supplies `BlockingPermitted` proof argument from `runFrom_validTrace`.
+  - `ConcreteSpec.Core.Observe.steps_trap_observation` (`ConcreteSpec/Proofs/Observe2.lean:593`, `tag :588`, `Helper (computation)`): **APPROVE** — `Steps`-level projection computation.
+  - `ConcreteSpec.Core.Observe.AdapterDemo.answeringWellFormed` (`ConcreteSpec/Proofs/Observe2.lean:681`, `tag :678`, `Helper (computation)`): **APPROVE** — closed fixture well-formedness proof.
+  - `ConcreteSpec.Core.Observe.AdapterDemo.blockingWellFormed` (`ConcreteSpec/Proofs/Observe2.lean:699`, `tag :696`, `Helper (computation)`): **APPROVE** — closed fixture well-formedness proof.
+  - `ConcreteSpec.Core.Observe.AdapterDemo.blockedPermitted` (`ConcreteSpec/Proofs/Observe2.lean:758`, `tag :757`, `Helper (projection)`): **APPROVE** — closed fixture permission proof.
+- **`ConcreteSpec/Proofs/ObserveEnvironment.lean`:**
+  - `ConcreteSpec.Core.Observe.environment_respond_valid` (`ConcreteSpec/Proofs/ObserveEnvironment.lean:18`, `tag :16`, `Helper (computation)`): **APPROVE** — relational admission bridge.
+  - `ConcreteSpec.Core.Observe.environment_oracle_wellFormed` (`ConcreteSpec/Proofs/ObserveEnvironment.lean:42`, `tag :39`, `Helper (computation)`): **APPROVE** — oracle well-formedness bridge feeding `environment_run_reply`.
+  - `ConcreteSpec.Core.Observe.Demo.envHandler_valid` (`ConcreteSpec/Proofs/ObserveEnvironment.lean:242`, `tag :238`, `Helper (computation)`): **APPROVE** — closed fixture validity proof.
+  - `ConcreteSpec.Core.Observe.HistoryDemo.handler_valid` (`ConcreteSpec/Proofs/ObserveEnvironment.lean:382`, `tag :380`, `Helper (arithmetic)`): **APPROVE** — closed fixture validity proof.
+  - `ConcreteSpec.Core.Observe.HistoryDemo.prior_valid` (`ConcreteSpec/Proofs/ObserveEnvironment.lean:399`, `tag :397`, `Helper (computation)`): **APPROVE** — closed fixture prior-trace proof.
+  - `ConcreteSpec.Core.Observe.RoutingDemo.envHandler_valid` (`ConcreteSpec/Proofs/ObserveEnvironment.lean:496`, `tag :492`, `Helper (computation)`): **APPROVE** — closed fixture validity proof.
+  - `ConcreteSpec.Core.Observe.BlockingEnvDemo.blockingHandler_valid` (`ConcreteSpec/Proofs/ObserveEnvironment.lean:644`, `tag :641`, `Helper (computation)`): **APPROVE** — closed fixture validity proof for the history-sensitive blocking handler.
+- **`ConcreteSpec/Proofs/ObserveEvidence.lean`:**
+  - `ConcreteSpec.Core.Observe.Evidence.insertion` (`ConcreteSpec/Proofs/ObserveEvidence.lean:15`, `tag :13`, `Helper (computation)`): **APPROVE** — closed `SilentInsertion` witness.
+  - `ConcreteSpec.Core.Observe.Evidence.shifted` (`ConcreteSpec/Proofs/ObserveEvidence.lean:84`, `tag :82`, `Helper (computation)`): **APPROVE** — closed `InfiniteStuttering` witness.
+- **`ConcreteSpec/Proofs/ObserveOutput.lean`:**
+  - `ConcreteSpec.Core.Observe.project_physical_outputs_list` (`ConcreteSpec/Proofs/ObserveOutput.lean:20`, `tag :16`, `Helper (computation)`): **APPROVE** — list induction feeding `project_physical_outputs`.
+  - `ConcreteSpec.Core.Observe.physical_run_execution` (`ConcreteSpec/Proofs/ObserveOutput.lean:37`, `tag :34`, `Helper (computation)`): **APPROVE** — fuel induction reaching exact `Exec.Ending O`.
+  - `ConcreteSpec.Core.Observe.physical_execution_outputs` (`ConcreteSpec/Proofs/ObserveOutput.lean:80`, `tag :78`, `Helper (computation)`): **APPROVE** — effect accumulation along `PhysicalEffects.Execution`.
+  - `ConcreteSpec.Core.Observe.no_erasing_correspondence` (`ConcreteSpec/Proofs/ObserveOutput.lean:101`, `tag :98`, `Helper (computation)`): **APPROVE** — refutes erasing adapter when `events.flatMap F.past ≠ []`.
+  - `ConcreteSpec.Core.Observe.OutputDemo.oracle_faithful` (`ConcreteSpec/Proofs/ObserveOutput.lean:226`, `tag :224`, `Helper (computation)`): **APPROVE** — concrete oracle faithfulness proof bundled into `OutputDemo.model`.
+  - `ConcreteSpec.Core.Observe.OutputDemo.adapter_correspondence` (`ConcreteSpec/Proofs/ObserveOutput.lean:256`, `tag :252`, `Helper (computation)`): **APPROVE** — concrete adapter correspondence proof against `OutputDemo.model`.
+  - `ConcreteSpec.Core.Observe.OutputDemo.run_writes` (`ConcreteSpec/Proofs/ObserveOutput.lean:277`, `tag :275`, `Helper (computation)`): **APPROVE** — concrete evaluator execution helper.
+  - `ConcreteSpec.Core.Observe.OutputDemo.permitted` (`ConcreteSpec/Proofs/ObserveOutput.lean:301`, `tag :298`, `Helper (computation)`): **APPROVE** — concrete `BlockingPermitted` witness.
+  - `ConcreteSpec.Core.Observe.OutputDemo.cannot_erase` (`ConcreteSpec/Proofs/ObserveOutput.lean:310`, `tag :308`, `Helper (computation)`): **APPROVE** — concrete non-emptiness helper for planted erasure refutations.
+- **`ConcreteSpec/Proofs/ObserveReport.lean`:**
+  - `ConcreteSpec.Core.Observe.runFrom_outOfFuel_not_final` (`ConcreteSpec/Proofs/ObserveReport.lean:128`, `tag :125`, `Helper (computation)`): **APPROVE** — evaluator fuel induction feeding `runFrom_outOfFuel_report_none`.
+  - `ConcreteSpec.Core.Observe.trapTerminal_eq_some_iff` (`ConcreteSpec/Proofs/ObserveReport.lean:291`, `tag :289`, `Helper (computation)`): **APPROVE** — lookup/validation branch equation.
+  - `ConcreteSpec.Core.Observe.sourceSites_valid` (`ConcreteSpec/Proofs/ObserveReport.lean:314`, `tag :312`, `Helper (computation)`): **APPROVE** — filter invariant helper (not independent path-production evidence; Finding 2 remains open per brief).
+  - `ConcreteSpec.Core.Observe.sourceSites_lookup` (`ConcreteSpec/Proofs/ObserveReport.lean:337`, `tag :335`, `Helper (computation)`): **APPROVE** — lookup helper feeding `runFrom_source_trap`.
+  - `ConcreteSpec.Core.Observe.ReportDemo.prior_complete` (`ConcreteSpec/Proofs/ObserveReport.lean:428`, `tag :426`, `Helper (computation)`): **APPROVE** — closed fixture prior-trace witness.
+  - `ConcreteSpec.Core.Observe.ReportDemo.pending_step` (`ConcreteSpec/Proofs/ObserveReport.lean:515`, `tag :513`, `Helper (computation)`): **APPROVE** — closed fixture step continuation witness.
+  - `ConcreteSpec.Core.Observe.ReportDemo.relativePathWellFormed` (`ConcreteSpec/Proofs/ObserveReport.lean:572`, `tag :570`, `Helper (computation)`): **APPROVE** — closed fixture well-formedness witness.
+  - `ConcreteSpec.Core.Observe.ReportDemo.sourcePermitted` (`ConcreteSpec/Proofs/ObserveReport.lean:800`, `tag :798`, `Helper (computation)`): **APPROVE** — closed fixture permission witness.
+- **`ConcreteSpec/Proofs/ObserveSource.lean`:**
+  - `ConcreteSpec.Core.Observe.scanSourcePrefix_no_newline` (`ConcreteSpec/Proofs/ObserveSource.lean:49`, `tag :46`, `Helper (computation)`): **APPROVE** — scanner accumulator helper.
+  - `ConcreteSpec.Core.Observe.source_bytes_ge_scalars` (`ConcreteSpec/Proofs/ObserveSource.lean:116`, `tag :114`, `Helper (arithmetic)`): **APPROVE** — UTF-8 byte lower bound per scalar feeding `source_multibyte_bytes`.
+  - `ConcreteSpec.Core.Observe.source_ascii_bytes` (`ConcreteSpec/Proofs/ObserveSource.lean:128`, `tag :126`, `Helper (computation)`): **APPROVE** — ASCII byte-count equality feeding `sourceSpan_ascii_eq_char_col`.
+  - `ConcreteSpec.Core.Observe.source_multibyte_bytes` (`ConcreteSpec/Proofs/ObserveSource.lean:139`, `tag :137`, `Helper (arithmetic)`): **APPROVE** — multibyte strict inequality feeding `sourceSpan_multibyte_gt_char_col`.
+  - `ConcreteSpec.Core.Observe.sourcePrefixSpan_hasByteColumn` (`ConcreteSpec/Proofs/ObserveSource.lean:215`, `tag :212`, `Helper (computation)`): **APPROVE** — single-line scanner-to-`HasByteColumn` computation equation.
+
+---
+
+### Findings
+
+No new findings in Round 5 (Finding 2 of `_review/REVIEW4-codex.md` on `ConcreteSpec/Spec/Observe.lean:223` and `ConcreteSpec/Proofs/ObserveReport.lean:362` remains intentionally open and blocked on the owner question regarding invalid source paths and duplicate site keys, per `_review/ROUND5.md:12`).
+
+VERDICT: ACCEPT
+rc=0

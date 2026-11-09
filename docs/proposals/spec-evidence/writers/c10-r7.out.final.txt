@@ -1,0 +1,21 @@
+All four findings are fixed:
+
+1. Launcher correctness now binds the requested root and result, with separate wrong-root and wrong-result mutants.
+2. Toy calls carry operational traces. Laws prove active-frame access safety, peak-stack bounds, and correspondence with `StackCode`. Out-of-frame spills and temporary over-budget reservations are rejected.
+3. Effect permissions derive independently from the command and pre-state. A corrupt executor cannot authorize itself by enlarging its reported footprint.
+4. All three retention mutants now retain their subjects’ complete instance parameters.
+
+Commits:
+
+- `6f7b21d49` — launcher input binding and mutant types.
+- `d49dd2d28` — independent effect permissions.
+- `54c71fc02` — traced toy-call conformance and stack safety.
+- `adc0656fc` — instruction-depth correspondence with structured stack accounting.
+
+Audited all 14 laws for closed instances and premise-preserving planted evidence. Helpers retain individual reasons and pending approvals; no approvals were authored.
+
+Native obligations remain: layout/ABI at slice 0/R-0580; artifact stack evidence at slice 0/R-0575; retention at slice 25/R-0580; launcher integration at slice 0/R-0505, supported by R-0503/R-0584.
+
+Final validation at `adc0656fc`: build passed; rules **32/32**; trust-ban **23/23**. Working tree clean.
+
+QUESTIONS: None.

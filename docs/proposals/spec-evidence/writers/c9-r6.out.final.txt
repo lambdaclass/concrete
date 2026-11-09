@@ -1,0 +1,21 @@
+Findings 1–5 are done:
+
+1. Recursive assignment includes descendants. New laws connect collection, occurrence lookup, and assigned tables; `nestedBody` and descendant-dropping mutants provide evidence.
+2. Four definitional equations are Representation lemmas. New table-assignment laws cover renaming, pinning, and named-scope behavior.
+3. Loader, discharge, and observation witnesses now preserve the Instance’s fixed inputs.
+4. Removed `Ghost.drive_steps`; the induction lives directly in `drive_steps_result`, retaining its history-dropping mutant.
+5. The location law checks parsed diagnostic bytes against source-derived coordinates. The old projection is an inversion helper.
+6. Left both byte-column theorems unchanged, as assigned to C6.
+
+Audited all C9 laws. Approved exemptions cite REVIEW5-codex. New support declarations retain individual reasons and PENDING approval: four representation lemmas, three assignment/lookup helpers, four guard-computation helpers, and two location helpers.
+
+Commits:
+
+- `ad8e593be` — complete nested assignment and identity correspondence.
+- `803214b77` — direct loader, discharge, and driver output contracts.
+- `8cba93247` — source-derived trap diagnostic contract.
+- `e66aa2fc6` — distinguish guard computations from semantic laws.
+
+The prescribed Lean build passed at final SHA `e66aa2fc6`. Working tree is clean. Rules/trust-ban gates were not run; no reviewers, git notes, or pushes.
+
+QUESTIONS: None.

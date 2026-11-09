@@ -1,0 +1,125 @@
+Review was read-only. I modified no files and ran no builds, gates, network operations, or writing git commands. The operational fixes are real, but three Laws still violate the binding vacuity/classification rule.
+
+1. **Major — `ConcreteSpec/Proofs/Ident.lean:495` — REAL DEFECT: the named-scope Law wraps a definitional equation.**
+
+   `pathAt_named_ancestor_resets_scope` rewrites both forest lookups with `pathAt_at_length`, then returns `descendant_named_ancestor_resets_scope`. That helper proves the result solely by unfolding `descendantKey`, `childScope`, and `segment`: a named construct’s child scope is defined to be `[]`. Moving the same equation behind forest locators does not establish independent assignment correctness.
+
+   The `namedNested`/`unresetScopePathAt` pair has matching arguments and demonstrates a faulty alternative, but does not cure this definitional-Law defect.
+
+   **Concrete fix:** retain the locator/scope equations as computation helpers. State named-scope stability over the actual assigned table’s subtree entries, comparing assignments before and after replacement of the outer prefix. Prove preservation through collection and numbering, with the scope-leaking assignment mutant as its counterexample.
+
+2. **Major — `ConcreteSpec/Proofs/Prim.lean:229` — REAL DEFECT: `PrimRegistry.allows_unknown` is a direct guard equation classified as a Law.**
+
+   Its entire proof is `simp [PrimRegistry.allows, hnone]`: the hypothesis selects exactly the operation’s `none => false` branch. This is the same kind of guard computation correctly exempted for the discharge mismatch helpers.
+
+   The `successAnswer`/`catchAllAllows` pair is well formed, but a planted mutant does not exempt a definitional Law.
+
+   **Concrete fix:** classify this declaration as a computation helper. Keep `unknown_primitive_stuck` as the substantive contract Law: it connects registry absence to the absence of an actual C1 transition and already has matching evidence.
+
+3. **Major — `ConcreteSpec/Proofs/Prim.lean:426` — REAL DEFECT: `ghost_erasure_ending` is a projection corollary classified as a Law.**
+
+   The proof rewrites by `ghost_erasure_run`, then constructs `⟨rfl, rfl⟩`. It only projects events and ending from the already established full-report equality. FINAL explicitly disallows projection Laws.
+
+   The `abortPieces`/`eraseAllPieces` witnesses are meaningful and correctly paired; the classification still fails.
+
+   **Concrete fix:** classify this as a congruence/projection helper, with an exemption reason identifying `ghost_erasure_run` as its soundness source. Keep the full-report theorem as the Law.
+
+The round-6 repairs otherwise check out:
+
+| Previous finding | Round-7 assessment |
+|---|---|
+| Loader wildcard branches | Fixed: total output contract and admission biconditional; fabricated refusal, unconditional admission, and discarded input are tested. |
+| Discharge wildcard branch | Fixed: refusal has the exact disjunction; success, stale context, wrong requested identity, missing registration, wrong key, and unconditional refusal have matching witnesses. |
+| Missing version-schema Law | Fixed by `EncodedPremise.read_iff`; writer and reader mismatch cases refute `versionIgnoringRead`. |
+| Trap observation disconnected from lookup | Fixed: both output branches require the corresponding site lookup; fabricated rendering and silent omission are refused. |
+| Rename/pin root coverage and mutants | Fixed: root and descendant membership are included; leaf instances are valid because an empty route resolves to an empty suffix. `noopRename`, `noopPin`, and scope-leaking assignment are tested. Named-scope classification remains finding 1. |
+| Collector soundness mutant | Fixed: `unprefixedCollect` mutates the collector and produces a key with no real occurrence route. |
+| Unused numbering helper | Fixed: `assignFunctionTable_lookup` uses it to connect numbered sites to collected occurrences. |
+
+The three binding identity decisions are represented as requested: structured kind/name paths with per-kind unnamed ordinals and pins; package name/version identity with origins separate and conflicting origins refused while retaining both records; and a closed, versioned premise enumeration with unknown categories refused. I found no additional owner decision being chosen.
+
+The following is the complete C9 Law audit. **PASS** means the source has a substantive statement and a matching closed Instance/Planted pair on inspection; it is not a claim that I ran the automated checker.
+
+| Law | Verdict; instance → planted mutant |
+|---|---|
+| `SiteKeyTable.nodup_renumber` | PASS; `siteTable`, `successor` → `collapseRenumber` |
+| `SiteKeyTable.lookup_renumber` | PASS; site 1 lookup → `collapseRenumber` |
+| `collectKeysIn_sound` | PASS; nested forest, universally quantified key → `unprefixedCollect` |
+| `collectKeysIn_complete` | PASS; `nestedPath`, route `[0,0,0]` → `shallowCollect` |
+| `assignFunctionTable_occurrences` | PASS; nested occurrence → `shallowAssign` |
+| `assignFunctionTable_lookup` | PASS; start 7, index 2 → `shallowAssign` |
+| `assignProgramTables_outsideEdit` | PASS; unchanged other function with shifted offsets → `assignProgramTablesFromSiteOffset` |
+| `key_insert_differentKind` | PASS; binding/call → `allKindsOrdinal` |
+| `key_insert_named` | PASS; unnamed binding/named insertion → `countNamedKey` |
+| `key_rename_other` | PASS; renamed sibling → `demoteRename` |
+| `key_pin_other` | PASS; pinned sibling → `labelOnlyOrdinal` |
+| `descendant_insert_differentKind` | PASS; nested route with satisfiable avoidance → `allKindsDescendantKey` |
+| `descendant_insert_named` | PASS; nested route → `countNamedDescendantKey` |
+| `pathAt_insert_after` | PASS; nested route/trailing insertion → `wholeForestPathAt` |
+| `pathAt_insert_named` | PASS; shifted root locator → `countNamedPathAt` |
+| `pathAt_insert_differentKind` | PASS; shifted locator with avoidance preserved → `allKindsPathAt` |
+| `pathAt_named_ancestor_resets_scope` | **FAIL classification**; `namedNested` → `unresetScopePathAt`; finding 1 |
+| `descendant_rename_other` | PASS; nested sibling → `demoteRename` |
+| `descendant_pin_other` | PASS; nested sibling → `labelOnlyDescendantKey` |
+| `assignFunctionTable_rename_named` | PASS; nested and leaf cases → `noopRename`; nested case also → `unresetScopeAssign` |
+| `assignFunctionTable_pin` | PASS; nested and leaf cases → `noopPin` |
+| `canonicalize_nodup` | PASS; repeated specialization → `bySite` |
+| `canonicalize_edge_sound` | PASS; `edgeZero`, membership preserved → `oobEntryAt` |
+| `canonicalize_complete` | PASS; `requestZero` → `dropFirstEdges` |
+| `canonicalize_share` | PASS; equal specialization at distinct sites → `bySite` |
+| `canonicalize_distinct` | PASS; differing type and capability cases → `onlyGeneric` |
+| `load_refusal_complete` | PASS; same package/different origins → `admitAll` |
+| `load_refusal_sound` | PASS; colliding modules → `fabricatedRefusalLoad`, `admitAll` |
+| `load_admitted` | PASS; valid and colliding lists → `discardLoad`, `admitAll` |
+| `lineAt_append` | PASS; newline after `aSource` → `constantLine` |
+| `lineAt_append_newline` | PASS; `aSource` → `constantLine` |
+| `lineAt_append_other` | PASS; tab, non-newline premise preserved → `offsetLine` |
+| `columnAt_append` | PASS; UTF-8 continuation byte → `scalarColumn` |
+| `columnAt_append_tab` | PASS; tab after `aSource` → `tabStopFour` |
+| `columnAt_append_newline` | PASS; newline after `aTab` → `noResetColumn` |
+| `read_encode` | PASS; current-version `stackRecord` → `encodeDroppingKind` |
+| `read_unknown` | PASS; category 99, unknown premise preserved → `catchAllRead` |
+| `read_iff` | PASS; mismatched writer/future reader → `versionIgnoringRead` |
+| `Prim.lookupId_rename` | PASS; swapped IDs in `locals` → `unrenamedLocals` |
+| `Prim.eval_rename` | PASS; binder-containing `source` → `unrenamedLocals` |
+| `Prim.eval_operands_rename` | PASS; same term through operands → `unrenamedLocals` |
+| `Prim.rename_inverse` | PASS; swap renaming → `idSymm` |
+| `Prim.rename_id` | PASS; `source` → `swap` |
+| `Prim.lookupId_rehint` | PASS; `locals` → `corruptIdRehintLocals` |
+| `Prim.eval_rehint` | PASS; `source` → `corruptIdRehintTerm` |
+| `Prim.eval_operands_rehint` | PASS; operand evaluation → `corruptIdRehintTerm` |
+| `SafetyEvidence.discharge_sound` | PASS; valid, stale, mismatched, and unregistered cases → corresponding consumer mutants, including `alwaysRefuseDischarge` |
+| `SafetyEvidence.discharge_target_mismatch` | PASS; distinct identities with true claims → `dischargeWithoutTable` |
+| `SafetyEvidence.discharge_unregistered` | PASS; empty table → `dischargeWithoutTable` |
+| `PrimRegistry.allows_unknown` | **FAIL classification**; `successAnswer` → `catchAllAllows`; finding 2 |
+| `PrimRegistry.unknown_primitive_stuck` | PASS; actual unknown request → `uncheckedPrimStep`, request/absence premises preserved |
+| `Ghost.drive_steps_result` | PASS; registered request/nonempty history → `dropHistoryDrive` |
+| `Ghost.runStmts_terminal` | PASS; returned and trapped instances; returned case → `restartingRunStmts` |
+| `Ghost.ghost_erasure_run` | PASS; `GhostDemo.pieces` → `eraseAllPieces` |
+| `Ghost.ghost_erasure_ending` | **FAIL projection classification**; `abortPieces` → `eraseAllPieces`; finding 3 |
+| `Observe.trapLine_injective` | PASS; closed universal application at `Demo.sp` → `trapLineWithoutColumn` |
+| `Observe.trapTerminal_valid_location` | PASS; validated tab site → `fabricatedTrapTerminal`, `silentTrapTerminal` |
+
+For the tagged C9 witnesses, I found no changed fixed arguments, impossible hypothesis proofs, or mutants of a different subject type. The failing rows above fail the independent Law-classification requirement.
+
+Every pending exemption receives the following verdict:
+
+| Pending declaration | Verdict and reason |
+|---|---|
+| `numberFunctionKeys_lookup` | **Approve** — numbering/lookup computation used by the public assignment correspondence. |
+| `pathAtIn_succ` | **Approve** — locator decomposition used in occurrence proofs. |
+| `key_rename_named` | **Approve** — root representation computation used by the table Law. |
+| `key_pin_unnamed` | **Approve** — root representation computation used by the table Law. |
+| `descendant_named_ancestor_resets_scope` | **Approve as computation only** — correctly exposes the definitional reset; cannot independently justify a Law wrapper. |
+| `descendant_rename_named` | **Approve** — prefix computation used by the assignment Law. |
+| `assignFunctionTable_descendant_mem` | **Approve** — transports a located occurrence through the established occurrence/table correspondence. |
+| `read_version_mismatch` | **Approve** — version-guard computation now used by `read_iff`. |
+| `trapTerminal_valid_location_inv` | **Approve** — inversion plumbing; the public Law additionally establishes decoded observation correctness. |
+| `validSites_valid` | **Approve** — closed fixture invariant supporting the witnesses. |
+| `discharge_context_mismatch` | **Approve** — guard computation used by the complete output contract and refusal proofs. |
+| `discharge_obligation_mismatch` | **Approve** — guard computation used by those same proofs. |
+| `Ghost.runStmts_of_not_normal` | **Approve** — internal unfolding support for erasure; terminal behavior has a separate Law. |
+
+The C6-owned `trap_line_uses_byte_columns` and `byteColumn_tab` still need their previously identified classification/evidence migration. The former substitutes a rendering premise; the latter needs a classified Law and full witness pair. Those remain C6 audit work, as explicitly assigned.
+
+VERDICT: CHANGES

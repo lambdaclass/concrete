@@ -1,0 +1,95 @@
+### 1. Assessment of Round 7 Fixes
+
+1. **Effect permissions derived independently from command and pre-state (`ConcreteSpec/Spec/Frame.lean:181-222`, `ConcreteSpec/Proofs/Frame.lean:578-691`) — REAL FIX**:
+   - `EffectCommand.permissions` computes the authorized `Footprint` purely from `tgt`, `before`, and `command` (using `⟨before.memory.next⟩` for `.alloc`), and `EffectResult` now requires both `footprint = command.permissions tgt before` and `(command.permissions tgt before).Preserves before after`.
+   - In `runEffect_frame`, the `.alloc` branch proves `block = ⟨before.memory.next⟩` from `Memory.alloc` rather than trusting the returned block ID, and the new planted mutant `selfAuthorizingEffect` (`ConcreteSpec/Proofs/Frame.lean:676-691`) is genuinely rejected.
+2. **Launcher evidence bound to requested `root` and `result` (`ConcreteSpec/Spec/Frame.lean:865-870`, `ConcreteSpec/Proofs/Frame.lean:1814-1932`) — REAL FIX (at toy level, see Finding 4 on contract placement)**:
+   - `ToyLaunchCorrect` now takes `root`, `reserved`, and `requestedResult`, requiring `artifact.1 = root` and `result = requestedResult` in the `.entered` branch. `rfl` in `toyLaunch_conforms` only discharges the output equalities produced by `toyLaunch`, not any hypothesis. Planted mutants `wrongRootToyLaunch` and `wrongResultToyLaunch` fail `ToyLaunchCorrect`.
+3. **Retention mutant type signatures (`ConcreteSpec/Proofs/Frame.lean:1683, 1740, 1758`) — REAL FIX**:
+   - `rejectingKeptChecker`, `untrackedKeptTransfer`, and `droppingKeptTransfer` now carry `[DecidableEq F]` / `[DecidableEq H]` matching `checkKeptPair` and `transferKept`.
+4. **Toy call stack/access traces (`toyTrace`, `ToyTraceSafe`, `toyBody_stack_model`, `toyBody_stack_safe`, `toyCall_conforms`) — INCOMPLETE / CONTAINS REAL DEFECTS**:
+   - See Findings 1, 2, and 3 below: `ToyTraceSafe` suffers from `Nat` subtraction truncation that makes its lower-bound checks vacuous when `origin = 0`; `ToyTraceSafe` is bolted onto `toyCall_conforms` on the side rather than integrated into `Signature.Call` / `TransitionConforms` and is completely omitted from `toyCallSeq_conforms`; and `toyBody_stack_model` compares two hardcoded constants (`toyBodyAt` and `.frame 8 .done`) with no structural translation between `ToyInstruction` and `StackCode`, while its `Instance` statement drops `toyTrace` and `toyBodyAt` altogether.
+
+---
+
+### 2. Findings
+
+1. **`ConcreteSpec/Spec/Frame.lean:487-500` & `ConcreteSpec/Proofs/Frame.lean:1207-1216` — [major] [REAL DEFECT] `Nat` subtraction truncation in `toyTrace` and `runToy` makes `ToyTraceSafe` lower-bound checks vacuous at `origin = 0` and masks stack/offset underflow**
+   - **Problem**: `toyTrace` computes slot addresses as `st.stackPointer - offset` in `Nat` (`Spec/Frame.lean:491`), and `runToy` computes `.release bytes` as `st.stackPointer - bytes` in `Nat` (`Spec/Frame.lean:479`). `ToyTraceSafe origin bound samples` checks `origin ≤ sample.1` and `origin ≤ address ∧ address < sample.1` (`Spec/Frame.lean:499-500`).
+     - `toyBody_stack_safe` quantifies over arbitrary `before : Machine Nat Nat`, which includes `before.stackPointer = 0` (`origin = 0`).
+     - When `origin = 0`, `0 ≤ sample.1` and `0 ≤ address` are trivially true for every `Nat`! An instruction stream `[.reserve 8, .slot 100 99, .release 8]` starting at `stackPointer = 0` accesses `8 - 100 = 0` in `Nat`, which satisfies `0 ≤ 0 ∧ 0 < 8`, so `ToyTraceSafe 0 8` judges an out-of-frame underflow 92 slots below the frame **safe**. Likewise, `[.release 100]` at `stackPointer = 0` saturates to `0` and satisfies `ToyTraceSafe 0 8`.
+     - Even for `origin > 0`, every underflowing offset `offset ≥ st.stackPointer` silently clamps to slot `0`, so `ToyTraceSafe` only catches underflow in `toyBase` because `toyBase.stackPointer` was chosen to be `1` instead of `0`.
+   - **Concrete fix**: Do not compute addresses or releases via unchecked truncating `Nat` subtraction. Either:
+     1. Record the raw instruction offset/release or check the guard `offset ≤ st.stackPointer` (and `0 < offset ∧ offset ≤ st.stackPointer - origin`) in `toyTrace` / `ToyTraceSafe` (or return `Option (Int × Option Int)` / fail on `offset > st.stackPointer` or `bytes > st.stackPointer`), and
+     2. Add a planted below-frame underflow mutant (e.g., `.slot 9 99` after `.reserve 8`, and `.slot 100 99` at `stackPointer = 0`) that is rejected for **all** `origin : Nat`, including `origin = 0`.
+
+2. **`ConcreteSpec/Spec/Frame.lean:519-540` & `ConcreteSpec/Proofs/Frame.lean:1185-1193, 1224-1231, 1391-1396` — [major] [REAL DEFECT] Containment patch: `ToyTraceSafe` is bolted onto `toyCall_conforms` outside `Signature.Call` / `TransitionConforms`, and omitted from `toyCallSeq_conforms`**
+   - **Problem**:
+     - `Signature` carries `stackBound`, yet `Signature.Call` and `TransitionConforms` still only relate pre/post `Machine` states and never enforce `stackBound` or active-frame access safety. As a result, `(outsideToyCall toyBase 11 7).machine` and `(overBudgetToyCall toyBase 11 7).machine` still satisfy `toySignature.Call`!
+     - Instead of strengthening `Signature.Call` / `TransitionConforms`, the diff bolts `ToyTraceSafe` onto `toyCall_conforms` as an external third conjunct.
+     - Worse, `toyCallSeq` (`Spec/Frame.lean:538-539`) immediately discards `.samples` from the first call (`(toyCall base arg result₁).machine`) and runs the second call via `runToy`, so `toyCallSeq_conforms` (`Proofs/Frame.lean:1391-1396`) checks neither peak stack bounds nor active-frame spill safety across sequential calls.
+   - **Concrete fix**: Integrate operational trace/stack-bound safety into the call contract (`Signature.Call` / `TransitionConforms`, or make `Machine` / `Call` carry the execution trace) and have `toyCallSeq` (via trace concatenation in `executeToy (toyBody result₁ ++ toyBodyAt 2 result₂)`) and `toyCallSeq_conforms` enforce `ToyTraceSafe` across the full sequential execution.
+
+3. **`ConcreteSpec/Proofs/Frame.lean:1195-1216, 1269-1282` — [major] [REAL DEFECT] `toyBody_stack_model` is a hardcoded constant comparison with no structural translation between `ToyInstruction` and `StackCode`, and its `Instance` violates `_review/VACUITY_CONVENTION_FINAL.md`**
+   - **Problem**:
+     - **Hardcoded shortcut**: `toyBody_stack_model` relates `toyTrace (toyBodyAt resultReg result) before` to `stackSamples (.frame 8 .done) before.stackPointer`. Neither side is derived from the other: there is no function compiling `StackCode` to `List ToyInstruction` or extracting `StackCode` from `List ToyInstruction`. Both are fixed constants, and `toyBody_stack_safe` (`Proofs/Frame.lean:1210-1216`) still unfolds `toyTrace, toyBodyAt, runToy` and performs the same 8-way `rcases hs` + `omega` that proves the bound directly without `stackSamples_bounded`.
+     - **Convention violation on `Instance`**: Because `toyBody_stack_model` takes `(sample : Nat × Option Nat)` and `(hs : sample ∈ toyTrace ...)` as parameters and its `Instance` (`Proofs/Frame.lean:1269-1272`) discharges `hs` inside the proof term via `(by decide)`, the `Instance` proposition is `((9, some 1) : Nat × Option Nat).1 ∈ stackSamples (.frame 8 .done) (toyInput toyBase 11).stackPointer`—which does not mention `toyTrace` or `toyBodyAt` at all.
+   - **Concrete fix**: Define a structural translation between `StackCode` and `List ToyInstruction` (e.g., `StackCode.compile : StackCode → List ToyInstruction` or `extractStackCode : List ToyInstruction → Option StackCode`), prove a general law `∀ code before sample, sample ∈ toyTrace (code.compile ...) before → sample.1 ∈ stackSamples code before.stackPointer`, derive the `sample.1 ≤ before.stackPointer + toySignature.stackBound` bound in `toyBody_stack_safe` from `stackSamples_bounded` without redoing 8-way `rcases` on `hs` for the depth bound, and state the law so its closed `Instance` retains `toyTrace` in the theorem statement (e.g., `∀ sample ∈ toyTrace ..., sample.1 ∈ stackSamples ...`).
+
+4. **`ConcreteSpec/Spec/Frame.lean:862-870` — [minor] [PREFERENCE] `ToyLaunchCorrect` binds `root` and `requestedResult` outside `Launcher.Run` / `LauncherConforms`**
+   - **Problem**: `ToyLaunchCorrect` adds `artifact.1 = root ∧ result = requestedResult` on top of `toyLauncher.Run`, whereas `Launcher.Run` and `LauncherConforms` themselves still take an arbitrary `artifact` and `result` without tying them to the requested root module or entry evaluation result.
+   - **Concrete fix**: Fold the root-identity and startup-outcome relation (`Startup`) into `Launcher` / `LauncherConforms` so the reusable launcher contract, not just `ToyLaunchCorrect`, binds the requested root and result across both `.refused125` and `.entered`.
+
+5. **`ConcreteSpec/Spec/Frame.lean:193-213` — [nit] [PREFERENCE] `runEffect` duplicates `EffectCommand.permissions` expressions**
+   - **Problem**: `runEffect` still computes its returned `Footprint` inline rather than referencing `command.permissions tgt before`.
+   - **Concrete fix**: Either have `runEffect` use `command.permissions tgt before` when constructing `some (after, footprint)` or have `runEffect` return `Option State` while `EffectResult` checks `(command.permissions tgt before).Preserves before after`.
+
+---
+
+### 3. Legitimacy of Named Native Deferrals
+
+- **Layout/ABI slice 0 (`R-0580`)**, **Artifact stack slice 0 (`R-0575`)**, **Retention slice 25 (`R-0580`)**, and **Launcher slice 0 (`R-0505` with `R-0503`/`R-0584`)**:
+  - Deferring the wiring to real C2/C3/C5/C9 AST/IR types to their tracked cross-chapter slices is legitimate **only insofar as C10 defines the full reusable contract now**.
+  - Where Round 7 put stack-trace safety (`ToyTraceSafe`) and root/result binding (`ToyLaunchCorrect`) into toy-only wrapper predicates instead of the generic `Signature.Call` / `TransitionConforms` and `Launcher` contracts (Findings 2 and 4), the deferral leaks into contract design and must be fixed in the reusable contracts.
+
+---
+
+### 4. N2 Vacuity Gate (`_review/N2-GATE-54c71fc02.txt`) Classification
+
+1. **Mutant signature mismatches on `rejectingKeptChecker`, `untrackedKeptTransfer`, `droppingKeptTransfer`**: **Real defect** at `54c71fc02` (missing `[DecidableEq]` binders on mutants relative to subjects `checkKeptPair` and `transferKept`). Fixed in `adc0656fc` (`ConcreteSpec/Proofs/Frame.lean:1683, 1740, 1758`).
+2. **`toyBody_stack_model` `Instance` / `Planted` shape (`ConcreteSpec/Proofs/Frame.lean:1197-1202, 1269-1281`)**: **Real defect** (see Finding 3: discharging `hs : sample ∈ toyTrace ...` by `(by decide)` inside the `Instance` proof term erases `toyTrace` and `toyBodyAt` from the `Instance` statement).
+3. **Unapproved `(approved: PENDING)` tags on `Helper` lemmas**: **Procedural gate stop (not a writer defect)** — the writer properly refrained from self-approving `PENDING` exemptions; reviewer verdicts on each exemption are given in Section 6 below.
+4. **Syntactic implication checks on specification-wrapper laws (`EffectResult`, `ToyLaunchCorrect`, `CheckedPairCorrect`)**: **Gate false positive** where the specification predicate matches on `Option`/`Startup` and enforces `Defined`/adequacy on both `none`/`.refused125` and `some`/`.entered` with both corruption and dropping mutants.
+
+---
+
+### 5. Vacuity Audit of All 14 C10 Laws under `_review/VACUITY_CONVENTION_FINAL.md`
+
+| # | Law (`ConcreteSpec/Proofs/Frame.lean`) | Subject | Instance Witness | Planted Counterexample(s) | Vacuity Verdict |
+|---|---|---|---|---|---|
+| 1 | `runEffect_frame` (`:565-648`) | `runEffect` | `byte_store` on `metadataStoreBefore` (`:650-655`) | `corruptEffect` (`:664`), `selfAuthorizingEffect` (`:682`), `droppingEffect` (`:696`) | **PASS (Non-vacuous)** |
+| 2 | Callee operand/lifecycle frame law (`evalConcreteOperand` / `concreteCallee` section) | Concrete callee evaluator | Store-callee instance on `metadataStoreBefore` | Corrupting callee (mutates unowned block) & dropping callee | **PASS (Non-vacuous)** |
+| 3 | `stackSamples_bounded` (stack accounting section) | `computedStackBound` / `stackSamples` | Nested/frame `StackCode` instance | Under-counting bound mutant fails `sample ≤ base + bound` | **PASS (Non-vacuous)** |
+| 4 | `toySignature_wellFormed` (ABI signature section) | `toySignature` | `toySignature_wellFormed` | Overlapping saved/clobber register & under-bounded signature mutants | **PASS (Non-vacuous)** |
+| 5 | `toyTransition_conforms` (`:1185-1193`) | `toyTransition` | Closed transition instance on `toyBase` | Saved-reg, caller-slot, stack-pointer, and result mutants | **DEFECT (Weakened contract: `Signature.Call` ignores `stackBound` and frame-access safety; `outsideToyCall` & `overBudgetToyCall` pass `Signature.Call`)** |
+| 6 | `toyBody_stack_model` (`:1197-1202`) | `stackSamples` | `((9, some 1)).1 ∈ stackSamples (.frame 8 .done) ...` (`:1269-1272`) | `ignoringStackSamples` (`:1274-1281`) | **DEFECT (Hardcoded constant comparison; `Instance` type drops `toyTrace` & `toyBodyAt`)** |
+| 7 | `toyBody_stack_safe` (`:1207-1216`) | `toyBodyAt` | `toyBody_stack_safe (toyInput toyBase 11) 1 7` (`:1241-1243`) | `outsideToyBodyAt` (`:1255`), `overBudgetToyBodyAt` (`:1263`) | **DEFECT (`Nat` subtraction truncation makes lower-bound checks vacuous at `origin = 0`)** |
+| 8 | `toyCall_conforms` (`:1226-1231`) | `toyCall` | `toyCall_conforms toyBase 11 7` (`:1234-1238`) | `wrongToySaved`, `wrongToySlot`, `wrongToyPointer`, `wrongToyResult`, `outsideToyCall`, `overBudgetToyCall` (`:1285-1361`) | **DEFECT (Bolts `ToyTraceSafe` on outside `Signature.Call`; inherits `Nat` truncation bug)** |
+| 9 | `toyCallSeq_conforms` (`:1391-1396`) | `toyCallSeq` | `toyCallSeq_conforms toyBase 11 7 9` (`:1399-1402`) | `clobberingSavedToyCallSeq` (`:1410`), `undeclaredClobberToyCallSeq` (`:1423`) | **DEFECT (Omits `ToyTraceSafe` and discards trace samples across sequential calls)** |
+| 10 | `checkKeptPair` conformance law (`:1530-1700`) | `checkKeptPair` | Valid kept-handle foreign declaration pair | Unkept/mismatched pair & `rejectingKeptChecker` (`:1683`) | **PASS (Non-vacuous)** |
+| 11 | `transferKept_sound` (`:1600-1770`) | `transferKept` | Tracked `.submit` / `.complete` transitions on handle `7` | `untrackedKeptTransfer` (`:1740`), `droppingKeptTransfer` (`:1758`) | **PASS (Non-vacuous)** |
+| 12 | `stack_under_reservation` (startup admission section) | `stackAdmission` | Under-reserved (`4 < 8`) and adequate (`8 ≤ 8`) cases | Admitting under-reserved & refusing adequate stack mutants | **PASS (Non-vacuous)** |
+| 13 | `toyLaunchExecution_conforms` (`:1810`) | `toyLaunchExecution` | Admitted execution on `root = 2, reserved = 8, result = 7` | Closure, entry, exit, and stack-adequacy mutants | **PASS (Non-vacuous on `.entered`, see Finding 4 on root/result binding)** |
+| 14 | `toyLaunch_conforms` (`:1814-1830`) | `toyLaunch` | `dependency_chain` (`2 8 7`, `:1833`) & `under_reserved` (`2 4 7`, `:1836`) | `wrongToyLaunch`, `wrongRootToyLaunch`, `wrongResultToyLaunch`, `overRetainingToyLaunch`, `underRetainingToyLaunch`, `alwaysRefusingToyLaunch`, `unboundedToyLaunch` (`:1847-1932`) | **PASS (Non-vacuous)** |
+
+---
+
+### 6. Verdict on Each `(approved: PENDING)` Exemption
+
+1. **`machine_preserved_trans` (`ConcreteSpec/Proofs/Frame.lean:1363`) — APPROVED**: Genuine relational transitivity (`Helper (congruence)`) composing `Machine.Preserved` across sequential calls in `toyCallSeq_conforms`.
+2. **`machine_registerFrame_union` (`ConcreteSpec/Proofs/Frame.lean:1375`) — APPROVED**: Genuine frame-composition lemma (`Helper (congruence)`) composing `Machine.RegisterFrame` clobber sets across sequential calls in `toyCallSeq_conforms`.
+3. **Retention specification characterization lemma (`ConcreteSpec/Proofs/Frame.lean:1430`) — APPROVED**: Genuine `Helper (computation)` unfolding the retention specification predicate, paired with the operational law `transferKept_sound`.
+4. **Per-command C4 frame lemmas (`store_frame`, `free_frame`, `expose_frame`, `alloc_frame`, `set_frame`, `write_frame`, `rawWrite_frame`) and `toyBodyAt_preserved` — APPROVED**: Internal case-split helpers directly discharging branches of `runEffect_frame` and `toyCallSeq_conforms`.
+
+VERDICT: CHANGES
+rc=0

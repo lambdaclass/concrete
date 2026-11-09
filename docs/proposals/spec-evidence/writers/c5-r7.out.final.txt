@@ -1,0 +1,14 @@
+All six findings are done:
+
+1. **Frame ownership — `d2b0b2d3`:** completed both ownership directions, rejected orphaned slots and cross-frame aliases, and proved preservation with alias-safe cleanup.
+2. **Definitional laws — `39a19a0d`:** retained computation facts as Helpers and added independent laws for move/reinitialization, loan identity non-reuse, nominal freshness, permanent brand retirement, scope non-escape, and exact narrowed permissions.
+3. **Finite simulation — `4536d8cf`:** restored unconditional `Steps_erasure`, with a mutant that corrupts execution while keeping erasure fixed.
+4. **Vacuous witnesses — `023ad95b`:** replaced all five refused-operation witnesses with successful cases and matching controls; the final commit strengthens the moved-owner witness with an unrelated live loan.
+5. **Deferred lifetime — `5787f2a5`:** `deferred_call_lifetime` proves held-loan retention before invocation and caller restoration after actual C1 return, with premature-ending and leaking mutants.
+6. **Upward lending — `4d7aa618`:** `downward_reborrow_protocol` proves scoped restoration and tests the exact activation-1-to-caller-0 refusal against an admitting mutant.
+
+The prescribed build passed on **`39a19a0d`**. Source audit: **70 Laws, 71 Instance/Planted pairs**, every named theorem classified. Source trust scan and `git diff --check` passed; working tree is clean.
+
+Helper approvals remain `PENDING`. No reviewers, git notes, or pushes were run.
+
+QUESTIONS: None.

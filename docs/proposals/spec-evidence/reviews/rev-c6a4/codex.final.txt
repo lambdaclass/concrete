@@ -1,0 +1,104 @@
+CHANGES. The reply-binding and exact-ending repairs are substantive, but the physical-semantics repair still permits the original zero-effect escape, and path validity still relies on the prohibited guard/premise pattern.
+
+This was an offline, source-only review. I modified nothing, ran no git commands, and ran no builds or gates. N2 assessments below are manual, not automated-check results.
+
+**Findings**
+
+1. **ConcreteSpec/Spec/Observe.lean:404; ConcreteSpec/Proofs/ObserveOutput.lean:122 — major — REAL DEFECT: a typeclass parameter does not fix physical semantics to the operands.**
+
+   Changing `PhysicalEffects` from `structure` to `class` changes instance inference, not the theorem’s quantification. `[F : PhysicalEffects O S.Output]` remains an arbitrary argument. Callers can supply a local instance—or an explicit instance argument—with both `emit` and `past` returning `[]`.
+
+   Against that instance, an output-erasing adapter satisfies `OutputCorrespondence`, and any oracle satisfies `OracleFaithful`. Both operational laws then succeed with no physical outputs. The assertion at lines 408–411 that the interpretation cannot be swapped is therefore false. `no_erasing_correspondence` only rejects erasure **after assuming a nonempty interpretation under the selected instance**; it does not close this escape.
+
+   **Long-term fix:** make physical effects an authoritative component of the semantic operand/signature bundle used by execution and adapter admission. Adapter construction must not independently choose that interpretation. Prove the concrete primitive interpretation independently and test erasure while retaining that same bundle. Keep the list-accumulation result as a helper.
+
+2. **ConcreteSpec/Spec/Observe.lean:223; ConcreteSpec/Proofs/ObserveReport.lean:368 — major — REAL DEFECT: the path repair relocates the invariant check instead of establishing independent path correctness.**
+
+   `sourceSites` now tests `PathOk` and drops failing entries. `sourceSites_valid` proves validity by following that filter. Meanwhile, `runFrom_source_trap` still requires `pathOk : PathOk src.path`. Moving the proof from a structure field to a theorem argument does not remove the admission premise identified in round 3.
+
+   The reported path identity, line and byte-column conjuncts are improvements. Nevertheless, the path-validity component still succeeds because the producer rechecks precisely that invariant, and the operational law excludes invalid source paths. The host-root mutant is rejected by runtime validation, so it does not independently establish correct path production.
+
+   **Long-term fix:** establish project-relative path production from an independently specified source-file/project identity boundary, then prove that site construction and reporting preserve it. Treat filtering/lookup equations as helpers, not path-production evidence. Do not introduce an invalid-path disposition without resolving the QUESTION below.
+
+3. **ConcreteSpec/Proofs/ObserveEnvironment.lean:652, 682 — minor — REAL DEFECT: the blocking Planted mutant has a different declaration type from its subject.**
+
+   `Environment.oracle` is polymorphic in `S` and `Input`. `BlockingEnvDemo.fabricateReplyOnBlockOracle` accepts only `Environment Demo.signature Unit`. Their applications have compatible types in this fixture, but the mutant declaration does not have the subject declaration’s type, as FINAL N2 requires.
+
+   **Fix:** define a polymorphic mutant with the exact `Environment.oracle` type. For example, it can fabricate a typed reply by invoking the supplied handler on another history; use a history-sensitive blocking fixture where the actual request blocks but that other invocation answers. Alternatively, introduce a named specialized subject and formulate the law and evidence consistently over it.
+
+4. **ConcreteSpec/Proofs/Observe2.lean:439; _review/CARRY.md:3 — minor — REAL DEFECT: the carried byte-column theorem audit is not completed in this tree.**
+
+   `byteColumn_ascii_eq_char_col`, `byteColumn_multibyte_gt_char_col`, and `sourcePrefixSpan_hasByteColumn`, which round 3 reports as present, resolve nowhere in `ConcreteSpec`. The current source laws provide useful UTF-8/tab and newline witnesses, but the claimed ASCII and multibyte theorem inventory cannot be audited or credited.
+
+   **Fix:** reconcile the carry against the actual declarations. Supply substantive producer-level ASCII/multibyte laws with closed Instances and premise-preserving mutants where required. A definitional `HasByteColumn` equation belongs among computation helpers, not newly manufactured Law evidence.
+
+**Round-3 finding disposition**
+
+| Round-3 finding | Assessment |
+|---|---|
+| Unconstrained physical interpretation | **Not fixed:** finding 1. |
+| Unguarded physical execution stopping / arbitrary final configuration | **Fixed.** Constructors distinguish stopping conditions, and both laws require the actual `runFrom` ending. |
+| Discarded C1 reply and unit store | **Fixed.** The primitive binds a local, returns it, and preserves `S.State`. `dropReturnValueOracle` now changes the observed ending. |
+| Blocking excluded; missing report connection | **Fixed semantically.** Both branches reach `reportObservation`; the blocking witness has the N2 defect in finding 3. |
+| Source theorem hardcodes only the constructor result | **Fixed for path identity, line and byte-column statements.** The conclusion now exposes span properties. |
+| Source-path proof projection/admission | **Not structurally fixed:** finding 2. |
+| Duplicate Instances | **Fixed.** The duplicate output/source cases identified in round 3 were removed. |
+
+Round 3’s inventory also contains stale names, including `environment_step_trace`, `runFrom_trap_status_134`, and several trace-equivalence laws absent here. I audited the actual declarations rather than accepting that inventory.
+
+**Every current C6 Law: vacuity and witnesses**
+
+“Pass” means substantive source-level evidence with a full closed law application and a corresponding planted rejection. It does not certify an automated projection-check run.
+
+| Law | Vacuity verdict and witness |
+|---|---|
+| `silent_internal_steps` | **Pass.** `leading_silence`; `firstStepVisible` loses the retained output. Final state is included. |
+| `blocked_silent_internal_steps` | **Pass.** `pending_silence`; `firstStepVisible` loses the prior output while retaining the pending-request arguments. |
+| `infinite_stuttering` | **Pass.** `delayed_emissions`; `firstPrefix` fails eventual-prefix correspondence. The index correspondence is proved. |
+| `full_observation_preservation` | **Pass as relational transport.** `stuttered_terminal_state`; `firstStepHasFullObservation` satisfies the mutated source premise and fails the target conclusion. This is not independent execution-correctness evidence. |
+| `trapLine_injective` | **Pass.** Distinct-site and distinct-column cases on a punctuated path; `trapLineWithoutSite` and `trapLineWithoutCol` create collisions. |
+| `byteColumn_tab` | **Pass.** `utf8_then_tab`; `doubleTabColumn` violates the one-byte increment. |
+| `runFrom_validTrace` | **Pass.** `complete_exchange_then_pending` applies the entire conjunction. `completedAsPendingRun` preserves the admission premises but supplies an ending with no corresponding request step. |
+| `environment_run_reply` | **Non-vacuous.** Doubling, history-sensitive and routed calls reject `dropReturnValueOracle`, `forgetHistoryOracle`, and `noReplyOracle`. `blocking_c1_call` exercises the other branch; its Planted declaration fails the exact-type rule—finding 3. |
+| `environment_stepHistory_valid` | **Pass for trace sequencing.** `doubling_exchange_step` / `dropRequestStepHistory`; `routed_exchange_step` / `leavePendingOnAnswerStepHistory`. |
+| `project_physical_outputs` | **Fail as the required physical-output contract.** The ordered-run Instance and erase/reverse mutants are substantive under the chosen interpretation, but cannot prevent choosing zero effects—finding 1. |
+| `output_before_trap_kept` | **Non-vacuous report/history preservation; incomplete physical contract.** `two_outputs_then_trap_report` rejects `dropTrapHistoryReport` and erasure. It inherits finding 1. |
+| `runFrom_report_trace` | **Pass.** `prior_exchange_block` rejects dropped history and always-`none`; `fuel_is_not_blocking` rejects a fabricated blocked observation through ending correspondence. |
+| `runFrom_blocked_report` | **Pass.** `preserve_prior_exchange` supplies the actual continuation and all premises; `onlyPendingHistory` loses the preceding exchange. |
+| `runFrom_outOfFuel_report_none` | **Pass.** `zero_fuel_at_request`; `divergeOnOutOfFuelReport` and `exitZeroOnOutOfFuelReport` fail. Non-finality is established by evaluator induction. |
+| `launch_missing_grant_status_125` | **Pass.** `missing_grant_refuses_startup`; ignoring grants and returning the wrong startup status each fail. |
+| `runFrom_trapped_status_134` | **Pass as report/status correspondence.** `trapped_report_not_exited_134`; `exit134OnTrapReport` and `wrongTrapStatus` fail. Its inherited `sites_valid` component is not independent path-production evidence. |
+| `runFrom_source_trap` | **Partial failure.** `source_path_to_trap` rejects wrong file identity and scalar columns. Path validity still uses the runtime-filter/admission shortcut—finding 2. |
+| `source_trap_column` | **Pass.** `utf8_tab` distinguishes byte column `5` from scalar column `4`; `scalarColumnSpan` fails. |
+| `sourcePrefixSpan_second_line` | **Pass for the stated two-line property.** `multiline_utf8_tab`; scalar-counting and single-line mutants fail. |
+| `delay_preserves_observation` | **Pass.** `silent_divergence` rejects fabricated termination; `finite_final_state` rejects resetting state. The infinite branch establishes its index correspondence. |
+
+The current C6 Law tags each name one class and real subject declarations. The inspected Instances are full applications, including the carried `runFrom_validTrace` case; none is merely its `.1` projection. The arithmetic/scanner obligations inspected are ordinary propositions, not theorem-shaped `Obligation` tags.
+
+**Pending exemption verdicts**
+
+I **approve each declaration listed below as a Helper or Representation lemma only**. These approvals do not turn premise projections, runtime checks, or representation equations into independent soundness evidence.
+
+| File | Individually approved declarations |
+|---|---|
+| `Spec/Observe.lean` | `Demo.refusedReportPermitted` — impossible-branch bookkeeping. |
+| `Proofs/Observe2.lean` | `RequestResponse.kind`, `Responds.allows`, `Responds.matches` — admission inversions. |
+| Same | `SilentInsertion.visible`, `visiblePrefix_succ`, `visiblePrefix_prefix` — trace computations. |
+| Same | `PrefixEventually.refl`, `.trans`; `SameInfiniteObservation.refl`, `.symm`, `.trans`; `SameObservation.refl`, `.symm`, `.trans`; `infinite_not_termination`, `infinite_silent_not_termination` — representation algebra/disjointness. |
+| Same | `StepIndexIncreasing.monotone`, `.strict`, `.apply_le`; `InfiniteStuttering.prefix_indices`, `.visiblePrefix_at` — arithmetic/index support. |
+| Same | `stripPrefix_append`, `parseRevNat_digits`, `decodeKind_render`, `trapLineChars_prefix`, `decodeWithKind_render`, `decodeTrapLine_render` — parser/renderer support. |
+| Same | `ValidTrace.outputs`, `ValidTrace.answer_projection`, `ExecAdapter.project_append`, `runFrom_noAnswer_pending_valid`, `runFrom_blockingPermitted`, `steps_trap_observation` — assembly/projection bridges. |
+| Same | `AdapterDemo.answeringWellFormed`, `.blockingWellFormed`, `.blockedPermitted` — closed fixture support. |
+| `Proofs/ObserveEnvironment.lean` | `environment_respond_valid`, `environment_oracle_wellFormed`; `Demo.envHandler_valid`; `HistoryDemo.handler_valid`, `.prior_valid`; `RoutingDemo.envHandler_valid`; `BlockingEnvDemo.blockingHandler_valid` — bridge and fixture proofs. |
+| `Proofs/ObserveEvidence.lean` | `Evidence.insertion`, `Evidence.shifted` — concrete stuttering witnesses. |
+| `Proofs/ObserveOutput.lean` | `project_physical_outputs_list`, `physical_run_execution`, `physical_execution_outputs`, `no_erasing_correspondence`; `OutputDemo.oracle_faithful`, `.adapter_correspondence`, `.run_writes`, `.permitted`, `.cannot_erase` — relation/list computations and fixture support. The previous rejection of `physical_run_execution` is resolved by its exact-ending statement. |
+| `Proofs/ObserveReport.lean` | `runFrom_outOfFuel_not_final`, `trapTerminal_eq_some_iff`, `sourceSites_valid`, `sourceSites_lookup`; `ReportDemo.prior_complete`, `.pending_step`, `.relativePathWellFormed`, `.sourcePermitted` — computation/fixture support. In particular, `sourceSites_valid` is approved only as a filter invariant. |
+| `Proofs/ObserveSource.lean` | `scanSourcePrefix_no_newline` — scanner support. |
+
+**Decided rules and QUESTION**
+
+The renderer retains the decided trap-line format. Trap/startup statuses remain `134`/`125`; normal exit remains a separate classification. Fuel exhaustion produces no external observation. Final state remains adapter-supplied. The source examples exercise 1-based lines and UTF-8 byte columns, including a one-byte tab.
+
+**QUESTION:** What is the specified disposition of a raw source entry whose path is invalid? The new `sourceSites` silently drops it, potentially making a reached trap unreportable; duplicate site keys can also expose a later entry. The supplied decisions establish valid emitted paths but do not authorize this disposition. Resolve the source-admission boundary explicitly; do not treat silent filtering as an owner decision.
+
+VERDICT: CHANGES

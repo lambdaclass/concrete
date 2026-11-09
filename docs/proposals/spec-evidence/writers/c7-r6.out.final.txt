@@ -1,0 +1,12 @@
+All three REAL DEFECTS fixed:
+
+- `6ad6a5f51`: fully closed security instances and mutants at the exact concrete run arguments.
+- `c685b4593`: classified `Account.enter_wf` as a helper; added an execution law proving the local peak equals the independently observed maximum.
+- `d674b443d`: retained `free_update` as a helper; proved exact free byte balance with history and frame preservation.
+- `7fe2bdb1e`: recorded all 63 existing exemption approvals from REVIEW5. Two newly classified helpers remain `PENDING`, each with its own reason.
+
+Audited all 20 C7 laws against the final convention. NI and CT meanings are unchanged.
+
+Validation: build passed on final HEAD; rules **32/32**, trust-ban **23/23**. Working tree clean. No pushes, reviewers, or git notes.
+
+QUESTIONS: None.

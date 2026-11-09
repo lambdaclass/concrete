@@ -1,0 +1,12 @@
+All three findings are done:
+
+- **Named scope:** `0a8b90ebd` proves preservation of the complete assigned subtree key sequence, with a closed Instance and scope-leaking Planted mutant.
+- **Registry guard and erasure projection:** `16f7801b3` reclassifies both as helpers, retaining the substantive execution and erasure laws.
+
+Audited all 55 C9 laws against FINAL. Recorded 13 existing reviewer approvals; four helper exemptions remain `PENDING`, each with a reason.
+
+Required wrapped build passed on final HEAD `0a8b90ebd`. Working tree is clean. No pushes, reviewers, or git notes.
+
+C6-owned theorem migration remains with C6, as instructed.
+
+QUESTIONS: None.

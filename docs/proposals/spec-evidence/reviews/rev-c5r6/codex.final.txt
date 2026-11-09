@@ -1,0 +1,237 @@
+Changes required. The round makes substantive improvements, but frame ownership remains incomplete, several Laws still restate definitions, and some positive witnesses are vacuous.
+
+This was a read-only source review: no files changed, git writes, network access, builds, or gates. The counts match the claim: **252 theorems, 106 Laws, 146 Helpers, 106 Instances, and 106 Planted examples**. Every named theorem has one classification. These counts do not establish compliance with the semantic vacuity rule.
+
+1. **ConcreteSpec/Spec/Own.lean:106 — major — REAL DEFECT: frame ownership is still incomplete.**
+
+   The new invariant says that slots belonging to an active frame appear in its locals. It does **not** say that every slot belongs to an active frame, as ROUND6 explicitly requires.
+
+   For example, start from `Examples.initial`, replace its frames with `[⟨1, [], []⟩]`, and set `nextActivation := 2`. Its activation-0 linear slot is orphaned, yet the new `WellFormed` accepts it. `leave` successfully pops frame 1 and leaves that obligation behind.
+
+   The locals index also lacks the reverse ownership relationship: a callee’s locals can name a caller’s slot. With a Copy caller slot, a well-formed callee containing that alias can successfully remove the caller’s slot during `leave`.
+
+   **Long-term fix:** make the slot/frame/local relationship complete and sound in both directions: every slot belongs to an active frame, every slot is indexed by its owning frame, and local entries cannot designate another activation’s slots. Prove preservation and cleanup from that relationship. Do not restore a runtime scan.
+
+2. **ConcreteSpec/Proofs/Own.lean:1955 — major — REAL DEFECT: wrapping definitional facts in result matches has not removed their vacuity.**
+
+   `test_erasure` unfolds the instrumented record, cases on `O.test v`, and proves both branches by `rfl`. It remains the same definitional equality previously rejected, expressed through a match.
+
+   Other clear examples include:
+
+   - `allows_erasure` at :2009: exactly the defining Boolean conjunction.
+   - `accessOwner_preserves` and `accessLoan_preserves` at :4192 and :4199: identity transitions returning the input invariant.
+   - `life_erasure` and `callLife_erasure` at :4849 and :4859: characterizations of the wrappers’ defining maps.
+   - `borrow_birth`, `endLoan_supply`, and `passOwner_birth` at :4925, :4950, and :5013: constructor or unchanged-field facts.
+   - The guard-enumerating progress statements, particularly `accessOwner_progress` at :310.
+
+   Grant has the same problem, including `fresh_progress` at :62, `fresh_generation` at :332, `endScope_non_escape` at :376, and `narrow_intersection` at :1091.
+
+   The new mutants often have the right type and falsify the exact statement. That repairs evidence packaging; it does not turn a definition restatement into independent soundness evidence.
+
+   **Long-term fix:** retain computation facts as helpers and formulate the owed semantic obligations independently—for example, protocol and execution properties connecting access, suspension, lifetime, cleanup, and concrete execution. Discharge the corresponding requirements through those properties. Cosmetic matches and helper indirection are insufficient.
+
+3. **ConcreteSpec/Proofs/Own.lean:2667 — major — REAL DEFECT: the multi-step Law is weakened and its mutant tests an added conjunct.**
+
+   `Steps_erasure` now requires `NotStuck` of an oracle execution and adds an oracle-run event-equality conjunct. The original finite-step simulation needs neither an oracle nor that premise.
+
+   Its Planted example at :3938 changes `liftOracle`, leaving both `Exec.Steps` propositions unchanged. The proof explicitly ignores the simulation conjunct and refutes only event equality. Thus it does not exercise the unconditional multi-step obligation.
+
+   The substantive unconditional theorem survives as `Steps_erasure_result` at :2558, tagged Helper.
+
+   **Long-term fix:** expose unconditional finite-step simulation as a Law with an appropriate semantic execution subject and its own premise-preserving mutant. Keep oracle-run event agreement separately, under its legitimate `NotStuck` premise. I reject the current exemption for `Steps_erasure_result`.
+
+4. **ConcreteSpec/Proofs/Own.lean:5308; ConcreteSpec/Proofs/Grant.lean:533, :642, :653, :1223 — major — REAL DEFECT: positive instances reduce to `True` on refused operations.**
+
+   These are full closed applications, but they are not non-trivial successful-result witnesses:
+
+   - `moved_no_loan`: `move shared ⟨0⟩` refuses because the root is borrowed.
+   - Generative `release_preserves`: `release dependent ⟨0⟩` refuses because `heap` still depends on its allocation.
+   - Generative `endScope_non_escape`: `releasedWithPhantom` retains the forbidden lexical dependency, so exit refuses.
+   - Generative `allocations_have_live_allocator`: again uses the refused `release dependent ⟨0⟩`.
+   - Grants `acquire_bounded`: selects right `2`, absent from the parent’s `[0, 1]`, so acquisition refuses.
+
+   **Long-term fix:** add successful closed instances exercising the postconditions. For live-allocator preservation, use at least two allocators so release succeeds while a dependency on another allocator remains. For scope non-escape, retain an outside dependency while successfully removing the exiting scope. Preserve the exact-argument mutant pairing.
+
+5. **ConcreteSpec/Proofs/Own.lean:5026, :5517 — major — REAL DEFECT: deferred-loan evidence does not establish the required lifetime contract.**
+
+   `defer_keeps_store` concerns one registration step. Its new positive case starts from `DirectArgumentWitnesses.caller`, before the direct root loan exists, and its mutant eagerly evaluates arguments. This tests late argument evaluation, not premature termination of a held loan.
+
+   The existing observation starting from `waiting` at :1694 is relevant, but it is neither a Law instance nor paired with the required mutant. There is still no general deferred-call lifetime Law establishing retention until execution and restoration after return.
+
+   **Long-term fix:** state the deferred protocol over execution, including an existing held loan, preservation before invocation, and cleanup on return. Supply the owner-requested mutant that ends the held loan at registration, plus a mutant that leaks it after the deferred invocation.
+
+6. **ConcreteSpec/Proofs/Own.lean:5483 — minor — REAL DEFECT: Q1’s required upward-lending control is still missing.**
+
+   The positive case is current activation 0. `reborrowToInactive` moves the output loan to activation 1. It does not exercise the owner-requested case of current activation 1 targeting caller activation 0.
+
+   **Concrete fix:** retain the refused upward example and add a same-typed mutant admitting that exact upward request, paired with an appropriate Law at the same arguments. Keep the current-frame restriction unchanged.
+
+The round-6 fixes assess as follows:
+
+| Requested fix | Assessment |
+|---|---|
+| Restore contract obligations as Laws | Names and evidence restored; definitional shortcuts remain |
+| Complete frame-local ownership and simplify `leave` | Cleanup proof genuinely improved; invariant incomplete |
+| Replace refusing roundtrip mutant | Fixed: mutant succeeds through exit and leaks a loan |
+| Operation-specific preservation mutants | Fixed in substance; mutations now target individual operations |
+| Mutate instrumentation/oracle lifting, keep erasure fixed | Fixed for the run and step controls; multi-step exception above |
+| Review exemptions and audit every Law | Classification complete; exemptions and semantic defects below remain |
+
+Q1’s current-frame restriction and upward refusal remain in the implementation; there is no exposed unrestricted destination helper. Q2’s direct argument loan creation, adoption, and return cleanup remain present. Q3’s whole-run forward statements retain exactly the non-`stuck` exception, and converse statements retain `CheckerAccepted`. The public finite-step Law is weakened as described above. I found no explicit new choice of an owner decision.
+
+The following is the complete **106-Law audit**. Locations are in the indicated proof file. `I` identifies the positive example; the named mutant identifies its adjacent Planted control.
+
+- **N:** substantive property; no manual vacuity defect found.
+- **D:** definition, guard, identity, or constructor shortcut under the binding rule.
+- **E:** positive witness is vacuous.
+- **W:** weakened obligation.
+- **Q:** required protocol/control evidence incomplete.
+
+`N` is a source-review verdict, not a claim that the coordinator’s elaborated projection gate was run.
+
+| Own Law | Verdict | Witness: I line / mutant |
+|---|---|---|
+| `move_progress` | D | 5184 / `moveRefuse` |
+| `borrow_progress` | D | 5196 / `borrowRefuse` |
+| `reborrowTo_progress` | D | 5207 / `reborrowToRefuse` |
+| `reborrow_progress` | D | 5220 / `reborrowRefuse` |
+| `accessOwner_progress` | D | 5233 / `accessOwnerRefuse` |
+| `accessLoan_progress` | D | 5241 / `accessLoanRefuse` |
+| `reinitialize_progress` | D | 5249 / `reinitializeRefuse` |
+| `endLoan_progress` | D | 5260 / `endLoanRefuse` |
+| `bind_fresh_progress` | D | 5270 / `bindRefuse` |
+| `enter_progress` | N | 4692 / `enterRefuse` |
+| `drop_progress` | D | 5282 / `dropRefuse` |
+| `directOwner_roundtrip` | N | 4713 / `passOwnerLeaked` |
+| `eval_ok_erasure` | D | 3786 / `zeroOperands` |
+| `eval_trap_erasure` | D | 3799 / `abortOperands` |
+| `test_erasure` | D | 3812 / `invertTestOperands` |
+| `instrumentLife_erasure` | D | 3825 / `skipLifeOperands` |
+| `allows_erasure` | D | 3840 / `refuseAllowsOperands` |
+| `step_next_erasure` | N | 3854 / `stepInstrumentedZeroVal` |
+| `step_request_erasure` | N | 3867 / `stepInstrumentedZeroVal` |
+| `Step_erasure` | N | 3888 / `stepInstrumentedZeroVal` |
+| `runFrom_erasure` | N | 3949 / `liftOracleMutateOwn` |
+| `run_erasure` | N | 3961 / `liftOracleMutateOwn` |
+| `Steps_erasure` | W | 3930 / `liftOracleMutateOwn` |
+| `step_stuck_iff_of_accepted` | N | 3992 / `stepInstrumentedRefuse` |
+| `runFrom_erasure_of_accepted` | N | 4004 / `liftOracleMutateOwn` |
+| `run_stuck_iff_of_accepted` | N | 4017 / `liftOracleDropAnswer` |
+| `move_preserves` | N | 4352 / `moveDuplicateSlot` |
+| `reinitialize_preserves` | N | 4359 / `reinitializeUnissuedPlace` |
+| `borrow_preserves` | N | 4366 / `borrowNoAdvanceSupply` |
+| `reborrowTo_preserves` | N | 4373 / `reborrowToDropParent` |
+| `reborrow_preserves` | N | 4380 / `reborrowDropAncestors` |
+| `endLoan_preserves` | N | 4387 / `endLoanRemoveParent` |
+| `bind_preserves` | N | 4408 / `bindNoAdvancePlace` |
+| `drop_preserves` | N | 4415 / `dropLocalOnly` |
+| `enter_preserves` | N | 4422 / `enterDuplicateFrameId` |
+| `endLocals_preserves` | N | 4429 / `endLocalsCallerInstead` |
+| `leave_preserves` | N, incomplete invariant | 4436 / `leaveKeepLocalLoans` |
+| `enterDown_preserves` | N | 4443 / `enterDownReuseParentId` |
+| `life_preserves` | N | 4450 / `lifeBindUnindexed` |
+| `adoptDown_preserves` | N | 4457 / `adoptDownUnissuedActivation` |
+| `passDown_preserves` | N | 4464 / `passDownClearParent` |
+| `passDown_call_preserves` | N | 4471 / `passDownOmitPending` |
+| `callLife_preserves` | N | 4478 / `callLifeUnissuedActivation` |
+| `callLife_call_preserves` | N | 4485 / `callLifeKeepPending` |
+| `passOwner_preserves` | N | 4492 / `passOwnerClearCallRoot` |
+| `passOwner_call_preserves` | N | 4499 / `passOwnerOmitPending` |
+| `accessOwner_preserves` | D | 4394 / `accessOwnerConsumeRoot` |
+| `accessLoan_preserves` | D | 4401 / `accessLoanDropParent` |
+| `leave_no_local_loan` | N | 4604 / `leaveIdentity` |
+| `leave_no_activation_slot` | N | 4613 / `leaveIdentity` |
+| `passOwner_freezes` | N | 4622 / `passOwnerNoFreeze` |
+| `leave_retains_caller` | N | 4631 / `leaveAllLoans` |
+| `leave_no_activation_loan` | N | 4640 / `leaveIdentity` |
+| `reborrowTo_live` | N | 4649 / `reborrowToDead` |
+| `adoptDown_live` | N | 4658 / `adoptDownDead` |
+| `leave_live` | N | 4667 / `leaveStranded` |
+| `evalArgs_ok_erasure` | N | 4788 / `zeroOperands` |
+| `evalArgs_trap_erasure` | N | 4801 / `abortOperands` |
+| `loan_has_owned_root` | N | 5298 / `borrowConsumeRoot` |
+| `moved_no_loan` | E | 5308 / `moveIgnoreLoans` |
+| `instrument_erasure` | D | 5318 / `instrumentKeepOldConcrete` |
+| `life_erasure` | D | 5327 / `lifeStoreNoOp` |
+| `callLife_erasure` | D | 5336 / `callLifeStoreNoOp` |
+| `instrument_preserves` | D: supplied preservation transported | 5345 / `instrumentUnissuedPlace` |
+| `readOwner_erasure` | D | 5359 / `readOwnerCorruptConcrete` |
+| `writeOwner_erasure` | D | 5373 / `writeOwnerNoOpConcrete` |
+| `readLoan_erasure` | D | 5388 / `readLoanCorruptConcrete` |
+| `writeLoan_erasure` | D | 5406 / `writeLoanNoOpConcrete` |
+| `borrow_birth` | D | 5426 / `borrowNoAdvanceSupply` |
+| `reborrow_birth` | D | 5439 / `reborrowToDropParent` |
+| `endLoan_supply` | D | 5459 / `endLoanRewindSupply` |
+| `adoptDown_only_arguments` | D | 5468 / `adoptDownNoOp` |
+| `reborrowTo_current` | D, Q | 5483 / `reborrowToInactive` |
+| `passOwner_birth` | D | 5496 / `passOwnerClearCallRoot` |
+| `defer_keeps_store` | D, Q | 5517 / `stepDeferEagerArgs` |
+
+| Generative Law, in Grant.lean | Verdict | Witness: I line / mutant |
+|---|---|---|
+| `fresh_preserves` | N | 509 / `freshNoAdvance` |
+| `fresh_progress` | D | 559 / `freshRefuse` |
+| `depend_preserves` | N | 517 / `dependDuplicatePlace` |
+| `consume_preserves` | N | 525 / `consumeDropBinders` |
+| `release_preserves` | E | 533 / `releaseIgnoreLiveDeps` |
+| `reset_preserves` | N | 541 / `resetNoAdvance` |
+| `endScope_preserves` | N | 549 / `endScopeDropAllBinders` |
+| `depend_progress` | D | 566 / `dependRefuse` |
+| `consume_progress` | D | 578 / `consumeRefuse` |
+| `release_progress` | D | 587 / `releaseRefuse` |
+| `reset_progress` | D | 597 / `resetRefuse` |
+| `endScope_progress` | D | 608 / `endScopeRefuse` |
+| `fresh_generation` | D | 620 / `freshNoAdvance` |
+| `reset_generation` | D | 631 / `resetNoAdvance` |
+| `endScope_non_escape` | D, E | 642 / `endScopeIgnoreDeps` |
+| `allocations_have_live_allocator` | E | 653 / `releaseIgnoreLiveDeps` |
+| `instrument_erasure` | D | 695 / `instrumentKeepOldStore` |
+| `run_erasure` | N | 704 / `runDropResults` |
+
+| Grants Law, in Grant.lean | Verdict | Witness: I line / mutant |
+|---|---|---|
+| `narrow_bounded` | N | 1215 / `narrowTakeRequested` |
+| `acquire_bounded` | E | 1223 / `acquireUncheckedSelected` |
+| `close_bounded` | N | 1232 / `closeEscalateRights` |
+| `rights_never_grow` | N | 1242 / `runOpsMintRight` |
+| `narrow_fresh` | N | 1250 / `narrowNoAdvance` |
+| `acquire_fresh` | N | 1258 / `acquireNoAdvance` |
+| `close_fresh` | N | 1266 / `closeRewindSupply` |
+| `dead_unusable` | D: usability guard | 1276 / `usableIgnoreLive` |
+| `close_consumes` | N | 1284 / `closeKeepLive` |
+| `narrow_consumes` | N | 1293 / `narrowKeepParent` |
+| `consumed_never_revives` | N | 1302 / `runOpsRevive` |
+| `narrow_intersection` | D | 1313 / `narrowTakeRequested` |
+| `acquire_keeps_parent` | N | 1331 / `acquireConsumeParent` |
+
+The Instance bodies use full closed applications, and the Planted examples inspected retain the instantiated hypotheses and negate the complete mutated conclusion. The five `E` cases show why syntactic compliance alone is insufficient. The simulation controls keep erasure fixed. No new malformed classification or missing Law/evidence pairing was found.
+
+For **every `approved: PENDING` exemption**, my verdicts follow. Approval means “acceptable as internal proof plumbing,” not approval to use it to conceal a missing contract Law or to certify its mirrored definitional Law.
+
+**Own — approve each of these 109 exemptions:**
+
+- `fold_preserves`, `move_preserves_result`, `reinitialize_preserves_result`, `compatible_symm`, `insert_loan`, `owner_guard`, `borrow_preserves_result`, `reborrowTo_preserves_result`, `reborrow_preserves_result`, `endLoan_preserves_result`, `accessOwner_preserves_result`, `accessLoan_preserves_result`.
+- `bind_preserves_result`, `drop_preserves_result`, `enter_preserves_result`, `endLocals_preserves_result`, `leave_preserves_result`, `set_views_preserves`, `enterDown_preserves_result`, `life_preserves_result`, `bind_params_progress`.
+- `loan_has_owned_root_of_wf`, `slot_unique`, `moved_no_loan_of_wf`, `instrument_erasure_result`, `life_erasure_result`, `map_metadata_preserves`, `adoptDown_preserves_result`, `passDown_preserves_result`, `passDown_call_preserves_result`, `callLife_preserves_result`.
+- `reinitialize_loans`, `bind_loans`, `fold_loans`, `enter_loans`, `drop_loans`, `endLoan_subset`, `life_subset`, `callLife_call_preserves_result`, `callLife_erasure_result`, `instrument_preserves_result`.
+- `readOwner_erasure_result`, `writeOwner_erasure_result`, `readLoan_erasure_result`, `writeLoan_erasure_result`, `nextLoan_fresh`, `borrow_birth_result`, `reborrow_birth_result`, `endLoan_frames`, `endLoan_supply_result`, `fold_frames`, `drop_absent`.
+- `leave_no_local_loan_result`, `adoptDown_only_arguments_result`, `leave_no_activation_slot_result`, `reborrowTo_current_result`, `passOwner_preserves_result`, `passOwner_call_preserves_result`, `passOwner_freezes_result`, `passOwner_birth_result`.
+- `loan_unique`, `endLoans_retains`, `leave_retains_caller_result`, `endLoans_removed`, `leave_no_activation_loan_result`, `defer_keeps_store_result`, `reborrowTo_live_result`, `adoptDown_live_result`, `leave_frames_proj`, `leave_live_result`.
+- `eval_ok_erasure_result`, `eval_trap_erasure_result`, `evalArgs_ok_erasure_result`, `evalArgs_trap_erasure_result`, `test_erasure_result`, `instrumentLife_erasure_result`, `allows_erasure_result`.
+- `bindLife_erasure_proj`, `dropOut_erasure_proj`, `register_erasure_proj`, `lookup_eraseProgram_proj`, `stepExit_erasure_proj`, `step_next_erasure_result`, `step_request_erasure_result`, `eraseLabel_events_proj`, `eraseLabel_answer_proj`, `Step_erasure_result`, `final?_eraseConfig_proj`, `allows_liftAnswer_proj`.
+- `eval_stuck_of_permitted_inv`, `evalArgs_stuck_of_permitted_inv`, `life_none_of_permitted_inv`, `bindLife_none_of_permitted_inv`, `dropOut_none_of_permitted_inv`, `register_none_proj`, `stepExit_none_of_permitted_inv`, `step_none_of_permitted_inv`, `request_none_of_permitted_inv`, `checkerAccepted_step_inv`, `isStuck_eraseEnding_proj`.
+- `step_det_next_inv`, `step_det_none_inv`, `move_not_checkerAccepted_inv`, `acceptedMove_checkerAccepted_inv`, `acceptedStuck_checkerAccepted_inv`, `unconditionalRunConverse_refuted`, `primFrameStuck_checkerAccepted_inv`, `traceSteps`, `bindMove_checkerAccepted_inv`.
+
+**Own — reject:** `Steps_erasure_result` (:2558). It carries the unconditional multi-step contract that the public Law no longer states independently.
+
+**Generative — approve each of these 14 exemptions:**
+
+`fresh_wf`, `fresh_preserves_result`, `depend_preserves_result`, `consume_preserves_result`, `release_preserves_result`, `reset_preserves_result`, `endScope_preserves_result`, `nextBrand_fresh`, `fresh_generation_result`, `reset_generation_result`, `endScope_non_escape_result`, `allocations_have_live_allocator_of_wf`, `instrument_erasure_result`, `run_erasure_result`.
+
+**Grants — approve each of these 22 exemptions:**
+
+`update_all`, `usable_some`, `consumed_bounded`, `consumed_fresh`, `issue_bounded`, `issue_fresh`, `narrow_bounded_result`, `acquire_bounded_result`, `close_bounded_result`, `rights_never_grow_steps`, `steps_of_runOps`, `narrow_fresh_result`, `acquire_fresh_result`, `close_fresh_result`, `consumed_dead`, `consumed_keeps_dead`, `issue_keeps_dead`, `close_consumes_result`, `narrow_consumes_result`, `consumed_never_revives_steps`, `narrow_intersection_result`, `acquire_keeps_parent_result`.
+
+There are no Representation-lemma exemptions in these files.
+
+VERDICT: CHANGES
