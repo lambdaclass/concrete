@@ -275,7 +275,7 @@ set_option maxHeartbeats 2000000 in
     let state : DischargeState := {}
     let (first, state) ← withLocalDeclD `first (mkConst ``Nat) fun _ =>
       dischargeRefutableContext.run state
-    let (renamed, state) ← withLocalDeclD `renamed (mkConst ``Nat) fun _ =>
+    let (renamed, state) ← withLocalDeclD `first (mkConst ``Nat) fun _ =>
       dischargeRefutableContext.run state
     if first || renamed then throwError "context-cache-invented-contradiction"
     unless state.refutedContexts.size == 1 do throwError "context-cache-not-shared"
@@ -303,7 +303,7 @@ set_option maxHeartbeats 2000000 in
 '''
     instrumented = consumer.replace(instrument, '      IO.println "CONTEXT SEARCH"\n' + instrument)
     for label, text in [('memoized', instrumented), ('context-erased', instrumented.replace(anchor,
-            '  let key := (({ closure := mkConst ``False, instances := #[], declarations := #[] } : DischargeKey), simplify)')),
+            '  let key := (({ closure := mkConst ``False, instances := #[], declarations := #[], settings := closure.settings } : DischargeKey), simplify)')),
             ('raw-type-erased', instrumented.replace('decl.fvarId, decl.type,', 'decl.fvarId, mkConst ``True,'))]:
         with compiled_consumer(consumer_text=text) as meta, tempfile.TemporaryDirectory(prefix='n2-refutation-') as temp:
             path = Path(temp) / 'Refutation.lean'
@@ -325,6 +325,8 @@ def main():
     dependency_controls()
     refutation_controls()
     with compiled_consumer() as meta:
+        from vacuity_cache_identity import controls as identity_controls
+        identity_controls(meta)
         return controls(meta)
 
 

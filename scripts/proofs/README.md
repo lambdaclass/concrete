@@ -575,3 +575,13 @@ The retained complete-key implementation reduces Grant line 1478 from 1,029,916
 to 706,499 heartbeats, while still reporting work-budget INCOMPLETE; all three
 profiled largest Own analyses still exhaust heartbeats. Those limits remain open
 owner questions, rather than successful gate results.
+
+N2 cache identity (amendment-3 fix round 3): expression caches use `Expr.equal`,
+which preserves binder information and names, with collision-checked hashes.
+Refutation and visited keys include complete declarations, local instances,
+options and meta configuration. Mutable metavariables and custom executable
+unfolding predicates are never reused. The bounded N15a regressions are in
+`vacuity_cache_identity.py`, also called by `vacuity_budget.py`. Cache optimizations
+must preserve these identities; ordinary `BEq Expr` is unsuitable for syntax-
+preserving transformations or binder-sensitive solvers. The per-analysis and
+whole-run wall policies remain pending owner as above.

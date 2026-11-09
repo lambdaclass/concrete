@@ -418,3 +418,27 @@ qualifying gate result. The whole-scope result remains pending the coordinator;
 remaining wall-policy and search/budget questions remain pending owner.
 
 Coordinator reviewers must do the best long-term thing rather than cut corners.
+
+### Fix round 3: structural cache identity
+
+N15a F1 reproduced on `296cbad05` before repair, with a bounded consumer-only
+Lean probe: orders `[b1,b2]` produced `false,false` and `[b2,b1]` produced
+`true,true`; expected bad-discharge answers are `false,true` and `true,false`.
+Replacing only the function binder type using `LocalContext.setType` gave
+`before=true after=true fresh=false` (the probe uses `withFreshCache` to isolate
+Lean's own infer-type cache). The repaired answers match all three expectations.
+
+The structural owner is the N2 analysis cache identity contract, not a budget
+exception. Every expression-keyed audit map now uses `Expr.equal`, including
+pre-existing projection, graph interning, dependency, mutation, collection and
+replacement maps. The ordinary Expr hash remains lawful: collisions are resolved
+by full equality. Closed refutation keys retain binder names/info and declaration
+kind/value; raw keys additionally retain declaration identities, names and indices.
+Both include options and meta configuration; visited uses the complete raw context.
+Mutable expressions/contexts and executable unfolding predicates bypass refutation
+cache publication and lookup. Immutable environment is scoped to each analysis.
+`certificateDependency` through `end Discharge` remains byte-identical.
+
+`vacuity_cache_identity.py` checks both orders, same-FVarId replacement, binder
+info/name/universe separation in interning and mutation, and options/mode keys.
+Per-analysis interpretation and wall policy remain **pending owner**.

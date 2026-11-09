@@ -5,6 +5,13 @@ import Lean
 open Lean Meta
 namespace Vacuity
 
+/-- Audit caches preserve all expression syntax, including binder names and
+    BinderInfo. Lean's ordinary BEq Expr deliberately ignores these fields.
+    Expr.hash is compatible with this finer equality (collisions are checked).
+    Keep this instance local: imported clients retain Lean's usual equality. -/
+local instance auditExprBEq : BEq Expr := ⟨Expr.equal⟩
+
+
 structure Tagged where
   name : Name
   info : ConstantInfo
@@ -803,14 +810,32 @@ def validateCertificate (entry : CertificateEntry) (candidate : Certificate) :
 
 end Discharge
 
+/-- Options are compared exactly; a constant hash is lawful and avoids treating
+    an options fingerprint as identity. Environment is immutable per analysis. -/
+local instance : Hashable Options := ⟨fun _ => 0⟩
+
+structure DischargeSettings where
+  options : Options
+  config : String
+  zeta : Array FVarId
+  mode : Bool × Bool × Nat
+  deriving BEq, Hashable
+
+def dischargeSettings : MetaM DischargeSettings := do
+  let ctx ← readThe Meta.Context
+  return ⟨← getOptions, reprStr (← getConfig), ctx.zetaDeltaSet.toArray,
+    (ctx.univApprox, ctx.inTypeClassResolution, ctx.synthPendingDepth)⟩
+
 structure DischargeKey where
   closure : Expr
   instances : Array (Name × Expr)
-  declarations : Array (Nat × Option Expr × Bool)
+  declarations : Array (Name × BinderInfo × Nat × Option Expr × Bool)
+  settings : DischargeSettings
   deriving BEq, Hashable
 
 structure DischargeRawContext where
-  declarations : Array (FVarId × Expr × Option Expr × BinderInfo × Nat × Bool)
+  settings : DischargeSettings
+  declarations : Array (FVarId × Expr × Option Expr × BinderInfo × Nat × Bool × Name × Nat)
   instances : Array (Name × Expr)
   deriving BEq, Hashable
 
@@ -822,21 +847,22 @@ def dischargeRawContext : MetaM DischargeRawContext := do
   let mut declarations := #[]
   for decl in (← getLCtx) do
     declarations := declarations.push (decl.fvarId, decl.type,
-      decl.value? (allowNondep := true), decl.binderInfo, dischargeDeclKind decl, decl.isLet)
-  return ⟨declarations, (← getLocalInstances).map fun i => (i.className, i.fvar)⟩
+      decl.value? (allowNondep := true), decl.binderInfo, dischargeDeclKind decl, decl.isLet, decl.userName, decl.index)
+  return ⟨← dischargeSettings, declarations, (← getLocalInstances).map fun i => (i.className, i.fvar)⟩
 
 structure DischargeState where
   budget : Option WorkBudget := none
   remaining : Nat := 20000
-  visited : Std.HashSet (Expr × Array FVarId) := {}
+  visited : Std.HashSet (Expr × DischargeRawContext) := {}
   refutedTypes : Std.HashMap DischargeKey Bool := {}
   refutedContexts : Std.HashMap (DischargeKey × Bool) Bool := {}
   rawRefutedTypes : Std.HashMap (Expr × DischargeRawContext) Bool := {}
   rawRefutedContexts : Std.HashMap (DischargeRawContext × Bool) Bool := {}
 
-/-- Alpha-canonical closed contexts retain every declaration and let value.
+/-- Closed contexts retain every declaration, binder field and let value.
     Results are analysis-private; metavariables are never cached. Local instance
-    order is part of the key, independent of binder names and fresh FVarIds. -/
+    order, options and meta configuration are part of the key. Closure keys
+    abstract fresh FVarIds but retain binder names. -/
 def dischargeClosure (e : Expr) : MetaM (Option DischargeKey) := do
   if e.hasMVar || e.hasLevelMVar then return none
   let mut xs := #[]
@@ -851,15 +877,29 @@ def dischargeClosure (e : Expr) : MetaM (Option DischargeKey) := do
     let value := decl.value? (allowNondep := true)
     if let some v := value then
       if v.hasMVar || v.hasLevelMVar then return none
-    declarations := declarations.push (kind, value.map (·.abstract xs), decl.isLet)
+    declarations := declarations.push (decl.userName, decl.binderInfo, kind, value.map (·.abstract xs), decl.isLet)
   let mut instances := #[]
   for inst in (← getLocalInstances) do
     if inst.fvar.hasMVar || inst.fvar.hasLevelMVar then return none
     instances := instances.push (inst.className, inst.fvar.abstract xs)
   let closure ← mkLambdaFVars xs e (usedLetOnly := false) (generalizeNondepLet := false)
-  return some ⟨closure, instances, declarations⟩
+  return some ⟨closure, instances, declarations, ← dischargeSettings⟩
+
+/-- Mutable metavariables and executable unfolding predicates cannot have a
+    structural identity. Such calls compute normally and never publish entries. -/
+def dischargeCacheable (context : DischargeRawContext) (e : Expr) : MetaM Bool := do
+  if (← readThe Meta.Context).customCanUnfoldPredicate?.isSome then return false
+  if e.hasMVar || e.hasLevelMVar then return false
+  for (_, type, value, _, _, _, _, _) in context.declarations do
+    if type.hasMVar || type.hasLevelMVar then return false
+    if let some v := value then
+      if v.hasMVar || v.hasLevelMVar then return false
+  for (_, inst) in context.instances do
+    if inst.hasMVar || inst.hasLevelMVar then return false
+  return true
 
 def dischargeRefutableTypeAt (context : DischargeRawContext) (domain : Expr) : StateRefT DischargeState MetaM Bool := do
+  unless ← dischargeCacheable context domain do return ← refutableType domain
   let raw := (domain, context)
   if let some cached := (← get).rawRefutedTypes[raw]? then return cached
   let some key ← dischargeClosure domain | return ← refutableType domain
@@ -873,6 +913,7 @@ def dischargeRefutableTypeAt (context : DischargeRawContext) (domain : Expr) : S
   return result
 
 def dischargeRefutableContextAt (context : DischargeRawContext) (simplify : Bool := false) : StateRefT DischargeState MetaM Bool := do
+  unless ← dischargeCacheable context (mkConst ``False) do return ← refutableContext simplify
   let raw := (context, simplify)
   if let some cached := (← get).rawRefutedContexts[raw]? then return cached
   let some closure ← dischargeClosure (mkConst ``False) | return ← refutableContext simplify
@@ -903,13 +944,14 @@ partial def falseDischarge (e : Expr) : StateRefT DischargeState MetaM Bool := d
   let e := cleanSpine e
   -- The same expression in a different hypothetical context is a different
   -- audit state: an unreachable branch cannot mask a later supplied use.
-  let key := (e, (← getLCtx).getFVarIds)
-  if (← get).visited.contains key then return false
+  let context ← dischargeRawContext
+  let key := (e, context)
+  let cacheable ← dischargeCacheable context e
+  if cacheable && (← get).visited.contains key then return false
   let fuel := (← get).remaining
   if let some budget := (← get).budget then chargeWork budget "false-discharge-budget"
   else if fuel == 0 then throwError "false-discharge-budget"
-  modify fun state => { state with remaining := fuel - 1, visited := state.visited.insert key }
-  let context ← dischargeRawContext
+  modify fun state => { state with remaining := fuel - 1, visited := if cacheable then state.visited.insert key else state.visited }
   let refuted ← dischargeRefutableTypeAt context (← inferType e)
   if refuted && !e.hasFVar then return !(← dischargeRefutableContextAt context true)
   let e ← whnfD e
