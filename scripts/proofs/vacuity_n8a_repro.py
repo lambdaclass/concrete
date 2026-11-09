@@ -24,9 +24,8 @@ def observe (label : String) (proof : Expr) (expected : String)
     for x in assumptions do
       let id ← term x
       let type ← term (← inferType x)
-      let (origin, graph) := internOrigin (.hypothetical id id) |>.run (← get).graph
-      modify fun s => { s with graph }
-      inputs := inputs.push ({ term := id, type, origin } : Input)
+      let o ← origin (.hypothetical id id)
+      inputs := inputs.push ({ term := id, type, origin := o } : Input)
     let proofId ← term proof
     let target ← term (← inferType proof)
     let query : Query := { template := { name := `Baseline.branch, levels := [], mode := .body }, inputs := #[], guards := #[], hypothetical := inputs, mode := .body }
@@ -43,22 +42,20 @@ def observe (label : String) (proof : Expr) (expected : String)
 
 set_option maxHeartbeats 2000000 in
 #eval show MetaM Unit from do
-  observe "bad-chain" (mkConst ``bad1) "admitted"
+  observe "bad-chain" (mkConst ``bad1) "rejected supplier=impossible"
 set_option maxHeartbeats 2000000 in
 #eval show MetaM Unit from do
   withLocalDeclD `h (mkConst ``Empty) fun h => do
-    observe "useImpossibleLet" (mkApp (mkConst ``useImpossibleLet) h) "admitted" #[h]
+    observe "useImpossibleLet" (mkApp (mkConst ``useImpossibleLet) h) "rejected supplier=impossible" #[h]
 set_option maxHeartbeats 2000000 in
 #eval show MetaM Unit from do
   observe "directApp" (mkConst ``directApp) "rejected supplier=suppliedByBool"
 set_option maxHeartbeats 2000000 in
 #eval show MetaM Unit from do
-  observe "letApp" (mkConst ``letApp)
-    "INCOMPLETE analysis-budget-or-error Baseline.instance stage=certificate-dependencies law=Baseline.law case=letApp unavailable-certificate-transfer suppliedByBool"
+  observe "letApp" (mkConst ``letApp) "rejected supplier=suppliedByBool"
 set_option maxHeartbeats 2000000 in
 #eval show MetaM Unit from do
-  observe "cert01" (mkConst ``cert01)
-    "INCOMPLETE analysis-budget-or-error Baseline.instance stage=certificate-dependencies law=Baseline.law case=cert01 false-discharge-budget"
+  observe "cert01" (mkConst ``cert01) "admitted"
 """
 
 
@@ -88,7 +85,7 @@ set_option maxHeartbeats 2000000 in
     withLocalDeclD `hd (← mkEq dec (mkConst ``Bool.true)) fun hd => do
       withLocalDeclD `hn (← mkArrow eq (mkConst ``False)) fun hn => do
         observe "F3b-simp" (← simpProof)
-          "INCOMPLETE analysis-budget-or-error Baseline.instance stage=certificate-dependencies law=Baseline.law case=F3b-simp false-discharge-budget" #[y, hd, hn]
+          "INCOMPLETE analysis-budget-or-error Baseline.instance stage=certificate-dependencies law=Baseline.law case=F3b-simp unavailable-certificate-transfer propext" #[y, hd, hn]
 """
     with compiled_consumer() as meta, tempfile.TemporaryDirectory(prefix="n8a-baseline-") as temp:
         work = Path(temp)
@@ -106,22 +103,18 @@ set_option maxHeartbeats 2000000 in
 
 def historical_controls(remove_cycle_check=False, poison_leaf=False):
     import vacuity_certificates as certificates
-    certificates.DRIVER = certificates.DRIVER.replace(
-        "let (actual, _) ← action.run {}",
-        'let (actual, state) ← action.run {}\n'
-        '  IO.println s!"COST {label}: work={state.worklistSteps} terms={state.graph.terms.size} nodes={state.graph.nodes.size} templates={state.graph.templates.size} queries={state.queryCount} components={state.componentCount}"')
     if poison_leaf:
         anchor = "theorem dependency0 : False → False := fun h => h"
         assert certificates.POSITIVE.count(anchor) == 1
         certificates.POSITIVE = certificates.POSITIVE.replace(anchor,
             "axiom impossible : False\ntheorem dependency0 : False → False := fun _ => impossible")
-        print("BASELINE MUTATION: dependency leaf replaced by impossible", flush=True)
+        print("MUTATION: dependency leaf replaced by impossible", flush=True)
     source = (HERE / "vacuity.lean").read_text()
     if remove_cycle_check:
-        anchor = '  if (← get).pending.contains key then throwError "cyclic-certificate-dependency"\n'
+        anchor = '  if (← get).pendingQueries.contains q then\n    throwError "cyclic-certificate-dependency"\n'
         assert source.count(anchor) == 1
         source = source.replace(anchor, "")
-        print("BASELINE MUTATION: pending-cycle rejection deleted in private consumer", flush=True)
+        print("MUTATION: pending-cycle rejection deleted in private consumer", flush=True)
     with compiled_consumer(consumer_text=source) as meta:
         return certificates.controls(meta)
 

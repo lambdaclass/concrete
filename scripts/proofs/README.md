@@ -154,23 +154,33 @@ blockers. No measured completion bound for an unimplemented solver is claimed.
 **Phase B slice 2a certificate dependencies (R-0219):** the accepted A2 protocol
 in [N2-discharge-solver.md](N2-discharge-solver.md) now has a direct entry point,
 `Vacuity.Discharge.validateCertificate : CertificateEntry → Certificate → Solver
-CertificateResult`, in `vacuity.lean`. It does not change the consumer. It retains
-the exact entry/query, target, permitted hypothetical origins, guards and immutable
-environment in a completed derivation. Actual applications transfer global
-supplier origins through exposed bodies (including opaque theorem values), types,
-implicit/proof/data arguments and generated simp declarations. Raw graph
-construction and dependency obligations share the existing 20,000-work counter;
-no validation phase renews the original heartbeat deadline.
+CertificateResult`, in `vacuity.lean`. It does not change the consumer. The slice-1
+`Graph` and `Work` queue are the single owner of dependency traversal (the earlier
+parallel `certificateDependency` walker is deleted). Templates (`compileTemplate`)
+and transfer nodes (`compileNode`) are compiled once over closed terms with
+`.forallBinder` and `.binder` distinguished, and `evalNode` / `evalCall` /
+`applyValue` evaluate over those compiled nodes with formal-to-actual `Input` and
+`Origin` (`Origin.substitution`, `Origin.field`) substitution across `let`,
+projection, and higher-order closures. It retains the exact entry/query, target,
+permitted hypothetical origins, guards and immutable environment in a completed
+derivation. Raw graph construction and dependency obligations share the existing
+20,000-work counter; no validation phase renews the original heartbeat deadline.
 
-Admission uses only completed transfers and finite structural evidence. An empty
-inductive hypothetical domain has a direct metadata derivation; it cannot hide a
-supplied argument because substitution precedes binder opening. Pending candidates
-are never available as exclusion evidence. Pending execution/dependency cycles,
-unavailable non-refutable opaque transfers, unsupported quotient transfers and
-exhaustion return a retained Instance/law/case INCOMPLETE at
-`stage=certificate-dependencies`. A supplied impossible producer instead rejects
-the candidate and identifies its declaration and producing origin; this result is
-not an original Instance false-discharge finding.
+Admission uses only completed transfers and finite structural evidence. Binder
+bodies and codomains are always validated; a `structuralExclusions` entry is
+recorded only at an actual 0-constructor recursor elimination of a permitted
+hypothetical empty-inductive assumption. Pending candidates are never available
+as exclusion evidence. Pending execution/dependency cycles, unavailable bodyless
+axiom transfers (Amendment 2), unsupported quotient transfers and exhaustion
+return a retained Instance/law/case INCOMPLETE at `stage=certificate-dependencies`.
+When a bodyless axiom such as `propext` is applied to arguments constructed
+solely from permitted hypothetical assumptions, origin transfer establishes that
+its result is purely hypothetical-derived (never blamed as a supplied
+contradiction on `propext`), while still returning the Amendment 2
+`unavailable-certificate-transfer propext` INCOMPLETE until the owner's
+trust-policy decision is recorded. A supplied impossible producer instead
+rejects the candidate and identifies its declaration and transferred producing
+origin chain; this result is not an original Instance false-discharge finding.
 
 The R-0219 long-term design remains the A2 prerequisite graph and application-sensitive
 summary/SCC solver: extend finite admission derivations to independently admitted
@@ -181,12 +191,17 @@ SCC invariants, consumer integration and measured historical completion remain
 later slices; the full solver is not claimed complete. The earlier
 [origin counterexample](N2-slice2-certificate-blocker.md) remains historical evidence.
 
-`vacuity_certificates.py` directly asserts exact results for the original injected
-simp certificate (supplier `impossible`), genuine library decide/matcher evidence,
-a complete dependency-chain baseline, that chain after the enclosing Instance has
-spent its shared allowance, and attempted self-exclusion of the injected producer.
-It also checks the retained origin, finite rank, unchanged aggregate budget and
-absence of admission on rejected/incomplete results. The focused runner includes
+`vacuity_certificates.py` directly asserts exact results for 13 non-vacuous
+controls: the original injected simp certificate (supplier `impossible`, with
+`Origin.substitution` traced from the entry argument), unapplied and `let`-wrapped
+empty-binder reproducers (`useImpossibleBinder`, `useImpossibleLet`), a `let`-headed
+supplied contradiction (`letApp` with `suppliedByBool`), a genuine pending-query
+cycle (`cyclic-certificate-dependency`), an 80-step dependency chain with both a
+valid leaf (`dependency-chain-baseline`) and a poisoned leaf (`dependency-chain-poisoned`),
+structural empty-inductive elimination (`Empty.elim h` with `rank=1 exclusions=1`),
+purely hypothetical `propext` (`unavailable-certificate-transfer propext`), genuine
+library decide/matcher evidence (`¬ (0 = 1) := by decide`), the `F3b` decide/matcher
+and `simpAll` certificates, and shared-budget exhaustion. The focused runner includes
 these controls after its unchanged 32 discharge controls:
 
 ```
@@ -365,9 +380,13 @@ axiom-origin/transport relation with checked evidence, rather than an axiom trus
 list or a non-refutable-result exemption. It requires design acceptance before
 implementation. No new solver entry or consumer switch is included in this record.
 
-**N8a slice-2a reproduction (R-0219):** [measured baseline findings](N2-N8a-reproduction.md)
-confirm the binder/application/origin defects, basic-decide and F3b certificate
-budget failures, and vacuous historical controls. The required long-term repair
-is one Graph/Work evaluator over closed templates with typed actual-origin
-substitution; delete the parallel certificate walker. No replacement evaluator,
-primitive trust rule or phase-B completion is claimed by the reproduction.
+**N8a slice-2a repair and measured controls (R-0219):**
+[N2-N8a-reproduction.md](N2-N8a-reproduction.md) records the completed slice-2a
+repair (single `Graph`/`Work` evaluator over closed templates, deletion of the
+parallel `certificateDependency` walker, `.forallBinder` vs `.binder`
+distinction with unconditional body validation, structural exclusions only at
+actual 0-constructor recursor eliminations of permitted hypotheticals, genuine
+`Origin.substitution` and `Origin.field` transfer, and 13 non-vacuous
+certificate controls verified against `--remove-cycle-check` and `--poison-leaf`
+mutations), together with the measured work units and the hypothetical-only
+`propext` observation for the owner's pending Amendment 2 decision.
