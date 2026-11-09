@@ -158,10 +158,14 @@ size_report() { # size_report NAME BACKEND EXE
   printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$target" "$bytes" "${text:-unavailable}" >>"$sizes"
 }
 
-rows=$(manifest_rows bir)
+rows=$(manifest_rows)
 mkdir -p "$work/ctl"
 first_name= first_program= first_expect=
 while IFS=$'\t' read -r name program expect; do
+  case "$program" in
+    bir:*) ;;
+    *) echo "slice0_artifacts: $name: unsupported program $program" >&2; exit 1 ;;
+  esac
   if [ -z "$first_name" ]; then first_name=$name first_program=$program first_expect=$expect; fi
   d="$work/ex/$name"
   t0=$(now_ms)
