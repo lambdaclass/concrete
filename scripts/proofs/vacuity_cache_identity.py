@@ -53,6 +53,20 @@ theorem b2 : H2 := fun _ _ _ _ => False.elim suppliedFalse
   let c ← withTransparency .all dischargeRawContext
   if a == c then throwError "mode-collapsed"
   IO.println "KEYS options mode distinct"
+
+#eval show MetaM Unit from do
+  let env ← getEnv
+  -- Pin the importer contract used by the cheap forward-reference rejection.
+  for i in [:env.header.moduleData.size] do
+    for imported in env.header.moduleData[i]!.imports do
+      if let some j := env.getModuleIdx? imported.module then
+        unless j.toNat < i do throwError "module-import-order"
+  let budget ← IO.mkRef ({} : AnalysisUsage)
+  let positive ← moduleDepends `Lean `Init (some budget)
+  let negative ← moduleDepends `Init `Lean (some budget)
+  let self ← moduleDepends `Lean `Lean (some budget)
+  unless positive && !negative && self do throwError "module-dependency-direction"
+  IO.println "MODULES import-order checked forward=false backward=true self=true"
 '''
 def controls(meta):
     with tempfile.TemporaryDirectory(prefix='n2-cache-identity-') as temp:
@@ -66,6 +80,7 @@ def controls(meta):
         'SETTYPE before=true after=false fresh=false',
         'KEYS interning mutation binder-info binder-name universe distinct',
         'KEYS options mode distinct',
+        'MODULES import-order checked forward=false backward=true self=true',
     ]
     assert result.stdout.splitlines() == expected, result.stdout
     for line in expected: print('PASS identity ' + line, flush=True)

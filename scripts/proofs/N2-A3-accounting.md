@@ -442,3 +442,14 @@ cache publication and lookup. Immutable environment is scoped to each analysis.
 `vacuity_cache_identity.py` checks both orders, same-FVarId replacement, binder
 info/name/universe separation in interning and mutation, and options/mode keys.
 Per-analysis interpretation and wall policy remain **pending owner**.
+
+The bounded Own:4269 planted reproduction confirms the reported work exhaustion:
+20,000 work, 833 instrumented heartbeats; charges were 10,838 constant traversal,
+7,925 module ancestry, 483 mutation, 367 may-mention, 234 mentions and 154 DFS.
+The importer-order repair rejects forward module references without walking
+ancestry: Own:4269 now PASS at 12,941 work / 680 diagnostic heartbeats (34 ms
+analysis). Charges: constants 10,841, module ancestry 263, may-mention 417,
+mutation 651, withProtected 354, mentions 258, DFS 157. Thus the former bound
+was dominated by avoidable module traversal, not a genuine >20,000 obligation.
+The control checks every loaded import edge respects Lean's import-before-
+importer invariant, plus positive, negative and self dependency queries.

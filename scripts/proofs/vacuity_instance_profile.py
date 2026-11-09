@@ -41,6 +41,51 @@ set_option maxHeartbeats 2000000 in
 '''
 
 
+PLANTED_DRIVER = r"""
+import N2Meta
+import ConcreteSpec.Proofs.Grant
+import ConcreteSpec.Proofs.Own
+open Lean Meta Vacuity
+set_option maxHeartbeats 2000000 in
+#eval show MetaM Unit from do
+  let env ← getEnv
+  let all := env.constants.map₁.toList ++ env.constants.map₂.toList
+  let selected := all.filter fun (n, _) => SELECTION
+  unless selected.length == 1 do throwError "profile-selection-count"
+  let instances := all.filter fun (n, _) => (toString n).endsWith "INSTANCE_SUFFIX"
+  unless instances.length == 1 do throwError "profile-instance-count"
+  let (iname, ici) := instances.head!
+  let value := cleanSpine ici.value!
+  let .const law levels := value.getAppFn' | throwError "profile-instance-head"
+  let lawInfo ← getConstInfo law
+  let lawDoc := (← findDocString? env law).getD ""
+  let subjects := quoted ((between lawDoc "Law (subject " ").").getD "")
+  let mut boundaries := #[]
+  for name in subjects do
+    let (some resolved, _) ← (resolve all law name).run {} | throwError "profile-subject"
+    boundaries := boundaries.push resolved
+  let ic : InstanceCase := { decl := iname, law, key := "profile", args := value.getAppArgs, levels }
+  for (n, ci) in selected do
+    let doc := (← findDocString? env n).getD ""
+    let some subjectText := field doc "subject" | throwError "profile-subject-tag"
+    let some mutantText := field doc "mutant" | throwError "profile-mutant-tag"
+    let (some subject, _) ← (resolve all n subjectText).run {} | throwError "profile-subject-resolution"
+    let (some mutant, _) ← (resolve all n mutantText).run {} | throwError "profile-mutant-resolution"
+    let job : AnalysisJob := {
+      name := n, stage := "planted", law := some law, caseName := "profile"
+      action := do
+        let expected ← counterexample lawInfo ic subject mutant boundaries (← get).budget
+        Lean.Meta.check expected
+        unless closed ci.type && (← protectedEq ci.type expected (boundaries.push mutant) (← get).budget) do
+          fail "planted-proposition" n s!"law={law} case=profile"
+    }
+    let start ← IO.monoMsNow
+    let (_, state) ← (isolated (← readThe Core.Context) job).run {}
+    IO.println s!"PROFILE elapsed-ms={(← IO.monoMsNow) - start}"
+    for f in state.findings do IO.println s!"{f.status} {f.code} {f.name} {f.detail}"
+"""
+
+
 def instrument(text):
     import re
     text = text.replace('  work : Nat := 0',
@@ -101,12 +146,17 @@ def main():
     parser.add_argument('--suffix', required=True, help='e.g. Own.lean:4258»; must select exactly one declaration')
     parser.add_argument('--consumer', type=Path, default=HERE / 'vacuity.lean')
     parser.add_argument('--profile', action='store_true')
+    parser.add_argument('--instance-suffix', help='Profile one planted analysis paired with this instance suffix')
     args = parser.parse_args()
     if not args.suffix.endswith('»') or any(c in args.suffix for c in '\n\r"\\'):
         parser.error('suffix must be a literal anonymous declaration suffix ending in »')
     scope = 'ConcreteSpec.Proofs.Grant,ConcreteSpec.Proofs.Own'
     selection = '(toString n).endsWith "' + args.suffix + '"'
     driver = DRIVER.replace('SELECTION', selection).replace('COUNT', '1')
+    if args.instance_suffix:
+        if any(c in args.instance_suffix for c in '\n\r"\\'):
+            parser.error('invalid instance suffix')
+        driver = PLANTED_DRIVER.replace('SELECTION', selection).replace('INSTANCE_SUFFIX', args.instance_suffix)
     text = args.consumer.read_text()
     if args.profile:
         text = instrument(text)

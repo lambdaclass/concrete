@@ -585,3 +585,9 @@ unfolding predicates are never reused. The bounded N15a regressions are in
 must preserve these identities; ordinary `BEq Expr` is unsuitable for syntax-
 preserving transformations or binder-sensitive solvers. The per-analysis and
 whole-run wall policies remain pending owner as above.
+
+Module dependency pruning uses Lean's import-before-importer module order
+(`Lean/Environment.lean`, `importModulesCore.go`: `goRec` precedes appending
+`moduleNames`). An earlier module cannot reference a later subject. Unknown
+module provenance remains conservative. `vacuity_cache_identity.py` checks this
+contract on the loaded import graph and checks both dependency directions.

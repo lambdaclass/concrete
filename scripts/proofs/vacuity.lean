@@ -1014,6 +1014,11 @@ partial def moduleDepends (module target : Name) (budget : Option WorkBudget) : 
     if let some answer := (← b.get).modules[(module, target)]? then return answer
   let env ← getEnv
   let some idx := env.getModuleIdx? module | return true
+  -- Lean's importer visits every import before appending its importer to
+  -- moduleNames (Environment.lean, importModulesCore.go). An earlier module
+  -- cannot refer forward to a later one. Do not walk its entire library DAG.
+  if let some targetIdx := env.getModuleIdx? target then
+    if idx.toNat < targetIdx.toNat then return false
   let mut answer := false
   for imported in env.header.moduleData[idx.toNat]!.imports do
     useWork budget
