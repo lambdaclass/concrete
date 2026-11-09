@@ -1,0 +1,12 @@
+MEASURE c9-new commit=3e22e6417cd4c84d658fd7d4601d11ad0b160454
+CENSUS roots=3 declarations=1761 uniqueExpr=88075 constantEdges=25284 userHeartbeats=1571
+ROOT ConcreteSpec.Core.Vacuity.«⟪example⟫ConcreteSpec/Proofs/Ident.lean:1266»
+ROOT ConcreteSpec.Core.KeyConstruct.collectKeysIn_sound
+ROOT ConcreteSpec.Core.Vacuity.«⟪example⟫ConcreteSpec/Proofs/Ident.lean:1273»
+MEASURE c6-current commit=6477c65a79aa715c60b32a4b025de204533c65b7
+CENSUS roots=5 declarations=3684 uniqueExpr=427568 constantEdges=87793 userHeartbeats=4771
+ROOT ConcreteSpec.Core.Observe.Evidence.«⟪example⟫ConcreteSpec/Proofs/ObserveEvidence.lean:150»
+ROOT ConcreteSpec.Core.Observe.Evidence.«⟪example⟫ConcreteSpec/Proofs/ObserveEvidence.lean:143»
+ROOT ConcreteSpec.Core.Observe.trapLine_injective
+ROOT ConcreteSpec.Core.Observe.Evidence.«⟪example⟫ConcreteSpec/Proofs/ObserveEvidence.lean:156»
+ROOT ConcreteSpec.Core.Observe.Evidence.«⟪example⟫ConcreteSpec/Proofs/ObserveEvidence.lean:163»
