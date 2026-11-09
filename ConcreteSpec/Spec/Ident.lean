@@ -761,7 +761,16 @@ def SourcePath.parse (raw : String) : Except Refusal SourcePath :=
   else if good : ∀ cs ∈ parts, ComponentOk cs then
     .ok ⟨parts, List.splitOn_ne_nil '/' raw.toList, good⟩
   else
-    let bad := (parts.find? fun cs => !decide (ComponentOk cs)).getD []
+    let bad? := parts.find? fun cs => !decide (ComponentOk cs)
+    have present : bad?.isSome := by
+      cases found : bad? with
+      | some _ => rfl
+      | none =>
+        have all := List.find?_eq_none.mp found
+        exact False.elim (good (by
+          intro cs member
+          simpa using all cs member))
+    let bad := bad?.get present
     .error ⟨raw, bad, componentReason bad⟩
 
 /-- A closed source identity used by the existing examples. -/
@@ -794,10 +803,9 @@ instance (sp : Span) (source : SourceText) : Decidable (sp.LocationOk source) :=
   unfold Span.LocationOk
   infer_instance
 
-/-- A span's path is relative to the project root and uses forward slashes: it is not empty,
-does not start with `/`, and holds no `\`. This is the minimal syntactic check; that the path is
-the one normalized path of its file (no drive prefix such as `C:`, no `.` or `..` segment, no
-empty segment) is part of elaboration's site-table obligation (README obligation O1). -/
+/-- A compatibility view of the older rendering properties. Every structured path satisfies
+this proposition; it is never a reporting admission check. `SourcePath` additionally excludes
+traversal, empty components and drive prefixes in its representation. -/
 def Span.PathOk (sp : Span) : Prop :=
   sp.path.render.toList ≠ [] ∧ sp.path.render.toList.head? ≠ some '/' ∧ '\\' ∉ sp.path.render.toList
 

@@ -105,6 +105,20 @@ theorem SourcePath.accepted_render (raw : String) (path : SourcePath)
     simp [SourcePath.render, List.intercalate_splitOn]
   · contradiction
 
+/-- Helper (inversion). Every parser refusal retains the exact offending raw spelling.
+(approved: PENDING). -/
+theorem SourcePath.refusal_input (raw : String) (diagnostic : SourcePath.Refusal)
+    (refused : SourcePath.parse raw = .error diagnostic) : diagnostic.input = raw := by
+  unfold SourcePath.parse at refused
+  dsimp only at refused
+  split at refused
+  · cases refused; rfl
+  · split at refused
+    · cases refused; rfl
+    · split at refused
+      · contradiction
+      · cases refused; rfl
+
 /-- A parser mutant that discards all source identities. -/
 def SourcePath.refuseAll (raw : String) : Except Refusal SourcePath :=
   .error ⟨raw, [], .empty⟩

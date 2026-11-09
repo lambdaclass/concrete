@@ -116,11 +116,106 @@ abbrev SiteTable := AList SiteId Span
 abbrev SourceTable := AList SourcePath SourceText
 
 /-- A well-formed site table gives every resolved site a project-relative, forward-slash path and
-checks its range, line and byte column against that path's actual source bytes. Elaboration's
-stronger normalized-path obligation remains O1. -/
+checks its range, line and byte column against that path's actual source bytes.
+Path syntax is carried by `SourcePath`, independently of this byte-correspondence predicate. -/
 def SiteTable.Valid (sources : SourceTable) (sites : SiteTable) : Prop :=
   ∀ site sp, AList.lookup sites site = some sp → sp.PathOk ∧
     ∃ source, AList.lookup sources sp.path = some source ∧ sp.LocationOk source
+
+/-- The complete source boundary input. Site spans already carry structured identities, while
+file paths are raw external spellings and must pass the strict parser. -/
+structure ProjectSources where
+  files : AList String SourceText
+  sites : SiteTable
+  deriving DecidableEq, Repr
+
+/-- Admission failures retain the offending input. A coordinate mismatch is also refused:
+accepting one would claim source correspondence without the source bytes establishing it. -/
+inductive SourceLoadRefusal where
+  | malformed (file : String × SourceText) (diagnostic : SourcePath.Refusal)
+  | duplicateFile (path : SourcePath)
+  | duplicateSite (site : SiteId)
+  | missingFile (entry : SiteId × Span)
+  | invalidLocation (entry : SiteId × Span) (bytes : SourceText)
+  deriving DecidableEq, Repr
+
+/-- The admitted tables contain data, not a stored assertion of their own correctness. The
+loader's operational laws establish completeness, uniqueness and byte correspondence. -/
+structure LoadedProject where
+  sources : SourceTable
+  sites : SiteTable
+  deriving DecidableEq, Repr
+
+/-- Whole-project admission or a named refusal. There is no partial-success constructor. -/
+inductive SourceLoadResult where
+  | admitted (project : LoadedProject)
+  | refused (diagnostic : SourceLoadRefusal)
+  deriving DecidableEq, Repr
+
+/-- Parse every file in order, stopping with a named error rather than dropping a malformed file. -/
+def LoadedProject.parseFiles : AList String SourceText → Except SourceLoadRefusal SourceTable
+  | [] => .ok []
+  | file :: rest =>
+    match SourcePath.parse file.1 with
+    | .error diagnostic => .error (.malformed file diagnostic)
+    | .ok path => match parseFiles rest with
+      | .error diagnostic => .error diagnostic
+      | .ok files => .ok ((path, file.2) :: files)
+
+/-- Locate a duplicate identity, including equal duplicate entries. The entire tail is searched,
+so keeping the first occurrence is never an admission policy. -/
+def LoadedProject.firstDuplicate {α : Type} [DecidableEq α] : List α → Option α
+  | [] => none
+  | key :: rest => if key ∈ rest then some key else firstDuplicate rest
+
+/-- Check the source binding of a supplied site. Coordinates are checked only at this admission
+boundary, never in `trapTerminal`; malformed locations have no reporting fallback. -/
+def LoadedProject.siteIssue (sources : SourceTable) (entry : SiteId × Span) :
+    Option SourceLoadRefusal :=
+  match AList.lookup sources entry.2.path with
+  | none => some (.missingFile entry)
+  | some bytes => if entry.2.LocationOk bytes then none
+      else some (.invalidLocation entry bytes)
+
+/-- Search for a source-binding error without changing the supplied site table. -/
+def LoadedProject.findSiteIssue (sources : SourceTable) : SiteTable → Option SourceLoadRefusal
+  | [] => none
+  | entry :: rest => match siteIssue sources entry with
+    | some issue => some issue
+    | none => findSiteIssue sources rest
+
+/-- Strict whole-project loader, following `LoadedModules.load`: parse the complete file input,
+refuse file and site collisions, then establish each site's byte correspondence. The returned
+site table is the input itself. Error priority is deterministic in input order; admission is
+order independent, while the first diagnostic and table enumeration need not be. -/
+def LoadedProject.load (input : ProjectSources) : SourceLoadResult :=
+  match parseFiles input.files with
+  | .error issue => .refused issue
+  | .ok sources =>
+    match firstDuplicate (List.map Prod.fst sources) with
+    | some path => .refused (.duplicateFile path)
+    | none => match firstDuplicate (List.map Prod.fst input.sites) with
+      | some site => .refused (.duplicateSite site)
+      | none => match findSiteIssue sources input.sites with
+        | some issue => .refused issue
+        | none => .admitted ⟨sources, input.sites⟩
+
+/-- Independent admission specification: exact raw spellings and bytes, unique file/site
+identities, and source-derived coordinates for every supplied span. -/
+def ProjectSources.Realizes (input : ProjectSources) (project : LoadedProject) : Prop :=
+  List.map (fun entry => (entry.1.render, entry.2)) project.sources = input.files ∧
+    (List.map Prod.fst project.sources).Nodup ∧ project.sites = input.sites ∧
+    (List.map Prod.fst input.sites).Nodup ∧
+    ∀ entry ∈ input.sites, ∃ bytes,
+      AList.lookup project.sources entry.2.path = some bytes ∧ entry.2.LocationOk bytes
+
+/-- A diagnostic names an input identity, never a fabricated file or site. Duplicate diagnostics
+name the common identity; malformed-file diagnostics additionally retain the unmodified raw file. -/
+def SourceLoadRefusal.Names (input : ProjectSources) : SourceLoadRefusal → Prop
+  | .malformed file diagnostic => file ∈ input.files ∧ diagnostic.input = file.1
+  | .duplicateFile path => path.render ∈ List.map Prod.fst input.files
+  | .duplicateSite site => site ∈ List.map Prod.fst input.sites
+  | .missingFile entry | .invalidLocation entry _ => entry ∈ input.sites
 
 /-- The character form of the decided trap line (OD101, Q7.10, runtime decision 2026-11-06).
 Keeping the append structure explicit also makes the exact delimiter bytes auditable. -/
