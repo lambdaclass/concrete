@@ -15,8 +15,9 @@ namespace ConcreteSpec.Core.Frame
 open ConcreteSpec.Core.Mem
 open ConcreteSpec.Core.Hybrid
 
-/-- Helper (congruence). Reflexivity of the preservation relation; used for idle execution. (approved: PENDING)
- The empty footprint frames every operation. -/
+/-- Helper (congruence). Reflexivity of the preservation relation; used for idle execution.
+(approved: _review/REVIEW5-agy.md, _review/REVIEW6-codex.md)
+The empty footprint frames every operation. -/
 theorem preserves_refl (st : State) : Footprint.empty.Preserves st st := by
   refine ⟨?_, ?_, ?_⟩
   · intro b i x hx ho
@@ -26,38 +27,43 @@ theorem preserves_refl (st : State) : Footprint.empty.Preserves st st := by
   · intro p hp
     rfl
 
-/-- Helper (inversion). Decomposes byte nonmembership in a footprint union. (approved: PENDING)
- Membership outside a union is membership outside both components. -/
+/-- Helper (inversion). Decomposes byte nonmembership in a footprint union.
+(approved: _review/REVIEW5-agy.md, _review/REVIEW6-codex.md)
+Membership outside a union is membership outside both components. -/
 theorem byteOutside_union {f g : Footprint} {b : MemBlockId} {i : Nat}
     (h : (f.union g).ByteOutside b i) : f.ByteOutside b i ∧ g.ByteOutside b i := by
   constructor <;> intro r hr <;> apply h r <;> simp [Footprint.union, hr]
 
-/-- Helper (inversion). Decomposes metadata nonmembership in a footprint union. (approved: PENDING)
- Block metadata outside a union is outside both components. -/
+/-- Helper (inversion). Decomposes metadata nonmembership in a footprint union.
+(approved: _review/REVIEW5-agy.md, _review/REVIEW6-codex.md)
+Block metadata outside a union is outside both components. -/
 theorem blockOutside_union {f g : Footprint} {b : MemBlockId}
     (h : (f.union g).BlockOutside b) : f.BlockOutside b ∧ g.BlockOutside b := by
   have hb : b ∉ f.blocks ++ g.blocks := h
   simp only [List.mem_append, not_or] at hb
   exact hb
 
-/-- Helper (inversion). Decomposes place nonmembership in a footprint union. (approved: PENDING)
- Place membership outside a union is membership outside both components. -/
+/-- Helper (inversion). Decomposes place nonmembership in a footprint union.
+(approved: _review/REVIEW5-agy.md, _review/REVIEW6-codex.md)
+Place membership outside a union is membership outside both components. -/
 theorem placeOutside_union {f g : Footprint} {p : Place}
     (h : (f.union g).PlaceOutside p) : f.PlaceOutside p ∧ g.PlaceOutside p := by
   have hp : p ∉ f.places ++ g.places := h
   simp only [List.mem_append, not_or] at hp
   exact hp
 
-/-- Helper (inversion). Extracts identity inequality from singleton nonmembership. (approved: PENDING)
- A lifecycle footprint excludes metadata framing for its own block, even when that block is
+/-- Helper (inversion). Extracts identity inequality from singleton nonmembership.
+(approved: _review/REVIEW5-agy.md, _review/REVIEW6-codex.md)
+A lifecycle footprint excludes metadata framing for its own block, even when that block is
 zero-sized. -/
 theorem blockOutside_block {b c : MemBlockId} (h : (Footprint.block b).BlockOutside c) : c ≠ b := by
   intro hcb
   subst c
   exact h (by simp [Footprint.block])
 
-/-- Helper (congruence). Transitivity under footprint union, used by execution induction. (approved: PENDING)
- Sequential composition frames the union of the two operations' footprints. -/
+/-- Helper (congruence). Transitivity under footprint union, used by execution induction.
+(approved: _review/REVIEW5-agy.md, _review/REVIEW6-codex.md)
+Sequential composition frames the union of the two operations' footprints. -/
 theorem preserves_seq {st st' st'' : State} {f g : Footprint}
     (h₁ : f.Preserves st st') (h₂ : g.Preserves st' st'') : (f.union g).Preserves st st'' := by
   refine ⟨?_, ?_, ?_⟩
@@ -83,8 +89,9 @@ theorem preserves_seq {st st' st'' : State} {f g : Footprint}
     obtain ⟨hf, hg⟩ := placeOutside_union hp
     exact (h₂.2.2 p hg).trans (h₁.2.2 p hf)
 
-/-- Helper (inversion). Decomposes successful C4 stores for the instruction and execution soundness laws. (approved: PENDING)
- A successful byte store preserves every old byte outside the exact access range, every block's
+/-- Helper (inversion). Decomposes successful C4 stores for the instruction and execution soundness laws.
+(approved: _review/REVIEW5-agy.md, _review/REVIEW6-codex.md, _review/REVIEW7-agy.md)
+A successful byte store preserves every old byte outside the exact access range, every block's
 metadata (including the written block's), and every structured place. A zero-byte store has the
 empty footprint. -/
 theorem store_frame (tgt : Target) (st : State) (hw : st.memory.WellFormed tgt) (m' : Memory)
@@ -130,7 +137,8 @@ private def metadataStoreBlock : Block :=
 private def metadataStoreBefore : State :=
   ⟨[], ⟨[(⟨0⟩, metadataStoreBlock)], 1⟩⟩
 
-/-- Helper (computation). Constructs the closed memory fixture used by the execution witnesses. (approved: PENDING) -/
+/-- Helper (computation). Constructs the closed memory fixture used by the execution witnesses.
+(approved: _review/REVIEW5-agy.md, _review/REVIEW6-codex.md) -/
 private theorem metadataStoreWellFormed : metadataStoreBefore.memory.WellFormed linuxX8664 :=
   alloc_wellFormed linuxX8664 Memory.empty (empty_wellFormed _) ⟨0⟩ 4096 2 1 ⟨0⟩
     metadataStoreBefore.memory rfl
@@ -168,8 +176,9 @@ example :
     simp [metadataStoreBadAfter, metadataStoreAfter, metadataStoreBefore, metadataStoreBlock,
       blockMetadata, Memory.block, Memory.modify, AList.update, AList.lookup] at hm
 
-/-- Helper (inversion). Decomposes successful C4 release for the instruction and execution soundness laws. (approved: PENDING)
- Releasing a block may change its lifecycle metadata, but frames all bytes and all metadata of
+/-- Helper (inversion). Decomposes successful C4 release for the instruction and execution soundness laws.
+(approved: _review/REVIEW5-agy.md, _review/REVIEW6-codex.md, _review/REVIEW7-agy.md)
+Releasing a block may change its lifecycle metadata, but frames all bytes and all metadata of
 other blocks and every structured place. -/
 theorem free_frame (st : State) (b : MemBlockId) (x : Block) (m' : Memory)
     (hx : st.memory.block b = some x) (h : st.memory.free b = some m') :
@@ -194,8 +203,9 @@ theorem free_frame (st : State) (b : MemBlockId) (x : Block) (m' : Memory)
       rfl
   · simp [hl] at h
 
-/-- Helper (inversion). Decomposes successful C4 exposure for the instruction and execution soundness laws. (approved: PENDING)
- Exposure may change only the exposed flag of the provenance block; every byte and all metadata
+/-- Helper (inversion). Decomposes successful C4 exposure for the instruction and execution soundness laws.
+(approved: _review/REVIEW5-agy.md, _review/REVIEW6-codex.md, _review/REVIEW7-agy.md)
+Exposure may change only the exposed flag of the provenance block; every byte and all metadata
 of other blocks and every place are preserved. -/
 theorem expose_frame (st : State) (m' : Memory) (p : Ptr) (b : MemBlockId) (x : Block)
     (hp : p.prov = some b) (hx : st.memory.block b = some x) (h : st.memory.expose p = some m') :
@@ -219,8 +229,9 @@ theorem expose_frame (st : State) (m' : Memory) (p : Ptr) (b : MemBlockId) (x : 
   · intro q hq
     rfl
 
-/-- Helper (inversion). Decomposes successful C4 allocation for the instruction and execution soundness laws. (approved: PENDING)
- Fresh allocation preserves every old byte, every old block's metadata and every place. The
+/-- Helper (inversion). Decomposes successful C4 allocation for the instruction and execution soundness laws.
+(approved: _review/REVIEW5-agy.md, _review/REVIEW6-codex.md, _review/REVIEW7-agy.md)
+Fresh allocation preserves every old byte, every old block's metadata and every place. The
 footprint is the complete new block; old bytes are necessarily outside it because their allocation
 identities differ. -/
 theorem alloc_frame (tgt : Target) (st : State) (hw : st.memory.WellFormed tgt)
@@ -244,8 +255,9 @@ theorem alloc_frame (tgt : Target) (st : State) (hw : st.memory.WellFormed tgt)
   · intro p hp
     rfl
 
-/-- Helper (computation). Computes the protected observations of a single structured-place update. (approved: PENDING)
- Replacing one structured place has exactly that place's footprint; bytes and block metadata are
+/-- Helper (computation). Computes the protected observations of a single structured-place update.
+(approved: _review/REVIEW5-agy.md, _review/REVIEW6-codex.md, _review/REVIEW7-agy.md)
+Replacing one structured place has exactly that place's footprint; bytes and block metadata are
 untouched. -/
 theorem set_frame (st : State) (p : Place) (c : Cell) :
     (Footprint.place p).Preserves st (st.set p c) := by
@@ -259,8 +271,9 @@ theorem set_frame (st : State) (p : Place) (c : Cell) :
     have hpq : p ≠ q := Ne.symm hqp
     simp [hpq]
 
-/-- Helper (inversion). Reduces a successful Hybrid structured write to the place-update case. (approved: PENDING)
- A successful typed write to structured storage has exactly the written place's footprint. -/
+/-- Helper (inversion). Reduces a successful Hybrid structured write to the place-update case.
+(approved: _review/REVIEW6-codex.md, _review/REVIEW7-agy.md)
+A successful typed write to structured storage has exactly the written place's footprint. -/
 theorem write_structured_frame (tgt : Target) (st st' : State) (p : Place) (c : Cell)
     (old v : Value) (hc : st.places p = some c) (hs : c.storage = .structured old)
     (h : st.write tgt p v = some st') : (Footprint.place p).Preserves st st' := by
@@ -274,8 +287,9 @@ theorem write_structured_frame (tgt : Target) (st st' : State) (p : Place) (c : 
     exact set_frame st p { c with storage := .structured v }
   · simp at h
 
-/-- Helper (inversion). Reduces a successful Hybrid materialized write to its C4 store. (approved: PENDING)
- A successful typed write to materialized storage has the byte footprint of its actual store. -/
+/-- Helper (inversion). Reduces a successful Hybrid materialized write to its C4 store.
+(approved: _review/REVIEW6-codex.md, _review/REVIEW7-agy.md)
+A successful typed write to materialized storage has the byte footprint of its actual store. -/
 theorem write_materialized_frame (tgt : Target) (st st' : State) (hw : st.memory.WellFormed tgt)
     (p : Place) (c : Cell) (r : Range) (v : Value)
     (hc : st.places p = some c) (hs : c.storage = .materialized r)
@@ -296,8 +310,9 @@ theorem write_materialized_frame (tgt : Target) (st st' : State) (hw : st.memory
       exact store_frame tgt st hw m r.ptr (encode tgt v) r.align access ha hm
   · simp at h
 
-/-- Helper (inversion). Reduces a successful Hybrid raw write to its C4 store. (approved: PENDING)
- A raw Hybrid write has the byte footprint of its underlying memory store and touches no place. -/
+/-- Helper (inversion). Reduces a successful Hybrid raw write to its C4 store.
+(approved: _review/REVIEW6-codex.md, _review/REVIEW7-agy.md)
+A raw Hybrid write has the byte footprint of its underlying memory store and touches no place. -/
 theorem rawWrite_frame (tgt : Target) (st st' : State) (hw : st.memory.WellFormed tgt)
     (p : Ptr) (bs : List MByte) (align : Nat)
     (access : Option (Option (MemBlockId × Nat)))
@@ -344,7 +359,7 @@ example : (fullBlock ⟨1⟩ 2).Disjoint ⟨⟨0⟩, 0, 1⟩ :=
   alloc_fresh_disjoint linuxX8664 metadataStoreBefore ⟨0⟩ 8192 2 1 ⟨1⟩ metadataAllocMemory
     ⟨⟨0⟩, 0, 1⟩ metadataStoreBlock metadataStoreWellFormed rfl rfl
 
-/-- A planted allocation range constructor reuses the existing block identity `⟨0⟩` instead of
+/-- A planted allocation range constructor reuses the existing block identity zero instead of
 recording the newly allocated block identity. -/
 def aliasingFullBlock (_b : MemBlockId) (size : Nat) : ByteRange := ⟨⟨0⟩, 0, size⟩
 
@@ -356,8 +371,9 @@ example : metadataStoreBefore.memory.WellFormed linuxX8664 ∧
     ¬ (aliasingFullBlock ⟨1⟩ 2).Disjoint ⟨⟨0⟩, 0, 1⟩ :=
   ⟨metadataStoreWellFormed, rfl, rfl, by decide⟩
 
-/-- Helper (computation). Computes the C1 call-entry step used by caller restoration. (approved: PENDING)
- Entering a C1 call saves the caller's locals in a `.ret` frame, binds the evaluated arguments to
+/-- Helper (computation). Computes the C1 call-entry step used by caller restoration.
+(approved: _review/REVIEW6-codex.md)
+Entering a C1 call saves the caller's locals in a return frame, binds the evaluated arguments to
 callee parameters, and preserves the caller's continuation below that frame. -/
 theorem step_call_saves_caller {O : Exec.Operands} (P : Exec.Program O) (dst : Option Var)
     (f : FnId) (args : List O.Expr) (site : SiteId) (caller : AList Var O.Val)
@@ -370,8 +386,9 @@ theorem step_call_saves_caller {O : Exec.Operands} (P : Exec.Program O) (dst : O
         .scope fn.block (fn.params.map Prod.fst) [] :: .ret dst caller :: k⟩) := by
   simp [Exec.step, Exec.onRes, hv, hf, hlen, hl]
 
-/-- Helper (computation). Computes the C1 final return step used by caller restoration. (approved: PENDING)
- A returned value reaching a `.ret` frame restores the caller's locals and continuation, binding
+/-- Helper (computation). Computes the C1 final return step used by caller restoration.
+(approved: _review/REVIEW6-codex.md)
+A returned value reaching a return frame restores the caller's locals and continuation, binding
 the result at any requested destination. Leave and destination-bind instrumentation thread the shared
 state through the same step. -/
 theorem step_return_restores_caller {O : Exec.Operands} (P : Exec.Program O) (v : O.Val)
@@ -383,8 +400,9 @@ theorem step_return_restores_caller {O : Exec.Operands} (P : Exec.Program O) (v 
   Exec.step_return_caller P v dst caller callee st k stLeave stBind hl hb
 
 /-- Helper (inversion). Inverts the complete-call derivation for the caller-restoration law,
-connecting the entry `.call` step that pushes `.ret dst caller :: k` to the final return step
-that pops it and binds `dst` in `caller`. (approved: PENDING) -/
+connecting the entry call step that pushes a return frame to the final return step
+that pops it and binds the destination in the caller environment.
+(approved: _review/REVIEW5-agy.md, _review/REVIEW6-codex.md) -/
 theorem c1Call_restores_caller {O : Exec.Operands} {f : FnId} {P : Exec.Program O}
     {entry exit : Exec.Config O} (h : C1Call O f P entry exit) :
     ∃ (fn : Exec.Fn O) (dst : Option Var) (result : O.Val) (caller : AList Var O.Val)
@@ -394,7 +412,7 @@ theorem c1Call_restores_caller {O : Exec.Operands} {f : FnId} {P : Exec.Program 
       Exec.step P entry =
         some (.next ⟨.exec fn.body, (fn.params.map Prod.fst).zip vs, stEnter,
           .scope fn.block (fn.params.map Prod.fst) [] :: .ret dst caller :: k⟩) ∧
-      exit.ctrl = .done ∧ exit.locals = Exec.bindDst dst result caller ∧ exit.frames = k := by
+      exit.ctrl = .done ∧ exit.locals = restoredLocals dst result caller ∧ exit.frames = k := by
   obtain ⟨fn, dst, caller, k, args, site, vs, st, stArgs, stEnter, stReturn, callee, tr, result,
     hf, he, hv, hlen, hl, hreturn⟩ := h
   have hCallStep : Exec.step P entry =
@@ -467,7 +485,8 @@ private def c1Boundary : Exec.Config c1Operands :=
 private def c1Exit : Exec.Config c1Operands :=
   ⟨.done, [(c1DstVar, (7 : Nat)), (c1SavedVar, (42 : Nat))], (), []⟩
 
-/-- Helper (computation). Constructs the closed explicit-return execution witness. (approved: PENDING) -/
+/-- Helper (computation). Constructs the closed explicit-return execution witness.
+(approved: _review/REVIEW5-agy.md, _review/REVIEW6-codex.md) -/
 private theorem c1ExplicitCall : C1Call c1Operands c1FnId c1Program c1Entry c1Exit := by
   have hs : Exec.Steps c1Program c1Entry [] c1Boundary := by
     apply Exec.steps_next rfl
@@ -477,7 +496,7 @@ private theorem c1ExplicitCall : C1Call c1Operands c1FnId c1Program c1Entry c1Ex
   exact ⟨c1Fn, some c1DstVar, c1CallerLocals, [], [], ⟨0⟩, [], (), (), (), (), [], [], (7 : Nat),
     rfl, rfl, rfl, rfl, rfl, .inl ⟨hs, rfl⟩⟩
 
-/-- Accepted: an explicit return reaches its own `.ret` frame after evaluating and cleaning up the
+/-- Accepted: an explicit return reaches its own return frame after evaluating and cleaning up the
 callee, then takes the final return step. -/
 example : C1Call c1Operands c1FnId c1Program c1Entry c1Exit := c1ExplicitCall
 
@@ -495,8 +514,8 @@ private def c1UnitBoundary : Exec.Config c1Operands :=
 
 private def c1UnitExit : Exec.Config c1Operands := ⟨.done, [], (), []⟩
 
-/-- Accepted: a Unit body can reach its `.ret` frame by falling through; the actual final step then
-binds `unitVal` and restores the caller. -/
+/-- Accepted: a Unit body can reach its return frame by falling through; the actual final step then
+binds `ConcreteSpec.Core.Exec.Operands.unitVal` and restores the caller. -/
 example : C1Call c1Operands c1UnitFnId c1UnitProgram c1UnitEntry c1UnitExit := by
   have hs : Exec.Steps c1UnitProgram c1UnitEntry [] c1UnitBoundary := by
     apply Exec.steps_next rfl
@@ -506,9 +525,9 @@ example : C1Call c1Operands c1UnitFnId c1UnitProgram c1UnitEntry c1UnitExit := b
   exact ⟨c1UnitFn, none, [], [], [], ⟨0⟩, [], (), (), (), (), [], [], (0 : Nat),
     rfl, rfl, rfl, rfl, rfl, .inr ⟨rfl, hs, rfl⟩⟩
 
-/-- Law (subject `ConcreteSpec.Core.Exec.bindDst`).
+/-- Law (subject `ConcreteSpec.Core.Frame.restoredLocals`).
 Complete calls push the caller's locals and continuation on entry and restore them with the
-returned value bound at `dst` on exit. -/
+returned value bound at the destination on exit. -/
 theorem caller_restoration (O : Exec.Operands) (f : FnId) (P : Exec.Program O)
     (entry exit : Exec.Config O) (call : C1Call O f P entry exit) :
     ∃ (fn : Exec.Fn O) (dst : Option Var) (result : O.Val) (caller : AList Var O.Val)
@@ -518,7 +537,7 @@ theorem caller_restoration (O : Exec.Operands) (f : FnId) (P : Exec.Program O)
       Exec.step P entry =
         some (.next ⟨.exec fn.body, (fn.params.map Prod.fst).zip vs, stEnter,
           .scope fn.block (fn.params.map Prod.fst) [] :: .ret dst caller :: k⟩) ∧
-      exit.ctrl = .done ∧ exit.locals = Exec.bindDst dst result caller ∧ exit.frames = k :=
+      exit.ctrl = .done ∧ exit.locals = restoredLocals dst result caller ∧ exit.frames = k :=
   c1Call_restores_caller call
 
 /-- Instance (law `ConcreteSpec.Core.Frame.caller_restoration`, case `explicit_return`). -/
@@ -530,7 +549,7 @@ example :
       Exec.step c1Program c1Entry =
         some (.next ⟨.exec fn.body, (fn.params.map Prod.fst).zip vs, stEnter,
           .scope fn.block (fn.params.map Prod.fst) [] :: .ret dst caller :: k⟩) ∧
-      c1Exit.ctrl = .done ∧ c1Exit.locals = Exec.bindDst dst result caller ∧ c1Exit.frames = k :=
+      c1Exit.ctrl = .done ∧ c1Exit.locals = restoredLocals dst result caller ∧ c1Exit.frames = k :=
   caller_restoration c1Operands c1FnId c1Program c1Entry c1Exit c1ExplicitCall
 
 /-- A planted destination binder drops the caller's saved locals upon return instead of restoring
@@ -542,7 +561,7 @@ def dropCallerBindDst {V : Type} (dst : Option Var) (v : V) (_caller : AList Var
   | some x => [(x, v)]
 
 /-- Planted (law `ConcreteSpec.Core.Frame.caller_restoration`, case `explicit_return`,
-subject `ConcreteSpec.Core.Exec.bindDst`, mutant `ConcreteSpec.Core.Frame.dropCallerBindDst`). -/
+subject `ConcreteSpec.Core.Frame.restoredLocals`, mutant `ConcreteSpec.Core.Frame.dropCallerBindDst`). -/
 example : C1Call c1Operands c1FnId c1Program c1Entry c1Exit ∧
     ¬ (∃ (fn : Exec.Fn c1Operands) (dst : Option Var) (result : Nat) (caller : AList Var Nat)
       (k : List (Exec.Frame c1Operands)) (args : List Nat) (site : SiteId)
@@ -705,7 +724,7 @@ example : metadataStoreBefore.memory.WellFormed linuxX8664 ∧
   exact h rfl
 
 /-- Helper (congruence). Widen static permissions without changing an execution.
-(approved: PENDING) -/
+(approved: _review/REVIEW5-agy.md, _review/REVIEW6-codex.md) -/
 theorem preserves_covers {before after : State} {outer inner : Footprint}
     (h : inner.Preserves before after) (cover : outer.Covers inner) :
     outer.Preserves before after := by
@@ -718,7 +737,7 @@ theorem preserves_covers {before after : State} {outer inner : Footprint}
     exact h.2.2 p (cover.2.2 p hp)
 
 /-- Helper (congruence). Compose two executions with the same advertised permission set.
-(approved: PENDING) -/
+(approved: _review/REVIEW5-agy.md, _review/REVIEW6-codex.md) -/
 theorem preserves_trans {before middle after : State} {f : Footprint}
     (h₁ : f.Preserves before middle) (h₂ : f.Preserves middle after) :
     f.Preserves before after := by
@@ -733,7 +752,7 @@ theorem preserves_trans {before middle after : State} {f : Footprint}
     simpa [Footprint.PlaceOutside, Footprint.union] using h
 
 /-- Helper (inversion). Structural induction over `C4Effects` proves that every derived effect
-step or sequence preserves state outside its footprint. (approved: PENDING) -/
+step or sequence preserves state outside its footprint. (approved: _review/REVIEW6-codex.md) -/
 theorem c4Execution_frame (tgt : Target) (before : State) (f : Footprint) (after : State)
     (effects : c4Execution tgt before f after) :
     f.Preserves before after := by
@@ -754,8 +773,8 @@ theorem c4Execution_frame (tgt : Target) (before : State) (f : Footprint) (after
     exact rawWrite_frame tgt st st' hw p bs align access ha hraw
   | seq _ _ ih₁ ih₂ => exact preserves_seq ih₁ ih₂
 
-/-- Helper (inversion). Every C4 effect derivation preserves `Memory.WellFormed`.
-(approved: PENDING) -/
+/-- Helper (inversion). Every C4 effect derivation preserves `ConcreteSpec.Core.Mem.Memory.WellFormed`.
+(approved: _review/REVIEW6-codex.md) -/
 theorem c4Execution_wellFormed (tgt : Target) (before : State) (f : Footprint) (after : State)
     (effects : c4Execution tgt before f after) (hw : before.memory.WellFormed tgt) :
     after.memory.WellFormed tgt := by
@@ -816,14 +835,14 @@ private def metadataStoreAndSetAfter : State :=
   metadataStoreAfter.set ⟨0⟩ ⟨.bool, .structured (.bool true)⟩
 
 /-- Helper (computation). Constructs the closed C4 byte-store execution step for composition
-and C1 call witnesses. (approved: PENDING) -/
+and C1 call witnesses. (approved: _review/REVIEW6-codex.md) -/
 private theorem metadataStoreExecution :
     c4Execution linuxX8664 metadataStoreBefore (.byte ⟨⟨0⟩, 0, 1⟩) metadataStoreAfter :=
   C4Effects.store metadataStoreBefore metadataStoreAfter.memory metadataStorePtr [.init 7 none]
     1 (some (some (⟨0⟩, 0))) metadataStoreWellFormed (by decide) rfl
 
 /-- Helper (computation). Constructs the closed C4 place-update execution step for sequential
-composition witnesses. (approved: PENDING) -/
+composition witnesses. (approved: _review/REVIEW6-codex.md) -/
 private theorem metadataSetExecution :
     c4Execution linuxX8664 metadataStoreAfter (.place ⟨0⟩) metadataStoreAndSetAfter :=
   C4Effects.set metadataStoreAfter ⟨0⟩ ⟨.bool, .structured (.bool true)⟩
@@ -852,7 +871,7 @@ example :
     State.set, State.places, AList.lookup] at hp
 
 /-- Helper (congruence). A footprint covered by either side of a union is covered by the union.
-(approved: PENDING) -/
+(approved: _review/REVIEW6-codex.md) -/
 theorem covers_of_or {body leave inner : Footprint}
     (h : body.Covers inner ∨ leave.Covers inner) :
     (body.union leave).Covers inner := by
@@ -865,7 +884,8 @@ theorem covers_of_or {body leave inner : Footprint}
       fun p ho => hl.2.2 p (placeOutside_union ho).2⟩
 
 /-- Helper (inversion). Induction over actual C1 steps threads memory well-formedness and
-reachability from `entry`, composing each step's C4 effect derivation. (approved: PENDING) -/
+reachability from the entry configuration, composing each step's C4 effect derivation.
+(approved: _review/REVIEW5-agy.md, _review/REVIEW6-codex.md) -/
 theorem c1_steps_frame {O : Exec.Operands} {P : Exec.Program O} {project : O.Store → State}
     {tgt : Target} {bodyFootprint leaveFootprint : Footprint} {entry : Exec.Config O}
     (implementation : C1EffectImplementation O P project tgt bodyFootprint leaveFootprint entry)
@@ -900,7 +920,8 @@ theorem c1_steps_frame {O : Exec.Operands} {P : Exec.Program O} {project : O.Sto
     exact ⟨preserves_trans hFrameStep hFrameRest, hWfAfter⟩
 
 /-- Helper (inversion). Lifts step soundness and well-formedness preservation through the
-complete-call derivation, including its final return/pop step. (approved: PENDING) -/
+complete-call derivation, including its final return/pop step.
+(approved: _review/REVIEW5-agy.md, _review/REVIEW6-codex.md) -/
 theorem c1_call_frame_of_implementation {O : Exec.Operands} {f : FnId} {P : Exec.Program O}
     {project : O.Store → State} {tgt : Target} {bodyFootprint leaveFootprint : Footprint}
     {entry exit : Exec.Config O}
@@ -958,7 +979,7 @@ private def StoringReachable (c : Exec.Config StoringOp) : Prop :=
 
 /-- Helper (inversion). One step of `storingProg` from a reachable configuration stays within
 the 5-state trajectory and either leaves the store idle or performs the authorized C4 byte store.
-(approved: PENDING) -/
+(approved: _review/REVIEW6-codex.md) -/
 private theorem storing_step_inv {before after : Exec.Config StoringOp}
     {label : Exec.Label StoringOp}
     (hr : StoringReachable before) (hstep : Exec.Step storingProg before label after) :
@@ -985,7 +1006,7 @@ private theorem storing_step_inv {before after : Exec.Config StoringOp}
       cases hs
 
 /-- Helper (inversion). Multi-step reachability in `storingProg` preserves `StoringReachable`.
-(approved: PENDING) -/
+(approved: _review/REVIEW6-codex.md) -/
 private theorem storing_steps_reachable {c before : Exec.Config StoringOp}
     {trace : List Unit} (hr : StoringReachable c)
     (hsteps : Exec.Steps storingProg c trace before) :
@@ -995,7 +1016,7 @@ private theorem storing_steps_reachable {c before : Exec.Config StoringOp}
   | step hstep _ ih => exact ih (storing_step_inv hr hstep).1
 
 /-- Helper (computation). Constructs the closed `C1EffectImplementation` witness for
-`storingProg` from `storingEntry`. (approved: PENDING) -/
+`storingProg` from `storingEntry`. (approved: _review/REVIEW6-codex.md) -/
 private theorem storingImplementation :
     C1EffectImplementation StoringOp storingProg id linuxX8664
       (.byte ⟨⟨0⟩, 0, 1⟩) .empty storingEntry := by
@@ -1013,7 +1034,7 @@ private theorem storingImplementation :
     exact metadataStoreExecution
 
 /-- Helper (computation). Constructs the closed `C1Call` witness for `storingProg`.
-(approved: PENDING) -/
+(approved: _review/REVIEW6-codex.md) -/
 private theorem storingExplicitCall :
     C1Call StoringOp storingFn storingProg storingEntry storingExit := by
   have hs : Exec.Steps storingProg storingEntry [] storingBoundary := by
@@ -1097,7 +1118,7 @@ example : 0 < (8 : Nat) ∧
   decide
 
 /-- Helper (computation). Structural induction showing operational stack samples conform to the
-static stack bound (`ArtifactStackConforms`). (approved: PENDING) -/
+static stack bound (`ArtifactStackConforms`). (approved: _review/REVIEW6-codex.md) -/
 theorem stackCode_conforms (code : StackCode) : StackSafe code := by
   induction code with
   | done =>
@@ -1151,7 +1172,7 @@ example :
   decide
 
 /-- Helper (computation). Establishes that the toy ABI signature satisfies alignment, frame-bound,
-and register-disjointness invariants. (approved: PENDING) -/
+and register-disjointness invariants. (approved: _review/REVIEW6-codex.md) -/
 theorem toySignature_wellFormed : toySignature.WellFormed := by
   refine ⟨⟨by decide, by decide⟩, by decide, by decide, ?_⟩
   intro r hr
@@ -1697,8 +1718,9 @@ example : ¬ (Machine.Preserved (toyInput toyBase 11) (overBudgetToyCallSeq toyB
   exact bad htr
 
 /-- Helper (computation). Characterizes the retention specification; execution evidence is
-`ConcreteSpec.Core.Frame.ABI.transferKept_sound`. (approved: PENDING)
- An extern unrelated to both sides of a pair cannot validly return either retention value. -/
+`ConcreteSpec.Core.Frame.ABI.transferKept_sound`.
+(approved: _review/REVIEW6-codex.md, _review/REVIEW7-agy.md)
+An extern unrelated to both sides of a pair cannot validly return either retention value. -/
 theorem extern_result_rejects_unrelated_retention {F H : Type} (pair : KeptPair F H) (f : F) (h : H)
     (hfs : f ≠ pair.submit) (hfc : f ≠ pair.complete) :
     ¬ ExternResult.Valid pair f (.receipt h) ∧ ¬ ExternResult.Valid pair f (.owned h) := by
@@ -1709,8 +1731,9 @@ theorem extern_result_rejects_unrelated_retention {F H : Type} (pair : KeptPair 
     exact hfc ho.1
 
 /-- Helper (computation). Characterizes the retention specification; execution evidence is
-`ConcreteSpec.Core.Frame.ABI.transferKept_sound`. (approved: PENDING)
- A well-formed kept pair validly returns its submission receipt and completion-owned handle.
+`ConcreteSpec.Core.Frame.ABI.transferKept_sound`.
+(approved: _review/REVIEW6-codex.md, _review/REVIEW7-agy.md)
+A well-formed kept pair validly returns its submission receipt and completion-owned handle.
 The exact result constraints already imply both `ExternResult.Valid` facts. -/
 theorem keptPair_results_valid {F H : Type} (pair : KeptPair F H)
     (submitParam : ExternParam H) (submitResult completeParam completeResult : ExternType H)
@@ -1729,8 +1752,9 @@ example : ExternResult.Valid (⟨0, 1, 7⟩ : KeptPair Nat Nat) 0 (.receipt 7) �
     (.receipt 7) (.receipt 7) (.owned 7) ⟨by decide, rfl, rfl, rfl, rfl⟩
 
 /-- Helper (computation). Characterizes the retention specification; execution evidence is
-`ConcreteSpec.Core.Frame.ABI.transferKept_sound`. (approved: PENDING)
- A kept receipt has exactly one retention transition: the paired completion returns the same
+`ConcreteSpec.Core.Frame.ABI.transferKept_sound`.
+(approved: _review/REVIEW6-codex.md, _review/REVIEW7-agy.md)
+A kept receipt has exactly one retention transition: the paired completion returns the same
 handle to Concrete ownership. -/
 theorem kept_only_paired_completion {F H : Type} (pair : KeptPair F H) (h : H)
     (event : ForeignEvent F H) (after : RetentionState H)
@@ -1749,8 +1773,9 @@ theorem kept_only_paired_completion {F H : Type} (pair : KeptPair F H) (h : H)
     | kept h'' => cases hs
 
 /-- Helper (computation). Characterizes the retention specification; execution evidence is
-`ConcreteSpec.Core.Frame.ABI.transferKept_sound`. (approved: PENDING)
- Submission of an owned handle calls the paired submitting extern and produces a receipt for the
+`ConcreteSpec.Core.Frame.ABI.transferKept_sound`.
+(approved: _review/REVIEW6-codex.md, _review/REVIEW7-agy.md)
+Submission of an owned handle calls the paired submitting extern and produces a receipt for the
 same handle. -/
 theorem submit_produces_paired_receipt {F H : Type} (pair : KeptPair F H) (h : H)
     (event : ForeignEvent F H) (after : RetentionState H)
@@ -1769,8 +1794,9 @@ theorem submit_produces_paired_receipt {F H : Type} (pair : KeptPair F H) (h : H
       exact ⟨rfl, rfl⟩
 
 /-- Helper (computation). Characterizes the retention specification; execution evidence is
-`ConcreteSpec.Core.Frame.ABI.transferKept_sound`. (approved: PENDING)
- The submitting extern cannot consume its own receipt, even though it is the other member of the
+`ConcreteSpec.Core.Frame.ABI.transferKept_sound`.
+(approved: _review/REVIEW6-codex.md, _review/REVIEW7-agy.md)
+The submitting extern cannot consume its own receipt, even though it is the other member of the
 pair: completion requires a distinct extern identity. -/
 theorem kept_receipt_rejects_submission {F H : Type} (pair : KeptPair F H) (h h' : H)
     (after : RetentionState H) : ¬ KeptStep pair (.kept h) (.call pair.submit h') after := by
@@ -1780,8 +1806,9 @@ theorem kept_receipt_rejects_submission {F H : Type} (pair : KeptPair F H) (h h'
   | kept h'' => cases hs
 
 /-- Helper (computation). Characterizes the retention specification; execution evidence is
-`ConcreteSpec.Core.Frame.ABI.transferKept_sound`. (approved: PENDING)
- No other extern can consume a kept receipt. -/
+`ConcreteSpec.Core.Frame.ABI.transferKept_sound`.
+(approved: _review/REVIEW6-codex.md, _review/REVIEW7-agy.md)
+No other extern can consume a kept receipt. -/
 theorem kept_receipt_rejects_other_extern {F H : Type} (pair : KeptPair F H) (h h' : H)
     (f : F) (after : RetentionState H) (hf : f ≠ pair.complete) :
     ¬ KeptStep pair (.kept h) (.call f h') after := by
@@ -1790,20 +1817,22 @@ theorem kept_receipt_rejects_other_extern {F H : Type} (pair : KeptPair F H) (h 
   cases he
   exact hf rfl
 
-/-- Helper (computation). Computes the refusal branch of the launcher admission specification. (approved: PENDING)
- A reservation below the final artifact bound refuses startup with status 125. -/
+/-- Helper (computation). Computes the refusal branch of the launcher admission specification.
+(approved: _review/REVIEW5-agy.md, _review/REVIEW6-codex.md)
+A reservation below the final artifact bound refuses startup with status 125. -/
 theorem stack_under_reservation {Input : Type} (bound reserved : Nat) (input : Input)
     (h : reserved < bound) : stackAdmission bound reserved input = .refused125 := by
   simp [stackAdmission, h]
 
-/-- Helper (computation). Computes the entry branch of the launcher admission specification. (approved: PENDING)
- A reservation at least the bound admits the same launcher input. -/
+/-- Helper (computation). Computes the entry branch of the launcher admission specification.
+(approved: _review/REVIEW5-agy.md, _review/REVIEW6-codex.md)
+A reservation at least the bound admits the same launcher input. -/
 theorem stack_adequate {Input : Type} (bound reserved : Nat) (input : Input)
     (h : bound ≤ reserved) : stackAdmission bound reserved input = .entered input := by
   simp [stackAdmission, Nat.not_lt_of_ge h]
 
 /-- Helper (inversion). An accepted declaration-check result preserves the endpoint identities and
-meets the descriptor contract. (approved: PENDING) -/
+meets the descriptor contract. (approved: _review/REVIEW5-agy.md, _review/REVIEW6-codex.md) -/
 theorem checkKeptPair_result {F H : Type} [DecidableEq F] [DecidableEq H]
     (submit complete : F) (sp : ExternParam H) (sr cp cr : ExternType H) :
     ∀ pair, checkKeptPair submit complete sp sr cp cr = some pair →
@@ -1823,7 +1852,8 @@ theorem checkKeptPair_result {F H : Type} [DecidableEq F] [DecidableEq H]
         exact ⟨rfl, rfl, hne, rfl, rfl, rfl, rfl⟩
 
 /-- Helper (inversion). If `checkKeptPair` rejects a declaration tuple, no handle witnesses a
-well-formed `KeptPair` for those endpoints and descriptors. (approved: PENDING) -/
+well-formed `KeptPair` for those endpoints and descriptors.
+(approved: _review/REVIEW6-codex.md) -/
 theorem checkKeptPair_complete {F H : Type} [DecidableEq F] [DecidableEq H]
     (submit complete : F) (sp : ExternParam H) (sr cp cr : ExternType H)
     (hnone : checkKeptPair submit complete sp sr cp cr = none) :
@@ -1849,7 +1879,7 @@ theorem checkKeptPair_sound {F H : Type} [DecidableEq F] [DecidableEq H]
       fun f h hfs hfc => extern_result_rejects_unrelated_retention pair f h hfs hfc⟩
 
 /-- Helper (inversion). Connects executable retention transfers to the `RetentionConforms`
-codegen obligation. (approved: PENDING) -/
+codegen obligation. (approved: _review/REVIEW6-codex.md) -/
 theorem transferTransition_conforms {F H : Type} [DecidableEq H] (pair : KeptPair F H)
     (distinct : pair.submit ≠ pair.complete) :
     RetentionConforms pair (transferTransition pair) := by
@@ -2037,10 +2067,11 @@ example : (0 : Nat) ≠ 1 ∧
       (droppingKeptTransfer ⟨0, 1, 7⟩ .complete (.kept 7)) := by
   refine ⟨by decide, ?_⟩
   intro h
-  exact h rfl
+  exact h.mp rfl
 
 /-- Helper (computation). The loader retains all and only reachable modules, so
-extra retained modules cannot satisfy the exact closure contract. (approved: PENDING) -/
+extra retained modules cannot satisfy the exact closure contract.
+(approved: _review/REVIEW5-agy.md, _review/REVIEW6-codex.md) -/
 theorem retainChain_membership (root dependency : Nat) :
     dependency ∈ retainChain root ↔ dependency ≤ root := by
   induction root with
@@ -2050,53 +2081,41 @@ theorem retainChain_membership (root dependency : Nat) :
     omega
 
 /-- Helper (computation). The loader's module count agrees with the independent entry contract.
-(approved: PENDING) -/
+(approved: _review/REVIEW5-agy.md, _review/REVIEW6-codex.md) -/
 theorem retainChain_length (root : Nat) : (retainChain root).length = root + 1 := by
   induction root with
   | zero => rfl
   | succ root ih => simp [retainChain, ih]
 
 /-- Helper (computation). Repeated successor implements the exit contract's arithmetic encoding.
-(approved: PENDING) -/
+(approved: _review/REVIEW5-agy.md, _review/REVIEW6-codex.md) -/
 theorem encodeToyExit_correct (root result : Nat) : encodeToyExit root result = result + root := by
   induction root with
   | zero => simp [encodeToyExit]
   | succ root ih => simp [encodeToyExit, ih, Nat.add_assoc]
 
-/-- Helper (inversion). Connects admitted `toyLaunch` runs to the `LauncherConforms` obligation.
-(approved: PENDING) -/
-theorem toyLaunchExecution_conforms : LauncherConforms toyLauncher toyLaunchExecution := by
-  intro ⟨root, loaded⟩ reserved input result observation hexec
-  dsimp [toyLaunchExecution, toyLaunch] at hexec
-  by_cases hlt : reserved < 8
-  · rw [stack_under_reservation 8 reserved () hlt] at hexec
-    contradiction
-  · have hadq : 8 ≤ reserved := Nat.le_of_not_lt hlt
-    rw [stack_adequate 8 reserved () hadq] at hexec
-    cases hexec
-    exact ⟨retainChain_membership root, retainChain_length root,
-      encodeToyExit_correct root result, hadq⟩
-
 /-- Law (subject `ConcreteSpec.Core.Frame.ABI.toyLaunch`).
 Independent loading and launch execution establish both the status-125 refusal contract below the
-8-byte bound and the closure, entry/exit correspondence, and stack-admission contract when admitted. -/
+8-byte bound and the root/result binding, closure, entry/exit correspondence, and stack-admission
+contract when admitted. -/
 theorem toyLaunch_conforms (root reserved result : Nat) :
     ToyLaunchCorrect root reserved result (toyLaunch root reserved result) := by
   by_cases hlt : reserved < 8
   · have href : stackAdmission 8 reserved () = .refused125 :=
       stack_under_reservation 8 reserved () hlt
-    simp [toyLaunch, href, ToyLaunchCorrect, hlt]
+    simp only [toyLaunch, ToyLaunchCorrect, href, Launcher.Outcome]
+    exact ⟨(root, retainChain root), rfl, retainChain_membership root, hlt⟩
   · have hadq : 8 ≤ reserved := Nat.le_of_not_lt hlt
     have hadm : stackAdmission 8 reserved () = .entered () :=
       stack_adequate 8 reserved () hadq
-    have hrun : toyLauncher.Run (root, retainChain root) reserved
-        (retainChain root).length result (encodeToyExit root result) := by
-      apply toyLaunchExecution_conforms
-      simp [toyLaunchExecution, toyLaunch, hadm]
-    simpa [toyLaunch, hadm, ToyLaunchCorrect] using
-      (⟨rfl, rfl, hrun⟩ : root = root ∧ result = result ∧
-        toyLauncher.Run (root, retainChain root) reserved
-          (retainChain root).length result (encodeToyExit root result))
+    simp only [toyLaunch, ToyLaunchCorrect, hadm, Launcher.Outcome]
+    exact ⟨rfl, rfl, retainChain_membership root, retainChain_length root,
+      encodeToyExit_correct root result, hadq⟩
+
+/-- Helper (inversion). Connects `toyLaunch` runs across refusal and entry outcomes to the
+`LauncherConforms` obligation. (approved: _review/REVIEW6-codex.md) -/
+theorem toyLaunchExecution_conforms : LauncherConforms toyLauncher toyLaunch :=
+  toyLaunch_conforms
 
 /-- Instance (law `ConcreteSpec.Core.Frame.ABI.toyLaunch_conforms`, case `dependency_chain`). -/
 example : ToyLaunchCorrect 2 8 7 (toyLaunch 2 8 7) := toyLaunch_conforms 2 8 7
@@ -2115,7 +2134,7 @@ def wrongToyLaunch (root reserved result : Nat) : Startup ((Nat × List Nat) × 
 subject `ConcreteSpec.Core.Frame.ABI.toyLaunch`, mutant `ConcreteSpec.Core.Frame.ABI.wrongToyLaunch`). -/
 example : ¬ ToyLaunchCorrect 2 8 7 (wrongToyLaunch 2 8 7) := by
   intro h
-  have bad := h.2.2.exit
+  have bad := h.exit
   change 10 = 9 at bad
   contradiction
 
@@ -2131,14 +2150,14 @@ def wrongResultToyLaunch (root reserved result : Nat) : Startup ((Nat × List Na
 subject `ConcreteSpec.Core.Frame.ABI.toyLaunch`, mutant `ConcreteSpec.Core.Frame.ABI.wrongRootToyLaunch`). -/
 example : ¬ ToyLaunchCorrect 2 8 7 (wrongRootToyLaunch 2 8 7) := by
   intro h
-  have bad : 3 = 2 := h.1
+  have bad : 3 = 2 := h.matchesRoot
   contradiction
 
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyLaunch_conforms`, case `dependency_chain`,
 subject `ConcreteSpec.Core.Frame.ABI.toyLaunch`, mutant `ConcreteSpec.Core.Frame.ABI.wrongResultToyLaunch`). -/
 example : ¬ ToyLaunchCorrect 2 8 7 (wrongResultToyLaunch 2 8 7) := by
   intro h
-  have bad : 8 = 7 := h.2.1
+  have bad : 8 = 7 := h.matchesResult
   contradiction
 
 /-- A planted loader retains an unrelated module while leaving entry and exit unchanged. -/
@@ -2154,7 +2173,7 @@ subject `ConcreteSpec.Core.Frame.ABI.toyLaunch`,
 mutant `ConcreteSpec.Core.Frame.ABI.overRetainingToyLaunch`). -/
 example : ¬ ToyLaunchCorrect 2 8 7 (overRetainingToyLaunch 2 8 7) := by
   intro h
-  have bad : 3 ≤ 2 := (h.2.2.closure 3).mp (by decide)
+  have bad : 3 ≤ 2 := (h.closure 3).mp (by decide)
   omega
 
 /-- A planted loader keeps only the root, omitting its transitive dependencies. -/
@@ -2170,7 +2189,7 @@ subject `ConcreteSpec.Core.Frame.ABI.toyLaunch`,
 mutant `ConcreteSpec.Core.Frame.ABI.underRetainingToyLaunch`). -/
 example : ¬ ToyLaunchCorrect 2 8 7 (underRetainingToyLaunch 2 8 7) := by
   intro h
-  have bad : 0 ∈ ([2] : List Nat) := (h.2.2.closure 0).mpr (by decide)
+  have bad : 0 ∈ ([2] : List Nat) := (h.closure 0).mpr (by decide)
   contradiction
 
 /-- A planted launcher unconditionally refuses with status 125 even when stack reservation is adequate. -/
@@ -2182,8 +2201,8 @@ def alwaysRefusingToyLaunch (_root _reserved _result : Nat) :
 subject `ConcreteSpec.Core.Frame.ABI.toyLaunch`,
 mutant `ConcreteSpec.Core.Frame.ABI.alwaysRefusingToyLaunch`). -/
 example : ¬ ToyLaunchCorrect 2 8 7 (alwaysRefusingToyLaunch 2 8 7) := by
-  intro h
-  change 8 < 8 at h
+  intro ⟨_, _, _, hlt⟩
+  change 8 < 8 at hlt
   omega
 
 /-- A planted launcher skips stack admission and enters even when reservation is below the bound. -/
@@ -2197,7 +2216,7 @@ subject `ConcreteSpec.Core.Frame.ABI.toyLaunch`,
 mutant `ConcreteSpec.Core.Frame.ABI.unboundedToyLaunch`). -/
 example : ¬ ToyLaunchCorrect 2 4 7 (unboundedToyLaunch 2 4 7) := by
   intro h
-  have bad : 8 ≤ 4 := h.2.2.adequateStack
+  have bad : 8 ≤ 4 := h.adequateStack
   omega
 
 

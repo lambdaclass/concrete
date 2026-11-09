@@ -130,6 +130,11 @@ def writeFootprint (tgt : Target) (before : State) (place : Place) (value : Valu
       (encode tgt value).length
   | none => .empty
 
+/-- The caller locals restored when a C1 call returns `result` to optional destination `dst`. -/
+def restoredLocals {V : Type} (dst : Option Var) (result : V) (caller : AList Var V) :
+    AList Var V :=
+  Exec.bindDst dst result caller
+
 /-- A complete C1 call of `f`, from its `.call` statement to the caller continuation. The `Steps`
 premise reaches this call's own `.ret` frame, either at an explicit return or at normal Unit
 fall-through. The final silent step performs `.leave`, result binding and restoration. A matching
@@ -811,7 +816,7 @@ endpoint and receipt exclusivity. -/
 def TransferCorrect {F H : Type} (pair : KeptPair F H)
     (instruction : RetentionInstruction) (before : RetentionState H) :
     Option (ForeignEvent F H × RetentionState H) → Prop
-  | none => ¬ instruction.Matches pair before
+  | none => instruction.Matches pair before ↔ False
   | some (event, after) =>
     instruction.Matches pair before ∧
     KeptStep pair before event after ∧
@@ -851,9 +856,11 @@ def CheckedPairCorrect {F H : Type} (submit complete : F)
 
 /-! ### Launcher entry and exit (Q8.5–Q8.6) -/
 
-/-- The launcher contract binds an exact retained artifact closure, entry inputs, exit observations
-and the final artifact's stack bound. These are relations, not a concrete launcher implementation. -/
-structure Launcher (Artifact Input Result Observation : Type) where
+/-- The launcher contract binds the requested root identity to the built artifact, together
+with the exact retained artifact closure, entry inputs, exit observations, and the final
+artifact's stack bound. These are relations, not a concrete launcher implementation. -/
+structure Launcher (Root Artifact Input Result Observation : Type) where
+  rootOf : Artifact → Root
   retainedClosure : Artifact → Prop
   entry : Artifact → Input → Prop
   exit : Artifact → Result → Observation → Prop
@@ -869,26 +876,44 @@ inductive Startup (Input : Type) where
 def stackAdmission {Input : Type} (bound reserved : Nat) (input : Input) : Startup Input :=
   if reserved < bound then .refused125 else .entered input
 
-/-- A launched run carries the exact artifact closure and entry/exit relations, with a reservation
-at least the final artifact bound. -/
-structure Launcher.Run {Artifact Input Result Observation : Type}
-    (l : Launcher Artifact Input Result Observation) (artifact : Artifact) (reserved : Nat)
-    (input : Input) (result : Result) (observation : Observation) : Prop where
+/-- An admitted launched run builds an artifact for the requested root, carries the exact
+artifact closure and entry/exit relations for the requested result, and has a reservation at
+least the final artifact bound. -/
+structure Launcher.Run {Root Artifact Input Result Observation : Type}
+    (l : Launcher Root Artifact Input Result Observation)
+    (root : Root) (artifact : Artifact) (reserved : Nat)
+    (input : Input) (requestedResult result : Result) (observation : Observation) : Prop where
+  matchesRoot : l.rootOf artifact = root
+  matchesResult : result = requestedResult
   closure : l.retainedClosure artifact
   entry : l.entry artifact input
   exit : l.exit artifact result observation
   adequateStack : l.stackBound artifact ≤ reserved
 
+/-- Complete startup-and-execution contract for a launcher across both outcomes: `.refused125`
+occurs only when the reservation is below the required bound for a valid closure of the requested
+root, and `.entered` establishes `Launcher.Run` for the requested root, reservation, and result. -/
+def Launcher.Outcome {Root Artifact Input Result Observation : Type}
+    (l : Launcher Root Artifact Input Result Observation)
+    (root : Root) (reserved : Nat) (requestedResult : Result) :
+    Startup (Artifact × Input × Result × Observation) → Prop
+  | .refused125 =>
+    ∃ artifact, l.rootOf artifact = root ∧ l.retainedClosure artifact ∧
+      reserved < l.stackBound artifact
+  | .entered (artifact, input, result, observation) =>
+    l.Run root artifact reserved input requestedResult result observation
+
 /-- Obligation (discharged at slice 0, R-0505).
 Obligation on the native launcher integration: relate independently executed startup and exit to
-the retained artifact closure, entry inputs, observations and reservation. Slice 0's unverified
-native path carries the explicit premise (R-0503); final-image validation discharges it at
-R-0505, with the direct-syscall launcher supplied by R-0584. Toy launches do not discharge it. -/
-def LauncherConforms {Artifact Input Result Observation : Type}
-    (launcher : Launcher Artifact Input Result Observation)
-    (execution : Artifact → Nat → Input → Result → Observation → Prop) : Prop :=
-  ∀ artifact reserved input result observation, execution artifact reserved input result observation →
-    launcher.Run artifact reserved input result observation
+the requested root, retained artifact closure, entry inputs, requested result, observations, and
+reservation across both refusal and entry outcomes. Slice 0's unverified native path carries the
+explicit premise (R-0503); final-image validation discharges it at R-0505, with the
+direct-syscall launcher supplied by R-0584. Toy launches do not discharge it. -/
+def LauncherConforms {Root Artifact Input Result Observation : Type}
+    (launcher : Launcher Root Artifact Input Result Observation)
+    (launch : Root → Nat → Result → Startup (Artifact × Input × Result × Observation)) : Prop :=
+  ∀ root reserved requestedResult,
+    launcher.Outcome root reserved requestedResult (launch root reserved requestedResult)
 
 /-- An executable closure loader for a toy chain of dependencies: module `n+1` needs module `n`.
 The implementation traverses the graph, whereas the closure specification quantifies over reachability. -/
@@ -904,7 +929,8 @@ def encodeToyExit : Nat → Nat → Nat
 /-- A toy launcher contract. Module reachability is `dependency ≤ root`; entry observes the
 number of loaded modules and exit encodes the result with the root's observation prefix.
 This supplies conformance evidence without choosing a native ABI or native launcher policy. -/
-def toyLauncher : Launcher (Nat × List Nat) Nat Nat Nat where
+def toyLauncher : Launcher Nat (Nat × List Nat) Nat Nat Nat where
+  rootOf := Prod.fst
   retainedClosure := fun artifact => ∀ dependency, dependency ∈ artifact.2 ↔ dependency ≤ artifact.1
   entry := fun artifact input => input = artifact.1 + 1
   exit := fun artifact result observation => observation = result + artifact.1
@@ -919,18 +945,11 @@ def toyLaunch (root reserved result : Nat) : Startup ((Nat × List Nat) × Nat �
     let loaded := retainChain root
     .entered ((root, loaded), loaded.length, result, encodeToyExit root result)
 
-/-- Relational view of admitted `toyLaunch` runs for `LauncherConforms`. -/
-def toyLaunchExecution (artifact : Nat × List Nat) (reserved input result observation : Nat) : Prop :=
-  toyLaunch artifact.1 reserved result = .entered (artifact, input, result, observation)
-
-/-- Conformance of `toyLaunch` across both startup outcomes: `.refused125` occurs only when the
-reservation is below the required 8-byte bound, and `.entered` establishes `toyLauncher.Run`. -/
-def ToyLaunchCorrect (root reserved requestedResult : Nat) :
-    Startup ((Nat × List Nat) × Nat × Nat × Nat) → Prop
-  | .refused125 => reserved < 8
-  | .entered (artifact, input, result, observation) =>
-    artifact.1 = root ∧ result = requestedResult ∧
-      toyLauncher.Run artifact reserved input result observation
+/-- Conformance of `toyLaunch` across both startup outcomes is the reusable `Launcher.Outcome`
+contract specialized to `toyLauncher`. -/
+abbrev ToyLaunchCorrect :
+    Nat → Nat → Nat → Startup ((Nat × List Nat) × Nat × Nat × Nat) → Prop :=
+  toyLauncher.Outcome
 
 /-! ### ABI examples -/
 
