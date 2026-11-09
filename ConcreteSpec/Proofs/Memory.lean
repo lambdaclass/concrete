@@ -467,8 +467,8 @@ theorem candidate_contains_unique (tgt : Target) (m : Memory) (hw : m.WellFormed
   apply hw.disjoint b x c y hx hy hn hxc.1.1.1 hyc.1.1.1
   refine ⟨hxc.2.trans hyc.2.symm, hxc.1.2, hyc.1.2, ?_, ?_⟩ <;> omega
 
-/-- Law (subject `ConcreteSpec.Core.Mem.Memory.fromExposed`). Reconstruction chooses an eligible containing block, or a one-past block only when no eligible block contains the address. -/
-theorem fromExposed_sound (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
+/-- Helper (inversion). Extracts block properties from successful reconstruction for inversion clients and the result-oriented law (approved: PENDING). -/
+theorem fromExposed_sound_inv (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
     (s : AddrSpace) (addr : Nat) :
     ∀ b, (m.fromExposed s addr).prov = some b →
     ∃ x, m.block b = some x ∧ x.Candidate s = true ∧
@@ -498,6 +498,19 @@ theorem fromExposed_sound (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
         simpa using hh
     next => cases h
 
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.fromExposed`). Reconstruction chooses an eligible containing block, or a one-past block only when no eligible block contains the address. -/
+theorem fromExposed_sound (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
+    (s : AddrSpace) (addr : Nat) :
+    match (m.fromExposed s addr).prov with
+    | none => True
+    | some b => ∃ x, m.block b = some x ∧ x.Candidate s = true ∧
+        ((x.base ≤ addr ∧ addr < x.base + x.size) ∨
+         (addr = x.base + x.size ∧ ∀ e ∈ m.blocks, e.2.Candidate s = true →
+           ¬ (e.2.base ≤ addr ∧ addr < e.2.base + e.2.size))) := by
+  cases h : (m.fromExposed s addr).prov with
+  | none => trivial
+  | some b => exact fromExposed_sound_inv tgt m hw s addr b h
+
 /-- Helper (inversion). An eligible containing or one-past candidate suffices to recover some provenance (approved: APPR-C4-agy-78ee5a2db). -/
 theorem fromExposed_exists (m : Memory) (s : AddrSpace) (addr : Nat)
     (e : MemBlockId × Block) (he : e ∈ m.blocks) (hc : e.2.Candidate s = true)
@@ -526,7 +539,7 @@ theorem fromExposed_contains (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
     (hi : x.base ≤ addr ∧ addr < x.base + x.size) :
     (m.fromExposed s addr).prov = some b := by
   obtain ⟨c, hp⟩ := fromExposed_exists m s addr (b, x) (AList.lookup_mem hx) hc (.inl hi)
-  obtain ⟨y, hy, hcy, hiy⟩ := fromExposed_sound tgt m hw s addr c hp
+  obtain ⟨y, hy, hcy, hiy⟩ := fromExposed_sound_inv tgt m hw s addr c hp
   rcases hiy with hiy | ⟨_, hn⟩
   · have := candidate_contains_unique tgt m hw s addr b c x y hx hy hc hcy hi hiy
     simpa only [← this] using hp
@@ -553,7 +566,7 @@ theorem fromExposed_onePast (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
       ¬ (e.2.base ≤ addr ∧ addr < e.2.base + e.2.size)) :
     (m.fromExposed s addr).prov = some b := by
   obtain ⟨c, hp⟩ := fromExposed_exists m s addr (b, x) (AList.lookup_mem hx) hc (.inr hi)
-  obtain ⟨y, hy, hcy, hiy⟩ := fromExposed_sound tgt m hw s addr c hp
+  obtain ⟨y, hy, hcy, hiy⟩ := fromExposed_sound_inv tgt m hw s addr c hp
   rcases hiy with hiy | ⟨hiy, _⟩
   · exact False.elim (hn (c, y) (AList.lookup_mem hy) hcy hiy)
   · have := candidate_onePast_unique tgt m hw s addr b c x y hx hy hc hcy hi hiy
@@ -568,7 +581,7 @@ theorem fromExposed_none (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
   cases hp : (m.fromExposed s addr).prov with
   | none => rfl
   | some b =>
-    obtain ⟨x, hx, hc, hi⟩ := fromExposed_sound tgt m hw s addr b hp
+    obtain ⟨x, hx, hc, hi⟩ := fromExposed_sound_inv tgt m hw s addr b hp
     have hh := hn (b, x) (AList.lookup_mem hx) hc
     rcases hi with hi | ⟨hi, _⟩
     · exact False.elim (hh.1 hi)
@@ -1772,20 +1785,24 @@ example : ¬ (match corruptExposeGeometry memory ptr with | none => True | some 
   decide
 
 /-- Instance (law `ConcreteSpec.Core.Mem.fromExposed_sound`, case `interior`). -/
-example : ∀ b, (exposedMemory.fromExposed ⟨0⟩ 42).prov = some b →
-    ∃ x, exposedMemory.block b = some x ∧ x.Candidate ⟨0⟩ = true ∧
-      ((x.base ≤ 42 ∧ 42 < x.base + x.size) ∨
-       (42 = x.base + x.size ∧ ∀ e ∈ exposedMemory.blocks, e.2.Candidate ⟨0⟩ = true →
-         ¬ (e.2.base ≤ 42 ∧ 42 < e.2.base + e.2.size))) := fromExposed_sound target exposedMemory exposedMemory_wf ⟨0⟩ 42
+example : match (exposedMemory.fromExposed ⟨0⟩ 42).prov with
+    | none => True
+    | some b => ∃ x, exposedMemory.block b = some x ∧ x.Candidate ⟨0⟩ = true ∧
+        ((x.base ≤ 42 ∧ 42 < x.base + x.size) ∨
+         (42 = x.base + x.size ∧ ∀ e ∈ exposedMemory.blocks, e.2.Candidate ⟨0⟩ = true →
+           ¬ (e.2.base ≤ 42 ∧ 42 < e.2.base + e.2.size))) :=
+  fromExposed_sound target exposedMemory exposedMemory_wf ⟨0⟩ 42
 /-- Planted (law `ConcreteSpec.Core.Mem.fromExposed_sound`, case `interior`, subject `ConcreteSpec.Core.Mem.Memory.fromExposed`, mutant `ConcreteSpec.Core.Mem.Audit.wrongReconstruction`). -/
-example : exposedMemory.WellFormed target ∧ ¬ (∀ b, (wrongReconstruction exposedMemory ⟨0⟩ 42).prov = some b →
-    ∃ x, exposedMemory.block b = some x ∧ x.Candidate ⟨0⟩ = true ∧
-      ((x.base ≤ 42 ∧ 42 < x.base + x.size) ∨
-       (42 = x.base + x.size ∧ ∀ e ∈ exposedMemory.blocks, e.2.Candidate ⟨0⟩ = true →
-         ¬ (e.2.base ≤ 42 ∧ 42 < e.2.base + e.2.size)))) := by
+example : exposedMemory.WellFormed target ∧
+    ¬ (match (wrongReconstruction exposedMemory ⟨0⟩ 42).prov with
+      | none => True
+      | some b => ∃ x, exposedMemory.block b = some x ∧ x.Candidate ⟨0⟩ = true ∧
+          ((x.base ≤ 42 ∧ 42 < x.base + x.size) ∨
+           (42 = x.base + x.size ∧ ∀ e ∈ exposedMemory.blocks, e.2.Candidate ⟨0⟩ = true →
+             ¬ (e.2.base ≤ 42 ∧ 42 < e.2.base + e.2.size)))) := by
   refine ⟨exposedMemory_wf, ?_⟩
   intro h
-  obtain ⟨x, hx, _⟩ := h ⟨1⟩ rfl
+  obtain ⟨x, hx, _⟩ := h
   cases hx
 
 /-- Accepted (rule C4). Framing observes initialized bytes in a second live allocation. -/
