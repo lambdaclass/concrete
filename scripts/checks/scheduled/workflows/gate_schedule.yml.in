@@ -1,0 +1,90 @@
+name: Scheduled gate tiers
+run-name: @@schedule:title@@
+on:
+  schedule:
+@@schedule:crons@@
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Full main-history SHA to replay (required for dispatch)'
+        type: string
+        required: true
+      tier:
+        description: 'Tier to replay'
+        type: choice
+        options: @@tier:options@@
+        required: true
+permissions:
+  contents: read
+jobs:
+  select:
+    if: github.ref == '@@identity:main_ref@@' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    timeout-minutes: @@budget:select_job_minutes@@
+    outputs:
+      sha: ${{ steps.select.outputs.sha }}
+      tier: ${{ steps.select.outputs.tier }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: @@identity:main_branch@@
+          fetch-depth: 0
+          persist-credentials: false
+      - id: select
+        env:
+          REQUESTED_SHA: ${{ inputs.sha }}
+          REQUESTED_TIER: ${{ inputs.tier }}
+          EVENT: ${{ github.event_name }}
+          CRON: ${{ github.event.schedule }}
+        run: |
+          set -euo pipefail
+          source scripts/checks/lib/scheduled_process.sh
+          bounded_run @@budget:selector@@ -- python3 scripts/checks/scheduled/selection.py "$EVENT" "$CRON" "$REQUESTED_SHA" "$REQUESTED_TIER" "$GITHUB_SHA"
+  campaign:
+    needs: select
+    if: github.ref == '@@identity:main_ref@@' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: [self-hosted, linux, x64, concrete, concrete-ci-2]
+    timeout-minutes: @@budget:campaign_job_minutes@@
+    permissions:
+      contents: read
+    concurrency:
+      group: scheduled-note-${{ needs.select.outputs.tier }}
+      cancel-in-progress: false
+    steps:
+      - name: Refuse substitute runner
+        if: runner.environment != 'self-hosted'
+        run: |
+          echo 'forged runner: not inventoried concrete-ci-2'
+          exit 1
+      # Controller is trusted main; old replay SHAs do not supply the controller.
+      - uses: actions/checkout@v4
+        with:
+          ref: @@identity:main_branch@@
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Run exact-SHA tier
+        env:
+          SELECTED_SHA: ${{ needs.select.outputs.sha }}
+          SELECTED_TIER: ${{ needs.select.outputs.tier }}
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          set -euo pipefail
+          state=$(mktemp -d)
+          trap 'rm -rf "$state"' EXIT
+          python3 scripts/checks/lib/scheduled_process.py --cwd "$PWD" --timeout @@budget:campaign@@ -- nix develop --command python3 scripts/checks/scheduled/run.py "$SELECTED_SHA" "$SELECTED_TIER" result-index
+      - name: Upload bounded metadata for trusted collection
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scheduled-index-${{ needs.select.outputs.tier }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: result-index/index.json
+          if-no-files-found: error
+          retention-days: @@retention:days@@
+      - id: result
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scheduled-${{ needs.select.outputs.tier }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: result-index/
+          if-no-files-found: error
+          retention-days: @@retention:days@@

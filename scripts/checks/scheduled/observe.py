@@ -6,6 +6,7 @@ import sys
 from protocol import EvidenceError, WINDOWS, git, inventory, observe, read_note, timestamp
 
 from history import main_history
+from scheduler_policy import note_ref
 from process_adapter import operation_clock
 
 ERRORS = (EvidenceError, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError)
@@ -49,12 +50,12 @@ def main(*, clock=None):
     failed = False
     try:
         repository = environment["GITHUB_REPOSITORY"]
-        first, eligible = main_history(environment, command=git)
-        first_set = set(first)
-        lineage = first + [sha for sha in eligible if sha not in first_set]
+        history = main_history(environment, command=git)
+        first = history.first_parent
+        lineage = history.presentation
         for tier in WINDOWS:
             try:
-                ref = "refs/notes/concrete-gates-" + tier
+                ref = note_ref(tier)
                 # No inventory needed to establish genuine absence.
                 refs = git("for-each-ref", "--format=%(refname)", ref, environment=environment).splitlines()
                 listing = git("notes", "--ref=" + ref, "list", environment=environment) if ref in refs else ""

@@ -3,7 +3,7 @@
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 if [ "${1:-}" != --scheduled-context ]; then
-  exec python3 -I "$ROOT/scripts/checks/lib/scheduled_process.py" --cwd "$PWD" --timeout 81000 -- bash "${BASH_SOURCE[0]}" --scheduled-context "$@"
+  exec python3 -I "$ROOT/scripts/checks/scheduled/suite_budget.py" --slot "${BASH_SOURCE[0]}" "$@"
 fi
 shift
 source "$ROOT/scripts/checks/lib/gate_env.sh" || exit 125

@@ -1,0 +1,46 @@
+name: Publish scheduled gate evidence
+on:
+  workflow_run:
+    workflows: [Scheduled gate tiers]
+    types: [completed]
+    branches: [@@identity:main_branch@@]
+  schedule:
+    - cron: '@@schedule:publisher_cron@@'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  publish:
+    if: github.ref == '@@identity:main_ref@@'
+    runs-on: ubuntu-24.04
+    timeout-minutes: @@budget:publish_job_minutes@@
+    permissions:
+      contents: write
+      actions: read
+    concurrency:
+      group: scheduled-trusted-publisher
+      cancel-in-progress: false
+    steps:
+      # Only trusted default-branch controller code; never the selected historical SHA.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Collect authoritative job provenance and append notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          state=$(mktemp -d)
+          trap 'rm -rf "$state"' EXIT
+          BOUNDED_PARENT="$state"
+          source scripts/checks/lib/scheduled_process.sh
+          bounded_run @@budget:configuration@@ -- git config user.name concrete-scheduled
+          bounded_run @@budget:configuration@@ -- git config user.email concrete-scheduled@users.noreply.github.com
+          rc=0
+          bounded_run -r @@budget:collection@@ @@budget:collection@@ --role publisher -- python3 scripts/checks/scheduled/collect.py || rc=$?
+          if bounded_is_incomplete "$rc"; then
+            echo 'INCOMPLETE scheduled collection: bounded attempts exhausted'
+            exit 1
+          fi
+          exit "$rc"

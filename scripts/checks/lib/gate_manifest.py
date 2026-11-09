@@ -14,7 +14,6 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[3]
 REGISTRY = ROOT / 'scripts/checks/gates.json'
-TIERS = {'pr', 'qualification', 'daily', 'weekly'}
 RUNNERS = {'ci', 'github-hosted', 'native-matrix', 'concrete-ci-2'}
 FIELDS = {'id', 'tiers', 'command', 'budget_seconds', 'runner_class', 'artifacts', 'tools', 'seed', 'controls', 'workflow'}
 
@@ -38,9 +37,10 @@ def relative(value):
     return isinstance(value, str) and bool(value) and not Path(value).is_absolute() and '..' not in Path(value).parts and value != '.' and '\n' not in value and '\r' not in value
 
 def validate_manifest(data):
+    from scheduler_policy import ALL_TIERS as TIERS, TIERS as SCHEDULED_TIERS, gate_seconds, job_minutes
     exact_fields(data, {'schema', 'windows', 'gates'}, 'document')
     require(type(data['schema']) is int and data['schema'] == 1, 'registry: unsupported schema')
-    require(isinstance(data['windows'], dict) and set(data['windows']) == {'daily','weekly'} and
+    require(isinstance(data['windows'], dict) and set(data['windows']) == set(SCHEDULED_TIERS) and
             all(type(v) is int and v > 0 for v in data['windows'].values()), 'registry: invalid freshness windows')
     require(isinstance(data['gates'], list) and data['gates'], 'registry: empty gates')
     seen = set(); bindings = set()
@@ -55,7 +55,7 @@ def validate_manifest(data):
         require(argv(row['command']), f'registry: invalid command: {gid}')
         require(type(row['budget_seconds']) is int and row['budget_seconds'] > 0, f'registry: invalid budget: {gid}')
         require(isinstance(row['runner_class'],str) and row['runner_class'] in RUNNERS, f'registry: invalid runner class: {gid}')
-        scheduled = bool(set(tiers) & {'daily','weekly'})
+        scheduled = bool(set(tiers) & set(SCHEDULED_TIERS))
         require(not scheduled or row['runner_class'] == 'concrete-ci-2', f'registry: scheduled runner class mismatch: {gid}')
         require(isinstance(row['tools'], dict) and all(isinstance(k,str) and isinstance(v,str) for k,v in row['tools'].items()), f'registry: invalid tools: {gid}')
         require(row['seed'] is None or type(row['seed']) is int, f'registry: invalid seed: {gid}')
@@ -83,18 +83,25 @@ def validate_manifest(data):
             require(pair not in bindings, f'registry: duplicate workflow binding: {gid}'); bindings.add(pair)
     return data
 
+def read_document(path=REGISTRY):
+    """Single JSON reader, including current-controller policy bootstrap."""
+    return json.loads(Path(path).read_text())
+
+
 def load(path=REGISTRY):
     try:
-        return validate_manifest(json.loads(Path(path).read_text()))
+        return validate_manifest(read_document(path))
     except (OSError, json.JSONDecodeError) as error:
         raise GateManifestError(f'registry: cannot read registry: {error}') from error
 
 def tier_rows(tier, data=None):
+    from scheduler_policy import ALL_TIERS as TIERS, TIERS as SCHEDULED_TIERS, gate_seconds, job_minutes
     require(tier in TIERS, f'registry: invalid tier: {tier}')
     return [dict(copy.deepcopy(row), tier=tier) for row in (load() if data is None else validate_manifest(data))['gates'] if tier in row['tiers']]
 
 def scheduled_rows(tier, data=None):
-    require(tier in {'daily','weekly'}, f'registry: invalid scheduled tier: {tier}')
+    from scheduler_policy import ALL_TIERS as TIERS, TIERS as SCHEDULED_TIERS, gate_seconds, job_minutes
+    require(tier in set(SCHEDULED_TIERS), f'registry: invalid scheduled tier: {tier}')
     return tier_rows(tier, data)
 
 TIER_EXPRESSION = "${{ github.event_name == 'pull_request' && 'pr' || 'qualification' }}"
@@ -103,6 +110,7 @@ def invocation(gid):
     return f'python3 scripts/checks/lib/gate_manifest.py execute --id {gid} --tier {TIER_EXPRESSION}'
 
 def check_workflow(data=None, root=ROOT, workflow=None):
+    from scheduler_policy import ALL_TIERS as TIERS, TIERS as SCHEDULED_TIERS, gate_seconds, job_minutes
     # YAML is read only here; all registry parsing goes through load/validate_manifest.
     import yaml
     data = load() if data is None else validate_manifest(data)
@@ -138,7 +146,7 @@ def check_workflow(data=None, root=ROOT, workflow=None):
                     f'registry: workflow runner class drift: {row["id"]}')
         uploads=[s.get('with',{}).get('path') for s in job['steps'] if s.get('uses','').startswith('actions/upload-artifact@')]
         require(set(uploads)==artifact_outputs and len(uploads)==len(artifact_outputs), f'registry: workflow artifact path drift: {jobid}')
-        require(job.get('timeout-minutes') == math.ceil(budget*3/60)+10, f'registry: workflow budget drift: {jobid}')
+        require(job.get('timeout-minutes') == job_minutes(budget), f'registry: workflow budget drift: {jobid}')
     for pair,row in expected.items():
         require(pair in found, f'registry: missing workflow invocation: {row["id"]}')
     # Root checks discover files dynamically; inventory completeness prevents row deletion.
@@ -149,6 +157,7 @@ def check_workflow(data=None, root=ROOT, workflow=None):
     return data
 
 def execute(gid,tier,environment):
+    from scheduler_policy import ALL_TIERS as TIERS, TIERS as SCHEDULED_TIERS, gate_seconds, job_minutes
     matches=[r for r in tier_rows(tier) if r['id']==gid]
     require(len(matches)==1, f'registry: gate not registered in tier: {gid}/{tier}')
     row=matches[0]
@@ -158,14 +167,20 @@ def execute(gid,tier,environment):
             stream.write('artifact_paths<<'+delimiter+'\n'+'\n'.join(a['path'] for a in row['artifacts'])+'\n'+delimiter+'\n')
     # The same bounded runner owns CI and scheduled budgets; no command in YAML.
     return process_run(['bash',str(ROOT/'scripts/checks/lib/bounded.sh'),str(row['budget_seconds']),*row['command']],
-                          cwd=ROOT, timeout=row['budget_seconds']*3+60, env=environment).returncode
+                          cwd=ROOT, timeout=gate_seconds(row['budget_seconds'], scheduled=False), env=environment).returncode
 
 def main():
     environment = dict(os.environ)
     parser=argparse.ArgumentParser(); parser.add_argument('operation',choices=['validate','check-workflow','tier','scheduled','execute','execute-root'])
     parser.add_argument('--tier'); parser.add_argument('--id'); parser.add_argument('--path');args=parser.parse_args()
     if args.operation=='validate':load()
-    elif args.operation=='check-workflow':check_workflow()
+    elif args.operation=='check-workflow':
+        check_workflow()
+        from scheduler_policy import BUDGET
+        result = process_run([sys.executable, str(ROOT / 'scripts/checks/scheduled/workflow_projection.py')],
+                             cwd=ROOT, env=environment, timeout=BUDGET['configuration'],
+                             capture_output=True, text=True)
+        require(result.returncode == 0, (result.stdout + result.stderr).strip())
     elif args.operation=='execute':return execute(args.id,args.tier,environment)
     elif args.operation=='execute-root':
         rows=[r for r in load()['gates'] if r['command']==['bash',args.path]]

@@ -14,6 +14,7 @@ from protocol import EvidenceError, git, inventory, require, clean_env, _registr
 ROOT = Path(__file__).resolve().parents[3]
 
 from process_adapter import operation_clock, process_run as call
+from scheduler_policy import Identity, BUDGET, gate_seconds
 
 def preserve_artifacts(row, checkout, output, number, sha, required, saved):
     """Preserve regular report trees before private-checkout cleanup, including partial runs."""
@@ -64,10 +65,12 @@ def run(sha, tier, output, environment, *, clock=None):
     clock = clock or operation_clock()
     environment = dict(environment)
     output = Path(output).resolve(); output.mkdir(parents=True, exist_ok=True)
-    attempt = environment["GITHUB_RUN_ID"] + "/" + environment["GITHUB_RUN_ATTEMPT"]
-    record = dict(sha=sha, tier=tier, repository=environment["GITHUB_REPOSITORY"],
+    identity = Identity.actions(environment["GITHUB_REPOSITORY"], sha, tier,
+                                environment["GITHUB_RUN_ID"], environment["GITHUB_RUN_ATTEMPT"],
+                                environment["GITHUB_EVENT_NAME"])
+    attempt = identity.attempt
+    record = dict(**identity.fields(),
                   runner_name=environment.get("RUNNER_NAME"), runner_environment=environment.get("RUNNER_ENVIRONMENT"),
-                  attempt=attempt, occurrence=environment.get("OCCURRENCE", tier) + "/" + environment["GITHUB_RUN_ID"],
                   controller_revision=None,
                   gate_revision=None, started=clock.observation.isoformat(), status="INCOMPLETE", conclusion="incomplete",
                   artifact=environment["GITHUB_SERVER_URL"] + "/" + environment["GITHUB_REPOSITORY"] +
@@ -82,8 +85,8 @@ def run(sha, tier, output, environment, *, clock=None):
             runners = inventory()
             _binding.verify(environment.get("GITHUB_REPOSITORY"), environment.get("RUNNER_ENVIRONMENT"),
                             environment.get("RUNNER_NAME"), runners)
-            call(["git", "clone", "--shared", "--no-checkout", str(ROOT), str(checkout)], check=True, env=clean_env(environment), cwd=Path(__file__).resolve().parents[3], timeout=120)
-            call(["git", "-C", str(checkout), "checkout", "--detach", sha], check=True, env=clean_env(environment), cwd=Path(__file__).resolve().parents[3], timeout=120)
+            call(["git", "clone", "--shared", "--no-checkout", str(ROOT), str(checkout)], check=True, env=clean_env(environment), cwd=Path(__file__).resolve().parents[3], timeout=BUDGET["clone"])
+            call(["git", "-C", str(checkout), "checkout", "--detach", sha], check=True, env=clean_env(environment), cwd=Path(__file__).resolve().parents[3], timeout=BUDGET["clone"])
             record["checkout_revision"] = git("-C", str(checkout), "rev-parse", "HEAD", environment=environment)
             require(record["checkout_revision"] == sha, "wrong checked-out revision")
             record["gate_revision"] = record["checkout_revision"]
@@ -108,7 +111,7 @@ def run(sha, tier, output, environment, *, clock=None):
                                str(row["budget_seconds"]), *row["command"]]
                     with log.open("w") as stream:
                         outcome = call(command, cwd=checkout, stdout=stream, stderr=subprocess.STDOUT,
-                                       timeout=row["budget_seconds"] * 3 + 180, env=gate_env)
+                                       timeout=gate_seconds(row["budget_seconds"]), env=gate_env)
                     gate["resources"] = {"wall_seconds": clock.monotonic() - began, "exit_code": outcome.returncode}
                     gate["status"] = "PASS" if outcome.returncode == 0 else "INCOMPLETE" if outcome.returncode == 125 else "FAIL"
                     artifacts_attempted = True
@@ -118,7 +121,7 @@ def run(sha, tier, output, environment, *, clock=None):
                         require(isinstance(control["diagnostic"], str) and control["diagnostic"], "missing exact control diagnostic")
                         control_run = call(["nix", "develop", "--command", "bash", str(ROOT / "scripts/checks/scheduled/with_slot.sh"),
                                             str(row["budget_seconds"]), *control["command"]], cwd=checkout,
-                                           capture_output=True, text=True, timeout=row["budget_seconds"] * 3 + 180, env=gate_env)
+                                           capture_output=True, text=True, timeout=gate_seconds(row["budget_seconds"]), env=gate_env)
                         diagnostic = (control_run.stdout + control_run.stderr).strip()
                         passed = control_run.returncode == control["exit_code"] and control_run.returncode not in (0, 125) and diagnostic == control["diagnostic"]
                         status = "PASS" if passed else "INCOMPLETE" if control_run.returncode == 125 else "FAIL"

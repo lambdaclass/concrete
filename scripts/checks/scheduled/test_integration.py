@@ -31,6 +31,8 @@ class Integrated(unittest.TestCase):
             for name in ('bounded.sh','bounded_exec.py','scheduled_process.py','scheduled_process.sh','heavy_slots.sh','gate_outcome.py','gate_env.sh','has_match.sh'):
                 shutil.copy(ROOT/'scripts/checks/lib'/name,lib/name)
             shutil.copy(ROOT/'scripts/checks/scheduled/with_slot.sh',scheduled)
+            from runtime_support import copy_policy_runtime
+            copy_policy_runtime(scheduled.parent.parent.parent)
             pool=scratch/'pool'; pool.mkdir()
             handles=[]
             for n in (1,2):

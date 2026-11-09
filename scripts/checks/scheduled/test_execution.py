@@ -16,7 +16,7 @@ from test_protocol import SHA, RUNNERS
 class Execution(unittest.TestCase):
     def environment(self):
         return dict(RUNNER_ENVIRONMENT="self-hosted", RUNNER_NAME="ci2-heavy",
-                    GITHUB_REPOSITORY="example/repo", GITHUB_RUN_ID="1",
+                    GITHUB_REPOSITORY="example/repo", GITHUB_RUN_ID="1", GITHUB_EVENT_NAME="schedule",
                     GITHUB_RUN_ATTEMPT="1", GITHUB_SERVER_URL="https://github.com")
 
     def test_missing_registry_is_incomplete(self):

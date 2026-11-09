@@ -1,0 +1,35 @@
+{
+  "main_branch": "main",
+  "remote": "origin",
+  "note_prefix": "refs/notes/concrete-gates-",
+  "cadence": {
+    "daily": "17 2 * * *",
+    "weekly": "43 3 * * 0"
+  },
+  "publisher_cron": "29 * * * *",
+  "observer_cron": "11 */4 * * *",
+  "retention_days": 90,
+  "queue_age_seconds": 93600,
+  "budgets": {
+    "git": 60,
+    "clone": 120,
+    "push": 120,
+    "publication_attempts": 4,
+    "selector": 30,
+    "configuration": 20,
+    "collection": 300,
+    "observation": 120,
+    "campaign": 80000,
+    "slot": 81000,
+    "select_job_minutes": 5,
+    "campaign_job_minutes": 1440,
+    "publish_job_minutes": 20,
+    "observe_job_minutes": 15,
+    "attempt_factor": 3,
+    "gate_reserve": 180,
+    "ci_reserve": 60,
+    "job_reserve_minutes": 10,
+    "suite_seconds": 180,
+    "suite_reserve": 0.1
+  }
+}

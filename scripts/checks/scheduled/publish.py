@@ -1,5 +1,6 @@
 """Trusted publisher: immutable attempts, idempotent retry, leased notes updates."""
 from process_adapter import process_run
+from scheduler_policy import note_ref, REMOTE, BUDGET
 import json
 from pathlib import Path
 import subprocess
@@ -9,12 +10,12 @@ from protocol import EvidenceError, append, clean_env, git, inventory, read_note
 def publish(record, runners, repository, environment):
     sha, tier = record["sha"], record["tier"]
     record = validate(record, sha, tier, runners, repository, record["attempt"])
-    ref = "refs/notes/concrete-gates-" + tier
-    for retry in range(4):
-        remote = git("ls-remote", "origin", ref, environment=environment)
+    ref = note_ref(tier)
+    for retry in range(BUDGET["publication_attempts"]):
+        remote = git("ls-remote", REMOTE, ref, environment=environment)
         expected = remote.split()[0] if remote else ""
         if expected:
-            git("fetch", "origin", "+" + ref + ":" + ref, environment=environment)
+            git("fetch", REMOTE, "+" + ref + ":" + ref, environment=environment)
             # Lease the fetched state, never a stale ls-remote result.
             expected = git("rev-parse", ref, environment=environment)
         else:
@@ -30,14 +31,14 @@ def publish(record, runners, repository, environment):
         history = append(history, record, sha, tier, runners, repository)
         body = "\n".join(json.dumps(item, sort_keys=True) for item in history) + "\n"
         process_run(["git", "notes", "--ref=" + ref, "add", "-f", "-F", "-", sha],
-                       input=body, text=True, check=True, timeout=60, env=clean_env(environment), cwd=Path(__file__).resolve().parents[3])
+                       input=body, text=True, check=True, timeout=BUDGET["git"], env=clean_env(environment), cwd=Path(__file__).resolve().parents[3])
         local = git("rev-parse", ref, environment=environment)
         try:
             process_run(["git", "push", "--force-with-lease=" + ref + ":" + expected,
-                        "origin", ref + ":" + ref], timeout=120, env=clean_env(environment), cwd=Path(__file__).resolve().parents[3])
+                        REMOTE, ref + ":" + ref], timeout=BUDGET["push"], env=clean_env(environment), cwd=Path(__file__).resolve().parents[3])
         except subprocess.TimeoutExpired:
             pass  # Remote readback, then identical-attempt recovery on the next iteration.
-        if git("ls-remote", "origin", ref, environment=environment).split()[0:1] == [local]:
+        if git("ls-remote", REMOTE, ref, environment=environment).split()[0:1] == [local]:
             return
     raise EvidenceError("INCOMPLETE: notes publication contention")
 

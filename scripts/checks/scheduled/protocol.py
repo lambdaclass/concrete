@@ -1,6 +1,7 @@
 """Exact-SHA append-only scheduled evidence. No gate list lives here."""
 from process_adapter import process_run
 from scheduled_process import clean_env
+from scheduler_policy import note_ref, BUDGET, WINDOWS
 import os
 import copy
 import datetime as dt
@@ -15,7 +16,6 @@ STATUSES = {"PASS", "FAIL", "INCOMPLETE", "MISSING"}
 _registry_spec = importlib.util.spec_from_file_location("gate_manifest", Path(__file__).resolve().parents[1] / "lib/gate_manifest.py")
 _registry = importlib.util.module_from_spec(_registry_spec)
 _registry_spec.loader.exec_module(_registry)
-WINDOWS = _registry.load()["windows"]
 REGISTRY_ROOT = Path(__file__).resolve().parents[3]
 
 class EvidenceError(ValueError):
@@ -35,7 +35,7 @@ def require(ok, message):
 
 def git(*args, environment=None):
     return process_run(["git", *args], check=True, capture_output=True,
-                          text=True, timeout=60, env=clean_env(dict(os.environ) if environment is None else environment), cwd=REGISTRY_ROOT).stdout.strip()
+                          text=True, timeout=BUDGET["git"], env=clean_env(dict(os.environ) if environment is None else environment), cwd=REGISTRY_ROOT).stdout.strip()
 
 def timestamp(value):
     try:
@@ -247,7 +247,7 @@ def observe(history, sha, tier, now, runners, repository):
     return f"PASS {tier} {sha}"
 
 def read_note(sha, tier, listed=False, *, environment=None):
-    ref = "refs/notes/concrete-gates-" + tier
+    ref = note_ref(tier)
     if not listed:
         listing = git("notes", "--ref=" + ref, "list", environment=environment)
         if not any(line.split()[-1] == sha for line in listing.splitlines()):

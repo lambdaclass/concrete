@@ -10,8 +10,10 @@ import time
 sys.path.insert(0, str(Path(__file__).absolute().parent))
 from process_adapter import process_run
 
-SECONDS = 180
-RESERVE = .10
+from scheduler_policy import BUDGET, allocate_deadline
+
+SECONDS = BUDGET["suite_seconds"]
+RESERVE = BUDGET["suite_reserve"]
 
 
 def deadline():
@@ -26,8 +28,7 @@ def remaining(end):
 
 
 def allocate(end, count=1):
-    if count < 1: raise ValueError('FAIL scheduled suite: invalid allocation')
-    return time.monotonic() + remaining(end) * (1 - RESERVE) / count
+    return allocate_deadline(end, count, monotonic=time.monotonic)
 
 
 def launch(script, args):
@@ -40,4 +41,8 @@ def launch(script, args):
 
 
 if __name__ == '__main__':
+    if sys.argv[1] == '--slot':
+        import os
+        sys.exit(process_run(['bash', sys.argv[2], '--scheduled-context', *sys.argv[3:]],
+                             env=dict(os.environ), cwd=Path.cwd(), timeout=BUDGET['slot']).returncode)
     sys.exit(launch(sys.argv[1], sys.argv[2:]))

@@ -4,7 +4,22 @@ import re
 import sys
 from protocol import EvidenceError, git, require
 
-MAIN = "refs/remotes/origin/main"
+from scheduler_policy import MAIN_HISTORY as MAIN
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class MainHistory:
+    first_parent: tuple
+    eligible: tuple
+
+    @property
+    def presentation(self):
+        return list(self.first_parent) + [sha for sha in self.eligible if sha not in set(self.first_parent)]
+
+    def __iter__(self):
+        # Compatibility for callers explicitly requesting both order roles.
+        return iter((list(self.first_parent), list(self.eligible)))
 
 
 def main_history(environment, command=git):
@@ -13,7 +28,7 @@ def main_history(environment, command=git):
     first = command("rev-list", "--first-parent", tip, environment=environment).splitlines()
     eligible = command("rev-list", "--topo-order", tip, environment=environment).splitlines()
     require(bool(first) and set(first) <= set(eligible), "invalid main history")
-    return first, eligible
+    return MainHistory(tuple(first), tuple(eligible))
 
 
 def authorize(sha, environment):

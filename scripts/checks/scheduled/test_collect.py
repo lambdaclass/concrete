@@ -26,8 +26,12 @@ class Collector(RegistryFixture, unittest.TestCase):
 
     def test_api_identity_overrides_forged_worker(self):
         self.payload["runner_name"] = "forged"
+        self.payload["occurrence"] = "forged/occurrence"
+        self.payload["qualification_status"] = "FAIL"
         r = collect.record_for(self.run, self.job, (SHA, "daily"), self.payload, "artifact", "example/repo", RUNNERS)
         self.assertEqual(r["runner_name"], "ci2-heavy")
+        self.assertEqual(r["occurrence"], "schedule/1")
+        self.assertEqual(r["qualification_status"], "PASS")
         self.job["runner_name"] = "other-host"
         with self.assertRaisesRegex(EvidenceError, "^forged runner: not inventoried concrete-ci-2$"):
             collect.record_for(self.run, self.job, (SHA, "daily"), self.payload, "artifact", "example/repo", RUNNERS)

@@ -16,9 +16,10 @@ import zipfile
 from protocol import EvidenceError, inventory, require, validate
 from publish import publish
 from process_adapter import operation_clock
+from scheduler_policy import Identity, POLICY, TIERS, MAIN_BRANCH, BUDGET
 
 API = "https://api.github.com"
-MAX_AGE = 26 * 3600
+MAX_AGE = POLICY["queue_age_seconds"]
 
 class SafeRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
@@ -32,7 +33,7 @@ def request(path, binary=False, *, token):
     require(url.startswith(API + "/"), "untrusted API URL")
     req = urllib.request.Request(url, headers={"Authorization": "Bearer " + token,
                                                 "Accept": "application/vnd.github+json"})
-    with urllib.request.build_opener(SafeRedirect()).open(req, timeout=60) as response:
+    with urllib.request.build_opener(SafeRedirect()).open(req, timeout=BUDGET["git"]) as response:
         body = response.read(16 * 1024 * 1024 + 1)
     require(len(body) <= 16 * 1024 * 1024, "collector response too large")
     return body if binary else json.loads(body)
@@ -51,13 +52,13 @@ def selected(base, jobs, run, *, token):
     matches = []
     if selectors and selectors[0].get("conclusion") == "success":
         logs = request(base + f'/jobs/{selectors[0]["id"]}/logs', binary=True, token=token).decode()
-        matches = re.findall(r"(?m)^(?:\d{4}-\d\d-\d\dT\S+ )?SCHEDULE_SELECTION ([0-9a-f]{40}) (daily|weekly)\s*$", logs)
+        matches = re.findall(r"(?m)^(?:\d{4}-\d\d-\d\dT\S+ )?SCHEDULE_SELECTION ([0-9a-f]{40}) (" + "|".join(map(re.escape, TIERS)) + r")\s*$", logs)
     # Rejected manual inputs have no accepted selection and must not annotate main.
     if not matches and run["event"] == "workflow_dispatch":
         return []
     if not matches and run["event"] == "schedule":
         tier = run.get("display_title", "").removeprefix("scheduled-")
-        require(tier in {"daily", "weekly"}, "INCOMPLETE: missing trusted schedule tier")
+        require(tier in TIERS, "INCOMPLETE: missing trusted schedule tier")
         return [(run["head_sha"], tier)]
     require(len(matches) == 1, "INCOMPLETE: missing trusted selection diagnostic")
     return matches
@@ -68,8 +69,7 @@ def record_for(run, job, selection, payload, artifact, repository, runners, *, c
     missing = ("queued-too-long" if (job or run).get("status") in {"queued", "waiting", "pending", "requested"} else
                job.get("conclusion") if job and job.get("conclusion") in {"cancelled", "skipped"} else
                "absent" if not job else None)
-    identity = dict(sha=sha, tier=tier, repository=repository,
-                    attempt=f'{run["id"]}/{run["run_attempt"]}', occurrence=f'{run["event"]}/{run["id"]}',
+    identity = dict(**Identity.actions(repository, sha, tier, run["id"], run["run_attempt"], run["event"]).fields(),
                     runner_name=job.get("runner_name") if job else None,
                     runner_environment="self-hosted" if job and job.get("runner_name") else None)
     if missing:
@@ -105,7 +105,7 @@ def read_index(archive):
 def collect(run, repository, runners, environment, *, clock=None):
     clock = clock or operation_clock()
     token = environment["GH_TOKEN"]
-    require(run["head_branch"] == "main" and run["event"] in {"schedule", "workflow_dispatch"}, "untrusted scheduled run")
+    require(run["head_branch"] == MAIN_BRANCH and run["event"] in {"schedule", "workflow_dispatch"}, "untrusted scheduled run")
     base = f"/repos/{repository}/actions"
     jobs = pages(base + f'/runs/{run["id"]}/attempts/{run["run_attempt"]}/jobs', "jobs", token=token)
     campaigns = [j for j in jobs if j["name"] == "campaign"]
@@ -147,7 +147,7 @@ def collect_event(environment, *, clock=None):
     if "workflow_run" in event:
         runs = [event["workflow_run"]]
     else:
-        path = f"/repos/{repository}/actions/workflows/gate_schedule.yml/runs?branch=main"
+        path = f"/repos/{repository}/actions/workflows/gate_schedule.yml/runs?branch={MAIN_BRANCH}"
         cutoff = (clock.observation - dt.timedelta(seconds=2 * MAX_AGE)).strftime("%Y-%m-%dT%H:%M:%SZ")
         candidates = pages(path + "&created=" + urllib.parse.quote(">=" + cutoff), "workflow_runs", token=token)
         # Old live runs must remain observable even when the hosted sweep was absent.

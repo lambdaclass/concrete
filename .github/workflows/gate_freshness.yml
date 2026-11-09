@@ -21,8 +21,8 @@ jobs:
         run: |
           set -euo pipefail
           source scripts/checks/lib/scheduled_process.sh
-          for tier in daily weekly; do
-            ref="refs/notes/concrete-gates-$tier"
+          refs=$(bounded_run 30 -- python3 scripts/checks/scheduled/selection.py --note-refs)
+          for ref in $refs; do
             exists=$(bounded_run 30 -- git ls-remote origin "$ref")
             if [ -n "$exists" ]; then bounded_run 30 -- git fetch origin "$ref:$ref"; fi
           done

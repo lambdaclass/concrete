@@ -1,5 +1,5 @@
 name: Scheduled gate tiers
-run-name: scheduled-${{ github.event_name == 'schedule' && (github.event.schedule == '43 3 * * 0' && 'weekly' || 'daily') || 'replay' }}
+run-name: scheduled-${{ github.event_name == 'schedule' && (github.event.schedule == '17 2 * * *' && 'daily' || (github.event.schedule == '43 3 * * 0' && 'weekly' || '')) || 'replay' }}
 on:
   schedule:
     - cron: '17 2 * * *'
@@ -40,20 +40,7 @@ jobs:
         run: |
           set -euo pipefail
           source scripts/checks/lib/scheduled_process.sh
-          if [ "$EVENT" = schedule ]; then
-            tier=daily
-            if [ "$CRON" = '43 3 * * 0' ]; then tier=weekly; fi
-            echo "SCHEDULE_SELECTION $GITHUB_SHA $tier"
-            echo "sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
-            echo "tier=$tier" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          sha=$(bounded_run 30 -- python3 scripts/checks/scheduled/history.py "$REQUESTED_SHA")
-          tier="$REQUESTED_TIER"
-          [[ "$tier" = daily || "$tier" = weekly ]]
-          echo "SCHEDULE_SELECTION $sha $tier"
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          echo "tier=$tier" >> "$GITHUB_OUTPUT"
+          bounded_run 30 -- python3 scripts/checks/scheduled/selection.py "$EVENT" "$CRON" "$REQUESTED_SHA" "$REQUESTED_TIER" "$GITHUB_SHA"
   campaign:
     needs: select
     if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
@@ -81,7 +68,6 @@ jobs:
           SELECTED_SHA: ${{ needs.select.outputs.sha }}
           SELECTED_TIER: ${{ needs.select.outputs.tier }}
           RUNNER_ENVIRONMENT: ${{ runner.environment }}
-          OCCURRENCE: ${{ github.event.schedule || format('replay/{0}', github.run_id) }}
         run: |
           set -euo pipefail
           state=$(mktemp -d)

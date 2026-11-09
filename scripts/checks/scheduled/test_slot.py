@@ -32,6 +32,8 @@ class Slot(unittest.TestCase):
                 (pool / f"slot-{number}").touch()
             env = runtime_environment(); env["CONCRETE_HEAVY_SLOT_DIR"] = str(pool)
             shutil.copy(ROOT / "scripts/checks/scheduled/with_slot.sh", scheduled)
+            from runtime_support import copy_policy_runtime
+            copy_policy_runtime(scheduled.parent.parent.parent)
             # Sourcing replayed libraries would produce this exact planted diagnostic.
             replay = Path(work) / "replay/scripts/checks/lib"; replay.mkdir(parents=True)
             (replay / "gate_env.sh").write_text("echo 'untrusted replay controller sourced'; exit 77\n")

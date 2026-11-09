@@ -46,9 +46,7 @@ def check(root):
     # controllers explicitly select the scheduler dispatcher, never generic policy.
     for relative in ('scripts/checks/scheduled_gates.sh', 'scripts/checks/scheduled/with_slot.sh'):
         text = (root / relative).read_text()
-        bootstrap = ('exec python3 -I "$ROOT/scripts/checks/scheduled/suite_budget.py"'
-                     if relative.endswith('scheduled_gates.sh') else
-                     'exec python3 -I "$ROOT/scripts/checks/lib/scheduled_process.py" --cwd "$PWD" --timeout ')
+        bootstrap = 'exec python3 -I "$ROOT/scripts/checks/scheduled/suite_budget.py"'
         if bootstrap not in text:
             raise ValueError(DIAGNOSTIC)
         if 'source "$ROOT/scripts/checks/lib/scheduled_process.sh"' not in text:
@@ -66,6 +64,8 @@ def check(root):
                 if not managed or 'lib/bounded_exec.py' in script or 'lib/bounded.sh' in script:
                     raise ValueError(DIAGNOSTIC)
                 check_shell_launches(script)
+    from ownership import check as check_ownership
+    check_ownership(root)
 
 
 def check_shell_launches(script, *, bootstrap=False):

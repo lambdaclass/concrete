@@ -1,0 +1,39 @@
+name: Scheduled gate freshness
+on:
+  schedule:
+    - cron: '@@schedule:observer_cron@@'
+  workflow_dispatch:
+  push:
+    branches: [@@identity:main_branch@@]
+permissions:
+  contents: read
+jobs:
+  freshness:
+    runs-on: ubuntu-24.04
+    timeout-minutes: @@budget:observe_job_minutes@@
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: @@identity:main_branch@@
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Observe main history independently
+        run: |
+          set -euo pipefail
+          source scripts/checks/lib/scheduled_process.sh
+          refs=$(bounded_run @@budget:selector@@ -- python3 scripts/checks/scheduled/selection.py --note-refs)
+          for ref in $refs; do
+            exists=$(bounded_run @@budget:selector@@ -- git ls-remote @@note-ref:remote@@ "$ref")
+            if [ -n "$exists" ]; then bounded_run @@budget:selector@@ -- git fetch @@note-ref:remote@@ "$ref:$ref"; fi
+          done
+          out=$(mktemp)
+          trap 'rm -f "$out"' EXIT
+          rc=0
+          bounded_run @@budget:observation@@ -- python3 scripts/checks/scheduled/observe.py > "$out" 2>&1 || rc=$?
+          cat "$out"
+          cat "$out" >> "$GITHUB_STEP_SUMMARY"
+          if bounded_is_incomplete "$rc"; then
+            echo 'INCOMPLETE freshness observer timed out' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          exit "$rc"
