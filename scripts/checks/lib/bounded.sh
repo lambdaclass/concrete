@@ -132,9 +132,6 @@ bounded_run() {
     rc="${outcome#exit }"
     [ "$tries" = 2 ] && echo "recovered ${secs}s $*" >> "$BOUNDED_LOG"
   fi
-  if [ "$(cat "$BOUNDED_OUTCOME_FILE" 2>/dev/null)" = incomplete ] && [ -n "${SCHEDULED_OUTCOME_FILE:-}" ]; then
-    python3 "${SCHEDULED_OUTCOME_HELPER:-$(dirname "$BOUNDED_SH")/gate_outcome.py}" INCOMPLETE 'bounded watchdog exhausted' || return 125
-  fi
   rm -rf "$tmp"
   return "$rc"
 }

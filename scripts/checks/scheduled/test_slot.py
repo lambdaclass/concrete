@@ -80,6 +80,20 @@ class Slot(unittest.TestCase):
         self.assertEqual((result.returncode,result.stdout,result.stderr),
                          (1,'','FAIL scheduled outcome: invalid event stream\n'))
 
+    def test_expected_inner_timeout_is_not_gate_outcome(self):
+        command = ['bash', '-c', 'source "$1"; bounded_run 0.02 -- sleep 1; rc=$?; bounded_is_incomplete "$rc" || exit 7; echo expected-timeout', 'bash', str(ROOT / 'scripts/checks/lib/bounded.sh')]
+        result = self.invoke(command)
+        self.assertEqual((result.returncode, result.stdout, result.stderr),
+                         (0, 'expected-timeout\n', ''))
+
+    def test_outer_retry_discards_abandoned_outcome(self):
+        with tempfile.TemporaryDirectory() as work:
+            marker = str(Path(work) / 'attempted')
+            result = self.invoke(['bash', '-c',
+                'if [ ! -e "$1" ]; then touch "$1"; python3 "$SCHEDULED_OUTCOME_HELPER" INCOMPLETE "abandoned attempt"; exec sleep 2; fi; echo recovered',
+                'bash', marker], budget='0.1')
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, 'recovered\n', ''))
+
     def test_git_environment_sanitized(self):
         from unittest.mock import patch
         with patch.dict(os.environ, {"GIT_DIR": "/nonexistent/planted-git-dir", "GIT_WORK_TREE": "/nonexistent/planted-work-tree"}):

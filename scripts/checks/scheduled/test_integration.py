@@ -125,12 +125,13 @@ printf 'depth=128\\n' > report-{n}/depth.txt
                               ('build', "bash -c 'sleep 1'")):
             program=self.report()+f'''source scripts/checks/lib/bounded.sh
 bounded_run 0.02 -- {command}; rc=$?
+if bounded_is_incomplete "$rc"; then python3 "$SCHEDULED_OUTCOME_HELPER" INCOMPLETE "measurement unavailable"; exit 1; fi
 [ "$rc" = 0 ] || exit 1
 '''
             code,index,files,_=self.invoke([program])
             self.assertEqual((code,index['status']),(1,'INCOMPLETE'),stage)
             self.assertEqual(files['gate-0.log'],b'INCOMPLETE scheduled gate: nested watchdog or gate incomplete\n',stage)
-        control=['bash','-c', "source scripts/checks/lib/bounded.sh; bounded_run 0.02 -- bash -c 'sleep 1'; exit 1"]
+        control=['bash','-c', "source scripts/checks/lib/bounded.sh; bounded_run 0.02 -- bash -c 'sleep 1'; rc=$?; if bounded_is_incomplete \"$rc\"; then python3 \"$SCHEDULED_OUTCOME_HELPER\" INCOMPLETE 'control unavailable'; fi; exit 1"]
         code,index,_,_=self.invoke([self.report()],control_command=control)
         self.assertEqual((code,index['status']),(1,'INCOMPLETE'))
         self.assertEqual(index['gates'][0]['controls'][0],dict(id='refusal',status='INCOMPLETE',

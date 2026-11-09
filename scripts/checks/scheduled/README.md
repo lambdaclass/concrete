@@ -176,10 +176,13 @@ append stream for that invocation) and `SCHEDULED_OUTCOME_HELPER` (the trusted
 `gate_outcome.py`). Emit a semantic failure with
 `python3 "$SCHEDULED_OUTCOME_HELPER" FAIL "DIAGNOSTIC"`; emit gate-level availability
 loss with `INCOMPLETE` instead. Events contain `status`, `diagnostic`, and `sha`.
-The shared `bounded.sh` emits INCOMPLETE automatically when an inner measurement,
-build or planted control exhausts its watchdog, even when a caller maps exit 124
-to exit 1. Non-timeout failures must emit FAIL before continuing after an error;
-otherwise a bare nonzero exit is FAIL when no INCOMPLETE event exists.
+Only the gate's top-level code emits a gate outcome. `bounded.sh` records local
+watchdog state only: check `bounded_is_incomplete "$rc"` and explicitly emit
+INCOMPLETE when an unrecovered timeout prevents the gate's observation. Expected
+timeout controls and recovered inner retries must not emit gate outcomes.
+Each outer watchdog attempt has a private outcome stream, discarded on timeout.
+Non-timeout failures must emit FAIL before continuing after an error; otherwise a
+bare nonzero exit is FAIL when no INCOMPLETE event exists.
 Explicit FAIL takes precedence over every INCOMPLETE event. A mismatched event SHA
 is FAIL with `FAIL scheduled outcome: selected SHA mismatch`. The wrapper transports
 INCOMPLETE as reserved exit 125; an unmarked gate exit 124 or 125 remains FAIL.
