@@ -57,8 +57,8 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
 identity with `python3 -I scripts/ids/allocate.py reserve iss|bug "Short immutable title"`.
 Use the returned ID and exact title; never infer a number from local files. Origin must be
 reachable. The [reservation protocol and operator backfill](docs/ISSUE_IDS.md) define failure
-recovery, branch inheritance and legacy imports. `scripts/checks/id_reservations.sh` refuses
-unreserved identities and collisions across origin main and every wip branch. The old filing
+recovery, branch inheritance and legacy imports. `scripts/checks/id_reservations.sh` validates all reservation refs and every record in
+origin/main, HEAD and the working tree. `allocate.py audit-wip` separately audits unrelated wip branches. The old filing
 instructions below describe frozen legacy tooling; no new filing runs the legacy allocator.
 
 **Bugs.**

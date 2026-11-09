@@ -79,16 +79,22 @@ if not makers:
 # Scripts may isolate at module entry, or as the first action in their main function.
 entry = next((n for n in module.body if isinstance(n, ast.FunctionDef) and n.name == 'main'), None)
 def repository_use(statement):
-    return any(isinstance(n, ast.Call) and name(n) in ('git', 'Snapshot') for n in ast.walk(statement))
-entry_isolated = False
-if entry:
-    for statement in entry.body:
+    if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return False  # Definitions do not execute their bodies at module entry.
+    return any(isinstance(n, ast.Call) and name(n) in
+               ('git', 'Snapshot', 'run', 'Popen', 'call', 'check_call', 'check_output')
+               for n in ast.walk(statement))
+def isolated_prefix(statements):
+    for statement in statements:
         if sandbox(statement):
-            entry_isolated = True
-            break
+            return True
         if repository_use(statement):
-            break
-isolated = any(sandbox(n) for n in module.body) or entry_isolated
+            return False
+    return None
+module_prefix = isolated_prefix(module.body)
+entry_prefix = isolated_prefix(entry.body) if entry else None
+# A late module call cannot repair an earlier operation, even if main is safe.
+isolated = module_prefix is True or (module_prefix is None and entry_prefix is True)
 sys.exit(3 if isolated else 1)
 PYSCAN
       case "$?" in
@@ -127,6 +133,8 @@ printf '#!/usr/bin/env bash\ngit init -q "$1"\n' > "$CTL_TREE/scripts/a/b/c/deep
 printf '#!/bin/bash\ngit clone -q "$1" "$2"\n' > "$CTL_TREE/scripts/a/b/nosuffix"
 printf '#!/usr/bin/env bash\nsource "$(dirname "$0")/../../checks/lib/git_sandbox.sh"\ngit_sandbox "$1"\ngit init -q "$2"\n' > "$CTL_TREE/scripts/a/b/good.sh"
 printf "import subprocess\nsubprocess.run(['git', 'init', 'x'])\n" > "$CTL_TREE/scripts/a/b/bad.py"
+printf "import subprocess\nsubprocess.run(['git', 'init'])\nsandbox_environment()\n" > "$CTL_TREE/scripts/a/b/late.py"
+printf "import subprocess\ndef main():\n subprocess.Popen(['git', 'init'])\n sandbox_environment()\n" > "$CTL_TREE/scripts/a/b/late_main.py"
 ctl="$(scan_makers "$CTL_TREE")"; rm -rf "${CTL_TREE:?}"
 printf '%s\n' "$ctl" | grep -q $'^FAIL\tscripts/a/b/c/deep.sh\t' \
   && ok "an unsandboxed maker three directories down is refused" || no "the scan missed scripts/a/b/c/deep.sh: $ctl"
@@ -136,6 +144,11 @@ printf '%s\n' "$ctl" | grep -q $'^FAIL\tscripts/a/b/bad.py\t' \
   && ok "an unsandboxed Python maker is refused" || no "Python scan missed maker: $ctl"
 printf '%s\n' "$ctl" | grep -q $'^ok\tscripts/a/b/good.sh\t' \
   && ok "a sandboxed maker at depth passes" || no "the scan did not accept scripts/a/b/good.sh: $ctl"
+
+for f in late.py late_main.py; do
+  printf '%s\n' "$ctl" | grep -q "$(printf '^FAIL\tscripts/a/b/%s\t' "$f")" \
+    && ok "Python $f must isolate before subprocess calls" || no "Python ordering scan missed $f: $ctl"
+done
 
 # The harness itself is a sandbox: it must not be steered by whatever environment started it.
 source "$HELPER" || exit 2

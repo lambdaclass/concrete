@@ -44,8 +44,9 @@ recover. Failed filing leaves the identity held so the same record can be comple
 Legacy conversions retain `legacy_oid`, require its exact lease, and fetch the remote old object
 without changing caller refs or FETCH_HEAD when the pre-push verifier needs it. Schema-1
 reservations cannot be converted again. Planning and checking fetch into a private bare repository;
-they never update caller refs or notes. Temporary Git operations isolate repository variables and
-global/system config, including when invoked from a hook. Origin must be reachable.
+they never update caller refs or notes. Temporary Git operations clear repository-locating variables, including when invoked from a
+hook, while preserving operator transport configuration. Private snapshots disable hooks and
+signing and inherit transport/authentication settings from the caller, including repo-local settings. Origin must be reachable.
 
 ## Enforcement and remote audit
 
@@ -60,20 +61,21 @@ the enforcement branch cannot pass its landing gate until origin/main and its ow
 are reserved. Main's old tools keep operating during preparation. After activation there are no
 unreserved historical-ID exemptions. Deleted files are absent only from the tree being checked.
 
-The normal gate does not judge unrelated wip branches. `reserve` takes the next number above all
-advertised records and reservations but does not require unrelated drafts to pass validation.
+The normal gate does not judge unrelated wip branches. `reserve` takes the next number above origin/main records and reservation refs. Unreserved
+wip drafts have no numbering authority and cannot exhaust or claim numbers. Malformed main
+records refuse allocation; unrelated drafts are recorded as audit errors without crashing.
 The authoritative reservation namespace provides mutual exclusion. A stale unreserved wip branch
 therefore cannot stop another branch's checks or reservations.
 
 `allocate.py audit-wip` separately checks all advertised main/wip records against reservations.
 `backfill --output PLAN` produces a nonpublishing operator plan for that same inventory plus the
 current tree and unused legacy reservations. Explicit titles define identity. For pre-title
-rows, backfill recovers historical titles; when evidence changed across rebases it accepts the
-canonical explicit title only if stable date/opened/area/kind fields agree. If no explicit
-title exists yet, it proposes the most widely preserved historical title (lexical tie break)
-and exposes all variants and stable fields in `legacy_matches` for operator review. Conflicting explicit
-titles or incompatible legacy identities require operator reconciliation, never automatic
-renumbering. Main is preferred for initial provenance; existing reservation provenance never
+rows, backfill recovers first-introduction titles from history. Distinct remaining titles require
+operator reconciliation; date/area signatures and majority votes never establish identity.
+The local branch replaces its remote inventory entry rather than being counted twice.
+Detached allocation or backfill requires `id.branch` or exactly one matching advertised wip HEAD;
+an unattributable or ambiguous HEAD is refused, never silently omitted.
+Main is preferred for initial provenance; existing reservation provenance never
 changes. The five ISS-0018 copies represent one evolving issue, not five introductions.
 
 ## Exact operator rollout order
