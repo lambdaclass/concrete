@@ -54,7 +54,7 @@ def collision(root, kind):
     (root / 'unrelated').write_text('different parent')
     a.git(root, 'add', 'unrelated')
     a.git(root, 'commit', '-qm', 'unrelated history')
-    a.git(root, 'cherry-pick', introduced)
+    a.git(root, 'cherry-pick', '-x', introduced)
     assert a.git(root, 'rev-parse', 'HEAD').stdout.strip() != introduced
     ok(cli(root, 'check'))
     # Edits inherit the introduction, regardless of title wording or row line number.

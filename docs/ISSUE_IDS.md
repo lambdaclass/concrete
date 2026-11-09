@@ -149,7 +149,8 @@ An introduction is a commit containing an ID when none of its parents contains t
 The allocator reads ledger patches and checks candidate parents for presence.
 Its provenance fingerprint binds the original record payload, original author name/email,
 authored timestamp and complete introduction commit message. Parent/tree/committer changes
-from a rebase or cherry-pick preserve that authored introduction. Matching current titles,
+from a rebase or cherry-pick preserve that authored introduction. Git's optional
+`(cherry picked from commit ...)` transfer trailer is excluded from the original message. Matching current titles,
 row dates or areas cannot do so. Two independent authored additions conflict even when their
 row text matches. As with Git's authored history itself, copying the complete authored change
 is a provenance transfer, not a new authorship claim; these tools do not authenticate authors. It inspects all

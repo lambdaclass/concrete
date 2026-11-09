@@ -159,6 +159,8 @@ def introduction_provenance(repo, revision, key):
     # and committer. Bind the original record payload, author (including authored
     # timestamp), and complete message, never the current row's wording.
     author = git(repo, 'show', '-s', '--format=%an%x00%ae%x00%at%x00%B', revision).stdout
+    # Git's -x trailer records the transfer; it is not part of original authorship.
+    author = re.sub(r'(?m)^\(cherry picked from commit [0-9a-f]{40,64}\)\s*$', '', author).rstrip()
     paths = git(repo, 'ls-tree', '-r', '--format=%(path)', revision).stdout.splitlines()
     if key.startswith('ISS-'):
         text = git(repo, 'show', f'{revision}:ISSUES.tsv').stdout
@@ -420,7 +422,8 @@ def make_plan(root, snapshot, local, branch, scope='all'):
                  if scope == 'all' or b == 'main']
     updates = []
     for key, rows in sorted(uses.items()):
-        errors = [identity_error(snapshot, key, sha, name) for name, _, sha in rows]
+        errors = [f'{name}: {error}' for name, _, sha in rows
+                  if (error := identity_error(snapshot, key, sha, name))]
         roots = set().union(*(introductions(snapshot.repo, sha).get(key, set()) for _, _, sha in rows))
         if (not snapshot.reservation(key) and
                 not introductions(snapshot.repo, snapshot.remote_heads['main']).get(key) and
