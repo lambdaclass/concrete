@@ -1491,7 +1491,7 @@ def InputDeterministic
   ∀ l₂ c₂, R P c a l₂ c₂ → l₁ = l₂ ∧ c₁ = c₂
 
 /-- Representation lemma. Function-backed internal transitions compare equal dispatcher
-results; this is not independent determinism evidence (approved: PENDING). -/
+results; this is not independent determinism evidence (approved: REV-C1-agy-f6f3683ff). -/
 theorem step_silent_deterministic (P : Program O) (c c₁ : Config O) (l₁ : Label O)
     (h₁ : AnswerStep P c none l₁ c₁) :
     InputDeterministic AnswerStep P c c₁ none l₁ := by
@@ -1502,7 +1502,7 @@ theorem step_silent_deterministic (P : Program O) (c c₁ : Config O) (l₁ : La
     | silent h₂ => exact ⟨rfl, step_silent_deterministic_inv h₁ h₂⟩
 
 /-- Representation lemma. Function-backed transitions at a fixed answer compare equal
-dispatcher and continuation results; this is not soundness evidence (approved: PENDING). -/
+dispatcher and continuation results; this is not soundness evidence (approved: REV-C1-agy-f6f3683ff). -/
 theorem step_deterministic (P : Program O) (c c₁ : Config O)
     (a : Option (Answer O.Val O.Event O.Store)) (l₁ : Label O)
     (h₁ : AnswerStep P c a l₁ c₁) :
@@ -1524,7 +1524,7 @@ theorem step_deterministic (P : Program O) (c c₁ : Config O)
 /-! ### Independent operational semantics and correspondence -/
 
 /-- Representation lemma. Argument judgment and left-to-right executable argument traversal
-have the same results; proved by list/result cases (approved: PENDING). -/
+have the same results; proved by list/result cases (approved: REV-C1-agy-f6f3683ff). -/
 theorem arguments_representation (L : AList Var O.Val) (st : O.Store) (es : List O.Expr)
     (r : Res (List O.Val × O.Store)) : Arguments O L st es r ↔ evalArgs O L st es = r := by
   constructor
@@ -1556,7 +1556,7 @@ theorem arguments_representation (L : AList Var O.Val) (st : O.Store) (es : List
           exact .cons he (ih st₁ _ hr)
 
 /-- Representation lemma. The independently specified registration judgment agrees with the
-executable stack traversal (approved: PENDING). -/
+executable stack traversal (approved: REV-C1-agy-f6f3683ff). -/
 theorem registered_representation (d : Deferred O) (k k' : List (Frame O)) :
     Registered d k k' ↔ register d k = some k' := by
   constructor
@@ -1574,7 +1574,7 @@ theorem registered_representation (d : Deferred O) (k k' : List (Frame O)) :
       | contradiction
 
 /-- Representation lemma. Destination admission agrees with the executable destination
-and lifecycle adapters (approved: PENDING). -/
+and lifecycle adapters (approved: REV-C1-agy-f6f3683ff). -/
 theorem destination_representation (dst : Option Var) (v : O.Val) (L L' : AList Var O.Val)
     (st st' : O.Store) : Destination O dst v L st L' st' ↔
       bindLife O dst st = some st' ∧ L' = bindDst dst v L := by
@@ -1587,26 +1587,26 @@ theorem destination_representation (dst : Option Var) (v : O.Val) (L L' : AList 
               · rintro ⟨h, rfl⟩; exact .bind h
 
 /-- Helper (congruence). Independent argument rules have a unique result, by induction on
-argument derivations and inversion of the other derivation (approved: PENDING). -/
+argument derivations and inversion of the other derivation (approved: REV-C1-agy-f6f3683ff). -/
 theorem arguments_unique_inv {L : AList Var O.Val} {st : O.Store} {es : List O.Expr}
     {r r' : Res (List O.Val × O.Store)} (h : Arguments O L st es r)
     (h' : Arguments O L st es r') : r = r' := by
   induction h generalizing r' <;> cases h' <;> simp_all <;> grind
 
-/-- Helper (congruence). Registration is unique by stack-rule inversion (approved: PENDING). -/
+/-- Helper (congruence). Registration is unique by stack-rule inversion (approved: REV-C1-agy-f6f3683ff). -/
 theorem registered_unique_inv {d : Deferred O} {k k₁ k₂ : List (Frame O)}
     (h : Registered d k k₁) (h' : Registered d k k₂) : k₁ = k₂ := by
   induction h generalizing k₂ <;> cases h' <;> simp_all <;> grind
 
 /-- Helper (congruence). Destination binding is unique by admission-rule inversion
-(approved: PENDING). -/
+(approved: REV-C1-agy-f6f3683ff). -/
 theorem destination_unique_inv {dst : Option Var} {v : O.Val} {L L₁ L₂ : AList Var O.Val}
     {st st₁ st₂ : O.Store} (h : Destination O dst v L st L₁ st₁)
     (h' : Destination O dst v L st L₂ st₂) : L₁ = L₂ ∧ st₁ = st₂ := by
   cases h <;> cases h' <;> simp_all
 
 /-- Helper (inversion). Translates each independent operational constructor into the
-function-backed representation; no uniqueness argument uses this lemma (approved: PENDING). -/
+function-backed representation; no uniqueness argument uses this lemma (approved: REV-C1-agy-f6f3683ff). -/
 theorem rules_answer_sound_inv {P : Program O} {c c' : Config O}
     {a : Option (Answer O.Val O.Event O.Store)} {l : Label O}
     (h : Rules P c a l c') : AnswerStep P c a l c' := by
@@ -1636,7 +1636,7 @@ theorem rules_deterministic (P : Program O) (c c₁ : Config O)
   all_goals grind only [arguments_unique_inv, registered_unique_inv, destination_unique_inv]
 
 /-- Helper (inversion). Statement completeness, with explicit operand and admission cases
-rather than a product of all dispatcher branches (approved: PENDING). -/
+rather than a product of all dispatcher branches (approved: REV-C1-agy-f6f3683ff). -/
 private theorem rules_exec_complete_inv {P : Program O} (s : Stmt O)
     (L : AList Var O.Val) (st : O.Store) (k : List (Frame O)) {c' : Config O}
     (hs : step P ⟨.exec s, L, st, k⟩ = some (.next c')) :
@@ -1722,7 +1722,7 @@ private theorem rules_exec_complete_inv {P : Program O} (s : Stmt O)
     | ok val => simp [step, he, onRes] at hs
 
 /-- Helper (inversion). Normal-completion completeness by frame and operand-result cases
-(approved: PENDING). -/
+(approved: REV-C1-agy-f6f3683ff). -/
 private theorem rules_done_complete_inv {P : Program O}
     (L : AList Var O.Val) (st : O.Store) (k : List (Frame O)) {c' : Config O}
     (hs : step P ⟨.done, L, st, k⟩ = some (.next c')) :
@@ -1763,7 +1763,7 @@ private theorem rules_done_complete_inv {P : Program O}
       exact .implicitReturn hl ((destination_representation _ _ _ _ _ _).mpr ⟨hb, rfl⟩)
 
 /-- Helper (inversion). Exit completeness by frame and, where inspected, exit kind
-(approved: PENDING). -/
+(approved: REV-C1-agy-f6f3683ff). -/
 private theorem rules_exit_complete_inv {P : Program O}
     (e : Exit O.Val) (L : AList Var O.Val) (st : O.Store) (k : List (Frame O)) {c' : Config O}
     (hs : step P ⟨.exiting e, L, st, k⟩ = some (.next c')) :
@@ -1809,7 +1809,7 @@ private theorem rules_exit_complete_inv {P : Program O}
         exact .explicitReturn hl ((destination_representation _ _ _ _ _ _).mpr ⟨hb, rfl⟩)
 
 /-- Helper (inversion). Silent completeness reduces to statement and frame inversion
-(approved: PENDING). -/
+(approved: REV-C1-agy-f6f3683ff). -/
 theorem rules_silent_complete_inv {P : Program O} {c c' : Config O}
     (hs : step P c = some (.next c')) : Rules P c none .silent c' := by
   obtain ⟨ctrl, L, st, k⟩ := c
@@ -1820,7 +1820,7 @@ theorem rules_silent_complete_inv {P : Program O} {c c' : Config O}
   | trapped kd site => simp [step] at hs
 
 /-- Helper (inversion). Every successful request continuation is a primitive operational
-transition; other statement and frame forms cannot request (approved: PENDING). -/
+transition; other statement and frame forms cannot request (approved: REV-C1-agy-f6f3683ff). -/
 private theorem rules_request_complete_inv {P : Program O} {c c' : Config O}
     {p : O.Prim} {vs : List O.Val} {site : SiteId} {st : O.Store}
     {cont : Answer O.Val O.Event O.Store → Option (Config O)}
@@ -1902,7 +1902,7 @@ theorem rules_complete (P : Program O) (c : Config O)
     exact rules_request_complete_inv hs ha hk
 
 /-- Representation lemma. Exact correspondence with the answer-retaining relation follows
-from dispatcher soundness and completeness (approved: PENDING). -/
+from dispatcher soundness and completeness (approved: REV-C1-agy-f6f3683ff). -/
 theorem rules_iff_answerStep (P : Program O) (c : Config O)
     (a : Option (Answer O.Val O.Event O.Store)) (l : Label O) (c' : Config O) :
     Rules P c a l c' ↔ AnswerStep P c a l c' := by
@@ -1915,7 +1915,7 @@ theorem rules_iff_answerStep (P : Program O) (c : Config O)
     | prim hs ha hk => exact ⟨_, _, _, _, _, hs, ha, hk, rfl⟩
 
 /-- Representation lemma. Erasing exactly the answer index gives the original observable
-single-step relation (approved: PENDING). -/
+single-step relation (approved: REV-C1-agy-f6f3683ff). -/
 theorem step_iff_rules (P : Program O) (c : Config O) (l : Label O) (c' : Config O) :
     Step P c l c' ↔ ∃ a, Rules P c a l c' := by
   constructor
@@ -2705,7 +2705,7 @@ private theorem base_execution : ∀ st₁ tr₂,
   exact boundary_of_performed (P := prog) (e := .ret 7) (k := []) [emptyScope] empty_passes hp
 
 /-- Representation lemma. The no-dispatch mutant retains successful empty-scope drops
-(approved: PENDING). -/
+(approved: REV-C1-agy-f6f3683ff). -/
 private theorem mutant_base_execution : ∀ st₁ tr₂,
     Performed prog [.drop [] [] []] [] st₁ tr₂ [] .init →
     BoundaryRun prog (NoDispatchStep prog) (.ret 7) [] [emptyScope] [] st₁ [.drop [] [] []] tr₂ [] .init := by
@@ -2746,7 +2746,7 @@ inductive SkipReturnStep (P : Program O) : Config O → Label O → Config O →
   | skip {c c'} : c'.ctrl ≠ .done → SkipReturnStep P c .silent c'
 
 /-- Helper (inversion). A shape invariant of the planted relation: no positive-length path
-can introduce `Ctrl.done` (approved: PENDING). -/
+can introduce `Ctrl.done` (approved: REV-C1-agy-f6f3683ff). -/
 private theorem skip_no_done {P : Program O} {stop : Config O → Prop}
     {c c' : Config O} {tr : List O.Event} {n : Nat}
     (h : FirstStepsN (SkipReturnStep P) stop c tr c' n) : c.ctrl ≠ .done → c'.ctrl ≠ .done := by
@@ -2770,7 +2770,7 @@ private theorem saved_three : FirstStepsN (Step prog) (fun c => c.frames.length 
   exact FirstStepsN.step (O := ops) (stop := fun c => c.frames.length ≤ 0) (l := .silent) (by decide) (Step.silent (P := prog) rfl) (.stop (by decide))
 
 /-- Representation lemma. A three-step mutant path crosses the same boundary while never
-reaching the required restored return configuration (approved: PENDING). -/
+reaching the required restored return configuration (approved: REV-C1-agy-f6f3683ff). -/
 private theorem skipped_three : FirstStepsN (SkipReturnStep prog) (fun c => c.frames.length ≤ 0)
     savedStart [] savedEnd 3 := by
   let mid : Config ops := ⟨.exiting (.ret 7), [], .init, returnQ⟩
@@ -2819,7 +2819,7 @@ private theorem bump_five : FirstStepsN (Step prog) (fun c => c.frames.length �
   exact FirstStepsN.step (O := ops) (stop := fun c => c.frames.length ≤ 0) (l := .silent) (by decide) (Step.silent (P := prog) rfl) (.stop (by decide))
 
 /-- Representation lemma. The mutant completes five steps without a restored return
-(approved: PENDING). -/
+(approved: REV-C1-agy-f6f3683ff). -/
 private theorem skipped_five : FirstStepsN (SkipReturnStep prog) (fun c => c.frames.length ≤ 0)
     ⟨.exec bumpD.stmt, [(x, 7)], .init, returnQ⟩ [] bumpEnd 5 := by
   let mid : Config ops := ⟨.exiting (.ret 7), [], .init, returnQ⟩
