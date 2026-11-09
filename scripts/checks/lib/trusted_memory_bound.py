@@ -47,7 +47,7 @@ def run(command, limit=LIMIT, seconds=600):
             raise ValueError(f"FAIL examples memory: cgroup MemoryMax exceeded ({limit} bytes)")
         if state.stdout.strip() == "timeout":
             raise RuntimeError("INCOMPLETE examples memory: service timeout")
-        if result.returncode and not state.stdout.strip():
+        if result.returncode and state.stdout.strip() not in ("exit-code", "signal", "core-dump"):
             raise RuntimeError("INCOMPLETE examples memory: cannot establish memory-limited service")
         return result.returncode
     finally:
