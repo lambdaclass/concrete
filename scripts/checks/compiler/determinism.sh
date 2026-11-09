@@ -31,25 +31,15 @@ cd "$root"
 # shellcheck source=scripts/checks/lib/limits.sh
 source scripts/checks/lib/limits.sh
 gate_limits 64 40000
-work=$(mktemp -d)
-trap 'rc=$?; bounded_summary || true
-  if [ "$rc" = 0 ] && grep -Eqs "^(incomplete|runner-failed)" "${BOUNDED_LOG:-/nonexistent}"; then
-    echo "INCOMPLETE: a bounded run timed out twice; not a pass"; rc=3
-  fi
-  rm -rf "${work:?}"; exit "$rc"' EXIT
-BOUNDED_PARENT="$work"
-# shellcheck source=scripts/checks/lib/bounded.sh
-source scripts/checks/lib/bounded.sh
-[ "$BOUNDED_HAVE_WATCHDOG" = 1 ] || { echo "determinism: python3 is required for bounded runs" >&2; exit 2; }
-bounded() {
-  local secs=$1 rc=0
-  shift
-  bounded_run -i /dev/null "$secs" -- "$@" || rc=$?
-  if [ "$rc" != 0 ] && bounded_is_incomplete "$rc"; then
-    echo "determinism: INCOMPLETE (timed out twice): $*" >&2
-  fi
-  return "$rc"
-}
+# Shared C lifecycle; the scheduler owns orchestration and outcome interpretation.
+source scripts/checks/compiler/campaign.sh
+
+report=${1:-$work/report}
+head_sha=$(git rev-parse HEAD)
+expected_sha=${SELECTED_SHA:-$head_sha}
+[[ "$expected_sha" =~ ^[0-9a-f]{40}$ ]] && [ "$head_sha" = "$expected_sha" ] ||
+  { echo 'FAIL slice0_determinism: selected SHA does not match HEAD' >&2; exit 1; }
+campaign_identity "$report" "$expected_sha"
 emit_only=${DETERMINISM_EMIT_ONLY:-0}
 case "$emit_only" in 0|1) ;; *) echo "determinism: DETERMINISM_EMIT_ONLY must be 0 or 1" >&2; exit 2 ;; esac
 if [ "$emit_only" = 1 ]; then
@@ -286,13 +276,14 @@ control_compare combined \
 read -r -a first_expectation <<<"$first_expect"
 for plant in nondeterministic monotonic; do
   rc=0
-  (cd "$root" && bounded 120 "$lake_cmd" --dir "$root" env lean --run "$driver" emit "${first_program#bir:}" \
+  (cd "$root" && CAMPAIGN_EXPECT_FAILURE=1 bounded 120 "$lake_cmd" --dir "$root" env lean --run "$driver" emit "${first_program#bir:}" \
     "$work/refused-$plant" "$target" "${first_expectation[@]}" --plant "$plant") >"$work/refusal-$plant.log" 2>&1 || rc=$?
-  if [ "$rc" != 2 ] || ! grep -qF 'plant without --allow-planted-failure' "$work/refusal-$plant.log"; then
+  if [ "$rc" != 2 ] || ! grep -qxF 'invalid expectation, or a plant without --allow-planted-failure' "$work/refusal-$plant.log"; then
     echo "FAIL slice0_determinism control refusal ($plant): plant did not require the explicit flag" >&2
     cat "$work/refusal-$plant.log" >&2
     exit 1
   fi
 done
 echo 'ok slice0_determinism control refusal: explicit flag required'
+cp "$work/manifest.txt" "$report/manifest.txt"
 echo 'PASS slice0_determinism'

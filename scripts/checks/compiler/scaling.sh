@@ -15,7 +15,7 @@
 # lean --run measures the interpreted compiler, the only compiler available until concrete exists.
 #
 # usage: scaling.sh [REPORT_DIR] [--allow-planted-failure --plant linear|quadratic]
-# SCALING_TIER=pr builds Concrete and runs deterministic family/depth coverage plus fast
+# SELECTED_TIER=pr builds Concrete and runs deterministic family/depth coverage plus fast
 # analyzer/refusal/provenance controls (no wall-clock qualification). SCALING_IN_PROCESS_ONLY=1 omits
 # native timing for local smoke runs. Every normal qualification/daily run automatically checks
 # linear PASS, quadratic FAIL, noise-envelope FAIL, plant-without-authorization refusal and
@@ -28,25 +28,8 @@ cd "$root"
 # shellcheck source=scripts/checks/lib/limits.sh
 source scripts/checks/lib/limits.sh
 gate_limits 64 40000
-work=$(mktemp -d)
-trap 'rc=$?; bounded_summary || true
-  if [ "$rc" = 0 ] && grep -Eqs "^(incomplete|runner-failed)" "${BOUNDED_LOG:-/nonexistent}"; then
-    echo "INCOMPLETE: a bounded run timed out twice; not a pass"; rc=3
-  fi
-  rm -rf "${work:?}"; exit "$rc"' EXIT
-BOUNDED_PARENT="$work"
-# shellcheck source=scripts/checks/lib/bounded.sh
-source scripts/checks/lib/bounded.sh
-[ "$BOUNDED_HAVE_WATCHDOG" = 1 ] || { echo "scaling: python3 is required for bounded runs" >&2; exit 2; }
-bounded() {
-  local secs=$1 rc=0
-  shift
-  bounded_run -i /dev/null "$secs" -- "$@" || rc=$?
-  if [ "$rc" != 0 ] && bounded_is_incomplete "$rc"; then
-    echo "scaling: INCOMPLETE (timed out twice): $*" >&2
-  fi
-  return "$rc"
-}
+# Shared C lifecycle; the scheduler owns orchestration and outcome interpretation.
+source scripts/checks/compiler/campaign.sh
 
 report=$work/report
 if [ "$#" -gt 0 ] && [ "${1#-}" = "$1" ]; then report=$1; shift; fi
@@ -69,11 +52,11 @@ case "$(uname -s)-$(uname -m)" in
   *) echo "scaling: runs only on x86-64 Linux (one machine, one job)" >&2; exit 2 ;;
 esac
 case "$in_process_only" in 0|1) ;; *) echo "scaling: SCALING_IN_PROCESS_ONLY must be 0 or 1" >&2; exit 2 ;; esac
-tier=${SCALING_TIER:-qualification}
-case "$tier" in pr|qualification|daily) ;; *) echo "scaling: invalid SCALING_TIER" >&2; exit 2 ;; esac
+tier=${SELECTED_TIER:-qualification}
+case "$tier" in pr|qualification|daily) ;; *) echo "scaling: invalid SELECTED_TIER" >&2; exit 2 ;; esac
 [ "$tier" != pr ] || in_process_only=1
 head_sha=$(git rev-parse HEAD)
-expected_sha=${CONCRETE_SCALING_EXPECTED_SHA:-${SELECTED_SHA:-}}
+expected_sha=${SELECTED_SHA:-$head_sha}
 mkdir -p "$report"
 printf 'sha=%s\ntier=%s\n' "$head_sha" "$tier" >"$report/identity.txt"
 
@@ -103,7 +86,8 @@ check_exact_sha() { # check_exact_sha ACTUAL_HEAD EXPECTED_SHA [EVENT_NAME] [REF
 }
 
 verify_report_sha() { # verify_report_sha FILE EXPECTED_SHA EXPECTED_TIER
-  python3 -I - "$1" "$2" "$3" <<'PY'
+  local rc=0
+  python3 -I - "$1" "$2" "$3" <<'PY' || rc=$?
 import re
 import sys
 from pathlib import Path
@@ -128,64 +112,35 @@ got_tier = tier_match.group(1)
 if got_tier != expected_tier:
     sys.exit(f"FAIL scaling: report tier {got_tier} in {path} does not match expected tier {expected_tier}")
 PY
+  if [ "$rc" != 0 ] && [ "${CAMPAIGN_EXPECT_FAILURE:-0}" != 1 ]; then
+    campaign_outcome FAIL 'scaling report SHA/tier binding failed'
+  fi
+  return "$rc"
 }
 
-check_ci2_runner() { # check_ci2_runner REPOSITORY ENVIRONMENT RUNNER_NAME INVENTORY_PATH
-  python3 -I - "$1" "$2" "$3" "$4" <<'PY'
-import sys
-from pathlib import Path
-
-repo, env, name, inv_path = sys.argv[1:]
-for key, val in (("github_repository", repo), ("runner_environment", env), ("runner_name", name)):
-    if not val or val == "unknown":
-        sys.exit(f"FAIL scaling: missing or unknown {key}")
-if env != "self-hosted":
-    sys.exit(f"FAIL scaling: expected runner_environment=self-hosted, got {env}")
-path = Path(inv_path)
-try:
-    lines = path.read_text(encoding="utf-8").splitlines()
-except OSError as error:
-    sys.exit(f"FAIL scaling: {path}: cannot read runner inventory ({error})")
-runners = {}
-pairs = set()
-for number, raw in enumerate(lines, 1):
-    line = raw.strip()
-    if not line or line.startswith("#"):
-        continue
-    fields = line.split()
-    if len(fields) != 2:
-        sys.exit(f"FAIL scaling: {path}:{number}: expected repository and one runner name")
-    r, n = fields
-    if (r, n) in pairs:
-        sys.exit(f"FAIL scaling: {path}:{number}: duplicate {r} {n}")
-    pairs.add((r, n))
-    runners.setdefault(r, set()).add(n)
-if not runners:
-    sys.exit(f"FAIL scaling: {path}: empty runner inventory")
-eligible = runners.get(repo)
-if eligible is None:
-    sys.exit(f"FAIL scaling: {path}: no concrete-ci-2 runner inventory for {repo}")
-if name not in eligible:
-    sys.exit(f"FAIL scaling: runner_name={name} is not eligible for {repo} in {path}")
-PY
+check_ci2_runner() {
+  python3 -I "$root/scripts/checks/lib/ci2_binding.py"
 }
-
-if [ -n "${CONCRETE_SCALING_GITHUB_REPOSITORY:-}${CONCRETE_SCALING_RUNNER_ENVIRONMENT:-}${CONCRETE_SCALING_RUNNER_NAME:-}" ]; then
-  check_ci2_runner \
-    "${CONCRETE_SCALING_GITHUB_REPOSITORY:-}" \
-    "${CONCRETE_SCALING_RUNNER_ENVIRONMENT:-}" \
-    "${CONCRETE_SCALING_RUNNER_NAME:-}" \
-    "$root/scripts/checks/lib/ci2_runners.txt"
-fi
-if [ -n "${CONCRETE_SCALING_EXPECTED_SHA:-}${SELECTED_SHA:-}${CONCRETE_SCALING_EVENT_NAME:-}${CONCRETE_SCALING_REF:-}" ]; then
-  check_exact_sha \
-    "$head_sha" \
-    "$expected_sha" \
-    "${CONCRETE_SCALING_EVENT_NAME:-}" \
-    "${CONCRETE_SCALING_REF:-}" \
-    "${CONCRETE_SCALING_RUNNER_ENVIRONMENT:-}"
-else
-  expected_sha=$head_sha
+check_exact_sha "$head_sha" "$expected_sha" "${GITHUB_EVENT_NAME:-}" "${GITHUB_REF:-}" "${RUNNER_ENVIRONMENT:-}"
+campaign_identity "$report" "$expected_sha"
+# Heavy CI and scheduled campaigns require authoritative runner verification. Local
+# focused smoke modes remain explicit and cannot qualify wall-clock measurements.
+if [ "$tier" != pr ] && [ "$in_process_only" = 0 ]; then
+  binding_rc=0
+  check_ci2_runner >"$work/binding.log" 2>&1 || binding_rc=$?
+  if [ "$binding_rc" != 0 ]; then
+    cat "$work/binding.log" >&2
+    if grep -q '^INCOMPLETE ' "$work/binding.log"; then
+      campaign_outcome INCOMPLETE 'runner inventory unavailable'
+      exit 125
+    fi
+    exit "$binding_rc"
+  fi
+  source "$root/scripts/checks/lib/heavy_slots.sh"
+  if ! heavy_slot_acquire; then
+    campaign_outcome INCOMPLETE 'shared host heavy slot unavailable'
+    exit 125
+  fi
 fi
 verify_report_sha "$report/identity.txt" "$expected_sha" "$tier"
 driver=(lake env lean --run "$root/scripts/checks/compiler/scaling.lean")
@@ -220,6 +175,7 @@ if [ -n "$plant" ]; then
 fi
 
 control_setup() { # control_setup PLANT REASON LOG
+  campaign_outcome FAIL "scaling control $1: control setup: $2"
   echo "FAIL scaling control $1: control setup: $2" >&2
   [ ! -f "$3" ] || cat "$3" >&2
 }
@@ -247,7 +203,7 @@ control_quadratic() {
     control_setup quadratic "driver exited $rc" "$work/control-quadratic-driver.log"
     return 1
   fi
-  analyze "$samples" "$work/control-quadratic-report.tsv" quadratic >"$log" 2>&1 || rc=$?
+  CAMPAIGN_EXPECT_FAILURE=1 analyze "$samples" "$work/control-quadratic-report.tsv" quadratic >"$log" 2>&1 || rc=$?
   if [ "$rc" = 0 ]; then
     control_setup quadratic "quadratic plant unexpectedly passed" "$log"
     return 1
@@ -277,7 +233,7 @@ control_noise_envelope() {
     printf 'sample\t%s\t60\tplant_linear\t10000000\t1\n' "$rep" >>"$samples"
     printf 'sample\t%s\t600\tplant_linear\t%s\t1\n' "$rep" "$large_ns" >>"$samples"
   done
-  bounded 60 python3 -I "$root/scripts/checks/lib/scaling_report.py" "$samples" "$work/control-envelope-report.tsv" \
+  CAMPAIGN_EXPECT_FAILURE=1 bounded 60 python3 -I "$root/scripts/checks/lib/scaling_report.py" "$samples" "$work/control-envelope-report.tsv" \
     --k0 6 --repetitions 9 --max-exponent 1.35 --min-stage-ns 10000000 --min-native-ns 100000000 \
     --mode linear >"$log" 2>&1 || rc=$?
   if [ "$rc" != 1 ] || [ "$(grep -c '^FAIL scaling:' "$log")" != 1 ] || ! grep -Eq \
@@ -291,14 +247,14 @@ control_noise_envelope() {
 
 control_refusal() {
   local log=$work/control-refusal.log rc=0
-  bounded 60 "${driver[@]}" measure "$k0" "$repetitions" "$target" --plant quadratic >"$log" 2>&1 || rc=$?
-  if [ "$rc" != 2 ] || ! grep -qF 'plants require --allow-planted-failure --plant linear|quadratic' "$log"; then
+  CAMPAIGN_EXPECT_FAILURE=1 bounded 60 "${driver[@]}" measure "$k0" "$repetitions" "$target" --plant quadratic >"$log" 2>&1 || rc=$?
+  if [ "$rc" != 2 ] || ! grep -qxF 'plants require --allow-planted-failure --plant linear|quadratic' "$log"; then
     control_setup refusal "driver did not refuse --plant without --allow-planted-failure (status $rc)" "$log"
     return 1
   fi
   rc=0
-  bounded 60 bash "$root/scripts/checks/compiler/scaling.sh" "$work/refusal-report" --plant quadratic >"$log" 2>&1 || rc=$?
-  if [ "$rc" != 2 ] || ! grep -qF 'scaling: plants require --allow-planted-failure --plant linear|quadratic' "$log"; then
+  CAMPAIGN_EXPECT_FAILURE=1 bounded 60 env -u SCHEDULED_OUTCOME_FILE bash "$root/scripts/checks/compiler/scaling.sh" "$work/refusal-report" --plant quadratic >"$log" 2>&1 || rc=$?
+  if [ "$rc" != 2 ] || ! grep -qxF 'scaling: plants require --allow-planted-failure --plant linear|quadratic' "$log"; then
     control_setup refusal "gate did not refuse --plant without --allow-planted-failure (status $rc)" "$log"
     return 1
   fi
@@ -306,26 +262,9 @@ control_refusal() {
 }
 
 control_ci2_provenance() {
-  local inv=$root/scripts/checks/lib/ci2_runners.txt log=$work/control-ci2.log rc=0
-  if ! check_ci2_runner unbalancedparentheses/concrete2 self-hosted concrete-ci-2-gha1 "$inv" >"$log" 2>&1 ||
-      ! check_ci2_runner lambdaclass/concrete self-hosted concrete-ci-2-gha4 "$inv" >"$log" 2>&1; then
-    control_setup ci2-provenance "eligible concrete-ci-2 runner was rejected" "$log"
-    return 1
-  fi
-  for case_spec in \
-      "github-hosted|unbalancedparentheses/concrete2|github-hosted|github-actions|expected runner_environment=self-hosted" \
-      "light-pool|lambdaclass/concrete|self-hosted|concrete-ci-2-gha7|runner_name=concrete-ci-2-gha7 is not eligible for lambdaclass/concrete" \
-      "wrong-repo|unbalancedparentheses/concrete2|self-hosted|concrete-ci-2-gha4|runner_name=concrete-ci-2-gha4 is not eligible for unbalancedparentheses/concrete2" \
-      "unregistered|unbalancedparentheses/concrete2|self-hosted|concrete-ci-2-gha999|runner_name=concrete-ci-2-gha999 is not eligible for unbalancedparentheses/concrete2"; do
-    IFS='|' read -r label repo env name expected <<<"$case_spec"
-    rc=0
-    check_ci2_runner "$repo" "$env" "$name" "$inv" >"$log" 2>&1 || rc=$?
-    if [ "$rc" = 0 ] || ! grep -qF "$expected" "$log"; then
-      control_setup "ci2-provenance-$label" "did not refuse with '$expected' (status $rc)" "$log"
-      return 1
-    fi
-  done
-  echo 'ok scaling control ci2-provenance: eligible runners accepted and substitutes refused'
+  # Exercise the shared verifier's public interface with a synthetic inventory;
+  # qualification above alone consults the authoritative ISS-0029 inventory.
+  bounded 30 python3 -I "$root/scripts/checks/compiler/scaling_binding_controls.py" "$root/scripts/checks/lib"
 }
 
 control_exact_sha() {
@@ -350,7 +289,7 @@ control_exact_sha() {
   done
   printf '# sha=1111111111111111111111111111111111111111; tier=%s\n' "$tier" >"$bad_report"
   rc=0
-  verify_report_sha "$bad_report" "$head_sha" "$tier" >"$log" 2>&1 || rc=$?
+  CAMPAIGN_EXPECT_FAILURE=1 verify_report_sha "$bad_report" "$head_sha" "$tier" >"$log" 2>&1 || rc=$?
   if [ "$rc" = 0 ] || ! grep -qF "FAIL scaling: report SHA 1111111111111111111111111111111111111111 in $bad_report does not match authorized expected SHA $head_sha" "$log"; then
     control_setup exact-sha-report-mismatch "did not refuse mismatched report SHA (status $rc)" "$log"
     return 1

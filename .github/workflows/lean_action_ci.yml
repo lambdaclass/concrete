@@ -332,7 +332,7 @@ jobs:
   # every build stage reproduced in distinct directories and on distinct machines; per-test determinism
   # from one compiler build; and interleaved scaling. Scaling runs only on x86-64 Linux; the other native
   # matrix gates run on x86-64 Linux and AArch64 macOS, and every matrix leg is a required job of its own.
-  tests:
+  backends:
     name: Tests (${{ matrix.arch }})
     needs: landing-record
     if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
@@ -357,13 +357,18 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install Nix
         uses: cachix/install-nix-action@v31
-      - name: Manifest tests (LLVM and LCB, native)
-        run: nix develop --command bash scripts/checks/compiler/tests.sh
+      - name: Backend gate (LLVM and LCB, native)
+        run: python3 scripts/checks/lib/gate_manifest.py execute --id backends --tier ${{ github.event_name == 'pull_request' && 'pr' || 'qualification' }}
 
   determinism:
     name: Determinism (${{ matrix.arch }})
     needs: landing-record
     if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
+    env:
+      SELECTED_SHA: ${{ github.sha }}
+      SELECTED_TIER: ${{ github.event_name == 'pull_request' && 'pr' || 'qualification' }}
+      SCHEDULED_ATTEMPT_ID: ${{ github.run_id }}/${{ github.run_attempt }}
+      RUNNER_ENVIRONMENT: ${{ runner.environment }}
     defaults:
       run:
         shell: bash
@@ -376,7 +381,7 @@ jobs:
           - arch: aarch64-macos
             runner: macos-15
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    timeout-minutes: 160
     permissions:
       contents: read
     steps:
@@ -384,12 +389,24 @@ jobs:
       - name: Install Nix
         uses: cachix/install-nix-action@v31
       - name: Per-test determinism (one compiler build, two native builds per test)
-        run: nix develop --command bash scripts/checks/lib/bounded.sh 3000 bash scripts/checks/compiler/determinism.sh
+        id: gate-determinism
+        run: python3 scripts/checks/lib/gate_manifest.py execute --id determinism --tier ${{ github.event_name == 'pull_request' && 'pr' || 'qualification' }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: determinism-${{ matrix.arch }}
+          path: ${{ steps.gate-determinism.outputs.artifact_paths }}
+          if-no-files-found: error
 
   scaling:
     name: Scaling (x86-64)
     needs: landing-record
     if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
+    env:
+      SELECTED_SHA: ${{ github.sha }}
+      SELECTED_TIER: ${{ github.event_name == 'pull_request' && 'pr' || 'qualification' }}
+      SCHEDULED_ATTEMPT_ID: ${{ github.run_id }}/${{ github.run_attempt }}
+      RUNNER_ENVIRONMENT: ${{ runner.environment }}
     defaults:
       run:
         shell: bash
@@ -397,15 +414,10 @@ jobs:
     # never on GitHub-hosted VMs or macOS shared VMs, and never executes pull_request code on
     # concrete-ci-2. Pull requests run deterministic family coverage on a hosted runner.
     runs-on: ${{ github.event_name != 'pull_request' && fromJSON('["self-hosted","linux","x64","concrete","concrete-ci-2"]') || 'ubuntu-24.04' }}
-    timeout-minutes: 60
+    timeout-minutes: 160
     permissions:
       contents: read
     steps:
-      - name: Refuse a substitute for concrete-ci-2
-        if: github.event_name != 'pull_request' && runner.environment != 'self-hosted'
-        run: |
-          echo "::error::Scaling (x86-64) requires self-hosted concrete-ci-2; heavy qualification cannot use a hosted substitute"
-          exit 1
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name != 'pull_request' && github.sha || '' }}
@@ -415,22 +427,27 @@ jobs:
         uses: cachix/install-nix-action@v31
       - name: Small deterministic family coverage (PR; no timing qualification)
         if: github.event_name == 'pull_request'
-        run: nix develop --command bash scripts/checks/lib/bounded.sh 2400 env SCALING_TIER=pr bash scripts/checks/compiler/scaling.sh scaling-report
+        id: gate-scaling-pr
+        run: python3 scripts/checks/lib/gate_manifest.py execute --id scaling-pr --tier ${{ github.event_name == 'pull_request' && 'pr' || 'qualification' }}
       - name: Interleaved 1x, 10x and 100x backend scaling
         if: github.event_name != 'pull_request'
         env:
-          CONCRETE_SCALING_EXPECTED_SHA: ${{ github.sha }}
-          CONCRETE_SCALING_EVENT_NAME: ${{ github.event_name }}
-          CONCRETE_SCALING_REF: ${{ github.ref }}
-          CONCRETE_SCALING_GITHUB_REPOSITORY: ${{ github.repository }}
-          CONCRETE_SCALING_RUNNER_ENVIRONMENT: ${{ runner.environment }}
-          CONCRETE_SCALING_RUNNER_NAME: ${{ runner.name }}
-        run: nix develop --command bash scripts/checks/lib/bounded.sh 600 env SCALING_TIER=qualification bash scripts/checks/compiler/scaling.sh scaling-report
+          SELECTED_SHA: ${{ github.sha }}
+          SCHEDULED_ATTEMPT_ID: ${{ github.run_id }}/${{ github.run_attempt }}
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        id: gate-scaling-qualification
+        run: python3 scripts/checks/lib/gate_manifest.py execute --id scaling-qualification --tier ${{ github.event_name == 'pull_request' && 'pr' || 'qualification' }}
       - uses: actions/upload-artifact@v4
-        if: always() && runner.environment == 'self-hosted'
+        if: always() && github.event_name == 'pull_request'
         with:
-          name: scaling-x86-64
-          path: scaling-report
+          name: scaling-pr-x86-64
+          path: ${{ steps.gate-scaling-pr.outputs.artifact_paths }}
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always() && github.event_name != 'pull_request'
+        with:
+          name: scaling-qualification-x86-64
+          path: ${{ steps.gate-scaling-qualification.outputs.artifact_paths }}
           if-no-files-found: error
 
   artifacts:

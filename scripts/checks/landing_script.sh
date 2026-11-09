@@ -1013,9 +1013,12 @@ out="$(python3 -I "$TMP/required_names.py" "$ROOT_DIR/.github/workflows/lean_act
 python3 -I - "$ROOT_DIR/.github/workflows/lean_action_ci.yml" "$TMP/rn" <<'PY3'
 import sys, yaml, copy, os
 w = yaml.safe_load(open(sys.argv[1])); os.makedirs(sys.argv[2], exist_ok=True)
-a = copy.deepcopy(w); a["jobs"]["tests"]["strategy"]["matrix"]["include"].append({"arch": "riscv64", "runner": "ubuntu-latest"})
-b = copy.deepcopy(w); b["jobs"]["tests"]["name"] = "Tests (${{ matrix.os }})"
-c = copy.deepcopy(w); c["jobs"]["tests"]["strategy"]["matrix"] = {"arch": ["x86-64", "aarch64-macos"]}
+test_jobs = [key for key, job in w["jobs"].items() if job.get("name") == "Tests (${{ matrix.arch }})"]
+assert len(test_jobs) == 1, "expected exactly one manifest test matrix"
+test_job = test_jobs[0]
+a = copy.deepcopy(w); a["jobs"][test_job]["strategy"]["matrix"]["include"].append({"arch": "riscv64", "runner": "ubuntu-latest"})
+b = copy.deepcopy(w); b["jobs"][test_job]["name"] = "Tests (${{ matrix.os }})"
+c = copy.deepcopy(w); c["jobs"][test_job]["strategy"]["matrix"] = {"arch": ["x86-64", "aarch64-macos"]}
 for n, x in (("extraleg", a), ("unresolved", b), ("product", c)):
     yaml.safe_dump(x, open(os.path.join(sys.argv[2], n + ".yml"), "w"))
 PY3

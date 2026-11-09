@@ -206,7 +206,7 @@
         "develop",
         "--command",
         "bash",
-        "scripts/checks/compiler/slice0_backends.sh"
+        "scripts/checks/compiler/tests.sh"
       ],
       "budget_seconds": 1200,
       "runner_class": "native-matrix",
@@ -534,6 +534,372 @@
       ],
       "budget_seconds": 60,
       "runner_class": "ci",
+      "artifacts": [],
+      "tools": {},
+      "seed": null,
+      "controls": [],
+      "workflow": null
+    },
+    {
+      "id": "scaling-pr",
+      "tiers": [
+        "pr",
+        "qualification"
+      ],
+      "command": [
+        "nix",
+        "develop",
+        "--command",
+        "env",
+        "SELECTED_TIER=pr",
+        "bash",
+        "scripts/checks/compiler/scaling.sh",
+        "scaling-pr-report"
+      ],
+      "budget_seconds": 2400,
+      "runner_class": "ci",
+      "artifacts": [
+        {
+          "path": "scaling-pr-report",
+          "sha_file": "scaling-pr-report/sha.txt"
+        }
+      ],
+      "tools": {
+        "lean": "lean-toolchain",
+        "lcb": "lake-manifest.json",
+        "nix": "flake.lock"
+      },
+      "seed": 0,
+      "controls": [
+        {
+          "id": "refusal-unauthorised-plant",
+          "command": [
+            "env",
+            "CAMPAIGN_EXPECT_FAILURE=1",
+            "bash",
+            "scripts/checks/compiler/scaling.sh",
+            "--plant",
+            "quadratic"
+          ],
+          "exit_code": 2,
+          "diagnostic": "scaling: plants require --allow-planted-failure --plant linear|quadratic"
+        },
+        {
+          "id": "refusal-invalid-tier",
+          "command": [
+            "env",
+            "CAMPAIGN_EXPECT_FAILURE=1",
+            "env",
+            "SELECTED_TIER=invalid",
+            "bash",
+            "scripts/checks/compiler/scaling.sh"
+          ],
+          "exit_code": 2,
+          "diagnostic": "scaling: invalid SELECTED_TIER"
+        },
+        {
+          "id": "refusal-forged-runner",
+          "command": [
+            "env",
+            "CAMPAIGN_EXPECT_FAILURE=1",
+            "env",
+            "GITHUB_REPOSITORY=unbalancedparentheses/concrete2",
+            "RUNNER_ENVIRONMENT=github-hosted",
+            "RUNNER_NAME=ubuntu-latest",
+            "bash",
+            "scripts/checks/compiler/scaling.sh"
+          ],
+          "exit_code": 1,
+          "diagnostic": "forged runner: expected RUNNER_ENVIRONMENT=self-hosted"
+        },
+        {
+          "id": "refusal-unauthorized-sha",
+          "command": [
+            "env",
+            "CAMPAIGN_EXPECT_FAILURE=1",
+            "env",
+            "SELECTED_SHA=not-a-sha",
+            "bash",
+            "scripts/checks/compiler/scaling.sh"
+          ],
+          "exit_code": 1,
+          "diagnostic": "FAIL scaling: unauthorized or invalid expected SHA: not-a-sha"
+        },
+        {
+          "id": "refusal-mismatched-sha",
+          "command": [
+            "env",
+            "CAMPAIGN_EXPECT_FAILURE=1",
+            "env",
+            "SELECTED_SHA=0000000000000000000000000000000000000000",
+            "bash",
+            "scripts/checks/compiler/scaling.sh"
+          ],
+          "exit_code": 1,
+          "diagnostic": "FAIL scaling: checked-out HEAD does not match authorized expected SHA 0000000000000000000000000000000000000000"
+        }
+      ],
+      "workflow": {
+        "job": "scaling",
+        "step": "Small deterministic family coverage (PR; no timing qualification)"
+      }
+    },
+    {
+      "id": "scaling-qualification",
+      "tiers": [
+        "pr",
+        "qualification"
+      ],
+      "command": [
+        "nix",
+        "develop",
+        "--command",
+        "env",
+        "SELECTED_TIER=qualification",
+        "bash",
+        "scripts/checks/compiler/scaling.sh",
+        "scaling-qualification-report"
+      ],
+      "budget_seconds": 600,
+      "runner_class": "ci",
+      "artifacts": [
+        {
+          "path": "scaling-qualification-report",
+          "sha_file": "scaling-qualification-report/sha.txt"
+        }
+      ],
+      "tools": {
+        "lean": "lean-toolchain",
+        "lcb": "lake-manifest.json",
+        "nix": "flake.lock"
+      },
+      "seed": 0,
+      "controls": [
+        {
+          "id": "refusal-unauthorised-plant",
+          "command": [
+            "env",
+            "CAMPAIGN_EXPECT_FAILURE=1",
+            "bash",
+            "scripts/checks/compiler/scaling.sh",
+            "--plant",
+            "quadratic"
+          ],
+          "exit_code": 2,
+          "diagnostic": "scaling: plants require --allow-planted-failure --plant linear|quadratic"
+        },
+        {
+          "id": "refusal-invalid-tier",
+          "command": [
+            "env",
+            "CAMPAIGN_EXPECT_FAILURE=1",
+            "env",
+            "SELECTED_TIER=invalid",
+            "bash",
+            "scripts/checks/compiler/scaling.sh"
+          ],
+          "exit_code": 2,
+          "diagnostic": "scaling: invalid SELECTED_TIER"
+        },
+        {
+          "id": "refusal-forged-runner",
+          "command": [
+            "env",
+            "CAMPAIGN_EXPECT_FAILURE=1",
+            "env",
+            "GITHUB_REPOSITORY=unbalancedparentheses/concrete2",
+            "RUNNER_ENVIRONMENT=github-hosted",
+            "RUNNER_NAME=ubuntu-latest",
+            "bash",
+            "scripts/checks/compiler/scaling.sh"
+          ],
+          "exit_code": 1,
+          "diagnostic": "forged runner: expected RUNNER_ENVIRONMENT=self-hosted"
+        },
+        {
+          "id": "refusal-unauthorized-sha",
+          "command": [
+            "env",
+            "CAMPAIGN_EXPECT_FAILURE=1",
+            "env",
+            "SELECTED_SHA=not-a-sha",
+            "bash",
+            "scripts/checks/compiler/scaling.sh"
+          ],
+          "exit_code": 1,
+          "diagnostic": "FAIL scaling: unauthorized or invalid expected SHA: not-a-sha"
+        },
+        {
+          "id": "refusal-mismatched-sha",
+          "command": [
+            "env",
+            "CAMPAIGN_EXPECT_FAILURE=1",
+            "env",
+            "SELECTED_SHA=0000000000000000000000000000000000000000",
+            "bash",
+            "scripts/checks/compiler/scaling.sh"
+          ],
+          "exit_code": 1,
+          "diagnostic": "FAIL scaling: checked-out HEAD does not match authorized expected SHA 0000000000000000000000000000000000000000"
+        }
+      ],
+      "workflow": {
+        "job": "scaling",
+        "step": "Interleaved 1x, 10x and 100x backend scaling"
+      }
+    },
+    {
+      "id": "scaling-daily",
+      "tiers": [
+        "daily"
+      ],
+      "command": [
+        "env",
+        "SELECTED_TIER=daily",
+        "bash",
+        "scripts/checks/compiler/scaling.sh",
+        "scaling-daily-report"
+      ],
+      "budget_seconds": 3600,
+      "runner_class": "concrete-ci-2",
+      "artifacts": [
+        {
+          "path": "scaling-daily-report",
+          "sha_file": "scaling-daily-report/sha.txt"
+        }
+      ],
+      "tools": {
+        "lean": "lean-toolchain",
+        "lcb": "lake-manifest.json",
+        "nix": "flake.lock"
+      },
+      "seed": 0,
+      "controls": [
+        {
+          "id": "refusal-unauthorised-plant",
+          "command": [
+            "env",
+            "CAMPAIGN_EXPECT_FAILURE=1",
+            "bash",
+            "scripts/checks/compiler/scaling.sh",
+            "--plant",
+            "quadratic"
+          ],
+          "exit_code": 2,
+          "diagnostic": "scaling: plants require --allow-planted-failure --plant linear|quadratic"
+        },
+        {
+          "id": "refusal-invalid-tier",
+          "command": [
+            "env",
+            "CAMPAIGN_EXPECT_FAILURE=1",
+            "env",
+            "SELECTED_TIER=invalid",
+            "bash",
+            "scripts/checks/compiler/scaling.sh"
+          ],
+          "exit_code": 2,
+          "diagnostic": "scaling: invalid SELECTED_TIER"
+        },
+        {
+          "id": "refusal-forged-runner",
+          "command": [
+            "env",
+            "CAMPAIGN_EXPECT_FAILURE=1",
+            "env",
+            "GITHUB_REPOSITORY=unbalancedparentheses/concrete2",
+            "RUNNER_ENVIRONMENT=github-hosted",
+            "RUNNER_NAME=ubuntu-latest",
+            "bash",
+            "scripts/checks/compiler/scaling.sh"
+          ],
+          "exit_code": 1,
+          "diagnostic": "forged runner: expected RUNNER_ENVIRONMENT=self-hosted"
+        },
+        {
+          "id": "refusal-unauthorized-sha",
+          "command": [
+            "env",
+            "CAMPAIGN_EXPECT_FAILURE=1",
+            "env",
+            "SELECTED_SHA=not-a-sha",
+            "bash",
+            "scripts/checks/compiler/scaling.sh"
+          ],
+          "exit_code": 1,
+          "diagnostic": "FAIL scaling: unauthorized or invalid expected SHA: not-a-sha"
+        },
+        {
+          "id": "refusal-mismatched-sha",
+          "command": [
+            "env",
+            "CAMPAIGN_EXPECT_FAILURE=1",
+            "env",
+            "SELECTED_SHA=0000000000000000000000000000000000000000",
+            "bash",
+            "scripts/checks/compiler/scaling.sh"
+          ],
+          "exit_code": 1,
+          "diagnostic": "FAIL scaling: checked-out HEAD does not match authorized expected SHA 0000000000000000000000000000000000000000"
+        }
+      ],
+      "workflow": null
+    },
+    {
+      "id": "determinism",
+      "tiers": [
+        "pr",
+        "qualification"
+      ],
+      "command": [
+        "nix",
+        "develop",
+        "--command",
+        "bash",
+        "scripts/checks/compiler/determinism.sh",
+        "determinism-report"
+      ],
+      "budget_seconds": 3000,
+      "runner_class": "native-matrix",
+      "artifacts": [
+        {
+          "path": "determinism-report",
+          "sha_file": "determinism-report/sha.txt"
+        }
+      ],
+      "tools": {},
+      "seed": 0,
+      "controls": [
+        {
+          "id": "invalid-mode",
+          "command": [
+            "env",
+            "CAMPAIGN_EXPECT_FAILURE=1",
+            "DETERMINISM_EMIT_ONLY=invalid",
+            "bash",
+            "scripts/checks/compiler/determinism.sh"
+          ],
+          "exit_code": 2,
+          "diagnostic": "determinism: DETERMINISM_EMIT_ONLY must be 0 or 1"
+        }
+      ],
+      "workflow": {
+        "job": "determinism",
+        "step": "Per-test determinism (one compiler build, two native builds per test)"
+      }
+    },
+    {
+      "id": "root-test_manifest",
+      "tiers": [
+        "pr",
+        "qualification"
+      ],
+      "command": [
+        "bash",
+        "scripts/checks/test_manifest.sh"
+      ],
+      "budget_seconds": 60,
+      "runner_class": "native-matrix",
       "artifacts": [],
       "tools": {},
       "seed": null,

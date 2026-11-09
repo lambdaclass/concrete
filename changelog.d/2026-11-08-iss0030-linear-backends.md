@@ -39,9 +39,9 @@ Landing dependency: the ISS-0030 branch (`wip/lcb-numbering`), Gate C
 (`gate-scaling-determinism` / `wip/gate-scaling-determinism`), and the scheduled-tier runner
 (`wip/gate-schedule`, [R-0676](ROADMAP.md)) are merged here (`c-wiring`) and land **together**,
 never alone. [R-0550](ROADMAP.md) owns backend scaling (with scheduled-tier infrastructure under
-`R-0676` / `R-0690` / `R-0563`). Gate C provides meaningful cheap PR coverage (`SCALING_TIER=pr`,
+`R-0676` / `R-0690` / `R-0563`). Gate C provides meaningful cheap PR coverage (`SELECTED_TIER=pr`,
 `check-small` across all five families at `1, 10, 100` plus `1,000`-entry depth probes) plus full
-scheduled scaling assertions (`SCALING_TIER=daily`, declared in `scripts/checks/lib/gate_manifest.py`
+scheduled scaling assertions (`SELECTED_TIER=daily`, declared in `scripts/checks/lib/gate_manifest.py`
 and invoked by `scripts/checks/scheduled/run.py --tier daily` on `concrete-ci-2`, running
 `--mode backend` at `100, 1000, 10000` and `100,000`-entry instruction/block depth probes with
 `wide_phi_depth` at `10,000`), as recorded in `Concrete/README.md`. ISS-0030 remains open until Gate
