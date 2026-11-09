@@ -1212,7 +1212,6 @@ ConcreteSpec.Core.Exec.register.eq_2	propext
 ConcreteSpec.Core.Exec.register.eq_3	propext
 ConcreteSpec.Core.Exec.register.eq_def	propext
 ConcreteSpec.Core.Exec.register_protected	propext
-ConcreteSpec.Core.Exec.register_protected.go	propext
 ConcreteSpec.Core.Exec.register_scope	propext
 ConcreteSpec.Core.Exec.register_seq	propext
 ConcreteSpec.Core.Exec.restrict.eq_1	propext
