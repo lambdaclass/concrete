@@ -413,7 +413,7 @@ theorem LoadedProject.load_order_independent (input other : ProjectSources)
 /-- Law (subject `ConcreteSpec.Core.Observe.LoadedProject.load`). C6's source-trap consumer
 interface: supply the successful load and the program's site-set equality, then membership in that
 site set supplies a span, a valid structured path, byte correspondence and a resolved trap terminal.
-`runFrom_source_trap` needs no caller-supplied `found` or `pathOk`: use the witnesses here. -/
+C6’s runFrom_source_trap needs no caller-supplied found or pathOk premises: use the witnesses here. -/
 theorem LoadedProject.load_trap_resolves (input : ProjectSources) (kind : TrapKind) :
     match LoadedProject.load input with
     | .refused _ => True
