@@ -84,7 +84,10 @@ def executable_mappings(lines):
         args, outcome = fields(result.group(1)), result.group(2)
         if outcome == '?':
             pending[pid] = ('no-return', ''); continue
-        if re.fullmatch(r'-1 E[A-Z0-9_]+(?: \([^\n]*\))?', outcome): continue
+        if re.fullmatch(r'-1 E[A-Z0-9_]+(?: \([^()\n]*\))?(?: \(INJECTED\))?', outcome): continue
+        mutations = {'personality', 'ptrace', 'process_vm_writev', 'userfaultfd', 'remap_file_pages', 'io_uring_setup'}
+        if kind in mutations:
+            raise ValueError('unsupported memory identity mutation: ' + kind)
         if not re.fullmatch(r'(?:0x[0-9a-f]+|[0-9]+)(?:<.*>)?', outcome):
             raise ValueError('missing mapping result')
         if kind in {'open', 'openat', 'openat2'}:
@@ -94,8 +97,6 @@ def executable_mappings(lines):
             if re.fullmatch(r'/proc/(?:self|thread-self|[0-9]+)(?:/task/[0-9]+)?/mem', path):
                 raise ValueError('process memory file access has no pinned identity')
             continue
-        if kind in {'personality', 'ptrace', 'process_vm_writev', 'userfaultfd', 'remap_file_pages'}:
-            raise ValueError('unsupported memory identity mutation: ' + kind)
         if kind == 'shmat':
             if len(args) != 3: raise ValueError('malformed shmat arguments')
             flags = bits(args[2], {'0', 'SHM_RDONLY', 'SHM_RND', 'SHM_REMAP', 'SHM_EXEC'}, 'shmat flags')

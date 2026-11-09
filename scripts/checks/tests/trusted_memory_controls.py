@@ -20,6 +20,8 @@ spec.loader.exec_module(m)
 CODE = r"""
 #define _GNU_SOURCE
 #include <assert.h>
+#include <errno.h>
+#include <sys/syscall.h>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/shm.h>
@@ -52,6 +54,7 @@ int main(int argc, char **argv) {
  if (!strcmp(mode,"execveat")) { char *a[]={"true",0}, *e[]={0}; execveat(AT_FDCWD,argv[1],a,e,0); assert(0); }
  if (!strcmp(mode,"empty")) { char *a[]={"true",0}, *e[]={0}; execveat(fd,"",a,e,AT_EMPTY_PATH); assert(0); }
  if (!strcmp(mode,"procmem")) { int mem=open("/proc/self/mem",O_RDWR); assert(mem>=0); close(mem); }
+ if (!strcmp(mode,"uring")) { assert(syscall(SYS_io_uring_setup,8,0)==-1 && errno==ENOSYS); }
  return 0;
 }
 """
@@ -75,6 +78,8 @@ class MemoryTests(unittest.TestCase):
     self.reject(lambda: m.executable_mappings([line(flags=flags,kind=kind)]),diagnostic)
   self.reject(lambda:m.executable_mappings([line(prot='PROT_EXEC|0x80')]),'unknown mapping protection: PROT_EXEC|0x80')
   self.reject(lambda:m.executable_mappings(['remap_file_pages(0x1000, 4096, 0, 0, 0) = 0']), 'unsupported memory identity mutation: remap_file_pages')
+  for kind in ('personality','ptrace','process_vm_writev','userfaultfd','io_uring_setup'):
+   self.reject(lambda:m.executable_mappings([kind+'(0) = 0']), 'unsupported memory identity mutation: '+kind)
   self.reject(lambda:m.executable_mappings(['future_exec_memory(0) = 0']), 'unsupported traced memory syscall: future_exec_memory')
   self.assertEqual(m.executable_mappings([line()[:-6]+'?', '+++ killed by SIGKILL +++']),set())
   self.reject(lambda:m.executable_mappings([line()[:-6]+'?']), 'unfinished mapping calls have no result')
@@ -96,6 +101,47 @@ print('hard address-space limit: ENOMEM')
   result=subprocess.run(['bash',str(LIB/'limited_exec.sh'),'65536',sys.executable,'-I','-c',code],check=True,text=True,capture_output=True,timeout=15)
   self.assertEqual(result.stdout.strip(),'hard address-space limit: ENOMEM')
 
+ def test_kernel_loader(self):
+  import hashlib
+  import struct
+  spec=importlib.util.spec_from_file_location('identity',LIB/'trusted_identity.py')
+  identity=importlib.util.module_from_spec(spec);spec.loader.exec_module(identity)
+  with tempfile.TemporaryDirectory() as tmp:
+   d=Path(tmp); src=d/'main.c';src.write_text('int main(void){return 0;}');exe=d/'lcb'
+   clang=os.environ.get('CONCRETE_SLICE0_CLANG',shutil.which('clang'))
+   def build(*flags):
+    subprocess.run([clang,'--no-default-config',str(src),*flags,'-o',str(exe)],check=True,capture_output=True,timeout=25)
+   build();data=exe.read_bytes();offset=struct.unpack_from('<Q',data,32)[0];size,count=struct.unpack_from('<HH',data,54)
+   for index in range(count):
+    header=struct.unpack_from('<IIQQQQQQ',data,offset+index*size)
+    if header[0]==3:
+     loader=os.fsdecode(data[header[2]:header[2]+header[5]-1]);break
+   closure=subprocess.run(['nix','path-info','--offline','--recursive','/'.join(loader.split('/')[:4])],check=True,text=True,capture_output=True,timeout=20).stdout.splitlines()
+   identity.executable.check(exe,set(closure))
+   allowed=d/'allowed';allowed.write_text('lcb\n'); evidence=d/'evidence';log=d/'trace'
+   def audit():
+    evidence.write_text(json.dumps({'inputs':{},'closure':dict.fromkeys(closure,{}),'role_closures':{'native':{'lcb':closure}},'lcb':str(exe),'lcb_sha256':hashlib.sha256(exe.read_bytes()).hexdigest()}))
+    return identity.check(log,allowed,evidence,exe,'native')
+   def trace():
+    subprocess.run(['strace',*m.strings.TRACE_FLAGS,'-o',str(log),str(exe)],check=True,capture_output=True,timeout=15)
+   trace();self.assertEqual(audit(),0)
+   unpinned=d/'loader';shutil.copyfile(loader,unpinned);unpinned.chmod(0o755)
+   build('-Wl,--dynamic-linker,'+str(unpinned));trace()
+   self.assertNotIn(str(unpinned),log.read_text())
+   self.assertTrue(all(path.startswith('/nix/store/') for path in m.executable_mappings(log.read_text().splitlines())))
+   self.reject(audit,'unregistered kernel interpreter: '+json.dumps(str(unpinned)))
+   build('-Wl,-z,execstack')
+   self.reject(lambda:identity.executable.check(exe,set(closure)),'executable ELF stack has no pinned identity')
+   build();data=bytearray(exe.read_bytes())
+   for index in range(count):
+    pos=offset+index*size;kind,flags=struct.unpack_from('<II',data,pos)
+    if kind==1 and flags & 1:
+     struct.pack_into('<I',data,pos+4,flags|2);break
+   exe.write_bytes(data)
+   self.reject(lambda:identity.executable.check(exe,set(closure)),'writable executable ELF segment has no immutable identity')
+   script=d/'script';script.write_text('#!'+str(unpinned)+'\n')
+   self.reject(lambda:identity.executable.check(script,set(closure)),'unregistered kernel interpreter: '+json.dumps(str(unpinned)))
+
  def test_real_syscalls(self):
   with tempfile.TemporaryDirectory() as tmp:
    d=Path(tmp); src=d/'memory.c'; exe=d/'memory'; src.write_text(CODE)
@@ -113,6 +159,10 @@ print('hard address-space limit: ENOMEM')
     log=d/mode
     subprocess.run(['strace',*m.strings.TRACE_FLAGS,'-o',str(log),str(exe),pinned,mode],check=True,capture_output=True,timeout=15)
     self.reject(lambda:m.executable_mappings(log.read_text().splitlines()),diagnostic)
+   log=d/'uring'
+   subprocess.run(['strace',*m.strings.TRACE_FLAGS,'-o',str(log),str(exe),pinned,'uring'],check=True,capture_output=True,timeout=15)
+   self.assertRegex(log.read_text(),r'io_uring_setup\(8, NULL\)\s+= -1 ENOSYS \(Function not implemented\) \(INJECTED\)')
+   m.executable_mappings(log.read_text().splitlines())
    for mode in ('execveat','empty'):
     log=d/mode; target=str(Path(shutil.which('true')).resolve())
     subprocess.run(['strace',*m.strings.TRACE_FLAGS,'-o',str(log),str(exe),target,mode],check=True,capture_output=True,timeout=15)

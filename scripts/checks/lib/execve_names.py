@@ -9,9 +9,10 @@ import sys
 
 # %memory selects all memory-management calls known to the installed strace,
 # including architecture-specific mmap2 and ipc decoding. Unknown calls fail closed.
-MEMORY_CALLS = frozenset("mmap mmap2 old_mmap mprotect pkey_mprotect shmat shmdt remap_file_pages mremap munmap brk msync madvise process_madvise mlock mlock2 munlock mlockall munlockall mincore membarrier mbind get_mempolicy set_mempolicy migrate_pages move_pages pkey_alloc pkey_free personality ptrace process_vm_writev userfaultfd open openat openat2".split())
+MEMORY_CALLS = frozenset("mmap mmap2 old_mmap mprotect pkey_mprotect shmat shmdt remap_file_pages mremap munmap brk msync madvise process_madvise mlock mlock2 munlock mlockall munlockall mincore membarrier mbind get_mempolicy set_mempolicy migrate_pages move_pages pkey_alloc pkey_free personality ptrace process_vm_writev userfaultfd io_uring_setup open openat openat2".split())
 TRACE_FLAGS = ['-f', '-qq', '-s', '4096', '-yy', '-e',
-    'trace=%memory,execve,execveat,personality,ptrace,process_vm_writev,userfaultfd,open,openat,openat2']
+    'trace=%memory,execve,execveat,personality,ptrace,process_vm_writev,userfaultfd,io_uring_setup,open,openat,openat2',
+    '-e', 'inject=io_uring_setup:error=ENOSYS']
 
 PID_PREFIX = re.compile(r'^\s*(?:(?:\[pid\s+([0-9]+)\]|([0-9]+))\s+)?(.*)$')
 DIRFD_PREFIX = re.compile(r'^(AT_FDCWD|-?[0-9]+)(?:<[^<>]*>)?\s*,\s*')
@@ -236,6 +237,7 @@ def parse(lines, paths=False):
                 continue
         elif resumed_match := RESUMED_PREFIX.match(body):
             resumed_kind = resumed_match.group(1)
+            kind = resumed_kind
             if pid not in pending:
                 raise ValueError(f"line {line_number}: resumed exec has no unfinished call")
             expected_kind, path = pending.pop(pid)

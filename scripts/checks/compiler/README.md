@@ -62,7 +62,7 @@ registered file identity and fail closed. Executable file mappings must be
 read-only, private and non-anonymous, with known protection/flag bits: a writable
 private page ceases to identify the store bytes, and shared backing is mutable.
 Memory identity mutations (`remap_file_pages`, personality changes, ptrace,
-process_vm_writev, userfaultfd) and process-memory file access are refused.
+process_vm_writev, userfaultfd, io_uring_setup) and process-memory file access are refused.
 Ordinary mremap only moves/aliases already checked mappings; it cannot add execute
 permission or replace their bytes. Killed no-return records require exact death
 records, just as the exec parser does. Both invoked and resolved paths must exist
@@ -330,3 +330,21 @@ isolation releases imported Lean regions between files without dropping or
 sampling any source. Darwin relies on the CI job's memory limit, as documented
 by the common launcher. A focused real allocation control checks the inherited
 hard limit and the exact ENOMEM result beyond it without allocating physical RAM.
+
+Kernel-created executable mappings are part of the same evidence boundary:
+`trusted_executable.py` reads the ELF program headers or shebang of every accepted
+executed file and recursively checks its kernel interpreter against the tool's
+closure (the native role closure for the separately hashed local LCB). The kernel
+loads PT_INTERP without a separate execve/mmap event; checking just userspace
+mapping calls therefore misses an arbitrary loader. Writable executable ELF
+segments, executable or unspecified GNU stacks, malformed program headers and
+unsupported binary formats fail closed. Supported targets use ELF64; a new format
+requires a real parser and focused controls before it is admitted. The sweep also
+disables io_uring setup with the shared strace policy's explicit ENOSYS injection,
+forcing the runtime's synchronous/threaded fallback: async open/write operations
+can otherwise access process memory without a traced open syscall. A real control
+requires precisely the ENOSYS injected result; any successful setup still fails
+closed in the parser. This is an enforced launch restriction, not an attempt to
+attribute opaque ring submissions to pinned code. Host kernel/vDSO behavior is
+the launch trust boundary; these checks establish identities for userspace files,
+not an attestation of the running kernel.

@@ -18,6 +18,10 @@ map_spec = importlib.util.spec_from_file_location("trusted_mappings", Path(__fil
 mappings = importlib.util.module_from_spec(map_spec)
 map_spec.loader.exec_module(mappings)
 
+elf_spec = importlib.util.spec_from_file_location("trusted_executable", Path(__file__).with_name("trusted_executable.py"))
+executable = importlib.util.module_from_spec(elf_spec)
+elf_spec.loader.exec_module(executable)
+
 def realpath(path):
     parser.checked_path(str(path))
     return parser.checked_path(os.path.realpath(path), "resolved executable path")
@@ -190,6 +194,7 @@ def check(logs, allowed, evidence, lcb, role):
             print(f"FAIL tools: identity-mismatch role '{display(role)}' program '{display(name)}': {display(real)}")
             failed = True
         else:
+            executable.check(real, set().union(*map(set, tool_closures.values())) if local else allowed_roots)
             info = evidence["closure"].get(root, {})
             print("tool-identity " + json.dumps({"executed": path, "resolved": real,
                   "narHash": info.get("narHash"), "local": local, "role": role}, sort_keys=True))

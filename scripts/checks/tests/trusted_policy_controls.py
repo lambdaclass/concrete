@@ -248,7 +248,7 @@ with tempfile.TemporaryDirectory() as tmp:
             original = os.path.realpath
             original_exists = os.path.exists
             fixture = mapping_root + "/lib/libfixture.so"
-            with patch.object(identity.os.path, "exists", side_effect=lambda p: str(p) == fixture or original_exists(p)), patch.object(identity.os.path, "realpath",
+            with patch.object(identity.executable, "check"), patch.object(identity.os.path, "exists", side_effect=lambda p: str(p) == fixture or original_exists(p)), patch.object(identity.os.path, "realpath",
                               side_effect=lambda p: resolved if str(p) == path and resolved else original(p)):
                 with contextlib.redirect_stdout(out):
                     rc = identity.check(log, allowed, evidence, lcb_bin, role)
