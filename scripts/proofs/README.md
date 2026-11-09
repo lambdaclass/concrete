@@ -507,3 +507,47 @@ a scope census. `--consumer PATH` permits an explicit baseline; `--profile`
 instruments a private consumer with work-call and Meta-search totals. Instrumented
 heartbeat counts include probe overhead and are diagnostic only. Sources, consumer
 compilation, and elaboration scratch stay private to that invocation.
+
+### N2 A3 fix round 2: refutation context reuse and unresolved cost
+
+Instance hypothesis validation now memoizes completed `refutableType` and
+`refutableContext` searches within its existing `DischargeState`. The key closes
+the entire expression and local context over bound variables, retaining all binder
+types, let values (including nondependent lets), declaration kinds, and local
+instance class names and order. Renaming a binder therefore reuses a result;
+changing an assumption does not. Raw-identity front caches avoid constructing the
+same closed key twice. A context or expression containing metavariables acquires
+no entry. The environment and evaluator options stay fixed during the analysis;
+results are never shared across jobs. Exceptions never publish a result.
+
+This preserves the existing kernel-checked refutation procedure and the original
+proof-state work charging; it does not exempt proofs or alter the solver. The
+control requires exactly two searches across two renamed Nat contexts and one
+False context, rejects mutable contexts, and requires exactly
+`CONTROL context-cache-crossed-context` when context identity is erased.
+`certificateDependency` through `end Discharge` remains byte-identical to
+`e692fa8e9`, including certificate validation.
+
+The cold single-instance baseline for Own line 4381 spends about 92% of its
+2,000,000 heartbeats in 3,425 contradiction searches. Grant line 1478 reaches
+20,000 distinct current proof-state visits; context-result reuse lowers its
+heartbeat cost substantially but does not make it complete. This is an open
+**search/budget question pending owner**, not evidence of another arithmetic
+accounting bug and not permission to increase a limit. R-0219 and the separate
+slice-2a proof/dependency-graph design own further structural proof-state sharing;
+that work must retain supplied-versus-hypothetical context identity and exact
+negative controls. The coordinator owns any additional roadmap row; none is
+allocated here.
+
+**Wall policy remains pending owner.** The per-analysis interpretation is still
+assumed, pending owner. Named analyses can each legitimately consume up to
+2,000,000 heartbeats, while the unchanged 120/240s driver watchdog is a separate
+whole-run wall bound. The supplied N14d diagnostic took 1,369s; several bounded
+single examples still exhaust heartbeats after this repair. No local whole-scope
+run establishes that the repaired implementation fits the default watchdog.
+Options remain: retain the whole-run wall bound and honest named interrupted/unrun
+INCOMPLETEs; supply wall capacity compatible with all per-analysis allowances;
+or choose option B's one shared analysis budget, which changes the guarantee for
+later jobs. This writer selects none of them. A cheap PR control is not a
+substitute for the real full-scope census on ci-2/daily/weekly; tiering must not
+weaken either check or silently omit the expensive obligations.

@@ -12,8 +12,8 @@ from vacuity_driver import HERE, compiled_consumer, run
 
 DRIVER = r'''
 import N2Meta
-import ConcreteSpec.Proofs.Own
 import ConcreteSpec.Proofs.Grant
+import ConcreteSpec.Proofs.Own
 open Lean Meta Vacuity
 set_option maxHeartbeats 2000000 in
 #eval show MetaM Unit from do
@@ -104,16 +104,15 @@ def main():
     args = parser.parse_args()
     if not args.suffix.endswith('»') or any(c in args.suffix for c in '\n\r"\\'):
         parser.error('suffix must be a literal anonymous declaration suffix ending in »')
-    module = 'ConcreteSpec.Proofs.Grant' if args.suffix.startswith('Grant.lean:') else 'ConcreteSpec.Proofs.Own'
+    scope = 'ConcreteSpec.Proofs.Grant,ConcreteSpec.Proofs.Own'
     selection = '(toString n).endsWith "' + args.suffix + '"'
     driver = DRIVER.replace('SELECTION', selection).replace('COUNT', '1')
-    driver = driver.replace('import ConcreteSpec.Proofs.Own\nimport ConcreteSpec.Proofs.Grant\n', 'import ' + module + '\n')
     text = args.consumer.read_text()
     if args.profile:
         text = instrument(text)
     print('PROFILE one-instance suffix=' + args.suffix + ' instrumentation=' + str(args.profile), flush=True)
     with compiled_consumer(consumer_text=text) as meta:
-        code, output = run(args.source, module, inventory=True, driver_text=driver, meta_path=meta)
+        code, output = run(args.source, scope, inventory=True, driver_text=driver, meta_path=meta)
     print(output, end='', flush=True)
     if code:
         return code

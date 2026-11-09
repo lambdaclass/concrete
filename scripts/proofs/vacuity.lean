@@ -803,10 +803,73 @@ def validateCertificate (entry : CertificateEntry) (candidate : Certificate) :
 
 end Discharge
 
+structure DischargeKey where
+  closure : Expr
+  instances : Array (Name × Expr)
+  declarations : Array (Nat × Option Expr)
+  deriving BEq, Hashable
+
 structure DischargeState where
   budget : Option WorkBudget := none
   remaining : Nat := 20000
   visited : Std.HashSet (Expr × Array FVarId) := {}
+  refutedTypes : Std.HashMap DischargeKey Bool := {}
+  refutedContexts : Std.HashMap (DischargeKey × Bool) Bool := {}
+  rawRefutedTypes : Std.HashMap (Expr × Array FVarId) Bool := {}
+  rawRefutedContexts : Std.HashMap (Array FVarId × Bool) Bool := {}
+
+/-- Alpha-canonical closed contexts retain every declaration and let value.
+    Results are analysis-private; metavariables are never cached. Local instance
+    order is part of the key, independent of binder names and fresh FVarIds. -/
+def dischargeClosure (e : Expr) : MetaM (Option DischargeKey) := do
+  if e.hasMVar || e.hasLevelMVar then return none
+  let mut xs := #[]
+  for decl in (← getLCtx) do
+    if decl.type.hasMVar || decl.type.hasLevelMVar then return none
+    if let some value := decl.value? then
+      if value.hasMVar || value.hasLevelMVar then return none
+    xs := xs.push decl.toExpr
+  let mut declarations := #[]
+  for decl in (← getLCtx) do
+    let kind := match decl.kind with
+      | .default => 0 | .implDetail => 1 | .auxDecl => 2
+    let value := decl.value? (allowNondep := true)
+    if let some v := value then
+      if v.hasMVar || v.hasLevelMVar then return none
+    declarations := declarations.push (kind, value.map (·.abstract xs))
+  let mut instances := #[]
+  for inst in (← getLocalInstances) do
+    if inst.fvar.hasMVar || inst.fvar.hasLevelMVar then return none
+    instances := instances.push (inst.className, inst.fvar.abstract xs)
+  let closure ← mkLambdaFVars xs e (usedLetOnly := false) (generalizeNondepLet := false)
+  return some ⟨closure, instances, declarations⟩
+
+def dischargeRefutableType (domain : Expr) : StateRefT DischargeState MetaM Bool := do
+  let raw := (domain, (← getLCtx).getFVarIds)
+  if let some cached := (← get).rawRefutedTypes[raw]? then return cached
+  let some key ← dischargeClosure domain | return ← refutableType domain
+  let result ← match (← get).refutedTypes[key]? with
+    | some cached => pure cached
+    | none => do
+      let result ← refutableType domain
+      modify fun s => { s with refutedTypes := s.refutedTypes.insert key result }
+      pure result
+  modify fun s => { s with rawRefutedTypes := s.rawRefutedTypes.insert raw result }
+  return result
+
+def dischargeRefutableContext (simplify : Bool := false) : StateRefT DischargeState MetaM Bool := do
+  let raw := ((← getLCtx).getFVarIds, simplify)
+  if let some cached := (← get).rawRefutedContexts[raw]? then return cached
+  let some closure ← dischargeClosure (mkConst ``False) | return ← refutableContext simplify
+  let key := (closure, simplify)
+  let result ← match (← get).refutedContexts[key]? with
+    | some cached => pure cached
+    | none => do
+      let result ← refutableContext simplify
+      modify fun s => { s with refutedContexts := s.refutedContexts.insert key result }
+      pure result
+  modify fun s => { s with rawRefutedContexts := s.rawRefutedContexts.insert raw result }
+  return result
 
 /-- Inspect helpers at their actual arguments, including open applications. Only
     a checked refutation of the hypothetical local context can exempt an impossible
@@ -823,16 +886,16 @@ partial def falseDischarge (e : Expr) : StateRefT DischargeState MetaM Bool := d
   if let some budget := (← get).budget then chargeWork budget "false-discharge-budget"
   else if fuel == 0 then throwError "false-discharge-budget"
   modify fun state => { state with remaining := fuel - 1, visited := state.visited.insert key }
-  let refuted ← refutableType (← inferType e)
-  if refuted && !e.hasFVar then return !(← refutableContext true)
+  let refuted ← dischargeRefutableType (← inferType e)
+  if refuted && !e.hasFVar then return !(← dischargeRefutableContext true)
   let e ← whnfD e
   if let .const n levels := e.getAppFn' then
     if [``False.elim, ``False.casesOn, ``absurd, ``Empty.elim, ``Empty.casesOn,
-        ``PEmpty.elim, ``PEmpty.casesOn].contains n && !e.hasFVar then return !(← refutableContext true)
+        ``PEmpty.elim, ``PEmpty.casesOn].contains n && !e.hasFVar then return !(← dischargeRefutableContext true)
     if let some matcher ← getMatcherInfo? n then
-      if matcher.numAlts == 0 && !e.hasFVar then return !(← refutableContext true)
+      if matcher.numAlts == 0 && !e.hasFVar then return !(← dischargeRefutableContext true)
     if let some (.recInfo r) := (← getEnv).find? n then
-      if r.rules.isEmpty && !e.hasFVar then return !(← refutableContext true)
+      if r.rules.isEmpty && !e.hasFVar then return !(← dischargeRefutableContext true)
     if let some ci := (← getEnv).find? n then
       if let some value := ci.value? (allowOpaque := true) then
         let body := value.instantiateLevelParams ci.levelParams levels
@@ -843,17 +906,17 @@ partial def falseDischarge (e : Expr) : StateRefT DischargeState MetaM Bool := d
         -- An opaque supplied producer of an impossible inhabitant is real
         -- evidence. Transparent derivations are followed to their suppliers;
         -- hypothetical local contradictions are not mistaken for suppliers.
-        if let .axiomInfo .. := ci then return !(← refutableContext true)
+        if let .axiomInfo .. := ci then return !(← dischargeRefutableContext true)
   match e with
   | .app .. =>
     for arg in e.getAppArgs do
-      if (← isProof arg) || (← refutableType (← inferType arg)) then
+      if (← isProof arg) || (← dischargeRefutableType (← inferType arg)) then
         if ← falseDischarge arg then return true
     return false
   | .lam .. => lambdaTelescope e fun xs body => do
     for x in xs do
-      if ← refutableType (← inferType x) then return false
-    if ← refutableContext then return false
+      if ← dischargeRefutableType (← inferType x) then return false
+    if ← dischargeRefutableContext then return false
     falseDischarge body
   | .letE _ _ v b _ => falseDischarge (b.instantiate1 v)
   | .mdata _ e | .proj _ _ e => falseDischarge e

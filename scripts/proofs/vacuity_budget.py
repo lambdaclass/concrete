@@ -259,9 +259,59 @@ end DependencyControls
         print(f'PASS dependency {label}: {result.stdout.strip()}', flush=True)
 
 
+def refutation_controls():
+    from vacuity_driver import HERE
+    consumer = (HERE / 'vacuity.lean').read_text()
+    anchor = '  let key := (closure, simplify)'
+    assert consumer.count(anchor) == 1
+    instrument = '      let result ← refutableContext simplify'
+    assert consumer.count(instrument) == 1
+    driver = r'''import N2Meta
+open Lean Meta Vacuity
+axiom suppliedFalse : False
+set_option maxHeartbeats 2000000 in
+#eval show MetaM Unit from do
+  try
+    let state : DischargeState := {}
+    let (first, state) ← withLocalDeclD `first (mkConst ``Nat) fun _ =>
+      dischargeRefutableContext.run state
+    let (renamed, state) ← withLocalDeclD `renamed (mkConst ``Nat) fun _ =>
+      dischargeRefutableContext.run state
+    if first || renamed then throwError "context-cache-invented-contradiction"
+    unless state.refutedContexts.size == 1 do throwError "context-cache-not-shared"
+    let (impossible, state) ← withLocalDeclD `hypothesis (mkConst ``False) fun _ =>
+      dischargeRefutableContext.run state
+    unless impossible do throwError "context-cache-crossed-context"
+    unless state.refutedContexts.size == 2 do throwError "context-cache-lost-context"
+    -- A mutable context must never acquire a refutation cache entry.
+    let unknown ← mkFreshExprMVar (mkSort Level.zero)
+    let (key, _) ← withLocalDeclD `unknown unknown fun _ => do
+      let key ← dischargeClosure (mkConst ``False)
+      pure (key, ())
+    if key.isSome then throwError "context-cache-retained-metavariable"
+    IO.println "CONTEXT CACHE complete shared=1 distinct=2 mutable=uncached"
+  catch ex => IO.println s!"CONTROL {← ex.toMessageData.toString}"
+'''
+    instrumented = consumer.replace(instrument, '      IO.println "CONTEXT SEARCH"\n' + instrument)
+    for label, text in [('memoized', instrumented), ('context-erased', instrumented.replace(anchor,
+            '  let key := (({ closure := mkConst ``False, instances := #[], declarations := #[] } : DischargeKey), simplify)'))]:
+        with compiled_consumer(consumer_text=text) as meta, tempfile.TemporaryDirectory(prefix='n2-refutation-') as temp:
+            path = Path(temp) / 'Refutation.lean'
+            path.write_text(driver)
+            result = command(['lean', path], temp, dict(os.environ, LEAN_PATH=str(meta)), seconds=60)
+        assert result.returncode == 0, result.stdout
+        if label == 'memoized':
+            assert 'CONTEXT CACHE complete shared=1 distinct=2 mutable=uncached' in result.stdout, result.stdout
+            assert result.stdout.splitlines().count('CONTEXT SEARCH') == 2, result.stdout
+            assert 'CONTROL ' not in result.stdout, result.stdout
+        else:
+            assert 'CONTROL context-cache-crossed-context' in result.stdout, result.stdout
+        print(f'PASS refutation {label}: {result.stdout.strip()}', flush=True)
+
 def main():
     dag_controls()
     dependency_controls()
+    refutation_controls()
     with compiled_consumer() as meta:
         return controls(meta)
 

@@ -253,3 +253,42 @@ The line-4258 completed charge profile is `workConstants=10819`,
 stopped before comparison; comparing individual category totals across those
 cut points is not a full-run speed comparison. Local cold-cache heartbeats and
 wall times also must not be substituted for the coordinator's scope census.
+
+### Refutation profiles and the remaining limit
+
+A bounded cold single-instance baseline for Own line 4381 records 3,425
+`refutableContext` calls costing 1,840,724 user heartbeats (raw profiler units
+1,840,724,607), approximately 92% of the 2,000,000 allowance. Type refutation
+accounts for about 149,931 user heartbeats; inference and whnf are much smaller.
+Caching by exact FVarIds alone provides little reuse because opening binders
+allocates fresh IDs. The repair keys completed refutation queries by closed,
+alpha-canonical contexts, with immutable raw-identity front caches. All local
+assumptions, declaration kinds, let values and local instance order remain in the
+key; mutable contexts are excluded. The actual proof-state visited key and work
+units are unchanged. No admitted certificate or proof is skipped.
+
+The focused refutation controls require two searches across renamed equivalent
+Nat contexts and a distinct False context; an erased-context mutation must report
+exactly `CONTROL context-cache-crossed-context`. Both pass, including explicit
+metavariable exclusion. All 13 production budget controls, both DAG probes and
+both completed-dependency probes pass on the final consumer bytes. The latter
+also require an exact PASS on the inline-contract witness and exact
+`FAIL instance-application` on its changed branch.
+
+Grant line 1478 still reaches 20,000 distinct states under the existing proof-state
+identity and reports `false-discharge-budget`. Own lines 4381/4394 still reach
+2,000,000 heartbeats. These are **INCOMPLETE**, not recovered verdicts. Further
+proof-state/contradiction-search design belongs to R-0219/slice 2a; the current
+search's fit within the owner budget is an open question, pending owner. No claim
+that its current state graph is a minimal or unavoidable proof graph is made.
+
+No whole-scope Grant/Own census was run locally. The supplied N14/N14d failure
+and the surviving expensive single instances leave whole-run wall compatibility
+unestablished. The owning README records the conflict and the costs of honest
+wall-unrun reporting, sufficient wall capacity for per-analysis work, and option
+B's shared budget. Per-analysis interpretation stays **assumed, pending owner**;
+none is chosen and no budget/watchdog is raised.
+
+The single-instance reproduction tool retains both Grant/Own imports in the
+spec worker's order, even while selecting exactly one declaration. This preserves
+the original environment rather than profiling a different import context.
