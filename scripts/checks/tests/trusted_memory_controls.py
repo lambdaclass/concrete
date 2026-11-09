@@ -172,10 +172,19 @@ print('hard address-space limit: ENOMEM')
     path=d/name;path.write_bytes(bytes(4096)); log=d/'path.trace'
     subprocess.run(['strace',*m.strings.TRACE_FLAGS,'-o',str(log),str(exe),str(path),'path'],check=True,capture_output=True,timeout=15)
     self.assertIn(str(path),m.executable_mappings(log.read_text().splitlines()))
-   # A real successful store mapping accepted by the union must fail in the other role.
-   log=d/'role'; log.write_text(f'mmap(NULL, 4096, PROT_EXEC, MAP_PRIVATE, 3<{pinned}>, 0) = 0x1000\n')
-   root='/'.join(pinned.split('/')[:4]); evidence={'closure':{root:{}},'role_closures':{'native':{'clang':[]},'lean-emit':{'lean':[root]}}}
-   self.reject(lambda:m.check([log],evidence,'native'),'unregistered executable mapping: '+json.dumps(pinned))
-   m.check([log],evidence,'lean-emit')
+   # Real role closures, real store fds and successful mmap records in both directions.
+   spec=importlib.util.spec_from_file_location('identity',LIB/'trusted_identity.py')
+   identity=importlib.util.module_from_spec(spec);spec.loader.exec_module(identity)
+   evidence=identity.store_evidence()
+   for role,target in [('native',pinned),('lean-emit',str(Path(clang).resolve()))]:
+    log=d/'cross-role.trace'
+    subprocess.run(['strace',*m.strings.TRACE_FLAGS,'-o',str(log),str(exe),target,'path'],check=True,capture_output=True,timeout=15)
+    # Isolate the successful planted syscall, so the diagnostic must identify its
+    # cross-role file, regardless of the fixture compiler's startup libraries.
+    planted=[line for line in log.read_text().splitlines() if ' mmap(' in line and '<'+target+'>' in line and 'PROT_EXEC' in line]
+    self.assertEqual(len(planted),1)
+    log.write_text('\n'.join(planted)+'\n')
+    self.assertEqual(m.executable_mappings(planted),{target})
+    self.reject(lambda:m.check([log],evidence,role),'unregistered executable mapping: '+json.dumps(target))
 
 if __name__=='__main__': unittest.main()
