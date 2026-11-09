@@ -120,7 +120,7 @@ key and `ssh-keygen -Y sign -n concrete-trusted-base-v1 -f OWNER_KEY DIGEST_FILE
 the coordinator commits the returned detached signature. Writers never generate
 or access a production private key. Key rotation is a coordinator/owner action,
 not inferred from a new branch-provided signer. Initial owner key, fingerprint
-confirmation and signature remain outstanding under **R-0678 / R-0509**.
+confirmation and signature remain outstanding under **R-0509 / R-0676**.
 
 `trusted_approval_controls.py` generates two fresh throwaway keys only in its
 private temporary directory, with a test-only allowed-signers file there. It
@@ -363,7 +363,7 @@ selection and enforcement without an 8 GiB local allocation. The complete
 `slice0_trusted_fresh.sh` on the daily tier (existing R-0676 / R-0509); PR retains
 the real cheap 64 MiB version. Darwin reports INCOMPLETE: an enforceable
 aggregate frontend bound there requires a platform-specific launcher, owned by
-R-0678 / R-0509. No source is dropped or sampled.
+R-0509 / R-0676. No source is dropped or sampled.
 
 Kernel-created executable mappings are part of the same evidence boundary:
 `trusted_executable.py` reads the ELF program headers or shebang of every accepted
@@ -399,21 +399,26 @@ was omitted. The batch bound applies to their combined cost. A timeout kills and
 PASS. Controls consume existing local artifacts without invoking Lake; missing
 artifacts are INCOMPLETE. No controls are sampled or dropped.
 
-On this shared development host the round-14 focused run passed; ownership.lean
-cost 42.529 s, declarations.lean 8.882 s, and individual frontend cases about
-2–3 s. These are **not ci-2 measurements**. The 180 s individual / 360 s batched /
-900 s enclosing bounds are provisional (the individual bound is three times the
-old 60 s limit exceeded on ci-2 D14). The coordinator must collect every timing
-on ci-2, repeat under shared load, and record the measured maximum plus margin
-before accepting item 8. This remaining calibration belongs to R-0678 / R-0509;
-no new roadmap ID is allocated by this writer.
+ci-2 calibration is complete: D15b at `3e3a21967b5b`, two runs (121 s
+and 124 s total), retained in `gates-briefs/D15b-timings.txt`. Final bounds:
+
+| Control class | Measured maximum | Margin above maximum | Bound |
+| --- | --- | --- | --- |
+| ownership.lean | 57.584 s | 122.416 s (over 3x total) | 180 s |
+| declarations.lean | 12.824 s | 32.176 s (over 3x total) | 45 s |
+| Other individual subprocesses, including driver compilation and row parsers | <3 s | >12 s (over 5x total) | 15 s |
+| Complete frontend batch | <3 s | >12 s (over 5x total) | 15 s |
+| Enclosing semantic controls | 124 s | 251 s (over 3x total) | 375 s |
+
+GitHub-hosted timing measurements remain to be collected, owned by R-0509 /
+R-0676. Do not infer hosted calibration from ci-2.
 
 ### Round-14 acceptance still required on ci-2
 
 Record the exact final SHA (`git rev-parse HEAD`) in every result. In the pinned
 clean environment from `slice0_gate_environment`, run:
 
-- `bounded_run 900 -- python3 -I scripts/checks/tests/trusted_base_controls.py`
+- `bounded_run 375 -- python3 -I scripts/checks/tests/trusted_base_controls.py`
   twice under ordinary shared load, retaining every `control-timing` row; set
   final per-command, batch and enclosing bounds from those measurements with
   explicit margin (item 8 is not complete until this is recorded).

@@ -212,7 +212,7 @@ bounded 90 python3 -I "$root/scripts/checks/tests/trusted_memory_bound_controls.
 bounded 10 python3 -I "$root/scripts/checks/tests/trusted_timeout_controls.py"
 bounded 60 python3 -I "$root/scripts/checks/tests/trusted_approval_controls.py"
 bounded 90 python3 -I "$root/scripts/checks/tests/trusted_policy_controls.py"
-bounded 900 python3 -I "$root/scripts/checks/tests/trusted_base_controls.py"
+bounded 375 python3 -I "$root/scripts/checks/tests/trusted_base_controls.py"
 bounded 180 python3 -I "$root/scripts/checks/lib/trusted_identity.py" prepare "$work/identity.json"
 printf 'lake\nlean\ngit\n' >"$work/frontend-tools"
 # Bootstrap the registry renderer with narrowly fixed names and lock-derived role identities;

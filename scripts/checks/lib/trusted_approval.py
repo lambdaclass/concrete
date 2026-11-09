@@ -1,7 +1,7 @@
 """Compute candidate trust digests; owner authorization is not yet established.
 
 Historical citations are context, never authentication. The owner must choose
-an authority boundary and approve the initial canonical digest (R-0678/R-0509).
+an authority boundary and approve the initial canonical digest (R-0509/R-0676).
 """
 import hashlib
 import json

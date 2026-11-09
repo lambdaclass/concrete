@@ -36,12 +36,12 @@ def lean(path, driver=False, extra_env=None, production=False):
         args = ["lean", *(["--run", DRIVER] if driver else []), str(path)]
     return control_run(args,
         env=env, text=True, stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT, timeout=180)
+        stderr=subprocess.STDOUT, timeout={"ownership.lean": 180, "declarations.lean": 45}.get(Path(path).name, 15))
 
 def lean_batch(paths):
     r = control_run(["lean", "--run", DRIVER, "--per-file", *[str(p) for p in paths]],
         env=dict(BASE_ENV), text=True, stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT, timeout=360)
+        stderr=subprocess.STDOUT, timeout=15)
     assert r.returncode == 0, r.stdout
     out, cur, measured = {}, [], set()
     for line in r.stdout.splitlines(keepends=True):
@@ -50,7 +50,7 @@ def lean_batch(paths):
             assert path_s not in measured, path_s
             measured.add(path_s)
             print("control-timing " + json.dumps({"control": "batch-file " + Path(path_s).name,
-                "seconds": int(ms) / 1000, "bound_seconds": 360}), file=sys.stderr)
+                "seconds": int(ms) / 1000, "bound_seconds": 15}), file=sys.stderr)
         elif line.startswith("__FILE_RC__ "):
             _, path_s, rc_s = line.strip().split(" ", 2)
             out[path_s] = subprocess.CompletedProcess(
@@ -68,7 +68,7 @@ with tempfile.TemporaryDirectory() as d:
     d = Path(d)
     module = d / "scripts/checks/compiler/slice0_examples.olean"
     module.parent.mkdir(parents=True)
-    control_run(["lean", "-o", str(module), DRIVER], env=BASE_ENV, check=True, timeout=180)
+    control_run(["lean", "-o", str(module), DRIVER], env=BASE_ENV, check=True, timeout=15)
     BASE_ENV["LEAN_PATH"] = str(d) + os.pathsep + BASE_ENV.get("LEAN_PATH", "")
     ambient = d / "ambient.lean"
     ambient.write_text("import Lean\nunsafe def ambientAuthority : Nat := 0\n")
@@ -159,7 +159,7 @@ with tempfile.TemporaryDirectory() as d:
     spoof = d / "spoof_example_json.lean"
     spoof.write_text('import Lean\n#eval IO.println "example-json {\\"name\\":\\"⟪example⟫spoof.lean:1:0\\",\\"axioms\\":[]}"\n')
     r_spoof = control_run(["lean", "--run", DRIVER, str(spoof)],
-        env=dict(BASE_ENV), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=180)
+        env=dict(BASE_ENV), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15)
     assert r_spoof.returncode == 0 and r_spoof.stdout == "", (r_spoof.returncode, r_spoof.stdout, r_spoof.stderr)
     spoof_rows = d / "spoof.rows"
     spoof_rows.write_text(r_spoof.stdout)
@@ -178,7 +178,7 @@ with tempfile.TemporaryDirectory() as d:
         r_multi = control_run(
             ["lean", "--run", DRIVER, str(benign), str(no_kw)],
             env=dict(BASE_ENV),
-            text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=180,
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=15,
         )
         require(r_multi, False, expected_decl)
     p.write_text(

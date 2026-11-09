@@ -6,12 +6,10 @@ import time
 import signal
 import json
 
-# Per-command timings are emitted on ci-2 for calibration; no controls are sampled.
-# 180s is provisional: 3x the old 60s bound exceeded by ownership.lean on D14.
-# Coordinator must retain ci-2 measurements and calibrate this bound before acceptance.
+# Final ci-2 D15b bounds and margins are recorded in compiler/README.md.
 _sequence = 0
 
-def control_run(args, *, timeout=180, check=False, **kwargs):
+def control_run(args, *, timeout=15, check=False, **kwargs):
     global _sequence
     _sequence += 1
     name = f"#{_sequence} " + " ".join(Path(str(a)).name if str(a).endswith(".lean") else str(a) for a in args)
