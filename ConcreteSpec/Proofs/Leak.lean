@@ -1122,6 +1122,34 @@ theorem function_entry_peak (m : Memory) (actions : List Action) (lineage : Line
   rw [Nat.max_eq_right hentry] at hp
   exact hp
 
+/-- Proof-side evidence for a bound: unknown status carries no numeric claim.
+This case presentation leaves the normative `Bound.Sound` implication unchanged. -/
+def BoundEvidence {α : Type} [LE α] (actual : α) (b : Bound α) : Prop :=
+  match b.status with
+  | .boundEstablished => actual ≤ b.limit
+  | .notEstablished => True
+
+/-- Proof-side evidence for an optional footprint, retaining the allocator-definedness check
+only when evidence is established. -/
+def OptionalBoundEvidence {α : Type} [LE α] (actual : Option α) (b : Bound α) : Prop :=
+  match b.status with
+  | .boundEstablished => ∃ a, actual = some a ∧ a ≤ b.limit
+  | .notEstablished => True
+
+/-- Helper (computation). Converts status-case evidence to the unchanged normative
+bound predicate by exhaustive status analysis (approved: PENDING). -/
+theorem boundEvidence_sound {α : Type} [LE α] (actual : α) (b : Bound α)
+    (h : BoundEvidence actual b) : Bound.Sound actual b := by
+  cases b with
+  | mk limit status => cases status <;> simp_all [BoundEvidence, Bound.Sound]
+
+/-- Helper (computation). Converts optional status-case evidence to the unchanged normative
+footprint predicate by exhaustive status analysis (approved: PENDING). -/
+theorem optionalBoundEvidence_sound {α : Type} [LE α] (actual : Option α) (b : Bound α)
+    (h : OptionalBoundEvidence actual b) : Bound.SoundOptional actual b := by
+  cases b with
+  | mk limit status => cases status <;> simp_all [OptionalBoundEvidence, Bound.SoundOptional]
+
 /-- Law (subject `run`).
 
 Independent analysis bounds certify any `LineageReport` (whether all bounds are established, some
@@ -1134,11 +1162,11 @@ theorem report_certified (m : Memory) (actions : List Action) (allocator : Alloc
     (hwf : ∀ l, (m l).WF)
     (hentry : (m lineage).functionPeak = (m lineage).live)
     (hrun : (run m actions).isSome = true)
-    (hrequested : Bound.Sound (allocated lineage actions) r.requested)
-    (hnet : Bound.Sound ((allocated lineage actions : Int) - freed lineage actions -
+    (hrequested : BoundEvidence (allocated lineage actions) r.requested)
+    (hnet : BoundEvidence ((allocated lineage actions : Int) - freed lineage actions -
       resetBytes lineage m actions) r.netChange)
-    (hpeak : Bound.Sound (observedPeak lineage m actions) r.peak)
-    (hfootprint : Bound.SoundOptional (allocator.footprint lineage m actions) r.footprint) :
+    (hpeak : BoundEvidence (observedPeak lineage m actions) r.peak)
+    (hfootprint : OptionalBoundEvidence (allocator.footprint lineage m actions) r.footprint) :
     ∃ m', run m actions = some m' ∧
       LineageReport.Sound lineage (m lineage) (m' lineage)
         (allocator.footprint lineage m actions) r := by
@@ -1146,15 +1174,15 @@ theorem report_certified (m : Memory) (actions : List Action) (allocator : Alloc
   obtain ⟨m'', h', hpeakEq⟩ := run_peak_exact m actions lineage hwf hrun
   rw [h] at h'
   cases h'
-  refine ⟨m', h, hlineage, ?_, ?_, ?_, hfootprint⟩
+  refine ⟨m', h, hlineage, ?_, ?_, ?_, optionalBoundEvidence_sound _ _ hfootprint⟩
   · have hd : (m' lineage).requested - (m lineage).requested = allocated lineage actions := by omega
     rw [hd]
-    exact hrequested
+    exact boundEvidence_sound _ _ hrequested
   · have hn : ((m' lineage).live : Int) - ((m lineage).live : Int) =
         (allocated lineage actions : Int) - freed lineage actions -
           resetBytes lineage m actions := by omega
     rw [hn]
-    exact hnet
+    exact boundEvidence_sound _ _ hnet
   · intro hstatus
     rw [hpeakEq, hentry]
     have hobserved : (m lineage).live ≤ observedPeak lineage m actions := by
@@ -1166,7 +1194,7 @@ theorem report_certified (m : Memory) (actions : List Action) (allocator : Alloc
         · exact Nat.le_refl _
         · exact Nat.le_max_left _ _
     rw [Nat.max_eq_right hobserved]
-    exact hpeak hstatus
+    exact boundEvidence_sound _ _ hpeak hstatus
 
 /-! ## Concrete accounting fixtures and definition controls -/
 
@@ -1509,29 +1537,33 @@ example : ∃ m', run reportEntryMemory reportActions = some m' ∧
       (demoAllocator.footprint ⟨0⟩ reportEntryMemory reportActions) establishedReport :=
   report_certified reportEntryMemory reportActions demoAllocator ⟨0⟩ establishedReport
     rfl reportEntry_wf rfl rfl
-    (fun _ => by decide) (fun _ => by decide) (fun _ => by decide)
-    (fun _ => ⟨10, rfl, by decide⟩)
+    (by dsimp [BoundEvidence, establishedReport]; decide)
+    (by dsimp [BoundEvidence, establishedReport]; decide)
+    (by dsimp [BoundEvidence, establishedReport]; decide)
+    ⟨10, rfl, by decide⟩
 
 /-- Planted (law `report_certified`, case `established`, subject `run`, mutant `brokenRun`). -/
 example : establishedReport.lineage = ⟨0⟩ ∧
     (∀ l, (reportEntryMemory l).WF) ∧
     (reportEntryMemory ⟨0⟩).functionPeak = (reportEntryMemory ⟨0⟩).live ∧
     (brokenRun reportEntryMemory reportActions).isSome = true ∧
-    Bound.Sound (allocated ⟨0⟩ reportActions) establishedReport.requested ∧
-    Bound.Sound ((allocated ⟨0⟩ reportActions : Int) - freed ⟨0⟩ reportActions -
+    BoundEvidence (allocated ⟨0⟩ reportActions) establishedReport.requested ∧
+    BoundEvidence ((allocated ⟨0⟩ reportActions : Int) - freed ⟨0⟩ reportActions -
       resetBytes ⟨0⟩ reportEntryMemory reportActions) establishedReport.netChange ∧
-    Bound.Sound (observedPeak ⟨0⟩ reportEntryMemory reportActions) establishedReport.peak ∧
-    Bound.SoundOptional (demoAllocator.footprint ⟨0⟩ reportEntryMemory reportActions)
+    BoundEvidence (observedPeak ⟨0⟩ reportEntryMemory reportActions) establishedReport.peak ∧
+    OptionalBoundEvidence (demoAllocator.footprint ⟨0⟩ reportEntryMemory reportActions)
       establishedReport.footprint ∧
     ¬ (∃ m', brokenRun reportEntryMemory reportActions = some m' ∧
       LineageReport.Sound ⟨0⟩ (reportEntryMemory ⟨0⟩) (m' ⟨0⟩)
         (demoAllocator.footprint ⟨0⟩ reportEntryMemory reportActions) establishedReport) := by
-  refine ⟨rfl, reportEntry_wf, rfl, rfl, fun _ => by decide, fun _ => by decide,
-    fun _ => by decide, fun _ => ⟨10, rfl, by decide⟩, ?_⟩
-  rintro ⟨m', hm', hsound⟩
-  cases hm'
-  have hreq : (899 : Nat) ≤ 8 := hsound.2.1 rfl
-  omega
+  refine ⟨rfl, reportEntry_wf, rfl, rfl, ?_, ?_, ?_, ⟨10, rfl, by decide⟩, ?_⟩
+  · dsimp [BoundEvidence, establishedReport]; decide
+  · dsimp [BoundEvidence, establishedReport]; decide
+  · dsimp [BoundEvidence, establishedReport]; decide
+  · rintro ⟨m', hm', hsound⟩
+    cases hm'
+    have hreq : (899 : Nat) ≤ 8 := hsound.2.1 rfl
+    omega
 
 /-- Instance (law `report_certified`, case `mixedStatus`). -/
 example : ∃ m', run reportEntryMemory reportActions = some m' ∧
@@ -1539,58 +1571,66 @@ example : ∃ m', run reportEntryMemory reportActions = some m' ∧
       (demoAllocator.footprint ⟨0⟩ reportEntryMemory reportActions) mixedStatusReport :=
   report_certified reportEntryMemory reportActions demoAllocator ⟨0⟩ mixedStatusReport
     rfl reportEntry_wf rfl rfl
-    (fun _ => by decide) nofun (fun _ => by decide)
-    (fun _ => ⟨10, rfl, by decide⟩)
+    (by dsimp [BoundEvidence, mixedStatusReport, establishedReport]; decide)
+    True.intro
+    (by dsimp [BoundEvidence, mixedStatusReport, establishedReport]; decide)
+    ⟨10, rfl, by decide⟩
 
 /-- Planted (law `report_certified`, case `mixedStatus`, subject `run`, mutant `brokenRun`). -/
 example : mixedStatusReport.lineage = ⟨0⟩ ∧
     (∀ l, (reportEntryMemory l).WF) ∧
     (reportEntryMemory ⟨0⟩).functionPeak = (reportEntryMemory ⟨0⟩).live ∧
     (brokenRun reportEntryMemory reportActions).isSome = true ∧
-    Bound.Sound (allocated ⟨0⟩ reportActions) mixedStatusReport.requested ∧
-    Bound.Sound ((allocated ⟨0⟩ reportActions : Int) - freed ⟨0⟩ reportActions -
+    BoundEvidence (allocated ⟨0⟩ reportActions) mixedStatusReport.requested ∧
+    BoundEvidence ((allocated ⟨0⟩ reportActions : Int) - freed ⟨0⟩ reportActions -
       resetBytes ⟨0⟩ reportEntryMemory reportActions) mixedStatusReport.netChange ∧
-    Bound.Sound (observedPeak ⟨0⟩ reportEntryMemory reportActions) mixedStatusReport.peak ∧
-    Bound.SoundOptional (demoAllocator.footprint ⟨0⟩ reportEntryMemory reportActions)
+    BoundEvidence (observedPeak ⟨0⟩ reportEntryMemory reportActions) mixedStatusReport.peak ∧
+    OptionalBoundEvidence (demoAllocator.footprint ⟨0⟩ reportEntryMemory reportActions)
       mixedStatusReport.footprint ∧
     ¬ (∃ m', brokenRun reportEntryMemory reportActions = some m' ∧
       LineageReport.Sound ⟨0⟩ (reportEntryMemory ⟨0⟩) (m' ⟨0⟩)
         (demoAllocator.footprint ⟨0⟩ reportEntryMemory reportActions) mixedStatusReport) := by
-  refine ⟨rfl, reportEntry_wf, rfl, rfl, fun _ => by decide, nofun,
-    fun _ => by decide, fun _ => ⟨10, rfl, by decide⟩, ?_⟩
-  rintro ⟨m', hm', hsound⟩
-  cases hm'
-  have hreq : (899 : Nat) ≤ 8 := hsound.2.1 rfl
-  omega
+  refine ⟨rfl, reportEntry_wf, rfl, rfl, ?_, True.intro, ?_, ⟨10, rfl, by decide⟩, ?_⟩
+  · dsimp [BoundEvidence, mixedStatusReport, establishedReport]; decide
+  · dsimp [BoundEvidence, mixedStatusReport, establishedReport]; decide
+  · rintro ⟨m', hm', hsound⟩
+    cases hm'
+    have hreq : (899 : Nat) ≤ 8 := hsound.2.1 rfl
+    omega
 
-/-- Instance (law `report_certified`, case emptyFunction). -/
+/-- Instance (law `report_certified`, case `emptyFunction`). -/
 example : ∃ m', run emptyFunctionEntryMemory [] = some m' ∧
     LineageReport.Sound ⟨0⟩ (emptyFunctionEntryMemory ⟨0⟩) (m' ⟨0⟩)
       (noFootprintAllocator.footprint ⟨0⟩ emptyFunctionEntryMemory []) emptyFunctionReport :=
   report_certified emptyFunctionEntryMemory [] noFootprintAllocator ⟨0⟩ emptyFunctionReport
     rfl emptyFunctionEntry_wf rfl rfl
-    (fun _ => by decide) (fun _ => by decide) (fun _ => by decide) nofun
+    (by dsimp [BoundEvidence, emptyFunctionReport, establishedReport]; decide)
+    (by dsimp [BoundEvidence, emptyFunctionReport, establishedReport]; decide)
+    (by dsimp [BoundEvidence, emptyFunctionReport, establishedReport]; decide)
+    True.intro
 
-/-- Planted (law `report_certified`, case emptyFunction, subject `run`, mutant `brokenRun`). -/
+/-- Planted (law `report_certified`, case `emptyFunction`, subject `run`, mutant `brokenRun`). -/
 example : emptyFunctionReport.lineage = ⟨0⟩ ∧
     (∀ l, (emptyFunctionEntryMemory l).WF) ∧
     (emptyFunctionEntryMemory ⟨0⟩).functionPeak = (emptyFunctionEntryMemory ⟨0⟩).live ∧
     (brokenRun emptyFunctionEntryMemory []).isSome = true ∧
-    Bound.Sound (allocated ⟨0⟩ []) emptyFunctionReport.requested ∧
-    Bound.Sound ((allocated ⟨0⟩ [] : Int) - freed ⟨0⟩ [] -
+    BoundEvidence (allocated ⟨0⟩ []) emptyFunctionReport.requested ∧
+    BoundEvidence ((allocated ⟨0⟩ [] : Int) - freed ⟨0⟩ [] -
       resetBytes ⟨0⟩ emptyFunctionEntryMemory []) emptyFunctionReport.netChange ∧
-    Bound.Sound (observedPeak ⟨0⟩ emptyFunctionEntryMemory []) emptyFunctionReport.peak ∧
-    Bound.SoundOptional (noFootprintAllocator.footprint ⟨0⟩ emptyFunctionEntryMemory [])
+    BoundEvidence (observedPeak ⟨0⟩ emptyFunctionEntryMemory []) emptyFunctionReport.peak ∧
+    OptionalBoundEvidence (noFootprintAllocator.footprint ⟨0⟩ emptyFunctionEntryMemory [])
       emptyFunctionReport.footprint ∧
     ¬ (∃ m', brokenRun emptyFunctionEntryMemory [] = some m' ∧
       LineageReport.Sound ⟨0⟩ (emptyFunctionEntryMemory ⟨0⟩) (m' ⟨0⟩)
         (noFootprintAllocator.footprint ⟨0⟩ emptyFunctionEntryMemory []) emptyFunctionReport) := by
-  refine ⟨rfl, emptyFunctionEntry_wf, rfl, rfl, fun _ => by decide, fun _ => by decide,
-    fun _ => by decide, nofun, ?_⟩
-  rintro ⟨m', hm', hsound⟩
-  cases hm'
-  have hreq : (899 : Nat) ≤ 0 := hsound.2.1 rfl
-  omega
+  refine ⟨rfl, emptyFunctionEntry_wf, rfl, rfl, ?_, ?_, ?_, True.intro, ?_⟩
+  · dsimp [BoundEvidence, emptyFunctionReport, establishedReport]; decide
+  · dsimp [BoundEvidence, emptyFunctionReport, establishedReport]; decide
+  · dsimp [BoundEvidence, emptyFunctionReport, establishedReport]; decide
+  · rintro ⟨m', hm', hsound⟩
+    cases hm'
+    have hreq : (899 : Nat) ≤ 0 := hsound.2.1 rfl
+    omega
 
 /-- Representation lemma. Concrete trajectory calculation showing `observedPeak` records 10 across `reportActions` (including 2 bytes live at entry) and 2 on an empty action list (approved: APPR-C7-agy-5d94c4b4d). -/
 example : observedPeak ⟨0⟩ reportEntryMemory reportActions = 10 ∧
