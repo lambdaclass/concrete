@@ -12,6 +12,7 @@ structure FileAuditState where
   nextCmdIdx : Nat := 0
   declMeta : Std.HashMap Name (Nat × Nat) := {}
   extraCSimp : NameSet := {}
+  extraAttributed : NameSet := {}
 
 def sortLocalDecls (declMeta : Std.HashMap Name (Nat × Nat))
     (xs : Array (Name × ConstantInfo)) : Array (Name × ConstantInfo) :=
@@ -66,23 +67,59 @@ def checkOwnerKind (n : Name) (owners : List Concrete.Premises.Component) : Comm
       IO.println s!"FAIL trusted declaration {n} is owned by {owners.length} components, expected exactly one"
       throwError "trusted declaration owner audit failed"
 
-def recordCommandState (cmd : Syntax) (auditRef : IO.Ref FileAuditState) : FrontendM Unit := do
-  let cs ← getCommandState
-  let input ← getInputContext
-  let env := cs.env
-  let line := (input.fileMap.toPosition (cmd.getPos?.getD 0)).line
+/- Retain trust-extension events (`csimp`, `cpass`, `extern`, `implemented_by`,
+   `init`, `builtin_init`, `export`) during recursive command elaboration and
+   attribute registration, before any local scope (`attribute [local ...] ... in`,
+   `open ... in`, `section ... end`, `namespace ... end`, or macro scope) closes. -/
+def recordEnvTrustState (env : Environment) (fileMap : FileMap) (stx : Syntax)
+    (auditRef : IO.Ref FileAuditState) (includeAllNewConsts : Bool := false) : IO Unit := do
+  let line := (fileMap.toPosition (stx.getPos?.getD 0)).line
   let st ← auditRef.get
   let cmdIdx := st.nextCmdIdx
   let mut declMeta := st.declMeta
-  for (n, _) in env.constants.map₂.toList do
-    unless n.isAnonymous || declMeta.contains n do
-      declMeta := declMeta.insert n (cmdIdx, line)
+  let mut extraAttributed := st.extraAttributed
+  if includeAllNewConsts then
+    for (n, _) in env.constants.map₂.toList do
+      unless n.isAnonymous || declMeta.contains n do
+        declMeta := declMeta.insert n (cmdIdx, line)
   for n in Concrete.Premises.moduleAttributedDeclarations env do
-    unless n.isAnonymous || declMeta.contains n do
-      declMeta := declMeta.insert n (cmdIdx, line)
+    unless n.isAnonymous do
+      extraAttributed := extraAttributed.insert n
+      unless declMeta.contains n do
+        declMeta := declMeta.insert n (cmdIdx, line)
   let extraCSimp := (Compiler.CSimp.ext.getState env).thmNames.foldStage2
     (fun acc n _ => acc.insert n) st.extraCSimp
-  auditRef.set { nextCmdIdx := cmdIdx + 1, declMeta, extraCSimp }
+  let extraCSimp := (Compiler.CSimp.ext.ext.getState env).stateStack.foldl
+    (fun acc top => top.state.thmNames.foldStage2 (fun a n _ => a.insert n) acc) extraCSimp
+  auditRef.set { nextCmdIdx := cmdIdx + 1, declMeta, extraCSimp, extraAttributed }
+
+def installAuditHooks (auditRef : IO.Ref FileAuditState) : IO Unit := do
+  attributeMapRef.modify fun m =>
+    m.fold (init := {}) fun acc name impl =>
+      acc.insert name { impl with
+        add := fun decl stx kind => do
+          impl.add decl stx kind
+          recordEnvTrustState (← getEnv) (← getFileMap) stx auditRef
+      }
+  commandElabAttribute.tableRef.modify fun tbl =>
+    tbl.fold (init := ({} : KeyedDeclsAttribute.Table CommandElab)) fun acc key entries =>
+      let includeConsts :=
+        key == ``Parser.Command.declaration ||
+        key == ``Parser.Command.«mutual» ||
+        key == ``Parser.Command.«initialize»
+      let entries' := entries.map fun entry =>
+        { entry with
+          value := fun stx => do
+            recordEnvTrustState (← getEnv) (← getFileMap) stx auditRef
+            entry.value stx
+            recordEnvTrustState (← getEnv) (← getFileMap) stx auditRef includeConsts
+        }
+      acc.insert key entries'
+
+def recordCommandState (cmd : Syntax) (auditRef : IO.Ref FileAuditState) : FrontendM Unit := do
+  let cs ← getCommandState
+  let input ← getInputContext
+  recordEnvTrustState cs.env input.fileMap cmd auditRef true
 
 partial def commands (auditRef : IO.Ref FileAuditState) : FrontendM Unit := do
   updateCmdPos
@@ -115,7 +152,7 @@ def auditFileEnvironment (file : String) (csList : List Concrete.Premises.Compon
     unless initConsts.contains n || n.isAnonymous do
       seen := seen.insert n
       localDecls := localDecls.push (n, ci)
-  for n in Concrete.Premises.moduleAttributedDeclarations env ++ st.extraCSimp.toList do
+  for n in Concrete.Premises.moduleAttributedDeclarations env ++ st.extraAttributed.toList ++ st.extraCSimp.toList do
     unless seen.contains n || n.isAnonymous do
       if let some ci := env.find? n then
         seen := seen.insert n
@@ -150,31 +187,114 @@ def configuredComponents : IO (List Concrete.Premises.Component) := do
             if c.id == compId then { c with declarations := c.declarations ++ names } else c
       return cs
 
+def isHeavyImport (m : Name) : Bool :=
+  m.getRoot == `Lean || m.getRoot == `LeanCompilerBackend ||
+  m == `Concrete || m == `Concrete.Premises || (`Concrete.Backend.LCB).isPrefixOf m
+
+def isLightHeader (file : String) : IO Bool := do
+  let text ← IO.FS.readFile file
+  let (header, _, _) ← Parser.parseHeader (Parser.mkInputContext text file)
+  return !(headerToImports header).any (fun imp => isHeavyImport imp.module)
+
+abbrev HeaderCacheKey := Bool × Array (Name × Bool × Bool × Bool)
+
+def headerCacheKey (header : HeaderSyntax) : HeaderCacheKey :=
+  (header.isModule, (headerToImports header).map fun i => (i.module, i.importAll, i.isExported, i.isMeta))
+
+unsafe def auditSingleFile (retained : IO.Ref NameSet) (auditRef : IO.Ref FileAuditState)
+    (envCache : IO.Ref (Std.HashMap HeaderCacheKey Environment))
+    (csList : List Concrete.Premises.Component) (file : String) : IO UInt32 := do
+  retained.set {}
+  auditRef.set {}
+  let text ← IO.FS.readFile file
+  let input := Parser.mkInputContext text file
+  let (header, ps, msgs) ← Parser.parseHeader input
+  if msgs.hasErrors then
+    for msg in msgs.toList do IO.eprintln (← msg.toString)
+    return 1
+  let key := headerCacheKey header
+  let cached? := (← envCache.get).get? key
+  let (env, msgs) ← match cached? with
+    | some cachedEnv => pure (cachedEnv, msgs)
+    | none =>
+        enableInitializersExecution
+        let (env, msgs) ← processHeader header {} msgs input
+        unless msgs.hasErrors do
+          envCache.modify (·.insert key env)
+        pure (env, msgs)
+  if msgs.hasErrors then
+    for msg in msgs.toList do IO.eprintln (← msg.toString)
+    return 1
+  let initConsts := env.constants.map₂
+  let action : FrontendM Unit := do
+    runCommandElabM do elabCommand (← `(command| noncomputable section))
+    commands auditRef
+    runCommandElabM do auditFileEnvironment file csList retained auditRef initConsts
+  let (_, state) ← StateRefT'.run (action.run { inputCtx := input })
+    { commandState := Command.mkState env msgs {}, parserState := ps, cmdPos := ps.pos }
+  if state.commandState.messages.hasErrors then
+    for msg in state.commandState.messages.toList do IO.eprintln (← msg.toString)
+    return 1
+  return 0
+
 unsafe def main (files : List String) : IO UInt32 := do
   let retained ← IO.mkRef NameSet.empty
   let auditRef ← IO.mkRef ({} : FileAuditState)
+  let envCache ← IO.mkRef ({} : Std.HashMap HeaderCacheKey Environment)
   commandElabAttribute.addBuiltin ``Parser.Command.declaration `retainExample (retainExample retained)
+  installAuditHooks auditRef
   initSearchPath (← findSysroot)
   let csList ← configuredComponents
+  let (perFile, inProcess, files) := match files with
+    | "--per-file" :: rest => (true, true, rest)
+    | "--in-process" :: rest => (false, true, rest)
+    | _ => (false, files.length <= 2, files)
+  if perFile then
+    for file in files do
+      let rc ← try
+        auditSingleFile retained auditRef envCache csList file
+      catch e =>
+        IO.eprintln e.toString
+        pure 1
+      (← IO.getStdout).flush
+      (← IO.getStderr).flush
+      IO.println s!"__FILE_RC__ {file} {rc}"
+      (← IO.getStdout).flush
+    return 0
+  if inProcess then
+    for file in files do
+      let rc ← auditSingleFile retained auditRef envCache csList file
+      if rc != 0 then return rc
+    return 0
+  let mut lightFiles : List String := []
+  let mut heavyFiles : List String := []
   for file in files do
-    retained.set {}
-    auditRef.set {}
-    let text ← IO.FS.readFile file
-    let input := Parser.mkInputContext text file
-    let (header, ps, msgs) ← Parser.parseHeader input
-    enableInitializersExecution
-    let (env, msgs) ← processHeader header {} msgs input
-    if msgs.hasErrors then
-      for msg in msgs.toList do IO.eprintln (← msg.toString)
-      return 1
-    let initConsts := env.constants.map₂
-    let action : FrontendM Unit := do
-      runCommandElabM do elabCommand (← `(command| noncomputable section))
-      commands auditRef
-      runCommandElabM do auditFileEnvironment file csList retained auditRef initConsts
-    let (_, state) ← StateRefT'.run (action.run { inputCtx := input })
-      { commandState := Command.mkState env msgs {}, parserState := ps, cmdPos := ps.pos }
-    if state.commandState.messages.hasErrors then
-      for msg in state.commandState.messages.toList do IO.eprintln (← msg.toString)
-      return 1
+    if (← isLightHeader file) then
+      lightFiles := lightFiles ++ [file]
+    else
+      heavyFiles := heavyFiles ++ [file]
+  let runChild (args : List String) : IO UInt32 := do
+    let out ← IO.Process.output {
+      cmd := (← IO.appPath).toString
+      args := (#["--run", "scripts/checks/compiler/slice0_examples.lean"] ++ args.toArray)
+    }
+    unless out.stdout.isEmpty do IO.print out.stdout
+    unless out.stderr.isEmpty do IO.eprint out.stderr
+    return out.exitCode
+  if heavyFiles.isEmpty then
+    for file in lightFiles do
+      let rc ← auditSingleFile retained auditRef envCache csList file
+      if rc != 0 then return rc
+    return 0
+  unless lightFiles.isEmpty do
+    let rc ← runChild ("--in-process" :: lightFiles)
+    if rc != 0 then return rc
+  let lastHeavy? := heavyFiles.getLast?
+  for file in heavyFiles do
+    if some file != lastHeavy? then
+      let rc ← runChild [file]
+      if rc != 0 then return rc
+    else
+      let rc ← auditSingleFile retained auditRef envCache csList file
+      if rc != 0 then return rc
   return 0

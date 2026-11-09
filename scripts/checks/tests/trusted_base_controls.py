@@ -1,17 +1,39 @@
 """Light semantic controls; run inside nix develop after building Concrete.Premises."""
 from pathlib import Path
+import json
 import os
 import re
 import subprocess
 import tempfile
 
 DRIVER = "scripts/checks/compiler/slice0_examples.lean"
+BASE_ENV = json.loads(subprocess.check_output(
+    ["lake", "env", "python3", "-I", "-c", "import json, os; print(json.dumps(dict(os.environ)))"],
+    text=True, timeout=30))
+BASE_ENV["LEAN_NUM_THREADS"] = "2"
+
 def lean(path, driver=False, extra_env=None):
-    env = {**os.environ, "LEAN_NUM_THREADS": "2"}
+    env = dict(BASE_ENV)
     if extra_env: env.update(extra_env)
-    return subprocess.run(["lake", "env", "lean", *(["--run", DRIVER] if driver else []), str(path)],
+    return subprocess.run(["lean", *(["--run", DRIVER] if driver else []), str(path)],
         env=env, text=True, stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT, timeout=60)
+
+def lean_batch(paths):
+    r = subprocess.run(["lean", "--run", DRIVER, "--per-file", *[str(p) for p in paths]],
+        env=dict(BASE_ENV), text=True, stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT, timeout=120)
+    assert r.returncode == 0, r.stdout
+    out, cur = {}, []
+    for line in r.stdout.splitlines(keepends=True):
+        if line.startswith("__FILE_RC__ "):
+            _, path_s, rc_s = line.strip().split(" ", 2)
+            out[path_s] = subprocess.CompletedProcess(
+                args=[path_s], returncode=int(rc_s), stdout="".join(cur))
+            cur = []
+        else:
+            cur.append(line)
+    return out
 
 def require(result, ok, diagnostic):
     assert (result.returncode == 0) == ok and diagnostic in result.stdout, (result.returncode, result.stdout)
@@ -36,7 +58,7 @@ with tempfile.TemporaryDirectory() as d:
     assert re.search(r'^FAIL unlisted example axiom .*\._native\.decide\.ax_1(?:\._@\.[^ ]+)? in ' + re.escape(str(p)) + r':4$', r.stdout, re.M), r.stdout
     p.write_text('import Lean\nexample : IO Unit := do while true do pure ()\n')
     require(lean(p, True), False, 'FAIL unlisted example trusted declaration ')
-    for ex_src, extra, kind_tag in [
+    ex_cases = [
         ('import Lean\nunsafe example : Nat := 0\n', None, 'unsafe'),
         ('import Lean\nunsafe def unsafeHelper : Nat := 0\nunsafe example : Nat := unsafeHelper\n',
          {"CONCRETE_TRUSTED_DECLARATIONS": "lexer:unsafeHelper"}, 'unsafe'),
@@ -48,13 +70,22 @@ with tempfile.TemporaryDirectory() as d:
         ('import Lean\ndef csimpOrig (n : Nat) := n + 0\ndef csimpRepl (n : Nat) := n\n'
          '@[csimp] example : csimpOrig = csimpRepl := by funext n; simp [csimpOrig, csimpRepl]\n',
          None, 'csimp'),
-    ]:
-        p.write_text(ex_src)
-        r_ex = lean(p, True, extra)
+        ('import Lean\n@[cpass] meta example : Lean.Compiler.LCNF.PassInstaller :=\n'
+         '  { phase := .base, install := pure }\n',
+         None, 'cpass'),
+    ]
+    ex_paths = []
+    for idx, (ex_src, extra, kind_tag) in enumerate(ex_cases):
+        ex_p = d / f"ex_{idx}.lean"
+        ex_p.write_text(ex_src)
+        ex_paths.append((ex_p, extra, kind_tag))
+    ex_batch = lean_batch([ex_p for ex_p, extra, _ in ex_paths if extra is None])
+    for ex_p, extra, kind_tag in ex_paths:
+        r_ex = ex_batch[str(ex_p)] if extra is None else lean(ex_p, True, extra)
         require(r_ex, False, f'FAIL unlisted example trusted declaration ')
         assert re.search(
             r'^FAIL unlisted example trusted declaration «?⟪example⟫'
-            + re.escape(str(p)) + r':\d+:\d+»? \[' + re.escape(kind_tag) + r'\]$',
+            + re.escape(str(ex_p)) + r':\d+:\d+»? \[' + re.escape(kind_tag) + r'\]$',
             r_ex.stdout, re.M
         ), r_ex.stdout
     no_kw = d / "loop_no_kw.lean"
@@ -108,7 +139,7 @@ with tempfile.TemporaryDirectory() as d:
     r_hyg = lean(p, True)
     require(r_hyg, False, 'FAIL unlisted example trusted declaration ')
     assert re.search(r'^FAIL unlisted example trusted declaration hygP\._@\.[^ ]+ \[partial\]$', r_hyg.stdout, re.M), r_hyg.stdout
-    for late_src, extra_env, expected_diag in [
+    late_cases = [
         # Separately applied extern, implemented_by and csimp attributes.
         ('import Lean\ndef late : Nat := 0\nattribute [extern "c_late"] late\nexample : True := True.intro\n',
          None, 'FAIL unlisted example trusted declaration late [extern]'),
@@ -119,7 +150,14 @@ with tempfile.TemporaryDirectory() as d:
          'theorem lateCsimp : csimpOrig = csimpRepl := by funext n; simp [csimpOrig, csimpRepl]\n'
          'attribute [csimp] lateCsimp\nexample : True := True.intro\n',
          None, 'FAIL unlisted example trusted declaration lateCsimp [csimp]'),
-        # Macro-generated commands applying extern, implemented_by and csimp attributes.
+        ('import Lean\n@[cpass] public meta def declCPass : Lean.Compiler.LCNF.PassInstaller :=\n'
+         '  { phase := .base, install := pure }\nexample : True := True.intro\n',
+         None, 'FAIL unlisted example trusted declaration declCPass [cpass]'),
+        ('import Lean\npublic meta def lateCPass : Lean.Compiler.LCNF.PassInstaller :=\n'
+         '  { phase := .base, install := pure }\n'
+         'attribute [cpass] lateCPass\nexample : True := True.intro\n',
+         None, 'FAIL unlisted example trusted declaration lateCPass [cpass]'),
+        # Macro-generated commands applying extern, implemented_by, csimp and cpass attributes.
         ('import Lean\ndef macroExternTarget : Nat := 0\n'
          'macro "applyExtern" : command => `(attribute [extern "c_macro_late"] $(Lean.mkIdent `macroExternTarget))\n'
          'applyExtern\nexample : True := True.intro\n',
@@ -133,7 +171,12 @@ with tempfile.TemporaryDirectory() as d:
          'macro "applyCsimp" : command => `(attribute [csimp] $(Lean.mkIdent `macroCsimpThm))\n'
          'applyCsimp\nexample : True := True.intro\n',
          None, 'FAIL unlisted example trusted declaration macroCsimpThm [csimp]'),
-        # Attributes applied in a later section/namespace (including scoped/local csimp and pre-attribute callers).
+        ('import Lean\npublic meta def macroCPassTarget : Lean.Compiler.LCNF.PassInstaller :=\n'
+         '  { phase := .base, install := pure }\n'
+         'macro "applyCPass" : command => `(attribute [cpass] $(Lean.mkIdent `macroCPassTarget))\n'
+         'applyCPass\nexample : True := True.intro\n',
+         None, 'FAIL unlisted example trusted declaration macroCPassTarget [cpass]'),
+        # Attributes applied in a later section/namespace (including scoped/local csimp, cpass and pre-attribute callers).
         ('import Lean\nnamespace Earlier\ndef nsExtern : Nat := 0\nend Earlier\n'
          'section LaterSec\nnamespace LaterNS\nattribute [extern "c_ns"] Earlier.nsExtern\nend LaterNS\nend LaterSec\n'
          'example : True := True.intro\n',
@@ -147,6 +190,11 @@ with tempfile.TemporaryDirectory() as d:
          'section LaterSec\nnamespace LaterNS\nattribute [csimp] Earlier.nsCsimp\nend LaterNS\nend LaterSec\n'
          'example : True := True.intro\n',
          None, 'FAIL unlisted example trusted declaration Earlier.nsCsimp [csimp]'),
+        ('import Lean\nnamespace Earlier\npublic meta def nsCPass : Lean.Compiler.LCNF.PassInstaller :=\n'
+         '  { phase := .base, install := pure }\nend Earlier\n'
+         'section LaterSec\nnamespace LaterNS\nattribute [cpass] Earlier.nsCPass\nend LaterNS\nend LaterSec\n'
+         'example : True := True.intro\n',
+         None, 'FAIL unlisted example trusted declaration Earlier.nsCPass [cpass]'),
         ('import Lean\nnamespace Earlier\ndef sOrig (n : Nat) := n + 0\ndef sRepl (n : Nat) := n\n'
          'theorem scopedCsimp : sOrig = sRepl := by funext n; simp [sOrig, sRepl]\n'
          'attribute [scoped csimp] scopedCsimp\nend Earlier\nexample : True := True.intro\n',
@@ -155,27 +203,111 @@ with tempfile.TemporaryDirectory() as d:
          'theorem localCsimp : lOrig = lRepl := by funext n; simp [lOrig, lRepl]\n'
          'attribute [local csimp] localCsimp\nend LocalSec\nexample : True := True.intro\n',
          None, 'FAIL unlisted example trusted declaration localCsimp [csimp]'),
+        # Command-local attributes via `attribute [local ...] ... in` and `open ... in attribute [...]`.
+        ('import Lean\ndef inOrig (n : Nat) := n + 0\ndef inRepl (n : Nat) := n\n'
+         'theorem localCsimpIn : inOrig = inRepl := by funext n; simp [inOrig, inRepl]\n'
+         'attribute [local csimp] localCsimpIn in\n'
+         'def useLocal (n : Nat) : Nat := inOrig n\n'
+         'example : useLocal 1 = 1 := rfl\n',
+         None, 'FAIL unlisted example trusted declaration localCsimpIn [csimp]'),
+        ('import Lean\nnamespace InScope\ndef inScopeExtern : Nat := 0\nend InScope\n'
+         'open InScope in\nattribute [extern "c_open_in"] inScopeExtern\n'
+         'example : True := True.intro\n',
+         None, 'FAIL unlisted example trusted declaration InScope.inScopeExtern [extern]'),
+        ('import Lean\nnamespace InScope\ndef inScopeRepl : Nat := 0\ndef inScopeImpl : Nat := 1\nend InScope\n'
+         'open InScope in\nattribute [implemented_by InScope.inScopeRepl] inScopeImpl\n'
+         'example : True := True.intro\n',
+         None, 'FAIL unlisted example trusted declaration InScope.inScopeImpl [implemented_by]'),
+        ('import Lean\nnamespace InScope\npublic meta def inScopeCPass : Lean.Compiler.LCNF.PassInstaller :=\n'
+         '  { phase := .base, install := pure }\nend InScope\n'
+         'open InScope in\nattribute [cpass] inScopeCPass\n'
+         'example : True := True.intro\n',
+         None, 'FAIL unlisted example trusted declaration InScope.inScopeCPass [cpass]'),
+        # Macros that open and close their own section/namespace scope inside one command.
+        ('import Lean\ndef scOrig (n : Nat) := n + 0\ndef scRepl (n : Nat) := n\n'
+         'theorem macroScopeLocalCsimp : scOrig = scRepl := by funext n; simp [scOrig, scRepl]\n'
+         'macro "closedScopeCsimp" : command => `(section\n'
+         '  attribute [local csimp] $(Lean.mkIdent `macroScopeLocalCsimp)\n'
+         '  def $(Lean.mkIdent `closedScopeUse) (n : Nat) : Nat := $(Lean.mkIdent `scOrig) n\n'
+         'end)\n'
+         'closedScopeCsimp\nexample : True := True.intro\n',
+         None, 'FAIL unlisted example trusted declaration macroScopeLocalCsimp [csimp]'),
+        ('import Lean\ndef macroScopeExtern : Nat := 0\n'
+         'macro "closedScopeExtern" : command => `(section\n'
+         '  attribute [extern "c_closed_scope"] $(Lean.mkIdent `macroScopeExtern)\n'
+         'end)\n'
+         'closedScopeExtern\nexample : True := True.intro\n',
+         None, 'FAIL unlisted example trusted declaration macroScopeExtern [extern]'),
+        ('import Lean\ndef macroScopeRepl : Nat := 0\ndef macroScopeImpl : Nat := 1\n'
+         'macro "closedScopeImpl" : command => `(section\n'
+         '  attribute [implemented_by $(Lean.mkIdent `macroScopeRepl)] $(Lean.mkIdent `macroScopeImpl)\n'
+         'end)\n'
+         'closedScopeImpl\nexample : True := True.intro\n',
+         None, 'FAIL unlisted example trusted declaration macroScopeImpl [implemented_by]'),
+        ('import Lean\npublic meta def macroScopeCPass : Lean.Compiler.LCNF.PassInstaller :=\n'
+         '  { phase := .base, install := pure }\n'
+         'macro "closedScopeCPass" : command => `(section\n'
+         '  attribute [cpass] $(Lean.mkIdent `macroScopeCPass)\n'
+         'end)\n'
+         'closedScopeCPass\nexample : True := True.intro\n',
+         None, 'FAIL unlisted example trusted declaration macroScopeCPass [cpass]'),
         ('import Lean\nprivate def privLate : Nat := 0\ndef callerBeforeAttr : Nat := privLate\n'
          'section LaterSec\nattribute [extern "c_priv_late"] privLate\nend LaterSec\n'
          'example : True := True.intro\n',
          {"CONCRETE_TRUSTED_DECLARATIONS": "lexer:privLate"},
          'FAIL unlisted example trusted declaration callerBeforeAttr [extern]'),
-    ]:
-        p.write_text(late_src)
-        r_late = lean(p, True, extra_env)
+    ]
+    late_paths = []
+    for idx, (late_src, extra_env, expected_diag) in enumerate(late_cases):
+        lp = d / f"late_{idx}.lean"
+        lp.write_text(late_src)
+        late_paths.append((lp, extra_env, expected_diag))
+    local_in_cases = [
+        ('import Lean\ndef localExternIn : Nat := 0\n'
+         'attribute [local extern "c_local_in"] localExternIn in\n'
+         'def useLocalExtern : Nat := localExternIn\n',
+         "Invalid attribute scope: Attribute `[extern]` must be global, not `local`"),
+        ('import Lean\ndef localImplRepl : Nat := 0\ndef localImplIn : Nat := 1\n'
+         'attribute [local implemented_by localImplRepl] localImplIn in\n'
+         'def useLocalImpl : Nat := localImplIn\n',
+         "Invalid attribute scope: Attribute `[implemented_by]` must be global, not `local`"),
+        ('import Lean\npublic meta def localCPassIn : Lean.Compiler.LCNF.PassInstaller :=\n'
+         '  { phase := .base, install := pure }\n'
+         'attribute [local cpass] localCPassIn in\n'
+         'def useLocalCPass : Nat := 0\n',
+         "Invalid attribute scope: Attribute `[cpass]` must be global, not `local`"),
+    ]
+    local_in_paths = []
+    for idx, (local_in_src, scope_err) in enumerate(local_in_cases):
+        lip = d / f"local_in_{idx}.lean"
+        lip.write_text(local_in_src)
+        local_in_paths.append((lip, scope_err))
+    batch_res = lean_batch(
+        [lp for lp, extra_env, _ in late_paths if extra_env is None] +
+        [lip for lip, _ in local_in_paths]
+    )
+    for lp, extra_env, expected_diag in late_paths:
+        r_late = batch_res[str(lp)] if extra_env is None else lean(lp, True, extra_env)
         require(r_late, False, expected_diag)
         assert expected_diag in r_late.stdout.splitlines(), r_late.stdout
-    # Positive control: a harmless later attribute (simp) in a later section/namespace passes.
+    for lip, scope_err in local_in_paths:
+        r_local_in = batch_res[str(lip)]
+        require(r_local_in, False, scope_err)
+    # Positive control: harmless later/local/macro-scoped attributes (simp) pass.
     p.write_text(
         'import Lean\n'
         'def harmlessFn (n : Nat) : Nat := n\n'
         'theorem harmlessEq (n : Nat) : harmlessFn n = n := rfl\n'
         'section LaterSec\n'
         'namespace LaterNS\n'
-        'attribute [simp] harmlessFn harmlessEq\n'
+        'attribute [simp] harmlessFn\n'
         'end LaterNS\n'
         'end LaterSec\n'
-        'example : harmlessFn 1 = 1 := by simp\n'
+        'attribute [local simp] harmlessEq in\n'
+        'def harmlessLocalUse (n : Nat) : Nat := harmlessFn n\n'
+        'macro "harmlessClosedScope" : command => `(section attribute [local simp] harmlessEq end)\n'
+        'harmlessClosedScope\n'
+        'example : harmlessFn 1 = 1 := by simp [harmlessEq]\n'
     )
     r_harmless = lean(p, True)
     require(r_harmless, True, 'example-json {"axioms":["propext"],')
@@ -199,6 +331,9 @@ namespace Concrete.Control
  def original (n : Nat) := n + 0
  def replacement (n : Nat) := n
  @[csimp] theorem replace : original = replacement := by funext n; simp [original, replacement]
+ @[cpass] public meta def declPass : Lean.Compiler.LCNF.PassInstaller := { phase := .base, install := pure }
+ public meta def latePass : Lean.Compiler.LCNF.PassInstaller := { phase := .base, install := pure }
+ attribute [cpass] latePass
  def whileDef : IO Unit := do
    while true do
      pure ()
@@ -229,6 +364,10 @@ open Lean Elab Command in
    throwError "unsafe inductive escaped"
  unless errors.contains "unlisted trusted declaration Concrete.Control.replace [csimp]" do
    throwError "csimp escaped"
+ unless errors.contains "unlisted trusted declaration Concrete.Control.declPass [cpass]" do
+   throwError "declPass escaped"
+ unless errors.contains "unlisted trusted declaration Concrete.Control.latePass [cpass]" do
+   throwError "latePass escaped"
  unless errors.contains "unlisted trusted declaration Concrete.Control.whileDef [partial-loop]" do
    throwError "whileDef escaped"
  unless errors.contains "unlisted trusted declaration Concrete.Control.repeatDef [partial-loop]" do
