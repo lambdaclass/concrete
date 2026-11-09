@@ -123,12 +123,16 @@ package `[assumptions]` interface by `R-0589`.
 `matches` names executable tools, axioms, and explanatory source/proof boundaries.
 `declarations` exclusively names actual trusted Lean escape hatches. Each such
 entry must resolve back to a discovered trusted declaration, with exactly one
-owner of kind `implementation`, `backend` or `runtime`. Without any textual
-prefilter, `Concrete.Premises.trustedDeclarationKinds` inspects every `ConstantInfo`
-in the `Concrete` import closure plus nested auxiliary declarations and
-same-module constants transitively reached from `ci.value?` for
-unsafe/partial/extern/implemented_by/csimp/opaque status and `Lean.Loop`
-(`while`/`repeat`) partial-loop use. Lean's recorded recursion tag (`Meta.recExt`)
+owner of kind `implementation`, `backend` or `runtime`. `Concrete.Premises.TrustedFact`
+is the single enumerated inductive type of trust-relevant declaration facts read
+from the elaborated environment (`extern`, `implemented_by`, `csimp`, `init`,
+`builtin_init`, `export`, `unsafe`, `partial`, `opaque`, `partial-loop`), with
+kernel-checked exhaustiveness (`TrustedFact.mem_all : ∀ f, f ∈ TrustedFact.all`)
+so a new constructor cannot be added without being classified and audited.
+Without any textual prefilter, `Concrete.Premises.trustedDeclarationKinds`
+inspects every `ConstantInfo` in the `Concrete` import closure plus nested
+auxiliary declarations and same-module constants transitively reached from
+`ci.value?` against `TrustedFact.all`. Lean's recorded recursion tag (`Meta.recExt`)
 licenses total recursive runtime twins; partial runtime twins inherit their
 parent declaration's owner when registered. Closure traversal visits each reachable
 constant once. Its total iteration bound is the finite environment cardinality
@@ -143,23 +147,32 @@ without source-token filtering. Its declaration elaborator retains anonymous
 examples after command macro expansion, including imported macros, as named
 declarations with fresh `line:column` identities while preserving full
 declaration modifiers (`unsafe`, `partial`, and attributes) in a
-`noncomputable section`. Newly elaborated constants per command are computed
-incrementally from `env.constants.map₂` (without rescanning imported `map₁`
-constants), sorted deterministically so primary declarations precede their
-auxiliaries, and audited for both axiom closures and trusted declaration kinds
-decided from the elaborated environment (`Concrete.Premises.trustedDeclarationKinds`
-and `Concrete.Premises.declarationOwners`, never from syntax). Quoted command
-templates remain data until invoked. Initializer execution is enabled
-independently for each file, and header and command errors are checked before
-later commands can reset their logs. `slice0_examples.lean` emits `example-json`
-rows only for retained examples, and `example_rows.py` requires `"⟪example⟫"`
-identities and fails closed if zero `example-json` rows are observed. The
-multi-file imported-macro controls in
-`scripts/checks/tests/trusted_frontend_controls.sh` require exact diagnostics
-for unlisted example axioms, `unsafe`/`partial`/attributed examples, and
-macro-introduced `unsafe` and `partial` declarations (including hygienic
-macro-scoped definitions), while verifying that uninvoked quoted command
-templates are not flagged.
+`noncomputable section`. As commands elaborate, per-command error logs, source
+command indices/lines, and stage-2 `csimp` state are recorded; once all commands
+in the file have elaborated, every file-local declaration in `env.constants.map₂`
+(plus any target of a module-local trust attribute/extension, while keeping
+imported `map₁` constants excluded from ordinary rescanning) is sorted
+deterministically by command order and primary-before-auxiliary name and audited
+against the **final** environment of the file for both axiom closures and
+`TrustedFact.all` kinds (`Concrete.Premises.trustedDeclarationKinds` and
+`Concrete.Premises.declarationOwners`, never from syntax). Separately applied
+`attribute [extern ...]`, `attribute [implemented_by ...]`, and `attribute [csimp]`
+commands—including those produced by macros or applied in later sections or
+namespaces—therefore cannot escape the audit or hide behind declarations
+elaborated earlier in the file. Quoted command templates remain data until
+invoked. Initializer execution is enabled independently for each file, and
+header and command errors are checked before later commands can reset their
+logs. `slice0_examples.lean` emits `example-json` rows only for retained
+examples, and `example_rows.py` requires `"⟪example⟫"` identities and fails
+closed if zero `example-json` rows are observed. The multi-file imported-macro
+controls in `scripts/checks/tests/trusted_frontend_controls.sh` and semantic
+controls in `scripts/checks/tests/trusted_base_controls.py` require exact
+diagnostics for unlisted example axioms, `unsafe`/`partial`/attributed examples,
+separately applied and macro-generated `extern`/`implemented_by`/`csimp`
+attributes (including in later sections/namespaces), and macro-introduced
+`unsafe` and `partial` declarations (including hygienic macro-scoped
+definitions), while verifying that harmless later attributes (`simp`) and
+uninvoked quoted command templates are not flagged.
 
 Focused controls live in `scripts/checks/tests/test_execve_names.py`,
 `scripts/checks/tests/trusted_base_controls.py` and

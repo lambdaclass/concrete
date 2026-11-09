@@ -2,16 +2,27 @@ import Lean
 import Concrete.Premises
 
 /- Gate-only frontend. Lean parses commands in their real import/namespace context.
-   Retain anonymous examples as named noncomputable definitions, then audit their
-   axiom closures AND all generated declarations (including local recursion).
+   Retain anonymous examples as named noncomputable definitions, then audit every
+   file-local declaration (and any module-local trust attribute/extension target)
+   against the file's FINAL environment after all commands have been elaborated.
    No source lexer or textual import insertion participates in the trust check. -/
 open Lean Elab Frontend Command
 
-def sortAdded (xs : Array (Name × ConstantInfo)) : Array (Name × ConstantInfo) :=
+structure FileAuditState where
+  nextCmdIdx : Nat := 0
+  declMeta : Std.HashMap Name (Nat × Nat) := {}
+  extraCSimp : NameSet := {}
+
+def sortLocalDecls (declMeta : Std.HashMap Name (Nat × Nat))
+    (xs : Array (Name × ConstantInfo)) : Array (Name × ConstantInfo) :=
   xs.qsort fun a b =>
-    let ea := a.1.eraseMacroScopes.toString
-    let eb := b.1.eraseMacroScopes.toString
-    ea < eb || (ea == eb && a.1.toString < b.1.toString)
+    let ca := (declMeta.get? a.1).map (·.1) |>.getD 0
+    let cb := (declMeta.get? b.1).map (·.1) |>.getD 0
+    if ca != cb then ca < cb
+    else
+      let ea := a.1.eraseMacroScopes.toString
+      let eb := b.1.eraseMacroScopes.toString
+      ea < eb || (ea == eb && a.1.toString < b.1.toString)
 
 def freshExampleName (base : String) : Command.CommandElabM Name := do
   let env ← getEnv
@@ -55,11 +66,27 @@ def checkOwnerKind (n : Name) (owners : List Concrete.Premises.Component) : Comm
       IO.println s!"FAIL trusted declaration {n} is owned by {owners.length} components, expected exactly one"
       throwError "trusted declaration owner audit failed"
 
-partial def commands (file : String) (csList : List Concrete.Premises.Component)
-    (retained : IO.Ref NameSet) : FrontendM Unit := do
+def recordCommandState (cmd : Syntax) (auditRef : IO.Ref FileAuditState) : FrontendM Unit := do
+  let cs ← getCommandState
+  let input ← getInputContext
+  let env := cs.env
+  let line := (input.fileMap.toPosition (cmd.getPos?.getD 0)).line
+  let st ← auditRef.get
+  let cmdIdx := st.nextCmdIdx
+  let mut declMeta := st.declMeta
+  for (n, _) in env.constants.map₂.toList do
+    unless n.isAnonymous || declMeta.contains n do
+      declMeta := declMeta.insert n (cmdIdx, line)
+  for n in Concrete.Premises.moduleAttributedDeclarations env do
+    unless n.isAnonymous || declMeta.contains n do
+      declMeta := declMeta.insert n (cmdIdx, line)
+  let extraCSimp := (Compiler.CSimp.ext.getState env).thmNames.foldStage2
+    (fun acc n _ => acc.insert n) st.extraCSimp
+  auditRef.set { nextCmdIdx := cmdIdx + 1, declMeta, extraCSimp }
+
+partial def commands (auditRef : IO.Ref FileAuditState) : FrontendM Unit := do
   updateCmdPos
   let cs ← getCommandState
-  let prevConsts := cs.env.constants.map₂
   let input ← getInputContext
   let scope := cs.scopes.head!
   let (cmd, ps, msgs) := Parser.parseCommand input
@@ -72,31 +99,44 @@ partial def commands (file : String) (csList : List Concrete.Premises.Component)
   if messages.hasErrors then
     for msg in messages.toList do IO.eprintln (← msg.toString)
     throw <| IO.userError "source command elaboration failed"
-  runCommandElabM do
-    let env ← getEnv
-    let retainedSet ← retained.get
-    let allowed := Concrete.Premises.allowedAxioms csList
-    let mut added : Array (Name × ConstantInfo) := #[]
-    for (n, ci) in env.constants.map₂.toList do
-      unless prevConsts.contains n || n.isAnonymous do
-        added := added.push (n, ci)
-    for (n, ci) in sortAdded added do
-      let userN := (privateToUserName? n).getD n
-      let axs ← liftCoreM (collectAxioms n)
-      if retainedSet.contains userN then
-        IO.println <| "example-json " ++ (Json.mkObj [
-          ("name", toJson n.toString), ("axioms", toJson (axs.map toString))]).compress
-      for ax in axs do
-        unless allowed.contains ax do
-          IO.println s!"FAIL unlisted example axiom {ax} in {file}:{(input.fileMap.toPosition (cmd.getPos?.getD 0)).line}"
-          throwError "example axiom audit failed"
-      let kinds ← liftCoreM <| Concrete.Premises.trustedDeclarationKinds env n ci
-      unless kinds.isEmpty do
-        let owners := Concrete.Premises.declarationOwners n csList (some env)
-        unless (← checkOwnerKind n owners) do
-          IO.println s!"FAIL unlisted example trusted declaration {n} [{", ".intercalate kinds}]"
-          throwError "example trusted declaration audit failed"
-  unless Parser.isTerminalCommand cmd do commands file csList retained
+  recordCommandState cmd auditRef
+  unless Parser.isTerminalCommand cmd do commands auditRef
+
+def auditFileEnvironment (file : String) (csList : List Concrete.Premises.Component)
+    (retained : IO.Ref NameSet) (auditRef : IO.Ref FileAuditState)
+    (initConsts : PHashMap Name ConstantInfo) : CommandElabM Unit := do
+  let env ← getEnv
+  let retainedSet ← retained.get
+  let st ← auditRef.get
+  let allowed := Concrete.Premises.allowedAxioms csList
+  let mut localDecls : Array (Name × ConstantInfo) := #[]
+  let mut seen : NameSet := {}
+  for (n, ci) in env.constants.map₂.toList do
+    unless initConsts.contains n || n.isAnonymous do
+      seen := seen.insert n
+      localDecls := localDecls.push (n, ci)
+  for n in Concrete.Premises.moduleAttributedDeclarations env ++ st.extraCSimp.toList do
+    unless seen.contains n || n.isAnonymous do
+      if let some ci := env.find? n then
+        seen := seen.insert n
+        localDecls := localDecls.push (n, ci)
+  for (n, ci) in sortLocalDecls st.declMeta localDecls do
+    let userN := (privateToUserName? n).getD n
+    let axs ← liftCoreM (collectAxioms n)
+    if retainedSet.contains userN then
+      IO.println <| "example-json " ++ (Json.mkObj [
+        ("name", toJson n.toString), ("axioms", toJson (axs.map toString))]).compress
+    let line := (st.declMeta.get? n).map (·.2) |>.getD 1
+    for ax in axs do
+      unless allowed.contains ax do
+        IO.println s!"FAIL unlisted example axiom {ax} in {file}:{line}"
+        throwError "example axiom audit failed"
+    let kinds ← liftCoreM <| Concrete.Premises.trustedDeclarationKinds env n ci st.extraCSimp
+    unless kinds.isEmpty do
+      let owners := Concrete.Premises.declarationOwners n csList (some env)
+      unless (← checkOwnerKind n owners) do
+        IO.println s!"FAIL unlisted example trusted declaration {n} [{", ".intercalate kinds}]"
+        throwError "example trusted declaration audit failed"
 
 def configuredComponents : IO (List Concrete.Premises.Component) := do
   match (← IO.getEnv "CONCRETE_TRUSTED_DECLARATIONS") with
@@ -112,11 +152,13 @@ def configuredComponents : IO (List Concrete.Premises.Component) := do
 
 unsafe def main (files : List String) : IO UInt32 := do
   let retained ← IO.mkRef NameSet.empty
+  let auditRef ← IO.mkRef ({} : FileAuditState)
   commandElabAttribute.addBuiltin ``Parser.Command.declaration `retainExample (retainExample retained)
   initSearchPath (← findSysroot)
   let csList ← configuredComponents
   for file in files do
     retained.set {}
+    auditRef.set {}
     let text ← IO.FS.readFile file
     let input := Parser.mkInputContext text file
     let (header, ps, msgs) ← Parser.parseHeader input
@@ -125,9 +167,11 @@ unsafe def main (files : List String) : IO UInt32 := do
     if msgs.hasErrors then
       for msg in msgs.toList do IO.eprintln (← msg.toString)
       return 1
+    let initConsts := env.constants.map₂
     let action : FrontendM Unit := do
       runCommandElabM do elabCommand (← `(command| noncomputable section))
-      commands file csList retained
+      commands auditRef
+      runCommandElabM do auditFileEnvironment file csList retained auditRef initConsts
     let (_, state) ← StateRefT'.run (action.run { inputCtx := input })
       { commandState := Command.mkState env msgs {}, parserState := ps, cmdPos := ps.pos }
     if state.commandState.messages.hasErrors then

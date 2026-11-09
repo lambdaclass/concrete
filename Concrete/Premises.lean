@@ -293,23 +293,87 @@ def isAuxOf (n c : Name) : Bool :=
   let uC := (privateToUserName? c).getD c
   c != n && uN != uC && uN.isPrefixOf uC
 
-def directTrustedDeclarationKinds (env : Environment) (n : Name) (ci : ConstantInfo) : List String := Id.run do
-  let mut kinds := []
-  if isExtern env n then kinds := kinds ++ ["extern"]
-  if (Compiler.implementedByAttr.getParam? env n).isSome then kinds := kinds ++ ["implemented_by"]
-  if Compiler.hasCSimpAttribute env n then kinds := kinds ++ ["csimp"]
-  unless isGeneratedPartialTwin env n do
-    if ci.isUnsafe then kinds := kinds ++ ["unsafe"]
-    if ci.isPartial then kinds := kinds ++ ["partial"]
-    if ci matches .opaqueInfo _ then
-      kinds := kinds ++ [if (env.find? (Compiler.mkUnsafeRecName n)).any (·.isPartial)
-        then "partial" else "opaque"]
-  if ci.value?.any exprHasPartialLoop then
-    kinds := kinds ++ ["partial-loop"]
-  return kinds
+/-- Every trust-relevant declaration fact read from the elaborated environment.
+Adding a constructor requires handling it in `name`, `all`, `holds` and `moduleAttributedNames`. -/
+inductive TrustedFact where
+  | extern
+  | implementedBy
+  | csimp
+  | init
+  | builtinInit
+  | exportSym
+  | «unsafe»
+  | «partial»
+  | «opaque»
+  | partialLoop
+  deriving Repr, DecidableEq
 
-def trustedDeclarationKinds (env : Environment) (n : Name) (ci : ConstantInfo) : CoreM (List String) := do
-  let mut kinds := directTrustedDeclarationKinds env n ci
+def TrustedFact.name : TrustedFact → String
+  | .extern => "extern"
+  | .implementedBy => "implemented_by"
+  | .csimp => "csimp"
+  | .init => "init"
+  | .builtinInit => "builtin_init"
+  | .exportSym => "export"
+  | .«unsafe» => "unsafe"
+  | .«partial» => "partial"
+  | .«opaque» => "opaque"
+  | .partialLoop => "partial-loop"
+
+def TrustedFact.all : List TrustedFact := [
+  .extern, .implementedBy, .csimp, .init, .builtinInit, .exportSym,
+  .«unsafe», .«partial», .«opaque», .partialLoop
+]
+
+theorem TrustedFact.mem_all (f : TrustedFact) : f ∈ TrustedFact.all := by
+  cases f <;> decide
+
+def hasCSimpFact (env : Environment) (n : Name) : Bool :=
+  Compiler.hasCSimpAttribute env n ||
+  (Compiler.CSimp.ext.ext.getState env).stateStack.any (·.state.thmNames.contains n) ||
+  (Compiler.CSimp.ext.ext.getState env).newEntries.any (fun | .global e | .scoped _ e => e.thmName == n) ||
+  match env.getModuleIdxFor? n with
+  | some m => (Compiler.CSimp.ext.ext.getModuleEntries env m).any (fun | .global e | .scoped _ e => e.thmName == n)
+  | none => false
+
+def TrustedFact.holds (env : Environment) (n : Name) (ci : ConstantInfo)
+    (extraCSimp : NameSet := {}) : TrustedFact → Bool
+  | .extern => isExtern env n
+  | .implementedBy => (Compiler.implementedByAttr.getParam? env n).isSome
+  | .csimp => hasCSimpFact env n || extraCSimp.contains n
+  | .init => (regularInitAttr.getParam? env n).isSome
+  | .builtinInit => (builtinInitAttr.getParam? env n).isSome
+  | .exportSym => (getExportNameFor? env n).isSome
+  | .«unsafe» => !isGeneratedPartialTwin env n && ci.isUnsafe
+  | .«partial» => !isGeneratedPartialTwin env n &&
+      (ci.isPartial || ((ci matches .opaqueInfo _) && (env.find? (Compiler.mkUnsafeRecName n)).any (·.isPartial)))
+  | .«opaque» => !isGeneratedPartialTwin env n &&
+      (ci matches .opaqueInfo _) && !(env.find? (Compiler.mkUnsafeRecName n)).any (·.isPartial)
+  | .partialLoop => ci.value?.any exprHasPartialLoop
+
+def TrustedFact.moduleAttributedNames (env : Environment) : TrustedFact → List Name
+  | .extern => (externAttr.ext.getState env).1
+  | .implementedBy => (Compiler.implementedByAttr.ext.getState env).1
+  | .csimp =>
+      let active := (Compiler.CSimp.ext.getState env).thmNames.foldStage2 (fun acc n _ => n :: acc) []
+      let entries := (Compiler.CSimp.ext.ext.getState env).newEntries.map fun
+        | .global e | .scoped _ e => e.thmName
+      active ++ entries
+  | .init => (regularInitAttr.ext.getState env).1
+  | .builtinInit => (builtinInitAttr.ext.getState env).1
+  | .exportSym => (exportAttr.ext.getState env).1
+  | .«unsafe» | .«partial» | .«opaque» | .partialLoop => []
+
+def moduleAttributedDeclarations (env : Environment) : List Name :=
+  TrustedFact.all.flatMap (·.moduleAttributedNames env)
+
+def directTrustedDeclarationKinds (env : Environment) (n : Name) (ci : ConstantInfo)
+    (extraCSimp : NameSet := {}) : List String :=
+  (TrustedFact.all.filter (·.holds env n ci extraCSimp)).map TrustedFact.name
+
+def trustedDeclarationKinds (env : Environment) (n : Name) (ci : ConstantInfo)
+    (extraCSimp : NameSet := {}) : CoreM (List String) := do
+  let mut kinds := directTrustedDeclarationKinds env n ci extraCSimp
   let modIdx := env.getModuleIdxFor? n
   let mut queue : Array (Name × ConstantInfo) := #[]
   let mut seen : NameSet := NameSet.empty.insert n
@@ -329,7 +393,7 @@ def trustedDeclarationKinds (env : Environment) (n : Name) (ci : ConstantInfo) :
     if h : idx < queue.size then
       let (c, cCi) := queue[idx]
       idx := idx + 1
-      let cKinds := directTrustedDeclarationKinds env c cCi
+      let cKinds := directTrustedDeclarationKinds env c cCi extraCSimp
       if cKinds.contains "partial-loop" then
         kinds := appendUnique kinds ["partial-loop"]
       if isAuxOf n c || c.isInternalDetail || isPrivateName c then

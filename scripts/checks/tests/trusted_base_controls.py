@@ -108,6 +108,78 @@ with tempfile.TemporaryDirectory() as d:
     r_hyg = lean(p, True)
     require(r_hyg, False, 'FAIL unlisted example trusted declaration ')
     assert re.search(r'^FAIL unlisted example trusted declaration hygP\._@\.[^ ]+ \[partial\]$', r_hyg.stdout, re.M), r_hyg.stdout
+    for late_src, extra_env, expected_diag in [
+        # Separately applied extern, implemented_by and csimp attributes.
+        ('import Lean\ndef late : Nat := 0\nattribute [extern "c_late"] late\nexample : True := True.intro\n',
+         None, 'FAIL unlisted example trusted declaration late [extern]'),
+        ('import Lean\ndef implTarget : Nat := 0\ndef lateImpl : Nat := 1\n'
+         'attribute [implemented_by implTarget] lateImpl\nexample : True := True.intro\n',
+         None, 'FAIL unlisted example trusted declaration lateImpl [implemented_by]'),
+        ('import Lean\ndef csimpOrig (n : Nat) := n + 0\ndef csimpRepl (n : Nat) := n\n'
+         'theorem lateCsimp : csimpOrig = csimpRepl := by funext n; simp [csimpOrig, csimpRepl]\n'
+         'attribute [csimp] lateCsimp\nexample : True := True.intro\n',
+         None, 'FAIL unlisted example trusted declaration lateCsimp [csimp]'),
+        # Macro-generated commands applying extern, implemented_by and csimp attributes.
+        ('import Lean\ndef macroExternTarget : Nat := 0\n'
+         'macro "applyExtern" : command => `(attribute [extern "c_macro_late"] $(Lean.mkIdent `macroExternTarget))\n'
+         'applyExtern\nexample : True := True.intro\n',
+         None, 'FAIL unlisted example trusted declaration macroExternTarget [extern]'),
+        ('import Lean\ndef macroImplRepl : Nat := 0\ndef macroImplTarget : Nat := 1\n'
+         'macro "applyImpl" : command => `(attribute [implemented_by $(Lean.mkIdent `macroImplRepl)] $(Lean.mkIdent `macroImplTarget))\n'
+         'applyImpl\nexample : True := True.intro\n',
+         None, 'FAIL unlisted example trusted declaration macroImplTarget [implemented_by]'),
+        ('import Lean\ndef mOrig (n : Nat) := n + 0\ndef mRepl (n : Nat) := n\n'
+         'theorem macroCsimpThm : mOrig = mRepl := by funext n; simp [mOrig, mRepl]\n'
+         'macro "applyCsimp" : command => `(attribute [csimp] $(Lean.mkIdent `macroCsimpThm))\n'
+         'applyCsimp\nexample : True := True.intro\n',
+         None, 'FAIL unlisted example trusted declaration macroCsimpThm [csimp]'),
+        # Attributes applied in a later section/namespace (including scoped/local csimp and pre-attribute callers).
+        ('import Lean\nnamespace Earlier\ndef nsExtern : Nat := 0\nend Earlier\n'
+         'section LaterSec\nnamespace LaterNS\nattribute [extern "c_ns"] Earlier.nsExtern\nend LaterNS\nend LaterSec\n'
+         'example : True := True.intro\n',
+         None, 'FAIL unlisted example trusted declaration Earlier.nsExtern [extern]'),
+        ('import Lean\nnamespace Earlier\ndef nsImplRepl : Nat := 0\ndef nsImpl : Nat := 1\nend Earlier\n'
+         'section LaterSec\nnamespace LaterNS\nattribute [implemented_by Earlier.nsImplRepl] Earlier.nsImpl\nend LaterNS\nend LaterSec\n'
+         'example : True := True.intro\n',
+         None, 'FAIL unlisted example trusted declaration Earlier.nsImpl [implemented_by]'),
+        ('import Lean\nnamespace Earlier\ndef nsOrig (n : Nat) := n + 0\ndef nsRepl (n : Nat) := n\n'
+         'theorem nsCsimp : nsOrig = nsRepl := by funext n; simp [nsOrig, nsRepl]\nend Earlier\n'
+         'section LaterSec\nnamespace LaterNS\nattribute [csimp] Earlier.nsCsimp\nend LaterNS\nend LaterSec\n'
+         'example : True := True.intro\n',
+         None, 'FAIL unlisted example trusted declaration Earlier.nsCsimp [csimp]'),
+        ('import Lean\nnamespace Earlier\ndef sOrig (n : Nat) := n + 0\ndef sRepl (n : Nat) := n\n'
+         'theorem scopedCsimp : sOrig = sRepl := by funext n; simp [sOrig, sRepl]\n'
+         'attribute [scoped csimp] scopedCsimp\nend Earlier\nexample : True := True.intro\n',
+         None, 'FAIL unlisted example trusted declaration Earlier.scopedCsimp [csimp]'),
+        ('import Lean\nsection LocalSec\ndef lOrig (n : Nat) := n + 0\ndef lRepl (n : Nat) := n\n'
+         'theorem localCsimp : lOrig = lRepl := by funext n; simp [lOrig, lRepl]\n'
+         'attribute [local csimp] localCsimp\nend LocalSec\nexample : True := True.intro\n',
+         None, 'FAIL unlisted example trusted declaration localCsimp [csimp]'),
+        ('import Lean\nprivate def privLate : Nat := 0\ndef callerBeforeAttr : Nat := privLate\n'
+         'section LaterSec\nattribute [extern "c_priv_late"] privLate\nend LaterSec\n'
+         'example : True := True.intro\n',
+         {"CONCRETE_TRUSTED_DECLARATIONS": "lexer:privLate"},
+         'FAIL unlisted example trusted declaration callerBeforeAttr [extern]'),
+    ]:
+        p.write_text(late_src)
+        r_late = lean(p, True, extra_env)
+        require(r_late, False, expected_diag)
+        assert expected_diag in r_late.stdout.splitlines(), r_late.stdout
+    # Positive control: a harmless later attribute (simp) in a later section/namespace passes.
+    p.write_text(
+        'import Lean\n'
+        'def harmlessFn (n : Nat) : Nat := n\n'
+        'theorem harmlessEq (n : Nat) : harmlessFn n = n := rfl\n'
+        'section LaterSec\n'
+        'namespace LaterNS\n'
+        'attribute [simp] harmlessFn harmlessEq\n'
+        'end LaterNS\n'
+        'end LaterSec\n'
+        'example : harmlessFn 1 = 1 := by simp\n'
+    )
+    r_harmless = lean(p, True)
+    require(r_harmless, True, 'example-json {"axioms":["propext"],')
+    assert "⟪example⟫" in r_harmless.stdout, r_harmless.stdout
     p = d / "declarations.lean"
     p.write_text('''import Concrete.Premises
 import Lean.Elab.Command
@@ -135,6 +207,10 @@ namespace Concrete.Control
      break
  def nestedLoop : IO Unit := hiddenLoop
  def nestedExtern (n : Nat) : Nat := hiddenExtern n
+ def initEffect : IO Unit := pure ()
+ attribute [init] initEffect
+ def exportedFn (n : Nat) : Nat := n
+ attribute [export c_exported_fn] exportedFn
 end Concrete.Control
 open Lean Elab Command in
 #eval show CommandElabM Unit from do
@@ -161,6 +237,10 @@ open Lean Elab Command in
    throwError "nestedLoop escaped"
  unless errors.contains "unlisted trusted declaration Concrete.Control.nestedExtern [extern, opaque]" do
    throwError "nestedExtern escaped"
+ unless errors.contains "unlisted trusted declaration Concrete.Control.initEffect [init]" do
+   throwError "initEffect escaped"
+ unless errors.contains "unlisted trusted declaration Concrete.Control.exportedFn [export]" do
+   throwError "exportedFn escaped"
  IO.println "ok safe recursion and unsafe controls"
 ''')
     require(lean(p), True, "ok safe recursion and unsafe controls")

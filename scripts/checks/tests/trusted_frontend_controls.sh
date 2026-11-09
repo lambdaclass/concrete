@@ -14,13 +14,30 @@ macro "sproutExtern" : command => `(@[extern "c_sprout"] example : Nat := 0)
 macro "bloom" : command => `(unsafe def $(Lean.mkIdent `hiddenEscape) : Nat := 0)
 macro "bloomPartial" : command => `(partial def $(Lean.mkIdent `hiddenPartial) (n : Nat) : Nat := $(Lean.mkIdent `hiddenPartial) n)
 macro "bloomHygienicPartial" : command => `(partial def hygPartial (n : Nat) : Nat := hygPartial n)
+macro "plantNeutral" : command => `(
+  def $(Lean.mkIdent `lateExternTarget) : Nat := 0
+  def $(Lean.mkIdent `lateImplReplacement) : Nat := 0
+  def $(Lean.mkIdent `lateImplTarget) : Nat := 1
+  def $(Lean.mkIdent `lateCsimpOrig) (n : Nat) : Nat := n
+  def $(Lean.mkIdent `lateCsimpRepl) (n : Nat) : Nat := n
+  theorem $(Lean.mkIdent `lateCsimpThm) :
+      $(Lean.mkIdent `lateCsimpOrig) = $(Lean.mkIdent `lateCsimpRepl) := rfl
+)
+macro "tagLateExtern" : command => `(attribute [extern "c_late_macro"] $(Lean.mkIdent `lateExternTarget))
+macro "tagLateImpl" : command => `(attribute [implemented_by $(Lean.mkIdent `lateImplReplacement)] $(Lean.mkIdent `lateImplTarget))
+macro "tagLateCsimp" : command => `(attribute [csimp] $(Lean.mkIdent `lateCsimpThm))
 EOF
 bounded_run 60 -- lake env lean --root="$work" -o "$work/Seed.olean" "$work/Seed.lean"
-for invocation in sprout sproutUnsafe sproutPartial sproutExtern bloom bloomPartial bloomHygienicPartial; do
-  printf 'import Seed\n%s\n' "$invocation" >"$work/Invoke.lean"
+for invocation in sprout sproutUnsafe sproutPartial sproutExtern bloom bloomPartial bloomHygienicPartial tagLateExtern tagLateImpl tagLateCsimp; do
+  case "$invocation" in
+    tagLate*)
+      printf 'import Seed\nplantNeutral\n%s\n' "$invocation" >"$work/Invoke.lean" ;;
+    *)
+      printf 'import Seed\n%s\n' "$invocation" >"$work/Invoke.lean" ;;
+  esac
   printf 'import Lean\n' >"$work/Other.lean"
   # Neither importing nor invoking file contains any former candidate token.
-  if grep -Ew 'example|partial|while|repeat|Loop|unsafe|extern|implemented_by|csimp|opaque' "$work/Invoke.lean" "$work/Other.lean"; then
+  if grep -Ew 'example|partial|while|repeat|Loop|unsafe|extern|implemented_by|csimp|opaque|attribute' "$work/Invoke.lean" "$work/Other.lean"; then
     echo 'FAIL control: fixture contains candidate tokens'; exit 1
   fi
   rc=0
@@ -43,6 +60,12 @@ for invocation in sprout sproutUnsafe sproutPartial sproutExtern bloom bloomPart
       grep -qxF 'FAIL unlisted example trusted declaration hiddenPartial [partial]' "$work/out" || { cat "$work/out"; exit 1; } ;;
     bloomHygienicPartial)
       grep -Eq '^FAIL unlisted example trusted declaration hygPartial\._@\.[^ ]+ \[partial\]$' "$work/out" || { cat "$work/out"; exit 1; } ;;
+    tagLateExtern)
+      grep -qxF 'FAIL unlisted example trusted declaration lateExternTarget [extern]' "$work/out" || { cat "$work/out"; exit 1; } ;;
+    tagLateImpl)
+      grep -qxF 'FAIL unlisted example trusted declaration lateImplTarget [implemented_by]' "$work/out" || { cat "$work/out"; exit 1; } ;;
+    tagLateCsimp)
+      grep -qxF 'FAIL unlisted example trusted declaration lateCsimpThm [csimp]' "$work/out" || { cat "$work/out"; exit 1; } ;;
   esac
   echo "ok imported $invocation rejected for exact planted reason"
 done
