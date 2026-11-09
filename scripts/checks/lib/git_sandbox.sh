@@ -27,3 +27,9 @@ git_sandbox() { # [gitconfig-file]
   fi
   return 0
 }
+
+# Python callers obtain the same sanitized environment without changing their parent.
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  git_sandbox "$1" || exit 2
+  python3 -I -c 'import json, os; print(json.dumps(dict(os.environ)))'
+fi

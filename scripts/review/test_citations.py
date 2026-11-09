@@ -4,14 +4,24 @@ import importlib.util
 from pathlib import Path
 import subprocess
 import tempfile
+import os
+
+sandbox_spec = importlib.util.spec_from_file_location("git_sandbox", Path(__file__).resolve().parents[1] / "checks/lib/git_sandbox.py")
+sandbox_module = importlib.util.module_from_spec(sandbox_spec)
+sandbox_spec.loader.exec_module(sandbox_module)
 
 spec = importlib.util.spec_from_file_location("contract", Path(__file__).with_name("output_contract.py"))
 contract = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(contract)
 with tempfile.TemporaryDirectory() as directory:
+    config = Path(directory) / "sandbox.config"
+    config.write_text("[core]\n hooksPath = /dev/null\n[commit]\n gpgSign = false\n")
+    env = sandbox_module.git_sandbox(config)
+    os.environ.clear()
+    os.environ.update(env)
     root = Path(directory)
     def git(*args):
-        return subprocess.check_output(["git", "-C", directory, *args], stderr=subprocess.DEVNULL).decode().strip()
+        return subprocess.check_output(["git", "-C", directory, *args], env=env, stderr=subprocess.PIPE).decode().strip()
     git("init", "-q")
     (root / "source.lean").write_text("def realAnchor := 1\ndef otherAnchor := 2\n")
     (root / "lean-toolchain").write_text("leanprover/lean4:v4.34.1\n")

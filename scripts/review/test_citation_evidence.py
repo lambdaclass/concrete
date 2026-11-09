@@ -3,10 +3,15 @@
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import tarfile
 import tempfile
+
+sandbox_spec = importlib.util.spec_from_file_location("git_sandbox", Path(__file__).resolve().parents[1] / "checks/lib/git_sandbox.py")
+sandbox_module = importlib.util.module_from_spec(sandbox_spec)
+sandbox_spec.loader.exec_module(sandbox_module)
 
 HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location('contract', HERE / 'output_contract.py')
@@ -20,8 +25,13 @@ manifest = json.loads((FIX / 'provenance.json').read_text())
 
 def run(name, review, positive=True, removed=False):
     with tempfile.TemporaryDirectory() as directory:
+        config = Path(directory) / "sandbox.config"
+        config.write_text("[core]\n hooksPath = /dev/null\n[commit]\n gpgSign = false\n")
+        env = sandbox_module.git_sandbox(config)
+        os.environ.clear()
+        os.environ.update(env)
         def git(*args):
-            return subprocess.check_output(['git', '-C', directory, *args], stderr=subprocess.DEVNULL).decode().strip()
+            return subprocess.check_output(['git', '-C', directory, *args], env=env, stderr=subprocess.PIPE).decode().strip()
         git('init', '-q')
         def unpack(which):
             with tarfile.open(FIX / (which + '.tar.gz')) as archive:
