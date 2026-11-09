@@ -295,7 +295,7 @@ def ObligationTable.lookup : ObligationTable → ObligationId → Option SafetyO
     if obligation.id = requested then some obligation else ObligationTable.lookup rest requested
 
 /-- Helper (inversion). Lookup returns an obligation with the requested intrinsic identity.
-(approved: REVIEW9-codex). -/
+(approved: APPR-C9-agy-3e22e6417). -/
 theorem ObligationTable.lookup_id (obligations : ObligationTable) (requested : ObligationId)
     (found : SafetyObligation) (success : ObligationTable.lookup obligations requested = some found) :
     found.id = requested := by

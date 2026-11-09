@@ -57,7 +57,7 @@ theorem SiteKeyTable.lookup_renumber (r : SiteRenumbering) :
       exact SiteKeyTable.lookup_renumber r rest site
 
 /-- Helper (computation). Projects the persistent-key column of `KeyConstruct.numberFunctionKeys`
-independently of the starting lexical site number. (approved: REVIEW5-codex). -/
+independently of the starting lexical site number. (approved: APPR-C9-agy-3e22e6417). -/
 theorem KeyConstruct.numberFunctionKeys_snd (f : FnId) :
     ∀ (startSite : Nat) (keys : List FunctionRelativeKey),
       List.map Prod.snd (KeyConstruct.numberFunctionKeys f startSite keys) =
@@ -68,7 +68,7 @@ theorem KeyConstruct.numberFunctionKeys_snd (f : FnId) :
 
 /-- Helper (computation). Resolves the lexical site numbered for an indexed relative key;
 this arithmetic correspondence is used to connect occurrence coverage to actual lookup.
-(approved: REVIEW7-codex). -/
+(approved: APPR-C9-agy-3e22e6417). -/
 theorem KeyConstruct.numberFunctionKeys_lookup (f : FnId) (keys : List FunctionRelativeKey)
     (startSite index : Nat) :
     AList.lookup (numberFunctionKeys f startSite keys) ⟨startSite + index⟩ =
@@ -91,7 +91,7 @@ theorem KeyConstruct.numberFunctionKeys_lookup (f : FnId) (keys : List FunctionR
       exact ih (startSite + 1) index
 
 /-- Helper (computation). Moving past a root extends precisely the preceding scope.
-(approved: REVIEW7-codex). -/
+(approved: APPR-C9-agy-3e22e6417). -/
 theorem KeyConstruct.pathAtIn_succ (scope : List KeyConstruct) (root : KeyConstruct)
     (rest : List KeyConstruct) (index : Nat) (route : List Nat) :
     pathAtIn scope (root :: rest) ((index + 1) :: route) =
@@ -252,19 +252,19 @@ theorem KeyConstruct.key_insert_named (before after : List KeyConstruct)
   simp [KeyConstruct.key, KeyConstruct.segment, List.filter_append, ConstructName.isUnnamed]
 
 /-- Helper (projection). Renaming preserves participation in unnamed-sibling ordinals.
-(approved: REVIEW9-codex). -/
+(approved: APPR-C9-agy-3e22e6417). -/
 theorem ConstructName.isUnnamed_rename (constructName : ConstructName) (name : String) :
     (constructName.rename name).isUnnamed = constructName.isUnnamed := by
   cases constructName <;> rfl
 
 /-- Helper (projection). Pinning or unpinning an unnamed construct's label preserves participation
-in unnamed-sibling ordinals. (approved: REVIEW5-codex). -/
+in unnamed-sibling ordinals. (approved: APPR-C9-agy-3e22e6417). -/
 theorem ConstructName.isUnnamed_pin (constructName : ConstructName) (label : Option String) :
     (constructName.pin label).isUnnamed = constructName.isUnnamed := by
   cases constructName <;> rfl
 
 /-- Helper (congruence). Replacing one preceding construct with another of the same kind and
-unnamed status preserves `KeyConstruct.segment`. (approved: REVIEW5-codex). -/
+unnamed status preserves `KeyConstruct.segment`. (approved: APPR-C9-agy-3e22e6417). -/
 theorem KeyConstruct.segment_replace_same_unnamed (before after : List KeyConstruct)
     (first second other : KeyConstruct) (sameKind : first.kind = second.kind)
     (sameUnnamed : first.name.isUnnamed = second.name.isUnnamed) :
@@ -299,7 +299,7 @@ def KeyConstruct.under (preceding : List KeyConstruct) (construct : KeyConstruct
   ⟨construct.segment preceding :: descendant.path⟩
 
 /-- Helper (computation). Computes the renamed root construct's own key for
-`KeyConstruct.assignFunctionTable_rename_named`. (approved: REVIEW7-codex). -/
+`KeyConstruct.assignFunctionTable_rename_named`. (approved: APPR-C9-agy-3e22e6417). -/
 theorem KeyConstruct.key_rename_named (preceding : List KeyConstruct) (kind : ConstructKind)
     (old : String) (children : List KeyConstruct) (name : String) :
     ((KeyConstruct.mk kind (.named old) children).rename name).key preceding =
@@ -307,7 +307,7 @@ theorem KeyConstruct.key_rename_named (preceding : List KeyConstruct) (kind : Co
   simp [KeyConstruct.key, KeyConstruct.segment, KeyConstruct.rename, ConstructName.rename]
 
 /-- Helper (computation). Computes the pinned root construct's own key for
-`KeyConstruct.assignFunctionTable_pin`. (approved: REVIEW7-codex). -/
+`KeyConstruct.assignFunctionTable_pin`. (approved: APPR-C9-agy-3e22e6417). -/
 theorem KeyConstruct.key_pin_unnamed (preceding : List KeyConstruct) (kind : ConstructKind)
     (old : Option String) (children : List KeyConstruct) (label : String) :
     ((KeyConstruct.mk kind (.unnamed old) children).pin (some label)).key preceding =
@@ -315,7 +315,7 @@ theorem KeyConstruct.key_pin_unnamed (preceding : List KeyConstruct) (kind : Con
   simp [KeyConstruct.key, KeyConstruct.segment, KeyConstruct.pin, ConstructName.pin]
 
 /-- Helper (congruence). Replacing an in-scope construct with one of the same kind and unnamed
-status leaves `KeyConstruct.pathAtIn` unchanged. (approved: REVIEW5-codex). -/
+status leaves `KeyConstruct.pathAtIn` unchanged. (approved: APPR-C9-agy-3e22e6417). -/
 theorem KeyConstruct.pathAtIn_replace_same_unnamed (forest : List KeyConstruct)
     (route : List Nat) (before after : List KeyConstruct) (first second : KeyConstruct)
     (sameKind : first.kind = second.kind)
@@ -341,7 +341,7 @@ theorem KeyConstruct.pathAtIn_replace_same_unnamed (forest : List KeyConstruct)
         simp [KeyConstruct.childScope, hname, hseg, hrec]
 
 /-- Helper (computation). Inserting a named construct in the inherited scope leaves
-`KeyConstruct.pathAtIn` unchanged. (approved: REVIEW5-codex). -/
+`KeyConstruct.pathAtIn` unchanged. (approved: APPR-C9-agy-3e22e6417). -/
 theorem KeyConstruct.pathAtIn_insert_named (forest : List KeyConstruct) (route : List Nat)
     (before after : List KeyConstruct) (label : String) (kind : ConstructKind)
     (children : List KeyConstruct) :
@@ -369,7 +369,7 @@ theorem KeyConstruct.pathAtIn_insert_named (forest : List KeyConstruct) (route :
         simp [KeyConstruct.childScope, hname, hseg, hrec]
 
 /-- Helper (computation). Inserting a construct whose kind is avoided along `route` in the
-enclosing named scope leaves `KeyConstruct.pathAtIn` unchanged. (approved: REVIEW5-codex). -/
+enclosing named scope leaves `KeyConstruct.pathAtIn` unchanged. (approved: APPR-C9-agy-3e22e6417). -/
 theorem KeyConstruct.pathAtIn_insert_differentKind (forest : List KeyConstruct) (route : List Nat)
     (before after : List KeyConstruct) (inserted : KeyConstruct)
     (avoids : KeyConstruct.RouteAvoidsKind inserted.kind forest route) :
@@ -399,7 +399,7 @@ theorem KeyConstruct.pathAtIn_insert_differentKind (forest : List KeyConstruct) 
         simp [KeyConstruct.childScope, hname, hseg, hrec]
 
 /-- Helper (computation). Unfolds `KeyConstruct.pathAt` at the exact index `before.length` of a
-split forest `before ++ target :: tail`. (approved: REVIEW5-codex). -/
+split forest `before ++ target :: tail`. (approved: APPR-C9-agy-3e22e6417). -/
 theorem KeyConstruct.pathAt_at_length (before tail : List KeyConstruct)
     (target : KeyConstruct) (route : List Nat) :
     KeyConstruct.pathAt (before ++ target :: tail) (before.length :: route) =
@@ -489,7 +489,7 @@ theorem KeyConstruct.pathAt_insert_differentKind (before mid after : List KeyCon
 
 /-- Helper (computation). Splits collection at a forest boundary, carrying all preceding roots
 into the suffix scope. Used to isolate actual subtree entries in the assigned table.
-(approved: REVIEW8-agy). -/
+(approved: APPR-C9-agy-3e22e6417). -/
 theorem KeyConstruct.collectKeysIn_append (scope before after : List KeyConstruct) :
     collectKeysIn scope (before ++ after) =
       collectKeysIn scope before ++ collectKeysIn (scope ++ before) after := by
@@ -523,7 +523,7 @@ theorem KeyConstruct.assignFunctionTable_named_scope (f : FnId) (start₁ start�
     List.map_append, List.take_succ_cons]
 
 /-- Helper (computation). Computes the scope reset of a named root for
-`KeyConstruct.pathAt_named_ancestor_resets_scope`. (approved: REVIEW7-codex). -/
+`KeyConstruct.pathAt_named_ancestor_resets_scope`. (approved: APPR-C9-agy-3e22e6417). -/
 theorem KeyConstruct.descendant_named_ancestor_resets_scope
     (preceding₁ preceding₂ : List KeyConstruct) (kind : ConstructKind) (name : String)
     (children : List KeyConstruct) (route : List Nat) :
@@ -533,7 +533,7 @@ theorem KeyConstruct.descendant_named_ancestor_resets_scope
 
 /-- Helper (computation). Transports the named-root scope equation through forest locators.
 This is not assignment soundness; `KeyConstruct.assignFunctionTable_named_scope` establishes
-preservation of the complete assigned subtree. (approved: REVIEW8-agy). -/
+preservation of the complete assigned subtree. (approved: APPR-C9-agy-3e22e6417). -/
 theorem KeyConstruct.pathAt_named_ancestor_resets_scope
     (before₁ after₁ before₂ after₂ : List KeyConstruct)
     (kind : ConstructKind) (name : String) (children : List KeyConstruct) (route : List Nat) :
@@ -580,7 +580,7 @@ theorem KeyConstruct.descendant_pin_other (before after : List KeyConstruct)
     simp [KeyConstruct.descendantKey, KeyConstruct.childScope, hname, hseg, hrec]
 
 /-- Helper (computation). Computes the renamed prefix over a descendant route for
-`KeyConstruct.assignFunctionTable_rename_named`. (approved: REVIEW7-codex). -/
+`KeyConstruct.assignFunctionTable_rename_named`. (approved: APPR-C9-agy-3e22e6417). -/
 theorem KeyConstruct.descendant_rename_named (preceding : List KeyConstruct)
     (kind : ConstructKind) (old name : String) (children : List KeyConstruct) (route : List Nat) :
     ((KeyConstruct.mk kind (.named old) children).rename name).descendantKey preceding route =
@@ -590,7 +590,7 @@ theorem KeyConstruct.descendant_rename_named (preceding : List KeyConstruct)
     KeyConstruct.segment, KeyConstruct.childScope, KeyConstruct.pathAt]
 
 /-- Helper (computation). Transports a located descendant through the occurrence/table
-correspondence; supplies no independent soundness evidence. (approved: REVIEW7-codex). -/
+correspondence; supplies no independent soundness evidence. (approved: APPR-C9-agy-3e22e6417). -/
 theorem KeyConstruct.assignFunctionTable_descendant_mem (f : FnId) (startSite : Nat)
     (before after : List KeyConstruct) (root : KeyConstruct) (route : List Nat)
     (key : FunctionRelativeKey) (found : root.descendantKey before route = some key) :
@@ -647,14 +647,14 @@ theorem KeyConstruct.assignFunctionTable_pin (f : FnId) (startSite : Nat)
     rfl
 
 /-- Helper (projection). A successful table lookup is in bounds.
-(approved: REVIEW9-codex). -/
+(approved: APPR-C9-agy-3e22e6417). -/
 theorem SpecializationTable.entryAt_lt_length {Ty Cap : Type}
     {entries : List (SpecializationId Ty Cap)} {index : Nat} {requested : SpecializationId Ty Cap}
     (present : entryAt entries index = some requested) : index < entries.length :=
   (List.getElem?_eq_some_iff.1 present).1
 
 /-- Helper (projection). A successful entry search resolves to the requested specialization.
-(approved: REVIEW9-codex). -/
+(approved: APPR-C9-agy-3e22e6417). -/
 theorem SpecializationTable.entryIndex_sound {Ty Cap : Type} [DecidableEq Ty] [DecidableEq Cap] :
     ∀ (entries : List (SpecializationId Ty Cap)) (requested : SpecializationId Ty Cap) (index : Nat),
       entryIndex entries requested = some index → entryAt entries index = some requested
@@ -671,7 +671,7 @@ theorem SpecializationTable.entryIndex_sound {Ty Cap : Type} [DecidableEq Ty] [D
       exact entryIndex_sound rest requested old oldIndex
 
 /-- Helper (projection). Interning resolves its requested specialization at the returned index.
-(approved: REVIEW9-codex). -/
+(approved: APPR-C9-agy-3e22e6417). -/
 theorem SpecializationTable.intern_sound {Ty Cap : Type} [DecidableEq Ty] [DecidableEq Cap]
     (entries : List (SpecializationId Ty Cap)) (requested : SpecializationId Ty Cap) :
     entryAt (intern entries requested).1 (intern entries requested).2 = some requested := by
@@ -681,7 +681,7 @@ theorem SpecializationTable.intern_sound {Ty Cap : Type} [DecidableEq Ty] [Decid
   | some index => exact entryIndex_sound entries requested index found
 
 /-- Helper (projection). Interning preserves every old numeric entry.
-(approved: REVIEW9-codex). -/
+(approved: APPR-C9-agy-3e22e6417). -/
 theorem SpecializationTable.intern_preserves {Ty Cap : Type} [DecidableEq Ty] [DecidableEq Cap]
     (entries : List (SpecializationId Ty Cap)) (requested : SpecializationId Ty Cap)
     (index : Nat) (old : SpecializationId Ty Cap)
@@ -697,7 +697,7 @@ theorem SpecializationTable.intern_preserves {Ty Cap : Type} [DecidableEq Ty] [D
     exact present
 
 /-- Helper (projection). A failed entry search really means the specialization is absent.
-(approved: REVIEW9-codex). -/
+(approved: APPR-C9-agy-3e22e6417). -/
 theorem SpecializationTable.entryIndex_none_not_mem {Ty Cap : Type} [DecidableEq Ty]
     [DecidableEq Cap] : ∀ (entries : List (SpecializationId Ty Cap))
     (requested : SpecializationId Ty Cap), entryIndex entries requested = none → requested ∉ entries
@@ -774,7 +774,7 @@ theorem SpecializationTable.canonicalize_complete {Ty Cap : Type} [DecidableEq T
       exact Or.inr kept
 
 /-- Helper (projection). Two numeric entries holding one specialization in a duplicate-free table
-are one entry. (approved: REVIEW9-codex). -/
+are one entry. (approved: APPR-C9-agy-3e22e6417). -/
 theorem SpecializationTable.entry_unique {Ty Cap : Type}
     {entries : List (SpecializationId Ty Cap)} (distinct : entries.Nodup)
     {first second : Nat} {requested : SpecializationId Ty Cap}
@@ -823,7 +823,7 @@ theorem SpecializationTable.canonicalize_distinct {Ty Cap : Type} [DecidableEq T
   rw [← firstResolved, ← secondResolved, sameEntry]
 
 /-- Helper (projection). A collision returned by the pair check has exactly the checked modules as
-its two sides. (approved: REVIEW9-codex). -/
+its two sides. (approved: APPR-C9-agy-3e22e6417). -/
 theorem LoadCollision.between?_sound (first second : LoadedModule) (collision : LoadCollision)
     (found : between? first second = some collision) :
     collision.first = first ∧ collision.second = second := by
@@ -840,7 +840,7 @@ theorem LoadCollision.between?_sound (first second : LoadedModule) (collision : 
     · simp [between?, package, top] at found
 
 /-- Helper (projection). A collision returned by the one-module scan names that module and a member
-of the scanned list. (approved: REVIEW9-codex). -/
+of the scanned list. (approved: APPR-C9-agy-3e22e6417). -/
 theorem LoadCollision.withModule_sound (first : LoadedModule) :
     ∀ (modules : List LoadedModule) (collision : LoadCollision),
       withModule first modules = some collision →
@@ -861,7 +861,7 @@ theorem LoadCollision.withModule_sound (first : LoadedModule) :
       exact ⟨same, List.mem_cons.2 (Or.inr member)⟩
 
 /-- Helper (projection). Soundness of the complete ordered-pair search.
-(approved: REVIEW9-codex). -/
+(approved: APPR-C9-agy-3e22e6417). -/
 theorem LoadedModules.findCollisionFrom_sound (candidates modules : List LoadedModule)
     (collision : LoadCollision) (found : findCollisionFrom candidates modules = some collision) :
     collision.first ∈ candidates ∧ collision.second ∈ modules := by
@@ -882,7 +882,7 @@ theorem LoadedModules.findCollisionFrom_sound (candidates modules : List LoadedM
       exact ⟨List.mem_cons.2 (Or.inr firstMember), secondMember⟩
 
 /-- Helper (projection). A real pair collision is visible to the ordered-pair checker.
-(approved: REVIEW9-codex). -/
+(approved: APPR-C9-agy-3e22e6417). -/
 theorem LoadCollision.between?_complete (first second : LoadedModule) (collision : LoadCollision)
     (sides : collision.first = first ∧ collision.second = second) :
     ∃ detected, between? first second = some detected := by
@@ -897,7 +897,7 @@ theorem LoadCollision.between?_complete (first second : LoadedModule) (collision
       simp [between?, LoadCollision.first, LoadCollision.second, samePackage, differentOrigins]⟩
 
 /-- Helper (projection). The one-module scan finds every collision with a member of its input list.
-(approved: REVIEW9-codex). -/
+(approved: APPR-C9-agy-3e22e6417). -/
 theorem LoadCollision.withModule_complete (first : LoadedModule) :
     ∀ (modules : List LoadedModule) (collision : LoadCollision),
       collision.first = first → collision.second ∈ modules →
@@ -1028,7 +1028,7 @@ theorem SourceText.columnAt_append_newline (source : SourceText) :
   simpa using SourceText.columnAt_append source 10
 
 /-- Helper (projection). `LocationOk` projects to bounds and the two computed coordinates.
-(approved: REVIEW9-codex). -/
+(approved: APPR-C9-agy-3e22e6417). -/
 theorem Span.locationOk_iff (source : SourceText) (sp : Span) :
     sp.LocationOk source ↔ sp.endOffset ≤ source.length ∧
       sp.line = source.lineAt sp.startOffset ∧ sp.col = source.columnAt sp.startOffset := Iff.rfl
@@ -1044,7 +1044,7 @@ theorem EncodedPremise.read_encode (record : PremiseRecord) (current : record.sp
     cases kind <;> rfl
 
 /-- Helper (inversion). A category number that is not the encoding of any `PremiseKind` decodes to
-`none` at every reader version. (approved: REVIEW5-codex). -/
+`none` at every reader version. (approved: APPR-C9-agy-3e22e6417). -/
 theorem PremiseKind.decode_eq_none_of_forall_encode_ne (reader : SpecVersion) (category : Nat)
     (unknown : ∀ kind : PremiseKind, kind.encode ≠ category) :
     PremiseKind.decode reader category = none := by
@@ -1073,7 +1073,7 @@ theorem EncodedPremise.read_unknown (reader : SpecVersion) (record : EncodedPrem
   · rfl
 
 /-- Helper (computation). Computes the writer/reader version guards for `EncodedPremise.read_iff`.
-(approved: REVIEW7-codex). -/
+(approved: APPR-C9-agy-3e22e6417). -/
 theorem EncodedPremise.read_version_mismatch (reader : SpecVersion) (record : EncodedPremise)
     (mismatch : record.spec ≠ reader ∨ reader ≠ specVersion) :
     record.read reader = none := by

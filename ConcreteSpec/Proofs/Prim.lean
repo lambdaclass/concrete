@@ -130,7 +130,7 @@ end Prim
 
 /-- Helper (computation). Computes the context-guard refusal branch for `SafetyEvidence.discharge_sound`,
 `SafetyEvidence.discharge_target_mismatch`, and `SafetyEvidence.discharge_unregistered`.
-(approved: REVIEW7-codex). -/
+(approved: APPR-C9-agy-3e22e6417). -/
 theorem SafetyEvidence.discharge_context_mismatch {claim : ObligationId → Prop}
     (e : SafetyEvidence claim) (obligations : ObligationTable) (current : EvidenceContext)
     (requested : ObligationId) (mismatch : ¬ e.Usable current) :
@@ -139,7 +139,7 @@ theorem SafetyEvidence.discharge_context_mismatch {claim : ObligationId → Prop
 
 /-- Helper (computation). Computes the requested-identity guard branch for `SafetyEvidence.discharge_sound`,
 `SafetyEvidence.discharge_target_mismatch`, and `SafetyEvidence.discharge_unregistered`.
-(approved: REVIEW7-codex). -/
+(approved: APPR-C9-agy-3e22e6417). -/
 theorem SafetyEvidence.discharge_obligation_mismatch {claim : ObligationId → Prop}
     (e : SafetyEvidence claim) (obligations : ObligationTable) (current : EvidenceContext)
     (requested : ObligationId) (mismatch : current.obligation ≠ requested) :
@@ -225,7 +225,7 @@ theorem SafetyEvidence.discharge_unregistered {claim : ObligationId → Prop}
 
 /-- Helper (computation). Computes the absent-registry branch of `PrimRegistry.allows`;
 execution safety is established by `PrimRegistry.unknown_primitive_stuck`.
-(approved: REVIEW8-agy). -/
+(approved: APPR-C9-agy-3e22e6417). -/
 theorem PrimRegistry.allows_unknown {Val Ty Store Event : Type} (R : PrimRegistry Val Ty Store Event)
     (p : PrimId) (hnone : AList.lookup R.entries p = none) (args : List Val) (st : Store)
     (a : Exec.Answer Val Event Store) : R.allows p args st a = false := by
@@ -250,7 +250,7 @@ theorem PrimRegistry.unknown_primitive_stuck {O : Exec.Operands}
     simp [PrimRegistry.operands, PrimRegistry.allows, hnone] at ha
 
 /-- Helper (projection). Unpacks the registry's `answerOk_iff` completeness field through
-`PrimRegistry.operands` and `PrimRegistry.allows`. (approved: REVIEW5-codex). -/
+`PrimRegistry.operands` and `PrimRegistry.allows`. (approved: APPR-C9-agy-3e22e6417). -/
 theorem PrimRegistry.allows_allowed {O : Exec.Operands}
     (R : PrimRegistry O.Val O.Ty O.Store O.Event) (p : PrimId)
     (c : PrimContract O.Val O.Ty O.Store O.Event) (hc : AList.lookup R.entries p = some c)
@@ -261,7 +261,7 @@ theorem PrimRegistry.allows_allowed {O : Exec.Operands}
   exact (R.answerOk_iff p c hc args st a).1 ha'
 
 /-- Helper (projection). Projects the postcondition or declared-failure disjunction from
-`PrimRegistry.allows_allowed`. (approved: REVIEW5-codex). -/
+`PrimRegistry.allows_allowed`. (approved: APPR-C9-agy-3e22e6417). -/
 theorem PrimRegistry.allows_postcondition {O : Exec.Operands}
     (R : PrimRegistry O.Val O.Ty O.Store O.Event) (p : PrimId)
     (c : PrimContract O.Val O.Ty O.Store O.Event) (hc : AList.lookup R.entries p = some c)
@@ -279,7 +279,7 @@ theorem PrimRegistry.allows_postcondition {O : Exec.Operands}
     exact hm.1
 
 /-- Helper (projection). Projects the absence of implicit traps from
-`PrimRegistry.allows_postcondition`. (approved: REVIEW5-codex). -/
+`PrimRegistry.allows_postcondition`. (approved: APPR-C9-agy-3e22e6417). -/
 theorem PrimRegistry.allows_no_implicit_trap {O : Exec.Operands}
     (R : PrimRegistry O.Val O.Ty O.Store O.Event) (p : PrimId)
     (c : PrimContract O.Val O.Ty O.Store O.Event) (hc : AList.lookup R.entries p = some c)
@@ -362,7 +362,7 @@ theorem drive_steps_result (P : Exec.Program O) (ρ : Exec.Oracle O)
   exact sound fuel hist c _ rfl
 
 /-- Helper (computation). Exposes the non-normal guard branch for the erasure induction. The terminal report and drive-step laws carry execution evidence.
-(approved: REVIEW7-codex). -/
+(approved: APPR-C9-agy-3e22e6417). -/
 theorem runStmts_of_not_normal (P : Exec.Program O) (ρ : Exec.Oracle O)
     (fuel : Nat) (hist : List O.Event) (ss : List (Exec.Stmt O)) (c : Exec.Config O)
     (hf : c.final? ≠ some .normal) : runStmts P ρ fuel hist ss c = drive P ρ fuel hist c := by
@@ -424,7 +424,7 @@ theorem ghost_erasure_run (G : Language O) (P : Exec.Program O) (ρ : Exec.Oracl
 
 /-- Helper (projection). Projects event and ending equality from the complete-report
 soundness law `Ghost.ghost_erasure_run`; supplies no independent erasure evidence.
-(approved: REVIEW8-agy). -/
+(approved: APPR-C9-agy-3e22e6417). -/
 theorem ghost_erasure_ending (G : Language O) (P : Exec.Program O) (ρ : Exec.Oracle O)
     (fuel : Nat) (hist : List O.Event) (ps : List (Piece G)) (Γ : AList Var G.Val)
     (c : Exec.Config O) :
