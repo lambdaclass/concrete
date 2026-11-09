@@ -12,6 +12,30 @@ from protocol import clean_env
 
 
 class ProcessCoverage(unittest.TestCase):
+    def test_adopted_sessions_and_exact_plants(self):
+        for mode in ('exit', 'cancel'):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as scratch:
+                directory = Path(scratch)
+                helper = ROOT / 'scripts/checks/lib/supervisor_control.py'
+                shutil.copy(helper, directory)
+                source = (ROOT / 'scripts/checks/lib/bounded_exec.py').read_text()
+                for planted in (False, True):
+                    text = source
+                    if planted:
+                        before = ('                self.reap_adopted()' if mode == 'exit'
+                                  else '        self.drain_adopted(grace)')
+                        self.assertIn(before, text)
+                        text = text.replace(before, before.replace('self.reap_adopted()', 'None').replace('self.drain_adopted(grace)', 'None'))
+                    (directory / 'bounded_exec.py').write_text(text)
+                    result = process_run([sys.executable, str(directory / helper.name), mode],
+                                         cwd=ROOT, env=runtime_environment(), timeout=4,
+                                         capture_output=True, text=True)
+                    diagnostic = ('mid-run orphan not reaped' if mode == 'exit'
+                                  else 'cancelled orphan not reaped')
+                    expected = (1, '', 'FAIL supervisor orphan: ' + diagnostic + '\n') if planted else (
+                        0, 'PASS supervisor orphan: ' + mode + '; tasks returned to baseline\n', '')
+                    self.assertEqual((result.returncode, result.stdout, result.stderr), expected)
+
     def test_census(self):
         check(ROOT)
 

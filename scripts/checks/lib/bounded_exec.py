@@ -115,7 +115,6 @@ class _Tree:
         self.listener = Listener(self.address, family='AF_UNIX', authkey=self.key)
         self.lock = threading.RLock()
         self.requests = {}
-        self.groups = set()
         self.threads = set()
         self.stopping = False
         self.acceptor = threading.Thread(target=self.accept, daemon=True)
@@ -215,7 +214,6 @@ class _Tree:
                     connection.send(None)
                 return 'exit 127'
             self.requests[request] = [parent, proc, cancelled]
-            self.groups.add(proc.pid)
         if started: started(proc.pid)
         if connection: connection.send(proc.pid)
         end = time.monotonic() + budget
@@ -223,6 +221,7 @@ class _Tree:
         outcome = None
         try:
             while proc.poll() is None:
+                self.reap_adopted()
                 disconnected = False
                 if connection and connection.poll():
                     try: connection.recv()
@@ -244,20 +243,40 @@ class _Tree:
             proc.wait()
             with self.lock: self.requests.pop(request, None)
 
-    def reap_adopted(self):
-        if sys.platform != 'linux': return
+    def adopted(self):
+        """Caller holds lock so a newly spawned leader cannot be mistaken for an orphan."""
+        if sys.platform != 'linux': return set()
         from pathlib import Path
-        with self.lock:
-            leaders = {e[1].pid for e in self.requests.values()}
+        leaders = {e[1].pid for e in self.requests.values()}
+        children = set()
         for task in Path('/proc/self/task').glob('*/children'):
-            try: children = task.read_text().split()
+            try: children.update(map(int, task.read_text().split()))
             except OSError: continue
-            for value in children:
-                pid = int(value)
-                if pid in leaders: continue
-                try:
-                    if os.getpgid(pid) in self.groups: os.waitpid(pid, os.WNOHANG)
+        return children - leaders
+
+    def reap_adopted(self):
+        with self.lock:
+            for pid in self.adopted():
+                try: os.waitpid(pid, os.WNOHANG)
                 except (ProcessLookupError, ChildProcessError): pass
+
+    def drain_adopted(self, grace):
+        # Killing an adopted parent can expose more descendants, including ones
+        # which escaped every registered session. Re-enumerate until none remain.
+        term_end = time.monotonic() + grace
+        end = term_end + 1
+        while True:
+            with self.lock:
+                self.reap_adopted()
+                children = self.adopted()
+                if not children: return
+                sig = signal.SIGTERM if time.monotonic() < term_end else signal.SIGKILL
+                for pid in children:
+                    try: os.kill(pid, sig)
+                    except ProcessLookupError: pass
+            if time.monotonic() >= end:
+                raise RuntimeError('bounded_exec: adopted children not reaped')
+            time.sleep(.005)
 
     def close(self, grace):
         self.stopping = True
@@ -271,14 +290,7 @@ class _Tree:
         self.wake_writer.close()
         with self.lock: threads = list(self.threads)
         for thread in threads: thread.join(timeout=grace + 1)
-        # Linux subreaper adoption lets the owner reap orphaned grandchildren,
-        # including a same-group child whose leader was killed on cancellation.
-        for pgid in self.groups:
-            while True:
-                try:
-                    pid, status = os.waitpid(-pgid, os.WNOHANG)
-                    if pid == 0: break
-                except ChildProcessError: break
+        self.drain_adopted(grace)
 
 
 def supervise(cmd, budget, kill_after, *, on_started=None, deadline=None, **process_options):

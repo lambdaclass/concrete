@@ -728,3 +728,33 @@ coordinator. The coordinator owns reviews and pushes, and concrete-ci-2 must run
 the impact gates plus the scheduled clean/hostile and stdin-open-pipe matrix on
 the final SHA, including the latency workload. R-0676 owns this structural repair;
 R-0690 qualification remains outstanding. Steps 5–6 are not started.
+
+
+### Round 18, step 4: adopted process ownership (P1)
+
+Confirmed before repair at 4022bfa52: `/tmp/gs-r18-repro.py` called
+`supervise()` on one Python child which forked one new-session child and then
+slept 0.5 seconds. Under `timeout 8s systemd-run --user --scope -q -p
+TasksMax=32 -p MemoryMax=128M python3 /tmp/gs-r18-repro.py`, supervise returned
+`exit 0` but `/proc/<orphan>/stat` still reported `Z`. The reproducer explicitly
+reaped it afterward. This confirms escaped-session zombies; it does not by
+itself establish the cause of the earlier landing-script hang.
+
+The one supervisor now reaps every adopted child other than a registered leader
+while commands run. Enumeration and reaping hold the registration lock, so they
+cannot steal a just-spawned leader's exit status. Shutdown repeatedly signals
+and reaps the entire adopted population, including newly exposed descendants,
+with TERM grace followed by KILL and a bounded drain. Process-group membership
+is no longer a condition for ownership.
+
+`lib/supervisor_control.py` is the persistent bounded reproducer (two forks,
+maximum two-second supervised work). It checks a new-session orphan exiting
+while its command is still running, and a TERM-ignoring new-session orphan alive
+when the owner is cancelled. Both require no remaining child tasks and the
+original supervisor thread count before returning. Removing continuous reaping
+must report exactly `FAIL supervisor orphan: mid-run orphan not reaped`;
+removing shutdown draining must report exactly `FAIL supervisor orphan:
+cancelled orphan not reaped`. Both planted controls passed in the focused Nix
+unittest (0.70 seconds). Both production modes passed with stdin closed and an
+open pipe. R-0676 owns the lifecycle repair; final-SHA server checks remain with
+the coordinator.
