@@ -63,7 +63,7 @@ are pairwise distinct. -/
 def Inv (s : State) : Prop :=
   (∀ e ∈ s.env, brandOf e.2 < s.next) ∧ (∀ b ∈ s.gen, b < s.next) ∧ s.gen.Nodup
 
-/-- Helper (inversion). Extend a no-duplicate list with a member excluded by the freshness premise. (approved: PENDING). -/
+/-- Helper (inversion). Extend a no-duplicate list with a member excluded by the freshness premise. (approved: REV-base1b-agy-01025713b). -/
 theorem nodup_snoc : ∀ {l : List Nat} {x : Nat}, l.Nodup → x ∉ l → (l ++ [x]).Nodup
   | [], _, _, _ => by simp
   | y :: l, x, h, hx => by
@@ -110,7 +110,7 @@ theorem run_inv {s ss s'} (h : Run s ss s') : Inv s → Inv s' := by
   | whileExit _ ih => exact ih
   | whileIter _ ih => exact ih
 
-/-- Representation lemma. The empty initialization fields reduce the bookkeeping invariant to empty-list identities. (approved: PENDING). -/
+/-- Representation lemma. The empty initialization fields reduce the bookkeeping invariant to empty-list identities. (approved: REV-base1b-agy-01025713b). -/
 theorem inv_init : Inv State.init := ⟨by simp [State.init], by simp [State.init], by simp [State.init]⟩
 
 /-- Law (subject `ConcreteSpec.Brand.Run`). **reset_fresh** (Q9.14, Q1.2, Q1.4, Q1.5).
@@ -177,16 +177,16 @@ def Rel (φ : Nat → Nat) (Γ : Ctx) (env : AList Nat Val) : Prop :=
 /-- φ with brand β assigned v. -/
 def upd (φ : Nat → Nat) (β v : Nat) : Nat → Nat := fun γ => if γ = β then v else φ γ
 
-/-- Representation lemma. Transport the static-to-ghost representation across context extension, erasure or fresh brand renaming; no operational soundness is claimed here. (approved: PENDING). -/
+/-- Representation lemma. Transport the static-to-ghost representation across context extension, erasure or fresh brand renaming; no operational soundness is claimed here. (approved: REV-base1b-agy-01025713b). -/
 theorem rel_cons {φ Γ env} (x : Nat) (t : STy) (h : Rel φ Γ env) :
     Rel φ ((x, t) :: Γ) ((x, emb φ t) :: env) := by
   intro y; by_cases hx : x = y <;> simp [AList.lookup, hx, h y]
 
-/-- Representation lemma. Transport the static-to-ghost representation across context extension, erasure or fresh brand renaming; no operational soundness is claimed here. (approved: PENDING). -/
+/-- Representation lemma. Transport the static-to-ghost representation across context extension, erasure or fresh brand renaming; no operational soundness is claimed here. (approved: REV-base1b-agy-01025713b). -/
 theorem rel_erase {φ Γ env} (p : Nat) (h : Rel φ Γ env) : Rel φ (AList.erase Γ p) (AList.erase env p) := by
   intro y; rw [AList.lookup_erase, AList.lookup_erase]; by_cases hy : y = p <;> simp [hy, h y]
 
-/-- Representation lemma. Transport the static-to-ghost representation across context extension, erasure or fresh brand renaming; no operational soundness is claimed here. (approved: PENDING). Reassigning a brand no binding has changes no binding's run-time value. -/
+/-- Representation lemma. Transport the static-to-ghost representation across context extension, erasure or fresh brand renaming; no operational soundness is claimed here. (approved: REV-base1b-agy-01025713b). Reassigning a brand no binding has changes no binding's run-time value. -/
 theorem emb_upd {B Γ} {φ : Nat → Nat} {β v x : Nat} {t : STy} (hb : BrandsIn B Γ) (hβ : β ∉ B)
     (hf : AList.lookup Γ x = some t) : emb (upd φ β v) t = emb φ t := by
   have hm := AList.lookup_mem hf
@@ -198,7 +198,7 @@ theorem emb_upd {B Γ} {φ : Nat → Nat} {β v x : Nat} {t : STy} (hb : BrandsI
     have : γ ≠ β := fun e => hβ (e ▸ hb _ hm γ (.inr rfl))
     simp [emb, upd, this]
 
-/-- Representation lemma. Transport the static-to-ghost representation across context extension, erasure or fresh brand renaming; no operational soundness is claimed here. (approved: PENDING). -/
+/-- Representation lemma. Transport the static-to-ghost representation across context extension, erasure or fresh brand renaming; no operational soundness is claimed here. (approved: REV-base1b-agy-01025713b). -/
 theorem rel_upd {φ Γ env} {B : List Nat} {β : Nat} (v : Nat) (h : Rel φ Γ env) (hb : BrandsIn B Γ)
     (hβ : β ∉ B) : Rel (upd φ β v) Γ env := by
   intro y
@@ -207,15 +207,15 @@ theorem rel_upd {φ Γ env} {B : List Nat} {β : Nat} (v : Nat) (h : Rel φ Γ e
   | none => rfl
   | some t => simp [emb_upd hb hβ hf]
 
-/-- Representation lemma. Transport the static-to-ghost representation across context extension, erasure or fresh brand renaming; no operational soundness is claimed here. (approved: PENDING). -/
+/-- Representation lemma. Transport the static-to-ghost representation across context extension, erasure or fresh brand renaming; no operational soundness is claimed here. (approved: REV-base1b-agy-01025713b). -/
 theorem brandsIn_erase {B Γ} (p : Nat) (h : BrandsIn B Γ) : BrandsIn B (AList.erase Γ p) :=
   fun e he => h e (AList.mem_of_mem_erase p he)
 
-/-- Representation lemma. Transport the static-to-ghost representation across context extension, erasure or fresh brand renaming; no operational soundness is claimed here. (approved: PENDING). -/
+/-- Representation lemma. Transport the static-to-ghost representation across context extension, erasure or fresh brand renaming; no operational soundness is claimed here. (approved: REV-base1b-agy-01025713b). -/
 theorem brandsIn_mono {B Γ} (β : Nat) (h : BrandsIn B Γ) : BrandsIn (β :: B) Γ :=
   fun e he γ hγ => List.mem_cons_of_mem _ (h e he γ hγ)
 
-/-- Representation lemma. Transport the static-to-ghost representation across context extension, erasure or fresh brand renaming; no operational soundness is claimed here. (approved: PENDING). -/
+/-- Representation lemma. Transport the static-to-ghost representation across context extension, erasure or fresh brand renaming; no operational soundness is claimed here. (approved: REV-base1b-agy-01025713b). -/
 theorem brandsIn_cons {B Γ} {x : Nat} {t : STy} (h : BrandsIn B Γ)
     (ht : ∀ β, (t = .alloc β ∨ t = .heap β) → β ∈ B) : BrandsIn B ((x, t) :: Γ) := by
   intro e he β hβ
@@ -223,12 +223,12 @@ theorem brandsIn_cons {B Γ} {x : Nat} {t : STy} (h : BrandsIn B Γ)
   · exact ht β hβ
   · exact h e he β hβ
 
-/-- Representation lemma. Transport the static-to-ghost representation across context extension, erasure or fresh brand renaming; no operational soundness is claimed here. (approved: PENDING). A fresh allocator binding keeps the brands in use. -/
+/-- Representation lemma. Transport the static-to-ghost representation across context extension, erasure or fresh brand renaming; no operational soundness is claimed here. (approved: REV-base1b-agy-01025713b). A fresh allocator binding keeps the brands in use. -/
 theorem brandsIn_new {B Γ} (x β : Nat) (h : BrandsIn B Γ) : BrandsIn (β :: B) ((x, .alloc β) :: Γ) :=
   brandsIn_cons (brandsIn_mono β h) (fun γ hγ => by
     rcases hγ with hγ | hγ <;> cases hγ; exact List.mem_cons_self ..)
 
-/-- Representation lemma. Transport the static-to-ghost representation across context extension, erasure or fresh brand renaming; no operational soundness is claimed here. (approved: PENDING). Opening allocator a, now of brand γ, under the new name β: what each loop iteration,
+/-- Representation lemma. Transport the static-to-ghost representation across context extension, erasure or fresh brand renaming; no operational soundness is claimed here. (approved: REV-base1b-agy-01025713b). Opening allocator a, now of brand γ, under the new name β: what each loop iteration,
 and the code after the loop, starts from (Q1.3). -/
 theorem rel_reopen {φ Γ env} {B : List Nat} {a γ β : Nat}
     (h : Rel φ ((a, .alloc γ) :: AList.erase Γ a) env) (hb : BrandsIn B Γ) (hβ : β ∉ B) :
@@ -242,7 +242,7 @@ theorem rel_reopen {φ Γ env} {B : List Nat} {a γ β : Nat}
     | none => rfl
     | some t => simp [emb_upd (brandsIn_erase a hb) hβ hf]
 
-/-- Representation lemma. Transport the static-to-ghost representation across context extension, erasure or fresh brand renaming; no operational soundness is claimed here. (approved: PENDING). Entering a loop: the allocator's current binding becomes the loop's. -/
+/-- Representation lemma. Transport the static-to-ghost representation across context extension, erasure or fresh brand renaming; no operational soundness is claimed here. (approved: REV-base1b-agy-01025713b). Entering a loop: the allocator's current binding becomes the loop's. -/
 theorem rel_split {φ Γ env} {a γ : Nat} (h : Rel φ Γ env) (ha : AList.lookup Γ a = some (.alloc γ)) :
     Rel φ ((a, .alloc γ) :: AList.erase Γ a) env := by
   intro y

@@ -30,7 +30,7 @@ theorem runBody_mono {Δ : Decls} {r : Atom} :
       · exact h
       · exact h
 
-/-- Helper (computation). The defining branch equations and structural traversal contain no constructor for this result; used inside the semantic safety proofs. (approved: PENDING). The return step never runs out of fuel. -/
+/-- Helper (computation). The defining branch equations and structural traversal contain no constructor for this result; used inside the semantic safety proofs. (approved: REV-base1a-agy-01025713b). The return step never runs out of fuel. -/
 theorem retOutcome_ne_outOfFuel (Δ : Decls) (env : Env) (r : Atom) :
     retOutcome Δ env r ≠ .outOfFuel := by
   unfold retOutcome; split <;> simp
@@ -104,15 +104,15 @@ inductive Corr (Δ : Decls) : Ctx → Env → Prop where
       (∀ sn vs, sl = .val (.struct sn vs) → FieldsHold e.kfields vs) →
       Corr Δ Γ env → Corr Δ ((x, e) :: Γ) ((x, sl) :: env)
 
-/-- Representation lemma. Type, Copy and known-value projections commute with usage bookkeeping; this is an equality of representations, not execution safety. (approved: PENDING). -/
+/-- Representation lemma. Type, Copy and known-value projections commute with usage bookkeeping; this is an equality of representations, not execution safety. (approved: REV-base1a-agy-01025713b). -/
 theorem tys_lookup (x : Var) (Γ : Ctx) : AList.lookup Γ.tys x = (AList.lookup Γ x).map Entry.ty :=
   AList.lookup_map Entry.ty Γ x
 
-/-- Representation lemma. Type, Copy and known-value projections commute with usage bookkeeping; this is an equality of representations, not execution safety. (approved: PENDING). -/
+/-- Representation lemma. Type, Copy and known-value projections commute with usage bookkeeping; this is an equality of representations, not execution safety. (approved: REV-base1a-agy-01025713b). -/
 theorem ctxMark_tys (x : Var) (mv : Bool) (Γ : Ctx) : (ctxMark Γ x mv).tys = Γ.tys :=
   AList.map_update Entry.ty (Entry.read mv) (fun _ => rfl) Γ x
 
-/-- Representation lemma. Type, Copy and known-value projections commute with usage bookkeeping; this is an equality of representations, not execution safety. (approved: PENDING). -/
+/-- Representation lemma. Type, Copy and known-value projections commute with usage bookkeeping; this is an equality of representations, not execution safety. (approved: REV-base1a-agy-01025713b). -/
 theorem useAtom_tys {Δ : Decls} {Γ Γ' : Ctx} {a : Atom} (h : UseAtom Δ Γ a Γ') : Γ'.tys = Γ.tys := by
   cases h with
   | int => rfl
@@ -120,25 +120,25 @@ theorem useAtom_tys {Δ : Decls} {Γ Γ' : Ctx} {a : Atom} (h : UseAtom Δ Γ a 
   | copy => exact ctxMark_tys _ _ _
   | move => exact ctxMark_tys _ _ _
 
-/-- Representation lemma. Type, Copy and known-value projections commute with usage bookkeeping; this is an equality of representations, not execution safety. (approved: PENDING). -/
+/-- Representation lemma. Type, Copy and known-value projections commute with usage bookkeeping; this is an equality of representations, not execution safety. (approved: REV-base1a-agy-01025713b). -/
 theorem useAtoms_tys {Δ : Decls} {Γ Γ' : Ctx} {as : List Atom} (h : UseAtoms Δ Γ as Γ') :
     Γ'.tys = Γ.tys := by
   induction h with
   | nil => rfl
   | cons h₁ _ ih => rw [ih, useAtom_tys h₁]
 
-/-- Representation lemma. Type, Copy and known-value projections commute with usage bookkeeping; this is an equality of representations, not execution safety. (approved: PENDING). -/
+/-- Representation lemma. Type, Copy and known-value projections commute with usage bookkeeping; this is an equality of representations, not execution safety. (approved: REV-base1a-agy-01025713b). -/
 theorem uses_tys {Δ : Decls} {Γ Γ' : Ctx} {e : Expr} (h : Uses Δ Γ e Γ') : Γ'.tys = Γ.tys := by
   cases h with
   | atom h => exact useAtom_tys h
   | add h₁ h₂ => rw [useAtom_tys h₂, useAtom_tys h₁]
   | mk h => exact useAtoms_tys h
 
-/-- Representation lemma. Type, Copy and known-value projections commute with usage bookkeeping; this is an equality of representations, not execution safety. (approved: PENDING). -/
+/-- Representation lemma. Type, Copy and known-value projections commute with usage bookkeeping; this is an equality of representations, not execution safety. (approved: REV-base1a-agy-01025713b). -/
 theorem vty_isCopy {Δ : Decls} {v : Val} {t : Ty} (h : VTy Δ v t) : v.isCopy Δ = t.isCopy Δ := by
   cases h <;> rfl
 
-/-- Helper (inversion). Extract a constituent fact from the context correspondence or typing derivation. (approved: PENDING). -/
+/-- Helper (inversion). Extract a constituent fact from the context correspondence or typing derivation. (approved: REV-base1a-agy-01025713b). -/
 theorem corr_find {Δ : Decls} {x : Var} {Γ : Ctx} {env : Env} (hc : Corr Δ Γ env) :
     ∀ {e : Entry}, AList.lookup Γ x = some e →
       (e.live = true → ∃ v, AList.lookup env x = some (.val v) ∧ VTy Δ v e.ty) ∧
@@ -164,7 +164,7 @@ theorem corr_find {Δ : Decls} {x : Var} {Γ : Ctx} {env : Env} (hc : Corr Δ Γ
       simp only [hne, ↓reduceIte]
       exact ih h
 
-/-- Representation lemma. Transport the context/environment correspondence across read bookkeeping on its two representations. (approved: PENDING). -/
+/-- Representation lemma. Transport the context/environment correspondence across read bookkeeping on its two representations. (approved: REV-base1a-agy-01025713b). -/
 theorem corr_mark_copy {Δ : Decls} {x : Var} {Γ : Ctx} {env : Env} (hc : Corr Δ Γ env) :
     Corr Δ (ctxMark Γ x false) env := by
   induction hc with
@@ -177,7 +177,7 @@ theorem corr_mark_copy {Δ : Decls} {x : Var} {Γ : Ctx} {env : Env} (hc : Corr 
       exact .cons (fun hl => hsl (by rw [← hl]; exact (Bool.and_true e.live).symm)) hk hkf hc
     · rw [ite_eq_right h]; exact .cons hsl hk hkf ih
 
-/-- Representation lemma. Transport the context/environment correspondence across read bookkeeping on its two representations. (approved: PENDING). Moving x out keeps the description, provided x's binding has no known value (a known
+/-- Law (subject `ConcreteSpec.ctxMark`). Moving x out keeps the description, provided x's binding has no known value (a known
 value is a Copy scalar, which is never moved). -/
 theorem corr_mark_move {Δ : Decls} {x : Var} {Γ : Ctx} {env : Env} (hc : Corr Δ Γ env) :
     (∀ e, AList.lookup Γ x = some e → e.known = none) →
@@ -233,7 +233,7 @@ theorem knownAtom_sound {Δ : Decls} {Γ : Ctx} {env : Env} {a : Atom} {s : Scal
     obtain ⟨hv, _⟩ := (corr_find hc hf).2.1 s hke
     simp [evalAtom, readVar, hv, Val.isCopy]
 
-/-- Representation lemma. Type, Copy and known-value projections commute with usage bookkeeping; this is an equality of representations, not execution safety. (approved: PENDING). Recording a read changes no binding's known value or field facts. -/
+/-- Representation lemma. Type, Copy and known-value projections commute with usage bookkeeping; this is an equality of representations, not execution safety. (approved: REV-base1a-agy-01025713b). Recording a read changes no binding's known value or field facts. -/
 theorem knownAtom_mark (y : Var) (mv : Bool) (a : Atom) (Γ : Ctx) :
     knownAtom (ctxMark Γ y mv) a = knownAtom Γ a := by
   cases a with
@@ -245,7 +245,7 @@ theorem knownAtom_mark (y : Var) (mv : Bool) (a : Atom) (Γ : Ctx) :
     · rw [ite_eq_right h]
   | _ => rfl
 
-/-- Representation lemma. Type, Copy and known-value projections commute with usage bookkeeping; this is an equality of representations, not execution safety. (approved: PENDING). -/
+/-- Representation lemma. Type, Copy and known-value projections commute with usage bookkeeping; this is an equality of representations, not execution safety. (approved: REV-base1a-agy-01025713b). -/
 theorem useAtom_knownAtom {Δ : Decls} {Γ Γ' : Ctx} {a : Atom} (h : UseAtom Δ Γ a Γ') (b : Atom) :
     knownAtom Γ' b = knownAtom Γ b := by
   cases h with
@@ -439,12 +439,12 @@ theorem knownExpr_sound {Δ : Decls} {Γ : Ctx} {env : Env} {e : Expr} {s : Scal
 
 /-! ### No hidden traps -/
 
-/-- Helper (computation). The defining branch equations and structural traversal contain no constructor for this result; used inside the semantic safety proofs. (approved: PENDING). Reading a local never traps. -/
+/-- Helper (computation). The defining branch equations and structural traversal contain no constructor for this result; used inside the semantic safety proofs. (approved: REV-base1a-agy-01025713b). Reading a local never traps. -/
 theorem readVar_ne_trap (Δ : Decls) (env : Env) (x : Var) (mv : Bool) (k : Trap) :
     readVar Δ env x mv ≠ .trap k := by
   unfold readVar; split <;> (try split) <;> simp
 
-/-- Helper (computation). The defining branch equations and structural traversal contain no constructor for this result; used inside the semantic safety proofs. (approved: PENDING). Reading an atom never traps. -/
+/-- Helper (computation). The defining branch equations and structural traversal contain no constructor for this result; used inside the semantic safety proofs. (approved: REV-base1a-agy-01025713b). Reading an atom never traps. -/
 theorem evalAtom_ne_trap (Δ : Decls) (env : Env) (a : Atom) (k : Trap) : evalAtom Δ env a ≠ .trap k := by
   cases a with
   | int => simp [evalAtom]
@@ -458,7 +458,7 @@ theorem evalAtom_ne_trap (Δ : Decls) (env : Env) (a : Atom) (k : Trap) : evalAt
     have := readVar_ne_trap Δ env x true k
     split <;> simp_all
 
-/-- Helper (computation). The defining branch equations and structural traversal contain no constructor for this result; used inside the semantic safety proofs. (approved: PENDING). Struct-literal fields never trap: they are atoms. -/
+/-- Helper (computation). The defining branch equations and structural traversal contain no constructor for this result; used inside the semantic safety proofs. (approved: REV-base1a-agy-01025713b). Struct-literal fields never trap: they are atoms. -/
 theorem evalFields_ne_trap (Δ : Decls) (k : Trap) :
     ∀ (env : Env) (fs : List (Name × Atom)), evalFields Δ env fs ≠ .trap k
   | env, [] => by simp [evalFields]
@@ -472,7 +472,7 @@ theorem evalFields_ne_trap (Δ : Decls) (k : Trap) :
     · simp_all
     · simp
 
-/-- Representation lemma. Type, Copy and known-value projections commute with usage bookkeeping; this is an equality of representations, not execution safety. (approved: PENDING). Recording a read changes no binding's bounds. -/
+/-- Representation lemma. Type, Copy and known-value projections commute with usage bookkeeping; this is an equality of representations, not execution safety. (approved: REV-base1a-agy-01025713b). Recording a read changes no binding's bounds. -/
 theorem atomBounds_mark (y : Var) (mv : Bool) (a : Atom) (Γ : Ctx) :
     atomBounds (ctxMark Γ y mv) a = atomBounds Γ a := by
   cases a with
@@ -484,7 +484,7 @@ theorem atomBounds_mark (y : Var) (mv : Bool) (a : Atom) (Γ : Ctx) :
     · rw [ite_eq_right h]
   | _ => rfl
 
-/-- Representation lemma. Type, Copy and known-value projections commute with usage bookkeeping; this is an equality of representations, not execution safety. (approved: PENDING). -/
+/-- Representation lemma. Type, Copy and known-value projections commute with usage bookkeeping; this is an equality of representations, not execution safety. (approved: REV-base1a-agy-01025713b). -/
 theorem useAtom_atomBounds {Δ : Decls} {Γ Γ' : Ctx} {a : Atom} (h : UseAtom Δ Γ a Γ') (b : Atom) :
     atomBounds Γ' b = atomBounds Γ b := by
   cases h with
@@ -567,7 +567,7 @@ theorem evalExpr_ne_trap {Δ : Decls} {e : Expr} {Γ Γ' : Ctx} {env : Env}
         simp [evalExpr, he₁, he₂, checkedAdd, hin]
       · cases ha
 
-/-- Helper (computation). The defining branch equations and structural traversal contain no constructor for this result; used inside the semantic safety proofs. (approved: PENDING). Binding the fields of a struct never traps. -/
+/-- Helper (computation). The defining branch equations and structural traversal contain no constructor for this result; used inside the semantic safety proofs. (approved: REV-base1a-agy-01025713b). Binding the fields of a struct never traps. -/
 theorem destructure_ne_trap (k : Trap) :
     ∀ (pat : List (Name × Binder)) (vs : List (Name × Scalar)) (env : Env), destructure pat vs env ≠ .trap k
   | [], _, _ => by simp [destructure]
@@ -653,7 +653,7 @@ theorem execStmt_safe {Δ : Decls} {Γ Γ' : Ctx} {env : Env} {s : Stmt}
         obtain ⟨env', hde, hc'⟩ := destructure_safe hvs (hkf _ _ rfl) hc₁ hp.declared
         exact .inr ⟨env', by simp [execStmt, he, hde], hc'⟩
 
-/-- Helper (inversion). Extract a constituent fact from the context correspondence or typing derivation. (approved: PENDING). An atom with a scalar type in HasType has that type in AtomTy. -/
+/-- Helper (inversion). Extract a constituent fact from the context correspondence or typing derivation. (approved: REV-base1a-agy-01025713b). An atom with a scalar type in HasType has that type in AtomTy. -/
 theorem hasType_atom_scalar {Δ : Decls} {Γ : TyCtx} {a : Atom} {st : STy}
     (h : HasType Δ Γ (.atom a) (.scalar st)) : AtomTy Γ a st := by
   cases h with
@@ -756,16 +756,37 @@ def entry : Entry := ⟨.scalar (.int .u8), true, false, none, []⟩
 def context : Ctx := [(slotVar, entry)]
 def environment : Env := [(slotVar, .val (.scalar (.int .u8 42)))]
 
+
 def literal : Program := ⟨[], [], .int .u8 42⟩
 def sum : Expr := .add (.int .u8 20) (.int .u8 22)
 def discard : Stmt := .let_ .wild (.scalar (.int .u8)) (.atom (.int .u8 42))
 
-/-- Helper (computation). The closed local holds a live in-range unsigned-byte value, establishing the read instance's correspondence premise. (approved: PENDING) -/
+/-- Helper (computation). The closed local holds a live in-range unsigned-byte value, establishing the read instance's correspondence premise. (approved: REV-base1a-agy-01025713b) -/
 theorem contextCorr : Corr [] context environment :=
   .cons (fun _ => ⟨_, rfl, .scalar (.int (by decide))⟩)
     (fun _ h => by cases h) (fun _ _ h => by cases h) .nil
 
-/-- Helper (computation). Closed typing and ownership derivation for dropping a Copy scalar. (approved: PENDING) -/
+/-- A broken move marker that leaves the static binding live. -/
+def keepLiveMark (Γ : Ctx) (_ : Var) (_ : Bool) : Ctx := Γ
+
+/-- Instance (law `ConcreteSpec.corr_mark_move`, case `liveSlot`). -/
+example := @corr_mark_move [] slotVar context environment contextCorr
+  (by intro e h; simpa [entry] using congrArg Entry.known (Option.some.inj h).symm)
+
+/-- Planted (law `ConcreteSpec.corr_mark_move`, case `liveSlot`, subject `ConcreteSpec.ctxMark`, mutant `ConcreteSpec.Evidence.keepLiveMark`). -/
+example : Corr [] context environment ∧
+    (∀ e, AList.lookup context slotVar = some e → e.known = none) ∧
+    ¬ Corr [] (keepLiveMark context slotVar true)
+      (AList.update environment slotVar (fun _ => .moved)) := by
+  refine ⟨contextCorr, ?_, ?_⟩
+  · intro e h
+    have : entry = e := Option.some.inj h
+    subst e; rfl
+  · intro h
+    obtain ⟨v, hv, _⟩ := (corr_find h (x := slotVar) (e := entry) rfl).1 rfl
+    cases hv
+
+/-- Helper (computation). Closed typing and ownership derivation for dropping a Copy scalar. (approved: REV-base1a-agy-01025713b) -/
 theorem discardOk : StmtOk [] [] discard [] :=
   .letWild (.int (by decide)) rfl rfl (.atom .int)
 
@@ -913,7 +934,7 @@ def oneField : StructDecl := ⟨"Field", false, [("a", .int .u8)]⟩
 def fieldValues : List (Name × Scalar) := [("a", .int .u8 42)]
 def fieldPattern : List (Name × Binder) := [("a", .name slotVar)]
 
-/-- Helper (computation). The concrete field value meets its declaration's scalar type. (approved: PENDING) -/
+/-- Helper (computation). The concrete field value meets its declaration's scalar type. (approved: REV-base1a-agy-01025713b) -/
 theorem fieldTyped : ∀ f st, Core.AList.lookup oneField.fields f = some st →
     ∃ v, Core.AList.lookup fieldValues f = some v ∧ SVTy v st := by
   intro f st hf
@@ -924,7 +945,7 @@ theorem fieldTyped : ∀ f st, Core.AList.lookup oneField.fields f = some st →
     exact ⟨.int .u8 42, by simp [fieldValues, Core.AList.lookup, he], .int (by decide)⟩
   · cases hf
 
-/-- Helper (computation). The concrete named-field pattern names a declared field. (approved: PENDING) -/
+/-- Helper (computation). The concrete named-field pattern names a declared field. (approved: REV-base1a-agy-01025713b) -/
 theorem fieldDeclared : ∀ p ∈ fieldPattern, ∃ st, Core.AList.lookup oneField.fields p.1 = some st := by
   intro p hp
   cases hp with

@@ -8,7 +8,7 @@ PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `Concret
 
 namespace ConcreteSpec.Cleanup
 
-/-- Helper (inversion). Restrict the dependency-order derivation to the left append segment. (approved: PENDING). -/
+/-- Helper (inversion). Restrict the dependency-order derivation to the left append segment. (approved: REV-base1b-agy-01025713b). -/
 theorem depOrder_append_left : ∀ {l₁ l₂ : List Deferred}, DepOrder (l₁ ++ l₂) → DepOrder l₁
   | [], _, _ => .nil
   | d :: l₁, l₂, h => by
@@ -17,20 +17,20 @@ theorem depOrder_append_left : ∀ {l₁ l₂ : List Deferred}, DepOrder (l₁ +
       exact .cons hs (fun d' hd' => hall d' (List.mem_append_left _ hd'))
         (depOrder_append_left hrest)
 
-/-- Helper (inversion). Restrict the dependency-order derivation to the right append segment. (approved: PENDING). -/
+/-- Helper (inversion). Restrict the dependency-order derivation to the right append segment. (approved: REV-base1b-agy-01025713b). -/
 theorem depOrder_append_right : ∀ {l₁ l₂ : List Deferred}, DepOrder (l₁ ++ l₂) → DepOrder l₂
   | [], _, h => h
   | _ :: l₁, _, h => by cases h with | cons _ _ hrest => exact depOrder_append_right hrest
 
-/-- Representation lemma. The defining flattening equation for a stack frame. (approved: PENDING). -/
+/-- Representation lemma. The defining flattening equation for a stack frame. (approved: REV-base1b-agy-01025713b). -/
 theorem pending_cons (f : Frame) (st : Stack) : pending (f :: st) = f.defers ++ pending st := by
   simp [pending]
 
-/-- Representation lemma. Flattening distributes over stack concatenation. (approved: PENDING). -/
+/-- Representation lemma. Flattening distributes over stack concatenation. (approved: REV-base1b-agy-01025713b). -/
 theorem pending_append (fs st : List Frame) : pending (fs ++ st) = pending fs ++ pending st := by
   simp [pending]
 
-/-- Helper (inversion). Extract the cross-segment dependency constraint from the ordering derivation. (approved: PENDING). -/
+/-- Helper (inversion). Extract the cross-segment dependency constraint from the ordering derivation. (approved: REV-base1b-agy-01025713b). -/
 theorem depOrder_cross : ∀ {l₁ l₂ : List Deferred}, DepOrder (l₁ ++ l₂) →
     ∀ x ∈ l₁, ∀ y ∈ l₂, x.target ∉ y.needs
   | [], _, _, x, hx, _, _ => by cases hx
@@ -102,7 +102,7 @@ theorem reg_inv {live : Res → Bool} {st : Stack} (h : Reg live st) : RegInv li
           exact absurd hr (depOrder_cross hdo x hx d hd)
         · exact h
 
-/-- Helper (inversion). Decompose a successful recursive unwind into the removed prefix and retained suffix. (approved: PENDING). -/
+/-- Helper (inversion). Decompose a successful recursive unwind into the removed prefix and retained suffix. (approved: REV-base1b-agy-01025713b). -/
 theorem unwindTo_prefix {p stop : FrameKind → Bool} :
     ∀ {st : Stack} {fs : List Frame}, unwindTo p stop st = some fs → ∃ rest, st = fs ++ rest
   | [], fs, h => by simp [unwindTo] at h
@@ -120,7 +120,7 @@ theorem unwindTo_prefix {p stop : FrameKind → Bool} :
         obtain ⟨rest, rfl⟩ := unwindTo_prefix hu
         exact ⟨rest, rfl⟩
 
-/-- Helper (inversion). Extract the stack-prefix decomposition from a successful exit unwind. The conclusion contains no mutable operation; it is used to restrict the registration invariant to the exited scopes. (approved: PENDING). An exit leaves a prefix of the scopes: the innermost ones. -/
+/-- Helper (inversion). Extract the stack-prefix decomposition from a successful exit unwind. The conclusion contains no mutable operation; it is used to restrict the registration invariant to the exited scopes. (approved: REV-base1b-agy-01025713b). An exit leaves a prefix of the scopes: the innermost ones. -/
 theorem unwound_prefix {e : Exit} {st : Stack} {fs : List Frame} (h : unwound e st = some fs) :
     ∃ rest, st = fs ++ rest := by
   cases e with
@@ -182,7 +182,7 @@ theorem runCleanup_trap {ok : Deferred → Bool} {d : Deferred} {post : List Def
       have := RunCleanup.step (ok := ok) hx ((ih (expected pre ++ [.call d]) .trapped).mpr ⟨rfl, rfl⟩)
       simpa [expected] using this
 
-/-- Helper (inversion). Locate the two calls in the order mandated by the dependency-order derivation. (approved: PENDING). In a dependency-ordered run list, a call runs before the release of an allocator it depends
+/-- Helper (inversion). Locate the two calls in the order mandated by the dependency-order derivation. (approved: REV-base1b-agy-01025713b). In a dependency-ordered run list, a call runs before the release of an allocator it depends
 on. -/
 theorem depOrder_before :
     ∀ {ds : List Deferred}, DepOrder ds → ∀ {d da : Deferred}, d ∈ ds → da ∈ ds →
@@ -213,7 +213,7 @@ theorem depOrder_before :
         obtain ⟨pre, mid, post, hsplit⟩ := depOrder_before hrest hd' hda' hdep
         exact ⟨x :: pre, mid, post, by simp [hsplit]⟩
 
-/-- Helper (inversion). Extract inequality of an earlier target and a later dependency. (approved: PENDING). In a dependency-ordered run list, no call consumes what a later call needs. -/
+/-- Helper (inversion). Extract inequality of an earlier target and a later dependency. (approved: REV-base1b-agy-01025713b). In a dependency-ordered run list, no call consumes what a later call needs. -/
 theorem depOrder_needs_unconsumed {pre post : List Deferred} {d : Deferred}
     (h : DepOrder (pre ++ d :: post)) : ∀ r ∈ d.needs, ∀ x ∈ pre, x.target ≠ r := by
   intro r hr x hx he
@@ -271,7 +271,7 @@ theorem defer_cleanup_releases {ok : Deferred → Bool} {live : Res → Bool} {s
     rw [hst, pending_append, hsplit]
     exact List.mem_append_left _ (List.mem_append_right _ (List.mem_cons_self ..))
 
-/-- Representation lemma. The defining abort branch unwinds no scopes, whose flattened pending list is empty. (approved: PENDING). An abort runs no cleanup (Q9.8). -/
+/-- Representation lemma. The defining abort branch unwinds no scopes, whose flattened pending list is empty. (approved: REV-base1b-agy-01025713b). An abort runs no cleanup (Q9.8). -/
 theorem abort_no_cleanup (st : Stack) : unwound .abort st = some [] ∧ pending [] = [] := ⟨rfl, rfl⟩
 
 

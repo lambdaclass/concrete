@@ -10,19 +10,19 @@ namespace ConcreteSpec.Core.AList
 
 variable {κ α β : Type} [DecidableEq κ]
 
-/-- Representation lemma. The defining lookup equation for a nonempty association list. (approved: PENDING) -/
+/-- Representation lemma. The defining lookup equation for a nonempty association list. (approved: REV-base1a-agy-01025713b) -/
 theorem lookup_cons (k' : κ) (a : α) (l : AList κ α) (k : κ) :
     lookup ((k', a) :: l) k = if k' = k then some a else lookup l k := rfl
 
-/-- Representation lemma. The defining update equation for a nonempty association list. (approved: PENDING) -/
+/-- Representation lemma. The defining update equation for a nonempty association list. (approved: REV-base1a-agy-01025713b) -/
 theorem update_cons (k' : κ) (a : α) (l : AList κ α) (k : κ) (f : α → α) :
     update ((k', a) :: l) k f = if k' = k then (k', f a) :: l else (k', a) :: update l k f := rfl
 
-/-- Representation lemma. The defining erase equation for a nonempty association list. (approved: PENDING) -/
+/-- Representation lemma. The defining erase equation for a nonempty association list. (approved: REV-base1a-agy-01025713b) -/
 theorem erase_cons (k' : κ) (a : α) (l : AList κ α) (k : κ) :
     erase ((k', a) :: l) k = if k' = k then erase l k else (k', a) :: erase l k := rfl
 
-/-- Representation lemma. Lookup inversion into membership of the underlying list. (approved: PENDING) -/
+/-- Representation lemma. Lookup inversion into membership of the underlying list. (approved: REV-base1a-agy-01025713b) -/
 theorem lookup_mem : ∀ {l : AList κ α} {k : κ} {a : α}, lookup l k = some a → (k, a) ∈ l
   | [], _, _, h => nomatch h
   | (k', b) :: l, k, a, h => by
@@ -31,7 +31,7 @@ theorem lookup_mem : ∀ {l : AList κ α} {k : κ} {a : α}, lookup l k = some 
     · rw [ite_eq_left hk] at h; cases h; subst hk; exact List.Mem.head _
     · rw [ite_eq_right hk] at h; exact List.Mem.tail _ (lookup_mem h)
 
-/-- Representation lemma. Membership implies that first-match lookup finds some binding, possibly a shadowing one. (approved: PENDING) -/
+/-- Representation lemma. Membership implies that first-match lookup finds some binding, possibly a shadowing one. (approved: REV-base1a-agy-01025713b) -/
 theorem lookup_isSome_of_mem : ∀ {l : AList κ α} {k : κ} {a : α}, (k, a) ∈ l →
     ∃ b, lookup l k = some b
   | [], _, _, h => nomatch h
@@ -44,7 +44,7 @@ theorem lookup_isSome_of_mem : ∀ {l : AList κ α} {k : κ} {a : α}, (k, a) �
       | head => exact absurd rfl hk
       | tail _ h => exact lookup_isSome_of_mem h
 
-/-- Representation lemma. Lookup commutes with mapping the payload representation. (approved: PENDING) -/
+/-- Representation lemma. Lookup commutes with mapping the payload representation. (approved: REV-base1a-agy-01025713b) -/
 theorem lookup_map (f : α → β) : ∀ (l : AList κ α) (k : κ), lookup (map f l) k = (lookup l k).map f
   | [], _ => rfl
   | (k', a) :: l, k => by
@@ -54,7 +54,7 @@ theorem lookup_map (f : α → β) : ∀ (l : AList κ α) (k : κ), lookup (map
     · rw [ite_eq_left hk, ite_eq_left hk]; rfl
     · rw [ite_eq_right hk, ite_eq_right hk]; exact lookup_map f l k
 
-/-- Representation lemma. The first-match update equation expressed through lookup. (approved: PENDING) -/
+/-- Representation lemma. The first-match update equation expressed through lookup. (approved: REV-base1a-agy-01025713b) -/
 theorem lookup_update (k : κ) (f : α → α) : ∀ (l : AList κ α) (q : κ),
     lookup (update l k f) q = if q = k then (lookup l k).map f else lookup l q
   | [], q => by
@@ -76,7 +76,7 @@ theorem lookup_update (k : κ) (f : α → α) : ∀ (l : AList κ α) (q : κ),
         rw [ite_eq_left hq, ite_eq_left hq, ite_eq_right hkq]
       · rw [ite_eq_right hq, ite_eq_right hq]
 
-/-- Representation lemma. Erasure removes every binding of the key and preserves other lookups. (approved: PENDING) -/
+/-- Representation lemma. Erasure removes every binding of the key and preserves other lookups. (approved: REV-base1a-agy-01025713b) -/
 theorem lookup_erase (k : κ) : ∀ (l : AList κ α) (q : κ),
     lookup (erase l k) q = if q = k then none else lookup l q
   | [], q => by
@@ -98,7 +98,7 @@ theorem lookup_erase (k : κ) : ∀ (l : AList κ α) (q : κ),
         rw [ite_eq_left hq, ite_eq_left hq, ite_eq_right hkq]
       · rw [ite_eq_right hq, ite_eq_right hq]
 
-/-- Representation lemma. Filtering bindings cannot introduce a new list member. (approved: PENDING) -/
+/-- Representation lemma. Filtering bindings cannot introduce a new list member. (approved: REV-base1a-agy-01025713b) -/
 theorem mem_of_mem_erase (k : κ) : ∀ {l : AList κ α} {e : κ × α}, e ∈ erase l k → e ∈ l
   | [], _, h => h
   | (k', a) :: l, e, h => by
@@ -110,7 +110,7 @@ theorem mem_of_mem_erase (k : κ) : ∀ {l : AList κ α} {e : κ × α}, e ∈ 
       | head => exact List.Mem.head _
       | tail _ h => exact List.Mem.tail _ (mem_of_mem_erase k h)
 
-/-- Representation lemma. Payload mapping commutes with filtering by key. (approved: PENDING) -/
+/-- Representation lemma. Payload mapping commutes with filtering by key. (approved: REV-base1a-agy-01025713b) -/
 theorem erase_map (f : α → β) (k : κ) : ∀ l : AList κ α, erase (map f l) k = map f (erase l k)
   | [] => rfl
   | (k', a) :: l => by
@@ -120,7 +120,7 @@ theorem erase_map (f : α → β) (k : κ) : ∀ l : AList κ α, erase (map f l
     · rw [ite_eq_left hk, ite_eq_left hk]; exact erase_map f k l
     · rw [ite_eq_right hk, ite_eq_right hk, erase_map f k l]; rfl
 
-/-- Representation lemma. `update` with a function that keeps what g sees changes nothing map g sees. (approved: PENDING) -/
+/-- Representation lemma. `update` with a function that keeps what g sees changes nothing map g sees. (approved: REV-base1a-agy-01025713b) -/
 theorem map_update (g : α → β) (f : α → α) (hg : ∀ a, g (f a) = g a) :
     ∀ (l : AList κ α) (k : κ), map g (update l k f) = map g l
   | [], _ => rfl

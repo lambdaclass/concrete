@@ -17,7 +17,7 @@ PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `Concret
 namespace ConcreteSpec.Examples
 open ConcreteSpec
 
-/-- Helper (computation). Closed checker computation establishing the premise for the parametric input example. (approved: PENDING). -/
+/-- Helper (computation). Closed checker computation establishing the premise for the parametric input example. (approved: REV-base1a-agy-01025713b). -/
 theorem add0_ok : BodyOk decls inputCtx add0 (.copy s₂) := bodyOkB_iff.mp (by decide)
 
 /-- Law (subject `ConcreteSpec.runBody`). For every input value the accepted body add0 neither gets stuck nor traps: the input is

@@ -11,25 +11,25 @@ namespace ConcreteSpec.Slice0
 open ConcreteSpec
 open ConcreteSpec.Core (AList)
 
-/-- Representation lemma. Injectivity of the syntax embedding, by constructor discrimination. (approved: PENDING). The embedding is injective: a slice-1 program in slice 0 has exactly one slice-0 reading. -/
+/-- Representation lemma. Injectivity of the syntax embedding, by constructor discrimination. (approved: REV-base1a-agy-01025713b). The embedding is injective: a slice-1 program in slice 0 has exactly one slice-0 reading. -/
 theorem Atom.toCore_injective {a b : Atom} (h : a.toCore = b.toCore) : a = b := by
   cases a <;> cases b <;> simp_all [Atom.toCore] <;> omega
 
-/-- Representation lemma. Injectivity of the syntax embedding lifted through expression constructors. (approved: PENDING). -/
+/-- Representation lemma. Injectivity of the syntax embedding lifted through expression constructors. (approved: REV-base1a-agy-01025713b). -/
 theorem Expr.toCore_injective {a b : Expr} (h : a.toCore = b.toCore) : a = b := by
   cases a <;> cases b <;> simp_all [Expr.toCore] <;>
     first
     | exact Atom.toCore_injective h
     | exact ⟨Atom.toCore_injective h.1, Atom.toCore_injective h.2⟩
 
-/-- Representation lemma. Injectivity of the syntax embedding lifted through statement fields. (approved: PENDING). -/
+/-- Representation lemma. Injectivity of the syntax embedding lifted through statement fields. (approved: REV-base1a-agy-01025713b). -/
 theorem Stmt.toCore_injective {a b : Stmt} (h : a.toCore = b.toCore) : a = b := by
   cases a; cases b
   simp only [Stmt.toCore, ConcreteSpec.Stmt.let_.injEq, Binder.name.injEq, true_and] at h
   obtain ⟨rfl, h⟩ := h
   rw [Expr.toCore_injective h]
 
-/-- Representation lemma. List lifting of the injective statement embedding. (approved: PENDING). -/
+/-- Representation lemma. List lifting of the injective statement embedding. (approved: REV-base1a-agy-01025713b). -/
 theorem map_toCore_injective : ∀ {l l' : List Stmt}, l.map Stmt.toCore = l'.map Stmt.toCore → l = l'
   | [], [], _ => rfl
   | [], _ :: _, h => by simp at h
@@ -38,7 +38,7 @@ theorem map_toCore_injective : ∀ {l l' : List Stmt}, l.map Stmt.toCore = l'.ma
     simp only [List.map_cons, List.cons.injEq] at h
     rw [Stmt.toCore_injective h.1, map_toCore_injective h.2]
 
-/-- Representation lemma. Injectivity of the syntax embedding lifted through program fields. (approved: PENDING). -/
+/-- Representation lemma. Injectivity of the syntax embedding lifted through program fields. (approved: REV-base1a-agy-01025713b). -/
 theorem toCore_injective {q q' : Program} (h : toCore q = toCore q') : q = q' := by
   cases q with
   | mk body ret =>
@@ -53,7 +53,7 @@ theorem toCore_injective {q q' : Program} (h : toCore q = toCore q') : q = q' :=
 def Known (Γ : Ctx) : Prop :=
   ∀ b ∈ Γ, b.2.ty = .scalar (.int .u8) ∧ ∃ n, b.2.known = some (.int .u8 n)
 
-/-- Representation lemma. Reading changes usage bookkeeping but preserves the known scalar annotations. (approved: PENDING). -/
+/-- Representation lemma. Reading changes usage bookkeeping but preserves the known scalar annotations. (approved: REV-base1a-agy-01025713b). -/
 theorem known_mark {x : Var} {mv : Bool} : ∀ {Γ : Ctx}, Known Γ → Known (ctxMark Γ x mv)
   | [], h => h
   | (y, e) :: Γ, h => by
@@ -68,7 +68,7 @@ theorem known_mark {x : Var} {mv : Bool} : ∀ {Γ : Ctx}, Known Γ → Known (c
       | head => exact h (y, e) (List.Mem.head _)
       | tail _ hb => exact known_mark (Γ := Γ) (fun b' h' => h b' (List.Mem.tail _ h')) b hb
 
-/-- Representation lemma. The atom-use judgment only changes usage bookkeeping, preserving the known annotations. (approved: PENDING). -/
+/-- Representation lemma. The atom-use judgment only changes usage bookkeeping, preserving the known annotations. (approved: REV-base1a-agy-01025713b). -/
 theorem known_useAtom {Δ : Decls} {Γ Γ' : Ctx} {a : ConcreteSpec.Atom} (hk : Known Γ)
     (hu : UseAtom Δ Γ a Γ') : Known Γ' := by
   cases hu with

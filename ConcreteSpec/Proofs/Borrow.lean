@@ -9,21 +9,21 @@ PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `Concret
 namespace ConcreteSpec.Borrow
 open Core (AList)
 
-/-- Representation lemma. An equation or structural decomposition of the context, index or range representation; no execution safety is claimed. (approved: PENDING). -/
+/-- Representation lemma. An equation or structural decomposition of the context, index or range representation; no execution safety is claimed. (approved: REV-base1b-agy-01025713b). -/
 theorem lookup_bodyCtx {m v src Γ p} (hv : p ≠ v) :
     AList.lookup (bodyCtx m v src Γ) p = (AList.lookup Γ p).map (lockFor m src.root) := by
   simp only [bodyCtx, AList.lookup, show ¬ v = p from fun h => hv h.symm, ↓reduceIte]
   exact AList.lookup_map _ Γ p
 
-/-- Helper (computation). The lock transformation preserves an existing stronger lock, by its finite branch equations. (approved: PENDING). -/
+/-- Helper (computation). The lock transformation preserves an existing stronger lock, by its finite branch equations. (approved: REV-base1b-agy-01025713b). -/
 theorem lockFor_excl {m r q} (h : q.lock = .excl) : (lockFor m r q).lock = .excl := by
   unfold lockFor; split <;> (try split) <;> (try split) <;> simp_all
 
-/-- Helper (inversion). Extract the equality or bound already enforced by the successful lookup or boundary test. (approved: PENDING). -/
+/-- Helper (inversion). Extract the equality or bound already enforced by the successful lookup or boundary test. (approved: REV-base1b-agy-01025713b). -/
 theorem ne_of_lookup {Γ : Ctx} {p v : Nat} {q : Place} (hp : AList.lookup Γ p = some q) (hv : AList.lookup Γ v = none) : p ≠ v := by
   rintro rfl; rw [hp] at hv; cases hv
 
-/-- Representation lemma. An equation or structural decomposition of the context, index or range representation; no execution safety is claimed. (approved: PENDING). -/
+/-- Representation lemma. An equation or structural decomposition of the context, index or range representation; no execution safety is claimed. (approved: REV-base1b-agy-01025713b). -/
 theorem lookup_restore (Γb : Ctx) : ∀ (Γ : Ctx) (p : Nat),
     AList.lookup (restore Γ Γb) p = if (AList.lookup Γb p).isSome then AList.lookup Γ p else none
   | [], _ => by simp [restore, AList.lookup]
@@ -43,14 +43,14 @@ theorem lookup_restore (Γb : Ctx) : ∀ (Γ : Ctx) (p : Nat),
         rw [hb, ite_eq_left (rfl : true = true), ite_eq_left (rfl : n = n), ite_eq_left (rfl : n = n)]
       · rw [ite_eq_right hnp, ite_eq_right hnp, ih]
 
-/-- Helper (inversion). Extract the equality or bound already enforced by the successful lookup or boundary test. (approved: PENDING). -/
+/-- Helper (inversion). Extract the equality or bound already enforced by the successful lookup or boundary test. (approved: REV-base1b-agy-01025713b). -/
 theorem lookup_restore_some {Γ Γb p q} (h : AList.lookup (restore Γ Γb) p = some q) : AList.lookup Γ p = some q := by
   rw [lookup_restore] at h
   split at h
   · exact h
   · cases h
 
-/-- Helper (computation). The lock transformation preserves an existing stronger lock, by its finite branch equations. (approved: PENDING). -/
+/-- Helper (computation). The lock transformation preserves an existing stronger lock, by its finite branch equations. (approved: REV-base1b-agy-01025713b). -/
 theorem lockFor_nonfree {m r q} (h : q.lock ≠ .free) : (lockFor m r q).lock ≠ .free := by
   unfold lockFor; split <;> (try split) <;> (try split) <;> simp_all
 
@@ -139,11 +139,11 @@ theorem open_mut_freezes_root {Γ s v body rest q Γ'} (h : Ok Γ (.borrow true 
 def NoWrite (r : Nat) (Γ : Ctx) : Prop :=
   ∀ p q, AList.lookup Γ p = some q → q.root = r → q.lock = .free → q.mutable = false ∧ q.owner = false
 
-/-- Helper (congruence). Transport the context predicate across restriction or a locked context extension; used by the separate access-soundness law. (approved: PENDING). -/
+/-- Helper (congruence). Transport the context predicate across restriction or a locked context extension; used by the separate access-soundness law. (approved: REV-base1b-agy-01025713b). -/
 theorem noWrite_restore {r Γ Γb} (h : NoWrite r Γ) : NoWrite r (restore Γ Γb) :=
   fun p q hp => h p q (lookup_restore_some hp)
 
-/-- Helper (congruence). Transport the context predicate across restriction or a locked context extension; used by the separate access-soundness law. (approved: PENDING). -/
+/-- Helper (congruence). Transport the context predicate across restriction or a locked context extension; used by the separate access-soundness law. (approved: REV-base1b-agy-01025713b). -/
 theorem noWrite_erase {r Γ p'} (h : NoWrite r Γ) : NoWrite r (AList.erase Γ p') := by
   intro p q hp
   rw [AList.lookup_erase] at hp
@@ -151,7 +151,7 @@ theorem noWrite_erase {r Γ p'} (h : NoWrite r Γ) : NoWrite r (AList.erase Γ p
   · cases hp
   · exact h p q hp
 
-/-- Helper (congruence). Transport the context predicate across restriction or a locked context extension; used by the separate access-soundness law. (approved: PENDING). -/
+/-- Helper (congruence). Transport the context predicate across restriction or a locked context extension; used by the separate access-soundness law. (approved: REV-base1b-agy-01025713b). -/
 theorem noWrite_bodyCtx {r Γ m v q0} (h : NoWrite r Γ)
     (hm : m = true → q0.lock = .free ∧ q0.mutable = true)
     (hsrc : q0.root = r → m = true → False) : NoWrite r (bodyCtx m v q0 Γ) := by
@@ -232,7 +232,7 @@ theorem shared_open_grants_no_write {Γ s v body rest q Γ'}
         · by_cases h2 : q1.lock = .free <;> simp [lockFor, h1, h2] at hl
         · simp [lockFor, h1] at hr
 
-/-- Representation lemma. An equation or structural decomposition of the context, index or range representation; no execution safety is claimed. (approved: PENDING). A range is valid exactly when a ≤ b and both bounds are ends of the source. -/
+/-- Representation lemma. An equation or structural decomposition of the context, index or range representation; no execution safety is claimed. (approved: REV-base1b-agy-01025713b). A range is valid exactly when a ≤ b and both bounds are ends of the source. -/
 theorem validRange_iff (s : Source) (a b : Nat) :
     validRange s a b = (decide (a ≤ b) && s.edge a && s.edge b) := by
   cases s with
@@ -244,21 +244,21 @@ theorem validRange_iff (s : Source) (a b : Nat) :
     by_cases h1 : a ≤ b <;> by_cases h2 : b ≤ bs.length <;> by_cases h3 : a ≤ bs.length <;>
       simp [h1, h2, h3] <;> first | omega | (cases boundary bs a <;> cases boundary bs b <;> simp)
 
-/-- Representation lemma. An equation or structural decomposition of the context, index or range representation; no execution safety is claimed. (approved: PENDING). -/
+/-- Representation lemma. An equation or structural decomposition of the context, index or range representation; no execution safety is claimed. (approved: REV-base1b-agy-01025713b). -/
 theorem boundary_zero (bs : List Nat) : boundary bs 0 = true := by simp [boundary]
 
-/-- Representation lemma. An equation or structural decomposition of the context, index or range representation; no execution safety is claimed. (approved: PENDING). -/
+/-- Representation lemma. An equation or structural decomposition of the context, index or range representation; no execution safety is claimed. (approved: REV-base1b-agy-01025713b). -/
 theorem boundary_len (bs : List Nat) : boundary bs bs.length = true := by simp [boundary]
 
-/-- Representation lemma. An equation or structural decomposition of the context, index or range representation; no execution safety is claimed. (approved: PENDING). -/
+/-- Representation lemma. An equation or structural decomposition of the context, index or range representation; no execution safety is claimed. (approved: REV-base1b-agy-01025713b). -/
 theorem edge_zero (s : Source) : s.edge 0 = true := by
   cases s <;> simp [Source.edge, boundary_zero]
 
-/-- Representation lemma. An equation or structural decomposition of the context, index or range representation; no execution safety is claimed. (approved: PENDING). -/
+/-- Representation lemma. An equation or structural decomposition of the context, index or range representation; no execution safety is claimed. (approved: REV-base1b-agy-01025713b). -/
 theorem edge_len (s : Source) : s.edge s.len = true := by
   cases s <;> simp [Source.edge, Source.len, boundary_len]
 
-/-- Helper (inversion). Extract the equality or bound already enforced by the successful lookup or boundary test. (approved: PENDING). -/
+/-- Helper (inversion). Extract the equality or bound already enforced by the successful lookup or boundary test. (approved: REV-base1b-agy-01025713b). -/
 theorem edge_le {s : Source} {i : Nat} (h : s.edge i = true) : i ≤ s.len := by
   cases s <;> simp_all [Source.edge, Source.len]
 
@@ -369,12 +369,12 @@ theorem root_restored {Γ m s v body rest q Γ'} (h : Ok Γ (.borrow m s v body 
 
 /-! ### Range views at run time -/
 
-/-- Representation lemma. An equation or structural decomposition of the context, index or range representation; no execution safety is claimed. (approved: PENDING). -/
+/-- Representation lemma. An equation or structural decomposition of the context, index or range representation; no execution safety is claimed. (approved: REV-base1b-agy-01025713b). -/
 theorem elemIdx_some {w : VInfo} {i j : Nat} :
     elemIdx w i = some j ↔ i < w.b - w.a ∧ j = w.a + i := by
   unfold elemIdx; by_cases h : i < w.b - w.a <;> simp [h, eq_comm]
 
-/-- Helper (arithmetic). The successful-index equation reduces this local bound calculation to addition and subtraction; used by the frame proof. (approved: PENDING). An index through a view lands in the view's range [a, b). -/
+/-- Helper (arithmetic). The successful-index equation reduces this local bound calculation to addition and subtraction; used by the frame proof. (approved: REV-base1b-agy-01025713b). An index through a view lands in the view's range [a, b). -/
 theorem elemIdx_range {w : VInfo} {i j : Nat} (h : elemIdx w i = some j) : w.a ≤ j ∧ j < w.b := by
   rw [elemIdx_some] at h; omega
 
@@ -382,7 +382,7 @@ theorem elemIdx_range {w : VInfo} {i j : Nat} (h : elemIdx w i = some j) : w.a �
 def ViewsOk (μ : Mem) (V : Views) : Prop :=
   ∀ v w, AList.lookup V v = some w → ∃ xs, AList.lookup μ w.src = some xs ∧ w.a ≤ w.b ∧ w.b ≤ xs.length
 
-/-- Representation lemma. Transport the interval-to-memory representation across a valid interval extension or a length-preserving source replacement. (approved: PENDING). Opening a valid range adds a view that satisfies ViewsOk. -/
+/-- Representation lemma. Transport the interval-to-memory representation across a valid interval extension or a length-preserving source replacement. (approved: REV-base1b-agy-01025713b). Opening a valid range adds a view that satisfies ViewsOk. -/
 theorem viewsOk_enter {μ V p xs a b e v m} (hV : ViewsOk μ V) (hx : AList.lookup μ p = some xs)
     (ho : openRange (.array xs.length) a b e = .enter) :
     ViewsOk μ ((v, ⟨p, a, b, m⟩) :: V) := by
@@ -394,7 +394,7 @@ theorem viewsOk_enter {μ V p xs a b e v m} (hV : ViewsOk μ V) (hx : AList.look
     exact ⟨xs, hx, hab, hb⟩
   · exact hV v' w hw
 
-/-- Representation lemma. Transport the interval-to-memory representation across a valid interval extension or a length-preserving source replacement. (approved: PENDING). A write that keeps the source's length keeps ViewsOk. -/
+/-- Representation lemma. Transport the interval-to-memory representation across a valid interval extension or a length-preserving source replacement. (approved: REV-base1b-agy-01025713b). A write that keeps the source's length keeps ViewsOk. -/
 theorem viewsOk_put {μ V p xs ys} (hV : ViewsOk μ V) (hx : AList.lookup μ p = some xs)
     (hl : ys.length = xs.length) : ViewsOk (AList.update μ p (fun _ => ys)) V := by
   intro v w hw
@@ -553,13 +553,13 @@ theorem range_block_frame {μ V m p v a b body n out} (hb : ViewOnly v body) :
 
 /-! ### Text views -/
 
-/-- Representation lemma. An equation or structural decomposition of the context, index or range representation; no execution safety is claimed. (approved: PENDING). -/
+/-- Representation lemma. An equation or structural decomposition of the context, index or range representation; no execution safety is claimed. (approved: REV-base1b-agy-01025713b). -/
 theorem boundary_iff (bs : List Nat) (i : Nat) :
     boundary bs i = true ↔ i = 0 ∨ i = bs.length ∨ ∃ x, bs[i]? = some x ∧ x / 64 ≠ 2 := by
   unfold boundary
   cases h : bs[i]? <;> simp [or_assoc]
 
-/-- Helper (inversion). Extract the continuation-byte constraints from the finite scalar-byte recognizer. (approved: PENDING). Every byte of a scalar after the first is a continuation byte. -/
+/-- Helper (inversion). Extract the continuation-byte constraints from the finite scalar-byte recognizer. (approved: REV-base1b-agy-01025713b). Every byte of a scalar after the first is a continuation byte. -/
 theorem isScalar_cont {s : List Nat} (h : isScalar s = true) :
     s ≠ [] ∧ ∀ j c, 0 < j → s[j]? = some c → c / 64 = 2 := by
   match s, h with
@@ -655,7 +655,7 @@ def memory : Mem := [(0, [7, 8])]
 def interval : VInfo := ⟨0, 0, 1, true⟩
 def views : Views := [(1, interval)]
 
-/-- Helper (computation). The closed memory and interval satisfy the representation premise of the access instances. (approved: PENDING) -/
+/-- Helper (computation). The closed memory and interval satisfy the representation premise of the access instances. (approved: REV-base1b-agy-01025713b) -/
 theorem described : ViewsOk memory views := by
   intro v w hw
   simp only [views, AList.lookup] at hw
@@ -663,7 +663,7 @@ theorem described : ViewsOk memory views := by
   · cases hw; exact ⟨[7, 8], rfl, by decide, by decide⟩
   · cases hw
 
-/-- Helper (computation). Closed derivation of the checked empty range block used by the opening instance. (approved: PENDING) -/
+/-- Helper (computation). Closed derivation of the checked empty range block used by the opening instance. (approved: REV-base1b-agy-01025713b) -/
 theorem rangeAccepted : RangeOk x0 true 0 1 ⟨some (.array 2), some 0, some 1⟩ [] none [] x0 := by
   refine ⟨.borrow rfl (by decide) (by intro _; exact ⟨rfl, rfl⟩) rfl .nil ?_, rfl⟩
   change Ok x0 [] x0
@@ -796,12 +796,12 @@ def frozen : Place := ⟨0, true, true, .excl⟩
 def lockedContext : Ctx := [(0, frozen), (1, ⟨1, true, true, .free⟩)]
 def readOnly : Ctx := [(0, ⟨0, false, false, .free⟩)]
 
-/-- Helper (computation). Closed acceptance derivation for writing through a mutable view while the root is frozen. (approved: PENDING) -/
+/-- Helper (computation). Closed acceptance derivation for writing through a mutable view while the root is frozen. (approved: REV-base1b-agy-01025713b) -/
 theorem mutableBlock : Ok x0 [.borrow true 0 1 [.write 1]] x0 := by
   exact .borrow rfl (by decide) (by intro _; exact ⟨rfl, rfl⟩) rfl
     (.write rfl rfl rfl .nil) .nil
 
-/-- Helper (computation). Closed acceptance derivation for reading through a shared view. (approved: PENDING) -/
+/-- Helper (computation). Closed acceptance derivation for reading through a shared view. (approved: REV-base1b-agy-01025713b) -/
 theorem sharedBlock : Ok x0 [.borrow false 0 1 [.read 1]] x0 := by
   exact .borrow rfl (by decide) (by intro h; cases h) rfl (.read rfl (by decide) .nil) .nil
 
