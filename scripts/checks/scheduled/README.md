@@ -20,30 +20,43 @@ main-only schedule-specific entry point; it does not replace the repro CI leg.
 The coordinator must reconcile X4's shared dispatch interface with ISS-0029 before
 qualification; a second independent trusted-runner implementation is forbidden.
 
-B/N5 (`origin/wip/gates-manifest`, c2245c99ab7e9255e6a25898386804d6621f2bb8)
-provides `tests/manifest.tsv`, a **fixture** inventory. It does not declare gate
-tiers, commands or windows. No fixture list is copied here and no campaign list
-is invented. The single source of gate selection must be G1 (R-0674), with G2/G3
-(R-0675) evidence/cost contracts. Until that producer lands, the executor records
-INCOMPLETE, and the observer cannot report PASS. The proposed adapter boundary is:
+## Gate registry (G1)
 
-```
-python3 scripts/checks/lib/gate_manifest.py scheduled --tier daily|weekly
-```
+`scripts/checks/gates.json` is the sole declarative owner of gate IDs, tiers,
+argv commands, budgets in seconds, runner classes, output artifacts, tools, seeds,
+controls, workflow bindings and daily/weekly freshness windows. JSON schema version
+1 has `schema`, `windows` and `gates`. `tests/manifest.tsv` on B/N5 is a separate
+program/expected-outcome inventory; it owns no gate tiers.
 
-It emits one JSON array of rows with `id`, `tier`, `command` (argv),
-`budget_seconds`, `tools` (consumed identities), `seed`, and `controls`.
-Each control has `id`, `command` (argv), `exit_code` (nonzero) and `diagnostic`
-(the complete, exact combined stdout/stderr after stripping surrounding whitespace).
-G1 must validate completeness, capability availability and tier placement before
-export; the scheduler refuses empty tiers and absent controls. This is an adapter
-contract awaiting agreement with G1, **not a claim that its exporter exists**.
-The registry must also own freshness windows; the protocol's current 36-hour daily
-and eight-day weekly recovery windows are initial operational defaults requiring
-integration into that registry before qualification. Prior failed attempts remain
-visible; recovery never rewrites their occurrence. The latest fresh attempt recovers
-operational MISSING/INCOMPLETE on its SHA; FAIL remains permanent. Newer main
-coverage recovers older operational gaps, while malformed evidence always surfaces.
+The single reader/validator is `scripts/checks/lib/gate_manifest.py`:
+`load(path=REGISTRY)` returns a validated document; `tier_rows(tier, data=None)` and
+`scheduled_rows(tier, data=None)` return matching rows with a selected `tier`;
+`check_workflow(data=None, root=ROOT, workflow=None)` checks CI and root inventory
+coverage. CLI: `validate`, `check-workflow`, `tier --tier T`,
+`scheduled --tier daily|weekly`, `execute --id ID --tier T`.
+Unknown fields, duplicate IDs/bindings, unsafe artifact paths, invalid budgets,
+scheduled runner mismatches and missing scheduled controls are rejected generically.
+No campaign count or specific gate belongs in the validator.
+
+Every existing CI command and root check is registered. CI calls `execute` by ID;
+commands and budgets do not appear a second time in YAML. Job timeouts are generated
+as `ceil(sum(registered step budgets) * 3 / 60) + 10` minutes (two bounded attempts
+plus setup/cleanup reserve), and checked for exact drift. When adding rows, update
+those generated job timeout values. `gates_registry.sh`, required by `run.sh`,
+checks workflow invocation, tier, budget, runner and root inventory completeness.
+Controls for row removal, literal/duplicate YAML commands, misrouted tiers, unknown
+fields, budgets and runner drift run through `scheduled_gates.sh`.
+
+Rows contain `id`, `tiers`, `command` (argv), `budget_seconds`, `runner_class`
+(`ci`, `github-hosted`, `native-matrix`, `concrete-ci-2`), `artifacts`, `tools`,
+`seed`, `controls`, and `workflow` (`null` or `job`/`step` binding). Each control
+has `id`, `command`, `exit_code` (nonzero, excluding reserved 125), and `diagnostic`
+(the complete exact combined output after stripping surrounding whitespace).
+Each artifact declares `path` and `sha_file`; scheduled outputs require a SHA file.
+No daily/weekly campaigns exist on this base: those tiers remain INCOMPLETE with
+`INCOMPLETE dependency: tier has no registered gates` until campaign owners add rows.
+Gate C must add its own PR/qualification/daily declarations here and CI bindings;
+it must not introduce a separate registry or add tiers to the fixture inventory.
 
 The executor uses `scripts/checks/lib/heavy_slots.sh`, the shared Linux host-wide
 `heavy_slot_acquire` / `heavy_slot_release` API. Landing, reproducibility and manual

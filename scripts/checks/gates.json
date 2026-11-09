@@ -1,0 +1,544 @@
+{
+  "schema": 1,
+  "windows": {
+    "daily": 129600,
+    "weekly": 691200
+  },
+  "gates": [
+    {
+      "id": "landing-record",
+      "tiers": [
+        "pr",
+        "qualification"
+      ],
+      "command": [
+        "bash",
+        "-c",
+        "recorded=false run=\"\"\nif out=\"$(git fetch -q --depth=1 origin \"$BEFORE\" 2>&1 \\\n          && bash scripts/land/train.sh record \"$HEAD_SHA\" --base \"$BEFORE\" --exclude-run \"$GITHUB_RUN_ID\" 2>&1)\"; then\n  run=\"$(printf '%s\\n' \"$out\" | sed -n 's/^qualifying_run=\\([0-9][0-9]*\\)$/\\1/p' | tail -1)\"\nfi\nprintf '%s\\n' \"$out\"\nif [ -n \"$run\" ]; then\n  recorded=true\n  { echo \"### Landing record\"\n    echo \"Run [$run](https://github.com/$LAND_REPO/actions/runs/$run) passed every landing-tier and required job at exactly \\`$HEAD_SHA\\`.\"\n    echo \"This run skips those jobs: that run is the result for this SHA.\"; } >> \"$GITHUB_STEP_SUMMARY\"\nelse\n  { echo \"### No landing record\"\n    echo \"No run qualifies \\`$HEAD_SHA\\`, so every job runs here:\"\n    printf '\\n```\\n%s\\n```\\n' \"$out\"; } >> \"$GITHUB_STEP_SUMMARY\"\nfi\necho \"recorded=$recorded\" >> \"$GITHUB_OUTPUT\"\n"
+      ],
+      "budget_seconds": 120,
+      "runner_class": "ci",
+      "artifacts": [],
+      "tools": {},
+      "seed": null,
+      "controls": [],
+      "workflow": {
+        "job": "landing-record",
+        "step": "Look up the run that qualified this exact SHA (none found: every job runs here)"
+      }
+    },
+    {
+      "id": "root-checks",
+      "tiers": [
+        "pr",
+        "qualification"
+      ],
+      "command": [
+        "bash",
+        "scripts/checks/run.sh"
+      ],
+      "budget_seconds": 900,
+      "runner_class": "ci",
+      "artifacts": [],
+      "tools": {},
+      "seed": null,
+      "controls": [],
+      "workflow": {
+        "job": "root-checks",
+        "step": "Root checks (scripts/checks/run.sh)"
+      }
+    },
+    {
+      "id": "spec",
+      "tiers": [
+        "pr",
+        "qualification"
+      ],
+      "command": [
+        "bash",
+        "scripts/checks/lib/spec_build.sh"
+      ],
+      "budget_seconds": 1200,
+      "runner_class": "ci",
+      "artifacts": [],
+      "tools": {},
+      "seed": null,
+      "controls": [],
+      "workflow": {
+        "job": "spec",
+        "step": "Build the specification, warnings refused"
+      }
+    },
+    {
+      "id": "proof-axioms",
+      "tiers": [
+        "pr",
+        "qualification"
+      ],
+      "command": [
+        "bash",
+        "scripts/proofs/axioms.sh"
+      ],
+      "budget_seconds": 1200,
+      "runner_class": "ci",
+      "artifacts": [],
+      "tools": {},
+      "seed": null,
+      "controls": [],
+      "workflow": {
+        "job": "proof-axioms",
+        "step": "Proof axioms (scripts/proofs/axioms.sh)"
+      }
+    },
+    {
+      "id": "proof-trust-ban",
+      "tiers": [
+        "pr",
+        "qualification"
+      ],
+      "command": [
+        "bash",
+        "scripts/proofs/trust_ban.sh"
+      ],
+      "budget_seconds": 1200,
+      "runner_class": "ci",
+      "artifacts": [],
+      "tools": {},
+      "seed": null,
+      "controls": [],
+      "workflow": {
+        "job": "proof-trust-ban",
+        "step": "Proof trust ban (sorry, native_decide) (scripts/proofs/trust_ban.sh)"
+      }
+    },
+    {
+      "id": "kernel-replay",
+      "tiers": [
+        "pr",
+        "qualification"
+      ],
+      "command": [
+        "bash",
+        "scripts/proofs/kernel_replay.sh"
+      ],
+      "budget_seconds": 1200,
+      "runner_class": "ci",
+      "artifacts": [],
+      "tools": {},
+      "seed": null,
+      "controls": [],
+      "workflow": {
+        "job": "kernel-replay",
+        "step": "Kernel replay (leanchecker) (scripts/proofs/kernel_replay.sh)"
+      }
+    },
+    {
+      "id": "external-recheck",
+      "tiers": [
+        "pr",
+        "qualification"
+      ],
+      "command": [
+        "bash",
+        "scripts/proofs/external.sh"
+      ],
+      "budget_seconds": 1800,
+      "runner_class": "ci",
+      "artifacts": [],
+      "tools": {},
+      "seed": null,
+      "controls": [],
+      "workflow": {
+        "job": "external-recheck",
+        "step": "External re-check (con-leche, nanoda) (scripts/proofs/external.sh)"
+      }
+    },
+    {
+      "id": "oracle-hosted-1",
+      "tiers": [
+        "pr",
+        "qualification"
+      ],
+      "command": [
+        "bash",
+        "scripts/checks/oracle_fetch.sh"
+      ],
+      "budget_seconds": 600,
+      "runner_class": "github-hosted",
+      "artifacts": [],
+      "tools": {},
+      "seed": null,
+      "controls": [],
+      "workflow": {
+        "job": "oracle-hosted",
+        "step": "Oracle fetch (missing, corrupt or unverifiable artifact is INCOMPLETE; negative controls)"
+      }
+    },
+    {
+      "id": "oracle-hosted-2",
+      "tiers": [
+        "pr",
+        "qualification"
+      ],
+      "command": [
+        "bash",
+        "scripts/oracle/ci_check.sh"
+      ],
+      "budget_seconds": 600,
+      "runner_class": "github-hosted",
+      "artifacts": [],
+      "tools": {},
+      "seed": null,
+      "controls": [],
+      "workflow": {
+        "job": "oracle-hosted",
+        "step": "Fetch the published oracle, verify it, run smoke.con through it (exit 42)"
+      }
+    },
+    {
+      "id": "backends",
+      "tiers": [
+        "pr",
+        "qualification"
+      ],
+      "command": [
+        "nix",
+        "develop",
+        "--command",
+        "bash",
+        "scripts/checks/compiler/slice0_backends.sh"
+      ],
+      "budget_seconds": 1200,
+      "runner_class": "native-matrix",
+      "artifacts": [],
+      "tools": {},
+      "seed": null,
+      "controls": [],
+      "workflow": {
+        "job": "backends",
+        "step": "Backend gate (LLVM and LCB, native)"
+      }
+    },
+    {
+      "id": "artifacts",
+      "tiers": [
+        "pr",
+        "qualification"
+      ],
+      "command": [
+        "nix",
+        "develop",
+        "--command",
+        "bash",
+        "scripts/checks/compiler/slice0_artifacts.sh",
+        "report"
+      ],
+      "budget_seconds": 3000,
+      "runner_class": "native-matrix",
+      "artifacts": [
+        {
+          "path": "report",
+          "sha_file": null
+        }
+      ],
+      "tools": {},
+      "seed": null,
+      "controls": [],
+      "workflow": {
+        "job": "artifacts",
+        "step": "Sanitizers, binary size (report-only) and stack bound (gates 10, 11, 12)"
+      }
+    },
+    {
+      "id": "trusted-base",
+      "tiers": [
+        "pr",
+        "qualification"
+      ],
+      "command": [
+        "nix",
+        "develop",
+        "--command",
+        "bash",
+        "scripts/checks/compiler/slice0_trusted_base.sh"
+      ],
+      "budget_seconds": 3000,
+      "runner_class": "native-matrix",
+      "artifacts": [],
+      "tools": {},
+      "seed": null,
+      "controls": [],
+      "workflow": {
+        "job": "trusted-base",
+        "step": "Trusted-base golden (premises, axioms, toolchain and LCB pin)"
+      }
+    },
+    {
+      "id": "reproducibility",
+      "tiers": [
+        "pr",
+        "qualification"
+      ],
+      "command": [
+        "nix",
+        "develop",
+        "--command",
+        "bash",
+        "scripts/checks/compiler/slice0_repro.sh",
+        "manifest.txt"
+      ],
+      "budget_seconds": 3600,
+      "runner_class": "native-matrix",
+      "artifacts": [
+        {
+          "path": "manifest.txt",
+          "sha_file": null
+        }
+      ],
+      "tools": {},
+      "seed": null,
+      "controls": [],
+      "workflow": {
+        "job": "reproducibility",
+        "step": "Compare every stage in distinct build directories"
+      }
+    },
+    {
+      "id": "compare-linux",
+      "tiers": [
+        "pr",
+        "qualification"
+      ],
+      "command": [
+        "bash",
+        "scripts/checks/lib/compare_linux.sh"
+      ],
+      "budget_seconds": 60,
+      "runner_class": "github-hosted",
+      "artifacts": [],
+      "tools": {},
+      "seed": null,
+      "controls": [],
+      "workflow": {
+        "job": "compare-linux",
+        "step": "Compare like targets, including compiler and toolchain identity"
+      }
+    },
+    {
+      "id": "root-doc_links",
+      "tiers": [
+        "pr",
+        "qualification"
+      ],
+      "command": [
+        "bash",
+        "scripts/checks/doc_links.sh"
+      ],
+      "budget_seconds": 900,
+      "runner_class": "ci",
+      "artifacts": [],
+      "tools": {},
+      "seed": null,
+      "controls": [],
+      "workflow": null
+    },
+    {
+      "id": "root-issues",
+      "tiers": [
+        "pr",
+        "qualification"
+      ],
+      "command": [
+        "bash",
+        "scripts/checks/issues.sh"
+      ],
+      "budget_seconds": 900,
+      "runner_class": "ci",
+      "artifacts": [],
+      "tools": {},
+      "seed": null,
+      "controls": [],
+      "workflow": null
+    },
+    {
+      "id": "root-landing_ready",
+      "tiers": [
+        "pr",
+        "qualification"
+      ],
+      "command": [
+        "bash",
+        "scripts/checks/landing_ready.sh"
+      ],
+      "budget_seconds": 900,
+      "runner_class": "ci",
+      "artifacts": [],
+      "tools": {},
+      "seed": null,
+      "controls": [],
+      "workflow": null
+    },
+    {
+      "id": "root-landing_script",
+      "tiers": [
+        "pr",
+        "qualification"
+      ],
+      "command": [
+        "bash",
+        "scripts/checks/landing_script.sh"
+      ],
+      "budget_seconds": 900,
+      "runner_class": "ci",
+      "artifacts": [],
+      "tools": {},
+      "seed": null,
+      "controls": [],
+      "workflow": null
+    },
+    {
+      "id": "root-legacy_frozen",
+      "tiers": [
+        "pr",
+        "qualification"
+      ],
+      "command": [
+        "bash",
+        "scripts/checks/legacy_frozen.sh"
+      ],
+      "budget_seconds": 900,
+      "runner_class": "ci",
+      "artifacts": [],
+      "tools": {},
+      "seed": null,
+      "controls": [],
+      "workflow": null
+    },
+    {
+      "id": "root-retention_manifest",
+      "tiers": [
+        "pr",
+        "qualification"
+      ],
+      "command": [
+        "bash",
+        "scripts/checks/retention_manifest.sh"
+      ],
+      "budget_seconds": 900,
+      "runner_class": "ci",
+      "artifacts": [],
+      "tools": {},
+      "seed": null,
+      "controls": [],
+      "workflow": null
+    },
+    {
+      "id": "root-review_tool",
+      "tiers": [
+        "pr",
+        "qualification"
+      ],
+      "command": [
+        "bash",
+        "scripts/checks/review_tool.sh"
+      ],
+      "budget_seconds": 900,
+      "runner_class": "ci",
+      "artifacts": [],
+      "tools": {},
+      "seed": null,
+      "controls": [],
+      "workflow": null
+    },
+    {
+      "id": "root-root_inventory",
+      "tiers": [
+        "pr",
+        "qualification"
+      ],
+      "command": [
+        "bash",
+        "scripts/checks/root_inventory.sh"
+      ],
+      "budget_seconds": 900,
+      "runner_class": "ci",
+      "artifacts": [],
+      "tools": {},
+      "seed": null,
+      "controls": [],
+      "workflow": null
+    },
+    {
+      "id": "root-sandbox_isolation",
+      "tiers": [
+        "pr",
+        "qualification"
+      ],
+      "command": [
+        "bash",
+        "scripts/checks/sandbox_isolation.sh"
+      ],
+      "budget_seconds": 900,
+      "runner_class": "ci",
+      "artifacts": [],
+      "tools": {},
+      "seed": null,
+      "controls": [],
+      "workflow": null
+    },
+    {
+      "id": "root-scheduled_gates",
+      "tiers": [
+        "pr",
+        "qualification"
+      ],
+      "command": [
+        "bash",
+        "scripts/checks/scheduled_gates.sh"
+      ],
+      "budget_seconds": 900,
+      "runner_class": "ci",
+      "artifacts": [],
+      "tools": {},
+      "seed": null,
+      "controls": [],
+      "workflow": null
+    },
+    {
+      "id": "root-workflow_yaml",
+      "tiers": [
+        "pr",
+        "qualification"
+      ],
+      "command": [
+        "bash",
+        "scripts/checks/workflow_yaml.sh"
+      ],
+      "budget_seconds": 900,
+      "runner_class": "ci",
+      "artifacts": [],
+      "tools": {},
+      "seed": null,
+      "controls": [],
+      "workflow": null
+    },
+    {
+      "id": "root-gates_registry",
+      "tiers": [
+        "pr",
+        "qualification"
+      ],
+      "command": [
+        "bash",
+        "scripts/checks/gates_registry.sh"
+      ],
+      "budget_seconds": 60,
+      "runner_class": "ci",
+      "artifacts": [],
+      "tools": {},
+      "seed": null,
+      "controls": [],
+      "workflow": null
+    }
+  ]
+}

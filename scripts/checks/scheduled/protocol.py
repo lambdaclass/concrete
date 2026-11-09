@@ -8,7 +8,10 @@ import subprocess
 from pathlib import Path
 
 STATUSES = {"PASS", "FAIL", "INCOMPLETE", "MISSING"}
-WINDOWS = {"daily": 36 * 3600, "weekly": 8 * 86400}
+_registry_spec = importlib.util.spec_from_file_location("gate_manifest", Path(__file__).resolve().parents[1] / "lib/gate_manifest.py")
+_registry = importlib.util.module_from_spec(_registry_spec)
+_registry_spec.loader.exec_module(_registry)
+WINDOWS = _registry.load()["windows"]
 
 class EvidenceError(ValueError):
     pass

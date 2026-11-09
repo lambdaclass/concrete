@@ -9,7 +9,7 @@ set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
-REQUIRED="legacy_frozen root_inventory workflow_yaml doc_links landing_script landing_ready review_tool sandbox_isolation retention_manifest issues oracle_fetch scheduled_gates"
+REQUIRED="legacy_frozen root_inventory workflow_yaml doc_links landing_script landing_ready review_tool sandbox_isolation retention_manifest issues oracle_fetch scheduled_gates gates_registry"
 missing=""
 for c in $REQUIRED; do [ -f "scripts/checks/$c.sh" ] || missing="$missing $c"; done
 [ -z "$missing" ] || { echo "run.sh: required check(s) missing:$missing" >&2; exit 1; }
@@ -19,7 +19,7 @@ for f in scripts/checks/*.sh; do
   n=$((n+1))
   echo "=== $f ==="
   s="$(date +%s)"
-  if bash "$f"; then echo "--- $f: pass ($(( $(date +%s) - s ))s)"
+  if python3 scripts/checks/lib/gate_manifest.py execute-root --path "$f"; then echo "--- $f: pass ($(( $(date +%s) - s ))s)"
   else echo "--- $f: FAIL ($(( $(date +%s) - s ))s)"; failed="$failed ${f##*/}"; fi
 done
 echo
