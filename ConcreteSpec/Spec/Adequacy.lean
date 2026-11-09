@@ -74,7 +74,7 @@ def runFromQ (P : Program O) (ρ : QueryOracle O) :
     Nat → List O.Event → List (Query O) → Config O → QueryReport O
   | fuel, events, issued, c =>
     match c.final?, fuel with
-    | some f, _ => ⟨events, issued, .final f⟩
+    | some f, _ => ⟨events, issued, .final f c.store⟩
     | none, 0 => ⟨events, issued, .outOfFuel c⟩
     | none, n + 1 =>
       match step P c with
@@ -137,7 +137,7 @@ inductive Moves (P : Program O) (ρ : QueryOracle O) : Nat → Position O → Po
 /-- Why an evaluator report is justified at the final position of its finite path. The `stuck`
 constructors distinguish a refused machine rule from a refused request continuation. -/
 inductive Conclusion (P : Program O) (ρ : QueryOracle O) : Ending O → Position O → Prop where
-  | final {f pos} : pos.config.final? = some f → Conclusion P ρ (.final f) pos
+  | final {f pos} : pos.config.final? = some f → Conclusion P ρ (.final f pos.config.store) pos
   | stuck {c events issued} : step P c = none →
       Conclusion P ρ (.stuck c) ⟨c, events, issued⟩
   | stuckContinuation {c events issued p vs site st k a} :
@@ -165,7 +165,7 @@ inductive ReportedQueries (P : Program O) (ρ : QueryOracle O) :
     {ending : Ending O} → {pos : Position O} → Conclusion P ρ ending pos →
       List (Query O) → Prop where
   | final {f} {pos : Position O} (hf : pos.config.final? = some f) :
-      ReportedQueries P ρ (ending := .final f) (pos := pos) (Conclusion.final hf) pos.queries
+      ReportedQueries P ρ (ending := .final f pos.config.store) (pos := pos) (Conclusion.final hf) pos.queries
   | stuck {c : Config O} {events : List O.Event} {issued : List (Query O)}
       (hs : step P c = none) :
       ReportedQueries P ρ (ending := .stuck c) (pos := ⟨c, events, issued⟩)
@@ -367,8 +367,8 @@ structure ConditionalTermination (O : Operands) (P : Program O) (domain : CallDo
   Premise : FnId → Type
   fuel : (∀ f, f ∈ dependencies → Premise f) → Oracle O → List O.Val → O.Store → Nat
   terminates : ∀ premises ρ args st, domain.calls ρ args st →
-    ∃ fn c f, AList.lookup P.fns domain.function = some fn ∧ enter fn args st = some c ∧
-      (run P ρ (fuel premises ρ args st) c).ending = .final f
+    ∃ fn c f finalStore, AList.lookup P.fns domain.function = some fn ∧ enter fn args st = some c ∧
+      (run P ρ (fuel premises ρ args st) c).ending = .final f finalStore
 
 /-- The family of premises required across all declared dependencies of a conditional termination
 theorem. -/

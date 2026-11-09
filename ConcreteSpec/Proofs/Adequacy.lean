@@ -27,6 +27,13 @@ open ConcreteSpec.Core
 
 variable {O : Operands} {P : Program O} {ρ : QueryOracle O} {c : Config O}
 
+/-- Helper (inversion). A final conclusion certifies a final configuration independently of
+its recorded store. (approved: PENDING) -/
+private theorem Conclusion.final_config {f : Final O.Val} {store : O.Store} {pos : Position O}
+    (h : Conclusion P ρ (.final f store) pos) : pos.config.final? = some f := by
+  cases h with
+  | final hf => exact hf
+
 /-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness
 (approved: APPR-integ-agy-0dbeba29e).
 Helper for constructing a query; this definitional equality is not execution-level contract
@@ -499,9 +506,9 @@ theorem runFromQ_sound : ∀ (fuel : Nat) (events : List O.Event) (issued : List
     | some f =>
       refine ⟨0, ⟨c, events, issued⟩, .refl _, by simp [runFromQ, hf], ?_⟩
       simpa [runFromQ, hf] using
-        (show ∃ hc : Conclusion P ρ (.final f) (⟨c, events, issued⟩ : Position O),
+        (show ∃ hc : Conclusion P ρ (.final f c.store) (⟨c, events, issued⟩ : Position O),
             ReportedQueries P ρ hc issued from
-          ⟨Conclusion.final hf, ReportedQueries.final hf⟩)
+          ⟨Conclusion.final (pos := ⟨c, events, issued⟩) hf, ReportedQueries.final (pos := ⟨c, events, issued⟩) hf⟩)
     | none =>
       refine ⟨0, ⟨c, events, issued⟩, .refl _, by simp [runFromQ, hf], ?_⟩
       simpa [runFromQ, hf] using
@@ -514,9 +521,9 @@ theorem runFromQ_sound : ∀ (fuel : Nat) (events : List O.Event) (issued : List
     | some f =>
       refine ⟨0, ⟨c, events, issued⟩, .refl _, by simp [runFromQ, hf], ?_⟩
       simpa [runFromQ, hf] using
-        (show ∃ hc : Conclusion P ρ (.final f) (⟨c, events, issued⟩ : Position O),
+        (show ∃ hc : Conclusion P ρ (.final f c.store) (⟨c, events, issued⟩ : Position O),
             ReportedQueries P ρ hc issued from
-          ⟨Conclusion.final hf, ReportedQueries.final hf⟩)
+          ⟨Conclusion.final (pos := ⟨c, events, issued⟩) hf, ReportedQueries.final (pos := ⟨c, events, issued⟩) hf⟩)
     | none =>
       cases hs : step P c with
       | none =>
@@ -641,7 +648,7 @@ a final configuration; the report carries the path's complete event and query hi
 theorem runFromQ_complete {n : Nat} {pos pos' : Position O} (h : Moves P ρ n pos pos')
     {f : Final O.Val} (hf : pos'.config.final? = some f) :
     runFromQ P ρ n pos.events pos.queries pos.config =
-      ⟨pos'.events, pos'.queries, .final f⟩ := by
+      ⟨pos'.events, pos'.queries, .final f pos'.config.store⟩ := by
   induction h with
   | refl pos => simp [runFromQ, hf]
   | step hm hms ih =>
@@ -654,13 +661,13 @@ theorem runFromQ_complete {n : Nat} {pos pos' : Position O} (h : Moves P ρ n po
       simpa [runFromQ, hn, hs, ha, hallow, hk] using ih hf
 
 /-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness
-(approved: APPR-integ-agy-0dbeba29e).
+(approved: PENDING).
 **Completeness for C1's `runFrom`.** Every finite execution from an empty query history to a
 final configuration is reported with exactly its number of steps as fuel. -/
 theorem runFrom_complete {ρ₀ : Oracle O} {n : Nat} {events : List O.Event} {c : Config O}
     {pos' : Position O} (h : Moves P ρ₀.toQueryOracle n ⟨c, events, []⟩ pos')
     {f : Final O.Val} (hf : pos'.config.final? = some f) :
-    runFrom P ρ₀ n events c = ⟨pos'.events, .final f⟩ := by
+    runFrom P ρ₀ n events c = ⟨pos'.events, .final f pos'.config.store⟩ := by
   have hq := runFromQ_complete (P := P) (ρ := ρ₀.toQueryOracle) h hf
   have hr := runFromQ_toReport (P := P) (ρ₀ := ρ₀) n events [] c
   rw [hq] at hr
@@ -714,12 +721,12 @@ theorem runFrom_mono {ρ₀ : Oracle O} : ∀ (n m : Nat), n ≤ m →
 
 /-- Helper (computation). **Completeness with enough fuel.** Every budget at least the finite path
 length reports that
-path's final outcome and events. (approved: APPR-integ-agy-0dbeba29e). -/
+path's final outcome and events. (approved: PENDING). -/
 theorem runFrom_complete_le {ρ₀ : Oracle O} {n m : Nat} (hle : n ≤ m)
     {events : List O.Event} {c : Config O} {pos' : Position O}
     (h : Moves P ρ₀.toQueryOracle n ⟨c, events, []⟩ pos')
     {f : Final O.Val} (hf : pos'.config.final? = some f) :
-    runFrom P ρ₀ m events c = ⟨pos'.events, .final f⟩ := by
+    runFrom P ρ₀ m events c = ⟨pos'.events, .final f pos'.config.store⟩ := by
   have hexact := runFrom_complete (P := P) (ρ₀ := ρ₀) h hf
   have hnot : ∀ c', (runFrom P ρ₀ n events c).ending ≠ .outOfFuel c' := by
     rw [hexact]
@@ -776,9 +783,9 @@ theorem runFrom_trace_prefix {ρ₀ : Oracle O} (n : Nat) (events : List O.Event
 
 /-- Helper (computation). A final report has an ordinary finite `Steps` witness ending in exactly that
 final
-configuration, with the reported events. (approved: APPR-integ-agy-0dbeba29e). -/
+configuration, with the reported events. (approved: PENDING). -/
 theorem runFrom_final_sound {ρ₀ : Oracle O} {fuel : Nat} {events : List O.Event} {c : Config O}
-    {f : Final O.Val} (h : (runFrom P ρ₀ fuel events c).ending = .final f) :
+    {f : Final O.Val} {finalStore : O.Store} (h : (runFrom P ρ₀ fuel events c).ending = .final f finalStore) :
     ∃ tr c', Steps P c tr c' ∧ c'.final? = some f ∧
       (runFrom P ρ₀ fuel events c).events = events ++ tr := by
   obtain ⟨n, pos, hpath, he, hc⟩ := runFrom_sound (P := P) (ρ₀ := ρ₀) fuel events c
@@ -1574,15 +1581,15 @@ theorem internal_finite_or_infinite_events (X : InfiniteExecution P ρ c) :
 
 /-- Law (subject `InfiniteExecution`).
 A final report excludes an infinite execution from the same initial configuration. -/
-theorem not_infinite_of_final {ρ₀ : Oracle O} {fuel : Nat} {c : Config O} {f : Final O.Val}
-    (h : (run P ρ₀ fuel c).ending = .final f) :
+theorem not_infinite_of_final {ρ₀ : Oracle O} {fuel : Nat} {c : Config O} {f : Final O.Val} {finalStore : O.Store}
+    (h : (run P ρ₀ fuel c).ending = .final f finalStore) :
     ¬ Nonempty (InfiniteExecution P ρ₀.toQueryOracle c) := by
   rintro ⟨X⟩
   have hp := X.toFuelLimit.prefixes fuel
   change runFromQ P ρ₀.toQueryOracle fuel [] [] c = _ at hp
   have hr := runFromQ_toReport (P := P) (ρ₀ := ρ₀) fuel [] [] c
   rw [hp] at hr
-  change (runFrom P ρ₀ fuel [] c).ending = .final f at h
+  change (runFrom P ρ₀ fuel [] c).ending = .final f finalStore at h
   simp [QueryReport.toReport] at hr
   rw [← hr] at h
   cases h
@@ -1624,10 +1631,10 @@ outcome is reported at every fuel budget above the certificate's witness budget.
 theorem TerminationEvidence.all_allowed_runs {domain : CallDomain O} (E : TerminationEvidence O P domain)
      (ρ : Oracle O) (args : List O.Val) (st : O.Store)
     (ha : domain.calls ρ args st) (m : Nat) (hm : E.conditional.fuel E.premises ρ args st ≤ m) :
-    ∃ fn c f, AList.lookup P.fns domain.function = some fn ∧ enter fn args st = some c ∧
-      (run P ρ m c).ending = .final f := by
-  obtain ⟨fn, c, f, hf, he, hfinal⟩ := E.conditional.terminates E.premises ρ args st ha
-  refine ⟨fn, c, f, hf, he, ?_⟩
+    ∃ fn c f finalStore, AList.lookup P.fns domain.function = some fn ∧ enter fn args st = some c ∧
+      (run P ρ m c).ending = .final f finalStore := by
+  obtain ⟨fn, c, f, finalStore, hf, he, hfinal⟩ := E.conditional.terminates E.premises ρ args st ha
+  refine ⟨fn, c, f, finalStore, hf, he, ?_⟩
   have hnot : ∀ c', (run P ρ (E.conditional.fuel E.premises ρ args st) c).ending ≠ .outOfFuel c' := by
     rw [hfinal]
     simp
@@ -1643,7 +1650,7 @@ theorem TerminationEvidence.excludes_infinite {domain : CallDomain O} (E : Termi
     (fn : Fn O) (c : Config O) (hf : AList.lookup P.fns domain.function = some fn)
     (ha : domain.calls ρ args st) (he : enter fn args st = some c) :
     ¬ Nonempty (InfiniteExecution P ρ.toQueryOracle c) := by
-  obtain ⟨fn', c', f, hf', he', hfinal⟩ := E.conditional.terminates E.premises ρ args st ha
+  obtain ⟨fn', c', f, finalStore, hf', he', hfinal⟩ := E.conditional.terminates E.premises ρ args st ha
   rw [hf] at hf'
   cases hf'
   rw [he] at he'
@@ -1654,6 +1661,18 @@ theorem TerminationEvidence.excludes_infinite {domain : CallDomain O} (E : Termi
 
 namespace Demo
 
+/-- A total fixture environment for the observation examples. Well-shaped demo operations use
+C1's original environment; other requests receive an explicit error answer, so they cannot be
+mistaken for an unmodelled blocked external request. (approved: PENDING) -/
+def observationEnv : Oracle ops := fun hist p vs site st =>
+  some ((env hist p vs site st).getD ⟨none, .error .abort, st⟩)
+
+/-- Helper (computation). Completing unanswered malformed fixture requests preserves every
+answer supplied by the original C1 demo environment. (approved: PENDING) -/
+theorem observationEnv_of_answer {hist p vs site st a}
+    (h : env hist p vs site st = some a) : observationEnv hist p vs site st = some a := by
+  simp [observationEnv, h]
+
 /-- A whole-program configuration that needs one silent step before it is final. -/
 def finishingConfig : Config ops := ⟨.exec .skip, [], .init, []⟩
 
@@ -1663,19 +1682,19 @@ def spinConfig : Config ops :=
 
 /-- `outOfFuel` does not imply divergence: this run only needed one more unit of fuel. -/
 example :
-    isOutOfFuel (run prog env 0 finishingConfig) = true ∧
-      brief (run prog env 1 finishingConfig) = ([], some .normal) := by decide
+    isOutOfFuel (run prog observationEnv 0 finishingConfig) = true ∧
+      brief (run prog observationEnv 1 finishingConfig) = ([], some .normal) := by decide
 
 /-- A configuration whose first step aborts. -/
 def failingConfig : Config ops := ⟨.exec (.abort s), [], .init, []⟩
 
 /-- `outOfFuel` also does not exclude failure: one more unit of fuel reveals this trap. -/
-example : isOutOfFuel (run prog env 0 failingConfig) = true ∧
-    brief (run prog env 1 failingConfig) = ([], some (.trapped .abort s)) := by decide
+example : isOutOfFuel (run prog observationEnv 0 failingConfig) = true ∧
+    brief (run prog observationEnv 1 failingConfig) = ([], some (.trapped .abort s)) := by decide
 
 /-- `outOfFuel` is not a program failure either: the silent loop exhausts its simulation budget
 without trapping or becoming stuck. The infinite-execution witness is `spin_infinite` below. -/
-example : isOutOfFuel (run prog env 50 spinConfig) = true := by decide
+example : isOutOfFuel (run prog observationEnv 50 spinConfig) = true := by decide
 
 /-- The store after entering the demo's parameterless main function. -/
 def spinStore : DState := DState.life (.enter []) .init
@@ -1705,20 +1724,20 @@ def spinConfigAt : Nat → Config ops
 /-- No events or queries occur in the periodic execution. -/
 def spinPosition (n : Nat) : Position ops := ⟨spinConfigAt (n % 5), [], []⟩
 
-/-- Helper (computation). Concrete computation for `spin_move_01`. (approved: APPR-integ-agy-0dbeba29e). -/
-theorem spin_move_01 : Move prog env ⟨spinConfig, [], []⟩ ⟨spinConfig1, [], []⟩ := .silent rfl
-/-- Helper (computation). Concrete computation for `spin_move_12`. (approved: APPR-integ-agy-0dbeba29e). -/
-theorem spin_move_12 : Move prog env ⟨spinConfig1, [], []⟩ ⟨spinConfig2, [], []⟩ := .silent rfl
-/-- Helper (computation). Concrete computation for `spin_move_23`. (approved: APPR-integ-agy-0dbeba29e). -/
-theorem spin_move_23 : Move prog env ⟨spinConfig2, [], []⟩ ⟨spinConfig3, [], []⟩ := .silent rfl
-/-- Helper (computation). Concrete computation for `spin_move_34`. (approved: APPR-integ-agy-0dbeba29e). -/
-theorem spin_move_34 : Move prog env ⟨spinConfig3, [], []⟩ ⟨spinConfig4, [], []⟩ := .silent rfl
-/-- Helper (computation). Concrete computation for `spin_move_40`. (approved: APPR-integ-agy-0dbeba29e). -/
-theorem spin_move_40 : Move prog env ⟨spinConfig4, [], []⟩ ⟨spinConfig, [], []⟩ := .silent rfl
+/-- Helper (computation). Concrete computation for `spin_move_01`. (approved: PENDING). -/
+theorem spin_move_01 : Move prog observationEnv ⟨spinConfig, [], []⟩ ⟨spinConfig1, [], []⟩ := .silent rfl
+/-- Helper (computation). Concrete computation for `spin_move_12`. (approved: PENDING). -/
+theorem spin_move_12 : Move prog observationEnv ⟨spinConfig1, [], []⟩ ⟨spinConfig2, [], []⟩ := .silent rfl
+/-- Helper (computation). Concrete computation for `spin_move_23`. (approved: PENDING). -/
+theorem spin_move_23 : Move prog observationEnv ⟨spinConfig2, [], []⟩ ⟨spinConfig3, [], []⟩ := .silent rfl
+/-- Helper (computation). Concrete computation for `spin_move_34`. (approved: PENDING). -/
+theorem spin_move_34 : Move prog observationEnv ⟨spinConfig3, [], []⟩ ⟨spinConfig4, [], []⟩ := .silent rfl
+/-- Helper (computation). Concrete computation for `spin_move_40`. (approved: PENDING). -/
+theorem spin_move_40 : Move prog observationEnv ⟨spinConfig4, [], []⟩ ⟨spinConfig, [], []⟩ := .silent rfl
 
 /-- Helper (computation). Every adjacent pair of periodic positions is one machine transition.
-(approved: APPR-integ-agy-0dbeba29e). -/
-theorem spin_move (n : Nat) : Move prog env (spinPosition n) (spinPosition (n + 1)) := by
+(approved: PENDING). -/
+theorem spin_move (n : Nat) : Move prog observationEnv (spinPosition n) (spinPosition (n + 1)) := by
   have hlt : n % 5 < 5 := Nat.mod_lt _ (by decide)
   have hc : n % 5 = 0 ∨ n % 5 = 1 ∨ n % 5 = 2 ∨ n % 5 = 3 ∨ n % 5 = 4 := by omega
   rcases hc with h | h | h | h | h
@@ -1734,14 +1753,14 @@ theorem spin_move (n : Nat) : Move prog env (spinPosition n) (spinPosition (n + 
     simpa [spinPosition, spinConfigAt, h, hn] using spin_move_40
 
 /-- The demo loop is an infinite maximal execution under its fixed environment. -/
-def spin_infinite : InfiniteExecution prog env spinConfig where
+def spin_infinite : InfiniteExecution prog observationEnv spinConfig where
   states := spinPosition
   initial := rfl
   step := spin_move
 
 /-- Helper (computation). In particular it is internal silent divergence: infinitely many steps and no
-raw events. (approved: APPR-integ-agy-0dbeba29e). -/
-theorem spin_internal_silent_divergence : InternalSilentDivergence prog env spinConfig :=
+raw events. (approved: PENDING). -/
+theorem spin_internal_silent_divergence : InternalSilentDivergence prog observationEnv spinConfig :=
   ⟨spin_infinite, ⟨0, fun n => by simp [spin_infinite, spinPosition]⟩⟩
 
 /-! ### Raw events need not be externally visible -/
@@ -1779,26 +1798,26 @@ def eventPosition (n : Nat) : Position ops :=
   ⟨eventConfigAt (n % 5), rawEvents (eventCount n),
     (List.range (eventCount n)).map eventQuery⟩
 
-/-- Helper (computation). Concrete computation for `event_move_01`. (approved: APPR-integ-agy-0dbeba29e). -/
-theorem event_move_01 (n : Nat) : Move prog env
+/-- Helper (computation). Concrete computation for `event_move_01`. (approved: PENDING). -/
+theorem event_move_01 (n : Nat) : Move prog observationEnv
     ⟨eventConfig, rawEvents n, (List.range n).map eventQuery⟩
     ⟨eventConfig1, rawEvents n, (List.range n).map eventQuery⟩ := .silent rfl
-/-- Helper (computation). Concrete computation for `event_move_12`. (approved: APPR-integ-agy-0dbeba29e). -/
-theorem event_move_12 (n : Nat) : Move prog env
+/-- Helper (computation). Concrete computation for `event_move_12`. (approved: PENDING). -/
+theorem event_move_12 (n : Nat) : Move prog observationEnv
     ⟨eventConfig1, rawEvents n, (List.range n).map eventQuery⟩
     ⟨eventConfig2, rawEvents n, (List.range n).map eventQuery⟩ := .silent rfl
-/-- Helper (computation). Concrete computation for `event_move_23`. (approved: APPR-integ-agy-0dbeba29e). -/
-theorem event_move_23 (n : Nat) : Move prog env
+/-- Helper (computation). Concrete computation for `event_move_23`. (approved: PENDING). -/
+theorem event_move_23 (n : Nat) : Move prog observationEnv
     ⟨eventConfig2, rawEvents n, (List.range n).map eventQuery⟩
     ⟨eventConfig3, rawEvents n, (List.range n).map eventQuery⟩ := .silent rfl
-/-- Helper (computation). Concrete computation for `event_move_40`. (approved: APPR-integ-agy-0dbeba29e). -/
-theorem event_move_40 (n : Nat) : Move prog env
+/-- Helper (computation). Concrete computation for `event_move_40`. (approved: PENDING). -/
+theorem event_move_40 (n : Nat) : Move prog observationEnv
     ⟨eventConfig4, rawEvents n, (List.range n).map eventQuery⟩
     ⟨eventConfig, rawEvents n, (List.range n).map eventQuery⟩ := .silent rfl
 
 /-- Helper (computation). The logging transition appends exactly its raw event and its next per-site
-query. (approved: APPR-integ-agy-0dbeba29e). -/
-theorem event_move_34 (n : Nat) : Move prog env
+query. (approved: PENDING). -/
+theorem event_move_34 (n : Nat) : Move prog observationEnv
     ⟨eventConfig3, rawEvents n, (List.range n).map eventQuery⟩
     ⟨eventConfig4, rawEvents (n + 1), (List.range (n + 1)).map eventQuery⟩ := by
   have hocc : occurrenceAt ((List.range n).map eventQuery) s = n := by
@@ -1812,17 +1831,17 @@ theorem event_move_34 (n : Nat) : Move prog env
   have hq : Query.issue (O := ops) (rawEvents n) .log [1] s spinStore
       ((List.range n).map eventQuery) = eventQuery n := by
     simp [Query.issue, eventQuery, hocc]
-  have hm : Move prog env ⟨eventConfig3, rawEvents n, (List.range n).map eventQuery⟩
+  have hm : Move prog observationEnv ⟨eventConfig3, rawEvents n, (List.range n).map eventQuery⟩
       ⟨eventConfig4, rawEvents n ++ [1], (List.range n).map eventQuery ++ [eventQuery n]⟩ := by
     rw [← hq]
-    exact Move.prim (P := prog) (ρ := env) (c := eventConfig3) (c' := eventConfig4)
+    exact Move.prim (P := prog) (ρ := observationEnv) (c := eventConfig3) (c' := eventConfig4)
       (events := rawEvents n) (issued := (List.range n).map eventQuery) (p := .log) (vs := [1])
       (site := s) (st := spinStore) (a := ⟨some 1, .ok 0, spinStore⟩) rfl rfl rfl rfl
   simpa [rawEvents, List.range_succ] using hm
 
 /-- Helper (computation). Every adjacent pair of positions in the logging loop is one real machine
-transition. (approved: APPR-integ-agy-0dbeba29e). -/
-theorem event_move (n : Nat) : Move prog env (eventPosition n) (eventPosition (n + 1)) := by
+transition. (approved: PENDING). -/
+theorem event_move (n : Nat) : Move prog observationEnv (eventPosition n) (eventPosition (n + 1)) := by
   have hlt : n % 5 < 5 := Nat.mod_lt _ (by decide)
   have hc : n % 5 = 0 ∨ n % 5 = 1 ∨ n % 5 = 2 ∨ n % 5 = 3 ∨ n % 5 = 4 := by omega
   rcases hc with h | h | h | h | h
@@ -1843,7 +1862,7 @@ theorem event_move (n : Nat) : Move prog env (eventPosition n) (eventPosition (n
     simpa [eventPosition, eventCount, eventConfigAt, h, hn, hd] using event_move_40 (eventCount n)
 
 /-- The logging loop is a genuine infinite execution with one raw event per iteration. -/
-def event_infinite : InfiniteExecution prog env eventConfig where
+def event_infinite : InfiniteExecution prog observationEnv eventConfig where
   states := eventPosition
   initial := rfl
   step := event_move
@@ -1853,14 +1872,20 @@ def erasingAdapter : Observe.ExecAdapter ops Observe.Demo.signature where
   events := fun _ => []
   request := fun _ _ _ _ => none
   status := fun _ => none
-  sites := []
+  state := fun st => st.counter
+  sourceProject := ⟨[], []⟩
+  sourceInput := ⟨[], []⟩
+  loaded := rfl
 
 /-- An adapter that retains every raw event as public output. -/
 def keepingAdapter : Observe.ExecAdapter ops Observe.Demo.signature where
   events := fun n => [.output (toString n)]
   request := fun _ _ _ _ => none
   status := fun _ => none
-  sites := []
+  state := fun st => st.counter
+  sourceProject := ⟨[], []⟩
+  sourceInput := ⟨[], []⟩
+  loaded := rfl
 
 /-- Helper (computation). Concrete computation for `erasing_project`. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem erasing_project (events : List Int) : erasingAdapter.project events = [] := by
@@ -1879,19 +1904,19 @@ theorem keeping_project_rawEvents (n : Nat) : keepingAdapter.project (rawEvents 
     simp [Observe.ExecAdapter.project, keepingAdapter, List.range_succ] <;> decide
 
 /-- Helper (computation). Empty output satisfies C6's internal-answer rule even though C1 emits a raw
-event. (approved: APPR-integ-agy-0dbeba29e). -/
-theorem erasingWellFormed : Observe.ExecAdapter.WellFormed erasingAdapter Observe.Demo.contract () env := by
+event. (approved: PENDING). -/
+theorem erasingWellFormed : Observe.ExecAdapter.WellFormed erasingAdapter Observe.Demo.contract () observationEnv := by
   constructor
   · intro hist p vs site store a answer typed
     exact ⟨[], erasing_project _⟩
   · intro hist p vs site store a q answer typed
     simp [erasingAdapter] at typed
-  · intro hist p vs site store q answer typed
-    simp [erasingAdapter] at typed
+  · intro hist p vs site store answer
+    simp [observationEnv, env] at answer
 
 /-- Helper (computation). Retaining raw events as public output satisfies C6's internal-answer rule.
-(approved: APPR-integ-agy-0dbeba29e). -/
-theorem keepingWellFormed : Observe.ExecAdapter.WellFormed keepingAdapter Observe.Demo.contract () env := by
+(approved: PENDING). -/
+theorem keepingWellFormed : Observe.ExecAdapter.WellFormed keepingAdapter Observe.Demo.contract () observationEnv := by
   constructor
   · intro hist p vs site store a answer typed
     cases a with
@@ -1901,22 +1926,22 @@ theorem keepingWellFormed : Observe.ExecAdapter.WellFormed keepingAdapter Observ
       | some n => exact ⟨[toString n], rfl⟩
   · intro hist p vs site store a q answer typed
     simp [keepingAdapter] at typed
-  · intro hist p vs site store q answer typed
-    simp [keepingAdapter] at typed
+  · intro hist p vs site store answer
+    simp [observationEnv, env] at answer
 
-/-- Helper (computation). Externally the erasing run is silent divergence. (approved: APPR-integ-agy-0dbeba29e). -/
-theorem erasing_silent_divergence : SilentDivergence prog erasingAdapter env eventConfig :=
+/-- Helper (computation). Externally the erasing run is silent divergence. (approved: PENDING). -/
+theorem erasing_silent_divergence : SilentDivergence prog erasingAdapter observationEnv eventConfig :=
   ⟨event_infinite, ⟨0, fun n => by simp [event_infinite, eventPosition, erasing_project]⟩⟩
 
 /-- Helper (computation). Internally that same run has infinitely many raw events. (approved:
 APPR-integ-agy-0dbeba29e). -/
-theorem erasing_internal_infinite : InternalInfiniteInteraction prog env eventConfig := by
+theorem erasing_internal_infinite : InternalInfiniteInteraction prog observationEnv eventConfig := by
   refine ⟨event_infinite, fun bound => ⟨5 * (bound + 1), ?_⟩⟩
   simp [event_infinite, eventPosition, eventCount, rawEvents]
 
 /-- Helper (computation). Retaining the raw events turns the same execution into external infinite
-interaction. (approved: APPR-integ-agy-0dbeba29e). -/
-theorem keeping_infinite_interaction : InfiniteInteraction prog keepingAdapter env eventConfig := by
+interaction. (approved: PENDING). -/
+theorem keeping_infinite_interaction : InfiniteInteraction prog keepingAdapter observationEnv eventConfig := by
   refine ⟨event_infinite, fun bound => ⟨5 * (bound + 1), ?_⟩⟩
   simp [event_infinite, eventPosition, eventCount, keeping_project_rawEvents]
 
@@ -1950,8 +1975,8 @@ example : ∃ trace : Observe.InfiniteTrace Observe.Demo.signature,
 
 /-- Planted raw-event classification: it disagrees with C6 on the erasing adapter. The run has
 infinite internal interaction but no external infinite interaction. -/
-example : InternalInfiniteInteraction prog env eventConfig ∧
-    ¬ InfiniteInteraction prog erasingAdapter env eventConfig :=
+example : InternalInfiniteInteraction prog observationEnv eventConfig ∧
+    ¬ InfiniteInteraction prog erasingAdapter observationEnv eventConfig :=
   ⟨erasing_internal_infinite,
     silentDivergence_not_infiniteInteraction erasingAdapter erasing_silent_divergence⟩
 
@@ -1974,8 +1999,8 @@ def otherSite : SiteId := ⟨1⟩
 def interleavedRequestConfig : Config ops := ⟨.exec (.seq
   (.prim none .bump [] s) (.prim none .bump [] otherSite)), [], .init, []⟩
 
-def silentRequests : QueryReport ops := runQ prog env 4 silentRequestConfig
-def interleavedRequests : QueryReport ops := runQ prog env 4 interleavedRequestConfig
+def silentRequests : QueryReport ops := runQ prog observationEnv 4 silentRequestConfig
+def interleavedRequests : QueryReport ops := runQ prog observationEnv 4 interleavedRequestConfig
 
 /-- The authenticated queries of those actual runs. -/
 def silentQuery0 : Query ops := Query.issue [] .bump [] s .init []
@@ -1991,7 +2016,7 @@ example : interleavedRequests.events = [] ∧
 
 /-- Non-vacuity for `runFromQ_consecutive_same_site`: the second actual query has occurrence one. -/
 example : silentQuery1.occurrence = silentQuery0.occurrence + 1 := by
-  apply runFromQ_consecutive_same_site (P := prog) (ρ := env) 4 [] [] silentRequestConfig
+  apply runFromQ_consecutive_same_site (P := prog) (ρ := observationEnv) 4 [] [] silentRequestConfig
     (i := 0) (q := silentQuery0) (q' := silentQuery1)
   · intro i q h
     simp at h
@@ -2001,7 +2026,7 @@ example : silentQuery1.occurrence = silentQuery0.occurrence + 1 := by
 
 /-- Non-vacuity for `runFromQ_consecutive_other_site`: the second site's first occurrence is zero. -/
 example : interleavedQuery1.occurrence = 0 := by
-  have h := runFromQ_consecutive_other_site (P := prog) (ρ := env) 4 [] []
+  have h := runFromQ_consecutive_other_site (P := prog) (ρ := observationEnv) 4 [] []
     interleavedRequestConfig (i := 0) (q := interleavedQuery0) (q' := interleavedQuery1)
     (by intro i q h; simp at h) (by rfl) (by rfl) (by decide)
   simpa [occurrenceAt] using h
@@ -2039,16 +2064,16 @@ def bumpK : Answer ops.Val ops.Event ops.Store → Option (Config ops) := fun a 
 
 /-- Helper (computation). A real transition under the lifted ordinary demo oracle. (approved:
 APPR-integ-agy-0dbeba29e). -/
-theorem bumpedMove : Move prog env ⟨bumpConfig, [], []⟩ ⟨bumpContinued, [], [bumpQuery]⟩ :=
-  Move.prim (P := prog) (ρ := env) (c := bumpConfig) (c' := bumpContinued) (events := [])
+theorem bumpedMove : Move prog observationEnv ⟨bumpConfig, [], []⟩ ⟨bumpContinued, [], [bumpQuery]⟩ :=
+  Move.prim (P := prog) (ρ := observationEnv) (c := bumpConfig) (c' := bumpContinued) (events := [])
     (issued := []) (p := .bump) (vs := []) (site := s) (st := .init)
     (a := ⟨none, .ok 0, ⟨1, []⟩⟩) rfl rfl rfl rfl
 
-/-- Non-vacuity for `Move.toQueryOracle_answer`: the actual transition uses exactly `env`'s answer. -/
-example : ∃ a, env [] .bump [] s .init = some a ∧ ops.allows .bump [] .init a = true ∧
+/-- Non-vacuity for `Move.toQueryOracle_answer`: the actual transition uses exactly `observationEnv`'s answer. -/
+example : ∃ a, observationEnv [] .bump [] s .init = some a ∧ ops.allows .bump [] .init a = true ∧
     bumpK a = some bumpContinued ∧ [] = [] ++ a.event.toList ∧
       [bumpQuery] = [] ++ [bumpQuery] := by
-  exact (Move.toQueryOracle_answer (ρ₀ := env) (pos := ⟨bumpConfig, [], []⟩)
+  exact (Move.toQueryOracle_answer (ρ₀ := observationEnv) (pos := ⟨bumpConfig, [], []⟩)
     (pos' := ⟨bumpContinued, [], [bumpQuery]⟩) (p := .bump) (vs := []) (site := s)
     (st := .init) (k := bumpK) (by
       simp [bumpConfig, step, evalArgs, onRes]
@@ -2057,12 +2082,12 @@ example : ∃ a, env [] .bump [] s .init = some a ∧ ops.allows .bump [] .init 
 
 /-- An occurrence-sensitive mutation answers only the first request at each site. -/
 def occurrenceSensitiveOracle : QueryOracle ops := fun q =>
-  if q.occurrence = 0 then answer env.toQueryOracle q else none
+  if q.occurrence = 0 then answer observationEnv.toQueryOracle q else none
 
-/-- Planted counter-example for lifted-oracle preservation: unlike `env.toQueryOracle`, this oracle
+/-- Planted counter-example for lifted-oracle preservation: unlike `observationEnv.toQueryOracle`, this oracle
 refuses the actual second request and therefore produces a different run. -/
 example : (runQ prog occurrenceSensitiveOracle 4 silentRequestConfig).toReport ≠
-    run prog env 4 silentRequestConfig := by
+    run prog observationEnv 4 silentRequestConfig := by
   intro h
   cases h
 
@@ -2175,7 +2200,7 @@ example : ¬ ∃ hc : Conclusion refusingBindProgram refusingBindOracle (.stuck 
 
 /-- A declared singleton call domain, independent of its termination proof. -/
 def terminatingDomain : CallDomain ops :=
-  ⟨boomF, fun ρ args st => ρ = env ∧ args = [] ∧ st = .init⟩
+  ⟨boomF, fun ρ args st => ρ = observationEnv ∧ args = [] ∧ st = .init⟩
 
 /-- This aborting function terminates with a trapped outcome; termination does not promise success. -/
 def terminatingConditional : ConditionalTermination ops prog terminatingDomain where
@@ -2185,12 +2210,12 @@ def terminatingConditional : ConditionalTermination ops prog terminatingDomain w
   terminates := by
     intro _ ρ args st h
     obtain ⟨rfl, rfl, rfl⟩ := h
-    exact ⟨boomFn, start boomFn [] .init, .trapped .abort ⟨9⟩,
+    exact ⟨boomFn, start boomFn [] .init, .trapped .abort ⟨9⟩, _,
       rfl, rfl, rfl⟩
 
 /-- An inhabited certificate for a declared function and an actual successful entry. -/
 def terminatingEvidence : TerminationEvidence ops prog terminatingDomain :=
-  ⟨terminatingConditional, (fun _ h => nomatch h), env, [], .init, rfl, rfl, rfl⟩
+  ⟨terminatingConditional, (fun _ h => nomatch h), observationEnv, [], .init, rfl, rfl, rfl⟩
 
 /-- The empty declared domain has no usable certificate, even though its conditional coverage
 can be proved with no executions. -/
@@ -2202,7 +2227,7 @@ example : ¬ Nonempty (TerminationEvidence ops prog ⟨boomF, fun _ _ _ => False
 /-- A missing function cannot be certified by restricting the certificate's admission filter. -/
 example : ¬ Nonempty (TerminationEvidence ops (⟨[]⟩ : Program ops) terminatingDomain) := by
   rintro ⟨E⟩
-  obtain ⟨fn, c, f, hf, _, _⟩ := E.conditional.terminates E.premises env [] .init ⟨rfl, rfl, rfl⟩
+  obtain ⟨fn, c, f, finalStore, hf, _, _⟩ := E.conditional.terminates E.premises observationEnv [] .init ⟨rfl, rfl, rfl⟩
   cases hf
 
 /-- The domain of a call whose entry lifecycle is refused. -/
@@ -2215,7 +2240,7 @@ def refusedEntryDomain : CallDomain refusedEntryOps := ⟨boomF, fun _ _ _ => Tr
 example : ¬ Nonempty (TerminationEvidence refusedEntryOps refusedEntryProgram refusedEntryDomain) := by
   rintro ⟨E⟩
   obtain ⟨ρ, args, st, h⟩ := E.admitted
-  obtain ⟨fn, c, f, hf, he, _⟩ := E.conditional.terminates E.premises ρ args st h
+  obtain ⟨fn, c, f, finalStore, hf, he, _⟩ := E.conditional.terminates E.premises ρ args st h
   have eqfn : fn = refusedEntryFn := by simpa [refusedEntryProgram, refusedEntryDomain, AList.lookup] using hf.symm
   subst fn
   simp [enter, refusedEntryOps] at he
@@ -2224,19 +2249,19 @@ example : ¬ Nonempty (TerminationEvidence refusedEntryOps refusedEntryProgram r
 def spinningFn : Fn ops := ⟨[], .int, ⟨0⟩, .loop ⟨0⟩ .skip (.lit 1) .skip s⟩
 def spinningProgram : Program ops := ⟨[(mainF, spinningFn)]⟩
 def spinningDomain : CallDomain ops :=
-  ⟨mainF, fun ρ args st => ρ = env ∧ args = [] ∧ st = .init⟩
+  ⟨mainF, fun ρ args st => ρ = observationEnv ∧ args = [] ∧ st = .init⟩
 
 /-- Program lookup is irrelevant to this call-free loop. -/
-def admittedSpin : InfiniteExecution spinningProgram env (start spinningFn [] .init) where
+def admittedSpin : InfiniteExecution spinningProgram observationEnv (start spinningFn [] .init) where
   states := spinPosition
   initial := rfl
   step := by
     intro n
-    have spin_move_01 : Move spinningProgram env ⟨spinConfig, [], []⟩ ⟨spinConfig1, [], []⟩ := .silent rfl
-    have spin_move_12 : Move spinningProgram env ⟨spinConfig1, [], []⟩ ⟨spinConfig2, [], []⟩ := .silent rfl
-    have spin_move_23 : Move spinningProgram env ⟨spinConfig2, [], []⟩ ⟨spinConfig3, [], []⟩ := .silent rfl
-    have spin_move_34 : Move spinningProgram env ⟨spinConfig3, [], []⟩ ⟨spinConfig4, [], []⟩ := .silent rfl
-    have spin_move_40 : Move spinningProgram env ⟨spinConfig4, [], []⟩ ⟨spinConfig, [], []⟩ := .silent rfl
+    have spin_move_01 : Move spinningProgram observationEnv ⟨spinConfig, [], []⟩ ⟨spinConfig1, [], []⟩ := .silent rfl
+    have spin_move_12 : Move spinningProgram observationEnv ⟨spinConfig1, [], []⟩ ⟨spinConfig2, [], []⟩ := .silent rfl
+    have spin_move_23 : Move spinningProgram observationEnv ⟨spinConfig2, [], []⟩ ⟨spinConfig3, [], []⟩ := .silent rfl
+    have spin_move_34 : Move spinningProgram observationEnv ⟨spinConfig3, [], []⟩ ⟨spinConfig4, [], []⟩ := .silent rfl
+    have spin_move_40 : Move spinningProgram observationEnv ⟨spinConfig4, [], []⟩ ⟨spinConfig, [], []⟩ := .silent rfl
     have hlt : n % 5 < 5 := Nat.mod_lt _ (by decide)
     have hc : n % 5 = 0 ∨ n % 5 = 1 ∨ n % 5 = 2 ∨ n % 5 = 3 ∨ n % 5 = 4 := by omega
     rcases hc with h | h | h | h | h
@@ -2254,15 +2279,15 @@ def admittedSpin : InfiniteExecution spinningProgram env (start spinningFn [] .i
 /-- A domain containing the spinning call cannot acquire usable evidence. -/
 example : ¬ Nonempty (TerminationEvidence ops spinningProgram spinningDomain) := by
   rintro ⟨E⟩
-  exact E.excludes_infinite env [] .init spinningFn (start spinningFn [] .init)
+  exact E.excludes_infinite observationEnv [] .init spinningFn (start spinningFn [] .init)
     rfl ⟨rfl, rfl, rfl⟩ rfl ⟨admittedSpin⟩
 
 /-- The per-callee termination premise for `spinningDomain`: every admitted call terminates within
 its witness budget. -/
 def spinningCalleePremise : Type :=
   PLift (∀ ρ args st, spinningDomain.calls ρ args st →
-    ∃ fn c f, AList.lookup spinningProgram.fns spinningDomain.function = some fn ∧
-      enter fn args st = some c ∧ (run spinningProgram ρ 10 c).ending = .final f)
+    ∃ fn c f finalStore, AList.lookup spinningProgram.fns spinningDomain.function = some fn ∧
+      enter fn args st = some c ∧ (run spinningProgram ρ 10 c).ending = .final f finalStore)
 
 /-- A conditional theorem that lists an uncertified dependency (`mainF`) whose premise requires
 termination of `spinningDomain` cannot have its dependency-indexed `Premises` discharged. -/
@@ -2273,7 +2298,7 @@ def uncertifiedDepConditional : ConditionalTermination ops prog terminatingDomai
   terminates := by
     intro _ ρ args st h
     obtain ⟨rfl, rfl, rfl⟩ := h
-    exact ⟨boomFn, start boomFn [] .init, .trapped .abort ⟨9⟩,
+    exact ⟨boomFn, start boomFn [] .init, .trapped .abort ⟨9⟩, _,
       rfl, rfl, rfl⟩
 
 /-- Because `dependencies` indexes `Premises`, a conditional theorem depending on a diverging
@@ -2281,7 +2306,7 @@ callee has an uninhabited premise family. -/
 example : ¬ Nonempty uncertifiedDepConditional.Premises := by
   rintro ⟨premises⟩
   obtain ⟨h⟩ := premises mainF (.head [])
-  obtain ⟨fn, c, f, hf, he, hfinal⟩ := h env [] .init ⟨rfl, rfl, rfl⟩
+  obtain ⟨fn, c, f, finalStore, hf, he, hfinal⟩ := h observationEnv [] .init ⟨rfl, rfl, rfl⟩
   cases hf
   cases he
   exact not_infinite_of_final hfinal ⟨admittedSpin⟩
@@ -2315,10 +2340,10 @@ example : RequestResolution prog badAnswerOracle ⟨terminalConfig, [], []⟩ .l
   (fuel := 0) (events := []) (issued := []) (c := terminalConfig) (p := .log) (vs := [1])
   (site := s) (st := .init) (k := terminalK) rfl terminalRequest
 
-/-- Instance (law `runFromQ_request_correspondence`, case `env`). -/
-example : RequestResolution prog env.toQueryOracle ⟨terminalConfig, [], []⟩ .log [1] s .init terminalK
-    (runFromQ prog env.toQueryOracle 1 [] [] terminalConfig) :=
-  runFromQ_request_correspondence (O := ops) (P := prog) (ρ := env.toQueryOracle)
+/-- Instance (law `runFromQ_request_correspondence`, case `observationEnv`). -/
+example : RequestResolution prog observationEnv.toQueryOracle ⟨terminalConfig, [], []⟩ .log [1] s .init terminalK
+    (runFromQ prog observationEnv.toQueryOracle 1 [] [] terminalConfig) :=
+  runFromQ_request_correspondence (O := ops) (P := prog) (ρ := observationEnv.toQueryOracle)
   (fuel := 0) (events := []) (issued := []) (c := terminalConfig) (p := .log) (vs := [1])
   (site := s) (st := .init) (k := terminalK) rfl terminalRequest
 
@@ -2326,7 +2351,7 @@ example : RequestResolution prog env.toQueryOracle ⟨terminalConfig, [], []⟩ 
 This tests report soundness separately from the wrong-history oracle mutation. -/
 def fabricatedFinalRun {O : Operands} (P : Program O) (ρ : QueryOracle O) (fuel : Nat)
     (events : List O.Event) (issued : List (Query O)) (c : Config O) : QueryReport O :=
-  { runFromQ P ρ fuel events issued c with ending := .final .normal }
+  { runFromQ P ρ fuel events issued c with ending := .final .normal c.store }
 
 /-- An evaluator mutation discards all supplied answers. -/
 def droppedAnswerRun {O : Operands} (P : Program O) (_ : QueryOracle O) (fuel : Nat)
@@ -2369,31 +2394,31 @@ example : terminalConfig.final? = none ∧
     subst ha
     simp [ops] at hl
 
-/-- Planted (law `runFromQ_request_correspondence`, case `env`,
+/-- Planted (law `runFromQ_request_correspondence`, case `observationEnv`,
 subject `runFromQ`, mutant `droppedAnswerRun`). Dropping the valid oracle answer omits the
 continued transition's emitted event and reports `.noAnswer` instead. -/
 example : terminalConfig.final? = none ∧
     step prog terminalConfig = some (.request .log [1] s .init terminalK) ∧
-    ¬ RequestResolution prog env.toQueryOracle ⟨terminalConfig, [], []⟩ .log [1] s .init terminalK
-      (droppedAnswerRun prog env.toQueryOracle 1 [] [] terminalConfig) := by
+    ¬ RequestResolution prog observationEnv.toQueryOracle ⟨terminalConfig, [], []⟩ .log [1] s .init terminalK
+      (droppedAnswerRun prog observationEnv.toQueryOracle 1 [] [] terminalConfig) := by
   refine ⟨rfl, terminalRequest, ?_⟩
-  have hev : (droppedAnswerRun prog env.toQueryOracle 1 [] [] terminalConfig).events = [] := rfl
-  generalize he : droppedAnswerRun prog env.toQueryOracle 1 [] [] terminalConfig = report at hev ⊢
+  have hev : (droppedAnswerRun prog observationEnv.toQueryOracle 1 [] [] terminalConfig).events = [] := rfl
+  generalize he : droppedAnswerRun prog observationEnv.toQueryOracle 1 [] [] terminalConfig = report at hev ⊢
   intro h
   cases h with
   | unanswered ha _ _ =>
-    simp [answer, Oracle.toQueryOracle, env, Query.issue] at ha
+    simp [answer, Oracle.toQueryOracle, observationEnv, env, Query.issue] at ha
   | invalid ha hl _ _ =>
-    simp [answer, Oracle.toQueryOracle, env, Query.issue] at ha
+    simp [answer, Oracle.toQueryOracle, observationEnv, env, Query.issue] at ha
     subst ha
     simp [ops] at hl
   | refused ha _ hk _ _ =>
-    simp [answer, Oracle.toQueryOracle, env, Query.issue] at ha
+    simp [answer, Oracle.toQueryOracle, observationEnv, env, Query.issue] at ha
     subst ha
     simp [terminalK, bindLife, ops, DState.life] at hk
   | continued _ _ _ hm hpath hevents _ _ =>
     obtain ⟨a, ha, _, _, hpos', _⟩ := (Move.toQueryOracle_answer terminalRequest).mp hm
-    simp [env] at ha
+    simp [observationEnv, env] at ha
     subst ha
     obtain ⟨tr, _, hpath_ev, _, _⟩ := Moves.toSteps hpath
     rw [hev, hpath_ev, hpos'] at hevents
@@ -2423,10 +2448,10 @@ def logThenSpinPosition : Nat → Position ops
   | n + 2 => ⟨spinConfigAt (n % 5), [1], [eventQuery 0]⟩
 
 /-- Helper (computation). Every adjacent pair of positions in `logThenSpinPosition` is one machine
-transition. (approved: APPR-integ-agy-0dbeba29e). -/
-theorem logThenSpin_move : ∀ n, Move prog env (logThenSpinPosition n) (logThenSpinPosition (n + 1))
+transition. (approved: PENDING). -/
+theorem logThenSpin_move : ∀ n, Move prog observationEnv (logThenSpinPosition n) (logThenSpinPosition (n + 1))
   | 0 =>
-    Move.prim (P := prog) (ρ := env) (c := logThenSpinConfig) (c' := logThenSpinConfig1)
+    Move.prim (P := prog) (ρ := observationEnv) (c := logThenSpinConfig) (c' := logThenSpinConfig1)
       (events := []) (issued := []) (p := .log) (vs := [1]) (site := s) (st := spinStore)
       (a := ⟨some 1, .ok 0, spinStore⟩) rfl rfl rfl rfl
   | 1 => .silent rfl
@@ -2436,27 +2461,27 @@ theorem logThenSpin_move : ∀ n, Move prog env (logThenSpinPosition n) (logThen
     rcases hc with h | h | h | h | h
     · have hn : (n + 1) % 5 = 1 := by omega
       simpa [logThenSpinPosition, spinConfigAt, h, hn] using
-        (Move.silent rfl : Move prog env ⟨spinConfig, [1], [eventQuery 0]⟩
+        (Move.silent rfl : Move prog observationEnv ⟨spinConfig, [1], [eventQuery 0]⟩
           ⟨spinConfig1, [1], [eventQuery 0]⟩)
     · have hn : (n + 1) % 5 = 2 := by omega
       simpa [logThenSpinPosition, spinConfigAt, h, hn] using
-        (Move.silent rfl : Move prog env ⟨spinConfig1, [1], [eventQuery 0]⟩
+        (Move.silent rfl : Move prog observationEnv ⟨spinConfig1, [1], [eventQuery 0]⟩
           ⟨spinConfig2, [1], [eventQuery 0]⟩)
     · have hn : (n + 1) % 5 = 3 := by omega
       simpa [logThenSpinPosition, spinConfigAt, h, hn] using
-        (Move.silent rfl : Move prog env ⟨spinConfig2, [1], [eventQuery 0]⟩
+        (Move.silent rfl : Move prog observationEnv ⟨spinConfig2, [1], [eventQuery 0]⟩
           ⟨spinConfig3, [1], [eventQuery 0]⟩)
     · have hn : (n + 1) % 5 = 4 := by omega
       simpa [logThenSpinPosition, spinConfigAt, h, hn] using
-        (Move.silent rfl : Move prog env ⟨spinConfig3, [1], [eventQuery 0]⟩
+        (Move.silent rfl : Move prog observationEnv ⟨spinConfig3, [1], [eventQuery 0]⟩
           ⟨spinConfig4, [1], [eventQuery 0]⟩)
     · have hn : (n + 1) % 5 = 0 := by omega
       simpa [logThenSpinPosition, spinConfigAt, h, hn] using
-        (Move.silent rfl : Move prog env ⟨spinConfig4, [1], [eventQuery 0]⟩
+        (Move.silent rfl : Move prog observationEnv ⟨spinConfig4, [1], [eventQuery 0]⟩
           ⟨spinConfig, [1], [eventQuery 0]⟩)
 
 /-- An infinite execution that emits one visible event and then spins silently forever. -/
-def logThenSpin_infinite : InfiniteExecution prog env logThenSpinConfig where
+def logThenSpin_infinite : InfiniteExecution prog observationEnv logThenSpinConfig where
   states := logThenSpinPosition
   initial := rfl
   step := logThenSpin_move
@@ -2541,13 +2566,13 @@ noncomputable def pendingTrace {O : Operands} {S : Observe.EventSignature} {P : 
 /-- Instance (law `InfiniteExecution.projectedTrace_valid`, case `keepingAdapter`). -/
 example : Observe.CompleteTrace Observe.Demo.contract ()
     (event_infinite.projectedTrace keepingAdapter 5) :=
-  InfiniteExecution.projectedTrace_valid (O := ops) (P := prog) (ρ₀ := env)
+  InfiniteExecution.projectedTrace_valid (O := ops) (P := prog) (ρ₀ := observationEnv)
     (c := eventConfig) (S := Observe.Demo.signature) (C := Observe.Demo.contract)
     (input := ()) (A := keepingAdapter) event_infinite keepingWellFormed 5
 
 /-- Planted (law `InfiniteExecution.projectedTrace_valid`, case `keepingAdapter`,
 subject `InfiniteExecution.projectedTrace`, mutant `pendingTrace`). -/
-example : Observe.ExecAdapter.WellFormed keepingAdapter Observe.Demo.contract () env ∧
+example : Observe.ExecAdapter.WellFormed keepingAdapter Observe.Demo.contract () observationEnv ∧
     ¬ Observe.CompleteTrace Observe.Demo.contract ()
       (pendingTrace keepingAdapter event_infinite 5) := by
   refine ⟨keepingWellFormed, ?_⟩
@@ -2583,13 +2608,13 @@ example : ∃ events,
       (.finiteDivergence events) ∧
     ∀ steps, MatchesProjectedHistory keepingAdapter logThenSpin_infinite steps →
       Observe.HasFullObservation (.infinite steps) (.finiteDivergence events) :=
-  finite_projected_observation (O := ops) (P := prog) (ρ₀ := env) (c := logThenSpinConfig)
+  finite_projected_observation (O := ops) (P := prog) (ρ₀ := observationEnv) (c := logThenSpinConfig)
     (S := Observe.Demo.signature) (C := Observe.Demo.contract) (input := ())
     (A := keepingAdapter) (X := logThenSpin_infinite) keepingWellFormed logThenSpinFinite
 
 /-- Planted (law `finite_projected_observation`, case `logThenSpin`,
 subject `InfiniteExecution.toObserveSteps`, mutant `silentObserveSteps`). -/
-example : Observe.ExecAdapter.WellFormed keepingAdapter Observe.Demo.contract () env ∧
+example : Observe.ExecAdapter.WellFormed keepingAdapter Observe.Demo.contract () observationEnv ∧
     FiniteEvents keepingAdapter logThenSpin_infinite ∧
     ¬ (∃ events,
       (∃ start, ∀ n, start ≤ n →
@@ -2622,13 +2647,13 @@ example : ∃ trace : Observe.InfiniteTrace Observe.Demo.signature,
       (.infiniteDivergence trace) ∧
     ∀ steps, MatchesProjectedHistory keepingAdapter event_infinite steps →
       Observe.HasFullObservation (.infinite steps) (.infiniteDivergence trace) :=
-  infinite_projected_observation (O := ops) (P := prog) (ρ₀ := env) (c := eventConfig)
+  infinite_projected_observation (O := ops) (P := prog) (ρ₀ := observationEnv) (c := eventConfig)
     (S := Observe.Demo.signature) (C := Observe.Demo.contract) (input := ())
     (A := keepingAdapter) (X := event_infinite) keepingWellFormed keptInfinite
 
 /-- Planted (law `infinite_projected_observation`, case `keepingAdapter`,
 subject `InfiniteExecution.toObserveSteps`, mutant `silentObserveSteps`). -/
-example : Observe.ExecAdapter.WellFormed keepingAdapter Observe.Demo.contract () env ∧
+example : Observe.ExecAdapter.WellFormed keepingAdapter Observe.Demo.contract () observationEnv ∧
     InfiniteEvents keepingAdapter event_infinite ∧
     ¬ (∃ trace : Observe.InfiniteTrace Observe.Demo.signature,
       (∀ n, keepingAdapter.project (event_infinite.states n).events =
@@ -2668,7 +2693,7 @@ example : terminalConfig.final? = none ∧
       (wrongHistoryRun prog occurrenceSensitiveOracle 1 [] [terminalQuery] terminalConfig) := by
   refine ⟨rfl, terminalRequest, ?_⟩
   have hfinal : (wrongHistoryRun prog occurrenceSensitiveOracle 1 [] [terminalQuery]
-    terminalConfig).ending = .final .normal := rfl
+    terminalConfig).ending = .final .normal .init := rfl
   generalize he : wrongHistoryRun prog occurrenceSensitiveOracle 1 [] [terminalQuery]
     terminalConfig = report at hfinal ⊢
   intro h
@@ -2741,13 +2766,13 @@ def thirdQuery : Query ops := Query.issue [] .bump [] s ⟨2, []⟩
 /-- A frozen revisited-site occurrence disagrees with the actual interval contribution. -/
 example : ¬ ({ thirdQuery with occurrence := 0 } : Query ops).occurrence =
     interleavedQuery0.occurrence + occurrenceAt
-      (((runQ prog env 7 threeRequestConfig).queries.drop 0).take (2 - 0)) s := by decide
+      (((runQ prog observationEnv 7 threeRequestConfig).queries.drop 0).take (2 - 0)) s := by decide
 
 /-- Instance (law `runFromQ_interleaved_site`, case `threeRequestConfig`). -/
 example : thirdQuery.occurrence = interleavedQuery0.occurrence +
-    occurrenceAt (((runFromQ prog env 7 [] [] threeRequestConfig).queries.drop 0).take (2 - 0))
+    occurrenceAt (((runFromQ prog observationEnv 7 [] [] threeRequestConfig).queries.drop 0).take (2 - 0))
       interleavedQuery0.site :=
-  runFromQ_interleaved_site (O := ops) (P := prog) (ρ := env.toQueryOracle)
+  runFromQ_interleaved_site (O := ops) (P := prog) (ρ := observationEnv.toQueryOracle)
     7 [] [] threeRequestConfig QueryHistoryValid.nil (i := 0) (j := 2)
     (q := interleavedQuery0) (q' := thirdQuery) (by decide) rfl rfl rfl
 
@@ -2762,23 +2787,23 @@ def sharedSiteRun {O : Operands} (P : Program O) (ρ : QueryOracle O) (fuel : Na
 /-- Planted (law `runFromQ_interleaved_site`, case `threeRequestConfig`,
 subject `runFromQ`, mutant `sharedSiteRun`). -/
 example : QueryHistoryValid ([] : List (Query ops)) ∧ 0 ≤ 2 ∧
-    (sharedSiteRun prog env 7 [] [] threeRequestConfig).queries[0]? = some interleavedQuery0 ∧
-    (sharedSiteRun prog env 7 [] [] threeRequestConfig).queries[2]? = some thirdQuery ∧
+    (sharedSiteRun prog observationEnv 7 [] [] threeRequestConfig).queries[0]? = some interleavedQuery0 ∧
+    (sharedSiteRun prog observationEnv 7 [] [] threeRequestConfig).queries[2]? = some thirdQuery ∧
     interleavedQuery0.site = thirdQuery.site ∧
     ¬ thirdQuery.occurrence = interleavedQuery0.occurrence +
-      occurrenceAt (((sharedSiteRun prog env 7 [] [] threeRequestConfig).queries.drop 0).take
+      occurrenceAt (((sharedSiteRun prog observationEnv 7 [] [] threeRequestConfig).queries.drop 0).take
         (2 - 0)) interleavedQuery0.site := by
   exact ⟨QueryHistoryValid.nil, by decide, rfl, rfl, rfl, by decide⟩
 
 /-- Instance (law `runFromQ_toReport`, case `terminalConfig`). -/
-example : (runFromQ prog env.toQueryOracle 1 [] [] terminalConfig).toReport =
-    runFrom prog env 1 [] terminalConfig :=
-  runFromQ_toReport (O := ops) (P := prog) (ρ₀ := env) 1 [] [] terminalConfig
+example : (runFromQ prog observationEnv.toQueryOracle 1 [] [] terminalConfig).toReport =
+    runFrom prog observationEnv 1 [] terminalConfig :=
+  runFromQ_toReport (O := ops) (P := prog) (ρ₀ := observationEnv) 1 [] [] terminalConfig
 
 /-- Planted (law `runFromQ_toReport`, case `terminalConfig`,
 subject `runFromQ`, mutant `droppedAnswerRun`). -/
-example : (droppedAnswerRun prog env.toQueryOracle 1 [] [] terminalConfig).toReport ≠
-    runFrom prog env 1 [] terminalConfig := by
+example : (droppedAnswerRun prog observationEnv.toQueryOracle 1 [] [] terminalConfig).toReport ≠
+    runFrom prog observationEnv 1 [] terminalConfig := by
   intro h
   have he := congrArg Report.events h
   cases he
@@ -2787,25 +2812,25 @@ example : (droppedAnswerRun prog env.toQueryOracle 1 [] [] terminalConfig).toRep
 def terminalFinished : Position ops := ⟨⟨.done, [], .init, []⟩, [1], [terminalQuery]⟩
 
 /-- Helper (computation). A real path includes the oracle's event and its recorded query
-(approved: APPR-integ-agy-0dbeba29e).
+(approved: PENDING).
 Constructs a concrete one-step oracle-checked path, including its event and query. -/
-theorem terminalPath : Moves prog env 1 ⟨terminalConfig, [], []⟩ terminalFinished :=
+theorem terminalPath : Moves prog observationEnv 1 ⟨terminalConfig, [], []⟩ terminalFinished :=
   .step (.prim (k := terminalK) (a := ⟨some 1, .ok 0, .init⟩)
     terminalRequest rfl rfl rfl) (.refl _)
 
 /-- Instance (law `runFromQ_complete`, case `terminalConfig`). -/
-example : runFromQ prog env.toQueryOracle 1 [] [] terminalConfig =
-    ⟨terminalFinished.events, terminalFinished.queries, .final .normal⟩ :=
-  runFromQ_complete (O := ops) (P := prog) (ρ := env.toQueryOracle) (n := 1)
+example : runFromQ prog observationEnv.toQueryOracle 1 [] [] terminalConfig =
+    ⟨terminalFinished.events, terminalFinished.queries, .final .normal .init⟩ :=
+  runFromQ_complete (O := ops) (P := prog) (ρ := observationEnv.toQueryOracle) (n := 1)
     (pos := ⟨terminalConfig, [], []⟩) (pos' := terminalFinished) terminalPath
     (f := .normal) rfl
 
 /-- Planted (law `runFromQ_complete`, case `terminalConfig`,
 subject `runFromQ`, mutant `droppedAnswerRun`). -/
-example : Moves prog env 1 ⟨terminalConfig, [], []⟩ terminalFinished ∧
+example : Moves prog observationEnv 1 ⟨terminalConfig, [], []⟩ terminalFinished ∧
     terminalFinished.config.final? = some (.normal : Final Int) ∧
-    droppedAnswerRun prog env.toQueryOracle 1 [] [] terminalConfig ≠
-      ⟨terminalFinished.events, terminalFinished.queries, .final .normal⟩ := by
+    droppedAnswerRun prog observationEnv.toQueryOracle 1 [] [] terminalConfig ≠
+      ⟨terminalFinished.events, terminalFinished.queries, .final .normal .init⟩ := by
   exact ⟨terminalPath, rfl, by intro h; cases h⟩
 
 /-- Instance (law `runFromQ_sound`, case `terminalConfig`). -/
@@ -2835,7 +2860,9 @@ example : ¬ (∃ n pos, Moves prog noAnswerOracle n ⟨terminalConfig, [], []�
         (fabricatedFinalRun prog noAnswerOracle 1 [] [] terminalConfig).queries) := by
   rintro ⟨n, pos, path, _, hc, _⟩
   cases path with
-  | refl => cases hc with | final hf => cases hf
+  | refl =>
+    have hf := Conclusion.final_config hc
+    cases hf
   | step hm _ => exact unanswered_no_move hm
 
 /-- An infinite-prefix mutation loses accumulated histories and restarts the configuration. -/
@@ -2843,15 +2870,15 @@ def forgetfulRunQ {O : Operands} (_ : Program O) (_ : QueryOracle O) (_ : Nat)
     (c : Config O) : QueryReport O := ⟨[], [], .outOfFuel c⟩
 
 /-- Instance (law `InfiniteExecution.evaluator_prefix`, case `event_infinite`). -/
-example : runQ prog env 4 eventConfig =
+example : runQ prog observationEnv 4 eventConfig =
     ⟨(event_infinite.states 4).events, (event_infinite.states 4).queries,
       .outOfFuel (event_infinite.states 4).config⟩ :=
-  InfiniteExecution.evaluator_prefix (O := ops) (P := prog) (ρ := env.toQueryOracle)
+  InfiniteExecution.evaluator_prefix (O := ops) (P := prog) (ρ := observationEnv.toQueryOracle)
     (c := eventConfig) event_infinite 4
 
 /-- Planted (law `InfiniteExecution.evaluator_prefix`, case `event_infinite`,
 subject `runQ`, mutant `forgetfulRunQ`). -/
-example : forgetfulRunQ prog env 4 eventConfig ≠
+example : forgetfulRunQ prog observationEnv 4 eventConfig ≠
     ⟨(event_infinite.states 4).events, (event_infinite.states 4).queries,
       .outOfFuel (event_infinite.states 4).config⟩ := by
   intro h
@@ -2859,14 +2886,14 @@ example : forgetfulRunQ prog env 4 eventConfig ≠
   cases he
 
 /-- Instance (law `runFromQ_queryHistoryValid`, case `threeRequestConfig`). -/
-example : QueryHistoryValid (runFromQ prog env 7 [] [] threeRequestConfig).queries :=
-  runFromQ_queryHistoryValid (O := ops) (P := prog) (ρ := env.toQueryOracle)
+example : QueryHistoryValid (runFromQ prog observationEnv 7 [] [] threeRequestConfig).queries :=
+  runFromQ_queryHistoryValid (O := ops) (P := prog) (ρ := observationEnv.toQueryOracle)
     7 [] [] threeRequestConfig QueryHistoryValid.nil
 
 /-- Planted (law `runFromQ_queryHistoryValid`, case `threeRequestConfig`,
 subject `runFromQ`, mutant `sharedSiteRun`). -/
 example : QueryHistoryValid ([] : List (Query ops)) ∧
-    ¬ QueryHistoryValid (sharedSiteRun prog env 7 [] [] threeRequestConfig).queries := by
+    ¬ QueryHistoryValid (sharedSiteRun prog observationEnv 7 [] [] threeRequestConfig).queries := by
   refine ⟨QueryHistoryValid.nil, ?_⟩
   intro h
   have wrong := h 1 { interleavedQuery1 with site := s } rfl
@@ -2880,24 +2907,24 @@ def earlyStopRun {O : Operands} (P : Program O) (ρ : Oracle O) (fuel : Nat)
   if fuel = 11 then ⟨[], .outOfFuel c⟩ else run P ρ fuel c
 
 /-- Instance (law `TerminationEvidence.all_allowed_runs`, case `terminatingEvidence`). -/
-example : ∃ fn c f, AList.lookup prog.fns terminatingDomain.function = some fn ∧
-    enter fn [] .init = some c ∧ (run prog env 11 c).ending = .final f :=
+example : ∃ fn c f finalStore, AList.lookup prog.fns terminatingDomain.function = some fn ∧
+    enter fn [] .init = some c ∧ (run prog observationEnv 11 c).ending = .final f finalStore :=
   TerminationEvidence.all_allowed_runs (O := ops) (P := prog) (domain := terminatingDomain)
-    terminatingEvidence env [] .init ⟨rfl, rfl, rfl⟩ 11 (by decide)
+    terminatingEvidence observationEnv [] .init ⟨rfl, rfl, rfl⟩ 11 (by decide)
 
 /-- Planted (law `TerminationEvidence.all_allowed_runs`, case `terminatingEvidence`,
 subject `run`, mutant `earlyStopRun`). -/
-example : terminatingDomain.calls env [] .init ∧
-    terminatingEvidence.conditional.fuel terminatingEvidence.premises env [] .init ≤ 11 ∧
-    ¬ (∃ fn c f, AList.lookup prog.fns terminatingDomain.function = some fn ∧
-      enter fn [] .init = some c ∧ (earlyStopRun prog env 11 c).ending = .final f) := by
+example : terminatingDomain.calls observationEnv [] .init ∧
+    terminatingEvidence.conditional.fuel terminatingEvidence.premises observationEnv [] .init ≤ 11 ∧
+    ¬ (∃ fn c f finalStore, AList.lookup prog.fns terminatingDomain.function = some fn ∧
+      enter fn [] .init = some c ∧ (earlyStopRun prog observationEnv 11 c).ending = .final f finalStore) := by
   refine ⟨⟨rfl, rfl, rfl⟩, by decide, ?_⟩
-  rintro ⟨fn, c, f, _, _, h⟩
+  rintro ⟨fn, c, f, finalStore, _, _, h⟩
   simp [earlyStopRun] at h
 
 /-- The no-intervening-same-site specialization is exercised by the same three-query run. -/
 example : thirdQuery.occurrence = interleavedQuery0.occurrence + 1 :=
-  runFromQ_interleaved_other_sites (O := ops) (P := prog) (ρ := env.toQueryOracle)
+  runFromQ_interleaved_other_sites (O := ops) (P := prog) (ρ := observationEnv.toQueryOracle)
     7 [] [] threeRequestConfig QueryHistoryValid.nil (i := 0) (j := 2)
     (q := interleavedQuery0) (q' := thirdQuery) (by decide) rfl rfl rfl (by
       intro k r hik hkj hkr
@@ -2915,16 +2942,16 @@ def extraFuelDropRunFrom {O : Operands} (P : Program O) (ρ : Oracle O) (fuel : 
   else ⟨[], (runFrom P ρ fuel events c).ending⟩
 
 /-- Instance (law `runFrom_mono`, case `terminalConfig`). -/
-example : runFrom prog env 2 [] terminalConfig = runFrom prog env 1 [] terminalConfig :=
-  runFrom_mono (O := ops) (P := prog) (ρ₀ := env) 1 2 (by decide) [] terminalConfig
+example : runFrom prog observationEnv 2 [] terminalConfig = runFrom prog observationEnv 1 [] terminalConfig :=
+  runFrom_mono (O := ops) (P := prog) (ρ₀ := observationEnv) 1 2 (by decide) [] terminalConfig
     (by intro c' h; cases h)
 
 /-- Planted (law `runFrom_mono`, case `terminalConfig`,
 subject `runFrom`, mutant `extraFuelDropRunFrom`). -/
 example : 1 ≤ 2 ∧
-    (∀ c', (extraFuelDropRunFrom prog env 1 [] terminalConfig).ending ≠ .outOfFuel c') ∧
-    extraFuelDropRunFrom prog env 2 [] terminalConfig ≠
-      extraFuelDropRunFrom prog env 1 [] terminalConfig := by
+    (∀ c', (extraFuelDropRunFrom prog observationEnv 1 [] terminalConfig).ending ≠ .outOfFuel c') ∧
+    extraFuelDropRunFrom prog observationEnv 2 [] terminalConfig ≠
+      extraFuelDropRunFrom prog observationEnv 1 [] terminalConfig := by
   refine ⟨by decide, ?_, ?_⟩
   · intro c' h
     cases h
@@ -2933,15 +2960,15 @@ example : 1 ≤ 2 ∧
     cases he
 
 /-- Instance (law `runFrom_trace_prefix_le`, case `terminalConfig`). -/
-example : (runFrom prog env 1 [] terminalConfig).events <+:
-    (runFrom prog env 2 [] terminalConfig).events :=
-  runFrom_trace_prefix_le (O := ops) (P := prog) (ρ₀ := env) 1 2 (by decide) [] terminalConfig
+example : (runFrom prog observationEnv 1 [] terminalConfig).events <+:
+    (runFrom prog observationEnv 2 [] terminalConfig).events :=
+  runFrom_trace_prefix_le (O := ops) (P := prog) (ρ₀ := observationEnv) 1 2 (by decide) [] terminalConfig
 
 /-- Planted (law `runFrom_trace_prefix_le`, case `terminalConfig`,
 subject `runFrom`, mutant `extraFuelDropRunFrom`). -/
 example : 1 ≤ 2 ∧
-    ¬ (extraFuelDropRunFrom prog env 1 [] terminalConfig).events <+:
-      (extraFuelDropRunFrom prog env 2 [] terminalConfig).events := by
+    ¬ (extraFuelDropRunFrom prog observationEnv 1 [] terminalConfig).events <+:
+      (extraFuelDropRunFrom prog observationEnv 2 [] terminalConfig).events := by
   refine ⟨by decide, ?_⟩
   rintro ⟨rest, h⟩
   cases h
@@ -2952,23 +2979,23 @@ def skippedStepRunFromQ {O : Operands} (P : Program O) (ρ : QueryOracle O) (fue
   runFromQ P ρ (2 * fuel) events issued c
 
 /-- Instance (law `move_of_fuel_succ`, case `eventConfig`). -/
-example : Move prog env
-    ((runFromQ prog env 0 [] [] eventConfig).position eventConfig)
-    ((runFromQ prog env (0 + 1) [] [] eventConfig).position eventConfig) :=
-  move_of_fuel_succ (O := ops) (P := prog) (ρ := env.toQueryOracle) (n := 0)
+example : Move prog observationEnv
+    ((runFromQ prog observationEnv 0 [] [] eventConfig).position eventConfig)
+    ((runFromQ prog observationEnv (0 + 1) [] [] eventConfig).position eventConfig) :=
+  move_of_fuel_succ (O := ops) (P := prog) (ρ := observationEnv.toQueryOracle) (n := 0)
     (events := []) (issued := []) (c := eventConfig) rfl rfl
 
 /-- Planted (law `move_of_fuel_succ`, case `eventConfig`,
 subject `runFromQ`, mutant `skippedStepRunFromQ`). Doubling the fuel budget skips every second
 transition; both fuel prefixes still report `outOfFuel`, but no single machine transition links
 the initial position to the two-step position. -/
-example : (skippedStepRunFromQ prog env 0 [] [] eventConfig).isOutOfFuel = true ∧
-    (skippedStepRunFromQ prog env (0 + 1) [] [] eventConfig).isOutOfFuel = true ∧
-    ¬ Move prog env
-      ((skippedStepRunFromQ prog env 0 [] [] eventConfig).position eventConfig)
-      ((skippedStepRunFromQ prog env (0 + 1) [] [] eventConfig).position eventConfig) := by
+example : (skippedStepRunFromQ prog observationEnv 0 [] [] eventConfig).isOutOfFuel = true ∧
+    (skippedStepRunFromQ prog observationEnv (0 + 1) [] [] eventConfig).isOutOfFuel = true ∧
+    ¬ Move prog observationEnv
+      ((skippedStepRunFromQ prog observationEnv 0 [] [] eventConfig).position eventConfig)
+      ((skippedStepRunFromQ prog observationEnv (0 + 1) [] [] eventConfig).position eventConfig) := by
   refine ⟨rfl, rfl, ?_⟩
-  change ¬ Move prog env ⟨eventConfig, [], []⟩ ⟨eventConfig2, [], []⟩
+  change ¬ Move prog observationEnv ⟨eventConfig, [], []⟩ ⟨eventConfig2, [], []⟩
   intro hm
   generalize hp : (⟨eventConfig2, [], []⟩ : Position ops) = pos' at hm
   cases hm with
@@ -2983,12 +3010,12 @@ def stationaryOrMove {O : Operands} (P : Program O) (ρ : QueryOracle O)
     (x y : Position O) : Prop := Move P ρ x y ∨ x = y
 
 /-- Instance (law `InfiniteExecution.unique`, case `spin_infinite`). -/
-example : ExecutionUnique (Move prog env) ⟨spinConfig, [], []⟩ :=
-  InfiniteExecution.unique (P := prog) (ρ := env) (c := spinConfig)
+example : ExecutionUnique (Move prog observationEnv) ⟨spinConfig, [], []⟩ :=
+  InfiniteExecution.unique (P := prog) (ρ := observationEnv) (c := spinConfig)
 
 /-- Planted (law `InfiniteExecution.unique`, case `spin_infinite`,
 subject `Move`, mutant `stationaryOrMove`). -/
-example : ¬ ExecutionUnique (stationaryOrMove prog env) ⟨spinConfig, [], []⟩ := by
+example : ¬ ExecutionUnique (stationaryOrMove prog observationEnv) ⟨spinConfig, [], []⟩ := by
   intro unique
   apply unique
   refine ⟨spin_infinite.states, (fun _ => ⟨spinConfig, [], []⟩),
@@ -3005,13 +3032,13 @@ def rawInfiniteInteraction {O : Operands} {S : Observe.EventSignature} (P : Prog
   InternalInfiniteInteraction P ρ c
 
 /-- Instance (law `silentDivergence_not_infiniteInteraction`, case `erasingAdapter`). -/
-example : ¬ InfiniteInteraction prog erasingAdapter env eventConfig :=
+example : ¬ InfiniteInteraction prog erasingAdapter observationEnv eventConfig :=
   silentDivergence_not_infiniteInteraction erasingAdapter erasing_silent_divergence
 
 /-- Planted (law `silentDivergence_not_infiniteInteraction`, case `erasingAdapter`,
 subject `InfiniteInteraction`, mutant `rawInfiniteInteraction`). -/
-example : SilentDivergence prog erasingAdapter env eventConfig ∧
-    ¬ ¬ rawInfiniteInteraction prog erasingAdapter env eventConfig :=
+example : SilentDivergence prog erasingAdapter observationEnv eventConfig ∧
+    ¬ ¬ rawInfiniteInteraction prog erasingAdapter observationEnv eventConfig :=
   ⟨erasing_silent_divergence, fun h => h erasing_internal_infinite⟩
 
 /-- An execution-record mutation that drops the transition-step obligation (`step`), allowing a
@@ -3021,14 +3048,14 @@ def stationaryExecution {O : Operands} (_ : Program O) (_ : QueryOracle O)
   { states : Nat → Position O // states 0 = ⟨c, [], []⟩ }
 
 /-- Instance (law `not_infinite_of_final`, case `finishingConfig`). -/
-example : ¬ Nonempty (InfiniteExecution prog env.toQueryOracle finishingConfig) :=
-  not_infinite_of_final (O := ops) (P := prog) (ρ₀ := env) (fuel := 1)
+example : ¬ Nonempty (InfiniteExecution prog observationEnv.toQueryOracle finishingConfig) :=
+  not_infinite_of_final (O := ops) (P := prog) (ρ₀ := observationEnv) (fuel := 1)
     (c := finishingConfig) (f := .normal) rfl
 
 /-- Planted (law `not_infinite_of_final`, case `finishingConfig`,
 subject `InfiniteExecution`, mutant `stationaryExecution`). -/
-example : (run prog env 1 finishingConfig).ending = .final .normal ∧
-    ¬ ¬ Nonempty (stationaryExecution prog env.toQueryOracle finishingConfig) :=
+example : (run prog observationEnv 1 finishingConfig).ending = .final .normal .init ∧
+    ¬ ¬ Nonempty (stationaryExecution prog observationEnv.toQueryOracle finishingConfig) :=
   ⟨rfl, fun h => h ⟨⟨fun _ => ⟨finishingConfig, [], []⟩, rfl⟩⟩⟩
 
 /-- A C1 oracle that leaves every primitive request unanswered. -/
@@ -3049,7 +3076,7 @@ example : (run prog blockingEnv 1 terminalConfig).ending = .noAnswer terminalCon
 a final report at larger fuel budgets. -/
 def resumeBlockedRun {O : Operands} (P : Program O) (ρ : Oracle O) (fuel : Nat)
     (c : Config O) : Report O :=
-  if fuel ≤ 1 then run P ρ fuel c else ⟨[], .final .normal⟩
+  if fuel ≤ 1 then run P ρ fuel c else ⟨[], .final .normal c.store⟩
 
 /-- Instance (law `endlesslyBlocked_of_noAnswer`, case `terminalConfig`). -/
 example : ∀ n, 1 ≤ n →
@@ -3068,16 +3095,16 @@ example : (resumeBlockedRun prog blockingEnv 1 terminalConfig).ending = .noAnswe
   cases h2
 
 /-- Instance (law `TerminationEvidence.excludes_infinite`, case `terminatingEvidence`). -/
-example : ¬ Nonempty (InfiniteExecution prog env.toQueryOracle (start boomFn [] .init)) :=
+example : ¬ Nonempty (InfiniteExecution prog observationEnv.toQueryOracle (start boomFn [] .init)) :=
   TerminationEvidence.excludes_infinite (O := ops) (P := prog) (domain := terminatingDomain)
-    terminatingEvidence env [] .init boomFn (start boomFn [] .init) rfl ⟨rfl, rfl, rfl⟩ rfl
+    terminatingEvidence observationEnv [] .init boomFn (start boomFn [] .init) rfl ⟨rfl, rfl, rfl⟩ rfl
 
 /-- Planted (law `TerminationEvidence.excludes_infinite`, case `terminatingEvidence`,
 subject `InfiniteExecution`, mutant `stationaryExecution`). -/
 example : AList.lookup prog.fns terminatingDomain.function = some boomFn ∧
-    terminatingDomain.calls env [] .init ∧
+    terminatingDomain.calls observationEnv [] .init ∧
     enter boomFn [] .init = some (start boomFn [] .init) ∧
-    ¬ ¬ Nonempty (stationaryExecution prog env.toQueryOracle (start boomFn [] .init)) :=
+    ¬ ¬ Nonempty (stationaryExecution prog observationEnv.toQueryOracle (start boomFn [] .init)) :=
   ⟨rfl, ⟨rfl, rfl, rfl⟩, rfl, fun h => h ⟨⟨fun _ => ⟨start boomFn [] .init, [], []⟩, rfl⟩⟩⟩
 
 end Demo

@@ -32,12 +32,16 @@ namespace ConcreteSpec.Core.Observe
 open ConcreteSpec.Core
 
 /-- The types an external-event instance supplies. `Kind` is extensible by choosing a larger type;
-each kind keeps its own request and response types. Public output is separate from operations. -/
+each kind keeps its own request and response types. Public output is separate from operations.
+`State` is the abstract externally visible state observed at termination, with initial launch
+state `initState`. -/
 structure EventSignature where
   Kind : Type
   Request : Kind → Type
   Response : Kind → Type
   Output : Type
+  State : Type
+  initState : State
 
 variable {S : EventSignature}
 
@@ -102,6 +106,48 @@ inductive ValidTrace (C : OperationContract S) (input : C.Input) :
 /-- A complete finite trace has no outstanding request. -/
 def CompleteTrace (C : OperationContract S) (input : C.Input) (events : List (Event S)) : Prop :=
   ValidTrace C input none events
+
+/-- An executable C6 environment handler: given the static launch input, the prior C6 event
+history, and the typed request `(k, req)`, `reply` dispatches on the operation kind `k` to compute
+either a typed payload `S.Response k` for that same operation kind or `none` when the environment
+leaves the request unanswered (blocked). Because `reply` returns `Option (S.Response q.1)`,
+`Environment.respond` guarantees operation-kind routing (`RequestResponse q r`) by construction
+whenever a response is produced. -/
+structure Environment (S : EventSignature) (Input : Type) where
+  reply : Input → List (Event S) → (k : S.Kind) → S.Request k → Option (S.Response k)
+
+/-- Execute an environment handler on a dependent request `q : Request S` after `history`,
+packaging a produced payload with `q.1` into `.response ⟨q.1, resp⟩` and mapping `none` to
+`.blocked`. -/
+def Environment.respond {S : EventSignature} {Input : Type}
+    (E : Environment S Input) (input : Input) (history : List (Event S))
+    (q : Request S) : Answer S :=
+  match E.reply input history q.1 q.2 with
+  | some resp => .response ⟨q.1, resp⟩
+  | none => .blocked
+
+/-- An executable environment handler `E` is valid for operation contract `C` when every produced
+payload satisfies `C.allows` at the history ending in `.request q`, and every `none` result is
+permitted to block by `C.mayBlock` at that history. -/
+structure Environment.Valid {S : EventSignature} (C : OperationContract S)
+    (E : Environment S C.Input) : Prop where
+  allows {input history k req resp} :
+    E.reply input (history ++ [.request ⟨k, req⟩]) k req = some resp →
+    C.allows input (history ++ [.request ⟨k, req⟩]) ⟨k, req⟩ ⟨k, resp⟩
+  mayBlock {input history k req} :
+    E.reply input (history ++ [.request ⟨k, req⟩]) k req = none →
+    C.mayBlock input (history ++ [.request ⟨k, req⟩]) ⟨k, req⟩
+
+/-- Extend a completed C6 event history by issuing request `q` and immediately recording
+`E.respond`'s answer: if `E.respond` returns `.response r`, both `.request q` and `.response r`
+are appended (`CompleteTrace`, pending `none`); if `E.respond` returns `.blocked`, `.request q`
+remains pending (`some q`). -/
+def Environment.stepHistory {S : EventSignature} {Input : Type}
+    (E : Environment S Input) (input : Input) (history : List (Event S))
+    (q : Request S) : List (Event S) × Option (Request S) :=
+  match E.respond input (history ++ [.request q]) q with
+  | .response r => (history ++ [.request q, .response r], none)
+  | .blocked => (history ++ [.request q], some q)
 
 /-- A finite externally visible history, oldest event first. -/
 abbrev FiniteTrace (S : EventSignature) := List (Event S)
@@ -231,6 +277,32 @@ def trapLine (kind : TrapKind) (site : SiteId) (sp : Span) : String :=
 /-- The 1-based byte column after source text `before`: its UTF-8 byte length plus one. -/
 def byteColumn (before : String) : Nat := before.utf8ByteSize + 1
 
+/-- A candidate point span from a structured path and a source line prefix. The column counts
+UTF-8 bytes, including one byte for a tab. Its offset is relative to that prefix; use
+`sourcePrefixSpan` for a whole-file offset. Only the project loader admits a candidate for reporting. -/
+def sourceSpan (path : SourcePath) (line : Nat) (linePositive : 0 < line)
+    (before : String) : Span :=
+  ⟨path, before.utf8ByteSize, before.utf8ByteSize, Nat.le_refl _, line, before.utf8ByteSize + 1, linePositive, Nat.zero_lt_succ _⟩
+
+/-- Scan the source text preceding an operation from the start of the file, returning the number
+of completed newline breaks and the characters preceding the operation on its own line. -/
+def scanSourcePrefix : List Char → Nat → List Char → Nat × List Char
+  | [], newlines, current => (newlines, current)
+  | c :: cs, newlines, current =>
+    if c = '\n' then scanSourcePrefix cs (newlines + 1) []
+    else scanSourcePrefix cs newlines (current ++ [c])
+
+/-- Construct an operation's `Span` from a validated project-relative forward-slash path and the
+multi-line source text preceding the operation from the beginning of the file. Newlines advance
+the 1-based line number and reset the current line prefix; the column on the final line is its
+1-based UTF-8 byte column (`byteColumn`), with a tab counting one byte. -/
+def sourcePrefixSpan (path : SourcePath) (prefixText : String) : Span :=
+  let scanned := scanSourcePrefix prefixText.toList 0 []
+  { sourceSpan path (scanned.1 + 1) (Nat.zero_lt_succ _) (String.ofList scanned.2) with
+    startOffset := prefixText.utf8ByteSize
+    endOffset := prefixText.utf8ByteSize
+    range_ok := Nat.le_refl _ }
+
 /-- A span's column is the byte column at the operation on its source line. -/
 def Span.HasByteColumn (sp : Span) (before : String) : Prop := sp.col = byteColumn before
 
@@ -240,9 +312,9 @@ inductive Terminal where
   | startupRefused
   | exited (status : Nat)
   | trapped (kind : TrapKind) (site : SiteId) (sp : Span) (line : String)
+  deriving DecidableEq, Repr
 
-/-- The terminal observation of a trap at a site present in the table. An absent site is not
-assigned an invented source location. -/
+/-- Resolve the registered source span without rechecking admission invariants. -/
 def trapTerminal (sites : SiteTable) (kind : TrapKind) (site : SiteId) : Option Terminal :=
   (AList.lookup sites site).map fun sp => .trapped kind site sp (trapLine kind site sp)
 
@@ -257,10 +329,11 @@ def Terminal.trapLine? : Terminal → Option String
   | .trapped _ _ _ line => some line
   | _ => none
 
-/-- A finite event history followed by a logical terminal action. -/
+/-- A finite event history, a logical terminal action, and the externally visible final state. -/
 structure Observation (S : EventSignature) where
   events : FiniteTrace S
   terminal : Terminal
+  state : S.State
 
 /-- Every externally visible behavior: finite termination, an explicitly blocked request, silent
 or eventually silent divergence with a finite event history, or an infinite event history. In
@@ -272,9 +345,10 @@ inductive FullObservation (S : EventSignature) where
   | finiteDivergence (events : FiniteTrace S)
   | infiniteDivergence (events : InfiniteTrace S)
 
-/-- Startup is refused before any program event when a required launch grant is missing. -/
+/-- Startup is refused before any program event when a required launch grant is missing,
+leaving the initial externally visible state unchanged. -/
 def launch (configured : Bool) (run : Unit → FullObservation S) : FullObservation S :=
-  if configured then run () else .terminal ⟨[], .startupRefused⟩
+  if configured then run () else .terminal ⟨[], .startupRefused, S.initState⟩
 
 /-! ## Preservation across silent internal steps -/
 
@@ -283,12 +357,21 @@ inductive Step (S : EventSignature) where
   | silent
   | emit (event : Event S)
 
-/-- A finite terminated or blocked execution, or a step-indexed infinite execution. The infinite
-form retains silent steps, so an empty event history does not make it terminated. -/
+/-- A finite terminated or blocked execution, or a step-indexed infinite execution. The finite
+form retains its terminal action and externally visible final state; the infinite form retains
+silent steps, so an empty event history does not make it terminated. -/
 inductive Execution (S : EventSignature) where
-  | finite (steps : List (Step S)) (terminal : Terminal)
+  | finite (steps : List (Step S)) (terminal : Terminal) (state : S.State)
   | blocked (steps : List (Step S)) (request : Request S)
   | infinite (steps : Nat → Step S)
+
+/-- Insert one internal step before an execution, retaining its ending and final state, and
+shifting every infinite step by one. This is an executable transformation, independent of the
+observation relations below; it does not inspect or recheck observation equivalence. -/
+def delayExecution : Execution S → Execution S
+  | .finite steps terminal state => .finite (.silent :: steps) terminal state
+  | .blocked steps request => .blocked (.silent :: steps) request
+  | .infinite steps => .infinite (fun n => match n with | 0 => .silent | n + 1 => steps n)
 
 /-- Any finite number of silent steps inserted anywhere in a finite execution. -/
 inductive SilentInsertion : List (Step S) → List (Step S) → Prop where
@@ -329,13 +412,13 @@ emitting and diverge silently. Each visible prefix of either must eventually occ
 def SameInfiniteObservation (steps₁ steps₂ : Nat → Step S) : Prop :=
   PrefixEventually steps₁ steps₂ ∧ PrefixEventually steps₂ steps₁
 
-/-- Full-observation equivalence for executions. Finite runs preserve every event and the exact
-terminal action; blocked runs also preserve the pending request. Infinite runs use the eventual
-prefix relation. Mixed finite/infinite cases are false, which is what prevents silent divergence
-from becoming successful termination. -/
+/-- Full-observation equivalence for executions. Finite runs preserve every event, the exact
+terminal action, and the externally visible final state; blocked runs also preserve the pending
+request. Infinite runs use the eventual prefix relation. Mixed finite/infinite cases are false,
+which is what prevents silent divergence from becoming successful termination. -/
 def SameObservation : Execution S → Execution S → Prop
-  | .finite xs terminal, .finite ys terminal' =>
-      visible xs = visible ys ∧ terminal = terminal'
+  | .finite xs terminal state, .finite ys terminal' state' =>
+      visible xs = visible ys ∧ terminal = terminal' ∧ state = state'
   | .blocked xs request, .blocked ys request' =>
       visible xs = visible ys ∧ request = request'
   | .infinite xs, .infinite ys => SameInfiniteObservation xs ys
@@ -345,13 +428,14 @@ def SameObservation : Execution S → Execution S → Prop
 def finiteDivergenceSteps (events : FiniteTrace S) (n : Nat) : Step S :=
   if h : n < events.length then .emit events[n] else .silent
 
-/-- An execution has a particular full observation. Finite and blocked runs project exactly their
-visible history and ending. An infinite run with finite divergence has the same history as the
-canonical eventually silent execution; infinite divergence retains every event of an infinite
-trace. This is a projection relation, not merely a restatement of `SameObservation`. -/
+/-- An execution has a particular full observation. Finite and blocked runs project their visible
+history, ending, and (for finite termination) externally visible final state. An infinite run with
+finite divergence has the same history as the canonical eventually silent execution; infinite
+divergence retains every event of an infinite trace. This is a projection relation, not merely a
+restatement of `SameObservation`. -/
 def HasFullObservation : Execution S → FullObservation S → Prop
-  | .finite steps terminal, .terminal observation =>
-      observation = ⟨visible steps, terminal⟩
+  | .finite steps terminal state, .terminal observation =>
+      observation = ⟨visible steps, terminal, state⟩
   | .blocked steps request, .blocked events request' =>
       visible steps ++ [.request request] = events ∧ request = request'
   | .infinite steps, .finiteDivergence events =>
@@ -364,13 +448,20 @@ def HasFullObservation : Execution S → FullObservation S → Prop
 
 /-- How a C1 operand instance appears in C6. An answer's C1 event may project to several typed C6
 events (for example, the split request and response it records). A pending C1 request must have a
-typed C6 request for blocking to be observed. Only a valid `main` result needs a status mapping;
-C1's value-less `Final.normal` is not given an invented process status. -/
+typed C6 request for blocking to be observed. `state` projects the externally visible final state
+from the C1 store. Only a valid `main` result needs a status mapping; C1's value-less
+`Final.normal` is not given an invented process status. -/
 structure ExecAdapter (O : Exec.Operands) (S : EventSignature) where
   events : O.Event → List (Event S)
   request : O.Prim → List O.Val → SiteId → O.Store → Option (Request S)
   status : O.Val → Option Nat
-  sites : SiteTable
+  state : O.Store → S.State
+  sourceProject : LoadedProject
+  sourceInput : ProjectSources
+  loaded : LoadedProject.load sourceInput = .admitted sourceProject
+
+/-- The site table supplied by the project boundary. -/
+def ExecAdapter.sites {O : Exec.Operands} {S : EventSignature} (A : ExecAdapter O S) : SiteTable := A.sourceProject.sites
 
 variable {O : Exec.Operands}
 
@@ -378,11 +469,110 @@ variable {O : Exec.Operands}
 def ExecAdapter.project (A : ExecAdapter O S) (events : List O.Event) : List (Event S) :=
   events.flatMap A.events
 
+/-- Select public outputs from the shared observation history, preserving their order. -/
+def publicOutputs (events : List (Event S)) : List S.Output :=
+  events.filterMap (fun event => match event with | .output value => some value | _ => none)
+
+/-- Primitive-level physical interpretation stored in the authoritative semantic operand bundle.
+The class notation supports low-level relation/list helpers; public physical laws use the bundle. `emit` describes the effect of executing an accepted primitive answer;
+`past` interprets recorded C1 events, including effects before the current evaluator call. -/
+class PhysicalEffects (O : Exec.Operands) (Output : Type) where
+  emit : O.Prim → List O.Val → O.Store → Exec.Answer O.Val O.Event O.Store → List Output
+  past : O.Event → List Output
+
+/-- Adapter output correspondence against a selected execution model's primitive semantics.
+The typeclass parameter is internal plumbing; public physical laws select it from the semantic
+operand bundle, never from an adapter or ambient instance search. -/
+def ExecAdapter.OutputCorrespondence [F : PhysicalEffects O S.Output]
+    (A : ExecAdapter O S) : Prop :=
+  ∀ event, publicOutputs (A.events event) = F.past event
+
+/-- A lawful oracle records in `a.event` the physical effects specified by the operand language's
+`PhysicalEffects` instance for its accepted primitive answers. This obligation is about primitive
+execution, not the adapter's public projection. -/
+def PhysicalEffects.OracleFaithful (Output : Type) [F : PhysicalEffects O Output]
+    (ρ : Exec.Oracle O) : Prop :=
+  ∀ hist p vs site store a, ρ hist p vs site store = some a →
+    O.allows p vs store a = true →
+    a.event.toList.flatMap F.past = F.emit p vs store a
+
+/-- Authoritative operand/signature bundle for physical execution. Choosing a different effect
+interpretation creates a different semantic operand language, even if its erased C1 operands
+coincide. An adapter is admitted against this bundle; it cannot supply its own interpretation.
+The primitive oracle and its independently proved recording obligation travel with the operands. -/
+structure PhysicalOperands (Output : Type) where
+  operands : Exec.Operands
+  effects : PhysicalEffects operands Output
+  oracle : Exec.Oracle operands
+  faithful : @PhysicalEffects.OracleFaithful operands Output effects oracle
+
+/-- Execute the authoritative primitive oracle of the semantic operand bundle. -/
+abbrev PhysicalOperands.runFrom {Output : Type} (M : PhysicalOperands Output)
+    (P : Exec.Program M.operands) (fuel : Nat) (hist : List M.operands.Event)
+    (c : Exec.Config M.operands) : Exec.Report M.operands :=
+  Exec.runFrom P M.oracle fuel hist c
+
+/-- Adapter admission uses the effect interpretation owned by the semantic operands.
+There is no independently selectable interpretation argument. -/
+def PhysicalOperands.Admits {S : EventSignature} (M : PhysicalOperands S.Output)
+    (A : ExecAdapter M.operands S) : Prop :=
+  @ExecAdapter.OutputCorrespondence S M.operands M.effects A
+
+/-- Independent physical execution semantics from `(hist, c)` to a stopped or budget-exhausted
+evaluator ending `Exec.Ending O`. Every stopping constructor is guarded by the exact machine
+condition (`final?`, `step`, oracle answer, primitive contract, or continuation) that stops
+execution, and stepping constructors require `c.final? = none`, so an execution reaching `.final`,
+`.noAnswer`, `.stuck`, or `.badAnswer` cannot stop early at an intermediate step. -/
+inductive PhysicalEffects.Execution (Output : Type) [F : PhysicalEffects O Output]
+    (P : Exec.Program O) (ρ : Exec.Oracle O) :
+    List O.Event → Exec.Config O → List Output → List O.Event → Exec.Ending O → Prop where
+  | final {hist c f} :
+      c.final? = some f →
+      PhysicalEffects.Execution Output P ρ hist c [] hist (.final f c.store)
+  | outOfFuel {hist c} :
+      c.final? = none →
+      PhysicalEffects.Execution Output P ρ hist c [] hist (.outOfFuel c)
+  | stuckStep {hist c} :
+      c.final? = none →
+      Exec.step P c = none →
+      PhysicalEffects.Execution Output P ρ hist c [] hist (.stuck c)
+  | stuckCont {hist c p vs site store k a} :
+      c.final? = none →
+      Exec.step P c = some (.request p vs site store k) →
+      ρ hist p vs site store = some a →
+      O.allows p vs store a = true →
+      k a = none →
+      PhysicalEffects.Execution Output P ρ hist c [] hist (.stuck c)
+  | noAnswer {hist c p vs site store k} :
+      c.final? = none →
+      Exec.step P c = some (.request p vs site store k) →
+      ρ hist p vs site store = none →
+      PhysicalEffects.Execution Output P ρ hist c [] hist (.noAnswer c)
+  | badAnswer {hist c p vs site store k a} :
+      c.final? = none →
+      Exec.step P c = some (.request p vs site store k) →
+      ρ hist p vs site store = some a →
+      O.allows p vs store a = false →
+      PhysicalEffects.Execution Output P ρ hist c [] hist (.badAnswer c)
+  | silent {hist c next outputs finalHist ending} :
+      c.final? = none →
+      Exec.step P c = some (.next next) →
+      PhysicalEffects.Execution Output P ρ hist next outputs finalHist ending →
+      PhysicalEffects.Execution Output P ρ hist c outputs finalHist ending
+  | answer {hist c p vs site store k a next outputs finalHist ending} :
+      c.final? = none →
+      Exec.step P c = some (.request p vs site store k) →
+      ρ hist p vs site store = some a →
+      O.allows p vs store a = true →
+      k a = some next →
+      PhysicalEffects.Execution Output P ρ (hist ++ a.event.toList) next outputs finalHist ending →
+      PhysicalEffects.Execution Output P ρ hist c (F.emit p vs store a ++ outputs) finalHist ending
+
 /-- Adapter and oracle well-formedness against a C6 operation contract. An internal answer emits
 only output. If a C1 request has typed request `q`, its answer projects to any output, then
 `.request q`, then a matching `.response r`, then any output; output cannot intervene while `q` is
 pending. The response satisfies `C.allows` in the history ending in that request. An unanswered
-typed request is blocking, not an evaluator result, only when `C.mayBlock` permits it. -/
+primitive request must have a typed external request `q` that `C.mayBlock` permits to block. -/
 structure ExecAdapter.WellFormed (A : ExecAdapter O S) (C : OperationContract S) (input : C.Input)
     (ρ : Exec.Oracle O) : Prop where
   internal {hist p vs site store a} : ρ hist p vs site store = some a →
@@ -394,9 +584,9 @@ structure ExecAdapter.WellFormed (A : ExecAdapter O S) (C : OperationContract S)
       (∃ outputs : List S.Output, before = outputs.map Event.output) ∧
       (∃ outputs : List S.Output, after = outputs.map Event.output) ∧
       RequestResponse q r ∧ C.allows input (A.project hist ++ before ++ [.request q]) q r
-  blocked {hist p vs site store q} : ρ hist p vs site store = none →
-    A.request p vs site store = some q →
-    C.mayBlock input (A.project hist ++ [.request q]) q
+  blocked {hist p vs site store} : ρ hist p vs site store = none →
+    ∃ q, A.request p vs site store = some q ∧
+      C.mayBlock input (A.project hist ++ [.request q]) q
 
 /-- Turn a C1 final configuration into a logical terminal observation, if it is a valid hosted
 `main` ending with a known trap site. -/
@@ -406,10 +596,10 @@ def ExecAdapter.terminal? (A : ExecAdapter O S) : Exec.Final O.Val → Option Te
   | .trapped kind site => trapTerminal A.sites kind site
 
 /-- The observation of a C1 finite execution. Its event projection is retained in full, including
-all output emitted before a trap. -/
+all output emitted before a trap, together with the projected externally visible final state. -/
 def stepsObservation (A : ExecAdapter O S) {P : Exec.Program O} {c c' : Exec.Config O}
     {events : List O.Event} (_steps : Exec.Steps P c events c') : Option (Observation S) :=
-  (c'.final?.bind A.terminal?).map fun terminal => ⟨A.project events, terminal⟩
+  (c'.final?.bind A.terminal?).map fun terminal => ⟨A.project events, terminal, A.state c'.store⟩
 
 /-- Every `noAnswer` projection in a report is permitted to block. The history ends in the typed
 request, exactly as required by `OperationContract.mayBlock` and `ValidTrace`. -/
@@ -421,39 +611,120 @@ def ExecAdapter.BlockingPermitted (P : Exec.Program O) (A : ExecAdapter O S)
 
 /-- The observation of a C1 evaluator report. The `BlockingPermitted` premise prevents an
 unanswered request from becoming a program observation when its operation forbids blocking.
-A blocked observation retains the earlier events and ends in its pending request. Unsafe stuckness,
-a bad answer and fuel exhaustion remain evaluator/premise reports, not external events. -/
+A terminal observation retains the projected event history, terminal action, and projected final
+external state; a blocked observation retains the earlier events and ends in its pending request.
+Unsafe stuckness, a bad answer and fuel exhaustion remain evaluator/premise reports, not external
+events. -/
 def reportObservation (P : Exec.Program O) (A : ExecAdapter O S) (C : OperationContract S)
     (input : C.Input) (r : Exec.Report O) (_permitted : ExecAdapter.BlockingPermitted P A C input r) :
     Option (FullObservation S) :=
   match r.ending with
-  | .final final => (A.terminal? final).map fun terminal =>
-      .terminal ⟨A.project r.events, terminal⟩
+  | .final final store => (A.terminal? final).map fun terminal =>
+      .terminal ⟨A.project r.events, terminal, A.state store⟩
   | .noAnswer c => match Exec.step P c with
     | some (.request p vs site store _) => (A.request p vs site store).map fun request =>
         .blocked (A.project r.events ++ [.request request]) request
     | _ => none
   | .stuck _ | .badAnswer _ | .outOfFuel _ => none
 
+/-- Every launch grant required by `main` is present in the launch configuration. -/
+def grantsConfigured {α : Type} [DecidableEq α] (required configured : List α) : Bool :=
+  required.all (fun g => decide (g ∈ configured))
+
+/-- Hosted launcher observation of a C1 evaluator run from initial configuration `c` (Q7.10,
+Q8.5): if any required grant is missing from `configured`, `main` does not run and the parent
+observes empty events, `.startupRefused` (exit status 125, no trap line), and the initial
+external state `A.state c.store`; otherwise `Exec.run P ρ fuel c` runs and is observed
+through `reportObservation`. -/
+def launchObservation {α : Type} [DecidableEq α] (required configured : List α)
+    (P : Exec.Program O) (A : ExecAdapter O S) (C : OperationContract S) (input : C.Input)
+    (ρ : Exec.Oracle O) (fuel : Nat) (c : Exec.Config O)
+    (permitted : ExecAdapter.BlockingPermitted P A C input (Exec.run P ρ fuel c)) :
+    Option (FullObservation S) :=
+  if grantsConfigured required configured then
+    reportObservation P A C input (Exec.run P ρ fuel c) permitted
+  else
+    some (.terminal ⟨[], .startupRefused, A.state c.store⟩)
+
 /-! ## Examples -/
+
+/-- C1 operand interface for typed environment calls. Requests and replies retain their dependent
+operation identities, local variables hold returned `Option (Response S)` values read by `eval`,
+and the C1 store carries the signature's externally visible state `S.State`. -/
+abbrev Environment.operands (S : EventSignature) : Exec.Operands where
+  Val := Option (Response S)
+  Expr := Var
+  Ty := Unit
+  Store := S.State
+  Prim := Request S
+  Event := Request S × Response S
+  unitVal := none
+  unitTy := ()
+  isCopy := fun _ => true
+  eval := fun L st x => match AList.lookup L x with
+    | some value => .ok (value, st)
+    | none => .stuck
+  life := fun _ st => some st
+  test := fun _ => none
+  allows := fun _ _ _ _ => true
+
+/-- Decode the C1 exchange records in their execution order. -/
+def Environment.history {S : EventSignature}
+    (hist : List (Request S × Response S)) : List (Event S) :=
+  hist.flatMap fun pair => [.request pair.1, .response pair.2]
+
+/-- Turn a typed operation handler into the actual oracle consumed by `Exec.runFrom`. Dispatch
+receives the preceding exchanges and current request. It returns the computed reply as both the
+C1 result and its recorded response, with unchanged store; blocking returns no C1 answer. -/
+def Environment.oracle {S : EventSignature} {Input : Type}
+    (E : Environment S Input) (input : Input) : Exec.Oracle (Environment.operands S) :=
+  fun hist q _ _ store =>
+    (E.reply input (Environment.history hist ++ [.request q]) q.1 q.2).map fun reply =>
+      ⟨some (q, ⟨q.1, reply⟩), .ok (some ⟨q.1, reply⟩), store⟩
+
+/-- The observation adapter for typed environment calls. Returned `some r` values map to exit
+status `0` and the C1 store `S.State` projects directly as the externally visible state; this
+adapter does not compute or check handler responses. -/
+def Environment.adapter (S : EventSignature) : ExecAdapter (Environment.operands S) S where
+  events := fun pair => [.request pair.1, .response pair.2]
+  request := fun q _ _ _ => some q
+  status := fun v => match v with | some _ => some 0 | none => none
+  state := id
+  sourceProject := ⟨[], []⟩
+  sourceInput := ⟨[], []⟩
+  loaded := rfl
+
+/-- Execute a single typed call in C1 from `store`: bind the primitive's returned response value to
+local variable `⟨"reply", 0⟩` and return that bound local so the `.final (.returned v) store` ending
+observes both the returned response value and the preserved C1 store. -/
+def Environment.call (S : EventSignature) (q : Request S) (site : SiteId) (store : S.State) :
+    Exec.Config (Environment.operands S) :=
+  ⟨.exec (.seq (.prim (some ⟨"reply", 0⟩) q [] site) (.ret ⟨"reply", 0⟩ site)), [], store, []⟩
 
 namespace Demo
 
 inductive Op where
   | double
 
-/-- One operation kind: a natural request, its doubled natural response, and text output. -/
+/-- One operation kind: a natural request, its doubled natural response, text output, and an
+integer external state with initial value `0`. -/
 abbrev signature : EventSignature where
   Kind := Op
   Request := fun _ => Nat
   Response := fun _ => Nat
   Output := String
+  State := Int
+  initState := 0
 
 /-- Responses double the request after any history; blocking is refused by this operation. -/
 abbrev contract : OperationContract signature where
   Input := Unit
   allows := fun _ _ q r => q.2 * 2 = r.2
   mayBlock := fun _ _ _ => False
+
+/-- An executable environment producer, independent of response admission. It implements
+doubling by addition; its result is not guarded by either the operation contract or `Responds`. -/
+def doublingReply (q : Request signature) : Response signature := ⟨q.1, q.2 + q.2⟩
 
 def request (n : Nat) : Event signature := .request ⟨.double, n⟩
 def response (n : Nat) : Event signature := .response ⟨.double, n⟩
@@ -482,9 +753,9 @@ example : Responds contract () [request 3] ⟨.double, 3⟩ (.response ⟨.doubl
 example : InfiniteTrace signature := fun _ => .output "tick"
 
 /-- Internal steps before and after an event do not change a finite observation. -/
-example : SameObservation (.finite [.silent, .emit (request 1), .silent] (.exited 0))
-    (.finite [.emit (request 1)] (.exited 0)) := by
-  exact ⟨rfl, rfl⟩
+example : SameObservation (.finite [.silent, .emit (request 1), .silent] (.exited 0) 0)
+    (.finite [.emit (request 1)] (.exited 0) 0) := by
+  exact ⟨rfl, rfl, rfl⟩
 
 /-- Accepted: an existing silent step is retained while another is inserted. -/
 example : SilentInsertion (S := signature) [.silent, .emit (request 1)]
@@ -493,7 +764,7 @@ example : SilentInsertion (S := signature) [.silent, .emit (request 1)]
 
 /-- An infinite silent execution is not a successful empty termination. -/
 example : ¬ SameObservation (S := signature) (.infinite (fun _ => Step.silent))
-    (.finite [] (.exited 0)) := by
+    (.finite [] (.exited 0) 0) := by
   simp [SameObservation]
 
 def site : SiteId := ⟨7⟩
@@ -525,7 +796,7 @@ example : trapLine .overflow site sp =
 
 example : (trapTerminal sites .overflow site).map Terminal.status = some 134 := by decide
 example : (launch (S := signature) false (fun _ => .finiteDivergence [])) =
-    .terminal ⟨[], .startupRefused⟩ := rfl
+    .terminal ⟨[], .startupRefused, 0⟩ := rfl
 example : (Terminal.exited 134).status = 134 ∧ Terminal.exited 134 ≠
     (trapTerminal sites .overflow site).get (by decide) := by
   constructor
@@ -560,9 +831,13 @@ def refusingAdapter : ExecAdapter refusingBindOps signature where
   events := fun n => [response (Int.toNat n)]
   request := fun _ _ _ _ => none
   status := fun _ => none
-  sites := []
+  state := fun st => st.counter
+  sourceProject := ⟨[], []⟩
+  sourceInput := ⟨[], []⟩
+  loaded := rfl
 
-/-- A stuck report has no `noAnswer` ending, so the blocking premise imposes nothing. -/
+/-- Helper (computation). Bookkeeping for a stuck report: its `noAnswer` antecedent is
+impossible. This is not a contract law or evidence of blocking correctness. (approved: APPR-C6-agy-6477c65a7) -/
 theorem refusedReportPermitted :
     ExecAdapter.BlockingPermitted ⟨[]⟩ refusingAdapter contract () refusedReport := by
   intro c p vs site store k q ending pending typed
@@ -575,6 +850,30 @@ example : refusedReport.events = [] ∧
     (match refusedReport.ending with | .stuck _ => true | _ => false) = true ∧
     reportObservation ⟨[]⟩ refusingAdapter contract () refusedReport refusedReportPermitted = none := by
   refine ⟨by decide, by decide, rfl⟩
+
+/-- Refused: the primitive request and its allowed answer are both present. Only the result
+binding fails. The exact requesting configuration is retained and a nonempty prior history is
+unchanged; failure cannot be explained by a missing oracle answer or a disallowed response. -/
+example : ∃ k : Exec.Answer Int Int Exec.Demo.DState → Option (Exec.Config refusingBindOps),
+    Exec.step (O := refusingBindOps) ⟨[]⟩ refusedRequest =
+      some (.request .log [3] Exec.Demo.s .init k) ∧
+    Exec.Demo.env [11] .log [3] Exec.Demo.s .init =
+      some ⟨some 3, .ok 0, .init⟩ ∧
+    refusingBindOps.allows .log [3] .init ⟨some 3, .ok 0, .init⟩ = true ∧
+    k ⟨some 3, .ok 0, .init⟩ = none ∧
+    Exec.runFrom (O := refusingBindOps) ⟨[]⟩ Exec.Demo.env 1 [11] refusedRequest = ⟨[11], .stuck refusedRequest⟩ := by
+  exact ⟨_, rfl, rfl, by decide, by decide, rfl⟩
+
+/-- Accepted: changing only the destination to the permitted local makes the continuation
+succeed. The same allowed answer is recorded after the same nonempty prior history. -/
+example : ∃ k : Exec.Answer Int Int Exec.Demo.DState → Option (Exec.Config refusingBindOps),
+    ∃ next : Exec.Config refusingBindOps,
+    Exec.step (O := refusingBindOps) ⟨[]⟩ ⟨.exec (.prim (some Exec.Demo.y) .log [.lit 3] Exec.Demo.s), [], .init, []⟩ =
+      some (.request .log [3] Exec.Demo.s .init k) ∧
+    k ⟨some 3, .ok 0, .init⟩ = some next ∧
+    (Exec.runFrom (O := refusingBindOps) ⟨[]⟩ Exec.Demo.env 1 [11]
+      ⟨.exec (.prim (some Exec.Demo.y) .log [.lit 3] Exec.Demo.s), [], .init, []⟩).events = [11, 3] := by
+  exact ⟨_, _, rfl, rfl, by decide⟩
 
 end Demo
 

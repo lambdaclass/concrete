@@ -3297,7 +3297,7 @@ its continuation `cont a` returns `none`. -/
 def bypassRunFrom (P : Program O) (ρ : Oracle O) (fuel : Nat) (hist : List O.Event)
     (c : Config O) : Report O :=
   match c.final?, fuel with
-  | some f, _ => ⟨hist, .final f⟩
+  | some f, _ => ⟨hist, .final f c.store⟩
   | none, 0 => ⟨hist, .outOfFuel c⟩
   | none, n + 1 =>
     match step P c with
@@ -3310,7 +3310,7 @@ def bypassRunFrom (P : Program O) (ρ : Oracle O) (fuel : Nat) (hist : List O.Ev
         if O.allows p vs st a then
           match cont a with
           | some c' => runFrom P ρ n (hist ++ a.event.toList) c'
-          | none => ⟨hist ++ a.event.toList, .final (.returned O.unitVal)⟩
+          | none => ⟨hist ++ a.event.toList, .final (.returned O.unitVal) a.store⟩
         else
           ⟨hist, .badAnswer c⟩
 

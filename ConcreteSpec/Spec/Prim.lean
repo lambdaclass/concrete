@@ -415,7 +415,7 @@ def drive (P : Exec.Program O) (ρ : Exec.Oracle O) :
     Nat → List O.Event → Exec.Config O → SegmentReport O
   | fuel, hist, c =>
     match c.final?, fuel with
-    | some f, _ => ⟨hist, .final f, c, fuel⟩
+    | some f, _ => ⟨hist, .final f c.store, c, fuel⟩
     | none, 0 => ⟨hist, .outOfFuel c, c, 0⟩
     | none, n + 1 =>
       match Exec.step P c with
@@ -440,7 +440,7 @@ def runStmts (P : Exec.Program O) (ρ : Exec.Oracle O) (fuel : Nat) (hist : List
     | some .normal =>
       let r := drive P ρ fuel hist ⟨.exec s, c.locals, c.store, c.frames⟩
       match r.ending with
-      | .final .normal => runStmts P ρ r.remaining r.events ss r.config
+      | .final .normal _ => runStmts P ρ r.remaining r.events ss r.config
       | _ => r
     | _ => drive P ρ fuel hist c
 
@@ -459,7 +459,7 @@ def runPieces (G : Language O) (P : Exec.Program O) (ρ : Exec.Oracle O)
     | some .normal =>
       let r := drive P ρ fuel hist ⟨.exec s, c.locals, c.store, c.frames⟩
       match r.ending with
-      | .final .normal => runPieces G P ρ r.remaining r.events ps Γ r.config
+      | .final .normal _ => runPieces G P ρ r.remaining r.events ps Γ r.config
       | _ => r
     | _ => drive P ρ fuel hist c
 

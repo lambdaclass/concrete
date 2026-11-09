@@ -2038,14 +2038,14 @@ example : ¬ ({ waiting with own := { waiting.own with loans := caller.own.loans
 example : (match (Exec.run callProgram (fun _ p => nomatch p) 100
     ⟨.exec (.seq (.call none callee [.ownerArgument ⟨0⟩ .mutable y] ⟨0⟩)
       (.cond (.value (.read x)) .skip .skip ⟨0⟩)), [(x, 7)], ⟨initial, []⟩, []⟩).ending with
-    | .final .normal => true
+    | .final .normal _ => true
     | _ => false) = true := by decide
 /-- Accepted: deferred direct lending uses late-read arguments; its call loan ends only when
 that call returns, and the caller reads its owner after cleanup. -/
 example : (match (Exec.run callProgram (fun _ p => nomatch p) 100
     ⟨.exec (.seq (.block ⟨0⟩ (.defer callee [.ownerArgument ⟨0⟩ .mutable y] ⟨0⟩))
       (.cond (.value (.read x)) .skip .skip ⟨0⟩)), [(x, 7)], ⟨initial, []⟩, []⟩).ending with
-    | .final .normal => true
+    | .final .normal _ => true
     | _ => false) = true := by decide
 /-- Observation. A call restores two caller owners and a pre-existing caller loan. -/
 example : (do
@@ -3940,7 +3940,7 @@ example :
     eraseReport (Exec.run emptyProg (liftOracle erasedOps types permitE erasedOracle) 100 primTraceConfig) ∧
     (Exec.run (eraseProgram emptyProg) erasedOracle 100 (eraseConfig primTraceConfig)).events = [7, 3] ∧
     (Exec.run (eraseProgram emptyProg) erasedOracle 100 (eraseConfig primTraceConfig)).ending =
-      .final (.returned 7) :=
+      .final (.returned 7) 10 :=
   ⟨run_erasure emptyProg erasedOracle 100 primTraceConfig rfl, rfl, rfl⟩
 
 /-- Rejection observation. The moved-owner counterexample refutes unconditional converse erasure on `Exec.run`: instrumented is `stuck`, erased returns `7`. -/

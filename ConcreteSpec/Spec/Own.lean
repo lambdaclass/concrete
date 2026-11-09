@@ -548,7 +548,7 @@ def eraseLabel : Exec.Label (instrumentOperands O types permit) → Exec.Label O
 
 /-- Erase a run ending to `O`. -/
 def eraseEnding : Exec.Ending (instrumentOperands O types permit) → Exec.Ending O
-  | .final f => .final f
+  | .final f st => .final f (erase st)
   | .stuck c => .stuck (eraseConfig c)
   | .noAnswer c => .noAnswer (eraseConfig c)
   | .badAnswer c => .badAnswer (eraseConfig c)
@@ -935,7 +935,7 @@ premise or a one-way successful-execution theorem is necessary for C1 erasure. -
 example : stuck (runBody (.seq (.bind y (.move x) ⟨0⟩) (.ret (.read x) ⟨1⟩))) = true ∧
     Ending.IsStuck instrumentedMoveRun.ending = true ∧
     (match erasedMoveRun.ending with
-      | .final (.returned n) => n == 7
+      | .final (.returned n) _ => n == 7
       | _ => false) = true := by decide
 example : ¬ (match erasedMoveRun.ending with
     | .stuck _ => true
@@ -949,7 +949,7 @@ example : (match (runBody
         (.cond (.endLoan ⟨1⟩) .skip
           (.cond (.use ⟨0⟩) .skip
             (.cond (.endLoan ⟨0⟩) .skip .skip ⟨0⟩) ⟨0⟩) ⟨0⟩) ⟨0⟩) ⟨0⟩)).ending with
-    | .final .normal => true
+    | .final .normal _ => true
     | _ => false) = true := by decide
 
 /-- Refused: an existing owner loan or reborrow is not a pending argument child and cannot
@@ -1010,7 +1010,7 @@ def callRun (body : Exec.Stmt callOps) : Exec.Report callOps :=
 then the caller can use its original parent again. No reference is a returned/stored value. -/
 example : (match (callRun (.seq (.call none callee [.argument ⟨0⟩ y] ⟨0⟩)
     (.cond (.value (.use ⟨0⟩)) .skip .skip ⟨0⟩))).ending with
-    | .final .normal => true
+    | .final .normal _ => true
     | _ => false) = true := by decide
 
 /-- Refused: OD23 applies during argument evaluation, before entry. The second argument

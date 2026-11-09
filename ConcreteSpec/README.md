@@ -75,8 +75,10 @@ Open obligations, by name:
   instrumentation (`Slot.moved` and `Entry.used/live/known/kfields`, `R-0571`) remain.
   Slice-1 brand erasure (part 5) is done.
 - **O4 Trap diagnostics** (Q7.10, OD101): C6 defines the exact trap-line bytes and their
-  injectivity. Producing each operation's source span remains O1; the startup refusal's bytes are
-  not yet defined.
+  injectivity on the rendered fields (kind, site, path, line, byte column), independently of
+  unrendered byte ranges. `Observe.sourceSpan` constructs byte columns from source prefixes; the operational
+  source-column law rejects scalar counting on `"a\té"`. Connecting elaborated operations to
+  that constructor remains O1; the startup refusal's bytes are not yet defined.
 - **O5 Target observations** (the launcher contract): every result here is about the model's
   outcomes; a claim about an executable needs a transport to the approved launcher contract.
 - **O6 Launch validation** (part 6): `ProgOk` assumes a valid launch: instance limits, the target
@@ -100,7 +102,22 @@ Open obligations, by name:
   (`Target`), C1 (`Exec`: the machine, its step, cleanup order, traps; parametric in the operand
   language), C2 (`Scalar`, `Const`), C4 (`Memory`, `Hybrid`) and C6 (`Observe`: typed requests,
   responses and output, finite and infinite observations, environment contracts, terminal
-  observations and the C1 adapter). C4 covers byte memory, scalar
+  observations with externally visible final state, and the C1 adapter). **C6 remains reopened,
+  not accepted.** Its audit repair includes externally visible final-state projection from C1
+  terminal stores across observation equivalence and stuttering, source-derived byte columns,
+  typed handler-to-C1 oracle construction with response, history and store correspondence, exact
+  reachable blocked reports tied to unanswered evaluator requests, primitive physical-effect
+  execution relations tied to authoritative operand/oracle/effect bundles and output-before-trap
+  preservation, execution-delay classification, and source-produced trap sites preserving file
+  identity. General ASCII and multibyte source-column laws distinguish bytes from scalar counts
+  and tab expansion. Under the owner's 2026-11-09 source-path decision, C6 consumes C9's
+  structured source identities and whole-project loader: malformed paths, unresolved files,
+  invalid coordinates and duplicate sites are refused without filtering. Every adapter carries
+  successful loader admission; source trap reports derive identity, line and byte column through
+  C9's consumer theorem, with no `found` or `pathOk` premise or reporting-time validation.
+  This integration depends on C9 commit `115a73b2d` (under independent review; subsequent C9
+  fixes must be merged on top). Inversion, projection and representation helpers
+  carry pending independent-review approvals; they are not contract evidence. Integration of the source-to-span pipeline with the elaborator remains O1. C4 covers byte memory, scalar
   representation and structured/materialized places, with trailing padding preserved by typed
   writes; struct field layouts, enums, pointers in structs and the C8 padding oracle remain out
   of its scalar slice. The old slice-1 `Spec/Rep.lean` still has its own `MByte` and integer

@@ -380,7 +380,7 @@ fuel; no statement body is entered. -/
 theorem runStmts_terminal (P : Exec.Program O) (ρ : Exec.Oracle O)
     (fuel : Nat) (hist : List O.Event) (ss : List (Exec.Stmt O)) (c : Exec.Config O)
     (f : Exec.Final O.Val) (hf : c.final? = some f) (hn : f ≠ .normal) :
-    runStmts P ρ fuel hist ss c = ⟨hist, .final f, c, fuel⟩ := by
+    runStmts P ρ fuel hist ss c = ⟨hist, .final f c.store, c, fuel⟩ := by
   cases ss with
   | nil => simp [runStmts, drive, hf]
   | cons s ss => cases f <;> simp [runStmts, drive, hf] at hn ⊢
@@ -840,7 +840,7 @@ def restartingRunStmts {O : Exec.Operands} (P : Exec.Program O) (ρ : Exec.Oracl
   | s :: ss, c =>
     let r := Ghost.drive P ρ fuel hist ⟨.exec s, c.locals, c.store, c.frames⟩
     match r.ending with
-    | .final .normal => restartingRunStmts P ρ r.remaining r.events ss r.config
+    | .final .normal _ => restartingRunStmts P ρ r.remaining r.events ss r.config
     | _ => r
 
 /-- Regression example (not independent soundness evidence). -/
@@ -859,20 +859,20 @@ example : returnedStart.final? ≠ some .normal ∧
 
 /-- Instance (law `ConcreteSpec.Core.Ghost.runStmts_terminal`, case `ConcreteSpec.Core.Vacuity.returnedStart`). -/
 example : Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] [.abort ⟨4⟩] returnedStart =
-    ⟨[], .final (.returned 1), returnedStart, 20⟩ :=
+    ⟨[], .final (.returned 1) returnedStart.store, returnedStart, 20⟩ :=
   Ghost.runStmts_terminal GhostDemo.program GhostDemo.oracle 20 [] [.abort ⟨4⟩] returnedStart
     (.returned 1) rfl (by decide)
 
 /-- Instance (law `ConcreteSpec.Core.Ghost.runStmts_terminal`, case `ConcreteSpec.Core.Vacuity.trappedStart`). -/
 example : Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] [.abort ⟨4⟩] trappedStart =
-    ⟨[], .final (.trapped .abort ⟨3⟩), trappedStart, 20⟩ :=
+    ⟨[], .final (.trapped .abort ⟨3⟩) trappedStart.store, trappedStart, 20⟩ :=
   Ghost.runStmts_terminal GhostDemo.program GhostDemo.oracle 20 [] [.abort ⟨4⟩] trappedStart
     (.trapped .abort ⟨3⟩) rfl (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Ghost.runStmts_terminal`, case `ConcreteSpec.Core.Vacuity.returnedStart`, subject `ConcreteSpec.Core.Ghost.runStmts`, mutant `ConcreteSpec.Core.Vacuity.restartingRunStmts`). -/
 example : (returnedStart.final? = some (.returned 1) ∧ Exec.Final.returned (1 : Int) ≠ .normal) ∧
     ¬ (restartingRunStmts GhostDemo.program GhostDemo.oracle 20 [] [.abort ⟨4⟩] returnedStart =
-      ⟨[], .final (.returned 1), returnedStart, 20⟩) := by
+      ⟨[], .final (.returned 1) returnedStart.store, returnedStart, 20⟩) := by
   refine ⟨⟨rfl, by decide⟩, ?_⟩
   intro h
   cases h
