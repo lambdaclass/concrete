@@ -866,9 +866,71 @@ check "round-12 rollback (companion): verify refuses rolled-back local ref again
 r12_out="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" export-log --repo "$W" --base "$REPLAY_BASE" --head "$REPLAY_HEAD" 2>&1)"; rc=$?
 check "round-12 rollback (companion): export-log refuses rolled-back local ref against companion ref (exit 1, got $rc)" \
   bash -c '[ "$1" -eq 1 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$r12_out"
-r12_out="$(CONCRETE_WRITER_NOTES_REF=refs/notes/concrete-writer python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" derive --repo "$W" --base "$REPLAY_BASE" --head "$REPLAY_HEAD" 2>&1)"; rc=$?
-check "round-12 rollback (companion): CONCRETE_WRITER_NOTES_REF override still enforces companion-ref continuity (exit 2, got $rc)" \
-  bash -c '[ "$1" -eq 2 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$r12_out"
+# Round-13 Item 2 controls: test the real REVIEW_WRITER_NOTES_REF override variable with a distinct ref
+# (refs/notes/custom-writer-override) and conflicting companion history, and prove the control fails if
+# companion validation is removed.
+g update-ref refs/notes/custom-writer-override "$SAVED_REPLAY_WNOTES"
+g update-ref -d refs/notes/concrete-writer 2>/dev/null || true
+g update-ref -d refs/notes/remote/concrete-writer 2>/dev/null || true
+r13_no_ovr_out="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" derive --repo "$W" --base "$REPLAY_BASE" --head "$REPLAY_HEAD" 2>&1)"; rc=$?
+check "round-13 REVIEW_WRITER_NOTES_REF control: without override, derive fails when standard writer-notes refs are absent (exit 2, got $rc)" test "$rc" -eq 2
+r13_pos_ovr_out="$(REVIEW_WRITER_NOTES_REF=refs/notes/custom-writer-override python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" derive --repo "$W" --base "$REPLAY_BASE" --head "$REPLAY_HEAD" 2>&1)"; rc=$?
+check "round-13 REVIEW_WRITER_NOTES_REF control: positive override reads distinct ref refs/notes/custom-writer-override (exit 0, got $rc: $r13_pos_ovr_out)" \
+  test "$rc" -eq 0 -a "$r13_pos_ovr_out" = "kimi,claude"
+# Conflicting companion history: refs/notes/custom-writer-override has 1-stanza N1 (claude only, no 2-stanza ancestor),
+# while companion refs (refs/notes/concrete-writer and refs/notes/remote/concrete-writer) hold 2-stanza N2 (claude->kimi).
+g update-ref refs/notes/custom-writer-override "$REPLAY_N1_WNOTES"
+g update-ref refs/notes/concrete-writer "$SAVED_REPLAY_WNOTES"
+g update-ref refs/notes/remote/concrete-writer "$SAVED_REPLAY_WNOTES"
+r13_out="$(REVIEW_WRITER_NOTES_REF=refs/notes/custom-writer-override python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" derive --repo "$W" --base "$REPLAY_BASE" --head "$REPLAY_HEAD" 2>&1)"; rc=$?
+check "round-13 REVIEW_WRITER_NOTES_REF (companion): derive with distinct override ref refuses rolled-back override against companion refs (exit 2, got $rc)" \
+  bash -c '[ "$1" -eq 2 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$r13_out"
+r13_out="$(REVIEW_WRITER_NOTES_REF=refs/notes/custom-writer-override python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" derive --repo "$W" --base "$REPLAY_BASE" --head "$REPLAY_HEAD" --reviewer kimi 2>&1)"; rc=$?
+check "round-13 REVIEW_WRITER_NOTES_REF (companion): derive --reviewer kimi with distinct override ref refuses rolled-back override against companion refs (exit 2, got $rc)" \
+  bash -c '[ "$1" -eq 2 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$r13_out"
+r13_out="$(REVIEW_WRITER_NOTES_REF=refs/notes/custom-writer-override python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" report --repo "$W" --base "$REPLAY_BASE" --head "$REPLAY_HEAD" 2>&1)"; rc=$?
+check "round-13 REVIEW_WRITER_NOTES_REF (companion): report with distinct override ref refuses rolled-back override against companion refs (exit 2, got $rc)" \
+  bash -c '[ "$1" -eq 2 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$r13_out"
+r13_out="$(REVIEW_WRITER_NOTES_REF=refs/notes/custom-writer-override python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" verify --repo "$W" --base "$REPLAY_BASE" --head "$REPLAY_HEAD" --claimed-writer claude --reviewer kimi 2>&1)"; rc=$?
+check "round-13 REVIEW_WRITER_NOTES_REF (companion): verify with distinct override ref refuses rolled-back override against companion refs (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$r13_out"
+r13_out="$(REVIEW_WRITER_NOTES_REF=refs/notes/custom-writer-override python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" export-log --repo "$W" --base "$REPLAY_BASE" --head "$REPLAY_HEAD" 2>&1)"; rc=$?
+check "round-13 REVIEW_WRITER_NOTES_REF (companion): export-log with distinct override ref refuses rolled-back override against companion refs (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$r13_out"
+r13_out="$(REVIEW_WRITER_NOTES_REF=refs/notes/custom-writer-override python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" validate-notes --repo "$W" --notes-rev "$REPLAY_N1_WNOTES" 2>&1)"; rc=$?
+check "round-13 REVIEW_WRITER_NOTES_REF (companion): validate-notes with distinct override ref refuses rolled-back override against companion refs (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$r13_out"
+r13_out="$(REVIEW_WRITER_NOTES_REF=refs/notes/custom-writer-override python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" fetch-notes --repo "$W" --no-fetch --no-update-local 2>&1)"; rc=$?
+check "round-13 REVIEW_WRITER_NOTES_REF (companion): fetch-notes --no-fetch with distinct override ref refuses rolled-back override against companion refs (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$r13_out"
+# Prove the control fails when companion validation is removed:
+g update-ref refs/notes/custom-writer-override "$REPLAY_N1_WNOTES"
+g update-ref refs/notes/concrete-writer "$SAVED_REPLAY_WNOTES"
+g update-ref refs/notes/remote/concrete-writer "$SAVED_REPLAY_WNOTES"
+python3 -I - "$ROOT_DIR/scripts/review/writer_provenance.py" "$T/wp_no_companion.py" <<'PY'
+import sys
+src, dst = sys.argv[1], sys.argv[2]
+with open(src, "r", encoding="utf-8") as f:
+    txt = f.read()
+target = """        check_refs=[
+            WRITER_NOTES_REF,
+            "refs/notes/concrete-writer",
+            "refs/notes/remote/concrete-writer",
+        ],"""
+replacement = """        check_refs=[
+            WRITER_NOTES_REF,
+        ],"""
+assert target in txt, "expected companion check_refs block in writer_provenance.py"
+with open(dst, "w", encoding="utf-8") as f:
+    f.write(txt.replace(target, replacement, 1))
+PY
+r13_mut_out="$(REVIEW_WRITER_NOTES_REF=refs/notes/custom-writer-override python3 -I "$T/wp_no_companion.py" derive --repo "$W" --base "$REPLAY_BASE" --head "$REPLAY_HEAD" 2>&1)"; rc=$?
+check "round-13 REVIEW_WRITER_NOTES_REF negative-control proof: removing companion refs from continuity allows the rolled-back override to pass with 'claude' (exit 0, got $rc: $r13_mut_out)" \
+  test "$rc" -eq 0 -a "$r13_mut_out" = "claude"
+rm -f "$T/wp_no_companion.py"
+g update-ref -d refs/notes/custom-writer-override 2>/dev/null || true
+g update-ref refs/notes/concrete-writer "$REPLAY_N1_WNOTES"
+g update-ref refs/notes/remote/concrete-writer "$SAVED_REPLAY_WNOTES"
 r12_head_before="$(g rev-parse HEAD)"
 r12_out="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" stamp-commit --repo "$W" --model claude --round 2 --branch replay-ancestor-corr --brief-sha256 1111111111111111111111111111111111111111111111111111111111111111 2>&1)"; rc=$?
 check "round-12 rollback (companion): stamp-commit refuses when writer-notes ref is rolled back and does not amend HEAD (exit 2, got $rc)" \
@@ -1353,8 +1415,11 @@ BF_R2_APPENDED_NOTE="$(g notes --ref=refs/notes/concrete-writer show "$BF_R2")"
 hook_out="$(wnote_hook "$APPENDED_WRITER_NOTES_SHA" "$WRITER_NOTES_SHA")"; rc=$?
 check "hook accepts a refs/notes/concrete-writer update that appends a signed superseding entry (exit 0, got $rc)" test "$rc" -eq 0
 g update-ref refs/notes/concrete-writer "$WRITER_NOTES_SHA"
-# Historical pre-contract writer note on an already-landed commit (main base) is NOT re-judged when
-# unchanged between old_notes_rev and new_notes_rev (Task B / owner item 5).
+# Round-13 Item 1 controls: state validity is a pure function of the writer-history state alone,
+# never derived from, cached by, or skipped because of an old ref, checkpoint, blob identity, or option.
+# Even when an invalid note is unchanged between old_notes_rev and new_notes_rev (or --notes-rev == --old-notes-rev),
+# or already sits at refs/notes/concrete-writer / refs/notes/remote/concrete-writer, validate-notes,
+# .githooks/pre-push, fetch-notes --no-fetch (and its ratchet), and notes.sh get writer must refuse it.
 HIST_MAIN_SHA="$(g rev-parse main)"
 g update-ref refs/notes/concrete-writer-hist-old "$WRITER_NOTES_SHA"
 g notes --ref=refs/notes/concrete-writer-hist-old add -f -m "pre-contract historical note on landed commit" "$HIST_MAIN_SHA" 2>/dev/null
@@ -1362,9 +1427,77 @@ HIST_OLD_NOTES_SHA="$(g rev-parse refs/notes/concrete-writer-hist-old)"
 g update-ref refs/notes/concrete-writer-hist-new "$HIST_OLD_NOTES_SHA"
 g notes --ref=refs/notes/concrete-writer-hist-new add -f -m "$BF_R2_APPENDED_NOTE" "$BF_R2" 2>/dev/null
 hook_out="$(wnote_hook "$(g rev-parse refs/notes/concrete-writer-hist-new)" "$HIST_OLD_NOTES_SHA")"; rc=$?
-check "hook does not re-judge an unchanged historical pre-contract writer note on a past landed commit when pushing new notes (exit 0, got $rc)" test "$rc" -eq 0
+check "round-13 state validity: hook refuses an unchanged invalid writer note even when present in old_notes_rev (exit 1, got $rc)" test "$rc" -eq 1
 g update-ref -d refs/notes/concrete-writer-hist-old 2>/dev/null || true
 g update-ref -d refs/notes/concrete-writer-hist-new 2>/dev/null || true
+
+# Build 4 invalid writer-notes states on top of WRITER_NOTES_SHA (each preserving BF_R1's valid 1st stanza
+# as a prefix and appending an invalid 2nd stanza, so continuity alone would accept them on fe48d4996):
+g notes --ref=refs/notes/concrete-writer show "$BF_R1" >"$T/r13-bf-r1-orig"
+sed "s/^model: .*/model: claude/;s/^round: .*/round: 2/;s/^evidence: .*/evidence: valid 2nd stanza base/" "$T/r13-bf-r1-orig" >"$T/r13-bf-r1-s2-raw"
+printf 'supersedes: %s\nreason: round-13 control second stanza\n' "$BF_R1_EID" >>"$T/r13-bf-r1-s2-raw"
+# (a) unsigned malformed note (valid 1st stanza + unsigned malformed 2nd stanza)
+printf '%s\n\nmodel: claude\nround: 2\nunsigned malformed note\n' "$(cat "$T/r13-bf-r1-orig")" >"$T/r13-unsigned-note"
+g update-ref refs/notes/concrete-writer-r13-unsigned "$WRITER_NOTES_SHA"
+g notes --ref=refs/notes/concrete-writer-r13-unsigned add -f -F "$T/r13-unsigned-note" "$BF_R1" 2>/dev/null
+R13_UNSIGNED_SHA="$(g rev-parse refs/notes/concrete-writer-r13-unsigned)"
+# (b) tampered signature (valid 1st stanza + 2nd stanza whose reason field was tampered after signing)
+sign_raw_stanza "$T/r13-bf-r1-s2-raw" "$T/r13-s2-signed"
+sed 's/^reason: .*/reason: tampered after signing/' "$T/r13-s2-signed" >"$T/r13-s2-tampered"
+printf '%s\n\n%s\n' "$(cat "$T/r13-bf-r1-orig")" "$(cat "$T/r13-s2-tampered")" >"$T/r13-tampered-note"
+g update-ref refs/notes/concrete-writer-r13-tampered "$WRITER_NOTES_SHA"
+g notes --ref=refs/notes/concrete-writer-r13-tampered add -f -F "$T/r13-tampered-note" "$BF_R1" 2>/dev/null
+R13_TAMPERED_SHA="$(g rev-parse refs/notes/concrete-writer-r13-tampered)"
+# (c) unauthorized key signature (valid 1st stanza + 2nd stanza signed with unauth_ed25519 not in allowed_writer_log_signers)
+sign_raw_stanza "$T/r13-bf-r1-s2-raw" "$T/r13-s2-rogue-key" "$T/keys/unauth_ed25519"
+printf '%s\n\n%s\n' "$(cat "$T/r13-bf-r1-orig")" "$(cat "$T/r13-s2-rogue-key")" >"$T/r13-rogue-key-note"
+g update-ref refs/notes/concrete-writer-r13-roguekey "$WRITER_NOTES_SHA"
+g notes --ref=refs/notes/concrete-writer-r13-roguekey add -f -F "$T/r13-rogue-key-note" "$BF_R1" 2>/dev/null
+R13_ROGUEKEY_SHA="$(g rev-parse refs/notes/concrete-writer-r13-roguekey)"
+# (d) unauthorized principal signature (valid 1st stanza + 2nd stanza signed with valid key but principal not in allowed_writer_log_signers)
+sign_raw_stanza "$T/r13-bf-r1-s2-raw" "$T/r13-s2-rogue-prin" "$T/keys/id_ed25519" "rogue-principal@concrete"
+printf '%s\n\n%s\n' "$(cat "$T/r13-bf-r1-orig")" "$(cat "$T/r13-s2-rogue-prin")" >"$T/r13-rogue-prin-note"
+g update-ref refs/notes/concrete-writer-r13-rogueprin "$WRITER_NOTES_SHA"
+g notes --ref=refs/notes/concrete-writer-r13-rogueprin add -f -F "$T/r13-rogue-prin-note" "$BF_R1" 2>/dev/null
+R13_ROGUEPRIN_SHA="$(g rev-parse refs/notes/concrete-writer-r13-rogueprin)"
+
+for r13_case in \
+  "unsigned:$R13_UNSIGNED_SHA" \
+  "tampered:$R13_TAMPERED_SHA" \
+  "unauthorized-key:$R13_ROGUEKEY_SHA" \
+  "unauthorized-principal:$R13_ROGUEPRIN_SHA"; do
+  r13_kind="${r13_case%%:*}"
+  r13_bad_sha="${r13_case#*:}"
+  g update-ref -d refs/notes/remote/concrete-writer 2>/dev/null || true
+  g update-ref refs/notes/concrete-writer "$WRITER_NOTES_SHA"
+  # 1. Identical --notes-rev and --old-notes-rev in validate-notes and pre-push hook:
+  r13_vn_out="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" validate-notes --repo "$W" --notes-rev "$r13_bad_sha" --old-notes-rev "$r13_bad_sha" 2>&1)"; rc=$?
+  check "round-13 identical old/new refs ($r13_kind): validate-notes refuses when --notes-rev == --old-notes-rev (exit 1, got $rc)" test "$rc" -eq 1
+  r13_hk_out="$(wnote_hook "$r13_bad_sha" "$r13_bad_sha")"; rc=$?
+  check "round-13 identical old/new refs ($r13_kind): pre-push hook refuses when local and remote SHA match (exit 1, got $rc)" test "$rc" -eq 1
+  # 2. fetch-notes --no-fetch (and checkpoint ratchet) when local ref already points to the invalid state:
+  g update-ref refs/notes/concrete-writer "$r13_bad_sha"
+  g update-ref -d refs/notes/remote/concrete-writer 2>/dev/null || true
+  r13_fn_out="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" fetch-notes --repo "$W" --no-fetch 2>&1)"; rc=$?
+  r13_rem_ref="$(git -C "$W" rev-parse --verify -q refs/notes/remote/concrete-writer 2>/dev/null || true)"
+  check "round-13 no-fetch checkpointing ($r13_kind): fetch-notes --no-fetch refuses invalid local state and never records checkpoint (exit 1, got $rc, remote-ref='$r13_rem_ref')" \
+    test "$rc" -eq 1 -a -z "$r13_rem_ref"
+  # 3. notes.sh get writer <sha> and notes.sh get writer <sha> model (even if both local and remote-tracking refs point to the invalid state):
+  g update-ref refs/notes/concrete-writer "$r13_bad_sha"
+  g update-ref refs/notes/remote/concrete-writer "$r13_bad_sha"
+  r13_ng_out="$(cd "$W" && bash "$ROOT_DIR/scripts/land/notes.sh" get writer "$BF_R1" 2>"$T/r13-ng-err")"; rc=$?
+  check "round-13 notes.sh get writer ($r13_kind): refuses invalid note state and outputs nothing on stdout (exit != 0, got $rc, out='$r13_ng_out')" \
+    test "$rc" -ne 0 -a -z "$r13_ng_out"
+  r13_ngf_out="$(cd "$W" && bash "$ROOT_DIR/scripts/land/notes.sh" get writer "$BF_R1" model 2>"$T/r13-ngf-err")"; rc=$?
+  check "round-13 notes.sh get writer field ($r13_kind): refuses invalid note state and outputs nothing on stdout (exit != 0, got $rc, out='$r13_ngf_out')" \
+    test "$rc" -ne 0 -a -z "$r13_ngf_out"
+done
+g update-ref -d refs/notes/concrete-writer-r13-unsigned 2>/dev/null || true
+g update-ref -d refs/notes/concrete-writer-r13-tampered 2>/dev/null || true
+g update-ref -d refs/notes/concrete-writer-r13-roguekey 2>/dev/null || true
+g update-ref -d refs/notes/concrete-writer-r13-rogueprin 2>/dev/null || true
+g update-ref -d refs/notes/remote/concrete-writer 2>/dev/null || true
+g update-ref refs/notes/concrete-writer "$WRITER_NOTES_SHA"
 hook_out="$(wnote_hook "$ABH_SHA" "$Z")"; rc=$?
 check "hook refuses a source commit pushed to refs/notes/concrete-writer (exit 1, got $rc)" \
   bash -c '[ "$1" -eq 1 ] && grep -q "invalid refs/notes/concrete-writer" <<<"$2"' _ "$rc" "$hook_out"

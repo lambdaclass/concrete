@@ -97,12 +97,16 @@ attribution of unstamped commits.
 """
 
 import argparse
+import atexit
+import concurrent.futures
 import hashlib
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 
 sys.dont_write_bytecode = True
 
@@ -394,6 +398,19 @@ def sign_entry(entry: dict[str, str], signing_key: str, signer: str) -> dict[str
     return entry
 
 
+_SIG_TMPDIR: str | None = None
+_SIG_TMPDIR_LOCK = threading.Lock()
+
+
+def _get_sig_tmpdir() -> str:
+    global _SIG_TMPDIR
+    with _SIG_TMPDIR_LOCK:
+        if _SIG_TMPDIR is None or not os.path.isdir(_SIG_TMPDIR):
+            _SIG_TMPDIR = tempfile.mkdtemp(prefix="wp-sig-")
+            atexit.register(shutil.rmtree, _SIG_TMPDIR, True)
+        return _SIG_TMPDIR
+
+
 def verify_stanza_signature(
     signed_payload: str,
     sig_block: str,
@@ -403,40 +420,40 @@ def verify_stanza_signature(
     source_desc: str,
 ) -> None:
     check_allowed_signers_has_keys(allowed_signers_path, source_desc, commit_sha)
-    with tempfile.TemporaryDirectory() as tmpdir:
-        sig_path = os.path.join(tmpdir, "stanza.sig")
-        with open(sig_path, "w", encoding="utf-8") as f:
-            f.write(sig_block + "\n")
-        find_proc = subprocess.run(
-            ["ssh-keygen", "-Y", "find-principals", "-f", allowed_signers_path, "-s", sig_path],
-            capture_output=True,
-            text=True,
-            check=False,
+    sig_path = os.path.join(_get_sig_tmpdir(), f"stanza-{threading.get_ident()}.sig")
+    with open(sig_path, "w", encoding="utf-8") as f:
+        f.write(sig_block + "\n")
+    ver_proc = subprocess.run(
+        ["ssh-keygen", "-Y", "verify", "-f", allowed_signers_path, "-I", signer, "-n", "git", "-s", sig_path],
+        input=signed_payload,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if ver_proc.returncode == 0:
+        return
+    find_proc = subprocess.run(
+        ["ssh-keygen", "-Y", "find-principals", "-f", allowed_signers_path, "-s", sig_path],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if find_proc.returncode != 0:
+        detail = find_proc.stderr.strip() or find_proc.stdout.strip() or "unknown signing key"
+        raise ProvenanceError(
+            f"{source_desc}: unverified writer-log entry for commit {commit_sha[:10]}: "
+            f"signing key is not authorized in {allowed_signers_path} ({detail})"
         )
-        if find_proc.returncode != 0:
-            detail = find_proc.stderr.strip() or find_proc.stdout.strip() or "unknown signing key"
-            raise ProvenanceError(
-                f"{source_desc}: unverified writer-log entry for commit {commit_sha[:10]}: "
-                f"signing key is not authorized in {allowed_signers_path} ({detail})"
-            )
-        principals = [ln.strip() for ln in find_proc.stdout.splitlines() if ln.strip()]
-        if signer not in principals:
-            raise ProvenanceError(
-                f"{source_desc}: unverified writer-log entry for commit {commit_sha[:10]}: "
-                f"signer '{signer}' does not match authorized principal(s) {principals} in {allowed_signers_path}"
-            )
-        ver_proc = subprocess.run(
-            ["ssh-keygen", "-Y", "verify", "-f", allowed_signers_path, "-I", signer, "-n", "git", "-s", sig_path],
-            input=signed_payload,
-            capture_output=True,
-            text=True,
-            check=False,
+    principals = [ln.strip() for ln in find_proc.stdout.splitlines() if ln.strip()]
+    if signer not in principals:
+        raise ProvenanceError(
+            f"{source_desc}: unverified writer-log entry for commit {commit_sha[:10]}: "
+            f"signer '{signer}' does not match authorized principal(s) {principals} in {allowed_signers_path}"
         )
-        if ver_proc.returncode != 0:
-            detail = ver_proc.stderr.strip() or ver_proc.stdout.strip() or "signature verification failed"
-            raise ProvenanceError(
-                f"{source_desc}: invalid SSH signature on writer-log entry for commit {commit_sha[:10]}: {detail}"
-            )
+    detail = ver_proc.stderr.strip() or ver_proc.stdout.strip() or "signature verification failed"
+    raise ProvenanceError(
+        f"{source_desc}: invalid SSH signature on writer-log entry for commit {commit_sha[:10]}: {detail}"
+    )
 
 
 def parse_log_stanza(
@@ -672,6 +689,52 @@ def read_optional_note(repo: str, notes_ref: str, sha: str) -> str | None:
     raise ProvenanceError(f"git notes --ref={notes_ref} show {sha[:10]} failed: {detail}")
 
 
+_VALIDATED_NOTE_BLOB_CACHE: dict[tuple[str, str, str], list[dict[str, str]]] = {}
+_BLOB_CACHE_LOCK = threading.Lock()
+
+
+def _signers_file_sha256(eff_signers: str) -> str:
+    try:
+        with open(eff_signers, "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()
+    except OSError as exc:
+        raise ProvenanceError(f"allowed-signers file '{eff_signers}' cannot be read: {exc}") from exc
+
+
+def parse_and_verify_note_blob(
+    annotated_sha: str,
+    blob_text: str,
+    eff_signers: str,
+) -> list[dict[str, str]]:
+    """Parse and cryptographically verify every stanza in a single commit's writer-note blob,
+    enforcing single-commit note authority. Cached in-process only by content hash of
+    (annotated_sha, blob_text, allowed_signers_content) after full validation in this process."""
+    if not blob_text or not blob_text.strip():
+        raise ProvenanceError(f"{WRITER_NOTES_REF} on {annotated_sha[:10]} is empty")
+    blob_hash = hashlib.sha256(blob_text.encode("utf-8")).hexdigest()
+    signers_hash = _signers_file_sha256(eff_signers)
+    cache_key = (annotated_sha, blob_hash, signers_hash)
+    with _BLOB_CACHE_LOCK:
+        cached = _VALIDATED_NOTE_BLOB_CACHE.get(cache_key)
+        if cached is not None:
+            return [dict(e) for e in cached]
+    stanzas = parse_multi_stanza_log(
+        blob_text, f"{WRITER_NOTES_REF} on {annotated_sha[:10]}", eff_signers
+    )
+    if not stanzas:
+        raise ProvenanceError(f"{WRITER_NOTES_REF} on {annotated_sha[:10]} is empty")
+    for c_sha, c_hist in stanzas.items():
+        if c_sha != annotated_sha:
+            raise ProvenanceError(
+                f"{WRITER_NOTES_REF} on {annotated_sha[:10]} records commit {c_hist[-1]['commit']}, not {annotated_sha} "
+                f"(each commit has one authoritative writer history on its own note)"
+            )
+    history = stanzas[annotated_sha]
+    with _BLOB_CACHE_LOCK:
+        _VALIDATED_NOTE_BLOB_CACHE[cache_key] = [dict(e) for e in history]
+    return history
+
+
 def get_commit_note_history(
     repo: str,
     sha: str,
@@ -681,16 +744,7 @@ def get_commit_note_history(
     if note_text is None:
         return None
     eff_signers = resolve_allowed_signers(repo, allowed_signers_path)
-    stanzas = parse_multi_stanza_log(note_text, f"{WRITER_NOTES_REF} on {sha[:10]}", eff_signers)
-    if not stanzas:
-        raise ProvenanceError(f"{WRITER_NOTES_REF} on {sha[:10]} is empty")
-    for c_sha, c_hist in stanzas.items():
-        if c_sha != sha:
-            raise ProvenanceError(
-                f"{WRITER_NOTES_REF} on {sha[:10]} records commit {c_hist[-1]['commit']}, not {sha} "
-                f"(each commit has one authoritative writer history on its own note)"
-            )
-    return stanzas[sha]
+    return parse_and_verify_note_blob(sha, note_text, eff_signers)
 
 
 def verify_history_against_authority(
@@ -1048,6 +1102,7 @@ def derive_range_provenance(
         commits = [c.strip() for c in proc.stdout.splitlines() if c.strip()]
 
     eff_signers = resolve_allowed_signers(repo, allowed_signers_path)
+    read_validated_writer_notes(repo, allowed_signers_path, target_commits=set(commits))
 
     writers: list[str] = []
     log_entries: list[dict[str, str]] = []
@@ -1077,8 +1132,6 @@ def derive_range_provenance(
                 f"commit {c[:10]} is unstamped and has no backfilled writer-log entry "
                 f"(unknown writer; unstamped commits are never attributed to claude by default)"
             )
-
-    verify_range_notes_continuity(repo, set(commits), eff_signers)
 
     if not writers:
         raise ProvenanceError(
@@ -1125,8 +1178,16 @@ def check_reviewer_against_history(
     if reviewer not in VALID_MODELS:
         raise ProvenanceError(f"invalid reviewer '{reviewer}'")
     if reviewer in writers:
+        detail = ""
+        for c, hist in histories.items():
+            if hist and hist[-1]["model"] == reviewer:
+                detail = (
+                    f" — commit {c[:10]} writer-log entry attributes {c[:10]} to '{reviewer}', "
+                    f"which is the reviewer on its review note"
+                )
+                break
         raise ProvenanceError(
-            f"reviewer {reviewer} cannot review its own work (writer {','.join(writers)})"
+            f"reviewer {reviewer} cannot review its own work (writer {','.join(writers)}){detail}"
         )
     for c, hist in histories.items():
         if len(hist) > 1:
@@ -1136,7 +1197,7 @@ def check_reviewer_against_history(
                     raise ProvenanceError(
                         f"reviewer {reviewer} cannot review its own work: commit {c[:10]} was attributed to "
                         f"{reviewer} in earlier signed entry {earlier['entry-id'][:10]} before correction "
-                        f"to {latest['model']} in {latest['entry-id'][:10]}"
+                        f"to {latest['model']} in {latest['entry-id'][:10]} (which is the reviewer on its review note)"
                     )
 
 
@@ -1345,7 +1406,7 @@ def cmd_stamp_commit(args: argparse.Namespace) -> int:
         eff_signers = resolve_allowed_signers(args.repo, args.allowed_signers)
         check_allowed_signers_has_keys(eff_signers, "stamp-commit")
         signing_key, signer = resolve_signing_key_and_signer(args.repo, args.signing_key, args.signer)
-        verify_range_notes_continuity(args.repo, None, eff_signers)
+        read_validated_writer_notes(args.repo, args.allowed_signers, target_commits=None)
 
         head_sha = resolve_commit(args.repo, "HEAD", "HEAD")
         start_sha = (
@@ -1481,7 +1542,7 @@ def cmd_backfill(args: argparse.Namespace) -> int:
         commit_sha = resolve_commit(args.repo, target_rev, "commit")
         start_sha = resolve_commit(args.repo, args.start_sha, "start-sha")
         end_sha = resolve_commit(args.repo, args.end_sha, "end-sha")
-        verify_range_notes_continuity(args.repo, None, eff_signers)
+        read_validated_writer_notes(args.repo, args.allowed_signers, target_commits=None)
 
         existing_note_text = read_optional_note(args.repo, WRITER_NOTES_REF, commit_sha)
         existing_history: list[dict[str, str]] = []
@@ -1619,195 +1680,304 @@ def split_raw_stanzas(text: str) -> list[str]:
 
 
 def _blob_has_valid_signed_note(
-    repo: str,
     annotated_sha: str,
-    blob_sha: str,
     blob_text: str,
     eff_signers: str,
-    cache: dict[tuple[str, str], bool],
 ) -> bool:
-    key = (annotated_sha, blob_sha)
-    if key in cache:
-        return cache[key]
     try:
-        stanzas = parse_multi_stanza_log(
-            blob_text, f"{WRITER_NOTES_REF} on {annotated_sha[:10]}", eff_signers
-        )
-        ok = bool(stanzas) and set(stanzas.keys()) == {annotated_sha}
+        parse_and_verify_note_blob(annotated_sha, blob_text, eff_signers)
+        return True
     except ProvenanceError:
-        ok = False
-    cache[key] = ok
-    return ok
+        return False
 
 
-def verify_notes_ancestor_continuity(
-    repo: str,
-    notes_rev: str | None,
-    new_entries: dict[str, str],
-    new_raw_cache: dict[str, list[str]],
-    eff_signers: str,
-    target_commits: set[str] | None = None,
-    extra_revs: list[str] | None = None,
-) -> None:
-    """Verify that `new_entries` preserves and only appends to every valid signed writer history in
-    all ancestor commits of `notes_rev`, all companion writer-notes refs, and any `extra_revs`."""
-    rev_roots: list[str] = []
-    notes_sha: str | None = None
-    if notes_rev:
-        notes_sha = resolve_commit(repo, notes_rev, "notes-rev")
-        rev_roots.append(notes_sha)
-    companion = collect_prior_writer_checkpoints(
-        repo,
-        extra_revs=extra_revs,
-        check_refs=[
-            WRITER_NOTES_REF,
-            "refs/notes/concrete-writer",
-            "refs/notes/remote/concrete-writer",
-        ],
+_VALIDATED_STATE_CACHE: dict[tuple[str, str, str], dict[str, list[dict[str, str]]]] = {}
+
+
+def batch_cat_objects(repo: str, oids: list[str]) -> dict[str, tuple[str, str]]:
+    """Read multiple git objects in a single `git cat-file --batch` call.
+    Returns `{oid: (objtype, text)}` for existing objects."""
+    unique_oids = list(dict.fromkeys(oid for oid in oids if oid and oid != ZERO40))
+    if not unique_oids:
+        return {}
+    stdin_bytes = "".join(f"{oid}\n" for oid in unique_oids).encode("utf-8")
+    proc = subprocess.run(
+        ["git", "-C", repo, "cat-file", "--batch"],
+        input=stdin_bytes,
+        capture_output=True,
+        check=False,
     )
-    for sha in companion:
-        if sha not in rev_roots:
-            rev_roots.append(sha)
-    if not rev_roots:
-        return
-
-    log_proc = git_run(
-        repo,
-        ["log", "--raw", "--root", "-m", "--no-abbrev", "--format=COMMIT %H", *rev_roots],
-        check=True,
-    )
-    if not log_proc.stdout.strip():
-        raise ProvenanceError("git log returned empty history for writer-notes continuity check")
-
-    valid_cache: dict[tuple[str, str], bool] = {}
-    blob_text_cache: dict[str, str] = {}
-    checked_pairs: set[tuple[str, str]] = set()
-    seen_commits: set[str] = set()
-
-    def get_blob_text(bsha: str) -> str:
-        if bsha not in blob_text_cache:
-            blob_text_cache[bsha] = git_run(repo, ["cat-file", "blob", bsha], check=True).stdout
-        return blob_text_cache[bsha]
-
-    blocks: list[tuple[str, list[str]]] = []
-    cur_anc_sha = ""
-    cur_lines: list[str] = []
-    for raw_line in log_proc.stdout.splitlines():
-        line = raw_line.strip()
-        if not line:
+    if proc.returncode != 0:
+        err = proc.stderr.decode("utf-8", errors="replace").strip()
+        raise ProvenanceError(f"git cat-file --batch failed ({proc.returncode}): {err}")
+    buf = proc.stdout
+    pos = 0
+    n = len(buf)
+    result: dict[str, tuple[str, str]] = {}
+    for req_oid in unique_oids:
+        nl = buf.find(b"\n", pos)
+        if nl < 0:
+            raise ProvenanceError("truncated git cat-file --batch header output")
+        header = buf[pos:nl].decode("utf-8", errors="replace")
+        pos = nl + 1
+        if header.endswith(" missing"):
             continue
-        if line.startswith("COMMIT "):
-            if cur_anc_sha:
-                blocks.append((cur_anc_sha, cur_lines))
-            cur_anc_sha = line[7:].strip()
-            if not HEX40_RE.match(cur_anc_sha):
-                raise ProvenanceError(f"malformed COMMIT line in git log output: '{line}'")
-            seen_commits.add(cur_anc_sha)
-            cur_lines = []
-            continue
-        if line.startswith(":") and "\t" in line:
-            cur_lines.append(line)
-    if cur_anc_sha:
-        blocks.append((cur_anc_sha, cur_lines))
-
-    for root_sha in rev_roots:
-        if root_sha not in seen_commits:
-            raise ProvenanceError(
-                f"git log output did not include required writer-notes commit {root_sha[:10]}"
-            )
-
-    ordered_blocks = (
-        [b for b in blocks if b[0] == notes_sha]
-        + [b for b in blocks if b[0] != notes_sha]
-    )
-
-    for cur_anc_sha, diff_lines in ordered_blocks:
-        for line in diff_lines:
-            meta, path = line.split("\t", 1)
-            c = path.replace("/", "").strip()
-            if len(c) != 40 or not all(ch in "0123456789abcdef" for ch in c):
-                continue
-            if target_commits is not None and c not in target_commits:
-                continue
-            parts = meta.split()
-            if len(parts) < 5:
-                continue
-            old_bsha, new_bsha = parts[2], parts[3]
-            candidate_blobs: list[str] = []
-            if old_bsha != ZERO40:
-                candidate_blobs.append(old_bsha)
-            if cur_anc_sha != notes_sha and new_bsha != ZERO40 and new_bsha != old_bsha:
-                candidate_blobs.append(new_bsha)
-            cur_blob_sha = new_entries.get(c)
-            for anc_blob_sha in candidate_blobs:
-                if cur_blob_sha == anc_blob_sha:
-                    continue
-                pair = (c, anc_blob_sha)
-                if pair in checked_pairs:
-                    continue
-                checked_pairs.add(pair)
-                anc_text = get_blob_text(anc_blob_sha)
-                if cur_blob_sha is not None:
-                    if c not in new_raw_cache:
-                        new_raw_cache[c] = split_raw_stanzas(get_blob_text(cur_blob_sha))
-                    new_raw = new_raw_cache[c]
-                    anc_raw = split_raw_stanzas(anc_text)
-                    if len(new_raw) >= len(anc_raw) and new_raw[: len(anc_raw)] == anc_raw:
-                        continue
-                if not _blob_has_valid_signed_note(repo, c, anc_blob_sha, anc_text, eff_signers, valid_cache):
-                    continue
-                if cur_blob_sha is None:
-                    raise ProvenanceError(
-                        f"writer-notes push deletes existing writer-log entry for commit(s): {c[:10]} "
-                        f"(present in writer-notes commit {cur_anc_sha[:10]})"
-                    )
-                raise ProvenanceError(
-                    f"writer-notes push rewrites or drops existing writer-log entry on {c[:10]} "
-                    f"from writer-notes commit {cur_anc_sha[:10]} "
-                    f"(the writer log is append-only; corrections must append a signed superseding entry)"
-                )
-
-    if notes_sha is None and rev_roots:
-        prior_desc = ", ".join(p[:10] for p in rev_roots)
-        raise ProvenanceError(
-            f"local {WRITER_NOTES_REF} is missing, but prior writer-log history was "
-            f"recorded at {prior_desc} (refusing deleted or missing local writer-notes ref)"
-        )
+        parts = header.split(" ")
+        if len(parts) < 3:
+            raise ProvenanceError(f"malformed git cat-file --batch header '{header}'")
+        resolved_sha, objtype, size_str = parts[0], parts[1], parts[2]
+        size = int(size_str)
+        if pos + size > n:
+            raise ProvenanceError("truncated git cat-file --batch object body")
+        content = buf[pos : pos + size].decode("utf-8", errors="replace")
+        pos += size
+        if pos < n and buf[pos : pos + 1] == b"\n":
+            pos += 1
+        result[req_oid] = (objtype, content)
+        result[resolved_sha] = (objtype, content)
+    return result
 
 
-def verify_range_notes_continuity(
-    repo: str,
-    target_commits: set[str] | None,
-    eff_signers: str,
-) -> None:
-    """Verify historical and companion-ref continuity for `target_commits` (or all notes when None)."""
-    cur_sha = resolve_optional_ref(repo, WRITER_NOTES_REF)
-    cur_entries: dict[str, str] = {}
-    if cur_sha is not None:
-        cur_entries = list_notes_tree(repo, cur_sha)
-    verify_notes_ancestor_continuity(
-        repo=repo,
-        notes_rev=cur_sha,
-        new_entries=cur_entries,
-        new_raw_cache={},
-        eff_signers=eff_signers,
-        target_commits=target_commits,
-    )
+def _parse_raw_commit_object(raw_text: str) -> tuple[list[str], str, str, str, str, list[str]]:
+    """Parse `(parents, an, ae, cn, ce, body_lines)` from a raw git commit object body."""
+    header_part, _, body_part = raw_text.partition("\n\n")
+    parents: list[str] = []
+    an = ""
+    ae = ""
+    cn = ""
+    ce = ""
+    for ln in header_part.splitlines():
+        if ln.startswith("parent "):
+            parents.append(ln[7:].strip())
+        elif ln.startswith("author "):
+            m = re.match(r"^author (.*) <([^>]*)> [0-9]+ [-+][0-9]+$", ln)
+            if m:
+                an, ae = m.group(1), m.group(2)
+        elif ln.startswith("committer "):
+            m = re.match(r"^committer (.*) <([^>]*)> [0-9]+ [-+][0-9]+$", ln)
+            if m:
+                cn, ce = m.group(1), m.group(2)
+    return parents, an, ae, cn, ce, body_part.splitlines()
 
 
-def validate_notes_ref(
+def validate_writer_history_state(
     repo: str,
     notes_rev: str,
-    old_notes_rev: str | None = None,
     allowed_signers_path: str | None = None,
-    allow_missing_targets: bool = False,
-) -> int:
-    """Semantically validate every writer-log note in `notes_rev` and enforce append-only history."""
+) -> dict[str, list[dict[str, str]]]:
+    """Predicate 1 (pure state validity): validate a writer-history state as a function of that
+    state alone (notes tree layout, every note blob's syntax, every stanza's entry-id and SSH
+    signature against authorized signers, single-commit note authority, and commit-level semantic
+    rules for every annotated commit present in `repo`).
+
+    Never derived from, cached by, or skipped because of an old ref, checkpoint, blob identity,
+    or option. Cached in-process only by content hash of a state that was fully validated in this
+    process.
+    """
     eff_signers = resolve_allowed_signers(repo, allowed_signers_path)
+    signers_hash = _signers_file_sha256(eff_signers)
     notes_sha = resolve_commit(repo, notes_rev, "notes-rev")
-    new_entries = list_notes_tree(repo, notes_sha)
-    old_entries: dict[str, str] = {}
+    entries = list_notes_tree(repo, notes_sha)
+    sorted_items = sorted(entries.items())
+    blob_map = batch_cat_objects(repo, [b for _, b in sorted_items])
+    state_hasher = hashlib.sha256()
+    validated_state: dict[str, list[dict[str, str]]] = {}
+    commit_oids_to_fetch: list[str] = []
+    blob_texts: list[tuple[str, str]] = []
+    for annotated_sha, blob_sha in sorted_items:
+        blob_info = blob_map.get(blob_sha)
+        if blob_info is None or blob_info[0] != "blob":
+            raise ProvenanceError(f"writer-notes {notes_sha[:10]}: missing note blob {blob_sha[:10]} for {annotated_sha[:10]}")
+        blob_text = blob_info[1]
+        state_hasher.update(f"{annotated_sha}:{blob_sha}:".encode("utf-8"))
+        state_hasher.update(hashlib.sha256(blob_text.encode("utf-8")).digest())
+        blob_texts.append((annotated_sha, blob_text))
+
+    if len(blob_texts) > 1:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(8, len(blob_texts))) as pool:
+            futs = [
+                (annotated_sha, pool.submit(parse_and_verify_note_blob, annotated_sha, blob_text, eff_signers))
+                for annotated_sha, blob_text in blob_texts
+            ]
+            for annotated_sha, fut in futs:
+                history = fut.result()
+                validated_state[annotated_sha] = history
+                commit_oids_to_fetch.append(annotated_sha)
+                for h in history:
+                    commit_oids_to_fetch.append(h["start-sha"])
+                    commit_oids_to_fetch.append(h["end-sha"])
+    else:
+        for annotated_sha, blob_text in blob_texts:
+            history = parse_and_verify_note_blob(annotated_sha, blob_text, eff_signers)
+            validated_state[annotated_sha] = history
+            commit_oids_to_fetch.append(annotated_sha)
+            for h in history:
+                commit_oids_to_fetch.append(h["start-sha"])
+                commit_oids_to_fetch.append(h["end-sha"])
+
+    commit_map = batch_cat_objects(repo, commit_oids_to_fetch)
+    for c_oid in sorted(set(commit_oids_to_fetch)):
+        c_info = commit_map.get(c_oid)
+        if c_info is not None and c_info[0] == "commit":
+            state_hasher.update(f"commit:{c_oid}:".encode("utf-8"))
+            state_hasher.update(hashlib.sha256(c_info[1].encode("utf-8")).digest())
+
+    state_cache_key = (os.path.abspath(repo), state_hasher.hexdigest(), signers_hash)
+    cached_state = _VALIDATED_STATE_CACHE.get(state_cache_key)
+    if cached_state is not None:
+        return {k: [dict(e) for e in v] for k, v in cached_state.items()}
+
+    parents_map: dict[str, list[str]] = {}
+    parsed_commits: dict[str, tuple[list[str], str, str, str, str, list[str]]] = {}
+    for c_oid, (objtype, raw_text) in commit_map.items():
+        if objtype == "commit":
+            parsed = _parse_raw_commit_object(raw_text)
+            parsed_commits[c_oid] = parsed
+            parents_map[c_oid] = parsed[0]
+
+    def is_anc_fast(anc: str, desc: str) -> bool:
+        if anc == desc:
+            return True
+        visited: set[str] = set()
+        stack = list(parents_map.get(desc, ()))
+        while stack:
+            cur = stack.pop()
+            if cur == anc:
+                return True
+            if cur not in visited:
+                visited.add(cur)
+                stack.extend(parents_map.get(cur, ()))
+        return is_ancestor(repo, anc, desc)
+
+    for annotated_sha, history in sorted(validated_state.items()):
+        if annotated_sha not in parsed_commits:
+            continue
+        parents, an, ae, cn, ce, body_lines = parsed_commits[annotated_sha]
+        is_merge = len(parents) > 1
+        if is_merge:
+            is_clean_auto_merge(repo, annotated_sha, parents)
+        author_has_writer_tag = "(writer)" in an.lower() or ae.lower().endswith("@writers.concrete")
+        writer_trailers: list[str] = []
+        agy_trailers: list[str] = []
+        for bl in body_lines:
+            mw = re.match(r"^Writer:[ \t]*(.*)$", bl)
+            if mw:
+                writer_trailers.append(mw.group(1).strip())
+            ma = re.match(r"^Agy-Diff-SHA256:[ \t]*(.*)$", bl)
+            if ma:
+                agy_trailers.append(ma.group(1).strip())
+        has_commit_stamp = author_has_writer_tag or bool(writer_trailers) or bool(agy_trailers)
+        if not cn or not ce or ce.lower().endswith("@writers.concrete") or "(writer)" in cn.lower():
+            raise ProvenanceError(
+                f"commit {annotated_sha[:10]} committer '{cn} <{ce}>' must be the owner's identity, not a writer identity"
+            )
+        head_sha = history[-1]["end-sha"]
+        if head_sha not in parsed_commits:
+            head_sha = resolve_commit(repo, head_sha, f"commit {annotated_sha[:10]} writer-log end-sha")
+        for entry in history:
+            if entry.get("source") == "backfill":
+                if has_commit_stamp:
+                    raise ProvenanceError(
+                        f"commit {annotated_sha[:10]} carries a harness commit stamp and cannot use a backfilled writer-log entry"
+                    )
+                if entry["commit"] != annotated_sha:
+                    raise ProvenanceError(
+                        f"commit {annotated_sha[:10]} writer-log entry is for commit {entry['commit']}, not {annotated_sha}"
+                    )
+            else:
+                if len(writer_trailers) == 0:
+                    raise ProvenanceError(
+                        f"commit {annotated_sha[:10]} has writer author or harness log entry but no 'Writer: <model>' trailer"
+                    )
+                if len(writer_trailers) > 1:
+                    raise ProvenanceError(f"commit {annotated_sha[:10]} has multiple 'Writer:' trailers")
+                model = writer_trailers[0]
+                if model not in VALID_MODELS:
+                    raise ProvenanceError(
+                        f"commit {annotated_sha[:10]} has invalid 'Writer: {model}' trailer (expected codex, kimi, agy or claude)"
+                    )
+                expected_ae = f"{model}@writers.concrete"
+                expected_an_choices = {
+                    f"{MODEL_DISPLAY[model]} (writer)",
+                    f"{model.capitalize()} (writer)",
+                    f"{model} (writer)",
+                }
+                if ae != expected_ae or an not in expected_an_choices:
+                    raise ProvenanceError(
+                        f"commit {annotated_sha[:10]} trailer 'Writer: {model}' does not match author '{an} <{ae}>' "
+                        f"(expected '{MODEL_DISPLAY[model]} (writer) <{expected_ae}>')"
+                    )
+                if model == "agy":
+                    if len(agy_trailers) != 1:
+                        raise ProvenanceError(
+                            f"commit {annotated_sha[:10]} written by agy must have exactly one 'Agy-Diff-SHA256: <64-hex>' trailer"
+                        )
+                    if not HEX64_RE.match(agy_trailers[0]):
+                        raise ProvenanceError(
+                            f"commit {annotated_sha[:10]} has malformed 'Agy-Diff-SHA256: {agy_trailers[0]}' trailer"
+                        )
+                else:
+                    if agy_trailers:
+                        raise ProvenanceError(
+                            f"commit {annotated_sha[:10]} written by {model} must not have an 'Agy-Diff-SHA256:' trailer"
+                        )
+                if entry["commit"] != annotated_sha:
+                    raise ProvenanceError(
+                        f"commit {annotated_sha[:10]} writer-log entry is for commit {entry['commit']}, not {annotated_sha}"
+                    )
+                if entry["model"] != model:
+                    raise ProvenanceError(
+                        f"commit {annotated_sha[:10]} writer-log model '{entry['model']}' does not match commit stamp '{model}'"
+                    )
+                if model == "agy" and entry.get("agy-diff-sha256") != agy_trailers[0]:
+                    raise ProvenanceError(
+                        f"commit {annotated_sha[:10]} writer-log agy-diff-sha256 '{entry.get('agy-diff-sha256')}' "
+                        f"does not match commit trailer '{agy_trailers[0]}'"
+                    )
+            start_sha = entry["start-sha"]
+            if start_sha not in parsed_commits:
+                start_sha = resolve_commit(repo, start_sha, f"commit {annotated_sha[:10]} writer-log start-sha")
+            end_sha = entry["end-sha"]
+            if end_sha not in parsed_commits:
+                end_sha = resolve_commit(repo, end_sha, f"commit {annotated_sha[:10]} writer-log end-sha")
+            if start_sha == annotated_sha or not is_anc_fast(start_sha, annotated_sha):
+                raise ProvenanceError(
+                    f"commit {annotated_sha[:10]} writer-log start-sha {start_sha[:10]} is not a strict ancestor of {annotated_sha[:10]}"
+                )
+            if not is_anc_fast(annotated_sha, end_sha):
+                raise ProvenanceError(
+                    f"commit {annotated_sha[:10]} is not an ancestor-or-equal of its writer-log end-sha {end_sha[:10]}"
+                )
+            if not is_anc_fast(end_sha, head_sha):
+                raise ProvenanceError(
+                    f"commit {annotated_sha[:10]} writer-log end-sha {end_sha[:10]} is not an ancestor-or-equal of head {head_sha[:10]}"
+                )
+
+    _VALIDATED_STATE_CACHE[state_cache_key] = {k: [dict(e) for e in v] for k, v in validated_state.items()}
+    return validated_state
+
+
+def verify_writer_history_continuity(
+    repo: str,
+    notes_rev: str | None,
+    old_notes_rev: str | None = None,
+    extra_revs: list[str] | None = None,
+    allowed_signers_path: str | None = None,
+    target_commits: set[str] | None = None,
+) -> None:
+    """Predicate 2 (continuity): verify that `notes_rev` is a valid append-only extension and
+    fast-forward descendant of `old_notes_rev`, all ancestor commits of `notes_rev`, all companion
+    writer-notes refs (`WRITER_NOTES_REF`, `refs/notes/concrete-writer`,
+    `refs/notes/remote/concrete-writer`), and any `extra_revs`."""
+    eff_signers = resolve_allowed_signers(repo, allowed_signers_path)
+    notes_sha: str | None = None
+    new_entries: dict[str, str] = {}
+    if notes_rev is not None:
+        notes_sha = resolve_commit(repo, notes_rev, "notes-rev")
+        new_entries = list_notes_tree(repo, notes_sha)
+
     old_rev_stripped = ""
+    old_entries: dict[str, str] = {}
     if old_notes_rev is not None:
         old_rev_stripped = old_notes_rev.strip()
         if not old_rev_stripped:
@@ -1827,84 +1997,223 @@ def validate_notes_ref(
                 raise ProvenanceError(
                     f"writer-notes push deletes existing writer-log entry for commit(s): {rem_str}"
                 )
-
-    validated = 0
-    new_raw_cache: dict[str, list[str]] = {}
-    for annotated_sha, blob_sha in sorted(new_entries.items()):
-        old_blob_sha = old_entries.get(annotated_sha)
-        is_changed = old_blob_sha != blob_sha
-        if not is_changed:
-            # Past landed commits are not re-judged: unchanged historical notes already present in
-            # old_notes_rev are not re-parsed or re-verified on push.
-            continue
-        proc = git_run(repo, ["cat-file", "blob", blob_sha], check=True)
-        new_text = proc.stdout
-        stanzas = parse_multi_stanza_log(
-            new_text, f"{WRITER_NOTES_REF} on {annotated_sha[:10]}", eff_signers
-        )
-        if not stanzas:
-            raise ProvenanceError(f"{WRITER_NOTES_REF} on {annotated_sha[:10]} is empty")
-        for c_sha, c_hist in stanzas.items():
-            if c_sha != annotated_sha:
-                raise ProvenanceError(
-                    f"{WRITER_NOTES_REF} on {annotated_sha[:10]} records commit {c_hist[-1]['commit']}, not {annotated_sha} "
-                    f"(each commit has one authoritative writer history on its own note)"
-                )
-
-        new_raw_stanzas = split_raw_stanzas(new_text)
-        new_raw_cache[annotated_sha] = new_raw_stanzas
-        if old_blob_sha and is_changed:
-            old_proc = git_run(repo, ["cat-file", "blob", old_blob_sha], check=True)
-            old_raw_stanzas = split_raw_stanzas(old_proc.stdout)
-            if (
-                len(new_raw_stanzas) <= len(old_raw_stanzas)
-                or new_raw_stanzas[: len(old_raw_stanzas)] != old_raw_stanzas
-            ):
-                raise ProvenanceError(
-                    f"writer-notes push rewrites or drops existing writer-log entry on {annotated_sha[:10]} "
-                    f"(the writer log is append-only; corrections must append a signed superseding entry)"
-                )
-
-        has_target = commit_exists(repo, annotated_sha)
-        if is_changed and not has_target and not allow_missing_targets:
-            raise ProvenanceError(
-                f"{WRITER_NOTES_REF} on {annotated_sha[:10]} annotates a commit not present in this repository"
+            old_new_blobs = batch_cat_objects(
+                repo, list(old_entries.values()) + [new_entries[c] for c in old_entries]
             )
-        if has_target:
-            history = stanzas[annotated_sha]
-            latest = history[-1]
-            inspect_commit(repo, annotated_sha, latest["end-sha"], stanzas, eff_signers)
-            # Also enforce that a backfill entry never attributes a commit to its review note's
-            # reviewer unless an earlier signed entry already did so.
-            for idx, h in enumerate(history):
-                if h.get("source") == "backfill":
-                    earlier_models = {p["model"] for p in history[:idx]}
-                    for rev_target in dict.fromkeys([annotated_sha, h["end-sha"]]):
-                        for rev_model in get_review_note_reviewers(repo, rev_target):
-                            if rev_model == h["model"] and h["model"] not in earlier_models:
-                                raise ProvenanceError(
-                                    f"{WRITER_NOTES_REF} on {annotated_sha[:10]}: backfill entry "
-                                    f"{h['entry-id'][:10]} attributes {annotated_sha[:10]} to '{h['model']}', "
-                                    f"which is the reviewer on {rev_target[:10]}'s review note"
-                                )
-        validated += 1
+            for annotated_sha, old_blob_sha in sorted(old_entries.items()):
+                new_blob_sha = new_entries.get(annotated_sha)
+                assert new_blob_sha is not None
+                new_text = old_new_blobs[new_blob_sha][1]
+                old_text = old_new_blobs[old_blob_sha][1]
+                new_raw_stanzas = split_raw_stanzas(new_text)
+                old_raw_stanzas = split_raw_stanzas(old_text)
+                if (
+                    len(new_raw_stanzas) < len(old_raw_stanzas)
+                    or new_raw_stanzas[: len(old_raw_stanzas)] != old_raw_stanzas
+                ):
+                    raise ProvenanceError(
+                        f"writer-notes push rewrites or drops existing writer-log entry on {annotated_sha[:10]} "
+                        f"(the writer log is append-only; corrections must append a signed superseding entry)"
+                    )
 
-    verify_notes_ancestor_continuity(
-        repo=repo,
-        notes_rev=notes_sha,
-        new_entries=new_entries,
-        new_raw_cache=new_raw_cache,
-        eff_signers=eff_signers,
-        extra_revs=[old_rev_stripped] if (old_rev_stripped and old_rev_stripped != ZERO40) else None,
+    combined_extra = list(extra_revs or [])
+    if old_rev_stripped and old_rev_stripped != ZERO40 and old_rev_stripped not in combined_extra:
+        combined_extra.append(old_rev_stripped)
+
+    rev_roots: list[str] = []
+    if notes_sha is not None:
+        rev_roots.append(notes_sha)
+    companion = collect_prior_writer_checkpoints(
+        repo,
+        extra_revs=combined_extra,
+        check_refs=[
+            WRITER_NOTES_REF,
+            "refs/notes/concrete-writer",
+            "refs/notes/remote/concrete-writer",
+        ],
     )
+    for sha in companion:
+        if sha not in rev_roots:
+            rev_roots.append(sha)
+
+    if rev_roots:
+        if notes_sha is None:
+            prior_desc = ", ".join(p[:10] for p in rev_roots)
+            raise ProvenanceError(
+                f"local {WRITER_NOTES_REF} is missing, but prior writer-log history was "
+                f"recorded at {prior_desc} (refusing deleted or missing local writer-notes ref)"
+            )
+
+        log_proc = git_run(
+            repo,
+            ["log", "--raw", "--root", "-m", "--no-abbrev", "--format=COMMIT %H", *rev_roots],
+            check=True,
+        )
+        if not log_proc.stdout.strip():
+            raise ProvenanceError("git log returned empty history for writer-notes continuity check")
+
+        new_raw_cache: dict[str, list[str]] = {}
+        checked_pairs: set[tuple[str, str]] = set()
+        seen_commits: set[str] = set()
+
+        blocks: list[tuple[str, list[str]]] = []
+        cur_anc_sha = ""
+        cur_lines: list[str] = []
+        for raw_line in log_proc.stdout.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if line.startswith("COMMIT "):
+                if cur_anc_sha:
+                    blocks.append((cur_anc_sha, cur_lines))
+                cur_anc_sha = line[7:].strip()
+                if not HEX40_RE.match(cur_anc_sha):
+                    raise ProvenanceError(f"malformed COMMIT line in git log output: '{line}'")
+                seen_commits.add(cur_anc_sha)
+                cur_lines = []
+                continue
+            if line.startswith(":") and "\t" in line:
+                cur_lines.append(line)
+        if cur_anc_sha:
+            blocks.append((cur_anc_sha, cur_lines))
+
+        for root_sha in rev_roots:
+            if root_sha not in seen_commits:
+                raise ProvenanceError(
+                    f"git log output did not include required writer-notes commit {root_sha[:10]}"
+                )
+
+        ordered_blocks = (
+            [b for b in blocks if b[0] == notes_sha]
+            + [b for b in blocks if b[0] != notes_sha]
+        )
+
+        blobs_needed: list[str] = []
+        for cur_anc_sha, diff_lines in ordered_blocks:
+            for line in diff_lines:
+                meta, path = line.split("\t", 1)
+                c = path.replace("/", "").strip()
+                if len(c) != 40 or not all(ch in "0123456789abcdef" for ch in c):
+                    continue
+                if target_commits is not None and c not in target_commits:
+                    continue
+                parts = meta.split()
+                if len(parts) < 5:
+                    continue
+                old_bsha, new_bsha = parts[2], parts[3]
+                if old_bsha != ZERO40:
+                    blobs_needed.append(old_bsha)
+                if cur_anc_sha != notes_sha and new_bsha != ZERO40 and new_bsha != old_bsha:
+                    blobs_needed.append(new_bsha)
+                cur_blob_sha = new_entries.get(c)
+                if cur_blob_sha is not None:
+                    blobs_needed.append(cur_blob_sha)
+
+        blob_batch = batch_cat_objects(repo, blobs_needed)
+
+        def get_blob_text(bsha: str) -> str:
+            info = blob_batch.get(bsha)
+            if info is not None:
+                return info[1]
+            return git_run(repo, ["cat-file", "blob", bsha], check=True).stdout
+
+        for cur_anc_sha, diff_lines in ordered_blocks:
+            for line in diff_lines:
+                meta, path = line.split("\t", 1)
+                c = path.replace("/", "").strip()
+                if len(c) != 40 or not all(ch in "0123456789abcdef" for ch in c):
+                    continue
+                if target_commits is not None and c not in target_commits:
+                    continue
+                parts = meta.split()
+                if len(parts) < 5:
+                    continue
+                old_bsha, new_bsha = parts[2], parts[3]
+                candidate_blobs: list[str] = []
+                if old_bsha != ZERO40:
+                    candidate_blobs.append(old_bsha)
+                if cur_anc_sha != notes_sha and new_bsha != ZERO40 and new_bsha != old_bsha:
+                    candidate_blobs.append(new_bsha)
+                cur_blob_sha = new_entries.get(c)
+                for anc_blob_sha in candidate_blobs:
+                    pair = (c, anc_blob_sha)
+                    if pair in checked_pairs:
+                        continue
+                    checked_pairs.add(pair)
+                    anc_text = get_blob_text(anc_blob_sha)
+                    if cur_blob_sha is not None:
+                        if c not in new_raw_cache:
+                            new_raw_cache[c] = split_raw_stanzas(get_blob_text(cur_blob_sha))
+                        new_raw = new_raw_cache[c]
+                        anc_raw = split_raw_stanzas(anc_text)
+                        if len(new_raw) >= len(anc_raw) and new_raw[: len(anc_raw)] == anc_raw:
+                            continue
+                    if not _blob_has_valid_signed_note(c, anc_text, eff_signers):
+                        continue
+                    if cur_blob_sha is None:
+                        raise ProvenanceError(
+                            f"writer-notes push deletes existing writer-log entry for commit(s): {c[:10]} "
+                            f"(present in writer-notes commit {cur_anc_sha[:10]})"
+                        )
+                    raise ProvenanceError(
+                        f"writer-notes push rewrites or drops existing writer-log entry on {c[:10]} "
+                        f"from writer-notes commit {cur_anc_sha[:10]} "
+                        f"(the writer log is append-only; corrections must append a signed superseding entry)"
+                    )
+
     if old_rev_stripped and old_rev_stripped != ZERO40:
+        assert notes_sha is not None
         old_sha = resolve_commit(repo, old_rev_stripped, "old-notes-rev")
         if not is_ancestor(repo, old_sha, notes_sha):
             raise ProvenanceError(
                 f"writer-notes push is non-fast-forward ({old_sha[:10]} is not an ancestor of {notes_sha[:10]}): "
                 f"refs/notes/concrete-writer history is append-only and may not be rewound or rewritten"
             )
-    return validated
+
+
+def read_validated_writer_notes(
+    repo: str,
+    allowed_signers_path: str | None = None,
+    target_commits: set[str] | None = None,
+) -> dict[str, list[dict[str, str]]]:
+    """Validate the current writer-notes state (Predicate 1) and its continuity against all
+    ancestors and companion checkpoints (Predicate 2), in that order, before any reader or
+    writer operation uses `WRITER_NOTES_REF`."""
+    cur_sha = resolve_optional_ref(repo, WRITER_NOTES_REF)
+    state: dict[str, list[dict[str, str]]] = {}
+    if cur_sha is not None:
+        state = validate_writer_history_state(repo, cur_sha, allowed_signers_path=allowed_signers_path)
+    verify_writer_history_continuity(
+        repo=repo,
+        notes_rev=cur_sha,
+        allowed_signers_path=allowed_signers_path,
+        target_commits=target_commits,
+    )
+    return state
+
+
+def validate_notes_ref(
+    repo: str,
+    notes_rev: str,
+    old_notes_rev: str | None = None,
+    allowed_signers_path: str | None = None,
+    allow_missing_targets: bool = False,
+) -> int:
+    """Validate `notes_rev` by running Predicate 1 (`validate_writer_history_state`) first and
+    Predicate 2 (`verify_writer_history_continuity`) second, in that order."""
+    del allow_missing_targets
+    validated_state = validate_writer_history_state(
+        repo=repo,
+        notes_rev=notes_rev,
+        allowed_signers_path=allowed_signers_path,
+    )
+    verify_writer_history_continuity(
+        repo=repo,
+        notes_rev=notes_rev,
+        old_notes_rev=old_notes_rev,
+        allowed_signers_path=allowed_signers_path,
+    )
+    return len(validated_state)
 
 
 def collect_prior_writer_checkpoints(
@@ -1954,9 +2263,9 @@ def fetch_notes_ref(
     no_fetch: bool = False,
 ) -> str | None:
     """Fetch `remote_ref` from `remote` (or validate local `target_ref` when `no_fetch=True`),
-    verify cryptographic validity and append-only continuity against all recorded checkpoints
-    (`old_notes_revs`, `target_ref`, `WRITER_NOTES_REF`, `refs/notes/concrete-writer`,
-    `refs/notes/remote/concrete-writer`), and update checkpoint refs monotonically.
+    requiring Predicate 1 (`validate_writer_history_state`) first and Predicate 2
+    (`verify_writer_history_continuity`) second, in that order, before advancing any checkpoint
+    or returning a writer-notes state.
 
     Checkpoints are never deleted or downgraded by a reader or rebuild. A missing remote or local
     ref is refused whenever any prior writer-log history was recorded.
@@ -1977,23 +2286,24 @@ def fetch_notes_ref(
     priors = collect_prior_writer_checkpoints(
         repo, extra_revs=old_notes_revs, check_refs=check_refs
     )
-    # Monotone checkpoint ratchet: if any recorded checkpoint in `priors` is a valid descendant of
-    # all other recorded checkpoints, advance the local checkpoint refs to it immediately so no
-    # failed fetch, rebuild, or state reset can ever lose or downgrade the highest known checkpoint.
+    # Monotone checkpoint ratchet: only a state that satisfies BOTH Predicate 1 (full state
+    # validity) and Predicate 2 (continuity + fast-forward ancestry of all recorded checkpoints),
+    # in that order, can ever advance checkpoint refs.
     if priors:
-        eff_signers = resolve_allowed_signers(repo, allowed_signers_path)
         for cand_prior in priors:
             try:
-                if not all(is_ancestor(repo, other_prior, cand_prior) for other_prior in priors):
-                    continue
-                cand_entries = list_notes_tree(repo, cand_prior)
-                verify_notes_ancestor_continuity(
+                validate_writer_history_state(
                     repo=repo,
                     notes_rev=cand_prior,
-                    new_entries=cand_entries,
-                    new_raw_cache={},
-                    eff_signers=eff_signers,
+                    allowed_signers_path=allowed_signers_path,
+                )
+                if not all(is_ancestor(repo, other_prior, cand_prior) for other_prior in priors):
+                    continue
+                verify_writer_history_continuity(
+                    repo=repo,
+                    notes_rev=cand_prior,
                     extra_revs=priors,
+                    allowed_signers_path=allowed_signers_path,
                 )
             except ProvenanceError:
                 continue
@@ -2018,22 +2328,26 @@ def fetch_notes_ref(
                     f"recorded at {prior_desc} (refusing deleted or missing local writer-notes ref)"
                 )
             return None
+        validate_writer_history_state(
+            repo=repo,
+            notes_rev=local_cand_sha,
+            allowed_signers_path=allowed_signers_path,
+        )
         if priors:
             for prior in priors:
-                validate_notes_ref(
+                verify_writer_history_continuity(
                     repo=repo,
                     notes_rev=local_cand_sha,
                     old_notes_rev=prior,
+                    extra_revs=priors,
                     allowed_signers_path=allowed_signers_path,
-                    allow_missing_targets=True,
                 )
         else:
-            validate_notes_ref(
+            verify_writer_history_continuity(
                 repo=repo,
                 notes_rev=local_cand_sha,
                 old_notes_rev=ZERO40,
                 allowed_signers_path=allowed_signers_path,
-                allow_missing_targets=True,
             )
         git_run(repo, ["update-ref", eff_target_ref, local_cand_sha])
         git_run(repo, ["update-ref", "refs/notes/remote/concrete-writer", local_cand_sha])
@@ -2064,22 +2378,26 @@ def fetch_notes_ref(
             )
 
         fetched_sha = resolve_commit(repo, tmp_fetch_ref, "fetched writer-notes")
+        validate_writer_history_state(
+            repo=repo,
+            notes_rev=fetched_sha,
+            allowed_signers_path=allowed_signers_path,
+        )
         if priors:
             for prior in priors:
-                validate_notes_ref(
+                verify_writer_history_continuity(
                     repo=repo,
                     notes_rev=fetched_sha,
                     old_notes_rev=prior,
+                    extra_revs=priors,
                     allowed_signers_path=allowed_signers_path,
-                    allow_missing_targets=True,
                 )
         else:
-            validate_notes_ref(
+            verify_writer_history_continuity(
                 repo=repo,
                 notes_rev=fetched_sha,
                 old_notes_rev=ZERO40,
                 allowed_signers_path=allowed_signers_path,
-                allow_missing_targets=True,
             )
 
         git_run(repo, ["update-ref", eff_target_ref, fetched_sha])
@@ -2133,7 +2451,10 @@ def sync_notes_refs(
             fetched_from_remote = True
 
         remote_sha = resolve_commit(repo, from_rev, "from-rev")
+        validate_writer_history_state(repo, remote_sha, allowed_signers_path=allowed_signers_path)
         local_sha = resolve_optional_ref(repo, WRITER_NOTES_REF)
+        if local_sha is not None:
+            validate_writer_history_state(repo, local_sha, allowed_signers_path=allowed_signers_path)
 
         if prev_remote_sha and remote_sha != prev_remote_sha and not is_ancestor(repo, prev_remote_sha, remote_sha):
             validate_notes_ref(
@@ -2141,7 +2462,6 @@ def sync_notes_refs(
                 remote_sha,
                 old_notes_rev=prev_remote_sha,
                 allowed_signers_path=allowed_signers_path,
-                allow_missing_targets=True,
             )
 
         if local_sha is None:
@@ -2150,7 +2470,6 @@ def sync_notes_refs(
                 remote_sha,
                 old_notes_rev=prev_remote_sha or ZERO40,
                 allowed_signers_path=allowed_signers_path,
-                allow_missing_targets=True,
             )
             git_run(repo, ["update-ref", WRITER_NOTES_REF, remote_sha])
             if fetched_from_remote:
@@ -2163,7 +2482,6 @@ def sync_notes_refs(
                 remote_sha,
                 old_notes_rev=prev_remote_sha or local_sha,
                 allowed_signers_path=allowed_signers_path,
-                allow_missing_targets=True,
             )
             if fetched_from_remote:
                 git_run(repo, ["update-ref", "refs/notes/remote/concrete-writer", remote_sha])
@@ -2176,14 +2494,12 @@ def sync_notes_refs(
                     remote_sha,
                     old_notes_rev=prev_remote_sha,
                     allowed_signers_path=allowed_signers_path,
-                    allow_missing_targets=True,
                 )
             validate_notes_ref(
                 repo,
                 remote_sha,
                 old_notes_rev=local_sha,
                 allowed_signers_path=allowed_signers_path,
-                allow_missing_targets=True,
             )
             git_run(repo, ["update-ref", WRITER_NOTES_REF, remote_sha])
             if fetched_from_remote:
@@ -2197,7 +2513,6 @@ def sync_notes_refs(
                     remote_sha,
                     old_notes_rev=local_sha,
                     allowed_signers_path=allowed_signers_path,
-                    allow_missing_targets=True,
                 )
             if prev_remote_sha:
                 validate_notes_ref(
@@ -2205,29 +2520,27 @@ def sync_notes_refs(
                     local_sha,
                     old_notes_rev=prev_remote_sha,
                     allowed_signers_path=allowed_signers_path,
-                    allow_missing_targets=True,
                 )
             validate_notes_ref(
                 repo,
                 local_sha,
                 old_notes_rev=remote_sha,
                 allowed_signers_path=allowed_signers_path,
-                allow_missing_targets=True,
             )
             if fetched_from_remote:
                 git_run(repo, ["update-ref", "refs/notes/remote/concrete-writer", remote_sha])
             return local_sha
 
-        # Diverged notes commits: verify neither side dropped or rewrote any ancestor history, and
-        # merge per-commit stanza lists by strict prefix extension.
+        # Diverged notes commits: both states are already validated by Predicate 1 above; now
+        # verify neither side dropped or rewrote any ancestor history, and merge per-commit stanza
+        # lists by strict prefix extension.
         local_entries = list_notes_tree(repo, local_sha)
         remote_entries = list_notes_tree(repo, remote_sha)
-        eff_signers = resolve_allowed_signers(repo, allowed_signers_path)
-        verify_notes_ancestor_continuity(
-            repo, local_sha, local_entries, {}, eff_signers, extra_revs=[local_sha]
+        verify_writer_history_continuity(
+            repo, local_sha, extra_revs=[local_sha], allowed_signers_path=allowed_signers_path
         )
-        verify_notes_ancestor_continuity(
-            repo, remote_sha, remote_entries, {}, eff_signers, extra_revs=[remote_sha]
+        verify_writer_history_continuity(
+            repo, remote_sha, extra_revs=[remote_sha], allowed_signers_path=allowed_signers_path
         )
 
         merged_entries: dict[str, str] = {}
@@ -2280,19 +2593,19 @@ def sync_notes_refs(
             ],
         )
         merged_sha = cproc.stdout.strip()
+        validate_writer_history_state(repo, merged_sha, allowed_signers_path=allowed_signers_path)
         if prev_remote_sha:
-            validate_notes_ref(
+            verify_writer_history_continuity(
                 repo,
                 merged_sha,
                 old_notes_rev=prev_remote_sha,
                 allowed_signers_path=allowed_signers_path,
-                allow_missing_targets=True,
             )
-        validate_notes_ref(
-            repo, merged_sha, old_notes_rev=local_sha, allowed_signers_path=allowed_signers_path, allow_missing_targets=True
+        verify_writer_history_continuity(
+            repo, merged_sha, old_notes_rev=local_sha, allowed_signers_path=allowed_signers_path
         )
-        validate_notes_ref(
-            repo, merged_sha, old_notes_rev=remote_sha, allowed_signers_path=allowed_signers_path, allow_missing_targets=True
+        verify_writer_history_continuity(
+            repo, merged_sha, old_notes_rev=remote_sha, allowed_signers_path=allowed_signers_path
         )
         git_run(repo, ["update-ref", WRITER_NOTES_REF, merged_sha])
         if fetched_from_remote:

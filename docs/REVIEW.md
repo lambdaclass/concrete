@@ -239,26 +239,37 @@ a self-declared claim, or a default attribution on unstamped commits:
   and uses the latest valid entry for `writers:`. Any model attested as writer
   in an earlier superseded signed entry remains disqualified from reviewing that
   commit (so relabelling an unstamped Kimi commit can never make Kimi eligible
-  to review it). `.githooks/pre-push` (`validate-notes`) runs unconditionally on
-  every push before any `CONCRETE_SKIP_GATES` bypass, refuses deleting
-  `refs/notes/concrete-writer`, and requires every nonzero `--old-notes-rev` to
-  resolve locally and be compared as an ancestor of the new ref (distinguishing an
-  absent object from the all-zero creation sentinel), checking both against
-  `--old-notes-rev` and across the commit history of the notes ref itself that no
-  existing commit note was deleted and that existing stanzas on every changed
-  commit remain an unmodified prefix of the new stanzas, refusing any update that
-  rolls back, rewrites, deletes, or re-signs an existing entry. `verify.sh
-  --fetch`, `scripts/land/notes.sh fetch`, and `scripts/land/train.sh` share
-  `writer_provenance.py fetch-notes`, which fetches `refs/notes/concrete-writer`
-  into a temporary ref, verifies continuity against all recorded checkpoints
-  (`refs/notes/concrete-writer`, `refs/notes/remote/concrete-writer`, and any
-  caller-supplied `--old-notes-rev` such as the train's `writer_notes` state),
-  never deletes a checkpoint ref, and refuses a missing remote ref whenever any
-  prior writer history was recorded; `writer_provenance.py` also
-  verifies historical continuity across the notes ref's ancestor chain and
-  companion ref on every provenance read. `scripts/land/notes.sh put` refuses
-  `writer` notes (`stamp-commit`, `backfill`, `fetch-notes`, `sync-notes`, and
-  `publish-notes` in `writer_provenance.py` are the only writer-note ref APIs).
+  to review it). Validation of writer-history states in `writer_provenance.py`
+  is structured as two separate predicates required in order by every reader,
+  writer, validator, and checkpoint ratchet:
+  1. **State validity (`validate_writer_history_state`):** a pure function of
+     the writer-history state alone (notes tree layout, every note blob's syntax,
+     every stanza's `entry-id` and SSH signature against authorized signers in
+     `allowed_writer_log_signers`, single-commit note authority, and commit-level
+     semantic rules for every annotated commit present in the repository),
+     computed in full on every read and never derived from, cached by, or skipped
+     because of an old ref, checkpoint, blob identity, or option (in-process
+     memoization is keyed only by content hash of a blob and signers file already
+     validated in the current process).
+  2. **Continuity (`verify_writer_history_continuity`):** a separate predicate
+     verifying that the state is a fast-forward descendant and append-only stanza
+     prefix extension of `--old-notes-rev`, every ancestor commit in the notes
+     ref's history, and every companion checkpoint (`REVIEW_WRITER_NOTES_REF`,
+     `refs/notes/concrete-writer`, `refs/notes/remote/concrete-writer`, and any
+     caller-supplied `--old-notes-rev`).
+  `.githooks/pre-push` (`validate-notes`) runs unconditionally on every push
+  before any `CONCRETE_SKIP_GATES` bypass, refuses deleting
+  `refs/notes/concrete-writer`, requires every nonzero `--old-notes-rev` to
+  resolve locally, and enforces state validity followed by continuity across all
+  notes (including notes unchanged from `--old-notes-rev`). `verify.sh --fetch`,
+  `scripts/land/notes.sh` (`fetch`, `get writer`, `ready`), and
+  `scripts/land/train.sh` share `writer_provenance.py fetch-notes`, which
+  requires state validity first and continuity second before advancing any
+  checkpoint ref or returning a writer-notes state, never deletes a checkpoint
+  ref, and refuses a missing remote or local ref whenever any prior writer
+  history was recorded. `scripts/land/notes.sh put` refuses `writer` notes
+  (`stamp-commit`, `backfill`, `fetch-notes`, `sync-notes`, and `publish-notes`
+  in `writer_provenance.py` are the only writer-note ref APIs).
 - **Harness-stamped commits (`source: harness`).** Each harness-written commit
   (`scripts/review/writer_provenance.py stamp-commit`) is stamped with author
   `<Model> (writer) <model@writers.concrete>` (while the committer remains the

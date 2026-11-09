@@ -261,6 +261,86 @@ out="$(cd "$A" && bash "$NOTES" get writer "$RVBF_SHA" model 2>&1)"; rc=$?
   || { no "notes.sh get writer rollback N3: exit $rc"; echo "$out" | sed 's/^/      /'; }
 ( cd "$A" && bash "$NOTES" ready "$RVBF_SHA" ) && no "notes.sh ready accepted rollback commit N3" || ok "notes.sh ready refuses rollback commit N3 on writer notes"
 ( cd "$A" && bash "$NOTES" ready --base origin/main "$RVBF_SHA" ) && no "notes.sh ready --base accepted rollback commit N3" || ok "notes.sh ready --base refuses rollback commit N3 on writer notes"
+# Round-13 controls on notes.sh get writer & ready: unsigned, tampered, and unauthorized-signer writer notes
+# are refused even when both local and remote-tracking refs already point to the invalid notes commit
+# (and even when the invalid stanza is appended after the existing valid stanzas so prefix continuity holds).
+ssh-keygen -q -t ed25519 -N "" -C "rogue@concrete" -f "$TMP/keys/rogue_ed25519"
+rvbf_eid2="$(git -C "$A" notes --ref=refs/notes/concrete-writer show "$RVBF_SHA" | sed -n 's/^entry-id: //p' | tail -n 1)"
+rvbf_rogue_note="$(python3 -B -I - "$ROOT_DIR/scripts/review" "$RVBF_SHA" "$BASE" "$TMP/ev/brief.txt" "$TMP/ev/output.txt" "$TMP/keys/rogue_ed25519" "$rvbf_eid2" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import writer_provenance as wp
+rvbf_sha, start_sha, brief_f, out_f, key_f, sup_id = sys.argv[2:8]
+entry = {
+    "model": "claude",
+    "round": "3",
+    "branch": "wip/rv-bf",
+    "brief-sha256": wp.sha256_file(brief_f, "brief"),
+    "output-sha256": wp.sha256_file(out_f, "output"),
+    "start-sha": start_sha,
+    "end-sha": rvbf_sha,
+    "commit": rvbf_sha,
+    "source": "backfill",
+    "evidence": "signed by unauthorized key",
+    "supersedes": sup_id,
+    "reason": "signed by unauthorized key",
+}
+print(wp.format_log_stanza(wp.sign_entry(entry, key_f, "orchestrator@concrete")))
+PY
+)"
+rvbf_tamp_stanza="$(python3 -B -I - "$ROOT_DIR/scripts/review" "$RVBF_SHA" "$BASE" "$TMP/ev/brief.txt" "$TMP/ev/output.txt" "$TMP/keys/id_ed25519" "$rvbf_eid2" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import writer_provenance as wp
+rvbf_sha, start_sha, brief_f, out_f, key_f, sup_id = sys.argv[2:8]
+entry = {
+    "model": "claude",
+    "round": "3",
+    "branch": "wip/rv-bf",
+    "brief-sha256": wp.sha256_file(brief_f, "brief"),
+    "output-sha256": wp.sha256_file(out_f, "output"),
+    "start-sha": start_sha,
+    "end-sha": rvbf_sha,
+    "commit": rvbf_sha,
+    "source": "backfill",
+    "evidence": "signed by valid key then tampered",
+    "supersedes": sup_id,
+    "reason": "original reason before tampering",
+}
+print(wp.format_log_stanza(wp.sign_entry(entry, key_f, "orchestrator@concrete")).replace("original reason before tampering", "tampered reason after signing"))
+PY
+)"
+git -C "$A" notes --ref=refs/notes/concrete-writer show "$RVBF_SHA" > "$TMP/rvbf-n2-orig"
+git -C "$A" update-ref refs/notes/concrete-writer-r13-uns "$rvbf_n2"
+printf '%s\n\nmodel: claude\nround: 3\nunsigned malformed note\n' "$(cat "$TMP/rvbf-n2-orig")" > "$TMP/rvbf-r13-uns-full"
+git -C "$A" notes --ref=refs/notes/concrete-writer-r13-uns add -f -F "$TMP/rvbf-r13-uns-full" "$RVBF_SHA" 2>/dev/null
+rvbf_r13_uns="$(git -C "$A" rev-parse refs/notes/concrete-writer-r13-uns)"
+git -C "$A" update-ref refs/notes/concrete-writer-r13-tamp "$rvbf_n2"
+printf '%s\n\n%s\n' "$(cat "$TMP/rvbf-n2-orig")" "$rvbf_tamp_stanza" > "$TMP/rvbf-r13-tamp-full"
+git -C "$A" notes --ref=refs/notes/concrete-writer-r13-tamp add -f -F "$TMP/rvbf-r13-tamp-full" "$RVBF_SHA" 2>/dev/null
+rvbf_r13_tamp="$(git -C "$A" rev-parse refs/notes/concrete-writer-r13-tamp)"
+git -C "$A" update-ref refs/notes/concrete-writer-r13-rogue "$rvbf_n2"
+printf '%s\n\n%s\n' "$(cat "$TMP/rvbf-n2-orig")" "$rvbf_rogue_note" > "$TMP/rvbf-r13-rogue-full"
+git -C "$A" notes --ref=refs/notes/concrete-writer-r13-rogue add -f -F "$TMP/rvbf-r13-rogue-full" "$RVBF_SHA" 2>/dev/null
+rvbf_r13_rogue="$(git -C "$A" rev-parse refs/notes/concrete-writer-r13-rogue)"
+for r13_pair in "unsigned:$rvbf_r13_uns" "tampered:$rvbf_r13_tamp" "unauthorized-signer:$rvbf_r13_rogue"; do
+  r13_lbl="${r13_pair%%:*}"
+  r13_sha="${r13_pair#*:}"
+  git -C "$A" update-ref refs/notes/concrete-writer "$r13_sha"
+  git -C "$A" update-ref refs/notes/remote/concrete-writer "$r13_sha"
+  out="$(cd "$A" && bash "$NOTES" get writer "$RVBF_SHA" 2>&1)"; rc=$?
+  [ "$rc" = 1 ] && has "$out" "invalid or discontinuous refs/notes/remote/concrete-writer" \
+    && ok "notes.sh get writer refuses $r13_lbl writer note even when already at checkpoint" \
+    || { no "notes.sh get writer $r13_lbl: exit $rc"; echo "$out" | sed 's/^/      /'; }
+  out="$(cd "$A" && bash "$NOTES" get writer "$RVBF_SHA" model 2>&1)"; rc=$?
+  [ "$rc" = 1 ] && has "$out" "invalid or discontinuous refs/notes/remote/concrete-writer" \
+    && ok "notes.sh get writer <sha> model refuses $r13_lbl writer note even when already at checkpoint" \
+    || { no "notes.sh get writer model $r13_lbl: exit $rc"; echo "$out" | sed 's/^/      /'; }
+done
+git -C "$A" update-ref -d refs/notes/concrete-writer-r13-uns 2>/dev/null || true
+git -C "$A" update-ref -d refs/notes/concrete-writer-r13-tamp 2>/dev/null || true
+git -C "$A" update-ref -d refs/notes/concrete-writer-r13-rogue 2>/dev/null || true
+git -C "$A" update-ref refs/notes/concrete-writer "$rvbf_n2"
 git -C "$A" update-ref refs/notes/remote/concrete-writer "$rvbf_n2"
 git -C "$A" push -q -f --no-verify origin "$rvbf_n1:refs/notes/concrete-writer"
 out="$(cd "$A" && bash "$NOTES" fetch writer 2>&1)"; rc=$?
