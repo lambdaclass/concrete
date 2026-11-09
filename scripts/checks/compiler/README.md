@@ -413,28 +413,39 @@ and 124 s total), retained in `gates-briefs/D15b-timings.txt`. Final bounds:
 GitHub-hosted timing measurements remain to be collected, owned by R-0509 /
 R-0676. Do not infer hosted calibration from ci-2.
 
-### Round-14 acceptance still required on ci-2
+### Round-15 acceptance on ci-2 and GitHub
 
-Record the exact final SHA (`git rev-parse HEAD`) in every result. In the pinned
-clean environment from `slice0_gate_environment`, run:
+Record the exact final SHA in every result. Within `slice0_gate_environment`,
+run `bounded_run 375 -- python3 -I scripts/checks/tests/trusted_base_controls.py`
+twice under shared load and retain all timing rows to verify the calibrated bounds.
+Run `bounded_run 15 -- python3 -I scripts/checks/tests/trusted_legs_controls.py`
+and `bounded_run 3600 -- bash scripts/checks/compiler/slice0_trusted_base.sh`.
+The integrated gate collects every independent leg, retaining errexit inside each
+leg: controls, preparation, loader controls, registry snapshot, approval, registry
+comparisons, environment/import audits, examples, audit controls and tools.
+Each prints its result; any failing or incomplete leg makes the gate nonzero.
+Preparation failures cannot silently turn later legs into passes. Shared bootstrap
+initialization must succeed before audit legs can launch. Approval failure never
+prevents the examples, memory, exec or loader/mapping legs from running.
+Golden updates also require every leg, including approval, to pass.
+The cheap aggregation control uses real approval verification with a temporary
+empty allowed-signers file and real empty example rows. It requires both exact
+`FAIL approval: awaiting owner key` and
+`FAIL examples: no example-json rows observed` diagnostics, a nonzero aggregate,
+and execution of a final successful leg; it also checks that inner errexit survives.
 
-- `bounded_run 375 -- python3 -I scripts/checks/tests/trusted_base_controls.py`
-  twice under ordinary shared load, retaining every `control-timing` row; set
-  final per-command, batch and enclosing bounds from those measurements with
-  explicit margin (item 8 is not complete until this is recorded).
-- `bounded_run 180 -- python3 -I scripts/checks/tests/trusted_memory_bound_controls.py --full`
-  to exercise the actual 8 GiB OOM limit, and the cheap form without `--full`
-  on ci-2 and GitHub to check both launch paths and kernel-reported limits.
-- `bounded_run 60 -- python3 -I scripts/checks/tests/trusted_approval_controls.py`
-  and `bounded_run 90 -- python3 -I scripts/checks/tests/trusted_policy_controls.py`.
-- `bounded_run 3600 -- bash scripts/checks/compiler/slice0_trusted_base.sh` for
-  the integrated D14 run. While the owner key is absent, the only intended
-  blocker is exactly `FAIL approval: awaiting owner key`; this is not a PASS.
-  Gate 9 stops there before its later examples audits, so the separate memory
-  controls above are required rather than inferred from that integrated run.
+ci-2 D15/D15b passed both memory controls (cheap and `--full`), approval and policy
+controls. Repeat `bounded_run 180 -- python3 -I scripts/checks/tests/trusted_memory_bound_controls.py --full`
+on the final SHA on ci-2. No full local suite or 8 GiB local allocation is authorized.
+The daily full-memory control is executable in `slice0_trusted_fresh.sh`; scheduled
+CI wiring belongs to R-0676 / R-0509.
 
-The daily full-memory control is executable in `slice0_trusted_fresh.sh`; wiring
-that existing daily script into scheduled CI remains R-0676 / R-0509. No full
-local suite or 8 GiB local allocation is authorized. Reviews of record belong
-to the coordinator and must choose the best long-term design without cutting
-corners for speed, diff size or round count.
+GitHub-hosted evidence remains outstanding: CI job `trusted-base`, matrix entry
+`x86-64` (`Slice 0 trusted base (gate 9, x86-64)`, `ubuntu-latest`), runs the explicit
+step `Cheap trusted memory control (kernel limits)` before the integrated gate.
+It uses `slice0_gate_environment`, prints the kernel memory.max, memory.swap.max
+and hard RLIMIT_AS from inside the capped service, and exercises the cheap 64 MiB
+OOM control. Collect this step's output plus the integrated semantic timing rows;
+ci-2 evidence does not establish the hosted system-manager launch path.
+Reviews of record belong to the coordinator and must choose the best long-term
+design without cutting corners for speed, diff size or round count.

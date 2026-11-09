@@ -206,13 +206,16 @@ check_examples() {
   bounded 30 python3 -I "$root/scripts/checks/lib/example_rows.py" "$out/examples"
 }
 
-bounded 30 python3 -I "$root/scripts/checks/tests/test_execve_names.py"
-bounded 60 python3 -I "$root/scripts/checks/tests/trusted_memory_controls.py"
-bounded 90 python3 -I "$root/scripts/checks/tests/trusted_memory_bound_controls.py"
-bounded 10 python3 -I "$root/scripts/checks/tests/trusted_timeout_controls.py"
-bounded 60 python3 -I "$root/scripts/checks/tests/trusted_approval_controls.py"
-bounded 90 python3 -I "$root/scripts/checks/tests/trusted_policy_controls.py"
-bounded 375 python3 -I "$root/scripts/checks/tests/trusted_base_controls.py"
+source scripts/checks/lib/trusted_legs.sh
+trusted_leg aggregation-controls bounded 15 python3 -I "$root/scripts/checks/tests/trusted_legs_controls.py"
+trusted_leg exec-controls bounded 30 python3 -I "$root/scripts/checks/tests/test_execve_names.py"
+trusted_leg memory-controls bounded 60 python3 -I "$root/scripts/checks/tests/trusted_memory_controls.py"
+trusted_leg memory-bound-controls bounded 90 python3 -I "$root/scripts/checks/tests/trusted_memory_bound_controls.py"
+trusted_leg timeout-controls bounded 10 python3 -I "$root/scripts/checks/tests/trusted_timeout_controls.py"
+trusted_leg approval-controls bounded 60 python3 -I "$root/scripts/checks/tests/trusted_approval_controls.py"
+trusted_leg policy-controls bounded 90 python3 -I "$root/scripts/checks/tests/trusted_policy_controls.py"
+trusted_leg semantic-controls bounded 375 python3 -I "$root/scripts/checks/tests/trusted_base_controls.py"
+prepare_audits() {
 bounded 180 python3 -I "$root/scripts/checks/lib/trusted_identity.py" prepare "$work/identity.json"
 printf 'lake\nlean\ngit\n' >"$work/frontend-tools"
 # Bootstrap the registry renderer with narrowly fixed names and lock-derived role identities;
@@ -223,22 +226,22 @@ if [ "$(uname -s)" = Linux ]; then
   check_tools "$work/pipeline-tools" lean-build "$work/build.execve"
 fi
 cp "$work/pipeline-tools" "$work/frontend-tools"
-bounded 90 python3 -I "$root/scripts/checks/tests/trusted_loader_controls.py"
+}
+trusted_leg prepare prepare_audits
+trusted_leg loader-controls bounded 90 python3 -I "$root/scripts/checks/tests/trusted_loader_controls.py"
+registry_snapshot() {
 if ! current "$work/current"; then
   echo "FAIL slice0_trusted_base: printing the trusted base failed"
   exit 1
 fi
-bounded 60 python3 -I "$root/scripts/checks/lib/trusted_approval.py" \
+}
+trusted_leg registry-snapshot registry_snapshot
+trusted_leg approval bounded 60 python3 -I "$root/scripts/checks/lib/trusted_approval.py" \
   "$work/current" "$root/tests/golden/slice0_trusted_base_approval.json"
-if [ "${1:-}" = update ]; then
-  mkdir -p "$(dirname "$golden")"
-  cp "$work/current" "$golden"
-  echo "slice0_trusted_base: golden updated; review: git diff -- $golden"
-  exit 0
-fi
-
+mode=${1:-check}
+registry_audits() {
 fail=0
-if cmp -s "$golden" "$work/current"; then
+if [ "$mode" = update ] || cmp -s "$golden" "$work/current"; then
   echo "ok   trusted base equals $golden"
 else
   echo "FAIL trusted base differs from $golden (run with update after review):"
@@ -285,6 +288,11 @@ else
   fail=1
 fi
 
+[ "$fail" = 0 ]
+}
+trusted_leg registry registry_audits
+environment_audits() {
+fail=0
 if print_lean scripts/checks/compiler/slice0_trusted_base_audit.lean "$work/audit"; then
   if [ "$(wc -l <"$work/audit")" -eq 1 ] && grep -Eq '^trusted declarations: [0-9]+$' "$work/audit"; then
     echo "ok   axioms and trusted code: $(grep '^trusted declarations: ' "$work/audit")"
@@ -310,12 +318,22 @@ else
   echo "FAIL listing Concrete's import closure"; fail=1
 fi
 
+[ "$fail" = 0 ]
+}
+trusted_leg environment environment_audits
+examples_audit() {
+fail=0
 if check_examples . "$work/examples-real"; then
   echo "ok   every retained Concrete example uses only listed axioms"
 else
   echo "FAIL Concrete example audit"; fail=1
 fi
 
+[ "$fail" = 0 ]
+}
+trusted_leg examples examples_audit
+audit_controls() {
+fail=0
 # Controls.
 differs() { # differs NAME FILE: FILE must not equal the current trusted base
   if cmp -s "$2" "$work/current"; then echo "FAIL control: comparison accepts $1"; fail=1
@@ -573,6 +591,12 @@ if readme_rows "$work/ctl/readme" >"$work/ctl/rows" && cmp -s "$work/rows" "$wor
   echo "FAIL control: the table check accepts a drifted table"; fail=1
 else echo "ok   control: the table check rejects a drifted table"; fi
 
+[ "$fail" = 0 ]
+}
+trusted_leg audit-controls audit_controls
+tools_audit() {
+fail=0
+mkdir -p "$work/ctl"
 if [ "$(uname -s)" = Linux ]; then
   if ! command -v strace >/dev/null 2>&1; then
     echo "FAIL tools: strace is required on Linux"; fail=1
@@ -733,7 +757,18 @@ else
   echo "tools: not checked on this host (Linux only)"
 fi
 
-[ "$fail" = 0 ] && echo "PASS slice0_trusted_base" || { echo "FAIL slice0_trusted_base"; exit 1; }
+[ "$fail" = 0 ]
+}
+trusted_leg tools tools_audit
+if [ "$trusted_legs_status" != 0 ]; then
+  echo "FAIL slice0_trusted_base"
+  return 1
+fi
+if [ "$mode" = update ]; then
+  cp "$work/current" "$golden"
+  echo "slice0_trusted_base: golden updated; review: git diff -- $golden"
+fi
+echo "PASS slice0_trusted_base"
 
 }
 slice0_gate_environment slice0_trusted_base_main "$@"
