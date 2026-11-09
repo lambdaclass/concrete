@@ -117,6 +117,15 @@ def witnessReverse : True := reverse b2 b1
         if (← dischargeRawContext) == raw then throwError "raw-declaration-field-collapsed"
         if (← dischargeClosure (mkConst ``False)) == key then throwError "closed-declaration-field-collapsed"
   IO.println "KEYS declaration-name binder-info kind distinct"
+
+#eval show MetaM Unit from do
+  withLocalDeclD `sameProjection (mkConst ``Nat) fun x => do
+    let ((_, before), _) ← ((direct `absent x).run { remaining := 64 }).run {}
+    let changed := (← getLCtx).setType x.fvarId! (mkConst ``False)
+    let ((_, after), _) ← withFreshCache <| withLCtx changed (← getLocalInstances) <|
+      ((direct `absent x).run before).run {}
+    unless after.answers.size == 2 do throwError "projection-context-collapsed"
+  IO.println "KEYS projection same-FVarId context distinct"
 '''
 def controls(meta):
     with tempfile.TemporaryDirectory(prefix='n2-cache-identity-') as temp:
@@ -138,6 +147,7 @@ def controls(meta):
         'MODULES import-order checked forward=false backward=true self=true',
         'DEMAND harmless-body searches=0',
         'KEYS declaration-name binder-info kind distinct',
+        'KEYS projection same-FVarId context distinct',
     ]
     assert [r.rstrip() for r in result.stdout.splitlines()] == expected, result.stdout
     for line in expected: print('PASS identity ' + line, flush=True)
@@ -149,8 +159,11 @@ def planted_controls():
     ordinary = consumer.replace('local instance auditExprBEq : BEq Expr := ⟨Expr.equal⟩', '')
     visited = consumer.replace('visited : Std.HashSet (Expr × DischargeRawContext)',
                                'visited : Std.HashSet (Expr × Array FVarId)')
-    visited = visited.replace('  let key := (e, context)', '  let key := (e, (← getLCtx).getFVarIds)')
-    for label, text in [('ordinary-expr-equality', ordinary), ('fvar-only-visited', visited)]:
+    prefix, body = visited.split('partial def falseDischarge', 1)
+    visited = prefix + 'partial def falseDischarge' + body.replace('  let key := (e, context)', '  let key := (e, (← getLCtx).getFVarIds)', 1)
+    projection = consumer.replace('answers : Std.HashMap (Expr × DischargeRawContext) Bool', 'answers : Std.HashMap Expr Bool')
+    projection = projection.replace('  let key := (e, context)', '  let key := e', 1)
+    for label, text in [('ordinary-expr-equality', ordinary), ('fvar-only-visited', visited), ('expression-only-projection', projection)]:
         assert text != consumer
         with compiled_consumer(consumer_text=text) as meta, tempfile.TemporaryDirectory(prefix='n2-identity-plant-') as temp:
             path = Path(temp) / 'Identity.lean'
@@ -163,7 +176,8 @@ def planted_controls():
         else:
             assert result.returncode == 1, result.stdout
             errors = [line.split('error: ', 1)[1] for line in result.stdout.splitlines() if 'error: ' in line]
-            assert errors == ['visited-context-collapsed'], result.stdout
+            expected = 'visited-context-collapsed' if label == 'fvar-only-visited' else 'projection-context-collapsed'
+            assert errors == [expected], result.stdout
         print('PASS identity planted ' + label + ': exact stale-result diagnostic', flush=True)
 
 if __name__ == '__main__':

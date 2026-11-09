@@ -397,7 +397,7 @@ bash scripts/checks/lib/bounded.sh 960 nix develop --command \
   bash scripts/checks/lib/bounded.sh 900 bash -c '
     set -euo pipefail
     git rev-parse HEAD
-    test "$(git rev-parse HEAD:scripts/proofs/vacuity.lean)" = 68e722750082236752b5c597d1a7b607a0a00f77
+    test "$(git rev-parse HEAD:scripts/proofs/vacuity.lean)" = dfee7d3d639677deb628526c54449ea85c6d90d1
     scratch=$(mktemp -d)
     trap '\''rm -rf "$scratch"'\'' EXIT
     git archive --format=tar 6efdce6136752d51fc74265d61278d90937f24cd > "$scratch/source.tar"
@@ -551,3 +551,18 @@ it is **not** a pass. It is rerun with unbuffered progress and a 1,500s outer
 test-harness bound. This changes neither a production gate allowance nor the
 120/240s per-audit watchdog. Standalone focused checks above remain independent
 completed results.
+
+### Projection cache audit completion
+
+The pre-existing projection-answer cache calls `isProof`, so its complete key
+also includes the raw local context, options and mode, with the same mutable-
+context bypass. The common key definitions now precede both consumers. A same-
+FVarId Nat-to-False control requires two projection entries, and an expression-
+only planted projection cache must fail with exactly `projection-context-collapsed`.
+This repairs the general cache contract; no claim is made that an unchanged
+well-typed production proof previously switched universes in place.
+
+The preceding receipts/profiles remain explicitly tied to consumer commit e5b2dc3c1.
+This final cache-contract addition changes projection analyses; instance/planted
+algorithms and their measured work are unchanged. Final-byte focused reruns are
+recorded separately below.

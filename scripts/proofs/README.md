@@ -604,3 +604,7 @@ here. This is still a pending-owner search/budget question. N15's 1,187s census
 and 1,809/2,152 attempted default-watchdog population are historical measurements;
 no round-3 whole-scope wall result is claimed. Daily/weekly must retain the real
 full census even if PR uses these bounded controls.
+
+Projection answers share the complete raw-context/options/mode identity contract:
+`isProof` observes typing context. The same-ID projection control and the planted
+expression-only variant pin this requirement independently of refutation caches.

@@ -5,7 +5,7 @@ bash scripts/checks/lib/bounded.sh 960 nix develop --command \
   bash scripts/checks/lib/bounded.sh 900 bash -c '
     set -euo pipefail
     git rev-parse HEAD
-    test "$(git rev-parse HEAD:scripts/proofs/vacuity.lean)" = 68e722750082236752b5c597d1a7b607a0a00f77
+    test "$(git rev-parse HEAD:scripts/proofs/vacuity.lean)" = dfee7d3d639677deb628526c54449ea85c6d90d1
     scratch=$(mktemp -d)
     trap '\''rm -rf "$scratch"'\'' EXIT
     git archive --format=tar 6efdce6136752d51fc74265d61278d90937f24cd > "$scratch/source.tar"

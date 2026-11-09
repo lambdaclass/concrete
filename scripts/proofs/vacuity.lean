@@ -295,25 +295,84 @@ def cleanSpine : Expr → Expr
   | .app f a => mkApp (cleanSpine f) a
   | e => e
 
+/-- Options are compared exactly; a constant hash is lawful and avoids treating
+    an options fingerprint as identity. Environment is immutable per analysis. -/
+local instance : Hashable Options := ⟨fun _ => 0⟩
+
+structure DischargeSettings where
+  options : Options
+  config : String
+  zeta : Array FVarId
+  mode : Bool × Bool × Nat
+  deriving BEq, Hashable
+
+def dischargeSettings : MetaM DischargeSettings := do
+  let ctx ← readThe Meta.Context
+  return ⟨← getOptions, reprStr (← getConfig), ctx.zetaDeltaSet.toArray,
+    (ctx.univApprox, ctx.inTypeClassResolution, ctx.synthPendingDepth)⟩
+
+structure DischargeKey where
+  closure : Expr
+  instances : Array (Name × Expr)
+  declarations : Array (Name × BinderInfo × Nat × Option Expr × Bool × Nat)
+  settings : DischargeSettings
+  deriving BEq, Hashable
+
+structure DischargeRawContext where
+  settings : DischargeSettings
+  declarations : Array (FVarId × Expr × Option Expr × BinderInfo × Nat × Bool × Name × Nat)
+  instances : Array (Name × Expr)
+  deriving BEq, Hashable
+
+def dischargeDeclKind (decl : LocalDecl) : Nat :=
+  match decl.kind with
+  | .default => 0 | .implDetail => 1 | .auxDecl => 2
+
+def dischargeRawContext : MetaM DischargeRawContext := do
+  let mut declarations := #[]
+  for decl in (← getLCtx) do
+    declarations := declarations.push (decl.fvarId, decl.type,
+      decl.value? (allowNondep := true), decl.binderInfo, dischargeDeclKind decl, decl.isLet, decl.userName, decl.index)
+  return ⟨← dischargeSettings, declarations, (← getLocalInstances).map fun i => (i.className, i.fvar)⟩
+
+/-- Mutable metavariables and executable unfolding predicates cannot have a
+    structural identity. Such calls compute normally and never publish entries. -/
+def dischargeCacheable (context : DischargeRawContext) (e : Expr) : MetaM Bool := do
+  let ctx ← readThe Meta.Context
+  if ctx.customCanUnfoldPredicate?.isSome || ctx.defEqCtx?.isSome || ctx.trackZetaDelta then return false
+  if e.hasMVar || e.hasLevelMVar then return false
+  for (_, type, value, _, _, _, _, _) in context.declarations do
+    if type.hasMVar || type.hasLevelMVar then return false
+    if let some v := value then
+      if v.hasMVar || v.hasLevelMVar then return false
+  for (_, inst) in context.instances do
+    if inst.hasMVar || inst.hasLevelMVar then return false
+  return true
+
 /-- Cache complete answers by elaborated expression, including local identities.
     Every reachable proof field is inspected; sharing does not consume fuel twice. -/
 structure ProjectionState where
   budget : Option WorkBudget := none
   remaining : Nat
-  answers : Std.HashMap Expr Bool := {}
+  answers : Std.HashMap (Expr × DischargeRawContext) Bool := {}
 
 mutual
 /-- Inspect the complete proof DAG under one declared distinct-expression bound.
     Raw delta unfolds one definition per visit; heartbeats also bound meta work. -/
 partial def direct (n : Name) (e : Expr) : StateRefT ProjectionState Audit Bool := do
   let e := cleanSpine e
-  if let some answer := (← get).answers[e]? then return answer
+  let context ← dischargeRawContext
+  let cacheable ← dischargeCacheable context e
+  let key := (e, context)
+  if cacheable then
+    if let some answer := (← get).answers[key]? then return answer
   let fuel := (← get).remaining
   if fuel == 0 then throwError "projection-budget"
   if let some b := (← get).budget then b.modify fun s => { s with projection := s.projection + 1 }
   modify fun state => { state with remaining := fuel - 1 }
   let answer ← directStep n e
-  modify fun state => { state with answers := state.answers.insert e answer }
+  if cacheable then
+    modify fun state => { state with answers := state.answers.insert key answer }
   return answer
 
 partial def directStep (n : Name) (e : Expr) : StateRefT ProjectionState Audit Bool := do
@@ -810,46 +869,6 @@ def validateCertificate (entry : CertificateEntry) (candidate : Certificate) :
 
 end Discharge
 
-/-- Options are compared exactly; a constant hash is lawful and avoids treating
-    an options fingerprint as identity. Environment is immutable per analysis. -/
-local instance : Hashable Options := ⟨fun _ => 0⟩
-
-structure DischargeSettings where
-  options : Options
-  config : String
-  zeta : Array FVarId
-  mode : Bool × Bool × Nat
-  deriving BEq, Hashable
-
-def dischargeSettings : MetaM DischargeSettings := do
-  let ctx ← readThe Meta.Context
-  return ⟨← getOptions, reprStr (← getConfig), ctx.zetaDeltaSet.toArray,
-    (ctx.univApprox, ctx.inTypeClassResolution, ctx.synthPendingDepth)⟩
-
-structure DischargeKey where
-  closure : Expr
-  instances : Array (Name × Expr)
-  declarations : Array (Name × BinderInfo × Nat × Option Expr × Bool × Nat)
-  settings : DischargeSettings
-  deriving BEq, Hashable
-
-structure DischargeRawContext where
-  settings : DischargeSettings
-  declarations : Array (FVarId × Expr × Option Expr × BinderInfo × Nat × Bool × Name × Nat)
-  instances : Array (Name × Expr)
-  deriving BEq, Hashable
-
-def dischargeDeclKind (decl : LocalDecl) : Nat :=
-  match decl.kind with
-  | .default => 0 | .implDetail => 1 | .auxDecl => 2
-
-def dischargeRawContext : MetaM DischargeRawContext := do
-  let mut declarations := #[]
-  for decl in (← getLCtx) do
-    declarations := declarations.push (decl.fvarId, decl.type,
-      decl.value? (allowNondep := true), decl.binderInfo, dischargeDeclKind decl, decl.isLet, decl.userName, decl.index)
-  return ⟨← dischargeSettings, declarations, (← getLocalInstances).map fun i => (i.className, i.fvar)⟩
-
 structure DischargeState where
   budget : Option WorkBudget := none
   remaining : Nat := 20000
@@ -884,20 +903,6 @@ def dischargeClosure (e : Expr) : MetaM (Option DischargeKey) := do
     instances := instances.push (inst.className, inst.fvar.abstract xs)
   let closure ← mkLambdaFVars xs e (usedLetOnly := false) (generalizeNondepLet := false)
   return some ⟨closure, instances, declarations, ← dischargeSettings⟩
-
-/-- Mutable metavariables and executable unfolding predicates cannot have a
-    structural identity. Such calls compute normally and never publish entries. -/
-def dischargeCacheable (context : DischargeRawContext) (e : Expr) : MetaM Bool := do
-  let ctx ← readThe Meta.Context
-  if ctx.customCanUnfoldPredicate?.isSome || ctx.defEqCtx?.isSome || ctx.trackZetaDelta then return false
-  if e.hasMVar || e.hasLevelMVar then return false
-  for (_, type, value, _, _, _, _, _) in context.declarations do
-    if type.hasMVar || type.hasLevelMVar then return false
-    if let some v := value then
-      if v.hasMVar || v.hasLevelMVar then return false
-  for (_, inst) in context.instances do
-    if inst.hasMVar || inst.hasLevelMVar then return false
-  return true
 
 def dischargeRefutableTypeAt (context : DischargeRawContext) (domain : Expr) : StateRefT DischargeState MetaM Bool := do
   unless ← dischargeCacheable context domain do return ← refutableType domain
