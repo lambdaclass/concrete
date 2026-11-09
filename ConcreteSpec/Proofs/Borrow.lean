@@ -9,17 +9,21 @@ PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `Concret
 namespace ConcreteSpec.Borrow
 open Core (AList)
 
+/-- Representation lemma. An equation or structural decomposition of the context, index or range representation; no execution safety is claimed. (approved: PENDING). -/
 theorem lookup_bodyCtx {m v src Γ p} (hv : p ≠ v) :
     AList.lookup (bodyCtx m v src Γ) p = (AList.lookup Γ p).map (lockFor m src.root) := by
   simp only [bodyCtx, AList.lookup, show ¬ v = p from fun h => hv h.symm, ↓reduceIte]
   exact AList.lookup_map _ Γ p
 
+/-- Helper (computation). The lock transformation preserves an existing stronger lock, by its finite branch equations. (approved: PENDING). -/
 theorem lockFor_excl {m r q} (h : q.lock = .excl) : (lockFor m r q).lock = .excl := by
   unfold lockFor; split <;> (try split) <;> (try split) <;> simp_all
 
+/-- Helper (inversion). Extract the equality or bound already enforced by the successful lookup or boundary test. (approved: PENDING). -/
 theorem ne_of_lookup {Γ : Ctx} {p v : Nat} {q : Place} (hp : AList.lookup Γ p = some q) (hv : AList.lookup Γ v = none) : p ≠ v := by
   rintro rfl; rw [hp] at hv; cases hv
 
+/-- Representation lemma. An equation or structural decomposition of the context, index or range representation; no execution safety is claimed. (approved: PENDING). -/
 theorem lookup_restore (Γb : Ctx) : ∀ (Γ : Ctx) (p : Nat),
     AList.lookup (restore Γ Γb) p = if (AList.lookup Γb p).isSome then AList.lookup Γ p else none
   | [], _ => by simp [restore, AList.lookup]
@@ -39,16 +43,18 @@ theorem lookup_restore (Γb : Ctx) : ∀ (Γ : Ctx) (p : Nat),
         rw [hb, ite_eq_left (rfl : true = true), ite_eq_left (rfl : n = n), ite_eq_left (rfl : n = n)]
       · rw [ite_eq_right hnp, ite_eq_right hnp, ih]
 
+/-- Helper (inversion). Extract the equality or bound already enforced by the successful lookup or boundary test. (approved: PENDING). -/
 theorem lookup_restore_some {Γ Γb p q} (h : AList.lookup (restore Γ Γb) p = some q) : AList.lookup Γ p = some q := by
   rw [lookup_restore] at h
   split at h
   · exact h
   · cases h
 
+/-- Helper (computation). The lock transformation preserves an existing stronger lock, by its finite branch equations. (approved: PENDING). -/
 theorem lockFor_nonfree {m r q} (h : q.lock ≠ .free) : (lockFor m r q).lock ≠ .free := by
   unfold lockFor; split <;> (try split) <;> (try split) <;> simp_all
 
-/-- The check is deterministic: the places after a list are a function of the places before. -/
+/-- Law (subject `ConcreteSpec.Borrow.Ok`). The check is deterministic: the places after a list are a function of the places before. -/
 theorem ok_det {Γ ss Γ₁} (h : Ok Γ ss Γ₁) : ∀ {Γ₂}, Ok Γ ss Γ₂ → Γ₁ = Γ₂ := by
   induction h with
   | nil => intro Γ₂ h2; cases h2; rfl
@@ -63,7 +69,7 @@ theorem ok_det {Γ ss Γ₁} (h : Ok Γ ss Γ₁) : ∀ {Γ₂}, Ok Γ ss Γ₂ 
       cases ihb hb2
       exact ih hr2
 
-/-- A place a statement list cannot touch (locked) keeps its entry. -/
+/-- Law (subject `ConcreteSpec.Borrow.Ok`). A place a statement list cannot touch (locked) keeps its entry. -/
 theorem ok_keeps_locked {Γ ss Γ'} (h : Ok Γ ss Γ') :
     ∀ {p q}, AList.lookup Γ p = some q → q.lock ≠ .free → AList.lookup Γ' p = some q := by
   induction h with
@@ -80,7 +86,7 @@ theorem ok_keeps_locked {Γ ss Γ'} (h : Ok Γ ss Γ') :
       ihb (by rw [lookup_bodyCtx (ne_of_lookup hp hv), hp]; rfl) (lockFor_nonfree hq)
     exact ih (by rw [lookup_restore, hb]; exact hp) hq
 
-/-- A frozen place is never named, at any depth. -/
+/-- Law (subject `ConcreteSpec.Borrow.Ok`). A frozen place is never named, at any depth. -/
 theorem excl_untouched {Γ ss Γ'} (h : Ok Γ ss Γ') :
     ∀ {p q}, AList.lookup Γ p = some q → q.lock = .excl → ¬ Touches p ss := by
   induction h with
@@ -115,10 +121,10 @@ theorem excl_untouched {Γ ss Γ'} (h : Ok Γ ss Γ') :
       have hb := ok_keeps_locked hbody hpb (lockFor_nonfree (by rw [hq]; decide))
       exact ih (by rw [lookup_restore, hb]; exact hp) hq ht
 
-/-- **`open_mut_freezes_root`** (Q9.14, Q3.3, Q3.4, REF-11). Inside an accepted
-`borrow mut src as v { body }`, no place of `src`'s root that existed before the open (the root
+/-- Law (subject `ConcreteSpec.Borrow.Ok`). **open_mut_freezes_root** (Q9.14, Q3.3, Q3.4, REF-11). Inside an accepted
+borrow mut src as v { body }, no place of src's root that existed before the open (the root
 itself and every view derived from it) is read, written, moved or opened again, at any depth.
-Only the new view `v` reaches the root. -/
+Only the new view v reaches the root. -/
 theorem open_mut_freezes_root {Γ s v body rest q Γ'} (h : Ok Γ (.borrow true s v body :: rest) Γ')
     (hs : AList.lookup Γ s = some q) :
     ∀ p q', AList.lookup Γ p = some q' → q'.root = q.root → ¬ Touches p body := by
@@ -129,13 +135,15 @@ theorem open_mut_freezes_root {Γ s v body rest q Γ'} (h : Ok Γ (.borrow true 
     refine excl_untouched hb (q := lockFor true q.root q') ?_ (by simp [lockFor, hr]) 
     rw [lookup_bodyCtx (ne_of_lookup hp hv), hp]; rfl
 
-/-- The places of root `r` grant no write: each is locked, or neither writable nor an owner. -/
+/-- The places of root r grant no write: each is locked, or neither writable nor an owner. -/
 def NoWrite (r : Nat) (Γ : Ctx) : Prop :=
   ∀ p q, AList.lookup Γ p = some q → q.root = r → q.lock = .free → q.mutable = false ∧ q.owner = false
 
+/-- Helper (congruence). Transport the context predicate across restriction or a locked context extension; used by the separate access-soundness law. (approved: PENDING). -/
 theorem noWrite_restore {r Γ Γb} (h : NoWrite r Γ) : NoWrite r (restore Γ Γb) :=
   fun p q hp => h p q (lookup_restore_some hp)
 
+/-- Helper (congruence). Transport the context predicate across restriction or a locked context extension; used by the separate access-soundness law. (approved: PENDING). -/
 theorem noWrite_erase {r Γ p'} (h : NoWrite r Γ) : NoWrite r (AList.erase Γ p') := by
   intro p q hp
   rw [AList.lookup_erase] at hp
@@ -143,6 +151,7 @@ theorem noWrite_erase {r Γ p'} (h : NoWrite r Γ) : NoWrite r (AList.erase Γ p
   · cases hp
   · exact h p q hp
 
+/-- Helper (congruence). Transport the context predicate across restriction or a locked context extension; used by the separate access-soundness law. (approved: PENDING). -/
 theorem noWrite_bodyCtx {r Γ m v q0} (h : NoWrite r Γ)
     (hm : m = true → q0.lock = .free ∧ q0.mutable = true)
     (hsrc : q0.root = r → m = true → False) : NoWrite r (bodyCtx m v q0 Γ) := by
@@ -166,7 +175,7 @@ theorem noWrite_bodyCtx {r Γ m v q0} (h : NoWrite r Γ)
       · simp only [lockFor, h1, ↓reduceIte] at hr hl ⊢
         exact h p q1 hq hr hl
 
-/-- An accepted list never writes a root whose places grant no write. -/
+/-- Law (subject `ConcreteSpec.Borrow.Ok`). An accepted list never writes a root whose places grant no write. -/
 theorem noWrite_sound {Γ ss Γ'} (h : Ok Γ ss Γ') : ∀ {r}, NoWrite r Γ → ¬ WritesRoot r Γ ss := by
   induction h with
   | nil => intro r _ hw; cases hw
@@ -200,9 +209,9 @@ theorem noWrite_sound {Γ ss Γ'} (h : Ok Γ ss Γ') : ∀ {r}, NoWrite r Γ →
         cases h0
         exact ih (noWrite_restore hn) hw
 
-/-- **`open_mut_freezes_root`, shared half** (Q9.14, Q3.3). A shared open never grants a write:
-inside an accepted `borrow src as v { body }`, nothing at any depth writes, moves or mutably
-opens a place of `src`'s root, whether through the root, through `v`, or through any view
+/-- Law (subject `ConcreteSpec.Borrow.Ok`). **open_mut_freezes_root, shared half** (Q9.14, Q3.3). A shared open never grants a write:
+inside an accepted borrow src as v { body }, nothing at any depth writes, moves or mutably
+opens a place of src's root, whether through the root, through v, or through any view
 derived from either. -/
 theorem shared_open_grants_no_write {Γ s v body rest q Γ'}
     (h : Ok Γ (.borrow false s v body :: rest) Γ') (hs : AList.lookup Γ s = some q) :
@@ -223,7 +232,7 @@ theorem shared_open_grants_no_write {Γ s v body rest q Γ'}
         · by_cases h2 : q1.lock = .free <;> simp [lockFor, h1, h2] at hl
         · simp [lockFor, h1] at hr
 
-/-- A range is valid exactly when `a ≤ b` and both bounds are ends of the source. -/
+/-- Representation lemma. An equation or structural decomposition of the context, index or range representation; no execution safety is claimed. (approved: PENDING). A range is valid exactly when a ≤ b and both bounds are ends of the source. -/
 theorem validRange_iff (s : Source) (a b : Nat) :
     validRange s a b = (decide (a ≤ b) && s.edge a && s.edge b) := by
   cases s with
@@ -235,20 +244,25 @@ theorem validRange_iff (s : Source) (a b : Nat) :
     by_cases h1 : a ≤ b <;> by_cases h2 : b ≤ bs.length <;> by_cases h3 : a ≤ bs.length <;>
       simp [h1, h2, h3] <;> first | omega | (cases boundary bs a <;> cases boundary bs b <;> simp)
 
+/-- Representation lemma. An equation or structural decomposition of the context, index or range representation; no execution safety is claimed. (approved: PENDING). -/
 theorem boundary_zero (bs : List Nat) : boundary bs 0 = true := by simp [boundary]
 
+/-- Representation lemma. An equation or structural decomposition of the context, index or range representation; no execution safety is claimed. (approved: PENDING). -/
 theorem boundary_len (bs : List Nat) : boundary bs bs.length = true := by simp [boundary]
 
+/-- Representation lemma. An equation or structural decomposition of the context, index or range representation; no execution safety is claimed. (approved: PENDING). -/
 theorem edge_zero (s : Source) : s.edge 0 = true := by
   cases s <;> simp [Source.edge, boundary_zero]
 
+/-- Representation lemma. An equation or structural decomposition of the context, index or range representation; no execution safety is claimed. (approved: PENDING). -/
 theorem edge_len (s : Source) : s.edge s.len = true := by
   cases s <;> simp [Source.edge, Source.len, boundary_len]
 
+/-- Helper (inversion). Extract the equality or bound already enforced by the successful lookup or boundary test. (approved: PENDING). -/
 theorem edge_le {s : Source} {i : Nat} (h : s.edge i = true) : i ≤ s.len := by
   cases s <;> simp_all [Source.edge, Source.len]
 
-/-- **A range accepted without `else` never traps** (no hidden traps). Its evidence holds: every
+/-- Law (subject `ConcreteSpec.Borrow.openRange`). **A range accepted without else never traps** (no hidden traps). Its evidence holds: every
 source and bounds that agree with what the checker knows pass the range test, so the range opens. -/
 theorem range_never_traps {Γ m src v k body rest Γ'} (h : RangeOk Γ m src v k body none rest Γ')
     {s : Source} {a b : Nat} (hs : Agrees k s a b) : openRange s a b false = .enter := by
@@ -261,7 +275,7 @@ theorem range_never_traps {Γ m src v k body rest Γ'} (h : RangeOk Γ m src v k
     simp [openRange, hk]
   · cases hk
 
-/-- **An opened view stays inside its source.** When the range opens, every index of the view
+/-- Law (subject `ConcreteSpec.Borrow.viewIndex`). **An opened view stays inside its source.** When the range opens, every index of the view
 is an index of the source, and for text both ends are scalar boundaries. -/
 theorem enter_in_bounds {s : Source} {a b : Nat} {e : Bool} (h : openRange s a b e = .enter) :
     a ≤ b ∧ b ≤ s.len ∧ (∀ i, i < b - a → viewIndex a i < s.len) ∧
@@ -282,8 +296,8 @@ theorem enter_in_bounds {s : Source} {a b : Nat} {e : Bool} (h : openRange s a b
     · simp only [viewIndex, Source.len]; omega
     · cases h; exact ⟨ha', hb'⟩
 
-/-- **`open_mut_freezes_root` for range opens.** Inside an accepted
-`borrow mut src from a until b as v { body } [else { … }]`, no place of `src`'s root that existed
+/-- Law (subject `ConcreteSpec.Borrow.Ok`). **open_mut_freezes_root for range opens.** Inside an accepted
+borrow mut src from a until b as v { body } [else { … }], no place of src's root that existed
 before the open is touched in the body: the range clause changes nothing about access (Q4.7). -/
 theorem range_open_mut_freezes_root {Γ src v k body els rest Γ' q}
     (h : RangeOk Γ true src v k body els rest Γ') (hs : AList.lookup Γ src = some q) :
@@ -293,14 +307,14 @@ theorem range_open_mut_freezes_root {Γ src v k body els rest Γ' q}
 
 /-! ### No escape -/
 
-/-- **A view never moves.** A view is not an owner, so moving it (returning it, storing it,
+/-- Law (subject `ConcreteSpec.Borrow.Ok`). **A view never moves.** A view is not an owner, so moving it (returning it, storing it,
 passing it by value, capturing it: all moves in Core) is refused. -/
 theorem view_not_moved {m v q Γ rest Γ'} : ¬ Ok (bodyCtx m v q Γ) (.move v :: rest) Γ' := by
   intro h
   cases h with
   | move hf _ ho _ => simp [bodyCtx, AList.lookup, view] at hf; subst hf; simp at ho
 
-/-- A name not in scope is never used, at any depth (except as a rebound view name). -/
+/-- Law (subject `ConcreteSpec.Borrow.Ok`). A name not in scope is never used, at any depth (except as a rebound view name). -/
 theorem fresh_not_used {Γ ss Γ'} (h : Ok Γ ss Γ') : ∀ {p}, AList.lookup Γ p = none → ¬ FreeUse p ss := by
   induction h with
   | nil => intro p _ hu; cases hu
@@ -327,15 +341,15 @@ theorem fresh_not_used {Γ ss Γ'} (h : Ok Γ ss Γ') : ∀ {p}, AList.lookup Γ
       exact ihb (by rw [lookup_bodyCtx (fun h => hne h.symm), hp]; rfl) hu
     | tail hu => exact ih (by rw [lookup_restore, hp]; split <;> rfl) hu
 
-/-- **The view does not outlive its block.** No statement after
-`borrow [mut] src as v { body }` names `v` (until a new block rebinds the name). -/
+/-- Law (subject `ConcreteSpec.Borrow.Ok`). **The view does not outlive its block.** No statement after
+borrow [mut] src as v { body } names v (until a new block rebinds the name). -/
 theorem view_not_used_after {Γ m s v body rest Γ'} (h : Ok Γ (.borrow m s v body :: rest) Γ') :
     ¬ FreeUse v rest := by
   cases h with
   | borrow _ _ _ hv _ hr => exact fresh_not_used hr (by rw [lookup_restore, hv]; split <;> rfl)
 
-/-- **The root is usable again exactly as before.** After `borrow [mut] src as v { body }`, the
-rest is checked with every place of `src`'s root present with exactly its entry from before the
+/-- Law (subject `ConcreteSpec.Borrow.Ok`). **The root is usable again exactly as before.** After borrow [mut] src as v { body }, the
+rest is checked with every place of src's root present with exactly its entry from before the
 open, lock included: the freeze of a mutable open (and the lock of a shared one) ends with the
 block. -/
 theorem root_restored {Γ m s v body rest q Γ'} (h : Ok Γ (.borrow m s v body :: rest) Γ')
@@ -355,19 +369,20 @@ theorem root_restored {Γ m s v body rest q Γ'} (h : Ok Γ (.borrow m s v body 
 
 /-! ### Range views at run time -/
 
+/-- Representation lemma. An equation or structural decomposition of the context, index or range representation; no execution safety is claimed. (approved: PENDING). -/
 theorem elemIdx_some {w : VInfo} {i j : Nat} :
     elemIdx w i = some j ↔ i < w.b - w.a ∧ j = w.a + i := by
   unfold elemIdx; by_cases h : i < w.b - w.a <;> simp [h, eq_comm]
 
-/-- An index through a view lands in the view's range `[a, b)`. -/
+/-- Helper (arithmetic). The successful-index equation reduces this local bound calculation to addition and subtraction; used by the frame proof. (approved: PENDING). An index through a view lands in the view's range [a, b). -/
 theorem elemIdx_range {w : VInfo} {i j : Nat} (h : elemIdx w i = some j) : w.a ≤ j ∧ j < w.b := by
   rw [elemIdx_some] at h; omega
 
-/-- Every view in scope is a range `a ≤ b ≤ len` of a source in memory. -/
+/-- Every view in scope is a range a ≤ b ≤ len of a source in memory. -/
 def ViewsOk (μ : Mem) (V : Views) : Prop :=
   ∀ v w, AList.lookup V v = some w → ∃ xs, AList.lookup μ w.src = some xs ∧ w.a ≤ w.b ∧ w.b ≤ xs.length
 
-/-- Opening a valid range adds a view that satisfies `ViewsOk`. -/
+/-- Representation lemma. Transport the interval-to-memory representation across a valid interval extension or a length-preserving source replacement. (approved: PENDING). Opening a valid range adds a view that satisfies ViewsOk. -/
 theorem viewsOk_enter {μ V p xs a b e v m} (hV : ViewsOk μ V) (hx : AList.lookup μ p = some xs)
     (ho : openRange (.array xs.length) a b e = .enter) :
     ViewsOk μ ((v, ⟨p, a, b, m⟩) :: V) := by
@@ -379,7 +394,7 @@ theorem viewsOk_enter {μ V p xs a b e v m} (hV : ViewsOk μ V) (hx : AList.look
     exact ⟨xs, hx, hab, hb⟩
   · exact hV v' w hw
 
-/-- A write that keeps the source's length keeps `ViewsOk`. -/
+/-- Representation lemma. Transport the interval-to-memory representation across a valid interval extension or a length-preserving source replacement. (approved: PENDING). A write that keeps the source's length keeps ViewsOk. -/
 theorem viewsOk_put {μ V p xs ys} (hV : ViewsOk μ V) (hx : AList.lookup μ p = some xs)
     (hl : ys.length = xs.length) : ViewsOk (AList.update μ p (fun _ => ys)) V := by
   intro v w hw
@@ -389,17 +404,22 @@ theorem viewsOk_put {μ V p xs ys} (hV : ViewsOk μ V) (hx : AList.lookup μ p =
   · subst hs; rw [hx] at hz; cases hz; exact ⟨ys, by simp [hx], h1, by omega⟩
   · exact ⟨zs, by simp [hs, hz], h1, h2⟩
 
-/-- **Every access through a view stays in its range and in its source.** The index `i` of a
-view of `[a, b)` reaches the source index `a + i`, which lies in `[a, b)` and inside the source;
+/-- Law (subject `ConcreteSpec.Borrow.elemIdx`). **Every access through a view stays in its range and in its source.** The index i of a
+view of [a, b) reaches the source index a + i, which lies in [a, b) and inside the source;
 an index outside the view has no source index, and the access traps. -/
-theorem view_in_source {μ V v w i j} (hV : ViewsOk μ V) (hw : AList.lookup V v = some w)
-    (hj : elemIdx w i = some j) :
-    ∃ xs, AList.lookup μ w.src = some xs ∧ j = w.a + i ∧ w.a ≤ j ∧ j < w.b ∧ j < xs.length := by
-  obtain ⟨xs, hx, h1, h2⟩ := hV v w hw
-  rw [elemIdx_some] at hj
-  exact ⟨xs, hx, hj.2, by omega, by omega, by omega⟩
+theorem view_in_source {μ V v w i} (hV : ViewsOk μ V) (hw : AList.lookup V v = some w) :
+    match elemIdx w i with
+    | none => True
+    | some j => ∃ xs, AList.lookup μ w.src = some xs ∧ j = w.a + i ∧
+        w.a ≤ j ∧ j < w.b ∧ j < xs.length := by
+  cases hj : elemIdx w i with
+  | none => trivial
+  | some j =>
+    obtain ⟨xs, hx, h1, h2⟩ := hV v w hw
+    rw [elemIdx_some] at hj
+    exact ⟨xs, hx, hj.2, by omega, by omega, by omega⟩
 
-/-- **Reading `v[i]`** outputs the source element `a + i` when `i < b - a`, and traps otherwise. -/
+/-- Law (subject `ConcreteSpec.Borrow.vrun`). **Reading v[i]** outputs the source element a + i when i < b - a, and traps otherwise. -/
 theorem view_get {μ V v w i n out rest} (hV : ViewsOk μ V) (hw : AList.lookup V v = some w) :
     ∃ xs, AList.lookup μ w.src = some xs ∧
       vrun (n + 1) μ V out (.get v i :: rest) =
@@ -414,8 +434,8 @@ theorem view_get {μ V v w i n out rest} (hV : ViewsOk μ V) (hw : AList.lookup 
     simp [elemIdx, hi, he]
   · simp [elemIdx, hi]
 
-/-- **Writing `v[i] = x`** through a mutable view writes the source element `a + i` when
-`i < b - a`, and traps otherwise. -/
+/-- Law (subject `ConcreteSpec.Borrow.vrun`). **Writing v[i] = x** through a mutable view writes the source element a + i when
+i < b - a, and traps otherwise. -/
 theorem view_set {μ V v w i x n out rest} (hV : ViewsOk μ V) (hw : AList.lookup V v = some w)
     (hm : w.mutable = true) :
     ∃ xs, AList.lookup μ w.src = some xs ∧
@@ -430,8 +450,8 @@ theorem view_set {μ V v w i x n out rest} (hV : ViewsOk μ V) (hw : AList.looku
     simp [elemIdx, hi, hx, hj]
   · simp [elemIdx, hi]
 
-/-- **A write changes exactly one element.** Writing `x` at index `j` of source `p` changes
-element `j` of `p` to `x` and no other element of any place. -/
+/-- Law (subject `ConcreteSpec.Core.AList.update`). **A write changes exactly one element.** Writing x at index j of source p changes
+element j of p to x and no other element of any place. -/
 theorem view_write_exact {μ : Mem} {p xs j x} (hx : AList.lookup μ p = some xs) (hj : j < xs.length) :
     ∀ q k, elem (AList.update μ p (fun _ => xs.set j x)) q k = if q = p ∧ k = j then some x else elem μ q k := by
   intro q k
@@ -445,79 +465,101 @@ theorem view_write_exact {μ : Mem} {p xs j x} (hx : AList.lookup μ p = some xs
     · simp [hk, Ne.symm hk]
   · simp [hq]
 
-/-- A body that only accesses its view changes nothing outside the view's range. -/
-theorem viewOnly_frame {V v w} (hw : AList.lookup V v = some w) {body : List VStmt} (hb : ViewOnly v body) :
-    ∀ n μ out μ' out', vrun n μ V out body = .ok μ' out' →
-      ∀ q k, ¬ (q = w.src ∧ w.a ≤ k ∧ k < w.b) → elem μ' q k = elem μ q k := by
-  induction hb with
-  | nil =>
-    intro n μ out μ' out' h q k _
-    cases n with
-    | zero => simp [vrun] at h
-    | succ n => simp only [vrun, VR.ok.injEq] at h; rw [h.1]
-  | @get i rest _ ih =>
-    intro n μ out μ' out' h q k hk
-    cases n with
-    | zero => simp [vrun] at h
-    | succ n =>
-      simp only [vrun, hw] at h
-      split at h
-      · cases h
-      · split at h
-        · exact ih n μ _ μ' out' h q k hk
-        · cases h
-  | @set i x rest _ ih =>
-    intro n μ out μ' out' h q k hk
-    cases n with
-    | zero => simp [vrun] at h
-    | succ n =>
-      simp only [vrun, hw] at h
-      split at h
-      · split at h
-        · cases h
-        · rename_i j hj
-          split at h
-          · rename_i xs hx
-            split at h
-            · rename_i hlt
-              rw [ih n _ out μ' out' h q k hk, view_write_exact hx hlt]
-              have hr := elemIdx_range hj
-              have hne : ¬ (q = w.src ∧ k = j) := fun ⟨h1, h2⟩ => hk ⟨h1, by omega, by omega⟩
-              simp [hne]
-            · cases h
-          · cases h
-      · cases h
+/-- Successful execution preserves each source element outside the selected interval. -/
+def FrameResult (μ : Mem) (w : VInfo) : VR → Prop
+  | .ok μ' _ => ∀ q k, ¬ (q = w.src ∧ w.a ≤ k ∧ k < w.b) → elem μ' q k = elem μ q k
+  | _ => True
 
-/-- **Mutation through a view is confined to its range.** A range block without `else` whose
-body only accesses its view changes no element outside `[a, b)` of its source. -/
-theorem range_block_frame {μ V m p v a b body n out μ' out'} (hb : ViewOnly v body)
-    (h : vrun (n + 1) μ V out [.range m p v a b body none] = .ok μ' out') :
-    ∀ q k, ¬ (q = p ∧ a ≤ k ∧ k < b) → elem μ' q k = elem μ q k := by
-  intro q k hk
-  simp only [vrun] at h
-  split at h
-  · cases h
-  · split at h
-    · split at h
-      · rename_i μ₁ out₁ h₁
-        have hμ : μ' = μ₁ := by
-          cases n with
-          | zero => simp [vrun] at h₁
-          | succ n => simp only [vrun, VR.ok.injEq] at h; exact h.1.symm
-        subst hμ
-        exact viewOnly_frame (w := ⟨p, a, b, m⟩) (by simp [AList.lookup]) hb n μ out _ out₁ h₁ q k hk
-      · rename_i hn; exact (hn _ _ h).elim
-    · simp at h
+/-- Law (subject `ConcreteSpec.Borrow.vrun`). A body that only accesses its view changes nothing outside the view's range. -/
+theorem viewOnly_frame {V v w} (hw : AList.lookup V v = some w) {body : List VStmt} (hb : ViewOnly v body) :
+    ∀ n μ out, FrameResult μ w (vrun n μ V out body) := by
+  have frame : ∀ n μ out μ' out', vrun n μ V out body = .ok μ' out' →
+      ∀ q k, ¬ (q = w.src ∧ w.a ≤ k ∧ k < w.b) → elem μ' q k = elem μ q k := by
+    induction hb with
+    | nil =>
+      intro n μ out μ' out' h q k _
+      cases n with
+      | zero => simp [vrun] at h
+      | succ n => simp only [vrun, VR.ok.injEq] at h; rw [h.1]
+    | @get i rest _ ih =>
+      intro n μ out μ' out' h q k hk
+      cases n with
+      | zero => simp [vrun] at h
+      | succ n =>
+        simp only [vrun, hw] at h
+        split at h
+        · cases h
+        · split at h
+          · exact ih n μ _ μ' out' h q k hk
+          · cases h
+    | @set i x rest _ ih =>
+      intro n μ out μ' out' h q k hk
+      cases n with
+      | zero => simp [vrun] at h
+      | succ n =>
+        simp only [vrun, hw] at h
+        split at h
+        · split at h
+          · cases h
+          · rename_i j hj
+            split at h
+            · rename_i xs hx
+              split at h
+              · rename_i hlt
+                rw [ih n _ out μ' out' h q k hk, view_write_exact hx hlt]
+                have hr := elemIdx_range hj
+                have hne : ¬ (q = w.src ∧ k = j) := fun ⟨h1, h2⟩ => hk ⟨h1, by omega, by omega⟩
+                simp [hne]
+              · cases h
+            · cases h
+        · cases h
+  intro n μ out
+  cases h : vrun n μ V out body with
+  | ok μ' out' => exact frame n μ out μ' out' h
+  | trap => trivial
+  | stuck => trivial
+  | outOfFuel => trivial
+
+/-- Law (subject `ConcreteSpec.Borrow.vrun`). **Mutation through a view is confined to its range.** A range block without else whose
+body only accesses its view changes no element outside [a, b) of its source. -/
+theorem range_block_frame {μ V m p v a b body n out} (hb : ViewOnly v body) :
+    FrameResult μ ⟨p, a, b, m⟩ (vrun (n + 1) μ V out [.range m p v a b body none]) := by
+  have frame : ∀ μ' out', vrun (n + 1) μ V out [.range m p v a b body none] = .ok μ' out' →
+      ∀ q k, ¬ (q = p ∧ a ≤ k ∧ k < b) → elem μ' q k = elem μ q k := by
+    intro μ' out' h
+    intro q k hk
+    simp only [vrun] at h
+    split at h
     · cases h
+    · split at h
+      · split at h
+        · rename_i μ₁ out₁ h₁
+          have hμ : μ' = μ₁ := by
+            cases n with
+            | zero => simp [vrun] at h₁
+            | succ n => simp only [vrun, VR.ok.injEq] at h; exact h.1.symm
+          subst hμ
+          have hf := viewOnly_frame (V := (v, ⟨p, a, b, m⟩) :: V) (w := ⟨p, a, b, m⟩) (by simp [AList.lookup]) hb n μ out
+          rw [h₁] at hf
+          exact hf q k hk
+        · rename_i hn; exact (hn _ _ h).elim
+      · simp at h
+      · cases h
+  cases h : vrun (n + 1) μ V out [.range m p v a b body none] with
+  | ok μ' out' => exact frame μ' out' h
+  | trap => trivial
+  | stuck => trivial
+  | outOfFuel => trivial
 
 /-! ### Text views -/
 
+/-- Representation lemma. An equation or structural decomposition of the context, index or range representation; no execution safety is claimed. (approved: PENDING). -/
 theorem boundary_iff (bs : List Nat) (i : Nat) :
     boundary bs i = true ↔ i = 0 ∨ i = bs.length ∨ ∃ x, bs[i]? = some x ∧ x / 64 ≠ 2 := by
   unfold boundary
   cases h : bs[i]? <;> simp [or_assoc]
 
-/-- Every byte of a scalar after the first is a continuation byte. -/
+/-- Helper (inversion). Extract the continuation-byte constraints from the finite scalar-byte recognizer. (approved: PENDING). Every byte of a scalar after the first is a continuation byte. -/
 theorem isScalar_cont {s : List Nat} (h : isScalar s = true) :
     s ≠ [] ∧ ∀ j c, 0 < j → s[j]? = some c → c / 64 = 2 := by
   match s, h with
@@ -535,7 +577,7 @@ theorem isScalar_cont {s : List Nat} (h : isScalar s = true) :
     simp [isScalar, cont] at h
     rcases j with _ | _ | _ | _ | j <;> simp_all <;> omega
 
-/-- Well-formed text splits at a scalar boundary into two well-formed halves. -/
+/-- Law (subject `ConcreteSpec.Borrow.Utf8`). Well-formed text splits at a scalar boundary into two well-formed halves. -/
 theorem utf8_split {bs : List Nat} (h : Utf8 bs) :
     ∀ i, i ≤ bs.length → boundary bs i = true → Utf8 (bs.take i) ∧ Utf8 (bs.drop i) := by
   induction h with
@@ -571,8 +613,8 @@ theorem utf8_split {bs : List Nat} (h : Utf8 bs) :
       · rw [List.getElem?_append_left hlt] at hx
         exact hx' (hc i x (by omega) hx)
 
-/-- **A text view of well-formed text is well formed.** A valid text range (both ends on scalar
-boundaries, `a ≤ b ≤ len`) of well-formed UTF-8 is itself well-formed UTF-8. -/
+/-- Law (subject `ConcreteSpec.Borrow.textSlice`). **A text view of well-formed text is well formed.** A valid text range (both ends on scalar
+boundaries, a ≤ b ≤ len) of well-formed UTF-8 is itself well-formed UTF-8. -/
 theorem text_view_utf8 {bs : List Nat} {a b : Nat} (h : Utf8 bs)
     (hv : validRange (.text bs) a b = true) : Utf8 (textSlice bs a b) := by
   simp only [validRange, Bool.and_eq_true, decide_eq_true_eq] at hv
@@ -588,5 +630,167 @@ theorem text_view_utf8 {bs : List Nat} {a b : Nat} (h : Utf8 bs)
       rw [List.getElem?_drop, show a + (b - a) = b by omega]
       exact hx
   exact (utf8_split hd (b - a) (by simp; omega) hb').1
+
+namespace Evidence
+
+def trapRange : Source → Nat → Nat → Bool → RangeStep := fun _ _ _ _ => .trap
+
+def farIndex : Nat → Nat → Nat := fun a i => a + i + 10
+
+def farElement : VInfo → Nat → Option Nat := fun _ _ => some 10
+
+def ignoreUpdate {κ α : Type} [DecidableEq κ] (l : AList κ α) (_ : κ) (_ : α → α) : AList κ α := l
+
+def badText : List Nat → Nat → Nat → List Nat := fun _ _ _ => [128]
+
+def brokenAccess (n : Nat) (μ : Mem) (V : Views) (out : List Nat) (ss : List VStmt) : VR :=
+  match ss with
+  | .get _ _ :: _ | .set _ _ _ :: _ => .stuck
+  | _ => vrun n μ V out ss
+
+def corruptFrame : Nat → Mem → Views → List Nat → List VStmt → VR :=
+  fun _ _ _ out _ => .ok [(0, [7, 99])] out
+
+def memory : Mem := [(0, [7, 8])]
+def interval : VInfo := ⟨0, 0, 1, true⟩
+def views : Views := [(1, interval)]
+
+/-- Helper (computation). The closed memory and interval satisfy the representation premise of the access instances. (approved: PENDING) -/
+theorem described : ViewsOk memory views := by
+  intro v w hw
+  simp only [views, AList.lookup] at hw
+  split at hw
+  · cases hw; exact ⟨[7, 8], rfl, by decide, by decide⟩
+  · cases hw
+
+/-- Helper (computation). Closed derivation of the checked empty range block used by the opening instance. (approved: PENDING) -/
+theorem rangeAccepted : RangeOk x0 true 0 1 ⟨some (.array 2), some 0, some 1⟩ [] none [] x0 := by
+  refine ⟨.borrow rfl (by decide) (by intro _; exact ⟨rfl, rfl⟩) rfl .nil ?_, rfl⟩
+  change Ok x0 [] x0
+  exact .nil
+
+/-- Instance (law `ConcreteSpec.Borrow.range_never_traps`, case `array`). -/
+example := @range_never_traps x0 true 0 1 ⟨some (.array 2), some 0, some 1⟩ [] [] x0
+  rangeAccepted (.array 2) 0 1 ⟨by intro s h; cases h; rfl, by intro a h; cases h; rfl,
+    by intro b h; cases h; rfl⟩
+
+/-- Planted (law `ConcreteSpec.Borrow.range_never_traps`, case `array`, subject `ConcreteSpec.Borrow.openRange`, mutant `ConcreteSpec.Borrow.Evidence.trapRange`). -/
+example : RangeOk x0 true 0 1 ⟨some (.array 2), some 0, some 1⟩ [] none [] x0 ∧
+    Agrees ⟨some (.array 2), some 0, some 1⟩ (.array 2) 0 1 ∧ ¬ (trapRange (.array 2) 0 1 false = .enter) :=
+  ⟨rangeAccepted, ⟨by intro s h; cases h; rfl, by intro a h; cases h; rfl,
+    by intro b h; cases h; rfl⟩, by decide⟩
+
+/-- Instance (law `ConcreteSpec.Borrow.enter_in_bounds`, case `array`). -/
+example := @enter_in_bounds (.array 2) 0 1 false rfl
+
+/-- Planted (law `ConcreteSpec.Borrow.enter_in_bounds`, case `array`, subject `ConcreteSpec.Borrow.viewIndex`, mutant `ConcreteSpec.Borrow.Evidence.farIndex`). -/
+example : openRange (.array 2) 0 1 false = .enter ∧
+    ¬ (0 ≤ 1 ∧ 1 ≤ Source.len (.array 2) ∧
+      (∀ i, i < 1 - 0 → farIndex 0 i < Source.len (.array 2)) ∧
+      ∀ bs, Source.array 2 = .text bs → boundary bs 0 = true ∧ boundary bs 1 = true) := by
+  refine ⟨rfl, ?_⟩
+  intro h
+  have := h.2.2.1 0 (by decide)
+  simp [farIndex, Source.len] at this
+
+/-- Instance (law `ConcreteSpec.Borrow.view_in_source`, case `firstElement`). -/
+example := @view_in_source memory views 1 interval 0 described rfl
+
+/-- Planted (law `ConcreteSpec.Borrow.view_in_source`, case `firstElement`, subject `ConcreteSpec.Borrow.elemIdx`, mutant `ConcreteSpec.Borrow.Evidence.farElement`). -/
+example : ViewsOk memory views ∧ AList.lookup views 1 = some interval ∧
+    ¬ (match farElement interval 0 with
+      | none => True
+      | some j => ∃ xs, AList.lookup memory interval.src = some xs ∧ j = interval.a + 0 ∧
+          interval.a ≤ j ∧ j < interval.b ∧ j < xs.length) := by
+  refine ⟨described, rfl, ?_⟩
+  simp [farElement, interval]
+
+/-- Instance (law `ConcreteSpec.Borrow.view_get`, case `firstElement`). -/
+example := @view_get memory views 1 interval 0 1 [] [] described rfl
+
+/-- Planted (law `ConcreteSpec.Borrow.view_get`, case `firstElement`, subject `ConcreteSpec.Borrow.vrun`, mutant `ConcreteSpec.Borrow.Evidence.brokenAccess`). -/
+example : ViewsOk memory views ∧ AList.lookup views 1 = some interval ∧
+    ¬ (∃ xs, AList.lookup memory interval.src = some xs ∧
+      brokenAccess 2 memory views [] [.get 1 0] =
+        if 0 < interval.b - interval.a then brokenAccess 1 memory views
+          ([] ++ [xs.getD (interval.a + 0) 0]) [] else .trap) := by
+  refine ⟨described, rfl, ?_⟩
+  simp [brokenAccess, interval, vrun]
+
+/-- Instance (law `ConcreteSpec.Borrow.view_set`, case `firstElement`). -/
+example := @view_set memory views 1 interval 0 99 1 [] [] described rfl rfl
+
+/-- Planted (law `ConcreteSpec.Borrow.view_set`, case `firstElement`, subject `ConcreteSpec.Borrow.vrun`, mutant `ConcreteSpec.Borrow.Evidence.brokenAccess`). -/
+example : ViewsOk memory views ∧ AList.lookup views 1 = some interval ∧ interval.mutable = true ∧
+    ¬ (∃ xs, AList.lookup memory interval.src = some xs ∧
+      brokenAccess 2 memory views [] [.set 1 0 99] =
+        if 0 < interval.b - interval.a then brokenAccess 1
+          (AList.update memory interval.src (fun _ => xs.set (interval.a + 0) 99)) views [] [] else .trap) := by
+  refine ⟨described, rfl, rfl, ?_⟩
+  simp [brokenAccess, interval, vrun]
+
+/-- Instance (law `ConcreteSpec.Borrow.view_write_exact`, case `firstElement`). -/
+example := @view_write_exact memory 0 [7, 8] 0 99 rfl (by decide) 0 0
+
+/-- Planted (law `ConcreteSpec.Borrow.view_write_exact`, case `firstElement`, subject `ConcreteSpec.Core.AList.update`, mutant `ConcreteSpec.Borrow.Evidence.ignoreUpdate`). -/
+example : AList.lookup memory 0 = some [7, 8] ∧ 0 < ([7, 8] : List Nat).length ∧
+    ¬ (elem (ignoreUpdate memory 0 (fun _ => ([7, 8] : List Nat).set 0 99)) 0 0 =
+      if 0 = 0 ∧ 0 = 0 then some 99 else elem memory 0 0) := by
+  constructor
+  · rfl
+  · constructor <;> decide
+
+/-- Instance (law `ConcreteSpec.Borrow.viewOnly_frame`, case `write`). -/
+example := @viewOnly_frame views 1 interval rfl [.set 1 0 99] (.set .nil) 2 memory []
+
+/-- Planted (law `ConcreteSpec.Borrow.viewOnly_frame`, case `write`, subject `ConcreteSpec.Borrow.vrun`, mutant `ConcreteSpec.Borrow.Evidence.corruptFrame`). -/
+example : AList.lookup views 1 = some interval ∧ ViewOnly 1 [.set 1 0 99] ∧
+    ¬ FrameResult memory interval (corruptFrame 2 memory views [] [.set 1 0 99]) := by
+  refine ⟨rfl, .set .nil, ?_⟩
+  intro h
+  have := h 0 1 (by simp [interval])
+  simp [memory, elem, AList.lookup] at this
+
+/-- Instance (law `ConcreteSpec.Borrow.range_block_frame`, case `write`). -/
+example := @range_block_frame memory [] true 0 1 0 1 [.set 1 0 99] 2 [] (.set .nil)
+
+/-- Planted (law `ConcreteSpec.Borrow.range_block_frame`, case `write`, subject `ConcreteSpec.Borrow.vrun`, mutant `ConcreteSpec.Borrow.Evidence.corruptFrame`). -/
+example : ViewOnly 1 [.set 1 0 99] ∧
+    ¬ FrameResult memory ⟨0, 0, 1, true⟩
+      (corruptFrame 3 memory [] [] [.range true 0 1 0 1 [.set 1 0 99] none]) := by
+  refine ⟨.set .nil, ?_⟩
+  intro h
+  have := h 0 1 (by decide)
+  simp [memory, elem, AList.lookup] at this
+
+/-- Instance (law `ConcreteSpec.Borrow.text_view_utf8`, case `ascii`). -/
+example := @text_view_utf8 [65] 0 1 (.cons (s := [65]) (by decide) .nil) rfl
+
+/-- Planted (law `ConcreteSpec.Borrow.text_view_utf8`, case `ascii`, subject `ConcreteSpec.Borrow.textSlice`, mutant `ConcreteSpec.Borrow.Evidence.badText`). -/
+example : Utf8 [65] ∧ validRange (.text [65]) 0 1 = true ∧ ¬ Utf8 (badText [65] 0 1) := by
+  refine ⟨.cons (s := [65]) (by decide) .nil, rfl, ?_⟩
+  intro h
+  change Utf8 [128] at h
+  generalize he : ([128] : List Nat) = bs at h
+  cases h with
+  | nil => cases he
+  | @cons s rest hs _ =>
+    have hn := (isScalar_cont hs).1
+    have hlen : s.length + rest.length = 1 := by
+      simpa using (congrArg List.length he).symm
+    have hsl : s.length = 1 := by
+      have := List.length_pos_iff.mpr hn
+      omega
+    cases s with
+    | nil => simp at hsl
+    | cons x xs =>
+      cases xs with
+      | cons y ys => simp at hsl
+      | nil =>
+        have hx : 128 = x := by simpa using congrArg (fun xs : List Nat => xs.head?) he
+        subst x
+        simp [isScalar] at hs
+
+end Evidence
 
 end ConcreteSpec.Borrow
