@@ -779,6 +779,7 @@ commit_file head.txt "head commit by claude" "head work"
 REPLAY_HEAD="$(g rev-parse HEAD)"
 REPLAY_HEAD_STANZA="$(g notes --ref=refs/notes/concrete-writer show "$REPLAY_HEAD")"
 # Export pre-correction log blob (before claude -> kimi correction on REPLAY_ANC):
+REPLAY_N1_WNOTES="$(g rev-parse refs/notes/concrete-writer)"
 REPLAY_TRUNC_BLOB="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" export-log --repo "$W" --base "$REPLAY_BASE" --head "$REPLAY_HEAD" --write-blob)"
 # Now append signed claude -> kimi correction on REPLAY_ANC:
 backfill_writer "$REPLAY_ANC" kimi 1 replay-ancestor-corr "$REPLAY_BASE" "$REPLAY_ANC" "corrected to kimi" \
@@ -813,6 +814,110 @@ printf '%s\n\n%s\n' "$(cat "$T/replay-conflict-stanza")" "$REPLAY_HEAD_STANZA" >
 conf_ver="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" verify --repo "$W" --base "$REPLAY_BASE" --head "$REPLAY_HEAD" --claimed-writer "claude" --reviewer codex --log-object "$T/replay-conflict.log" 2>&1)"; rc=$?
 check "verify with --log-object refuses a conflicting exported log against authoritative per-commit history (exit 1, got $rc)" \
   bash -c '[ "$1" -eq 1 ] && grep -q "conflicts with authoritative writer history for commit" <<<"$2"' _ "$rc" "$conf_ver"
+
+# Replay 4 (Round 12 / Codex Round-11 HIGH finding):
+# Rolling back BOTH the current note on refs/notes/concrete-writer AND the external --log-object to the
+# older signed 1-stanza history (while the signed claude->kimi correction remains in notes ancestry or
+# in companion ref refs/notes/remote/concrete-writer) must be refused by every reader/writer subcommand
+# and option of writer_provenance.py, verify.sh, review.sh, and .githooks/pre-push.
+g update-ref refs/notes/concrete-writer-rb-r12 "$SAVED_REPLAY_WNOTES"
+g notes --ref=refs/notes/concrete-writer-rb-r12 add -f -m "$REPLAY_ANC_OLD_STANZA" "$REPLAY_ANC" 2>/dev/null
+REPLAY_RB_WNOTES="$(g rev-parse refs/notes/concrete-writer-rb-r12)"
+for rb_mode in "ancestry:$REPLAY_RB_WNOTES" "companion:$REPLAY_N1_WNOTES"; do
+  rb_label="${rb_mode%%:*}"
+  rb_sha="${rb_mode#*:}"
+  g update-ref refs/notes/concrete-writer "$rb_sha"
+  if [ "$rb_label" = "companion" ]; then
+    g update-ref refs/notes/remote/concrete-writer "$SAVED_REPLAY_WNOTES"
+  else
+    g update-ref -d refs/notes/remote/concrete-writer 2>/dev/null || true
+  fi
+  r12_out="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" verify --repo "$W" --base "$REPLAY_BASE" --head "$REPLAY_HEAD" --claimed-writer "claude" --reviewer kimi --log-object "$REPLAY_TRUNC_BLOB" 2>&1)"; rc=$?
+  check "round-12 rollback ($rb_label): verify --log-object refuses rolled-back note + matching older --log-object (exit 1, got $rc)" \
+    bash -c '[ "$1" -eq 1 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$r12_out"
+  r12_out="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" derive --repo "$W" --base "$REPLAY_BASE" --head "$REPLAY_HEAD" --reviewer kimi --log-object "$REPLAY_TRUNC_BLOB" 2>&1)"; rc=$?
+  check "round-12 rollback ($rb_label): derive --reviewer --log-object refuses rolled-back note + matching older --log-object (exit 2, got $rc)" \
+    bash -c '[ "$1" -eq 2 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$r12_out"
+  r12_out="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" derive --repo "$W" --base "$REPLAY_BASE" --head "$REPLAY_HEAD" --assert-writer claude --report --log-object "$REPLAY_TRUNC_BLOB" 2>&1)"; rc=$?
+  check "round-12 rollback ($rb_label): derive --assert-writer --report --log-object refuses rolled-back note + matching older --log-object (exit 2, got $rc)" \
+    bash -c '[ "$1" -eq 2 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$r12_out"
+  r12_out="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" report --repo "$W" --base "$REPLAY_BASE" --head "$REPLAY_HEAD" --log-object "$REPLAY_TRUNC_BLOB" 2>&1)"; rc=$?
+  check "round-12 rollback ($rb_label): report --log-object refuses rolled-back note + matching older --log-object (exit 2, got $rc)" \
+    bash -c '[ "$1" -eq 2 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$r12_out"
+  r12_out="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" export-log --repo "$W" --base "$REPLAY_BASE" --head "$REPLAY_HEAD" --log-object "$REPLAY_TRUNC_BLOB" 2>&1)"; rc=$?
+  check "round-12 rollback ($rb_label): export-log --log-object refuses rolled-back note + matching older --log-object (exit 1, got $rc)" \
+    bash -c '[ "$1" -eq 1 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$r12_out"
+  r12_out="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" export-log --repo "$W" --base "$REPLAY_BASE" --head "$REPLAY_HEAD" --write-blob --log-object "$REPLAY_TRUNC_BLOB" 2>&1)"; rc=$?
+  check "round-12 rollback ($rb_label): export-log --write-blob --log-object refuses rolled-back note + matching older --log-object (exit 1, got $rc)" \
+    bash -c '[ "$1" -eq 1 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$r12_out"
+done
+# Also verify all remaining entry points/options on companion-ref rollback (local N1 vs remote-tracking N2):
+g update-ref refs/notes/concrete-writer "$REPLAY_N1_WNOTES"
+g update-ref refs/notes/remote/concrete-writer "$SAVED_REPLAY_WNOTES"
+r12_out="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" derive --repo "$W" --base "$REPLAY_BASE" --head "$REPLAY_HEAD" 2>&1)"; rc=$?
+check "round-12 rollback (companion): derive refuses rolled-back local ref against companion ref (exit 2, got $rc)" \
+  bash -c '[ "$1" -eq 2 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$r12_out"
+r12_out="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" report --repo "$W" --base "$REPLAY_BASE" --head "$REPLAY_HEAD" 2>&1)"; rc=$?
+check "round-12 rollback (companion): report refuses rolled-back local ref against companion ref (exit 2, got $rc)" \
+  bash -c '[ "$1" -eq 2 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$r12_out"
+r12_out="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" verify --repo "$W" --base "$REPLAY_BASE" --head "$REPLAY_HEAD" --claimed-writer claude --reviewer kimi 2>&1)"; rc=$?
+check "round-12 rollback (companion): verify refuses rolled-back local ref against companion ref (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$r12_out"
+r12_out="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" export-log --repo "$W" --base "$REPLAY_BASE" --head "$REPLAY_HEAD" 2>&1)"; rc=$?
+check "round-12 rollback (companion): export-log refuses rolled-back local ref against companion ref (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$r12_out"
+r12_out="$(CONCRETE_WRITER_NOTES_REF=refs/notes/concrete-writer python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" derive --repo "$W" --base "$REPLAY_BASE" --head "$REPLAY_HEAD" 2>&1)"; rc=$?
+check "round-12 rollback (companion): CONCRETE_WRITER_NOTES_REF override still enforces companion-ref continuity (exit 2, got $rc)" \
+  bash -c '[ "$1" -eq 2 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$r12_out"
+r12_head_before="$(g rev-parse HEAD)"
+r12_out="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" stamp-commit --repo "$W" --model claude --round 2 --branch replay-ancestor-corr --brief-sha256 1111111111111111111111111111111111111111111111111111111111111111 2>&1)"; rc=$?
+check "round-12 rollback (companion): stamp-commit refuses when writer-notes ref is rolled back and does not amend HEAD (exit 2, got $rc)" \
+  bash -c '[ "$1" -eq 2 ] && [ "$(git -C "$3" rev-parse HEAD)" = "$4" ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$r12_out" "$W" "$r12_head_before"
+g reset -q --hard "$r12_head_before"
+g update-ref refs/notes/concrete-writer "$REPLAY_N1_WNOTES"
+r12_out="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" backfill --repo "$W" --commit "$REPLAY_ANC" --model codex --round 2 --branch replay-ancestor-corr --brief-file "$T/ev/dummy.brief" --output-file "$T/ev/dummy.out" --start-sha "$REPLAY_BASE" --end-sha "$REPLAY_ANC" --evidence "attempt fork from rolled-back v1" --supersedes "$REPLAY_ANC_EID1" --reason "fork from v1" 2>&1)"; rc=$?
+check "round-12 rollback (companion): backfill refuses to fork from rolled-back v1 when companion ref has v2 (exit 2, got $rc)" \
+  bash -c '[ "$1" -eq 2 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$r12_out"
+g update-ref refs/notes/concrete-writer "$REPLAY_N1_WNOTES"
+r12_out="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" correct --repo "$W" --commit "$REPLAY_ANC" --model codex --round 2 --branch replay-ancestor-corr --brief-file "$T/ev/dummy.brief" --output-file "$T/ev/dummy.out" --start-sha "$REPLAY_BASE" --end-sha "$REPLAY_ANC" --evidence "attempt fork from rolled-back v1" --supersedes "$REPLAY_ANC_EID1" --reason "fork from v1" 2>&1)"; rc=$?
+check "round-12 rollback (companion): correct refuses to fork from rolled-back v1 when companion ref has v2 (exit 2, got $rc)" \
+  bash -c '[ "$1" -eq 2 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$r12_out"
+g update-ref refs/notes/concrete-writer "$REPLAY_N1_WNOTES"
+r12_out="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" validate-notes --repo "$W" --notes-rev "$REPLAY_N1_WNOTES" 2>&1)"; rc=$?
+check "round-12 rollback (companion): validate-notes without --old-notes-rev refuses rolled-back notes-rev against companion ref (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$r12_out"
+r12_out="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" validate-notes --repo "$W" --notes-rev "$REPLAY_N1_WNOTES" --allow-missing-targets 2>&1)"; rc=$?
+check "round-12 rollback (companion): validate-notes --allow-missing-targets refuses rolled-back notes-rev against companion ref (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$r12_out"
+r12_out="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" fetch-notes --repo "$W" --no-fetch --no-update-local --target-ref refs/notes/concrete-writer 2>&1)"; rc=$?
+check "round-12 rollback (companion): fetch-notes --no-fetch refuses rolled-back target ref against companion ref (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$r12_out"
+g update-ref refs/notes/concrete-writer "$SAVED_REPLAY_WNOTES"
+r12_out="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" sync-notes --repo "$W" --from-rev "$REPLAY_N1_WNOTES" 2>&1)"; rc=$?
+check "round-12 rollback: sync-notes --from-rev refuses an older rolled-back notes commit (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$r12_out"
+g push -q -f --no-verify origin "$REPLAY_N1_WNOTES:refs/notes/concrete-writer"
+r12_out="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" sync-notes --repo "$W" --remote origin 2>&1)"; rc=$?
+check "round-12 rollback: sync-notes --remote refuses when remote writer-notes was rolled back relative to refs/notes/remote/concrete-writer (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$r12_out"
+r12_out="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" publish-notes --repo "$W" --remote origin 2>&1)"; rc=$?
+check "round-12 rollback: publish-notes --remote refuses when remote writer-notes was rolled back relative to refs/notes/remote/concrete-writer (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$r12_out"
+g update-ref refs/notes/concrete-writer "$REPLAY_N1_WNOTES"
+r12_calls_before="$(calls)"
+r12_out="$(cd "$W" && REVIEW_PUSH=0 REVIEW_KIMI_BIN="$T/bin/kimi" bash "$REVIEW" --base "$REPLAY_BASE" --head "$REPLAY_HEAD" --reviewer kimi 2>&1)"; rc=$?
+check "round-12 rollback: review.sh refuses rolled-back writer-notes ref before invoking reviewer (exit 2, got $rc)" \
+  bash -c '[ "$1" -eq 2 ] && [ "$2" -eq "$3" ] && grep -q "rewrites or drops existing writer-log entry" <<<"$4"' _ "$rc" "$(calls)" "$r12_calls_before" "$r12_out"
+r12_out="$(cd "$W" && REVIEW_PUSH=0 REVIEW_KIMI_BIN="$T/bin/kimi" bash "$REVIEW" --base "$REPLAY_BASE" --head "$REPLAY_HEAD" --writer claude --reviewer kimi 2>&1)"; rc=$?
+check "round-12 rollback: review.sh --writer refuses rolled-back writer-notes ref before invoking reviewer (exit 2, got $rc)" \
+  bash -c '[ "$1" -eq 2 ] && [ "$2" -eq "$3" ] && grep -q "rewrites or drops existing writer-log entry" <<<"$4"' _ "$rc" "$(calls)" "$r12_calls_before" "$r12_out"
+r12_out="$(cd "$W" && printf 'refs/notes/concrete-writer %s refs/notes/concrete-writer 0000000000000000000000000000000000000000\n' "$REPLAY_N1_WNOTES" | bash "$ROOT_DIR/.githooks/pre-push" 2>&1)"; rc=$?
+check "round-12 rollback: pre-push hook refuses pushing rolled-back N1 even with 0000... remote sentinel when companion ref holds N2 (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$r12_out"
+g update-ref refs/notes/concrete-writer "$SAVED_REPLAY_WNOTES"
+g update-ref -d refs/notes/remote/concrete-writer 2>/dev/null || true
+g update-ref -d refs/notes/concrete-writer-rb-r12 2>/dev/null || true
+git -C "$T/origin.git" update-ref -d refs/notes/concrete-writer 2>/dev/null || true
 g notes --ref=refs/notes/concrete-review remove "$REPLAY_HEAD" 2>/dev/null
 
 # Allowed signers controls (Task A / owner item 7, approved 2026-11-08):
@@ -1626,12 +1731,70 @@ chmod +x "$T/fail-git/git"
 FI_HEAD="$(g rev-parse HEAD)"
 FI_BASE="$(g rev-parse origin/main)"
 FI_WNOTES="$(g rev-parse refs/notes/concrete-writer)"
+FI_LOG_BLOB="$(python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" export-log --repo "$W" --base "$FI_BASE" --head "$FI_HEAD" --write-blob)"
 for subcmd in log ls-tree cat-file for-each-ref rev-parse; do
   fi_rc=0
   PATH="$T/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" \
     python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" validate-notes --repo "$W" --notes-rev "$FI_WNOTES" \
     >"$T/fi-val-$subcmd.out" 2>&1 || fi_rc=$?
   check "failure injection: validate-notes fails closed when git $subcmd fails (got $fi_rc)" \
+    test "$fi_rc" -ne 0
+  fi_rc=0
+  PATH="$T/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" \
+    python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" validate-notes --repo "$W" --notes-rev "$FI_WNOTES" --allow-missing-targets \
+    >"$T/fi-val-amt-$subcmd.out" 2>&1 || fi_rc=$?
+  check "failure injection: validate-notes --allow-missing-targets fails closed when git $subcmd fails (got $fi_rc)" \
+    test "$fi_rc" -ne 0
+  fi_rc=0
+  PATH="$T/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" \
+    python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" fetch-notes --repo "$W" --no-fetch --target-ref refs/notes/concrete-writer \
+    >"$T/fi-fn-nf-$subcmd.out" 2>&1 || fi_rc=$?
+  check "failure injection: fetch-notes --no-fetch fails closed when git $subcmd fails (got $fi_rc)" \
+    test "$fi_rc" -ne 0
+  fi_rc=0
+  PATH="$T/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" \
+    python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" fetch-notes --repo "$W" --remote origin --target-ref refs/notes/concrete-writer \
+    >"$T/fi-fn-$subcmd.out" 2>&1 || fi_rc=$?
+  check "failure injection: fetch-notes --remote fails closed when git $subcmd fails (got $fi_rc)" \
+    test "$fi_rc" -ne 0
+  fi_rc=0
+  PATH="$T/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" \
+    python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" sync-notes --repo "$W" --from-rev "$FI_WNOTES" \
+    >"$T/fi-sn-fr-$subcmd.out" 2>&1 || fi_rc=$?
+  check "failure injection: sync-notes --from-rev fails closed when git $subcmd fails (got $fi_rc)" \
+    test "$fi_rc" -ne 0
+  fi_rc=0
+  PATH="$T/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" \
+    python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" sync-notes --repo "$W" --remote origin \
+    >"$T/fi-sn-rem-$subcmd.out" 2>&1 || fi_rc=$?
+  check "failure injection: sync-notes --remote fails closed when git $subcmd fails (got $fi_rc)" \
+    test "$fi_rc" -ne 0
+  fi_rc=0
+  PATH="$T/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" \
+    python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" publish-notes --repo "$W" --remote origin \
+    >"$T/fi-pn-$subcmd.out" 2>&1 || fi_rc=$?
+  check "failure injection: publish-notes fails closed when git $subcmd fails (got $fi_rc)" \
+    test "$fi_rc" -ne 0
+  fi_rc=0
+  PATH="$T/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" \
+    python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" stamp-commit --repo "$W" --model claude --round 1 --branch nonff \
+    --brief-sha256 1111111111111111111111111111111111111111111111111111111111111111 \
+    >"$T/fi-sc-$subcmd.out" 2>&1 || fi_rc=$?
+  check "failure injection: stamp-commit fails closed when git $subcmd fails (got $fi_rc)" \
+    test "$fi_rc" -ne 0
+  fi_rc=0
+  PATH="$T/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" \
+    python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" backfill --repo "$W" --commit "$FI_HEAD" --model claude --round 1 --branch nonff \
+    --brief-file "$T/ev/dummy.brief" --output-file "$T/ev/dummy.out" --start-sha "$FI_BASE" --end-sha "$FI_HEAD" --evidence "fi test" \
+    >"$T/fi-bf-$subcmd.out" 2>&1 || fi_rc=$?
+  check "failure injection: backfill fails closed when git $subcmd fails (got $fi_rc)" \
+    test "$fi_rc" -ne 0
+  fi_rc=0
+  PATH="$T/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" \
+    python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" correct --repo "$W" --commit "$FI_HEAD" --model claude --round 1 --branch nonff \
+    --brief-file "$T/ev/dummy.brief" --output-file "$T/ev/dummy.out" --start-sha "$FI_BASE" --end-sha "$FI_HEAD" --evidence "fi test" \
+    >"$T/fi-cor-$subcmd.out" 2>&1 || fi_rc=$?
+  check "failure injection: correct fails closed when git $subcmd fails (got $fi_rc)" \
     test "$fi_rc" -ne 0
 done
 for subcmd in log ls-tree cat-file rev-list merge-base show notes for-each-ref rev-parse; do
@@ -1641,10 +1804,64 @@ for subcmd in log ls-tree cat-file rev-list merge-base show notes for-each-ref r
     >"$T/fi-der-$subcmd.out" 2>&1 || fi_rc=$?
   check "failure injection: writer_provenance.py derive fails closed when git $subcmd fails (got $fi_rc)" \
     test "$fi_rc" -ne 0
+  fi_rc=0
+  PATH="$T/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" \
+    python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" derive --repo "$W" --base "$FI_BASE" --head "$FI_HEAD" --log-object "$FI_LOG_BLOB" \
+    >"$T/fi-der-lo-$subcmd.out" 2>&1 || fi_rc=$?
+  check "failure injection: writer_provenance.py derive --log-object fails closed when git $subcmd fails (got $fi_rc)" \
+    test "$fi_rc" -ne 0
+  fi_rc=0
+  PATH="$T/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" \
+    python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" report --repo "$W" --base "$FI_BASE" --head "$FI_HEAD" \
+    >"$T/fi-rep-$subcmd.out" 2>&1 || fi_rc=$?
+  check "failure injection: writer_provenance.py report fails closed when git $subcmd fails (got $fi_rc)" \
+    test "$fi_rc" -ne 0
+  fi_rc=0
+  PATH="$T/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" \
+    python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" report --repo "$W" --base "$FI_BASE" --head "$FI_HEAD" --log-object "$FI_LOG_BLOB" \
+    >"$T/fi-rep-lo-$subcmd.out" 2>&1 || fi_rc=$?
+  check "failure injection: writer_provenance.py report --log-object fails closed when git $subcmd fails (got $fi_rc)" \
+    test "$fi_rc" -ne 0
+  fi_rc=0
+  PATH="$T/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" \
+    python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" verify --repo "$W" --base "$FI_BASE" --head "$FI_HEAD" --claimed-writer claude --reviewer codex \
+    >"$T/fi-vpy-$subcmd.out" 2>&1 || fi_rc=$?
+  check "failure injection: writer_provenance.py verify fails closed when git $subcmd fails (got $fi_rc)" \
+    test "$fi_rc" -ne 0
+  fi_rc=0
+  PATH="$T/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" \
+    python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" verify --repo "$W" --base "$FI_BASE" --head "$FI_HEAD" --claimed-writer claude --reviewer codex --log-object "$FI_LOG_BLOB" \
+    >"$T/fi-vpy-lo-$subcmd.out" 2>&1 || fi_rc=$?
+  check "failure injection: writer_provenance.py verify --log-object fails closed when git $subcmd fails (got $fi_rc)" \
+    test "$fi_rc" -ne 0
+  fi_rc=0
+  PATH="$T/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" \
+    python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" export-log --repo "$W" --base "$FI_BASE" --head "$FI_HEAD" \
+    >"$T/fi-exp-$subcmd.out" 2>&1 || fi_rc=$?
+  check "failure injection: writer_provenance.py export-log fails closed when git $subcmd fails (got $fi_rc)" \
+    test "$fi_rc" -ne 0
+  fi_rc=0
+  PATH="$T/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" \
+    python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" export-log --repo "$W" --base "$FI_BASE" --head "$FI_HEAD" --log-object "$FI_LOG_BLOB" \
+    >"$T/fi-exp-lo-$subcmd.out" 2>&1 || fi_rc=$?
+  check "failure injection: writer_provenance.py export-log --log-object fails closed when git $subcmd fails (got $fi_rc)" \
+    test "$fi_rc" -ne 0
   fi_vrc=0
   ( cd "$W" && PATH="$T/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" \
       bash "$VERIFY" --required-base "$FI_BASE" "$FI_HEAD" >"$T/fi-ver-$subcmd.out" 2>&1 ) || fi_vrc=$?
-  check "failure injection: verify.sh fails closed when git $subcmd fails (got $fi_vrc)" \
+  check "failure injection: verify.sh --required-base fails closed when git $subcmd fails (got $fi_vrc)" \
+    test "$fi_vrc" -ne 0
+  fi_vrc=0
+  ( cd "$W" && PATH="$T/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" \
+      bash "$VERIFY" --fetch "$FI_HEAD" >"$T/fi-ver-f-$subcmd.out" 2>&1 ) || fi_vrc=$?
+  check "failure injection: verify.sh --fetch fails closed when git $subcmd fails (got $fi_vrc)" \
+    test "$fi_vrc" -ne 0
+done
+for subcmd in rev-parse notes; do
+  fi_vrc=0
+  ( cd "$W" && PATH="$T/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" \
+      bash "$VERIFY" --fields "$FI_HEAD" >"$T/fi-ver-fld-$subcmd.out" 2>&1 ) || fi_vrc=$?
+  check "failure injection: verify.sh --fields fails closed when git $subcmd fails (got $fi_vrc)" \
     test "$fi_vrc" -ne 0
 done
 # Also verify merge-tree failure injection on a merge commit:
@@ -1660,8 +1877,8 @@ PATH="$T/fail-git:$PATH" GIT_FAIL_SUBCMDS=merge-tree \
   >"$T/fi-der-mergetree.out" 2>&1 || fi_mrc=$?
 check "failure injection: writer_provenance.py derive fails closed when git merge-tree fails on a merge commit (got $fi_mrc)" \
   test "$fi_mrc" -ne 0
-# Also verify review.sh fails closed when git rev-list or git notes fails during round-history scan:
-for subcmd in rev-list notes for-each-ref; do
+# Also verify review.sh fails closed when git log, ls-tree, cat-file, rev-list, notes, or for-each-ref fails:
+for subcmd in log ls-tree cat-file rev-list notes for-each-ref; do
   fi_rrc=0
   ( cd "$W" && PATH="$T/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" \
       REVIEW_PUSH=0 REVIEW_CODEX_BIN="$T/bin/codex" \

@@ -1412,12 +1412,34 @@ git notes --ref=refs/notes/concrete-writer-trv-del remove "$R1" 2>/dev/null
 n3_trv_del="$(git rev-parse refs/notes/concrete-writer-trv-del)"
 git update-ref refs/notes/concrete-writer "$saved_wnotes"
 git notes --ref=refs/notes/concrete-writer remove "$R1" 2>/dev/null
-python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" backfill --repo "$PWD" \
+bf_rb_out="$(python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" backfill --repo "$PWD" \
   --commit "$R1" --model claude --round 1 --branch test \
   --brief-file "$TMP/ev/brief.txt" --output-file "$TMP/ev/output.txt" \
   --start-sha "$(git rev-parse "$R1~1")" --end-sha "$R1" \
-  --evidence "re-signed single entry hiding codex correction" >/dev/null
-r1_resigned_note="$(git notes --ref=refs/notes/concrete-writer show "$R1")"
+  --evidence "re-signed single entry hiding codex correction" 2>&1)"; rc=$?
+[ "$rc" = 2 ] && has "$bf_rb_out" "deletes existing writer-log entry" \
+  && ok "backfill refuses to mint a replacement entry after git notes remove / rollback" \
+  || { no "backfill after git notes remove: exit $rc"; echo "$bf_rb_out" | sed 's/^/      /'; }
+r1_resigned_note="$(python3 -B -I - "$ROOT_DIR/scripts/review" "$R1" "$(git rev-parse "$R1~1")" "$TMP/ev/brief.txt" "$TMP/ev/output.txt" "$TMP/keys/id_ed25519" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import writer_provenance as wp
+r1, start_sha, brief_f, out_f, key_f = sys.argv[2:7]
+entry = {
+    "model": "claude",
+    "round": "1",
+    "branch": "test",
+    "brief-sha256": wp.sha256_file(brief_f, "brief"),
+    "output-sha256": wp.sha256_file(out_f, "output"),
+    "start-sha": start_sha,
+    "end-sha": r1,
+    "commit": r1,
+    "source": "backfill",
+    "evidence": "re-signed single entry hiding codex correction",
+}
+print(wp.format_log_stanza(wp.sign_entry(entry, key_f, "orchestrator@concrete")))
+PY
+)"
 git update-ref refs/notes/concrete-writer "$n2_wnotes"
 git update-ref refs/notes/concrete-writer-trv-resign "$n2_wnotes"
 git notes --ref=refs/notes/concrete-writer-trv-resign add -f -m "$r1_resigned_note" "$R1" 2>/dev/null
@@ -1556,8 +1578,12 @@ out="$(PATH="$TMP/fail-git:$PATH" GIT_FAIL_SUBCMDS=log python3 -B -I "$ROOT_DIR/
 [ "$rc" != 0 ] && has "$out" "git log" && ! has "$out" "validated " \
   && ok "failure injection: validate-notes on signed deletion commit fails closed when git log fails" \
   || { no "validate-notes deletion with failing git log: exit $rc"; echo "$out" | sed 's/^/      /'; }
-for subcmd in log ls-tree cat-file for-each-ref; do
-  out="$(PATH="$TMP/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" validate-notes --repo "$PWD" --notes-rev "$saved_wnotes" 2>&1)"; rc=$?
+out="$(python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" validate-notes --repo "$PWD" --notes-rev "$saved_wnotes" 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "rewrites or drops existing writer-log entry" && ! has "$out" "validated " \
+  && ok "rollback control: validate-notes without --old-notes-rev refuses rolled-back notes-rev against companion refs" \
+  || { no "validate-notes companion rollback: exit $rc"; echo "$out" | sed 's/^/      /'; }
+for subcmd in log ls-tree cat-file for-each-ref rev-parse; do
+  out="$(PATH="$TMP/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" validate-notes --repo "$PWD" --notes-rev "$n2_wnotes" 2>&1)"; rc=$?
   [ "$rc" != 0 ] && ! has "$out" "validated " \
     && ok "failure injection: validate-notes fails closed when git $subcmd fails" \
     || { no "validate-notes with failing git $subcmd: exit $rc"; echo "$out" | sed 's/^/      /'; }
@@ -1801,7 +1827,7 @@ o="$(pm "$HX")"; has "$o" "${HX:0:10} is not the clean merge of its members onto
   && ok "pure_merge refuses a head with an extra commit ($o)" || no "pure_merge on an extra commit: '$o'"
 o="$(pm "$HY")"; has "$o" "${HY:0:10} is not the clean merge of its members onto ${BR:0:10}: ${HY:0:10} differs from the clean merge of ${R2:0:10}" \
   && ok "pure_merge refuses a merge whose tree carries an extra change ($o)" || no "pure_merge on a changed merge: '$o'"
-# Failure injection on signoff.sh verify:
+# Rollback and failure-injection controls on signoff.sh record and signoff.sh verify:
 bash "$TMP/put-review" "$R2" "findings@2"
 bash "$TMP/put-signoff" "$R2" valid "$R1"
 o="$(PATH="$TMP/fail-git:$PATH" GIT_FAIL_SUBCMDS=diff bash "$ROOT_DIR/scripts/land/signoff.sh" verify "$R2" --base "$MR" 2>&1)"; r=$?
@@ -1809,11 +1835,43 @@ o="$(PATH="$TMP/fail-git:$PATH" GIT_FAIL_SUBCMDS=diff bash "$ROOT_DIR/scripts/la
   && ok "failure injection: signoff.sh verify fails closed when git diff fails (never defaults diff_class to docs cap 2)" \
   || { no "signoff.sh verify with failing git diff: exit $r"; echo "$o" | sed 's/^/      /'; }
 bash "$TMP/put-review" "$R2" "findings@5"
-for subcmd in ls-tree cat-file merge-base for-each-ref; do
+# Prepare a signed correction on R2 in refs/notes/remote/concrete-writer while keeping local refs/notes/concrete-writer
+# at saved_wnotes (rollback of R2's writer history): both signoff.sh verify and signoff.sh record must refuse.
+r2_old_note="$(git notes --ref=refs/notes/concrete-writer show "$R2")"
+r2_eid="$(printf '%s\n' "$r2_old_note" | sed -n 's/^entry-id: //p')"
+python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" backfill --repo "$PWD" \
+  --commit "$R2" --model agy --round 2 --branch test \
+  --brief-file "$TMP/ev/brief.txt" --output-file "$TMP/ev/output.txt" \
+  --start-sha "$(git rev-parse "$R2~1")" --end-sha "$R2" \
+  --evidence "audit correction on R2" --supersedes "$r2_eid" --reason "agy co-wrote R2" >/dev/null
+r2_n2_wnotes="$(git rev-parse refs/notes/concrete-writer)"
+git update-ref refs/notes/remote/concrete-writer "$r2_n2_wnotes"
+git update-ref refs/notes/concrete-writer "$saved_wnotes"
+o="$(bash "$ROOT_DIR/scripts/land/signoff.sh" verify "$R2" --base "$MR" 2>&1)"; r=$?
+[ "$r" = 1 ] && has "$o" "writer provenance failed" && has "$o" "rewrites or drops existing writer-log entry" \
+  && ok "rollback control: signoff.sh verify refuses when writer-notes ref is rolled back" \
+  || { no "signoff.sh verify rollback: exit $r"; echo "$o" | sed 's/^/      /'; }
+o="$(bash "$ROOT_DIR/scripts/land/signoff.sh" record "$R2" --base "$MR" --rounds-at "$R2" --date 2026-11-08 --quote "approve ${R2:0:10}" \
+  --codex-request "$TMP/so-collect-req.txt" --codex "$TMP/so-collect-out.txt" \
+  --kimi-request "$TMP/so-collect-req.txt" --kimi "$TMP/so-collect-out.txt" \
+  --agy-request "$TMP/so-collect-req.txt" --agy "$TMP/so-collect-out.txt" 2>&1)"; r=$?
+[ "$r" = 1 ] && has "$o" "writer provenance failed" && has "$o" "rewrites or drops existing writer-log entry" \
+  && ok "rollback control: signoff.sh record refuses when writer-notes ref is rolled back" \
+  || { no "signoff.sh record rollback: exit $r"; echo "$o" | sed 's/^/      /'; }
+git update-ref refs/notes/concrete-writer "$saved_wnotes"
+git update-ref refs/notes/remote/concrete-writer "$saved_wnotes"
+for subcmd in log ls-tree cat-file merge-base for-each-ref rev-list show notes rev-parse; do
   o="$(PATH="$TMP/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" bash "$ROOT_DIR/scripts/land/signoff.sh" verify "$R2" --base "$MR" 2>&1)"; r=$?
   [ "$r" != 0 ] \
     && ok "failure injection: signoff.sh verify fails closed when git $subcmd fails" \
     || { no "signoff.sh verify with failing git $subcmd: exit $r"; echo "$o" | sed 's/^/      /'; }
+  o="$(PATH="$TMP/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" bash "$ROOT_DIR/scripts/land/signoff.sh" record "$R2" --base "$MR" --rounds-at "$R2" --date 2026-11-08 --quote "approve ${R2:0:10}" \
+    --codex-request "$TMP/so-collect-req.txt" --codex "$TMP/so-collect-out.txt" \
+    --kimi-request "$TMP/so-collect-req.txt" --kimi "$TMP/so-collect-out.txt" \
+    --agy-request "$TMP/so-collect-req.txt" --agy "$TMP/so-collect-out.txt" 2>&1)"; r=$?
+  [ "$r" != 0 ] \
+    && ok "failure injection: signoff.sh record fails closed when git $subcmd fails" \
+    || { no "signoff.sh record with failing git $subcmd: exit $r"; echo "$o" | sed 's/^/      /'; }
 done
 bash "$TMP/put-signoff" "$R2" none
 

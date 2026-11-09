@@ -187,6 +187,9 @@ check() {
   [ -n "$rounds" ] || bad "rounds-at ${at:0:10}: no round count in '$vout'"
   [ "$rounds" -ge "$cap" ] \
     || bad "the review cap was not reached: a $cls change has cap $cap, and ${at:0:10} records $rounds round(s)"
+  local wp_out wp_rc=0
+  wp_out="$(python3 -B -I "$REVIEW_DIR/writer_provenance.py" derive --repo . --base "$base" --head "$sha" 2>&1)" || wp_rc=$?
+  [ "$wp_rc" = 0 ] || bad "writer provenance failed for ${base:0:10}..${sha:0:10}: ${wp_out//$'\n'/ }"
   local r n entry file hash got reviewed verdict verdicts=""
   for r in $REVIEWERS; do
     n="F_request_$r"; [ -n "${!n}" ] || bad "the record has no $r request"

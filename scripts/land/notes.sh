@@ -58,6 +58,14 @@ fetch_kind() { # kind
 
 get_note() { # kind sha [key]
   local ref="refs/notes/remote/concrete-$1" ref_sha txt nrc=0
+  if [ "$1" = writer ]; then
+    local wout="" wrc=0
+    wout="$(python3 -B -I "$WRITER_PROV" fetch-notes --no-fetch --target-ref "$ref" --no-update-local 2>&1)" || wrc=$?
+    if [ "$wrc" -ne 0 ]; then
+      echo "notes: invalid or discontinuous $ref: ${wout//$'\n'/ }" >&2
+      return 1
+    fi
+  fi
   ref_sha="$(git for-each-ref --format='%(objectname)' -- "$ref")" || return 1
   [ -n "$ref_sha" ] || return 0
   txt="$(git notes --ref="$ref" show "$2" 2>&1)" || nrc=$?
@@ -111,8 +119,14 @@ put_note() { # kind sha key=value...
 
 sub="${1:-}"; [ $# -gt 0 ] && shift
 case "$sub" in
-  fetch) fetch_kind review; fetch_kind gates; fetch_kind writer ;;
-  get) kind_ok "${1:-}"; [ -n "${2:-}" ] || die "get <kind> <sha> [key]"; get_note "$1" "$(git rev-parse "$2")" "${3:-}" ;;
+  fetch)
+    if [ -n "${1:-}" ]; then
+      kind_ok "$1"
+      fetch_kind "$1"
+    else
+      fetch_kind review; fetch_kind gates; fetch_kind writer
+    fi ;;
+  get) kind_ok "${1:-}"; [ -n "${2:-}" ] || die "get <kind> <sha> [key]"; sha="$(git rev-parse --verify "$2^{commit}")" || die "get: '$2' is not a commit"; get_note "$1" "$sha" "${3:-}" ;;
   put) kind_ok "${1:-}"; [ $# -ge 3 ] || die "put <kind> <sha> key=value..."; put_note "$@" ;;
   ready)
     baseref=""

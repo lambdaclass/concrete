@@ -216,16 +216,52 @@ git -C "$A" update-ref refs/notes/concrete-writer-del "$rvbf_n2"
 git -C "$A" notes --ref=refs/notes/concrete-writer-del remove "$RVBF_SHA" 2>/dev/null
 rvbf_n3_del="$(git -C "$A" rev-parse refs/notes/concrete-writer-del)"
 git -C "$A" update-ref refs/notes/concrete-writer "$rvbf_n0"
-python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" backfill --repo "$A" \
+bf_rb_out="$(python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" backfill --repo "$A" \
   --commit "$RVBF_SHA" --model claude --round 1 --branch wip/rv-bf \
   --brief-file "$TMP/ev/brief.txt" --output-file "$TMP/ev/output.txt" \
   --start-sha "$BASE" --end-sha "$RVBF_SHA" \
-  --evidence "re-signed single entry hiding codex" >/dev/null
-rvbf_resigned_note="$(git -C "$A" notes --ref=refs/notes/concrete-writer show "$RVBF_SHA")"
+  --evidence "re-signed single entry hiding codex" 2>&1)"; rc=$?
+[ "$rc" = 2 ] && has "$bf_rb_out" "deletes existing writer-log entry" \
+  && ok "backfill refuses to mint a replacement entry when local writer-notes ref was rewound behind companion ref" \
+  || { no "backfill on rewound ref: exit $rc"; echo "$bf_rb_out" | sed 's/^/      /'; }
+rvbf_resigned_note="$(python3 -B -I - "$ROOT_DIR/scripts/review" "$RVBF_SHA" "$BASE" "$TMP/ev/brief.txt" "$TMP/ev/output.txt" "$TMP/keys/id_ed25519" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import writer_provenance as wp
+rvbf_sha, start_sha, brief_f, out_f, key_f = sys.argv[2:7]
+entry = {
+    "model": "claude",
+    "round": "1",
+    "branch": "wip/rv-bf",
+    "brief-sha256": wp.sha256_file(brief_f, "brief"),
+    "output-sha256": wp.sha256_file(out_f, "output"),
+    "start-sha": start_sha,
+    "end-sha": rvbf_sha,
+    "commit": rvbf_sha,
+    "source": "backfill",
+    "evidence": "re-signed single entry hiding codex",
+}
+print(wp.format_log_stanza(wp.sign_entry(entry, key_f, "orchestrator@concrete")))
+PY
+)"
 git -C "$A" update-ref refs/notes/concrete-writer "$rvbf_n2"
 git -C "$A" update-ref refs/notes/concrete-writer-resign "$rvbf_n2"
 git -C "$A" notes --ref=refs/notes/concrete-writer-resign add -f -m "$rvbf_resigned_note" "$RVBF_SHA" 2>/dev/null
 rvbf_n3_resign="$(git -C "$A" rev-parse refs/notes/concrete-writer-resign)"
+# Rollback controls on notes.sh get writer and notes.sh ready (default and --base):
+git -C "$A" update-ref refs/notes/remote/concrete-writer "$rvbf_n1"
+out="$(cd "$A" && bash "$NOTES" get writer "$RVBF_SHA" 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "invalid or discontinuous refs/notes/remote/concrete-writer" && has "$out" "rewrites or drops existing writer-log entry" \
+  && ok "notes.sh get writer refuses rolled-back remote-tracking writer ref against local companion ref" \
+  || { no "notes.sh get writer companion rollback: exit $rc"; echo "$out" | sed 's/^/      /'; }
+git -C "$A" update-ref refs/notes/remote/concrete-writer "$rvbf_n3_rb"
+out="$(cd "$A" && bash "$NOTES" get writer "$RVBF_SHA" model 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "invalid or discontinuous refs/notes/remote/concrete-writer" && has "$out" "rewrites or drops existing writer-log entry" \
+  && ok "notes.sh get writer <sha> <key> refuses rollback commit N3 on writer notes" \
+  || { no "notes.sh get writer rollback N3: exit $rc"; echo "$out" | sed 's/^/      /'; }
+( cd "$A" && bash "$NOTES" ready "$RVBF_SHA" ) && no "notes.sh ready accepted rollback commit N3" || ok "notes.sh ready refuses rollback commit N3 on writer notes"
+( cd "$A" && bash "$NOTES" ready --base origin/main "$RVBF_SHA" ) && no "notes.sh ready --base accepted rollback commit N3" || ok "notes.sh ready --base refuses rollback commit N3 on writer notes"
+git -C "$A" update-ref refs/notes/remote/concrete-writer "$rvbf_n2"
 git -C "$A" push -q -f --no-verify origin "$rvbf_n1:refs/notes/concrete-writer"
 out="$(cd "$A" && bash "$NOTES" fetch writer 2>&1)"; rc=$?
 [ "$rc" = 1 ] && has "$out" "rewrites or drops existing writer-log entry" \
@@ -286,11 +322,21 @@ out="$(cd "$A" && PATH="$TMP/fail-git:$PATH" GIT_FAIL_SUBCMDS=log bash "$NOTES" 
 git -C "$A" update-ref refs/notes/concrete-writer "$rvbf_n0"
 git -C "$A" update-ref refs/notes/remote/concrete-writer "$rvbf_n0"
 git -C "$A" push -q -f --no-verify origin "$rvbf_n0:refs/notes/concrete-writer"
-for subcmd in log notes for-each-ref merge-base; do
+for subcmd in log ls-tree cat-file notes for-each-ref rev-parse; do
+  ( cd "$A" && PATH="$TMP/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" bash "$NOTES" get writer "$RVBF_SHA" >/dev/null 2>&1 ); rc=$?
+  [ "$rc" != 0 ] \
+    && ok "failure injection: notes.sh get writer fails closed when git $subcmd fails" \
+    || no "failure injection: notes.sh get writer with failing git $subcmd: exit $rc"
+done
+for subcmd in log ls-tree cat-file notes for-each-ref merge-base rev-parse; do
   ( cd "$A" && PATH="$TMP/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" bash "$NOTES" ready "$RVBF_SHA" >/dev/null 2>&1 ); rc=$?
   [ "$rc" != 0 ] \
     && ok "failure injection: notes.sh ready fails closed when git $subcmd fails" \
     || no "failure injection: notes.sh ready with failing git $subcmd: exit $rc"
+  ( cd "$A" && PATH="$TMP/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" bash "$NOTES" ready --base origin/main "$RVBF_SHA" >/dev/null 2>&1 ); rc=$?
+  [ "$rc" != 0 ] \
+    && ok "failure injection: notes.sh ready --base fails closed when git $subcmd fails" \
+    || no "failure injection: notes.sh ready --base with failing git $subcmd: exit $rc"
 done
 git -C "$A" update-ref refs/notes/concrete-writer "$rvbf_n0"
 git -C "$A" update-ref refs/notes/remote/concrete-writer "$rvbf_n0"
