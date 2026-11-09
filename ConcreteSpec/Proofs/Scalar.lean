@@ -338,13 +338,13 @@ theorem plainNeg_trap_iff (t : IntTy) (a : Int) (k : TrapKind) :
   cases checkedNeg t a <;> simp
 
 /-- Helper (arithmetic). Plain negation is never stuck: it has a result or a trap.
-(approved: PENDING) -/
+(approved: APPR-C2-agy-5372ad2a0) -/
 theorem plainNeg_not_stuck (t : IntTy) (a : Int) : plainNeg t a ≠ .stuck := by
   unfold plainNeg
   cases checkedNeg t a <;> simp
 
 /-- Helper (arithmetic). Representability of mathematical negation, independently of the
-`checkedNeg` result wrapper. (approved: PENDING) -/
+`checkedNeg` result wrapper. (approved: APPR-C2-agy-5372ad2a0) -/
 private theorem neg_inRange_iff (t : IntTy) (a : Int) (ha : t.InRange a) :
     t.InRange (-a) ↔ (if t.signed = true then a ≠ t.min else a = 0) := by
   cases t <;> simp [IntTy.InRange, IntTy.min, IntTy.max, IntTy.signed, IntTy.bits] at * <;> omega
