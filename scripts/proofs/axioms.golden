@@ -118,12 +118,17 @@ ConcreteSpec.Authority.mem_subst	Quot.sound propext
 ConcreteSpec.Authority.mem_subst._simp_1_2	propext
 ConcreteSpec.Authority.runMain.eq_1	propext
 ConcreteSpec.Authority.sub_iff	Quot.sound propext
-ConcreteSpec.Authority.sub_sound	propext
+ConcreteSpec.Authority.sub_sound	Quot.sound propext
 ConcreteSpec.Binder.name.inj	
 ConcreteSpec.Binder.name.injEq	propext
 ConcreteSpec.Binder.name.sizeOf_spec	
 ConcreteSpec.Binder.wild.sizeOf_spec	
 ConcreteSpec.BodyOk.brecOn	propext
+ConcreteSpec.Borrow.Evidence.described	
+ConcreteSpec.Borrow.Evidence.mutableBlock	
+ConcreteSpec.Borrow.Evidence.rangeAccepted	propext
+ConcreteSpec.Borrow.Evidence.sharedBlock	
+ConcreteSpec.Borrow.Evidence.views.eq_1	
 ConcreteSpec.Borrow.FreeUse.brecOn	
 ConcreteSpec.Borrow.Lock.excl.sizeOf_spec	
 ConcreteSpec.Borrow.Lock.free.sizeOf_spec	
@@ -2341,10 +2346,19 @@ ConcreteSpec.Entry.mk.inj
 ConcreteSpec.Entry.mk.injEq	propext
 ConcreteSpec.Entry.mk.sizeOf_spec	
 ConcreteSpec.Entry.read.eq_1	
+ConcreteSpec.Evidence.contextCorr	
+ConcreteSpec.Evidence.discardOk	propext
+ConcreteSpec.Evidence.fieldDeclared	
+ConcreteSpec.Evidence.fieldTyped	Quot.sound propext
+ConcreteSpec.Evidence.fieldValues.eq_1	
+ConcreteSpec.Evidence.oneField.eq_1	
 ConcreteSpec.Examples.add0_never_stuck	Quot.sound propext
 ConcreteSpec.Examples.add0_never_traps	Quot.sound propext
 ConcreteSpec.Examples.add0_ok	Quot.sound propext
 ConcreteSpec.Exec.brecOn	propext
+ConcreteSpec.ExitU8._sparseCasesOn_1.else_eq	propext
+ConcreteSpec.ExitU8.eq_1	propext
+ConcreteSpec.ExitU8.eq_2	propext
 ConcreteSpec.Expr.add.inj	
 ConcreteSpec.Expr.add.injEq	propext
 ConcreteSpec.Expr.add.sizeOf_spec	
@@ -3200,6 +3214,8 @@ _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.octets.match_1.eq_3
 _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.ordered.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.ordered.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.overlaps_symm	
+_private.ConcreteSpec.Proofs.Observe.0.ConcreteSpec.ExitU8.match_1.eq_1	propext
+_private.ConcreteSpec.Proofs.Observe.0.ConcreteSpec.ExitU8.match_1.eq_2	propext
 _private.ConcreteSpec.Proofs.Observe.0.ConcreteSpec.Observe.instReprObservation.repr.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Observe.0.ConcreteSpec.Observe.instReprObservation.repr.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Observe.0.ConcreteSpec.Observe.instReprObservation.repr.match_1.eq_3	
