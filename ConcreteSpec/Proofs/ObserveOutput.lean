@@ -143,11 +143,11 @@ theorem project_physical_outputs {S : EventSignature}
     exact hne (List.append_eq_nil_iff.mp hempty).2
 
 /-- Fault: history projection erases all projected events. -/
-def eraseProjection {O : Exec.Operands} {S : EventSignature}
+def eraseProjection {S : EventSignature} {O : Exec.Operands}
     (_A : ExecAdapter O S) (_history : List O.Event) : List (Event S) := []
 
 /-- Fault: history projection reverses the order of primitive events before projecting them. -/
-def reverseProjection {O : Exec.Operands} {S : EventSignature}
+def reverseProjection {S : EventSignature} {O : Exec.Operands}
     (A : ExecAdapter O S) (history : List O.Event) : List (Event S) :=
   history.reverse.flatMap A.events
 
@@ -181,7 +181,7 @@ theorem output_before_trap_kept {S : EventSignature}
   simp [reportObservation, ending, ExecAdapter.terminal?, trapTerminal, resolved, pathOk]
 
 /-- Fault: drops all events emitted before a trap when reporting a trapped terminal state. -/
-def dropTrapHistoryReport {O : Exec.Operands} {S : EventSignature}
+def dropTrapHistoryReport {S : EventSignature} {O : Exec.Operands}
     (P : Exec.Program O) (A : ExecAdapter O S) (C : OperationContract S) (input : C.Input)
     (r : Exec.Report O) (permitted : ExecAdapter.BlockingPermitted P A C input r) :
     Option (FullObservation S) :=
@@ -420,6 +420,14 @@ example : adapter.OutputCorrespondence ∧
   obtain ⟨outputs, execution, erased, _⟩ := invalid.2
   exact cannot_erase execution erased
 
+section
+
+/-- The original escape attempt: replace ambient interpretation with zero physical effects.
+This instance cannot change the already selected authoritative operand bundle. -/
+local instance zeroEffects : PhysicalEffects Exec.Demo.ops String where
+  emit := fun _ _ _ _ => []
+  past := fun _ => []
+
 /-- Refused: an erasing adapter is not admitted for the unchanged concrete semantic operand
 bundle. No ambient physical-effects instance is used by this admission proposition. -/
 example : ¬ PhysicalOperands.Admits (S := Demo.signature) model { adapter with events := fun _ => [] } := by
@@ -427,6 +435,8 @@ example : ¬ PhysicalOperands.Admits (S := Demo.signature) model { adapter with 
   have output := correspondence 3
   change [] = ["3"] at output
   cases output
+
+end
 
 end OutputDemo
 end ConcreteSpec.Core.Observe

@@ -398,8 +398,8 @@ def ExecAdapter.project (A : ExecAdapter O S) (events : List O.Event) : List (Ev
 def publicOutputs (events : List (Event S)) : List S.Output :=
   events.filterMap (fun event => match event with | .output value => some value | _ => none)
 
-/-- Primitive-level physical semantics fixed by the operand and output types independently of any
-observation adapter. `emit` describes the effect of executing an accepted primitive answer;
+/-- Primitive-level physical interpretation stored in the authoritative semantic operand bundle.
+The class notation supports low-level relation/list helpers; public physical laws use the bundle. `emit` describes the effect of executing an accepted primitive answer;
 `past` interprets recorded C1 events, including effects before the current evaluator call. -/
 class PhysicalEffects (O : Exec.Operands) (Output : Type) where
   emit : O.Prim → List O.Val → O.Store → Exec.Answer O.Val O.Event O.Store → List Output

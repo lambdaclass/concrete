@@ -633,12 +633,14 @@ def contract : OperationContract Demo.signature where
   allows := fun _ _ q r => q.2 * 2 = r.2
   mayBlock := fun _ _ _ => True
 
-/-- Executable handler that leaves requests unanswered (`.blocked`). -/
+/-- History-sensitive fixture: an empty-history probe answers, while the real history ending
+in the current request blocks. -/
 def blockingHandler : Environment Demo.signature Unit where
   reply := fun _ hist _ n => if hist.isEmpty then some (n + n) else none
 
 /-- Helper (computation). `blockingHandler` satisfies `Environment.Valid` for `BlockingEnvDemo.contract`
-because `reply` is `none` and `mayBlock` is permitted. (approved: PENDING) -/
+because answered probes double their arguments and unanswered requests may block.
+(approved: PENDING) -/
 theorem blockingHandler_valid : Environment.Valid contract blockingHandler := by
   constructor
   · intro input history k req resp h

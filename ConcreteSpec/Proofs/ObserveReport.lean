@@ -96,7 +96,7 @@ theorem runFrom_blocked_report {O : Exec.Operands} {S : EventSignature}
 
 /-- A report adapter fault drops only the prior history, retaining the correctly typed pending
 request. Its result can remain a valid permitted pending trace, while violating preservation. -/
-def onlyPendingHistory {O : Exec.Operands} {S : EventSignature}
+def onlyPendingHistory {S : EventSignature} {O : Exec.Operands}
     (P : Exec.Program O) (A : ExecAdapter O S) (C : OperationContract S) (input : C.Input)
     (r : Exec.Report O) (permitted : ExecAdapter.BlockingPermitted P A C input r) :
     Option (FullObservation S) :=
@@ -106,7 +106,7 @@ def onlyPendingHistory {O : Exec.Operands} {S : EventSignature}
 
 /-- A report adapter fault: a blocked result drops its history, including the pending request.
 The environment, evaluator and all admission premises are unchanged. -/
-def dropBlockedHistory {O : Exec.Operands} {S : EventSignature}
+def dropBlockedHistory {S : EventSignature} {O : Exec.Operands}
     (P : Exec.Program O) (A : ExecAdapter O S) (C : OperationContract S) (input : C.Input)
     (r : Exec.Report O) (permitted : ExecAdapter.BlockingPermitted P A C input r) :
     Option (FullObservation S) :=
@@ -116,7 +116,7 @@ def dropBlockedHistory {O : Exec.Operands} {S : EventSignature}
 
 /-- A report adapter fault that always returns `none`, suppressing valid terminal and blocked
 observations. -/
-def alwaysNoneReport {O : Exec.Operands} {S : EventSignature}
+def alwaysNoneReport {S : EventSignature} {O : Exec.Operands}
     (_P : Exec.Program O) (_A : ExecAdapter O S) (C : OperationContract S) (_input : C.Input)
     (_r : Exec.Report O) (_permitted : ExecAdapter.BlockingPermitted _P _A C _input _r) :
     Option (FullObservation S) :=
@@ -187,7 +187,7 @@ theorem runFrom_outOfFuel_report_none {O : Exec.Operands} {S : EventSignature}
 
 /-- Fault: fabricates `.finiteDivergence` when `runFrom` runs out of fuel, confusing budget
 exhaustion with program divergence. -/
-def divergeOnOutOfFuelReport {O : Exec.Operands} {S : EventSignature}
+def divergeOnOutOfFuelReport {S : EventSignature} {O : Exec.Operands}
     (P : Exec.Program O) (A : ExecAdapter O S) (C : OperationContract S) (input : C.Input)
     (r : Exec.Report O) (permitted : ExecAdapter.BlockingPermitted P A C input r) :
     Option (FullObservation S) :=
@@ -196,7 +196,7 @@ def divergeOnOutOfFuelReport {O : Exec.Operands} {S : EventSignature}
   | _ => reportObservation P A C input r permitted
 
 /-- Fault: fabricates a normal `.exited 0` terminal observation when `runFrom` runs out of fuel. -/
-def exitZeroOnOutOfFuelReport {O : Exec.Operands} {S : EventSignature}
+def exitZeroOnOutOfFuelReport {S : EventSignature} {O : Exec.Operands}
     (P : Exec.Program O) (A : ExecAdapter O S) (C : OperationContract S) (input : C.Input)
     (r : Exec.Report O) (permitted : ExecAdapter.BlockingPermitted P A C input r) :
     Option (FullObservation S) :=
@@ -227,8 +227,8 @@ theorem launch_missing_grant_status_125 {α : Type} [DecidableEq α]
   simp [launchObservation, hgrants, Terminal.status, Terminal.trapLine?]
 
 /-- Fault: ignores missing launch grants and runs `main` regardless of `grantsConfigured`. -/
-def ignoreGrantsLaunchObservation {α : Type} [DecidableEq α]
-    {O : Exec.Operands} {S : EventSignature}
+def ignoreGrantsLaunchObservation {S : EventSignature} {O : Exec.Operands}
+    {α : Type} [DecidableEq α]
     (_required _configured : List α)
     (P : Exec.Program O) (A : ExecAdapter O S) (C : OperationContract S) (input : C.Input)
     (ρ : Exec.Oracle O) (fuel : Nat) (c : Exec.Config O)
@@ -271,7 +271,7 @@ theorem runFrom_trapped_status_134 {O : Exec.Operands} {S : EventSignature}
 
 /-- Fault: collapses trapped runs to `.exited 134`, losing the trap classification and diagnostic
 line while keeping the numeric status. -/
-def exit134OnTrapReport {O : Exec.Operands} {S : EventSignature}
+def exit134OnTrapReport {S : EventSignature} {O : Exec.Operands}
     (P : Exec.Program O) (A : ExecAdapter O S) (C : OperationContract S) (input : C.Input)
     (r : Exec.Report O) (permitted : ExecAdapter.BlockingPermitted P A C input r) :
     Option (FullObservation S) :=
@@ -408,7 +408,7 @@ def uncheckedTrapTerminal (sites : SiteTable) (kind : TrapKind) (site : SiteId) 
   (AList.lookup sites site).map fun sp => .trapped kind site sp (trapLine kind site sp)
 
 /-- Fault: mistakes a request waiting at the fuel boundary for an unanswered oracle call. -/
-def fabricatedBlockingReport {O : Exec.Operands} {S : EventSignature}
+def fabricatedBlockingReport {S : EventSignature} {O : Exec.Operands}
     (P : Exec.Program O) (A : ExecAdapter O S) (C : OperationContract S) (input : C.Input)
     (r : Exec.Report O) (permitted : ExecAdapter.BlockingPermitted P A C input r) :
     Option (FullObservation S) :=
