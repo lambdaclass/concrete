@@ -234,7 +234,7 @@ class Outcome(RegistryFixture, unittest.TestCase):
                  patch.object(observe, 'git', return_value=''), \
                  patch.object(observe, 'observe_main', return_value=[f'FAIL daily {SHA}: recorded attempt']), \
                  patch('builtins.print'):
-                self.assertEqual(observe.main(clock=operation_clock(observation=now)), 1)
+                self.assertEqual(observe.main(clock=operation_clock(observation=now), completion_output=output), 1)
             self.assertEqual(output.read_text(), 'completed=true\n')
 
     def test_redirect_production_and_credential_plant(self):

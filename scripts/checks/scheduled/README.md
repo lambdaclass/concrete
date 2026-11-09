@@ -897,7 +897,7 @@ observer workflow. `observer_watch.py` derives due four-hour occurrences from th
 policy cadence and reads scheduled observer runs and their attempt-specific job
 steps from Actions. The named `Observer execution completed` step must complete
 successfully; workflow conclusion is a separate producer verdict. The observer
-sets its completion output after reporting all observed states, including FAIL,
+sets its explicitly supplied `--completion-output` path after reporting all observed states, including FAIL,
 and a following always-eligible step records that execution completed. Fetch
 failures, watchdog expiry and crashes cannot produce that record. Manual runs
 and runs without the completion step cannot fill an occurrence. It allows one cadence period for completion and checks
@@ -1011,7 +1011,8 @@ the upload control includes a nested failed control with a stale cached summary
 and asserts preservation of `specific worker failure`. JSON sibling and late
 overdue publication controls assert `FAIL daily <sha>: recorded attempt`.
 The existing `test_outer_retry_discards_abandoned_outcome` remains required.
-The workflow completion step is authored in its owning template and regenerated;
+Completion output is an explicit CLI capability; ambient `GITHUB_OUTPUT` cannot
+redirect an embedded observer invocation. The workflow completion step is authored in its owning template and regenerated;
 it enters the scheduled shell adapter like every other controller step. Existing
 process-context and unrelated-timeout plants use the executor's current
 supervision indentation, preserving their exact diagnostics.
