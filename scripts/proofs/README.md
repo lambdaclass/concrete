@@ -344,3 +344,17 @@ shard has completed, with all FAIL and INCOMPLETE findings retained. Never sampl
 omit an obligation, or weaken the PR checker to fit a budget. Keep the complete
 structural sweep in the scheduled tier. R-0219 remains the gate owner; the
 coordinator records the R-0691 roadmap text, rather than writers editing ROADMAP.
+
+
+**Phase B slice 2b axiom-transfer boundary (R-0219):** implementation stopped at
+the specific accepted-design gap recorded in
+[N2-slice2b-axiom-boundary.md](N2-slice2b-axiom-boundary.md). The existing
+`finite-collection-simp-positive` witness reaches primitive `propext` through its
+safety-bearing transports. Direct validation produces the exact named
+`unavailable-certificate-transfer propext` INCOMPLETE, while the note requires this
+positive control to complete. `vacuity_solver_boundary.py` reproduces and checks
+that diagnostic and confirms the existing traversal accepts the witness. The
+long-term R-0219 resolution proposed in the record is an explicit generic typed
+axiom-origin/transport relation with checked evidence, rather than an axiom trust
+list or a non-refutable-result exemption. It requires design acceptance before
+implementation. No new solver entry or consumer switch is included in this record.
