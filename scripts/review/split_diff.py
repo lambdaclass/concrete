@@ -18,6 +18,8 @@ import os
 import re
 import sys
 
+sys.dont_write_bytecode = True
+
 GROUP_ORDER = ["compiler", "tests", "scripts", "docs"]
 
 

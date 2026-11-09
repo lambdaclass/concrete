@@ -42,7 +42,7 @@ fi
 
 snapshot_review_archive() {
   local tree_dir="$1"
-  python3 -I - "$tree_dir" <<'PY'
+  python3 -B -I - "$tree_dir" <<'PY'
 import hashlib, os, sys
 root = sys.argv[1]
 for dirpath, dirnames, filenames in os.walk(root):
@@ -116,7 +116,7 @@ validate_reviewer_output() {
   if bounded_is_incomplete "$rc"; then
     incomplete_flag=(--incomplete)
   fi
-  python3 -I "$COLLECT_OUTPUT_DIR/output_contract.py" \
+  python3 -B -I "$COLLECT_OUTPUT_DIR/output_contract.py" \
     --repo "$repo" --commit "$commit" --verdicts "$verdicts" \
     --rc "$rc" "${incomplete_flag[@]}" --log "$log_file" "$out_file"
 }
@@ -199,7 +199,7 @@ check_collector_structure() {
       "$COLLECT_OUTPUT_DIR/../land/signoff.sh"
     )
   fi
-  python3 -I - "$collector_file" "${callers[@]}" <<'PY'
+  python3 -B -I - "$collector_file" "${callers[@]}" <<'PY'
 import re
 import sys
 

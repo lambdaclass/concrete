@@ -18,12 +18,16 @@
 #   notes.sh ready [--base <ref>] <sha>     exit 0 iff verify.sh accepts the review note (covering
 #                                           merge-base(<base>, <sha>)) and gates is pass
 #
-# <kind> is review, gates or writer. LAND_REMOTE (default origin) names the remote; `fork` is refused.
-# Writers: scripts/review/review.sh (review, writer) and scripts/land/ready.sh (gates).
+# <kind> is review, gates or writer (`put` accepts only review or gates; writer notes are signed and
+# append-only, managed only through scripts/review/writer_provenance.py). LAND_REMOTE (default origin)
+# names the remote; `fork` is refused.
+# Writers: scripts/review/review.sh (review), scripts/review/writer_provenance.py (writer) and
+# scripts/land/ready.sh (gates).
 # `put` never force-pushes: it rewrites on top of the remote's notes tip and retries on a race.
 set -euo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VERIFY="$SELF_DIR/../review/verify.sh"
+WRITER_PROV="$SELF_DIR/../review/writer_provenance.py"
 REMOTE="${LAND_REMOTE:-origin}"
 DRY="${LAND_NOTES_DRY:-0}"
 die() { echo "notes: $*" >&2; exit 1; }
@@ -33,6 +37,34 @@ kind_ok() { case "$1" in review|gates|writer) ;; *) die "kind must be review, ga
 
 fetch_kind() { # kind
   local out
+  if [ "$1" = writer ]; then
+    local prev_remote prev_local old_rev tmp_ref="refs/notes/remote/concrete-writer-fetch-$$" werr
+    prev_remote="$(git rev-parse -q --verify refs/notes/remote/concrete-writer 2>/dev/null || true)"
+    prev_local="$(git rev-parse -q --verify refs/notes/concrete-writer 2>/dev/null || true)"
+    old_rev="${prev_remote:-${prev_local:-0000000000000000000000000000000000000000}}"
+    git update-ref -d "$tmp_ref" 2>/dev/null || true
+    if out="$(git fetch -q "$REMOTE" "+refs/notes/concrete-writer:$tmp_ref" 2>&1)"; then
+      if ! werr="$(python3 -B -I "$WRITER_PROV" validate-notes --allow-missing-targets --notes-rev "$tmp_ref" --old-notes-rev "$old_rev" 2>&1)"; then
+        git update-ref -d "$tmp_ref" 2>/dev/null || true
+        echo "notes: invalid or discontinuous refs/notes/concrete-writer on $REMOTE: ${werr//$'\n'/ }" >&2
+        return 1
+      fi
+      git update-ref refs/notes/remote/concrete-writer "$tmp_ref"
+      git update-ref -d "$tmp_ref" 2>/dev/null || true
+      return 0
+    fi
+    git update-ref -d "$tmp_ref" 2>/dev/null || true
+    case "$out" in
+      *"couldn't find remote ref"*)
+        if [ -n "$prev_remote" ]; then
+          echo "notes: remote $REMOTE deleted refs/notes/concrete-writer (was ${prev_remote:0:10})" >&2
+          return 1
+        fi
+        git update-ref -d refs/notes/remote/concrete-writer 2>/dev/null || true
+        return 0 ;;
+    esac
+    echo "$out" >&2; return 1
+  fi
   if out="$(git fetch -q "$REMOTE" "+refs/notes/concrete-$1:refs/notes/remote/concrete-$1" 2>&1)"; then return 0; fi
   case "$out" in
     *"couldn't find remote ref"*) git update-ref -d "refs/notes/remote/concrete-$1" 2>/dev/null || true; return 0 ;;
@@ -52,6 +84,7 @@ get_note() { # kind sha [key]
 
 put_note() { # kind sha key=value...
   local kind="$1" sha="$2"; shift 2
+  [ "$kind" != writer ] || die "put: writer notes are signed and append-only; publish them only through scripts/review/writer_provenance.py"
   sha="$(git rev-parse --verify "$sha^{commit}")" || die "put: '$2' is not a commit"
   local msg="" kv
   for kv in "$@"; do
@@ -74,10 +107,8 @@ put_note() { # kind sha key=value...
       echo "notes (dry-run): would publish refs/notes/concrete-$kind on $REMOTE: $sha"; printf '%s\n' "$msg" | sed 's/^/    /'
       return 0
     fi
-    # Notes carry no source tree: the pre-push gates have nothing of theirs to validate, and this
-    # push is a fast-forward of a metadata ref (refused if anyone else moved it), so it skips them
-    # by the documented switch.
-    if CONCRETE_SKIP_GATES=1 git push -q "$REMOTE" "$new:refs/notes/concrete-$kind" 2>/dev/null; then
+    # Review and gates notes take the pre-push hook's review-notes tier directly (no gate bypass).
+    if git push -q "$REMOTE" "$new:refs/notes/concrete-$kind" 2>/dev/null; then
       git update-ref "refs/notes/remote/concrete-$kind" "$new"
       return 0
     fi

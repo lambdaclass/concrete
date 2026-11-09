@@ -31,6 +31,8 @@ import re
 import subprocess
 import sys
 
+sys.dont_write_bytecode = True
+
 REFUSAL_RE = re.compile(
     r"(I can.?t|I cannot|I won.?t|I.?m (not able|unable)|unable to) "
     r"(help|assist|comply|review|continue|provide)"

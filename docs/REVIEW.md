@@ -239,12 +239,23 @@ a self-declared claim, or a default attribution on unstamped commits:
   and uses the latest valid entry for `writers:`. Any model attested as writer
   in an earlier superseded signed entry remains disqualified from reviewing that
   commit (so relabelling an unstamped Kimi commit can never make Kimi eligible
-  to review it). `.githooks/pre-push` (`validate-notes`) requires every nonzero
-  `--old-notes-rev` to resolve locally and be compared (distinguishing an absent
-  object from the all-zero creation sentinel), checking that no existing commit
-  note was deleted and that existing stanzas on every changed commit remain an
-  unmodified prefix of the new stanzas, refusing any update that rewrites or
-  drops an existing entry.
+  to review it). `.githooks/pre-push` (`validate-notes`) runs unconditionally on
+  every push before any `CONCRETE_SKIP_GATES` bypass, refuses deleting
+  `refs/notes/concrete-writer`, and requires every nonzero `--old-notes-rev` to
+  resolve locally and be compared as an ancestor of the new ref (distinguishing an
+  absent object from the all-zero creation sentinel), checking both against
+  `--old-notes-rev` and across the commit history of the notes ref itself that no
+  existing commit note was deleted and that existing stanzas on every changed
+  commit remain an unmodified prefix of the new stanzas, refusing any update that
+  rolls back, rewrites, deletes, or re-signs an existing entry. `verify.sh
+  --fetch`, `scripts/land/notes.sh fetch`, and `scripts/land/train.sh` fetch
+  `refs/notes/concrete-writer` into a temporary ref and verify continuity against
+  any previously fetched/recorded local or remote writer-notes state via
+  `validate-notes` before updating local refs, and `writer_provenance.py` also
+  verifies historical continuity across the notes ref's ancestor chain and
+  companion ref on every provenance read. `scripts/land/notes.sh put` refuses
+  `writer` notes (`stamp-commit`, `backfill`, `sync-notes`, and `publish-notes`
+  in `writer_provenance.py` are the only writer-note mutation APIs).
 - **Harness-stamped commits (`source: harness`).** Each harness-written commit
   (`scripts/review/writer_provenance.py stamp-commit`) is stamped with author
   `<Model> (writer) <model@writers.concrete>` (while the committer remains the
@@ -426,10 +437,12 @@ ignores. Every prompt sent, including its diff piece, is saved byte for byte as
 section records that path and the prompt's sha256.
 
 A non-fast-forward rejection (another agent pushed notes in the meantime) is
-handled by fetching the remote notes, merging them (`git notes merge -s ours`: on
-a conflict for the same commit the local, newer note wins), and retrying, up to
+handled by fetching the remote notes, merging them (`git notes merge -s ours` for
+review and findings notes; `writer_provenance.py sync-notes` for
+`refs/notes/concrete-writer`, which verifies append-only continuity and refuses
+dropping any remote writer-log entry), and retrying, up to
 three attempts. Any other push failure stops at once with exit 6. The script also
-fetches and merges the remote notes before each round, so it counts rounds that
+fetches and synchronizes the remote notes before each round, so it counts rounds that
 were run elsewhere.
 
 The pre-push hook (`.githooks/pre-push`) runs no gates for a push that updates

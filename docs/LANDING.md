@@ -92,8 +92,11 @@ verdict; any failing leg fails the check (see [Pipelining](#pipelining)).
   train's recorded base, so its reviewed range covers the entire train diff; a note based at an
   unreviewed intermediate commit is refused. `scripts/review/verify.sh --required-base <train-base>`
   judges origin's notes (`refs/notes/concrete-review` and `refs/notes/concrete-writer`; when origin
-  has no `refs/notes/concrete-writer` ref, any stale local ref is removed, and any other fetch
-  failure on `refs/notes/concrete-writer` fails closed at once in both `check` and `land`). Absent,
+  has no `refs/notes/concrete-writer` ref and no prior writer history was recorded for the train or
+  local clone, any stale local ref is removed, and any other fetch failure or historical
+  discontinuity on `refs/notes/concrete-writer` against the train's recorded `writer_notes` state or
+  local writer-notes refs fails closed at once via `writer_provenance.py validate-notes` in both
+  `check` and `land`). Absent,
   malformed, blocked, findings, self-reviewed or provenance-invalid clean notes, or notes over unstamped
   commits without a backfilled writer-log entry,
   qualify nothing, and a non-clean head note is not overridden by the members. A member
@@ -340,10 +343,16 @@ A branch is **ready** when all of the following hold:
 | `refs/notes/concrete-gates` | `gates: pass\|fail`, `selected: N`, `utc: ...` | `scripts/land/ready.sh` |
 
 One `key: value` per line; `notes.sh get` takes the last when a key repeats, while `verify.sh`
-refuses a repeated key in a review note. `scripts/land/notes.sh` reads and
-writes the notes (`get`, `put`, `ready`), and `notes.sh ready` validates the review note through
-`scripts/review/verify.sh --required-base`. `put` builds each write on its own temporary ref on top
-of the remote's notes tip, pushes that commit without force, and retries on a race. Concurrent
+refuses a repeated key in a review note. `scripts/land/notes.sh` reads
+all three notes (`get`, `fetch`, `ready`) and writes `review` and `gates` notes (`put`), while refusing
+`notes.sh put writer` because `refs/notes/concrete-writer` is signed and append-only and is mutated
+only through `scripts/review/writer_provenance.py` (`stamp-commit`, `backfill`, `sync-notes`,
+`publish-notes`). `notes.sh fetch` validates `refs/notes/concrete-writer` continuity via
+`writer_provenance.py validate-notes` before updating `refs/notes/remote/concrete-writer`, and
+`notes.sh ready` validates the review note through `scripts/review/verify.sh --required-base`.
+`put` builds each `review` or `gates` write on its own temporary ref on top of the remote's notes tip,
+pushes that commit without force (`.githooks/pre-push` accepts review-notes pushes on the fast path
+while unconditionally validating `refs/notes/concrete-writer`), and retries on a race. Concurrent
 writers therefore never drop each other's notes, including writers that share one clone or its
 worktrees.
 

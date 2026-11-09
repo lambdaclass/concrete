@@ -1373,6 +1373,81 @@ out="$(PATH="$TMP/bad-wfetch:$PATH" bash "$TRAIN" --dry-run land trv 2>&1)"; rc=
 out="$(PATH="$TMP/bad-wfetch:$PATH" bash "$TRAIN" check trv --no-remote 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "could not fetch refs/notes/concrete-writer from origin: fatal: transport error fetching refs/notes/concrete-writer" && [ ! -s "$FAKE_GH_DIR/review.log" ] \
   && ok "check fails closed when fetching refs/notes/concrete-writer fails and does not turn the fetch error into a reviewer run" || { no "check writer-notes fetch error: exit $rc"; echo "$out" | sed 's/^/      /'; }
+# Round 9 controls: train.sh check and land verify historical continuity of refs/notes/concrete-writer
+# and refuse rollback, deletion, and re-signing attempts on the writer history.
+r1_old_note="$(git notes --ref=refs/notes/concrete-writer show "$R1")"
+r1_eid="$(printf '%s\n' "$r1_old_note" | sed -n 's/^entry-id: //p')"
+r1_rev_note="$(git notes --ref=refs/notes/concrete-review show "$R1")"
+git notes --ref=refs/notes/concrete-review remove "$R1" 2>/dev/null || true
+python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" backfill --repo "$PWD" \
+  --commit "$R1" --model codex --round 2 --branch test \
+  --brief-file "$TMP/ev/brief.txt" --output-file "$TMP/ev/output.txt" \
+  --start-sha "$(git rev-parse "$R1~1")" --end-sha "$R1" \
+  --evidence "audit correction naming codex" --supersedes "$r1_eid" --reason "codex co-wrote R1" >/dev/null
+git notes --ref=refs/notes/concrete-review add -f -m "$r1_rev_note" "$R1"
+n2_wnotes="$(git rev-parse refs/notes/concrete-writer)"
+CONCRETE_SKIP_GATES=1 git push -q origin refs/notes/concrete-writer
+out="$(bash "$TRAIN" --dry-run land trv 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "has no review provenance" && has "$out" "which is the reviewer on" \
+  && ok "land refuses a member whose appended writer-history correction names its reviewer (codex)" || { no "land appended codex correction: exit $rc"; echo "$out" | sed 's/^/      /'; }
+# Prepare rollback, deletion, and re-signed commits on top of n2_wnotes:
+git update-ref refs/notes/concrete-writer-trv-rb "$n2_wnotes"
+git notes --ref=refs/notes/concrete-writer-trv-rb add -f -m "$r1_old_note" "$R1" 2>/dev/null
+n3_trv_rb="$(git rev-parse refs/notes/concrete-writer-trv-rb)"
+git update-ref refs/notes/concrete-writer-trv-del "$n2_wnotes"
+git notes --ref=refs/notes/concrete-writer-trv-del remove "$R1" 2>/dev/null
+n3_trv_del="$(git rev-parse refs/notes/concrete-writer-trv-del)"
+git update-ref refs/notes/concrete-writer "$saved_wnotes"
+git notes --ref=refs/notes/concrete-writer remove "$R1" 2>/dev/null
+python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" backfill --repo "$PWD" \
+  --commit "$R1" --model claude --round 1 --branch test \
+  --brief-file "$TMP/ev/brief.txt" --output-file "$TMP/ev/output.txt" \
+  --start-sha "$(git rev-parse "$R1~1")" --end-sha "$R1" \
+  --evidence "re-signed single entry hiding codex correction" >/dev/null
+r1_resigned_note="$(git notes --ref=refs/notes/concrete-writer show "$R1")"
+git update-ref refs/notes/concrete-writer "$n2_wnotes"
+git update-ref refs/notes/concrete-writer-trv-resign "$n2_wnotes"
+git notes --ref=refs/notes/concrete-writer-trv-resign add -f -m "$r1_resigned_note" "$R1" 2>/dev/null
+n3_trv_resign="$(git rev-parse refs/notes/concrete-writer-trv-resign)"
+# 1. Rollback (rewinding origin's refs/notes/concrete-writer from n2_wnotes to saved_wnotes, and n3_trv_rb):
+git push -q -f --no-verify origin "$saved_wnotes:refs/notes/concrete-writer"
+out="$(bash "$TRAIN" --dry-run land trv 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "invalid or discontinuous refs/notes/concrete-writer" && has "$out" "rewrites or drops existing writer-log entry" \
+  && ok "land refuses a rolled-back refs/notes/concrete-writer (N2 -> N1) on origin" || { no "land rollback N2->N1: exit $rc"; echo "$out" | sed 's/^/      /'; }
+: > "$FAKE_GH_DIR/review.log"
+out="$(bash "$TRAIN" check trv --no-remote 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "invalid or discontinuous refs/notes/concrete-writer" && [ ! -s "$FAKE_GH_DIR/review.log" ] \
+  && ok "check refuses a rolled-back refs/notes/concrete-writer (N2 -> N1) and does not call the reviewer" || { no "check rollback N2->N1: exit $rc"; echo "$out" | sed 's/^/      /'; }
+git push -q -f --no-verify origin "$n3_trv_rb:refs/notes/concrete-writer"
+out="$(bash "$TRAIN" --dry-run land trv 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "invalid or discontinuous refs/notes/concrete-writer" && has "$out" "rewrites or drops existing writer-log entry" \
+  && ok "land refuses a commit (N3) on refs/notes/concrete-writer that rolls back a correction stanza" || { no "land rollback N3: exit $rc"; echo "$out" | sed 's/^/      /'; }
+# 2. Deletion (removing R1's note in n3_trv_del):
+git push -q -f --no-verify origin "$n3_trv_del:refs/notes/concrete-writer"
+out="$(bash "$TRAIN" --dry-run land trv 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "invalid or discontinuous refs/notes/concrete-writer" && has "$out" "deletes existing writer-log entry" \
+  && ok "land refuses a commit on refs/notes/concrete-writer that deletes a commit's writer note" || { no "land deletion N3: exit $rc"; echo "$out" | sed 's/^/      /'; }
+: > "$FAKE_GH_DIR/review.log"
+out="$(bash "$TRAIN" check trv --no-remote 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "invalid or discontinuous refs/notes/concrete-writer" && [ ! -s "$FAKE_GH_DIR/review.log" ] \
+  && ok "check refuses a commit on refs/notes/concrete-writer that deletes a commit's writer note" || { no "check deletion N3: exit $rc"; echo "$out" | sed 's/^/      /'; }
+# 3. Re-signing (replacing R1's note with a freshly signed stanza in n3_trv_resign):
+git push -q -f --no-verify origin "$n3_trv_resign:refs/notes/concrete-writer"
+out="$(bash "$TRAIN" --dry-run land trv 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "invalid or discontinuous refs/notes/concrete-writer" && has "$out" "rewrites or drops existing writer-log entry" \
+  && ok "land refuses a re-signed replacement writer note on refs/notes/concrete-writer" || { no "land re-signing N3: exit $rc"; echo "$out" | sed 's/^/      /'; }
+: > "$FAKE_GH_DIR/review.log"
+out="$(bash "$TRAIN" check trv --no-remote 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "invalid or discontinuous refs/notes/concrete-writer" && [ ! -s "$FAKE_GH_DIR/review.log" ] \
+  && ok "check refuses a re-signed replacement writer note on refs/notes/concrete-writer" || { no "check re-signing N3: exit $rc"; echo "$out" | sed 's/^/      /'; }
+# Restore saved_wnotes on local, remote, and train state:
+git update-ref refs/notes/concrete-writer "$saved_wnotes"
+git update-ref refs/notes/remote/concrete-writer "$saved_wnotes"
+git push -q -f --no-verify origin "$saved_wnotes:refs/notes/concrete-writer"
+git update-ref -d refs/notes/concrete-writer-trv-rb 2>/dev/null || true
+git update-ref -d refs/notes/concrete-writer-trv-del 2>/dev/null || true
+git update-ref -d refs/notes/concrete-writer-trv-resign 2>/dev/null || true
+sed -i "s/^writer_notes=.*/writer_notes=$saved_wnotes/" "$LAND_STATE_DIR/trv/state" 2>/dev/null || true
 
 echo "=== review: notes cover the train base (ISS-0019, A -> B -> C) ==="
 git checkout -q -b brvcov "$MR"

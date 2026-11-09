@@ -35,6 +35,8 @@ import unicodedata
 from pathlib import Path
 from urllib.parse import unquote
 
+sys.dont_write_bytecode = True
+
 DEFAULT_ROOT = Path(__file__).resolve().parents[3]
 SKIP_PARTS = {".git", ".lake", ".cache", "node_modules"}
 FRAGMENT_DIRS = ("changelog.d",)  # folded into the root CHANGELOG.md, so root-relative

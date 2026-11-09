@@ -179,6 +179,76 @@ COV_C_SHA="$(sha_of wip/rvcov-c)"
 ( cd "$A" && bash "$NOTES" ready "$COV_C_SHA" ) && no "notes.sh ready accepted unreviewed intermediate B base" || ok "notes.sh ready refuses a note based at unreviewed intermediate commit B"
 out="$(cd "$A" && LAND_REVIEW_CMD=true bash "$ROOT_DIR/scripts/land/ready.sh" wip/rvcov-c 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "rejected by verify.sh" && ok "ready.sh refuses a note based at unreviewed intermediate commit B" || { no "ready.sh unreviewed B base: exit $rc"; echo "$out" | sed 's/^/      /'; }
+# Writer-note publishing and continuity through notes.sh (put writer refusal, rollback, deletion, re-signing):
+out="$(cd "$A" && bash "$NOTES" put writer "$RV2_SHA" model=claude 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "writer notes are signed and append-only" \
+  && ok "notes.sh put refuses writer notes and directs callers to writer_provenance.py" || { no "notes.sh put writer: exit $rc"; echo "$out" | sed 's/^/      /'; }
+mkdir -p "$TMP/ev"
+printf 'brief\n' > "$TMP/ev/brief.txt"
+printf 'output\n' > "$TMP/ev/output.txt"
+( cd "$A" && git fetch -q origin && git checkout -q -B wip/rv-bf origin/main \
+  && mkdir -p src && printf 'rv-bf\n' > src/rv-bf.txt && git add -A && git commit -qm rv-bf \
+  && git push -q -f origin HEAD:refs/heads/wip/rv-bf )
+RVBF_SHA="$(sha_of wip/rv-bf)"
+rvbf_n0="$(git -C "$A" rev-parse refs/notes/concrete-writer)"
+python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" backfill --repo "$A" \
+  --commit "$RVBF_SHA" --model claude --round 1 --branch wip/rv-bf \
+  --brief-file "$TMP/ev/brief.txt" --output-file "$TMP/ev/output.txt" \
+  --start-sha "$BASE" --end-sha "$RVBF_SHA" \
+  --evidence "initial claude backfill for rv-bf" >/dev/null
+rvbf_n1="$(git -C "$A" rev-parse refs/notes/concrete-writer)"
+rvbf_old_note="$(git -C "$A" notes --ref=refs/notes/concrete-writer show "$RVBF_SHA")"
+rvbf_eid="$(awk -F': ' '/^entry-id: /{print $2; exit}' <<<"$rvbf_old_note")"
+python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" backfill --repo "$A" \
+  --commit "$RVBF_SHA" --model codex --round 2 --branch wip/rv-bf \
+  --brief-file "$TMP/ev/brief.txt" --output-file "$TMP/ev/output.txt" \
+  --start-sha "$BASE" --end-sha "$RVBF_SHA" \
+  --evidence "audit correction naming codex" --supersedes "$rvbf_eid" --reason "codex co-wrote rv-bf" >/dev/null
+rvbf_n2="$(git -C "$A" rev-parse refs/notes/concrete-writer)"
+( cd "$A" && git push -q -f origin refs/notes/concrete-writer \
+  && bash "$NOTES" put review "$RVBF_SHA" verdict=clean rounds=1 reviewer=codex writer=claude,codex base="$BASE" pieces=1 repository=readable >/dev/null \
+  && bash "$NOTES" put gates "$RVBF_SHA" gates=pass selected=3 >/dev/null && bash "$NOTES" fetch )
+( cd "$A" && bash "$NOTES" ready "$RVBF_SHA" ) && no "notes.sh ready accepted codex reviewer after correction naming codex" || ok "notes.sh ready refuses reviewer codex when writer history records codex"
+git -C "$A" update-ref refs/notes/concrete-writer-rb "$rvbf_n2"
+git -C "$A" notes --ref=refs/notes/concrete-writer-rb add -f -m "$rvbf_old_note" "$RVBF_SHA" 2>/dev/null
+rvbf_n3_rb="$(git -C "$A" rev-parse refs/notes/concrete-writer-rb)"
+git -C "$A" update-ref refs/notes/concrete-writer-del "$rvbf_n2"
+git -C "$A" notes --ref=refs/notes/concrete-writer-del remove "$RVBF_SHA" 2>/dev/null
+rvbf_n3_del="$(git -C "$A" rev-parse refs/notes/concrete-writer-del)"
+git -C "$A" update-ref refs/notes/concrete-writer "$rvbf_n0"
+python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" backfill --repo "$A" \
+  --commit "$RVBF_SHA" --model claude --round 1 --branch wip/rv-bf \
+  --brief-file "$TMP/ev/brief.txt" --output-file "$TMP/ev/output.txt" \
+  --start-sha "$BASE" --end-sha "$RVBF_SHA" \
+  --evidence "re-signed single entry hiding codex" >/dev/null
+rvbf_resigned_note="$(git -C "$A" notes --ref=refs/notes/concrete-writer show "$RVBF_SHA")"
+git -C "$A" update-ref refs/notes/concrete-writer "$rvbf_n2"
+git -C "$A" update-ref refs/notes/concrete-writer-resign "$rvbf_n2"
+git -C "$A" notes --ref=refs/notes/concrete-writer-resign add -f -m "$rvbf_resigned_note" "$RVBF_SHA" 2>/dev/null
+rvbf_n3_resign="$(git -C "$A" rev-parse refs/notes/concrete-writer-resign)"
+git -C "$A" push -q -f --no-verify origin "$rvbf_n1:refs/notes/concrete-writer"
+out="$(cd "$A" && bash "$NOTES" fetch writer 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "rewrites or drops existing writer-log entry" \
+  && ok "notes.sh fetch refuses rolled-back writer notes (N2 -> N1)" || { no "notes.sh fetch rollback N2->N1: exit $rc"; echo "$out" | sed 's/^/      /'; }
+git -C "$A" push -q -f --no-verify origin "$rvbf_n3_rb:refs/notes/concrete-writer"
+out="$(cd "$A" && bash "$NOTES" fetch writer 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "rewrites or drops existing writer-log entry" \
+  && ok "notes.sh fetch refuses rollback commit N3 on writer notes" || { no "notes.sh fetch rollback N3: exit $rc"; echo "$out" | sed 's/^/      /'; }
+git -C "$A" push -q -f --no-verify origin "$rvbf_n3_del:refs/notes/concrete-writer"
+out="$(cd "$A" && bash "$NOTES" fetch writer 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "deletes existing writer-log entry" \
+  && ok "notes.sh fetch refuses deletion commit N3 on writer notes" || { no "notes.sh fetch deletion N3: exit $rc"; echo "$out" | sed 's/^/      /'; }
+git -C "$A" push -q -f --no-verify origin "$rvbf_n3_resign:refs/notes/concrete-writer"
+out="$(cd "$A" && bash "$NOTES" fetch writer 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "rewrites or drops existing writer-log entry" \
+  && ok "notes.sh fetch refuses re-signed replacement commit N3 on writer notes" || { no "notes.sh fetch re-signing N3: exit $rc"; echo "$out" | sed 's/^/      /'; }
+git -C "$A" update-ref refs/notes/concrete-writer "$rvbf_n0"
+git -C "$A" update-ref refs/notes/remote/concrete-writer "$rvbf_n0"
+git -C "$A" push -q -f --no-verify origin "$rvbf_n0:refs/notes/concrete-writer"
+git -C "$A" update-ref -d refs/notes/concrete-writer-rb 2>/dev/null || true
+git -C "$A" update-ref -d refs/notes/concrete-writer-del 2>/dev/null || true
+git -C "$A" update-ref -d refs/notes/concrete-writer-resign 2>/dev/null || true
+git --git-dir="$TMP/origin.git" update-ref -d refs/heads/wip/rv-bf 2>/dev/null || true
 # Default review command in ready.sh succeeds when LAND_REVIEW_CMD and LAND_REVIEW_WRITER are unset.
 cat > "$TMP/fake-codex" <<'EOF'
 #!/usr/bin/env bash

@@ -12,6 +12,7 @@ script fails if a generated link has no target or a specification module is miss
 import bisect, html, json, os, re, sys, urllib.parse
 from collections import defaultdict
 
+sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'proofs'))
 import lean_lex  # noqa: E402  (the one Lean lexer, scripts/proofs/lean_lex.py)
 

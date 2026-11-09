@@ -24,3 +24,10 @@ fi
 
 # Every gate matches text with has_match, never a pipe into grep -q (bug 283).
 source "$(dirname "${BASH_SOURCE[0]}")/has_match.sh" || exit 2
+
+# Checks and review/landing tooling never write Python bytecode (__pycache__ / *.pyc) into the
+# source tree or sandbox repositories. PYTHONDONTWRITEBYTECODE=1 covers non-isolated invocations,
+# and the python3 function passes -B on every shell invocation (including `python3 -I`, where
+# Python's isolated mode otherwise ignores PYTHONDONTWRITEBYTECODE).
+export PYTHONDONTWRITEBYTECODE=1
+python3() { command python3 -B "$@"; }

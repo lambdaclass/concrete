@@ -18,6 +18,7 @@
 import os
 import sys
 
+sys.dont_write_bytecode = True
 import gdb
 
 sys.path.insert(0, os.environ["STACK_LIB"])

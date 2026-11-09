@@ -36,6 +36,7 @@ FETCH=0
 FIELDS=0
 REQUIRED_BASE=""
 PROV_ARGS=()
+SIGNERS_ARGS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --fetch) FETCH=1; shift ;;
@@ -43,7 +44,10 @@ while [ $# -gt 0 ]; do
     --required-base)
       [ $# -ge 2 ] && [ -n "$2" ] || { echo "verify: --required-base needs a commit" >&2; exit 2; }
       REQUIRED_BASE="$2"; shift 2 ;;
-    --brief-file|--output-file|--evidence-dir|--allowed-signers)
+    --allowed-signers)
+      [ $# -ge 2 ] && [ -n "$2" ] || { echo "verify: $1 needs a value" >&2; exit 2; }
+      PROV_ARGS+=("$1" "$2"); SIGNERS_ARGS+=("$1" "$2"); shift 2 ;;
+    --brief-file|--output-file|--evidence-dir)
       [ $# -ge 2 ] && [ -n "$2" ] || { echo "verify: $1 needs a value" >&2; exit 2; }
       PROV_ARGS+=("$1" "$2"); shift 2 ;;
     --) shift; break ;;
@@ -65,7 +69,19 @@ if [ "$FETCH" = 1 ]; then
   git fetch -q "$REMOTE" "+$NOTES_REF:$NOTES_REF" \
     || { echo "verify: could not fetch $NOTES_REF from $REMOTE" >&2; exit 2; }
   werr=""
-  if ! werr="$(git fetch -q "$REMOTE" "+$WRITER_NOTES_REF:$WRITER_NOTES_REF" 2>&1)"; then
+  prev_wref="$(git rev-parse -q --verify "$WRITER_NOTES_REF" 2>/dev/null || true)"
+  tmp_wref="refs/notes/remote/concrete-writer-verify-fetch-$$"
+  git update-ref -d "$tmp_wref" 2>/dev/null || true
+  if werr="$(git fetch -q "$REMOTE" "+$WRITER_NOTES_REF:$tmp_wref" 2>&1)"; then
+    if ! v_err="$(python3 -B -I "$SCRIPT_DIR/writer_provenance.py" validate-notes --allow-missing-targets --notes-rev "$tmp_wref" --old-notes-rev "${prev_wref:-0000000000000000000000000000000000000000}" "${SIGNERS_ARGS[@]}" 2>&1)"; then
+      git update-ref -d "$tmp_wref" 2>/dev/null || true
+      echo "verify: invalid or discontinuous $WRITER_NOTES_REF on $REMOTE: ${v_err//$'\n'/ }" >&2
+      exit 1
+    fi
+    git update-ref "$WRITER_NOTES_REF" "$tmp_wref"
+    git update-ref -d "$tmp_wref" 2>/dev/null || true
+  else
+    git update-ref -d "$tmp_wref" 2>/dev/null || true
     case "$werr" in
       *"couldn't find remote ref"*) git update-ref -d "$WRITER_NOTES_REF" 2>/dev/null || true ;;
       *) echo "verify: could not fetch $WRITER_NOTES_REF from $REMOTE: ${werr//$'\n'/ }" >&2; exit 2 ;;
@@ -154,7 +170,7 @@ if [ "$VERDICT" = clean ]; then
     echo "$SHA clean review note is not clean provenance: base $(field base) is not an ancestor-or-equal of required base $REQUIRED_BASE"
     exit 1
   fi
-  if ! prov_out="$(python3 -I "$SCRIPT_DIR/writer_provenance.py" verify --base "$(field base)" --head "$SHA" --claimed-writer "$WRITER" --reviewer "$REVIEWER" "${PROV_ARGS[@]}" 2>&1)"; then
+  if ! prov_out="$(python3 -B -I "$SCRIPT_DIR/writer_provenance.py" verify --base "$(field base)" --head "$SHA" --claimed-writer "$WRITER" --reviewer "$REVIEWER" "${PROV_ARGS[@]}" 2>&1)"; then
     echo "$SHA clean review note is not clean provenance: ${prov_out//$'\n'/ }"
     exit 1
   fi

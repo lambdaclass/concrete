@@ -131,15 +131,24 @@ source "$SCRIPT_DIR/collect_output.sh" || exit 2
 sha256_file() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
 
 # ---------------------------------------------------------------- notes sync
-# Fetch the remote notes refs and merge them into the local ones. On a conflict
-# for the same commit the local note wins (`-s ours`): it is the newer result.
+# Fetch the remote notes refs and merge them into the local ones. For review and
+# findings notes, on a conflict for the same commit the local note wins (`-s ours`):
+# it is the newer result. For writer notes, `writer_provenance.py sync-notes`
+# enforces append-only stanza prefix continuity and refuses rollbacks, deletions
+# or conflicting rewrites.
 sync_notes() {
   [ "$PUSH" = 1 ] || return 0
   local ref tmp ferr
   for ref in "$NOTES_REF" "$FINDINGS_REF" "$WRITER_NOTES_REF"; do
     tmp="refs/notes/review-sync-${ref##*/}"
     if ferr="$(git fetch -q "$REMOTE" "+$ref:$tmp" 2>&1)"; then
-      if git show-ref -q --verify "$ref"; then
+      if [ "$ref" = "$WRITER_NOTES_REF" ]; then
+        if ! werr="$(python3 -B -I "$SCRIPT_DIR/writer_provenance.py" sync-notes --repo "$ROOT" --from-rev "$tmp" 2>&1)"; then
+          echo "review: could not sync remote $ref: ${werr//$'\n'/ }" >&2
+          git update-ref -d "$tmp" 2>/dev/null || true
+          return 1
+        fi
+      elif git show-ref -q --verify "$ref"; then
         git notes --ref="$ref" merge -q -s ours "$tmp" >/dev/null 2>&1 \
           || { echo "review: could not merge remote $ref" >&2; git update-ref -d "$tmp"; return 1; }
       else
@@ -210,7 +219,7 @@ else
     || die "--base $BASE ($BASE_SHA) is not an ancestor of HEAD ($HEAD_SHA)"
 fi
 
-if ! WRITER="$(python3 -I "$SCRIPT_DIR/writer_provenance.py" derive --repo "$ROOT" --base "$BASE_SHA" --head "$HEAD_SHA" --reviewer "$REVIEWER" ${ASSERT_WRITER:+--assert-writer "$ASSERT_WRITER"} 2>"$WORK/prov.err")"; then
+if ! WRITER="$(python3 -B -I "$SCRIPT_DIR/writer_provenance.py" derive --repo "$ROOT" --base "$BASE_SHA" --head "$HEAD_SHA" --reviewer "$REVIEWER" ${ASSERT_WRITER:+--assert-writer "$ASSERT_WRITER"} 2>"$WORK/prov.err")"; then
   die "$(cat "$WORK/prov.err")"
 fi
 case ",$WRITER," in
@@ -242,7 +251,7 @@ while read -r c; do
   elif [ "$v" = findings ]; then
     if ! git merge-base --is-ancestor "$nb" "$BASE_SHA" 2>/dev/null \
       || ! git merge-base --is-ancestor "$nb" "$c" 2>/dev/null \
-      || ! python3 -I "$SCRIPT_DIR/writer_provenance.py" verify --repo "$ROOT" --base "$nb" --head "$c" --claimed-writer "$nw" --reviewer "$nr" >/dev/null 2>&1; then
+      || ! python3 -B -I "$SCRIPT_DIR/writer_provenance.py" verify --repo "$ROOT" --base "$nb" --head "$c" --claimed-writer "$nw" --reviewer "$nr" >/dev/null 2>&1; then
       v=unverified-findings
     fi
   fi
@@ -299,7 +308,7 @@ fi
 
 # ---------------------------------------------------------------- split
 TOTAL="$(wc -c <"$WORK/full.diff" | tr -d ' ')"
-split_at() { rm -rf "$WORK/pieces"; python3 "$SCRIPT_DIR/split_diff.py" "$WORK/full.diff" "$WORK/pieces" "$1"; }
+split_at() { rm -rf "$WORK/pieces"; python3 -B -I "$SCRIPT_DIR/split_diff.py" "$WORK/full.diff" "$WORK/pieces" "$1"; }
 if [ "$PIECES" = auto ]; then
   K="$(split_at "$PIECE_BYTES")"
 else
@@ -434,7 +443,7 @@ while IFS=$'\t' read -r name group bytes paths; do
     # Retry once: smaller pieces (the piece halved) and a more neutral prompt.
     half_dir="$WORK/half-$i"
     half_limit=$(( (bytes + 1) / 2 ))
-    python3 "$SCRIPT_DIR/split_diff.py" "$WORK/pieces/$name" "$half_dir" "$half_limit" --no-groups >/dev/null
+    python3 -B -I "$SCRIPT_DIR/split_diff.py" "$WORK/pieces/$name" "$half_dir" "$half_limit" --no-groups >/dev/null
     result=clean body=""
     j=0
     while IFS=$'\t' read -r hname _hgroup hbytes hpaths; do
@@ -455,7 +464,7 @@ $LAST_BODY" ;;
       esac
     done <"$half_dir/manifest.tsv"
   fi
-  stripped="$(printf '%s\n' "$body" | python3 -I "$SCRIPT_DIR/output_contract.py" --strip)"
+  stripped="$(printf '%s\n' "$body" | python3 -B -I "$SCRIPT_DIR/output_contract.py" --strip)"
   case "$result" in
     findings)
       N_FINDINGS=$((N_FINDINGS + 1))

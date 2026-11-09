@@ -381,6 +381,17 @@ cmd_build() {
 
   state_set "$name" head "$(git rev-parse HEAD)"
   state_set "$name" built_utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  local init_wnotes="" build_tmp_wref="refs/notes/remote/concrete-writer-build-$$"
+  git update-ref -d "$build_tmp_wref" 2>/dev/null || true
+  if git fetch -q "$REMOTE" "+refs/notes/concrete-writer:$build_tmp_wref" 2>/dev/null; then
+    init_wnotes="$(git rev-parse -q --verify "$build_tmp_wref" 2>/dev/null || true)"
+    git update-ref -d "$build_tmp_wref" 2>/dev/null || true
+    if [ -n "$init_wnotes" ] && python3 -B -I "$SELF_DIR/../review/writer_provenance.py" validate-notes --notes-rev "$init_wnotes" --old-notes-rev 0000000000000000000000000000000000000000 >/dev/null 2>&1; then
+      state_set "$name" writer_notes "$init_wnotes"
+    fi
+  elif init_wnotes="$(git rev-parse -q --verify refs/notes/concrete-writer 2>/dev/null || true)" && [ -n "$init_wnotes" ]; then
+    state_set "$name" writer_notes "$init_wnotes"
+  fi
   log_row "$name" build passed "${#shas[@]} member(s)"
   note "train/$name built at $(git rev-parse --short=10 HEAD) on base ${base:0:10}:"
   printf '    %s\n' "${shas[@]}"
@@ -514,10 +525,41 @@ review_provenance() { # name head
   [ -f "$VERIFY" ] || { echo "no review verifier ($VERIFY is missing)"; return 1; }
   git fetch -q "$REMOTE" "+refs/notes/concrete-review:refs/notes/concrete-review" 2>/dev/null \
     || { echo "could not fetch refs/notes/concrete-review from $REMOTE"; return 1; }
-  local werr=""
-  if ! werr="$(git fetch -q "$REMOTE" "+refs/notes/concrete-writer:refs/notes/concrete-writer" 2>&1)"; then
+  local werr="" prev_local prev_remote prev_state tmp_wref="refs/notes/remote/concrete-writer-train-$$"
+  prev_local="$(git rev-parse -q --verify refs/notes/concrete-writer 2>/dev/null || true)"
+  prev_remote="$(git rev-parse -q --verify refs/notes/remote/concrete-writer 2>/dev/null || true)"
+  prev_state="$(state_get_soft "$name" writer_notes)"
+  git update-ref -d "$tmp_wref" 2>/dev/null || true
+  if werr="$(git fetch -q "$REMOTE" "+refs/notes/concrete-writer:$tmp_wref" 2>&1)"; then
+    local prior v_err new_wsha checked_prior=0
+    for prior in "$prev_state" "$prev_remote" "$prev_local"; do
+      [ -n "$prior" ] || continue
+      git cat-file -e "$prior^{commit}" 2>/dev/null || continue
+      checked_prior=1
+      if ! v_err="$(python3 -B -I "$SELF_DIR/../review/writer_provenance.py" validate-notes --allow-missing-targets --notes-rev "$tmp_wref" --old-notes-rev "$prior" 2>&1)"; then
+        git update-ref -d "$tmp_wref" 2>/dev/null || true
+        echo "invalid or discontinuous refs/notes/concrete-writer from $REMOTE: ${v_err//$'\n'/ }"
+        return 2
+      fi
+    done
+    if [ "$checked_prior" = 0 ]; then
+      if ! v_err="$(python3 -B -I "$SELF_DIR/../review/writer_provenance.py" validate-notes --allow-missing-targets --notes-rev "$tmp_wref" --old-notes-rev 0000000000000000000000000000000000000000 2>&1)"; then
+        git update-ref -d "$tmp_wref" 2>/dev/null || true
+        echo "invalid or discontinuous refs/notes/concrete-writer from $REMOTE: ${v_err//$'\n'/ }"
+        return 2
+      fi
+    fi
+    new_wsha="$(git rev-parse "$tmp_wref")"
+    git update-ref refs/notes/concrete-writer "$new_wsha"
+    git update-ref refs/notes/remote/concrete-writer "$new_wsha"
+    git update-ref -d "$tmp_wref" 2>/dev/null || true
+    [ "$DRY" = 1 ] || state_set "$name" writer_notes "$new_wsha"
+  else
+    git update-ref -d "$tmp_wref" 2>/dev/null || true
     case "$werr" in
-      *"couldn't find remote ref"*) git update-ref -d refs/notes/concrete-writer 2>/dev/null || true ;;
+      *"couldn't find remote ref"*)
+        git update-ref -d refs/notes/concrete-writer 2>/dev/null || true
+        git update-ref -d refs/notes/remote/concrete-writer 2>/dev/null || true ;;
       *) echo "could not fetch refs/notes/concrete-writer from $REMOTE: ${werr//$'\n'/ }"; return 2 ;;
     esac
   fi

@@ -33,13 +33,10 @@ fi
 ROOT_DIR="$(git rev-parse --show-toplevel)"
 cd "$ROOT_DIR"
 
-if [ "${CONCRETE_SKIP_GATES:-0}" = "1" ]; then
-  echo "pre-push: gates SKIPPED by CONCRETE_SKIP_GATES=1 — you own the CI result." >&2
-  exit 0
-fi
-
 wip_refs=0; wip_dels=0; note_refs=0; other_refs=0; wip_shas=""; full_shas=""
 # Kept whole so the hook can hand the same lines to itself when it re-enters the gate shell (below).
+# Writer-provenance validation on refs/notes/concrete-writer is unconditional and runs before any
+# CONCRETE_SKIP_GATES bypass so signed writer history can never be rolled back, deleted or replaced.
 HOOK_STDIN="$(cat)"
 while read -r _localref localsha remoteref _remotesha; do
   [ -z "${localsha:-}" ] && continue
@@ -67,7 +64,7 @@ while read -r _localref localsha remoteref _remotesha; do
         *[!0]*)
           writer_prov_py="$ROOT_DIR/scripts/review/writer_provenance.py"
           [ -f "$writer_prov_py" ] || writer_prov_py="$(cd "$(dirname "$HOOK_SELF")/.." && pwd)/scripts/review/writer_provenance.py"
-          if ! wnote_err="$(python3 -I "$writer_prov_py" validate-notes --repo "$ROOT_DIR" --notes-rev "$localsha" --old-notes-rev "${_remotesha:-}" 2>&1)"; then
+          if ! wnote_err="$(python3 -B -I "$writer_prov_py" validate-notes --repo "$ROOT_DIR" --notes-rev "$localsha" --old-notes-rev "${_remotesha:-}" 2>&1)"; then
             echo "pre-push (review-notes tier): invalid $remoteref ($localsha): ${wnote_err//$'\n'/ } — refusing" >&2
             exit 1
           fi
@@ -76,7 +73,7 @@ while read -r _localref localsha remoteref _remotesha; do
           echo "pre-push (review-notes tier): refusing to delete $remoteref" >&2
           exit 1 ;;
       esac ;;
-    refs/notes/concrete-review|refs/notes/concrete-review-findings)
+    refs/notes/concrete-review|refs/notes/concrete-review-findings|refs/notes/concrete-gates)
       case "$localsha" in
         *[!0]*) note_refs=$((note_refs+1)) ;;
         *) other_refs=$((other_refs+1)) ;;   # deleting a review note takes the full tier
@@ -102,6 +99,11 @@ if [ "$other_refs" -eq 0 ] && [ $((wip_refs + wip_dels)) -gt 0 ]; then
 fi
 if [ "$other_refs" -eq 0 ] && [ "$note_refs" -gt 0 ]; then
   echo "pre-push: review-notes push (review notes, owner sign-offs) — no source tree, no gates"
+  exit 0
+fi
+
+if [ "${CONCRETE_SKIP_GATES:-0}" = "1" ]; then
+  echo "pre-push: gates SKIPPED by CONCRETE_SKIP_GATES=1 — you own the CI result." >&2
   exit 0
 fi
 

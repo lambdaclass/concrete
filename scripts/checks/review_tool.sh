@@ -48,6 +48,13 @@ cat >"$GIT_CONFIG_GLOBAL" <<'EOF'
 	detachedHead = false
 EOF
 
+snapshot_source_tree() {
+  git -C "$ROOT_DIR" status --porcelain=v1 -z -uall --ignored=matching
+  git -C "$ROOT_DIR" diff --binary HEAD
+  find "$ROOT_DIR/scripts" "$ROOT_DIR/.githooks" \( -name '__pycache__' -o -name '*.pyc' -o -name '*.pyo' \) -print 2>/dev/null | LC_ALL=C sort
+}
+snapshot_source_tree >"$T/root.before"
+
 # ------------------------------------------------------------------ fake codex
 FAKE_LOG="$T/fake"
 mkdir -p "$FAKE_LOG" "$T/bin"
@@ -224,8 +231,9 @@ export REVIEW_WRITER_SIGNER="orchestrator@concrete"
 export REVIEW_WRITER_ALLOWED_SIGNERS="$T/keys/allowed_signers"
 
 sign_raw_stanza() { # sign_raw_stanza <in-file> <out-file> [key-file] [signer]
-  python3 -I - "$ROOT_DIR/scripts/review/writer_provenance.py" "$1" "$2" "${3:-$T/keys/id_ed25519}" "${4:-orchestrator@concrete}" <<'PY'
+  python3 -B -I - "$ROOT_DIR/scripts/review/writer_provenance.py" "$1" "$2" "${3:-$T/keys/id_ed25519}" "${4:-orchestrator@concrete}" <<'PY'
 import importlib.util, re, sys
+sys.dont_write_bytecode = True
 spec = importlib.util.spec_from_file_location("wp", sys.argv[1])
 wp = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(wp)
@@ -718,6 +726,7 @@ g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nro
 v_replay_before="$(cd "$W" && bash "$VERIFY" "$REPLAY_HEAD" 2>&1)"; rc=$?
 check "before replay: verify.sh refuses kimi clean note after claude->kimi correction on ancestor (exit 1, got $rc)" test "$rc" -eq 1
 # Replay 1: append ancestor's older signed claude stanza to head's note.
+SAVED_REPLAY_WNOTES="$(g rev-parse refs/notes/concrete-writer)"
 g notes --ref=refs/notes/concrete-writer add -f -m "$(printf '%s\n\n%s' "$REPLAY_HEAD_STANZA" "$REPLAY_ANC_OLD_STANZA")" "$REPLAY_HEAD" 2>/dev/null
 REPLAY_NOTES_SHA="$(g rev-parse refs/notes/concrete-writer)"
 val_replay="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" validate-notes --repo "$W" --notes-rev "$REPLAY_NOTES_SHA" 2>&1)"; rc=$?
@@ -728,7 +737,7 @@ check "derive refuses when head note embeds an ancestor's older signed stanza (e
 v_replay_after="$(cd "$W" && bash "$VERIFY" "$REPLAY_HEAD" 2>&1)"; rc=$?
 check "verify.sh still refuses kimi clean note when ancestor's older signed claude stanza is appended to head's note (exit 1, got $rc)" \
   bash -c '[ "$1" -eq 1 ] && grep -q "records commit $3, not $4" <<<"$2"' _ "$rc" "$v_replay_after" "$REPLAY_ANC" "$REPLAY_HEAD"
-g notes --ref=refs/notes/concrete-writer add -f -m "$REPLAY_HEAD_STANZA" "$REPLAY_HEAD" 2>/dev/null
+g update-ref refs/notes/concrete-writer "$SAVED_REPLAY_WNOTES"
 # Replay 2: pass the truncated pre-correction exported log via --log-object.
 trunc_ver="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" verify --repo "$W" --base "$REPLAY_BASE" --head "$REPLAY_HEAD" --claimed-writer "claude" --reviewer kimi --log-object "$REPLAY_TRUNC_BLOB" 2>&1)"; rc=$?
 check "verify with --log-object refuses a truncated pre-correction exported log against authoritative per-commit history (exit 1, got $rc)" \
@@ -751,6 +760,7 @@ listed_drv="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" derive 
 check "allowed_signers control 1: entry signed by a key listed under its principal verifies (exit 0, got $rc: $listed_drv)" \
   test "$rc" -eq 0 -a "$listed_drv" = "kimi,agy"
 # 2. Entry signed by an unlisted throwaway key is refused.
+SAVED_CORR_WNOTES="$(g rev-parse refs/notes/concrete-writer)"
 g notes --ref=refs/notes/concrete-writer show "$CORR_SHA" >"$T/corr-saved-note"
 awk '/^entry-id:/{exit} {print}' "$T/corr-saved-note" >"$T/corr-first-stanza-raw"
 sign_raw_stanza "$T/corr-first-stanza-raw" "$T/corr-unlisted-stanza" "$T/keys/unauth_ed25519" "orchestrator@concrete"
@@ -769,7 +779,7 @@ g notes --ref=refs/notes/concrete-writer add -f -F "$T/corr-wrong-principal" "$C
 wrong_prin_drv="$(REVIEW_WRITER_ALLOWED_SIGNERS="$T/keys/two_allowed_signers" python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" derive --repo "$W" --base "$CORR_BASE" --head "$CORR_SHA" 2>&1)"; rc=$?
 check "allowed_signers control 3: entry with valid signature whose principal does not match its allowed-signers line is refused (exit 2, got $rc)" \
   bash -c '[ "$1" -eq 2 ] && grep -q "signer '\''other@concrete'\'' does not match authorized principal(s) \['\''orchestrator@concrete'\''\]" <<<"$2"' _ "$rc" "$wrong_prin_drv"
-g notes --ref=refs/notes/concrete-writer add -f -F "$T/corr-saved-note" "$CORR_SHA" 2>/dev/null
+g update-ref refs/notes/concrete-writer "$SAVED_CORR_WNOTES"
 # 4. Shipped scripts/review/allowed_writer_log_signers parses, has fingerprint
 #    SHA256:vx5cqlK2RywhQLRwaOCplg2BeBCnEBiZnxF8wn/CSLU, and contains the exact principals docs/REVIEW.md lists.
 SHIPPED_SIGNERS="$ROOT_DIR/scripts/review/allowed_writer_log_signers"
@@ -893,9 +903,10 @@ commit_unstamped t.txt "trailer only" "$(printf 'forged stamp\n\nWriter: codex')
 review --reviewer kimi >"$T/trailer-only" 2>&1; rc=$?
 check "a commit with a Writer: trailer but no author stamp or log entry is refused (exit 2, got $rc)" test "$rc" -eq 2
 g checkout -q main && g checkout -qb author-and-trailer-no-log
-commit_file t2.txt "no log" "no log"
+SAVED_NOLOG_WNOTES="$(g rev-parse refs/notes/concrete-writer)"
+commit_unstamped t2.txt "no log" "no log"
 stamp_writer codex 1 author-and-trailer-no-log
-g notes --ref=refs/notes/concrete-writer remove HEAD 2>/dev/null
+g update-ref refs/notes/concrete-writer "$SAVED_NOLOG_WNOTES"
 review --reviewer kimi >"$T/no-log" 2>&1; rc=$?
 check "a commit with writer author and Writer: trailer but no writer-log entry is refused by review.sh (exit 2, got $rc)" test "$rc" -eq 2
 check "no-log refusal says a Writer: trailer alone is never enough" grep -q "Writer: trailer alone is never enough" "$T/no-log"
@@ -907,9 +918,10 @@ check "verify.sh no-log refusal names the missing writer-log entry" grep -q "no 
 # 2. agy commit with mismatched agy-diff-sha256 in writer-log (even if validly signed) is refused;
 #    tampered stanza without re-signing, unsigned stanza, and stanza signed by an unauthorized key are also refused.
 g checkout -q main && g checkout -qb agy-bad-hash
-commit_file abh.txt "agy" "agy"
+commit_unstamped abh.txt "agy" "agy"
 stamp_writer agy 1 agy-bad-hash
 ABH_SHA="$(g rev-parse HEAD)"
+SAVED_ABH_WNOTES="$(g rev-parse refs/notes/concrete-writer)"
 g notes --ref=refs/notes/concrete-writer show "$ABH_SHA" >"$T/good-agy-log"
 sed 's/^agy-diff-sha256: .*/agy-diff-sha256: 9999999999999999999999999999999999999999999999999999999999999999/' "$T/good-agy-log" >"$T/tampered-agy-log"
 g notes --ref=refs/notes/concrete-writer add -f -F "$T/tampered-agy-log" "$ABH_SHA" 2>/dev/null
@@ -927,11 +939,12 @@ review --reviewer kimi >"$T/agy-unauth-out" 2>&1; rc=$?
 check "a writer-log stanza signed by an unauthorized SSH key is refused (exit 2, got $rc)" \
   bash -c '[ "$1" -eq 2 ] && grep -q "signing key is not authorized" "$2"' _ "$rc" "$T/agy-unauth-out"
 sign_raw_stanza "$T/tampered-agy-log" "$T/bad-agy-log"
+g update-ref refs/notes/concrete-writer "$SAVED_ABH_WNOTES"
 g notes --ref=refs/notes/concrete-writer add -f -F "$T/bad-agy-log" "$ABH_SHA" 2>/dev/null
 BAD_WRITER_NOTES_SHA="$(g rev-parse refs/notes/concrete-writer)"
 review --reviewer kimi >"$T/agy-bad-out" 2>&1; rc=$?
 check "agy commit whose writer-log agy-diff-sha256 mismatches its trailer is refused even when signed (exit 2, got $rc)" test "$rc" -eq 2
-g notes --ref=refs/notes/concrete-writer add -f -F "$T/good-agy-log" "$ABH_SHA" 2>/dev/null
+g update-ref refs/notes/concrete-writer "$SAVED_ABH_WNOTES"
 # 3. Clean note whose writer: claims claude on a codex-stamped branch is refused by verify.sh.
 g checkout -q reviewer-kimi
 SELF_BASE="$(g merge-base HEAD main)"
@@ -1169,9 +1182,11 @@ BF_R2_OLD_NOTE="$(g notes --ref=refs/notes/concrete-writer show "$BF_R2")"
 BF_R2_EID="$(sed -n 's/^entry-id: //p' <<<"$BF_R2_OLD_NOTE")"
 backfill_writer "$BF_R2" claude 2 backfill-kimi-agy "$BF_R1" "$BF_R2" "append correction on BF_R2" \
   "$BF_R2_EID" "audit test of append-only push"
-hook_out="$(wnote_hook "$(g rev-parse refs/notes/concrete-writer)" "$WRITER_NOTES_SHA")"; rc=$?
+APPENDED_WRITER_NOTES_SHA="$(g rev-parse refs/notes/concrete-writer)"
+BF_R2_APPENDED_NOTE="$(g notes --ref=refs/notes/concrete-writer show "$BF_R2")"
+hook_out="$(wnote_hook "$APPENDED_WRITER_NOTES_SHA" "$WRITER_NOTES_SHA")"; rc=$?
 check "hook accepts a refs/notes/concrete-writer update that appends a signed superseding entry (exit 0, got $rc)" test "$rc" -eq 0
-g notes --ref=refs/notes/concrete-writer add -f -m "$BF_R2_OLD_NOTE" "$BF_R2" 2>/dev/null
+g update-ref refs/notes/concrete-writer "$WRITER_NOTES_SHA"
 # Historical pre-contract writer note on an already-landed commit (main base) is NOT re-judged when
 # unchanged between old_notes_rev and new_notes_rev (Task B / owner item 5).
 HIST_MAIN_SHA="$(g rev-parse main)"
@@ -1179,12 +1194,7 @@ g update-ref refs/notes/concrete-writer-hist-old "$WRITER_NOTES_SHA"
 g notes --ref=refs/notes/concrete-writer-hist-old add -f -m "pre-contract historical note on landed commit" "$HIST_MAIN_SHA" 2>/dev/null
 HIST_OLD_NOTES_SHA="$(g rev-parse refs/notes/concrete-writer-hist-old)"
 g update-ref refs/notes/concrete-writer-hist-new "$HIST_OLD_NOTES_SHA"
-g notes --ref=refs/notes/concrete-writer-hist-new add -f -m "$(printf '%s\n\n%s' "$BF_R2_OLD_NOTE" "$(g notes --ref=refs/notes/concrete-writer show "$BF_R2")")" "$BF_R2" 2>/dev/null
-# Restore BF_R2 with the valid appended correction in concrete-writer-hist-new:
-backfill_writer "$BF_R2" claude 2 backfill-kimi-agy "$BF_R1" "$BF_R2" "append correction on BF_R2" \
-  "$BF_R2_EID" "audit test of append-only push"
-g notes --ref=refs/notes/concrete-writer-hist-new add -f -m "$(g notes --ref=refs/notes/concrete-writer show "$BF_R2")" "$BF_R2" 2>/dev/null
-g notes --ref=refs/notes/concrete-writer add -f -m "$BF_R2_OLD_NOTE" "$BF_R2" 2>/dev/null
+g notes --ref=refs/notes/concrete-writer-hist-new add -f -m "$BF_R2_APPENDED_NOTE" "$BF_R2" 2>/dev/null
 hook_out="$(wnote_hook "$(g rev-parse refs/notes/concrete-writer-hist-new)" "$HIST_OLD_NOTES_SHA")"; rc=$?
 check "hook does not re-judge an unchanged historical pre-contract writer note on a past landed commit when pushing new notes (exit 0, got $rc)" test "$rc" -eq 0
 g update-ref -d refs/notes/concrete-writer-hist-old 2>/dev/null || true
@@ -1195,9 +1205,114 @@ check "hook refuses a source commit pushed to refs/notes/concrete-writer (exit 1
 hook_out="$(wnote_hook "$Z" "$WRITER_NOTES_SHA")"; rc=$?
 check "hook refuses deleting refs/notes/concrete-writer (exit 1, got $rc)" \
   bash -c '[ "$1" -eq 1 ] && grep -q "refusing to delete refs/notes/concrete-writer" <<<"$2"' _ "$rc" "$hook_out"
+# Round 9 controls:
+# 1. CONCRETE_SKIP_GATES=1 never bypasses refs/notes/concrete-writer validation or deletion refusal:
+#    rollback, deletion, and re-signing attempts are all refused under CONCRETE_SKIP_GATES=1.
+wnote_hook_skip() { (cd "$W" && printf 'refs/notes/concrete-writer %s refs/notes/concrete-writer %s\n' "$1" "${2:-$Z}" | CONCRETE_SKIP_GATES=1 bash "$HOOK" 2>&1); }
+# Prepare N2 on BF_R2 where a signed correction attributes BF_R2 to codex (so codex cannot review BF_R4):
+g update-ref refs/notes/concrete-writer "$WRITER_NOTES_SHA"
+backfill_writer "$BF_R2" codex 2 backfill-kimi-agy "$BF_R1" "$BF_R2" "correction naming codex" \
+  "$BF_R2_EID" "codex co-wrote BF_R2"
+N2_CODEX_NOTES_SHA="$(g rev-parse refs/notes/concrete-writer)"
+# Also build N3_ROLLBACK (parent N2_CODEX_NOTES_SHA, rolling BF_R2 back to its 1-stanza note):
+g update-ref refs/notes/concrete-writer-r9-rollback "$N2_CODEX_NOTES_SHA"
+g notes --ref=refs/notes/concrete-writer-r9-rollback add -f -m "$BF_R2_OLD_NOTE" "$BF_R2" 2>/dev/null
+N3_ROLLBACK_SHA="$(g rev-parse refs/notes/concrete-writer-r9-rollback)"
+# Rollback through skip switch (both rewinding N2 -> N1 and pushing N3_ROLLBACK):
+hook_out="$(wnote_hook_skip "$WRITER_NOTES_SHA" "$N2_CODEX_NOTES_SHA")"; rc=$?
+check "skip-switch control (rollback N2->N1): CONCRETE_SKIP_GATES=1 refuses rolling back refs/notes/concrete-writer to an earlier commit (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$hook_out"
+hook_out="$(wnote_hook_skip "$N3_ROLLBACK_SHA" "$N2_CODEX_NOTES_SHA")"; rc=$?
+check "skip-switch control (rollback commit N3): CONCRETE_SKIP_GATES=1 refuses a commit that drops a correction stanza (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$hook_out"
+hook_out="$(wnote_hook_skip "$N3_ROLLBACK_SHA" "$Z")"; rc=$?
+check "skip-switch control (ancestor continuity on rollback commit N3): CONCRETE_SKIP_GATES=1 refuses N3 even against 0000... sentinel (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$hook_out"
+# Deletion through skip switch (both deleting an entry in N3_DEL and deleting the ref):
+hook_out="$(wnote_hook_skip "$(g rev-parse refs/notes/concrete-writer-del)" "$WRITER_NOTES_SHA")"; rc=$?
+check "skip-switch control (deletion of note entry): CONCRETE_SKIP_GATES=1 refuses deleting a commit note (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "deletes existing writer-log entry" <<<"$2"' _ "$rc" "$hook_out"
+hook_out="$(wnote_hook_skip "$(g rev-parse refs/notes/concrete-writer-del)" "$Z")"; rc=$?
+check "skip-switch control (ancestor continuity on deleted note entry): CONCRETE_SKIP_GATES=1 refuses a deletion commit even against 0000... sentinel (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "deletes existing writer-log entry" <<<"$2"' _ "$rc" "$hook_out"
+hook_out="$(wnote_hook_skip "$Z" "$N2_CODEX_NOTES_SHA")"; rc=$?
+check "skip-switch control (deletion of ref): CONCRETE_SKIP_GATES=1 refuses deleting refs/notes/concrete-writer (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "refusing to delete refs/notes/concrete-writer" <<<"$2"' _ "$rc" "$hook_out"
+# Re-signing through skip switch (both against old_notes_rev and against 0000... sentinel via ancestor continuity):
+hook_out="$(wnote_hook_skip "$(g rev-parse refs/notes/concrete-writer-replace)" "$WRITER_NOTES_SHA")"; rc=$?
+check "skip-switch control (re-signing entry): CONCRETE_SKIP_GATES=1 refuses a re-signed replacement entry (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$hook_out"
+hook_out="$(wnote_hook_skip "$(g rev-parse refs/notes/concrete-writer-replace)" "$Z")"; rc=$?
+check "skip-switch control (ancestor continuity on re-signed entry): CONCRETE_SKIP_GATES=1 refuses a re-signed commit even against 0000... sentinel (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$hook_out"
+# notes.sh put writer refusal control:
+notes_put_out="$(cd "$W" && bash "$ROOT_DIR/scripts/land/notes.sh" put writer "$BF_R2" model=claude 2>&1)"; rc=$?
+check "notes.sh put refuses writer notes and directs callers to the append-only writer_provenance.py API (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "writer notes are signed and append-only" <<<"$2"' _ "$rc" "$notes_put_out"
+# 2. Landing / verify.sh --required-base continuity controls for rollback, deletion, and re-signing:
+#    With N2_CODEX_NOTES_SHA active (BF_R2 corrected to codex), a clean review note by reviewer=codex
+#    on BF_R4 is self-review and must be refused even if someone attempts rollback, deletion, or re-signing.
+g update-ref refs/notes/concrete-writer "$N2_CODEX_NOTES_SHA"
+g push -q -f origin "refs/notes/concrete-writer:refs/notes/concrete-writer"
+g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 1\nreviewer: codex\nwriter: kimi,agy\nutc: 2026-11-08T00:00:00Z\nbase: %s\npieces: 1\nrepository: readable' "$BF_BASE")" "$BF_R4"
+g push -q -f origin "refs/notes/concrete-review:refs/notes/concrete-review"
+# Verify baseline: N2_CODEX_NOTES_SHA refuses codex as reviewer on BF_R4:
+v_n2_out="$(cd "$W" && bash "$VERIFY" --fetch --required-base "$BF_BASE" "$BF_R4" 2>&1)"; rc=$?
+check "verify.sh --fetch --required-base refuses reviewer codex when BF_R2 has a signed correction naming codex (exit 1, got $rc)" test "$rc" -eq 1
+# Landing/verify Rollback control A (rewind origin's refs/notes/concrete-writer from N2 to N1):
+g push -q -f --no-verify origin "$WRITER_NOTES_SHA:refs/notes/concrete-writer"
+v_rb1_out="$(cd "$W" && bash "$VERIFY" --fetch --required-base "$BF_BASE" "$BF_R4" 2>&1)"; rc=$?
+check "landing/verify control (rollback N2->N1 on remote): verify.sh --fetch --required-base refuses rolled-back writer history (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$v_rb1_out"
+# Landing/verify Rollback control B (commit N3_ROLLBACK on top of N2):
+g push -q -f --no-verify origin "$N3_ROLLBACK_SHA:refs/notes/concrete-writer"
+v_rb2_out="$(cd "$W" && bash "$VERIFY" --fetch --required-base "$BF_BASE" "$BF_R4" 2>&1)"; rc=$?
+check "landing/verify control (rollback commit N3 on remote): verify.sh --fetch --required-base refuses dropped stanza (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$v_rb2_out"
+g update-ref refs/notes/concrete-writer "$N3_ROLLBACK_SHA"
+v_rb3_out="$(cd "$W" && bash "$VERIFY" --required-base "$BF_BASE" "$BF_R4" 2>&1)"; rc=$?
+check "landing/verify control (local rollback commit N3): verify.sh --required-base refuses dropped stanza via ancestor continuity (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$v_rb3_out"
+# Landing/verify Deletion control A (delete BF_R2's note on top of N2):
+g update-ref refs/notes/concrete-writer "$N2_CODEX_NOTES_SHA"
+g update-ref refs/notes/concrete-writer-r9-del "$N2_CODEX_NOTES_SHA"
+g notes --ref=refs/notes/concrete-writer-r9-del remove "$BF_R2" 2>/dev/null
+N3_DEL_R9_SHA="$(g rev-parse refs/notes/concrete-writer-r9-del)"
+g push -q -f --no-verify origin "$N3_DEL_R9_SHA:refs/notes/concrete-writer"
+v_del1_out="$(cd "$W" && bash "$VERIFY" --fetch --required-base "$BF_BASE" "$BF_R4" 2>&1)"; rc=$?
+check "landing/verify control (note deletion on remote): verify.sh --fetch --required-base refuses deleted writer note (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "deletes existing writer-log entry" <<<"$2"' _ "$rc" "$v_del1_out"
+# Landing/verify Deletion control B (delete refs/notes/concrete-writer on remote):
+git -C "$T/origin.git" update-ref -d refs/notes/concrete-writer
+v_del2_out="$(cd "$W" && bash "$VERIFY" --fetch --required-base "$BF_BASE" "$BF_R4" 2>&1)"; rc=$?
+check "landing/verify control (ref deletion on remote): verify.sh --fetch --required-base refuses when remote writer-notes ref is deleted (exit 1, got $rc)" test "$rc" -eq 1
+# Landing/verify Re-signing control (replace BF_R2's note with a freshly signed 1-stanza note on top of N2):
+g update-ref refs/notes/concrete-writer "$N2_CODEX_NOTES_SHA"
+sed "s/^evidence: .*/evidence: re-signed single stanza/" <<<"$BF_R2_OLD_NOTE" >"$T/resigned-bf-r2-raw"
+sign_raw_stanza "$T/resigned-bf-r2-raw" "$T/resigned-bf-r2"
+g update-ref refs/notes/concrete-writer-r9-resign "$N2_CODEX_NOTES_SHA"
+g notes --ref=refs/notes/concrete-writer-r9-resign add -f -F "$T/resigned-bf-r2" "$BF_R2" 2>/dev/null
+N3_RESIGN_R9_SHA="$(g rev-parse refs/notes/concrete-writer-r9-resign)"
+g push -q -f --no-verify origin "$N3_RESIGN_R9_SHA:refs/notes/concrete-writer"
+v_res1_out="$(cd "$W" && bash "$VERIFY" --fetch --required-base "$BF_BASE" "$BF_R4" 2>&1)"; rc=$?
+check "landing/verify control (re-signing on remote): verify.sh --fetch --required-base refuses re-signed replacement note (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$v_res1_out"
+g update-ref refs/notes/concrete-writer "$N3_RESIGN_R9_SHA"
+v_res2_out="$(cd "$W" && bash "$VERIFY" --required-base "$BF_BASE" "$BF_R4" 2>&1)"; rc=$?
+check "landing/verify control (local re-signing commit): verify.sh --required-base refuses re-signed replacement note via ancestor continuity (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$v_res2_out"
+# Restore clean state on $W and $T/origin.git:
+g notes --ref=refs/notes/concrete-review remove "$BF_R4" 2>/dev/null || true
+g push -q -f origin "refs/notes/concrete-review:refs/notes/concrete-review"
+g update-ref refs/notes/concrete-writer "$WRITER_NOTES_SHA"
+g update-ref -d refs/notes/remote/concrete-writer 2>/dev/null || true
+git -C "$T/origin.git" update-ref refs/notes/concrete-writer "$WRITER_NOTES_SHA"
 g update-ref -d refs/notes/concrete-writer-bad 2>/dev/null || true
 g update-ref -d refs/notes/concrete-writer-del 2>/dev/null || true
 g update-ref -d refs/notes/concrete-writer-replace 2>/dev/null || true
+g update-ref -d refs/notes/concrete-writer-r9-rollback 2>/dev/null || true
+g update-ref -d refs/notes/concrete-writer-r9-del 2>/dev/null || true
+g update-ref -d refs/notes/concrete-writer-r9-resign 2>/dev/null || true
 # Owner sign-off refs: only a record (parentless, its subject's 40-hex name, exactly the seven files)
 # takes the notes tier. Anything else takes the full tier, which a linked worktree refuses before it
 # runs anything: that refusal is how these legs see the tier without running the gates.
@@ -1384,6 +1499,13 @@ review --pieces zero >/dev/null 2>&1; rc=$?
 check "bad --pieces: exit 2 (got $rc)" test "$rc" -eq 2
 review --bogus >/dev/null 2>&1; rc=$?
 check "unknown flag: exit 2 (got $rc)" test "$rc" -eq 2
+
+echo "=== source tree hygiene (no Python bytecode written into repository) ==="
+( unset PYTHONDONTWRITEBYTECODE; sign_raw_stanza "$T/good-agy-log" "$T/bytecode-check-stanza" )
+snapshot_source_tree >"$T/root.after"
+check "sign_raw_stanza and review_tool leave scripts/review/__pycache__ absent" test ! -e "$ROOT_DIR/scripts/review/__pycache__"
+check "review_tool check run leaves the source tree byte-identical (no tracked, untracked or ignored __pycache__/*.pyc changes)" \
+  cmp -s "$T/root.before" "$T/root.after"
 
 echo
 echo "check_review_tool: PASS=$PASS FAIL=$FAIL"
