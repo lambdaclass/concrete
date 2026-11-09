@@ -194,6 +194,12 @@ class RegistryEvidence(unittest.TestCase):
         with patch.object(protocol, 'REGISTRY_ROOT', self.root / 'absent'):
             self.check_mutation(self.payload, 'INCOMPLETE registry: unavailable at ' + self.sha)
 
+    def test_tool_seed_substitution_across_evidence_adapters(self):
+        for field, value in (("tools", {"compiler": "substitute"}), ("seed", 999), ("seed", True)):
+            payload = copy.deepcopy(self.payload)
+            payload['gates'][0][field] = value
+            self.check_mutation(payload, 'FAIL scheduled provenance: tool/seed mismatch')
+
     def test_forged_cached_qualification_is_recomputed(self):
         self.payload['qualification'] = []
         self.payload['gates'][0]['command'] = ['true']

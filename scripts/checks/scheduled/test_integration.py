@@ -28,7 +28,7 @@ class Integrated(unittest.TestCase):
             scratch=Path(work); controller=scratch/'controller'; controller.mkdir()
             lib=controller/'scripts/checks/lib'; lib.mkdir(parents=True)
             scheduled=controller/'scripts/checks/scheduled'; scheduled.mkdir()
-            for name in ('bounded.sh','bounded_exec.py','scheduled_process.py','scheduled_process.sh','heavy_slots.sh','gate_outcome.py','gate_env.sh','has_match.sh'):
+            for name in ('bounded.sh','bounded_exec.py','scheduled_process.py','scheduled_process.sh','heavy_slots.sh','gate_outcome.py','scheduled_outcome.py','gate_env.sh','has_match.sh'):
                 shutil.copy(ROOT/'scripts/checks/lib'/name,lib/name)
             shutil.copy(ROOT/'scripts/checks/scheduled/with_slot.sh',scheduled)
             from runtime_support import copy_policy_runtime

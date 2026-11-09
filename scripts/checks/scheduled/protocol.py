@@ -3,6 +3,7 @@ from process_adapter import process_run
 from scheduled_process import clean_env
 from scheduler_policy import note_ref, BUDGET, WINDOWS
 import os
+from scheduled_outcome import reduce_outcomes, execution_status
 import copy
 import datetime as dt
 import importlib.util
@@ -92,6 +93,8 @@ def qualification(record, sha, tier):
         gate = actual[gid]
         if gate["command"] != row["command"]:
             issue("FAIL", "wrong command " + gid)
+        if gate["tools"] != row["tools"] or (type(gate["seed"]) is not type(row["seed"]) or gate["seed"] != row["seed"]):
+            issues.append(dict(status="FAIL", diagnostic="FAIL scheduled provenance: tool/seed mismatch", operational=False))
         controls = gate["controls"]
         ids = [c.get("id") for c in controls]
         if any(not isinstance(cid, str) for cid in ids) or len(set(ids)) != len(ids):
@@ -199,19 +202,14 @@ def validate(record, sha, tier, runners, repository, attempt):
         require(all(k in gate for k in ("command", "tools", "seed", "resources", "controls", "log")), "missing gate metadata")
         if gate["status"] == "PASS":
             require(all(c.get("status") == "PASS" for c in gate["controls"]), "missing/pending control evidence")
-    statuses = {g["status"] for g in gates}
-    expected = ("MISSING" if record["conclusion"] in {"cancelled", "skipped", "queued-too-long", "absent"}
-                else "FAIL" if "FAIL" in statuses else "INCOMPLETE" if "INCOMPLETE" in statuses
-                else "INCOMPLETE" if record.get("execution_error") or dependency else "PASS" if statuses <= {"PASS"} else None)
+    expected = execution_status(gates, unavailable=bool(record.get("execution_error") or dependency), missing=missing)
     conclusions = {"PASS": "success", "FAIL": "failure", "INCOMPLETE": "incomplete"}
     require(record["status"] == expected and
             (missing or record["conclusion"] == conclusions.get(expected)), "status/conclusion contradicts evidence")
     record = copy.deepcopy(record)
     record["qualification_outcomes"] = qualification(record, sha, tier)
     record["qualification"] = [o["diagnostic"] for o in record["qualification_outcomes"]]
-    record["qualification_status"] = (
-        "FAIL" if record["status"] == "FAIL" or any(o["status"] == "FAIL" for o in record["qualification_outcomes"])
-        else "INCOMPLETE" if record["qualification"] else record["status"])
+    record["qualification_status"] = reduce_outcomes([record["status"], *(o["status"] for o in record["qualification_outcomes"])])
     return record
 
 def append(history, record, sha, tier, runners, repository):
@@ -228,7 +226,7 @@ def observe(history, sha, tier, now, runners, repository):
     for record in history:
         require(timestamp(record["completed"]) <= now, "future completion")
     require(len({r["attempt"] for r in history}) == len(history), "replay would overwrite attempt")
-    if any(r["status"] == "FAIL" for r in history):
+    if reduce_outcomes(r["status"] for r in history) == "FAIL":
         raise observation_error("FAIL", tier, sha, "recorded attempt")
     for record in history:
         for outcome in record["qualification_outcomes"]:

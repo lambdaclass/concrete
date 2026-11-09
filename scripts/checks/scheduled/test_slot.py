@@ -22,7 +22,7 @@ class Slot(unittest.TestCase):
             root = Path(work) / "controller"
             lib = root / "scripts/checks/lib"; lib.mkdir(parents=True)
             scheduled = root / "scripts/checks/scheduled"; scheduled.mkdir()
-            for name in ("bounded.sh", "bounded_exec.py", "scheduled_process.py", "scheduled_process.sh", "heavy_slots.sh", "gate_outcome.py"):
+            for name in ("bounded.sh", "bounded_exec.py", "scheduled_process.py", "scheduled_process.sh", "heavy_slots.sh", "gate_outcome.py", "scheduled_outcome.py"):
                 shutil.copy(ROOT / "scripts/checks/lib" / name, lib / name)
             (lib / "gate_env.sh").write_text(":\n")
             if acquire is not None:

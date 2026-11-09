@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Structured nested-gate outcomes. Never infer watchdog state from log text or rc 124."""
 import json
+from scheduled_outcome import reduce_outcomes
 import os
 from pathlib import Path
 import sys
@@ -31,10 +32,11 @@ def result(path, rc, sha):
     except (OSError, ValueError, TypeError):
         print('FAIL scheduled outcome: invalid event stream', file=sys.stderr)
         return 1
-    if any(e['status']=='FAIL' for e in events):
+    status = reduce_outcomes(e['status'] for e in events)
+    if status == 'FAIL':
         print('FAIL scheduled gate: explicit failure outcome', file=sys.stderr)
         return 1
-    if any(e['status']=='INCOMPLETE' for e in events):
+    if status == 'INCOMPLETE':
         print('INCOMPLETE scheduled gate: nested watchdog or gate incomplete', file=sys.stderr)
         return 125
     return 1 if rc == 125 else rc
