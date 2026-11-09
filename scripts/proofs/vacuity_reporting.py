@@ -18,7 +18,7 @@ def ownership_controls(meta):
     for cap in [None, 100000]:
         code, report = run(ROOT, '', fixture, 64, meta_path=meta, whole_run_cap=cap)
         name = 'ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:8»'
-        assert f'FAIL unknown-name {name} ConcreteSpecControl.missingLaw' in report, report
+        assert f'FAIL unknown-name {name} ConcreteSpecControl.missingLaw' in report.splitlines(), report
         assert any(r.startswith(f'NOTE analysis-result {name} stage=classification ') and
                    'result=FAIL ' in r for r in report.splitlines()), report
         assert code == (1 if cap is None else 2), report
@@ -56,8 +56,8 @@ def watchdog_controls():
         code, report = run(ROOT, '', fixture, 64, meta_path=meta, audit_seconds=4)
     rows = report.splitlines()
     assert code == 2 and 'FAIL unknown-name ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:8» ConcreteSpecControl.missingLaw' in rows, report
-    assert any('stage=evidence-tags ' in r and 'reason=wall-watchdog ' in r for r in rows), report
-    assert any('stage=projection ' in r and 'reason=wall-watchdog-unrun ' in r for r in rows), report
+    assert 'INCOMPLETE analysis-budget-or-error ConcreteSpecControl.growth stage=evidence-tags law=none case=none reason=wall-watchdog heartbeats=unavailable/2000000 work=unavailable/20000 projection=unavailable/4096' in rows, report
+    assert 'INCOMPLETE analysis-budget-or-error ConcreteSpecControl.growth stage=projection law=ConcreteSpecControl.growth case=none reason=wall-watchdog-unrun heartbeats=0/2000000 work=0/20000 projection=0/4096' in rows, report
     terminals = [r for r in rows if r.startswith('NOTE analysis-result ')]
     stats = dict(re.findall(r'(\w[\w-]*)=([^ ]+)', next(r for r in rows if r.startswith('NOTE analysis-summary '))))
     n = int(stats['N'])

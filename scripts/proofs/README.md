@@ -232,14 +232,17 @@ spend any later independent job's allowance.
 The driver's wall watchdog is separate: `--audit-seconds` defaults to the existing
 120 seconds, with the bounded runner's retry at twice that value. It reports both
 wall bounds and observed elapsed time. An expired watchdog is infrastructure
-INCOMPLETE, never evidence of a completed population. A larger wall allowance on
+INCOMPLETE, never evidence of a completed population. After population freezing,
+the recovery journal retains completed results and names all unfinished analyses
+(see the fix-round-1 protocol below). A larger wall allowance on
 a dedicated server does not enlarge any deterministic analysis or scheduler limit.
 
-`vacuity_budget.py` checks the production scheduler with 12 exact-diagnostic
+`vacuity_budget.py` checks the production scheduler with 13 exact-diagnostic
 controls: a real 20,001-obligation discharge workload followed by a malformed
 Instance, each alone and in reverse order; an in-Meta heartbeat exception followed
 by that same FAIL; four-identity cap population and zero-cap controls; empty
-population; and shared-counter exhaustion through mentions, mutate and protection.
+population; repeated identical Instance failures with separate FAIL terminals; and
+shared-counter exhaustion through mentions, mutate and protection.
 The cap controls assert unchanged earlier terminal records byte for byte and
 that no capped body executes. `vacuity_reporting.py` includes these controls,
 checks normalized exceptions and prerequisite failures in the full consumer,

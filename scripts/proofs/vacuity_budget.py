@@ -113,6 +113,8 @@ def controls(meta):
         assert len(heavy) == 1 and int(GRAMMAR.fullmatch(heavy[0])[6]) < 2000000 and 'stage=instance law=BudgetControls.heavyLaw case=heavy reason=false-discharge-budget' in heavy[0] and 'work=20000/20000' in heavy[0], single
         alone, incomplete, _, _ = probe('bad-alone', '#[bad]', 20000)
         assert incomplete == [] and BAD in alone and alone[-1] == 'N2 FAIL', alone
+        rows, inc, terminals, _ = probe('repeated-instance-finding', '#[bad, bad]', 40000)
+        assert inc == [] and rows.count(BAD) == 1 and len(terminals) == 2 and all('result=FAIL ' in r for r in terminals), rows
         for label, jobs in [('starvation', '#[heavy, bad]'), ('reverse', '#[bad, heavy]')]:
             rows, inc, terminals, stats = probe(label, jobs, 40000)
             assert BAD in rows and len(inc) == 1 and rows[-1] == 'N2 INCOMPLETE', rows
@@ -144,7 +146,7 @@ def controls(meta):
             rows, inc, _, _ = probe('nested-reset-' + label, f'#[nested "{label}", bad]', 40000)
             assert len(inc) == 1 and inc[0] == f'INCOMPLETE analysis-budget-or-error BudgetControls.{label} stage={label} law=none case=none reason=work-budget heartbeats={GRAMMAR.fullmatch(inc[0])[6]}/2000000 work=20000/20000 projection=0/4096', rows
             assert BAD in rows and rows[-1] == 'N2 INCOMPLETE', rows
-    print('Budget controls: 12 PASS, 0 FAIL', flush=True)
+    print('Budget controls: 13 PASS, 0 FAIL', flush=True)
     return 0
 
 
