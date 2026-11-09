@@ -13,6 +13,23 @@ generation, raw concatenation of trace logs across sessions, and anchoring owner
 approval in a mutable CI variable or rebase-fragile git commit SHA. Gate 9 owns
 their removal.
 
+## Production declaration authority
+
+The production `slice0_examples.lean` entry always passes the checked-in
+`Concrete.Premises.components` to the shared `auditMain` function. Neither
+arguments nor ambient variables can extend that registry. The separate
+`tests/trusted_examples_entry.lean` entry exercises injected component lists;
+production never imports or selects it. The semantic controls compile the shared
+module into private temporary storage before running that test entry. An inherited
+`CONCRETE_TRUSTED_DECLARATIONS` must still produce exactly
+`FAIL unlisted example trusted declaration ambientAuthority [unsafe]` in production.
+
+The other ambient inputs are observations, not authority: PATH-resolved tools and
+`CONCRETE_SLICE0_CLANG` must match lock-derived identities; cwd is fixed by the gate
+helper; resource bounds cannot add trust. `CONCRETE_TRUSTED_BASE_WITHOUT` only removes
+registry components for the missing-entry control and cannot add matches. The
+approval input remains fail-closed under T1. No external declaration list is read.
+
 ## Approval authority (T1)
 
 Owner authorization is **not established**. Historical citations in

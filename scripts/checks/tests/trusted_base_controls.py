@@ -12,10 +12,17 @@ BASE_ENV = json.loads(subprocess.check_output(
     text=True, timeout=30))
 BASE_ENV["LEAN_NUM_THREADS"] = "2"
 
-def lean(path, driver=False, extra_env=None):
+TEST_DRIVER = "scripts/checks/tests/trusted_examples_entry.lean"
+
+def lean(path, driver=False, extra_env=None, production=False):
     env = dict(BASE_ENV)
     if extra_env: env.update(extra_env)
-    return subprocess.run(["lean", *(["--run", DRIVER] if driver else []), str(path)],
+    if driver and extra_env and not production:
+        env["TRUSTED_TEST_FILE"] = str(path)
+        args = ["lean", TEST_DRIVER]
+    else:
+        args = ["lean", *(["--run", DRIVER] if driver else []), str(path)]
+    return subprocess.run(args,
         env=env, text=True, stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT, timeout=60)
 
@@ -40,6 +47,17 @@ def require(result, ok, diagnostic):
 
 with tempfile.TemporaryDirectory() as d:
     d = Path(d)
+    module = d / "scripts/checks/compiler/slice0_examples.olean"
+    module.parent.mkdir(parents=True)
+    subprocess.run(["lean", "-o", str(module), DRIVER], env=BASE_ENV, check=True, timeout=60)
+    BASE_ENV["LEAN_PATH"] = str(d) + os.pathsep + BASE_ENV.get("LEAN_PATH", "")
+    ambient = d / "ambient.lean"
+    ambient.write_text("import Lean\nunsafe def ambientAuthority : Nat := 0\n")
+    require(lean(ambient, True, {
+        "CONCRETE_TRUSTED_DECLARATIONS": "lexer:ambientAuthority",
+        "CONCRETE_TRUSTED_BASE_WITHOUT": "lexer",
+    }, production=True), False,
+        "FAIL unlisted example trusted declaration ambientAuthority [unsafe]")
     empty = d / "empty.rows"
     empty.write_text("no json rows\n")
     r_empty = subprocess.run(["python3", "-I", "scripts/checks/lib/example_rows.py", str(empty)],

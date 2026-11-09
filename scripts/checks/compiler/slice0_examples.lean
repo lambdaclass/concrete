@@ -175,18 +175,6 @@ def auditFileEnvironment (file : String) (csList : List Concrete.Premises.Compon
         IO.println s!"FAIL unlisted example trusted declaration {n} [{", ".intercalate kinds}]"
         throwError "example trusted declaration audit failed"
 
-def configuredComponents : IO (List Concrete.Premises.Component) := do
-  match (← IO.getEnv "CONCRETE_TRUSTED_DECLARATIONS") with
-  | none => return Concrete.Premises.components
-  | some spec =>
-      let mut cs := Concrete.Premises.components
-      for entry in spec.splitOn ";" do
-        if let [compId, decls] := entry.splitOn ":" then
-          let names := decls.splitOn "," |>.filter (!·.isEmpty)
-          cs := cs.map fun c =>
-            if c.id == compId then { c with declarations := c.declarations ++ names } else c
-      return cs
-
 def isHeavyImport (m : Name) : Bool :=
   m.getRoot == `Lean || m.getRoot == `LeanCompilerBackend ||
   m == `Concrete || m == `Concrete.Premises || (`Concrete.Backend.LCB).isPrefixOf m
@@ -237,14 +225,13 @@ unsafe def auditSingleFile (retained : IO.Ref NameSet) (auditRef : IO.Ref FileAu
     return 1
   return 0
 
-unsafe def main (files : List String) : IO UInt32 := do
+unsafe def auditMain (csList : List Concrete.Premises.Component) (files : List String) : IO UInt32 := do
   let retained ← IO.mkRef NameSet.empty
   let auditRef ← IO.mkRef ({} : FileAuditState)
   let envCache ← IO.mkRef ({} : Std.HashMap HeaderCacheKey Environment)
   commandElabAttribute.addBuiltin ``Parser.Command.declaration `retainExample (retainExample retained)
   installAuditHooks auditRef
   initSearchPath (← findSysroot)
-  let csList ← configuredComponents
   let (perFile, inProcess, files) := match files with
     | "--per-file" :: rest => (true, true, rest)
     | "--in-process" :: rest => (false, true, rest)
@@ -298,3 +285,7 @@ unsafe def main (files : List String) : IO UInt32 := do
       let rc ← auditSingleFile retained auditRef envCache csList file
       if rc != 0 then return rc
   return 0
+
+-- Production authority is exclusively the checked-in registry.
+unsafe def main (files : List String) : IO UInt32 :=
+  auditMain Concrete.Premises.components files
