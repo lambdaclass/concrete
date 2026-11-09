@@ -1,0 +1,73 @@
+N2 SCOPE ConcreteSpec.Repro
+N2 CHECKER bf81a4a3a9006c7691078a57a0d07c6c1fdabe2a32402be248081edbcb5a9b36
+N2 SOURCE-FILE ConcreteSpec/Repro.lean c9cb394656c1400b13a8d012dfd938d764f0838f3308b62739db3a8f0cf892bd
+TRACE empty-rec False.rec: False.rec (fun x => isTrue t₁ = isFalse f₂) (f₂ t₁)
+TRACE unfold instSubsingletonDecidable actual=instSubsingletonDecidable p✝
+TRACE unfold Decidable.decide.congr_simp actual=Decidable.decide.congr_simp (a = a) True (eq_self a)
+TRACE unfold congrArg actual=congrArg (fun f x => f.liftOn (fun f => f x) fun x_1 x_2 h => h x)
+  (Quot.sound fun {a} =>
+    Eq.trans
+      (congrFun'
+        (congrArg Eq (Eq.trans (Decidable.decide.congr_simp (a = a) True (eq_self a)) (decide_true instDecidableTrue)))
+        true)
+      (eq_self true))
+TRACE unfold funext actual=funext fun {a} =>
+  Eq.trans
+    (congrFun'
+      (congrArg Eq (Eq.trans (Decidable.decide.congr_simp (a = a) True (eq_self a)) (decide_true instDecidableTrue)))
+      true)
+    (eq_self true)
+TRACE unfold forall_congr actual=forall_congr fun {a} =>
+  Eq.trans
+    (congrFun'
+      (congrArg Eq (Eq.trans (Decidable.decide.congr_simp (a = a) True (eq_self a)) (decide_true instDecidableTrue)))
+      true)
+    (eq_self true)
+TRACE unfold Eq.trans actual=Eq.trans
+  (forall_congr fun {a} =>
+    Eq.trans
+      (congrFun'
+        (congrArg Eq (Eq.trans (Decidable.decide.congr_simp (a = a) True (eq_self a)) (decide_true instDecidableTrue)))
+        true)
+      (eq_self true))
+  (implies_true Nat)
+TRACE unfold Eq.symm actual=Eq.symm
+  (Eq.trans
+    (forall_congr fun {a} =>
+      Eq.trans
+        (congrFun'
+          (congrArg Eq
+            (Eq.trans (Decidable.decide.congr_simp (a = a) True (eq_self a)) (decide_true instDecidableTrue)))
+          true)
+        (eq_self true))
+    (implies_true Nat))
+TRACE unfold of_eq_true actual=of_eq_true
+  (Eq.trans
+    (forall_congr fun {a} =>
+      Eq.trans
+        (congrFun'
+          (congrArg Eq
+            (Eq.trans (Decidable.decide.congr_simp (a = a) True (eq_self a)) (decide_true instDecidableTrue)))
+          true)
+        (eq_self true))
+    (implies_true Nat))
+TRACE unfold Nat.instLawfulBEq actual=Nat.instLawfulBEq
+TRACE unfold List.instDecidableMemOfLawfulBEq._proof_1 actual=List.instDecidableMemOfLawfulBEq._proof_1 3 [1, 2]
+TRACE unfold of_decide_eq_true actual=of_decide_eq_true (id (Eq.refl true))
+TRACE empty-matcher List.decidableBAll.match_1: nomatch a✝¹, a✝
+TRACE unfold List.decidableBAll._proof_1 actual=List.decidableBAll._proof_1 (fun y => y = 0) y h
+TRACE unfold List.decidableBAll._proof_2 actual=List.decidableBAll._proof_2 (fun y => y = 0) 0 [] (Nat.eq_of_beq_eq_true (Eq.refl (Nat.beq 0 0)))
+  (List.decidableBAll._proof_1 fun y => y = 0)
+TRACE unfold of_decide_eq_true actual=of_decide_eq_true (id (Eq.refl true))
+REPORT Helper ( ConcreteSpec.Repro.single_zero Helper (inversion). Every element of the singleton list is zero (approved: repro:r1). 
+REPORT Helper ( ConcreteSpec.Repro.last_mem Helper (computation). The last element is a member of a two-element list (approved: repro:r1). 
+FAIL instance-false-discharge ConcreteSpec.Repro.«⟪example⟫ConcreteSpec/Repro.lean:19» 
+FAIL instance-false-discharge ConcreteSpec.Repro.«⟪example⟫ConcreteSpec/Repro.lean:52» 
+FAIL unpaired-planted ConcreteSpec.Repro.«⟪example⟫ConcreteSpec/Repro.lean:55» 
+FAIL planted-proposition ConcreteSpec.Repro.«⟪example⟫ConcreteSpec/Repro.lean:55» law=ConcreteSpec.Repro.sum_zero case=decided_ball no-valid-closed-instance
+FAIL unpaired-planted ConcreteSpec.Repro.«⟪example⟫ConcreteSpec/Repro.lean:22» 
+FAIL planted-proposition ConcreteSpec.Repro.«⟪example⟫ConcreteSpec/Repro.lean:22» law=ConcreteSpec.Repro.find_absent case=decided_notin no-valid-closed-instance
+NOTE projection-cost ConcreteSpec.Repro.sum_zero visited=2 limit=4096 cached=2
+NOTE projection-cost ConcreteSpec.Repro.find_absent visited=2 limit=4096 cached=2
+NOTE projection-cost ConcreteSpec.Repro.len_pos visited=3 limit=4096 cached=3
+N2 FAIL

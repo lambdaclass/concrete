@@ -1,0 +1,25 @@
+TRACE rec False.rec (fun x => a✝ = b✝) (Bool.ne_true_of_eq_false (decide_eq_false h) h✝)
+CTX a._@.Init.Data.Nat.Basic.176410721._hygCtx._hyg.12: Nat
+CTX b._@.Init.Data.Nat.Basic.176410721._hygCtx._hyg.13: Nat
+CTX h: (a✝¹ == b✝¹) = true
+CTX a._@.Init.Core.176410721._hygCtx._hyg.17: Nat
+CTX b._@.Init.Core.176410721._hygCtx._hyg.18: Nat
+CTX h: decide (a✝ = b✝) = true
+CTX h: ¬a✝ = b✝
+TRACE via _private.Init.Prelude.0.of_decide_eq_true.match_1_1
+TRACE via of_decide_eq_true
+TRACE via instLawfulBEq
+TRACE via beq_iff_eq
+TRACE via beq_iff_eq._simp_1
+TRACE via Nat.instLawfulBEq
+TRACE via List.instDecidableMemOfLawfulBEq._proof_1
+TRACE via of_decide_eq_true
+REPORT Helper ( ConcreteSpec.Repro.single_zero Helper (inversion). Every element of the singleton list is zero (approved: repro:r1). 
+REPORT Helper ( ConcreteSpec.Repro.last_mem Helper (computation). The last element is a member of a two-element list (approved: repro:r1). 
+FAIL instance-false-discharge ConcreteSpec.Repro.«⟪example⟫ConcreteSpec/Repro.lean:19» 
+FAIL unpaired-planted ConcreteSpec.Repro.«⟪example⟫ConcreteSpec/Repro.lean:22» 
+FAIL planted-proposition ConcreteSpec.Repro.«⟪example⟫ConcreteSpec/Repro.lean:22» law=ConcreteSpec.Repro.find_absent case=decided_notin no-valid-closed-instance
+NOTE projection-cost ConcreteSpec.Repro.sum_zero visited=2 limit=4096 cached=2
+NOTE projection-cost ConcreteSpec.Repro.find_absent visited=2 limit=4096 cached=2
+NOTE projection-cost ConcreteSpec.Repro.len_pos visited=3 limit=4096 cached=3
+N2 FAIL

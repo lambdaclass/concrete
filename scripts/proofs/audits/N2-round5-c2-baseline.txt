@@ -1,0 +1,9 @@
+TRACE refuted ConcreteSpec.Core.cycle_excludes_dependencyOrder U source chain order hcycle hord
+CTX U: ConcreteSpec.Core.ConstTypes
+CTX source: List (ConcreteSpec.Core.ConstDecl U)
+CTX order: List (ConcreteSpec.Core.ConstDecl U)
+CTX hord: ConcreteSpec.Core.DependencyOrder U source order
+CTX chain: List ConcreteSpec.Core.ConstId
+CTX hcycle: ConcreteSpec.Core.CycleChain U source chain
+HELPER _private.ConcreteSpec.Proofs.Const.0.ConcreteSpec.Core.acyclic_of_dependencyOrder falseDischarge=true
+PASS exact-source helper probes c2

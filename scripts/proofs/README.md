@@ -112,16 +112,51 @@ confirm whole-module completion; isolated proof controls do not certify a head.
 Hypothesis discharge scanning follows proof helpers transitively with a visited
 set and a shared traversal budget; data/typeclass arguments are excluded.
 Closed helper bodies are applied to the actual supplied arguments before reduction.
-Open helper bodies are traversed generically once per declaration; every actual
-proof/empty-type argument is still inspected at every use. This bounds recursive
-helper analysis without specializing generic recursion machinery at endlessly
-fresh hypothetical locals. A hypothetical lambda branch is excluded only when
-the kernel checks a refutation of one of its assumptions (or its type has no
-constructors); failure to prove that fact excludes nothing. Conversely, an actual
-argument inhabiting such a refuted type is rejected, including False/Empty/PEmpty
-hidden inside generic helpers. There is no proof-name or proof-shape allowlist,
-and nesting depth does not determine whether a proof is real. Resource exhaustion
-in refutation search is propagated as INCOMPLETE, never swallowed as success.
+Open helper bodies also retain their actual supplied arguments; there is no
+per-declaration cache that replaces supplied proofs by hypothetical binders.
+The visited key includes the full local context, so a result obtained in an
+unreachable context cannot suppress a check of the same term in a reachable one.
+A hypothetical branch can be excluded by a checked refutation of its context,
+including several assumptions jointly (contradiction and, at an elimination,
+`simp_all` certificates). Failure to find a certificate grants no exemption.
+An open derivation of `False` is followed through transparent helpers to its
+suppliers, rather than treating its intermediate result as a supplied impossible
+inhabitant. Local hypothetical contradictions are not actual suppliers; closed
+impossible inhabitants and opaque supplied producers of impossible inhabitants
+are rejected. This applies to data-dependent supplied impossibilities too.
+There is no library trust list, proof-shape allowlist, or nesting cutoff. The
+shared traversal budget remains 20,000 visits; resource exhaustion in traversal
+or refutation search propagates as INCOMPLETE. The projection bound is unchanged.
+The exact Init-only `fixtures/F3b-Repro.lean` is a positive control, including both
+`by decide` cases and all its original passing proof forms. Joint hypothetical
+binders are positive controls; actual jointly contradictory supplied proofs,
+reachable helper branches and data-dependent supplied impossibilities are exact
+`instance-false-discharge` negative controls. Under the Instance convention,
+these negatives actually discharge a premise through `False.elim`; an unreachable
+branch under unsupplied contradictory binders does not do so.
+`vacuity_round5.py c1|c2 [--baseline]` probes only the three reported helper bodies
+in freshly archived real sources (baseline 550fab85e or current checker); it does
+not claim whole-module completion. R-0219 owns this semantic repair. Server replay
+and the complete 17-scope c1/c2 audits remain required before promotion.
+
+**Round 5 staging blocker (R-0219):** actual-argument traversal repairs the reported
+false positives and preserves the exact discharge negatives, but the isolated
+historical C9 control currently exhausts the unchanged 2,000,000-heartbeat bound.
+It is INCOMPLETE, never PASS; this branch is not ready for promotion. Generic
+per-declaration argument erasure and an alpha-key optimization that conflated a
+lambda with its opened body were rejected. Increasing a budget or dropping proof
+dependencies is not the fix. The remaining long-term design is a memoized
+recursive proof summary with formal supplied-argument provenance and branch
+reachability constraints, instantiated at every actual application. Summaries
+must preserve dependencies between several supplied proofs and data-dependent
+branches, and context-dependent results cannot be reused in a reachable context.
+The summary solver must use a shared bounded worklist, report unfinished strongly
+connected components as INCOMPLETE, and retain all exact historical controls.
+R-0219 owns this remaining work; the coordinator may file its implementation row
+(no IDs allocated here). Environment sharding under coordinator-owned R-0691 can
+improve full-environment throughput but **does not solve** this single-proof
+recursion expansion. Keep the real cheap PR audit and full daily audit if tiering
+is needed; never restore argument erasure or sample dependencies to save time.
 The exact C9-new instance and planted excerpts in `fixtures/provenance.json` are
 positive controls: both retained identities require zero FAIL/INCOMPLETE evidence
 diagnostics. On the server, run `nix develop -c python3

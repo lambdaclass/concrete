@@ -19,6 +19,13 @@ def controls(run, source, labels=None):
     def add(label, text, expected, budget=64, status=1):
         cases.append((label, text, budget, set(expected), status))
 
+    from pathlib import Path
+    repro = Path(__file__).with_name("fixtures") / "F3b-Repro.lean"
+    add("joint-branch-decide-repro", {
+        "ConcreteSpec.lean": "import ConcreteSpec.Repro\n",
+        "ConcreteSpec/Repro.lean": repro.read_text(),
+    }, set(), status=0)
+
     add("unclassified", BASE.replace("/-- Law (subject `ConcreteSpecControl.S`). -/", ""),
         {("FAIL", "classification-count", "ConcreteSpecControl.growth"), ("FAIL", "evidence-law-kind", "EXAMPLE")})
     add("double", BASE.replace("Law (subject", "Helper (computation). reason (approved: independent:r1) (writer: writer) (reviewer: reviewer). Law (subject"),

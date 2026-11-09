@@ -1,0 +1,81 @@
+TRACE refuted Eq.casesOn (motive := fun a t => ConcreteSpec.Core.Exec.Ctrl.done = a → h.left ≍ t → False) h.left
+  (fun h_1 => False.elim (noConfusion_of_Nat ConcreteSpec.Core.Exec.Ctrl.ctorIdx h_1))
+  (Eq.refl ConcreteSpec.Core.Exec.Ctrl.done) (HEq.refl h.left)
+CTX n: Int
+CTX e: ConcreteSpec.Core.Exec.Exit Int
+CTX L: ConcreteSpec.Core.AList ConcreteSpec.Core.Var Int
+CTX rest: List (ConcreteSpec.Core.Exec.Frame ConcreteSpec.Core.Exec.Demo.ops)
+CTX h: {
+        ctrl :=
+          ConcreteSpec.Core.Exec.Ctrl.exec
+            { f := ConcreteSpec.Core.Exec.Demo.logF, args := [ConcreteSpec.Core.Exec.Demo.E.lit n],
+                site := ConcreteSpec.Core.Exec.Demo.s }.stmt,
+        locals := L, store := ConcreteSpec.Core.Exec.Demo.DState.init,
+        frames := ConcreteSpec.Core.Exec.Frame.resume (ConcreteSpec.Core.Exec.Pending.exit e) :: rest }.ctrl =
+    ConcreteSpec.Core.Exec.Ctrl.done ∧
+  {
+        ctrl :=
+          ConcreteSpec.Core.Exec.Ctrl.exec
+            { f := ConcreteSpec.Core.Exec.Demo.logF, args := [ConcreteSpec.Core.Exec.Demo.E.lit n],
+                site := ConcreteSpec.Core.Exec.Demo.s }.stmt,
+        locals := L, store := ConcreteSpec.Core.Exec.Demo.DState.init,
+        frames := ConcreteSpec.Core.Exec.Frame.resume (ConcreteSpec.Core.Exec.Pending.exit e) :: rest }.frames =
+    ConcreteSpec.Core.Exec.Frame.resume (ConcreteSpec.Core.Exec.Pending.exit e) :: rest
+HELPER _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.CleanupEvidence.logSegment falseDischarge=true
+TRACE empty-rec False.rec
+  (fun x =>
+    L✝ = L →
+      st✝ = st →
+        tr = tr₁ ++ tr₂ →
+          L' = L₂ →
+            st' = st₂ →
+              hperf ≍ ConcreteSpec.Core.Exec.Performed.call a✝¹ a✝ →
+                ConcreteSpec.Core.Exec.BoundaryRun P (ConcreteSpec.Core.Exec.Step P) e k [] L✝ st✝
+                  (ConcreteSpec.Core.Exec.planWith [] L✝) tr L' st')
+  (noConfusion_of_Nat List.ctorIdx h✝)
+CTX O: ConcreteSpec.Core.Exec.Operands
+CTX P: ConcreteSpec.Core.Exec.Program O
+CTX e: ConcreteSpec.Core.Exec.Exit O.Val
+CTX k: List (ConcreteSpec.Core.Exec.Frame O)
+CTX pre: List (ConcreteSpec.Core.Exec.Frame O)
+CTX L: ConcreteSpec.Core.AList ConcreteSpec.Core.Var O.Val
+CTX L': ConcreteSpec.Core.AList ConcreteSpec.Core.Var O.Val
+CTX st: O.Store
+CTX st': O.Store
+CTX tr: List O.Event
+CTX hp: ∀ (f : ConcreteSpec.Core.Exec.Frame O), f ∈ pre → ConcreteSpec.Core.Exec.Passes e f
+CTX hperf: ConcreteSpec.Core.Exec.Performed P (ConcreteSpec.Core.Exec.planWith pre L✝¹) L✝¹ st✝¹ tr✝ L' st'
+CTX L: ConcreteSpec.Core.AList ConcreteSpec.Core.Var O.Val
+CTX st: O.Store
+CTX tr: List O.Event
+CTX hp: ∀ (f : ConcreteSpec.Core.Exec.Frame O), f ∈ [] → ConcreteSpec.Core.Exec.Passes e f
+CTX hperf: ConcreteSpec.Core.Exec.Performed P (ConcreteSpec.Core.Exec.planWith [] L✝) L✝ st✝ tr L' st'
+CTX L: ConcreteSpec.Core.AList ConcreteSpec.Core.Var O.Val
+CTX d: ConcreteSpec.Core.Exec.Deferred O
+CTX rest: List (ConcreteSpec.Core.Exec.CleanAct O)
+CTX st: O.Store
+CTX tr₁: List O.Event
+CTX st₁: O.Store
+CTX tr₂: List O.Event
+CTX L₂: ConcreteSpec.Core.AList ConcreteSpec.Core.Var O.Val
+CTX st₂: O.Store
+CTX q: List (ConcreteSpec.Core.Exec.Frame O)
+CTX a._@._internal._hyg.0: ConcreteSpec.Core.Exec.FirstSteps (ConcreteSpec.Core.Exec.Step P)
+  (fun c => c.ctrl = ConcreteSpec.Core.Exec.Ctrl.done ∧ c.frames = q)
+  { ctrl := ConcreteSpec.Core.Exec.Ctrl.exec d.stmt, locals := L, store := st, frames := q } tr₁
+  { ctrl := ConcreteSpec.Core.Exec.Ctrl.done, locals := L, store := st₁, frames := q }
+CTX a._@._internal._hyg.0: ConcreteSpec.Core.Exec.Performed P rest L st₁ tr₂ L₂ st₂
+CTX a_ih._@._internal._hyg.0: (fun a a_1 a_2 a_3 a_4 a_5 t =>
+    ConcreteSpec.Core.Exec.planWith [] L✝ = a →
+      L✝ = a_1 →
+        st✝ = a_2 →
+          tr = a_3 →
+            L' = a_4 →
+              st' = a_5 →
+                hperf ≍ t →
+                  ConcreteSpec.Core.Exec.BoundaryRun P (ConcreteSpec.Core.Exec.Step P) e k [] L✝ st✝
+                    (ConcreteSpec.Core.Exec.planWith [] L✝) tr L' st')
+  rest L st₁ tr₂ L₂ st₂ a✝
+CTX h._@.ConcreteSpec.Proofs.Exec.3293321307._hygCtx._hyg.118: ConcreteSpec.Core.Exec.planWith [] L✝ = ConcreteSpec.Core.Exec.CleanAct.call L d :: rest
+HELPER ConcreteSpec.Core.Exec.boundary_of_performed falseDischarge=true
+PASS exact-source helper probes c1

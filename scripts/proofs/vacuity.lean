@@ -330,42 +330,61 @@ def refutableType (domain : Expr) : MetaM Bool := withoutModifyingState do
       return false
   return false
 
+/-- Certify an unreachable hypothetical context, including contradictions requiring
+    several binders. The certificate is constructed from the local hypotheses,
+    independently of the proof being audited, and type checked before use.
+    Failure to find a certificate grants no exemption. -/
+def refutableContext (simplify : Bool := false) : MetaM Bool := withoutModifyingState do
+  let goal ← mkFreshExprMVar (mkConst ``False)
+  if !(← goal.mvarId!.contradictionCore { useDecide := false }) then
+    if !simplify then return false
+    let ctx ← Simp.mkContext { failIfUnchanged := false } (simpTheorems := #[(← getSimpTheorems)])
+    let (remaining, _) ← simpAll goal.mvarId! ctx
+    if remaining.isSome then return false
+  let proof ← instantiateMVars goal
+  if proof.hasMVar then return false
+  Lean.Meta.check proof
+  return true
+
 structure DischargeState where
   remaining : Nat := 20000
-  visited : Std.HashSet Expr := {}
-  openBodies : Std.HashSet Name := {}
+  visited : Std.HashSet (Expr × Array FVarId) := {}
 
-/-- Closed helpers are inspected at their actual arguments. Open helper bodies are
-    scanned generically once per declaration, rather than repeatedly specializing
-    recursive proof machinery at fresh hypothetical locals. Every supplied proof
-    or empty-type argument is still checked at every application. Hypothetical
-    lambda contexts are excluded only by a checked refutation of a binder type.
-    The shared visited graph and fuel bound all dependency traversal. -/
+/-- Inspect helpers at their actual arguments, including open applications. Only
+    a checked refutation of the hypothetical local context can exempt an impossible
+    branch. In particular, contradictory supplied arguments remain supplied: they
+    are substituted before inspecting the helper, never replaced by fresh binders.
+    The shared expression graph and fuel bound dependency traversal. -/
 partial def falseDischarge (e : Expr) : StateRefT DischargeState MetaM Bool := do
   let e := cleanSpine e
-  if (← get).visited.contains e then return false
+  -- The same expression in a different hypothetical context is a different
+  -- audit state: an unreachable branch cannot mask a later supplied use.
+  let key := (e, (← getLCtx).getFVarIds)
+  if (← get).visited.contains key then return false
   let fuel := (← get).remaining
   if fuel == 0 then throwError "false-discharge-budget"
-  modify fun state => { state with remaining := fuel - 1, visited := state.visited.insert e }
-  if ← refutableType (← inferType e) then return true
+  modify fun state => { state with remaining := fuel - 1, visited := state.visited.insert key }
+  let refuted ← refutableType (← inferType e)
+  if refuted && !e.hasFVar then return !(← refutableContext true)
   let e ← whnfD e
   if let .const n levels := e.getAppFn' then
     if [``False.elim, ``False.casesOn, ``absurd, ``Empty.elim, ``Empty.casesOn,
-        ``PEmpty.elim, ``PEmpty.casesOn].contains n then return true
+        ``PEmpty.elim, ``PEmpty.casesOn].contains n && !e.hasFVar then return !(← refutableContext true)
     if let some matcher ← getMatcherInfo? n then
-      if matcher.numAlts == 0 then return true
+      if matcher.numAlts == 0 && !e.hasFVar then return !(← refutableContext true)
     if let some (.recInfo r) := (← getEnv).find? n then
-      if r.rules.isEmpty then return true
-    let openTerm := e.hasFVar
-    let expand := !openTerm || !(← get).openBodies.contains n
-    if expand then
-      if openTerm then modify fun state => { state with openBodies := state.openBodies.insert n }
-      if let some ci := (← getEnv).find? n then
-        if let some value := ci.value? (allowOpaque := true) then
-          let body := value.instantiateLevelParams ci.levelParams levels
-          let applied := if openTerm then body else (mkAppN body e.getAppArgs).headBeta
-          let reduced ← whnfD applied
-          if ← falseDischarge reduced then return true
+      if r.rules.isEmpty && !e.hasFVar then return !(← refutableContext true)
+    if let some ci := (← getEnv).find? n then
+      if let some value := ci.value? (allowOpaque := true) then
+        let body := value.instantiateLevelParams ci.levelParams levels
+        let applied := (mkAppN body e.getAppArgs).headBeta
+        let reduced ← whnfD applied
+        if ← falseDischarge reduced then return true
+      else if refuted then
+        -- An opaque supplied producer of an impossible inhabitant is real
+        -- evidence. Transparent derivations are followed to their suppliers;
+        -- hypothetical local contradictions are not mistaken for suppliers.
+        if let .axiomInfo .. := ci then return !(← refutableContext true)
   match e with
   | .app .. =>
     for arg in e.getAppArgs do
@@ -375,6 +394,7 @@ partial def falseDischarge (e : Expr) : StateRefT DischargeState MetaM Bool := d
   | .lam .. => lambdaTelescope e fun xs body => do
     for x in xs do
       if ← refutableType (← inferType x) then return false
+    if ← refutableContext then return false
     falseDischarge body
   | .letE _ _ v b _ => falseDischarge (b.instantiate1 v)
   | .mdata _ e | .proj _ _ e => falseDischarge e

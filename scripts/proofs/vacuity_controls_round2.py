@@ -219,6 +219,57 @@ end ConcreteSpecControl
             "end ConcreteSpecControl")
         add(label, fixture, bad("instance-false-discharge"))
 
+    # Jointly contradictory *hypothetical* binders are an unreachable branch.
+    # Supplied inhabitants of the same two domains are actual discharges.
+    joint_hyp = base.replace("_h : n = 2", "_h : ∀ p : Prop, p → ¬ p → n = 2")
+    joint_hyp = joint_hyp.replace("growth 2 rfl", "growth 2 (fun _ hp hn => False.elim (hn hp))")
+    joint_hyp = joint_hyp.replace("2 = 2 ∧ ¬ 2 < mutant 2 := by decide",
+        "(∀ p : Prop, p → ¬ p → 2 = 2) ∧ ¬ 2 < mutant 2 := by constructor; exact fun _ _ _ => rfl; decide")
+    add("joint-hypothetical-positive", joint_hyp, set(), status=0)
+    helper_tag = "/-- Helper (computation). Supplied contradiction (approved: independent:r5). -/\n"
+    joint = ("axiom opaqueP : Prop\naxiom hp : opaqueP\naxiom hn : ¬ opaqueP\n" + helper_tag +
+        "theorem jointDischarge (_k : Nat) (p : Prop) (hp : p) (hn : ¬ p) : 2 = 2 := False.elim (hn hp)\n")
+    add("joint-supplied-negative", extra("", joint + tag +
+        "\nexample : 2 < S 2 := growth 2 (jointDischarge 0 opaqueP hp hn)"), bad("instance-false-discharge"))
+    add("joint-open-supplied-negative", universal_hyp.replace("/-- Law", joint + "/-- Law", 1).replace(
+        "end ConcreteSpecControl", tag +
+        "\nexample : 2 < S 2 := growth 2 (fun k => jointDischarge k opaqueP hp hn)\nend ConcreteSpecControl"), bad("instance-false-discharge"))
+    reachable = ("axiom impossibleAt : Nat → False\n" + helper_tag +
+        "theorem reachableDischarge (k : Nat) : 2 = 2 := False.elim (impossibleAt k)\n")
+    add("reachable-open-impossible-negative", universal_hyp.replace("/-- Law", reachable + "/-- Law", 1).replace(
+        "end ConcreteSpecControl", tag +
+        "\nexample : 2 < S 2 := growth 2 (fun k => reachableDischarge k)\nend ConcreteSpecControl"), bad("instance-false-discharge"))
+
+    branching = ("axiom opaqueP : Prop\naxiom hp : opaqueP\naxiom hn : ¬ opaqueP\n" + helper_tag +
+        "theorem branchDischarge (_k : Nat) (bad : Bool) (p : Prop) (hp : p) (hn : ¬ p) : 2 = 2 := by\n"
+        "  cases bad with\n  | false => rfl\n  | true => exact False.elim (hn hp)\n")
+    add("reachable-joint-helper-negative", universal_hyp.replace("/-- Law", branching + "/-- Law", 1).replace(
+        "end ConcreteSpecControl", tag +
+        "\nexample : 2 < S 2 := growth 2 (fun k => Eq.trans (branchDischarge k false opaqueP hp hn) "
+        "(branchDischarge k true opaqueP hp hn))\nend ConcreteSpecControl"), bad("instance-false-discharge"))
+
+    # Reusing a closed subterm after an unreachable context must inspect it
+    # again. The contradiction here needs simp on decide, beyond the fast pass.
+    contextual = base.replace("_h : n = 2",
+        "_h : (∀ (p : Prop) [Decidable p], decide p = true → ¬p → n = 2) ∧ n = 2")
+    contextual = contextual.replace("growth 2 rfl",
+        "growth 2 ⟨(fun _ _ _ _ => rfl), rfl⟩")
+    contextual = contextual.replace("2 = 2 ∧ ¬ 2 < mutant 2 := by decide",
+        "((∀ (p : Prop) [Decidable p], decide p = true → ¬p → 2 = 2) ∧ 2 = 2) ∧ ¬ 2 < mutant 2 := "
+        "⟨⟨(fun _ _ _ _ => rfl), rfl⟩, by decide⟩")
+    contextual = contextual.replace("/-- Law", "axiom impossible : False\n/-- Law", 1)
+    for label, right, expected in [
+        ("unreachable-closed-supplier-positive", "rfl", set()),
+        ("context-cache-supplied-negative", "False.elim impossible", bad("instance-false-discharge")),
+    ]:
+        proof = "growth 2 ⟨(fun _ _ _ _ => False.elim impossible), " + right + "⟩"
+        if expected:
+            fixture = contextual.replace("end ConcreteSpecControl", tag +
+                "\nexample : 2 < S 2 := " + proof + "\nend ConcreteSpecControl")
+        else:
+            fixture = contextual.replace("growth 2 ⟨(fun _ _ _ _ => rfl), rfl⟩", proof)
+        add(label, fixture, expected, status=1 if expected else 0)
+
     add("recursive-law-positive", extra("/-- Law (subject `ConcreteSpecControl.S`). -/", "theorem recursiveLaw (n : Nat) : n < S n := match n with\n  | 0 => Nat.zero_lt_succ 0\n  | n + 1 => Nat.succ_lt_succ (recursiveLaw n)"), bad("missing-instance", "ConcreteSpecControl.recursiveLaw"))
     add("namespace-components", base + "namespace Left.Right\nopen ConcreteSpecControl\n/-- Helper (computation). References `S` (approved: independent:r3). -/\ntheorem marker : True := trivial\nend Left.Right\n", set(), status=0)
     add("root-and-open-ambiguous", base + "def S : Nat := 0\nopen ConcreteSpecControl\n/-- Helper (computation). Ambiguous reference `S` (approved: independent:r3). -/\ntheorem Other.marker : True := trivial\n", bad("ambiguous-name", "Other.marker"))
