@@ -9,14 +9,14 @@ PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `Concret
 namespace ConcreteSpec.Core
 
 /-- Representation lemma. Splitting the unique rendering recovers the stored components.
-(approved: PENDING). -/
+(approved: REV-C9-agy-115a73b2d). -/
 theorem SourcePath.split_render (path : SourcePath) :
     path.render.toList.splitOn '/' = path.components := by
   simp only [SourcePath.render, String.toList_ofList]
   exact List.splitOn_intercalate '/' (fun cs h => (path.valid cs h).2.2.2.1) path.nonempty
 
 /-- Representation lemma. Equality of the sole rendering is equality of structured identities.
-(approved: PENDING). -/
+(approved: REV-C9-agy-115a73b2d). -/
 theorem SourcePath.render_injective (a b : SourcePath) (h : a.render = b.render) : a = b := by
   have parts := congrArg (fun s : String => s.toList.splitOn '/') h
   rw [a.split_render, b.split_render] at parts
@@ -25,7 +25,7 @@ theorem SourcePath.render_injective (a b : SourcePath) (h : a.render = b.render)
   rfl
 
 /-- Representation lemma. The renderer has no root, traversal spelling, drive introducer or
-backslash; this follows from the component representation. (approved: PENDING). -/
+backslash; this follows from the component representation. (approved: REV-C9-agy-115a73b2d). -/
 theorem SourcePath.render_safe (path : SourcePath) :
     path.render.toList ≠ [] ∧ path.render ≠ "." ∧ path.render ≠ ".." ∧
       path.render.toList.head? ≠ some '/' ∧
@@ -83,7 +83,7 @@ theorem SourcePath.render_safe (path : SourcePath) :
     (fun eq => h.2.2.1 (by simpa only [String.toList_ofList] using (congrArg String.toList eq).trans (by decide))), h.2.2.2⟩
 
 /-- Representation lemma. AY-3 (assumed-yes pending owner confirmation): every scalar
-in a rendered path is free of ASCII controls, including separators. (approved: PENDING). -/
+in a rendered path is free of ASCII controls, including separators. (approved: REV-C9-agy-115a73b2d). -/
 theorem SourcePath.render_no_controls (path : SourcePath) :
     ∀ c ∈ path.render.toList, ¬ SourcePath.Control c := by
   have joinSafe : ∀ parts : List (List Char),
@@ -118,7 +118,7 @@ theorem SourcePath.parse_render (path : SourcePath) :
 
 /-- Helper (inversion). Every admitted raw string is exactly
 the sole rendering of the returned identity; acceptance cannot silently normalize.
-(approved: PENDING). -/
+(approved: REV-C9-agy-115a73b2d). -/
 theorem SourcePath.accepted_render (raw : String) (path : SourcePath)
     (accepted : SourcePath.parse raw = .ok path) : path.render = raw := by
   unfold SourcePath.parse at accepted
@@ -131,7 +131,7 @@ theorem SourcePath.accepted_render (raw : String) (path : SourcePath)
   · contradiction
 
 /-- Helper (inversion). Every parser refusal retains the exact offending raw spelling.
-(approved: PENDING). -/
+(approved: REV-C9-agy-115a73b2d). -/
 theorem SourcePath.refusal_input (raw : String) (diagnostic : SourcePath.Refusal)
     (refused : SourcePath.parse raw = .error diagnostic) : diagnostic.input = raw := by
   unfold SourcePath.parse at refused
@@ -242,7 +242,7 @@ example : SourcePath.backslashComponent ≠ [] ∧ '/' ∉ SourcePath.backslashC
   refine ⟨by decide, by decide, by decide, ?_⟩
   intro h; cases h
 
-/-- Helper (computation). The AY-2 diagnostic is specifically backslash. (approved: PENDING). -/
+/-- Helper (computation). The AY-2 diagnostic is specifically backslash. (approved: REV-C9-agy-115a73b2d). -/
 theorem SourcePath.backslash_reason : componentReason backslashComponent = .backslash := by rfl
 
 /-- A precomposed Unicode path; AY-4 is assumed-yes pending owner confirmation. -/
@@ -256,7 +256,7 @@ def SourcePath.normalize (raw : String) : Except Refusal SourcePath :=
   parse (if raw = "é" then "é" else raw)
 
 /-- Helper (computation). Both Unicode spellings render exactly, and normalization-equivalent
-spellings have different identities under AY-4. (approved: PENDING). -/
+spellings have different identities under AY-4. (approved: REV-C9-agy-115a73b2d). -/
 theorem SourcePath.unicode_exact :
     precomposed.render = "é" ∧ decomposed.render = "é" ∧ precomposed ≠ decomposed := by decide
 

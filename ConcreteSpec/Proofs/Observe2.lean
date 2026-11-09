@@ -22,7 +22,7 @@ open ConcreteSpec.Core
 variable {S : EventSignature}
 
 /-- Helper (computation). Parsing every rendered file recovers its identity and bytes.
-(approved: PENDING). -/
+(approved: REV-C9-agy-115a73b2d). -/
 theorem LoadedProject.parseFiles_render (sources : SourceTable) :
     LoadedProject.parseFiles (List.map (fun entry => (entry.1.render, entry.2)) sources) = .ok sources := by
   induction sources with
@@ -30,7 +30,7 @@ theorem LoadedProject.parseFiles_render (sources : SourceTable) :
   | cons entry rest ih => simp [LoadedProject.parseFiles, SourcePath.parse_render, ih]
 
 /-- Helper (inversion). Successful file parsing preserves every raw spelling and byte sequence.
-(approved: PENDING). -/
+(approved: REV-C9-agy-115a73b2d). -/
 theorem LoadedProject.parseFiles_exact (files : AList String SourceText) (sources : SourceTable)
     (parsed : LoadedProject.parseFiles files = .ok sources) :
     List.map (fun entry => (entry.1.render, entry.2)) sources = files := by
@@ -48,7 +48,7 @@ theorem LoadedProject.parseFiles_exact (files : AList String SourceText) (source
         simp only [List.map_cons, SourcePath.accepted_render file.1 path hp, ih tail ht]
 
 /-- Helper (computation). File parsing is exactly the representation relation, in both directions.
-(approved: PENDING). -/
+(approved: REV-C9-agy-115a73b2d). -/
 theorem LoadedProject.parseFiles_iff (files : AList String SourceText) (sources : SourceTable) :
     LoadedProject.parseFiles files = .ok sources ↔
       List.map (fun entry => (entry.1.render, entry.2)) sources = files := by
@@ -57,7 +57,7 @@ theorem LoadedProject.parseFiles_iff (files : AList String SourceText) (sources 
   · intro h; rw [← h]; exact LoadedProject.parseFiles_render sources
 
 /-- Helper (computation). The collision search finds none exactly for lists without repeats.
-(approved: PENDING). -/
+(approved: REV-C9-agy-115a73b2d). -/
 theorem LoadedProject.firstDuplicate_none {α : Type} [DecidableEq α] (keys : List α) :
     LoadedProject.firstDuplicate keys = none ↔ keys.Nodup := by
   induction keys with
@@ -66,7 +66,7 @@ theorem LoadedProject.firstDuplicate_none {α : Type} [DecidableEq α] (keys : L
     by_cases h : key ∈ rest <;> simp [LoadedProject.firstDuplicate, h, ih]
 
 /-- Helper (computation). A site's source-binding check succeeds exactly for a matching file
-whose bytes establish the span's location. (approved: PENDING). -/
+whose bytes establish the span's location. (approved: REV-C9-agy-115a73b2d). -/
 theorem LoadedProject.siteIssue_none (sources : SourceTable) (entry : SiteId × Span) :
     LoadedProject.siteIssue sources entry = none ↔ ∃ bytes,
       AList.lookup sources entry.2.path = some bytes ∧ entry.2.LocationOk bytes := by
@@ -76,7 +76,7 @@ theorem LoadedProject.siteIssue_none (sources : SourceTable) (entry : SiteId × 
   | some bytes => by_cases h : entry.2.LocationOk bytes <;> simp [h]
 
 /-- Helper (computation). The source-binding scan covers every supplied site, without filtering.
-(approved: PENDING). -/
+(approved: REV-C9-agy-115a73b2d). -/
 theorem LoadedProject.findSiteIssue_none (sources : SourceTable) (sites : SiteTable) :
     LoadedProject.findSiteIssue sources sites = none ↔
       ∀ entry ∈ sites, ∃ bytes,
@@ -124,7 +124,7 @@ theorem LoadedProject.load_admitted (input : ProjectSources) (project : LoadedPr
     simp_all
 
 /-- Helper (computation). Unique keys make membership and lookup agree on the *same* span,
-rather than merely finding a value for that identity. (approved: PENDING). -/
+rather than merely finding a value for that identity. (approved: REV-C9-agy-115a73b2d). -/
 theorem LoadedProject.lookup_iff_mem {κ α : Type} [DecidableEq κ]
     (table : AList κ α) (unique : (List.map Prod.fst table).Nodup) (key : κ) (value : α) :
     AList.lookup table key = some value ↔ (key, value) ∈ table := by
@@ -174,7 +174,7 @@ theorem LoadedProject.load_locations (input : ProjectSources) :
       sp.path.render_safe.2.2.2.2.2⟩, bytes, bound, loc⟩
 
 /-- Helper (computation). A reported duplicate is an identity in the original list.
-(approved: PENDING). -/
+(approved: REV-C9-agy-115a73b2d). -/
 theorem LoadedProject.firstDuplicate_mem {α : Type} [DecidableEq α] (keys : List α)
     (key : α) (found : LoadedProject.firstDuplicate keys = some key) : key ∈ keys := by
   induction keys with
@@ -186,7 +186,7 @@ theorem LoadedProject.firstDuplicate_mem {α : Type} [DecidableEq α] (keys : Li
     · exact List.Mem.tail _ (ih found)
 
 /-- Helper (inversion). Parsing failures name an original file and its exact raw spelling.
-(approved: PENDING). -/
+(approved: REV-C9-agy-115a73b2d). -/
 theorem LoadedProject.parseFiles_refusal_names (files : AList String SourceText)
     (sites : SiteTable) (issue : SourceLoadRefusal)
     (refused : LoadedProject.parseFiles files = .error issue) :
@@ -209,7 +209,7 @@ theorem LoadedProject.parseFiles_refusal_names (files : AList String SourceText)
         cases diagnostic <;> simp_all [SourceLoadRefusal.Names]
 
 /-- Helper (inversion). A per-site diagnostic names the supplied entry.
-(approved: PENDING). -/
+(approved: REV-C9-agy-115a73b2d). -/
 theorem LoadedProject.siteIssue_names (sources : SourceTable) (entry : SiteId × Span)
     (input : ProjectSources) (member : entry ∈ input.sites) (issue : SourceLoadRefusal)
     (found : LoadedProject.siteIssue sources entry = some issue) : issue.Names input := by
@@ -223,7 +223,7 @@ theorem LoadedProject.siteIssue_names (sources : SourceTable) (entry : SiteId ×
     · cases found; exact member
 
 /-- Helper (inversion). The source-binding scan's diagnostic names an entry in its input.
-(approved: PENDING). -/
+(approved: REV-C9-agy-115a73b2d). -/
 theorem LoadedProject.findSiteIssue_names (sources : SourceTable) (sites : SiteTable)
     (input : ProjectSources) (subset : ∀ entry ∈ sites, entry ∈ input.sites)
     (issue : SourceLoadRefusal) (found : LoadedProject.findSiteIssue sources sites = some issue) :
@@ -315,14 +315,14 @@ theorem LoadedProject.load_unique (input : ProjectSources) :
 
 /-- Representation lemma. A lookup is functional: two successful resolutions of one identity
 return the same span. This is finite-map algebra, not independent loader soundness.
-(approved: PENDING). -/
+(approved: REV-C9-agy-115a73b2d). -/
 theorem LoadedProject.lookup_functional (project : LoadedProject) (site : SiteId) (a b : Span)
     (first : AList.lookup project.sites site = some a)
     (second : AList.lookup project.sites site = some b) : a = b := by
   exact Option.some.inj (first.symm.trans second)
 
 /-- Helper (computation). A permutation of mapped input can be lifted to its original records.
-No decoder or fallback value is needed. (approved: PENDING). -/
+No decoder or fallback value is needed. (approved: REV-C9-agy-115a73b2d). -/
 theorem LoadedProject.lift_permutation {α β : Type} (f : α → β)
     {left right : List β} (permutation : left.Perm right) (records : List α)
     (mapped : List.map f records = left) :
@@ -355,7 +355,7 @@ theorem LoadedProject.lift_permutation {α β : Type} (f : α → β)
     exact ⟨last, hl, pm.trans pl⟩
 
 /-- Representation lemma. Reordering a finite map with unique keys preserves lookup.
-(approved: PENDING). -/
+(approved: REV-C9-agy-115a73b2d). -/
 theorem LoadedProject.lookup_permutation {κ α : Type} [DecidableEq κ]
     (left right : AList κ α) (permutation : left.Perm right)
     (unique : (List.map Prod.fst left).Nodup) (key : κ) :
@@ -377,7 +377,7 @@ theorem LoadedProject.lookup_permutation {κ α : Type} [DecidableEq κ]
 
 /-- Helper (congruence). The independent admission specification transports across arbitrary
 file and site permutations, including different byte sequences in distinct files.
-(approved: PENDING). -/
+(approved: REV-C9-agy-115a73b2d). -/
 theorem ProjectSources.realizes_permutation (input other : ProjectSources)
     (files : input.files.Perm other.files) (sites : input.sites.Perm other.sites)
     (project : LoadedProject) (realizes : input.Realizes project) :
@@ -499,7 +499,7 @@ def loseSites (input : ProjectSources) : SourceLoadResult :=
   | .admitted project => .admitted { project with sites := [] }
 
 /-- Helper (computation). The parent spelling contradicts the structured renderer independently
-of the loader's checks. (approved: PENDING). -/
+of the loader's checks. (approved: REV-C9-agy-115a73b2d). -/
 theorem parent_invalid : ¬ ∃ project, parentPath.Realizes project := by
   rintro ⟨project, raw, _⟩
   have member : ("..", tabSource) ∈ List.map
@@ -509,7 +509,7 @@ theorem parent_invalid : ¬ ∃ project, parentPath.Realizes project := by
   exact entry.1.render_safe.2.2.1 (congrArg Prod.fst equal)
 
 /-- Helper (computation). Two equal site identities are not a unique input set.
-(approved: PENDING). -/
+(approved: REV-C9-agy-115a73b2d). -/
 theorem duplicate_invalid : ¬ ∃ project, duplicate.Realizes project := by
   rintro ⟨project, h⟩
   have unique := h.2.2.2.1
@@ -517,7 +517,7 @@ theorem duplicate_invalid : ¬ ∃ project, duplicate.Realizes project := by
   simp at unique
 
 /-- Helper (computation). A referenced file cannot be resolved in an empty file input.
-(approved: PENDING). -/
+(approved: REV-C9-agy-115a73b2d). -/
 theorem missing_invalid : ¬ ∃ project, missing.Realizes project := by
   rintro ⟨project, raw, _, _, _, locations⟩
   have empty : project.sources = [] := by
@@ -528,7 +528,7 @@ theorem missing_invalid : ¬ ∃ project, missing.Realizes project := by
   simp [empty, AList.lookup] at found
 
 /-- Helper (computation). Repeated raw files parse to repeated structured identities, so the
-independent unique-file requirement rejects them. (approved: PENDING). -/
+independent unique-file requirement rejects them. (approved: REV-C9-agy-115a73b2d). -/
 theorem duplicateFiles_invalid : ¬ ∃ project, duplicateFiles.Realizes project := by
   rintro ⟨project, h⟩
   have parsed := (LoadedProject.parseFiles_iff duplicateFiles.files project.sources).mpr h.1
@@ -540,7 +540,7 @@ theorem duplicateFiles_invalid : ¬ ∃ project, duplicateFiles.Realizes project
   simp at unique
 
 /-- Helper (computation). The independently supplied bytes refute the fabricated column.
-(approved: PENDING). -/
+(approved: REV-C9-agy-115a73b2d). -/
 theorem badLocation_invalid : ¬ ∃ project, badLocation.Realizes project := by
   rintro ⟨project, h⟩
   obtain ⟨bytes, found, loc⟩ := h.2.2.2.2 (⟨0⟩, badSpan) (by simp [badLocation])
@@ -1343,14 +1343,14 @@ private def decodeTrapLine (line : String) :
   let (site, path, line, col) ← decodeWithKind kind line.toList
   some (kind, site, path, line, col)
 
-/-- Helper (computation). Regroups the exact trap-line characters. (approved: PENDING). -/
+/-- Helper (computation). Regroups the exact trap-line characters. (approved: REV-C9-agy-115a73b2d). -/
 private theorem trapLineChars_prefix (kind : TrapKind) (site : SiteId) (sp : Span) :
     trapLineChars kind site sp = linePrefix kind ++
       (sp.path.render.toList ++ ":".toList ++ (toString sp.line).toList ++ ":".toList ++
         (toString sp.col).toList ++ " (site ".toList ++ (toString site.id).toList ++ ")".toList) := by
   simp [trapLineChars, linePrefix, List.append_assoc]
 
-/-- Helper (computation). Computes the decoder on rendered fields. (approved: PENDING). -/
+/-- Helper (computation). Computes the decoder on rendered fields. (approved: REV-C9-agy-115a73b2d). -/
 private theorem decodeWithKind_render (kind : TrapKind) (site : SiteId) (sp : Span) :
     decodeWithKind kind (trapLineChars kind site sp) = some (site, sp.path.render, sp.line, sp.col) := by
   have hline : 0 < sp.line := sp.line_pos
@@ -1359,7 +1359,7 @@ private theorem decodeWithKind_render (kind : TrapKind) (site : SiteId) (sp : Sp
   rw [trapLineChars_prefix, stripPrefix_append]
   simp [List.reverse_append, stripPrefix, parseRevNat_digits, hline, hcol]
 
-/-- Helper (computation). Computes the complete renderer/decoder round trip. (approved: PENDING). -/
+/-- Helper (computation). Computes the complete renderer/decoder round trip. (approved: REV-C9-agy-115a73b2d). -/
 private theorem decodeTrapLine_render (kind : TrapKind) (site : SiteId) (sp : Span) :
     decodeTrapLine (trapLine kind site sp) = some (kind, site, sp.path.render, sp.line, sp.col) := by
   simp [decodeTrapLine, trapLine, decodeKind_render, decodeWithKind_render]
