@@ -400,7 +400,9 @@ def make_plan(root, snapshot, local, branch, scope='all'):
     for key, rows in sorted(uses.items()):
         errors = [identity_error(snapshot, key, sha, name) for name, _, sha in rows]
         roots = set().union(*(introductions(snapshot.repo, sha).get(key, set()) for _, _, sha in rows))
-        if not snapshot.reservation(key) and len(roots) > 1:
+        if (not snapshot.reservation(key) and
+                not introductions(snapshot.repo, snapshot.remote_heads['main']).get(key) and
+                len(roots) > 1):
             errors.append(f'{key}: independent unreserved introductions {sorted(roots)}')
         if any(errors):
             conflicts.append(f'{key}: ' + repr([(name, title) for name, title, _ in rows]) + '; ' + '; '.join(sorted(set(filter(None, errors)))))

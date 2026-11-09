@@ -118,6 +118,17 @@ def independent_unreserved(root):
         assert p.returncode == 1 and any(key in c for c in json.loads(plan.read_text())['conflicts']), p.stderr
 
 
+def historical_baseline(root):
+    save(root, 'roadmap', 'old historical item')
+    a.git(root, 'rm', 'ROADMAP.md')
+    a.git(root, 'commit', '-qm', 'historical deletion')
+    save(root, 'roadmap', 'main historical restoration')
+    a.git(root, 'push', '-q', 'origin', 'main')
+    plan = root.parent / 'plan.json'
+    ok(cli(root, 'backfill', '--output', str(plan)))
+    assert json.loads(plan.read_text())['conflicts'] == []
+
+
 def unreserved(root):
     save(root, 'roadmap', 'unreserved task')
     p = cli(root, 'check')
@@ -179,7 +190,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='id-round6-') as tmp:
         tests = [('ISS-0020-before-main-and-merge-target', lambda r: collision(r, 'iss')),
                  ('R-before-main-and-merge-target', lambda r: collision(r, 'roadmap')),
-                 *[(f.__name__, f) for f in (race, backfill, independent_unreserved, unreserved, metadata, incomplete, unreadable_reservation, parser)]]
+                 *[(f.__name__, f) for f in (race, backfill, independent_unreserved, historical_baseline, unreserved, metadata, incomplete, unreadable_reservation, parser)]]
         for name, test in tests:
             directory = Path(tmp) / name
             directory.mkdir()
