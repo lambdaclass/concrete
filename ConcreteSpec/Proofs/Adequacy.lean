@@ -28,7 +28,7 @@ open ConcreteSpec.Core
 variable {O : Operands} {P : Program O} {ρ : QueryOracle O} {c : Config O}
 
 /-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness
-(approved: PENDING).
+(approved: APPR-integ-agy-0dbeba29e).
 Helper for constructing a query; this definitional equality is not execution-level contract
 evidence. -/
 theorem issue_occurrence (events : List O.Event) (p : O.Prim) (args : List O.Val) (site : SiteId)
@@ -36,7 +36,7 @@ theorem issue_occurrence (events : List O.Event) (p : O.Prim) (args : List O.Val
     (Query.issue events p args site st issued).occurrence = occurrenceAt issued site := rfl
 
 /-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than
-independent execution evidence (approved: PENDING).
+independent execution evidence (approved: APPR-integ-agy-0dbeba29e).
 Helper for reasoning about a history append; this is not execution-level contract evidence. -/
 theorem issue_next_occurrence (issued : List (Query O)) (site : SiteId) (q : Query O) :
     occurrenceAt (issued ++ [q]) site =
@@ -44,21 +44,21 @@ theorem issue_next_occurrence (issued : List (Query O)) (site : SiteId) (q : Que
   simp [occurrenceAt, List.filter_append]
   split <;> simp_all
 
-/-- Helper (congruence). Equal queries have equal pure-function answers (approved: PENDING).
+/-- Helper (congruence). Equal queries have equal pure-function answers (approved: APPR-integ-agy-0dbeba29e).
 Helper for rewriting an oracle answer under query equality; this congruence is not
 execution-level contract evidence. -/
 theorem answer_deterministic (ρ : QueryOracle O) {q₁ q₂ : Query O} (h : q₁ = q₂) :
     answer ρ q₁ = answer ρ q₂ := congrArg (answer ρ) h
 
 /-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness
-(approved: PENDING).
+(approved: APPR-integ-agy-0dbeba29e).
 Helper for unfolding the adapter; this definitional equality is not execution-level contract
 evidence. -/
 theorem answer_toQueryOracle (ρ₀ : Oracle O) (q : Query O) :
     answer ρ₀.toQueryOracle q = ρ₀ q.events q.prim q.args q.site q.store := rfl
 
 /-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than
-independent execution evidence (approved: PENDING).
+independent execution evidence (approved: APPR-integ-agy-0dbeba29e).
 Appending the authenticated next query preserves the per-site occurrence invariant. -/
 theorem QueryHistoryValid.append {issued : List (Query O)} {q : Query O}
     (valid : QueryHistoryValid issued) (occurrence : q.occurrence = occurrenceAt issued q.site) :
@@ -114,19 +114,19 @@ theorem runFromQ_queryHistoryValid : ∀ (fuel : Nat) (events : List O.Event)
                 simpa [runFromQ, hf, hs, q, ha, hallow, hk] using
                   ih (events ++ a.event.toList) (issued ++ [q]) c' nextValid
 
-/-- Helper (computation). The empty history has no entries to check (approved: PENDING). -/
+/-- Helper (computation). The empty history has no entries to check (approved: APPR-integ-agy-0dbeba29e). -/
 theorem QueryHistoryValid.nil : QueryHistoryValid ([] : List (Query O)) := by
   intro i q h
   simp at h
 
 /-- Helper (projection). Specializes the general evaluator invariant to empty histories (approved:
-PENDING). -/
+APPR-integ-agy-0dbeba29e). -/
 theorem runQ_queryHistoryValid (fuel : Nat) (c : Config O) :
     QueryHistoryValid (runQ P ρ fuel c).queries :=
   runFromQ_queryHistoryValid fuel [] [] c QueryHistoryValid.nil
 
 /-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than
-independent execution evidence (approved: PENDING).
+independent execution evidence (approved: APPR-integ-agy-0dbeba29e).
 Splits a per-site prefix count into its old prefix and the queries in the interval. -/
 theorem occurrenceAt_take_interval (qs : List (Query O)) (site : SiteId)
     {i j : Nat} (hij : i ≤ j) :
@@ -153,7 +153,7 @@ theorem runFromQ_interleaved_site (fuel : Nat) (events : List O.Event)
     ← validRun i q hq]
 
 /-- Helper (arithmetic). An interval containing its first query and no further query at that
-site contributes exactly one to the prefix count (approved: PENDING). -/
+site contributes exactly one to the prefix count (approved: APPR-integ-agy-0dbeba29e). -/
 theorem occurrenceAt_take_no_other (qs : List (Query O)) {i j : Nat} {q : Query O}
     (hq : qs[i]? = some q)
     (separate : ∀ k r, i < k → k < j → qs[k]? = some r → r.site ≠ q.site) :
@@ -182,7 +182,7 @@ theorem occurrenceAt_take_no_other (qs : List (Query O)) {i j : Nat} {q : Query 
 
 /-- Helper (arithmetic). Two requests to the same site separated only by other sites differ
 by exactly one occurrence, regardless of silent machine work or unrelated queries
-(approved: PENDING). -/
+(approved: APPR-integ-agy-0dbeba29e). -/
 theorem runFromQ_interleaved_other_sites (fuel : Nat) (events : List O.Event)
     (issued : List (Query O)) (c : Config O) (valid : QueryHistoryValid issued)
     {i j : Nat} {q q' : Query O} (hij : i < j)
@@ -197,7 +197,7 @@ theorem runFromQ_interleaved_other_sites (fuel : Nat) (events : List O.Event)
     ← history i q hq]
 
 /-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than
-independent execution evidence (approved: PENDING).
+independent execution evidence (approved: APPR-integ-agy-0dbeba29e).
 **Repeated requests at one site advance their occurrences.** These are consecutive queries in
 the actual run history; arbitrarily many silent machine transitions may separate the requests. -/
 theorem runFromQ_consecutive_same_site (fuel : Nat) (events : List O.Event)
@@ -215,7 +215,7 @@ theorem runFromQ_consecutive_same_site (fuel : Nat) (events : List O.Event)
   simp
 
 /-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than
-independent execution evidence (approved: PENDING).
+independent execution evidence (approved: APPR-integ-agy-0dbeba29e).
 **Interleaved sites keep separate counters.** A query at another site does not advance the
 current query's occurrence count, even when the requests are consecutive in an actual run. -/
 theorem runFromQ_consecutive_other_site (fuel : Nat) (events : List O.Event)
@@ -273,7 +273,7 @@ theorem runFromQ_toReport {ρ₀ : Oracle O} :
                   ih (events ++ a.event.toList) (issued ++ [Query.issue events p vs site st issued]) c'
 
 /-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness
-(approved: PENDING).
+(approved: APPR-integ-agy-0dbeba29e).
 Exact primitive-move characterization under a lifted ordinary oracle, in both directions,
 including the successor configuration, events, and queries. This is constructor inversion,
 not the independent evaluator request/answer law. -/
@@ -305,7 +305,7 @@ theorem Move.toQueryOracle_answer {ρ₀ : Oracle O} {pos pos' : Position O}
 /-- Helper (computation). Unfolds one issued request into the four evaluator branches. This
 computation helper
 is used to prove the independent oracle/contract relation in the request correspondence law.
-(approved: PENDING). -/
+(approved: APPR-integ-agy-0dbeba29e). -/
 theorem runFromQ_request {fuel : Nat} {events : List O.Event} {issued : List (Query O)}
     {c : Config O} {p : O.Prim} {vs : List O.Val} {site : SiteId} {st : O.Store}
     {k : Answer O.Val O.Event O.Store → Option (Config O)}
@@ -323,7 +323,7 @@ theorem runFromQ_request {fuel : Nat} {events : List O.Event} {issued : List (Qu
   rfl
 
 /-- Helper (computation). Every instrumented run extends the query history with which it started.
-(approved: PENDING). -/
+(approved: APPR-integ-agy-0dbeba29e). -/
 theorem runFromQ_queries_from : ∀ (fuel : Nat) (events : List O.Event) (issued : List (Query O))
     (c : Config O), ∃ later, (runFromQ P ρ fuel events issued c).queries = issued ++ later := by
   intro fuel
@@ -357,7 +357,7 @@ theorem runFromQ_queries_from : ∀ (fuel : Nat) (events : List O.Event) (issued
                   List.append_assoc]⟩
 
 /-- Helper (computation). One more unit of fuel preserves every query already issued. (approved:
-PENDING). -/
+APPR-integ-agy-0dbeba29e). -/
 theorem runFromQ_queries_prefix : ∀ (fuel : Nat) (events : List O.Event) (issued : List (Query O))
     (c : Config O),
     (runFromQ P ρ fuel events issued c).queries <+:
@@ -397,7 +397,7 @@ theorem runFromQ_queries_prefix : ∀ (fuel : Nat) (events : List O.Event) (issu
                   ih (events ++ a.event.toList) (issued ++ [q]) c'
 
 /-- Helper (computation). Query histories are prefix-monotone for every increase in fuel. (approved:
-PENDING). -/
+APPR-integ-agy-0dbeba29e). -/
 theorem runFromQ_queries_prefix_le {n m : Nat} (hle : n ≤ m) (events : List O.Event)
     (issued : List (Query O)) (c : Config O) :
     (runFromQ P ρ n events issued c).queries <+: (runFromQ P ρ m events issued c).queries := by
@@ -414,7 +414,7 @@ theorem runFromQ_queries_prefix_le {n m : Nat} (hle : n ≤ m) (events : List O.
 
 /-- Helper (computation). The first queries of a run are independent of its fuel: if two budgets both
 issue query `i`,
-they issue the same query there. (approved: PENDING). -/
+they issue the same query there. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem runFromQ_query_fuel_independent {n m : Nat} {events : List O.Event}
     {issued : List (Query O)} {c : Config O} {i : Nat} {qn qm : Query O}
     (hn : (runFromQ P ρ n events issued c).queries[i]? = some qn)
@@ -433,7 +433,7 @@ theorem runFromQ_query_fuel_independent {n m : Nat} {events : List O.Event}
 /-! ### Finite executions and evaluator adequacy -/
 
 /-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness
-(approved: PENDING).
+(approved: APPR-integ-agy-0dbeba29e).
 One oracle-checked move is one ordinary labeled step, with the same event contribution. -/
 theorem Move.toStep {pos pos' : Position O} (h : Move P ρ pos pos') :
     ∃ l, Step P pos.config l pos'.config ∧ pos'.events = pos.events ++ l.events ∧
@@ -445,7 +445,7 @@ theorem Move.toStep {pos pos' : Position O} (h : Move P ρ pos pos') :
     cases he : a.event <;> simp [Answer.label, Label.events, he]
 
 /-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness
-(approved: PENDING).
+(approved: APPR-integ-agy-0dbeba29e).
 An oracle-checked finite path erases to `Steps`; its final histories extend its initial ones. -/
 theorem Moves.toSteps {n : Nat} {pos pos' : Position O} (h : Moves P ρ n pos pos') :
     ∃ tr later, pos'.events = pos.events ++ tr ∧ pos'.queries = pos.queries ++ later ∧
@@ -460,7 +460,7 @@ theorem Moves.toSteps {n : Nat} {pos pos' : Position O} (h : Moves P ρ n pos po
     · rw [hq', hq, List.append_assoc]
 
 /-- Helper (computation). A configuration with an available machine transition is not final.
-(approved: PENDING). -/
+(approved: APPR-integ-agy-0dbeba29e). -/
 theorem final?_none_of_step {c : Config O} {out : Out O} (h : step P c = some out) :
     c.final? = none := by
   cases c with
@@ -606,7 +606,7 @@ theorem runFromQ_request_correspondence {fuel : Nat} {events : List O.Event}
           ha hl hk (.prim hs ha hl hk) hpath he hc hr
 
 /-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness
-(approved: PENDING).
+(approved: APPR-integ-agy-0dbeba29e).
 **Soundness for C1's `runFrom`.** Query erasure preserves the finite execution and its ending
 justification. `Moves.toSteps` turns the same witness into the ordinary `Steps` relation. -/
 theorem runFrom_sound {ρ₀ : Oracle O} (fuel : Nat) (events : List O.Event) (c : Config O) :
@@ -627,7 +627,7 @@ theorem runFrom_sound {ρ₀ : Oracle O} (fuel : Nat) (events : List O.Event) (c
   exact hc
 
 /-- Helper (computation). Every report extends the event history supplied to `runFrom`. (approved:
-PENDING). -/
+APPR-integ-agy-0dbeba29e). -/
 theorem runFrom_events_from {ρ₀ : Oracle O} (fuel : Nat) (events : List O.Event) (c : Config O) :
     ∃ tr, (runFrom P ρ₀ fuel events c).events = events ++ tr := by
   obtain ⟨n, pos, hpath, he, hc⟩ := runFrom_sound (P := P) (ρ₀ := ρ₀) fuel events c
@@ -654,7 +654,7 @@ theorem runFromQ_complete {n : Nat} {pos pos' : Position O} (h : Moves P ρ n po
       simpa [runFromQ, hn, hs, ha, hallow, hk] using ih hf
 
 /-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness
-(approved: PENDING).
+(approved: APPR-integ-agy-0dbeba29e).
 **Completeness for C1's `runFrom`.** Every finite execution from an empty query history to a
 final configuration is reported with exactly its number of steps as fuel. -/
 theorem runFrom_complete {ρ₀ : Oracle O} {n : Nat} {events : List O.Event} {c : Config O}
@@ -714,7 +714,7 @@ theorem runFrom_mono {ρ₀ : Oracle O} : ∀ (n m : Nat), n ≤ m →
 
 /-- Helper (computation). **Completeness with enough fuel.** Every budget at least the finite path
 length reports that
-path's final outcome and events. (approved: PENDING). -/
+path's final outcome and events. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem runFrom_complete_le {ρ₀ : Oracle O} {n m : Nat} (hle : n ≤ m)
     {events : List O.Event} {c : Config O} {pos' : Position O}
     (h : Moves P ρ₀.toQueryOracle n ⟨c, events, []⟩ pos')
@@ -769,14 +769,14 @@ theorem runFrom_trace_prefix_le {ρ₀ : Oracle O} : ∀ (n m : Nat), n ≤ m �
                   (ih m hle' (events ++ a.event.toList) c')
 
 /-- Helper (computation). The events of fuel `n` are a prefix of those of fuel `n + 1`. (approved:
-PENDING). -/
+APPR-integ-agy-0dbeba29e). -/
 theorem runFrom_trace_prefix {ρ₀ : Oracle O} (n : Nat) (events : List O.Event) (c : Config O) :
     (runFrom P ρ₀ n events c).events <+: (runFrom P ρ₀ (n + 1) events c).events :=
   runFrom_trace_prefix_le n (n + 1) (Nat.le_add_right n 1) events c
 
 /-- Helper (computation). A final report has an ordinary finite `Steps` witness ending in exactly that
 final
-configuration, with the reported events. (approved: PENDING). -/
+configuration, with the reported events. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem runFrom_final_sound {ρ₀ : Oracle O} {fuel : Nat} {events : List O.Event} {c : Config O}
     {f : Final O.Val} (h : (runFrom P ρ₀ fuel events c).ending = .final f) :
     ∃ tr c', Steps P c tr c' ∧ c'.final? = some f ∧
@@ -793,7 +793,7 @@ theorem runFrom_final_sound {ρ₀ : Oracle O} {fuel : Nat} {events : List O.Eve
 
 /-- Helper (computation). If `n` steps exhaust the budget at `pos`, then `n + m` steps are exactly `m`
 steps from `pos`.
-This is the compatibility operation used by the infinite-limit theorem. (approved: PENDING). -/
+This is the compatibility operation used by the infinite-limit theorem. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem runFromQ_add_of_outOfFuel {n : Nat} {events : List O.Event} {issued : List (Query O)}
     {c : Config O} {pos : Position O}
     (h : runFromQ P ρ n events issued c =
@@ -841,7 +841,7 @@ theorem runFromQ_add_of_outOfFuel {n : Nat} {events : List O.Event} {issued : Li
                 simpa [runFromQ, hf, hs, ha, hallow, hk, Nat.succ_add] using ih h' m
 
 /-- Helper (computation). A zero-step `outOfFuel` report identifies its position exactly. (approved:
-PENDING). -/
+APPR-integ-agy-0dbeba29e). -/
 theorem eq_of_runFromQ_zero_out {events : List O.Event} {issued : List (Query O)} {c : Config O}
     {pos : Position O}
     (h : runFromQ P ρ 0 events issued c = ⟨pos.events, pos.queries, .outOfFuel pos.config⟩) :
@@ -856,7 +856,7 @@ theorem eq_of_runFromQ_zero_out {events : List O.Event} {issued : List (Query O)
       rfl
 
 /-- Helper (computation). A move between two nonfinal positions determines the one-unit report from
-its source. (approved: PENDING). -/
+its source. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem Move.runFromQ_one {pos pos' : Position O} (hm : Move P ρ pos pos')
     (hf : pos.config.final? = none) (hf' : pos'.config.final? = none) :
     runFromQ P ρ 1 pos.events pos.queries pos.config =
@@ -865,7 +865,7 @@ theorem Move.runFromQ_one {pos pos' : Position O} (hm : Move P ρ pos pos')
   | silent hs => simp [runFromQ, hf, hs, hf']
   | prim hs ha hallow hk => simp [runFromQ, hf, hs, ha, hallow, hk, hf']
 
-/-- Helper (computation). A move's source is not final. (approved: PENDING). -/
+/-- Helper (computation). A move's source is not final. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem Move.not_final {pos pos' : Position O} (hm : Move P ρ pos pos') :
     pos.config.final? = none := by
   cases hm with
@@ -928,7 +928,7 @@ theorem move_of_fuel_succ {n : Nat} {events : List O.Event} {issued : List (Quer
                       exact .prim hs ha hallow hk
 
 /-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness
-(approved: PENDING).
+(approved: APPR-integ-agy-0dbeba29e).
 No position of an infinite execution is final. -/
 theorem InfiniteExecution.not_final (X : InfiniteExecution P ρ c) (n : Nat) :
     (X.states n).config.final? = none :=
@@ -982,25 +982,25 @@ def FuelLimit.toInfiniteExecution (L : FuelLimit P ρ c) : InfiniteExecution P �
     rwa [hp0, hp1] at hm
 
 /-- Representation lemma. This repackages the same states and proof fields; it supplies no independent
-behavioral evidence (approved: PENDING).
+behavioral evidence (approved: APPR-integ-agy-0dbeba29e).
 Infinite executions and compatible fuel limits are two presentations of the same behavior. -/
 theorem infinite_iff_fuelLimit : Nonempty (InfiniteExecution P ρ c) ↔ Nonempty (FuelLimit P ρ c) :=
   ⟨fun ⟨X⟩ => ⟨X.toFuelLimit⟩, fun ⟨L⟩ => ⟨L.toInfiniteExecution⟩⟩
 
 /-- Representation lemma. This repackages the same states and proof fields; it supplies no independent
-behavioral evidence (approved: PENDING).
+behavioral evidence (approved: APPR-integ-agy-0dbeba29e).
 Truncating an infinite execution and reconstructing it returns the original execution. -/
 theorem InfiniteExecution.toFuelLimit_toInfiniteExecution (X : InfiniteExecution P ρ c) :
     X.toFuelLimit.toInfiniteExecution = X := rfl
 
 /-- Representation lemma. This repackages the same states and proof fields; it supplies no independent
-behavioral evidence (approved: PENDING).
+behavioral evidence (approved: APPR-integ-agy-0dbeba29e).
 Reconstructing a fuel limit and truncating it returns the original limit. -/
 theorem FuelLimit.toInfiniteExecution_toFuelLimit (L : FuelLimit P ρ c) :
     L.toInfiniteExecution.toFuelLimit = L := rfl
 
 /-- Helper (computation). Compatible fuel limits from one initial configuration have the same
-positions. (approved: PENDING). -/
+positions. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem fuelLimit_states_unique (L K : FuelLimit P ρ c) : L.states = K.states := by
   funext n
   have h := (L.prefixes n).symm.trans (K.prefixes n)
@@ -1021,7 +1021,7 @@ theorem fuelLimit_states_unique (L K : FuelLimit P ρ c) : L.states = K.states :
 
 /-- Helper (computation). There is at most one compatible fuel limit for a fixed query-level oracle
 and initial
-configuration. (approved: PENDING). -/
+configuration. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem FuelLimit.unique (L K : FuelLimit P ρ c) : L = K := by
   cases L with
   | mk ls lp =>
@@ -1032,7 +1032,7 @@ theorem FuelLimit.unique (L K : FuelLimit P ρ c) : L = K := by
       rfl
 
 /-- Helper (congruence). Equality of fuel limits transports back to equality of executions;
-this representation calculation is separate from semantic determinism. (approved: PENDING). -/
+this representation calculation is separate from semantic determinism. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem InfiniteExecution.unique_execution (X Y : InfiniteExecution P ρ c) : X = Y := by
   have h : X.toFuelLimit = Y.toFuelLimit := FuelLimit.unique _ _
   have hxy : X = Y := calc
@@ -1053,7 +1053,7 @@ theorem InfiniteExecution.unique : ExecutionUnique (Move P ρ) ⟨c, [], []⟩ :
   exact different h
 
 /-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness
-(approved: PENDING).
+(approved: APPR-integ-agy-0dbeba29e).
 One transition extends, and never changes, the raw event history. -/
 theorem Move.events_prefix {pos pos' : Position O} (h : Move P ρ pos pos') :
     pos.events <+: pos'.events := by
@@ -1062,7 +1062,7 @@ theorem Move.events_prefix {pos pos' : Position O} (h : Move P ρ pos pos') :
   | prim => exact ⟨_, rfl⟩
 
 /-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than
-independent execution evidence (approved: PENDING).
+independent execution evidence (approved: APPR-integ-agy-0dbeba29e).
 Every later position of an infinite execution extends every earlier raw history. -/
 theorem InfiniteExecution.events_prefix (X : InfiniteExecution P ρ c) {m n : Nat} (h : m ≤ n) :
     (X.states m).events <+: (X.states n).events := by
@@ -1076,7 +1076,7 @@ theorem InfiniteExecution.events_prefix (X : InfiniteExecution P ρ c) {m n : Na
     rw [← List.append_assoc, hrest, show m + (d + 1) = m + d + 1 by omega, hnext]
 
 /-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than
-independent execution evidence (approved: PENDING).
+independent execution evidence (approved: APPR-integ-agy-0dbeba29e).
 Adapter projection preserves the execution's history-prefix order. -/
 theorem InfiniteExecution.projected_prefix {S : Observe.EventSignature}
     (A : Observe.ExecAdapter O S) (X : InfiniteExecution P ρ c) {m n : Nat} (h : m ≤ n) :
@@ -1085,7 +1085,7 @@ theorem InfiniteExecution.projected_prefix {S : Observe.EventSignature}
   exact ⟨A.project rest, by rw [← Observe.ExecAdapter.project_append, hrest]⟩
 
 /-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than
-independent execution evidence (approved: PENDING).
+independent execution evidence (approved: APPR-integ-agy-0dbeba29e).
 A prefix determines every list entry that lies in the shorter list. -/
 theorem getElem?_eq_of_prefix {α : Type} {xs ys : List α} (h : xs <+: ys) {i : Nat}
     (hi : i < xs.length) : ys[i]? = xs[i]? := by
@@ -1094,7 +1094,7 @@ theorem getElem?_eq_of_prefix {α : Type} {xs ys : List α} (h : xs <+: ys) {i :
 
 /-- Helper (computation). The canonical eventually silent C6 execution has exactly `events.take n`
 events after `n`
-steps. (approved: PENDING). -/
+steps. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem visiblePrefix_finiteDivergenceSteps {S : Observe.EventSignature}
     (events : List (Observe.Event S)) (n : Nat) :
     Observe.visiblePrefix (Observe.finiteDivergenceSteps events) n = events.take n := by
@@ -1107,7 +1107,7 @@ theorem visiblePrefix_finiteDivergenceSteps {S : Observe.EventSignature}
     · simp [Observe.finiteDivergenceSteps, Observe.Step.event?, h]
 
 /-- Helper (computation). An emitting C6 execution has exactly the first `n` trace events after `n`
-steps. (approved: PENDING). -/
+steps. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem visiblePrefix_emitTrace {S : Observe.EventSignature} (trace : Observe.InfiniteTrace S)
     (n : Nat) : Observe.visiblePrefix (fun i => Observe.Step.emit (trace i)) n =
       (List.range n).map trace := by
@@ -1116,7 +1116,7 @@ theorem visiblePrefix_emitTrace {S : Observe.EventSignature} (trace : Observe.In
   | succ n ih => simp [Observe.visiblePrefix_succ, ih, Observe.Step.event?, List.range_succ]
 
 /-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than
-independent execution evidence (approved: PENDING).
+independent execution evidence (approved: APPR-integ-agy-0dbeba29e).
 A bounded monotone sequence of natural numbers is eventually constant. -/
 theorem eventually_constant_of_bounded {f : Nat → Nat} (mono : ∀ {m n}, m ≤ n → f m ≤ f n) :
     ∀ bound, (∀ n, f n ≤ bound) → ∃ start, ∀ n, start ≤ n → f n = f start := by
@@ -1143,7 +1143,7 @@ theorem eventually_constant_of_bounded {f : Nat → Nat} (mono : ∀ {m n}, m �
 /-- Helper (computation). Cofinality through the actual projected histories relates any two matching
 streams,
 even with different silent-step schedules. This is a relational composition helper. (approved:
-PENDING). -/
+APPR-integ-agy-0dbeba29e). -/
 theorem MatchesProjectedHistory.sameObservation {S : Observe.EventSignature}
     {A : Observe.ExecAdapter O S} {X : InfiniteExecution P ρ c}
     {xs ys : Nat → Observe.Step S}
@@ -1160,7 +1160,7 @@ theorem MatchesProjectedHistory.sameObservation {S : Observe.EventSignature}
     exact ⟨m, r ++ t, by rw [hm, hi, List.append_assoc]⟩
 
 /-- Helper (computation). Prefix concatenation is monotone in the block count.
-(approved: PENDING). -/
+(approved: APPR-integ-agy-0dbeba29e). -/
 theorem blockPrefix_prefix {S : Observe.EventSignature} (blocks : Nat → List (Observe.Step S))
     {m n : Nat} (h : m ≤ n) : blockPrefix blocks m <+: blockPrefix blocks n := by
   obtain ⟨d, rfl⟩ := Nat.exists_eq_add_of_le h
@@ -1171,7 +1171,7 @@ theorem blockPrefix_prefix {S : Observe.EventSignature} (blocks : Nat → List (
     exact ⟨rest ++ blocks (m + d), by simp [blockPrefix, ← hr, List.append_assoc]⟩
 
 /-- Helper (arithmetic). Nonempty blocks embed machine positions strictly into step indices.
-(approved: PENDING). -/
+(approved: APPR-integ-agy-0dbeba29e). -/
 theorem InfiniteExecution.boundary_growth {S : Observe.EventSignature}
     (A : Observe.ExecAdapter O S) (X : InfiniteExecution P ρ c) (n : Nat) :
     X.observeBoundary A n < X.observeBoundary A (n + 1) := by
@@ -1182,7 +1182,7 @@ theorem InfiniteExecution.boundary_growth {S : Observe.EventSignature}
   omega
 
 /-- Helper (arithmetic). Every machine transition consumes at least one C6 step.
-(approved: PENDING). -/
+(approved: APPR-integ-agy-0dbeba29e). -/
 theorem InfiniteExecution.boundary_ge {S : Observe.EventSignature}
     (A : Observe.ExecAdapter O S) (X : InfiniteExecution P ρ c) (n : Nat) :
     n ≤ X.observeBoundary A n := by
@@ -1191,7 +1191,7 @@ theorem InfiniteExecution.boundary_ge {S : Observe.EventSignature}
   | succ n ih => have := X.boundary_growth A n; omega
 
 /-- Helper (arithmetic). The boundary map strictly preserves the machine-position order, hence
-is an embedding rather than a cofinal rescheduling. (approved: PENDING). -/
+is an embedding rather than a cofinal rescheduling. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem InfiniteExecution.boundary_strict {S : Observe.EventSignature}
     (A : Observe.ExecAdapter O S) (X : InfiniteExecution P ρ c) {m n : Nat} (h : m < n) :
     X.observeBoundary A m < X.observeBoundary A n := by
@@ -1204,7 +1204,7 @@ theorem InfiniteExecution.boundary_strict {S : Observe.EventSignature}
     · have earlier := ih (by omega); omega
 
 /-- Helper (arithmetic). Distinct machine positions have distinct embedded C6 boundaries.
-(approved: PENDING). -/
+(approved: APPR-integ-agy-0dbeba29e). -/
 theorem InfiniteExecution.boundary_injective {S : Observe.EventSignature}
     (A : Observe.ExecAdapter O S) (X : InfiniteExecution P ρ c) {m n : Nat}
     (h : X.observeBoundary A m = X.observeBoundary A n) : m = n := by
@@ -1215,7 +1215,7 @@ theorem InfiniteExecution.boundary_injective {S : Observe.EventSignature}
     · omega
 
 /-- Helper (computation). Flattening agrees with each finite concatenation at every index in it.
-(approved: PENDING). -/
+(approved: APPR-integ-agy-0dbeba29e). -/
 theorem InfiniteExecution.flatten_get {S : Observe.EventSignature}
     (A : Observe.ExecAdapter O S) (X : InfiniteExecution P ρ c) (n i : Nat)
     (hi : i < X.observeBoundary A n) :
@@ -1229,7 +1229,7 @@ theorem InfiniteExecution.flatten_get {S : Observe.EventSignature}
     rw [getElem?_eq_of_prefix (blockPrefix_prefix _ (show i + 1 ≤ n by omega)) hlt]
 
 /-- Helper (computation). At an embedded boundary, the flattened steps are precisely the finite
-concatenation of all preceding blocks. (approved: PENDING). -/
+concatenation of all preceding blocks. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem InfiniteExecution.flatten_boundary {S : Observe.EventSignature}
     (A : Observe.ExecAdapter O S) (X : InfiniteExecution P ρ c) (n : Nat) :
     (List.range (X.observeBoundary A n)).map (X.toObserveSteps A) =
@@ -1242,7 +1242,7 @@ theorem InfiniteExecution.flatten_boundary {S : Observe.EventSignature}
     rfl
 
 /-- Helper (computation). A block's visible events are its transition's projected difference.
-(approved: PENDING). -/
+(approved: APPR-integ-agy-0dbeba29e). -/
 theorem InfiniteExecution.visible_block {S : Observe.EventSignature}
     (A : Observe.ExecAdapter O S) (X : InfiniteExecution P ρ c) (n : Nat) :
     Observe.visible (X.observeBlock A n) = X.transitionEvents A n := by
@@ -1250,7 +1250,7 @@ theorem InfiniteExecution.visible_block {S : Observe.EventSignature}
   split <;> simp_all [Observe.visible, Observe.Step.event?, List.filterMap_map, Function.comp_def]
 
 /-- Helper (arithmetic). A projected prefix decomposes into its old history and the current
-transition's events. (approved: PENDING). -/
+transition's events. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem InfiniteExecution.transition_append {S : Observe.EventSignature}
     (A : Observe.ExecAdapter O S) (X : InfiniteExecution P ρ c) (n : Nat) :
     A.project (X.states (n + 1)).events =
@@ -1259,7 +1259,7 @@ theorem InfiniteExecution.transition_append {S : Observe.EventSignature}
   simp [InfiniteExecution.transitionEvents, ← hr]
 
 /-- Helper (inversion). A silent machine transition retains the event history.
-(approved: PENDING). -/
+(approved: APPR-integ-agy-0dbeba29e). -/
 theorem Move.silent_events {pos pos' : Position O} {cNext : Config O}
     (move : Move P ρ pos pos') (silent : step P pos.config = some (.next cNext)) :
     pos'.events = pos.events := by
@@ -1268,7 +1268,7 @@ theorem Move.silent_events {pos pos' : Position O} {cNext : Config O}
   | prim hs _ _ _ => rw [silent] at hs; cases hs
 
 /-- Helper (computation). Projected differences recover exactly the raw events appended by this
-transition, including multi-event projections and erasure. (approved: PENDING). -/
+transition, including multi-event projections and erasure. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem InfiniteExecution.transitionEvents_eq {S : Observe.EventSignature}
     (A : Observe.ExecAdapter O S) (X : InfiniteExecution P ρ c) (n : Nat)
     (events : List O.Event)
@@ -1277,14 +1277,14 @@ theorem InfiniteExecution.transitionEvents_eq {S : Observe.EventSignature}
   simp [InfiniteExecution.transitionEvents, h, Observe.ExecAdapter.project_append]
 
 /-- Helper (computation). Silent and erased transitions occupy a singleton silent block.
-(approved: PENDING). -/
+(approved: APPR-integ-agy-0dbeba29e). -/
 theorem InfiniteExecution.observeBlock_erased {S : Observe.EventSignature}
     (A : Observe.ExecAdapter O S) (X : InfiniteExecution P ρ c) (n : Nat)
     (empty : X.transitionEvents A n = []) : X.observeBlock A n = [.silent] := by
   simp [InfiniteExecution.observeBlock, empty]
 
 /-- Helper (inversion). A silent machine transition maps to a silent block, regardless of the
-adapter's expansion of earlier transitions. (approved: PENDING). -/
+adapter's expansion of earlier transitions. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem InfiniteExecution.observeBlock_silent {S : Observe.EventSignature}
     (A : Observe.ExecAdapter O S) (X : InfiniteExecution P ρ c) (n : Nat)
     {cNext : Config O} (silent : Exec.step P (X.states n).config = some (.next cNext)) :
@@ -1294,7 +1294,7 @@ theorem InfiniteExecution.observeBlock_silent {S : Observe.EventSignature}
   simp [InfiniteExecution.transitionEvents, he]
 
 /-- Helper (computation). Concatenated blocks recover exactly the projected machine history.
-(approved: PENDING). -/
+(approved: APPR-integ-agy-0dbeba29e). -/
 theorem InfiniteExecution.visible_blocks {S : Observe.EventSignature}
     (A : Observe.ExecAdapter O S) (X : InfiniteExecution P ρ c) (n : Nat) :
     Observe.visible (blockPrefix (X.observeBlock A) n) = A.project (X.states n).events := by
@@ -1308,7 +1308,7 @@ theorem InfiniteExecution.visible_blocks {S : Observe.EventSignature}
     rw [X.visible_block A n, ← X.transition_append A n]
 
 /-- Helper (computation). The explicit boundary embedding aligns flattened visible prefixes with
-machine histories. (approved: PENDING). -/
+machine histories. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem InfiniteExecution.visiblePrefix_toObserveSteps {S : Observe.EventSignature}
     (A : Observe.ExecAdapter O S) (X : InfiniteExecution P ρ c) (n : Nat) :
     Observe.visiblePrefix (X.toObserveSteps A) (X.observeBoundary A n) =
@@ -1317,7 +1317,7 @@ theorem InfiniteExecution.visiblePrefix_toObserveSteps {S : Observe.EventSignatu
   rw [X.flatten_boundary A n, X.visible_blocks A n]
 
 /-- Helper (computation). Cutting the flattened stream at successive embedded boundaries gives
-exactly that transition's block, including its silent step when erased. (approved: PENDING). -/
+exactly that transition's block, including its silent step when erased. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem InfiniteExecution.flatten_interval {S : Observe.EventSignature}
     (A : Observe.ExecAdapter O S) (X : InfiniteExecution P ρ c) (n : Nat) :
     (((List.range (X.observeBoundary A (n + 1))).map (X.toObserveSteps A)).drop
@@ -1383,7 +1383,7 @@ theorem InfiniteExecution.projectedTrace_valid {S : Observe.EventSignature}
 
 /-- Helper (projection). This notation specialization of `InfiniteExecution.projectedTrace_valid`
 uses the adapter directly on the raw history; it supplies no independent semantic evidence.
-(approved: PENDING).
+(approved: APPR-integ-agy-0dbeba29e).
 Every finite prefix of an infinite execution under a well-formed adapter and C1 oracle has a
 complete valid C6 event trace. -/
 theorem InfiniteExecution.projected_completeTrace {S : Observe.EventSignature}
@@ -1523,7 +1523,7 @@ theorem infinite_projected_observation {S : Observe.EventSignature}
   exact Observe.SameInfiniteObservation.trans (hs.sameObservation hm) hobs
 
 /-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than
-independent execution evidence (approved: PENDING).
+independent execution evidence (approved: APPR-integ-agy-0dbeba29e).
 Every infinite execution has either finitely many or infinitely many projected events; these
 are the two external classes `SilentDivergence` and `InfiniteInteraction`. -/
 theorem finite_or_infinite_events {S : Observe.EventSignature} (A : Observe.ExecAdapter O S)
@@ -1539,7 +1539,7 @@ theorem finite_or_infinite_events {S : Observe.EventSignature} (A : Observe.Exec
     exact Nat.le_of_not_gt (fun hlt => hn ⟨n, hlt⟩)
 
 /-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than
-independent execution evidence (approved: PENDING).
+independent execution evidence (approved: APPR-integ-agy-0dbeba29e).
 One infinite execution cannot have both finitely many and infinitely many projected events. -/
 theorem finite_not_infinite_events {S : Observe.EventSignature} {A : Observe.ExecAdapter O S}
     {X : InfiniteExecution P ρ c} (hf : FiniteEvents A X) (hi : InfiniteEvents A X) : False := by
@@ -1559,7 +1559,7 @@ theorem silentDivergence_not_infiniteInteraction {S : Observe.EventSignature}
   exact finite_not_infinite_events hf hi
 
 /-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than
-independent execution evidence (approved: PENDING).
+independent execution evidence (approved: APPR-integ-agy-0dbeba29e).
 The raw classification has the same finite/infinite dichotomy, explicitly internally. -/
 theorem internal_finite_or_infinite_events (X : InfiniteExecution P ρ c) :
     InternalFiniteEvents X ∨ InternalInfiniteEvents X := by
@@ -1705,19 +1705,19 @@ def spinConfigAt : Nat → Config ops
 /-- No events or queries occur in the periodic execution. -/
 def spinPosition (n : Nat) : Position ops := ⟨spinConfigAt (n % 5), [], []⟩
 
-/-- Helper (computation). Concrete computation for `spin_move_01`. (approved: PENDING). -/
+/-- Helper (computation). Concrete computation for `spin_move_01`. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem spin_move_01 : Move prog env ⟨spinConfig, [], []⟩ ⟨spinConfig1, [], []⟩ := .silent rfl
-/-- Helper (computation). Concrete computation for `spin_move_12`. (approved: PENDING). -/
+/-- Helper (computation). Concrete computation for `spin_move_12`. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem spin_move_12 : Move prog env ⟨spinConfig1, [], []⟩ ⟨spinConfig2, [], []⟩ := .silent rfl
-/-- Helper (computation). Concrete computation for `spin_move_23`. (approved: PENDING). -/
+/-- Helper (computation). Concrete computation for `spin_move_23`. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem spin_move_23 : Move prog env ⟨spinConfig2, [], []⟩ ⟨spinConfig3, [], []⟩ := .silent rfl
-/-- Helper (computation). Concrete computation for `spin_move_34`. (approved: PENDING). -/
+/-- Helper (computation). Concrete computation for `spin_move_34`. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem spin_move_34 : Move prog env ⟨spinConfig3, [], []⟩ ⟨spinConfig4, [], []⟩ := .silent rfl
-/-- Helper (computation). Concrete computation for `spin_move_40`. (approved: PENDING). -/
+/-- Helper (computation). Concrete computation for `spin_move_40`. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem spin_move_40 : Move prog env ⟨spinConfig4, [], []⟩ ⟨spinConfig, [], []⟩ := .silent rfl
 
 /-- Helper (computation). Every adjacent pair of periodic positions is one machine transition.
-(approved: PENDING). -/
+(approved: APPR-integ-agy-0dbeba29e). -/
 theorem spin_move (n : Nat) : Move prog env (spinPosition n) (spinPosition (n + 1)) := by
   have hlt : n % 5 < 5 := Nat.mod_lt _ (by decide)
   have hc : n % 5 = 0 ∨ n % 5 = 1 ∨ n % 5 = 2 ∨ n % 5 = 3 ∨ n % 5 = 4 := by omega
@@ -1740,7 +1740,7 @@ def spin_infinite : InfiniteExecution prog env spinConfig where
   step := spin_move
 
 /-- Helper (computation). In particular it is internal silent divergence: infinitely many steps and no
-raw events. (approved: PENDING). -/
+raw events. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem spin_internal_silent_divergence : InternalSilentDivergence prog env spinConfig :=
   ⟨spin_infinite, ⟨0, fun n => by simp [spin_infinite, spinPosition]⟩⟩
 
@@ -1779,25 +1779,25 @@ def eventPosition (n : Nat) : Position ops :=
   ⟨eventConfigAt (n % 5), rawEvents (eventCount n),
     (List.range (eventCount n)).map eventQuery⟩
 
-/-- Helper (computation). Concrete computation for `event_move_01`. (approved: PENDING). -/
+/-- Helper (computation). Concrete computation for `event_move_01`. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem event_move_01 (n : Nat) : Move prog env
     ⟨eventConfig, rawEvents n, (List.range n).map eventQuery⟩
     ⟨eventConfig1, rawEvents n, (List.range n).map eventQuery⟩ := .silent rfl
-/-- Helper (computation). Concrete computation for `event_move_12`. (approved: PENDING). -/
+/-- Helper (computation). Concrete computation for `event_move_12`. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem event_move_12 (n : Nat) : Move prog env
     ⟨eventConfig1, rawEvents n, (List.range n).map eventQuery⟩
     ⟨eventConfig2, rawEvents n, (List.range n).map eventQuery⟩ := .silent rfl
-/-- Helper (computation). Concrete computation for `event_move_23`. (approved: PENDING). -/
+/-- Helper (computation). Concrete computation for `event_move_23`. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem event_move_23 (n : Nat) : Move prog env
     ⟨eventConfig2, rawEvents n, (List.range n).map eventQuery⟩
     ⟨eventConfig3, rawEvents n, (List.range n).map eventQuery⟩ := .silent rfl
-/-- Helper (computation). Concrete computation for `event_move_40`. (approved: PENDING). -/
+/-- Helper (computation). Concrete computation for `event_move_40`. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem event_move_40 (n : Nat) : Move prog env
     ⟨eventConfig4, rawEvents n, (List.range n).map eventQuery⟩
     ⟨eventConfig, rawEvents n, (List.range n).map eventQuery⟩ := .silent rfl
 
 /-- Helper (computation). The logging transition appends exactly its raw event and its next per-site
-query. (approved: PENDING). -/
+query. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem event_move_34 (n : Nat) : Move prog env
     ⟨eventConfig3, rawEvents n, (List.range n).map eventQuery⟩
     ⟨eventConfig4, rawEvents (n + 1), (List.range (n + 1)).map eventQuery⟩ := by
@@ -1821,7 +1821,7 @@ theorem event_move_34 (n : Nat) : Move prog env
   simpa [rawEvents, List.range_succ] using hm
 
 /-- Helper (computation). Every adjacent pair of positions in the logging loop is one real machine
-transition. (approved: PENDING). -/
+transition. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem event_move (n : Nat) : Move prog env (eventPosition n) (eventPosition (n + 1)) := by
   have hlt : n % 5 < 5 := Nat.mod_lt _ (by decide)
   have hc : n % 5 = 0 ∨ n % 5 = 1 ∨ n % 5 = 2 ∨ n % 5 = 3 ∨ n % 5 = 4 := by omega
@@ -1862,13 +1862,13 @@ def keepingAdapter : Observe.ExecAdapter ops Observe.Demo.signature where
   status := fun _ => none
   sites := []
 
-/-- Helper (computation). Concrete computation for `erasing_project`. (approved: PENDING). -/
+/-- Helper (computation). Concrete computation for `erasing_project`. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem erasing_project (events : List Int) : erasingAdapter.project events = [] := by
   induction events with
   | nil => rfl
   | cons event events ih => simp [Observe.ExecAdapter.project, erasingAdapter]
 
-/-- Helper (computation). Concrete computation for `keeping_project_rawEvents`. (approved: PENDING). -/
+/-- Helper (computation). Concrete computation for `keeping_project_rawEvents`. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem keeping_project_rawEvents (n : Nat) : keepingAdapter.project (rawEvents n) =
     (List.range n).map fun _ => Observe.Event.output "1" := by
   induction n with
@@ -1879,7 +1879,7 @@ theorem keeping_project_rawEvents (n : Nat) : keepingAdapter.project (rawEvents 
     simp [Observe.ExecAdapter.project, keepingAdapter, List.range_succ] <;> decide
 
 /-- Helper (computation). Empty output satisfies C6's internal-answer rule even though C1 emits a raw
-event. (approved: PENDING). -/
+event. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem erasingWellFormed : Observe.ExecAdapter.WellFormed erasingAdapter Observe.Demo.contract () env := by
   constructor
   · intro hist p vs site store a answer typed
@@ -1890,7 +1890,7 @@ theorem erasingWellFormed : Observe.ExecAdapter.WellFormed erasingAdapter Observ
     simp [erasingAdapter] at typed
 
 /-- Helper (computation). Retaining raw events as public output satisfies C6's internal-answer rule.
-(approved: PENDING). -/
+(approved: APPR-integ-agy-0dbeba29e). -/
 theorem keepingWellFormed : Observe.ExecAdapter.WellFormed keepingAdapter Observe.Demo.contract () env := by
   constructor
   · intro hist p vs site store a answer typed
@@ -1904,18 +1904,18 @@ theorem keepingWellFormed : Observe.ExecAdapter.WellFormed keepingAdapter Observ
   · intro hist p vs site store q answer typed
     simp [keepingAdapter] at typed
 
-/-- Helper (computation). Externally the erasing run is silent divergence. (approved: PENDING). -/
+/-- Helper (computation). Externally the erasing run is silent divergence. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem erasing_silent_divergence : SilentDivergence prog erasingAdapter env eventConfig :=
   ⟨event_infinite, ⟨0, fun n => by simp [event_infinite, eventPosition, erasing_project]⟩⟩
 
 /-- Helper (computation). Internally that same run has infinitely many raw events. (approved:
-PENDING). -/
+APPR-integ-agy-0dbeba29e). -/
 theorem erasing_internal_infinite : InternalInfiniteInteraction prog env eventConfig := by
   refine ⟨event_infinite, fun bound => ⟨5 * (bound + 1), ?_⟩⟩
   simp [event_infinite, eventPosition, eventCount, rawEvents]
 
 /-- Helper (computation). Retaining the raw events turns the same execution into external infinite
-interaction. (approved: PENDING). -/
+interaction. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem keeping_infinite_interaction : InfiniteInteraction prog keepingAdapter env eventConfig := by
   refine ⟨event_infinite, fun bound => ⟨5 * (bound + 1), ?_⟩⟩
   simp [event_infinite, eventPosition, eventCount, keeping_project_rawEvents]
@@ -2038,7 +2038,7 @@ def bumpK : Answer ops.Val ops.Event ops.Store → Option (Config ops) := fun a 
   | .error kd => some ⟨.trapped kd s, [], a.store, []⟩
 
 /-- Helper (computation). A real transition under the lifted ordinary demo oracle. (approved:
-PENDING). -/
+APPR-integ-agy-0dbeba29e). -/
 theorem bumpedMove : Move prog env ⟨bumpConfig, [], []⟩ ⟨bumpContinued, [], [bumpQuery]⟩ :=
   Move.prim (P := prog) (ρ := env) (c := bumpConfig) (c' := bumpContinued) (events := [])
     (issued := []) (p := .bump) (vs := []) (site := s) (st := .init)
@@ -2295,7 +2295,7 @@ def terminalK : Answer ops.Val ops.Event ops.Store → Option (Config ops) := fu
   | .error kd => some ⟨.trapped kd s, [], a.store, []⟩
 
 /-- Helper (computation). Computes the request and continuation issued by the concrete logging
-statement. (approved: PENDING). -/
+statement. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem terminalRequest : step prog terminalConfig = some (.request .log [1] s .init terminalK) := by
   simp [terminalConfig, step, evalArgs, evalE, onRes, Res.bind, Res.map]
   funext a
@@ -2399,10 +2399,10 @@ example : terminalConfig.final? = none ∧
     rw [hev, hpath_ev, hpos'] at hevents
     simp at hevents
 
-/-- Helper (computation). Finite projected histories of the erasing execution. (approved: PENDING). -/
+/-- Helper (computation). Finite projected histories of the erasing execution. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem erasedFinite : FiniteEvents erasingAdapter event_infinite :=
   ⟨0, fun _ => by simp [erasing_project]⟩
-/-- Helper (computation). Unbounded projected histories of the keeping execution. (approved: PENDING). -/
+/-- Helper (computation). Unbounded projected histories of the keeping execution. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem keptInfinite : InfiniteEvents keepingAdapter event_infinite := by
   intro bound
   refine ⟨5 * (bound + 1), ?_⟩
@@ -2423,7 +2423,7 @@ def logThenSpinPosition : Nat → Position ops
   | n + 2 => ⟨spinConfigAt (n % 5), [1], [eventQuery 0]⟩
 
 /-- Helper (computation). Every adjacent pair of positions in `logThenSpinPosition` is one machine
-transition. (approved: PENDING). -/
+transition. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem logThenSpin_move : ∀ n, Move prog env (logThenSpinPosition n) (logThenSpinPosition (n + 1))
   | 0 =>
     Move.prim (P := prog) (ρ := env) (c := logThenSpinConfig) (c' := logThenSpinConfig1)
@@ -2462,7 +2462,7 @@ def logThenSpin_infinite : InfiniteExecution prog env logThenSpinConfig where
   step := logThenSpin_move
 
 /-- Helper (computation). The one-event-then-spin execution has bounded projected history under the
-keeping adapter. (approved: PENDING). -/
+keeping adapter. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem logThenSpinFinite : FiniteEvents keepingAdapter logThenSpin_infinite := by
   refine ⟨1, fun n => ?_⟩
   cases n with
@@ -2520,7 +2520,7 @@ def silentObserveSteps {O : Operands} {S : Observe.EventSignature} {P : Program 
     (_ : InfiniteExecution P ρ c) (_ : Nat) : Observe.Step S := .silent
 
 /-- Helper (computation). Every visible prefix of `silentObserveSteps` is empty. (approved:
-PENDING). -/
+APPR-integ-agy-0dbeba29e). -/
 theorem visiblePrefix_silentObserveSteps {O : Operands} {S : Observe.EventSignature}
     {P : Program O} {ρ : QueryOracle O} {c : Config O}
     (A : Observe.ExecAdapter O S) (X : InfiniteExecution P ρ c) (n : Nat) :
@@ -2690,7 +2690,7 @@ def refusingK : Answer refusingBindOps.Val refusingBindOps.Event refusingBindOps
   | .error kd => some ⟨.trapped kd s, [], a.store, []⟩
 
 /-- Helper (computation). Computes the request and continuation issued by the concrete
-lifecycle-refused statement. (approved: PENDING). -/
+lifecycle-refused statement. (approved: APPR-integ-agy-0dbeba29e). -/
 theorem refusingBindRequest :
     step refusingBindProgram refusingBindConfig = some (.request .log [1] s .init refusingK) := by
   simp [refusingBindConfig, step, evalArgs, evalE, onRes, Res.bind, Res.map]
@@ -2787,7 +2787,7 @@ example : (droppedAnswerRun prog env.toQueryOracle 1 [] [] terminalConfig).toRep
 def terminalFinished : Position ops := ⟨⟨.done, [], .init, []⟩, [1], [terminalQuery]⟩
 
 /-- Helper (computation). A real path includes the oracle's event and its recorded query
-(approved: PENDING).
+(approved: APPR-integ-agy-0dbeba29e).
 Constructs a concrete one-step oracle-checked path, including its event and query. -/
 theorem terminalPath : Moves prog env 1 ⟨terminalConfig, [], []⟩ terminalFinished :=
   .step (.prim (k := terminalK) (a := ⟨some 1, .ok 0, .init⟩)
@@ -2815,7 +2815,7 @@ example : ∃ n pos, Moves prog noAnswerOracle n ⟨terminalConfig, [], []⟩ po
       ReportedQueries prog noAnswerOracle hc (runFromQ prog noAnswerOracle 1 [] [] terminalConfig).queries :=
   runFromQ_sound (O := ops) (P := prog) (ρ := noAnswerOracle) 1 [] [] terminalConfig
 
-/-- Helper (inversion). No successful move answers this unanswered request (approved: PENDING).
+/-- Helper (inversion). No successful move answers this unanswered request (approved: APPR-integ-agy-0dbeba29e).
 Inverts a purported move at the concrete unanswered request; neither a silent step
 nor an answered primitive transition is possible. -/
 theorem unanswered_no_move {pos : Position ops} :
