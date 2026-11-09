@@ -18,7 +18,12 @@ No existing build products are trusted. Every anonymous example is retained by
 to **theorems.lean**, whose `populationConstants` defines the single population for
 N2 and the existing axiom inventory. Generated declarations are excluded from N2
 by declaration selection ranges and Lean projection/matcher/equation provenance, never by
-suffix. The axiom inventory still includes generated declarations.
+suffix. The axiom inventory still includes generated declarations. The shared rewrite
+reserves `⟪example⟫` in authored identifiers before generating retained names;
+strings and comments may still contain it. This authenticates the generated-example
+provenance used by all consumers: a hand-written proof cannot opt out of
+classification by spelling a synthetic example name. `example-provenance` is a FAIL,
+not an analysis timeout or a skipped declaration.
 
 Controls compile the generic checker and shared population functions once in a
 fresh private directory, without importing any specification. Each fixture still

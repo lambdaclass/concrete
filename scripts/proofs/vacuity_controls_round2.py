@@ -143,3 +143,6 @@ end ConcreteSpecControl
 
     add("unclassified-opaque", extra("", "opaque proofOpaque : True := trivial"), bad("classification-count", "ConcreteSpecControl.proofOpaque"))
     add("opaque-helper-positive", extra("/-- Helper (computation). Opaque support proof (approved: independent:r2). -/", "opaque proofOpaque : True := trivial"), set(), status=0)
+
+    add("forged-example-provenance", extra("", "def «⟪example⟫spoof» : True := trivial"), bad("example-provenance", "[anonymous]"))
+    add("example-marker-literals-positive", extra("", 'def markerText : String := "⟪example⟫"\n-- ⟪example⟫ is permitted in comments.'), set(), status=0)

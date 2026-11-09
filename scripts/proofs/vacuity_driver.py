@@ -13,7 +13,7 @@ import subprocess
 import sys
 import tempfile
 
-from lean_lex import examples, lex, LexError
+from lean_lex import examples, lex, LexError, ExampleProvenanceError
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
@@ -150,6 +150,8 @@ set_option maxHeartbeats 2000000 in
 def run(*args, **kwargs):
     try:
         return _run(*args, **kwargs)
+    except ExampleProvenanceError as error:
+        return 1, "FAIL example-provenance [anonymous] " + str(error) + "\nN2 FAIL\n"
     except LexError as error:
         return 2, "INCOMPLETE lexical-error [anonymous] " + str(error) + "\nN2 INCOMPLETE\n"
 

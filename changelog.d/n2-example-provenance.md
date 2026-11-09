@@ -1,0 +1,1 @@
+N2 (R-0219): reserve the retained-example marker at the shared rewrite boundary so authored proofs cannot forge generated-example provenance and evade classification. String/comment contents and existing companion-gate outputs remain unchanged.

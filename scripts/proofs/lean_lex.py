@@ -13,7 +13,7 @@ syntax data; the library runs no meta code): the lexer fails closed, never skips
 `comment_spans(src)` gives the top-level comments (the owner view, scripts/spec/lean_site.py, takes
 its doc blocks from them, so a doc comment inside an ordinary comment or a string is not one).
 
-Commands (exit 3 when a source cannot be read or lexed):
+Commands (exit 3 when a source cannot be read, lexed, or rewritten with sound provenance):
 
   scan RE FILE...          `file:line: text` for every match of RE (over the whole lexed text,
                            reported at the line where it starts) and for every `import` outside
@@ -34,10 +34,15 @@ class LexError(Exception):
     pass
 
 
-def lex(src, spans=None, literals=True):
+class ExampleProvenanceError(LexError):
+    """An authored identifier tries to claim the rewriter's generated provenance."""
+
+
+def lex(src, spans=None, literals=True, *, keep_names=False):
     """`src` with its comments blanked; when `spans` is a list, each top-level comment's
     (start, end) offsets are appended to it (a comment nested in another is part of that one).
-    With `literals=False`, string, character and name literals are blanked too (code tokens only)."""
+    With `literals=False`, string, character and name literals are blanked too (code tokens only).
+    `keep_names=True` preserves quoted identifiers for provenance validation."""
     n, out = len(src), []
 
     def emit(text, literal=False):
@@ -93,7 +98,7 @@ def lex(src, spans=None, literals=True):
             elif c == "«":                            # a quoted name part: no comment inside it
                 k = src.find("»", i + 1)
                 if k < 0: raise LexError("unterminated «name»")
-                emit(src[i:k + 1], True); i = k + 1
+                emit(src[i:k + 1], not keep_names); i = k + 1
             elif src.startswith("`(", i) or src.startswith("``(", i):
                 # A syntax quotation: its comments are syntax data, not comments of the source,
                 # and the library runs no meta code, so the lexer refuses it.
@@ -162,6 +167,11 @@ def examples(src_dir, dst_dir, paths):
     count = 0
     for rel in paths:
         src = open(os.path.join(src_dir, rel), encoding="utf-8").read()
+        identifiers = lex(src, literals=False, keep_names=True)
+        if EXAMPLE_MARK in identifiers:
+            line = identifiers.count("\n", 0, identifiers.index(EXAMPLE_MARK)) + 1
+            raise ExampleProvenanceError(
+                f"{rel}:{line}: reserved retained-example marker in an authored identifier")
         text = lex(src, literals=False)          # an `example` inside a literal is not a command
         out, last = [], 0
         for m in EXAMPLE.finditer(text):
