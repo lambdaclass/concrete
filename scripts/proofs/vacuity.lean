@@ -856,9 +856,9 @@ partial def workConstants (e : Expr) (budget : Option WorkBudget) : MetaM (Array
     if let some cached := (← b.get).constants[e]? then return cached
   let result ← match e with
     | .const n _ => pure #[n]
-    | .app f a => return ((← workConstants f budget) ++ (← workConstants a budget)).toList.eraseDups.toArray
-    | .lam _ t b _ | .forallE _ t b _ => return ((← workConstants t budget) ++ (← workConstants b budget)).toList.eraseDups.toArray
-    | .letE _ t v b _ => return ((← workConstants t budget) ++ (← workConstants v budget) ++ (← workConstants b budget)).toList.eraseDups.toArray
+    | .app f a => pure ((← workConstants f budget) ++ (← workConstants a budget)).toList.eraseDups.toArray
+    | .lam _ t b _ | .forallE _ t b _ => pure ((← workConstants t budget) ++ (← workConstants b budget)).toList.eraseDups.toArray
+    | .letE _ t v b _ => pure ((← workConstants t budget) ++ (← workConstants v budget) ++ (← workConstants b budget)).toList.eraseDups.toArray
     | .mdata _ b | .proj _ _ b => workConstants b budget
     | _ => pure #[]
   if let some b := budget then b.modify fun s => { s with constants := s.constants.insert e result }
@@ -985,8 +985,11 @@ def withProtected (a b : Expr) (subjects : Array Name) (check : Expr → Expr �
   for subject in subjects do
     a := (← (mutate a subject subject subjects (some budget)).run 0).1
     b := (← (mutate b subject subject subjects (some budget)).run 0).1
+  let collected ← IO.mkRef ({} : Std.HashSet Expr)
   let rec collect (e : Expr) (terms : Array Expr) : MetaM (Array Expr) := do
     chargeWork budget
+    if (← collected.get).contains e then return terms
+    collected.modify (·.insert e)
     match e with
     | .const n _ => return if subjects.contains n && !terms.contains e then terms.push e else terms
     | .app f a => collect a (← collect f terms)
@@ -995,17 +998,22 @@ def withProtected (a b : Expr) (subjects : Array Name) (check : Expr → Expr �
     | .mdata _ b | .proj _ _ b => collect b terms
     | _ => return terms
   let protectedTerms ← collect b (← collect a #[])
+  let replacements ← IO.mkRef ({} : Std.HashMap (Expr × Expr × Expr) Expr)
   let rec replace (e term value : Expr) : MetaM Expr := do
     chargeWork budget
-    if e == term then return value
-    match e with
-    | .app f a => return mkApp (← replace f term value) (← replace a term value)
-    | .lam n t b bi => return .lam n (← replace t term value) (← replace b term value) bi
-    | .forallE n t b bi => return .forallE n (← replace t term value) (← replace b term value) bi
-    | .letE n t v b nd => return .letE n (← replace t term value) (← replace v term value) (← replace b term value) nd
-    | .mdata md b => return .mdata md (← replace b term value)
-    | .proj n i b => return .proj n i (← replace b term value)
-    | _ => return e
+    if let some cached := (← replacements.get)[(e, term, value)]? then return cached
+    let result ← (do
+      if e == term then return value
+      match e with
+      | .app f a => return mkApp (← replace f term value) (← replace a term value)
+      | .lam n t b bi => return .lam n (← replace t term value) (← replace b term value) bi
+      | .forallE n t b bi => return .forallE n (← replace t term value) (← replace b term value) bi
+      | .letE n t v b nd => return .letE n (← replace t term value) (← replace v term value) (← replace b term value) nd
+      | .mdata md b => return .mdata md (← replace b term value)
+      | .proj n i b => return .proj n i (← replace b term value)
+      | _ => return e)
+    replacements.modify (·.insert (e, term, value) result)
+    return result
   let rec compare (i : Nat) (a b : Expr) : MetaM Bool := do
     chargeWork budget
     if i >= protectedTerms.size then return ← check a b

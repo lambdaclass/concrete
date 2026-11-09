@@ -148,7 +148,45 @@ def controls(meta):
     return 0
 
 
+def dag_controls():
+    from vacuity_driver import HERE
+    consumer = (HERE / 'vacuity.lean').read_text()
+    anchor = '  if let some b := budget then b.modify fun s => { s with constants := s.constants.insert e result }'
+    assert consumer.count(anchor) == 1
+    driver = r'''import N2Meta
+open Lean Meta Vacuity
+set_option maxHeartbeats 2000000 in
+#eval show MetaM Unit from do
+  for depth in [10, 15] do
+    let mut e := mkConst ``Nat.zero
+    for _ in [:depth] do e := mkApp2 (mkConst ``Nat.add) e e
+    let budget ← IO.mkRef ({} : AnalysisUsage)
+    try
+      discard <| workConstants e (some budget)
+      let usage ← budget.get
+      IO.println s!"DAG depth={depth} work={usage.work} cached={usage.constants.size} root={usage.constants.contains e}"
+      unless usage.constants.contains e do throwError "dag-root-not-cached"
+      unless usage.work <= 4 * depth + 3 do throwError "dag-work-not-linear"
+    catch ex => IO.println s!"CONTROL {← ex.toMessageData.toString}"
+'''
+    for label, text in [('memoized', consumer), ('early-exit', consumer.replace(anchor,
+            '  if e.isApp then return result\n' + anchor))]:
+        with compiled_consumer(consumer_text=text) as meta, tempfile.TemporaryDirectory(prefix='n2-dag-') as temp:
+            path = Path(temp) / 'Dag.lean'
+            path.write_text(driver)
+            result = command(['lean', path], temp, dict(os.environ, LEAN_PATH=str(meta)), seconds=60)
+        assert result.returncode == 0, result.stdout
+        if label == 'memoized':
+            assert 'DAG depth=15 work=61 cached=32 root=true' in result.stdout, result.stdout
+            assert 'CONTROL ' not in result.stdout, result.stdout
+        else:
+            assert 'DAG depth=10 work=4093 cached=2 root=false' in result.stdout, result.stdout
+            assert 'CONTROL dag-root-not-cached' in result.stdout and 'CONTROL work-budget' in result.stdout, result.stdout
+        print(f'PASS DAG {label}: {result.stdout.strip()}', flush=True)
+
+
 def main():
+    dag_controls()
     with compiled_consumer() as meta:
         return controls(meta)
 
