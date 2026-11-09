@@ -2,14 +2,146 @@
 """Print basenames of successful execve calls in a strace -f execve log."""
 
 import os
-import json
 import re
 import sys
 
-CALL = re.compile(r'execve(at)?\((?:[^," ]+,\s*)?"((?:[^"\\]|\\.)*)"')
-RESULT = re.compile(r'\)\s*=\s*(-?[0-9]+)(?:\s|$)')
-RESUMED = re.compile(r'<\.\.\. execve(at)? resumed>')
-PID = re.compile(r'^\s*(?:\[pid\s+)?([0-9]+)\]?\s+')
+PID_PREFIX = re.compile(r'^\s*(?:(?:\[pid\s+([0-9]+)\]|([0-9]+))\s+)?(.*)$')
+DIRFD_PREFIX = re.compile(r'^(AT_FDCWD|-?[0-9]+)\s*,\s*')
+RESUMED_PREFIX = re.compile(r'^<\.\.\.\s+(execve(?:at)?)\s+resumed>')
+UNFINISHED_TAIL = re.compile(r'^<unfinished \.\.\.>\s*$')
+RESULT_TAIL = re.compile(
+    r'^\s*=\s*(0|-[0-9]+(?:\s+E[A-Z0-9_]+(?:\s+\([^()\r\n]*\))?)?)\s*$'
+)
+SIGNAL_LINE = re.compile(r'^---\s+SIG[A-Z0-9_]+\s+\{[^"\r\n]*\}\s+---\s*$')
+
+_SIMPLE_ESCAPES = {
+    '"': ord('"'),
+    '\\': ord('\\'),
+    'a': 7,
+    'b': 8,
+    'f': 12,
+    'n': 10,
+    'r': 13,
+    't': 9,
+    'v': 11,
+}
+_ARG_TOKEN_CHARS = frozenset(
+    ',0123456789abcdefABCDEFxX_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.|+-'
+)
+
+
+def _skip_ws(text, idx):
+    while idx < len(text) and text[idx].isspace():
+        idx += 1
+    return idx
+
+
+def _scan_quoted_string(text, idx, line_number):
+    """Scan a C/strace double-quoted string literal starting at text[idx] == '"'."""
+    if idx >= len(text) or text[idx] != '"':
+        raise ValueError(f"line {line_number}: expected quoted string literal")
+    idx += 1
+    raw = bytearray()
+    while idx < len(text):
+        ch = text[idx]
+        if ch == '"':
+            idx += 1
+            truncated = text.startswith("...", idx)
+            if truncated:
+                idx += 3
+            if 0 in raw:
+                raise ValueError(f"line {line_number}: NUL byte in quoted string")
+            return os.fsdecode(bytes(raw)), idx, truncated
+        if ch == '\\':
+            idx += 1
+            if idx >= len(text):
+                raise ValueError(f"line {line_number}: unterminated escape in string literal")
+            esc = text[idx]
+            if esc in _SIMPLE_ESCAPES:
+                raw.append(_SIMPLE_ESCAPES[esc])
+                idx += 1
+            elif esc in '01234567':
+                digits = esc
+                idx += 1
+                for _ in range(2):
+                    if idx < len(text) and text[idx] in '01234567':
+                        digits += text[idx]
+                        idx += 1
+                    else:
+                        break
+                val = int(digits, 8)
+                if val > 0xFF:
+                    raise ValueError(f"line {line_number}: octal escape out of range: \\{digits}")
+                raw.append(val)
+            elif esc == 'x':
+                idx += 1
+                digits = ""
+                for _ in range(2):
+                    if idx < len(text) and text[idx] in '0123456789abcdefABCDEF':
+                        digits += text[idx]
+                        idx += 1
+                    else:
+                        break
+                if not digits:
+                    raise ValueError(f"line {line_number}: invalid hex escape in string literal")
+                raw.append(int(digits, 16))
+            else:
+                raise ValueError(f"line {line_number}: unknown escape \\{esc} in string literal")
+        else:
+            raw.extend(ch.encode("utf-8"))
+            idx += 1
+    raise ValueError(f"line {line_number}: unterminated string literal")
+
+
+def _scan_args_to_end(text, idx, line_number, allow_unfinished, require_arg=False):
+    """Scan syscall arguments outside the executable path to ')' or '<unfinished ...>'."""
+    bracket_depth = 0
+    saw_token = False
+    while idx < len(text):
+        ch = text[idx]
+        if ch.isspace():
+            idx += 1
+            continue
+        if ch == '<':
+            if allow_unfinished and bracket_depth == 0 and UNFINISHED_TAIL.match(text[idx:]):
+                return "unfinished", len(text)
+            raise ValueError(f"line {line_number}: unexpected '<' in exec arguments")
+        if text.startswith("/*", idx):
+            close_idx = text.find("*/", idx + 2)
+            if close_idx < 0:
+                raise ValueError(f"line {line_number}: unterminated comment in exec arguments")
+            idx = close_idx + 2
+            continue
+        if ch == '"':
+            _, idx, _ = _scan_quoted_string(text, idx, line_number)
+            saw_token = True
+            continue
+        if ch == '[':
+            bracket_depth += 1
+            saw_token = True
+            idx += 1
+            continue
+        if ch == ']':
+            if bracket_depth <= 0:
+                raise ValueError(f"line {line_number}: unmatched ']' in exec arguments")
+            bracket_depth -= 1
+            idx += 1
+            continue
+        if ch == ')':
+            if bracket_depth != 0:
+                raise ValueError(f"line {line_number}: unclosed '[' before ')' in exec arguments")
+            if require_arg and not saw_token:
+                raise ValueError(f"line {line_number}: missing exec argument before ')'")
+            return "completed", idx + 1
+        if ch == '(' or text.startswith("*/", idx):
+            raise ValueError(f"line {line_number}: unexpected token in exec arguments")
+        if ch in _ARG_TOKEN_CHARS:
+            if ch != ',':
+                saw_token = True
+            idx += 1
+            continue
+        raise ValueError(f"line {line_number}: unexpected character {ch!r} in exec arguments")
+    raise ValueError(f"line {line_number}: missing exec result")
 
 
 def parse(lines, paths=False):
@@ -19,32 +151,71 @@ def parse(lines, paths=False):
     them explicitly rather than guessing an identity. Absolute execveat is supported.
     """
     found, pending = set(), {}
-    for line_number, line in enumerate(lines, 1):
-        pid_match = PID.match(line)
-        pid = pid_match.group(1) if pid_match else "main"
-        call, resumed = CALL.search(line), RESUMED.search(line)
-        if call:
+    for line_number, raw_line in enumerate(lines, 1):
+        line = raw_line.rstrip("\r\n")
+        if not line.strip():
+            continue
+        pid_match = PID_PREFIX.match(line)
+        pid = pid_match.group(1) or pid_match.group(2) or "main"
+        body = pid_match.group(3)
+        if not body:
+            continue
+        if SIGNAL_LINE.match(body) and "execve" not in body:
+            continue
+        if body.startswith(("execve(", "execveat(")):
             if pid in pending:
                 raise ValueError(f"line {line_number}: overlapping exec calls")
-            path = json.loads('"' + call.group(2) + '"')
-            if "<unfinished ...>" in line:
-                pending[pid] = path
+            if body.startswith("execveat("):
+                kind = "execveat"
+                idx = _skip_ws(body, len("execveat("))
+                dirfd_match = DIRFD_PREFIX.match(body[idx:])
+                if not dirfd_match:
+                    raise ValueError(f"line {line_number}: malformed execveat dirfd")
+                idx = _skip_ws(body, idx + dirfd_match.end())
+            else:
+                kind = "execve"
+                idx = _skip_ws(body, len("execve("))
+            if idx >= len(body) or body[idx] != '"':
+                raise ValueError(f"line {line_number}: missing quoted executable path")
+            path, idx, truncated = _scan_quoted_string(body, idx, line_number)
+            if truncated:
+                raise ValueError(f"line {line_number}: truncated executable path")
+            idx = _skip_ws(body, idx)
+            if idx >= len(body) or body[idx] not in (',', '<'):
+                raise ValueError(f"line {line_number}: malformed exec arguments")
+            has_comma = body[idx] == ','
+            if has_comma:
+                idx += 1
+            state, end_idx = _scan_args_to_end(
+                body, idx, line_number, allow_unfinished=True, require_arg=has_comma
+            )
+            if state == "unfinished":
+                pending[pid] = (kind, path)
                 continue
-        elif resumed:
+        elif resumed_match := RESUMED_PREFIX.match(body):
+            resumed_kind = resumed_match.group(1)
             if pid not in pending:
                 raise ValueError(f"line {line_number}: resumed exec has no unfinished call")
-            path = pending.pop(pid)
+            expected_kind, path = pending.pop(pid)
+            if resumed_kind != expected_kind:
+                raise ValueError(
+                    f"line {line_number}: resumed {resumed_kind} does not match unfinished {expected_kind}"
+                )
+            state, end_idx = _scan_args_to_end(
+                body, resumed_match.end(), line_number, allow_unfinished=False, require_arg=False
+            )
         else:
-            if "execve" in line:
-                raise ValueError(f"line {line_number}: unrecognised exec syscall")
-            continue
-        result = RESULT.search(line)
+            raise ValueError(f"line {line_number}: unrecognised exec syscall")
+        result = RESULT_TAIL.match(body[end_idx:])
         if not result:
             raise ValueError(f"line {line_number}: missing exec result")
-        if int(result.group(1)) == 0:
+        if result.group(1) == "0":
             if not os.path.isabs(path):
                 raise ValueError(f"line {line_number}: unresolved relative executable {path!r}")
-            found.add(path if paths else os.path.basename(path))
+            norm_path = os.path.normpath(path)
+            if path.endswith("/") or not os.path.basename(norm_path):
+                raise ValueError(f"line {line_number}: invalid executable path {path!r}")
+            found.add(path if paths else os.path.basename(norm_path))
     if pending:
         raise ValueError(f"unfinished exec calls have no result: {', '.join(sorted(pending))}")
     return sorted(found)

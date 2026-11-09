@@ -260,7 +260,7 @@ else
 fi
 
 if print_lean scripts/checks/compiler/slice0_trusted_base_audit.lean "$work/audit"; then
-  if grep -Eq '^trusted declarations: [0-9]+$' "$work/audit"; then
+  if [ "$(wc -l <"$work/audit")" -eq 1 ] && grep -Eq '^trusted declarations: [0-9]+$' "$work/audit"; then
     echo "ok   axioms and trusted code: $(grep '^trusted declarations: ' "$work/audit")"
   else
     echo "FAIL environment audit did not report its trusted-declaration total"; fail=1
@@ -570,10 +570,28 @@ EOF
       fail=1
     fi
 
+    long_arg=$(python3 -I -c 'print(") = -1 <unfinished ...> <... execve resumed>) = -1 " + "A" * 5000)')
+    bounded 30 strace -f -qq -s 4096 -e trace=execve,execveat \
+      -o "$work/ctl/quoted-args.execve" bash -c '
+        "$1" ") = 0" "<unfinished ...>" "<... execve resumed>) = 0" 2>/dev/null || true
+        exec "$2" --version ") = -1 " "<unfinished ...>" "<... execve resumed>) = -1 " "a\"b\\\"c\\\\\") = -1 " "$3" >/dev/null
+      ' _ "$work/ctl/nonexistent-tool" "$(command -v objcopy)" "$long_arg"
+    if check_tools "$work/pipeline-tools" native "$work/ctl/quoted-args.execve" >"$work/ctl/quoted-args.out" 2>&1; then
+      echo "FAIL control: quoted result/unfinished/resumed arguments hid objcopy"; fail=1
+    elif grep -qxF "FAIL tools: unlisted program 'objcopy'" "$work/ctl/quoted-args.out" &&
+         ! grep -qF "nonexistent-tool" "$work/ctl/quoted-args.out"; then
+      echo "ok   control: real strace keeps objcopy with adversarial arguments and excludes failed exec"
+    else
+      echo "FAIL control: adversarial-argument strace control did not fail for the planted reason"
+      cat "$work/ctl/quoted-args.out" >&2
+      fail=1
+    fi
+
     mkdir -p "$work/ctl/wrong-path"
     cp "$(command -v bash)" "$work/ctl/wrong-path/clang"
     bounded 30 strace -f -qq -s 4096 -e trace=execve,execveat \
-      -o "$work/ctl/wrong-path.execve" "$work/ctl/wrong-path/clang" --version >/dev/null
+      -o "$work/ctl/wrong-path.execve" "$work/ctl/wrong-path/clang" --version \
+      ") = -1 " "<unfinished ...>" "<... execve resumed>) = -1 " 'a"b\"c\\") = -1 ' "$long_arg" >/dev/null
     if check_tools "$work/pipeline-tools" native "$work/ctl/wrong-path.execve" >"$work/ctl/wrong-path.out" 2>&1; then
       echo "FAIL control: identity audit accepts a different executable named clang"; fail=1
     elif grep -qxF "FAIL tools: identity-mismatch role 'native' program 'clang': $work/ctl/wrong-path/clang" "$work/ctl/wrong-path.out"; then
