@@ -592,8 +592,8 @@ Module dependency pruning uses Lean's import-before-importer module order
 module provenance remains conservative. `vacuity_cache_identity.py` checks this
 contract on the loaded import graph and checks both dependency directions.
 
-Round-3 refutation scheduling follows transparent producers to suppliers and
-requests hypothetical-context certificates only for suspicious discharges. It
+Round-3 refutation scheduling checks each result type before following producers
+and requests hypothetical-context certificates only for suspicious discharges. It
 retains certificate checks and never treats missing certificates as exemptions.
 This removes thousands of consistency searches on harmless lambdas. Own:4381
 drops from ~70s to ~18s in diagnostic single-example probes, but still exhausts
@@ -608,3 +608,10 @@ full census even if PR uses these bounded controls.
 Projection answers share the complete raw-context/options/mode identity contract:
 `isProof` observes typing context. The same-ID projection control and the planted
 expression-only variant pin this requirement independently of refutation caches.
+
+A closed False result must remain a discharge even when Eq transport hides its
+suppliers: `transportP`, a supplied inhabitant, and `transportP = False` can be
+jointly contradictory without any one supplier type being decidably refutable.
+Result-type refutation therefore runs before unfolding every node. Only context
+certificate searches are demand-driven. The exact transport negative and a
+planted missing-result-obligation variant enforce this independently.

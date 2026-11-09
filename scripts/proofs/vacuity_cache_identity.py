@@ -101,9 +101,9 @@ def witnessReverse : True := reverse b2 b1
 #eval show MetaM Unit from do
   let harmless := mkLambda `x .default (mkConst ``Nat) (.bvar 0)
   let (bad, state) ← (falseDischarge harmless).run {}
-  unless !bad && state.refutedContexts.isEmpty && state.refutedTypes.isEmpty do
+  unless !bad && state.refutedContexts.isEmpty do
     throwError "eager-harmless-refutation"
-  IO.println "DEMAND harmless-body searches=0"
+  IO.println "DEMAND harmless-body context-searches=0"
 
 #eval show MetaM Unit from do
   withLocalDeclD `same (mkConst ``Nat) fun x => do
@@ -136,6 +136,23 @@ def witnessReverse : True := reverse b2 b1
   unless state.rawRefutedTypes.size == 2 && state.refutedTypes.size == 2 do
     throwError "refuted-type-binder-info-collapsed"
   IO.println "KEYS raw-refuted-types closed-refuted-types binder-info distinct"
+
+axiom transportP : Prop
+axiom suppliedTransportP : transportP
+axiom transportEquality : transportP = False
+def transportedFalse : False := Eq.mp transportEquality suppliedTransportP
+theorem falseLaw (_h : False) : True := True.intro
+def transportWitness : True := falseLaw transportedFalse
+#eval show MetaM Unit from do
+  let (bad, _) ← (falseDischarge (mkConst `transportedFalse)).run {}
+  unless bad do throwError "transport-false-discharge-missed"
+  let (_, state) ← (checkInstance (← getEnv) [] #[]
+    { name := `transportWitness, info := (← getConstInfo `transportWitness), doc := "", law := `falseLaw, key := "transport" } #[]).run {}
+  let some finding := state.findings[0]? | throwError "transport-instance-finding-missed"
+  unless state.findings.size == 1 && finding.status == "FAIL" &&
+      finding.code == "instance-false-discharge" do
+    throwError "transport-instance-finding-missed"
+  IO.println "TRANSPORT bad=true exact=FAIL-instance-false-discharge"
 '''
 def controls(meta):
     with tempfile.TemporaryDirectory(prefix='n2-cache-identity-') as temp:
@@ -155,10 +172,11 @@ def controls(meta):
         'KEYS interning mutation replacement projection binder-info binder-name universe distinct',
         'KEYS options mode distinct',
         'MODULES import-order checked forward=false backward=true self=true',
-        'DEMAND harmless-body searches=0',
+        'DEMAND harmless-body context-searches=0',
         'KEYS declaration-name binder-info kind distinct',
         'KEYS projection same-FVarId context distinct',
         'KEYS raw-refuted-types closed-refuted-types binder-info distinct',
+        'TRANSPORT bad=true exact=FAIL-instance-false-discharge',
     ]
     assert [r.rstrip() for r in result.stdout.splitlines()] == expected, result.stdout
     for line in expected: print('PASS identity ' + line, flush=True)
@@ -174,7 +192,8 @@ def planted_controls():
     visited = prefix + 'partial def falseDischarge' + body.replace('  let key := (e, context)', '  let key := (e, (← getLCtx).getFVarIds)', 1)
     projection = consumer.replace('answers : Std.HashMap (Expr × DischargeRawContext) Bool', 'answers : Std.HashMap Expr Bool')
     projection = projection.replace('  let key := (e, context)', '  let key := e', 1)
-    for label, text in [('ordinary-expr-equality', ordinary), ('fvar-only-visited', visited), ('expression-only-projection', projection)]:
+    missing_type = consumer.replace('  let refuted ← dischargeRefutableTypeAt context (← inferType e)\n  if refuted && !e.hasFVar then return !(← dischargeRefutableContextAt context true)', '  let refuted := false')
+    for label, text in [('ordinary-expr-equality', ordinary), ('fvar-only-visited', visited), ('expression-only-projection', projection), ('missing-result-obligation', missing_type)]:
         assert text != consumer
         with compiled_consumer(consumer_text=text) as meta, tempfile.TemporaryDirectory(prefix='n2-identity-plant-') as temp:
             path = Path(temp) / 'Identity.lean'
@@ -187,7 +206,7 @@ def planted_controls():
         else:
             assert result.returncode == 1, result.stdout
             errors = [line.split('error: ', 1)[1] for line in result.stdout.splitlines() if 'error: ' in line]
-            expected = 'visited-context-collapsed' if label == 'fvar-only-visited' else 'projection-context-collapsed'
+            expected = {'fvar-only-visited': 'visited-context-collapsed', 'expression-only-projection': 'projection-context-collapsed', 'missing-result-obligation': 'transport-false-discharge-missed'}[label]
             assert errors == [expected], result.stdout
         print('PASS identity planted ' + label + ': exact stale-result diagnostic', flush=True)
 

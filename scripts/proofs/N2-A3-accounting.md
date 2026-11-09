@@ -397,7 +397,7 @@ bash scripts/checks/lib/bounded.sh 960 nix develop --command \
   bash scripts/checks/lib/bounded.sh 900 bash -c '
     set -euo pipefail
     git rev-parse HEAD
-    test "$(git rev-parse HEAD:scripts/proofs/vacuity.lean)" = dfee7d3d639677deb628526c54449ea85c6d90d1
+    test "$(git rev-parse HEAD:scripts/proofs/vacuity.lean)" = cda204c1bd45de5f8716c804b367dc00c68770e5
     scratch=$(mktemp -d)
     trap '\''rm -rf "$scratch"'\'' EXIT
     git archive --format=tar 6efdce6136752d51fc74265d61278d90937f24cd > "$scratch/source.tar"
@@ -456,9 +456,8 @@ importer invariant, plus positive, negative and self dependency queries.
 
 ### Demand-driven refutation (round 3)
 
-Refutation certificates exempt suspicious discharges. Transparent producers are
-now followed to their suppliers before deciding their result proposition; lambda
-contexts are refuted only after their body reports a suspicious discharge. No
+Refutation certificates exempt suspicious discharges. Every result type is checked before following its producer; lambda contexts
+are refuted only after their body reports a suspicious discharge. No
 exemption is granted without the same checked certificate. A harmless lambda
 control asserts zero refutation-cache entries. Exact supplied-False, unreachable-
 branch and both BinderInfo orders remain required controls.
@@ -586,3 +585,21 @@ Own:4269 planted PASS at 12,941 / 680 (35 ms); Own:4258 instance PASS at
 12,324 / 4,510 (266 ms). Protected region SHA256 remains
 `474a74f351984565847d5239a86707b389970bf1eba33d2b45c4486c1ec11fd4`,
 byte-identical to `296cbad05`. The ci-2 command script now pins the final blob.
+
+### Preserve result-type obligations (final audit correction)
+
+An additional bounded negative at consumer `37b2a0b1a` exposed the intermediate
+result-type deferral: with `transportP : Prop`, `suppliedTransportP : transportP`,
+and `transportEquality : transportP = False`, Eq transport produces a closed
+False. The probe returned `TRANSPORT false-result bad=false` while
+`refutableType False = true`. This is a confirmed regression, not an accepted
+exemption. The result-type check is restored before unfolding every node.
+Only the costly context-certificate search remains demand-driven. The prior
+profiles/receipts stay attached to their explicit earlier consumer commits; they
+are superseded by the final receipts below. No gate budget is changed.
+
+The new exact control requires both `falseDischarge = true` and one
+`FAIL instance-false-discharge` from checkInstance. Removing the result-type
+obligation in a private consumer must fail with exactly
+`transport-false-discharge-missed`. This prevents gaining speed by missing
+joint supplied contradictions hidden by nonempty recursors.

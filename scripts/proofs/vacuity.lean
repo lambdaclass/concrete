@@ -958,9 +958,10 @@ partial def falseDischarge (e : Expr) : StateRefT DischargeState MetaM Bool := d
   if let some budget := (← get).budget then chargeWork budget "false-discharge-budget"
   else if fuel == 0 then throwError "false-discharge-budget"
   modify fun state => { state with remaining := fuel - 1, visited := if cacheable then state.visited.insert key else state.visited }
-  -- Follow transparent producers before asking decide to normalize their result
-  -- proposition. Their suppliers are the evidence we audit; deciding the whole
-  -- operational judgment at every intermediate proof node repeats real reduction.
+  -- A refutable result is evidence even when transport hides its supplier.
+  -- Only the context certificate search is demand-driven; never omit this test.
+  let refuted ← dischargeRefutableTypeAt context (← inferType e)
+  if refuted && !e.hasFVar then return !(← dischargeRefutableContextAt context true)
   let e ← whnfD e
   if let .const n levels := e.getAppFn' then
     if [``False.elim, ``False.casesOn, ``absurd, ``Empty.elim, ``Empty.casesOn,
@@ -975,7 +976,7 @@ partial def falseDischarge (e : Expr) : StateRefT DischargeState MetaM Bool := d
         let applied := (mkAppN body e.getAppArgs).headBeta
         let reduced ← whnfD applied
         if ← falseDischarge reduced then return true
-      else if ← dischargeRefutableTypeAt context (← inferType e) then
+      else if refuted then
         -- An opaque supplied producer of an impossible inhabitant is real
         -- evidence. Transparent derivations are followed to their suppliers;
         -- hypothetical local contradictions are not mistaken for suppliers.
