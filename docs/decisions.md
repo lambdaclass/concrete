@@ -17,12 +17,29 @@ The shape of Core was approved provisionally on 2026-11-05 ([stage A2a](#decided
 <a id="waiting-for-the-owner"></a>
 ## Waiting for the owner
 
-Links only; each item's text lives where it is linked.
+The remaining questions are listed here or linked to their existing home.
 
 1. The spec read and the Core freeze, A2c ([queue](../ROADMAP.md#the-queue)).
 2. The items the reviews leave open until they are fully dispositioned: SPARK review items 4(b) and
    4(c) ([SPARK review](proposals/SPARK.md)). Quantitative step and time bounds were decided on
    2026-11-07 ([row](#decided-2026-11-07-step-bounds)); the reviews' remaining disposition is unchanged.
+
+The 2026-11-09 questions left open after comparing all three answers:
+
+- Q2: Not decided: the substance of the 33 proposals, pending [their revision](#decided-2026-11-09-redo-proposals).
+- Q1: Not decided: which listed branches are ready or have satisfied their dependencies.
+- Q5B–C: Later command and launcher answers are recorded [below](#decided-2026-11-10-review-commands); their exact authority and launcher design remain open.
+- Q6: Not decided: a one-writer-model-per-branch rule; it is not stated in all three answers.
+- Q7 and the checker main-line update: Not decided: extra rounds, their allowances and exit tests, or whether to stop and redesign the main line.
+- Q8: Not decided: the detailed axiom contracts and treatment of individual foundational axioms beyond [the agreed direction](#decided-2026-11-09-standard-axioms).
+- Q9: Not decided: per-check budgets, the whole-run cap and whether limits may be raised; only [optimization and complete coverage](#decided-2026-11-09-checker-speed) are shared by all three answers.
+- Q10: Not decided: the temporary manual-review exception for the 27 proof-axiom lines.
+- Q11(a): Not decided: whether a build will require an explanation of why a program got stuck; no answer is needed now.
+- Q11(b–c): Not decided: struct field layout and whole-pointer representation; full proposals are still needed.
+- Q12: Not decided: the extension’s scope, pending [the reviewed design](#decided-2026-11-09-helper-design).
+- Q13–14: Not decided: the consumer audits, detailed launch contracts and additional implementation or freeze conditions not shared by all three answers.
+- Older questions: Not decided: the lifecycle signature change, standard-library coverage questions, slice-1 choices and syntax spellings; the three answers do not settle them.
+- Review-access stamping: Not decided: include staged changes or stamp only committed content.
 
 A decided proposal moves to `docs/archive/<topic>-<date>/`.
 
@@ -31,6 +48,37 @@ A decided proposal moves to `docs/archive/<topic>-<date>/`.
 
 Each row records a decision and its reason. A language rule itself is its Lean definition in
 [ConcreteSpec/](../ConcreteSpec/), which governs once it lands.
+
+- [Resume qualified merges](#decided-2026-11-09-qualified-merges).
+- [Redo the assumed-yes proposals](#decided-2026-11-09-redo-proposals).
+- [Wait for independent report-check review](#decided-2026-11-09-report-review).
+- [Supply the public signing key](#decided-2026-11-09-public-key).
+- [Owner approves trusted code](#decided-2026-11-09-trust-approver).
+- [Pre-create the memory-limit group](#decided-2026-11-09-memory-group).
+- [No containment promise on macOS](#decided-2026-11-09-macos-guarantee).
+- [Independent review before final qualification](#decided-2026-11-09-independent-review).
+- [General rule for permitted foundational axioms](#decided-2026-11-09-standard-axioms).
+- [Improve checker speed and require full coverage](#decided-2026-11-09-checker-speed).
+- [Exact proof provenance in the long term](#decided-2026-11-09-exact-provenance).
+- [Design before extending contradiction checks](#decided-2026-11-09-helper-design).
+- [Local-variable identity is its number](#decided-2026-11-09-variable-identity).
+- [Each launch supplies its starting state](#decided-2026-11-09-launch-state).
+- [Stop the deployed landing bot](#decided-2026-11-09-stop-bot).
+- [Make builds hermetic](#decided-2026-11-09-hermetic-builds).
+- [Stop and redesign the checker design line](#decided-2026-11-09-vacuity-redesign).
+- [Unused imports are errors](#decided-2026-11-09-unused-imports).
+- [Unproved tests during development](#decided-2026-11-10-unproved-tests).
+- [Plan the stopped spec work](#decided-2026-11-10-spec-plan).
+- [Delegate review-tool command permission](#decided-2026-11-10-review-commands).
+- [Delegate the locked-down launcher](#decided-2026-11-10-launcher).
+- [Containment on macOS is informational](#decided-2026-11-10-macos-ci).
+- [Unused private code is an error](#decided-2026-11-10-unused-private).
+- [Update syntax by hand](#decided-2026-11-10-manual-migration).
+- [One mechanical lexer merge](#decided-2026-11-10-lexer-merge).
+- [Tests may take inputs and become proofs](#decided-2026-11-10-tests-proofs).
+- [Highest review cap for mixed file kinds](#decided-2026-11-10-mixed-review-cap).
+- [Protect main and use pull requests](#decided-2026-11-10-pr-flow).
+- [Coordinator merges qualified pull requests](#decided-2026-11-10-pr-merger).
 
 - The core statement ([row](#decided-project-core-statement)).
 - Proof infrastructure from the first commit ([row](#decided-project-proof-infrastructure)).
@@ -70,6 +118,294 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 - Capabilities stay as decided, `with(...)` permission sets plus grant values; confirmed, no revision ([row](#decided-2026-11-08-capabilities-kept)).
 - Every branch gets an agy review too ([row](#decided-project-review)).
 - Eleven plan and process decisions: UBSan dropped, a complete adapter theorem, smaller landing scripts, Claude's quota on the critical path, the front end now, one decisions writer, risk-capped reviews, one clones folder, a later no-libc runtime, a compile-speed budget and the termination wording ([row](#decided-2026-11-08-eleven)).
+
+<a id="decided-2026-11-09-10"></a>
+## Owner decisions 2026-11-09 and 2026-11-10
+
+The 2026-11-09 agreement entries record only what Claude, Codex and agy all agreed.
+The later direct answers stand separately; unresolved details remain [waiting for the owner](#waiting-for-the-owner).
+
+<a id="decided-2026-11-09-qualified-merges"></a>
+### Resume qualified merges
+
+Question: RESUME MERGING TO MAIN?
+
+Owner, 2026-11-09: "ok too many questions do what all of you agree"
+
+Meaning: Resume merging individually qualified pieces, with their required checks, reviews and approvals.
+
+<a id="decided-2026-11-09-redo-proposals"></a>
+### Redo the assumed-yes proposals
+
+Question: THE 33 ASSUMED-YES ITEMS.
+
+Owner, 2026-11-09: "ok too many questions do what all of you agree"
+
+Meaning: Redo the proposals with fair alternatives and costs before deciding them.
+
+<a id="decided-2026-11-09-report-review"></a>
+### Wait for independent report-check review
+
+Question: SIGN OFF THE SPEC-CHANGE REPORT CHECK?
+
+Owner, 2026-11-09: "ok too many questions do what all of you agree"
+
+Meaning: Wait for an independent reviewer before sign-off.
+
+<a id="decided-2026-11-09-public-key"></a>
+### Supply the public signing key
+
+Question: SEND YOUR SSH PUBLIC KEY.
+
+Owner, 2026-11-09: "ok too many questions do what all of you agree"
+
+Meaning: The owner should supply the public signing key.
+
+<a id="decided-2026-11-09-trust-approver"></a>
+### Owner approves trusted code
+
+Question: Who approves?
+
+Owner, 2026-11-09: "ok too many questions do what all of you agree"
+
+Meaning: The owner alone approves trusted code, using the owner’s SSH key.
+
+<a id="decided-2026-11-09-memory-group"></a>
+### Pre-create the memory-limit group
+
+Question: Memory limits. Option 1: trust sudo plus the user service bus. Option 2: pre-create the memory-limit group once.
+
+Owner, 2026-11-09: "ok too many questions do what all of you agree"
+
+Meaning: Choose option 2: pre-create the memory-limit group once.
+
+<a id="decided-2026-11-09-macos-guarantee"></a>
+### No containment promise on macOS
+
+Question: macOS: this implementation makes no promise there and fails rather than passes?
+
+Owner, 2026-11-09: "ok too many questions do what all of you agree"
+
+Meaning: This implementation makes no containment promise on macOS and cannot qualify there.
+
+<a id="decided-2026-11-09-independent-review"></a>
+### Independent review before final qualification
+
+Question: BRANCHES WHERE EVERY AVAILABLE MODEL WROTE CODE.
+
+Owner, 2026-11-09: "ok too many questions do what all of you agree"
+
+Meaning: Wait for an independent reviewer before final qualification.
+
+Refines [the review decision](#decided-project-review).
+
+<a id="decided-2026-11-09-standard-axioms"></a>
+### General rule for permitted foundational axioms
+
+Question: VACUOUS-LAW CHECKER AND LEAN'S BUILT-IN AXIOMS.
+
+Owner, 2026-11-09: "ok too many questions do what all of you agree"
+
+Meaning: Choose a general rule based on what an axiom is and where it comes from, never its name, with explicit contracts and a named trust assumption; user axioms remain unproved.
+
+<a id="decided-2026-11-09-checker-speed"></a>
+### Improve checker speed and require full coverage
+
+Question: CHECKER COMPUTE BUDGET.
+
+Owner, 2026-11-09: "ok too many questions do what all of you agree"
+
+Meaning: Optimize first, then split deterministically if needed; acceptance requires complete coverage.
+
+<a id="decided-2026-11-09-exact-provenance"></a>
+### Exact proof provenance in the long term
+
+Question: PROOF-AXIOM LIST FOR THE COMBINED SPEC (27 hard lines).
+
+Owner, 2026-11-09: "ok too many questions do what all of you agree"
+
+Meaning: Choose exact provenance from Lean in the long term.
+
+<a id="decided-2026-11-09-helper-design"></a>
+### Design before extending contradiction checks
+
+Question: MUST THE CHECKER CATCH CONTRADICTIONS HIDDEN IN HELPER THEOREMS?
+
+Owner, 2026-11-09: "ok too many questions do what all of you agree"
+
+Meaning: Prepare a reviewed, bounded extension design before deciding the scope.
+
+<a id="decided-2026-11-09-variable-identity"></a>
+### Local-variable identity is its number
+
+Question: WHAT IDENTIFIES A LOCAL VARIABLE?
+
+Owner, 2026-11-09: "ok too many questions do what all of you agree"
+
+Meaning: Choose option 1a: the number alone identifies a local variable; names move to a side table.
+
+<a id="decided-2026-11-09-launch-state"></a>
+### Each launch supplies its starting state
+
+Question: WHAT DOES A REFUSED START REPORT ABOUT THE OUTSIDE WORLD?
+
+Owner, 2026-11-09: "ok too many questions do what all of you agree"
+
+Meaning: Choose option 2: each launch passes its own start state; the environment holds types only.
+
+<a id="decided-2026-11-09-stop-bot"></a>
+### Stop the deployed landing bot
+
+Question: Stop any deployed landing-bot service on the server.
+
+Owner, 2026-11-09: "ok too many questions do what all of you agree"
+
+Meaning: Stop any deployed landing-bot service.
+
+<a id="decided-2026-11-09-hermetic-builds"></a>
+### Make builds hermetic
+
+Question: Builds still reach the network (non-hermetic); to fix.
+
+Owner, 2026-11-09: "ok too many questions do what all of you agree"
+
+Meaning: Make builds hermetic: builds must not reach the network.
+
+Refines [the reproducible-builds decision](#decided-project-reproducible-builds).
+
+<a id="decided-2026-11-09-vacuity-redesign"></a>
+### Stop and redesign the checker design line
+
+Question: Your call for each line: (i) allow N more rounds with these exact bugs as the exit test; (ii) stop and redesign; (iii) leave it stopped.
+
+Owner, 2026-11-09: "ok too many questions do what all of you agree"
+
+Meaning: Stop and redesign the design line for the next part of the vacuous-law checker.
+
+<a id="decided-2026-11-09-unused-imports"></a>
+### Unused imports are errors
+
+Question: Unused imports.
+
+Owner, 2026-11-09: "refuse them obviously"
+
+Meaning: Unused imports are a compile error.
+
+<a id="decided-2026-11-10-unproved-tests"></a>
+### Unproved tests during development
+
+Question: 1 unproved tests may merge? (rec: yes during development, proved for release)
+
+Owner, 2026-11-10: "1 ok 2 yes but also i think we can do it ourselves if we have enough quota 3 allo everything yo uwant 4 do what you want 5 okay"
+
+Meaning: Unproved tests may merge during development; they must be proved for release.
+
+<a id="decided-2026-11-10-spec-plan"></a>
+### Plan the stopped spec work
+
+Question: 2 Codex+agy write a plan to bring the stopped spec work onto main in small reviewed pieces?
+
+Owner, 2026-11-10: "1 ok 2 yes but also i think we can do it ourselves if we have enough quota 3 allo everything yo uwant 4 do what you want 5 okay"
+
+Meaning: Approve the plan; the coordinator and writer models may also carry it out as quota allows.
+
+<a id="decided-2026-11-10-review-commands"></a>
+### Delegate review-tool command permission
+
+Question: 3 commands review tools may run: ssh-keygen, systemd-run, systemctl (rec: ssh-keygen now, others with Q4)
+
+Owner, 2026-11-10: "1 ok 2 yes but also i think we can do it ourselves if we have enough quota 3 allo everything yo uwant 4 do what you want 5 okay"
+
+Meaning: Allow all three commands for review tools.
+
+Not decided: their permitted operations and authority.
+
+<a id="decided-2026-11-10-launcher"></a>
+### Delegate the locked-down launcher
+
+Question: 4 locked-down launcher (rec: wait for exact design)
+
+Owner, 2026-11-10: "1 ok 2 yes but also i think we can do it ourselves if we have enough quota 3 allo everything yo uwant 4 do what you want 5 okay"
+
+Meaning: Delegate the locked-down launcher decision to the coordinator.
+
+Not decided: the launcher’s exact design.
+
+<a id="decided-2026-11-10-macos-ci"></a>
+### Containment on macOS is informational
+
+Question: 5 containment check on macOS informational only, never counts as passed.
+
+Owner, 2026-11-10: "1 ok 2 yes but also i think we can do it ourselves if we have enough quota 3 allo everything yo uwant 4 do what you want 5 okay"
+
+Meaning: The macOS containment check is informational only and never counts as passed.
+
+<a id="decided-2026-11-10-unused-private"></a>
+### Unused private code is an error
+
+Question: Is unused private code a compile error?
+
+Owner, 2026-11-10: "1. yes 2. yes we will rewrite everything by hand 3. yes 4. yes 5. yes"
+
+Meaning: Unused private code is a compile error.
+
+<a id="decided-2026-11-10-manual-migration"></a>
+### Update syntax by hand
+
+Question: No migration tool: we update the repo's code by hand when the syntax changes?
+
+Owner, 2026-11-10: "1. yes 2. yes we will rewrite everything by hand 3. yes 4. yes 5. yes"
+
+Meaning: Use no migration tool; update the repository’s code by hand when syntax changes.
+
+<a id="decided-2026-11-10-lexer-merge"></a>
+### One mechanical lexer merge
+
+Question: Can Codex do one mechanical merge for the lexer literals branch?
+
+Owner, 2026-11-10: "1. yes 2. yes we will rewrite everything by hand 3. yes 4. yes 5. yes"
+
+Meaning: Codex may do one mechanical merge for the lexer literals branch.
+
+<a id="decided-2026-11-10-tests-proofs"></a>
+### Tests may take inputs and become proofs
+
+Question: Can tests take inputs and become proofs?
+
+Owner, 2026-11-10: "1. yes 2. yes we will rewrite everything by hand 3. yes 4. yes 5. yes"
+
+Meaning: Tests may take inputs and become proofs.
+
+<a id="decided-2026-11-10-mixed-review-cap"></a>
+### Highest review cap for mixed file kinds
+
+Question: Does the highest round limit apply when a branch mixes file kinds? (classes: docs/roadmap 2, scripts 3, compiler/spec 5).
+
+Owner, 2026-11-10: "1. yes 2. yes we will rewrite everything by hand 3. yes 4. yes 5. yes"
+
+Meaning: A branch mixing file kinds uses the highest applicable round limit.
+
+Refines [the review caps](#decided-2026-11-08-review-caps).
+
+<a id="decided-2026-11-10-pr-flow"></a>
+### Protect main and use pull requests
+
+Question: Apply the main-branch protection rules on GitHub yourself.
+
+Owner, 2026-11-10: "ok protect main create prs and we merge them"
+
+Meaning: Protect main and create pull requests for merging.
+
+Revises [the landing decision](#decided-2026-11-08-landing-shrink).
+
+<a id="decided-2026-11-10-pr-merger"></a>
+### Coordinator merges qualified pull requests
+
+Question: who presses merge? (a) Me [the coordinator], automatically, once the tests and the review pass ... with you able to merge or block any PR yourself. (b) You, on every PR.
+
+Owner, 2026-11-10: "a"
+
+Meaning: The coordinator merges automatically after tests and review pass; the owner may merge or block any pull request.
 
 <a id="rules-a-decision-changed"></a>
 ## Rules a decision has changed
@@ -798,6 +1134,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   target. This moves the reproducibility half of R-0104 (merged into R-0149 in phase G) to B0;
   R-0149 keeps incremental-build equivalence. The slice-0 worker owns the work on `wip/slice0` when
   Claude capacity returns; work started on `wip/slice0-repro`.
+  Revised by [the hermetic-builds answer](#decided-2026-11-09-hermetic-builds).
 - <a id="decided-project-concrete-toml"></a>**Policies and declared assumptions live in
   `Concrete.toml`** (owner, 2026-11-06: "concrete.toml is fine", in place of a separate policy
   file). A project's policies, such as the
@@ -1127,6 +1464,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   3. <a id="decided-2026-11-08-landing-shrink"></a>*Smaller landing scripts.* Keep the train, its
      review leg, the gates and the `legacy/` protection; drop the landing bot, notify, install-bot,
      the systemd units and duplicate helpers; the old copies move to `legacy/` (R-0617).
+     Revised by [the pull-request flow](#decided-2026-11-10-pr-flow).
   4. <a id="decided-2026-11-08-quota"></a>*Claude's quota goes to the critical path:* the spec, slice 0
      and the front end. Mechanical work goes to Codex and Kimi as writers.
   5. <a id="decided-2026-11-08-front-end"></a>*The front end starts now.* The lexer and the LL(1)
@@ -1137,6 +1475,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
      at a time;* other workers send it their records.
   7. <a id="decided-2026-11-08-review-caps"></a>*Review rounds capped by risk:* docs and roadmap 2,
      scripts 3, compiler and spec 5 (R-0618).
+     Revised by [the mixed-file cap answer](#decided-2026-11-10-mixed-review-cap).
   8. <a id="decided-2026-11-08-clones"></a>*One clones folder:* every branch's clone is
      `~/projects/clones/<branch>`, removed after the branch lands (R-0619).
   9. <a id="decided-2026-11-08-no-libc"></a>*A no-libc runtime* on the proven path comes as a later
@@ -1241,6 +1580,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   Codex and Kimi reviews. agy cannot read files, so its prompt carries the diff and the context it
   needs and ends with a required verdict line. (The coordinator's relay added that agy can also act
   as a writer.)
+  Revised by [independent review before final qualification](#decided-2026-11-09-independent-review).
 - <a id="decided-project-throughput"></a>**Development throughput** (2026-10-22). The development
   feedback loop (landing, review, CI) is a priority track beside the main sequence
   ([record](archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-10-22--development-throughput-priority)).
