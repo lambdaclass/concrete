@@ -3,7 +3,7 @@
 #
 # These checks need Lean, which the gate shell does not carry: CI takes it from elan (lean-action),
 # and a check started without `lake` on PATH refuses (exit 2), never passes. Each check reads the
-# specification's built environment, so each first runs `lake build ConcreteSpec` (a no-op when the
+# two libraries' built environments, so each first runs `lake build ConcreteSpec Concrete` (a no-op when the
 # build is current): `lake env lean` would otherwise read whatever .olean files are there, stale
 # ones included, and judge a library other than the sources.
 #
@@ -11,7 +11,7 @@
 #                                   CONTROL-FILE, the enumerator runs on a temporary copy with that
 #                                   file's declarations inserted at its marker (negative controls).
 #   spec_modules                    every module the ConcreteSpec sources declare (from file paths).
-#   prune_orphans [BUILD-DIR]       delete ConcreteSpec build files (.olean, .ilean, .trace, .hash, IR)
+#   prune_orphans [BUILD-DIR]       delete ConcreteSpec and Concrete build files (.olean, .ilean, .trace, .hash, IR)
 #                                   of modules with no source, and print each one (ISS-0016). Run before
 #                                   the build below, so a build directory restored from an older cache
 #                                   cannot carry a deleted or renamed module into any check.
@@ -37,20 +37,28 @@ prune_orphans() {
   local build="${1:-.lake/build}" d f rel m
   # Deletion keys on this list, so a partial list must stop the prune before anything is removed:
   # the enumeration must succeed, include the root module, and name only modules whose source exists.
-  spec_modules > "$TMP/prune-modules.txt" || { echo "prune_orphans: listing the source modules failed" >&2; return 1; }
+  spec_modules > "$TMP/prune-modules.txt" || { echo "prune_orphans: listing spec modules failed" >&2; return 1; }
+  [ -f Concrete.lean ] && [ -d Concrete ] || return 1
+  { echo Concrete.lean; find Concrete -name '*.lean'; } | sed -E 's#\.lean$##; s#/#.#g' | sort -u >> "$TMP/prune-modules.txt" \
+    || { echo "prune_orphans: listing compiler modules failed" >&2; return 1; }
   grep -qxF ConcreteSpec "$TMP/prune-modules.txt" || { echo "prune_orphans: the source list lacks ConcreteSpec" >&2; return 1; }
+  grep -qxF Concrete "$TMP/prune-modules.txt" || return 1
   while read -r m; do [ -f "${m//.//}.lean" ] || { echo "prune_orphans: listed module $m has no source" >&2; return 1; }; done < "$TMP/prune-modules.txt"
   for d in "$build/lib/lean" "$build/ir"; do
     [ -d "$d" ] || continue
-    find "$d" -type f \( -path "$d/ConcreteSpec/*" -o -name 'ConcreteSpec.*' \) | while read -r f; do
+    find "$d" -type f \( -path "$d/ConcreteSpec/*" -o -name 'ConcreteSpec.*' -o -path "$d/Concrete/*" -o -name 'Concrete.*' \) > "$TMP/prune-files.txt" || return 1
+    while read -r f; do
       rel="${f#"$d"/}"; m="$(dirname "$rel")/$(basename "$rel" | cut -d. -f1)"; m="${m#./}"; m="${m//\//.}"
-      grep -qxF "$m" "$TMP/prune-modules.txt" || { rm -f "$f" && echo "pruned orphan build file $f (no source module $m)"; }
-    done
+      if ! grep -qxF "$m" "$TMP/prune-modules.txt"; then
+        rm -f "$f" || return 1
+        echo "pruned orphan build file $f (no source module $m)"
+      fi
+    done < "$TMP/prune-files.txt"
   done
 }
 prune_orphans >&2 || { echo "error: $CHECK_NAME: pruning orphaned build files failed" >&2; exit 2; }
-"$LAKE" build ConcreteSpec > "$TMP/lake-build.log" 2>&1 \
-  || { tail -20 "$TMP/lake-build.log" >&2; echo "error: $CHECK_NAME: lake build ConcreteSpec failed" >&2; exit 2; }
+"$LAKE" build ConcreteSpec Concrete > "$TMP/lake-build.log" 2>&1 \
+  || { tail -20 "$TMP/lake-build.log" >&2; echo "error: $CHECK_NAME: lake build ConcreteSpec Concrete failed" >&2; exit 2; }
 
 MARKER='-- CONTROL DECLARATIONS (negative controls are inserted here, in a temporary copy only)'
 [ "$(grep -cxF -- "$MARKER" "$ENUMERATOR")" = 1 ] \

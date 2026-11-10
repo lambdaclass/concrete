@@ -1,11 +1,12 @@
 import Concrete
 
 /-!
-Emitter for the slice-0 backend gate (`scripts/checks/compiler/slice0_backends.sh`). PROVISIONAL.
+Emitter for the manifest-driven test gate (`scripts/checks/compiler/tests.sh`). PROVISIONAL.
 
 `lake env lean --run scripts/checks/compiler/slice0_bir.lean list` prints the hand-written BIR examples;
-`... emit NAME DIR TARGET` checks the example in Lean (well formed; its BIR run gives the expected
-outcome; LCB's own evaluator on the adapted body returns the same result word) and writes
+`... emit NAME DIR TARGET EXPECT...` takes the expectation from `tests/manifest.tsv` and checks the
+example in Lean (well formed; its BIR run gives that outcome; LCB's own evaluator on the adapted
+body returns the same result word; a trap site's kind is the expected kind) and writes
 `DIR/llvm.ll` (body + runtime entry), `DIR/lcb_body.s` (the adapted body, assembled by LCB in
 process for TARGET: `x86_64-linux`, `aarch64-linux` or `aarch64-macos`), `DIR/lcb_rt.ssa` (the
 runtime entry as QBE text, for LCB's command line), `DIR/lcb_body.ssa` (a debug dump only), and the
@@ -18,6 +19,25 @@ word that encodes nothing, which the runtime must refuse (`Runtime.invalidLine`,
 -/
 
 open Concrete.BIR Concrete.Backend
+open ConcreteSpec (Trap)
+
+structure Expectation where
+  outcome : Outcome
+  trapKind : Option Trap
+  trapKindName : String := ""
+
+def trapOfName : String → Option Trap
+  | "arithmeticOverflow" => some .arithmeticOverflow
+  | _ => none
+
+def parseExpectation : List String → Option Expectation
+  | ["exit", c] => match c.toNat? with
+    | some n => if n ≤ 255 then some ⟨.exited n, none, ""⟩ else none
+    | none => none
+  | ["trap", kind, "site", s] => match s.toNat? with
+    | some n => if !kind.isEmpty then some ⟨.trapped n, trapOfName kind, kind⟩ else none
+    | none => none
+  | _ => none
 
 def writeExpected (dir : System.FilePath) (status : String) (stderr : String) : IO Unit := do
   IO.FS.writeFile (dir / "status") (status ++ "\n")
@@ -52,14 +72,17 @@ def writeBackends (dir : System.FilePath) (target : LCB.Target) (p : Program)
   IO.FS.writeFile (dir / "llvm.ll") (LLVM.module p)
   writeLcb dir target emitted
 
-def emit (name : String) (dir : System.FilePath) (target : LCB.Target) : IO UInt32 := do
-  let some (_, p, expected) := Examples.all.find? (·.1 == name)
+def emit (name : String) (dir : System.FilePath) (expectation : List String)
+    (target : LCB.Target) : IO UInt32 := do
+  let some (_, p) := Examples.all.find? (·.1 == name)
     | IO.eprintln s!"unknown example {name}"; return 2
+  let some expected := parseExpectation expectation
+    | IO.eprintln s!"{name}: invalid BIR expectation; use exit N or trap KIND site N"; return 2
   unless wf p do IO.eprintln s!"{name}: not well formed"; return 1
   let got := run p 1000
-  unless got == expected do
-    IO.eprintln s!"{name}: BIR run gives {repr got}, expected {repr expected}"; return 1
-  let some word := encode expected | IO.eprintln s!"{name}: no result word"; return 1
+  unless got == expected.outcome do
+    IO.eprintln s!"{name}: expectation mismatch: BIR run gives {repr got}, expected {repr expected.outcome}"; return 1
+  let some word := encode expected.outcome | IO.eprintln s!"{name}: no result word"; return 1
   match LCB.emit p with
   | .error msg => IO.eprintln s!"{name}: adapter: {msg}"; return 1
   | .ok (f, tbl) =>
@@ -69,10 +92,13 @@ def emit (name : String) (dir : System.FilePath) (target : LCB.Target) : IO UInt
         IO.eprintln s!"{name}: LCB's evaluator returns {w}, BIR's result word is {word}"; return 1
     | none => IO.eprintln s!"{name}: LCB's evaluator does not return"; return 1
     unless ← writeBackends dir target p (f, tbl) do return 1
-    match expected with
+    match expected.outcome with
     | .exited c => writeExpected dir (toString c) ""
     | .trapped s => match tbl[s]? with
-      | some e => writeExpected dir "134" (Runtime.trapLine e ++ "\n")
+      | some e =>
+        unless expected.trapKind == some e.kind do
+          IO.eprintln s!"{name}: expectation mismatch: trap site {s} has kind {repr e.kind}, expected {expected.trapKindName}"; return 1
+        writeExpected dir "134" (Runtime.trapLine e ++ "\n")
       | none => IO.eprintln s!"{name}: no site {s}"; return 1
     | _ => IO.eprintln s!"{name}: no observation"; return 1
     return 0
@@ -114,9 +140,9 @@ def withTarget (name : String) (k : LCB.Target → IO UInt32) : IO UInt32 :=
 def main (args : List String) : IO UInt32 := do
   match args with
   | ["list"] => do
-    for (n, _, _) in Examples.all do IO.println n
+    for (n, _) in Examples.all do IO.println n
     return 0
-  | ["emit", name, dir, t] => withTarget t (emit name dir)
+  | "emit" :: name :: dir :: t :: expectation => withTarget t (emit name dir expectation)
   | ["loop", dir, t] => withTarget t (emitLoop dir)
   | ["invalid", dir, t] => withTarget t (emitInvalid dir)
-  | _ => IO.eprintln "usage: slice0_bir.lean list | (emit NAME | loop | invalid) DIR TARGET"; return 2
+  | _ => IO.eprintln "usage: slice0_bir.lean list | emit NAME DIR TARGET EXPECT... | (loop | invalid) DIR TARGET"; return 2

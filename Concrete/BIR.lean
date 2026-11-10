@@ -539,8 +539,8 @@ def answerDischarged : Program :=
 def return134 : Program :=
   { blocks := [{ params := [], insts := [], term := .ret (.imm .u8 134) }], sites := [] }
 
-example : WF answer := by decide +kernel
-example : WF overflow := by decide +kernel
+example : WF answer := by decide
+example : WF overflow := by decide
 example : WF answerDischarged := by decide
 example : WF return134 := by decide
 example : run answer 3 = .exited 42 := by decide
@@ -604,7 +604,7 @@ def twoSites (a b c : Int) : Program :=
     sites := [⟨.arithmeticOverflow, ⟨3⟩, ⟨10, 15⟩, ⟨"src/main.con", 1, 11⟩⟩,
               ⟨.arithmeticOverflow, ⟨9⟩, ⟨40, 47⟩, ⟨"src/ñandú \"x\"/lib.con", 17, 5⟩⟩] }
 
-example : WF (twoSites 100 100 2) := by decide +kernel
+example : WF (twoSites 100 100 2) := by decide
 example : run (twoSites 100 100 2) 5 = .trapped 1 := by decide
 example : run (twoSites 200 100 2) 5 = .trapped 0 := by decide
 example : run (twoSites 20 1 2) 5 = .exited 42 := by decide
@@ -630,56 +630,56 @@ def useBeforeDef : Program :=
         term := .ret (.reg 0) }],
     sites := [] }
 
-example : Loc.wf ⟨"/abs/main.con", 1, 1⟩ = false := by decide +kernel
-example : Loc.wf ⟨"src\\main.con", 1, 1⟩ = false := by decide +kernel
-example : Loc.wf ⟨"src/main.con\n", 1, 1⟩ = false := by decide +kernel
-example : Loc.wf ⟨"src/main.con", 0, 1⟩ = false := by decide +kernel
-example : Loc.wf ⟨"src/main.con", 1, 0⟩ = false := by decide +kernel
-example : Loc.wf ⟨"src/\u0085main.con", 1, 1⟩ = false := by decide +kernel
-example : Loc.wf ⟨"src/\u2028main.con", 1, 1⟩ = false := by decide +kernel
-example : Loc.wf ⟨"../outside.con", 1, 1⟩ = false := by decide +kernel
-example : Loc.wf ⟨"src/../main.con", 1, 1⟩ = false := by decide +kernel
-example : Loc.wf ⟨"./main.con", 1, 1⟩ = false := by decide +kernel
-example : Loc.wf ⟨"src//main.con", 1, 1⟩ = false := by decide +kernel
-example : Loc.wf ⟨"src/", 1, 1⟩ = false := by decide +kernel
-example : Loc.wf ⟨"C:/outside.con", 1, 1⟩ = false := by decide +kernel
-example : Loc.wf ⟨"src/ñandú \"x\"/lib.con", 17, 5⟩ = true := by decide +kernel
+example : Loc.wf ⟨"/abs/main.con", 1, 1⟩ = false := by decide
+example : Loc.wf ⟨"src\\main.con", 1, 1⟩ = false := by decide
+example : Loc.wf ⟨"src/main.con\n", 1, 1⟩ = false := by decide
+example : Loc.wf ⟨"src/main.con", 0, 1⟩ = false := by decide
+example : Loc.wf ⟨"src/main.con", 1, 0⟩ = false := by decide
+example : Loc.wf ⟨"src/\u0085main.con", 1, 1⟩ = false := by decide
+example : Loc.wf ⟨"src/\u2028main.con", 1, 1⟩ = false := by decide
+example : Loc.wf ⟨"../outside.con", 1, 1⟩ = false := by decide
+example : Loc.wf ⟨"src/../main.con", 1, 1⟩ = false := by decide
+example : Loc.wf ⟨"./main.con", 1, 1⟩ = false := by decide
+example : Loc.wf ⟨"src//main.con", 1, 1⟩ = false := by decide
+example : Loc.wf ⟨"src/", 1, 1⟩ = false := by decide
+example : Loc.wf ⟨"C:/outside.con", 1, 1⟩ = false := by decide
+example : Loc.wf ⟨"src/ñandú \"x\"/lib.con", 17, 5⟩ = true := by decide
 example : ¬ WF unreachableParam := by decide
 example : ¬ WF crossBlockUse := by decide
 example : ¬ WF useBeforeDef := by decide
 
-/-- The examples, by name, with the outcome each must show (`scripts/checks/compiler/slice0_backends.sh`). -/
-def all : List (String × Program × Outcome) :=
-  [("answer", answer, .exited 42), ("boundary", boundary, .exited 255),
-   ("overflow", overflow, .trapped 0), ("answer_discharged", answerDischarged, .exited 42),
-   ("return134", return134, .exited 134),
-   ("i8_add_ok", checkedOp .add .i8 (-100) (-28), .exited 0),
-   ("i8_add_ovf", checkedOp .add .i8 (-100) (-29), .trapped 0),
-   ("u16_mul_ok", checkedOp .mul .u16 300 218, .exited 0),
-   ("u16_mul_ovf", checkedOp .mul .u16 300 219, .trapped 0),
-   ("i16_sub_ovf", checkedOp .sub .i16 (-32768) 1, .trapped 0),
-   ("u8_sub_ovf", checkedOp .sub .u8 0 1, .trapped 0),
-   ("i8_mul_ok", checkedOp .mul .i8 (-16) 8, .exited 0),
-   ("i8_mul_ovf", checkedOp .mul .i8 (-16) (-8), .trapped 0),
-   ("w_i8_add", wrapped .add .i8 100 100, .exited 72),
-   ("w_i8_add_ok", wrapped .add .i8 (-100) 50, .exited 206),
-   ("w_i8_sub", wrapped .sub .i8 (-100) 100, .exited 184),
-   ("w_i8_mul", wrapped .mul .i8 (-16) 9, .exited 240),
-   ("w_u8_add", wrapped .add .u8 200 100, .exited 172),
-   ("w_u8_sub", wrapped .sub .u8 3 5, .exited 126),
-   ("w_u8_mul", wrapped .mul .u8 20 20, .exited 16),
-   ("w_i16_add", wrapped .add .i16 32767 1, .exited 128),
-   ("w_i16_sub", wrapped .sub .i16 (-32768) 1, .exited 127),
-   ("w_i16_sub_ok", wrapped .sub .i16 (-1000) 24000, .exited 88),
-   ("w_i16_mul", wrapped .mul .i16 300 301, .exited 60),
-   ("w_u16_sub", wrapped .sub .u16 1 3, .exited 126),
-   ("w_u16_mul", wrapped .mul .u16 65535 65535, .exited 129),
-   ("w_u16_mul_ok", wrapped .mul .u16 255 257, .exited 255),
-   ("widen_u", widenU, .exited 160), ("widen_s", widenS, .exited 90),
-   ("site1", twoSites 100 100 2, .trapped 1), ("site0", twoSites 200 100 2, .trapped 0),
-   ("two_sites_ok", twoSites 20 1 2, .exited 42)]
+/-- The examples, by name. Their expected outcomes live only in `tests/manifest.tsv`. -/
+def all : List (String × Program) :=
+  [("answer", answer), ("boundary", boundary),
+   ("overflow", overflow), ("answer_discharged", answerDischarged),
+   ("return134", return134),
+   ("i8_add_ok", checkedOp .add .i8 (-100) (-28)),
+   ("i8_add_ovf", checkedOp .add .i8 (-100) (-29)),
+   ("u16_mul_ok", checkedOp .mul .u16 300 218),
+   ("u16_mul_ovf", checkedOp .mul .u16 300 219),
+   ("i16_sub_ovf", checkedOp .sub .i16 (-32768) 1),
+   ("u8_sub_ovf", checkedOp .sub .u8 0 1),
+   ("i8_mul_ok", checkedOp .mul .i8 (-16) 8),
+   ("i8_mul_ovf", checkedOp .mul .i8 (-16) (-8)),
+   ("w_i8_add", wrapped .add .i8 100 100),
+   ("w_i8_add_ok", wrapped .add .i8 (-100) 50),
+   ("w_i8_sub", wrapped .sub .i8 (-100) 100),
+   ("w_i8_mul", wrapped .mul .i8 (-16) 9),
+   ("w_u8_add", wrapped .add .u8 200 100),
+   ("w_u8_sub", wrapped .sub .u8 3 5),
+   ("w_u8_mul", wrapped .mul .u8 20 20),
+   ("w_i16_add", wrapped .add .i16 32767 1),
+   ("w_i16_sub", wrapped .sub .i16 (-32768) 1),
+   ("w_i16_sub_ok", wrapped .sub .i16 (-1000) 24000),
+   ("w_i16_mul", wrapped .mul .i16 300 301),
+   ("w_u16_sub", wrapped .sub .u16 1 3),
+   ("w_u16_mul", wrapped .mul .u16 65535 65535),
+   ("w_u16_mul_ok", wrapped .mul .u16 255 257),
+   ("widen_u", widenU), ("widen_s", widenS),
+   ("site1", twoSites 100 100 2), ("site0", twoSites 200 100 2),
+   ("two_sites_ok", twoSites 20 1 2)]
 
-example : all.all (fun (_, p, o) => wf p && run p 5 == o) := by decide +kernel
+example : all.all (fun (_, p) => wf p) := by decide
 
 end Examples
 
