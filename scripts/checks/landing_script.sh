@@ -1184,10 +1184,13 @@ CONCRETE_SKIP_GATES=1 git push -q origin ":$R/$sha" 2>/dev/null || true
 # The member's own review.sh note: the rounds it used (any verdict), which the cap is judged against.
 bash "$(dirname "$0")/put-review" "$sha" "findings@$rounds"
 d="$(mktemp -d)"
+trap 'rm -rf "$d"' EXIT
 for r in codex kimi agy; do
   printf 'review of %s by %s\n' "$sha" "$r" > "$d/$r-request"
   printf '  VERDICT: ACCEPT\n' > "$d/$r"
 done
+# Exercise record directly with the requested output, before any valid ref exists.
+if [ "$mode" = recordverdict ]; then printf '%s' "$SO_OUTPUT" > "$d/agy"; fi
 bash "$SIGNOFF" record "$sha" --base "$base" --rounds-at "$sha" --date 2026-11-08 --quote "sign off ${sha:0:8}, yes" \
   --codex-request "$d/codex-request" --codex "$d/codex" \
   --kimi-request "$d/kimi-request" --kimi "$d/kimi" \
@@ -1216,7 +1219,10 @@ set_request() { # reviewer stored-request-file
     "set:$r-request.txt:$(git hash-object -w "$q")"
 }
 case "$mode" in
-  valid) ;;
+  valid|recordverdict) ;;
+  verdict) printf '%s' "$SO_OUTPUT" > "$d/agy-r"
+    variant "s/^verdict-agy: .*/verdict-agy: agy.txt $(sha256sum < "$d/agy-r" | cut -d' ' -f1)/" \
+      "set:agy.txt:$(git hash-object -w "$d/agy-r")" ;;
   othersha) variant "s/^commit: .*/commit: $(git rev-parse "$3")/" ;;
   unnamed) variant "s/^quote: .*/quote: sign off the branch/" ;;
   tampered) variant "" "set:kimi.txt:$(printf 'edited output\n  VERDICT: ACCEPT\n' | git hash-object -w --stdin)" ;;
@@ -1238,7 +1244,6 @@ case "$mode" in
       "set:agy.txt:$(git hash-object -w "$d/agy-r")" ;;
   *) echo "put-signoff: unknown mode $mode" >&2; exit 2 ;;
 esac
-rm -rf "$d"
 CONCRETE_SKIP_GATES=1 git push -q -f origin "$R/$sha"
 SIGNOFF_EOF
 
@@ -1312,6 +1317,34 @@ so_leg "a sign-off whose agy output ends in REJECT" reject pass "owner sign-off 
 o="$(bash "$ROOT_DIR/scripts/land/signoff.sh" verify "$R2" --base "$MR" 2>&1)"; r=$?
 [ "$r" = 0 ] && has "$o" "verdicts: codex ACCEPT, kimi ACCEPT, agy REJECT" \
   && ok "verify accepts agy's REJECT at the cap and reports every verdict" || { no "verify with agy's REJECT (exit $r)"; echo "$o" | sed 's/^/      /'; }
+# ISS-0053: select the last declaration, including malformed declarations, before
+# validating. Verify forged records with matching hashes as well as record's refusal
+# to create a ref. Both canonical outcomes remain legitimate owner sign-offs.
+verdict_case(){ # label output expected-status expected-verdict
+  local label="$1" output="$2" expected="$3" value="$4" mode o r
+  for mode in recordverdict verdict; do
+    o="$(SO_OUTPUT="$output" bash "$TMP/put-signoff" "$R2" "$mode" 2>&1)"; r=$?
+    if [ "$mode" = verdict ] || [ "$expected" = pass ]; then
+      if [ "$r" = 0 ]; then
+        o="$(bash "$ROOT_DIR/scripts/land/signoff.sh" verify "$R2" --base "$MR" 2>&1)"; r=$?
+      fi
+    fi
+    if [ "$expected" = pass ]; then
+      [ "$r" = 0 ] && has "$o" "agy $value" \
+        && ok "$mode: $label" || { no "$mode: $label (exit $r)"; echo "$o"; }
+    else
+      [ "$r" = 1 ] && has "$o" "last declaration is not" \
+        && { [ "$mode" = verdict ] || ! git rev-parse -q --verify "refs/owner-signoff/$R2" >/dev/null; } \
+        && ok "$mode: $label" || { no "$mode: $label (exit $r)"; echo "$o"; }
+    fi
+  done
+}
+for last in 'VERDICT: BLOCKED' 'VERDICT: UNKNOWN' 'VERDICT: accept' 'verdict: ACCEPT' 'VERDICT: ACCEPT extra' 'VERDICT: AC CEPT' 'VERDICT:  ACCEPT' 'VERDICT : ACCEPT' 'VERDICT:'; do
+  verdict_case "trailing $last is refused" "$(printf 'VERDICT: ACCEPT\n  %s\n' "$last")" refuse ''
+done
+verdict_case "whitespace around ACCEPT is allowed" $'VERDICT: REJECT\n \tVERDICT: ACCEPT\t \n' pass ACCEPT
+verdict_case "final REJECT supersedes ACCEPT" $'VERDICT: ACCEPT\nVERDICT: REJECT\n' pass REJECT
+verdict_case "final ACCEPT supersedes REJECT" $'VERDICT: REJECT\nVERDICT: ACCEPT\n' pass ACCEPT
 so_leg "a sign-off whose quote names no commit" unnamed refuse "the quote does not name ${R2:0:10}"
 so_leg "a member with neither a note nor a sign-off" none refuse "$R2 has no owner sign-off"
 # The cap is the class of the member's diff: docs 2, scripts 3, compiler and spec 5, the highest wins.

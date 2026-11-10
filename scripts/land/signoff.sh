@@ -59,6 +59,16 @@ usage() { awk 'NR > 1 { if (!/^#/) exit; sub(/^# ?/, ""); print }' "${BASH_SOURC
 die() { echo "signoff: $*" >&2; exit 2; }
 sha256() { if command -v sha256sum >/dev/null 2>&1; then sha256sum | cut -d' ' -f1; else shasum -a 256 | cut -d' ' -f1; fi; }
 
+# Read the last declaration before validating it. Recognize case/spacing variants as
+# declarations too, so a malformed final declaration cannot expose an earlier ACCEPT.
+# Preserve the existing allowance for whitespace around a canonical verdict line.
+last_verdict() {
+  local line
+  line="$(awk 'tolower($0) ~ /^[[:space:]]*verdict[[:space:]]*:/ { last = $0 } END { print last }')"
+  [[ "$line" =~ ^[[:space:]]*VERDICT:\ (ACCEPT|REJECT)[[:space:]]*$ ]] || return 1
+  printf '%s\n' "${BASH_REMATCH[1]}"
+}
+
 # path_class PATH → docs | scripts | compiler (anything unlisted is compiler: the highest class)
 path_class() {
   case "$1" in
@@ -199,9 +209,9 @@ check() {
     [ "$file" = "$r.txt" ] && [[ "$hash" =~ ^[0-9a-f]{64}$ ]] || bad "verdict-$r is '$entry', not '$r.txt <sha256>'"
     got="$(git cat-file blob "$obj:$file" | sha256)"
     [ "$got" = "$hash" ] || bad "the sha256 of $file is $got, not the recorded $hash"
-    verdict="$(git cat-file blob "$obj:$file" | grep -E '^[[:space:]]*VERDICT: (ACCEPT|REJECT)[[:space:]]*$' | tail -1 | tr -d '[:space:]')" || true
-    [ -n "$verdict" ] || bad "the $r output has no verdict"
-    verdicts="$verdicts${verdicts:+, }$r ${verdict#VERDICT:}"
+    verdict="$(git cat-file blob "$obj:$file" | last_verdict)" \
+      || bad "the $r output has no verdict or its last declaration is not VERDICT: ACCEPT or VERDICT: REJECT"
+    verdicts="$verdicts${verdicts:+, }$r $verdict"
   done
   echo "$sha signed off by the owner ($F_date; $cls change, cap $cap reached at ${at:0:10} with $rounds round(s); verdicts: $verdicts): \"$F_quote\""
 }
