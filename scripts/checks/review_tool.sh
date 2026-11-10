@@ -199,6 +199,39 @@ check "verify.sh judges the exact commit, not the branch (R1 still 1)" test "$rc
 review >/dev/null 2>&1; rc=$?
 check "an already-clean HEAD reports clean without a call (exit 0)" test "$rc" -eq 0 -a "$(calls)" -eq 2
 
+echo "=== advanced base: full branch fallback preserves rounds and excludes main ==="
+g checkout -qb advanced-base main
+commit_file member.txt "member reviewed" "member change"
+reset_fake
+review --max-rounds 3 >"$T/advanced-first" 2>&1; rc=$?
+check "member initially reviewed clean" test "$rc/$(field rounds)" = "0/1"
+g checkout -q main
+commit_file upstream.txt "MARK_FINDING unrelated main change" "main advances"
+# No push: explicit base matches the train's invocation.
+g checkout -q advanced-base
+g merge -q --no-edit main
+commit_file member-new.txt "member added after merging main" "member continues"
+reset_fake
+review --base main --head HEAD --max-rounds 3 >"$T/advanced-second" 2>&1; rc=$?
+check "advanced-base round is clean and remains round 2" test "$rc/$(field rounds)" = "0/2"
+check "fallback reviews the complete member contribution" grep -q 'files=member-new.txt,member.txt,$' "$FAKE_LOG/calls"
+check "fallback excludes unrelated main changes" bash -c '! grep -q upstream.txt "$1"' _ "$FAKE_LOG/stdin.1"
+check "fallback prompt describes full branch scope" grep -q 'complete change of a branch' "$FAKE_LOG/prompt.1"
+check "fallback is announced" grep -q 'reviewing full base..HEAD diff (round 2)' "$T/advanced-second"
+commit_file member-new.txt "member changed again" "member delta"
+reset_fake
+review --base main --max-rounds 3 >"$T/advanced-third" 2>&1; rc=$?
+check "descendant review resumes delta at round 3" test "$rc/$(field rounds)" = "0/3"
+check "resumed delta contains only the new member change" grep -q 'files=member-new.txt,$' "$FAKE_LOG/calls"
+commit_file cap.txt "no fourth round" "cap probe"
+review --base main --max-rounds 3 >"$T/advanced-cap" 2>&1; rc=$?
+check "base advance did not reset the cap" test "$rc" -eq 3
+check "cap calls no additional reviewer" test "$(calls)" -eq 1
+g checkout -q feature
+# Restore the fixture base for the independent legs below.
+g branch -f main origin/main
+reset_fake
+
 echo "=== verify.sh: missing and malformed notes ==="
 commit_file x.txt "x" "unreviewed"
 (cd "$W" && bash "$VERIFY" HEAD >/dev/null 2>&1); rc=$?
