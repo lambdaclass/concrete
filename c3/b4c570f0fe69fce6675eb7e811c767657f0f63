@@ -1,0 +1,3 @@
+[piece 1 of 1: docs]
+- docs/decisions.md:1278: This records refusal of unreachable private items as decided despite the ambiguous owner answer “yes obviously no.” The coordinator’s interpretation and the owner’s silence do not establish explicit approval. Keep this unresolved until the owner clarifies.
+- docs/decisions.md:1285: The quoted owner statements waive compatibility with old Concrete code; they do not reject a parser-driven migration tool or require repository code updates in the same change. Recording those additional choices as decided exceeds the quoted approval’s scope.
