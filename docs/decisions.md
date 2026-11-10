@@ -87,6 +87,9 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 - The agreed answers of 2026-11-09: branch qualification, independent reviews, hard round limits,
   gate budgets, proof provenance, spec corrections and offline builds ([row](#decided-2026-11-09-agreed)).
 
+- Unused imports and unreachable private items are refused; no parser-driven migration tool
+  ([row](#decided-2026-11-09-r7-l6)).
+
 <a id="rules-a-decision-changed"></a>
 ## Rules a decision has changed
 
@@ -1265,6 +1268,25 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
       `[policy]`/`[assumptions]` keys; slice-1 spec subset vs narrowing; and R-0600 at slice 1 or 5.
       The other older questions are the lifecycle signature `life : Life -> Store -> Option Store`,
       std coverage S1/S3/S4/S5 (canonical NaN is part of S5), and the R-0625 spelling round.
+- <a id="decided-2026-11-09-r7-l6"></a>**Unused items and syntax migration: R7 and L6**
+  (owner, 2026-11-09, chat). These answers concern R7 and L6 of the 33 proposals on
+  `wip/proposals-33-revised`; the proposals are not copied here.
+
+  1. <a id="decided-2026-11-09-unused-imports"></a>*Unused imports are refused, with no warning
+     tier.* Asked "Unused imports: refuse them, or report them as facts with a policy?", the
+     owner answered verbatim: "refuse them obviously".
+  2. <a id="decided-2026-11-09-unreachable-private-items"></a>*Private items nothing reaches
+     (unreachable private functions and types) are refused.* Asked "Should those be refused
+     too? I'd say yes, for the same reason.", the owner answered verbatim: "yes obviously no".
+     The coordinator replied that it read this as yes and asked the owner to say if they meant
+     no; the owner did not object. This records that interpretation and exchange. The exact
+     reachability roots and the spelling of any diagnostics stay with the R7 proposal, pending
+     owner decision.
+  3. <a id="decided-2026-11-09-no-parser-migration-tool"></a>*No parser-driven migration tool.*
+     Syntax changes need not keep old Concrete code working; code in the repository is updated
+     in the same change. The owner's verbatim words were: "i don't care about old concrete code"
+     and "we are doing everything from scratch".
+
 - <a id="decided-project-spark-2026-11-06"></a>**What Concrete takes from SPARK** (owner, 2026-11-06: "ok do everything", after Claude, Codex, agy and Kimi chose unanimously; the
   [review](proposals/SPARK.md) items 1, 2, 3, 6, 7, 9 and 10).
   - *Function values with safety preconditions.* A function whose `#[requires]` is a safety
