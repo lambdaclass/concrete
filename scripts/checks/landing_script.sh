@@ -104,7 +104,7 @@ GH
 chmod +x "$TMP/fake-gh"
 
 # A review note as scripts/review/review.sh writes it (scripts/review/verify.sh's six keys), published
-# to origin. put-review <sha> <clean|findings|blocked|malformed|none>; none removes the note.
+# to origin. put-review <sha> <clean|findings|blocked|malformed|none>[@rounds]; none removes the note.
 cat > "$TMP/put-review" <<'EOF'
 #!/usr/bin/env bash
 set -e
@@ -113,8 +113,8 @@ git fetch -q origin "+$R:$R" 2>/dev/null || true
 case "$2" in
   none) git notes --ref=$R remove --ignore-missing "$sha" 2>/dev/null ;;
   malformed) git notes --ref=$R add -f -m "verdict: clean" "$sha" ;;
-  *) git notes --ref=$R add -f -m "verdict: $2
-rounds: 1
+  *) git notes --ref=$R add -f -m "verdict: ${2%@*}
+rounds: $(case "$2" in *@*) echo "${2#*@}" ;; *) echo 1 ;; esac)
 reviewer: codex
 utc: 2026-11-06T00:00:00Z
 base: $sha
@@ -564,6 +564,31 @@ dec="$( cd "$RI" && export CONCRETE_TEST_OUT="$TMP" CONCRETE_TEST_LIB="$ROOT_DIR
 dec="$( cd "$RI" && source "$ROOT_DIR/scripts/checks/lib/prepush_record.sh" && ppr_remote_components "$RI" "$RIH" "$TMP/ri.changed" "$TMP/ri.plan" "$TMP/ri.comp" \
   && ppr_remote_check "$RI" "$TMP/ri.comp" && echo REUSE || echo "refused:$PPR_REASON" )"
 has "$dec" "refused:changed:env" && ok "a push in another CONCRETE_* environment than the host's run does not reuse it" || no "e2e env mismatch: $dec"
+# The login is checked on the host before anything is fetched: a root login, an unreadable one, or
+# one without its gate clone is INCOMPLETE and named (2026-11-08: the root admin alias looked for
+# /root/concrete2). A git shim on the "host" logs every fetch; each case must log none.
+mkdir -p "$TMP/hostgit" "$TMP/hostroot" "$TMP/hostnoid"
+printf '#!/bin/sh\nfor a in "$@"; do case "$a" in fetch) echo "$*" >> "%s"; break ;; esac; done\nexec "%s" "$@"\n' "$TMP/hostgit.log" "$(command -v git)" > "$TMP/hostgit/git"
+printf '#!/bin/sh\ncase "$1" in -u) echo 0 ;; -un) echo root ;; *) exit 1 ;; esac\n' > "$TMP/hostroot/id"
+printf '#!/bin/sh\nexit 1\n' > "$TMP/hostnoid/id"
+chmod +x "$TMP/hostgit/git" "$TMP/hostroot/id" "$TMP/hostnoid/id"
+: > "$TMP/hostgit.log"; PATH="$TMP/hostroot:$TMP/hostgit:$PATH" e2e
+[ "$rc" = 3 ] && has "$out" "INCOMPLETE" && has "$out" "gate host login is root@" && [ ! -s "$TMP/hostgit.log" ] && [ ! -f "$RIATT" ] \
+  && ok "a root login on the gate host is refused before it fetches (INCOMPLETE)" || { no "root gate login: exit $rc"; echo "$out" | sed 's/^/      /'; }
+: > "$TMP/hostgit.log"; PATH="$TMP/hostnoid:$TMP/hostgit:$PATH" e2e
+[ "$rc" = 3 ] && has "$out" "INCOMPLETE" && has "$out" "cannot read the gate host login" && [ ! -s "$TMP/hostgit.log" ] && [ ! -f "$RIATT" ] \
+  && ok "a gate host login that id cannot read is refused, not taken as non-root (INCOMPLETE)" || { no "unreadable gate login: exit $rc"; echo "$out" | sed 's/^/      /'; }
+mv "$HH/concrete2" "$HH/concrete2.away"; mkdir "$HH/concrete2"; : > "$TMP/hostgit.log"
+PATH="$TMP/hostgit:$PATH" e2e
+rmdir "$HH/concrete2"; mv "$HH/concrete2.away" "$HH/concrete2"
+[ "$rc" = 3 ] && has "$out" "INCOMPLETE" && has "$out" "no gate clone at $HH/concrete2 for " && [ ! -s "$TMP/hostgit.log" ] && [ ! -f "$RIATT" ] \
+  && ok "a gate login without its gate clone is INCOMPLETE and names the account and path" || { no "missing gate clone: exit $rc"; echo "$out" | sed 's/^/      /'; }
+# A gate clone that is a linked worktree (its .git a file) is a gate clone.
+mv "$HH/concrete2" "$HH/concrete2.main"; git -C "$HH/concrete2.main" worktree add -q --detach "$HH/concrete2" 2>/dev/null
+e2e
+git -C "$HH/concrete2.main" worktree remove --force "$HH/concrete2"; mv "$HH/concrete2.main" "$HH/concrete2"
+[ "$rc" = 0 ] && has "$out" "stub gates passed" \
+  && ok "a gate clone that is a linked worktree runs the gates" || { no "worktree gate clone: exit $rc"; echo "$out" | sed 's/^/      /'; }
 touch "$HH/unreachable"; e2e; rm -f "$HH/unreachable"
 [ "$rc" = 3 ] && has "$out" "INCOMPLETE" && [ ! -f "$RIATT" ] && ok "the real transport to an unreachable host is INCOMPLETE (exit 3), attests nothing" || { no "e2e unreachable: exit $rc"; echo "$out" | sed 's/^/      /'; }
 hook="$ROOT_DIR/.githooks/pre-push"
@@ -988,13 +1013,13 @@ out="$(python3 -I "$TMP/required_names.py" "$ROOT_DIR/.github/workflows/lean_act
 python3 -I - "$ROOT_DIR/.github/workflows/lean_action_ci.yml" "$TMP/rn" <<'PY3'
 import sys, yaml, copy, os
 w = yaml.safe_load(open(sys.argv[1])); os.makedirs(sys.argv[2], exist_ok=True)
-a = copy.deepcopy(w); a["jobs"]["backends"]["strategy"]["matrix"]["include"].append({"arch": "riscv64", "runner": "ubuntu-latest"})
-b = copy.deepcopy(w); b["jobs"]["backends"]["name"] = "Slice 0 backends (${{ matrix.os }})"
-c = copy.deepcopy(w); c["jobs"]["backends"]["strategy"]["matrix"] = {"arch": ["x86-64", "aarch64-macos"]}
+a = copy.deepcopy(w); a["jobs"]["tests"]["strategy"]["matrix"]["include"].append({"arch": "riscv64", "runner": "ubuntu-latest"})
+b = copy.deepcopy(w); b["jobs"]["tests"]["name"] = "Tests (${{ matrix.os }})"
+c = copy.deepcopy(w); c["jobs"]["tests"]["strategy"]["matrix"] = {"arch": ["x86-64", "aarch64-macos"]}
 for n, x in (("extraleg", a), ("unresolved", b), ("product", c)):
     yaml.safe_dump(x, open(os.path.join(sys.argv[2], n + ".yml"), "w"))
 PY3
-for v in extraleg:"landing-tier job not required: Slice 0 backends (riscv64)" unresolved:"leaves its name unresolved" product:"is not a non-empty include list"; do
+for v in extraleg:"landing-tier job not required: Tests (riscv64)" unresolved:"leaves its name unresolved" product:"is not a non-empty include list"; do
   o="$(python3 -I "$TMP/required_names.py" "$TMP/rn/${v%%:*}.yml" "$re_default" "$ROOT_DIR/required-checks.txt")"
   has "$o" "${v#*:}" && ok "CONTROL: the required-checks check reports the ${v%%:*} matrix" || no "CONTROL: the required-checks check missed the ${v%%:*} matrix: '$o'"
 done
@@ -1141,6 +1166,82 @@ inv_leg tin3 binv-legacy 5456
 [ "$rc" = 5 ] && has "$out" "no rehearsal record" \
   && ok "a change under legacy/ (inventory untouched) still needs a rehearsal" || { no "legacy change: dry-run land exit $rc"; echo "$out" | sed 's/^/      /'; }
 
+# An owner sign-off record (scripts/land/signoff.sh), published to origin. put-signoff <sha> <mode>
+# [<other sha>]: valid; none removes it; othersha records <other sha> and files it under <sha>;
+# tampered changes kimi.txt after recording; otherreview makes kimi's request body name <other sha>;
+# otherreviewed gives that request a reviewed line for <other sha> while its body and output name
+# <sha>; noreviewed removes its reviewed line; requestverdict puts ACCEPT only in agy's request;
+# unnamedbody gives kimi's request no commit name; noagy drops agy's verdict; reject ends agy's output
+# with VERDICT: REJECT; unnamed has a quote that names no commit.
+printf '#!/usr/bin/env bash\nSIGNOFF=%q\n' "$ROOT_DIR/scripts/land/signoff.sh" > "$TMP/put-signoff"
+cat >> "$TMP/put-signoff" <<'SIGNOFF_EOF'
+set -e
+sha="$(git rev-parse "$1")"; mode="$2"; R=refs/owner-signoff; tab="$(printf '\t')"
+base="${SO_BASE:-$(git rev-parse origin/main)}"; rounds="${SO_ROUNDS:-5}"
+git update-ref -d "$R/$sha" 2>/dev/null || true
+CONCRETE_SKIP_GATES=1 git push -q origin ":$R/$sha" 2>/dev/null || true
+[ "$mode" = none ] && exit 0
+# The member's own review.sh note: the rounds it used (any verdict), which the cap is judged against.
+bash "$(dirname "$0")/put-review" "$sha" "findings@$rounds"
+d="$(mktemp -d)"
+for r in codex kimi agy; do
+  printf 'review of %s by %s\n' "$sha" "$r" > "$d/$r-request"
+  printf '  VERDICT: ACCEPT\n' > "$d/$r"
+done
+bash "$SIGNOFF" record "$sha" --base "$base" --rounds-at "$sha" --date 2026-11-08 --quote "sign off ${sha:0:8}, yes" \
+  --codex-request "$d/codex-request" --codex "$d/codex" \
+  --kimi-request "$d/kimi-request" --kimi "$d/kimi" \
+  --agy-request "$d/agy-request" --agy "$d/agy" >/dev/null
+c="$(git rev-parse "$R/$sha")"
+# variant SED [drop:FILE | set:FILE:BLOB]...: the valid record with record.txt edited by SED and files
+# dropped or replaced (record writes only valid records, so every refused variant is built from one).
+variant() {
+  local rec entries t f b change
+  rec="$(git cat-file blob "$c:record.txt" | sed "$1" | git hash-object -w --stdin)"
+  entries="$(git ls-tree "$c" | grep -v "${tab}record.txt\$")"
+  shift
+  for change in "$@"; do
+    case "$change" in
+      drop:*) entries="$(printf '%s\n' "$entries" | grep -v "${tab}${change#drop:}\$")" ;;
+      set:*) f="${change#set:}"; f="${f%%:*}"; b="${change##*:}"
+        entries="$(printf '%s\n' "$entries" | sed "s/blob [0-9a-f]*${tab}${f}\$/blob ${b}${tab}${f}/")" ;;
+    esac
+  done
+  t="$(printf '%s\n100644 blob %s\trecord.txt\n' "$entries" "$rec" | git mktree)"
+  git update-ref "$R/$sha" "$(git commit-tree "$t" -m variant)"
+}
+set_request() { # reviewer stored-request-file
+  local r="$1" q="$2"
+  variant "s/^request-$r: .*/request-$r: $r-request.txt $(sha256sum < "$q" | cut -d' ' -f1)/" \
+    "set:$r-request.txt:$(git hash-object -w "$q")"
+}
+case "$mode" in
+  valid) ;;
+  othersha) variant "s/^commit: .*/commit: $(git rev-parse "$3")/" ;;
+  unnamed) variant "s/^quote: .*/quote: sign off the branch/" ;;
+  tampered) variant "" "set:kimi.txt:$(printf 'edited output\n  VERDICT: ACCEPT\n' | git hash-object -w --stdin)" ;;
+  otherreview) printf 'reviewed: %s\nreview of %s by kimi\n' "$sha" "$(git rev-parse "$3")" > "$d/kimi-o"
+    set_request kimi "$d/kimi-o" ;;
+  otherreviewed) printf 'reviewed: %s\nreview of %s by kimi\n' "$(git rev-parse "$3")" "$sha" > "$d/kimi-q"
+    printf 'review of %s by kimi\nVERDICT: ACCEPT\n' "$sha" > "$d/kimi-o"
+    variant "s/^request-kimi: .*/request-kimi: kimi-request.txt $(sha256sum < "$d/kimi-q" | cut -d' ' -f1)/;s/^verdict-kimi: .*/verdict-kimi: kimi.txt $(sha256sum < "$d/kimi-o" | cut -d' ' -f1)/" \
+      "set:kimi-request.txt:$(git hash-object -w "$d/kimi-q")" "set:kimi.txt:$(git hash-object -w "$d/kimi-o")" ;;
+  noreviewed) printf 'review of %s by kimi\n' "$sha" > "$d/kimi-q"; set_request kimi "$d/kimi-q" ;;
+  unnamedbody) printf 'reviewed: %s\nreview the branch\n' "$sha" > "$d/kimi-q"; set_request kimi "$d/kimi-q" ;;
+  requestverdict) printf 'reviewed: %s\nreview of %s by agy\nVERDICT: ACCEPT\n' "$sha" "$sha" > "$d/agy-q"
+    printf 'agy output without a verdict\n' > "$d/agy-o"
+    variant "s/^request-agy: .*/request-agy: agy-request.txt $(sha256sum < "$d/agy-q" | cut -d' ' -f1)/;s/^verdict-agy: .*/verdict-agy: agy.txt $(sha256sum < "$d/agy-o" | cut -d' ' -f1)/" \
+      "set:agy-request.txt:$(git hash-object -w "$d/agy-q")" "set:agy.txt:$(git hash-object -w "$d/agy-o")" ;;
+  noagy) variant "/^verdict-agy:/d" "drop:agy.txt" ;;
+  reject) printf 'VERDICT: REJECT\n' > "$d/agy-r"
+    variant "s/^verdict-agy: .*/verdict-agy: agy.txt $(sha256sum < "$d/agy-r" | cut -d' ' -f1)/" \
+      "set:agy.txt:$(git hash-object -w "$d/agy-r")" ;;
+  *) echo "put-signoff: unknown mode $mode" >&2; exit 2 ;;
+esac
+rm -rf "$d"
+CONCRETE_SKIP_GATES=1 git push -q -f origin "$R/$sha"
+SIGNOFF_EOF
+
 echo "=== review: check fails closed, land requires review provenance ==="
 git checkout -q main && git fetch -q origin && git reset -q --hard origin/main
 MR="$(git rev-parse HEAD)"
@@ -1190,6 +1291,71 @@ bash "$TMP/put-review" "$HR" none; bash "$TMP/put-review" "$R1" clean; bash "$TM
 out="$(bash "$TRAIN" check trv --no-remote 2>&1)"; rc=$?
 [ "$rc" = 0 ] && [ ! -s "$FAKE_GH_DIR/review.log" ] \
   && ok "check over members reviewed clean passes the review leg without running the reviewer" || { no "check over reviewed members: exit $rc, reviewer calls '$(cat "$FAKE_GH_DIR/review.log")'"; echo "$out" | sed 's/^/      /'; }
+
+echo "=== review: an owner sign-off at a member's exact SHA is its review provenance (R-0618) ==="
+# brv1 is reviewed clean. brv2 used its rounds (a findings note, round 5: rv2.txt is in no class, so
+# its cap is the highest, 5) and is signed off, or carries a record that must not count.
+so_leg(){ # label mode expect(refuse|pass) text
+  bash "$TMP/put-signoff" "$R2" "$2" "$R1"
+  prov_leg "$1" none clean "$( [ "$2" = none ] && echo none || echo findings@5)" "$3" "$4"
+}
+so_leg "a member with a valid owner sign-off and a clean merge" valid pass "owner sign-off (1) at its exact SHA, and the head is their clean merge"
+so_leg "a sign-off recorded for another commit" othersha refuse "the record is for $R1, not $R2"
+so_leg "a sign-off whose verdict file was changed after recording" tampered refuse "the sha256 of kimi.txt is"
+so_leg "a sign-off whose kimi request body names another commit" otherreview refuse "the kimi request body does not name ${R2:0:10}"
+so_leg "F1: a reviewed line for another commit despite body and output naming the signed SHA" otherreviewed refuse "the kimi request's reviewed line is '$R1', not $R2"
+so_leg "F1b: a request without a reviewed first line" noreviewed refuse "the kimi request's first line is not a 'reviewed: <full 40-hex SHA>' line"
+so_leg "F2: ACCEPT in agy's request but no verdict in its output" requestverdict refuse "the agy output has no verdict"
+so_leg "a request body that names no commit" unnamedbody refuse "the kimi request body does not name ${R2:0:10}"
+so_leg "a sign-off without agy's verdict" noagy refuse "the record has no agy verdict"
+so_leg "a sign-off whose agy output ends in REJECT" reject pass "owner sign-off (1) at its exact SHA, and the head is their clean merge"
+o="$(bash "$ROOT_DIR/scripts/land/signoff.sh" verify "$R2" --base "$MR" 2>&1)"; r=$?
+[ "$r" = 0 ] && has "$o" "verdicts: codex ACCEPT, kimi ACCEPT, agy REJECT" \
+  && ok "verify accepts agy's REJECT at the cap and reports every verdict" || { no "verify with agy's REJECT (exit $r)"; echo "$o" | sed 's/^/      /'; }
+so_leg "a sign-off whose quote names no commit" unnamed refuse "the quote does not name ${R2:0:10}"
+so_leg "a member with neither a note nor a sign-off" none refuse "$R2 has no owner sign-off"
+# The cap is the class of the member's diff: docs 2, scripts 3, compiler and spec 5, the highest wins.
+git checkout -q -b bsodoc "$MR"; mkdir -p docs; printf 'd\n' > docs/so.md; commit_all bsodoc; SD="$(git rev-parse HEAD)"
+git checkout -q -b bsoscr "$MR"; mkdir -p scripts; printf 'echo\n' > scripts/so.sh; commit_all bsoscr; SS="$(git rev-parse HEAD)"
+git checkout -q -b bsomix "$MR"; mkdir -p docs Concrete; printf 'd\n' > docs/so.md; printf -- '-- x\n' > Concrete/So.lean; commit_all bsomix; SM="$(git rev-parse HEAD)"
+o="$(SO_ROUNDS=2 bash "$TMP/put-signoff" "$SD" valid 2>&1 && bash "$ROOT_DIR/scripts/land/signoff.sh" verify "$SD" --base "$MR" 2>&1)"; r=$?
+[ "$r" = 0 ] && has "$o" "docs change, cap 2 reached" && ok "a docs-only member signed off after 2 rounds is accepted" || { no "docs member after 2 rounds (exit $r)"; echo "$o" | sed 's/^/      /'; }
+for c in "SS scripts 3" "SM compiler 5"; do
+  read -r sv cls cap <<< "$c"; s="${!sv}"
+  o="$(SO_ROUNDS=2 bash "$TMP/put-signoff" "$s" valid 2>&1)"; r=$?
+  [ "$r" != 0 ] && has "$o" "the review cap was not reached: a $cls change has cap $cap, and ${s:0:10} records 2 round(s)" && ! git rev-parse -q --verify "refs/owner-signoff/$s" >/dev/null \
+    && ok "record refuses a $cls member after 2 rounds and writes nothing" || { no "record of a $cls member after 2 rounds (exit $r)"; echo "$o" | sed 's/^/      /'; }
+  SO_ROUNDS="$cap" bash "$TMP/put-signoff" "$s" valid >/dev/null 2>&1 || no "record of a $cls member at its cap $cap"
+  bash "$TMP/put-review" "$s" findings@2
+  o="$(bash "$ROOT_DIR/scripts/land/signoff.sh" verify "$s" --base "$MR" 2>&1)"; r=$?
+  [ "$r" = 1 ] && has "$o" "the review cap was not reached: a $cls change has cap $cap, and ${s:0:10} records 2 round(s)" \
+    && ok "verify refuses a $cls member's sign-off after 2 rounds" || { no "verify of a $cls member after 2 rounds (exit $r)"; echo "$o" | sed 's/^/      /'; }
+  bash "$TMP/put-signoff" "$s" none
+done
+# The cap evidence is a well-formed review.sh note: a bare `rounds: 5` note does not count.
+bash "$TMP/put-signoff" "$R2" valid
+git notes --ref=refs/notes/concrete-review add -f -m "rounds: 5" "$R2"
+o="$(bash "$ROOT_DIR/scripts/land/signoff.sh" verify "$R2" --base "$MR" 2>&1)"; r=$?
+[ "$r" = 1 ] && has "$o" "rounds-at ${R2:0:10} carries no well-formed review.sh note" \
+  && ok "verify refuses cap evidence that is not a well-formed review.sh note" || { no "malformed cap note (exit $r)"; echo "$o" | sed 's/^/      /'; }
+bash "$TMP/put-review" "$R2" none; bash "$TMP/put-signoff" "$R2" none
+bash "$TMP/put-signoff" "$SD" none
+git checkout -q train/trv
+# The same valid sign-off, but a head beyond the clean merge of its members. train.sh already refuses
+# a head that is not the built train; pure_merge is the provenance's own check, run here on heads that
+# add a commit, or that change a merge's tree, over the built train.
+bash "$TMP/put-signoff" "$R2" valid
+BR="$MR"   # the train was built on main at MR
+git checkout -q --detach "$HR"; printf 'extra\n' > extra.txt; git add extra.txt; git commit -qm extra; HX="$(git rev-parse HEAD)"
+git checkout -q --detach "$HR"; printf 'extra\n' > extra.txt; git add extra.txt; git commit -q --amend --no-edit; HY="$(git rev-parse HEAD)"
+git checkout -q train/trv
+pm(){ bash -c 'eval "$(sed -n "/^pure_merge() {/,/^}/p" "$1")"; pure_merge "$2" "$3" "$4" "$5"' _ "$TRAIN" "$BR" "$1" "$R1" "$R2"; }
+o="$(pm "$HR")"; [ -z "$o" ] && ok "pure_merge: the built train is the clean merge of its members" || no "pure_merge refused the built train: '$o'"
+o="$(pm "$HX")"; has "$o" "${HX:0:10} is not the clean merge of its members onto ${BR:0:10}: ${HX:0:10} is not the merge of ${R2:0:10}" \
+  && ok "pure_merge refuses a head with an extra commit ($o)" || no "pure_merge on an extra commit: '$o'"
+o="$(pm "$HY")"; has "$o" "${HY:0:10} is not the clean merge of its members onto ${BR:0:10}: ${HY:0:10} differs from the clean merge of ${R2:0:10}" \
+  && ok "pure_merge refuses a merge whose tree carries an extra change ($o)" || no "pure_merge on a changed merge: '$o'"
+bash "$TMP/put-signoff" "$R2" none
 
 echo "=== where a train runs: a full clone with the repository hook (ISS-0015) ==="
 cd "$W" || exit 2
