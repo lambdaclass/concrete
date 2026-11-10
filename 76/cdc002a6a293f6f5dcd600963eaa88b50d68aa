@@ -1,0 +1,6 @@
+[piece 10 of 18: scripts]
+- scripts/land/signoff.sh:202: Filtering for ACCEPT/REJECT before selecting the last verdict ignores later unsupported verdicts. An output containing `VERDICT: ACCEPT` followed by `VERDICT: BLOCKED` qualifies, despite the requirement that its last VERDICT line be ACCEPT or REJECT. Select the last VERDICT line first, then validate it, so incomplete reviews cannot qualify.
+[piece 14 of 18: docs]
+Repository reads failed with a sandbox error, so this review is limited to the supplied diff.
+
+- docs/REVIEW.md:177: The new “highest class present winning” rule decides the cap for mixed-class diffs, while ROADMAP.md’s R-0618 explicitly leaves that choice to the owner before enforcement. No dated owner answer or quoted owner rule authorizing this choice is supplied here. This resolves an explicitly pending project question without recorded provenance; retain it as pending or cite the owner’s explicit approval.
