@@ -58,6 +58,11 @@ uncommitted tree is never reviewed, and the script warns when it is dirty.
   script finds that commit by walking the branch (`base..HEAD`) for the newest
   note under `refs/notes/concrete-review`. The prompt includes the previous
   round's findings and asks the reviewer to list each one that is still open.
+  If the last reviewed commit does not descend from the current base (for
+  example, after merging newer main changes), the round reviews the full
+  `base..HEAD` diff instead. This excludes changes imported from the base and
+  includes merge resolutions. It preserves the round count and cap; the prompt
+  identifies the patch as the complete branch change.
 - A `blocked` round does not count as having reviewed its diff, so the next
   round starts from the last `clean` or `findings` round, or from the base.
   Running again on a blocked `HEAD` is allowed and counts as a round. A round
