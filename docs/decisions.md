@@ -24,19 +24,21 @@ Links only; each item's text lives where it is linked.
    4(c) ([SPARK review](proposals/SPARK.md)). Quantitative step and time bounds were decided on
    2026-11-07 ([row](#decided-2026-11-07-step-bounds)); the reviews' remaining disposition is unchanged.
 
-3. The [33 revised proposals under review](#proposals-under-review-2026-11-09), all awaiting the owner.
+3. The [33 revised items under review](#proposals-under-review-2026-11-09): R7 and L6 are decided; the remaining 31 proposals await the owner.
 
 A decided proposal moves to `docs/archive/<topic>-<date>/`.
 
 <a id="proposals-under-review-2026-11-09"></a>
 ## Proposals under review (2026-11-09)
 
-All 33 items below are **proposals, not decided**. They revise the coordinator’s unapproved
+Of the 33 items below, R7 and L6 are **decided by the owner 2026-11-09**; the remaining
+31 are **proposals, not decided**. The proposals revise the coordinator’s unapproved
 recommendations using both independent per-item reviews. Existing decisions govern until the
 owner explicitly answers; review acceptance is not owner approval. Delivery slices are proposed
 obligations, not changes to ROADMAP. Every proposed syntax, API, manifest field and CLI form has
 **spelling pending owner**; existing names identify current concepts, not approval of new forms.
-Costs include implementation and proof work. The two split verdicts remain unresolved.
+Costs include implementation and proof work. The owner resolved the two split verdicts in R7 and L6;
+R7’s exact reachability roots and diagnostic spellings remain pending owner.
 
 <a id="pending-r1"></a>
 ### R1. Hosted launch and final image
@@ -137,19 +139,13 @@ Costs include implementation and proof work. The two split verdicts remain unres
 <a id="pending-r7"></a>
 ### R7. Unused imports and private reachability
 
-*Status*: proposal, not decided. **split: waiting for the owner**.
+*Status*: decided by the owner 2026-11-09 — unused imports and unreachable private items are refused (record: decided-2026-11-09-r7-l6). Exact reachability roots and diagnostic spellings remain pending owner.
 
-*Proposal*: Present both positions; split: waiting for the owner. Codex rejects unconditional refusal: emit typed unused-import/private-reachability facts and let explicit project policy refuse them, following the [diagnostic policy](#decided-project-diagnostics-2026-11-06). agy proposes mandatory refusal at slice 17, arguing for a smaller reviewed surface. Both analyze the active module graph using resolved identities. Distinguish runtime, proof, test and exported-interface roots: entry point, public declarations of reachable modules, tests and reachable contract/proof references. Edges include indirect calls, generic instantiations, applicable implementations, field types, invariants and constant initializers. Selected files define the analyzed universe, never roots for every declaration. Import use means a referenced imported binding in that file. Check all written code under Q6.4 even when unreachable. In agy’s position duplicate/unused imports receive a meaning-preserving fix hint only with checked preservation evidence.
+*Open proposal details*: Analyze the active module graph using resolved identities. Distinguish runtime, proof, test and exported-interface roots: entry point, public declarations of reachable modules, tests and reachable contract/proof references. Edges include indirect calls, generic instantiations, applicable implementations, field types, invariants and constant initializers. Selected files define the analyzed universe, never roots for every declaration. Import use means a referenced imported binding in that file. Check all written code under Q6.4 even when unreachable. Propose delivery at slice 17 and meaning-preserving fix hints for duplicate/unused imports only with checked preservation evidence. These details remain proposals pending owner, including the exact reachability roots and diagnostic spellings.
 
-*Alternatives*: Codex’s facts plus policy: medium analysis/policy implementation and proof cost, project-dependent strictness. agy’s mandatory refusal: medium graph/fix-evidence cost and stricter source maintenance, uniform smaller surface. Keep current admission meanwhile: small immediate cost, no new coverage.
+*Cost*: Medium — precise dependency roots/edges, graph analysis and fix evidence; mandatory refusal adds source compatibility and maintenance cost.
 
-*Cost*: Medium — either position needs precise dependency roots/edges; refusal adds compatibility cost.
-
-*Review*: Codex: REJECT; agy: ACCEPT WITH CHANGES
-
-*Changes taken*: Codex: typed facts/policies, distinct roots, indirect/generic edges and checking all code. agy: mandatory refusal position, resolved graph/import rules, implementation/invariant edges and proved fix hints. Neither admission policy is selected.
-
-*Conflict*: Codex rejects mandatory refusal while agy recommends it; the owner must choose. Mandatory refusal would revise the [diagnostic policy](#decided-project-diagnostics-2026-11-06): revises a decided row: needs the owner.
+*Review history*: Codex: REJECT; agy: ACCEPT WITH CHANGES. Codex recommended typed facts plus project policy under the [diagnostic policy](#decided-project-diagnostics-2026-11-06); agy recommended mandatory refusal. The owner selected refusal, resolving the admission-policy split. The review suggestions on resolved identities, dependency analysis and checked fix hints inform the open details above; they do not decide them.
 
 <a id="pending-r8"></a>
 ### R8. Package spec version
@@ -291,19 +287,9 @@ Costs include implementation and proof work. The two split verdicts remain unres
 <a id="pending-l6"></a>
 ### L6. Parser-driven migration
 
-*Status*: proposal, not decided. **split: waiting for the owner**.
+*Status*: decided by the owner 2026-11-09 — rejected; no migration tool (record: decided-2026-11-09-r7-l6).
 
-*Proposal*: Present both positions; split: waiting for the owner. Codex recommends structured migration with parsing plus resolution/typing where needed, old grammar confined to the migration tool, source/destination versioned reviewable patches and automatic application only after checked preservation conditions. Unsupported semantic changes produce precise manual obligations, not a promise of a complete codemod per revision. agy rejects a standing pre-1.0 requirement: retain [up-front grammar freezing](#decided-2026-11-08-written-grammar), existing [proved diagnostic fixes](#decided-project-diagnostics-2026-11-06), the [slice-17 formatter](#decided-2026-11-07-tools), and the later migration obligation ([R-0392, transferred to R-0398](archive/roadmap-2026-11/task_disposition.tsv), active target [R-0398](../ROADMAP.md#g-release-and-ecosystem)) after compatibility policy and external-user demand. Neither a new command nor an earlier delivery requirement is selected.
-
-*Alternatives*: Codex’s versioned semantic migration tool: large historical-parser, typing and preservation-proof cost, lower repeated user migration effort. agy’s grammar-first/later-tooling position: small immediate cost, manual guidance plus checked diagnostic fixes until demonstrated demand; later migrations still cost work.
-
-*Cost*: Large if early structured migration is chosen; small immediate cost if existing staging remains — the owner must choose the obligation.
-
-*Review*: Codex: ACCEPT WITH CHANGES; agy: REJECT
-
-*Changes taken*: Codex: semantic checks, tool-only historical grammar, versioned patches and precise manual obligations. agy: grammar-first refusal of a standing early requirement, formatter/diagnostic reuse and later migration placement. Neither is selected.
-
-*Conflict*: Codex accepts a qualified tool requirement; agy rejects its early standing cost. Timing and obligation remain with the owner.
+*Review history*: Codex: ACCEPT WITH CHANGES; agy: REJECT. Codex recommended versioned parser-driven migration with semantic checks and preservation conditions; agy rejected the early standing requirement. The owner rejected L6: no migration tool. The earlier proposal’s references to a later migration obligation ([R-0392, transferred to R-0398](archive/roadmap-2026-11/task_disposition.tsv), active target [R-0398](../ROADMAP.md#g-release-and-ecosystem)) record its context, not an exception to this decision. Existing [up-front grammar freezing](#decided-2026-11-08-written-grammar), [proved diagnostic fixes](#decided-project-diagnostics-2026-11-06) and the [slice-17 formatter](#decided-2026-11-07-tools) remain separately decided work.
 
 <a id="pending-l7"></a>
 ### L7. Targets as data
@@ -370,7 +356,7 @@ Costs include implementation and proof work. The two split verdicts remain unres
 
 *Status*: proposal, not decided.
 
-*Proposal*: Allow typed zeroed allocation only with a target-specific compiler-checked structural proof that zero bytes construct a canonical Copy, brand/resource/authority-free value. Integers, false booleans, positive-zero floats and arrays qualify only with representation proofs; structs need qualifying fields and any invariant proved at zero. Refuse linear values, references, handles, grants, allocator brands and heap owners; enum eligibility needs an explicit zero discriminant on a fieldless variant and its representation proof. Include padding and zero-sized cases. Preserve explicit allocator/permission inputs and fallible results, exposing typed storage only after completed initialization and conserving inputs on failure. Other types may receive raw zeroed storage only through qualified raw memory followed by explicit initialization.
+*Proposal*: Allow typed zeroed allocation only with a target-specific compiler-checked structural proof that zero bytes construct a canonical Copy, brand/resource/authority-free value. Integers, false booleans, positive-zero floats and arrays qualify only with representation proofs; structs must explicitly declare valid-zero eligibility in their declaring module, with qualifying fields and any invariant proved at zero. Clients may use exported checked eligibility evidence; they may not infer eligibility from private representation or bypass private construction rights. The declaration spelling remains pending owner. Refuse linear values, references, handles, grants, allocator brands and heap owners; enum eligibility needs an explicit zero discriminant on a fieldless variant and its representation proof. Include padding and zero-sized cases. Preserve explicit allocator/permission inputs and fallible results, exposing typed storage only after completed initialization and conserving inputs on failure. Other types may receive raw zeroed storage only through qualified raw memory followed by explicit initialization.
 
 *Alternatives*: Keep explicit typed initialization (small new implementation cost, potentially higher initialization/stack work); raw zeroed bytes plus manual qualification (medium client proof burden, delayed to raw-memory support).
 
