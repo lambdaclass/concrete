@@ -87,8 +87,13 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 - The agreed answers of 2026-11-09: branch qualification, independent reviews, hard round limits,
   gate budgets, proof provenance, spec corrections and offline builds ([row](#decided-2026-11-09-agreed)).
 
-- Unused imports and unreachable private items are refused; no parser-driven migration tool
-  ([row](#decided-2026-11-09-r7-l6)).
+- Unused imports are refused; the owner explicitly confirmed unused private code is a compile error
+  and syntax changes rewrite repository code by hand without a migration tool or old-code compatibility
+  on 2026-11-10 ([row](#decided-2026-11-09-r7-l6)).
+- Parameterized tests generate proof statements; counterexample runs never count as proof
+  ([row](#decided-2026-11-10-parameterized-tests)).
+- Mixed branches use the highest review cap of the classes present
+  ([row](#decided-2026-11-10-mixed-cap)).
 
 <a id="rules-a-decision-changed"></a>
 ## Rules a decision has changed
@@ -1155,7 +1160,8 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   6. <a id="decided-2026-11-08-one-writer"></a>*One writer for `docs/decisions.md` and `ROADMAP.md`
      at a time;* other workers send it their records.
   7. <a id="decided-2026-11-08-review-caps"></a>*Review rounds capped by risk:* docs and roadmap 2,
-     scripts 3, compiler and spec 5 (R-0618).
+     scripts 3, compiler and spec 5 (R-0618); a mixed branch uses the highest class present
+     ([owner confirmation](#decided-2026-11-10-mixed-cap)).
   8. <a id="decided-2026-11-08-clones"></a>*One clones folder:* every branch's clone is
      `~/projects/clones/<branch>`, removed after the branch lands (R-0619).
   9. <a id="decided-2026-11-08-no-libc"></a>*A no-libc runtime* on the proven path comes as a later
@@ -1275,17 +1281,48 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   1. <a id="decided-2026-11-09-unused-imports"></a>*Unused imports are refused, with no warning
      tier.* Asked "Unused imports: refuse them, or report them as facts with a policy?", the
      owner answered verbatim: "refuse them obviously".
-  2. <a id="decided-2026-11-09-unreachable-private-items"></a>*Private items nothing reaches
-     (unreachable private functions and types) are refused.* Asked "Should those be refused
-     too? I'd say yes, for the same reason.", the owner answered verbatim: "yes obviously no".
-     The coordinator replied that it read this as yes and asked the owner to say if they meant
-     no; the owner did not object. This records that interpretation and exchange. The exact
-     reachability roots and the spelling of any diagnostics stay with the R7 proposal, pending
-     owner decision.
-  3. <a id="decided-2026-11-09-no-parser-migration-tool"></a>*No parser-driven migration tool.*
-     Syntax changes need not keep old Concrete code working; code in the repository is updated
-     in the same change. The owner's verbatim words were: "i don't care about old concrete code"
-     and "we are doing everything from scratch".
+  2. <a id="decided-2026-11-09-unreachable-private-items"></a>*Unused private functions and
+     types are compile errors, not warnings.* Owner, 2026-11-10, answering the numbered list:
+     Question 1: "Is unused private code a compile error?" — owner: "yes". A private function or
+     type that nothing in the program uses is refused. Historically, asked "Should those be refused
+     too? I'd say yes, for the same reason.", the owner answered "yes obviously no"; the coordinator
+     interpreted that as yes. That ambiguous quote is history only: the explicit 2026-11-10 answer
+     settles it. The exact reachability roots and diagnostic spellings remain pending with R7.
+  3. <a id="decided-2026-11-09-no-parser-migration-tool"></a>*No migration tool; syntax changes
+     rewrite repository code by hand in the same change, with no compatibility for old Concrete
+     code.* Owner, 2026-11-10, answering the numbered list: Question 2: "No migration tool: we update
+     the repo's code by hand when the syntax changes?" — owner: "yes we will rewrite everything by hand".
+     The earlier 2026-11-09 quotes, "i don't care about old concrete code" and "we are doing
+     everything from scratch", waived compatibility; the explicit 2026-11-10 answer settles the
+     migration-tool and manual-rewrite questions.
+
+- <a id="decided-2026-11-10-parameterized-tests"></a>**Parameterized tests and their generated proofs**
+  (owner, 2026-11-10, answering the numbered list).
+
+  3. Question "Can tests take inputs and become proofs?" — owner: "yes".
+
+  A `#[test]` may take parameters, with bounds written on the test's own signature, not in
+  `Concrete.toml`. From the test's source the compiler generates the Lean statement "for every
+  input within its bounds, running the test terminates normally and returns 0". A zero-parameter
+  test is checked by kernel evaluation. Until proved, the runner searches for counterexamples
+  using random inputs and the bounded search and reports any failing input; this never counts
+  as proof. The facts report shows each such test as proved or not proved; no fuzz run counts.
+  This reuses the generated per-function models (R-0512's compiler-generated Core statements)
+  and the bounded counterexample search (R-0599). It revises the zero-parameter restriction of
+  [OD146](#od146); the `u8` result rule stays. Implementation is tracked by R-0626 in
+  [the roadmap](../ROADMAP.md#the-queue).
+
+  Still pending owner: the spelling of bounds, and whether code may merge while a parameterized
+  test is not proved.
+
+- <a id="decided-2026-11-10-mixed-cap"></a>**The highest review cap applies to mixed branches**
+  (owner, 2026-11-10, answering the numbered list).
+
+  4. Question "Does the highest round limit apply when a branch mixes file kinds?" — owner: "yes".
+
+  A branch touching several classes gets the cap of the highest class present: docs and roadmap
+  2, scripts 3, compiler and spec 5. This settles the mixed-class question for the
+  [review-caps decision](#decided-2026-11-08-review-caps) and R-0618.
 
 - <a id="decided-project-spark-2026-11-06"></a>**What Concrete takes from SPARK** (owner, 2026-11-06: "ok do everything", after Claude, Codex, agy and Kimi chose unanimously; the
   [review](proposals/SPARK.md) items 1, 2, 3, 6, 7, 9 and 10).
@@ -1549,7 +1586,7 @@ V1a, V1b and V1c.
 | OD143 | <a id="od143"></a>What a contract may read (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Which names each contract position (`requires`, `ensures`, `invariant`, `variant`) may read. Bears on CON-2, CON-3 and CON-4. The current compiler: CON-3 says a contract reads parameters and `result`, CON-4 lets contracts read `ghost let` bindings, and CON-2's accepted loop invariant reads the local `i`; the checker accepts all three. Options: (a) per position: `requires` the parameters, `ensures` the parameters, `result` and ghost bindings, and a loop's `invariant` and `variant` every binding in scope, with CON-3 amended; (b) every position reads every binding in scope at that point; (c) CON-3 as written, with loop contracts and ghost reads refused. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-143 | see OPEN-143 | decided 2026-11-01 by the owner (final set): A contract reads exactly the names in scope at its position, plus `result` in `ensures` |
 | OD144 | <a id="od144"></a>Postconditions and deferred calls (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Whether an `ensures` clause is about the state before or after the function's deferred calls run. Bears on CON-2 and STMT-11. The current compiler: `#[ensures(result == *r)]` on a function whose `defer inc(r)` runs after the result is computed is accepted and runs (contracts are erased at run time); the probe does not show which state the postcondition's proof obligation reads, no rule says, and STMT-11 computes the result before the deferred calls run. Options: (a) after every deferred call, the state the caller sees; (b) when the result is computed, before deferred calls; (c) refuse an `ensures` in a function with a deferred call that may write what the clause reads. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-144 | see OPEN-144 | decided 2026-11-01 by the owner (final set): After every deferred call |
 | OD145 | <a id="od145"></a>How a contract names machine arithmetic (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: How a contract expression names machine arithmetic, which CON-3 allows in place of its default mathematical arithmetic. Bears on CON-3 and ARITH-4. The current compiler: `#[ensures(result == wrapping_add(x, 1))]` is accepted and the program runs (contracts are erased at run time); what the proof pipeline makes of the named operation was not probed. CON-3 says a contract's integer arithmetic is mathematical unless it names a machine operation, and no rule or example names one. Options: (a) the named operations of ARITH-4 (`wrapping_add`, `saturating_add` and the rest) are the machine operations in a contract; (b) a contract-only spelling; (c) contracts have only mathematical arithmetic, and CON-3 drops the exception. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-145 | see OPEN-145 | decided 2026-11-01 by the owner (final set): ARITH-4 named operations |
-| OD146 | <a id="od146"></a>The result type of a test function (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Whether a `#[test]` function returns `i32` (STMT-10) or follows `main`'s decided `u8` or `Unit` (OD24). Bears on STMT-10 and STMT-7. The current compiler: `#[test] fn t() -> Int` is refused with E0319 (`#[test] function 't' must return i32`), and a test's result is its exit status under `concrete test`. Options: (a) keep `i32`; (b) `u8` or `Unit`, as `main` (STMT-7@3); (c) `Unit` only, a failing test aborting. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-146 | see OPEN-146 | decided 2026-11-01 by the owner (final set): `u8` or `Unit`, as `main`. Revised 2026-11-02: `u8` only, as `main` ([decisions](decisions.md#decided-2026-11-02-main)) |
+| OD146 | <a id="od146"></a>The result type of a test function (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Whether a `#[test]` function returns `i32` (STMT-10) or follows `main`'s decided `u8` or `Unit` (OD24). Bears on STMT-10 and STMT-7. The current compiler: `#[test] fn t() -> Int` is refused with E0319 (`#[test] function 't' must return i32`), and a test's result is its exit status under `concrete test`. Options: (a) keep `i32`; (b) `u8` or `Unit`, as `main` (STMT-7@3); (c) `Unit` only, a failing test aborting. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-146 | see OPEN-146 | decided 2026-11-01 by the owner (final set): `u8` or `Unit`, as `main`. Revised 2026-11-02: `u8` only, as `main` ([decisions](decisions.md#decided-2026-11-02-main)); the zero-parameter restriction is revised by the [2026-11-10 parameterized-tests decision](#decided-2026-11-10-parameterized-tests), with `u8` unchanged |
 | OD147 | <a id="od147"></a>`repr(C, packed)` together (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Whether `#[repr(C, packed)]` is accepted, and what layout it gives. Bears on FFI-4 and FFI-8. The current compiler: accepted: `#[repr(C, packed)] struct Copy P { a: u8, b: u32 }` has size 5, so packing overrides C alignment. FFI-4 refuses only `packed` with `align(N)`, and FFI-8 states C layout and packed layout separately. Options: (a) refuse the combination; (b) accept it as C field order with no padding and alignment 1, as the current compiler does, and FFI-8 says so. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-147 | see OPEN-147 | decided 2026-11-01 by the owner (final set): Accept: C order, no padding, align 1, stated in FFI-8 |
 | OD148 | <a id="od148"></a>Type parameters on a trait (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Whether a trait declaration may have type parameters, and if so what binds them at a bound and an impl. Bears on TRAIT-1, TRAIT-9 and SYN-1. The current compiler: `trait Tr<T> { fn get(&self, x: T) -> T; }` parses, but no bound or impl head can supply `T`, so `impl Tr for S { fn get(&self, x: u8) -> u8 ... }` is refused with E0582 and E0587 (`expected return type T, got u8`). OPEN-77 lists generic trait methods among the grammar's stale items; it covers only the productions, while this entry covers what the parameters mean and what binds them. Options: (a) refuse type parameters on a trait declaration; (b) allow them, with type arguments at bounds and impl heads (`impl Tr<u8> for S`). Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-148 | see OPEN-148 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Refuse type parameters on a trait |
 | OD149 | <a id="od149"></a>How `[e; N]` evaluates `e` (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: How many times an array repetition `[e; N]` evaluates `e`, and which `e` it accepts. Bears on STMT-4, OWN-15 and TYPE-7. The current compiler: `e` is evaluated once per element, in index order (`[bump(&mut n); 3]` gives `[1, 2, 3]` on both consumers), and whether a linear `e` is accepted was not shown (an array of a linear type that is never consumed is refused with E0208 either way). OWN-15 says only that an array literal moves each element in, and STMT-4 orders written elements. Options: (a) `e` is evaluated once and copied, so it must be Copy; (b) `e` is evaluated `N` times in index order, as the current compiler does; (c) `e` must be a constant expression. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-149 | see OPEN-149 | decided 2026-11-01 by the owner (final set): Evaluated once, must be Copy |
