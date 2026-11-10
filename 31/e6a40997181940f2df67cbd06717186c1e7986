@@ -1,0 +1,6 @@
+[piece 10 of 18: scripts]
+- scripts/land/signoff.sh:202: Filtering for ACCEPT/REJECT before selecting the last verdict accepts output containing `VERDICT: ACCEPT` followed by `VERDICT: BLOCKED` or another incomplete result. This can qualify an unfinished review for owner sign-off. Select the last VERDICT line first, then require ACCEPT or REJECT.
+[piece 14 of 18: docs]
+Repository reads failed because the sandbox could not start, so this review is limited to the supplied diff; owner-decision provenance could not be verified.
+
+- docs/REVIEW.md:177: The new rule says the highest class determines the cap for mixed diffs, while R-0618 in ROADMAP.md explicitly leaves that choice pending an owner answer before enforcement. These give conflicting instructions for when a mixed branch qualifies for sign-off. Reconcile them with the explicit owner answer and its provenance before treating this policy as decided.
