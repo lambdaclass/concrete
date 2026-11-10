@@ -14,7 +14,10 @@
 #                with origin/main);
 #   round N > 1  reviews only the delta since the last reviewed commit (found from
 #                the notes on earlier commits of the branch) and passes the previous
-#                round's findings to the reviewer.
+#                round's findings to the reviewer. If that commit does not descend
+#                from the current base, review the full base..HEAD diff instead:
+#                never include changes imported from base. This fallback preserves
+#                the branch's round count and cap (it is not a new round 1).
 #
 # A large diff is split into pieces by file group and size. A piece the reviewer
 # refuses is retried once, halved and with a more neutral prompt; after that it is
@@ -195,6 +198,15 @@ if [ "$ROUND" -gt "$MAX_ROUNDS" ]; then
 fi
 
 FROM="${REVIEWED_SHA:-$BASE_SHA}"
+FULL_REVIEW=0
+if [ -n "$REVIEWED_SHA" ] && ! git merge-base --is-ancestor "$BASE_SHA" "$REVIEWED_SHA"; then
+  # An old review predates changes imported from base. Comparing it directly
+  # with HEAD would review base's changes too. Re-review the branch's complete
+  # current contribution, including merge resolutions, without resetting rounds.
+  FROM="$BASE_SHA"
+  FULL_REVIEW=1
+  echo "review: last reviewed commit does not descend from base; reviewing full base..HEAD diff (round $ROUND)" >&2
+fi
 git diff --no-color --no-ext-diff -M "$FROM" "$HEAD_SHA" >"$WORK/full.diff"
 if [ ! -s "$WORK/full.diff" ]; then
   echo "review: nothing to review: no changes between $FROM and HEAD" >&2
@@ -241,7 +253,7 @@ Use `VERDICT: findings` when you report any finding, including an earlier findin
 
 prompt_for() { # prompt_for <standard|neutral> <piece label> <group> <paths>
   local scope="$SCOPE_ROUND1"
-  [ -n "$REVIEWED_SHA" ] && scope="$SCOPE_DELTA"
+  [ -n "$REVIEWED_SHA" ] && [ "$FULL_REVIEW" = 0 ] && scope="$SCOPE_DELTA"
   if [ "$1" = standard ]; then
     cat <<EOF
 You are reviewing a patch to Concrete, a compiler for a small systems programming language. The compiler is written in Lean 4; the repository also holds its standard library, test programs, test scripts and documentation. The repository is checked out read-only in the working directory, and you may open any file in it for context.
