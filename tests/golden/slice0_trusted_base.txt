@@ -11,7 +11,8 @@ theorem Concrete.Lex.checkSource_ok_iff axioms: propext, Classical.choice, Quot.
 theorem Concrete.Lex.checkSource_error_offset_iff axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.Lex.checkSource_error_complete axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.Lex.checkSource_error_iff axioms: propext, Classical.choice, Quot.sound
-theorem Concrete.Lex.lineComment_none_iff axioms: propext
+theorem Concrete.Lex.lineComment_none_iff axioms: propext, Quot.sound
+theorem Concrete.Lex.lineComment_error_iff axioms: propext
 theorem Concrete.Lex.decodeStep_complete axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.Lex.decodeStep_error_first axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.Lex.decodeLoop_sound axioms: propext, Quot.sound
@@ -40,6 +41,52 @@ theorem Concrete.Lex.lineComment_complete axioms: propext
 theorem Concrete.Lex.decode_ok_iff axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.Lex.lineComment_some_iff axioms: propext
 theorem Concrete.Lex.decode_error_not_decodes axioms: propext, Classical.choice, Quot.sound
+theorem Concrete.Lex.whitespace?_iff axioms: propext
+theorem Concrete.Lex.commentBody_rest_length_le axioms: propext, Quot.sound
+theorem Concrete.Lex.lineComment_rest_length_lt axioms: propext, Quot.sound
+theorem Concrete.Lex.skipTriviaAux_sound axioms: propext, Quot.sound
+theorem Concrete.Lex.skipTriviaAux_complete axioms: propext, Quot.sound
+theorem Concrete.Lex.skipTrivia_sound axioms: propext, Quot.sound
+theorem Concrete.Lex.skipTrivia_complete axioms: propext, Quot.sound
+theorem Concrete.Lex.trivia_unique axioms: propext, Quot.sound
+theorem Concrete.Lex.scanIdentBody_sound axioms: propext
+theorem Concrete.Lex.scanIdentBody_complete axioms: propext
+theorem Concrete.Lex.identifier_sound axioms: propext
+theorem Concrete.Lex.identifier_complete axioms: propext
+theorem Concrete.Lex.identifier_unique axioms: propext
+theorem Concrete.Lex.decodeEscape_sound axioms: propext
+theorem Concrete.Lex.decodeEscape_complete axioms: 
+theorem Concrete.Lex.stringPrepend_ok axioms: propext
+theorem Concrete.Lex.stringBody_sound axioms: propext
+theorem Concrete.Lex.stringBody_complete axioms: propext, Quot.sound
+theorem Concrete.Lex.stringBody_unique axioms: propext, Quot.sound
+theorem Concrete.Lex.decodeByteEscape_sound axioms: propext
+theorem Concrete.Lex.decodeByteEscape_complete axioms: 
+theorem Concrete.Lex.byteLiteral_sound axioms: propext
+theorem Concrete.Lex.byteLiteral_complete axioms: propext, Quot.sound
+theorem Concrete.Lex.byteLiteral_unique axioms: propext, Quot.sound
+theorem Concrete.Lex.byteLiteral_none_iff axioms: propext, Quot.sound
+theorem Concrete.Lex.label_sound axioms: propext
+theorem Concrete.Lex.label_complete axioms: propext
+theorem Concrete.Lex.label_unique axioms: propext
+theorem Concrete.Lex.prefixRest_sound axioms: propext
+theorem Concrete.Lex.prefixRest_complete axioms: propext
+theorem Concrete.Lex.longestMatch_cons_of_no_match axioms: propext
+theorem Concrete.Lex.longestMatchAux_sound axioms: propext
+theorem Concrete.Lex.longestMatch_sound axioms: propext
+theorem Concrete.Lex.longestMatch_unique axioms: propext
+theorem Concrete.Lex.longestMatch_complete axioms: propext
+theorem Concrete.Lex.scanDigits_sound axioms: propext
+theorem Concrete.Lex.scanDigits_complete axioms: propext
+theorem Concrete.Lex.decodeSuffix_sound axioms: propext
+theorem Concrete.Lex.decodeSuffix_complete axioms: 
+theorem Concrete.Lex.splitRadix_spec axioms: propext
+theorem Concrete.Lex.integerDigits_sound axioms: propext, Quot.sound
+theorem Concrete.Lex.integerDigits_complete axioms: propext, Quot.sound
+theorem Concrete.Lex.integerLiteral_sound axioms: propext, Quot.sound
+theorem Concrete.Lex.decimal_prefixed_refused axioms: propext
+theorem Concrete.Lex.integerLiteral_complete axioms: propext, Quot.sound
+theorem Concrete.Lex.integerLiteral_unique axioms: propext, Quot.sound
 theorem Concrete.BIR.decode_encode axioms: propext, Quot.sound
 theorem Concrete.BIR.run_progress axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.BIR.behaviour_diverges_iff axioms: propext, Classical.choice, Quot.sound

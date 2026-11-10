@@ -88,14 +88,14 @@ theorem commentBody_unique {cs r s : List Nat}
   | eof => cases hs; rfl
   | lf rest => cases hs with
     | lf => rfl
-    | cons hn _ _ => exact False.elim (hn rfl)
+    | cons hn _ _ _ => exact False.elim (hn rfl)
   | cr rest => cases hs with
     | cr => rfl
-    | cons _ hn _ => exact False.elim (hn rfl)
-  | cons hn hm _ ih => cases hs with
+    | cons _ hn _ _ => exact False.elim (hn rfl)
+  | cons hn hm _ _ ih => cases hs with
     | lf => exact False.elim (hn rfl)
     | cr => exact False.elim (hm rfl)
-    | cons _ _ ht => exact ih ht
+    | cons _ _ _ ht => exact ih ht
 
 /-- A line comment determines one suffix. -/
 theorem lineComment_unique {cs r s : List Nat}
