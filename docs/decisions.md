@@ -17,30 +17,7 @@ The shape of Core was approved provisionally on 2026-11-05 ([stage A2a](#decided
 <a id="waiting-for-the-owner"></a>
 ## Waiting for the owner
 
-Links only; each item's text lives where it is linked.
-
-1. The spec read and the Core freeze, A2c ([queue](../ROADMAP.md#the-queue)).
-2. The items the reviews leave open until they are fully dispositioned: SPARK review items 4(b) and
-   4(c) ([SPARK review](proposals/SPARK.md)). Quantitative step and time bounds were decided on
-   2026-11-07 ([row](#decided-2026-11-07-step-bounds)); the reviews' remaining disposition is unchanged.
-
-- Compiler trust-check tools: approval of systemd-run, systemctl and ssh-keygen remains open; the answers disagree.
-- Compiler trust-check foundations: approval of the launcher, verifier, key distribution and first-time setup remains open; the answers disagree.
-- Compiler trust-check macOS CI: informational versus dropped or split remains open beyond the later containment-only answer.
-- Extra rounds beyond branch limits: the standing policy and branch-specific exceptions remain open beyond the later explicit grants.
-- Proof-axiom provenance: the answers disagree on the interim manual exception and do not settle its approval.
-- Duplicate-base-model cleanup: no stuck-program change is needed now; struct layout and whole-pointer representation await full proposals.
-- Lifecycle signature: the change awaits a full proposal.
-- Standard-library coverage: replacement, streams, traversal callbacks and floating-point NaN policy await full proposals.
-- Slice 1: move spelling, abort placement and result type, manifest keys, compiler subset and always-aborts task placement await a reviewed proposal.
-- Syntax spelling: the full spelling proposal remains open.
-- Review-access stamping: staged changes versus committed content remains open; the answers disagree.
-- Vacuous-law checker main line: additional rounds versus redesign remains open; the answers disagree.
-- [Main-branch protection](#decided-2026-11-09-main-protection): exact settings remain open.
-- [Tests as proofs](#decided-2026-11-10-tests-proofs): syntax, types and proof-obligation rules remain open.
-- [Unproved tests](#decided-2026-11-10-unproved-tests): the release milestone remains open.
-
-A decided proposal moves to `docs/archive/<topic>-<date>/`.
+The nineteen 2026-11-09 items decided by agreement of the three models await the owner's line-by-line confirmation.
 
 <a id="recent-decisions"></a>
 ## Recent decisions
@@ -48,23 +25,6 @@ A decided proposal moves to `docs/archive/<topic>-<date>/`.
 Each row records a decision and its reason. A language rule itself is its Lean definition in
 [ConcreteSpec/](../ConcreteSpec/), which governs once it lands.
 
-- [Resume qualified merges](#decided-2026-11-09-qualified-merges).
-- [Redo provisional proposals](#decided-2026-11-09-redo-proposals).
-- [Wait for independent report-check review](#decided-2026-11-09-report-review).
-- [Supply the public signing key](#decided-2026-11-09-public-key).
-- [Independent review before qualification](#decided-2026-11-09-independent-review).
-- [General rule for foundational axioms](#decided-2026-11-09-standard-axioms).
-- [Improve speed and require full coverage](#decided-2026-11-09-checker-speed).
-- [Design before extending contradiction checks](#decided-2026-11-09-helper-design).
-- [Variable identity is its number](#decided-2026-11-09-variable-identity).
-- [Each launch supplies its starting state](#decided-2026-11-09-launch-state).
-- [Owner approves trusted code](#decided-2026-11-09-trust-approver).
-- [Pre-create the memory-limit group](#decided-2026-11-09-memory-group).
-- [No trust-check promise on macOS](#decided-2026-11-09-macos-guarantee).
-- [Stop the deployed landing bot](#decided-2026-11-09-stop-bot).
-- [Make builds hermetic](#decided-2026-11-09-hermetic-builds).
-- [Stop and redesign the checker design line](#decided-2026-11-09-vacuity-redesign).
-- [Apply main-branch protection](#decided-2026-11-09-main-protection).
 - [Unused imports are errors](#decided-2026-11-09-unused-imports).
 - [Unproved tests during development](#decided-2026-11-10-unproved-tests).
 - [Plan the stopped spec work](#decided-2026-11-10-spec-plan).
@@ -85,6 +45,9 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 - [One more repository-switch round](#decided-2026-11-11-switch-round).
 - [Rebuild the decisions record](#decided-2026-11-11-record-template).
 - [Install the review-tool launcher](#decided-2026-11-11-install-launcher).
+- [Repository-switch round five](#decided-2026-11-11-switch-round-five).
+- [Repository-switch round six](#decided-2026-11-11-switch-round-six).
+- [Record direct answers and seek confirmation](#decided-2026-11-11-direct-record).
 
 - The core statement ([row](#decided-project-core-statement)).
 - Proof infrastructure from the first commit ([row](#decided-project-proof-infrastructure)).
@@ -126,293 +89,86 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 - Eleven plan and process decisions: UBSan dropped, a complete adapter theorem, smaller landing scripts, Claude's quota on the critical path, the front end now, one decisions writer, risk-capped reviews, one clones folder, a later no-libc runtime, a compile-speed budget and the termination wording ([row](#decided-2026-11-08-eleven)).
 
 
-<a id="decided-2026-11-09-qualified-merges"></a>
-**Resume qualified merges**
-- Asked (2026-11-09): "RESUME MERGING TO MAIN?
-   - Ready: the number allocator, the citation checker, the test-list check.
-   - Already signed off by you and still waiting: slice 0, the language
-     record, the owner sign-off, the legacy sweep, one-repository.
-   - Not ready: the review-access tool, 2 of its 9 steps accepted.
-   Rec: merge the qualified pieces one by one, each with its own checks.
-   Saying yes waives no check and gives no sign-off. Reply "resume merging"."
-- Owner (2026-11-09): "ok too many questions do what all of you agree"
-- Meaning: Resume merging independently qualified pieces, each with its own required checks.
-- Not decided: Which listed branches are ready and whether their dependencies are qualified.
-
-<a id="decided-2026-11-09-redo-proposals"></a>
-**Redo provisional proposals**
-- Asked (2026-11-09): "THE 33 ASSUMED-YES ITEMS.
-   - What they are: provisional proposals (startup rules, constant tables,
-     bit ops, array splitting, secret wiping, versioning and more).
-   - Review finding: several alternatives are weak and costs are missing.
-     They also decide meaning, not just spelling.
-   Rec: treat them as proposals. I bring each with fair alternatives and
-   costs before asking for a yes. Answer: "all yes" / list rejects / "redo"."
-- Owner (2026-11-09): "ok too many questions do what all of you agree"
-- Meaning: Redo the provisional proposals with fair alternatives and costs before deciding them.
-- Not decided: Approval of the proposals themselves.
-
-<a id="decided-2026-11-09-report-review"></a>
-**Wait for independent report-check review**
-- Asked (2026-11-09): "SIGN OFF THE SPEC-CHANGE REPORT CHECK?
-   - State: passed its full run; both final reviews clean.
-   Text if yes: "I sign off the spec-change report check at ff249d449"
-   Rec: strongest is to wait for an independent review."
-- Owner (2026-11-09): "ok too many questions do what all of you agree"
-- Meaning: Wait for an independent review before signing off the spec-change report check.
-- Not decided: Sign-off of the report check.
-
-<a id="decided-2026-11-09-public-key"></a>
-**Supply the public signing key**
-- Asked (2026-11-09): "SEND YOUR SSH PUBLIC KEY.
-   - Why: only your key may approve trusted code (you delegated this).
-   - Fingerprint and distribution checks will be documented."
-- Owner (2026-11-09): "ok too many questions do what all of you agree"
-- Meaning: The owner should supply the public signing key with fingerprint and distribution checks documented.
-- Not decided: The concrete key-distribution mechanism.
-
-<a id="decided-2026-11-09-independent-review"></a>
-**Independent review before qualification**
-- Asked (2026-11-09): "BRANCHES WHERE EVERY AVAILABLE MODEL WROTE CODE.
-   - Which: the spec-change report check, the scaling check, the trust
-     check, the vacuous-law checker (design line), review-access.
-   - Also spec branches c1-audit, c2-audit, c4-audit, c5, c6-audit, c7,
-     c9, c10 and integrate.
-   - Problem: no independent reviewer exists until Kimi returns.
-   Option A: accept cross-reviews now as provisional; Kimi reviews later.
-             This is an EXCEPTION, not an improvement.
-   Option B: wait about a week for Kimi.
-   Rec (Codex): an independent reviewer before final qualification. Any
-   exception should name exact SHAs and require a back-review.
-   From now on: one writer model per branch."
-- Owner (2026-11-09): "ok too many questions do what all of you agree"
-- Meaning: Wait for an independent reviewer before final qualification and use one writer model per branch from now on.
-- Not decided: Any provisional cross-review exception.
-
-<a id="decided-2026-11-09-standard-axioms"></a>
-**General rule for foundational axioms**
-- Asked (2026-11-09): "VACUOUS-LAW CHECKER AND LEAN'S BUILT-IN AXIOMS.
-   - Axioms: propext, Quot.sound, possibly Classical.choice.
-   - Blocks: six real spec laws now report "incomplete" (fresh names,
-     grants, four ownership rules), plus test cases.
-   Option 1: rebuild the reasoning without the axioms. Most work; limited
-             where the axioms have no proof.
-   Option 2: a GENERAL rule keyed on what the axiom is and where it comes
-             from, never its name, covering the axioms your proof policy
-             allows. User axioms always count as unproved. This adds one
-             named trust assumption. A propext-only candidate sits on a side
-             branch; agy says a one-name rule breaks "no name list".
-   Option 3: stay strict; those laws are never fully checked.
-   Rec: option 2 as a general rule with explicit contracts and controls."
-- Owner (2026-11-09): "ok too many questions do what all of you agree"
-- Meaning: Use a general rule based on axiom kind and origin rather than names, with explicit contracts and a stated trust assumption, keeping user axioms unproved.
-- Not decided: The exact contracts and controls, including details proposed by only one answer.
-
-<a id="decided-2026-11-09-checker-speed"></a>
-**Improve speed and require full coverage**
-- Asked (2026-11-09): "CHECKER COMPUTE BUDGET.
-   - What: each check gets its own budget, plus a whole-run cap that names
-     every check it cuts.
-   - Built provisionally, not approved by you.
-   - Latest: 0 failures. Under the normal time limit 333 checks don't run
-     and 343 are incomplete.
-   Rec: make it faster first, then split deterministically across CI jobs
-   if needed. Require full coverage for acceptance. No raised limits."
-- Owner (2026-11-09): "ok too many questions do what all of you agree"
-- Meaning: Optimize the checker first, then partition deterministically if needed, requiring complete coverage without raising limits.
-- Not decided: Approval of the provisional per-check budget implementation and whole-run cap.
-
-<a id="decided-2026-11-09-helper-design"></a>
-**Design before extending contradiction checks**
-- Asked (2026-11-09): "MUST THE CHECKER CATCH CONTRADICTIONS HIDDEN IN HELPER THEOREMS?
-    - Today: the accepted design covers only a law's uses.
-    Option A: extend it to law proofs and planted examples. Needs a bounded
-              definition and cost first.
-    Option B: keep today's scope and document the limit.
-    Rec (revised): a reviewed extension design first, then decide."
-- Owner (2026-11-09): "ok too many questions do what all of you agree"
-- Meaning: Prepare a reviewed, bounded extension design before deciding the checker’s scope.
-- Not decided: Whether to extend scope and the extension’s exact semantics and costs.
-
-<a id="decided-2026-11-09-variable-identity"></a>
-**Variable identity is its number**
-- Asked (2026-11-09): "WHAT IDENTIFIES A LOCAL VARIABLE? [not fully reviewed]
-    - What we ran: a local stored as ("stored",7) and used as
-      ("occurrence",7). The operand evaluator reads 42; lookup finds
-      nothing; assignment is stuck; scope end removes it; drop counts it
-      as dropped.
-    - UNVERIFIED: whether real programs can reach this. There is no
-      elaborator yet.
-    1a: the number alone; names move to a side table. The JSON variable
-        type changes once; a law keeps "renaming never changes execution".
-    1b: the number alone, name kept on the variable. Output unchanged;
-        largest proof migration.
-    2:  number and name together. Smallest change, but the compiler must
-        guarantee equal numbers get equal names, and renaming must not merge
-        ("a",7)/("b",7). A naming mistake makes a variable silently absent.
-    3:  one owner plus a checked view, with a proved agreement law. Option
-        2's obligation plus a bridge law.
-    Rec: 1a (or 1b if you don't want the output change)."
-- Owner (2026-11-09): "ok too many questions do what all of you agree"
-- Meaning: Use the number alone for local-variable identity, with names in a side table.
-- Not decided: Implementation qualification, the complete consumer audit and additional proof details absent from any answer.
-
-<a id="decided-2026-11-09-launch-state"></a>
-**Each launch supplies its starting state**
-- Asked (2026-11-09): "WHAT DOES A REFUSED START REPORT ABOUT THE OUTSIDE WORLD?
-    [not fully reviewed]
-    - What we ran: the demo environment declares 0 and the memory reads 1.
-      Both launchers ran. Both refuse with status 125; one reports 0, the
-      other 1.
-    1: the environment owns one fixed start state. Each launch must prove
-       memory matches, which adds a premise on the refusal theorem. One
-       environment per starting world.
-    2: each launch passes its own start state; the environment holds types
-       only. The theorem keeps its statement.
-    Rec: 2 (changed from my earlier draft)."
-- Owner (2026-11-09): "ok too many questions do what all of you agree"
-- Meaning: Each launch supplies its own starting state and the environment holds types only.
-- Not decided: The complete theorem and launcher contracts and implementation qualification.
-
-<a id="decided-2026-11-09-trust-approver"></a>
-**Owner approves trusted code**
-- Asked (2026-11-09): "Who approves? Rec: you alone, with your SSH key."
-- Owner (2026-11-09): "ok too many questions do what all of you agree"
-- Meaning: Only the owner approves trusted code, using the owner’s SSH key.
-- Not decided: nothing
-
-<a id="decided-2026-11-09-memory-group"></a>
-**Pre-create the memory-limit group**
-- Asked (2026-11-09): "Memory limits.
-      Option 1: trust sudo plus the user service bus.
-      Option 2: pre-create the memory-limit group once.
-      Rec: option 2 (less trusted code; one-off setup cost)."
-- Owner (2026-11-09): "ok too many questions do what all of you agree"
-- Meaning: Pre-create the memory-limit group once.
-- Not decided: The exact setup and protection contract.
-
-<a id="decided-2026-11-09-macos-guarantee"></a>
-**No trust-check promise on macOS**
-- Asked (2026-11-09): "macOS: this implementation makes no promise there and fails rather
-      than passes? Rec: yes."
-- Owner (2026-11-09): "ok too many questions do what all of you agree"
-- Meaning: This implementation makes no trust-check promise on macOS and refuses qualification there.
-- Not decided: The exact failure status.
-
-<a id="decided-2026-11-09-stop-bot"></a>
-**Stop the deployed landing bot**
-- Asked (2026-11-09): "Stop any deployed landing-bot service on the server."
-- Owner (2026-11-09): "ok too many questions do what all of you agree"
-- Meaning: Stop any deployed landing-bot service on the server.
-- Not decided: Disabling details proposed by only some answers.
-
-<a id="decided-2026-11-09-hermetic-builds"></a>
-**Make builds hermetic**
-- Asked (2026-11-09): "Builds still reach the network (non-hermetic); to fix."
-- Owner (2026-11-09): "ok too many questions do what all of you agree"
-- Meaning: Fix builds so they are hermetic.
-- Not decided: The implementation and enforcement details.
-
-<a id="decided-2026-11-09-vacuity-redesign"></a>
-**Stop and redesign the checker design line**
-- Asked (2026-11-09): "Design line for the next part: stopped at its limit, rejected by Codex.
-  The prototype undercounts cost, and it relies on unfinished main-line
-  fixes.
-Your call for each line:
-  (i)   allow N more rounds with these exact bugs as the exit test;
-  (ii)  stop and redesign;
-  (iii) leave it stopped."
-- Owner (2026-11-09): "ok too many questions do what all of you agree"
-- Meaning: Stop and redesign the vacuous-law checker’s design line.
-- Not decided: Branch unification and additional implementation rounds.
-
-<a id="decided-2026-11-09-main-protection"></a>
-**Apply main-branch protection**
-- Asked (2026-11-09): "Apply the main-branch protection rules on GitHub yourself"
-- Owner (2026-11-09): "ok too many questions do what all of you agree"
-- Meaning: The owner should apply main-branch protection on GitHub.
-- Not decided: The exact protection settings, since the referenced proposal is absent from this branch; the later [pull-request answer](#decided-2026-11-10-pr-flow) revises the flow.
-
 <a id="decided-2026-11-09-unused-imports"></a>
 **Unused imports are errors**
-- Asked (2026-11-09): "Unused imports."
+- Asked (2026-11-09): [Exact question not preserved; the recorded topic is unused imports.]
 - Owner (2026-11-09): "refuse them obviously"
 - Meaning: Unused imports are a compile error.
 - Not decided: nothing
 
 <a id="decided-2026-11-10-unproved-tests"></a>
 **Unproved tests during development**
-- Asked (2026-11-10): "unproved tests may merge? (rec: yes during development, proved for release)"
+- Asked (2026-11-10): "1 unproved tests may merge? (rec: yes during development, proved for release)"
 - Owner (2026-11-10): "1 ok 2 yes but also i think we can do it ourselves if we have enough quota 3 allo everything yo uwant 4 do what you want 5 okay"
 - Meaning: Unproved tests may merge during development and must be proved for release.
 - Not decided: Which release milestone requires proofs.
 
 <a id="decided-2026-11-10-spec-plan"></a>
 **Plan the stopped spec work**
-- Asked (2026-11-10): "Codex+agy write a plan to bring the stopped spec work onto main in small reviewed pieces?"
+- Asked (2026-11-10): "2 Codex+agy write a plan to bring the stopped spec work onto main in small reviewed pieces?"
 - Owner (2026-11-10): "1 ok 2 yes but also i think we can do it ourselves if we have enough quota 3 allo everything yo uwant 4 do what you want 5 okay"
 - Meaning: Codex and agy may write the plan, and the owner and coordinator may do the work themselves if quota permits.
 - Not decided: Approval of the unwritten plan or execution by other writer models.
 
 <a id="decided-2026-11-10-review-commands"></a>
 **Allow review-tool commands**
-- Asked (2026-11-10): "commands review tools may run: ssh-keygen, systemd-run, systemctl"
+- Asked (2026-11-10): "3 commands review tools may run: ssh-keygen, systemd-run, systemctl (rec: ssh-keygen now, others with Q4)"
 - Owner (2026-11-10): "1 ok 2 yes but also i think we can do it ourselves if we have enough quota 3 allo everything yo uwant 4 do what you want 5 okay"
 - Meaning: Allow ssh-keygen, systemd-run and systemctl for review tools.
 - Not decided: Their permitted operations and authority.
 
 <a id="decided-2026-11-10-launcher"></a>
 **Delegate the locked-down launcher**
-- Asked (2026-11-10): "locked-down launcher (rec: wait for exact design)"
+- Asked (2026-11-10): "4 locked-down launcher (rec: wait for exact design)"
 - Owner (2026-11-10): "1 ok 2 yes but also i think we can do it ourselves if we have enough quota 3 allo everything yo uwant 4 do what you want 5 okay"
 - Meaning: Delegate the locked-down launcher decision to the coordinator.
 - Not decided: The exact launcher design.
 
 <a id="decided-2026-11-10-macos-ci"></a>
 **Containment on macOS is informational**
-- Asked (2026-11-10): "containment check on macOS informational only, never counts as passed."
+- Asked (2026-11-10): "5 containment check on macOS informational only, never counts as passed."
 - Owner (2026-11-10): "1 ok 2 yes but also i think we can do it ourselves if we have enough quota 3 allo everything yo uwant 4 do what you want 5 okay"
 - Meaning: The macOS containment check is informational only and never counts as passed.
 - Not decided: Whether portable non-containment trust-check legs run on macOS or count as required checks.
 
 <a id="decided-2026-11-10-unused-private"></a>
 **Unused private code is an error**
-- Asked (2026-11-10): "Is unused private code a compile error?"
+- Asked (2026-11-10): "1. Is unused private code a compile error?"
 - Owner (2026-11-10): "1. yes 2. yes we will rewrite everything by hand 3. yes 4. yes 5. yes"
 - Meaning: Unused private code is a compile error.
-- Not decided: nothing
+- Not decided: Which declaration kinds and entry roots define unused private code.
 
 <a id="decided-2026-11-10-manual-migration"></a>
 **Update syntax by hand**
-- Asked (2026-11-10): "No migration tool: we update the repo's code by hand when the syntax changes?"
+- Asked (2026-11-10): "2. No migration tool: we update the repo's code by hand when the syntax changes?"
 - Owner (2026-11-10): "1. yes 2. yes we will rewrite everything by hand 3. yes 4. yes 5. yes"
 - Meaning: Use no migration tool and update the repository’s code by hand when syntax changes.
 - Not decided: nothing
 
 <a id="decided-2026-11-10-lexer-merge"></a>
 **One mechanical lexer merge**
-- Asked (2026-11-10): "Can Codex do one mechanical merge for the lexer literals branch?"
+- Asked (2026-11-10): "3. Can Codex do one mechanical merge for the lexer literals branch?"
 - Owner (2026-11-10): "1. yes 2. yes we will rewrite everything by hand 3. yes 4. yes 5. yes"
 - Meaning: Codex may do one mechanical merge for the lexer literals branch.
 - Not decided: nothing
 
 <a id="decided-2026-11-10-tests-proofs"></a>
 **Tests may take inputs and become proofs**
-- Asked (2026-11-10): "Can tests take inputs and become proofs?"
+- Asked (2026-11-10): "4. Can tests take inputs and become proofs?"
 - Owner (2026-11-10): "1. yes 2. yes we will rewrite everything by hand 3. yes 4. yes 5. yes"
 - Meaning: Tests may take inputs and become proofs.
-- Not decided: Surface syntax, permissible parameter types, interaction with the earlier test-result rule and how a test becomes a proof obligation versus a runnable test.
+- Not decided: Surface syntax, permissible parameter types, interaction with [the earlier test-result rule](#od146) and how a test becomes a proof obligation versus a runnable test.
 
 <a id="decided-2026-11-10-mixed-review-cap"></a>
 **Highest review cap for mixed file kinds**
-- Asked (2026-11-10): "Does the highest round limit apply when a branch mixes file kinds?"
+- Asked (2026-11-10): "5. Does the highest round limit apply when a branch mixes file kinds?"
 - Owner (2026-11-10): "1. yes 2. yes we will rewrite everything by hand 3. yes 4. yes 5. yes"
 - Meaning: A branch mixing file kinds uses the highest applicable round limit.
 - Not decided: nothing
 
 <a id="decided-2026-11-10-pr-flow"></a>
 **Protect main and use pull requests**
-- Asked (2026-11-10): "[question not preserved in the supplied record]"
+- Asked (2026-11-10): [Question not preserved in the supplied record.]
 - Owner (2026-11-10): "ok protect main create prs and we merge them"
 - Meaning: Protect main and create pull requests for merging.
 - Not decided: The exact protection settings, disposition of the train, remote synchronization and interaction with self-hosted pull-request job restrictions.
@@ -422,7 +178,7 @@ Your call for each line:
 - Asked (2026-11-10): "who presses merge? (a) Me [the coordinator], automatically, once the tests and the review pass ... with you able to merge or block any PR yourself. (b) You, on every PR."
 - Owner (2026-11-10): "a"
 - Meaning: The coordinator merges automatically once tests and review pass, and the owner may merge or block any pull request.
-- Not decided: nothing
+- Not decided: The merge mechanism, merge strategy and credentials or identity used to merge into protected main.
 
 <a id="decided-2026-11-11-main-repository"></a>
 **Choose the main repository**
@@ -440,38 +196,59 @@ Your call for each line:
 
 <a id="decided-2026-11-11-send-everything"></a>
 **Send everything to lambdaclass/concrete**
-- Asked (2026-11-11): "[question not preserved in the supplied record]"
+- Asked (2026-11-11): [Question not preserved in the supplied record.]
 - Owner (2026-11-11): "ok we need to send everything to lambdaclass/concrete"
 - Meaning: Send everything to lambdaclass/concrete.
-- Not decided: The migration procedure and timing.
+- Not decided: The migration procedure and timing, and which release assets, review and sign-off refs, runner registrations, repository variables and landing defaults must transfer or change.
 
 <a id="decided-2026-11-11-archive-copy"></a>
 **Archive concrete2**
-- Asked (2026-11-11): "[question not preserved in the supplied record]"
+- Asked (2026-11-11): [Question not preserved in the supplied record.]
 - Owner (2026-11-11): "concrete2 in unblanacedparentehses will be archived"
 - Meaning: Archive concrete2.
 - Not decided: The migration procedure and timing.
 
 <a id="decided-2026-11-11-switch-round"></a>
 **One more repository-switch round**
-- Asked (2026-11-11): "one more round for the lambdaclass switch (one-line ready.sh fix)"
+- Asked (2026-11-11): [Question preserved only as a summary: one more round for the lambdaclass switch (one-line ready.sh fix).]
 - Owner (2026-11-11): "yes to all"
 - Meaning: Allow one more round for the lambdaclass switch’s one-line ready.sh fix.
-- Not decided: nothing
+- Not decided: Acceptance of the fix under the required reviews and gates, and how the cap exception is recorded.
 
 <a id="decided-2026-11-11-record-template"></a>
 **Rebuild the decisions record**
-- Asked (2026-11-11): "rebuild the decisions record from a template: exact owner quote plus a one-line meaning per answer"
+- Asked (2026-11-11): [Question preserved only as a summary: rebuild the decisions record from a template: exact owner quote plus a one-line meaning per answer.]
 - Owner (2026-11-11): "yes to all"
 - Meaning: Rebuild the decisions record from a template containing the exact owner quote and one-line meaning per answer.
 - Not decided: nothing
 
 <a id="decided-2026-11-11-install-launcher"></a>
 **Install the review-tool launcher**
-- Asked (2026-11-11): "install the review-tool launcher with root, through the private dotfiles repo where server setup lives"
+- Asked (2026-11-11): [Question preserved only as a summary: install the review-tool launcher with root, through the private dotfiles repo where server setup lives.]
 - Owner (2026-11-11): "yes to all"
 - Meaning: Install the review-tool launcher with root through the private dotfiles repository where server setup lives.
-- Not decided: The exact installation procedure.
+- Not decided: The exact installation procedure, launcher design and authority boundary.
+
+<a id="decided-2026-11-11-switch-round-five"></a>
+**Repository-switch round five**
+- Asked (2026-11-11): "can the lambdaclass switch get round 5, to fix the relative path in run-at-ref.sh?"
+- Owner (2026-11-11): "yes"
+- Meaning: Allow round five for the lambdaclass switch to fix the relative path in run-at-ref.sh.
+- Not decided: Acceptance of the fix under the required reviews and gates, and how the cap exception is recorded.
+
+<a id="decided-2026-11-11-switch-round-six"></a>
+**Repository-switch round six**
+- Asked (2026-11-11): [Question preserved only as a summary: (1) lambdaclass switch round 6: run-at-ref.sh accepts only two sources, the lambdaclass URL and a bundle file.]
+- Owner (2026-11-11): "ok do so"
+- Meaning: Allow round six for the lambdaclass switch, restricting run-at-ref.sh sources to the lambdaclass URL and a bundle file.
+- Not decided: Acceptance of the fix under the required reviews and gates, and how the cap exception is recorded.
+
+<a id="decided-2026-11-11-direct-record"></a>
+**Record direct answers and seek confirmation**
+- Asked (2026-11-11): [Question preserved only as a summary: (2) land the owner's direct answers now; show the owner the 19 "all three agreed" 2026-11-09 items as one line each to confirm or fix.]
+- Owner (2026-11-11): "ok do so"
+- Meaning: Land the direct owner answers now and present the nineteen agreement-based items to the owner one line each for confirmation or correction.
+- Not decided: The owner’s line-by-line answers to those nineteen items.
 
 <a id="rules-a-decision-changed"></a>
 ## Rules a decision has changed
@@ -493,7 +270,7 @@ undecided dependency remains explicitly linked to the target Core proposal rathe
 | MEM-5/7, TYPE-10, OWN-15 | `free(h)` releases storage and returns its payload; a Copy result can disappear as part of consumption. | OD59; clarified OD140 | Fixed in prose 2026-11-03. Allocator identities, dependency discipline and complete failure contracts remain [undecided: see the target Core proposal](#core-allocator-identities). |
 | STMT-7 | `main` takes no parameters until an implementation task lands. | authority rule 12; revised OD38 | Fixed in prose 2026-11-03. |
 | STMT-7 | `main` returns `u8` or `Unit`, with `Unit` mapped to zero. | 2026-11-02 main decision | Fixed in prose 2026-11-03. |
-| STMT-10 | Tests return `i32`. | Revised OD146 | Fixed in prose 2026-11-03. |
+| STMT-10 | Tests return `i32`. | Revised OD146 | Fixed in prose 2026-11-03. Revised by [tests as proofs](#decided-2026-11-10-tests-proofs) and [unproved tests during development](#decided-2026-11-10-unproved-tests). |
 | SCOPE-2 | Types, traits, and modules are categorically “another namespace” and therefore not collisions. | Completed OD43; OD67 | Fixed in prose 2026-11-03. |
 | TRAIT-D1 rationale | Impl target lookup includes a sibling submodule’s declarations as an implicit fallback. | Explicit-child decision, completed OD43 | Fixed in prose 2026-11-03. |
 | Modules introduction and MOD-7 rationale; accepted examples throughout modules/types/FFI | Inline `mod m { … }` is an available module form. | OD33/61 | Fixed in prose 2026-11-03. |
@@ -695,7 +472,7 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **P5** legacy/ is a byte-frozen snapshot, never patched or run — legacy/ is main's tree at the move commit, byte-frozen. A root check compares its tree hash, allowing only deletions a satisfied RETENTION.tsv entry authorizes. No legacy gate ever runs. The oracle is the tag-built artifact (P13), not the legacy/ copy.
 - **P6** Retention manifest gates deleting legacy/ — RETENTION.tsv at the root gives every legacy asset (corpus, regressions, examples, std, bug ledger, site, docs, research) a destination and deletion criterion. Revised 2026-11-06 ([restart row](#decided-project-restart)): nothing is deleted at B3; legacy/, the old pipeline included, is deleted way later (LD: once the new compiler implements a full real program such as RocksDB, ethrex or similar), when RETENTION.tsv has no live entry, a final ideas sweep has dispositioned every idea and the owner explicitly approves.
 - **P7** Prove the new landing path before moving — T0: land beside the old tree the new root CI, required-checks.txt (enforced by train watch and land), RETENTION.tsv, the task disposition table, ORACLE.lock with the oracle artifact, and ISSUES.tsv. T1: rehearse the move on a throwaway branch: fresh clone, build, hook, exact-SHA CI, train --dry-run land; a broken build, a failing gate and a missing required check must each be refused. T2: the move in one train.
-- **P8** Server services under scripts/ — Keep only landing services: train, review, hook, landing bot. The status page, work queue, fuzz farm, perf tracking and nightly campaign all stop and are recorded as archived in RETENTION.tsv; each returns only with a roadmap task.
+- **P8** Server services under scripts/ — Keep only landing services: train, review, hook, landing bot. The status page, work queue, fuzz farm, perf tracking and nightly campaign all stop and are recorded as archived in RETENTION.tsv; each returns only with a roadmap task. Revised by [the pull-request flow](#decided-2026-11-10-pr-flow).
 - **P9** Website during the transition — The website goes down at the move and is redone from scratch with the new compiler; no frozen playground is served. Unpublishing the live site is an outward action whose moment the owner confirms.
 - **P10** What 'closed' means for old-compiler bugs — Old-compiler defects become 'retired with the old implementation', never 'fixed'. Each keeps its reproducer, ruling and structural class; 106 reproducers feed the oracle comparisons. Bugs the frozen browser compiler still shows stay visible while the site serves it.
 - **P11** Std bugs and rulings are carried — Add a 'std' class: 12 std bugs move with std as contracts plus regressions. The 112 language rulings (26 still open) keep their ruling and become conformance examples.
@@ -808,6 +585,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   asset `oracle-legacy-compiler-final-x86_64-linux.tar.gz` with SHA-256
   `74d8f1e3b5214d9c64c25736a24c19458736a2dacc7977ff784506839b9f26a2`. It predates the decisions of 2026-10-29 to 2026-11-05 and is
   not the current language.
+  Revised by [the main-repository choice](#decided-2026-11-11-main-repository), [the transfer instruction](#decided-2026-11-11-send-everything) and [the archive instruction](#decided-2026-11-11-archive-copy).
 - <a id="decided-project-site"></a>**The website** (owner, row P9, 2026-11-05). The website goes down
   at the move and is rebuilt from scratch with the new compiler. No frozen playground is served in
   between. Unpublishing the live site is an outward action; the owner confirms its moment. The owner
@@ -1200,7 +978,6 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   target. This moves the reproducibility half of R-0104 (merged into R-0149 in phase G) to B0;
   R-0149 keeps incremental-build equivalence. The slice-0 worker owns the work on `wip/slice0` when
   Claude capacity returns; work started on `wip/slice0-repro`.
-  Revised by [Make builds hermetic](#decided-2026-11-09-hermetic-builds).
 - <a id="decided-project-concrete-toml"></a>**Policies and declared assumptions live in
   `Concrete.toml`** (owner, 2026-11-06: "concrete.toml is fine", in place of a separate policy
   file). A project's policies, such as the
@@ -1531,7 +1308,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   3. <a id="decided-2026-11-08-landing-shrink"></a>*Smaller landing scripts.* Keep the train, its
      review leg, the gates and the `legacy/` protection; drop the landing bot, notify, install-bot,
      the systemd units and duplicate helpers; the old copies move to `legacy/` (R-0617).
-  Revised by [Stop the deployed landing bot](#decided-2026-11-09-stop-bot), [Protect main and use pull requests](#decided-2026-11-10-pr-flow), [Coordinator merges qualified pull requests](#decided-2026-11-10-pr-merger).
+     Revised by [Protect main and use pull requests](#decided-2026-11-10-pr-flow), [Coordinator merges qualified pull requests](#decided-2026-11-10-pr-merger).
   4. <a id="decided-2026-11-08-quota"></a>*Claude's quota goes to the critical path:* the spec, slice 0
      and the front end. Mechanical work goes to Codex and Kimi as writers.
   5. <a id="decided-2026-11-08-front-end"></a>*The front end starts now.* The lexer and the LL(1)
@@ -1542,7 +1319,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
      at a time;* other workers send it their records.
   7. <a id="decided-2026-11-08-review-caps"></a>*Review rounds capped by risk:* docs and roadmap 2,
      scripts 3, compiler and spec 5 (R-0618).
-  Revised by [Highest review cap for mixed file kinds](#decided-2026-11-10-mixed-review-cap), [One extra round for three branches](#decided-2026-11-11-extra-round).
+     Revised by [Highest review cap for mixed file kinds](#decided-2026-11-10-mixed-review-cap), [One extra round for three branches](#decided-2026-11-11-extra-round), [Repository-switch round five](#decided-2026-11-11-switch-round-five), [Repository-switch round six](#decided-2026-11-11-switch-round-six), [the repository-switch extra round](#decided-2026-11-11-switch-round).
   8. <a id="decided-2026-11-08-clones"></a>*One clones folder:* every branch's clone is
      `~/projects/clones/<branch>`, removed after the branch lands (R-0619).
   9. <a id="decided-2026-11-08-no-libc"></a>*A no-libc runtime* on the proven path comes as a later
@@ -1647,7 +1424,6 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   Codex and Kimi reviews. agy cannot read files, so its prompt carries the diff and the context it
   needs and ends with a required verdict line. (The coordinator's relay added that agy can also act
   as a writer.)
-  Revised by [Independent review before qualification](#decided-2026-11-09-independent-review).
 - <a id="decided-project-throughput"></a>**Development throughput** (2026-10-22). The development
   feedback loop (landing, review, CI) is a priority track beside the main sequence
   ([record](archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-10-22--development-throughput-priority)).
@@ -1840,7 +1616,7 @@ V1a, V1b and V1c.
 | OD143 | <a id="od143"></a>What a contract may read (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Which names each contract position (`requires`, `ensures`, `invariant`, `variant`) may read. Bears on CON-2, CON-3 and CON-4. The current compiler: CON-3 says a contract reads parameters and `result`, CON-4 lets contracts read `ghost let` bindings, and CON-2's accepted loop invariant reads the local `i`; the checker accepts all three. Options: (a) per position: `requires` the parameters, `ensures` the parameters, `result` and ghost bindings, and a loop's `invariant` and `variant` every binding in scope, with CON-3 amended; (b) every position reads every binding in scope at that point; (c) CON-3 as written, with loop contracts and ghost reads refused. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-143 | see OPEN-143 | decided 2026-11-01 by the owner (final set): A contract reads exactly the names in scope at its position, plus `result` in `ensures` |
 | OD144 | <a id="od144"></a>Postconditions and deferred calls (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Whether an `ensures` clause is about the state before or after the function's deferred calls run. Bears on CON-2 and STMT-11. The current compiler: `#[ensures(result == *r)]` on a function whose `defer inc(r)` runs after the result is computed is accepted and runs (contracts are erased at run time); the probe does not show which state the postcondition's proof obligation reads, no rule says, and STMT-11 computes the result before the deferred calls run. Options: (a) after every deferred call, the state the caller sees; (b) when the result is computed, before deferred calls; (c) refuse an `ensures` in a function with a deferred call that may write what the clause reads. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-144 | see OPEN-144 | decided 2026-11-01 by the owner (final set): After every deferred call |
 | OD145 | <a id="od145"></a>How a contract names machine arithmetic (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: How a contract expression names machine arithmetic, which CON-3 allows in place of its default mathematical arithmetic. Bears on CON-3 and ARITH-4. The current compiler: `#[ensures(result == wrapping_add(x, 1))]` is accepted and the program runs (contracts are erased at run time); what the proof pipeline makes of the named operation was not probed. CON-3 says a contract's integer arithmetic is mathematical unless it names a machine operation, and no rule or example names one. Options: (a) the named operations of ARITH-4 (`wrapping_add`, `saturating_add` and the rest) are the machine operations in a contract; (b) a contract-only spelling; (c) contracts have only mathematical arithmetic, and CON-3 drops the exception. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-145 | see OPEN-145 | decided 2026-11-01 by the owner (final set): ARITH-4 named operations |
-| OD146 | <a id="od146"></a>The result type of a test function (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Whether a `#[test]` function returns `i32` (STMT-10) or follows `main`'s decided `u8` or `Unit` (OD24). Bears on STMT-10 and STMT-7. The current compiler: `#[test] fn t() -> Int` is refused with E0319 (`#[test] function 't' must return i32`), and a test's result is its exit status under `concrete test`. Options: (a) keep `i32`; (b) `u8` or `Unit`, as `main` (STMT-7@3); (c) `Unit` only, a failing test aborting. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-146 | see OPEN-146 | decided 2026-11-01 by the owner (final set): `u8` or `Unit`, as `main`. Revised 2026-11-02: `u8` only, as `main` ([decisions](decisions.md#decided-2026-11-02-main)) |
+| OD146 | <a id="od146"></a>The result type of a test function (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Whether a `#[test]` function returns `i32` (STMT-10) or follows `main`'s decided `u8` or `Unit` (OD24). Bears on STMT-10 and STMT-7. The current compiler: `#[test] fn t() -> Int` is refused with E0319 (`#[test] function 't' must return i32`), and a test's result is its exit status under `concrete test`. Options: (a) keep `i32`; (b) `u8` or `Unit`, as `main` (STMT-7@3); (c) `Unit` only, a failing test aborting. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-146 | see OPEN-146 | decided 2026-11-01 by the owner (final set): `u8` or `Unit`, as `main`. Revised 2026-11-02: `u8` only, as `main` ([decisions](decisions.md#decided-2026-11-02-main)). Revised by [tests as proofs](#decided-2026-11-10-tests-proofs) and [unproved tests during development](#decided-2026-11-10-unproved-tests). |
 | OD147 | <a id="od147"></a>`repr(C, packed)` together (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Whether `#[repr(C, packed)]` is accepted, and what layout it gives. Bears on FFI-4 and FFI-8. The current compiler: accepted: `#[repr(C, packed)] struct Copy P { a: u8, b: u32 }` has size 5, so packing overrides C alignment. FFI-4 refuses only `packed` with `align(N)`, and FFI-8 states C layout and packed layout separately. Options: (a) refuse the combination; (b) accept it as C field order with no padding and alignment 1, as the current compiler does, and FFI-8 says so. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-147 | see OPEN-147 | decided 2026-11-01 by the owner (final set): Accept: C order, no padding, align 1, stated in FFI-8 |
 | OD148 | <a id="od148"></a>Type parameters on a trait (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Whether a trait declaration may have type parameters, and if so what binds them at a bound and an impl. Bears on TRAIT-1, TRAIT-9 and SYN-1. The current compiler: `trait Tr<T> { fn get(&self, x: T) -> T; }` parses, but no bound or impl head can supply `T`, so `impl Tr for S { fn get(&self, x: u8) -> u8 ... }` is refused with E0582 and E0587 (`expected return type T, got u8`). OPEN-77 lists generic trait methods among the grammar's stale items; it covers only the productions, while this entry covers what the parameters mean and what binds them. Options: (a) refuse type parameters on a trait declaration; (b) allow them, with type arguments at bounds and impl heads (`impl Tr<u8> for S`). Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-148 | see OPEN-148 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Refuse type parameters on a trait |
 | OD149 | <a id="od149"></a>How `[e; N]` evaluates `e` (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: How many times an array repetition `[e; N]` evaluates `e`, and which `e` it accepts. Bears on STMT-4, OWN-15 and TYPE-7. The current compiler: `e` is evaluated once per element, in index order (`[bump(&mut n); 3]` gives `[1, 2, 3]` on both consumers), and whether a linear `e` is accepted was not shown (an array of a linear type that is never consumed is refused with E0208 either way). OWN-15 says only that an array literal moves each element in, and STMT-4 orders written elements. Options: (a) `e` is evaluated once and copied, so it must be Copy; (b) `e` is evaluated `N` times in index order, as the current compiler does; (c) `e` must be a constant expression. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-149 | see OPEN-149 | decided 2026-11-01 by the owner (final set): Evaluated once, must be Copy |
@@ -1853,7 +1629,6 @@ V1a, V1b and V1c.
 | OD156 | <a id="od156"></a>The capability of `get_args` (added 2026-10-31, raised while reviewing the builtins catalog of spec readability 2). Question: Which capability the builtin `get_args` requires, or whether the builtin is removed. Bears on TRUST-4, STMT-7, TRUST-9 and OPEN-136. The current compiler: Check gives `get_args()` the result `HeapArray<String>` and requires `Process` (E0520 with `Env` only); the builtin has no implementation on either consumer (bug 347). STMT-7's rationale says command-line arguments come from `std.args` with `Env`, and OD8 gives `main` the root resource value (TRUST-9). Options: (a) `Env`, as `std.args` requires; (b) `Process`, as the current compiler's signature says; (c) another capability, or none; (d) remove the builtin, and command-line arguments come from `std.args`. Austral: not checked. Pick: none given (raised while reviewing the builtins catalog of spec readability 2, 2026-10-31). | see OPEN-156 | see OPEN-156 | decided 2026-11-01 by the owner (final set): Superseded by the authority decision of 2026-11-01: `get_args` requires `with(Env)`, and `with(Alloc)` when it allocates. Revised 2026-11-02 by the owner's rule: it also takes the `Environment` grant, and an allocator when it allocates ([decisions](decisions.md#decided-2026-11-02-filesystem)) |
 | OD157 | <a id="od157"></a>How the type `Unit` is written (added 2026-10-31, raised while reviewing the builtins catalog of spec readability 2). Question: Whether the type `Unit`, which STMT-7 names as a result type of `main` and which other rules and the builtins catalog also name, has a spelling in type positions, and which spelling. Bears on STMT-7, TYPE-4, SYN-1 and OPEN-66. The current compiler: a function with no result type returns no value, and `fn main() { return; }` exits 0; `fn main() -> Unit` and `let x: Unit = f();` are refused at resolve (E0108, unknown type 'Unit'); `fn main() -> ()` is a parse error (E0001, `expected type`). STMT-7@3 says `main`'s result type is `u8` or `Unit`. OPEN-66 concerns the unit value's literal; this entry concerns the type in type positions, and the two cross-reference each other. Options: (a) no spelling: the type is written only by omitting the result type, and STMT-7 says so; (b) `Unit` is a builtin type name, accepted wherever a type is; (c) `()` is the type's spelling; (d) both `Unit` and `()` are accepted. Austral: not checked. Pick: none given (raised while reviewing the builtins catalog of spec readability 2, 2026-10-31). | see OPEN-157 | see OPEN-157 | decided 2026-11-01 by the owner (final set): The type is written `Unit`, its value `()` |
 
-Revised by [tests as proofs](#decided-2026-11-10-tests-proofs) and [unproved tests during development](#decided-2026-11-10-unproved-tests).
 
 
 ## Decided
