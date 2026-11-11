@@ -1,0 +1,1 @@
+Resolve local landing-runner sources in the gate repository, matching Git fetch, and reject archived source identities before fetching. Preserve caller-relative gate/run directories across clone execution and cleanup. Add bounded controls for relative bundles, clones, conflicting caller inputs and archived paths (ISS-0056).

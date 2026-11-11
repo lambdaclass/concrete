@@ -106,6 +106,22 @@ def planted_controls():
 
 
 if __name__ == '__main__':
+    if sys.argv[1:2] == ['--fetch-source']:
+        source = sys.argv[2]
+        # The caller must use the same cwd as Git fetch. Local inputs are transports,
+        # but both their written and resolved identities must still be permitted.
+        if pathlib.Path(source).exists():
+            resolved = str(pathlib.Path(source).resolve())
+            errors = [f'{endpoint_problem(url)}: {url}' for url in (source, resolved)
+                      if endpoint_problem(url)]
+            source = resolved
+        else:
+            errors = remote_problems(source)
+        if errors:
+            print('\n'.join(errors), file=sys.stderr)
+            sys.exit(1)
+        print(source)
+        sys.exit(0)
     if sys.argv[1:2] == ['--remote']:
         errors = remote_problems(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None)
         if errors: print('\n'.join(errors), file=sys.stderr)

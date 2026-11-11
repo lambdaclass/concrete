@@ -11,7 +11,8 @@
 #
 # Env: RUN_AT_REF_REPO (gate clone, default ~/concrete2), RUN_AT_REF_RUNS (default ~/runs),
 #      RUN_AT_REF_SOURCE (what to fetch from: origin, a local clone path or a git bundle,
-#      default origin; scripts/land/gates_remote.sh passes a bundle so an unpublished train SHA can
+#      default origin; relative sources resolve inside RUN_AT_REF_REPO, as with git -C fetch.
+#      scripts/land/gates_remote.sh passes a bundle so an unpublished train SHA can
 #      run), RUN_AT_REF_KEEP=1, RUN_AT_REF_NO_NIX=1 (run the command
 #      without `nix develop`: the landing gate's sandbox only).
 set -euo pipefail
@@ -25,18 +26,17 @@ CMD="$*"
 REPO="${RUN_AT_REF_REPO:-$HOME/concrete2}"
 RUNS="${RUN_AT_REF_RUNS:-$HOME/runs}"
 SRC="${RUN_AT_REF_SOURCE:-origin}"
+# Freeze caller-relative directories before entering the run clone (including cleanup).
+REPO="$(cd "$REPO" && pwd -P)"
+RUNS="$(python3 -I -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$RUNS")"
 # Validate the clone before copying its objects or remote-tracking refs, including bundle runs.
 IDENTITY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../checks/lib/repository_identity.py"
 if git -C "$REPO" config --get-regexp '^remote\.origin\.' >/dev/null; then
   (cd "$REPO" && python3 -I "$IDENTITY" --remote origin) || exit 1
 fi
-# Local bundles/clones are transport inputs, not alternate network authorities.
-if [ -e "$SRC" ]; then
-  # git -C resolves relative sources in REPO; fetch the same path we inspected here.
-  SRC="$(cd "$(dirname "$SRC")" && pwd)/$(basename "$SRC")"
-else
-  (cd "$REPO" && python3 -I "$IDENTITY" --remote "$SRC") || exit 1
-fi
+# Resolve and validate in the very directory used by `git -C REPO fetch`.
+# Preserve the supplied spelling for identity checks as normalization can erase it.
+SRC="$(cd "$REPO" && python3 -I "$IDENTITY" --fetch-source "$SRC")" || exit 1
 mkdir -p "$RUNS"
 ID="$(date -u +%Y%m%dT%H%M%S)-$$"; WT="$RUNS/$ID"
 cleanup() {

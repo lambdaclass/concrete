@@ -112,12 +112,32 @@ done
 # Both supported local transports and origin run the exact expected commit.
 git remote set-url origin "$TMP/repo"
 expected="$(git rev-parse HEAD)"
+cp "$TMP/input.bundle" "$TMP/repo/input.bundle"
+cp "$TMP/input.bundle" "$TMP/repo/repo-only.bundle"
+git clone -q --no-hardlinks "$TMP/repo" "$TMP/repo/input-clone"
+# A same-named caller input must not override the gate repository's input.
+git clone -q --no-hardlinks "$TMP/repo" "$TMP/input-clone"
+git -C "$TMP/input-clone" -c user.name=Test -c user.email=test@example.com commit --allow-empty -qm decoy
 cd "$TMP"
-for source in origin "$TMP/repo" "$TMP/input.bundle" input.bundle; do
+for source in origin "$TMP/repo" "$TMP/input.bundle" input.bundle repo-only.bundle input-clone; do
   out="$(RUN_AT_REF_REPO="$TMP/repo" RUN_AT_REF_SOURCE="$source" RUN_AT_REF_RUNS="$TMP/runs" RUN_AT_REF_NO_NIX=1 \
-    bash "$ROOT_DIR/scripts/land/run-at-ref.sh" HEAD 'git rev-parse HEAD')"
+    bounded_run 15 -- bash "$ROOT_DIR/scripts/land/run-at-ref.sh" HEAD 'git rev-parse HEAD')"
   [[ "$out" == *"sha=$expected"* && "$out" == *"exit=0"* ]] || { echo "$out" >&2; exit 1; }
 done
+# Caller-relative repository/run directories must remain valid through clone and cleanup.
+out="$(RUN_AT_REF_REPO=repo RUN_AT_REF_SOURCE=repo-only.bundle RUN_AT_REF_RUNS=relative-runs RUN_AT_REF_NO_NIX=1 \
+    bounded_run 15 -- bash "$ROOT_DIR/scripts/land/run-at-ref.sh" HEAD 'git rev-parse HEAD')"
+[[ "$out" == *"sha=$expected"* && "$out" == *"exit=0"* ]] || { echo "$out" >&2; exit 1; }
+[[ -z "$(git -C repo for-each-ref refs/run-at-ref/)" ]] || { echo 'runner leaked reachability ref' >&2; exit 1; }
+[[ -z "$(find relative-runs -mindepth 1 -type d -print)" ]] || { echo 'runner leaked clone' >&2; exit 1; }
+# An existing relative archived path must be refused before creating run state.
+mkdir -p "$TMP/repo/$old_owner"
+git clone -q --no-hardlinks "$TMP/repo/input-clone" "$TMP/repo/$old_owner/concrete2"
+if out="$(RUN_AT_REF_REPO="$TMP/repo" RUN_AT_REF_SOURCE="$old_owner/concrete2" RUN_AT_REF_RUNS="$TMP/refused-runs" RUN_AT_REF_NO_NIX=1 \
+    bounded_run 15 -- bash "$ROOT_DIR/scripts/land/run-at-ref.sh" HEAD true 2>&1)"; then
+  echo 'repository_identity: runner accepted relative archived repository' >&2; exit 1
+fi
+[[ "$out" == *"archived repository destination refused"* && ! -e "$TMP/refused-runs" ]] || { echo "$out" >&2; exit 1; }
 # These statements run after their entry points change directory. Exercise the
 # actual source statements in isolation: no reviewer, proof build or note writes.
 for spec in 'land/train.sh:usage()' 'review/review.sh:usage()' 'proofs/external.sh:DIRECT='; do
@@ -136,4 +156,5 @@ for spec in 'land/train.sh:usage()' 'review/review.sh:usage()' 'proofs/external.
     [[ "$out" == *"${file##*/}"* ]] || { echo "$file: empty help" >&2; exit 1; }
   fi
 done
+bounded_gate_status
 echo 'repository_identity: hook, runner, fetch, push, content and remote-name controls pass'
