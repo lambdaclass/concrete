@@ -5,9 +5,9 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh"
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 source "$ROOT/scripts/checks/lib/git_sandbox.sh"
-git_sandbox
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
+git_sandbox "$TMP/gitconfig"
 BOUNDED_PARENT="$TMP"
 source "$ROOT/scripts/checks/lib/bounded.sh"
 mkdir -p "$TMP/source" "$TMP/bin" "$TMP/project/scripts/checks/lib" "$TMP/project/scripts/proofs"
@@ -40,7 +40,8 @@ cat > "$TMP/bin/elan" <<'CONTROL'
 #!/usr/bin/env bash
 set -eu
 [ "$ELAN_HOME" = "$CONCRETE_EXT_TOOLS/elan" ]
-[ "$ELAN_TOOLCHAIN" = deliberately-conflicting-ambient-toolchain ]
+[ "${ELAN_TOOLCHAIN+x}" != x ]
+[ "${LEAN_PATH+x}" != x ]
 [ "$#" = 6 ]
 [ "$1 $2 $3 $4 $5" = 'run --install leanprover/lean4:v4.35.0 lake build' ]
 case "$6" in lean4export|con-leche) ;; *) exit 90 ;; esac
@@ -49,6 +50,13 @@ echo "$6" >> "$DISPATCH_LOG"
 CONTROL
 cat > "$TMP/bin/lake" <<'CONTROL'
 #!/usr/bin/env bash
+set -eu
+[ "$ELAN_HOME" = "$CONCRETE_EXT_TOOLS/elan" ]
+[ "${ELAN_TOOLCHAIN+x}" != x ]
+[ "${LEAN_PATH+x}" != x ]
+# Model a caller's elan proxy writing its home on the project build.
+mkdir -p "$ELAN_HOME"
+touch "$ELAN_HOME/project-build"
 # Only lib.sh's project prerequisite may use ambient Lake. A tool build must use elan.
 [ "$*" = 'build ConcreteSpec Concrete' ] && exit 0
 echo 'FAIL: ambient lake used for an external tool' >&2
@@ -61,9 +69,31 @@ echo 'CONTROL: reached Rust build boundary' >&2
 exit 92
 CONTROL
 chmod +x "$TMP/bin/"*
+cat > "$TMP/check-path" <<'CONTROL'
+#!/usr/bin/env bash
+set -eu
+for tool in lake lean leanchecker; do
+  [ "$(command -v "$tool")" = "$CALLER_BIN/$tool" ] || {
+    echo "proxy shadows caller: $tool" >&2; exit 1;
+  }
+done
+CONTROL
+chmod +x "$TMP/check-path"
+ln -s lake "$TMP/bin/lean"
+ln -s lake "$TMP/bin/leanchecker"
+mkdir "$TMP/proxies"
+for tool in lake lean leanchecker; do ln -s "$TMP/bin/elan" "$TMP/proxies/$tool"; done
+export CALLER_BIN="$TMP/bin"
+if PATH="$TMP/proxies:$TMP/bin:$PATH" bash "$TMP/check-path" > "$TMP/negative" 2>&1; then
+  echo 'FAIL: proxy-leak negative control accepted'; exit 1
+fi
+grep -qF 'proxy shadows caller: lake' "$TMP/negative"
+# Supply the caller PATH before entering Nix; checking inside observes Nix's additions.
+PATH="$TMP/bin:$PATH" bounded_run 120 -- nix develop "$ROOT#extcheck" -c bash "$TMP/check-path"
 export PATH="$TMP/bin:$PATH" DISPATCH_LOG="$TMP/dispatched"
 export CONCRETE_EXT_TOOLS="$TMP/tools" ELAN_HOME="$TMP/shared-elan"
-export ELAN_TOOLCHAIN=deliberately-conflicting-ambient-toolchain
+export ELAN_TOOLCHAIN=deliberately-conflicting-ambient-toolchain LEAN_PATH=/conflicting/lean/path
+export CONCRETE_EXT_ELAN="$TMP/bin/elan"
 mkdir -p "$ELAN_HOME"
 echo untouched > "$ELAN_HOME/sentinel"
 run_driver() {
@@ -84,7 +114,7 @@ cmp "$TMP/expected" "$DISPATCH_LOG"
 for tool in lean4export con-leche; do
   cached="$CONCRETE_EXT_TOOLS/$tool-$REV-leanprover_lean4_v4.35.0"
   printf '%s\n' leanprover/lean4:v4.34.1 > "$cached/lean-toolchain"
-  run_driver 'toolchain mismatch'
+  run_driver 'worktree=leanprover/lean4:v4.34.1'
   cmp "$TMP/expected" "$DISPATCH_LOG"
   cp "$TMP/project/lean-toolchain" "$cached/lean-toolchain"
 done
@@ -96,7 +126,7 @@ cmp "$TMP/expected" "$DISPATCH_LOG"
 sed 's/^LEAN4EXPORT_TOOLCHAIN=.*/LEAN4EXPORT_TOOLCHAIN=leanprover\/lean4:v4.34.1/' "$TMP/pins" > "$TMP/project/scripts/proofs/external.pins"
 run_driver 'differs from project'
 cmp "$TMP/expected" "$DISPATCH_LOG"
-[ "$(cat "$ELAN_HOME/sentinel")" = untouched ]
-[ "$(find "$ELAN_HOME" -type f | wc -l)" -eq 1 ]
+[ "$(cat "$TMP/shared-elan/sentinel")" = untouched ]
+[ "$(find "$TMP/shared-elan" -type f | wc -l)" -eq 1 ]
 bounded_gate_status
 echo 'external toolchain: production dispatch, isolated elan, cache hits and pin mismatch controls pass'

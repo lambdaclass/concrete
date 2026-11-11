@@ -32,11 +32,22 @@
 # Tools are built once per pinned SHA into $CONCRETE_EXT_TOOLS (default ~/.cache/concrete-ext):
 # lean4export and con-leche with their declared, pinned toolchains (explicit elan dispatch; the
 # exporter must match this project to read its .olean files), nanoda with cargo. CI runs this
-# script in `nix develop .#extcheck`, which adds cargo, rustc and elan to the gate userland.
+# script in `nix develop .#extcheck`, which adds Rust and supplies an explicit elan
+# executable without PATH proxies.
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/../checks/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
+# Isolate before lib.sh builds the project: the caller's Lake may itself be an
+# elan proxy. Neither that build nor the external builders may write shared elan state.
+TOOLS="${CONCRETE_EXT_TOOLS:-$HOME/.cache/concrete-ext}"
+export ELAN_HOME="$TOOLS/elan"
+unset ELAN_TOOLCHAIN LEAN_PATH
+# The cache is shared by every run of this user on the machine (a self-hosted runner's HOME persists,
+# and worktrees share it): building holds an exclusive lock on it, builds in a private directory and
+# publishes the finished one with a rename, so no run sees, or removes, another's half-built tool.
+mkdir -p "$TOOLS" && exec 9> "$TOOLS/.lock" && flock 9 \
+  || { echo "error: cannot lock the tool cache $TOOLS" >&2; exit 2; }
 CHECK_NAME=PROOF-EXTERNAL
 source scripts/proofs/lib.sh
 # A pre-push hook in a linked worktree exports repository-local Git variables; without clearing
@@ -49,14 +60,8 @@ git_sandbox || exit 2
 . scripts/proofs/external.pins
 EXPECT_FORMAT=3.1.0
 INV="python3 scripts/proofs/export_inventory.py"
-TOOLS="${CONCRETE_EXT_TOOLS:-$HOME/.cache/concrete-ext}"
 TOOLCHAIN="$(cat lean-toolchain)"
 
-# The cache is shared by every run of this user on the machine (a self-hosted runner's HOME persists,
-# and worktrees share it): building holds an exclusive lock on it, builds in a private directory and
-# publishes the finished one with a rename, so no run sees, or removes, another's half-built tool.
-mkdir -p "$TOOLS" && exec 9> "$TOOLS/.lock" && flock 9 \
-  || { echo "error: cannot lock the tool cache $TOOLS" >&2; exit 2; }
 # publish DIR BUILD-COMMAND… → runs the command in DIR.partial.$$ (already cloned) and renames it to DIR
 publish() {
   local dir=$1 work="$1.partial.$$"; shift

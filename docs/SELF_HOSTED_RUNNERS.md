@@ -252,11 +252,17 @@ already handles, and what the host has to handle.
   on cache hits and misses, and builds explicitly dispatch that toolchain through elan. The
   exporter must match the project's toolchain to read its `.olean` files. External builds use
   `~/.cache/concrete-ext/elan` as their isolated elan home, even if `ELAN_HOME` is set by the
-  runner: Nix elan can patch downloaded Linux binaries, so it must not modify shared `~/.elan`.
+  runner, including during the project build. Ambient `ELAN_TOOLCHAIN` and `LEAN_PATH`
+  are cleared. The extcheck shell passes elan by absolute path without adding its
+  Lean/Lake proxies to PATH, preserving the caller’s toolchain. Nix elan can patch
+  downloaded Linux binaries, so it must not modify shared `~/.elan`.
   These Nix-patched external toolchains are build dependencies, not receipt checker identities.
   The cache lives in the user's HOME, so each runner has its own. Old directories are never
   deleted; prune `~/.cache/concrete-ext` now and then. Nix garbage collection can invalidate
-  patched toolchains; remove the cache-local `elan` directory to reinstall them if needed.
+  patched toolchains; CI keys this cache on `flake.nix` and `flake.lock` as well as
+  the pins, builder and project toolchain. On persistent runners, remove the entire
+  `~/.cache/concrete-ext` cache after such invalidation so both toolchains and compiled
+  tools rebuild against the current Nix store.
 - **Processes.** The runner kills a job's process tree when the job ends. A gate that leaves a
   daemon behind would survive on a persistent runner. That is one more reason to prefer ephemeral
   runners.

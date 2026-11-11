@@ -3,10 +3,11 @@ source "$(dirname "${BASH_SOURCE[0]}")/../checks/lib/git_sandbox.sh" || return 2
 git_sandbox || return 2
 # Verify the revision's declaration even on a cache hit; never rewrite lean-toolchain.
 verify_toolchain() {
-  local dir=$1 rev=$2 tc=$3 declared
+  local dir=$1 rev=$2 tc=$3 declared worktree
   declared=$(git -C "$dir" show "$rev:lean-toolchain") || return 1
-  [ "$declared" = "$tc" ] && [ "$(cat "$dir/lean-toolchain")" = "$tc" ] || {
-    echo "error: toolchain mismatch at $rev: pin=$tc declared=$declared" >&2
+  worktree=$(cat "$dir/lean-toolchain") || return 1
+  [ "$declared" = "$tc" ] && [ "$worktree" = "$tc" ] || {
+    echo "error: toolchain mismatch at $rev: pin=$tc declared=$declared worktree=$worktree" >&2
     return 1
   }
 }
@@ -20,8 +21,9 @@ build_lake_tool() {
       || { rm -rf "$work"; return 1; }
     verify_toolchain "$work" "$rev" "$tc" \
       || { rm -rf "$work"; return 1; }
-    command -v elan >/dev/null || { echo "error: external Lean tools need elan" >&2; rm -rf "$work"; return 1; }
-    publish "$dir" env ELAN_HOME="$TOOLS/elan" elan run --install "$tc" lake build "$target" \
+    local elan="${CONCRETE_EXT_ELAN:-elan}"
+    command -v "$elan" >/dev/null || { echo "error: external Lean tools need elan" >&2; rm -rf "$work"; return 1; }
+    publish "$dir" env -u ELAN_TOOLCHAIN -u LEAN_PATH ELAN_HOME="$TOOLS/elan" "$elan" run --install "$tc" lake build "$target" \
       || { rm -rf "$work"; return 1; }
   fi
   [ "$(git -C "$dir" rev-parse HEAD)" = "$rev" ] && verify_toolchain "$dir" "$rev" "$tc" || return 1

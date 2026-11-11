@@ -141,11 +141,13 @@
           # toolchain come from the runner, exactly as before.
           gates = pkgs.mkShellNoCC ({ packages = gatesUserland; } // gatesMarker);
 
-          # `nix develop .#extcheck` — the gate userland plus cargo and rustc, for
-          # scripts/proofs/external.sh, which builds the pinned nanoda checker (a Rust program) once
-          # per revision. mkShell, not NoCC: rustc links through the C compiler. Lean still comes
-          # from elan, as in the gates shell.
-          extcheck = pkgs.mkShell ({ packages = gatesUserland ++ [ pkgs.cargo pkgs.rustc pkgs.elan ]; } // gatesMarker);
+          # External builders add Rust and a C linker, but no Lean/Lake proxy shims.
+          # Only build_lake_tool invokes Nix elan, by absolute path with an isolated home.
+          # The project's Lake and Lean remain those supplied by the caller.
+          extcheck = pkgs.mkShell ({
+            packages = gatesUserland ++ [ pkgs.cargo pkgs.rustc ];
+            CONCRETE_EXT_ELAN = "${pkgs.elan}/bin/elan";
+          } // gatesMarker);
 
           # `nix develop .#provers` — adds the independent second kernels.
         });

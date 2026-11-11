@@ -198,12 +198,18 @@ The exporter is now the upstream v4.35.0 revision, matching our olean format.
 including on cache hits, and dispatches `elan run --install TOOLCHAIN lake build`
 without rewriting the declaration. External tool installations use the cache-local
 `$CONCRETE_EXT_TOOLS/elan` home (or `~/.cache/concrete-ext/elan`), overriding
-ambient `ELAN_HOME` to protect shared user toolchains from Nix elan patching.
+ambient `ELAN_HOME` before the project build as well, to protect shared user toolchains
+from Nix elan patching. Both `ELAN_TOOLCHAIN` and `LEAN_PATH` are cleared.
 Use `nix develop .#extcheck` for this gate; Rust is absent from the default shell.
+The shell supplies `CONCRETE_EXT_ELAN` by absolute path only; it adds no Lean,
+Lake or leanchecker proxies to PATH, preserving the caller’s project toolchain.
 The required root `external_toolchain.sh` control invokes the production driver
 against local sources and executable stubs. It checks fresh dispatch, cache reuse,
 corrupted cache declarations, pin mismatches, exporter/project agreement, and
 isolation from ambient Lake, toolchain overrides and the shared elan home.
+It checks the actual extcheck PATH and rejects a simulated proxy leak as a negative
+control. CI keys the external cache on the pins, builder, project toolchain and
+both Nix flake files.
 
 R-0208's measured-build policies and receipts under `legacy/` describe the frozen
 compiler and remain historical evidence, as does `scripts/oracle/ORACLE.lock`.
