@@ -15,7 +15,8 @@ import subprocess
 import sys
 import tempfile
 
-from landing_census import census, run
+from landing_census import census
+from landing_controls import check_census
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = 'aa44140a33747fa37ece59c76090972e564c65b4'
@@ -24,7 +25,7 @@ EVIDENCE = '5db3018e24eb284894b3615833aa373c76944475'
 DOSSIER = '2bef2b5e20dffb5b277f9451be6fef969cf6c898'
 MANIFEST = ROOT / 'ConcreteSpec/landing/inventory.tsv'
 FIELDS = ['record', 'name', 'kind', 'source', 'line', 'end_line', 'piece',
-          'prerequisites', 'disposition', 'contract', 'digest', 'dependencies', 'migration', 'note']
+          'prerequisites', 'disposition', 'contract', 'digest', 'dependencies', 'migration', 'note', 'term_digest', 'regeneration']
 
 # Plan prerequisites, not an order guessed from filenames. External answers are explicit holds.
 PREREQS = {
@@ -60,7 +61,7 @@ for p in list(PREREQS):
 for i in range(1,11):
     PREREQS[f'C{i}-close'] = ['F40','F07','F18','F21','F22','F25b','T2','F27','F29p']
 PREREQS['Freeze'] = [f'C{i}-close' for i in range(1,11)]
-HOLDS = {'F03p':'path character/normalization owner answer', 'F04p':'path authority',
+HOLDS = {'T2':'accepted bounded helper-contradiction extension design', 'F03p':'path character/normalization owner answer', 'F04p':'path authority',
  'F06':'independent constant authority (D4)', 'F08':'renewed lifecycle answer',
  'F09c':'law-subject/determinism authority (D4)', 'F12':'representation extensions held',
  'F18':'accepted ISS-0050 redesign', 'F19':'accepted ISS-0047 redesign; repair ISS-0045/0048',
@@ -86,14 +87,23 @@ WHOLE = {
  'Proofs/ObserveReport':'F23','Spec/Adequacy':'F24a', 'Spec/Frame':'F28',
  'Spec/Rules':'F17', 'Spec/Surface0':'F36','Proofs/Surface0':'F36',
 }
+REGENERATE_MODULES = tuple('ConcreteSpec.'+stem.replace('/','.') for stem in WHOLE if stem.startswith('Spec/'))
+
 CONTRACTS = {'Ident':'C9','Target':'C3','Outcome':'C1','Exec':'C1','Scalar':'C2',
  'Const':'C2','Memory':'C4','Hybrid':'C4','Own':'C5','Grant':'C5','Prim':'C9',
  'Leak':'C7','Adequacy':'C8','Frame':'C10','Authority':'C5','Brand':'C5',
  'Borrow':'C5','Cleanup':'C1','Rep':'C4','Basics':'C9','Rules':'C9'}
 
 
+@lru_cache(maxsize=1)
+def git_local_variables():
+    env = {k:v for k,v in os.environ.items() if k not in ('GIT_DIR','GIT_WORK_TREE','GIT_COMMON_DIR')}
+    return set(subprocess.check_output(['git','rev-parse','--local-env-vars'],env=env,text=True).splitlines())
+
+
 def git(*args):
-    return subprocess.check_output(['git', *args], cwd=ROOT, stderr=subprocess.DEVNULL)
+    env = {k:v for k,v in os.environ.items() if k not in git_local_variables()}
+    return subprocess.check_output(['git', *args], cwd=ROOT, env=env, stderr=subprocess.DEVNULL)
 
 
 def sha(data):
@@ -107,6 +117,10 @@ def source(ref, path):
 
 def piece(file, line):
     stem = file.removeprefix('ConcreteSpec/').removesuffix('.lean')
+    if stem == 'Spec/Examples' and 326 <= line <= 392:
+        return 'F35'
+    if stem == 'Proofs/Examples' and line <= 36:
+        return 'F35'
     if stem in WHOLE:
         return WHOLE[stem]
     if stem in ('Spec','ConcreteSpec') or file == 'ConcreteSpec.lean':
@@ -120,7 +134,7 @@ def piece(file, line):
     if stem == 'Proofs/Exec':
         for lo, hi, p in [(1,344,'F09a'),(354,1402,'F09b'),(1404,1943,'F09c'),
                           (2301,2321,'F09a'),(2323,2902,'F09b'),
-                          (3753,3883,'F09a'),(3884,3908,'F09b'),(3997,4058,'F09c')]:
+                          (3753,3883,'F09a'),(3884,3908,'F09b'),(3997,4048,'F09c')]:
             if lo <= line <= hi:
                 return p
         return 'F10'
@@ -139,7 +153,7 @@ def piece(file, line):
     if stem == 'Proofs/Observe2':
         return 'F20p' if 967 <= line <= 1011 else 'F20'
     if stem == 'Proofs/Frame':
-        return 'F29p' if line == 2334 or 2343 <= line <= 2353 or 2429 <= line <= 2457 else 'F29'
+        return 'F29p' if 2334 <= line <= 2335 or 2343 <= line <= 2353 or 2429 <= line <= 2457 else 'F29'
     if stem == 'Spec/Leak':
         return 'F27' if line >= 417 else 'F26'
     if stem == 'Proofs/Leak':
@@ -156,7 +170,7 @@ def row(**kw):
     return {k: str(kw.get(k, '')) for k in FIELDS}
 
 
-def records_from_census(data):
+def records_from_census(data, source_root=None):
     """Stable identity and source digests independent of the manual assignment columns."""
     result = []
     example_deps = {(r['file'],r['line']):r['uses'] for r in data if r['record']=='example'}
@@ -169,22 +183,27 @@ def records_from_census(data):
             continue
         f = c['file']
         if f not in files:
-            files[f] = source(SOURCE, f).decode().splitlines(keepends=True)
-        digest = sha(''.join(files[f][c['line']-1:c['endLine']]).encode())
+            files[f] = (source(SOURCE, f) if source_root is None else (source_root/f).read_bytes()).decode().splitlines(keepends=True)
+        digest = sha((''.join(files[f]) if c['syntax']=='module-realization' else ''.join(files[f][c['line']-1:c['endLine']])).encode())
         r = row(record='command', name=f"{f}:{c['line']}:{c['endLine']}",
                 kind='example' if c['example'] else c['syntax'], source=f,
                 line=c['line'], end_line=c['endLine'], digest=digest,
                 contract=contract(f), dependencies=json.dumps(sorted(set(example_deps.get((f,c['line']),[]))), separators=(',',':')))
         commands[f].append(r)
         result.append(r)
+    origins = {(r['file'],r['name']):r for r in data if r['record']=='origin'}
     for d in decls:
         f = d['module'].replace('.', '/') + '.lean'
-        command = next((c for c in commands[f] if int(c['line']) <= d['line'] <= int(c['end_line'])), None)
+        origin = origins.get((f,d['name']))
+        if origin is None:
+            raise ValueError(f'no observed command origin: {d["name"]}')
+        command = next(c for c in commands[f]
+                       if int(c['line']) == origin['line'] and int(c['end_line']) == origin['endLine'])
         result.append(row(record='declaration', name=d['name'], kind=d['kind'], source=f,
-                          line=d['line'], end_line=command['end_line'] if command else 0,
-                          digest=command['digest'] if command else sha((SOURCE+'\n'+d['name']).encode()),
+                          line=d['line'], end_line=command['end_line'], term_digest=d['shape'],
+                          digest=command['digest'],
                           dependencies=json.dumps(sorted(set(d['uses']) & names), separators=(',',':')),
-                          contract=contract(f), note=command['name'] if command else 'generated; no source range'))
+                          contract=contract(f), note=command['name']))
     return result
 
 
@@ -221,24 +240,127 @@ def evidence_rows():
 
 
 @lru_cache(maxsize=1)
-def baseline_command_digests():
-    """Only actual parsed commands qualify as existing baseline source, never text in comments."""
+def baseline_census():
     paths = git('ls-tree','-r','--name-only',BASE,'ConcreteSpec','ConcreteSpec.lean').decode().splitlines()
-    paths = [p for p in paths if p.endswith('.lean')]
     with tempfile.TemporaryDirectory(prefix='spec-baseline-') as tmp:
         root = Path(tmp)
         for path in paths:
+            if not path.endswith('.lean'):
+                continue
             target = root/path
             target.parent.mkdir(parents=True,exist_ok=True)
             target.write_bytes(source(BASE,path))
-        parsed = [json.loads(s) for s in run(['lean','--run',str(ROOT/'scripts/spec/landing_inventory.lean'),
-                  'parse',*paths],root,dict(os.environ,LEAN_PATH=str(root))).splitlines()]
-    result = defaultdict(set)
-    for c in parsed:
-        if c['record']=='command':
-            lines = source(BASE,c['file']).splitlines(keepends=True)
-            result[c['file']].add(sha(b''.join(lines[c['line']-1:c['endLine']])))
-    return result
+        return census(root,ROOT/'scripts/spec/landing_inventory.lean',examples=False,regenerate_modules=REGENERATE_MODULES)
+
+
+@lru_cache(maxsize=1)
+def baseline_members():
+    data = baseline_census()
+    origins = {(r['file'],r['name']):r for r in data if r['record']=='origin'}
+    commands = defaultdict(set)
+    declarations = {}
+    for r in data:
+        if r['record']=='command':
+            lines = source(BASE,r['file']).splitlines(keepends=True)
+            commands[r['file']].add(sha(b''.join(lines if r['syntax']=='module-realization' else lines[r['line']-1:r['endLine']])))
+        elif r['record']=='declaration':
+            o = origins[(r['module'].replace('.','/')+'.lean',r['name'])]
+            lines = source(BASE,o['file']).splitlines(keepends=True)
+            declarations[r['name']] = (o['file'],sha(b''.join(lines[o['line']-1:o['endLine']])),r['shape'])
+    return commands, declarations
+
+
+def on_baseline(r):
+    member = baseline_members()[1].get(r['name'])
+    return member is not None and member[2]==r['term_digest'] and (
+        r['line']=='0' or member[:2]==(r['source'],r['digest']))
+
+
+def emission_choices(data):
+    declarations = {r['name']:r for r in data if r['record']=='declaration'}
+    observed = {(o['file'],o['name']):o for o in data if o['record']=='origin'}
+    def expand(file, name, seen):
+        if name in declarations:
+            return {name}
+        if name in seen or (file,name) not in observed:
+            return set()
+        seen.add(name)
+        return set().union(*(expand(file,d,seen) for d in observed[(file,name)]['uses']))
+    out = defaultdict(list)
+    for o in data:
+        if o['record']!='origin' or o['name'] not in declarations:
+            continue
+        d = declarations[o['name']]
+        if o['shape']!=d['shape'] or (o['line']==0 and d['kind']!='theorem'):
+            continue
+        deps = set().union(*(expand(o['file'],n,set()) for n in o['uses']))
+        out[o['name']].append((f"{o['file']}:{o['line']}:{o['endLine']}",sorted(deps)))
+    return out
+
+
+def configure_migrations():
+    # Classifications follow the actual baseline import DAG, including paths through Spec.
+    data = baseline_census()
+    imports = {r['file'][:-5].replace('/','.'):r['imports'] for r in data if r['record']=='imports'}
+    stems = ['Basics','Authority','Borrow','Brand','Checker','Cleanup','Examples',
+             'Observe','Rep','Slice0','Slice1','Surface0']
+    owners = {f'ConcreteSpec.Proofs.{stem}':f'M{i:02}' for i,stem in enumerate(stems,1)}
+    def reachable(m, seen):
+        if m in seen:
+            return set()
+        seen.add(m)
+        return set(imports.get(m,[])) | set().union(*(reachable(d,seen) for d in imports.get(m,[])))
+    for module, p in owners.items():
+        PREREQS[p] = ['F02','T1c'] + sorted({owners[d] for d in reachable(module,set()) if d in owners})
+
+
+def command_identity(r):
+    return r['name'] if r['record']=='command' else r['note'].split(';',1)[0]
+
+
+def context_destinations(population):
+    commands = [r for r in population if r['record']=='command']
+    material = defaultdict(set)
+    for r in population:
+        if r['record']=='declaration':
+            material[r['regeneration'] or command_identity(r)].add(r['piece'])
+    result = {}
+    for file in sorted({r['source'] for r in commands}):
+        # Each scope owns its context directives. A directive travels to every later
+        # material command in its scope (including nested scopes), in original order.
+        scopes = [[]]
+        openings = []
+        for c in sorted((r for r in commands if r['source']==file),key=lambda r:int(r['line'])):
+            if c['kind'] in ('Lean.Parser.Command.namespace','Lean.Parser.Command.section'):
+                result[c['name']] = set()
+                scopes.append([c['name']])
+                openings.append(c['name'])
+            elif c['kind']=='Lean.Parser.Command.end':
+                if not openings:
+                    raise ValueError(f'unmatched context end: {c["name"]}')
+                result[c['name']] = set(result[openings.pop()])
+                scopes.pop()
+            elif c['name'] in material or c['kind']=='example':
+                destinations = material[c['name']] | {c['piece']}
+                for scope in scopes:
+                    for name in scope:
+                        result[name].update(destinations)
+            else:
+                # variable/open/universe/options/local notation and other commands
+                # without constants are context, not an exclusively owned policy row.
+                result[c['name']] = set()
+                scopes[-1].append(c['name'])
+        if openings:
+            raise ValueError(f'unbalanced parsed contexts: {file}')
+    return {name:','.join(sorted(destinations)) for name,destinations in result.items()}
+
+
+def update_contexts(rows):
+    contexts = context_destinations(rows)
+    for r in rows:
+        if r['record']=='command' and r['name'] in contexts:
+            r['note'] = 'balanced context destinations='+contexts[r['name']]
+            r['disposition'] = 'retain'
 
 
 def generate(data):
@@ -250,8 +372,15 @@ def generate(data):
         rows.append(row(record='piece',name=p,kind='landing-piece',piece=p,prerequisites=','.join(deps),
                         disposition='owner-held' if p in HOLDS else 'retain',note=HOLDS.get(p,'')))
     population = records_from_census(data)
+    anchors = {}
     for r in population:
-        p = piece(r['source'],int(r['end_line'] or r['line']))
+        if r['record']=='declaration' and r['line']!='0':
+            key = command_identity(r)
+            anchors[key] = min(anchors.get(key,int(r['line'])),int(r['line']))
+    for r in population:
+        key = command_identity(r)
+        p = (WHOLE[r['source'].removeprefix('ConcreteSpec/').removesuffix('.lean')]
+             if key.endswith(':0:0') else piece(r['source'],anchors.get(key,int(key.rsplit(':',2)[1]))))
         r.update(piece=p, prerequisites=','.join(PREREQS[p]),
                  disposition='owner-held' if p in HOLDS else 'repair',
                  note=r['note'] + ('; '+HOLDS[p] if p in HOLDS else ''))
@@ -260,20 +389,13 @@ def generate(data):
             r['disposition'] = 'replace'
             r['note'] += '; ISS-0046: replace presentation-bearing identity with shared numeric identity; do not restore the raw-record inequality'
     byname = {r['name']:r for r in population if r['record']=='declaration'}
-    baseline = baseline_command_digests()
+    baseline, baseline_decls = baseline_members()
     for r in population:
-        if r['line']!='0' and r['digest'] in baseline[r['source']]:
+        if ((r['record']=='command' and r['digest'] in baseline[r['source']]) or
+            (r['record']=='declaration' and on_baseline(r))):
             r['migration'] = r['piece']
             r.update(piece='BASE',prerequisites='',disposition='retain')
             r['note'] += '; parsed baseline command; adapt at migration piece'
-        elif r['record']=='declaration' and r['line']=='0':
-            # Initial module assignment conveys no information about a compiler artifact's
-            # origin. Only the actual dependency/consumer constraints below assign it.
-            r.update(piece='P',prerequisites=','.join(PREREQS['P']),disposition='repair',
-                     note='compiler artifact; no source command range')
-    # Resolve concrete dependency closures. Anonymous compiler artifacts may be emitted by
-    # a later importer; they are regenerated with their first actual consumer, not copied as
-    # authored source. This is an extraction assignment, never compiler-origin attestation.
     ancestry = {}
     def ancestors(p):
         if p not in ancestry:
@@ -288,100 +410,66 @@ def generate(data):
                  disposition='owner-held' if p in HOLDS else 'repair')
         if why not in r['note']:
             r['note'] += '; '+why
-    # First move complete ranged fixture commands (the plan's earliest-consumer rule),
-    # following generated intermediates as well as direct references in anonymous examples.
-    def ranged_dependencies(name,seen):
-        if name in seen:
-            return set()
-        seen.add(name)
-        if byname[name]['line']!='0':
-            return {name}
-        out = set()
-        for dep in json.loads(byname[name]['dependencies']):
-            out |= ranged_dependencies(dep,seen)
-        return out
-    named_cache = {n:ranged_dependencies(n,set()) for n in byname}
-    consumers = [r for r in population if r['kind']=='example'] + [r for r in byname.values() if r['line']!='0']
-    for _ in range(len(PREREQS)):
+    command_rows = {r['name']:r for r in population if r['record']=='command'}
+    choices = emission_choices(data)
+    generated = {n:r for n,r in byname.items() if r['line']=='0' and r['piece']!='BASE'}
+    fixtures = {command_identity(r) for r in byname.values() if r['line']!='0'
+                and any(tag in r['name'] for tag in ('.Demo.','.CoreEvidence.','.Vacuity.'))}
+    def available(p,d):
+        return p==d or d in ancestry[p]
+    def candidate_piece(command):
+        c = command_rows[command]
+        return c['migration'] if c['piece']=='BASE' else c['piece']
+    # Generated realizations may be emitted in several importers with different proofs.
+    # Choose only an actually observed, kernel-identical emission, never an inferred owner.
+    # Single-emission helpers (including partial bodies) remain with their command.
+    effective = {n:json.loads(r['dependencies']) for n,r in byname.items()}
+    for _ in range(len(PREREQS)*2):
         changed = False
-        for r in consumers:
-            needs = set()
-            for dep in json.loads(r['dependencies']):
-                needs |= named_cache[dep]
-            for dep in sorted(needs):
+        users = defaultdict(list)
+        for n,r in byname.items():
+            if r['piece']=='BASE':
+                continue
+            for d in effective[n]:
+                users[d].append(r['piece'])
+        for r in population:
+            if r['kind']=='example' and r['piece']!='BASE':
+                for d in json.loads(r['dependencies']):
+                    users[d].append(r['piece'])
+        for n,r in generated.items():
+            if not choices[n]:
+                raise ValueError(f'no kernel-identical observed emission: {n}')
+            def score(choice):
+                cmd,deps = choice
+                p = candidate_piece(cmd)
+                violations = sum(not available(p,byname[d]['piece']) for d in deps)
+                violations += sum(not available(u,p) for u in users[n])
+                return violations,len(ancestry[p]),cmd
+            cmd,deps = min(choices[n],key=score)
+            p = candidate_piece(cmd)
+            if (r['piece'],r['regeneration'],effective[n]) != (p,cmd,deps):
+                assign(r,p,'regenerated at observed kernel-identical emission')
+                r['regeneration'] = cmd
+                effective[n] = deps
+                changed = True
+        consumers = [(r,effective[n]) for n,r in byname.items() if r['piece']!='BASE']
+        consumers += [(r,json.loads(r['dependencies'])) for r in population if r['kind']=='example' and r['piece']!='BASE']
+        for r,deps in consumers:
+            for dep in deps:
                 d = byname[dep]
-                if r['piece']==d['piece'] or d['piece'] in ancestry[r['piece']]:
+                if available(r['piece'],d['piece']) or not available(d['piece'],r['piece']):
                     continue
-                if ('.Demo.' in d['name'] or '.CoreEvidence.' in d['name'] or '.Vacuity.' in d['name']) and r['piece'] in ancestry[d['piece']]:
-                    key = (d['source'],d['digest'])
+                cmd = d['regeneration'] or command_identity(d)
+                if cmd in fixtures:
                     for support in population:
-                        if (support['source'],support['digest'])==key:
+                        if command_identity(support)==cmd and support['piece']!='BASE':
                             assign(support,r['piece'],'shared fixture/support moved to earliest consumer')
                     changed = True
         if not changed:
             break
-    # Strongly connected components keep mutual generated auxiliaries together. Propagate the
-    # actual ranged dependencies/users through their DAG; never infer authorship from names.
-    generated = {n:r for n,r in byname.items() if r['line']=='0'}
-    index, low, stack, onstack, components = {}, {}, [], set(), []
-    sys.setrecursionlimit(max(10000,len(generated)*2))
-    def connect(n):
-        index[n] = low[n] = len(index)
-        stack.append(n); onstack.add(n)
-        for d in json.loads(generated[n]['dependencies']):
-            if d not in generated:
-                continue
-            if d not in index:
-                connect(d); low[n] = min(low[n],low[d])
-            elif d in onstack:
-                low[n] = min(low[n],index[d])
-        if low[n]==index[n]:
-            group = []
-            while True:
-                d = stack.pop(); onstack.remove(d); group.append(d)
-                if d==n:
-                    break
-            components.append(group)
-    for n in generated:
-        if n not in index:
-            connect(n)
-    component = {n:i for i,g in enumerate(components) for n in g}
-    outgoing, incoming = defaultdict(set), defaultdict(set)
-    lower, upper = defaultdict(set), defaultdict(set)
-    for n,r in byname.items():
-        for dep in json.loads(r['dependencies']):
-            if n in generated and dep in generated:
-                a,b = component[n],component[dep]
-                if a!=b:
-                    outgoing[a].add(b); incoming[b].add(a)
-            elif n in generated:
-                lower[component[n]].add(byname[dep]['piece'])
-            elif dep in generated:
-                upper[component[dep]].add(r['piece'])
-    for r in population:
-        if r['kind']=='example':
-            for dep in json.loads(r['dependencies']):
-                if dep in generated:
-                    upper[component[dep]].add(r['piece'])
-    def reach(i,edges,anchors,cache):
-        if i not in cache:
-            result = set(anchors[i])
-            for j in edges[i]:
-                result |= reach(j,edges,anchors,cache)
-            cache[i] = result
-        return cache[i]
-    lc,uc = {},{}
-    for i,group in enumerate(components):
-        needs = reach(i,outgoing,lower,lc)
-        users = reach(i,incoming,upper,uc)
-        candidates = [p for p in PREREQS
-                      if all(d==p or d in ancestry[p] for d in needs)
-                      and all(p==u or p in ancestry[u] for u in users)]
-        if not candidates:
-            raise ValueError(f'generated closure has incompatible pieces: {group[0]}: needs={sorted(needs)}, users={sorted(users)}')
-        p = min(candidates,key=lambda p:(len(ancestry[p]),p))
-        for n in group:
-            assign(generated[n],p,'regenerated auxiliary; actual dependency/consumer closure, not origin attestation')
+    else:
+        raise ValueError('observed emission/fixture assignment did not converge')
+    update_contexts(population)
     rows += population + evidence_rows()
     for i in range(1,11):
         c = f'C{i}'
@@ -394,10 +482,13 @@ def generate(data):
 
 
 def write(rows):
-    with MANIFEST.open('w',newline='') as f:
-        writer = csv.DictWriter(f, FIELDS, delimiter='\t', lineterminator='\n')
-        writer.writeheader()
-        writer.writerows(sorted(rows,key=lambda r:(r['record'],r['name'])))
+    with tempfile.TemporaryDirectory(prefix='.landing-write-',dir=MANIFEST.parent) as tmp:
+        target = Path(tmp)/'inventory.tsv'
+        with target.open('w',newline='') as f:
+            writer = csv.DictWriter(f, FIELDS, delimiter='\t', lineterminator='\n')
+            writer.writeheader()
+            writer.writerows(sorted(rows,key=lambda r:(r['record'],r['name'])))
+        os.replace(target,MANIFEST)
 
 
 def read():
@@ -408,9 +499,60 @@ def read():
         return list(reader)
 
 
-def judgment(rows, data, dependencies=True):
+@lru_cache(maxsize=None)
+def landed_population(ref):
+    if len(ref)!=40 or any(c not in '0123456789abcdef' for c in ref):
+        raise ValueError('landed source must be a full immutable commit SHA')
+    ensure_object(ref)
+    with tempfile.TemporaryDirectory(prefix='spec-landed-') as tmp:
+        root = Path(tmp)
+        for path in git('ls-tree','-r','--name-only',ref,'ConcreteSpec','ConcreteSpec.lean').decode().splitlines():
+            if path.endswith('.lean'):
+                target = root/path
+                target.parent.mkdir(parents=True,exist_ok=True)
+                target.write_bytes(source(ref,path))
+        data = census(root, ROOT/'scripts/spec/landing_inventory.lean',examples=False,regenerate_modules=REGENERATE_MODULES)
+    origins = {(r['file'],r['name']):r for r in data if r['record']=='origin'}
+    result = {}
+    for d in data:
+        if d['record']!='declaration':
+            continue
+        o = origins[(d['module'].replace('.','/')+'.lean',d['name'])]
+        lines = source(ref,o['file']).splitlines(keepends=True)
+        result[d['name']] = sha(b''.join(lines[o['line']-1:o['endLine']]))
+    return result
+
+
+def record_landed(rows, piece, ref):
+    if piece not in PREREQS or piece=='BASE':
+        raise ValueError(f'invalid landed piece: {piece}')
+    population = landed_population(ref)
+    prior = {r['name'] for r in rows if r['record']=='landed'}
+    targets = [r for r in rows if r['record']=='declaration' and r['piece']==piece and r['name'] not in prior]
+    missing = [r['name'] for r in targets if r['name'] not in population]
+    if missing:
+        raise ValueError('landed declarations missing; provide explicit renamed declaration mappings: '+', '.join(missing))
+    return rows + [row(record='landed',name=r['name'],kind='landed-declaration',source=ref,
+                       piece=piece,prerequisites=','.join(PREREQS[piece]),digest=population[r['name']],
+                       note=r['name'],disposition='present') for r in targets]
+
+
+def check_landed(rows, decls):
+    for r in rows:
+        if r['record']=='landed':
+            if r['kind']!='landed-declaration' or r['disposition']!='present':
+                raise ValueError(f'invalid landed record: {r["name"]}')
+            if r['name'] not in decls or r['piece']!=decls[r['name']]['piece']:
+                raise ValueError(f'invalid landed mapping: {r["name"]}')
+            if landed_population(r['source']).get(r['note']) != r['digest']:
+                raise ValueError(f'landed declaration mismatch: {r["name"]}')
+
+
+def judgment(rows, data, dependencies=True, extra_root=None):
     seen = {}
     for r in rows:
+        if r['record'] not in {'snapshot','piece','command','declaration','finding','contract','landed'}:
+            raise ValueError(f'unknown inventory record: {r["record"]}')
         key = (r['record'],r['name'])
         if key in seen:
             raise ValueError(f'duplicate assignment: {r["name"]}')
@@ -419,12 +561,18 @@ def judgment(rows, data, dependencies=True):
     if set(pieces) != set(PREREQS):
         raise ValueError('landing piece population mismatch')
     for p in PREREQS:
+        if pieces[p]['disposition'] != ('owner-held' if p in HOLDS else 'retain') or pieces[p]['note'] != HOLDS.get(p,''):
+            raise ValueError(f'plan hold changed: {p}')
         if pieces[p]['prerequisites'] != ','.join(PREREQS[p]):
             raise ValueError(f'plan prerequisites changed: {p}')
     for r in rows:
         if not r['piece'] or r['piece'] not in pieces:
             raise ValueError(f'unassigned {r["record"]}: {r["name"]}')
-    expected = records_from_census(data) + evidence_rows()
+    if extra_root is None:
+        expected = records_from_census(data) + evidence_rows()
+    else:
+        original, extra = data
+        expected = records_from_census(original) + records_from_census(extra,extra_root) + evidence_rows()
     expected_keys = {(r['record'],r['name']) for r in expected}
     if len(expected_keys) != len(expected):
         raise ValueError('duplicate identity in the live Lean/evidence census')
@@ -433,7 +581,9 @@ def judgment(rows, data, dependencies=True):
         if key not in seen:
             raise ValueError(f'unassigned {e["record"]}: {e["name"]}')
         r = seen[key]
-        for k in ('kind','source','line','end_line','digest','dependencies','contract'):
+        if e['record']=='declaration' and command_identity(r) != command_identity(e):
+            raise ValueError(f'command origin mismatch: {e["name"]}')
+        for k in ('kind','source','line','end_line','digest','dependencies','contract','term_digest'):
             if r[k] != e[k]:
                 raise ValueError(f'census mismatch ({k}): {e["name"]}')
     for key in seen:
@@ -471,19 +621,52 @@ def judgment(rows, data, dependencies=True):
     for r in rows:
         if r['record'] != 'piece' and r['prerequisites'] and r['prerequisites'] != pieces[r['piece']]['prerequisites']:
             raise ValueError(f'prerequisites disagree with piece: {r["name"]}')
+    contexts = context_destinations(rows)
+    for r in rows:
+        if r['record']=='command' and r['name'] in contexts and r['note'] != 'balanced context destinations='+contexts[r['name']]:
+            raise ValueError(f'context destinations mismatch: {r["name"]}')
     decls = {r['name']:r for r in rows if r['record']=='declaration'}
-    command_rows = {(r['source'],r['digest']):r for r in rows if r['record']=='command'}
-    for r in decls.values():
-        if r['piece']=='BASE' and r['line']!='0' and r['digest'] not in baseline_command_digests()[r['source']]:
+    command_rows = {r['name']:r for r in rows if r['record']=='command'}
+    baseline_commands, baseline_decls = baseline_members()
+    for r in rows:
+        if r['piece']=='BASE' and r['record']=='command' and r['digest'] not in baseline_commands[r['source']]:
             raise ValueError(f'baseline assignment has no parsed baseline command: {r["name"]}')
-        if r['line']!='0':
-            c = command_rows[(r['source'],r['digest'])]
-            if r['piece'] != c['piece']:
+    for r in decls.values():
+        if r['piece']=='BASE' and not on_baseline(r):
+            raise ValueError(f'baseline assignment has no baseline declaration: {r["name"]}')
+        if r['line']=='0':
+            continue
+        c = command_rows[command_identity(r)]
+        if r['piece'] != c['piece']:
+            # A shared command may already exist on BASE with only some generated
+            # artifacts present. Its new artifacts still belong to its migration piece.
+            if not (c['piece']=='BASE' and r['piece']==c['migration']):
                 raise ValueError(f'split source command: {r["name"]}')
+    check_landed(rows,decls)
+    choices = emission_choices(data if extra_root is None else data[0]+data[1])
+    effective = {}
+    for n,r in decls.items():
+        if r['piece']=='BASE':
+            # The freshly built baseline is a closed environment; its proof/body
+            # is retained, rather than replaced by the source snapshot's version.
+            effective[n] = []
+        elif r['line']=='0':
+            found = next((deps for cmd,deps in choices[n] if cmd==r['regeneration']),None)
+            if found is None:
+                raise ValueError(f'unobserved regeneration command: {n}')
+            c = command_rows[r['regeneration']]
+            p = c['migration'] if c['piece']=='BASE' else c['piece']
+            if r['piece']!=p:
+                raise ValueError(f'split source command: {n}')
+            effective[n] = found
+        else:
+            effective[n] = json.loads(r['dependencies'])
     errors = []
     if dependencies:
-        for r in list(decls.values()) + [r for r in rows if r['kind']=='example']:
-            for dep in json.loads(r['dependencies']):
+        consumers = [(r,effective[n]) for n,r in decls.items()]
+        consumers += [(r,json.loads(r['dependencies'])) for r in rows if r['kind']=='example' and r['piece']!='BASE']
+        for r,deps in consumers:
+            for dep in deps:
                 d = decls[dep]
                 if d['piece'] != r['piece'] and d['piece'] not in closure[r['piece']]:
                     errors.append(f'{r["piece"]} {r["name"]} requires {d["piece"]} {dep}')
@@ -492,27 +675,53 @@ def judgment(rows, data, dependencies=True):
     return closure
 
 
+def verify_plan_boundaries(rows):
+    # Named plan obligations catch boundary drift in the generated assignments themselves,
+    # including documentation beginning on a different line from a declaration's name.
+    expected = {
+        'ConcreteSpec.Core.Exec.runFrom_final_sound':'F24a',
+        'ConcreteSpec.Core.Exec.internal_finite_or_infinite_events':'F25a',
+        'ConcreteSpec.Core.Frame.ABI.LoadBoundaryDemo.controlInput':'F29p',
+        'ConcreteSpec.Core.Exec.CoreEvidence.dropArgProtocolDestroyCall':'F10',
+        'ConcreteSpec.Examples.add0_ok':'F35',
+        'ConcreteSpec.Core.CExpr.eval.match_5':'F06',
+    }
+    declarations = {r['name']:r for r in rows if r['record']=='declaration'}
+    for name,piece in expected.items():
+        r = declarations[name]
+        assigned = r['migration'] if r['piece']=='BASE' else r['piece']
+        if assigned!=piece:
+            raise ValueError(f'plan boundary mismatch: {name}: {assigned}, expected {piece}')
+    print('control PASS: named plan boundaries and held fixture destination')
+
+
 def report(rows, detail=None):
-    counts = Counter(r['piece'] for r in rows if r['record']=='declaration' and r['piece']!='BASE')
+    if detail and detail not in PREREQS and detail != 'all':
+        raise ValueError(f'unknown remaining piece: {detail}')
+    landed = {r['name'] for r in rows if r['record']=='landed'}
+    counts = Counter(r['piece'] for r in rows if r['record']=='declaration' and r['piece']!='BASE' and r['name'] not in landed)
     examples = Counter(r['piece'] for r in rows if r['kind']=='example')
     for p in sorted(r['name'] for r in rows if r['record']=='piece'):
         print(f'{p}\tremaining={counts[p]}\texamples={examples[p]}')
     if detail:
         for r in sorted(rows,key=lambda r:(r['piece'],r['name'])):
-            if r['record']=='declaration' and r['piece']!='BASE' and detail in ('all',r['piece']):
+            if r['record']=='declaration' and r['piece']!='BASE' and r['name'] not in landed and detail in ('all',r['piece']):
                 print(f'remaining\t{r["piece"]}\t{r["name"]}')
 
 
+def ensure_object(ref):
+    # Fetch object availability without moving refs, FETCH_HEAD or shallow boundaries.
+    try:
+        git('cat-file','-e',ref+'^{commit}')
+    except subprocess.CalledProcessError:
+        print(f'fetch pinned inventory source {ref}',flush=True)
+        git('fetch','--no-tags','--no-write-fetch-head','origin',ref)
+        git('cat-file','-e',ref+'^{commit}')
+
+
 def ensure_objects():
-    # Fresh CI checkouts need the historical extraction/evidence objects. Fetch exact commits
-    # into the object database only: never move a branch, tag, FETCH_HEAD, or shallow boundary.
     for ref in (SOURCE,BASE,EVIDENCE,DOSSIER):
-        try:
-            git('cat-file','-e',ref+'^{commit}')
-        except subprocess.CalledProcessError:
-            print(f'fetch pinned inventory source {ref}',flush=True)
-            git('fetch','--no-tags','--no-write-fetch-head','origin',ref)
-            git('cat-file','-e',ref+'^{commit}')
+        ensure_object(ref)
 
 
 def extract(root):
@@ -528,19 +737,33 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--write',action='store_true',help='explicitly regenerate initial plan assignments')
     parser.add_argument('--remaining', metavar='PIECE', help='list remaining declaration names for a piece, or all')
+    parser.add_argument('--census-output',type=Path,help='write fresh census JSONL for independent inspection; never read as a cache')
+    parser.add_argument('--record-landed',metavar='PIECE')
+    parser.add_argument('--landed-ref',metavar='SHA')
     args = parser.parse_args()
+    if bool(args.record_landed) != bool(args.landed_ref):
+        raise ValueError('--record-landed and --landed-ref are required together')
+    if args.write and args.record_landed:
+        raise ValueError('--write resets initial assignments; do not combine with --record-landed')
     if os.environ.get('CONCRETE_GATES_SHELL') != '1':
         raise ValueError('run inside nix develop -c')
+    if args.remaining and args.remaining not in PREREQS and args.remaining != 'all':
+        raise ValueError(f'unknown remaining piece: {args.remaining}')
+    check_census(ROOT/'scripts/spec/landing_inventory.lean')
     ensure_objects()
+    configure_migrations()
     print(f'landing inventory: source={SOURCE}; baseline={BASE}',flush=True)
     with tempfile.TemporaryDirectory(prefix='spec-landing-') as tmp:
         root = Path(tmp)
         extract(root)
-        data = census(root,ROOT/'scripts/spec/landing_inventory.lean')
-        if args.write:
-            write(generate(data))
-        rows = read()
-        judgment(rows,data,dependencies=False)
+        data = census(root,ROOT/'scripts/spec/landing_inventory.lean',regenerate_modules=REGENERATE_MODULES)
+        if args.census_output:
+            args.census_output.write_text(''.join(json.dumps(r,sort_keys=True)+'\n' for r in data))
+        rows = generate(data) if args.write else read()
+        if args.record_landed:
+            rows = record_landed(rows,args.record_landed,args.landed_ref)
+        closure = judgment(rows,data,dependencies=False)
+        verify_plan_boundaries(rows)
         # Coverage controls exercise the same judgment, never the generator.
         duplicate = next(r for r in rows if r['record']=='declaration')
         try:
@@ -552,32 +775,37 @@ def main():
         else:
             raise ValueError('duplicate control accepted')
         # Plant a real compiled module, enumerate it through exactly the production exporter.
-        control = root/'ConcreteSpec/InventoryControl.lean'
+        control_root = root/'control'
+        (control_root/'ConcreteSpec').mkdir(parents=True)
+        (control_root/'ConcreteSpec.lean').write_text('import ConcreteSpec.InventoryControl\n')
+        control = control_root/'ConcreteSpec/InventoryControl.lean'
         control.write_text('namespace ConcreteSpec.InventoryControl\ndef unassigned : Nat := 7\nend ConcreteSpec.InventoryControl\n')
-        env = dict(os.environ,LEAN_PATH=str(root))
-        run(['lean','-o',str(control.with_suffix('.olean')),str(control)],root,env)
-        mf = root/'control-modules.txt'
-        mf.write_text('ConcreteSpec.InventoryControl\n')
-        planted = [json.loads(s) for s in run(['lean','--run',str(ROOT/'scripts/spec/landing_inventory.lean'),
-            'constants',str(mf)],root,env).splitlines()]
-        # No command row is planted: demand failure on the real new constant specifically.
+        planted = census(control_root,ROOT/'scripts/spec/landing_inventory.lean')
+        command_assignments = [dict(r,piece='P',prerequisites=','.join(PREREQS['P']))
+                               for r in records_from_census(planted,control_root)
+                               if r['record']=='command']
+        update_contexts(command_assignments)
+        # Supply parsed commands so the coverage refusal must name the new declaration.
         try:
-            judgment(rows,data+planted)
+            judgment(rows+command_assignments,(data,planted),extra_root=control_root)
         except ValueError as exc:
             if str(exc) != 'unassigned declaration: ConcreteSpec.InventoryControl.unassigned':
                 raise
-            print('control PASS: planted unassigned declaration refused')
+            print('control PASS: planted unassigned declaration refused through census discovery')
         else:
             raise ValueError('unassigned control accepted')
         # A complete command assigned ahead of its scalar/execution prerequisites must fail
         # dependency order, rather than just the source-command atomicity check.
         scalar_names = {r['name'] for r in rows if r['record']=='declaration' and r['piece']=='F05'}
-        victim = next(r for r in rows if r['record']=='declaration' and r['piece']=='F06'
-                      and r['line']!='0' and scalar_names.intersection(json.loads(r['dependencies'])))
+        victim = next((r for r in rows if r['record']=='declaration' and r['piece']=='F06'
+                       and r['line']!='0' and scalar_names.intersection(json.loads(r['dependencies']))),None)
+        if victim is None:
+            raise ValueError('dependency-order control has no scalar-dependent command')
         bad = [dict(r) for r in rows]
         for r in bad:
-            if (r['source'],r['digest']) == (victim['source'],victim['digest']):
+            if (r['regeneration'] or command_identity(r)) == command_identity(victim):
                 r.update(piece='F03',prerequisites=','.join(PREREQS['F03']))
+        update_contexts(bad)
         try:
             judgment(bad,data)
         except ValueError as exc:
@@ -586,8 +814,60 @@ def main():
             print('control PASS: premature command assignment refused by dependency order')
         else:
             raise ValueError('dependency-order control accepted')
+        def refuse(mutated, prefix, label):
+            update_contexts(mutated)
+            try:
+                judgment(mutated,data)
+            except ValueError as exc:
+                if not str(exc).startswith(prefix):
+                    raise
+                print('control PASS: '+label)
+            else:
+                raise ValueError(label+' control accepted')
+
+        # A zero-range declaration must be proved present on the pinned baseline too.
+        absent = next((r for r in rows if r['record']=='declaration' and r['line']=='0'
+                       and r['name'] not in baseline_members()[1]),None)
+        if absent is None:
+            raise ValueError('baseline control has no nonbaseline auxiliary')
+        bad = [dict(r) for r in rows]
+        next(r for r in bad if r['record']=='declaration' and r['name']==absent['name']).update(piece='BASE',prerequisites='')
+        refuse(bad,'baseline assignment has no baseline declaration:','invalid zero-range BASE assignment refused')
+
+        # Exercise atomicity on one of the real identical-text command collisions.
+        groups = Counter((r['source'],r['digest']) for r in rows if r['record']=='command')
+        split = next((r for r in rows if r['record']=='declaration' and r['piece']!='BASE'
+                      and groups[(r['source'],r['digest'])]>1),None)
+        if split is None:
+            raise ValueError('split control has no identical-text command collision')
+        bad = [dict(r) for r in rows]
+        target = next(r for r in bad if r['record']=='declaration' and r['name']==split['name'])
+        target.update(piece='F40' if split['piece']!='F40' else 'F03')
+        target['prerequisites'] = ','.join(PREREQS[target['piece']])
+        refuse(bad,'split source command:','identical-text commands retain separate identities')
+
+        decls = {r['name']:r for r in rows if r['record']=='declaration'}
+        example = next((r for r in rows if r['kind']=='example' and r['piece']!='BASE'
+                        and any(decls[d]['piece'] not in closure['F03']|{'F03'} for d in json.loads(r['dependencies']))),None)
+        if example is None:
+            raise ValueError('anonymous-example control has no later dependency')
+        bad = [dict(r) for r in rows]
+        for r in bad:
+            if (r['regeneration'] or command_identity(r))==command_identity(example):
+                r.update(piece='F03',prerequisites=','.join(PREREQS['F03']))
+        refuse(bad,'piece dependency order refused:','anonymous example premature dependency refused')
+        unknown = False
+        try:
+            report(rows,'UNKNOWN-PIECE')
+        except ValueError as exc:
+            unknown = str(exc)=='unknown remaining piece: UNKNOWN-PIECE'
+        if not unknown:
+            raise ValueError('unknown remaining piece control accepted')
+        print('control PASS: unknown remaining piece refused')
         report(rows,args.remaining)
         judgment(rows,data)
+        if args.write or args.record_landed:
+            write(rows)
         print(f'landing inventory PASS: source={SOURCE}; baseline={BASE}')
 
 

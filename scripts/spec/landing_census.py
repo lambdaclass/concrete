@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import shutil
+import tempfile
 
 
 def run(args, cwd, env):
@@ -14,7 +16,17 @@ def run(args, cwd, env):
     return p.stdout
 
 
-def census(root, exporter):
+def census(root, exporter, examples=True, regenerate_modules=()):
+    # Never rewrite caller sources or artifacts, even when instrumentation fails.
+    with tempfile.TemporaryDirectory(prefix='landing-census-') as tmp:
+        scratch = Path(tmp)
+        shutil.copytree(Path(root)/'ConcreteSpec', scratch/'ConcreteSpec',
+                        ignore=shutil.ignore_patterns('*.olean', '*.ilean', '*.ir'))
+        shutil.copy2(Path(root)/'ConcreteSpec.lean', scratch/'ConcreteSpec.lean')
+        return _census(scratch, Path(exporter).resolve(), examples, regenerate_modules)
+
+
+def _census(root, exporter, include_examples, regenerate_modules):
     root = Path(root).resolve()
     env = dict(os.environ, LEAN_PATH=str(root))
     files = sorted(root.glob('ConcreteSpec/**/*.lean')) + [root / 'ConcreteSpec.lean']
@@ -60,6 +72,17 @@ def census(root, exporter):
     build()
     original = constants()
     records.extend(original)
+    requests = root/'inventory-realizations.txt'
+    requests.write_text('\n'.join(sorted(d['name'] for d in original if d['line']==0 and d['kind']=='theorem'))+'\n')
+    for m in order:
+        requested = str(requests) if m in regenerate_modules else '-'
+        records.extend(json.loads(s) for s in run(
+            ['lean', '--run', str(exporter), 'origins', modules[m], m, requested], root, env).splitlines())
+        if m in regenerate_modules:
+            records.append({'record':'command','file':modules[m], 'line':0,'endLine':0,
+                            'syntax':'module-realization','example':False})
+    if not include_examples:
+        return records
     names = {d['name'] for d in original}
     # Examples are erased from the persistent environment. Give each a private name in a
     # disposable second build; Lean still elaborates its exact binders/type/body/context.
@@ -73,7 +96,13 @@ def census(root, exporter):
             if body[pos:pos+7] != b'example':
                 raise ValueError(f'example token mismatch: {rel}:{pos}')
             marker = f'__landing_example_{pos}'
-            body = body[:pos] + f'private def {marker}'.encode() + body[pos+7:]
+            replacement = f'def {marker}'.encode()
+            insertion = c['noncomputableInsert'] if c['noncomputableInsert'] is not None else pos
+            if not c['noncomputable'] and insertion==pos:
+                replacement = b'noncomputable '+replacement
+            body = body[:pos] + replacement + body[pos+7:]
+            if not c['noncomputable'] and insertion<pos:
+                body = body[:insertion]+b'noncomputable '+body[insertion:]
             examples[(rel[:-5].replace('/','.'),marker)] = c
         (root/rel).write_bytes(body)
     build(instrumented=True)
