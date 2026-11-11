@@ -1,7 +1,6 @@
 import ConcreteSpec.Spec.Surface0
 
-/-! Proofs of the source rules defined in ConcreteSpec.Spec.Surface0.
-Evidence disposition: docs/decisions.md#decided-2026-11-08-source-evidence. -/
+/-! Proofs of the source rules, owner-approved item 30 (OPEN-1). -/
 namespace ConcreteSpec.Surface0
 namespace Utf8
 

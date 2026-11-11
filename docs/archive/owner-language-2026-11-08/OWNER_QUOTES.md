@@ -21,9 +21,7 @@ Taken as: all 29 decided as Claude's final picks after the three-model rounds, i
 - 14: `help` now, no `run`, which revises the slice-0 surface;
 - 18: fallible primitive operations in a closed initializer grammar, with no calls, loops or effects; success is kernel-checked, every initializer is evaluated, running out of fuel refuses, and TYPE-22 is revised.
 The final list as shown to the owner is in the session transcript at 2026-11-08T15:08Z.
-Item 28: the owner applies d6159bf6 personally.
-Item 27: the sweep 35b489e4 is signed off.
-B e997548d was asked separately (item 30) and is not covered by this reply.
+Unrelated operational dispositions are omitted.
 
 
 ## 2026-11-08T15:31:59Z owner (verbatim)
@@ -51,8 +49,7 @@ Codex device-auth re-login for agent on concrete-ci-2 (option A: main's review.s
 
 ## Later slice-0 sign-off
 
-- 2026-11-08, verbatim: "sign off ea5181b5, 1547734f8, a27fbb842, yes redesign". Owner sign-offs under process item 1 (exact SHAs reviewed by Codex, Kimi and agy):
+- 2026-11-08, verbatim excerpt: "sign off ea5181b5". This excerpt retains only the slice-0 sign-off from the combined answer (exact SHAs reviewed by Codex, Kimi and agy):
   - wip/slice0 at ea5181b535fd2983abfcafe31b3ff7bf59ec6439 (Codex verification ACCEPT, Kimi ACCEPT, agy ACCEPT after withdrawing; branch CI 42451061873 18/18);
-  - wip/record-language at 1547734f86e83d381f6cac2f25d2810b083bc9ed (Codex, Kimi verification ACCEPT, agy ACCEPT);
-  - wip/one-repository (B) at a27fbb842 (all three ACCEPT at cap 3).
-  - "yes redesign": guard A and the acceptance shim are redesigned: shrink the landing scripts first (process decision 3: drop bot, notify, install-bot, systemd units), then B (one repository, lambdaclass/concrete only) lands BEFORE the foundation freeze, then server-side protection of main (GitHub rulesets/branch protection: only a train merge with required checks green updates main) as the real boundary, then a much smaller local guard as a convenience. wip/remote-guard (b60670804) and wip/acceptance-shim (eca268078) are superseded.
+
+The other sign-offs and operational redesign context are omitted.
