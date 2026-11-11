@@ -183,16 +183,17 @@ while read -r c; do
   [ "$r" -le "$PREV_ROUNDS" ] || PREV_ROUNDS="$r"
   vrc=0
   bash "$SCRIPT_DIR/verify.sh" --required-base "$BASE_SHA" "$c" >/dev/null 2>&1 || vrc=$?
-  [ "$vrc" -le 1 ] || INSUFFICIENT_RANGE=1
   if [ -z "$PREV_SHA" ]; then
     PREV_SHA="$c" PREV_VERDICT="$v"
     if [ "$vrc" -le 1 ]; then PREV_VALID=1; fi
   fi
-  # Only a covering descendant review can supersede an ancestor's findings.
+  # Topological order visits covering descendants first. They supersede both
+  # ancestor findings and insufficient scope, but never uncovered merge siblings.
   covered=0
   for descendant in $COVERING_REVIEWS; do
     if git merge-base --is-ancestor "$c" "$descendant"; then covered=1; break; fi
   done
+  if [ "$covered" = 0 ] && [ "$vrc" -gt 1 ]; then INSUFFICIENT_RANGE=1; fi
   if [ "$covered" = 0 ] && [ "$v" != clean ]; then
     PREV_FINDINGS="$PREV_FINDINGS
 $(findings_for "$c" "$r")"

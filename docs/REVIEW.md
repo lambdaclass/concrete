@@ -27,7 +27,7 @@ it the same way every time, and its note is the record the landing train checks.
 
 ```sh
 scripts/review/review.sh [--base <ref>] [--head <ref>] [--max-rounds 5] [--pieces auto|N] [--prompt-extra "..."]
-scripts/review/verify.sh [--fetch] [--required-base <commit>] <commit>
+scripts/review/verify.sh [--fetch] [--notes-ref <ref>] [--required-base <commit>] <commit>
 ```
 
 One invocation runs **one round** on `HEAD`. Commit fixes between rounds; the
@@ -198,8 +198,8 @@ commit's review provenance ([LANDING.md](LANDING.md)); it approves no other comm
 ## verify.sh
 
 ```sh
-scripts/review/verify.sh --required-base <base> <commit> # exit 0 clean, 1 findings/blocked, 2 invalid
-scripts/review/verify.sh --fetch --required-base <base> <commit> # fetch origin notes first
+scripts/review/verify.sh [--notes-ref <ref>] --required-base <base> <commit> # exit 0 clean, 1 findings/blocked, 2 invalid
+scripts/review/verify.sh --fetch [--notes-ref <ref>] --required-base <base> <commit> # fetch origin notes first
 ```
 
 It judges the exact commit. A clean note on an ancestor says nothing about the
@@ -212,9 +212,9 @@ With `--required-base`, the note's base must be an ancestor-or-equal
 of the required commit; an unknown or insufficient base exits 2. This applies to
 clean, findings and blocked evidence alike. Incremental review ignores malformed
 notes and retains the maximum round count across all schema-valid notes in the
-branch history, including merge parents. Any insufficient-range evidence triggers
-a full review without resetting rounds or the cap; only a covering descendant
-review can supersede earlier findings.
+branch history, including merge parents. Uncovered insufficient-range evidence
+triggers a full review without resetting rounds or the cap. A covering descendant
+review supersedes earlier findings and narrow ancestor notes.
 Without this option, verification judges the note without a required range.
 `--notes-ref <ref>` explicitly selects the notes ref (default `refs/notes/concrete-review`);
 readiness uses the fetched `refs/notes/remote/concrete-review` snapshot.

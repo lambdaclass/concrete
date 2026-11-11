@@ -277,12 +277,12 @@ check "invalid range cannot reset exhausted cap" test "$rc" -eq 3 -a "$(calls)" 
 # Stacked notes must not conceal ancestor caps or unresolved findings.
 for mode in capped malformed uncapped merge; do
   g checkout -q -B "stack-$mode" "$RANGE_BASE"
-  commit_file ancestor.txt ancestor ancestor
+  commit_file ancestor.txt ancestor "ancestor-$mode"
   STACK_B="$(g rev-parse HEAD)"
   rounds=5; [ "$mode" != uncapped ] || rounds=2
   range_note findings "$rounds" "$RANGE_BASE"
   g notes --ref=concrete-review-findings add -f -m 'ANCESTOR_OPEN_FINDING' HEAD
-  commit_file child.txt child child
+  commit_file child.txt child "child-$mode"
   rounds=1; [ "$mode" != malformed ] || rounds=0
   range_note clean "$rounds" "$STACK_B"
   if [ "$mode" = merge ]; then
@@ -295,7 +295,7 @@ for mode in capped malformed uncapped merge; do
   reset_fake
   REVIEW_PUSH=0 review --base "$RANGE_BASE" >"$T/stack" 2>&1; rc=$?
   if [ "$mode" = uncapped ]; then
-    check "stacked narrow clean preserves round 3" test "$rc/$(field rounds)" = 0/3
+    check "stacked narrow clean preserves round 3" test "$rc/$(field rounds)" = 0/3 -a "$(calls)" -eq 1
     check "stacked narrow clean forces full review" grep -q '^+ancestor$' "$FAKE_LOG/stdin.1"
     check "stacked narrow clean carries ancestor findings" grep -q ANCESTOR_OPEN_FINDING "$FAKE_LOG/prompt.1"
   else
@@ -309,29 +309,74 @@ commit_file initial.txt initial initial
 range_note blocked 1 "$RANGE_BASE"
 reset_fake
 REVIEW_PUSH=0 review --base "$RANGE_BASE" >"$T/blocked-first" 2>&1; rc=$?
-check "covering first blocked round resumes at round 2" test "$rc/$(field rounds)" = 0/2
+check "covering first blocked round resumes at round 2" test "$rc/$(field rounds)" = 0/2 -a "$(calls)" -eq 1
 check "covering first blocked round has no false range diagnostic" test -z "$(grep 'prior review does not cover' "$T/blocked-first")"
 # A blocked round contributes its count, but never advances the delta start.
 for mode in narrow covering; do
   g checkout -q -B "blocked-$mode" "$RANGE_BASE"
-  commit_file prior.txt prior prior
+  commit_file prior.txt prior "prior-$mode"
   range_note clean 2 "$RANGE_BASE"
-  commit_file pending.txt pending pending
+  commit_file pending.txt pending "pending-$mode"
   BLOCKED_BASE="$(g rev-parse HEAD)"
-  commit_file blocked.txt blocked blocked
+  commit_file blocked.txt blocked "blocked-$mode"
   nb="$RANGE_BASE"; [ "$mode" != narrow ] || nb="$BLOCKED_BASE"
   range_note blocked 1 "$nb"
-  commit_file after.txt after after
+  commit_file after.txt after "after-$mode"
   reset_fake
   REVIEW_PUSH=0 review --base "$RANGE_BASE" >"$T/blocked-scope" 2>&1; rc=$?
   check "$mode blocked note preserves maximum round count" test "$rc/$(field rounds)" = 0/3
+  check "$mode blocked invokes reviewer once" test "$(calls)" -eq 1
+  check "$mode blocked reviewer diff exists" test -f "$FAKE_LOG/stdin.1"
   if [ "$mode" = narrow ]; then
     check "narrow blocked note forces full scope despite older clean" grep -q '^+prior$' "$FAKE_LOG/stdin.1"
   else
-    check "covering blocked note retains delta scope" test -z "$(grep '^+prior$' "$FAKE_LOG/stdin.1")"
+    for hunk in pending blocked after; do
+      check "covering blocked delta includes $hunk" grep -q "^+$hunk$" "$FAKE_LOG/stdin.1"
+    done
+    check "covering blocked note retains delta scope" bash -c '[ -f "$1" ] && ! grep -q "^+prior$" "$1"' _ "$FAKE_LOG/stdin.1"
     check "covering blocked note has no false range diagnostic" test -z "$(grep 'prior review does not cover' "$T/blocked-scope")"
   fi
 done
+# A completed covering review supersedes narrow ancestor scope, including at the cap.
+for verdict in clean findings; do
+  g checkout -q -B "recovered-$verdict" "$RANGE_BASE"
+  commit_file narrow.txt narrow "narrow-$verdict"
+  RECOVERY_MID="$(g rev-parse HEAD)"
+  commit_file old-scope.txt old-scope "old-scope-$verdict"
+  range_note clean 2 "$RECOVERY_MID"
+  commit_file covering.txt covering "covering-$verdict"
+  range_note "$verdict" 3 "$RANGE_BASE"
+  reset_fake
+  cap=5; expected=4
+  if [ "$verdict" = clean ]; then cap=3; expected=0; fi
+  REVIEW_PUSH=0 review --base "$RANGE_BASE" --max-rounds "$cap" >"$T/recovered" 2>&1; rc=$?
+  check "covering $verdict supersedes narrow ancestor shortcut" test "$rc" -eq "$expected" -a "$(calls)" -eq 0
+  if [ "$verdict" = clean ]; then reason='already reviewed clean'; else reason='HEAD already reviewed in round'; fi
+  check "covering $verdict shortcut gives intended reason" grep -q "$reason" "$T/recovered"
+  commit_file resumed.txt resumed "resumed-$verdict"
+  reset_fake
+  REVIEW_PUSH=0 review --base "$RANGE_BASE" >"$T/recovered" 2>&1; rc=$?
+  check "covering $verdict descendant calls reviewer once" test "$rc" -eq 0 -a "$(calls)" -eq 1
+  check "covering $verdict descendant logs diff" test -f "$FAKE_LOG/stdin.1"
+  check "covering $verdict descendant reviews new delta" grep -q '^+resumed$' "$FAKE_LOG/stdin.1"
+  check "covering $verdict descendant excludes superseded scope" bash -c '[ -f "$1" ] && ! grep -q "^+old-scope$" "$1"' _ "$FAKE_LOG/stdin.1"
+done
+# Coverage on one merge parent must not hide a narrow note on the other.
+g checkout -q -B uncovered-side "$RANGE_BASE"
+commit_file side-base.txt side-base side-base
+SIDE_BASE="$(g rev-parse HEAD)"
+commit_file uncovered.txt uncovered uncovered
+range_note clean 2 "$SIDE_BASE"
+g checkout -q -B covered-side "$RANGE_BASE"
+commit_file covered.txt covered covered
+range_note clean 2 "$RANGE_BASE"
+g merge -q --no-ff uncovered-side -m uncovered-merge
+reset_fake
+REVIEW_PUSH=0 review --base "$RANGE_BASE" >"$T/uncovered" 2>&1; rc=$?
+check "uncovered merge sibling calls reviewer once" test "$rc" -eq 0 -a "$(calls)" -eq 1
+check "uncovered merge sibling gives full-scope reason" grep -q 'prior review does not cover' "$T/uncovered"
+check "uncovered merge sibling includes already-covered parent" grep -q '^+covered$' "$FAKE_LOG/stdin.1"
+check "uncovered merge sibling includes narrow contribution" grep -q '^+side-base$' "$FAKE_LOG/stdin.1"
 g checkout -q range-controls
 # A real unrelated commit is syntactically valid but cannot cover the required base.
 UNRELATED="$(printf unrelated | g commit-tree "$(g rev-parse HEAD^{tree})")"
