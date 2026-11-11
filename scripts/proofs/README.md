@@ -1,7 +1,8 @@
-# Axiom property check and named-theorem golden
+# Proof checks and axiom-check design
 
-Status: design, 2026-11-09. This document records the target design; it does not
-change executable checking behavior. The current P/A/G contract remains documented
+Status: current toolchain documentation (2026-11-11) and axiom-check design
+(2026-11-09). The axiom-check design below does not change executable behavior.
+The current P/A/G contract remains documented
 in the header of `axioms.sh`, including its full per-theorem golden comparison.
 
 The governing owner decisions are 2026-11-08, “yes to 6 things”, item 2 (the
@@ -119,8 +120,8 @@ or replace checking independently generated equations.
 ## Interim state and implementation prerequisites
 
 Until compiler provenance is available and validated across imports, keep the
-current executable full-theorem golden check as an **interim** safeguard. This
-branch changes documentation and comments only. It introduces no baseline mode,
+current executable full-theorem golden check as an **interim** safeguard. The
+axiom-check design introduces no baseline mode,
 name-based filtering, manual allowlist, or helper-removal exception. The interim
 full golden is not the agreed end state.
 
@@ -178,7 +179,7 @@ realize equations or otherwise change the enumerated population.
 After implementation, run the property/golden gate and focused compiler-provenance
 fixtures under `nix develop` on concrete-ci-2, using `bounded_run` from
 `scripts/checks/lib/bounded.sh`. Record results against the exact candidate SHA
-and toolchain identity. This design round makes no runtime or implementation
+and toolchain identity. The axiom-check design makes no runtime or implementation
 acceptance claim. Compiler metadata remains within the existing compiler trust
 boundary; protection against hostile metaprograms forging it is not established
 by these checks.
@@ -195,8 +196,14 @@ file still declares 4.34.1). No theorem or compiler definition required a change
 The exporter is now the upstream v4.35.0 revision, matching our olean format.
 `lake_tool.sh` compares each revision's checked-in declaration with its pin,
 including on cache hits, and dispatches `elan run --install TOOLCHAIN lake build`
-without rewriting the declaration. The root `external_toolchain.sh` control
-plants a mismatched pin and requires refusal before a build can run.
+without rewriting the declaration. External tool installations use the cache-local
+`$CONCRETE_EXT_TOOLS/elan` home (or `~/.cache/concrete-ext/elan`), overriding
+ambient `ELAN_HOME` to protect shared user toolchains from Nix elan patching.
+Use `nix develop .#extcheck` for this gate; Rust is absent from the default shell.
+The required root `external_toolchain.sh` control invokes the production driver
+against local sources and executable stubs. It checks fresh dispatch, cache reuse,
+corrupted cache declarations, pin mismatches, exporter/project agreement, and
+isolation from ambient Lake, toolchain overrides and the shared elan home.
 
 R-0208's measured-build policies and receipts under `legacy/` describe the frozen
 compiler and remain historical evidence, as does `scripts/oracle/ORACLE.lock`.

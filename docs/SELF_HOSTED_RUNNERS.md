@@ -247,12 +247,16 @@ already handles, and what the host has to handle.
   An ephemeral runner in a fresh container or VM needs neither.
 - **`$HOME` caches** persist: `~/.elan` (the toolchain, keyed by `lean-toolchain`) and
   `~/.cache/concrete-ext`. In that cache, each tool is built into a directory named by its pinned
-  SHA and checked against it, and lean4export, which is rebuilt with this repository's toolchain,
-  also has that toolchain in its directory name. So a toolchain bump builds a new exporter instead of
-  reusing one that cannot read the new `.olean` files. Both caches are keyed by everything their
-  builds depend on, so keeping them between jobs makes runs faster without affecting correctness.
-  They live in the user's HOME, so each runner has its own. Old directories are never deleted; prune
-  `~/.cache/concrete-ext` now and then.
+  SHA and checked against it. Both Lake tools (lean4export and con-leche) also carry
+  their pinned toolchain in the directory name. Each revision's declared toolchain is verified
+  on cache hits and misses, and builds explicitly dispatch that toolchain through elan. The
+  exporter must match the project's toolchain to read its `.olean` files. External builds use
+  `~/.cache/concrete-ext/elan` as their isolated elan home, even if `ELAN_HOME` is set by the
+  runner: Nix elan can patch downloaded Linux binaries, so it must not modify shared `~/.elan`.
+  These Nix-patched external toolchains are build dependencies, not receipt checker identities.
+  The cache lives in the user's HOME, so each runner has its own. Old directories are never
+  deleted; prune `~/.cache/concrete-ext` now and then. Nix garbage collection can invalidate
+  patched toolchains; remove the cache-local `elan` directory to reinstall them if needed.
 - **Processes.** The runner kills a job's process tree when the job ends. A gate that leaves a
   daemon behind would survive on a persistent runner. That is one more reason to prefer ephemeral
   runners.

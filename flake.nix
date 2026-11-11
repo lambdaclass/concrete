@@ -114,13 +114,10 @@
             # failed in this shell while passing on CI, whose elan puts no clang on PATH.
             clang
             leanRelease
-            elan
-            cargo
-            rustc
           ] ++ gatesUserland;
         in {
-          # Default shell includes the pinned Lean toolchain and external-check builders. The
-          # second-kernel drivers (Rocq, Isabelle) are an opt-in spike and Isabelle
+          # Default shell includes the pinned Lean toolchain. External-check builders
+          # live in extcheck. The second-kernel drivers (Rocq, Isabelle) are an opt-in spike and Isabelle
           # is a multi-GB closure, so they live in a separate shell — no contributor
           # pays for them unless they run `--report multi-kernel`.
           default = pkgs.mkShell ({

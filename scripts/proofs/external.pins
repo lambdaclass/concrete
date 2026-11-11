@@ -9,7 +9,8 @@ LEAN4EXPORT_REV=5a9a355dc6c5fd82b69058d433e2ae2e8dfbf8fe
 # 3 declined; completeness 131 right, 0 wrong, 6 declined). Built with its own lean-toolchain
 # (v4.35.0, which carries the lean4#15288 thread-sharing fix); con-leche does not build with Lean
 # 4.34.1 at any of these revisions. The gate runs it with --jobs=1.
-# Revisions carried over unchanged from legacy/scripts/tests/external_checker.pins.
+# con-leche and nanoda revisions are unchanged from the frozen legacy pins;
+# lean4export advanced to v4.35.0 to match the project’s olean format.
 CONLECHE_TOOLCHAIN=leanprover/lean4:v4.35.0
 CONLECHE_URL=https://github.com/leanprover/con-leche
 CONLECHE_REV=ae1f31983ecd085c6140d0f8d433f23ee7eab72b

@@ -21,7 +21,7 @@ build_lake_tool() {
     verify_toolchain "$work" "$rev" "$tc" \
       || { rm -rf "$work"; return 1; }
     command -v elan >/dev/null || { echo "error: external Lean tools need elan" >&2; rm -rf "$work"; return 1; }
-    publish "$dir" elan run --install "$tc" lake build "$target" \
+    publish "$dir" env ELAN_HOME="$TOOLS/elan" elan run --install "$tc" lake build "$target" \
       || { rm -rf "$work"; return 1; }
   fi
   [ "$(git -C "$dir" rev-parse HEAD)" = "$rev" ] && verify_toolchain "$dir" "$rev" "$tc" || return 1
