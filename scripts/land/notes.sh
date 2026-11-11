@@ -16,7 +16,7 @@
 #                                           commit's note (fetch, rewrite, fast-forward push, retry)
 #   notes.sh ready <sha> [required-base]    verify review scope and gates (docs/REVIEW.md)
 #
-# <kind> is review or gates. LAND_REMOTE (default origin) names the remote; `fork` is refused.
+# <kind> is review or gates. LAND_REMOTE names the remote; see AGENTS.md, "Branches", for repository policy.
 # Writers: scripts/review/review.sh (review) and scripts/land/ready.sh (gates).
 # `put` never force-pushes: it rewrites on top of the remote's notes tip and retries on a race.
 set -euo pipefail

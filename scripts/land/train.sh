@@ -34,8 +34,8 @@
 #     lands only with an accepted acceptance rehearsal of that exact candidate (same train-head tree,
 #     same base) in <state>/rehearsals.tsv; see is_move_candidate and require_rehearsal. A dry run
 #     refused only by that gate exits 5.
-#   * pushes name the exact SHA, never `HEAD` (HEAD can move during a wait), and a
-#     remote named `fork` is refused outright.
+#   * pushes name the exact SHA, never `HEAD` (HEAD can move during a wait).
+#     Remote policy is defined in AGENTS.md, "Branches".
 #   * (2026-10-25) a push's exit status is not its result: GitHub drops the connection during a long
 #     hook, so a push can fail after the remote moved, or before. The train's push to ci/<name> and
 #     the push of `land` are followed by an `ls-remote` of the ref, and one that did not move it

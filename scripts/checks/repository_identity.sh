@@ -19,7 +19,7 @@ required = {
     'scripts/checks/workflow_yaml.sh', 'scripts/checks/lib/repository_identity.py',
     'scripts/checks/repository_identity.sh', 'scripts/land/move_prereqs.py',
     'scripts/land/train.sh', 'scripts/land/ready.sh', 'scripts/land/notes.sh',
-    'scripts/land/acceptance.sh', 'scripts/land/gates_transport_ssh.sh',
+    'scripts/land/acceptance.sh', 'scripts/land/gates_transport_ssh.sh', 'scripts/land/run-at-ref.sh',
     'scripts/review/review.sh', 'scripts/review/verify.sh',
 }
 assert not required - overlay, f'move overlay omits {sorted(required - overlay)}'
@@ -31,6 +31,9 @@ trap 'rm -rf "$TMP"' EXIT
 git init -q "$TMP/repo"
 git -C "$TMP/repo" config core.hooksPath "$TMP/nohooks"
 git -C "$TMP/repo" remote add origin "$TMP/local.git"
+# A real local bundle ensures stale-origin probes cannot pass merely on a missing input.
+git -C "$TMP/repo" -c user.name=Test -c user.email=test@example.com commit --allow-empty -qm fixture
+git -C "$TMP/repo" bundle create "$TMP/input.bundle" HEAD
 cd "$TMP/repo"
 old_owner=unbalancedparentheses
 mixed_owner=UnbalancedParentheses
@@ -64,12 +67,26 @@ for url in "${urls[@]}"; do
     fi
     [[ "$out" == *"archived repository destination refused"* ]] || { echo "$out" >&2; exit 1; }
   done
+  if out="$(RUN_AT_REF_REPO="$TMP/repo" RUN_AT_REF_SOURCE="$TMP/input.bundle" RUN_AT_REF_RUNS="$TMP/runs" \
+      bash "$ROOT_DIR/scripts/land/run-at-ref.sh" HEAD true 2>&1)"; then
+    echo "repository_identity: runner accepted stale origin with local bundle" >&2; exit 1
+  fi
+  [[ "$out" == *"archived repository destination refused"* ]] || { echo "$out" >&2; exit 1; }
+  [[ ! -e "$TMP/runs" ]] || { echo 'runner touched run state before refusal' >&2; exit 1; }
   git remote set-url origin "$TMP/local.git"
   git config --add remote.origin.pushurl "$url"
   if python3 -I "$ROOT_DIR/scripts/checks/lib/repository_identity.py" --remote origin 2>/dev/null; then exit 1; fi
   git config --unset-all remote.origin.pushurl
 done
+git remote set-url origin "$TMP/local.git"
 for name in fork lambdaclass; do
+  git remote add "$name" "$TMP/repo"
+  if out="$(RUN_AT_REF_REPO="$TMP/repo" RUN_AT_REF_SOURCE="$name" RUN_AT_REF_RUNS="$TMP/runs" \
+      bash "$ROOT_DIR/scripts/land/run-at-ref.sh" HEAD true 2>&1)"; then
+    echo "repository_identity: runner accepted remote $name" >&2; exit 1
+  fi
+  [[ "$out" == *"only origin is permitted"* ]] || { echo "$out" >&2; exit 1; }
+  [[ ! -e "$TMP/runs" ]] || { echo 'runner touched run state before refusal' >&2; exit 1; }
   if CONCRETE_SKIP_GATES=1 bash "$ROOT_DIR/.githooks/pre-push" "$name" "$TMP/local.git" </dev/null 2>/dev/null; then
     echo "repository_identity: hook accepted remote $name" >&2; exit 1
   fi
@@ -78,4 +95,13 @@ for url in "$TMP/local.git" https://github.com/lambdaclass/concrete.git ssh://gi
   git remote set-url origin "$url"
   CONCRETE_SKIP_GATES=1 bash "$ROOT_DIR/.githooks/pre-push" origin "$url" </dev/null >/dev/null 2>&1
 done
-echo 'repository_identity: hook, fetch, push, content and remote-name controls pass'
+# Both supported local transports and origin run the exact expected commit.
+git remote set-url origin "$TMP/repo"
+expected="$(git rev-parse HEAD)"
+cd "$TMP"
+for source in origin "$TMP/repo" "$TMP/input.bundle" input.bundle; do
+  out="$(RUN_AT_REF_REPO="$TMP/repo" RUN_AT_REF_SOURCE="$source" RUN_AT_REF_RUNS="$TMP/runs" RUN_AT_REF_NO_NIX=1 \
+    bash "$ROOT_DIR/scripts/land/run-at-ref.sh" HEAD 'git rev-parse HEAD')"
+  [[ "$out" == *"sha=$expected"* && "$out" == *"exit=0"* ]] || { echo "$out" >&2; exit 1; }
+done
+echo 'repository_identity: hook, runner, fetch, push, content and remote-name controls pass'

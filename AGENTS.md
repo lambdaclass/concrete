@@ -93,9 +93,9 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
 - Commit each validated slice. Push the branch to `wip/<branch>` at least every 5 minutes of work
   (`git push origin HEAD:refs/heads/wip/<branch>`); the hook's wip tier only scans for conflict
   markers.
-- Never push to `main`, `ci/*` or the remote `fork`. Landings go only to `origin`
-  (`lambdaclass/concrete`), through `scripts/land/train.sh`. Configure both fetch and all push URLs
-  for origin to that repository; there is no mirror.
+- Never push to `main` or `ci/*`. Only the remote name `origin` is permitted, with both fetch
+  and all push URLs targeting `lambdaclass/concrete`; there is no mirror. Landings go through
+  `scripts/land/train.sh`.
   `train.sh check` runs the checks before the push, and the push runs the root hook's full set again.
   The train reads back `ci/<name>` and `main` with `ls-remote` and retries dropped connections;
   `land` requires origin/main at the exact head.

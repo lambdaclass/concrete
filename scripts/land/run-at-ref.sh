@@ -10,7 +10,7 @@
 # hardlinks the objects, so it costs about what a worktree costs.
 #
 # Env: RUN_AT_REF_REPO (gate clone, default ~/concrete2), RUN_AT_REF_RUNS (default ~/runs),
-#      RUN_AT_REF_SOURCE (what to fetch from: a remote name, a path to a clone or a git bundle,
+#      RUN_AT_REF_SOURCE (what to fetch from: origin, a local clone path or a git bundle,
 #      default origin; scripts/land/gates_remote.sh passes a bundle so an unpublished train SHA can
 #      run), RUN_AT_REF_KEEP=1, RUN_AT_REF_NO_NIX=1 (run the command
 #      without `nix develop`: the landing gate's sandbox only).
@@ -25,6 +25,18 @@ CMD="$*"
 REPO="${RUN_AT_REF_REPO:-$HOME/concrete2}"
 RUNS="${RUN_AT_REF_RUNS:-$HOME/runs}"
 SRC="${RUN_AT_REF_SOURCE:-origin}"
+# Validate the clone before copying its objects or remote-tracking refs, including bundle runs.
+IDENTITY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../checks/lib/repository_identity.py"
+if git -C "$REPO" config --get-regexp '^remote\.origin\.' >/dev/null; then
+  (cd "$REPO" && python3 -I "$IDENTITY" --remote origin) || exit 1
+fi
+# Local bundles/clones are transport inputs, not alternate network authorities.
+if [ -e "$SRC" ]; then
+  # git -C resolves relative sources in REPO; fetch the same path we inspected here.
+  SRC="$(cd "$(dirname "$SRC")" && pwd)/$(basename "$SRC")"
+else
+  (cd "$REPO" && python3 -I "$IDENTITY" --remote "$SRC") || exit 1
+fi
 mkdir -p "$RUNS"
 ID="$(date -u +%Y%m%dT%H%M%S)-$$"; WT="$RUNS/$ID"
 cleanup() {
