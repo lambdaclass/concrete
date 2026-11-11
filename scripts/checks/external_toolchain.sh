@@ -46,17 +46,16 @@ set -eu
 [ "$1 $2 $3 $4 $5" = 'run --install leanprover/lean4:v4.35.0 lake build' ]
 case "$6" in lean4export|con-leche) ;; *) exit 90 ;; esac
 [ "$(cat lean-toolchain)" = leanprover/lean4:v4.35.0 ]
+mkdir -p "$ELAN_HOME"
+touch "$ELAN_HOME/tool-build"
 echo "$6" >> "$DISPATCH_LOG"
 CONTROL
 cat > "$TMP/bin/lake" <<'CONTROL'
 #!/usr/bin/env bash
 set -eu
-[ "$ELAN_HOME" = "$CONCRETE_EXT_TOOLS/elan" ]
+[ "$ELAN_HOME" = "$CALLER_ELAN_HOME" ]
 [ "${ELAN_TOOLCHAIN+x}" != x ]
 [ "${LEAN_PATH+x}" != x ]
-# Model a caller's elan proxy writing its home on the project build.
-mkdir -p "$ELAN_HOME"
-touch "$ELAN_HOME/project-build"
 # Only lib.sh's project prerequisite may use ambient Lake. A tool build must use elan.
 [ "$*" = 'build ConcreteSpec Concrete' ] && exit 0
 echo 'FAIL: ambient lake used for an external tool' >&2
@@ -89,21 +88,37 @@ if PATH="$TMP/proxies:$TMP/bin:$PATH" bash "$TMP/check-path" > "$TMP/negative" 2
 fi
 grep -qF 'proxy shadows caller: lake' "$TMP/negative"
 # Supply the caller PATH before entering Nix; checking inside observes Nix's additions.
-PATH="$TMP/bin:$PATH" bounded_run 120 -- nix develop "$ROOT#extcheck" -c bash "$TMP/check-path"
+rc=0
+PATH="$TMP/bin:$PATH" bounded_run 120 -- nix develop "$ROOT#extcheck" -c bash "$TMP/check-path" || rc=$?
+if bounded_is_incomplete "$rc"; then bounded_gate_status; exit 1; fi
+[ "$rc" = 0 ]
 export PATH="$TMP/bin:$PATH" DISPATCH_LOG="$TMP/dispatched"
 export CONCRETE_EXT_TOOLS="$TMP/tools" ELAN_HOME="$TMP/shared-elan"
 export ELAN_TOOLCHAIN=deliberately-conflicting-ambient-toolchain LEAN_PATH=/conflicting/lean/path
-export CONCRETE_EXT_ELAN="$TMP/bin/elan"
+export CONCRETE_EXT_ELAN="$TMP/bin/elan" CALLER_ELAN_HOME="$ELAN_HOME"
 mkdir -p "$ELAN_HOME"
 echo untouched > "$ELAN_HOME/sentinel"
 run_driver() {
-  local diagnostic=$1 rc=0
+  local diagnostic=$1 expected_rc=${2:-1} rc=0
   bounded_run 30 -- bash "$TMP/project/scripts/proofs/external.sh" > "$TMP/out" 2>&1 || rc=$?
-  if bounded_is_incomplete "$rc" || [ "$rc" != 1 ] || ! grep -qF "$diagnostic" "$TMP/out"; then
+  if bounded_is_incomplete "$rc"; then bounded_gate_status; exit 1; fi
+  if [ "$rc" != "$expected_rc" ] || ! grep -qF "$diagnostic" "$TMP/out"; then
     cat "$TMP/out"; echo "FAIL: expected refusal at $diagnostic, rc=$rc"; exit 1
   fi
 }
+# Round-3 negative control: a global isolated home must fail the caller proxy.
+cp "$TMP/project/scripts/proofs/external.sh" "$TMP/driver"
+sed '/^CHECK_NAME=PROOF-EXTERNAL/i export ELAN_HOME="$TOOLS/elan"' "$TMP/driver" > "$TMP/project/scripts/proofs/external.sh"
+run_driver 'lake build ConcreteSpec Concrete failed' 2
+cp "$TMP/driver" "$TMP/project/scripts/proofs/external.sh"
+# Round-2 negative control: unscoped tool elan writes must fail before dispatch.
+cp "$TMP/project/scripts/proofs/lake_tool.sh" "$TMP/builder"
+sed 's/ELAN_HOME="$TOOLS\/elan" //' "$TMP/builder" > "$TMP/project/scripts/proofs/lake_tool.sh"
+run_driver 'could not build lean4export'
+[ ! -e "$DISPATCH_LOG" ]
+cp "$TMP/builder" "$TMP/project/scripts/proofs/lake_tool.sh"
 run_driver 'could not build nanoda'
+[ -f "$CONCRETE_EXT_TOOLS/elan/tool-build" ]
 grep -qF 'CONTROL: reached Rust build boundary' "$TMP/out"
 printf 'lean4export\ncon-leche\n' > "$TMP/expected"
 cmp "$TMP/expected" "$DISPATCH_LOG"

@@ -252,7 +252,8 @@ already handles, and what the host has to handle.
   on cache hits and misses, and builds explicitly dispatch that toolchain through elan. The
   exporter must match the project's toolchain to read its `.olean` files. External builds use
   `~/.cache/concrete-ext/elan` as their isolated elan home, even if `ELAN_HOME` is set by the
-  runner, including during the project build. Ambient `ELAN_TOOLCHAIN` and `LEAN_PATH`
+  runner, only during pinned Lean tool builds. Project builds and queries retain the
+  caller’s ELAN_HOME unchanged. Ambient `ELAN_TOOLCHAIN` and `LEAN_PATH`
   are cleared. The extcheck shell passes elan by absolute path without adding its
   Lean/Lake proxies to PATH, preserving the caller’s toolchain. Nix elan can patch
   downloaded Linux binaries, so it must not modify shared `~/.elan`.

@@ -1,4 +1,19 @@
 #!/usr/bin/env bash
+# Toolchain isolation contract:
+# Project builds, population queries and exporter execution use the caller's Lake on PATH
+# and the caller's ELAN_HOME unchanged. ELAN_TOOLCHAIN and LEAN_PATH are cleared so the
+# project's lean-toolchain governs resolution.
+# Only pinned Lean tool builds use ELAN_HOME=$TOOLS/elan, via CONCRETE_EXT_ELAN
+# (absolute Nix elan in .#extcheck; otherwise the caller's elan). No elan proxies are
+# added to PATH. nanoda is built with cargo, without changing the caller's ELAN_HOME.
+# TOOLS defaults to ~/.cache/concrete-ext: it contains isolated elan installations,
+# source/build trees keyed by tool revision + declared toolchain (nanoda: revision),
+# and .built completion markers. CI's outer cache key additionally includes external.pins,
+# lake_tool.sh, lean-toolchain, flake.nix and flake.lock, including Nix patching identity.
+# Project preparation precedes the cache lock. Tool installation/build/publication and
+# verification hold TOOLS/.lock; after unlocking only finished tool artifacts are read,
+# never the isolated elan home. Builds publish private trees by rename.
+#
 # INDEPENDENT RE-CHECK: every theorem of the specification exported with lean4export and re-checked
 # by two checkers that share no code with the Lean kernel or with each other.
 #
@@ -29,27 +44,16 @@
 #   N  names whose dotted spellings collide, and a non-ASCII one, are encoded apart and alike by both
 #      renderers (every comparison is by that injective encoding).
 #
-# Tools are built once per pinned SHA into $CONCRETE_EXT_TOOLS (default ~/.cache/concrete-ext):
-# lean4export and con-leche with their declared, pinned toolchains (explicit elan dispatch; the
-# exporter must match this project to read its .olean files), nanoda with cargo. CI runs this
-# script in `nix develop .#extcheck`, which adds Rust and supplies an explicit elan
-# executable without PATH proxies.
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/../checks/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
-# Isolate before lib.sh builds the project: the caller's Lake may itself be an
-# elan proxy. Neither that build nor the external builders may write shared elan state.
 TOOLS="${CONCRETE_EXT_TOOLS:-$HOME/.cache/concrete-ext}"
-export ELAN_HOME="$TOOLS/elan"
 unset ELAN_TOOLCHAIN LEAN_PATH
-# The cache is shared by every run of this user on the machine (a self-hosted runner's HOME persists,
-# and worktrees share it): building holds an exclusive lock on it, builds in a private directory and
-# publishes the finished one with a rename, so no run sees, or removes, another's half-built tool.
-mkdir -p "$TOOLS" && exec 9> "$TOOLS/.lock" && flock 9 \
-  || { echo "error: cannot lock the tool cache $TOOLS" >&2; exit 2; }
 CHECK_NAME=PROOF-EXTERNAL
 source scripts/proofs/lib.sh
+mkdir -p "$TOOLS" && exec 9> "$TOOLS/.lock" && flock 9 \
+  || { echo "error: cannot lock the tool cache $TOOLS" >&2; exit 2; }
 # A pre-push hook in a linked worktree exports repository-local Git variables; without clearing
 # them, `git -C "$tool" rev-parse HEAD` reads this repository's HEAD instead of the tool's
 # (the sandbox helper, ISS-0015).
