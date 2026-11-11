@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Readiness notes (docs/LANDING.md, "Readiness"). A branch is ready to land when its head
-# commit carries BOTH notes, published on the primary remote:
+# commit carries BOTH notes, published on origin:
 #
 #   refs/notes/concrete-review   verdict: clean|findings|blocked   rounds: N   reviewer: codex   utc: ...
 #                                base: <sha>   pieces: N   (format owned by scripts/review/review.sh and
@@ -24,7 +24,7 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REMOTE="${LAND_REMOTE:-origin}"
 DRY="${LAND_NOTES_DRY:-0}"
 die() { echo "notes: $*" >&2; exit 1; }
-[ "$REMOTE" != fork ] || die "refusing the remote named 'fork'"
+python3 -I "$SELF_DIR/../checks/lib/repository_identity.py" --remote "$REMOTE" || exit 1
 
 kind_ok() { case "$1" in review|gates) ;; *) die "kind must be review or gates, not '$1'" ;; esac; }
 

@@ -190,10 +190,8 @@ else, it stops at once. A retry to main is still a plain push, a fast-forward or
 hook runs the full root set again. The reset of `ci/<name>` to the base skips the hook and is
 not retried; a failure there stops `ci` before anything is dispatched.
 
-The sole remote is `origin`, configured to fetch and push only `lambdaclass/concrete`.
-A remote named `fork` is refused. There is no mirror or mirror opt-out. The root
-`scripts/push-both.sh` helper is retired; its frozen legacy copy is historical.
-Queue and protection changes belong to the next implementation stage.
+Repository destinations and publication rules are defined in [AGENTS.md](../AGENTS.md#rules).
+The retired root `scripts/push-both.sh` remains only as frozen historical evidence in `legacy/`.
 
 ### bisect
 
@@ -384,7 +382,7 @@ The server was shared with other full runs at a load average of 15 to 32.
 | variable | default | meaning |
 |---|---|---|
 | `LAND_REPO` | `lambdaclass/concrete` | repository for `gh` |
-| `LAND_REMOTE` | `origin` | sole remote (origin, targeting lambdaclass/concrete) |
+| `LAND_REMOTE` | `origin` | see [repository rules](../AGENTS.md#rules) |
 | `LAND_CAMPAIGN_JOBS` | `^(Gate mutation\|Weekly clean-checkout proof replay\|Nightly differential fuzz\|Checker pin freshness \(campaign finding\))` | job names in the campaign tier; the default must match exactly the workflow's campaign jobs (`check_landing_script.sh`) |
 | `LAND_STATE_DIR`, `LAND_LOG_DIR` | under the git common directory | state and log location |
 | `LAND_NO_NIX` | unset | `1` never re-enters `nix develop` |

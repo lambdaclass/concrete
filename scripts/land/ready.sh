@@ -30,7 +30,7 @@ done
 [ -n "$branch" ] || die "name the pushed branch (e.g. wip/my-fix)"
 cd "$(git rev-parse --show-toplevel)"
 REMOTE="${LAND_REMOTE:-origin}"
-[ "$REMOTE" != fork ] || die "refusing the remote named 'fork'"
+python3 -I "$(dirname "${BASH_SOURCE[0]}")/../checks/lib/repository_identity.py" --remote "$REMOTE" || exit 1
 [ -z "$(git status --porcelain --untracked-files=no)" ] || die "the work tree has uncommitted changes"
 land_assert_no_op start
 git fetch -q "$REMOTE"

@@ -98,6 +98,7 @@ REPO="${LAND_REPO:-lambdaclass/concrete}"
 GH="${LAND_GH:-gh}"
 REMOTE="${LAND_REMOTE:-origin}"
 HOOK="${LAND_HOOK:-.githooks/pre-push}"
+python3 -I "$SELF_DIR/../checks/lib/repository_identity.py" --remote "$REMOTE" || exit 1
 # Must name exactly the workflow's campaign jobs (an `if:` on `inputs.campaign`, and the jobs that `needs:`
 # one): check_landing_script.sh derives that set from lean_action_ci.yml and fails on any difference.
 # The root has no campaign tier yet; a campaign job, when one returns, is named "Campaign: ...".
@@ -122,11 +123,6 @@ assert_clean() {
   fi
 }
 
-refuse_fork() {
-  case "$1" in
-    fork) die "refusing to push to the remote named 'fork' (it is a divergent repository)" ;;
-  esac
-}
 
 valid_name() {
   case "$1" in
@@ -405,7 +401,6 @@ remote_leg() { # name head
   runner="$(remote_runner)"
   ref="$head"
   if [ "${LAND_REMOTE_PUSH:-1}" = 1 ]; then
-    refuse_fork "$REMOTE"
     # One ref per run, created only if absent (no --force), so concurrent checks never share one.
     # Created only if ABSENT. An empty lease is not enough: git reports a ref that already holds
     # this SHA as "up to date" (success) before it looks at the lease, so ownership is taken only
@@ -632,7 +627,6 @@ cmd_ci() {
   done
   valid_name "$name"
   require_train_checkout "$name"
-  refuse_fork "$REMOTE"
   stage_start
   local base head; base="$(state_get "$name" base)"; head="$(git rev-parse HEAD)"
   if [ "$(state_get_soft "$name" checked)" != "$head" ]; then
@@ -964,7 +958,6 @@ cmd_land() {
   done
   valid_name "$name"
   require_train_checkout "$name"
-  refuse_fork "$REMOTE"
   stage_start
   local base head id; base="$(state_get "$name" base)"; head="$(git rev-parse HEAD)"
   id="$(state_get "$name" run_id)"

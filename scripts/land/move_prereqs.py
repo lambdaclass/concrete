@@ -1,7 +1,7 @@
 """Landing prerequisites P2 and P4 of the legacy/ move (scripts/land/legacy_move.sh), judged on content.
 
   move_prereqs.py workflow FILE...   exit 0 when some FILE is a workflow with a schedule trigger and,
-                                     in a job with no `if`, `needs` or continue-on-error, a step with
+                                     in a sole-repository guarded job with no `needs` or continue-on-error, a step with
                                      no `if`, `shell` or continue-on-error, under a bash shell that
                                      fails on error, whose whole run is the single line
                                      `bash scripts/oracle/build.sh` (rebuild from the tag and verify)
@@ -36,7 +36,7 @@ def workflow_ok(text):
     on = doc.get("on", doc.get(True))
     if not (isinstance(on, dict) and on.get("schedule")):
         return ["no schedule trigger"]
-    # One narrow form, so nothing can hide it: an unconditional job with an unconditional step whose
+    # One narrow form, so nothing can hide it: a sole-repository guarded job with an unconditional step whose
     # whole run script is the single line `bash scripts/oracle/build.sh`.
     # The job has no `needs` (a skipped dependency would skip it), and the step's effective shell is
     # bash failing on error: GitHub's default, or one of the SHELLS below set as a workflow or job
@@ -47,8 +47,11 @@ def workflow_ok(text):
     if not shell_ok(doc):
         return ["the workflow's default shell is not one that runs the script and fails on error"]
     for job in (doc.get("jobs") or {}).values():
-        if (not isinstance(job, dict) or "if" in job or job.get("continue-on-error") or "needs" in job
-                or not shell_ok(job)):
+        if not isinstance(job, dict):
+            continue
+        condition = str(job.get("if", "")).strip().removeprefix('${{').removesuffix('}}').strip()
+        if (condition != "github.repository == 'lambdaclass/concrete'"
+                or job.get("continue-on-error") or "needs" in job or not shell_ok(job)):
             continue
         for step in job.get("steps") or []:
             if (not isinstance(step, dict) or "if" in step or step.get("continue-on-error")
@@ -57,7 +60,7 @@ def workflow_ok(text):
             run = step.get("run")
             if isinstance(run, str) and run.strip() == "bash scripts/oracle/build.sh":
                 return []
-    return ["no unconditional step whose run is exactly `bash scripts/oracle/build.sh` in an unconditional job"]
+    return ["no unconditional step whose run is exactly `bash scripts/oracle/build.sh` in a sole-repository guarded job"]
 
 
 SITE_PLACEHOLDER = re.compile(r"(?i)\b(todo|tbd|fixme|xxx|placeholder|pending|unknown)\b")
@@ -108,7 +111,7 @@ def site_ok(text):
     return out
 
 
-GOOD_WF = """on:\n  schedule:\n    - cron: "0 3 * * 1"\njobs:\n  r:\n    runs-on: x\n    steps:\n      - run: bash scripts/oracle/build.sh\n"""
+GOOD_WF = """on:\n  schedule:\n    - cron: "0 3 * * 1"\njobs:\n  r:\n    if: github.repository == 'lambdaclass/concrete'\n    runs-on: x\n    steps:\n      - run: bash scripts/oracle/build.sh\n"""
 GOOD_SITE = ("decision: P9 (owner, 2026-11-05)\nbuild: book.yml stops with the move (archived)\n"
              "deployment: https://a.example.io/x/ and https://b.example.io/y/ (GitHub Pages)\n"
              "unpublish: gh api -X DELETE repos/a/x/pages; gh api -X DELETE repos/b/y/pages\n"
@@ -127,7 +130,9 @@ def self_test():
     expect("--record only", workflow_ok(GOOD_WF.replace("build.sh", "build.sh --record")), False)
     expect("unscheduled", workflow_ok(GOOD_WF.replace("schedule", "workflow_dispatch")), False)
     expect("step if: false", workflow_ok(GOOD_WF.replace("      - run:", "      - if: false\n        run:")), False)
-    expect("job if: false", workflow_ok(GOOD_WF.replace("    runs-on: x", "    if: false\n    runs-on: x")), False)
+    expect("job if: false", workflow_ok(GOOD_WF.replace("github.repository == 'lambdaclass/concrete'", "false")), False)
+    expect("missing repository guard", workflow_ok(GOOD_WF.replace("    if: github.repository == 'lambdaclass/concrete'\n", "")), False)
+    expect("guard bypass", workflow_ok(GOOD_WF.replace("github.repository == 'lambdaclass/concrete'", "github.repository == 'lambdaclass/concrete' || true")), False)
     expect("step continue-on-error", workflow_ok(GOOD_WF.replace("      - run:", "      - continue-on-error: true\n        run:")), False)
     expect("job needs a skipped job", workflow_ok(GOOD_WF.replace("  r:\n", "  d:\n    if: false\n    runs-on: x\n    steps:\n      - run: true\n  r:\n    needs: d\n")), False)
     expect("step shell echo", workflow_ok(GOOD_WF.replace("      - run:", "      - shell: 'echo {0}'\n        run:")), False)

@@ -38,6 +38,7 @@ done
 [ $# -eq 1 ] || { echo "usage: verify.sh [--fetch] [--notes-ref <ref>] [--required-base <commit>] <commit>" >&2; exit 2; }
 
 if [ "$FETCH" = 1 ]; then
+  python3 -I "$(dirname "${BASH_SOURCE[0]}")/../checks/lib/repository_identity.py" --remote "$REMOTE" || exit 2
   git fetch -q "$REMOTE" "+$NOTES_REF:$NOTES_REF" \
     || { echo "verify: could not fetch $NOTES_REF from $REMOTE" >&2; exit 2; }
 fi

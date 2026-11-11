@@ -27,14 +27,8 @@ if [ "$#" = 1 ] && [ "$1" = --concrete-identify ]; then
   echo "concrete-pre-push $(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/$(basename "${BASH_SOURCE[0]}")"
   exit 0
 fi
-# origin is the sole repository, lambdaclass/concrete. Refuse stale source endpoints even
-# for backup/evidence pushes and even when gates are explicitly skipped.
-archived_owner=unbalancedparentheses
-case "${2:-}" in
-  *github.com[:/]"$archived_owner"/concrete2|*github.com[:/]"$archived_owner"/concrete2.git)
-    echo "pre-push: archived repository destination refused; configure origin as lambdaclass/concrete" >&2
-    exit 1 ;;
-esac
+# Validate before every tier, including explicit gate bypasses.
+python3 -I "$(dirname "$HOOK_SELF")/../scripts/checks/lib/repository_identity.py" --remote "${1:-origin}" "${2:-}" || exit 1
 ROOT_DIR="$(git rev-parse --show-toplevel)"
 cd "$ROOT_DIR"
 

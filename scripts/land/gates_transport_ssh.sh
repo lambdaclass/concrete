@@ -26,6 +26,7 @@ trap 'rm -rf "$tmp"' EXIT
 mkdir -p "$tmp/$id/scripts/land" "$tmp/$id/scripts/checks/lib"
 cp "$bundle" "$tmp/$id/c.bundle" && cp "$SELF_DIR/run-at-ref.sh" "$tmp/$id/scripts/land/run-at-ref.sh" \
   && cp "$SELF_DIR/../checks/lib/git_sandbox.sh" "$tmp/$id/scripts/checks/lib/git_sandbox.sh" \
+  && cp "$SELF_DIR/../checks/lib/repository_identity.py" "$tmp/$id/scripts/checks/lib/repository_identity.py" \
   || { echo "transport: cannot stage the bundle" >&2; exit 255; }
 {
   echo '#!/usr/bin/env bash'
@@ -43,6 +44,7 @@ cp "$bundle" "$tmp/$id/c.bundle" && cp "$SELF_DIR/run-at-ref.sh" "$tmp/$id/scrip
   # A gate clone is a work tree whose top level is $gc (a clone, or a worktree whose .git is a file).
   echo 'top="$(git -C "$gc" rev-parse --show-toplevel 2>/dev/null)"'
   echo '[ -n "$top" ] && [ "$(cd "$gc" && pwd -P)" = "$(cd "$top" && pwd -P)" ] || { echo "transport: no gate clone at $gc for $who (RUN_AT_REF_REPO); is the ssh destination the gate user?" >&2; exit 255; }'
+  echo '(cd "$gc" && python3 -I "$dir/scripts/checks/lib/repository_identity.py" --remote origin) || exit 255'
   echo 'git -C "$gc" fetch -q origin || { echo "transport: fetch in the gate clone failed" >&2; exit 255; }'
   printf 'RUN_AT_REF_SOURCE="$dir/c.bundle" bash "$dir/scripts/land/run-at-ref.sh" %q %q\n' "$ref" "$cmd"
 } > "$tmp/$id/run.sh"

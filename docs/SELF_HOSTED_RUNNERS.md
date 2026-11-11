@@ -86,8 +86,8 @@ gh variable set CONCRETE_SELF_HOSTED_CAMPAIGN --body true -R lambdaclass/concret
 
 The variable is read when a run starts. Runs already queued keep the routing they started with.
 
-**lambdaclass/concrete** is the sole repository. Repository variables and runners must be
-registered there; copied Git refs do not migrate registration or routing configuration.
+Following the [repository rules](../AGENTS.md#rules), repository variables and runners must be
+registered on the destination; copied Git refs do not migrate registration or routing configuration.
 Use `https://github.com/lambdaclass/concrete` for registration. The frozen nightly workflow
 under legacy/ is historical and is not an active campaign scheduler.
 

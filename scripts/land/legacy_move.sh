@@ -68,6 +68,9 @@ OVERLAY=(README.md CHANGELOG.md required-checks.txt required-checks-transition.t
   .claude/commands/cstatus.md scripts/land/move_prereqs.py
   docs/archive/bugs-2026-11/README.md docs/archive/bugs-2026-11/bug_disposition.tsv
   # Sole-repository migration: overlay current tools and guidance after historical rewrites.
+  scripts/checks/workflow_yaml.sh .claude/commands/land.md docs/proposals/SPEC_UNIFICATION.md
+  scripts/land/ready.sh scripts/land/notes.sh scripts/land/gates_transport_ssh.sh
+  scripts/review/review.sh scripts/review/verify.sh
   RETENTION.tsv AGENTS.md docs/LANDING.md docs/REVIEW.md docs/SELF_HOSTED_RUNNERS.md
   scripts/checks/landing_script.sh scripts/checks/landing_ready.sh scripts/checks/retention_manifest.sh
   scripts/checks/repository_identity.sh scripts/checks/lib/repository_identity.py
