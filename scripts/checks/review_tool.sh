@@ -194,6 +194,13 @@ check "note: rounds 2, verdict clean" test "$(field rounds)/$(field verdict)" = 
 (cd "$W" && bash "$VERIFY" HEAD >"$T/v" 2>&1); rc=$?
 check "verify.sh: clean exit 0 (got $rc)" test "$rc" -eq 0
 check "verify.sh prints the verdict" grep -q "clean (round 2" "$T/v"
+(cd "$W" && bash "$VERIFY" --required-base "$BASE" HEAD >"$T/vr" 2>&1); rc=$?
+check "verify.sh accepts a note based at the required base" test "$rc" -eq 0
+(cd "$W" && bash "$VERIFY" --required-base "$R1" HEAD >"$T/vr" 2>&1); rc=$?
+check "verify.sh accepts a note based before the required base" test "$rc" -eq 0
+(cd "$W" && bash "$VERIFY" --required-base missing-required-base HEAD >"$T/vr" 2>&1); rc=$?
+check "verify.sh refuses an unknown required base" test "$rc" -eq 2
+check "unknown required base has its own diagnostic" grep -q 'required base is not a commit' "$T/vr"
 (cd "$W" && bash "$VERIFY" "$R1" >/dev/null 2>&1); rc=$?
 check "verify.sh judges the exact commit, not the branch (R1 still 1)" test "$rc" -eq 1
 review >/dev/null 2>&1; rc=$?
@@ -244,6 +251,9 @@ B40="$(printf '%040d' 0 | tr 0 a)"
 g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nbase: %s\npieces: 1\nutc: 2026-10-22T00:00:00Z' "$B40")" HEAD
 (cd "$W" && bash "$VERIFY" HEAD >"$T/vc" 2>&1); rc=$?
 check "a note with utc last verifies clean (exit 0, got $rc)" test "$rc" -eq 0
+(cd "$W" && bash "$VERIFY" --required-base HEAD HEAD >"$T/vr" 2>&1); rc=$?
+check "verify.sh refuses a syntactically valid but unknown note base" test "$rc" -eq 2
+check "unknown note base fails for range coverage" grep -q 'review range does not cover required base' "$T/vr"
 # The landing bot's keys went with it: a verdict carried across a rebase, or a landing order, is no
 # longer a key a review note may hold.
 for extra in "carried-from: $B40" "order: 1"; do

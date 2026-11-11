@@ -110,7 +110,7 @@ sha_of(){ git --git-dir="$TMP/origin.git" rev-parse "refs/heads/$1"; }
 mark(){ # branch [review-verdict] [gates] [extra review key=value]
   local s; s="$(sha_of "$1")"
   ( cd "$A" && git fetch -q origin \
-    && bash "$NOTES" put review "$s" verdict="${2:-clean}" rounds=1 reviewer=codex base="$s" pieces=1 ${4:+"$4"} >/dev/null \
+    && bash "$NOTES" put review "$s" verdict="${2:-clean}" rounds=1 reviewer=codex base="$(git -C "$W" rev-parse origin/main)" pieces=1 ${4:+"$4"} >/dev/null \
     && bash "$NOTES" put gates "$s" gates="${3:-pass}" selected=3 >/dev/null ) || no "mark $1"
 }
 land_refs(){ git --git-dir="$TMP/origin.git" for-each-ref --format='%(refname)' 'refs/heads/wip/land-*'; }

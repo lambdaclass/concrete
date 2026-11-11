@@ -466,7 +466,8 @@ review_cmd() {
 # REVIEW PROVENANCE (fail closed; docs/LANDING.md, "check" and "land"). A train is reviewed when its
 # head carries a clean review note, or when its head carries no review note and every member carries
 # one at its exact recorded SHA (each member was reviewed at its own head: a train
-# built or rebuilt from reviewed branches). Every note is judged by scripts/review/verify.sh, on
+# built or rebuilt from reviewed branches). Each note base must be an ancestor-or-equal of the
+# recorded train base, so its range covers the whole change being landed. Every note is judged by scripts/review/verify.sh, on
 # $REMOTE's notes (fetched first, replacing the local copy, as verify.sh --fetch does): an absent,
 # malformed, blocked or findings note qualifies nothing, and a head note that is not clean is not
 # overridden by its members. Prints what qualified; on failure prints why and returns 1.
@@ -505,11 +506,12 @@ pure_merge() {
   [ "$cur" = "$base" ] || echo "${head:0:10} is not the clean merge of its members onto ${base:0:10}: the merges start at ${cur:0:10}"
 }
 review_provenance() { # name head
-  local name="$1" head="$2" out m n=0 bad=""
+  local name="$1" head="$2" out m n=0 bad="" base
+  base="$(state_get_soft "$name" base)"
   [ -f "$VERIFY" ] || { echo "no review verifier ($VERIFY is missing)"; return 1; }
   git fetch -q "$REMOTE" "+refs/notes/concrete-review:refs/notes/concrete-review" 2>/dev/null \
     || { echo "could not fetch refs/notes/concrete-review from $REMOTE"; return 1; }
-  if out="$(bash "$VERIFY" "$head" 2>&1)"; then echo "the head ${head:0:10} carries a clean review note"; return 0; fi
+  if out="$(bash "$VERIFY" --required-base "$base" "$head" 2>&1)"; then echo "the head ${head:0:10} carries a clean review note"; return 0; fi
   if git notes --ref=refs/notes/concrete-review show "$head" >/dev/null 2>&1; then
     echo "the head's review note does not qualify: ${out//$'\n'/ }"; return 1
   fi
@@ -518,7 +520,7 @@ review_provenance() { # name head
     || { echo "could not fetch refs/owner-signoff/* from $REMOTE"; return 1; }
   for m in $(state_get_soft "$name" members | tr ',' ' '); do
     n=$((n + 1)); shas+=("${m##*@}")
-    out="$(bash "$VERIFY" "${m##*@}" 2>&1)" && continue
+    out="$(bash "$VERIFY" --required-base "$base" "${m##*@}" 2>&1)" && continue
     if so="$(bash "$SIGNOFF" verify "${m##*@}" --base "$(state_get_soft "$name" base)" 2>&1)"; then signed=$((signed + 1)); continue; fi
     bad="$bad; member ${m%@*}: ${out//$'\n'/ }; ${so//$'\n'/ }"
   done

@@ -27,7 +27,7 @@ it the same way every time, and its note is the record the landing train checks.
 
 ```sh
 scripts/review/review.sh [--base <ref>] [--head <ref>] [--max-rounds 5] [--pieces auto|N] [--prompt-extra "..."]
-scripts/review/verify.sh [--fetch] <commit>
+scripts/review/verify.sh [--fetch] [--required-base <commit>] <commit>
 ```
 
 One invocation runs **one round** on `HEAD`. Commit fixes between rounds; the
@@ -196,13 +196,17 @@ commit's review provenance ([LANDING.md](LANDING.md)); it approves no other comm
 ## verify.sh
 
 ```sh
-scripts/review/verify.sh <commit>          # exit 0 clean, 1 findings/blocked, 2 none or malformed
-scripts/review/verify.sh --fetch <commit>  # fetch the notes ref from origin first
+scripts/review/verify.sh --required-base <base> <commit> # exit 0 clean, 1 findings/blocked, 2 invalid
+scripts/review/verify.sh --fetch --required-base <base> <commit> # fetch origin notes first
 ```
 
 It judges the exact commit. A clean note on an ancestor says nothing about the
 commits after it, so a branch that gains a commit after its clean round needs
-another round.
+another round. With `--required-base`, the note's base must be an ancestor-or-equal
+of the required commit; an unknown or insufficient base exits 2. Landing supplies
+the train's recorded base (origin/main at build time) for both head and member
+notes, so a clean verdict over only an intermediate range cannot qualify.
+Without this option, verification judges the note without a required range.
 
 ## Tests
 

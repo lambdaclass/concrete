@@ -89,7 +89,8 @@ verdict; any failing leg fails the check (see [Pipelining](#pipelining)).
 - **review** (fails closed): the leg passes at once when the train already has **review
   provenance**: a clean review note at its head or, when the head has no note, a clean note on every
   member at its exact recorded SHA (each member was reviewed at its own head). Each note is judged by
-  `scripts/review/verify.sh` on origin's notes; an absent, malformed, blocked or findings note
+  `scripts/review/verify.sh --required-base` on origin's notes, using the
+  [review range rule](REVIEW.md#verifysh) against the recorded train base; an absent, malformed, blocked or findings note
   qualifies nothing, and a head note that is not clean is not overridden by the members. A member
   without a clean note qualifies instead by an **owner sign-off** at its exact SHA (R-0618: a branch
   at the review-round cap of its diff's class, approved by the owner after Codex, Kimi and agy all
