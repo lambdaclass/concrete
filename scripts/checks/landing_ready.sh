@@ -149,6 +149,24 @@ out="$(cd "$A" && LAND_REVIEW_CMD=true bash "$ROOT_DIR/scripts/land/ready.sh" wi
 [ "$rc" = 0 ] && [ "$(cd "$A" && bash "$NOTES" get gates "$(sha_of wip/rv2)" gates)" = pass ] \
   && ok "passing legs publish gates: pass and the head becomes ready" || { no "ready.sh pass: exit $rc"; echo "$out" | sed 's/^/      /'; }
 
+echo "=== ISS-0019: readiness checks schema and range ==="
+for mode in intermediate self malformed; do
+  mk "wip/range-$mode" hidden "src/hidden-$mode" hidden
+  MID="$(sha_of "wip/range-$mode")"
+  mk "wip/range-$mode" visible "src/visible-$mode" visible "$MID"
+  RH="$(sha_of "wip/range-$mode")"
+  nb="$MID"; [ "$mode" != self ] || nb="$RH"
+  (cd "$A" && bash "$NOTES" put review "$RH" verdict=clean rounds=1 reviewer=codex base="$nb" pieces=1 >/dev/null && bash "$NOTES" put gates "$RH" gates=pass >/dev/null)
+  if [ "$mode" = malformed ]; then
+    (cd "$A" && bash "$NOTES" put review "$RH" verdict=clean >/dev/null)
+  fi
+  out="$(cd "$A" && bash "$NOTES" ready "$RH" 2>&1)"; rc=$?
+  reason='review range does not cover required base'; [ "$mode" != malformed ] || reason='malformed review note'
+  [ "$rc" = 2 ] && has "$out" "$reason" && ok "notes ready rejects $mode evidence for $reason" || { no "notes ready $mode: $rc $out"; }
+  out="$(cd "$A" && bash "$ROOT_DIR/scripts/land/ready.sh" --no-review --no-remote "wip/range-$mode" 2>&1)"; rc=$?
+  [ "$rc" = 2 ] && has "$out" "$reason" && ok "ready --no-review rejects $mode evidence for $reason" || { no "ready $mode: $rc $out"; }
+done
+
 echo "=== bisect --ci: a red CI run names the culprit, each probe its own run ==="
 mk wip/cired cired CIRED red; mark wip/cired
 mk wip/g3 g3 src/g3.txt g3; mark wip/g3

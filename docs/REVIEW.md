@@ -6,8 +6,8 @@ Every branch is reviewed by `scripts/review/review.sh` before it lands. The
 script picks the diff, splits it, runs the reviewer, records the verdict as a
 git note on the reviewed commit, and enforces the round cap.
 `scripts/review/verify.sh` validates that note. The landing tools in `scripts/land/`
-([LANDING.md](LANDING.md)) read its verdict through `scripts/land/notes.sh`: a branch is
-ready to land only when its head carries a clean review note.
+([LANDING.md](LANDING.md)) use that verifier, including for readiness and sign-off
+evidence; see the [range contract](#verifysh).
 
 ## Why one script
 
@@ -58,7 +58,9 @@ uncommitted tree is never reviewed, and the script warns when it is dirty.
   script finds that commit by walking the branch (`base..HEAD`) for the newest
   note under `refs/notes/concrete-review`. The prompt includes the previous
   round's findings and asks the reviewer to list each one that is still open.
-  If the last reviewed commit does not descend from the current base (for
+  Only notes satisfying the [range contract](#verifysh) can advance the delta
+  start or skip an already-clean HEAD. Otherwise the round reviews the full
+  `base..HEAD` diff. If the last reviewed commit does not descend from the current base (for
   example, after merging newer main changes), the round reviews the full
   `base..HEAD` diff instead. This excludes changes imported from the base and
   includes merge resolutions. It preserves the round count and cap; the prompt
@@ -202,11 +204,17 @@ scripts/review/verify.sh --fetch --required-base <base> <commit> # fetch origin 
 
 It judges the exact commit. A clean note on an ancestor says nothing about the
 commits after it, so a branch that gains a commit after its clean round needs
-another round. With `--required-base`, the note's base must be an ancestor-or-equal
-of the required commit; an unknown or insufficient base exits 2. Landing supplies
-the train's recorded base (origin/main at build time) for both head and member
-notes, so a clean verdict over only an intermediate range cannot qualify.
+another round. All consumers use this verifier for schema and range validation:
+landing supplies the recorded train base, sign-off supplies its diff base for
+`rounds-at`, readiness supplies its selected base (`notes.sh ready` defaults to
+`origin/main`), and incremental review supplies its current review base.
+With `--required-base`, the note's base must be an ancestor-or-equal
+of the required commit; an unknown or insufficient base exits 2. This applies to
+clean, findings and blocked evidence alike. Invalid prior
+review evidence triggers a full review without resetting rounds or the cap.
 Without this option, verification judges the note without a required range.
+`REVIEW_NOTES_REF` selects the notes ref (default `refs/notes/concrete-review`);
+readiness uses the fetched `refs/notes/remote/concrete-review` snapshot.
 
 ## Tests
 

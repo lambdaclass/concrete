@@ -326,7 +326,9 @@ A branch is **ready** when all of the following hold:
 | `refs/notes/concrete-review` | `verdict: clean\|findings\|blocked`, `rounds: N`, `reviewer: codex`, `utc: ...`, `base: <sha>`, `pieces: N` | `scripts/review/review.sh` (`scripts/review/verify.sh` reads it) |
 | `refs/notes/concrete-gates` | `gates: pass\|fail`, `selected: N`, `utc: ...` | `scripts/land/ready.sh` |
 
-One `key: value` per line; when a key repeats, the last line wins. `scripts/land/notes.sh` reads and
+One `key: value` per line. Review notes must satisfy the schema and
+[range contract](REVIEW.md#verifysh); gates keys use the last value when repeated.
+`scripts/land/notes.sh` reads and
 writes the notes (`get`, `put`, `ready`). `put` builds each write on its own temporary ref on top
 of the remote's notes tip, pushes that commit without force, and retries on a race. Concurrent
 writers therefore never drop each other's notes, including writers that share one clone or its

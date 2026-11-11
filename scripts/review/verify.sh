@@ -17,7 +17,7 @@
 
 set -euo pipefail
 
-NOTES_REF="refs/notes/concrete-review"
+NOTES_REF="${REVIEW_NOTES_REF:-refs/notes/concrete-review}"
 REMOTE="${REVIEW_REMOTE:-origin}"
 FETCH=0
 REQUIRED_BASE=""

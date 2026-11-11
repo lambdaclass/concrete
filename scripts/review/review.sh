@@ -166,6 +166,7 @@ fi
 # Latest note on the branch (round count), and the latest note whose round
 # actually reviewed its diff (delta start). A `blocked` round reviewed only part
 # of its diff, so it does not advance the delta start.
+PREV_VALID=0 REVIEWED_VALID=0
 PREV_SHA="" PREV_ROUNDS=0 PREV_VERDICT="" REVIEWED_SHA="" REVIEWED_ROUNDS=0 REVIEWED_VERDICT=""
 while read -r c; do
   [ -n "$c" ] || continue
@@ -173,11 +174,20 @@ while read -r c; do
   v="$(note_field "$n" verdict)"
   r="$(note_field "$n" rounds)"
   [[ "$r" =~ ^[0-9]+$ ]] || continue
-  if [ -z "$PREV_SHA" ]; then PREV_SHA="$c" PREV_ROUNDS="$r" PREV_VERDICT="$v"; fi
-  if [ "$v" = clean ] || [ "$v" = findings ]; then REVIEWED_SHA="$c" REVIEWED_ROUNDS="$r" REVIEWED_VERDICT="$v"; break; fi
+  vrc=0
+  bash "$SCRIPT_DIR/verify.sh" --required-base "$BASE_SHA" "$c" >/dev/null 2>&1 || vrc=$?
+  if [ -z "$PREV_SHA" ]; then
+    PREV_SHA="$c" PREV_ROUNDS="$r" PREV_VERDICT="$v"
+    if [ "$vrc" -le 1 ]; then PREV_VALID=1; fi
+  fi
+  if [ "$v" = clean ] || [ "$v" = findings ]; then
+    REVIEWED_SHA="$c" REVIEWED_ROUNDS="$r" REVIEWED_VERDICT="$v"
+    if [ "$vrc" -le 1 ]; then REVIEWED_VALID=1; fi
+    break
+  fi
 done < <(git rev-list --topo-order HEAD "^$BASE_SHA")
 
-if [ "$PREV_SHA" = "$HEAD_SHA" ] && [ "$PREV_VERDICT" != blocked ]; then
+if [ "$PREV_VALID" = 1 ] && [ "$PREV_SHA" = "$HEAD_SHA" ] && [ "$PREV_VERDICT" != blocked ]; then
   if [ "$PREV_VERDICT" = clean ]; then
     echo "review: HEAD $HEAD_SHA already reviewed clean (round $PREV_ROUNDS)"
     exit 0
@@ -199,13 +209,15 @@ fi
 
 FROM="${REVIEWED_SHA:-$BASE_SHA}"
 FULL_REVIEW=0
-if [ -n "$REVIEWED_SHA" ] && ! git merge-base --is-ancestor "$BASE_SHA" "$REVIEWED_SHA"; then
-  # An old review predates changes imported from base. Comparing it directly
+if { [ "$REVIEWED_VALID" = 0 ] && [ -n "$PREV_SHA" ]; } ||
+   { [ -n "$REVIEWED_SHA" ] && ! git merge-base --is-ancestor "$BASE_SHA" "$REVIEWED_SHA"; }; then
+  # Missing range coverage or an old review predating changes imported from base
+  # requires full review. Comparing an old commit directly
   # with HEAD would review base's changes too. Re-review the branch's complete
   # current contribution, including merge resolutions, without resetting rounds.
   FROM="$BASE_SHA"
   FULL_REVIEW=1
-  echo "review: last reviewed commit does not descend from base; reviewing full base..HEAD diff (round $ROUND)" >&2
+  echo "review: prior review does not cover current branch scope; reviewing full base..HEAD diff (round $ROUND)" >&2
 fi
 git diff --no-color --no-ext-diff -M "$FROM" "$HEAD_SHA" >"$WORK/full.diff"
 if [ ! -s "$WORK/full.diff" ]; then

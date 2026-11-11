@@ -239,6 +239,64 @@ g checkout -q feature
 g branch -f main origin/main
 reset_fake
 
+echo "=== ISS-0019: prior review ranges cannot hide branch changes ==="
+g checkout -q -b range-controls origin/main
+RANGE_BASE="$(g rev-parse HEAD)"
+commit_file hidden.txt hidden hidden
+RANGE_MID="$(g rev-parse HEAD)"
+commit_file visible.txt visible visible
+range_note() {
+  g notes --ref=concrete-review add -f -m "$(printf 'verdict: %s\nrounds: %s\nreviewer: codex\nutc: 2026-11-11T00:00:00Z\nbase: %s\npieces: 1' "$1" "$2" "$3")" HEAD
+}
+for verdict in clean findings blocked; do
+  range_note "$verdict" 1 "$RANGE_MID"
+  reset_fake
+  REVIEW_PUSH=0 review --base "$RANGE_BASE" >"$T/range" 2>&1; rc=$?
+  check "HEAD $verdict intermediate note triggers full review" test "$rc" -eq 0 -a "$(calls)" -eq 1
+  check "HEAD $verdict full review includes hidden change" grep -q '^+hidden$' "$FAKE_LOG/stdin.1"
+  check "HEAD $verdict fallback preserves rounds" test "$(field rounds)" = 2
+done
+range_note clean 1 "$RANGE_MID"
+commit_file later.txt later later
+reset_fake
+REVIEW_PUSH=0 review --base "$RANGE_BASE" >"$T/range" 2>&1; rc=$?
+check "ancestor intermediate note triggers full review" test "$rc" -eq 0 -a "$(calls)" -eq 1
+check "ancestor fallback includes hidden and new changes" grep -q 'files=hidden.txt,later.txt,visible.txt,' "$FAKE_LOG/calls"
+# A train merge may have no tree delta from the inadequately reviewed member.
+range_note clean 1 "$RANGE_MID"
+MERGE_HEAD="$(printf merge | g commit-tree "$(g rev-parse HEAD^{tree})" -p "$(g rev-parse HEAD)" -p "$RANGE_BASE")"
+g reset -q --hard "$MERGE_HEAD"
+reset_fake
+REVIEW_PUSH=0 review --base "$RANGE_BASE" >"$T/range" 2>&1; rc=$?
+check "identical-tree train merge falls back instead of nothing-to-review" test "$rc" -eq 0 -a "$(calls)" -eq 1
+check "identical-tree fallback includes unreviewed contribution" grep -q '^+hidden$' "$FAKE_LOG/stdin.1"
+range_note clean 5 "$RANGE_MID"
+reset_fake
+REVIEW_PUSH=0 review --base "$RANGE_BASE" >"$T/range" 2>&1; rc=$?
+check "invalid range cannot reset exhausted cap" test "$rc" -eq 3 -a "$(calls)" -eq 0
+# A real unrelated commit is syntactically valid but cannot cover the required base.
+UNRELATED="$(printf unrelated | g commit-tree "$(g rev-parse HEAD^{tree})")"
+range_note clean 1 "$UNRELATED"
+(cd "$W" && bash "$VERIFY" --required-base "$RANGE_BASE" HEAD >"$T/vr" 2>&1); rc=$?
+check "real non-ancestor note base exits 2 with range reason" test "$rc" -eq 2 -a -n "$(grep 'review range does not cover required base' "$T/vr")"
+for args in missing empty flag; do
+  case "$args" in
+    missing) (cd "$W" && bash "$VERIFY" --required-base >"$T/vr" 2>&1) ;;
+    empty) (cd "$W" && bash "$VERIFY" --required-base '' HEAD >"$T/vr" 2>&1) ;;
+    flag) (cd "$W" && bash "$VERIFY" --required-base --fetch HEAD >"$T/vr" 2>&1) ;;
+  esac; rc=$?
+  check "$args required-base argument exits 2 with argument reason" test "$rc" -eq 2 -a -n "$(grep -E 'needs a commit|required base is not a commit' "$T/vr")"
+done
+# Both endpoints exist, but the path between them is shallowly truncated.
+range_note clean 1 "$RANGE_BASE"
+g clone -q --no-local --depth 1 --branch range-controls "$W" "$T/shallow"
+git -C "$T/shallow" fetch -q --depth 1 "$W" "$RANGE_BASE"
+git -C "$T/shallow" fetch -q "$W" refs/notes/concrete-review:refs/notes/concrete-review
+(cd "$T/shallow" && bash "$VERIFY" --required-base HEAD HEAD >"$T/vr" 2>&1); rc=$?
+check "shallow ancestry fails closed with range reason" test "$rc" -eq 2 -a -n "$(grep 'review range does not cover required base' "$T/vr")"
+g checkout -q feature
+reset_fake
+
 echo "=== verify.sh: missing and malformed notes ==="
 commit_file x.txt "x" "unreviewed"
 (cd "$W" && bash "$VERIFY" HEAD >/dev/null 2>&1); rc=$?

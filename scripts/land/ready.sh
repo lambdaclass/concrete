@@ -92,4 +92,4 @@ bash "$SELF_DIR/notes.sh" put gates "$head" "${kv[@]}"
 bash "$SELF_DIR/notes.sh" fetch
 verdict="$(bash "$SELF_DIR/notes.sh" get review "$head" verdict)"
 echo "ready: ${head:0:10} gates=$gates review=${verdict:-none}"
-[ "$gates" = pass ] && [ "$verdict" = clean ]
+[ "$gates" = pass ] && bash "$SELF_DIR/notes.sh" ready "$head" "$base"
