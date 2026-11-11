@@ -142,7 +142,8 @@
           gates = pkgs.mkShellNoCC ({ packages = gatesUserland; } // gatesMarker);
 
           # External builders add Rust and a C linker, but no Lean/Lake proxy shims.
-          # Only build_lake_tool invokes Nix elan, by absolute path with an isolated home.
+          # Nix elan supplies cache identity via --version; pinned Lean tool builds invoke it
+          # by absolute path with an identity-keyed isolated home.
           # The project's Lake and Lean remain those supplied by the caller.
           extcheck = pkgs.mkShell ({
             packages = gatesUserland ++ [ pkgs.cargo pkgs.rustc ];

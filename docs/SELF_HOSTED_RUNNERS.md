@@ -247,11 +247,10 @@ already handles, and what the host has to handle.
   An ephemeral runner in a fresh container or VM needs neither.
 - **`$HOME` caches** persist: `~/.elan` (the toolchain, keyed by `lean-toolchain`) and
   `~/.cache/concrete-ext`. In that cache, each tool is built into a directory named by its pinned
-  SHA and checked against it. Both Lake tools (lean4export and con-leche) also carry
-  their pinned toolchain in the directory name. Each revision's declared toolchain is verified
-  on cache hits and misses, and builds explicitly dispatch that toolchain through elan. The
+  SHA, toolchain, recipe hash and elan identity, and checked against it. Each Lake tool's
+  declared toolchain is verified on cache hits and misses; builds dispatch it through elan. The
   exporter must match the project's toolchain to read its `.olean` files. External builds use
-  `~/.cache/concrete-ext/elan` as their isolated elan home, even if `ELAN_HOME` is set by the
+  `~/.cache/concrete-ext/elan-<identity>` as their isolated elan home, even if `ELAN_HOME` is set by the
   runner, only during pinned Lean tool builds. Project builds and queries retain the
   caller’s ELAN_HOME unchanged. Ambient `ELAN_TOOLCHAIN` and `LEAN_PATH`
   are cleared. The extcheck shell passes elan by absolute path without adding its
@@ -259,11 +258,11 @@ already handles, and what the host has to handle.
   downloaded Linux binaries, so it must not modify shared `~/.elan`.
   These Nix-patched external toolchains are build dependencies, not receipt checker identities.
   The cache lives in the user's HOME, so each runner has its own. Old directories are never
-  deleted; prune `~/.cache/concrete-ext` now and then. Nix garbage collection can invalidate
-  patched toolchains; CI keys this cache on `flake.nix` and `flake.lock` as well as
-  the pins, builder and project toolchain. On persistent runners, remove the entire
-  `~/.cache/concrete-ext` cache after such invalidation so both toolchains and compiled
-  tools rebuild against the current Nix store.
+  deleted; prune `~/.cache/concrete-ext` now and then. The resolved elan path and version
+  identify both isolated homes and every tool tree on hosted and persistent runners.
+  Switching between Nix and upstream elan, or changing its Nix store path, selects fresh trees.
+  All build recipes, including the nanoda stack patch, live in `lake_tool.sh`; its content
+  hash also keys every tool tree. CI additionally keys the archive on both flake files.
 - **Processes.** The runner kills a job's process tree when the job ends. A gate that leaves a
   daemon behind would survive on a persistent runner. That is one more reason to prefer ephemeral
   runners.

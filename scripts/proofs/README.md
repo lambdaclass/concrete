@@ -197,7 +197,7 @@ The exporter is now the upstream v4.35.0 revision, matching our olean format.
 `lake_tool.sh` compares each revision's checked-in declaration with its pin,
 including on cache hits, and dispatches `elan run --install TOOLCHAIN lake build`
 without rewriting the declaration. External tool installations use the cache-local
-`$CONCRETE_EXT_TOOLS/elan` home (or `~/.cache/concrete-ext/elan`), overriding
+`${CONCRETE_EXT_TOOLS}/elan-<identity>` home (or `~/.cache/concrete-ext/elan-<identity>`), overriding
 ambient `ELAN_HOME` only for pinned tool builds, to protect shared user toolchains
 from Nix elan patching. Project builds and queries retain the caller’s `ELAN_HOME`.
 Both `ELAN_TOOLCHAIN` and `LEAN_PATH` are cleared.
@@ -209,8 +209,13 @@ against local sources and executable stubs. It checks fresh dispatch, cache reus
 corrupted cache declarations, pin mismatches, exporter/project agreement, and
 isolation from ambient Lake, toolchain overrides and the shared elan home.
 It checks the actual extcheck PATH and rejects a simulated proxy leak as a negative
-control, and rejects global-home redirection and unscoped tool builds. CI keys the external cache on the pins, builder, project toolchain and
-both Nix flake files.
+control, and rejects global-home redirection, redirection after locking, premature locking
+and unscoped tool builds. All post-build stubs assert the caller home and an unlocked
+cache; build stubs assert the locked phase. The full driver completes, including fidelity and corruption
+controls, using the production inventory reader and synthetic checker inputs. Resolved
+elan path/version keys isolated homes and all tool trees, whose keys also include the toolchain and the hash
+of the self-contained `lake_tool.sh` recipes (including the nanoda stack patch). CI keys
+the external cache on the pins, builder, project toolchain and both Nix flake files.
 
 R-0208's measured-build policies and receipts under `legacy/` describe the frozen
 compiler and remain historical evidence, as does `scripts/oracle/ORACLE.lock`.

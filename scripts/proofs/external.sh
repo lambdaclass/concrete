@@ -3,13 +3,13 @@
 # Project builds, population queries and exporter execution use the caller's Lake on PATH
 # and the caller's ELAN_HOME unchanged. ELAN_TOOLCHAIN and LEAN_PATH are cleared so the
 # project's lean-toolchain governs resolution.
-# Only pinned Lean tool builds use ELAN_HOME=$TOOLS/elan, via CONCRETE_EXT_ELAN
+# Only pinned Lean tool builds use an identity-keyed cache-local ELAN_HOME, via CONCRETE_EXT_ELAN
 # (absolute Nix elan in .#extcheck; otherwise the caller's elan). No elan proxies are
 # added to PATH. nanoda is built with cargo, without changing the caller's ELAN_HOME.
 # TOOLS defaults to ~/.cache/concrete-ext: it contains isolated elan installations,
-# source/build trees keyed by tool revision + declared toolchain (nanoda: revision),
+# source/build trees keyed by revision, toolchain, recipe hash and resolved elan path/version,
 # and .built completion markers. CI's outer cache key additionally includes external.pins,
-# lake_tool.sh, lean-toolchain, flake.nix and flake.lock, including Nix patching identity.
+# lake_tool.sh, lean-toolchain, flake.nix and flake.lock. Local keys also separate elan builds.
 # Project preparation precedes the cache lock. Tool installation/build/publication and
 # verification hold TOOLS/.lock; after unlocking only finished tool artifacts are read,
 # never the isolated elan home. Builds publish private trees by rename.
@@ -66,20 +66,15 @@ EXPECT_FORMAT=3.1.0
 INV="python3 scripts/proofs/export_inventory.py"
 TOOLCHAIN="$(cat lean-toolchain)"
 
-# publish DIR BUILD-COMMAND… → runs the command in DIR.partial.$$ (already cloned) and renames it to DIR
-publish() {
-  local dir=$1 work="$1.partial.$$"; shift
-  (cd "$work" && "$@" >&2) && touch "$work/.built" && rm -rf "$dir" && mv "$work" "$dir"
-}
 . scripts/proofs/lake_tool.sh
 
 echo "=== P: pinned tools ==="
 [ "$LEAN4EXPORT_TOOLCHAIN" = "$TOOLCHAIN" ] \
   || { no "exporter pin $LEAN4EXPORT_TOOLCHAIN differs from project $TOOLCHAIN"; finish; }
-EXPORT_DIR=$(build_lake_tool lean4export "$LEAN4EXPORT_URL" "$LEAN4EXPORT_REV" "$LEAN4EXPORT_TOOLCHAIN" lean4export) \
+EXPORT_DIR=$(build_lake_tool "$TOOLS" lean4export "$LEAN4EXPORT_URL" "$LEAN4EXPORT_REV" "$LEAN4EXPORT_TOOLCHAIN" lean4export) \
   && ok "lean4export at $LEAN4EXPORT_REV, built with $TOOLCHAIN" \
   || { no "could not build lean4export at $LEAN4EXPORT_REV"; finish; }
-CHECK_DIR=$(build_lake_tool con-leche "$CONLECHE_URL" "$CONLECHE_REV" "$CONLECHE_TOOLCHAIN" con-leche) \
+CHECK_DIR=$(build_lake_tool "$TOOLS" con-leche "$CONLECHE_URL" "$CONLECHE_REV" "$CONLECHE_TOOLCHAIN" con-leche) \
   && ok "con-leche at $CONLECHE_REV, built with $CONLECHE_TOOLCHAIN" \
   || { no "could not build con-leche at $CONLECHE_REV"; finish; }
 EXPORTER="$EXPORT_DIR/.lake/build/bin/lean4export"
@@ -91,20 +86,10 @@ DIRECT=$(grep -nE '^[^#]*"\$CONLECHE"' "$0" | grep -v 'CONLECHE_FLAGS\[@\]')
 [ "${CONLECHE_FLAGS[*]}" = "--verified --jobs=1" ] && [ -z "$DIRECT" ] \
   && ok "con-leche runs as --verified --jobs=1 at every call site" \
   || no "con-leche flags are [${CONLECHE_FLAGS[*]}]; direct calls: $(echo $DIRECT | cut -c1-200)"
-NANODA_DIR="$TOOLS/nanoda-$NANODA_REV"
-if [ ! -f "$NANODA_DIR/.built" ]; then
-  command -v cargo >/dev/null || { echo "error: building nanoda needs cargo (nix develop .#extcheck)" >&2; exit 2; }
-  W="$NANODA_DIR.partial.$$"; rm -rf "$W"
-  # The thread stack is raised from 16 MiB to 256 MiB exactly as the Lean Kernel Arena patches it.
-  { git clone -q "$NANODA_URL" "$W" && git -C "$W" checkout -q "$NANODA_REV" \
-    && has_match -F 'STACK_SIZE: usize = 16_777_216;' < "$W/src/lib.rs" \
-    && sed -i.orig 's/STACK_SIZE: usize = 16_777_216;/STACK_SIZE: usize = 268_435_456;/' "$W/src/lib.rs" \
-    && publish "$NANODA_DIR" cargo build --release -q; } >&2 || rm -rf "$W"
-fi
-NANODA="$NANODA_DIR/target/release/nanoda_bin"
-[ -x "$NANODA" ] && [ "$(git -C "$NANODA_DIR" rev-parse HEAD)" = "$NANODA_REV" ] \
+NANODA_DIR=$(build_cargo_tool "$TOOLS" "$NANODA_URL" "$NANODA_REV" "$TOOLCHAIN") \
   && ok "nanoda at $NANODA_REV (thread stack patched as the Arena does)" \
   || { no "could not build nanoda at $NANODA_REV"; finish; }
+NANODA="$NANODA_DIR/target/release/nanoda_bin"
 flock -u 9   # every tool is built and verified; the rest only reads them
 # nanoda FILE → runs nanoda on FILE permitting exactly the standard axioms
 nanoda() {

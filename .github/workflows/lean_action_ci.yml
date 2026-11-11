@@ -275,8 +275,8 @@ jobs:
       - name: Kernel replay (leanchecker) (scripts/proofs/kernel_replay.sh)
         run: bash scripts/proofs/kernel_replay.sh
 
-  # lean4export, con-leche and nanoda are built once per pinned revision (scripts/proofs/external.pins)
-  # into ~/.cache/concrete-ext; nanoda needs cargo, so the check runs in the extcheck shell.
+  # Tool trees key the pinned revision/toolchain, resolved elan identity and complete build recipe.
+  # They live in ~/.cache/concrete-ext; nanoda needs cargo from the extcheck shell.
   external-recheck:
     name: External re-check (con-leche, nanoda)
     needs: landing-record
