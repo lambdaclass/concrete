@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.Slice0
 import ConcreteSpec.Proofs.Observe
 
 /-!

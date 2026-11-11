@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.Brand
 import ConcreteSpec.Proofs.Basics
 
 /-!

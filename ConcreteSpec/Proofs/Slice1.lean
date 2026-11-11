@@ -1,3 +1,5 @@
+import ConcreteSpec.Spec.Slice1Semantics
+import ConcreteSpec.Spec.Slice1Ownership
 import ConcreteSpec.Proofs.Basics
 
 /-!

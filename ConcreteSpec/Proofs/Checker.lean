@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.Slice1Checker
 import ConcreteSpec.Proofs.Slice1
 
 /-!

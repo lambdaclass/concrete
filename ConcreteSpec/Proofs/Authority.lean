@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.Authority
 import ConcreteSpec.Proofs.Basics
 
 /-!

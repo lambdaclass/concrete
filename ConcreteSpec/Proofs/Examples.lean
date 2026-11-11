@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.Examples
 import ConcreteSpec.Proofs.Checker
 import ConcreteSpec.Proofs.Rep
 import ConcreteSpec.Proofs.Cleanup

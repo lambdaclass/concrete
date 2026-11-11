@@ -1,4 +1,4 @@
-import ConcreteSpec.Spec
+import ConcreteSpec.Spec.Basics
 
 /-!
 # Lemmas about association lists (`Spec/Basics.lean`).
