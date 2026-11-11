@@ -1,0 +1,2 @@
+[piece 2 of 3: scripts]
+- scripts/land/run-at-ref.sh:35: Relative `RUN_AT_REF_SOURCE` paths are now tested and resolved against the caller’s working directory, whereas the existing `git -C "$REPO" fetch` resolves them against `$REPO`. A valid relative bundle or clone inside `$REPO` is therefore rejected as a remote name when invoked elsewhere; if the same relative path exists in both directories, the runner fetches the wrong source.
