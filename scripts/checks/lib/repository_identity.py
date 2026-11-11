@@ -20,18 +20,53 @@ HISTORICAL_LINES = {
 }
 
 
-def endpoint_problem(url):
-    if ARCHIVED.search(url):
-        return 'archived repository destination refused'
-    # Sandboxes use local bare repositories. All network destinations must identify the owner repo.
-    if url.startswith(('/', './', '../', 'file://')) or (':' not in url and '@' not in url):
-        return None
+def canonical_url(url):
     normalized = url.lower().rstrip('/')
     if normalized.endswith('.git'):
         normalized = normalized[:-4]
-    if re.fullmatch(r'(?:https?://github\.com/|ssh://git@github\.com(?::22)?/|git@[^/:]+:)lambdaclass/concrete', normalized):
+    return bool(re.fullmatch(r'(?:https?://github\.com/|ssh://git@github\.com(?::22)?/|git@[^/:]+:)lambdaclass/concrete', normalized))
+
+
+def endpoint_problem(url):
+    if ARCHIVED.search(url):
+        return 'archived repository destination refused'
+    # Local remotes exist only for gate sandboxes. Check their resolved identity too.
+    if url.startswith(('/', './', '../', 'file://')) or (':' not in url and '@' not in url):
+        local = url[7:] if url.startswith('file://') else url
+        if ARCHIVED.search(str(pathlib.Path(local).resolve())):
+            return 'archived repository destination refused'
+        return None
+    if canonical_url(url):
         return None
     return 'destination is not lambdaclass/concrete'
+
+
+def fetch_source(source, repo, ref=None):
+    if ARCHIVED.search(source):
+        raise ValueError('archived repository destination refused')
+    if canonical_url(source):
+        return source
+    # Resolve once against the caller, refusing symlinks in every path component.
+    path = pathlib.Path(source).absolute()
+    if any(part.is_symlink() for part in (path, *path.parents)):
+        raise ValueError('symlink fetch source refused')
+    if not path.is_file():
+        raise ValueError('fetch source must be a canonical repository URL or a git bundle file; local clones and remote names are refused')
+    verified = subprocess.run(['git', '-C', repo, 'bundle', 'verify', str(path)],
+                              capture_output=True, text=True)
+    if verified.returncode:
+        raise ValueError('invalid git bundle: ' + verified.stderr.strip())
+    heads = subprocess.run(['git', 'bundle', 'list-heads', str(path)],
+                           capture_output=True, text=True, check=True)
+    entries = [line.split() for line in heads.stdout.splitlines()]
+    if not entries or any(len(row) != 2 or not re.fullmatch(r'[0-9a-f]{40}|[0-9a-f]{64}', row[0])
+                          or (row[1] != 'HEAD' and subprocess.run(
+                              ['git', 'check-ref-format', row[1]], capture_output=True).returncode)
+                          for row in entries):
+        raise ValueError('git bundle has invalid or missing refs')
+    if ref is not None and not any(ref in row for row in entries):
+        raise ValueError('requested ref is not advertised by git bundle: ' + ref)
+    return str(path)
 
 
 def remote_problems(name, destination=None):
@@ -107,20 +142,12 @@ def planted_controls():
 
 if __name__ == '__main__':
     if sys.argv[1:2] == ['--fetch-source']:
-        source = sys.argv[2]
-        # The caller must use the same cwd as Git fetch. Local inputs are transports,
-        # but both their written and resolved identities must still be permitted.
-        if pathlib.Path(source).exists():
-            resolved = str(pathlib.Path(source).resolve())
-            errors = [f'{endpoint_problem(url)}: {url}' for url in (source, resolved)
-                      if endpoint_problem(url)]
-            source = resolved
-        else:
-            errors = remote_problems(source)
-        if errors:
-            print('\n'.join(errors), file=sys.stderr)
+        try:
+            print(fetch_source(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else '.',
+                               sys.argv[4] if len(sys.argv) > 4 else None))
+        except ValueError as error:
+            print(error, file=sys.stderr)
             sys.exit(1)
-        print(source)
         sys.exit(0)
     if sys.argv[1:2] == ['--remote']:
         errors = remote_problems(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None)

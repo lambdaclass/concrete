@@ -390,7 +390,7 @@ The server was shared with other full runs at a load average of 15 to 32.
 | `LAND_GATES_HOST` | `git config land.gatesHost` | gate host (ssh destination) for `check`'s impact leg; empty = none; `check --local-gates` runs here instead |
 | `LAND_GATES_TRANSPORT` | `scripts/land/gates_transport_ssh.sh` | `<transport> <host> <bundle> <ref> <command>`, printing `run-at-ref.sh`'s output; `LAND_GATES_SSH`/`LAND_GATES_SCP` override its ssh and scp |
 | `LAND_REMOTE_RUNNER` | `~/bin/concrete-remote` | `<runner> <ref> <command>` for the remote leg; empty disables it |
-| `LAND_REMOTE_PUSH` | `1` | `0`: the runner fetches the SHA from this clone, nothing is published |
+| `LAND_REMOTE_PUSH` | `1` | `0`: the runner receives a bundle through `RUN_AT_REF_SOURCE`, nothing is published |
 | `LAND_FULL_GATES_CMD` | `lake build && bash scripts/checks/run.sh` | the remote leg's command |
 | `LAND_REVIEW_CMD` | `scripts/review/review.sh` when present | the review leg's command (`--base --head` appended); with neither, `check` fails |
 | `LAND_PUSH_ATTEMPTS`, `LAND_PUSH_RETRY_SLEEP` | `3`, `15` | attempts and pause for a verified push |
@@ -435,3 +435,14 @@ and a fake hook that fails exactly when the checkout contains `BAD`. It covers:
 - `ready.sh`: a failed review leg publishing `gates: fail` over an older clean verdict, and
   passing legs making a head ready;
 - a static check that nothing under `scripts/land` force-pushes main.
+
+### Fetch sources for isolated gate runs
+
+`run-at-ref.sh` accepts the canonical repository URLs defined by
+`scripts/checks/lib/repository_identity.py` (the default is
+`https://github.com/lambdaclass/concrete.git`) or a git bundle file. Relative bundle
+paths resolve once against the caller's directory. Bundles must pass `git bundle
+verify` against the gate clone, and the requested ref or full SHA must be advertised
+by the bundle. Local clones, remote names, other URLs and symlink paths are refused.
+The CI server train path (`gates_remote.sh` → `gates_transport_ssh.sh`) creates and
+copies a bundle, then passes its absolute path as `RUN_AT_REF_SOURCE`.

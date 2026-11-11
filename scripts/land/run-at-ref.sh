@@ -10,8 +10,8 @@
 # hardlinks the objects, so it costs about what a worktree costs.
 #
 # Env: RUN_AT_REF_REPO (gate clone, default ~/concrete2), RUN_AT_REF_RUNS (default ~/runs),
-#      RUN_AT_REF_SOURCE (what to fetch from: origin, a local clone path or a git bundle,
-#      default origin; relative sources resolve inside RUN_AT_REF_REPO, as with git -C fetch.
+#      RUN_AT_REF_SOURCE (canonical repository URL or a verified git bundle file,
+#      default https://github.com/lambdaclass/concrete.git; relative bundles resolve against the caller.
 #      scripts/land/gates_remote.sh passes a bundle so an unpublished train SHA can
 #      run), RUN_AT_REF_KEEP=1, RUN_AT_REF_NO_NIX=1 (run the command
 #      without `nix develop`: the landing gate's sandbox only).
@@ -25,7 +25,7 @@ REF="$1"; shift
 CMD="$*"
 REPO="${RUN_AT_REF_REPO:-$HOME/concrete2}"
 RUNS="${RUN_AT_REF_RUNS:-$HOME/runs}"
-SRC="${RUN_AT_REF_SOURCE:-origin}"
+SRC="${RUN_AT_REF_SOURCE:-https://github.com/lambdaclass/concrete.git}"
 # Freeze caller-relative directories before entering the run clone (including cleanup).
 REPO="$(cd "$REPO" && pwd -P)"
 RUNS="$(python3 -I -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$RUNS")"
@@ -34,9 +34,8 @@ IDENTITY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../checks/lib/repository
 if git -C "$REPO" config --get-regexp '^remote\.origin\.' >/dev/null; then
   (cd "$REPO" && python3 -I "$IDENTITY" --remote origin) || exit 1
 fi
-# Resolve and validate in the very directory used by `git -C REPO fetch`.
-# Preserve the supplied spelling for identity checks as normalization can erase it.
-SRC="$(cd "$REPO" && python3 -I "$IDENTITY" --fetch-source "$SRC")" || exit 1
+# Validate before creating run state; bundle paths are caller-relative.
+SRC="$(python3 -I "$IDENTITY" --fetch-source "$SRC" "$REPO" "$REF")" || exit 1
 mkdir -p "$RUNS"
 ID="$(date -u +%Y%m%dT%H%M%S)-$$"; WT="$RUNS/$ID"
 cleanup() {

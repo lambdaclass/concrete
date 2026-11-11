@@ -1,0 +1,1 @@
+Landing fetch sources now accept only canonical repository URLs and verified git bundles, with caller-relative paths, advertised-ref checks and explicit clone/symlink refusal. Resolved sandbox remote paths cannot hide archived repository identity.

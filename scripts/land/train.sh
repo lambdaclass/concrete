@@ -389,7 +389,7 @@ cmd_build() {
 # With LAND_REMOTE_PUSH=1 (default) the head is first published as wip/land-<name>-<sha>-<pid>-<n>
 # (the hook's backup tier) so a runner that fetches from the remote can see it, and deleted
 # afterwards; the
-# server's local runner fetches from this clone instead (LAND_REMOTE_PUSH=0, ref = the SHA).
+# server's local runner receives a verified bundle instead (LAND_REMOTE_PUSH=0, ref = the SHA).
 remote_runner() {
   local r="${LAND_REMOTE_RUNNER-$HOME/bin/concrete-remote}"
   if [ -n "$r" ] && [ -x "$r" ]; then echo "$r"; fi
@@ -417,8 +417,21 @@ remote_leg() { # name head
     # (the hook's wip tier exempts only non-deletions), and the lease removes only this run's ref.
     trap 'CONCRETE_SKIP_GATES=1 git push -q --force-with-lease="refs/heads/'"$ref"':'"$head"'" "'"$REMOTE"'" ":refs/heads/'"$ref"'" 2>/dev/null || true' EXIT
   fi
-  local rc=0 out
-  out="$("$runner" "$ref" "${LAND_FULL_GATES_CMD:-lake build && bash scripts/checks/run.sh}" 2>&1)" || rc=$?
+  local rc=0 out bundle_dir="" bundle_ref bundle_cleanup
+  if [ "${LAND_REMOTE_PUSH:-1}" = 0 ]; then
+    bundle_dir="$(mktemp -d)" || return 1
+    bundle_ref="refs/land-bundle/$$-$RANDOM-$RANDOM"
+    git update-ref "$bundle_ref" "$head" "" || { rm -rf "$bundle_dir"; return 1; }
+    printf -v bundle_cleanup 'git update-ref -d %q %q; rm -rf %q' "$bundle_ref" "$head" "$bundle_dir"
+    trap "$bundle_cleanup" EXIT
+    git bundle create "$bundle_dir/head.bundle" "$bundle_ref" || return 1
+    git update-ref -d "$bundle_ref" "$head" || return 1
+    out="$(RUN_AT_REF_SOURCE="$bundle_dir/head.bundle" "$runner" "$ref" "${LAND_FULL_GATES_CMD:-lake build && bash scripts/checks/run.sh}" 2>&1)" || rc=$?
+    rm -rf "$bundle_dir"
+    trap - EXIT
+  else
+    out="$("$runner" "$ref" "${LAND_FULL_GATES_CMD:-lake build && bash scripts/checks/run.sh}" 2>&1)" || rc=$?
+  fi
   printf '%s\n' "$out"
   if [ "${LAND_REMOTE_PUSH:-1}" = 1 ]; then
     # The normal-path deletion, logged; the EXIT trap above stays as the backstop for interruptions.

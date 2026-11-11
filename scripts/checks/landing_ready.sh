@@ -86,6 +86,11 @@ cat > "$TMP/fake-runner" <<'EOF'
 #!/usr/bin/env bash
 # A remote runner: fetches like concrete-remote (a ref on origin, or a SHA) and reports the SHA.
 echo "$1" >> "$FAKE_GH_DIR/runner.log"
+if [ -n "${RUN_AT_REF_SOURCE:-}" ]; then
+  git bundle verify "$RUN_AT_REF_SOURCE" || exit 1
+  git bundle list-heads "$RUN_AT_REF_SOURCE" | grep -q "^$1 " || exit 1
+  printf '%s\n' "$RUN_AT_REF_SOURCE" > "$FAKE_GH_DIR/runner.bundle"
+fi
 sha="$(git --git-dir="$ORIGIN_GIT" rev-parse --verify -q "refs/heads/$1" || git --git-dir="$ORIGIN_GIT" rev-parse --verify -q "$1^{commit}")" || { echo "no such ref $1"; exit 1; }
 echo "[concrete-remote] ref=$1 sha=$sha"
 EOF
@@ -135,6 +140,13 @@ case "$rl" in wip/land-collide) fresh="" ;; wip/land-*) fresh="$rl" ;; *) fresh=
   && ok "the remote runner ran once, on the run's own fresh ref ($fresh), which is deleted afterwards" \
   || no "remote runner invocations: '$rl'"
 git --git-dir="$TMP/origin.git" update-ref -d refs/heads/wip/land-collide
+# Server-local runs must carry the candidate as a bundle, without publishing a ref.
+out="$(cd "$W" && LAND_REMOTE_PUSH=0 bash "$ROOT_DIR/scripts/land/train.sh" check cx-t --no-review 2>&1)"; rc=$?
+bundle_path="$(cat "$TMP/gh/runner.bundle" 2>/dev/null)"
+[ "$rc" = 0 ] && [ -n "$bundle_path" ] && [ ! -e "$bundle_path" ] \
+  && [ -z "$(git -C "$W" for-each-ref refs/land-bundle/)" ] && [ -z "$(land_refs)" ] \
+  && ok "server-local runner receives a verified bundle; temporary refs and files are removed and nothing is published" \
+  || { no "server-local bundle: exit $rc"; echo "$out"; }
 ( cd "$W" && git checkout -q --detach origin/main )
 
 echo "=== ready.sh: legs in parallel; any failed leg (the review included) publishes gates: fail ==="

@@ -99,7 +99,7 @@ for name in fork lambdaclass; do
       bash "$ROOT_DIR/scripts/land/run-at-ref.sh" HEAD true 2>&1)"; then
     echo "repository_identity: runner accepted remote $name" >&2; exit 1
   fi
-  [[ "$out" == *"only origin is permitted"* ]] || { echo "$out" >&2; exit 1; }
+  [[ "$out" == *"local clones and remote names are refused"* ]] || { echo "$out" >&2; exit 1; }
   [[ ! -e "$TMP/runs" ]] || { echo 'runner touched run state before refusal' >&2; exit 1; }
   if CONCRETE_SKIP_GATES=1 bash "$ROOT_DIR/.githooks/pre-push" "$name" "$TMP/local.git" </dev/null 2>/dev/null; then
     echo "repository_identity: hook accepted remote $name" >&2; exit 1
@@ -109,35 +109,50 @@ for url in "$TMP/local.git" https://github.com/lambdaclass/concrete.git ssh://gi
   git remote set-url origin "$url"
   CONCRETE_SKIP_GATES=1 bash "$ROOT_DIR/.githooks/pre-push" origin "$url" </dev/null >/dev/null 2>&1
 done
-# Both supported local transports and origin run the exact expected commit.
+# Canonical URL recognition is offline; bundle execution exercises the actual runner.
+for url in https://github.com/lambdaclass/concrete.git ssh://git@github.com:22/lambdaclass/concrete.git git@github-alias:lambdaclass/concrete.git; do
+  [[ "$(bounded_run 15 -- python3 -I "$ROOT_DIR/scripts/checks/lib/repository_identity.py" --fetch-source "$url")" = "$url" ]]
+done
 git remote set-url origin "$TMP/repo"
 expected="$(git rev-parse HEAD)"
-cp "$TMP/input.bundle" "$TMP/repo/input.bundle"
-cp "$TMP/input.bundle" "$TMP/repo/repo-only.bundle"
-git clone -q --no-hardlinks "$TMP/repo" "$TMP/repo/input-clone"
-# A same-named caller input must not override the gate repository's input.
-git clone -q --no-hardlinks "$TMP/repo" "$TMP/input-clone"
-git -C "$TMP/input-clone" -c user.name=Test -c user.email=test@example.com commit --allow-empty -qm decoy
 cd "$TMP"
-for source in origin "$TMP/repo" "$TMP/input.bundle" input.bundle repo-only.bundle input-clone; do
-  out="$(RUN_AT_REF_REPO="$TMP/repo" RUN_AT_REF_SOURCE="$source" RUN_AT_REF_RUNS="$TMP/runs" RUN_AT_REF_NO_NIX=1 \
+mkdir 'caller@host:dir'
+cp input.bundle 'caller@host:dir/input.bundle'
+for source in "$TMP/input.bundle" input.bundle 'caller@host:dir/input.bundle'; do
+  out="$(RUN_AT_REF_REPO=repo RUN_AT_REF_SOURCE="$source" RUN_AT_REF_RUNS=relative-runs RUN_AT_REF_NO_NIX=1 \
     bounded_run 15 -- bash "$ROOT_DIR/scripts/land/run-at-ref.sh" HEAD 'git rev-parse HEAD')"
   [[ "$out" == *"sha=$expected"* && "$out" == *"exit=0"* ]] || { echo "$out" >&2; exit 1; }
 done
-# Caller-relative repository/run directories must remain valid through clone and cleanup.
-out="$(RUN_AT_REF_REPO=repo RUN_AT_REF_SOURCE=repo-only.bundle RUN_AT_REF_RUNS=relative-runs RUN_AT_REF_NO_NIX=1 \
-    bounded_run 15 -- bash "$ROOT_DIR/scripts/land/run-at-ref.sh" HEAD 'git rev-parse HEAD')"
-[[ "$out" == *"sha=$expected"* && "$out" == *"exit=0"* ]] || { echo "$out" >&2; exit 1; }
-[[ -z "$(git -C repo for-each-ref refs/run-at-ref/)" ]] || { echo 'runner leaked reachability ref' >&2; exit 1; }
-[[ -z "$(find relative-runs -mindepth 1 -type d -print)" ]] || { echo 'runner leaked clone' >&2; exit 1; }
-# An existing relative archived path must be refused before creating run state.
-mkdir -p "$TMP/repo/$old_owner"
-git clone -q --no-hardlinks "$TMP/repo/input-clone" "$TMP/repo/$old_owner/concrete2"
-if out="$(RUN_AT_REF_REPO="$TMP/repo" RUN_AT_REF_SOURCE="$old_owner/concrete2" RUN_AT_REF_RUNS="$TMP/refused-runs" RUN_AT_REF_NO_NIX=1 \
-    bounded_run 15 -- bash "$ROOT_DIR/scripts/land/run-at-ref.sh" HEAD true 2>&1)"; then
-  echo 'repository_identity: runner accepted relative archived repository' >&2; exit 1
-fi
-[[ "$out" == *"archived repository destination refused"* && ! -e "$TMP/refused-runs" ]] || { echo "$out" >&2; exit 1; }
+[[ -z "$(git -C repo for-each-ref refs/run-at-ref/)" ]]
+[[ -z "$(find relative-runs -mindepth 1 -type d -print)" ]]
+ln -s input.bundle linked.bundle
+ln -s "$TMP" linked-dir
+printf invalid > invalid.bundle
+# Each refusal checks its diagnostic, and must precede run-state creation.
+for spec in 'repo|local clones and remote names are refused' \
+    "$TMP/repo|local clones and remote names are refused" \
+    "https://github.com/$old_owner/concrete2.git|archived repository destination refused" \
+    'linked.bundle|symlink fetch source refused' 'linked-dir/input.bundle|symlink fetch source refused' \
+    'invalid.bundle|invalid git bundle' 'origin|local clones and remote names are refused' \
+    'https://example.com/other.git|local clones and remote names are refused'; do
+  source="${spec%%|*}"; reason="${spec#*|}"
+  if out="$(RUN_AT_REF_REPO=repo RUN_AT_REF_SOURCE="$source" RUN_AT_REF_RUNS=refused-runs RUN_AT_REF_NO_NIX=1 \
+      bounded_run 15 -- bash "$ROOT_DIR/scripts/land/run-at-ref.sh" HEAD true 2>&1)"; then
+    echo "repository_identity: accepted $source" >&2; exit 1
+  fi
+  [[ "$out" == *"$reason"* && ! -e refused-runs ]] || { echo "$out" >&2; exit 1; }
+done
+if out="$(RUN_AT_REF_REPO=repo RUN_AT_REF_SOURCE=input.bundle RUN_AT_REF_RUNS=refused-runs \
+    bounded_run 15 -- bash "$ROOT_DIR/scripts/land/run-at-ref.sh" refs/heads/missing true 2>&1)"; then exit 1; fi
+[[ "$out" == *"requested ref is not advertised"* && ! -e refused-runs ]]
+# Resolved local remote identity must not hide an archived destination.
+mkdir -p "$old_owner/concrete2"
+ln -s "$TMP/$old_owner/concrete2" clean-remote
+for url in "$TMP/clean-remote" "file://$TMP/clean-remote"; do
+  git -C repo remote set-url origin "$url"
+  if out="$(cd repo && bounded_run 15 -- python3 -I "$ROOT_DIR/scripts/checks/lib/repository_identity.py" --remote origin 2>&1)"; then exit 1; fi
+  [[ "$out" == *"archived repository destination refused"* ]] || { echo "$out" >&2; exit 1; }
+done
 # These statements run after their entry points change directory. Exercise the
 # actual source statements in isolation: no reviewer, proof build or note writes.
 for spec in 'land/train.sh:usage()' 'review/review.sh:usage()' 'proofs/external.sh:DIRECT='; do
