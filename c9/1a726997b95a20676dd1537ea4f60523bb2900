@@ -1,0 +1,4 @@
+[piece 1 of 1: docs]
+- ROADMAP.md:439: R-0698–R-0701 record new requirements as “owner, 2026-11-11” without quoting the owner’s answers or citing a quoted owner rule authorizing them. A date and attribution alone do not supply the required provenance; add the approval evidence so the recorded scope can be verified.
+
+Repository reads failed because the sandbox could not initialize, so I could not cross-check `docs/decisions.md`.
