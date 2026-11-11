@@ -21,7 +21,7 @@
     in {
       devShells = forAllSystems ({ pkgs }:
         let
-          # LEAN IS THE OFFICIAL v4.34.1 RELEASE ARCHIVE, not nixpkgs' lean4 (R-0208). The checker identity a
+          # LEAN IS THE OFFICIAL v4.35.0 RELEASE ARCHIVE, not nixpkgs' lean4 (R-0208). The checker identity a
           # receipt binds is the executable and libraries that actually load; nixpkgs builds Lean itself
           # (reporting its version tag as the githash), so the devshell and CI's elan ran DIFFERENT checkers
           # under one name. Pinning the archive elan installs makes them the same build. Hashes are the
@@ -32,16 +32,16 @@
             let
               sys = pkgs.stdenv.hostPlatform.system;
               asset = {
-                "aarch64-darwin" = { name = "darwin_aarch64"; sha256 = "65f22a4f047738ec742667b3247e836a86ebf06eabc12655c3dee00637e37866"; };
-                "x86_64-darwin"  = { name = "darwin";         sha256 = "c2fee70250444e46c1106a27bddfef948d1e563eef431eaac05bb946b2f73d3a"; };
-                "x86_64-linux"   = { name = "linux";          sha256 = "47bf4bbd78f70c2e9670598ab7124d92b6efb7330ff33e5fbb4030f6fd72e4e4"; };
-                "aarch64-linux"  = { name = "linux_aarch64";  sha256 = "fdb974c2cdb4627e090d5d4007b913e09d13c4868720fb5594e22808b3de9e37"; };
+                "aarch64-darwin" = { name = "darwin_aarch64"; sha256 = "c0c6f34f35ba1dcc5c4a5fd106fefab9eb5e8469712624dd2c868d51b63177c2"; };
+                "x86_64-darwin"  = { name = "darwin";         sha256 = "0b43be5c7ecfb36016566a41005ab62bdb04743e6bfd5837e45f796ef4750b4e"; };
+                "x86_64-linux"   = { name = "linux";          sha256 = "7289597a44543246c9227b8cae501767e095ce17f6d448b95fc4a8dc97268f6d"; };
+                "aarch64-linux"  = { name = "linux_aarch64";  sha256 = "c8f0f8a3920e839718b1343e6781fd80a3e9b1024fbcd7078eb30f54e806b028"; };
               }.${sys};
             in pkgs.stdenv.mkDerivation {
               pname = "lean4-release";
-              version = "4.34.1";
+              version = "4.35.0";
               src = pkgs.fetchurl {
-                url = "https://github.com/leanprover/lean4/releases/download/v4.34.1/lean-4.34.1-${asset.name}.tar.zst";
+                url = "https://github.com/leanprover/lean4/releases/download/v4.35.0/lean-4.35.0-${asset.name}.tar.zst";
                 sha256 = asset.sha256;
               };
               nativeBuildInputs = [ pkgs.zstd ]
@@ -53,7 +53,7 @@
               dontStrip = true;
               dontFixup = pkgs.stdenv.isDarwin;
               unpackPhase = "tar --zstd -xf $src";
-              installPhase = "mkdir -p $out && cp -R lean-4.34.1-${asset.name}/. $out/";
+              installPhase = "mkdir -p $out && cp -R lean-4.35.0-${asset.name}/. $out/";
             };
           # pyyaml so scripts/tests/check_workflow_yaml.sh can actually run: it needs pyyaml or ruby
           # and FAILS (rather than skips) without either. The only non-stdlib module any gate imports.
@@ -114,9 +114,12 @@
             # failed in this shell while passing on CI, whose elan puts no clang on PATH.
             clang
             leanRelease
+            elan
+            cargo
+            rustc
           ] ++ gatesUserland;
         in {
-          # Default shell stays light: the pre-existing toolchain only. The
+          # Default shell includes the pinned Lean toolchain and external-check builders. The
           # second-kernel drivers (Rocq, Isabelle) are an opt-in spike and Isabelle
           # is a multi-GB closure, so they live in a separate shell — no contributor
           # pays for them unless they run `--report multi-kernel`.
@@ -145,7 +148,7 @@
           # scripts/proofs/external.sh, which builds the pinned nanoda checker (a Rust program) once
           # per revision. mkShell, not NoCC: rustc links through the C compiler. Lean still comes
           # from elan, as in the gates shell.
-          extcheck = pkgs.mkShell ({ packages = gatesUserland ++ [ pkgs.cargo pkgs.rustc ]; } // gatesMarker);
+          extcheck = pkgs.mkShell ({ packages = gatesUserland ++ [ pkgs.cargo pkgs.rustc pkgs.elan ]; } // gatesMarker);
 
           # `nix develop .#provers` — adds the independent second kernels.
         });

@@ -297,7 +297,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/concrete-ext
-          key: ${{ runner.os }}-concrete-ext-${{ hashFiles('scripts/proofs/external.pins', 'lean-toolchain') }}
+          key: ${{ runner.os }}-concrete-ext-${{ hashFiles('scripts/proofs/external.pins', 'scripts/proofs/lake_tool.sh', 'lean-toolchain') }}
 
       - name: Install Lean and build the specification (via lean-action)
         id: lean_install

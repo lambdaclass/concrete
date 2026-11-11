@@ -37,7 +37,7 @@ Golden equality pins axiom accounting, not statement or proof-body equality.
 
 ## Verified Lean API evidence
 
-`lean-toolchain` pins `leanprover/lean4:v4.34.1`. Source paths below are relative
+`lean-toolchain` pins `leanprover/lean4:v4.35.0`. Source paths below are relative
 to `$(lean --print-prefix)/src/lean/Lean`. Source inspection and successful Lean
 `#check` probes establish the API names and limitations below. These existing APIs
 do not supply general persistent helper provenance.
@@ -182,3 +182,44 @@ and toolchain identity. This design round makes no runtime or implementation
 acceptance claim. Compiler metadata remains within the existing compiler trust
 boundary; protection against hostile metaprograms forging it is not established
 by these checks.
+
+## Lean 4.35.0 toolchain migration
+
+The project and Nix official-release archive pin Lean 4.35.0; CI's lean-action
+reads the same `lean-toolchain`. All four Nix asset hashes are the release's
+published SHA-256 digests. The existing LCB revision `4bea4b3` builds with 4.35.0
+as a Lake dependency, so its source pin is retained (its standalone toolchain
+file still declares 4.34.1). No theorem or compiler definition required a change.
+
+`external.pins` pins both Lean tools' toolchains as well as their revisions.
+The exporter is now the upstream v4.35.0 revision, matching our olean format.
+`lake_tool.sh` compares each revision's checked-in declaration with its pin,
+including on cache hits, and dispatches `elan run --install TOOLCHAIN lake build`
+without rewriting the declaration. The root `external_toolchain.sh` control
+plants a mismatched pin and requires refusal before a build can run.
+
+R-0208's measured-build policies and receipts under `legacy/` describe the frozen
+compiler and remain historical evidence, as does `scripts/oracle/ORACLE.lock`.
+They do not accept this new checker or authorize receipts for it. The current
+proof gates establish axiom accounting, fresh kernel replay and independent
+re-checks for the current sources; they do not inherit legacy checker acceptance.
+
+The 4.35.0 axiom golden adds exactly the following compiler-generated theorems
+under `ConcreteSpec.Surface0`. Each proves Boolean reflection for its existing
+`inferInstanceAs` decidability instance in `Spec/Surface0.lean`; each has an empty
+transitive axiom set. No previous row changes or disappears.
+
+| Added suffix | Existing predicate / instance |
+| --- | --- |
+| `instDecidableBidiControl._proof_1` | bidirectional control character |
+| `instDecidableByteEscape._proof_1` | byte escape and decoded byte |
+| `instDecidableByteRaw._proof_1` | raw byte literal character |
+| `instDecidableCommentRaw._proof_1` | raw comment character |
+| `instDecidableControl._proof_1` | control character |
+| `instDecidableForbiddenRaw._proof_1` | forbidden raw character |
+| `instDecidableIdentContinue._proof_1` | identifier continuation character |
+| `instDecidableIdentStart._proof_1` | identifier starting character |
+| `instDecidableScalar._proof_1` | UTF-8 scalar |
+| `instDecidableStringEscape._proof_1` | string escape and decoded scalar |
+| `instDecidableStringRaw._proof_1` | raw string character |
+| `instDecidableWhitespace._proof_1` | whitespace character |

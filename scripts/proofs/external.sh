@@ -30,9 +30,9 @@
 #      renderers (every comparison is by that injective encoding).
 #
 # Tools are built once per pinned SHA into $CONCRETE_EXT_TOOLS (default ~/.cache/concrete-ext):
-# lean4export with THIS toolchain (it reads our .olean files), con-leche with its own (elan installs
-# it), nanoda with cargo (CI runs this script in `nix develop .#extcheck`, which adds cargo and rustc
-# to the gate userland).
+# lean4export and con-leche with their declared, pinned toolchains (explicit elan dispatch; the
+# exporter must match this project to read its .olean files), nanoda with cargo. CI runs this
+# script in `nix develop .#extcheck`, which adds cargo, rustc and elan to the gate userland.
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/../checks/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -62,28 +62,16 @@ publish() {
   local dir=$1 work="$1.partial.$$"; shift
   (cd "$work" && "$@" >&2) && touch "$work/.built" && rm -rf "$dir" && mv "$work" "$dir"
 }
-# build_lake_tool NAME URL REV TOOLCHAIN-OVERRIDE TARGET → prints the source dir; builds once per SHA
-build_lake_tool() {
-  local name=$1 url=$2 rev=$3 tc=$4 target=$5
-  # The toolchain override is part of the build's identity (an exporter built with another toolchain
-  # cannot read this build's .olean files), so it names the directory alongside the SHA.
-  local dir="$TOOLS/$name-$rev${tc:+-$(printf '%s' "$tc" | tr -c 'A-Za-z0-9._-' '_')}"
-  if [ ! -f "$dir/.built" ]; then
-    local work="$dir.partial.$$"; rm -rf "$work"
-    git clone -q "$url" "$work" >&2 && git -C "$work" checkout -q "$rev" >&2 || return 1
-    [ -n "$tc" ] && echo "$tc" > "$work/lean-toolchain"
-    publish "$dir" "$LAKE" build "$target" || { rm -rf "$work"; return 1; }
-  fi
-  [ "$(git -C "$dir" rev-parse HEAD)" = "$rev" ] || return 1
-  echo "$dir"
-}
+. scripts/proofs/lake_tool.sh
 
 echo "=== P: pinned tools ==="
-EXPORT_DIR=$(build_lake_tool lean4export "$LEAN4EXPORT_URL" "$LEAN4EXPORT_REV" "$TOOLCHAIN" lean4export) \
+[ "$LEAN4EXPORT_TOOLCHAIN" = "$TOOLCHAIN" ] \
+  || { no "exporter pin $LEAN4EXPORT_TOOLCHAIN differs from project $TOOLCHAIN"; finish; }
+EXPORT_DIR=$(build_lake_tool lean4export "$LEAN4EXPORT_URL" "$LEAN4EXPORT_REV" "$LEAN4EXPORT_TOOLCHAIN" lean4export) \
   && ok "lean4export at $LEAN4EXPORT_REV, built with $TOOLCHAIN" \
   || { no "could not build lean4export at $LEAN4EXPORT_REV"; finish; }
-CHECK_DIR=$(build_lake_tool con-leche "$CONLECHE_URL" "$CONLECHE_REV" "" con-leche) \
-  && ok "con-leche at $CONLECHE_REV" \
+CHECK_DIR=$(build_lake_tool con-leche "$CONLECHE_URL" "$CONLECHE_REV" "$CONLECHE_TOOLCHAIN" con-leche) \
+  && ok "con-leche at $CONLECHE_REV, built with $CONLECHE_TOOLCHAIN" \
   || { no "could not build con-leche at $CONLECHE_REV"; finish; }
 EXPORTER="$EXPORT_DIR/.lake/build/bin/lean4export"
 CONLECHE="$CHECK_DIR/.lake/build/bin/con-leche"

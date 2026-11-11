@@ -97,5 +97,5 @@ theorem Concrete.Backend.LCB.Proof.artifact_correct axioms: propext, Classical.c
 axiom propext : ∀ {a b : Prop}, (a ↔ b) → a = b
 axiom Classical.choice : {α : Sort u} → Nonempty α → α
 axiom Quot.sound : ∀ {α : Sort u} {r : α → α → Prop} {a b : α}, r a b → Quot.mk r a = Quot.mk r b
-lean-toolchain leanprover/lean4:v4.34.1
+lean-toolchain leanprover/lean4:v4.35.0
 pin «lean-compiler-backend» 4bea4b3ffd8a43a73a0016012d865044067b3275
