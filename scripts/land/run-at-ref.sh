@@ -29,13 +29,9 @@ SRC="${RUN_AT_REF_SOURCE:-https://github.com/lambdaclass/concrete.git}"
 # Freeze caller-relative directories before entering the run clone (including cleanup).
 REPO="$(cd "$REPO" && pwd -P)"
 RUNS="$(python3 -I -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$RUNS")"
-# Validate the clone before copying its objects or remote-tracking refs, including bundle runs.
-IDENTITY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../checks/lib/repository_identity.py"
-if git -C "$REPO" config --get-regexp '^remote\.origin\.' >/dev/null; then
-  (cd "$REPO" && python3 -I "$IDENTITY" --remote origin) || exit 1
-fi
 # Validate before creating run state; bundle paths are caller-relative.
-SRC="$(python3 -I "$IDENTITY" --fetch-source "$SRC" "$REPO" "$REF")" || exit 1
+SOURCE_HELPER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/bundle_source.py"
+SRC="$(python3 -I "$SOURCE_HELPER" "$SRC" "$REPO" "$REF")" || exit 1
 mkdir -p "$RUNS"
 ID="$(date -u +%Y%m%dT%H%M%S)-$$"; WT="$RUNS/$ID"
 cleanup() {

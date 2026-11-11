@@ -1,0 +1,1 @@
+Remove custom repository identity guards following owner-confirmed GitHub archival. Keep the canonical repository switch, stale live-reference text check, retired push-both record, verified bundle transport and script self-location fixes.

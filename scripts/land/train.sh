@@ -42,7 +42,7 @@
 #     is retried (LAND_PUSH_ATTEMPTS). The ci/<name> reset to the base skips the hook; not retried.
 #
 # ENVIRONMENT (test seams and overrides): LAND_REPO (owner/name for gh, default
-# lambdaclass/concrete), LAND_GH (gh binary), LAND_REMOTE (sole remote, default origin),
+# lambdaclass/concrete), LAND_GH (gh binary),
 # LAND_STATE_DIR (default <git common dir>/concrete-landing), LAND_LOG_DIR (default
 # $LAND_STATE_DIR/log), LAND_NO_NIX=1 (never re-enter `nix develop`), LAND_CAMPAIGN_JOBS (regex of
 # campaign-tier job names), LAND_HOOK (pre-push hook path, default .githooks/pre-push),
@@ -96,9 +96,8 @@ STATE_ROOT="${LAND_STATE_DIR:-$COMMON/concrete-landing}"
 LOG_DIR="${LAND_LOG_DIR:-$STATE_ROOT/log}"
 REPO="${LAND_REPO:-lambdaclass/concrete}"
 GH="${LAND_GH:-gh}"
-REMOTE="${LAND_REMOTE:-origin}"
+REMOTE=origin
 HOOK="${LAND_HOOK:-.githooks/pre-push}"
-python3 -I "$SELF_DIR/../checks/lib/repository_identity.py" --remote "$REMOTE" || exit 1
 # Must name exactly the workflow's campaign jobs (an `if:` on `inputs.campaign`, and the jobs that `needs:`
 # one): check_landing_script.sh derives that set from lean_action_ci.yml and fails on any difference.
 # The root has no campaign tier yet; a campaign job, when one returns, is named "Campaign: ...".

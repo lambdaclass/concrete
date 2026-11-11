@@ -60,7 +60,10 @@ base="$(git rev-parse --verify "$BASE^{commit}")"; btree="$(git rev-parse "$base
 [ -z "$(git status --porcelain)" ] || die "the checkout is not clean (tracked or untracked changes)"
 
 # Handwritten root files: the new root's own, not derived from the base.
-OVERLAY=(README.md CHANGELOG.md required-checks.txt required-checks-transition.tsv .gitignore flake.nix lakefile.toml
+OVERLAY=(
+  scripts/checks/archived_references.sh scripts/checks/lib/archived_references.py
+  scripts/checks/landing_sources.sh scripts/land/bundle_source.py
+  README.md CHANGELOG.md required-checks.txt required-checks-transition.tsv .gitignore flake.nix lakefile.toml
   lake-manifest.json ConcreteSpec.lean ConcreteSpec/Spec.lean .githooks/pre-push .github/workflows/lean_action_ci.yml
   changelog.d/2026-11-04-legacy-move.md scripts/land/legacy_move.sh scripts/checks/run.sh
   scripts/checks/legacy_frozen.sh scripts/checks/root_inventory.sh scripts/checks/root_inventory.txt
@@ -73,7 +76,6 @@ OVERLAY=(README.md CHANGELOG.md required-checks.txt required-checks-transition.t
   scripts/review/review.sh scripts/review/verify.sh
   RETENTION.tsv AGENTS.md docs/LANDING.md docs/REVIEW.md docs/SELF_HOSTED_RUNNERS.md
   scripts/checks/landing_script.sh scripts/checks/landing_ready.sh scripts/checks/retention_manifest.sh
-  scripts/checks/repository_identity.sh scripts/checks/lib/repository_identity.py
   scripts/land/train.sh scripts/land/acceptance.sh scripts/land/signoff.sh scripts/worktree-new.sh
   scripts/oracle/ORACLE.lock scripts/oracle/build.sh .github/workflows/oracle.yml)
 # Copied from the base: "src dst [optional]". A directory source ends in /.

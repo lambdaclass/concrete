@@ -21,7 +21,6 @@ concurrency:
 
 jobs:
   rebuild:
-    if: github.repository == 'lambdaclass/concrete'
     name: Oracle rebuild (reproduces ORACLE.lock)
     runs-on: ${{ vars.CONCRETE_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     timeout-minutes: 180

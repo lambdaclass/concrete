@@ -96,17 +96,16 @@ echo "[concrete-remote] ref=$1 sha=$sha"
 EOF
 chmod +x "$TMP/fake-gh" "$TMP/hook" "$TMP/fake-runner"
 
-for r in origin fork; do git init -q --bare "$TMP/$r.git"; done
+git init -q --bare "$TMP/origin.git"
 A="$TMP/agent"; W="$TMP/lander"
 git init -q "$A"; cd "$A" || exit 2
-for r in origin fork; do git remote add "$r" "$TMP/$r.git"; done
+git remote add origin "$TMP/origin.git"
 mkdir -p src
 printf 'Build\n' > required-checks.txt  # train.sh refuses a landing with no required-checks.txt
 git add -A && git commit -qm base
-for r in origin fork; do git push -q "$r" main; done
+git push -q origin main
 BASE="$(git rev-parse HEAD)"
 git clone -q "$TMP/origin.git" "$W"
-( cd "$W" && git remote add fork "$TMP/fork.git" )
 
 # mk <branch> <commit-message> <file> <content> [from]: one commit on <from> (default main), pushed.
 mk(){ ( cd "$A" && git fetch -q origin && git checkout -q -B "$1" "${5:-origin/main}" && mkdir -p "$(dirname "$3")" \

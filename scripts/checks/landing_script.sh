@@ -15,7 +15,7 @@
 #               merge or rebase already in progress, a dirty tree and an existing train are refused
 #   pipeline    check feeds the hook exactly base..head on ci/<name>; ci pushes and records the run
 #   watch       a campaign-only failure is reported as such; a landing failure fetches log tails
-#   land        refused on a head-SHA mismatch, a red landing job, a moved main, a remote named fork;
+#   land        refused on a head-SHA mismatch, a red landing job, a moved main;
 #               dry-run pushes nothing; a real land puts origin at the train head and cancels
 #               no run (main's own run records the train's, R-0570)
 #   record      (2026-11-06, R-0570) main's run names the run that qualified its exact SHA only when
@@ -136,10 +136,10 @@ EOF
 export LAND_REVIEW_CMD="bash $TMP/fake-review"
 
 W="$TMP/work"
-for r in origin fork; do git init -q --bare "$TMP/$r.git"; done
+git init -q --bare "$TMP/origin.git"
 git init -q "$W"
 cd "$W" || exit 2
-for r in origin fork; do git remote add "$r" "$TMP/$r.git"; done
+git remote add origin "$TMP/origin.git"
 
 # --- the toy repository: a ledger, a corpus map, a generated block, a generated file ---------------
 mkdir -p scripts/gen scripts/tests docs/project src Concrete
@@ -182,7 +182,7 @@ printf '# required\nBuild\n' > required-checks.txt
 regen(){ python3 -I scripts/gen/candidate_table.py && bash scripts/gen/build_identity.sh; }
 regen
 git add -A && git commit -qm base
-git push -q origin main && git push -q fork main
+git push -q origin main
 BASE="$(git rev-parse HEAD)"
 
 branch(){ git checkout -q -b "$1" "$BASE"; }
@@ -630,9 +630,6 @@ runjson "$(git rev-parse b1)" success success
 out="$(bash "$TRAIN" land t1 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "not the train HEAD" && ok "land refuses a run at another SHA" || no "land accepted a head-SHA mismatch (exit $rc)"
 runjson "$HEAD1" success failure
-out="$(LAND_REMOTE=fork bash "$TRAIN" land t1 2>&1)"; rc=$?
-[ "$rc" != 0 ] && has "$out" "named 'fork'" && ok "land refuses the remote named fork as primary" || no "fork accepted as primary (exit $rc)"
-[ "$(git ls-remote fork refs/heads/main | cut -f1)" = "$BASE" ] && ok "fork untouched" || no "fork was pushed"
 out="$(bash "$TRAIN" --dry-run land t1 2>&1)"; rc=$?
 [ "$rc" = 0 ] && has "$out" "would run" && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$BASE" ] \
   && ok "dry-run land verifies and pushes nothing" || { no "dry-run land: exit $rc"; echo "$out" | sed 's/^/      /'; }
@@ -646,7 +643,6 @@ out="$(bash "$TRAIN" land t1 2>&1)"; rc=$?
 out="$(bash "$TRAIN" land t1 2>&1)"; rc=$?
 [ "$rc" = 0 ] && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$HEAD1" ] \
   && ok "land puts origin/main at the train head" || { no "land: exit $rc"; echo "$out" | sed 's/^/      /'; }
-[ "$(git ls-remote fork refs/heads/main | cut -f1)" = "$BASE" ] && ok "fork still untouched after landing" || no "fork was pushed"
 [ ! -d "$(git rev-parse --git-common-dir)/concrete-land.lock" ] && ok "publish lock released" || no "publish lock left behind"
 calls="$(cat "$FAKE_GH_DIR/calls.log")"
 ! has "$calls" "run cancel" && has "$out" "records run 4242" \
@@ -907,8 +903,8 @@ rec = jobs.get("landing-record")
 if not rec or rec.get("name") != "Landing record":
     print("no job landing-record named 'Landing record'")
 else:
-    if rec.get("needs") or rec.get("if") != "github.repository == 'lambdaclass/concrete'":
-        print("landing-record must run on every event in the sole repository, first")
+    if rec.get("needs") or "if" in rec:
+        print("landing-record must run on every event, first")
     if "steps.record.outputs.recorded" not in str(rec.get("outputs", {}).get("recorded", "")):
         print("landing-record does not export the record step's verdict")
 def needs(j):

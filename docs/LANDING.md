@@ -382,7 +382,6 @@ The server was shared with other full runs at a load average of 15 to 32.
 | variable | default | meaning |
 |---|---|---|
 | `LAND_REPO` | `lambdaclass/concrete` | repository for `gh` |
-| `LAND_REMOTE` | `origin` | see [repository rules](../AGENTS.md#rules) |
 | `LAND_CAMPAIGN_JOBS` | `^(Gate mutation\|Weekly clean-checkout proof replay\|Nightly differential fuzz\|Checker pin freshness \(campaign finding\))` | job names in the campaign tier; the default must match exactly the workflow's campaign jobs (`check_landing_script.sh`) |
 | `LAND_STATE_DIR`, `LAND_LOG_DIR` | under the git common directory | state and log location |
 | `LAND_NO_NIX` | unset | `1` never re-enters `nix develop` |
@@ -438,11 +437,14 @@ and a fake hook that fails exactly when the checkout contains `BAD`. It covers:
 
 ### Fetch sources for isolated gate runs
 
-`run-at-ref.sh` accepts the canonical repository URLs defined by
-`scripts/checks/lib/repository_identity.py` (the default is
-`https://github.com/lambdaclass/concrete.git`) or a git bundle file. Relative bundle
+`run-at-ref.sh` accepts `https://github.com/lambdaclass/concrete.git` or a git bundle file. Relative bundle
 paths resolve once against the caller's directory. Bundles must pass `git bundle
 verify` against the gate clone, and the requested ref or full SHA must be advertised
 by the bundle. Local clones, remote names, other URLs and symlink paths are refused.
 The CI server train path (`gates_remote.sh` → `gates_transport_ssh.sh`) creates and
 copies a bundle, then passes its absolute path as `RUN_AT_REF_SOURCE`.
+
+The former repository is archived on GitHub, which refuses pushes. Custom remote-identity
+and workflow repository guards are therefore removed. `archived_references.sh` checks
+maintained text for stale endpoints; `legacy/`, `docs/archive/`, and `changelog.d/`
+are historical paths, and existing issue/decision evidence is exempt by exact line digest.

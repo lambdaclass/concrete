@@ -89,7 +89,6 @@ bad_env="$(compgen -e | grep -E '^(LAND_|CONCRETE_SKIP_)' || true)"
 BUILD_CMD="${ACCEPT_BUILD_CMD:-nix develop --command lake build}"
 
 SRC_REPO="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "acceptance: run inside a clone" >&2; exit 2; }
-python3 -I "$SELF_DIR/../checks/lib/repository_identity.py" --remote origin || exit 2
 ORIGIN_URL="$(git -C "$SRC_REPO" remote get-url origin)"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/acceptance.XXXXXX")"
 [ "$KEEP" = 1 ] || trap 'rm -rf "$WORK"' EXIT

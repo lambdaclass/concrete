@@ -16,15 +16,14 @@
 #                                           commit's note (fetch, rewrite, fast-forward push, retry)
 #   notes.sh ready <sha> [required-base]    verify review scope and gates (docs/REVIEW.md)
 #
-# <kind> is review or gates. LAND_REMOTE names the remote; see AGENTS.md, "Branches", for repository policy.
+# <kind> is review or gates. The remote is origin; see AGENTS.md, "Branches", for repository policy.
 # Writers: scripts/review/review.sh (review) and scripts/land/ready.sh (gates).
 # `put` never force-pushes: it rewrites on top of the remote's notes tip and retries on a race.
 set -euo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REMOTE="${LAND_REMOTE:-origin}"
+REMOTE=origin
 DRY="${LAND_NOTES_DRY:-0}"
 die() { echo "notes: $*" >&2; exit 1; }
-python3 -I "$SELF_DIR/../checks/lib/repository_identity.py" --remote "$REMOTE" || exit 1
 
 kind_ok() { case "$1" in review|gates) ;; *) die "kind must be review or gates, not '$1'" ;; esac; }
 
