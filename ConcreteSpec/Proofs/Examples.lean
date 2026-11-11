@@ -1,9 +1,15 @@
-import ConcreteSpec.Spec.Examples
-import ConcreteSpec.Proofs.Checker
-import ConcreteSpec.Proofs.Rep
-import ConcreteSpec.Proofs.Cleanup
-import ConcreteSpec.Proofs.Borrow
 import ConcreteSpec.Proofs.Brand
+import ConcreteSpec.Proofs.Checker
+import ConcreteSpec.Proofs.Cleanup
+import ConcreteSpec.Proofs.Slice1
+import ConcreteSpec.Spec.Basics
+import ConcreteSpec.Spec.Brand
+import ConcreteSpec.Spec.Cleanup
+import ConcreteSpec.Spec.Examples
+import ConcreteSpec.Spec.Slice1Checker
+import ConcreteSpec.Spec.Slice1Ownership
+import ConcreteSpec.Spec.Slice1Semantics
+import ConcreteSpec.Spec.Slice1Syntax
 
 /-!
 # The examples of the specification derived from the general theorems (non-vacuity witnesses)

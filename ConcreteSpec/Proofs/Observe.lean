@@ -1,5 +1,9 @@
-import ConcreteSpec.Spec.Observation
 import ConcreteSpec.Proofs.Slice1
+import ConcreteSpec.Spec.Observation
+import ConcreteSpec.Spec.Slice1Ownership
+import ConcreteSpec.Spec.Slice1Semantics
+import ConcreteSpec.Spec.Slice1Syntax
+import ConcreteSpec.Spec.Statics
 
 /-!
 # Part 7: `checked_observation`

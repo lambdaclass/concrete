@@ -1,5 +1,4 @@
 import ConcreteSpec.Spec.Authority
-import ConcreteSpec.Proofs.Basics
 
 /-!
 # Part 6: `sub_iff` and `authority_contained`

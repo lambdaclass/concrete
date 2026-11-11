@@ -1,5 +1,6 @@
-import ConcreteSpec.Spec.Brand
 import ConcreteSpec.Proofs.Basics
+import ConcreteSpec.Spec.Basics
+import ConcreteSpec.Spec.Brand
 
 /-!
 # Part 5: `reset_fresh` and the brand refusals.
