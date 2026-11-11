@@ -1,0 +1,2 @@
+[piece 1 of 3: scripts]
+- scripts/land/ready.sh:33: The identity-check path is resolved from relative `BASH_SOURCE[0]` after changing to the repository root. Invoking `bash land/ready.sh wip/test` from `scripts/` therefore looks for `land/../checks/lib/repository_identity.py` under the root and fails before fetching. Resolve the script directory before changing directories, or use the repository-root-relative checker path.
