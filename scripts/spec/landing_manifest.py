@@ -10,6 +10,7 @@ import hashlib
 from functools import lru_cache
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -119,7 +120,7 @@ def piece(file, line):
     stem = file.removeprefix('ConcreteSpec/').removesuffix('.lean')
     if stem == 'Spec/Examples' and 326 <= line <= 392:
         return 'F35'
-    if stem == 'Proofs/Examples' and line <= 36:
+    if stem == 'Proofs/Examples' and line <= 64:
         return 'F35'
     if stem in WHOLE:
         return WHOLE[stem]
@@ -185,10 +186,18 @@ def records_from_census(data, source_root=None):
         if f not in files:
             files[f] = (source(SOURCE, f) if source_root is None else (source_root/f).read_bytes()).decode().splitlines(keepends=True)
         digest = sha((''.join(files[f]) if c['syntax']=='module-realization' else ''.join(files[f][c['line']-1:c['endLine']])).encode())
+        uses = example_deps.get((f,c['line']),[])
+        if c['syntax']=='Lean.Parser.Command.attribute':
+            uses = []
+            for ident in c['identifiers']:
+                matches = [n for n in names if n==ident or n.endswith('.'+ident)]
+                if len(matches)!=1:
+                    raise ValueError('ambiguous global attribute target: '+ident)
+                uses += matches
         r = row(record='command', name=f"{f}:{c['line']}:{c['endLine']}",
                 kind='example' if c['example'] else c['syntax'], source=f,
                 line=c['line'], end_line=c['endLine'], digest=digest,
-                contract=contract(f), dependencies=json.dumps(sorted(set(example_deps.get((f,c['line']),[]))), separators=(',',':')))
+                contract=contract(f), dependencies=json.dumps(sorted(set(uses)), separators=(',',':')))
         commands[f].append(r)
         result.append(r)
     origins = {(r['file'],r['name']):r for r in data if r['record']=='origin'}
@@ -318,6 +327,24 @@ def command_identity(r):
     return r['name'] if r['record']=='command' else r['note'].split(';',1)[0]
 
 
+def shared_fixtures(commands):
+    fixtures = json.loads((ROOT/'ConcreteSpec/landing/shared-fixtures.json').read_text())
+    if len(fixtures) != len(set(fixtures)) or any(f not in commands for f in fixtures):
+        raise ValueError('invalid declared shared fixture commands')
+    return set(fixtures)
+
+
+def context_note(r, destinations):
+    # Replace only our machine annotation, preserving all authority/hold prose,
+    # including annotations before or after it in manually maintained rows.
+    note = r['note']
+    annotation = 'balanced context destinations='+destinations
+    match = re.search(r'(^|; )balanced context destinations=[A-Za-z0-9,\-]*', note)
+    if match:
+        return note[:match.start()] + match.group(1) + annotation + note[match.end():]
+    return (note + '; ' if note else '') + annotation
+
+
 def context_destinations(population):
     commands = [r for r in population if r['record']=='command']
     material = defaultdict(set)
@@ -340,7 +367,7 @@ def context_destinations(population):
                     raise ValueError(f'unmatched context end: {c["name"]}')
                 result[c['name']] = set(result[openings.pop()])
                 scopes.pop()
-            elif c['name'] in material or c['kind']=='example':
+            elif c['name'] in material or c['kind'] in ('example', 'module-realization', 'Lean.Parser.Command.attribute'):
                 destinations = material[c['name']] | {c['piece']}
                 for scope in scopes:
                     for name in scope:
@@ -359,8 +386,7 @@ def update_contexts(rows):
     contexts = context_destinations(rows)
     for r in rows:
         if r['record']=='command' and r['name'] in contexts:
-            r['note'] = 'balanced context destinations='+contexts[r['name']]
-            r['disposition'] = 'retain'
+            r['note'] = context_note(r, contexts[r['name']])
 
 
 def generate(data):
@@ -396,6 +422,7 @@ def generate(data):
             r['migration'] = r['piece']
             r.update(piece='BASE',prerequisites='',disposition='retain')
             r['note'] += '; parsed baseline command; adapt at migration piece'
+    assign_law_controls(population)
     ancestry = {}
     def ancestors(p):
         if p not in ancestry:
@@ -407,14 +434,13 @@ def generate(data):
         ancestors(p)
     def assign(r,p,why):
         r.update(piece=p,prerequisites=','.join(PREREQS[p]),
-                 disposition='owner-held' if p in HOLDS else 'repair')
+                 disposition='owner-held' if p in HOLDS or r['disposition']=='owner-held' else 'repair')
         if why not in r['note']:
             r['note'] += '; '+why
     command_rows = {r['name']:r for r in population if r['record']=='command'}
     choices = emission_choices(data)
     generated = {n:r for n,r in byname.items() if r['line']=='0' and r['piece']!='BASE'}
-    fixtures = {command_identity(r) for r in byname.values() if r['line']!='0'
-                and any(tag in r['name'] for tag in ('.Demo.','.CoreEvidence.','.Vacuity.'))}
+    fixtures = shared_fixtures(command_rows)
     def available(p,d):
         return p==d or d in ancestry[p]
     def candidate_piece(command):
@@ -453,7 +479,7 @@ def generate(data):
                 effective[n] = deps
                 changed = True
         consumers = [(r,effective[n]) for n,r in byname.items() if r['piece']!='BASE']
-        consumers += [(r,json.loads(r['dependencies'])) for r in population if r['kind']=='example' and r['piece']!='BASE']
+        consumers += [(r,json.loads(r['dependencies'])) for r in population if r['kind'] in ('example','Lean.Parser.Command.attribute') and r['piece']!='BASE']
         for r,deps in consumers:
             for dep in deps:
                 d = byname[dep]
@@ -469,6 +495,7 @@ def generate(data):
             break
     else:
         raise ValueError('observed emission/fixture assignment did not converge')
+    check_law_controls(population)
     update_contexts(population)
     rows += population + evidence_rows()
     for i in range(1,11):
@@ -499,8 +526,29 @@ def read():
         return list(reader)
 
 
+def validate_landed_ref(ref):
+    if len(ref)!=40 or any(c not in '0123456789abcdef' for c in ref):
+        raise ValueError('landed source must be a full immutable commit SHA')
+    if ref in PIN_TAGS.values():
+        raise ValueError('snapshot pin cannot be landed progress: '+ref)
+    ensure_object(ref)
+    try:
+        git('merge-base', '--is-ancestor', ref, 'HEAD')
+    except subprocess.CalledProcessError:
+        # A shallow checkout must prove ancestry using a private complete repository;
+        # fetching into the caller would mutate its shallow boundary.
+        with tempfile.TemporaryDirectory(prefix='spec-ancestry-') as tmp:
+            git('clone', '--quiet', '--bare', '--no-local', git('remote','get-url','origin').decode().strip(), tmp)
+            env = {k:v for k,v in os.environ.items() if k not in git_local_variables()}
+            result = subprocess.run(['git','--git-dir='+tmp,'merge-base','--is-ancestor',ref,
+                                     git('rev-parse','HEAD').decode().strip()],env=env,capture_output=True)
+            if result.returncode:
+                raise ValueError('landed source is not an ancestor of checked revision: '+ref)
+
+
 @lru_cache(maxsize=None)
 def landed_population(ref):
+    validate_landed_ref(ref)
     if len(ref)!=40 or any(c not in '0123456789abcdef' for c in ref):
         raise ValueError('landed source must be a full immutable commit SHA')
     ensure_object(ref)
@@ -526,6 +574,7 @@ def landed_population(ref):
 def record_landed(rows, piece, ref):
     if piece not in PREREQS or piece=='BASE':
         raise ValueError(f'invalid landed piece: {piece}')
+    validate_landed_ref(ref)
     population = landed_population(ref)
     prior = {r['name'] for r in rows if r['record']=='landed'}
     targets = [r for r in rows if r['record']=='declaration' and r['piece']==piece and r['name'] not in prior]
@@ -544,8 +593,44 @@ def check_landed(rows, decls):
                 raise ValueError(f'invalid landed record: {r["name"]}')
             if r['name'] not in decls or r['piece']!=decls[r['name']]['piece']:
                 raise ValueError(f'invalid landed mapping: {r["name"]}')
+            validate_landed_ref(r['source'])
             if landed_population(r['source']).get(r['note']) != r['digest']:
                 raise ValueError(f'landed declaration mismatch: {r["name"]}')
+
+
+def check_command_atomicity(rows, identity=command_identity):
+    commands = {identity(r):r for r in rows if r['record']=='command'}
+    for r in rows:
+        if r['record']!='declaration' or r['line']=='0':
+            continue
+        c = commands[identity(r)]
+        if r['piece']!=c['piece'] and not (c['piece']=='BASE' and r['piece']==c['migration']):
+            raise ValueError('split source command: '+r['name'])
+
+
+def check_identity_control():
+    commands = [row(record='command',name='fixture:'+str(i),source='fixture',digest='same',piece=p)
+                for i,p in enumerate(('F05','F40'))]
+    decls = [row(record='declaration',name='d'+str(i),note=c['name'],line=1,
+                 source='fixture',digest='same',piece=c['piece']) for i,c in enumerate(commands)]
+    population = commands+decls
+    check_command_atomicity(population)
+    # Under collapsed source/digest keys the correctly relocated first command fails.
+    try:
+        check_command_atomicity(population,lambda r:(r['source'],r['digest']))
+    except ValueError:
+        pass
+    else:
+        raise ValueError('identical-text control did not detect collapsed identities')
+    wrong = [dict(r) for r in population]
+    wrong[2]['piece'],wrong[3]['piece'] = wrong[3]['piece'],wrong[2]['piece']
+    try:
+        check_command_atomicity(wrong)
+    except ValueError:
+        pass
+    else:
+        raise ValueError('sibling declarations moved without their command')
+    print('control PASS: distinct identical-text commands move independently; collapsed keying fails')
 
 
 def judgment(rows, data, dependencies=True, extra_root=None):
@@ -565,6 +650,15 @@ def judgment(rows, data, dependencies=True, extra_root=None):
             raise ValueError(f'plan hold changed: {p}')
         if pieces[p]['prerequisites'] != ','.join(PREREQS[p]):
             raise ValueError(f'plan prerequisites changed: {p}')
+    for r in rows:
+        allowed = {'present'} if r['record']=='landed' else {'retain','repair','replace','owner-held','retire'}
+        if r['disposition'] not in allowed:
+            raise ValueError('invalid disposition: '+r['name'])
+        if r['piece']=='BASE' and r['record'] in ('command','declaration'):
+            if r['migration'] not in PREREQS or r['migration']=='BASE':
+                raise ValueError('invalid BASE migration: '+r['name'])
+        elif r['migration']:
+            raise ValueError('unexpected migration: '+r['name'])
     for r in rows:
         if not r['piece'] or r['piece'] not in pieces:
             raise ValueError(f'unassigned {r["record"]}: {r["name"]}')
@@ -623,7 +717,7 @@ def judgment(rows, data, dependencies=True, extra_root=None):
             raise ValueError(f'prerequisites disagree with piece: {r["name"]}')
     contexts = context_destinations(rows)
     for r in rows:
-        if r['record']=='command' and r['name'] in contexts and r['note'] != 'balanced context destinations='+contexts[r['name']]:
+        if r['record']=='command' and r['name'] in contexts and r['note'] != context_note(r, contexts[r['name']]):
             raise ValueError(f'context destinations mismatch: {r["name"]}')
     decls = {r['name']:r for r in rows if r['record']=='declaration'}
     command_rows = {r['name']:r for r in rows if r['record']=='command'}
@@ -634,14 +728,7 @@ def judgment(rows, data, dependencies=True, extra_root=None):
     for r in decls.values():
         if r['piece']=='BASE' and not on_baseline(r):
             raise ValueError(f'baseline assignment has no baseline declaration: {r["name"]}')
-        if r['line']=='0':
-            continue
-        c = command_rows[command_identity(r)]
-        if r['piece'] != c['piece']:
-            # A shared command may already exist on BASE with only some generated
-            # artifacts present. Its new artifacts still belong to its migration piece.
-            if not (c['piece']=='BASE' and r['piece']==c['migration']):
-                raise ValueError(f'split source command: {r["name"]}')
+    check_command_atomicity(rows)
     check_landed(rows,decls)
     choices = emission_choices(data if extra_root is None else data[0]+data[1])
     effective = {}
@@ -664,15 +751,89 @@ def judgment(rows, data, dependencies=True, extra_root=None):
     errors = []
     if dependencies:
         consumers = [(r,effective[n]) for n,r in decls.items()]
-        consumers += [(r,json.loads(r['dependencies'])) for r in rows if r['kind']=='example' and r['piece']!='BASE']
+        consumers += [(r,json.loads(r['dependencies'])) for r in rows if r['kind'] in ('example','Lean.Parser.Command.attribute') and r['piece']!='BASE']
         for r,deps in consumers:
             for dep in deps:
                 d = decls[dep]
                 if d['piece'] != r['piece'] and d['piece'] not in closure[r['piece']]:
                     errors.append(f'{r["piece"]} {r["name"]} requires {d["piece"]} {dep}')
+        fixtures = shared_fixtures(command_rows)
+        for r,deps in consumers:
+            for dep in deps:
+                d = decls[dep]
+                if command_identity(d) in fixtures and r['piece'] in closure[d['piece']]:
+                    errors.append('shared fixture does not accompany earliest consumer: '+dep)
         if errors:
             raise ValueError('piece dependency order refused:\n'+'\n'.join(errors))
+    if dependencies:
+        check_law_controls(rows)
     return closure
+
+
+def law_control_groups(rows):
+    decls = {r['name']:r for r in rows if r['record']=='declaration'}
+    def resolve(name):
+        if name in decls:
+            return decls[name]
+        matches = [r for n,r in decls.items() if n.endswith('.'+name)]
+        if len(matches)!=1:
+            raise ValueError('unresolved law/control annotation: '+name)
+        return matches[0]
+    snapshot_files = set(git('ls-tree','-r','--name-only',SOURCE,'ConcreteSpec','ConcreteSpec.lean').decode().splitlines())
+    for r in rows:
+        if r['record']!='command' or r['line']=='0' or r['source'] not in snapshot_files:
+            continue
+        lines = source(SOURCE,r['source']).decode().splitlines()
+        text = '\n'.join(lines[int(r['line'])-1:int(r['end_line'])])
+        for law in re.findall(r'(?:Instance|Planted) \(law `([^`]+)`',text):
+            yield resolve(law), [r]+[resolve(m) for m in re.findall(r'mutant `([^`]+)`',text)]
+
+
+def check_law_controls(rows):
+    groups = list(law_control_groups(rows))
+    shared = shared_law_support(groups)
+    fixtures = shared_fixtures({r['name']:r for r in rows if r['record']=='command'})
+    declarations = {r['name']:r for r in rows if r['record']=='declaration'}
+    if any(command_identity(declarations[n]) not in fixtures for n in shared):
+        raise ValueError('shared law support missing from declared fixtures')
+    for law, controls in groups:
+        for control in controls:
+            if control['name'] in shared:
+                continue  # Reusable support is checked at its earliest consumer by the dependency judgment.
+            if (control['migration'] or control['piece'])!=(law['migration'] or law['piece']):
+                raise ValueError('law/control piece mismatch: '+control['name']+' law '+law['name'])
+
+
+def shared_law_support(groups):
+    laws = defaultdict(set)
+    for law, controls in groups:
+        for c in controls:
+            if c['record']=='declaration':
+                laws[c['name']].add(law['name'])
+    return {n for n, users in laws.items() if len(users)>1}
+
+
+def assign_law_controls(rows):
+    groups = list(law_control_groups(rows))
+    shared = shared_law_support(groups)
+    for law, controls in groups:
+        destination = law['migration'] or law['piece']
+        identities = {command_identity(r) for r in controls if r['name'] not in shared}
+        for r in rows:
+            if r['record'] not in ('command','declaration') or command_identity(r) not in identities:
+                continue
+            current = r['migration'] or r['piece']
+            if r['disposition']=='owner-held' and current!=destination:
+                raise ValueError('held law/control group requires an explicit plan answer: '+r['name']+
+                                 ' stays '+current+'; law belongs to '+destination)
+            if r['piece']=='BASE':
+                r['migration'] = destination
+            else:
+                r.update(piece=destination, prerequisites=','.join(PREREQS[destination]))
+                if destination in HOLDS:
+                    r['disposition']='owner-held'
+                    if HOLDS[destination] not in r['note']:
+                        r['note'] += '; '+HOLDS[destination]
 
 
 def verify_plan_boundaries(rows):
@@ -684,6 +845,11 @@ def verify_plan_boundaries(rows):
         'ConcreteSpec.Core.Frame.ABI.LoadBoundaryDemo.controlInput':'F29p',
         'ConcreteSpec.Core.Exec.CoreEvidence.dropArgProtocolDestroyCall':'F10',
         'ConcreteSpec.Examples.add0_ok':'F35',
+        'ConcreteSpec.Examples.add0_never_stuck':'F35',
+        'ConcreteSpec.Examples.add0_never_traps':'F35',
+        'ConcreteSpec.Examples.Add0Evidence.stuckBody':'F35',
+        'ConcreteSpec.Examples.Add0Evidence.trapBody':'F35',
+        'ConcreteSpec.Core.Frame.ABI.LoadBoundaryDemo.empty_invalid':'F29',
         'ConcreteSpec.Core.CExpr.eval.match_5':'F06',
     }
     declarations = {r['name']:r for r in rows if r['record']=='declaration'}
@@ -700,9 +866,10 @@ def report(rows, detail=None):
         raise ValueError(f'unknown remaining piece: {detail}')
     landed = {r['name'] for r in rows if r['record']=='landed'}
     counts = Counter(r['piece'] for r in rows if r['record']=='declaration' and r['piece']!='BASE' and r['name'] not in landed)
-    examples = Counter(r['piece'] for r in rows if r['kind']=='example')
+    examples = Counter(r['piece'] for r in rows if r['kind']=='example' and r['piece']!='BASE')
+    print('remaining-examples\t'+str(sum(examples.values())))
     for p in sorted(r['name'] for r in rows if r['record']=='piece'):
-        print(f'{p}\tremaining={counts[p]}\texamples={examples[p]}')
+        print(f'{p}\tremaining={counts[p]}\tremaining-examples={examples[p]}')
     if detail:
         for r in sorted(rows,key=lambda r:(r['piece'],r['name'])):
             if r['record']=='declaration' and r['piece']!='BASE' and r['name'] not in landed and detail in ('all',r['piece']):
@@ -719,9 +886,17 @@ def ensure_object(ref):
         git('cat-file','-e',ref+'^{commit}')
 
 
+PIN_TAGS = {'source': SOURCE, 'baseline': BASE, 'evidence': EVIDENCE, 'dossier': DOSSIER}
+
+
 def ensure_objects():
-    for ref in (SOURCE,BASE,EVIDENCE,DOSSIER):
-        ensure_object(ref)
+    for name, ref in PIN_TAGS.items():
+        tag = 'refs/tags/spec-inventory/'+name
+        remote = git('ls-remote','--refs','origin',tag).decode().split()
+        if remote != [ref,tag]:
+            raise ValueError('missing or changed protected inventory pin: '+tag+' expected '+ref)
+        git('fetch','--no-tags','--no-write-fetch-head','origin',tag)
+        git('cat-file','-e',ref+'^{commit}')
 
 
 def extract(root):
@@ -764,6 +939,7 @@ def main():
             rows = record_landed(rows,args.record_landed,args.landed_ref)
         closure = judgment(rows,data,dependencies=False)
         verify_plan_boundaries(rows)
+        check_law_controls(rows)
         # Coverage controls exercise the same judgment, never the generator.
         duplicate = next(r for r in rows if r['record']=='declaration')
         try:
@@ -781,7 +957,7 @@ def main():
         control = control_root/'ConcreteSpec/InventoryControl.lean'
         control.write_text('namespace ConcreteSpec.InventoryControl\ndef unassigned : Nat := 7\nend ConcreteSpec.InventoryControl\n')
         planted = census(control_root,ROOT/'scripts/spec/landing_inventory.lean')
-        command_assignments = [dict(r,piece='P',prerequisites=','.join(PREREQS['P']))
+        command_assignments = [dict(r,piece='P',disposition='repair',prerequisites=','.join(PREREQS['P']))
                                for r in records_from_census(planted,control_root)
                                if r['record']=='command']
         update_contexts(command_assignments)
@@ -831,20 +1007,32 @@ def main():
         if absent is None:
             raise ValueError('baseline control has no nonbaseline auxiliary')
         bad = [dict(r) for r in rows]
-        next(r for r in bad if r['record']=='declaration' and r['name']==absent['name']).update(piece='BASE',prerequisites='')
+        next(r for r in bad if r['record']=='declaration' and r['name']==absent['name']).update(piece='BASE',migration='F40',prerequisites='')
         refuse(bad,'baseline assignment has no baseline declaration:','invalid zero-range BASE assignment refused')
 
-        # Exercise atomicity on one of the real identical-text command collisions.
-        groups = Counter((r['source'],r['digest']) for r in rows if r['record']=='command')
-        split = next((r for r in rows if r['record']=='declaration' and r['piece']!='BASE'
-                      and groups[(r['source'],r['digest'])]>1),None)
-        if split is None:
-            raise ValueError('split control has no identical-text command collision')
+        check_identity_control()
         bad = [dict(r) for r in rows]
-        target = next(r for r in bad if r['record']=='declaration' and r['name']==split['name'])
-        target.update(piece='F40' if split['piece']!='F40' else 'F03')
-        target['prerequisites'] = ','.join(PREREQS[target['piece']])
-        refuse(bad,'split source command:','identical-text commands retain separate identities')
+        law_control = next(c for law, controls in law_control_groups(bad)
+                           if law['name']=='ConcreteSpec.Examples.add0_never_stuck'
+                           for c in controls if c['record']=='command')
+        law_control.update(piece='F40',prerequisites=','.join(PREREQS['F40']))
+        refuse(bad,'law/control piece mismatch:','law and its annotated control cannot split')
+        held = next(r for r in rows if r['record']=='command' and r['disposition']=='owner-held'
+                    and r['name'] in context_destinations(rows))
+        held_copy = [dict(r) for r in rows]
+        update_contexts(held_copy)
+        if next(r for r in held_copy if r['record']=='command' and r['name']==held['name'])!=held:
+            raise ValueError('context pass changed a held row')
+        manual = dict(held,note='balanced context destinations=OLD; owner hold: preserve this reason')
+        updated = context_note(manual,'F18')
+        if updated!='balanced context destinations=F18; owner hold: preserve this reason':
+            raise ValueError('context pass erased a trailing owner hold note')
+        print('control PASS: held context row and hold note survive unchanged')
+        for column,value,prefix in [('migration','TYPO','invalid BASE migration:'),
+                                    ('disposition','TYPO','invalid disposition:')]:
+            bad = [dict(r) for r in rows]
+            next(r for r in bad if r['record']=='declaration' and r['piece']=='BASE')[column] = value
+            refuse(bad,prefix,'closed '+column+' schema')
 
         decls = {r['name']:r for r in rows if r['record']=='declaration'}
         example = next((r for r in rows if r['kind']=='example' and r['piece']!='BASE'

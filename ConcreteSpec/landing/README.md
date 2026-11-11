@@ -12,8 +12,10 @@ nix develop -c bash scripts/spec/landing_inventory.sh
 nix develop -c bash scripts/spec/landing_inventory.sh --remaining F03
 ```
 
-The check needs the pinned source, baseline and evidence git objects. A fresh CI checkout fetches
-missing commits by exact SHA from `origin`, without moving refs, `FETCH_HEAD` or shallow boundaries.
+The check needs four permanent lightweight tags under `refs/tags/spec-inventory/` on `origin`: `source`, `baseline`, `evidence`, and `dossier`. `PIN_TAGS` in `scripts/spec/landing_manifest.py` declares their exact commit SHAs. Every run verifies the advertised tag targets and fetches those tags without moving local refs, `FETCH_HEAD` or shallow boundaries. Configure repository tag protection to forbid updating or deleting `spec-inventory/**` before publishing them. Wip branches are never input anchors.
+
+To add an input, choose its immutable commit, add its name/SHA to `PIN_TAGS`, create a lightweight `spec-inventory/<name>` tag with `git -c tag.gpgsign=false tag spec-inventory/<name> <full-SHA>`, and have the publishing harness push that tag after confirming the protection rule covers it. Add a changed/missing-tag refusal control and document the input purpose. Never retarget an existing tag; use a new name for a new snapshot. The publishing harness owns tag publication.
+
 Unavailable pinned objects are an error; it never substitutes a moving branch. It writes all build artifacts in a private
 `mktemp` directory, builds every source module (including orphans) in the parsed import graph's
 order, and reads constants, kinds, ranges and term dependencies from Lean. All original sources
@@ -46,7 +48,7 @@ The TSV contains these record types:
 
 A declaration's `piece` is its extraction destination. `BASE` requires the actual constant in the
 freshly compiled pinned baseline with a matching kernel fingerprint. Authored declarations also
-require the same complete source command. `migration` names the later checked-view/adaptation work.
+require the same complete source command. `migration` names a known non-BASE piece and is mandatory only on BASE command/declaration rows; it is empty on every other row. Dispositions use the closed set `retain`, `repair`, `replace`, `owner-held`, `retire`; landed receipts alone use `present`.
 No unchanged fragment is claimed to implement its future checked view. Remaining counts exclude
 `BASE`; `--remaining all` lists all outstanding declaration names. Update assignments explicitly
 only to repair the extraction schedule; checking never fills an omitted row. `--write` regenerates
@@ -64,7 +66,7 @@ nix develop -c bash scripts/spec/landing_inventory.sh --record-landed F05 --land
 For renamed or relocated declarations, add explicit `landed` rows: `name` is the original name,
 `source` is the landed commit SHA, `note` is the replacement qualified name, and `digest` is the
 replacement command's SHA-256. `--census-output <path>` exports the fresh source census for inspection;
-it never supplies cached input. The checker freshly compiles each landed commit and verifies each
+it never supplies cached input. The checker refuses every snapshot pin as progress and requires each landed commit to be an ancestor of the checked `HEAD`. In shallow checkouts it proves ancestry in a private complete clone without changing the caller’s shallow boundary. It freshly compiles each landed commit and verifies each
 mapped declaration and command digest. Remaining declaration counts exclude verified mappings.
 Presence verifies progress in reconstruction; it does not attest semantic equivalence, reviews,
 authority answers, or contract closure. `BASE` remains the original baseline, never a progress label.
@@ -99,7 +101,7 @@ even when its emitting module differs. The freshly compiled baseline is a closed
 retains its own proofs/bodies; source snapshot proof dependencies do not replace those baseline
 proofs. No missing baseline constant can be inferred from dependency closure. Where a command
 already exists on BASE but emits a new artifact, that artifact belongs to the migration piece.
-The plan's shared fixtures move with their earliest consumers. Namespace/section openings, matching
+Shared fixture commands are explicitly declared by snapshot command identity in `shared-fixtures.json`; selection never tests declaration-name substrings. The generator moves these fixtures with their earliest consumers, and the judgment refuses a fixture left later than a consumer. Snapshot Instance/Planted law annotations define groups: laws, annotated Instance/Planted commands and single-law mutants must share a destination (or BASE migration destination). A mutant explicitly referenced by several laws is reusable support, declared in `shared-fixtures.json` and placed at its earliest consumer; it is available to every later law rather than reassigned repeatedly. Whole-module realization phases and global attribute registrations are material commands, never scoped templates. Attribute targets come from parsed identifiers, must resolve uniquely to census declarations, and participate in dependency checking. Namespace/section openings, matching
 ends, and context directives such as variables/open/options are templates: their notes enumerate every later destination in scope requiring a copy;
 the judgment checks balanced pairs and complete destination lists. Named group boundaries use
 Lean's declaration selection start, and anonymous commands use their parsed command start.
@@ -116,7 +118,7 @@ changed source digests or dependency lists, split commands, prerequisite cycles,
 on a later/unrelated piece. It checks both declaration terms and elaborated examples. It reports
 all pieces before issuing its final dependency verdict. Its controls use normal file discovery/import traversal to plant a real unassigned declaration,
 and require specific refusals for duplicates, premature commands and anonymous examples, identical-text
-command splits, invalid zero-range BASE assignments, import cycles and unknown progress pieces.
+independent relocation of identical-text commands (including a deliberately collapsed-key implementation), invalid zero-range BASE assignments, import cycles and unknown progress pieces.
 Private/noncomputable/unsafe examples, opaque body origins and source/artifact isolation have small
 production-census regression controls. Progress controls also verify historical-object fetches from a
 shallow clone, repaired/relocated mappings and isolation from inherited Git repository variables.
@@ -126,3 +128,5 @@ requires the plan's repairs, complete-context extraction, actual reconstructed c
 exact-SHA qualification, independent reviews and owner answers. An `owner-held` row remains held;
 assigning it a destination does not authorize its policy. Historical findings/approval receipts
 are carried for reconciliation, never inherited as reviews of reconstructed candidates.
+
+Remaining-example counts exclude BASE examples. Examples have no landed receipts, so every non-BASE example remains outstanding until explicit command progress is implemented; a declaration receipt cannot silently discharge an example. The current initial schedule has 1,745 remaining anonymous examples out of 1,894 total.

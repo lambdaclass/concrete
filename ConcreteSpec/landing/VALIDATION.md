@@ -1,5 +1,27 @@
 # Piece P validation
 
+Round 3 status, 2026-11-11: **not validated; ISS-0054 remains open**. Writer base
+`5410d4631b9d7f12f862b3c473f0815d3f6c7f53`; uncommitted repairs are not an exact-SHA
+qualification. No commits, pushes, review tools or review notes were made by the writer.
+
+`nix develop -c bash scripts/spec/landing_inventory.sh --write` refuses the production
+remote because `refs/tags/spec-inventory/source` is absent. All four input tags must be
+published and protected by the harness/admin before production validation can pass.
+The gate does not fall back to wip refs or unanchored snapshot objects.
+
+A full fresh-census run in a disposable clone with explicitly tagged input fixtures passed
+ancestry/snapshot rejection, repaired progress, Git isolation, census instrumentation,
+named boundaries, coverage/duplicate/order controls, discriminating identical-text keying,
+hold preservation, closed schemas and unknown-piece refusal. Its final dependency judgment
+failed: strict law/control co-landing conflicts with existing path-policy holds in F20p/F29p.
+The generator now refuses to reschedule those held rows without an explicit plan answer.
+The tagged fixture tests tag availability/identity, not GitHub protection configuration.
+The working inventory has not been replaced: `--write` writes only after the entire gate passes.
+Remaining anonymous examples in the initial schedule: **1,745** (1,894 total; 149 BASE).
+
+The round-2 results below are historical and do not qualify the round-3 changes.
+
+
 Round 2, 2026-11-11. Source snapshot: `aa44140a33747fa37ece59c76090972e564c65b4`.
 Baseline: `1a50c64ff1b6f3a2899522f279eccc86d3b004a2`.
 

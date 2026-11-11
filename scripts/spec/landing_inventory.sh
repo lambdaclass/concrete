@@ -12,6 +12,7 @@ trap 'rm -rf "$TMP"' EXIT
 BOUNDED_PARENT="$TMP"
 source scripts/checks/lib/bounded.sh
 rc=0
+python3 scripts/spec/test_landing_pins.py || exit $?
 bounded_run 90 -- python3 scripts/spec/test_landing_progress.py || rc=$?
 if [ "$rc" -eq 0 ]; then
   bounded_run 1500 -- python3 scripts/spec/landing_manifest.py "$@" || rc=$?

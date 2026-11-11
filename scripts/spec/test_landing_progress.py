@@ -59,6 +59,23 @@ def main():
         shallow = (fresh/'.git/shallow').read_bytes()
         inventory.ROOT = fresh
         try:
+            # A valid object on an unmerged branch is never landed progress.
+            git('-C',str(fresh),'checkout','--quiet','-b','unmerged')
+            git('-C',str(fresh),'-c','user.name=Control','-c','user.email=c@example.invalid',
+                '-c','commit.gpgsign=false','commit','--quiet','--allow-empty','-m','unmerged')
+            unmerged = git('-C',str(fresh),'rev-parse','HEAD')
+            git('-C',str(fresh),'checkout','--quiet','-')
+            for rejected,prefix in [(unmerged,'landed source is not an ancestor'),
+                                    (inventory.SOURCE,'snapshot pin cannot be landed progress')]:
+                try:
+                    inventory.validate_landed_ref(rejected)
+                except ValueError as exc:
+                    if not str(exc).startswith(prefix):
+                        raise
+                else:
+                    raise ValueError('invalid landed source accepted: '+rejected)
+            print('control PASS: unmerged branch and source snapshot progress refused')
+            refs = git('-C',str(fresh),'for-each-ref')
             # Original source digest remains distinct from the repaired command digest.
             old = inventory.row(record='declaration',name='Original.answer',piece='F05',digest='original-source-digest')
             before = dict(old)
