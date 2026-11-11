@@ -59,7 +59,7 @@ trap 'rm -rf "$TMP"' EXIT
 (
   set -e
   cd "$TMP"; git init -q c; cd c
-  mkdir -p a b; echo 1 > a/x; echo 2 > b/y; echo 3 > top
+  mkdir -p a b scripts; echo frozen > scripts/push-both.sh; echo 1 > a/x; echo 2 > b/y; echo 3 > top
   git add -A; git -c user.name=t -c user.email=t@t commit -qm frozen
 ) || { echo "FATAL: control repository"; exit 2; }
 cd "$TMP/c"
@@ -83,6 +83,10 @@ T="$(tree_with 'rm -rf b')"
 [ -n "$(judge "$F" "$T" "$TMP/r_child.tsv")" ] && ok "control: a resolved parent does not release a child with an open row" || no "control: open child released by resolved parent"
 T="$(tree_with 'rm -f a/x')"
 [ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv")" ] && ok "control: a deletion outside the resolved row is refused" || no "control: unrelated deletion accepted"
+T="$(tree_with 'rm -f scripts/push-both.sh')"
+[ -n "$(judge "$F" "$T" "$ROOT_DIR/RETENTION.tsv")" ] \
+  && ok "control: the retired helper's open row forbids deleting its frozen copy" \
+  || no "control: retired helper's frozen copy became deletable"
 cd "$ROOT_DIR"
 
 echo "=== legacy/ against $LOCK ==="

@@ -45,6 +45,43 @@ for f in "$WF_DIR"/*.yml "$WF_DIR"/*.yaml; do
   fi
 done
 
+# A copied workflow must not execute as another repository's control plane.
+if python3 -I - "$WF_DIR" <<'PYGUARD'
+import copy
+import pathlib
+import sys
+import yaml
+
+def unguarded(doc):
+    bad = []
+    for name, job in doc.get('jobs', {}).items():
+        cond = str(job.get('if', '')).strip().removeprefix('${{').removesuffix('}}').strip()
+        guard = "github.repository == 'lambdaclass/concrete'"
+        if not (cond == guard or (cond.startswith(guard + ' && ') and '||' not in cond)):
+            bad.append(name)
+    return bad
+
+fixture = {'jobs': {'run': {'if': "github.repository == 'lambdaclass/concrete'"}}}
+assert not unguarded(fixture)
+missing = copy.deepcopy(fixture); missing['jobs']['run'].pop('if')
+assert unguarded(missing) == ['run']
+wrong = copy.deepcopy(fixture); wrong['jobs']['run']['if'] = "github.repository == 'another/repo'"
+assert unguarded(wrong) == ['run']
+failed = []
+for path in sorted(pathlib.Path(sys.argv[1]).glob('*')):
+    if path.suffix not in ('.yml', '.yaml'): continue
+    bad = unguarded(yaml.safe_load(path.read_text()))
+    if bad: failed.append(f'{path}: unguarded jobs: {bad}')
+if failed:
+    print('\n'.join(failed)); sys.exit(1)
+PYGUARD
+then
+  echo "  ok   every job runs only in the sole repository; missing/wrong guard controls refused"
+  PASS=$((PASS+1))
+else
+  echo "  FAIL repository execution guards"; FAIL=$((FAIL+1))
+fi
+
 echo ""
 echo "WORKFLOW-YAML: PASS=$PASS  FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

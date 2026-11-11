@@ -66,7 +66,13 @@ OVERLAY=(README.md CHANGELOG.md required-checks.txt required-checks-transition.t
   scripts/checks/legacy_frozen.sh scripts/checks/root_inventory.sh scripts/checks/root_inventory.txt
   .claude/codex-review-prompt.md .claude/commands/rebase.md .claude/commands/roadmap-item.md
   .claude/commands/cstatus.md scripts/land/move_prereqs.py
-  docs/archive/bugs-2026-11/README.md docs/archive/bugs-2026-11/bug_disposition.tsv)
+  docs/archive/bugs-2026-11/README.md docs/archive/bugs-2026-11/bug_disposition.tsv
+  # Sole-repository migration: overlay current tools and guidance after historical rewrites.
+  RETENTION.tsv AGENTS.md docs/LANDING.md docs/REVIEW.md docs/SELF_HOSTED_RUNNERS.md
+  scripts/checks/landing_script.sh scripts/checks/landing_ready.sh scripts/checks/retention_manifest.sh
+  scripts/checks/repository_identity.sh scripts/checks/lib/repository_identity.py
+  scripts/land/train.sh scripts/land/acceptance.sh scripts/land/signoff.sh scripts/worktree-new.sh
+  scripts/oracle/ORACLE.lock scripts/oracle/build.sh .github/workflows/oracle.yml)
 # Copied from the base: "src dst [optional]". A directory source ends in /.
 COPY=(
   "ROADMAP.md ROADMAP.md" "CLAUDE.md CLAUDE.md" "LICENSE LICENSE" ".gitattributes .gitattributes"
@@ -80,7 +86,7 @@ COPY=(
   "docs/archive/site-down.md docs/archive/site-down.md optional"
   ".github/workflows/oracle.yml .github/workflows/oracle.yml optional"
   "scripts/land/ scripts/land/" "scripts/review/ scripts/review/" "scripts/oracle/ scripts/oracle/ optional"
-  "scripts/push-both.sh scripts/push-both.sh" "scripts/worktree-new.sh scripts/worktree-new.sh"
+  "scripts/worktree-new.sh scripts/worktree-new.sh"
   ".claude/commands/creview.md .claude/commands/creview.md" ".claude/commands/land.md .claude/commands/land.md"
   "scripts/tests/check_landing_script.sh scripts/checks/landing_script.sh"
   "scripts/tests/check_landing_bot.sh scripts/checks/landing_bot.sh"
