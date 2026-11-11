@@ -84,6 +84,14 @@ end Witness{index}
                          [i for i, c in enumerate(result) if c == '\n'])
         self.assertEqual(lexer.count_examples(source), 1)
 
+    def test_module_import_word_boundaries(self):
+        modules = {'ConcreteSpec.Spec.Basics'}
+        source = ('import ConcreteSpec.Spec.Basics\n'
+                  'def importedX := 1\ndef value :=\n  importedX\n')
+        self.assertEqual(lexer.module_imports(source, modules)[0], list(modules))
+        with self.assertRaises(lexer.LexError):
+            lexer.module_imports(source + 'def bad := 0; import ConcreteSpec.Spec.Basics\n', modules)
+
     def test_compiler_import_graph_and_banned_words(self):
         header = lexer.compiler_header()
         for module, allowed in (("Concrete.Lex", True), ("Lean.Meta.Basic", True),

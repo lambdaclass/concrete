@@ -182,11 +182,3 @@ and toolchain identity. This design round makes no runtime or implementation
 acceptance claim. Compiler metadata remains within the existing compiler trust
 boundary; protection against hostile metaprograms forging it is not established
 by these checks.
-
-Direct proof imports are checked by `imports.py` inside the required trust-ban
-job. It elaborates complete proof commands (naming anonymous examples) and
-compares imports with the modules defining their directly used constants.
-Controls verify rejection of unused imports and of direct imports omitted in
-favor of transitive visibility. Both import gates share the lexer header parser;
-`imports.py --write` preserves comments while updating import commands. Each
-build and elaboration uses the bounded runner and forwards failure diagnostics.

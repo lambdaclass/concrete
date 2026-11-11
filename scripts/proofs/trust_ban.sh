@@ -2,6 +2,8 @@
 # TRUST BAN: no `sorry` and no `native_decide` anywhere in the specification or compiler (Q9.17), checked
 # transitively in the kernel's terms and in the sources the environment does not keep.
 #
+#   I  every proof module, recursively enumerated, imports exactly the modules defining its
+#      directly referenced constants (including anonymous examples); see scripts/proofs/IMPORTS.md.
 #   E  no constant of ANY kind the ConcreteSpec library declares (definitions, instances and
 #      generated helpers included, not only theorems) depends transitively on sorryAx, on
 #      Lean.ofReduceBool or Lean.ofReduceNat (what native_decide and `decide +native` reduce through),
@@ -17,6 +19,9 @@
 #      option on `decide`, ofReduceBool, ofReduceNat, trustCompiler or skipKernelTC, and define no
 #      syntax extension, run no meta code, set no option and import nothing outside the library
 #      (the lexer reads what Lean reads only for syntax it knows).
+#
+# IMPORT CONTROLS: unused and transitive-only imports, open namespaces, recursive/nonempty
+# populations, and comment/EOL-preserving idempotent header rewrites are checked by imports.py.
 #
 # NEGATIVE CONTROLS: a theorem proved by sorry, a definition whose body is sorry (no theorem about
 # it), a theorem proved by native_decide and a declared axiom each fail E or D naming the constant;

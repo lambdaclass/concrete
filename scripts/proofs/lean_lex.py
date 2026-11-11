@@ -191,7 +191,7 @@ def module_imports(source, modules):
         k += 1
     if k < len(lines) and not FIRST_COMMAND.match(lines[k]):
         raise LexError('invalid import header terminator')
-    if any(line.lstrip().startswith('import') for line in lines[k:]):
+    if any(re.search(r"\bimport\b", line) for line in lines[k:]):
         raise LexError('import outside header')
     return deps, spans, offset
 
