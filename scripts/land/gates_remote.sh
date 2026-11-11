@@ -4,7 +4,7 @@
 #
 #   gates_remote.sh --host H --base <sha> --head <sha> [--src-ref R] [--dst-ref R]
 #
-# 1. Bundles base..head (a temporary ref, refs/land-remote/<id>, at head) and hands it to the
+# 1. Bundles head and its complete history (a temporary ref, refs/land-remote/<id>, at head) and hands it to the
 #    TRANSPORT, which runs scripts/land/run-at-ref.sh on the host: a fresh clone of exactly head,
 #    where scripts/land/impact_gates.sh runs the same hook with the same input line the `ci` push will
 #    present. The CONCRETE_* variables of this environment are forwarded, so the selection and the
@@ -58,10 +58,9 @@ trap cleanup EXIT
 # This run replaces any earlier attestation: whatever it ends in, no older result stands beside it.
 rm -f "$(ppr_remote_path "$ROOT")" "$(ppr_remote_log_path "$ROOT")" 2>/dev/null || true
 git update-ref "$ref" "$head" || incomplete "cannot create $ref"
-# base..head only: the host's clone already has base (it is on main). A host that lacks it cannot
-# fetch the bundle, which is a transport failure (INCOMPLETE), never a pass.
-if [ "$base" = "$head" ]; then range=("$ref"); else range=("$ref" "^$base"); fi
-git bundle create "$TMPD/candidate.bundle" "${range[@]}" >/dev/null 2>&1 \
+# No receiver inventory is negotiated by this transport. Include all ancestors rather than
+# assuming its clone has base (or every parent of a merged candidate).
+git bundle create "$TMPD/candidate.bundle" "$ref" >/dev/null 2>&1 \
   || incomplete "git bundle create failed"
 
 # The command run in the host's clone. It first clears the gate bypass and the hook's re-entry

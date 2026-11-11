@@ -52,6 +52,9 @@ git -C "$WT" checkout --quiet --detach "$SHA"
 echo "[concrete-remote] ref=$REF sha=$SHA clone=$WT host=$(hostname)"
 if [ -d "$REPO/.lake" ]; then cp -a "$REPO/.lake" "$WT/.lake"; fi
 cd "$WT"
+# SOURCE selects this invocation's input, not the input of runners the command may
+# start (for example, the root checks' disposable landing repositories).
+unset RUN_AT_REF_SOURCE
 START=$(date +%s)
 RC=0
 if [ "${RUN_AT_REF_NO_NIX:-0}" = 1 ]; then bash -c "$CMD" || RC=$?

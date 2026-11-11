@@ -339,6 +339,12 @@ echo "=== gate host: check's impact leg on the gate host, bound to the SHA; INCO
 cat > "$TMP/fake-transport" <<'EOF'
 #!/usr/bin/env bash
 host="$1" bundle="$2" ref="$3" cmd="$4"
+# Verify in an empty receiver: transport must not assume any main/base objects.
+receiver="$(mktemp -d)" || exit 1
+trap 'rm -rf "$receiver"' EXIT
+git init -q --bare "$receiver" || exit 1
+git -C "$receiver" bundle verify "$bundle" || exit 1
+git -C "$receiver" fetch -q "$bundle" "$ref" || exit 1
 printf '%s\n' "$host" > "$FAKE_GH_DIR/transport.host"
 printf '%s\n' "$cmd" > "$FAKE_GH_DIR/transport.cmd"
 sha="$(git bundle list-heads "$bundle" "$ref" | cut -d' ' -f1)"

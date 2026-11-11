@@ -79,6 +79,20 @@ done
 if out="$(RUN_AT_REF_REPO=repo RUN_AT_REF_SOURCE=input.bundle RUN_AT_REF_RUNS=refused-runs \
     bounded_run 15 -- bash "$ROOT_DIR/scripts/land/run-at-ref.sh" refs/heads/missing true 2>&1)"; then exit 1; fi
 [[ "$out" == *"requested ref is not advertised"* && ! -e refused-runs ]]
+# A valid incremental bundle is unusable when the receiving repository lacks its base.
+git -C repo -c user.name=Test -c user.email=test@example.com commit --allow-empty -qm next
+git -C repo bundle create "$TMP/incremental.bundle" HEAD "^$expected"
+git init -q empty-receiver
+if out="$(RUN_AT_REF_REPO=empty-receiver RUN_AT_REF_SOURCE=incremental.bundle RUN_AT_REF_RUNS=refused-runs \
+    RUN_AT_REF_NO_NIX=1 bounded_run 15 -- bash "$ROOT_DIR/scripts/land/run-at-ref.sh" HEAD true 2>&1)"; then
+  echo 'landing_sources: accepted bundle with missing prerequisites' >&2; exit 1
+fi
+[[ "$out" == *"Repository lacks these prerequisite commits"* && "$out" == *"$expected"* && ! -e refused-runs ]]
+# The selected source belongs only to this invocation, even when commands launch runners.
+out="$(RUN_AT_REF_REPO=empty-receiver RUN_AT_REF_SOURCE=input.bundle RUN_AT_REF_RUNS=relative-runs \
+  RUN_AT_REF_NO_NIX=1 bounded_run 15 -- bash "$ROOT_DIR/scripts/land/run-at-ref.sh" HEAD \
+  'test -z "${RUN_AT_REF_SOURCE+x}" && git rev-parse HEAD')"
+[[ "$out" == *"exit=0"* && "$out" == *"sha=$expected"* ]]
 # These statements run after their entry points change directory. Exercise the
 # actual source statements in isolation: no reviewer, proof build or note writes.
 for spec in 'land/train.sh:usage()' 'review/review.sh:usage()' 'proofs/external.sh:DIRECT='; do

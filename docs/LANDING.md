@@ -216,7 +216,8 @@ when set (empty means none), else `git config land.gatesHost`. Set it once per c
 
 With a gate host, `check`'s impact leg is `scripts/land/gates_remote.sh`:
 
-1. It bundles `base..head` under a temporary ref.
+1. It bundles the head and its complete history under a temporary ref. No receiver object
+   inventory is negotiated, so the bundle has no prerequisite commits.
 2. The transport (`scripts/land/gates_transport_ssh.sh`) copies one directory to the host: the
    bundle, this checkout's `run-at-ref.sh`, and a script that quotes the command for bash. The
    host's login shell sees only `bash land-remote-<id>/run.sh`. That script runs `git fetch origin`
@@ -441,6 +442,8 @@ and a fake hook that fails exactly when the checkout contains `BAD`. It covers:
 paths resolve once against the caller's directory. Bundles must pass `git bundle
 verify` against the gate clone, and the requested ref or full SHA must be advertised
 by the bundle. Local clones, remote names, other URLs and symlink paths are refused.
+The runner clears `RUN_AT_REF_SOURCE` before executing the command, so nested runners select
+their own input rather than inheriting the outer bundle.
 The CI server train path (`gates_remote.sh` → `gates_transport_ssh.sh`) creates and
 copies a bundle, then passes its absolute path as `RUN_AT_REF_SOURCE`.
 
