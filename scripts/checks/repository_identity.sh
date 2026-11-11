@@ -34,7 +34,21 @@ git -C "$TMP/repo" remote add origin "$TMP/local.git"
 # A real local bundle ensures stale-origin probes cannot pass merely on a missing input.
 git -C "$TMP/repo" -c user.name=Test -c user.email=test@example.com commit --allow-empty -qm fixture
 git -C "$TMP/repo" bundle create "$TMP/input.bundle" HEAD
+# Invoke entry points through relative paths from a nested caller directory. The
+# checkout they operate on is deliberately different from the tools' checkout.
+mkdir "$TMP/repo/caller"
+relative_tools="$(python3 -I -c 'import os,sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))' "$ROOT_DIR/scripts" "$TMP/repo/caller")"
+BOUNDED_PARENT="$TMP" source "$ROOT_DIR/scripts/checks/lib/bounded.sh"
 cd "$TMP/repo"
+# Pass identity validation but stop before fetch, review, notes or gates.
+printf dirty > tracked
+git add tracked
+if out="$(cd caller && bounded_run 15 -- bash "$relative_tools/land/ready.sh" wip/test 2>&1)"; then
+  echo 'repository_identity: ready accepted dirty fixture' >&2; exit 1
+fi
+[[ "$out" == *"the work tree has uncommitted changes"* ]] || { echo "$out" >&2; exit 1; }
+git reset -q -- tracked
+rm tracked
 old_owner=unbalancedparentheses
 mixed_owner=UnbalancedParentheses
 urls=(
@@ -62,7 +76,7 @@ for url in "${urls[@]}"; do
   git remote set-url origin "$url"
   if python3 -I "$ROOT_DIR/scripts/checks/lib/repository_identity.py" --remote origin 2>/dev/null; then exit 1; fi
   for tool in "$ROOT_DIR/scripts/land/ready.sh" "$ROOT_DIR/scripts/land/notes.sh"; do
-    if out="$(bash "$tool" wip/test 2>&1)"; then
+    if out="$(cd caller && bounded_run 15 -- bash "$relative_tools/land/${tool##*/}" wip/test 2>&1)"; then
       echo "repository_identity: $tool accepted stale origin" >&2; exit 1
     fi
     [[ "$out" == *"archived repository destination refused"* ]] || { echo "$out" >&2; exit 1; }
@@ -103,5 +117,23 @@ for source in origin "$TMP/repo" "$TMP/input.bundle" input.bundle; do
   out="$(RUN_AT_REF_REPO="$TMP/repo" RUN_AT_REF_SOURCE="$source" RUN_AT_REF_RUNS="$TMP/runs" RUN_AT_REF_NO_NIX=1 \
     bash "$ROOT_DIR/scripts/land/run-at-ref.sh" HEAD 'git rev-parse HEAD')"
   [[ "$out" == *"sha=$expected"* && "$out" == *"exit=0"* ]] || { echo "$out" >&2; exit 1; }
+done
+# These statements run after their entry points change directory. Exercise the
+# actual source statements in isolation: no reviewer, proof build or note writes.
+for spec in 'land/train.sh:usage()' 'review/review.sh:usage()' 'proofs/external.sh:DIRECT='; do
+  file="${spec%%:*}"; prefix="${spec#*:}"
+  statement="$(python3 -I -c 'import pathlib,sys; print(next(line for line in pathlib.Path(sys.argv[1]).read_text().splitlines() if line.startswith(sys.argv[2])))' "$ROOT_DIR/scripts/$file" "$prefix")"
+  probe='SELF_DIR="$(cd "$(dirname "$0")" && pwd)"; SCRIPT_DIR="$SELF_DIR"; cd "$1"; '
+  case "$prefix" in
+    'usage()') probe+="$statement"$'\nusage'; expected=2
+      [ "$file" != review/review.sh ] || expected=0 ;;
+    *) probe+="$statement; [ -z \"\$DIRECT\" ]"; expected=0 ;;
+  esac
+  rc=0
+  out="$(cd "$ROOT_DIR/scripts" && bounded_run 15 -- bash -c "$probe" "$file" "$ROOT_DIR" 2>&1)" || rc=$?
+  [ "$rc" = "$expected" ] && [[ "$out" != *'No such file'* ]] || { echo "$file: $out" >&2; exit 1; }
+  if [ "$prefix" = 'usage()' ]; then
+    [[ "$out" == *"${file##*/}"* ]] || { echo "$file: empty help" >&2; exit 1; }
+  fi
 done
 echo 'repository_identity: hook, runner, fetch, push, content and remote-name controls pass'

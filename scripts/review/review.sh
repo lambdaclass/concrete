@@ -64,7 +64,7 @@ MAX_ROUNDS=5
 PIECES="auto"
 EXTRA=""
 
-usage() { awk 'NR > 1 { if (!/^#/) exit; sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}"; }  # the header, whatever its length
+usage() { awk 'NR > 1 { if (!/^#/) exit; sub(/^# ?/, ""); print }' "$SCRIPT_DIR/review.sh"; }  # the header, whatever its length
 die() { echo "review: $*" >&2; exit 2; }
 
 while [ $# -gt 0 ]; do
