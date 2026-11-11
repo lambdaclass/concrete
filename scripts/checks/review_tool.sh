@@ -274,6 +274,65 @@ range_note clean 5 "$RANGE_MID"
 reset_fake
 REVIEW_PUSH=0 review --base "$RANGE_BASE" >"$T/range" 2>&1; rc=$?
 check "invalid range cannot reset exhausted cap" test "$rc" -eq 3 -a "$(calls)" -eq 0
+# Stacked notes must not conceal ancestor caps or unresolved findings.
+for mode in capped malformed uncapped merge; do
+  g checkout -q -B "stack-$mode" "$RANGE_BASE"
+  commit_file ancestor.txt ancestor ancestor
+  STACK_B="$(g rev-parse HEAD)"
+  rounds=5; [ "$mode" != uncapped ] || rounds=2
+  range_note findings "$rounds" "$RANGE_BASE"
+  g notes --ref=concrete-review-findings add -f -m 'ANCESTOR_OPEN_FINDING' HEAD
+  commit_file child.txt child child
+  rounds=1; [ "$mode" != malformed ] || rounds=0
+  range_note clean "$rounds" "$STACK_B"
+  if [ "$mode" = merge ]; then
+    # Review evidence on both parents must contribute to the cap.
+    g checkout -q -b stack-side "$RANGE_BASE"
+    commit_file side.txt side side
+    range_note clean 1 "$RANGE_BASE"
+    g merge -q --no-ff "stack-$mode" -m merge
+  fi
+  reset_fake
+  REVIEW_PUSH=0 review --base "$RANGE_BASE" >"$T/stack" 2>&1; rc=$?
+  if [ "$mode" = uncapped ]; then
+    check "stacked narrow clean preserves round 3" test "$rc/$(field rounds)" = 0/3
+    check "stacked narrow clean forces full review" grep -q '^+ancestor$' "$FAKE_LOG/stdin.1"
+    check "stacked narrow clean carries ancestor findings" grep -q ANCESTOR_OPEN_FINDING "$FAKE_LOG/prompt.1"
+  else
+    check "stacked $mode cannot bypass ancestor cap" test "$rc" -eq 3 -a "$(calls)" -eq 0
+    check "stacked $mode fails for cap reason" grep -q 'cap' "$T/stack"
+  fi
+done
+# A valid first blocked round has no completed delta start, but has valid scope.
+g checkout -q -B blocked-first "$RANGE_BASE"
+commit_file initial.txt initial initial
+range_note blocked 1 "$RANGE_BASE"
+reset_fake
+REVIEW_PUSH=0 review --base "$RANGE_BASE" >"$T/blocked-first" 2>&1; rc=$?
+check "covering first blocked round resumes at round 2" test "$rc/$(field rounds)" = 0/2
+check "covering first blocked round has no false range diagnostic" test -z "$(grep 'prior review does not cover' "$T/blocked-first")"
+# A blocked round contributes its count, but never advances the delta start.
+for mode in narrow covering; do
+  g checkout -q -B "blocked-$mode" "$RANGE_BASE"
+  commit_file prior.txt prior prior
+  range_note clean 2 "$RANGE_BASE"
+  commit_file pending.txt pending pending
+  BLOCKED_BASE="$(g rev-parse HEAD)"
+  commit_file blocked.txt blocked blocked
+  nb="$RANGE_BASE"; [ "$mode" != narrow ] || nb="$BLOCKED_BASE"
+  range_note blocked 1 "$nb"
+  commit_file after.txt after after
+  reset_fake
+  REVIEW_PUSH=0 review --base "$RANGE_BASE" >"$T/blocked-scope" 2>&1; rc=$?
+  check "$mode blocked note preserves maximum round count" test "$rc/$(field rounds)" = 0/3
+  if [ "$mode" = narrow ]; then
+    check "narrow blocked note forces full scope despite older clean" grep -q '^+prior$' "$FAKE_LOG/stdin.1"
+  else
+    check "covering blocked note retains delta scope" test -z "$(grep '^+prior$' "$FAKE_LOG/stdin.1")"
+    check "covering blocked note has no false range diagnostic" test -z "$(grep 'prior review does not cover' "$T/blocked-scope")"
+  fi
+done
+g checkout -q range-controls
 # A real unrelated commit is syntactically valid but cannot cover the required base.
 UNRELATED="$(printf unrelated | g commit-tree "$(g rev-parse HEAD^{tree})")"
 range_note clean 1 "$UNRELATED"

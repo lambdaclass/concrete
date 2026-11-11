@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # R-0544 — does a commit carry a clean review verdict? See docs/REVIEW.md.
 #
-#   scripts/review/verify.sh [--fetch] [--required-base <commit>] <commit>
+#   scripts/review/verify.sh [--fetch] [--notes-ref <ref>] [--required-base <commit>] <commit>
 #
 # Reads the git note that scripts/review/review.sh wrote on <commit> under
 # refs/notes/concrete-review. The verdict counts only for that exact commit: a
@@ -17,13 +17,16 @@
 
 set -euo pipefail
 
-NOTES_REF="${REVIEW_NOTES_REF:-refs/notes/concrete-review}"
+NOTES_REF="refs/notes/concrete-review"
 REMOTE="${REVIEW_REMOTE:-origin}"
 FETCH=0
 REQUIRED_BASE=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --fetch) FETCH=1; shift ;;
+    --notes-ref)
+      [ $# -ge 2 ] && git check-ref-format "$2" || { echo "verify: --notes-ref needs a full ref" >&2; exit 2; }
+      NOTES_REF="$2"; shift 2 ;;
     --required-base)
       [ $# -ge 2 ] || { echo "verify: --required-base needs a commit" >&2; exit 2; }
       REQUIRED_BASE="$(git rev-parse -q --verify "$2^{commit}")" \
@@ -32,7 +35,7 @@ while [ $# -gt 0 ]; do
     *) break ;;
   esac
 done
-[ $# -eq 1 ] || { echo "usage: verify.sh [--fetch] [--required-base <commit>] <commit>" >&2; exit 2; }
+[ $# -eq 1 ] || { echo "usage: verify.sh [--fetch] [--notes-ref <ref>] [--required-base <commit>] <commit>" >&2; exit 2; }
 
 if [ "$FETCH" = 1 ]; then
   git fetch -q "$REMOTE" "+$NOTES_REF:$NOTES_REF" \

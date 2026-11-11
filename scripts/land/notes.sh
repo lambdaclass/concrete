@@ -91,7 +91,7 @@ case "$sub" in
   ready)
     [ -n "${1:-}" ] || die "ready <sha>"
     s="$(git rev-parse "$1")"
-    REVIEW_NOTES_REF=refs/notes/remote/concrete-review bash "$SELF_DIR/../review/verify.sh" \
-      --required-base "${2:-$REMOTE/main}" "$s" && [ "$(get_note gates "$s" gates)" = pass ] ;;
+    bash "$SELF_DIR/../review/verify.sh" \
+      --notes-ref refs/notes/remote/concrete-review --required-base "${2-$REMOTE/main}" "$s" && [ "$(get_note gates "$s" gates)" = pass ] ;;
   *) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

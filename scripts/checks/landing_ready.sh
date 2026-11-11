@@ -167,6 +167,26 @@ for mode in intermediate self malformed; do
   [ "$rc" = 2 ] && has "$out" "$reason" && ok "ready --no-review rejects $mode evidence for $reason" || { no "ready $mode: $rc $out"; }
 done
 
+echo "=== ISS-0019: explicit bases and notes ref isolation ==="
+mk wip/explicit-base explicit src/explicit explicit; mark wip/explicit-base
+EH="$(sha_of wip/explicit-base)"
+out="$(cd "$A" && bash "$NOTES" ready "$EH" '' 2>&1)"; rc=$?
+[ "$rc" = 2 ] && has "$out" 'required base is not a commit' && ok "notes ready rejects explicit empty base" || no "empty notes base: $rc $out"
+for arg in empty missing; do
+  if [ "$arg" = empty ]; then
+    out="$(cd "$A" && bash "$ROOT_DIR/scripts/land/ready.sh" --base '' --dry-run wip/explicit-base 2>&1)"; rc=$?
+  else
+    out="$(cd "$A" && bash "$ROOT_DIR/scripts/land/ready.sh" --base 2>&1)"; rc=$?
+  fi
+  [ "$rc" != 0 ] && has "$out" '--base needs a nonempty ref' && ok "ready rejects $arg base argument" || no "ready $arg base: $rc $out"
+done
+# Keep the published clean snapshot, but replace canonical local evidence with findings.
+(cd "$A" && git notes --ref=concrete-review add -f -m "$(printf 'verdict: findings\nrounds: 2\nreviewer: codex\nutc: 2026-11-11T00:00:00Z\nbase: %s\npieces: 1' "$BASE")" "$EH")
+out="$(cd "$A" && REVIEW_NOTES_REF=refs/notes/remote/concrete-review bash "$ROOT_DIR/scripts/review/verify.sh" --required-base "$BASE" "$EH" 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" 'findings (round 2' && ok "ambient notes ref cannot override canonical evidence" || no "ambient ref: $rc $out"
+out="$(cd "$A" && bash "$NOTES" ready "$EH" "$BASE" 2>&1)"; rc=$?
+[ "$rc" = 0 ] && has "$out" 'clean (round 1' && ok "readiness explicitly selects published snapshot" || no "published ref: $rc $out"
+
 echo "=== bisect --ci: a red CI run names the culprit, each probe its own run ==="
 mk wip/cired cired CIRED red; mark wip/cired
 mk wip/g3 g3 src/g3.txt g3; mark wip/g3

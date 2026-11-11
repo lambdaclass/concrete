@@ -210,10 +210,13 @@ landing supplies the recorded train base, sign-off supplies its diff base for
 `origin/main`), and incremental review supplies its current review base.
 With `--required-base`, the note's base must be an ancestor-or-equal
 of the required commit; an unknown or insufficient base exits 2. This applies to
-clean, findings and blocked evidence alike. Invalid prior
-review evidence triggers a full review without resetting rounds or the cap.
+clean, findings and blocked evidence alike. Incremental review ignores malformed
+notes and retains the maximum round count across all schema-valid notes in the
+branch history, including merge parents. Any insufficient-range evidence triggers
+a full review without resetting rounds or the cap; only a covering descendant
+review can supersede earlier findings.
 Without this option, verification judges the note without a required range.
-`REVIEW_NOTES_REF` selects the notes ref (default `refs/notes/concrete-review`);
+`--notes-ref <ref>` explicitly selects the notes ref (default `refs/notes/concrete-review`);
 readiness uses the fetched `refs/notes/remote/concrete-review` snapshot.
 
 ## Tests

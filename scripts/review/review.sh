@@ -166,34 +166,52 @@ fi
 # Latest note on the branch (round count), and the latest note whose round
 # actually reviewed its diff (delta start). A `blocked` round reviewed only part
 # of its diff, so it does not advance the delta start.
-PREV_VALID=0 REVIEWED_VALID=0
-PREV_SHA="" PREV_ROUNDS=0 PREV_VERDICT="" REVIEWED_SHA="" REVIEWED_ROUNDS=0 REVIEWED_VERDICT=""
+PREV_VALID=0
+PREV_SHA="" PREV_ROUNDS=0 PREV_VERDICT="" REVIEWED_SHA="" REVIEWED_ROUNDS=0
+INSUFFICIENT_RANGE=0
+PREV_FINDINGS=""
+COVERING_REVIEWS=""
 while read -r c; do
   [ -n "$c" ] || continue
-  n="$(git notes --ref="$NOTES_REF" show "$c" 2>/dev/null)" || continue
+  # Schema first: malformed notes supply neither rounds nor review evidence.
+  vrc=0
+  bash "$SCRIPT_DIR/verify.sh" "$c" >/dev/null 2>&1 || vrc=$?
+  [ "$vrc" -le 1 ] || continue
+  n="$(git notes --ref="$NOTES_REF" show "$c")"
   v="$(note_field "$n" verdict)"
   r="$(note_field "$n" rounds)"
-  [[ "$r" =~ ^[0-9]+$ ]] || continue
+  [ "$r" -le "$PREV_ROUNDS" ] || PREV_ROUNDS="$r"
   vrc=0
   bash "$SCRIPT_DIR/verify.sh" --required-base "$BASE_SHA" "$c" >/dev/null 2>&1 || vrc=$?
+  [ "$vrc" -le 1 ] || INSUFFICIENT_RANGE=1
   if [ -z "$PREV_SHA" ]; then
-    PREV_SHA="$c" PREV_ROUNDS="$r" PREV_VERDICT="$v"
+    PREV_SHA="$c" PREV_VERDICT="$v"
     if [ "$vrc" -le 1 ]; then PREV_VALID=1; fi
   fi
-  if [ "$v" = clean ] || [ "$v" = findings ]; then
-    REVIEWED_SHA="$c" REVIEWED_ROUNDS="$r" REVIEWED_VERDICT="$v"
-    if [ "$vrc" -le 1 ]; then REVIEWED_VALID=1; fi
-    break
+  # Only a covering descendant review can supersede an ancestor's findings.
+  covered=0
+  for descendant in $COVERING_REVIEWS; do
+    if git merge-base --is-ancestor "$c" "$descendant"; then covered=1; break; fi
+  done
+  if [ "$covered" = 0 ] && [ "$v" != clean ]; then
+    PREV_FINDINGS="$PREV_FINDINGS
+$(findings_for "$c" "$r")"
+  fi
+  if [ "$vrc" -le 1 ] && { [ "$v" = clean ] || [ "$v" = findings ]; }; then
+    COVERING_REVIEWS="$COVERING_REVIEWS $c"
+    if [ -z "$REVIEWED_SHA" ]; then
+      REVIEWED_SHA="$c" REVIEWED_ROUNDS="$r"
+    fi
   fi
 done < <(git rev-list --topo-order HEAD "^$BASE_SHA")
 
-if [ "$PREV_VALID" = 1 ] && [ "$PREV_SHA" = "$HEAD_SHA" ] && [ "$PREV_VERDICT" != blocked ]; then
+if [ "$INSUFFICIENT_RANGE" = 0 ] && [ "$PREV_VALID" = 1 ] && [ "$PREV_SHA" = "$HEAD_SHA" ] && [ "$PREV_VERDICT" != blocked ]; then
   if [ "$PREV_VERDICT" = clean ]; then
     echo "review: HEAD $HEAD_SHA already reviewed clean (round $PREV_ROUNDS)"
     exit 0
   fi
   if [ "$PREV_ROUNDS" -ge "$MAX_ROUNDS" ]; then
-    cap_message "$PREV_ROUNDS" "$(findings_for "$PREV_SHA" "$PREV_ROUNDS")"
+    cap_message "$PREV_ROUNDS" "$PREV_FINDINGS"
     exit 3
   fi
   echo "review: HEAD already reviewed in round $PREV_ROUNDS (verdict $PREV_VERDICT)." >&2
@@ -203,13 +221,13 @@ fi
 
 ROUND=$((PREV_ROUNDS + 1))
 if [ "$ROUND" -gt "$MAX_ROUNDS" ]; then
-  cap_message "$PREV_ROUNDS" "$(findings_for "$PREV_SHA" "$PREV_ROUNDS")"
+  cap_message "$PREV_ROUNDS" "$PREV_FINDINGS"
   exit 3
 fi
 
 FROM="${REVIEWED_SHA:-$BASE_SHA}"
 FULL_REVIEW=0
-if { [ "$REVIEWED_VALID" = 0 ] && [ -n "$PREV_SHA" ]; } ||
+if [ "$INSUFFICIENT_RANGE" = 1 ] ||
    { [ -n "$REVIEWED_SHA" ] && ! git merge-base --is-ancestor "$BASE_SHA" "$REVIEWED_SHA"; }; then
   # Missing range coverage or an old review predating changes imported from base
   # requires full review. Comparing an old commit directly
@@ -223,18 +241,6 @@ git diff --no-color --no-ext-diff -M "$FROM" "$HEAD_SHA" >"$WORK/full.diff"
 if [ ! -s "$WORK/full.diff" ]; then
   echo "review: nothing to review: no changes between $FROM and HEAD" >&2
   exit 4
-fi
-
-# Open findings to carry forward: those of the latest round, and, when that
-# round was blocked, also those of the last fully reviewed round (the blocked
-# round may not have seen the code they are about).
-PREV_FINDINGS=""
-if [ -n "$PREV_SHA" ] && [ "$PREV_VERDICT" != clean ]; then
-  PREV_FINDINGS="$(findings_for "$PREV_SHA" "$PREV_ROUNDS")"
-fi
-if [ "$REVIEWED_VERDICT" = findings ] && [ "$REVIEWED_SHA" != "$PREV_SHA" ]; then
-  PREV_FINDINGS="$PREV_FINDINGS
-$(findings_for "$REVIEWED_SHA" "$REVIEWED_ROUNDS")"
 fi
 
 # ---------------------------------------------------------------- split

@@ -22,7 +22,7 @@ while [ $# -gt 0 ]; do
     --dry-run) DRY=1 ;;
     --no-review) review=0 ;;
     --no-remote) remote=0 ;;
-    --base) baseref="$2"; shift ;;
+    --base) [ $# -ge 2 ] && [ -n "$2" ] || die "--base needs a nonempty ref"; baseref="$2"; shift ;;
     -*) die "unknown option $1" ;;
     *) branch="$1" ;;
   esac; shift
