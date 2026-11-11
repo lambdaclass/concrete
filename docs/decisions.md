@@ -17,42 +17,28 @@ The shape of Core was approved provisionally on 2026-11-05 ([stage A2a](#decided
 <a id="waiting-for-the-owner"></a>
 ## Waiting for the owner
 
-Links only; each item’s text lives where it is linked.
+Links only; each item's text lives where it is linked.
 
 1. The spec read and the Core freeze, A2c ([queue](../ROADMAP.md#the-queue)).
 2. The items the reviews leave open until they are fully dispositioned: SPARK review items 4(b) and
    4(c) ([SPARK review](proposals/SPARK.md)). Quantitative step and time bounds were decided on
    2026-11-07 ([row](#decided-2026-11-07-step-bounds)); the reviews' remaining disposition is unchanged.
 
-Open details from the 2026-11-09, 2026-11-10 and 2026-11-11 answers:
-
-- [Wait for independent report-check review](#decided-2026-11-09-report-review).
-- [Main-branch protection settings](#decided-2026-11-09-main-protection).
-- [macOS compiler trust-check CI](#pending-2026-11-09-macos-ci).
-- [Main repository details](#decided-2026-11-11-main-repository).
-- [Extra-round details](#decided-2026-11-11-extra-round).
-- [Resume qualified merges](#decided-2026-11-09-qualified-merges).
-- [Redo the assumed-yes proposals](#decided-2026-11-09-redo-proposals).
-- [Supply the public signing key](#decided-2026-11-09-public-key).
-- [No trust-check promise on macOS](#decided-2026-11-09-macos-guarantee).
-- [Independent review before final qualification](#decided-2026-11-09-independent-review).
-- [General rule for permitted foundational axioms](#decided-2026-11-09-standard-axioms).
-- [Improve checker speed and require full coverage](#decided-2026-11-09-checker-speed).
-- [Exact proof provenance in the long term](#decided-2026-11-09-exact-provenance).
-- [Design before extending contradiction checks](#decided-2026-11-09-helper-design).
-- [Local-variable identity is its number](#decided-2026-11-09-variable-identity).
-- [Each launch supplies its starting state](#decided-2026-11-09-launch-state).
-- [Stop and redesign the checker design line](#decided-2026-11-09-vacuity-redesign).
-- [Compiler trust-check tools](#pending-2026-11-09-trust-tools).
-- [Compiler trust-check foundations](#pending-2026-11-09-trust-foundations).
-- [Extra review rounds](#pending-2026-11-09-extra-rounds).
-- [Duplicate-model cleanup questions](#pending-2026-11-09-spec-questions).
-- [Older language questions](#pending-2026-11-09-older-questions).
-- [Review-access stamping](#pending-2026-11-09-stamping).
-- [Plan the stopped spec work](#decided-2026-11-10-spec-plan).
-- [Allow review-tool commands](#decided-2026-11-10-review-commands).
-- [Delegate the locked-down launcher](#decided-2026-11-10-launcher).
-- [Protect main and use pull requests](#decided-2026-11-10-pr-flow).
+- Compiler trust-check tools: approval of systemd-run, systemctl and ssh-keygen remains open; the answers disagree.
+- Compiler trust-check foundations: approval of the launcher, verifier, key distribution and first-time setup remains open; the answers disagree.
+- Compiler trust-check macOS CI: informational versus dropped or split remains open beyond the later containment-only answer.
+- Extra rounds beyond branch limits: the standing policy and branch-specific exceptions remain open beyond the later explicit grants.
+- Proof-axiom provenance: the answers disagree on the interim manual exception and do not settle its approval.
+- Duplicate-base-model cleanup: no stuck-program change is needed now; struct layout and whole-pointer representation await full proposals.
+- Lifecycle signature: the change awaits a full proposal.
+- Standard-library coverage: replacement, streams, traversal callbacks and floating-point NaN policy await full proposals.
+- Slice 1: move spelling, abort placement and result type, manifest keys, compiler subset and always-aborts task placement await a reviewed proposal.
+- Syntax spelling: the full spelling proposal remains open.
+- Review-access stamping: staged changes versus committed content remains open; the answers disagree.
+- Vacuous-law checker main line: additional rounds versus redesign remains open; the answers disagree.
+- [Main-branch protection](#decided-2026-11-09-main-protection): exact settings remain open.
+- [Tests as proofs](#decided-2026-11-10-tests-proofs): syntax, types and proof-obligation rules remain open.
+- [Unproved tests](#decided-2026-11-10-unproved-tests): the release milestone remains open.
 
 A decided proposal moves to `docs/archive/<topic>-<date>/`.
 
@@ -62,29 +48,19 @@ A decided proposal moves to `docs/archive/<topic>-<date>/`.
 Each row records a decision and its reason. A language rule itself is its Lean definition in
 [ConcreteSpec/](../ConcreteSpec/), which governs once it lands.
 
-- [Compiler trust-check tools](#pending-2026-11-09-trust-tools).
-- [Compiler trust-check foundations](#pending-2026-11-09-trust-foundations).
-- [Extra review rounds](#pending-2026-11-09-extra-rounds).
-- [Duplicate-model cleanup questions](#pending-2026-11-09-spec-questions).
-- [Older language questions](#pending-2026-11-09-older-questions).
-- [Review-access stamping](#pending-2026-11-09-stamping).
-- [Main repository](#decided-2026-11-11-main-repository).
-- [One extra round](#decided-2026-11-11-extra-round).
-- [macOS compiler trust-check CI remains open](#pending-2026-11-09-macos-ci).
 - [Resume qualified merges](#decided-2026-11-09-qualified-merges).
-- [Redo the assumed-yes proposals](#decided-2026-11-09-redo-proposals).
+- [Redo provisional proposals](#decided-2026-11-09-redo-proposals).
 - [Wait for independent report-check review](#decided-2026-11-09-report-review).
 - [Supply the public signing key](#decided-2026-11-09-public-key).
+- [Independent review before qualification](#decided-2026-11-09-independent-review).
+- [General rule for foundational axioms](#decided-2026-11-09-standard-axioms).
+- [Improve speed and require full coverage](#decided-2026-11-09-checker-speed).
+- [Design before extending contradiction checks](#decided-2026-11-09-helper-design).
+- [Variable identity is its number](#decided-2026-11-09-variable-identity).
+- [Each launch supplies its starting state](#decided-2026-11-09-launch-state).
 - [Owner approves trusted code](#decided-2026-11-09-trust-approver).
 - [Pre-create the memory-limit group](#decided-2026-11-09-memory-group).
 - [No trust-check promise on macOS](#decided-2026-11-09-macos-guarantee).
-- [Independent review before final qualification](#decided-2026-11-09-independent-review).
-- [General rule for permitted foundational axioms](#decided-2026-11-09-standard-axioms).
-- [Improve checker speed and require full coverage](#decided-2026-11-09-checker-speed).
-- [Exact proof provenance in the long term](#decided-2026-11-09-exact-provenance).
-- [Design before extending contradiction checks](#decided-2026-11-09-helper-design).
-- [Local-variable identity is its number](#decided-2026-11-09-variable-identity).
-- [Each launch supplies its starting state](#decided-2026-11-09-launch-state).
 - [Stop the deployed landing bot](#decided-2026-11-09-stop-bot).
 - [Make builds hermetic](#decided-2026-11-09-hermetic-builds).
 - [Stop and redesign the checker design line](#decided-2026-11-09-vacuity-redesign).
@@ -102,6 +78,13 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 - [Highest review cap for mixed file kinds](#decided-2026-11-10-mixed-review-cap).
 - [Protect main and use pull requests](#decided-2026-11-10-pr-flow).
 - [Coordinator merges qualified pull requests](#decided-2026-11-10-pr-merger).
+- [Choose the main repository](#decided-2026-11-11-main-repository).
+- [One extra round for three branches](#decided-2026-11-11-extra-round).
+- [Send everything to lambdaclass/concrete](#decided-2026-11-11-send-everything).
+- [Archive concrete2](#decided-2026-11-11-archive-copy).
+- [One more repository-switch round](#decided-2026-11-11-switch-round).
+- [Rebuild the decisions record](#decided-2026-11-11-record-template).
+- [Install the review-tool launcher](#decided-2026-11-11-install-launcher).
 
 - The core statement ([row](#decided-project-core-statement)).
 - Proof infrastructure from the first commit ([row](#decided-project-proof-infrastructure)).
@@ -142,563 +125,353 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 - Every branch gets an agy review too ([row](#decided-project-review)).
 - Eleven plan and process decisions: UBSan dropped, a complete adapter theorem, smaller landing scripts, Claude's quota on the critical path, the front end now, one decisions writer, risk-capped reviews, one clones folder, a later no-libc runtime, a compile-speed budget and the termination wording ([row](#decided-2026-11-08-eleven)).
 
-<a id="decided-2026-11-09-10"></a>
-## Owner decisions 2026-11-09 and 2026-11-10
-
-The 2026-11-09 agreement entries record only what Claude, Codex and agy all agreed.
-The later direct answers stand separately; unresolved details remain [waiting for the owner](#waiting-for-the-owner).
 
 <a id="decided-2026-11-09-qualified-merges"></a>
-### Resume qualified merges
-
-Question: RESUME MERGING TO MAIN?
-
-Owner, 2026-11-09: "ok too many questions do what all of you agree"
-
-Meaning: Resume merging individually qualified pieces, with their required checks, reviews and approvals.
-
-Not decided: which candidate branches have satisfied their dependencies and qualification requirements.
+**Resume qualified merges**
+- Asked (2026-11-09): "RESUME MERGING TO MAIN?
+   - Ready: the number allocator, the citation checker, the test-list check.
+   - Already signed off by you and still waiting: slice 0, the language
+     record, the owner sign-off, the legacy sweep, one-repository.
+   - Not ready: the review-access tool, 2 of its 9 steps accepted.
+   Rec: merge the qualified pieces one by one, each with its own checks.
+   Saying yes waives no check and gives no sign-off. Reply "resume merging"."
+- Owner (2026-11-09): "ok too many questions do what all of you agree"
+- Meaning: Resume merging independently qualified pieces, each with its own required checks.
+- Not decided: Which listed branches are ready and whether their dependencies are qualified.
 
 <a id="decided-2026-11-09-redo-proposals"></a>
-### Redo the assumed-yes proposals
-
-Question: THE 33 ASSUMED-YES ITEMS.
-- What they are: provisional proposals (startup rules, constant tables,
-  bit ops, array splitting, secret wiping, versioning and more).
-- Review finding: several alternatives are weak and costs are missing.
-  They also decide meaning, not just spelling.
-Rec: treat them as proposals. I bring each with fair alternatives and
-costs before asking for a yes. Answer: "all yes" / list rejects / "redo".
-
-Owner, 2026-11-09: "ok too many questions do what all of you agree"
-
-Meaning: Redo the proposals with fair alternatives and costs before deciding them.
-
-Not decided: the substance of the 33 proposals.
+**Redo provisional proposals**
+- Asked (2026-11-09): "THE 33 ASSUMED-YES ITEMS.
+   - What they are: provisional proposals (startup rules, constant tables,
+     bit ops, array splitting, secret wiping, versioning and more).
+   - Review finding: several alternatives are weak and costs are missing.
+     They also decide meaning, not just spelling.
+   Rec: treat them as proposals. I bring each with fair alternatives and
+   costs before asking for a yes. Answer: "all yes" / list rejects / "redo"."
+- Owner (2026-11-09): "ok too many questions do what all of you agree"
+- Meaning: Redo the provisional proposals with fair alternatives and costs before deciding them.
+- Not decided: Approval of the proposals themselves.
 
 <a id="decided-2026-11-09-report-review"></a>
-### Wait for independent report-check review
-
-Question: SIGN OFF THE SPEC-CHANGE REPORT CHECK?
-
-Owner, 2026-11-09: "ok too many questions do what all of you agree"
-
-Meaning: Wait for an independent reviewer before sign-off.
-
-Not decided: sign-off of the spec-change report check itself.
+**Wait for independent report-check review**
+- Asked (2026-11-09): "SIGN OFF THE SPEC-CHANGE REPORT CHECK?
+   - State: passed its full run; both final reviews clean.
+   Text if yes: "I sign off the spec-change report check at ff249d449"
+   Rec: strongest is to wait for an independent review."
+- Owner (2026-11-09): "ok too many questions do what all of you agree"
+- Meaning: Wait for an independent review before signing off the spec-change report check.
+- Not decided: Sign-off of the report check.
 
 <a id="decided-2026-11-09-public-key"></a>
-### Supply the public signing key
-
-Question: SEND YOUR SSH PUBLIC KEY.
-
-Owner, 2026-11-09: "ok too many questions do what all of you agree"
-
-Meaning: The owner should supply the public signing key.
-
-Not decided: the fingerprint and distribution checks.
-
-<a id="decided-2026-11-09-trust-approver"></a>
-### Owner approves trusted code
-
-Question: TRUST CHECK (only code you approved can run in the compiler).
-
-A. Who approves? Rec: you alone, with your SSH key.
-
-Owner, 2026-11-09: "ok too many questions do what all of you agree"
-
-Meaning: The owner alone approves trusted code, using the owner’s SSH key.
-
-<a id="decided-2026-11-09-memory-group"></a>
-### Pre-create the memory-limit group
-
-Question: TRUST CHECK (only code you approved can run in the compiler).
-
-D. Memory limits.
-Option 1: trust sudo plus the user service bus.
-Option 2: pre-create the memory-limit group once.
-Rec: option 2 (less trusted code; one-off setup cost).
-
-Owner, 2026-11-09: "ok too many questions do what all of you agree"
-
-Meaning: Choose option 2: pre-create the memory-limit group once.
-
-<a id="decided-2026-11-09-macos-guarantee"></a>
-### No trust-check promise on macOS
-
-Question: TRUST CHECK (only code you approved can run in the compiler).
-
-E. macOS: this implementation makes no promise there and fails rather
-than passes? Rec: yes.
-
-Owner, 2026-11-09: "ok too many questions do what all of you agree"
-
-Meaning: This trust-check implementation makes no promise on macOS and cannot qualify there.
-
-Not decided: whether the reported status is FAIL or INCOMPLETE.
+**Supply the public signing key**
+- Asked (2026-11-09): "SEND YOUR SSH PUBLIC KEY.
+   - Why: only your key may approve trusted code (you delegated this).
+   - Fingerprint and distribution checks will be documented."
+- Owner (2026-11-09): "ok too many questions do what all of you agree"
+- Meaning: The owner should supply the public signing key with fingerprint and distribution checks documented.
+- Not decided: The concrete key-distribution mechanism.
 
 <a id="decided-2026-11-09-independent-review"></a>
-### Independent review before final qualification
-
-Question: BRANCHES WHERE EVERY AVAILABLE MODEL WROTE CODE.
-- Problem: no independent reviewer exists until Kimi returns.
-Option A: accept cross-reviews now as provisional; Kimi reviews later.
-          This is an EXCEPTION, not an improvement.
-Option B: wait about a week for Kimi.
-Rec (Codex): an independent reviewer before final qualification. Any
-exception should name exact SHAs and require a back-review.
-From now on: one writer model per branch.
-
-Owner, 2026-11-09: "ok too many questions do what all of you agree"
-
-Meaning: Wait for an independent reviewer before final qualification.
-
-Not decided: a one-writer-model-per-branch rule.
-
-Refines [the review decision](#decided-project-review).
+**Independent review before qualification**
+- Asked (2026-11-09): "BRANCHES WHERE EVERY AVAILABLE MODEL WROTE CODE.
+   - Which: the spec-change report check, the scaling check, the trust
+     check, the vacuous-law checker (design line), review-access.
+   - Also spec branches c1-audit, c2-audit, c4-audit, c5, c6-audit, c7,
+     c9, c10 and integrate.
+   - Problem: no independent reviewer exists until Kimi returns.
+   Option A: accept cross-reviews now as provisional; Kimi reviews later.
+             This is an EXCEPTION, not an improvement.
+   Option B: wait about a week for Kimi.
+   Rec (Codex): an independent reviewer before final qualification. Any
+   exception should name exact SHAs and require a back-review.
+   From now on: one writer model per branch."
+- Owner (2026-11-09): "ok too many questions do what all of you agree"
+- Meaning: Wait for an independent reviewer before final qualification and use one writer model per branch from now on.
+- Not decided: Any provisional cross-review exception.
 
 <a id="decided-2026-11-09-standard-axioms"></a>
-### General rule for permitted foundational axioms
-
-Question: VACUOUS-LAW CHECKER AND LEAN'S BUILT-IN AXIOMS.
-- Axioms: propext, Quot.sound, possibly Classical.choice.
-- Blocks: six real spec laws now report "incomplete" (fresh names,
-  grants, four ownership rules), plus test cases.
-Option 1: rebuild the reasoning without the axioms. Most work; limited
-          where the axioms have no proof.
-Option 2: a GENERAL rule keyed on what the axiom is and where it comes
-          from, never its name, covering the axioms your proof policy
-          allows. User axioms always count as unproved. This adds one
-          named trust assumption. A propext-only candidate sits on a side
-          branch; agy says a one-name rule breaks "no name list".
-Option 3: stay strict; those laws are never fully checked.
-Rec: option 2 as a general rule with explicit contracts and controls.
-
-Owner, 2026-11-09: "ok too many questions do what all of you agree"
-
-Meaning: Choose a general rule based on what an axiom is and where it comes from, never its name, with explicit contracts and a named trust assumption; user axioms remain unproved.
-
-Not decided: the detailed axiom contracts and treatment of individual foundational axioms.
+**General rule for foundational axioms**
+- Asked (2026-11-09): "VACUOUS-LAW CHECKER AND LEAN'S BUILT-IN AXIOMS.
+   - Axioms: propext, Quot.sound, possibly Classical.choice.
+   - Blocks: six real spec laws now report "incomplete" (fresh names,
+     grants, four ownership rules), plus test cases.
+   Option 1: rebuild the reasoning without the axioms. Most work; limited
+             where the axioms have no proof.
+   Option 2: a GENERAL rule keyed on what the axiom is and where it comes
+             from, never its name, covering the axioms your proof policy
+             allows. User axioms always count as unproved. This adds one
+             named trust assumption. A propext-only candidate sits on a side
+             branch; agy says a one-name rule breaks "no name list".
+   Option 3: stay strict; those laws are never fully checked.
+   Rec: option 2 as a general rule with explicit contracts and controls."
+- Owner (2026-11-09): "ok too many questions do what all of you agree"
+- Meaning: Use a general rule based on axiom kind and origin rather than names, with explicit contracts and a stated trust assumption, keeping user axioms unproved.
+- Not decided: The exact contracts and controls, including details proposed by only one answer.
 
 <a id="decided-2026-11-09-checker-speed"></a>
-### Improve checker speed and require full coverage
-
-Question: CHECKER COMPUTE BUDGET.
-
-Owner, 2026-11-09: "ok too many questions do what all of you agree"
-
-Meaning: Optimize first, then split deterministically if needed; acceptance requires complete coverage.
-
-Not decided: per-check budgets, the whole-run cap and whether limits may be raised.
-
-<a id="decided-2026-11-09-exact-provenance"></a>
-### Exact proof provenance in the long term
-
-Question: PROOF-AXIOM LIST FOR THE COMBINED SPEC (27 hard lines).
-- Problem: the pinned Lean throws away which proof generated each piece.
-Long-term (a): exact provenance from Lean, upstream preferred, or a
-               maintained pinned patch.
-Long-term (b): only what Lean records today, plus a manual review each
-               time.
-Codex says (b) is a tradeoff, not clearly best.
-Rec: exact provenance (ask upstream; evaluate a pinned patch
-honestly), with a one-off manual review of the 27 lines NOW as an
-explicit interim exception.
-
-Owner, 2026-11-09: "ok too many questions do what all of you agree"
-
-Meaning: Choose exact provenance from Lean in the long term.
-
-Not decided: the delivery mechanism (upstream Lean, a pinned patch or a transitive-closure property check) and the temporary manual-review exception for the 27 lines.
+**Improve speed and require full coverage**
+- Asked (2026-11-09): "CHECKER COMPUTE BUDGET.
+   - What: each check gets its own budget, plus a whole-run cap that names
+     every check it cuts.
+   - Built provisionally, not approved by you.
+   - Latest: 0 failures. Under the normal time limit 333 checks don't run
+     and 343 are incomplete.
+   Rec: make it faster first, then split deterministically across CI jobs
+   if needed. Require full coverage for acceptance. No raised limits."
+- Owner (2026-11-09): "ok too many questions do what all of you agree"
+- Meaning: Optimize the checker first, then partition deterministically if needed, requiring complete coverage without raising limits.
+- Not decided: Approval of the provisional per-check budget implementation and whole-run cap.
 
 <a id="decided-2026-11-09-helper-design"></a>
-### Design before extending contradiction checks
-
-Question: MUST THE CHECKER CATCH CONTRADICTIONS HIDDEN IN HELPER THEOREMS?
-
-Owner, 2026-11-09: "ok too many questions do what all of you agree"
-
-Meaning: Prepare a reviewed, bounded extension design before deciding the scope.
-
-Not decided: the extension’s scope.
+**Design before extending contradiction checks**
+- Asked (2026-11-09): "MUST THE CHECKER CATCH CONTRADICTIONS HIDDEN IN HELPER THEOREMS?
+    - Today: the accepted design covers only a law's uses.
+    Option A: extend it to law proofs and planted examples. Needs a bounded
+              definition and cost first.
+    Option B: keep today's scope and document the limit.
+    Rec (revised): a reviewed extension design first, then decide."
+- Owner (2026-11-09): "ok too many questions do what all of you agree"
+- Meaning: Prepare a reviewed, bounded extension design before deciding the checker’s scope.
+- Not decided: Whether to extend scope and the extension’s exact semantics and costs.
 
 <a id="decided-2026-11-09-variable-identity"></a>
-### Local-variable identity is its number
-
-Question: WHAT IDENTIFIES A LOCAL VARIABLE? [not fully reviewed]
-- What we ran: a local stored as ("stored",7) and used as
-("occurrence",7). The operand evaluator reads 42; lookup finds
-nothing; assignment is stuck; scope end removes it; drop counts it
-as dropped.
-- UNVERIFIED: whether real programs can reach this. There is no
-elaborator yet.
-1a: the number alone; names move to a side table. The JSON variable
-type changes once; a law keeps "renaming never changes execution".
-1b: the number alone, name kept on the variable. Output unchanged;
-largest proof migration.
-2:  number and name together. Smallest change, but the compiler must
-guarantee equal numbers get equal names, and renaming must not merge
-("a",7)/("b",7). A naming mistake makes a variable silently absent.
-3:  one owner plus a checked view, with a proved agreement law. Option
-2's obligation plus a bridge law.
-Rec: 1a (or 1b if you don't want the output change).
-
-Owner, 2026-11-09: "ok too many questions do what all of you agree"
-
-Meaning: Choose option 1a: the number alone identifies a local variable; names move to a side table.
-
-Not decided: the consumer audit and additional implementation or freeze conditions.
+**Variable identity is its number**
+- Asked (2026-11-09): "WHAT IDENTIFIES A LOCAL VARIABLE? [not fully reviewed]
+    - What we ran: a local stored as ("stored",7) and used as
+      ("occurrence",7). The operand evaluator reads 42; lookup finds
+      nothing; assignment is stuck; scope end removes it; drop counts it
+      as dropped.
+    - UNVERIFIED: whether real programs can reach this. There is no
+      elaborator yet.
+    1a: the number alone; names move to a side table. The JSON variable
+        type changes once; a law keeps "renaming never changes execution".
+    1b: the number alone, name kept on the variable. Output unchanged;
+        largest proof migration.
+    2:  number and name together. Smallest change, but the compiler must
+        guarantee equal numbers get equal names, and renaming must not merge
+        ("a",7)/("b",7). A naming mistake makes a variable silently absent.
+    3:  one owner plus a checked view, with a proved agreement law. Option
+        2's obligation plus a bridge law.
+    Rec: 1a (or 1b if you don't want the output change)."
+- Owner (2026-11-09): "ok too many questions do what all of you agree"
+- Meaning: Use the number alone for local-variable identity, with names in a side table.
+- Not decided: Implementation qualification, the complete consumer audit and additional proof details absent from any answer.
 
 <a id="decided-2026-11-09-launch-state"></a>
-### Each launch supplies its starting state
+**Each launch supplies its starting state**
+- Asked (2026-11-09): "WHAT DOES A REFUSED START REPORT ABOUT THE OUTSIDE WORLD?
+    [not fully reviewed]
+    - What we ran: the demo environment declares 0 and the memory reads 1.
+      Both launchers ran. Both refuse with status 125; one reports 0, the
+      other 1.
+    1: the environment owns one fixed start state. Each launch must prove
+       memory matches, which adds a premise on the refusal theorem. One
+       environment per starting world.
+    2: each launch passes its own start state; the environment holds types
+       only. The theorem keeps its statement.
+    Rec: 2 (changed from my earlier draft)."
+- Owner (2026-11-09): "ok too many questions do what all of you agree"
+- Meaning: Each launch supplies its own starting state and the environment holds types only.
+- Not decided: The complete theorem and launcher contracts and implementation qualification.
 
-Question: WHAT DOES A REFUSED START REPORT ABOUT THE OUTSIDE WORLD?
-[not fully reviewed]
-- What we ran: the demo environment declares 0 and the memory reads 1.
-Both launchers ran. Both refuse with status 125; one reports 0, the
-other 1.
-1: the environment owns one fixed start state. Each launch must prove
-memory matches, which adds a premise on the refusal theorem. One
-environment per starting world.
-2: each launch passes its own start state; the environment holds types
-only. The theorem keeps its statement.
-Rec: 2 (changed from my earlier draft).
+<a id="decided-2026-11-09-trust-approver"></a>
+**Owner approves trusted code**
+- Asked (2026-11-09): "Who approves? Rec: you alone, with your SSH key."
+- Owner (2026-11-09): "ok too many questions do what all of you agree"
+- Meaning: Only the owner approves trusted code, using the owner’s SSH key.
+- Not decided: nothing
 
-Owner, 2026-11-09: "ok too many questions do what all of you agree"
+<a id="decided-2026-11-09-memory-group"></a>
+**Pre-create the memory-limit group**
+- Asked (2026-11-09): "Memory limits.
+      Option 1: trust sudo plus the user service bus.
+      Option 2: pre-create the memory-limit group once.
+      Rec: option 2 (less trusted code; one-off setup cost)."
+- Owner (2026-11-09): "ok too many questions do what all of you agree"
+- Meaning: Pre-create the memory-limit group once.
+- Not decided: The exact setup and protection contract.
 
-Meaning: Choose option 2: each launch passes its own start state; the environment holds types only.
-
-Not decided: the detailed launch contracts and additional implementation or freeze conditions.
+<a id="decided-2026-11-09-macos-guarantee"></a>
+**No trust-check promise on macOS**
+- Asked (2026-11-09): "macOS: this implementation makes no promise there and fails rather
+      than passes? Rec: yes."
+- Owner (2026-11-09): "ok too many questions do what all of you agree"
+- Meaning: This implementation makes no trust-check promise on macOS and refuses qualification there.
+- Not decided: The exact failure status.
 
 <a id="decided-2026-11-09-stop-bot"></a>
-### Stop the deployed landing bot
-
-Question: Stop any deployed landing-bot service on the server.
-
-Owner, 2026-11-09: "ok too many questions do what all of you agree"
-
-Meaning: Stop any deployed landing-bot service.
-
-Refines [the landing-services decision](#decided-2026-11-08-landing-shrink).
+**Stop the deployed landing bot**
+- Asked (2026-11-09): "Stop any deployed landing-bot service on the server."
+- Owner (2026-11-09): "ok too many questions do what all of you agree"
+- Meaning: Stop any deployed landing-bot service on the server.
+- Not decided: Disabling details proposed by only some answers.
 
 <a id="decided-2026-11-09-hermetic-builds"></a>
-### Make builds hermetic
-
-Question: Builds still reach the network (non-hermetic); to fix.
-
-Owner, 2026-11-09: "ok too many questions do what all of you agree"
-
-Meaning: Make builds hermetic: builds must not reach the network.
-
-Refines [the reproducible-builds decision](#decided-project-reproducible-builds).
+**Make builds hermetic**
+- Asked (2026-11-09): "Builds still reach the network (non-hermetic); to fix."
+- Owner (2026-11-09): "ok too many questions do what all of you agree"
+- Meaning: Fix builds so they are hermetic.
+- Not decided: The implementation and enforcement details.
 
 <a id="decided-2026-11-09-vacuity-redesign"></a>
-### Stop and redesign the checker design line
-
-Question: UPDATE 19:10Z: VACUOUS-LAW CHECKER STOPPED AT ITS ROUND LIMIT
-- Main line: round 5 (the last allowed) has 0 failures in the CI run, but
-  no valid review (agy's was voided). Codex then ran four confirmed bugs
-  with real examples:
-  - Two false passes (soundness holes):
-    (a) a counterfeit contract nested inside a structure-valued subject;
-    (b) a helper with no readable body hidden inside a case split.
-  - Two false "incomplete" on genuine proofs: certain recursive proofs,
-    and `let`/`have` at the head of an application.
-- Design line for the next part: stopped at its limit, rejected by Codex.
+**Stop and redesign the checker design line**
+- Asked (2026-11-09): "Design line for the next part: stopped at its limit, rejected by Codex.
   The prototype undercounts cost, and it relies on unfinished main-line
   fixes.
 Your call for each line:
   (i)   allow N more rounds with these exact bugs as the exit test;
   (ii)  stop and redesign;
-  (iii) leave it stopped.
-Rec: (i) for the main line, with one writer (Codex) and an independent
-review; (ii) for the design line.
-
-Owner, 2026-11-09: "ok too many questions do what all of you agree"
-
-Meaning: Stop and redesign the design line for the next part of the vacuous-law checker.
-
-Not decided: extra rounds, allowances, exit tests or redesign for the checker main line; whether to combine the two lines.
+  (iii) leave it stopped."
+- Owner (2026-11-09): "ok too many questions do what all of you agree"
+- Meaning: Stop and redesign the vacuous-law checker’s design line.
+- Not decided: Branch unification and additional implementation rounds.
 
 <a id="decided-2026-11-09-main-protection"></a>
-### Apply main-branch protection
-
-Question: Apply the main-branch protection rules on GitHub yourself.
-
-Owner, 2026-11-09: "ok too many questions do what all of you agree"
-
-Meaning: Apply main-branch protection.
-
-Not decided: the exact protection settings.
-
-Revised by [the pull-request flow](#decided-2026-11-10-pr-flow).
-
-<a id="pending-2026-11-09-macos-ci"></a>
-### macOS compiler trust-check CI remains open
-
-Question: macOS CI job. Options: required-and-failing / informational / dropped. Rec: informational, labelled "no promise on macOS". Not counted as qualification.
-
-Owner, 2026-11-09: "ok too many questions do what all of you agree"
-
-Meaning: No macOS compiler trust-check CI policy is established by the three-model agreement.
-
-Not decided: whether portable non-containment checks run on macOS and count as required checks; Claude and Codex chose informational CI, while agy chose dropping Linux-only containment or splitting out required portable checks.
-
-Refined by [the later containment-only answer](#decided-2026-11-10-macos-ci).
-
-<a id="pending-2026-11-09-trust-tools"></a>
-### Compiler trust-check tools
-
-Question: TRUST CHECK (only code you approved can run in the compiler).
-
-B. Approve three system tools added during fixes: systemd-run,
-systemctl, ssh-keygen. They hold real authority, not just "limits".
-
-Owner, 2026-11-09: "ok too many questions do what all of you agree"
-
-Meaning: No permission for compiler trust-check tools is established by the three-model agreement.
-
-Not decided: whether systemd-run, systemctl and ssh-keygen may be used by the compiler trust check; later permission for review tools is [recorded separately](#decided-2026-11-10-review-commands).
-
-<a id="pending-2026-11-09-trust-foundations"></a>
-### Compiler trust-check foundations
-
-Question: TRUST CHECK (only code you approved can run in the compiler).
-
-C. Approve what the sealed box relies on: protected launcher, signature
-verifier, key distribution, first-time setup.
-
-Owner, 2026-11-09: "ok too many questions do what all of you agree"
-
-Meaning: No approval of the sealed-box foundations is established by the three-model agreement.
-
-Not decided: the signature verifier, key distribution and first-time setup; the later launcher answer is [recorded separately](#decided-2026-11-10-launcher).
-
-<a id="pending-2026-11-09-extra-rounds"></a>
-### Extra review rounds
-
-Question: FIX ROUNDS PAST YOUR LIMITS (docs 2, scripts 3, compiler/spec 5).
-
-Owner, 2026-11-09: "ok too many questions do what all of you agree"
-
-Meaning: No exception to the round limits is established by the three-model agreement.
-
-Not decided: extra rounds and their allowances and exit tests for branches other than the checker lines [recorded separately](#decided-2026-11-09-vacuity-redesign).
-
-Refined by [the later one-round exception](#decided-2026-11-11-extra-round).
-
-<a id="pending-2026-11-09-spec-questions"></a>
-### Duplicate-model cleanup questions
-
-Question: SPEC QUESTIONS FROM THE DUPLICATE-BASE-MODEL CLEANUP.
-(a) Why a program got stuck: contingent, only if the build shows
-trouble. No answer needed now.
-(b) Memory layout of structs with fields: still yours.
-(c) Representation of whole pointers: still yours.
-I'll bring full proposals for (b) and (c) separately.
-Caveat: the design's acceptance came from split reruns after voided
-reviews, so it is not independently accepted.
-
-Owner, 2026-11-09: "ok too many questions do what all of you agree"
-
-Meaning: No answer is needed now on why a program got stuck; bring full proposals for struct layout and whole-pointer representation.
-
-Not decided: whether a build will require an explanation of why a program got stuck, struct field layout and whole-pointer representation.
-
-<a id="pending-2026-11-09-older-questions"></a>
-### Older language questions
-
-Question: Older questions never asked:
-- the lifecycle signature change (life : Life -> Store -> Option Store);
-- standard-library coverage: safe replacement, streams, traversal callbacks and floating-point NaN behavior;
-- slice 1: `move t` vs `t`, where `abort()` goes and its result type,
-Concrete.toml [policy]/[assumptions] keys, spec subset vs narrowing,
-R-0600 at slice 1 or 5;
-- the syntax spelling round.
-
-Owner, 2026-11-09: "ok too many questions do what all of you agree"
-
-Meaning: No language choice is established by the three-model agreement.
-
-Not decided: the lifecycle signature, standard-library coverage choices, slice-1 choices and syntax spellings.
-
-<a id="pending-2026-11-09-stamping"></a>
-### Review-access stamping
-
-Question: Review-access stamping: should stamping a commit include staged changes
-(as today), or only what is already committed?
-
-Owner, 2026-11-09: "ok too many questions do what all of you agree"
-
-Meaning: No stamping choice is established by the three-model agreement.
-
-Not decided: whether to include staged changes or stamp only committed content.
+**Apply main-branch protection**
+- Asked (2026-11-09): "Apply the main-branch protection rules on GitHub yourself"
+- Owner (2026-11-09): "ok too many questions do what all of you agree"
+- Meaning: The owner should apply main-branch protection on GitHub.
+- Not decided: The exact protection settings, since the referenced proposal is absent from this branch; the later [pull-request answer](#decided-2026-11-10-pr-flow) revises the flow.
 
 <a id="decided-2026-11-09-unused-imports"></a>
-### Unused imports are errors
-
-Question: Unused imports.
-
-Owner, 2026-11-09: "refuse them obviously"
-
-Meaning: Unused imports are a compile error.
+**Unused imports are errors**
+- Asked (2026-11-09): "Unused imports."
+- Owner (2026-11-09): "refuse them obviously"
+- Meaning: Unused imports are a compile error.
+- Not decided: nothing
 
 <a id="decided-2026-11-10-unproved-tests"></a>
-### Unproved tests during development
-
-Question: 1 unproved tests may merge? (rec: yes during development, proved for release)
-
-Owner, 2026-11-10: "1 ok 2 yes but also i think we can do it ourselves if we have enough quota 3 allo everything yo uwant 4 do what you want 5 okay"
-
-Meaning: Unproved tests may merge during development; they must be proved for release.
+**Unproved tests during development**
+- Asked (2026-11-10): "unproved tests may merge? (rec: yes during development, proved for release)"
+- Owner (2026-11-10): "1 ok 2 yes but also i think we can do it ourselves if we have enough quota 3 allo everything yo uwant 4 do what you want 5 okay"
+- Meaning: Unproved tests may merge during development and must be proved for release.
+- Not decided: Which release milestone requires proofs.
 
 <a id="decided-2026-11-10-spec-plan"></a>
-### Plan the stopped spec work
-
-Question: 2 Codex+agy write a plan to bring the stopped spec work onto main in small reviewed pieces?
-
-Owner, 2026-11-10: "1 ok 2 yes but also i think we can do it ourselves if we have enough quota 3 allo everything yo uwant 4 do what you want 5 okay"
-
-Meaning: Codex and agy may write the plan; the owner and Claude may do the work themselves if they have enough quota.
-
-Not decided: approval of the unwritten plan or execution by other writer models.
+**Plan the stopped spec work**
+- Asked (2026-11-10): "Codex+agy write a plan to bring the stopped spec work onto main in small reviewed pieces?"
+- Owner (2026-11-10): "1 ok 2 yes but also i think we can do it ourselves if we have enough quota 3 allo everything yo uwant 4 do what you want 5 okay"
+- Meaning: Codex and agy may write the plan, and the owner and coordinator may do the work themselves if quota permits.
+- Not decided: Approval of the unwritten plan or execution by other writer models.
 
 <a id="decided-2026-11-10-review-commands"></a>
-### Allow review-tool commands
-
-Question: 3 commands review tools may run: ssh-keygen, systemd-run, systemctl (rec: ssh-keygen now, others with the locked-down launcher)
-
-Owner, 2026-11-10: "1 ok 2 yes but also i think we can do it ourselves if we have enough quota 3 allo everything yo uwant 4 do what you want 5 okay"
-
-Meaning: Allow all three commands for review tools.
-
-Not decided: their permitted operations and authority; the launcher question mentioned in the prompt is [recorded here](#decided-2026-11-10-launcher).
+**Allow review-tool commands**
+- Asked (2026-11-10): "commands review tools may run: ssh-keygen, systemd-run, systemctl"
+- Owner (2026-11-10): "1 ok 2 yes but also i think we can do it ourselves if we have enough quota 3 allo everything yo uwant 4 do what you want 5 okay"
+- Meaning: Allow ssh-keygen, systemd-run and systemctl for review tools.
+- Not decided: Their permitted operations and authority.
 
 <a id="decided-2026-11-10-launcher"></a>
-### Delegate the locked-down launcher
-
-Question: 4 locked-down launcher (rec: wait for exact design)
-
-Owner, 2026-11-10: "1 ok 2 yes but also i think we can do it ourselves if we have enough quota 3 allo everything yo uwant 4 do what you want 5 okay"
-
-Meaning: Delegate the locked-down launcher decision to the coordinator.
-
-Not decided: the launcher’s exact design.
+**Delegate the locked-down launcher**
+- Asked (2026-11-10): "locked-down launcher (rec: wait for exact design)"
+- Owner (2026-11-10): "1 ok 2 yes but also i think we can do it ourselves if we have enough quota 3 allo everything yo uwant 4 do what you want 5 okay"
+- Meaning: Delegate the locked-down launcher decision to the coordinator.
+- Not decided: The exact launcher design.
 
 <a id="decided-2026-11-10-macos-ci"></a>
-### Containment on macOS is informational
-
-Question: 5 containment check on macOS informational only, never counts as passed.
-
-Owner, 2026-11-10: "1 ok 2 yes but also i think we can do it ourselves if we have enough quota 3 allo everything yo uwant 4 do what you want 5 okay"
-
-Meaning: The macOS containment check is informational only and never counts as passed.
-
-Refines [the earlier macOS CI question](#pending-2026-11-09-macos-ci).
+**Containment on macOS is informational**
+- Asked (2026-11-10): "containment check on macOS informational only, never counts as passed."
+- Owner (2026-11-10): "1 ok 2 yes but also i think we can do it ourselves if we have enough quota 3 allo everything yo uwant 4 do what you want 5 okay"
+- Meaning: The macOS containment check is informational only and never counts as passed.
+- Not decided: Whether portable non-containment trust-check legs run on macOS or count as required checks.
 
 <a id="decided-2026-11-10-unused-private"></a>
-### Unused private code is an error
-
-Question: 1. Is unused private code a compile error?
-
-Owner, 2026-11-10: "1. yes 2. yes we will rewrite everything by hand 3. yes 4. yes 5. yes"
-
-Meaning: Unused private code is a compile error.
+**Unused private code is an error**
+- Asked (2026-11-10): "Is unused private code a compile error?"
+- Owner (2026-11-10): "1. yes 2. yes we will rewrite everything by hand 3. yes 4. yes 5. yes"
+- Meaning: Unused private code is a compile error.
+- Not decided: nothing
 
 <a id="decided-2026-11-10-manual-migration"></a>
-### Update syntax by hand
-
-Question: 2. No migration tool: we update the repo's code by hand when the syntax changes?
-
-Owner, 2026-11-10: "1. yes 2. yes we will rewrite everything by hand 3. yes 4. yes 5. yes"
-
-Meaning: Use no migration tool; update the repository’s code by hand when syntax changes.
+**Update syntax by hand**
+- Asked (2026-11-10): "No migration tool: we update the repo's code by hand when the syntax changes?"
+- Owner (2026-11-10): "1. yes 2. yes we will rewrite everything by hand 3. yes 4. yes 5. yes"
+- Meaning: Use no migration tool and update the repository’s code by hand when syntax changes.
+- Not decided: nothing
 
 <a id="decided-2026-11-10-lexer-merge"></a>
-### One mechanical lexer merge
-
-Question: 3. Can Codex do one mechanical merge for the lexer literals branch?
-
-Owner, 2026-11-10: "1. yes 2. yes we will rewrite everything by hand 3. yes 4. yes 5. yes"
-
-Meaning: Codex may do one mechanical merge for the lexer literals branch.
+**One mechanical lexer merge**
+- Asked (2026-11-10): "Can Codex do one mechanical merge for the lexer literals branch?"
+- Owner (2026-11-10): "1. yes 2. yes we will rewrite everything by hand 3. yes 4. yes 5. yes"
+- Meaning: Codex may do one mechanical merge for the lexer literals branch.
+- Not decided: nothing
 
 <a id="decided-2026-11-10-tests-proofs"></a>
-### Tests may take inputs and become proofs
-
-Question: 4. Can tests take inputs and become proofs?
-
-Owner, 2026-11-10: "1. yes 2. yes we will rewrite everything by hand 3. yes 4. yes 5. yes"
-
-Meaning: Tests may take inputs and become proofs.
+**Tests may take inputs and become proofs**
+- Asked (2026-11-10): "Can tests take inputs and become proofs?"
+- Owner (2026-11-10): "1. yes 2. yes we will rewrite everything by hand 3. yes 4. yes 5. yes"
+- Meaning: Tests may take inputs and become proofs.
+- Not decided: Surface syntax, permissible parameter types, interaction with the earlier test-result rule and how a test becomes a proof obligation versus a runnable test.
 
 <a id="decided-2026-11-10-mixed-review-cap"></a>
-### Highest review cap for mixed file kinds
-
-Question: 5. Does the highest round limit apply when a branch mixes file kinds?
-
-Owner, 2026-11-10: "1. yes 2. yes we will rewrite everything by hand 3. yes 4. yes 5. yes"
-
-Meaning: A branch mixing file kinds uses the highest applicable round limit.
-
-Refines [the review caps](#decided-2026-11-08-review-caps).
+**Highest review cap for mixed file kinds**
+- Asked (2026-11-10): "Does the highest round limit apply when a branch mixes file kinds?"
+- Owner (2026-11-10): "1. yes 2. yes we will rewrite everything by hand 3. yes 4. yes 5. yes"
+- Meaning: A branch mixing file kinds uses the highest applicable round limit.
+- Not decided: nothing
 
 <a id="decided-2026-11-10-pr-flow"></a>
-### Protect main and use pull requests
-
-Question: The 2026-11-10 prompt was not preserved in the supplied record. The earlier main-protection question is [recorded separately](#decided-2026-11-09-main-protection).
-
-Owner, 2026-11-10: "ok protect main create prs and we merge them"
-
-Meaning: Protect main and create pull requests for merging.
-
-Not decided: the exact branch-protection settings, whether the train is retired or adapted, dual-remote synchronization, or how PR gates interact with the existing ban on self-hosted pull-request jobs.
-
-Revises [the landing decision](#decided-2026-11-08-landing-shrink) and [the main-protection answer](#decided-2026-11-09-main-protection).
-
-Refined by [who merges pull requests](#decided-2026-11-10-pr-merger).
-
-Refined by [the main-repository answer](#decided-2026-11-11-main-repository).
+**Protect main and use pull requests**
+- Asked (2026-11-10): "[question not preserved in the supplied record]"
+- Owner (2026-11-10): "ok protect main create prs and we merge them"
+- Meaning: Protect main and create pull requests for merging.
+- Not decided: The exact protection settings, disposition of the train, remote synchronization and interaction with self-hosted pull-request job restrictions.
 
 <a id="decided-2026-11-10-pr-merger"></a>
-### Coordinator merges qualified pull requests
-
-Question: who presses merge? (a) Me [the coordinator], automatically, once the tests and the review pass ... with you able to merge or block any PR yourself. (b) You, on every PR.
-
-Owner, 2026-11-10: "a"
-
-Meaning: The coordinator merges automatically after tests and review pass; the owner may merge or block any pull request.
-
-Refines [the pull-request flow](#decided-2026-11-10-pr-flow) and revises [the landing decision](#decided-2026-11-08-landing-shrink).
-
-<a id="decided-2026-11-11"></a>
-## Owner decisions 2026-11-11
+**Coordinator merges qualified pull requests**
+- Asked (2026-11-10): "who presses merge? (a) Me [the coordinator], automatically, once the tests and the review pass ... with you able to merge or block any PR yourself. (b) You, on every PR."
+- Owner (2026-11-10): "a"
+- Meaning: The coordinator merges automatically once tests and review pass, and the owner may merge or block any pull request.
+- Not decided: nothing
 
 <a id="decided-2026-11-11-main-repository"></a>
-### lambdaclass/concrete becomes the main repository
-
-Question: Where main lives: (a) move concrete2 into an organization the owner owns, (b) make lambdaclass/concrete the main repository and concrete2 its copy, (c) no merge queue.
-
-Owner, 2026-11-11: "b make lambdaclass concrete"
-
-Meaning: lambdaclass/concrete becomes the canonical repository and concrete2 its mirror.
-
-Not decided: the mirroring arrangement and branch-protection settings.
-
-Refines [the pull-request flow](#decided-2026-11-10-pr-flow).
+**Choose the main repository**
+- Asked (2026-11-11): "Where main lives: (a) move concrete2 into an organization you own, (b) make lambdaclass/concrete, already an organization repo, the main one (concrete2 becomes the copy), (c) no merge queue"
+- Owner (2026-11-11): "b make lambdaclass concrete"
+- Meaning: Make lambdaclass/concrete the main repository and concrete2 the copy.
+- Not decided: Whether and how to enable a merge queue and how repository infrastructure migrates; the copy arrangement is revised by [the archive answer](#decided-2026-11-11-archive-copy).
 
 <a id="decided-2026-11-11-extra-round"></a>
-### One extra round for three branches at their cap
+**One extra round for three branches**
+- Asked (2026-11-11): "One more round each for three branches at their limit: decisions record, six roadmap tasks, review-coverage fix"
+- Owner (2026-11-11): "yes okay but show me"
+- Meaning: Allow one extra round each for the decisions record, six roadmap tasks and review-coverage fix, with the results shown to the owner.
+- Not decided: What must be shown, whether further sign-off is needed and how the exception is recorded in tooling.
 
-Question: One extra round for three branches at their cap; the exact question wording and full branch list were not preserved in the supplied record.
+<a id="decided-2026-11-11-send-everything"></a>
+**Send everything to lambdaclass/concrete**
+- Asked (2026-11-11): "[question not preserved in the supplied record]"
+- Owner (2026-11-11): "ok we need to send everything to lambdaclass/concrete"
+- Meaning: Send everything to lambdaclass/concrete.
+- Not decided: The migration procedure and timing.
 
-Owner, 2026-11-11: "yes okay but show me"
+<a id="decided-2026-11-11-archive-copy"></a>
+**Archive concrete2**
+- Asked (2026-11-11): "[question not preserved in the supplied record]"
+- Owner (2026-11-11): "concrete2 in unblanacedparentehses will be archived"
+- Meaning: Archive concrete2.
+- Not decided: The migration procedure and timing.
 
-Meaning: Allow one extra round for the three branches presented at their cap, with the result shown to the owner.
+<a id="decided-2026-11-11-switch-round"></a>
+**One more repository-switch round**
+- Asked (2026-11-11): "one more round for the lambdaclass switch (one-line ready.sh fix)"
+- Owner (2026-11-11): "yes to all"
+- Meaning: Allow one more round for the lambdaclass switch’s one-line ready.sh fix.
+- Not decided: nothing
 
-Not decided: the supplied record does not identify the other two branches or specify what must be shown.
+<a id="decided-2026-11-11-record-template"></a>
+**Rebuild the decisions record**
+- Asked (2026-11-11): "rebuild the decisions record from a template: exact owner quote plus a one-line meaning per answer"
+- Owner (2026-11-11): "yes to all"
+- Meaning: Rebuild the decisions record from a template containing the exact owner quote and one-line meaning per answer.
+- Not decided: nothing
 
-Refines [the review caps](#decided-2026-11-08-review-caps) and [the earlier extra-round question](#pending-2026-11-09-extra-rounds).
+<a id="decided-2026-11-11-install-launcher"></a>
+**Install the review-tool launcher**
+- Asked (2026-11-11): "install the review-tool launcher with root, through the private dotfiles repo where server setup lives"
+- Owner (2026-11-11): "yes to all"
+- Meaning: Install the review-tool launcher with root through the private dotfiles repository where server setup lives.
+- Not decided: The exact installation procedure.
 
 <a id="rules-a-decision-changed"></a>
 ## Rules a decision has changed
@@ -922,7 +695,7 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **P5** legacy/ is a byte-frozen snapshot, never patched or run — legacy/ is main's tree at the move commit, byte-frozen. A root check compares its tree hash, allowing only deletions a satisfied RETENTION.tsv entry authorizes. No legacy gate ever runs. The oracle is the tag-built artifact (P13), not the legacy/ copy.
 - **P6** Retention manifest gates deleting legacy/ — RETENTION.tsv at the root gives every legacy asset (corpus, regressions, examples, std, bug ledger, site, docs, research) a destination and deletion criterion. Revised 2026-11-06 ([restart row](#decided-project-restart)): nothing is deleted at B3; legacy/, the old pipeline included, is deleted way later (LD: once the new compiler implements a full real program such as RocksDB, ethrex or similar), when RETENTION.tsv has no live entry, a final ideas sweep has dispositioned every idea and the owner explicitly approves.
 - **P7** Prove the new landing path before moving — T0: land beside the old tree the new root CI, required-checks.txt (enforced by train watch and land), RETENTION.tsv, the task disposition table, ORACLE.lock with the oracle artifact, and ISSUES.tsv. T1: rehearse the move on a throwaway branch: fresh clone, build, hook, exact-SHA CI, train --dry-run land; a broken build, a failing gate and a missing required check must each be refused. T2: the move in one train.
-- **P8** Server services under scripts/ — Keep only landing services: train, review, hook, landing bot. The status page, work queue, fuzz farm, perf tracking and nightly campaign all stop and are recorded as archived in RETENTION.tsv; each returns only with a roadmap task. Revised by [the landing-services decision](#decided-2026-11-08-landing-shrink) and [stopping the deployed bot](#decided-2026-11-09-stop-bot).
+- **P8** Server services under scripts/ — Keep only landing services: train, review, hook, landing bot. The status page, work queue, fuzz farm, perf tracking and nightly campaign all stop and are recorded as archived in RETENTION.tsv; each returns only with a roadmap task.
 - **P9** Website during the transition — The website goes down at the move and is redone from scratch with the new compiler; no frozen playground is served. Unpublishing the live site is an outward action whose moment the owner confirms.
 - **P10** What 'closed' means for old-compiler bugs — Old-compiler defects become 'retired with the old implementation', never 'fixed'. Each keeps its reproducer, ruling and structural class; 106 reproducers feed the oracle comparisons. Bugs the frozen browser compiler still shows stay visible while the site serves it.
 - **P11** Std bugs and rulings are carried — Add a 'std' class: 12 std bugs move with std as contracts plus regressions. The 112 language rulings (26 still open) keep their ruling and become conformance examples.
@@ -1427,7 +1200,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   target. This moves the reproducibility half of R-0104 (merged into R-0149 in phase G) to B0;
   R-0149 keeps incremental-build equivalence. The slice-0 worker owns the work on `wip/slice0` when
   Claude capacity returns; work started on `wip/slice0-repro`.
-  Revised by [the hermetic-builds answer](#decided-2026-11-09-hermetic-builds).
+  Revised by [Make builds hermetic](#decided-2026-11-09-hermetic-builds).
 - <a id="decided-project-concrete-toml"></a>**Policies and declared assumptions live in
   `Concrete.toml`** (owner, 2026-11-06: "concrete.toml is fine", in place of a separate policy
   file). A project's policies, such as the
@@ -1588,6 +1361,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   then as you said right", approving the recorded recommendation). This answers when the tools
   arrive: the test runner lands at slice 8 with `#[test]`, extends to modules at slice 17, and the
   formatter lands at slice 17. The LSP comes later.
+  Revised by [tests as proofs](#decided-2026-11-10-tests-proofs) and [unproved tests during development](#decided-2026-11-10-unproved-tests).
 - <a id="decided-2026-11-07-performance"></a>**Speed tracking** (owner, 2026-11-07: "ok go ahead all
   yes then as you said right", approving the recorded recommendation). This answers when performance
   is measured and how it is reported. Flagship runtime is tracked from slice 2. Compiler wall time,
@@ -1757,7 +1531,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   3. <a id="decided-2026-11-08-landing-shrink"></a>*Smaller landing scripts.* Keep the train, its
      review leg, the gates and the `legacy/` protection; drop the landing bot, notify, install-bot,
      the systemd units and duplicate helpers; the old copies move to `legacy/` (R-0617).
-     Revised by [stopping the deployed bot](#decided-2026-11-09-stop-bot), [the pull-request flow](#decided-2026-11-10-pr-flow) and [who merges pull requests](#decided-2026-11-10-pr-merger).
+  Revised by [Stop the deployed landing bot](#decided-2026-11-09-stop-bot), [Protect main and use pull requests](#decided-2026-11-10-pr-flow), [Coordinator merges qualified pull requests](#decided-2026-11-10-pr-merger).
   4. <a id="decided-2026-11-08-quota"></a>*Claude's quota goes to the critical path:* the spec, slice 0
      and the front end. Mechanical work goes to Codex and Kimi as writers.
   5. <a id="decided-2026-11-08-front-end"></a>*The front end starts now.* The lexer and the LL(1)
@@ -1768,7 +1542,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
      at a time;* other workers send it their records.
   7. <a id="decided-2026-11-08-review-caps"></a>*Review rounds capped by risk:* docs and roadmap 2,
      scripts 3, compiler and spec 5 (R-0618).
-     Revised by [the mixed-file cap answer](#decided-2026-11-10-mixed-review-cap) and [the one-round exception](#decided-2026-11-11-extra-round).
+  Revised by [Highest review cap for mixed file kinds](#decided-2026-11-10-mixed-review-cap), [One extra round for three branches](#decided-2026-11-11-extra-round).
   8. <a id="decided-2026-11-08-clones"></a>*One clones folder:* every branch's clone is
      `~/projects/clones/<branch>`, removed after the branch lands (R-0619).
   9. <a id="decided-2026-11-08-no-libc"></a>*A no-libc runtime* on the proven path comes as a later
@@ -1873,7 +1647,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   Codex and Kimi reviews. agy cannot read files, so its prompt carries the diff and the context it
   needs and ends with a required verdict line. (The coordinator's relay added that agy can also act
   as a writer.)
-  Revised by [independent review before final qualification](#decided-2026-11-09-independent-review).
+  Revised by [Independent review before qualification](#decided-2026-11-09-independent-review).
 - <a id="decided-project-throughput"></a>**Development throughput** (2026-10-22). The development
   feedback loop (landing, review, CI) is a priority track beside the main sequence
   ([record](archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-10-22--development-throughput-priority)).
@@ -2079,6 +1853,8 @@ V1a, V1b and V1c.
 | OD156 | <a id="od156"></a>The capability of `get_args` (added 2026-10-31, raised while reviewing the builtins catalog of spec readability 2). Question: Which capability the builtin `get_args` requires, or whether the builtin is removed. Bears on TRUST-4, STMT-7, TRUST-9 and OPEN-136. The current compiler: Check gives `get_args()` the result `HeapArray<String>` and requires `Process` (E0520 with `Env` only); the builtin has no implementation on either consumer (bug 347). STMT-7's rationale says command-line arguments come from `std.args` with `Env`, and OD8 gives `main` the root resource value (TRUST-9). Options: (a) `Env`, as `std.args` requires; (b) `Process`, as the current compiler's signature says; (c) another capability, or none; (d) remove the builtin, and command-line arguments come from `std.args`. Austral: not checked. Pick: none given (raised while reviewing the builtins catalog of spec readability 2, 2026-10-31). | see OPEN-156 | see OPEN-156 | decided 2026-11-01 by the owner (final set): Superseded by the authority decision of 2026-11-01: `get_args` requires `with(Env)`, and `with(Alloc)` when it allocates. Revised 2026-11-02 by the owner's rule: it also takes the `Environment` grant, and an allocator when it allocates ([decisions](decisions.md#decided-2026-11-02-filesystem)) |
 | OD157 | <a id="od157"></a>How the type `Unit` is written (added 2026-10-31, raised while reviewing the builtins catalog of spec readability 2). Question: Whether the type `Unit`, which STMT-7 names as a result type of `main` and which other rules and the builtins catalog also name, has a spelling in type positions, and which spelling. Bears on STMT-7, TYPE-4, SYN-1 and OPEN-66. The current compiler: a function with no result type returns no value, and `fn main() { return; }` exits 0; `fn main() -> Unit` and `let x: Unit = f();` are refused at resolve (E0108, unknown type 'Unit'); `fn main() -> ()` is a parse error (E0001, `expected type`). STMT-7@3 says `main`'s result type is `u8` or `Unit`. OPEN-66 concerns the unit value's literal; this entry concerns the type in type positions, and the two cross-reference each other. Options: (a) no spelling: the type is written only by omitting the result type, and STMT-7 says so; (b) `Unit` is a builtin type name, accepted wherever a type is; (c) `()` is the type's spelling; (d) both `Unit` and `()` are accepted. Austral: not checked. Pick: none given (raised while reviewing the builtins catalog of spec readability 2, 2026-10-31). | see OPEN-157 | see OPEN-157 | decided 2026-11-01 by the owner (final set): The type is written `Unit`, its value `()` |
 
+Revised by [tests as proofs](#decided-2026-11-10-tests-proofs) and [unproved tests during development](#decided-2026-11-10-unproved-tests).
+
 
 ## Decided
 
@@ -2113,6 +1889,7 @@ long-term answer, Codex having read the repository; the owner answered the first
 - <a id="decided-2026-11-02-main"></a>**`main`'s result** (revises OD24): `main` returns `u8`, and
   only `u8`. Owner's answer, 2026-11-01. A test function's result follows it (revises OD146): `u8`
   only.
+  Revised by [tests as proofs](#decided-2026-11-10-tests-proofs) and [unproved tests during development](#decided-2026-11-10-unproved-tests).
 - <a id="decided-2026-11-02-namespace"></a>**One namespace per module** (completes OD43): a type and a
   value (a function or constant) in one module may not share a name. A struct literal `S { ... }` and
   a variant path `E::V` name the type itself and are not collisions. Owner's answer, 2026-11-01.
