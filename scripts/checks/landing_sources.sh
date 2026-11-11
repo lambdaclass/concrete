@@ -20,7 +20,7 @@ assert module.fetch_source(url, '.') == url
 # The migration must preserve each maintained overlay entry, including transport helpers.
 text = (root / 'scripts/land/legacy_move.sh').read_text()
 overlay = set(shlex.split(text.split('OVERLAY=(', 1)[1].split(')\n', 1)[0], comments=True))
-required = {'scripts/land/run-at-ref.sh', 'scripts/land/bundle_source.py',
+required = {'scripts/land/run-at-ref.sh', 'scripts/land/bundle_source.py', 'scripts/land/impact_gates.sh',
             'scripts/checks/landing_sources.sh', 'scripts/checks/archived_references.sh',
             'scripts/checks/lib/archived_references.py'}
 assert required <= overlay

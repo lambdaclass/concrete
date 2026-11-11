@@ -7,7 +7,56 @@ import sys
 import tempfile
 
 ARCHIVED = re.compile(r"(?<![a-z0-9_-])unbalancedparentheses(?:[/:]|\.github\.io/)concrete2(?=$|[^a-z0-9_-])", re.IGNORECASE)
-HISTORICAL_PATHS = ('legacy/', 'docs/archive/', 'changelog.d/')
+# Frozen evidence only: new files, even under archive directories, are scanned.
+HISTORICAL_FILES = {
+    'docs/archive/roadmap-2026-11/ROADMAP_TASKS.md',
+    'docs/archive/site-down.md',
+    'legacy/.github/workflows/lean_action_ci.yml',
+    'legacy/.github/workflows/nightly.yml',
+    'legacy/ISSUES.tsv',
+    'legacy/README.md',
+    'legacy/changelog.d/2026-11-05-restart-infra-2.md',
+    'legacy/docs/archive/ROADMAP_HISTORY.md',
+    'legacy/docs/archive/ROADMAP_RETIRED_TASKS.md',
+    'legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md',
+    'legacy/docs/archive/roadmap-2026-11/ROADMAP_TASKS.md',
+    'legacy/docs/archive/site-down.md',
+    'legacy/docs/archive/site-frozen.md',
+    'legacy/docs/book/src/getting_started.md',
+    'legacy/docs/book/src/installation.md',
+    'legacy/docs/project/GATE_PROFILE.md',
+    'legacy/docs/project/LANDING.md',
+    'legacy/docs/project/PROMOTION_PIPELINE.md',
+    'legacy/docs/project/SELF_HOSTED_RUNNERS.md',
+    'legacy/docs/spec/SPEC.md',
+    'legacy/docs/spec/decisions.md',
+    'legacy/docs/verification/KNOWN_HOLES.md',
+    'legacy/paper/evidence-carrying.typ',
+    'legacy/research/meta/bend-roc-lessons.md',
+    'legacy/research/proof-evidence/concrete-design.md',
+    'legacy/scripts/fuzz/farm/farm.sh',
+    'legacy/scripts/fuzz/farm/install-farm.sh',
+    'legacy/scripts/gen/site_reference.py',
+    'legacy/scripts/land/install-bot.sh',
+    'legacy/scripts/land/train.sh',
+    'legacy/scripts/oracle/ORACLE.lock',
+    'legacy/scripts/perf/install-perf.sh',
+    'legacy/scripts/push-both.sh',
+    'legacy/scripts/spec/spec.py',
+    'legacy/scripts/status/install.sh',
+    'legacy/scripts/status/status.py',
+    'legacy/site/config.toml',
+    'legacy/site/content/guide/direction.md',
+    'legacy/site/content/guide/getting_started.md',
+    'legacy/site/content/guide/high_integrity.md',
+    'legacy/site/content/guide/installation.md',
+    'legacy/site/content/guide/intro.md',
+    'legacy/site/content/guide/landing.md',
+    'legacy/site/content/guide/status.md',
+    'legacy/site/content/paper.md',
+    'legacy/site/templates/base.html',
+    'legacy/site/templates/index.html',
+}
 HISTORICAL_LINES = {
     'docs/decisions.md': {'89301668fabffe82fce229eb1f7d3a5bf529c559507d92a0003bee3e51663158'},
     'ISSUES.tsv': {
@@ -19,7 +68,7 @@ HISTORICAL_LINES = {
 
 
 def problems(path, content):
-    if path.startswith(HISTORICAL_PATHS):
+    if path in HISTORICAL_FILES:
         return []
     found = []
     for number, line in enumerate(content.splitlines(), 1):
@@ -36,9 +85,10 @@ def controls():
     assert problems('README.md', 'https://' + 'unbalancedparentheses' + '.github.io/concrete2')
     for path in ('README.md', '.github/workflows/ci.yml', 'scripts/tool.sh'):
         assert problems(path, f'https://github.com/{old}')
-    for path in ('legacy/scripts/tool.sh', 'docs/archive/report.md',
-                 'changelog.d/2026-11-05.md'):
+    for path in HISTORICAL_FILES:
         assert not problems(path, old)
+    for path in ('legacy/new.md', 'docs/archive/new.md', 'changelog.d/new.md'):
+        assert problems(path, old)
     assert problems('ISSUES.tsv', f'ISS-1\t{old}\tclosed')
     assert problems('ISSUES.tsv', f'ISS-2\t{old}\topen')
     assert problems('docs/decisions.md', old)
@@ -64,13 +114,18 @@ def planted_controls():
         subprocess.run(['git', 'init', '-q', str(root)], check=True)
         old = 'https://github.com/' + 'unbalancedparentheses' + '/concrete2'
         (root / 'docs/archive').mkdir(parents=True)
-        (root / 'docs/archive/evidence.md').write_text(old)
+        (root / 'docs/archive/site-down.md').write_text(old)
         assert not scan(root), 'historical evidence refused'
         (root / 'README.md').write_text(old)
         for url in (old, 'https://' + 'unbalancedparentheses' + '.github.io/concrete2'):
             (root / 'README.md').write_text(url)
             assert scan(root) == ['README.md:1: archived repository reference'], 'planted live endpoint passed'
         (root / 'README.md').unlink()
+        (root / 'changelog.d').mkdir()
+        fragment = root / 'changelog.d/new.md'
+        fragment.write_text(old)
+        assert scan(root) == ['changelog.d/new.md:1: archived repository reference'], 'new live fragment exempted'
+        fragment.unlink()
         (root / 'ISSUES.tsv').write_text(f'ISS-9999\t{old}\tclosed')
         assert scan(root) == ['ISSUES.tsv:1: archived repository reference'], 'new closed issue exempted'
 

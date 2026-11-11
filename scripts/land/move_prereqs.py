@@ -1,7 +1,7 @@
 """Landing prerequisites P2 and P4 of the legacy/ move (scripts/land/legacy_move.sh), judged on content.
 
   move_prereqs.py workflow FILE...   exit 0 when some FILE is a workflow with a schedule trigger and,
-                                     in an unconditional job with no `needs` or continue-on-error, a step with
+                                     in a job with no `if`, `needs` or continue-on-error, a step with
                                      no `if`, `shell` or continue-on-error, under a bash shell that
                                      fails on error, whose whole run is the single line
                                      `bash scripts/oracle/build.sh` (rebuild from the tag and verify)
@@ -47,10 +47,8 @@ def workflow_ok(text):
     if not shell_ok(doc):
         return ["the workflow's default shell is not one that runs the script and fails on error"]
     for job in (doc.get("jobs") or {}).values():
-        if not isinstance(job, dict):
-            continue
-        if ("if" in job
-                or job.get("continue-on-error") or "needs" in job or not shell_ok(job)):
+        if (not isinstance(job, dict) or "if" in job or job.get("continue-on-error") or "needs" in job
+                or not shell_ok(job)):
             continue
         for step in job.get("steps") or []:
             if (not isinstance(step, dict) or "if" in step or step.get("continue-on-error")

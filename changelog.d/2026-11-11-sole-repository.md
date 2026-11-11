@@ -1,0 +1,3 @@
+Use lambdaclass/concrete through origin for repository operations, landing, reviews and oracle sources; retire the root push-both helper. Reject archived repository URLs in maintained text, including new changelog fragments, while preserving explicitly listed historical evidence. Preserve maintained landing tools through the legacy-move overlay.
+
+Isolated landing runs accept the canonical HTTPS repository URL or verified git bundles with advertised refs. Resolve bundle paths and run directories against the caller before changing directory, refuse clone and symlink sources, and use bundles for unpublished server-local train runs (ISS-0054, ISS-0056, ISS-0057).

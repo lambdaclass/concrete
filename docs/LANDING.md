@@ -401,7 +401,7 @@ script against a throwaway repository with bare-repo remotes and a fake `gh`. It
 - every resolution route;
 - every refusal: a real conflict, prose next to a generated block, a duplicate corpus key, a merge
   or rebase already in progress, a dirty tree, an existing train, a head-SHA mismatch, a red
-  landing job, a moved main and a remote named `fork`;
+  landing job and a moved main;
 - the check → ci → watch → land pipeline, with both dry-runs;
 - `ci` dispatches with the train's base; `land` cancels no run; `record` names the qualifying run
   only for the newest completed dispatch of CI at exactly the head and the base with every
@@ -444,7 +444,7 @@ by the bundle. Local clones, remote names, other URLs and symlink paths are refu
 The CI server train path (`gates_remote.sh` → `gates_transport_ssh.sh`) creates and
 copies a bundle, then passes its absolute path as `RUN_AT_REF_SOURCE`.
 
-The former repository is archived on GitHub, which refuses pushes. Custom remote-identity
-and workflow repository guards are therefore removed. `archived_references.sh` checks
-maintained text for stale endpoints; `legacy/`, `docs/archive/`, and `changelog.d/`
-are historical paths, and existing issue/decision evidence is exempt by exact line digest.
+`archived_references.sh` checks maintained text for stale endpoints, including live
+`changelog.d/` fragments. Its explicit `HISTORICAL_FILES` list names the frozen evidence
+files exempted from scanning; existing issue/decision evidence is exempt by exact line
+digest. New files under historical directories are scanned too.
