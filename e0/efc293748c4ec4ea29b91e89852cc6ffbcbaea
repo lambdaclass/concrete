@@ -1,0 +1,3 @@
+[piece 3 of 4: scripts]
+- scripts/checks/external_toolchain.sh:95: Both tool fixtures, the project and the elan stub use v4.35.0, so the gate cannot detect dispatching con-leche with the project toolchain instead of its own pin. The three incorrect dispatch mutations recorded in ISS-0057 still pass. Use a distinct con-leche toolchain and assert dispatch against it.
+- scripts/proofs/lake_tool.sh:48: Nanoda’s cache identity includes elan and Lean but omits cargo and rustc, which actually build it. Changing the Rust toolchain can therefore reuse the previous binary instead of rebuilding. ISS-0058 remains unresolved; include the Rust builders’ identities in the cache key.
