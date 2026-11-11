@@ -2,9 +2,11 @@
 
 This is archived evidence, **not a decision or proposal approved here**. The original
 59-item recommendation and grammar sheet named in OWNER_QUOTES.md were not present
-in the archived tag. Their absence prevents checking the blanket approval against
+in the archived branch tag `archive/2026-11-10/record-language`. Their absence prevents checking the blanket approval against
 the wording below. No rule, spelling, or revision in this extract gains authority
-from this archive. Existing owner decisions continue to govern.
+from this archive. Existing owner decisions continue to govern. For the landed source rules formerly citing
+item 30, see the [provenance disposition](../../decisions.md#decided-2026-11-08-source-evidence);
+their Lean definitions remain unchanged.
 
 Source: `archive/2026-11-10/record-language`, docs/decisions.md lines 1166–1347.
 

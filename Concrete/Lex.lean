@@ -313,11 +313,11 @@ def decodeUtf8 (bs : List UInt8) : Except DecodeError (List Nat) := decodeAt 0 b
 /-- Check source restrictions while decoding, short circuiting at the first refusal. -/
 def sourceAt (off : Nat) (bs : List UInt8) : Except DecodeError (List Nat) :=
   decodeLoop true off bs []
-/-- Source checking from byte zero. Item 30 excludes raw NUL and U+FEFF everywhere;
+/-- Source checking from byte zero. ConcreteSpec.Surface0 excludes raw NUL and U+FEFF everywhere;
 Q4.2 concerns static text values, which can contain NUL via the `\0` escape. -/
 def checkSource (bs : List UInt8) : Except DecodeError (List Nat) := sourceAt 0 bs
 
-/-- The source flag adds exactly the raw-source scalar restrictions of item 30. -/
+/-- The source flag adds exactly the raw-source scalar restrictions defined in ConcreteSpec.Surface0. -/
 def Allowed (source : Bool) (cs : List Nat) : Prop :=
   ∀ c ∈ cs, source = true → c ≠ 0 ∧ c ≠ 0xFEFF
 
@@ -405,7 +405,7 @@ theorem decodeUtf8_sound {bs : List UInt8} {cs : List Nat}
 theorem decodeUtf8_complete {bs : List UInt8} {cs : List Nat}
     (h : Utf8.Decodes bs cs) : decodeUtf8 bs = .ok cs := decodeAt_complete h 0
 
-/-- Successful source checking is exactly decoding with item 30's restrictions. -/
+/-- Successful source checking is exactly decoding with ConcreteSpec.Surface0 source restrictions. -/
 theorem sourceAt_iff (off : Nat) (bs : List UInt8) (cs : List Nat) :
     sourceAt off bs = .ok cs ↔
       decodeAt off bs = .ok cs ∧ ∀ c ∈ cs, c ≠ 0 ∧ c ≠ 0xFEFF := by

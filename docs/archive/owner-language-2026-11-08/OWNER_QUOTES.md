@@ -1,8 +1,10 @@
 # Primary owner record excerpts
 
-Transcribed without changes from `docs/proposals/owner-2026-11-08/PENDING_RECORDS.md`
+Selected excerpts from `docs/proposals/owner-2026-11-08/PENDING_RECORDS.md`
 at source commit `054c5c4a5ae083c1ee72ff17d1fc753e0b5a251c`.
 The quoted owner words are primary evidence; the surrounding explanations are the recorder’s context.
+Excerpts retain source wording; headings introduced for navigation are editorial. Intervening
+entries are omitted. Dispositions and rules are recorded only in [decisions.md](../../decisions.md#decided-2026-11-08-language).
 
 ## Language approval and qualification
 
@@ -11,6 +13,18 @@ The quoted owner words are primary evidence; the surrounding explanations are th
 - 2026-11-08, verbatim: "record, yes to all recommended". This approves the full language/process list as recommended: scratchpad/LANGUAGE_DECISIONS_2026-11-08.md (items 1-59, with item 11 = remove `as` entirely and item 40 per the "fully gone" answer). Includes item 5 (land slice 0 at 0e2950e7). Item 11(b), how two same-named imported items are used, is still under review (round 6, options 1-3, Claude recommends 2) and is NOT covered by this approval; it goes back to the owner.
 
 - 2026-11-08, verbatim: "i like 3". This answers item 11(b): option 3, always qualified. Imports stay item lists (`import std::json::{parse};`, MOD-2 manifest and OD139 kept); every imported item is used as `<module last segment>::name` everywhere (values, types, patterns, theorem paths), never bare; items declared in the same module stay bare; builtin types (u8, bool, ...) stay bare. Two imports of the same item name from different modules are allowed (revises MOD-3). Two imported modules with the same last segment are refused. A local named like an imported module segment is refused (no shadowing). Reviewers round 6: Codex 3, Kimi 3, agy 1; Claude revised to 3. Exact spelling in the spelling round.
+
+## 2026-11-08 15:08 UTC owner (verbatim), answering the 29 questions
+"ok but i said already all yes based on the best long term reviews of each agent and what we said before right?"
+Taken as: all 29 decided as Claude's final picks after the three-model rounds, including the revised 3, 14 and 18:
+- 3: `'a'` is a u8 ASCII literal, with tests;
+- 14: `help` now, no `run`, which revises the slice-0 surface;
+- 18: fallible primitive operations in a closed initializer grammar, with no calls, loops or effects; success is kernel-checked, every initializer is evaluated, running out of fuel refuses, and TYPE-22 is revised.
+The final list as shown to the owner is in the session transcript at 2026-11-08T15:08Z.
+Item 28: the owner applies d6159bf6 personally.
+Item 27: the sweep 35b489e4 is signed off.
+B e997548d was asked separately (item 30) and is not covered by this reply.
+
 
 ## 2026-11-08T15:31:59Z owner (verbatim)
 "okay with your decisions"
@@ -34,3 +48,11 @@ The two split questions:
 
 ### Codex login
 Codex device-auth re-login for agent on concrete-ci-2 (option A: main's review.sh on concrete-ci-2 for review-access). Approved.
+
+## Later slice-0 sign-off
+
+- 2026-11-08, verbatim: "sign off ea5181b5, 1547734f8, a27fbb842, yes redesign". Owner sign-offs under process item 1 (exact SHAs reviewed by Codex, Kimi and agy):
+  - wip/slice0 at ea5181b535fd2983abfcafe31b3ff7bf59ec6439 (Codex verification ACCEPT, Kimi ACCEPT, agy ACCEPT after withdrawing; branch CI 42451061873 18/18);
+  - wip/record-language at 1547734f86e83d381f6cac2f25d2810b083bc9ed (Codex, Kimi verification ACCEPT, agy ACCEPT);
+  - wip/one-repository (B) at a27fbb842 (all three ACCEPT at cap 3).
+  - "yes redesign": guard A and the acceptance shim are redesigned: shrink the landing scripts first (process decision 3: drop bot, notify, install-bot, systemd units), then B (one repository, lambdaclass/concrete only) lands BEFORE the foundation freeze, then server-side protection of main (GitHub rulesets/branch protection: only a train merge with required checks green updates main) as the real boundary, then a much smaller local guard as a convenience. wip/remote-guard (b60670804) and wip/acceptance-shim (eca268078) are superseded.
