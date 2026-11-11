@@ -29,17 +29,30 @@ def run(command):
     return result.stdout
 
 
-def dependencies(source, temp):
+def inspect(module, temp):
+    return run(["lake", "env", "env",
+                "LEAN_PATH=" + str(temp.parent) + ":" +
+                run(["lake", "env", "printenv", "LEAN_PATH"]).strip(),
+                "lean", "--run", str(ROOT / "scripts/proofs/imports.lean"), module])
+
+
+def dependencies(source, temp, built_module=None):
     _, _, end = module_imports(source, MODULES)
     # Rewrite only example command tokens; all declarations and context survive.
     body = source[end:]
     for i, match in reversed(list(enumerate(EXAMPLE.finditer(lex(body, literals=False))))):
-        body = body[:match.start()] + f'noncomputable def «⟪import-example⟫{i}»' + body[match.end():]
-    temp.write_text('import Lean\n' + source[:end] +
-                    'set_option linter.defProp false\n' + body + '\n' +
-                    (ROOT / 'scripts/proofs/imports.lean').read_text())
-    output = run(['lake', 'env', 'lean', '-DwarningAsError=true',
-                  '-DautoImplicit=false', str(temp)])
+        body = body[:match.start()] + f'noncomputable abbrev «⟪import-example⟫{i}»' + body[match.end():]
+    temp.write_text(source[:end] + body)
+    run(['lake', 'env', 'lean', '-DwarningAsError=true',
+         '-DautoImplicit=false', '-R', str(temp.parent), '-o', str(temp.with_suffix('.olean')), str(temp)])
+    output = inspect(temp.stem, temp)
+    if built_module:
+        built = inspect(built_module, temp)
+        def named(text):
+            return sorted(line for line in text.splitlines() if line.startswith('NAMED '))
+        if named(output) != named(built):
+            raise SystemExit(f'probe/built .olean dependency mismatch: {built_module}\n'
+                             f'probe: {named(output)}\nbuilt: {named(built)}')
     deps = sorted(line.removeprefix('IMPORT ') for line in output.splitlines()
                   if line.startswith('IMPORT '))
     if not deps:
@@ -99,6 +112,17 @@ def controls(temp):
              'def scopeControl : Name := "scope"\n')
     if dependencies(scope, temp) != ['ConcreteSpec.Spec.Slice1Syntax']:
         raise SystemExit('open namespace probe control failed')
+    equation = ('open ConcreteSpec\nset_option linter.defProp false in def probeEq := @ConcreteSpec.runBody.eq_2\n')
+    minimal = 'import ConcreteSpec.Spec.Slice1Semantics\n' + equation
+    extra_equation = 'import ConcreteSpec.Proofs.Slice1\n' + minimal
+    eq_deps = dependencies(minimal, temp)
+    if dependencies(extra_equation, temp) != eq_deps:
+        raise SystemExit('realized equation ownership depends on imports')
+    extra_canonical = rewrite(extra_equation, eq_deps + ['ConcreteSpec.Proofs.Slice1'])
+    if matches(extra_canonical, dependencies(extra_canonical, temp)):
+        raise SystemExit('unneeded realization-module import accepted')
+    if not matches(rewrite(minimal, eq_deps), dependencies(rewrite(minimal, eq_deps), temp)):
+        raise SystemExit('canonical equation imports rejected')
     deps = dependencies(good, temp)
     if not matches(good, deps):
         raise SystemExit('positive direct-import control rejected')
@@ -155,7 +179,7 @@ def main():
         controls(temp)
         for path in proof_paths(ROOT):
             source = path.read_bytes().decode('utf-8')
-            deps = dependencies(source, temp)
+            deps = dependencies(source, temp, '.'.join(path.relative_to(ROOT).with_suffix('').parts))
             print(f'{path.relative_to(ROOT)}: {", ".join(deps)}', flush=True)
             if not matches(source, deps):
                 if args.write:

@@ -37,6 +37,7 @@ source scripts/proofs/lib.sh
 
 # Exact direct imports are part of this required Lean-enabled gate.
 python3 scripts/proofs/imports.py || { no "direct proof imports or controls failed"; finish; }
+ok "direct proof imports and controls"
 
 BANNED_AXIOM_RE='^(sorryAx|Lean[.]ofReduceBool|Lean[.]ofReduceNat|Lean[.]trustCompiler)$|[.]_native[.]'
 BANNED_WORD_RE='\b(sorry|sorryAx|admit|native_decide|ofReduceBool|ofReduceNat|trustCompiler|skipKernelTC)\b|\+native\b|\bnative»?\s*:=|\bdecide\s*\(\s*config\b|\bdecide\s*[+-]|\bDecide[.]Config\b'
