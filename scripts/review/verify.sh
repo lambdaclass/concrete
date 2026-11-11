@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # R-0544 — does a commit carry a clean review verdict? See docs/REVIEW.md.
 #
-#   scripts/review/verify.sh [--fetch] <commit>
+#   scripts/review/verify.sh [--fetch] [--notes-ref <ref>] [--required-base <commit>] <commit>
 #
 # Reads the git note that scripts/review/review.sh wrote on <commit> under
 # refs/notes/concrete-review. The verdict counts only for that exact commit: a
@@ -10,16 +10,32 @@
 #   --fetch  first fetch refs/notes/concrete-review from $REVIEW_REMOTE (default
 #            origin), replacing the local copy (a reader, not a writer).
 #
+#   --required-base  require the note base to be an ancestor-or-equal of this commit.
+#
 # Exit codes: 0 clean; 1 reviewed, not clean (findings or blocked);
-#             2 no note, a malformed note, or a usage error.
+#             2 no note, a malformed or insufficient-range note, or a usage error.
 
 set -euo pipefail
 
 NOTES_REF="refs/notes/concrete-review"
 REMOTE="${REVIEW_REMOTE:-origin}"
 FETCH=0
-if [ "${1:-}" = --fetch ]; then FETCH=1; shift; fi
-[ $# -eq 1 ] || { echo "usage: verify.sh [--fetch] <commit>" >&2; exit 2; }
+REQUIRED_BASE=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --fetch) FETCH=1; shift ;;
+    --notes-ref)
+      [ $# -ge 2 ] && git check-ref-format "$2" || { echo "verify: --notes-ref needs a full ref" >&2; exit 2; }
+      NOTES_REF="$2"; shift 2 ;;
+    --required-base)
+      [ $# -ge 2 ] || { echo "verify: --required-base needs a commit" >&2; exit 2; }
+      REQUIRED_BASE="$(git rev-parse -q --verify "$2^{commit}")" \
+        || { echo "verify: required base is not a commit: $2" >&2; exit 2; }
+      shift 2 ;;
+    *) break ;;
+  esac
+done
+[ $# -eq 1 ] || { echo "usage: verify.sh [--fetch] [--notes-ref <ref>] [--required-base <commit>] <commit>" >&2; exit 2; }
 
 if [ "$FETCH" = 1 ]; then
   git fetch -q "$REMOTE" "+$NOTES_REF:$NOTES_REF" \
@@ -63,6 +79,12 @@ for k in verdict rounds reviewer utc base pieces; do
 done
 
 field() { local n="F_${1//-/_}"; printf '%s' "${!n:-}"; }
+if [ -n "$REQUIRED_BASE" ]; then
+  git merge-base --is-ancestor "$(field base)" "$REQUIRED_BASE" 2>/dev/null || {
+    echo "$SHA review range does not cover required base $REQUIRED_BASE: note base $(field base) is not an ancestor-or-equal"
+    exit 2
+  }
+fi
 VERDICT="$(field verdict)"
 echo "$SHA $VERDICT (round $(field rounds), reviewer $(field reviewer), $(field utc), base $(field base), $(field pieces) piece(s))"
 [ "$VERDICT" = clean ] && exit 0

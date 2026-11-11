@@ -35,7 +35,8 @@
 # class counts as compiler and spec. A sign-off qualifies only when the review rounds recorded on the
 # member's own commits reach that cap: `rounds-at` must be the commit itself or one of its ancestors
 # not on BASE, and carry a well-formed review.sh note (scripts/review/verify.sh: clean, findings or
-# blocked) whose round is at least the cap, whatever its verdict
+# blocked), satisfying docs/REVIEW.md's range contract, whose round is at least the cap,
+# whatever its verdict
 # (the cap counts rounds used: the other reviewers' rejections are why a branch reaches it).
 #
 # `verify` accepts the record only if the ref exists, the tree holds exactly those seven 100644 blobs,
@@ -115,6 +116,7 @@ cmd_record() {
   [[ "$date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || die "record: --date YYYY-MM-DD is required"
   [ -n "$quote" ] && [[ "$quote" != *$'\n'* ]] || die "record: --quote is required, on one line"
   [ -n "$base" ] || die "record: --base BASE is required"
+  base="$(git rev-parse -q --verify "$base^{commit}")" || die "record: --base is not a commit"
   at="$(git rev-parse -q --verify "$at^{commit}")" || die "record: --rounds-at must name the noted commit"
   local rec="signoff: owner
 commit: $sha
@@ -174,12 +176,14 @@ check() {
   cap="$(class_cap "$cls")"
   at="$F_rounds_at"
   [[ "$at" =~ ^[0-9a-f]{40}$ ]] || bad "rounds-at '$at' is not a full commit SHA"
-  { git merge-base --is-ancestor "$at" "$sha" 2>/dev/null && ! git merge-base --is-ancestor "$at" "$base" 2>/dev/null; } \
+  local arc=0
+  git merge-base --is-ancestor "$at" "$base" 2>/dev/null || arc=$?
+  { [ "$arc" = 1 ] && git merge-base --is-ancestor "$at" "$sha" 2>/dev/null; } \
     || bad "rounds-at ${at:0:10} is not one of ${sha:0:10}'s own commits (an ancestor or itself, not on ${base:0:10})"
   # verify.sh judges the note as review.sh wrote it: 0 clean, 1 findings or blocked (both well formed,
   # and both count: the cap is rounds used); 2 is no note or a malformed one.
   local vout vrc=0
-  vout="$(bash "$VERIFY" "$at" 2>&1)" || vrc=$?
+  vout="$(bash "$VERIFY" --required-base "$base" "$at" 2>&1)" || vrc=$?
   [ "$vrc" = 0 ] || [ "$vrc" = 1 ] || bad "rounds-at ${at:0:10} carries no well-formed review.sh note: ${vout//$'\n'/ }"
   rounds="$(printf '%s\n' "$vout" | sed -n 's/.*(round \([1-9][0-9]*\), reviewer .*/\1/p' | head -1)"
   [ -n "$rounds" ] || bad "rounds-at ${at:0:10}: no round count in '$vout'"

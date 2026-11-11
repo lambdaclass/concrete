@@ -7,19 +7,20 @@
 #                                checked by scripts/review/verify.sh)
 #   refs/notes/concrete-gates    gates: pass|fail          selected: N                   utc: ...
 #
-# One `key: value` per line; when a key repeats, the last line wins. A note is attached to a
+# One `key: value` per line; review schema is checked by verify.sh, gates use the last value. A note is attached to a
 # commit, so a verdict is bound to that exact SHA: a new commit starts with no notes, and no rule has to say so.
 #
 #   notes.sh fetch                          copy the remote notes to refs/notes/remote/concrete-*
 #   notes.sh get <kind> <sha> [<key>]       print the published note (or one key) of <sha>
 #   notes.sh put <kind> <sha> key=value...  replace <sha>'s note on the remote, keeping every other
 #                                           commit's note (fetch, rewrite, fast-forward push, retry)
-#   notes.sh ready <sha>                    exit 0 iff verdict is clean and gates is pass
+#   notes.sh ready <sha> [required-base]    verify review scope and gates (docs/REVIEW.md)
 #
 # <kind> is review or gates. LAND_REMOTE (default origin) names the remote; `fork` is refused.
 # Writers: scripts/review/review.sh (review) and scripts/land/ready.sh (gates).
 # `put` never force-pushes: it rewrites on top of the remote's notes tip and retries on a race.
 set -euo pipefail
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REMOTE="${LAND_REMOTE:-origin}"
 DRY="${LAND_NOTES_DRY:-0}"
 die() { echo "notes: $*" >&2; exit 1; }
@@ -90,6 +91,7 @@ case "$sub" in
   ready)
     [ -n "${1:-}" ] || die "ready <sha>"
     s="$(git rev-parse "$1")"
-    [ "$(get_note review "$s" verdict)" = clean ] && [ "$(get_note gates "$s" gates)" = pass ] ;;
+    bash "$SELF_DIR/../review/verify.sh" \
+      --notes-ref refs/notes/remote/concrete-review --required-base "${2-$REMOTE/main}" "$s" && [ "$(get_note gates "$s" gates)" = pass ] ;;
   *) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

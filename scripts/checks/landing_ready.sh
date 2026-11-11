@@ -110,7 +110,7 @@ sha_of(){ git --git-dir="$TMP/origin.git" rev-parse "refs/heads/$1"; }
 mark(){ # branch [review-verdict] [gates] [extra review key=value]
   local s; s="$(sha_of "$1")"
   ( cd "$A" && git fetch -q origin \
-    && bash "$NOTES" put review "$s" verdict="${2:-clean}" rounds=1 reviewer=codex base="$s" pieces=1 ${4:+"$4"} >/dev/null \
+    && bash "$NOTES" put review "$s" verdict="${2:-clean}" rounds=1 reviewer=codex base="$(git -C "$W" rev-parse origin/main)" pieces=1 ${4:+"$4"} >/dev/null \
     && bash "$NOTES" put gates "$s" gates="${3:-pass}" selected=3 >/dev/null ) || no "mark $1"
 }
 land_refs(){ git --git-dir="$TMP/origin.git" for-each-ref --format='%(refname)' 'refs/heads/wip/land-*'; }
@@ -148,6 +148,44 @@ mk wip/rv2 rv2 src/rv2.txt rv2; mark wip/rv2 clean fail
 out="$(cd "$A" && LAND_REVIEW_CMD=true bash "$ROOT_DIR/scripts/land/ready.sh" wip/rv2 2>&1)"; rc=$?
 [ "$rc" = 0 ] && [ "$(cd "$A" && bash "$NOTES" get gates "$(sha_of wip/rv2)" gates)" = pass ] \
   && ok "passing legs publish gates: pass and the head becomes ready" || { no "ready.sh pass: exit $rc"; echo "$out" | sed 's/^/      /'; }
+
+echo "=== ISS-0019: readiness checks schema and range ==="
+for mode in intermediate self malformed; do
+  mk "wip/range-$mode" hidden "src/hidden-$mode" hidden
+  MID="$(sha_of "wip/range-$mode")"
+  mk "wip/range-$mode" visible "src/visible-$mode" visible "$MID"
+  RH="$(sha_of "wip/range-$mode")"
+  nb="$MID"; [ "$mode" != self ] || nb="$RH"
+  (cd "$A" && bash "$NOTES" put review "$RH" verdict=clean rounds=1 reviewer=codex base="$nb" pieces=1 >/dev/null && bash "$NOTES" put gates "$RH" gates=pass >/dev/null)
+  if [ "$mode" = malformed ]; then
+    (cd "$A" && bash "$NOTES" put review "$RH" verdict=clean >/dev/null)
+  fi
+  out="$(cd "$A" && bash "$NOTES" ready "$RH" 2>&1)"; rc=$?
+  reason='review range does not cover required base'; [ "$mode" != malformed ] || reason='malformed review note'
+  [ "$rc" = 2 ] && has "$out" "$reason" && ok "notes ready rejects $mode evidence for $reason" || { no "notes ready $mode: $rc $out"; }
+  out="$(cd "$A" && bash "$ROOT_DIR/scripts/land/ready.sh" --no-review --no-remote "wip/range-$mode" 2>&1)"; rc=$?
+  [ "$rc" = 2 ] && has "$out" "$reason" && ok "ready --no-review rejects $mode evidence for $reason" || { no "ready $mode: $rc $out"; }
+done
+
+echo "=== ISS-0019: explicit bases and notes ref isolation ==="
+mk wip/explicit-base explicit src/explicit explicit; mark wip/explicit-base
+EH="$(sha_of wip/explicit-base)"
+out="$(cd "$A" && bash "$NOTES" ready "$EH" '' 2>&1)"; rc=$?
+[ "$rc" = 2 ] && has "$out" 'required base is not a commit' && ok "notes ready rejects explicit empty base" || no "empty notes base: $rc $out"
+for arg in empty missing; do
+  if [ "$arg" = empty ]; then
+    out="$(cd "$A" && bash "$ROOT_DIR/scripts/land/ready.sh" --base '' --dry-run wip/explicit-base 2>&1)"; rc=$?
+  else
+    out="$(cd "$A" && bash "$ROOT_DIR/scripts/land/ready.sh" --base 2>&1)"; rc=$?
+  fi
+  [ "$rc" != 0 ] && has "$out" '--base needs a nonempty ref' && ok "ready rejects $arg base argument" || no "ready $arg base: $rc $out"
+done
+# Keep the published clean snapshot, but replace canonical local evidence with findings.
+(cd "$A" && git notes --ref=concrete-review add -f -m "$(printf 'verdict: findings\nrounds: 2\nreviewer: codex\nutc: 2026-11-11T00:00:00Z\nbase: %s\npieces: 1' "$BASE")" "$EH")
+out="$(cd "$A" && REVIEW_NOTES_REF=refs/notes/remote/concrete-review bash "$ROOT_DIR/scripts/review/verify.sh" --required-base "$BASE" "$EH" 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" 'findings (round 2' && ok "ambient notes ref cannot override canonical evidence" || no "ambient ref: $rc $out"
+out="$(cd "$A" && bash "$NOTES" ready "$EH" "$BASE" 2>&1)"; rc=$?
+[ "$rc" = 0 ] && has "$out" 'clean (round 1' && ok "readiness explicitly selects published snapshot" || no "published ref: $rc $out"
 
 echo "=== bisect --ci: a red CI run names the culprit, each probe its own run ==="
 mk wip/cired cired CIRED red; mark wip/cired

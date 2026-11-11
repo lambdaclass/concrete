@@ -104,7 +104,7 @@ GH
 chmod +x "$TMP/fake-gh"
 
 # A review note as scripts/review/review.sh writes it (scripts/review/verify.sh's six keys), published
-# to origin. put-review <sha> <clean|findings|blocked|malformed|none>[@rounds]; none removes the note.
+# to origin. put-review <sha> <clean|findings|blocked|malformed|none>[@rounds] [base]; none removes the note.
 cat > "$TMP/put-review" <<'EOF'
 #!/usr/bin/env bash
 set -e
@@ -117,7 +117,7 @@ case "$2" in
 rounds: $(case "$2" in *@*) echo "${2#*@}" ;; *) echo 1 ;; esac)
 reviewer: codex
 utc: 2026-11-06T00:00:00Z
-base: $sha
+base: $(git rev-parse "${3:-origin/main}")
 pieces: 1" "$sha" ;;
 esac
 git show-ref -q --verify $R || exit 0
@@ -131,7 +131,7 @@ cat > "$TMP/fake-review" <<'EOF'
 mode="$(cat "$FAKE_GH_DIR/review.mode" 2>/dev/null || echo clean)"
 echo "$4 $mode" >> "$FAKE_GH_DIR/review.log"
 case "$mode" in none) exit 0 ;; fail) exit 1 ;; esac
-bash "$(dirname "$0")/put-review" "$4" "$mode"
+bash "$(dirname "$0")/put-review" "$4" "$mode" "$2"
 EOF
 export LAND_REVIEW_CMD="bash $TMP/fake-review"
 
@@ -1182,7 +1182,7 @@ git update-ref -d "$R/$sha" 2>/dev/null || true
 CONCRETE_SKIP_GATES=1 git push -q origin ":$R/$sha" 2>/dev/null || true
 [ "$mode" = none ] && exit 0
 # The member's own review.sh note: the rounds it used (any verdict), which the cap is judged against.
-bash "$(dirname "$0")/put-review" "$sha" "findings@$rounds"
+bash "$(dirname "$0")/put-review" "$sha" "findings@$rounds" "${SO_NOTE_BASE:-$base}"
 d="$(mktemp -d)"
 trap 'rm -rf "$d"' EXIT
 for r in codex kimi agy; do
@@ -1251,7 +1251,7 @@ echo "=== review: check fails closed, land requires review provenance ==="
 git checkout -q main && git fetch -q origin && git reset -q --hard origin/main
 MR="$(git rev-parse HEAD)"
 git checkout -q -b brv1 "$MR"; printf 'rv1\n' > rv1.txt; commit_all brv1
-git checkout -q -b brv2 "$MR"; printf 'rv2\n' > rv2.txt; commit_all brv2
+git checkout -q -b brv2 brv1; printf 'rv2\n' > rv2.txt; commit_all brv2
 bash "$TRAIN" build trv brv1 brv2 >/dev/null 2>&1 || no "review train build"
 git checkout -q train/trv; HR="$(git rev-parse HEAD)"; R1="$(git rev-parse brv1)"; R2="$(git rev-parse brv2)"
 out="$(LAND_REVIEW_CMD= bash "$TRAIN" check trv --no-remote 2>&1)"; rc=$?
@@ -1272,11 +1272,11 @@ bash "$TRAIN" check trv --no-remote --no-review >/dev/null 2>&1 || no "check --n
 printf '[{"databaseId": 6161, "headSha": "%s", "createdAt": "9999-01-01T00:00:00Z"}]' "$HR" > "$FAKE_GH_DIR/list.json"
 bash "$TRAIN" ci trv >/dev/null 2>&1 || no "review train ci"
 runjson "$HR" success success
-prov_leg(){ # label head-mode m1-mode m2-mode expect(refuse|pass) [expected text]
-  bash "$TMP/put-review" "$HR" "$2"; bash "$TMP/put-review" "$R1" "$3"; bash "$TMP/put-review" "$R2" "$4"
+prov_leg(){ # label head-mode m1-mode m2-mode expect(refuse|pass) [text] [head-base] [m1-base] [m2-base] [text2]
+  bash "$TMP/put-review" "$HR" "$2" "${7:-$MR}"; bash "$TMP/put-review" "$R1" "$3" "${8:-$MR}"; bash "$TMP/put-review" "$R2" "$4" "${9:-$MR}"
   local o r; o="$(bash "$TRAIN" --dry-run land trv 2>&1)"; r=$?
   if [ "$5" = refuse ]; then
-    [ "$r" = 1 ] && has "$o" "has no review provenance" && has "$o" "${6:-}" && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$MR" ] \
+    [ "$r" = 1 ] && has "$o" "has no review provenance" && has "$o" "${6:-}" && has "$o" "${10:-}" && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$MR" ] \
       && ok "land refuses $1" || { no "land with $1 (exit $r)"; echo "$o" | sed 's/^/      /'; }
   else
     [ "$r" = 0 ] && has "$o" "${6:-}" && ok "land accepts $1" || { no "land with $1 (exit $r)"; echo "$o" | sed 's/^/      /'; }
@@ -1290,6 +1290,14 @@ done
 prov_leg "an unreviewed head with one member unreviewed" none clean none refuse "member brv2:"
 prov_leg "an unreviewed head whose every member is clean at its exact SHA" none clean clean pass "every member (2) carries a clean one"
 prov_leg "a clean head note" clean none none pass "the head ${HR:0:10} carries a clean review note"
+# ISS-0019: R1 is an unlanded intermediate base, reachable from the train head.
+# A syntactically clean note must fail specifically for its insufficient range.
+prov_leg "a clean head note covering only an intermediate range" clean clean clean refuse "review range does not cover required base $MR: note base $R1" "$R1"
+prov_leg "a clean member note covering only an intermediate range" none clean clean refuse "member brv2:" "$MR" "$MR" "$R1" "review range does not cover required base $MR: note base $R1"
+prov_leg "a head note based at the recorded main base" clean none none pass "the head ${HR:0:10} carries a clean review note" "$MR"
+# Both member notes may start strictly before recorded main, including signed pure merges.
+OLDER="$(git rev-parse "$MR^")"
+prov_leg "strict-ancestor member note bases" none clean clean pass "every member (2) carries a clean one" "$MR" "$OLDER" "$OLDER"
 # check over reviewed members takes the members' provenance and does not run the reviewer again.
 bash "$TMP/put-review" "$HR" none; bash "$TMP/put-review" "$R1" clean; bash "$TMP/put-review" "$R2" clean
 : > "$FAKE_GH_DIR/review.log"
@@ -1365,6 +1373,32 @@ for c in "SS scripts 3" "SM compiler 5"; do
     && ok "verify refuses a $cls member's sign-off after 2 rounds" || { no "verify of a $cls member after 2 rounds (exit $r)"; echo "$o" | sed 's/^/      /'; }
   bash "$TMP/put-signoff" "$s" none
 done
+# Record, verify, check and land must all reject the same insufficient cap evidence.
+git checkout -q train/trv
+for nb in "$R1" "$R2" aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; do
+  o="$(SO_NOTE_BASE="$nb" bash "$TMP/put-signoff" "$R2" valid 2>&1)"; r=$?
+  [ "$r" = 1 ] && has "$o" 'review range does not cover required base' && ! git rev-parse -q --verify "refs/owner-signoff/$R2" >/dev/null \
+    && ok "record rejects insufficient note base $nb" || { no "record range $nb: $r $o"; }
+  bash "$TMP/put-signoff" "$R2" valid
+  bash "$TMP/put-review" "$R2" findings@5 "$nb"
+  o="$(bash "$ROOT_DIR/scripts/land/signoff.sh" verify "$R2" --base "$MR" 2>&1)"; r=$?
+  [ "$r" = 1 ] && has "$o" 'review range does not cover required base' \
+    && ok "verify rejects insufficient cap range $nb" || no "verify range $nb: $r $o"
+  bash "$TMP/put-review" "$HR" none; bash "$TMP/put-review" "$R1" clean
+  for action in check land; do
+    if [ "$action" = check ]; then
+      o="$(LAND_REVIEW_CMD=false bash "$TRAIN" check trv --no-remote 2>&1)"; r=$?
+    else
+      o="$(bash "$TRAIN" --dry-run land trv 2>&1)"; r=$?
+    fi
+    [ "$r" != 0 ] && has "$o" 'review range does not cover required base' \
+      && ok "$action rejects signoff with insufficient cap range $nb" || no "$action range $nb: $r $o"
+  done
+done
+# A valid pure merge with signed member and strict-ancestor note remains eligible.
+bash "$TMP/put-signoff" "$R2" valid
+prov_leg "pure merge with a signed member and strict-ancestor notes" none clean findings@5 pass "head is their clean merge" "$MR" "$OLDER" "$OLDER"
+bash "$TMP/put-signoff" "$R2" none
 # The cap evidence is a well-formed review.sh note: a bare `rounds: 5` note does not count.
 bash "$TMP/put-signoff" "$R2" valid
 git notes --ref=refs/notes/concrete-review add -f -m "rounds: 5" "$R2"
