@@ -171,6 +171,31 @@ class ModuleHeader:
         return line.startswith("import ") and line[7:].rstrip() in self.modules
 
 
+def module_imports(source, modules):
+    """Return (module names, import-line spans, header end) using source offsets.
+
+    Comments and blank lines are legal anywhere in the header. Keep their bytes
+    separate from import lines so header rewrites preserve documentation.
+    """
+    header = ModuleHeader(modules)
+    lines = lex(source, literals=False).splitlines(keepends=True)
+    deps, spans = [], []
+    k = offset = 0
+    while k < len(lines) and (not lines[k].strip() or header.match(lines[k])):
+        if lines[k].strip():
+            deps.append(lines[k][7:].strip())
+            # Replace only code, retaining trailing comments and line endings.
+            end = len(lines[k].rstrip())
+            spans.append((offset, offset + end))
+        offset += len(lines[k])
+        k += 1
+    if k < len(lines) and not FIRST_COMMAND.match(lines[k]):
+        raise LexError('invalid import header terminator')
+    if any(line.lstrip().startswith('import') for line in lines[k:]):
+        raise LexError('import outside header')
+    return deps, spans, offset
+
+
 def compiler_header():
     prefix = Path(subprocess.check_output(["lean", "--print-prefix"], text=True).strip())
     modules = set()

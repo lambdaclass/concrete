@@ -7,28 +7,15 @@ python3 -I - <<'PY'
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path('scripts/proofs').resolve()))
-from lean_lex import lex, ModuleHeader, FIRST_COMMAND, LexError
+from lean_lex import module_imports, LexError
 
 modules = {'ConcreteSpec'} | {
     '.'.join(p.with_suffix('').parts) for p in Path('ConcreteSpec').rglob('*.lean')}
-header = ModuleHeader(modules)
 
-def imports(source):
-    lines = lex(source, literals=False).splitlines()
-    result = []
-    k = 0
-    while k < len(lines) and (not lines[k].strip() or header.match(lines[k])):
-        if lines[k].strip():
-            result.append(lines[k][7:].strip())
-        k += 1
-    if k < len(lines) and not FIRST_COMMAND.match(lines[k]):
-        raise ValueError('invalid import header terminator')
-    if any(line.lstrip().startswith('import') for line in lines[k:]):
-        raise ValueError('import outside header')
-    return result
-
-def check(source, basics=False):
-    deps = imports(source)
+def check(source, basics=False, spec=False):
+    deps, _, _ = module_imports(source, modules)
+    if spec and any(m.startswith("ConcreteSpec.Proofs.") for m in deps):
+        raise ValueError("spec imports proof")
     if any(m in {'ConcreteSpec', 'ConcreteSpec.Spec'} for m in deps):
         raise ValueError('umbrella import')
     if basics and deps != ['ConcreteSpec.Spec.Basics']:
@@ -55,7 +42,16 @@ for source, basics in [
 paths = sorted(Path('ConcreteSpec').rglob('*.lean'))
 for path in paths:
     try:
-        check(path.read_text(), path == Path('ConcreteSpec/Proofs/Basics.lean'))
+        check(path.read_text(), path == Path('ConcreteSpec/Proofs/Basics.lean'),
+              path == Path('ConcreteSpec/Spec.lean') or Path('ConcreteSpec/Spec') in path.parents)
+        if path == Path('ConcreteSpec/Spec.lean') or Path('ConcreteSpec/Spec') in path.parents:
+            try:
+                check('import ConcreteSpec.Proofs.Basics\n' + path.read_text(), spec=True)
+            except ValueError as e:
+                if str(e) != 'spec imports proof':
+                    raise
+            else:
+                raise ValueError('spec-to-proof control accepted')
         # Exercise the umbrella control against every current module, including future files.
         try:
             check('import ConcreteSpec.Spec\n' + path.read_text())
