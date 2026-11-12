@@ -148,6 +148,9 @@ CONTROL
 cat > "$TMP/bin/cargo" <<'CONTROL'
 #!/usr/bin/env bash
 set -eu
+[ "$(cat "$RUST_MEASUREMENT")" = "$PWD" ] || { echo 'CONTROL: Rust measured outside build directory' >&2; exit 96; }
+[ "${RUSTC:-}" = "$(command -v rustc)" ] || { echo 'CONTROL: keyed RUSTC missing' >&2; exit 96; }
+[ "${RUSTC_WRAPPER+x}${RUSTC_WORKSPACE_WRAPPER+x}" = '' ] || exit 96
 [ "$ELAN_HOME" = "$CALLER_ELAN_HOME" ] || { echo 'CONTROL: cargo home changed' >&2; exit 97; }
 if flock -n "$CONCRETE_EXT_TOOLS/.lock" true; then
   echo 'CONTROL: build lock missing' >&2; exit 99
@@ -163,7 +166,12 @@ cat > "$TMP/bin/rustc" <<'CONTROL'
 #!/usr/bin/env bash
 set -eu
 [ "$1" = -vV ]
-echo "rustc fixture ${FIXTURE_RUST_VERSION:-1}"
+case "$PWD" in
+  "$CONCRETE_EXT_TOOLS"/nanoda-source.*) location=build ;;
+  *) location=wrong-directory ;;
+esac
+printf '%s\n' "$PWD" > "$RUST_MEASUREMENT"
+echo "rustc fixture ${FIXTURE_RUST_VERSION:-1} $location"
 CONTROL
 chmod +x "$TMP/bin/"*
 cat > "$TMP/check-path" <<'CONTROL'
@@ -192,6 +200,8 @@ if bounded_is_incomplete "$rc"; then bounded_gate_status; exit 1; fi
 [ "$rc" = 0 ]
 export PATH="$TMP/bin:$PATH" DISPATCH_LOG="$TMP/dispatched" PHASE_LOG="$TMP/phases"
 export CONCRETE_EXT_TOOLS="$TMP/tools" ELAN_HOME="$TMP/shared-elan"
+export RUST_MEASUREMENT="$TMP/rust-measurement"
+export RUSTC=/conflicting/rustc RUSTC_WRAPPER=/conflicting/wrapper RUSTC_WORKSPACE_WRAPPER=/conflicting/workspace-wrapper
 export ELAN_TOOLCHAIN=deliberately-conflicting-ambient-toolchain LEAN_PATH=/conflicting/lean/path
 export CONCRETE_EXT_ELAN="$TMP/bin/elan" CALLER_ELAN_HOME="$ELAN_HOME"
 mkdir -p "$ELAN_HOME"
@@ -282,6 +292,14 @@ Path(sys.argv[2]).write_text(s.replace(old, '"$elan" run --install '+sys.argv[3]
 CONTROL
   run_driver 'CONTROL: per-tool toolchain dispatch wrong'
 done
+cp "$TMP/builder" "$TMP/project/scripts/proofs/lake_tool.sh"
+# Measuring outside the build checkout must be refused by the directory-sensitive proxy control.
+sed 's/version=$(cd "$work" \&\& "$rustc" -vV)/version=$("$rustc" -vV)/' "$TMP/builder" > "$TMP/project/scripts/proofs/lake_tool.sh"
+run_driver 'CONTROL: Rust measured outside build directory'
+cp "$TMP/builder" "$TMP/project/scripts/proofs/lake_tool.sh"
+# Removing explicit RUSTC must fail despite the conflicting caller environment.
+sed 's/RUSTC="$rustc" //' "$TMP/builder" > "$TMP/project/scripts/proofs/lake_tool.sh"
+run_driver 'CONTROL: keyed RUSTC missing'
 cp "$TMP/builder" "$TMP/project/scripts/proofs/lake_tool.sh"
 # A retained lock must fail the first post-build population query.
 sed 's/^flock -u 9.*/: # negative control: retain lock/' "$TMP/driver" > "$TMP/project/scripts/proofs/external.sh"

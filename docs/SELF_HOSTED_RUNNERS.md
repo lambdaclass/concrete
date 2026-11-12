@@ -248,7 +248,9 @@ already handles, and what the host has to handle.
   An ephemeral runner in a fresh container or VM needs neither.
 - **`$HOME` caches** persist: `~/.elan` (the toolchain, keyed by `lean-toolchain`) and
   `~/.cache/concrete-ext`. In that cache, each tool is built into a directory named by its pinned
-  SHA, toolchain, recipe hash and elan identity, and checked against it. Each Lake tool's
+  SHA and recipe hash, plus its builder identity: Lake trees include the toolchain and resolved
+  elan path/version; nanoda trees include resolved cargo/rustc paths and `rustc -vV` measured
+  in the build checkout. Each Lake tool's
   declared toolchain is verified on cache hits and misses; builds dispatch it through elan. The
   exporter must match the project's toolchain to read its `.olean` files. External builds use
   `~/.cache/concrete-ext/elan-<identity>` as their isolated elan home, even if `ELAN_HOME` is set by the
@@ -262,7 +264,6 @@ already handles, and what the host has to handle.
   deleted; prune `~/.cache/concrete-ext` now and then. The resolved elan path and version
   identify isolated homes and Lake tool trees on hosted and persistent runners.
   Switching between Nix and upstream elan, or changing its Nix store path, selects fresh trees.
-  Nanoda trees instead use the resolved cargo and rustc paths and `rustc -vV` output.
   All build recipes, including the nanoda stack patch, live in `lake_tool.sh`; its content
   hash also keys every tool tree. CI additionally keys the archive on both flake files.
 - **Processes.** The runner kills a job's process tree when the job ends. A gate that leaves a

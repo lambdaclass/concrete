@@ -275,7 +275,8 @@ jobs:
       - name: Kernel replay (leanchecker) (scripts/proofs/kernel_replay.sh)
         run: bash scripts/proofs/kernel_replay.sh
 
-  # Tool trees key the pinned revision/toolchain, resolved elan identity and complete build recipe.
+  # All tool trees key the pinned revision and complete build recipe. Lake trees also key their
+  # toolchain and elan path/version; nanoda keys cargo/rustc realpaths and build-directory rustc -vV.
   # They live in ~/.cache/concrete-ext; nanoda needs cargo from the extcheck shell.
   external-recheck:
     name: External re-check (con-leche, nanoda)

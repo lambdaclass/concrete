@@ -7,9 +7,10 @@
 # (absolute Nix elan in .#extcheck; otherwise the caller's elan). No elan proxies are
 # added to PATH. nanoda is built with cargo, without changing the caller's ELAN_HOME.
 # TOOLS defaults to ~/.cache/concrete-ext: it contains isolated elan installations,
-# source/build trees keyed by revision, toolchain, recipe hash and resolved elan path/version,
-# and .built completion markers. CI's outer cache key additionally includes external.pins,
-# lake_tool.sh, lean-toolchain, flake.nix and flake.lock. Local keys also separate elan builds.
+# source/build trees keyed by revision and recipe hash, and .built completion markers.
+# Lake trees additionally key their toolchain and resolved elan path/version; nanoda trees key
+# resolved cargo/rustc paths and rustc -vV measured in the build checkout. CI's outer cache key
+# additionally includes external.pins, lake_tool.sh, lean-toolchain, flake.nix and flake.lock.
 # Project preparation precedes the cache lock. Tool installation/build/publication and
 # verification hold TOOLS/.lock; after unlocking only finished tool artifacts are read,
 # never the isolated elan home. Builds publish private trees by rename.

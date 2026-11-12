@@ -111,12 +111,20 @@ if bash -c '
   git_sandbox "$2/first" || exit
   [ "${GIT_DIR+x}" != x ] || exit 1
   source "$1"
-  git_sandbox "$2/second" || exit
+  export GIT_DIR=/deliberately/foreign
+  git_sandbox || exit
+  [ "${GIT_DIR+x}" != x ] || exit 1
+  git_sandbox "$2/first" || exit
+  export GIT_DIR=/deliberately/foreign
+  rc=0
+  git_sandbox "$2/second" 2> "$2/conflict" || rc=$?
+  [ "$rc" = 2 ] && grep -qF "conflicting isolated config" "$2/conflict" || exit 1
+  [ "${GIT_DIR+x}" != x ] || exit 1
   [ "$GIT_CONFIG_GLOBAL" = "$2/first" ] && [ "$GIT_CONFIG_NOSYSTEM" = 1 ]
 ' bash "$ROOT_DIR/$HELPER" "$TMP"; then
-  ok "repeated sandbox calls preserve the first configuration"
+  ok "repeated sandbox calls clear inherited variables and refuse conflicting configs"
 else
-  no "repeated sandbox calls changed the first configuration"
+  no "repeated sandbox isolation/config conflict control failed"
 fi
 
 BOUNDED_PARENT="$TMP"

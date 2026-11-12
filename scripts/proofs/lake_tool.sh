@@ -46,25 +46,29 @@ build_lake_tool() {
 
 build_cargo_tool() {
   local tools=$1 url=$2 rev=$3 cargo rustc identity recipe dir work
-  cargo=$(command -v cargo) || return 1
-  rustc=$(command -v rustc) || return 1
+  # Measure and build in the same private checkout: rustup resolution is directory-sensitive.
+  # This also checks the source on cache hits without executing cargo again.
+  work=$(mktemp -d "$tools/nanoda-source.XXXXXX") || return 1
+  git clone -q "$url" "$work" >&2 && git -C "$work" checkout -q "$rev" >&2 \
+    || { rm -rf "$work"; return 1; }
   local version cargo_path rustc_path
-  cargo_path=$(realpath "$cargo") && rustc_path=$(realpath "$rustc") || return 1
-  # Invoke the selected paths: rustup proxies depend on their invocation basename.
-  version=$("$rustc" -vV) || return 1
+  cargo=$(cd "$work" && command -v cargo) && rustc=$(cd "$work" && command -v rustc) \
+    && cargo_path=$(cd "$work" && realpath "$cargo") \
+    && rustc_path=$(cd "$work" && realpath "$rustc") \
+    && version=$(cd "$work" && "$rustc" -vV) \
+    && recipe=$(recipe_identity) || { rm -rf "$work"; return 1; }
+  # Keep proxy invocation names (cargo/rustc), rather than invoking their rustup realpaths.
   identity=$(printf '%s\n%s\n%s\n' "$cargo_path" "$rustc_path" "$version" | sha256sum | cut -d' ' -f1)
-  recipe=$(recipe_identity) || return 1
   dir="$tools/nanoda-$rev-$identity-$recipe"
   if [ ! -f "$dir/.built" ]; then
-    work="$dir.partial.$$"
-    rm -rf "$work"
     # Raise the thread stack from 16 MiB to 256 MiB, as the Lean Kernel Arena does.
-    git clone -q "$url" "$work" >&2 && git -C "$work" checkout -q "$rev" >&2 \
-      && grep -qF 'STACK_SIZE: usize = 16_777_216;' "$work/src/lib.rs" \
+    grep -qF 'STACK_SIZE: usize = 16_777_216;' "$work/src/lib.rs" \
       && sed -i.orig 's/STACK_SIZE: usize = 16_777_216;/STACK_SIZE: usize = 268_435_456;/' "$work/src/lib.rs" \
-      && publish "$dir" env RUSTC="$rustc" "$cargo" build --release -q \
+      && (cd "$work" && env -u RUSTC_WRAPPER -u RUSTC_WORKSPACE_WRAPPER RUSTC="$rustc" "$cargo" build --release -q >&2) \
+      && touch "$work/.built" && rm -rf "$dir" && mv "$work" "$dir" \
       || { rm -rf "$work"; return 1; }
   fi
+  rm -rf "$work"
   [ -x "$dir/target/release/nanoda_bin" ] && [ "$(git -C "$dir" rev-parse HEAD)" = "$rev" ] || return 1
   echo "$dir"
 }
