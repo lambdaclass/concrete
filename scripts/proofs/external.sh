@@ -56,7 +56,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/../checks/lib/gate_env.sh" || exit 2
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SELF_DIR/../.." && pwd)"
 cd "$ROOT_DIR"
-TOOLS="${CONCRETE_EXT_TOOLS:-$HOME/.cache/concrete-ext}"
+# Resolve once before any tool recipe changes directory or creates symlinks.
+TOOLS=$(realpath -m "${CONCRETE_EXT_TOOLS:-$HOME/.cache/concrete-ext}") || exit 2
 unset ELAN_TOOLCHAIN LEAN_PATH
 CHECK_NAME=PROOF-EXTERNAL
 source scripts/proofs/lib.sh

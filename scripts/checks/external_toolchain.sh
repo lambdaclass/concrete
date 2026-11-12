@@ -64,7 +64,7 @@ cat > "$TMP/artifact" <<'CONTROL'
 #!/usr/bin/env bash
 set -eu
 [ "$ELAN_HOME" = "$CALLER_ELAN_HOME" ] || { echo 'CONTROL: artifact home changed' >&2; exit 98; }
-flock -n "$CONCRETE_EXT_TOOLS/.lock" true || { echo 'CONTROL: artifact lock held' >&2; exit 99; }
+flock -n "$FIXTURE_TOOLS/.lock" true || { echo 'CONTROL: artifact lock held' >&2; exit 99; }
 case "$0" in
   */lean4export) echo exporter >> "$PHASE_LOG"; cat "$FIXTURE_STREAM"; exit 0 ;;
   */con-leche) file=$3; kind=conleche ;;
@@ -85,14 +85,14 @@ cat > "$TMP/bin/elan" <<'CONTROL'
 set -eu
 if [ "$1" = --version ]; then
   [ "$ELAN_HOME" = "$CALLER_ELAN_HOME" ] || { echo 'CONTROL: caller home changed' >&2; exit 94; }
-  if flock -n "$CONCRETE_EXT_TOOLS/.lock" true; then
+  if flock -n "$FIXTURE_TOOLS/.lock" true; then
   echo 'CONTROL: build lock missing' >&2; exit 99
 fi
   echo 'elan fixture 1'; exit 0
 fi
 identity=$(printf '%s\n%s\n' "$(realpath "$0")" 'elan fixture 1' | sha256sum | cut -d' ' -f1)
-[ "$ELAN_HOME" = "$CONCRETE_EXT_TOOLS/elan-$identity" ] || { echo 'CONTROL: tool home wrong' >&2; exit 93; }
-if flock -n "$CONCRETE_EXT_TOOLS/.lock" true; then
+[ "$ELAN_HOME" = "$FIXTURE_TOOLS/elan-$identity" ] || { echo 'CONTROL: tool home wrong' >&2; exit 93; }
+if flock -n "$FIXTURE_TOOLS/.lock" true; then
   echo 'CONTROL: build lock missing' >&2; exit 99
 fi
 [ "$CALLER_ELAN_HOME" != "$ELAN_HOME" ]
@@ -121,8 +121,8 @@ set -eu
 [ "$ELAN_HOME" = "$CALLER_ELAN_HOME" ] || { echo 'CONTROL: caller home changed' >&2; exit 94; }
 [ "${ELAN_TOOLCHAIN+x}" != x ]
 [ "${LEAN_PATH+x}" != x ]
-mkdir -p "$CONCRETE_EXT_TOOLS"
-flock -n "$CONCRETE_EXT_TOOLS/.lock" true || { echo 'CONTROL: caller lock held' >&2; exit 95; }
+mkdir -p "$FIXTURE_TOOLS"
+flock -n "$FIXTURE_TOOLS/.lock" true || { echo 'CONTROL: caller lock held' >&2; exit 95; }
 case "$*" in
   'build ConcreteSpec Concrete') echo project >> "$PHASE_LOG" ;;
   'env lean '*)
@@ -153,9 +153,9 @@ set -eu
 [ "${RUSTC_WRAPPER+x}${RUSTC_WORKSPACE_WRAPPER+x}${CARGO_BUILD_RUSTC_WRAPPER+x}${CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER+x}${RUSTFLAGS+x}${CARGO_BUILD_RUSTFLAGS+x}${CARGO_ENCODED_RUSTFLAGS+x}${CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS+x}${CARGO_TARGET_DIR+x}" = '' ] || exit 96
 [ "$*" = 'build --release --locked -q' ] || exit 96
 [ "$CARGO_HOME" != "$AMBIENT_CARGO_HOME" ] && [ ! -f "$CARGO_HOME/config.toml" ] || exit 96
-[ -L "$CARGO_HOME/registry" ] || exit 96
+[ -L "$CARGO_HOME/registry" ] && [ -d "$CARGO_HOME/registry" ] || exit 96
 [ "${ELAN_HOME+x}" = '' ] || exit 97
-if flock -n "$CONCRETE_EXT_TOOLS/.lock" true; then
+if flock -n "$FIXTURE_TOOLS/.lock" true; then
   echo 'CONTROL: build lock missing' >&2; exit 99
 fi
 grep -qF "STACK_SIZE: usize = $(cat "$STACK_EXPECTATION");" src/lib.rs
@@ -170,7 +170,7 @@ cat > "$TMP/bin/rustc" <<'CONTROL'
 set -eu
 [ "$1" = -vV ]
 case "$PWD" in
-  */concrete-nanoda.*|"$CONCRETE_EXT_TOOLS"/source-nanoda-*) location=build ;;
+  */concrete-nanoda.*|"$FIXTURE_TOOLS"/source-nanoda-*) location=build ;;
   *) location=wrong-directory ;;
 esac
 printf '%s\n' "$PWD" > "$RUST_MEASUREMENT"
@@ -202,7 +202,7 @@ PATH="$TMP/bin:$PATH" bounded_run 120 -- nix develop "$ROOT#extcheck" -c bash "$
 if bounded_is_incomplete "$rc"; then bounded_gate_status; exit 1; fi
 [ "$rc" = 0 ]
 export PATH="$TMP/bin:$PATH" DISPATCH_LOG="$TMP/dispatched" PHASE_LOG="$TMP/phases"
-export CONCRETE_EXT_TOOLS="$TMP/tools" ELAN_HOME="$TMP/shared-elan"
+export FIXTURE_TOOLS="$TMP/tools" CONCRETE_EXT_TOOLS="$TMP/tools" ELAN_HOME="$TMP/shared-elan"
 export RUST_MEASUREMENT="$TMP/rust-measurement"
 export RUSTC=/conflicting/rustc RUSTC_WRAPPER=/conflicting/wrapper RUSTC_WORKSPACE_WRAPPER=/conflicting/workspace-wrapper
 export CARGO_BUILD_RUSTC_WRAPPER=/conflicting/config-wrapper CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER=/conflicting/config-workspace-wrapper
@@ -220,7 +220,7 @@ python3 - "$TMP/bin/cargo" "$TMP/stack-expectation" <<'CONTROL'
 from pathlib import Path
 import os, shlex, sys
 p = Path(sys.argv[1])
-keys = ('RUST_MEASUREMENT', 'AMBIENT_CARGO_HOME', 'CONCRETE_EXT_TOOLS', 'FIXTURE_ARTIFACT', 'DISPATCH_LOG')
+keys = ('RUST_MEASUREMENT', 'AMBIENT_CARGO_HOME', 'FIXTURE_TOOLS', 'FIXTURE_ARTIFACT', 'DISPATCH_LOG')
 context = ''.join(k+'='+shlex.quote(os.environ[k])+'\n' for k in keys)
 context += 'STACK_EXPECTATION='+shlex.quote(sys.argv[2])+'\n'
 p.write_text(p.read_text().replace('set -eu\n', 'set -eu\n'+context, 1))
@@ -264,7 +264,9 @@ cp "$TMP/driver" "$TMP/project/scripts/proofs/external.sh"
 rm -rf "$CONCRETE_EXT_TOOLS"
 : > "$DISPATCH_LOG"
 : > "$PHASE_LOG"
-run_driver 'PROOF-EXTERNAL:' 0
+# Cold relative cache: every derived path must survive recipe directory changes,
+# and Cargo must see a registry symlink that resolves to an existing directory.
+CONCRETE_EXT_TOOLS=../tools CONCRETE_EXT_ELAN=../bin/elan run_driver 'PROOF-EXTERNAL:' 0
 # Check obligations by phase, without relying on the placement of source lines.
 for phase in project population-theorems population-encoded exporter population-decls population-heads conleche-spec.ndjson nanoda-spec.ndjson; do
   grep -qxF "$phase" "$PHASE_LOG"

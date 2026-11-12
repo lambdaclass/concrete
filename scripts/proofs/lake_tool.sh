@@ -27,6 +27,8 @@ build_lake_tool() {
   local tools=$1 name=$2 url=$3 rev=$4 tc=$5 target=$6
   local elan identity recipe
   elan=$(command -v "${CONCRETE_EXT_ELAN:-elan}") || return 1
+  # Preserve the proxy name, but make invocation independent of publish's cwd.
+  elan=$(realpath -s "$elan") || return 1
   identity=$(elan_identity "$elan") || return 1
   recipe=$(recipe_identity) || return 1
   local dir="$tools/$name-$rev-$identity-$recipe-$(printf '%s' "$tc" | tr -c 'A-Za-z0-9._-' '_')"
