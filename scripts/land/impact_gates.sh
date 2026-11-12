@@ -10,7 +10,7 @@
 # 2. scripts/tests/select_gates.sh --base --head (R-0513), when it exists and the hook does not
 #    already call it, run through run_ci_gates_local.sh --first.
 # --report FILE receives `selected: N` (the select_gates count, or `hook` when only the hook ran).
-# LAND_HOOK, LAND_REMOTE, LAND_NO_NIX as in train.sh.
+# LAND_HOOK, LAND_NO_NIX as in train.sh.
 set -euo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/land/lib.sh
@@ -31,7 +31,7 @@ done
 case "$dst" in refs/heads/wip/*) die "--dst-ref $dst is in the hook's wip tier, which runs no gates" ;; esac
 cd "$(git rev-parse --show-toplevel)"
 HOOK="${LAND_HOOK:-.githooks/pre-push}"
-REMOTE="${LAND_REMOTE:-origin}"
+REMOTE=origin
 [ "$(git rev-parse HEAD)" = "$(git rev-parse "$head")" ] || die "the checkout is not at --head $head"
 [ -f "$HOOK" ] || die "no pre-push hook at $HOOK"
 url="$(git remote get-url "$REMOTE" 2>/dev/null || echo "$REMOTE")"

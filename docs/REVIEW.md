@@ -192,7 +192,7 @@ verbatim request as `r-request.txt` after prepending `reviewed: <sha>`, and the 
 verdict line counts; it must be `VERDICT: ACCEPT` or `VERDICT: REJECT`. A completed REJECT is
 recorded and reported, not a refusal of the owner's sign-off; an output with no verdict line does
 not qualify. Recording refuses a record that does not qualify.
-Push the resulting `refs/owner-signoff/<sha>` to both remotes. The landing train accepts it as that
+Push the resulting `refs/owner-signoff/<sha>` to origin. The landing train accepts it as that
 commit's review provenance ([LANDING.md](LANDING.md)); it approves no other commit.
 
 ## verify.sh
