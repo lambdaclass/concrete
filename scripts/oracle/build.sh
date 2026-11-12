@@ -16,7 +16,7 @@
 # The rebuild is the VERIFICATION of the published artifact (fetch.sh is how runners get it): both
 # hashes reproduced from a fresh clone of the tag mean the release asset is what the tag builds.
 #
-# ORACLE_SOURCE   clone source (default: the lock's url, then mirror_url); a path or bundle also works
+# ORACLE_SOURCE   clone source (default: the lock's url); a path or bundle also works
 # ORACLE_HOME     install root (default ~/oracle); the install is <commit>/ (the unpacked artifact)
 #                 and <commit>.BUILD_INFO beside it
 # ORACLE_KEEP=1   keep a failed build's directory for inspection
@@ -45,16 +45,11 @@ SRC="$WORK/src"
 NIX=(nix --extra-experimental-features "nix-command flakes")
 
 # 1. Source: a fresh clone; the tag must resolve to the locked commit.
-cloned=0
-for url in ${ORACLE_SOURCE:-} "$(lock url)" "$(lock mirror_url)"; do
-  [ -n "$url" ] || continue
-  rm -rf "$SRC"
-  if git clone --quiet --no-checkout "$url" "$SRC" 2>/dev/null \
-     && git -C "$SRC" fetch --quiet origin "refs/tags/$TAG:refs/tags/$TAG" 2>/dev/null; then
-    cloned=1; echo "oracle: cloned $url"; break
-  fi
-done
-[ "$cloned" = 1 ] || die "could not clone any source with tag $TAG"
+url="${ORACLE_SOURCE:-$(lock url)}"
+git clone --quiet --no-checkout "$url" "$SRC" \
+  && git -C "$SRC" fetch --quiet origin "refs/tags/$TAG:refs/tags/$TAG" \
+  || die "could not clone source $url with tag $TAG"
+echo "oracle: cloned $url"
 got="$(git -C "$SRC" rev-parse "refs/tags/$TAG^{commit}")"
 [ "$got" = "$COMMIT" ] || die "tag $TAG is $got, the lock says $COMMIT (a moved tag is never followed)"
 git -C "$SRC" -c advice.detachedHead=false checkout --quiet --detach "$COMMIT"

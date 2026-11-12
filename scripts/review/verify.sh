@@ -7,8 +7,7 @@
 # refs/notes/concrete-review. The verdict counts only for that exact commit: a
 # clean note on an ancestor says nothing about the commits after it.
 #
-#   --fetch  first fetch refs/notes/concrete-review from $REVIEW_REMOTE (default
-#            origin), replacing the local copy (a reader, not a writer).
+#   --fetch  first fetch refs/notes/concrete-review from origin, replacing the local copy (a reader, not a writer).
 #
 #   --required-base  require the note base to be an ancestor-or-equal of this commit.
 #
@@ -18,7 +17,7 @@
 set -euo pipefail
 
 NOTES_REF="refs/notes/concrete-review"
-REMOTE="${REVIEW_REMOTE:-origin}"
+REMOTE=origin
 FETCH=0
 REQUIRED_BASE=""
 while [ $# -gt 0 ]; do

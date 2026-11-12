@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Readiness notes (docs/LANDING.md, "Readiness"). A branch is ready to land when its head
-# commit carries BOTH notes, published on the primary remote:
+# commit carries BOTH notes, published on origin:
 #
 #   refs/notes/concrete-review   verdict: clean|findings|blocked   rounds: N   reviewer: codex   utc: ...
 #                                base: <sha>   pieces: N   (format owned by scripts/review/review.sh and
@@ -16,15 +16,14 @@
 #                                           commit's note (fetch, rewrite, fast-forward push, retry)
 #   notes.sh ready <sha> [required-base]    verify review scope and gates (docs/REVIEW.md)
 #
-# <kind> is review or gates. LAND_REMOTE (default origin) names the remote; `fork` is refused.
+# <kind> is review or gates. The remote is origin; see AGENTS.md, "Branches", for repository policy.
 # Writers: scripts/review/review.sh (review) and scripts/land/ready.sh (gates).
 # `put` never force-pushes: it rewrites on top of the remote's notes tip and retries on a race.
 set -euo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REMOTE="${LAND_REMOTE:-origin}"
+REMOTE=origin
 DRY="${LAND_NOTES_DRY:-0}"
 die() { echo "notes: $*" >&2; exit 1; }
-[ "$REMOTE" != fork ] || die "refusing the remote named 'fork'"
 
 kind_ok() { case "$1" in review|gates) ;; *) die "kind must be review or gates, not '$1'" ;; esac; }
 

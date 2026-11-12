@@ -35,7 +35,8 @@
 # to the gate userland).
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/../checks/lib/gate_env.sh" || exit 2
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SELF_DIR/../.." && pwd)"
 cd "$ROOT_DIR"
 CHECK_NAME=PROOF-EXTERNAL
 source scripts/proofs/lib.sh
@@ -90,7 +91,7 @@ CONLECHE="$CHECK_DIR/.lake/build/bin/con-leche"
 CONLECHE_FLAGS=(--verified --jobs=1)
 conleche() { "$CONLECHE" "${CONLECHE_FLAGS[@]}" "$1"; }
 # Every con-leche run goes through conleche(): a direct call would run at the default worker count.
-DIRECT=$(grep -nE '^[^#]*"\$CONLECHE"' "$0" | grep -v 'CONLECHE_FLAGS\[@\]')
+DIRECT=$(grep -nE '^[^#]*"\$CONLECHE"' "$SELF_DIR/external.sh" | grep -v 'CONLECHE_FLAGS\[@\]')
 [ "${CONLECHE_FLAGS[*]}" = "--verified --jobs=1" ] && [ -z "$DIRECT" ] \
   && ok "con-leche runs as --verified --jobs=1 at every call site" \
   || no "con-leche flags are [${CONLECHE_FLAGS[*]}]; direct calls: $(echo $DIRECT | cut -c1-200)"

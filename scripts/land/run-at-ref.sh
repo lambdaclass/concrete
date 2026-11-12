@@ -6,12 +6,13 @@
 #
 # A clone, not a worktree: some gates refuse to run in a linked worktree (the mutation campaign and
 # its summary producer, check_phase6c_observability #5: "Run it in a clone"), so a full set run in
-# a worktree is red for a reason that has nothing to do with the candidate. `clone --local`
-# hardlinks the objects, so it costs about what a worktree costs.
+# a worktree is red for a reason that has nothing to do with the candidate. Initialize an
+# independent repository and fetch only the run ref, without inheriting the gate clone's refs.
 #
 # Env: RUN_AT_REF_REPO (gate clone, default ~/concrete2), RUN_AT_REF_RUNS (default ~/runs),
-#      RUN_AT_REF_SOURCE (what to fetch from: a remote name, a path to a clone or a git bundle,
-#      default origin; scripts/land/gates_remote.sh passes a bundle so an unpublished train SHA can
+#      RUN_AT_REF_SOURCE (canonical repository URL or a verified git bundle file,
+#      default https://github.com/lambdaclass/concrete.git; relative bundles resolve against the caller.
+#      scripts/land/gates_remote.sh passes a bundle so an unpublished train SHA can
 #      run), RUN_AT_REF_KEEP=1, RUN_AT_REF_NO_NIX=1 (run the command
 #      without `nix develop`: the landing gate's sandbox only).
 set -euo pipefail
@@ -24,7 +25,13 @@ REF="$1"; shift
 CMD="$*"
 REPO="${RUN_AT_REF_REPO:-$HOME/concrete2}"
 RUNS="${RUN_AT_REF_RUNS:-$HOME/runs}"
-SRC="${RUN_AT_REF_SOURCE:-origin}"
+SRC="${RUN_AT_REF_SOURCE:-https://github.com/lambdaclass/concrete.git}"
+# Freeze caller-relative directories before entering the run clone (including cleanup).
+REPO="$(cd "$REPO" && pwd -P)"
+RUNS="$(python3 -I -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$RUNS")"
+# Validate before creating run state; bundle paths are caller-relative.
+SOURCE_HELPER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/bundle_source.py"
+SRC="$(python3 -I "$SOURCE_HELPER" "$SRC" "$REPO" "$REF")" || exit 1
 mkdir -p "$RUNS"
 ID="$(date -u +%Y%m%dT%H%M%S)-$$"; WT="$RUNS/$ID"
 cleanup() {
@@ -39,12 +46,16 @@ cleanup() {
 } 9>"$RUNS/.fetch.lock"
 trap 'cleanup; git -C "$REPO" update-ref -d "refs/run-at-ref/$ID" 2>/dev/null || true' EXIT
 trap 'exit 130' INT TERM HUP
-git clone --quiet --local --no-checkout "$REPO" "$WT"
-git -C "$WT" fetch --quiet origin "+refs/remotes/origin/*:refs/remotes/origin/*" "+refs/run-at-ref/$ID:refs/run-at-ref/$ID"
+git init --quiet "$WT"
+git -C "$WT" remote add origin "$REPO"
+git -C "$WT" fetch --quiet --no-tags origin "+refs/run-at-ref/$ID:refs/run-at-ref/$ID"
 git -C "$WT" checkout --quiet --detach "$SHA"
 echo "[concrete-remote] ref=$REF sha=$SHA clone=$WT host=$(hostname)"
 if [ -d "$REPO/.lake" ]; then cp -a "$REPO/.lake" "$WT/.lake"; fi
 cd "$WT"
+# SOURCE selects this invocation's input, not the input of runners the command may
+# start (for example, the root checks' disposable landing repositories).
+unset RUN_AT_REF_SOURCE
 START=$(date +%s)
 RC=0
 if [ "${RUN_AT_REF_NO_NIX:-0}" = 1 ]; then bash -c "$CMD" || RC=$?
