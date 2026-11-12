@@ -10,7 +10,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
-from lean_lex import EXAMPLE, lex, module_imports
+from lean_lex import module_imports, rename_examples
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULES = {'ConcreteSpec'} | {
@@ -37,13 +37,10 @@ def inspect(module, temp):
 
 
 def dependencies(source, temp, built_module=None):
-    _, _, end = module_imports(source, MODULES)
-    # Rewrite only example command tokens; all declarations and context survive.
-    body = source[end:]
-    for i, match in reversed(list(enumerate(EXAMPLE.finditer(lex(body, literals=False))))):
-        body = body[:match.start()] + f'noncomputable abbrev «⟪import-example⟫{i}»' + body[match.end():]
-    temp.write_text(source[:end] + body)
-    run(['lake', 'env', 'lean', '-DwarningAsError=true',
+    module_imports(source, MODULES)
+    temp.write_text(rename_examples(source, lambda line: f'⟪import-example⟫{line}'))
+    search = str(temp.parent) + ':' + run(['lake', 'env', 'printenv', 'LEAN_PATH']).strip()
+    run(['lake', 'env', 'env', 'LEAN_PATH=' + search, 'lean', '-DwarningAsError=true',
          '-DautoImplicit=false', '-R', str(temp.parent), '-o', str(temp.with_suffix('.olean')), str(temp)])
     output = inspect(temp.stem, temp)
     if built_module:
@@ -99,7 +96,49 @@ def proof_paths(root):
     return paths
 
 
+def declaring_owner_control(temp):
+    # Keep both variants in isolated search paths: no stale realized lemmas may
+    # leak from the pre-realized defining module into the lazy variant.
+    for realized in (False, True):
+        with tempfile.TemporaryDirectory(prefix='import-owner-') as directory:
+            root = Path(directory)
+            module_dir = root / 'ConcreteSpec'
+            module_dir.mkdir()
+            sources = {
+                'ImportOwnerB': 'def ConcreteSpec.zg (n : Nat) := n\n',
+                'ImportOwnerA': (
+                    'import ConcreteSpec.ImportOwnerB\n'
+                    'def ConcreteSpec.zf : Nat → Nat | 0 => ConcreteSpec.zg 0 | n+1 => n\n'
+                    + ('theorem zf1 : ConcreteSpec.zf 1 = 0 := by rw [ConcreteSpec.zf.eq_2]\n'
+                       if realized else '')),
+            }
+            synthetic = {f'ConcreteSpec.{name}' for name in sources}
+            MODULES.update(synthetic)
+            try:
+                search = str(root) + ':' + run(['lake', 'env', 'printenv', 'LEAN_PATH']).strip()
+                def compile_source(path, source):
+                    path.write_text(source)
+                    run(['lake', 'env', 'env', 'LEAN_PATH=' + search,
+                         'lean', '-DwarningAsError=true', '-DautoImplicit=false',
+                         '-R', str(root), '-o', str(path.with_suffix('.olean')), str(path)])
+                for name, source in sources.items():
+                    compile_source(module_dir / f'{name}.lean', source)
+                for declaration in ('theorem zt', 'example'):
+                    body = declaration + ' : ConcreteSpec.zf 1 = 0 := by rw [ConcreteSpec.zf.eq_2]\n'
+                    minimal = 'import ConcreteSpec.ImportOwnerA\nopen ConcreteSpec\n' + body
+                    compile_source(root / 'Built.lean', minimal)
+                    probe = root / 'Probe.lean'
+                    for source in (minimal, 'import ConcreteSpec.ImportOwnerB\n' + minimal):
+                        deps = dependencies(source, probe, 'Built')
+                        if deps != ['ConcreteSpec.ImportOwnerA'] or matches(source, deps) != (source == minimal):
+                            raise SystemExit(f'declaring-owner control failed: realized={realized}, {declaration}: {deps}')
+            finally:
+                MODULES.difference_update(synthetic)
+    print('imports: declaring-owner controls pass (named/examples, lazy/pre-realized)')
+
+
 def controls(temp):
+    declaring_owner_control(temp)
     # Brand imports Basics itself: removing the explicit Basics import still
     # elaborates. Both an extra import and a transitive-only dependency must fail.
     good = ('-- leading comment\nimport ConcreteSpec.Spec.Basics -- keep me\n'

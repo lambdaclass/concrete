@@ -20,12 +20,22 @@ resolved to their enclosing declaration using `isReservedName` on the user name;
 other compiler helpers without declaration ranges walk to their enclosing
 source declaration. Private realization prefixes are stripped with
 `privateToUserName` when their enclosing declaration is not under that prefix.
-Thus a helper belongs to its definition's module, irrespective of where Lean
-first realized it. The equation-lemma control compares the same body with and
+The inspector applies this ownership resolution to both the declaration being
+scanned and each constant it references. A declaration contributes dependencies
+only when its owner belongs to the target file. Thus a helper belongs to its
+definition's module, irrespective of where Lean first realized it. The equation-lemma control compares the same body with and
 without the realizing proof import and rejects the superfluous import.
+A second control builds two synthetic modules: one defines a function, and the
+other defines a two-equation function whose first equation calls it. A consumer
+uses only the second equation. Its dependencies must contain only the defining
+module, whether that module already realized the equation lemmas or Lean realizes
+them in the consumer. Named theorems and anonymous examples both exercise this
+control, including comparison with the unmodified consumer's built artifact and
+rejection of an extra import of the first function's module.
 
-Anonymous examples must be named to retain their terms in an artifact. They
-become noncomputable abbreviations, which accept both proposition and data
+Anonymous examples must be named to retain their terms in an artifact. Both gates
+use the same lexer renaming function, including its requirement that each example
+command start its line. They become noncomputable abbreviations, which accept both proposition and data
 values without changing any linter option. These fresh names are never referenced
 by the original source. Every current proof file also compares the probe's
 named-declaration dependency set with the real build's `.olean` dependency set,

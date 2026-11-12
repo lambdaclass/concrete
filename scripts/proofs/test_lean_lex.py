@@ -36,7 +36,7 @@ class TrustLexer(unittest.TestCase):
                     self.assertEqual(lexer.count_examples(source), 1)
                     with contextlib.redirect_stdout(io.StringIO()):
                         lexer.examples(tmp, str(Path(tmp) / "out"), ["Spoof.lean"])
-                    self.assertIn("noncomputable def", (Path(tmp) / "out/Spoof.lean").read_text())
+                    self.assertIn("noncomputable abbrev", (Path(tmp) / "out/Spoof.lean").read_text())
 
     def test_lean_accepts_interpolation_boundaries(self):
         # Differential witness: these are Lean terms, not merely invented lexer inputs.
@@ -83,6 +83,15 @@ end Witness{index}
         self.assertEqual([i for i, c in enumerate(source) if c == '\n'],
                          [i for i, c in enumerate(result) if c == '\n'])
         self.assertEqual(lexer.count_examples(source), 1)
+
+    def test_example_renaming_line_start(self):
+        source = '-- example\nexample : True := by trivial\n'
+        self.assertEqual(lexer.rename_examples(source, lambda line: f'probe{line}'),
+                         '-- example\nnoncomputable abbrev «probe2» : True := by trivial\n')
+        for source in (' example : True := by trivial\n',
+                       'set_option linter.unusedVariables false in example : True := by trivial\n'):
+            with self.subTest(source=source), self.assertRaises(lexer.LexError):
+                lexer.rename_examples(source, lambda line: f'probe{line}')
 
     def test_module_import_word_boundaries(self):
         modules = {'ConcreteSpec.Spec.Basics'}
