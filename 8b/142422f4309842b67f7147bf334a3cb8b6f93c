@@ -1,0 +1,6 @@
+[piece 3 of 5: scripts]
+- ISSUES.tsv:37: The new proof issue reuses `ISS-0061`, already assigned to the unrelated toolchain-dispatch issue immediately below it. This makes issue references ambiguous and can cause consumers keyed by issue ID to conflate or overwrite the records. Assign the new issue a unique ID.
+[piece 4 of 5: scripts]
+- scripts/proofs/local_identity.py:70: The tail-first lookup control also replaces the original proof with `rfl`. That proof can fail for correct head-first lookup because the conditional testing a variable’s equality with itself does not reduce definitionally. Any Lean error then counts as successful rejection, so this control can pass without detecting the lookup regression. Preserve the original proof or verify that the replacement proof succeeds against head-first lookup.
+
+Repository reads were blocked by a sandbox failure, so owner-decision provenance could not be checked.
