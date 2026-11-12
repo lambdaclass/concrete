@@ -661,26 +661,19 @@ def full_digests(data, root):
         if r['record']=='command' and r['kind']!='module-realization' and r['name'] not in represented:
             result['command:'+r['name']] = r['digest']
             result.commands['command:'+r['name']] = keys[r['name']]
-    counts, scope_counts, scopes = Counter(), Counter(), defaultdict(list)
+    counts = Counter()
     metadata = {(c['file'],c['line']):c for c in data if c['record']=='command'}
-    for r in sorted((r for r in rows if r['record']=='command'),
+    for r in sorted((r for r in rows if r['record']=='command' and r['kind']!='module-realization'),
                     key=lambda r:(r['source'],int(r['line']),int(r['end_line']))):
         key = keys[r['name']]
-        scope = scopes[r['source']]
-        slot = (r['source'],tuple(scope),r['kind'])
-        ordinal = counts[slot]
-        counts[slot] += 1
         command = metadata.get((r['source'],int(r['line'])),{})
         statement = command.get('statement')
-        result.presence[key] = (('statement',json.dumps(statement,sort_keys=True)) if statement is not None
-                                else ('slot',slot,ordinal))
-        if r['kind'] in ('Lean.Parser.Command.namespace','Lean.Parser.Command.section'):
-            token = (r['source'],tuple(scope),r['kind'],json.dumps(command['scopeIdentity'],sort_keys=True))
-            occurrence = scope_counts[token]
-            scope_counts[token] += 1
-            scope.append((r['kind'],token[-1],occurrence))
-        elif r['kind']=='Lean.Parser.Command.end' and scope:
-            scope.pop()
+        syntax = statement if statement is not None else command.get('commandIdentity')
+        if syntax is None:
+            raise ValueError('missing parsed command identity: '+r['name'])
+        base = ('statement' if statement is not None else 'syntax',json.dumps(syntax,sort_keys=True))
+        result.presence[key] = (*base,counts[base])
+        counts[base] += 1
     return result
 
 
@@ -863,23 +856,62 @@ def replacement_rows(rows, authored=None):
     return result
 
 
-def replacement_progress(rows, reasons, checked, snapshot=None):
+def command_identity_groups(population):
+    groups = defaultdict(list)
+    for key,identity in getattr(population,'presence',{}).items():
+        if len(identity)!=3 or type(identity[2]) is not int or identity[2]<0:
+            raise ValueError('ambiguous command identity: '+json.dumps(key))
+        groups[identity[:2]].append((identity[2],key))
+    for base,members in groups.items():
+        if sorted(i for i,k in members)!=list(range(len(members))):
+            raise ValueError('ambiguous command identity occurrences: '+json.dumps(base))
+    return groups
+
+
+def report_command_collisions(snapshot):
+    for base,members in sorted(command_identity_groups(snapshot).items()):
+        if len(members)>1:
+            print('command identity collision\t'+json.dumps(base)+'\t'+
+                  json.dumps([dict(occurrence=i,key=k) for i,k in sorted(members)]))
+
+
+def replacement_progress(rows, reasons, checked, snapshot=None, *, fixture_slots=False):
     reasons = dict(reasons)
     command_keys = list(getattr(checked,'commands',{}).values())
     commands = set(command_keys)
     snapshot_commands = command_match_keys(rows)
-    old_slots = command_presence_slots(snapshot_commands.values())
-    head_slots = command_presence_slots(command_keys)
-    for r,spec in replacement_rows(rows):
+    records = replacement_rows(rows)
+    if fixture_slots:
+        if snapshot is not None:
+            raise ValueError('fixture slots cannot be used with a production snapshot')
+        old_slots = command_presence_slots(snapshot_commands.values())
+        head_slots = command_presence_slots(command_keys)
+    else:
+        old_groups = command_identity_groups(snapshot)
+        command_identity_groups(checked)
+        for n in {n for r,s in records for n in s['supersedes'] if n.startswith('command:')}:
+            key = snapshot_commands[n.removeprefix('command:')]
+            if key not in getattr(snapshot,'presence',{}):
+                raise ValueError('missing snapshot command identity: '+n)
+        for key in commands:
+            if key not in getattr(checked,'presence',{}):
+                raise ValueError('missing HEAD command identity: '+json.dumps(key))
+        superseded = Counter(getattr(snapshot,'presence',{})[snapshot_commands[n.removeprefix('command:')]][:2]
+                             for r,s in records for n in s['supersedes'] if n.startswith('command:'))
+        pinned = {k for r,s in records for k in s['_command_keys']}
+        retained = Counter(identity[:2] for k,identity in getattr(checked,'presence',{}).items()
+                           if k not in pinned)
+    for r,spec in records:
         refusal = None
         for n in spec['supersedes']:
             if n.startswith('command:'):
                 old_key = snapshot_commands[n.removeprefix('command:')]
-                old_identity = getattr(snapshot,'presence',{}).get(old_key)
-                retained = [k for k in commands if
-                            (getattr(checked,'presence',{}).get(k)==old_identity if old_identity is not None
-                             else head_slots[k]==old_slots[old_key])]
-                present = any(k not in spec['_command_keys'] for k in retained)
+                if fixture_slots:
+                    present = any(head_slots[k]==old_slots[old_key] and k not in spec['_command_keys']
+                                  for k in commands)
+                else:
+                    base = snapshot.presence[old_key][:2]
+                    present = retained[base] > len(old_groups[base])-superseded[base]
             else:
                 present = n in checked and spec['declarations'].get(n)!=checked[n]
             if present:
@@ -1779,6 +1811,7 @@ def main():
         relocation_evidence(rows)
         law_control_schedule(rows)
         snapshot = full_digests(data,root)
+        report_command_collisions(snapshot)
         snapshot.update(header_targets())
         checked = head_population()
         if args.head_digests:

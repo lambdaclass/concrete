@@ -121,8 +121,13 @@ between records.
 All target declarations and commands must match together at HEAD, and every superseded unit
 must be absent by identity, or itself be a target at the recorded digest; partial
 replacement does not close. Declaration identity is its qualified name. Example-command
-identity is its parsed statement, excluding proof syntax and source positions. Commands
-without a statement use module, enclosing scope, kind and ordinal within that kind and scope.
+identity is its parsed statement plus its occurrence among equal statements, excluding proof
+syntax and source positions. Other commands use parsed syntax plus occurrence. The census lists
+every collision group with all occurrence keys. Reconciliation matches these groups as multisets:
+HEAD commands outside pinned targets may number at most the snapshot count minus the number
+superseded across all records. Thus retiring one of two equal statements requires the count to
+drop to one. Ambiguous occurrences and missing snapshot or HEAD identities are refused. Position
+slots are available only to synthetic tests with the explicit `fixture_slots=True` flag.
 A retained superseded unit outside the pinned targets refuses with `superseded unit still present`.
 Reviewed retirement closes only when every superseded unit is absent at HEAD, without
 replacement material. Results report `reconciled by

@@ -176,10 +176,10 @@ def main():
             population = old_rows+[replacement]
             before = inventory.progress_reasons(without_consumer,repaired)
             if before['recursive']=='identical full digest': raise ValueError('silent replacement landed')
-            if inventory.replacement_progress(population,before,repaired)['recursive']!='reconciled by replacement':
+            if inventory.replacement_progress(population,before,repaired,fixture_slots=True)['recursive']!='reconciled by replacement':
                 raise ValueError('reviewed replacement did not land')
             for checked,expected in (({},'missing replacement declaration: renamed'), ({new_name:'0'*64},'replacement digest mismatch: renamed')):
-                if inventory.replacement_progress(population,before,checked)['recursive']!=expected:
+                if inventory.replacement_progress(population,before,checked,fixture_slots=True)['recursive']!=expected:
                     raise ValueError('missing or changed replacement landed')
             cases = [(dict(spec,supersedes=['unknown']), 'unknown replacement row: unknown'),
                 (dict(spec,review=''), 'missing accepting review: control-repair'),
@@ -204,10 +204,10 @@ def main():
             refused(lambda: inventory.replacement_rows(population+[dict(replacement,name='second')]),
                     'already-replaced row: recursive')
             present = dict(repaired,recursive=without_consumer['recursive'])
-            if inventory.replacement_progress(population,{'recursive':'identical full digest'},present)['recursive']!='superseded unit still present: recursive':
+            if inventory.replacement_progress(population,{'recursive':'identical full digest'},present,fixture_slots=True)['recursive']!='superseded unit still present: recursive':
                 raise ValueError('unchanged superseded declaration closed')
             edited = dict(repaired,recursive='1'*64)
-            if inventory.replacement_progress(population,before,edited)['recursive']!='superseded unit still present: recursive':
+            if inventory.replacement_progress(population,before,edited,fixture_slots=True)['recursive']!='superseded unit still present: recursive':
                 raise ValueError('edited superseded declaration closed')
             print('control PASS: edited old declaration is still present by name')
             in_place = dict(spec,declarations={'recursive':'1'*64})
@@ -216,7 +216,7 @@ def main():
             accept(in_place)
             replacement['note']=json.dumps(spec)
             in_place_rows = old_rows+[dict(replacement,note=json.dumps(in_place))]
-            if inventory.replacement_progress(in_place_rows,{'recursive':'full digest mismatch'},{'recursive':'1'*64})['recursive']!='reconciled by replacement':
+            if inventory.replacement_progress(in_place_rows,{'recursive':'full digest mismatch'},{'recursive':'1'*64},fixture_slots=True)['recursive']!='reconciled by replacement':
                 raise ValueError('in-place digest repair refused')
             two_old = old_rows+[inventory.row(record='declaration',name='second-old',piece='F03')]
             refused(lambda: inventory.replacement_rows(two_old+[dict(replacement,note=json.dumps(dict(spec,supersedes=['recursive','second-old'])))]),
@@ -236,9 +236,9 @@ def main():
             accept(multi)
             replacement['note']=json.dumps(spec)
             multi_rows = old_rows+[dict(replacement,note=json.dumps(multi))]
-            if inventory.replacement_progress(multi_rows,before,repaired)['recursive']!='missing replacement declaration: second':
+            if inventory.replacement_progress(multi_rows,before,repaired,fixture_slots=True)['recursive']!='missing replacement declaration: second':
                 raise ValueError('partial multi-declaration replacement landed')
-            if inventory.replacement_progress(multi_rows,before,dict(repaired,second='1'*64))['recursive']!='reconciled by replacement':
+            if inventory.replacement_progress(multi_rows,before,dict(repaired,second='1'*64),fixture_slots=True)['recursive']!='reconciled by replacement':
                 raise ValueError('complete multi-declaration replacement refused')
             print('control PASS: reviewed replacement closes only at exact replacement digests; invalid, unknown, duplicate and partial rows refused')
             # Command targets use the production scope/digest/ordinal identity.
@@ -259,29 +259,29 @@ def main():
             accept(cspec,'F02')
             crec = dict(replacement,piece='F02',note=json.dumps(cspec))
             cr = {'command:old-example':'full digest mismatch'}
-            if inventory.replacement_progress(command_rows+[crec],cr,command_head)['command:old-example']!='reconciled by replacement':
+            if inventory.replacement_progress(command_rows+[crec],cr,command_head,fixture_slots=True)['command:old-example']!='reconciled by replacement':
                 raise ValueError('reviewed F02 example replacement did not close')
-            if inventory.replacement_progress(command_rows+[crec],cr,inventory.Digests())['command:old-example']!='missing replacement command: '+json.dumps(key):
+            if inventory.replacement_progress(command_rows+[crec],cr,inventory.Digests(),fixture_slots=True)['command:old-example']!='missing replacement command: '+json.dumps(key):
                 raise ValueError('missing command replacement closed')
             changed_key = (*key[:3],'f'*64,key[4])
             changed_head = inventory.Digests(commands={'changed':changed_key})
-            observed = inventory.replacement_progress(command_rows+[crec],cr,changed_head)['command:old-example']
+            observed = inventory.replacement_progress(command_rows+[crec],cr,changed_head,fixture_slots=True)['command:old-example']
             if observed!='replacement command digest mismatch: '+json.dumps(key): raise ValueError(observed)
             retired = dict(cspec,action='retire',commands=[])
             accept(retired,'F02')
-            if inventory.replacement_progress(command_rows+[dict(crec,note=json.dumps(retired))],cr,{})['command:old-example']!='reconciled by retirement':
+            if inventory.replacement_progress(command_rows+[dict(crec,note=json.dumps(retired))],cr,{},fixture_slots=True)['command:old-example']!='reconciled by retirement':
                 raise ValueError('reviewed retirement refused')
             still_present = inventory.Digests(commands={'old':next(iter(inventory.command_match_keys(command_rows).values()))})
-            if inventory.replacement_progress(command_rows+[dict(crec,note=json.dumps(retired))],cr,still_present)['command:old-example']!='superseded unit still present: command:old-example':
+            if inventory.replacement_progress(command_rows+[dict(crec,note=json.dumps(retired))],cr,still_present,fixture_slots=True)['command:old-example']!='superseded unit still present: command:old-example':
                 raise ValueError('retirement closed with the old command still present')
             d_retired = dict(spec,action='retire',declarations={},commands=[])
             accept(d_retired)
             d_record = dict(replacement,note=json.dumps(d_retired))
-            if inventory.replacement_progress(old_rows+[d_record],before,{})['recursive']!='reconciled by retirement':
+            if inventory.replacement_progress(old_rows+[d_record],before,{},fixture_slots=True)['recursive']!='reconciled by retirement':
                 raise ValueError('reviewed declaration retirement refused')
-            if inventory.replacement_progress(old_rows+[d_record],{'recursive':'identical full digest'},{'recursive':without_consumer['recursive']})['recursive']!='superseded unit still present: recursive':
+            if inventory.replacement_progress(old_rows+[d_record],{'recursive':'identical full digest'},{'recursive':without_consumer['recursive']},fixture_slots=True)['recursive']!='superseded unit still present: recursive':
                 raise ValueError('retirement closed with the old declaration still present')
-            if inventory.replacement_progress(old_rows+[d_record],before,{'recursive':'1'*64})['recursive']!='superseded unit still present: recursive':
+            if inventory.replacement_progress(old_rows+[d_record],before,{'recursive':'1'*64},fixture_slots=True)['recursive']!='superseded unit still present: recursive':
                 raise ValueError('retirement closed with a changed declaration still present')
             for bad,expected in ((dict(retired,reason=''),'invalid replacement field reason: control-repair'),
                                  (dict(retired,review={}), 'missing accepting review: control-repair'),
@@ -328,7 +328,7 @@ def main():
             if combined.presence[forbidden_key][0]!='statement':
                 raise ValueError('example lacks parsed statement identity')
             actual_old = dict(command_rows[0],source=forbidden_key[0],kind=forbidden_key[2],digest=forbidden_key[3])
-            observed = inventory.replacement_progress([actual_old,crec],cr,combined)['command:old-example']
+            observed = inventory.replacement_progress([actual_old,crec],cr,combined,combined)['command:old-example']
             if observed!='superseded unit still present: command:old-example': raise ValueError(observed)
             forbidden.write_text(forbidden.read_text().replace('example :', 'example : True := by trivial\nexample :').replace('by decide','by exact of_decide_eq_true rfl'))
             commit()
@@ -337,6 +337,47 @@ def main():
                 observed = inventory.replacement_progress([actual_old,dict(crec,note=json.dumps(candidate))],cr,edited_head,combined)['command:old-example']
                 if observed!='superseded unit still present: command:old-example': raise ValueError(observed)
             print('control PASS: proof-edited forbidden example remains present under replacement and retirement')
+            # Production multiset matching: the BASE twin must survive retirement.
+            forbidden.write_text('example : False → False := by intro h; exact h\n' * 2)
+            commit()
+            twins = inventory.head_population()
+            twin_keys = [k for k in twins.commands.values() if k[0]==str(forbidden.relative_to(root))]
+            twin_rows = [dict(actual_old,name='old-example' if i==0 else 'twin',
+                              source=k[0],kind=k[2],digest=k[3],line=i+1,end_line=i+1,
+                              piece='F02' if i==0 else 'BASE') for i,k in enumerate(twin_keys)]
+            twin_population = twin_rows+[dict(crec,note=json.dumps(retired))]
+            missing = inventory.Digests()
+            refused(lambda: inventory.replacement_progress(twin_population,cr,twins,missing),
+                    'missing snapshot command identity: command:old-example')
+            refused(lambda: inventory.replacement_progress(twin_population,cr,twins),
+                    'missing snapshot command identity: command:old-example')
+            refused(lambda: inventory.replacement_progress(twin_population,cr,twins,twins,fixture_slots=True),
+                    'fixture slots cannot be used with a production snapshot')
+            missing_head = inventory.Digests(commands=twins.commands)
+            refused(lambda: inventory.replacement_progress(twin_population,cr,missing_head,twins),
+                    'missing HEAD command identity: '+json.dumps(next(iter(twins.commands.values()))))
+            print('control PASS: production missing snapshot command identity refuses explicitly')
+            collision_output = io.StringIO()
+            with contextlib.redirect_stdout(collision_output):
+                inventory.report_command_collisions(twins)
+            if 'command identity collision' not in collision_output.getvalue():
+                raise ValueError('snapshot twin collision omitted from census')
+            ambiguous = inventory.Digests()
+            ambiguous.presence = dict(twins.presence)
+            ambiguous.presence[twin_keys[1]] = ambiguous.presence[twin_keys[0]]
+            try: inventory.command_identity_groups(ambiguous)
+            except ValueError as exc:
+                if not str(exc).startswith('ambiguous command identity occurrences: '): raise
+            else: raise ValueError('ambiguous occurrence records accepted')
+            observed = inventory.replacement_progress(twin_population,cr,twins,twins)['command:old-example']
+            if observed!='superseded unit still present: command:old-example': raise ValueError(observed)
+            forbidden.write_text('example : False → False := by intro h; exact h\n')
+            commit()
+            one_twin = inventory.head_population()
+            observed = inventory.replacement_progress(twin_population,cr,one_twin,twins)['command:old-example']
+            if observed!='reconciled by retirement': raise ValueError(observed)
+            print('control PASS: equal-statement twins are count-matched; one retirement closes only after count drops')
+            print('control PASS: snapshot census lists collisions and refuses ambiguous occurrence records')
             forbidden.unlink()
             commit()
             print('control PASS: F02 forbidden raw-record inequality left beside its replacement keeps obligation open')

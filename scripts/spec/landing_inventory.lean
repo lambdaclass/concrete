@@ -70,6 +70,7 @@ private partial def commands (ctx : Parser.InputContext) (env : Environment)
     let stop := ctx.fileMap.toPosition (stx.getTailPos?.getD 0)
     emit [("record", toJson "command"), ("file", toJson ctx.fileName),
       ("statement", toJson (exampleStatement stx)),
+      ("commandIdentity", syntaxIdentity stx),
       ("scopeIdentity", if stx.isOfKind ``Parser.Command.namespace || stx.isOfKind ``Parser.Command.section
         then syntaxIdentity stx else Json.null),
       ("noncomputable", toJson (noncomputableModifier stx)),

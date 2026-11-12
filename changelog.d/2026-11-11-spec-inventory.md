@@ -25,3 +25,10 @@ survive an unavailable configured remote, tag instructions disable signing for
 lightweight tags, and HEAD exports include command replacement identities.
 
 Reconciliation presence follows declaration names and parsed example statements, with scope/kind/ordinal identities for other commands. Retained superseded units must themselves be pinned targets. Accepting reviews bind to the substantive reconciliation record present in their reviewed commit; older revisions cannot approve later records. Controls cover edited obsolete declarations, proof-edited and shifted F02 examples under replacement and retirement, and stale review revisions.
+
+Round 11 gives parsed command identities distinct occurrences and reconciles equal-statement
+groups by snapshot/HEAD multiplicity outside pinned targets. The census lists every collision
+group; ambiguous occurrences and missing production identities fail closed. Parsed syntax
+identifies non-example commands, and positional matching requires an explicit synthetic-fixture
+flag. Production controls retain a BASE twin while retiring one equal-statement example,
+refuse retirement while both remain, and check missing identities and collision diagnostics.
