@@ -1,4 +1,6 @@
-import ConcreteSpec.Proofs.Slice1
+import ConcreteSpec.Spec.Rep
+import ConcreteSpec.Spec.Slice1Semantics
+import ConcreteSpec.Spec.Slice1Syntax
 
 /-!
 # Part 2: `rep_roundtrip`, decoding an encoded value gives the value back.
