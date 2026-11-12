@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Full source progress controls through the production Lean census on committed HEADs."""
+import contextlib
+import io
 import os
 from pathlib import Path
 import subprocess
@@ -63,6 +65,45 @@ def main():
             commit()
             assert_reason('missing declaration')
             print('control PASS: deleted theorem stops counting because declaration is missing')
+            definition = 'def recursive : Nat → Nat\n  | 0 => 0\n  | n+1 => recursive n\n'
+            probe.write_text(definition)
+            consumer = root/'ConcreteSpec/Consumer.lean'
+            consumer.write_text('import ConcreteSpec.Control\ntheorem realized : recursive 0 = 0 := by rw [recursive.eq_1]\nexample : True := by trivial\n')
+            commit()
+            realized = inventory.census(root, exporter, examples=False)
+            generated = {d['name'] for d in realized if d['record']=='declaration'
+                         and d['name'].startswith('recursive.')}
+            if 'recursive.eq_1' not in generated:
+                raise ValueError('control failed to realize recursive equation lemma')
+            with_consumer = inventory.head_population()
+            if 'recursive' not in with_consumer or any(n.startswith('recursive.') for n in with_consumer):
+                raise ValueError('generated equation became a progress unit')
+            example = next(n for n in with_consumer if n.startswith('command:ConcreteSpec/Consumer.lean:'))
+            population = [inventory.row(record='piece',name='F03'),
+                          inventory.row(record='declaration',name='recursive',piece='F03'),
+                          inventory.row(record='declaration',name='recursive.eq_1',piece='F03'),
+                          inventory.row(record='command',name=example.removeprefix('command:'),kind='example',piece='F03')]
+            def assert_report(checked, expected):
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    inventory.report(population,reasons=inventory.progress_reasons(with_consumer,checked))
+                if expected not in output.getvalue():
+                    raise ValueError('anonymous example excluded from landed total: '+output.getvalue())
+            assert_report(with_consumer,'F03\tlanded=2/2\tremaining=0\tremaining-examples=0')
+            consumer.unlink()
+            commit()
+            without_consumer = inventory.head_population()
+            if without_consumer != {'recursive':with_consumer['recursive']}:
+                raise ValueError('generated lemma realization affected definition progress')
+            assert_report(without_consumer,'F03\tlanded=1/2\tremaining=1\tremaining-examples=1')
+            reasons = inventory.progress_reasons(with_consumer,without_consumer)
+            if reasons != {'recursive':'identical full digest','realized':'missing declaration',example:'missing declaration'}:
+                raise ValueError('definition/example progress mismatch: '+str(reasons))
+            probe.write_text(definition.replace('| 0 => 0','| 0 => 1'))
+            commit()
+            if inventory.progress_reasons(without_consumer,inventory.head_population()) != {'recursive':'full digest mismatch'}:
+                raise ValueError('changed definition counted as landed')
+            print('control PASS: generated equations never count; defining source and anonymous examples govern progress')
         finally:
             inventory.ROOT = original_root
             inventory.source.cache_clear()

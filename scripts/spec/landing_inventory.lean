@@ -37,6 +37,14 @@ private partial def identifiers (s : Syntax) : Array String :=
   | .ident _ _ n _ => #[n.toString]
   | _ => s.getArgs.flatMap identifiers
 
+private partial def sourceIdentifiers (ctx : Parser.InputContext) (s : Syntax) : Array Json :=
+  match s with
+  | .ident _ _ n _ =>
+    let pos := ctx.fileMap.toPosition (s.getPos?.getD 0)
+    #[Json.mkObj [("name", toJson n.toString), ("line", toJson pos.line),
+      ("column", toJson pos.column)]]
+  | _ => s.getArgs.flatMap (sourceIdentifiers ctx)
+
 private partial def commands (ctx : Parser.InputContext) (env : Environment)
     (ps : Parser.ModuleParserState) (messages : MessageLog) : IO Unit := do
   let (stx, next, messages) := Parser.parseCommand ctx { env, options := {} } ps messages
@@ -50,7 +58,7 @@ private partial def commands (ctx : Parser.InputContext) (env : Environment)
       ("noncomputable", toJson (noncomputableModifier stx)),
       ("noncomputableInsert", toJson (noncomputableInsert stx)),
       ("syntax", toJson stx.getKind.toString), ("example", toJson (containsExample stx)), ("exampleToken", toJson (exampleToken stx)), ("line", toJson start.line),
-      ("endLine", toJson stop.line), ("identifiers", toJson (identifiers stx))]
+      ("endLine", toJson stop.line), ("sourceIdentifiers", Json.arr (sourceIdentifiers ctx stx)), ("identifiers", toJson (identifiers stx))]
     commands ctx env next messages
 
 -- Observe the environment after each elaborated command. This is extraction provenance,
@@ -252,6 +260,7 @@ unsafe def main (args : List String) : IO Unit := do
         let ranges := declRangeExt.find? env n
         emit [("record", toJson "declaration"), ("name", toJson n.toString),
           ("shape", toJson (← fingerprint input output ci)), ("kind", toJson kind), ("userName", toJson (privateToUserName n).toString), ("module", toJson m.toString),
+          ("column", toJson (ranges.map (·.selectionRange.pos.column) |>.getD 0)),
           ("line", toJson (ranges.map (·.selectionRange.pos.line) |>.getD 0)),
           ("uses", toJson (ci.getUsedConstantsAsSet.toList.map Name.toString))]
     | _ => throw (IO.userError "expected: parse FILE | constants MODULES_FILE")

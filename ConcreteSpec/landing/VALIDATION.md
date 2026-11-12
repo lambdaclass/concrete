@@ -1,51 +1,67 @@
 # Piece P validation
 
-Round 5, 2026-11-12 UTC. Writer changes remain uncommitted for the harness. No pushes, review tools or review notes were made. ISS-0054 remains open for independent review. Fresh generation passed under Nix. The final read-only run and artifact hashes are recorded below.
+Round 6, 2026-11-12 UTC. Writer changes are left for the harness to commit and publish.
+No push, review tool or review note was made. ISS-0054 remains open for independent review
+and harness exact-commit qualification.
 
-Progress is a derived measurement of committed HEAD, once per gate run. It compares same-name full digests covering statement, proof/body source, doc comments, inline and separately applied attributes, plus kernel shape for generated declarations. No progress records, historical receipt builds, ancestry tests or branch-internal anchor SHAs remain. The inventory still freshly builds its declared snapshot and baseline inputs for coverage and scheduling. Progress controls assert exact reasons: identical full digest counts; documentation-only, proof-source-only and separate-attribute changes produce `full digest mismatch`; deletion produces `missing declaration`. They use actual committed Lean fixtures and verify inherited Git context isolation.
+Progress measures authored source declarations and commands, including anonymous examples.
+Lean parser identifier positions and declaration selection ranges distinguish authored declarations
+from generated constants with inherited ranges. Generated equations/auxiliaries and synthetic
+module-realization phases do not contribute progress units. Commands represented by authored
+declarations are not counted twice. Other commands compare their own source digest.
+The production-census controls realize an equation in a later consumer, remove that consumer,
+and change the defining source: generated lemmas never affect progress, the unchanged definition
+counts, and a changed definition does not. Anonymous examples affect both landed totals and
+remaining-example counts. README documents explicit reviewed replacement rows for repaired or
+replaced snapshot declarations; mismatched digests never silently close an obligation.
 
-Input pins are protected `spec-inventory/{source,baseline,evidence,dossier}` tags at the declared commit SHAs. Both lightweight and annotated tags are accepted and verified after peeling to commits. Missing or changed tags are refused with the exact ref and expected SHA. The Spec CI job uses a depth-one checkout; missing inputs are fetched only as depth-one named tags, never full history or moving branches. Tag publication/protection remains the coordinator's responsibility.
+Input pins remain protected `spec-inventory/{source,baseline,evidence,dossier}` tags at declared
+commit SHAs, fetched only by depth-one tag fetch when absent locally. Pin controls cover both
+remote advertisement forms and real retargeted local lightweight and annotated tags.
 
-Law/control placement is derived from current rows, not an earlier branch commit. The gate checks every Lean-resolved pair, co-landing, dependency closure, owner holds and earliest shared-fixture consumers. `law-control-placement.json` records the current complete population. `moved-laws.json` is recomputed and compared in read mode, includes both commands and declarations, and contains their row notes. Law-driven moves name their causal law and control; dependent commands inherit that provenance. Other moves identify shared fixtures, named dependency support or observed auxiliary regeneration. The table below is generated from the same relocation measurement and checked in read mode. It includes definitions, helpers, commands and fixture moves, without claiming that all relocations are theorem laws.
+The renamed `relocations.json` retains the complete relocation record (commands and declarations).
+Read mode resolves every named causal law/control against the actual Lean-resolved groups and
+compares both the JSON and the generated table below. Negative controls reject fabricated laws
+and controls. Plan assignments and `plan.md` are unchanged.
 
-Held Frame spans come from F29p's citations in `plan.md`; the uncited 2429–2457 literal range is removed. Law/control dependency closure determines any further moves. `LoadBoundaryDemo.empty_invalid` remains in F29p. No change to `plan.md` is made in this round.
+Plan deltas for coordinator reconciliation: ObserveEnvironment has 76 declarations in F23 and
+six reusable fixtures in F19, with none in F21; ObserveOutput has 102 in F21 and four in F19.
+Other law/control cascades and fixture/auxiliary relocations remain exhaustively recorded below.
+These are reported deltas, not amendments of the supplied plan or owner decisions.
 
-Plan deltas for coordinator reconciliation: the laws-with-controls ruling and dependency cascades change the supplied extraction scopes. ObserveEnvironment leaves F21 (the plan describes F21 as whole ObserveEnvironment and ObserveOutput); its environment laws and dependent routing definitions move to F23, while early reusable fixtures accompany their consumers. The final ObserveEnvironment declaration population is 76 in F23 and six reusable fixtures in F19; none remains in F21. ObserveOutput retains 102 declarations in F21, with four reusable fixtures in F19. F09a/F09b/F09c lose execution laws and dependent commands to F10; F20 loses observation laws/controls and dependents to F20p, F22 and F23; F29 loses ABI laws/controls and dependents to held F29p. Adequacy groups also relocate across F24a/F25a/F25b as listed below. These are reported plan deltas for the coordinator, not edits or implicit amendments to the plan. The exhaustive table provides the precise from/to destinations, including fixture and auxiliary differences beyond these scope summaries.
-
-Commands:
+Validation command:
 
 ```sh
-nix develop -c bash scripts/spec/landing_inventory.sh --write
 nix develop -c bash scripts/spec/landing_inventory.sh
 ```
 
-The inventory shell runs the pin and progress controls before the fresh census and its scheduling/coverage controls. Every negative control requires its specific intended refusal. Generation exited 0 at HEAD `210c0ef132c0af64a881ddf1da01bb04280c6092`, with code bundle `8513d984f0c3f85647631019a909893e464dc26d87dc5b7494ba25f9de306e34`. A final fail-closed provenance check was then tightened to require a named law/control on every law-dependent or forced-consumer note; its specific negative control and the fresh read-only gate qualify the final bundle below. This validation-only tightening does not alter generation assignments. The generated audit contains 979 declarations and 222 commands; these totals describe this result and are not gate selection criteria. The actual M01 measurement is `landed=0/11`, `remaining=11`, so the baseline documentation cannot count as migrated.
-
-## Final results
-
-The fresh read-only inventory gate exited **0**, including all pin, progress, provenance, census, coverage, scheduling, dependency and hold controls, on checked HEAD `210c0ef132c0af64a881ddf1da01bb04280c6092`. The final code bundle and all measured inventory/JSON/plan/workflow artifacts were unchanged by read mode. The generated relocation table passed its exact read-mode comparison. The root inventory gate and its controls, the full TSV row-width/schema check and `git diff --check` also passed under Nix. A separate citation control confirmed that F29p's hold spans come only from the cited 2334–2353 range, with line 2440 assigned F29 before dependency relocation. An independent provenance audit confirmed that every named law/control cause resolves to a Lean-derived annotation pair. `plan.md` is unchanged.
+The final read-only gate exited **0**, including every pin, progress, relocation, census,
+coverage, scheduling, dependency and hold control. It measured committed HEAD `1f1becbd621a8f18d4df5e28e83ce0a5c0bd40d3`
+with the working-tree code bundle recorded below. M01 remains `landed=0/11`, `remaining=11`.
+The root inventory gate and all five controls, TSV row-width check (42,865 data rows), and
+`git diff --check` also passed under `nix develop -c`. Source assignments and relocation contents
+are unchanged. Code changes remain uncommitted for the harness, which must qualify its final commit.
 
 | Artifact | SHA-256 |
 |---|---|
 | `ConcreteSpec/landing/inventory.tsv` | `ba364e2f1dcb62bdb6098a62ec3a69cf630ce5095f10f83a2476868209e779ae` |
 | `ConcreteSpec/landing/plan.md` | `6f7fc0ead811164c3c36265c81f02b47f1845512342a5c12779202b8eff98691` |
-| `ConcreteSpec/landing/law-control-placement.json` | `9a57dcf78210791dbaaa10f42960b0820fed544bde364550bda7dda62dbd15ac` |
-| `ConcreteSpec/landing/shared-fixtures.json` | `98378a73d04cee55dca77ff9e5f49a09d466c72d4ef8a3acaa62c54a04cae73c` |
-| `ConcreteSpec/landing/fixture-selection.json` | `f916e3a2729d7610cfaf4ac73e1bb536a8bf2f2e6a551ea9e5744cc770747f09` |
 | `ConcreteSpec/landing/fixture-selection-changes.json` | `360909119c2445863c7a61c0048e66188e60714608e2fa5906c337d73e4e334c` |
-| `ConcreteSpec/landing/moved-laws.json` | `2f84f62ebffc06d039d89f600455c81d32178af18d65bc4e9a9d10177e926c74` |
+| `ConcreteSpec/landing/fixture-selection.json` | `f916e3a2729d7610cfaf4ac73e1bb536a8bf2f2e6a551ea9e5744cc770747f09` |
+| `ConcreteSpec/landing/law-control-placement.json` | `9a57dcf78210791dbaaa10f42960b0820fed544bde364550bda7dda62dbd15ac` |
+| `ConcreteSpec/landing/relocations.json` | `2f84f62ebffc06d039d89f600455c81d32178af18d65bc4e9a9d10177e926c74` |
+| `ConcreteSpec/landing/shared-fixtures.json` | `98378a73d04cee55dca77ff9e5f49a09d466c72d4ef8a3acaa62c54a04cae73c` |
 | `.github/workflows/lean_action_ci.yml` | `cd218540aa83927cd7fc73b00f830c98377b5f50ec53055aecd62d6b1d6c684c` |
 | `.gitattributes` | `6323742cbc9c09e1963533ae3b4cf1be7ae5347daf56af452dfca0cff20fb14d` |
-| `scripts/spec/ code bundle` | `9778845dd1cebf526b1565a58e589c7d4621643380c738b8a6ef55a91077b54c` |
+| `scripts/spec/ code bundle` | `e789f644d54e9fb9ff47b0db04763bcdab87e7eba5801201262b2f14ec099e34` |
 
-The code bundle hashes sorted `.py`, `.lean` and `.sh` paths directly under `scripts/spec/`, encoded as UTF-8 path, NUL, file bytes, NUL. Logs are fresh outputs, never census inputs:
+The code bundle hashes sorted `.py`, `.lean` and `.sh` paths directly under `scripts/spec/`,
+encoded as UTF-8 path, NUL, file bytes, NUL. Logs are outputs, never census inputs.
 
 | Log | SHA-256 |
 |---|---|
-| `/tmp/round5-final-write.log` | `a7850550b30f0750dd17446fbba67d8b6ed9dceb73b4aca9113840b5935ca3b9` |
-| `/tmp/round5-final-read.log` | `1feb4f34922cb72c2f722f43e897613dcf172492d64d78ae42499c000b565687` |
-
-No writer commit, push, review-tool invocation or review note was made. The harness owns committing, publishing and independent review.
+| `/tmp/round6-final-inventory.log` | `9b3289ec5ef61687485a0a3149f7aea1ecd16592b7259a402dc12500dd076869` |
+| `/tmp/round6-root-inventory.log` | `361a34090bdecd8c6f65dbb753c1ec6a6344b4aa45283d36a1a60822676f5bc9` |
 
 <!-- relocations:start -->
 | Record | Name | From | To | Cause |

@@ -50,20 +50,37 @@ A declaration's `piece` is its extraction destination. `BASE` requires the actua
 freshly compiled pinned baseline with a matching kernel fingerprint. Authored declarations also
 require the same complete source command. `migration` names a known non-BASE piece and is mandatory only on BASE command/declaration rows; it is empty on every other row. Dispositions use the closed set `retain`, `repair`, `replace`, `owner-held`, `retire`.
 No unchanged fragment is claimed to implement its future checked view. Remaining counts exclude
-`BASE`; `--remaining all` lists all outstanding declaration names. Update assignments explicitly
+`BASE`; `--remaining all` lists all outstanding authored source units. Update assignments explicitly
 only to repair the extraction schedule; checking never fills an omitted row. `--write` regenerates
 the initial assignment from the pinned plan and atomically replaces the TSV only after all checks
 and controls pass.
 
-Progress is derived once from a fresh census of committed HEAD. A declaration counts exactly
-when HEAD contains the same qualified name and full digest: complete command source (statement,
-proof/body, doc comment and inline attributes), separately resolved attribute commands, and kernel
-shape for generated artifacts. A doc-comment-only or proof-source change therefore differs.
-There are no progress receipts, renamed mappings, ancestry requirements, introduction commits or
-historical progress builds. Deleting a declaration removes it from the measurement. Each piece
-reports landed declarations over its total declarations, plus remaining declarations.
+Progress is derived once from a fresh census of committed HEAD. Its units are authored
+source declarations and source commands with no authored declaration of their own (including
+anonymous examples, attributes and context directives). A declaration must select its own
+identifier in Lean's parsed source; a generated constant inheriting another declaration's range
+is not authored. Compiler-generated equations, recursors and auxiliaries, and synthetic
+module-realization phases, never enter the numerator or denominator. Their inventory records
+retain dependency/emission information for their owning commands, not separate progress obligations.
+A declaration counts exactly when HEAD contains the same qualified name and full digest:
+complete command source (statement, proof/body, doc comment and inline attributes), separately
+resolved attribute commands, and kernel shape. Other source commands compare their source digest
+at their snapshot command identity. A command containing multiple authored declarations is
+represented by those declarations, never counted again. Anonymous examples count in their
+piece's landed total and stop contributing to remaining-examples when their digest matches.
+A doc-comment-only or proof-source change therefore differs. There are no progress receipts,
+renamed mappings, ancestry requirements, introduction commits or historical progress builds.
+Deleting source removes it from the measurement. Each piece reports landed source units over
+its total source units, plus remaining units. `--remaining all` lists those units.
+
 `BASE` is the original baseline, never a progress label. This measures source reconstruction;
-it does not confer owner approval, independent review or contract closure.
+it does not confer owner approval, independent review or contract closure. A repaired or replaced
+declaration normally differs from the snapshot and therefore cannot close its snapshot row by
+equality. To close that obligation, supersede the snapshot row with an explicit replacement row,
+reviewed with the repaired/replacement declaration and its new source digest. Preserve the original
+snapshot identity and the reason for supersession in that reviewed inventory change; never silently
+rewrite a digest or treat a mismatch as landed. The present snapshot inventory has no such
+supersessions. Repair/replace pieces remain outstanding until this explicit reconciliation lands.
 `--census-output <path>` exports the fresh snapshot census for inspection, never cached input.
 
 Ranges describe complete commands, rather than line slices used as implementation sources.
@@ -98,7 +115,7 @@ already exists on BASE but emits a new artifact, that artifact belongs to the mi
 The coordinator's law/control direction is checked against current rows and their dependency
 closure, with no historical schedule anchor. `law-control-placement.json` covers every
 Lean-resolved annotation pair. Laws and their controls co-land; unavailable dependencies force
-relocation. `moved-laws.json` covers every declaration and command relocated from the plan's
+relocation. `relocations.json` covers every declaration and command relocated from the plan's
 assignment, including fixture and auxiliary changes; the read-only gate recomputes and compares
 it. Every law-driven move retains a note naming the causal law and control, including cascades.
 `VALIDATION.md` lists every relocation and reports plan deltas for the coordinator without
@@ -131,4 +148,4 @@ exact-SHA qualification, independent reviews and owner answers. An `owner-held` 
 assigning it a destination does not authorize its policy. Historical findings/approval receipts
 are carried for reconciliation, never inherited as reviews of reconstructed candidates.
 
-Remaining-example counts exclude BASE examples. Progress measures declarations only; every non-BASE example remains outstanding. The current initial schedule has 1,745 remaining anonymous examples out of 1,894 total.
+Remaining-example counts exclude BASE examples and measure unmatched anonymous source commands. Generated lemma realization cannot affect source progress; a two-module production-census control checks this together with changed defining source and missing anonymous examples. Pin controls also refuse moved local lightweight tags and retargeted annotated tags.

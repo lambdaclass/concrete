@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 """Lightweight and annotated pin protocols, without network mutations."""
+import os
+from pathlib import Path
+import subprocess
+import tempfile
 import landing_manifest as inventory
 
 
@@ -42,7 +46,44 @@ def main():
                     except ValueError as exc:
                         if str(exc)!='missing or changed protected inventory pin: '+tag+' expected '+expected: raise
                     else: raise ValueError('missing/changed pin accepted')
-        print('control PASS: shallow tag-only fetch; annotated pins peeled; missing/changed pins refused')
+        with tempfile.TemporaryDirectory(prefix='landing-local-pins-') as tmp:
+            root = Path(tmp)
+            config = root/'gitconfig'
+            config.write_text('')
+            raw = subprocess.check_output(['bash','-c',
+                'source "$1" || exit 2; git_sandbox "$2" || exit 2; env -0',
+                '_',str(inventory.ROOT/'scripts/checks/lib/git_sandbox.sh'),str(config)])
+            isolated = dict(os.fsdecode(e).split('=',1) for e in raw.split(b'\0') if e)
+            templates = root/'empty-template'
+            templates.mkdir()
+            isolated['GIT_TEMPLATE_DIR'] = str(templates)
+            def real_git(*args):
+                return subprocess.check_output(['git', '-c','user.name=Control',
+                    '-c','user.email=c@example.invalid','-c','commit.gpgsign=false',
+                    '-c','tag.gpgsign=false',*args],cwd=root,env=isolated,stderr=subprocess.STDOUT)
+            real_git('init','--quiet')
+            real_git('commit','--allow-empty','--quiet','-m','first')
+            expected = real_git('rev-parse','HEAD').decode().strip()
+            real_git('commit','--allow-empty','--quiet','-m','second')
+            saved_pins = inventory.PIN_TAGS
+            inventory.PIN_TAGS = {'source':expected}
+            inventory.git = real_git
+            try:
+                tag = 'refs/tags/spec-inventory/source'
+                for annotated in (False, True):
+                    def set_tag(target):
+                        real_git('tag','--force',*(['-a','-m','annotated control'] if annotated else []),
+                                 'spec-inventory/source',target)
+                    set_tag(expected)
+                    inventory.ensure_objects()
+                    set_tag('HEAD')
+                    try: inventory.ensure_objects()
+                    except ValueError as exc:
+                        if str(exc)!='changed protected inventory pin: '+tag+' expected '+expected: raise
+                    else: raise ValueError('retargeted local pin accepted')
+            finally:
+                inventory.PIN_TAGS = saved_pins
+        print('control PASS: shallow tag-only fetch; annotated pins peeled; missing/changed remote and real retargeted local pins refused')
     finally:
         inventory.git = original
 

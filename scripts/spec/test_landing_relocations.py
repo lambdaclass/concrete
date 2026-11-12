@@ -8,6 +8,7 @@ import landing_manifest as inventory
 
 def main():
     original = inventory.ROOT
+    original_metadata = inventory.LAW_METADATA
     with tempfile.TemporaryDirectory(prefix='landing-relocations-') as tmp:
         root = Path(tmp)
         landing = root/'ConcreteSpec/landing'
@@ -19,14 +20,17 @@ def main():
                                 piece='F23',note='law fixture.law with control fixture.control')
         declaration = inventory.row(record='declaration',name='fixture.law',source=file,line=1,
                                     piece='F23',note=command['name']+'; '+command['note'])
-        rows = [command,declaration]
+        control = inventory.row(record='declaration',name='fixture.control',source=file,line=1,
+                                piece='F23',note=command['name']+'; '+command['note'])
+        rows = [command,declaration,control]
+        inventory.LAW_METADATA = [dict(laws=['fixture.law'], mutants=['fixture.control'],file=file,line=1)]
         inventory.ROOT = root
         try:
             expected = inventory.relocation_evidence(rows,write=True)
             if {r['record'] for r in expected.values()}!={'command','declaration'}:
                 raise ValueError('relocation evidence omitted commands or declarations')
             inventory.relocation_evidence(rows)
-            path = landing/'moved-laws.json'
+            path = landing/'relocations.json'
             pristine = path.read_text()
             def refused(population,message):
                 try: inventory.relocation_evidence(population)
@@ -38,14 +42,19 @@ def main():
             path.write_text(json.dumps(damaged))
             refused(rows,'relocation evidence is stale')
             path.write_text(pristine)
-            refused([dict(command,note=''),declaration],'relocation lacks cause: '+command['name'])
-            refused([dict(command,note='shared fixture f forces consumer'),declaration],
+            refused([dict(command,note=''),declaration,control],'relocation lacks cause: '+command['name'])
+            refused([dict(command,note='shared fixture f forces consumer'),declaration,control],
                     'law relocation lacks named law/control: '+command['name'])
+            refused([dict(command,note='law invented with control fixture.control'),declaration,control],
+                    'unresolved relocation law/control: invented with control fixture.control')
+            refused([dict(command,note='law fixture.law with control invented'),declaration,control],
+                    'unresolved relocation law/control: fixture.law with control invented')
             validation.write_text('Missing relocation table\n')
             refused(rows,'VALIDATION relocation table is stale')
             print('control PASS: read mode refuses omitted commands, missing/nonnamed law causes and incomplete VALIDATION')
         finally:
             inventory.ROOT = original
+            inventory.LAW_METADATA = original_metadata
 
 
 if __name__=='__main__':

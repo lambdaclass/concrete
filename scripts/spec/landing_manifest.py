@@ -396,7 +396,7 @@ def update_contexts(rows):
 
 
 def generate(data):
-    MOVED_LAWS.clear()
+    RELOCATED_DECLARATIONS.clear()
     rows = [row(record='snapshot',name='source',kind='git-commit',source=SOURCE,piece='P',disposition='retain'),
             row(record='snapshot',name='baseline',kind='git-commit',source=BASE,piece='BASE',disposition='retain'),
             row(record='snapshot',name='plan',kind='sha256',source='ConcreteSpec/landing/plan.md',piece='P',
@@ -529,7 +529,7 @@ def generate(data):
                     causes = inherited_causes(byname[d] for d in unavailable)
                     annotate_move(member, ('dependent on relocated law ' if causes else 'dependent on observed auxiliary ')+
                                   ', '.join(unavailable)+('; '+causes if causes else ''))
-                    if member['record']=='declaration': MOVED_LAWS.setdefault(member['name'],old_piece)
+                    if member['record']=='declaration': RELOCATED_DECLARATIONS.setdefault(member['name'],old_piece)
             if before==[(r['piece'],r['migration']) for r in population]: break
     else:
         raise ValueError('observed emission/fixture assignment did not converge')
@@ -575,12 +575,21 @@ def read():
 
 
 def full_digests(data, root):
-    """Source identity includes proof bodies, docs and separately applied attributes.
+    """Authored declarations and otherwise unrepresented source commands only.
 
-    Kernel shapes additionally distinguish generated declarations from the same command.
-    The source digest remains mandatory even when theorem types are proof-irrelevant.
+    A declaration must select its own identifier in the parsed source. Inherited
+    ranges on recursors/helpers do not turn compiler output into authored work.
     """
     rows = records_from_census(data, root)
+    tokens = {(c['file'], i['line'], i['column']): i['name']
+              for c in data if c['record']=='command'
+              for i in c.get('sourceIdentifiers', [])}
+    authored = set()
+    for d in data:
+        if d['record']!='declaration': continue
+        token = tokens.get((d['module'].replace('.', '/')+'.lean', d['line'], d['column']))
+        if token and (d['userName']==token or d['userName'].endswith('.'+token)):
+            authored.add(d['name'])
     commands = {(r['source'],int(r['line'])):r for r in rows if r['record']=='command'}
     attributes = defaultdict(list)
     for metadata in data:
@@ -588,9 +597,15 @@ def full_digests(data, root):
             digest = commands[(metadata['file'],metadata['line'])]['digest']
             for target in metadata['targets']:
                 attributes[target].append(digest)
-    return {r['name']:sha(json.dumps([r['digest'],r['term_digest'],attributes[r['name']]],
+    result = {r['name']:sha(json.dumps([r['digest'],r['term_digest'],attributes[r['name']]],
                                     separators=(',',':')).encode())
-            for r in rows if r['record']=='declaration'}
+              for r in rows if r['record']=='declaration' and r['name'] in authored}
+    represented = {command_identity(r) for r in rows
+                   if r['record']=='declaration' and r['name'] in authored}
+    for r in rows:
+        if r['record']=='command' and r['kind']!='module-realization' and r['name'] not in represented:
+            result['command:'+r['name']] = r['digest']
+    return result
 
 
 def head_population():
@@ -604,7 +619,7 @@ def head_population():
                 target = root/path
                 target.parent.mkdir(parents=True,exist_ok=True)
                 target.write_bytes(source(head,path))
-        data = census(root, ROOT/'scripts/spec/landing_inventory.lean',examples=False,regenerate_modules=REGENERATE_MODULES)
+        data = census(root, ROOT/'scripts/spec/landing_inventory.lean',examples=False,regenerate_modules=())
         return full_digests(data,root)
 
 
@@ -874,9 +889,15 @@ def relocation_evidence(rows, write=False):
         if r['record']=='declaration' and r['line']!='0':
             key = command_identity(r)
             anchors[key] = min(anchors.get(key,int(r['line'])),int(r['line']))
+    pairs = {(law['name'], c['name']) for law, controls in law_control_groups(rows) for c in controls}
     moved = {}
     for r in rows:
         if r['record'] not in ('declaration','command'): continue
+        for cause in re.finditer(r'law ([^;]+?) with control ([^;]+)', r['note']):
+            law, controls = cause.groups()
+            for control in controls.split(', '):
+                if (law, control) not in pairs:
+                    raise ValueError('unresolved relocation law/control: '+law+' with control '+control)
         key = command_identity(r)
         old = (WHOLE[r['source'].removeprefix('ConcreteSpec/').removesuffix('.lean')]
                if key.endswith(':0:0') else piece(r['source'],anchors.get(key,int(key.rsplit(':',2)[1]))))
@@ -891,7 +912,7 @@ def relocation_evidence(rows, write=False):
         moved[r['record']+':'+r['name']] = dict(record=r['record'],name=r['name'],
                                               **{'from':old,'to':dest,'reason':r['note']})
     moved = dict(sorted(moved.items()))
-    path = ROOT/'ConcreteSpec/landing/moved-laws.json'
+    path = ROOT/'ConcreteSpec/landing/relocations.json'
     if write: path.write_text(json.dumps(moved,indent=2,sort_keys=True)+'\n')
     elif not path.exists() or json.loads(path.read_text())!=moved:
         raise ValueError('relocation evidence is stale')
@@ -926,7 +947,7 @@ def annotate_move(r, cause):
     if cause not in r['note']: r['note'] += '; '+cause
 
 
-MOVED_LAWS = {}
+RELOCATED_DECLARATIONS = {}
 
 
 def assign_law_controls(rows, effective_dependencies):
@@ -985,7 +1006,7 @@ def assign_law_controls(rows, effective_dependencies):
             destination = effective(law) if effective(law) in candidates else min(candidates,key=lambda p:(len(closures[p]),p))
             old = effective(law)
             if old != destination:
-                MOVED_LAWS.setdefault(law['name'],old)
+                RELOCATED_DECLARATIONS.setdefault(law['name'],old)
             for r in members:
                 if effective(r)==destination:
                     if any(marker in r['note'] for marker in ('dependent ', 'shared fixture', 'regenerated at observed')):
@@ -1002,7 +1023,7 @@ def assign_law_controls(rows, effective_dependencies):
             if not authored: continue
             current = effective(authored[0])
             unavailable = {declarations[d]['piece'] for member in authored for d in dependencies(member)
-                           if d in MOVED_LAWS and declarations[d]['piece'] not in closures[current]
+                           if d in RELOCATED_DECLARATIONS and declarations[d]['piece'] not in closures[current]
                            and command_identity(declarations[d]) not in fixtures}
             if not unavailable: continue
             needs = {declarations[d]['piece'] for member in authored for d in dependencies(member)
@@ -1012,11 +1033,11 @@ def assign_law_controls(rows, effective_dependencies):
             for r in members:
                 if r['piece']=='BASE': r['migration']=destination
                 else: r.update(piece=destination,prerequisites=','.join(PREREQS[destination]))
-                causes = inherited_causes(declarations[d] for member in authored for d in dependencies(member) if d in MOVED_LAWS)
-                unavailable_names = sorted({d for member in authored for d in dependencies(member) if d in MOVED_LAWS})
+                causes = inherited_causes(declarations[d] for member in authored for d in dependencies(member) if d in RELOCATED_DECLARATIONS)
+                unavailable_names = sorted({d for member in authored for d in dependencies(member) if d in RELOCATED_DECLARATIONS})
                 annotate_move(r, ('dependent on relocated law; '+causes) if causes else
                               'dependent on observed auxiliary '+', '.join(unavailable_names))
-                if r['record']=='declaration': MOVED_LAWS.setdefault(r['name'],current)
+                if r['record']=='declaration': RELOCATED_DECLARATIONS.setdefault(r['name'],current)
             changed = True
         fixture_consumers = defaultdict(list)
         for r in rows:
@@ -1040,7 +1061,7 @@ def assign_law_controls(rows, effective_dependencies):
                     if r['piece']=='BASE': r['migration']=destination
                     else: r.update(piece=destination,prerequisites=','.join(PREREQS[destination]))
                     annotate_move(r, 'shared fixture '+fixture+' forces consumer; '+inherited_causes(consumers))
-                    if r['record']=='declaration': MOVED_LAWS.setdefault(r['name'],old)
+                    if r['record']=='declaration': RELOCATED_DECLARATIONS.setdefault(r['name'],old)
                 changed = True
         if not changed: return
     raise ValueError('law/control assignment did not converge')
@@ -1075,17 +1096,21 @@ def report(rows, detail=None, reasons=None):
     if detail and detail not in PREREQS and detail != 'all':
         raise ValueError(f'unknown remaining piece: {detail}')
     landed = {name for name,reason in (reasons or {}).items() if reason=='identical full digest'}
-    counts = Counter(r['piece'] for r in rows if r['record']=='declaration' and r['piece']!='BASE' and r['name'] not in landed)
-    examples = Counter(r['piece'] for r in rows if r['kind']=='example' and r['piece']!='BASE')
+    def identity(r):
+        return ('command:' if r['record']=='command' else '')+r['name']
+    units = [r for r in rows if r['record'] in ('declaration','command')
+             and identity(r) in (reasons or {}) and r['piece']!='BASE']
+    counts = Counter(r['piece'] for r in units if identity(r) not in landed)
+    examples = Counter(r['piece'] for r in units if r['kind']=='example' and identity(r) not in landed)
     print('remaining-examples\t'+str(sum(examples.values())))
     for p in sorted(r['name'] for r in rows if r['record']=='piece'):
-        total = sum(r['record']=='declaration' and r['piece']==p for r in rows)
-        matched = sum(r['record']=='declaration' and r['piece']==p and r['name'] in landed for r in rows)
+        total = sum(r['piece']==p for r in units)
+        matched = sum(r['piece']==p and identity(r) in landed for r in units)
         print(f'{p}\tlanded={matched}/{total}\tremaining={counts[p]}\tremaining-examples={examples[p]}')
     if detail:
-        for r in sorted(rows,key=lambda r:(r['piece'],r['name'])):
-            if r['record']=='declaration' and r['piece']!='BASE' and r['name'] not in landed and detail in ('all',r['piece']):
-                print(f'remaining\t{r["piece"]}\t{r["name"]}')
+        for r in sorted(units,key=lambda r:(r['piece'],r['name'])):
+            if identity(r) not in landed and detail in ('all',r['piece']):
+                print(f'remaining\t{r["piece"]}\t{identity(r)}')
 
 
 PIN_TAGS = {'source': SOURCE, 'baseline': BASE, 'evidence': EVIDENCE, 'dossier': DOSSIER}
@@ -1122,7 +1147,7 @@ def extract(root):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--write',action='store_true',help='explicitly regenerate initial plan assignments')
-    parser.add_argument('--remaining', metavar='PIECE', help='list remaining declaration names for a piece, or all')
+    parser.add_argument('--remaining', metavar='PIECE', help='list remaining authored source units for a piece, or all')
     parser.add_argument('--census-output',type=Path,help='write fresh census JSONL for independent inspection; never read as a cache')
     args = parser.parse_args()
     if os.environ.get('CONCRETE_GATES_SHELL') != '1':
