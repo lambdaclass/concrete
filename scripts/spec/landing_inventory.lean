@@ -213,7 +213,8 @@ unsafe def main (args : List String) : IO Unit := do
             if let `(Parser.Module.import| $[public]? $[meta]? import $[all]? $mod) := stx then
               imports := imports.push mod.getId
         emit [("record", toJson "imports"), ("file", toJson file),
-          ("imports", toJson (imports.map Name.toString))]
+          ("imports", toJson (imports.map Name.toString)),
+          ("headerEnd", toJson (header.raw.getTailPos?.getD 0).byteIdx)]
         commands ctx env ps messages
     | ["origins", file, mod, requests] =>
       let ctx := Parser.mkInputContext (← IO.FS.readFile file) file

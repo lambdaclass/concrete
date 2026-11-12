@@ -65,22 +65,52 @@ retain dependency/emission information for their owning commands, not separate p
 A declaration counts exactly when HEAD contains the same qualified name and full digest:
 complete command source (statement, proof/body, doc comment and inline attributes), separately
 resolved attribute commands, and kernel shape. Other source commands compare their source digest
-at their snapshot command identity. A command containing multiple authored declarations is
+by the same content-and-sequence matcher used for BASE membership: file, enclosing
+namespace/section sequence, command kind and source digest, with an ordinal among identical
+commands in that scope. Parsed positions order the sequence but never enter matching identities.
+The original positional names remain audit keys. Moving an unchanged example past unrelated
+declarations or changing an import header therefore preserves its progress; changing its source does not. A command containing multiple authored declarations is
 represented by those declarations, never counted again. Anonymous examples count in their
 piece's landed total and stop contributing to remaining-examples when their digest matches.
-A doc-comment-only or proof-source change therefore differs. There are no progress receipts,
-renamed mappings, ancestry requirements, introduction commits or historical progress builds.
+A doc-comment-only or proof-source change therefore differs. Progress uses the current checked revision, without ancestry requirements, introduction commits
+or historical progress builds.
 Deleting source removes it from the measurement. Each piece reports landed source units over
 its total source units, plus remaining units. `--remaining all` lists those units.
 
+F01 measures the exact import header of each of the twelve proof files in its landed revision.
+`headers.json` records the source revision and preserves each reviewed target's exact text,
+parsed byte extent and SHA-256. The gate checks the proof-file population against the pinned
+baseline and reparses those header bytes to reject arbitrary prefix extents. It needs no
+historical header commit object, including in the depth-one Spec CI checkout. Only those twelve targets enter
+F01's denominator; future snapshot-only modules belong to their own pieces. An import header runs
+from the start of the file through Lean's last header syntax token, preserving all intervening bytes.
+Current main lands all twelve. Headers do not affect declaration/command matching.
+
 `BASE` is the original baseline, never a progress label. This measures source reconstruction;
-it does not confer owner approval, independent review or contract closure. A repaired or replaced
-declaration normally differs from the snapshot and therefore cannot close its snapshot row by
-equality. To close that obligation, supersede the snapshot row with an explicit replacement row,
-reviewed with the repaired/replacement declaration and its new source digest. Preserve the original
-snapshot identity and the reason for supersession in that reviewed inventory change; never silently
-rewrite a digest or treat a mismatch as landed. The present snapshot inventory has no such
-supersessions. Repair/replace pieces remain outstanding until this explicit reconciliation lands.
+it does not confer owner approval, independent review or contract closure. A repaired or renamed
+declaration cannot close by equality. Add a `replacement` record to `inventory.tsv`, preserving
+all original snapshot rows unchanged. Its `name` is a unique reconciliation identifier, `piece`
+is the superseded declarations' common non-BASE piece, `disposition` is `replace`, and `note` is
+JSON with exactly these fields (all other TSV columns are empty):
+
+- `supersedes`: a nonempty list of distinct snapshot declaration names.
+- `declarations`: a nonempty object mapping replacing qualified declaration names to their
+  64-character full digests. These use the same command-source, attribute and kernel-shape
+  digest as ordinary progress, not a hash of a declaration's printed type.
+- `reason`: a nonempty explanation of the repair or replacement.
+- `review`: an object containing a nonempty `reference` identifying the accepting review and
+  `verdict` equal to `ACCEPT`. This records the review; the gate does not perform it.
+
+The judgment refuses unknown and already-superseded snapshot declarations, cross-piece or BASE
+supersessions, generated constants, owner-held declarations, malformed digests, extra schema fields and missing or
+nonaccepting review references. Replacement rows cannot themselves be superseded. Regenerating
+initial assignments preserves existing reviewed replacement records. Each original obligation
+counts as landed exactly when **all** replacing declarations exist at HEAD with the recorded
+full digests; matching the old declaration alone no longer closes a superseded obligation.
+Many-to-many reconciliations therefore preserve the original denominator and cannot close partially.
+`--head-digests PATH` exports the checked HEAD full digests for preparing such a reviewed record.
+No supersessions are needed merely for line shifts, and the present inventory has none yet.
+Repair/replace obligations remain outstanding until equality or explicit reviewed reconciliation.
 `--census-output <path>` exports the fresh snapshot census for inspection, never cached input.
 
 Ranges describe complete commands, rather than line slices used as implementation sources.
@@ -118,6 +148,14 @@ Lean-resolved annotation pair. Laws and their controls co-land; unavailable depe
 relocation. `relocations.json` covers every declaration and command relocated from the plan's
 assignment, including fixture and auxiliary changes; the read-only gate recomputes and compares
 it. Every law-driven move retains a note naming the causal law and control, including cascades.
+Each relocation's `reason` is an array of checked objects, never free-form cause text;
+`note` retains the source annotation for audit. The closed kinds are `law-control` (the row's
+command belongs to the named resolved pair), `law-dependent` (it transitively uses that pair),
+`law-support` (the pair transitively uses it), `shared-fixture` (its command is in
+`shared-fixtures.json`), `shared-fixture-consumer` (it uses that listed fixture), `regenerated`
+(its zero-range declaration has the census-validated observed emission), and `auxiliary-dependent`
+(it uses the named auxiliary at that observed emission). Every reference is checked against the
+row graph, shared-fixture list and census; a real but unrelated law/control pair is refused too.
 `VALIDATION.md` lists every relocation and reports plan deltas for the coordinator without
 rewriting the supplied plan.
 

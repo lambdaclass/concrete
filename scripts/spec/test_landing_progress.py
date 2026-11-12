@@ -2,6 +2,7 @@
 """Full source progress controls through the production Lean census on committed HEADs."""
 import contextlib
 import io
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -10,6 +11,18 @@ import landing_manifest as inventory
 
 
 def main():
+    def sequence(offset):
+        return [inventory.row(record='command',name=f'fixture:{offset+i}:{offset+i}',source='fixture',
+                              line=offset+i,end_line=offset+i,kind=kind,digest=digest)
+                for i,(kind,digest) in enumerate([
+                    ('Lean.Parser.Command.namespace','X'),('example','same'),('example','same'),
+                    ('Lean.Parser.Command.end','end'),('Lean.Parser.Command.namespace','Y'),
+                    ('example','same'),('Lean.Parser.Command.end','end')])]
+    before, shifted = sequence(1), sequence(20)
+    old, new = inventory.command_match_keys(before), inventory.command_match_keys(shifted)
+    if list(old.values())!=list(new.values()) or len(set(old.values()))!=len(old):
+        raise ValueError('sequence matching collapsed duplicates/scopes or retained lines')
+    print('control PASS: identical commands retain multiplicity and enclosing scopes independent of lines')
     original_root = inventory.ROOT
     original_env = dict(os.environ)
     with tempfile.TemporaryDirectory(prefix='landing-progress-control-') as tmp:
@@ -90,6 +103,20 @@ def main():
                 if expected not in output.getvalue():
                     raise ValueError('anonymous example excluded from landed total: '+output.getvalue())
             assert_report(with_consumer,'F03\tlanded=2/2\tremaining=0\tremaining-examples=0')
+            consumer_source = consumer.read_text()
+            for shifted in [consumer_source.replace('import ConcreteSpec.Control', 'import Init\nimport ConcreteSpec.Control'),
+                            consumer_source.replace('theorem realized : recursive 0 = 0 := by rw [recursive.eq_1]\n','')]:
+                consumer.write_text(shifted)
+                commit()
+                if inventory.progress_reasons(with_consumer,inventory.head_population())[example]!='identical full digest':
+                    raise ValueError('line-shifted unchanged example did not land')
+            consumer.write_text(consumer_source.replace('by trivial','True.intro'))
+            commit()
+            if inventory.progress_reasons(with_consumer,inventory.head_population())[example]=='identical full digest':
+                raise ValueError('changed anonymous example counted as landed')
+            consumer.write_text(consumer_source)
+            commit()
+            print('control PASS: header and declaration line shifts preserve examples; changed example does not land')
             consumer.unlink()
             commit()
             without_consumer = inventory.head_population()
@@ -104,6 +131,86 @@ def main():
             if inventory.progress_reasons(without_consumer,inventory.head_population()) != {'recursive':'full digest mismatch'}:
                 raise ValueError('changed definition counted as landed')
             print('control PASS: generated equations never count; defining source and anonymous examples govern progress')
+            # Use actual production full digests for a repaired, renamed declaration.
+            old_rows = [inventory.row(record='declaration',name='recursive',piece='F03',disposition='repair')]
+            new_name = 'renamed'
+            probe.write_text('def renamed : Nat := 1\n')
+            commit()
+            repaired = inventory.head_population()
+            spec = dict(supersedes=['recursive'], declarations={new_name:repaired[new_name]},
+                        reason='control repair',review=dict(reference='control accepting review',verdict='ACCEPT'))
+            replacement = inventory.row(record='replacement',name='control-repair',piece='F03',
+                                        disposition='replace',note=json.dumps(spec))
+            population = old_rows+[replacement]
+            before = inventory.progress_reasons(without_consumer,repaired)
+            if before['recursive']=='identical full digest': raise ValueError('silent replacement landed')
+            if inventory.replacement_progress(population,before,repaired)['recursive']!='identical full digest':
+                raise ValueError('reviewed replacement did not land')
+            for checked in ({}, {new_name:'0'*64}):
+                if inventory.replacement_progress(population,before,checked)['recursive']=='identical full digest':
+                    raise ValueError('missing or changed replacement landed')
+            for changed in [dict(spec,supersedes=['unknown']), dict(spec,review=''), dict(spec,review=dict(reference='rejected',verdict='REJECT')),
+                            dict(spec,declarations={new_name:'bad'}), dict(spec,extra='unknown'),
+                            dict(spec,supersedes=[]), dict(spec,supersedes=['recursive','recursive']),
+                            dict(spec,declarations={'header:fake':'0'*64}), dict(spec,reason='')]:
+                try: inventory.replacement_rows(old_rows+[dict(replacement,note=json.dumps(changed))])
+                except ValueError: pass
+                else: raise ValueError('invalid replacement schema accepted')
+            duplicate_note = replacement['note'][:-1]+', "reason": "duplicate"}'
+            try: inventory.replacement_rows(old_rows+[dict(replacement,note=duplicate_note)])
+            except ValueError: pass
+            else: raise ValueError('duplicate replacement JSON field accepted')
+            for altered in [dict(old_rows[0],piece='F02'), dict(old_rows[0],piece='BASE'),
+                            dict(old_rows[0],disposition='owner-held')]:
+                try: inventory.replacement_rows([altered,replacement])
+                except ValueError: pass
+                else: raise ValueError('replacement escaped piece or owner hold')
+            try: inventory.replacement_rows(population,authored=set())
+            except ValueError: pass
+            else: raise ValueError('generated constant became replacement progress')
+            try: inventory.replacement_rows(population+[dict(replacement,name='second')])
+            except ValueError as exc:
+                if str(exc)!='already-replaced row: recursive': raise
+            else: raise ValueError('duplicate supersession accepted')
+            multi = dict(spec,declarations={new_name:repaired[new_name], 'second': '1'*64})
+            multi_rows = old_rows+[dict(replacement,note=json.dumps(multi))]
+            if inventory.replacement_progress(multi_rows,before,repaired)['recursive']=='identical full digest':
+                raise ValueError('partial multi-declaration replacement landed')
+            if inventory.replacement_progress(multi_rows,before,dict(repaired,second='1'*64))['recursive']!='identical full digest':
+                raise ValueError('complete multi-declaration replacement refused')
+            print('control PASS: reviewed replacement closes only at exact replacement digests; invalid, unknown, duplicate and partial rows refused')
+            proof = root/'ConcreteSpec/Proofs/Header.lean'
+            proof.parent.mkdir()
+            proof.write_text('import ConcreteSpec.Control\ntheorem headerControl : True := by trivial\n')
+            commit()
+            header_snapshot = inventory.head_population()
+            header = 'header:ConcreteSpec/Proofs/Header.lean'
+            if header not in header_snapshot: raise ValueError('proof import header is not measured')
+            targets = root/'ConcreteSpec/landing/headers.json'
+            targets.parent.mkdir()
+            length = len('import ConcreteSpec.Control'.encode())
+            target_spec = dict(revision='f'*40, headers={str(proof.relative_to(root)):
+                               dict(bytes=length,digest=header_snapshot[header],text='import ConcreteSpec.Control')})
+            targets.write_text(json.dumps(target_spec))
+            if inventory.header_targets({str(proof.relative_to(root))})!={header:header_snapshot[header]}:
+                raise ValueError('exact parsed header target refused')
+            entry = target_spec['headers'][str(proof.relative_to(root))]
+            extra = entry['text']+'\n\n'
+            entry.update(bytes=len(extra.encode()),digest=inventory.sha(extra.encode()),text=extra)
+            targets.write_text(json.dumps(target_spec))
+            try: inventory.header_targets({str(proof.relative_to(root))})
+            except ValueError as exc:
+                if str(exc)!='header target is not the exact parsed import header': raise
+            else: raise ValueError('arbitrary hash-consistent header prefix accepted')
+            proof.write_text('import Init\nimport ConcreteSpec.Control\ntheorem headerControl : True := by trivial\n')
+            commit()
+            if inventory.progress_reasons(header_snapshot,inventory.head_population())[header]!='full digest mismatch':
+                raise ValueError('changed import header counted as landed')
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                inventory.report([inventory.row(record='piece',name='F01')],reasons={header:'identical full digest'})
+            if 'F01\tlanded=1/1' not in output.getvalue(): raise ValueError('F01 header excluded from totals')
+            print('control PASS: exact import headers measure F01; a changed header stops counting')
         finally:
             inventory.ROOT = original_root
             inventory.source.cache_clear()

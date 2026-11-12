@@ -181,7 +181,7 @@ def row(**kw):
     return {k: str(kw.get(k, '')) for k in FIELDS}
 
 
-def records_from_census(data, source_root=None):
+def records_from_census(data, source_root=None, ref=SOURCE):
     """Stable identity and source digests independent of the manual assignment columns."""
     result = []
     example_deps = {(r['file'],r['line']):r['uses'] for r in data if r['record']=='example'}
@@ -194,7 +194,7 @@ def records_from_census(data, source_root=None):
             continue
         f = c['file']
         if f not in files:
-            files[f] = (source(SOURCE, f) if source_root is None else (source_root/f).read_bytes()).decode().splitlines(keepends=True)
+            files[f] = (source(ref, f) if source_root is None else (source_root/f).read_bytes()).decode().splitlines(keepends=True)
         digest = sha((''.join(files[f]) if c['syntax']=='module-realization' else ''.join(files[f][c['line']-1:c['endLine']])).encode())
         uses = example_deps.get((f,c['line']),[])
         if c['syntax']=='Lean.Parser.Command.attribute':
@@ -274,6 +274,8 @@ def baseline_members():
     origins = {(r['file'],r['name']):r for r in data if r['record']=='origin'}
     commands = defaultdict(set)
     declarations = {}
+    for name, key in command_match_keys(records_from_census(data, ref=BASE)).items():
+        commands[name.rsplit(':',2)[0]].add(key)
     for r in data:
         if r['record']=='command':
             lines = source(BASE,r['file']).splitlines(keepends=True)
@@ -424,8 +426,9 @@ def generate(data):
             r['note'] += '; ISS-0046: replace presentation-bearing identity with shared numeric identity; do not restore the raw-record inequality'
     byname = {r['name']:r for r in population if r['record']=='declaration'}
     baseline, baseline_decls = baseline_members()
+    command_keys = command_match_keys(population)
     for r in population:
-        if ((r['record']=='command' and r['digest'] in baseline[r['source']]) or
+        if ((r['record']=='command' and command_keys[r['name']] in baseline[r['source']]) or
             (r['record']=='declaration' and on_baseline(r))):
             r['migration'] = r['piece']
             r.update(piece='BASE',prerequisites='',disposition='retain')
@@ -544,6 +547,7 @@ def generate(data):
     fixture_consumers += [(r,json.loads(r['dependencies'])) for r in population if r['kind'] in ('example','Lean.Parser.Command.attribute') and r['piece']!='BASE']
     fixture_placement(population,fixture_consumers,ancestry,write_basis=True)
     law_control_schedule(population,write=True)
+    relocation_causes(population,normalize=True)
     relocation_evidence(population,write=True)
     rows += population + evidence_rows()
     for i in range(1,11):
@@ -574,13 +578,43 @@ def read():
         return list(reader)
 
 
-def full_digests(data, root):
-    """Authored declarations and otherwise unrepresented source commands only.
+def command_match_keys(rows):
+    """Content and ordinal within the enclosing namespace/section sequence.
 
-    A declaration must select its own identifier in the parsed source. Inherited
-    ranges on recursors/helpers do not turn compiler output into authored work.
+    Snapshot line ranges only order the parsed sequence; they never enter a key.
+    Equal commands remain distinct, including repeated identical scopes.
     """
-    rows = records_from_census(data, root)
+    result, stacks, counts = {}, defaultdict(list), Counter()
+    for r in sorted((r for r in rows if r['record']=='command'),
+                    key=lambda r:(r['source'],int(r['line']),int(r['end_line']))):
+        stack = stacks[r['source']]
+        scope = tuple(stack)
+        token = (r['source'], scope, r['kind'], r['digest'])
+        ordinal = counts[token]
+        counts[token] += 1
+        key = (*token, ordinal)
+        result[r['name']] = key
+        if r['kind'] in ('Lean.Parser.Command.namespace','Lean.Parser.Command.section'):
+            stack.append((r['kind'],r['digest'],ordinal))
+        elif r['kind']=='Lean.Parser.Command.end' and stack:
+            stack.pop()
+    return result
+
+
+class Digests(dict):
+    """Snapshot audit names accompanied by position-free matching identities."""
+    def __init__(self, *args, commands=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.commands = commands or {}
+
+
+def import_headers(data, root):
+    # Lean's command census starts immediately after the parsed module header.
+    return {r['file']:sha((root/r['file']).read_bytes()[:r['headerEnd']])
+            for r in data if r['record']=='imports' and r['file'].startswith('ConcreteSpec/Proofs/')}
+
+
+def authored_names(data):
     tokens = {(c['file'], i['line'], i['column']): i['name']
               for c in data if c['record']=='command'
               for i in c.get('sourceIdentifiers', [])}
@@ -590,6 +624,17 @@ def full_digests(data, root):
         token = tokens.get((d['module'].replace('.', '/')+'.lean', d['line'], d['column']))
         if token and (d['userName']==token or d['userName'].endswith('.'+token)):
             authored.add(d['name'])
+    return authored
+
+
+def full_digests(data, root):
+    """Authored declarations and otherwise unrepresented source commands only.
+
+    A declaration must select its own identifier in the parsed source. Inherited
+    ranges on recursors/helpers do not turn compiler output into authored work.
+    """
+    rows = records_from_census(data, root)
+    authored = authored_names(data)
     commands = {(r['source'],int(r['line'])):r for r in rows if r['record']=='command'}
     attributes = defaultdict(list)
     for metadata in data:
@@ -597,14 +642,17 @@ def full_digests(data, root):
             digest = commands[(metadata['file'],metadata['line'])]['digest']
             for target in metadata['targets']:
                 attributes[target].append(digest)
-    result = {r['name']:sha(json.dumps([r['digest'],r['term_digest'],attributes[r['name']]],
+    result = Digests({r['name']:sha(json.dumps([r['digest'],r['term_digest'],attributes[r['name']]],
                                     separators=(',',':')).encode())
-              for r in rows if r['record']=='declaration' and r['name'] in authored}
+              for r in rows if r['record']=='declaration' and r['name'] in authored})
+    keys = command_match_keys(rows)
     represented = {command_identity(r) for r in rows
                    if r['record']=='declaration' and r['name'] in authored}
     for r in rows:
         if r['record']=='command' and r['kind']!='module-realization' and r['name'] not in represented:
             result['command:'+r['name']] = r['digest']
+            result.commands['command:'+r['name']] = keys[r['name']]
+    result.update({'header:'+f:d for f,d in import_headers(data,root).items()})
     return result
 
 
@@ -623,10 +671,101 @@ def head_population():
         return full_digests(data,root)
 
 
+def unique_object(pairs):
+    result = {}
+    for key,value in pairs:
+        if key in result: raise ValueError('duplicate JSON field: '+key)
+        result[key] = value
+    return result
+
+
+def replacement_rows(rows, authored=None):
+    """Reviewed supersessions are additive records; snapshot rows remain immutable."""
+    snapshot = {r['name']:r for r in rows if r['record']=='declaration'}
+    replaced, result = set(), []
+    for r in rows:
+        if r['record']!='replacement': continue
+        try:
+            spec = json.loads(r['note'],object_pairs_hook=unique_object)
+            if set(spec)!={'supersedes','declarations','reason','review'}:
+                raise ValueError()
+            old, new = spec['supersedes'], spec['declarations']
+            if (not isinstance(old,list) or not old or len(set(old))!=len(old) or
+                not all(isinstance(n,str) for n in old) or not isinstance(new,dict) or not new or
+                not all(isinstance(n,str) and n and not n.startswith(('command:','header:')) and isinstance(d,str) and re.fullmatch('[0-9a-f]{64}',d)
+                        for n,d in new.items()) or
+                not isinstance(spec['reason'],str) or not spec['reason'].strip() or
+                not isinstance(spec['review'],dict) or set(spec['review'])!={'reference','verdict'} or
+                spec['review']['verdict']!='ACCEPT' or not isinstance(spec['review']['reference'],str) or
+                not spec['review']['reference'].strip()):
+                raise ValueError()
+        except (ValueError,TypeError):
+            raise ValueError('invalid replacement schema: '+r['name']) from None
+        for n in old:
+            if n not in snapshot: raise ValueError('unknown replacement row: '+n)
+            if n in replaced: raise ValueError('already-replaced row: '+n)
+            if authored is not None and n not in authored:
+                raise ValueError('replacement is not an authored progress unit: '+n)
+            original = snapshot[n]
+            if original['piece']=='BASE' or original['piece']!=r['piece'] or original['disposition']=='owner-held':
+                raise ValueError('invalid replacement ownership: '+n)
+            replaced.add(n)
+        if not r['name'].strip() or any(r[k] for k in FIELDS if k not in ('record','name','piece','disposition','note')) or r['disposition']!='replace':
+            raise ValueError('invalid replacement columns: '+r['name'])
+        result.append((r,spec))
+    return result
+
+
+def replacement_progress(rows, reasons, checked):
+    reasons = dict(reasons)
+    for r,spec in replacement_rows(rows):
+        matched = all(checked.get(n)==d for n,d in spec['declarations'].items())
+        for n in spec['supersedes']:
+            if n not in reasons: raise ValueError('replacement is not a progress unit: '+n)
+            reasons[n] = 'identical full digest' if matched else 'replacement declaration missing or digest mismatch'
+    return reasons
+
+
+def header_targets(proof_files=None):
+    spec = json.loads((ROOT/'ConcreteSpec/landing/headers.json').read_text())
+    if set(spec)!= {'revision','headers'} or not re.fullmatch('[0-9a-f]{40}',spec['revision']):
+        raise ValueError('invalid header target schema')
+    # Reviewed exact header bytes carry revision provenance without requiring
+    # its historical object in the depth-one Spec checkout.
+    headers = spec['headers']
+    if proof_files is None:
+        proof_files = {r['file'] for r in baseline_census() if r['record']=='imports'
+                       and r['file'].startswith('ConcreteSpec/Proofs/')}
+    if set(headers)!=set(proof_files):
+        raise ValueError('header target population mismatch')
+    for f,entry in headers.items():
+        if (set(entry)!={'bytes','digest','text'} or not isinstance(entry['text'],str) or
+            not isinstance(entry['bytes'],int) or entry['bytes']!=len(entry['text'].encode()) or
+            sha(entry['text'].encode())!=entry['digest']):
+            raise ValueError('invalid exact header target: '+f)
+    with tempfile.TemporaryDirectory(prefix='spec-header-targets-') as tmp:
+        root = Path(tmp)
+        for f in headers:
+            dest = root/f
+            dest.parent.mkdir(parents=True,exist_ok=True)
+            dest.write_bytes(headers[f]['text'].encode()+b'\nexample : True := True.intro\n')
+        parsed = subprocess.check_output(['lean','--run',str(ROOT/'scripts/spec/landing_inventory.lean'),
+                                         'parse',*sorted(headers)],cwd=root,text=True)
+        observed = {r['file']:r['headerEnd'] for r in map(json.loads,parsed.splitlines()) if r['record']=='imports'}
+        if observed!={f:e['bytes'] for f,e in headers.items()}:
+            raise ValueError('header target is not the exact parsed import header')
+    return {'header:'+f:entry['digest'] for f,entry in headers.items()}
+
+
 def progress_reasons(snapshot, checked):
-    return {name: ('missing declaration' if name not in checked else
-                   'full digest mismatch' if checked[name]!=digest else 'identical full digest')
-            for name,digest in snapshot.items()}
+    commands = {key:checked[name] for name,key in getattr(checked,'commands',{}).items()}
+    reasons = {}
+    for name,digest in snapshot.items():
+        key = getattr(snapshot,'commands',{}).get(name)
+        value = commands.get(key) if key is not None else checked.get(name)
+        reasons[name] = ('missing declaration' if value is None else
+                         'full digest mismatch' if value!=digest else 'identical full digest')
+    return reasons
 
 
 def check_command_atomicity(rows, identity=command_identity):
@@ -668,12 +807,13 @@ def judgment(rows, data, dependencies=True, extra_root=None):
     LAW_METADATA[:] = [r for r in (data if extra_root is None else data[0]) if r["record"]=="resolved-command"]
     seen = {}
     for r in rows:
-        if r['record'] not in {'snapshot','piece','command','declaration','finding','contract'}:
+        if r['record'] not in {'snapshot','piece','command','declaration','finding','contract','replacement'}:
             raise ValueError(f'unknown inventory record: {r["record"]}')
         key = (r['record'],r['name'])
         if key in seen:
             raise ValueError(f'duplicate assignment: {r["name"]}')
         seen[key] = r
+    replacement_rows(rows,authored_names(data if extra_root is None else data[0]+data[1]))
     pieces = {r['name']:r for r in rows if r['record']=='piece'}
     if set(pieces) != set(PREREQS):
         raise ValueError('landing piece population mismatch')
@@ -758,8 +898,9 @@ def judgment(rows, data, dependencies=True, extra_root=None):
     decls = {r['name']:r for r in rows if r['record']=='declaration'}
     command_rows = {r['name']:r for r in rows if r['record']=='command'}
     baseline_commands, baseline_decls = baseline_members()
+    command_keys = command_match_keys(rows)
     for r in rows:
-        if r['piece']=='BASE' and r['record']=='command' and r['digest'] not in baseline_commands[r['source']]:
+        if r['piece']=='BASE' and r['record']=='command' and command_keys[r['name']] not in baseline_commands[r['source']]:
             raise ValueError(f'baseline assignment has no parsed baseline command: {r["name"]}')
     for r in decls.values():
         if r['piece']=='BASE' and not on_baseline(r):
@@ -883,34 +1024,103 @@ def law_control_schedule(rows, write=False):
     return cases
 
 
+def relocation_causes(rows, normalize=False):
+    """Produce a closed, data-checked causal vocabulary for each moved row."""
+    commands = {r['name']:r for r in rows if r['record']=='command'}
+    declarations = {r['name']:r for r in rows if r['record']=='declaration'}
+    fixtures = shared_fixtures(commands)
+    members = defaultdict(list)
+    for r in declarations.values():
+        members[r['regeneration'] or command_identity(r)].append(r)
+    graph = {n:{declarations[d]['regeneration'] or command_identity(declarations[d])
+                for r in [c]+members[n] for d in json.loads(r['dependencies'] or '[]')
+                if d in declarations} - {n} for n,c in commands.items()}
+    def reachable(n):
+        seen, todo = set(), [n]
+        while todo:
+            node = todo.pop()
+            if node in seen: continue
+            seen.add(node)
+            todo.extend(graph.get(node,()))
+        return seen
+    closures = {n:reachable(n) for n in commands}
+    groups = {}
+    for law, controls in law_control_groups(rows):
+        for control in controls:
+            groups[(law['name'],control['name'])] = {
+                command_identity(law),*(command_identity(c) for c in controls)}
+    result = {}
+    for r in rows:
+        if r['record'] not in ('command','declaration'): continue
+        key = r['regeneration'] or command_identity(r)
+        causes = []
+        note = r['note']
+        unrelated = set()
+        for match in re.finditer(r'law ([^;]+?) with control ([^;]+)',note):
+            law, controls = match.groups()
+            for control in controls.split(', '):
+                pair = (law,control)
+                if pair not in groups:
+                    raise ValueError('unresolved relocation law/control: '+law+' with control '+control)
+                group = groups[pair]
+                if key in group: kind = 'law-control'
+                elif closures.get(key,{key}) & group: kind = 'law-dependent'
+                elif any(key in closures.get(n,{n}) for n in group): kind = 'law-support'
+                else:
+                    if normalize:
+                        unrelated.add(pair)
+                        continue
+                    raise ValueError('unrelated relocation law/control: '+r['name']+'; '+law+' with control '+control)
+                causes.append(dict(kind=kind,law=law,control=control))
+        if unrelated:
+            # Assignment propagation can inherit a union of consumer annotations.
+            # Retain only pairs that actually explain this member, never borrow a
+            # sibling consumer's law/control attribution through shared prose.
+            def relevant(match):
+                law, controls = match.groups()
+                names = [c for c in controls.split(', ') if (law,c) not in unrelated]
+                return 'law '+law+' with control '+', '.join(names) if names else ''
+            r['note'] = re.sub(r'law ([^;]+?) with control ([^;]+)',relevant,note)
+        if 'shared fixture/support moved to earliest consumer' in note:
+            if key not in fixtures: raise ValueError('unverified shared fixture: '+r['name'])
+            causes.append(dict(kind='shared-fixture',command=key))
+        for fixture in re.findall(r'shared fixture ([^;]+?) forces consumer',note):
+            if fixture not in fixtures or fixture not in closures.get(key,set()):
+                raise ValueError('unverified shared fixture: '+r['name'])
+            causes.append(dict(kind='shared-fixture-consumer',command=fixture))
+        if 'regenerated at observed' in note:
+            if not r['regeneration'] or r['regeneration'] not in commands or r['line']!='0':
+                raise ValueError('unverified regenerated relocation: '+r['name'])
+            causes.append(dict(kind='regenerated',command=r['regeneration']))
+        for names in re.findall(r'dependent on observed auxiliary ([^;]+)',note):
+            for name in names.split(', '):
+                dep = declarations.get(name)
+                if dep is None or not dep['regeneration'] or dep['regeneration'] not in closures.get(key,set()):
+                    raise ValueError('unverified auxiliary relocation: '+r['name']+'; '+name)
+                causes.append(dict(kind='auxiliary-dependent',declaration=name,command=dep['regeneration']))
+        result[(r['record'],r['name'])] = causes
+    return result
+
+
 def relocation_evidence(rows, write=False):
     anchors = {}
     for r in rows:
         if r['record']=='declaration' and r['line']!='0':
             key = command_identity(r)
             anchors[key] = min(anchors.get(key,int(r['line'])),int(r['line']))
-    pairs = {(law['name'], c['name']) for law, controls in law_control_groups(rows) for c in controls}
+    verified_causes = relocation_causes(rows)
     moved = {}
     for r in rows:
         if r['record'] not in ('declaration','command'): continue
-        for cause in re.finditer(r'law ([^;]+?) with control ([^;]+)', r['note']):
-            law, controls = cause.groups()
-            for control in controls.split(', '):
-                if (law, control) not in pairs:
-                    raise ValueError('unresolved relocation law/control: '+law+' with control '+control)
         key = command_identity(r)
         old = (WHOLE[r['source'].removeprefix('ConcreteSpec/').removesuffix('.lean')]
                if key.endswith(':0:0') else piece(r['source'],anchors.get(key,int(key.rsplit(':',2)[1]))))
         dest = r['migration'] or r['piece']
         if old==dest: continue
-        named_cause = re.search(r'law [^;]+ with control ',r['note'])
-        if any(marker in r['note'] for marker in ('dependent on relocated law', 'forces consumer')) and not named_cause:
-            raise ValueError('law relocation lacks named law/control: '+r['name'])
-        if not (named_cause or
-                any(cause in r['note'] for cause in ('shared fixture', 'regenerated at observed', 'dependent on observed auxiliary'))):
-            raise ValueError('relocation lacks cause: '+r['name'])
+        causes = verified_causes[(r['record'],r['name'])]
+        if not causes: raise ValueError('relocation lacks cause: '+r['name'])
         moved[r['record']+':'+r['name']] = dict(record=r['record'],name=r['name'],
-                                              **{'from':old,'to':dest,'reason':r['note']})
+                                              **{'from':old,'to':dest,'reason':causes,'note':r['note']})
     moved = dict(sorted(moved.items()))
     path = ROOT/'ConcreteSpec/landing/relocations.json'
     if write: path.write_text(json.dumps(moved,indent=2,sort_keys=True)+'\n')
@@ -920,7 +1130,7 @@ def relocation_evidence(rows, write=False):
     begin, end = '<!-- relocations:start -->', '<!-- relocations:end -->'
     table = '\n'.join(['| Record | Name | From | To | Cause |', '|---|---|---|---|---|'] +
         [f"| {r['record']} | `{r['name']}` | {r['from']} | {r['to']} | " +
-         r['reason'].replace('|','&#124;').replace('\n',' ')+' |' for r in moved.values()])
+         json.dumps(r['reason'],sort_keys=True).replace('|','&#124;')+' |' for r in moved.values()])
     block = begin+'\n'+table+'\n'+end
     text = validation.read_text()
     pattern = re.escape(begin)+r'.*?'+re.escape(end)
@@ -1100,6 +1310,7 @@ def report(rows, detail=None, reasons=None):
         return ('command:' if r['record']=='command' else '')+r['name']
     units = [r for r in rows if r['record'] in ('declaration','command')
              and identity(r) in (reasons or {}) and r['piece']!='BASE']
+    units += [row(record='header',name=n,piece='F01') for n in (reasons or {}) if n.startswith('header:')]
     counts = Counter(r['piece'] for r in units if identity(r) not in landed)
     examples = Counter(r['piece'] for r in units if r['kind']=='example' and identity(r) not in landed)
     print('remaining-examples\t'+str(sum(examples.values())))
@@ -1148,6 +1359,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--write',action='store_true',help='explicitly regenerate initial plan assignments')
     parser.add_argument('--remaining', metavar='PIECE', help='list remaining authored source units for a piece, or all')
+    parser.add_argument('--head-digests',type=Path,help='export checked HEAD full digests for reviewed replacement records')
     parser.add_argument('--census-output',type=Path,help='write fresh census JSONL for independent inspection; never read as a cache')
     args = parser.parse_args()
     if os.environ.get('CONCRETE_GATES_SHELL') != '1':
@@ -1164,8 +1376,24 @@ def main():
         data = census(root,ROOT/'scripts/spec/landing_inventory.lean',regenerate_modules=REGENERATE_MODULES)
         if args.census_output:
             args.census_output.write_text(''.join(json.dumps(r,sort_keys=True)+'\n' for r in data))
-        rows = generate(data) if args.write else read()
+        existing_replacements = [r for r in read() if r['record']=='replacement'] if args.write else []
+        rows = generate(data)+existing_replacements if args.write else read()
         closure = judgment(rows,data,dependencies=False)
+        victim = next(r for r in rows if r['record']=='declaration' and r['piece']!='BASE'
+                      and r['disposition']!='owner-held' and r['name'] in authored_names(data))
+        replacement = row(record='replacement',name='replacement-judgment-control',piece=victim['piece'],
+                          disposition='replace',note=json.dumps(dict(supersedes=[victim['name']],
+                          declarations={'InventoryControl.repaired':sha(b'repaired')},reason='control',
+                          review=dict(reference='control',verdict='ACCEPT'))))
+        judgment(rows+[replacement],data,dependencies=False)
+        try:
+            bad = json.loads(replacement['note'])
+            bad['supersedes'] = ['InventoryControl.unknown']
+            judgment(rows+[dict(replacement,note=json.dumps(bad))],data,dependencies=False)
+        except ValueError as exc:
+            if str(exc)!='unknown replacement row: InventoryControl.unknown': raise
+        else: raise ValueError('judgment accepted unknown supersession')
+        print('control PASS: inventory judgment admits reviewed replacement schema and refuses unknown supersession')
         verify_plan_boundaries(rows)
         check_law_controls(rows)
         # Mutate only fixture placement: dependency availability still holds when moved earlier.
@@ -1310,11 +1538,22 @@ def main():
         print('control PASS: unknown remaining piece refused')
         relocation_evidence(rows)
         law_control_schedule(rows)
-        reasons = progress_reasons(full_digests(data,root),head_population())
+        snapshot = full_digests(data,root)
+        for name in list(snapshot):
+            if name.startswith('header:'): del snapshot[name]
+        snapshot.update(header_targets())
+        checked = head_population()
+        if args.head_digests:
+            args.head_digests.write_text(json.dumps(checked,indent=2,sort_keys=True)+'\n')
+        reasons = replacement_progress(rows,progress_reasons(snapshot,checked),checked)
         report(rows,args.remaining,reasons)
         judgment(rows,data)
         if args.write:
             write(rows)
+            persisted = read()
+            judgment(persisted,data)
+            relocation_evidence(persisted)
+            print('control PASS: regenerated inventory reread and judged against the same fresh census')
         print(f'landing inventory PASS: source={SOURCE}; baseline={BASE}')
 
 
