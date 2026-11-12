@@ -41,37 +41,37 @@ def mv (x : Var) : Expr := .atom (.move x)
 
 def cp (x : Var) : Expr := .atom (.copy x)
 
-/-- Local 0; for example, its diagnostic spelling is `t`. -/
+/-- Local 0; for example, `⟨0⟩` denotes this numeric identity. -/
 def t₀ : Var := ⟨0⟩
 
-/-- Local 1; for example, its diagnostic spelling is `u`. -/
+/-- Local 1; for example, `⟨1⟩` denotes this numeric identity. -/
 def u₁ : Var := ⟨1⟩
 
-/-- Local 4; for example, its diagnostic spelling is `p`. -/
+/-- Local 4; for example, `⟨4⟩` denotes this numeric identity. -/
 def p₄ : Var := ⟨4⟩
 
-/-- Local 5; for example, its diagnostic spelling is `q`. -/
+/-- Local 5; for example, `⟨5⟩` denotes this numeric identity. -/
 def q₅ : Var := ⟨5⟩
 
-/-- Local 0; for example, its diagnostic spelling is `x`. -/
+/-- Local 0; for example, `⟨0⟩` denotes this numeric identity. -/
 def x₀ : Var := ⟨0⟩
 
-/-- Local 1; for example, its diagnostic spelling is `x`. -/
+/-- Local 1; for example, `⟨1⟩` denotes this numeric identity. -/
 def x₁ : Var := ⟨1⟩
 
-/-- Local 6; for example, its diagnostic spelling is `y`. -/
+/-- Local 6; for example, `⟨6⟩` denotes this numeric identity. -/
 def y₆ : Var := ⟨6⟩
 
-/-- Local 0; for example, its diagnostic spelling is `a`. -/
+/-- Local 0; for example, `⟨0⟩` denotes this numeric identity. -/
 def a₀ : Var := ⟨0⟩
 
-/-- Local 1; for example, its diagnostic spelling is `b`. -/
+/-- Local 1; for example, `⟨1⟩` denotes this numeric identity. -/
 def b₁ : Var := ⟨1⟩
 
-/-- Local 2; for example, its diagnostic spelling is `s`. -/
+/-- Local 2; for example, `⟨2⟩` denotes this numeric identity. -/
 def s₂ : Var := ⟨2⟩
 
-/-- Local 3; for example, its diagnostic spelling is `z`. -/
+/-- Local 3; for example, `⟨3⟩` denotes this numeric identity. -/
 def z₃ : Var := ⟨3⟩
 
 /-- The slice's central program: an empty linear struct is created, moved, and consumed by a
@@ -485,106 +485,174 @@ example : Observe.observe true (runBody decls 10 (inputEnv 200) add100 (.copy s�
 example : (Observe.observe false (run moveThenConsume 10)).map Observe.Observation.status =
     some 125 := by decide
 
-/-- Elaboration output for `moveThenConsume`; spellings are scoped to this program. -/
+/-- The identities bound by a pattern; for example, `.name ⟨7⟩` binds local 7. -/
+def binderLocals : Binder → List Var
+  | .name x => [x]
+  | .wild => []
+
+/-- All statement binders, including destructuring; for example, a wildcard adds none. -/
+def bodyLocals (ss : List Stmt) : List Var := ss.flatMap fun st =>
+  match st with
+  | .let_ b _ _ => binderLocals b
+  | .letStruct _ pat _ => pat.flatMap fun (_, b) => binderLocals b
+
+/-- Every displayed number is bound in this program; for example, an empty table is valid. -/
+def namesBound (names : LocalNames) (bound : List Var) : Bool :=
+  names.entries.all fun (x, _) => bound.contains x
+
+/-- Elaboration output for `moveThenConsume`; spellings are scoped to this program. For example, `t₀` displays as `t`. -/
 def moveThenConsumeElaborated : Elaborated Program :=
-  ⟨moveThenConsume, [(t₀, "t"), (u₁, "u")]⟩
+  ⟨moveThenConsume, ⟨[(t₀, "t"), (u₁, "u")]⟩⟩
 
-/-- Elaboration output for `useAfterMove`; spellings are scoped to this program. -/
+example : namesBound moveThenConsumeElaborated.names (bodyLocals moveThenConsumeElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `useAfterMove`; spellings are scoped to this program. For example, `t₀` displays as `t`. -/
 def useAfterMoveElaborated : Elaborated Program :=
-  ⟨useAfterMove, [(t₀, "t"), (u₁, "u")]⟩
+  ⟨useAfterMove, ⟨[(t₀, "t"), (u₁, "u")]⟩⟩
 
-/-- Elaboration output for `copyLinear`; spellings are scoped to this program. -/
+example : namesBound useAfterMoveElaborated.names (bodyLocals useAfterMoveElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `copyLinear`; spellings are scoped to this program. For example, `t₀` displays as `t`. -/
 def copyLinearElaborated : Elaborated Program :=
-  ⟨copyLinear, [(t₀, "t")]⟩
+  ⟨copyLinear, ⟨[(t₀, "t")]⟩⟩
 
-/-- Elaboration output for `moveCopy`; spellings are scoped to this program. -/
+example : namesBound copyLinearElaborated.names (bodyLocals copyLinearElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `moveCopy`; spellings are scoped to this program. For example, `x₀` displays as `x`. -/
 def moveCopyElaborated : Elaborated Program :=
-  ⟨moveCopy, [(x₀, "x")]⟩
+  ⟨moveCopy, ⟨[(x₀, "x")]⟩⟩
 
-/-- Elaboration output for `notConsumed`; spellings are scoped to this program. -/
+example : namesBound moveCopyElaborated.names (bodyLocals moveCopyElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `notConsumed`; spellings are scoped to this program. For example, `t₀` displays as `t`. -/
 def notConsumedElaborated : Elaborated Program :=
-  ⟨notConsumed, [(t₀, "t")]⟩
+  ⟨notConsumed, ⟨[(t₀, "t")]⟩⟩
 
-/-- Elaboration output for `copyTwice`; spellings are scoped to this program. -/
+example : namesBound notConsumedElaborated.names (bodyLocals notConsumedElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `copyTwice`; spellings are scoped to this program. For example, `p₄` displays as `p`. -/
 def copyTwiceElaborated : Elaborated Program :=
-  ⟨copyTwice, [(p₄, "p"), (q₅, "q")]⟩
+  ⟨copyTwice, ⟨[(p₄, "p"), (q₅, "q")]⟩⟩
 
-/-- Elaboration output for `unusedBinding`; spellings are scoped to this program. -/
+example : namesBound copyTwiceElaborated.names (bodyLocals copyTwiceElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `unusedBinding`; spellings are scoped to this program. For example, `x₀` displays as `x`. -/
 def unusedBindingElaborated : Elaborated Program :=
-  ⟨unusedBinding, [(x₀, "x")]⟩
+  ⟨unusedBinding, ⟨[(x₀, "x")]⟩⟩
 
-/-- Elaboration output for `destructureAdd`; spellings are scoped to this program. -/
+example : namesBound unusedBindingElaborated.names (bodyLocals unusedBindingElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `destructureAdd`; spellings are scoped to this program. For example, `p₄` displays as `p`. -/
 def destructureAddElaborated : Elaborated Program :=
-  ⟨destructureAdd, [(p₄, "p"), (x₁, "x"), (y₆, "y"), (s₂, "s")]⟩
+  ⟨destructureAdd, ⟨[(p₄, "p"), (x₁, "x"), (y₆, "y"), (s₂, "s")]⟩⟩
 
-/-- Elaboration output for `missingField`; spellings are scoped to this program. -/
+example : namesBound destructureAddElaborated.names (bodyLocals destructureAddElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `missingField`; spellings are scoped to this program. For example, `p₄` displays as `p`. -/
 def missingFieldElaborated : Elaborated Program :=
-  ⟨missingField, [(p₄, "p"), (x₁, "x")]⟩
+  ⟨missingField, ⟨[(p₄, "p"), (x₁, "x")]⟩⟩
 
-/-- Elaboration output for `wildcardField`; spellings are scoped to this program. -/
+example : namesBound missingFieldElaborated.names (bodyLocals missingFieldElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `wildcardField`; spellings are scoped to this program. For example, `p₄` displays as `p`. -/
 def wildcardFieldElaborated : Elaborated Program :=
-  ⟨wildcardField, [(p₄, "p"), (x₁, "x")]⟩
+  ⟨wildcardField, ⟨[(p₄, "p"), (x₁, "x")]⟩⟩
 
-/-- Elaboration output for `overflowTrap`; spellings are scoped to this program. -/
+example : namesBound wildcardFieldElaborated.names (bodyLocals wildcardFieldElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `overflowTrap`; spellings are scoped to this program. For example, `a₀` displays as `a`. -/
 def overflowTrapElaborated : Elaborated Program :=
-  ⟨overflowTrap, [(a₀, "a"), (b₁, "b"), (s₂, "s")]⟩
+  ⟨overflowTrap, ⟨[(a₀, "a"), (b₁, "b"), (s₂, "s")]⟩⟩
 
-/-- Elaboration output for `overflowDropped`; spellings are scoped to this program. -/
+example : namesBound overflowTrapElaborated.names (bodyLocals overflowTrapElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `overflowDropped`; spellings are scoped to this program. For example, this table has no named locals. -/
 def overflowDroppedElaborated : Elaborated Program :=
-  ⟨overflowDropped, []⟩
+  ⟨overflowDropped, ⟨[]⟩⟩
 
-/-- Elaboration output for `fieldOverflowTrap`; spellings are scoped to this program. -/
+example : namesBound overflowDroppedElaborated.names (bodyLocals overflowDroppedElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `fieldOverflowTrap`; spellings are scoped to this program. For example, `p₄` displays as `p`. -/
 def fieldOverflowTrapElaborated : Elaborated Program :=
-  ⟨fieldOverflowTrap, [(p₄, "p"), (x₁, "x"), (y₆, "y"), (s₂, "s")]⟩
+  ⟨fieldOverflowTrap, ⟨[(p₄, "p"), (x₁, "x"), (y₆, "y"), (s₂, "s")]⟩⟩
 
-/-- Elaboration output for `fieldOverflowMoved`; spellings are scoped to this program. -/
+example : namesBound fieldOverflowTrapElaborated.names (bodyLocals fieldOverflowTrapElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `fieldOverflowMoved`; spellings are scoped to this program. For example, `p₄` displays as `p`. -/
 def fieldOverflowMovedElaborated : Elaborated Program :=
-  ⟨fieldOverflowMoved, [(p₄, "p"), (q₅, "q"), (x₁, "x"), (y₆, "y"), (s₂, "s")]⟩
+  ⟨fieldOverflowMoved, ⟨[(p₄, "p"), (q₅, "q"), (x₁, "x"), (y₆, "y"), (s₂, "s")]⟩⟩
 
-/-- Elaboration output for `fieldSumFits`; spellings are scoped to this program. -/
+example : namesBound fieldOverflowMovedElaborated.names (bodyLocals fieldOverflowMovedElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `fieldSumFits`; spellings are scoped to this program. For example, `p₄` displays as `p`. -/
 def fieldSumFitsElaborated : Elaborated Program :=
-  ⟨fieldSumFits, [(p₄, "p"), (x₁, "x"), (y₆, "y"), (s₂, "s")]⟩
+  ⟨fieldSumFits, ⟨[(p₄, "p"), (x₁, "x"), (y₆, "y"), (s₂, "s")]⟩⟩
 
-/-- Elaboration output for `literalTooBig`; spellings are scoped to this program. -/
+example : namesBound fieldSumFitsElaborated.names (bodyLocals fieldSumFitsElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `literalTooBig`; spellings are scoped to this program. For example, `a₀` displays as `a`. -/
 def literalTooBigElaborated : Elaborated Program :=
-  ⟨literalTooBig, [(a₀, "a")]⟩
+  ⟨literalTooBig, ⟨[(a₀, "a")]⟩⟩
 
-/-- Elaboration output for `mixedAdd`; spellings are scoped to this program. -/
+example : namesBound literalTooBigElaborated.names (bodyLocals literalTooBigElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `mixedAdd`; spellings are scoped to this program. For example, `a₀` displays as `a`. -/
 def mixedAddElaborated : Elaborated Program :=
-  ⟨mixedAdd, [(a₀, "a"), (b₁, "b"), (s₂, "s")]⟩
+  ⟨mixedAdd, ⟨[(a₀, "a"), (b₁, "b"), (s₂, "s")]⟩⟩
 
-/-- Elaboration output for `rebind`; spellings are scoped to this program. -/
+example : namesBound mixedAddElaborated.names (bodyLocals mixedAddElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `rebind`; spellings are scoped to this program. For example, `x₀` displays as `x`. -/
 def rebindElaborated : Elaborated Program :=
-  ⟨rebind, [(x₀, "x")]⟩
+  ⟨rebind, ⟨[(x₀, "x")]⟩⟩
 
-/-- Elaboration output for `wildCopy`; spellings are scoped to this program. -/
+example : namesBound rebindElaborated.names (bodyLocals rebindElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `wildCopy`; spellings are scoped to this program. For example, this table has no named locals. -/
 def wildCopyElaborated : Elaborated Program :=
-  ⟨wildCopy, []⟩
+  ⟨wildCopy, ⟨[]⟩⟩
 
-/-- Elaboration output for `wildLinear`; spellings are scoped to this program. -/
+example : namesBound wildCopyElaborated.names (bodyLocals wildCopyElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `wildLinear`; spellings are scoped to this program. For example, this table has no named locals. -/
 def wildLinearElaborated : Elaborated Program :=
-  ⟨wildLinear, []⟩
+  ⟨wildLinear, ⟨[]⟩⟩
 
-/-- Elaboration output for `wrongReturnType`; spellings are scoped to this program. -/
+example : namesBound wildLinearElaborated.names (bodyLocals wildLinearElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `wrongReturnType`; spellings are scoped to this program. For example, this table has no named locals. -/
 def wrongReturnTypeElaborated : Elaborated Program :=
-  ⟨wrongReturnType, []⟩
+  ⟨wrongReturnType, ⟨[]⟩⟩
 
-/-- Elaboration output for the `add100` function body, including its input and result. -/
+example : namesBound wrongReturnTypeElaborated.names (bodyLocals wrongReturnTypeElaborated.code.body) = true := by decide
+
+/-- Elaboration output for the `add100` function body, including its input and result. For example, `x₀` displays as `x`. -/
 def add100Elaborated : Elaborated (Ctx × List Stmt × Atom) :=
-  ⟨(inputCtx, add100, .copy s₂), [(x₀, "x"), (s₂, "s")]⟩
+  ⟨(inputCtx, add100, .copy s₂), ⟨[(x₀, "x"), (s₂, "s")]⟩⟩
 
-/-- Elaboration output for the `add0` function body. -/
+example : namesBound add100Elaborated.names (List.map Prod.fst add100Elaborated.code.1 ++ bodyLocals add100Elaborated.code.2.1) = true := by decide
+
+/-- Elaboration output for the `add0` function body. For example, `x₀` displays as `x`. -/
 def add0Elaborated : Elaborated (Ctx × List Stmt × Atom) :=
-  ⟨(inputCtx, add0, .copy s₂), [(x₀, "x"), (s₂, "s")]⟩
+  ⟨(inputCtx, add0, .copy s₂), ⟨[(x₀, "x"), (s₂, "s")]⟩⟩
 
-/-- In this function the locals numbered 1 and 6 spell `c` and `d`, as in its surface example. -/
+example : namesBound add0Elaborated.names (List.map Prod.fst add0Elaborated.code.1 ++ bodyLocals add0Elaborated.code.2.1) = true := by decide
+
+/-- In this function the locals numbered 1 and 6 spell `c` and `d`, as in its surface example. For example, `x₀` displays as `x`. -/
 def partialKnownRefusedElaborated : Elaborated (Ctx × List Stmt × Atom) :=
   ⟨(inputCtx, partialKnownRefused, .copy z₃),
-    [(x₀, "x"), (p₄, "p"), (x₁, "c"), (y₆, "d"), (s₂, "s"), (z₃, "z")]⟩
+    ⟨[(x₀, "x"), (p₄, "p"), (x₁, "c"), (y₆, "d"), (s₂, "s"), (z₃, "z")]⟩⟩
 
-/-- The same function-scoped spellings for the second partial-facts example. -/
+example : namesBound partialKnownRefusedElaborated.names (List.map Prod.fst partialKnownRefusedElaborated.code.1 ++ bodyLocals partialKnownRefusedElaborated.code.2.1) = true := by decide
+
+/-- The same function-scoped spellings for the second partial-facts example. For example, `x₀` displays as `x`. -/
 def partialUnknownRefusedElaborated : Elaborated (Ctx × List Stmt × Atom) :=
   ⟨(inputCtx, partialUnknownRefused, .copy s₂),
-    [(x₀, "x"), (p₄, "p"), (x₁, "c"), (y₆, "d"), (s₂, "s")]⟩
+    ⟨[(x₀, "x"), (p₄, "p"), (x₁, "c"), (y₆, "d"), (s₂, "s")]⟩⟩
+
+example : namesBound partialUnknownRefusedElaborated.names (List.map Prod.fst partialUnknownRefusedElaborated.code.1 ++ bodyLocals partialUnknownRefusedElaborated.code.2.1) = true := by decide
+
+/-- A stale table naming unbound local 999 is refused, even for a valid program. -/
+example : namesBound ⟨[(⟨999⟩, "stale")]⟩ (bodyLocals moveThenConsume.body) = false := by decide
 
 end ConcreteSpec.Examples

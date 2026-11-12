@@ -9,4 +9,5 @@ import ConcreteSpec.Proofs.Surface0
 import ConcreteSpec.Proofs.Rep
 import ConcreteSpec.Proofs.Borrow
 
+import ConcreteSpec.Diagnostics
 import ConcreteSpec.Proofs.LocalIdentity

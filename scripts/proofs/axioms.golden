@@ -710,27 +710,12 @@ ConcreteSpec.IntTy.u16.sizeOf_spec
 ConcreteSpec.IntTy.u32.sizeOf_spec	
 ConcreteSpec.IntTy.u64.sizeOf_spec	
 ConcreteSpec.IntTy.u8.sizeOf_spec	
-ConcreteSpec.LocalIdentity.borrowAssign_names	propext
-ConcreteSpec.LocalIdentity.borrowExecute_names	propext
-ConcreteSpec.LocalIdentity.borrowMove_names	
-ConcreteSpec.LocalIdentity.borrowRead_names	
-ConcreteSpec.LocalIdentity.borrowRestore_names	
-ConcreteSpec.LocalIdentity.borrowRun_names	propext
-ConcreteSpec.LocalIdentity.borrowScope_names	propext
-ConcreteSpec.LocalIdentity.borrowWrite_names	
-ConcreteSpec.LocalIdentity.brandCheck_names	
-ConcreteSpec.LocalIdentity.brandErased_names	propext
-ConcreteSpec.LocalIdentity.brandFree_names	propext
-ConcreteSpec.LocalIdentity.brandGhost_names	propext
-ConcreteSpec.LocalIdentity.brandRelease_names	propext
-ConcreteSpec.LocalIdentity.brandReset_names	propext
-ConcreteSpec.LocalIdentity.brandUse_names	propext
-ConcreteSpec.LocalIdentity.drop_names	propext
+ConcreteSpec.LocalIdentity.distinct_numbers	
 ConcreteSpec.LocalIdentity.first_binding	
 ConcreteSpec.LocalIdentity.numeric_identity	
-ConcreteSpec.LocalIdentity.read_names	
-ConcreteSpec.LocalIdentity.sliceRun_names	propext
-ConcreteSpec.LocalIdentity.statement_names	propext
+ConcreteSpec.LocalNames.mk.inj	
+ConcreteSpec.LocalNames.mk.injEq	propext
+ConcreteSpec.LocalNames.mk.sizeOf_spec	
 ConcreteSpec.Observe.Observation.exited.inj	
 ConcreteSpec.Observe.Observation.exited.injEq	propext
 ConcreteSpec.Observe.Observation.exited.sizeOf_spec	

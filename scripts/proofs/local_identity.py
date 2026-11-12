@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
-"""Kernel-checked negative controls for each name-independence law, in private copies.
+"""Structural name-independence and numeric/lookup controls, in private copies.
 
-Every mutation adds an actual dependency on the owning diagnostics table to one dispatch.
-It must build, then the corresponding unchanged theorem must fail in its proof (not its header).
-No tracked source or build artifact is overwritten. The environment scan also plants both direct
-and aliased semantic references, and checks Var's constructor rather than its printed spelling.
+The load-bearing environment scan rejects spelling tables in semantic interfaces.
+Controls compile successfully before requiring the scan to reject each form.
 """
 from pathlib import Path
 import os
-import re
 import shutil
 import subprocess
 import tempfile
@@ -31,53 +28,7 @@ def main():
                  'ConcreteSpec']), 'semantic environment scan')
     path = run(['lake', 'env', 'printenv', 'LEAN_PATH'])
     require(path, 'Lean search path')
-    boundary = (ROOT / 'ConcreteSpec/Diagnostics.lean').read_text()
     laws = (ROOT / 'ConcreteSpec/Proofs/LocalIdentity.lean').read_text()
-    definitions = list(re.finditer(r'^def (\w+) .*? :=\n  (.*)$', boundary, re.M))
-    statements = dict((m[1], m[0]) for m in re.finditer(
-        r'^theorem (\w+_names)\b.*?(?=\n\n)', laws, re.M | re.S))
-    required = {
-        'read', 'statement', 'drop', 'sliceRun',
-        'borrowRead', 'borrowWrite', 'borrowMove', 'borrowRestore', 'borrowRun',
-        'borrowAssign', 'borrowScope', 'borrowExecute',
-        'brandUse', 'brandFree', 'brandRelease', 'brandReset', 'brandGhost',
-        'brandErased', 'brandCheck',
-    }
-    missing = required - {m[1] for m in definitions}
-    if missing:
-        raise SystemExit('missing operation laws/controls: ' + ', '.join(sorted(missing)))
-    expected = {m[1] + '_names' for m in definitions}
-    if expected != statements.keys():
-        raise SystemExit('dispatches and law controls do not correspond exactly')
-    # Concrete counterexamples prove the mutants invalidate the laws, not merely their old proofs.
-    slot = '[(⟨0⟩, .val (.scalar (.bool true)))]'
-    place = '[(⟨0⟩, { root := ⟨0⟩, mutable := true, owner := true, lock := .free })]'
-    memory = '([(⟨0⟩, [7])], [])'
-    state = '{ env := [(⟨1⟩, .heapV 0), (⟨0⟩, .allocV 0)], next := 1, gen := [0] }'
-    alloc = '{ env := [(⟨0⟩, .allocV 0)], next := 1, gen := [0] }'
-    witnesses = {
-        'read': (slot, 'read [] STATE ⟨0⟩ false', None),
-        'statement': ('[]', 'statement [] STATE ⟨0⟩ (.scalar .bool) (.atom (.bool true))', None),
-        'drop': (slot, 'drop [] STATE ⟨0⟩ (.scalar .bool)', None),
-        'sliceRun': ('[]', 'sliceRun STATE [] 1 [] (.int .u8 0)', None),
-        'borrowRead': (place, 'borrowRead STATE ⟨0⟩ '+place, '.read rfl (by decide) .nil'),
-        'borrowWrite': (place, 'borrowWrite STATE ⟨0⟩ '+place, '.write rfl rfl rfl .nil'),
-        'borrowMove': (place, 'borrowMove STATE ⟨0⟩ []', '.move rfl rfl rfl .nil'),
-        'borrowRestore': (place, 'borrowRestore STATE '+place, None),
-        'borrowRun': (memory, 'borrowRun STATE ⟨0⟩ 2 []', None),
-        'borrowAssign': (memory, 'borrowAssign STATE ⟨0⟩ 2 0 8', None),
-        'borrowScope': (memory, 'borrowScope STATE ⟨0⟩ 3 false ⟨1⟩ 0 1 []', None),
-        'borrowExecute': (memory, 'borrowExecute STATE 1 []', None),
-        'brandUse': (state, 'brandUse STATE ⟨1⟩ (fun _ => false) 2 ⟨0⟩', None),
-        'brandFree': (state, 'brandFree STATE ⟨1⟩ (fun _ => false) 2 ⟨0⟩', None),
-        'brandRelease': (alloc, 'brandRelease STATE ⟨0⟩ (fun _ => false) 2', None),
-        'brandReset': (alloc, 'brandReset STATE ⟨0⟩ (fun _ => false) 2 ⟨1⟩ 0', None),
-        'brandGhost': ('Brand.State.init', 'brandGhost STATE (fun _ => false) 1 0 []', None),
-        'brandErased': ('[]', 'brandErased STATE (fun _ => false) 1 0 []', None),
-        'brandCheck': ('[]', 'brandCheck STATE [] [] []', '.nil'),
-    }
-    if witnesses.keys() != {m[1] for m in definitions}:
-        raise SystemExit('each operation law needs a concrete mutant counterexample')
     with tempfile.TemporaryDirectory(prefix='local-identity-') as tmp:
         stage = Path(tmp)
         shutil.copytree(ROOT / ".lake/build/lib/lean/ConcreteSpec", stage / "ConcreteSpec")
@@ -90,37 +41,10 @@ def main():
             return run(['lean', '-DwarningAsError=true', '-DautoImplicit=false',
                         '-R', tmp, '-o', str(file.with_suffix('.olean')), str(file)], env=env)
 
-        # Compile each unchanged law alone first, ruling out a malformed control or missing import.
         header = laws[:laws.index('/-- Numeric identity')]
         numeric = laws[laws.index('/-- Numeric identity'):laws.index('/-- The first binding')]
-        for match in definitions:
-            name, body = match[1], match[2]
-            theorem = statements[name + '_names']
-            test = header + numeric + theorem + '\nend ConcreteSpec.LocalIdentity\n'
-            require(compile_file('ConcreteSpec.Diagnostics', boundary), 'boundary baseline')
-            require(compile_file('LawControl', test), name + ' positive control')
-            # Both branches are well-typed and executable; only the table distinguishes them.
-            # Prop-valued checks are refused; data results get an operation-specific stuck/empty.
-            fallback = ('False' if ' : Prop :=' in match[0] else
-                        '[]' if name == 'borrowRestore' else '.stuck' if name.startswith(('borrow', 'brand'))
-                        else '.stuck .unbound')
-            replacement = f'if s.names.isEmpty then {body} else {fallback}'
-            mutant = boundary[:match.start(2)] + replacement + boundary[match.end(2):]
-            require(compile_file('ConcreteSpec.Diagnostics', mutant), name + ' mutant builds')
-            semantic, call, accepted = witnesses[name]
-            left = call.replace('STATE', '⟨'+semantic+', []⟩')
-            right = call.replace('STATE', '⟨'+semantic+', [(⟨0⟩, "renamed")]⟩')
-            proof = ('intro h; have hok : '+left+' := '+accepted+'; exact Eq.mp h hok'
-                     if accepted else 'intro h; cases h')
-            witness = header + 'example : '+left+' ≠ '+right+' := by\n  '+proof+'\nend ConcreteSpec.LocalIdentity\n'
-            require(compile_file('Counterexample', witness), name + ' mutant violates law')
-            result = compile_file('LawControl', test)
-            proof_line = test[:test.index(':= by', test.index('theorem '+name+'_names'))].count('\n') + 1
-            errors = re.findall(r'LawControl.lean:(\d+):\d+: error:', result.stdout + result.stderr)
-            if not result.returncode or not any(int(line) >= proof_line for line in errors):
-                raise SystemExit(f'{name}: unchanged law did not reject the name-dependent dispatch\n'
-                                 + result.stdout + result.stderr)
-            print(f'control: {name}_names rejects diagnostics-dependent implementation')
+        require(compile_file('NumericControl', header + numeric + '\nend ConcreteSpec.LocalIdentity\n'),
+                'numeric identity baseline')
         # A field carrying a spelling breaks numeric identity, even when all operations compile.
         mutant = header + '''structure NamedVar where
   id : Nat
@@ -147,15 +71,50 @@ def main():
         if not result.returncode or 'error:' not in result.stdout:
             raise SystemExit('first_binding accepted tail-first lookup')
         print('control: first_binding rejects tail-first implementation')
-        require(compile_file('ConcreteSpec.Diagnostics', boundary), 'restore staged boundary')
-        for declaration in ['def leak : ConcreteSpec.LocalNames := []',
-                            'abbrev Hidden := ConcreteSpec.LocalNames\ndef leak : Hidden := []']:
-            require(compile_file('ConcreteSpec.Spec.NameLeak', 'import ConcreteSpec.Spec.Basics\n' + declaration), 'semantic leak builds')
+        require(compile_file('TableShapeControl', 'namespace ConcreteSpec\nstructure Var where\n  id : Nat\nabbrev LocalNames := List (Var × String)\nend ConcreteSpec\n'), 'table alias mutant builds')
+        result = run(['lean', '--run', 'scripts/proofs/local_identity.lean', 'TableShapeControl'], env=env)
+        if not result.returncode or 'nominal structure' not in result.stderr:
+            raise SystemExit('nominal table scan accepted list alias')
+        print('control: spelling table must be nominal')
+        controls = {
+            'nominal': 'def leak : ConcreteSpec.LocalNames := ⟨[]⟩',
+            'nominal alias': 'abbrev Hidden := ConcreteSpec.LocalNames\ndef leak : Hidden := ⟨[]⟩',
+            'pair': 'def leak : ConcreteSpec.Var × String := (⟨0⟩, "x")',
+            'plain list': 'def leak : List (ConcreteSpec.Var × String) := [(⟨0⟩, "x")]',
+            'function': 'def leak : ConcreteSpec.Var → String := fun _ => "x"',
+            'function alias': 'abbrev Hidden := ConcreteSpec.Var → String\ndef leak : Hidden := fun _ => "x"',
+            'wrapped string': 'structure Text where\n  text : String\nstructure Hidden where\n  key : ConcreteSpec.Var\n  spelling : Text\ndef leak : Hidden := ⟨⟨0⟩, ⟨"x"⟩⟩',
+            'function field': 'structure Hidden where\n  display : ConcreteSpec.Var → String\ndef leak : Hidden := ⟨fun _ => "x"⟩',
+            'parameterized alias': 'abbrev Hidden (α : Type) := List (ConcreteSpec.Var × α)\ndef leak : Hidden String := []',
+            'generic record': 'structure Hidden (κ α : Type) where\n  key : κ\n  spelling : α\ndef leak : Hidden ConcreteSpec.Var String := ⟨⟨0⟩, "x"⟩',
+            'generic wrapper': 'structure Box (α : Type) where\n  value : α\nstructure Hidden where\n  key : ConcreteSpec.Var\n  spelling : Box String\ndef leak : Hidden := ⟨⟨0⟩, ⟨"x"⟩⟩',
+            'tuple payload': 'def leak : ConcreteSpec.Var × String × Nat := (⟨0⟩, "x", 1)',
+            'tuple key': 'def leak : (ConcreteSpec.Var × Nat) × String := ((⟨0⟩, 1), "x")',
+            'curried function': 'def leak : ConcreteSpec.Var → Nat → String := fun _ _ => "x"',
+            'pair alias': 'abbrev Hidden := List (ConcreteSpec.Var × String)\ndef leak : Hidden := []',
+            'structure': 'structure Hidden where\n  key : ConcreteSpec.Var\n  spelling : String\ndef leak : Hidden := ⟨⟨0⟩, "x"⟩',
+            'nested structure alias': 'structure Hidden where\n  entries : List (ConcreteSpec.Var × String)\nabbrev Alias := Hidden\ndef leak : Alias := ⟨[]⟩',
+        }
+        for label, declaration in controls.items():
+            require(compile_file('ConcreteSpec.Spec.NameLeak',
+                    'import ConcreteSpec.Diagnostics.Types\n' + declaration), label + ' builds')
             result = run(['lean', '--run', 'scripts/proofs/local_identity.lean',
                           'ConcreteSpec.Spec.NameLeak'], env=env)
             if not result.returncode or 'semantic diagnostics dependency:' not in result.stderr:
-                raise SystemExit('semantic dependency scan accepted a planted name-table reference\n' + result.stdout + result.stderr)
-            print('control: semantic scan rejects ' + ('aliased' if 'Hidden' in declaration else 'direct') + ' LocalNames dependency')
+                raise SystemExit(label + ': scan accepted spelling table\n' + result.stdout + result.stderr)
+            print('control: semantic scan rejects ' + label)
+        examples = (ROOT / 'ConcreteSpec/Spec/Examples.lean').read_text()
+        for label, declaration in {
+            'table': 'def unauthorized : ConcreteSpec.LocalNames := ⟨[]⟩',
+            'arbitrary payload': 'def unauthorized : ConcreteSpec.Elaborated (ConcreteSpec.Var → String) := ⟨(fun _ => "x"), ⟨[]⟩⟩',
+        }.items():
+            require(compile_file('ConcreteSpec.Spec.Examples', examples + '\n' + declaration),
+                    'Examples non-exempt ' + label + ' builds')
+            result = run(['lean', '--run', 'scripts/proofs/local_identity.lean',
+                          'ConcreteSpec.Spec.Examples'], env=env)
+            if not result.returncode or 'semantic diagnostics dependency: unauthorized' not in result.stderr:
+                raise SystemExit('Examples exemption accepted unauthorized ' + label)
+            print('control: Examples exemption rejects ' + label)
 
 
 if __name__ == '__main__':

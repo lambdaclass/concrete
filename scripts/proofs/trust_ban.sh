@@ -42,9 +42,10 @@ else
   no "direct proof imports or controls failed"
 fi
 
-# Identity and diagnostics are structural trust properties, with one mutation per law.
+# Identity and diagnostics are structural trust properties; the environment scan is load-bearing.
+# Compiling negative controls cover spelling-carrier forms and the numeric/lookup invariants.
 if python3 scripts/proofs/local_identity.py; then
-  ok "numeric local identity, semantic diagnostics separation and law mutation controls"
+  ok "numeric local identity, structural diagnostics separation and negative controls"
 else
   no "local identity or a negative control failed"
 fi

@@ -14,6 +14,10 @@ comment, followed by example programs: the surface program in a doc comment, its
 what the rules say about it: accepted (`check p = true`) with its outcome (`run p 10 = .exit 42`),
 or refused (`check p = false`). You can read it without reading any proof.
 
+[`Diagnostics/`](Diagnostics/) owns per-program spelling tables through `Elaborated`.
+Semantic operations consume code only; the required `local_identity` gate checks this boundary
+from elaborated types, including aliases and structural Var/String pairings.
+
 [`Proofs/`](Proofs/) says why the rules hang together. Read it only to check a claim.
 
 **The owner view.** `scripts/spec/lean_site.sh [OUT]` (after `lake build ConcreteSpec`) generates
@@ -33,7 +37,8 @@ archived prose specification [legacy/docs/spec](../legacy/docs/spec)).
 - Axioms: only Lean's standard `propext`, `Quot.sound` and `Classical.choice`. The evaluator
   `run`, the checker `check` and the other executable definitions use `propext` alone, so they
   stay executable and the examples are decided by running them; `Classical.choice` appears only
-  in proofs (`rep_roundtrip` through the core lemma `Nat.mod_mul`, and the range proofs).
+  in proofs (`rep_roundtrip` through the core lemma `Nat.mod_mul`, the range proofs,
+  and the generic `lookup_zip` proof).
 - These rules are checked in CI by [scripts/proofs](../scripts/proofs): the per-theorem axiom
   inventory against its golden list, the transitive ban on `sorry` and `native_decide`, a fresh
   kernel replay with `leanchecker`, and an independent re-check of the exported theorems by

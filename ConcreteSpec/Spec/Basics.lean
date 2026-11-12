@@ -4,9 +4,9 @@
 PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). Part of `ConcreteSpec.Spec`;
 see `ConcreteSpec/README.md`.
 
-`Var` and `LocalNames` have their only home here. A local is identified only by its number.
+`Var` has its only home here. A local is identified only by its number.
 Diagnostics tables belong to a particular elaborated program or function; no semantic definition
-takes or refers to `LocalNames`.
+takes or refers to the diagnostics spelling table.
 
 Every finite map in the specification (a context, an environment, a memory, a field list) is an
 association list: a list of key–value pairs, read from the front. This module is the one
@@ -74,12 +74,3 @@ example : map (· * 2) [(1, 10), (2, 20)] = [(1, 20), (2, 40)] := rfl
 end AList
 
 end ConcreteSpec.Core
-
-namespace ConcreteSpec
-
-/-- Source spellings for diagnostics only. For example, `[(⟨7⟩, "count")]` displays
-local 7 as `count`. This table belongs to one elaborated program or function, outside its semantic state. -/
-abbrev LocalNames := Core.AList Var String
-
-
-end ConcreteSpec
