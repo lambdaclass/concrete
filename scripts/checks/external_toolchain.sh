@@ -150,7 +150,11 @@ cat > "$TMP/bin/cargo" <<'CONTROL'
 set -eu
 [ "$(cat "$RUST_MEASUREMENT")" = "$PWD" ] || { echo 'CONTROL: Rust measured outside build directory' >&2; exit 96; }
 [ "${RUSTC:-}" = "$(command -v rustc)" ] || { echo 'CONTROL: keyed RUSTC missing' >&2; exit 96; }
-[ "${RUSTC_WRAPPER+x}${RUSTC_WORKSPACE_WRAPPER+x}" = '' ] || exit 96
+[ "${RUSTC_WRAPPER-unset}:${RUSTC_WORKSPACE_WRAPPER-unset}:${CARGO_BUILD_RUSTC_WRAPPER-unset}:${CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER-unset}" = ':::' ] || exit 96
+[ "${RUSTFLAGS+x}${CARGO_BUILD_RUSTFLAGS+x}" = '' ] || exit 96
+[ "${CARGO_ENCODED_RUSTFLAGS-unset}" = '' ] || exit 96
+[ "$CARGO_HOME" != "$AMBIENT_CARGO_HOME" ] && [ ! -f "$CARGO_HOME/config.toml" ] || exit 96
+[ -L "$CARGO_HOME/registry" ] || exit 96
 [ "$ELAN_HOME" = "$CALLER_ELAN_HOME" ] || { echo 'CONTROL: cargo home changed' >&2; exit 97; }
 if flock -n "$CONCRETE_EXT_TOOLS/.lock" true; then
   echo 'CONTROL: build lock missing' >&2; exit 99
@@ -167,7 +171,7 @@ cat > "$TMP/bin/rustc" <<'CONTROL'
 set -eu
 [ "$1" = -vV ]
 case "$PWD" in
-  "$CONCRETE_EXT_TOOLS"/nanoda-source.*) location=build ;;
+  "$CONCRETE_EXT_TOOLS"/nanoda-source.*|"$CONCRETE_EXT_TOOLS"/source-nanoda-*) location=build ;;
   *) location=wrong-directory ;;
 esac
 printf '%s\n' "$PWD" > "$RUST_MEASUREMENT"
@@ -202,6 +206,11 @@ export PATH="$TMP/bin:$PATH" DISPATCH_LOG="$TMP/dispatched" PHASE_LOG="$TMP/phas
 export CONCRETE_EXT_TOOLS="$TMP/tools" ELAN_HOME="$TMP/shared-elan"
 export RUST_MEASUREMENT="$TMP/rust-measurement"
 export RUSTC=/conflicting/rustc RUSTC_WRAPPER=/conflicting/wrapper RUSTC_WORKSPACE_WRAPPER=/conflicting/workspace-wrapper
+export CARGO_BUILD_RUSTC_WRAPPER=/conflicting/config-wrapper CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER=/conflicting/config-workspace-wrapper
+export RUSTFLAGS=conflicting CARGO_ENCODED_RUSTFLAGS=conflicting CARGO_BUILD_RUSTFLAGS=conflicting
+export CARGO_HOME="$TMP/cargo-home" AMBIENT_CARGO_HOME="$TMP/cargo-home"
+mkdir -p "$CARGO_HOME"
+printf '[build]\nrustc-wrapper = "/conflicting/config-wrapper"\nrustflags = ["conflicting"]\n' > "$CARGO_HOME/config.toml"
 export ELAN_TOOLCHAIN=deliberately-conflicting-ambient-toolchain LEAN_PATH=/conflicting/lean/path
 export CONCRETE_EXT_ELAN="$TMP/bin/elan" CALLER_ELAN_HOME="$ELAN_HOME"
 mkdir -p "$ELAN_HOME"
@@ -251,7 +260,10 @@ for phase in project population-theorems population-encoded exporter population-
 done
 printf 'lean4export\ncon-leche\nnanoda\n' > "$TMP/expected"
 cmp "$TMP/expected" "$DISPATCH_LOG"
+# Cache hits must succeed even when the nanoda upstream is unavailable.
+mv "$TMP/source" "$TMP/source-offline"
 run_driver 'PROOF-EXTERNAL:' 0
+mv "$TMP/source-offline" "$TMP/source"
 cmp "$TMP/expected" "$DISPATCH_LOG"
 # A different resolved elan path must produce distinct homes and Lake tool trees.
 cp "$TMP/bin/elan" "$TMP/bin/elan-other"
@@ -295,7 +307,7 @@ done
 cp "$TMP/builder" "$TMP/project/scripts/proofs/lake_tool.sh"
 # Measuring outside the build checkout must be refused by the directory-sensitive proxy control.
 sed 's/version=$(cd "$work" \&\& "$rustc" -vV)/version=$("$rustc" -vV)/' "$TMP/builder" > "$TMP/project/scripts/proofs/lake_tool.sh"
-run_driver 'CONTROL: Rust measured outside build directory'
+run_driver 'Rust measured outside build directory'
 cp "$TMP/builder" "$TMP/project/scripts/proofs/lake_tool.sh"
 # Removing explicit RUSTC must fail despite the conflicting caller environment.
 sed 's/RUSTC="$rustc" //' "$TMP/builder" > "$TMP/project/scripts/proofs/lake_tool.sh"
