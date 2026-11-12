@@ -167,6 +167,14 @@ def main():
                 require(result, label + ' accepted')
             print('control: external helper ' + label)
         controls = {
+            'lambda callback': 'def leak (vs : List ConcreteSpec.Var) : Nat := (vs.map (fun v => toString v.id)).length',
+            'let callback': 'def leak (vs : List ConcreteSpec.Var) : Nat := let render := fun (v : ConcreteSpec.Var) => toString v.id; (vs.map render).length',
+            'named local helper': 'def leak (vs : List ConcreteSpec.Var) : Nat := (vs.map render).length\nwhere render (v : ConcreteSpec.Var) : String := toString v.id',
+            'Option.map callback': 'def leak (v : Option ConcreteSpec.Var) : Nat := (v.map (fun x => toString x.id)).getD "" |>.length',
+            'Array.map callback': 'def leak (vs : Array ConcreteSpec.Var) : Nat := (vs.map (fun v => toString v.id)).size',
+            'match arm callback': 'def leak (vs : Option (List ConcreteSpec.Var)) : Nat := match vs with | none => 0 | some xs => (xs.map (fun v => toString v.id)).length',
+            'instance method callback': 'class Render (α : Type) where\n  render : α → String\ninstance : Render ConcreteSpec.Var where\n  render v := toString v.id\ndef leak (vs : List ConcreteSpec.Var) : Nat := (vs.map Render.render).length',
+            'structure projection callback': 'structure Renderer where\n  render : ConcreteSpec.Var → String\ndef leak (vs : List ConcreteSpec.Var) : Nat := (vs.map ((⟨fun v => toString v.id⟩ : Renderer).render)).length',
             'type constructor parameter': 'def leak (F : Type → Type) (v : F ConcreteSpec.Var) (_spelling : String) : F ConcreteSpec.Var := v',
             'type class constructor parameter': 'class Family where\n  Carrier : Type → Type\ndef leak [f : Family] (v : f.Carrier ConcreteSpec.Var) (_spelling : String) : f.Carrier ConcreteSpec.Var := v',
             'universe polymorphic constructor': 'universe u v\ndef leak (F : Type u → Type v) (x : F (ULift.{u} ConcreteSpec.Var)) (_spelling : String) : F (ULift.{u} ConcreteSpec.Var) := x',
@@ -216,7 +224,13 @@ def main():
                     'import ConcreteSpec.Diagnostics.Types\nimport ConcreteSpec.Spec.Slice1Syntax\n' + declaration), label + ' builds')
             result = run(['lean', '--run', 'scripts/proofs/local_identity.lean',
                           'ConcreteSpec.Spec.NameLeak'], env=env)
-            reject(result, label, 'semantic diagnostics dependency:')
+            callback_controls = {
+                'lambda callback', 'let callback', 'named local helper',
+                'Option.map callback', 'Array.map callback', 'match arm callback',
+                'instance method callback', 'structure projection callback',
+            }
+            reject(result, label, 'semantic diagnostics dependency: leak'
+                   if label in callback_controls else 'semantic diagnostics dependency:')
             if 'semantic definitions refer to LocalNames/Elaborated' not in result.stderr:
                 raise SystemExit(label + ': missing semantic scan rejection')
             print('control: semantic scan rejects ' + label)

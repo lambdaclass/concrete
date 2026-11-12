@@ -113,27 +113,32 @@ def paired (e : Expr) : StateRefT CarrierCache MetaM Bool := do
   let a ← carriers e
   return a.1 && a.2
 
--- Body-local pairings matter even when the exported result erases the pair.
--- Check each embedded type independently: unrelated numeric literals in a body
--- must not combine with a Var binder to invent a spelling interface.
-partial def bodyPaired (e : Expr) : StateRefT CarrierCache MetaM Bool := do
-  if ← isType e then return ← paired e
+-- Semantic rule: every subterm of every reachable declaration's elaborated
+-- type and value is checked using its complete inferred type. Type expressions
+-- are also checked as carriers themselves (their inferred type is merely Sort).
+-- Bindings are instantiated with fresh locals before descending, so inferType
+-- sees the actual dependent context. Applications include their function spine
+-- and instance/type arguments; projections include their receiver. No reduction
+-- precedes this walk, and no matcher, auxiliary or recursor is exempt.
+-- Soundness relative to carriers: any variable/spelling interface in the
+-- elaborated dependency closure occurs as a type expression or the type of a
+-- subterm. Exhaustive Expr descent checks that occurrence in its local context;
+-- closure traversal checks named helpers by the identical rule, and reverse
+-- reachability attributes their refusal to every semantic caller. Thus erasing
+-- an intermediate result or moving it into a callback/helper cannot hide it.
+partial def semanticPaired (e : Expr) : StateRefT CarrierCache MetaM Bool := do
+  if ← paired (← inferType e) then return true
+  if (← isType e) && (← paired e) then return true
   match e with
-  | .app .. =>
-    -- Type arguments alone may be split across a generic constructor application.
-    -- Its instantiated result exposes the actual pairing. Do not inspect partial
-    -- application spines as independent interfaces.
-    if ← paired (← inferType e) then return true
-    for arg in e.getAppArgs do
-      if ← bodyPaired arg then return true
-    return ← bodyPaired e.getAppFn
-  | .forallE _ domain body bi | .lam _ domain body bi =>
-    if ← paired domain then return true
-    withLocalDecl `parameter bi domain fun x => bodyPaired (body.instantiate1 x)
-  | .letE _ type value body _ =>
-    if (← paired type) || (← bodyPaired value) then return true
-    withLetDecl `parameter type value fun x => bodyPaired (body.instantiate1 x)
-  | .mdata _ body | .proj _ _ body => bodyPaired body
+  | .app f a =>
+    return (← semanticPaired f) || (← semanticPaired a)
+  | .forallE name domain body bi | .lam name domain body bi =>
+    if ← semanticPaired domain then return true
+    withLocalDecl name bi domain fun x => semanticPaired (body.instantiate1 x)
+  | .letE name type value body _ =>
+    if (← semanticPaired type) || (← semanticPaired value) then return true
+    withLetDecl name type value fun x => semanticPaired (body.instantiate1 x)
+  | .mdata _ body | .proj _ _ body => semanticPaired body
   | _ => return false
 
 -- The only presentation records in Examples are complete programs and function bodies.
@@ -201,9 +206,6 @@ def main (args : List String) : IO Unit := do
     let mut seeds := #[]
     for (n, ci) in env.constants.toList do
       if !reachable.contains n then continue
-      -- Lean-generated eliminators expose constructor fields as continuation arguments.
-      -- They are not user semantic interfaces; dependencies still propagate through them.
-      if isMatcherCore env n || isAuxRecursor env n || (ci matches .recInfo _) then continue
       -- Bound each declaration, rather than charging the entire imported
       -- environment against one declaration's default heartbeat allowance.
       let isPair ← Core.withCurrHeartbeats do
@@ -212,9 +214,9 @@ def main (args : List String) : IO Unit := do
             paired (mkAppN (mkConst n (ci.levelParams.map mkLevelParam)) params)
           else pure false
         let bodyPair ← match ci.value? with
-          | some value => bodyPaired value
+          | some value => semanticPaired value
           | none => pure false
-        return structurePair || (← paired ci.type) || bodyPair
+        return structurePair || (← semanticPaired ci.type) || bodyPair
       if isPair then seeds := seeds.push n
     return seeds
   let (seeds, _) ← ((inspect.run' {}).run' {}).toIO { fileName := "local_identity", fileMap := default } { env := env }
