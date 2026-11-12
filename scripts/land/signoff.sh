@@ -27,7 +27,7 @@
 #   request-agy: agy-request.txt <sha256>
 #   verdict-agy: agy.txt <sha256>
 # `record` builds the record, verifies it, and only then writes the ref locally; it pushes nothing
-# (push the ref to both remotes: the pre-push hook takes a refs/owner-signoff/* record in its
+# (push the ref to origin: the pre-push hook takes a refs/owner-signoff/* record in its
 # no-source-tree tier). Only the owner's recorded words go in a quote.
 #
 # THE CAP (R-0618) comes from the class of the member's diff against its base, classified by path,
@@ -140,7 +140,7 @@ verdict-$r: $r.txt $(sha256 < "$f")"
   out="$( check "$sha" "$commit" "$base" )" || { printf '%s\nsignoff: not recorded (nothing written)\n' "$out" >&2; exit 1; }
   git update-ref "$PREFIX/$sha" "$commit"
   echo "$out"
-  echo "signoff: recorded $PREFIX/$sha -> ${commit:0:10}; push it to both remotes"
+  echo "signoff: recorded $PREFIX/$sha -> ${commit:0:10}; push it to origin"
 }
 
 # check SHA RECORD BASE: judge the record commit RECORD as a sign-off of SHA (exit 1 with the reason)

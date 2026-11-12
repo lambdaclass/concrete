@@ -4,7 +4,7 @@
 
 2026-11-12 UTC. Checked HEAD: `08f9d88ce53cceca31216caf418315b8e3609735`.
 Writer changes are uncommitted for the harness; exact final-commit qualification remains the
-harness's responsibility. No pushes, review tools or review notes were made. ISS-0054 stays open.
+harness's responsibility. No pushes, review tools or review notes were made. ISS-0067 stays open.
 
 Reconciliation now covers authored declarations and standalone command progress units, with
 position-free command targets, disjoint replacing populations and same-piece snapshot ownership.
@@ -65,7 +65,7 @@ f7684e9b1bee94a4745418d0673f7b352307814e188d36405790d09110a35f9b  scripts/spec/t
 
 Round 7, 2026-11-12 UTC. Merged `origin/main` first, including F01. The checked HEAD is
 `6d19d4489e6474bfe3464a4b9fd91ec9cee2e246`; writer changes remain uncommitted for the harness.
-No push, review tool or review note was made. ISS-0054 remains open for independent review and
+No push, review tool or review note was made. ISS-0067 remains open for independent review and
 harness qualification of its final commit. The working-tree code bundle is hashed below.
 
 Command progress and BASE membership share one content-and-scope sequence matcher: file,

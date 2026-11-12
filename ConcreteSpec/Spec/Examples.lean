@@ -1,3 +1,4 @@
+import ConcreteSpec.Diagnostics.Types
 import ConcreteSpec.Spec.Slice1Checker
 import ConcreteSpec.Spec.Rep
 import ConcreteSpec.Spec.Observation
@@ -18,17 +19,17 @@ Each example gives the surface program in its doc comment, its Core syntax, and 
 specification says about it: accepted (`check p = true`) with an outcome (`run p 10 = …`), or
 refused (`check p = false`). By `check_iff` (`Proofs/Checker.lean`), `check p = true` is exactly
 the rule `Checked p`, and `bodyOkB … = true` is exactly `BodyOk …`. Locals are written with their
-source name and a number: `t₀` is `⟨"t", 0⟩`. A refused program may still have a `run` example:
+number alone: `t₀` is `⟨0⟩`; source spellings belong in `LocalNames`. A refused program may still have a `run` example:
 it shows what the refused code would do if it ran anyway. -/
 
 /-- `struct Token {}` — empty, not `Copy`, so linear (OWN-D1). -/
-def token : StructDecl := { name := "Token", copy := false, fields := [] }
+def token : StructDecl := { name := ⟨"Token"⟩, copy := false, fields := [] }
 
 /-- `struct Copy Unit0 {}` — empty and declared `Copy` (TYPE-14). -/
-def unit0 : StructDecl := { name := "Unit0", copy := true, fields := [] }
+def unit0 : StructDecl := { name := ⟨"Unit0"⟩, copy := true, fields := [] }
 
 /-- `struct Pair { a: u8, b: u8 }` — not `Copy`. -/
-def pair : StructDecl := { name := "Pair", copy := false, fields := [("a", .int .u8), ("b", .int .u8)] }
+def pair : StructDecl := { name := ⟨"Pair"⟩, copy := false, fields := [(⟨"a"⟩, .int .u8), (⟨"b"⟩, .int .u8)] }
 
 def decls : Decls := [token, unit0, pair]
 
@@ -40,27 +41,38 @@ def mv (x : Var) : Expr := .atom (.move x)
 
 def cp (x : Var) : Expr := .atom (.copy x)
 
-def t₀ : Var := ⟨"t", 0⟩
+/-- Local 0; for example, `⟨0⟩` denotes this numeric identity. -/
+def t₀ : Var := ⟨0⟩
 
-def u₁ : Var := ⟨"u", 1⟩
+/-- Local 1; for example, `⟨1⟩` denotes this numeric identity. -/
+def u₁ : Var := ⟨1⟩
 
-def p₀ : Var := ⟨"p", 0⟩
+/-- Local 4; for example, `⟨4⟩` denotes this numeric identity. -/
+def p₄ : Var := ⟨4⟩
 
-def q₁ : Var := ⟨"q", 1⟩
+/-- Local 5; for example, `⟨5⟩` denotes this numeric identity. -/
+def q₅ : Var := ⟨5⟩
 
-def x₀ : Var := ⟨"x", 0⟩
+/-- Local 0; for example, `⟨0⟩` denotes this numeric identity. -/
+def x₀ : Var := ⟨0⟩
 
-def x₁ : Var := ⟨"x", 1⟩
+/-- Local 1; for example, `⟨1⟩` denotes this numeric identity. -/
+def x₁ : Var := ⟨1⟩
 
-def y₁ : Var := ⟨"y", 1⟩
+/-- Local 6; for example, `⟨6⟩` denotes this numeric identity. -/
+def y₆ : Var := ⟨6⟩
 
-def a₀ : Var := ⟨"a", 0⟩
+/-- Local 0; for example, `⟨0⟩` denotes this numeric identity. -/
+def a₀ : Var := ⟨0⟩
 
-def b₁ : Var := ⟨"b", 1⟩
+/-- Local 1; for example, `⟨1⟩` denotes this numeric identity. -/
+def b₁ : Var := ⟨1⟩
 
-def s₂ : Var := ⟨"s", 2⟩
+/-- Local 2; for example, `⟨2⟩` denotes this numeric identity. -/
+def s₂ : Var := ⟨2⟩
 
-def z₃ : Var := ⟨"z", 3⟩
+/-- Local 3; for example, `⟨3⟩` denotes this numeric identity. -/
+def z₃ : Var := ⟨3⟩
 
 /-- The slice's central program: an empty linear struct is created, moved, and consumed by a
 destructuring `let` (OWN-1, OWN-2, PAT-5). It exits with 42.
@@ -73,9 +85,9 @@ fn main() -> u8 {
 }
 ``` -/
 def moveThenConsume : Program :=
-  { decls, body := [.let_ (.name t₀) (.struct "Token") (.mk "Token" []),
-                    .let_ (.name u₁) (.struct "Token") (mv t₀),
-                    .letStruct "Token" [] (mv u₁)],
+  { decls, body := [.let_ (.name t₀) (.struct ⟨"Token"⟩) (.mk ⟨"Token"⟩ []),
+                    .let_ (.name u₁) (.struct ⟨"Token"⟩) (mv t₀),
+                    .letStruct ⟨"Token"⟩ [] (mv u₁)],
     ret := .int .u8 42 }
 
 example : check moveThenConsume = true := by decide
@@ -93,10 +105,10 @@ fn main() -> u8 {
 }
 ``` -/
 def useAfterMove : Program :=
-  { decls, body := [.let_ (.name t₀) (.struct "Token") (.mk "Token" []),
-                    .let_ (.name u₁) (.struct "Token") (mv t₀),
-                    .letStruct "Token" [] (mv t₀),
-                    .letStruct "Token" [] (mv u₁)],
+  { decls, body := [.let_ (.name t₀) (.struct ⟨"Token"⟩) (.mk ⟨"Token"⟩ []),
+                    .let_ (.name u₁) (.struct ⟨"Token"⟩) (mv t₀),
+                    .letStruct ⟨"Token"⟩ [] (mv t₀),
+                    .letStruct ⟨"Token"⟩ [] (mv u₁)],
     ret := .int .u8 42 }
 
 example : check useAfterMove = false := by decide
@@ -108,8 +120,8 @@ example : run useAfterMove 10 = .stuck .movedRead := by decide
 /-- Refused: a linear value read with `copy` (Q9.1: a linear local is only moved). Run anyway, the
 read is in the wrong mode. -/
 def copyLinear : Program :=
-  { decls, body := [.let_ (.name t₀) (.struct "Token") (.mk "Token" []),
-                    .letStruct "Token" [] (cp t₀)],
+  { decls, body := [.let_ (.name t₀) (.struct ⟨"Token"⟩) (.mk ⟨"Token"⟩ []),
+                    .letStruct ⟨"Token"⟩ [] (cp t₀)],
     ret := .int .u8 42 }
 
 example : check copyLinear = false := by decide
@@ -134,7 +146,7 @@ fn main() -> u8 {
 }
 ``` -/
 def notConsumed : Program :=
-  { decls, body := [.let_ (.name t₀) (.struct "Token") (.mk "Token" [])], ret := .int .u8 42 }
+  { decls, body := [.let_ (.name t₀) (.struct ⟨"Token"⟩) (.mk ⟨"Token"⟩ [])], ret := .int .u8 42 }
 
 example : check notConsumed = false := by decide
 
@@ -149,10 +161,10 @@ fn main() -> u8 {
 }
 ``` -/
 def copyTwice : Program :=
-  { decls, body := [.let_ (.name p₀) (.struct "Unit0") (.mk "Unit0" []),
-                    .let_ (.name q₁) (.struct "Unit0") (cp p₀),
-                    .letStruct "Unit0" [] (cp p₀),
-                    .letStruct "Unit0" [] (cp q₁)],
+  { decls, body := [.let_ (.name p₄) (.struct ⟨"Unit0"⟩) (.mk ⟨"Unit0"⟩ []),
+                    .let_ (.name q₅) (.struct ⟨"Unit0"⟩) (cp p₄),
+                    .letStruct ⟨"Unit0"⟩ [] (cp p₄),
+                    .letStruct ⟨"Unit0"⟩ [] (cp q₅)],
     ret := .int .u8 0 }
 
 example : check copyTwice = true := by decide
@@ -182,9 +194,9 @@ fn main() -> u8 {
 }
 ``` -/
 def destructureAdd : Program :=
-  { decls, body := [.let_ (.name p₀) (.struct "Pair") (.mk "Pair" [("a", .int .u8 40), ("b", .int .u8 2)]),
-                    .letStruct "Pair" [("a", .name x₁), ("b", .name y₁)] (mv p₀),
-                    .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₁))],
+  { decls, body := [.let_ (.name p₄) (.struct ⟨"Pair"⟩) (.mk ⟨"Pair"⟩ [(⟨"a"⟩, .int .u8 40), (⟨"b"⟩, .int .u8 2)]),
+                    .letStruct ⟨"Pair"⟩ [(⟨"a"⟩, .name x₁), (⟨"b"⟩, .name y₆)] (mv p₄),
+                    .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₆))],
     ret := .copy s₂ }
 
 example : check destructureAdd = true := by decide
@@ -200,8 +212,8 @@ fn main() -> u8 {
 }
 ``` -/
 def missingField : Program :=
-  { decls, body := [.let_ (.name p₀) (.struct "Pair") (.mk "Pair" [("a", .int .u8 40), ("b", .int .u8 2)]),
-                    .letStruct "Pair" [("a", .name x₁)] (mv p₀)],
+  { decls, body := [.let_ (.name p₄) (.struct ⟨"Pair"⟩) (.mk ⟨"Pair"⟩ [(⟨"a"⟩, .int .u8 40), (⟨"b"⟩, .int .u8 2)]),
+                    .letStruct ⟨"Pair"⟩ [(⟨"a"⟩, .name x₁)] (mv p₄)],
     ret := .copy x₁ }
 
 example : check missingField = false := by decide
@@ -215,8 +227,8 @@ fn main() -> u8 {
 }
 ``` -/
 def wildcardField : Program :=
-  { decls, body := [.let_ (.name p₀) (.struct "Pair") (.mk "Pair" [("a", .int .u8 42), ("b", .int .u8 0)]),
-                    .letStruct "Pair" [("a", .name x₁), ("b", .wild)] (mv p₀)],
+  { decls, body := [.let_ (.name p₄) (.struct ⟨"Pair"⟩) (.mk ⟨"Pair"⟩ [(⟨"a"⟩, .int .u8 42), (⟨"b"⟩, .int .u8 0)]),
+                    .letStruct ⟨"Pair"⟩ [(⟨"a"⟩, .name x₁), (⟨"b"⟩, .wild)] (mv p₄)],
     ret := .copy x₁ }
 
 example : check wildcardField = true := by decide
@@ -268,9 +280,9 @@ fn main() -> u8 {
 }
 ``` -/
 def fieldOverflowTrap : Program :=
-  { decls, body := [.let_ (.name p₀) (.struct "Pair") (.mk "Pair" [("a", .int .u8 200), ("b", .int .u8 100)]),
-                    .letStruct "Pair" [("a", .name x₁), ("b", .name y₁)] (mv p₀),
-                    .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₁))],
+  { decls, body := [.let_ (.name p₄) (.struct ⟨"Pair"⟩) (.mk ⟨"Pair"⟩ [(⟨"a"⟩, .int .u8 200), (⟨"b"⟩, .int .u8 100)]),
+                    .letStruct ⟨"Pair"⟩ [(⟨"a"⟩, .name x₁), (⟨"b"⟩, .name y₆)] (mv p₄),
+                    .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₆))],
     ret := .copy s₂ }
 
 example : check fieldOverflowTrap = false := by decide
@@ -288,10 +300,10 @@ fn main() -> u8 {
 }
 ``` -/
 def fieldOverflowMoved : Program :=
-  { decls, body := [.let_ (.name p₀) (.struct "Pair") (.mk "Pair" [("a", .int .u8 200), ("b", .int .u8 100)]),
-                    .let_ (.name q₁) (.struct "Pair") (mv p₀),
-                    .letStruct "Pair" [("a", .name x₁), ("b", .name y₁)] (mv q₁),
-                    .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₁))],
+  { decls, body := [.let_ (.name p₄) (.struct ⟨"Pair"⟩) (.mk ⟨"Pair"⟩ [(⟨"a"⟩, .int .u8 200), (⟨"b"⟩, .int .u8 100)]),
+                    .let_ (.name q₅) (.struct ⟨"Pair"⟩) (mv p₄),
+                    .letStruct ⟨"Pair"⟩ [(⟨"a"⟩, .name x₁), (⟨"b"⟩, .name y₆)] (mv q₅),
+                    .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₆))],
     ret := .copy s₂ }
 
 example : check fieldOverflowMoved = false := by decide
@@ -301,9 +313,9 @@ example : run fieldOverflowMoved 10 = .trap .arithmeticOverflow := by decide
 /-- Accepted with the facts in range: the known sum fits, and the program exits with it. The
 known field values make no program with a fitting sum fail to check. -/
 def fieldSumFits : Program :=
-  { decls, body := [.let_ (.name p₀) (.struct "Pair") (.mk "Pair" [("a", .int .u8 200), ("b", .int .u8 55)]),
-                    .letStruct "Pair" [("a", .name x₁), ("b", .name y₁)] (mv p₀),
-                    .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₁))],
+  { decls, body := [.let_ (.name p₄) (.struct ⟨"Pair"⟩) (.mk ⟨"Pair"⟩ [(⟨"a"⟩, .int .u8 200), (⟨"b"⟩, .int .u8 55)]),
+                    .letStruct ⟨"Pair"⟩ [(⟨"a"⟩, .name x₁), (⟨"b"⟩, .name y₆)] (mv p₄),
+                    .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₆))],
     ret := .copy s₂ }
 
 example : check fieldSumFits = true := by decide
@@ -361,9 +373,9 @@ fn f(x: u8) -> u8 {
 }
 ``` -/
 def partialKnownRefused : List Stmt :=
-  [.let_ (.name p₀) (.struct "Pair") (.mk "Pair" [("a", .copy x₀), ("b", .int .u8 200)]),
-   .letStruct "Pair" [("a", .name x₁), ("b", .name y₁)] (mv p₀),
-   .let_ (.name s₂) u8 (.add (.copy y₁) (.int .u8 100)),
+  [.let_ (.name p₄) (.struct ⟨"Pair"⟩) (.mk ⟨"Pair"⟩ [(⟨"a"⟩, .copy x₀), (⟨"b"⟩, .int .u8 200)]),
+   .letStruct ⟨"Pair"⟩ [(⟨"a"⟩, .name x₁), (⟨"b"⟩, .name y₆)] (mv p₄),
+   .let_ (.name s₂) u8 (.add (.copy y₆) (.int .u8 100)),
    .let_ (.name z₃) u8 (.add (.copy x₁) (.copy s₂))]
 
 example : bodyOkB decls inputCtx partialKnownRefused (.copy z₃) = false := by decide
@@ -379,9 +391,9 @@ fn f(x: u8) -> u8 {
 }
 ``` -/
 def partialUnknownRefused : List Stmt :=
-  [.let_ (.name p₀) (.struct "Pair") (.mk "Pair" [("a", .copy x₀), ("b", .int .u8 200)]),
-   .letStruct "Pair" [("a", .name x₁), ("b", .name y₁)] (mv p₀),
-   .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₁))]
+  [.let_ (.name p₄) (.struct ⟨"Pair"⟩) (.mk ⟨"Pair"⟩ [(⟨"a"⟩, .copy x₀), (⟨"b"⟩, .int .u8 200)]),
+   .letStruct ⟨"Pair"⟩ [(⟨"a"⟩, .name x₁), (⟨"b"⟩, .name y₆)] (mv p₄),
+   .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₆))]
 
 example : bodyOkB decls inputCtx partialUnknownRefused (.copy s₂) = false := by decide
 
@@ -444,7 +456,7 @@ fn main() -> u8 {
 }
 ``` -/
 def wildLinear : Program :=
-  { decls, body := [.let_ .wild (.struct "Token") (.mk "Token" [])], ret := .int .u8 42 }
+  { decls, body := [.let_ .wild (.struct ⟨"Token"⟩) (.mk ⟨"Token"⟩ [])], ret := .int .u8 42 }
 
 example : check wildLinear = false := by decide
 
@@ -457,8 +469,8 @@ example : check wrongReturnType = false := by decide
 /-! ### Representation and observations of the examples -/
 
 /-- `Token` has no bytes, and decoding no bytes at type `Token` gives the empty struct (Part 2). -/
-example : Rep.encodeVal (.struct "Token" []) = [] ∧
-    Rep.decodeVal decls (.struct "Token") [] = some (.struct "Token" []) := by decide
+example : Rep.encodeVal (.struct ⟨"Token"⟩ []) = [] ∧
+    Rep.decodeVal decls (.struct ⟨"Token"⟩) [] = some (.struct ⟨"Token"⟩ []) := by decide
 
 /-- `moveThenConsume` exits with status 42 (Part 7). -/
 example : (Observe.observe true (run moveThenConsume 10)).map Observe.Observation.status = some 42 := by
@@ -472,5 +484,175 @@ example : Observe.observe true (runBody decls 10 (inputEnv 200) add100 (.copy s�
 /-- A missing configured grant: status 125, and `main` does not run. -/
 example : (Observe.observe false (run moveThenConsume 10)).map Observe.Observation.status =
     some 125 := by decide
+
+/-- The identities bound by a pattern; for example, `.name ⟨7⟩` binds local 7. -/
+def binderLocals : Binder → List Var
+  | .name x => [x]
+  | .wild => []
+
+/-- All statement binders, including destructuring; for example, a wildcard adds none. -/
+def bodyLocals (ss : List Stmt) : List Var := ss.flatMap fun st =>
+  match st with
+  | .let_ b _ _ => binderLocals b
+  | .letStruct _ pat _ => pat.flatMap fun (_, b) => binderLocals b
+
+/-- Every displayed number is bound in this program; for example, an empty table is valid. -/
+def namesBound (names : LocalNames) (bound : List Var) : Bool :=
+  names.entries.all fun (x, _) => bound.contains x
+
+/-- Elaboration output for `moveThenConsume`; spellings are scoped to this program. For example, `t₀` displays as `t`. -/
+def moveThenConsumeElaborated : Elaborated Program :=
+  ⟨moveThenConsume, ⟨[(t₀, "t"), (u₁, "u")]⟩⟩
+
+example : namesBound moveThenConsumeElaborated.names (bodyLocals moveThenConsumeElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `useAfterMove`; spellings are scoped to this program. For example, `t₀` displays as `t`. -/
+def useAfterMoveElaborated : Elaborated Program :=
+  ⟨useAfterMove, ⟨[(t₀, "t"), (u₁, "u")]⟩⟩
+
+example : namesBound useAfterMoveElaborated.names (bodyLocals useAfterMoveElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `copyLinear`; spellings are scoped to this program. For example, `t₀` displays as `t`. -/
+def copyLinearElaborated : Elaborated Program :=
+  ⟨copyLinear, ⟨[(t₀, "t")]⟩⟩
+
+example : namesBound copyLinearElaborated.names (bodyLocals copyLinearElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `moveCopy`; spellings are scoped to this program. For example, `x₀` displays as `x`. -/
+def moveCopyElaborated : Elaborated Program :=
+  ⟨moveCopy, ⟨[(x₀, "x")]⟩⟩
+
+example : namesBound moveCopyElaborated.names (bodyLocals moveCopyElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `notConsumed`; spellings are scoped to this program. For example, `t₀` displays as `t`. -/
+def notConsumedElaborated : Elaborated Program :=
+  ⟨notConsumed, ⟨[(t₀, "t")]⟩⟩
+
+example : namesBound notConsumedElaborated.names (bodyLocals notConsumedElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `copyTwice`; spellings are scoped to this program. For example, `p₄` displays as `p`. -/
+def copyTwiceElaborated : Elaborated Program :=
+  ⟨copyTwice, ⟨[(p₄, "p"), (q₅, "q")]⟩⟩
+
+example : namesBound copyTwiceElaborated.names (bodyLocals copyTwiceElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `unusedBinding`; spellings are scoped to this program. For example, `x₀` displays as `x`. -/
+def unusedBindingElaborated : Elaborated Program :=
+  ⟨unusedBinding, ⟨[(x₀, "x")]⟩⟩
+
+example : namesBound unusedBindingElaborated.names (bodyLocals unusedBindingElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `destructureAdd`; spellings are scoped to this program. For example, `p₄` displays as `p`. -/
+def destructureAddElaborated : Elaborated Program :=
+  ⟨destructureAdd, ⟨[(p₄, "p"), (x₁, "x"), (y₆, "y"), (s₂, "s")]⟩⟩
+
+example : namesBound destructureAddElaborated.names (bodyLocals destructureAddElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `missingField`; spellings are scoped to this program. For example, `p₄` displays as `p`. -/
+def missingFieldElaborated : Elaborated Program :=
+  ⟨missingField, ⟨[(p₄, "p"), (x₁, "x")]⟩⟩
+
+example : namesBound missingFieldElaborated.names (bodyLocals missingFieldElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `wildcardField`; spellings are scoped to this program. For example, `p₄` displays as `p`. -/
+def wildcardFieldElaborated : Elaborated Program :=
+  ⟨wildcardField, ⟨[(p₄, "p"), (x₁, "x")]⟩⟩
+
+example : namesBound wildcardFieldElaborated.names (bodyLocals wildcardFieldElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `overflowTrap`; spellings are scoped to this program. For example, `a₀` displays as `a`. -/
+def overflowTrapElaborated : Elaborated Program :=
+  ⟨overflowTrap, ⟨[(a₀, "a"), (b₁, "b"), (s₂, "s")]⟩⟩
+
+example : namesBound overflowTrapElaborated.names (bodyLocals overflowTrapElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `overflowDropped`; spellings are scoped to this program. For example, this table has no named locals. -/
+def overflowDroppedElaborated : Elaborated Program :=
+  ⟨overflowDropped, ⟨[]⟩⟩
+
+example : namesBound overflowDroppedElaborated.names (bodyLocals overflowDroppedElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `fieldOverflowTrap`; spellings are scoped to this program. For example, `p₄` displays as `p`. -/
+def fieldOverflowTrapElaborated : Elaborated Program :=
+  ⟨fieldOverflowTrap, ⟨[(p₄, "p"), (x₁, "x"), (y₆, "y"), (s₂, "s")]⟩⟩
+
+example : namesBound fieldOverflowTrapElaborated.names (bodyLocals fieldOverflowTrapElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `fieldOverflowMoved`; spellings are scoped to this program. For example, `p₄` displays as `p`. -/
+def fieldOverflowMovedElaborated : Elaborated Program :=
+  ⟨fieldOverflowMoved, ⟨[(p₄, "p"), (q₅, "q"), (x₁, "x"), (y₆, "y"), (s₂, "s")]⟩⟩
+
+example : namesBound fieldOverflowMovedElaborated.names (bodyLocals fieldOverflowMovedElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `fieldSumFits`; spellings are scoped to this program. For example, `p₄` displays as `p`. -/
+def fieldSumFitsElaborated : Elaborated Program :=
+  ⟨fieldSumFits, ⟨[(p₄, "p"), (x₁, "x"), (y₆, "y"), (s₂, "s")]⟩⟩
+
+example : namesBound fieldSumFitsElaborated.names (bodyLocals fieldSumFitsElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `literalTooBig`; spellings are scoped to this program. For example, `a₀` displays as `a`. -/
+def literalTooBigElaborated : Elaborated Program :=
+  ⟨literalTooBig, ⟨[(a₀, "a")]⟩⟩
+
+example : namesBound literalTooBigElaborated.names (bodyLocals literalTooBigElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `mixedAdd`; spellings are scoped to this program. For example, `a₀` displays as `a`. -/
+def mixedAddElaborated : Elaborated Program :=
+  ⟨mixedAdd, ⟨[(a₀, "a"), (b₁, "b"), (s₂, "s")]⟩⟩
+
+example : namesBound mixedAddElaborated.names (bodyLocals mixedAddElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `rebind`; spellings are scoped to this program. For example, `x₀` displays as `x`. -/
+def rebindElaborated : Elaborated Program :=
+  ⟨rebind, ⟨[(x₀, "x")]⟩⟩
+
+example : namesBound rebindElaborated.names (bodyLocals rebindElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `wildCopy`; spellings are scoped to this program. For example, this table has no named locals. -/
+def wildCopyElaborated : Elaborated Program :=
+  ⟨wildCopy, ⟨[]⟩⟩
+
+example : namesBound wildCopyElaborated.names (bodyLocals wildCopyElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `wildLinear`; spellings are scoped to this program. For example, this table has no named locals. -/
+def wildLinearElaborated : Elaborated Program :=
+  ⟨wildLinear, ⟨[]⟩⟩
+
+example : namesBound wildLinearElaborated.names (bodyLocals wildLinearElaborated.code.body) = true := by decide
+
+/-- Elaboration output for `wrongReturnType`; spellings are scoped to this program. For example, this table has no named locals. -/
+def wrongReturnTypeElaborated : Elaborated Program :=
+  ⟨wrongReturnType, ⟨[]⟩⟩
+
+example : namesBound wrongReturnTypeElaborated.names (bodyLocals wrongReturnTypeElaborated.code.body) = true := by decide
+
+/-- Elaboration output for the `add100` function body, including its input and result. For example, `x₀` displays as `x`. -/
+def add100Elaborated : Elaborated (Ctx × List Stmt × Atom) :=
+  ⟨(inputCtx, add100, .copy s₂), ⟨[(x₀, "x"), (s₂, "s")]⟩⟩
+
+example : namesBound add100Elaborated.names (List.map Prod.fst add100Elaborated.code.1 ++ bodyLocals add100Elaborated.code.2.1) = true := by decide
+
+/-- Elaboration output for the `add0` function body. For example, `x₀` displays as `x`. -/
+def add0Elaborated : Elaborated (Ctx × List Stmt × Atom) :=
+  ⟨(inputCtx, add0, .copy s₂), ⟨[(x₀, "x"), (s₂, "s")]⟩⟩
+
+example : namesBound add0Elaborated.names (List.map Prod.fst add0Elaborated.code.1 ++ bodyLocals add0Elaborated.code.2.1) = true := by decide
+
+/-- In this function the locals numbered 1 and 6 spell `c` and `d`, as in its surface example. For example, `x₀` displays as `x`. -/
+def partialKnownRefusedElaborated : Elaborated (Ctx × List Stmt × Atom) :=
+  ⟨(inputCtx, partialKnownRefused, .copy z₃),
+    ⟨[(x₀, "x"), (p₄, "p"), (x₁, "c"), (y₆, "d"), (s₂, "s"), (z₃, "z")]⟩⟩
+
+example : namesBound partialKnownRefusedElaborated.names (List.map Prod.fst partialKnownRefusedElaborated.code.1 ++ bodyLocals partialKnownRefusedElaborated.code.2.1) = true := by decide
+
+/-- The same function-scoped spellings for the second partial-facts example. For example, `x₀` displays as `x`. -/
+def partialUnknownRefusedElaborated : Elaborated (Ctx × List Stmt × Atom) :=
+  ⟨(inputCtx, partialUnknownRefused, .copy s₂),
+    ⟨[(x₀, "x"), (p₄, "p"), (x₁, "c"), (y₆, "d"), (s₂, "s")]⟩⟩
+
+example : namesBound partialUnknownRefusedElaborated.names (List.map Prod.fst partialUnknownRefusedElaborated.code.1 ++ bodyLocals partialUnknownRefusedElaborated.code.2.1) = true := by decide
+
+/-- A stale table naming unbound local 999 is refused, even for a valid program. -/
+example : namesBound ⟨[(⟨999⟩, "stale")]⟩ (bodyLocals moveThenConsume.body) = false := by decide
 
 end ConcreteSpec.Examples

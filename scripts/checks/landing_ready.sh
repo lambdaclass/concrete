@@ -53,6 +53,7 @@ export LAND_HOOK="$TMP/hook" LAND_REMOTE_RUNNER="$TMP/fake-runner" FAKE_GH_DIR="
 # (mark), so the leg passes on the members' provenance without calling the reviewer; a reviewer this
 # fails stands for one that is never needed.
 export LAND_REVIEW_CMD=false
+export LAND_TEST_RUN_AT_REF="$ROOT_DIR/scripts/land/run-at-ref.sh"
 
 cat > "$TMP/fake-gh" <<'GH'
 #!/usr/bin/env bash
@@ -86,22 +87,31 @@ cat > "$TMP/fake-runner" <<'EOF'
 #!/usr/bin/env bash
 # A remote runner: fetches like concrete-remote (a ref on origin, or a SHA) and reports the SHA.
 echo "$1" >> "$FAKE_GH_DIR/runner.log"
+if [ -n "${RUN_AT_REF_SOURCE:-}" ]; then
+  # The real receiver must import the candidate without any pre-existing history.
+  receiver="$(mktemp -d)" || exit 1
+  trap 'rm -rf "$receiver"' EXIT
+  git init -q "$receiver/repo" || exit 1
+  RUN_AT_REF_REPO="$receiver/repo" RUN_AT_REF_RUNS="$receiver/runs" RUN_AT_REF_NO_NIX=1 \
+    bash "$LAND_TEST_RUN_AT_REF" "$1" 'git cat-file -e HEAD^{commit}' || exit 1
+  printf '%s\n' "$RUN_AT_REF_SOURCE" > "$FAKE_GH_DIR/runner.bundle"
+  exit 0
+fi
 sha="$(git --git-dir="$ORIGIN_GIT" rev-parse --verify -q "refs/heads/$1" || git --git-dir="$ORIGIN_GIT" rev-parse --verify -q "$1^{commit}")" || { echo "no such ref $1"; exit 1; }
 echo "[concrete-remote] ref=$1 sha=$sha"
 EOF
 chmod +x "$TMP/fake-gh" "$TMP/hook" "$TMP/fake-runner"
 
-for r in origin lambdaclass fork; do git init -q --bare "$TMP/$r.git"; done
+git init -q --bare "$TMP/origin.git"
 A="$TMP/agent"; W="$TMP/lander"
 git init -q "$A"; cd "$A" || exit 2
-for r in origin lambdaclass fork; do git remote add "$r" "$TMP/$r.git"; done
+git remote add origin "$TMP/origin.git"
 mkdir -p src
 printf 'Build\n' > required-checks.txt  # train.sh refuses a landing with no required-checks.txt
 git add -A && git commit -qm base
-for r in origin lambdaclass fork; do git push -q "$r" main; done
+git push -q origin main
 BASE="$(git rev-parse HEAD)"
 git clone -q "$TMP/origin.git" "$W"
-( cd "$W" && git remote add lambdaclass "$TMP/lambdaclass.git" && git remote add fork "$TMP/fork.git" )
 
 # mk <branch> <commit-message> <file> <content> [from]: one commit on <from> (default main), pushed.
 mk(){ ( cd "$A" && git fetch -q origin && git checkout -q -B "$1" "${5:-origin/main}" && mkdir -p "$(dirname "$3")" \
@@ -135,6 +145,13 @@ case "$rl" in wip/land-collide) fresh="" ;; wip/land-*) fresh="$rl" ;; *) fresh=
   && ok "the remote runner ran once, on the run's own fresh ref ($fresh), which is deleted afterwards" \
   || no "remote runner invocations: '$rl'"
 git --git-dir="$TMP/origin.git" update-ref -d refs/heads/wip/land-collide
+# Server-local runs must carry the candidate as a bundle, without publishing a ref.
+out="$(cd "$W" && LAND_REMOTE_PUSH=0 bash "$ROOT_DIR/scripts/land/train.sh" check cx-t --no-review 2>&1)"; rc=$?
+bundle_path="$(cat "$TMP/gh/runner.bundle" 2>/dev/null)"
+[ "$rc" = 0 ] && [ -n "$bundle_path" ] && [ ! -e "$bundle_path" ] \
+  && [ -z "$(git -C "$W" for-each-ref refs/land-bundle/)" ] && [ -z "$(land_refs)" ] \
+  && ok "server-local runner imports the bundle through run-at-ref in an empty repository; temporary refs and files are removed and nothing is published" \
+  || { no "server-local bundle: exit $rc"; echo "$out"; }
 ( cd "$W" && git checkout -q --detach origin/main )
 
 echo "=== ready.sh: legs in parallel; any failed leg (the review included) publishes gates: fail ==="

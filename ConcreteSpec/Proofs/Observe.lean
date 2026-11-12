@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.Basics
 import ConcreteSpec.Proofs.Slice1
 import ConcreteSpec.Spec.Observation
 import ConcreteSpec.Spec.Slice1Ownership

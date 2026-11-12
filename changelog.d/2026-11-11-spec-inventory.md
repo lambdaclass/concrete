@@ -7,7 +7,7 @@ Use shallow protected input tag fetches, peeling annotated tags. Check law/contr
 current rows, preserve owner holds, and check complete command/declaration relocation provenance
 in read mode against Lean-resolved law/control pairs. Exclude generated constants from progress,
 measure anonymous examples, and refuse retargeted local annotated/lightweight pins. Report every relocation and plan scope delta for coordinator reconciliation.
-ISS-0054 remains open pending independent review.
+ISS-0067 remains open pending independent review.
 Round 7 makes command progress independent of line shifts using the BASE sequence matcher,
 measures F01 exact import headers, implements reviewed replacement records, and replaces
 free-text relocation justifications with checked cause kinds and negative controls.

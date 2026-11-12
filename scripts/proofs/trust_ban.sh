@@ -42,6 +42,14 @@ else
   no "direct proof imports or controls failed"
 fi
 
+# Identity and diagnostics are structural trust properties; the environment scan is load-bearing.
+# Compiling negative controls cover spelling-carrier forms and the numeric/lookup invariants.
+if python3 scripts/proofs/local_identity.py; then
+  ok "numeric local identity, structural diagnostics separation and negative controls"
+else
+  no "local identity or a negative control failed"
+fi
+
 BANNED_AXIOM_RE='^(sorryAx|Lean[.]ofReduceBool|Lean[.]ofReduceNat|Lean[.]trustCompiler)$|[.]_native[.]'
 BANNED_WORD_RE='\b(sorry|sorryAx|admit|native_decide|ofReduceBool|ofReduceNat|trustCompiler|skipKernelTC)\b|\+native\b|\bnative»?\s*:=|\bdecide\s*\(\s*config\b|\bdecide\s*[+-]|\bDecide[.]Config\b'
 # `decide` takes no options at all (`decide +native`, `decide (config := ⟨…⟩)` with a positional

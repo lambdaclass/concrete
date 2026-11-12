@@ -21,6 +21,8 @@ for a program that is not well formed). `Behaviour` is the fuel-free meaning; `e
 the result word every backend's body returns, decoded by the runtime entry.
 -/
 
+open ConcreteSpec.Core (AList)
+
 namespace Concrete.BIR
 open ConcreteSpec (IntTy Trap)
 
@@ -155,13 +157,9 @@ def wrap (t : IntTy) (n : Int) : Int := (n - t.min) % ((2 : Int) ^ t.bits) + t.m
 
 abbrev Env := List (Reg × Val)
 
-def lookup (env : Env) (r : Reg) : Option Val :=
-  match env with
-  | [] => none
-  | (r', v) :: rest => if r' = r then some v else lookup rest r
-
+/-- Read a register with the shared first-binding lookup, or check an immediate. For example, an immediate `u8` value 42 evaluates to 42. -/
 def evalOp (env : Env) : Operand → Option Val
-  | .reg r => lookup env r
+  | .reg r => AList.lookup env r
   | .imm t v => if t.inRange v then some (.int t v) else none
 
 /-- Two integer operands of type `t`. -/
@@ -211,7 +209,8 @@ def Outcome.final : Outcome → Bool
   | _ => true
 
 /-- Run block `j` and what follows, with `fuel` block executions. Blocks are named by index, as
-in LCB's state. -/
+in LCB's state.
+For example, a conditional terminator reads the newest binding of its flag. -/
 def runBlock (p : Program) : Nat → Nat → Env → Outcome
   | 0, _, _ => .outOfFuel
   | fuel + 1, j, env =>
@@ -229,7 +228,7 @@ def runBlock (p : Program) : Nat → Nat → Env → Outcome
       | .br t args => match enter p t args env' with
         | some env'' => runBlock p fuel t env''
         | none => .stuck
-      | .condbr c t ta e ea => match lookup env' c with
+      | .condbr c t ta e ea => match AList.lookup env' c with
         | some (.bool true) => match enter p t ta env' with
           | some env'' => runBlock p fuel t env''
           | none => .stuck
@@ -244,7 +243,8 @@ def run (p : Program) (fuel : Nat) : Outcome :=
   | some _ => runBlock p fuel 0 []
   | none => .stuck
 
-/-- More fuel never changes a final outcome. -/
+/-- More fuel never changes a final outcome.
+For example, an exit reached with fuel 3 has the same result with fuel 4. -/
 theorem runBlock_mono (p : Program) :
     ∀ (n k j : Nat) (env : Env), (runBlock p n j env).final = true →
       runBlock p (n + k) j env = runBlock p n j env := by
@@ -273,7 +273,7 @@ theorem runBlock_mono (p : Program) :
       | some env'' => simp only [hn] at h ⊢; exact ih k t env'' h
     | condbr c t ta e ea =>
       simp only [ht] at h ⊢
-      cases hc : lookup env' c with
+      cases hc : AList.lookup env' c with
       | none => rfl
       | some v =>
         cases v with
@@ -434,11 +434,6 @@ well-formed program never reads an undefined register (`run_progress`, in
 `Concrete/BIR/Progress.lean`). Beyond that: types, arities, targets (never the entry), every non-entry block
 has a predecessor, trap sites exist, and every register is defined once. -/
 
-def lookupTy (types : List (Reg × Ty)) (r : Reg) : Option Ty :=
-  match types with
-  | [] => none
-  | (r', t) :: rest => if r' = r then some t else lookupTy rest r
-
 def Inst.defs : Inst → List (Reg × Ty)
   | .bin _ t d _ _ => [(d, .int t)]
   | .binOvf _ t d f _ _ => [(d, .int t), (f, .bool)]
@@ -453,9 +448,10 @@ def Program.defs (p : Program) : List (Reg × Ty) := p.blocks.flatMap Block.defs
 come from this number (they come from the final artifact and the launcher's reservation). -/
 def Program.frameSlots (p : Program) : Nat := p.defs.length
 
-/-- `a` has type `ty` in `scope` (the registers defined so far in the block). -/
+/-- `a` has type `ty` in `scope` (the registers defined so far in the block).
+For example, a register whose first type binding is `bool` is a boolean operand. -/
 def operandHas (scope : List (Reg × Ty)) (ty : Ty) : Operand → Bool
-  | .reg r => lookupTy scope r == some ty
+  | .reg r => AList.lookup scope r == some ty
   | .imm t v => ty == .int t && t.inRange v
 
 def Inst.wf (scope : List (Reg × Ty)) : Inst → Bool
@@ -472,11 +468,12 @@ def edgeWf (p : Program) (scope : List (Reg × Ty)) (target : Nat) (args : List 
   | some blk => blk.params.length == args.length &&
       (blk.params.zip args).all (fun (pr, a) => operandHas scope pr.2 a)
 
+/-- Check the targets and operands of a terminator. For example, a conditional branch must read a register typed as `bool`. -/
 def Term.wf (p : Program) (scope : List (Reg × Ty)) : Term → Bool
   | .ret a => operandHas scope (.int .u8) a
   | .br t args => edgeWf p scope t args
   | .condbr c t ta e ea =>
-    lookupTy scope c == some .bool && t != e && edgeWf p scope t ta && edgeWf p scope e ea
+    AList.lookup scope c == some .bool && t != e && edgeWf p scope t ta && edgeWf p scope e ea
   | .trap s => s < p.sites.length
 
 /-- A block: each instruction's operands are defined earlier in the block. -/

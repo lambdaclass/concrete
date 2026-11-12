@@ -7,7 +7,7 @@ Land: $ARGUMENTS
 
 Rules: [AGENTS.md](../../AGENTS.md). The manual is
 [docs/LANDING.md](../../docs/LANDING.md); `scripts/land/train.sh` (header) is the
-contract. Landings reach `origin` and `lambdaclass` only through it.
+contract.
 
 **Where.** Run `train.sh` from a full clone with the repository hook enabled (`git clone`, then
 `git config core.hooksPath .githooks`), never from a linked worktree: it refuses both a worktree and
@@ -42,5 +42,5 @@ the logs, fix on the member branch, rebuild. Never land on a timeout or a skippe
 **Otherwise** do not land: report the branch, head SHA and the evidence above, so the orchestrator
 puts it on a train.
 
-After a landing: `gh run list --workflow CI --branch main` and confirm the run for the landed SHA
+After a landing: `gh run list -R lambdaclass/concrete --workflow CI --branch main` and confirm the run for the landed SHA
 is green; a red main stops the line.

@@ -28,7 +28,7 @@ Core's binding form (Q9.1):
 * **A-normal form.** Every operand is an atom: a literal, `copy x` or `move x`. `x + y` is an
   expression whose operands are atoms; a nested surface expression becomes a sequence of `let`s
   of temporaries, and `return` takes an atom.
-* **Fresh identities.** A local is a `Var`, an identity (a source-name hint and a number) that is
+* **Fresh identities.** A local is a `Var`, a numeric identity (source spellings live in `LocalNames`) that is
   bound at most once. Surface names, shadowing and the namespace rules (SCOPE-1, SCOPE-2) are
   elaboration rules that map names to identities; Core only requires each identity to be fresh.
 * **Explicit moves and copies.** Reading a local is written `copy x` (its type is Copy) or
@@ -79,15 +79,16 @@ neither, so its examples show only reachable positions and a discarded one (`ove
 
 namespace ConcreteSpec
 
-/-- A declaration name: a struct or a field. Declaration names are nominal (Q9.2). -/
-abbrev Name := String
+/-- A declaration name: a struct or a field. Declaration names are nominal (Q9.2).
+For example, `⟨"count"⟩ : Name` names a field. -/
+structure Name where
+  /-- The declaration spelling; for example, `(⟨"count"⟩ : Name).text = "count"`. -/
+  text : String
+  deriving DecidableEq
 
-/-- A local variable's identity in Core (Q9.1, fresh identities). `hint` is the source name, kept
-for reading; the identity is the pair, and each identity is bound at most once (`Fresh`). -/
-structure Var where
-  hint : String
-  id : Nat
-  deriving DecidableEq, Repr
+-- Keep diagnostic rendering identical to the previous String representation.
+instance : Repr Name where
+  reprPrec name prec := reprPrec name.text prec
 
 /-! ### Types -/
 
@@ -179,7 +180,7 @@ inductive Atom where
   | bool (b : Bool)
   | copy (x : Var)
   | move (x : Var)
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 /-- An expression in A-normal form (Q9.1): an atom, checked integer addition `l + r` of two atoms
 (ARITH-3), or a struct literal `S { f: a, ... }` whose fields are atoms (TYPE-7). -/
@@ -187,20 +188,20 @@ inductive Expr where
   | atom (a : Atom)
   | add (l r : Atom)
   | mk (s : Name) (fields : List (Name × Atom))
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 /-- A destructuring pattern binds a field to a local, or ignores it with `_` (PAT-1, PAT-5). -/
 inductive Binder where
   | name (x : Var)
   | wild
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 /-- A statement: `let x: T = e;`, `let _: T = e;`, or a destructuring `let S { f: b, ... } = e;`
 (PAT-5). -/
 inductive Stmt where
   | let_ (b : Binder) (t : Ty) (e : Expr)
   | letStruct (s : Name) (pat : List (Name × Binder)) (e : Expr)
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 /-- A slice-1 program: struct declarations and `fn main() -> u8 { body; return ret; }` (STMT-7:
 `main` returns `u8` and may declare no grants; STMT-9: the body ends in `return`). In A-normal form
@@ -209,7 +210,7 @@ structure Program where
   decls : Decls
   body : List Stmt
   ret : Atom
-  deriving Repr
+
 
 
 end ConcreteSpec

@@ -93,12 +93,12 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
 - Commit each validated slice. Push the branch to `wip/<branch>` at least every 5 minutes of work
   (`git push origin HEAD:refs/heads/wip/<branch>`); the hook's wip tier only scans for conflict
   markers.
-- Never push to `main`, `ci/*` or the remote `fork`. Landings go to both `origin` and
-  `lambdaclass`, only through the landing script (`scripts/land/train.sh`).
-  `train.sh check` runs the checks before the push, and the push runs the root hook's full set again;
-  the train's push to `ci/<name>` and both pushes of `land` are read back with `ls-remote` and
-  retried when they did not move the ref (GitHub drops the connection during long hooks); `land` checks that both remotes are at
-  the head ([LANDING.md](docs/LANDING.md#land)).
+- Never push to `main` or `ci/*`. Only the remote name `origin` is permitted, with both fetch
+  and all push URLs targeting `lambdaclass/concrete`; there is no mirror. Landings go through
+  `scripts/land/train.sh`.
+  `train.sh check` runs the checks before the push, and the push runs the root hook's full set again.
+  The train reads back `ci/<name>` and `main` with `ls-remote` and retries dropped connections;
+  `land` requires origin/main at the exact head.
 - After any push of your own whose hook ran gates, check that the remote ref moved
   (`git ls-remote origin refs/heads/<branch>`) and push again if it did not.
 
@@ -209,7 +209,7 @@ confirms the corruption it was meant to catch.
 
 So worktrees fix file-level races, not coordination:
 
-- Pushes must still be sequenced — hence the lock in `push-both.sh`.
+- Local landings are sequenced by the train’s common-git-directory `concrete-land.lock`.
 - `git stash` is still unsafe across worktrees; bare `git stash` / `git stash pop`
   is banned repo-wide. Use a temporary WIP commit, or
   `git stash push -u -m "<unique-tag>"` and recover by SHA with `apply`, never
@@ -236,7 +236,7 @@ matters. So concurrency is caught where the signal is a fact:
   means a third party wrote the file: it **refuses to restore**, preserves their
   version under `CONCURRENT-EDIT/`, keeps its own backup for reconciliation, and
   fails the run. It cannot silently overwrite an edit it did not make.
-- **`scripts/push-both.sh`** takes an exclusive lock in the **common** git dir
+- **`scripts/land/train.sh land`** takes an exclusive lock in the **common** git dir
   (`git rev-parse --git-common-dir`), not the worktree — remotes are shared, so a
   per-worktree lock would miss two worktrees publishing at once.
 
@@ -249,7 +249,7 @@ Long-running work does not always require an idle tree. Distinguish the phases:
 | pre-push hook running gates | **yes** — gates read the working tree |
 | `run_ci_gates_local.sh` | **yes** — same reason |
 | `test_mutation.sh` | **yes** — it rewrites source in place |
-| `push-both.sh` waiting for remote CI | **no** — it only polls `gh` |
+| `train.sh watch` waiting for remote CI | **no** — it only polls `gh` |
 
 The CI wait touches no files, so work can continue during it — in another
 worktree. Treating the whole publish as tree-freezing is over-caution; treating
@@ -318,6 +318,9 @@ to fix, not as noise.
 
 ### Killing a publish does not un-publish it
 
+The following 2026-07-31 incident concerns the retired `push-both.sh`. The same child-process
+and remote-readback rules apply to current train publication to origin.
+
 `push-both.sh` runs `git push` as a CHILD process. Killing the script does not
 kill that child, and a `git push` already in flight will complete.
 
@@ -333,6 +336,9 @@ AFTER the process tree is gone (`pgrep -f "git push"` clear), and treat the
 remote's actual state as the answer rather than the state you saw before killing.
 
 ### Orchestrating a publish: never infer state from process names
+
+The `push-both` examples below are historical; use captured PIDs and exact origin refs for current
+train operations.
 
 `pgrep -f "push-both"` matches the WAITER'S OWN command line, which contains that
 string. Every `until ! pgrep -f "push-both"; do sleep 30; done` loop therefore

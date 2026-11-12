@@ -35,8 +35,7 @@
 #
 # Environment (mostly for the test gate, scripts/checks/review_tool.sh):
 #   REVIEW_CODEX_BIN    reviewer binary (default: codex)
-#   REVIEW_REMOTE       remote for notes and the default base (default: origin)
-#   REVIEW_MAIN_REF     ref the default base is computed against (default: $REVIEW_REMOTE/main)
+#   REVIEW_MAIN_REF     ref the default base is computed against (default: origin/main)
 #   REVIEW_PUSH         1 to fetch/push the notes refs (default: 1)
 #   REVIEW_PIECE_BYTES  size limit of one piece in bytes (default: 60000)
 
@@ -48,7 +47,7 @@ ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 
 CODEX_BIN="${REVIEW_CODEX_BIN:-codex}"
-REMOTE="${REVIEW_REMOTE:-origin}"
+REMOTE=origin
 MAIN_REF="${REVIEW_MAIN_REF:-$REMOTE/main}"
 PUSH="${REVIEW_PUSH:-1}"
 PIECE_BYTES="${REVIEW_PIECE_BYTES:-60000}"
@@ -61,7 +60,7 @@ MAX_ROUNDS=5
 PIECES="auto"
 EXTRA=""
 
-usage() { awk 'NR > 1 { if (!/^#/) exit; sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}"; }  # the header, whatever its length
+usage() { awk 'NR > 1 { if (!/^#/) exit; sub(/^# ?/, ""); print }' "$SCRIPT_DIR/review.sh"; }  # the header, whatever its length
 die() { echo "review: $*" >&2; exit 2; }
 
 while [ $# -gt 0 ]; do
