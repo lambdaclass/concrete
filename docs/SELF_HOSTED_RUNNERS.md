@@ -281,6 +281,13 @@ already handles, and what the host has to handle.
 4. To turn it off, delete the variable. Queued jobs that are still waiting for a self-hosted
    runner have to be cancelled and re-run.
 
+The external-tool cache also retains per-revision `source-nanoda-<rev>` checkouts and
+builder-keyed `registry-<identity>` Cargo downloads. Completed nanoda cache hits work
+offline. Cargo uses an allowlisted environment and private Cargo home, ignoring caller
+wrappers and profile/target overrides; `--locked` enforces Cargo.lock. Builds run outside
+HOME and refuse ancestor Cargo configuration. See the isolation contract in
+[`scripts/proofs/external.sh`](../scripts/proofs/external.sh).
+
 ## Build cache (R-0546)
 
 Every job, worktree and agent used to build the compiler from nothing. Two caches now start that

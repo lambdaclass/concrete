@@ -11,6 +11,12 @@
 # Lake trees additionally key their toolchain and resolved elan path/version; nanoda trees key
 # resolved cargo/rustc paths and rustc -vV measured in the build checkout. CI's outer cache key
 # additionally includes external.pins, lake_tool.sh, lean-toolchain, flake.nix and flake.lock.
+# nanoda also retains source-nanoda-<rev> (HEAD and cleanliness checked on every run) and
+# registry-<identity> (Cargo registry downloads). Completed cache hits need no nanoda network.
+# Cargo builds run outside HOME, with a private CARGO_HOME and env -i allowlisting only PATH,
+# HOME, optional RUSTUP_HOME/RUSTUP_TOOLCHAIN, and explicit CARGO_HOME/RUSTC; caller Cargo
+# configuration, wrappers and profile/target overrides are ignored. Builds enforce --locked
+# and refuse .cargo/config or .cargo/config.toml in the build directory or any ancestor.
 # Project preparation precedes the cache lock. Tool installation/build/publication and
 # verification hold TOOLS/.lock; after unlocking only finished tool artifacts are read,
 # never the isolated elan home. Builds publish private trees by rename.

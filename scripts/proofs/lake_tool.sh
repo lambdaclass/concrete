@@ -45,7 +45,11 @@ build_lake_tool() {
 }
 
 build_cargo_tool() {
-  local tools=$1 url=$2 rev=$3 cargo rustc identity recipe dir work source home
+  local tools=$1 url=$2 rev=$3 cargo rustc identity recipe dir work source home ancestor
+  local -a cargo_env=(env -i "PATH=$PATH" "HOME=$HOME")
+  # Rustup proxies need their selected installation, but no ambient Cargo/Rust overrides.
+  [ -z "${RUSTUP_HOME+x}" ] || cargo_env+=("RUSTUP_HOME=$RUSTUP_HOME")
+  [ -z "${RUSTUP_TOOLCHAIN+x}" ] || cargo_env+=("RUSTUP_TOOLCHAIN=$RUSTUP_TOOLCHAIN")
   # Keep the pinned checkout locally: a cache hit verifies HEAD without network access.
   source="$tools/source-nanoda-$rev"
   if [ ! -d "$source" ]; then
@@ -53,7 +57,7 @@ build_cargo_tool() {
     git clone -q "$url" "$work" >&2 && git -C "$work" checkout -q "$rev" >&2 \
       && mv "$work" "$source" || { rm -rf "$work"; return 1; }
   fi
-  [ "$(git -C "$source" rev-parse HEAD)" = "$rev" ] && [ -z "$(git -C "$source" status --porcelain)" ] || return 1
+  [ "$(git -C "$source" rev-parse HEAD)" = "$rev" ] && [ -z "$(git -C "$source" status --porcelain)" ] || { echo "error: cached nanoda source revision or cleanliness mismatch: $source" >&2; return 1; }
   work=$source
   local version cargo_path rustc_path
   cargo=$(cd "$work" && command -v cargo) && rustc=$(cd "$work" && command -v rustc) \
@@ -65,8 +69,19 @@ build_cargo_tool() {
   identity=$(printf '%s\n%s\n%s\n' "$cargo_path" "$rustc_path" "$version" | sha256sum | cut -d' ' -f1)
   dir="$tools/nanoda-$rev-$identity-$recipe"
   if [ ! -f "$dir/.built" ]; then
-    work=$(mktemp -d "$tools/nanoda-source.XXXXXX") || return 1
+    # Build outside HOME so the usual ~/.cargo configuration is not an ancestor.
+    work=$(mktemp -d /tmp/concrete-nanoda.XXXXXX) || return 1
     cp -a "$source/." "$work/" || { rm -rf "$work"; return 1; }
+    # Cargo searches every ancestor, independently of CARGO_HOME. Fail closed.
+    ancestor=$(realpath "$work") || { rm -rf "$work"; return 1; }
+    while :; do
+      if [ -e "$ancestor/.cargo/config" ] || [ -e "$ancestor/.cargo/config.toml" ]; then
+        echo "error: refusing nanoda build: Cargo configuration in $ancestor/.cargo" >&2
+        rm -rf "$work"; return 1
+      fi
+      [ "$ancestor" != / ] || break
+      ancestor=$(dirname "$ancestor")
+    done
     # Re-measure in the actual build directory, where rustup selects its compiler.
     [ "$(cd "$work" && "$rustc" -vV)" = "$version" ] || { echo "error: Rust measured outside build directory or compiler identity changed" >&2; rm -rf "$work"; return 1; }
     home=$(mktemp -d) || { rm -rf "$work"; return 1; }
@@ -76,9 +91,9 @@ build_cargo_tool() {
     # Raise the thread stack from 16 MiB to 256 MiB, as the Lean Kernel Arena does.
     grep -qF 'STACK_SIZE: usize = 16_777_216;' "$work/src/lib.rs" \
       && sed -i.orig 's/STACK_SIZE: usize = 16_777_216;/STACK_SIZE: usize = 268_435_456;/' "$work/src/lib.rs" \
-      && (cd "$work" && env -u RUSTFLAGS -u CARGO_BUILD_RUSTFLAGS CARGO_ENCODED_RUSTFLAGS= RUSTC_WRAPPER= RUSTC_WORKSPACE_WRAPPER= CARGO_BUILD_RUSTC_WRAPPER= CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER= CARGO_HOME="$home" RUSTC="$rustc" "$cargo" build --release -q >&2) \
-      && printf '%s\n' "$rev" > "$work/.source-rev" && touch "$work/.built" && rm -rf "$dir" && mv "$work" "$dir" \
-      || { rm -rf "$work" "$home"; return 1; }
+      && (cd "$work" && "${cargo_env[@]}" CARGO_HOME="$home" RUSTC="$rustc" "$cargo" build --release --locked -q >&2) \
+      && printf '%s\n' "$rev" > "$work/.source-rev" && touch "$work/.built" && rm -rf "$dir" && mv "$work" "$dir.partial.$$" && mv "$dir.partial.$$" "$dir" \
+      || { rm -rf "$work" "$dir.partial.$$" "$home"; return 1; }
     rm -rf "$home"
   fi
   [ -x "$dir/target/release/nanoda_bin" ] && [ "$(cat "$dir/.source-rev")" = "$rev" ] && [ "$(git -C "$dir" rev-parse HEAD)" = "$rev" ] || return 1

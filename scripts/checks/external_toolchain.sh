@@ -150,16 +150,15 @@ cat > "$TMP/bin/cargo" <<'CONTROL'
 set -eu
 [ "$(cat "$RUST_MEASUREMENT")" = "$PWD" ] || { echo 'CONTROL: Rust measured outside build directory' >&2; exit 96; }
 [ "${RUSTC:-}" = "$(command -v rustc)" ] || { echo 'CONTROL: keyed RUSTC missing' >&2; exit 96; }
-[ "${RUSTC_WRAPPER-unset}:${RUSTC_WORKSPACE_WRAPPER-unset}:${CARGO_BUILD_RUSTC_WRAPPER-unset}:${CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER-unset}" = ':::' ] || exit 96
-[ "${RUSTFLAGS+x}${CARGO_BUILD_RUSTFLAGS+x}" = '' ] || exit 96
-[ "${CARGO_ENCODED_RUSTFLAGS-unset}" = '' ] || exit 96
+[ "${RUSTC_WRAPPER+x}${RUSTC_WORKSPACE_WRAPPER+x}${CARGO_BUILD_RUSTC_WRAPPER+x}${CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER+x}${RUSTFLAGS+x}${CARGO_BUILD_RUSTFLAGS+x}${CARGO_ENCODED_RUSTFLAGS+x}${CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS+x}${CARGO_TARGET_DIR+x}" = '' ] || exit 96
+[ "$*" = 'build --release --locked -q' ] || exit 96
 [ "$CARGO_HOME" != "$AMBIENT_CARGO_HOME" ] && [ ! -f "$CARGO_HOME/config.toml" ] || exit 96
 [ -L "$CARGO_HOME/registry" ] || exit 96
-[ "$ELAN_HOME" = "$CALLER_ELAN_HOME" ] || { echo 'CONTROL: cargo home changed' >&2; exit 97; }
+[ "${ELAN_HOME+x}" = '' ] || exit 97
 if flock -n "$CONCRETE_EXT_TOOLS/.lock" true; then
   echo 'CONTROL: build lock missing' >&2; exit 99
 fi
-grep -qF "STACK_SIZE: usize = ${FIXTURE_STACK_SIZE:-268_435_456};" src/lib.rs
+grep -qF "STACK_SIZE: usize = $(cat "$STACK_EXPECTATION");" src/lib.rs
 grep -qF 'STACK_SIZE: usize = 16_777_216;' src/lib.rs && exit 98
 mkdir -p target/release
 cp "$FIXTURE_ARTIFACT" target/release/nanoda_bin
@@ -171,7 +170,7 @@ cat > "$TMP/bin/rustc" <<'CONTROL'
 set -eu
 [ "$1" = -vV ]
 case "$PWD" in
-  "$CONCRETE_EXT_TOOLS"/nanoda-source.*|"$CONCRETE_EXT_TOOLS"/source-nanoda-*) location=build ;;
+  */concrete-nanoda.*|"$CONCRETE_EXT_TOOLS"/source-nanoda-*) location=build ;;
   *) location=wrong-directory ;;
 esac
 printf '%s\n' "$PWD" > "$RUST_MEASUREMENT"
@@ -208,6 +207,7 @@ export RUST_MEASUREMENT="$TMP/rust-measurement"
 export RUSTC=/conflicting/rustc RUSTC_WRAPPER=/conflicting/wrapper RUSTC_WORKSPACE_WRAPPER=/conflicting/workspace-wrapper
 export CARGO_BUILD_RUSTC_WRAPPER=/conflicting/config-wrapper CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER=/conflicting/config-workspace-wrapper
 export RUSTFLAGS=conflicting CARGO_ENCODED_RUSTFLAGS=conflicting CARGO_BUILD_RUSTFLAGS=conflicting
+export CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS=true CARGO_TARGET_DIR="$TMP/escaped-target"
 export CARGO_HOME="$TMP/cargo-home" AMBIENT_CARGO_HOME="$TMP/cargo-home"
 mkdir -p "$CARGO_HOME"
 printf '[build]\nrustc-wrapper = "/conflicting/config-wrapper"\nrustflags = ["conflicting"]\n' > "$CARGO_HOME/config.toml"
@@ -215,7 +215,18 @@ export ELAN_TOOLCHAIN=deliberately-conflicting-ambient-toolchain LEAN_PATH=/conf
 export CONCRETE_EXT_ELAN="$TMP/bin/elan" CALLER_ELAN_HOME="$ELAN_HOME"
 mkdir -p "$ELAN_HOME"
 echo untouched > "$ELAN_HOME/sentinel"
+# Stub context is fixed in its script, never passed through the production allowlist.
+python3 - "$TMP/bin/cargo" "$TMP/stack-expectation" <<'CONTROL'
+from pathlib import Path
+import os, shlex, sys
+p = Path(sys.argv[1])
+keys = ('RUST_MEASUREMENT', 'AMBIENT_CARGO_HOME', 'CONCRETE_EXT_TOOLS', 'FIXTURE_ARTIFACT', 'DISPATCH_LOG')
+context = ''.join(k+'='+shlex.quote(os.environ[k])+'\n' for k in keys)
+context += 'STACK_EXPECTATION='+shlex.quote(sys.argv[2])+'\n'
+p.write_text(p.read_text().replace('set -eu\n', 'set -eu\n'+context, 1))
+CONTROL
 run_driver() {
+  printf '%s\n' "${FIXTURE_STACK_SIZE:-268_435_456}" > "$TMP/stack-expectation"
   local diagnostic=$1 expected_rc=${2:-1} rc=0
   bounded_run 30 -- bash "$TMP/project/scripts/proofs/external.sh" > "$TMP/out" 2>&1 || rc=$?
   if bounded_is_incomplete "$rc"; then bounded_gate_status; exit 1; fi
@@ -313,6 +324,33 @@ cp "$TMP/builder" "$TMP/project/scripts/proofs/lake_tool.sh"
 sed 's/RUSTC="$rustc" //' "$TMP/builder" > "$TMP/project/scripts/proofs/lake_tool.sh"
 run_driver 'CONTROL: keyed RUSTC missing'
 cp "$TMP/builder" "$TMP/project/scripts/proofs/lake_tool.sh"
+nanoda_dispatches=$(grep -cx nanoda "$DISPATCH_LOG")
+# Place builds under a private parent to exercise hierarchical config refusal.
+sed "s|/tmp/concrete-nanoda.XXXXXX|$TMP/cargo-parent/concrete-nanoda.XXXXXX|" "$TMP/builder" > "$TMP/project/scripts/proofs/lake_tool.sh"
+mkdir -p "$TMP/cargo-parent"
+# Refuse hierarchical Cargo configuration before invoking cargo (both supported names).
+for config in config config.toml; do
+  mkdir -p "$TMP/cargo-parent/.cargo"
+  printf '[profile.release]\noverflow-checks = true\n' > "$TMP/cargo-parent/.cargo/$config"
+  FIXTURE_RUST_VERSION=parent-config run_driver 'refusing nanoda build: Cargo configuration'
+  rm "$TMP/cargo-parent/.cargo/$config"
+done
+rmdir "$TMP/cargo-parent/.cargo"
+cp "$TMP/builder" "$TMP/project/scripts/proofs/lake_tool.sh"
+# Force misses with corrupt cached sources; require the source diagnostic itself.
+cached_source="$CONCRETE_EXT_TOOLS/source-nanoda-$REV"
+git -C "$cached_source" checkout -q "$CONLECHE_REV" 2>/dev/null || {
+  git -C "$cached_source" -c user.name=Control -c user.email=control@example.invalid commit --allow-empty -qm wrong-revision
+}
+FIXTURE_RUST_VERSION=wrong-source run_driver 'cached nanoda source revision or cleanliness mismatch'
+git -C "$cached_source" checkout -q "$REV"
+printf '// modified tracked source\n' >> "$cached_source/src/lib.rs"
+FIXTURE_RUST_VERSION=dirty-source run_driver 'cached nanoda source revision or cleanliness mismatch'
+git -C "$cached_source" restore src/lib.rs
+[ ! -e "$CARGO_TARGET_DIR" ]
+[ "$(grep -cx nanoda "$DISPATCH_LOG")" = "$nanoda_dispatches" ]
+# The temporary recipe creates separate Lake trees; restore the baseline dispatch log.
+cp "$TMP/expected" "$DISPATCH_LOG"
 # A retained lock must fail the first post-build population query.
 sed 's/^flock -u 9.*/: # negative control: retain lock/' "$TMP/driver" > "$TMP/project/scripts/proofs/external.sh"
 run_driver 'CONTROL: caller lock held'
