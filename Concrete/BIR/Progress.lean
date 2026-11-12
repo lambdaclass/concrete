@@ -19,6 +19,8 @@ encodes (`Outcome.Encodable`). With `behaviour_diverges_iff` (no WF needed), the
 encodable outcome some fuel reaches, or divergence.
 -/
 
+open ConcreteSpec.Core (AList)
+
 namespace Concrete.BIR
 open ConcreteSpec (IntTy)
 
@@ -27,25 +29,28 @@ def Val.HasTy : Val → Ty → Prop
   | .int t x, ty => ty = .int t ∧ t.inRange x = true
   | .bool _, ty => ty = .bool
 
-/-- Every register typed in `scope` is bound in `env` to a value of that type. -/
+/-- Every register typed in `scope` is bound in `env` to a value of that type.
+For example, a boolean register in the scope must have a boolean value in the environment. -/
 def Typed (scope : List (Reg × Ty)) (env : Env) : Prop :=
-  ∀ r ty, lookupTy scope r = some ty → ∃ v, lookup env r = some v ∧ v.HasTy ty
+  ∀ r ty, AList.lookup scope r = some ty → ∃ v, AList.lookup env r = some v ∧ v.HasTy ty
 
+/-- An empty typing scope imposes no requirements on the environment. For example, it accepts an empty environment. -/
 theorem typed_nil (env : Env) : Typed [] env := by
   intro r ty h
-  simp [lookupTy] at h
+  simp [AList.lookup] at h
 
+/-- Adding a correctly typed first binding preserves typing. For example, binding a boolean register in both lists preserves `Typed`. -/
 theorem typed_cons {scope : List (Reg × Ty)} {env : Env} (h : Typed scope env) (r : Reg) {v : Val}
     {ty : Ty} (hv : v.HasTy ty) : Typed ((r, ty) :: scope) ((r, v) :: env) := by
   intro r' ty' h'
   by_cases hr : r = r'
   · subst hr
-    simp [lookupTy] at h'
+    simp [AList.lookup] at h'
     subst h'
-    exact ⟨v, by simp [lookup], hv⟩
-  · simp only [lookupTy, hr, ↓reduceIte] at h'
+    exact ⟨v, by simp [AList.lookup], hv⟩
+  · simp only [AList.lookup, hr, ↓reduceIte] at h'
     obtain ⟨v', hv', ht'⟩ := h r' ty' h'
-    exact ⟨v', by simp [lookup, hr, hv'], ht'⟩
+    exact ⟨v', by simp [AList.lookup, hr, hv'], ht'⟩
 
 theorem int_of_hasTy {v : Val} {t : IntTy} (h : v.HasTy (.int t)) :
     ∃ x, v = .int t x ∧ t.inRange x = true := by
@@ -176,43 +181,47 @@ theorem args_fit {scope : List (Reg × Ty)} {env : Env} (h : Typed scope env) :
     obtain ⟨vs, hvs, hf⟩ := args_fit h ps args (by simpa using hl) ha.2
     exact ⟨v :: vs, by simp [List.mapM_cons, hv, hvs], .cons ht hf⟩
 
-theorem lookupTy_mem {l : List (Reg × Ty)} {r : Reg} {ty : Ty} (h : lookupTy l r = some ty) :
+/-- A successful type lookup comes from a binding in the list. For example, finding register 7 as `bool` requires that pair to occur. -/
+theorem lookupTy_mem {l : List (Reg × Ty)} {r : Reg} {ty : Ty} (h : AList.lookup l r = some ty) :
     r ∈ l.map Prod.fst := by
   induction l with
-  | nil => simp [lookupTy] at h
+  | nil => simp [AList.lookup] at h
   | cons x l ih =>
     obtain ⟨r', t'⟩ := x
     by_cases hr : r' = r
     · simp [hr]
-    · simp only [lookupTy, hr, ↓reduceIte] at h
+    · simp only [AList.lookup, hr, ↓reduceIte] at h
       exact List.mem_cons_of_mem _ (ih h)
 
-theorem lookupTy_append_none {l₁ l₂ : List (Reg × Ty)} {r : Reg} (h : lookupTy l₁ r = none) :
-    lookupTy (l₁ ++ l₂) r = lookupTy l₂ r := by
+/-- When the first list has no binding, look in the second. For example, an empty first list cannot hide a later register. -/
+theorem lookupTy_append_none {l₁ l₂ : List (Reg × Ty)} {r : Reg} (h : AList.lookup l₁ r = none) :
+    AList.lookup (l₁ ++ l₂) r = AList.lookup l₂ r := by
   induction l₁ with
   | nil => rfl
   | cons x l ih =>
     obtain ⟨r', t'⟩ := x
     by_cases hr : r' = r
-    · simp [lookupTy, hr] at h
+    · simp [AList.lookup, hr] at h
     · rw [List.cons_append]
-      simp only [lookupTy, hr, ↓reduceIte] at h ⊢
+      simp only [AList.lookup, hr, ↓reduceIte] at h ⊢
       exact ih h
 
+/-- A binding in the first list wins over the second list. For example, appending another type for register 7 cannot replace its first type. -/
 theorem lookupTy_append_some {l₁ l₂ : List (Reg × Ty)} {r : Reg} {ty : Ty}
-    (h : lookupTy l₁ r = some ty) : lookupTy (l₁ ++ l₂) r = some ty := by
+    (h : AList.lookup l₁ r = some ty) : AList.lookup (l₁ ++ l₂) r = some ty := by
   induction l₁ with
-  | nil => simp [lookupTy] at h
+  | nil => simp [AList.lookup] at h
   | cons x l ih =>
     obtain ⟨r', t'⟩ := x
     by_cases hr : r' = r
-    · simpa [lookupTy, hr] using h
+    · simpa [AList.lookup, hr] using h
     · rw [List.cons_append]
-      simp only [lookupTy, hr, ↓reduceIte] at h ⊢
+      simp only [AList.lookup, hr, ↓reduceIte] at h ⊢
       exact ih h
 
 /-- Entering a block binds its (distinct) parameters to fitting values: the parameters' scope is
-satisfied, whatever the rest of the environment holds. -/
+satisfied, whatever the rest of the environment holds.
+For example, a function with no parameters begins with an empty typed scope. -/
 theorem entry_typed :
     ∀ {ps : List (Reg × Ty)} {vs : List Val}, Fits ps vs → (ps.map Prod.fst).Nodup →
       ∀ env : Env, Typed ps.reverse ((ps.map Prod.fst).zip vs ++ env)
@@ -221,7 +230,7 @@ theorem entry_typed :
     rw [List.map_cons, List.nodup_cons] at hn
     intro r' ty' h'
     rw [List.reverse_cons] at h'
-    cases hl : lookupTy ps.reverse r' with
+    cases hl : AList.lookup ps.reverse r' with
     | some t =>
       rw [lookupTy_append_some hl, Option.some.injEq] at h'
       subst h'
@@ -230,15 +239,15 @@ theorem entry_typed :
         subst he
         exact hn.1 (by simpa using lookupTy_mem hl)
       obtain ⟨w, hw, ht⟩ := entry_typed hf hn.2 env r' t hl
-      exact ⟨w, by simp [lookup, hne, hw], ht⟩
+      exact ⟨w, by simp [AList.lookup, hne, hw], ht⟩
     | none =>
       rw [lookupTy_append_none hl] at h'
       by_cases hr : r = r'
       · subst hr
-        simp [lookupTy] at h'
+        simp [AList.lookup] at h'
         subst h'
-        exact ⟨v, by simp [lookup], hv⟩
-      · simp [lookupTy, hr] at h'
+        exact ⟨v, by simp [AList.lookup], hv⟩
+      · simp [AList.lookup, hr] at h'
 
 theorem sublist_flatMap {α β : Type} (f : α → List β) {a : α} :
     ∀ {l : List α}, a ∈ l → (f a).Sublist (l.flatMap f)

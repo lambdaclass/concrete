@@ -80,8 +80,10 @@ The required slice-0 behaviours: normal exit 42, exit 255 at the boundary, stati
 known overflow and of an out-of-range literal, refusal of an unused binding, and the use of an
 undeclared local. -/
 
-def a₀ : Var := ⟨"a", 0⟩
-def b₁ : Var := ⟨"b", 1⟩
+/-- Local 0, displayed as `a`; for example, the first binder in `answer`. -/
+def a₀ : Var := ⟨0⟩
+/-- Local 1, displayed as `b`; for example, a distinct second binder. -/
+def b₁ : Var := ⟨1⟩
 
 /-- ```
 fn main() -> u8 {
@@ -92,16 +94,16 @@ fn main() -> u8 {
 ```
 In A-normal form the returned sum gets its own binding `s`. It exits with 42. -/
 def answer : Program :=
-  { body := [⟨a₀, .atom (.lit 20)⟩, ⟨b₁, .atom (.lit 22)⟩, ⟨⟨"s", 2⟩, .add (.var a₀) (.var b₁)⟩],
-    ret := .var ⟨"s", 2⟩ }
+  { body := [⟨a₀, .atom (.lit 20)⟩, ⟨b₁, .atom (.lit 22)⟩, ⟨⟨2⟩, .add (.var a₀) (.var b₁)⟩],
+    ret := .var ⟨2⟩ }
 
 example : check (toCore answer) = true := by decide
 example : run (toCore answer) 10 = .exit 42 := by decide
 
 /-- `let a: u8 = 200; let b: u8 = 55; return a + b;` exits with 255, the largest `u8`. -/
 def boundary : Program :=
-  { body := [⟨a₀, .atom (.lit 200)⟩, ⟨b₁, .atom (.lit 55)⟩, ⟨⟨"s", 2⟩, .add (.var a₀) (.var b₁)⟩],
-    ret := .var ⟨"s", 2⟩ }
+  { body := [⟨a₀, .atom (.lit 200)⟩, ⟨b₁, .atom (.lit 55)⟩, ⟨⟨2⟩, .add (.var a₀) (.var b₁)⟩],
+    ret := .var ⟨2⟩ }
 
 example : check (toCore boundary) = true := by decide
 example : run (toCore boundary) 10 = .exit 255 := by decide
@@ -109,8 +111,8 @@ example : run (toCore boundary) 10 = .exit 255 := by decide
 /-- `let a: u8 = 200; let b: u8 = 56; return a + b;` is refused: `a + b` is known to overflow
 (Q6.1), so it is never run. -/
 def overflow : Program :=
-  { body := [⟨a₀, .atom (.lit 200)⟩, ⟨b₁, .atom (.lit 56)⟩, ⟨⟨"s", 2⟩, .add (.var a₀) (.var b₁)⟩],
-    ret := .var ⟨"s", 2⟩ }
+  { body := [⟨a₀, .atom (.lit 200)⟩, ⟨b₁, .atom (.lit 56)⟩, ⟨⟨2⟩, .add (.var a₀) (.var b₁)⟩],
+    ret := .var ⟨2⟩ }
 
 example : check (toCore overflow) = false := by decide
 

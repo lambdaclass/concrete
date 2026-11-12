@@ -28,7 +28,7 @@ Core's binding form (Q9.1):
 * **A-normal form.** Every operand is an atom: a literal, `copy x` or `move x`. `x + y` is an
   expression whose operands are atoms; a nested surface expression becomes a sequence of `let`s
   of temporaries, and `return` takes an atom.
-* **Fresh identities.** A local is a `Var`, an identity (a source-name hint and a number) that is
+* **Fresh identities.** A local is a `Var`, a numeric identity (source spellings live in `LocalNames`) that is
   bound at most once. Surface names, shadowing and the namespace rules (SCOPE-1, SCOPE-2) are
   elaboration rules that map names to identities; Core only requires each identity to be fresh.
 * **Explicit moves and copies.** Reading a local is written `copy x` (its type is Copy) or
@@ -81,13 +81,6 @@ namespace ConcreteSpec
 
 /-- A declaration name: a struct or a field. Declaration names are nominal (Q9.2). -/
 abbrev Name := String
-
-/-- A local variable's identity in Core (Q9.1, fresh identities). `hint` is the source name, kept
-for reading; the identity is the pair, and each identity is bound at most once (`Fresh`). -/
-structure Var where
-  hint : String
-  id : Nat
-  deriving DecidableEq, Repr
 
 /-! ### Types -/
 

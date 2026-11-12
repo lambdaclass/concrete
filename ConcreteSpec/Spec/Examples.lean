@@ -18,7 +18,7 @@ Each example gives the surface program in its doc comment, its Core syntax, and 
 specification says about it: accepted (`check p = true`) with an outcome (`run p 10 = …`), or
 refused (`check p = false`). By `check_iff` (`Proofs/Checker.lean`), `check p = true` is exactly
 the rule `Checked p`, and `bodyOkB … = true` is exactly `BodyOk …`. Locals are written with their
-source name and a number: `t₀` is `⟨"t", 0⟩`. A refused program may still have a `run` example:
+number alone: `t₀` is `⟨0⟩`; source spellings belong in `LocalNames`. A refused program may still have a `run` example:
 it shows what the refused code would do if it ran anyway. -/
 
 /-- `struct Token {}` — empty, not `Copy`, so linear (OWN-D1). -/
@@ -40,27 +40,43 @@ def mv (x : Var) : Expr := .atom (.move x)
 
 def cp (x : Var) : Expr := .atom (.copy x)
 
-def t₀ : Var := ⟨"t", 0⟩
+/-- Local 0; for example, its diagnostic spelling is `t`. -/
+def t₀ : Var := ⟨0⟩
 
-def u₁ : Var := ⟨"u", 1⟩
+/-- Local 1; for example, its diagnostic spelling is `u`. -/
+def u₁ : Var := ⟨1⟩
 
-def p₀ : Var := ⟨"p", 0⟩
+/-- Local 4; for example, its diagnostic spelling is `p`. -/
+def p₄ : Var := ⟨4⟩
 
-def q₁ : Var := ⟨"q", 1⟩
+/-- Local 5; for example, its diagnostic spelling is `q`. -/
+def q₅ : Var := ⟨5⟩
 
-def x₀ : Var := ⟨"x", 0⟩
+/-- Local 0; for example, its diagnostic spelling is `x`. -/
+def x₀ : Var := ⟨0⟩
 
-def x₁ : Var := ⟨"x", 1⟩
+/-- Local 1; for example, its diagnostic spelling is `x`. -/
+def x₁ : Var := ⟨1⟩
 
-def y₁ : Var := ⟨"y", 1⟩
+/-- Local 6; for example, its diagnostic spelling is `y`. -/
+def y₆ : Var := ⟨6⟩
 
-def a₀ : Var := ⟨"a", 0⟩
+/-- Local 0; for example, its diagnostic spelling is `a`. -/
+def a₀ : Var := ⟨0⟩
 
-def b₁ : Var := ⟨"b", 1⟩
+/-- Local 1; for example, its diagnostic spelling is `b`. -/
+def b₁ : Var := ⟨1⟩
 
-def s₂ : Var := ⟨"s", 2⟩
+/-- Local 2; for example, its diagnostic spelling is `s`. -/
+def s₂ : Var := ⟨2⟩
 
-def z₃ : Var := ⟨"z", 3⟩
+/-- Local 3; for example, its diagnostic spelling is `z`. -/
+def z₃ : Var := ⟨3⟩
+
+/-- Example diagnostic spellings; for example, local 4 is printed as `p`. These names
+are not part of any program or semantic context. -/
+def localNames : LocalNames :=
+  [(p₄, "p"), (q₅, "q"), (x₁, "x"), (y₆, "y"), (s₂, "s")]
 
 /-- The slice's central program: an empty linear struct is created, moved, and consumed by a
 destructuring `let` (OWN-1, OWN-2, PAT-5). It exits with 42.
@@ -149,10 +165,10 @@ fn main() -> u8 {
 }
 ``` -/
 def copyTwice : Program :=
-  { decls, body := [.let_ (.name p₀) (.struct "Unit0") (.mk "Unit0" []),
-                    .let_ (.name q₁) (.struct "Unit0") (cp p₀),
-                    .letStruct "Unit0" [] (cp p₀),
-                    .letStruct "Unit0" [] (cp q₁)],
+  { decls, body := [.let_ (.name p₄) (.struct "Unit0") (.mk "Unit0" []),
+                    .let_ (.name q₅) (.struct "Unit0") (cp p₄),
+                    .letStruct "Unit0" [] (cp p₄),
+                    .letStruct "Unit0" [] (cp q₅)],
     ret := .int .u8 0 }
 
 example : check copyTwice = true := by decide
@@ -182,9 +198,9 @@ fn main() -> u8 {
 }
 ``` -/
 def destructureAdd : Program :=
-  { decls, body := [.let_ (.name p₀) (.struct "Pair") (.mk "Pair" [("a", .int .u8 40), ("b", .int .u8 2)]),
-                    .letStruct "Pair" [("a", .name x₁), ("b", .name y₁)] (mv p₀),
-                    .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₁))],
+  { decls, body := [.let_ (.name p₄) (.struct "Pair") (.mk "Pair" [("a", .int .u8 40), ("b", .int .u8 2)]),
+                    .letStruct "Pair" [("a", .name x₁), ("b", .name y₆)] (mv p₄),
+                    .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₆))],
     ret := .copy s₂ }
 
 example : check destructureAdd = true := by decide
@@ -200,8 +216,8 @@ fn main() -> u8 {
 }
 ``` -/
 def missingField : Program :=
-  { decls, body := [.let_ (.name p₀) (.struct "Pair") (.mk "Pair" [("a", .int .u8 40), ("b", .int .u8 2)]),
-                    .letStruct "Pair" [("a", .name x₁)] (mv p₀)],
+  { decls, body := [.let_ (.name p₄) (.struct "Pair") (.mk "Pair" [("a", .int .u8 40), ("b", .int .u8 2)]),
+                    .letStruct "Pair" [("a", .name x₁)] (mv p₄)],
     ret := .copy x₁ }
 
 example : check missingField = false := by decide
@@ -215,8 +231,8 @@ fn main() -> u8 {
 }
 ``` -/
 def wildcardField : Program :=
-  { decls, body := [.let_ (.name p₀) (.struct "Pair") (.mk "Pair" [("a", .int .u8 42), ("b", .int .u8 0)]),
-                    .letStruct "Pair" [("a", .name x₁), ("b", .wild)] (mv p₀)],
+  { decls, body := [.let_ (.name p₄) (.struct "Pair") (.mk "Pair" [("a", .int .u8 42), ("b", .int .u8 0)]),
+                    .letStruct "Pair" [("a", .name x₁), ("b", .wild)] (mv p₄)],
     ret := .copy x₁ }
 
 example : check wildcardField = true := by decide
@@ -268,9 +284,9 @@ fn main() -> u8 {
 }
 ``` -/
 def fieldOverflowTrap : Program :=
-  { decls, body := [.let_ (.name p₀) (.struct "Pair") (.mk "Pair" [("a", .int .u8 200), ("b", .int .u8 100)]),
-                    .letStruct "Pair" [("a", .name x₁), ("b", .name y₁)] (mv p₀),
-                    .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₁))],
+  { decls, body := [.let_ (.name p₄) (.struct "Pair") (.mk "Pair" [("a", .int .u8 200), ("b", .int .u8 100)]),
+                    .letStruct "Pair" [("a", .name x₁), ("b", .name y₆)] (mv p₄),
+                    .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₆))],
     ret := .copy s₂ }
 
 example : check fieldOverflowTrap = false := by decide
@@ -288,10 +304,10 @@ fn main() -> u8 {
 }
 ``` -/
 def fieldOverflowMoved : Program :=
-  { decls, body := [.let_ (.name p₀) (.struct "Pair") (.mk "Pair" [("a", .int .u8 200), ("b", .int .u8 100)]),
-                    .let_ (.name q₁) (.struct "Pair") (mv p₀),
-                    .letStruct "Pair" [("a", .name x₁), ("b", .name y₁)] (mv q₁),
-                    .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₁))],
+  { decls, body := [.let_ (.name p₄) (.struct "Pair") (.mk "Pair" [("a", .int .u8 200), ("b", .int .u8 100)]),
+                    .let_ (.name q₅) (.struct "Pair") (mv p₄),
+                    .letStruct "Pair" [("a", .name x₁), ("b", .name y₆)] (mv q₅),
+                    .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₆))],
     ret := .copy s₂ }
 
 example : check fieldOverflowMoved = false := by decide
@@ -301,9 +317,9 @@ example : run fieldOverflowMoved 10 = .trap .arithmeticOverflow := by decide
 /-- Accepted with the facts in range: the known sum fits, and the program exits with it. The
 known field values make no program with a fitting sum fail to check. -/
 def fieldSumFits : Program :=
-  { decls, body := [.let_ (.name p₀) (.struct "Pair") (.mk "Pair" [("a", .int .u8 200), ("b", .int .u8 55)]),
-                    .letStruct "Pair" [("a", .name x₁), ("b", .name y₁)] (mv p₀),
-                    .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₁))],
+  { decls, body := [.let_ (.name p₄) (.struct "Pair") (.mk "Pair" [("a", .int .u8 200), ("b", .int .u8 55)]),
+                    .letStruct "Pair" [("a", .name x₁), ("b", .name y₆)] (mv p₄),
+                    .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₆))],
     ret := .copy s₂ }
 
 example : check fieldSumFits = true := by decide
@@ -361,9 +377,9 @@ fn f(x: u8) -> u8 {
 }
 ``` -/
 def partialKnownRefused : List Stmt :=
-  [.let_ (.name p₀) (.struct "Pair") (.mk "Pair" [("a", .copy x₀), ("b", .int .u8 200)]),
-   .letStruct "Pair" [("a", .name x₁), ("b", .name y₁)] (mv p₀),
-   .let_ (.name s₂) u8 (.add (.copy y₁) (.int .u8 100)),
+  [.let_ (.name p₄) (.struct "Pair") (.mk "Pair" [("a", .copy x₀), ("b", .int .u8 200)]),
+   .letStruct "Pair" [("a", .name x₁), ("b", .name y₆)] (mv p₄),
+   .let_ (.name s₂) u8 (.add (.copy y₆) (.int .u8 100)),
    .let_ (.name z₃) u8 (.add (.copy x₁) (.copy s₂))]
 
 example : bodyOkB decls inputCtx partialKnownRefused (.copy z₃) = false := by decide
@@ -379,9 +395,9 @@ fn f(x: u8) -> u8 {
 }
 ``` -/
 def partialUnknownRefused : List Stmt :=
-  [.let_ (.name p₀) (.struct "Pair") (.mk "Pair" [("a", .copy x₀), ("b", .int .u8 200)]),
-   .letStruct "Pair" [("a", .name x₁), ("b", .name y₁)] (mv p₀),
-   .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₁))]
+  [.let_ (.name p₄) (.struct "Pair") (.mk "Pair" [("a", .copy x₀), ("b", .int .u8 200)]),
+   .letStruct "Pair" [("a", .name x₁), ("b", .name y₆)] (mv p₄),
+   .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₆))]
 
 example : bodyOkB decls inputCtx partialUnknownRefused (.copy s₂) = false := by decide
 

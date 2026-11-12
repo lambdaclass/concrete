@@ -696,6 +696,14 @@ ConcreteSpec.IntTy.u16.sizeOf_spec
 ConcreteSpec.IntTy.u32.sizeOf_spec	
 ConcreteSpec.IntTy.u64.sizeOf_spec	
 ConcreteSpec.IntTy.u8.sizeOf_spec	
+ConcreteSpec.LocalIdentity.diagnostics_frame	
+ConcreteSpec.LocalIdentity.drop_presentation	propext
+ConcreteSpec.LocalIdentity.erase_presentation	
+ConcreteSpec.LocalIdentity.first_binding	propext
+ConcreteSpec.LocalIdentity.number_presentation	
+ConcreteSpec.LocalIdentity.numeric_identity	propext
+ConcreteSpec.LocalIdentity.read_presentation	
+ConcreteSpec.LocalIdentity.update_presentation	
 ConcreteSpec.Observe.Observation.exited.inj	
 ConcreteSpec.Observe.Observation.exited.injEq	propext
 ConcreteSpec.Observe.Observation.exited.sizeOf_spec	
@@ -1253,7 +1261,6 @@ ConcreteSpec.instDecidableEqVal.decEq._proof_6
 ConcreteSpec.instDecidableEqVal.decEq._proof_7	
 ConcreteSpec.instDecidableEqVar.decEq._proof_1	
 ConcreteSpec.instDecidableEqVar.decEq._proof_2	
-ConcreteSpec.instDecidableEqVar.decEq._proof_3	
 ConcreteSpec.knownAtom.eq_1	
 ConcreteSpec.knownAtom.eq_2	
 ConcreteSpec.knownAtom.eq_3	
@@ -1457,6 +1464,8 @@ _private.ConcreteSpec.Proofs.Cleanup.0.ConcreteSpec.Cleanup.unwound.match_1.eq_3
 _private.ConcreteSpec.Proofs.Cleanup.0.ConcreteSpec.Cleanup.unwound.match_1.eq_4	
 _private.ConcreteSpec.Proofs.Cleanup.0.ConcreteSpec.Cleanup.unwound.match_1.eq_5	
 _private.ConcreteSpec.Proofs.Cleanup.0.ConcreteSpec.Cleanup.unwound.match_1.eq_6	
+_private.ConcreteSpec.Proofs.LocalIdentity.0.ConcreteSpec.Core.AList.lookup.match_1.eq_1	
+_private.ConcreteSpec.Proofs.LocalIdentity.0.ConcreteSpec.Core.AList.lookup.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Observe.0.ConcreteSpec.Observe.instReprObservation.repr.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Observe.0.ConcreteSpec.Observe.instReprObservation.repr.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Observe.0.ConcreteSpec.Observe.instReprObservation.repr.match_1.eq_3	

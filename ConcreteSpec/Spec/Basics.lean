@@ -13,6 +13,17 @@ map first; `map` takes the function first, as `List.map` does. Call them qualifi
 (`AList.lookup Γ x`): on a plain `List` the dotted form would reach `List.erase` or `List.map`.
 -/
 
+namespace ConcreteSpec
+
+/-- A local's fresh numeric identity. For example, `⟨7⟩` denotes local 7 regardless of
+its spelling in the source; two different numbers denote different locals. -/
+structure Var where
+  /-- The identity number; for example, local `⟨7⟩` has number 7. -/
+  id : Nat
+  deriving DecidableEq, Repr
+
+end ConcreteSpec
+
 namespace ConcreteSpec.Core
 
 /-- A finite map as a list of key–value pairs. A key may occur more than once; the first entry
@@ -59,3 +70,11 @@ example : map (· * 2) [(1, 10), (2, 20)] = [(1, 20), (2, 40)] := rfl
 end AList
 
 end ConcreteSpec.Core
+
+namespace ConcreteSpec
+
+/-- Source spellings for diagnostics only. For example, `[(⟨7⟩, "count")]` displays
+local 7 as `count`. This table is separate from every semantic context and program. -/
+abbrev LocalNames := Core.AList Var String
+
+end ConcreteSpec

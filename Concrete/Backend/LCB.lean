@@ -1,3 +1,4 @@
+import ConcreteSpec.Proofs.Basics
 import Concrete.Backend.Runtime
 import Concrete.BIR.Progress
 import LeanCompilerBackend.Verified.Job
@@ -32,6 +33,8 @@ targets through LCB's compatibility backends, reached with LCB's own `Verified.r
 lowering, assembly rendering, the assembler and the linker are inside `P_toolchain[lcb]`. `render`
 prints the function as QBE text only as a debug dump.
 -/
+
+open ConcreteSpec.Core (AList)
 
 namespace Concrete.Backend.LCB
 open Concrete.BIR
@@ -99,8 +102,9 @@ def numberingOk (p : Program) : Bool :=
   (intermediates p).all (fun m => !slots.contains m)
 
 /-- The LCB value id of a register. `adapt` refuses a program where a register has two
-definitions, so this is a function of the register. -/
-def regId (p : Program) (r : Reg) : Option Nat := (ids p).lookup r
+definitions, so this is a function of the register.
+For example, a register numbered 7 is looked up as `some 7`. -/
+def regId (p : Program) (r : Reg) : Option Nat := AList.lookup (ids p) r
 
 def idOf (p : Program) (r : Reg) : Except String Nat :=
   match regId p r with
@@ -376,8 +380,9 @@ theorem inst_length {p : Program} {n : Nat} {ins : Inst} {xs : List Source.Instr
 
 /-! ## `adapter_correct`, numbering -/
 
+/-- In a list with distinct registers, every listed binding is returned by the shared lookup. For example, a single register/id pair is found. -/
 theorem lookup_of_mem {l : List (Reg × Nat)} (hn : (l.map Prod.fst).Nodup) {r : Reg} {n : Nat}
-    (hm : (r, n) ∈ l) : l.lookup r = some n := by
+    (hm : (r, n) ∈ l) : AList.lookup l r = some n := by
   induction l with
   | nil => simp at hm
   | cons a l ih =>
@@ -385,11 +390,11 @@ theorem lookup_of_mem {l : List (Reg × Nat)} (hn : (l.map Prod.fst).Nodup) {r :
     simp only [List.map_cons, List.nodup_cons, List.mem_map] at hn
     simp only [List.mem_cons, Prod.mk.injEq] at hm
     rcases hm with ⟨rfl, rfl⟩ | hm
-    · simp [List.lookup]
+    · simp [AList.lookup]
     · have hne : r ≠ r' := by
         rintro rfl; exact hn.1 ⟨(r, n), hm, rfl⟩
-      have hb : (r == r') = false := by simpa using hne
-      simp only [List.lookup, hb]
+      have hb : r' ≠ r := Ne.symm hne
+      simp only [AList.lookup, ite_eq_right hb]
       exact ih hn.2 hm
 
 /-- A block parameter's id is its position. -/
@@ -416,10 +421,10 @@ theorem enc_width (v : Val) : (enc v).width = .word := by cases v <;> rfl
 
 theorem word_bne : (Width.word != Width.word) = false := by decide
 
-theorem mem_of_lookup {l : List (Reg × Nat)} {r : Reg} {n : Nat} (h : l.lookup r = some n) :
+/-- A successful numbering lookup names a listed register/id pair. For example, returning id 7 means that pair occurs in the numbering. -/
+theorem mem_of_lookup {l : List (Reg × Nat)} {r : Reg} {n : Nat} (h : AList.lookup l r = some n) :
     (r, n) ∈ l := by
-  obtain ⟨l₁, l₂, rfl, _⟩ := List.lookup_eq_some_iff.mp h
-  simp
+  exact ConcreteSpec.Core.AList.lookup_mem h
 
 theorem eq_of_snd {l : List (Reg × Nat)} (hn : (l.map Prod.snd).Nodup) {a b : Reg} {n : Nat}
     (ha : (a, n) ∈ l) (hb : (b, n) ∈ l) : a = b := by
@@ -434,9 +439,10 @@ theorem eq_of_snd {l : List (Reg × Nat)} (hn : (l.map Prod.snd).Nodup) {a b : R
     · subst hb; exact absurd ⟨(a, n), ha, rfl⟩ hn.1
     · exact ih hn.2 ha hb
 
-/-- Agreement: every BIR register's newest value sits, encoded, at its LCB id. -/
+/-- Agreement: every BIR register's newest value sits, encoded, at its LCB id.
+For example, a BIR register holding 42 must have the encoding of 42 in its numbered LCB slot. -/
 def Agrees (p : Program) (benv : Env) (lenv : Source.Environment) : Prop :=
-  ∀ r v, lookup benv r = some v → ∃ n, regId p r = some n ∧ lenv[n]? = some (some (enc v))
+  ∀ r v, AList.lookup benv r = some v → ∃ n, regId p r = some n ∧ lenv[n]? = some (some (enc v))
 
 theorem regId_injective {p : Program} (hok : numberingOk p = true) {a b : Reg} {n : Nat}
     (ha : regId p a = some n) (hb : regId p b = some n) : a = b := by
@@ -479,13 +485,14 @@ theorem agrees_set_other {p : Program} {benv : Env} {lenv : Source.Environment} 
   rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_ne (hm r n hn).symm]
   exact hl
 
-/-- Defining register `d` with `v` at its own slot extends agreement. -/
+/-- Defining register `d` with `v` at its own slot extends agreement.
+For example, defining a fresh register holding 42 adds the same encoded value on the LCB side. -/
 theorem agrees_define {p : Program} (hok : numberingOk p = true) {benv : Env}
     {lenv : Source.Environment} {d : Reg} {nd : Nat} {v : Val} (hag : Agrees p benv lenv)
     (hd : regId p d = some nd) (hs : nd < lenv.size) :
     Agrees p ((d, v) :: benv) (lenv.set! nd (some (enc v))) := by
   intro r w hw
-  simp only [lookup] at hw
+  simp only [AList.lookup] at hw
   by_cases hdr : d = r
   · subst hdr
     simp at hw
@@ -811,13 +818,15 @@ theorem trunc_steps {f : Source.Function} {s : Source.State} {lb : Source.Block}
 
 /-- Every integer a BIR environment binds is in its type's range (immediates are, by WF; results
 are, by `wrap_inRange`). `binOvf_steps` needs it: agreement alone would let a `.u8` register hold
-`2 ^ 32`, whose word is `0`. -/
-def InRange (benv : Env) : Prop := ∀ r t x, lookup benv r = some (.int t x) → t.inRange x = true
+`2 ^ 32`, whose word is `0`.
+For example, a `u8` binding of 42 satisfies the range requirement. -/
+def InRange (benv : Env) : Prop := ∀ r t x, AList.lookup benv r = some (.int t x) → t.inRange x = true
 
+/-- Adding an in-range value preserves the environment range invariant. For example, adding `u8` value 42 preserves `InRange`. -/
 theorem inRange_cons {benv : Env} {d : Reg} {v : Val} (hr : InRange benv)
     (hv : ∀ t x, v = .int t x → t.inRange x = true) : InRange ((d, v) :: benv) := by
   intro r t x h
-  simp only [lookup] at h
+  simp only [AList.lookup] at h
   by_cases hdr : d = r
   · simp [hdr] at h; exact hv t x h
   · simp [hdr] at h; exact hr r t x h
@@ -1464,25 +1473,27 @@ theorem getElem?_foldl_set_mem {α : Type} (g : α → Nat) (v : α → Option S
       simp [Array.set!_eq_setIfInBounds, hs]
     · exact getElem?_foldl_set_mem g v l _ hn.2 x hx (by rw [size_set!]; exact hs)
 
+/-- Search the first environment before the second. For example, a first binding of register 7 hides any later binding of 7. -/
 theorem lookup_append {l₁ l₂ : Env} {r : Reg} :
-    lookup (l₁ ++ l₂) r = match lookup l₁ r with | some v => some v | none => lookup l₂ r := by
+    AList.lookup (l₁ ++ l₂) r = match AList.lookup l₁ r with | some v => some v | none => AList.lookup l₂ r := by
   induction l₁ with
   | nil => rfl
   | cons x l ih =>
     obtain ⟨r', v'⟩ := x
-    simp only [List.cons_append, lookup]
+    simp only [List.cons_append, AList.lookup]
     split <;> simp_all
 
+/-- A lookup in zipped parameters and values has a matching position. For example, the first parameter is paired with the first value. -/
 theorem lookup_zip {r : Reg} : ∀ {ps : List Reg} {vs : List Val}, ps.length = vs.length →
-    (∀ v, lookup (ps.zip vs) r = some v → ∃ i : Nat, ps[i]? = some r ∧ vs[i]? = some v) ∧
-    (lookup (ps.zip vs) r = none → r ∉ ps)
-  | [], [], _ => by simp [lookup]
+    (∀ v, AList.lookup (ps.zip vs) r = some v → ∃ i : Nat, ps[i]? = some r ∧ vs[i]? = some v) ∧
+    (AList.lookup (ps.zip vs) r = none → r ∉ ps)
+  | [], [], _ => by simp [AList.lookup]
   | [], _ :: _, h => by simp at h
   | _ :: _, [], h => by simp at h
   | q :: ps, w :: vs, h => by
     simp only [List.length_cons, Nat.add_right_cancel_iff] at h
     obtain ⟨ih₁, ih₂⟩ := lookup_zip (r := r) h
-    simp only [List.zip_cons_cons, lookup]
+    simp only [List.zip_cons_cons, AList.lookup]
     by_cases hq : q = r
     · subst hq
       simp only [↓reduceIte, Option.some.injEq, reduceCtorEq, false_implies, and_true]
@@ -1518,7 +1529,8 @@ theorem optionMapM_ok {α β : Type} {g : α → Option β} :
         | succ i => simpa using hel i x (by simpa using hx)
 
 /-- One BIR edge `j → t` with arguments `args`, the only edge from `j` into `t`: LCB's `transfer`
-lands at `t`'s first position with the invariant for BIR's `enter`. -/
+lands at `t`'s first position with the invariant for BIR's `enter`.
+For example, passing one argument to one block parameter preserves their paired values. -/
 theorem edge_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function}
     (hf : adapt p = .ok f) {j t : Nat} {bj : Block} (hbj : p.blocks[j]? = some bj)
     {args : List Operand} (hedge : edgesTo t j bj.term = [(j, args)])
@@ -1595,7 +1607,7 @@ theorem edge_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function
   · intro r v hv
     rw [lookup_append] at hv
     have hz := lookup_zip (r := r) (show (bt.params.map Prod.fst).length = vals.length by simp; omega)
-    cases hlz : lookup ((bt.params.map Prod.fst).zip vals) r with
+    cases hlz : AList.lookup ((bt.params.map Prod.fst).zip vals) r with
     | none =>
       simp only [hlz] at hv
       have hnot := hz.2 hlz
@@ -1628,7 +1640,7 @@ theorem edge_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function
   · intro r t' x hv
     rw [lookup_append] at hv
     have hz := lookup_zip (r := r) (show (bt.params.map Prod.fst).length = vals.length by simp; omega)
-    cases hlz : lookup ((bt.params.map Prod.fst).zip vals) r with
+    cases hlz : AList.lookup ((bt.params.map Prod.fst).zip vals) r with
     | none => simp only [hlz] at hv; exact hr r t' x hv
     | some v' =>
       simp only [hlz, Option.some.injEq] at hv
@@ -1664,7 +1676,8 @@ theorem condbr_ne {p : Program} (hwf : WF p) {j : Nat} {b : Block} (hb : p.block
   exact h.1.1.2
 
 /-- Each BIR run from block `j` is matched by LCB from `⟨j, 0, env⟩`: an exit or a trap by a
-return of its encoding, running out of fuel by at least `fuel` LCB steps. -/
+return of its encoding, running out of fuel by at least `fuel` LCB steps.
+For example, a BIR return of 42 is simulated by an LCB return of its encoding. -/
 theorem runBlock_sim {p : Program} (hwf : WF p) (hok : numberingOk p = true) {f : Source.Function}
     (hf : adapt p = .ok f) :
     ∀ (fuel j : Nat) (benv : Env) (env : Source.Environment), env.size = valueCount p →
@@ -1768,7 +1781,7 @@ theorem runBlock_sim {p : Program} (hwf : WF p) (hok : numberingOk p = true) {f 
       | error e => simp [hid] at hterm
       | ok nc =>
       simp only [hid, pure, Except.pure, Except.ok.injEq] at hterm
-      cases hl : lookup benv₁ c with
+      cases hl : AList.lookup benv₁ c with
       | none => simp only [hl]
       | some v =>
       rcases v with ⟨ty, x⟩ | bb
@@ -1830,7 +1843,8 @@ theorem initial_ok {p : Program} (hwf : WF p) {f : Source.Function} (hf : adapt 
 /-- **`adapter_correct`, over runs.** For a well-formed BIR program that the adapter accepts, under
 LCB's own semantics (`Source.HasBehavior`, imported and never restated): a BIR run that exits with
 `c` makes the adapted body return the word `c`; one that traps at site `s` makes it return the
-word `256 + s`; and a program that runs out of fuel at every fuel makes it diverge. -/
+word `256 + s`; and a program that runs out of fuel at every fuel makes it diverge.
+For example, successful adaptation preserves an exiting execution with status 42. -/
 theorem adapter_correct_run {p : Program} (hwf : WF p) {f : Source.Function}
     (hf : adapt p = .ok f) :
     (∀ fuel c, run p fuel = .exited c → Source.HasBehavior f #[] (.returned (word c))) ∧
@@ -1839,7 +1853,7 @@ theorem adapter_correct_run {p : Program} (hwf : WF p) {f : Source.Function}
     ((∀ fuel, run p fuel = .outOfFuel) → Source.HasBehavior f #[] .diverges) := by
   have hok := (adapt_ok hf).1
   have sim := fun fuel => runBlock_sim hwf hok hf fuel 0 [] (Array.replicate (valueCount p) none)
-    (by simp) (fun r v h => by simp [lookup] at h) (fun r t x h => by simp [lookup] at h)
+    (by simp) (fun r v h => by simp [AList.lookup] at h) (fun r t x h => by simp [AList.lookup] at h)
   refine ⟨fun fuel c h => ?_, fun fuel st h => ?_, fun h => ?_⟩
   · unfold run at h
     cases hb : p.blocks[0]? with
