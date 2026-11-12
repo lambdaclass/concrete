@@ -1,0 +1,2 @@
+[piece 3 of 4: scripts]
+- scripts/proofs/lake_tool.sh:90: A relative `CONCRETE_EXT_TOOLS` produces a dangling registry symlink: `tools/registry-…` is resolved relative to the temporary Cargo home, although the registry was created relative to the project directory. Cold nanoda builds then fail when Cargo accesses the registry. Normalize the cache directory to an absolute path before constructing paths or symlinks.
