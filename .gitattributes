@@ -1,1 +1,4 @@
 *.con linguist-language=Rust
+
+# Empty final TSV columns require trailing delimiter tabs.
+ConcreteSpec/landing/inventory.tsv whitespace=-blank-at-eol

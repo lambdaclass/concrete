@@ -22,12 +22,28 @@ def other : Nat := 8
 theorem proofA : True := True.intro
 theorem proofB : True := by trivial
 def branch : Nat → Nat | 0 => 0 | n+1 => n
+namespace Decoy
+theorem proofA : True := True.intro
+def other : Nat := 99
+end Decoy
+attribute [reducible] dep
+/- Instance (law `does.not.exist`, mutant `also.missing`). -/
+/-- Instance (law `proofA`, case `one`). -/
+example : True := proofA
+/-- Planted (law `proofA`, case `one`, mutant `other`). -/
+example : other = 8 := rfl
 end ConcreteSpec.Control
 ''')
         before = probe.read_bytes()
         data = census(root, exporter,regenerate_modules=('ConcreteSpec.Control',))
         if probe.read_bytes()!=before or list(root.rglob('*.olean')):
             raise ValueError('census isolation control: caller sources/artifacts modified')
+        metadata = [r for r in data if r['record']=='resolved-command']
+        if not any(r['targets']==['ConcreteSpec.Control.dep'] for r in metadata):
+            raise ValueError('reducible attribute target was not resolved by Lean')
+        if not any(r['laws']==['ConcreteSpec.Control.proofA'] and r['mutants']==['ConcreteSpec.Control.other'] for r in metadata):
+            raise ValueError('namespace-relative law/mutant names were not resolved by Lean')
+        print('control PASS: reducible targets and namespace-relative annotations resolved by Lean')
         origins = {r['name']:r for r in data if r['record']=='origin'}
         decls = {r['name']:r for r in data if r['record']=='declaration'}
         if decls['ConcreteSpec.Control.dep']['shape']==decls['ConcreteSpec.Control.other']['shape']:

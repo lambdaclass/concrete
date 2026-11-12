@@ -1,0 +1,38 @@
+{
+  "added": {
+    "ConcreteSpec/Proofs/ObserveEnvironment.lean:16:37": "Prerequisite support of relocated law/control commands; move with its earliest Lean-observed consumer, preserving command atomicity",
+    "ConcreteSpec/Proofs/ObserveEnvironment.lean:175:180": "Prerequisite support of relocated law/control commands; move with its earliest Lean-observed consumer, preserving command atomicity",
+    "ConcreteSpec/Proofs/ObserveEnvironment.lean:369:373": "Prerequisite support of relocated law/control commands; move with its earliest Lean-observed consumer, preserving command atomicity",
+    "ConcreteSpec/Proofs/ObserveEnvironment.lean:375:376": "Prerequisite support of relocated law/control commands; move with its earliest Lean-observed consumer, preserving command atomicity",
+    "ConcreteSpec/Proofs/ObserveEnvironment.lean:378:390": "Prerequisite support of relocated law/control commands; move with its earliest Lean-observed consumer, preserving command atomicity",
+    "ConcreteSpec/Proofs/ObserveEnvironment.lean:392:393": "Prerequisite support of relocated law/control commands; move with its earliest Lean-observed consumer, preserving command atomicity",
+    "ConcreteSpec/Proofs/ObserveEnvironment.lean:395:398": "Prerequisite support of relocated law/control commands; move with its earliest Lean-observed consumer, preserving command atomicity",
+    "ConcreteSpec/Proofs/ObserveEnvironment.lean:39:70": "Prerequisite support of relocated law/control commands; move with its earliest Lean-observed consumer, preserving command atomicity",
+    "ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466": "Prerequisite support of relocated law/control commands; move with its earliest Lean-observed consumer, preserving command atomicity",
+    "ConcreteSpec/Proofs/ObserveEnvironment.lean:468:474": "Prerequisite support of relocated law/control commands; move with its earliest Lean-observed consumer, preserving command atomicity",
+    "ConcreteSpec/Proofs/ObserveEnvironment.lean:476:481": "Prerequisite support of relocated law/control commands; move with its earliest Lean-observed consumer, preserving command atomicity",
+    "ConcreteSpec/Proofs/ObserveEnvironment.lean:483:488": "Prerequisite support of relocated law/control commands; move with its earliest Lean-observed consumer, preserving command atomicity",
+    "ConcreteSpec/Proofs/ObserveEnvironment.lean:490:512": "Prerequisite support of relocated law/control commands; move with its earliest Lean-observed consumer, preserving command atomicity",
+    "ConcreteSpec/Proofs/ObserveEnvironment.lean:628:632": "Prerequisite support of relocated law/control commands; move with its earliest Lean-observed consumer, preserving command atomicity",
+    "ConcreteSpec/Proofs/ObserveEnvironment.lean:634:637": "Prerequisite support of relocated law/control commands; move with its earliest Lean-observed consumer, preserving command atomicity",
+    "ConcreteSpec/Proofs/ObserveEnvironment.lean:639:653": "Prerequisite support of relocated law/control commands; move with its earliest Lean-observed consumer, preserving command atomicity"
+  },
+  "removed": {
+    "ConcreteSpec/Proofs/Adequacy.lean:1670:1674": "No external consumer in the fresh Lean census; remains inventoried at its ordinary source assignment",
+    "ConcreteSpec/Proofs/Adequacy.lean:1761:1764": "No external consumer in the fresh Lean census; remains inventoried at its ordinary source assignment",
+    "ConcreteSpec/Proofs/Adequacy.lean:1942:1946": "No external consumer in the fresh Lean census; remains inventoried at its ordinary source assignment",
+    "ConcreteSpec/Proofs/Adequacy.lean:2427:2429": "No external consumer in the fresh Lean census; remains inventoried at its ordinary source assignment",
+    "ConcreteSpec/Proofs/Exec.lean:3602:3605": "No external consumer in the fresh Lean census; remains inventoried at its ordinary source assignment",
+    "ConcreteSpec/Proofs/Ident.lean:2095:2107": "No external consumer in the fresh Lean census; remains inventoried at its ordinary source assignment",
+    "ConcreteSpec/Proofs/Ident.lean:2264:2264": "No external consumer in the fresh Lean census; remains inventoried at its ordinary source assignment",
+    "ConcreteSpec/Proofs/Ident.lean:2266:2266": "No external consumer in the fresh Lean census; remains inventoried at its ordinary source assignment",
+    "ConcreteSpec/Proofs/Ident.lean:2268:2268": "No external consumer in the fresh Lean census; remains inventoried at its ordinary source assignment",
+    "ConcreteSpec/Proofs/Ident.lean:2341:2342": "No external consumer in the fresh Lean census; remains inventoried at its ordinary source assignment",
+    "ConcreteSpec/Proofs/Ident.lean:2343:2343": "No external consumer in the fresh Lean census; remains inventoried at its ordinary source assignment",
+    "ConcreteSpec/Proofs/Prim.lean:560:560": "No external consumer in the fresh Lean census; remains inventoried at its ordinary source assignment",
+    "ConcreteSpec/Proofs/Prim.lean:742:742": "No external consumer in the fresh Lean census; remains inventoried at its ordinary source assignment",
+    "ConcreteSpec/Proofs/Prim.lean:743:743": "No external consumer in the fresh Lean census; remains inventoried at its ordinary source assignment",
+    "ConcreteSpec/Proofs/Prim.lean:744:744": "No external consumer in the fresh Lean census; remains inventoried at its ordinary source assignment",
+    "ConcreteSpec/Spec/Observe.lean:725:727": "No external consumer in the fresh Lean census; remains inventoried at its ordinary source assignment"
+  }
+}

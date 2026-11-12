@@ -45,18 +45,13 @@ def main():
         ref = git('rev-parse','HEAD')
         if git('status','--porcelain','--untracked-files=no'):
             raise ValueError('progress fixture is not a committed snapshot')
-        # A fresh depth-one CI checkout must fetch an older receipt's exact object.
-        (root/'ConcreteSpec/Repaired.lean').write_text('namespace Repaired\ndef answer : Nat := 10\nend Repaired\n')
-        git('add','ConcreteSpec/Repaired.lean')
-        git('-c','user.name=Inventory control','-c','user.email=inventory@example.invalid',
-            '-c','commit.gpgsign=false','commit','--quiet','-m','later fixture commit')
-        fresh = root/'fresh'
-        git('clone','--quiet','--depth=1',root.as_uri(),str(fresh))
-        probe = subprocess.run(['git','cat-file','-e',ref+'^{commit}'],cwd=fresh,env=isolated,capture_output=True)
-        if probe.returncode==0:
-            raise ValueError('historical receipt object was not excluded by the shallow fixture')
-        refs = git('-C',str(fresh),'for-each-ref')
-        shallow = (fresh/'.git/shallow').read_bytes()
+        inventory.INVENTORY_INTRODUCTION = ref
+        introduction = ref
+        # A receipt must be later than introduction and retain the exact snapshot term.
+        git('-c','user.name=Control','-c','user.email=c@example.invalid',
+            '-c','commit.gpgsign=false','commit','--quiet','--allow-empty','-m','later fixture commit')
+        fresh = root
+        refs = git('for-each-ref')
         inventory.ROOT = fresh
         try:
             # A valid object on an unmerged branch is never landed progress.
@@ -76,12 +71,10 @@ def main():
                     raise ValueError('invalid landed source accepted: '+rejected)
             print('control PASS: unmerged branch and source snapshot progress refused')
             refs = git('-C',str(fresh),'for-each-ref')
-            # Original source digest remains distinct from the repaired command digest.
             old = inventory.row(record='declaration',name='Original.answer',piece='F05',digest='original-source-digest')
-            before = dict(old)
             landed = inventory.landed_population(ref)
-            if git('-C',str(fresh),'for-each-ref')!=refs or (fresh/'.git/shallow').read_bytes()!=shallow or (fresh/'.git/FETCH_HEAD').exists():
-                raise ValueError('receipt fetch moved refs, shallow boundary or FETCH_HEAD')
+            old['term_digest'] = landed['Repaired.answer']
+            before = dict(old)
             receipt = inventory.row(record='landed',name=old['name'],kind='landed-declaration',
                 source=ref,piece='F05',note='Repaired.answer',digest=landed['Repaired.answer'],disposition='present')
             inventory.check_landed([old,receipt],{old['name']:old})
@@ -99,11 +92,28 @@ def main():
                     raise
             else:
                 raise ValueError('invalid landed digest accepted')
-            # Automatic recording also accepts a repaired command under a surviving name.
+            # Automatic recording accepts only an identical snapshot fingerprint.
             surviving = dict(old,name='Repaired.answer')
             recorded = inventory.record_landed([surviving],'F05',ref)
             inventory.check_landed(recorded,{surviving['name']:surviving})
-            print('control PASS: repaired/relocated progress preserves source evidence and verifies commit/digest')
+            stale = dict(surviving,piece='M01',term_digest='older-main-fingerprint')
+            try: inventory.record_landed([stale],'M01',ref)
+            except ValueError: pass
+            else: raise ValueError('stale M01 fingerprint accepted')
+            (root/'ConcreteSpec/Repaired.lean').write_text('namespace Repaired\nend Repaired\n')
+            git('add','ConcreteSpec/Repaired.lean')
+            git('-c','user.name=Control','-c','user.email=c@example.invalid',
+                '-c','commit.gpgsign=false','commit','--quiet','-m','delete declaration')
+            try: inventory.check_landed([old,receipt],{old['name']:old})
+            except ValueError: pass
+            else: raise ValueError('deleted landed declaration accepted')
+            inventory.INVENTORY_INTRODUCTION = git('rev-parse','HEAD')
+            inventory.validate_landed_ref.cache_clear()
+            try: inventory.validate_landed_ref(ref)
+            except ValueError as exc:
+                if not str(exc).startswith('landed source predates inventory'): raise
+            else: raise ValueError('baseline-era receipt accepted')
+            print('control PASS: stale fingerprints, baseline-era receipts and later deletion refused')
         finally:
             inventory.ROOT = original_root
             inventory.landed_population.cache_clear()

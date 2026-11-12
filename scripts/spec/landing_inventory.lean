@@ -130,11 +130,42 @@ private def fingerprint (input output : IO.FS.Handle) (ci : ConstantInfo) : IO S
   unless digest.length == 64 do throw (IO.userError "kernel fingerprint worker failed")
   return digest
 
+private partial def docComment? (s : Syntax) : Option String :=
+  if s.isOfKind ``Parser.Command.docComment then some (TSyntax.getDocString ⟨s⟩)
+  else s.getArgs.findSome? docComment?
+
+private def resolvedMetadata (ctx : Parser.InputContext) (stx : Syntax)
+    (state : Elab.Command.State) : IO Unit := do
+  let scope := state.scopes.head!
+  let resolve (id : Name) : IO String := do
+    let candidates := ResolveName.resolveGlobalName state.env scope.opts scope.currNamespace scope.openDecls id
+    let names := candidates.filterMap fun (n, fields) => if fields.isEmpty then some n else none
+    match names with
+    | [n] => return n.toString
+    | _ => throw (IO.userError s!"unresolved or ambiguous inventory annotation: {id}")
+  let mut targets : Array String := #[]
+  if stx.isOfKind ``Parser.Command.attribute then
+    for id in stx[4].getArgs do targets := targets.push (← resolve id.getId)
+  let mut laws : Array String := #[]
+  let mut mutants : Array String := #[]
+  if let some doc := docComment? stx then
+    if doc.trimAscii.toString.startsWith "Instance (" || doc.trimAscii.toString.startsWith "Planted (" then
+      let parts := doc.splitOn "`"
+      for i in [:parts.length / 2] do
+        let label := parts[2*i]!
+        let name := parts[2*i+1]!.toName
+        if label.endsWith "law " then laws := laws.push (← resolve name)
+        if label.endsWith "mutant " then mutants := mutants.push (← resolve name)
+  emit [("record", toJson "resolved-command"), ("file", toJson ctx.fileName),
+    ("line", toJson (ctx.fileMap.toPosition (stx.getPos?.getD 0)).line),
+    ("targets", toJson targets), ("laws", toJson laws), ("mutants", toJson mutants)]
+
 private partial def originCommands (input output : IO.FS.Handle) (ctx : Parser.InputContext) (before : NameSet)
     (snap : Lean.Language.Lean.CommandParsedSnapshot) : IO Environment := do
   let state := snap.elabSnap.resultSnap.get.cmdState
   let after := state.env
   let stx := snap.stx
+  resolvedMetadata ctx stx state
   let start := ctx.fileMap.toPosition (stx.getPos?.getD 0)
   let stop := ctx.fileMap.toPosition (stx.getTailPos?.getD 0)
   let mut names := before

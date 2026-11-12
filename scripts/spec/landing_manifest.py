@@ -7,6 +7,7 @@ import argparse
 from collections import Counter, defaultdict
 import csv
 import hashlib
+import io
 from functools import lru_cache
 import json
 import os
@@ -154,7 +155,7 @@ def piece(file, line):
     if stem == 'Proofs/Observe2':
         return 'F20p' if 967 <= line <= 1011 else 'F20'
     if stem == 'Proofs/Frame':
-        return 'F29p' if 2334 <= line <= 2335 or 2343 <= line <= 2353 or 2429 <= line <= 2457 else 'F29'
+        return 'F29p' if 2334 <= line <= 2353 or 2429 <= line <= 2457 else 'F29'
     if stem == 'Spec/Leak':
         return 'F27' if line >= 417 else 'F26'
     if stem == 'Proofs/Leak':
@@ -188,12 +189,8 @@ def records_from_census(data, source_root=None):
         digest = sha((''.join(files[f]) if c['syntax']=='module-realization' else ''.join(files[f][c['line']-1:c['endLine']])).encode())
         uses = example_deps.get((f,c['line']),[])
         if c['syntax']=='Lean.Parser.Command.attribute':
-            uses = []
-            for ident in c['identifiers']:
-                matches = [n for n in names if n==ident or n.endswith('.'+ident)]
-                if len(matches)!=1:
-                    raise ValueError('ambiguous global attribute target: '+ident)
-                uses += matches
+            metadata = next(r for r in data if r['record']=='resolved-command' and r['file']==f and r['line']==c['line'])
+            uses = metadata['targets']
         r = row(record='command', name=f"{f}:{c['line']}:{c['endLine']}",
                 kind='example' if c['example'] else c['syntax'], source=f,
                 line=c['line'], end_line=c['endLine'], digest=digest,
@@ -397,6 +394,7 @@ def generate(data):
     for p, deps in PREREQS.items():
         rows.append(row(record='piece',name=p,kind='landing-piece',piece=p,prerequisites=','.join(deps),
                         disposition='owner-held' if p in HOLDS else 'retain',note=HOLDS.get(p,'')))
+    LAW_METADATA[:] = [r for r in data if r["record"]=="resolved-command"]
     population = records_from_census(data)
     anchors = {}
     for r in population:
@@ -422,7 +420,6 @@ def generate(data):
             r['migration'] = r['piece']
             r.update(piece='BASE',prerequisites='',disposition='retain')
             r['note'] += '; parsed baseline command; adapt at migration piece'
-    assign_law_controls(population)
     ancestry = {}
     def ancestors(p):
         if p not in ancestry:
@@ -438,6 +435,8 @@ def generate(data):
         if why not in r['note']:
             r['note'] += '; '+why
     command_rows = {r['name']:r for r in population if r['record']=='command'}
+    command_members = defaultdict(list)
+    for r in population: command_members[command_identity(r)].append(r)
     choices = emission_choices(data)
     generated = {n:r for n,r in byname.items() if r['line']=='0' and r['piece']!='BASE'}
     fixtures = shared_fixtures(command_rows)
@@ -450,7 +449,7 @@ def generate(data):
     # Choose only an actually observed, kernel-identical emission, never an inferred owner.
     # Single-emission helpers (including partial bodies) remain with their command.
     effective = {n:json.loads(r['dependencies']) for n,r in byname.items()}
-    for _ in range(len(PREREQS)*2):
+    for iteration in range(len(PREREQS)*2):
         changed = False
         users = defaultdict(list)
         for n,r in byname.items():
@@ -480,23 +479,59 @@ def generate(data):
                 changed = True
         consumers = [(r,effective[n]) for n,r in byname.items() if r['piece']!='BASE']
         consumers += [(r,json.loads(r['dependencies'])) for r in population if r['kind'] in ('example','Lean.Parser.Command.attribute') and r['piece']!='BASE']
+        fixture_users = defaultdict(set)
         for r,deps in consumers:
             for dep in deps:
                 d = byname[dep]
-                if available(r['piece'],d['piece']) or not available(d['piece'],r['piece']):
-                    continue
                 cmd = d['regeneration'] or command_identity(d)
-                if cmd in fixtures:
-                    for support in population:
-                        if command_identity(support)==cmd and support['piece']!='BASE':
-                            assign(support,r['piece'],'shared fixture/support moved to earliest consumer')
+                if cmd in fixtures and command_identity(r)!=cmd:
+                    fixture_users[cmd].add(r['piece'])
+        for cmd, users in fixture_users.items():
+            if command_rows[cmd]['piece']=='BASE': continue
+            earliest = [p for p in users if all(available(q,p) for q in users)]
+            if not earliest:
+                continue  # Other support commands may move this pass; final judgment refuses unresolved sets.
+            destination = earliest[0]
+            for support in command_members[cmd]:
+                if support['piece'] not in ('BASE',destination) and (support['line']!='0' or support['regeneration']==cmd):
+                    assign(support,destination,'shared fixture/support moved to earliest consumer')
                     changed = True
         if not changed:
-            break
+            before = [(r['piece'],r['migration']) for r in population]
+            assign_law_controls(population,effective)
+            # A moved command may own a generated auxiliary used by an unannotated
+            # command. Move that dependent command later, then solve emissions again.
+            for consumer,deps in consumers:
+                if consumer['piece']=='BASE': continue
+                unavailable = [d for d in deps if not available(consumer['piece'],byname[d]['piece'])
+                               and command_identity(byname[d]) not in fixtures]
+                if not unavailable: continue
+                identity = command_identity(consumer)
+                needs = {byname[d]['piece'] for d in deps if command_identity(byname[d])!=identity
+                         and command_identity(byname[d]) not in fixtures}
+                if consumer['piece'] in HOLDS: needs.add(consumer['piece'])
+                candidates = [p for p in PREREQS if all(available(p,d) for d in needs)]
+                destination = min(candidates,key=lambda p:(len(ancestry[p]),p))
+                old_piece = consumer['migration'] or consumer['piece']
+                for member in command_members[identity]:
+                    if member['piece']=='BASE': member['migration']=destination
+                    else: assign(member,destination,'dependent command follows relocated law or observed auxiliary')
+                    if member['record']=='declaration': MOVED_LAWS.setdefault(member['name'],old_piece)
+            if before==[(r['piece'],r['migration']) for r in population]: break
     else:
         raise ValueError('observed emission/fixture assignment did not converge')
     check_law_controls(population)
+    moved = {name:{'from':old,'to':byname[name]['migration'] or byname[name]['piece']} for name,old in sorted(MOVED_LAWS.items())}
+    (ROOT/'ConcreteSpec/landing/moved-laws.json').write_text(json.dumps(moved,indent=2,sort_keys=True)+'\n')
+    for r in population:
+        held = r['migration'] or r['piece']
+        if held in HOLDS:
+            r['disposition'] = 'owner-held'
+            if HOLDS[held] not in r['note']: r['note'] += '; '+HOLDS[held]
     update_contexts(population)
+    fixture_consumers = [(r,[] if r['piece']=='BASE' else effective[n]) for n,r in byname.items()]
+    fixture_consumers += [(r,json.loads(r['dependencies'])) for r in population if r['kind'] in ('example','Lean.Parser.Command.attribute') and r['piece']!='BASE']
+    fixture_placement(population,fixture_consumers,ancestry,write_basis=True)
     rows += population + evidence_rows()
     for i in range(1,11):
         c = f'C{i}'
@@ -526,32 +561,25 @@ def read():
         return list(reader)
 
 
+INVENTORY_INTRODUCTION = '5b617c680b72fa1fc033dd0c909e5c4b588c5690'
+
+
+@lru_cache(maxsize=None)
 def validate_landed_ref(ref):
     if len(ref)!=40 or any(c not in '0123456789abcdef' for c in ref):
         raise ValueError('landed source must be a full immutable commit SHA')
     if ref in PIN_TAGS.values():
         raise ValueError('snapshot pin cannot be landed progress: '+ref)
-    ensure_object(ref)
-    try:
-        git('merge-base', '--is-ancestor', ref, 'HEAD')
-    except subprocess.CalledProcessError:
-        # A shallow checkout must prove ancestry using a private complete repository;
-        # fetching into the caller would mutate its shallow boundary.
-        with tempfile.TemporaryDirectory(prefix='spec-ancestry-') as tmp:
-            git('clone', '--quiet', '--bare', '--no-local', git('remote','get-url','origin').decode().strip(), tmp)
-            env = {k:v for k,v in os.environ.items() if k not in git_local_variables()}
-            result = subprocess.run(['git','--git-dir='+tmp,'merge-base','--is-ancestor',ref,
-                                     git('rev-parse','HEAD').decode().strip()],env=env,capture_output=True)
-            if result.returncode:
-                raise ValueError('landed source is not an ancestor of checked revision: '+ref)
+    if git('rev-parse','--is-shallow-repository').decode().strip()=='true':
+        raise ValueError('landed ancestry requires complete history; checkout with fetch-depth: 0')
+    for older,newer,message in [(INVENTORY_INTRODUCTION,ref,'landed source predates inventory introduction: '),
+                                (ref,'HEAD','landed source is not an ancestor of checked revision: ')]:
+        try: git('merge-base','--is-ancestor',older,newer)
+        except subprocess.CalledProcessError: raise ValueError(message+ref)
 
 
 @lru_cache(maxsize=None)
 def landed_population(ref):
-    validate_landed_ref(ref)
-    if len(ref)!=40 or any(c not in '0123456789abcdef' for c in ref):
-        raise ValueError('landed source must be a full immutable commit SHA')
-    ensure_object(ref)
     with tempfile.TemporaryDirectory(prefix='spec-landed-') as tmp:
         root = Path(tmp)
         for path in git('ls-tree','-r','--name-only',ref,'ConcreteSpec','ConcreteSpec.lean').decode().splitlines():
@@ -560,14 +588,7 @@ def landed_population(ref):
                 target.parent.mkdir(parents=True,exist_ok=True)
                 target.write_bytes(source(ref,path))
         data = census(root, ROOT/'scripts/spec/landing_inventory.lean',examples=False,regenerate_modules=REGENERATE_MODULES)
-    origins = {(r['file'],r['name']):r for r in data if r['record']=='origin'}
-    result = {}
-    for d in data:
-        if d['record']!='declaration':
-            continue
-        o = origins[(d['module'].replace('.','/')+'.lean',d['name'])]
-        lines = source(ref,o['file']).splitlines(keepends=True)
-        result[d['name']] = sha(b''.join(lines[o['line']-1:o['endLine']]))
+    result = {d['name']:d['shape'] for d in data if d['record']=='declaration'}
     return result
 
 
@@ -578,7 +599,7 @@ def record_landed(rows, piece, ref):
     population = landed_population(ref)
     prior = {r['name'] for r in rows if r['record']=='landed'}
     targets = [r for r in rows if r['record']=='declaration' and r['piece']==piece and r['name'] not in prior]
-    missing = [r['name'] for r in targets if r['name'] not in population]
+    missing = [r['name'] for r in targets if population.get(r['name']) != r['term_digest']]
     if missing:
         raise ValueError('landed declarations missing; provide explicit renamed declaration mappings: '+', '.join(missing))
     return rows + [row(record='landed',name=r['name'],kind='landed-declaration',source=ref,
@@ -594,7 +615,9 @@ def check_landed(rows, decls):
             if r['name'] not in decls or r['piece']!=decls[r['name']]['piece']:
                 raise ValueError(f'invalid landed mapping: {r["name"]}')
             validate_landed_ref(r['source'])
-            if landed_population(r['source']).get(r['note']) != r['digest']:
+            if (r['digest'] != decls[r['name']]['term_digest'] or
+                landed_population(r['source']).get(r['note']) != r['digest'] or
+                landed_population(git('rev-parse','HEAD').decode().strip()).get(r['note']) != r['digest']):
                 raise ValueError(f'landed declaration mismatch: {r["name"]}')
 
 
@@ -634,6 +657,7 @@ def check_identity_control():
 
 
 def judgment(rows, data, dependencies=True, extra_root=None):
+    LAW_METADATA[:] = [r for r in (data if extra_root is None else data[0]) if r["record"]=="resolved-command"]
     seen = {}
     for r in rows:
         if r['record'] not in {'snapshot','piece','command','declaration','finding','contract','landed'}:
@@ -651,6 +675,10 @@ def judgment(rows, data, dependencies=True, extra_root=None):
         if pieces[p]['prerequisites'] != ','.join(PREREQS[p]):
             raise ValueError(f'plan prerequisites changed: {p}')
     for r in rows:
+        effective_piece = r['migration'] or r['piece']
+        if r['record'] in ('command','declaration') and effective_piece in HOLDS:
+            if r['disposition']!='owner-held' or HOLDS[effective_piece] not in r['note']:
+                raise ValueError('owner hold lost: '+r['name'])
         allowed = {'present'} if r['record']=='landed' else {'retain','repair','replace','owner-held','retire'}
         if r['disposition'] not in allowed:
             raise ValueError('invalid disposition: '+r['name'])
@@ -757,39 +785,62 @@ def judgment(rows, data, dependencies=True, extra_root=None):
                 d = decls[dep]
                 if d['piece'] != r['piece'] and d['piece'] not in closure[r['piece']]:
                     errors.append(f'{r["piece"]} {r["name"]} requires {d["piece"]} {dep}')
-        fixtures = shared_fixtures(command_rows)
-        for r,deps in consumers:
-            for dep in deps:
-                d = decls[dep]
-                if command_identity(d) in fixtures and r['piece'] in closure[d['piece']]:
-                    errors.append('shared fixture does not accompany earliest consumer: '+dep)
         if errors:
             raise ValueError('piece dependency order refused:\n'+'\n'.join(errors))
     if dependencies:
         check_law_controls(rows)
+        fixture_placement(rows, consumers, closure)
     return closure
+
+
+LAW_METADATA = []
+
+
+def fixture_placement(rows, consumers, closure, write_basis=False):
+    commands = {r['name']:r for r in rows if r['record']=='command'}
+    decls = {r['name']:r for r in rows if r['record']=='declaration'}
+    fixtures = shared_fixtures(commands)
+    users = defaultdict(set)
+    for r,deps in consumers:
+        for dep in deps:
+            cmd = decls[dep]['regeneration'] or command_identity(decls[dep])
+            if cmd in fixtures and command_identity(r)!=cmd:
+                users[cmd].add((r['record'],r['name'],r['piece']))
+    basis = {}
+    for cmd in sorted(fixtures):
+        c = commands[cmd]
+        pieces = {p for _,_,p in users[cmd]}
+        if not pieces: raise ValueError('shared fixture has no consumer: '+cmd)
+        earliest = [p for p in pieces if all(p==q or p in closure[q] for q in pieces)]
+        if not earliest or c['piece'] not in earliest:
+            raise ValueError('shared fixture does not accompany earliest consumer: '+cmd+' placed '+c['piece']+' consumers '+','.join(sorted(pieces)))
+        basis[cmd] = {'basis':'Lean-observed constant dependencies; earliest consumer in prerequisite partial order',
+                      'piece':c['piece'],'consumers':sorted(users[cmd])}
+    path = ROOT/'ConcreteSpec/landing/fixture-selection.json'
+    if write_basis:
+        path.write_text(json.dumps(basis,indent=2,sort_keys=True)+'\n')
+    elif not path.exists() or json.loads(path.read_text())!=json.loads(json.dumps(basis)):
+        raise ValueError('shared fixture selection evidence is stale')
 
 
 def law_control_groups(rows):
     decls = {r['name']:r for r in rows if r['record']=='declaration'}
-    def resolve(name):
-        if name in decls:
-            return decls[name]
-        matches = [r for n,r in decls.items() if n.endswith('.'+name)]
-        if len(matches)!=1:
-            raise ValueError('unresolved law/control annotation: '+name)
-        return matches[0]
-    snapshot_files = set(git('ls-tree','-r','--name-only',SOURCE,'ConcreteSpec','ConcreteSpec.lean').decode().splitlines())
-    for r in rows:
-        if r['record']!='command' or r['line']=='0' or r['source'] not in snapshot_files:
-            continue
-        lines = source(SOURCE,r['source']).decode().splitlines()
-        text = '\n'.join(lines[int(r['line'])-1:int(r['end_line'])])
-        for law in re.findall(r'(?:Instance|Planted) \(law `([^`]+)`',text):
-            yield resolve(law), [r]+[resolve(m) for m in re.findall(r'mutant `([^`]+)`',text)]
+    commands = {(r['source'],int(r['line'])):r for r in rows if r['record']=='command'}
+    for metadata in LAW_METADATA:
+        for law in metadata['laws']:
+            yield decls[law], [commands[(metadata['file'],metadata['line'])]] + [decls[n] for n in metadata['mutants']]
 
 
 def check_law_controls(rows):
+    cases = law_control_schedule(rows)
+    declarations_by_name = {r['name']:r for r in rows if r['record']=='declaration'}
+    @lru_cache(maxsize=None)
+    def closure(p): return {p}|set().union(*(closure(d) for d in PREREQS[p]))
+    for case in cases:
+        if case['unavailable'] and case['law_piece']!=case['control_piece']:
+            law = declarations_by_name[case['law']]
+            if case['control_piece'] not in closure(law['migration'] or law['piece']):
+                raise ValueError('law precedes required control material: '+case['law'])
     groups = list(law_control_groups(rows))
     shared = shared_law_support(groups)
     fixtures = shared_fixtures({r['name']:r for r in rows if r['record']=='command'})
@@ -813,27 +864,148 @@ def shared_law_support(groups):
     return {n for n, users in laws.items() if len(users)>1}
 
 
-def assign_law_controls(rows):
+ROUND3_SCHEDULE = '61998c215112b8ac5e011b242779a553334d74c7'
+
+
+@lru_cache(maxsize=1)
+def original_schedule():
+    # The coordinator ruling applies to the reviewed round-3 schedule, not to
+    # transient positions while fixtures and observed emissions are being solved.
+    rows = list(csv.DictReader(io.StringIO(source(ROUND3_SCHEDULE,
+                        'ConcreteSpec/landing/inventory.tsv').decode()),delimiter='\t'))
+    for r in rows:
+        if r['record'] not in ('command','declaration') or r['piece']=='BASE': continue
+        origin_line = int(command_identity(r).rsplit(':',2)[1])
+        if r['source']=='ConcreteSpec/Proofs/Examples.lean' and 0<origin_line<=64:
+            r['piece']='F35'  # coordinator-approved stale citation correction
+        if r['source']=='ConcreteSpec/Proofs/Frame.lean' and 2334<=origin_line<=2353:
+            r['piece']='F29p'  # owner-held span, including empty_invalid
+    return rows
+
+
+def law_control_schedule(rows, write=False):
+    historical = original_schedule()
+    declarations = {r['name']:r for r in historical if r['record']=='declaration'}
+    @lru_cache(maxsize=None)
+    def closure(p): return {p}|set().union(*(closure(d) for d in PREREQS[p]))
+    cases = []
+    for law,controls in law_control_groups(historical):
+        lp = law['migration'] or law['piece']
+        for c in controls:
+            cp = c['migration'] or c['piece']
+            unavailable = sorted(d for d in json.loads(c['dependencies']) if declarations[d]['piece'] not in closure(lp))
+            cases.append(dict(law=law['name'],control=c['name'],law_piece=lp,control_piece=cp,unavailable=unavailable))
+    evidence = {'basis':'Coordinator 2026-11-11: laws move to their controls; corrected add0 citation and restored held Frame span',
+                'source':SOURCE,'schedule_commit':ROUND3_SCHEDULE,'cases':cases}
+    path = ROOT/'ConcreteSpec/landing/law-control-placement.json'
+    if write: path.write_text(json.dumps(evidence,indent=2,sort_keys=True)+'\n')
+    elif not path.exists() or json.loads(path.read_text())!=evidence:
+        raise ValueError('law/control scheduling evidence is stale')
+    return cases
+
+
+MOVED_LAWS = {}
+
+
+def assign_law_controls(rows, effective_dependencies):
     groups = list(law_control_groups(rows))
     shared = shared_law_support(groups)
-    for law, controls in groups:
-        destination = law['migration'] or law['piece']
-        identities = {command_identity(r) for r in controls if r['name'] not in shared}
+    declarations = {r['name']:r for r in rows if r['record']=='declaration'}
+    commands = {r['name']:r for r in rows if r['record']=='command'}
+    fixtures = shared_fixtures(commands)
+    command_members = defaultdict(list)
+    for r in rows:
+        if r['record'] in ('command','declaration'):
+            identity = r['regeneration'] or command_identity(r)
+            command_members[identity].append(r)
+    def dependencies(r):
+        names = effective_dependencies[r['name']] if r['record']=='declaration' else json.loads(r['dependencies'])
+        def material(name,seen):
+            if declarations[name]['line']!='0': return {name}
+            if name in seen: return set()
+            return set().union(*(material(d,seen|{name}) for d in effective_dependencies[name]))
+        return set().union(*(material(name,set()) for name in names))
+    def effective(r): return r['migration'] or r['piece']
+    @lru_cache(maxsize=None)
+    def closure(p):
+        return {p} | set().union(*(closure(d) for d in PREREQS[p]))
+    closures = {p:closure(p) for p in PREREQS}
+    required_destinations = defaultdict(set)
+    for case in law_control_schedule(rows):
+        if case['unavailable'] and case['law_piece']!=case['control_piece']:
+            required_destinations[case['law']].add(case['control_piece'])
+    forced_destinations = {}
+    # Fixed point: a moved law can itself be a dependency of another group.
+    for _ in PREREQS:
+        changed = False
+        for law, controls in groups:
+            members = [law]+[c for c in controls if c['name'] not in shared]
+            identities = {command_identity(r) for r in members}
+            members = [r for identity in identities for r in command_members[identity]]
+            needs = set(required_destinations[law['name']])
+            needs.update(forced_destinations[i] for i in identities if i in forced_destinations)
+            for member in members:
+                if effective(member) in HOLDS:
+                    needs.add(effective(member))
+                for dep in dependencies(member):
+                    d = declarations[dep]
+                    if command_identity(d) not in identities and command_identity(d) not in fixtures:
+                        needs.add(d['piece'])
+            candidates = [p for p in PREREQS if needs <= closures[p]]
+            if not candidates: raise ValueError('no law/control destination: '+law['name'])
+            destination = effective(law) if effective(law) in candidates else min(candidates,key=lambda p:(len(closures[p]),p))
+            old = effective(law)
+            if old != destination:
+                MOVED_LAWS.setdefault(law['name'],old)
+            for r in members:
+                if effective(r)==destination: continue
+                if effective(r) in HOLDS and effective(r) not in closures[destination]:
+                    raise ValueError('cannot move owner-held material: '+r['name'])
+                if r['piece']=='BASE': r['migration']=destination
+                else: r.update(piece=destination,prerequisites=','.join(PREREQS[destination]))
+                changed = True
+        for identity, members in command_members.items():
+            authored = [r for r in members if r['record']=='declaration' and r['piece']!='BASE' and r['line']!='0']
+            if not authored: continue
+            current = effective(authored[0])
+            unavailable = {declarations[d]['piece'] for member in authored for d in dependencies(member)
+                           if d in MOVED_LAWS and declarations[d]['piece'] not in closures[current]
+                           and command_identity(declarations[d]) not in fixtures}
+            if not unavailable: continue
+            needs = {declarations[d]['piece'] for member in authored for d in dependencies(member)
+                     if command_identity(declarations[d]) not in fixtures and command_identity(declarations[d])!=identity}
+            candidates = [p for p in PREREQS if needs <= closures[p]]
+            destination = min(candidates,key=lambda p:(len(closures[p]),p))
+            for r in members:
+                if r['piece']=='BASE': r['migration']=destination
+                else: r.update(piece=destination,prerequisites=','.join(PREREQS[destination]))
+                if r['record']=='declaration': MOVED_LAWS.setdefault(r['name'],current)
+            changed = True
+        fixture_consumers = defaultdict(list)
         for r in rows:
-            if r['record'] not in ('command','declaration') or command_identity(r) not in identities:
-                continue
-            current = r['migration'] or r['piece']
-            if r['disposition']=='owner-held' and current!=destination:
-                raise ValueError('held law/control group requires an explicit plan answer: '+r['name']+
-                                 ' stays '+current+'; law belongs to '+destination)
-            if r['piece']=='BASE':
-                r['migration'] = destination
-            else:
-                r.update(piece=destination, prerequisites=','.join(PREREQS[destination]))
-                if destination in HOLDS:
-                    r['disposition']='owner-held'
-                    if HOLDS[destination] not in r['note']:
-                        r['note'] += '; '+HOLDS[destination]
+            if r['record'] not in ('declaration','command') or r['piece']=='BASE': continue
+            if r['record']=='command' and r['kind'] not in ('example','Lean.Parser.Command.attribute'): continue
+            for d in dependencies(r):
+                identity = command_identity(declarations[d])
+                if identity in fixtures and command_identity(r)!=identity:
+                    fixture_consumers[identity].append(r)
+        order = {p:i for i,p in enumerate(PREREQS)}
+        for fixture,consumers in fixture_consumers.items():
+            pieces = {r['piece'] for r in consumers}
+            if any(all(p in closures[q] for q in pieces) for p in pieces): continue
+            destination = max(pieces,key=order.get)
+            for consumer in consumers:
+                identity = command_identity(consumer)
+                if consumer['piece']==destination: continue
+                forced_destinations[identity] = destination
+                for r in command_members[identity]:
+                    old = effective(r)
+                    if r['piece']=='BASE': r['migration']=destination
+                    else: r.update(piece=destination,prerequisites=','.join(PREREQS[destination]))
+                    if r['record']=='declaration': MOVED_LAWS.setdefault(r['name'],old)
+                changed = True
+        if not changed: return
+    raise ValueError('law/control assignment did not converge')
 
 
 def verify_plan_boundaries(rows):
@@ -849,7 +1021,7 @@ def verify_plan_boundaries(rows):
         'ConcreteSpec.Examples.add0_never_traps':'F35',
         'ConcreteSpec.Examples.Add0Evidence.stuckBody':'F35',
         'ConcreteSpec.Examples.Add0Evidence.trapBody':'F35',
-        'ConcreteSpec.Core.Frame.ABI.LoadBoundaryDemo.empty_invalid':'F29',
+        'ConcreteSpec.Core.Frame.ABI.LoadBoundaryDemo.empty_invalid':'F29p',
         'ConcreteSpec.Core.CExpr.eval.match_5':'F06',
     }
     declarations = {r['name']:r for r in rows if r['record']=='declaration'}
@@ -892,6 +1064,13 @@ PIN_TAGS = {'source': SOURCE, 'baseline': BASE, 'evidence': EVIDENCE, 'dossier':
 def ensure_objects():
     for name, ref in PIN_TAGS.items():
         tag = 'refs/tags/spec-inventory/'+name
+        try:
+            local = git('rev-parse','--verify',tag).decode().strip()
+        except subprocess.CalledProcessError:
+            local = None
+        if local is not None:
+            if local != ref: raise ValueError('changed protected inventory pin: '+tag+' expected '+ref)
+            continue
         remote = git('ls-remote','--refs','origin',tag).decode().split()
         if remote != [ref,tag]:
             raise ValueError('missing or changed protected inventory pin: '+tag+' expected '+ref)
@@ -940,6 +1119,36 @@ def main():
         closure = judgment(rows,data,dependencies=False)
         verify_plan_boundaries(rows)
         check_law_controls(rows)
+        # Mutate only fixture placement: dependency availability still holds when moved earlier.
+        fixture_commands = shared_fixtures({r['name']:r for r in rows if r['record']=='command'})
+        fixture = next(r for r in rows if r['record']=='command' and r['name'] in fixture_commands and r['piece'] not in ('BASE','F02'))
+        bad = [dict(r) for r in rows]
+        for r in bad:
+            if command_identity(r)==fixture['name']: r['piece']='F02'
+        fixture_consumers = [(r,json.loads(r['dependencies'])) for r in bad if r['record']=='declaration' and r['piece']!='BASE']
+        fixture_consumers += [(r,json.loads(r['dependencies'])) for r in bad if r['kind'] in ('example','Lean.Parser.Command.attribute') and r['piece']!='BASE']
+        observed_consumers = [(r,json.loads(r['dependencies'])) for r in rows if r['record']=='declaration' and r['piece']!='BASE']
+        observed_consumers += [(r,json.loads(r['dependencies'])) for r in rows if r['kind'] in ('example','Lean.Parser.Command.attribute') and r['piece']!='BASE']
+        fixture_placement(rows,observed_consumers,closure)
+        try: fixture_placement(bad,fixture_consumers,closure)
+        except ValueError as exc:
+            if not str(exc).startswith('shared fixture does not accompany earliest consumer: '+fixture['name']+' placed F02 '): raise
+            print('control PASS: fixture placed before its earliest consumer refused')
+        else: raise ValueError('premature fixture accepted')
+        control_decls = {r['name']:r for r in rows if r['record']=='declaration'}
+        unused_consumers = [(r,[d for d in deps if (control_decls[d]['regeneration'] or command_identity(control_decls[d]))!=fixture['name']])
+                            for r,deps in observed_consumers]
+        try: fixture_placement(rows,unused_consumers,closure)
+        except ValueError as exc:
+            if str(exc)!='shared fixture has no consumer: '+fixture['name']: raise
+            print('control PASS: declared fixture without consumers refused')
+        else: raise ValueError('unused fixture accepted')
+        older_main = git('rev-parse',BASE+'^').decode().strip()
+        try: record_landed(rows,'M01',older_main)
+        except ValueError as exc:
+            if not str(exc).startswith('landed source predates inventory introduction:'): raise
+            print('control PASS: stale M01 recorded against older main refused')
+        else: raise ValueError('older-main M01 receipt accepted')
         # Coverage controls exercise the same judgment, never the generator.
         duplicate = next(r for r in rows if r['record']=='declaration')
         try:
@@ -1028,6 +1237,10 @@ def main():
         if updated!='balanced context destinations=F18; owner hold: preserve this reason':
             raise ValueError('context pass erased a trailing owner hold note')
         print('control PASS: held context row and hold note survive unchanged')
+        for kind in ('command','declaration'):
+            bad = [dict(r) for r in rows]
+            next(r for r in bad if r['record']==kind and (r['migration'] or r['piece']) in HOLDS)['disposition']='retain'
+            refuse(bad,'owner hold lost:','held '+kind+' cannot become retain')
         for column,value,prefix in [('migration','TYPO','invalid BASE migration:'),
                                     ('disposition','TYPO','invalid disposition:')]:
             bad = [dict(r) for r in rows]
