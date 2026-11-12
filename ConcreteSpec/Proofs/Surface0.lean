@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.Borrow
 import ConcreteSpec.Spec.Surface0
 
 /-! Proofs of the source rules, owner-approved item 30 (OPEN-1). -/

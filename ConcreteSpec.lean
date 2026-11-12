@@ -6,3 +6,5 @@ import ConcreteSpec.Proofs.Authority
 import ConcreteSpec.Proofs.Observe
 import ConcreteSpec.Proofs.Slice0
 import ConcreteSpec.Proofs.Surface0
+import ConcreteSpec.Proofs.Rep
+import ConcreteSpec.Proofs.Borrow

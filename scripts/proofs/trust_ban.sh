@@ -2,6 +2,8 @@
 # TRUST BAN: no `sorry` and no `native_decide` anywhere in the specification or compiler (Q9.17), checked
 # transitively in the kernel's terms and in the sources the environment does not keep.
 #
+#   I  every proof module, recursively enumerated, imports exactly the modules defining its
+#      directly referenced constants (including anonymous examples); see scripts/proofs/IMPORTS.md.
 #   E  no constant of ANY kind the ConcreteSpec library declares (definitions, instances and
 #      generated helpers included, not only theorems) depends transitively on sorryAx, on
 #      Lean.ofReduceBool or Lean.ofReduceNat (what native_decide and `decide +native` reduce through),
@@ -18,6 +20,9 @@
 #      syntax extension, run no meta code, set no option and import nothing outside the library
 #      (the lexer reads what Lean reads only for syntax it knows).
 #
+# IMPORT CONTROLS: unused and transitive-only imports, open namespaces, recursive/nonempty
+# populations, and comment/EOL-preserving idempotent header rewrites are checked by imports.py.
+#
 # NEGATIVE CONTROLS: a theorem proved by sorry, a definition whose body is sorry (no theorem about
 # it), a theorem proved by native_decide and a declared axiom each fail E or D naming the constant;
 # a source with an `example` proved by native_decide or a sorry hidden in an interpolation fails S,
@@ -29,6 +34,13 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 CHECK_NAME=PROOF-TRUST-BAN
 source scripts/proofs/lib.sh
+
+# Exact direct imports are part of this required Lean-enabled gate.
+if python3 scripts/proofs/imports.py; then
+  ok "direct proof imports and controls"
+else
+  no "direct proof imports or controls failed"
+fi
 
 BANNED_AXIOM_RE='^(sorryAx|Lean[.]ofReduceBool|Lean[.]ofReduceNat|Lean[.]trustCompiler)$|[.]_native[.]'
 BANNED_WORD_RE='\b(sorry|sorryAx|admit|native_decide|ofReduceBool|ofReduceNat|trustCompiler|skipKernelTC)\b|\+native\b|\bnative»?\s*:=|\bdecide\s*\(\s*config\b|\bdecide\s*[+-]|\bDecide[.]Config\b'
@@ -158,8 +170,9 @@ L=$(lake_options lakefile.toml)
 
 echo "=== X: the examples, in the kernel's terms ==="
 # A copy of the library in which every `example` is a named declaration, built, and its axioms
-# collected as E collects a theorem's. warningAsError is off in the copy only: a definition may draw
-# a linter warning the example did not, and the copy is read for axioms, not judged for warnings.
+# collected as E collects a theorem's. Each example becomes a noncomputable abbreviation.
+# warningAsError stays off in this axiom-only copy: named abbreviations can trigger declaration
+# linters that anonymous examples do not; warnings remain errors in the original library.
 EX="$TMP/ex"; mkdir -p "$EX"
 cp lakefile.toml lean-toolchain lake-manifest.json "$EX"/ || { no "could not copy the Lake files"; finish; }
 [ -d .lake/build ] && mkdir -p "$EX/.lake" && cp -r .lake/build "$EX/.lake/"
