@@ -10,7 +10,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
-from lean_lex import module_imports, rename_examples
+from lean_lex import LexError, module_imports, rename_examples
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULES = {'ConcreteSpec'} | {
@@ -36,13 +36,16 @@ def inspect(module, temp):
                 "lean", "--run", str(ROOT / "scripts/proofs/imports.lean"), module])
 
 
-def dependencies(source, temp, built_module=None):
+def dependencies(source, temp, built_module=None, *, dropped=None):
     module_imports(source, MODULES)
     temp.write_text(rename_examples(source, lambda line: f'⟪import-example⟫{line}'))
     search = str(temp.parent) + ':' + run(['lake', 'env', 'printenv', 'LEAN_PATH']).strip()
     run(['lake', 'env', 'env', 'LEAN_PATH=' + search, 'lean', '-DwarningAsError=true',
          '-DautoImplicit=false', '-R', str(temp.parent), '-o', str(temp.with_suffix('.olean')), str(temp)])
     output = inspect(temp.stem, temp)
+    if dropped is not None:
+        dropped.extend(line.removeprefix('FOREIGN ') for line in output.splitlines()
+                       if line.startswith('FOREIGN '))
     if built_module:
         built = inspect(built_module, temp)
         def named(text):
@@ -129,7 +132,11 @@ def declaring_owner_control(temp):
                     compile_source(root / 'Built.lean', minimal)
                     probe = root / 'Probe.lean'
                     for source in (minimal, 'import ConcreteSpec.ImportOwnerB\n' + minimal):
-                        deps = dependencies(source, probe, 'Built')
+                        dropped = []
+                        deps = dependencies(source, probe, 'Built', dropped=dropped)
+                        if bool(dropped) != (not realized):
+                            raise SystemExit(f'declaring-owner precondition failed: realized={realized}, '
+                                             f'{declaration}: foreign-owned constants {dropped}')
                         if deps != ['ConcreteSpec.ImportOwnerA'] or matches(source, deps) != (source == minimal):
                             raise SystemExit(f'declaring-owner control failed: realized={realized}, {declaration}: {deps}')
             finally:
@@ -218,7 +225,10 @@ def main():
         controls(temp)
         for path in proof_paths(ROOT):
             source = path.read_bytes().decode('utf-8')
-            deps = dependencies(source, temp, '.'.join(path.relative_to(ROOT).with_suffix('').parts))
+            try:
+                deps = dependencies(source, temp, '.'.join(path.relative_to(ROOT).with_suffix('').parts))
+            except LexError as e:
+                raise SystemExit(f'imports: {path.relative_to(ROOT)}:{e}') from None
             print(f'{path.relative_to(ROOT)}: {", ".join(deps)}', flush=True)
             if not matches(source, deps):
                 if args.write:

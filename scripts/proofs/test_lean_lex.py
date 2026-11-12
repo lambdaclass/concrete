@@ -93,6 +93,41 @@ end Witness{index}
             with self.subTest(source=source), self.assertRaises(lexer.LexError):
                 lexer.rename_examples(source, lambda line: f'probe{line}')
 
+    def test_examples_command_error_names_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'Bad.lean'
+            path.write_text('-- header\n example : True := by trivial\n')
+            result = subprocess.run(
+                ['python3', lexer.__file__, 'examples', tmp, str(Path(tmp) / 'out'), 'Bad.lean'],
+                text=True, capture_output=True)
+            self.assertEqual(result.returncode, 3)
+            self.assertIn('Bad.lean:2: an `example`', result.stderr)
+            self.assertNotIn('Traceback', result.stderr)
+
+    def test_imports_command_lexer_error_names_proof(self):
+        # Stub only build/control work; the real per-file checker must catch both
+        # malformed lexemes and the shared renamer's line-start rejection.
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'ConcreteSpec/Proofs/Bad.lean'
+            path.parent.mkdir(parents=True)
+            for body, message in (
+                    ('open ConcreteSpec\n example : True := by trivial\n', '3: an `example`'),
+                    ('/- unterminated', 'unterminated comment')):
+                with self.subTest(body=body):
+                    path.write_text('import ConcreteSpec.Spec.Basics\n' + body)
+                    code = (
+                        'import sys; from pathlib import Path; '
+                        f'sys.path.insert(0, {str(Path(__file__).parent)!r}); '
+                        'import imports; '
+                        f'imports.ROOT = Path({tmp!r}); '
+                        'imports.run = lambda command: ""; '
+                        'imports.controls = lambda temp: None; '
+                        'sys.exit(imports.main())')
+                    result = subprocess.run(['python3', '-c', code], text=True, capture_output=True)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn('ConcreteSpec/Proofs/Bad.lean:' + message, result.stderr)
+                    self.assertNotIn('Traceback', result.stderr)
+
     def test_module_import_word_boundaries(self):
         modules = {'ConcreteSpec.Spec.Basics'}
         source = ('import ConcreteSpec.Spec.Basics\n'

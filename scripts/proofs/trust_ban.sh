@@ -170,8 +170,9 @@ L=$(lake_options lakefile.toml)
 
 echo "=== X: the examples, in the kernel's terms ==="
 # A copy of the library in which every `example` is a named declaration, built, and its axioms
-# collected as E collects a theorem's. warningAsError is off in the copy only: a definition may draw
-# a linter warning the example did not, and the copy is read for axioms, not judged for warnings.
+# collected as E collects a theorem's. Each example becomes a noncomputable abbreviation.
+# warningAsError stays off in this axiom-only copy: named abbreviations can trigger declaration
+# linters that anonymous examples do not; warnings remain errors in the original library.
 EX="$TMP/ex"; mkdir -p "$EX"
 cp lakefile.toml lean-toolchain lake-manifest.json "$EX"/ || { no "could not copy the Lake files"; finish; }
 [ -d .lake/build ] && mkdir -p "$EX/.lake" && cp -r .lake/build "$EX/.lake/"

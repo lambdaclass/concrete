@@ -251,7 +251,7 @@ def rename_examples(src, name):
     for m in EXAMPLE.finditer(text):
         line = text.count("\n", 0, m.start()) + 1
         if m.start() > 0 and text[m.start() - 1] != "\n":
-            raise LexError(f"line {line}: an `example` that does not start its line")
+            raise LexError(f"{line}: an `example` that does not start its line")
         out.append(src[last:m.start()])
         out.append(f"noncomputable abbrev «{name(line)}»")
         last = m.end()
@@ -263,7 +263,10 @@ def examples(src_dir, dst_dir, paths):
     count = 0
     for rel in paths:
         src = (Path(src_dir) / rel).read_text(encoding="utf-8")
-        renamed = rename_examples(src, lambda line: f"{EXAMPLE_MARK}{rel}:{line}")
+        try:
+            renamed = rename_examples(src, lambda line: f"{EXAMPLE_MARK}{rel}:{line}")
+        except LexError as e:
+            raise LexError(f"{rel}:{e}") from e
         count += count_examples(src)
         dst = os.path.join(dst_dir, rel)
         os.makedirs(os.path.dirname(dst) or ".", exist_ok=True)

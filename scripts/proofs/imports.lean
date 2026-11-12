@@ -33,7 +33,9 @@ def main (args : List String) : IO Unit := do
     let some i := env.getModuleIdxFor? n | continue
     if env.header.moduleNames[i.toNat]! != target.toName then continue
     let some oi := env.getModuleIdxFor? (owner env n) | continue
-    if env.header.moduleNames[oi.toNat]! != target.toName then continue
+    if env.header.moduleNames[oi.toNat]! != target.toName then
+      IO.println s!"FOREIGN {n}"
+      continue
     let exampleDecl := (privateToUserName n).toString.contains "⟪import-example⟫"
     for c in ci.getUsedConstantsAsSet do
       let some j := env.getModuleIdxFor? (owner env c) | continue
