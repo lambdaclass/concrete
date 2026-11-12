@@ -105,6 +105,9 @@ def main():
             raise SystemExit('numeric data scan accepted a spelling table alias')
         print('control: numeric data alias cannot hide a spelling table')
         accepted = {
+            'type constructor with declaration names': 'def field (F : Type → Type) (v : F ConcreteSpec.Var) (_name : ConcreteSpec.Name) : F ConcreteSpec.Var := v',
+            'type class with numeric data': 'class Family where\n  Carrier : Type → Type\ndef field [f : Family] (v : f.Carrier ConcreteSpec.Var) (_numbers : ConcreteSpec.Numbers) : f.Carrier ConcreteSpec.Var := v',
+
             'numeric list data': 'def numbers (_ : ConcreteSpec.Var) (_ : ConcreteSpec.Numbers) : Bool := true',
             'variable and declaration name function': 'def field (_ : ConcreteSpec.Var) (_ : ConcreteSpec.Name) : Bool := true',
             'variable and declaration name judgment': 'inductive Field : ConcreteSpec.Var → ConcreteSpec.Name → Prop where\n  | entry : Field ⟨0⟩ ⟨"field"⟩',
@@ -118,6 +121,13 @@ def main():
                          'ConcreteSpec.Spec.NameAccepted'], env=env), label + ' accepted')
             print('control: semantic scan accepts ' + label)
         controls = {
+            'type constructor parameter': 'def leak (F : Type → Type) (v : F ConcreteSpec.Var) (_spelling : String) : F ConcreteSpec.Var := v',
+            'type class constructor parameter': 'class Family where\n  Carrier : Type → Type\ndef leak [f : Family] (v : f.Carrier ConcreteSpec.Var) (_spelling : String) : f.Carrier ConcreteSpec.Var := v',
+            'universe polymorphic constructor': 'universe u v\ndef leak (F : Type u → Type v) (x : F (ULift.{u} ConcreteSpec.Var)) (_spelling : String) : F (ULift.{u} ConcreteSpec.Var) := x',
+            'higher kinded constructor': 'def leak (F : (Type → Type) → Type) (x : F (fun _ => ConcreteSpec.Var)) (_spelling : String) : F (fun _ => ConcreteSpec.Var) := x',
+            'type argument inside numeric index': 'inductive Hidden : ConcreteSpec.Numbers → Type where\n  | entry (xs) : Hidden xs\ndef leak (f : Type → ConcreteSpec.Numbers) (x : Hidden (f ConcreteSpec.Var)) (_spelling : String) : Hidden (f ConcreteSpec.Var) := x',
+            'erased alias argument': 'abbrev Ignore (_ : Type) := Nat\ndef leak (_x : Ignore ConcreteSpec.Var) (_spelling : String) : Bool := true',
+
             'character list spelling': 'def leak : List (ConcreteSpec.Var × List Char) := []',
             'scalar list spelling': 'def leak : List (ConcreteSpec.Var × List Nat) := []',
             'UTF-8 byte list spelling': 'def leak : List (ConcreteSpec.Var × List UInt8) := []',
