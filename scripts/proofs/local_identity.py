@@ -136,6 +136,36 @@ def main():
             require(run(['lean', '--run', 'scripts/proofs/local_identity.lean',
                          'ConcreteSpec.Spec.NameAccepted'], env=env), label + ' accepted')
             print('control: semantic scan accepts ' + label)
+        # Imported helpers must be inspected even when their module is outside Spec.
+        helper_header = 'import ConcreteSpec.Diagnostics.Types\nimport ConcreteSpec.Spec.Slice1Syntax\n'
+        for label, helper, semantic, refused in [
+            ('external pairing signature',
+             'def attach (v : ConcreteSpec.Var) : ConcreteSpec.Var × String := (v, "x")',
+             'def spellingLength (v : ConcreteSpec.Var) : Nat := (attach v).2.length', True),
+            ('external pairing body',
+             'def hiddenLength (v : ConcreteSpec.Var) : Nat := ((v, "x") : ConcreteSpec.Var × String).2.length',
+             'def spellingLength (v : ConcreteSpec.Var) : Nat := hiddenLength v', True),
+            ('external legitimate helpers',
+             'namespace ConcreteSpec.Diagnostics\n'
+             'def names : ConcreteSpec.LocalNames := ⟨[]⟩\n'
+             'end ConcreteSpec.Diagnostics\n'
+             'def numericHelper (v : ConcreteSpec.Var) : Nat := v.id + 0\n'
+             'theorem numericHelper_eq (v : ConcreteSpec.Var) : numericHelper v = v.id := Nat.add_zero v.id',
+             'def numeric (v : ConcreteSpec.Var) : Nat := numericHelper v\n'
+             'theorem numeric_eq (v : ConcreteSpec.Var) : numeric v = v.id := numericHelper_eq v', False),
+        ]:
+            require(compile_file('ExternalHelpers', helper_header + helper), label + ' helper builds')
+            require(compile_file('ConcreteSpec.Spec.ExternalControl',
+                    'import ExternalHelpers\n' + semantic), label + ' semantic builds')
+            result = run(['lean', '--run', 'scripts/proofs/local_identity.lean',
+                          'ConcreteSpec.Spec.ExternalControl'], env=env)
+            if refused:
+                reject(result, label, 'semantic diagnostics dependency: spellingLength')
+                if 'semantic definitions refer to LocalNames/Elaborated' not in result.stderr:
+                    raise SystemExit(label + ': missing semantic scan rejection')
+            else:
+                require(result, label + ' accepted')
+            print('control: external helper ' + label)
         controls = {
             'type constructor parameter': 'def leak (F : Type → Type) (v : F ConcreteSpec.Var) (_spelling : String) : F ConcreteSpec.Var := v',
             'type class constructor parameter': 'class Family where\n  Carrier : Type → Type\ndef leak [f : Family] (v : f.Carrier ConcreteSpec.Var) (_spelling : String) : f.Carrier ConcreteSpec.Var := v',

@@ -113,6 +113,29 @@ def paired (e : Expr) : StateRefT CarrierCache MetaM Bool := do
   let a ← carriers e
   return a.1 && a.2
 
+-- Body-local pairings matter even when the exported result erases the pair.
+-- Check each embedded type independently: unrelated numeric literals in a body
+-- must not combine with a Var binder to invent a spelling interface.
+partial def bodyPaired (e : Expr) : StateRefT CarrierCache MetaM Bool := do
+  if ← isType e then return ← paired e
+  match e with
+  | .app .. =>
+    -- Type arguments alone may be split across a generic constructor application.
+    -- Its instantiated result exposes the actual pairing. Do not inspect partial
+    -- application spines as independent interfaces.
+    if ← paired (← inferType e) then return true
+    for arg in e.getAppArgs do
+      if ← bodyPaired arg then return true
+    return ← bodyPaired e.getAppFn
+  | .forallE _ domain body bi | .lam _ domain body bi =>
+    if ← paired domain then return true
+    withLocalDecl `parameter bi domain fun x => bodyPaired (body.instantiate1 x)
+  | .letE _ type value body _ =>
+    if (← paired type) || (← bodyPaired value) then return true
+    withLetDecl `parameter type value fun x => bodyPaired (body.instantiate1 x)
+  | .mdata _ body | .proj _ _ body => bodyPaired body
+  | _ => return false
+
 -- The only presentation records in Examples are complete programs and function bodies.
 def presentationRecord (type : Expr) : Bool := Id.run do
   if !type.getAppFn.isConstOf `ConcreteSpec.Elaborated then return false
@@ -152,6 +175,24 @@ def main (args : List String) : IO Unit := do
   for (n, ci) in env.constants.toList do
     for c in ci.getUsedConstantsAsSet do
       users := users.insert c ((users[c]?.getD #[]).push n)
+  -- Inspect the complete dependency closure of semantic declarations. Module
+  -- ownership determines the roots to protect, never which helpers can seed taint.
+  let mut reachable : Std.HashSet Name := {}
+  let mut pending := #[]
+  for (n, _) in env.constants.toList do
+    let some i := env.getModuleIdxFor? n | continue
+    let m := env.header.moduleNames[i.toNat]!.toString
+    if m == "ConcreteSpec.Spec" || m.startsWith "ConcreteSpec.Spec." then
+      pending := pending.push n
+  let mut next := 0
+  while next < pending.size do
+    let n := pending[next]!
+    next := next + 1
+    if reachable.contains n then continue
+    reachable := reachable.insert n
+    if let some ci := env.find? n then
+      for dependency in ci.getUsedConstantsAsSet do
+        pending := pending.push dependency
   let mut tainted : Std.HashSet Name := {}
   let mut queue := #[`ConcreteSpec.LocalNames, `ConcreteSpec.Elaborated]
   -- Inspect every declaration's instantiated telescope, including inductive indices
@@ -159,10 +200,7 @@ def main (args : List String) : IO Unit := do
   let inspect : StateRefT CarrierCache MetaM (Array Name) := do
     let mut seeds := #[]
     for (n, ci) in env.constants.toList do
-      let some i := env.getModuleIdxFor? n | continue
-      let m := env.header.moduleNames[i.toNat]!.toString
-      if !(m == "ConcreteSpec.Spec" || m.startsWith "ConcreteSpec.Spec.") &&
-          !isStructure env n then continue
+      if !reachable.contains n then continue
       -- Lean-generated eliminators expose constructor fields as continuation arguments.
       -- They are not user semantic interfaces; dependencies still propagate through them.
       if isMatcherCore env n || isAuxRecursor env n || (ci matches .recInfo _) then continue
@@ -173,7 +211,10 @@ def main (args : List String) : IO Unit := do
           forallTelescopeReducing ci.type fun params _ => do
             paired (mkAppN (mkConst n (ci.levelParams.map mkLevelParam)) params)
           else pure false
-        return structurePair || (← paired ci.type)
+        let bodyPair ← match ci.value? with
+          | some value => bodyPaired value
+          | none => pure false
+        return structurePair || (← paired ci.type) || bodyPair
       if isPair then seeds := seeds.push n
     return seeds
   let (seeds, _) ← ((inspect.run' {}).run' {}).toIO { fileName := "local_identity", fileMap := default } { env := env }
