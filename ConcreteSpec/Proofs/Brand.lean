@@ -75,7 +75,7 @@ theorem nodup_snoc : ∀ {l : List Nat} {x : Nat}, l.Nodup → x ∉ l → (l ++
     simp only [List.mem_append, List.mem_singleton, not_or]
     exact ⟨h.1, fun e => hx (by simp [e])⟩
 
-theorem inv_bind {s : State} (a : Nat) {env : AList Nat Val} (hi : Inv s)
+theorem inv_bind {s : State} (a : Var) {env : AList Var Val} (hi : Inv s)
     (henv : ∀ e ∈ env, brandOf e.2 < s.next) : Inv (s.bind a env) := by
   obtain ⟨_, hg, hn⟩ := hi
   refine ⟨?_, ?_, ?_⟩
@@ -170,21 +170,21 @@ def emb (φ : Nat → Nat) : STy → Val
 
 /-- The run-time values match the static context under the brand assignment `φ`: the same
 names, and an allocator or value of brand `β` carries the run-time brand `φ β`. -/
-def Rel (φ : Nat → Nat) (Γ : Ctx) (env : AList Nat Val) : Prop :=
+def Rel (φ : Nat → Nat) (Γ : Ctx) (env : AList Var Val) : Prop :=
   ∀ x, AList.lookup env x = (AList.lookup Γ x).map (emb φ)
 
 /-- `φ` with brand `β` assigned `v`. -/
 def upd (φ : Nat → Nat) (β v : Nat) : Nat → Nat := fun γ => if γ = β then v else φ γ
 
-theorem rel_cons {φ Γ env} (x : Nat) (t : STy) (h : Rel φ Γ env) :
+theorem rel_cons {φ Γ env} (x : Var) (t : STy) (h : Rel φ Γ env) :
     Rel φ ((x, t) :: Γ) ((x, emb φ t) :: env) := by
   intro y; by_cases hx : x = y <;> simp [AList.lookup, hx, h y]
 
-theorem rel_erase {φ Γ env} (p : Nat) (h : Rel φ Γ env) : Rel φ (AList.erase Γ p) (AList.erase env p) := by
+theorem rel_erase {φ Γ env} (p : Var) (h : Rel φ Γ env) : Rel φ (AList.erase Γ p) (AList.erase env p) := by
   intro y; rw [AList.lookup_erase, AList.lookup_erase]; by_cases hy : y = p <;> simp [hy, h y]
 
 /-- Reassigning a brand no binding has changes no binding's run-time value. -/
-theorem emb_upd {B Γ} {φ : Nat → Nat} {β v x : Nat} {t : STy} (hb : BrandsIn B Γ) (hβ : β ∉ B)
+theorem emb_upd {B Γ} {φ : Nat → Nat} {β v : Nat} {x : Var} {t : STy} (hb : BrandsIn B Γ) (hβ : β ∉ B)
     (hf : AList.lookup Γ x = some t) : emb (upd φ β v) t = emb φ t := by
   have hm := AList.lookup_mem hf
   cases t with
@@ -203,13 +203,13 @@ theorem rel_upd {φ Γ env} {B : List Nat} {β : Nat} (v : Nat) (h : Rel φ Γ e
   | none => rfl
   | some t => simp [emb_upd hb hβ hf]
 
-theorem brandsIn_erase {B Γ} (p : Nat) (h : BrandsIn B Γ) : BrandsIn B (AList.erase Γ p) :=
+theorem brandsIn_erase {B Γ} (p : Var) (h : BrandsIn B Γ) : BrandsIn B (AList.erase Γ p) :=
   fun e he => h e (AList.mem_of_mem_erase p he)
 
 theorem brandsIn_mono {B Γ} (β : Nat) (h : BrandsIn B Γ) : BrandsIn (β :: B) Γ :=
   fun e he γ hγ => List.mem_cons_of_mem _ (h e he γ hγ)
 
-theorem brandsIn_cons {B Γ} {x : Nat} {t : STy} (h : BrandsIn B Γ)
+theorem brandsIn_cons {B Γ} {x : Var} {t : STy} (h : BrandsIn B Γ)
     (ht : ∀ β, (t = .alloc β ∨ t = .heap β) → β ∈ B) : BrandsIn B ((x, t) :: Γ) := by
   intro e he β hβ
   rcases List.mem_cons.mp he with rfl | he
@@ -217,13 +217,13 @@ theorem brandsIn_cons {B Γ} {x : Nat} {t : STy} (h : BrandsIn B Γ)
   · exact h e he β hβ
 
 /-- A fresh allocator binding keeps the brands in use. -/
-theorem brandsIn_new {B Γ} (x β : Nat) (h : BrandsIn B Γ) : BrandsIn (β :: B) ((x, .alloc β) :: Γ) :=
+theorem brandsIn_new {B Γ} (x : Var) (β : Nat) (h : BrandsIn B Γ) : BrandsIn (β :: B) ((x, .alloc β) :: Γ) :=
   brandsIn_cons (brandsIn_mono β h) (fun γ hγ => by
     rcases hγ with hγ | hγ <;> cases hγ; exact List.mem_cons_self ..)
 
 /-- Opening allocator `a`, now of brand `γ`, under the new name `β`: what each loop iteration,
 and the code after the loop, starts from (Q1.3). -/
-theorem rel_reopen {φ Γ env} {B : List Nat} {a γ β : Nat}
+theorem rel_reopen {φ Γ env} {B : List Nat} {a : Var} {γ β : Nat}
     (h : Rel φ ((a, .alloc γ) :: AList.erase Γ a) env) (hb : BrandsIn B Γ) (hβ : β ∉ B) :
     Rel (upd φ β (φ γ)) ((a, .alloc β) :: AList.erase Γ a) env := by
   intro y
@@ -236,7 +236,7 @@ theorem rel_reopen {φ Γ env} {B : List Nat} {a γ β : Nat}
     | some t => simp [emb_upd (brandsIn_erase a hb) hβ hf]
 
 /-- Entering a loop: the allocator's current binding becomes the loop's. -/
-theorem rel_split {φ Γ env} {a γ : Nat} (h : Rel φ Γ env) (ha : AList.lookup Γ a = some (.alloc γ)) :
+theorem rel_split {φ Γ env} {a : Var} {γ : Nat} (h : Rel φ Γ env) (ha : AList.lookup Γ a = some (.alloc γ)) :
     Rel φ ((a, .alloc γ) :: AList.erase Γ a) env := by
   intro y
   rw [h y]

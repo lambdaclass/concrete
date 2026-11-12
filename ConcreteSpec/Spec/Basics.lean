@@ -1,8 +1,12 @@
 /-!
-# Basics: association lists
+# Basics: numeric local identity, diagnostics and association lists
 
 PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). Part of `ConcreteSpec.Spec`;
 see `ConcreteSpec/README.md`.
+
+`Var` has its only home here. A local is identified only by its number.
+Diagnostics tables belong to a particular elaborated program or function; no semantic definition
+takes or refers to the diagnostics spelling table.
 
 Every finite map in the specification (a context, an environment, a memory, a field list) is an
 association list: a list of key–value pairs, read from the front. This module is the one
@@ -12,6 +16,21 @@ module defines its own lookup; a table of declarations, each carrying its own na
 map first; `map` takes the function first, as `List.map` does. Call them qualified
 (`AList.lookup Γ x`): on a plain `List` the dotted form would reach `List.erase` or `List.map`.
 -/
+
+namespace ConcreteSpec
+
+/-- A local's fresh numeric identity. For example, `⟨7⟩` denotes local 7 regardless of
+its spelling in the source; two different numbers denote different locals. -/
+structure Var where
+  /-- The identity number; for example, local `⟨7⟩` has number 7. -/
+  id : Nat
+  deriving DecidableEq
+
+/-- Numeric data rather than source spelling scalars. For example, `[1, 2] : Numbers`
+can hold array elements, program text bytes or allocator generations; never identifier spellings. This alias changes no list operation. -/
+abbrev Numbers := List Nat
+
+end ConcreteSpec
 
 namespace ConcreteSpec.Core
 

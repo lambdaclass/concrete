@@ -155,7 +155,7 @@ def controls(temp):
     good += 'def brandControl : Brand.STy := .heap 0\n'
     scope = ('import ConcreteSpec.Spec.Slice1Syntax\n'
              'open ConcreteSpec\nnamespace ConcreteSpec\n'
-             'def scopeControl : Name := "scope"\n')
+             'def scopeControl : Name := ⟨"scope"⟩\n')
     if dependencies(scope, temp) != ['ConcreteSpec.Spec.Slice1Syntax']:
         raise SystemExit('open namespace probe control failed')
     equation = ('open ConcreteSpec\nset_option linter.defProp false in def probeEq := @ConcreteSpec.runBody.eq_2\n')
