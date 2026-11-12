@@ -603,7 +603,7 @@ def command_match_keys(rows):
 
 
 def command_presence_slots(keys):
-    """Fallback slots for fixtures without parsed statement metadata.
+    """Positional identities explicitly restricted to synthetic fixtures.
 
     Count all commands of a kind in each scope, not just equal content digests.
     """
@@ -667,11 +667,16 @@ def full_digests(data, root):
                     key=lambda r:(r['source'],int(r['line']),int(r['end_line']))):
         key = keys[r['name']]
         command = metadata.get((r['source'],int(r['line'])),{})
-        statement = command.get('statement')
-        syntax = statement if statement is not None else command.get('commandIdentity')
-        if syntax is None:
-            raise ValueError('missing parsed command identity: '+r['name'])
-        base = ('statement' if statement is not None else 'syntax',json.dumps(syntax,sort_keys=True))
+        if r['kind']=='example':
+            identity = command.get('exampleTypeIdentity')
+            if not identity:
+                raise ValueError('missing elaborated example type identity: '+r['name'])
+            base = ('statement',identity)
+        else:
+            syntax = command.get('commandIdentity')
+            if syntax is None:
+                raise ValueError('missing parsed command identity: '+r['name'])
+            base = ('syntax',json.dumps(syntax,sort_keys=True))
         result.presence[key] = (*base,counts[base])
         counts[base] += 1
     return result
@@ -1003,6 +1008,8 @@ def progress_reasons(snapshot, checked):
     reasons = {}
     for name,digest in sorted(snapshot.items()):
         key = getattr(snapshot,'commands',{}).get(name)
+        if name.startswith('command:') and key is None:
+            raise ValueError('missing snapshot command match key: '+name)
         value = commands.get(key) if key is not None else checked.get(name)
         reasons[name] = (value if name.startswith('header:') and value and value.startswith('F01 property failure:') else
                          'missing declaration' if value is None else

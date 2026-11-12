@@ -38,3 +38,12 @@ statements. An absent later twin cannot hide a retained superseded command. Ambi
 assignment of proof-edited occurrences to multiple snapshot keys fails closed, with a
 parser-produced control. Sort diagnostic and result traversals, and run all inventory unit
 tests under hash seeds 0, 1, 2 and 3 inside the gate.
+
+Round 13 derives every example presence identity from the original Lean elaboration's inferred
+type and full local context, through one path for typed and inferred examples. Missing or
+unresolved elaborated identities fail closed; proof syntax is never a fallback. Production
+controls check inferred proof edits under retirement and replacement, including a section
+hypothesis used only by the old proof, and assert the specific missing-identity refusal.
+The identity fallback audit also makes missing command match keys refuse instead of using
+audit names. Declaration presence still uses qualified names; non-example commands use parsed
+syntax; positional identities remain available only with the synthetic-fixture flag.

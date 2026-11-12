@@ -1265,7 +1265,7 @@
   "command:ConcreteSpec/Proofs/Exec.lean:1917:1927": {
     "from": "F09c",
     "name": "ConcreteSpec/Proofs/Exec.lean:1917:1927",
-    "note": "; law-subject/determinism authority (D4); dependent command follows relocated law or observed auxiliary; dependent on relocated law _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.rules_request_complete_inv; law ConcreteSpec.Core.Exec.protected_step with control ConcreteSpec/Proofs/Exec.lean:4126:4129; law ConcreteSpec.Core.Exec.protected_step with control ConcreteSpec/Proofs/Exec.lean:4130:4137, ConcreteSpec.Core.Exec.CoreEvidence.arbitraryStep; law ConcreteSpec.Core.Exec.steps_request with control ConcreteSpec/Proofs/Exec.lean:3608:3614; law ConcreteSpec.Core.Exec.steps_request with control ConcreteSpec/Proofs/Exec.lean:3616:3625, ConcreteSpec.Core.Exec.Refusal.StuckStep",
+    "note": "; law-subject/determinism authority (D4); dependent on relocated law; law ConcreteSpec.Core.Exec.protected_step with control ConcreteSpec/Proofs/Exec.lean:4126:4129; law ConcreteSpec.Core.Exec.protected_step with control ConcreteSpec/Proofs/Exec.lean:4130:4137, ConcreteSpec.Core.Exec.CoreEvidence.arbitraryStep; law ConcreteSpec.Core.Exec.steps_request with control ConcreteSpec/Proofs/Exec.lean:3608:3614; law ConcreteSpec.Core.Exec.steps_request with control ConcreteSpec/Proofs/Exec.lean:3616:3625, ConcreteSpec.Core.Exec.Refusal.StuckStep",
     "reason": [
       {
         "control": "ConcreteSpec/Proofs/Exec.lean:4126:4129",
@@ -3121,7 +3121,7 @@
   "command:ConcreteSpec/Proofs/ObserveEnvironment.lean:395:398": {
     "from": "F21",
     "name": "ConcreteSpec/Proofs/ObserveEnvironment.lean:395:398",
-    "note": "; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:392:393 forces consumer; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:400:423; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:425:457, ConcreteSpec.Core.Observe.forgetHistoryOracle",
+    "note": "; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:369:373 forces consumer; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:400:423; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:425:457, ConcreteSpec.Core.Observe.forgetHistoryOracle",
     "reason": [
       {
         "control": "ConcreteSpec/Proofs/ObserveEnvironment.lean:400:423",
@@ -3139,7 +3139,7 @@
         "law": "ConcreteSpec.Core.Observe.environment_run_reply"
       },
       {
-        "command": "ConcreteSpec/Proofs/ObserveEnvironment.lean:392:393",
+        "command": "ConcreteSpec/Proofs/ObserveEnvironment.lean:369:373",
         "kind": "shared-fixture-consumer"
       }
     ],
@@ -3208,7 +3208,7 @@
   "command:ConcreteSpec/Proofs/ObserveEnvironment.lean:468:474": {
     "from": "F21",
     "name": "ConcreteSpec/Proofs/ObserveEnvironment.lean:468:474",
-    "note": "; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; ; ; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:540:570, ConcreteSpec.Core.Observe.noReplyOracle",
+    "note": "; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:540:570, ConcreteSpec.Core.Observe.noReplyOracle",
     "reason": [
       {
         "control": "ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538",
@@ -3236,7 +3236,7 @@
   "command:ConcreteSpec/Proofs/ObserveEnvironment.lean:476:481": {
     "from": "F21",
     "name": "ConcreteSpec/Proofs/ObserveEnvironment.lean:476:481",
-    "note": "; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; ; ; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:540:570, ConcreteSpec.Core.Observe.noReplyOracle",
+    "note": "; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:540:570, ConcreteSpec.Core.Observe.noReplyOracle",
     "reason": [
       {
         "control": "ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538",
@@ -3264,7 +3264,7 @@
   "command:ConcreteSpec/Proofs/ObserveEnvironment.lean:483:488": {
     "from": "F21",
     "name": "ConcreteSpec/Proofs/ObserveEnvironment.lean:483:488",
-    "note": "; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; ; ; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:540:570, ConcreteSpec.Core.Observe.noReplyOracle",
+    "note": "; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:540:570, ConcreteSpec.Core.Observe.noReplyOracle",
     "reason": [
       {
         "control": "ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538",
@@ -3292,7 +3292,7 @@
   "command:ConcreteSpec/Proofs/ObserveEnvironment.lean:490:512": {
     "from": "F21",
     "name": "ConcreteSpec/Proofs/ObserveEnvironment.lean:490:512",
-    "note": "; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; ; ; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:540:570, ConcreteSpec.Core.Observe.noReplyOracle",
+    "note": "; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:540:570, ConcreteSpec.Core.Observe.noReplyOracle",
     "reason": [
       {
         "control": "ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538",
@@ -3353,10 +3353,10 @@
   "command:ConcreteSpec/Proofs/ObserveEnvironment.lean:572:580": {
     "from": "F21",
     "name": "ConcreteSpec/Proofs/ObserveEnvironment.lean:572:580",
-    "note": "; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:16:37 forces consumer; ; ",
+    "note": "; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; ; ",
     "reason": [
       {
-        "command": "ConcreteSpec/Proofs/ObserveEnvironment.lean:16:37",
+        "command": "ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466",
         "kind": "shared-fixture-consumer"
       }
     ],
@@ -3366,10 +3366,10 @@
   "command:ConcreteSpec/Proofs/ObserveEnvironment.lean:582:594": {
     "from": "F21",
     "name": "ConcreteSpec/Proofs/ObserveEnvironment.lean:582:594",
-    "note": "; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:175:180 forces consumer; ; ",
+    "note": "; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; ; ",
     "reason": [
       {
-        "command": "ConcreteSpec/Proofs/ObserveEnvironment.lean:175:180",
+        "command": "ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466",
         "kind": "shared-fixture-consumer"
       }
     ],
@@ -3379,7 +3379,7 @@
   "command:ConcreteSpec/Proofs/ObserveEnvironment.lean:596:604": {
     "from": "F21",
     "name": "ConcreteSpec/Proofs/ObserveEnvironment.lean:596:604",
-    "note": "; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; ; ; ; ; law ConcreteSpec.Core.Observe.environment_stepHistory_valid with control ConcreteSpec/Proofs/ObserveEnvironment.lean:596:604",
+    "note": "; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; ; ; law ConcreteSpec.Core.Observe.environment_stepHistory_valid with control ConcreteSpec/Proofs/ObserveEnvironment.lean:596:604",
     "reason": [
       {
         "control": "ConcreteSpec/Proofs/ObserveEnvironment.lean:596:604",
@@ -3397,7 +3397,7 @@
   "command:ConcreteSpec/Proofs/ObserveEnvironment.lean:606:622": {
     "from": "F21",
     "name": "ConcreteSpec/Proofs/ObserveEnvironment.lean:606:622",
-    "note": "; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; ; ; ; ; law ConcreteSpec.Core.Observe.environment_stepHistory_valid with control ConcreteSpec/Proofs/ObserveEnvironment.lean:606:622, ConcreteSpec.Core.Observe.leavePendingOnAnswerStepHistory",
+    "note": "; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; ; ; law ConcreteSpec.Core.Observe.environment_stepHistory_valid with control ConcreteSpec/Proofs/ObserveEnvironment.lean:606:622, ConcreteSpec.Core.Observe.leavePendingOnAnswerStepHistory",
     "reason": [
       {
         "control": "ConcreteSpec/Proofs/ObserveEnvironment.lean:606:622",
@@ -9702,7 +9702,7 @@
   "declaration:ConcreteSpec.Core.Exec.step_iff_rules": {
     "from": "F09c",
     "name": "ConcreteSpec.Core.Exec.step_iff_rules",
-    "note": "ConcreteSpec/Proofs/Exec.lean:1917:1927; law-subject/determinism authority (D4); dependent command follows relocated law or observed auxiliary; dependent on relocated law _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.rules_request_complete_inv; law ConcreteSpec.Core.Exec.protected_step with control ConcreteSpec/Proofs/Exec.lean:4126:4129; law ConcreteSpec.Core.Exec.protected_step with control ConcreteSpec/Proofs/Exec.lean:4130:4137, ConcreteSpec.Core.Exec.CoreEvidence.arbitraryStep; law ConcreteSpec.Core.Exec.steps_request with control ConcreteSpec/Proofs/Exec.lean:3608:3614; law ConcreteSpec.Core.Exec.steps_request with control ConcreteSpec/Proofs/Exec.lean:3616:3625, ConcreteSpec.Core.Exec.Refusal.StuckStep",
+    "note": "ConcreteSpec/Proofs/Exec.lean:1917:1927; law-subject/determinism authority (D4); dependent on relocated law; law ConcreteSpec.Core.Exec.protected_step with control ConcreteSpec/Proofs/Exec.lean:4126:4129; law ConcreteSpec.Core.Exec.protected_step with control ConcreteSpec/Proofs/Exec.lean:4130:4137, ConcreteSpec.Core.Exec.CoreEvidence.arbitraryStep; law ConcreteSpec.Core.Exec.steps_request with control ConcreteSpec/Proofs/Exec.lean:3608:3614; law ConcreteSpec.Core.Exec.steps_request with control ConcreteSpec/Proofs/Exec.lean:3616:3625, ConcreteSpec.Core.Exec.Refusal.StuckStep",
     "reason": [
       {
         "control": "ConcreteSpec/Proofs/Exec.lean:4126:4129",
@@ -12720,7 +12720,7 @@
   "declaration:ConcreteSpec.Core.Observe.HistoryDemo.prior_valid": {
     "from": "F21",
     "name": "ConcreteSpec.Core.Observe.HistoryDemo.prior_valid",
-    "note": "ConcreteSpec/Proofs/ObserveEnvironment.lean:395:398; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:392:393 forces consumer; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:400:423; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:425:457, ConcreteSpec.Core.Observe.forgetHistoryOracle",
+    "note": "ConcreteSpec/Proofs/ObserveEnvironment.lean:395:398; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:369:373 forces consumer; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:400:423; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:425:457, ConcreteSpec.Core.Observe.forgetHistoryOracle",
     "reason": [
       {
         "control": "ConcreteSpec/Proofs/ObserveEnvironment.lean:400:423",
@@ -12738,7 +12738,7 @@
         "law": "ConcreteSpec.Core.Observe.environment_run_reply"
       },
       {
-        "command": "ConcreteSpec/Proofs/ObserveEnvironment.lean:392:393",
+        "command": "ConcreteSpec/Proofs/ObserveEnvironment.lean:369:373",
         "kind": "shared-fixture-consumer"
       }
     ],
@@ -13203,7 +13203,7 @@
   "declaration:ConcreteSpec.Core.Observe.RoutingDemo.contract": {
     "from": "F21",
     "name": "ConcreteSpec.Core.Observe.RoutingDemo.contract",
-    "note": "ConcreteSpec/Proofs/ObserveEnvironment.lean:476:481; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; ; ; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:540:570, ConcreteSpec.Core.Observe.noReplyOracle",
+    "note": "ConcreteSpec/Proofs/ObserveEnvironment.lean:476:481; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:540:570, ConcreteSpec.Core.Observe.noReplyOracle",
     "reason": [
       {
         "control": "ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538",
@@ -13231,7 +13231,7 @@
   "declaration:ConcreteSpec.Core.Observe.RoutingDemo.contract.match_1": {
     "from": "F21",
     "name": "ConcreteSpec.Core.Observe.RoutingDemo.contract.match_1",
-    "note": "ConcreteSpec/Proofs/ObserveEnvironment.lean:476:481; regenerated at observed kernel-identical emission; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; ; ; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:540:570, ConcreteSpec.Core.Observe.noReplyOracle",
+    "note": "ConcreteSpec/Proofs/ObserveEnvironment.lean:476:481; regenerated at observed kernel-identical emission; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:540:570, ConcreteSpec.Core.Observe.noReplyOracle",
     "reason": [
       {
         "control": "ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538",
@@ -13263,7 +13263,7 @@
   "declaration:ConcreteSpec.Core.Observe.RoutingDemo.envHandler": {
     "from": "F21",
     "name": "ConcreteSpec.Core.Observe.RoutingDemo.envHandler",
-    "note": "ConcreteSpec/Proofs/ObserveEnvironment.lean:483:488; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; ; ; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:540:570, ConcreteSpec.Core.Observe.noReplyOracle",
+    "note": "ConcreteSpec/Proofs/ObserveEnvironment.lean:483:488; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:540:570, ConcreteSpec.Core.Observe.noReplyOracle",
     "reason": [
       {
         "control": "ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538",
@@ -13291,7 +13291,7 @@
   "declaration:ConcreteSpec.Core.Observe.RoutingDemo.envHandler.eq_1": {
     "from": "F21",
     "name": "ConcreteSpec.Core.Observe.RoutingDemo.envHandler.eq_1",
-    "note": "ConcreteSpec/Proofs/ObserveEnvironment.lean:490:512; regenerated at observed kernel-identical emission; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; ; ; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:540:570, ConcreteSpec.Core.Observe.noReplyOracle",
+    "note": "ConcreteSpec/Proofs/ObserveEnvironment.lean:490:512; regenerated at observed kernel-identical emission; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:540:570, ConcreteSpec.Core.Observe.noReplyOracle",
     "reason": [
       {
         "control": "ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538",
@@ -13323,7 +13323,7 @@
   "declaration:ConcreteSpec.Core.Observe.RoutingDemo.envHandler.match_1": {
     "from": "F21",
     "name": "ConcreteSpec.Core.Observe.RoutingDemo.envHandler.match_1",
-    "note": "ConcreteSpec/Proofs/ObserveEnvironment.lean:483:488; regenerated at observed kernel-identical emission; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; ; ; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:540:570, ConcreteSpec.Core.Observe.noReplyOracle",
+    "note": "ConcreteSpec/Proofs/ObserveEnvironment.lean:483:488; regenerated at observed kernel-identical emission; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:540:570, ConcreteSpec.Core.Observe.noReplyOracle",
     "reason": [
       {
         "control": "ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538",
@@ -13355,7 +13355,7 @@
   "declaration:ConcreteSpec.Core.Observe.RoutingDemo.envHandler_valid": {
     "from": "F21",
     "name": "ConcreteSpec.Core.Observe.RoutingDemo.envHandler_valid",
-    "note": "ConcreteSpec/Proofs/ObserveEnvironment.lean:490:512; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; ; ; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:540:570, ConcreteSpec.Core.Observe.noReplyOracle",
+    "note": "ConcreteSpec/Proofs/ObserveEnvironment.lean:490:512; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:540:570, ConcreteSpec.Core.Observe.noReplyOracle",
     "reason": [
       {
         "control": "ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538",
@@ -13383,7 +13383,7 @@
   "declaration:ConcreteSpec.Core.Observe.RoutingDemo.envHandler_valid._proof_1_3": {
     "from": "F21",
     "name": "ConcreteSpec.Core.Observe.RoutingDemo.envHandler_valid._proof_1_3",
-    "note": "ConcreteSpec/Proofs/ObserveEnvironment.lean:490:512; regenerated at observed kernel-identical emission; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; ; ; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:540:570, ConcreteSpec.Core.Observe.noReplyOracle",
+    "note": "ConcreteSpec/Proofs/ObserveEnvironment.lean:490:512; regenerated at observed kernel-identical emission; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:540:570, ConcreteSpec.Core.Observe.noReplyOracle",
     "reason": [
       {
         "control": "ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538",
@@ -13462,7 +13462,7 @@
   "declaration:ConcreteSpec.Core.Observe.RoutingDemo.signature": {
     "from": "F21",
     "name": "ConcreteSpec.Core.Observe.RoutingDemo.signature",
-    "note": "ConcreteSpec/Proofs/ObserveEnvironment.lean:468:474; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; ; ; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:540:570, ConcreteSpec.Core.Observe.noReplyOracle",
+    "note": "ConcreteSpec/Proofs/ObserveEnvironment.lean:468:474; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:540:570, ConcreteSpec.Core.Observe.noReplyOracle",
     "reason": [
       {
         "control": "ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538",
@@ -20424,7 +20424,7 @@
   "declaration:_private.ConcreteSpec.Proofs.ObserveEnvironment.0.ConcreteSpec.Core.Observe.RoutingDemo.envHandler.match_1.eq_1": {
     "from": "F21",
     "name": "_private.ConcreteSpec.Proofs.ObserveEnvironment.0.ConcreteSpec.Core.Observe.RoutingDemo.envHandler.match_1.eq_1",
-    "note": "ConcreteSpec/Proofs/ObserveEnvironment.lean:490:512; regenerated at observed kernel-identical emission; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; ; ; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:540:570, ConcreteSpec.Core.Observe.noReplyOracle",
+    "note": "ConcreteSpec/Proofs/ObserveEnvironment.lean:490:512; regenerated at observed kernel-identical emission; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:540:570, ConcreteSpec.Core.Observe.noReplyOracle",
     "reason": [
       {
         "control": "ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538",
@@ -20456,7 +20456,7 @@
   "declaration:_private.ConcreteSpec.Proofs.ObserveEnvironment.0.ConcreteSpec.Core.Observe.RoutingDemo.envHandler.match_1.eq_2": {
     "from": "F21",
     "name": "_private.ConcreteSpec.Proofs.ObserveEnvironment.0.ConcreteSpec.Core.Observe.RoutingDemo.envHandler.match_1.eq_2",
-    "note": "ConcreteSpec/Proofs/ObserveEnvironment.lean:490:512; regenerated at observed kernel-identical emission; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; ; ; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:540:570, ConcreteSpec.Core.Observe.noReplyOracle",
+    "note": "ConcreteSpec/Proofs/ObserveEnvironment.lean:490:512; regenerated at observed kernel-identical emission; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:540:570, ConcreteSpec.Core.Observe.noReplyOracle",
     "reason": [
       {
         "control": "ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538",
@@ -20488,7 +20488,7 @@
   "declaration:_private.ConcreteSpec.Proofs.ObserveEnvironment.0.ConcreteSpec.Core.Observe.RoutingDemo.envHandler.match_1.splitter": {
     "from": "F21",
     "name": "_private.ConcreteSpec.Proofs.ObserveEnvironment.0.ConcreteSpec.Core.Observe.RoutingDemo.envHandler.match_1.splitter",
-    "note": "ConcreteSpec/Proofs/ObserveEnvironment.lean:490:512; regenerated at observed kernel-identical emission; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; ; ; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:540:570, ConcreteSpec.Core.Observe.noReplyOracle",
+    "note": "ConcreteSpec/Proofs/ObserveEnvironment.lean:490:512; regenerated at observed kernel-identical emission; shared fixture ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466 forces consumer; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538; law ConcreteSpec.Core.Observe.environment_run_reply with control ConcreteSpec/Proofs/ObserveEnvironment.lean:540:570, ConcreteSpec.Core.Observe.noReplyOracle",
     "reason": [
       {
         "control": "ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538",

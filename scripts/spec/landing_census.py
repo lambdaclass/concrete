@@ -82,6 +82,14 @@ def _census(root, exporter, include_examples, regenerate_modules, validator=None
         if m in regenerate_modules:
             records.append({'record':'command','file':modules[m], 'line':0,'endLine':0,
                             'syntax':'module-realization','example':False})
+    identities = {(r['file'],r['line']):r['identity'] for r in records
+                  if r['record']=='example-identity'}
+    for c in parsed:
+        if c['record']=='command' and c['example']:
+            identity = identities.get((c['file'],c['line']))
+            if not identity:
+                raise ValueError(f"missing elaborated example type identity: {c['file']}:{c['line']}")
+            c['exampleTypeIdentity'] = identity
     if not include_examples:
         return records
     names = {d['name'] for d in original}

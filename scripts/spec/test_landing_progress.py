@@ -326,7 +326,7 @@ def main():
             forbidden_key = next(k for k in combined.commands.values()
                                  if k[0]=='ConcreteSpec/Forbidden.lean' and k[2]=='example')
             if combined.presence[forbidden_key][0]!='statement':
-                raise ValueError('example lacks parsed statement identity')
+                raise ValueError('example lacks elaborated type identity')
             actual_old = dict(command_rows[0],source=forbidden_key[0],kind=forbidden_key[2],digest=forbidden_key[3])
             observed = inventory.replacement_progress([actual_old,crec],cr,combined,combined)['command:old-example']
             if observed!='superseded unit still present: command:old-example': raise ValueError(observed)
@@ -337,7 +337,56 @@ def main():
                 observed = inventory.replacement_progress([actual_old,dict(crec,note=json.dumps(candidate))],cr,edited_head,combined)['command:old-example']
                 if observed!='superseded unit still present: command:old-example': raise ValueError(observed)
             print('control PASS: proof-edited forbidden example remains present under replacement and retirement')
+            for label,context,old_proof,new_proof in (
+                    ('closed', '', '(show True from True.intro)', '(show True from by trivial)'),
+                    ('hypothesis', 'variable (h : True)\n', '(show True from h)',
+                     '(show True from True.intro)'),
+                    ('universe-instance', 'universe u\nvariable {α : Type u} [Nonempty α]\n',
+                     '(show Nonempty α from inferInstance)',
+                     '(show Nonempty α from by infer_instance)')):
+                # The replacement target must first appear at HEAD, as it does in
+                # a production replacement; it is not an unchanged snapshot twin.
+                probe.write_text('-- replacement has not landed\n')
+                forbidden.write_text(context+'example := '+old_proof+'\n')
+                commit()
+                inferred_snapshot = inventory.head_population()
+                inferred_key = next(k for k in inferred_snapshot.commands.values()
+                                    if k[0]=='ConcreteSpec/Forbidden.lean' and k[2]=='example')
+                inferred_old = dict(actual_old,digest=inferred_key[3])
+                probe.write_text('example : True ∧ True := by constructor <;> trivial\n')
+                forbidden.write_text(context+'example := '+new_proof+'\n')
+                commit()
+                inferred_head = inventory.head_population()
+                edited_key = next(k for k in inferred_head.commands.values()
+                                  if k[0]=='ConcreteSpec/Forbidden.lean' and k[2]=='example')
+                if inferred_key==edited_key:
+                    raise ValueError('inferred proof control did not change source digest')
+                if inferred_snapshot.presence[inferred_key]!=inferred_head.presence[edited_key]:
+                    raise ValueError('proof-only inferred example edit changed elaborated identity')
+                replacement_key = next(k for k in inferred_head.commands.values()
+                                       if k[0]=='ConcreteSpec/Control.lean' and k[2]=='example')
+                inferred_spec = dict(cspec,reason='inferred proof edit control: '+label,
+                    commands=[dict(module='ConcreteSpec.Control',
+                    scope=[list(x) for x in replacement_key[1]],kind=replacement_key[2],
+                    digest=replacement_key[3],ordinal=replacement_key[4])])
+                accept(inferred_spec,'F02')
+                for candidate in (inferred_spec,retired):
+                    observed = inventory.replacement_progress(
+                        [inferred_old,dict(crec,note=json.dumps(candidate))],cr,
+                        inferred_head,inferred_snapshot)['command:old-example']
+                    if observed!='superseded unit still present: command:old-example':
+                        raise ValueError(observed)
+                missing_identity = inventory.census(root,exporter,examples=False)
+                for command in missing_identity:
+                    if command['record']=='command' and command.get('example'):
+                        command.pop('exampleTypeIdentity',None)
+                missing_name = next(r['name'] for r in inventory.records_from_census(missing_identity,root)
+                                    if r['record']=='command' and r['kind']=='example')
+                refused(lambda: inventory.full_digests(missing_identity,root),
+                        'missing elaborated example type identity: '+missing_name)
+            print('control PASS: inferred examples retain type/context identity across proof edits; retirement and replacement detect presence; missing identity refuses')
             # Production multiset matching: the BASE twin must survive retirement.
+            probe.write_text('example : True := by trivial\n')
             forbidden.write_text('example : False → False := by intro h; exact h\n'
                                  'example : False → False := by exact id\n')
             commit()

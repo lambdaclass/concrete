@@ -45,19 +45,12 @@ private partial def sourceIdentifiers (ctx : Parser.InputContext) (s : Syntax) :
       ("column", toJson pos.column)]]
   | _ => s.getArgs.flatMap (sourceIdentifiers ctx)
 
--- Parsed statement identity excludes proof syntax and source positions.
+-- Parsed syntax for non-example commands excludes source positions.
 private partial def syntaxIdentity (s : Syntax) : Json :=
   match s with
   | .atom _ value => toJson value
   | .ident _ _ name _ => toJson name.toString
   | _ => Json.arr (#[toJson s.getKind.toString] ++ s.getArgs.map syntaxIdentity)
-
-private partial def exampleStatement (s : Syntax) : Option Json :=
-  if s.isOfKind ``Parser.Command.example then
-    s.getArgs.findSome? fun arg =>
-      if arg.isOfKind ``Parser.Command.optDeclSig && !arg[1].getArgs.isEmpty
-      then some (syntaxIdentity arg) else none
-  else s.getArgs.findSome? exampleStatement
 
 private partial def commands (ctx : Parser.InputContext) (env : Environment)
     (ps : Parser.ModuleParserState) (messages : MessageLog) : IO Unit := do
@@ -69,7 +62,6 @@ private partial def commands (ctx : Parser.InputContext) (env : Environment)
     let start := ctx.fileMap.toPosition (stx.getPos?.getD 0)
     let stop := ctx.fileMap.toPosition (stx.getTailPos?.getD 0)
     emit [("record", toJson "command"), ("file", toJson ctx.fileName),
-      ("statement", toJson (exampleStatement stx)),
       ("commandIdentity", syntaxIdentity stx),
       ("scopeIdentity", if stx.isOfKind ``Parser.Command.namespace || stx.isOfKind ``Parser.Command.section
         then syntaxIdentity stx else Json.null),
@@ -149,6 +141,42 @@ private def shape (ci : ConstantInfo) : String := Id.run do
   let (payload, state) := build.run {}
   return Json.compress (Json.arr #[payload, Json.arr state.nodes])
 
+-- Every example has an elaborated declaration-header fvar, including examples
+-- whose type is inferred. Read that header after metavariable assignments settle,
+-- never a term/proof subtree or the proof-dependent generalized environment entry.
+private def exampleIdentity (stx : Syntax) (state : Elab.Command.State) : IO String := do
+  let some token := exampleToken stx
+    | throw (IO.userError "missing elaborated example type identity: example token absent")
+  let mut identities : Array String := #[]
+  for tree in state.infoState.trees do
+    let tree := tree.substitute state.infoState.assignment
+    identities ← tree.foldInfoM (fun ctx info found => do
+      let .ofTermInfo term := info | return found
+      unless term.isBinder && term.expr.isFVar &&
+          term.stx.isOfKind ``Parser.Command.declId &&
+          term.stx.getPos?.map (·.byteIdx) == some token do return found
+      let identity ← term.runMetaM ctx do
+        let type ← Meta.inferType term.expr >>= instantiateMVars
+        -- The recursive declaration placeholder is compiler machinery, not a local binder.
+        let locals := term.lctx.foldl (fun xs d =>
+          if d.isAuxDecl then xs else xs.push (mkFVar d.fvarId)) #[]
+        let type ← Meta.mkForallFVars locals type
+          (usedLetOnly := false) (generalizeNondepLet := false)
+        let type ← instantiateMVars type
+        if type.hasMVar || type.hasFVar then
+          throwError "unresolved elaborated example type identity"
+        -- Universe parameter spelling (including generated names) is presentation too.
+        let params := (collectLevelParams {} type).params
+        let type := type.instantiateLevelParamsArray params
+          (params.mapIdx fun i _ => Level.param (.num `_landingUniverse i))
+        let (root, state) := (exprNode type).run {}
+        return Json.compress (Json.arr #[toJson root, Json.arr state.nodes])
+      return found.push identity) identities
+  let distinct := identities.toList.eraseDups
+  match distinct with
+  | [identity] => return identity
+  | _ => throw (IO.userError "missing or ambiguous elaborated example type identity")
+
 private def fingerprint (input output : IO.FS.Handle) (ci : ConstantInfo) : IO String := do
   input.putStrLn (Json.compress (toJson (shape ci)))
   input.flush
@@ -192,6 +220,10 @@ private partial def originCommands (input output : IO.FS.Handle) (ctx : Parser.I
   let after := state.env
   let stx := snap.stx
   resolvedMetadata ctx stx state
+  if containsExample stx then
+    emit [("record", toJson "example-identity"), ("file", toJson ctx.fileName),
+      ("line", toJson (ctx.fileMap.toPosition (stx.getPos?.getD 0)).line),
+      ("identity", toJson (← exampleIdentity stx state))]
   let start := ctx.fileMap.toPosition (stx.getPos?.getD 0)
   let stop := ctx.fileMap.toPosition (stx.getTailPos?.getD 0)
   let mut names := before

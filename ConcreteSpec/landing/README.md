@@ -121,8 +121,10 @@ between records.
 All target declarations and commands must match together at HEAD, and every superseded unit
 must be absent by identity, or itself be a target at the recorded digest; partial
 replacement does not close. Declaration identity is its qualified name. Example-command
-identity is its parsed statement plus its occurrence among equal statements, excluding proof
-syntax and source positions. Other commands use parsed syntax plus occurrence. The census lists
+identity is its Lean-elaborated type closed over the complete local context, plus its
+occurrence among equal identities. Explicitly typed and inferred examples use the same
+elaboration-info path; proof syntax and source positions never enter this identity. Missing,
+ambiguous or unresolved type identities refuse reconciliation. Other commands use parsed syntax plus occurrence. The census lists
 every collision group with all occurrence keys. Reconciliation first matches each HEAD
 command by its own exact key. A superseded key still at HEAD always refuses, regardless
 of whether equal-statement twins have landed. Pinned targets and exact-key twins explain
