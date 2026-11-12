@@ -7,10 +7,14 @@ import sys
 def fetch_source(source, repo, ref=None):
     if source == 'https://github.com/lambdaclass/concrete.git':
         return source
-    # Resolve once against the caller, refusing symlinks in every path component.
+    # Bundles may live anywhere: parent aliases (including macOS /var) are
+    # permitted. Refuse indirection at the selected file itself, then use one
+    # canonical path for verification and fetch so caller-relative paths survive
+    # the runner changing directory. This is not a directory confinement check.
     path = pathlib.Path(source).absolute()
-    if any(part.is_symlink() for part in (path, *path.parents)):
+    if path.is_symlink():
         raise ValueError('symlink fetch source refused')
+    path = path.resolve()
     if not path.is_file():
         raise ValueError('fetch source must be a canonical repository URL or a git bundle file; local clones and remote names are refused')
     verified = subprocess.run(['git', '-C', repo, 'bundle', 'verify', str(path)],

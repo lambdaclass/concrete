@@ -27,6 +27,7 @@ assert required <= overlay
 assert all((root / path).is_file() for path in overlay), 'missing migration overlay file'
 PYSOURCE
 TMP="$(mktemp -d)"
+TMP="$(cd "$TMP" && pwd -P)"
 trap 'rm -rf "$TMP"' EXIT
 # Disposable fixture: no installed hooks and no network.
 git init -q "$TMP/repo"
@@ -64,14 +65,21 @@ for source in "$TMP/input.bundle" input.bundle 'caller@host:dir/input.bundle'; d
 done
 [[ -z "$(git -C repo for-each-ref refs/run-at-ref/)" ]]
 [[ -z "$(find relative-runs -mindepth 1 -type d -print)" ]]
-ln -s input.bundle linked.bundle
+# Emulate macOS's /var -> /private/var using a parent alias on every host.
+# Both absolute and caller-relative sources must work after the runner changes cwd.
 ln -s "$TMP" linked-dir
+for source in "$TMP/linked-dir/input.bundle" linked-dir/input.bundle; do
+  out="$(RUN_AT_REF_REPO=repo RUN_AT_REF_SOURCE="$source" RUN_AT_REF_RUNS=relative-runs RUN_AT_REF_NO_NIX=1 \
+    bounded_run 15 -- bash "$ROOT_DIR/scripts/land/run-at-ref.sh" HEAD 'git rev-parse HEAD')"
+  [[ "$out" == *"sha=$expected"* && "$out" == *"exit=0"* ]] || { echo "$out" >&2; exit 1; }
+done
+ln -s input.bundle linked.bundle
 printf invalid > invalid.bundle
 # Each refusal checks its diagnostic, and must precede run-state creation.
 for spec in 'repo|local clones and remote names are refused' \
     "$TMP/repo|local clones and remote names are refused" \
     'https://example.com/archive.git|local clones and remote names are refused' \
-    'linked.bundle|symlink fetch source refused' 'linked-dir/input.bundle|symlink fetch source refused' \
+    'linked.bundle|symlink fetch source refused' 'linked-dir/linked.bundle|symlink fetch source refused' \
     'invalid.bundle|invalid git bundle' 'origin|local clones and remote names are refused' \
     'https://example.com/other.git|local clones and remote names are refused'; do
   source="${spec%%|*}"; reason="${spec#*|}"
