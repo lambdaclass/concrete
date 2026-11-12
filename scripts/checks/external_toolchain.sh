@@ -24,8 +24,14 @@ printf 'const STACK_SIZE: usize = 16_777_216;\n' > "$TMP/source/src/lib.rs"
 git -C "$TMP/source" add lean-toolchain src/lib.rs
 git -C "$TMP/source" -c user.name=Control -c user.email=control@example.invalid commit -qm fixture
 REV=$(git -C "$TMP/source" rev-parse HEAD)
+# A separate source exercises dispatch when the tool differs from the project.
+git clone -q "$TMP/source" "$TMP/conleche-source"
+printf '%s\n' leanprover/lean4:v4.35.0-fixture > "$TMP/conleche-source/lean-toolchain"
+git -C "$TMP/conleche-source" add lean-toolchain
+git -C "$TMP/conleche-source" -c user.name=Control -c user.email=control@example.invalid commit -qm conleche-toolchain
+CONLECHE_REV=$(git -C "$TMP/conleche-source" rev-parse HEAD)
 # Retain the production pin names and syntax, replacing only fixture addresses/revisions.
-python3 - "$TMP/project/scripts/proofs/external.pins" "$TMP/source" "$REV" <<'PY'
+python3 - "$TMP/project/scripts/proofs/external.pins" "$TMP/source" "$REV" "$TMP/conleche-source" "$CONLECHE_REV" <<'PY'
 from pathlib import Path
 import sys
 p = Path(sys.argv[1])
@@ -33,6 +39,9 @@ s = p.read_text()
 import re
 s = re.sub(r'(?m)^([A-Z0-9]+)_URL=.*$', lambda m: m[1]+'_URL='+sys.argv[2], s)
 s = re.sub(r'(?m)^([A-Z0-9]+)_REV=.*$', lambda m: m[1]+'_REV='+sys.argv[3], s)
+s = re.sub(r'(?m)^CONLECHE_URL=.*$', 'CONLECHE_URL='+sys.argv[4], s)
+s = re.sub(r'(?m)^CONLECHE_REV=.*$', 'CONLECHE_REV='+sys.argv[5], s)
+s = re.sub(r'(?m)^CONLECHE_TOOLCHAIN=.*$', 'CONLECHE_TOOLCHAIN=leanprover/lean4:v4.35.0-fixture', s)
 p.write_text(s)
 PY
 cp "$TMP/project/scripts/proofs/external.pins" "$TMP/pins"
@@ -90,9 +99,15 @@ fi
 [ "${ELAN_TOOLCHAIN+x}" != x ]
 [ "${LEAN_PATH+x}" != x ]
 [ "$#" = 6 ]
-[ "$1 $2 $3 $4 $5" = 'run --install leanprover/lean4:v4.35.0 lake build' ]
-case "$6" in lean4export|con-leche) ;; *) exit 90 ;; esac
-[ "$(cat lean-toolchain)" = leanprover/lean4:v4.35.0 ]
+[ "$1 $2 $4 $5" = 'run --install lake build' ]
+case "$6" in
+  lean4export) expected=leanprover/lean4:v4.35.0 ;;
+  con-leche) expected=leanprover/lean4:v4.35.0-fixture ;;
+  *) exit 90 ;;
+esac
+[ "$3" = "$expected" ] && [ "$(cat lean-toolchain)" = "$expected" ] || {
+  echo 'CONTROL: per-tool toolchain dispatch wrong' >&2; exit 90;
+}
 mkdir -p .lake/build/bin
 cp "$FIXTURE_ARTIFACT" ".lake/build/bin/$6"
 chmod +x ".lake/build/bin/$6"
@@ -143,6 +158,12 @@ mkdir -p target/release
 cp "$FIXTURE_ARTIFACT" target/release/nanoda_bin
 chmod +x target/release/nanoda_bin
 echo nanoda >> "$DISPATCH_LOG"
+CONTROL
+cat > "$TMP/bin/rustc" <<'CONTROL'
+#!/usr/bin/env bash
+set -eu
+[ "$1" = -vV ]
+echo "rustc fixture ${FIXTURE_RUST_VERSION:-1}"
 CONTROL
 chmod +x "$TMP/bin/"*
 cat > "$TMP/check-path" <<'CONTROL'
@@ -222,20 +243,45 @@ printf 'lean4export\ncon-leche\nnanoda\n' > "$TMP/expected"
 cmp "$TMP/expected" "$DISPATCH_LOG"
 run_driver 'PROOF-EXTERNAL:' 0
 cmp "$TMP/expected" "$DISPATCH_LOG"
-# A different resolved elan path must produce distinct homes and all tool trees.
+# A different resolved elan path must produce distinct homes and Lake tool trees.
 cp "$TMP/bin/elan" "$TMP/bin/elan-other"
 CONCRETE_EXT_ELAN="$TMP/bin/elan-other" run_driver 'PROOF-EXTERNAL:' 0
 [ "$(find "$CONCRETE_EXT_TOOLS" -maxdepth 1 -type d -name 'elan-*' | wc -l)" -eq 2 ]
-for tool in lean4export con-leche nanoda; do
+for tool in lean4export con-leche; do
   [ "$(find "$CONCRETE_EXT_TOOLS" -maxdepth 1 -type d -name "$tool-*" | wc -l)" -eq 2 ]
 done
+[ "$(find "$CONCRETE_EXT_TOOLS" -maxdepth 1 -type d -name 'nanoda-*' | wc -l)" -eq 1 ]
+# Each Rust builder identity component independently invalidates nanoda.
+mkdir "$TMP/rust-other"
+cp "$TMP/bin/cargo" "$TMP/rust-other/cargo"
+PATH="$TMP/rust-other:$PATH" run_driver 'PROOF-EXTERNAL:' 0
+[ "$(find "$CONCRETE_EXT_TOOLS" -maxdepth 1 -type d -name 'nanoda-*' | wc -l)" -eq 2 ]
+cp "$TMP/bin/rustc" "$TMP/rust-other/rustc"
+PATH="$TMP/rust-other:$PATH" run_driver 'PROOF-EXTERNAL:' 0
+[ "$(find "$CONCRETE_EXT_TOOLS" -maxdepth 1 -type d -name 'nanoda-*' | wc -l)" -eq 3 ]
+FIXTURE_RUST_VERSION=2 run_driver 'PROOF-EXTERNAL:' 0
+[ "$(find "$CONCRETE_EXT_TOOLS" -maxdepth 1 -type d -name 'nanoda-*' | wc -l)" -eq 4 ]
 # Changing the nanoda patch changes every recipe-keyed tree, without changing elan homes.
 sed 's/268_435_456/536_870_912/g' "$TMP/builder" > "$TMP/project/scripts/proofs/lake_tool.sh"
 FIXTURE_STACK_SIZE=536_870_912 run_driver 'PROOF-EXTERNAL:' 0
-for tool in lean4export con-leche nanoda; do
+for tool in lean4export con-leche; do
   [ "$(find "$CONCRETE_EXT_TOOLS" -maxdepth 1 -type d -name "$tool-*" | wc -l)" -eq 3 ]
 done
 [ "$(find "$CONCRETE_EXT_TOOLS" -maxdepth 1 -type d -name 'elan-*' | wc -l)" -eq 2 ]
+[ "$(find "$CONCRETE_EXT_TOOLS" -maxdepth 1 -type d -name 'nanoda-*' | wc -l)" -eq 5 ]
+cp "$TMP/builder" "$TMP/project/scripts/proofs/lake_tool.sh"
+# All three project-toolchain substitutions must fail accepted distinct-tool dispatch.
+for replacement in 'leanprover/lean4:v4.35.0' '"$TOOLCHAIN"' '"$(cat lean-toolchain)"'; do
+  python3 - "$TMP/builder" "$TMP/project/scripts/proofs/lake_tool.sh" "$replacement" <<'CONTROL'
+from pathlib import Path
+import sys
+s = Path(sys.argv[1]).read_text()
+old = '"$elan" run --install "$tc" lake build'
+assert s.count(old) == 1
+Path(sys.argv[2]).write_text(s.replace(old, '"$elan" run --install '+sys.argv[3]+' lake build'))
+CONTROL
+  run_driver 'CONTROL: per-tool toolchain dispatch wrong'
+done
 cp "$TMP/builder" "$TMP/project/scripts/proofs/lake_tool.sh"
 # A retained lock must fail the first post-build population query.
 sed 's/^flock -u 9.*/: # negative control: retain lock/' "$TMP/driver" > "$TMP/project/scripts/proofs/external.sh"
@@ -248,7 +294,7 @@ for tool in lean4export con-leche; do
   for tree in "$CONCRETE_EXT_TOOLS"/"$tool"-*; do printf '%s\n' leanprover/lean4:v4.34.1 > "$tree/lean-toolchain"; done
   run_driver 'worktree=leanprover/lean4:v4.34.1'
   cmp "$TMP/expected" "$DISPATCH_LOG"
-  for tree in "$CONCRETE_EXT_TOOLS"/"$tool"-*; do cp "$TMP/project/lean-toolchain" "$tree/lean-toolchain"; done
+  for tree in "$CONCRETE_EXT_TOOLS"/"$tool"-*; do git -C "$tree" show HEAD:lean-toolchain > "$tree/lean-toolchain"; done
 done
 # A wrong con-leche pin must be checked against the source revision before dispatch.
 sed 's/^CONLECHE_TOOLCHAIN=.*/CONLECHE_TOOLCHAIN=leanprover\/lean4:v4.34.1/' "$TMP/pins" > "$TMP/project/scripts/proofs/external.pins"

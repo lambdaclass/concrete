@@ -1,4 +1,6 @@
 # Sourced by external.sh: self-contained tool recipes; callers hold the cache lock.
+source "$(dirname "${BASH_SOURCE[0]}")/../checks/lib/git_sandbox.sh" || exit 2
+git_sandbox || exit 2
 # All recipe content (including the nanoda patch) participates in every tree key.
 recipe_identity() { sha256sum "${BASH_SOURCE[0]}" | cut -d' ' -f1; }
 elan_identity() {
@@ -43,11 +45,16 @@ build_lake_tool() {
 }
 
 build_cargo_tool() {
-  local tools=$1 url=$2 rev=$3 tc=$4 elan identity recipe dir work
-  elan=$(command -v "${CONCRETE_EXT_ELAN:-elan}") || return 1
-  identity=$(elan_identity "$elan") || return 1
+  local tools=$1 url=$2 rev=$3 cargo rustc identity recipe dir work
+  cargo=$(command -v cargo) || return 1
+  rustc=$(command -v rustc) || return 1
+  local version cargo_path rustc_path
+  cargo_path=$(realpath "$cargo") && rustc_path=$(realpath "$rustc") || return 1
+  # Invoke the selected paths: rustup proxies depend on their invocation basename.
+  version=$("$rustc" -vV) || return 1
+  identity=$(printf '%s\n%s\n%s\n' "$cargo_path" "$rustc_path" "$version" | sha256sum | cut -d' ' -f1)
   recipe=$(recipe_identity) || return 1
-  dir="$tools/nanoda-$rev-$identity-$recipe-$(printf '%s' "$tc" | tr -c 'A-Za-z0-9._-' '_')"
+  dir="$tools/nanoda-$rev-$identity-$recipe"
   if [ ! -f "$dir/.built" ]; then
     work="$dir.partial.$$"
     rm -rf "$work"
@@ -55,7 +62,7 @@ build_cargo_tool() {
     git clone -q "$url" "$work" >&2 && git -C "$work" checkout -q "$rev" >&2 \
       && grep -qF 'STACK_SIZE: usize = 16_777_216;' "$work/src/lib.rs" \
       && sed -i.orig 's/STACK_SIZE: usize = 16_777_216;/STACK_SIZE: usize = 268_435_456;/' "$work/src/lib.rs" \
-      && publish "$dir" cargo build --release -q \
+      && publish "$dir" env RUSTC="$rustc" "$cargo" build --release -q \
       || { rm -rf "$work"; return 1; }
   fi
   [ -x "$dir/target/release/nanoda_bin" ] && [ "$(git -C "$dir" rev-parse HEAD)" = "$rev" ] || return 1

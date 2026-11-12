@@ -16,6 +16,8 @@
 # (`git rev-parse --local-env-vars`), so it tracks whatever the installed git treats as local.
 
 git_sandbox() { # [gitconfig-file]
+  # Sourced helpers may call again: retain the first sandbox, including its config.
+  [ "${_CONCRETE_GIT_SANDBOX_PID:-}" = "$$" ] && return 0
   local v vars
   vars="$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR git rev-parse --local-env-vars 2>/dev/null)" \
     || { echo "git_sandbox: git rev-parse --local-env-vars failed" >&2; return 2; }
@@ -24,5 +26,7 @@ git_sandbox() { # [gitconfig-file]
   if [ $# -ge 1 ]; then
     export GIT_CONFIG_GLOBAL="$1" GIT_CONFIG_NOSYSTEM=1
   fi
+  _CONCRETE_GIT_SANDBOX_PID=$$
+  export -n _CONCRETE_GIT_SANDBOX_PID
   return 0
 }

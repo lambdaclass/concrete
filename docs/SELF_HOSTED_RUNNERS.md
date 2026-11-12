@@ -155,7 +155,8 @@ sudo -iu runner1 sh -c 'curl --proto =https --tlsv1.2 -sSf https://sh.rustup.rs 
 ```
 
 - `rustc` is used by the LL(1) grammar job. `cargo` builds nanoda for the external-checker job
-  whenever `~/.cache/concrete-ext` has no build for the pinned SHA. Ubuntu's `rustc` package does
+  whenever `~/.cache/concrete-ext` has no build for the pinned SHA, resolved cargo and rustc paths,
+  `rustc -vV` output and build recipe hash. Ubuntu's `rustc` package does
   not pull in `cargo`, so use rustup (or install both `rustc` and `cargo`), and check it once by
   running the external-checker job with an empty `~/.cache/concrete-ext`. Rustup puts its tools in
   `~/.cargo/bin`, so install it before `./config.sh`, or add that directory to the runner's `.path`.
@@ -259,8 +260,9 @@ already handles, and what the host has to handle.
   These Nix-patched external toolchains are build dependencies, not receipt checker identities.
   The cache lives in the user's HOME, so each runner has its own. Old directories are never
   deleted; prune `~/.cache/concrete-ext` now and then. The resolved elan path and version
-  identify both isolated homes and every tool tree on hosted and persistent runners.
+  identify isolated homes and Lake tool trees on hosted and persistent runners.
   Switching between Nix and upstream elan, or changing its Nix store path, selects fresh trees.
+  Nanoda trees instead use the resolved cargo and rustc paths and `rustc -vV` output.
   All build recipes, including the nanoda stack patch, live in `lake_tool.sh`; its content
   hash also keys every tool tree. CI additionally keys the archive on both flake files.
 - **Processes.** The runner kills a job's process tree when the job ends. A gate that leaves a

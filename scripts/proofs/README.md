@@ -213,7 +213,8 @@ control, and rejects global-home redirection, redirection after locking, prematu
 and unscoped tool builds. All post-build stubs assert the caller home and an unlocked
 cache; build stubs assert the locked phase. The full driver completes, including fidelity and corruption
 controls, using the production inventory reader and synthetic checker inputs. Resolved
-elan path/version keys isolated homes and all tool trees, whose keys also include the toolchain and the hash
+elan path/version keys isolated homes and Lake tool trees, whose keys also include their declared toolchain.
+Nanoda trees use the resolved cargo and rustc paths plus `rustc -vV`. Every tool tree includes the hash
 of the self-contained `lake_tool.sh` recipes (including the nanoda stack patch). CI keys
 the external cache on the pins, builder, project toolchain and both Nix flake files.
 

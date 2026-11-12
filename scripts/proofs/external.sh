@@ -86,7 +86,7 @@ DIRECT=$(grep -nE '^[^#]*"\$CONLECHE"' "$0" | grep -v 'CONLECHE_FLAGS\[@\]')
 [ "${CONLECHE_FLAGS[*]}" = "--verified --jobs=1" ] && [ -z "$DIRECT" ] \
   && ok "con-leche runs as --verified --jobs=1 at every call site" \
   || no "con-leche flags are [${CONLECHE_FLAGS[*]}]; direct calls: $(echo $DIRECT | cut -c1-200)"
-NANODA_DIR=$(build_cargo_tool "$TOOLS" "$NANODA_URL" "$NANODA_REV" "$TOOLCHAIN") \
+NANODA_DIR=$(build_cargo_tool "$TOOLS" "$NANODA_URL" "$NANODA_REV") \
   && ok "nanoda at $NANODA_REV (thread stack patched as the Arena does)" \
   || { no "could not build nanoda at $NANODA_REV"; finish; }
 NANODA="$NANODA_DIR/target/release/nanoda_bin"

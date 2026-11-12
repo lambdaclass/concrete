@@ -103,6 +103,22 @@ trap 'rm -rf "$TMP"' EXIT
 git_sandbox "$TMP/gitconfig" || exit 2
 printf '[user]\n\tname = isolation gate\n\temail = isolation@example.invalid\n[init]\n\tdefaultBranch = main\n[advice]\n\tdetachedHead = false\n' > "$GIT_CONFIG_GLOBAL"
 
+# Re-sourcing a self-contained recipe must preserve the first sandbox configuration.
+if bash -c '
+  source "$1"
+  GIT_DIR=/deliberately/foreign
+  export GIT_DIR
+  git_sandbox "$2/first" || exit
+  [ "${GIT_DIR+x}" != x ] || exit 1
+  source "$1"
+  git_sandbox "$2/second" || exit
+  [ "$GIT_CONFIG_GLOBAL" = "$2/first" ] && [ "$GIT_CONFIG_NOSYSTEM" = 1 ]
+' bash "$ROOT_DIR/$HELPER" "$TMP"; then
+  ok "repeated sandbox calls preserve the first configuration"
+else
+  no "repeated sandbox calls changed the first configuration"
+fi
+
 BOUNDED_PARENT="$TMP"
 source "$ROOT_DIR/scripts/checks/lib/bounded.sh" || exit 2
 # bounded <cmd...>: at most 120 s per attempt (the portable bounded_run: its own watchdog kills the
