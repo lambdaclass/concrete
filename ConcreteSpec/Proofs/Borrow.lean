@@ -1,4 +1,6 @@
 import ConcreteSpec.Proofs.Basics
+import ConcreteSpec.Spec.Basics
+import ConcreteSpec.Spec.Borrow
 
 /-!
 # Part 4: `open_mut_freezes_root` and `shared_open_grants_no_write`.

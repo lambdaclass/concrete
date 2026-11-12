@@ -1,4 +1,9 @@
-import ConcreteSpec.Proofs.Slice1
+import ConcreteSpec.Proofs.Basics
+import ConcreteSpec.Spec.Basics
+import ConcreteSpec.Spec.Slice1Checker
+import ConcreteSpec.Spec.Slice1Ownership
+import ConcreteSpec.Spec.Slice1Syntax
+import ConcreteSpec.Spec.Statics
 
 /-!
 # The checker agrees with the judgments (`check_iff`), so every `check p = true` example in the specification is a statement about the judgment `Checked p`.

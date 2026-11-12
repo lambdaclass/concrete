@@ -20,7 +20,7 @@ Commands (exit 3 when a source cannot be read or lexed):
                            the header, which must be lines `import ConcreteSpec[.M…]`, one
                            module each, ended by a command at column 0
   examples SRC DST FILE... copies each FILE (a path relative to SRC) to DST with every `example`
-                           command turned into `noncomputable def «⟪example⟫FILE:LINE»` (no space,
+                           command turned into `noncomputable abbrev «⟪example⟫FILE:LINE»` (no space,
                            so listings split on spaces stay sound), so the kernel's view of it
                            stays in the environment; prints the count. Every
                            `example` token must start a line.
@@ -171,6 +171,31 @@ class ModuleHeader:
         return line.startswith("import ") and line[7:].rstrip() in self.modules
 
 
+def module_imports(source, modules):
+    """Return (module names, import-line spans, header end) using source offsets.
+
+    Comments and blank lines are legal anywhere in the header. Keep their bytes
+    separate from import lines so header rewrites preserve documentation.
+    """
+    header = ModuleHeader(modules)
+    lines = lex(source, literals=False).splitlines(keepends=True)
+    deps, spans = [], []
+    k = offset = 0
+    while k < len(lines) and (not lines[k].strip() or header.match(lines[k])):
+        if lines[k].strip():
+            deps.append(lines[k][7:].strip())
+            # Replace only code, retaining trailing comments and line endings.
+            end = len(lines[k].rstrip())
+            spans.append((offset, offset + end))
+        offset += len(lines[k])
+        k += 1
+    if k < len(lines) and not FIRST_COMMAND.match(lines[k]):
+        raise LexError('invalid import header terminator')
+    if any(re.search(r"\bimport\b", line) for line in lines[k:]):
+        raise LexError('import outside header')
+    return deps, spans, offset
+
+
 def compiler_header():
     prefix = Path(subprocess.check_output(["lean", "--print-prefix"], text=True).strip())
     modules = set()
@@ -219,23 +244,33 @@ def count_examples(src):
     return len(EXAMPLE.findall(lex(src, literals=False)))
 
 
+def rename_examples(src, name):
+    """Retain examples as abbreviations; name maps each source line to a fresh name."""
+    text = lex(src, literals=False)
+    out, last = [], 0
+    for m in EXAMPLE.finditer(text):
+        line = text.count("\n", 0, m.start()) + 1
+        if m.start() > 0 and text[m.start() - 1] != "\n":
+            raise LexError(f"{line}: an `example` that does not start its line")
+        out.append(src[last:m.start()])
+        out.append(f"noncomputable abbrev «{name(line)}»")
+        last = m.end()
+    out.append(src[last:])
+    return "".join(out)
+
+
 def examples(src_dir, dst_dir, paths):
     count = 0
     for rel in paths:
         src = (Path(src_dir) / rel).read_text(encoding="utf-8")
-        text = lex(src, literals=False)          # an `example` inside a literal is not a command
-        out, last = [], 0
-        for m in EXAMPLE.finditer(text):
-            line = text.count("\n", 0, m.start()) + 1
-            if m.start() > 0 and text[m.start() - 1] != "\n":
-                raise LexError(f"{rel}:{line}: an `example` that does not start its line")
-            out.append(src[last:m.start()])
-            out.append(f"noncomputable def «{EXAMPLE_MARK}{rel}:{line}»")
-            last = m.end(); count += 1
-        out.append(src[last:])
+        try:
+            renamed = rename_examples(src, lambda line: f"{EXAMPLE_MARK}{rel}:{line}")
+        except LexError as e:
+            raise LexError(f"{rel}:{e}") from e
+        count += count_examples(src)
         dst = os.path.join(dst_dir, rel)
         os.makedirs(os.path.dirname(dst) or ".", exist_ok=True)
-        Path(dst).write_text("".join(out), encoding="utf-8")
+        Path(dst).write_text(renamed, encoding="utf-8")
     print(count)
 
 
