@@ -14,7 +14,7 @@ source scripts/checks/lib/bounded.sh
 rc=0
 python3 scripts/spec/test_landing_pins.py || exit $?
 python3 scripts/spec/test_landing_relocations.py || exit $?
-bounded_run 180 -- python3 scripts/spec/test_landing_progress.py || rc=$?
+bounded_run 300 -- python3 scripts/spec/test_landing_progress.py || rc=$?
 if [ "$rc" -eq 0 ]; then
   bounded_run 1500 -- python3 scripts/spec/landing_manifest.py "$@" || rc=$?
 fi

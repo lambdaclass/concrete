@@ -1,5 +1,68 @@
 # Piece P validation
 
+## Round 8 (current)
+
+2026-11-12 UTC. Checked HEAD: `08f9d88ce53cceca31216caf418315b8e3609735`.
+Writer changes are uncommitted for the harness; exact final-commit qualification remains the
+harness's responsibility. No pushes, review tools or review notes were made. ISS-0054 stays open.
+
+Reconciliation now covers authored declarations and standalone command progress units, with
+position-free command targets, disjoint replacing populations and same-piece snapshot ownership.
+Both replacement and retirement require a reason and a structured, resolvable accepting review
+reference at an ancestor commit. Retirement additionally checks that the original units are absent.
+The denominator is unchanged, and replacement/retirement are reported separately from equality.
+
+F01 is one property: complete root import reachability and production exact-import checks of
+every HEAD proof file, using isolated freshly built modules (including probe/built dependency
+agreement). The recorded F01 revision must be an actual ancestor. Spec CI retains history for
+ancestry checks; it does not rebuild historical progress revisions. Controls use actual fixture
+commits, including an unrelated root commit for ancestry refusal. Frozen header bytes are removed.
+
+The coordinator's tag-creation, push and remote-verification procedure is documented in README.md.
+Pin controls require diagnostics to include all absent tags in one run, while preserving bounded
+fetches and refusal of changed local/remote pins.
+
+Validation result: PASS (exit 0), including every pin, relocation and progress control and
+the fresh production inventory census. F01 reports `landed=1/1`; F02 remains `0/5` with
+two examples, pending actual piece implementation and reviewed reconciliation. The command was:
+
+```sh
+nix develop -c bash scripts/spec/landing_inventory.sh
+```
+
+Additional validation passed (exit 0):
+
+```sh
+nix develop -c bash scripts/checks/lib/bounded.sh 600 python3 scripts/proofs/imports.py
+```
+
+This ran the production checker on all twelve current proof modules and its declaring-owner,
+extra/transitive-only import, anonymous-example, commented-header and rewrite controls.
+
+Earlier development runs caught and corrected the F01 fixture's header syntax and an invalid-header
+error path. The final controls include unused versus legitimate later imports, incomplete roots,
+nonancestor provenance, command replacement, declaration/command retirement with absence checks,
+foreign/shared targets, unresolvable review artifacts, and existing digest/relocation/pin controls.
+
+Final working-tree bundle SHA-256 checksums (validation prose excluded to avoid self-reference;
+all executable inputs below were unchanged throughout the final passing gate run):
+
+```text
+2dcdd35cc220a4386aa1576a7170dbd339ed11e00791c0b72ad978dad0a6efc0  .github/workflows/lean_action_ci.yml
+2c96062a7451013f799720e6a5e5e9a7840ac9115f9bc096963a3822a10351ae  ConcreteSpec/landing/README.md
+1ff107a8cab18f335b7eed35d940d84eedb8c7cbf670e2f0d85ec10eef31dbe1  ConcreteSpec/landing/headers.json
+2b99334aefccf521ff5d814d27ab69eb7b738be8fd0819312c5891358308bdd2  ISSUES.tsv
+7592c5510a511b66f28c428646868f7a6c49c40833db142e63b4302398efb05f  changelog.d/2026-11-11-spec-inventory.md
+8c5ca0a968424bceb7731da51634f1968efbb1b018b8c37e35c85f3c2f440650  scripts/proofs/imports.py
+466eef00654660fa654a501e0919793c2733c280e936184324c9e075ec12d12c  scripts/spec/landing_census.py
+3a28c4cc576283ec4591de0f135042d57c28719f26458290ff9f528407292a43  scripts/spec/landing_inventory.sh
+b1897a1f7ae8f7414cab08e1d72d5081d45257eec23990a0939cffb0aee81999  scripts/spec/landing_manifest.py
+e6cde7cc022990cbde6f598b8f9c5b5c1ca67b0f511611f7b076f766db6879e7  scripts/spec/test_landing_pins.py
+f7684e9b1bee94a4745418d0673f7b352307814e188d36405790d09110a35f9b  scripts/spec/test_landing_progress.py
+```
+
+## Round 7 (historical)
+
 Round 7, 2026-11-12 UTC. Merged `origin/main` first, including F01. The checked HEAD is
 `6d19d4489e6474bfe3464a4b9fd91ec9cee2e246`; writer changes remain uncommitted for the harness.
 No push, review tool or review note was made. ISS-0054 remains open for independent review and

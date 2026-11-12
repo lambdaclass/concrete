@@ -46,6 +46,16 @@ def main():
                     except ValueError as exc:
                         if str(exc)!='missing or changed protected inventory pin: '+tag+' expected '+expected: raise
                     else: raise ValueError('missing/changed pin accepted')
+        def all_missing(*args):
+            if args[0]=='rev-parse': raise inventory.subprocess.CalledProcessError(1,args)
+            return b''
+        inventory.git = all_missing
+        try: inventory.ensure_objects()
+        except ValueError as exc:
+            for name,ref in inventory.PIN_TAGS.items():
+                if 'refs/tags/spec-inventory/'+name+' expected '+ref not in str(exc):
+                    raise ValueError('missing tag omitted from diagnostic: '+name)
+        else: raise ValueError('all missing pins accepted')
         with tempfile.TemporaryDirectory(prefix='landing-local-pins-') as tmp:
             root = Path(tmp)
             config = root/'gitconfig'

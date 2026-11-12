@@ -137,17 +137,17 @@ def main():
             probe.write_text('def renamed : Nat := 1\n')
             commit()
             repaired = inventory.head_population()
-            spec = dict(supersedes=['recursive'], declarations={new_name:repaired[new_name]},
-                        reason='control repair',review=dict(reference='control accepting review',verdict='ACCEPT'))
+            spec = dict(supersedes=['recursive'], declarations={new_name:repaired[new_name]},commands=[],action='replace',
+                        reason='control repair',review=dict(reference={'path':'ConcreteSpec/Control.lean','commit':git('rev-parse','HEAD')},verdict='ACCEPT'))
             replacement = inventory.row(record='replacement',name='control-repair',piece='F03',
                                         disposition='replace',note=json.dumps(spec))
             population = old_rows+[replacement]
             before = inventory.progress_reasons(without_consumer,repaired)
             if before['recursive']=='identical full digest': raise ValueError('silent replacement landed')
-            if inventory.replacement_progress(population,before,repaired)['recursive']!='identical full digest':
+            if inventory.replacement_progress(population,before,repaired)['recursive']!='reconciled by replacement':
                 raise ValueError('reviewed replacement did not land')
             for checked in ({}, {new_name:'0'*64}):
-                if inventory.replacement_progress(population,before,checked)['recursive']=='identical full digest':
+                if inventory.replacement_progress(population,before,checked)['recursive']=='reconciled by replacement':
                     raise ValueError('missing or changed replacement landed')
             for changed in [dict(spec,supersedes=['unknown']), dict(spec,review=''), dict(spec,review=dict(reference='rejected',verdict='REJECT')),
                             dict(spec,declarations={new_name:'bad'}), dict(spec,extra='unknown'),
@@ -174,43 +174,114 @@ def main():
             else: raise ValueError('duplicate supersession accepted')
             multi = dict(spec,declarations={new_name:repaired[new_name], 'second': '1'*64})
             multi_rows = old_rows+[dict(replacement,note=json.dumps(multi))]
-            if inventory.replacement_progress(multi_rows,before,repaired)['recursive']=='identical full digest':
+            if inventory.replacement_progress(multi_rows,before,repaired)['recursive']=='reconciled by replacement':
                 raise ValueError('partial multi-declaration replacement landed')
-            if inventory.replacement_progress(multi_rows,before,dict(repaired,second='1'*64))['recursive']!='identical full digest':
+            if inventory.replacement_progress(multi_rows,before,dict(repaired,second='1'*64))['recursive']!='reconciled by replacement':
                 raise ValueError('complete multi-declaration replacement refused')
             print('control PASS: reviewed replacement closes only at exact replacement digests; invalid, unknown, duplicate and partial rows refused')
+            # Command targets use the production scope/digest/ordinal identity.
+            command_rows = [inventory.row(record='command',name='old-example',piece='F02',
+                disposition='replace',source='ConcreteSpec/Control.lean',line=1,end_line=1,
+                kind='example',digest='0'*64)]
+            probe.write_text('example : True := by trivial\n')
+            commit()
+            command_head = inventory.head_population()
+            key = next(iter(command_head.commands.values()))
+            target = dict(module='ConcreteSpec.Control',scope=[list(x) for x in key[1]],
+                          kind=key[2],digest=key[3],ordinal=key[4])
+            cspec = dict(spec,supersedes=['command:old-example'],declarations={},commands=[target])
+            crec = dict(replacement,piece='F02',note=json.dumps(cspec))
+            cr = {'command:old-example':'full digest mismatch'}
+            if inventory.replacement_progress(command_rows+[crec],cr,command_head)['command:old-example']!='reconciled by replacement':
+                raise ValueError('reviewed F02 example replacement did not close')
+            if inventory.replacement_progress(command_rows+[crec],cr,inventory.Digests())['command:old-example']=='reconciled by replacement':
+                raise ValueError('missing command replacement closed')
+            retired = dict(cspec,action='retire',commands=[])
+            if inventory.replacement_progress(command_rows+[dict(crec,note=json.dumps(retired))],cr,{})['command:old-example']!='reconciled by retirement':
+                raise ValueError('reviewed retirement refused')
+            still_present = inventory.Digests(commands={'old':next(iter(inventory.command_match_keys(command_rows).values()))})
+            if inventory.replacement_progress(command_rows+[dict(crec,note=json.dumps(retired))],cr,still_present)['command:old-example']=='reconciled by retirement':
+                raise ValueError('retirement closed with the old command still present')
+            d_retired = dict(spec,action='retire',declarations={},commands=[])
+            d_record = dict(replacement,note=json.dumps(d_retired))
+            if inventory.replacement_progress(old_rows+[d_record],before,{})['recursive']!='reconciled by retirement':
+                raise ValueError('reviewed declaration retirement refused')
+            if inventory.replacement_progress(old_rows+[d_record],before,{'recursive':'0'*64})['recursive']=='reconciled by retirement':
+                raise ValueError('retirement closed with the old declaration still present')
+            for bad in (dict(retired,reason=''),dict(retired,review={}),dict(cspec,action='retire')):
+                try: inventory.replacement_rows(command_rows+[dict(crec,note=json.dumps(bad))])
+                except ValueError: pass
+                else: raise ValueError('unreviewed or nonempty retirement accepted')
+            foreign = inventory.row(record='declaration',name=new_name,piece='F04')
+            try: inventory.replacement_rows(population+[foreign])
+            except ValueError: pass
+            else: raise ValueError('foreign piece replacement target accepted')
+            sibling = inventory.row(record='declaration',name='other-old',piece='F03')
+            shared = dict(replacement,name='shared',note=json.dumps(dict(spec,supersedes=['other-old'])))
+            try: inventory.replacement_rows(population+[sibling,shared])
+            except ValueError: pass
+            else: raise ValueError('shared replacing declaration accepted')
+            unrelated = git('-c','user.name=Control','-c','user.email=c@example.invalid',
+                            'commit-tree',git('rev-parse','HEAD^{tree}'),'-m','unrelated provenance')
+            for reference in ({'path':'missing-review','commit':git('rev-parse','HEAD')},
+                              {'path':'ConcreteSpec/Control.lean','commit':unrelated},
+                              {'note':'refs/notes/missing-review','commit':git('rev-parse','HEAD')}):
+                bad = dict(spec,review=dict(reference=reference,verdict='ACCEPT'))
+                try: inventory.replacement_rows(old_rows+[dict(replacement,note=json.dumps(bad))])
+                except ValueError: pass
+                else: raise ValueError('unresolvable review artifact accepted')
+            command_foreign = dict(command_rows[0],name='foreign-command',piece='F04',
+                                   source=key[0],kind=key[2],digest=key[3])
+            try: inventory.replacement_rows(command_rows+[command_foreign,crec])
+            except ValueError: pass
+            else: raise ValueError('foreign piece command target accepted')
+            # A second record cannot reuse a replacing command either.
+            sibling_command = dict(command_rows[0],name='sibling-command')
+            shared_command = dict(crec,name='shared-command',note=json.dumps(
+                dict(cspec,supersedes=['command:sibling-command'])))
+            try: inventory.replacement_rows(command_rows+[sibling_command,crec,shared_command])
+            except ValueError: pass
+            else: raise ValueError('shared replacing command accepted')
+            print('control PASS: F02 command replacement, retirement, ownership and exclusive targets')
             proof = root/'ConcreteSpec/Proofs/Header.lean'
             proof.parent.mkdir()
-            proof.write_text('import ConcreteSpec.Control\ntheorem headerControl : True := by trivial\n')
+            # Build the complete root and minimal direct imports with production checker.
+            probe.write_text('def approved : Nat := 1\n')
+            proof.write_text('import ConcreteSpec.Control\nopen Nat\nexample : approved = 1 := rfl\n')
+            (root/'ConcreteSpec.lean').write_text('import ConcreteSpec.Proofs.Header\n')
             commit()
-            header_snapshot = inventory.head_population()
-            header = 'header:ConcreteSpec/Proofs/Header.lean'
-            if header not in header_snapshot: raise ValueError('proof import header is not measured')
             targets = root/'ConcreteSpec/landing/headers.json'
             targets.parent.mkdir()
-            length = len('import ConcreteSpec.Control'.encode())
-            target_spec = dict(revision='f'*40, headers={str(proof.relative_to(root)):
-                               dict(bytes=length,digest=header_snapshot[header],text='import ConcreteSpec.Control')})
+            target_spec = dict(revision=git('rev-parse','HEAD'),property='exact-imports-and-complete-root')
             targets.write_text(json.dumps(target_spec))
-            if inventory.header_targets({str(proof.relative_to(root))})!={header:header_snapshot[header]}:
-                raise ValueError('exact parsed header target refused')
-            entry = target_spec['headers'][str(proof.relative_to(root))]
-            extra = entry['text']+'\n\n'
-            entry.update(bytes=len(extra.encode()),digest=inventory.sha(extra.encode()),text=extra)
-            targets.write_text(json.dumps(target_spec))
-            try: inventory.header_targets({str(proof.relative_to(root))})
-            except ValueError as exc:
-                if str(exc)!='header target is not the exact parsed import header': raise
-            else: raise ValueError('arbitrary hash-consistent header prefix accepted')
-            proof.write_text('import Init\nimport ConcreteSpec.Control\ntheorem headerControl : True := by trivial\n')
+            header = 'header:F01'
+            snapshot_property = inventory.header_targets()
+            def property_reason():
+                return inventory.progress_reasons(snapshot_property,inventory.head_population())[header]
+            if property_reason()!='identical full digest': raise ValueError('canonical F01 property refused')
+            probe2 = root/'ConcreteSpec/Later.lean'
+            probe2.write_text('def later : Nat := 2\n')
+            proof.write_text('import ConcreteSpec.Later\n'+proof.read_text())
             commit()
-            if inventory.progress_reasons(header_snapshot,inventory.head_population())[header]!='full digest mismatch':
-                raise ValueError('changed import header counted as landed')
+            if property_reason()=='identical full digest': raise ValueError('unneeded import landed F01')
+            probe2 = root/'ConcreteSpec/Later.lean'
+            probe2.write_text('def later : Nat := 2\n')
+            proof.write_text('import ConcreteSpec.Control\nimport ConcreteSpec.Later\nopen Nat\nexample : approved + later = 3 := rfl\n')
+            commit()
+            if property_reason()!='identical full digest': raise ValueError('legitimate later import unlanded F01')
+            (root/'ConcreteSpec.lean').write_text('import ConcreteSpec.Control\n')
+            commit()
+            if property_reason()=='identical full digest': raise ValueError('incomplete root landed F01')
+            target_spec['revision']=unrelated
+            targets.write_text(json.dumps(target_spec))
+            try: inventory.header_targets()
+            except ValueError: pass
+            else: raise ValueError('unrelated header revision accepted')
             output = io.StringIO()
             with contextlib.redirect_stdout(output):
                 inventory.report([inventory.row(record='piece',name='F01')],reasons={header:'identical full digest'})
-            if 'F01\tlanded=1/1' not in output.getvalue(): raise ValueError('F01 header excluded from totals')
-            print('control PASS: exact import headers measure F01; a changed header stops counting')
+            if 'F01\tlanded=1/1' not in output.getvalue(): raise ValueError('F01 property excluded from totals')
+            print('control PASS: F01 exact-import property survives legitimate additions; extra imports, incomplete root and nonancestor revision fail')
         finally:
             inventory.ROOT = original_root
             inventory.source.cache_clear()

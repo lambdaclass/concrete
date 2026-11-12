@@ -16,17 +16,17 @@ def run(args, cwd, env):
     return p.stdout
 
 
-def census(root, exporter, examples=True, regenerate_modules=()):
+def census(root, exporter, examples=True, regenerate_modules=(), validator=None):
     # Never rewrite caller sources or artifacts, even when instrumentation fails.
     with tempfile.TemporaryDirectory(prefix='landing-census-') as tmp:
         scratch = Path(tmp)
         shutil.copytree(Path(root)/'ConcreteSpec', scratch/'ConcreteSpec',
                         ignore=shutil.ignore_patterns('*.olean', '*.ilean', '*.ir'))
         shutil.copy2(Path(root)/'ConcreteSpec.lean', scratch/'ConcreteSpec.lean')
-        return _census(scratch, Path(exporter).resolve(), examples, regenerate_modules)
+        return _census(scratch, Path(exporter).resolve(), examples, regenerate_modules, validator)
 
 
-def _census(root, exporter, include_examples, regenerate_modules):
+def _census(root, exporter, include_examples, regenerate_modules, validator=None):
     root = Path(root).resolve()
     env = dict(os.environ, LEAN_PATH=str(root))
     files = sorted(root.glob('ConcreteSpec/**/*.lean')) + [root / 'ConcreteSpec.lean']
@@ -70,6 +70,7 @@ def _census(root, exporter, include_examples, regenerate_modules):
         return [json.loads(s) for s in run(
             ['lean', '--run', str(exporter), 'constants', str(module_file)], root, env).splitlines()]
     build()
+    if validator is not None: validator(root, parsed)
     original = constants()
     records.extend(original)
     requests = root/'inventory-realizations.txt'

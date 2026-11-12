@@ -77,40 +77,65 @@ or historical progress builds.
 Deleting source removes it from the measurement. Each piece reports landed source units over
 its total source units, plus remaining units. `--remaining all` lists those units.
 
-F01 measures the exact import header of each of the twelve proof files in its landed revision.
-`headers.json` records the source revision and preserves each reviewed target's exact text,
-parsed byte extent and SHA-256. The gate checks the proof-file population against the pinned
-baseline and reparses those header bytes to reject arbitrary prefix extents. It needs no
-historical header commit object, including in the depth-one Spec CI checkout. Only those twelve targets enter
-F01's denominator; future snapshot-only modules belong to their own pieces. An import header runs
-from the start of the file through Lean's last header syntax token, preserving all intervening bytes.
-Current main lands all twelve. Headers do not affect declaration/command matching.
+F01 is one property unit, `header:F01`: the root `ConcreteSpec.lean` import closure
+must reach every HEAD spec/proof module, and every HEAD proof file (including later additions)
+must pass the exact direct-import algorithm in `scripts/proofs/imports.py`. The inventory calls
+that same algorithm on freshly built, isolated HEAD sources. An unneeded import unlands F01;
+a legitimate new direct import keeps it landed. `headers.json` records the property and the
+reviewed F01 revision, which must resolve to an ancestor of HEAD. The Spec CI checkout
+retains commit history (`fetch-depth: 0`) for this check and review-reference ancestry;
+no historical proof builds are needed. It is provenance, not frozen
+header bytes. Headers do not affect declaration/command matching.
 
-`BASE` is the original baseline, never a progress label. This measures source reconstruction;
-it does not confer owner approval, independent review or contract closure. A repaired or renamed
-declaration cannot close by equality. Add a `replacement` record to `inventory.tsv`, preserving
-all original snapshot rows unchanged. Its `name` is a unique reconciliation identifier, `piece`
-is the superseded declarations' common non-BASE piece, `disposition` is `replace`, and `note` is
-JSON with exactly these fields (all other TSV columns are empty):
+`BASE` is the original baseline, never a progress label. Source reconstruction does not confer
+owner approval or contract closure. Add a `replacement` record to `inventory.tsv` to reconcile
+changed or intentionally retired units, preserving all snapshot rows. Its `name` is a unique
+identifier, `piece` is the superseded units' common non-BASE piece, `disposition` is `replace`,
+and `note` is JSON with exactly these fields (all other TSV columns empty):
 
-- `supersedes`: a nonempty list of distinct snapshot declaration names.
-- `declarations`: a nonempty object mapping replacing qualified declaration names to their
-  64-character full digests. These use the same command-source, attribute and kernel-shape
-  digest as ordinary progress, not a hash of a declaration's printed type.
-- `reason`: a nonempty explanation of the repair or replacement.
-- `review`: an object containing a nonempty `reference` identifying the accepting review and
-  `verdict` equal to `ACCEPT`. This records the review; the gate does not perform it.
+- `supersedes`: nonempty distinct snapshot progress-unit names. Declarations use qualified names;
+  commands use `command:` followed by the snapshot audit name, including its original range.
+- `action`: `replace` or `retire`. Retirement requires empty `declarations` and `commands`;
+  replacement requires at least one target. Both require a reason and accepting review.
+- `declarations`: replacing qualified names mapped to 64-character full progress digests.
+- `commands`: replacing position-free identities, each an object with `module` (dotted module
+  name), `scope` (the ordered enclosing `[kind, digest, ordinal]` triples), `kind`, `digest`,
+  and `ordinal` (zero-based occurrence among identical commands in that scope).
+- `reason`: nonempty explanation, including why retired material is intentionally omitted.
+- `review`: `{ "verdict": "ACCEPT", "reference": { "path": "review/file", "commit": "<40-hex>" } }`,
+  or a reference containing `note` (a full `refs/notes/...` ref) and `commit` instead of `path`.
+  The commit must be an ancestor of HEAD and the file at that commit or note on that commit
+  must exist and be nonempty. The gate validates the artifact reference, not its judgment.
 
-The judgment refuses unknown and already-superseded snapshot declarations, cross-piece or BASE
-supersessions, generated constants, owner-held declarations, malformed digests, extra schema fields and missing or
-nonaccepting review references. Replacement rows cannot themselves be superseded. Regenerating
-initial assignments preserves existing reviewed replacement records. Each original obligation
-counts as landed exactly when **all** replacing declarations exist at HEAD with the recorded
-full digests; matching the old declaration alone no longer closes a superseded obligation.
-Many-to-many reconciliations therefore preserve the original denominator and cannot close partially.
-`--head-digests PATH` exports the checked HEAD full digests for preparing such a reviewed record.
-No supersessions are needed merely for line shifts, and the present inventory has none yet.
-Repair/replace obligations remain outstanding until equality or explicit reviewed reconciliation.
+The judgment refuses unknown or already-superseded units, generated constants, owner-held or
+BASE units, cross-piece supersessions, malformed schemas and missing reviews. A target that is
+also a snapshot unit must belong to the same piece. Targets cannot be shared between records.
+All target declarations and commands must match together at HEAD; partial replacement does not
+close. Reviewed retirement closes only when every superseded unit is absent at HEAD, without
+replacement material. Results report `reconciled by
+replacement` or `reconciled by retirement`, distinct from `identical full digest`, preserving the
+original denominator. Silent edits or deletion cannot close an obligation. This supports F02's
+replaced examples and all repair/replace command obligations without restoring obsolete rules.
+`--head-digests PATH` exports HEAD declaration digests; command keys follow `command_match_keys`
+from the fresh census. Regeneration preserves the additive reconciliation records.
+
+Before landing, the coordinator creates the following lightweight tags at these exact objects
+and pushes each tag to origin (and to lambdaclass for the mirrored landing). Never force or
+retarget a tag; investigate an existing mismatch. For each row, run `git tag spec-inventory/NAME
+SHA`, then `git push origin refs/tags/spec-inventory/NAME` and `git push lambdaclass
+refs/tags/spec-inventory/NAME`. Verify each remote with `git ls-remote REMOTE
+refs/tags/spec-inventory/NAME`. Annotated tags are also supported and checked by peeled commit.
+The gate accepts matching local tags, fetches absent tags from origin with bounded depth, and
+names every missing remote tag in its error. The coordinator must push these before landing;
+a local pass alone does not publish them.
+
+| Tag suffix | Commit |
+|---|---|
+| source | aa44140a33747fa37ece59c76090972e564c65b4 |
+| baseline | 1a50c64ff1b6f3a2899522f279eccc86d3b004a2 |
+| evidence | 5db3018e24eb284894b3615833aa373c76944475 |
+| dossier | 2bef2b5e20dffb5b277f9451be6fef969cf6c898 |
+
 `--census-output <path>` exports the fresh snapshot census for inspection, never cached input.
 
 Ranges describe complete commands, rather than line slices used as implementation sources.

@@ -11,3 +11,7 @@ ISS-0054 remains open pending independent review.
 Round 7 makes command progress independent of line shifts using the BASE sequence matcher,
 measures F01 exact import headers, implements reviewed replacement records, and replaces
 free-text relocation justifications with checked cause kinds and negative controls.
+Round 8 generalizes reconciliation to standalone commands and reviewed retirement, enforces
+exclusive targets and resolvable structured review artifacts, and measures F01 by complete root
+reachability plus the production exact-imports checker at HEAD. Preserve commit history in Spec
+CI to verify provenance ancestry. Document coordinator pin publication and report every absent tag.

@@ -29,25 +29,27 @@ def run(command):
     return result.stdout
 
 
-def inspect(module, temp):
+def inspect(module, temp, search_path=None):
+    if search_path is not None:
+        return run(["env", "LEAN_PATH="+search_path, "lean", "--run", str(ROOT / "scripts/proofs/imports.lean"), module])
     return run(["lake", "env", "env",
                 "LEAN_PATH=" + str(temp.parent) + ":" +
                 run(["lake", "env", "printenv", "LEAN_PATH"]).strip(),
                 "lean", "--run", str(ROOT / "scripts/proofs/imports.lean"), module])
 
 
-def dependencies(source, temp, built_module=None, *, dropped=None):
+def dependencies(source, temp, built_module=None, *, dropped=None, search_path=None):
     module_imports(source, MODULES)
     temp.write_text(rename_examples(source, lambda line: f'⟪import-example⟫{line}'))
-    search = str(temp.parent) + ':' + run(['lake', 'env', 'printenv', 'LEAN_PATH']).strip()
-    run(['lake', 'env', 'env', 'LEAN_PATH=' + search, 'lean', '-DwarningAsError=true',
+    search = str(temp.parent) + ':' + (search_path if search_path is not None else run(['lake', 'env', 'printenv', 'LEAN_PATH']).strip())
+    run((['lake', 'env'] if search_path is None else []) + ['env', 'LEAN_PATH=' + search, 'lean', '-DwarningAsError=true',
          '-DautoImplicit=false', '-R', str(temp.parent), '-o', str(temp.with_suffix('.olean')), str(temp)])
-    output = inspect(temp.stem, temp)
+    output = inspect(temp.stem, temp, search if search_path is not None else None)
     if dropped is not None:
         dropped.extend(line.removeprefix('FOREIGN ') for line in output.splitlines()
                        if line.startswith('FOREIGN '))
     if built_module:
-        built = inspect(built_module, temp)
+        built = inspect(built_module, temp, search if search_path is not None else None)
         def named(text):
             return sorted(line for line in text.splitlines() if line.startswith('NAMED '))
         if named(output) != named(built):

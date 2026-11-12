@@ -608,12 +608,6 @@ class Digests(dict):
         self.commands = commands or {}
 
 
-def import_headers(data, root):
-    # Lean's command census starts immediately after the parsed module header.
-    return {r['file']:sha((root/r['file']).read_bytes()[:r['headerEnd']])
-            for r in data if r['record']=='imports' and r['file'].startswith('ConcreteSpec/Proofs/')}
-
-
 def authored_names(data):
     tokens = {(c['file'], i['line'], i['column']): i['name']
               for c in data if c['record']=='command'
@@ -652,12 +646,11 @@ def full_digests(data, root):
         if r['record']=='command' and r['kind']!='module-realization' and r['name'] not in represented:
             result['command:'+r['name']] = r['digest']
             result.commands['command:'+r['name']] = keys[r['name']]
-    result.update({'header:'+f:d for f,d in import_headers(data,root).items()})
     return result
 
 
 def head_population():
-    # Exactly one checked revision, with no ancestry requirement or historical rebuild.
+    # Exactly one checked revision; the F01 provenance is separately ancestry-checked.
     head = git('rev-parse','HEAD^{commit}').decode().strip()
     print('progress checked revision: '+head,flush=True)
     with tempfile.TemporaryDirectory(prefix='spec-head-') as tmp:
@@ -667,8 +660,14 @@ def head_population():
                 target = root/path
                 target.parent.mkdir(parents=True,exist_ok=True)
                 target.write_bytes(source(head,path))
-        data = census(root, ROOT/'scripts/spec/landing_inventory.lean',examples=False,regenerate_modules=())
-        return full_digests(data,root)
+        properties = []
+        data = census(root, ROOT/'scripts/spec/landing_inventory.lean',examples=False,regenerate_modules=(),
+                      validator=(lambda built,parsed: properties.append(header_property(built,parsed)))
+                      if (ROOT/'ConcreteSpec/landing/headers.json').exists() else None)
+        result = full_digests(data,root)
+        if properties:
+            result['header:F01'] = 'exact-imports-and-complete-root' if properties[0] else 'property fails'
+        return result
 
 
 def unique_object(pairs):
@@ -679,27 +678,65 @@ def unique_object(pairs):
     return result
 
 
+def unit_name(r):
+    return ('command:' if r['record']=='command' else '')+r['name']
+
+
+def review_reference(review):
+    if not isinstance(review,dict) or set(review)!={'reference','verdict'} or review['verdict']!='ACCEPT':
+        raise ValueError('invalid accepting review')
+    ref = review['reference']
+    if not isinstance(ref,dict) or set(ref) not in ({'path','commit'},{'note','commit'}):
+        raise ValueError('invalid structured review reference')
+    commit = ref['commit']
+    if not isinstance(commit,str) or not re.fullmatch('[0-9a-f]{40}',commit):
+        raise ValueError('invalid review commit')
+    git('merge-base','--is-ancestor',commit,'HEAD')
+    if 'path' in ref:
+        path = ref['path']
+        if not isinstance(path,str) or not path or path.startswith('/') or '..' in Path(path).parts:
+            raise ValueError('invalid review path')
+        if not git('show',commit+':'+path).strip(): raise ValueError('empty review artifact')
+    else:
+        note = ref['note']
+        if not isinstance(note,str) or not note.startswith('refs/notes/'):
+            raise ValueError('invalid review note ref')
+        if not git('notes','--ref='+note,'show',commit).strip(): raise ValueError('empty review note')
+
+
 def replacement_rows(rows, authored=None):
-    """Reviewed supersessions are additive records; snapshot rows remain immutable."""
-    snapshot = {r['name']:r for r in rows if r['record']=='declaration'}
-    replaced, result = set(), []
+    """Reconcile immutable snapshot units with disjoint, reviewed HEAD targets."""
+    snapshot = {unit_name(r):r for r in rows if r['record'] in ('declaration','command')}
+    replaced, targets, result = set(), set(), []
     for r in rows:
         if r['record']!='replacement': continue
         try:
             spec = json.loads(r['note'],object_pairs_hook=unique_object)
-            if set(spec)!={'supersedes','declarations','reason','review'}:
+            if set(spec)!={'supersedes','declarations','commands','action','reason','review'}:
                 raise ValueError()
-            old, new = spec['supersedes'], spec['declarations']
-            if (not isinstance(old,list) or not old or len(set(old))!=len(old) or
-                not all(isinstance(n,str) for n in old) or not isinstance(new,dict) or not new or
-                not all(isinstance(n,str) and n and not n.startswith(('command:','header:')) and isinstance(d,str) and re.fullmatch('[0-9a-f]{64}',d)
-                        for n,d in new.items()) or
-                not isinstance(spec['reason'],str) or not spec['reason'].strip() or
-                not isinstance(spec['review'],dict) or set(spec['review'])!={'reference','verdict'} or
-                spec['review']['verdict']!='ACCEPT' or not isinstance(spec['review']['reference'],str) or
-                not spec['review']['reference'].strip()):
+            old, new, commands = spec['supersedes'], spec['declarations'], spec['commands']
+            if (not isinstance(old,list) or not old or not all(isinstance(n,str) for n in old) or
+                len(set(old))!=len(old) or not isinstance(new,dict) or not isinstance(commands,list) or
+                not all(isinstance(n,str) and n and not n.startswith(('command:','header:')) and
+                        isinstance(d,str) and re.fullmatch('[0-9a-f]{64}',d) for n,d in new.items()) or
+                spec['action'] not in ('replace','retire') or
+                bool(new or commands)!=(spec['action']=='replace') or
+                not isinstance(spec['reason'],str) or not spec['reason'].strip()):
                 raise ValueError()
-        except (ValueError,TypeError):
+            review_reference(spec['review'])
+            keys = []
+            for c in commands:
+                if (not isinstance(c,dict) or set(c)!={'module','scope','kind','digest','ordinal'} or
+                    not isinstance(c['module'],str) or not c['module'] or
+                    not isinstance(c['kind'],str) or not c['kind'] or
+                    not isinstance(c['digest'],str) or not re.fullmatch('[0-9a-f]{64}',c['digest']) or
+                    type(c['ordinal']) is not int or c['ordinal']<0 or not isinstance(c['scope'],list) or
+                    not all(isinstance(x,list) and len(x)==3 and isinstance(x[0],str) and
+                            isinstance(x[1],str) and type(x[2]) is int and x[2]>=0 for x in c['scope'])):
+                    raise ValueError()
+                keys.append((c['module'].replace('.','/')+'.lean',tuple(tuple(x) for x in c['scope']),
+                             c['kind'],c['digest'],c['ordinal']))
+        except (ValueError,TypeError,subprocess.CalledProcessError):
             raise ValueError('invalid replacement schema: '+r['name']) from None
         for n in old:
             if n not in snapshot: raise ValueError('unknown replacement row: '+n)
@@ -710,51 +747,84 @@ def replacement_rows(rows, authored=None):
             if original['piece']=='BASE' or original['piece']!=r['piece'] or original['disposition']=='owner-held':
                 raise ValueError('invalid replacement ownership: '+n)
             replaced.add(n)
+        for n in new:
+            if n in snapshot and snapshot[n]['piece']!=r['piece']:
+                raise ValueError('replacement target belongs to another piece: '+n)
+        for target in [('declaration',n) for n in new]+[('command',k) for k in keys]:
+            if target in targets: raise ValueError('shared replacement target: '+r['name'])
+            targets.add(target)
+        snapshot_commands = command_match_keys(rows)
+        for key in keys:
+            for n,k in snapshot_commands.items():
+                if k==key and snapshot['command:'+n]['piece']!=r['piece']:
+                    raise ValueError('replacement command belongs to another piece: '+n)
         if not r['name'].strip() or any(r[k] for k in FIELDS if k not in ('record','name','piece','disposition','note')) or r['disposition']!='replace':
             raise ValueError('invalid replacement columns: '+r['name'])
+        spec['_command_keys'] = keys
         result.append((r,spec))
     return result
 
 
 def replacement_progress(rows, reasons, checked):
     reasons = dict(reasons)
+    commands = set(getattr(checked,'commands',{}).values())
+    snapshot_commands = command_match_keys(rows)
     for r,spec in replacement_rows(rows):
-        matched = all(checked.get(n)==d for n,d in spec['declarations'].items())
+        matched = (all(checked.get(n)==d for n,d in spec['declarations'].items()) and
+                   all(k in commands for k in spec['_command_keys']))
+        if spec['action']=='retire':
+            matched = all((snapshot_commands[n.removeprefix('command:')] not in commands
+                           if n.startswith('command:') else n not in checked)
+                          for n in spec['supersedes'])
         for n in spec['supersedes']:
             if n not in reasons: raise ValueError('replacement is not a progress unit: '+n)
-            reasons[n] = 'identical full digest' if matched else 'replacement declaration missing or digest mismatch'
+            reasons[n] = (('reconciled by retirement' if spec['action']=='retire' else 'reconciled by replacement')
+                          if matched else ('retired unit still present' if spec['action']=='retire'
+                                           else 'replacement unit missing or digest mismatch'))
     return reasons
 
 
-def header_targets(proof_files=None):
+def header_targets():
     spec = json.loads((ROOT/'ConcreteSpec/landing/headers.json').read_text())
-    if set(spec)!= {'revision','headers'} or not re.fullmatch('[0-9a-f]{40}',spec['revision']):
+    if set(spec)!= {'revision','property'} or spec['property']!='exact-imports-and-complete-root':
         raise ValueError('invalid header target schema')
-    # Reviewed exact header bytes carry revision provenance without requiring
-    # its historical object in the depth-one Spec checkout.
-    headers = spec['headers']
-    if proof_files is None:
-        proof_files = {r['file'] for r in baseline_census() if r['record']=='imports'
-                       and r['file'].startswith('ConcreteSpec/Proofs/')}
-    if set(headers)!=set(proof_files):
-        raise ValueError('header target population mismatch')
-    for f,entry in headers.items():
-        if (set(entry)!={'bytes','digest','text'} or not isinstance(entry['text'],str) or
-            not isinstance(entry['bytes'],int) or entry['bytes']!=len(entry['text'].encode()) or
-            sha(entry['text'].encode())!=entry['digest']):
-            raise ValueError('invalid exact header target: '+f)
-    with tempfile.TemporaryDirectory(prefix='spec-header-targets-') as tmp:
-        root = Path(tmp)
-        for f in headers:
-            dest = root/f
-            dest.parent.mkdir(parents=True,exist_ok=True)
-            dest.write_bytes(headers[f]['text'].encode()+b'\nexample : True := True.intro\n')
-        parsed = subprocess.check_output(['lean','--run',str(ROOT/'scripts/spec/landing_inventory.lean'),
-                                         'parse',*sorted(headers)],cwd=root,text=True)
-        observed = {r['file']:r['headerEnd'] for r in map(json.loads,parsed.splitlines()) if r['record']=='imports'}
-        if observed!={f:e['bytes'] for f,e in headers.items()}:
-            raise ValueError('header target is not the exact parsed import header')
-    return {'header:'+f:entry['digest'] for f,entry in headers.items()}
+    revision = spec['revision']
+    if not isinstance(revision,str) or not re.fullmatch('[0-9a-f]{40}',revision):
+        raise ValueError('invalid header revision')
+    try: git('merge-base','--is-ancestor',revision,'HEAD')
+    except subprocess.CalledProcessError:
+        raise ValueError('header revision is not an ancestor of HEAD') from None
+    return {'header:F01':'exact-imports-and-complete-root'}
+
+
+def header_property(root, data):
+    """Run the production exact-imports algorithm against freshly built HEAD sources."""
+    sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'proofs'))
+    import imports as exact
+    modules = {r['file'][:-5].replace('/','.') : r['imports'] for r in data if r['record']=='imports'}
+    reachable = set()
+    def visit(m):
+        if m in reachable or m not in modules: return
+        reachable.add(m)
+        for dep in modules[m]: visit(dep)
+    visit('ConcreteSpec')
+    if reachable!=set(modules): return False
+    saved = exact.MODULES
+    exact.MODULES = set(modules)
+    try:
+        with tempfile.TemporaryDirectory(prefix='landing-imports-') as tmp:
+            probe = Path(tmp)/'Probe.lean'
+            for path in exact.proof_paths(root):
+                text = path.read_text()
+                try:
+                    module = path.relative_to(root).with_suffix('').as_posix().replace('/','.')
+                    deps = exact.dependencies(text,probe,module,search_path=str(root))
+                    if not exact.matches(text,deps): return False
+                except exact.LexError:
+                    return False
+    finally:
+        exact.MODULES = saved
+    return True
 
 
 def progress_reasons(snapshot, checked):
@@ -813,7 +883,10 @@ def judgment(rows, data, dependencies=True, extra_root=None):
         if key in seen:
             raise ValueError(f'duplicate assignment: {r["name"]}')
         seen[key] = r
-    replacement_rows(rows,authored_names(data if extra_root is None else data[0]+data[1]))
+    authored = authored_names(data if extra_root is None else data[0]+data[1])
+    represented = {command_identity(d) for d in rows if d['record']=='declaration' and d['name'] in authored}
+    replacement_rows(rows,authored | {'command:'+r['name'] for r in rows if r['record']=='command'
+                                    and r['kind']!='module-realization' and r['name'] not in represented})
     pieces = {r['name']:r for r in rows if r['record']=='piece'}
     if set(pieces) != set(PREREQS):
         raise ValueError('landing piece population mismatch')
@@ -1305,7 +1378,7 @@ def verify_plan_boundaries(rows):
 def report(rows, detail=None, reasons=None):
     if detail and detail not in PREREQS and detail != 'all':
         raise ValueError(f'unknown remaining piece: {detail}')
-    landed = {name for name,reason in (reasons or {}).items() if reason=='identical full digest'}
+    landed = {name for name,reason in (reasons or {}).items() if reason in ('identical full digest','reconciled by replacement','reconciled by retirement')}
     def identity(r):
         return ('command:' if r['record']=='command' else '')+r['name']
     units = [r for r in rows if r['record'] in ('declaration','command')
@@ -1318,6 +1391,8 @@ def report(rows, detail=None, reasons=None):
         total = sum(r['piece']==p for r in units)
         matched = sum(r['piece']==p and identity(r) in landed for r in units)
         print(f'{p}\tlanded={matched}/{total}\tremaining={counts[p]}\tremaining-examples={examples[p]}')
+    for name,reason in sorted((reasons or {}).items()):
+        if reason.startswith('reconciled by '): print(reason+'\t'+name)
     if detail:
         for r in sorted(units,key=lambda r:(r['piece'],r['name'])):
             if identity(r) not in landed and detail in ('all',r['piece']):
@@ -1328,6 +1403,7 @@ PIN_TAGS = {'source': SOURCE, 'baseline': BASE, 'evidence': EVIDENCE, 'dossier':
 
 
 def ensure_objects():
+    missing = []
     for name, ref in PIN_TAGS.items():
         tag = 'refs/tags/spec-inventory/'+name
         try:
@@ -1340,11 +1416,13 @@ def ensure_objects():
         advertised = git('ls-remote','origin',tag,tag+'^{}').decode().splitlines()
         remote = dict(line.split()[::-1] for line in advertised)
         if remote.get(tag+'^{}',remote.get(tag)) != ref:
-            raise ValueError('missing or changed protected inventory pin: '+tag+' expected '+ref)
+            missing.append('missing or changed protected inventory pin: '+tag+' expected '+ref)
+            continue
         git('fetch','--depth=1','--no-tags','--no-write-fetch-head','origin',tag+':'+tag)
         if git('rev-parse','--verify',tag+'^{commit}').decode().strip()!=ref:
             raise ValueError('changed protected inventory pin: '+tag+' expected '+ref)
 
+    if missing: raise ValueError('\n'.join(missing))
 
 def extract(root):
     files = git('ls-tree','-r','--name-only',SOURCE,'ConcreteSpec','ConcreteSpec.lean').decode().splitlines()
@@ -1383,8 +1461,8 @@ def main():
                       and r['disposition']!='owner-held' and r['name'] in authored_names(data))
         replacement = row(record='replacement',name='replacement-judgment-control',piece=victim['piece'],
                           disposition='replace',note=json.dumps(dict(supersedes=[victim['name']],
-                          declarations={'InventoryControl.repaired':sha(b'repaired')},reason='control',
-                          review=dict(reference='control',verdict='ACCEPT'))))
+                          declarations={},commands=[],action='retire',reason='control',
+                          review=dict(reference={'path':'ConcreteSpec/landing/plan.md','commit':git('rev-parse','HEAD').decode().strip()},verdict='ACCEPT'))))
         judgment(rows+[replacement],data,dependencies=False)
         try:
             bad = json.loads(replacement['note'])
@@ -1539,8 +1617,6 @@ def main():
         relocation_evidence(rows)
         law_control_schedule(rows)
         snapshot = full_digests(data,root)
-        for name in list(snapshot):
-            if name.startswith('header:'): del snapshot[name]
         snapshot.update(header_targets())
         checked = head_population()
         if args.head_digests:
