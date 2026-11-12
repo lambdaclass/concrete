@@ -37,7 +37,7 @@ scripts/proofs	proof integrity	retained	scripts/proofs (the proof-integrity chec
 .gitignore .gitattributes .envrc	repo	retained	root	R-0558	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
 scripts/land scripts/checks	landing	retained	scripts/land	R-0563	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
 scripts/review	landing	retained	scripts/review	R-0563	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
-scripts/push-both.sh scripts/worktree-new.sh	landing	retained	scripts/	R-0563	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+scripts/worktree-new.sh	landing	retained	scripts/	R-0563	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
 scripts/oracle	oracle	retained	scripts/oracle (ORACLE.lock, build, fetch, publish, run)	R-0564	root: when the differential no longer uses the legacy oracle (after D); legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
 scripts/tests/check_oracle_fetch.sh	oracle	retained	scripts/checks/oracle_fetch.sh (the controls of the required job Oracle (GitHub-hosted fetch + smoke); at the move its guard line is repointed at the new root's gate guard and the job runs it there)	R-0564	root: with scripts/oracle; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
 docs/project/LANDING.md docs/project/SELF_HOSTED_RUNNERS.md docs/project/REVIEW.md docs/LANDING.md docs/SELF_HOSTED_RUNNERS.md docs/REVIEW.md	process	retained	docs/	R-0563	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
@@ -72,3 +72,4 @@ docs/spec	prose spec	archived	legacy/docs/spec (non-normative once the Lean rule
 docs	docs	archived	legacy/docs; a page returns when a task needs it (more specific rows above govern their paths)	R-0558	never deleted with the pipeline	open
 editor	tooling	archived	legacy/editor	R-0558	never deleted automatically; returns with an editor task (phase G)	open
 research paper bench tasks logo.png	research	archived	legacy/	R-0558	never deleted with the pipeline	open
+scripts/push-both.sh	landing	retire	legacy/scripts/push-both.sh	R-0590	LD (R-0590) and owner approval; root helper retired 2026-11-11 by sole-repository decision	open

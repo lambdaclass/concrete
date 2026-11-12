@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Landing trains (ROADMAP R-0539): integrate every ready branch into ONE candidate, validate it once,
-# and land it on both remotes. Stage timestamps go to the landing log (R-0547). docs/LANDING.md
+# and land it on origin. Stage timestamps go to the landing log (R-0547). docs/LANDING.md
 # is the manual; this header is the contract.
 #
 #   train.sh [--dry-run] build  <name> [--force] [--no-fetch] <ref>...
 #   train.sh [--dry-run] check  <name> [--no-remote] [--no-review] [--local-gates]
 #   train.sh [--dry-run] ci     <name> [--skip-check]
 #   train.sh             watch  <name> [--interval S] [--timeout S]
-#   train.sh [--dry-run] land   <name> [--no-mirror]
+#   train.sh [--dry-run] land   <name>
 #   train.sh             bisect <name> (--test '<cmd>' | --ci)
 #   train.sh             status <name>
 #   train.sh             record <head> --base <sha> [--exclude-run <id>]   (main's CI, R-0570)
@@ -34,16 +34,15 @@
 #     lands only with an accepted acceptance rehearsal of that exact candidate (same train-head tree,
 #     same base) in <state>/rehearsals.tsv; see is_move_candidate and require_rehearsal. A dry run
 #     refused only by that gate exits 5.
-#   * pushes name the exact SHA, never `HEAD` (push-both.sh: HEAD can move during a wait), and a
-#     remote named `fork` is refused outright.
+#   * pushes name the exact SHA, never `HEAD` (HEAD can move during a wait).
+#     Remote policy is defined in AGENTS.md, "Branches".
 #   * (2026-10-25) a push's exit status is not its result: GitHub drops the connection during a long
 #     hook, so a push can fail after the remote moved, or before. The train's push to ci/<name> and
-#     both pushes of `land` are followed by an `ls-remote` of the ref, and one that did not move it
+#     the push of `land` are followed by an `ls-remote` of the ref, and one that did not move it
 #     is retried (LAND_PUSH_ATTEMPTS). The ci/<name> reset to the base skips the hook; not retried.
 #
 # ENVIRONMENT (test seams and overrides): LAND_REPO (owner/name for gh, default
-# unbalancedparentheses/concrete2), LAND_GH (gh binary), LAND_REMOTE (primary, default origin),
-# LAND_MIRROR (default lambdaclass, required: a missing remote is refused; empty or --no-mirror skips),
+# lambdaclass/concrete), LAND_GH (gh binary),
 # LAND_STATE_DIR (default <git common dir>/concrete-landing), LAND_LOG_DIR (default
 # $LAND_STATE_DIR/log), LAND_NO_NIX=1 (never re-enter `nix develop`), LAND_CAMPAIGN_JOBS (regex of
 # campaign-tier job names), LAND_HOOK (pre-push hook path, default .githooks/pre-push),
@@ -95,10 +94,9 @@ where_ok() {
 }
 STATE_ROOT="${LAND_STATE_DIR:-$COMMON/concrete-landing}"
 LOG_DIR="${LAND_LOG_DIR:-$STATE_ROOT/log}"
-REPO="${LAND_REPO:-unbalancedparentheses/concrete2}"
+REPO="${LAND_REPO:-lambdaclass/concrete}"
 GH="${LAND_GH:-gh}"
-REMOTE="${LAND_REMOTE:-origin}"
-MIRROR="${LAND_MIRROR-lambdaclass}"
+REMOTE=origin
 HOOK="${LAND_HOOK:-.githooks/pre-push}"
 # Must name exactly the workflow's campaign jobs (an `if:` on `inputs.campaign`, and the jobs that `needs:`
 # one): check_landing_script.sh derives that set from lean_action_ci.yml and fails on any difference.
@@ -124,11 +122,6 @@ assert_clean() {
   fi
 }
 
-refuse_fork() {
-  case "$1" in
-    fork) die "refusing to push to the remote named 'fork' (it is a divergent repository)" ;;
-  esac
-}
 
 valid_name() {
   case "$1" in
@@ -395,7 +388,7 @@ cmd_build() {
 # With LAND_REMOTE_PUSH=1 (default) the head is first published as wip/land-<name>-<sha>-<pid>-<n>
 # (the hook's backup tier) so a runner that fetches from the remote can see it, and deleted
 # afterwards; the
-# server's local runner fetches from this clone instead (LAND_REMOTE_PUSH=0, ref = the SHA).
+# server's local runner receives a verified bundle instead (LAND_REMOTE_PUSH=0, ref = the SHA).
 remote_runner() {
   local r="${LAND_REMOTE_RUNNER-$HOME/bin/concrete-remote}"
   if [ -n "$r" ] && [ -x "$r" ]; then echo "$r"; fi
@@ -407,7 +400,6 @@ remote_leg() { # name head
   runner="$(remote_runner)"
   ref="$head"
   if [ "${LAND_REMOTE_PUSH:-1}" = 1 ]; then
-    refuse_fork "$REMOTE"
     # One ref per run, created only if absent (no --force), so concurrent checks never share one.
     # Created only if ABSENT. An empty lease is not enough: git reports a ref that already holds
     # this SHA as "up to date" (success) before it looks at the lease, so ownership is taken only
@@ -424,8 +416,21 @@ remote_leg() { # name head
     # (the hook's wip tier exempts only non-deletions), and the lease removes only this run's ref.
     trap 'CONCRETE_SKIP_GATES=1 git push -q --force-with-lease="refs/heads/'"$ref"':'"$head"'" "'"$REMOTE"'" ":refs/heads/'"$ref"'" 2>/dev/null || true' EXIT
   fi
-  local rc=0 out
-  out="$("$runner" "$ref" "${LAND_FULL_GATES_CMD:-lake build && bash scripts/checks/run.sh}" 2>&1)" || rc=$?
+  local rc=0 out bundle_dir="" bundle_ref bundle_cleanup
+  if [ "${LAND_REMOTE_PUSH:-1}" = 0 ]; then
+    bundle_dir="$(mktemp -d)" || return 1
+    bundle_ref="refs/land-bundle/$$-$RANDOM-$RANDOM"
+    git update-ref "$bundle_ref" "$head" "" || { rm -rf "$bundle_dir"; return 1; }
+    printf -v bundle_cleanup 'git update-ref -d %q %q; rm -rf %q' "$bundle_ref" "$head" "$bundle_dir"
+    trap "$bundle_cleanup" EXIT
+    git bundle create "$bundle_dir/head.bundle" "$bundle_ref" || return 1
+    git update-ref -d "$bundle_ref" "$head" || return 1
+    out="$(RUN_AT_REF_SOURCE="$bundle_dir/head.bundle" "$runner" "$ref" "${LAND_FULL_GATES_CMD:-lake build && bash scripts/checks/run.sh}" 2>&1)" || rc=$?
+    rm -rf "$bundle_dir"
+    trap - EXIT
+  else
+    out="$("$runner" "$ref" "${LAND_FULL_GATES_CMD:-lake build && bash scripts/checks/run.sh}" 2>&1)" || rc=$?
+  fi
   printf '%s\n' "$out"
   if [ "${LAND_REMOTE_PUSH:-1}" = 1 ]; then
     # The normal-path deletion, logged; the EXIT trap above stays as the backstop for interruptions.
@@ -634,7 +639,6 @@ cmd_ci() {
   done
   valid_name "$name"
   require_train_checkout "$name"
-  refuse_fork "$REMOTE"
   stage_start
   local base head; base="$(state_get "$name" base)"; head="$(git rev-parse HEAD)"
   if [ "$(state_get_soft "$name" checked)" != "$head" ]; then
@@ -820,8 +824,8 @@ cmd_watch() {
 # When it does not hold, nothing is skipped: main's run runs every job itself. So main is green
 # only on a result obtained AT ITS EXACT SHA, by this workflow, under land's own rule:
 #   * the NEWEST completed workflow_dispatch run of .github/workflows/lean_action_ci.yml in $REPO
-#     (the train's repository, read by the mirror's CI too: both are public and a SHA names the same
-#     tree in both) whose head SHA is exactly <head> and whose title says it ran at base <base>
+#     (the sole repository; the run must name this exact SHA and base).
+#     Its head SHA is exactly <head> and its title says it ran at base <base>
 #     (`<ref> at base <sha>`, written by the workflow's run-name from the `base` input `train.sh ci`
 #     passes), other than the asking run. The base binds the base-sensitive checks (LL1_BASE,
 #     TOTALITY_BASE, CONFORMANCE_BASE, SPEC_BASE) to the very base main had before the push, as a
@@ -957,26 +961,23 @@ require_rehearsal() { # name base head
 }
 
 cmd_land() {
-  local name="" mirror_on=1
+  local name=""
   while [ $# -gt 0 ]; do
     case "$1" in
-      --no-mirror) mirror_on=0 ;;
       -*) die "land: unknown option $1" ;;
       *) name="$1" ;;
     esac; shift
   done
   valid_name "$name"
   require_train_checkout "$name"
-  refuse_fork "$REMOTE"
   stage_start
   local base head id; base="$(state_get "$name" base)"; head="$(git rev-parse HEAD)"
   id="$(state_get "$name" run_id)"
   [ -n "$id" ] || die "land: no CI run recorded for $name"
 
-  # Serialize with push-both.sh BEFORE reading the remotes: every check below must still hold when
-  # the push happens. The pushes also carry leases on the values read here, so a publisher that does
-  # not take this lock still cannot slip a commit in between.
-  local lock="$COMMON/concrete-push-both.lock"
+  # Serialize local publishers before checking the authoritative remote.
+  # The plain fast-forward push also refuses a concurrent incompatible update.
+  local lock="$COMMON/concrete-land.lock"
   if [ "$DRY" = 0 ]; then
     mkdir "$lock" 2>/dev/null || die "land: another publish holds $lock"
     printf 'pid=%s worktree=%s train=%s\n' "$$" "$ROOT" "$name" > "$lock/owner"
@@ -1016,20 +1017,6 @@ cmd_land() {
   fi
   git merge-base --is-ancestor "$base" "$head" || die "land: the train does not descend from its base"
 
-  local mirror="" mmain=""
-  # Both remotes are required (owner's decision, 2026-10-22): a missing mirror remote is a refusal
-  # before anything is pushed, not a silent origin-only landing. --no-mirror is the explicit opt-out.
-  if [ "$mirror_on" = 1 ] && [ -n "$MIRROR" ]; then
-    refuse_fork "$MIRROR"
-    git remote get-url "$MIRROR" >/dev/null 2>&1 \
-      || die "land: mirror remote '$MIRROR' is not configured; both remotes are required (add it, or pass --no-mirror deliberately)"
-    mirror="$MIRROR"
-    mmain="$(git ls-remote "$mirror" refs/heads/main | cut -f1)"
-    if [ -n "$mmain" ] && ! git merge-base --is-ancestor "$mmain" "$head" 2>/dev/null; then
-      die "land: $mirror/main (${mmain:0:10}) is not an ancestor of the train; reconcile the mirror first (nothing pushed)"
-    fi
-  fi
-
   # Review provenance, read now and not trusted from `check`: a check run with --no-review, or a
   # reviewer that wrote no clean note, leaves none, and nothing lands without it.
   local prov
@@ -1051,22 +1038,11 @@ cmd_land() {
   if [ "$DRY" = 0 ]; then
     [ "$(remote_main)" = "$head" ] || die "land: $REMOTE/main is not at ${head:0:10} after the push"
   fi
-  if [ -n "$mirror" ]; then
-    # The mirror receives exactly the commit the primary's hook just accepted (push-both.sh policy).
-    ( push_verified "$mirror" "$head" main CONCRETE_SKIP_GATES=1 ) || {
-      log_row "$name" land failed "mirror $mirror not at head"
-      die "land: $REMOTE landed, but $mirror/main is not at ${head:0:10}"
-    }
-  fi
   [ "$DRY" = 1 ] && return 0
-  # Both remotes, read back once more: the landing is complete only when each is at the head.
   [ "$(remote_main)" = "$head" ] || die "land: $REMOTE/main is not at ${head:0:10}"
-  if [ -n "$mirror" ] && [ "$(git ls-remote "$mirror" refs/heads/main | cut -f1)" != "$head" ]; then
-    die "land: $mirror/main is not at ${head:0:10}"
-  fi
   state_set "$name" landed_utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  log_row "$name" land passed "$REMOTE${mirror:+ + $mirror}"
-  note "landed ${head:0:10} on $REMOTE/main${mirror:+ and $mirror/main}. Members (result: CI run $id at ${head:0:10}):"
+  log_row "$name" land passed "$REMOTE"
+  note "landed ${head:0:10} on $REMOTE/main. Members (result: CI run $id at ${head:0:10}):"
   state_get "$name" members | tr ',' '\n' | sed 's/^/    /'
   note "main's own CI run at ${head:0:10} records run $id in its Landing record job (train.sh record) and"
   note "skips the jobs that run already passed; confirm: gh run list --workflow CI --branch main -R $REPO"
@@ -1154,7 +1130,7 @@ cmd_status() {
   [ -f "$LOG_DIR/$name.tsv" ] && column -t -s $'\t' "$LOG_DIR/$name.tsv" 2>/dev/null || true
 }
 
-usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,14p' "$SELF_DIR/train.sh" | sed 's/^# \{0,1\}//'; exit 2; }
 
 sub="${1:-}"; [ $# -gt 0 ] && shift
 case "$sub" in status|record|""|-h|--help) ;; *) where_ok ;; esac

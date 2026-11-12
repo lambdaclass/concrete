@@ -11,7 +11,7 @@
 # independent guards: a `git` shim first on PATH for every leg refuses any push whose destination is
 # main (or --all, --mirror, a bare HEAD), whatever flags the candidate's scripts pass, --no-verify
 # included; the clone's hooks path is a pre-push guard that refuses the same before it runs the real
-# hook; and both remotes' main is read before and after, a move to the train head being a failure.
+# hook; and origin/main is read before and after, a move to the train head being a failure.
 # The train head's publishing scripts are also refused if they run `git push ... --no-verify`. It refuses to start with any LAND_* or CONCRETE_SKIP_* variable set, since those
 # redirect remotes, swap the hook or skip the gates.
 #
@@ -25,7 +25,7 @@
 #   --keep         keep the clone
 #
 # Legs, in order (each stops the run when it fails, except the negative controls, which all run):
-#   clone    git clone of origin, both remotes configured, the guarded hooks path installed
+#   clone    git clone of origin, origin configured, the guarded hooks path installed
 #   train    train.sh build <name> <ref>; the train head is the SHA every later result is bound to
 #   build    ACCEPT_BUILD_CMD in the clone, at the train head (default: nix develop --command lake
 #            build, the root's build)
@@ -90,7 +90,6 @@ BUILD_CMD="${ACCEPT_BUILD_CMD:-nix develop --command lake build}"
 
 SRC_REPO="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "acceptance: run inside a clone" >&2; exit 2; }
 ORIGIN_URL="$(git -C "$SRC_REPO" remote get-url origin)"
-MIRROR_URL="$(git -C "$SRC_REPO" remote get-url lambdaclass 2>/dev/null || true)"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/acceptance.XXXXXX")"
 [ "$KEEP" = 1 ] || trap 'rm -rf "$WORK"' EXIT
 C="$WORK/clone"
@@ -110,7 +109,7 @@ leg() { # name cmd... — runs unless skipped; a failure ends the run (the negat
   fi
   row "$n" failed "see $log"; tail -n 30 "$log" | sed 's/^/      /'; FAILED=1; finish
 }
-main_heads() { local r; for r in origin lambdaclass; do git -C "$C" ls-remote "$r" refs/heads/main 2>/dev/null | cut -f1; done | tr '\n' ' '; }
+main_heads() { git -C "$C" ls-remote origin refs/heads/main | cut -f1; }
 finish() {
   if [ -n "$MAIN_BEFORE" ]; then
     local after; after="$(main_heads)"
@@ -189,7 +188,6 @@ GUARD
 }
 do_clone() {
   git clone --quiet "$ORIGIN_URL" "$C" && cd "$C" || return 1
-  [ -z "$MIRROR_URL" ] || git remote add lambdaclass "$MIRROR_URL"
   make_guard
   git config core.hooksPath "$WORK/guard-hooks"
   MAIN_BEFORE="$(main_heads)"
@@ -205,7 +203,7 @@ do_build() { # at the train head: the build result belongs to the SHA every othe
 do_train() {
   TRAIN build "$NAME" "$REF" && HEAD="$(git -C "$C" rev-parse HEAD)" || return 1
   # The candidate's own publishing scripts, at the train head, may not skip hooks on a push.
-  local hits; hits="$(cd "$C" && grep -rnE -- 'git[^#]*push[^#]*--no-verify|--no-verify[^#]*push' scripts/land scripts/push-both.sh 2>/dev/null \
+  local hits; hits="$(cd "$C" && grep -rnE -- 'git[^#]*push[^#]*--no-verify|--no-verify[^#]*push' scripts/land scripts/review .githooks 2>/dev/null \
     | grep -v '^scripts/land/acceptance.sh:' | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' || true)"
   [ -z "$hits" ] || { echo "the train head's landing scripts push with --no-verify:"; echo "$hits"; return 1; }
   echo "train head $HEAD"
@@ -303,7 +301,7 @@ do_negative() {
   if [ -n "${SKIP[negative]:-}" ]; then row negative skipped "--skip"; SKIPPED=1; return 0; fi
   local rid rsha
   rid="$(cd "$C" && sed -n 's/^run_id=//p' "$(git rev-parse --git-common-dir)/concrete-landing/$NAME/train.env" | tail -1)"
-  rsha="$(gh run view "$rid" -R "${ACCEPT_REPO:-unbalancedparentheses/concrete2}" --json headSha 2>/dev/null | python3 -I -c 'import json,sys; print(json.load(sys.stdin).get("headSha",""))' 2>/dev/null)"
+  rsha="$(gh run view "$rid" -R "${ACCEPT_REPO:-lambdaclass/concrete}" --json headSha 2>/dev/null | python3 -I -c 'import json,sys; print(json.load(sys.stdin).get("headSha",""))' 2>/dev/null)"
   if [ "$rsha" != "$HEAD" ]; then row neg:run failed "run ${rid:-?} is at ${rsha:-?}, not the train head $HEAD: the controls would test another SHA"; FAILED=1; return 0; fi
   row neg:run passed "run $rid is at the train head ${HEAD:0:10}"
   make_tamper_gh

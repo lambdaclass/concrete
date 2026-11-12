@@ -29,8 +29,7 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$branch" ] || die "name the pushed branch (e.g. wip/my-fix)"
 cd "$(git rev-parse --show-toplevel)"
-REMOTE="${LAND_REMOTE:-origin}"
-[ "$REMOTE" != fork ] || die "refusing the remote named 'fork'"
+REMOTE=origin
 [ -z "$(git status --porcelain --untracked-files=no)" ] || die "the work tree has uncommitted changes"
 land_assert_no_op start
 git fetch -q "$REMOTE"

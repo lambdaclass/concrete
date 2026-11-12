@@ -126,7 +126,7 @@ Two refactors make layers 2–4 tractable, and both are done: `runBlock` names b
 
 LCB's own lowering, assembler and linker are LCB's named trust boundaries, carried as `P_toolchain[lcb]` until LCB's preservation theorem covers the slice-0 domain.
 
-LCB is a pinned lake dependency (`require` with an exact rev, LCB's upstream lock recorded). It uses the same Lean toolchain (v4.34.1) and no Mathlib.
+LCB is a pinned lake dependency (`require` with an exact rev, LCB's upstream lock recorded). Concrete builds it as a Lake dependency with Lean v4.35.0 and no Mathlib. The pinned upstream revision declares v4.34.1 for standalone builds; its sources also build under Concrete’s v4.35.0 toolchain.
 
 **The encoded result, with one decoding runtime.** Neither backend's input contains a call or a trap.
 

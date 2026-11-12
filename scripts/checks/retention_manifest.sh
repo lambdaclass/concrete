@@ -33,6 +33,14 @@ out="$(problems RETENTION.tsv)"
   && ok "the longest listed prefix governs (decisions.md retained inside archived docs/spec; fuzz findings migrate)" \
   || no "precedence: decisions.md=$(govern RETENTION.tsv docs/decisions.md) types.md=$(govern RETENTION.tsv docs/spec/types.md)"
 
+# The retired root helper keeps its own open legacy governance; it cannot inherit retention
+# from the still-live worktree creator, nor become ungoverned through the split.
+[ ! -e scripts/push-both.sh ] && [ -f legacy/scripts/push-both.sh ] \
+  && [ "$(govern RETENTION.tsv legacy/scripts/push-both.sh)" = retire ] \
+  && [ "$(govern RETENTION.tsv scripts/worktree-new.sh)" = retained ] \
+  && ok "retired helper and retained worktree creator have distinct governance" \
+  || no "push helper retirement governance"
+
 echo "=== negative controls ==="
 out="$( { printf '%s\n' "$files"; echo new-top-level-thing; echo docs/new/deep/file.md; } | python3 -I "$RP" check RETENTION.tsv)"
 case "$out" in *"no row governs new-top-level-thing"*) ok "an ungoverned path is refused" ;; *) no "an ungoverned path passed" ;; esac
