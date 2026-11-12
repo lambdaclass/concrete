@@ -112,7 +112,7 @@ structure State where
   env : AList Var Val
   next : Nat
   gen : List Nat
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 /-- Generate a brand for allocator `a`. -/
 def State.bind (s : State) (a : Var) (env : AList Var Val) : State :=
@@ -150,7 +150,7 @@ inductive GR where
   | stuck
   /-- The fuel ran out; inconclusive. -/
   | outOfFuel
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 /-- The ghost run as an executable function (`ghost_run`, `Proofs/Brand.lean`: every finished
 ghost run is a `Run`). The loop conditions are abstracted: loop test number `k` of the run takes
@@ -207,7 +207,7 @@ inductive ER where
   | done (env : AList Var EVal) (k : Nat)
   | stuck
   | outOfFuel
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 /-- The erased run, with the same fuel and loop tests as `ghost`. -/
 def erased (σ : Nat → Bool) : Nat → Nat → AList Var EVal → List Stmt → ER

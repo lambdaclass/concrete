@@ -2,7 +2,8 @@
 """Structural name-independence and numeric/lookup controls, in private copies.
 
 The load-bearing environment scan rejects spelling tables in semantic interfaces.
-Controls compile successfully before requiring the scan to reject each form.
+Controls compile successfully before requiring the scan to accept declaration names
+and reject local-spelling mixtures, including nested AST payloads.
 """
 from pathlib import Path
 import os
@@ -76,7 +77,39 @@ def main():
         if not result.returncode or 'nominal structure' not in result.stderr:
             raise SystemExit('nominal table scan accepted list alias')
         print('control: spelling table must be nominal')
+        for declaration in [
+            'structure Name where\n  text : String\n  hidden : Var',
+            'abbrev Name := String',
+        ]:
+            require(compile_file('DeclarationNameControl',
+                    'namespace ConcreteSpec\nstructure Var where\n  id : Nat\n'
+                    'structure LocalNames where\n  entries : List (Var × String)\n' + declaration +
+                    '\nend ConcreteSpec\n'), 'declaration name shape mutant builds')
+            result = run(['lean', '--run', 'scripts/proofs/local_identity.lean',
+                          'DeclarationNameControl'], env=env)
+            if not result.returncode or not any(message in result.stderr for message in
+                    ['missing nominal declaration Name constructor',
+                     'declaration Name must have exactly one String field']):
+                raise SystemExit('declaration name scan accepted broken nominal boundary\n' +
+                                 result.stdout + result.stderr)
+            print('control: declaration names must be nominal text only')
+        accepted = {
+            'variable and declaration name function': 'def field (_ : ConcreteSpec.Var) (_ : ConcreteSpec.Name) : Bool := true',
+            'variable and declaration name judgment': 'inductive Field : ConcreteSpec.Var → ConcreteSpec.Name → Prop where\n  | entry : Field ⟨0⟩ ⟨"field"⟩',
+            'AST field name and atoms': 'inductive FieldAST where\n  | entry : ConcreteSpec.Name → List ConcreteSpec.Atom → FieldAST',
+            'declaration name Binder pattern': 'def pattern (pat : List (ConcreteSpec.Name × ConcreteSpec.Binder)) : Nat := pat.length',
+        }
+        for label, declaration in accepted.items():
+            require(compile_file('ConcreteSpec.Spec.NameAccepted',
+                    'import ConcreteSpec.Diagnostics.Types\nimport ConcreteSpec.Spec.Slice1Syntax\n' + declaration), label + ' builds')
+            require(run(['lean', '--run', 'scripts/proofs/local_identity.lean',
+                         'ConcreteSpec.Spec.NameAccepted'], env=env), label + ' accepted')
+            print('control: semantic scan accepts ' + label)
         controls = {
+            'Binder spelling structure': 'structure Hidden where\n  binder : ConcreteSpec.Binder\n  spelling : String\ndef leak (table : List Hidden) : Nat := table.length',
+            'Binder spelling pair list': 'def leak (table : List (ConcreteSpec.Binder × String)) : Nat := table.length',
+            'AST spelling payload': 'inductive Hidden where\n  | entry : ConcreteSpec.Var → String → Hidden\ndef leak (table : List Hidden) : Nat := table.length',
+
             'nested carrier fields': 'structure Key where\n  value : ConcreteSpec.Var\n  extra : Nat\nstructure Hidden where\n  key : Key\n  spelling : String',
             'unused split structure': 'structure Hidden where\n  key : ConcreteSpec.Var\n  spelling : String',
             'nested containers': 'def leak : List (List (ConcreteSpec.Var × String)) := []',
@@ -109,7 +142,7 @@ def main():
         }
         for label, declaration in controls.items():
             require(compile_file('ConcreteSpec.Spec.NameLeak',
-                    'import ConcreteSpec.Diagnostics.Types\n' + declaration), label + ' builds')
+                    'import ConcreteSpec.Diagnostics.Types\nimport ConcreteSpec.Spec.Slice1Syntax\n' + declaration), label + ' builds')
             result = run(['lean', '--run', 'scripts/proofs/local_identity.lean',
                           'ConcreteSpec.Spec.NameLeak'], env=env)
             if not result.returncode or 'semantic diagnostics dependency:' not in result.stderr:

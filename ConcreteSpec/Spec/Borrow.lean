@@ -37,7 +37,7 @@ structure Place where
   mutable : Bool
   owner : Bool
   lock : Lock
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 /-- The places in scope, by fresh identity (Q9.1). -/
 abbrev Ctx := AList Var Place
@@ -402,7 +402,7 @@ structure VInfo where
   a : Nat
   b : Nat
   mutable : Bool
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 abbrev Views := AList Var VInfo
 
@@ -429,7 +429,7 @@ inductive VR where
   | trap
   | stuck
   | outOfFuel
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 /-- The run. The fuel bounds the depth of the run's recursion, not the number of statements it
 executes: each statement passes one unit less to what follows it, and a block and the statements

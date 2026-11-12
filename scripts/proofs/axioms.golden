@@ -716,6 +716,9 @@ ConcreteSpec.LocalIdentity.numeric_identity
 ConcreteSpec.LocalNames.mk.inj	
 ConcreteSpec.LocalNames.mk.injEq	propext
 ConcreteSpec.LocalNames.mk.sizeOf_spec	
+ConcreteSpec.Name.mk.inj	
+ConcreteSpec.Name.mk.injEq	propext
+ConcreteSpec.Name.mk.sizeOf_spec	
 ConcreteSpec.Observe.Observation.exited.inj	
 ConcreteSpec.Observe.Observation.exited.injEq	propext
 ConcreteSpec.Observe.Observation.exited.sizeOf_spec	
@@ -1208,6 +1211,8 @@ ConcreteSpec.instDecidableEqExpr.decEq._proof_8
 ConcreteSpec.instDecidableEqExpr.decEq._proof_9	
 ConcreteSpec.instDecidableEqIntTy._proof_1	
 ConcreteSpec.instDecidableEqIntTy._proof_2	
+ConcreteSpec.instDecidableEqName.decEq._proof_1	
+ConcreteSpec.instDecidableEqName.decEq._proof_2	
 ConcreteSpec.instDecidableEqOutcome.decEq._proof_1	
 ConcreteSpec.instDecidableEqOutcome.decEq._proof_10	
 ConcreteSpec.instDecidableEqOutcome.decEq._proof_11	
@@ -1399,6 +1404,9 @@ _private.ConcreteSpec.Proofs.Borrow.0.ConcreteSpec.Borrow.vrun.match_7.eq_1
 _private.ConcreteSpec.Proofs.Borrow.0.ConcreteSpec.Borrow.vrun.match_7.eq_2	
 _private.ConcreteSpec.Proofs.Borrow.0.ConcreteSpec.Borrow.vrun.match_9.eq_1	propext
 _private.ConcreteSpec.Proofs.Borrow.0.ConcreteSpec.Borrow.vrun.match_9.eq_2	propext
+_private.ConcreteSpec.Proofs.Brand.0.ConcreteSpec.Brand.GR.erase.match_1.eq_1	
+_private.ConcreteSpec.Proofs.Brand.0.ConcreteSpec.Brand.GR.erase.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Brand.0.ConcreteSpec.Brand.GR.erase.match_1.eq_3	
 _private.ConcreteSpec.Proofs.Brand.0.ConcreteSpec.Brand.emb.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Brand.0.ConcreteSpec.Brand.emb.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Brand.0.ConcreteSpec.Brand.erased.match_1.eq_1	propext
@@ -1431,9 +1439,6 @@ _private.ConcreteSpec.Proofs.Brand.0.ConcreteSpec.Brand.ghost.match_5.eq_1	prope
 _private.ConcreteSpec.Proofs.Brand.0.ConcreteSpec.Brand.ghost.match_5.eq_2	propext
 _private.ConcreteSpec.Proofs.Brand.0.ConcreteSpec.Brand.ghost.match_8.eq_1	propext
 _private.ConcreteSpec.Proofs.Brand.0.ConcreteSpec.Brand.ghost.match_8.eq_2	propext
-_private.ConcreteSpec.Proofs.Brand.0.ConcreteSpec.Brand.instReprGR.repr.match_1.eq_1	
-_private.ConcreteSpec.Proofs.Brand.0.ConcreteSpec.Brand.instReprGR.repr.match_1.eq_2	
-_private.ConcreteSpec.Proofs.Brand.0.ConcreteSpec.Brand.instReprGR.repr.match_1.eq_3	
 _private.ConcreteSpec.Proofs.Brand.0.ConcreteSpec.Brand.instReprVal.repr.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Brand.0.ConcreteSpec.Brand.instReprVal.repr.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Checker.0.ConcreteSpec.atomTy.match_1.eq_1	propext
@@ -1525,10 +1530,10 @@ _private.ConcreteSpec.Proofs.Rep.0.ConcreteSpec.instReprIntTy.repr.match_1.eq_5
 _private.ConcreteSpec.Proofs.Rep.0.ConcreteSpec.instReprIntTy.repr.match_1.eq_6	
 _private.ConcreteSpec.Proofs.Rep.0.ConcreteSpec.instReprIntTy.repr.match_1.eq_7	
 _private.ConcreteSpec.Proofs.Rep.0.ConcreteSpec.instReprIntTy.repr.match_1.eq_8	
-_private.ConcreteSpec.Proofs.Slice0.0.ConcreteSpec.Slice0.instReprAtom.repr.match_1.eq_1	
-_private.ConcreteSpec.Proofs.Slice0.0.ConcreteSpec.Slice0.instReprAtom.repr.match_1.eq_2	
-_private.ConcreteSpec.Proofs.Slice0.0.ConcreteSpec.Slice0.instReprExpr.repr.match_1.eq_1	
-_private.ConcreteSpec.Proofs.Slice0.0.ConcreteSpec.Slice0.instReprExpr.repr.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Slice0.0.ConcreteSpec.Slice0.Atom.toCore.match_1.eq_1	
+_private.ConcreteSpec.Proofs.Slice0.0.ConcreteSpec.Slice0.Atom.toCore.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Slice0.0.ConcreteSpec.Slice0.Expr.toCore.match_1.eq_1	
+_private.ConcreteSpec.Proofs.Slice0.0.ConcreteSpec.Slice0.Expr.toCore.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Slice1.0.ConcreteSpec.Core.AList.update.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Slice1.0.ConcreteSpec.Core.AList.update.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Slice1.0.ConcreteSpec.admitted.match_1.eq_1	propext

@@ -2,101 +2,55 @@ import Lean
 
 open Lean Meta
 
--- All inspection happens in MetaM: instantiate dependent binders before reducing aliases
--- and field families. Inductive semantic ASTs remain opaque carriers: their field
--- names are not local spellings. Structure fields are inspected in their local context.
+-- Normalize aliases and dependent field families in their instantiated contexts.
 def normalType (e : Expr) : MetaM Expr := do
   withTransparency .all <| whnf (← instantiateMVars e)
 
-def withStructureFields (e : Expr) (k : Array Expr → MetaM α) : MetaM α := do
-  let e ← normalType e
-  let env ← getEnv
-  let .const n levels := e.getAppFn | return ← k #[]
-  if !isStructure env n then return ← k #[]
-  let some (.inductInfo info) := env.find? n | return ← k #[]
-  if e.getAppNumArgs != info.numParams then return ← k #[]
-  let t ← inferType (mkAppN (mkConst info.ctors.head! levels) e.getAppArgs)
-  forallTelescopeReducing t fun fields _ => do
-    let types ← fields.mapM fun field => do normalType (← inferType field)
-    k types
-
 def combine (a b : Bool × Bool) : Bool × Bool := (a.1 || b.1, a.2 || b.2)
 
--- Carrier summaries cross containers and structure fields. Product payloads preserve
--- container boundaries: a field-name/Atom pair is not itself a local spelling.
-partial def carriers (e : Expr) (seen : List Name := []) (flatten : Bool := false) (records : Bool := true) : MetaM (Bool × Bool) := do
+-- Declaration names are nominal text, not local spellings. All other inductive
+-- constructors are inspected, including ASTs, containers, structures and indices.
+partial def carriers (e : Expr) (seen : List Name := []) : StateRefT (Std.HashSet Expr) MetaM (Bool × Bool) := do
   let e ← normalType e
   if e.isConstOf `ConcreteSpec.Var then return (true, false)
-  if e.isConstOf `String then return (false, true)
+  if e.isConstOf `ConcreteSpec.Name then return (false, false)
+  if e.isConstOf `String || e.isConstOf `ConcreteSpec.LocalNames then return (false, true)
   if e.isForall then
     return ← forallTelescopeReducing e fun xs result => do
-      let mut found ← carriers result seen false records
-      for x in xs do found := combine found (← carriers (← inferType x) seen false records)
+      let mut found ← carriers result seen
+      for x in xs do found := combine found (← carriers (← inferType x) seen)
       return found
-  let .const n _ := e.getAppFn | return (false, false)
-  if seen.contains n then return (false, false)
-  let ancestors := seen
-  let seen := n :: seen
-  withStructureFields e fun fields => do
-    if fields.size == 1 then return ← carriers fields[0]! seen false records
-    if n == `Prod || n == `Sigma || n == `PSigma then
-      let mut found := (false, false)
-      for field in fields do
-        let a ← carriers field seen flatten records
-        if !flatten && !a.1 && !a.2 then return (false, false)
-        found := combine found a
-      return found
-    -- Includes nested records and indexed predicates, including Prop.
-    let mut found := (false, false)
-    if records then
-      for field in fields do
-        found := combine found (← carriers field seen false records)
-    for arg in e.getAppArgs do
-      if ← isType arg then
-        found := combine found (← carriers arg ancestors false records)
-      else
-        found := combine found (← carriers (← inferType arg) ancestors false records)
-    return found
-
--- At an interface's outer telescope, a local and a field-name parameter are legal.
--- Inside any parameter, field or index, ALL binders and the result contribute:
--- Var → String → Bool and Var → String → Prop are tables too.
-partial def paired (e : Expr) (seen : List Name := []) (interface : Bool := false) : MetaM Bool := do
-  let e ← normalType e
-  if !interface then
-    let a ← carriers e [] true
-    if a.1 && a.2 then return true
-  if e.isForall then
-    return ← forallTelescopeReducing e fun xs result => do
-      -- The outer interface also forbids direct name-conversion functions. At this
-      -- boundary semantic records/judgments are opaque endpoints: an AST's field names
-      -- do not make an AST conversion a Var/String conversion. Each endpoint is still
-      -- checked independently below with full field/index inspection.
-      let output ← if ← isProp result then pure (false, false) else carriers result [] true false
-      for x in xs do
-        let domain ← inferType x
-        let input ← carriers domain [] false false
-        if (input.1 && !input.2 && output.2 && !output.1) ||
-            (input.2 && !input.1 && output.1 && !output.2) then return true
-        if ← paired domain seen then return true
-      paired result seen
-  let .const n _ := e.getAppFn | return false
-  if seen.contains n then return false
-  let seen := n :: seen
-  let fieldsPaired ← withStructureFields e fun fields => do
-    let mut found := (false, false)
-    for field in fields do
-      found := combine found (← carriers field [] true)
-      if ← paired field seen then return true
-    return found.1 && found.2
-  if fieldsPaired then return true
+  let .const n levels := e.getAppFn | return (false, false)
+  let mut found := (false, false)
   for arg in e.getAppArgs do
     if ← isType arg then
-      if ← paired arg seen then return true
-  return false
+      found := combine found (← carriers arg seen)
+    else
+      found := combine found (← carriers (← inferType arg) seen)
+  if seen.contains n then return found
+  if (← get).contains e then return found
+  modify (·.insert e)
+  let ancestors := n :: seen
+  let env ← getEnv
+  if let some (.inductInfo info) := env.find? n then
+    if e.getAppNumArgs >= info.numParams then
+      for ctor in info.ctors do
+        let t ← inferType (mkAppN (mkConst ctor levels) (e.getAppArgs.extract 0 info.numParams))
+        let payload ← forallTelescopeReducing t fun fields _ => do
+          let mut payload := (false, false)
+          for field in fields do
+            payload := combine payload (← carriers (← inferType field) ancestors)
+          return payload
+        found := combine found payload
+  return found
 
--- The only presentation records in Examples are complete programs and function bodies
--- (input context, statements, return atom). No operation or arbitrary Elaborated payload is exempt.
+-- Every semantic telescope, parameter, index and nested payload obeys the same
+-- rule: locals may accompany declaration names, but never local spellings.
+def paired (e : Expr) : MetaM Bool := do
+  let a ← (carriers e).run' {}
+  return a.1 && a.2
+
+-- The only presentation records in Examples are complete programs and function bodies.
 def presentationRecord (type : Expr) : Bool := Id.run do
   if !type.getAppFn.isConstOf `ConcreteSpec.Elaborated then return false
   let args := type.getAppArgs
@@ -121,6 +75,11 @@ def main (args : List String) : IO Unit := do
     throw (IO.userError "Var must have exactly one Nat field")
   unless isStructure env `ConcreteSpec.LocalNames do
     throw (IO.userError "LocalNames must be a nominal structure")
+  let some (.ctorInfo nameCtor) := env.find? `ConcreteSpec.Name.mk
+    | throw (IO.userError "missing nominal declaration Name constructor")
+  unless isStructure env `ConcreteSpec.Name && nameCtor.numFields == 1 &&
+      nameCtor.numParams == 0 && nameCtor.type.bindingDomain! == mkConst `String do
+    throw (IO.userError "declaration Name must have exactly one String field")
   -- Reverse reachability visits each dependency edge once, including recursive components.
   let mut users : Std.HashMap Name (Array Name) := {}
   for (n, ci) in env.constants.toList do
@@ -140,17 +99,11 @@ def main (args : List String) : IO Unit := do
       -- Lean-generated eliminators expose constructor fields as continuation arguments.
       -- They are not user semantic interfaces; dependencies still propagate through them.
       if isMatcherCore env n || isAuxRecursor env n || (ci matches .recInfo _) then continue
-      let predicate ← forallTelescopeReducing ci.type fun _ result => do
-        return (← normalType result) == mkSort Level.zero
-      let interface := !predicate && match ci with
-        | .inductInfo _ => false
-        | _ => true
       let structurePair ← if isStructure env n then
         forallTelescopeReducing ci.type fun params _ => do
-          let type := mkAppN (mkConst n (ci.levelParams.map mkLevelParam)) params
-          paired type
+          paired (mkAppN (mkConst n (ci.levelParams.map mkLevelParam)) params)
         else pure false
-      if structurePair || (← paired ci.type [] interface) then seeds := seeds.push n
+      if structurePair || (← paired ci.type) then seeds := seeds.push n
     return seeds
   let (seeds, _) ← (inspect.run' {}).toIO { fileName := "local_identity", fileMap := default } { env := env }
   queue := queue ++ seeds

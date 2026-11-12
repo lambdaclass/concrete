@@ -24,7 +24,7 @@ its spelling in the source; two different numbers denote different locals. -/
 structure Var where
   /-- The identity number; for example, local `⟨7⟩` has number 7. -/
   id : Nat
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 end ConcreteSpec
 

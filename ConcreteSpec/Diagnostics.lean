@@ -1,4 +1,5 @@
 import ConcreteSpec.Diagnostics.Types
+import ConcreteSpec.Diagnostics.Repr
 
 /-!
 # Diagnostics ownership

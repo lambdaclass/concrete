@@ -34,25 +34,25 @@ ARITH-2) or a read of a local. -/
 inductive Atom where
   | lit (n : Nat)
   | var (x : Var)
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 /-- A slice-0 expression: an atom, or checked `l + r` of two atoms (ARITH-3). -/
 inductive Expr where
   | atom (a : Atom)
   | add (l r : Atom)
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 /-- `let x: u8 = e;` — the only slice-0 statement. -/
 structure Stmt where
   x : Var
   e : Expr
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 /-- `fn main() -> u8 { body; return ret; }` with no structs. -/
 structure Program where
   body : List Stmt
   ret : Atom
-  deriving Repr
+
 
 /-- An atom in Core: a literal is `u8`, a local is read with `copy` (`u8` is Copy). -/
 def Atom.toCore : Atom → ConcreteSpec.Atom

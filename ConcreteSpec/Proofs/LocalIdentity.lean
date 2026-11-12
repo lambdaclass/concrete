@@ -6,7 +6,10 @@ import ConcreteSpec.Proofs.Basics
 
 Semantic operations cannot see spellings by type. The required local_identity environment gate
 is the load-bearing check: it rejects diagnostics tables and Var/String pairings in semantic
-interfaces, including aliases and structures. These laws constrain numeric identity and lookup;
+parameters, fields, indices and nested AST types, including aliases, functions and
+structures. A variable (also through Binder or another container) may accompany a nominal
+field/struct Name, including in judgments; it may never accompany a local spelling (String)
+or the spelling table. These laws constrain numeric identity and lookup;
 they do not substitute for that structural check. Future codecs are tracked in ISS-0060.
 -/
 namespace ConcreteSpec.LocalIdentity
