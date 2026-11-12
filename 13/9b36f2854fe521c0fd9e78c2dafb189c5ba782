@@ -1,0 +1,2 @@
+[piece 3 of 5: scripts]
+- scripts/proofs/local_identity.lean:166: Non-structure declarations outside `ConcreteSpec.Spec.*` are excluded from seed inspection. An imported helper `attach : Var → Var × String` therefore remains untainted, allowing a semantic function `def spellingLength (v : Var) : Nat := (attach v).2.length` to pass: its own signature contains no spelling carrier, and reverse dependency propagation never starts at `attach`. Inspect reachable helper signatures too, otherwise semantic behavior can depend on local spellings through this boundary.
