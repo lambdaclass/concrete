@@ -38,7 +38,7 @@ def main():
                 raise ValueError('gate fetched unexpected refs')
             if any('--depth=1' not in c for c in calls if c[0]=='fetch'):
                 raise ValueError('unbounded pin fetch')
-            for name,expected in inventory.PIN_TAGS.items():
+            for name,expected in sorted(inventory.PIN_TAGS.items()):
                 tag = 'refs/tags/spec-inventory/'+name
                 for advertised in (b'',('0'*40+'\t'+tag+'\n').encode()):
                     fetched.clear()
@@ -57,7 +57,7 @@ def main():
         try: inventory.ensure_objects(remote='fixture-remote')
         except ValueError as exc:
             expected = '\n'.join('missing or changed protected inventory pin: refs/tags/spec-inventory/'+n+' expected '+r
-                                 for n,r in inventory.PIN_TAGS.items())
+                                 for n,r in sorted(inventory.PIN_TAGS.items()))
             if str(exc)!=expected: raise
         else: raise ValueError('all missing pins accepted')
         def unavailable(*args):
@@ -66,7 +66,7 @@ def main():
             return b''
         inventory.git = unavailable
         expected = '\n'.join('missing or changed protected inventory pin: refs/tags/spec-inventory/'+n+' expected '+r
-                             for n,r in inventory.PIN_TAGS.items())
+                             for n,r in sorted(inventory.PIN_TAGS.items()))
         try: inventory.ensure_objects(remote='fixture-remote')
         except ValueError as exc:
             if str(exc)!=expected: raise

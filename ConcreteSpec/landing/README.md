@@ -123,10 +123,14 @@ must be absent by identity, or itself be a target at the recorded digest; partia
 replacement does not close. Declaration identity is its qualified name. Example-command
 identity is its parsed statement plus its occurrence among equal statements, excluding proof
 syntax and source positions. Other commands use parsed syntax plus occurrence. The census lists
-every collision group with all occurrence keys. Reconciliation matches these groups as multisets:
-HEAD commands outside pinned targets may number at most the snapshot count minus the number
-superseded across all records. Thus retiring one of two equal statements requires the count to
-drop to one. Ambiguous occurrences and missing snapshot or HEAD identities are refused. Position
+every collision group with all occurrence keys. Reconciliation first matches each HEAD
+command by its own exact key. A superseded key still at HEAD always refuses, regardless
+of whether equal-statement twins have landed. Pinned targets and exact-key twins explain
+only their own occurrences. Remaining equal-statement occurrences are assigned only when
+there is a single unmatched snapshot key; multiple candidate keys refuse as ambiguous,
+rather than using snapshot counts to assume that other pieces have landed. This ambiguity
+is reachable when a proof edit changes a command's full key and multiple snapshot twins
+lack exact-key matches. Missing snapshot or HEAD identities are refused. Position
 slots are available only to synthetic tests with the explicit `fixture_slots=True` flag.
 A retained superseded unit outside the pinned targets refuses with `superseded unit still present`.
 Reviewed retirement closes only when every superseded unit is absent at HEAD, without

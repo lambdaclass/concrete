@@ -338,7 +338,8 @@ def main():
                 if observed!='superseded unit still present: command:old-example': raise ValueError(observed)
             print('control PASS: proof-edited forbidden example remains present under replacement and retirement')
             # Production multiset matching: the BASE twin must survive retirement.
-            forbidden.write_text('example : False → False := by intro h; exact h\n' * 2)
+            forbidden.write_text('example : False → False := by intro h; exact h\n'
+                                 'example : False → False := by exact id\n')
             commit()
             twins = inventory.head_population()
             twin_keys = [k for k in twins.commands.values() if k[0]==str(forbidden.relative_to(root))]
@@ -355,7 +356,7 @@ def main():
                     'fixture slots cannot be used with a production snapshot')
             missing_head = inventory.Digests(commands=twins.commands)
             refused(lambda: inventory.replacement_progress(twin_population,cr,missing_head,twins),
-                    'missing HEAD command identity: '+json.dumps(next(iter(twins.commands.values()))))
+                    'missing HEAD command identity: '+json.dumps(min(twins.commands.values())))
             print('control PASS: production missing snapshot command identity refuses explicitly')
             collision_output = io.StringIO()
             with contextlib.redirect_stdout(collision_output):
@@ -371,12 +372,36 @@ def main():
             else: raise ValueError('ambiguous occurrence records accepted')
             observed = inventory.replacement_progress(twin_population,cr,twins,twins)['command:old-example']
             if observed!='superseded unit still present: command:old-example': raise ValueError(observed)
-            forbidden.write_text('example : False → False := by intro h; exact h\n')
+            # Retain only the later twin under its own full key.
+            forbidden.write_text('example : False → False := by exact id\n')
             commit()
             one_twin = inventory.head_population()
             observed = inventory.replacement_progress(twin_population,cr,one_twin,twins)['command:old-example']
             if observed!='reconciled by retirement': raise ValueError(observed)
-            print('control PASS: equal-statement twins are count-matched; one retirement closes only after count drops')
+            print('control PASS: equal-statement twins reconcile by their own keys')
+            # Real parser output: a proof-edited occurrence has neither old key.
+            forbidden.write_text('example : False → False := by intro h; assumption\n')
+            commit()
+            ambiguous_head = inventory.head_population()
+            base = twins.presence[twin_keys[0]][:2]
+            observed = inventory.replacement_progress(twin_population,cr,ambiguous_head,twins)['command:old-example']
+            if observed!='ambiguous command occurrence assignment: '+json.dumps(base): raise ValueError(observed)
+            # Progressive cross-piece landing must never explain away the old key.
+            progressive_spec = dict(retired)
+            accept(progressive_spec,'F25a')
+            progressive_record = dict(crec,piece='F25a',note=json.dumps(progressive_spec))
+            for piece in ('BASE','F25b'):
+                progressive = [dict(twin_rows[0],piece='F25a'),dict(twin_rows[1],piece=piece)]
+                for text, expected in [
+                    ('example : False → False := by intro h; exact h\n','superseded unit still present: command:old-example'),
+                    ('example : False → False := by intro h; exact h\nexample : False → False := by exact id\n','superseded unit still present: command:old-example'),
+                    ('example : False → False := by exact id\n','reconciled by retirement'),
+                    ('','reconciled by retirement')]:
+                    forbidden.write_text(text)
+                    commit()
+                    observed = inventory.replacement_progress(progressive+[progressive_record],cr,inventory.head_population(),twins)['command:old-example']
+                    if observed!=expected: raise ValueError(observed)
+            print('control PASS: retained own key refuses before and after later twin lands; correct retirement closes in either state')
             print('control PASS: snapshot census lists collisions and refuses ambiguous occurrence records')
             forbidden.unlink()
             commit()

@@ -32,3 +32,9 @@ group; ambiguous occurrences and missing production identities fail closed. Pars
 identifies non-example commands, and positional matching requires an explicit synthetic-fixture
 flag. Production controls retain a BASE twin while retiring one equal-statement example,
 refuse retirement while both remain, and check missing identities and collision diagnostics.
+
+Round 12 matches retained commands by their own keys before considering unmatched parsed
+statements. An absent later twin cannot hide a retained superseded command. Ambiguous
+assignment of proof-edited occurrences to multiple snapshot keys fails closed, with a
+parser-produced control. Sort diagnostic and result traversals, and run all inventory unit
+tests under hash seeds 0, 1, 2 and 3 inside the gate.

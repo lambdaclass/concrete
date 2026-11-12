@@ -89,7 +89,7 @@ WHOLE = {
  'Proofs/ObserveReport':'F23','Spec/Adequacy':'F24a', 'Spec/Frame':'F28',
  'Spec/Rules':'F17', 'Spec/Surface0':'F36','Proofs/Surface0':'F36',
 }
-REGENERATE_MODULES = tuple('ConcreteSpec.'+stem.replace('/','.') for stem in WHOLE if stem.startswith('Spec/'))
+REGENERATE_MODULES = tuple('ConcreteSpec.'+stem.replace('/','.') for stem in sorted(WHOLE) if stem.startswith('Spec/'))
 
 CONTRACTS = {'Ident':'C9','Target':'C3','Outcome':'C1','Exec':'C1','Scalar':'C2',
  'Const':'C2','Memory':'C4','Hybrid':'C4','Own':'C5','Grant':'C5','Prim':'C9',
@@ -99,12 +99,12 @@ CONTRACTS = {'Ident':'C9','Target':'C3','Outcome':'C1','Exec':'C1','Scalar':'C2'
 
 @lru_cache(maxsize=1)
 def git_local_variables():
-    env = {k:v for k,v in os.environ.items() if k not in ('GIT_DIR','GIT_WORK_TREE','GIT_COMMON_DIR')}
+    env = {k:v for k,v in sorted(os.environ.items()) if k not in ('GIT_DIR','GIT_WORK_TREE','GIT_COMMON_DIR')}
     return set(subprocess.check_output(['git','rev-parse','--local-env-vars'],env=env,text=True).splitlines())
 
 
 def git(*args):
-    env = {k:v for k,v in os.environ.items() if k not in git_local_variables()}
+    env = {k:v for k,v in sorted(os.environ.items()) if k not in git_local_variables()}
     return subprocess.check_output(['git', *args], cwd=ROOT, env=env, stderr=subprocess.DEVNULL)
 
 
@@ -328,7 +328,7 @@ def configure_migrations():
             return set()
         seen.add(m)
         return set(imports.get(m,[])) | set().union(*(reachable(d,seen) for d in imports.get(m,[])))
-    for module, p in owners.items():
+    for module, p in sorted(owners.items()):
         PREREQS[p] = ['F02','T1c'] + sorted({owners[d] for d in reachable(module,set()) if d in owners})
 
 
@@ -388,7 +388,7 @@ def context_destinations(population):
                 scopes[-1].append(c['name'])
         if openings:
             raise ValueError(f'unbalanced parsed contexts: {file}')
-    return {name:','.join(sorted(destinations)) for name,destinations in result.items()}
+    return {name:','.join(sorted(destinations)) for name,destinations in sorted(result.items())}
 
 
 def update_contexts(rows):
@@ -404,7 +404,7 @@ def generate(data):
             row(record='snapshot',name='baseline',kind='git-commit',source=BASE,piece='BASE',disposition='retain'),
             row(record='snapshot',name='plan',kind='sha256',source='ConcreteSpec/landing/plan.md',piece='P',
                 digest=sha((ROOT/'ConcreteSpec/landing/plan.md').read_bytes()),disposition='retain')]
-    for p, deps in PREREQS.items():
+    for p, deps in sorted(PREREQS.items()):
         rows.append(row(record='piece',name=p,kind='landing-piece',piece=p,prerequisites=','.join(deps),
                         disposition='owner-held' if p in HOLDS else 'retain',note=HOLDS.get(p,'')))
     LAW_METADATA[:] = [r for r in data if r["record"]=="resolved-command"]
@@ -441,7 +441,7 @@ def generate(data):
             for d in PREREQS[p]:
                 ancestry[p] |= ancestors(d)
         return ancestry[p]
-    for p in PREREQS:
+    for p in sorted(PREREQS):
         ancestors(p)
     def assign(r,p,why):
         r.update(piece=p,prerequisites=','.join(PREREQS[p]),
@@ -452,7 +452,7 @@ def generate(data):
     command_members = defaultdict(list)
     for r in population: command_members[command_identity(r)].append(r)
     choices = emission_choices(data)
-    generated = {n:r for n,r in byname.items() if r['line']=='0' and r['piece']!='BASE'}
+    generated = {n:r for n,r in sorted(byname.items()) if r['line']=='0' and r['piece']!='BASE'}
     fixtures = shared_fixtures(command_rows)
     def available(p,d):
         return p==d or d in ancestry[p]
@@ -462,11 +462,11 @@ def generate(data):
     # Generated realizations may be emitted in several importers with different proofs.
     # Choose only an actually observed, kernel-identical emission, never an inferred owner.
     # Single-emission helpers (including partial bodies) remain with their command.
-    effective = {n:json.loads(r['dependencies']) for n,r in byname.items()}
+    effective = {n:json.loads(r['dependencies']) for n,r in sorted(byname.items())}
     for iteration in range(len(PREREQS)*2):
         changed = False
         users = defaultdict(list)
-        for n,r in byname.items():
+        for n,r in sorted(byname.items()):
             if r['piece']=='BASE':
                 continue
             for d in effective[n]:
@@ -475,7 +475,7 @@ def generate(data):
             if r['kind']=='example' and r['piece']!='BASE':
                 for d in json.loads(r['dependencies']):
                     users[d].append(r['piece'])
-        for n,r in generated.items():
+        for n,r in sorted(generated.items()):
             if not choices[n]:
                 raise ValueError(f'no kernel-identical observed emission: {n}')
             def score(choice):
@@ -491,7 +491,7 @@ def generate(data):
                 r['regeneration'] = cmd
                 effective[n] = deps
                 changed = True
-        consumers = [(r,effective[n]) for n,r in byname.items() if r['piece']!='BASE']
+        consumers = [(r,effective[n]) for n,r in sorted(byname.items()) if r['piece']!='BASE']
         consumers += [(r,json.loads(r['dependencies'])) for r in population if r['kind'] in ('example','Lean.Parser.Command.attribute') and r['piece']!='BASE']
         fixture_users = defaultdict(set)
         for r,deps in consumers:
@@ -500,9 +500,9 @@ def generate(data):
                 cmd = d['regeneration'] or command_identity(d)
                 if cmd in fixtures and command_identity(r)!=cmd:
                     fixture_users[cmd].add(r['piece'])
-        for cmd, users in fixture_users.items():
+        for cmd, users in sorted(fixture_users.items()):
             if command_rows[cmd]['piece']=='BASE': continue
-            earliest = [p for p in users if all(available(q,p) for q in users)]
+            earliest = [p for p in sorted(users) if all(available(q,p) for q in sorted(users))]
             if not earliest:
                 continue  # Other support commands may move this pass; final judgment refuses unresolved sets.
             destination = earliest[0]
@@ -524,7 +524,7 @@ def generate(data):
                 needs = {byname[d]['piece'] for d in deps if command_identity(byname[d])!=identity
                          and command_identity(byname[d]) not in fixtures}
                 if consumer['piece'] in HOLDS: needs.add(consumer['piece'])
-                candidates = [p for p in PREREQS if all(available(p,d) for d in needs)]
+                candidates = [p for p in sorted(PREREQS) if all(available(p,d) for d in sorted(needs))]
                 destination = min(candidates,key=lambda p:(len(ancestry[p]),p))
                 old_piece = consumer['migration'] or consumer['piece']
                 for member in command_members[identity]:
@@ -544,7 +544,7 @@ def generate(data):
             r['disposition'] = 'owner-held'
             if HOLDS[held] not in r['note']: r['note'] += '; '+HOLDS[held]
     update_contexts(population)
-    fixture_consumers = [(r,[] if r['piece']=='BASE' else effective[n]) for n,r in byname.items()]
+    fixture_consumers = [(r,[] if r['piece']=='BASE' else effective[n]) for n,r in sorted(byname.items())]
     fixture_consumers += [(r,json.loads(r['dependencies'])) for r in population if r['kind'] in ('example','Lean.Parser.Command.attribute') and r['piece']!='BASE']
     fixture_placement(population,fixture_consumers,ancestry,write_basis=True)
     law_control_schedule(population,write=True)
@@ -678,9 +678,9 @@ def full_digests(data, root):
 
 
 def head_digest_export(checked):
-    return dict(declarations={n:d for n,d in checked.items() if not n.startswith(('command:','header:'))},
+    return dict(declarations={n:d for n,d in sorted(checked.items()) if not n.startswith(('command:','header:'))},
                 headCommandKeys=[dict(module=k[0][:-5].replace('/','.'),scope=k[1],kind=k[2],
-                                      digest=k[3],ordinal=k[4]) for k in checked.commands.values()])
+                                      digest=k[3],ordinal=k[4]) for k in sorted(checked.commands.values())])
 
 
 def head_population():
@@ -755,7 +755,7 @@ def review_reference(review, record, units, spec):
         raise ValueError('review artifact does not cover replacement: '+record)
     # Bind acceptance to the substantive reconciliation, not just its reusable name.
     # The review reference is added after review and cannot pin its own commit.
-    expected = {k:v for k,v in spec.items() if k!='review'}
+    expected = {k:v for k,v in sorted(spec.items()) if k!='review'}
     try:
         manifest = git('show',revisions[0]+':ConcreteSpec/landing/inventory.tsv').decode()
     except subprocess.CalledProcessError:
@@ -768,8 +768,8 @@ def review_reference(review, record, units, spec):
         except (ValueError,TypeError): continue
         if (isinstance(reviewed,dict) and candidate.get('disposition')=='replace' and
             candidate.get('piece')==spec['_piece'] and
-            {k:v for k,v in reviewed.items() if k!='review'}==
-            {k:v for k,v in expected.items() if k!='_piece'}):
+            {k:v for k,v in sorted(reviewed.items()) if k!='review'}==
+            {k:v for k,v in sorted(expected.items()) if k!='_piece'}):
             covered = True
     if not covered:
         raise ValueError('reviewed commit does not contain reconciliation: '+record)
@@ -820,7 +820,7 @@ def replacement_rows(rows, authored=None):
                              c['kind'],c['digest'],c['ordinal']))
         except (json.JSONDecodeError,TypeError):
             raise ValueError('invalid replacement JSON: '+r['name']) from None
-        for n in old:
+        for n in sorted(old):
             if n not in snapshot: raise ValueError('unknown replacement row: '+n)
             if n in replaced: raise ValueError('already-replaced row: '+n)
             if authored is not None and n not in authored:
@@ -834,17 +834,17 @@ def replacement_rows(rows, authored=None):
                 raise ValueError('replacement supersedes owner-held unit: '+n)
             replaced.add(n)
         review_reference(spec['review'],r['name'],old,dict(spec,_piece=r['piece']))
-        for n in new:
+        for n in sorted(new):
             if n in snapshot and snapshot[n]['piece']!=r['piece']:
                 raise ValueError('replacement target belongs to another piece: '+n)
             if n in snapshot and n not in old:
                 raise ValueError('replacement target is independent snapshot unit: '+n)
-        for target in [('declaration',n) for n in new]+[('command',k) for k in keys]:
+        for target in [('declaration',n) for n in sorted(new)]+[('command',k) for k in keys]:
             if target in targets: raise ValueError('shared replacement target: '+r['name'])
             targets.add(target)
         snapshot_commands = command_match_keys(rows)
-        for key in keys:
-            for n,k in snapshot_commands.items():
+        for key in sorted(keys):
+            for n,k in sorted(snapshot_commands.items()):
                 if k==key and snapshot['command:'+n]['piece']!=r['piece']:
                     raise ValueError('replacement command belongs to another piece: '+n)
                 if k==key:
@@ -858,11 +858,17 @@ def replacement_rows(rows, authored=None):
 
 def command_identity_groups(population):
     groups = defaultdict(list)
-    for key,identity in getattr(population,'presence',{}).items():
+    for key,identity in sorted(getattr(population,'presence',{}).items()):
         if len(identity)!=3 or type(identity[2]) is not int or identity[2]<0:
             raise ValueError('ambiguous command identity: '+json.dumps(key))
         groups[identity[:2]].append((identity[2],key))
-    for base,members in groups.items():
+    # full_digests assigns occurrences with a per-base counter starting at zero,
+    # incremented once for each emitted key. Thus genuine census groups always
+    # have exactly range(len(members)); this is a metadata-integrity invariant,
+    # not the reconciliation ambiguity test. The production-twins control checks
+    # genuine groups and rejects an injected duplicate occurrence. Assignment
+    # ambiguity below is separately exercised using real proof-edited Lean input.
+    for base,members in sorted(groups.items()):
         if sorted(i for i,k in members)!=list(range(len(members))):
             raise ValueError('ambiguous command identity occurrences: '+json.dumps(base))
     return groups
@@ -889,47 +895,58 @@ def replacement_progress(rows, reasons, checked, snapshot=None, *, fixture_slots
     else:
         old_groups = command_identity_groups(snapshot)
         command_identity_groups(checked)
-        for n in {n for r,s in records for n in s['supersedes'] if n.startswith('command:')}:
+        for n in sorted({n for r,s in records for n in s['supersedes'] if n.startswith('command:')}):
             key = snapshot_commands[n.removeprefix('command:')]
             if key not in getattr(snapshot,'presence',{}):
                 raise ValueError('missing snapshot command identity: '+n)
-        for key in commands:
+        for key in sorted(commands):
             if key not in getattr(checked,'presence',{}):
                 raise ValueError('missing HEAD command identity: '+json.dumps(key))
-        superseded = Counter(getattr(snapshot,'presence',{})[snapshot_commands[n.removeprefix('command:')]][:2]
-                             for r,s in records for n in s['supersedes'] if n.startswith('command:'))
         pinned = {k for r,s in records for k in s['_command_keys']}
-        retained = Counter(identity[:2] for k,identity in getattr(checked,'presence',{}).items()
-                           if k not in pinned)
+        head_groups = command_identity_groups(checked)
+        # Occurrence numbers are census-local, not evidence of which twin landed.
+        # Exact keys explain their own occurrences. Only unmatched occurrences need
+        # assignment; with multiple remaining snapshot keys no count can select one.
+        unmatched = {}
+        for base,members in sorted(old_groups.items()):
+            old_keys = {k for _,k in members}
+            head_keys = {k for _,k in head_groups.get(base,[]) if k not in pinned}
+            unmatched[base] = (sorted(old_keys-head_keys), sorted(head_keys-old_keys))
     for r,spec in records:
         refusal = None
-        for n in spec['supersedes']:
+        for n in sorted(spec['supersedes']):
             if n.startswith('command:'):
                 old_key = snapshot_commands[n.removeprefix('command:')]
                 if fixture_slots:
                     present = any(head_slots[k]==old_slots[old_key] and k not in spec['_command_keys']
-                                  for k in commands)
+                                  for k in sorted(commands))
                 else:
                     base = snapshot.presence[old_key][:2]
-                    present = retained[base] > len(old_groups[base])-superseded[base]
+                    candidates, occurrences = unmatched[base]
+                    present = old_key in commands and old_key not in pinned
+                    if not present and occurrences:
+                        if len(candidates)>1:
+                            refusal = 'ambiguous command occurrence assignment: '+json.dumps(base)
+                            break
+                        present = old_key in candidates
             else:
                 present = n in checked and spec['declarations'].get(n)!=checked[n]
             if present:
                 refusal = 'superseded unit still present: '+n
                 break
         if refusal is None:
-            for n,d in spec['declarations'].items():
+            for n,d in sorted(spec['declarations'].items()):
                 if n not in checked:
                     refusal = 'missing replacement declaration: '+n; break
                 if checked[n]!=d:
                     refusal = 'replacement digest mismatch: '+n; break
         if refusal is None:
-            for key in spec['_command_keys']:
+            for key in sorted(spec['_command_keys']):
                 if key not in commands:
-                    same_unit = any(k[:3]==key[:3] and k[4]==key[4] for k in commands)
+                    same_unit = any(k[:3]==key[:3] and k[4]==key[4] for k in sorted(commands))
                     refusal = ('replacement command digest mismatch: ' if same_unit else 'missing replacement command: ')+json.dumps(key)
                     break
-        for n in spec['supersedes']:
+        for n in sorted(spec['supersedes']):
             if n not in reasons: raise ValueError('replacement is not a progress unit: '+n)
             reasons[n] = refusal or ('reconciled by retirement' if spec['action']=='retire' else 'reconciled by replacement')
     return reasons
@@ -984,7 +1001,7 @@ def header_property(root, data):
 def progress_reasons(snapshot, checked):
     commands = {key:checked[name] for name,key in getattr(checked,'commands',{}).items()}
     reasons = {}
-    for name,digest in snapshot.items():
+    for name,digest in sorted(snapshot.items()):
         key = getattr(snapshot,'commands',{}).get(name)
         value = commands.get(key) if key is not None else checked.get(name)
         reasons[name] = (value if name.startswith('header:') and value and value.startswith('F01 property failure:') else
@@ -1045,7 +1062,7 @@ def judgment(rows, data, dependencies=True, extra_root=None):
     pieces = {r['name']:r for r in rows if r['record']=='piece'}
     if set(pieces) != set(PREREQS):
         raise ValueError('landing piece population mismatch')
-    for p in PREREQS:
+    for p in sorted(PREREQS):
         if pieces[p]['disposition'] != ('owner-held' if p in HOLDS else 'retain') or pieces[p]['note'] != HOLDS.get(p,''):
             raise ValueError(f'plan hold changed: {p}')
         if pieces[p]['prerequisites'] != ','.join(PREREQS[p]):
@@ -1084,7 +1101,7 @@ def judgment(rows, data, dependencies=True, extra_root=None):
         for k in ('kind','source','line','end_line','digest','dependencies','contract','term_digest'):
             if r[k] != e[k]:
                 raise ValueError(f'census mismatch ({k}): {e["name"]}')
-    for key in seen:
+    for key in sorted(seen):
         if key[0] in ('declaration','command','finding') and key not in expected_keys:
             raise ValueError(f'extraneous assignment: {key[1]}')
     for i in range(1,11):
@@ -1111,7 +1128,7 @@ def judgment(rows, data, dependencies=True, extra_root=None):
             out |= visit(d,active+[p])
         closure[p] = out
         return out
-    for p in pieces:
+    for p in sorted(pieces):
         visit(p,[])
     for r in rows:
         if r['record']=='declaration' and r['piece'] not in closure[r['contract']+'-close']:
@@ -1130,13 +1147,13 @@ def judgment(rows, data, dependencies=True, extra_root=None):
     for r in rows:
         if r['piece']=='BASE' and r['record']=='command' and command_keys[r['name']] not in baseline_commands[r['source']]:
             raise ValueError(f'baseline assignment has no parsed baseline command: {r["name"]}')
-    for r in decls.values():
+    for r in sorted(decls.values(), key=lambda value: json.dumps(value,sort_keys=True)):
         if r['piece']=='BASE' and not on_baseline(r):
             raise ValueError(f'baseline assignment has no baseline declaration: {r["name"]}')
     check_command_atomicity(rows)
     choices = emission_choices(data if extra_root is None else data[0]+data[1])
     effective = {}
-    for n,r in decls.items():
+    for n,r in sorted(decls.items()):
         if r['piece']=='BASE':
             # The freshly built baseline is a closed environment; its proof/body
             # is retained, rather than replaced by the source snapshot's version.
@@ -1154,7 +1171,7 @@ def judgment(rows, data, dependencies=True, extra_root=None):
             effective[n] = json.loads(r['dependencies'])
     errors = []
     if dependencies:
-        consumers = [(r,effective[n]) for n,r in decls.items()]
+        consumers = [(r,effective[n]) for n,r in sorted(decls.items())]
         consumers += [(r,json.loads(r['dependencies'])) for r in rows if r['kind'] in ('example','Lean.Parser.Command.attribute') and r['piece']!='BASE']
         for r,deps in consumers:
             for dep in deps:
@@ -1187,7 +1204,7 @@ def fixture_placement(rows, consumers, closure, write_basis=False):
         c = commands[cmd]
         pieces = {p for _,_,p in users[cmd]}
         if not pieces: raise ValueError('shared fixture has no consumer: '+cmd)
-        earliest = [p for p in pieces if all(p==q or p in closure[q] for q in pieces)]
+        earliest = [p for p in sorted(pieces) if all(p==q or p in closure[q] for q in sorted(pieces))]
         if not earliest or c['piece'] not in earliest:
             raise ValueError('shared fixture does not accompany earliest consumer: '+cmd+' placed '+c['piece']+' consumers '+','.join(sorted(pieces)))
         basis[cmd] = {'basis':'Lean-observed constant dependencies; earliest consumer in prerequisite partial order',
@@ -1228,7 +1245,7 @@ def shared_law_support(groups):
         for c in controls:
             if c['record']=='declaration':
                 laws[c['name']].add(law['name'])
-    return {n for n, users in laws.items() if len(users)>1}
+    return {n for n, users in sorted(laws.items()) if len(users)>1}
 
 
 def law_control_schedule(rows, write=False):
@@ -1258,18 +1275,18 @@ def relocation_causes(rows, normalize=False):
     declarations = {r['name']:r for r in rows if r['record']=='declaration'}
     fixtures = shared_fixtures(commands)
     members = defaultdict(list)
-    for r in declarations.values():
+    for r in sorted(declarations.values(), key=lambda value: json.dumps(value,sort_keys=True)):
         members[r['regeneration'] or command_identity(r)].append(r)
     graph = {n:{declarations[d]['regeneration'] or command_identity(declarations[d])
                 for r in [c]+members[n] for d in json.loads(r['dependencies'] or '[]')
-                if d in declarations} - {n} for n,c in commands.items()}
+                if d in declarations} - {n} for n,c in sorted(commands.items())}
     def reachable(n):
         seen, todo = set(), [n]
         while todo:
             node = todo.pop()
             if node in seen: continue
             seen.add(node)
-            todo.extend(graph.get(node,()))
+            todo.extend(sorted(graph.get(node,())))
         return seen
     closures = {n:reachable(n) for n in commands}
     groups = {}
@@ -1429,7 +1446,7 @@ def assign_law_controls(rows, effective_dependencies):
         for law, controls in groups:
             members = [law]+[c for c in controls if c['name'] not in shared]
             identities = {command_identity(r) for r in members}
-            members = [r for identity in identities for r in command_members[identity]]
+            members = [r for identity in sorted(identities) for r in command_members[identity]]
             needs = set(required_destinations[law['name']])
             needs.update(forced_destinations[i] for i in identities if i in forced_destinations)
             for member in members:
@@ -1439,7 +1456,7 @@ def assign_law_controls(rows, effective_dependencies):
                     d = declarations[dep]
                     if command_identity(d) not in identities and command_identity(d) not in fixtures:
                         needs.add(d['piece'])
-            candidates = [p for p in PREREQS if needs <= closures[p]]
+            candidates = [p for p in sorted(PREREQS) if needs <= closures[p]]
             if not candidates: raise ValueError('no law/control destination: '+law['name'])
             destination = effective(law) if effective(law) in candidates else min(candidates,key=lambda p:(len(closures[p]),p))
             old = effective(law)
@@ -1456,7 +1473,7 @@ def assign_law_controls(rows, effective_dependencies):
                 else: r.update(piece=destination,prerequisites=','.join(PREREQS[destination]))
                 annotate_move(r, law_cause(law, controls))
                 changed = True
-        for identity, members in command_members.items():
+        for identity, members in sorted(command_members.items()):
             authored = [r for r in members if r['record']=='declaration' and r['piece']!='BASE' and r['line']!='0']
             if not authored: continue
             current = effective(authored[0])
@@ -1466,7 +1483,7 @@ def assign_law_controls(rows, effective_dependencies):
             if not unavailable: continue
             needs = {declarations[d]['piece'] for member in authored for d in dependencies(member)
                      if command_identity(declarations[d]) not in fixtures and command_identity(declarations[d])!=identity}
-            candidates = [p for p in PREREQS if needs <= closures[p]]
+            candidates = [p for p in sorted(PREREQS) if needs <= closures[p]]
             destination = min(candidates,key=lambda p:(len(closures[p]),p))
             for r in members:
                 if r['piece']=='BASE': r['migration']=destination
@@ -1486,9 +1503,9 @@ def assign_law_controls(rows, effective_dependencies):
                 if identity in fixtures and command_identity(r)!=identity:
                     fixture_consumers[identity].append(r)
         order = {p:i for i,p in enumerate(PREREQS)}
-        for fixture,consumers in fixture_consumers.items():
+        for fixture,consumers in sorted(fixture_consumers.items()):
             pieces = {r['piece'] for r in consumers}
-            if any(all(p in closures[q] for q in pieces) for p in pieces): continue
+            if any(all(p in closures[q] for q in sorted(pieces)) for p in sorted(pieces)): continue
             destination = max(pieces,key=order.get)
             for consumer in consumers:
                 identity = command_identity(consumer)
@@ -1522,7 +1539,7 @@ def verify_plan_boundaries(rows):
         'ConcreteSpec.Core.CExpr.eval.match_5':'F06',
     }
     declarations = {r['name']:r for r in rows if r['record']=='declaration'}
-    for name,piece in expected.items():
+    for name,piece in sorted(expected.items()):
         r = declarations[name]
         assigned = r['migration'] if r['piece']=='BASE' else r['piece']
         if assigned!=piece:
@@ -1568,7 +1585,7 @@ def ensure_objects(remote=None):
         remote = remote or 'origin'
 
     missing = []
-    for name, ref in PIN_TAGS.items():
+    for name, ref in sorted(PIN_TAGS.items()):
         tag = 'refs/tags/spec-inventory/'+name
         try:
             local = git('rev-parse','--verify',tag+'^{commit}').decode().strip()
