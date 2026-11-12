@@ -93,7 +93,19 @@ def main():
                 raise SystemExit('declaration name scan accepted broken nominal boundary\n' +
                                  result.stdout + result.stderr)
             print('control: declaration names must be nominal text only')
+        require(compile_file('NumericDataControl',
+                'namespace ConcreteSpec\nstructure Var where\n  id : Nat\n'
+                'structure LocalNames where\n  entries : List (Var × String)\n'
+                'structure Name where\n  text : String\n'
+                'abbrev Numbers := List (Var × String)\nend ConcreteSpec\n'),
+                'numeric data shape mutant builds')
+        result = run(['lean', '--run', 'scripts/proofs/local_identity.lean',
+                      'NumericDataControl'], env=env)
+        if not result.returncode or 'Numbers must be exactly List Nat' not in result.stderr:
+            raise SystemExit('numeric data scan accepted a spelling table alias')
+        print('control: numeric data alias cannot hide a spelling table')
         accepted = {
+            'numeric list data': 'def numbers (_ : ConcreteSpec.Var) (_ : ConcreteSpec.Numbers) : Bool := true',
             'variable and declaration name function': 'def field (_ : ConcreteSpec.Var) (_ : ConcreteSpec.Name) : Bool := true',
             'variable and declaration name judgment': 'inductive Field : ConcreteSpec.Var → ConcreteSpec.Name → Prop where\n  | entry : Field ⟨0⟩ ⟨"field"⟩',
             'AST field name and atoms': 'inductive FieldAST where\n  | entry : ConcreteSpec.Name → List ConcreteSpec.Atom → FieldAST',
@@ -106,6 +118,9 @@ def main():
                          'ConcreteSpec.Spec.NameAccepted'], env=env), label + ' accepted')
             print('control: semantic scan accepts ' + label)
         controls = {
+            'character list spelling': 'def leak : List (ConcreteSpec.Var × List Char) := []',
+            'scalar list spelling': 'def leak : List (ConcreteSpec.Var × List Nat) := []',
+            'UTF-8 byte list spelling': 'def leak : List (ConcreteSpec.Var × List UInt8) := []',
             'Binder spelling structure': 'structure Hidden where\n  binder : ConcreteSpec.Binder\n  spelling : String\ndef leak (table : List Hidden) : Nat := table.length',
             'Binder spelling pair list': 'def leak (table : List (ConcreteSpec.Binder × String)) : Nat := table.length',
             'AST spelling payload': 'inductive Hidden where\n  | entry : ConcreteSpec.Var → String → Hidden\ndef leak (table : List Hidden) : Nat := table.length',

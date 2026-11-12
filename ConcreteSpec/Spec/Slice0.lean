@@ -53,7 +53,6 @@ structure Program where
   body : List Stmt
   ret : Atom
 
-
 /-- An atom in Core: a literal is `u8`, a local is read with `copy` (`u8` is Copy). -/
 def Atom.toCore : Atom → ConcreteSpec.Atom
   | .lit n => .int .u8 n

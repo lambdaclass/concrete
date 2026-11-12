@@ -26,6 +26,10 @@ structure Var where
   id : Nat
   deriving DecidableEq
 
+/-- Numeric data rather than source spelling scalars. For example, `[1, 2] : Numbers`
+can hold array elements, program text bytes or allocator generations; never identifier spellings. This alias changes no list operation. -/
+abbrev Numbers := List Nat
+
 end ConcreteSpec
 
 namespace ConcreteSpec.Core

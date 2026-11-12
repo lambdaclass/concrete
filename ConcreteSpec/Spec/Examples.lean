@@ -23,13 +23,13 @@ number alone: `t₀` is `⟨0⟩`; source spellings belong in `LocalNames`. A re
 it shows what the refused code would do if it ran anyway. -/
 
 /-- `struct Token {}` — empty, not `Copy`, so linear (OWN-D1). -/
-def token : StructDecl := { name := "Token", copy := false, fields := [] }
+def token : StructDecl := { name := ⟨"Token"⟩, copy := false, fields := [] }
 
 /-- `struct Copy Unit0 {}` — empty and declared `Copy` (TYPE-14). -/
-def unit0 : StructDecl := { name := "Unit0", copy := true, fields := [] }
+def unit0 : StructDecl := { name := ⟨"Unit0"⟩, copy := true, fields := [] }
 
 /-- `struct Pair { a: u8, b: u8 }` — not `Copy`. -/
-def pair : StructDecl := { name := "Pair", copy := false, fields := [("a", .int .u8), ("b", .int .u8)] }
+def pair : StructDecl := { name := ⟨"Pair"⟩, copy := false, fields := [(⟨"a"⟩, .int .u8), (⟨"b"⟩, .int .u8)] }
 
 def decls : Decls := [token, unit0, pair]
 
@@ -85,9 +85,9 @@ fn main() -> u8 {
 }
 ``` -/
 def moveThenConsume : Program :=
-  { decls, body := [.let_ (.name t₀) (.struct "Token") (.mk "Token" []),
-                    .let_ (.name u₁) (.struct "Token") (mv t₀),
-                    .letStruct "Token" [] (mv u₁)],
+  { decls, body := [.let_ (.name t₀) (.struct ⟨"Token"⟩) (.mk ⟨"Token"⟩ []),
+                    .let_ (.name u₁) (.struct ⟨"Token"⟩) (mv t₀),
+                    .letStruct ⟨"Token"⟩ [] (mv u₁)],
     ret := .int .u8 42 }
 
 example : check moveThenConsume = true := by decide
@@ -105,10 +105,10 @@ fn main() -> u8 {
 }
 ``` -/
 def useAfterMove : Program :=
-  { decls, body := [.let_ (.name t₀) (.struct "Token") (.mk "Token" []),
-                    .let_ (.name u₁) (.struct "Token") (mv t₀),
-                    .letStruct "Token" [] (mv t₀),
-                    .letStruct "Token" [] (mv u₁)],
+  { decls, body := [.let_ (.name t₀) (.struct ⟨"Token"⟩) (.mk ⟨"Token"⟩ []),
+                    .let_ (.name u₁) (.struct ⟨"Token"⟩) (mv t₀),
+                    .letStruct ⟨"Token"⟩ [] (mv t₀),
+                    .letStruct ⟨"Token"⟩ [] (mv u₁)],
     ret := .int .u8 42 }
 
 example : check useAfterMove = false := by decide
@@ -120,8 +120,8 @@ example : run useAfterMove 10 = .stuck .movedRead := by decide
 /-- Refused: a linear value read with `copy` (Q9.1: a linear local is only moved). Run anyway, the
 read is in the wrong mode. -/
 def copyLinear : Program :=
-  { decls, body := [.let_ (.name t₀) (.struct "Token") (.mk "Token" []),
-                    .letStruct "Token" [] (cp t₀)],
+  { decls, body := [.let_ (.name t₀) (.struct ⟨"Token"⟩) (.mk ⟨"Token"⟩ []),
+                    .letStruct ⟨"Token"⟩ [] (cp t₀)],
     ret := .int .u8 42 }
 
 example : check copyLinear = false := by decide
@@ -146,7 +146,7 @@ fn main() -> u8 {
 }
 ``` -/
 def notConsumed : Program :=
-  { decls, body := [.let_ (.name t₀) (.struct "Token") (.mk "Token" [])], ret := .int .u8 42 }
+  { decls, body := [.let_ (.name t₀) (.struct ⟨"Token"⟩) (.mk ⟨"Token"⟩ [])], ret := .int .u8 42 }
 
 example : check notConsumed = false := by decide
 
@@ -161,10 +161,10 @@ fn main() -> u8 {
 }
 ``` -/
 def copyTwice : Program :=
-  { decls, body := [.let_ (.name p₄) (.struct "Unit0") (.mk "Unit0" []),
-                    .let_ (.name q₅) (.struct "Unit0") (cp p₄),
-                    .letStruct "Unit0" [] (cp p₄),
-                    .letStruct "Unit0" [] (cp q₅)],
+  { decls, body := [.let_ (.name p₄) (.struct ⟨"Unit0"⟩) (.mk ⟨"Unit0"⟩ []),
+                    .let_ (.name q₅) (.struct ⟨"Unit0"⟩) (cp p₄),
+                    .letStruct ⟨"Unit0"⟩ [] (cp p₄),
+                    .letStruct ⟨"Unit0"⟩ [] (cp q₅)],
     ret := .int .u8 0 }
 
 example : check copyTwice = true := by decide
@@ -194,8 +194,8 @@ fn main() -> u8 {
 }
 ``` -/
 def destructureAdd : Program :=
-  { decls, body := [.let_ (.name p₄) (.struct "Pair") (.mk "Pair" [("a", .int .u8 40), ("b", .int .u8 2)]),
-                    .letStruct "Pair" [("a", .name x₁), ("b", .name y₆)] (mv p₄),
+  { decls, body := [.let_ (.name p₄) (.struct ⟨"Pair"⟩) (.mk ⟨"Pair"⟩ [(⟨"a"⟩, .int .u8 40), (⟨"b"⟩, .int .u8 2)]),
+                    .letStruct ⟨"Pair"⟩ [(⟨"a"⟩, .name x₁), (⟨"b"⟩, .name y₆)] (mv p₄),
                     .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₆))],
     ret := .copy s₂ }
 
@@ -212,8 +212,8 @@ fn main() -> u8 {
 }
 ``` -/
 def missingField : Program :=
-  { decls, body := [.let_ (.name p₄) (.struct "Pair") (.mk "Pair" [("a", .int .u8 40), ("b", .int .u8 2)]),
-                    .letStruct "Pair" [("a", .name x₁)] (mv p₄)],
+  { decls, body := [.let_ (.name p₄) (.struct ⟨"Pair"⟩) (.mk ⟨"Pair"⟩ [(⟨"a"⟩, .int .u8 40), (⟨"b"⟩, .int .u8 2)]),
+                    .letStruct ⟨"Pair"⟩ [(⟨"a"⟩, .name x₁)] (mv p₄)],
     ret := .copy x₁ }
 
 example : check missingField = false := by decide
@@ -227,8 +227,8 @@ fn main() -> u8 {
 }
 ``` -/
 def wildcardField : Program :=
-  { decls, body := [.let_ (.name p₄) (.struct "Pair") (.mk "Pair" [("a", .int .u8 42), ("b", .int .u8 0)]),
-                    .letStruct "Pair" [("a", .name x₁), ("b", .wild)] (mv p₄)],
+  { decls, body := [.let_ (.name p₄) (.struct ⟨"Pair"⟩) (.mk ⟨"Pair"⟩ [(⟨"a"⟩, .int .u8 42), (⟨"b"⟩, .int .u8 0)]),
+                    .letStruct ⟨"Pair"⟩ [(⟨"a"⟩, .name x₁), (⟨"b"⟩, .wild)] (mv p₄)],
     ret := .copy x₁ }
 
 example : check wildcardField = true := by decide
@@ -280,8 +280,8 @@ fn main() -> u8 {
 }
 ``` -/
 def fieldOverflowTrap : Program :=
-  { decls, body := [.let_ (.name p₄) (.struct "Pair") (.mk "Pair" [("a", .int .u8 200), ("b", .int .u8 100)]),
-                    .letStruct "Pair" [("a", .name x₁), ("b", .name y₆)] (mv p₄),
+  { decls, body := [.let_ (.name p₄) (.struct ⟨"Pair"⟩) (.mk ⟨"Pair"⟩ [(⟨"a"⟩, .int .u8 200), (⟨"b"⟩, .int .u8 100)]),
+                    .letStruct ⟨"Pair"⟩ [(⟨"a"⟩, .name x₁), (⟨"b"⟩, .name y₆)] (mv p₄),
                     .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₆))],
     ret := .copy s₂ }
 
@@ -300,9 +300,9 @@ fn main() -> u8 {
 }
 ``` -/
 def fieldOverflowMoved : Program :=
-  { decls, body := [.let_ (.name p₄) (.struct "Pair") (.mk "Pair" [("a", .int .u8 200), ("b", .int .u8 100)]),
-                    .let_ (.name q₅) (.struct "Pair") (mv p₄),
-                    .letStruct "Pair" [("a", .name x₁), ("b", .name y₆)] (mv q₅),
+  { decls, body := [.let_ (.name p₄) (.struct ⟨"Pair"⟩) (.mk ⟨"Pair"⟩ [(⟨"a"⟩, .int .u8 200), (⟨"b"⟩, .int .u8 100)]),
+                    .let_ (.name q₅) (.struct ⟨"Pair"⟩) (mv p₄),
+                    .letStruct ⟨"Pair"⟩ [(⟨"a"⟩, .name x₁), (⟨"b"⟩, .name y₆)] (mv q₅),
                     .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₆))],
     ret := .copy s₂ }
 
@@ -313,8 +313,8 @@ example : run fieldOverflowMoved 10 = .trap .arithmeticOverflow := by decide
 /-- Accepted with the facts in range: the known sum fits, and the program exits with it. The
 known field values make no program with a fitting sum fail to check. -/
 def fieldSumFits : Program :=
-  { decls, body := [.let_ (.name p₄) (.struct "Pair") (.mk "Pair" [("a", .int .u8 200), ("b", .int .u8 55)]),
-                    .letStruct "Pair" [("a", .name x₁), ("b", .name y₆)] (mv p₄),
+  { decls, body := [.let_ (.name p₄) (.struct ⟨"Pair"⟩) (.mk ⟨"Pair"⟩ [(⟨"a"⟩, .int .u8 200), (⟨"b"⟩, .int .u8 55)]),
+                    .letStruct ⟨"Pair"⟩ [(⟨"a"⟩, .name x₁), (⟨"b"⟩, .name y₆)] (mv p₄),
                     .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₆))],
     ret := .copy s₂ }
 
@@ -373,8 +373,8 @@ fn f(x: u8) -> u8 {
 }
 ``` -/
 def partialKnownRefused : List Stmt :=
-  [.let_ (.name p₄) (.struct "Pair") (.mk "Pair" [("a", .copy x₀), ("b", .int .u8 200)]),
-   .letStruct "Pair" [("a", .name x₁), ("b", .name y₆)] (mv p₄),
+  [.let_ (.name p₄) (.struct ⟨"Pair"⟩) (.mk ⟨"Pair"⟩ [(⟨"a"⟩, .copy x₀), (⟨"b"⟩, .int .u8 200)]),
+   .letStruct ⟨"Pair"⟩ [(⟨"a"⟩, .name x₁), (⟨"b"⟩, .name y₆)] (mv p₄),
    .let_ (.name s₂) u8 (.add (.copy y₆) (.int .u8 100)),
    .let_ (.name z₃) u8 (.add (.copy x₁) (.copy s₂))]
 
@@ -391,8 +391,8 @@ fn f(x: u8) -> u8 {
 }
 ``` -/
 def partialUnknownRefused : List Stmt :=
-  [.let_ (.name p₄) (.struct "Pair") (.mk "Pair" [("a", .copy x₀), ("b", .int .u8 200)]),
-   .letStruct "Pair" [("a", .name x₁), ("b", .name y₆)] (mv p₄),
+  [.let_ (.name p₄) (.struct ⟨"Pair"⟩) (.mk ⟨"Pair"⟩ [(⟨"a"⟩, .copy x₀), (⟨"b"⟩, .int .u8 200)]),
+   .letStruct ⟨"Pair"⟩ [(⟨"a"⟩, .name x₁), (⟨"b"⟩, .name y₆)] (mv p₄),
    .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₆))]
 
 example : bodyOkB decls inputCtx partialUnknownRefused (.copy s₂) = false := by decide
@@ -456,7 +456,7 @@ fn main() -> u8 {
 }
 ``` -/
 def wildLinear : Program :=
-  { decls, body := [.let_ .wild (.struct "Token") (.mk "Token" [])], ret := .int .u8 42 }
+  { decls, body := [.let_ .wild (.struct ⟨"Token"⟩) (.mk ⟨"Token"⟩ [])], ret := .int .u8 42 }
 
 example : check wildLinear = false := by decide
 
@@ -469,8 +469,8 @@ example : check wrongReturnType = false := by decide
 /-! ### Representation and observations of the examples -/
 
 /-- `Token` has no bytes, and decoding no bytes at type `Token` gives the empty struct (Part 2). -/
-example : Rep.encodeVal (.struct "Token" []) = [] ∧
-    Rep.decodeVal decls (.struct "Token") [] = some (.struct "Token" []) := by decide
+example : Rep.encodeVal (.struct ⟨"Token"⟩ []) = [] ∧
+    Rep.decodeVal decls (.struct ⟨"Token"⟩) [] = some (.struct ⟨"Token"⟩ []) := by decide
 
 /-- `moveThenConsume` exits with status 42 (Part 7). -/
 example : (Observe.observe true (run moveThenConsume 10)).map Observe.Observation.status = some 42 := by

@@ -126,7 +126,7 @@ branching. Without a range there is no `else` (the whole view always opens). Ele
 /-- A source's value at run time: an array of `len` elements, or text with its bytes. -/
 inductive Source where
   | array (len : Nat)
-  | text (bytes : List Nat)
+  | text (bytes : Numbers)
   deriving DecidableEq, Repr
 
 /-- The length of a source: elements for an array, bytes for text. -/
@@ -136,7 +136,7 @@ def Source.len : Source → Nat
 
 /-- `i` is a UTF-8 scalar boundary of the text `bs` (R4 F4.2): `0`, the length, or an offset
 whose byte is not a continuation byte (`x / 64 = 2` is `0b10xxxxxx`). -/
-def boundary (bs : List Nat) (i : Nat) : Bool :=
+def boundary (bs : Numbers) (i : Nat) : Bool :=
   i == 0 || i == bs.length ||
     (match bs[i]? with
      | some x => x / 64 != 2
@@ -391,7 +391,7 @@ not yet joined to the access rules `Ok` in one theorem (they are separate fragme
 -/
 
 /-- Memory: each owner array place and its elements. -/
-abbrev Mem := AList Var (List Nat)
+abbrev Mem := AList Var Numbers
 
 /-- The element `j` of place `p`. -/
 def elem (μ : Mem) (p : Var) (j : Nat) : Option Nat := (AList.lookup μ p).bind (·[j]?)
@@ -425,7 +425,7 @@ inductive VStmt where
 /-- The outcome of a run: the memory and the values output, a trap, stuck (an unbound name or a
 write through a shared view, which the access rules refuse), or out of fuel. -/
 inductive VR where
-  | ok (μ : Mem) (out : List Nat)
+  | ok (μ : Mem) (out : Numbers)
   | trap
   | stuck
   | outOfFuel
@@ -434,7 +434,7 @@ inductive VR where
 /-- The run. The fuel bounds the depth of the run's recursion, not the number of statements it
 executes: each statement passes one unit less to what follows it, and a block and the statements
 after it each start with the fuel left at its open. The view is bound inside its block only. -/
-def vrun : Nat → Mem → Views → List Nat → List VStmt → VR
+def vrun : Nat → Mem → Views → Numbers → List VStmt → VR
   | 0, _, _, _, _ => .outOfFuel
   | _ + 1, μ, _, out, [] => .ok μ out
   | n + 1, μ, V, out, .get v i :: rest => match AList.lookup V v with
@@ -520,7 +520,7 @@ well formed. A text range on scalar boundaries of well-formed text is itself wel
 def cont (c : Nat) : Bool := 0x80 ≤ c && c ≤ 0xBF
 
 /-- One well-formed UTF-8 encoded scalar. -/
-def isScalar : List Nat → Bool
+def isScalar : Numbers → Bool
   | [x] => x < 0x80
   | [x, c] => 0xC2 ≤ x && x ≤ 0xDF && cont c
   | [x, c, d] =>
@@ -533,12 +533,12 @@ def isScalar : List Nat → Bool
   | _ => false
 
 /-- Well-formed UTF-8: a sequence of well-formed scalars. -/
-inductive Utf8 : List Nat → Prop where
+inductive Utf8 : Numbers → Prop where
   | nil : Utf8 []
   | cons {s rest} : isScalar s = true → Utf8 rest → Utf8 (s ++ rest)
 
 /-- The bytes of the text range `[a, b)`. -/
-def textSlice (bs : List Nat) (a b : Nat) : List Nat := (bs.drop a).take (b - a)
+def textSlice (bs : Numbers) (a b : Nat) : Numbers := (bs.drop a).take (b - a)
 
 /-- `"é!"` is well formed, and so is its range `[0, 2)`, `"é"`. -/
 example : Utf8 [0xC3, 0xA9, 0x21] := .cons (s := [0xC3, 0xA9]) rfl (.cons (s := [0x21]) rfl .nil)

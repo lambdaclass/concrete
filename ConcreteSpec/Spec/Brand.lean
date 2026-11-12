@@ -68,31 +68,31 @@ inductive Stmt where
 /-- The static check, from the brand names in use `B` and the context `Γ` to the context at the
 end. A brand binder must be fresh in `B` (generative); brand equality is name equality
 (nominal). -/
-inductive Ok : List Nat → Ctx → List Stmt → Ctx → Prop where
-  | nil {B Γ} : Ok B Γ [] Γ
-  | newAlloc {B Γ a β rest Γ'} : AList.lookup Γ a = none → β ∉ B →
+inductive Ok : Numbers → Ctx → List Stmt → Ctx → Prop where
+  | nil {B : Numbers} {Γ} : Ok B Γ [] Γ
+  | newAlloc {B : Numbers} {Γ a β rest Γ'} : AList.lookup Γ a = none → β ∉ B →
       Ok (β :: B) ((a, .alloc β) :: Γ) rest Γ' → Ok B Γ (.newAlloc a β :: rest) Γ'
-  | alloc {B Γ h a β rest Γ'} : AList.lookup Γ a = some (.alloc β) → AList.lookup Γ h = none →
+  | alloc {B : Numbers} {Γ h a β rest Γ'} : AList.lookup Γ a = some (.alloc β) → AList.lookup Γ h = none →
       Ok B ((h, .heap β) :: Γ) rest Γ' → Ok B Γ (.alloc h a :: rest) Γ'
-  | use {B Γ h a β rest Γ'} : AList.lookup Γ h = some (.heap β) →
+  | use {B : Numbers} {Γ h a β rest Γ'} : AList.lookup Γ h = some (.heap β) →
       AList.lookup Γ a = some (.alloc β) →
       Ok B Γ rest Γ' → Ok B Γ (.use h a :: rest) Γ'
-  | free {B Γ h a β rest Γ'} : AList.lookup Γ h = some (.heap β) →
+  | free {B : Numbers} {Γ h a β rest Γ'} : AList.lookup Γ h = some (.heap β) →
       AList.lookup Γ a = some (.alloc β) →
       Ok B (AList.erase Γ h) rest Γ' → Ok B Γ (.free h a :: rest) Γ'
-  | release {B Γ a β rest Γ'} : AList.lookup Γ a = some (.alloc β) → NoHeap Γ β →
+  | release {B : Numbers} {Γ a β rest Γ'} : AList.lookup Γ a = some (.alloc β) → NoHeap Γ β →
       Ok B (AList.erase Γ a) rest Γ' → Ok B Γ (.release a :: rest) Γ'
-  | reset {B Γ a' a β β' rest Γ'} : AList.lookup Γ a = some (.alloc β) → NoHeap Γ β →
+  | reset {B : Numbers} {Γ a' a β β' rest Γ'} : AList.lookup Γ a = some (.alloc β) → NoHeap Γ β →
       AList.lookup (AList.erase Γ a) a' = none → β' ∉ B →
       Ok (β' :: B) ((a', .alloc β') :: AList.erase Γ a) rest Γ' → Ok B Γ (.reset a' a β' :: rest) Γ'
-  | while_ {B Γ a β0 β βx β'' body rest Γ'} : AList.lookup Γ a = some (.alloc β0) → NoHeap Γ β0 →
+  | while_ {B : Numbers} {Γ a β0 β βx β'' body rest Γ'} : AList.lookup Γ a = some (.alloc β0) → NoHeap Γ β0 →
       β ∉ B → βx ∉ B →
       Ok (β :: B) ((a, .alloc β) :: AList.erase Γ a) body ((a, .alloc β'') :: AList.erase Γ a) →
       Ok (βx :: B) ((a, .alloc βx) :: AList.erase Γ a) rest Γ' →
       Ok B Γ (.while_ a β βx body :: rest) Γ'
 
 /-- Every brand in the context is a brand name in use. -/
-def BrandsIn (B : List Nat) (Γ : Ctx) : Prop :=
+def BrandsIn (B : Numbers) (Γ : Ctx) : Prop :=
   ∀ e ∈ Γ, ∀ β, (e.2 = .alloc β ∨ e.2 = .heap β) → β ∈ B
 
 /-! ### The ghost run -/
@@ -111,7 +111,7 @@ order. -/
 structure State where
   env : AList Var Val
   next : Nat
-  gen : List Nat
+  gen : Numbers
   deriving DecidableEq
 
 /-- Generate a brand for allocator `a`. -/

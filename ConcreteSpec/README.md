@@ -16,7 +16,9 @@ or refused (`check p = false`). You can read it without reading any proof.
 
 [`Diagnostics/`](Diagnostics/) owns per-program spelling tables through `Elaborated`.
 Semantic operations consume code only; the required `local_identity` gate checks this boundary
-from elaborated types, including aliases and structural Var/String pairings.
+from elaborated types, including aliases and structural Var/spelling pairings (strings, characters, scalar lists and UTF-8 byte lists).
+Numeric lists use the definitionally equal `Numbers` alias; declaration names use explicit
+`⟨"field"⟩` literals.
 
 [`Proofs/`](Proofs/) says why the rules hang together. Read it only to check a claim.
 

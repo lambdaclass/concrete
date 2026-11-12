@@ -11,10 +11,17 @@ def combine (a b : Bool × Bool) : Bool × Bool := (a.1 || b.1, a.2 || b.2)
 -- Declaration names are nominal text, not local spellings. All other inductive
 -- constructors are inspected, including ASTs, containers, structures and indices.
 partial def carriers (e : Expr) (seen : List Name := []) : StateRefT (Std.HashSet Expr) MetaM (Bool × Bool) := do
-  let e ← normalType e
+  if e.isConstOf `ConcreteSpec.Numbers then return (false, false)
+  -- Preserve proposition indices as declared: reducing membership on numeric
+  -- data expands its list implementation and discards the data annotation.
+  let e ← if ← isProp e then instantiateMVars e else normalType e
   if e.isConstOf `ConcreteSpec.Var then return (true, false)
   if e.isConstOf `ConcreteSpec.Name then return (false, false)
-  if e.isConstOf `String || e.isConstOf `ConcreteSpec.LocalNames then return (false, true)
+  -- Spellings occur as strings, characters, scalar lists and UTF-8 byte lists
+  -- in the surface spec. Nat alone remains numeric (in particular, Var.id).
+  let textList := e.isAppOfArity `List 1 &&
+    (e.getAppArgs[0]!.isConstOf `Nat || e.getAppArgs[0]!.isConstOf `UInt8)
+  if textList || e.isConstOf `Char || e.isConstOf `String || e.isConstOf `ConcreteSpec.LocalNames then return (false, true)
   if e.isForall then
     return ← forallTelescopeReducing e fun xs result => do
       let mut found ← carriers result seen
@@ -22,11 +29,16 @@ partial def carriers (e : Expr) (seen : List Name := []) : StateRefT (Std.HashSe
       return found
   let .const n levels := e.getAppFn | return (false, false)
   let mut found := (false, false)
+  let mut signature ← inferType e.getAppFn
   for arg in e.getAppArgs do
+    signature ← normalType signature
     if ← isType arg then
       found := combine found (← carriers arg seen)
     else
-      found := combine found (← carriers (← inferType arg) seen)
+      -- Use the declared index type: inferring a cons expression would erase
+      -- the Numbers annotation and mistake numeric data for spelling scalars.
+      found := combine found (← carriers signature.bindingDomain! seen)
+    signature := signature.bindingBody!.instantiate1 arg
   if seen.contains n then return found
   if (← get).contains e then return found
   modify (·.insert e)
@@ -80,6 +92,10 @@ def main (args : List String) : IO Unit := do
   unless isStructure env `ConcreteSpec.Name && nameCtor.numFields == 1 &&
       nameCtor.numParams == 0 && nameCtor.type.bindingDomain! == mkConst `String do
     throw (IO.userError "declaration Name must have exactly one String field")
+  let some (.defnInfo numbers) := env.find? `ConcreteSpec.Numbers
+    | throw (IO.userError "missing numeric list alias")
+  unless numbers.value == mkApp (mkConst `List [Level.zero]) (mkConst `Nat) do
+    throw (IO.userError "Numbers must be exactly List Nat")
   -- Reverse reachability visits each dependency edge once, including recursive components.
   let mut users : Std.HashMap Name (Array Name) := {}
   for (n, ci) in env.constants.toList do
