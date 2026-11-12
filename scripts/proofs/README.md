@@ -1,7 +1,8 @@
-# Axiom property check and named-theorem golden
+# Proof checks and axiom-check design
 
-Status: design, 2026-11-09. This document records the target design; it does not
-change executable checking behavior. The current P/A/G contract remains documented
+Status: current toolchain documentation (2026-11-11) and axiom-check design
+(2026-11-09). The axiom-check design below does not change executable behavior.
+The current P/A/G contract remains documented
 in the header of `axioms.sh`, including its full per-theorem golden comparison.
 
 The governing owner decisions are 2026-11-08, “yes to 6 things”, item 2 (the
@@ -37,7 +38,7 @@ Golden equality pins axiom accounting, not statement or proof-body equality.
 
 ## Verified Lean API evidence
 
-`lean-toolchain` pins `leanprover/lean4:v4.34.1`. Source paths below are relative
+`lean-toolchain` pins `leanprover/lean4:v4.35.0`. Source paths below are relative
 to `$(lean --print-prefix)/src/lean/Lean`. Source inspection and successful Lean
 `#check` probes establish the API names and limitations below. These existing APIs
 do not supply general persistent helper provenance.
@@ -119,8 +120,8 @@ or replace checking independently generated equations.
 ## Interim state and implementation prerequisites
 
 Until compiler provenance is available and validated across imports, keep the
-current executable full-theorem golden check as an **interim** safeguard. This
-branch changes documentation and comments only. It introduces no baseline mode,
+current executable full-theorem golden check as an **interim** safeguard. The
+axiom-check design introduces no baseline mode,
 name-based filtering, manual allowlist, or helper-removal exception. The interim
 full golden is not the agreed end state.
 
@@ -178,7 +179,67 @@ realize equations or otherwise change the enumerated population.
 After implementation, run the property/golden gate and focused compiler-provenance
 fixtures under `nix develop` on concrete-ci-2, using `bounded_run` from
 `scripts/checks/lib/bounded.sh`. Record results against the exact candidate SHA
-and toolchain identity. This design round makes no runtime or implementation
+and toolchain identity. The axiom-check design makes no runtime or implementation
 acceptance claim. Compiler metadata remains within the existing compiler trust
 boundary; protection against hostile metaprograms forging it is not established
 by these checks.
+
+## Lean 4.35.0 toolchain migration
+
+The project and Nix official-release archive pin Lean 4.35.0; CI's lean-action
+reads the same `lean-toolchain`. All four Nix asset hashes are the release's
+published SHA-256 digests. The existing LCB revision `4bea4b3` builds with 4.35.0
+as a Lake dependency, so its source pin is retained (its standalone toolchain
+file still declares 4.34.1). No theorem or compiler definition required a change.
+
+`external.pins` pins both Lean tools' toolchains as well as their revisions.
+The exporter is now the upstream v4.35.0 revision, matching our olean format.
+`lake_tool.sh` compares each revision's checked-in declaration with its pin,
+including on cache hits, and dispatches `elan run --install TOOLCHAIN lake build`
+without rewriting the declaration. External tool installations use the cache-local
+`${CONCRETE_EXT_TOOLS}/elan-<identity>` home (or `~/.cache/concrete-ext/elan-<identity>`), overriding
+ambient `ELAN_HOME` only for pinned tool builds, to protect shared user toolchains
+from Nix elan patching. Project builds and queries retain the caller’s `ELAN_HOME`.
+Both `ELAN_TOOLCHAIN` and `LEAN_PATH` are cleared.
+Use `nix develop .#extcheck` for this gate; Rust is absent from the default shell.
+The shell supplies `CONCRETE_EXT_ELAN` by absolute path only; it adds no Lean,
+Lake or leanchecker proxies to PATH, preserving the caller’s project toolchain.
+The required root `external_toolchain.sh` control invokes the production driver
+against local sources and executable stubs. It checks fresh dispatch, cache reuse,
+corrupted cache declarations, pin mismatches, exporter/project agreement, and
+isolation from ambient Lake, toolchain overrides and the shared elan home.
+It checks the actual extcheck PATH and rejects a simulated proxy leak as a negative
+control, and rejects global-home redirection, redirection after locking, premature locking
+and unscoped tool builds. All post-build stubs assert the caller home and an unlocked
+cache; build stubs assert the locked phase. The full driver completes, including fidelity and corruption
+controls, using the production inventory reader and synthetic checker inputs. Resolved
+elan path/version keys isolated homes and Lake tool trees, whose keys also include their declared toolchain.
+Nanoda trees use the resolved cargo and rustc paths plus `rustc -vV`. Every tool tree includes the hash
+of the self-contained `lake_tool.sh` recipes (including the nanoda stack patch). CI keys
+the external cache on the pins, builder, project toolchain and both Nix flake files.
+
+R-0208's measured-build policies and receipts under `legacy/` describe the frozen
+compiler and remain historical evidence, as does `scripts/oracle/ORACLE.lock`.
+They do not accept this new checker or authorize receipts for it. The current
+proof gates establish axiom accounting, fresh kernel replay and independent
+re-checks for the current sources; they do not inherit legacy checker acceptance.
+
+The 4.35.0 axiom golden adds exactly the following compiler-generated theorems
+under `ConcreteSpec.Surface0`. Each proves Boolean reflection for its existing
+`inferInstanceAs` decidability instance in `Spec/Surface0.lean`; each has an empty
+transitive axiom set. No previous row changes or disappears.
+
+| Added suffix | Existing predicate / instance |
+| --- | --- |
+| `instDecidableBidiControl._proof_1` | bidirectional control character |
+| `instDecidableByteEscape._proof_1` | byte escape and decoded byte |
+| `instDecidableByteRaw._proof_1` | raw byte literal character |
+| `instDecidableCommentRaw._proof_1` | raw comment character |
+| `instDecidableControl._proof_1` | control character |
+| `instDecidableForbiddenRaw._proof_1` | forbidden raw character |
+| `instDecidableIdentContinue._proof_1` | identifier continuation character |
+| `instDecidableIdentStart._proof_1` | identifier starting character |
+| `instDecidableScalar._proof_1` | UTF-8 scalar |
+| `instDecidableStringEscape._proof_1` | string escape and decoded scalar |
+| `instDecidableStringRaw._proof_1` | raw string character |
+| `instDecidableWhitespace._proof_1` | whitespace character |

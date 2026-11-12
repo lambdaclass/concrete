@@ -1,4 +1,26 @@
 #!/usr/bin/env bash
+# Toolchain isolation contract:
+# Project builds, population queries and exporter execution use the caller's Lake on PATH
+# and the caller's ELAN_HOME unchanged. ELAN_TOOLCHAIN and LEAN_PATH are cleared so the
+# project's lean-toolchain governs resolution.
+# Only pinned Lean tool builds use an identity-keyed cache-local ELAN_HOME, via CONCRETE_EXT_ELAN
+# (absolute Nix elan in .#extcheck; otherwise the caller's elan). No elan proxies are
+# added to PATH. nanoda is built with cargo, without changing the caller's ELAN_HOME.
+# TOOLS defaults to ~/.cache/concrete-ext: it contains isolated elan installations,
+# source/build trees keyed by revision and recipe hash, and .built completion markers.
+# Lake trees additionally key their toolchain and resolved elan path/version; nanoda trees key
+# resolved cargo/rustc paths and rustc -vV measured in the build checkout. CI's outer cache key
+# additionally includes external.pins, lake_tool.sh, lean-toolchain, flake.nix and flake.lock.
+# nanoda also retains source-nanoda-<rev> (HEAD and cleanliness checked on every run) and
+# registry-<identity> (Cargo registry downloads). Completed cache hits need no nanoda network.
+# Cargo builds run outside HOME, with a private CARGO_HOME and env -i allowlisting only PATH,
+# HOME, optional RUSTUP_HOME/RUSTUP_TOOLCHAIN, and explicit CARGO_HOME/RUSTC; caller Cargo
+# configuration, wrappers and profile/target overrides are ignored. Builds enforce --locked
+# and refuse .cargo/config or .cargo/config.toml in the build directory or any ancestor.
+# Project preparation precedes the cache lock. Tool installation/build/publication and
+# verification hold TOOLS/.lock; after unlocking only finished tool artifacts are read,
+# never the isolated elan home. Builds publish private trees by rename.
+#
 # INDEPENDENT RE-CHECK: every theorem of the specification exported with lean4export and re-checked
 # by two checkers that share no code with the Lean kernel or with each other.
 #
@@ -29,17 +51,18 @@
 #   N  names whose dotted spellings collide, and a non-ASCII one, are encoded apart and alike by both
 #      renderers (every comparison is by that injective encoding).
 #
-# Tools are built once per pinned SHA into $CONCRETE_EXT_TOOLS (default ~/.cache/concrete-ext):
-# lean4export with THIS toolchain (it reads our .olean files), con-leche with its own (elan installs
-# it), nanoda with cargo (CI runs this script in `nix develop .#extcheck`, which adds cargo and rustc
-# to the gate userland).
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/../checks/lib/gate_env.sh" || exit 2
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SELF_DIR/../.." && pwd)"
 cd "$ROOT_DIR"
+# Resolve once before any tool recipe changes directory or creates symlinks.
+TOOLS=$(realpath -m "${CONCRETE_EXT_TOOLS:-$HOME/.cache/concrete-ext}") || exit 2
+unset ELAN_TOOLCHAIN LEAN_PATH
 CHECK_NAME=PROOF-EXTERNAL
 source scripts/proofs/lib.sh
+mkdir -p "$TOOLS" && exec 9> "$TOOLS/.lock" && flock 9 \
+  || { echo "error: cannot lock the tool cache $TOOLS" >&2; exit 2; }
 # A pre-push hook in a linked worktree exports repository-local Git variables; without clearing
 # them, `git -C "$tool" rev-parse HEAD` reads this repository's HEAD instead of the tool's
 # (the sandbox helper, ISS-0015).
@@ -50,41 +73,18 @@ git_sandbox || exit 2
 . scripts/proofs/external.pins
 EXPECT_FORMAT=3.1.0
 INV="python3 scripts/proofs/export_inventory.py"
-TOOLS="${CONCRETE_EXT_TOOLS:-$HOME/.cache/concrete-ext}"
 TOOLCHAIN="$(cat lean-toolchain)"
 
-# The cache is shared by every run of this user on the machine (a self-hosted runner's HOME persists,
-# and worktrees share it): building holds an exclusive lock on it, builds in a private directory and
-# publishes the finished one with a rename, so no run sees, or removes, another's half-built tool.
-mkdir -p "$TOOLS" && exec 9> "$TOOLS/.lock" && flock 9 \
-  || { echo "error: cannot lock the tool cache $TOOLS" >&2; exit 2; }
-# publish DIR BUILD-COMMAND… → runs the command in DIR.partial.$$ (already cloned) and renames it to DIR
-publish() {
-  local dir=$1 work="$1.partial.$$"; shift
-  (cd "$work" && "$@" >&2) && touch "$work/.built" && rm -rf "$dir" && mv "$work" "$dir"
-}
-# build_lake_tool NAME URL REV TOOLCHAIN-OVERRIDE TARGET → prints the source dir; builds once per SHA
-build_lake_tool() {
-  local name=$1 url=$2 rev=$3 tc=$4 target=$5
-  # The toolchain override is part of the build's identity (an exporter built with another toolchain
-  # cannot read this build's .olean files), so it names the directory alongside the SHA.
-  local dir="$TOOLS/$name-$rev${tc:+-$(printf '%s' "$tc" | tr -c 'A-Za-z0-9._-' '_')}"
-  if [ ! -f "$dir/.built" ]; then
-    local work="$dir.partial.$$"; rm -rf "$work"
-    git clone -q "$url" "$work" >&2 && git -C "$work" checkout -q "$rev" >&2 || return 1
-    [ -n "$tc" ] && echo "$tc" > "$work/lean-toolchain"
-    publish "$dir" "$LAKE" build "$target" || { rm -rf "$work"; return 1; }
-  fi
-  [ "$(git -C "$dir" rev-parse HEAD)" = "$rev" ] || return 1
-  echo "$dir"
-}
+. scripts/proofs/lake_tool.sh
 
 echo "=== P: pinned tools ==="
-EXPORT_DIR=$(build_lake_tool lean4export "$LEAN4EXPORT_URL" "$LEAN4EXPORT_REV" "$TOOLCHAIN" lean4export) \
+[ "$LEAN4EXPORT_TOOLCHAIN" = "$TOOLCHAIN" ] \
+  || { no "exporter pin $LEAN4EXPORT_TOOLCHAIN differs from project $TOOLCHAIN"; finish; }
+EXPORT_DIR=$(build_lake_tool "$TOOLS" lean4export "$LEAN4EXPORT_URL" "$LEAN4EXPORT_REV" "$LEAN4EXPORT_TOOLCHAIN" lean4export) \
   && ok "lean4export at $LEAN4EXPORT_REV, built with $TOOLCHAIN" \
   || { no "could not build lean4export at $LEAN4EXPORT_REV"; finish; }
-CHECK_DIR=$(build_lake_tool con-leche "$CONLECHE_URL" "$CONLECHE_REV" "" con-leche) \
-  && ok "con-leche at $CONLECHE_REV" \
+CHECK_DIR=$(build_lake_tool "$TOOLS" con-leche "$CONLECHE_URL" "$CONLECHE_REV" "$CONLECHE_TOOLCHAIN" con-leche) \
+  && ok "con-leche at $CONLECHE_REV, built with $CONLECHE_TOOLCHAIN" \
   || { no "could not build con-leche at $CONLECHE_REV"; finish; }
 EXPORTER="$EXPORT_DIR/.lake/build/bin/lean4export"
 CONLECHE="$CHECK_DIR/.lake/build/bin/con-leche"
@@ -95,20 +95,10 @@ DIRECT=$(grep -nE '^[^#]*"\$CONLECHE"' "$SELF_DIR/external.sh" | grep -v 'CONLEC
 [ "${CONLECHE_FLAGS[*]}" = "--verified --jobs=1" ] && [ -z "$DIRECT" ] \
   && ok "con-leche runs as --verified --jobs=1 at every call site" \
   || no "con-leche flags are [${CONLECHE_FLAGS[*]}]; direct calls: $(echo $DIRECT | cut -c1-200)"
-NANODA_DIR="$TOOLS/nanoda-$NANODA_REV"
-if [ ! -f "$NANODA_DIR/.built" ]; then
-  command -v cargo >/dev/null || { echo "error: building nanoda needs cargo (nix develop .#extcheck)" >&2; exit 2; }
-  W="$NANODA_DIR.partial.$$"; rm -rf "$W"
-  # The thread stack is raised from 16 MiB to 256 MiB exactly as the Lean Kernel Arena patches it.
-  { git clone -q "$NANODA_URL" "$W" && git -C "$W" checkout -q "$NANODA_REV" \
-    && has_match -F 'STACK_SIZE: usize = 16_777_216;' < "$W/src/lib.rs" \
-    && sed -i.orig 's/STACK_SIZE: usize = 16_777_216;/STACK_SIZE: usize = 268_435_456;/' "$W/src/lib.rs" \
-    && publish "$NANODA_DIR" cargo build --release -q; } >&2 || rm -rf "$W"
-fi
-NANODA="$NANODA_DIR/target/release/nanoda_bin"
-[ -x "$NANODA" ] && [ "$(git -C "$NANODA_DIR" rev-parse HEAD)" = "$NANODA_REV" ] \
+NANODA_DIR=$(build_cargo_tool "$TOOLS" "$NANODA_URL" "$NANODA_REV") \
   && ok "nanoda at $NANODA_REV (thread stack patched as the Arena does)" \
   || { no "could not build nanoda at $NANODA_REV"; finish; }
+NANODA="$NANODA_DIR/target/release/nanoda_bin"
 flock -u 9   # every tool is built and verified; the rest only reads them
 # nanoda FILE → runs nanoda on FILE permitting exactly the standard axioms
 nanoda() {
