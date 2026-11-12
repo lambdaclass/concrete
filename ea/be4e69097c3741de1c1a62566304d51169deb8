@@ -1,0 +1,2 @@
+[piece 1 of 3: scripts]
+- scripts/land/bundle_source.py:12: Rejecting symlinks in every parent breaks the new required `landing_sources.sh` gate on macOS: `mktemp -d` normally returns a path under `/var/folders`, and `/var` is a symlink to `/private/var`. Consequently, valid fixture bundles are rejected before the acceptance controls run. Canonicalize generated temporary-directory paths before constructing bundle paths, while retaining refusal of explicitly supplied symlinks.
