@@ -7,7 +7,6 @@ import argparse
 from collections import Counter, defaultdict
 import csv
 import hashlib
-import io
 from functools import lru_cache
 import json
 import os
@@ -117,6 +116,16 @@ def source(ref, path):
     return git('show', f'{ref}:{path}')
 
 
+@lru_cache(maxsize=None)
+def plan_citations(destination, file):
+    """Read held source spans from the supplied plan, without inventing boundaries."""
+    text = (ROOT/'ConcreteSpec/landing/plan.md').read_text()
+    section = re.search(r'^\| '+re.escape(destination)+r' \|.*$', text, re.M)
+    if section is None:
+        raise ValueError('missing plan piece: '+destination)
+    return [(int(a),int(b)) for a,b in re.findall(re.escape(file)+r':(\d+)[–-](\d+)',section.group())]
+
+
 def piece(file, line):
     stem = file.removeprefix('ConcreteSpec/').removesuffix('.lean')
     if stem == 'Spec/Examples' and 326 <= line <= 392:
@@ -155,7 +164,7 @@ def piece(file, line):
     if stem == 'Proofs/Observe2':
         return 'F20p' if 967 <= line <= 1011 else 'F20'
     if stem == 'Proofs/Frame':
-        return 'F29p' if 2334 <= line <= 2353 or 2429 <= line <= 2457 else 'F29'
+        return 'F29p' if any(lo <= line <= hi for lo,hi in plan_citations('F29p', 'ConcreteSpec/Proofs/Frame.lean')) else 'F29'
     if stem == 'Spec/Leak':
         return 'F27' if line >= 417 else 'F26'
     if stem == 'Proofs/Leak':
@@ -387,6 +396,7 @@ def update_contexts(rows):
 
 
 def generate(data):
+    MOVED_LAWS.clear()
     rows = [row(record='snapshot',name='source',kind='git-commit',source=SOURCE,piece='P',disposition='retain'),
             row(record='snapshot',name='baseline',kind='git-commit',source=BASE,piece='BASE',disposition='retain'),
             row(record='snapshot',name='plan',kind='sha256',source='ConcreteSpec/landing/plan.md',piece='P',
@@ -516,13 +526,14 @@ def generate(data):
                 for member in command_members[identity]:
                     if member['piece']=='BASE': member['migration']=destination
                     else: assign(member,destination,'dependent command follows relocated law or observed auxiliary')
+                    causes = inherited_causes(byname[d] for d in unavailable)
+                    annotate_move(member, ('dependent on relocated law ' if causes else 'dependent on observed auxiliary ')+
+                                  ', '.join(unavailable)+('; '+causes if causes else ''))
                     if member['record']=='declaration': MOVED_LAWS.setdefault(member['name'],old_piece)
             if before==[(r['piece'],r['migration']) for r in population]: break
     else:
         raise ValueError('observed emission/fixture assignment did not converge')
     check_law_controls(population)
-    moved = {name:{'from':old,'to':byname[name]['migration'] or byname[name]['piece']} for name,old in sorted(MOVED_LAWS.items())}
-    (ROOT/'ConcreteSpec/landing/moved-laws.json').write_text(json.dumps(moved,indent=2,sort_keys=True)+'\n')
     for r in population:
         held = r['migration'] or r['piece']
         if held in HOLDS:
@@ -532,6 +543,8 @@ def generate(data):
     fixture_consumers = [(r,[] if r['piece']=='BASE' else effective[n]) for n,r in byname.items()]
     fixture_consumers += [(r,json.loads(r['dependencies'])) for r in population if r['kind'] in ('example','Lean.Parser.Command.attribute') and r['piece']!='BASE']
     fixture_placement(population,fixture_consumers,ancestry,write_basis=True)
+    law_control_schedule(population,write=True)
+    relocation_evidence(population,write=True)
     rows += population + evidence_rows()
     for i in range(1,11):
         c = f'C{i}'
@@ -561,64 +574,44 @@ def read():
         return list(reader)
 
 
-INVENTORY_INTRODUCTION = '5b617c680b72fa1fc033dd0c909e5c4b588c5690'
+def full_digests(data, root):
+    """Source identity includes proof bodies, docs and separately applied attributes.
+
+    Kernel shapes additionally distinguish generated declarations from the same command.
+    The source digest remains mandatory even when theorem types are proof-irrelevant.
+    """
+    rows = records_from_census(data, root)
+    commands = {(r['source'],int(r['line'])):r for r in rows if r['record']=='command'}
+    attributes = defaultdict(list)
+    for metadata in data:
+        if metadata['record']=='resolved-command' and metadata['targets']:
+            digest = commands[(metadata['file'],metadata['line'])]['digest']
+            for target in metadata['targets']:
+                attributes[target].append(digest)
+    return {r['name']:sha(json.dumps([r['digest'],r['term_digest'],attributes[r['name']]],
+                                    separators=(',',':')).encode())
+            for r in rows if r['record']=='declaration'}
 
 
-@lru_cache(maxsize=None)
-def validate_landed_ref(ref):
-    if len(ref)!=40 or any(c not in '0123456789abcdef' for c in ref):
-        raise ValueError('landed source must be a full immutable commit SHA')
-    if ref in PIN_TAGS.values():
-        raise ValueError('snapshot pin cannot be landed progress: '+ref)
-    if git('rev-parse','--is-shallow-repository').decode().strip()=='true':
-        raise ValueError('landed ancestry requires complete history; checkout with fetch-depth: 0')
-    for older,newer,message in [(INVENTORY_INTRODUCTION,ref,'landed source predates inventory introduction: '),
-                                (ref,'HEAD','landed source is not an ancestor of checked revision: ')]:
-        try: git('merge-base','--is-ancestor',older,newer)
-        except subprocess.CalledProcessError: raise ValueError(message+ref)
-
-
-@lru_cache(maxsize=None)
-def landed_population(ref):
-    with tempfile.TemporaryDirectory(prefix='spec-landed-') as tmp:
+def head_population():
+    # Exactly one checked revision, with no ancestry requirement or historical rebuild.
+    head = git('rev-parse','HEAD^{commit}').decode().strip()
+    print('progress checked revision: '+head,flush=True)
+    with tempfile.TemporaryDirectory(prefix='spec-head-') as tmp:
         root = Path(tmp)
-        for path in git('ls-tree','-r','--name-only',ref,'ConcreteSpec','ConcreteSpec.lean').decode().splitlines():
+        for path in git('ls-tree','-r','--name-only',head,'ConcreteSpec','ConcreteSpec.lean').decode().splitlines():
             if path.endswith('.lean'):
                 target = root/path
                 target.parent.mkdir(parents=True,exist_ok=True)
-                target.write_bytes(source(ref,path))
+                target.write_bytes(source(head,path))
         data = census(root, ROOT/'scripts/spec/landing_inventory.lean',examples=False,regenerate_modules=REGENERATE_MODULES)
-    result = {d['name']:d['shape'] for d in data if d['record']=='declaration'}
-    return result
+        return full_digests(data,root)
 
 
-def record_landed(rows, piece, ref):
-    if piece not in PREREQS or piece=='BASE':
-        raise ValueError(f'invalid landed piece: {piece}')
-    validate_landed_ref(ref)
-    population = landed_population(ref)
-    prior = {r['name'] for r in rows if r['record']=='landed'}
-    targets = [r for r in rows if r['record']=='declaration' and r['piece']==piece and r['name'] not in prior]
-    missing = [r['name'] for r in targets if population.get(r['name']) != r['term_digest']]
-    if missing:
-        raise ValueError('landed declarations missing; provide explicit renamed declaration mappings: '+', '.join(missing))
-    return rows + [row(record='landed',name=r['name'],kind='landed-declaration',source=ref,
-                       piece=piece,prerequisites=','.join(PREREQS[piece]),digest=population[r['name']],
-                       note=r['name'],disposition='present') for r in targets]
-
-
-def check_landed(rows, decls):
-    for r in rows:
-        if r['record']=='landed':
-            if r['kind']!='landed-declaration' or r['disposition']!='present':
-                raise ValueError(f'invalid landed record: {r["name"]}')
-            if r['name'] not in decls or r['piece']!=decls[r['name']]['piece']:
-                raise ValueError(f'invalid landed mapping: {r["name"]}')
-            validate_landed_ref(r['source'])
-            if (r['digest'] != decls[r['name']]['term_digest'] or
-                landed_population(r['source']).get(r['note']) != r['digest'] or
-                landed_population(git('rev-parse','HEAD').decode().strip()).get(r['note']) != r['digest']):
-                raise ValueError(f'landed declaration mismatch: {r["name"]}')
+def progress_reasons(snapshot, checked):
+    return {name: ('missing declaration' if name not in checked else
+                   'full digest mismatch' if checked[name]!=digest else 'identical full digest')
+            for name,digest in snapshot.items()}
 
 
 def check_command_atomicity(rows, identity=command_identity):
@@ -641,16 +634,16 @@ def check_identity_control():
     # Under collapsed source/digest keys the correctly relocated first command fails.
     try:
         check_command_atomicity(population,lambda r:(r['source'],r['digest']))
-    except ValueError:
-        pass
+    except ValueError as exc:
+        if str(exc)!='split source command: d0': raise
     else:
         raise ValueError('identical-text control did not detect collapsed identities')
     wrong = [dict(r) for r in population]
     wrong[2]['piece'],wrong[3]['piece'] = wrong[3]['piece'],wrong[2]['piece']
     try:
         check_command_atomicity(wrong)
-    except ValueError:
-        pass
+    except ValueError as exc:
+        if str(exc)!='split source command: d0': raise
     else:
         raise ValueError('sibling declarations moved without their command')
     print('control PASS: distinct identical-text commands move independently; collapsed keying fails')
@@ -660,7 +653,7 @@ def judgment(rows, data, dependencies=True, extra_root=None):
     LAW_METADATA[:] = [r for r in (data if extra_root is None else data[0]) if r["record"]=="resolved-command"]
     seen = {}
     for r in rows:
-        if r['record'] not in {'snapshot','piece','command','declaration','finding','contract','landed'}:
+        if r['record'] not in {'snapshot','piece','command','declaration','finding','contract'}:
             raise ValueError(f'unknown inventory record: {r["record"]}')
         key = (r['record'],r['name'])
         if key in seen:
@@ -679,7 +672,7 @@ def judgment(rows, data, dependencies=True, extra_root=None):
         if r['record'] in ('command','declaration') and effective_piece in HOLDS:
             if r['disposition']!='owner-held' or HOLDS[effective_piece] not in r['note']:
                 raise ValueError('owner hold lost: '+r['name'])
-        allowed = {'present'} if r['record']=='landed' else {'retain','repair','replace','owner-held','retire'}
+        allowed = {'retain','repair','replace','owner-held','retire'}
         if r['disposition'] not in allowed:
             raise ValueError('invalid disposition: '+r['name'])
         if r['piece']=='BASE' and r['record'] in ('command','declaration'):
@@ -757,7 +750,6 @@ def judgment(rows, data, dependencies=True, extra_root=None):
         if r['piece']=='BASE' and not on_baseline(r):
             raise ValueError(f'baseline assignment has no baseline declaration: {r["name"]}')
     check_command_atomicity(rows)
-    check_landed(rows,decls)
     choices = emission_choices(data if extra_root is None else data[0]+data[1])
     effective = {}
     for n,r in decls.items():
@@ -832,15 +824,6 @@ def law_control_groups(rows):
 
 
 def check_law_controls(rows):
-    cases = law_control_schedule(rows)
-    declarations_by_name = {r['name']:r for r in rows if r['record']=='declaration'}
-    @lru_cache(maxsize=None)
-    def closure(p): return {p}|set().union(*(closure(d) for d in PREREQS[p]))
-    for case in cases:
-        if case['unavailable'] and case['law_piece']!=case['control_piece']:
-            law = declarations_by_name[case['law']]
-            if case['control_piece'] not in closure(law['migration'] or law['piece']):
-                raise ValueError('law precedes required control material: '+case['law'])
     groups = list(law_control_groups(rows))
     shared = shared_law_support(groups)
     fixtures = shared_fixtures({r['name']:r for r in rows if r['record']=='command'})
@@ -864,44 +847,83 @@ def shared_law_support(groups):
     return {n for n, users in laws.items() if len(users)>1}
 
 
-ROUND3_SCHEDULE = '61998c215112b8ac5e011b242779a553334d74c7'
-
-
-@lru_cache(maxsize=1)
-def original_schedule():
-    # The coordinator ruling applies to the reviewed round-3 schedule, not to
-    # transient positions while fixtures and observed emissions are being solved.
-    rows = list(csv.DictReader(io.StringIO(source(ROUND3_SCHEDULE,
-                        'ConcreteSpec/landing/inventory.tsv').decode()),delimiter='\t'))
-    for r in rows:
-        if r['record'] not in ('command','declaration') or r['piece']=='BASE': continue
-        origin_line = int(command_identity(r).rsplit(':',2)[1])
-        if r['source']=='ConcreteSpec/Proofs/Examples.lean' and 0<origin_line<=64:
-            r['piece']='F35'  # coordinator-approved stale citation correction
-        if r['source']=='ConcreteSpec/Proofs/Frame.lean' and 2334<=origin_line<=2353:
-            r['piece']='F29p'  # owner-held span, including empty_invalid
-    return rows
-
-
 def law_control_schedule(rows, write=False):
-    historical = original_schedule()
-    declarations = {r['name']:r for r in historical if r['record']=='declaration'}
+    declarations = {r['name']:r for r in rows if r['record']=='declaration'}
     @lru_cache(maxsize=None)
     def closure(p): return {p}|set().union(*(closure(d) for d in PREREQS[p]))
     cases = []
-    for law,controls in law_control_groups(historical):
+    for law,controls in law_control_groups(rows):
         lp = law['migration'] or law['piece']
         for c in controls:
             cp = c['migration'] or c['piece']
-            unavailable = sorted(d for d in json.loads(c['dependencies']) if declarations[d]['piece'] not in closure(lp))
+            unavailable = sorted(d for d in json.loads(c['dependencies'])
+                                 if declarations[d]['piece'] not in closure(lp))
             cases.append(dict(law=law['name'],control=c['name'],law_piece=lp,control_piece=cp,unavailable=unavailable))
-    evidence = {'basis':'Coordinator 2026-11-11: laws move to their controls; corrected add0 citation and restored held Frame span',
-                'source':SOURCE,'schedule_commit':ROUND3_SCHEDULE,'cases':cases}
+    evidence = {'basis':'Current rows: coordinator laws-with-controls ruling; dependency availability and co-landing',
+                'source':SOURCE,'cases':cases}
     path = ROOT/'ConcreteSpec/landing/law-control-placement.json'
     if write: path.write_text(json.dumps(evidence,indent=2,sort_keys=True)+'\n')
     elif not path.exists() or json.loads(path.read_text())!=evidence:
         raise ValueError('law/control scheduling evidence is stale')
     return cases
+
+
+def relocation_evidence(rows, write=False):
+    anchors = {}
+    for r in rows:
+        if r['record']=='declaration' and r['line']!='0':
+            key = command_identity(r)
+            anchors[key] = min(anchors.get(key,int(r['line'])),int(r['line']))
+    moved = {}
+    for r in rows:
+        if r['record'] not in ('declaration','command'): continue
+        key = command_identity(r)
+        old = (WHOLE[r['source'].removeprefix('ConcreteSpec/').removesuffix('.lean')]
+               if key.endswith(':0:0') else piece(r['source'],anchors.get(key,int(key.rsplit(':',2)[1]))))
+        dest = r['migration'] or r['piece']
+        if old==dest: continue
+        named_cause = re.search(r'law [^;]+ with control ',r['note'])
+        if any(marker in r['note'] for marker in ('dependent on relocated law', 'forces consumer')) and not named_cause:
+            raise ValueError('law relocation lacks named law/control: '+r['name'])
+        if not (named_cause or
+                any(cause in r['note'] for cause in ('shared fixture', 'regenerated at observed', 'dependent on observed auxiliary'))):
+            raise ValueError('relocation lacks cause: '+r['name'])
+        moved[r['record']+':'+r['name']] = dict(record=r['record'],name=r['name'],
+                                              **{'from':old,'to':dest,'reason':r['note']})
+    moved = dict(sorted(moved.items()))
+    path = ROOT/'ConcreteSpec/landing/moved-laws.json'
+    if write: path.write_text(json.dumps(moved,indent=2,sort_keys=True)+'\n')
+    elif not path.exists() or json.loads(path.read_text())!=moved:
+        raise ValueError('relocation evidence is stale')
+    validation = ROOT/'ConcreteSpec/landing/VALIDATION.md'
+    begin, end = '<!-- relocations:start -->', '<!-- relocations:end -->'
+    table = '\n'.join(['| Record | Name | From | To | Cause |', '|---|---|---|---|---|'] +
+        [f"| {r['record']} | `{r['name']}` | {r['from']} | {r['to']} | " +
+         r['reason'].replace('|','&#124;').replace('\n',' ')+' |' for r in moved.values()])
+    block = begin+'\n'+table+'\n'+end
+    text = validation.read_text()
+    pattern = re.escape(begin)+r'.*?'+re.escape(end)
+    if write:
+        validation.write_text(re.sub(pattern,lambda _:block,text,flags=re.S)
+                              if begin in text else text+'\n'+block+'\n')
+    elif block not in text:
+        raise ValueError('VALIDATION relocation table is stale')
+    return moved
+
+
+def law_cause(law, controls):
+    return 'law '+law['name']+' with control '+', '.join(c['name'] for c in controls)
+
+
+def inherited_causes(rows):
+    # Normalize a named cause even when an earlier dependent-move note prefixes it.
+    return '; '.join(sorted({'law '+law+' with control '+controls
+                            for r in rows for law,controls in
+                            re.findall(r'law ([^\s;]+) with control ([^;]+)',r['note'])}))
+
+
+def annotate_move(r, cause):
+    if cause not in r['note']: r['note'] += '; '+cause
 
 
 MOVED_LAWS = {}
@@ -930,10 +952,17 @@ def assign_law_controls(rows, effective_dependencies):
     def closure(p):
         return {p} | set().union(*(closure(d) for d in PREREQS[p]))
     closures = {p:closure(p) for p in PREREQS}
+    # Derive the obligation from this invocation's current rows. Preserve a
+    # control's destination when it needs material unavailable to its law.
+    # An already co-located control does not pin the group to its old piece:
+    # a later dependency can require the whole group to move sideways in the DAG.
     required_destinations = defaultdict(set)
-    for case in law_control_schedule(rows):
-        if case['unavailable'] and case['law_piece']!=case['control_piece']:
-            required_destinations[case['law']].add(case['control_piece'])
+    for law,controls in groups:
+        for control in controls:
+            if control['name'] in shared or effective(control)==effective(law): continue
+            if any(declarations[d]['piece'] not in closures[effective(law)]
+                   for d in dependencies(control)):
+                required_destinations[law['name']].add(effective(control))
     forced_destinations = {}
     # Fixed point: a moved law can itself be a dependency of another group.
     for _ in PREREQS:
@@ -958,11 +987,15 @@ def assign_law_controls(rows, effective_dependencies):
             if old != destination:
                 MOVED_LAWS.setdefault(law['name'],old)
             for r in members:
-                if effective(r)==destination: continue
+                if effective(r)==destination:
+                    if any(marker in r['note'] for marker in ('dependent ', 'shared fixture', 'regenerated at observed')):
+                        annotate_move(r,law_cause(law,controls))
+                    continue
                 if effective(r) in HOLDS and effective(r) not in closures[destination]:
                     raise ValueError('cannot move owner-held material: '+r['name'])
                 if r['piece']=='BASE': r['migration']=destination
                 else: r.update(piece=destination,prerequisites=','.join(PREREQS[destination]))
+                annotate_move(r, law_cause(law, controls))
                 changed = True
         for identity, members in command_members.items():
             authored = [r for r in members if r['record']=='declaration' and r['piece']!='BASE' and r['line']!='0']
@@ -979,6 +1012,10 @@ def assign_law_controls(rows, effective_dependencies):
             for r in members:
                 if r['piece']=='BASE': r['migration']=destination
                 else: r.update(piece=destination,prerequisites=','.join(PREREQS[destination]))
+                causes = inherited_causes(declarations[d] for member in authored for d in dependencies(member) if d in MOVED_LAWS)
+                unavailable_names = sorted({d for member in authored for d in dependencies(member) if d in MOVED_LAWS})
+                annotate_move(r, ('dependent on relocated law; '+causes) if causes else
+                              'dependent on observed auxiliary '+', '.join(unavailable_names))
                 if r['record']=='declaration': MOVED_LAWS.setdefault(r['name'],current)
             changed = True
         fixture_consumers = defaultdict(list)
@@ -1002,6 +1039,7 @@ def assign_law_controls(rows, effective_dependencies):
                     old = effective(r)
                     if r['piece']=='BASE': r['migration']=destination
                     else: r.update(piece=destination,prerequisites=','.join(PREREQS[destination]))
+                    annotate_move(r, 'shared fixture '+fixture+' forces consumer; '+inherited_causes(consumers))
                     if r['record']=='declaration': MOVED_LAWS.setdefault(r['name'],old)
                 changed = True
         if not changed: return
@@ -1033,29 +1071,21 @@ def verify_plan_boundaries(rows):
     print('control PASS: named plan boundaries and held fixture destination')
 
 
-def report(rows, detail=None):
+def report(rows, detail=None, reasons=None):
     if detail and detail not in PREREQS and detail != 'all':
         raise ValueError(f'unknown remaining piece: {detail}')
-    landed = {r['name'] for r in rows if r['record']=='landed'}
+    landed = {name for name,reason in (reasons or {}).items() if reason=='identical full digest'}
     counts = Counter(r['piece'] for r in rows if r['record']=='declaration' and r['piece']!='BASE' and r['name'] not in landed)
     examples = Counter(r['piece'] for r in rows if r['kind']=='example' and r['piece']!='BASE')
     print('remaining-examples\t'+str(sum(examples.values())))
     for p in sorted(r['name'] for r in rows if r['record']=='piece'):
-        print(f'{p}\tremaining={counts[p]}\tremaining-examples={examples[p]}')
+        total = sum(r['record']=='declaration' and r['piece']==p for r in rows)
+        matched = sum(r['record']=='declaration' and r['piece']==p and r['name'] in landed for r in rows)
+        print(f'{p}\tlanded={matched}/{total}\tremaining={counts[p]}\tremaining-examples={examples[p]}')
     if detail:
         for r in sorted(rows,key=lambda r:(r['piece'],r['name'])):
             if r['record']=='declaration' and r['piece']!='BASE' and r['name'] not in landed and detail in ('all',r['piece']):
                 print(f'remaining\t{r["piece"]}\t{r["name"]}')
-
-
-def ensure_object(ref):
-    # Fetch object availability without moving refs, FETCH_HEAD or shallow boundaries.
-    try:
-        git('cat-file','-e',ref+'^{commit}')
-    except subprocess.CalledProcessError:
-        print(f'fetch pinned inventory source {ref}',flush=True)
-        git('fetch','--no-tags','--no-write-fetch-head','origin',ref)
-        git('cat-file','-e',ref+'^{commit}')
 
 
 PIN_TAGS = {'source': SOURCE, 'baseline': BASE, 'evidence': EVIDENCE, 'dossier': DOSSIER}
@@ -1065,17 +1095,19 @@ def ensure_objects():
     for name, ref in PIN_TAGS.items():
         tag = 'refs/tags/spec-inventory/'+name
         try:
-            local = git('rev-parse','--verify',tag).decode().strip()
+            local = git('rev-parse','--verify',tag+'^{commit}').decode().strip()
         except subprocess.CalledProcessError:
             local = None
         if local is not None:
             if local != ref: raise ValueError('changed protected inventory pin: '+tag+' expected '+ref)
             continue
-        remote = git('ls-remote','--refs','origin',tag).decode().split()
-        if remote != [ref,tag]:
+        advertised = git('ls-remote','origin',tag,tag+'^{}').decode().splitlines()
+        remote = dict(line.split()[::-1] for line in advertised)
+        if remote.get(tag+'^{}',remote.get(tag)) != ref:
             raise ValueError('missing or changed protected inventory pin: '+tag+' expected '+ref)
-        git('fetch','--no-tags','--no-write-fetch-head','origin',tag)
-        git('cat-file','-e',ref+'^{commit}')
+        git('fetch','--depth=1','--no-tags','--no-write-fetch-head','origin',tag+':'+tag)
+        if git('rev-parse','--verify',tag+'^{commit}').decode().strip()!=ref:
+            raise ValueError('changed protected inventory pin: '+tag+' expected '+ref)
 
 
 def extract(root):
@@ -1092,13 +1124,7 @@ def main():
     parser.add_argument('--write',action='store_true',help='explicitly regenerate initial plan assignments')
     parser.add_argument('--remaining', metavar='PIECE', help='list remaining declaration names for a piece, or all')
     parser.add_argument('--census-output',type=Path,help='write fresh census JSONL for independent inspection; never read as a cache')
-    parser.add_argument('--record-landed',metavar='PIECE')
-    parser.add_argument('--landed-ref',metavar='SHA')
     args = parser.parse_args()
-    if bool(args.record_landed) != bool(args.landed_ref):
-        raise ValueError('--record-landed and --landed-ref are required together')
-    if args.write and args.record_landed:
-        raise ValueError('--write resets initial assignments; do not combine with --record-landed')
     if os.environ.get('CONCRETE_GATES_SHELL') != '1':
         raise ValueError('run inside nix develop -c')
     if args.remaining and args.remaining not in PREREQS and args.remaining != 'all':
@@ -1114,8 +1140,6 @@ def main():
         if args.census_output:
             args.census_output.write_text(''.join(json.dumps(r,sort_keys=True)+'\n' for r in data))
         rows = generate(data) if args.write else read()
-        if args.record_landed:
-            rows = record_landed(rows,args.record_landed,args.landed_ref)
         closure = judgment(rows,data,dependencies=False)
         verify_plan_boundaries(rows)
         check_law_controls(rows)
@@ -1143,12 +1167,6 @@ def main():
             if str(exc)!='shared fixture has no consumer: '+fixture['name']: raise
             print('control PASS: declared fixture without consumers refused')
         else: raise ValueError('unused fixture accepted')
-        older_main = git('rev-parse',BASE+'^').decode().strip()
-        try: record_landed(rows,'M01',older_main)
-        except ValueError as exc:
-            if not str(exc).startswith('landed source predates inventory introduction:'): raise
-            print('control PASS: stale M01 recorded against older main refused')
-        else: raise ValueError('older-main M01 receipt accepted')
         # Coverage controls exercise the same judgment, never the generator.
         duplicate = next(r for r in rows if r['record']=='declaration')
         try:
@@ -1265,9 +1283,12 @@ def main():
         if not unknown:
             raise ValueError('unknown remaining piece control accepted')
         print('control PASS: unknown remaining piece refused')
-        report(rows,args.remaining)
+        relocation_evidence(rows)
+        law_control_schedule(rows)
+        reasons = progress_reasons(full_digests(data,root),head_population())
+        report(rows,args.remaining,reasons)
         judgment(rows,data)
-        if args.write or args.record_landed:
+        if args.write:
             write(rows)
         print(f'landing inventory PASS: source={SOURCE}; baseline={BASE}')
 

@@ -1,5 +1,5 @@
 {
-  "basis": "Coordinator 2026-11-11: laws move to their controls; corrected add0 citation and restored held Frame span",
+  "basis": "Current rows: coordinator laws-with-controls ruling; dependency availability and co-landing",
   "cases": [
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:2389:2396",
@@ -108,23 +108,23 @@
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:2629:2634",
-      "control_piece": "F09b",
+      "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.raw_cleanup_runs_plan",
-      "law_piece": "F09b",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:2636:2652",
-      "control_piece": "F09b",
+      "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.raw_cleanup_runs_plan",
-      "law_piece": "F09b",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Exec.CleanupEvidence.EscapeEmitStep",
-      "control_piece": "F09b",
+      "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.raw_cleanup_runs_plan",
-      "law_piece": "F09b",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
@@ -171,65 +171,65 @@
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:2781:2788",
-      "control_piece": "F09b",
+      "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.FirstStepsN.split_return",
-      "law_piece": "F09b",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:2790:2800",
-      "control_piece": "F09b",
+      "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.FirstStepsN.split_return",
-      "law_piece": "F09b",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Exec.CleanupEvidence.SkipReturnStep",
       "control_piece": "F09b",
       "law": "ConcreteSpec.Core.Exec.FirstStepsN.split_return",
-      "law_piece": "F09b",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:2832:2839",
-      "control_piece": "F09b",
+      "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.FirstStepsN.call_return",
-      "law_piece": "F09b",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:2841:2852",
-      "control_piece": "F09b",
+      "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.FirstStepsN.call_return",
-      "law_piece": "F09b",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Exec.CleanupEvidence.SkipReturnStep",
       "control_piece": "F09b",
       "law": "ConcreteSpec.Core.Exec.FirstStepsN.call_return",
-      "law_piece": "F09b",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:2875:2879",
-      "control_piece": "F09b",
+      "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.boundary_complete",
-      "law_piece": "F09b",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:2881:2900",
-      "control_piece": "F09b",
+      "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.boundary_complete",
-      "law_piece": "F09b",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Exec.CleanupEvidence.PaddedEscape",
-      "control_piece": "F09b",
+      "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.boundary_complete",
-      "law_piece": "F09b",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
@@ -803,108 +803,96 @@
       "control": "ConcreteSpec/Proofs/Exec.lean:3608:3614",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.steps_request",
-      "law_piece": "F09a",
-      "unavailable": [
-        "ConcreteSpec.Core.Exec.CoreEvidence.logAns"
-      ]
+      "law_piece": "F10",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:3616:3625",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.steps_request",
-      "law_piece": "F09a",
-      "unavailable": [
-        "ConcreteSpec.Core.Exec.CoreEvidence.logAns",
-        "ConcreteSpec.Core.Exec.Refusal.StuckStep",
-        "ConcreteSpec.Core.Exec.Refusal.StuckStep.casesOn"
-      ]
+      "law_piece": "F10",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Exec.Refusal.StuckStep",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.steps_request",
-      "law_piece": "F09a",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:3627:3631",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.lookup_restrict",
-      "law_piece": "F09a",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:3633:3637",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.lookup_restrict",
-      "law_piece": "F09a",
-      "unavailable": [
-        "ConcreteSpec.Core.Exec.CoreEvidence.dropAllRestrict"
-      ]
+      "law_piece": "F10",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Exec.CoreEvidence.dropAllRestrict",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.lookup_restrict",
-      "law_piece": "F09a",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:3639:3643",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.lookup_restrict",
-      "law_piece": "F09a",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:3645:3649",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.lookup_restrict",
-      "law_piece": "F09a",
-      "unavailable": [
-        "ConcreteSpec.Core.Exec.CoreEvidence.keepAllRestrict"
-      ]
+      "law_piece": "F10",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Exec.CoreEvidence.keepAllRestrict",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.lookup_restrict",
-      "law_piece": "F09a",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:3651:3654",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.restrict_dom_drops",
-      "law_piece": "F09a",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:3656:3660",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.restrict_dom_drops",
-      "law_piece": "F09a",
-      "unavailable": [
-        "ConcreteSpec.Core.Exec.CoreEvidence.keepAllRestrict"
-      ]
+      "law_piece": "F10",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Exec.CoreEvidence.keepAllRestrict",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.restrict_dom_drops",
-      "law_piece": "F09a",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:3665:3670",
-      "control_piece": "F10",
+      "control_piece": "F09a",
       "law": "ConcreteSpec.Core.Exec.two_defers_register",
       "law_piece": "F09a",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:3672:3678",
-      "control_piece": "F10",
+      "control_piece": "F09a",
       "law": "ConcreteSpec.Core.Exec.two_defers_register",
       "law_piece": "F09a",
       "unavailable": []
@@ -920,94 +908,84 @@
       "control": "ConcreteSpec/Proofs/Exec.lean:3680:3684",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.step_ret",
-      "law_piece": "F09a",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:3686:3692",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.step_ret",
-      "law_piece": "F09a",
-      "unavailable": [
-        "ConcreteSpec.Core.Exec.CoreEvidence.stuckStep"
-      ]
+      "law_piece": "F10",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Exec.CoreEvidence.stuckStep",
       "control_piece": "F09c",
       "law": "ConcreteSpec.Core.Exec.step_ret",
-      "law_piece": "F09a",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:3694:3698",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.step_return_caller",
-      "law_piece": "F09a",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:3700:3707",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.step_return_caller",
-      "law_piece": "F09a",
-      "unavailable": [
-        "ConcreteSpec.Core.Exec.CoreEvidence.stuckStep"
-      ]
+      "law_piece": "F10",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Exec.CoreEvidence.stuckStep",
       "control_piece": "F09c",
       "law": "ConcreteSpec.Core.Exec.step_return_caller",
-      "law_piece": "F09a",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:3709:3717",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.exit_scope_next",
-      "law_piece": "F09a",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:3719:3728",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.exit_scope_next",
-      "law_piece": "F09a",
-      "unavailable": [
-        "ConcreteSpec.Core.Exec.Refusal.StuckStep",
-        "ConcreteSpec.Core.Exec.Refusal.StuckStep.casesOn"
-      ]
+      "law_piece": "F10",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Exec.Refusal.StuckStep",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.exit_scope_next",
-      "law_piece": "F09a",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:3730:3738",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.done_scope_next",
-      "law_piece": "F09a",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:3740:3749",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.done_scope_next",
-      "law_piece": "F09a",
-      "unavailable": [
-        "ConcreteSpec.Core.Exec.Refusal.StuckStep",
-        "ConcreteSpec.Core.Exec.Refusal.StuckStep.casesOn"
-      ]
+      "law_piece": "F10",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Exec.Refusal.StuckStep",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.done_scope_next",
-      "law_piece": "F09a",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
@@ -1075,23 +1053,23 @@
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:3814:3823",
-      "control_piece": "F09a",
+      "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.return_reaches_caller",
-      "law_piece": "F09a",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:3825:3836",
-      "control_piece": "F09a",
+      "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.return_reaches_caller",
-      "law_piece": "F09a",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Exec.CoreEvidence.ReflOnlySteps",
       "control_piece": "F09a",
       "law": "ConcreteSpec.Core.Exec.return_reaches_caller",
-      "law_piece": "F09a",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
@@ -1173,117 +1151,101 @@
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:3906:3912",
-      "control_piece": "F09b",
+      "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.step_trapped",
-      "law_piece": "F09b",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:3914:3922",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.step_trapped",
-      "law_piece": "F09b",
-      "unavailable": [
-        "ConcreteSpec.Core.Exec.CoreEvidence.noTrapFinal?"
-      ]
+      "law_piece": "F10",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Exec.CoreEvidence.noTrapFinal?",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.step_trapped",
-      "law_piece": "F09b",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:3924:3931",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.step_trapped",
-      "law_piece": "F09b",
-      "unavailable": [
-        "ConcreteSpec.Core.Exec.CoreEvidence.RecoverTrapStep",
-        "ConcreteSpec.Core.Exec.CoreEvidence.RecoverTrapStep.recover"
-      ]
+      "law_piece": "F10",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Exec.CoreEvidence.RecoverTrapStep",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.step_trapped",
-      "law_piece": "F09b",
-      "unavailable": [
-        "ConcreteSpec.Core.Exec.CoreEvidence.RecoverTrapStep.recover"
-      ]
+      "law_piece": "F10",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:3933:3938",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.steps_from_trapped",
-      "law_piece": "F09b",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:3940:3947",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.steps_from_trapped",
-      "law_piece": "F09b",
-      "unavailable": [
-        "ConcreteSpec.Core.Exec.CoreEvidence.RecoverTrapSteps",
-        "ConcreteSpec.Core.Exec.CoreEvidence.RecoverTrapSteps.recover"
-      ]
+      "law_piece": "F10",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Exec.CoreEvidence.RecoverTrapSteps",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.steps_from_trapped",
-      "law_piece": "F09b",
-      "unavailable": [
-        "ConcreteSpec.Core.Exec.CoreEvidence.RecoverTrapSteps.recover"
-      ]
+      "law_piece": "F10",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:3949:3956",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.abort_runs_no_cleanup",
-      "law_piece": "F09b",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:3958:3967",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.abort_runs_no_cleanup",
-      "law_piece": "F09b",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Exec.CoreEvidence.ReflOnlySteps",
       "control_piece": "F09a",
       "law": "ConcreteSpec.Core.Exec.abort_runs_no_cleanup",
-      "law_piece": "F09b",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:3969:3975",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.evalArgs_first_trap",
-      "law_piece": "F09b",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:3977:3984",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.evalArgs_first_trap",
-      "law_piece": "F09b",
-      "unavailable": [
-        "ConcreteSpec.Core.Exec.CoreEvidence.swallowTrapEvalArgs"
-      ]
+      "law_piece": "F10",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Exec.CoreEvidence.swallowTrapEvalArgs",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.evalArgs_first_trap",
-      "law_piece": "F09b",
-      "unavailable": [
-        "ConcreteSpec.Core.Exec.CoreEvidence.swallowTrapEvalArgs._f"
-      ]
+      "law_piece": "F10",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:3997:4001",
@@ -1350,23 +1312,23 @@
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:4044:4046",
-      "control_piece": "F09c",
+      "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.rules_complete",
-      "law_piece": "F09c",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:4048:4053",
-      "control_piece": "F09c",
+      "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.rules_complete",
-      "law_piece": "F09c",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Exec.CoreEvidence.trapSkipStep",
-      "control_piece": "F09c",
+      "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.rules_complete",
-      "law_piece": "F09c",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
@@ -1408,102 +1370,85 @@
       "control": "ConcreteSpec/Proofs/Exec.lean:4112:4116",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.register_protected",
-      "law_piece": "F09b",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:4117:4124",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.register_protected",
-      "law_piece": "F09b",
-      "unavailable": [
-        "ConcreteSpec.Core.Exec.CoreEvidence.forgetRegister"
-      ]
+      "law_piece": "F10",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Exec.CoreEvidence.forgetRegister",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.register_protected",
-      "law_piece": "F09b",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:4126:4129",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.protected_step",
-      "law_piece": "F09b",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:4130:4137",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.protected_step",
-      "law_piece": "F09b",
-      "unavailable": [
-        "ConcreteSpec.Core.Exec.CoreEvidence.arbitraryStep",
-        "ConcreteSpec.Core.Exec.CoreEvidence.arbitraryStep.any"
-      ]
+      "law_piece": "F10",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Exec.CoreEvidence.arbitraryStep",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.protected_step",
-      "law_piece": "F09b",
-      "unavailable": [
-        "ConcreteSpec.Core.Exec.CoreEvidence.arbitraryStep.any"
-      ]
+      "law_piece": "F10",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:4139:4142",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.call_protects",
-      "law_piece": "F09b",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:4143:4149",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.call_protects",
-      "law_piece": "F09b",
-      "unavailable": [
-        "ConcreteSpec.Core.Exec.CoreEvidence.arbitraryStep",
-        "ConcreteSpec.Core.Exec.CoreEvidence.arbitraryStep.any"
-      ]
+      "law_piece": "F10",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Exec.CoreEvidence.arbitraryStep",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.call_protects",
-      "law_piece": "F09b",
-      "unavailable": [
-        "ConcreteSpec.Core.Exec.CoreEvidence.arbitraryStep.any"
-      ]
+      "law_piece": "F10",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:4151:4154",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.exit_label",
-      "law_piece": "F09b",
+      "law_piece": "F10",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:4155:4160",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.exit_label",
-      "law_piece": "F09b",
-      "unavailable": [
-        "ConcreteSpec.Core.Exec.CoreEvidence.arbitraryStep",
-        "ConcreteSpec.Core.Exec.CoreEvidence.arbitraryStep.any"
-      ]
+      "law_piece": "F10",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Exec.CoreEvidence.arbitraryStep",
       "control_piece": "F10",
       "law": "ConcreteSpec.Core.Exec.exit_label",
-      "law_piece": "F09b",
-      "unavailable": [
-        "ConcreteSpec.Core.Exec.CoreEvidence.arbitraryStep.any"
-      ]
+      "law_piece": "F10",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Exec.lean:4239:4242",
@@ -3068,245 +3013,233 @@
     },
     {
       "control": "ConcreteSpec/Proofs/Observe2.lean:851:855",
-      "control_piece": "F20",
+      "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
+      "law_piece": "F20p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Observe2.lean:857:865",
-      "control_piece": "F20",
+      "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
+      "law_piece": "F20p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Observe.SourceLoadDemo.forgiveMalformed",
-      "control_piece": "F20",
+      "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
+      "law_piece": "F20p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Observe2.lean:871:875",
-      "control_piece": "F20",
+      "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
+      "law_piece": "F20p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Observe2.lean:877:885",
-      "control_piece": "F20",
+      "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
+      "law_piece": "F20p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Observe.SourceLoadDemo.forgiveMalformed",
-      "control_piece": "F20",
+      "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
+      "law_piece": "F20p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Observe2.lean:891:895",
-      "control_piece": "F20",
+      "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
+      "law_piece": "F20p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Observe2.lean:897:905",
-      "control_piece": "F20",
+      "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
+      "law_piece": "F20p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Observe.SourceLoadDemo.forgiveMalformed",
-      "control_piece": "F20",
+      "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
+      "law_piece": "F20p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Observe2.lean:911:915",
-      "control_piece": "F20",
+      "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
+      "law_piece": "F20p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Observe2.lean:917:925",
-      "control_piece": "F20",
+      "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
+      "law_piece": "F20p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Observe.SourceLoadDemo.forgiveMalformed",
-      "control_piece": "F20",
+      "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
+      "law_piece": "F20p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Observe2.lean:931:935",
-      "control_piece": "F20",
+      "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
+      "law_piece": "F20p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Observe2.lean:937:945",
-      "control_piece": "F20",
+      "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
+      "law_piece": "F20p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Observe.SourceLoadDemo.forgiveMalformed",
-      "control_piece": "F20",
+      "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
+      "law_piece": "F20p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Observe2.lean:951:955",
-      "control_piece": "F20",
+      "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
+      "law_piece": "F20p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Observe2.lean:957:965",
-      "control_piece": "F20",
+      "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
+      "law_piece": "F20p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Observe.SourceLoadDemo.forgiveMalformed",
-      "control_piece": "F20",
+      "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
+      "law_piece": "F20p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Observe2.lean:971:975",
       "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
-      "unavailable": [
-        "ConcreteSpec.Core.Observe.SourceLoadDemo.backslashDiagnostic",
-        "ConcreteSpec.Core.Observe.SourceLoadDemo.backslashInput"
-      ]
+      "law_piece": "F20p",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Observe2.lean:977:985",
       "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
-      "unavailable": [
-        "ConcreteSpec.Core.Observe.SourceLoadDemo.backslashDiagnostic",
-        "ConcreteSpec.Core.Observe.SourceLoadDemo.backslashInput"
-      ]
+      "law_piece": "F20p",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Observe.SourceLoadDemo.forgiveMalformed",
-      "control_piece": "F20",
+      "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
+      "law_piece": "F20p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Observe2.lean:998:1001",
       "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
-      "unavailable": [
-        "ConcreteSpec.Core.Observe.SourceLoadDemo.controlDiagnostic",
-        "ConcreteSpec.Core.Observe.SourceLoadDemo.controlInput"
-      ]
+      "law_piece": "F20p",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Observe2.lean:1003:1011",
       "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
-      "unavailable": [
-        "ConcreteSpec.Core.Observe.SourceLoadDemo.controlDiagnostic",
-        "ConcreteSpec.Core.Observe.SourceLoadDemo.controlInput"
-      ]
+      "law_piece": "F20p",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Observe.SourceLoadDemo.forgiveMalformed",
-      "control_piece": "F20",
+      "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
+      "law_piece": "F20p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Observe2.lean:1017:1021",
-      "control_piece": "F20",
+      "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
+      "law_piece": "F20p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Observe2.lean:1023:1031",
-      "control_piece": "F20",
+      "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
+      "law_piece": "F20p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Observe.SourceLoadDemo.forgiveMalformed",
-      "control_piece": "F20",
+      "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
+      "law_piece": "F20p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Observe2.lean:1037:1041",
-      "control_piece": "F20",
+      "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
+      "law_piece": "F20p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Observe2.lean:1043:1051",
-      "control_piece": "F20",
+      "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
+      "law_piece": "F20p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Observe.SourceLoadDemo.forgiveMalformed",
-      "control_piece": "F20",
+      "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
+      "law_piece": "F20p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Observe2.lean:1057:1061",
-      "control_piece": "F20",
+      "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
+      "law_piece": "F20p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Observe2.lean:1063:1071",
-      "control_piece": "F20",
+      "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
+      "law_piece": "F20p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Observe.SourceLoadDemo.forgiveMalformed",
-      "control_piece": "F20",
+      "control_piece": "F20p",
       "law": "ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed",
-      "law_piece": "F20",
+      "law_piece": "F20p",
       "unavailable": []
     },
     {
@@ -3348,67 +3281,63 @@
       "control": "ConcreteSpec/Proofs/Adequacy.lean:2329:2334",
       "control_piece": "F25b",
       "law": "ConcreteSpec.Core.Exec.runFromQ_request_correspondence",
-      "law_piece": "F24a",
+      "law_piece": "F25b",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Adequacy.lean:2336:2341",
       "control_piece": "F25b",
       "law": "ConcreteSpec.Core.Exec.runFromQ_request_correspondence",
-      "law_piece": "F24a",
-      "unavailable": [
-        "ConcreteSpec.Core.Exec.Demo.badAnswerOracle"
-      ]
+      "law_piece": "F25b",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Adequacy.lean:2343:2348",
       "control_piece": "F25b",
       "law": "ConcreteSpec.Core.Exec.runFromQ_request_correspondence",
-      "law_piece": "F24a",
+      "law_piece": "F25b",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Adequacy.lean:2361:2370",
       "control_piece": "F25b",
       "law": "ConcreteSpec.Core.Exec.runFromQ_request_correspondence",
-      "law_piece": "F24a",
+      "law_piece": "F25b",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Exec.Demo.fabricatedFinalRun",
       "control_piece": "F24a",
       "law": "ConcreteSpec.Core.Exec.runFromQ_request_correspondence",
-      "law_piece": "F24a",
+      "law_piece": "F25b",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Adequacy.lean:2372:2395",
       "control_piece": "F25b",
       "law": "ConcreteSpec.Core.Exec.runFromQ_request_correspondence",
-      "law_piece": "F24a",
-      "unavailable": [
-        "ConcreteSpec.Core.Exec.Demo.badAnswerOracle"
-      ]
+      "law_piece": "F25b",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Exec.Demo.fabricatedFinalRun",
       "control_piece": "F24a",
       "law": "ConcreteSpec.Core.Exec.runFromQ_request_correspondence",
-      "law_piece": "F24a",
+      "law_piece": "F25b",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Adequacy.lean:2397:2425",
       "control_piece": "F25b",
       "law": "ConcreteSpec.Core.Exec.runFromQ_request_correspondence",
-      "law_piece": "F24a",
+      "law_piece": "F25b",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Exec.Demo.droppedAnswerRun",
       "control_piece": "F24a",
       "law": "ConcreteSpec.Core.Exec.runFromQ_request_correspondence",
-      "law_piece": "F24a",
+      "law_piece": "F25b",
       "unavailable": []
     },
     {
@@ -3518,44 +3447,44 @@
     },
     {
       "control": "ConcreteSpec/Proofs/Adequacy.lean:2678:2684",
-      "control_piece": "F24a",
+      "control_piece": "F25b",
       "law": "ConcreteSpec.Core.Exec.runFromQ_request_correspondence",
-      "law_piece": "F24a",
+      "law_piece": "F25b",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Adequacy.lean:2686:2707",
-      "control_piece": "F24a",
+      "control_piece": "F25b",
       "law": "ConcreteSpec.Core.Exec.runFromQ_request_correspondence",
-      "law_piece": "F24a",
+      "law_piece": "F25b",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Exec.Demo.wrongHistoryRun",
-      "control_piece": "F24a",
+      "control_piece": "F25b",
       "law": "ConcreteSpec.Core.Exec.runFromQ_request_correspondence",
-      "law_piece": "F24a",
+      "law_piece": "F25b",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Adequacy.lean:2725:2731",
-      "control_piece": "F24a",
+      "control_piece": "F25b",
       "law": "ConcreteSpec.Core.Exec.runFromQ_request_correspondence",
-      "law_piece": "F24a",
+      "law_piece": "F25b",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Adequacy.lean:2733:2758",
-      "control_piece": "F24a",
+      "control_piece": "F25b",
       "law": "ConcreteSpec.Core.Exec.runFromQ_request_correspondence",
-      "law_piece": "F24a",
+      "law_piece": "F25b",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Exec.Demo.fabricatedFinalRun",
       "control_piece": "F24a",
       "law": "ConcreteSpec.Core.Exec.runFromQ_request_correspondence",
-      "law_piece": "F24a",
+      "law_piece": "F25b",
       "unavailable": []
     },
     {
@@ -3658,7 +3587,7 @@
     },
     {
       "control": "ConcreteSpec.Core.Exec.Demo.forgetfulRunQ",
-      "control_piece": "F24a",
+      "control_piece": "F24b",
       "law": "ConcreteSpec.Core.Exec.InfiniteExecution.evaluator_prefix",
       "law_piece": "F24b",
       "unavailable": []
@@ -8551,186 +8480,170 @@
     },
     {
       "control": "ConcreteSpec/Proofs/Frame.lean:2354:2357",
-      "control_piece": "F29",
+      "control_piece": "F29p",
       "law": "ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact",
-      "law_piece": "F29",
-      "unavailable": [
-        "ConcreteSpec.Core.Frame.ABI.LoadBoundaryDemo.empty_invalid"
-      ]
+      "law_piece": "F29p",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Frame.lean:2359:2367",
-      "control_piece": "F29",
+      "control_piece": "F29p",
       "law": "ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact",
-      "law_piece": "F29",
-      "unavailable": [
-        "ConcreteSpec.Core.Frame.ABI.LoadBoundaryDemo.empty_invalid"
-      ]
+      "law_piece": "F29p",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Frame.ABI.LoadBoundaryDemo.admitRefused",
-      "control_piece": "F29",
+      "control_piece": "F29p",
       "law": "ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact",
-      "law_piece": "F29",
+      "law_piece": "F29p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Frame.lean:2369:2372",
-      "control_piece": "F29",
+      "control_piece": "F29p",
       "law": "ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact",
-      "law_piece": "F29",
+      "law_piece": "F29p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Frame.lean:2374:2382",
-      "control_piece": "F29",
+      "control_piece": "F29p",
       "law": "ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact",
-      "law_piece": "F29",
+      "law_piece": "F29p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Frame.ABI.LoadBoundaryDemo.admitRefused",
-      "control_piece": "F29",
+      "control_piece": "F29p",
       "law": "ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact",
-      "law_piece": "F29",
+      "law_piece": "F29p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Frame.lean:2384:2387",
-      "control_piece": "F29",
+      "control_piece": "F29p",
       "law": "ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact",
-      "law_piece": "F29",
+      "law_piece": "F29p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Frame.lean:2389:2397",
-      "control_piece": "F29",
+      "control_piece": "F29p",
       "law": "ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact",
-      "law_piece": "F29",
+      "law_piece": "F29p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Frame.ABI.LoadBoundaryDemo.admitRefused",
-      "control_piece": "F29",
+      "control_piece": "F29p",
       "law": "ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact",
-      "law_piece": "F29",
+      "law_piece": "F29p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Frame.lean:2399:2402",
-      "control_piece": "F29",
+      "control_piece": "F29p",
       "law": "ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact",
-      "law_piece": "F29",
+      "law_piece": "F29p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Frame.lean:2404:2412",
-      "control_piece": "F29",
+      "control_piece": "F29p",
       "law": "ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact",
-      "law_piece": "F29",
+      "law_piece": "F29p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Frame.ABI.LoadBoundaryDemo.admitRefused",
-      "control_piece": "F29",
+      "control_piece": "F29p",
       "law": "ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact",
-      "law_piece": "F29",
+      "law_piece": "F29p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Frame.lean:2414:2417",
-      "control_piece": "F29",
+      "control_piece": "F29p",
       "law": "ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact",
-      "law_piece": "F29",
+      "law_piece": "F29p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Frame.lean:2419:2427",
-      "control_piece": "F29",
+      "control_piece": "F29p",
       "law": "ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact",
-      "law_piece": "F29",
+      "law_piece": "F29p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Frame.ABI.LoadBoundaryDemo.admitRefused",
-      "control_piece": "F29",
+      "control_piece": "F29p",
       "law": "ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact",
-      "law_piece": "F29",
+      "law_piece": "F29p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Frame.lean:2429:2432",
       "control_piece": "F29p",
       "law": "ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact",
-      "law_piece": "F29",
-      "unavailable": [
-        "ConcreteSpec.Core.Frame.ABI.LoadBoundaryDemo.controlInput",
-        "ConcreteSpec.Core.Frame.ABI.LoadBoundaryDemo.control_invalid"
-      ]
+      "law_piece": "F29p",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Frame.lean:2434:2442",
       "control_piece": "F29p",
       "law": "ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact",
-      "law_piece": "F29",
-      "unavailable": [
-        "ConcreteSpec.Core.Frame.ABI.LoadBoundaryDemo.controlInput",
-        "ConcreteSpec.Core.Frame.ABI.LoadBoundaryDemo.control_invalid"
-      ]
+      "law_piece": "F29p",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Frame.ABI.LoadBoundaryDemo.admitRefused",
-      "control_piece": "F29",
+      "control_piece": "F29p",
       "law": "ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact",
-      "law_piece": "F29",
+      "law_piece": "F29p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Frame.lean:2444:2447",
       "control_piece": "F29p",
       "law": "ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact",
-      "law_piece": "F29",
-      "unavailable": [
-        "ConcreteSpec.Core.Frame.ABI.LoadBoundaryDemo.backslash_invalid",
-        "ConcreteSpec.Core.Observe.SourceLoadDemo.backslashInput"
-      ]
+      "law_piece": "F29p",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Frame.lean:2449:2457",
       "control_piece": "F29p",
       "law": "ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact",
-      "law_piece": "F29",
-      "unavailable": [
-        "ConcreteSpec.Core.Frame.ABI.LoadBoundaryDemo.backslash_invalid",
-        "ConcreteSpec.Core.Observe.SourceLoadDemo.backslashInput"
-      ]
+      "law_piece": "F29p",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Frame.ABI.LoadBoundaryDemo.admitRefused",
-      "control_piece": "F29",
+      "control_piece": "F29p",
       "law": "ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact",
-      "law_piece": "F29",
+      "law_piece": "F29p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Frame.lean:2459:2462",
-      "control_piece": "F29",
+      "control_piece": "F29p",
       "law": "ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact",
-      "law_piece": "F29",
+      "law_piece": "F29p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/Frame.lean:2464:2472",
-      "control_piece": "F29",
+      "control_piece": "F29p",
       "law": "ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact",
-      "law_piece": "F29",
+      "law_piece": "F29p",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Frame.ABI.LoadBoundaryDemo.admitRefused",
-      "control_piece": "F29",
+      "control_piece": "F29p",
       "law": "ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact",
-      "law_piece": "F29",
+      "law_piece": "F29p",
       "unavailable": []
     },
     {
@@ -10205,342 +10118,275 @@
     },
     {
       "control": "ConcreteSpec/Proofs/ObserveEnvironment.lean:252:276",
-      "control_piece": "F21",
+      "control_piece": "F23",
       "law": "ConcreteSpec.Core.Observe.environment_run_reply",
-      "law_piece": "F21",
+      "law_piece": "F23",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/ObserveEnvironment.lean:278:310",
-      "control_piece": "F21",
+      "control_piece": "F23",
       "law": "ConcreteSpec.Core.Observe.environment_run_reply",
-      "law_piece": "F21",
+      "law_piece": "F23",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Observe.dropReturnValueOracle",
-      "control_piece": "F21",
+      "control_piece": "F23",
       "law": "ConcreteSpec.Core.Observe.environment_run_reply",
-      "law_piece": "F21",
+      "law_piece": "F23",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/ObserveEnvironment.lean:336:345",
-      "control_piece": "F21",
+      "control_piece": "F23",
       "law": "ConcreteSpec.Core.Observe.environment_stepHistory_valid",
-      "law_piece": "F21",
+      "law_piece": "F23",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/ObserveEnvironment.lean:347:365",
-      "control_piece": "F21",
+      "control_piece": "F23",
       "law": "ConcreteSpec.Core.Observe.environment_stepHistory_valid",
-      "law_piece": "F21",
+      "law_piece": "F23",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Observe.dropRequestStepHistory",
-      "control_piece": "F21",
+      "control_piece": "F23",
       "law": "ConcreteSpec.Core.Observe.environment_stepHistory_valid",
-      "law_piece": "F21",
+      "law_piece": "F23",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/ObserveEnvironment.lean:400:423",
-      "control_piece": "F21",
+      "control_piece": "F23",
       "law": "ConcreteSpec.Core.Observe.environment_run_reply",
-      "law_piece": "F21",
+      "law_piece": "F23",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/ObserveEnvironment.lean:425:457",
-      "control_piece": "F21",
+      "control_piece": "F23",
       "law": "ConcreteSpec.Core.Observe.environment_run_reply",
-      "law_piece": "F21",
+      "law_piece": "F23",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Observe.forgetHistoryOracle",
-      "control_piece": "F21",
+      "control_piece": "F23",
       "law": "ConcreteSpec.Core.Observe.environment_run_reply",
-      "law_piece": "F21",
+      "law_piece": "F23",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/ObserveEnvironment.lean:514:538",
-      "control_piece": "F21",
+      "control_piece": "F23",
       "law": "ConcreteSpec.Core.Observe.environment_run_reply",
-      "law_piece": "F21",
+      "law_piece": "F23",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/ObserveEnvironment.lean:540:570",
-      "control_piece": "F21",
+      "control_piece": "F23",
       "law": "ConcreteSpec.Core.Observe.environment_run_reply",
-      "law_piece": "F21",
+      "law_piece": "F23",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Observe.noReplyOracle",
-      "control_piece": "F21",
+      "control_piece": "F23",
       "law": "ConcreteSpec.Core.Observe.environment_run_reply",
-      "law_piece": "F21",
+      "law_piece": "F23",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/ObserveEnvironment.lean:596:604",
-      "control_piece": "F21",
+      "control_piece": "F23",
       "law": "ConcreteSpec.Core.Observe.environment_stepHistory_valid",
-      "law_piece": "F21",
+      "law_piece": "F23",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/ObserveEnvironment.lean:606:622",
-      "control_piece": "F21",
+      "control_piece": "F23",
       "law": "ConcreteSpec.Core.Observe.environment_stepHistory_valid",
-      "law_piece": "F21",
+      "law_piece": "F23",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Observe.leavePendingOnAnswerStepHistory",
-      "control_piece": "F21",
+      "control_piece": "F23",
       "law": "ConcreteSpec.Core.Observe.environment_stepHistory_valid",
-      "law_piece": "F21",
+      "law_piece": "F23",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/ObserveEnvironment.lean:663:687",
-      "control_piece": "F21",
+      "control_piece": "F23",
       "law": "ConcreteSpec.Core.Observe.environment_run_reply",
-      "law_piece": "F21",
+      "law_piece": "F23",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/ObserveEnvironment.lean:689:721",
-      "control_piece": "F21",
+      "control_piece": "F23",
       "law": "ConcreteSpec.Core.Observe.environment_run_reply",
-      "law_piece": "F21",
+      "law_piece": "F23",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Observe.BlockingEnvDemo.fabricateReplyOnBlockOracle",
-      "control_piece": "F21",
+      "control_piece": "F23",
       "law": "ConcreteSpec.Core.Observe.environment_run_reply",
-      "law_piece": "F21",
+      "law_piece": "F23",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/ObserveEvidence.lean:21:23",
       "control_piece": "F22",
       "law": "ConcreteSpec.Core.Observe.silent_internal_steps",
-      "law_piece": "F20",
-      "unavailable": [
-        "ConcreteSpec.Core.Observe.Evidence.after",
-        "ConcreteSpec.Core.Observe.Evidence.before",
-        "ConcreteSpec.Core.Observe.Evidence.insertion",
-        "ConcreteSpec.Core.Observe.Evidence.signature"
-      ]
+      "law_piece": "F22",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/ObserveEvidence.lean:25:34",
       "control_piece": "F22",
       "law": "ConcreteSpec.Core.Observe.silent_internal_steps",
-      "law_piece": "F20",
-      "unavailable": [
-        "ConcreteSpec.Core.Observe.Evidence.after",
-        "ConcreteSpec.Core.Observe.Evidence.before",
-        "ConcreteSpec.Core.Observe.Evidence.event",
-        "ConcreteSpec.Core.Observe.Evidence.firstStepVisible",
-        "ConcreteSpec.Core.Observe.Evidence.insertion",
-        "ConcreteSpec.Core.Observe.Evidence.signature"
-      ]
+      "law_piece": "F22",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Observe.Evidence.firstStepVisible",
       "control_piece": "F22",
       "law": "ConcreteSpec.Core.Observe.silent_internal_steps",
-      "law_piece": "F20",
+      "law_piece": "F22",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/ObserveEvidence.lean:44:48",
       "control_piece": "F22",
       "law": "ConcreteSpec.Core.Observe.full_observation_preservation",
-      "law_piece": "F20",
-      "unavailable": [
-        "ConcreteSpec.Core.Observe.Evidence.after",
-        "ConcreteSpec.Core.Observe.Evidence.before",
-        "ConcreteSpec.Core.Observe.Evidence.event",
-        "ConcreteSpec.Core.Observe.Evidence.insertion",
-        "ConcreteSpec.Core.Observe.Evidence.signature"
-      ]
+      "law_piece": "F22",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/ObserveEvidence.lean:50:59",
       "control_piece": "F22",
       "law": "ConcreteSpec.Core.Observe.full_observation_preservation",
-      "law_piece": "F20",
-      "unavailable": [
-        "ConcreteSpec.Core.Observe.Evidence.after",
-        "ConcreteSpec.Core.Observe.Evidence.before",
-        "ConcreteSpec.Core.Observe.Evidence.event",
-        "ConcreteSpec.Core.Observe.Evidence.firstStepHasFullObservation",
-        "ConcreteSpec.Core.Observe.Evidence.firstStepVisible",
-        "ConcreteSpec.Core.Observe.Evidence.insertion",
-        "ConcreteSpec.Core.Observe.Evidence.signature"
-      ]
+      "law_piece": "F22",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Observe.Evidence.firstStepHasFullObservation",
       "control_piece": "F22",
       "law": "ConcreteSpec.Core.Observe.full_observation_preservation",
-      "law_piece": "F20",
-      "unavailable": [
-        "ConcreteSpec.Core.Observe.Evidence.firstStepHasFullObservation.match_1",
-        "ConcreteSpec.Core.Observe.Evidence.firstStepVisible"
-      ]
+      "law_piece": "F22",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/ObserveEvidence.lean:61:64",
       "control_piece": "F22",
       "law": "ConcreteSpec.Core.Observe.blocked_silent_internal_steps",
-      "law_piece": "F20",
-      "unavailable": [
-        "ConcreteSpec.Core.Observe.Evidence.after",
-        "ConcreteSpec.Core.Observe.Evidence.before",
-        "ConcreteSpec.Core.Observe.Evidence.insertion",
-        "ConcreteSpec.Core.Observe.Evidence.signature"
-      ]
+      "law_piece": "F22",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/ObserveEvidence.lean:66:75",
       "control_piece": "F22",
       "law": "ConcreteSpec.Core.Observe.blocked_silent_internal_steps",
-      "law_piece": "F20",
-      "unavailable": [
-        "ConcreteSpec.Core.Observe.Evidence.after",
-        "ConcreteSpec.Core.Observe.Evidence.before",
-        "ConcreteSpec.Core.Observe.Evidence.event",
-        "ConcreteSpec.Core.Observe.Evidence.firstStepVisible",
-        "ConcreteSpec.Core.Observe.Evidence.insertion",
-        "ConcreteSpec.Core.Observe.Evidence.signature"
-      ]
+      "law_piece": "F22",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Observe.Evidence.firstStepVisible",
       "control_piece": "F22",
       "law": "ConcreteSpec.Core.Observe.blocked_silent_internal_steps",
-      "law_piece": "F20",
+      "law_piece": "F22",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/ObserveEvidence.lean:100:102",
       "control_piece": "F22",
       "law": "ConcreteSpec.Core.Observe.infinite_stuttering",
-      "law_piece": "F20",
-      "unavailable": [
-        "ConcreteSpec.Core.Observe.Evidence.delayed",
-        "ConcreteSpec.Core.Observe.Evidence.emitting",
-        "ConcreteSpec.Core.Observe.Evidence.shifted",
-        "ConcreteSpec.Core.Observe.Evidence.signature"
-      ]
+      "law_piece": "F22",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/ObserveEvidence.lean:104:113",
       "control_piece": "F22",
       "law": "ConcreteSpec.Core.Observe.infinite_stuttering",
-      "law_piece": "F20",
-      "unavailable": [
-        "ConcreteSpec.Core.Observe.Evidence.delayed",
-        "ConcreteSpec.Core.Observe.Evidence.emitting",
-        "ConcreteSpec.Core.Observe.Evidence.event",
-        "ConcreteSpec.Core.Observe.Evidence.firstPrefix",
-        "ConcreteSpec.Core.Observe.Evidence.shifted",
-        "ConcreteSpec.Core.Observe.Evidence.signature"
-      ]
+      "law_piece": "F22",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Observe.Evidence.firstPrefix",
       "control_piece": "F22",
       "law": "ConcreteSpec.Core.Observe.infinite_stuttering",
-      "law_piece": "F20",
+      "law_piece": "F22",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/ObserveEvidence.lean:118:119",
       "control_piece": "F22",
       "law": "ConcreteSpec.Core.Observe.byteColumn_tab",
-      "law_piece": "F20",
+      "law_piece": "F22",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/ObserveEvidence.lean:121:123",
       "control_piece": "F22",
       "law": "ConcreteSpec.Core.Observe.byteColumn_tab",
-      "law_piece": "F20",
-      "unavailable": [
-        "ConcreteSpec.Core.Observe.Evidence.doubleTabColumn"
-      ]
+      "law_piece": "F22",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Observe.Evidence.doubleTabColumn",
       "control_piece": "F22",
       "law": "ConcreteSpec.Core.Observe.byteColumn_tab",
-      "law_piece": "F20",
+      "law_piece": "F22",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/ObserveEvidence.lean:142:146",
       "control_piece": "F22",
       "law": "ConcreteSpec.Core.Observe.trapLine_injective",
-      "law_piece": "F20",
-      "unavailable": [
-        "ConcreteSpec.Core.Observe.Evidence.punctuatedSpan"
-      ]
+      "law_piece": "F22",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/ObserveEvidence.lean:148:153",
       "control_piece": "F22",
       "law": "ConcreteSpec.Core.Observe.trapLine_injective",
-      "law_piece": "F20",
-      "unavailable": [
-        "ConcreteSpec.Core.Observe.Evidence.punctuatedSpan",
-        "ConcreteSpec.Core.Observe.Evidence.trapLineWithoutSite"
-      ]
+      "law_piece": "F22",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Observe.Evidence.trapLineWithoutSite",
       "control_piece": "F22",
       "law": "ConcreteSpec.Core.Observe.trapLine_injective",
-      "law_piece": "F20",
+      "law_piece": "F22",
       "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/ObserveEvidence.lean:155:159",
       "control_piece": "F22",
       "law": "ConcreteSpec.Core.Observe.trapLine_injective",
-      "law_piece": "F20",
-      "unavailable": [
-        "ConcreteSpec.Core.Observe.Evidence.punctuatedSpan",
-        "ConcreteSpec.Core.Observe.Evidence.shiftedColSpan"
-      ]
+      "law_piece": "F22",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/ObserveEvidence.lean:161:166",
       "control_piece": "F22",
       "law": "ConcreteSpec.Core.Observe.trapLine_injective",
-      "law_piece": "F20",
-      "unavailable": [
-        "ConcreteSpec.Core.Observe.Evidence.punctuatedSpan",
-        "ConcreteSpec.Core.Observe.Evidence.shiftedColSpan",
-        "ConcreteSpec.Core.Observe.Evidence.trapLineWithoutCol"
-      ]
+      "law_piece": "F22",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Observe.Evidence.trapLineWithoutCol",
       "control_piece": "F22",
       "law": "ConcreteSpec.Core.Observe.trapLine_injective",
-      "law_piece": "F20",
+      "law_piece": "F22",
       "unavailable": []
     },
     {
@@ -10617,25 +10463,21 @@
       "control": "ConcreteSpec/Proofs/ObserveReport.lean:363:375",
       "control_piece": "F23",
       "law": "ConcreteSpec.Core.Observe.runFrom_validTrace",
-      "law_piece": "F20",
-      "unavailable": [
-        "ConcreteSpec.Core.Observe.ReportDemo.prior_complete"
-      ]
+      "law_piece": "F23",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec/Proofs/ObserveReport.lean:377:394",
       "control_piece": "F23",
       "law": "ConcreteSpec.Core.Observe.runFrom_validTrace",
-      "law_piece": "F20",
-      "unavailable": [
-        "ConcreteSpec.Core.Observe.ReportDemo.prior_complete"
-      ]
+      "law_piece": "F23",
+      "unavailable": []
     },
     {
       "control": "ConcreteSpec.Core.Observe.completedAsPendingRun",
-      "control_piece": "F20",
+      "control_piece": "F23",
       "law": "ConcreteSpec.Core.Observe.runFrom_validTrace",
-      "law_piece": "F20",
+      "law_piece": "F23",
       "unavailable": []
     },
     {
@@ -12564,6 +12406,5 @@
       "unavailable": []
     }
   ],
-  "schedule_commit": "61998c215112b8ac5e011b242779a553334d74c7",
   "source": "aa44140a33747fa37ece59c76090972e564c65b4"
 }
