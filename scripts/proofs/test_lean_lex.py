@@ -36,7 +36,7 @@ class TrustLexer(unittest.TestCase):
                     self.assertEqual(lexer.count_examples(source), 1)
                     with contextlib.redirect_stdout(io.StringIO()):
                         lexer.examples(tmp, str(Path(tmp) / "out"), ["Spoof.lean"])
-                    self.assertIn("noncomputable def", (Path(tmp) / "out/Spoof.lean").read_text())
+                    self.assertIn("noncomputable abbrev", (Path(tmp) / "out/Spoof.lean").read_text())
 
     def test_lean_accepts_interpolation_boundaries(self):
         # Differential witness: these are Lean terms, not merely invented lexer inputs.
@@ -83,6 +83,58 @@ end Witness{index}
         self.assertEqual([i for i, c in enumerate(source) if c == '\n'],
                          [i for i, c in enumerate(result) if c == '\n'])
         self.assertEqual(lexer.count_examples(source), 1)
+
+    def test_example_renaming_line_start(self):
+        source = '-- example\nexample : True := by trivial\n'
+        self.assertEqual(lexer.rename_examples(source, lambda line: f'probe{line}'),
+                         '-- example\nnoncomputable abbrev «probe2» : True := by trivial\n')
+        for source in (' example : True := by trivial\n',
+                       'set_option linter.unusedVariables false in example : True := by trivial\n'):
+            with self.subTest(source=source), self.assertRaises(lexer.LexError):
+                lexer.rename_examples(source, lambda line: f'probe{line}')
+
+    def test_examples_command_error_names_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'Bad.lean'
+            path.write_text('-- header\n example : True := by trivial\n')
+            result = subprocess.run(
+                ['python3', lexer.__file__, 'examples', tmp, str(Path(tmp) / 'out'), 'Bad.lean'],
+                text=True, capture_output=True)
+            self.assertEqual(result.returncode, 3)
+            self.assertIn('Bad.lean:2: an `example`', result.stderr)
+            self.assertNotIn('Traceback', result.stderr)
+
+    def test_imports_command_lexer_error_names_proof(self):
+        # Stub only build/control work; the real per-file checker must catch both
+        # malformed lexemes and the shared renamer's line-start rejection.
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'ConcreteSpec/Proofs/Bad.lean'
+            path.parent.mkdir(parents=True)
+            for body, message in (
+                    ('open ConcreteSpec\n example : True := by trivial\n', '3: an `example`'),
+                    ('/- unterminated', 'unterminated comment')):
+                with self.subTest(body=body):
+                    path.write_text('import ConcreteSpec.Spec.Basics\n' + body)
+                    code = (
+                        'import sys; from pathlib import Path; '
+                        f'sys.path.insert(0, {str(Path(__file__).parent)!r}); '
+                        'import imports; '
+                        f'imports.ROOT = Path({tmp!r}); '
+                        'imports.run = lambda command: ""; '
+                        'imports.controls = lambda temp: None; '
+                        'sys.exit(imports.main())')
+                    result = subprocess.run(['python3', '-c', code], text=True, capture_output=True)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn('ConcreteSpec/Proofs/Bad.lean:' + message, result.stderr)
+                    self.assertNotIn('Traceback', result.stderr)
+
+    def test_module_import_word_boundaries(self):
+        modules = {'ConcreteSpec.Spec.Basics'}
+        source = ('import ConcreteSpec.Spec.Basics\n'
+                  'def importedX := 1\ndef value :=\n  importedX\n')
+        self.assertEqual(lexer.module_imports(source, modules)[0], list(modules))
+        with self.assertRaises(lexer.LexError):
+            lexer.module_imports(source + 'def bad := 0; import ConcreteSpec.Spec.Basics\n', modules)
 
     def test_compiler_import_graph_and_banned_words(self):
         header = lexer.compiler_header()
