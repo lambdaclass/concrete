@@ -53,6 +53,7 @@ export LAND_HOOK="$TMP/hook" LAND_REMOTE_RUNNER="$TMP/fake-runner" FAKE_GH_DIR="
 # (mark), so the leg passes on the members' provenance without calling the reviewer; a reviewer this
 # fails stands for one that is never needed.
 export LAND_REVIEW_CMD=false
+export LAND_TEST_RUN_AT_REF="$ROOT_DIR/scripts/land/run-at-ref.sh"
 
 cat > "$TMP/fake-gh" <<'GH'
 #!/usr/bin/env bash
@@ -87,9 +88,14 @@ cat > "$TMP/fake-runner" <<'EOF'
 # A remote runner: fetches like concrete-remote (a ref on origin, or a SHA) and reports the SHA.
 echo "$1" >> "$FAKE_GH_DIR/runner.log"
 if [ -n "${RUN_AT_REF_SOURCE:-}" ]; then
-  git bundle verify "$RUN_AT_REF_SOURCE" || exit 1
-  git bundle list-heads "$RUN_AT_REF_SOURCE" | grep -q "^$1 " || exit 1
+  # The real receiver must import the candidate without any pre-existing history.
+  receiver="$(mktemp -d)" || exit 1
+  trap 'rm -rf "$receiver"' EXIT
+  git init -q "$receiver/repo" || exit 1
+  RUN_AT_REF_REPO="$receiver/repo" RUN_AT_REF_RUNS="$receiver/runs" RUN_AT_REF_NO_NIX=1 \
+    bash "$LAND_TEST_RUN_AT_REF" "$1" 'git cat-file -e HEAD^{commit}' || exit 1
   printf '%s\n' "$RUN_AT_REF_SOURCE" > "$FAKE_GH_DIR/runner.bundle"
+  exit 0
 fi
 sha="$(git --git-dir="$ORIGIN_GIT" rev-parse --verify -q "refs/heads/$1" || git --git-dir="$ORIGIN_GIT" rev-parse --verify -q "$1^{commit}")" || { echo "no such ref $1"; exit 1; }
 echo "[concrete-remote] ref=$1 sha=$sha"
@@ -144,7 +150,7 @@ out="$(cd "$W" && LAND_REMOTE_PUSH=0 bash "$ROOT_DIR/scripts/land/train.sh" chec
 bundle_path="$(cat "$TMP/gh/runner.bundle" 2>/dev/null)"
 [ "$rc" = 0 ] && [ -n "$bundle_path" ] && [ ! -e "$bundle_path" ] \
   && [ -z "$(git -C "$W" for-each-ref refs/land-bundle/)" ] && [ -z "$(land_refs)" ] \
-  && ok "server-local runner receives a verified bundle; temporary refs and files are removed and nothing is published" \
+  && ok "server-local runner imports the bundle through run-at-ref in an empty repository; temporary refs and files are removed and nothing is published" \
   || { no "server-local bundle: exit $rc"; echo "$out"; }
 ( cd "$W" && git checkout -q --detach origin/main )
 

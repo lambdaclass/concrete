@@ -218,11 +218,14 @@ With a gate host, `check`'s impact leg is `scripts/land/gates_remote.sh`:
 
 1. It bundles the head and its complete history under a temporary ref. No receiver object
    inventory is negotiated, so the bundle has no prerequisite commits.
-2. The transport (`scripts/land/gates_transport_ssh.sh`) copies one directory to the host: the
-   bundle, this checkout's `run-at-ref.sh`, and a script that quotes the command for bash. The
-   host's login shell sees only `bash land-remote-<id>/run.sh`. That script runs `git fetch origin`
-   in the host's gate clone (`~/concrete2`), runs `run-at-ref.sh` on the bundle, and removes the
-   directory. The host therefore needs no GitHub credentials and no copy of the landing scripts.
+2. The transport (`scripts/land/gates_transport_ssh.sh`) copies one directory to the host,
+   containing exactly `c.bundle`, `scripts/land/run-at-ref.sh`, `scripts/land/bundle_source.py`,
+   `scripts/checks/lib/git_sandbox.sh`, and the generated `run.sh` that quotes the command for
+   bash. The host's login shell sees only `bash land-remote-<id>/run.sh`. That script checks the
+   gate login and gate repository (`RUN_AT_REF_REPO`, default `~/concrete2`), runs `run-at-ref.sh`
+   on the bundle, and removes the staged directory. The host needs Git, Python, nix and a gate
+   repository, which may be empty; its origin is unused and no GitHub credentials or preinstalled
+   landing scripts are required. The bundle supplies all candidate history.
 3. In a fresh clone of exactly the head, the host runs `impact_gates.sh`: the same hook, with the
    same input line the `ci` push will present. The command first unsets `CONCRETE_SKIP_GATES`
    (whatever the host's environment holds) and the hook's re-entry marker. Then it exports this

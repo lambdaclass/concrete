@@ -20,8 +20,9 @@
 # caller treats 3 as blocking; it never counts as a pass.
 #
 # Transport: LAND_GATES_TRANSPORT, called as `<transport> <host> <bundle> <ref> <command>`, must
-# print run-at-ref.sh's output. The default, gates_transport_ssh.sh, copies the bundle to the host
-# and pipes this checkout's run-at-ref.sh through ssh. The landing gate passes a fake.
+# print run-at-ref.sh's output. The default, gates_transport_ssh.sh, stages the bundle and
+# receiver scripts described in docs/LANDING.md and invokes them through ssh. It needs no
+# fetch from the gate clone's origin: the bundle carries all history. The landing gate passes a fake.
 set -uo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 incomplete() { echo "gates-remote: INCOMPLETE: $*" >&2; exit 3; }

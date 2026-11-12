@@ -3,14 +3,11 @@
 #
 #   gates_transport_ssh.sh <host> <bundle> <ref> <command>
 #
-# Copies ONE directory to <host> (any ssh destination, e.g. an ~/.ssh/config alias): the bundle, this
-# checkout's scripts/land/run-at-ref.sh with the sandbox helper it sources (scripts/checks/lib/
-# git_sandbox.sh, staged at the same relative paths), and a bash script that brings the host's gate clone up to
-# date with its origin (so base, which is on main, is there) and runs run-at-ref.sh with
-# RUN_AT_REF_SOURCE=<the bundle>, <ref> and <command>. The ref and command are quoted for bash HERE,
-# into that file, so the host's login shell only ever sees `bash land-remote-<id>/run.sh`, whatever
-# the command contains. Output is run-at-ref.sh's. The login must not be root. The host needs its gate clone (RUN_AT_REF_REPO,
-# default ~/concrete2) and nix; it needs no GitHub credentials and no copy of the landing scripts.
+# Copies ONE directory to <host> (any ssh destination, e.g. an ~/.ssh/config alias).
+# Its complete file inventory and receiver contract are documented in docs/LANDING.md,
+# "The gate host": the full-history bundle needs no objects from the gate clone's origin.
+# The command is quoted for bash HERE into run.sh, so the host's login shell only sees
+# `bash land-remote-<id>/run.sh`. Output is run-at-ref.sh's; the login must not be root.
 #
 # Env: LAND_GATES_SSH (default `ssh -o BatchMode=yes -o ServerAliveInterval=20 -o ServerAliveCountMax=120`),
 #      LAND_GATES_SCP (default `scp -q -r -o BatchMode=yes`; must copy a directory).
@@ -33,7 +30,7 @@ cp "$bundle" "$tmp/$id/c.bundle" && cp "$SELF_DIR/run-at-ref.sh" "$tmp/$id/scrip
   echo 'dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"'
   echo 'trap '\''rm -rf "$dir"'\'' EXIT'
   echo 'gc="${RUN_AT_REF_REPO:-$HOME/concrete2}"'
-  # Who the ssh destination logged in as, checked ON THE HOST before anything is fetched: gates never
+  # Who the ssh destination logged in as, checked ON THE HOST before importing the bundle: gates never
   # run as root, an unreadable identity is not "not root", and a login without its gate clone names
   # the account and path. (2026-11-08: a train run from an account whose `concrete-ci-2` alias is
   # the root admin login looked for /root/concrete2 and reported only "fetch in the gate clone
@@ -44,7 +41,6 @@ cp "$bundle" "$tmp/$id/c.bundle" && cp "$SELF_DIR/run-at-ref.sh" "$tmp/$id/scrip
   # A gate clone is a work tree whose top level is $gc (a clone, or a worktree whose .git is a file).
   echo 'top="$(git -C "$gc" rev-parse --show-toplevel 2>/dev/null)"'
   echo '[ -n "$top" ] && [ "$(cd "$gc" && pwd -P)" = "$(cd "$top" && pwd -P)" ] || { echo "transport: no gate clone at $gc for $who (RUN_AT_REF_REPO); is the ssh destination the gate user?" >&2; exit 255; }'
-  echo 'git -C "$gc" fetch -q origin || { echo "transport: fetch in the gate clone failed" >&2; exit 255; }'
   printf 'RUN_AT_REF_SOURCE="$dir/c.bundle" bash "$dir/scripts/land/run-at-ref.sh" %q %q\n' "$ref" "$cmd"
 } > "$tmp/$id/run.sh"
 "${SCP[@]}" "$tmp/$id" "$host:$id" || { echo "transport: copying to $host failed" >&2; exit 255; }

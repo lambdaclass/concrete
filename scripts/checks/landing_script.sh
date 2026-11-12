@@ -532,7 +532,9 @@ EOF
   git add -A && git commit -qm base && git push -q origin HEAD:main \
   && echo 'echo gate2' > scripts/g2.sh && git add -A && git commit -qm head )
 RIB="$(git -C "$RI" rev-parse HEAD~1)" RIH="$(git -C "$RI" rev-parse HEAD)"
-git clone -q "$TMP/ri-origin.git" "$HH/concrete2"
+# An empty receiver with an unusable origin controls both history completeness and origin independence.
+git init -q "$HH/concrete2"
+git -C "$HH/concrete2" remote add origin "$TMP/nonexistent-origin.git"
 cat > "$TMP/scp-shim" <<'EOF'
 #!/usr/bin/env bash
 # scp -r <dir> host:<name>  ->  copy into the fake host's home
@@ -590,7 +592,7 @@ rmdir "$HH/concrete2"; mv "$HH/concrete2.away" "$HH/concrete2"
 [ "$rc" = 3 ] && has "$out" "INCOMPLETE" && has "$out" "no gate clone at $HH/concrete2 for " && [ ! -s "$TMP/hostgit.log" ] && [ ! -f "$RIATT" ] \
   && ok "a gate login without its gate clone is INCOMPLETE and names the account and path" || { no "missing gate clone: exit $rc"; echo "$out" | sed 's/^/      /'; }
 # A gate clone that is a linked worktree (its .git a file) is a gate clone.
-mv "$HH/concrete2" "$HH/concrete2.main"; git -C "$HH/concrete2.main" worktree add -q --detach "$HH/concrete2" 2>/dev/null
+mv "$HH/concrete2" "$HH/concrete2.main"; git -C "$HH/concrete2.main" worktree add -q --detach "$HH/concrete2" "$RIH" 2>/dev/null
 e2e
 git -C "$HH/concrete2.main" worktree remove --force "$HH/concrete2"; mv "$HH/concrete2.main" "$HH/concrete2"
 [ "$rc" = 0 ] && has "$out" "stub gates passed" \
