@@ -243,3 +243,84 @@ transitive axiom set. No previous row changes or disappears.
 | `instDecidableStringEscape._proof_1` | string escape and decoded scalar |
 | `instDecidableStringRaw._proof_1` | raw string character |
 | `instDecidableWhitespace._proof_1` | whitespace character |
+
+## Local identity performance (ISS-0066)
+
+The classifier still checks the inferred type of every elaborated subterm of
+all declarations reachable from semantic roots, and checks type expressions as
+carriers themselves. The cache stores results of that same classifier; it adds
+no namespace, matcher, recursor, body or dependency exemption.
+
+Ordinary fixtures use distinct module and declaration names. One imported
+environment contains them and the main library, and every reachable constant is
+classified once. Each target reports only roots in its own transitive module
+import closure. If taint originating outside that closure could reach a target
+root, it would be a dependency of that root and therefore inside the closure.
+This is why sharing traversal preserves standalone outcomes. The controls check
+both an unrelated clean fixture beside refused fixtures and an explicit import
+of a refused fixture. Identically named declarations in different namespaces
+must retain their independent verdicts.
+
+Carrier entries containing locals, semantic-expression caches and Lean's
+inferType/normalization caches share the lifetime of one declaration. Closed
+carrier expressions (no free variables, metavariables or loose bound variables)
+are reused across declarations, including their constructor-ancestry key. Opened binders have fresh free-variable
+identities; imported expressions have no metavariables. Cache entries involving
+locals are never reused in another declaration's context. Shape controls still
+use independent environments because they redefine the nominal identity types.
+The two Examples refusals share a separate replacement Examples environment,
+with each unauthorized declaration required by name.
+
+Reproduce scanner phase and wall timings, and peak resident memory, with:
+
+```sh
+nix develop -c bash -c 'LOCAL_IDENTITY_PROFILE=1 /usr/bin/time -v bash scripts/proofs/trust_ban.sh'
+```
+
+Measurements below are sequential, warm-build runs on Linux x86_64, AMD Ryzen 9
+9950X3D, Lean 4.35.0, inside nix develop. The workstation was shared with other
+sessions. Scanner invocations and fixture compilations were sequential; controls
+were never profiled in parallel. Peak RSS is the maximum child resident set
+reported by GNU time, not the sum of independently running processes. Baseline source:
+22724c4be398ab399cef3ab3f756cfb6df72591b, with phase-timing instrumentation only.
+
+The representative control is the original compiling lambda callback:
+`def leak (vs : List ConcreteSpec.Var) : Nat := (vs.map (fun v => toString v.id)).length`.
+Both versions reject specifically at `semantic diagnostics dependency: leak`.
+The no-op benchmark elaborates the same scanner definitions but replaces the
+entry point with `pure ()`, isolating startup/elaboration from environment work.
+
+| Representative callback | Before | After |
+| --- | ---: | ---: |
+| Wall time | 18.970 s | 8.300 s |
+| Import | 0.290 s | 0.372 s |
+| Graph construction | 10.893 s | 0.222 s |
+| Semantic traversal (1,259 declarations) | 6.260 s | 5.986 s |
+| Peak RSS (KiB) | 2,190,472 | 2,071,724 |
+
+The old no-op scanner took 1.320 s with 1,637,196 KiB peak RSS. Its process and
+elaboration overhead is small beside graph construction and traversal; removing
+repeated environment scans and irrelevant reverse edges addresses the measured
+cause. Shape controls still start separate processes to keep incompatible
+nominal declarations isolated. Scanner invocations fall from 68 to 8; the
+Examples pair is compiled together but each refusal is asserted by its own name.
+
+| Complete `trust_ban.sh` | Before | After |
+| --- | ---: | ---: |
+| Wall time | 27m36.59s | 5m51.34s |
+| Peak RSS (KiB) | 2,744,888 | 2,132,488 |
+| Result | PASS=39 FAIL=0 | PASS=39 FAIL=0 |
+
+The final shared batch imported in 0.334 s, built its graph in 0.552 s, and
+traversed 7,012 reachable declarations in 48.306 s (51.107 s process wall time).
+The replacement Examples environment imported in 0.285 s, built its graph in
+0.221 s, and traversed 2,010 declarations in 15.391 s (17.825 s wall time).
+The batch retained 187,508 closed carrier results; Examples retained 120,787.
+Context-bearing entries and Meta state were released after each declaration.
+All 69 original controls remain, with the two import-isolation controls added.
+
+The after run measures the uncommitted writer tree based on the baseline SHA
+above; the harness owns its commit. Measured source SHA-256 values:
+
+- `local_identity.py`: `b8c482adb88553bfe4d0e951b203fd63c626fde7c12a65f473c763af7d6eef72`
+- `local_identity.lean`: `a7ef755d42ab43c092d87f8295af2066613a1bbd510c00ed254833be73c83a39`
