@@ -5,7 +5,7 @@
 #
 # Copies ONE directory to <host> (any ssh destination, e.g. an ~/.ssh/config alias).
 # Its complete file inventory and receiver contract are documented in docs/LANDING.md,
-# "The gate host": the full-history bundle needs no objects from the gate clone's origin.
+# "Gate host": the full-history bundle needs no objects from the gate clone's origin.
 # The command is quoted for bash HERE into run.sh, so the host's login shell only sees
 # `bash land-remote-<id>/run.sh`. Output is run-at-ref.sh's; the login must not be root.
 #

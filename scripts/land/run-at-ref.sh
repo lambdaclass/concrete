@@ -6,8 +6,8 @@
 #
 # A clone, not a worktree: some gates refuse to run in a linked worktree (the mutation campaign and
 # its summary producer, check_phase6c_observability #5: "Run it in a clone"), so a full set run in
-# a worktree is red for a reason that has nothing to do with the candidate. `clone --local`
-# hardlinks the objects, so it costs about what a worktree costs.
+# a worktree is red for a reason that has nothing to do with the candidate. Initialize an
+# independent repository and fetch only the run ref, without inheriting the gate clone's refs.
 #
 # Env: RUN_AT_REF_REPO (gate clone, default ~/concrete2), RUN_AT_REF_RUNS (default ~/runs),
 #      RUN_AT_REF_SOURCE (canonical repository URL or a verified git bundle file,
@@ -46,8 +46,9 @@ cleanup() {
 } 9>"$RUNS/.fetch.lock"
 trap 'cleanup; git -C "$REPO" update-ref -d "refs/run-at-ref/$ID" 2>/dev/null || true' EXIT
 trap 'exit 130' INT TERM HUP
-git clone --quiet --local --no-checkout "$REPO" "$WT"
-git -C "$WT" fetch --quiet origin "+refs/remotes/origin/*:refs/remotes/origin/*" "+refs/run-at-ref/$ID:refs/run-at-ref/$ID"
+git init --quiet "$WT"
+git -C "$WT" remote add origin "$REPO"
+git -C "$WT" fetch --quiet --no-tags origin "+refs/run-at-ref/$ID:refs/run-at-ref/$ID"
 git -C "$WT" checkout --quiet --detach "$SHA"
 echo "[concrete-remote] ref=$REF sha=$SHA clone=$WT host=$(hostname)"
 if [ -d "$REPO/.lake" ]; then cp -a "$REPO/.lake" "$WT/.lake"; fi

@@ -49,12 +49,17 @@ fi
 git reset -q -- tracked
 rm tracked
 expected="$(git rev-parse HEAD)"
+# A long-lived gate repository may retain stale remote refs and unrelated tags.
+# Neither the initial repository creation nor the run-ref fetch may import them.
+git update-ref refs/remotes/origin/main "$expected"
+git update-ref refs/remotes/origin/wip/stale "$expected"
+git update-ref refs/tags/stale-gate-tag "$expected"
 cd "$TMP"
 mkdir 'caller@host:dir'
 cp input.bundle 'caller@host:dir/input.bundle'
 for source in "$TMP/input.bundle" input.bundle 'caller@host:dir/input.bundle'; do
   out="$(RUN_AT_REF_REPO=repo RUN_AT_REF_SOURCE="$source" RUN_AT_REF_RUNS=relative-runs RUN_AT_REF_NO_NIX=1 \
-    bounded_run 15 -- bash "$ROOT_DIR/scripts/land/run-at-ref.sh" HEAD 'git rev-parse HEAD')"
+    bounded_run 15 -- bash "$ROOT_DIR/scripts/land/run-at-ref.sh" HEAD 'test -z "$(git for-each-ref refs/remotes/origin/ refs/tags/)" && git rev-parse HEAD')"
   [[ "$out" == *"sha=$expected"* && "$out" == *"exit=0"* ]] || { echo "$out" >&2; exit 1; }
 done
 [[ -z "$(git -C repo for-each-ref refs/run-at-ref/)" ]]
