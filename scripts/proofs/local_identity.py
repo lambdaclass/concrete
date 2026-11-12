@@ -77,6 +77,18 @@ def main():
             raise SystemExit('nominal table scan accepted list alias')
         print('control: spelling table must be nominal')
         controls = {
+            'nested carrier fields': 'structure Key where\n  value : ConcreteSpec.Var\n  extra : Nat\nstructure Hidden where\n  key : Key\n  spelling : String',
+            'unused split structure': 'structure Hidden where\n  key : ConcreteSpec.Var\n  spelling : String',
+            'nested containers': 'def leak : List (List (ConcreteSpec.Var × String)) := []',
+            'dependent-pair list': 'def leak (table : List (Sigma (fun _ : ConcreteSpec.Var => String))) : Nat := table.length',
+            'dependent-ppair list': 'def leak (table : List (PSigma (fun _ : ConcreteSpec.Var => String))) : Nat := table.length',
+            'membership parameter': 'def leak (table : ConcreteSpec.Var → String → Bool) : Bool := table ⟨0⟩ "x"',
+            'membership field': 'structure Hidden where\n  member : ConcreteSpec.Var → String → Bool\ndef leak : Hidden := ⟨fun _ _ => true⟩',
+            'reducible predicate': 'def Hidden (_ : ConcreteSpec.Var) (_ : String) : Prop := True',
+            'empty indexed proposition': 'inductive Hidden : ConcreteSpec.Var → String → Prop',
+            'dependent field alias': 'abbrev Text (_ : ConcreteSpec.Var) := String\ndef leak : List (Sigma Text) := []',
+            'user matcher name': 'def match_1 (table : ConcreteSpec.Var → String → Bool) : Bool := table ⟨0⟩ "x"',
+            'indexed proposition': 'inductive Hidden : ConcreteSpec.Var → String → Prop where\n  | entry : Hidden ⟨0⟩ "x"\ntheorem leak (h : Hidden ⟨0⟩ "x") : Hidden ⟨0⟩ "x" := h',
             'nominal': 'def leak : ConcreteSpec.LocalNames := ⟨[]⟩',
             'nominal alias': 'abbrev Hidden := ConcreteSpec.LocalNames\ndef leak : Hidden := ⟨[]⟩',
             'pair': 'def leak : ConcreteSpec.Var × String := (⟨0⟩, "x")',

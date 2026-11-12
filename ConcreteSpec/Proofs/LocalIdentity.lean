@@ -23,7 +23,8 @@ theorem first_binding {α : Type} (x : Var) (a : α) (rest : AList Var α) :
     AList.lookup ((x, a) :: rest) x = some a := by
   rw [AList.lookup_cons, ite_eq_left rfl]
 
-/-- Different numbers remain different locals; for example, locals 0 and 1 cannot alias. -/
+/-- Different numbers remain different locals; for example, locals 0 and 1 cannot alias.
+This is the trivial direction of `numeric_identity`, covered by that law’s negative control. -/
 theorem distinct_numbers (x y : Var) (h : x.id ≠ y.id) : x ≠ y := by
   intro heq
   exact h (congrArg Var.id heq)

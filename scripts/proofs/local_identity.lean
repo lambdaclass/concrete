@@ -1,113 +1,99 @@
 import Lean
 
-open Lean
+open Lean Meta
 
--- Inspect type aliases and pairing constructors without conflating a semantic AST
--- (which may contain struct-field names) with a local spelling table.
--- A Var/String pairing is data carrying both, or a function directly connecting the two.
-partial def typeResult (e : Expr) : Bool :=
-  match e with
-  | .forallE _ _ b _ => typeResult b
-  | .sort u => u != Level.zero
-  | _ => false
+-- All inspection happens in MetaM: instantiate dependent binders before reducing aliases
+-- and field families. Inductive semantic ASTs remain opaque carriers: their field
+-- names are not local spellings. Structure fields are inspected in their local context.
+def normalType (e : Expr) : MetaM Expr := do
+  withTransparency .all <| whnf (← instantiateMVars e)
 
--- Instantiate a structure's fields at its actual type arguments. This catches a generic
--- `Record Var String` as well as a record declaring those field types directly.
-def structureFields (env : Environment) (e : Expr) : List Expr := Id.run do
-  let .const n _ := e.getAppFn | return []
-  if !isStructure env n then return []
-  let some (.inductInfo info) := env.find? n | return []
-  let args := e.getAppArgs
-  if args.size != info.numParams then return []
-  let some (.ctorInfo ctor) := env.find? info.ctors.head! | return []
-  let mut t := ctor.type
-  for arg in args do
-    if !t.isForall then return []
-    t := t.bindingBody!.instantiate1 arg
-  let mut result := #[]
-  while t.isForall do
-    result := result.push t.bindingDomain!
-    t := t.bindingBody!
-  -- A proposition's evidence is not a spelling record.
-  let some ci := env.find? n | return []
-  let mut kind := ci.type
-  while kind.isForall do kind := kind.bindingBody!
-  if kind == mkSort Level.zero then return []
-  return result.toList
+def withStructureFields (e : Expr) (k : Array Expr → MetaM α) : MetaM α := do
+  let e ← normalType e
+  let env ← getEnv
+  let .const n levels := e.getAppFn | return ← k #[]
+  if !isStructure env n then return ← k #[]
+  let some (.inductInfo info) := env.find? n | return ← k #[]
+  if e.getAppNumArgs != info.numParams then return ← k #[]
+  let t ← inferType (mkAppN (mkConst info.ctors.head! levels) e.getAppArgs)
+  forallTelescopeReducing t fun fields _ => do
+    let types ← fields.mapM fun field => do normalType (← inferType field)
+    k types
 
--- Only spelling carriers count: semantic records and predicates remain opaque. In particular,
--- a field-name/Atom pair is not a spelling, and an environment entry is not a String.
-partial def atoms (env : Environment) (e : Expr) (seen : List Name := []) : Bool × Bool := Id.run do
+def combine (a b : Bool × Bool) : Bool × Bool := (a.1 || b.1, a.2 || b.2)
+
+-- Carrier summaries cross containers and structure fields. Product payloads preserve
+-- container boundaries: a field-name/Atom pair is not itself a local spelling.
+partial def carriers (e : Expr) (seen : List Name := []) (flatten : Bool := false) (records : Bool := true) : MetaM (Bool × Bool) := do
+  let e ← normalType e
   if e.isConstOf `ConcreteSpec.Var then return (true, false)
   if e.isConstOf `String then return (false, true)
-  if let .const n _ := e.getAppFn then
-    if !seen.contains n then
-      if let some (.defnInfo d) := env.find? n then
-        if typeResult d.type then return atoms env (d.value.beta e.getAppArgs) (n :: seen)
-    -- A single-field nominal wrapper preserves the carrier (for example, Text : String).
-    if !seen.contains n then
-      if let [field] := structureFields env e then
-        return atoms env field (n :: seen)
-    let args := e.getAppArgs
-    if (n == `List || n == `Option) && args.size == 1 then
-      return atoms env args[0]! seen
-    if n == `Prod && args.size == 2 then
-      let a := atoms env args[0]! seen
-      let b := atoms env args[1]! seen
-      if (a.1 || a.2) && (b.1 || b.2) then return (a.1 || b.1, a.2 || b.2)
-  return (false, false)
+  if e.isForall then
+    return ← forallTelescopeReducing e fun xs result => do
+      let mut found ← carriers result seen false records
+      for x in xs do found := combine found (← carriers (← inferType x) seen false records)
+      return found
+  let .const n _ := e.getAppFn | return (false, false)
+  if seen.contains n then return (false, false)
+  let ancestors := seen
+  let seen := n :: seen
+  withStructureFields e fun fields => do
+    if fields.size == 1 then return ← carriers fields[0]! seen false records
+    if n == `Prod || n == `Sigma || n == `PSigma then
+      let mut found := (false, false)
+      for field in fields do
+        let a ← carriers field seen flatten records
+        if !flatten && !a.1 && !a.2 then return (false, false)
+        found := combine found a
+      return found
+    -- Includes nested records and indexed predicates, including Prop.
+    let mut found := (false, false)
+    if records then
+      for field in fields do
+        found := combine found (← carriers field seen false records)
+    for arg in e.getAppArgs do
+      if ← isType arg then
+        found := combine found (← carriers arg ancestors false records)
+      else
+        found := combine found (← carriers (← inferType arg) ancestors false records)
+    return found
 
--- Flatten contiguous product payloads, preserving container boundaries. Thus Var × (String × Nat)
--- carries a spelling, while (an environment) × (field-name/Atom pairs) does not pair a local
--- with a spelling. Opaque semantic records remain opaque unless their own fields pair them.
-partial def components (env : Environment) (e : Expr) (seen : List Name := []) : Bool × Bool := Id.run do
-  if let .const n _ := e.getAppFn then
-    if !seen.contains n then
-      if let some (.defnInfo d) := env.find? n then
-        if typeResult d.type then return components env (d.value.beta e.getAppArgs) (n :: seen)
-    let args := e.getAppArgs
-    if n == `Prod && args.size == 2 then
-      let a := components env args[0]! seen
-      let b := components env args[1]! seen
-      return (a.1 || b.1, a.2 || b.2)
-  return atoms env e seen
-
-partial def codomain (e : Expr) : Expr :=
-  match e with
-  | .forallE _ _ b _ => codomain b
-  | _ => e
-
-partial def paired (env : Environment) (e : Expr) (seen : List Name := []) : Bool := Id.run do
-  if let .const n _ := e.getAppFn then
-    if !seen.contains n then
-      if let some (.defnInfo d) := env.find? n then
-        if typeResult d.type then
-          if paired env (d.value.beta e.getAppArgs) (n :: seen) then return true
-  if let .const n _ := e.getAppFn then
-    if !seen.contains n then
-      let mut v := false
-      let mut s := false
-      for field in structureFields env e do
-        let a := components env field
-        v := v || a.1
-        s := s || a.2
-        if paired env field (n :: seen) then return true
-      if v && s then return true
-  match e with
-  | .forallE _ d b _ =>
-    let a := atoms env d
-    let z := components env (codomain b)
-    return (a.1 && !a.2 && z.2 && !z.1) ||
-      (a.2 && !a.1 && z.1 && !z.2) ||
-      paired env d seen || paired env b seen
-  | .app f x =>
-    if e.getAppFn.isConstOf `Prod then
-      let args := e.getAppArgs
-      if args.size == 2 then
-        let a := components env e
-        if a.1 && a.2 then return true
-    return paired env f seen || paired env x seen
-  | _ => return false
+-- At an interface's outer telescope, a local and a field-name parameter are legal.
+-- Inside any parameter, field or index, ALL binders and the result contribute:
+-- Var → String → Bool and Var → String → Prop are tables too.
+partial def paired (e : Expr) (seen : List Name := []) (interface : Bool := false) : MetaM Bool := do
+  let e ← normalType e
+  if !interface then
+    let a ← carriers e [] true
+    if a.1 && a.2 then return true
+  if e.isForall then
+    return ← forallTelescopeReducing e fun xs result => do
+      -- The outer interface also forbids direct name-conversion functions. At this
+      -- boundary semantic records/judgments are opaque endpoints: an AST's field names
+      -- do not make an AST conversion a Var/String conversion. Each endpoint is still
+      -- checked independently below with full field/index inspection.
+      let output ← if ← isProp result then pure (false, false) else carriers result [] true false
+      for x in xs do
+        let domain ← inferType x
+        let input ← carriers domain [] false false
+        if (input.1 && !input.2 && output.2 && !output.1) ||
+            (input.2 && !input.1 && output.1 && !output.2) then return true
+        if ← paired domain seen then return true
+      paired result seen
+  let .const n _ := e.getAppFn | return false
+  if seen.contains n then return false
+  let seen := n :: seen
+  let fieldsPaired ← withStructureFields e fun fields => do
+    let mut found := (false, false)
+    for field in fields do
+      found := combine found (← carriers field [] true)
+      if ← paired field seen then return true
+    return found.1 && found.2
+  if fieldsPaired then return true
+  for arg in e.getAppArgs do
+    if ← isType arg then
+      if ← paired arg seen then return true
+  return false
 
 -- The only presentation records in Examples are complete programs and function bodies
 -- (input context, statements, return atom). No operation or arbitrary Elaborated payload is exempt.
@@ -142,28 +128,32 @@ def main (args : List String) : IO Unit := do
       users := users.insert c ((users[c]?.getD #[]).push n)
   let mut tainted : Std.HashSet Name := {}
   let mut queue := #[`ConcreteSpec.LocalNames, `ConcreteSpec.Elaborated]
-  -- Structures can split a spelling association over several fields. Seed their names too;
-  -- reverse reachability then catches aliases, nested structures and consumers transitively.
-  for (n, _) in env.constants.toList do
-    if !isStructure env n then continue
-    let some ci := env.find? n | continue
-    let mut result := ci.type
-    while result.isForall do result := result.bindingBody!
-    if result == mkSort Level.zero then continue
-    if let some (.inductInfo d) := env.find? n then
-      let mut v := false
-      let mut s := false
-      let mut hasPair := false
-      for c in d.ctors do
-        if let some ci := env.find? c then
-          let mut t := ci.type
-          while t.isForall do
-            hasPair := hasPair || paired env t.bindingDomain!
-            let a := components env t.bindingDomain!
-            v := v || a.1
-            s := s || a.2
-            t := t.bindingBody!
-      if (v && s) || hasPair then queue := queue.push n
+  -- Inspect every declaration's instantiated telescope, including inductive indices
+  -- and Prop-valued judgments. The same analysis handles fields and function values.
+  let inspect : MetaM (Array Name) := do
+    let mut seeds := #[]
+    for (n, ci) in env.constants.toList do
+      let some i := env.getModuleIdxFor? n | continue
+      let m := env.header.moduleNames[i.toNat]!.toString
+      if !(m == "ConcreteSpec.Spec" || m.startsWith "ConcreteSpec.Spec.") &&
+          !isStructure env n then continue
+      -- Lean-generated eliminators expose constructor fields as continuation arguments.
+      -- They are not user semantic interfaces; dependencies still propagate through them.
+      if isMatcherCore env n || isAuxRecursor env n || (ci matches .recInfo _) then continue
+      let predicate ← forallTelescopeReducing ci.type fun _ result => do
+        return (← normalType result) == mkSort Level.zero
+      let interface := !predicate && match ci with
+        | .inductInfo _ => false
+        | _ => true
+      let structurePair ← if isStructure env n then
+        forallTelescopeReducing ci.type fun params _ => do
+          let type := mkAppN (mkConst n (ci.levelParams.map mkLevelParam)) params
+          paired type
+        else pure false
+      if structurePair || (← paired ci.type [] interface) then seeds := seeds.push n
+    return seeds
+  let (seeds, _) ← (inspect.run' {}).toIO { fileName := "local_identity", fileMap := default } { env := env }
+  queue := queue ++ seeds
   let mut pos := 0
   while pos < queue.size do
     let n := queue[pos]!
@@ -183,7 +173,7 @@ def main (args : List String) : IO Unit := do
         (presentationRecord ci.type ||
          n == `ConcreteSpec.Examples.namesBound.match_1 ||
          n == `ConcreteSpec.Examples.namesBound) then continue
-    if tainted.contains n || paired env ci.type then
+    if tainted.contains n then
       IO.eprintln s!"semantic diagnostics dependency: {n}"
       bad := true
   if bad then throw (IO.userError "semantic definitions refer to LocalNames/Elaborated")
