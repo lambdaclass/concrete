@@ -15,6 +15,9 @@ def main():
             fetched = set()
             def fixture(*args):
                 calls.append(args)
+                if args[0]=='config':
+                    if args[1:]!=('--get','landing.inventoryRemote'): raise ValueError('unexpected remote config lookup')
+                    return b'fixture-remote\n'
                 if args[0]=='rev-parse':
                     tag = args[-1].removesuffix('^{commit}')
                     if tag not in fetched: raise inventory.subprocess.CalledProcessError(1,args)
@@ -22,6 +25,7 @@ def main():
                         return ('f'*40).encode()
                     return inventory.PIN_TAGS[tag.rsplit('/',1)[-1]].encode()
                 if args[0]=='ls-remote':
+                    if args[1]!='fixture-remote': raise ValueError('wrong configured remote')
                     tag = args[-2]
                     ref = inventory.PIN_TAGS[tag.rsplit('/',1)[-1]]
                     return ((('f'*40 if annotated else ref)+'\t'+tag+'\n')+
@@ -42,7 +46,7 @@ def main():
                         if args[0]=='ls-remote' and args[-2]==tag: return advertised
                         return fixture(*args)
                     inventory.git = missing
-                    try: inventory.ensure_objects()
+                    try: inventory.ensure_objects(remote='fixture-remote')
                     except ValueError as exc:
                         if str(exc)!='missing or changed protected inventory pin: '+tag+' expected '+expected: raise
                     else: raise ValueError('missing/changed pin accepted')
@@ -50,12 +54,23 @@ def main():
             if args[0]=='rev-parse': raise inventory.subprocess.CalledProcessError(1,args)
             return b''
         inventory.git = all_missing
-        try: inventory.ensure_objects()
+        try: inventory.ensure_objects(remote='fixture-remote')
         except ValueError as exc:
-            for name,ref in inventory.PIN_TAGS.items():
-                if 'refs/tags/spec-inventory/'+name+' expected '+ref not in str(exc):
-                    raise ValueError('missing tag omitted from diagnostic: '+name)
+            expected = '\n'.join('missing or changed protected inventory pin: refs/tags/spec-inventory/'+n+' expected '+r
+                                 for n,r in inventory.PIN_TAGS.items())
+            if str(exc)!=expected: raise
         else: raise ValueError('all missing pins accepted')
+        def unavailable(*args):
+            if args[0] in ('rev-parse','ls-remote'):
+                raise inventory.subprocess.CalledProcessError(1,args)
+            return b''
+        inventory.git = unavailable
+        expected = '\n'.join('missing or changed protected inventory pin: refs/tags/spec-inventory/'+n+' expected '+r
+                             for n,r in inventory.PIN_TAGS.items())
+        try: inventory.ensure_objects(remote='fixture-remote')
+        except ValueError as exc:
+            if str(exc)!=expected: raise
+        else: raise ValueError('unavailable remote accepted')
         with tempfile.TemporaryDirectory(prefix='landing-local-pins-') as tmp:
             root = Path(tmp)
             config = root/'gitconfig'
@@ -85,9 +100,9 @@ def main():
                         real_git('tag','--force',*(['-a','-m','annotated control'] if annotated else []),
                                  'spec-inventory/source',target)
                     set_tag(expected)
-                    inventory.ensure_objects()
+                    inventory.ensure_objects(remote='fixture-remote')
                     set_tag('HEAD')
-                    try: inventory.ensure_objects()
+                    try: inventory.ensure_objects(remote='fixture-remote')
                     except ValueError as exc:
                         if str(exc)!='changed protected inventory pin: '+tag+' expected '+expected: raise
                     else: raise ValueError('retargeted local pin accepted')

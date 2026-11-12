@@ -102,31 +102,39 @@ and `note` is JSON with exactly these fields (all other TSV columns empty):
   name), `scope` (the ordered enclosing `[kind, digest, ordinal]` triples), `kind`, `digest`,
   and `ordinal` (zero-based occurrence among identical commands in that scope).
 - `reason`: nonempty explanation, including why retired material is intentionally omitted.
-- `review`: `{ "verdict": "ACCEPT", "reference": { "path": "review/file", "commit": "<40-hex>" } }`,
-  or a reference containing `note` (a full `refs/notes/...` ref) and `commit` instead of `path`.
-  The commit must be an ancestor of HEAD and the file at that commit or note on that commit
-  must exist and be nonempty. The gate validates the artifact reference, not its judgment.
+- `review`: `{ "verdict": "ACCEPT", "reference": { "path": "ConcreteSpec/landing/reviews/ID.txt", "commit": "<40-hex>" } }`.
+  The artifact commit must be an ancestor of HEAD. Review records live only under
+  `ConcreteSpec/landing/reviews/` with a `.txt` suffix. Each contains exactly one
+  `COMMIT: <40-hex>` naming the reviewed revision (an ancestor of the artifact commit),
+  a `RECORD: <replacement name>` or a `UNIT: <superseded name>` line for every covered unit,
+  and a final `VERDICT: ACCEPT` line. The gate parses these fields from the committed artifact;
+  the verdict in the inventory alone is insufficient. Notes refs are unsupported.
 
 The judgment refuses unknown or already-superseded units, generated constants, owner-held or
 BASE units, cross-piece supersessions, malformed schemas and missing reviews. A target that is
-also a snapshot unit must belong to the same piece. Targets cannot be shared between records.
-All target declarations and commands must match together at HEAD; partial replacement does not
-close. Reviewed retirement closes only when every superseded unit is absent at HEAD, without
+also a snapshot unit must be the superseded declaration itself; independent same-piece units
+are refused. Each replacement record supersedes exactly one obligation. Targets cannot be shared
+between records.
+All target declarations and commands must match together at HEAD, and every superseded unit
+must be absent or changed beyond its snapshot full digest; partial replacement does not close.
+Reviewed retirement closes only when every superseded unit is absent at HEAD, without
 replacement material. Results report `reconciled by
 replacement` or `reconciled by retirement`, distinct from `identical full digest`, preserving the
 original denominator. Silent edits or deletion cannot close an obligation. This supports F02's
 replaced examples and all repair/replace command obligations without restoring obsolete rules.
-`--head-digests PATH` exports HEAD declaration digests; command keys follow `command_match_keys`
-from the fresh census. Regeneration preserves the additive reconciliation records.
+`--head-digests PATH` exports `declarations` (HEAD full digests) and `headCommandKeys`
+(the command objects accepted by replacement records) from the fresh census. Regeneration
+preserves the additive reconciliation records.
 
 Before landing, the coordinator creates the following lightweight tags at these exact objects
 and pushes each tag to origin (and to lambdaclass for the mirrored landing). Never force or
-retarget a tag; investigate an existing mismatch. For each row, run `git tag spec-inventory/NAME
-SHA`, then `git push origin refs/tags/spec-inventory/NAME` and `git push lambdaclass
+retarget a tag; investigate an existing mismatch. For each row, run
+`git -c tag.gpgsign=false tag spec-inventory/NAME SHA`, then `git push origin refs/tags/spec-inventory/NAME` and `git push lambdaclass
 refs/tags/spec-inventory/NAME`. Verify each remote with `git ls-remote REMOTE
 refs/tags/spec-inventory/NAME`. Annotated tags are also supported and checked by peeled commit.
-The gate accepts matching local tags, fetches absent tags from origin with bounded depth, and
-names every missing remote tag in its error. The coordinator must push these before landing;
+The gate accepts matching local tags and fetches absent tags with bounded depth from the remote
+named by `git config landing.inventoryRemote` (default `origin`). It names every missing remote
+tag in its error. The coordinator must push these before landing;
 a local pass alone does not publish them.
 
 | Tag suffix | Commit |

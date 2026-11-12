@@ -15,3 +15,11 @@ Round 8 generalizes reconciliation to standalone commands and reviewed retiremen
 exclusive targets and resolvable structured review artifacts, and measures F01 by complete root
 reachability plus the production exact-imports checker at HEAD. Preserve commit history in Spec
 CI to verify provenance ancestry. Document coordinator pin publication and report every absent tag.
+
+Round 9: reconciliation requires superseded material to be absent or changed as
+well as exact replacement targets, with one obligation per replacement and no
+independent snapshot targets. Refusals identify their cause, including F01's
+failing file and imports. Accepting reviews are parsed committed records under
+`ConcreteSpec/landing/reviews/`; note references are unsupported. Pin diagnostics
+survive an unavailable configured remote, tag instructions disable signing for
+lightweight tags, and HEAD exports include command replacement identities.

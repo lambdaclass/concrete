@@ -649,6 +649,12 @@ def full_digests(data, root):
     return result
 
 
+def head_digest_export(checked):
+    return dict(declarations={n:d for n,d in checked.items() if not n.startswith(('command:','header:'))},
+                headCommandKeys=[dict(module=k[0][:-5].replace('/','.'),scope=k[1],kind=k[2],
+                                      digest=k[3],ordinal=k[4]) for k in checked.commands.values()])
+
+
 def head_population():
     # Exactly one checked revision; the F01 provenance is separately ancestry-checked.
     head = git('rev-parse','HEAD^{commit}').decode().strip()
@@ -666,7 +672,7 @@ def head_population():
                       if (ROOT/'ConcreteSpec/landing/headers.json').exists() else None)
         result = full_digests(data,root)
         if properties:
-            result['header:F01'] = 'exact-imports-and-complete-root' if properties[0] else 'property fails'
+            result['header:F01'] = properties[0]
         return result
 
 
@@ -682,26 +688,43 @@ def unit_name(r):
     return ('command:' if r['record']=='command' else '')+r['name']
 
 
-def review_reference(review):
-    if not isinstance(review,dict) or set(review)!={'reference','verdict'} or review['verdict']!='ACCEPT':
-        raise ValueError('invalid accepting review')
+def review_reference(review, record, units):
+    if not isinstance(review,dict) or not review:
+        raise ValueError('missing accepting review: '+record)
+    if set(review)!={'reference','verdict'}:
+        raise ValueError('invalid review fields: '+record)
+    if review['verdict']!='ACCEPT':
+        raise ValueError('review verdict is not ACCEPT: '+record)
     ref = review['reference']
-    if not isinstance(ref,dict) or set(ref) not in ({'path','commit'},{'note','commit'}):
-        raise ValueError('invalid structured review reference')
+    if not isinstance(ref,dict) or set(ref)!={'path','commit'}:
+        raise ValueError('invalid review reference fields: '+record)
     commit = ref['commit']
     if not isinstance(commit,str) or not re.fullmatch('[0-9a-f]{40}',commit):
-        raise ValueError('invalid review commit')
-    git('merge-base','--is-ancestor',commit,'HEAD')
-    if 'path' in ref:
-        path = ref['path']
-        if not isinstance(path,str) or not path or path.startswith('/') or '..' in Path(path).parts:
-            raise ValueError('invalid review path')
-        if not git('show',commit+':'+path).strip(): raise ValueError('empty review artifact')
-    else:
-        note = ref['note']
-        if not isinstance(note,str) or not note.startswith('refs/notes/'):
-            raise ValueError('invalid review note ref')
-        if not git('notes','--ref='+note,'show',commit).strip(): raise ValueError('empty review note')
+        raise ValueError('invalid review commit: '+record)
+    try: git('merge-base','--is-ancestor',commit,'HEAD')
+    except subprocess.CalledProcessError:
+        raise ValueError('review commit is not an ancestor of HEAD: '+record) from None
+    path = ref['path']
+    if (not isinstance(path,str) or not path.startswith('ConcreteSpec/landing/reviews/') or
+        '..' in Path(path).parts or not path.endswith('.txt')):
+        raise ValueError('review path outside ConcreteSpec/landing/reviews/*.txt: '+record)
+    try: artifact = git('show',commit+':'+path).decode()
+    except subprocess.CalledProcessError:
+        raise ValueError('missing review artifact: '+path) from None
+    # The artifact is committed after the reviewed revision, avoiding a self-referential SHA.
+    revisions = re.findall(r'^COMMIT: ([0-9a-f]{40})$',artifact,re.M)
+    if len(revisions)!=1:
+        raise ValueError('review artifact requires one COMMIT: '+path)
+    try: git('merge-base','--is-ancestor',revisions[0],commit)
+    except subprocess.CalledProcessError:
+        raise ValueError('reviewed commit is not an ancestor of artifact commit: '+path) from None
+    verdicts = re.findall(r'^VERDICT: (.+)$',artifact,re.M)
+    if not verdicts or verdicts[-1]!='ACCEPT':
+        raise ValueError('review artifact last verdict is not ACCEPT: '+path)
+    records = re.findall(r'^RECORD: (.+)$',artifact,re.M)
+    reviewed_units = re.findall(r'^UNIT: (.+)$',artifact,re.M)
+    if record not in records and not set(units)<=set(reviewed_units):
+        raise ValueError('review artifact does not cover replacement: '+record)
 
 
 def replacement_rows(rows, authored=None):
@@ -712,18 +735,28 @@ def replacement_rows(rows, authored=None):
         if r['record']!='replacement': continue
         try:
             spec = json.loads(r['note'],object_pairs_hook=unique_object)
+            if not isinstance(spec,dict):
+                raise ValueError('invalid replacement JSON object: '+r['name'])
+            if 'review' not in spec:
+                raise ValueError('missing accepting review: '+r['name'])
             if set(spec)!={'supersedes','declarations','commands','action','reason','review'}:
-                raise ValueError()
+                required = {'supersedes','declarations','commands','action','reason','review'}
+                raise ValueError('invalid replacement schema fields: '+r['name']+
+                                 ' missing='+','.join(sorted(required-set(spec)))+
+                                 ' extra='+','.join(sorted(set(spec)-required)))
             old, new, commands = spec['supersedes'], spec['declarations'], spec['commands']
-            if (not isinstance(old,list) or not old or not all(isinstance(n,str) for n in old) or
-                len(set(old))!=len(old) or not isinstance(new,dict) or not isinstance(commands,list) or
-                not all(isinstance(n,str) and n and not n.startswith(('command:','header:')) and
-                        isinstance(d,str) and re.fullmatch('[0-9a-f]{64}',d) for n,d in new.items()) or
-                spec['action'] not in ('replace','retire') or
-                bool(new or commands)!=(spec['action']=='replace') or
-                not isinstance(spec['reason'],str) or not spec['reason'].strip()):
-                raise ValueError()
-            review_reference(spec['review'])
+            def field(ok, name):
+                if not ok: raise ValueError('invalid replacement field '+name+': '+r['name'])
+            field(isinstance(old,list) and bool(old) and all(isinstance(n,str) for n in old)
+                  and len(set(old))==len(old), 'supersedes')
+            field(isinstance(new,dict) and all(isinstance(n,str) and n and
+                  not n.startswith(('command:','header:')) and isinstance(d,str) and
+                  re.fullmatch('[0-9a-f]{64}',d) for n,d in new.items()), 'declarations')
+            field(isinstance(commands,list), 'commands')
+            field(spec['action'] in ('replace','retire'), 'action')
+            field(bool(new or commands)==(spec['action']=='replace'), 'action targets')
+            field(spec['action']!='replace' or len(old)==1, 'one replacement obligation')
+            field(isinstance(spec['reason'],str) and bool(spec['reason'].strip()), 'reason')
             keys = []
             for c in commands:
                 if (not isinstance(c,dict) or set(c)!={'module','scope','kind','digest','ordinal'} or
@@ -733,23 +766,30 @@ def replacement_rows(rows, authored=None):
                     type(c['ordinal']) is not int or c['ordinal']<0 or not isinstance(c['scope'],list) or
                     not all(isinstance(x,list) and len(x)==3 and isinstance(x[0],str) and
                             isinstance(x[1],str) and type(x[2]) is int and x[2]>=0 for x in c['scope'])):
-                    raise ValueError()
+                    raise ValueError('invalid replacement field commands: '+r['name'])
                 keys.append((c['module'].replace('.','/')+'.lean',tuple(tuple(x) for x in c['scope']),
                              c['kind'],c['digest'],c['ordinal']))
-        except (ValueError,TypeError,subprocess.CalledProcessError):
-            raise ValueError('invalid replacement schema: '+r['name']) from None
+        except (json.JSONDecodeError,TypeError):
+            raise ValueError('invalid replacement JSON: '+r['name']) from None
         for n in old:
             if n not in snapshot: raise ValueError('unknown replacement row: '+n)
             if n in replaced: raise ValueError('already-replaced row: '+n)
             if authored is not None and n not in authored:
                 raise ValueError('replacement is not an authored progress unit: '+n)
             original = snapshot[n]
-            if original['piece']=='BASE' or original['piece']!=r['piece'] or original['disposition']=='owner-held':
-                raise ValueError('invalid replacement ownership: '+n)
+            if original['piece']=='BASE':
+                raise ValueError('replacement supersedes BASE unit: '+n)
+            if original['piece']!=r['piece']:
+                raise ValueError('replacement supersedes foreign piece unit: '+n)
+            if original['disposition']=='owner-held':
+                raise ValueError('replacement supersedes owner-held unit: '+n)
             replaced.add(n)
+        review_reference(spec['review'],r['name'],old)
         for n in new:
             if n in snapshot and snapshot[n]['piece']!=r['piece']:
                 raise ValueError('replacement target belongs to another piece: '+n)
+            if n in snapshot and n not in old:
+                raise ValueError('replacement target is independent snapshot unit: '+n)
         for target in [('declaration',n) for n in new]+[('command',k) for k in keys]:
             if target in targets: raise ValueError('shared replacement target: '+r['name'])
             targets.add(target)
@@ -758,6 +798,8 @@ def replacement_rows(rows, authored=None):
             for n,k in snapshot_commands.items():
                 if k==key and snapshot['command:'+n]['piece']!=r['piece']:
                     raise ValueError('replacement command belongs to another piece: '+n)
+                if k==key:
+                    raise ValueError('replacement command is unchanged snapshot unit: '+n)
         if not r['name'].strip() or any(r[k] for k in FIELDS if k not in ('record','name','piece','disposition','note')) or r['disposition']!='replace':
             raise ValueError('invalid replacement columns: '+r['name'])
         spec['_command_keys'] = keys
@@ -770,17 +812,28 @@ def replacement_progress(rows, reasons, checked):
     commands = set(getattr(checked,'commands',{}).values())
     snapshot_commands = command_match_keys(rows)
     for r,spec in replacement_rows(rows):
-        matched = (all(checked.get(n)==d for n,d in spec['declarations'].items()) and
-                   all(k in commands for k in spec['_command_keys']))
-        if spec['action']=='retire':
-            matched = all((snapshot_commands[n.removeprefix('command:')] not in commands
-                           if n.startswith('command:') else n not in checked)
-                          for n in spec['supersedes'])
+        refusal = None
+        for n in spec['supersedes']:
+            present = (snapshot_commands[n.removeprefix('command:')] in commands if n.startswith('command:')
+                       else n in checked and (spec['action']=='retire' or reasons.get(n)=='identical full digest'))
+            if present:
+                refusal = 'superseded unit still present: '+n
+                break
+        if refusal is None:
+            for n,d in spec['declarations'].items():
+                if n not in checked:
+                    refusal = 'missing replacement declaration: '+n; break
+                if checked[n]!=d:
+                    refusal = 'replacement digest mismatch: '+n; break
+        if refusal is None:
+            for key in spec['_command_keys']:
+                if key not in commands:
+                    same_unit = any(k[:3]==key[:3] and k[4]==key[4] for k in commands)
+                    refusal = ('replacement command digest mismatch: ' if same_unit else 'missing replacement command: ')+json.dumps(key)
+                    break
         for n in spec['supersedes']:
             if n not in reasons: raise ValueError('replacement is not a progress unit: '+n)
-            reasons[n] = (('reconciled by retirement' if spec['action']=='retire' else 'reconciled by replacement')
-                          if matched else ('retired unit still present' if spec['action']=='retire'
-                                           else 'replacement unit missing or digest mismatch'))
+            reasons[n] = refusal or ('reconciled by retirement' if spec['action']=='retire' else 'reconciled by replacement')
     return reasons
 
 
@@ -808,7 +861,8 @@ def header_property(root, data):
         reachable.add(m)
         for dep in modules[m]: visit(dep)
     visit('ConcreteSpec')
-    if reachable!=set(modules): return False
+    if reachable!=set(modules):
+        return 'F01 property failure: ConcreteSpec.lean unreachable modules: '+', '.join(sorted(set(modules)-reachable))
     saved = exact.MODULES
     exact.MODULES = set(modules)
     try:
@@ -819,12 +873,14 @@ def header_property(root, data):
                 try:
                     module = path.relative_to(root).with_suffix('').as_posix().replace('/','.')
                     deps = exact.dependencies(text,probe,module,search_path=str(root))
-                    if not exact.matches(text,deps): return False
-                except exact.LexError:
-                    return False
+                    if not exact.matches(text,deps):
+                        actual,_,_ = exact.module_imports(text,exact.MODULES)
+                        return f'F01 property failure: {path.relative_to(root)} expected imports {deps!r}, actual {sorted(actual)!r}'
+                except exact.LexError as exc:
+                    return f'F01 property failure: {path.relative_to(root)}: {exc}'
     finally:
         exact.MODULES = saved
-    return True
+    return 'exact-imports-and-complete-root'
 
 
 def progress_reasons(snapshot, checked):
@@ -833,7 +889,8 @@ def progress_reasons(snapshot, checked):
     for name,digest in snapshot.items():
         key = getattr(snapshot,'commands',{}).get(name)
         value = commands.get(key) if key is not None else checked.get(name)
-        reasons[name] = ('missing declaration' if value is None else
+        reasons[name] = (value if name.startswith('header:') and value and value.startswith('F01 property failure:') else
+                         'missing declaration' if value is None else
                          'full digest mismatch' if value!=digest else 'identical full digest')
     return reasons
 
@@ -1393,16 +1450,25 @@ def report(rows, detail=None, reasons=None):
         print(f'{p}\tlanded={matched}/{total}\tremaining={counts[p]}\tremaining-examples={examples[p]}')
     for name,reason in sorted((reasons or {}).items()):
         if reason.startswith('reconciled by '): print(reason+'\t'+name)
+        elif reason.startswith(('F01 property failure:', 'superseded unit still present:',
+                                'missing replacement ', 'replacement digest mismatch:',
+                                'replacement command digest mismatch:')):
+            print('progress refusal\t'+name+'\t'+reason)
     if detail:
         for r in sorted(units,key=lambda r:(r['piece'],r['name'])):
             if identity(r) not in landed and detail in ('all',r['piece']):
-                print(f'remaining\t{r["piece"]}\t{identity(r)}')
+                print(f'remaining\t{r["piece"]}\t{identity(r)}\t{reasons[identity(r)]}')
 
 
 PIN_TAGS = {'source': SOURCE, 'baseline': BASE, 'evidence': EVIDENCE, 'dossier': DOSSIER}
 
 
-def ensure_objects():
+def ensure_objects(remote=None):
+    if remote is None:
+        try: remote = git('config','--get','landing.inventoryRemote').decode().strip()
+        except subprocess.CalledProcessError: remote = 'origin'
+        remote = remote or 'origin'
+
     missing = []
     for name, ref in PIN_TAGS.items():
         tag = 'refs/tags/spec-inventory/'+name
@@ -1413,12 +1479,13 @@ def ensure_objects():
         if local is not None:
             if local != ref: raise ValueError('changed protected inventory pin: '+tag+' expected '+ref)
             continue
-        advertised = git('ls-remote','origin',tag,tag+'^{}').decode().splitlines()
-        remote = dict(line.split()[::-1] for line in advertised)
-        if remote.get(tag+'^{}',remote.get(tag)) != ref:
+        try: advertised = git('ls-remote',remote,tag,tag+'^{}').decode().splitlines()
+        except subprocess.CalledProcessError: advertised = []
+        advertised_refs = dict(line.split()[::-1] for line in advertised)
+        if advertised_refs.get(tag+'^{}',advertised_refs.get(tag)) != ref:
             missing.append('missing or changed protected inventory pin: '+tag+' expected '+ref)
             continue
-        git('fetch','--depth=1','--no-tags','--no-write-fetch-head','origin',tag+':'+tag)
+        git('fetch','--depth=1','--no-tags','--no-write-fetch-head',remote,tag+':'+tag)
         if git('rev-parse','--verify',tag+'^{commit}').decode().strip()!=ref:
             raise ValueError('changed protected inventory pin: '+tag+' expected '+ref)
 
@@ -1431,6 +1498,40 @@ def extract(root):
             dest = root / f
             dest.parent.mkdir(parents=True,exist_ok=True)
             dest.write_bytes(source(SOURCE,f))
+
+
+def check_replacement_judgment(rows, data):
+    """Exercise judgment with a real committed review in a private Git clone."""
+    global ROOT
+    original_root = ROOT
+    with tempfile.TemporaryDirectory(prefix='landing-review-control-') as tmp:
+        clone = Path(tmp)/'repo'
+        git('clone','--quiet','--shared',str(ROOT),str(clone))
+        try:
+            ROOT = clone
+            victim = next(r for r in rows if r['record']=='declaration' and r['piece']!='BASE'
+                          and r['disposition']!='owner-held' and r['name'] in authored_names(data))
+            path = 'ConcreteSpec/landing/reviews/control.txt'
+            artifact = ROOT/path
+            artifact.parent.mkdir(parents=True,exist_ok=True)
+            artifact.write_text('COMMIT: '+git('rev-parse','HEAD').decode().strip()+
+                                '\nRECORD: replacement-judgment-control\nVERDICT: ACCEPT\n')
+            git('add',path)
+            git('-c','user.name=Inventory control','-c','user.email=control@example.invalid',
+                '-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null','commit','--quiet','-m','fixture accepting review')
+            spec = dict(supersedes=[victim['name']],declarations={},commands=[],action='retire',reason='control',
+                        review=dict(reference=dict(path=path,commit=git('rev-parse','HEAD').decode().strip()),verdict='ACCEPT'))
+            replacement = row(record='replacement',name='replacement-judgment-control',piece=victim['piece'],
+                              disposition='replace',note=json.dumps(spec))
+            judgment(rows+[replacement],data,dependencies=False)
+            spec['supersedes'] = ['InventoryControl.unknown']
+            try: judgment(rows+[dict(replacement,note=json.dumps(spec))],data,dependencies=False)
+            except ValueError as exc:
+                if str(exc)!='unknown replacement row: InventoryControl.unknown': raise
+            else: raise ValueError('judgment accepted unknown supersession')
+        finally:
+            ROOT = original_root
+    print('control PASS: inventory judgment admits committed fixture review and refuses unknown supersession')
 
 
 def main():
@@ -1457,21 +1558,7 @@ def main():
         existing_replacements = [r for r in read() if r['record']=='replacement'] if args.write else []
         rows = generate(data)+existing_replacements if args.write else read()
         closure = judgment(rows,data,dependencies=False)
-        victim = next(r for r in rows if r['record']=='declaration' and r['piece']!='BASE'
-                      and r['disposition']!='owner-held' and r['name'] in authored_names(data))
-        replacement = row(record='replacement',name='replacement-judgment-control',piece=victim['piece'],
-                          disposition='replace',note=json.dumps(dict(supersedes=[victim['name']],
-                          declarations={},commands=[],action='retire',reason='control',
-                          review=dict(reference={'path':'ConcreteSpec/landing/plan.md','commit':git('rev-parse','HEAD').decode().strip()},verdict='ACCEPT'))))
-        judgment(rows+[replacement],data,dependencies=False)
-        try:
-            bad = json.loads(replacement['note'])
-            bad['supersedes'] = ['InventoryControl.unknown']
-            judgment(rows+[dict(replacement,note=json.dumps(bad))],data,dependencies=False)
-        except ValueError as exc:
-            if str(exc)!='unknown replacement row: InventoryControl.unknown': raise
-        else: raise ValueError('judgment accepted unknown supersession')
-        print('control PASS: inventory judgment admits reviewed replacement schema and refuses unknown supersession')
+        check_replacement_judgment(rows,data)
         verify_plan_boundaries(rows)
         check_law_controls(rows)
         # Mutate only fixture placement: dependency availability still holds when moved earlier.
@@ -1620,7 +1707,7 @@ def main():
         snapshot.update(header_targets())
         checked = head_population()
         if args.head_digests:
-            args.head_digests.write_text(json.dumps(checked,indent=2,sort_keys=True)+'\n')
+            args.head_digests.write_text(json.dumps(head_digest_export(checked),indent=2,sort_keys=True)+'\n')
         reasons = replacement_progress(rows,progress_reasons(snapshot,checked),checked)
         report(rows,args.remaining,reasons)
         judgment(rows,data)
