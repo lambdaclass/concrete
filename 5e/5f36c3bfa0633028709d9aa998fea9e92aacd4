@@ -1,0 +1,2 @@
+[piece 3 of 4: scripts]
+- ISSUES.tsv:34: The new toolchain-dispatch issue reuses `ISS-0057`, which already identifies the unrelated landing bundle-source issue immediately below it. Two distinct defects now share one identifier, making issue references ambiguous; assign the new record an unused ID.
