@@ -9,3 +9,11 @@ existing roadmap work. Illustrative import spelling remains pending.
 Record the missing item-30 primary recommendation as a provenance gap. The landed
 Lean files remain unchanged. The full 59-item record awaits recovery of the original
 recommendation and grammar sheet.
+
+Round 5: restore owner disposition for mixed-class review caps and distinguish tool
+implementation from approval. Queue missing approval recovery as ISS-0065 and Lean
+authority re-citation as ISS-0064, with explicit closure conditions. Identify OD48's
+loop typing as a derived consequence, explain OD137's byte-literal change, narrow
+alias notes to the removed `as` spelling, and leave unresolved `char` literals and
+obsolete reservations open. Remove the duplicate import-before-use statement and
+the incorrectly ordered revision without resolving older decision tensions.
