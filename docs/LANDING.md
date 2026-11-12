@@ -75,7 +75,7 @@ verdict; any failing leg fails the check (see [Pipelining](#pipelining)).
   gate command per line, which runs through `run_ci_gates_local.sh --first`.
 - **remote**: the full gate set (R-0541) through `LAND_REMOTE_RUNNER <ref> <command>`. The
   default runner is `~/bin/concrete-remote`; on the server it is `scripts/land/run-at-ref.sh`, which
-  runs in a fresh `clone --local`, not a worktree, because some gates refuse linked worktrees. A
+  initializes an empty, independent repository and fetches only the run's ref, with no tags, because some gates refuse linked worktrees. A
   runner that fetches from origin first gets the head published under a ref unique to that run,
   `wip/land-<name>-<sha>-<pid>-<n>` (the hook's backup tier). It is created only if absent. The
   push carries an empty lease, and ownership is taken only from `--porcelain`'s `*` (new ref)
