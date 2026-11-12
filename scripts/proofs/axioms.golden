@@ -982,6 +982,11 @@ ConcreteSpec.Surface0.firstError_cons_inv	Classical.choice Quot.sound propext
 ConcreteSpec.Surface0.firstError_here	propext
 ConcreteSpec.Surface0.firstError_not_decodes	Classical.choice Quot.sound propext
 ConcreteSpec.Surface0.firstError_unique	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.instDecidableBidiControl._proof_1	
+ConcreteSpec.Surface0.instDecidableByteEscape._proof_1	
+ConcreteSpec.Surface0.instDecidableByteRaw._proof_1	
+ConcreteSpec.Surface0.instDecidableCommentRaw._proof_1	
+ConcreteSpec.Surface0.instDecidableControl._proof_1	
 ConcreteSpec.Surface0.instDecidableDigitsAccepted._proof_1	
 ConcreteSpec.Surface0.instDecidableDigitsAccepted._proof_2	propext
 ConcreteSpec.Surface0.instDecidableDigitsAccepted._proof_3	
@@ -1003,6 +1008,13 @@ ConcreteSpec.Surface0.instDecidableEqIntegerToken.decEq._proof_4
 ConcreteSpec.Surface0.instDecidableEqIntegerToken.decEq._proof_5	
 ConcreteSpec.Surface0.instDecidableEqRadix._proof_1	
 ConcreteSpec.Surface0.instDecidableEqRadix._proof_2	
+ConcreteSpec.Surface0.instDecidableForbiddenRaw._proof_1	
+ConcreteSpec.Surface0.instDecidableIdentContinue._proof_1	
+ConcreteSpec.Surface0.instDecidableIdentStart._proof_1	
+ConcreteSpec.Surface0.instDecidableScalar._proof_1	
+ConcreteSpec.Surface0.instDecidableStringEscape._proof_1	
+ConcreteSpec.Surface0.instDecidableStringRaw._proof_1	
+ConcreteSpec.Surface0.instDecidableWhitespace._proof_1	
 ConcreteSpec.Surface0.lineComment_unique	propext
 ConcreteSpec.Surface0.scalarFailure_byte	propext
 ConcreteSpec.Surface0.scalarFailure_eof	Quot.sound propext

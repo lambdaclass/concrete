@@ -275,8 +275,12 @@ jobs:
       - name: Kernel replay (leanchecker) (scripts/proofs/kernel_replay.sh)
         run: bash scripts/proofs/kernel_replay.sh
 
-  # lean4export, con-leche and nanoda are built once per pinned revision (scripts/proofs/external.pins)
-  # into ~/.cache/concrete-ext; nanoda needs cargo, so the check runs in the extcheck shell.
+  # All tool trees key the pinned revision and complete build recipe. Lake trees also key their
+  # toolchain and elan path/version; nanoda keys cargo/rustc realpaths and build-directory rustc -vV.
+  # They live in ~/.cache/concrete-ext; nanoda needs cargo from the extcheck shell.
+  # Also caches source-nanoda-<rev> and registry-<identity>; completed nanoda hits are offline.
+  # Cargo uses env -i, private CARGO_HOME and --locked, refusing ancestor configs outside HOME.
+  # See scripts/proofs/external.sh's isolation contract (caller wrappers/overrides are ignored).
   external-recheck:
     name: External re-check (con-leche, nanoda)
     needs: landing-record
@@ -297,7 +301,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/concrete-ext
-          key: ${{ runner.os }}-concrete-ext-${{ hashFiles('scripts/proofs/external.pins', 'lean-toolchain') }}
+          key: ${{ runner.os }}-concrete-ext-${{ hashFiles('scripts/proofs/external.pins', 'scripts/proofs/lake_tool.sh', 'lean-toolchain', 'flake.nix', 'flake.lock') }}
 
       - name: Install Lean and build the specification (via lean-action)
         id: lean_install
