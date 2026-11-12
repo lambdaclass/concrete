@@ -60,14 +60,9 @@ usage() { awk 'NR > 1 { if (!/^#/) exit; sub(/^# ?/, ""); print }' "${BASH_SOURC
 die() { echo "signoff: $*" >&2; exit 2; }
 sha256() { if command -v sha256sum >/dev/null 2>&1; then sha256sum | cut -d' ' -f1; else shasum -a 256 | cut -d' ' -f1; fi; }
 
-# Read the last declaration before validating it. Recognize case/spacing variants as
-# declarations too, so a malformed final declaration cannot expose an earlier ACCEPT.
-# Preserve the existing allowance for whitespace around a canonical verdict line.
+# Keep all review declaration selection and syntax validation in one reader.
 last_verdict() {
-  local line
-  line="$(awk 'tolower($0) ~ /^[[:space:]]*verdict[[:space:]]*:/ { last = $0 } END { print last }')"
-  [[ "$line" =~ ^[[:space:]]*VERDICT:\ (ACCEPT|REJECT)[[:space:]]*$ ]] || return 1
-  printf '%s\n' "${BASH_REMATCH[1]}"
+  python3 "${VERIFY%/*}/verdict.py" signoff
 }
 
 # path_class PATH → docs | scripts | compiler (anything unlisted is compiler: the highest class)

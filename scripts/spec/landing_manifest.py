@@ -21,6 +21,9 @@ from landing_census import census
 from landing_controls import check_census
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / 'scripts' / 'review'))
+from verdict import read_verdict
+
 SOURCE = 'aa44140a33747fa37ece59c76090972e564c65b4'
 BASE = '1a50c64ff1b6f3a2899522f279eccc86d3b004a2'
 EVIDENCE = '5db3018e24eb284894b3615833aa373c76944475'
@@ -751,8 +754,7 @@ def review_reference(review, record, units, spec):
     try: git('merge-base','--is-ancestor',revisions[0],commit)
     except subprocess.CalledProcessError:
         raise ValueError('reviewed commit is not an ancestor of artifact commit: '+path) from None
-    verdicts = re.findall(r'^VERDICT: (.+)$',artifact,re.M)
-    if not verdicts or verdicts[-1]!='ACCEPT':
+    if read_verdict(artifact) != 'ACCEPT':
         raise ValueError('review artifact last verdict is not ACCEPT: '+path)
     records = re.findall(r'^RECORD: (.+)$',artifact,re.M)
     reviewed_units = re.findall(r'^UNIT: (.+)$',artifact,re.M)

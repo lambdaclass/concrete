@@ -328,9 +328,9 @@ run_one() {
   msg="$(cat "$out")"
   [ -n "$msg" ] || [ "$rc" -ne 0 ] || msg="$(cat "$log")"
   LAST_BODY="$msg"
-  last="$(printf '%s\n' "$msg" | sed -e 's/[`*]//g' -e 's/[[:space:]]*$//' | awk 'NF { l = $0 } END { print l }')"
-  if [ "$rc" -eq 0 ] && [ "$last" = "VERDICT: clean" ]; then LAST_RESULT=clean
-  elif [ "$rc" -eq 0 ] && [ "$last" = "VERDICT: findings" ]; then LAST_RESULT=findings
+  last="$(printf '%s\n' "$msg" | python3 "$SCRIPT_DIR/verdict.py" review)" || last=""
+  if [ "$rc" -eq 0 ] && [ "$last" = "clean" ]; then LAST_RESULT=clean
+  elif [ "$rc" -eq 0 ] && [ "$last" = "findings" ]; then LAST_RESULT=findings
   elif { printf '%s\n' "$msg"; cat "$log"; } | has_match -iE "$REFUSAL_RE"; then LAST_RESULT=refused
   elif [ "$rc" -ne 0 ]; then
     LAST_RESULT=error

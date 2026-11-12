@@ -222,8 +222,18 @@ def main():
             refused(lambda: inventory.replacement_rows(two_old+[dict(replacement,note=json.dumps(dict(spec,supersedes=['recursive','second-old'])))]),
                     'invalid replacement field one replacement obligation: control-repair')
             accepting_text = review_path.read_text()
-            for text,expected in [
-                (accepting_text+'VERDICT: REJECT\n','review artifact last verdict is not ACCEPT: ConcreteSpec/landing/reviews/control.txt'),
+            malformed_verdicts = [
+                'VERDICT:\tREJECT', 'VERDICT:  ACCEPT', 'verdict: ACCEPT',
+                'VERDICT: ACCEPT trailing text', 'VERDICT : ACCEPT', 'VERDICT:',
+                'VERDICT', 'VERDICT nonsense', 'VERDICT: REJECT',
+            ]
+            verdict_refusal = 'review artifact last verdict is not ACCEPT: ConcreteSpec/landing/reviews/control.txt'
+            malformed_controls = [
+                (prefix + line + '\n', verdict_refusal)
+                for line in malformed_verdicts
+                for prefix in [accepting_text.replace('VERDICT: ACCEPT\n', ''), accepting_text]
+            ]
+            for text,expected in malformed_controls + [
                 (accepting_text.replace('UNIT: recursive\n',''),'review artifact does not cover replacement: control-repair'),
                 (accepting_text.replace('COMMIT:', 'REVISION:'),'review artifact requires one COMMIT: ConcreteSpec/landing/reviews/control.txt')]:
                 review_path.write_text(text)

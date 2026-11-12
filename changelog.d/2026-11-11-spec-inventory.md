@@ -47,3 +47,10 @@ hypothesis used only by the old proof, and assert the specific missing-identity 
 The identity fallback audit also makes missing command match keys refuse instead of using
 audit names. Declaration presence still uses qualified names; non-example commands use parsed
 syntax; positional identities remain available only with the synthetic-fixture flag.
+
+Round 14 shares review verdict parsing across inventory reconciliation, owner sign-off and
+review output contracts. The last verdict-like declaration decides, including malformed
+case, whitespace, colon and empty variants; malformed later declarations cannot reveal an
+earlier acceptance. Existing canonical output formats retain their whitespace and Markdown
+allowances. Committed reconciliation controls assert the exact refusal for each malformed
+form both alone and following ACCEPT.
