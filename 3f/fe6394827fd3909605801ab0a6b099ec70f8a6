@@ -1,0 +1,2 @@
+[piece 3 of 5: scripts]
+- scripts/proofs/local_identity.lean:30: Returning immediately for non-constant application heads skips their arguments. For example, `def leak (F : Type → Type) (v : F Var) (spelling : String) : F Var := v` passes this analysis: `F Var` hides the local carrier while `String` is detected. No taint seed is produced, so the gate accepts a semantic interface pairing locals with spellings. Inspect application arguments even when the head is a type parameter.
