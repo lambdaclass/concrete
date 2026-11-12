@@ -45,6 +45,20 @@ private partial def sourceIdentifiers (ctx : Parser.InputContext) (s : Syntax) :
       ("column", toJson pos.column)]]
   | _ => s.getArgs.flatMap (sourceIdentifiers ctx)
 
+-- Parsed statement identity excludes proof syntax and source positions.
+private partial def syntaxIdentity (s : Syntax) : Json :=
+  match s with
+  | .atom _ value => toJson value
+  | .ident _ _ name _ => toJson name.toString
+  | _ => Json.arr (#[toJson s.getKind.toString] ++ s.getArgs.map syntaxIdentity)
+
+private partial def exampleStatement (s : Syntax) : Option Json :=
+  if s.isOfKind ``Parser.Command.example then
+    s.getArgs.findSome? fun arg =>
+      if arg.isOfKind ``Parser.Command.optDeclSig && !arg[1].getArgs.isEmpty
+      then some (syntaxIdentity arg) else none
+  else s.getArgs.findSome? exampleStatement
+
 private partial def commands (ctx : Parser.InputContext) (env : Environment)
     (ps : Parser.ModuleParserState) (messages : MessageLog) : IO Unit := do
   let (stx, next, messages) := Parser.parseCommand ctx { env, options := {} } ps messages
@@ -55,6 +69,9 @@ private partial def commands (ctx : Parser.InputContext) (env : Environment)
     let start := ctx.fileMap.toPosition (stx.getPos?.getD 0)
     let stop := ctx.fileMap.toPosition (stx.getTailPos?.getD 0)
     emit [("record", toJson "command"), ("file", toJson ctx.fileName),
+      ("statement", toJson (exampleStatement stx)),
+      ("scopeIdentity", if stx.isOfKind ``Parser.Command.namespace || stx.isOfKind ``Parser.Command.section
+        then syntaxIdentity stx else Json.null),
       ("noncomputable", toJson (noncomputableModifier stx)),
       ("noncomputableInsert", toJson (noncomputableInsert stx)),
       ("syntax", toJson stx.getKind.toString), ("example", toJson (containsExample stx)), ("exampleToken", toJson (exampleToken stx)), ("line", toJson start.line),

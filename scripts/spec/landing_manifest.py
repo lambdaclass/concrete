@@ -9,6 +9,7 @@ import csv
 import hashlib
 from functools import lru_cache
 import json
+import io
 import os
 import re
 from pathlib import Path
@@ -601,11 +602,25 @@ def command_match_keys(rows):
     return result
 
 
+def command_presence_slots(keys):
+    """Fallback slots for fixtures without parsed statement metadata.
+
+    Count all commands of a kind in each scope, not just equal content digests.
+    """
+    counts, result = Counter(), {}
+    for key in keys:
+        slot = key[:3]
+        result[key] = (*slot,counts[slot])
+        counts[slot] += 1
+    return result
+
+
 class Digests(dict):
     """Snapshot audit names accompanied by position-free matching identities."""
     def __init__(self, *args, commands=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.commands = commands or {}
+        self.presence = {}
 
 
 def authored_names(data):
@@ -646,6 +661,26 @@ def full_digests(data, root):
         if r['record']=='command' and r['kind']!='module-realization' and r['name'] not in represented:
             result['command:'+r['name']] = r['digest']
             result.commands['command:'+r['name']] = keys[r['name']]
+    counts, scope_counts, scopes = Counter(), Counter(), defaultdict(list)
+    metadata = {(c['file'],c['line']):c for c in data if c['record']=='command'}
+    for r in sorted((r for r in rows if r['record']=='command'),
+                    key=lambda r:(r['source'],int(r['line']),int(r['end_line']))):
+        key = keys[r['name']]
+        scope = scopes[r['source']]
+        slot = (r['source'],tuple(scope),r['kind'])
+        ordinal = counts[slot]
+        counts[slot] += 1
+        command = metadata.get((r['source'],int(r['line'])),{})
+        statement = command.get('statement')
+        result.presence[key] = (('statement',json.dumps(statement,sort_keys=True)) if statement is not None
+                                else ('slot',slot,ordinal))
+        if r['kind'] in ('Lean.Parser.Command.namespace','Lean.Parser.Command.section'):
+            token = (r['source'],tuple(scope),r['kind'],json.dumps(command['scopeIdentity'],sort_keys=True))
+            occurrence = scope_counts[token]
+            scope_counts[token] += 1
+            scope.append((r['kind'],token[-1],occurrence))
+        elif r['kind']=='Lean.Parser.Command.end' and scope:
+            scope.pop()
     return result
 
 
@@ -688,7 +723,7 @@ def unit_name(r):
     return ('command:' if r['record']=='command' else '')+r['name']
 
 
-def review_reference(review, record, units):
+def review_reference(review, record, units, spec):
     if not isinstance(review,dict) or not review:
         raise ValueError('missing accepting review: '+record)
     if set(review)!={'reference','verdict'}:
@@ -725,6 +760,27 @@ def review_reference(review, record, units):
     reviewed_units = re.findall(r'^UNIT: (.+)$',artifact,re.M)
     if record not in records and not set(units)<=set(reviewed_units):
         raise ValueError('review artifact does not cover replacement: '+record)
+    # Bind acceptance to the substantive reconciliation, not just its reusable name.
+    # The review reference is added after review and cannot pin its own commit.
+    expected = {k:v for k,v in spec.items() if k!='review'}
+    try:
+        manifest = git('show',revisions[0]+':ConcreteSpec/landing/inventory.tsv').decode()
+    except subprocess.CalledProcessError:
+        manifest = ''
+    covered = False
+    for candidate in csv.DictReader(io.StringIO(manifest),delimiter='\t'):
+        if candidate.get('record')!='replacement' or candidate.get('name')!=record:
+            continue
+        try: reviewed = json.loads(candidate['note'],object_pairs_hook=unique_object)
+        except (ValueError,TypeError): continue
+        if (isinstance(reviewed,dict) and candidate.get('disposition')=='replace' and
+            candidate.get('piece')==spec['_piece'] and
+            {k:v for k,v in reviewed.items() if k!='review'}==
+            {k:v for k,v in expected.items() if k!='_piece'}):
+            covered = True
+    if not covered:
+        raise ValueError('reviewed commit does not contain reconciliation: '+record)
+
 
 
 def replacement_rows(rows, authored=None):
@@ -784,7 +840,7 @@ def replacement_rows(rows, authored=None):
             if original['disposition']=='owner-held':
                 raise ValueError('replacement supersedes owner-held unit: '+n)
             replaced.add(n)
-        review_reference(spec['review'],r['name'],old)
+        review_reference(spec['review'],r['name'],old,dict(spec,_piece=r['piece']))
         for n in new:
             if n in snapshot and snapshot[n]['piece']!=r['piece']:
                 raise ValueError('replacement target belongs to another piece: '+n)
@@ -807,15 +863,25 @@ def replacement_rows(rows, authored=None):
     return result
 
 
-def replacement_progress(rows, reasons, checked):
+def replacement_progress(rows, reasons, checked, snapshot=None):
     reasons = dict(reasons)
-    commands = set(getattr(checked,'commands',{}).values())
+    command_keys = list(getattr(checked,'commands',{}).values())
+    commands = set(command_keys)
     snapshot_commands = command_match_keys(rows)
+    old_slots = command_presence_slots(snapshot_commands.values())
+    head_slots = command_presence_slots(command_keys)
     for r,spec in replacement_rows(rows):
         refusal = None
         for n in spec['supersedes']:
-            present = (snapshot_commands[n.removeprefix('command:')] in commands if n.startswith('command:')
-                       else n in checked and (spec['action']=='retire' or reasons.get(n)=='identical full digest'))
+            if n.startswith('command:'):
+                old_key = snapshot_commands[n.removeprefix('command:')]
+                old_identity = getattr(snapshot,'presence',{}).get(old_key)
+                retained = [k for k in commands if
+                            (getattr(checked,'presence',{}).get(k)==old_identity if old_identity is not None
+                             else head_slots[k]==old_slots[old_key])]
+                present = any(k not in spec['_command_keys'] for k in retained)
+            else:
+                present = n in checked and spec['declarations'].get(n)!=checked[n]
             if present:
                 refusal = 'superseded unit still present: '+n
                 break
@@ -1514,15 +1580,24 @@ def check_replacement_judgment(rows, data):
             path = 'ConcreteSpec/landing/reviews/control.txt'
             artifact = ROOT/path
             artifact.parent.mkdir(parents=True,exist_ok=True)
-            artifact.write_text('COMMIT: '+git('rev-parse','HEAD').decode().strip()+
-                                '\nRECORD: replacement-judgment-control\nVERDICT: ACCEPT\n')
-            git('add',path)
-            git('-c','user.name=Inventory control','-c','user.email=control@example.invalid',
-                '-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null','commit','--quiet','-m','fixture accepting review')
             spec = dict(supersedes=[victim['name']],declarations={},commands=[],action='retire',reason='control',
-                        review=dict(reference=dict(path=path,commit=git('rev-parse','HEAD').decode().strip()),verdict='ACCEPT'))
+                        review={})
             replacement = row(record='replacement',name='replacement-judgment-control',piece=victim['piece'],
                               disposition='replace',note=json.dumps(spec))
+            with (ROOT/'ConcreteSpec/landing/inventory.tsv').open('w',newline='') as f:
+                writer = csv.DictWriter(f,fieldnames=FIELDS,delimiter='\t')
+                writer.writeheader()
+                writer.writerows(rows+[replacement])
+            def commit_fixture(message):
+                git('add','ConcreteSpec/landing')
+                git('-c','user.name=Inventory control','-c','user.email=control@example.invalid',
+                    '-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null','commit','--quiet','-m',message)
+            commit_fixture('fixture reconciliation')
+            artifact.write_text('COMMIT: '+git('rev-parse','HEAD').decode().strip()+
+                                '\nRECORD: replacement-judgment-control\nVERDICT: ACCEPT\n')
+            commit_fixture('fixture accepting review')
+            spec['review'] = dict(reference=dict(path=path,commit=git('rev-parse','HEAD').decode().strip()),verdict='ACCEPT')
+            replacement['note'] = json.dumps(spec)
             judgment(rows+[replacement],data,dependencies=False)
             spec['supersedes'] = ['InventoryControl.unknown']
             try: judgment(rows+[dict(replacement,note=json.dumps(spec))],data,dependencies=False)
@@ -1708,7 +1783,7 @@ def main():
         checked = head_population()
         if args.head_digests:
             args.head_digests.write_text(json.dumps(head_digest_export(checked),indent=2,sort_keys=True)+'\n')
-        reasons = replacement_progress(rows,progress_reasons(snapshot,checked),checked)
+        reasons = replacement_progress(rows,progress_reasons(snapshot,checked),checked,snapshot)
         report(rows,args.remaining,reasons)
         judgment(rows,data)
         if args.write:

@@ -23,3 +23,5 @@ failing file and imports. Accepting reviews are parsed committed records under
 `ConcreteSpec/landing/reviews/`; note references are unsupported. Pin diagnostics
 survive an unavailable configured remote, tag instructions disable signing for
 lightweight tags, and HEAD exports include command replacement identities.
+
+Reconciliation presence follows declaration names and parsed example statements, with scope/kind/ordinal identities for other commands. Retained superseded units must themselves be pinned targets. Accepting reviews bind to the substantive reconciliation record present in their reviewed commit; older revisions cannot approve later records. Controls cover edited obsolete declarations, proof-edited and shifted F02 examples under replacement and retirement, and stale review revisions.

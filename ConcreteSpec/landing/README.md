@@ -108,7 +108,10 @@ and `note` is JSON with exactly these fields (all other TSV columns empty):
   `COMMIT: <40-hex>` naming the reviewed revision (an ancestor of the artifact commit),
   a `RECORD: <replacement name>` or a `UNIT: <superseded name>` line for every covered unit,
   and a final `VERDICT: ACCEPT` line. The gate parses these fields from the committed artifact;
-  the verdict in the inventory alone is insufficient. Notes refs are unsupported.
+  the verdict in the inventory alone is insufficient. The reviewed COMMIT must contain a
+  replacement row with the same name, piece, disposition and substantive JSON fields
+  (all fields except the later-added review reference). An older review of the name or
+  superseded units alone cannot approve a new reconciliation. Notes refs are unsupported.
 
 The judgment refuses unknown or already-superseded units, generated constants, owner-held or
 BASE units, cross-piece supersessions, malformed schemas and missing reviews. A target that is
@@ -116,7 +119,11 @@ also a snapshot unit must be the superseded declaration itself; independent same
 are refused. Each replacement record supersedes exactly one obligation. Targets cannot be shared
 between records.
 All target declarations and commands must match together at HEAD, and every superseded unit
-must be absent or changed beyond its snapshot full digest; partial replacement does not close.
+must be absent by identity, or itself be a target at the recorded digest; partial
+replacement does not close. Declaration identity is its qualified name. Example-command
+identity is its parsed statement, excluding proof syntax and source positions. Commands
+without a statement use module, enclosing scope, kind and ordinal within that kind and scope.
+A retained superseded unit outside the pinned targets refuses with `superseded unit still present`.
 Reviewed retirement closes only when every superseded unit is absent at HEAD, without
 replacement material. Results report `reconciled by
 replacement` or `reconciled by retirement`, distinct from `identical full digest`, preserving the

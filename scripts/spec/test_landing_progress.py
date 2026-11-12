@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Full source progress controls through the production Lean census on committed HEADs."""
+import csv
 import contextlib
 import io
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -145,12 +147,32 @@ def main():
             repaired = inventory.head_population()
             review_path = root/'ConcreteSpec/landing/reviews/control.txt'
             review_path.parent.mkdir(parents=True)
-            review_path.write_text('COMMIT: '+git('rev-parse','HEAD')+'\nUNIT: recursive\nUNIT: command:old-example\nVERDICT: ACCEPT\n')
+            review_path.write_text('COMMIT: '+git('rev-parse','HEAD')+'\nUNIT: recursive\nUNIT: command:old-example\nUNIT: other-old\nUNIT: command:sibling-command\nVERDICT: ACCEPT\n')
             commit()
             spec = dict(supersedes=['recursive'], declarations={new_name:repaired[new_name]},commands=[],action='replace',
                         reason='control repair',review=dict(reference={'path':'ConcreteSpec/landing/reviews/control.txt','commit':git('rev-parse','HEAD')},verdict='ACCEPT'))
             replacement = inventory.row(record='replacement',name='control-repair',piece='F03',
                                         disposition='replace',note=json.dumps(spec))
+            def accept(candidate, piece='F03', name='control-repair'):
+                reviewed_record = inventory.row(record='replacement',name=name,piece=piece,
+                    disposition='replace',note=json.dumps(candidate))
+                manifest = root/'ConcreteSpec/landing/inventory.tsv'
+                with manifest.open('w',newline='') as f:
+                    writer = csv.DictWriter(f,fieldnames=inventory.FIELDS,delimiter='\t')
+                    writer.writeheader()
+                    writer.writerow(reviewed_record)
+                commit()
+                text = review_path.read_text()
+                text = re.sub(r'^COMMIT: .+$','COMMIT: '+git('rev-parse','HEAD'),text,flags=re.M)
+                review_path.write_text(text)
+                commit()
+                candidate['review'] = dict(verdict='ACCEPT',reference=dict(
+                    path='ConcreteSpec/landing/reviews/control.txt',commit=git('rev-parse','HEAD')))
+            refused(lambda: inventory.replacement_rows(old_rows+[replacement]),
+                    'reviewed commit does not contain reconciliation: control-repair')
+            print('control PASS: review of older revision refused because reconciliation is absent')
+            accept(spec)
+            replacement['note']=json.dumps(spec)
             population = old_rows+[replacement]
             before = inventory.progress_reasons(without_consumer,repaired)
             if before['recursive']=='identical full digest': raise ValueError('silent replacement landed')
@@ -184,7 +206,15 @@ def main():
             present = dict(repaired,recursive=without_consumer['recursive'])
             if inventory.replacement_progress(population,{'recursive':'identical full digest'},present)['recursive']!='superseded unit still present: recursive':
                 raise ValueError('unchanged superseded declaration closed')
+            edited = dict(repaired,recursive='1'*64)
+            if inventory.replacement_progress(population,before,edited)['recursive']!='superseded unit still present: recursive':
+                raise ValueError('edited superseded declaration closed')
+            print('control PASS: edited old declaration is still present by name')
             in_place = dict(spec,declarations={'recursive':'1'*64})
+            refused(lambda: inventory.replacement_rows(old_rows+[dict(replacement,note=json.dumps(in_place))]),
+                    'reviewed commit does not contain reconciliation: control-repair')
+            accept(in_place)
+            replacement['note']=json.dumps(spec)
             in_place_rows = old_rows+[dict(replacement,note=json.dumps(in_place))]
             if inventory.replacement_progress(in_place_rows,{'recursive':'full digest mismatch'},{'recursive':'1'*64})['recursive']!='reconciled by replacement':
                 raise ValueError('in-place digest repair refused')
@@ -203,6 +233,8 @@ def main():
             review_path.write_text(accepting_text)
             commit()
             multi = dict(spec,declarations={new_name:repaired[new_name], 'second': '1'*64})
+            accept(multi)
+            replacement['note']=json.dumps(spec)
             multi_rows = old_rows+[dict(replacement,note=json.dumps(multi))]
             if inventory.replacement_progress(multi_rows,before,repaired)['recursive']!='missing replacement declaration: second':
                 raise ValueError('partial multi-declaration replacement landed')
@@ -211,7 +243,7 @@ def main():
             print('control PASS: reviewed replacement closes only at exact replacement digests; invalid, unknown, duplicate and partial rows refused')
             # Command targets use the production scope/digest/ordinal identity.
             command_rows = [inventory.row(record='command',name='old-example',piece='F02',
-                disposition='replace',source='ConcreteSpec/Control.lean',line=1,end_line=1,
+                disposition='replace',source='ConcreteSpec/Old.lean',line=1,end_line=1,
                 kind='example',digest='0'*64)]
             probe.write_text('example : True := by trivial\n')
             commit()
@@ -224,6 +256,7 @@ def main():
                 raise ValueError('HEAD command export cannot write replacement record')
             target = exported['headCommandKeys'][0]
             cspec = dict(spec,supersedes=['command:old-example'],declarations={},commands=[target])
+            accept(cspec,'F02')
             crec = dict(replacement,piece='F02',note=json.dumps(cspec))
             cr = {'command:old-example':'full digest mismatch'}
             if inventory.replacement_progress(command_rows+[crec],cr,command_head)['command:old-example']!='reconciled by replacement':
@@ -235,12 +268,14 @@ def main():
             observed = inventory.replacement_progress(command_rows+[crec],cr,changed_head)['command:old-example']
             if observed!='replacement command digest mismatch: '+json.dumps(key): raise ValueError(observed)
             retired = dict(cspec,action='retire',commands=[])
+            accept(retired,'F02')
             if inventory.replacement_progress(command_rows+[dict(crec,note=json.dumps(retired))],cr,{})['command:old-example']!='reconciled by retirement':
                 raise ValueError('reviewed retirement refused')
             still_present = inventory.Digests(commands={'old':next(iter(inventory.command_match_keys(command_rows).values()))})
             if inventory.replacement_progress(command_rows+[dict(crec,note=json.dumps(retired))],cr,still_present)['command:old-example']!='superseded unit still present: command:old-example':
                 raise ValueError('retirement closed with the old command still present')
             d_retired = dict(spec,action='retire',declarations={},commands=[])
+            accept(d_retired)
             d_record = dict(replacement,note=json.dumps(d_retired))
             if inventory.replacement_progress(old_rows+[d_record],before,{})['recursive']!='reconciled by retirement':
                 raise ValueError('reviewed declaration retirement refused')
@@ -259,15 +294,12 @@ def main():
             refused(lambda: inventory.replacement_rows(population+[independent]),
                     'replacement target is independent snapshot unit: '+new_name)
             sibling = inventory.row(record='declaration',name='other-old',piece='F03')
-            # Cover both obligations in the fixture review.
-            review_path.write_text(review_path.read_text().replace('VERDICT:', 'UNIT: other-old\nUNIT: command:sibling-command\nVERDICT:'))
-            commit()
-            spec['review']['reference']['commit']=git('rev-parse','HEAD')
+            shared_spec = dict(spec,supersedes=['other-old'])
+            accept(shared_spec,name='shared')
             replacement['note']=json.dumps(spec)
             population=old_rows+[replacement]
-            cspec['review']=spec['review']
             crec['note']=json.dumps(cspec)
-            shared = dict(replacement,name='shared',note=json.dumps(dict(spec,supersedes=['other-old'])))
+            shared = dict(replacement,name='shared',note=json.dumps(shared_spec))
             refused(lambda: inventory.replacement_rows(population+[sibling,shared]),'shared replacement target: shared')
             unrelated = git('-c','user.name=Control','-c','user.email=c@example.invalid',
                             'commit-tree',git('rev-parse','HEAD^{tree}'),'-m','unrelated provenance')
@@ -293,16 +325,27 @@ def main():
             combined = inventory.head_population()
             forbidden_key = next(k for k in combined.commands.values()
                                  if k[0]=='ConcreteSpec/Forbidden.lean' and k[2]=='example')
+            if combined.presence[forbidden_key][0]!='statement':
+                raise ValueError('example lacks parsed statement identity')
             actual_old = dict(command_rows[0],source=forbidden_key[0],kind=forbidden_key[2],digest=forbidden_key[3])
             observed = inventory.replacement_progress([actual_old,crec],cr,combined)['command:old-example']
             if observed!='superseded unit still present: command:old-example': raise ValueError(observed)
+            forbidden.write_text(forbidden.read_text().replace('example :', 'example : True := by trivial\nexample :').replace('by decide','by exact of_decide_eq_true rfl'))
+            commit()
+            edited_head = inventory.head_population()
+            for candidate in (cspec,retired):
+                observed = inventory.replacement_progress([actual_old,dict(crec,note=json.dumps(candidate))],cr,edited_head,combined)['command:old-example']
+                if observed!='superseded unit still present: command:old-example': raise ValueError(observed)
+            print('control PASS: proof-edited forbidden example remains present under replacement and retirement')
             forbidden.unlink()
             commit()
             print('control PASS: F02 forbidden raw-record inequality left beside its replacement keeps obligation open')
             # A second record cannot reuse a replacing command either.
             sibling_command = dict(command_rows[0],name='sibling-command')
-            shared_command = dict(crec,name='shared-command',note=json.dumps(
-                dict(cspec,supersedes=['command:sibling-command'])))
+            shared_spec = dict(cspec,supersedes=['command:sibling-command'])
+            accept(shared_spec,'F02','shared-command')
+            crec['note']=json.dumps(cspec)
+            shared_command = dict(crec,name='shared-command',note=json.dumps(shared_spec))
             refused(lambda: inventory.replacement_rows(command_rows+[sibling_command,crec,shared_command]),
                     'shared replacement target: shared-command')
             print('control PASS: F02 command replacement, retirement, ownership and exclusive targets')
