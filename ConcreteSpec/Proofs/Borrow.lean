@@ -19,22 +19,22 @@ theorem lookup_bodyCtx {m v src Γ p} (hv : p ≠ v) :
 theorem lockFor_excl {m r q} (h : q.lock = .excl) : (lockFor m r q).lock = .excl := by
   unfold lockFor; split <;> (try split) <;> (try split) <;> simp_all
 
-theorem ne_of_lookup {Γ : Ctx} {p v : Nat} {q : Place} (hp : AList.lookup Γ p = some q) (hv : AList.lookup Γ v = none) : p ≠ v := by
+theorem ne_of_lookup {Γ : Ctx} {p v : Var} {q : Place} (hp : AList.lookup Γ p = some q) (hv : AList.lookup Γ v = none) : p ≠ v := by
   rintro rfl; rw [hp] at hv; cases hv
 
-theorem lookup_restore (Γb : Ctx) : ∀ (Γ : Ctx) (p : Nat),
+theorem lookup_restore (Γb : Ctx) : ∀ (Γ : Ctx) (p : Var),
     AList.lookup (restore Γ Γb) p = if (AList.lookup Γb p).isSome then AList.lookup Γ p else none
   | [], _ => by simp [restore, AList.lookup]
   | (n, q) :: Γ, p => by
     have ih := lookup_restore Γb Γ p
     unfold restore at ih ⊢
     cases hb : (AList.lookup Γb n).isSome
-    · rw [List.filter_cons_of_neg (p := fun e : Nat × Place => (AList.lookup Γb e.1).isSome) (a := (n, q))
+    · rw [List.filter_cons_of_neg (p := fun e : Var × Place => (AList.lookup Γb e.1).isSome) (a := (n, q))
         (fun h => Bool.noConfusion (hb.symm.trans h)), ih, AList.lookup_cons]
       by_cases hnp : n = p
       · subst hnp; rw [hb]; rfl
       · rw [ite_eq_right hnp]
-    · rw [List.filter_cons_of_pos (p := fun e : Nat × Place => (AList.lookup Γb e.1).isSome) (a := (n, q)) hb, AList.lookup_cons,
+    · rw [List.filter_cons_of_pos (p := fun e : Var × Place => (AList.lookup Γb e.1).isSome) (a := (n, q)) hb, AList.lookup_cons,
         AList.lookup_cons]
       by_cases hnp : n = p
       · subst hnp
@@ -132,7 +132,7 @@ theorem open_mut_freezes_root {Γ s v body rest q Γ'} (h : Ok Γ (.borrow true 
     rw [lookup_bodyCtx (ne_of_lookup hp hv), hp]; rfl
 
 /-- The places of root `r` grant no write: each is locked, or neither writable nor an owner. -/
-def NoWrite (r : Nat) (Γ : Ctx) : Prop :=
+def NoWrite (r : Var) (Γ : Ctx) : Prop :=
   ∀ p q, AList.lookup Γ p = some q → q.root = r → q.lock = .free → q.mutable = false ∧ q.owner = false
 
 theorem noWrite_restore {r Γ Γb} (h : NoWrite r Γ) : NoWrite r (restore Γ Γb) :=

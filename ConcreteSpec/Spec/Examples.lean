@@ -1,3 +1,4 @@
+import ConcreteSpec.Diagnostics.Types
 import ConcreteSpec.Spec.Slice1Checker
 import ConcreteSpec.Spec.Rep
 import ConcreteSpec.Spec.Observation
@@ -72,11 +73,6 @@ def s₂ : Var := ⟨2⟩
 
 /-- Local 3; for example, its diagnostic spelling is `z`. -/
 def z₃ : Var := ⟨3⟩
-
-/-- Example diagnostic spellings; for example, local 4 is printed as `p`. These names
-are not part of any program or semantic context. -/
-def localNames : LocalNames :=
-  [(p₄, "p"), (q₅, "q"), (x₁, "x"), (y₆, "y"), (s₂, "s")]
 
 /-- The slice's central program: an empty linear struct is created, moved, and consumed by a
 destructuring `let` (OWN-1, OWN-2, PAT-5). It exits with 42.
@@ -488,5 +484,107 @@ example : Observe.observe true (runBody decls 10 (inputEnv 200) add100 (.copy s�
 /-- A missing configured grant: status 125, and `main` does not run. -/
 example : (Observe.observe false (run moveThenConsume 10)).map Observe.Observation.status =
     some 125 := by decide
+
+/-- Elaboration output for `moveThenConsume`; spellings are scoped to this program. -/
+def moveThenConsumeElaborated : Elaborated Program :=
+  ⟨moveThenConsume, [(t₀, "t"), (u₁, "u")]⟩
+
+/-- Elaboration output for `useAfterMove`; spellings are scoped to this program. -/
+def useAfterMoveElaborated : Elaborated Program :=
+  ⟨useAfterMove, [(t₀, "t"), (u₁, "u")]⟩
+
+/-- Elaboration output for `copyLinear`; spellings are scoped to this program. -/
+def copyLinearElaborated : Elaborated Program :=
+  ⟨copyLinear, [(t₀, "t")]⟩
+
+/-- Elaboration output for `moveCopy`; spellings are scoped to this program. -/
+def moveCopyElaborated : Elaborated Program :=
+  ⟨moveCopy, [(x₀, "x")]⟩
+
+/-- Elaboration output for `notConsumed`; spellings are scoped to this program. -/
+def notConsumedElaborated : Elaborated Program :=
+  ⟨notConsumed, [(t₀, "t")]⟩
+
+/-- Elaboration output for `copyTwice`; spellings are scoped to this program. -/
+def copyTwiceElaborated : Elaborated Program :=
+  ⟨copyTwice, [(p₄, "p"), (q₅, "q")]⟩
+
+/-- Elaboration output for `unusedBinding`; spellings are scoped to this program. -/
+def unusedBindingElaborated : Elaborated Program :=
+  ⟨unusedBinding, [(x₀, "x")]⟩
+
+/-- Elaboration output for `destructureAdd`; spellings are scoped to this program. -/
+def destructureAddElaborated : Elaborated Program :=
+  ⟨destructureAdd, [(p₄, "p"), (x₁, "x"), (y₆, "y"), (s₂, "s")]⟩
+
+/-- Elaboration output for `missingField`; spellings are scoped to this program. -/
+def missingFieldElaborated : Elaborated Program :=
+  ⟨missingField, [(p₄, "p"), (x₁, "x")]⟩
+
+/-- Elaboration output for `wildcardField`; spellings are scoped to this program. -/
+def wildcardFieldElaborated : Elaborated Program :=
+  ⟨wildcardField, [(p₄, "p"), (x₁, "x")]⟩
+
+/-- Elaboration output for `overflowTrap`; spellings are scoped to this program. -/
+def overflowTrapElaborated : Elaborated Program :=
+  ⟨overflowTrap, [(a₀, "a"), (b₁, "b"), (s₂, "s")]⟩
+
+/-- Elaboration output for `overflowDropped`; spellings are scoped to this program. -/
+def overflowDroppedElaborated : Elaborated Program :=
+  ⟨overflowDropped, []⟩
+
+/-- Elaboration output for `fieldOverflowTrap`; spellings are scoped to this program. -/
+def fieldOverflowTrapElaborated : Elaborated Program :=
+  ⟨fieldOverflowTrap, [(p₄, "p"), (x₁, "x"), (y₆, "y"), (s₂, "s")]⟩
+
+/-- Elaboration output for `fieldOverflowMoved`; spellings are scoped to this program. -/
+def fieldOverflowMovedElaborated : Elaborated Program :=
+  ⟨fieldOverflowMoved, [(p₄, "p"), (q₅, "q"), (x₁, "x"), (y₆, "y"), (s₂, "s")]⟩
+
+/-- Elaboration output for `fieldSumFits`; spellings are scoped to this program. -/
+def fieldSumFitsElaborated : Elaborated Program :=
+  ⟨fieldSumFits, [(p₄, "p"), (x₁, "x"), (y₆, "y"), (s₂, "s")]⟩
+
+/-- Elaboration output for `literalTooBig`; spellings are scoped to this program. -/
+def literalTooBigElaborated : Elaborated Program :=
+  ⟨literalTooBig, [(a₀, "a")]⟩
+
+/-- Elaboration output for `mixedAdd`; spellings are scoped to this program. -/
+def mixedAddElaborated : Elaborated Program :=
+  ⟨mixedAdd, [(a₀, "a"), (b₁, "b"), (s₂, "s")]⟩
+
+/-- Elaboration output for `rebind`; spellings are scoped to this program. -/
+def rebindElaborated : Elaborated Program :=
+  ⟨rebind, [(x₀, "x")]⟩
+
+/-- Elaboration output for `wildCopy`; spellings are scoped to this program. -/
+def wildCopyElaborated : Elaborated Program :=
+  ⟨wildCopy, []⟩
+
+/-- Elaboration output for `wildLinear`; spellings are scoped to this program. -/
+def wildLinearElaborated : Elaborated Program :=
+  ⟨wildLinear, []⟩
+
+/-- Elaboration output for `wrongReturnType`; spellings are scoped to this program. -/
+def wrongReturnTypeElaborated : Elaborated Program :=
+  ⟨wrongReturnType, []⟩
+
+/-- Elaboration output for the `add100` function body, including its input and result. -/
+def add100Elaborated : Elaborated (Ctx × List Stmt × Atom) :=
+  ⟨(inputCtx, add100, .copy s₂), [(x₀, "x"), (s₂, "s")]⟩
+
+/-- Elaboration output for the `add0` function body. -/
+def add0Elaborated : Elaborated (Ctx × List Stmt × Atom) :=
+  ⟨(inputCtx, add0, .copy s₂), [(x₀, "x"), (s₂, "s")]⟩
+
+/-- In this function the locals numbered 1 and 6 spell `c` and `d`, as in its surface example. -/
+def partialKnownRefusedElaborated : Elaborated (Ctx × List Stmt × Atom) :=
+  ⟨(inputCtx, partialKnownRefused, .copy z₃),
+    [(x₀, "x"), (p₄, "p"), (x₁, "c"), (y₆, "d"), (s₂, "s"), (z₃, "z")]⟩
+
+/-- The same function-scoped spellings for the second partial-facts example. -/
+def partialUnknownRefusedElaborated : Elaborated (Ctx × List Stmt × Atom) :=
+  ⟨(inputCtx, partialUnknownRefused, .copy s₂),
+    [(x₀, "x"), (p₄, "p"), (x₁, "c"), (y₆, "d"), (s₂, "s")]⟩
 
 end ConcreteSpec.Examples

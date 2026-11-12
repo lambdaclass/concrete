@@ -1,104 +1,163 @@
+import ConcreteSpec.Spec.Slice1Syntax
+import ConcreteSpec.Diagnostics.Types
+import ConcreteSpec.Diagnostics
 import ConcreteSpec.Spec.Basics
 import ConcreteSpec.Spec.Slice1Semantics
-import ConcreteSpec.Spec.Slice1Syntax
+import ConcreteSpec.Spec.Borrow
+import ConcreteSpec.Spec.Brand
+
+import ConcreteSpec.Proofs.Basics
 
 /-!
-# Numeric local identity
+# Name independence of the execution boundary
 
-Names are an external diagnostics table. The frame law below quantifies over *every* observation
-of semantic state, so it applies to reads, updates, erasure, evaluation and any future serializer
-without giving a semantic operation access to that table. The concrete controls additionally
-pin the operations that exist today. Slice 1 has no assignment or scope-exit erasure operation;
-`AList.update` and `AList.erase` are the shared map operations, not invented language semantics.
+Two elaborated states may have entirely different diagnostics tables. Equal semantic state and
+numerically equal operands must give the same result for each actual operation. The numeric
+premise is load-bearing: a name-carrying identity cannot prove these statements. The required
+local_identity gate independently mutates every dispatch to consult diagnostics and requires the
+corresponding proof to fail. The semantic dependency scan closes the other route: adding a name
+table to an operation inside Spec. Future codecs are tracked in ISS-XXXX, not covered here.
 -/
-
 namespace ConcreteSpec.LocalIdentity
-open Core
+open Core Diagnostics
 
-/-- Replacing diagnostics preserves every observation of semantic state. For example, taking
-`observe := fun env => readVar [] env ⟨7⟩ false` preserves a read when `count` becomes `total`.
-The observer receives only the semantic component, never the diagnostics table. -/
-theorem diagnostics_frame {σ α : Type} (observe : σ → α) (state : σ)
-    (before after : LocalNames) :
-    observe (state, before).1 = observe (state, after).1 := rfl
-
-/-- Numeric identities are equal exactly when their numbers are equal. For example,
-locals 7 and 8 remain distinct even if both diagnostics entries say `count`. -/
+/-- Numeric identity is complete: there is no hidden spelling component. -/
 theorem numeric_identity (x y : Var) : x = y ↔ x.id = y.id := by
-  cases x; cases y; simp
+  cases x; cases y; constructor <;> intro h
+  · exact congrArg Var.id h
+  · cases h; rfl
 
-/-- The first binding wins, including when a later binding has the same number.
-For example, reading 7 from `[(7, 10), (7, 20)]` gives 10. -/
+/-- The first binding wins for a local identity. -/
 theorem first_binding {α : Type} (x : Var) (a : α) (rest : AList Var α) :
-    AList.lookup ((x, a) :: rest) x = some a := by simp [AList.lookup]
+    AList.lookup ((x, a) :: rest) x = some a := by
+  rw [AList.lookup_cons, ite_eq_left rfl]
 
-/-- A read sees the same environment after a diagnostic rename. For example, local 7
-still returns 42 when its displayed name changes from `count` to `total`. -/
-theorem read_presentation (Δ : Decls) (env : Env) (x : Var) (mv : Bool)
-    (before after : LocalNames) :
-    readVar Δ (env, before).1 x mv = readVar Δ (env, after).1 x mv := rfl
+/-- Replacing the diagnostics table preserves `read`, including its semantic result. -/
+theorem read_names {s t : Elaborated Env} (hs : s.code = t.code)
+    (x y : Var) (hx : x.id = y.id) (Δ : Decls) (mv : Bool) :
+    read Δ s x mv = read Δ t y mv := by
+  have hxy := (numeric_identity x y).mpr hx
+  cases s; cases t; cases hs; cases hxy; rfl
 
-/-- Updating a binding ignores diagnostic names. For example, incrementing local 7
-changes its first binding whether its displayed name is `count` or `total`. -/
-theorem update_presentation {α : Type} (env : AList Var α) (x : Var) (f : α → α)
-    (before after : LocalNames) :
-    AList.update (env, before).1 x f = AList.update (env, after).1 x f := rfl
+/-- Replacing the diagnostics table preserves `statement`, including its semantic result. -/
+theorem statement_names {s t : Elaborated Env} (hs : s.code = t.code)
+    (x y : Var) (hx : x.id = y.id) (Δ : Decls) (ty : Ty) (e : Expr) :
+    statement Δ s x ty e = statement Δ t y ty e := by
+  have hxy := (numeric_identity x y).mpr hx
+  cases s; cases t; cases hs; cases hxy; rfl
 
-/-- Removing a local ignores diagnostic names. For example, erasing local 7 removes
-all its bindings even if the diagnostics table was renamed. -/
-theorem erase_presentation {α : Type} (env : AList Var α) (x : Var)
-    (before after : LocalNames) :
-    AList.erase (env, before).1 x = AList.erase (env, after).1 x := rfl
+/-- Replacing the diagnostics table preserves `drop`, including its semantic result. -/
+theorem drop_names {s t : Elaborated Env} (hs : s.code = t.code)
+    (x y : Var) (hx : x.id = y.id) (Δ : Decls) (ty : Ty) :
+    drop Δ s x ty = drop Δ t y ty := by
+  have hxy := (numeric_identity x y).mpr hx
+  cases s; cases t; cases hs; cases hxy; rfl
 
-/-- Dropping an expression ignores diagnostic names. For example, `let _: u8 = copy x`
-keeps the same environment when the displayed name of `x` changes. -/
-theorem drop_presentation (Δ : Decls) (env : Env) (ty : Ty) (e : Expr)
-    (before after : LocalNames) :
-    execStmt Δ (env, before).1 (.let_ .wild ty e) =
-      execStmt Δ (env, after).1 (.let_ .wild ty e) := rfl
+/-- Replacing the diagnostics table preserves `borrowRead`, including its semantic result. -/
+theorem borrowRead_names {s t : Elaborated Borrow.Ctx} (hs : s.code = t.code)
+    (x y : Var) (hx : x.id = y.id) (out : Borrow.Ctx) :
+    borrowRead s x out = borrowRead t y out := by
+  have hxy := (numeric_identity x y).mpr hx
+  cases s; cases t; cases hs; cases hxy; rfl
 
-/-- The numeric representation ignores diagnostics. For example, local 7 stays 7
-when printed as `total`; `numeric_identity` ensures this representation is injective.
-There is no local-variable JSON codec in the root compiler yet. -/
-theorem number_presentation (x : Var) (before after : LocalNames) :
-    (x, before).1.id = (x, after).1.id := rfl
+/-- Replacing the diagnostics table preserves `borrowWrite`, including its semantic result. -/
+theorem borrowWrite_names {s t : Elaborated Borrow.Ctx} (hs : s.code = t.code)
+    (x y : Var) (hx : x.id = y.id) (out : Borrow.Ctx) :
+    borrowWrite s x out = borrowWrite t y out := by
+  have hxy := (numeric_identity x y).mpr hx
+  cases s; cases t; cases hs; cases hxy; rfl
 
--- Positive controls and negated planted results: the kernel must reject each mutant result.
-example : AList.lookup ([(⟨7⟩, 10), (⟨7⟩, 20)] : AList Var Nat) ⟨7⟩ = some 10 := rfl
-example : AList.lookup ([(⟨7⟩, 10), (⟨7⟩, 20)] : AList Var Nat) ⟨7⟩ ≠ some 20 := by decide
+/-- Replacing the diagnostics table preserves `borrowMove`, including its semantic result. -/
+theorem borrowMove_names {s t : Elaborated Borrow.Ctx} (hs : s.code = t.code)
+    (x y : Var) (hx : x.id = y.id) (out : Borrow.Ctx) :
+    borrowMove s x out = borrowMove t y out := by
+  have hxy := (numeric_identity x y).mpr hx
+  cases s; cases t; cases hs; cases hxy; rfl
 
--- Equal spellings do not merge identities; changing the number does change the lookup.
-example : AList.lookup ([(⟨7⟩, "count"), (⟨8⟩, "count")] : LocalNames) ⟨8⟩ =
-    some "count" := rfl
-example : (⟨7⟩ : Var) ≠ ⟨8⟩ := by decide
-example : AList.lookup ([(⟨7⟩, 10), (⟨8⟩, 20)] : AList Var Nat) ⟨8⟩ ≠ some 10 := by decide
+/-- Replacing the diagnostics table preserves `borrowRestore`, including its semantic result. -/
+theorem borrowRestore_names {s t : Elaborated Borrow.Ctx} (hs : s.code = t.code)
+    (body : Borrow.Ctx) :
+    borrowRestore s body = borrowRestore t body := by
+  cases s; cases t; cases hs; rfl
 
--- Reads: changing diagnostics leaves the actual evaluator unchanged.
-example : readVar [] ((([(⟨7⟩, .val (.scalar (.int .u8 42)))],
-    [(⟨7⟩, "count")]) : Env × LocalNames).1) ⟨7⟩ false =
-    readVar [] ((([(⟨7⟩, .val (.scalar (.int .u8 42)))],
-    [(⟨7⟩, "total")]) : Env × LocalNames).1) ⟨7⟩ false := rfl
-example : readVar [] [(⟨7⟩, .val (.scalar (.int .u8 42)))] ⟨8⟩ false =
-    .stuck .unbound := rfl
+/-- Replacing the diagnostics table preserves `borrowRun`, including its semantic result. -/
+theorem borrowRun_names {s t : Elaborated (Borrow.Mem × Borrow.Views)} (hs : s.code = t.code)
+    (x y : Var) (hx : x.id = y.id) (fuel : Nat) (ss : List Borrow.VStmt) :
+    borrowRun s x fuel ss = borrowRun t y fuel ss := by
+  have hxy := (numeric_identity x y).mpr hx
+  cases s; cases t; cases hs; cases hxy; rfl
 
--- Updates change only the first matching identity; erasure removes all its bindings.
-example : AList.update ([(⟨7⟩, 10), (⟨8⟩, 20), (⟨7⟩, 30)] : AList Var Nat)
-    ⟨7⟩ (· + 1) = [(⟨7⟩, 11), (⟨8⟩, 20), (⟨7⟩, 30)] := rfl
-example : AList.update ([(⟨7⟩, 10), (⟨8⟩, 20)] : AList Var Nat)
-    ⟨7⟩ (· + 1) ≠ [(⟨7⟩, 10), (⟨8⟩, 21)] := by decide
-example : AList.erase ([(⟨7⟩, 10), (⟨8⟩, 20), (⟨7⟩, 30)] : AList Var Nat)
-    ⟨7⟩ = [(⟨8⟩, 20)] := rfl
-example : AList.erase ([(⟨7⟩, 10), (⟨8⟩, 20), (⟨7⟩, 30)] : AList Var Nat)
-    ⟨7⟩ ≠ [(⟨8⟩, 20), (⟨7⟩, 30)] := by decide
+/-- Replacing the diagnostics table preserves `borrowAssign`, including its semantic result. -/
+theorem borrowAssign_names {s t : Elaborated (Borrow.Mem × Borrow.Views)} (hs : s.code = t.code)
+    (x y : Var) (hx : x.id = y.id) (fuel i v : Nat) :
+    borrowAssign s x fuel i v = borrowAssign t y fuel i v := by
+  have hxy := (numeric_identity x y).mpr hx
+  cases s; cases t; cases hs; cases hxy; rfl
 
--- Dropping a copy keeps the environment; a mutant which erases its source is refused.
-example : execStmt [] [(⟨7⟩, .val (.scalar (.int .u8 42)))]
-    (.let_ .wild (.scalar (.int .u8)) (.atom (.copy ⟨7⟩))) =
-    .ok [(⟨7⟩, .val (.scalar (.int .u8 42)))] := rfl
-example : execStmt [] [(⟨7⟩, .val (.scalar (.int .u8 42)))]
-    (.let_ .wild (.scalar (.int .u8)) (.atom (.copy ⟨7⟩))) ≠ .ok [] := by
-  intro h; cases h
-example : (⟨7⟩ : Var).id = 7 := rfl
-example : (⟨7⟩ : Var).id ≠ (⟨8⟩ : Var).id := by decide
+/-- Replacing the diagnostics table preserves `borrowScope`, including its semantic result. -/
+theorem borrowScope_names {s t : Elaborated (Borrow.Mem × Borrow.Views)} (hs : s.code = t.code)
+    (x y : Var) (hx : x.id = y.id) (fuel : Nat) (m : Bool) (v : Var) (a b : Nat) (ss : List Borrow.VStmt) :
+    borrowScope s x fuel m v a b ss = borrowScope t y fuel m v a b ss := by
+  have hxy := (numeric_identity x y).mpr hx
+  cases s; cases t; cases hs; cases hxy; rfl
+
+/-- Replacing the diagnostics table preserves `brandUse`, including its semantic result. -/
+theorem brandUse_names {s t : Elaborated Brand.State} (hs : s.code = t.code)
+    (x y : Var) (hx : x.id = y.id) (σ : Nat → Bool) (fuel : Nat) (a : Var) :
+    brandUse s x σ fuel a = brandUse t y σ fuel a := by
+  have hxy := (numeric_identity x y).mpr hx
+  cases s; cases t; cases hs; cases hxy; rfl
+
+/-- Replacing the diagnostics table preserves `brandFree`, including its semantic result. -/
+theorem brandFree_names {s t : Elaborated Brand.State} (hs : s.code = t.code)
+    (x y : Var) (hx : x.id = y.id) (σ : Nat → Bool) (fuel : Nat) (a : Var) :
+    brandFree s x σ fuel a = brandFree t y σ fuel a := by
+  have hxy := (numeric_identity x y).mpr hx
+  cases s; cases t; cases hs; cases hxy; rfl
+
+/-- Replacing the diagnostics table preserves `brandRelease`, including its semantic result. -/
+theorem brandRelease_names {s t : Elaborated Brand.State} (hs : s.code = t.code)
+    (x y : Var) (hx : x.id = y.id) (σ : Nat → Bool) (fuel : Nat) :
+    brandRelease s x σ fuel = brandRelease t y σ fuel := by
+  have hxy := (numeric_identity x y).mpr hx
+  cases s; cases t; cases hs; cases hxy; rfl
+
+/-- Replacing the diagnostics table preserves `brandReset`, including its semantic result. -/
+theorem brandReset_names {s t : Elaborated Brand.State} (hs : s.code = t.code)
+    (x y : Var) (hx : x.id = y.id) (σ : Nat → Bool) (fuel : Nat) (a : Var) (β : Nat) :
+    brandReset s x σ fuel a β = brandReset t y σ fuel a β := by
+  have hxy := (numeric_identity x y).mpr hx
+  cases s; cases t; cases hs; cases hxy; rfl
+
+/-- Replacing the diagnostics table preserves `brandGhost`, including its semantic result. -/
+theorem brandGhost_names {s t : Elaborated Brand.State} (hs : s.code = t.code)
+    (σ : Nat → Bool) (fuel k : Nat) (ss : List Brand.Stmt) :
+    brandGhost s σ fuel k ss = brandGhost t σ fuel k ss := by
+  cases s; cases t; cases hs; rfl
+
+/-- Replacing the diagnostics table preserves `brandErased`, including its semantic result. -/
+theorem brandErased_names {s t : Elaborated (Core.AList Var Brand.EVal)} (hs : s.code = t.code)
+    (σ : Nat → Bool) (fuel k : Nat) (ss : List Brand.Stmt) :
+    brandErased s σ fuel k ss = brandErased t σ fuel k ss := by
+  cases s; cases t; cases hs; rfl
+
+
+/-- Diagnostic table replacement preserves the complete slice-1 evaluator. -/
+theorem sliceRun_names {s t : Elaborated Env} (hs : s.code = t.code)
+    (Δ : Decls) (fuel : Nat) (ss : List Stmt) (ret : Atom) :
+    sliceRun s Δ fuel ss ret = sliceRun t Δ fuel ss ret := by
+  cases s; cases t; cases hs; rfl
+
+/-- Diagnostic table replacement preserves every range-view execution. -/
+theorem borrowExecute_names {s t : Elaborated (Borrow.Mem × Borrow.Views)} (hs : s.code = t.code)
+    (fuel : Nat) (ss : List Borrow.VStmt) :
+    borrowExecute s fuel ss = borrowExecute t fuel ss := by
+  cases s; cases t; cases hs; rfl
+
+/-- Diagnostic table replacement preserves every static Brand judgement. -/
+theorem brandCheck_names {s t : Elaborated Brand.Ctx} (hs : s.code = t.code)
+    (brands : List Nat) (ss : List Brand.Stmt) (out : Brand.Ctx) :
+    brandCheck s brands ss out = brandCheck t brands ss out := by
+  cases s; cases t; cases hs; rfl
 
 end ConcreteSpec.LocalIdentity

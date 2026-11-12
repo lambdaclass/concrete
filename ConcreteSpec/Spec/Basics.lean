@@ -1,8 +1,12 @@
 /-!
-# Basics: association lists
+# Basics: numeric local identity, diagnostics and association lists
 
 PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). Part of `ConcreteSpec.Spec`;
 see `ConcreteSpec/README.md`.
+
+`Var` and `LocalNames` have their only home here. A local is identified only by its number.
+Diagnostics tables belong to a particular elaborated program or function; no semantic definition
+takes or refers to `LocalNames`.
 
 Every finite map in the specification (a context, an environment, a memory, a field list) is an
 association list: a list of key–value pairs, read from the front. This module is the one
@@ -74,7 +78,8 @@ end ConcreteSpec.Core
 namespace ConcreteSpec
 
 /-- Source spellings for diagnostics only. For example, `[(⟨7⟩, "count")]` displays
-local 7 as `count`. This table is separate from every semantic context and program. -/
+local 7 as `count`. This table belongs to one elaborated program or function, outside its semantic state. -/
 abbrev LocalNames := Core.AList Var String
+
 
 end ConcreteSpec

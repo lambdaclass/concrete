@@ -41,7 +41,7 @@ inductive STy where
   | heap (β : Nat)
   deriving DecidableEq, Repr
 
-abbrev Ctx := AList Nat STy
+abbrev Ctx := AList Var STy
 
 /-- No value of brand `β` is live. -/
 def NoHeap (Γ : Ctx) (β : Nat) : Prop := ∀ e ∈ Γ, e.2 ≠ .heap β
@@ -50,20 +50,20 @@ instance (Γ : Ctx) (β : Nat) : Decidable (NoHeap Γ β) := by unfold NoHeap; i
 
 inductive Stmt where
   /-- `new a` with brand binder `β`. -/
-  | newAlloc (a β : Nat)
+  | newAlloc (a : Var) (β : Nat)
   /-- Allocate `h` from `a`. -/
-  | alloc (h a : Nat)
+  | alloc (h a : Var)
   /-- An operation on `h` through `a`. -/
-  | use (h a : Nat)
+  | use (h a : Var)
   /-- Free `h` through `a`. -/
-  | free (h a : Nat)
+  | free (h a : Var)
   /-- Release `a`. -/
-  | release (a : Nat)
+  | release (a : Var)
   /-- `a' = reset(a)`, with brand binder `β'` for `a'`. -/
-  | reset (a' a β' : Nat)
+  | reset (a' a : Var) (β' : Nat)
   /-- `while cond { body }` carrying allocator `a`; `β` names its brand inside one iteration and
   `βx` after the loop. The condition is abstracted. -/
-  | while_ (a β βx : Nat) (body : List Stmt)
+  | while_ (a : Var) (β βx : Nat) (body : List Stmt)
 
 /-- The static check, from the brand names in use `B` and the context `Γ` to the context at the
 end. A brand binder must be fresh in `B` (generative); brand equality is name equality
@@ -109,13 +109,13 @@ def brandOf : Val → Nat
 /-- The ghost state: the live values, the next unused brand, and every brand generated so far in
 order. -/
 structure State where
-  env : AList Nat Val
+  env : AList Var Val
   next : Nat
   gen : List Nat
   deriving DecidableEq, Repr
 
 /-- Generate a brand for allocator `a`. -/
-def State.bind (s : State) (a : Nat) (env : AList Nat Val) : State :=
+def State.bind (s : State) (a : Var) (env : AList Var Val) : State :=
   { env := (a, .allocV s.next) :: env, next := s.next + 1, gen := s.gen ++ [s.next] }
 
 /-- The ghost run. Each operation on a heap value checks that the allocator has the value's
@@ -204,13 +204,13 @@ def Val.erase : Val → EVal
 
 /-- The result of the erased run. -/
 inductive ER where
-  | done (env : AList Nat EVal) (k : Nat)
+  | done (env : AList Var EVal) (k : Nat)
   | stuck
   | outOfFuel
   deriving DecidableEq, Repr
 
 /-- The erased run, with the same fuel and loop tests as `ghost`. -/
-def erased (σ : Nat → Bool) : Nat → Nat → AList Nat EVal → List Stmt → ER
+def erased (σ : Nat → Bool) : Nat → Nat → AList Var EVal → List Stmt → ER
   | 0, _, _, _ => .outOfFuel
   | _ + 1, k, env, [] => .done env k
   | n + 1, k, env, .newAlloc a _ :: rest => erased σ n k ((a, .alloc) :: env) rest
@@ -245,7 +245,7 @@ def GR.erase : GR → ER
 /-! ### Examples -/
 
 /-- `new a; h = alloc(a); reset(a)` is refused: `h` is still live (Q1.5). -/
-example : ¬ Ok [] [] [.newAlloc 0 10, .alloc 1 0, .reset 0 0 11, .free 1 0, .release 0] [] := by
+example : ¬ Ok [] [] [.newAlloc ⟨0⟩ 10, .alloc ⟨1⟩ ⟨0⟩, .reset ⟨0⟩ ⟨0⟩ 11, .free ⟨1⟩ ⟨0⟩, .release ⟨0⟩] [] := by
   intro hok
   cases hok with
   | newAlloc _ _ h1 =>
@@ -254,25 +254,25 @@ example : ¬ Ok [] [] [.newAlloc 0 10, .alloc 1 0, .reset 0 0 11, .free 1 0, .re
       simp [AList.lookup] at ha'; subst ha'
       cases h2 with
       | reset ha hno _ _ _ =>
-        simp [AList.lookup] at ha; subst ha; exact hno (1, .heap 10) (by simp) rfl
+        simp [AList.lookup] at ha; subst ha; exact hno (⟨1⟩, .heap 10) (by simp) rfl
 
 /-- `new a; h = alloc(a); free(h); a = reset(a); h2 = alloc(a); free(h2); release(a)` is accepted. -/
-example : Ok [] [] [.newAlloc 0 10, .alloc 1 0, .free 1 0, .reset 0 0 11, .alloc 2 0, .free 2 0,
-    .release 0] [] :=
+example : Ok [] [] [.newAlloc ⟨0⟩ 10, .alloc ⟨1⟩ ⟨0⟩, .free ⟨1⟩ ⟨0⟩, .reset ⟨0⟩ ⟨0⟩ 11, .alloc ⟨2⟩ ⟨0⟩, .free ⟨2⟩ ⟨0⟩,
+    .release ⟨0⟩] [] :=
   .newAlloc rfl (by decide) <| .alloc rfl rfl <| .free rfl rfl <|
     .reset rfl (by decide) rfl (by decide) <| .alloc rfl rfl <| .free rfl rfl <|
     .release rfl (by decide) .nil
 
 /-- A value of brand 10 used through an allocator of brand 11 is refused (nominal brand equality,
 Q1.4). -/
-example : ¬ Ok [10, 11] [(1, .heap 10), (0, .alloc 11)] [.use 1 0] [(1, .heap 10), (0, .alloc 11)] := by
+example : ¬ Ok [10, 11] [(⟨1⟩, .heap 10), (⟨0⟩, .alloc 11)] [.use ⟨1⟩ ⟨0⟩] [(⟨1⟩, .heap 10), (⟨0⟩, .alloc 11)] := by
   intro hok
   cases hok with
   | use h1 h2 _ => simp [AList.lookup] at h1 h2; subst h1; cases h2
 
 /-- A loop that resets its allocator each iteration is accepted (existential loop state, Q1.3). -/
-example : Ok [] [] [.newAlloc 0 10, .while_ 0 20 30 [.alloc 1 0, .free 1 0, .reset 0 0 21],
-    .release 0] [] :=
+example : Ok [] [] [.newAlloc ⟨0⟩ 10, .while_ ⟨0⟩ 20 30 [.alloc ⟨1⟩ ⟨0⟩, .free ⟨1⟩ ⟨0⟩, .reset ⟨0⟩ ⟨0⟩ 21],
+    .release ⟨0⟩] [] :=
   .newAlloc rfl (by decide) <|
     .while_ (β'' := 21) rfl (by decide) (by decide) (by decide)
       (.alloc rfl rfl <| .free rfl rfl <| .reset rfl (by decide) rfl (by decide) .nil)
@@ -281,30 +281,30 @@ example : Ok [] [] [.newAlloc 0 10, .while_ 0 20 30 [.alloc 1 0, .free 1 0, .res
 /-- The ghost run of that loop, with loop tests that iterate three times (tests 0–2 iterate,
 test 3 exits), finishes without a failed brand check, in the state of the `Run` below. By `checked_passes_brand_checks` (`Proofs/Brand.lean`) every checked
 program does so, for every outcome of its loop tests. -/
-example : ghost (fun k => decide (k < 3)) 20 0 State.init [.newAlloc 0 10,
-    .while_ 0 20 30 [.alloc 1 0, .free 1 0, .reset 0 0 21], .release 0] =
+example : ghost (fun k => decide (k < 3)) 20 0 State.init [.newAlloc ⟨0⟩ 10,
+    .while_ ⟨0⟩ 20 30 [.alloc ⟨1⟩ ⟨0⟩, .free ⟨1⟩ ⟨0⟩, .reset ⟨0⟩ ⟨0⟩ 21], .release ⟨0⟩] =
     .done { env := [], next := 4, gen := [0, 1, 2, 3] } 4 := by
   decide
 
 /-- Its erased run does the same, without brands. -/
-example : erased (fun k => decide (k < 3)) 20 0 [] [.newAlloc 0 10,
-    .while_ 0 20 30 [.alloc 1 0, .free 1 0, .reset 0 0 21], .release 0] = .done [] 4 := by
+example : erased (fun k => decide (k < 3)) 20 0 [] [.newAlloc ⟨0⟩ 10,
+    .while_ ⟨0⟩ 20 30 [.alloc ⟨1⟩ ⟨0⟩, .free ⟨1⟩ ⟨0⟩, .reset ⟨0⟩ ⟨0⟩ 21], .release ⟨0⟩] = .done [] 4 := by
   decide
 
 /-- The refused brand mismatch fails its ghost check: brand 0's value through brand 1's
 allocator. -/
-example : ghost (fun _ => false) 10 0 State.init [.newAlloc 0 10, .newAlloc 2 11,
-    .alloc 1 0, .use 1 2] = .stuck := by decide
+example : ghost (fun _ => false) 10 0 State.init [.newAlloc ⟨0⟩ 10, .newAlloc ⟨2⟩ 11,
+    .alloc ⟨1⟩ ⟨0⟩, .use ⟨1⟩ ⟨2⟩] = .stuck := by decide
 
 /-- Erasure removes that check: the erased run of the refused program does not notice the
 mismatch. Brand checking is static only. -/
-example : erased (fun _ => false) 10 0 [] [.newAlloc 0 10, .newAlloc 2 11, .alloc 1 0, .use 1 2] =
-    .done [(1, .heap), (2, .alloc), (0, .alloc)] 0 := by decide
+example : erased (fun _ => false) 10 0 [] [.newAlloc ⟨0⟩ 10, .newAlloc ⟨2⟩ 11, .alloc ⟨1⟩ ⟨0⟩, .use ⟨1⟩ ⟨2⟩] =
+    .done [(⟨1⟩, .heap), (⟨2⟩, .alloc), (⟨0⟩, .alloc)] 0 := by decide
 
 /-- Three iterations of that loop generate four pairwise distinct brands: 0 for `new`, then 1, 2
 and 3 for the resets. -/
-example : Run State.init [.newAlloc 0 10, .while_ 0 20 30 [.alloc 1 0, .free 1 0, .reset 0 0 21],
-    .release 0] { env := [], next := 4, gen := [0, 1, 2, 3] } :=
+example : Run State.init [.newAlloc ⟨0⟩ 10, .while_ ⟨0⟩ 20 30 [.alloc ⟨1⟩ ⟨0⟩, .free ⟨1⟩ ⟨0⟩, .reset ⟨0⟩ ⟨0⟩ 21],
+    .release ⟨0⟩] { env := [], next := 4, gen := [0, 1, 2, 3] } :=
   .newAlloc <| .whileIter <| .alloc rfl <| .free rfl rfl <| .reset rfl <|
     .whileIter <| .alloc rfl <| .free rfl rfl <| .reset rfl <|
     .whileIter <| .alloc rfl <| .free rfl rfl <| .reset rfl <|

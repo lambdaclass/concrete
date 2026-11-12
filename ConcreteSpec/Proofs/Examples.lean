@@ -92,7 +92,7 @@ end ConcreteSpec.Cleanup
 namespace ConcreteSpec.Brand
 
 /-- The brand-mismatch example of `Spec/Brand.lean`, derived from `brand_mismatch_refused`. -/
-example : ¬ Ok [10, 11] [(1, .heap 10), (0, .alloc 11)] [.use 1 0] [(1, .heap 10), (0, .alloc 11)] :=
+example : ¬ Ok [10, 11] [(⟨1⟩, .heap 10), (⟨0⟩, .alloc 11)] [.use ⟨1⟩ ⟨0⟩] [(⟨1⟩, .heap 10), (⟨0⟩, .alloc 11)] :=
   (brand_mismatch_refused rfl rfl (by decide)).1
 
 end ConcreteSpec.Brand

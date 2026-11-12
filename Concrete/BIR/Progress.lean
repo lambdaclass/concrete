@@ -1,3 +1,4 @@
+import ConcreteSpec.Proofs.Basics
 import Concrete.BIR
 
 /-!
@@ -181,43 +182,7 @@ theorem args_fit {scope : List (Reg × Ty)} {env : Env} (h : Typed scope env) :
     obtain ⟨vs, hvs, hf⟩ := args_fit h ps args (by simpa using hl) ha.2
     exact ⟨v :: vs, by simp [List.mapM_cons, hv, hvs], .cons ht hf⟩
 
-/-- A successful type lookup comes from a binding in the list. For example, finding register 7 as `bool` requires that pair to occur. -/
-theorem lookupTy_mem {l : List (Reg × Ty)} {r : Reg} {ty : Ty} (h : AList.lookup l r = some ty) :
-    r ∈ l.map Prod.fst := by
-  induction l with
-  | nil => simp [AList.lookup] at h
-  | cons x l ih =>
-    obtain ⟨r', t'⟩ := x
-    by_cases hr : r' = r
-    · simp [hr]
-    · simp only [AList.lookup, hr, ↓reduceIte] at h
-      exact List.mem_cons_of_mem _ (ih h)
 
-/-- When the first list has no binding, look in the second. For example, an empty first list cannot hide a later register. -/
-theorem lookupTy_append_none {l₁ l₂ : List (Reg × Ty)} {r : Reg} (h : AList.lookup l₁ r = none) :
-    AList.lookup (l₁ ++ l₂) r = AList.lookup l₂ r := by
-  induction l₁ with
-  | nil => rfl
-  | cons x l ih =>
-    obtain ⟨r', t'⟩ := x
-    by_cases hr : r' = r
-    · simp [AList.lookup, hr] at h
-    · rw [List.cons_append]
-      simp only [AList.lookup, hr, ↓reduceIte] at h ⊢
-      exact ih h
-
-/-- A binding in the first list wins over the second list. For example, appending another type for register 7 cannot replace its first type. -/
-theorem lookupTy_append_some {l₁ l₂ : List (Reg × Ty)} {r : Reg} {ty : Ty}
-    (h : AList.lookup l₁ r = some ty) : AList.lookup (l₁ ++ l₂) r = some ty := by
-  induction l₁ with
-  | nil => simp [AList.lookup] at h
-  | cons x l ih =>
-    obtain ⟨r', t'⟩ := x
-    by_cases hr : r' = r
-    · simpa [AList.lookup, hr] using h
-    · rw [List.cons_append]
-      simp only [AList.lookup, hr, ↓reduceIte] at h ⊢
-      exact ih h
 
 /-- Entering a block binds its (distinct) parameters to fitting values: the parameters' scope is
 satisfied, whatever the rest of the environment holds.
@@ -232,16 +197,16 @@ theorem entry_typed :
     rw [List.reverse_cons] at h'
     cases hl : AList.lookup ps.reverse r' with
     | some t =>
-      rw [lookupTy_append_some hl, Option.some.injEq] at h'
+      rw [AList.lookup_append_some hl, Option.some.injEq] at h'
       subst h'
       have hne : r ≠ r' := by
         intro he
         subst he
-        exact hn.1 (by simpa using lookupTy_mem hl)
+        exact hn.1 (by simpa using (show r ∈ ps.reverse.map Prod.fst from List.mem_map.mpr ⟨_, AList.lookup_mem hl, rfl⟩))
       obtain ⟨w, hw, ht⟩ := entry_typed hf hn.2 env r' t hl
       exact ⟨w, by simp [AList.lookup, hne, hw], ht⟩
     | none =>
-      rw [lookupTy_append_none hl] at h'
+      rw [AList.lookup_append_none hl] at h'
       by_cases hr : r = r'
       · subst hr
         simp [AList.lookup] at h'

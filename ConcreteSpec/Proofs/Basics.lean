@@ -121,4 +121,62 @@ theorem map_update (g : α → β) (f : α → α) (hg : ∀ a, g (f a) = g a) :
     · rw [ite_eq_right hk]; show (k', g a) :: map g (update l k f) = (k', g a) :: map g l
       rw [map_update g f hg l k]
 
+/-- In a list with distinct registers, every listed binding is returned by the shared lookup. For example, a single register/id pair is found. -/
+theorem lookup_of_mem {l : AList κ α} (hn : (List.map Prod.fst l).Nodup) {r : κ} {n : α}
+    (hm : (r, n) ∈ l) : AList.lookup l r = some n := by
+  induction l with
+  | nil => simp at hm
+  | cons a l ih =>
+    obtain ⟨r', n'⟩ := a
+    simp only [List.map_cons, List.nodup_cons, List.mem_map] at hn
+    simp only [List.mem_cons, Prod.mk.injEq] at hm
+    rcases hm with ⟨rfl, rfl⟩ | hm
+    · simp [AList.lookup]
+    · have hne : r ≠ r' := by
+        rintro rfl; exact hn.1 ⟨(r, n), hm, rfl⟩
+      have hb : r' ≠ r := Ne.symm hne
+      simp only [AList.lookup, ite_eq_right hb]
+      exact ih hn.2 hm
+
+
+/-- Search the first environment before the second. For example, a first binding of register 7 hides any later binding of 7. -/
+theorem lookup_append {l₁ l₂ : AList κ α} {r : κ} :
+    AList.lookup (l₁ ++ l₂) r = match AList.lookup l₁ r with | some v => some v | none => AList.lookup l₂ r := by
+  induction l₁ with
+  | nil => rfl
+  | cons x l ih =>
+    obtain ⟨r', v'⟩ := x
+    simp only [List.cons_append, AList.lookup]
+    split <;> simp_all
+
+/-- A lookup in zipped parameters and values has a matching position. For example, the first parameter is paired with the first value. -/
+theorem lookup_zip {r : κ} : ∀ {ps : List κ} {vs : List α}, ps.length = vs.length →
+    (∀ v, AList.lookup (ps.zip vs) r = some v → ∃ i : Nat, ps[i]? = some r ∧ vs[i]? = some v) ∧
+    (AList.lookup (ps.zip vs) r = none → r ∉ ps)
+  | [], [], _ => by simp [AList.lookup]
+  | [], _ :: _, h => by simp at h
+  | _ :: _, [], h => by simp at h
+  | q :: ps, w :: vs, h => by
+    simp only [List.length_cons, Nat.add_right_cancel_iff] at h
+    obtain ⟨ih₁, ih₂⟩ := lookup_zip (r := r) h
+    simp only [List.zip_cons_cons, AList.lookup]
+    by_cases hq : q = r
+    · subst hq
+      simp only [↓reduceIte, Option.some.injEq, reduceCtorEq, false_implies, and_true]
+      intro v hv
+      exact ⟨0, rfl, by simp [hv]⟩
+    · simp only [hq, ↓reduceIte]
+      refine ⟨fun v hv => ?_, fun hn => ?_⟩
+      · obtain ⟨i, h1, h2⟩ := ih₁ v hv
+        exact ⟨i + 1, by simpa using h1, by simpa using h2⟩
+      · simp only [List.mem_cons, not_or]
+        exact ⟨fun e => hq e.symm, ih₂ hn⟩
+
+
+theorem lookup_append_none {l₁ l₂ : AList κ α} {k : κ} (h : lookup l₁ k = none) :
+    lookup (l₁ ++ l₂) k = lookup l₂ k := by rw [lookup_append, h]
+
+theorem lookup_append_some {l₁ l₂ : AList κ α} {k : κ} {a : α}
+    (h : lookup l₁ k = some a) : lookup (l₁ ++ l₂) k = some a := by rw [lookup_append, h]
+
 end ConcreteSpec.Core.AList

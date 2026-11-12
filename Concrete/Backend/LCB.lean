@@ -103,7 +103,7 @@ def numberingOk (p : Program) : Bool :=
 
 /-- The LCB value id of a register. `adapt` refuses a program where a register has two
 definitions, so this is a function of the register.
-For example, a register numbered 7 is looked up as `some 7`. -/
+For example, a register at offset 2 in a block with base 5 is looked up as `some 7`. -/
 def regId (p : Program) (r : Reg) : Option Nat := AList.lookup (ids p) r
 
 def idOf (p : Program) (r : Reg) : Except String Nat :=
@@ -380,28 +380,11 @@ theorem inst_length {p : Program} {n : Nat} {ins : Inst} {xs : List Source.Instr
 
 /-! ## `adapter_correct`, numbering -/
 
-/-- In a list with distinct registers, every listed binding is returned by the shared lookup. For example, a single register/id pair is found. -/
-theorem lookup_of_mem {l : List (Reg × Nat)} (hn : (l.map Prod.fst).Nodup) {r : Reg} {n : Nat}
-    (hm : (r, n) ∈ l) : AList.lookup l r = some n := by
-  induction l with
-  | nil => simp at hm
-  | cons a l ih =>
-    obtain ⟨r', n'⟩ := a
-    simp only [List.map_cons, List.nodup_cons, List.mem_map] at hn
-    simp only [List.mem_cons, Prod.mk.injEq] at hm
-    rcases hm with ⟨rfl, rfl⟩ | hm
-    · simp [AList.lookup]
-    · have hne : r ≠ r' := by
-        rintro rfl; exact hn.1 ⟨(r, n), hm, rfl⟩
-      have hb : r' ≠ r := Ne.symm hne
-      simp only [AList.lookup, ite_eq_right hb]
-      exact ih hn.2 hm
-
 /-- A block parameter's id is its position. -/
 theorem regId_param {p : Program} (hn : ((ids p).map Prod.fst).Nodup) {j k : Nat} {b : Block}
     {r : Reg} {ty : Ty} (hb : p.blocks[j]? = some b) (hk : b.params[k]? = some (r, ty)) :
     regId p r = some (blockBase p j + k) := by
-  apply lookup_of_mem hn
+  apply AList.lookup_of_mem hn
   simp only [ids, List.mem_flatMap, List.mem_append, List.mem_map]
   exact ⟨(j, b), Runtime.mem_indexed hb, Or.inl ⟨(k, (r, ty)), Runtime.mem_indexed hk, rfl⟩⟩
 
@@ -410,7 +393,7 @@ theorem regId_inst {p : Program} (hn : ((ids p).map Prod.fst).Nodup) {j i : Nat}
     {ins : Inst} {r : Reg} {off : Nat} (hb : p.blocks[j]? = some b) (hi : b.insts[i]? = some ins)
     (hd : (r, off) ∈ instDefs ins) :
     regId p r = some (blockBase p j + instBase b i + off) := by
-  apply lookup_of_mem hn
+  apply AList.lookup_of_mem hn
   simp only [ids, List.mem_flatMap, List.mem_append, List.mem_map]
   exact ⟨(j, b), Runtime.mem_indexed hb,
     Or.inr ⟨(i, ins), Runtime.mem_indexed hi, ⟨(r, off), hd, rfl⟩⟩⟩
@@ -420,11 +403,6 @@ theorem regId_inst {p : Program} (hn : ((ids p).map Prod.fst).Nodup) {j i : Nat}
 theorem enc_width (v : Val) : (enc v).width = .word := by cases v <;> rfl
 
 theorem word_bne : (Width.word != Width.word) = false := by decide
-
-/-- A successful numbering lookup names a listed register/id pair. For example, returning id 7 means that pair occurs in the numbering. -/
-theorem mem_of_lookup {l : List (Reg × Nat)} {r : Reg} {n : Nat} (h : AList.lookup l r = some n) :
-    (r, n) ∈ l := by
-  exact ConcreteSpec.Core.AList.lookup_mem h
 
 theorem eq_of_snd {l : List (Reg × Nat)} (hn : (l.map Prod.snd).Nodup) {a b : Reg} {n : Nat}
     (ha : (a, n) ∈ l) (hb : (b, n) ∈ l) : a = b := by
@@ -447,7 +425,7 @@ def Agrees (p : Program) (benv : Env) (lenv : Source.Environment) : Prop :=
 theorem regId_injective {p : Program} (hok : numberingOk p = true) {a b : Reg} {n : Nat}
     (ha : regId p a = some n) (hb : regId p b = some n) : a = b := by
   simp only [numberingOk, Bool.and_eq_true, decide_eq_true_eq] at hok
-  exact eq_of_snd hok.1.1.1.2 (mem_of_lookup ha) (mem_of_lookup hb)
+  exact eq_of_snd hok.1.1.1.2 (AList.lookup_mem ha) (AList.lookup_mem hb)
 
 /-- Reading a translated operand gives the encoded BIR value. -/
 theorem read_operand {p : Program} {benv : Env} {lenv : Source.Environment}
@@ -859,7 +837,7 @@ theorem intArgs_ok {benv : Env} {t : IntTy} {a b : Operand} {x y : Int}
 theorem regId_lt {p : Program} (hok : numberingOk p = true) {r : Reg} {n : Nat}
     (h : regId p r = some n) : n < valueCount p := by
   simp only [numberingOk, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true] at hok
-  exact hok.1.1.2 n (List.mem_map.mpr ⟨(r, n), mem_of_lookup h, rfl⟩)
+  exact hok.1.1.2 n (List.mem_map.mpr ⟨(r, n), AList.lookup_mem h, rfl⟩)
 
 theorem ids_nodup {p : Program} (hok : numberingOk p = true) : ((ids p).map Prod.fst).Nodup := by
   simp only [numberingOk, Bool.and_eq_true, decide_eq_true_eq] at hok
@@ -878,7 +856,7 @@ theorem inter_not_reg {p : Program} (hok : numberingOk p = true) {m : Nat}
   subst heq
   simp only [numberingOk, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true] at hok
   have h := hok.2 n hm
-  have hmem : n ∈ (ids p).map Prod.snd := List.mem_map.mpr ⟨(r, n), mem_of_lookup hr, rfl⟩
+  have hmem : n ∈ (ids p).map Prod.snd := List.mem_map.mpr ⟨(r, n), AList.lookup_mem hr, rfl⟩
   simp [hmem] at h
 
 theorem size_set4 (e : Source.Environment) (n : Nat) (u₀ u₁ u₂ v : Option Source.Value) :
@@ -1473,39 +1451,6 @@ theorem getElem?_foldl_set_mem {α : Type} (g : α → Nat) (v : α → Option S
       simp [Array.set!_eq_setIfInBounds, hs]
     · exact getElem?_foldl_set_mem g v l _ hn.2 x hx (by rw [size_set!]; exact hs)
 
-/-- Search the first environment before the second. For example, a first binding of register 7 hides any later binding of 7. -/
-theorem lookup_append {l₁ l₂ : Env} {r : Reg} :
-    AList.lookup (l₁ ++ l₂) r = match AList.lookup l₁ r with | some v => some v | none => AList.lookup l₂ r := by
-  induction l₁ with
-  | nil => rfl
-  | cons x l ih =>
-    obtain ⟨r', v'⟩ := x
-    simp only [List.cons_append, AList.lookup]
-    split <;> simp_all
-
-/-- A lookup in zipped parameters and values has a matching position. For example, the first parameter is paired with the first value. -/
-theorem lookup_zip {r : Reg} : ∀ {ps : List Reg} {vs : List Val}, ps.length = vs.length →
-    (∀ v, AList.lookup (ps.zip vs) r = some v → ∃ i : Nat, ps[i]? = some r ∧ vs[i]? = some v) ∧
-    (AList.lookup (ps.zip vs) r = none → r ∉ ps)
-  | [], [], _ => by simp [AList.lookup]
-  | [], _ :: _, h => by simp at h
-  | _ :: _, [], h => by simp at h
-  | q :: ps, w :: vs, h => by
-    simp only [List.length_cons, Nat.add_right_cancel_iff] at h
-    obtain ⟨ih₁, ih₂⟩ := lookup_zip (r := r) h
-    simp only [List.zip_cons_cons, AList.lookup]
-    by_cases hq : q = r
-    · subst hq
-      simp only [↓reduceIte, Option.some.injEq, reduceCtorEq, false_implies, and_true]
-      intro v hv
-      exact ⟨0, rfl, by simp [hv]⟩
-    · simp only [hq, ↓reduceIte]
-      refine ⟨fun v hv => ?_, fun hn => ?_⟩
-      · obtain ⟨i, h1, h2⟩ := ih₁ v hv
-        exact ⟨i + 1, by simpa using h1, by simpa using h2⟩
-      · simp only [List.mem_cons, not_or]
-        exact ⟨fun e => hq e.symm, ih₂ hn⟩
-
 theorem optionMapM_ok {α β : Type} {g : α → Option β} :
     ∀ {l : List α} {l' : List β}, l.mapM g = some l' →
       l'.length = l.length ∧ ∀ (i : Nat) (x : α), l[i]? = some x → ∃ y, g x = some y ∧ l'[i]? = some y
@@ -1605,8 +1550,8 @@ theorem edge_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function
       exact ⟨adapt_widths hf _ hlt, by rw [hsz]; exact hlt, by rw [hw i hi]; exact enc_width _⟩)
   refine ⟨_, htr, by rw [size_foldl_set]; exact hsz, ?_, ?_⟩
   · intro r v hv
-    rw [lookup_append] at hv
-    have hz := lookup_zip (r := r) (show (bt.params.map Prod.fst).length = vals.length by simp; omega)
+    rw [AList.lookup_append] at hv
+    have hz := AList.lookup_zip (r := r) (show (bt.params.map Prod.fst).length = vals.length by simp; omega)
     cases hlz : AList.lookup ((bt.params.map Prod.fst).zip vals) r with
     | none =>
       simp only [hlz] at hv
@@ -1638,8 +1583,8 @@ theorem edge_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function
       rw [List.getElem?_eq_getElem (show i < vals.length by omega), Option.some.injEq] at hvi
       rw [hvi]
   · intro r t' x hv
-    rw [lookup_append] at hv
-    have hz := lookup_zip (r := r) (show (bt.params.map Prod.fst).length = vals.length by simp; omega)
+    rw [AList.lookup_append] at hv
+    have hz := AList.lookup_zip (r := r) (show (bt.params.map Prod.fst).length = vals.length by simp; omega)
     cases hlz : AList.lookup ((bt.params.map Prod.fst).zip vals) r with
     | none => simp only [hlz] at hv; exact hr r t' x hv
     | some v' =>
