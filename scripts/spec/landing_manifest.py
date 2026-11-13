@@ -407,6 +407,9 @@ def generate(data):
             row(record='snapshot',name='baseline',kind='git-commit',source=BASE,piece='BASE',disposition='retain'),
             row(record='snapshot',name='plan',kind='sha256',source='ConcreteSpec/landing/plan.md',piece='P',
                 digest=sha((ROOT/'ConcreteSpec/landing/plan.md').read_bytes()),disposition='retain')]
+    rows.append(row(record='snapshot', name='toolchain', kind='lean-commit',
+                    source=census_toolchain(), piece='P', disposition='retain',
+                    note='Elaboration identity; classify every cross-toolchain census delta before updating.'))
     for p, deps in sorted(PREREQS.items()):
         rows.append(row(record='piece',name=p,kind='landing-piece',piece=p,prerequisites=','.join(deps),
                         disposition='owner-held' if p in HOLDS else 'retain',note=HOLDS.get(p,'')))
@@ -1054,6 +1057,46 @@ def check_identity_control():
     print('control PASS: distinct identical-text commands move independently; collapsed keying fails')
 
 
+@lru_cache(maxsize=1)
+def census_toolchain():
+    return subprocess.check_output(['lean', '--githash'], text=True).strip()
+
+
+def check_census_toolchain(rows, actual):
+    recorded = next((r['source'] for r in rows if r['record']=='snapshot' and r['name']=='toolchain'), None)
+    if recorded != actual:
+        raise ValueError(f'census toolchain changed: recorded={recorded}; actual={actual}; '
+                         'classify dependency, generated-population and term-digest changes before updating the inventory')
+
+
+def census_drift(recorded, expected):
+    """Report all changed edges before judgment, without modifying any assignment.
+
+    Cause classes are triage hints, never authority to accept a change. Dependencies
+    are kernel constants (including instances), rather than source identifier tokens.
+    """
+    seen = {(r['record'], r['name']): r for r in recorded}
+    differences = []
+    for e in expected:
+        r = seen.get((e['record'], e['name']))
+        if r is None or r['dependencies'] == e['dependencies']:
+            continue
+        added = sorted(set(json.loads(e['dependencies'])) - set(json.loads(r['dependencies'])))
+        removed = sorted(set(json.loads(r['dependencies'])) - set(json.loads(e['dependencies'])))
+        if r['digest'] != e['digest']:
+            cause = 'source-change: inspect moved/removed definitions and held-rule authority'
+        elif e['kind'] == 'example':
+            cause = 'elaboration-or-extraction: inspect proof/instance terms and example helper expansion'
+        elif e['line'] == '0':
+            cause = 'generated-term-or-extraction: inspect toolchain and command realization'
+        else:
+            cause = 'elaboration-or-extraction: inspect toolchain and constant dependency traversal'
+        differences.append(f"{e['record']} {e['name']}: added={json.dumps(added)}; "
+                           f"removed={json.dumps(removed)}; likely cause={cause}")
+    if differences:
+        raise ValueError('census mismatch (dependencies):\n' + '\n'.join(differences))
+
+
 def judgment(rows, data, dependencies=True, extra_root=None):
     LAW_METADATA[:] = [r for r in (data if extra_root is None else data[0]) if r["record"]=="resolved-command"]
     seen = {}
@@ -1097,6 +1140,7 @@ def judgment(rows, data, dependencies=True, extra_root=None):
     else:
         original, extra = data
         expected = records_from_census(original) + records_from_census(extra,extra_root) + evidence_rows()
+    census_drift(rows, expected)
     expected_keys = {(r['record'],r['name']) for r in expected}
     if len(expected_keys) != len(expected):
         raise ValueError('duplicate identity in the live Lean/evidence census')
@@ -1678,6 +1722,8 @@ def main():
         raise ValueError('run inside nix develop -c')
     if args.remaining and args.remaining not in PREREQS and args.remaining != 'all':
         raise ValueError(f'unknown remaining piece: {args.remaining}')
+    if not args.write:
+        check_census_toolchain(read(), census_toolchain())
     check_census(ROOT/'scripts/spec/landing_inventory.lean')
     ensure_objects()
     configure_migrations()

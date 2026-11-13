@@ -14,14 +14,30 @@ def combine (a b : Bool × Bool) : Bool × Bool := (a.1 || b.1, a.2 || b.2)
 -- constructor is open must not cache an incomplete answer for another context.
 abbrev CarrierCache := Std.HashMap (Expr × List Name) (Bool × Bool)
 
+-- Cache keys containing locals are valid only inside their declaration. Imported
+-- terms contain no metavariables, and each opened binder has a fresh fvar id.
+structure ScanCache where
+  carrier : CarrierCache := {}
+  closedCarrier : CarrierCache := {}
+  semantic : Std.HashMap Expr Bool := {}
+
+abbrev ScanM := StateRefT ScanCache MetaM
+
 mutual
-partial def carriers (e : Expr) (seen : List Name := []) : StateRefT CarrierCache MetaM (Bool × Bool) := do
-  if let some found := (← get)[(e, seen)]? then return found
+partial def carriers (e : Expr) (seen : List Name := []) : ScanM (Bool × Bool) := do
+  -- Closed expressions cannot depend on a declaration's local context. Keep
+  -- those reusable results, but never retain a local or a loose bound variable.
+  let closed := !e.hasFVar && !e.hasMVar && !e.hasLooseBVars
+  let cache ← get
+  if let some found := (if closed then cache.closedCarrier else cache.carrier)[(e, seen)]? then
+    return found
   let found ← carrierCore e seen
-  modify (·.insert (e, seen) found)
+  modify fun s => if closed then
+    { s with closedCarrier := s.closedCarrier.insert (e, seen) found }
+    else { s with carrier := s.carrier.insert (e, seen) found }
   return found
 
-partial def carrierCore (e : Expr) (seen : List Name := []) : StateRefT CarrierCache MetaM (Bool × Bool) := do
+partial def carrierCore (e : Expr) (seen : List Name := []) : ScanM (Bool × Bool) := do
   if e.isConstOf `ConcreteSpec.Numbers then return (false, false)
   -- These validated nominal boundaries intentionally hide their representation.
   if e.isConstOf `ConcreteSpec.Var then return (true, false)
@@ -91,7 +107,7 @@ partial def carrierCore (e : Expr) (seen : List Name := []) : StateRefT CarrierC
 -- Opaque numeric/name data still cannot hide type arguments (for example a
 -- numeric-valued function applied to Var). Walk its syntax without interpreting
 -- its string/list representation as a semantic spelling interface.
-partial def typeSubterms (e : Expr) (seen : List Name) : StateRefT CarrierCache MetaM (Bool × Bool) := do
+partial def typeSubterms (e : Expr) (seen : List Name) : ScanM (Bool × Bool) := do
   if ← isType e then return ← carriers e seen
   match e with
   | .app f a => return combine (← typeSubterms f seen) (← typeSubterms a seen)
@@ -109,7 +125,7 @@ end
 
 -- Every semantic telescope, parameter, index and nested payload obeys the same
 -- rule: locals may accompany declaration names, but never local spellings.
-def paired (e : Expr) : StateRefT CarrierCache MetaM Bool := do
+def paired (e : Expr) : ScanM Bool := do
   let a ← carriers e
   return a.1 && a.2
 
@@ -126,7 +142,14 @@ def paired (e : Expr) : StateRefT CarrierCache MetaM Bool := do
 -- closure traversal checks named helpers by the identical rule, and reverse
 -- reachability attributes their refusal to every semantic caller. Thus erasing
 -- an intermediate result or moving it into a callback/helper cannot hide it.
-partial def semanticPaired (e : Expr) : StateRefT CarrierCache MetaM Bool := do
+mutual
+partial def semanticPaired (e : Expr) : ScanM Bool := do
+  if let some found := (← get).semantic[e]? then return found
+  let found ← semanticCore e
+  modify fun s => { s with semantic := s.semantic.insert e found }
+  return found
+
+partial def semanticCore (e : Expr) : ScanM Bool := do
   if ← paired (← inferType e) then return true
   if (← isType e) && (← paired e) then return true
   match e with
@@ -141,6 +164,8 @@ partial def semanticPaired (e : Expr) : StateRefT CarrierCache MetaM Bool := do
   | .mdata _ body | .proj _ _ body => semanticPaired body
   | _ => return false
 
+end
+
 -- The only presentation records in Examples are complete programs and function bodies.
 def presentationRecord (type : Expr) : Bool := Id.run do
   if !type.getAppFn.isConstOf `ConcreteSpec.Elaborated then return false
@@ -154,11 +179,34 @@ def presentationRecord (type : Expr) : Bool := Id.run do
     (mkApp2 prod listStmt (mkConst `ConcreteSpec.Atom))
   return code == body
 
+-- A batch request protects exactly the semantic modules a standalone import
+-- would expose. Other fixtures in the shared environment are not its roots.
+def importClosure (env : Environment) (target : Name) : Std.HashSet String := Id.run do
+  let mut modules : Std.HashSet String := {}
+  let mut pending := #[target]
+  let mut next := 0
+  while next < pending.size do
+    let name := pending[next]!
+    next := next + 1
+    if modules.contains name.toString then continue
+    modules := modules.insert name.toString
+    if let some idx := env.getModuleIdx? name then
+      for dependency in env.header.moduleData[idx.toNat]!.imports do
+        pending := pending.push dependency.module
+  return modules
+
 def main (args : List String) : IO Unit := do
-  let [target] := args | throw (IO.userError "expected one import module")
+  let batch := args.head? == some "--batch"
+  let targets := if batch then args.drop 1 else args
+  unless !targets.isEmpty && (batch || targets.length == 1) do
+    throw (IO.userError "expected one import module or --batch modules...")
   unsafe enableInitializersExecution
   initSearchPath (← findSysroot)
-  let env ← importModules #[{module := target.toName}] {} (loadExts := true)
+  let profile := (← IO.getEnv "LOCAL_IDENTITY_PROFILE") == some "1"
+  let started ← IO.monoMsNow
+  let env ← importModules (targets.toArray.map fun target => {module := target.toName}) {} (loadExts := true)
+  if profile then IO.eprintln s!"profile: import_ms={(← IO.monoMsNow) - started}"
+  let graphStart ← IO.monoMsNow
   let some (.ctorInfo ctor) := env.find? `ConcreteSpec.Var.mk
     | throw (IO.userError "missing Var constructor")
   unless ctor.numFields == 1 && ctor.numParams == 0 &&
@@ -175,11 +223,6 @@ def main (args : List String) : IO Unit := do
     | throw (IO.userError "missing numeric list alias")
   unless numbers.value == mkApp (mkConst `List [Level.zero]) (mkConst `Nat) do
     throw (IO.userError "Numbers must be exactly List Nat")
-  -- Reverse reachability visits each dependency edge once, including recursive components.
-  let mut users : Std.HashMap Name (Array Name) := {}
-  for (n, ci) in env.constants.toList do
-    for c in ci.getUsedConstantsAsSet do
-      users := users.insert c ((users[c]?.getD #[]).push n)
   -- Inspect the complete dependency closure of semantic declarations. Module
   -- ownership determines the roots to protect, never which helpers can seed taint.
   let mut reachable : Std.HashSet Name := {}
@@ -198,28 +241,41 @@ def main (args : List String) : IO Unit := do
     if let some ci := env.find? n then
       for dependency in ci.getUsedConstantsAsSet do
         pending := pending.push dependency
+  -- Only reachable callers can affect a protected root. Build their reverse
+  -- edges once, after closure discovery; unrelated imported declarations cannot
+  -- carry taint back into this closed dependency set.
+  let mut users : Std.HashMap Name (Array Name) := {}
+  for n in reachable.toArray do
+    if let some ci := env.find? n then
+      for dependency in ci.getUsedConstantsAsSet do
+        users := users.insert dependency ((users[dependency]?.getD #[]).push n)
   let mut tainted : Std.HashSet Name := {}
   let mut queue := #[`ConcreteSpec.LocalNames, `ConcreteSpec.Elaborated]
   -- Inspect every declaration's instantiated telescope, including inductive indices
   -- and Prop-valued judgments. The same analysis handles fields and function values.
-  let inspect : StateRefT CarrierCache MetaM (Array Name) := do
-    let mut seeds := #[]
-    for (n, ci) in env.constants.toList do
-      if !reachable.contains n then continue
-      -- Bound each declaration, rather than charging the entire imported
-      -- environment against one declaration's default heartbeat allowance.
-      let isPair ← Core.withCurrHeartbeats do
-        let structurePair ← if isStructure env n then
-          forallTelescopeReducing ci.type fun params _ => do
-            paired (mkAppN (mkConst n (ci.levelParams.map mkLevelParam)) params)
-          else pure false
-        let bodyPair ← match ci.value? with
-          | some value => semanticPaired value
-          | none => pure false
-        return structurePair || (← semanticPaired ci.type) || bodyPair
-      if isPair then seeds := seeds.push n
-    return seeds
-  let (seeds, _) ← ((inspect.run' {}).run' {}).toIO { fileName := "local_identity", fileMap := default } { env := env }
+  if profile then IO.eprintln s!"profile: graph_ms={(← IO.monoMsNow) - graphStart} reachable={reachable.size}"
+  let scanStart ← IO.monoMsNow
+  let mut seeds := #[]
+  let mut closedCarrier : CarrierCache := {}
+  for (n, ci) in env.constants.toList do
+    if !reachable.contains n then continue
+    -- Local carrier, semantic and Meta inference caches belong to one declaration.
+    -- Only closed carrier expressions cross this boundary: they cannot contain
+    -- local contexts, and the imported environment remains immutable.
+    let inspect : ScanM Bool := Core.withCurrHeartbeats do
+      let structurePair ← if isStructure env n then
+        forallTelescopeReducing ci.type fun params _ => do
+          paired (mkAppN (mkConst n (ci.levelParams.map mkLevelParam)) params)
+        else pure false
+      let bodyPair ← match ci.value? with
+        | some value => semanticPaired value
+        | none => pure false
+      return structurePair || (← semanticPaired ci.type) || bodyPair
+    let ((isPair, cache), _) ← ((inspect.run { closedCarrier := closedCarrier }).run' {}).toIO
+      { fileName := "local_identity", fileMap := default } { env := env }
+    closedCarrier := cache.closedCarrier
+    if isPair then seeds := seeds.push n
+  if profile then IO.eprintln s!"profile: traversal_ms={(← IO.monoMsNow) - scanStart} closed_carriers={closedCarrier.size}"
   queue := queue ++ seeds
   let mut pos := 0
   while pos < queue.size do
@@ -229,6 +285,7 @@ def main (args : List String) : IO Unit := do
     tainted := tainted.insert n
     queue := queue ++ (users[n]?.getD #[])
   let mut bad := false
+  let mut refusals : Std.HashMap String (Array Json) := {}
   for (n, ci) in env.constants.toList do
     let some i := env.getModuleIdxFor? n | continue
     let m := env.header.moduleNames[i.toNat]!.toString
@@ -241,7 +298,18 @@ def main (args : List String) : IO Unit := do
          n == `ConcreteSpec.Examples.namesBound.match_1 ||
          n == `ConcreteSpec.Examples.namesBound) then continue
     if tainted.contains n then
-      IO.eprintln s!"semantic diagnostics dependency: {n}"
+      if !batch then IO.eprintln s!"semantic diagnostics dependency: {n}"
+      refusals := refusals.insert m ((refusals[m]?.getD #[]).push (toJson n.toString))
       bad := true
+  if profile then IO.eprintln s!"profile: total_ms={(← IO.monoMsNow) - started}"
+  if batch then
+    for target in targets do
+      let modules := importClosure env target.toName
+      let mut names := #[]
+      for (module, refused) in refusals.toList do
+        if modules.contains module then names := names ++ refused
+      IO.println <| Json.compress <| Json.mkObj
+        [("module", toJson target), ("refusals", toJson names)]
+    return
   if bad then throw (IO.userError "semantic definitions refer to LocalNames/Elaborated")
   IO.println "numeric Var and semantic diagnostics separation: pass"

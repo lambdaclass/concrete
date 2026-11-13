@@ -32,6 +32,10 @@ attribute [reducible] dep
 example : True := proofA
 /-- Planted (law `proofA`, case `one`, mutant `other`). -/
 example : other = 8 := rfl
+def accepted (n : Nat) : Prop := n = dep
+instance instAccepted (n : Nat) : Decidable (accepted n) :=
+  inferInstanceAs (Decidable (n = dep))
+example (n : Nat) : Bool := @decide (accepted n) (instAccepted n)
 end ConcreteSpec.Control
 ''')
         before = probe.read_bytes()
@@ -66,6 +70,15 @@ end ConcreteSpec.Control
             raise ValueError('lazy equation was not regenerated with its defining module')
         print('control PASS: reserved-name equation regeneration observed')
         print('control PASS: private/noncomputable/unsafe examples; opaque body origins; census isolation')
+        instance_command = next(r for r in data if r['record']=='command' and r['example']
+                                and 'instAccepted' in r['identifiers'])
+        instance_example = next(r for r in data if r['record']=='example'
+                                and r['line']==instance_command['line']
+                                and r['file']==instance_command['file'])
+        if 'ConcreteSpec.Control.instAccepted' not in instance_example['uses']:
+            raise ValueError('example census replaced a kernel instance dependency with source policy names')
+        print('control PASS: example instance constant preserved as an elaborated dependency')
+
         # Exercise graph traversal before elaboration, through normal source discovery.
         probe.write_text('import ConcreteSpec\n')
         try:

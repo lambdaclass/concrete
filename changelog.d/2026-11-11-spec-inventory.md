@@ -54,3 +54,9 @@ case, whitespace, colon and empty variants; malformed later declarations cannot 
 earlier acceptance. Existing canonical output formats retain their whitespace and Markdown
 allowances. Committed reconciliation controls assert the exact refusal for each malformed
 form both alone and following ACCEPT.
+
+Round 16 merges the landed foundations and records the census toolchain identity. Fresh
+cross-version censuses classify every dependency, term and generated-population delta before
+updating the manifest. Dependency failures list every changed entry with added/removed names
+and a cause-class hint; Root checks guard unconditional inventory validation in required Spec CI.
+The instance-dependency control preserves real kernel constants through example instrumentation.

@@ -45,6 +45,13 @@ for f in "$WF_DIR"/*.yml "$WF_DIR"/*.yaml; do
   fi
 done
 
+# Hold the expensive inventory in required Spec CI even when its step is removed.
+if python3 scripts/spec/test_landing_drift.py; then
+  echo '  ok   required landing inventory CI and dependency diagnostic controls'; PASS=$((PASS+1))
+else
+  echo '  FAIL required landing inventory CI/diagnostics'; FAIL=$((FAIL+1))
+fi
+
 echo ""
 echo "WORKFLOW-YAML: PASS=$PASS  FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

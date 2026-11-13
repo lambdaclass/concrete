@@ -1,6 +1,78 @@
 # Piece P validation
 
-## Round 8 (current)
+## Round 16 (2026-11-13)
+
+Writer checkout HEAD: `4ccfdb8bc0c88c46121cbe947681a8557ad26db6`.
+Merged main: `74eb63c65c3094aec19d17d81b75a21660477590`.
+The primary ISSUES.tsv conflict retains main's updated authority records and the
+branch's allocated ISS-0067 record. No generated view was hand-merged. The harness
+owns the branch merge commit and push; this writer makes neither.
+
+[DEPENDENCY_DRIFT.md](DEPENDENCY_DRIFT.md) classifies all 35 dependency mismatches.
+[toolchain-drift.json](toolchain-drift.json) records every additional term/population
+delta. Fresh independent censuses of the same pinned source with the same exporter
+reproduce every old manifest field and declaration under Lean 4.34.1 exactly;
+Lean 4.35.0 changes 35 dependency lists, 387 term digests and one generated helper.
+Each updated entry names the toolchain reason. Holds, plan assignments and
+regeneration commands are preserved. No new spec rule or owner decision is chosen.
+Current main excludes held paths (ISS-0068); this drift revealed no new main
+path-policy dependency. The other existing authority conflicts remain tracked
+in ISS-0064/0065/0069/0070/0071.
+
+The inventory reads committed HEAD for progress, so validation used a disposable
+local full clone with both real parents and all merged working-tree changes:
+
+- Candidate commit: `549909e89118edcd43be52e2acf1a541cd6d79f3`.
+- Candidate tree: `130e308a0f2ba3cd08077fbf135bc884e5836385`.
+- Clone: `/home/unbalancedparen/projects/clones/spec-inventory-r16-validation-b61nry2e`.
+
+PASS (exit 0), inside `nix develop -c`, against that candidate:
+
+```sh
+lake build
+bash scripts/checks/run.sh
+bash scripts/spec/landing_inventory.sh --census-output /tmp/spec-inventory-round16-final.jsonl
+```
+
+Build: 45 jobs. Root checks: all 17 pass, including the complete hook-selected set.
+Inventory unit controls (`test_landing_drift.py`, `test_landing_pins.py`,
+`test_landing_relocations.py`, `test_landing_progress.py`) pass under each
+`PYTHONHASHSEED=0,1,2,3`. The full fresh inventory judgment passes under seed 3,
+as selected by the gate. Its progress check names the candidate commit above,
+not the writer's pre-merge HEAD. Separate production census/extraction controls,
+including the new instance-dependency control, also pass under all four seeds.
+No timeout or INCOMPLETE result was accepted.
+
+A production diagnostic probe compares the pre-round manifest at writer HEAD with
+the fresh 4.35 census and verifies that all 35 mismatching entries appear together,
+each with added/removed names and a likely cause class. It passes. Required-CI
+controls refuse gate deletion, conditional execution, allowed failure, loss of
+required status and main/PR path filters. The manifest pins Lean's exact commit.
+
+Local logs: `/tmp/spec-inventory-round16-candidate-build.log`,
+`/tmp/spec-inventory-round16-candidate-root.log`,
+`/tmp/spec-inventory-round16-candidate-full.log`,
+`/tmp/spec-inventory-round16-census-seeds.log`,
+`/tmp/spec-inventory-round16-drift-diagnostic.log`.
+Cross-version census files: `/tmp/spec-inventory-round15-round16-old.jsonl` and
+`/tmp/spec-inventory-round15-round16-new.jsonl`.
+
+After the full candidate run, only `scripts/spec/test_landing_drift.py` changes in
+validation commit `ae4727e264e99a60b040d24e8e70b40f71ddd3ef` (tree `3900b669596ca1c867edba4df335d0bc09fb74ec`).
+That guard-only delta accepts additional push branches, unfiltered pushes and
+explicit main-plus-tag triggers, while refusing tag-only triggers and negative
+main exclusion. All four seed runs and all 17 Root checks pass on this delta;
+log: `/tmp/spec-inventory-round16-guard-candidate-root.log`. The production
+inventory, all other unit controls, Lean sources and recorded manifest are byte
+identical to the fully qualified candidate above. No repeated census is claimed
+for this guard-only delta. The wip hook's conflict-marker tier also passes on
+that commit through a direct hook invocation; no Git transport was invoked.
+
+This section records completed validation afterward. The harness still owns exact
+final-commit qualification, publication and independent review. ISS-0067 stays open.
+No branch review tool or branch review note was used.
+
+## Round 8 (historical)
 
 2026-11-12 UTC. Checked HEAD: `08f9d88ce53cceca31216caf418315b8e3609735`.
 Writer changes are uncommitted for the harness; exact final-commit qualification remains the

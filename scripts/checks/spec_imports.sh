@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # No specification or proof module may hide its dependencies behind an umbrella.
+# The capability base is a leaf: higher authority/grant/primitive models depend on it.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 cd "$(dirname "$0")/../.."
@@ -12,8 +13,10 @@ from lean_lex import module_imports, LexError
 modules = {'ConcreteSpec'} | {
     '.'.join(p.with_suffix('').parts) for p in Path('ConcreteSpec').rglob('*.lean')}
 
-def check(source, basics=False, spec=False):
+def check(source, basics=False, spec=False, capability_base=False):
     deps, _, _ = module_imports(source, modules)
+    if capability_base and deps:
+        raise ValueError('capability base must have no imports')
     if spec and any(m.startswith("ConcreteSpec.Proofs.") for m in deps):
         raise ValueError("spec imports proof")
     if any(m in {'ConcreteSpec', 'ConcreteSpec.Spec'} for m in deps):
@@ -39,11 +42,24 @@ for source, basics in [
         pass
     else:
         raise SystemExit('spec_imports: negative control accepted: ' + source)
+# Check the same leaf rule used on the real source against every current module.
+# A comment or string mentioning Authority is not a dependency.
+check('/- import ConcreteSpec.Spec.Authority -/\n'
+      'def literal := "import ConcreteSpec.Spec.Authority"\n', capability_base=True)
+for dep in sorted(modules):
+    try:
+        check('import ' + dep + suffix, capability_base=True)
+    except ValueError as e:
+        if str(e) != 'capability base must have no imports':
+            raise
+    else:
+        raise SystemExit('spec_imports: capability-base control accepted: ' + dep)
 paths = sorted(Path('ConcreteSpec').rglob('*.lean'))
 for path in paths:
     try:
         check(path.read_text(), path == Path('ConcreteSpec/Proofs/Basics.lean'),
-              path == Path('ConcreteSpec/Spec.lean') or Path('ConcreteSpec/Spec') in path.parents)
+              path == Path('ConcreteSpec/Spec.lean') or Path('ConcreteSpec/Spec') in path.parents,
+              path == Path('ConcreteSpec/Spec/CapabilityBase.lean'))
         if path == Path('ConcreteSpec/Spec.lean') or Path('ConcreteSpec/Spec') in path.parents:
             try:
                 check('import ConcreteSpec.Proofs.Basics\n' + path.read_text(), spec=True)

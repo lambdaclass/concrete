@@ -12125,7 +12125,7 @@
   "declaration:ConcreteSpec.Core.Observe.BlockingEnvDemo.blockingHandler": {
     "from": "F21",
     "name": "ConcreteSpec.Core.Observe.BlockingEnvDemo.blockingHandler",
-    "note": "ConcreteSpec/Proofs/ObserveEnvironment.lean:634:637; shared fixture/support moved to earliest consumer",
+    "note": "ConcreteSpec/Proofs/ObserveEnvironment.lean:634:637; shared fixture/support moved to earliest consumer; round 16: Lean 4.34.1 to 4.35.0; Lean 4.35 kernel-term elaboration/fingerprint changes; identical pinned source and exporter reproduce the recorded term under 4.34.1",
     "reason": [
       {
         "command": "ConcreteSpec/Proofs/ObserveEnvironment.lean:634:637",
@@ -13054,7 +13054,7 @@
   "declaration:ConcreteSpec.Core.Observe.RoutingDemo.Kind.noConfusion": {
     "from": "F21",
     "name": "ConcreteSpec.Core.Observe.RoutingDemo.Kind.noConfusion",
-    "note": "ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466; regenerated at observed kernel-identical emission; shared fixture/support moved to earliest consumer",
+    "note": "ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466; regenerated at observed kernel-identical emission; shared fixture/support moved to earliest consumer; round 16: Lean 4.34.1 to 4.35.0; Lean 4.35 kernel-term elaboration/fingerprint changes; identical pinned source and exporter reproduce the recorded term under 4.34.1",
     "reason": [
       {
         "command": "ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466",
@@ -13071,7 +13071,7 @@
   "declaration:ConcreteSpec.Core.Observe.RoutingDemo.Kind.noConfusionType": {
     "from": "F21",
     "name": "ConcreteSpec.Core.Observe.RoutingDemo.Kind.noConfusionType",
-    "note": "ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466; regenerated at observed kernel-identical emission; shared fixture/support moved to earliest consumer",
+    "note": "ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466; regenerated at observed kernel-identical emission; shared fixture/support moved to earliest consumer; round 16: Lean 4.34.1 to 4.35.0; Lean 4.35 kernel-term elaboration/fingerprint changes; identical pinned source and exporter reproduce the recorded term under 4.34.1",
     "reason": [
       {
         "command": "ConcreteSpec/Proofs/ObserveEnvironment.lean:463:466",
@@ -15602,7 +15602,7 @@
   "declaration:ConcreteSpec.Core.SourceText.columnAt.eq_1": {
     "from": "F04",
     "name": "ConcreteSpec.Core.SourceText.columnAt.eq_1",
-    "note": "ConcreteSpec/Proofs/Ident.lean:1277:1286; regenerated at observed kernel-identical emission",
+    "note": "ConcreteSpec/Proofs/Ident.lean:1277:1286; regenerated at observed kernel-identical emission; round 16: Lean 4.34.1 to 4.35.0; Lean 4.35 kernel-term elaboration/fingerprint changes; identical pinned source and exporter reproduce the recorded term under 4.34.1",
     "reason": [
       {
         "command": "ConcreteSpec/Spec/Outcome.lean:0:0",
@@ -15615,7 +15615,7 @@
   "declaration:ConcreteSpec.Core.SourceText.lineAt.eq_1": {
     "from": "F04",
     "name": "ConcreteSpec.Core.SourceText.lineAt.eq_1",
-    "note": "ConcreteSpec/Proofs/Ident.lean:1255:1263; regenerated at observed kernel-identical emission",
+    "note": "ConcreteSpec/Proofs/Ident.lean:1255:1263; regenerated at observed kernel-identical emission; round 16: Lean 4.34.1 to 4.35.0; Lean 4.35 kernel-term elaboration/fingerprint changes; identical pinned source and exporter reproduce the recorded term under 4.34.1",
     "reason": [
       {
         "command": "ConcreteSpec/Spec/Outcome.lean:0:0",

@@ -14,6 +14,7 @@ source scripts/checks/lib/bounded.sh
 rc=0
 for seed in 0 1 2 3; do
   export PYTHONHASHSEED="$seed"
+  python3 scripts/spec/test_landing_drift.py || exit $?
   python3 scripts/spec/test_landing_pins.py || exit $?
   python3 scripts/spec/test_landing_relocations.py || exit $?
   bounded_run 900 -- python3 scripts/spec/test_landing_progress.py || rc=$?

@@ -220,6 +220,14 @@ The M01–M12 prerequisite edges follow the freshly parsed baseline import graph
 transitive paths through Spec modules. T2 explicitly remains held for its accepted bounded design.
 The expensive census runs in the Spec build CI job, outside the Lean-free Root checks shell and
 local fast push gates. Every census uses a private copy and leaves caller sources/artifacts intact.
+Root checks hold that CI step in the required, unfiltered Spec build job with deletion,
+conditional-step, allowed-failure, missing-required-job and path-filter controls. This includes
+changes to the toolchain, exporter and manifest, even when no specification file changes.
+Dependency mismatches are reported together, by entry, with added and removed kernel constants
+and a likely cause class. Instance constants are real elaborated dependencies, not source-name
+aliases. A toolchain upgrade can change proof bodies and generated recursors without changing
+the source or proof-irrelevant identity; classify each delta before updating its recorded edges.
+Round 16 classifications are in [DEPENDENCY_DRIFT.md](DEPENDENCY_DRIFT.md).
 
 The judgment refuses missing/extra census records, duplicate identities, empty/unknown pieces,
 changed source digests or dependency lists, split commands, prerequisite cycles, incomplete contract prerequisite closures, and dependencies
