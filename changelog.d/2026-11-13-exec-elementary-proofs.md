@@ -3,6 +3,6 @@ Return crosses the activation's function-end lifecycle boundary before caller re
 real deferred calls witness cleanup completion. Add concrete law applications and isolated
 planted transition controls, without inheriting historical approvals or adding a driver.
 
-Round 2 removes the parallel manifest, puts retained authority and adaptation notes beside
-the declarations, and holds ten stronger laws and their controls for missing precise
-authority (ISS-XXXX). Existing execution definitions stay unchanged.
+All fourteen E1 laws carry positive Instances and isolated Planted controls. Cite the
+admitted execution definitions and their foundation, structured-exit, cleanup and lifecycle
+decision bases beside each law; scope filtering is a consequence of the admitted filter.
