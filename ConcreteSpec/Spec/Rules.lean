@@ -18,17 +18,21 @@ namespace ConcreteSpec.Core
 /-- Diagnostic rule identities, in specification order. No rules are registered by this piece. -/
 def registeredRules : List RuleId := []
 
-/-- A conformance proof's verdict relative to its linked rule. -/
-inductive RuleVerdict where
-  | accepted
-  | refused
+/-- Acceptance evidence applies the owning rule's judgment to a concrete input.
+The exporter recognizes this proposition's elaborated type, without unfolding the wrapper. -/
+def RuleAccepted {Input : Sort _} (rule : Input → Prop) (input : Input) : Prop :=
+  rule input
 
-/-- A structured link to a named conformance proof. The exporter checks that the proof exists,
-has no nonstandard axioms, and mentions its rule in its type or proof dependencies. -/
+/-- Refusal evidence proves the negation of the same judgment on a concrete input. -/
+def RuleRefused {Input : Sort _} (rule : Input → Prop) (input : Input) : Prop :=
+  ¬ rule input
+
+/-- A named conformance theorem linked to its owning rule. Its proposition supplies the verdict;
+there is no separately assigned verdict. Inputs must normalize to closed constructor/literal data,
+with no parameters, axioms, opaque computations or unresolved variables. -/
 structure RuleExample where
   rule : Lean.Name
   declaration : Lean.Name
-  verdict : RuleVerdict
 
 /-- Complete conformance links, populated alongside the owning rules. -/
 def registeredRuleExamples : List RuleExample := []

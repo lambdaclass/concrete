@@ -8,6 +8,6 @@ trap 'rm -rf "$TMP"' EXIT
 BOUNDED_PARENT="$TMP"; source scripts/checks/lib/bounded.sh
 bounded_run -i /dev/null -r 3600 3600 -- lake build ConcreteSpec
 bounded_run -i /dev/null 600 -- lake env lean scripts/spec/rules.lean > "$TMP/rules.jsonl"
-bounded_run -i /dev/null 120 -- python3 -I scripts/spec/rules.py "$TMP/rules.jsonl" docs/decisions.md ROADMAP.md
+bash scripts/spec/rules_validate.sh "$TMP/rules.jsonl" docs/decisions.md ROADMAP.md
 bounded_run -i /dev/null 600 -- python3 -I scripts/spec/rules_controls.py "$TMP"
 bounded_summary

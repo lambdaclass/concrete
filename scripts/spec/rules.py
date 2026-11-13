@@ -41,7 +41,7 @@ def main(rules_path, row_paths):
                 or not r["name"].strip()
                 or (r["kind"] == "rule" and r["rev"] < 0)
                 or (r["kind"] == "example" and
-                    (not r["rule"].strip() or r["verdict"] not in ("Accepted", "Refused")))):
+                    (not r["rule"].strip() or r["verdict"] not in ("Accepted", "Refused", "Invalid")))):
             print("error: malformed registry record (closed rule/example schema required)", file=sys.stderr)
             return 3
     rules = [r for r in records if r["kind"] == "rule"]
@@ -67,6 +67,7 @@ def main(rules_path, row_paths):
         identities.add(identity)
         if n not in seen: fails.append(f"example {identity} cites unregistered rule {n}")
         if not e["elaborated"]: fails.append(f"example {identity} is not an elaborated trusted theorem")
+        if e["verdict"] == "Invalid": fails.append(f"example {identity} has no concrete rule acceptance/refusal proposition")
         if not e["usesRule"]: fails.append(f"example {identity} does not use linked rule {n}")
         if n in seen and e["elaborated"] and e["usesRule"]: seen[n].add(e["verdict"])
     for n in names:

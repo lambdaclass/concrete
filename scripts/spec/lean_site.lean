@@ -47,4 +47,5 @@ def inSpec (env : Environment) (n : Name) : Option Name := do
       ("module", toString m), ("line", r.selectionRange.pos.line), ("endLine", r.range.endPos.line),
       ("selCol", r.selectionRange.pos.column), ("selEndLine", r.selectionRange.endPos.line),
       ("selEndCol", r.selectionRange.endPos.column),
+      ("ruleExample", toJson (ConcreteSpec.Core.registeredRuleExamples.any fun e => e.declaration == n)),
       ("doc", doc), ("type", ty), ("uses", toJson used)]))
