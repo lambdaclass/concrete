@@ -1308,7 +1308,10 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   Transcript for every L-number below:
   `~/.claude/projects/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e.jsonl`.
   Times are the source entry's UTC timestamps. Recommendations are assistant text;
-  answers are owner plain-text user messages, except the explicitly identified queued command.
+  answers are owner plain-text user messages or explicitly identified human queued commands
+  (`attachment.type: queued_command`, `attachment.prompt`, human origin). Task notifications
+  are not owner answers. When several asks are pending, a blanket reply is recorded in that
+  context; an item-specific reply is evidence only for the item it names.
   A blanket reply is not a separate per-item reply. Recovery records only the shown text;
   references such as "as proposed" do not recover an unshown proposal.
 
@@ -1320,6 +1323,10 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
 ```text
 ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
 ```
+
+  The final restatement also presented a separate Decision 2, sign-off of exactly
+  `e997548d`, and L124700 kept both decisions pending. The reply above is a blanket
+  reply to that context, not 29 separate answers; no executed sign-off is claimed here.
 
   No earlier literal "all yes" is recovered. The owner's reference to an earlier approval
   is not used as evidence of another utterance.
@@ -2925,6 +2932,25 @@ The C9 identity questions have finished their round with all three models, so he
 The spec worker has also written the tagging convention that the planned check for laws that prove nothing will use, and I've passed it to the gates worker.
 ```
 
+  This shares a blanket reply with the lexer-spelling recommendations below. Before
+  the answer, L125791, 2026-11-08T15:29:09.145Z restated the pending asks:
+
+```text
+Everything in that update was already in my last message. The other news: the stack-bound fix's second round is now being written, covering both reviewers' findings:
+- read the segment form that GDB prints without brackets;
+- refuse every register-relative `fs:` or `gs:` access;
+- check the whole byte range of each access;
+- refuse writes to segment registers, and refuse `gs:` outright on x86-64 Linux;
+- limit `fs:` offsets using the binary's real thread-local layout instead of a fixed number.
+
+Waiting for you:
+1. **"yes codex login":** to start the Codex re-login on concrete-ci-2. This unblocks every landing.
+2. **Lexer spellings:** "yes to the block, 1 permit, 2 complementary", or your own picks.
+3. **The three C9 identity questions:** "yes to all three", or your changes.
+```
+  C9 remains an explicit pending ask; this is not a separate C9-only answer. The
+  Codex-login ask is operational and is not recorded here as a language decision.
+
   Owner, L125820, 2026-11-08T15:31:48.674Z:
 
 ```text
@@ -2990,6 +3016,9 @@ Still waiting on you:
 - the sign-off of `fb097fa4`.
 ```
 
+  The answer names the six improvements, so it covers those six recommendations;
+  it is not used as sign-off of `fb097fa4`, the separate pending ask in the follow-up.
+
   **C5 loan/erasure answers**, recommendation L125401, 2026-11-08T15:20:29.681Z:
 
 ```text
@@ -3010,31 +3039,69 @@ The three C5 questions are about how borrows and the borrow checker are specifie
 Reply "yes to all three", or name the ones you'd change.
 ```
 
-  Owner, L125431, 2026-11-08T15:21:17.612Z:
-
-```text
-yes to everythiong
-```
-  Owner clarification/confirmation, L125406, 2026-11-08T15:20:41.115Z:
+  **Intervening source-links/diagnostics context.** The owner wrote at L125406,
+  2026-11-08T15:20:41.115Z:
 
 ```text
 i want to have elm like errors for item 1 so we need to make sure they are good
 ```
-  Owner clarification/confirmation, L125465, 2026-11-08T15:21:20.598Z:
+  This is not recorded as a clarification of C5 question 1. The assistant interpreted it
+  as the source-links item and restated three pending asks at L125426,
+  2026-11-08T15:21:05.921Z:
+
+```text
+I've read "item 1" as the source-links item, since good errors depend on it. Elm-quality errors are now their own item (K13) in the same review round, which compares the design against Elm, Rust, Gleam and Roc.
+
+What it covers:
+- **Errors as data.** Each error has a title, rule ID, the main code location, labelled secondary locations ("moved here", "used again here"), a plain-language explanation and, when certain, a fix hint. The same data prints as Elm-style text for people and as JSON for agents.
+- **Source links built for it.** They carry full ranges, locations that survive across passes, and where a type came from ("this is `u8` because of here"). These requirements feed back into item 1's design.
+- **An explanation page for every rule,** with a failing example and its fix. A `concrete explain <rule>` command is an option, but it's new CLI, so it would come to you.
+- **A message style guide.** Errors talk to you, avoid unexplained jargon, show the code and say what to do next. A hint appears only when it is certain to be right.
+- **No error cascades.** Your earlier decision to stop at the first error in each file already prevents them.
+- **A quality gate.** Every error message has a snapshot test, and a reviewer model scores each new or changed message against the style guide. An error without a reviewed snapshot fails the gate.
+
+It's ranked to start before slice 1, because the lexer and parser are already writing errors. I've saved your words exactly as you wrote them.
+
+Still waiting for you:
+1. **The three C5 questions:** reply "yes to all three", or name the ones you'd change.
+2. **Runner label:** reply "yes runner label" or "no".
+3. **The 12 architecture items:** reply "add all 12".
+```
+
+  **Reply to the three pending asks**, owner L125431, 2026-11-08T15:21:17.612Z:
+
+```text
+yes to everythiong
+```
+  C5's three recommendations above are covered by this blanket answer to the pending
+  asks, not by the Elm-errors clarification or the architecture-specific replies below.
+  The runner-label and architecture asks are identified here only by the restatement;
+  their full proposals are not recovered here, so no runner-label design or architecture
+  content is inferred from this answer. Recover those proposals before recording their substance.
+
+  **Architecture-only confirmations**, human queued commands (`attachment.prompt`,
+  human origin), L125465, 2026-11-08T15:21:20.598Z:
 
 ```text
 yes to adding all the 12
 ```
-  Owner clarification/confirmation, L125466, 2026-11-08T15:21:23.073Z:
+  Human queued command, L125466, 2026-11-08T15:21:23.073Z:
 
 ```text
 add all 12
 ```
-  Owner clarification/confirmation, L125467, 2026-11-08T15:21:27.008Z:
+  These answer the 12-architecture-items ask, not C5. Their substance remains queued
+  for recovery of the full proposal.
+
+  **Further blanket confirmation**, human queued command, L125467,
+  2026-11-08T15:21:27.008Z:
 
 ```text
 the three things are all good
 ```
+  The intervening prompt lists three pending asks, while C5 itself has three questions.
+  This reply does not name either set. It is preserved in that context, without treating
+  it as an additional C5-only answer or deriving any unshown proposal from it.
 
   **Writer revision**, owner directive with no preceding recommendation, L126064, 2026-11-08T15:37:39.012Z:
 
@@ -3089,11 +3156,23 @@ okay with your decisions
   This proposal does not say LF/CR ends comments. The report's claim that this particular
   15:31 approval explicitly settles bare CR is not verified and is not recorded as authority.
 
+  **Attribution audit.** The 59-list follow-up at L119080 left both the recommended
+  list and slice-0 landing pending; the queued "record, yes to all recommended" at
+  L119110 answers the recommendations (which already include slice 0 as item 5),
+  not the import detail explicitly held open. The `self`/`as` exception and later
+  import choice remain separately sourced above. The November 9 answer at L140591
+  explicitly limits itself to agreement among the reviewers; it does not choose any
+  of the split Q5 options in L140586. The 29-list, six-improvements and C9/lexer
+  shared-ask contexts are preserved above on the same basis.
+
   <a id="decided-2026-11-08-recovery-queue"></a>**Remaining owner queue (ISS-0065).**
   Precisely: 29-list items 22 (O1–O12 substance), 25 (unanswered clarification and unshown
   staged S3 wording), 27 (roadmap/legacy sign-off mismatch); 59-list items 37 (OPEN-19
   restrictions) and 51 (OPEN-22 grammar); source-rule U+FEFF scope and bare-CR comment
-  termination. For U+FEFF, does "no byte-order mark" prohibit only a source-leading BOM
+  termination; full runner-label and 12-architecture-item proposals behind L125426
+  and the Elm-quality/source-links proposal context (the owner’s words and the
+  assistant’s interpretation are preserved above, without equating them).
+  For U+FEFF, does "no byte-order mark" prohibit only a source-leading BOM
   or every U+FEFF scalar, including comments and literals? For comments, does bare CR end
   a `//` comment? Neither answer is inferred here. The landed Lean behavior stays unchanged,
   recorded as an authority conflict pending the owner's answer. Reopened proposals above
