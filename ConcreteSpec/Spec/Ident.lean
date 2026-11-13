@@ -796,6 +796,61 @@ example : (match LoadedModules.load [loadedA,
     | .refused (.topLevel _ _ _ _) => true
     | _ => false) = true := by decide
 
+/-- Ordinals are per kind; named siblings consume none, while pinned unnamed siblings still
+consume one. The literal list checks both completeness and traversal order. -/
+example : KeyConstruct.collectKeys
+    [⟨.call, .unnamed none, []⟩,
+     ⟨.binding, .unnamed none, []⟩,
+     ⟨.call, .named "helper", []⟩,
+     ⟨.call, .unnamed (some "keep"), []⟩,
+     ⟨.call, .unnamed none, []⟩,
+     ⟨.binding, .unnamed none, []⟩] =
+    [⟨[⟨.call, .ordinal 0⟩]⟩,
+     ⟨[⟨.binding, .ordinal 0⟩]⟩,
+     ⟨[⟨.call, .named "helper"⟩]⟩,
+     ⟨[⟨.call, .pinned "keep"⟩]⟩,
+     ⟨[⟨.call, .ordinal 2⟩]⟩,
+     ⟨[⟨.binding, .ordinal 1⟩]⟩] := by cbv
+
+/-- Entering a named construct resets the scope, but entering an unnamed one inherits it.
+Both the collector and the occurrence resolver must retain the complete ancestor path. -/
+example : let body : List KeyConstruct :=
+    [⟨.call, .unnamed none, []⟩,
+     ⟨.block, .named "inner", [⟨.call, .unnamed none, []⟩]⟩,
+     ⟨.block, .unnamed none,
+       [⟨.call, .unnamed none,
+         [⟨.binding, .unnamed none, []⟩]⟩]⟩]
+    KeyConstruct.collectKeys body =
+      [⟨[⟨.call, .ordinal 0⟩]⟩,
+       ⟨[⟨.block, .named "inner"⟩]⟩,
+       ⟨[⟨.block, .named "inner"⟩, ⟨.call, .ordinal 0⟩]⟩,
+       ⟨[⟨.block, .ordinal 0⟩]⟩,
+       ⟨[⟨.block, .ordinal 0⟩, ⟨.call, .ordinal 1⟩]⟩,
+       ⟨[⟨.block, .ordinal 0⟩, ⟨.call, .ordinal 1⟩, ⟨.binding, .ordinal 0⟩]⟩] ∧
+    KeyConstruct.pathAt body [1, 0] =
+      some ⟨[⟨.block, .named "inner"⟩, ⟨.call, .ordinal 0⟩]⟩ ∧
+    KeyConstruct.pathAt body [2, 0, 0] =
+      some ⟨[⟨.block, .ordinal 0⟩, ⟨.call, .ordinal 1⟩, ⟨.binding, .ordinal 0⟩]⟩ := by cbv
+
+/-- Descendant assignment retains a pinned ancestor and inherited per-kind ordinals. -/
+example : KeyConstruct.descendantKey [⟨.call, .unnamed none, []⟩]
+    ⟨.block, .unnamed (some "outer"), [⟨.call, .unnamed none, []⟩]⟩ [0] =
+    some ⟨[⟨.block, .pinned "outer"⟩, ⟨.call, .ordinal 1⟩]⟩ := by cbv
+
+/-- Assigned tables attach every key, in preorder, to its actual owner and sequential sites
+starting at a nonzero offset. Program assignment uses the selected function's body and offset. -/
+example : let f : FnId := ⟨loadedA.module, "f"⟩
+    let g : FnId := ⟨loadedA.module, "g"⟩
+    let body : List KeyConstruct :=
+      [⟨.block, .named "inner", [⟨.call, .unnamed (some "invoke"), []⟩]⟩]
+    KeyConstruct.assignFunctionTable f 7 body =
+      [(⟨7⟩, ⟨.function f, ⟨[⟨.block, .named "inner"⟩]⟩⟩),
+       (⟨8⟩, ⟨.function f, ⟨[⟨.block, .named "inner"⟩, ⟨.call, .pinned "invoke"⟩]⟩⟩)] ∧
+    KeyConstruct.assignProgramTables
+      (fun owner => if owner = f then body else [⟨.abort, .unnamed none, []⟩])
+      (fun owner => if owner = f then 7 else 20) g =
+      [(⟨20⟩, ⟨.function g, ⟨[⟨.abort, .ordinal 0⟩]⟩⟩)] := by cbv
+
 /-- Equal specialization requests at different sites share one entry, retaining both edges. -/
 example : let generic := GenericId.function ⟨loadedA.module, "f"⟩
     let table := SpecializationTable.canonicalize

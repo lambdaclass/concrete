@@ -117,7 +117,7 @@ example : ¬ ({ linuxX8664 with
     maxObject := 2 ^ 16 } : Target).WellFormed := by decide
 
 /-- Nor is one whose pointer alignment is not a power of two. -/
-example : ¬ ({ linuxX8664 with ptrAlign := 6 } : Target).WellFormed := by decide
+example : ¬ ({ linuxX8664 with ptrSize := 12, ptrAlign := 6 } : Target).WellFormed := by decide
 
 /-- Nor one whose pointer size is not a multiple of its alignment. -/
 example : ¬ ({ linuxX8664 with ptrAlign := 16 } : Target).WellFormed := by decide
