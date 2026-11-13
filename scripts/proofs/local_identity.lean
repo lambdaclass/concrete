@@ -12,29 +12,91 @@ def combine (a b : Bool × Bool) : Bool × Bool := (a.1 || b.1, a.2 || b.2)
 -- constructors are inspected, including ASTs, containers, structures and indices.
 -- Ancestors are part of the key: a recursive field inspected while its
 -- constructor is open must not cache an incomplete answer for another context.
-abbrev CarrierCache := Std.HashMap (Expr × List Name) (Bool × Bool)
+abbrev CarrierCache := Std.HashMap ((Nat × Expr) × List Name) (Bool × Bool)
 
--- Cache keys containing locals are valid only inside their declaration. Imported
--- terms contain no metavariables, and each opened binder has a fresh fvar id.
+-- Keys close over their local context. Only fully closed, metavariable-free
+-- carrier results cross declaration boundaries; recursion ancestors remain part
+-- of every carrier key.
 structure ScanCache where
   carrier : CarrierCache := {}
   closedCarrier : CarrierCache := {}
-  semantic : Std.HashMap Expr Bool := {}
+  semantic : Std.HashMap (Nat × Expr) Bool := {}
 
 abbrev ScanM := StateRefT ScanCache MetaM
+
+-- A cache key closes over exactly the free-variable dependency context, including
+-- local let values. Alpha-equivalent openings therefore share results without
+-- conflating variables whose types or local definitions differ. The prefix count
+-- separates the captured context from binders already in the original expression;
+-- without it, an open body could alias its closed lambda or let expression.
+-- No reduction occurs while making this key: Numbers/Name annotations survive.
+def contextualKey (e : Expr) : MetaM (Nat × Expr) := do
+  if !e.hasFVar then return (0, e)
+  let mut vars := collectFVars {} e
+  let mut next := 0
+  let mut visited : FVarIdSet := {}
+  while next < vars.fvarIds.size do
+    let id := vars.fvarIds[next]!
+    next := next + 1
+    if visited.contains id then continue
+    visited := visited.insert id
+    let decl ← id.getDecl
+    vars := collectFVars vars decl.type
+    if let some value := decl.value? then vars := collectFVars vars value
+  let xs := (← getLCtx).foldl (fun xs decl =>
+    if vars.fvarSet.contains decl.fvarId then xs.push decl.toExpr else xs) #[]
+  let closed ← mkLambdaFVars xs e (usedLetOnly := false) (generalizeNondepLet := false)
+  return (xs.size, closed)
+
+-- Exercise the production key, including aliases whose unreduced annotations
+-- have different meanings to the carrier scanner. These controls never alter
+-- the scanner's declaration population, admission rules or resource limits.
+def contextualKeyControls : MetaM Unit := do
+  let nat := mkConst ``Nat
+  let first ← withLocalDeclD `x nat contextualKey
+  let renamed ← withLocalDeclD `another nat contextualKey
+  unless first == renamed do throwError "cache: alpha-equivalent contexts differ"
+  let unrelated ← withLocalDeclD `unused (mkConst ``String) fun _ =>
+    withLocalDeclD `another nat contextualKey
+  unless first == unrelated do throwError "cache: unused context affects key"
+  let otherType ← withLocalDeclD `x (mkConst ``String) contextualKey
+  unless first != otherType do throwError "cache: local type omitted"
+  let one ← withLetDecl `x nat (mkNatLit 1) contextualKey
+  let two ← withLetDecl `x nat (mkNatLit 2) contextualKey
+  unless one != two do throwError "cache: local let value omitted"
+  let closed ← contextualKey (.lam `x nat (.bvar 0) .default)
+  unless first.2 == closed.2 && first != closed do
+    throwError "cache: original expression/context boundary omitted"
+  let list ← withLocalDeclD `T (mkSort (.succ .zero)) fun t =>
+    withLocalDeclD `x (mkApp (mkConst ``List [.zero]) t) contextualKey
+  let sameList ← withLocalDeclD `U (mkSort (.succ .zero)) fun t =>
+    withLocalDeclD `ys (mkApp (mkConst ``List [.zero]) t) contextualKey
+  unless list == sameList do throwError "cache: dependent context not closed"
+  let option ← withLocalDeclD `T (mkSort (.succ .zero)) fun t =>
+    withLocalDeclD `x (mkApp (mkConst ``Option [.zero]) t) contextualKey
+  unless list != option do throwError "cache: dependent domain omitted"
+  let chain ← withLetDecl `x nat (mkNatLit 1) fun x =>
+    withLetDecl `y nat x contextualKey
+  let sameChain ← withLetDecl `a nat (mkNatLit 1) fun a =>
+    withLetDecl `b nat a contextualKey
+  unless chain == sameChain do throwError "cache: let dependencies not closed"
+  let numbers ← withLocalDeclD `x (mkConst `ConcreteSpec.Numbers) contextualKey
+  let scalars ← withLocalDeclD `x (mkApp (mkConst ``List [.zero]) nat) contextualKey
+  unless numbers != scalars do throwError "cache: numeric annotation erased"
 
 mutual
 partial def carriers (e : Expr) (seen : List Name := []) : ScanM (Bool × Bool) := do
   -- Closed expressions cannot depend on a declaration's local context. Keep
   -- those reusable results, but never retain a local or a loose bound variable.
-  let closed := !e.hasFVar && !e.hasMVar && !e.hasLooseBVars
+  let key ← contextualKey e
+  let closed := !key.2.hasFVar && !key.2.hasMVar && !key.2.hasLooseBVars
   let cache ← get
-  if let some found := (if closed then cache.closedCarrier else cache.carrier)[(e, seen)]? then
+  if let some found := (if closed then cache.closedCarrier else cache.carrier)[(key, seen)]? then
     return found
   let found ← carrierCore e seen
   modify fun s => if closed then
-    { s with closedCarrier := s.closedCarrier.insert (e, seen) found }
-    else { s with carrier := s.carrier.insert (e, seen) found }
+    { s with closedCarrier := s.closedCarrier.insert (key, seen) found }
+    else { s with carrier := s.carrier.insert (key, seen) found }
   return found
 
 partial def carrierCore (e : Expr) (seen : List Name := []) : ScanM (Bool × Bool) := do
@@ -144,9 +206,10 @@ def paired (e : Expr) : ScanM Bool := do
 -- an intermediate result or moving it into a callback/helper cannot hide it.
 mutual
 partial def semanticPaired (e : Expr) : ScanM Bool := do
-  if let some found := (← get).semantic[e]? then return found
+  let key ← contextualKey e
+  if let some found := (← get).semantic[key]? then return found
   let found ← semanticCore e
-  modify fun s => { s with semantic := s.semantic.insert e found }
+  modify fun s => { s with semantic := s.semantic.insert key found }
   return found
 
 partial def semanticCore (e : Expr) : ScanM Bool := do
@@ -223,6 +286,8 @@ def main (args : List String) : IO Unit := do
     | throw (IO.userError "missing numeric list alias")
   unless numbers.value == mkApp (mkConst `List [Level.zero]) (mkConst `Nat) do
     throw (IO.userError "Numbers must be exactly List Nat")
+  let _ ← contextualKeyControls.run' {} |>.toIO
+    { fileName := "local_identity_key_controls", fileMap := default } { env := env }
   -- Inspect the complete dependency closure of semantic declarations. Module
   -- ownership determines the roots to protect, never which helpers can seed taint.
   let mut reachable : Std.HashSet Name := {}

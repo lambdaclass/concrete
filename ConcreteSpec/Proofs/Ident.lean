@@ -29,6 +29,7 @@ are not authorities and have been removed.
   `SourceText` laws prove arithmetic over bytes, including LF steps, tab and multibyte
   fixtures. They impose no source-admission, BOM or comment-termination policy.
 
+Classification follows docs/decisions.md#decided-2026-11-13-proof-labels.
 A `Law` states behavior of an executable subject. A `Helper` is computation, projection,
 inversion or proof support and is not independent law evidence. `Instance` examples apply
 laws to concrete inputs; `Planted` examples refute named wrong implementations with the
@@ -135,7 +136,7 @@ theorem KeyConstruct.numberFunctionKeys_lookup (f : FnId) (keys : List FunctionR
 
 /-- Helper (computation). Moving past a root extends precisely the preceding scope. -/
 theorem KeyConstruct.pathAtIn_succ (scope : List KeyConstruct) (root : KeyConstruct)
-    (rest : List KeyConstruct) (index : Nat) (route : List Nat) :
+    (rest : List KeyConstruct) (index : Nat) (route : Numbers) :
     pathAtIn scope (root :: rest) ((index + 1) :: route) =
       pathAtIn (scope ++ [root]) rest (index :: route) := by
   simp [pathAtIn, List.take_succ_cons, List.append_assoc]
@@ -183,7 +184,7 @@ theorem KeyConstruct.collectKeysIn_collectionSound (scope forest : List KeyConst
 /-- Law (subject `ConcreteSpec.Core.KeyConstruct.collectKeysIn`).
 Every successfully located occurrence is collected; no nested site can disappear. -/
 theorem KeyConstruct.collectKeysIn_complete (scope forest : List KeyConstruct)
-    (route : List Nat) (key : FunctionRelativeKey) (nonempty : route ≠ [])
+    (route : Numbers) (key : FunctionRelativeKey) (nonempty : route ≠ [])
     (found : pathAtIn scope forest route = some key) : key ∈ collectKeysIn scope forest := by
   cases forest with
   | nil => cases route <;> simp_all [pathAtIn]
@@ -288,19 +289,19 @@ theorem KeyConstruct.key_insert_differentKind (before after : List KeyConstruct)
 **A named insertion does not consume an unnamed ordinal.** Every existing sibling key is
 therefore unchanged, independently of where the named sibling is inserted. -/
 theorem KeyConstruct.key_insert_named (before after : List KeyConstruct)
-    (label : String) (kind : ConstructKind) (children : List KeyConstruct) (target : KeyConstruct) :
+    (label : Name) (kind : ConstructKind) (children : List KeyConstruct) (target : KeyConstruct) :
     target.key (before ++ KeyConstruct.mk kind (.named label) children :: after) =
       target.key (before ++ after) := by
   simp [KeyConstruct.key, KeyConstruct.segment, List.filter_append, ConstructName.isUnnamed]
 
 /-- Helper (projection). Renaming preserves participation in unnamed-sibling ordinals. -/
-theorem ConstructName.isUnnamed_rename (constructName : ConstructName) (name : String) :
+theorem ConstructName.isUnnamed_rename (constructName : ConstructName) (name : Name) :
     (constructName.rename name).isUnnamed = constructName.isUnnamed := by
   cases constructName <;> rfl
 
 /-- Helper (projection). Pinning or unpinning an unnamed construct's label preserves participation
 in unnamed-sibling ordinals. -/
-theorem ConstructName.isUnnamed_pin (constructName : ConstructName) (label : Option String) :
+theorem ConstructName.isUnnamed_pin (constructName : ConstructName) (label : Option Name) :
     (constructName.pin label).isUnnamed = constructName.isUnnamed := by
   cases constructName <;> rfl
 
@@ -317,7 +318,7 @@ theorem KeyConstruct.segment_replace_same_unnamed (before after : List KeyConstr
 **Renaming one item leaves every sibling key unchanged.** Renaming preserves the item's kind
 and named/unnamed status, so it cannot change any sibling's ordinal. -/
 theorem KeyConstruct.key_rename_other (before after : List KeyConstruct)
-    (target other : KeyConstruct) (name : String) :
+    (target other : KeyConstruct) (name : Name) :
     other.key (before ++ target.rename name :: after) = other.key (before ++ target :: after) := by
   simp only [KeyConstruct.key]
   rw [KeyConstruct.segment_replace_same_unnamed before after (target.rename name) target other
@@ -328,7 +329,7 @@ theorem KeyConstruct.key_rename_other (before after : List KeyConstruct)
 preserves the item's kind and unnamed status, so it still occupies its place in the per-kind
 ordinal sequence. -/
 theorem KeyConstruct.key_pin_other (before after : List KeyConstruct)
-    (target other : KeyConstruct) (label : Option String) :
+    (target other : KeyConstruct) (label : Option Name) :
     other.key (before ++ target.pin label :: after) = other.key (before ++ target :: after) := by
   simp only [KeyConstruct.key]
   rw [KeyConstruct.segment_replace_same_unnamed before after (target.pin label) target other
@@ -342,7 +343,7 @@ def KeyConstruct.under (preceding : List KeyConstruct) (construct : KeyConstruct
 /-- Helper (computation). Computes the renamed root construct's own key for
 `KeyConstruct.assignFunctionTable_rename_named`. -/
 theorem KeyConstruct.key_rename_named (preceding : List KeyConstruct) (kind : ConstructKind)
-    (old : String) (children : List KeyConstruct) (name : String) :
+    (old : Name) (children : List KeyConstruct) (name : Name) :
     ((KeyConstruct.mk kind (.named old) children).rename name).key preceding =
       ⟨[⟨kind, .named name⟩]⟩ := by
   simp [KeyConstruct.key, KeyConstruct.segment, KeyConstruct.rename, ConstructName.rename]
@@ -350,7 +351,7 @@ theorem KeyConstruct.key_rename_named (preceding : List KeyConstruct) (kind : Co
 /-- Helper (computation). Computes the pinned root construct's own key for
 `KeyConstruct.assignFunctionTable_pin`. -/
 theorem KeyConstruct.key_pin_unnamed (preceding : List KeyConstruct) (kind : ConstructKind)
-    (old : Option String) (children : List KeyConstruct) (label : String) :
+    (old : Option Name) (children : List KeyConstruct) (label : Name) :
     ((KeyConstruct.mk kind (.unnamed old) children).pin (some label)).key preceding =
       ⟨[⟨kind, .pinned label⟩]⟩ := by
   simp [KeyConstruct.key, KeyConstruct.segment, KeyConstruct.pin, ConstructName.pin]
@@ -358,7 +359,7 @@ theorem KeyConstruct.key_pin_unnamed (preceding : List KeyConstruct) (kind : Con
 /-- Helper (congruence). Replacing an in-scope construct with one of the same kind and unnamed
 status leaves `KeyConstruct.pathAtIn` unchanged. -/
 theorem KeyConstruct.pathAtIn_replace_same_unnamed (forest : List KeyConstruct)
-    (route : List Nat) (before after : List KeyConstruct) (first second : KeyConstruct)
+    (route : Numbers) (before after : List KeyConstruct) (first second : KeyConstruct)
     (sameKind : first.kind = second.kind)
     (sameUnnamed : first.name.isUnnamed = second.name.isUnnamed) :
     KeyConstruct.pathAtIn (before ++ first :: after) forest route =
@@ -383,8 +384,8 @@ theorem KeyConstruct.pathAtIn_replace_same_unnamed (forest : List KeyConstruct)
 
 /-- Helper (computation). Inserting a named construct in the inherited scope leaves
 `KeyConstruct.pathAtIn` unchanged. -/
-theorem KeyConstruct.pathAtIn_insert_named (forest : List KeyConstruct) (route : List Nat)
-    (before after : List KeyConstruct) (label : String) (kind : ConstructKind)
+theorem KeyConstruct.pathAtIn_insert_named (forest : List KeyConstruct) (route : Numbers)
+    (before after : List KeyConstruct) (label : Name) (kind : ConstructKind)
     (children : List KeyConstruct) :
     KeyConstruct.pathAtIn
         (before ++ KeyConstruct.mk kind (.named label) children :: after) forest route =
@@ -411,7 +412,7 @@ theorem KeyConstruct.pathAtIn_insert_named (forest : List KeyConstruct) (route :
 
 /-- Helper (computation). Inserting a construct whose kind is avoided along `route` in the
 enclosing named scope leaves `KeyConstruct.pathAtIn` unchanged. -/
-theorem KeyConstruct.pathAtIn_insert_differentKind (forest : List KeyConstruct) (route : List Nat)
+theorem KeyConstruct.pathAtIn_insert_differentKind (forest : List KeyConstruct) (route : Numbers)
     (before after : List KeyConstruct) (inserted : KeyConstruct)
     (avoids : KeyConstruct.RouteAvoidsKind inserted.kind forest route) :
     KeyConstruct.pathAtIn (before ++ inserted :: after) forest route =
@@ -442,7 +443,7 @@ theorem KeyConstruct.pathAtIn_insert_differentKind (forest : List KeyConstruct) 
 /-- Helper (computation). Unfolds `KeyConstruct.pathAt` at the exact index `before.length` of a
 split forest `before ++ target :: tail`. -/
 theorem KeyConstruct.pathAt_at_length (before tail : List KeyConstruct)
-    (target : KeyConstruct) (route : List Nat) :
+    (target : KeyConstruct) (route : Numbers) :
     KeyConstruct.pathAt (before ++ target :: tail) (before.length :: route) =
       target.descendantKey before route := by
   have htake : (before ++ target :: tail).take before.length = before := by
@@ -454,7 +455,7 @@ theorem KeyConstruct.pathAt_at_length (before tail : List KeyConstruct)
 Inserting a sibling whose kind is avoided along `route` in the enclosing named scope preserves the
 complete assigned descendant path, including through unnamed intermediate constructs. -/
 theorem KeyConstruct.descendant_insert_differentKind (before after : List KeyConstruct)
-    (inserted target : KeyConstruct) (route : List Nat)
+    (inserted target : KeyConstruct) (route : Numbers)
     (avoids : KeyConstruct.SubtreeAvoidsKind inserted.kind target route) :
     target.descendantKey (before ++ inserted :: after) route =
       target.descendantKey (before ++ after) route := by
@@ -474,8 +475,8 @@ theorem KeyConstruct.descendant_insert_differentKind (before after : List KeyCon
 /-- Law (subject `ConcreteSpec.Core.KeyConstruct.descendantKey`, `ConcreteSpec.Core.ConstructName.isUnnamed`).
 Inserting a named sibling preserves complete descendant paths, not just root segments. -/
 theorem KeyConstruct.descendant_insert_named (before after : List KeyConstruct)
-    (label : String) (kind : ConstructKind) (children : List KeyConstruct)
-    (target : KeyConstruct) (route : List Nat) :
+    (label : Name) (kind : ConstructKind) (children : List KeyConstruct)
+    (target : KeyConstruct) (route : Numbers) :
     target.descendantKey (before ++ KeyConstruct.mk kind (.named label) children :: after) route =
       target.descendantKey (before ++ after) route := by
   have hseg :
@@ -493,7 +494,7 @@ theorem KeyConstruct.descendant_insert_named (before after : List KeyConstruct)
 **Inserting a sibling after a construct in a forest leaves that construct's and its descendants'
 assigned paths unchanged.** Only siblings before `before.length` enter `target`'s scope. -/
 theorem KeyConstruct.pathAt_insert_after (before mid after : List KeyConstruct)
-    (target inserted : KeyConstruct) (route : List Nat) :
+    (target inserted : KeyConstruct) (route : Numbers) :
     KeyConstruct.pathAt (before ++ target :: (mid ++ inserted :: after)) (before.length :: route) =
       KeyConstruct.pathAt (before ++ target :: (mid ++ after)) (before.length :: route) := by
   rw [KeyConstruct.pathAt_at_length, KeyConstruct.pathAt_at_length]
@@ -502,8 +503,8 @@ theorem KeyConstruct.pathAt_insert_after (before mid after : List KeyConstruct)
 **Inserting a named sibling before `target` in a forest shifts `target`'s raw child index without
 changing its assigned path.** -/
 theorem KeyConstruct.pathAt_insert_named (before mid after : List KeyConstruct)
-    (label : String) (kind : ConstructKind) (children : List KeyConstruct)
-    (target : KeyConstruct) (route : List Nat) :
+    (label : Name) (kind : ConstructKind) (children : List KeyConstruct)
+    (target : KeyConstruct) (route : Numbers) :
     KeyConstruct.pathAt
         ((before ++ KeyConstruct.mk kind (.named label) children :: mid) ++ target :: after)
         ((before ++ KeyConstruct.mk kind (.named label) children :: mid).length :: route) =
@@ -517,7 +518,7 @@ theorem KeyConstruct.pathAt_insert_named (before mid after : List KeyConstruct)
 **Inserting a different-kind sibling before `target` in a forest shifts `target`'s raw child index
 without changing its assigned path.** -/
 theorem KeyConstruct.pathAt_insert_differentKind (before mid after : List KeyConstruct)
-    (inserted target : KeyConstruct) (route : List Nat)
+    (inserted target : KeyConstruct) (route : Numbers)
     (avoids : KeyConstruct.SubtreeAvoidsKind inserted.kind target route) :
     KeyConstruct.pathAt
         ((before ++ inserted :: mid) ++ target :: after)
@@ -546,7 +547,7 @@ and ends before the following forest; arbitrary lexical site offsets are erased 
 actual table has been assigned. No occurrence-validity or admission premise is required. -/
 theorem KeyConstruct.assignFunctionTable_named_scope (f : FnId) (start₁ start₂ : Nat)
     (before₁ after₁ before₂ after₂ : List KeyConstruct)
-    (kind : ConstructKind) (name : String) (children : List KeyConstruct) :
+    (kind : ConstructKind) (name : Name) (children : List KeyConstruct) :
     ((List.map Prod.snd (assignFunctionTable f start₁
       (before₁ ++ KeyConstruct.mk kind (.named name) children :: after₁))).drop
         (collectKeys before₁).length).take
@@ -565,8 +566,8 @@ theorem KeyConstruct.assignFunctionTable_named_scope (f : FnId) (start₁ start�
 /-- Helper (computation). Computes the scope reset of a named root for
 `KeyConstruct.pathAt_named_ancestor_resets_scope`. -/
 theorem KeyConstruct.descendant_named_ancestor_resets_scope
-    (preceding₁ preceding₂ : List KeyConstruct) (kind : ConstructKind) (name : String)
-    (children : List KeyConstruct) (route : List Nat) :
+    (preceding₁ preceding₂ : List KeyConstruct) (kind : ConstructKind) (name : Name)
+    (children : List KeyConstruct) (route : Numbers) :
     (KeyConstruct.mk kind (.named name) children).descendantKey preceding₁ route =
       (KeyConstruct.mk kind (.named name) children).descendantKey preceding₂ route := by
   simp [KeyConstruct.descendantKey, KeyConstruct.childScope, KeyConstruct.segment]
@@ -576,7 +577,7 @@ This is not assignment soundness; `KeyConstruct.assignFunctionTable_named_scope`
 preservation of the complete assigned subtree. -/
 theorem KeyConstruct.pathAt_named_ancestor_resets_scope
     (before₁ after₁ before₂ after₂ : List KeyConstruct)
-    (kind : ConstructKind) (name : String) (children : List KeyConstruct) (route : List Nat) :
+    (kind : ConstructKind) (name : Name) (children : List KeyConstruct) (route : Numbers) :
     KeyConstruct.pathAt
         (before₁ ++ KeyConstruct.mk kind (.named name) children :: after₁)
         (before₁.length :: route) =
@@ -589,7 +590,7 @@ theorem KeyConstruct.pathAt_named_ancestor_resets_scope
 /-- Law (subject `ConcreteSpec.Core.KeyConstruct.descendantKey`, `ConcreteSpec.Core.KeyConstruct.rename`).
 Renaming a sibling cannot change the complete assigned path of any descendant of another item. -/
 theorem KeyConstruct.descendant_rename_other (before after : List KeyConstruct)
-    (target other : KeyConstruct) (name : String) (route : List Nat) :
+    (target other : KeyConstruct) (name : Name) (route : Numbers) :
     other.descendantKey (before ++ target.rename name :: after) route =
       other.descendantKey (before ++ target :: after) route := by
   have hseg := KeyConstruct.segment_replace_same_unnamed before after (target.rename name) target other
@@ -606,7 +607,7 @@ theorem KeyConstruct.descendant_rename_other (before after : List KeyConstruct)
 Pinning or unpinning a sibling's label cannot change the complete assigned path of any descendant
 of another item. -/
 theorem KeyConstruct.descendant_pin_other (before after : List KeyConstruct)
-    (target other : KeyConstruct) (label : Option String) (route : List Nat) :
+    (target other : KeyConstruct) (label : Option Name) (route : Numbers) :
     other.descendantKey (before ++ target.pin label :: after) route =
       other.descendantKey (before ++ target :: after) route := by
   have hseg := KeyConstruct.segment_replace_same_unnamed before after (target.pin label) target other
@@ -622,7 +623,7 @@ theorem KeyConstruct.descendant_pin_other (before after : List KeyConstruct)
 /-- Helper (computation). Computes the renamed prefix over a descendant route for
 `KeyConstruct.assignFunctionTable_rename_named`. -/
 theorem KeyConstruct.descendant_rename_named (preceding : List KeyConstruct)
-    (kind : ConstructKind) (old name : String) (children : List KeyConstruct) (route : List Nat) :
+    (kind : ConstructKind) (old name : Name) (children : List KeyConstruct) (route : Numbers) :
     ((KeyConstruct.mk kind (.named old) children).rename name).descendantKey preceding route =
       (KeyConstruct.pathAt children route).map (fun suffix =>
         ⟨⟨kind, .named name⟩ :: suffix.path⟩) := by
@@ -632,7 +633,7 @@ theorem KeyConstruct.descendant_rename_named (preceding : List KeyConstruct)
 /-- Helper (computation). Transports a located descendant through the occurrence/table
 correspondence; supplies no independent soundness evidence. -/
 theorem KeyConstruct.assignFunctionTable_descendant_mem (f : FnId) (startSite : Nat)
-    (before after : List KeyConstruct) (root : KeyConstruct) (route : List Nat)
+    (before after : List KeyConstruct) (root : KeyConstruct) (route : Numbers)
     (key : FunctionRelativeKey) (found : root.descendantKey before route = some key) :
     (⟨.function f, key⟩ : StableKey) ∈
       (List.map Prod.snd (assignFunctionTable f startSite (before ++ root :: after))) := by
@@ -647,8 +648,8 @@ every actual descendant. Its suffix is resolved in a fresh named scope, regardle
 siblings of any kind. Sibling preservation is proved by `KeyConstruct.descendant_rename_other` and
 the occurrence/table correspondence. -/
 theorem KeyConstruct.assignFunctionTable_rename_named (f : FnId) (startSite : Nat)
-    (before after : List KeyConstruct) (kind : ConstructKind) (old name : String)
-    (children : List KeyConstruct) (route : List Nat) (suffix : FunctionRelativeKey)
+    (before after : List KeyConstruct) (kind : ConstructKind) (old name : Name)
+    (children : List KeyConstruct) (route : Numbers) (suffix : FunctionRelativeKey)
     (found : pathAt children route = some suffix) :
     (⟨.function f, ⟨[⟨kind, .named name⟩]⟩⟩ : StableKey) ∈
       (List.map Prod.snd (assignFunctionTable f startSite
@@ -668,8 +669,8 @@ theorem KeyConstruct.assignFunctionTable_rename_named (f : FnId) (startSite : Na
 Pinning an unnamed root assigns its label to the construct's own table entry and throughout its
 actual subtree while preserving the inherited named scope used to resolve the suffix. -/
 theorem KeyConstruct.assignFunctionTable_pin (f : FnId) (startSite : Nat)
-    (before after : List KeyConstruct) (kind : ConstructKind) (old : Option String)
-    (label : String) (children : List KeyConstruct) (route : List Nat) (suffix : FunctionRelativeKey)
+    (before after : List KeyConstruct) (kind : ConstructKind) (old : Option Name)
+    (label : Name) (children : List KeyConstruct) (route : Numbers) (suffix : FunctionRelativeKey)
     (found : pathAtIn before children route = some suffix) :
     (⟨.function f, ⟨[⟨kind, .pinned label⟩]⟩⟩ : StableKey) ∈
       (List.map Prod.snd (assignFunctionTable f startSite
@@ -1162,17 +1163,17 @@ theorem EncodedPremise.read_iff (reader : SpecVersion) (record : EncodedPremise)
 namespace Vacuity
 
 /-- A package and module used by the identity examples. -/
-def package (name : String := "demo") : PackageId := ⟨name, ⟨"1"⟩⟩
+def package (name : Name := ⟨"demo"⟩) : PackageId := ⟨name, ⟨⟨"1"⟩⟩⟩
 
 /-- An enclosing function used by the persistent-key examples. -/
-def function : FnId := FnId.mk (ModuleId.mk package ["demo"] (by decide)) "f"
+def function : FnId := FnId.mk (ModuleId.mk package [⟨"demo"⟩] (by decide)) ⟨"f"⟩
 
 /-- A second enclosing function. -/
-def otherFunction : FnId := FnId.mk (ModuleId.mk package ["demo"] (by decide)) "g"
+def otherFunction : FnId := FnId.mk (ModuleId.mk package [⟨"demo"⟩] (by decide)) ⟨"g"⟩
 
 /-- A declaration and constant that own obligations outside function bodies. -/
-def declaration : DeclId := ⟨function.module, "S"⟩
-def constant : ConstId := ⟨function.module, "N"⟩
+def declaration : DeclId := ⟨function.module, ⟨"S"⟩⟩
+def constant : ConstId := ⟨function.module, ⟨"N"⟩⟩
 
 /-- Structured paths for a binding, a call and a struct invariant. -/
 def bindingKey : StableKey := ⟨.function function, ⟨[⟨.binding, .ordinal 0⟩]⟩⟩
@@ -1212,8 +1213,8 @@ example : siteTable.NoDupSites ∧ ¬ (collapseRenumber successor siteTable).NoD
 
 /-- An unnamed binding, a named binding, a named call, and an unnamed loop used by key-stability examples. -/
 def unnamedBinding : KeyConstruct := KeyConstruct.mk .binding (.unnamed none) []
-def namedBinding : KeyConstruct := KeyConstruct.mk .binding (.named "x") []
-def namedCall : KeyConstruct := KeyConstruct.mk .call (.named "work") []
+def namedBinding : KeyConstruct := KeyConstruct.mk .binding (.named ⟨"x"⟩) []
+def namedCall : KeyConstruct := KeyConstruct.mk .call (.named ⟨"work"⟩) []
 def unnamedLoop : KeyConstruct := KeyConstruct.mk .loop (.unnamed none) []
 def unnamedBlock : KeyConstruct := KeyConstruct.mk .block (.unnamed none) []
 
@@ -1260,10 +1261,10 @@ example : (∀ f, f ≠ otherFunction → bodiesAfter f = bodiesBefore f) ∧
 
 /-- A nested toy function body with two unnamed levels and a pinned leaf. -/
 def nestedBody : KeyConstruct := ⟨.block, .unnamed none,
-  [⟨.loop, .unnamed none, [⟨.primitive, .unnamed (some "effect"), []⟩]⟩]⟩
-def namedNested : KeyConstruct := ⟨.block, .named "body", nestedBody.children⟩
+  [⟨.loop, .unnamed none, [⟨.primitive, .unnamed (some ⟨"effect"⟩), []⟩]⟩]⟩
+def namedNested : KeyConstruct := ⟨.block, .named ⟨"body"⟩, nestedBody.children⟩
 def nestedPath : FunctionRelativeKey :=
-  ⟨[⟨.block, .ordinal 0⟩, ⟨.loop, .ordinal 0⟩, ⟨.primitive, .pinned "effect"⟩]⟩
+  ⟨[⟨.block, .ordinal 0⟩, ⟨.loop, .ordinal 0⟩, ⟨.primitive, .pinned ⟨"effect"⟩⟩]⟩
 def insertedCall : KeyConstruct := ⟨.call, .unnamed none, []⟩
 
 /-- Mutant collector that reproduces the old omission of every descendant. -/
@@ -1284,7 +1285,7 @@ decreasing_by
   all_goals cases construct <;> simp_all <;> omega
 
 /-- Mutant occurrence resolver that loses every route, with exactly the resolver's type. -/
-def missingPathAtIn (_scope _forest : List KeyConstruct) (_route : List Nat) :
+def missingPathAtIn (_scope _forest : List KeyConstruct) (_route : Numbers) :
     Option FunctionRelativeKey := none
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.collectKeysIn_sound`, case `ConcreteSpec.Core.Vacuity.nestedBody`). -/
@@ -1337,7 +1338,7 @@ example : nestedPath ∈ KeyConstruct.collectKeysIn [] [nestedBody] :=
   KeyConstruct.collectKeysIn_complete [] [nestedBody] [0, 0, 0] nestedPath (by decide) (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.collectKeysIn_complete`, case `ConcreteSpec.Core.Vacuity.nestedBody`, subject `ConcreteSpec.Core.KeyConstruct.collectKeysIn`, mutant `ConcreteSpec.Core.Vacuity.shallowCollect`). -/
-example : (([0, 0, 0] : List Nat) ≠ [] ∧
+example : (([0, 0, 0] : Numbers) ≠ [] ∧
     KeyConstruct.pathAtIn [] [nestedBody] [0, 0, 0] = some nestedPath) ∧
     ¬ nestedPath ∈ shallowCollect [] [nestedBody] := by decide
 
@@ -1381,17 +1382,17 @@ example : ¬ (AList.lookup (shallowAssign function 7 [nestedBody]) ⟨7 + 2⟩ =
   decide
 
 /-- Suffix below the toy block, independently resolved in its named scope. -/
-def nestedSuffix : FunctionRelativeKey := ⟨[⟨.loop, .ordinal 0⟩, ⟨.primitive, .pinned "effect"⟩]⟩
-def renamedRootKey : FunctionRelativeKey := ⟨[⟨.block, .named "new"⟩]⟩
-def renamedPath : FunctionRelativeKey := ⟨⟨.block, .named "new"⟩ :: nestedSuffix.path⟩
-def pinnedRootKey : FunctionRelativeKey := ⟨[⟨.block, .pinned "pin"⟩]⟩
-def pinnedPath : FunctionRelativeKey := ⟨⟨.block, .pinned "pin"⟩ :: nestedSuffix.path⟩
+def nestedSuffix : FunctionRelativeKey := ⟨[⟨.loop, .ordinal 0⟩, ⟨.primitive, .pinned ⟨"effect"⟩⟩]⟩
+def renamedRootKey : FunctionRelativeKey := ⟨[⟨.block, .named ⟨"new"⟩⟩]⟩
+def renamedPath : FunctionRelativeKey := ⟨⟨.block, .named ⟨"new"⟩⟩ :: nestedSuffix.path⟩
+def pinnedRootKey : FunctionRelativeKey := ⟨[⟨.block, .pinned ⟨"pin"⟩⟩]⟩
+def pinnedPath : FunctionRelativeKey := ⟨⟨.block, .pinned ⟨"pin"⟩⟩ :: nestedSuffix.path⟩
 
 /-- Mutant rename that leaves the construct's old name unchanged. -/
-def noopRename (construct : KeyConstruct) (_name : String) : KeyConstruct := construct
+def noopRename (construct : KeyConstruct) (_name : Name) : KeyConstruct := construct
 
 /-- Mutant pin that ignores the supplied user label. -/
-def noopPin (construct : KeyConstruct) (_label : Option String) : KeyConstruct := construct
+def noopPin (construct : KeyConstruct) (_label : Option Name) : KeyConstruct := construct
 
 /-- Mutant collector that fails to reset the sibling scope when entering a `.named` construct. -/
 def unresetScopeCollect (scope : List KeyConstruct) : List KeyConstruct → List FunctionRelativeKey
@@ -1412,25 +1413,25 @@ def unresetScopeAssign (f : FnId) (startSite : Nat) (body : List KeyConstruct) :
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_named_scope`, case `ConcreteSpec.Core.Vacuity.namedNested`). -/
 example : ((List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
-      ([unnamedLoop] ++ KeyConstruct.mk .block (.named "body") nestedBody.children :: [namedCall]))).drop
+      ([unnamedLoop] ++ KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children :: [namedCall]))).drop
         (KeyConstruct.collectKeys [unnamedLoop]).length).take
-          (KeyConstruct.collectKeys [KeyConstruct.mk .block (.named "body") nestedBody.children]).length =
+          (KeyConstruct.collectKeys [KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children]).length =
     ((List.map Prod.snd (KeyConstruct.assignFunctionTable function 19
-      ([] ++ KeyConstruct.mk .block (.named "body") nestedBody.children :: [unnamedBinding]))).drop
+      ([] ++ KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children :: [unnamedBinding]))).drop
         (KeyConstruct.collectKeys []).length).take
-          (KeyConstruct.collectKeys [KeyConstruct.mk .block (.named "body") nestedBody.children]).length :=
+          (KeyConstruct.collectKeys [KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children]).length :=
   KeyConstruct.assignFunctionTable_named_scope function 7 19 [unnamedLoop] [namedCall]
-    [] [unnamedBinding] .block "body" nestedBody.children
+    [] [unnamedBinding] .block ⟨"body"⟩ nestedBody.children
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_named_scope`, case `ConcreteSpec.Core.Vacuity.namedNested`, subject `ConcreteSpec.Core.KeyConstruct.assignFunctionTable`, mutant `ConcreteSpec.Core.Vacuity.unresetScopeAssign`). -/
 example : ¬ (((List.map Prod.snd (unresetScopeAssign function 7
-      ([unnamedLoop] ++ KeyConstruct.mk .block (.named "body") nestedBody.children :: [namedCall]))).drop
+      ([unnamedLoop] ++ KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children :: [namedCall]))).drop
         (KeyConstruct.collectKeys [unnamedLoop]).length).take
-          (KeyConstruct.collectKeys [KeyConstruct.mk .block (.named "body") nestedBody.children]).length =
+          (KeyConstruct.collectKeys [KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children]).length =
     ((List.map Prod.snd (unresetScopeAssign function 19
-      ([] ++ KeyConstruct.mk .block (.named "body") nestedBody.children :: [unnamedBinding]))).drop
+      ([] ++ KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children :: [unnamedBinding]))).drop
         (KeyConstruct.collectKeys []).length).take
-          (KeyConstruct.collectKeys [KeyConstruct.mk .block (.named "body") nestedBody.children]).length) := by
+          (KeyConstruct.collectKeys [KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children]).length) := by
   simp [unresetScopeAssign, KeyConstruct.numberFunctionKeys_snd, unresetScopeCollect,
     KeyConstruct.collectKeys, KeyConstruct.collectKeysIn, KeyConstruct.key,
     KeyConstruct.segment, KeyConstruct.childScope, ConstructName.isUnnamed,
@@ -1439,21 +1440,21 @@ example : ¬ (((List.map Prod.snd (unresetScopeAssign function 7
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_rename_named`, case `ConcreteSpec.Core.Vacuity.namedNested`). -/
 example : (⟨.function function, renamedRootKey⟩ : StableKey) ∈
       (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
-        ([unnamedLoop] ++ (KeyConstruct.mk .block (.named "old") nestedBody.children).rename "new" :: []))) ∧
+        ([unnamedLoop] ++ (KeyConstruct.mk .block (.named ⟨"old"⟩) nestedBody.children).rename ⟨"new"⟩ :: []))) ∧
     (⟨.function function, renamedPath⟩ : StableKey) ∈
       (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
-        ([unnamedLoop] ++ (KeyConstruct.mk .block (.named "old") nestedBody.children).rename "new" :: []))) :=
-  KeyConstruct.assignFunctionTable_rename_named function 7 [unnamedLoop] [] .block "old" "new"
+        ([unnamedLoop] ++ (KeyConstruct.mk .block (.named ⟨"old"⟩) nestedBody.children).rename ⟨"new"⟩ :: []))) :=
+  KeyConstruct.assignFunctionTable_rename_named function 7 [unnamedLoop] [] .block ⟨"old"⟩ ⟨"new"⟩
     nestedBody.children [0, 0] nestedSuffix (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_rename_named`, case `ConcreteSpec.Core.Vacuity.namedNested`, subject `ConcreteSpec.Core.KeyConstruct.rename`, mutant `ConcreteSpec.Core.Vacuity.noopRename`). -/
 example : KeyConstruct.pathAt nestedBody.children [0, 0] = some nestedSuffix ∧
     ¬ ((⟨.function function, renamedRootKey⟩ : StableKey) ∈
         (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
-          ([unnamedLoop] ++ noopRename (KeyConstruct.mk .block (.named "old") nestedBody.children) "new" :: []))) ∧
+          ([unnamedLoop] ++ noopRename (KeyConstruct.mk .block (.named ⟨"old"⟩) nestedBody.children) ⟨"new"⟩ :: []))) ∧
       (⟨.function function, renamedPath⟩ : StableKey) ∈
         (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
-          ([unnamedLoop] ++ noopRename (KeyConstruct.mk .block (.named "old") nestedBody.children) "new" :: [])))) := by
+          ([unnamedLoop] ++ noopRename (KeyConstruct.mk .block (.named ⟨"old"⟩) nestedBody.children) ⟨"new"⟩ :: [])))) := by
   refine ⟨by decide, ?_⟩
   rintro ⟨member, _⟩
   simp [KeyConstruct.assignFunctionTable, KeyConstruct.numberFunctionKeys_snd,
@@ -1464,10 +1465,10 @@ example : KeyConstruct.pathAt nestedBody.children [0, 0] = some nestedSuffix ∧
 example : KeyConstruct.pathAt nestedBody.children [0, 0] = some nestedSuffix ∧
     ¬ ((⟨.function function, renamedRootKey⟩ : StableKey) ∈
         (List.map Prod.snd (unresetScopeAssign function 7
-          ([unnamedLoop] ++ (KeyConstruct.mk .block (.named "old") nestedBody.children).rename "new" :: []))) ∧
+          ([unnamedLoop] ++ (KeyConstruct.mk .block (.named ⟨"old"⟩) nestedBody.children).rename ⟨"new"⟩ :: []))) ∧
       (⟨.function function, renamedPath⟩ : StableKey) ∈
         (List.map Prod.snd (unresetScopeAssign function 7
-          ([unnamedLoop] ++ (KeyConstruct.mk .block (.named "old") nestedBody.children).rename "new" :: [])))) := by
+          ([unnamedLoop] ++ (KeyConstruct.mk .block (.named ⟨"old"⟩) nestedBody.children).rename ⟨"new"⟩ :: [])))) := by
   refine ⟨by decide, ?_⟩
   rintro ⟨_, member⟩
   simp [unresetScopeAssign, KeyConstruct.numberFunctionKeys_snd, unresetScopeCollect,
@@ -1477,23 +1478,23 @@ example : KeyConstruct.pathAt nestedBody.children [0, 0] = some nestedSuffix ∧
   decide
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_rename_named`, case `ConcreteSpec.Core.Vacuity.namedCall`). -/
-example : (⟨.function function, ⟨[⟨.call, .named "renamed"⟩]⟩⟩ : StableKey) ∈
+example : (⟨.function function, ⟨[⟨.call, .named ⟨"renamed"⟩⟩]⟩⟩ : StableKey) ∈
       (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
-        ([] ++ (KeyConstruct.mk .call (.named "work") []).rename "renamed" :: []))) ∧
-    (⟨.function function, ⟨⟨.call, .named "renamed"⟩ :: ([] : List KeySegment)⟩⟩ : StableKey) ∈
+        ([] ++ (KeyConstruct.mk .call (.named ⟨"work"⟩) []).rename ⟨"renamed"⟩ :: []))) ∧
+    (⟨.function function, ⟨⟨.call, .named ⟨"renamed"⟩⟩ :: ([] : List KeySegment)⟩⟩ : StableKey) ∈
       (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
-        ([] ++ (KeyConstruct.mk .call (.named "work") []).rename "renamed" :: []))) :=
-  KeyConstruct.assignFunctionTable_rename_named function 7 [] [] .call "work" "renamed"
+        ([] ++ (KeyConstruct.mk .call (.named ⟨"work"⟩) []).rename ⟨"renamed"⟩ :: []))) :=
+  KeyConstruct.assignFunctionTable_rename_named function 7 [] [] .call ⟨"work"⟩ ⟨"renamed"⟩
     [] [] ⟨[]⟩ rfl
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_rename_named`, case `ConcreteSpec.Core.Vacuity.namedCall`, subject `ConcreteSpec.Core.KeyConstruct.rename`, mutant `ConcreteSpec.Core.Vacuity.noopRename`). -/
 example : KeyConstruct.pathAt ([] : List KeyConstruct) [] = some ⟨[]⟩ ∧
-    ¬ ((⟨.function function, ⟨[⟨.call, .named "renamed"⟩]⟩⟩ : StableKey) ∈
+    ¬ ((⟨.function function, ⟨[⟨.call, .named ⟨"renamed"⟩⟩]⟩⟩ : StableKey) ∈
         (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
-          ([] ++ noopRename (KeyConstruct.mk .call (.named "work") []) "renamed" :: []))) ∧
-      (⟨.function function, ⟨⟨.call, .named "renamed"⟩ :: ([] : List KeySegment)⟩⟩ : StableKey) ∈
+          ([] ++ noopRename (KeyConstruct.mk .call (.named ⟨"work"⟩) []) ⟨"renamed"⟩ :: []))) ∧
+      (⟨.function function, ⟨⟨.call, .named ⟨"renamed"⟩⟩ :: ([] : List KeySegment)⟩⟩ : StableKey) ∈
         (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
-          ([] ++ noopRename (KeyConstruct.mk .call (.named "work") []) "renamed" :: [])))) := by
+          ([] ++ noopRename (KeyConstruct.mk .call (.named ⟨"work"⟩) []) ⟨"renamed"⟩ :: [])))) := by
   refine ⟨rfl, ?_⟩
   rintro ⟨member, _⟩
   simp [KeyConstruct.assignFunctionTable, KeyConstruct.numberFunctionKeys_snd,
@@ -1503,21 +1504,21 @@ example : KeyConstruct.pathAt ([] : List KeyConstruct) [] = some ⟨[]⟩ ∧
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_pin`, case `ConcreteSpec.Core.Vacuity.nestedBody`). -/
 example : (⟨.function function, pinnedRootKey⟩ : StableKey) ∈
       (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
-        ([] ++ (KeyConstruct.mk .block (.unnamed none) nestedBody.children).pin (some "pin") :: []))) ∧
+        ([] ++ (KeyConstruct.mk .block (.unnamed none) nestedBody.children).pin (some ⟨"pin"⟩) :: []))) ∧
     (⟨.function function, pinnedPath⟩ : StableKey) ∈
       (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
-        ([] ++ (KeyConstruct.mk .block (.unnamed none) nestedBody.children).pin (some "pin") :: []))) :=
-  KeyConstruct.assignFunctionTable_pin function 7 [] [] .block none "pin" nestedBody.children
+        ([] ++ (KeyConstruct.mk .block (.unnamed none) nestedBody.children).pin (some ⟨"pin"⟩) :: []))) :=
+  KeyConstruct.assignFunctionTable_pin function 7 [] [] .block none ⟨"pin"⟩ nestedBody.children
     [0, 0] nestedSuffix (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_pin`, case `ConcreteSpec.Core.Vacuity.nestedBody`, subject `ConcreteSpec.Core.KeyConstruct.pin`, mutant `ConcreteSpec.Core.Vacuity.noopPin`). -/
 example : KeyConstruct.pathAtIn [] nestedBody.children [0, 0] = some nestedSuffix ∧
     ¬ ((⟨.function function, pinnedRootKey⟩ : StableKey) ∈
         (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
-          ([] ++ noopPin (KeyConstruct.mk .block (.unnamed none) nestedBody.children) (some "pin") :: []))) ∧
+          ([] ++ noopPin (KeyConstruct.mk .block (.unnamed none) nestedBody.children) (some ⟨"pin"⟩) :: []))) ∧
       (⟨.function function, pinnedPath⟩ : StableKey) ∈
         (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
-          ([] ++ noopPin (KeyConstruct.mk .block (.unnamed none) nestedBody.children) (some "pin") :: [])))) := by
+          ([] ++ noopPin (KeyConstruct.mk .block (.unnamed none) nestedBody.children) (some ⟨"pin"⟩) :: [])))) := by
   refine ⟨by decide, ?_⟩
   rintro ⟨member, _⟩
   simp [KeyConstruct.assignFunctionTable, KeyConstruct.numberFunctionKeys_snd,
@@ -1525,22 +1526,22 @@ example : KeyConstruct.pathAtIn [] nestedBody.children [0, 0] = some nestedSuffi
     KeyConstruct.key, KeyConstruct.segment, KeyConstruct.childScope] at member
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_pin`, case `ConcreteSpec.Core.Vacuity.unnamedBinding`). -/
-example : (⟨.function function, ⟨[⟨.binding, .pinned "pinned"⟩]⟩⟩ : StableKey) ∈
+example : (⟨.function function, ⟨[⟨.binding, .pinned ⟨"pinned"⟩⟩]⟩⟩ : StableKey) ∈
       (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
-        ([] ++ (KeyConstruct.mk .binding (.unnamed none) []).pin (some "pinned") :: []))) ∧
-    (⟨.function function, ⟨⟨.binding, .pinned "pinned"⟩ :: ([] : List KeySegment)⟩⟩ : StableKey) ∈
+        ([] ++ (KeyConstruct.mk .binding (.unnamed none) []).pin (some ⟨"pinned"⟩) :: []))) ∧
+    (⟨.function function, ⟨⟨.binding, .pinned ⟨"pinned"⟩⟩ :: ([] : List KeySegment)⟩⟩ : StableKey) ∈
       (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
-        ([] ++ (KeyConstruct.mk .binding (.unnamed none) []).pin (some "pinned") :: []))) :=
-  KeyConstruct.assignFunctionTable_pin function 7 [] [] .binding none "pinned" [] [] ⟨[]⟩ rfl
+        ([] ++ (KeyConstruct.mk .binding (.unnamed none) []).pin (some ⟨"pinned"⟩) :: []))) :=
+  KeyConstruct.assignFunctionTable_pin function 7 [] [] .binding none ⟨"pinned"⟩ [] [] ⟨[]⟩ rfl
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_pin`, case `ConcreteSpec.Core.Vacuity.unnamedBinding`, subject `ConcreteSpec.Core.KeyConstruct.pin`, mutant `ConcreteSpec.Core.Vacuity.noopPin`). -/
 example : KeyConstruct.pathAtIn [] ([] : List KeyConstruct) [] = some ⟨[]⟩ ∧
-    ¬ ((⟨.function function, ⟨[⟨.binding, .pinned "pinned"⟩]⟩⟩ : StableKey) ∈
+    ¬ ((⟨.function function, ⟨[⟨.binding, .pinned ⟨"pinned"⟩⟩]⟩⟩ : StableKey) ∈
         (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
-          ([] ++ noopPin (KeyConstruct.mk .binding (.unnamed none) []) (some "pinned") :: []))) ∧
-      (⟨.function function, ⟨⟨.binding, .pinned "pinned"⟩ :: ([] : List KeySegment)⟩⟩ : StableKey) ∈
+          ([] ++ noopPin (KeyConstruct.mk .binding (.unnamed none) []) (some ⟨"pinned"⟩) :: []))) ∧
+      (⟨.function function, ⟨⟨.binding, .pinned ⟨"pinned"⟩⟩ :: ([] : List KeySegment)⟩⟩ : StableKey) ∈
         (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
-          ([] ++ noopPin (KeyConstruct.mk .binding (.unnamed none) []) (some "pinned") :: [])))) := by
+          ([] ++ noopPin (KeyConstruct.mk .binding (.unnamed none) []) (some ⟨"pinned"⟩) :: [])))) := by
   refine ⟨rfl, ?_⟩
   rintro ⟨member, _⟩
   simp [KeyConstruct.assignFunctionTable, KeyConstruct.numberFunctionKeys_snd,
@@ -1566,26 +1567,26 @@ def countNamedKey (preceding : List KeyConstruct) (target : KeyConstruct) : Func
   ⟨[⟨target.kind, .ordinal (preceding.filter fun sibling => sibling.kind == target.kind).length⟩]⟩
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.key_insert_named`, case `ConcreteSpec.Core.Vacuity.unnamedBinding`). -/
-example : unnamedBinding.key ([] ++ KeyConstruct.mk .binding (.named "x") [] :: []) =
+example : unnamedBinding.key ([] ++ KeyConstruct.mk .binding (.named ⟨"x"⟩) [] :: []) =
     unnamedBinding.key ([] ++ []) :=
-  KeyConstruct.key_insert_named [] [] "x" .binding [] unnamedBinding
+  KeyConstruct.key_insert_named [] [] ⟨"x"⟩ .binding [] unnamedBinding
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.key_insert_named`, case `ConcreteSpec.Core.Vacuity.unnamedBinding`, subject `ConcreteSpec.Core.KeyConstruct.key`, mutant `ConcreteSpec.Core.Vacuity.countNamedKey`). -/
-example : ¬ (countNamedKey ([] ++ KeyConstruct.mk .binding (.named "x") [] :: []) unnamedBinding =
+example : ¬ (countNamedKey ([] ++ KeyConstruct.mk .binding (.named ⟨"x"⟩) [] :: []) unnamedBinding =
     countNamedKey ([] ++ []) unnamedBinding) := by decide
 
 /-- Mutant rename that demotes a named construct to an unnamed pinned construct, causing it to
 consume an unnamed ordinal. -/
-def demoteRename (construct : KeyConstruct) (name : String) : KeyConstruct :=
+def demoteRename (construct : KeyConstruct) (name : Name) : KeyConstruct :=
   { construct with name := .unnamed (some name) }
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.key_rename_other`, case `ConcreteSpec.Core.Vacuity.namedBinding`). -/
-example : unnamedBinding.key ([] ++ namedBinding.rename "y" :: [unnamedBinding]) =
+example : unnamedBinding.key ([] ++ namedBinding.rename ⟨"y"⟩ :: [unnamedBinding]) =
     unnamedBinding.key ([] ++ namedBinding :: [unnamedBinding]) :=
-  KeyConstruct.key_rename_other [] [unnamedBinding] namedBinding unnamedBinding "y"
+  KeyConstruct.key_rename_other [] [unnamedBinding] namedBinding unnamedBinding ⟨"y"⟩
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.key_rename_other`, case `ConcreteSpec.Core.Vacuity.namedBinding`, subject `ConcreteSpec.Core.KeyConstruct.rename`, mutant `ConcreteSpec.Core.Vacuity.demoteRename`). -/
-example : ¬ (unnamedBinding.key ([] ++ demoteRename namedBinding "y" :: [unnamedBinding]) =
+example : ¬ (unnamedBinding.key ([] ++ demoteRename namedBinding ⟨"y"⟩ :: [unnamedBinding]) =
     unnamedBinding.key ([] ++ namedBinding :: [unnamedBinding])) := by decide
 
 /-- Mutant key assignment that excludes pinned unnamed siblings from the per-kind ordinal count. -/
@@ -1595,27 +1596,27 @@ def labelOnlyOrdinal (preceding : List KeyConstruct) (target : KeyConstruct) : F
   ⟨[⟨target.kind, .ordinal count⟩]⟩
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.key_pin_other`, case `ConcreteSpec.Core.Vacuity.unnamedBinding`). -/
-example : unnamedBinding.key ([] ++ unnamedBinding.pin (some "x") :: [unnamedBinding]) =
+example : unnamedBinding.key ([] ++ unnamedBinding.pin (some ⟨"x"⟩) :: [unnamedBinding]) =
     unnamedBinding.key ([] ++ unnamedBinding :: [unnamedBinding]) :=
-  KeyConstruct.key_pin_other [] [unnamedBinding] unnamedBinding unnamedBinding (some "x")
+  KeyConstruct.key_pin_other [] [unnamedBinding] unnamedBinding unnamedBinding (some ⟨"x"⟩)
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.key_pin_other`, case `ConcreteSpec.Core.Vacuity.unnamedBinding`, subject `ConcreteSpec.Core.KeyConstruct.key`, mutant `ConcreteSpec.Core.Vacuity.labelOnlyOrdinal`). -/
-example : ¬ (labelOnlyOrdinal ([] ++ unnamedBinding.pin (some "x") :: [unnamedBinding]) unnamedBinding =
+example : ¬ (labelOnlyOrdinal ([] ++ unnamedBinding.pin (some ⟨"x"⟩) :: [unnamedBinding]) unnamedBinding =
     labelOnlyOrdinal ([] ++ unnamedBinding :: [unnamedBinding]) unnamedBinding) := by decide
 
 /-- Helper computation example (not law evidence). -/
-example : ((KeyConstruct.mk .call (.named "work") []).rename "renamed").key [] =
-    ⟨[⟨.call, .named "renamed"⟩]⟩ :=
-  KeyConstruct.key_rename_named [] .call "work" [] "renamed"
+example : ((KeyConstruct.mk .call (.named ⟨"work"⟩) []).rename ⟨"renamed"⟩).key [] =
+    ⟨[⟨.call, .named ⟨"renamed"⟩⟩]⟩ :=
+  KeyConstruct.key_rename_named [] .call ⟨"work"⟩ [] ⟨"renamed"⟩
 
 /-- Helper computation example (not law evidence). -/
-example : ((KeyConstruct.mk .binding (.unnamed none) []).pin (some "pinned")).key [] =
-    ⟨[⟨.binding, .pinned "pinned"⟩]⟩ :=
-  KeyConstruct.key_pin_unnamed [] .binding none [] "pinned"
+example : ((KeyConstruct.mk .binding (.unnamed none) []).pin (some ⟨"pinned"⟩)).key [] =
+    ⟨[⟨.binding, .pinned ⟨"pinned"⟩⟩]⟩ :=
+  KeyConstruct.key_pin_unnamed [] .binding none [] ⟨"pinned"⟩
 
 /-- Mutant `descendantKey` that uses one ordinal across all construct kinds for the root segment. -/
 def allKindsDescendantKey (preceding : List KeyConstruct) (construct : KeyConstruct)
-    (route : List Nat) : Option FunctionRelativeKey :=
+    (route : Numbers) : Option FunctionRelativeKey :=
   (KeyConstruct.pathAtIn (construct.childScope preceding) construct.children route).map
     fun descendant => ⟨(allKindsOrdinal preceding construct).path ++ descendant.path⟩
 
@@ -1632,22 +1633,22 @@ example : KeyConstruct.SubtreeAvoidsKind insertedCall.kind nestedBody [0, 0] ∧
 
 /-- Mutant `descendantKey` that counts named siblings in the root segment's ordinal. -/
 def countNamedDescendantKey (preceding : List KeyConstruct) (construct : KeyConstruct)
-    (route : List Nat) : Option FunctionRelativeKey :=
+    (route : Numbers) : Option FunctionRelativeKey :=
   (KeyConstruct.pathAtIn (construct.childScope preceding) construct.children route).map
     fun descendant => ⟨(countNamedKey preceding construct).path ++ descendant.path⟩
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.descendant_insert_named`, case `ConcreteSpec.Core.Vacuity.nestedBody`). -/
-example : nestedBody.descendantKey ([] ++ KeyConstruct.mk .block (.named "body") nestedBody.children :: []) [0, 0] =
+example : nestedBody.descendantKey ([] ++ KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children :: []) [0, 0] =
     nestedBody.descendantKey ([] ++ []) [0, 0] :=
-  KeyConstruct.descendant_insert_named [] [] "body" .block nestedBody.children nestedBody [0, 0]
+  KeyConstruct.descendant_insert_named [] [] ⟨"body"⟩ .block nestedBody.children nestedBody [0, 0]
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.descendant_insert_named`, case `ConcreteSpec.Core.Vacuity.nestedBody`, subject `ConcreteSpec.Core.KeyConstruct.descendantKey`, mutant `ConcreteSpec.Core.Vacuity.countNamedDescendantKey`). -/
-example : ¬ (countNamedDescendantKey ([] ++ KeyConstruct.mk .block (.named "body") nestedBody.children :: []) nestedBody [0, 0] =
+example : ¬ (countNamedDescendantKey ([] ++ KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children :: []) nestedBody [0, 0] =
     countNamedDescendantKey ([] ++ []) nestedBody [0, 0]) := by decide
 
 /-- Mutant `pathAt` that counts ordinals across the whole forest rather than `forest.take index`,
 so inserting a sibling after `target` shifts `target`'s ordinal. -/
-def wholeForestPathAt (forest : List KeyConstruct) : List Nat → Option FunctionRelativeKey
+def wholeForestPathAt (forest : List KeyConstruct) : Numbers → Option FunctionRelativeKey
   | [] => some ⟨[]⟩
   | index :: route => do
     let construct ← forest[index]?
@@ -1668,7 +1669,7 @@ example : ¬ (wholeForestPathAt ([] ++ nestedBody :: ([] ++ unnamedBlock :: []))
       (([] : List KeyConstruct).length :: [0, 0])) := by decide
 
 /-- Mutant `pathAt` that counts named siblings in the root segment's ordinal. -/
-def countNamedPathAt (forest : List KeyConstruct) : List Nat → Option FunctionRelativeKey
+def countNamedPathAt (forest : List KeyConstruct) : Numbers → Option FunctionRelativeKey
   | [] => some ⟨[]⟩
   | index :: route =>
     match forest[index]? with
@@ -1678,23 +1679,23 @@ def countNamedPathAt (forest : List KeyConstruct) : List Nat → Option Function
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.pathAt_insert_named`, case `ConcreteSpec.Core.Vacuity.nestedBody`). -/
 example : KeyConstruct.pathAt
-      (([] ++ KeyConstruct.mk .block (.named "body") nestedBody.children :: []) ++ nestedBody :: [])
-      (([] ++ KeyConstruct.mk .block (.named "body") nestedBody.children :: []).length :: [0, 0]) =
+      (([] ++ KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children :: []) ++ nestedBody :: [])
+      (([] ++ KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children :: []).length :: [0, 0]) =
     KeyConstruct.pathAt
       (([] ++ []) ++ nestedBody :: [])
       (([] ++ ([] : List KeyConstruct)).length :: [0, 0]) :=
-  KeyConstruct.pathAt_insert_named [] [] [] "body" .block nestedBody.children nestedBody [0, 0]
+  KeyConstruct.pathAt_insert_named [] [] [] ⟨"body"⟩ .block nestedBody.children nestedBody [0, 0]
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.pathAt_insert_named`, case `ConcreteSpec.Core.Vacuity.nestedBody`, subject `ConcreteSpec.Core.KeyConstruct.pathAt`, mutant `ConcreteSpec.Core.Vacuity.countNamedPathAt`). -/
 example : ¬ (countNamedPathAt
-      (([] ++ KeyConstruct.mk .block (.named "body") nestedBody.children :: []) ++ nestedBody :: [])
-      (([] ++ KeyConstruct.mk .block (.named "body") nestedBody.children :: []).length :: [0, 0]) =
+      (([] ++ KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children :: []) ++ nestedBody :: [])
+      (([] ++ KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children :: []).length :: [0, 0]) =
     countNamedPathAt
       (([] ++ []) ++ nestedBody :: [])
       (([] ++ ([] : List KeyConstruct)).length :: [0, 0])) := by decide
 
 /-- Mutant `pathAt` that counts all unnamed siblings regardless of kind. -/
-def allKindsPathAt (forest : List KeyConstruct) : List Nat → Option FunctionRelativeKey
+def allKindsPathAt (forest : List KeyConstruct) : Numbers → Option FunctionRelativeKey
   | [] => some ⟨[]⟩
   | index :: route =>
     match forest[index]? with
@@ -1724,12 +1725,12 @@ example : KeyConstruct.SubtreeAvoidsKind insertedCall.kind nestedBody [0, 0] ∧
 /-- Mutant `descendantKey` that fails to reset the sibling scope when entering a `.named`
 construct, leaking outer siblings into the named construct's scope. -/
 def unresetScopeDescendantKey (preceding : List KeyConstruct) (construct : KeyConstruct)
-    (route : List Nat) : Option FunctionRelativeKey :=
+    (route : Numbers) : Option FunctionRelativeKey :=
   (KeyConstruct.pathAtIn preceding construct.children route).map
     fun descendant => ⟨construct.segment preceding :: descendant.path⟩
 
 /-- Mutant `pathAt` that fails to reset the sibling scope when entering a `.named` construct. -/
-def unresetScopePathAt (forest : List KeyConstruct) : List Nat → Option FunctionRelativeKey
+def unresetScopePathAt (forest : List KeyConstruct) : Numbers → Option FunctionRelativeKey
   | [] => some ⟨[]⟩
   | index :: route =>
     match forest[index]? with
@@ -1739,68 +1740,68 @@ def unresetScopePathAt (forest : List KeyConstruct) : List Nat → Option Functi
 
 /-- Regression example (not independent soundness evidence). -/
 example : KeyConstruct.pathAt
-      ([unnamedLoop] ++ KeyConstruct.mk .block (.named "body") nestedBody.children :: [])
+      ([unnamedLoop] ++ KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children :: [])
       (([unnamedLoop] : List KeyConstruct).length :: [0, 0]) =
     KeyConstruct.pathAt
-      ([] ++ KeyConstruct.mk .block (.named "body") nestedBody.children :: [])
+      ([] ++ KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children :: [])
       (([] : List KeyConstruct).length :: [0, 0]) :=
-  KeyConstruct.pathAt_named_ancestor_resets_scope [unnamedLoop] [] [] [] .block "body"
+  KeyConstruct.pathAt_named_ancestor_resets_scope [unnamedLoop] [] [] [] .block ⟨"body"⟩
     nestedBody.children [0, 0]
 
 /-- Regression example (not independent soundness evidence). -/
 example : ¬ (unresetScopePathAt
-      ([unnamedLoop] ++ KeyConstruct.mk .block (.named "body") nestedBody.children :: [])
+      ([unnamedLoop] ++ KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children :: [])
       (([unnamedLoop] : List KeyConstruct).length :: [0, 0]) =
     unresetScopePathAt
-      ([] ++ KeyConstruct.mk .block (.named "body") nestedBody.children :: [])
+      ([] ++ KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children :: [])
       (([] : List KeyConstruct).length :: [0, 0])) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.descendant_rename_other`, case `ConcreteSpec.Core.Vacuity.nestedBody`). -/
-example : nestedBody.descendantKey ([] ++ namedNested.rename "otherName" :: []) [0, 0] =
+example : nestedBody.descendantKey ([] ++ namedNested.rename ⟨"otherName"⟩ :: []) [0, 0] =
     nestedBody.descendantKey ([] ++ namedNested :: []) [0, 0] :=
-  KeyConstruct.descendant_rename_other [] [] namedNested nestedBody "otherName" [0, 0]
+  KeyConstruct.descendant_rename_other [] [] namedNested nestedBody ⟨"otherName"⟩ [0, 0]
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.descendant_rename_other`, case `ConcreteSpec.Core.Vacuity.nestedBody`, subject `ConcreteSpec.Core.KeyConstruct.rename`, mutant `ConcreteSpec.Core.Vacuity.demoteRename`). -/
-example : ¬ (nestedBody.descendantKey ([] ++ demoteRename namedNested "otherName" :: []) [0, 0] =
+example : ¬ (nestedBody.descendantKey ([] ++ demoteRename namedNested ⟨"otherName"⟩ :: []) [0, 0] =
     nestedBody.descendantKey ([] ++ namedNested :: []) [0, 0]) := by decide
 
 /-- Mutant `descendantKey` that excludes pinned unnamed siblings from the root's ordinal count. -/
 def labelOnlyDescendantKey (preceding : List KeyConstruct) (construct : KeyConstruct)
-    (route : List Nat) : Option FunctionRelativeKey :=
+    (route : Numbers) : Option FunctionRelativeKey :=
   (KeyConstruct.pathAtIn (construct.childScope preceding) construct.children route).map
     fun descendant => ⟨(labelOnlyOrdinal preceding construct).path ++ descendant.path⟩
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.descendant_pin_other`, case `ConcreteSpec.Core.Vacuity.nestedBody`). -/
-example : nestedBody.descendantKey ([] ++ nestedBody.pin (some "pinned") :: []) [0, 0] =
+example : nestedBody.descendantKey ([] ++ nestedBody.pin (some ⟨"pinned"⟩) :: []) [0, 0] =
     nestedBody.descendantKey ([] ++ nestedBody :: []) [0, 0] :=
-  KeyConstruct.descendant_pin_other [] [] nestedBody nestedBody (some "pinned") [0, 0]
+  KeyConstruct.descendant_pin_other [] [] nestedBody nestedBody (some ⟨"pinned"⟩) [0, 0]
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.descendant_pin_other`, case `ConcreteSpec.Core.Vacuity.nestedBody`, subject `ConcreteSpec.Core.KeyConstruct.descendantKey`, mutant `ConcreteSpec.Core.Vacuity.labelOnlyDescendantKey`). -/
-example : ¬ (labelOnlyDescendantKey ([] ++ nestedBody.pin (some "pinned") :: []) nestedBody [0, 0] =
+example : ¬ (labelOnlyDescendantKey ([] ++ nestedBody.pin (some ⟨"pinned"⟩) :: []) nestedBody [0, 0] =
     labelOnlyDescendantKey ([] ++ nestedBody :: []) nestedBody [0, 0]) := by decide
 
 /-- Representation example (not law evidence). -/
-example : ((KeyConstruct.mk .block (.named "body") nestedBody.children).rename "renamed").descendantKey [] [0, 0] =
+example : ((KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children).rename ⟨"renamed"⟩).descendantKey [] [0, 0] =
     (KeyConstruct.pathAt nestedBody.children [0, 0]).map (fun suffix =>
-      ⟨⟨.block, .named "renamed"⟩ :: suffix.path⟩) :=
-  KeyConstruct.descendant_rename_named [] .block "body" "renamed" nestedBody.children [0, 0]
+      ⟨⟨.block, .named ⟨"renamed"⟩⟩ :: suffix.path⟩) :=
+  KeyConstruct.descendant_rename_named [] .block ⟨"body"⟩ ⟨"renamed"⟩ nestedBody.children [0, 0]
 
 /-- Representation example (not law evidence). -/
-example : ¬ ((noopRename (KeyConstruct.mk .block (.named "body") nestedBody.children) "renamed").descendantKey [] [0, 0] =
+example : ¬ ((noopRename (KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children) ⟨"renamed"⟩).descendantKey [] [0, 0] =
     (KeyConstruct.pathAt nestedBody.children [0, 0]).map (fun suffix =>
-      ⟨⟨.block, .named "renamed"⟩ :: suffix.path⟩)) := by decide
+      ⟨⟨.block, .named ⟨"renamed"⟩⟩ :: suffix.path⟩)) := by decide
 
 /-- Three specializations of one generic, differing one argument list at a time. -/
-def numeric : SpecializationId Nat String := ⟨.function function, [0], ["Fs"]⟩
-def otherType : SpecializationId Nat String := ⟨.function function, [1], ["Fs"]⟩
-def otherCapability : SpecializationId Nat String := ⟨.function function, [0], ["Console"]⟩
+def numeric : SpecializationId Nat Name := ⟨.function function, [0], [⟨"Fs"⟩]⟩
+def otherType : SpecializationId Nat Name := ⟨.function function, [1], [⟨"Fs"⟩]⟩
+def otherCapability : SpecializationId Nat Name := ⟨.function function, [0], [⟨"Console"⟩]⟩
 
 /-- Distinct request sites for the same specialization. -/
-def requestZero : SpecializationRequest Nat String := ⟨⟨0⟩, numeric⟩
-def requestOne : SpecializationRequest Nat String := ⟨⟨1⟩, numeric⟩
-def requestOtherType : SpecializationRequest Nat String := ⟨⟨2⟩, otherType⟩
-def requestOtherCapability : SpecializationRequest Nat String := ⟨⟨3⟩, otherCapability⟩
-def edgeZero : SpecializationEdge Nat String := ⟨requestZero, 0⟩
+def requestZero : SpecializationRequest Nat Name := ⟨⟨0⟩, numeric⟩
+def requestOne : SpecializationRequest Nat Name := ⟨⟨1⟩, numeric⟩
+def requestOtherType : SpecializationRequest Nat Name := ⟨⟨2⟩, otherType⟩
+def requestOtherCapability : SpecializationRequest Nat Name := ⟨⟨3⟩, otherCapability⟩
+def edgeZero : SpecializationEdge Nat Name := ⟨requestZero, 0⟩
 
 /-- Mutated implementation that drops the first request's edge. -/
 def dropFirstEdges {Ty Cap : Type} [DecidableEq Ty] [DecidableEq Cap]
@@ -1849,8 +1850,8 @@ example : ∃ zeroEdge oneEdge, zeroEdge ∈ (SpecializationTable.canonicalize
 
 /-- A planted interner parameterized by a lossy request key. -/
 def canonicalizeByKey {Key : Type} [DecidableEq Key]
-    (key : SpecializationRequest Nat String → Key) :
-    List (SpecializationRequest Nat String) → List Key × SpecializationTable Nat String
+    (key : SpecializationRequest Nat Name → Key) :
+    List (SpecializationRequest Nat Name) → List Key × SpecializationTable Nat Name
   | [] => ([], ⟨[], []⟩)
   | request :: rest =>
     let (keys, table) := canonicalizeByKey key rest
@@ -1928,10 +1929,10 @@ example : (SpecializationTable.canonicalize [requestZero, requestOne]).entries.N
 example : ¬ (bySite [requestZero, requestOne]).entries.Nodup := by decide
 
 /-- Loaded modules with explicit package versions and origins. -/
-def firstModule : LoadedModule := ⟨⟨package "p1", ["first"], by decide⟩, ⟨"registry-a"⟩⟩
-def secondModule : LoadedModule := ⟨⟨package "p1", ["second"], by decide⟩, ⟨"registry-a"⟩⟩
-def collidingModule : LoadedModule := ⟨⟨package "p2", ["first"], by decide⟩, ⟨"registry-b"⟩⟩
-def samePackageOtherOrigin : LoadedModule := ⟨⟨package "p1", ["other"], by decide⟩, ⟨"mirror"⟩⟩
+def firstModule : LoadedModule := ⟨⟨package ⟨"p1"⟩, [⟨"first"⟩], by decide⟩, ⟨⟨"registry-a"⟩⟩⟩
+def secondModule : LoadedModule := ⟨⟨package ⟨"p1"⟩, [⟨"second"⟩], by decide⟩, ⟨⟨"registry-a"⟩⟩⟩
+def collidingModule : LoadedModule := ⟨⟨package ⟨"p2"⟩, [⟨"first"⟩], by decide⟩, ⟨⟨"registry-b"⟩⟩⟩
+def samePackageOtherOrigin : LoadedModule := ⟨⟨package ⟨"p1"⟩, [⟨"other"⟩], by decide⟩, ⟨⟨"mirror"⟩⟩⟩
 def collidingTop : LoadCollision := .topLevel firstModule collidingModule rfl (by decide)
 def collidingOrigin : LoadCollision := .packageOrigin firstModule samePackageOtherOrigin (by decide) (by decide)
 
@@ -2096,7 +2097,7 @@ example : ¬ (scalarColumn (utf8Prefix ++ [169]) (utf8Prefix.length + 1) =
 /-- A source `assume`, a package stack assumption, and their wire records. -/
 def sourceAssume : PremiseId :=
   ⟨.assume, .function (StableKey.mk (.function function) ⟨[⟨.assumption, .ordinal 0⟩]⟩)⟩
-def stackAssumption : PremiseId := ⟨.stack, .package package ⟨"defaultStack"⟩⟩
+def stackAssumption : PremiseId := ⟨.stack, .package package ⟨⟨"defaultStack"⟩⟩⟩
 def stackRecord : PremiseRecord := ⟨stackAssumption.kind, stackAssumption.scope, specVersion⟩
 def unknownRecord : EncodedPremise := ⟨99, stackAssumption.scope, specVersion⟩
 def futureVersion : SpecVersion := ⟨0, 2⟩
@@ -2180,11 +2181,11 @@ example : invariantKey.owner = .declaration declaration ∧ initializerKey.owner
   exact ⟨rfl, rfl⟩
 
 /-- Two facts with the same conclusion but different premise dependencies. -/
-def conditional : ConditionalFact String := ⟨"bounded", [sourceAssume]⟩
-def unconditional : ConditionalFact String := ⟨"bounded", []⟩
+def conditional : ConditionalFact Name := ⟨⟨"bounded"⟩, [sourceAssume]⟩
+def unconditional : ConditionalFact Name := ⟨⟨"bounded"⟩, []⟩
 
 /-- Planted counter-example: comparing only conclusions loses the conditional fact's premise debt. -/
-def conclusionOnly (first second : ConditionalFact String) : Prop :=
+def conclusionOnly (first second : ConditionalFact Name) : Prop :=
   first.conclusion = second.conclusion
 
 example : conclusionOnly conditional unconditional ∧ conditional ≠ unconditional := by

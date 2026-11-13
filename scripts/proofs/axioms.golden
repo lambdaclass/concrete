@@ -788,6 +788,253 @@ ConcreteSpec.Core.EncodedPremise.read_encode
 ConcreteSpec.Core.EncodedPremise.read_iff	propext
 ConcreteSpec.Core.EncodedPremise.read_unknown	
 ConcreteSpec.Core.EncodedPremise.read_version_mismatch	propext
+ConcreteSpec.Core.Exec.Answer.mk.inj	
+ConcreteSpec.Core.Exec.Answer.mk.injEq	propext
+ConcreteSpec.Core.Exec.Answer.mk.sizeOf_spec	
+ConcreteSpec.Core.Exec.Arguments.brecOn	
+ConcreteSpec.Core.Exec.Cleans.brecOn	propext
+ConcreteSpec.Core.Exec.Config.mk.inj	
+ConcreteSpec.Core.Exec.Config.mk.injEq	propext
+ConcreteSpec.Core.Exec.Config.mk.sizeOf_spec	
+ConcreteSpec.Core.Exec.Ctrl.done.sizeOf_spec	
+ConcreteSpec.Core.Exec.Ctrl.exec.inj	
+ConcreteSpec.Core.Exec.Ctrl.exec.injEq	propext
+ConcreteSpec.Core.Exec.Ctrl.exec.sizeOf_spec	
+ConcreteSpec.Core.Exec.Ctrl.exiting.inj	
+ConcreteSpec.Core.Exec.Ctrl.exiting.injEq	propext
+ConcreteSpec.Core.Exec.Ctrl.exiting.sizeOf_spec	
+ConcreteSpec.Core.Exec.Ctrl.refused.sizeOf_spec	
+ConcreteSpec.Core.Exec.Ctrl.trapped.inj	
+ConcreteSpec.Core.Exec.Ctrl.trapped.injEq	propext
+ConcreteSpec.Core.Exec.Ctrl.trapped.sizeOf_spec	
+ConcreteSpec.Core.Exec.Deferred.mk.inj	
+ConcreteSpec.Core.Exec.Deferred.mk.injEq	propext
+ConcreteSpec.Core.Exec.Deferred.mk.sizeOf_spec	
+ConcreteSpec.Core.Exec.Demo.DState.mk.inj	
+ConcreteSpec.Core.Exec.Demo.DState.mk.injEq	propext
+ConcreteSpec.Core.Exec.Demo.DState.mk.sizeOf_spec	
+ConcreteSpec.Core.Exec.Demo.E.arith.inj	
+ConcreteSpec.Core.Exec.Demo.E.arith.injEq	propext
+ConcreteSpec.Core.Exec.Demo.E.arith.sizeOf_spec	
+ConcreteSpec.Core.Exec.Demo.E.brecOn.eq	
+ConcreteSpec.Core.Exec.Demo.E.counter.sizeOf_spec	
+ConcreteSpec.Core.Exec.Demo.E.fail.inj	
+ConcreteSpec.Core.Exec.Demo.E.fail.injEq	propext
+ConcreteSpec.Core.Exec.Demo.E.fail.sizeOf_spec	
+ConcreteSpec.Core.Exec.Demo.E.lit.inj	
+ConcreteSpec.Core.Exec.Demo.E.lit.injEq	propext
+ConcreteSpec.Core.Exec.Demo.E.lit.sizeOf_spec	
+ConcreteSpec.Core.Exec.Demo.E.move.inj	
+ConcreteSpec.Core.Exec.Demo.E.move.injEq	propext
+ConcreteSpec.Core.Exec.Demo.E.move.sizeOf_spec	
+ConcreteSpec.Core.Exec.Demo.E.var.inj	
+ConcreteSpec.Core.Exec.Demo.E.var.injEq	propext
+ConcreteSpec.Core.Exec.Demo.E.var.sizeOf_spec	
+ConcreteSpec.Core.Exec.Demo.Pr.bump.sizeOf_spec	
+ConcreteSpec.Core.Exec.Demo.Pr.log.sizeOf_spec	
+ConcreteSpec.Core.Exec.Demo.T.int.sizeOf_spec	
+ConcreteSpec.Core.Exec.Demo.T.ofNat_ctorIdx	
+ConcreteSpec.Core.Exec.Demo.T.tok.sizeOf_spec	
+ConcreteSpec.Core.Exec.Demo.T.unit.sizeOf_spec	
+ConcreteSpec.Core.Exec.Demo.instDecidableEqDState.decEq._proof_1	
+ConcreteSpec.Core.Exec.Demo.instDecidableEqDState.decEq._proof_2	
+ConcreteSpec.Core.Exec.Demo.instDecidableEqDState.decEq._proof_3	
+ConcreteSpec.Core.Exec.Demo.instDecidableEqT._proof_1	
+ConcreteSpec.Core.Exec.Demo.instDecidableEqT._proof_2	
+ConcreteSpec.Core.Exec.Demo.logF._proof_1	
+ConcreteSpec.Core.Exec.DestroyProtocol.mk.inj	
+ConcreteSpec.Core.Exec.DestroyProtocol.mk.injEq	propext
+ConcreteSpec.Core.Exec.DestroyProtocol.mk.sizeOf_spec	
+ConcreteSpec.Core.Exec.DestroyProtocol.notCopy	
+ConcreteSpec.Core.Exec.DestroyProtocol.sig	
+ConcreteSpec.Core.Exec.Ending.badAnswer.sizeOf_spec	
+ConcreteSpec.Core.Exec.Ending.final.inj	
+ConcreteSpec.Core.Exec.Ending.final.injEq	propext
+ConcreteSpec.Core.Exec.Ending.final.sizeOf_spec	
+ConcreteSpec.Core.Exec.Ending.noAnswer.sizeOf_spec	
+ConcreteSpec.Core.Exec.Ending.outOfFuel.sizeOf_spec	
+ConcreteSpec.Core.Exec.Ending.stuck.sizeOf_spec	
+ConcreteSpec.Core.Exec.Exit.brk.inj	
+ConcreteSpec.Core.Exec.Exit.brk.injEq	propext
+ConcreteSpec.Core.Exec.Exit.brk.sizeOf_spec	
+ConcreteSpec.Core.Exec.Exit.cont.inj	
+ConcreteSpec.Core.Exec.Exit.cont.injEq	propext
+ConcreteSpec.Core.Exec.Exit.cont.sizeOf_spec	
+ConcreteSpec.Core.Exec.Exit.ret.inj	
+ConcreteSpec.Core.Exec.Exit.ret.injEq	propext
+ConcreteSpec.Core.Exec.Exit.ret.sizeOf_spec	
+ConcreteSpec.Core.Exec.Final.normal.sizeOf_spec	
+ConcreteSpec.Core.Exec.Final.returned.inj	
+ConcreteSpec.Core.Exec.Final.returned.injEq	propext
+ConcreteSpec.Core.Exec.Final.returned.sizeOf_spec	
+ConcreteSpec.Core.Exec.Final.trapped.inj	
+ConcreteSpec.Core.Exec.Final.trapped.injEq	propext
+ConcreteSpec.Core.Exec.Final.trapped.sizeOf_spec	
+ConcreteSpec.Core.Exec.Fn.mk.inj	
+ConcreteSpec.Core.Exec.Fn.mk.injEq	propext
+ConcreteSpec.Core.Exec.Fn.mk.sizeOf_spec	
+ConcreteSpec.Core.Exec.Frame.body.inj	
+ConcreteSpec.Core.Exec.Frame.body.injEq	propext
+ConcreteSpec.Core.Exec.Frame.body.sizeOf_spec	
+ConcreteSpec.Core.Exec.Frame.functionEnd.sizeOf_spec	
+ConcreteSpec.Core.Exec.Frame.resume.inj	
+ConcreteSpec.Core.Exec.Frame.resume.injEq	propext
+ConcreteSpec.Core.Exec.Frame.resume.sizeOf_spec	
+ConcreteSpec.Core.Exec.Frame.ret.inj	
+ConcreteSpec.Core.Exec.Frame.ret.injEq	propext
+ConcreteSpec.Core.Exec.Frame.ret.sizeOf_spec	
+ConcreteSpec.Core.Exec.Frame.scope.inj	
+ConcreteSpec.Core.Exec.Frame.scope.injEq	propext
+ConcreteSpec.Core.Exec.Frame.scope.sizeOf_spec	
+ConcreteSpec.Core.Exec.Frame.seq.inj	
+ConcreteSpec.Core.Exec.Frame.seq.injEq	propext
+ConcreteSpec.Core.Exec.Frame.seq.sizeOf_spec	
+ConcreteSpec.Core.Exec.Frame.test.inj	
+ConcreteSpec.Core.Exec.Frame.test.injEq	propext
+ConcreteSpec.Core.Exec.Frame.test.sizeOf_spec	
+ConcreteSpec.Core.Exec.Label.emit.inj	
+ConcreteSpec.Core.Exec.Label.emit.injEq	propext
+ConcreteSpec.Core.Exec.Label.emit.sizeOf_spec	
+ConcreteSpec.Core.Exec.Label.silent.sizeOf_spec	
+ConcreteSpec.Core.Exec.Life.bind.inj	
+ConcreteSpec.Core.Exec.Life.bind.injEq	propext
+ConcreteSpec.Core.Exec.Life.bind.sizeOf_spec	
+ConcreteSpec.Core.Exec.Life.drop.inj	
+ConcreteSpec.Core.Exec.Life.drop.injEq	propext
+ConcreteSpec.Core.Exec.Life.drop.sizeOf_spec	
+ConcreteSpec.Core.Exec.Life.enter.inj	
+ConcreteSpec.Core.Exec.Life.enter.injEq	propext
+ConcreteSpec.Core.Exec.Life.enter.sizeOf_spec	
+ConcreteSpec.Core.Exec.Life.leave.sizeOf_spec	
+ConcreteSpec.Core.Exec.Operands.mk.inj	
+ConcreteSpec.Core.Exec.Operands.mk.injEq	propext
+ConcreteSpec.Core.Exec.Operands.mk.sizeOf_spec	
+ConcreteSpec.Core.Exec.Out.next.inj	
+ConcreteSpec.Core.Exec.Out.next.injEq	propext
+ConcreteSpec.Core.Exec.Out.next.sizeOf_spec	
+ConcreteSpec.Core.Exec.Out.request.inj	
+ConcreteSpec.Core.Exec.Out.request.injEq	propext
+ConcreteSpec.Core.Exec.Out.request.sizeOf_spec	
+ConcreteSpec.Core.Exec.Part.elem.inj	
+ConcreteSpec.Core.Exec.Part.elem.injEq	propext
+ConcreteSpec.Core.Exec.Part.elem.sizeOf_spec	
+ConcreteSpec.Core.Exec.Part.key.inj	
+ConcreteSpec.Core.Exec.Part.key.injEq	propext
+ConcreteSpec.Core.Exec.Part.key.sizeOf_spec	
+ConcreteSpec.Core.Exec.Part.payload.sizeOf_spec	
+ConcreteSpec.Core.Exec.Part.storage.sizeOf_spec	
+ConcreteSpec.Core.Exec.Part.value.inj	
+ConcreteSpec.Core.Exec.Part.value.injEq	propext
+ConcreteSpec.Core.Exec.Part.value.sizeOf_spec	
+ConcreteSpec.Core.Exec.Pending.exit.inj	
+ConcreteSpec.Core.Exec.Pending.exit.injEq	propext
+ConcreteSpec.Core.Exec.Pending.exit.sizeOf_spec	
+ConcreteSpec.Core.Exec.Pending.fall.sizeOf_spec	
+ConcreteSpec.Core.Exec.Program.mk.inj	
+ConcreteSpec.Core.Exec.Program.mk.injEq	propext
+ConcreteSpec.Core.Exec.Program.mk.sizeOf_spec	
+ConcreteSpec.Core.Exec.Registered.brecOn	
+ConcreteSpec.Core.Exec.Report.mk.inj	
+ConcreteSpec.Core.Exec.Report.mk.injEq	propext
+ConcreteSpec.Core.Exec.Report.mk.sizeOf_spec	
+ConcreteSpec.Core.Exec.RunsAll.brecOn	propext
+ConcreteSpec.Core.Exec.Steps.brecOn	propext
+ConcreteSpec.Core.Exec.Stmt.abort.inj	
+ConcreteSpec.Core.Exec.Stmt.abort.injEq	propext
+ConcreteSpec.Core.Exec.Stmt.abort.sizeOf_spec	
+ConcreteSpec.Core.Exec.Stmt.assign.inj	
+ConcreteSpec.Core.Exec.Stmt.assign.injEq	propext
+ConcreteSpec.Core.Exec.Stmt.assign.sizeOf_spec	
+ConcreteSpec.Core.Exec.Stmt.bind.inj	
+ConcreteSpec.Core.Exec.Stmt.bind.injEq	propext
+ConcreteSpec.Core.Exec.Stmt.bind.sizeOf_spec	
+ConcreteSpec.Core.Exec.Stmt.block.inj	
+ConcreteSpec.Core.Exec.Stmt.block.injEq	propext
+ConcreteSpec.Core.Exec.Stmt.block.sizeOf_spec	
+ConcreteSpec.Core.Exec.Stmt.brecOn.eq	
+ConcreteSpec.Core.Exec.Stmt.brk.inj	
+ConcreteSpec.Core.Exec.Stmt.brk.injEq	propext
+ConcreteSpec.Core.Exec.Stmt.brk.sizeOf_spec	
+ConcreteSpec.Core.Exec.Stmt.call.inj	
+ConcreteSpec.Core.Exec.Stmt.call.injEq	propext
+ConcreteSpec.Core.Exec.Stmt.call.sizeOf_spec	
+ConcreteSpec.Core.Exec.Stmt.cond.inj	
+ConcreteSpec.Core.Exec.Stmt.cond.injEq	propext
+ConcreteSpec.Core.Exec.Stmt.cond.sizeOf_spec	
+ConcreteSpec.Core.Exec.Stmt.cont.inj	
+ConcreteSpec.Core.Exec.Stmt.cont.injEq	propext
+ConcreteSpec.Core.Exec.Stmt.cont.sizeOf_spec	
+ConcreteSpec.Core.Exec.Stmt.defer.inj	
+ConcreteSpec.Core.Exec.Stmt.defer.injEq	propext
+ConcreteSpec.Core.Exec.Stmt.defer.sizeOf_spec	
+ConcreteSpec.Core.Exec.Stmt.loop.inj	
+ConcreteSpec.Core.Exec.Stmt.loop.injEq	propext
+ConcreteSpec.Core.Exec.Stmt.loop.sizeOf_spec	
+ConcreteSpec.Core.Exec.Stmt.prim.inj	
+ConcreteSpec.Core.Exec.Stmt.prim.injEq	propext
+ConcreteSpec.Core.Exec.Stmt.prim.sizeOf_spec	
+ConcreteSpec.Core.Exec.Stmt.ret.inj	
+ConcreteSpec.Core.Exec.Stmt.ret.injEq	propext
+ConcreteSpec.Core.Exec.Stmt.ret.sizeOf_spec	
+ConcreteSpec.Core.Exec.Stmt.seq.inj	
+ConcreteSpec.Core.Exec.Stmt.seq.injEq	propext
+ConcreteSpec.Core.Exec.Stmt.seq.sizeOf_spec	
+ConcreteSpec.Core.Exec.Stmt.skip.sizeOf_spec	
+ConcreteSpec.Core.Exec.instDecidableEqExit.decEq._proof_1	
+ConcreteSpec.Core.Exec.instDecidableEqExit.decEq._proof_10	
+ConcreteSpec.Core.Exec.instDecidableEqExit.decEq._proof_11	
+ConcreteSpec.Core.Exec.instDecidableEqExit.decEq._proof_12	
+ConcreteSpec.Core.Exec.instDecidableEqExit.decEq._proof_2	
+ConcreteSpec.Core.Exec.instDecidableEqExit.decEq._proof_3	
+ConcreteSpec.Core.Exec.instDecidableEqExit.decEq._proof_4	
+ConcreteSpec.Core.Exec.instDecidableEqExit.decEq._proof_5	
+ConcreteSpec.Core.Exec.instDecidableEqExit.decEq._proof_6	
+ConcreteSpec.Core.Exec.instDecidableEqExit.decEq._proof_7	
+ConcreteSpec.Core.Exec.instDecidableEqExit.decEq._proof_8	
+ConcreteSpec.Core.Exec.instDecidableEqExit.decEq._proof_9	
+ConcreteSpec.Core.Exec.instDecidableEqFinal.decEq._proof_1	
+ConcreteSpec.Core.Exec.instDecidableEqFinal.decEq._proof_10	
+ConcreteSpec.Core.Exec.instDecidableEqFinal.decEq._proof_11	
+ConcreteSpec.Core.Exec.instDecidableEqFinal.decEq._proof_12	
+ConcreteSpec.Core.Exec.instDecidableEqFinal.decEq._proof_2	
+ConcreteSpec.Core.Exec.instDecidableEqFinal.decEq._proof_3	
+ConcreteSpec.Core.Exec.instDecidableEqFinal.decEq._proof_4	
+ConcreteSpec.Core.Exec.instDecidableEqFinal.decEq._proof_5	
+ConcreteSpec.Core.Exec.instDecidableEqFinal.decEq._proof_6	
+ConcreteSpec.Core.Exec.instDecidableEqFinal.decEq._proof_7	
+ConcreteSpec.Core.Exec.instDecidableEqFinal.decEq._proof_8	
+ConcreteSpec.Core.Exec.instDecidableEqFinal.decEq._proof_9	
+ConcreteSpec.Core.Exec.instDecidableEqPart.decEq._proof_1	
+ConcreteSpec.Core.Exec.instDecidableEqPart.decEq._proof_10	
+ConcreteSpec.Core.Exec.instDecidableEqPart.decEq._proof_11	
+ConcreteSpec.Core.Exec.instDecidableEqPart.decEq._proof_12	
+ConcreteSpec.Core.Exec.instDecidableEqPart.decEq._proof_13	
+ConcreteSpec.Core.Exec.instDecidableEqPart.decEq._proof_14	
+ConcreteSpec.Core.Exec.instDecidableEqPart.decEq._proof_15	
+ConcreteSpec.Core.Exec.instDecidableEqPart.decEq._proof_16	
+ConcreteSpec.Core.Exec.instDecidableEqPart.decEq._proof_17	
+ConcreteSpec.Core.Exec.instDecidableEqPart.decEq._proof_18	
+ConcreteSpec.Core.Exec.instDecidableEqPart.decEq._proof_19	
+ConcreteSpec.Core.Exec.instDecidableEqPart.decEq._proof_2	
+ConcreteSpec.Core.Exec.instDecidableEqPart.decEq._proof_20	
+ConcreteSpec.Core.Exec.instDecidableEqPart.decEq._proof_21	
+ConcreteSpec.Core.Exec.instDecidableEqPart.decEq._proof_22	
+ConcreteSpec.Core.Exec.instDecidableEqPart.decEq._proof_23	
+ConcreteSpec.Core.Exec.instDecidableEqPart.decEq._proof_24	
+ConcreteSpec.Core.Exec.instDecidableEqPart.decEq._proof_25	
+ConcreteSpec.Core.Exec.instDecidableEqPart.decEq._proof_26	
+ConcreteSpec.Core.Exec.instDecidableEqPart.decEq._proof_3	
+ConcreteSpec.Core.Exec.instDecidableEqPart.decEq._proof_4	
+ConcreteSpec.Core.Exec.instDecidableEqPart.decEq._proof_5	
+ConcreteSpec.Core.Exec.instDecidableEqPart.decEq._proof_6	
+ConcreteSpec.Core.Exec.instDecidableEqPart.decEq._proof_7	
+ConcreteSpec.Core.Exec.instDecidableEqPart.decEq._proof_8	
+ConcreteSpec.Core.Exec.instDecidableEqPart.decEq._proof_9	
+ConcreteSpec.Core.Exec.instDecidableEqPending.decEq._proof_1	
+ConcreteSpec.Core.Exec.instDecidableEqPending.decEq._proof_2	
+ConcreteSpec.Core.Exec.instDecidableEqPending.decEq._proof_3	
+ConcreteSpec.Core.Exec.instDecidableEqPending.decEq._proof_4	
+ConcreteSpec.Core.Exec.instDecidableEqPending.decEq._proof_5	
 ConcreteSpec.Core.FieldId.mk.inj	
 ConcreteSpec.Core.FieldId.mk.injEq	propext
 ConcreteSpec.Core.FieldId.mk.sizeOf_spec	

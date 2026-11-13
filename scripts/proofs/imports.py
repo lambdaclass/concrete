@@ -153,10 +153,10 @@ def controls(temp):
             'open ConcreteSpec\n'
             'def importControl := Core.AList.lookup (κ := Nat) (α := Nat)\n')
     good += 'def brandControl : Brand.STy := .heap 0\n'
-    scope = ('import ConcreteSpec.Spec.Slice1Syntax\n'
+    scope = ('import ConcreteSpec.Spec.Basics\n'
              'open ConcreteSpec\nnamespace ConcreteSpec\n'
              'def scopeControl : Name := ⟨"scope"⟩\n')
-    if dependencies(scope, temp) != ['ConcreteSpec.Spec.Slice1Syntax']:
+    if dependencies(scope, temp) != ['ConcreteSpec.Spec.Basics']:
         raise SystemExit('open namespace probe control failed')
     equation = ('open ConcreteSpec\nset_option linter.defProp false in def probeEq := @ConcreteSpec.runBody.eq_2\n')
     minimal = 'import ConcreteSpec.Spec.Slice1Semantics\n' + equation
