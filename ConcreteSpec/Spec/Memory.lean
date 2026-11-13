@@ -67,7 +67,7 @@ Held: Boolean encoding and its dependent laws/controls (ISS-0069); main's Spec/R
 is preserved without a second Boolean definition. Struct layout and further pointer-representation
 and pointer-byte mapping belong to F12/F33 and remain held (ISS-0070). U+FEFF scope
 and bare CR (ISS-0064), the five queued partial items (ISS-0065), path policy (ISS-0068),
-constant restrictions and SPARK-style character preconditions (ISS-0065, D4 queue) supply no rule here.
+and constant restrictions (ISS-0065, D4 queue) supply no rule here.
 No historical approval annotation is evidence. Block identities reuse Ident.BlockId; association
 lookup reuses Basics.AList. There are no local-variable fixtures in this module.
 

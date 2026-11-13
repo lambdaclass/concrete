@@ -11,5 +11,4 @@ constant-result controls with arithmetic, lookup, guard and state-update faults.
 bytes for all eight types agree with existing Rep on the existing profile.
 
 Hold Boolean encoding and dependent evidence under ISS-0069, preserving existing Rep behavior.
-Constant restrictions and SPARK-style character preconditions remain tracked by ISS-0065's D4
-queue. Remove the duplicate extraction disposition document.
+Constant restrictions remain tracked by ISS-0065's D4 queue. Remove the duplicate extraction disposition document.
