@@ -15,3 +15,4 @@ import ConcreteSpec.Proofs.LocalIdentity
 import ConcreteSpec.Proofs.Scalar
 import ConcreteSpec.Diagnostics.ScalarFixtures
 import ConcreteSpec.Proofs.Ident
+import ConcreteSpec.Proofs.Exec
