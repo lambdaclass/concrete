@@ -1121,16 +1121,21 @@ ConcreteSpec.Core.Hybrid.materialize_frame	Quot.sound propext
 ConcreteSpec.Core.Hybrid.materialize_idempotent	Quot.sound propext
 ConcreteSpec.Core.Hybrid.materialize_projection	Quot.sound propext
 ConcreteSpec.Core.Hybrid.materialize_read	Classical.choice Quot.sound propext
-ConcreteSpec.Core.Hybrid.materialize_read._proof_1_13	Quot.sound propext
+ConcreteSpec.Core.Hybrid.materialize_read._proof_1_8	Quot.sound propext
+ConcreteSpec.Core.Hybrid.materialize_read._proof_1_9	Quot.sound propext
 ConcreteSpec.Core.Hybrid.materialize_reuse	Quot.sound propext
 ConcreteSpec.Core.Hybrid.materialize_wellFormed	Quot.sound propext
 ConcreteSpec.Core.Hybrid.memory_wellFormed	propext
 ConcreteSpec.Core.Hybrid.projected_transport	propext
-ConcreteSpec.Core.Hybrid.rangesDisjoint_separated	Quot.sound propext
-ConcreteSpec.Core.Hybrid.rangesDisjoint_separated._proof_1_2	Quot.sound propext
-ConcreteSpec.Core.Hybrid.rangesDisjoint_separated._proof_1_3	Quot.sound propext
-ConcreteSpec.Core.Hybrid.rangesDisjoint_separated._proof_1_4	Quot.sound propext
-ConcreteSpec.Core.Hybrid.rangesDisjoint_separated._proof_1_5	Quot.sound propext
+ConcreteSpec.Core.Hybrid.rangesDisjoint_separated	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Hybrid.rangesDisjoint_separated._proof_1_19	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Hybrid.rangesDisjoint_separated._proof_1_20	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Hybrid.rangesDisjoint_separated._proof_1_21	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Hybrid.rangesDisjoint_separated._proof_1_22	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Hybrid.rangesDisjoint_separated._proof_1_23	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Hybrid.rangesDisjoint_separated._proof_1_24	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Hybrid.rangesDisjoint_separated._proof_1_25	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Hybrid.rangesDisjoint_separated._proof_1_26	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Hybrid.rawWrite_read	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Hybrid.rawWrite_wellFormed	Quot.sound propext
 ConcreteSpec.Core.Hybrid.read_structured	propext
@@ -1152,7 +1157,7 @@ ConcreteSpec.Core.Hybrid.sliceIntTy.eq_7
 ConcreteSpec.Core.Hybrid.sliceIntTy.eq_8	
 ConcreteSpec.Core.Hybrid.typed_store_frame	Quot.sound propext
 ConcreteSpec.Core.Hybrid.write_frame	Quot.sound propext
-ConcreteSpec.Core.Hybrid.write_frame_disjoint	Quot.sound propext
+ConcreteSpec.Core.Hybrid.write_frame_disjoint	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Hybrid.write_read	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Hybrid.write_wellFormed	Quot.sound propext
 ConcreteSpec.Core.InstanceId.mk.inj	
@@ -3004,6 +3009,8 @@ _private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Rep.decodeNat.match_1.eq_3
 _private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Rep.decodeScalar.match_1.eq_1	propext
 _private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Rep.decodeScalar.match_1.eq_2	propext
 _private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Rep.decodeScalar.match_1.eq_3	propext
+_private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Rep.scalarSize.match_1.eq_1	
+_private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Rep.scalarSize.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.instReprIntTy.repr.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.instReprIntTy.repr.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.instReprIntTy.repr.match_1.eq_3	

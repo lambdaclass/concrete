@@ -29,7 +29,7 @@ Extraction disposition: the complete Spec/Hybrid and Proofs/Hybrid command popul
 integration-head aa44140a3 are adapted here. Shared memory, scalar and execution definitions
 are imported. Boolean encoding/decoding and their dependent examples are owner-held under
 ISS-0069; controls instead exercise the independent u8 rule. Character and unit byte layout
-are unsupported rather than inferred from their scalar constructors. The source had no admitted
+are held under ISS-XXXX for missing layout authority, rather than inferred from scalar constructors. The source had no admitted
 struct or pointer cell codec; neither is added (ISS-0070). Inherited approval receipts are retired.
 The source's broad invariant mutants are replaced with allocation-counter-only mutations;
 raw-write/read correspondence and agreement with existing Spec/Rep are added explicitly.
@@ -37,10 +37,14 @@ raw-write/read correspondence and agreement with existing Spec/Rep are added exp
 namespace ConcreteSpec.Core.Hybrid
 open ConcreteSpec.Core.Mem
 
-/-- Representation lemma. Scalar encoding produces sizeof v.ty bytes. -/
-@[simp] theorem encode_length (tgt : Target) (v : Value) :
-    (encode tgt v).length = sizeof v.ty := by
-  cases v <;> simp [encode, Value.ty, CVal.ty, sizeof]
+/-- Representation lemma. An admitted codec has exactly the shared layout's byte count. -/
+@[simp] theorem encode_length (tgt : Target) (v : Value) (hv : v.Storable) :
+    sizeof v.ty = some (encode tgt v).length := by
+  cases v with
+  | int t n => cases t <;> simp [sizeof, Value.ty, CVal.ty, encode, sliceIntTy, ConcreteSpec.Rep.scalarSize, ConcreteSpec.IntTy.bits, intBytes, IntTy.bits]
+  | bool b => exact False.elim (hv.2.2.1 rfl)
+  | unit => exact False.elim (hv.2.1 rfl)
+  | char c => exact False.elim (hv.2.2.2 rfl)
 
 /-- Helper. The two byte containers enumerate the same little-endian octets. -/
 private theorem slice_leBytes (w n : Nat) :
@@ -153,11 +157,12 @@ theorem write_read (tgt : Target) (st st' : State) (hw : st.memory.WellFormed tg
           simp [hm] at h
           subst st'
           have hl := store_load tgt st.memory m hw r.ptr (encode tgt v) r.align hm
-          rw [encode_length, hv.1] at hl
+          have hsize := encode_length tgt v hv.2
+          rw [hv.1] at hsize
           simp only [State.read, State.places_memory, hc]
           dsimp
           rw [hs]
-          dsimp
+          simp only [hsize, Option.bind_some]
           rw [hl]
           dsimp
           rw [← hv.1]
@@ -170,9 +175,10 @@ including padding, initialization and pointer fragments. -/
 theorem typed_store_frame (tgt : Target) (st : State) (hw : st.WellFormed tgt)
     (p : Place) (t : Ty) (r : Range) (v : Value) (b : BlockId) (off i : Nat) (x : Block)
     (hc : st.places p = some ⟨t, .materialized r⟩)
-    (ha : st.memory.access tgt r.ptr (sizeof t) r.align = some (some (b, off)))
+    (n : Nat) (hsize : sizeof t = some n)
+    (ha : st.memory.access tgt r.ptr n r.align = some (some (b, off)))
     (hx : st.memory.block b = some x)
-    (hi : i < off ∨ off + sizeof t ≤ i) :
+    (hi : i < off ∨ off + n ≤ i) :
     match st.write tgt p v with
     | some st' => (st'.memory.block b).map (fun y => y.bytes[i]?) = some (x.bytes[i]?)
     | none => True := by
@@ -189,8 +195,8 @@ theorem typed_store_frame (tgt : Target) (st : State) (hw : st.WellFormed tgt)
         simp [hm] at h
         subst st'
         have hsf := store_same_block_frame tgt st.memory hw.memory r.ptr (encode tgt v)
-          r.align b off i x (by simpa [encode_length, hv.1] using ha) hx
-          (by simpa [encode_length, hv.1] using hi)
+          r.align b off i x (by have he := encode_length tgt v hv.2; rw [hv.1, hsize] at he; cases he; exact ha) hx
+          (by have he := encode_length tgt v hv.2; rw [hv.1, hsize] at he; cases he; exact hi)
         simpa [hm] using hsf
     next => simp at h
 
@@ -344,7 +350,7 @@ An authorized whole-active-range raw write determines the next typed read, inclu
 failure. There is no stale structured fallback after materialization. -/
 theorem rawWrite_read (tgt : Target) (st st' : State) (hw : st.memory.WellFormed tgt)
     (p : Place) (t : Ty) (r : Range) (bs : List MByte)
-    (hc : st.places p = some ⟨t, .materialized r⟩) (hlen : bs.length = sizeof t)
+    (hc : st.places p = some ⟨t, .materialized r⟩) (hlen : sizeof t = some bs.length)
     (h : st.rawWrite tgt r.ptr bs r.align = some st') :
     st'.read tgt p = decode tgt t bs := by
   unfold State.rawWrite at h
@@ -354,8 +360,7 @@ theorem rawWrite_read (tgt : Target) (st st' : State) (hw : st.memory.WellFormed
     simp [hm] at h
     subst st'
     have hl := store_load tgt st.memory m hw r.ptr bs r.align hm
-    rw [hlen] at hl
-    simp [State.read, hc, hl]
+    simp [State.read, hc, hlen, hl]
 
 /-- Helper (inversion). Successful materialization either reuses the existing cell or allocates and fills one
 fresh block. This decomposition keeps the later laws independent of monadic elaboration. -/
@@ -426,7 +431,7 @@ theorem materialize_wellFormed (tgt : Target) (st : State) (hw : st.WellFormed t
     obtain ⟨r, st'⟩ := pair
     rcases materialize_cases tgt st st' p s base align padding r h with reused | fresh
     · obtain ⟨_, _, _, rfl⟩ := reused; exact hw
-    · obtain ⟨c, v, b, m, m', _, _, ht, _, ha, hm, rfl, rfl⟩ := fresh
+    · obtain ⟨c, v, b, m, m', _, _, ht, hv, ha, hm, rfl, rfl⟩ := fresh
       have ham := alloc_wellFormed tgt st.memory hw.memory s base (encode tgt v ++ padding).length align
       rw [ha] at ham
       have halloc : ({ st with memory := m } : State).WellFormed tgt := by
@@ -443,7 +448,7 @@ theorem materialize_wellFormed (tgt : Target) (st : State) (hw : st.WellFormed t
       rw [ha] at hab
       refine ⟨b, candidate s base (encode tgt v ++ padding).length align, rfl,
         hab, rfl, rfl, rfl, rfl, ?_⟩
-      simp [List.length_append, encode_length, ht]
+      exact ⟨(encode tgt v).length, ht ▸ encode_length tgt v hv, by simp⟩
 
 /-- Law (authority: docs/decisions.md#foundation-q2; Q3.11, Q3.7; integer representation also #foundation-q3 and #od126).
 (subject `ConcreteSpec.Core.Hybrid.State.expose`). Exposing a typed place preserves both layers of the invariant. -/
@@ -505,8 +510,8 @@ theorem write_frame (tgt : Target) (st st' : State) (p q : Place) (v : Value)
             cases hd : d.storage with
             | structured w => simp [State.read, hq, hd]
             | materialized s =>
-              have hh := store_load_other tgt st.memory m r.ptr s.ptr (encode tgt v)
-                r.align (sizeof d.ty) s.align hm (Ne.symm (hsep c d r s hc hq hs hd))
+              have hh (n : Nat) := store_load_other tgt st.memory m r.ptr s.ptr (encode tgt v)
+                r.align n s.align hm (Ne.symm (hsep c d r s hc hq hs hd))
               simp [State.read, hq, hd, hh]
     next => simp at h
 
@@ -520,16 +525,16 @@ theorem rangesDisjoint_separated (tgt : Target) (st : State) (hw : st.WellFormed
   have hs := hw.projected q d hq
   simp only [Cell.Projected, hcr] at hr
   simp only [Cell.Projected, hds] at hs
-  obtain ⟨b, x, hpb, hbx, hrspace, hrbase, hrsize, _, hrfit⟩ := hr
+  obtain ⟨b, x, hpb, hbx, hrspace, hrbase, hrsize, _, n, hn, hrfit⟩ := hr
   obtain ⟨b', y, hpb', hby, hsspace, hsbase, hssize, _⟩ := hs
   have hbb : b = b' := by rw [hpb, hpb'] at he; exact Option.some.inj he
   subst b'
   rw [hbx] at hby
   cases hby
-  have hpos : 0 < sizeof c.ty := by
+  have hpos : 0 < n := by
     have hct := ht c hc
     cases hc' : c.ty with
-    | int t => cases t <;> decide
+    | int t => cases t <;> simp [hc', sizeof, sliceIntTy, ConcreteSpec.Rep.scalarSize, ConcreteSpec.IntTy.bits] at hn <;> omega
     | bool => exact False.elim (hct.2.1 hc')
     | unit => exact False.elim (hct.1 hc')
     | char => exact False.elim (hct.2.2 hc')
@@ -578,16 +583,16 @@ theorem materialize_frame (tgt : Target) (st st' : State) (hw : st.WellFormed tg
         obtain ⟨old, x, hp, hx, _⟩ := hproj
         have hbo := alloc_ne_existing tgt st.memory hw.memory space base (encode tgt v ++ padding).length align old x hx
         rw [ha] at hbo
-        have hload : m.load tgt s.ptr (sizeof d.ty) s.align =
-            st.memory.load tgt s.ptr (sizeof d.ty) s.align := by
+        have hload (n : Nat) : m.load tgt s.ptr n s.align =
+            st.memory.load tgt s.ptr n s.align := by
           apply load_congr
           intro old' hp'
           have he : old' = old := by rw [hp] at hp'; exact (Option.some.inj hp').symm
           subst old'
           obtain ⟨_, rfl, _⟩ := alloc_result tgt _ space base _ align b m ha
           simp [Memory.block, AList.lookup, hbo]
-        have hstore := store_load_other tgt m m' ⟨space, base, some b⟩ s.ptr
-          (encode tgt v ++ padding) align (sizeof d.ty) s.align hm
+        have hstore (n : Nat) := store_load_other tgt m m' ⟨space, base, some b⟩ s.ptr
+          (encode tgt v ++ padding) align n s.align hm
           (by simpa only [hp, ne_eq, Option.some.injEq] using Ne.symm hbo)
         simp [State.read, Ne.symm hne, hq, hd, hstore, hload]
 
@@ -617,7 +622,7 @@ theorem expose_frame (tgt : Target) (st st' : State) (hw : st.WellFormed tgt)
         cases hd : d.storage with
         | structured v => simp [State.read, hq, hd]
         | materialized s =>
-          simp [State.read, hq, hd, expose_load tgt _ _ r'.ptr s.ptr (sizeof d.ty) s.align he]
+          simp [State.read, hq, hd, expose_load tgt _ _ r'.ptr s.ptr _ s.align he]
 
 /-- Law (authority: docs/decisions.md#foundation-q2; Q3.11, Q3.7; integer representation also #foundation-q3 and #od126).
 (subject `ConcreteSpec.Core.Hybrid.State.read`). Materialization preserves the value read from a place, including its first allocation. -/
@@ -635,19 +640,19 @@ theorem materialize_read (tgt : Target) (st st' : State) (hw : st.memory.WellFor
     have ham := alloc_wellFormed tgt st.memory hw space base (encode tgt v ++ padding).length align
     rw [ha] at ham
     have hl := store_load tgt m m' ham ⟨space, base, some b⟩ (encode tgt v ++ padding) align hm
-    have hpos : 0 < sizeof v.ty := by
+    have hpos : 0 < (encode tgt v).length := by
       cases v with
-      | int t n => cases t <;> simp [Value.ty, CVal.ty, sizeof, intBytes, IntTy.bits]
+      | int t n => cases t <;> simp [encode, encodeInt, intBytes, IntTy.bits, leBytes_length]
       | bool b => exact False.elim (hv.2.2.1 rfl)
       | unit => exact False.elim (hv.2.1 rfl)
       | char c => exact False.elim (hv.2.2.2 rfl)
     have hshort := load_prefix tgt m' ⟨space, base, some b⟩
-      (encode tgt v ++ padding).length (sizeof v.ty) align (encode tgt v ++ padding)
-      (by simp [encode_length]; omega) (by omega) (by simp) hl
-    have htake : (encode tgt v ++ padding).take (sizeof v.ty) = encode tgt v := by
-      rw [← encode_length tgt v]; simp
+      (encode tgt v ++ padding).length ((encode tgt v).length) align (encode tgt v ++ padding)
+      (by simp only [List.length_append]; omega) (by omega) (by simp) hl
+    have htake : (encode tgt v ++ padding).take ((encode tgt v).length) = encode tgt v := by
+      simp
     rw [htake] at hshort
-    simpa [State.read, hshort, ← ht, Rep] using (rep_roundtrip tgt v hv)
+    simpa [State.read, hshort, ← ht, encode_length tgt v hv, Rep] using (rep_roundtrip tgt v hv)
 
 
 namespace Audit
@@ -676,30 +681,60 @@ def matExposedState : State :=
 def forgetFreshness (st : State) : State :=
   { st with memory := { st.memory with next := 0 } }
 
-def badRep : Target → Ty → List MByte → Value → Prop := fun _ _ _ _ => False
-def badEncode : Target → Value → List MByte := fun _ _ => []
-def badDecodeUnit : Target → Ty → List MByte → Option Value := fun _ _ _ => some .unit
-def badReadNone : Target → State → Place → Option Value := fun _ _ _ => none
-def badReadStructOnly : Target → State → Place → Option Value :=
-  fun tgt st p => if st.memory.next == 0 then st.read tgt p else none
-def badMaterializeNone : Target → State → Place → AddrSpace → Nat → Nat → List MByte →
-    Option (Range × State) := fun _ _ _ _ _ _ _ => none
-def badMaterializeEmpty : Target → State → Place → AddrSpace → Nat → Nat → List MByte →
-    Option (Range × State) :=
-  fun tgt st p s base align pad =>
-    (st.materialize tgt p s base align pad).map fun (r, out) =>
-      (r, { out with cells := out.cells.filter (fun e => e.1 != p) })
-def badMaterializeAddressGate : Target → State → Place → AddrSpace → Nat → Nat → List MByte →
-    Option (Range × State) :=
-  fun tgt st p s base align pad => if base == 40 then st.materialize tgt p s base align pad else none
+/-- Wrong relation: compare integer bytes with the successor of the requested value. -/
+def badRep (tgt : Target) (t : Ty) (bs : List MByte) (v : Value) : Prop :=
+  match v with
+  | .int it n => Rep tgt t bs (.int it (n + 1))
+  | _ => Rep tgt t bs v
+/-- Wrong codec: an off-by-one integer payload. -/
+def badEncode (tgt : Target) : Value → List MByte
+  | .int t n => encodeInt tgt t (n + 1)
+  | v => encode tgt v
+/-- Wrong decoder: erase the decoded type by returning unit on success. -/
+def badDecodeUnit (tgt : Target) (t : Ty) (bs : List MByte) : Option Value :=
+  (decode tgt t bs).map (fun _ => .unit)
+/-- Wrong reader: dispatch only to the byte-storage branch, losing structured values. -/
+def badReadNone (tgt : Target) (st : State) (p : Place) : Option Value := do
+  let c ← st.places p
+  match c.storage with
+  | .structured _ => none
+  | .materialized _ => st.read tgt p
+/-- Wrong reader: dispatch only to structured storage, losing materialized values. -/
+def badReadStructOnly (tgt : Target) (st : State) (p : Place) : Option Value := do
+  let c ← st.places p
+  match c.storage with
+  | .structured _ => st.read tgt p
+  | .materialized _ => none
+/-- Wrong materializer: decode an existing mapping and allocate it again instead of reusing it.
+The first structured allocation is unchanged; only the reuse branch is faulty. -/
+def badMaterializeReallocate (tgt : Target) (st : State) (p : Place) (s : AddrSpace)
+    (base align : Nat) (pad : List MByte) : Option (Range × State) := do
+  let c ← st.places p
+  match c.storage with
+  | .structured _ => st.materialize tgt p s base align pad
+  | .materialized _ =>
+    let v ← st.read tgt p
+    (st.set p { c with storage := .structured v }).materialize tgt p s base align pad
+/-- Wrong materializer: allocate the bytes but forget to publish the place's new storage form. -/
+def badMaterializeEmpty (tgt : Target) (st : State) (p : Place) (s : AddrSpace)
+    (base align : Nat) (pad : List MByte) : Option (Range × State) :=
+  (st.materialize tgt p s base align pad).map fun (r, out) =>
+    (r, { out with cells := st.cells })
 def badMaterializeWf : Target → State → Place → AddrSpace → Nat → Nat → List MByte →
     Option (Range × State) :=
   fun tgt st p s base align pad =>
     (st.materialize tgt p s base align pad).map fun (r, out) => (r, forgetFreshness out)
-def badWriteClobber : Target → State → Place → Value → Option State :=
-  fun _ _ _ _ =>
-    some { after with memory := after.memory.modify ⟨0⟩ fun x =>
-      { x with bytes := [.init 1 none, .init 0 none, .uninit] } }
+/-- Wrong writer: clear the trailing bytes of the containing block after an active write. -/
+def badWriteClobber (tgt : Target) (st : State) (p : Place) (v : Value) : Option State := do
+  let out ← st.write tgt p v
+  let c ← out.places p
+  match c.storage with
+  | .structured _ => some out
+  | .materialized r =>
+    let b ← r.ptr.prov
+    pure { out with memory := out.memory.modify b fun x =>
+      { x with bytes := x.bytes.take (encode tgt v).length ++
+          List.replicate (x.size - (encode tgt v).length) (.init 0 none) } }
 def badWriteWf : Target → State → Place → Value → Option State := fun tgt st p v => (st.write tgt p v).map forgetFreshness
 def badRawWriteWf : Target → State → Ptr → List MByte → Nat → Option State :=
   fun tgt st p bs a => (st.rawWrite tgt p bs a).map forgetFreshness
@@ -746,7 +781,7 @@ example : Rep linuxX8664 (Value.ty (.int .u8 1)) (encode linuxX8664 (.int .u8 1)
 /-- Planted (law `ConcreteSpec.Core.Hybrid.rep_roundtrip`, case `u8One`, subject `ConcreteSpec.Core.Hybrid.Rep`, mutant `ConcreteSpec.Core.Hybrid.Audit.badRep`). -/
 example : Value.Storable (.int .u8 1) ∧
     ¬ badRep linuxX8664 (Value.ty (.int .u8 1)) (encode linuxX8664 (.int .u8 1)) (.int .u8 1) :=
-  ⟨by decide, id⟩
+  ⟨by decide, by intro h; cases h⟩
 
 /-- Planted (law `ConcreteSpec.Core.Hybrid.rep_roundtrip`, case `u8One`, subject `ConcreteSpec.Core.Hybrid.encode`, mutant `ConcreteSpec.Core.Hybrid.Audit.badEncode`). -/
 example : Value.Storable (.int .u8 1) ∧
@@ -764,7 +799,7 @@ example : match decode linuxX8664 (.int .u8) [.init 1 none] with
 example : ¬ (match badDecodeUnit linuxX8664 (.int .u8) [.init 1 none] with
     | some v => v.ty = (.int .u8) ∧ v.Storable
     | none => True) := by
-  dsimp [badDecodeUnit]
+  change ¬ (CTy.unit = CTy.int IntTy.u8 ∧ Value.Storable .unit)
   decide
 
 -- 3. read_structured
@@ -783,9 +818,9 @@ example : structState.places ⟨0⟩ = some ⟨(.int .u8), .structured (.int .u8
 example : before.materialize linuxX8664 ⟨0⟩ ⟨0⟩ 60 1 [] = some (range, before) :=
   materialize_reuse linuxX8664 before ⟨0⟩ (.int .u8) range rfl ⟨0⟩ 60 1 []
 
-/-- Planted (law `ConcreteSpec.Core.Hybrid.materialize_reuse`, case `alreadyMat`, subject `ConcreteSpec.Core.Hybrid.State.materialize`, mutant `ConcreteSpec.Core.Hybrid.Audit.badMaterializeNone`). -/
-example : before.places ⟨0⟩ = some ⟨(.int .u8), .materialized range⟩ ∧
-    ¬ (badMaterializeNone linuxX8664 before ⟨0⟩ ⟨0⟩ 60 1 [] = some (range, before)) :=
+/-- Planted (law `ConcreteSpec.Core.Hybrid.materialize_reuse`, case `alreadyMat`, subject `ConcreteSpec.Core.Hybrid.State.materialize`, mutant `ConcreteSpec.Core.Hybrid.Audit.badMaterializeReallocate`). -/
+example : matState.places ⟨0⟩ = some ⟨(.int .u8), .materialized matRange⟩ ∧
+    ¬ (badMaterializeReallocate linuxX8664 matState ⟨0⟩ ⟨0⟩ 60 1 [] = some (matRange, matState)) :=
   ⟨rfl, by intro h; cases h⟩
 
 -- 5. write_read
@@ -793,10 +828,10 @@ example : before.places ⟨0⟩ = some ⟨(.int .u8), .materialized range⟩ ∧
 example : after.read linuxX8664 ⟨0⟩ = some (.int .u8 1) :=
   write_read linuxX8664 before after before_wf.memory ⟨0⟩ (.int .u8 1) rfl
 
-/-- Planted (law `ConcreteSpec.Core.Hybrid.write_read`, case `u8One`, subject `ConcreteSpec.Core.Hybrid.State.read`, mutant `ConcreteSpec.Core.Hybrid.Audit.badReadNone`). -/
+/-- Planted (law `ConcreteSpec.Core.Hybrid.write_read`, case `u8One`, subject `ConcreteSpec.Core.Hybrid.State.read`, mutant `ConcreteSpec.Core.Hybrid.Audit.badReadStructOnly`). -/
 example : before.memory.WellFormed linuxX8664 ∧
     before.write linuxX8664 ⟨0⟩ (.int .u8 1) = some after ∧
-    ¬ (badReadNone linuxX8664 after ⟨0⟩ = some (.int .u8 1)) :=
+    ¬ (badReadStructOnly linuxX8664 after ⟨0⟩ = some (.int .u8 1)) :=
   ⟨before_wf.memory, rfl, by decide⟩
 
 -- 6. typed_store_frame
@@ -806,19 +841,19 @@ example : match before.write linuxX8664 ⟨0⟩ (.int .u8 1) with
         some ((candidate ⟨0⟩ 40 3 1).bytes[1]?)
     | none => True :=
   typed_store_frame linuxX8664 before before_wf ⟨0⟩ (.int .u8) range (.int .u8 1) ⟨0⟩ 0 1
-    (candidate ⟨0⟩ 40 3 1) rfl rfl rfl (.inr (by decide))
+    (candidate ⟨0⟩ 40 3 1) rfl 1 rfl rfl rfl (.inr (by decide))
 
 /-- Planted (law `ConcreteSpec.Core.Hybrid.typed_store_frame`, case `trailingPad`, subject `ConcreteSpec.Core.Hybrid.State.write`, mutant `ConcreteSpec.Core.Hybrid.Audit.badWriteClobber`). A typed write mutated to initialize trailing padding to zero violates the frame at byte 1 of the same well-formed state. -/
 example : before.WellFormed linuxX8664 ∧
     before.places ⟨0⟩ = some ⟨(.int .u8), .materialized range⟩ ∧
-    before.memory.access linuxX8664 range.ptr (sizeof (.int .u8)) range.align = some (some (⟨0⟩, 0)) ∧
+    before.memory.access linuxX8664 range.ptr 1 range.align = some (some (⟨0⟩, 0)) ∧
     before.memory.block ⟨0⟩ = some (candidate ⟨0⟩ 40 3 1) ∧
-    (1 < 0 ∨ 0 + sizeof (.int .u8) ≤ 1) ∧
+    (1 < 0 ∨ 0 + 1 ≤ 1) ∧
     ¬ (match badWriteClobber linuxX8664 before ⟨0⟩ (.int .u8 1) with
       | some st' => (st'.memory.block ⟨0⟩).map (fun y => y.bytes[1]?) =
           some ((candidate ⟨0⟩ 40 3 1).bytes[1]?)
       | none => True) :=
-  ⟨before_wf, rfl, rfl, rfl, .inr (by decide), by dsimp [badWriteClobber]; decide⟩
+  ⟨before_wf, rfl, rfl, rfl, .inr (by decide), by intro h; cases h⟩
 
 -- 7. materialize_projection
 /-- Instance (law `ConcreteSpec.Core.Hybrid.materialize_projection`, case `firstMat`). -/
@@ -839,18 +874,13 @@ example : ¬ (match badMaterializeEmpty linuxX8664 structState ⟨0⟩ ⟨0⟩ 4
 example : before.materialize linuxX8664 ⟨0⟩ ⟨0⟩ 60 1 [] = some (range, before) :=
   materialize_idempotent linuxX8664 before before ⟨0⟩ ⟨0⟩ ⟨0⟩ 40 1 60 1 [] [] range rfl
 
-/-- Planted (law `ConcreteSpec.Core.Hybrid.materialize_idempotent`, case `secondCall`, subject `ConcreteSpec.Core.Hybrid.State.materialize`, mutant `ConcreteSpec.Core.Hybrid.Audit.badMaterializeAddressGate`). -/
-example : badMaterializeAddressGate linuxX8664 before ⟨0⟩ ⟨0⟩ 40 1 [] = some (range, before) ∧
-    ¬ (badMaterializeAddressGate linuxX8664 before ⟨0⟩ ⟨0⟩ 60 1 [] = some (range, before)) :=
-  ⟨rfl, by intro h; cases h⟩
-
 /-- Instance (law `ConcreteSpec.Core.Hybrid.materialize_idempotent`, case `firstAllocation`). The first call allocates and initializes storage; a different second request reuses it. -/
 example : matState.materialize linuxX8664 ⟨0⟩ ⟨0⟩ 60 1 [] = some (matRange, matState) :=
   materialize_idempotent linuxX8664 structState matState ⟨0⟩ ⟨0⟩ ⟨0⟩
     40 1 60 1 [] [] matRange rfl
-/-- Planted (law `ConcreteSpec.Core.Hybrid.materialize_idempotent`, case `firstAllocation`, subject `ConcreteSpec.Core.Hybrid.State.materialize`, mutant `ConcreteSpec.Core.Hybrid.Audit.badMaterializeAddressGate`). -/
-example : badMaterializeAddressGate linuxX8664 structState ⟨0⟩ ⟨0⟩ 40 1 [] = some (matRange, matState) ∧
-    ¬ (badMaterializeAddressGate linuxX8664 matState ⟨0⟩ ⟨0⟩ 60 1 [] = some (matRange, matState)) :=
+/-- Planted (law `ConcreteSpec.Core.Hybrid.materialize_idempotent`, case `firstAllocation`, subject `ConcreteSpec.Core.Hybrid.State.materialize`, mutant `ConcreteSpec.Core.Hybrid.Audit.badMaterializeReallocate`). -/
+example : badMaterializeReallocate linuxX8664 structState ⟨0⟩ ⟨0⟩ 40 1 [] = some (matRange, matState) ∧
+    ¬ (badMaterializeReallocate linuxX8664 matState ⟨0⟩ ⟨0⟩ 60 1 [] = some (matRange, matState)) :=
   ⟨rfl, by intro h; cases h⟩
 
 -- 9. write_wellFormed
@@ -959,16 +989,17 @@ private theorem before_disjoint : before.RangesDisjoint ⟨0⟩ ⟨1⟩ := by
   cases hr; cases hs
   exact .inr (.inr (.inr (.inl (by decide))))
 
-/-- Corrupt the actual observed value by confusing the two live projections. -/
-def badReadDiff : Target → State → Place → Option Value :=
-  fun tgt st q => if q = ⟨1⟩ then st.read tgt ⟨0⟩ else st.read tgt q
-/-- Corrupt the observed integer when a separate place becomes materialized. -/
-def badReadEmptyDiff : Target → State → Place → Option Value :=
-  fun tgt st q => if q = ⟨1⟩ then
-    match st.places ⟨0⟩ with
-    | some ⟨_, .materialized _⟩ => some (.int .u8 0)
-    | _ => st.read tgt q
-  else st.read tgt q
+/-- Wrong projection lookup: use the newest materialized entry for every byte read.
+Structured entries are skipped, so materializing an unrelated cell can redirect a read. -/
+def badReadDiff (tgt : Target) (st : State) (q : Place) : Option Value :=
+  match st.cells with
+  | (_, ⟨t, .materialized r⟩) :: _ => do
+    let n ← sizeof t
+    let bs ← st.memory.load tgt r.ptr n r.align
+    decode tgt t bs
+  | _ => st.read tgt q
+
+abbrev badReadEmptyDiff := badReadDiff
 
 /-- Instance (laws `write_frame`, `materialize_frame`, `expose_frame`). The observed place decodes successfully before and after each transition. -/
 example : before.read linuxX8664 ⟨1⟩ = some (.int .u8 1) ∧
@@ -1046,7 +1077,12 @@ def rawAfter : State :=
   (matState.rawWrite linuxX8664 matRange.ptr [.init 2 none] 1).getD matState
 
 /-- Wrong rule: keep reading the old value after a raw overwrite. -/
-def staleRead (_tgt : Target) (_st : State) (_p : Place) : Option Value := some (.int .u8 1)
+def staleRead (tgt : Target) (st : State) (p : Place) : Option Value :=
+  match st.cells.find? (fun e => e.1 == p && match e.2.storage with
+    | .structured _ => true
+    | .materialized _ => false) with
+  | some (_, ⟨_, .structured v⟩) => some v
+  | _ => st.read tgt p
 
 /-- Instance (law `ConcreteSpec.Core.Hybrid.rawWrite_read`, case `overwrite`). -/
 example : rawAfter.read linuxX8664 ⟨0⟩ = decode linuxX8664 (.int .u8) [.init 2 none] :=
@@ -1058,7 +1094,7 @@ example : rawAfter.read linuxX8664 ⟨0⟩ = decode linuxX8664 (.int .u8) [.init
 well-formed state, projection, byte count and successful raw write reject a stale typed read. -/
 example : matState.memory.WellFormed linuxX8664 ∧
     matState.places ⟨0⟩ = some ⟨.int .u8, .materialized matRange⟩ ∧
-    ([MByte.init 2 none].length = sizeof (.int .u8)) ∧
+    (sizeof (.int .u8) = some [MByte.init 2 none].length) ∧
     matState.rawWrite linuxX8664 matRange.ptr [.init 2 none] 1 = some rawAfter ∧
     ¬ (staleRead linuxX8664 rawAfter ⟨0⟩ = decode linuxX8664 (.int .u8) [.init 2 none]) :=
   ⟨(materialize_wellFormed linuxX8664 structState structState_wf ⟨0⟩ ⟨0⟩ 40 1 []).memory,

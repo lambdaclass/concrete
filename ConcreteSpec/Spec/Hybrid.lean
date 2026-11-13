@@ -12,7 +12,7 @@ permission and ownership remain premises of C5, as for `Memory.store`.
 
 This piece covers integer cells only. Boolean encoding is held (ISS-0069), as are
 struct layout and whole-pointer representation (ISS-0070; F12/F33 owner hold).
-Unit has no representation here. Unsupported encodings are empty sentinels, never admitted
+Character and unit layouts are held under ISS-XXXX; neither has a representation here. Unsupported encodings are empty sentinels, never admitted
 by `Storable`. Padding is explicit uninterpreted storage, not a field-layout algorithm.
 
 Authority in `docs/decisions.md`: #foundation-q2 approves structured places with byte/provenance
@@ -44,19 +44,31 @@ abbrev Value := CVal
 abbrev Value.ty (v : Value) : Ty := CVal.ty v
 abbrev Value.Valid (v : Value) : Prop := CVal.Valid v
 
-/-- Byte storage in this slice supports integers. Boolean, character and unit storage are held;
+/-- Byte storage in this slice supports integers. Boolean encoding (ISS-0069) and character/unit layouts (ISS-XXXX) are held;
 sharing the common value universe does not add unit layout or materialization rules. -/
 def Value.Storable (v : Value) : Prop := v.Valid ∧ v.ty ≠ .unit ∧ v.ty ≠ .bool ∧ v.ty ≠ .char
 
 instance (v : Value) : Decidable v.Storable := by
   cases v <;> dsimp [Value.Storable, Value.Valid, Value.ty, CVal.Valid, CVal.ty] <;> infer_instance
 
-/-- Active byte count for integers, a pure layout query. Zero for unsupported types is a
-sentinel, never an admitted layout: Storable excludes Boolean, character and unit values. -/
-def sizeof : Ty → Nat
-  | .int t => intBytes t
-  | .bool => 0
-  | .unit | .char => 0
+/-- Adapter to the existing slice representation's integer names. No layout is chosen here. -/
+def sliceIntTy : IntTy → ConcreteSpec.IntTy
+  | .i8 => .i8 | .i16 => .i16 | .i32 => .i32 | .i64 => .i64
+  | .u8 => .u8 | .u16 => .u16 | .u32 => .u32 | .u64 => .u64
+
+/-- Partial layout query, delegating to the existing Rep scalar layout. Boolean size is
+settled by OD126 even though its byte encoding is held (ISS-0069). Character and unit
+layout lack admitted authority (ISS-XXXX); refusal is distinct from a zero-byte layout. -/
+def sizeof : Ty → Option Nat
+  | .int t => some (ConcreteSpec.Rep.scalarSize (.int (sliceIntTy t)))
+  | .bool => some (ConcreteSpec.Rep.scalarSize .bool)
+  | .unit | .char => none
+
+/-- Instance. The encoding hold does not hold the decided one-byte Boolean layout. -/
+example : sizeof .bool = some 1 := rfl
+
+/-- Instance. Missing layout authority refuses a query, rather than claiming zero bytes. -/
+example : sizeof .char = none ∧ sizeof .unit = none := ⟨rfl, rfl⟩
 
 /-- Alignment is a read-only layout input; querying it never materializes a place. -/
 def alignof (layoutAlign : Ty → Nat) (t : Ty) : Nat := layoutAlign t
@@ -76,11 +88,6 @@ def decode (tgt : Target) : Ty → List MByte → Option Value
 /-- The representation relation; padding is outside the active slice passed to decoding. -/
 def Rep (tgt : Target) (t : Ty) (bs : List MByte) (v : Value) : Prop :=
   decode tgt t bs = some v
-
-/-- Adapter to the existing slice representation's integer names. No layout is chosen here. -/
-def sliceIntTy : IntTy → ConcreteSpec.IntTy
-  | .i8 => .i8 | .i16 => .i16 | .i32 => .i32 | .i64 => .i64
-  | .u8 => .u8 | .u16 => .u16 | .u32 => .u32 | .u64 => .u64
 
 /-- Forget fragment bookkeeping when comparing integer bytes with Spec/Rep.
 Integers carry no provenance (Q3.7); uninitialized bytes stay uninitialized. -/
@@ -135,7 +142,7 @@ def Cell.Projected (m : Memory) (c : Cell) : Prop :=
   | .structured _ => True
   | .materialized r => ∃ b x, r.ptr.prov = some b ∧ m.block b = some x ∧
       r.ptr.space = x.space ∧ r.ptr.addr = x.base ∧ r.extent = x.size ∧
-      r.align = x.align ∧ sizeof c.ty ≤ r.extent
+      r.align = x.align ∧ ∃ n, sizeof c.ty = some n ∧ n ≤ r.extent
 
 /-- Byte memory is well-formed and every materialized scalar has a valid containing projection. -/
 structure State.WellFormed (tgt : Target) (st : State) : Prop where
@@ -175,7 +182,8 @@ def State.read (tgt : Target) (st : State) (p : Place) : Option Value := do
   match c.storage with
   | .structured v => if v.ty = c.ty ∧ v.Storable then some v else none
   | .materialized r =>
-    let bs ← st.memory.load tgt r.ptr (sizeof c.ty) r.align
+    let n ← sizeof c.ty
+    let bs ← st.memory.load tgt r.ptr n r.align
     decode tgt c.ty bs
 
 /-- Safe typed write. No padding argument exists: materialized writes encode only active bytes.
