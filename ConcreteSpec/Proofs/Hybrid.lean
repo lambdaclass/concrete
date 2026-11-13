@@ -29,7 +29,7 @@ Extraction disposition: the complete Spec/Hybrid and Proofs/Hybrid command popul
 integration-head aa44140a3 are adapted here. Shared memory, scalar and execution definitions
 are imported. Boolean encoding/decoding and their dependent examples are owner-held under
 ISS-0069; controls instead exercise the independent u8 rule. Character and unit byte layout
-are held under ISS-XXXX for missing layout authority, rather than inferred from scalar constructors. The source had no admitted
+are held under ISS-0076 for missing layout authority, rather than inferred from scalar constructors. The source had no admitted
 struct or pointer cell codec; neither is added (ISS-0070). Inherited approval receipts are retired.
 The source's broad invariant mutants are replaced with allocation-counter-only mutations;
 raw-write/read correspondence and agreement with existing Spec/Rep are added explicitly.
@@ -37,11 +37,36 @@ raw-write/read correspondence and agreement with existing Spec/Rep are added exp
 namespace ConcreteSpec.Core.Hybrid
 open ConcreteSpec.Core.Mem
 
+/-- Law (authority: docs/decisions.md#foundation-q2; Q3.11; held codecs:
+ISS-0069, ISS-0076). The public encoding query refuses values outside storage admission. -/
+theorem encode_refuses_unadmitted (tgt : Target) (v : Value) (hv : ¬ v.Storable) :
+    encode tgt v = none := by
+  simp [encode, hv]
+
+/-- Instance (law `encode_refuses_unadmitted`). All held scalar representations refuse,
+including both Boolean values; no empty byte list stands in for missing authority. -/
+example (tgt : Target) (b : Bool) (c : Char) :
+    encode tgt (.bool b) = none ∧ encode tgt (.char c) = none ∧ encode tgt .unit = none := by
+  simp [encode, Value.Storable, Value.ty, CVal.ty]
+
+/-- Instance. The public query retains the admitted integer encoding. -/
+example : encode linuxX8664 (.int .u8 7) = some [.init 7 none] := by decide
+
+/-- Planted encoder: return an apparent empty representation when admission fails. -/
+def sentinelEncode (tgt : Target) (v : Value) : Option (List MByte) :=
+  if hv : v.Storable then some (encodeAdmitted tgt v hv) else some []
+
+/-- Planted (law `encode_refuses_unadmitted`, case `heldBoolean`,
+subject `ConcreteSpec.Core.Hybrid.encode`, mutant `ConcreteSpec.Core.Hybrid.sentinelEncode`).
+The empty-sentinel implementation violates refusal while preserving admitted integer encoding. -/
+example : ¬ Value.Storable (.bool true) ∧
+    sentinelEncode linuxX8664 (.bool true) ≠ none := by decide
+
 /-- Representation lemma. An admitted codec has exactly the shared layout's byte count. -/
 @[simp] theorem encode_length (tgt : Target) (v : Value) (hv : v.Storable) :
-    sizeof v.ty = some (encode tgt v).length := by
+    sizeof v.ty = some (encodeAdmitted tgt v hv).length := by
   cases v with
-  | int t n => cases t <;> simp [sizeof, Value.ty, CVal.ty, encode, sliceIntTy, ConcreteSpec.Rep.scalarSize, ConcreteSpec.IntTy.bits, intBytes, IntTy.bits]
+  | int t n => cases t <;> simp [sizeof, Value.ty, CVal.ty, encodeAdmitted, sliceIntTy, ConcreteSpec.Rep.scalarSize, ConcreteSpec.IntTy.bits, intBytes, IntTy.bits]
   | bool b => exact False.elim (hv.2.2.1 rfl)
   | unit => exact False.elim (hv.2.1 rfl)
   | char c => exact False.elim (hv.2.2.2 rfl)
@@ -56,8 +81,8 @@ private theorem slice_leBytes (w n : Nat) :
 
 /-- Representation lemma. On Spec/Rep's fixed profile, integer encoding is the existing
 representation under the byte-container adapter; the hybrid adds no second encoding policy. -/
-theorem encode_agrees_slice (t : IntTy) (n : Int) :
-    (encode linuxX8664 (.int t n)).map sliceByte =
+theorem encode_agrees_slice (t : IntTy) (n : Int) (hv : Value.Storable (.int t n)) :
+    (encodeAdmitted linuxX8664 (.int t n) hv).map sliceByte =
       ConcreteSpec.Rep.encodeScalar (.int (sliceIntTy t) n) := by
   cases t <;> exact slice_leBytes _ _
 
@@ -86,11 +111,11 @@ theorem decode_agrees_slice (t : IntTy) (bs : List MByte) :
     ConcreteSpec.IntTy.signed, IntTy.signed, ConcreteSpec.IntTy.bits, IntTy.bits, Option.map_map, Function.comp_def]
 
 /-- Law (authority: docs/decisions.md#foundation-q2; Q3.11, Q3.7; integer representation also #foundation-q3 and #od126).
-(subject `ConcreteSpec.Core.Hybrid.Rep`, `ConcreteSpec.Core.Hybrid.encode`). Every storable scalar value round-trips through its byte representation. -/
+(subject `ConcreteSpec.Core.Hybrid.Rep`, `ConcreteSpec.Core.Hybrid.encodeAdmitted`). Every storable scalar value round-trips through its byte representation. -/
 theorem rep_roundtrip (tgt : Target) (v : Value) (hv : v.Storable) :
-    Rep tgt v.ty (encode tgt v) v := by
+    Rep tgt v.ty (encodeAdmitted tgt v hv) v := by
   cases v with
-  | int t n => simp [Rep, Value.ty, CVal.ty, encode, decode, decodeInt_encodeInt tgt t n hv.1]
+  | int t n => simp [Rep, Value.ty, CVal.ty, encodeAdmitted, decode, decodeInt_encodeInt tgt t n hv.1]
   | bool b => exact False.elim (hv.2.2.1 rfl)
   | unit => exact False.elim (hv.2.1 rfl)
   | char c => exact False.elim (hv.2.2.2 rfl)
@@ -151,22 +176,21 @@ theorem write_read (tgt : Target) (st st' : State) (hw : st.memory.WellFormed tg
         simp [State.read, hv]
       | materialized r =>
         simp only [hs] at h
-        cases hm : st.memory.store tgt r.ptr (encode tgt v) r.align with
+        cases hm : st.memory.store tgt r.ptr (encodeAdmitted tgt v hv.2) r.align with
         | none => simp [hm] at h
         | some m =>
           simp [hm] at h
           subst st'
-          have hl := store_load tgt st.memory m hw r.ptr (encode tgt v) r.align hm
+          have hl := store_load tgt st.memory m hw r.ptr (encodeAdmitted tgt v hv.2) r.align hm
           have hsize := encode_length tgt v hv.2
-          rw [hv.1] at hsize
+          have hsize := (congrArg sizeof hv.1.symm).trans hsize
           simp only [State.read, State.places_memory, hc]
           dsimp
           rw [hs]
           simp only [hsize, Option.bind_some]
           rw [hl]
           dsimp
-          rw [← hv.1]
-          exact rep_roundtrip tgt v hv.2
+          simpa only [Rep, hv.1] using rep_roundtrip tgt v hv.2
     next => simp at h
 
 /-- Law (authority: docs/decisions.md#foundation-q2; Q3.11, Q3.7; integer representation also #foundation-q3 and #od126).
@@ -189,14 +213,14 @@ theorem typed_store_frame (tgt : Target) (st : State) (hw : st.WellFormed tgt)
     dsimp at h
     split at h
     next hv =>
-      cases hm : st.memory.store tgt r.ptr (encode tgt v) r.align with
+      cases hm : st.memory.store tgt r.ptr (encodeAdmitted tgt v hv.2) r.align with
       | none => simp [hm] at h
       | some m =>
         simp [hm] at h
         subst st'
-        have hsf := store_same_block_frame tgt st.memory hw.memory r.ptr (encode tgt v)
-          r.align b off i x (by have he := encode_length tgt v hv.2; rw [hv.1, hsize] at he; cases he; exact ha) hx
-          (by have he := encode_length tgt v hv.2; rw [hv.1, hsize] at he; cases he; exact hi)
+        have hsf := store_same_block_frame tgt st.memory hw.memory r.ptr (encodeAdmitted tgt v hv.2)
+          r.align b off i x (by have he := (congrArg sizeof hv.1.symm).trans (encode_length tgt v hv.2); have he := hsize.symm.trans he; cases he; exact ha) hx
+          (by have he := (congrArg sizeof hv.1.symm).trans (encode_length tgt v hv.2); have he := hsize.symm.trans he; cases he; exact hi)
         simpa [hm] using hsf
     next => simp at h
 
@@ -225,13 +249,13 @@ theorem materialize_projection (tgt : Target) (st : State) (p : Place) (s : Addr
       | structured v =>
         simp only [hs] at h
         split at h
-        next =>
-          cases ha : (st.memory.alloc tgt s base (encode tgt v ++ padding).length align).toOption with
+        next hv =>
+          cases ha : (st.memory.alloc tgt s base (encodeAdmitted tgt v hv.2 ++ padding).length align).toOption with
           | none => simp only [ha] at h; cases h
           | some pair =>
             obtain ⟨b, m⟩ := pair
             simp only [ha] at h
-            cases hm : m.store tgt ⟨s, base, some b⟩ (encode tgt v ++ padding) align with
+            cases hm : m.store tgt ⟨s, base, some b⟩ (encodeAdmitted tgt v hv.2 ++ padding) align with
             | none => simp [hm] at h
             | some m' =>
               simp [hm] at h
@@ -307,7 +331,7 @@ theorem write_wellFormed (tgt : Target) (st : State) (hw : st.WellFormed tgt)
       simp only [hc] at h
       dsimp at h
       split at h
-      next =>
+      next hv =>
         cases hs : c.storage with
         | structured old =>
           simp only [hs, Option.some.injEq] at h
@@ -315,12 +339,12 @@ theorem write_wellFormed (tgt : Target) (st : State) (hw : st.WellFormed tgt)
           exact set_wellFormed tgt st p _ hw trivial
         | materialized r =>
           simp only [hs] at h
-          cases hm : st.memory.store tgt r.ptr (encode tgt v) r.align with
+          cases hm : st.memory.store tgt r.ptr (encodeAdmitted tgt v hv.2) r.align with
           | none => simp [hm] at h
           | some m =>
             simp [hm] at h
             subst st'
-            have hsw := store_wellFormed tgt st.memory hw.memory r.ptr (encode tgt v) r.align
+            have hsw := store_wellFormed tgt st.memory hw.memory r.ptr (encodeAdmitted tgt v hv.2) r.align
             rw [hm] at hsw
             exact memory_wellFormed tgt st m hw hsw (store_geometry_inv tgt _ _ _ _ _ hm)
       next => simp at h
@@ -369,10 +393,10 @@ theorem materialize_cases (tgt : Target) (st st' : State) (p : Place) (s : AddrS
     (h : st.materialize tgt p s base align padding = some (r, st')) :
     (∃ c, st.places p = some c ∧ c.storage = .materialized r ∧ st' = st) ∨
     ∃ c v b m m', st.places p = some c ∧ c.storage = .structured v ∧
-      v.ty = c.ty ∧ v.Storable ∧
-      st.memory.alloc tgt s base (encode tgt v ++ padding).length align = .ok (b, m) ∧
-      m.store tgt ⟨s, base, some b⟩ (encode tgt v ++ padding) align = some m' ∧
-      r = ⟨⟨s, base, some b⟩, (encode tgt v ++ padding).length, align⟩ ∧
+      v.ty = c.ty ∧ ∃ hv : v.Storable,
+      st.memory.alloc tgt s base (encodeAdmitted tgt v hv ++ padding).length align = .ok (b, m) ∧
+      m.store tgt ⟨s, base, some b⟩ (encodeAdmitted tgt v hv ++ padding) align = some m' ∧
+      r = ⟨⟨s, base, some b⟩, (encodeAdmitted tgt v hv ++ padding).length, align⟩ ∧
       st' = ({ st with memory := m' }).set p { c with storage := .materialized r } := by
   unfold State.materialize at h
   cases hc : st.places p with
@@ -389,12 +413,12 @@ theorem materialize_cases (tgt : Target) (st st' : State) (p : Place) (s : AddrS
       simp only [hs] at h
       split at h
       next hv =>
-        cases ha : st.memory.alloc tgt s base (encode tgt v ++ padding).length align with
+        cases ha : st.memory.alloc tgt s base (encodeAdmitted tgt v hv.2 ++ padding).length align with
         | error e => simp only [ha, Except.toOption, Option.bind_none] at h; cases h
         | ok pair =>
           obtain ⟨b, m⟩ := pair
           simp only [ha, Except.toOption, Option.bind_some] at h
-          cases hm : m.store tgt ⟨s, base, some b⟩ (encode tgt v ++ padding) align with
+          cases hm : m.store tgt ⟨s, base, some b⟩ (encodeAdmitted tgt v hv.2 ++ padding) align with
           | none => simp [hm] at h
           | some m' =>
             simp only [hm, Option.bind_some, Option.some.injEq, Prod.mk.injEq] at h
@@ -432,23 +456,23 @@ theorem materialize_wellFormed (tgt : Target) (st : State) (hw : st.WellFormed t
     rcases materialize_cases tgt st st' p s base align padding r h with reused | fresh
     · obtain ⟨_, _, _, rfl⟩ := reused; exact hw
     · obtain ⟨c, v, b, m, m', _, _, ht, hv, ha, hm, rfl, rfl⟩ := fresh
-      have ham := alloc_wellFormed tgt st.memory hw.memory s base (encode tgt v ++ padding).length align
+      have ham := alloc_wellFormed tgt st.memory hw.memory s base (encodeAdmitted tgt v hv ++ padding).length align
       rw [ha] at ham
       have halloc : ({ st with memory := m } : State).WellFormed tgt := by
         refine ⟨ham, ?_⟩
         intro q d hd
         exact alloc_projected tgt _ _ hw.memory d (hw.projected q d hd) s base _ align b ha
-      have hsw := store_wellFormed tgt m ham ⟨s, base, some b⟩ (encode tgt v ++ padding) align
+      have hsw := store_wellFormed tgt m ham ⟨s, base, some b⟩ (encodeAdmitted tgt v hv ++ padding) align
       rw [hm] at hsw
       have hwritten := memory_wellFormed tgt _ m' halloc hsw (store_geometry_inv tgt _ _ _ _ _ hm)
       apply set_wellFormed tgt _ p _ hwritten
       apply projected_transport m m' _ _ (store_geometry_inv tgt _ _ _ _ _ hm)
       simp only [Cell.Projected]
-      have hab := alloc_block tgt st.memory s base (encode tgt v ++ padding).length align
+      have hab := alloc_block tgt st.memory s base (encodeAdmitted tgt v hv ++ padding).length align
       rw [ha] at hab
-      refine ⟨b, candidate s base (encode tgt v ++ padding).length align, rfl,
+      refine ⟨b, candidate s base (encodeAdmitted tgt v hv ++ padding).length align, rfl,
         hab, rfl, rfl, rfl, rfl, ?_⟩
-      exact ⟨(encode tgt v).length, ht ▸ encode_length tgt v hv, by simp⟩
+      exact ⟨(encodeAdmitted tgt v hv).length, ht ▸ encode_length tgt v hv, by simp⟩
 
 /-- Law (authority: docs/decisions.md#foundation-q2; Q3.11, Q3.7; integer representation also #foundation-q3 and #od126).
 (subject `ConcreteSpec.Core.Hybrid.State.expose`). Exposing a typed place preserves both layers of the invariant. -/
@@ -491,7 +515,7 @@ theorem write_frame (tgt : Target) (st st' : State) (p q : Place) (v : Value)
     simp only [hc] at h
     dsimp at h
     split at h
-    next =>
+    next hv =>
       cases hs : c.storage with
       | structured old =>
         simp only [hs, Option.some.injEq] at h
@@ -499,7 +523,7 @@ theorem write_frame (tgt : Target) (st st' : State) (p q : Place) (v : Value)
         simp [State.read, Ne.symm hne]
       | materialized r =>
         simp only [hs] at h
-        cases hm : st.memory.store tgt r.ptr (encode tgt v) r.align with
+        cases hm : st.memory.store tgt r.ptr (encodeAdmitted tgt v hv.2) r.align with
         | none => simp [hm] at h
         | some m =>
           simp [hm] at h
@@ -510,7 +534,7 @@ theorem write_frame (tgt : Target) (st st' : State) (p q : Place) (v : Value)
             cases hd : d.storage with
             | structured w => simp [State.read, hq, hd]
             | materialized s =>
-              have hh (n : Nat) := store_load_other tgt st.memory m r.ptr s.ptr (encode tgt v)
+              have hh (n : Nat) := store_load_other tgt st.memory m r.ptr s.ptr (encodeAdmitted tgt v hv.2)
                 r.align n s.align hm (Ne.symm (hsep c d r s hc hq hs hd))
               simp [State.read, hq, hd, hh]
     next => simp at h
@@ -571,7 +595,7 @@ theorem materialize_frame (tgt : Target) (st st' : State) (hw : st.WellFormed tg
     st'.read tgt q = st.read tgt q := by
   rcases materialize_cases tgt st st' p space base align padding r h with reused | fresh
   · obtain ⟨_, _, _, rfl⟩ := reused; rfl
-  · obtain ⟨c, v, b, m, m', _, _, _, _, ha, hm, rfl, rfl⟩ := fresh
+  · obtain ⟨c, v, b, m, m', _, _, _, hv, ha, hm, rfl, rfl⟩ := fresh
     cases hq : st.places q with
     | none => simp [State.read, Ne.symm hne, hq]
     | some d =>
@@ -581,7 +605,7 @@ theorem materialize_frame (tgt : Target) (st st' : State) (hw : st.WellFormed tg
         have hproj := hw.projected q d hq
         simp only [Cell.Projected, hd] at hproj
         obtain ⟨old, x, hp, hx, _⟩ := hproj
-        have hbo := alloc_ne_existing tgt st.memory hw.memory space base (encode tgt v ++ padding).length align old x hx
+        have hbo := alloc_ne_existing tgt st.memory hw.memory space base (encodeAdmitted tgt v hv ++ padding).length align old x hx
         rw [ha] at hbo
         have hload (n : Nat) : m.load tgt s.ptr n s.align =
             st.memory.load tgt s.ptr n s.align := by
@@ -592,7 +616,7 @@ theorem materialize_frame (tgt : Target) (st st' : State) (hw : st.WellFormed tg
           obtain ⟨_, rfl, _⟩ := alloc_result tgt _ space base _ align b m ha
           simp [Memory.block, AList.lookup, hbo]
         have hstore (n : Nat) := store_load_other tgt m m' ⟨space, base, some b⟩ s.ptr
-          (encode tgt v ++ padding) align n s.align hm
+          (encodeAdmitted tgt v hv ++ padding) align n s.align hm
           (by simpa only [hp, ne_eq, Option.some.injEq] using Ne.symm hbo)
         simp [State.read, Ne.symm hne, hq, hd, hstore, hload]
 
@@ -637,19 +661,19 @@ theorem materialize_read (tgt : Target) (st st' : State) (hw : st.memory.WellFor
     have hvw : w = v := by
       simpa [State.read, hc, hs, ht, hv] using hr
     subst w
-    have ham := alloc_wellFormed tgt st.memory hw space base (encode tgt v ++ padding).length align
+    have ham := alloc_wellFormed tgt st.memory hw space base (encodeAdmitted tgt v hv ++ padding).length align
     rw [ha] at ham
-    have hl := store_load tgt m m' ham ⟨space, base, some b⟩ (encode tgt v ++ padding) align hm
-    have hpos : 0 < (encode tgt v).length := by
+    have hl := store_load tgt m m' ham ⟨space, base, some b⟩ (encodeAdmitted tgt v hv ++ padding) align hm
+    have hpos : 0 < (encodeAdmitted tgt v hv).length := by
       cases v with
-      | int t n => cases t <;> simp [encode, encodeInt, intBytes, IntTy.bits, leBytes_length]
+      | int t n => cases t <;> simp [encodeAdmitted, encodeInt, intBytes, IntTy.bits, leBytes_length]
       | bool b => exact False.elim (hv.2.2.1 rfl)
       | unit => exact False.elim (hv.2.1 rfl)
       | char c => exact False.elim (hv.2.2.2 rfl)
     have hshort := load_prefix tgt m' ⟨space, base, some b⟩
-      (encode tgt v ++ padding).length ((encode tgt v).length) align (encode tgt v ++ padding)
+      (encodeAdmitted tgt v hv ++ padding).length ((encodeAdmitted tgt v hv).length) align (encodeAdmitted tgt v hv ++ padding)
       (by simp only [List.length_append]; omega) (by omega) (by simp) hl
-    have htake : (encode tgt v ++ padding).take ((encode tgt v).length) = encode tgt v := by
+    have htake : (encodeAdmitted tgt v hv ++ padding).take ((encodeAdmitted tgt v hv).length) = encodeAdmitted tgt v hv := by
       simp
     rw [htake] at hshort
     simpa [State.read, hshort, ← ht, encode_length tgt v hv, Rep] using (rep_roundtrip tgt v hv)
@@ -687,9 +711,10 @@ def badRep (tgt : Target) (t : Ty) (bs : List MByte) (v : Value) : Prop :=
   | .int it n => Rep tgt t bs (.int it (n + 1))
   | _ => Rep tgt t bs v
 /-- Wrong codec: an off-by-one integer payload. -/
-def badEncode (tgt : Target) : Value → List MByte
+def badEncode (tgt : Target) (v : Value) (hv : v.Storable) : List MByte :=
+  match v with
   | .int t n => encodeInt tgt t (n + 1)
-  | v => encode tgt v
+  | v => encodeAdmitted tgt v hv
 /-- Wrong decoder: erase the decoded type by returning unit on success. -/
 def badDecodeUnit (tgt : Target) (t : Ty) (bs : List MByte) : Option Value :=
   (decode tgt t bs).map (fun _ => .unit)
@@ -726,15 +751,17 @@ def badMaterializeWf : Target → State → Place → AddrSpace → Nat → Nat 
     (st.materialize tgt p s base align pad).map fun (r, out) => (r, forgetFreshness out)
 /-- Wrong writer: clear the trailing bytes of the containing block after an active write. -/
 def badWriteClobber (tgt : Target) (st : State) (p : Place) (v : Value) : Option State := do
-  let out ← st.write tgt p v
-  let c ← out.places p
-  match c.storage with
-  | .structured _ => some out
-  | .materialized r =>
-    let b ← r.ptr.prov
-    pure { out with memory := out.memory.modify b fun x =>
-      { x with bytes := x.bytes.take (encode tgt v).length ++
-          List.replicate (x.size - (encode tgt v).length) (.init 0 none) } }
+  if hv : v.Storable then
+    let out ← st.write tgt p v
+    let c ← out.places p
+    match c.storage with
+    | .structured _ => some out
+    | .materialized r =>
+      let b ← r.ptr.prov
+      pure { out with memory := out.memory.modify b fun x =>
+        { x with bytes := x.bytes.take (encodeAdmitted tgt v hv).length ++
+            List.replicate (x.size - (encodeAdmitted tgt v hv).length) (.init 0 none) } }
+  else none
 def badWriteWf : Target → State → Place → Value → Option State := fun tgt st p v => (st.write tgt p v).map forgetFreshness
 def badRawWriteWf : Target → State → Ptr → List MByte → Nat → Option State :=
   fun tgt st p bs a => (st.rawWrite tgt p bs a).map forgetFreshness
@@ -775,17 +802,17 @@ private theorem structState_wf : structState.WellFormed linuxX8664 := by
 
 -- 1. rep_roundtrip
 /-- Instance (law `ConcreteSpec.Core.Hybrid.rep_roundtrip`, case `u8One`). -/
-example : Rep linuxX8664 (Value.ty (.int .u8 1)) (encode linuxX8664 (.int .u8 1)) (.int .u8 1) :=
+example : Rep linuxX8664 (Value.ty (.int .u8 1)) (encodeAdmitted linuxX8664 (.int .u8 1) (by decide)) (.int .u8 1) :=
   rep_roundtrip linuxX8664 (.int .u8 1) (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Hybrid.rep_roundtrip`, case `u8One`, subject `ConcreteSpec.Core.Hybrid.Rep`, mutant `ConcreteSpec.Core.Hybrid.Audit.badRep`). -/
 example : Value.Storable (.int .u8 1) ∧
-    ¬ badRep linuxX8664 (Value.ty (.int .u8 1)) (encode linuxX8664 (.int .u8 1)) (.int .u8 1) :=
+    ¬ badRep linuxX8664 (Value.ty (.int .u8 1)) (encodeAdmitted linuxX8664 (.int .u8 1) (by decide)) (.int .u8 1) :=
   ⟨by decide, by intro h; cases h⟩
 
-/-- Planted (law `ConcreteSpec.Core.Hybrid.rep_roundtrip`, case `u8One`, subject `ConcreteSpec.Core.Hybrid.encode`, mutant `ConcreteSpec.Core.Hybrid.Audit.badEncode`). -/
+/-- Planted (law `ConcreteSpec.Core.Hybrid.rep_roundtrip`, case `u8One`, subject `ConcreteSpec.Core.Hybrid.encodeAdmitted`, mutant `ConcreteSpec.Core.Hybrid.Audit.badEncode`). -/
 example : Value.Storable (.int .u8 1) ∧
-    ¬ Rep linuxX8664 (Value.ty (.int .u8 1)) (badEncode linuxX8664 (.int .u8 1)) (.int .u8 1) :=
+    ¬ Rep linuxX8664 (Value.ty (.int .u8 1)) (badEncode linuxX8664 (.int .u8 1) (by decide)) (.int .u8 1) :=
   ⟨by decide, by intro h; cases h⟩
 
 -- 2. decode_valid

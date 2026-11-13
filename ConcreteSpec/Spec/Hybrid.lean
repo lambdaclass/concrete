@@ -12,8 +12,9 @@ permission and ownership remain premises of C5, as for `Memory.store`.
 
 This piece covers integer cells only. Boolean encoding is held (ISS-0069), as are
 struct layout and whole-pointer representation (ISS-0070; F12/F33 owner hold).
-Character and unit layouts are held under ISS-XXXX; neither has a representation here. Unsupported encodings are empty sentinels, never admitted
-by `Storable`. Padding is explicit uninterpreted storage, not a field-layout algorithm.
+Character and unit layouts are held under ISS-0076; neither has a representation here.
+Encoding refuses unadmitted values, and the underlying byte encoder requires a `Storable`
+admission proof. Padding is explicit uninterpreted storage, not a field-layout algorithm.
 
 Authority in `docs/decisions.md`: #foundation-q2 approves structured places with byte/provenance
 blocks and materialization on raw address-taking or exposure; #decided-2026-11-05-core,
@@ -44,7 +45,7 @@ abbrev Value := CVal
 abbrev Value.ty (v : Value) : Ty := CVal.ty v
 abbrev Value.Valid (v : Value) : Prop := CVal.Valid v
 
-/-- Byte storage in this slice supports integers. Boolean encoding (ISS-0069) and character/unit layouts (ISS-XXXX) are held;
+/-- Byte storage in this slice supports integers. Boolean encoding (ISS-0069) and character/unit layouts (ISS-0076) are held;
 sharing the common value universe does not add unit layout or materialization rules. -/
 def Value.Storable (v : Value) : Prop := v.Valid ∧ v.ty ≠ .unit ∧ v.ty ≠ .bool ∧ v.ty ≠ .char
 
@@ -58,7 +59,7 @@ def sliceIntTy : IntTy → ConcreteSpec.IntTy
 
 /-- Partial layout query, delegating to the existing Rep scalar layout. Boolean size is
 settled by OD126 even though its byte encoding is held (ISS-0069). Character and unit
-layout lack admitted authority (ISS-XXXX); refusal is distinct from a zero-byte layout. -/
+layout lack admitted authority (ISS-0076); refusal is distinct from a zero-byte layout. -/
 def sizeof : Ty → Option Nat
   | .int t => some (ConcreteSpec.Rep.scalarSize (.int (sliceIntTy t)))
   | .bool => some (ConcreteSpec.Rep.scalarSize .bool)
@@ -73,11 +74,19 @@ example : sizeof .char = none ∧ sizeof .unit = none := ⟨rfl, rfl⟩
 /-- Alignment is a read-only layout input; querying it never materializes a place. -/
 def alignof (layoutAlign : Ty → Nat) (t : Ty) : Nat := layoutAlign t
 
-/-- Active scalar bytes, with no padding choices. -/
-def encode (tgt : Target) : Value → List MByte
+/-- Active scalar bytes, restricted to admitted values, with no padding choices.
+A held representation cannot supply the required admission proof. -/
+def encodeAdmitted (tgt : Target) (v : Value) (h : v.Storable) : List MByte :=
+  match v with
   | .int t n => encodeInt tgt t n
-  | .bool _ => []
-  | .unit | .char _ => []
+  | .bool _ => False.elim (h.2.2.1 rfl)
+  | .unit => False.elim (h.2.1 rfl)
+  | .char _ => False.elim (h.2.2.2 rfl)
+
+/-- Partial encoding, with the same explicit refusal shape as `sizeof`.
+Only admitted values reach the restricted encoder; refusal supplies no representation bytes. -/
+def encode (tgt : Target) (v : Value) : Option (List MByte) :=
+  if hv : v.Storable then some (encodeAdmitted tgt v hv) else none
 
 /-- Partial decoding of the current active bytes. -/
 def decode (tgt : Target) : Ty → List MByte → Option Value
@@ -190,11 +199,11 @@ def State.read (tgt : Target) (st : State) (p : Place) : Option Value := do
 The caller supplies ownership and write permission (C5). -/
 def State.write (tgt : Target) (st : State) (p : Place) (v : Value) : Option State := do
   let c ← st.places p
-  if v.ty = c.ty ∧ v.Storable then
+  if hv : v.ty = c.ty ∧ v.Storable then
     match c.storage with
     | .structured _ => some (st.set p { c with storage := .structured v })
     | .materialized r =>
-      let m ← st.memory.store tgt r.ptr (encode tgt v) r.align
+      let m ← st.memory.store tgt r.ptr (encodeAdmitted tgt v hv.2) r.align
       some { st with memory := m }
   else none
 
@@ -207,8 +216,8 @@ def State.materialize (tgt : Target) (st : State) (p : Place) (space : AddrSpace
   match c.storage with
   | .materialized r => some (r, st)
   | .structured v =>
-    if v.ty = c.ty ∧ v.Storable then
-      let bs := encode tgt v ++ padding
+    if hv : v.ty = c.ty ∧ v.Storable then
+      let bs := encodeAdmitted tgt v hv.2 ++ padding
       let (b, m) ← (st.memory.alloc tgt space base bs.length align).toOption
       let r : Range := ⟨⟨space, base, some b⟩, bs.length, align⟩
       let m ← m.store tgt r.ptr bs align
