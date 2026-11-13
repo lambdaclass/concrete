@@ -43,9 +43,10 @@ imports to F03 without inheriting approval claims. The numeric local-identity pr
 already live in `Proofs/LocalIdentity`; no spelling-bearing local identity is restored.
 
 Hold lines 11–279 (SourcePath), 1300–1305 (Span projection), and 2341–2355 (Span controls)
-for F04p. Path backslashes, controls and Unicode normalization/identity lack settled
-independent authority. U+FEFF scope, bare-CR comment termination and the five queued
-partial items in `decided-2026-11-08-recovery-queue` are likewise excluded; neither this
+for F04p, tracked with the F03p path interface by ISS-0068. Path backslashes, controls
+and Unicode normalization/identity lack settled independent owner authority. U+FEFF
+scope and bare-CR comment termination (ISS-0064 and ISS-0065), and the five queued
+partial items in `decided-2026-11-08-recovery-queue` (ISS-0065), are likewise excluded; neither this
 arithmetic nor any fixture resolves them. No assumed-yes branch is an implementation
 or authority source.
 -/
