@@ -1,5 +1,7 @@
 # Proof checks and axiom-check design
 
+For theorem-comment classification, use the [owner-accepted project convention](../../docs/decisions.md#decided-2026-11-13-proof-labels), including its scope limits.
+
 Status: current toolchain documentation (2026-11-11) and axiom-check design
 (2026-11-09). The axiom-check design below does not change executable behavior.
 The current P/A/G contract remains documented
