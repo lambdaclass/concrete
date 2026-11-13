@@ -16,8 +16,8 @@ retained identities on release; access failure without provenance or after relea
 and frame laws; exposed reconstruction soundness and uniqueness; address equality ignores
 provenance. Empty memory is well-formed; geometry-preserving updates, store, free and exposure
 preserve well-formedness. Exposure preserves byte reads. Reconstruction is complete at both
-priorities, with no containing or one-past ties. Pointer round trips require a well-formed
-target and a target-valid pointer.
+priorities, with no containing or one-past ties. Pointer codecs and their dependent
+laws and controls are omitted pending ISS-0070; no numeric encoding is assumed.
 -/
 namespace ConcreteSpec.Core.Mem
 open ConcreteSpec
@@ -127,31 +127,6 @@ private theorem leBytes_leValue (os : List (Fin 256)) : leBytes os.length (leVal
   | cons v vs ih =>
     simp [leBytes, leValue, Nat.add_mod, Nat.add_div, Nat.mod_eq_of_lt v.isLt,
       Nat.div_eq_of_lt v.isLt, Nat.not_le_of_gt v.isLt, ih]
-
-/-- Law (subject `ConcreteSpec.Core.Mem.decodePtr`, `ConcreteSpec.Core.Mem.encodePtr`). A valid pointer round-trips by numeric octet decoding, independently of fragment validation. -/
-theorem decodePtr_encodePtr (tgt : Target) (ht : tgt.WellFormed) (p : Ptr) (hpv : p.Valid tgt) :
-    decodePtr tgt (encodePtr tgt p) = some p := by
-  have hp : 0 < tgt.ptrSize := by have := ht.1; have := ht.2.1; omega
-  have hl : (ordered tgt.byteOrder (leBytes tgt.ptrSize p.addr)).length > 0 := by simpa using hp
-  have hb : p.addr < 256 ^ tgt.ptrSize := by
-    have hh := Nat.pow_le_pow_right (by decide : 1 ≤ 2) ht.2.1
-    have he : 256 ^ tgt.ptrSize = 2 ^ (8 * tgt.ptrSize) := by rw [Nat.pow_mul]
-    rw [he]
-    exact Nat.lt_of_lt_of_le hpv.1 hh
-  have ho : octets (encodePtr tgt p) = some (ordered tgt.byteOrder (leBytes tgt.ptrSize p.addr)) :=
-    octets_fragments _ _ 0
-  have hlen : (encodePtr tgt p).length = tgt.ptrSize := by simp [encodePtr]
-  cases hs : ordered tgt.byteOrder (leBytes tgt.ptrSize p.addr) with
-  | nil => simp [hs] at hl
-  | cons v vs =>
-    have he : encodePtr tgt p = .init v (some (p, 0)) ::
-        (vs.zipIdx 1).map (fun (v, i) => .init v (some (p, i))) := by
-      simp [encodePtr, hs, List.zipIdx_cons]
-    rw [he]
-    simp only [decodePtr]
-    rw [← he]
-    simp only [hlen, ↓reduceIte, ho]
-    simp [encodePtr, ordered_ordered, leValue_leBytes _ _ hb, hpv]
 
 /-- Helper (computation). Block lookup after modify reduces to association-list update. -/
 @[simp] theorem block_modify (m : Memory) (b c : BlockId) (f : Block → Block) :
@@ -634,42 +609,6 @@ theorem access_zero_valid_inv (tgt : Target) (m : Memory) (p : Ptr) (a : Nat)
   next hv => exact hv.2.2
   next => cases h
 
-/-- Helper (inversion). Extract the independent width, fragment, numeric and validity checks. -/
-private theorem decodePtr_checks_inv (tgt : Target) (bs : List MByte) (p : Ptr)
-    (h : decodePtr tgt bs = some p) :
-    ∃ os, octets bs = some os ∧ bs.length = tgt.ptrSize ∧
-      bs = (os.zipIdx.map fun (v, i) => .init v (some (p, i))) ∧
-      leValue (ordered tgt.byteOrder os) = p.addr ∧ p.Valid tgt := by
-  match bs with
-  | .init _ (some (q, 0)) :: _ =>
-    simp only [decodePtr] at h
-    split at h
-    next hlen =>
-      split at h
-      next os ho =>
-        split at h
-        next hc => cases h; exact ⟨os, ho, hlen, hc⟩
-        next => cases h
-      next => cases h
-    next => cases h
-  | [] | .uninit :: _ | .init _ none :: _ | .init _ (some (_, Nat.succ _)) :: _ => cases h
-
-/-- Law (subject `ConcreteSpec.Core.Mem.decodePtr`, `ConcreteSpec.Core.Mem.encodePtr`). Successful pointer decoding recovers exactly a whole stored representation and a valid
-pointer. The representation follows from numeric byte reconstruction, not encoder comparison. -/
-theorem decodePtr_some (tgt : Target) (ht : tgt.WellFormed) (bs : List MByte) (p : Ptr) :
-    decodePtr tgt bs = some p ↔ bs = encodePtr tgt p ∧ p.Valid tgt := by
-  constructor
-  · intro h
-    obtain ⟨os, ho, hlen, hf, hn, hv⟩ := decodePtr_checks_inv tgt bs p h
-    have hos : os = ordered tgt.byteOrder (leBytes tgt.ptrSize p.addr) := by
-      have hr := leBytes_leValue (ordered tgt.byteOrder os)
-      rw [ordered_length, octets_length ho, hlen, hn] at hr
-      have hh := congrArg (ordered tgt.byteOrder) hr
-      simpa using hh.symm
-    exact ⟨by rw [hf, hos]; rfl, hv⟩
-  · rintro ⟨rfl, hv⟩
-    exact decodePtr_encodePtr tgt ht p hv
-
 /-- Law (subject `ConcreteSpec.Core.Mem.Memory.access`). Nonempty access succeeds on the independent liveness, provenance and geometry obligations.
 Together with access_valid this proves deleting the redundant target-validity guard preserves
 success on well-formed memory. -/
@@ -1087,7 +1026,6 @@ def other : Ptr := ⟨⟨0⟩, 41, some ⟨1⟩⟩
 def badPtr : Ptr := ⟨⟨0⟩, 256, some ⟨0⟩⟩
 def nullPtr : Ptr := ⟨⟨0⟩, 0, none⟩
 def rawPtr : Ptr := ⟨⟨0⟩, 40, none⟩
-def bytes : List MByte := [.init 40 (some (ptr, 0)), .init 0 (some (ptr, 1))]
 def initBlock : Block := candidate ⟨0⟩ 40 8 1
 def memory : Memory := ⟨[(⟨0⟩, initBlock)], 1⟩
 def freedBlock : Block := { initBlock with live := false, exposed := false }
@@ -1115,15 +1053,6 @@ def badDecodeIntRange := badDecodeInt
 /-- Fault: magnitude replaces the two's-complement pattern. -/
 def badEncodeInt (tgt : Target) (t : IntTy) (n : Int) : List MByte :=
   (ordered tgt.byteOrder (leBytes (intBytes t) n.natAbs)).map (.init · none)
-def badDecodePtr (tgt : Target) (bs : List MByte) : Option Ptr :=
-  decodePtr { tgt with byteOrder := .big } bs
-/-- Fault: storing the address discards all provenance annotations. -/
-def badEncodePtr (tgt : Target) (p : Ptr) : List MByte :=
-  (ordered tgt.byteOrder (leBytes tgt.ptrSize p.addr)).map (.init · none)
-def firstFragment : Target → List MByte → Option Ptr
-  | _, .init _ (some (p, _)) :: _ => some p
-  | _, _ => none
-
 def badEmpty : Memory := ⟨[(⟨1⟩, initBlock)], 0⟩
 
 def badAllocId : Target → Memory → AddrSpace → Nat → Nat → Nat →
@@ -1250,57 +1179,6 @@ example : ¬ (match badDecodeIntRange target .i8 [.init 251 none] with
     | none => True) := by
   change ¬ IntTy.i8.InRange 251
   decide
-
--- 5. decodePtr_encodePtr
-/-- Instance (law `ConcreteSpec.Core.Mem.decodePtr_encodePtr`, case `valid`). Accepted: a valid whole pointer. -/
-example : decodePtr target (encodePtr target ptr) = some ptr :=
-  decodePtr_encodePtr target (by decide) ptr (by decide)
-
-/-- Planted (law `ConcreteSpec.Core.Mem.decodePtr_encodePtr`, case `valid`, subject `ConcreteSpec.Core.Mem.decodePtr`, mutant `ConcreteSpec.Core.Mem.Audit.badDecodePtr`). A decoder mutated to reverse violates the round trip at this valid pointer. -/
-example : target.WellFormed ∧ ptr.Valid target ∧
-    ¬ (badDecodePtr target (encodePtr target ptr) = some ptr) := by decide
-
-/-- Planted (law `ConcreteSpec.Core.Mem.decodePtr_encodePtr`, case `valid`, subject `ConcreteSpec.Core.Mem.encodePtr`, mutant `ConcreteSpec.Core.Mem.Audit.badEncodePtr`). -/
-example : target.WellFormed ∧ ptr.Valid target ∧
-    ¬ (decodePtr target (badEncodePtr target ptr) = some ptr) := by decide
-
--- 6. decodePtr_some
-/-- Instance (law `ConcreteSpec.Core.Mem.decodePtr_some`, case `valid`). Accepted: successful decoding has exactly the stored encoding, including provenance. -/
-example : decodePtr target bytes = some ptr ↔ bytes = encodePtr target ptr ∧ ptr.Valid target :=
-  decodePtr_some target (by decide) bytes ptr
-
-/-- Planted (law `ConcreteSpec.Core.Mem.decodePtr_some`, case `valid`, subject `ConcreteSpec.Core.Mem.decodePtr`, mutant `ConcreteSpec.Core.Mem.Audit.badDecodePtr`). -/
-example : target.WellFormed ∧
-    ¬ (badDecodePtr target bytes = some ptr ↔ bytes = encodePtr target ptr ∧ ptr.Valid target) := by
-  decide
-
-/-- Planted (law `ConcreteSpec.Core.Mem.decodePtr_some`, case `valid`, subject `ConcreteSpec.Core.Mem.encodePtr`, mutant `ConcreteSpec.Core.Mem.Audit.badEncodePtr`). -/
-example : target.WellFormed ∧
-    ¬ (decodePtr target bytes = some ptr ↔ bytes = badEncodePtr target ptr ∧ ptr.Valid target) := by
-  decide
-
-/-- Instance (law `ConcreteSpec.Core.Mem.decodePtr_some`, case `partial`). Refused: partial pointer, with the second fragment missing. -/
-example : decodePtr target [.init 40 (some (ptr, 0))] = some ptr ↔
-    [.init 40 (some (ptr, 0))] = encodePtr target ptr ∧ ptr.Valid target :=
-  decodePtr_some target (by decide) [.init 40 (some (ptr, 0))] ptr
-
-/-- Planted (law `ConcreteSpec.Core.Mem.decodePtr_some`, case `partial`, subject `ConcreteSpec.Core.Mem.decodePtr`, mutant `ConcreteSpec.Core.Mem.Audit.firstFragment`). The first-fragment-only mutant violates the converse on a partial pointer. -/
-example : target.WellFormed ∧
-    ¬ (firstFragment target [.init 40 (some (ptr, 0))] = some ptr ↔
-      [.init 40 (some (ptr, 0))] = encodePtr target ptr ∧ ptr.Valid target) := by decide
-
-/-- Refused: partial pointer, with the second fragment missing. -/
-example : decodePtr target [.init 40 (some (ptr, 0))] = none := by decide
-/-- Refused: two pointers' fragments, with otherwise correct octets and indices. -/
-example : decodePtr target [.init 40 (some (ptr, 0)), .init 0 (some (other, 1))] = none := by decide
-/-- Refused: the right pointer's fragments in the wrong order. -/
-example : decodePtr target [.init 0 (some (ptr, 1)), .init 40 (some (ptr, 0))] = none := by decide
-/-- Refused: correct fragments and indices, but one corrupted octet. -/
-example : decodePtr target [.init 41 (some (ptr, 0)), .init 0 (some (ptr, 1))] = none := by decide
-/-- Refused: integer bytes spell a valid address but carry no pointer meaning. -/
-example : decodePtr target [.init 40 none, .init 0 none] = none := by decide
-/-- Refused: uninitialized bytes cannot supply a pointer. -/
-example : decodePtr target [.uninit, .uninit] = none := by decide
 
 -- 7. empty_wellFormed
 /-- Instance (law `ConcreteSpec.Core.Mem.empty_wellFormed`, case `default`). -/
@@ -1853,37 +1731,6 @@ example : ¬ (ignoreSpace ptr ⟨⟨1⟩, 40, none⟩ = false ↔ ptr.space ≠ 
 /-! The following controls delete one guard at a time. Their other obligations are
 satisfied, so each refusal observes its named rule rather than an unrelated failure. -/
 
-/-- Fault injector for pointer decoding: omit width, fragment consistency, numeric address,
-or target validity respectively. No bytes-to-address conversion is introduced in the spec. -/
-def decodeSkipping (skip : Nat) (tgt : Target) (bs : List MByte) : Option Ptr :=
-  match bs with
-  | .init _ (some (p, 0)) :: _ =>
-    if skip = 0 ∨ bs.length = tgt.ptrSize then
-      match octets bs with
-      | some os =>
-        if (skip = 1 ∨ bs = os.zipIdx.map (fun (v, i) => .init v (some (p, i)))) ∧
-            (skip = 2 ∨ leValue (ordered tgt.byteOrder os) = p.addr) ∧
-            (skip = 3 ∨ p.Valid tgt) then some p else none
-      | none => none
-    else none
-  | _ => none
-
-/-- A partial pointer has correct fragments and octets, but the wrong byte count. -/
-example : decodePtr target [.init 40 (some (ptr, 0))] = none ∧
-    decodeSkipping 0 target [.init 40 (some (ptr, 0))] = some ptr := by decide
-
-/-- Mixing identities fails even when width, address and indices agree. -/
-example : decodePtr target [.init 40 (some (ptr, 0)), .init 0 (some (other, 1))] = none ∧
-    decodeSkipping 1 target [.init 40 (some (ptr, 0)), .init 0 (some (other, 1))] = some ptr := by decide
-
-/-- Correct fragment labels cannot excuse an incorrect numeric octet. -/
-example : decodePtr target [.init 41 (some (ptr, 0)), .init 0 (some (ptr, 1))] = none ∧
-    decodeSkipping 2 target [.init 41 (some (ptr, 0)), .init 0 (some (ptr, 1))] = some ptr := by decide
-
-/-- Width, labels and numeric octets all agree; only the address range is invalid. -/
-example : decodePtr target [.init 0 (some (badPtr, 0)), .init 1 (some (badPtr, 1))] = none ∧
-    decodeSkipping 3 target [.init 0 (some (badPtr, 0)), .init 1 (some (badPtr, 1))] = some badPtr := by decide
-
 /-- Fault injector for access: omit just liveness, space, lower bound, upper bound or alignment. -/
 def accessSkipping (skip : Nat) (m : Memory) (p : Ptr) (n a : Nat) :
     Option (Option (BlockId × Nat)) := do
@@ -1960,11 +1807,6 @@ example : let m : Memory := ⟨[(⟨0⟩, { candidate ⟨0⟩ 40 0 1 with expose
   exact expose_wellFormed target _
     (alloc_wellFormed target Memory.empty (empty_wellFormed target) ⟨0⟩ 40 0 1)
     ⟨⟨0⟩, 40, some ⟨0⟩⟩
-
-/-- Equal numeric bytes do not make plain integer storage a pointer. Reading stored pointer
-bytes as an integer, however, keeps the numeric address and discards provenance. -/
-example : decodeInt target .u16 bytes = some 40 ∧
-    decodePtr target [.init 40 none, .init 0 none] = none := by decide
 
 end Audit
 

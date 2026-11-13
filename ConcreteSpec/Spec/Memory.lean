@@ -65,9 +65,9 @@ Authority (anchors in `docs/decisions.md` on main):
 
 Held: Boolean encoding and its dependent laws/controls (ISS-0069); main's Spec/Rep behavior
 is preserved without a second Boolean definition. Struct layout and further pointer-representation
-extensions belong to F12/F33 and remain held pending owner answers (ISS-XXXX). U+FEFF scope
+and pointer-byte mapping belong to F12/F33 and remain held (ISS-0070). U+FEFF scope
 and bare CR (ISS-0064), the five queued partial items (ISS-0065), path policy (ISS-0068),
-constant restrictions and SPARK-style character preconditions supply no rule here.
+constant restrictions and SPARK-style character preconditions (ISS-0065, D4 queue) supply no rule here.
 No historical approval annotation is evidence. Block identities reuse Ident.BlockId; association
 lookup reuses Basics.AList. There are no local-variable fixtures in this module.
 
@@ -292,26 +292,10 @@ def decodeInt (tgt : Target) (t : IntTy) (bs : List MByte) : Option Int :=
     (octets bs).map fun os => ofBits t (leValue (ordered tgt.byteOrder os))
   else none
 
-/-- The bytes of a stored pointer: its address in the profile's order and pointer width, each byte
-a fragment of the pointer. Encoding is total; decoding checks target validity. -/
-def encodePtr (tgt : Target) (p : Ptr) : List MByte :=
-  ((ordered tgt.byteOrder (leBytes tgt.ptrSize p.addr)).zipIdx).map fun (v, i) => .init v (some (p, i))
-
-/-- The pointer the bytes hold: one pointer-width sequence of that pointer's fragments,
-in order, whose initialized octets decode its target-valid address. All other byte patterns
-have no pointer meaning (owner decision 2026-11-08, item 20). -/
-def decodePtr (tgt : Target) (bs : List MByte) : Option Ptr :=
-  match bs with
-  | .init _ (some (p, 0)) :: _ =>
-    if bs.length = tgt.ptrSize then
-      match octets bs with
-      | some os =>
-        if bs = (os.zipIdx.map fun (v, i) => .init v (some (p, i))) ∧
-            leValue (ordered tgt.byteOrder os) = p.addr ∧ p.Valid tgt
-        then some p else none
-      | none => none
-    else none
-  | _ => none
+/-! Pointer encoding and decoding are omitted pending source-backed owner authority
+(ISS-0070). Recovered item 20 constrains whole-pointer meaning, but does not select
+any octet mapping. Fragment annotations describe provenance bookkeeping only; neither
+an address-to-octets rule nor its converse follows from them. -/
 
 /-! ### Examples -/
 
@@ -383,15 +367,5 @@ example : (do
     let m ← m.expose ⟨⟨0⟩, 4096, some b⟩
     pure ((m.fromExposed ⟨0⟩ 4100).prov, (m.fromExposed ⟨0⟩ 4112).prov,
       (m.fromExposed ⟨0⟩ 8192).prov)) = some (some ⟨0⟩, some ⟨0⟩, none) := by decide
-
-/-- A stored pointer reads back with its provenance; the same bytes read as an integer give its
-address, with no provenance. -/
-example : (do
-    let (b, m) ← (Memory.empty.alloc tgt ⟨0⟩ 4096 16 8).toOption
-    let p : Ptr := ⟨⟨0⟩, 4100, some b⟩
-    let m ← m.store tgt ⟨⟨0⟩, 4104, some b⟩ (encodePtr tgt p) 8
-    let bs ← m.load tgt ⟨⟨0⟩, 4104, some b⟩ 8 8
-    pure (decodePtr tgt bs == some p, decodeInt tgt .u64 bs)) = some (true, some 4100) := by
-  decide
 
 end ConcreteSpec.Core.Mem

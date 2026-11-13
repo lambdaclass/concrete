@@ -988,7 +988,7 @@ ConcreteSpec.Core.MachineOp.wrapping.injEq	propext
 ConcreteSpec.Core.MachineOp.wrapping.sizeOf_spec	
 ConcreteSpec.Core.Mem.AllocError.ofNat_ctorIdx	
 ConcreteSpec.Core.Mem.AllocError.unavailable.sizeOf_spec	
-ConcreteSpec.Core.Mem.Audit.bytes._proof_1	propext
+ConcreteSpec.Core.Mem.Audit.storedBlock._proof_1	propext
 ConcreteSpec.Core.Mem.Block.Candidate.eq_1	
 ConcreteSpec.Core.Mem.Block.Overlaps.eq_1	
 ConcreteSpec.Core.Mem.Block.mk.inj	
@@ -1048,19 +1048,10 @@ ConcreteSpec.Core.Mem.candidate_onePast_unique._proof_1_2	Quot.sound propext
 ConcreteSpec.Core.Mem.candidate_onePast_unique._proof_1_3	Quot.sound propext
 ConcreteSpec.Core.Mem.decodeInt_encodeInt	Quot.sound propext
 ConcreteSpec.Core.Mem.decodeInt_inRange	Classical.choice Quot.sound propext
-ConcreteSpec.Core.Mem.decodePtr._sparseCasesOn_3.else_eq	propext
-ConcreteSpec.Core.Mem.decodePtr._sparseCasesOn_4.else_eq	propext
-ConcreteSpec.Core.Mem.decodePtr._sparseCasesOn_5.else_eq	propext
-ConcreteSpec.Core.Mem.decodePtr.eq_1	propext
-ConcreteSpec.Core.Mem.decodePtr.eq_2	propext
-ConcreteSpec.Core.Mem.decodePtr_encodePtr	Quot.sound propext
-ConcreteSpec.Core.Mem.decodePtr_encodePtr._proof_1_1	Quot.sound propext
-ConcreteSpec.Core.Mem.decodePtr_some	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Mem.empty_wellFormed	Quot.sound propext
 ConcreteSpec.Core.Mem.encodeInt.eq_1	
 ConcreteSpec.Core.Mem.encodeInt_length	propext
 ConcreteSpec.Core.Mem.encodeInt_rep	propext
-ConcreteSpec.Core.Mem.encodePtr.eq_1	
 ConcreteSpec.Core.Mem.eqAddr_provenance	propext
 ConcreteSpec.Core.Mem.eqAddr_separation	Quot.sound propext
 ConcreteSpec.Core.Mem.eqAddr_separation._proof_1_3	Quot.sound propext
@@ -2690,11 +2681,6 @@ _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.Memory.load.match_1.
 _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.Memory.load.match_1.eq_3	
 _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.canonical_of_unique	Quot.sound propext
 _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.canonical_of_unique._simp_1_1	propext
-_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.decodePtr.match_1.eq_1	
-_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.decodePtr.match_1.eq_2	
-_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.decodePtr.match_3.eq_1	propext
-_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.decodePtr.match_3.eq_2	propext
-_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.decodePtr_checks_inv	propext
 _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.keys_update	propext
 _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.leBytes.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.leBytes.match_1.eq_2	
