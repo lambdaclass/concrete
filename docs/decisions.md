@@ -54,8 +54,8 @@ yes approve it
 
 Decided by that approval:
 
-- The ownership-bookkeeping (lifecycle) step returns an updated state or a refusal:
-  `life : Life → Store → Option Store`.
+- The ownership-bookkeeping (lifecycle) step answers either "OK, here is the updated ledger"
+  or "refused".
 - Refusal stops the run, classified unsafe; it is never normal completion, a program trap,
   or a recoverable error.
 - The checker must prove that an accepted program is never refused at every lifecycle site:
