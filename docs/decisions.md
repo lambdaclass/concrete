@@ -14,6 +14,72 @@ the earlier behaviour, the answer below governs, and the code follows as its new
 
 The shape of Core was approved provisionally on 2026-11-05 ([stage A2a](#decided-2026-11-05)): it binds the design, and the owner freezes Core at stage A2c, after the four design theorems are proved against the proposed `Spec.lean` and the integration stage A2i (2026-11-06) is accepted. The project and architecture decisions are recorded here too, [below](#decided-project).
 
+<a id="decided-2026-11-13-lifecycle-refusal"></a>
+## Decided 2026-11-13: lifecycle refusal
+
+This answers the lifecycle-signature part of the [November 9 reopening](#decided-2026-11-09-older-proposals).
+
+Assistant recommendation, verbatim. Provenance: session
+`e2c54e65-31b5-4145-8101-c2d7b071b97e`, physical transcript line 151131,
+2026-11-13T17:21:38.208Z (UTC):
+
+~~~text
+Both recommend the same solution: the ledger is allowed to answer **"refused"**, and the spec already does this.
+
+How it works:
+1. **The ledger has two answers.** Every time a variable is created, a function starts or ends, or a block closes, the ledger answers either "OK, here is the updated ledger" or "refused".
+2. **A refusal stops the run.** It is labelled unsafe. It can never be reported as "finished normally". It is also not a trap and not a recoverable error: it means the program broke the ownership rules, which a real Concrete program can never do.
+3. **The checker carries the guarantee.** It must prove that any program it accepts never gets a "refused", at every point: when a function starts, when a result is stored, and when the last block closes. The spec's safety theorem rests on that.
+4. **No reasons in the spec.** The spec only says "refused". Error messages for the programmer come from the checker.
+
+Example:
+```
+let x = make();
+borrow x as r { ... }  // something still borrows x
+}                      // block closes and frees x
+```
+Before the fix, the spec said "finished normally". With it, the ledger refuses, the run stops as unsafe, and the checker must have rejected this program in the first place.
+
+Nothing changes in the language you write, and the existing rules stay as they are: destruction is always written by the programmer, closing a block never destroys anything by itself, and a trap during cleanup ends the program.
+
+Do you approve it? If yes, I'll record your answer and start the execution spec, which unblocks about 15 pieces after it.
+~~~
+
+Owner reply, verbatim. Provenance: the same session, physical transcript line 151136,
+2026-11-13T17:21:41.810Z (UTC):
+
+~~~text
+yes approve it
+~~~
+
+Decided by that approval:
+
+- The ownership-bookkeeping (lifecycle) step answers either "OK, here is the updated ledger"
+  or "refused".
+- Refusal stops the run, classified unsafe; it is never normal completion, a program trap,
+  or a recoverable error.
+- The checker must prove that an accepted program is never refused at every lifecycle site:
+  function entry, result binding, and scope exit including the final one.
+- The spec carries no refusal reasons; diagnostics come from the checker.
+- Unchanged: [explicit consuming destruction](#od60), with the
+  [receiver-syntax revision](#decided-2026-11-08-language-revisions);
+  [no synthesized destruction at scope exit, only storage teardown](#od69);
+  [a trap in a deferred call ends the program and runs no further deferred call](#od68).
+
+**NOT decided:** how refusal at initial function entry is reported versus refusal mid-run;
+that a refused response to a primitive request does not roll back an already-performed
+external effect (the spec only stops). These are open spec-detail questions raised by the
+Codex review for the execution piece to state explicitly, not owner decisions to encode
+from this record.
+
+Evidence: `scratchpad/f08/approval.md`, `proposal.md`, `review-codex.md` and
+`review-kimi.md` under session `e2c54e65-31b5-4145-8101-c2d7b071b97e`'s scratchpad
+(`/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/`). The primary transcript is
+`~/.claude/projects/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e.jsonl`.
+The full proposal presents options A–F, history and sources. Codex and Kimi independently
+confirmed the defect and agreed with the recommendation, both with changes
+(`AGREE-WITH-CHANGES`). agy could not review because of quota.
+
 <a id="waiting-for-the-owner"></a>
 ## Waiting for the owner
 
@@ -1965,6 +2031,10 @@ ok too many questions do what all of you agree
   Thus 29-list items 6–10 (slice 1), 23, 25, 26 (S1/S3/S4), and 11 through S5
   (NaN) are historical recovered evidence, superseded by this requirement to bring full
   proposals. Recovery does not restore their former current status.
+
+  Forward note: the lifecycle-signature question is answered by the
+  [November 13 lifecycle-refusal decision](#decided-2026-11-13-lifecycle-refusal).
+  The other reopened questions retain their existing status.
 
   <a id="decided-2026-11-08-recovered-59"></a>**The 59-item list.** Recommendations last shown
   in full at L119002, 2026-11-08T04:03:06.062Z. The owner answered at L119110, 2026-11-08T04:05:31.772Z
