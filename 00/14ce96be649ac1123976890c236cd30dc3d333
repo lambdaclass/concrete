@@ -1,0 +1,2 @@
+[piece 2 of 4: scripts]
+- ConcreteSpec/Proofs/Exec.lean:1023: The file ends with both `CoreEvidence` and `ConcreteSpec.Core.Exec` namespaces still open. Add their matching `end` commands; otherwise Lean reports an unexpected end of input and the module cannot compile.
