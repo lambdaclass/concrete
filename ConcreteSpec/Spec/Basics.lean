@@ -26,6 +26,19 @@ structure Var where
   id : Nat
   deriving DecidableEq
 
+/-- Nominal identity text (Q9.2): a declaration, module component or opaque
+identity token, never a local diagnostic spelling. No character, path, version
+or normalization policy is imposed by this wrapper.
+For example, `⟨"count"⟩ : Name` names a field. -/
+structure Name where
+  /-- The declaration spelling; for example, `(⟨"count"⟩ : Name).text = "count"`. -/
+  text : String
+  deriving DecidableEq
+
+-- Keep diagnostic rendering identical to the previous String representation.
+instance : Repr Name where
+  reprPrec name prec := reprPrec name.text prec
+
 /-- Numeric data rather than source spelling scalars. For example, `[1, 2] : Numbers`
 can hold array elements, program text bytes or allocator generations; never identifier spellings. This alias changes no list operation. -/
 abbrev Numbers := List Nat

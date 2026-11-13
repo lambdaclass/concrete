@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.Basics
 import ConcreteSpec.Spec.Rep
 import ConcreteSpec.Spec.Slice1Semantics
 import ConcreteSpec.Spec.Slice1Syntax
