@@ -163,6 +163,12 @@ jobs:
             exit 1
           fi
 
+      - name: Extract specification site
+        run: nix develop -c bash scripts/spec/lean_site.sh
+
+      - name: Check rule registry and controls
+        run: nix develop -c bash scripts/spec/rules.sh
+
   # PROOF INTEGRITY (scripts/proofs). Four jobs, each required, each with its own negative controls:
   # the per-theorem axiom inventory against its golden list, the transitive sorry/native_decide ban,
   # the fresh kernel replay (leanchecker) and the independent re-check (con-leche, nanoda). The spec
