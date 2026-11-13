@@ -2,6 +2,7 @@ import ConcreteSpec.Spec.Basics
 import ConcreteSpec.Spec.Ident
 import ConcreteSpec.Spec.Target
 import ConcreteSpec.Spec.Outcome
+import ConcreteSpec.Spec.Scalar
 import ConcreteSpec.Spec.Surface0
 import ConcreteSpec.Spec.Slice1Syntax
 import ConcreteSpec.Spec.Statics
