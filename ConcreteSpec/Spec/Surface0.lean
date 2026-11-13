@@ -7,12 +7,16 @@ import ConcreteSpec.Spec.Slice1Syntax
 **PROPOSED: not normative until the owner freezes Core (ROADMAP A2c).**
 Part of ConcreteSpec.Spec; see ConcreteSpec/README.md.
 
-Authority: docs/decisions.md, owner-approved language list item 30 (OPEN-1),
+Authority: docs/decisions.md#recovered-59-30 (OPEN-1; primary recommendation
+and queued owner approval recorded with transcript lines and UTC times),
 SYN-5@3 and SYN-6@3, and the literal decisions recorded on 2026-11-08.
 Core Q4.2 permits embedded NUL in static text VALUES (e.g. through the `\0`
-escape), not in raw source bytes. Item 30 and the owner's no-hidden-surprises
-ruling exclude U+FEFF anywhere, including comments and literals. Bare CR ends
-a comment.
+escape), not in raw source bytes. Item 30 says "no byte-order mark"; it does not
+settle whether U+FEFF is excluded everywhere, including comments and literals.
+The landed definitions below exclude it everywhere and end comments at bare CR.
+These authority gaps remain open in docs/decisions.md#decided-2026-11-08-recovery-queue
+(ISS-0064 / ISS-0065); the claimed separate 15:31 CR approval was not verified.
+No current owner approval of either disputed scope is inferred here.
 
 UTF-8 source validity, NUL/BOM refusal, ASCII identifiers, the four settled whitespace scalars,
 line comments and maximal trivia runs are specified here. Strings and comments refuse raw Cc,
@@ -30,21 +34,21 @@ is included.
 namespace ConcreteSpec.Surface0
 namespace Utf8
 
-/-- Decision: owner-approved language list item 30 (OPEN-1), SYN-5@3 / SYN-6@3.
+/-- Decision: docs/decisions.md#recovered-59-30 (OPEN-1), SYN-5@3 / SYN-6@3.
  A Unicode scalar value: below U+110000 and outside the surrogate interval. -/
 def Scalar (c : Nat) : Prop := c < 0x110000 ∧ (c < 0xD800 ∨ 0xE000 ≤ c)
 
-/-- Decision: item 30 (OPEN-1), SYN-5@3. The shared UTF-8 one-byte row. -/
+/-- Decision: docs/decisions.md#recovered-59-30 (OPEN-1), SYN-5@3. The shared UTF-8 one-byte row. -/
 def One (a : UInt8) : Prop := Borrow.isScalar [a.toNat] = true
-/-- Decision: item 30 (OPEN-1), SYN-5@3. The shared UTF-8 two-byte row. -/
+/-- Decision: docs/decisions.md#recovered-59-30 (OPEN-1), SYN-5@3. The shared UTF-8 two-byte row. -/
 def Two (a b : UInt8) : Prop := Borrow.isScalar [a.toNat, b.toNat] = true
-/-- Decision: item 30 (OPEN-1), SYN-5@3. The shared UTF-8 three-byte rows. -/
+/-- Decision: docs/decisions.md#recovered-59-30 (OPEN-1), SYN-5@3. The shared UTF-8 three-byte rows. -/
 def Three (a b c : UInt8) : Prop := Borrow.isScalar [a.toNat, b.toNat, c.toNat] = true
-/-- Decision: item 30 (OPEN-1), SYN-5@3. The shared UTF-8 four-byte rows. -/
+/-- Decision: docs/decisions.md#recovered-59-30 (OPEN-1), SYN-5@3. The shared UTF-8 four-byte rows. -/
 def Four (a b c d : UInt8) : Prop :=
   Borrow.isScalar [a.toNat, b.toNat, c.toNat, d.toNat] = true
 
-/-- Decision: owner-approved language list item 30 (OPEN-1), SYN-5@3 / SYN-6@3.
+/-- Decision: docs/decisions.md#recovered-59-30 (OPEN-1), SYN-5@3 / SYN-6@3.
  A scalar's encoding combines Borrow.isScalar with the positional value equation;
 this judgment does not run a decoder. All other lengths are excluded. -/
 def Encodes (s : Nat) (bs : List UInt8) : Prop :=
@@ -58,7 +62,7 @@ def Encodes (s : Nat) (bs : List UInt8) : Prop :=
         (c.toNat - 0x80) * 64 + (d.toNat - 0x80)
   | _ => False
 
-/-- Decision: owner-approved language list item 30 (OPEN-1), SYN-5@3 / SYN-6@3.
+/-- Decision: docs/decisions.md#recovered-59-30 (OPEN-1), SYN-5@3 / SYN-6@3.
  Bytes decode to scalars exactly when they concatenate their encodings in order. -/
 inductive Decodes : List UInt8 → List Nat → Prop
   | nil : Decodes [] []
@@ -67,12 +71,12 @@ inductive Decodes : List UInt8 → List Nat → Prop
 
 end Utf8
 
-/-- Decision: item 30 (OPEN-1), SYN-5@3. A partial scalar admits a
+/-- Decision: docs/decisions.md#recovered-59-30 (OPEN-1), SYN-5@3. A partial scalar admits a
 well-formed continuation exactly when it is a prefix of an encoding. -/
 def ScalarPrefix (bytes : List UInt8) : Prop :=
   ∃ suffix value, Utf8.Encodes value (bytes ++ suffix)
 
-/-- Decision: item 30 (OPEN-1), SYN-5@3. A local first failure: all shorter
+/-- Decision: docs/decisions.md#recovered-59-30 (OPEN-1), SYN-5@3. A local first failure: all shorter
 prefixes can still become one scalar, and the prefix before failure is unfinished.
 At EOF the scalar is unfinished; otherwise
 the byte at `offset` makes any well-formed continuation impossible. -/
@@ -82,7 +86,7 @@ def ScalarFailure (bytes : List UInt8) (offset : Nat) : Prop :=
   ((offset < bytes.length ∧ ¬ ScalarPrefix (bytes.take (offset + 1))) ∨
    (offset = bytes.length ∧ ¬ ∃ value, Utf8.Encodes value bytes))
 
-/-- Decision: item 30 (OPEN-1), SYN-5@3. The first failed scalar follows a
+/-- Decision: docs/decisions.md#recovered-59-30 (OPEN-1), SYN-5@3. The first failed scalar follows a
 well-formed byte prefix. The offset is the first byte where no scalar continuation
 exists, or EOF when an otherwise extendible scalar is incomplete. -/
 def FirstError (bytes : List UInt8) (offset : Nat) : Prop :=
@@ -90,8 +94,9 @@ def FirstError (bytes : List UInt8) (offset : Nat) : Prop :=
     bytes = pre ++ rest ∧ Utf8.Decodes pre cs ∧
     ScalarFailure rest localOffset ∧ rest ≠ [] ∧ offset = pre.length + localOffset
 
-/-- Decision: item 30 (OPEN-1), SYN-5@3. The first raw-source failure:
+/-- Decision: docs/decisions.md#recovered-59-30 (OPEN-1), SYN-5@3. The first raw-source failure:
 an invalid scalar, NUL, or U+FEFF, following only permitted complete scalars.
+The everywhere-U+FEFF scope is pending owner confirmation; see the header (ISS-0064).
 NUL/BOM offsets name the start of the refused scalar. -/
 inductive SourceFailure : List UInt8 → Nat → Prop
   | utf8 {bytes : List UInt8} {k : Nat} : bytes ≠ [] → ScalarFailure bytes k → SourceFailure bytes k
@@ -101,7 +106,7 @@ inductive SourceFailure : List UInt8 → Nat → Prop
       Utf8.Encodes c chunk → c ≠ 0 → c ≠ 0xFEFF → SourceFailure rest k →
       SourceFailure (chunk ++ rest) (chunk.length + k)
 
-/-- Decision: owner-approved language list item 30 (OPEN-1), SYN-5@3 / SYN-6@3.
+/-- Decision: docs/decisions.md#recovered-59-30 (OPEN-1), SYN-5@3 / SYN-6@3.
  A source has a decoding with neither NUL nor BOM anywhere. -/
 def SourceOk (bs : List UInt8) : Prop :=
   ∃ cs, Utf8.Decodes bs cs ∧ ∀ c ∈ cs, c ≠ 0 ∧ c ≠ 0xFEFF
@@ -113,7 +118,7 @@ def Whitespace (c : Nat) : Prop := c = 32 ∨ c = 9 ∨ c = 10 ∨ c = 13
 def IdentStart (c : Nat) : Prop :=
   (65 ≤ c ∧ c ≤ 90) ∨ (97 ≤ c ∧ c ≤ 122) ∨ c = 95
 
-/-- Decision: owner-approved language list item 30 (OPEN-1), SYN-5@3 / SYN-6@3.
+/-- Decision: docs/decisions.md#recovered-59-30 (OPEN-1), SYN-5@3 / SYN-6@3.
  Only ASCII letters, underscore and digits continue identifiers. -/
 def IdentContinue (c : Nat) : Prop := IdentStart c ∨ (48 ≤ c ∧ c ≤ 57)
 
@@ -332,7 +337,7 @@ instance (c : Nat) : Decidable (Utf8.Scalar c) := inferInstanceAs (Decidable (_ 
 instance (c : Nat) : Decidable (Whitespace c) := inferInstanceAs (Decidable (_ ∨ _))
 /-- Identifier-start membership is decidable by ASCII bounds. -/
 instance (c : Nat) : Decidable (IdentStart c) := inferInstanceAs (Decidable (_ ∨ _))
-/-- Decision: owner-approved language list item 30 (OPEN-1), SYN-5@3 / SYN-6@3.
+/-- Decision: docs/decisions.md#recovered-59-30 (OPEN-1), SYN-5@3 / SYN-6@3.
  Identifier-continuation membership is decidable by ASCII bounds. -/
 instance (c : Nat) : Decidable (IdentContinue c) := inferInstanceAs (Decidable (_ ∨ _))
 /-- The string escape relation is decidable by its six scalar equalities. -/
@@ -368,7 +373,7 @@ instance (a b c : UInt8) : Decidable (Utf8.Three a b c) := inferInstanceAs (Deci
 instance (a b c d : UInt8) : Decidable (Utf8.Four a b c d) :=
   inferInstanceAs (Decidable (_ = true))
 
-/-- Decision: owner-approved language list item 30 (OPEN-1), SYN-5@3 / SYN-6@3.
+/-- Decision: docs/decisions.md#recovered-59-30 (OPEN-1), SYN-5@3 / SYN-6@3.
  Encoding membership is decidable directly from the range constraints. -/
 instance (c : Nat) (bs : List UInt8) : Decidable (Utf8.Encodes c bs) := by
   unfold Utf8.Encodes

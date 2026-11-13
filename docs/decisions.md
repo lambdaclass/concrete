@@ -1199,23 +1199,19 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   additional comparison rule is inferred.
 - <a id="decided-2026-11-08-language"></a>**Language answers of 2026-11-08** (owner:
   "record, yes to all recommended"; [primary excerpts](archive/owner-language-2026-11-08/OWNER_QUOTES.md#language-approval-and-qualification)).
-  The archived branch tag `archive/2026-11-10/record-language` preserves a later
-  [59-item transcription](archive/owner-language-2026-11-08/TRANSCRIPTION.md), but not the
-  recommendation and grammar sheet that the owner saw. The blanket approval cannot verify
-  those missing texts. The entries below record only substance preserved with a primary quote.
-  The excerpts preserve evidence; this decision record states its disposition.
-  Recovery or explicit owner re-confirmation stays queued in [ISS-0065](../ISSUES.tsv):
-  the 59-item set beyond items 5, 7, 11 and 40, and the other 26 answers in the 15:08
-  list of 29 (only 3, 14 and 18 are preserved here). Missing substance is not inferred
-  from implementation.
+  The [verified recovery](#decided-2026-11-08-recovered) records the owner-shown
+  recommendations and primary replies, including the historical 29-item list and the 59-item list.
+  Only the [explicit remaining queue](#decided-2026-11-08-recovery-queue) lacks sufficient
+  source-backed disposition (ISS-0065). Recovered older proposals reopened on November 9
+  remain superseded; this recording does not make them current.
   - <a id="decided-2026-11-08-removed-words"></a>*Removed words* (items 7, 11 and 40;
     owner: "i prefer fully gone, self and as are irrelevant from what i see", then
     "record, yes to all recommended"; [source](archive/owner-language-2026-11-08/OWNER_QUOTES.md#language-approval-and-qualification)).
     Receivers and every special use of `as` are removed. `self` and `as` are ordinary identifiers,
     not reserved words. Obsolete forms get ordinary parse or resolution errors, not a dedicated
     diagnostic. Item 40's added or retained reservations are `spec`, `by`, `kept`, `Self`, `while`
-    and `Entropy`; the source says obsolete reservations are dropped but does not name
-    that set, which remains undetermined pending ISS-0065. This is not the full keyword table.
+    and `Entropy`; the verified [item-40 source](#recovered-59-40) names the dropped
+    reservations as `in`, `newtype`, `union`, `total`. This is not the full keyword table.
     Replacement conversion, borrow and unpack spellings are not decided here.
   - <a id="decided-2026-11-08-imports-qualified"></a>*Imported uses* (item 11(b); owner:
     "i like 3"; [source](archive/owner-language-2026-11-08/OWNER_QUOTES.md#language-approval-and-qualification)).
@@ -1234,17 +1230,16 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     ([source](archive/owner-language-2026-11-08/OWNER_QUOTES.md#later-slice-0-sign-off)).
   - <a id="decided-2026-11-08-process"></a>*Review implementation.* The later landed
     [review-cap and sign-off implementation](REVIEW.md#the-cap) is documented there.
-    Implementation is not evidence of owner approval; missing process recommendations
-    remain queued under ISS-0065.
+    The [recovered process recommendations](#decided-2026-11-08-recovered-59) supply
+    owner evidence; implementation alone is not evidence of approval.
   - <a id="decided-2026-11-08-language-literals"></a>*Later literal answers* (owner,
     15:08 UTC: "ok but i said already all yes based on the best long term reviews of each agent and what we said before right?";
-    15:31:59 UTC: "okay with your decisions";
+    15:31:48 UTC: "okay with your decisions";
     [15:08 source](archive/owner-language-2026-11-08/OWNER_QUOTES.md#2026-11-08-1508-utc-owner-verbatim-answering-the-29-questions),
-    [15:31 source](archive/owner-language-2026-11-08/OWNER_QUOTES.md#2026-11-08t153159z-owner-verbatim)).
+    [15:31 source](archive/owner-language-2026-11-08/OWNER_QUOTES.md#2026-11-08t153148z-owner-verbatim)).
     The first answer approves ASCII `u8` single-quoted byte literals; the second approves their
-    exact six escapes and printable-ASCII raw content, the raw-scalar restrictions in strings
-    and comments, TAB permitted in comments, LF/CR ending comments, lowercase base prefixes and
-    hex digits, exactly eight integer suffixes on every base, no float suffixes, and malformed
+    exact six escapes and printable-ASCII raw content, the raw-scalar restrictions in strings, TAB permitted in comments,  lowercase base prefixes and
+    hex digits, exactly eight integer suffixes on every base, and malformed
     adjacent text refused as one token. These lexical definitions live in
     [Surface0](../ConcreteSpec/Spec/Surface0.lean); the already-landed string escape table is
     separate from the byte escape table. This record links to those definitions rather than
@@ -1268,7 +1263,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     The initializer grammar is closed, with fallible primitive operations and no calls, loops
     or effects. Every initializer is evaluated; success is kernel-checked and fuel exhaustion
     refuses. This revises TYPE-22 and the constant-evaluation portions of Q6.4 and Q6.6.
-  - <a id="decided-2026-11-08-c9-identities"></a>*C9 identity* (owner, 15:31:59 UTC:
+  - <a id="decided-2026-11-08-c9-identities"></a>*C9 identity* (owner, 15:31:48 UTC:
     "okay with your decisions"; [source](archive/owner-language-2026-11-08/OWNER_QUOTES.md#c9-identity)).
     `FunctionRelativeKey` is a structured path of construct-kind/name segments. Unnamed items
     use an ordinal among same-kind siblings under the nearest named ancestor, with an optional
@@ -1296,18 +1291,1892 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     [imported-use answer](#decided-2026-11-08-imports-qualified), or
     [literal answers](#decided-2026-11-08-language-literals). The remaining substance of those
     rows continues to govern. The CLI and constant revisions are recorded above.
-  - <a id="decided-2026-11-08-source-evidence"></a>*Landed source rules and missing evidence.*
-    The source-validity and trivia definitions are maintained in
-    [Surface0](../ConcreteSpec/Spec/Surface0.lean), still PROPOSED until the Core freeze.
-    Their former citations to approved list item 30 cannot be verified from the surviving
-    blanket approval. [ISS-0064](../ISSUES.tsv) tracks re-citing the header and definitions
-    at Surface0.lean lines 10, 33, 47 and 61 once item 30 is recovered or explicitly
-    re-confirmed through ISS-0065. This entry neither approves the
-    missing recommendation nor changes the landed behavior. The Lean definitions are the one
-    statement of those rules; historical implementation changelogs are not independent authority.
+  - <a id="decided-2026-11-08-source-evidence"></a>*Source rules and authority limits.*
+    [Item 30](#recovered-59-30) now has primary recommendation and approval provenance.
+    [Surface0](../ConcreteSpec/Spec/Surface0.lean) cites it for UTF-8 and source-text rules.
+    Its wider U+FEFF exclusion and bare-CR comment termination remain unverified authority
+    claims, explicitly [queued](#decided-2026-11-08-recovery-queue); ISS-0064 remains open.
+    No Lean semantics change. The spec remains PROPOSED until the Core freeze.
 
   *Related existing work:* [R-0618](../ROADMAP.md#r-0618) covers review caps and
   exact-commit sign-off. ISS-0065 tracks missing approvals; ISS-0064 tracks the Lean citations.
+
+
+- <a id="decided-2026-11-08-recovered"></a>**Primary approvals recovered 2026-11-13.**
+  Authorized by the owner on 2026-11-13 ("1. yes and 2 a"). All quotations below
+  were checked against the primary JSONL, not against implementation or the recovery report.
+  Transcript for every L-number below:
+  `~/.claude/projects/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e.jsonl`.
+  Times are the source entry's UTC timestamps. Recommendations are assistant text;
+  answers are owner plain-text user messages or explicitly identified human queued commands
+  (`attachment.type: queued_command`, `attachment.prompt`, human origin). Task notifications
+  are not owner answers. When several asks are pending, a blanket reply is recorded in that
+  context; an item-specific reply is evidence only for the item it names.
+  A blanket reply is not a separate per-item reply. Recovery records only the shown text;
+  references such as "as proposed" do not recover an unshown proposal.
+
+  <a id="decided-2026-11-08-recovered-29"></a>**The 29 answers.** The full recommendations
+  were shown at L124574, 2026-11-08T15:05:01.527Z; the final compact restatement
+  at L124693, 2026-11-08T15:08:10.131Z is also reproduced per item.
+  The owner answered all of them at L124708, 2026-11-08T15:08:56.319Z:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  The final restatement also presented a separate Decision 2, sign-off of exactly
+  `e997548d`, and L124700 kept both decisions pending. The reply above is a blanket
+  reply to that context, not 29 separate answers; no executed sign-off is claimed here.
+
+  No earlier literal "all yes" is recovered. The owner's reference to an earlier approval
+  is not used as evidence of another utterance.
+
+  <a id="recovered-29-1"></a>**29-list item 1: RECOVERED.**
+
+```text
+1. **Yes:** when Codex wrote a branch, Kimi or agy reviews it, never Codex itself. This is what's blocking the lexer and the C1 and C5 fixes.
+```
+
+  Final restatement:
+
+```text
+1. When Codex wrote a branch, Kimi or agy reviews it instead of Codex. This unblocks the lexer. (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+
+  <a id="recovered-29-2"></a>**29-list item 2: RECOVERED.**
+
+```text
+2. **Yes:** the operator and punctuation list is closed, and adding a token later takes an explicit revision.
+```
+
+  Final restatement:
+
+```text
+2. The operator and punctuation list is closed. (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+
+  <a id="recovered-29-3"></a>**29-list item 3: RECOVERED.**
+
+```text
+3. **`'a'` is the ASCII byte `97u8`.** It has its own small escape list, and anything non-ASCII is refused. Tests pin down both the literal and how it's told apart from labels.
+```
+
+  Final restatement:
+
+```text
+3. `'a'` is the ASCII byte 97, and anything non-ASCII is refused. (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+
+  <a id="recovered-29-4"></a>**29-list item 4: RECOVERED.**
+
+```text
+4. **No raw tabs or control characters inside strings;** write `\t` instead.
+```
+
+  Final restatement:
+
+```text
+4. Strings may not contain raw tabs or control characters; write `\t`. (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+
+  <a id="recovered-29-5"></a>**29-list item 5: RECOVERED.**
+
+```text
+5. **Numbers:**
+   - suffixes such as `200u8`;
+   - prefixes `0x`, `0b` and `0o`;
+   - no `_` separators;
+   - typos like `123u9` are refused.
+```
+
+  Final restatement:
+
+```text
+5. Numbers: `200u8`, `0x`/`0b`/`0o`, no `_`, and `123u9` is refused. (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+
+  <a id="recovered-29-6"></a>**29-list item 6: RECOVERED; recovered evidence superseded by the November 9 reopening (not current).**
+
+```text
+6. **The compiler accepts a stated part of the spec,** with proofs. We don't cut the spec down.
+```
+
+  Final restatement:
+
+```text
+6. Slice 1 implements a stated part of the spec, without cutting the spec down. (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+  Current authority: [November 9 reopening](#decided-2026-11-09-older-proposals); bring the full proposal before deciding.
+
+  <a id="recovered-29-7"></a>**29-list item 7: RECOVERED; recovered evidence superseded by the November 9 reopening (not current).**
+
+```text
+7. **Consuming a value is written `move t`.**
+```
+
+  Final restatement:
+
+```text
+7. Consuming a value is written `move t`. (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+  Current authority: [November 9 reopening](#decided-2026-11-09-older-proposals); bring the full proposal before deciding.
+
+  <a id="recovered-29-8"></a>**29-list item 8: RECOVERED; recovered evidence superseded by the November 9 reopening (not current).**
+
+```text
+8. **`abort()` appears only as `return abort();`.** It never produces a value and runs no cleanup.
+```
+
+  Final restatement:
+
+```text
+8. `abort()` is written only as `return abort();` and runs no cleanup. (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+  Current authority: [November 9 reopening](#decided-2026-11-09-older-proposals); bring the full proposal before deciding.
+
+  <a id="recovered-29-9"></a>**29-list item 9: RECOVERED; recovered evidence superseded by the November 9 reopening (not current).**
+
+```text
+9. **`Concrete.toml`:** each table gets its own version, the policy is picked by name (for example `profile = "predictable"`), and trusted assumptions get an explicit setting. Version 1 fixes exactly what each named policy means.
+```
+
+  Final restatement:
+
+```text
+9. Each `Concrete.toml` table has its own version, the policy is chosen by name, and trusted assumptions get an explicit setting. (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+  Current authority: [November 9 reopening](#decided-2026-11-09-older-proposals); bring the full proposal before deciding.
+
+  <a id="recovered-29-10"></a>**29-list item 10: RECOVERED; recovered evidence superseded by the November 9 reopening (not current).**
+
+```text
+10. **R-0600, the "always aborts" fact, goes in slice 5.**
+```
+
+  Final restatement:
+
+```text
+10. The "always aborts" fact (R-0600) belongs in slice 5. (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+  Current authority: [November 9 reopening](#decided-2026-11-09-older-proposals); bring the full proposal before deciding.
+
+  <a id="recovered-29-11"></a>**29-list item 11: RECOVERED; recovered evidence superseded by the November 9 reopening (not current).**
+
+```text
+11. **NaN:**
+    - operations that can create NaN need a proof, or a checked form;
+    - arithmetic that does produce NaN gives the one canonical bit pattern;
+    - bit conversions, `abs`, `neg` and `copysign` keep the exact bits;
+    - `==` follows IEEE, and a separate `bit_eq` compares bits.
+```
+
+  Final restatement:
+
+```text
+11. NaN:
+    - operations that can create NaN need a proof, or a checked form;
+    - arithmetic that does produce NaN gives the one canonical bit pattern;
+    - bit conversions, `abs`, `neg` and `copysign` keep the exact bits;
+    - `==` follows IEEE, and a separate `bit_eq` compares bits.
+
+    (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+  The additional claim that this chooses S5 option (a) was not shown and is not recovered.
+  Current authority: [November 9 reopening](#decided-2026-11-09-older-proposals); bring the full proposal before deciding.
+
+  <a id="recovered-29-12"></a>**29-list item 12: RECOVERED.**
+
+```text
+12. **Each file is checked separately,** and checking a file stops at its first error.
+```
+
+  Final restatement:
+
+```text
+12. Each file is checked separately, and checking a file stops at its first error. (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+
+  <a id="recovered-29-13"></a>**29-list item 13: RECOVERED.**
+
+```text
+13. **Exit codes:**
+    - 0 OK;
+    - 1 refused;
+    - 2 incomplete;
+    - 3 usage error;
+    - 4 internal error.
+
+    `concrete facts` doubles as the check mode.
+```
+
+  Final restatement:
+
+```text
+13. Exit codes: 0 OK, 1 refused, 2 incomplete, 3 usage error, 4 internal error. (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+
+  <a id="recovered-29-14"></a>**29-list item 14: RECOVERED.**
+
+```text
+14. **`help` exists now.** `emit`, `trace` and `interp` each arrive once the data they show exists. There's **no `run` command**: building and then executing is the one way to run a program. This revises the slice-0 surface.
+```
+
+  Final restatement:
+
+```text
+14. `help` exists now, and `emit`, `trace` and `interp` arrive later. There is no `run` command. (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+
+  <a id="recovered-29-15"></a>**29-list item 15: RECOVERED.**
+
+```text
+15. **The formatter has `--check`, `--write` and `--stdin`,** and combining them is refused.
+```
+
+  Final restatement:
+
+```text
+15. The formatter has `--check`, `--write` and `--stdin`. (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+
+  <a id="recovered-29-16"></a>**29-list item 16: RECOVERED.**
+
+```text
+16. **Yes to `concrete schema` and `concrete capabilities`,** so an agent can discover what the compiler supports.
+```
+
+  Final restatement:
+
+```text
+16. Add `concrete schema` and `concrete capabilities`. (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+
+  <a id="recovered-29-17"></a>**29-list item 17: RECOVERED.**
+
+```text
+17. **A `[policy]` key sets the minimum proof strength for your own contracts,** and vacuous proofs are rejected.
+```
+
+  Final restatement:
+
+```text
+17. A `[policy]` key sets the minimum proof strength, and vacuous proofs are rejected. (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+
+  <a id="recovered-29-18"></a>**29-list item 18: RECOVERED.**
+
+```text
+18. **A constant's initializer may use primitive operations that can fail,** inside a closed grammar with no calls, loops or effects.
+    - The compiler evaluates every initializer, and the kernel checks that it succeeded.
+    - A failure, or running out of evaluation budget, means the constant is refused.
+    - `1 + 2` is allowed.
+    - This changes the TYPE-22 decision, so it gets recorded.
+```
+
+  Final restatement:
+
+```text
+18. A constant's initializer may use primitive operations that can fail, but no calls, loops or effects. The kernel checks that its evaluation succeeds, and failure means refusal. (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+
+  <a id="recovered-29-19"></a>**29-list item 19: RECOVERED.**
+
+```text
+19. **A constant may refer to one declared later.** Cycles are refused, and the error shows the chain.
+```
+
+  Final restatement:
+
+```text
+19. A constant may refer to one declared later, and cycles are refused. (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+
+  <a id="recovered-29-20"></a>**29-list item 20: RECOVERED.**
+
+```text
+20. **Bytes that aren't a whole stored pointer have no pointer meaning.** A named bytes-to-address conversion is added only when a workload needs it.
+```
+
+  Final restatement:
+
+```text
+20. Bytes that aren't a whole pointer carry no pointer meaning. (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+
+  <a id="recovered-29-21"></a>**29-list item 21: RECOVERED.**
+
+```text
+21. **Confirm the C1 change:** a cleanup step can be refused, and a refused step ends the run.
+```
+
+  Final restatement:
+
+```text
+21. A cleanup step can be refused, and a refused step ends the run. (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+
+  <a id="recovered-29-22"></a>**29-list item 22: PARTIAL; queued for owner re-confirmation.**
+
+```text
+22. **The std placement plan and O1–O12, as recommended.**
+```
+
+  Final restatement:
+
+```text
+22. The std placement plan, O1–O12. (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+  Missing: The full std-placement O1–O12 recommendations were not shown; "as recommended" does not recover their substance.
+
+  <a id="recovered-29-23"></a>**29-list item 23: RECOVERED; recovered evidence superseded by the November 9 reopening (not current).**
+
+```text
+23. **A safe `replace` at slice 13, and `swap` at slice 15.**
+```
+
+  Final restatement:
+
+```text
+23. Safe `replace` at slice 13, `swap` at slice 15. (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+  Current authority: [November 9 reopening](#decided-2026-11-09-older-proposals); bring the full proposal before deciding.
+
+  <a id="recovered-29-24"></a>**29-list item 24: RECOVERED.**
+
+```text
+24. **A view may lend several of its elements at once for reading only,** never two for writing.
+```
+
+  Final restatement:
+
+```text
+24. A view may lend several of its elements at once for reading only, never for writing. (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+
+  <a id="recovered-29-25"></a>**29-list item 25: PARTIAL; queued for owner re-confirmation; recovered evidence superseded by the November 9 reopening (not current).**
+
+```text
+25. **The stream interface is one generic function with a capability parameter.**
+```
+
+  Final restatement:
+
+```text
+25. A stream is one generic function with a capability parameter. (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+  Missing: The owner asked what item 25 meant at L124740, 2026-11-08T15:09:26.525Z. No answer to that question is recovered. The staged slice-18/per-family, slice-20/generic and D4 wording was not shown. Re-confirm the full S3 proposal.
+  Current authority: [November 9 reopening](#decided-2026-11-09-older-proposals); bring the full proposal before deciding.
+
+  <a id="recovered-29-26"></a>**29-list item 26: RECOVERED; recovered evidence superseded by the November 9 reopening (not current).**
+
+```text
+26. **Walking a structure through borrows uses the decided function pointer plus explicit context.** The design probe at slices 20–21 has the final say.
+```
+
+  Final restatement:
+
+```text
+26. Walking a structure through borrows uses a function pointer plus an explicit context. (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+  Current authority: [November 9 reopening](#decided-2026-11-09-older-proposals); bring the full proposal before deciding.
+
+  <a id="recovered-29-27"></a>**29-list item 27: PARTIAL; queued for owner re-confirmation.**
+
+```text
+27. **Sign off the roadmap sweep `35b489e4`.**
+```
+
+  Final restatement:
+
+```text
+27. Sign off the roadmap sweep `35b489e4`. (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+  Missing: The final two lists call 35b489e4 a roadmap sweep; the earlier list called it a legacy sweep. The correction came after approval, without an owner re-confirmation. Re-confirm the intended sign-off.
+
+  <a id="recovered-29-28"></a>**29-list item 28: RECOVERED.**
+
+```text
+28. **Approve the `main` protection settings in `d6159bf6`.** You apply them on GitHub yourself.
+```
+
+  Final restatement:
+
+```text
+28. Apply the `main` protection settings in `d6159bf6`; you do this on GitHub yourself. (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+
+  <a id="recovered-29-29"></a>**29-list item 29: RECOVERED.**
+
+```text
+29. **Yes:** sketch the showcase programs before the C1–C10 freeze, to test the design.
+```
+
+  Final restatement:
+
+```text
+29. Sketch the showcase programs before the spec freeze. (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+
+  <a id="decided-2026-11-09-older-proposals"></a>**Current authority for reopened older proposals.**
+  The assistant's agreed-list recommendation at L140586, 2026-11-09T19:56:40.977Z included exactly:
+
+```text
+- **Older questions** (lifecycle signature, standard-library coverage, slice 1, syntax spellings, NaN): bring the full proposals before deciding.
+```
+
+  The owner answered at L140591, 2026-11-09T19:58:06.514Z:
+
+```text
+ok too many questions do what all of you agree
+```
+
+  Thus 29-list items 6–10 (slice 1), 23, 25, 26 (S1/S3/S4), and 11 through S5
+  (NaN) are historical recovered evidence, superseded by this requirement to bring full
+  proposals. Recovery does not restore their former current status.
+
+  <a id="decided-2026-11-08-recovered-59"></a>**The 59-item list.** Recommendations last shown
+  in full at L119002, 2026-11-08T04:03:06.062Z. The owner answered at L119110, 2026-11-08T04:05:31.772Z
+  (human queued command, `attachment.type: queued_command`, `attachment.prompt`):
+
+```text
+record, yes to all recommended
+```
+
+  Items 11 and 40 also carry the later owner-shown changes and owner qualification below.
+
+  <a id="recovered-59-1"></a>**59-list item 1: RECOVERED.**
+
+```text
+1. When a branch reaches its review-round cap, you can approve one exact commit after all three models have reviewed it, and that approval is recorded.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-2"></a>**59-list item 2: RECOVERED.**
+
+```text
+2. A branch that mixes classes gets the highest cap.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-3"></a>**59-list item 3: RECOVERED.**
+
+```text
+3. There will be one review round on where each std item lives.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-4"></a>**59-list item 4: RECOVERED.**
+
+```text
+4. The trap names are `overflow`, `division_by_zero`, `invalid_shift`, `out_of_bounds`, `invalid_range` and `abort`.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-5"></a>**59-list item 5: RECOVERED.**
+
+```text
+5. Slice 0 lands now.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-6"></a>**59-list item 6: RECOVERED.**
+
+```text
+6. Dot method calls are removed. You write `Type::f(x)` or `Trait::f(x)`.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-7"></a>**59-list item 7: RECOVERED.**
+
+```text
+7. `self`, `&self` and `&mut self` are removed in favour of a typed first parameter. There is still exactly one Destroy protocol.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-8"></a>**59-list item 8: RECOVERED.**
+
+```text
+8. Constructors always write `field: value`.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-9"></a>**59-list item 9: RECOVERED.**
+
+```text
+9. Patterns always write `field: binder`.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-10"></a>**59-list item 10: RECOVERED.**
+
+```text
+10. Exact (mathematical) arithmetic in contracts is marked explicitly, e.g. `math { … }`.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-11"></a>**59-list item 11: RECOVERED.**
+
+```text
+11. `as` is removed entirely, pending round 4:
+    - casts become one named lossless conversion;
+    - imports can't be renamed;
+    - a borrow is written `borrow v = x { … }`;
+    - an unpack is written `unpack x = p { … }`.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+  The final follow-up approval ask (L119060, 2026-11-08T04:04:18.088Z) replaced the item-11 recommendation with full removal of `as`:
+
+```text
+Yes, I recommend it. All three reviewers now agree on every item. The only part still under review is the import fix (round 5), and the most it can change is that one item.
+
+To start, I need from you:
+1. **Approve the list:** all 59 items as recommended, with item 11 as "remove `as` entirely".
+2. **`self` and `as`:** reserved with no use, which I recommend, or fully gone.
+3. **Slice 0:** go to land it.
+
+The import detail in item 11b stays pending until round 5 is back; if the reviewers raise a problem, I'll bring you that one choice with examples.
+
+Once you approve, the work goes in this order:
+1. **Record now.** The spec worker writes your answer word for word and every decision into `decisions.md`, with each revised row named, and the work into ROADMAP. That's one branch through the normal train, after the branches already queued.
+2. **Spec now, for the foundation-level rules.** These are the trap names, `out_of_bounds`, constants computed at compile time and Copy-only, the dead-store refusal, the `#[depends]` check, the math boundary in contracts, and receivers as typed first parameters. They go into the C1–C10 Lean work already under way, before the freeze.
+3. **The spelling round next.** Exact names and punctuation come to you as before/after code: the conversion function, the move-out, `math { }`, the output and append functions, import punctuation and the item-59 sub-rules. The grammar is encoded in Lean only after you approve those.
+4. **Then the parser,** built against the Lean grammar and proven to match it.
+
+Just answer "yes, all recommended, reserved, land slice 0", or tell me which parts to change.
+```
+  Import qualification was separately answered by the owner at L119176, 2026-11-08T04:07:58.873Z:
+
+```text
+i like 3
+```
+  The options actually shown (L119171, 2026-11-08T04:07:42.215Z) were:
+
+```text
+All three reviewers rejected my recommendation (option 2). Their objection is right: under option 2, adding one import elsewhere in a module would force rewriting existing bare uses, so how a name is written would depend on something far away.
+
+Codex and Kimi pick option 3; agy picks option 1. This is your decision, item 11b. With `as` gone there is no renaming, so the question is how code uses two imported items that share a name.
+
+**Option 1: refuse the clash.**
+
+```con
+import std::json::{parse};
+import std::csv::{parse};      // error: `parse` imported twice
+```
+
+A module can't use both `parse` functions. You split the code into two modules, one per format. Names are always bare: `parse(s)`, `Vec<u8>`.
+- **For:** the simplest rule, one bare form, and every name means one thing in a module (agy).
+- **Against:** a naming accident forces you to restructure your code.
+
+**Option 3: always qualify by the module.**
+
+```con
+import std::json::{parse};
+import std::csv::{parse};
+import std::vec::{Vec};
+
+fn load(a: vec::Vec<u8>, b: vec::Vec<u8>) {
+    let x: json::Value = json::parse(a);
+    let y: csv::Table  = csv::parse(b);
+}
+```
+
+Every imported item is written `module::name` everywhere, never bare. Items defined in the same module stay bare.
+- **For:** you see where every name comes from at the point of use, which is the "know everything" goal. There is only one form, clashes can't happen, and adding an import never changes other code (Codex, Kimi).
+- **Against:** it's noisier everywhere, especially in types (`vec::Vec<u8>`, `option::Option<T>`). Builtin types such as `u8` and `bool` stay bare.
+
+Two details of option 3 that would come in the spelling round:
+- If two imported modules share a last segment (`a::util` and `b::util`), the clash is refused, as in option 1. That should be rare.
+- A local variable named like a module (`let json = …`) is refused. This follows from the existing no-shadowing rule.
+
+**I now recommend option 3.** You've said verbosity is fine when it's clearer, and option 3 is the most transparent choice that never forces you to restructure code. Option 1 is cleaner to read, but it lets a name collision dictate your module layout.
+
+Which do you want: 1 or 3?
+```
+
+  <a id="recovered-59-12"></a>**59-list item 12: RECOVERED.**
+
+```text
+12. The consuming `*h` is replaced by a named move-out.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-13"></a>**59-list item 13: RECOVERED.**
+
+```text
+13. Assertions are always written `assert(e);`.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-14"></a>**59-list item 14: RECOVERED.**
+
+```text
+14. Link and export names are written `#[link_name("sym")]` and `#[export_name("sym")]`.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-15"></a>**59-list item 15: RECOVERED.**
+
+```text
+15. Imports use `::`.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-16"></a>**59-list item 16: RECOVERED.**
+
+```text
+16. `char` is removed. Use `u8` plus explicit UTF-8 operations.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-17"></a>**59-list item 17: RECOVERED.**
+
+```text
+17. The `print`, `println` and `append` builtins are removed:
+    - output becomes ordinary calls with Console;
+    - append becomes an ordinary call under `with(Alloc)`.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-18"></a>**59-list item 18: RECOVERED.**
+
+```text
+18. Every local has a written type, and every function has a result arrow, including `-> Unit`.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-19"></a>**59-list item 19: RECOVERED.**
+
+```text
+19. OrderedMap only for now. HashMap waits until the KV store measures a need.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-20"></a>**59-list item 20: RECOVERED.**
+
+```text
+20. Process is removed if an audit of the foreign declarations shows nothing needs it.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-21"></a>**59-list item 21: RECOVERED.**
+
+```text
+21. `defer` keeps late reads.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-22"></a>**59-list item 22: RECOVERED.**
+
+```text
+22. Handwritten bodyless functions are refused. Compiler-generated interfaces, traits and `extern` keep theirs.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-23"></a>**59-list item 23: RECOVERED.**
+
+```text
+23. Packed structs are removed until a real foreign ABI needs them.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-24"></a>**59-list item 24: RECOVERED.**
+
+```text
+24. Local `assume` is removed only after its replacement is shown working.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-25"></a>**59-list item 25: RECOVERED.**
+
+```text
+25. Function values are kept: function pointer plus explicit context.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-26"></a>**59-list item 26: RECOVERED.**
+
+```text
+26. Constants are computed at compile time, their values are Copy, and the allowed operations are defined first.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-27"></a>**59-list item 27: RECOVERED.**
+
+```text
+27. Value-producing `if`/`match`, both proof scopes, and existential brands are kept.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-28"></a>**59-list item 28: RECOVERED.**
+
+```text
+28. An optional checked annotation `#[depends(result <- a, b)]` is added.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-29"></a>**59-list item 29: RECOVERED.**
+
+```text
+29. A dead store to a `mut` local is refused.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-30"></a>**59-list item 30: RECOVERED.**
+
+```text
+30. Source is UTF-8, comments are `//` only, and there are no block comments, byte-order mark, shebang or NUL bytes.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+  Earlier fuller recommendation (L118703, 2026-11-08T03:38:31.490Z):
+
+```text
+30. Source files are UTF-8; whitespace is space, tab, LF or CR; only `//` comments; no block comments, byte-order mark, shebang or NUL bytes. **Yes.**
+```
+  The final restatement omits the whitespace clause; it does not name a replacement. Neither version specifies U+FEFF position scope or when CR ends a comment.
+
+  <a id="recovered-59-31"></a>**59-list item 31: RECOVERED.**
+
+```text
+31. Identifiers are ASCII and case-sensitive.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-32"></a>**59-list item 32: RECOVERED.**
+
+```text
+32. There is one closed table of builtin names, with no aliases.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-33"></a>**59-list item 33: RECOVERED.**
+
+```text
+33. There are two escape lists, and quoted text can't contain raw newlines.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-34"></a>**59-list item 34: RECOVERED.**
+
+```text
+34. The lexer takes the longest matching token; `>>` is split only where it closes generics.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-35"></a>**59-list item 35: RECOVERED.**
+
+```text
+35. Aliases and constants are written `type N = T;` and `const N: T = e;`.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-36"></a>**59-list item 36: RECOVERED.**
+
+```text
+36. The set of attributes is closed.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-37"></a>**59-list item 37: PARTIAL; queued for owner re-confirmation.**
+
+```text
+37. Borrow and defer restrictions are as proposed.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+  Missing: OPEN-19 borrow/defer restrictions were never shown; re-confirm the complete proposal behind "as proposed".
+
+  <a id="recovered-59-38"></a>**59-list item 38: RECOVERED.**
+
+```text
+38. Views and the constant-time APIs are ordinary calls.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-39"></a>**59-list item 39: RECOVERED.**
+
+```text
+39. There is no concurrency syntax until the concurrency model is reviewed.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-40"></a>**59-list item 40: RECOVERED.**
+
+```text
+40. The reserved words are `spec`, `by`, `kept`, `Self`, `while`, `Entropy`, and `self` (and `as`) with no use. Obsolete reservations are dropped.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+  The dropped set was explicitly shown at L118854, 2026-11-08T03:55:58.322Z:
+
+```text
+Old reservations that no rule needs (`in`, `newtype`, `union`, `total`) are dropped.
+```
+  Before the blanket reply, the owner qualified `self`/`as` at L119065, 2026-11-08T04:05:14.946Z:
+
+```text
+i prefer fully gone, self and as are irrelevant from what i see
+```
+  The resulting recommendation shown at L119080, 2026-11-08T04:05:26.518Z:
+
+```text
+I've recorded your answer word for word: `self` and `as` are fully gone and not reserved. They're ordinary identifiers with no special meaning. The reserved words in item 40 become `spec`, `by`, `kept`, `Self`, `while` and `Entropy`.
+
+One small consequence: Rust-style `&self` or `x as u32` now gets an ordinary syntax or name error, not a tailored message. That's fine.
+
+Two things are still open before the spec worker starts:
+1. **The rest of the list:** do you approve all 59 items as recommended, with item 11 as "remove `as` entirely"? The import detail in 11b waits for round 5.
+2. **Slice 0:** may it land?
+```
+
+  <a id="recovered-59-41"></a>**59-list item 41: RECOVERED.**
+
+```text
+41. Typed number suffixes like `200u8` stay.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-42"></a>**59-list item 42: RECOVERED.**
+
+```text
+42. The old precedence table stays.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-43"></a>**59-list item 43: RECOVERED.**
+
+```text
+43. A declaration is attributes, then `pub`, then the item. Commas are required and a trailing comma is optional.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-44"></a>**59-list item 44: RECOVERED.**
+
+```text
+44. Imports are written `import a::b::{x, y};`.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-45"></a>**59-list item 45: RECOVERED.**
+
+```text
+45. Specification functions are written `spec fn f(...) -> T = e;`, and proof steps `assert(e) by lemma(args);`.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-46"></a>**59-list item 46: RECOVERED.**
+
+```text
+46. Type parameters come before capability parameters, written `cap C`, `+` and `{}`.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-47"></a>**59-list item 47: RECOVERED.**
+
+```text
+47. Blocks keep the decided statement/value behaviour.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-48"></a>**59-list item 48: RECOVERED.**
+
+```text
+48. Match arms use qualified enum patterns, and every arm ends with a comma.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-49"></a>**59-list item 49: RECOVERED.**
+
+```text
+49. Labels work on both `while` and `for`, with `break 'label;` and `continue 'label;`.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-50"></a>**59-list item 50: RECOVERED.**
+
+```text
+50. Empty array literals are refused; empty struct literals are kept.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-51"></a>**59-list item 51: PARTIAL; queued for owner re-confirmation.**
+
+```text
+51. Brands use an explicit `exists`, `pack` and `unpack` surface.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+  Missing: the drafted OPEN-22 exists/pack/unpack surface was never shown; re-confirm its exact grammar. Brand scope remains deferred to item 59.
+
+  <a id="recovered-59-52"></a>**59-list item 52: RECOVERED.**
+
+```text
+52. FFI keeps `kept buf: H`, and borrowed arguments can't be kept.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-53"></a>**59-list item 53: RECOVERED.**
+
+```text
+53. `while…else` and postfix `->` are refused.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-54"></a>**59-list item 54: RECOVERED.**
+
+```text
+54. The Core freeze, once the proofs are done.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-55"></a>**59-list item 55: RECOVERED.**
+
+```text
+55. Exact names and spellings, as before/after code.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-56"></a>**59-list item 56: RECOVERED.**
+
+```text
+56. The Entropy grant's shape, at slice 6.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-57"></a>**59-list item 57: RECOVERED.**
+
+```text
+57. The concurrency model, at slice 28.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-58"></a>**59-list item 58: RECOVERED.**
+
+```text
+58. Niches and smaller enum tags, only if needed.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-59"></a>**59-list item 59: RECOVERED.**
+
+```text
+59. The remaining grammar sub-rules, in the spelling round.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="decided-2026-11-08-recovered-d3"></a>**D3 primary-source chain.** The landing-plan
+  prerequisites are sourced here independently of branch descriptions or later transcriptions.
+  Fuel-bounded fallible constants, forward references/cycle chains and non-whole-pointer
+  decoding are [29-list items 18–20](#recovered-29-18); refused cleanup is item 21.
+  None of those items, C9 or C5 was in the November 9 reopening.
+
+  **C9 identity**, recommendation L125750, 2026-11-08T15:28:04.788Z:
+
+```text
+The C9 identity questions have finished their round with all three models, so here they are. Reply "yes to all three", or name the ones you'd change.
+
+1. **How an item inside a function is identified.** Facts, proofs and caches must still find the same item after you edit code nearby.
+   - **My pick:** a path of named parts, each one a kind of construct plus its name, such as function `parse` → loop `'outer` → assert. Unnamed items get a number counted among siblings of the same kind, under the nearest named parent, and you can add a label to pin one down.
+   - **Why:** this is agy's design, which also answers Codex's warning. Plain counters renumber everything when you insert an item earlier, so stored facts would point at the wrong thing.
+2. **What a package ID contains.**
+   - **My pick:** name and version, kept as separate fields rather than one string, with no content hash.
+   - **Why:** a hash changes on every edit and would break stored proof evidence, so hashes belong to build-artifact identity instead.
+   - **Codex's point:** two packages with the same name and version but different origins are refused when loading, consistent with your earlier rule against two versions coexisting (OD44).
+3. **Adding new kinds of trusted assumptions later.**
+   - **My pick:** a new kind is added only when a decision row names it.
+   - **Also:** the schema carries a version number, and an unknown kind is refused. There is no catch-all string option. All three models agree.
+
+**Separately:** C9 round 3 isn't accepted. Codex and agy found that several identity laws only restate their own record's shape. The identities also can't yet name trait items or obligations outside functions, such as struct invariants and constants. Round 4 will tie the laws to the operations that actually assign identities.
+
+The spec worker has also written the tagging convention that the planned check for laws that prove nothing will use, and I've passed it to the gates worker.
+```
+
+  This shares a blanket reply with the lexer-spelling recommendations below. Before
+  the answer, L125791, 2026-11-08T15:29:09.145Z restated the pending asks:
+
+```text
+Everything in that update was already in my last message. The other news: the stack-bound fix's second round is now being written, covering both reviewers' findings:
+- read the segment form that GDB prints without brackets;
+- refuse every register-relative `fs:` or `gs:` access;
+- check the whole byte range of each access;
+- refuse writes to segment registers, and refuse `gs:` outright on x86-64 Linux;
+- limit `fs:` offsets using the binary's real thread-local layout instead of a fixed number.
+
+Waiting for you:
+1. **"yes codex login":** to start the Codex re-login on concrete-ci-2. This unblocks every landing.
+2. **Lexer spellings:** "yes to the block, 1 permit, 2 complementary", or your own picks.
+3. **The three C9 identity questions:** "yes to all three", or your changes.
+```
+  C9 remains an explicit pending ask; this is not a separate C9-only answer. The
+  Codex-login ask is operational and is not recorded here as a language decision.
+
+  Owner, L125820, 2026-11-08T15:31:48.674Z:
+
+```text
+okay with your decisions
+```
+
+  **Six improvements**, recommendation L121997, 2026-11-08T13:31:34.909Z:
+
+```text
+Yes. Tonight showed six things worth changing, mostly in how we work. The language design itself held up: no reviewer found a contradiction in the decided rules. The one real gap is at the edge between borrows and calls, which C5 found.
+
+**What to fix:**
+
+1. **"True by definition" proofs are the main spec risk.** Three contracts did it independently:
+   - C5 re-checks the ownership invariant at every step, so "operations keep the invariant" holds automatically.
+   - C6's preservation theorem just restated its own definition.
+   - C8's termination evidence holds trivially when the program fails to start.
+
+   The fix is a standing rule in every writer brief and reviewer checklist. Each law needs a planted counterexample that must fail. No guard may make a law true by construction, and the brief says what a law with real content looks like. This is the most important item.
+
+2. **The approved-axioms file is noise.** Almost every new branch failed CI the first time on it: the lexer, C4, C6 and C7. C4's update removed 34 of its lines, all helper lemmas Lean generates automatically. The file compares exact lists when what we care about is a property. Simpler: check that every declaration uses only the standard axioms, and pin only the named theorems.
+
+3. **The spec is fanning out instead of coming together.** C7 and C8 are stacked on the unreviewed C1 change, C10 is built on a merge, and nothing has been merged into `spec-core` since C1 and C2. A2i, the integration step meant to join the contracts, keeps getting further away. Simpler: merge each accepted contract into `spec-core` as soon as it is accepted, so the next one builds on a single base. C4, C6 and the C1 change could go in now.
+
+4. **Process tooling took most of the night.** The sign-off mechanism took three review rounds plus a follow-up, and one capped branch blocked seven finished branches behind it. I'd stop building process machinery once the sign-off fix and the landing-script shrink land. I'd also stop chaining landings that don't depend on each other: the decision records never needed the sign-off fix.
+
+5. **Workers kept stalling.** The spec worker sat idle for 1–2 hours three times, because jobs it started in the background never told it they had finished. The fix is one shared launcher that always starts a bounded watcher with each job, instead of each worker remembering to.
+
+6. **Questions reached you before Codex, Kimi and agy had reviewed them.** You caught this on the slice-1 and lexer questions. The rule should be that every owner question gets the three-model round before it reaches you. That round is running now for the ones that missed it.
+
+Smaller ones:
+- **Writer and reviewer overlap:** the mandatory review script always uses Codex, so whenever Codex writes, it reviews its own work. Kimi now writes by default, but the script should accept any reviewer.
+- **Slice scope:** the slice-1 spec covers more than slice 1 builds. Each slice brief should state up front which part of the spec the slice implements.
+
+My recommendation is to do 1, 2, 3 and 5 now; Kimi writes and Codex and agy review, as usual. Item 4 is a policy change. Approving it means: freeze process tooling after the two landing branches, and land independent branches independently. Should I go ahead with 1, 2, 3 and 5, and do you approve 4?
+```
+
+  Owner, L122066, 2026-11-08T13:33:02.706Z:
+
+```text
+yes to 6 things
+```
+  Follow-up before approval (L122051, 2026-11-08T13:32:34.970Z):
+
+```text
+Agreed. I've put the two spec-quality fixes into effect now, and the spec worker is applying them alongside the running reviews.
+
+1. **No more laws that are true by definition.**
+   - **The rule:** every writer brief and every reviewer prompt now says the same thing. Each law needs a real example where it holds, and a planted bad case (a broken rule or a bad state) that it must reject. Reviewers must also check each law for this explicitly.
+   - **The audit:** Codex, Kimi and agy are checking the contracts already accepted (C1, C2, C4, C6 and the C1 cleanup change) law by law. Any law that turns out to be empty goes back for a fix round.
+2. **One spec instead of many branches.**
+   - **Merging now:** the accepted contracts are going into the single spec branch: the C1 change, C4 and C6. Every accepted contract after that goes in as soon as it is accepted.
+   - **Checks and review:** the merged result has to pass all seven checks, and agy and Kimi review the merge itself.
+   - **Fix rounds:** the C5, C7, C8 and C10 fixes are then rebuilt on top of that one branch.
+
+   This is the start of joining the contracts into one spec, the step called A2i. It is the precondition for freezing them.
+
+I'm leaving the approved-axioms check (item 2) unchanged until you say yes: it changes what a CI gate checks.
+
+Still waiting on you:
+- item 2: may I change that check?
+- item 4: freeze the process tooling and land independent branches independently;
+- the sign-off of `fb097fa4`.
+```
+
+  The answer names the six improvements, so it covers those six recommendations;
+  it is not used as sign-off of `fb097fa4`, the separate pending ask in the follow-up.
+
+  **C5 loan/erasure answers**, recommendation L125401, 2026-11-08T15:20:29.681Z:
+
+```text
+The three C5 questions are about how borrows and the borrow checker are specified. Codex, Kimi and agy agree on all three.
+
+1. **Where can a borrow point?** A borrow passed into a function can point only into the current call, or into the function being called. It can never point back up into a caller. This follows your decisions that borrows flow downward and that references are second-class. The spec adds a planted example of an upward borrow, which it refuses. (yes)
+
+2. **Passing a variable straight into a call.** In `f(&mut x)`, the borrow of `x` lasts exactly as long as the call. You don't write a separate borrow scope, and `x` is usable again the moment `f` returns. There are two extra conditions:
+   - if the call is deferred, the borrow lasts until the deferred call actually runs, not until it is scheduled;
+   - an existing borrow is never ended implicitly.
+
+   (yes)
+
+3. **What the borrow-checker proof promises.** The spec has two versions of execution: one with the borrow-tracking machinery, and one with it erased, which is what actually runs. The proof says that every step the tracked version takes, the erased version takes too, with the same events, the same memory and the same final result. The stronger claim, "the tracked version gets stuck exactly when the erased one does", is promised only for programs the checker accepts.
+
+   Codex has a checked example showing why it can't be promised for every program. In that example, a value used after being moved stops the tracked run, while the erased run happily returns 7. (yes)
+
+Reply "yes to all three", or name the ones you'd change.
+```
+
+  **Intervening source-links/diagnostics context.** The owner wrote at L125406,
+  2026-11-08T15:20:41.115Z:
+
+```text
+i want to have elm like errors for item 1 so we need to make sure they are good
+```
+  This is not recorded as a clarification of C5 question 1. The assistant interpreted it
+  as the source-links item and restated three pending asks at L125426,
+  2026-11-08T15:21:05.921Z:
+
+```text
+I've read "item 1" as the source-links item, since good errors depend on it. Elm-quality errors are now their own item (K13) in the same review round, which compares the design against Elm, Rust, Gleam and Roc.
+
+What it covers:
+- **Errors as data.** Each error has a title, rule ID, the main code location, labelled secondary locations ("moved here", "used again here"), a plain-language explanation and, when certain, a fix hint. The same data prints as Elm-style text for people and as JSON for agents.
+- **Source links built for it.** They carry full ranges, locations that survive across passes, and where a type came from ("this is `u8` because of here"). These requirements feed back into item 1's design.
+- **An explanation page for every rule,** with a failing example and its fix. A `concrete explain <rule>` command is an option, but it's new CLI, so it would come to you.
+- **A message style guide.** Errors talk to you, avoid unexplained jargon, show the code and say what to do next. A hint appears only when it is certain to be right.
+- **No error cascades.** Your earlier decision to stop at the first error in each file already prevents them.
+- **A quality gate.** Every error message has a snapshot test, and a reviewer model scores each new or changed message against the style guide. An error without a reviewed snapshot fails the gate.
+
+It's ranked to start before slice 1, because the lexer and parser are already writing errors. I've saved your words exactly as you wrote them.
+
+Still waiting for you:
+1. **The three C5 questions:** reply "yes to all three", or name the ones you'd change.
+2. **Runner label:** reply "yes runner label" or "no".
+3. **The 12 architecture items:** reply "add all 12".
+```
+
+  **Reply to the three pending asks**, owner L125431, 2026-11-08T15:21:17.612Z:
+
+```text
+yes to everythiong
+```
+  C5's three recommendations above are covered by this blanket answer to the pending
+  asks, not by the Elm-errors clarification or the architecture-specific replies below.
+  The runner-label and architecture asks are identified here only by the restatement;
+  their full proposals are not recovered here, so no runner-label design or architecture
+  content is inferred from this answer. Recover those proposals before recording their substance.
+
+  **Architecture-only confirmations**, human queued commands (`attachment.prompt`,
+  human origin), L125465, 2026-11-08T15:21:20.598Z:
+
+```text
+yes to adding all the 12
+```
+  Human queued command, L125466, 2026-11-08T15:21:23.073Z:
+
+```text
+add all 12
+```
+  These answer the 12-architecture-items ask, not C5. Their substance remains queued
+  for recovery of the full proposal.
+
+  **Further blanket confirmation**, human queued command, L125467,
+  2026-11-08T15:21:27.008Z:
+
+```text
+the three things are all good
+```
+  The intervening prompt lists three pending asks, while C5 itself has three questions.
+  This reply does not name either set. It is preserved in that context, without treating
+  it as an additional C5-only answer or deriving any unshown proposal from it.
+
+  **Writer revision**, owner directive with no preceding recommendation, L126064, 2026-11-08T15:37:39.012Z:
+
+```text
+can you use only kimi codex and agy to code and you just review things?
+```
+  It revises the earlier writer directive at L120476, 2026-11-08T05:53:40.428Z:
+
+```text
+can you have kimi, codex and agy implement things and we just review it
+```
+
+  **Lexer approval context**, recommendation L125775, 2026-11-08T15:29:01.548Z:
+
+```text
+The lexer spelling round is back, and two of the questions split the reviewers. Reply "yes to the block, 1 permit, 2 complementary", or give your own picks.
+
+**Agreed by all three models, to approve as a block:**
+- **(a) Escapes in `'a'`:** exactly `\n \t \r \0 \\ \'`. Anything else is written as a number, for example `0x1bu8`. `\xHH` is refused, because it would be a second way to write integers.
+- **(b) Characters refused inside strings:**
+  - every control character, which includes raw tab and newline (so no raw multiline strings; write `\t` or `\n`);
+  - the Unicode line and paragraph separators;
+  - the bidi reordering controls, which can make code display differently from what it does ("Trojan Source").
+
+  These go beyond plain control characters, which is why the reviewers ask for your explicit yes. A `'a'` literal allows only printable ASCII.
+- **(c) Case:** only lowercase `0x`, `0b`, `0o` and lowercase hex digits, so `0xFF` is refused and written `0xff`. A few older spec examples get updated.
+- **(d) Suffixes:** exactly `i8 i16 i32 i64 u8 u16 u32 u64`, allowed on any base (`0xffu8`). A malformed suffix such as `123u9`, `200U8` or `200u8foo` is refused as one error, never split into pieces.
+
+**The two split questions:**
+
+1. **Raw tab inside a `//` comment.**
+   - **My pick:** permit it, as Codex and agy say. Item 30 already decided that tab is whitespace, and a comment is plain text for people.
+   - **Kimi:** refuse it.
+
+2. **When a suffix like `200u8` may be written.**
+   - **My pick:** a suffix only where nothing else gives the type, as Codex and agy say. Under this rule `let x: u8 = 200u8;` is refused as redundant, and so is `x + 1u8`. A suffix is needed only where no type is known, for example `id(200u8)`.
+     - This keeps one way to write each thing, your firm rule.
+     - The cost: it revises the literal-typing rows (OD31/OD138), and the approved example `S { a: 200u8 }` becomes `S { a: 200 }`.
+   - **Kimi:** a suffix allowed anywhere, as long as it agrees with the expected type. That's simpler, but it's a recorded second way to write the same code.
+
+**Also waiting for you:**
+- **Codex login:** "yes codex login" to start it on concrete-ci-2. This unblocks all landings.
+- **The three C9 identity questions.**
+```
+
+  Owner, L125820, 2026-11-08T15:31:48.674Z:
+
+```text
+okay with your decisions
+```
+
+  This proposal does not say LF/CR ends comments. The report's claim that this particular
+  15:31 approval explicitly settles bare CR is not verified and is not recorded as authority.
+
+  **Attribution audit.** The 59-list follow-up at L119080 left both the recommended
+  list and slice-0 landing pending; the queued "record, yes to all recommended" at
+  L119110 answers the recommendations (which already include slice 0 as item 5),
+  not the import detail explicitly held open. The `self`/`as` exception and later
+  import choice remain separately sourced above. The November 9 answer at L140591
+  explicitly limits itself to agreement among the reviewers; it does not choose any
+  of the split Q5 options in L140586. The 29-list, six-improvements and C9/lexer
+  shared-ask contexts are preserved above on the same basis.
+
+  <a id="decided-2026-11-08-recovery-queue"></a>**Remaining owner queue (ISS-0065).**
+  Precisely: 29-list items 22 (O1–O12 substance), 25 (unanswered clarification and unshown
+  staged S3 wording), 27 (roadmap/legacy sign-off mismatch); 59-list items 37 (OPEN-19
+  restrictions) and 51 (OPEN-22 grammar); source-rule U+FEFF scope and bare-CR comment
+  termination; full runner-label and 12-architecture-item proposals behind L125426
+  and the Elm-quality/source-links proposal context (the owner’s words and the
+  assistant’s interpretation are preserved above, without equating them).
+  For U+FEFF, does "no byte-order mark" prohibit only a source-leading BOM
+  or every U+FEFF scalar, including comments and literals? For comments, does bare CR end
+  a `//` comment? Neither answer is inferred here. The landed Lean behavior stays unchanged,
+  recorded as an authority conflict pending the owner's answer. Reopened proposals above
+  remain subject to November 9's full-proposal requirement, independently of recovery.
 
 - <a id="decided-project-spark-2026-11-06"></a>**What Concrete takes from SPARK** (owner, 2026-11-06: "ok do everything", after Claude, Codex, agy and Kimi chose unanimously; the
   [review](proposals/SPARK.md) items 1, 2, 3, 6, 7, 9 and 10).

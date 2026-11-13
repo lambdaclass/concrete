@@ -24,7 +24,14 @@ The final list as shown to the owner is in the session transcript at 2026-11-08T
 Unrelated operational dispositions are omitted.
 
 
-## 2026-11-08T15:31:59Z owner (verbatim)
+## 2026-11-08T15:31:48Z owner (verbatim)
+
+Editorial correction, 2026-11-13: the primary transcript timestamp is
+2026-11-08T15:31:48.674Z (L125820), corrected from the secondary record's time.
+The primary proposal (L125775) does not show the comment-wide control restrictions,
+LF/CR comment ending or the explicit no-float-suffix clause attributed to it below.
+Those surrounding explanations are retained as historical recorder context, not
+verified owner-shown text. See the [recovery and queue](../../decisions.md#decided-2026-11-08-recovery-queue).
 "okay with your decisions"
 This answers three pending asks, with Claude's picks as shown:
 
