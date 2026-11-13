@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.Hybrid
 import ConcreteSpec.Spec.Exec
 import ConcreteSpec.Spec.Memory
 import ConcreteSpec.Spec.Basics
