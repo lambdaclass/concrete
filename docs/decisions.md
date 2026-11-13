@@ -3172,11 +3172,152 @@ okay with your decisions
   termination; full runner-label and 12-architecture-item proposals behind L125426
   and the Elm-quality/source-links proposal context (the owner’s words and the
   assistant’s interpretation are preserved above, without equating them).
+  D4 adds the following exact held questions (ISS-0065; path details also ISS-0068):
+
+  - Confirm or reject the ten delegated sub-rules and the R2 reopening route in the
+    [D4 evidence](#decided-2026-11-13-d4-recovery). The delegation is verified; its admission
+    under the recording rule is not clear. No per-item owner selection is recovered.
+  - Constants: is unit admitted? L130440 (2026-11-08T23:27:37.528Z) says
+    "Constants stay int, bool or unit." L134638 instead says integers and bools.
+    Is `char` admitted, given normal constant typing but the scalar restriction?
+    What are the exact R2 preconditions? L130440 lists construction/elimination syntax,
+    computed errors, a separate constant type and workload; L134638 does not repeat the list.
+    No shown recommendation establishes revisiting `ofC_copy`. Are table/enum constants
+    and the proposed one-read-only-copy opened with `borrow` admitted? Their later proposal
+    has no verified approval; the unapproved proposals still require the owner’s redo.
+  - Source paths: refuse single-dot or empty components (`a//b`, trailing slash)?
+    Refuse drive prefixes (`C:...`)? Neither is named in the final shown options.
+    Refuse or interpret backslashes? Refuse ASCII controls U+0000–U+001F/U+007F?
+    Accept other Unicode unchanged, with exact-scalar identity and no normalization?
+    No verified approval settles these. The owner-approved held plan at L144552,
+    2026-11-11T13:33:37.630Z ("ok go ahead with" the pasted plan), expressly keeps
+    backslashes and Unicode waiting for the owner.
+  - Classification: is the `Law` / `Helper` / `Representation lemma` /
+    `Instance (law, case)` / `Planted (law, case, subject, mutant)` taxonomy,
+    `(approved: ...)` receipt suffix, and exclusion of helpers/representation lemmas
+    from evidence an owner rule or an engineering convention? L125750 reports tagging
+    as information, not a proposal for approval. No owner approval is verified.
+
+  Additional bare-CR context (ISS-0064): assistant L118779,
+  2026-11-08T03:47:36.473Z, before item 30's approval, says verbatim:
+
+```text
+- If that byte is `/`, it skips everything up to LF, CR or end of file.
+```
+
+  This answers a parsing question; it is not the numbered recommendation approved at
+  L119110 and does not distinguish bare CR from CRLF. It is context, not approval.
+  Bare CR and U+FEFF remain PARTIAL; the other missing path/constant/taxonomy approvals
+  are NOT FOUND, not inferred from implementation or assistant assertions.
+
   For U+FEFF, does "no byte-order mark" prohibit only a source-leading BOM
   or every U+FEFF scalar, including comments and literals? For comments, does bare CR end
   a `//` comment? Neither answer is inferred here. The landed Lean behavior stays unchanged,
   recorded as an authority conflict pending the owner's answer. Reopened proposals above
   remain subject to November 9's full-proposal requirement, independently of recovery.
+
+- <a id="decided-2026-11-13-d4-recovery"></a>**D4 authority recovery (2026-11-13).**
+  This records primary evidence, not new language semantics. The secondary recovery report
+  supplied line pointers only. The excluded assumed-yes branch was not consulted.
+  All line numbers below refer to
+  `~/.claude/projects/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e.jsonl`;
+  times are UTC. Recommendation and choice texts are assistant messages; owner replies below
+  are plain-text user messages except the explicitly identified human queued command.
+
+  **Delegated evidence; queued for owner confirmation, not recorded as decided.**
+  The [recording rule](#decided-project-recording) expressly admits the owner's rule for
+  Claude-and-Codex agreement on a question. It does not clearly admit this different delegation
+  to the coordinator. Consequently the following ten sub-rules remain held, despite recovery
+  of the delegation and the choices. This does not present the coordinator's picks as the
+  owner's own picks or extend authority to later overnight proposals.
+
+  Options and recommendations actually shown, L134638, 2026-11-09T04:51:38.623Z:
+
+```text
+### 2. C6: what happens to an invalid source location
+**Background.** When a program traps, for example on overflow, the rule you decided (OD101) says it must print where it happened: file and position. Today, if a source file's path is malformed or two entries share a site key, the spec silently drops that entry. A trap there then prints no location at all.
+
+- **(a) Make it impossible.** Every source file gets one structured, project-relative path (never empty, never `..`, never absolute), and the loader refuses bad paths or duplicate sites with an error. Every accepted program can then always report its trap location. It costs a little more spec work across C9, C10 and C6.
+- **(b) Refuse only where trap sites are built.** Paths stay plain strings, and the compiler errors only when a bad one is used for a trap. That's simpler, but the raw string stays the real identity, so other places could still mishandle it. Codex calls this a shortcut.
+- **(c) Keep silently dropping.** No work, but it breaks OD101 and your no-hidden-traps rule.
+- **(d) Print a placeholder** such as `<unknown>`. The program doesn't break, but the trap line doesn't say where the trap happened.
+
+**Recommendation: (a).** Codex and agy both chose it independently.
+```
+
+```text
+### 3. C2: what a constant's value may be computed from
+**Background.** A constant such as `const MAX: u32 = 4 * 1024` is computed at compile time.
+- **Checked arithmetic** returns a `Result`: `Ok(value)`, or `Err` on overflow.
+- **`try_convert`** turns a number into a smaller type, also returning a `Result`.
+
+The question is whether constants can involve `Result` values.
+
+**Part 1, what types constants can have:**
+- **(a) Constants stay plain scalars** (integers and bools). Checked arithmetic is not allowed in a constant's formula; plain, wrapping and saturating arithmetic are. If the formula overflows, the constant is refused at compile time, so you still never get a wrong constant.
+- **(b) Allow `Result`-typed constants now.** That needs new syntax for unpacking a `Result` inside a constant, and a decision on whether an `Err` can be a constant's value. Both models say it breaks rules 1 and 2 and the admission tests, and no program needs it yet.
+- **(c) Later:** reopen through R2 (aggregate and enum constants) when a real program needs it, with listed preconditions. This isn't really a separate choice now; it's how (a) would be extended later.
+
+**Part 2, what to do with `try_convert`.** The spec currently lets it appear in constants, as if it returned a plain number, but your decision OD106 says it returns a `Result`. That's an inconsistency.
+- **(i)** Remove `try_convert` from constant formulas, consistent with (a).
+- **(ii)** Keep it, but only if we add a separate conversion that returns a plain number and refuses the constant on failure. That would be a new language feature for you to approve.
+
+**Recommendation: (a) with (i).** Both models agree.
+```
+
+```text
+### 5. Q-SUBJ: how to test laws about step relations
+**Background.** The N2 gate makes sure every law is actually tested. Each law needs a concrete example where it holds, plus a planted wrong version of the thing it's about, which must make the law fail. That proves the law says something. The convention you approved assumes the law is about a function, which N2 swaps for a broken one.
+
+36 laws in C1 are instead about `Step`, `Steps` and `AnswerStep`, the "program takes one step" relations. These are written as inductive rules, not functions.
+
+- **(a) Let N2 accept rules too.** The planted wrong version is then a broken set of rules with the same shape, such as "a step that never moves". Those are already written. It's the same strength of test, and it's how semantics are normally written. It's a small change to the convention you approved.
+- **(b) Rewrite `Step` and the others as functions.** The convention stays as it is, but this changes how the semantics are written in every spec branch: a large change, and a less natural form.
+- **(c) Restate the 36 laws in terms of the existing `step` function.** Only C1 is affected, but the laws then talk about one implementation rather than the semantics.
+
+**Codex's related finding:** C1's two determinism laws ("a program has only one next step") are currently true just because `step` is a function, so they prove nothing. Codex suggests labelling them as facts about the representation, and proving determinism separately against independently written rules. If you pick (a), that follows naturally.
+
+**Recommendation: (a)**, plus Codex's determinism fix.
+```
+
+  Verbatim owner delegation, L134801, 2026-11-09T05:14:16.260Z:
+
+```text
+ok tell me again the options choose the best long term options for everything
+```
+
+  The options were **not re-shown before the choice**. The coordinator's choices,
+  L134888, 2026-11-09T05:18:25.409Z (verbatim rows):
+
+```text
+| 2 | C6: invalid source locations | **(a) Make them impossible** | Every source file gets one checked project-relative path, and the loader refuses bad paths and duplicate sites. Every trap can then always say where it happened. The other options either hide traps, keep a shortcut, or print a useless location. |
+| 3 | C2: constants | **(a)+(i)** | Constants stay plain integers and bools, and `try_convert` comes out of constant formulas. That matches OD106, which says it returns a `Result`. Richer constants come later through R2, when a real program needs them. |
+| 5 | Q-SUBJ: laws about steps | **(a)** | N2 accepts inductive rules when a broken version of the same shape is planted. That keeps the semantics in their natural form, with the same strength of test. C1's two determinism laws will also be proved against independently written rules, so they actually say something. |
+```
+
+  Scope of the ten held delegated sub-rules (report rows 1.4–1.5, 2.1–2.5, 3.2–3.4):
+  scalar integer/bool constants excluding checked arithmetic; exclusion of `try_convert`
+  without a new plain-valued substitute; one structured project-relative path per file with
+  loader errors; nonempty paths; no `..`; no absolute paths; refusal of duplicate site keys;
+  inductive law subjects with same-shape broken rules; classification of function-tautological
+  determinism facts as representation facts; separate determinism proofs over independent rules.
+  The recommendation includes plain/wrapping/saturating arithmetic and compile-time overflow
+  refusal. The R2 reopening route appears in both the recommendation and choice, but does not
+  settle the exact preconditions. Confirmation of these choices under this delegation is queued
+  below; no additional path-character policy, unit/char admission, or rule granularity follows.
+
+  **Already recovered authority, independently checked; existing records retained.**
+  These seven report rows need no duplicate decision or expanded scope:
+
+  | Report row | Existing record | Primary recommendation and owner reply (UTC) |
+  |---|---|---|
+  | 1.1 | [Copy compile-time constants](#recovered-59-26) | L119002, 2026-11-08T04:03:06.062Z; human queued L119110, 04:05:31.772Z: "record, yes to all recommended". |
+  | 1.2 | [Initializer grammar](#recovered-29-18) | L124574, 2026-11-08T15:05:01.527Z / L124693; L124708, 15:08:56.319Z: "ok but i said already all yes based on the best long term reviews of each agent and what we said before right?" |
+  | 1.3 | [Forward constants/cycles](#recovered-29-19) | Same recommendation list and blanket reply as 1.2; its qualification remains in the existing record. |
+  | 1.8 | [No special constant typing rule](#decided-2026-11-12-char) | L147727, 2026-11-12T18:35:40.324Z; L147901, 20:40:30.692Z: "yes to your recommendations". |
+  | 2.6 | [Rendered trap paths](#decided-project-runtime-2026-11-06) | L112704, 2026-11-06T14:44:30.004Z; L112976, 16:41:07.983Z; L112979, 16:43:18.861Z: "ok do everything". Rendering with forward slashes does not decide input backslashes. |
+  | 2.14 | [Function-relative identity](#decided-2026-11-08-c9-identities) | L125750, 2026-11-08T15:28:04.788Z; L125820, 15:31:48.674Z: "okay with your decisions". Construct-kind/name paths are not source-file paths. |
+  | 3.1 | [Six improvements](#decided-2026-11-08-recovered-d3) | L121997, 2026-11-08T13:31:34.909Z / L122051, 13:32:34.970Z; L122066, 13:33:02.706Z: "yes to 6 things". Real examples and planted bad cases do not approve a tag vocabulary. |
 
 - <a id="decided-project-spark-2026-11-06"></a>**What Concrete takes from SPARK** (owner, 2026-11-06: "ok do everything", after Claude, Codex, agy and Kimi chose unanimously; the
   [review](proposals/SPARK.md) items 1, 2, 3, 6, 7, 9 and 10).
