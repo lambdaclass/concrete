@@ -2,22 +2,33 @@
 """Structural name-independence and numeric/lookup controls, in private copies.
 
 The load-bearing environment scan rejects spelling tables in semantic interfaces.
-Controls compile successfully before requiring the scan to accept declaration names
-and reject local-spelling mixtures, including nested AST payloads.
+Semantic fixtures have distinct names and share one environment/closure traversal
+with the main check. Shape mutants and the replacement Examples environment stay
+separate because they deliberately redefine the same nominal declarations.
+Set LOCAL_IDENTITY_PROFILE=1 to report scanner phase timings.
 """
 from pathlib import Path
+import json
 import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
+import time
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def run(args, *, env=None):
-    return subprocess.run(['bash', 'scripts/checks/lib/bounded.sh', '300', *args],
-                          cwd=ROOT, env=env, text=True, capture_output=True)
+    started = time.monotonic()
+    result = subprocess.run(['bash', 'scripts/checks/lib/bounded.sh', '300', *args],
+                            cwd=ROOT, env=env, text=True, capture_output=True)
+    if os.environ.get('LOCAL_IDENTITY_PROFILE') == '1' and 'scripts/proofs/local_identity.lean' in args:
+        print(f'scan: wall_s={time.monotonic() - started:.3f} ' + ' '.join(args),
+              file=sys.stderr, flush=True)
+        print(result.stderr, file=sys.stderr, end='', flush=True)
+    return result
 
 
 def require(result, label):
@@ -38,14 +49,17 @@ def reject(result, label, expected, *, lean=False):
 
 
 def main():
-    require(run(['lake', 'env', 'lean', '--run', 'scripts/proofs/local_identity.lean',
-                 'ConcreteSpec']), 'semantic environment scan')
     path = run(['lake', 'env', 'printenv', 'LEAN_PATH'])
     require(path, 'Lean search path')
     laws = (ROOT / 'ConcreteSpec/Proofs/LocalIdentity.lean').read_text()
     with tempfile.TemporaryDirectory(prefix='local-identity-') as tmp:
         stage = Path(tmp)
         shutil.copytree(ROOT / ".lake/build/lib/lean/ConcreteSpec", stage / "ConcreteSpec")
+        # Lean resolves a package to its first search root as a whole. The batch
+        # now imports ConcreteSpec itself, so stage its root artifacts too.
+        for artifact in (ROOT / '.lake/build/lib/lean').glob('ConcreteSpec.*'):
+            if artifact.is_file():
+                shutil.copy2(artifact, stage / artifact.name)
         env = dict(os.environ, LEAN_PATH=tmp + ':' + path.stdout.strip())
 
         def compile_file(module, source):
@@ -54,6 +68,30 @@ def main():
             file.write_text(source)
             return run(['lean', '-DwarningAsError=true', '-DautoImplicit=false',
                         '-R', tmp, '-o', str(file.with_suffix('.olean')), str(file)], env=env)
+
+        scans = [('ConcreteSpec', 'semantic environment scan', None)]
+        serial = 0
+
+        def semantic_file(source, *, namespace=None):
+            nonlocal serial
+            serial += 1
+            module = f'ConcreteSpec.Spec.IdentityControl{serial}'
+            namespace = namespace or f'IdentityControl{serial}'
+            # Imports must precede the namespace; declarations in independent
+            # fixtures must never collide when imported into the batch environment.
+            lines = source.splitlines(keepends=True)
+            imports = ''.join(line for line in lines if line.startswith('import '))
+            body = ''.join(line for line in lines if not line.startswith('import '))
+            require(compile_file(module, imports + f'namespace {namespace}\n' + body +
+                                 f'\nend {namespace}\n'), module + ' builds')
+            return module, namespace
+
+        def scan_later(module, namespace, label, expected=None):
+            if expected:
+                expected = expected.replace('dependency: leak', f'dependency: {namespace}.leak')
+                expected = expected.replace('dependency: spellingLength',
+                                            f'dependency: {namespace}.spellingLength')
+            scans.append((module, label, expected))
 
         header = laws[:laws.index('/-- Numeric identity')]
         numeric = laws[laws.index('/-- Numeric identity'):laws.index('/-- The first binding')]
@@ -131,13 +169,15 @@ def main():
             'declaration name Binder pattern': 'def pattern (pat : List (ConcreteSpec.Name × ConcreteSpec.Binder)) : Nat := pat.length',
         }
         for label, declaration in accepted.items():
-            require(compile_file('ConcreteSpec.Spec.NameAccepted',
-                    'import ConcreteSpec.Diagnostics.Types\nimport ConcreteSpec.Spec.Slice1Syntax\n' + declaration), label + ' builds')
-            require(run(['lean', '--run', 'scripts/proofs/local_identity.lean',
-                         'ConcreteSpec.Spec.NameAccepted'], env=env), label + ' accepted')
-            print('control: semantic scan accepts ' + label)
+            module, namespace = semantic_file(
+                'import ConcreteSpec.Diagnostics.Types\nimport ConcreteSpec.Spec.Slice1Syntax\n' + declaration)
+            scan_later(module, namespace, label)
         # Imported helpers must be inspected even when their module is outside Spec.
         helper_header = 'import ConcreteSpec.Diagnostics.Types\nimport ConcreteSpec.Spec.Slice1Syntax\n'
+        require(compile_file('ExternalDiagnostics', helper_header +
+                'namespace ConcreteSpec.Diagnostics\n'
+                'def names : ConcreteSpec.LocalNames := ⟨[]⟩\n'
+                'end ConcreteSpec.Diagnostics\n'), 'external diagnostics helper builds')
         for label, helper, semantic, refused in [
             ('external pairing signature',
              'def attach (v : ConcreteSpec.Var) : ConcreteSpec.Var × String := (v, "x")',
@@ -146,26 +186,20 @@ def main():
              'def hiddenLength (v : ConcreteSpec.Var) : Nat := ((v, "x") : ConcreteSpec.Var × String).2.length',
              'def spellingLength (v : ConcreteSpec.Var) : Nat := hiddenLength v', True),
             ('external legitimate helpers',
-             'namespace ConcreteSpec.Diagnostics\n'
-             'def names : ConcreteSpec.LocalNames := ⟨[]⟩\n'
-             'end ConcreteSpec.Diagnostics\n'
              'def numericHelper (v : ConcreteSpec.Var) : Nat := v.id + 0\n'
              'theorem numericHelper_eq (v : ConcreteSpec.Var) : numericHelper v = v.id := Nat.add_zero v.id',
              'def numeric (v : ConcreteSpec.Var) : Nat := numericHelper v\n'
              'theorem numeric_eq (v : ConcreteSpec.Var) : numeric v = v.id := numericHelper_eq v', False),
         ]:
-            require(compile_file('ExternalHelpers', helper_header + helper), label + ' helper builds')
-            require(compile_file('ConcreteSpec.Spec.ExternalControl',
-                    'import ExternalHelpers\n' + semantic), label + ' semantic builds')
-            result = run(['lean', '--run', 'scripts/proofs/local_identity.lean',
-                          'ConcreteSpec.Spec.ExternalControl'], env=env)
-            if refused:
-                reject(result, label, 'semantic diagnostics dependency: spellingLength')
-                if 'semantic definitions refer to LocalNames/Elaborated' not in result.stderr:
-                    raise SystemExit(label + ': missing semantic scan rejection')
-            else:
-                require(result, label + ' accepted')
-            print('control: external helper ' + label)
+            namespace = f'ExternalControl{serial + 1}'
+            helper_module = f'ExternalHelpers{serial + 1}'
+            imports = helper_header + ('import ExternalDiagnostics\n' if not refused else '')
+            require(compile_file(helper_module, imports + f'namespace {namespace}\n' +
+                                 helper + f'\nend {namespace}\n'), label + ' helper builds')
+            module, namespace = semantic_file('import ' + helper_module + '\n' + semantic,
+                                              namespace=namespace)
+            scan_later(module, namespace, label,
+                       'semantic diagnostics dependency: spellingLength' if refused else None)
         controls = {
             'lambda callback': 'def leak (vs : List ConcreteSpec.Var) : Nat := (vs.map (fun v => toString v.id)).length',
             'let callback': 'def leak (vs : List ConcreteSpec.Var) : Nat := let render := fun (v : ConcreteSpec.Var) => toString v.id; (vs.map render).length',
@@ -220,31 +254,64 @@ def main():
             'nested structure alias': 'structure Hidden where\n  entries : List (ConcreteSpec.Var × String)\nabbrev Alias := Hidden\ndef leak : Alias := ⟨[]⟩',
         }
         for label, declaration in controls.items():
-            require(compile_file('ConcreteSpec.Spec.NameLeak',
-                    'import ConcreteSpec.Diagnostics.Types\nimport ConcreteSpec.Spec.Slice1Syntax\n' + declaration), label + ' builds')
-            result = run(['lean', '--run', 'scripts/proofs/local_identity.lean',
-                          'ConcreteSpec.Spec.NameLeak'], env=env)
+            module, namespace = semantic_file(
+                'import ConcreteSpec.Diagnostics.Types\nimport ConcreteSpec.Spec.Slice1Syntax\n' + declaration)
             callback_controls = {
                 'lambda callback', 'let callback', 'named local helper',
                 'Option.map callback', 'Array.map callback', 'match arm callback',
                 'instance method callback', 'structure projection callback',
             }
-            reject(result, label, 'semantic diagnostics dependency: leak'
-                   if label in callback_controls else 'semantic diagnostics dependency:')
-            if 'semantic definitions refer to LocalNames/Elaborated' not in result.stderr:
-                raise SystemExit(label + ': missing semantic scan rejection')
-            print('control: semantic scan rejects ' + label)
+            scan_later(module, namespace, label, 'semantic diagnostics dependency: leak'
+                       if label in callback_controls else 'semantic diagnostics dependency:')
+        # An explicitly imported refused fixture remains part of the target's
+        # protected roots, even when this module's own declaration is clean.
+        refused_module, refused_namespace = module, namespace
+        module, namespace = semantic_file('import ' + refused_module + '\n' +
+            'def leak (v : ConcreteSpec.Var) : Nat := v.id')
+        scan_later(module, namespace, 'import closure preserves refusal',
+                   f'semantic diagnostics dependency: {refused_namespace}.leak')
+        # A clean fixture checked AFTER refused fixtures remains clean in the
+        # same imported environment. Its roots exclude unrelated fixture modules.
+        module, namespace = semantic_file(helper_header +
+            'def leak (v : ConcreteSpec.Var) : Nat := v.id')
+        scan_later(module, namespace, 'independent outcome beside refused controls')
+        result = run(['lean', '--run', 'scripts/proofs/local_identity.lean', '--batch',
+                      *(module for module, _, _ in scans)], env=env)
+        require(result, 'batched semantic controls')
+        try:
+            records = [json.loads(line) for line in result.stdout.splitlines()]
+            if [record['module'] for record in records] != [item[0] for item in scans]:
+                raise ValueError('missing, reordered or duplicate batch results')
+            for record, (_, label, expected) in zip(records, scans):
+                names = record['refusals']
+                if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
+                    raise ValueError('invalid refusal list')
+                output = '\n'.join('semantic diagnostics dependency: ' + n for n in names)
+                if expected is None:
+                    if names:
+                        raise SystemExit(f'{label}: unexpected refusal\n{output}')
+                elif expected not in output:
+                    raise SystemExit(f'{label}: missing specific refusal {expected!r}\n{output}')
+                print('control: semantic scan ' + ('accepts ' if expected is None else 'rejects ') + label)
+        except (ValueError, KeyError, TypeError) as error:
+            raise SystemExit(f'invalid semantic batch results: {error}\n{result.stdout}') from error
         examples = (ROOT / 'ConcreteSpec/Spec/Examples.lean').read_text()
-        for label, declaration in {
-            'table': 'def unauthorized : ConcreteSpec.LocalNames := ⟨[]⟩',
-            'arbitrary payload': 'def unauthorized : ConcreteSpec.Elaborated (ConcreteSpec.Var → String) := ⟨(fun _ => "x"), ⟨[]⟩⟩',
-        }.items():
-            require(compile_file('ConcreteSpec.Spec.Examples', examples + '\n' + declaration),
-                    'Examples non-exempt ' + label + ' builds')
-            result = run(['lean', '--run', 'scripts/proofs/local_identity.lean',
-                          'ConcreteSpec.Spec.Examples'], env=env)
-            reject(result, 'scanner mutant', 'semantic diagnostics dependency: unauthorized')
+        example_controls = {
+            'table': ('unauthorizedTable',
+                      'def unauthorizedTable : ConcreteSpec.LocalNames := ⟨[]⟩'),
+            'arbitrary payload': ('unauthorizedPayload',
+                'def unauthorizedPayload : ConcreteSpec.Elaborated (ConcreteSpec.Var → String) := ⟨(fun _ => "x"), ⟨[]⟩⟩'),
+        }
+        require(compile_file('ConcreteSpec.Spec.Examples', examples + '\n' +
+                '\n'.join(declaration for _, declaration in example_controls.values())),
+                'Examples non-exempt controls build')
+        result = run(['lean', '--run', 'scripts/proofs/local_identity.lean',
+                      'ConcreteSpec.Spec.Examples'], env=env)
+        for label, (name, _) in example_controls.items():
+            reject(result, 'Examples non-exempt ' + label,
+                   'semantic diagnostics dependency: ' + name)
             print('control: Examples exemption rejects ' + label)
+
 
 
 if __name__ == '__main__':
