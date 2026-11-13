@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.Memory
 import ConcreteSpec.Spec.Basics
 import ConcreteSpec.Spec.Ident
 import ConcreteSpec.Spec.Target
