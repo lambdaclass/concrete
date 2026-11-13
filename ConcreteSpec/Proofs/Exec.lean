@@ -3075,21 +3075,34 @@ example : trapped.final? = some (.trapped .abort s) ∧ ¬ Blocked RecoverTrap t
   refine ⟨rfl, fun h => ?_⟩
   exact h .silent _ RecoverTrap.recover
 
-/-- Instance (law `ConcreteSpec.Core.Exec.steps_from_trapped`). Even with work queued, the
-only production execution is the empty trace at the exact trapped configuration. -/
-example : Steps prog trapped [] trapped ↔ ([] : List Int) = [] ∧ trapped = trapped :=
-  steps_from_trapped prog .abort s live initial _ [] trapped
+/-- Instance (law `ConcreteSpec.Core.Exec.steps_from_trapped`). Recovery cannot change even
+just the control field of the populated trapped endpoint. -/
+example : ¬ Steps prog trapped [] { trapped with ctrl := .done } := by
+  intro h
+  have bad := ((steps_from_trapped prog .abort s live initial _ [] _).mp h).2
+  cases bad
 
-/-- Planted. Relational closure witness adding the single forbidden recovery operation. -/
+/-- Instance (law `ConcreteSpec.Core.Exec.steps_from_trapped`). No event can be emitted even
+when the endpoint remains exactly the trapped configuration. -/
+example : ¬ Steps prog trapped [9] trapped := by
+  intro h
+  have bad := ((steps_from_trapped prog .abort s live initial _ [9] trapped).mp h).1
+  cases bad
+
+/-- Planted. Add only silent recovery to a changed endpoint. -/
 inductive RecoverTrapSteps : Config ops → List Int → Config ops → Prop where
   | recover : RecoverTrapSteps trapped [] { trapped with ctrl := .done }
-/-- Planted (law `ConcreteSpec.Core.Exec.steps_from_trapped`). One recovery step is enough
-to falsify the exact trapped-run characterization. -/
-example : ¬ (RecoverTrapSteps trapped [] { trapped with ctrl := .done } ↔
-    ([] : List Int) = [] ∧ { trapped with ctrl := .done } = trapped) := by
-  intro h
-  have bad := (h.mp .recover).2
-  cases bad
+/-- Planted (law `ConcreteSpec.Core.Exec.steps_from_trapped`). The changed-endpoint exclusion
+fails with just the forbidden silent recovery. -/
+example : ¬ (¬ RecoverTrapSteps trapped [] { trapped with ctrl := .done }) :=
+  fun h => h .recover
+
+/-- Planted. Add only an event at the identical trapped endpoint. -/
+inductive NoisyTrapSteps : Config ops → List Int → Config ops → Prop where
+  | emit : NoisyTrapSteps trapped [9] trapped
+/-- Planted (law `ConcreteSpec.Core.Exec.steps_from_trapped`). The nonempty-trace exclusion
+fails with just the forbidden event, without changing the endpoint. -/
+example : ¬ (¬ NoisyTrapSteps trapped [9] trapped) := fun h => h .emit
 
 /-- Instance (law `ConcreteSpec.Core.Exec.abort_runs_no_cleanup`). Abort reaches its trap
 without touching registered calls, locals, activation markers or the caller frame. -/
@@ -3118,12 +3131,48 @@ example : runFrom prog env 30 [13]
         [.scope boomFn.block [] [], .functionEnd, .ret none live,
          .resume (.exit (.ret 7)), .scope ⟨1⟩ [] [d 2], outer, .functionEnd]⟩, 27⟩ := rfl
 
-/-- Instance (law `ConcreteSpec.Core.Exec.evalArgs_first_trap`). A real move changes lifecycle
-state before overflow; a later different trap cannot replace the first one. -/
-example : evalArgs ops [(y, 8), (x, 7)] initial
-    ([.move y] ++ .fail .overflow :: [.fail .divisionByZero]) = .trap .overflow :=
-  evalArgs_first_trap (O := ops) [(y, 8), (x, 7)] (.fail .overflow) .overflow
+/-- Helper. A toy operand interface observing the earlier move: reading `y` traps with
+overflow exactly when `y` is marked moved. All other operands use the existing demo evaluator.
+This is evidence for abstract operand threading, not a Concrete operand policy. -/
+abbrev trapOps : Operands := { ops with eval := fun L st e => match e with
+  | .var v => if v = y ∧ y ∈ st.top then .trap .overflow else ops.eval L st e
+  | _ => ops.eval L st e }
+
+/-- Instance (law `ConcreteSpec.Core.Exec.evalArgs_first_trap`). Only the prefix's move makes
+this operand trap; evaluating the suffix would instead report division by zero. -/
+example : evalArgs trapOps [(y, 8)] initial
+    ([.move y] ++ .var y :: [.fail .divisionByZero]) = .trap .overflow :=
+  evalArgs_first_trap (O := trapOps) [(y, 8)] (.var y) .overflow
     [.fail .divisionByZero] [.move y] initial ⟨4, [[y, x, p], [t]]⟩ [8] rfl rfl
+
+/-- Planted. Discard only each successful operand's updated store. -/
+def lostStateArgs (O : Operands) (L : AList Var O.Val) :
+    O.Store → List O.Expr → Res (List O.Val × O.Store)
+  | st, [] => .ok ([], st)
+  | st, e :: es => (O.eval L st e).bind fun (v, _) =>
+      (lostStateArgs O L st es).map fun (vs, st₂) => (v :: vs, st₂)
+/-- Planted (law `ConcreteSpec.Core.Exec.evalArgs_first_trap`). Losing the prefix state
+prevents the state-dependent overflow, exposing the later division-by-zero trap. -/
+example : lostStateArgs trapOps [(y, 8)] initial
+    [.move y, .var y, .fail .divisionByZero] = .trap .divisionByZero ∧
+    lostStateArgs trapOps [(y, 8)] initial
+      [.move y, .var y, .fail .divisionByZero] ≠ .trap .overflow := by decide
+
+/-- Planted. Continue past a trap only when a later operand exists. Successful effects
+remain threaded; a final trap is still propagated. -/
+def pastTrapArgs (O : Operands) (L : AList Var O.Val) :
+    O.Store → List O.Expr → Res (List O.Val × O.Store)
+  | st, [] => .ok ([], st)
+  | st, e :: es => match O.eval L st e with
+    | .ok (v, st₁) => (pastTrapArgs O L st₁ es).map fun (vs, st₂) => (v :: vs, st₂)
+    | .trap kd => match es with | [] => .trap kd | _ :: _ => pastTrapArgs O L st es
+    | .stuck => .stuck
+/-- Planted (law `ConcreteSpec.Core.Exec.evalArgs_first_trap`). Continuing replaces the
+state-dependent first trap by the suffix's distinct trap. -/
+example : pastTrapArgs trapOps [(y, 8)] initial
+    [.move y, .var y, .fail .divisionByZero] = .trap .divisionByZero ∧
+    pastTrapArgs trapOps [(y, 8)] initial
+      [.move y, .var y, .fail .divisionByZero] ≠ .trap .overflow := by decide
 
 /-- Planted. Swallow only an argument trap; successful prefix effects remain threaded. -/
 def swallowTrapEvalArgs (O : Operands) (L : AList Var O.Val) :
@@ -3133,13 +3182,12 @@ def swallowTrapEvalArgs (O : Operands) (L : AList Var O.Val) :
     | .ok (v, st₁) => (swallowTrapEvalArgs O L st₁ es).map fun (vs, st₂) => (v :: vs, st₂)
     | .trap _ => .ok ([], st)
     | .stuck => .stuck
-/-- Planted (law `ConcreteSpec.Core.Exec.evalArgs_first_trap`). The successful move and the
-first trap premise still hold; swallowing that trap falsifies its propagation. -/
-example : swallowTrapEvalArgs ops [(y, 8), (x, 7)] initial [.move y] =
-      .ok ([8], ⟨4, [[y, x, p], [t]]⟩) ∧
-    ops.eval [(y, 8), (x, 7)] ⟨4, [[y, x, p], [t]]⟩ (.fail .overflow) = .trap .overflow ∧
-    swallowTrapEvalArgs ops [(y, 8), (x, 7)] initial
-      ([.move y] ++ .fail .overflow :: [.fail .divisionByZero]) ≠ .trap .overflow := by decide
+/-- Planted (law `ConcreteSpec.Core.Exec.evalArgs_first_trap`). Swallowing the same first
+trap returns the moved prefix and its updated state rather than propagating overflow. -/
+example : swallowTrapEvalArgs trapOps [(y, 8)] initial
+    [.move y, .var y, .fail .divisionByZero] = .ok ([8], ⟨4, [[y, x, p], [t]]⟩) ∧
+    swallowTrapEvalArgs trapOps [(y, 8)] initial
+      [.move y, .var y, .fail .divisionByZero] ≠ .trap .overflow := by decide
 
 
 /-- Helper. With only inner dispatch omitted, the higher-order final-drop premise remains
