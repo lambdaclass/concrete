@@ -29,6 +29,7 @@ are not authorities and have been removed.
   `SourceText` laws prove arithmetic over bytes, including LF steps, tab and multibyte
   fixtures. They impose no source-admission, BOM or comment-termination policy.
 
+Classification follows docs/decisions.md#decided-2026-11-13-proof-labels.
 A `Law` states behavior of an executable subject. A `Helper` is computation, projection,
 inversion or proof support and is not independent law evidence. `Instance` examples apply
 laws to concrete inputs; `Planted` examples refute named wrong implementations with the

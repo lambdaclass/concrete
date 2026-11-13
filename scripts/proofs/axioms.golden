@@ -876,6 +876,7 @@ ConcreteSpec.Core.Exec.Fn.mk.sizeOf_spec
 ConcreteSpec.Core.Exec.Frame.body.inj	
 ConcreteSpec.Core.Exec.Frame.body.injEq	propext
 ConcreteSpec.Core.Exec.Frame.body.sizeOf_spec	
+ConcreteSpec.Core.Exec.Frame.functionEnd.sizeOf_spec	
 ConcreteSpec.Core.Exec.Frame.resume.inj	
 ConcreteSpec.Core.Exec.Frame.resume.injEq	propext
 ConcreteSpec.Core.Exec.Frame.resume.sizeOf_spec	
