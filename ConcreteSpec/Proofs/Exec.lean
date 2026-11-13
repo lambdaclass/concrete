@@ -402,6 +402,7 @@ open Demo
 inductive MissingRule where
   | request | registerSecond | retValue | returnBind | exitCleanup | doneCleanup
   | exitSeq | functionLeave | breakHere | continueHere
+  | skipRestriction | skipDrop
   | reverseExit | reverseDone | outerFirst | fifoRegister | cleanupBeforeValue | bindBeforeLeave
   deriving DecidableEq
 
@@ -420,6 +421,14 @@ def fifoRegister (d : Deferred O) : List (Frame O) → Option (List (Frame O))
 /-- Planted. Each case changes only its named rule, with no change to operands or admission. -/
 def missingStep (r : MissingRule) (P : Program O) (c : Config O) : Option (Out O) :=
   match r, c.ctrl, c.frames with
+  | .skipRestriction, .exiting e, .scope _ dm [] :: k =>
+      (dropOut O dm c.locals c.store).map fun st => .next ⟨.exiting e, c.locals, st, k⟩
+  | .skipRestriction, .done, .scope _ dm [] :: k =>
+      (dropOut O dm c.locals c.store).map fun st => .next ⟨.done, c.locals, st, k⟩
+  | .skipDrop, .exiting e, .scope _ dm [] :: k =>
+      some (.next ⟨.exiting e, restrict dm c.locals, c.store, k⟩)
+  | .skipDrop, .done, .scope _ dm [] :: k =>
+      some (.next ⟨.done, restrict dm c.locals, c.store, k⟩)
   | .bindBeforeLeave, .exiting (.ret v), .functionEnd :: .ret dst caller :: k => do
       let st ← bindLife O dst c.store
       let st' ← O.life .leave st
@@ -1047,6 +1056,323 @@ theorem outer_first_completes : MutSteps .outerFirst prog
         (a := ⟨some 2, .ok 0, DState.life (.enter [x]) .init⟩) rfl rfl rfl)
     | apply MutSteps.step (O := ops) (tr := []) (MutStep.prim (O := ops)
         (a := ⟨some 1, .ok 0, DState.life (.enter [x]) .init⟩) rfl rfl rfl)
+
+
+/-! Populated preservation/teardown witnesses complement the event-order witnesses above.
+The outer x survives, inner p disappears, p's moved marker disappears, and x's
+marker, the counter and the lower activation survive. No operation is a no-op. -/
+/-- Helper. Locals before leaving the inner scope. -/
+def scopeLocals : AList Var Int := [(p, 20), (x, 10)]
+/-- Helper. Independently stated surviving locals. -/
+def outerLocals : AList Var Int := [(x, 10)]
+/-- Helper. Both live and dead locals have lifecycle markers; lower activation is populated. -/
+def scopeState : DState := ⟨9, [[p, x], [y]]⟩
+/-- Helper. Only the dead local's marker is removed. -/
+def outerState : DState := ⟨9, [[x], [y]]⟩
+/-- Helper. A populated scope with no remaining deferred calls. -/
+def teardown : Frame ops := .scope ⟨3⟩ [x] []
+/-- Helper. Cleanup certificate includes a genuinely changing scope drop. -/
+private theorem teardownCleans : Cleans prog [teardown] scopeLocals scopeState [] outerState :=
+  .scope (.nil _) rfl (.nil _ _)
+/-- Helper. The scope passes every structured exit. -/
+private theorem teardownPasses (e : Exit Int) :
+    ∀ f ∈ ([teardown] : List (Frame ops)), Passes e f := by
+  intro f hf
+  simp only [List.mem_singleton] at hf
+  subst f
+  trivial
+
+/-- Instance (law `exit_scope_runs_defers`). Scope exit restricts locals and drops
+only the inner lifecycle marker, preserving the counter and lower activation. -/
+theorem exit_scope_teardown_instance : Steps prog
+    ⟨.exiting (.ret 7), scopeLocals, scopeState, [teardown]⟩ []
+    ⟨.exiting (.ret 7), outerLocals, outerState, []⟩ :=
+  exit_scope_runs_defers prog (.ret 7) ⟨3⟩ [x] scopeLocals [] []
+    scopeState scopeState [] outerState (.nil _) rfl
+
+/-- Instance (law `done_scope_runs_defers`). Normal completion has the same
+observable local and lifecycle teardown obligations as structured exit. -/
+theorem done_scope_teardown_instance : Steps prog
+    ⟨.done, scopeLocals, scopeState, [teardown]⟩ []
+    ⟨.done, outerLocals, outerState, []⟩ :=
+  done_scope_runs_defers prog ⟨3⟩ [x] scopeLocals [] []
+    scopeState scopeState [] outerState (.nil _) rfl
+
+/-- Instance (law `unwind_runs_plan`). The cleanup prefix must retain outer x,
+remove inner p, and remove only p's lifecycle marker before reaching its boundary. -/
+theorem unwind_runs_plan_teardown_instance : Steps prog
+    ⟨.exiting (.ret 7), scopeLocals, scopeState, teardown :: []⟩ []
+    ⟨.exiting (.ret 7), outerLocals, outerState, []⟩ :=
+  unwind_runs_plan prog (.ret 7) [] [teardown] scopeLocals scopeState outerState [] teardownCleans (teardownPasses _)
+
+/-- Instance (law `break_reaches_loop`). The cleanup prefix must retain outer x,
+remove inner p, and remove only p's lifecycle marker before reaching its boundary. -/
+theorem break_reaches_loop_teardown_instance : Steps prog
+    ⟨.exiting (.brk ⟨1⟩), scopeLocals, scopeState, teardown :: [.body ⟨1⟩ .skip (.lit 0) .skip s]⟩ []
+    ⟨.done, outerLocals, outerState, []⟩ :=
+  break_reaches_loop prog ⟨1⟩ .skip .skip (.lit 0) s [] [teardown] scopeLocals scopeState outerState [] teardownCleans (teardownPasses _)
+
+/-- Instance (law `continue_reaches_loop`). The cleanup prefix must retain outer x,
+remove inner p, and remove only p's lifecycle marker before reaching its boundary. -/
+theorem continue_reaches_loop_teardown_instance : Steps prog
+    ⟨.exiting (.cont ⟨1⟩), scopeLocals, scopeState, teardown :: [.body ⟨1⟩ .skip (.lit 0) .skip s]⟩ []
+    ⟨.exec (.loop ⟨1⟩ .skip (.lit 0) .skip s), outerLocals, outerState, []⟩ :=
+  continue_reaches_loop prog ⟨1⟩ .skip .skip (.lit 0) s [] [teardown] scopeLocals scopeState outerState [] teardownCleans (teardownPasses _)
+
+/-- Instance (law `return_reaches_caller`). Scope teardown clears p before leave;
+the populated lower activation then undergoes result binding, preserving counter 9.
+The intermediate local restriction is witnessed by exit_scope_teardown_instance. -/
+theorem return_reaches_caller_teardown_instance : Steps prog
+    ⟨.exiting (.ret 7), scopeLocals, scopeState,
+      [teardown, .functionEnd, .ret (some y) [(x, 10)]]⟩ []
+    ⟨.done, [(y, 7), (x, 10)], ⟨9, [[]]⟩, []⟩ :=
+  return_reaches_caller prog 7 (some y) [(x, 10)] [] [teardown] scopeLocals
+    scopeState outerState [] ⟨9, [[y]]⟩ ⟨9, [[]]⟩ teardownCleans (teardownPasses _) rfl rfl
+
+/-- Planted (law `exit_scope_runs_defers`). Only skipRestriction changes: it retains inner p while performing the lifecycle drop.
+The exact populated teardown instance is unreachable. -/
+theorem exit_scope_runs_defers_skipRestriction :
+    ¬ MutSteps .skipRestriction prog ⟨.exiting (.ret 7), scopeLocals, scopeState, teardown :: []⟩ []
+      ⟨.exiting (.ret 7), outerLocals, outerState, []⟩ := by
+  intro h
+  rcases missing_next rfl h with ⟨he, _⟩ | h
+  · cases he
+  have he := (missing_trace rfl h).1
+  cases he
+
+/-- Planted (law `exit_scope_runs_defers`). Only skipDrop changes: it restricts locals correctly but retains the dead lifecycle marker.
+The exact populated teardown instance is unreachable. -/
+theorem exit_scope_runs_defers_skipDrop :
+    ¬ MutSteps .skipDrop prog ⟨.exiting (.ret 7), scopeLocals, scopeState, teardown :: []⟩ []
+      ⟨.exiting (.ret 7), outerLocals, outerState, []⟩ := by
+  intro h
+  rcases missing_next rfl h with ⟨he, _⟩ | h
+  · cases he
+  have he := (missing_trace rfl h).1
+  cases he
+
+/-- Planted (law `done_scope_runs_defers`). Only skipRestriction changes: it retains inner p while performing the lifecycle drop.
+The exact populated teardown instance is unreachable. -/
+theorem done_scope_runs_defers_skipRestriction :
+    ¬ MutSteps .skipRestriction prog ⟨.done, scopeLocals, scopeState, teardown :: []⟩ []
+      ⟨.done, outerLocals, outerState, []⟩ := by
+  intro h
+  rcases missing_next rfl h with ⟨he, _⟩ | h
+  · cases he
+  have he := (missing_trace rfl h).1
+  cases he
+
+/-- Planted (law `done_scope_runs_defers`). Only skipDrop changes: it restricts locals correctly but retains the dead lifecycle marker.
+The exact populated teardown instance is unreachable. -/
+theorem done_scope_runs_defers_skipDrop :
+    ¬ MutSteps .skipDrop prog ⟨.done, scopeLocals, scopeState, teardown :: []⟩ []
+      ⟨.done, outerLocals, outerState, []⟩ := by
+  intro h
+  rcases missing_next rfl h with ⟨he, _⟩ | h
+  · cases he
+  have he := (missing_trace rfl h).1
+  cases he
+
+/-- Planted (law `unwind_runs_plan`). Only skipRestriction changes: it retains inner p while performing the lifecycle drop.
+The exact populated teardown instance is unreachable. -/
+theorem unwind_runs_plan_skipRestriction :
+    ¬ MutSteps .skipRestriction prog ⟨.exiting (.ret 7), scopeLocals, scopeState, teardown :: []⟩ []
+      ⟨.exiting (.ret 7), outerLocals, outerState, []⟩ := by
+  intro h
+  rcases missing_next rfl h with ⟨he, _⟩ | h
+  · cases he
+  have he := (missing_trace rfl h).1
+  cases he
+
+/-- Planted (law `unwind_runs_plan`). Only skipDrop changes: it restricts locals correctly but retains the dead lifecycle marker.
+The exact populated teardown instance is unreachable. -/
+theorem unwind_runs_plan_skipDrop :
+    ¬ MutSteps .skipDrop prog ⟨.exiting (.ret 7), scopeLocals, scopeState, teardown :: []⟩ []
+      ⟨.exiting (.ret 7), outerLocals, outerState, []⟩ := by
+  intro h
+  rcases missing_next rfl h with ⟨he, _⟩ | h
+  · cases he
+  have he := (missing_trace rfl h).1
+  cases he
+
+/-- Planted (law `break_reaches_loop`). Only skipRestriction changes: it retains inner p while performing the lifecycle drop.
+The exact populated teardown instance is unreachable. -/
+theorem break_reaches_loop_skipRestriction :
+    ¬ MutSteps .skipRestriction prog ⟨.exiting (.brk ⟨1⟩), scopeLocals, scopeState, teardown :: [.body ⟨1⟩ .skip (.lit 0) .skip s]⟩ []
+      ⟨.done, outerLocals, outerState, []⟩ := by
+  intro h
+  rcases missing_next rfl h with ⟨he, _⟩ | h
+  · cases he
+  rcases missing_next rfl h with ⟨he, _⟩ | h
+  · cases he
+  have he := (missing_trace rfl h).1
+  cases he
+
+/-- Planted (law `break_reaches_loop`). Only skipDrop changes: it restricts locals correctly but retains the dead lifecycle marker.
+The exact populated teardown instance is unreachable. -/
+theorem break_reaches_loop_skipDrop :
+    ¬ MutSteps .skipDrop prog ⟨.exiting (.brk ⟨1⟩), scopeLocals, scopeState, teardown :: [.body ⟨1⟩ .skip (.lit 0) .skip s]⟩ []
+      ⟨.done, outerLocals, outerState, []⟩ := by
+  intro h
+  rcases missing_next rfl h with ⟨he, _⟩ | h
+  · cases he
+  rcases missing_next rfl h with ⟨he, _⟩ | h
+  · cases he
+  have he := (missing_trace rfl h).1
+  cases he
+
+/-- Planted (law `continue_reaches_loop`). Only skipRestriction changes: it retains inner p while performing the lifecycle drop.
+The exact populated teardown instance is unreachable. -/
+theorem continue_reaches_loop_skipRestriction :
+    ¬ MutSteps .skipRestriction prog ⟨.exiting (.cont ⟨1⟩), scopeLocals, scopeState, teardown :: [.body ⟨1⟩ .skip (.lit 0) .skip s]⟩ []
+      ⟨.exec (.loop ⟨1⟩ .skip (.lit 0) .skip s), outerLocals, outerState, []⟩ := by
+  intro h
+  rcases missing_next rfl h with ⟨he, _⟩ | h
+  · cases he
+  rcases missing_next rfl h with ⟨he, _⟩ | h
+  · cases he
+  rcases missing_next rfl h with ⟨he, _⟩ | h
+  · cases he
+  rcases missing_next rfl h with ⟨he, _⟩ | h
+  · cases he
+  rcases missing_next rfl h with ⟨he, _⟩ | h
+  · cases he
+  have he := (missing_trace rfl h).1
+  cases he
+
+/-- Planted (law `continue_reaches_loop`). Only skipDrop changes: it restricts locals correctly but retains the dead lifecycle marker.
+The exact populated teardown instance is unreachable. -/
+theorem continue_reaches_loop_skipDrop :
+    ¬ MutSteps .skipDrop prog ⟨.exiting (.cont ⟨1⟩), scopeLocals, scopeState, teardown :: [.body ⟨1⟩ .skip (.lit 0) .skip s]⟩ []
+      ⟨.exec (.loop ⟨1⟩ .skip (.lit 0) .skip s), outerLocals, outerState, []⟩ := by
+  intro h
+  rcases missing_next rfl h with ⟨he, _⟩ | h
+  · cases he
+  rcases missing_next rfl h with ⟨he, _⟩ | h
+  · cases he
+  rcases missing_next rfl h with ⟨he, _⟩ | h
+  · cases he
+  rcases missing_next rfl h with ⟨he, _⟩ | h
+  · cases he
+  rcases missing_next rfl h with ⟨he, _⟩ | h
+  · cases he
+  have he := (missing_trace rfl h).1
+  cases he
+
+
+/-- Instance (law `steps_request`). Moving the argument changes lifecycle state;
+result binding clears x but preserves p, the counter, the lower activation and frames. -/
+theorem steps_request_lifecycle_instance :
+    Step prog ⟨.exec (.prim (some x) .log [.move p] s), [(p, 20), (y, 12)],
+      ⟨9, [[x], [y]]⟩, [.seq .skip]⟩ (.emit 20)
+      ⟨.done, [(x, 0), (p, 20), (y, 12)], ⟨9, [[p], [y]]⟩, [.seq .skip]⟩ :=
+  steps_request prog (some x) .log [.move p] s [(p, 20), (y, 12)]
+    ⟨9, [[x], [y]]⟩ ⟨9, [[p, x], [y]]⟩ ⟨9, [[p], [y]]⟩ [20] [.seq .skip]
+    ⟨some 20, .ok 0, ⟨9, [[p, x], [y]]⟩⟩ 0 rfl rfl rfl rfl
+
+/-- Instance (law `steps_request`). The accepted answer's counter differs from the
+request store: retaining the old store loses the primitive's effect. -/
+theorem steps_request_store_instance :
+    Step prog ⟨.exec (.prim (some x) .bump [] s), [(y, 12)], scopeState, [.seq .skip]⟩ .silent
+      ⟨.done, [(x, 0), (y, 12)], ⟨10, [[p], [y]]⟩, [.seq .skip]⟩ :=
+  steps_request prog (some x) .bump [] s [(y, 12)] scopeState scopeState
+    ⟨10, [[p], [y]]⟩ [] [.seq .skip] ⟨none, .ok 0, ⟨10, [[p, x], [y]]⟩⟩ 0 rfl rfl rfl rfl
+
+/-- Instance (law `two_defers_register`). Populated locals determine the saved
+domain; registration preserves state and the enclosing continuation. -/
+theorem two_defers_register_preservation_instance : Steps prog
+    ⟨.exec (.block ⟨1⟩ (.seq (.defer d1.f d1.args d1.site)
+      (.seq (.defer d2.f d2.args d2.site) .skip))), scopeLocals, scopeState, [.seq .skip]⟩ []
+    ⟨.exec .skip, scopeLocals, scopeState,
+      [.scope ⟨1⟩ [p, x] [d2, d1], .seq .skip]⟩ :=
+  two_defers_register prog ⟨1⟩ d1 d2 .skip scopeLocals scopeState [.seq .skip]
+
+/-- Instance (law `exit_scope_next`). Dispatch preserves populated locals, domain,
+state, remaining calls and lower continuation while remembering the exit value. -/
+theorem exit_scope_next_preservation_instance : Step prog
+    ⟨.exiting (.ret 7), scopeLocals, scopeState, [.scope ⟨1⟩ [x] [d1, d2], .seq .skip]⟩ .silent
+    ⟨.exec d1.stmt, scopeLocals, scopeState,
+      [.resume (.exit (.ret 7)), .scope ⟨1⟩ [x] [d2], .seq .skip]⟩ :=
+  (exit_scope_next prog (.ret 7) ⟨1⟩ [x] d1 [d2] scopeLocals scopeState [.seq .skip] .silent _).mpr ⟨rfl, rfl⟩
+
+/-- Instance (law `done_scope_next`). Dispatch preserves populated locals, saved domain,
+state, remaining calls and the lower continuation, while remembering the pending exit. -/
+theorem done_scope_next_preservation_instance : Step prog
+    ⟨.done, scopeLocals, scopeState, [.scope ⟨1⟩ [x] [d1, d2], .seq .skip]⟩ .silent
+    ⟨.exec d1.stmt, scopeLocals, scopeState,
+      [.resume (.fall), .scope ⟨1⟩ [x] [d2], .seq .skip]⟩ :=
+  (done_scope_next prog ⟨1⟩ [x] d1 [d2] scopeLocals scopeState [.seq .skip] .silent _).mpr ⟨rfl, rfl⟩
+
+/-- Instance (law `exit_scope_runs_defers`). Bump and two logs make store threading and
+trace order observable together with local restriction and lifecycle teardown. -/
+theorem exit_scope_runs_defers_effects_instance : Steps prog
+    ⟨.exiting (.ret 7), scopeLocals, scopeState,
+      [.scope ⟨1⟩ [x] [⟨bumpF, [], s⟩, d1, d2], .seq .skip]⟩ [1, 2]
+    ⟨.exiting (.ret 7), outerLocals, ⟨10, [[x], [y]]⟩, [.seq .skip]⟩ :=
+  exit_scope_runs_defers prog (.ret 7) ⟨1⟩ [x] scopeLocals [.seq .skip]
+    [⟨bumpF, [], s⟩, d1, d2] scopeState ⟨10, [[p, x], [y]]⟩ [1, 2]
+    ⟨10, [[x], [y]]⟩
+    (.cons (demo_bump_completes _ _) (.cons (demo_log_completes _ _)
+      (.cons (demo_log_value_completes 2 _ _) (.nil _)))) rfl
+
+/-- Instance (law `done_scope_runs_defers`). Bump and two logs make store threading and
+trace order observable together with local restriction and lifecycle teardown. -/
+theorem done_scope_runs_defers_effects_instance : Steps prog
+    ⟨.done, scopeLocals, scopeState,
+      [.scope ⟨1⟩ [x] [⟨bumpF, [], s⟩, d1, d2], .seq .skip]⟩ [1, 2]
+    ⟨.done, outerLocals, ⟨10, [[x], [y]]⟩, [.seq .skip]⟩ :=
+  done_scope_runs_defers prog ⟨1⟩ [x] scopeLocals [.seq .skip]
+    [⟨bumpF, [], s⟩, d1, d2] scopeState ⟨10, [[p, x], [y]]⟩ [1, 2]
+    ⟨10, [[x], [y]]⟩
+    (.cons (demo_bump_completes _ _) (.cons (demo_log_completes _ _)
+      (.cons (demo_log_value_completes 2 _ _) (.nil _)))) rfl
+
+
+/-- Helper. Both nested scopes have a different dead local and a distinct log. -/
+def populatedScopes : List (Frame ops) :=
+  [.scope ⟨1⟩ [y, x] [d1], .scope ⟨2⟩ [x] [d2]]
+/-- Helper. Nested cleanup removes p then y, preserves x, threads the store,
+and logs inner 1 before outer 2. The two drops are both observable. -/
+private theorem populatedCleanup : Cleans prog populatedScopes
+    [(p, 20), (y, 30), (x, 10)] ⟨9, [[p, y, x], [a]]⟩ [1, 2] ⟨9, [[x], [a]]⟩ :=
+  .scope (.cons (demo_log_completes _ _) (.nil _)) rfl
+    (.scope (.cons (demo_log_value_completes 2 _ _) (.nil _)) rfl (.nil _ _))
+/-- Helper. Both nested scopes pass each structured exit. -/
+private theorem populatedPasses (e : Exit Int) :
+    ∀ f ∈ populatedScopes, Passes e f := by
+  intro f hf
+  simp only [populatedScopes, List.mem_cons, List.not_mem_nil, or_false] at hf
+  rcases hf with rfl | rfl <;> trivial
+
+/-- Instance (law `unwind_runs_plan`). Inner p and outer y disappear in separate
+scope exits; x and its moved marker survive, as do counter and lower activation.
+The trace simultaneously witnesses inner-before-outer cleanup. -/
+theorem unwind_runs_plan_populated_instance : Steps prog
+    ⟨.exiting (.ret 7), [(p, 20), (y, 30), (x, 10)], ⟨9, [[p, y, x], [a]]⟩,
+      populatedScopes ++ []⟩ [1, 2]
+    ⟨.exiting (.ret 7), [(x, 10)], ⟨9, [[x], [a]]⟩, []⟩ :=
+  unwind_runs_plan prog (.ret 7) [] populatedScopes [(p, 20), (y, 30), (x, 10)]
+    ⟨9, [[p, y, x], [a]]⟩ ⟨9, [[x], [a]]⟩ [1, 2] populatedCleanup (populatedPasses _)
+
+/-- Instance (law `break_reaches_loop`). Inner p and outer y disappear in separate
+scope exits; x and its moved marker survive, as do counter and lower activation.
+The trace simultaneously witnesses inner-before-outer cleanup. -/
+theorem break_reaches_loop_populated_instance : Steps prog
+    ⟨.exiting (.brk ⟨1⟩), [(p, 20), (y, 30), (x, 10)], ⟨9, [[p, y, x], [a]]⟩,
+      populatedScopes ++ [.body ⟨1⟩ .skip (.lit 0) .skip s]⟩ [1, 2]
+    ⟨.done, [(x, 10)], ⟨9, [[x], [a]]⟩, []⟩ :=
+  break_reaches_loop prog ⟨1⟩ .skip .skip (.lit 0) s [] populatedScopes [(p, 20), (y, 30), (x, 10)]
+    ⟨9, [[p, y, x], [a]]⟩ ⟨9, [[x], [a]]⟩ [1, 2] populatedCleanup (populatedPasses _)
+
+/-- Instance (law `continue_reaches_loop`). Inner p and outer y disappear in separate
+scope exits; x and its moved marker survive, as do counter and lower activation.
+The trace simultaneously witnesses inner-before-outer cleanup. -/
+theorem continue_reaches_loop_populated_instance : Steps prog
+    ⟨.exiting (.cont ⟨1⟩), [(p, 20), (y, 30), (x, 10)], ⟨9, [[p, y, x], [a]]⟩,
+      populatedScopes ++ [.body ⟨1⟩ .skip (.lit 0) .skip s]⟩ [1, 2]
+    ⟨.exec (.loop ⟨1⟩ .skip (.lit 0) .skip s), [(x, 10)], ⟨9, [[x], [a]]⟩, []⟩ :=
+  continue_reaches_loop prog ⟨1⟩ .skip .skip (.lit 0) s [] populatedScopes [(p, 20), (y, 30), (x, 10)]
+    ⟨9, [[p, y, x], [a]]⟩ ⟨9, [[x], [a]]⟩ [1, 2] populatedCleanup (populatedPasses _)
 
 end CoreEvidence
 end ConcreteSpec.Core.Exec

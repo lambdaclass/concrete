@@ -13,3 +13,11 @@ outer-before-inner scope exit and cleanup-before-return-value evaluation using t
 same concrete instances. Populate activation state so return moves, caller result
 binding and activation leave have observable effects; primitive completion now
 binds a result while preserving existing caller locals and continuation frames.
+
+Populate scope-restoration witnesses with retained outer locals, removed inner locals,
+and independently stated lifecycle states. Reject omission of domain restriction and
+omission of lifecycle drop separately for normal completion, exit, unwind, break and
+continue. Nested witnesses drop two different locals while preserving the counter,
+lower activation and surviving moved marker. Add combined cleanup store/event/teardown
+witnesses and populated registration, dispatch and primitive-response witnesses so
+saved domains, frames, argument effects, answer stores and result admission are observable.

@@ -816,25 +816,45 @@ ConcreteSpec.Core.Exec.CoreEvidence.MissingRule.retValue.sizeOf_spec
 ConcreteSpec.Core.Exec.CoreEvidence.MissingRule.returnBind.sizeOf_spec	
 ConcreteSpec.Core.Exec.CoreEvidence.MissingRule.reverseDone.sizeOf_spec	
 ConcreteSpec.Core.Exec.CoreEvidence.MissingRule.reverseExit.sizeOf_spec	
+ConcreteSpec.Core.Exec.CoreEvidence.MissingRule.skipDrop.sizeOf_spec	
+ConcreteSpec.Core.Exec.CoreEvidence.MissingRule.skipRestriction.sizeOf_spec	
 ConcreteSpec.Core.Exec.CoreEvidence.MutSteps.brecOn	propext
 ConcreteSpec.Core.Exec.CoreEvidence.break_reaches_loop_instance	propext
 ConcreteSpec.Core.Exec.CoreEvidence.break_reaches_loop_planted	Quot.sound propext
+ConcreteSpec.Core.Exec.CoreEvidence.break_reaches_loop_populated_instance	propext
 ConcreteSpec.Core.Exec.CoreEvidence.break_reaches_loop_reversed	Quot.sound propext
+ConcreteSpec.Core.Exec.CoreEvidence.break_reaches_loop_skipDrop	propext
+ConcreteSpec.Core.Exec.CoreEvidence.break_reaches_loop_skipRestriction	propext
+ConcreteSpec.Core.Exec.CoreEvidence.break_reaches_loop_teardown_instance	propext
 ConcreteSpec.Core.Exec.CoreEvidence.continue_reaches_loop_instance	propext
 ConcreteSpec.Core.Exec.CoreEvidence.continue_reaches_loop_planted	Quot.sound propext
+ConcreteSpec.Core.Exec.CoreEvidence.continue_reaches_loop_populated_instance	propext
 ConcreteSpec.Core.Exec.CoreEvidence.continue_reaches_loop_reversed	Quot.sound propext
+ConcreteSpec.Core.Exec.CoreEvidence.continue_reaches_loop_skipDrop	propext
+ConcreteSpec.Core.Exec.CoreEvidence.continue_reaches_loop_skipRestriction	propext
+ConcreteSpec.Core.Exec.CoreEvidence.continue_reaches_loop_teardown_instance	propext
 ConcreteSpec.Core.Exec.CoreEvidence.done_scope_next_instance	propext
 ConcreteSpec.Core.Exec.CoreEvidence.done_scope_next_planted	propext
+ConcreteSpec.Core.Exec.CoreEvidence.done_scope_next_preservation_instance	propext
 ConcreteSpec.Core.Exec.CoreEvidence.done_scope_next_reversed	propext
+ConcreteSpec.Core.Exec.CoreEvidence.done_scope_runs_defers_effects_instance	propext
 ConcreteSpec.Core.Exec.CoreEvidence.done_scope_runs_defers_instance	propext
 ConcreteSpec.Core.Exec.CoreEvidence.done_scope_runs_defers_planted	propext
 ConcreteSpec.Core.Exec.CoreEvidence.done_scope_runs_defers_reversed	Quot.sound propext
+ConcreteSpec.Core.Exec.CoreEvidence.done_scope_runs_defers_skipDrop	propext
+ConcreteSpec.Core.Exec.CoreEvidence.done_scope_runs_defers_skipRestriction	propext
+ConcreteSpec.Core.Exec.CoreEvidence.done_scope_teardown_instance	propext
 ConcreteSpec.Core.Exec.CoreEvidence.exit_scope_next_instance	propext
 ConcreteSpec.Core.Exec.CoreEvidence.exit_scope_next_planted	propext
+ConcreteSpec.Core.Exec.CoreEvidence.exit_scope_next_preservation_instance	propext
 ConcreteSpec.Core.Exec.CoreEvidence.exit_scope_next_reversed	propext
+ConcreteSpec.Core.Exec.CoreEvidence.exit_scope_runs_defers_effects_instance	propext
 ConcreteSpec.Core.Exec.CoreEvidence.exit_scope_runs_defers_instance	propext
 ConcreteSpec.Core.Exec.CoreEvidence.exit_scope_runs_defers_planted	propext
 ConcreteSpec.Core.Exec.CoreEvidence.exit_scope_runs_defers_reversed	Quot.sound propext
+ConcreteSpec.Core.Exec.CoreEvidence.exit_scope_runs_defers_skipDrop	propext
+ConcreteSpec.Core.Exec.CoreEvidence.exit_scope_runs_defers_skipRestriction	propext
+ConcreteSpec.Core.Exec.CoreEvidence.exit_scope_teardown_instance	propext
 ConcreteSpec.Core.Exec.CoreEvidence.hasRegistered._sparseCasesOn_1.else_eq	propext
 ConcreteSpec.Core.Exec.CoreEvidence.instDecidableEqMissingRule._proof_1	
 ConcreteSpec.Core.Exec.CoreEvidence.instDecidableEqMissingRule._proof_2	
@@ -846,6 +866,8 @@ ConcreteSpec.Core.Exec.CoreEvidence.missingStep._sparseCasesOn_11.else_eq	propex
 ConcreteSpec.Core.Exec.CoreEvidence.missingStep._sparseCasesOn_12.else_eq	propext
 ConcreteSpec.Core.Exec.CoreEvidence.missingStep._sparseCasesOn_13.else_eq	propext
 ConcreteSpec.Core.Exec.CoreEvidence.missingStep._sparseCasesOn_14.else_eq	propext
+ConcreteSpec.Core.Exec.CoreEvidence.missingStep._sparseCasesOn_15.else_eq	propext
+ConcreteSpec.Core.Exec.CoreEvidence.missingStep._sparseCasesOn_16.else_eq	propext
 ConcreteSpec.Core.Exec.CoreEvidence.missingStep._sparseCasesOn_2.else_eq	propext
 ConcreteSpec.Core.Exec.CoreEvidence.missingStep._sparseCasesOn_3.else_eq	propext
 ConcreteSpec.Core.Exec.CoreEvidence.missingStep._sparseCasesOn_4.else_eq	propext
@@ -863,7 +885,11 @@ ConcreteSpec.Core.Exec.CoreEvidence.missingStep.eq_14	propext
 ConcreteSpec.Core.Exec.CoreEvidence.missingStep.eq_15	propext
 ConcreteSpec.Core.Exec.CoreEvidence.missingStep.eq_16	propext
 ConcreteSpec.Core.Exec.CoreEvidence.missingStep.eq_17	propext
+ConcreteSpec.Core.Exec.CoreEvidence.missingStep.eq_18	propext
+ConcreteSpec.Core.Exec.CoreEvidence.missingStep.eq_19	propext
 ConcreteSpec.Core.Exec.CoreEvidence.missingStep.eq_2	propext
+ConcreteSpec.Core.Exec.CoreEvidence.missingStep.eq_20	propext
+ConcreteSpec.Core.Exec.CoreEvidence.missingStep.eq_21	propext
 ConcreteSpec.Core.Exec.CoreEvidence.missingStep.eq_3	propext
 ConcreteSpec.Core.Exec.CoreEvidence.missingStep.eq_4	propext
 ConcreteSpec.Core.Exec.CoreEvidence.missingStep.eq_5	propext
@@ -872,6 +898,7 @@ ConcreteSpec.Core.Exec.CoreEvidence.missingStep.eq_7	propext
 ConcreteSpec.Core.Exec.CoreEvidence.missingStep.eq_8	propext
 ConcreteSpec.Core.Exec.CoreEvidence.missingStep.eq_9	propext
 ConcreteSpec.Core.Exec.CoreEvidence.outer_first_completes	propext
+ConcreteSpec.Core.Exec.CoreEvidence.populatedScopes.eq_1	propext
 ConcreteSpec.Core.Exec.CoreEvidence.restrict_dom_drops_instance	propext
 ConcreteSpec.Core.Exec.CoreEvidence.restrict_dom_drops_planted	propext
 ConcreteSpec.Core.Exec.CoreEvidence.return_reaches_caller_bind_before_leave	propext
@@ -879,6 +906,7 @@ ConcreteSpec.Core.Exec.CoreEvidence.return_reaches_caller_instance	Quot.sound pr
 ConcreteSpec.Core.Exec.CoreEvidence.return_reaches_caller_lifecycle_instance	Quot.sound propext
 ConcreteSpec.Core.Exec.CoreEvidence.return_reaches_caller_planted	Quot.sound propext
 ConcreteSpec.Core.Exec.CoreEvidence.return_reaches_caller_reversed	Quot.sound propext
+ConcreteSpec.Core.Exec.CoreEvidence.return_reaches_caller_teardown_instance	propext
 ConcreteSpec.Core.Exec.CoreEvidence.reverse_done_completes	propext
 ConcreteSpec.Core.Exec.CoreEvidence.reverse_exit_completes	propext
 ConcreteSpec.Core.Exec.CoreEvidence.step_ret_cleanup_first	propext
@@ -888,14 +916,21 @@ ConcreteSpec.Core.Exec.CoreEvidence.step_ret_planted	propext
 ConcreteSpec.Core.Exec.CoreEvidence.step_return_caller_instance	propext
 ConcreteSpec.Core.Exec.CoreEvidence.step_return_caller_planted	propext
 ConcreteSpec.Core.Exec.CoreEvidence.steps_request_instance	propext
+ConcreteSpec.Core.Exec.CoreEvidence.steps_request_lifecycle_instance	propext
 ConcreteSpec.Core.Exec.CoreEvidence.steps_request_planted	propext
+ConcreteSpec.Core.Exec.CoreEvidence.steps_request_store_instance	propext
 ConcreteSpec.Core.Exec.CoreEvidence.two_defers_register_fifo	Quot.sound propext
 ConcreteSpec.Core.Exec.CoreEvidence.two_defers_register_instance	propext
 ConcreteSpec.Core.Exec.CoreEvidence.two_defers_register_planted	propext
+ConcreteSpec.Core.Exec.CoreEvidence.two_defers_register_preservation_instance	propext
 ConcreteSpec.Core.Exec.CoreEvidence.unwind_runs_plan_instance	propext
 ConcreteSpec.Core.Exec.CoreEvidence.unwind_runs_plan_planted	propext
 ConcreteSpec.Core.Exec.CoreEvidence.unwind_runs_plan_planted._simp_1_1	propext
+ConcreteSpec.Core.Exec.CoreEvidence.unwind_runs_plan_populated_instance	propext
 ConcreteSpec.Core.Exec.CoreEvidence.unwind_runs_plan_reversed	Quot.sound propext
+ConcreteSpec.Core.Exec.CoreEvidence.unwind_runs_plan_skipDrop	propext
+ConcreteSpec.Core.Exec.CoreEvidence.unwind_runs_plan_skipRestriction	propext
+ConcreteSpec.Core.Exec.CoreEvidence.unwind_runs_plan_teardown_instance	propext
 ConcreteSpec.Core.Exec.Ctrl.done.sizeOf_spec	
 ConcreteSpec.Core.Exec.Ctrl.exec.inj	
 ConcreteSpec.Core.Exec.Ctrl.exec.injEq	propext
@@ -3039,7 +3074,11 @@ _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.CoreEvidence.missingS
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.CoreEvidence.missingStep.match_1.eq_15	propext
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.CoreEvidence.missingStep.match_1.eq_16	propext
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.CoreEvidence.missingStep.match_1.eq_17	propext
+_private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.CoreEvidence.missingStep.match_1.eq_18	propext
+_private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.CoreEvidence.missingStep.match_1.eq_19	propext
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.CoreEvidence.missingStep.match_1.eq_2	propext
+_private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.CoreEvidence.missingStep.match_1.eq_20	propext
+_private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.CoreEvidence.missingStep.match_1.eq_21	propext
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.CoreEvidence.missingStep.match_1.eq_3	propext
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.CoreEvidence.missingStep.match_1.eq_4	propext
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.CoreEvidence.missingStep.match_1.eq_5	propext
@@ -3053,8 +3092,15 @@ _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.CoreEvidence.missing_
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.CoreEvidence.passes_nested_scopes	propext
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.CoreEvidence.passes_nested_scopes._simp_1_1	propext
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.CoreEvidence.passes_nested_scopes._simp_1_2	propext
+_private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.CoreEvidence.populatedCleanup	propext
+_private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.CoreEvidence.populatedPasses	propext
+_private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.CoreEvidence.populatedPasses._simp_1_2	propext
+_private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.CoreEvidence.populatedPasses._simp_1_3	propext
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.CoreEvidence.realCalls	propext
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.CoreEvidence.realCleanup	Quot.sound propext
+_private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.CoreEvidence.teardownCleans	propext
+_private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.CoreEvidence.teardownPasses	propext
+_private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.CoreEvidence.teardownPasses._simp_1_1	propext
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.Demo.DState.life.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.Demo.DState.life.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.Demo.DState.life.match_1.eq_3	
