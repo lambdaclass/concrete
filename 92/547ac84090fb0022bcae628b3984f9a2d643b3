@@ -1,0 +1,4 @@
+[piece 484 of 497: scripts]
+- scripts/spec/landing_census.py:86: Example identities are keyed only by `(file, line)`. Two examples on the same source line overwrite each other’s identity, and both commands then receive the last example’s type identity at line 93. This silently corrupts the census for valid same-line examples with different types; use a unique command position, such as `exampleToken`, throughout identity extraction and lookup.
+[piece 489 of 497: docs]
+- ConcreteSpec/landing/README.md:148: The tag-publication procedure requires a mirrored landing and `git push lambdaclass`, contradicting AGENTS.md’s explicit rule that only `origin` is permitted and there is no mirror. Following these instructions fails in the prescribed repository configuration; remove the second-remote publication requirement.
