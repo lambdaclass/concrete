@@ -145,10 +145,9 @@ replaced examples and all repair/replace command obligations without restoring o
 preserves the additive reconciliation records.
 
 Before landing, the coordinator creates the following lightweight tags at these exact objects
-and pushes each tag to origin (and to lambdaclass for the mirrored landing). Never force or
+and pushes each tag to origin. Never force or
 retarget a tag; investigate an existing mismatch. For each row, run
-`git -c tag.gpgsign=false tag spec-inventory/NAME SHA`, then `git push origin refs/tags/spec-inventory/NAME` and `git push lambdaclass
-refs/tags/spec-inventory/NAME`. Verify each remote with `git ls-remote REMOTE
+`git -c tag.gpgsign=false tag spec-inventory/NAME SHA`, then `git push origin refs/tags/spec-inventory/NAME`. Verify origin with `git ls-remote origin
 refs/tags/spec-inventory/NAME`. Annotated tags are also supported and checked by peeled commit.
 The gate accepts matching local tags and fetches absent tags with bounded depth from the remote
 named by `git config landing.inventoryRemote` (default `origin`). It names every missing remote

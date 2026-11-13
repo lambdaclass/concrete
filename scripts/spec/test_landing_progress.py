@@ -68,6 +68,26 @@ def main():
         exporter.write_bytes((original_root/'scripts/spec/landing_inventory.lean').read_bytes())
         inventory.ROOT = root
         try:
+            # Compare against isolated commands so the control checks correctness as well
+            # as distinctness through the production parser/elaborator/census join.
+            examples = ['example : True := by trivial',
+                        'example : False → False := by intro h; exact h']
+            expected = []
+            for source in examples:
+                probe.write_text(source+'\n')
+                commands = inventory.census(root,exporter,examples=False)
+                expected.append(next(c['exampleTypeIdentity'] for c in commands
+                                     if c['record']=='command' and c.get('example')))
+            probe.write_text(' '.join(examples)+'\n')
+            commands = inventory.census(root,exporter)
+            paired = [c for c in commands if c['record']=='command' and c.get('example')]
+            if (len(paired)!=2 or paired[0]['line']!=paired[1]['line'] or
+                    paired[0]['exampleToken']==paired[1]['exampleToken'] or
+                    expected[0]==expected[1] or
+                    [c['exampleTypeIdentity'] for c in paired]!=expected):
+                raise ValueError('same-line examples lost their distinct elaborated type identities')
+            print('control PASS: same-line examples retain distinct and correct elaborated type identities')
+            probe.write_text(original)
             snapshot = inventory.head_population()
             def assert_reason(expected):
                 observed = inventory.progress_reasons(snapshot,inventory.head_population())

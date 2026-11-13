@@ -106,4 +106,4 @@ Each gate keeps negative controls.
 Each landed state has one meaningful queue, working bug filing and regeneration, and intact
 promotion semantics. Both branches go through Codex review, the pre-push hook and branch CI.
 
-The freeze is made real by tagging `legacy-compiler-final` on both remotes.
+The freeze is made real by tagging `legacy-compiler-final` through origin.

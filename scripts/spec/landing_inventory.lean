@@ -222,6 +222,7 @@ private partial def originCommands (input output : IO.FS.Handle) (ctx : Parser.I
   resolvedMetadata ctx stx state
   if containsExample stx then
     emit [("record", toJson "example-identity"), ("file", toJson ctx.fileName),
+      ("exampleToken", toJson (exampleToken stx)),
       ("line", toJson (ctx.fileMap.toPosition (stx.getPos?.getD 0)).line),
       ("identity", toJson (← exampleIdentity stx state))]
   let start := ctx.fileMap.toPosition (stx.getPos?.getD 0)

@@ -70,7 +70,7 @@ on red.
   table) once on the train rather than on each branch;
 - runs the fast gates and pushes the train to `ci/`;
 - dispatches CI and watches it to its conclusion;
-- on green, lands the train on both remotes.
+- on green, lands the train through origin.
 
 On red, it bisects the train by member and rebuilds it without the offending branch. Every result is
 recorded against the SHA of the candidate that actually ran: the train, or the bisection candidate.
@@ -2132,19 +2132,17 @@ reverse inventory fail for reasons no owner has adjudicated. Generated
 artifacts are never promoted as source fixtures, and new `.audit_me/` files are
 forbidden once this gate lands.
 
-**Publication discipline.** A milestone is not “pushed everywhere” until the
-same intended tip and bug/roadmap artifacts are present on every declared
-remote and required CI conclusions are recorded. Remote parity is process
-state, not a compiler bug; report it separately and do not let a green origin
-implicitly describe a lagging mirror.
+**Publication discipline.** Publication uses only `origin`, with fetch and push
+URLs targeting `lambdaclass/concrete`, as required by AGENTS.md. A milestone
+is published only when the intended tip and bug/roadmap artifacts are present
+on origin and the required CI conclusions are recorded.
 
-The publication state machine is fixed: run the required local gates; push the
-primary; wait for the named remote-CI conclusions; verify the primary ref still
-equals the intended tip; then fast-forward the mirror and verify both refs.
-The mirror may never lead the primary, and local hook success is not a synonym
-for hosted CI success. A divergence requiring anything other than a
-fast-forward stops publication for an explicit reconciliation; the helper may
-not hide it with a force push.
+Run the required gates and publish validated branches through
+`scripts/land/train.sh`; never push directly to `main` or `ci/*`. Verify the
+exact origin ref after publication and record CI results against its full SHA.
+Local hook success is not a synonym for hosted CI success. A divergence
+requiring anything other than a fast-forward stops publication for an explicit
+reconciliation; the helper may not hide it with a force push.
 
 ### Task R-0439
 
