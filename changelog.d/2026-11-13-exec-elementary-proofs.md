@@ -2,3 +2,7 @@ Carry E1 elementary execution and structured-exit proofs onto the shared executi
 Return crosses the activation's function-end lifecycle boundary before caller restoration;
 real deferred calls witness cleanup completion. Add concrete law applications and isolated
 planted transition controls, without inheriting historical approvals or adding a driver.
+
+Round 2 removes the parallel manifest, puts retained authority and adaptation notes beside
+the declarations, and holds ten stronger laws and their controls for missing precise
+authority (ISS-XXXX). Existing execution definitions stay unchanged.
