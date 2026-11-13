@@ -3262,11 +3262,11 @@ okay with your decisions
     No verified approval settles these. The owner-approved held plan at L144552,
     2026-11-11T13:33:37.630Z ("ok go ahead with" the pasted plan), expressly keeps
     backslashes and Unicode waiting for the owner.
-  - Classification: is the `Law` / `Helper` / `Representation lemma` /
-    `Instance (law, case)` / `Planted (law, case, subject, mutant)` taxonomy,
-    `(approved: ...)` receipt suffix, and exclusion of helpers/representation lemmas
-    from evidence an owner rule or an engineering convention? L125750 reports tagging
-    as information, not a proposal for approval. No owner approval is verified.
+  - Classification: the taxonomy was held here because L125750 reported tagging as
+    information, not a proposal for approval. **Answered 2026-11-13:** see the
+    [proof-label convention](#decided-2026-11-13-proof-labels). The `(approved: ...)`
+    receipt suffix and detailed tag format were not covered by that answer; their
+    authority remains governed by existing records or open.
 
   Additional bare-CR context (ISS-0064): assistant L118779,
   2026-11-08T03:47:36.473Z, before item 30's approval, says verbatim:
@@ -3277,8 +3277,9 @@ okay with your decisions
 
   This answers a parsing question; it is not the numbered recommendation approved at
   L119110 and does not distinguish bare CR from CRLF. It is context, not approval.
-  Bare CR and U+FEFF remain PARTIAL; the other missing path/constant/taxonomy approvals
-  are NOT FOUND, not inferred from implementation or assistant assertions.
+  Bare CR and U+FEFF remain PARTIAL; the other missing path/constant approvals
+  are NOT FOUND, not inferred from implementation or assistant assertions. The taxonomy
+  hold is resolved only within the scope of the later [answer](#decided-2026-11-13-proof-labels).
 
   For U+FEFF, does "no byte-order mark" prohibit only a source-leading BOM
   or every U+FEFF scalar, including comments and literals? For comments, does bare CR end
@@ -3376,6 +3377,10 @@ ok tell me again the options choose the best long term options for everything
   settle the exact preconditions. Confirmation of these choices under this delegation is queued
   below; no additional path-character policy, unit/char admission, or rule granularity follows.
 
+  **Later disposition of report §3.5 (classification vocabulary).** The taxonomy hold
+  is answered by the [2026-11-13 proof-label convention](#decided-2026-11-13-proof-labels),
+  within that entry's stated scope. This does not resolve the ten delegated choices above.
+
   **Already recovered authority, independently checked; existing records retained.**
   These seven report rows need no duplicate decision or expanded scope:
 
@@ -3388,6 +3393,56 @@ ok tell me again the options choose the best long term options for everything
   | 2.6 | [Rendered trap paths](#decided-project-runtime-2026-11-06) | L112704, 2026-11-06T14:44:30.004Z; L112976, 16:41:07.983Z; L112979, 16:43:18.861Z: "ok do everything". Rendering with forward slashes does not decide input backslashes. |
   | 2.14 | [Function-relative identity](#decided-2026-11-08-c9-identities) | L125750, 2026-11-08T15:28:04.788Z; L125820, 15:31:48.674Z: "okay with your decisions". Construct-kind/name paths are not source-file paths. |
   | 3.1 | [Six improvements](#decided-2026-11-08-recovered-d3) | L121997, 2026-11-08T13:31:34.909Z / L122051, 13:32:34.970Z; L122066, 13:33:02.706Z: "yes to 6 things". Real examples and planted bad cases do not approve a tag vocabulary. |
+
+- <a id="decided-2026-11-13-proof-labels"></a>**Theorem-classification vocabulary (2026-11-13).**
+  The owner accepts recording the vocabulary explained below as the project convention.
+  The quoted explanation is the definition of the five tags and their evidence status;
+  no additional meanings or format requirements are inferred from the reply.
+
+  Provenance: session `e2c54e65-31b5-4145-8101-c2d7b071b97e`, primary transcript
+  `~/.claude/projects/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e.jsonl`,
+  independently checked against `scratchpad/labels/approval.md` in
+  `/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/`.
+  All timestamps below are UTC; the owner messages are human, typed user messages.
+
+  Owner question, L151435, 2026-11-13T17:56:00.435Z:
+
+~~~text
+what do you mean theorems classifed?
+~~~
+
+  Assistant explanation and question, L151464, 2026-11-13T17:56:15.556Z:
+
+~~~text
+Every theorem in the spec carries a small tag in its comment saying what kind of proof it is. A planned check uses those tags to catch theorems that look like guarantees but prove nothing. The tags are:
+
+- **Law:** a real guarantee about the language, for example "a refused step never finishes normally". These are what the spec promises.
+- **Helper:** a stepping stone used to prove a law. It isn't a promise by itself.
+- **Representation lemma:** something that is true only because of how the spec happens to be written in Lean, not a fact about the language. Example: "a program has only one next step" is automatically true when the step is written as a function, so it proves nothing about determinism.
+- **Instance:** a law checked on one concrete example.
+- **Planted:** a deliberately broken version of a rule, used to show the law's test would catch a wrong definition.
+
+Only laws count as evidence. Helpers and representation lemmas don't.
+
+**What you already approved:** the substance. Every law needs positive and negative tests. Determinism must be proved against separately written rules. Laws that hold only because of how the spec is written are relabelled as representation lemmas.
+
+**What has no recorded approval:** the tag names and format themselves. The workers invented that vocabulary. I told you about it twice on Nov 8 as an update, but never asked you.
+
+**The question:** is this vocabulary engineering I can just record as the convention, or do you want to approve it yourself? I recommend treating it as engineering: it changes nothing in the language, and the real rules behind it are already yours. It does block the proof pieces after the execution spec, so I need one or the other.
+~~~
+
+  Owner reply, L151469, 2026-11-13T17:56:44.839Z:
+
+~~~text
+yes it's okay
+~~~
+
+  Scope: this resolves the vocabulary hold in [D4](#decided-2026-11-13-d4-recovery),
+  report §3.5, for the convention actually explained above. The `(approved: ...)`
+  reviewer-receipt suffix, detailed tag argument syntax, rule granularity, and any check
+  design are not covered by this answer. They remain governed by existing records or
+  open; the mention of a planned check does not approve its design. The explanation's
+  account of earlier approvals does not independently settle D4's held delegated choices.
 
 - <a id="decided-project-spark-2026-11-06"></a>**What Concrete takes from SPARK** (owner, 2026-11-06: "ok do everything", after Claude, Codex, agy and Kimi chose unanimously; the
   [review](proposals/SPARK.md) items 1, 2, 3, 6, 7, 9 and 10).
