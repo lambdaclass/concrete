@@ -939,8 +939,8 @@ end ScalarLawEvidence
 /-! ### Numeric contract variables
 
 `Var` is the numeric identity from Basics. Valuations below use only `AList.lookup`;
-there is no scalar-specific lookup or spelling interface. Presentation renaming is
-checked separately by the existing LocalIdentity population controls.
+there is no scalar-specific lookup or spelling interface. Paired presentation-renaming fixtures live in Diagnostics/ScalarFixtures.lean;
+the LocalIdentity population controls separately enforce the structural boundary.
 -/
 namespace ScalarVariableEvidence
 /-- A scalar valuation over two different numeric identities. -/

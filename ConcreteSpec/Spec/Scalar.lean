@@ -64,11 +64,13 @@ Authority (all links refer to docs/decisions.md on the reconstruction base):
   trap spellings #recovered-59-4. The trap vocabulary itself is imported.
 - Character construction and projection: #decided-2026-11-12-char.
 
-Held, with dependent examples and proofs omitted: Boolean bit encodings and the
-Boolean-to-integer mapping. #od126 fixes a Boolean's size, but does not say which
-bits represent true or false; #od11 does not choose their numeric encoding.
-The historical scalar implementation supplies no independent authority for these
-choices. Existing main representation behavior is left to its checked-view migration.
+Held, with dependent examples and proofs omitted: new Boolean bit-encoding and
+Boolean-to-integer definitions, pending owner authority (ISS-0069). #od126 fixes
+size, not encoding; #od11 does not choose a numeric mapping. For Boolean storage
+bytes this module defers to the existing definition in Spec/Rep.lean (false = 0,
+true = 1; other or uninitialized bytes invalid), without extending or reversing it.
+That existing behavior remains an authority conflict tracked by ISS-0069; it is
+not authority for a Boolean-to-integer conversion.
 Also held: replacement conversion/exact surface spellings, SPARK-style character
 conversion preconditions, floats, and constant-expression restrictions. The five
 items in #decided-2026-11-08-recovery-queue, U+FEFF scope, bare CR in comments and

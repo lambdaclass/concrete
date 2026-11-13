@@ -12,3 +12,13 @@ not the encoding, and OD11 does not choose a numeric map. Omit their dependent e
 than treating source implementation as approval. Keep conversion/exact surface spellings,
 SPARK-style char preconditions, floats, constant restrictions and unresolved source/path policy
 out of this piece. Scalar.lean records the carried decision anchors and exact held scope.
+
+ISS-0069 tracks the unresolved Boolean encoding and conversion authority, existing Rep
+bytes (false=0, true=1, all other/uninitialized bytes invalid), structural owner and
+owner-disposition closure condition. Scalar defers storage encoding to Rep and does
+not infer a numeric conversion. No owner choice is made.
+
+Add paired diagnostics fixtures: renaming presentations preserves scalar contract
+results, while distinct numbers sharing a spelling retain distinct results. Each
+fixture rejects a presentation-keyed valuation that respectively loses or aliases
+a binding.

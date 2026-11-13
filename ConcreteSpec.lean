@@ -12,3 +12,4 @@ import ConcreteSpec.Proofs.Borrow
 import ConcreteSpec.Diagnostics
 import ConcreteSpec.Proofs.LocalIdentity
 import ConcreteSpec.Proofs.Scalar
+import ConcreteSpec.Diagnostics.ScalarFixtures
