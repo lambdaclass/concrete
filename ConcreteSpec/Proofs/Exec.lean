@@ -5,7 +5,7 @@ import ConcreteSpec.Spec.Outcome
 import ConcreteSpec.Spec.Scalar
 
 /-!
-# Elementary execution and structured exits (F09a, E1)
+# Execution, structured exits and cleanup boundaries (F09a/E1, F09b/E2)
 
 PROPOSED until Core freeze. No historical approval is inherited.
 Each Law cites the admitted Spec/Exec definitions by stable declaration name and
@@ -1375,4 +1375,1876 @@ theorem continue_reaches_loop_populated_instance : Steps prog
     ⟨9, [[p, y, x], [a]]⟩ ⟨9, [[x], [a]]⟩ [1, 2] populatedCleanup (populatedPasses _)
 
 end CoreEvidence
+
+/-! ## Cleanup and saved-caller boundaries (F09b, E2)
+
+Only scope/test cleanup is observed before a function-end boundary. No second
+driver is introduced. Historical approval tokens are discarded.
+
+The complete source command groups are repaired here: cleanup action planning and
+certificates; first-boundary observation; trapped runs; saved-caller preservation
+and first-return segmentation; raw cleanup completeness; abort and first argument
+trap; the complete CleanupEvidence replacement and call-projection controls.
+E1 owns the shared completion and execution-composition helpers.
+
+Projection and reconstruction of observation certificates are Representation
+lemmas or Helpers, not independent language guarantees. In particular, an observer
+can certify a call body at a chosen saved continuation; it does not assert a raw
+execution of the entire unwind. `boundary_complete` starts from actual machine
+steps, and `raw_cleanup_runs_plan` is the language guarantee of exact cleanup.
+Their controls preserve actual raw first-arrival and endpoint premises.
+
+Held, without introducing their definitions or dependent evidence: U+FEFF, bare CR,
+constant restrictions and queued partial approvals (ISS-0064/ISS-0065); path policy
+(ISS-0068); Boolean encoding (ISS-0069); pointer bytes, struct layout and whole-pointer
+representation (ISS-0070); SPARK char preconditions (ISS-0071); wiping (ISS-0072);
+startup and ABI (ISS-0073). The demo interfaces do not settle those questions.
+-/
+/-- One action of a cleanup: a call, with the locals it runs with, or leaving a scope entered with
+`dm`, from locals `L` to restored locals `L'`. -/
+inductive CleanAct (O : Operands) where
+  | call (L : AList Var O.Val) (d : Deferred O)
+  | drop (dm : List Var) (L L' : AList Var O.Val)
+
+/-- The call of an action, if it is one. -/
+def CleanAct.call? : CleanAct O → Option (Deferred O)
+  | .call _ d => some d
+  | .drop .. => none
+
+/-- The actions an exit through frames `pre` performs, from locals `L`, in order. -/
+def planWith : List (Frame O) → AList Var O.Val → List (CleanAct O)
+  | [], _ => []
+  | .scope _ dm ds :: k, L =>
+    ds.map (.call L) ++ .drop dm L (restrict dm L) :: planWith k (restrict dm L)
+  | .test _ _ _ _ _ dm :: k, L => .drop dm L (restrict dm L) :: planWith k (restrict dm L)
+  | _ :: k, L => planWith k L
+
+/-- Representation lemma (subject `ConcreteSpec.Core.Exec.planWith`, `ConcreteSpec.Core.Exec.plan`). Filtering
+`planWith` pre L to its `CleanAct.call` actions yields `plan` pre.
+Basis: admitted `Spec/Exec` definitions named in the subject and proof.
+`docs/decisions.md#decided-2026-11-08-foundation`, C1 / `#foundation-q1`,
+admits execution, call and cleanup laws in Lean. `#od2` clause (5) / `#core-q9-8` require nested reverse cleanup;
+`#od69` limits teardown to storage; `#decided-2026-11-13-lifecycle-refusal`
+requires lifecycle admission. Function-end is a boundary, as in admitted `Passes`. -/
+theorem planWith_calls : ∀ (pre : List (Frame O)) (L : AList Var O.Val),
+    (planWith pre L).filterMap CleanAct.call? = plan pre
+  | [], _ => rfl
+  | .scope _ dm ds :: k, L => by
+    have hds : (ds.map (CleanAct.call L)).filterMap CleanAct.call? = ds := by
+      induction ds with
+      | nil => rfl
+      | cons d ds ih => simp [CleanAct.call?] at ih ⊢; exact ih
+    simp only [planWith, plan, List.filterMap_append, hds, List.filterMap_cons, CleanAct.call?,
+      planWith_calls k (restrict dm L)]
+  | .test _ _ _ _ _ dm :: k, L => by
+    simp only [planWith, plan, List.filterMap_cons, CleanAct.call?]
+    exact planWith_calls k (restrict dm L)
+  | .seq _ :: k, L => planWith_calls k L
+  | .body .. :: k, L => planWith_calls k L
+  | .resume _ :: k, L => planWith_calls k L
+  | .ret .. :: k, L => planWith_calls k L
+  | .functionEnd :: k, L => planWith_calls k L
+
+/-- A list of cleanup actions run one after another, the state threaded: each call completes, and
+each scope left tells the instrumentation what it drops. -/
+inductive RunsEach (P : Program O) : List (CleanAct O) → O.Store → List O.Event → O.Store → Prop where
+  | nil (st : O.Store) : RunsEach P [] st [] st
+  | call {L d rest st tr₁ st₁ tr₂ st₂} : Completes P L d st tr₁ st₁ →
+      RunsEach P rest st₁ tr₂ st₂ → RunsEach P (.call L d :: rest) st (tr₁ ++ tr₂) st₂
+  | drop {dm L rest st stDrop tr st'} : dropOut O dm L st = some stDrop →
+      RunsEach P rest stDrop tr st' →
+      RunsEach P (.drop dm L (restrict dm L) :: rest) st tr st'
+
+/-- Helper (inversion). Composes a `RunsAll` call certificate sequence with a `RunsEach` suffix. -/
+theorem RunsAll.each {P : Program O} {L : AList Var O.Val} {ds : List (Deferred O)}
+    {st st₁ st₂ : O.Store} {tr₁ tr₂ : List O.Event} {rest : List (CleanAct O)}
+    (h : RunsAll P L ds st tr₁ st₁) (h' : RunsEach P rest st₁ tr₂ st₂) :
+    RunsEach P (ds.map (.call L) ++ rest) st (tr₁ ++ tr₂) st₂ := by
+  induction h with
+  | nil => simpa using h'
+  | cons hd _ ih => simpa [List.append_assoc] using RunsEach.call hd (ih h')
+
+/-- Helper (inversion). Splits a `RunsEach` over mapped calls and a suffix. -/
+theorem RunsEach.split_calls {P : Program O} {L : AList Var O.Val} :
+    ∀ {ds : List (Deferred O)} {rest : List (CleanAct O)} {st st₂ : O.Store} {tr : List O.Event},
+    RunsEach P (ds.map (.call L) ++ rest) st tr st₂ →
+    ∃ tr₁ st₁ tr₂, tr = tr₁ ++ tr₂ ∧ RunsAll P L ds st tr₁ st₁ ∧ RunsEach P rest st₁ tr₂ st₂
+  | [], _, _, _, _, h => ⟨[], _, _, rfl, .nil _, by simpa using h⟩
+  | d :: ds, rest, st, st₂, tr, h => by
+    cases h with
+    | call hd hr =>
+      obtain ⟨tr₁, st₁, tr₂, rfl, ha, hb⟩ := RunsEach.split_calls hr
+      exact ⟨_, st₁, tr₂, by simp [List.append_assoc], .cons hd ha, hb⟩
+
+/-- Frames eligible for scope-cleanup traversal. Function-end, saved caller and
+running-cleanup boundaries are excluded, consistently with admitted `Passes`. -/
+def Frame.passable : Frame O → Bool
+  | .resume _ | .ret .. | .functionEnd => false
+  | _ => true
+
+/-- Helper (inversion). Relates two cleanup certificates; not a law about actual runs. -/
+theorem cleans_iff_runs_plan_inv {P : Program O} :
+    ∀ {pre : List (Frame O)} {L : AList Var O.Val} {st st' : O.Store} {tr : List O.Event},
+    (∀ f ∈ pre, f.passable = true) →
+    (Cleans P pre L st tr st' ↔ RunsEach P (planWith pre L) st tr st')
+  | [], L, st, st', tr, _ => by
+    constructor
+    · intro h; cases h; exact .nil _
+    · intro h; cases h; exact .nil _ _
+  | .scope b dm ds :: pre, L, st, st', tr, hp => by
+    have hp' := fun f hf => hp f (List.mem_cons_of_mem _ hf)
+    constructor
+    · intro h
+      cases h with
+      | scope hr hd hc => exact RunsAll.each hr (.drop hd ((cleans_iff_runs_plan_inv hp').1 hc))
+    · intro h
+      obtain ⟨tr₁, st₁, tr₂, rfl, ha, hb⟩ := RunsEach.split_calls h
+      cases hb with
+      | drop hd hb => exact .scope ha hd ((cleans_iff_runs_plan_inv hp').2 hb)
+  | .test l cr t b site dm :: pre, L, st, st', tr, hp => by
+    have hp' := fun f hf => hp f (List.mem_cons_of_mem _ hf)
+    constructor
+    · intro h; cases h with
+      | test hd hc => exact .drop hd ((cleans_iff_runs_plan_inv hp').1 hc)
+    · intro h; cases h with
+      | drop hd hb => exact .test hd ((cleans_iff_runs_plan_inv hp').2 hb)
+  | .seq _ :: pre, L, st, st', tr, hp => by
+    have hp' := fun f hf => hp f (List.mem_cons_of_mem _ hf)
+    constructor
+    · intro h; cases h with
+      | seq hc => exact (cleans_iff_runs_plan_inv hp').1 hc
+    · intro h; exact .seq ((cleans_iff_runs_plan_inv hp').2 h)
+  | .body .. :: pre, L, st, st', tr, hp => by
+    have hp' := fun f hf => hp f (List.mem_cons_of_mem _ hf)
+    constructor
+    · intro h; cases h with
+      | body hc => exact (cleans_iff_runs_plan_inv hp').1 hc
+    · intro h; exact .body ((cleans_iff_runs_plan_inv hp').2 h)
+  | .resume _ :: _, _, _, _, _, hp => absurd (hp _ List.mem_cons_self) (by simp [Frame.passable])
+  | .functionEnd :: _, _, _, _, _, hp => absurd (hp _ List.mem_cons_self) (by simp [Frame.passable])
+  | .ret .. :: _, _, _, _, _, hp => absurd (hp _ List.mem_cons_self) (by simp [Frame.passable])
+
+/-- Helper (inversion). Every frame an exit passes is passable. -/
+theorem Passes.passable {e : Exit O.Val} : ∀ {f : Frame O}, Passes e f → f.passable = true
+  | .seq _, _ | .scope .., _ | .test .., _ | .body .., _ => rfl
+  | .resume _, h => h.elim
+  | .ret .., h => h.elim
+  | .functionEnd, h => h.elim
+
+/-! ### Actual cleanup executions
+
+A boundary is a fixed suffix of the continuation stack. `BoundaryRun` observes actual transitions
+until an exit first reaches that suffix. Ordinary call bodies are first-return segments, so their
+own nested cleanup is not confused with the registrations of the scopes being observed. The
+observer neither consults `planWith` nor prescribes which deferred function a step must select.
+It records the call selected by the transition and drops at the scope/test frame being left.
+Consequently changing the dispatcher to skip or insert a call invalidates `cleanup_runs_exact_plan`.
+-/
+
+/-- An actual execution stopped at its first configuration satisfying `stop`. -/
+inductive FirstSteps (R : Config O → Label O → Config O → Prop) (stop : Config O → Prop) :
+    Config O → List O.Event → Config O → Prop where
+  | stop {c} : stop c → FirstSteps R stop c [] c
+  | step {c l c' tr c''} : ¬ stop c → R c l c' → FirstSteps R stop c' tr c'' →
+      FirstSteps R stop c (l.events ++ tr) c''
+
+/-- Helper (inversion). Forgetting first-arrival information preserves the actual execution. -/
+theorem FirstSteps.steps_inv {P : Program O} {stop : Config O → Prop} {c c' : Config O}
+    {tr : List O.Event} (h : FirstSteps (Step P) stop c tr c') : Steps P c tr c' := by
+  induction h with
+  | stop => exact .refl _
+  | step _ hs _ ih => exact .step hs ih
+
+/-- The local-lifetime action observed when an exit directly leaves its current frame:
+it records both the pre-step locals `L` and the actual post-step locals `L'` produced by the
+transition. Calls and their nested cleanup are recorded separately. -/
+def leaving : List (Frame O) → AList Var O.Val → AList Var O.Val → List (CleanAct O)
+  | .scope _ dm [] :: _, L, L' => [.drop dm L L']
+  | .test _ _ _ _ _ dm :: _, L, L' => [.drop dm L L']
+  | _, _, _ => []
+
+/-- An observer of a successful exit to a fixed boundary, using a supplied outer transition
+relation `R`. Call bodies use actual first-return executions. The parameter permits planted
+mutations of the cleanup dispatcher without mutating any tracked source. The production law
+uses `R = Step P`. A nonempty prefix is required before every observed transition. A direct pass
+never crosses function-end, the boundary excluded by admitted `Passes`: execution
+stops at the first arrival at the boundary, before the caller/loop below it can run. -/
+inductive BoundaryRun (P : Program O) (R : Config O → Label O → Config O → Prop)
+    (e : Exit O.Val) (k : List (Frame O)) :
+    List (Frame O) → AList Var O.Val → O.Store → List (CleanAct O) → List O.Event →
+      AList Var O.Val → O.Store → Prop where
+  | stop {L st} : BoundaryRun P R e k [] L st [] [] L st
+  | pass {pre pre' L L' st st' acts tr Lend stEnd} : pre ≠ [] →
+      pre.head? ≠ some .functionEnd →
+      R ⟨.exiting e, L, st, pre ++ k⟩ .silent ⟨.exiting e, L', st', pre' ++ k⟩ →
+      BoundaryRun P R e k pre' L' st' acts tr Lend stEnd →
+      BoundaryRun P R e k pre L st (leaving pre L L' ++ acts) tr Lend stEnd
+  | call {pre rest L st st' d acts tr₁ tr₂ Lend stEnd q} : pre ≠ [] →
+      R ⟨.exiting e, L, st, pre ++ k⟩ .silent
+        ⟨.exec d.stmt, L, st, .resume (.exit e) :: rest ++ k⟩ →
+      FirstSteps (Step P) (fun c => c.ctrl = .done ∧ c.frames = q)
+        ⟨.exec d.stmt, L, st, q⟩ tr₁
+        ⟨.done, L, st', q⟩ →
+      R ⟨.done, L, st', .resume (.exit e) :: rest ++ k⟩ .silent
+        ⟨.exiting e, L, st', rest ++ k⟩ →
+      BoundaryRun P R e k rest L st' acts tr₂ Lend stEnd →
+      BoundaryRun P R e k pre L st (.call L d :: acts) (tr₁ ++ tr₂) Lend stEnd
+
+/-- Execute an action list independently of the cleanup dispatcher, threading both the local
+environment and the store: calls must complete their first-return execution preserving the
+caller's locals, and drops must perform both `dropOut` on the store and `restrict` on the locals. -/
+inductive Performed (P : Program O) :
+    List (CleanAct O) → AList Var O.Val → O.Store → List O.Event → AList Var O.Val → O.Store → Prop where
+  | nil {L st} : Performed P [] L st [] L st
+  | call {L d rest st tr₁ st₁ tr₂ L₂ st₂ q} :
+      FirstSteps (Step P) (fun c => c.ctrl = .done ∧ c.frames = q)
+        ⟨.exec d.stmt, L, st, q⟩ tr₁ ⟨.done, L, st₁, q⟩ →
+      Performed P rest L st₁ tr₂ L₂ st₂ →
+      Performed P (.call L d :: rest) L st (tr₁ ++ tr₂) L₂ st₂
+  | drop {dm L rest st stDrop tr L' st'} : dropOut O dm L st = some stDrop →
+      Performed P rest (restrict dm L) stDrop tr L' st' →
+      Performed P (.drop dm L (restrict dm L) :: rest) L st tr L' st'
+
+/-- Helper (inversion). Compose independent action executions. -/
+private theorem performed_append_inv {P : Program O} {as bs : List (CleanAct O)}
+    {L L₁ L₂ : AList Var O.Val} {st st₁ st₂ : O.Store} {tr₁ tr₂ : List O.Event}
+    (ha : Performed P as L st tr₁ L₁ st₁) (hb : Performed P bs L₁ st₁ tr₂ L₂ st₂) :
+    Performed P (as ++ bs) L st (tr₁ ++ tr₂) L₂ st₂ := by
+  induction ha with
+  | nil => simpa using hb
+  | call hc _ ih => simpa [List.append_assoc] using Performed.call hc (ih hb)
+  | drop hd _ ih => exact .drop hd (ih hb)
+
+/-- Helper (inversion). Internal dispatcher decomposition supporting the observable silence
+law `exit_label`; not an independent soundness claim. -/
+private theorem stepExit_no_request_inv (L : AList Var O.Val) (st : O.Store) (e : Exit O.Val)
+    (frames : List (Frame O)) (p : O.Prim) (vs : List O.Val) (site : SiteId) (st' : O.Store)
+    (cont : Answer O.Val O.Event O.Store → Option (Config O)) :
+    stepExit L st e frames ≠ some (.request p vs site st' cont) := by
+  cases frames with
+  | nil => simp [stepExit]
+  | cons f frames =>
+    cases f with
+    | seq t => simp [stepExit]
+    | scope b dm ds =>
+      cases ds with
+      | nil => cases hd : dropOut O dm L st <;> simp [stepExit, hd]
+      | cons d ds => simp [stepExit, startCleanup]
+    | test l cr t body site dm =>
+      cases hd : dropOut O dm L st <;> simp [stepExit, hd]
+    | body l cr t body site =>
+      cases e with
+      | ret v => simp [stepExit]
+      | brk l' => by_cases he : l' = l <;> simp [stepExit, he]
+      | cont l' => by_cases he : l' = l <;> simp [stepExit, he]
+    | resume p => simp [stepExit]
+    | ret dst caller =>
+      cases e with
+      | brk l => simp [stepExit]
+      | cont l => simp [stepExit]
+      | ret v =>
+        cases hb : bindLife O dst st <;> simp [stepExit, hb]
+    | functionEnd =>
+      cases e <;> cases hl : O.life .leave st <;> simp [stepExit, hl]
+
+/-- Helper (inversion). Converts the transition representation using the separately proved exit-silence restriction. -/
+private theorem exit_step_next_inv {P : Program O} {e : Exit O.Val} {L : AList Var O.Val}
+    {st : O.Store} {frames : List (Frame O)} {label : Label O} {c : Config O}
+    (h : Step P ⟨.exiting e, L, st, frames⟩ label c) :
+    step P ⟨.exiting e, L, st, frames⟩ = some (.next c) := by
+  cases h with
+  | silent h => exact h
+  | prim h _ _ => exact False.elim (stepExit_no_request_inv L st e frames _ _ _ _ _ h)
+
+/-- Helper (inversion). A directly passing exit step removes precisely the top frame,
+restores its saved locals, and performs its local drop. -/
+private theorem exit_pass_plan_inv {P : Program O} {e : Exit O.Val} {k pre pre' : List (Frame O)}
+    {L L' : AList Var O.Val} {st st' : O.Store} {label : Label O}
+    (h : Step P ⟨.exiting e, L, st, pre ++ k⟩ label
+      ⟨.exiting e, L', st', pre' ++ k⟩) (hne : pre ≠ [])
+    (hbound : pre.head? ≠ some .functionEnd) :
+    ((∀ f ∈ pre', Passes e f) → ∀ f ∈ pre, Passes e f) ∧
+      planWith pre L = leaving pre L L' ++ planWith pre' L' ∧
+      unwindLocals pre L = unwindLocals pre' L' ∧
+      Performed P (leaving pre L L') L st [] L' st' := by
+  cases pre with
+  | nil => exact False.elim (hne rfl)
+  | cons f pre =>
+    have next : step P ⟨.exiting e, L, st, f :: (pre ++ k)⟩ =
+        some (.next ⟨.exiting e, L', st', pre' ++ k⟩) := exit_step_next_inv h
+    have finish (hL : L = L') (hk : pre ++ k = pre' ++ k) :
+        L = L' ∧ pre = pre' := ⟨hL, List.append_cancel_right hk⟩
+    cases f with
+    | seq t =>
+      simp only [step, stepExit, Option.some.injEq, Out.next.injEq, Config.mk.injEq] at next
+      obtain ⟨_, hL, hst, hk⟩ := next
+      subst st'
+      obtain ⟨rfl, rfl⟩ := finish hL hk
+      refine ⟨?_, rfl, rfl, .nil⟩
+      intro hp f₀ hf₀
+      cases hf₀ with
+      | head => trivial
+      | tail _ hf₀ => exact hp f₀ hf₀
+    | scope b dm ds =>
+      cases ds with
+      | cons d ds => simp [step, stepExit, startCleanup] at next
+      | nil =>
+        cases hd : dropOut O dm L st with
+        | none => simp [step, stepExit, hd] at next
+        | some stDrop =>
+          simp only [step, stepExit, hd, Option.map_some, Option.some.injEq, Out.next.injEq,
+            Config.mk.injEq] at next
+          obtain ⟨_, hL, hst, hk⟩ := next
+          have hk' := List.append_cancel_right hk
+          subst pre'
+          subst L'
+          subst st'
+          refine ⟨?_, rfl, rfl, .drop hd .nil⟩
+          intro hp f₀ hf₀
+          cases hf₀ with
+          | head => trivial
+          | tail _ hf₀ => exact hp f₀ hf₀
+    | test l cr t body site dm =>
+      cases hd : dropOut O dm L st with
+      | none => simp [step, stepExit, hd] at next
+      | some stDrop =>
+        simp only [step, stepExit, hd, Option.map_some, Option.some.injEq, Out.next.injEq,
+          Config.mk.injEq] at next
+        obtain ⟨_, hL, hst, hk⟩ := next
+        have hk' := List.append_cancel_right hk
+        subst pre'
+        subst L'
+        subst st'
+        refine ⟨?_, rfl, rfl, .drop hd .nil⟩
+        intro hp f₀ hf₀
+        cases hf₀ with
+        | head => trivial
+        | tail _ hf₀ => exact hp f₀ hf₀
+    | body l cr t body site =>
+      cases e with
+      | ret v =>
+        simp only [step, stepExit, Option.some.injEq, Out.next.injEq, Config.mk.injEq] at next
+        obtain ⟨_, hL, hst, hk⟩ := next
+        obtain ⟨rfl, rfl⟩ := finish hL hk
+        subst st'
+        refine ⟨?_, rfl, rfl, .nil⟩
+        intro hp f₀ hf₀
+        cases hf₀ with
+        | head => trivial
+        | tail _ hf₀ => exact hp f₀ hf₀
+      | brk l' =>
+        by_cases he : l' = l
+        · simp [step, stepExit, he] at next
+        · simp only [step, stepExit, he, ↓reduceIte, Option.some.injEq, Out.next.injEq,
+            Config.mk.injEq] at next
+          obtain ⟨_, hL, hst, hk⟩ := next
+          obtain ⟨rfl, rfl⟩ := finish hL hk
+          subst st'
+          refine ⟨?_, rfl, rfl, .nil⟩
+          intro hp f₀ hf₀
+          cases hf₀ with
+          | head => exact he
+          | tail _ hf₀ => exact hp f₀ hf₀
+      | cont l' =>
+        by_cases he : l' = l
+        · simp [step, stepExit, he] at next
+        · simp only [step, stepExit, he, ↓reduceIte, Option.some.injEq, Out.next.injEq,
+            Config.mk.injEq] at next
+          obtain ⟨_, hL, hst, hk⟩ := next
+          obtain ⟨rfl, rfl⟩ := finish hL hk
+          subst st'
+          refine ⟨?_, rfl, rfl, .nil⟩
+          intro hp f₀ hf₀
+          cases hf₀ with
+          | head => exact he
+          | tail _ hf₀ => exact hp f₀ hf₀
+    | functionEnd => exact False.elim (hbound rfl)
+    | resume p => simp [step, stepExit] at next
+    | ret dst caller =>
+      cases e <;> simp [step, stepExit] at next
+
+
+
+/-- Helper (inversion). A cleanup dispatch step selects the head registration and preserves
+its scope with the remaining registrations. -/
+private theorem exit_call_plan_inv {P : Program O} {e : Exit O.Val} {k pre rest : List (Frame O)}
+    {L : AList Var O.Val} {st : O.Store} {d : Deferred O} {label : Label O}
+    (h : Step P ⟨.exiting e, L, st, pre ++ k⟩ label
+      ⟨.exec d.stmt, L, st, .resume (.exit e) :: rest ++ k⟩) (hne : pre ≠ []) :
+    ((∀ f ∈ rest, Passes e f) → ∀ f ∈ pre, Passes e f) ∧
+      planWith pre L = .call L d :: planWith rest L ∧
+      unwindLocals pre L = unwindLocals rest L := by
+  cases pre with
+  | nil => exact False.elim (hne rfl)
+  | cons f pre =>
+    have hn : step P ⟨.exiting e, L, st, f :: (pre ++ k)⟩ =
+        some (.next ⟨.exec d.stmt, L, st, .resume (.exit e) :: rest ++ k⟩) :=
+      exit_step_next_inv h
+    clear h
+    have h := hn
+    cases f with
+    | scope b dm ds =>
+      cases ds with
+      | nil =>
+        cases hd : dropOut O dm L st <;> simp [step, stepExit, hd] at h
+      | cons d' ds =>
+        simp only [step, stepExit, startCleanup, Option.some.injEq, Out.next.injEq,
+          Config.mk.injEq, Ctrl.exec.injEq] at h
+        obtain ⟨hd, _, _, hk⟩ := h
+        have hds : d' = d := by
+          have hd' : d'.f = d.f ∧ d'.args = d.args ∧ d'.site = d.site := by
+            simpa [Deferred.stmt, Stmt.call.injEq] using hd
+          cases d' with | mk f args site =>
+            cases d with | mk f' args' site' =>
+              obtain ⟨hf, ha, hs⟩ := hd'
+              simp only at hf ha hs
+              subst f'; subst args'; subst site'
+              rfl
+        subst d'
+        have hr : .scope b dm ds :: pre = rest := by
+          apply List.append_cancel_right (bs := k)
+          exact List.cons.inj hk |>.2
+        subst rest
+        refine ⟨?_, by simp [planWith], rfl⟩
+        intro hp f₀ hf₀
+        cases hf₀ with
+        | head => trivial
+        | tail _ hf₀ => exact hp f₀ (List.mem_cons_of_mem _ hf₀)
+    | seq t => simp [step, stepExit] at h
+    | test l cr t body site dm =>
+      cases hd : dropOut O dm L st <;> simp [step, stepExit, hd] at h
+    | resume p => simp [step, stepExit] at h
+    | ret dst caller =>
+      cases e <;> simp [step, stepExit] at h
+
+    | functionEnd => cases e <;> cases hl : O.life .leave st <;> simp [step, stepExit, hl] at h
+    | body l cr t body site =>
+      cases e with
+      | ret v => simp [step, stepExit] at h
+      | brk l' => by_cases he : l' = l <;> simp [step, stepExit, he] at h
+      | cont l' => by_cases he : l' = l <;> simp [step, stepExit, he, Deferred.stmt] at h
+
+/-- Helper (subject `ConcreteSpec.Core.Exec.Step`). A completed sequence of deferred calls dispatches each call before the final scope drop.
+Basis: admitted `Spec/Exec` definitions named in the subject and proof.
+`docs/decisions.md#decided-2026-11-08-foundation`, C1 / `#foundation-q1`,
+admits execution, call and cleanup laws in Lean. `#od2` clause (5) / `#core-q9-8` require nested reverse cleanup;
+`#od69` limits teardown to storage; `#decided-2026-11-13-lifecycle-refusal`
+requires lifecycle admission. Function-end is a boundary, as in admitted `Passes`. -/
+theorem boundary_scope_calls {P : Program O} {e : Exit O.Val} {k : List (Frame O)}
+    (b : BlockId) (dm : List Var) (pre : List (Frame O)) (ds : List (Deferred O))
+    {L L' : AList Var O.Val} {st st' : O.Store}
+    {acts : List (CleanAct O)} {tr : List O.Event}
+    (hperf : Performed P (ds.map (.call L) ++ acts) L st tr L' st')
+    (hbase : ∀ st₁ tr₂, Performed P acts L st₁ tr₂ L' st' →
+      BoundaryRun P (Step P) e k (.scope b dm [] :: pre) L st₁ acts tr₂ L' st') :
+    BoundaryRun P (Step P) e k (.scope b dm ds :: pre) L st (ds.map (.call L) ++ acts) tr L' st' := by
+  induction ds generalizing st tr with
+  | nil => exact hbase st tr hperf
+  | cons d ds ih =>
+    cases hperf with
+    | call hc hrest =>
+      have hr := ih hrest
+      simpa [List.append_assoc] using
+        BoundaryRun.call (pre := .scope b dm (d :: ds) :: pre)
+          (rest := .scope b dm ds :: pre) (by simp) (.silent rfl) hc (.silent rfl) hr
+
+/-- Helper (subject `ConcreteSpec.Core.Exec.Step`). An independently performed action plan reconstructs the actual first-boundary execution.
+Basis: admitted `Spec/Exec` definitions named in the subject and proof.
+`docs/decisions.md#decided-2026-11-08-foundation`, C1 / `#foundation-q1`,
+admits execution, call and cleanup laws in Lean. `#od2` clause (5) / `#core-q9-8` require nested reverse cleanup;
+`#od69` limits teardown to storage; `#decided-2026-11-13-lifecycle-refusal`
+requires lifecycle admission. Function-end is a boundary, as in admitted `Passes`. -/
+theorem boundary_of_performed {P : Program O} {e : Exit O.Val} {k : List (Frame O)}
+    (pre : List (Frame O)) {L L' : AList Var O.Val} {st st' : O.Store} {tr : List O.Event}
+    (hp : ∀ f ∈ pre, Passes e f)
+    (hperf : Performed P (planWith pre L) L st tr L' st') :
+    BoundaryRun P (Step P) e k pre L st (planWith pre L) tr L' st' := by
+  induction pre generalizing L st tr with
+  | nil =>
+    cases hperf
+    exact .stop
+  | cons f pre ih =>
+    have hp' : ∀ f₀ ∈ pre, Passes e f₀ := fun f₀ hf₀ => hp f₀ (List.mem_cons_of_mem _ hf₀)
+    have hpf : Passes e f := hp f List.mem_cons_self
+    cases f with
+    | seq t =>
+      simpa [leaving, planWith] using BoundaryRun.pass (pre := .seq t :: pre) (pre' := pre)
+        (by simp) (by simp) (.silent rfl) (ih hp' hperf)
+    | scope b dm ds =>
+      simp only [planWith] at hperf ⊢
+      refine boundary_scope_calls b dm pre ds hperf ?_
+      intro st₁ tr₂ hdrop
+      cases hdrop with
+      | drop hd hrest =>
+        have hs : Step P ⟨.exiting e, L, st₁, .scope b dm [] :: (pre ++ k)⟩ .silent
+            ⟨.exiting e, restrict dm L, _, pre ++ k⟩ :=
+          .silent (by simp only [step, stepExit, hd]; rfl)
+        simpa [leaving] using BoundaryRun.pass (pre := .scope b dm [] :: pre) (pre' := pre)
+          (by simp) (by simp) hs (ih hp' hrest)
+    | test l cr t body site dm =>
+      simp only [planWith] at hperf ⊢
+      cases hperf with
+      | drop hd hrest =>
+        have hs : Step P ⟨.exiting e, L, st, .test l cr t body site dm :: (pre ++ k)⟩ .silent
+            ⟨.exiting e, restrict dm L, _, pre ++ k⟩ :=
+          .silent (by simp only [step, stepExit, hd]; rfl)
+        simpa [leaving] using BoundaryRun.pass (pre := .test l cr t body site dm :: pre)
+          (pre' := pre) (by simp) (by simp) hs (ih hp' hrest)
+    | body l cr t body site =>
+      cases e with
+      | ret v =>
+        simpa [leaving, planWith] using BoundaryRun.pass
+          (pre := .body l cr t body site :: pre) (pre' := pre) (by simp) (by simp) (.silent rfl) (ih hp' hperf)
+      | brk l' =>
+        have hne : l' ≠ l := hpf
+        have hs : Step P ⟨.exiting (.brk l'), L, st, .body l cr t body site :: (pre ++ k)⟩ .silent
+            ⟨.exiting (.brk l'), L, st, pre ++ k⟩ :=
+          .silent (by simp [step, stepExit, hne])
+        simpa [leaving, planWith] using BoundaryRun.pass
+          (pre := .body l cr t body site :: pre) (pre' := pre) (by simp) (by simp) hs (ih hp' hperf)
+      | cont l' =>
+        have hne : l' ≠ l := hpf
+        have hs : Step P ⟨.exiting (.cont l'), L, st, .body l cr t body site :: (pre ++ k)⟩ .silent
+            ⟨.exiting (.cont l'), L, st, pre ++ k⟩ :=
+          .silent (by simp [step, stepExit, hne])
+        simpa [leaving, planWith] using BoundaryRun.pass
+          (pre := .body l cr t body site :: pre) (pre' := pre) (by simp) (by simp) hs (ih hp' hperf)
+    | functionEnd => exact False.elim hpf
+    | resume p => exact False.elim hpf
+    | ret dst caller => exact False.elim hpf
+
+/-- Helper (subject `ConcreteSpec.Core.Exec.Step`). A successful actual unwind, stopped on first
+arrival at the selected stack boundary, occurs if and only if every frame in pre passes the
+exit, the observed actions are `planWith` pre L, the final locals are `unwindLocals` pre L, and
+all planned calls and drops are performed in order.
+Basis: admitted `Spec/Exec` definitions named in the subject and proof.
+`docs/decisions.md#decided-2026-11-08-foundation`, C1 / `#foundation-q1`,
+admits execution, call and cleanup laws in Lean. `#od2` clause (5) / `#core-q9-8` require nested reverse cleanup;
+`#od69` limits teardown to storage; `#decided-2026-11-13-lifecycle-refusal`
+requires lifecycle admission. Function-end is a boundary, as in admitted `Passes`. -/
+theorem cleanup_runs_exact_plan (P : Program O) (e : Exit O.Val) (k pre : List (Frame O))
+    (L L' : AList Var O.Val) (st st' : O.Store) (acts : List (CleanAct O)) (tr : List O.Event) :
+    BoundaryRun P (Step P) e k pre L st acts tr L' st' ↔
+      (∀ (f : Frame O), f ∈ pre → Passes e f) ∧ acts = planWith pre L ∧
+        L' = unwindLocals pre L ∧ Performed P acts L st tr L' st' := by
+  constructor
+  · intro h
+    induction h with
+    | stop => exact ⟨(by intro _ hf; cases hf), rfl, rfl, Performed.nil⟩
+    | pass hne hbound hs _ ih =>
+      obtain ⟨hpp, he, hu, hp⟩ := exit_pass_plan_inv hs hne hbound
+      exact ⟨hpp ih.1, by rw [ih.2.1, ← he], by rw [ih.2.2.1, ← hu],
+        by simpa using performed_append_inv hp ih.2.2.2⟩
+    | call hne hs hc _ _ ih =>
+      obtain ⟨hpp, he, hu⟩ := exit_call_plan_inv hs hne
+      exact ⟨hpp ih.1, by rw [ih.2.1, ← he], by rw [ih.2.2.1, ← hu], Performed.call hc ih.2.2.2⟩
+  · rintro ⟨hp, rfl, _, hperf⟩
+    exact boundary_of_performed pre hp hperf
+
+/-! ### Traps are terminal -/
+
+/-- No labeled transition is available under `R`. Parameterized by the transition relation so
+contract laws and planted mutants share the same predicate. -/
+def Blocked (R : Config O → Label O → Config O → Prop) (c : Config O) : Prop :=
+  ∀ l c', ¬ R c l c'
+
+/-- Helper (inversion). A missing implementation result has no relational transition. -/
+private theorem no_step_of_none_inv {P : Program O} {c : Config O} (h : step P c = none) :
+    Blocked (Step P) c := by
+  intro l c' hs
+  cases hs with
+  | silent hs => rw [h] at hs; cases hs
+  | prim hs _ _ => rw [h] at hs; cases hs
+
+/-- Law (subject `ConcreteSpec.Core.Exec.Config.final?`, `ConcreteSpec.Core.Exec.Step`). A
+configuration's `Config.final?` reports `Final.trapped` kd site if and only if its control is
+`Ctrl.trapped` kd site, and every trapped configuration is blocked in `Step`.
+Basis: admitted `Spec/Exec` definitions named in the subject and proof.
+`docs/decisions.md#decided-2026-11-08-foundation`, C1 / `#foundation-q1`,
+admits execution, call and cleanup laws in Lean. `#od68` ends the program on a trapping deferred call;
+`#od10` and `#od2` clause (5) forbid abort cleanup. -/
+theorem step_trapped (P : Program O) (ctrl : Ctrl O) (kd : TrapKind) (site : SiteId)
+    (L : AList Var O.Val) (st : O.Store) (k : List (Frame O)) :
+    (Config.final? ⟨ctrl, L, st, k⟩ = some (.trapped kd site) ↔ ctrl = .trapped kd site) ∧
+      Blocked (Step P) ⟨.trapped kd site, L, st, k⟩ := by
+  refine ⟨⟨fun h => ?_, fun h => by subst h; rfl⟩, no_step_of_none_inv rfl⟩
+  cases ctrl with
+  | exec _ => cases h
+  | done => cases k <;> cases h
+  | exiting e => cases e <;> cases k <;> cases h
+  | refused => cases h
+  | trapped kd' site' => cases h; rfl
+
+/-- Law (subject `ConcreteSpec.Core.Exec.Steps`). After a trap nothing runs: a multi-step execution
+from a trapped configuration is equivalent to emitting no events and remaining in that exact
+trapped configuration.
+Basis: admitted `Spec/Exec` definitions named in the subject and proof.
+`docs/decisions.md#decided-2026-11-08-foundation`, C1 / `#foundation-q1`,
+admits execution, call and cleanup laws in Lean. `#od68` ends the program on a trapping deferred call;
+`#od10` and `#od2` clause (5) forbid abort cleanup. -/
+theorem steps_from_trapped (P : Program O) (kd : TrapKind) (site : SiteId) (L : AList Var O.Val)
+    (st : O.Store) (k : List (Frame O)) (tr : List O.Event) (c : Config O) :
+    Steps P ⟨.trapped kd site, L, st, k⟩ tr c ↔
+      tr = [] ∧ c = ⟨.trapped kd site, L, st, k⟩ := by
+  constructor
+  · intro h
+    cases h with
+    | refl => exact ⟨rfl, rfl⟩
+    | step hs _ =>
+      exact False.elim ((step_trapped P (.trapped kd site) kd site L st k).2 _ _ hs)
+  · rintro ⟨rfl, rfl⟩
+    exact .refl _
+
+/-- A call retains its saved caller frame until normal return. -/
+def Protected (L : AList Var O.Val) (q : List (Frame O)) (c : Config O) : Prop :=
+  ∃ pre, c.frames = pre ++ .ret none L :: q
+
+/-- Registration preserves a saved caller boundary for every successful result. -/
+def RegistrationPreservesCaller (reg : Deferred O → List (Frame O) → Option (List (Frame O)))
+    (d : Deferred O) (caller : AList Var O.Val) (q : List (Frame O)) : Prop :=
+  ∀ pre k', reg d (pre ++ .ret none caller :: q) = some k' →
+    ∃ pre', k' = pre' ++ .ret none caller :: q
+
+/-- A transition either preserves the saved boundary or restores it with the caller locals. -/
+def PreservesCaller (R : Config O → Label O → Config O → Prop)
+    (caller : AList Var O.Val) (q : List (Frame O)) (c : Config O) : Prop :=
+  ∀ label c', R c label c' →
+    Protected caller q c' ∨ (c'.ctrl = .done ∧ c'.locals = caller ∧ c'.frames = q)
+
+/-- Law (subject `ConcreteSpec.Core.Exec.register`). Defer registration preserves the saved caller boundary.
+Basis: admitted `Spec/Exec` definitions named in the subject and proof.
+`docs/decisions.md#decided-2026-11-08-foundation`, C1 / `#foundation-q1`,
+admits execution, call and cleanup laws in Lean. Caller restoration follows admitted `step`/`stepExit` and `register`;
+`#decided-2026-11-13-lifecycle-refusal` requires successful admission at each lifecycle site. -/
+theorem register_protected (d : Deferred O) (caller : AList Var O.Val)
+    (q : List (Frame O)) : RegistrationPreservesCaller register d caller q := by
+  intro pre
+  induction pre with
+  | nil =>
+    intro k' h
+    simp [register] at h
+  | cons f pre ih =>
+    intro k' h
+    cases f with
+    | seq t =>
+      simp only [List.cons_append, register] at h
+      cases hr : register d (pre ++ .ret none caller :: q) with
+      | none => simp [hr] at h
+      | some rest =>
+        simp only [hr, Option.map_some, Option.some.injEq] at h
+        obtain ⟨pre', rfl⟩ := ih rest hr
+        exact ⟨.seq t :: pre', h.symm⟩
+    | scope b dm ds =>
+      simp only [List.cons_append, register, Option.some.injEq] at h
+      exact ⟨.scope b dm (d :: ds) :: pre, h.symm⟩
+    | test l cr t body site dm => simp [register] at h
+    | body l cr t body site => simp [register] at h
+    | resume p => simp [register] at h
+    | ret dst L => simp [register] at h
+    | functionEnd => simp [register] at h
+
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). Each transition preserves the saved caller boundary or returns to it with caller locals restored.
+Basis: admitted `Spec/Exec` definitions named in the subject and proof.
+`docs/decisions.md#decided-2026-11-08-foundation`, C1 / `#foundation-q1`,
+admits execution, call and cleanup laws in Lean. Caller restoration follows admitted `step`/`stepExit` and `register`;
+`#decided-2026-11-13-lifecycle-refusal` requires successful admission at each lifecycle site. -/
+theorem protected_step {P : Program O} {caller : AList Var O.Val}
+    {q : List (Frame O)} {c : Config O} (hp : Protected caller q c) :
+    PreservesCaller (Step P) caller q c := by
+  intro label c' h
+  cases c with | mk ctrl locals st frames =>
+    obtain ⟨pre, rfl⟩ := hp
+    cases h with
+    | silent h =>
+      cases pre with
+      | nil =>
+        change step P ⟨ctrl, locals, st, .ret none caller :: q⟩ = _ at h
+        cases ctrl with
+        | exec stmt =>
+          cases stmt <;> simp only [step, onRes, Option.bind, Option.map, bindLife] at h <;>
+            repeat' first | simp_all [register] | split at h
+          all_goals try simp only [Option.some.injEq, Out.next.injEq] at h
+          all_goals try subst c'
+          all_goals try contradiction
+          all_goals repeat' first | simp_all [Protected] | split at h
+          all_goals try grind [Protected, register_protected]
+          all_goals try first
+            | rfl
+            | exact ⟨[], rfl⟩
+            | exact ⟨[_, _, _], rfl⟩
+            | exact ⟨[_, _], rfl⟩
+            | exact ⟨[_], rfl⟩
+            | exact ⟨[_, _, _], rfl⟩
+            | exact ⟨[_, _], rfl⟩
+            | exact .inl ⟨[], rfl⟩
+            | exact .inl ⟨[_], rfl⟩
+            | exact .inl ⟨[_, _, _], rfl⟩
+            | exact .inl ⟨[_, _], rfl⟩
+            | (rcases h with ⟨_, rfl⟩; exact .inl ⟨[_, _, _], rfl⟩)
+        | done =>
+          simp only [step, Option.map, bindLife] at h
+          repeat' first | simp_all | split at h
+          all_goals try simp only [Option.some.injEq, Out.next.injEq] at h
+          all_goals try subst c'
+          all_goals try contradiction
+          all_goals repeat' first | simp_all [Protected] | split at h
+          all_goals exact .inr rfl
+        | exiting e =>
+          cases e <;> simp only [step, stepExit, Option.map, bindLife] at h
+          all_goals repeat' first | simp_all | split at h
+          all_goals try simp only [Option.some.injEq, Out.next.injEq] at h
+          all_goals try subst c'
+          all_goals try contradiction
+          all_goals repeat' first | simp_all [Protected, bindDst] | split at h
+          all_goals exact .inr rfl
+        | refused => simp [step] at h
+        | trapped kd site => simp [step] at h
+      | cons f pre =>
+        change step P ⟨ctrl, locals, st, f :: (pre ++ .ret none caller :: q)⟩ = _ at h
+        cases ctrl with
+        | exec stmt =>
+          cases stmt <;> simp only [step, onRes, Option.bind, Option.map, bindLife] at h <;>
+            repeat' first | simp_all | split at h
+          all_goals try simp only [Option.some.injEq, Out.next.injEq] at h
+          all_goals try subst c'
+          all_goals try contradiction
+          all_goals repeat' first | simp_all [Protected] | split at h
+          all_goals try grind [Protected, register_protected]
+          all_goals try first
+            | rfl
+            | exact ⟨f :: pre, rfl⟩
+            | exact ⟨_ :: f :: pre, rfl⟩
+            | exact ⟨_ :: _ :: _ :: f :: pre, rfl⟩
+            | exact ⟨_ :: _ :: f :: pre, rfl⟩
+            | exact .inl ⟨f :: pre, rfl⟩
+            | exact .inl (register_protected _ caller q (f :: pre) _ (by assumption))
+            | exact .inl ⟨_ :: f :: pre, rfl⟩
+            | exact .inl ⟨_ :: _ :: _ :: f :: pre, rfl⟩
+            | exact .inl ⟨_ :: _ :: f :: pre, rfl⟩
+        | done =>
+          cases f <;> simp only [step, onRes, startCleanup, Option.bind, Option.map, bindLife] at h <;>
+            repeat' first | simp_all | split at h
+          all_goals try simp only [Option.some.injEq, Out.next.injEq] at h
+          all_goals try subst c'
+          all_goals try contradiction
+          all_goals repeat' first | simp_all [Protected, bindDst] | split at h
+          all_goals try grind [Protected, register_protected]
+          all_goals try first
+            | rfl
+            | exact ⟨pre, rfl⟩
+            | exact ⟨_ :: pre, rfl⟩
+            | exact ⟨_ :: _ :: pre, rfl⟩
+            | exact .inl ⟨pre, rfl⟩
+            | exact .inl ⟨_ :: pre, rfl⟩
+            | exact .inl ⟨_ :: _ :: pre, rfl⟩
+        | exiting e =>
+          cases f <;> cases e <;>
+            simp only [step, stepExit, startCleanup, Option.map, bindLife] at h <;>
+            repeat' first | simp_all | split at h
+          all_goals try simp only [Option.some.injEq, Out.next.injEq] at h
+          all_goals try subst c'
+          all_goals try contradiction
+          all_goals repeat' first | simp_all [Protected, bindDst] | split at h
+          all_goals try grind [Protected, register_protected]
+          all_goals try first
+            | rfl
+            | exact ⟨pre, rfl⟩
+            | exact ⟨_ :: pre, rfl⟩
+            | exact ⟨_ :: _ :: pre, rfl⟩
+            | exact .inl ⟨pre, rfl⟩
+            | exact .inl ⟨_ :: pre, rfl⟩
+            | exact .inl ⟨_ :: _ :: pre, rfl⟩
+        | refused => simp [step] at h
+        | trapped kd site => simp [step] at h
+    | prim h ha hk =>
+      cases ctrl with
+      | exec stmt =>
+        cases stmt <;> simp only [step, onRes, Option.bind, Option.map] at h <;>
+          repeat' first | simp_all [Protected, bindLife] | split at h | split at hk
+        all_goals try grind [Protected]
+        all_goals exact ⟨pre, rfl⟩
+      | done =>
+        cases pre with
+        | nil =>
+          change step P ⟨.done, locals, st, .ret none caller :: q⟩ = _ at h
+          simp only [step, Option.map, bindLife] at h
+          repeat' first | simp_all | split at h
+        | cons f pre =>
+          change step P ⟨.done, locals, st, f :: (pre ++ .ret none caller :: q)⟩ = _ at h
+          cases f <;> simp only [step, onRes, startCleanup, Option.bind, Option.map] at h <;>
+            repeat' first | simp_all | split at h
+      | exiting e => exact False.elim (stepExit_no_request_inv locals st e _ _ _ _ _ _ h)
+      | refused => simp [step] at h
+      | trapped kd site => simp [step] at h
+/-- A step count for a first-arrival execution, used only for induction on strict subpaths. -/
+inductive FirstStepsN (R : Config O → Label O → Config O → Prop) (stop : Config O → Prop) :
+    Config O → List O.Event → Config O → Nat → Prop where
+  | stop {c} : stop c → FirstStepsN R stop c [] c 0
+  | step {c l c' tr c'' n} : ¬ stop c → R c l c' → FirstStepsN R stop c' tr c'' n →
+      FirstStepsN R stop c (l.events ++ tr) c'' (n + 1)
+
+/-- Helper (inversion). Adds an induction index to the first-arrival certificate without changing its execution. -/
+private theorem FirstSteps.sized_inv {R : Config O → Label O → Config O → Prop} {stop : Config O → Prop}
+    {c c' : Config O} {tr : List O.Event} (h : FirstSteps R stop c tr c') :
+    ∃ n, FirstStepsN R stop c tr c' n := by
+  induction h with
+  | stop hs => exact ⟨0, .stop hs⟩
+  | step hn hs _ ih => obtain ⟨n, ih⟩ := ih; exact ⟨n + 1, .step hn hs ih⟩
+
+/-- Helper (inversion). Erases only the induction index of a first-arrival certificate. -/
+private theorem FirstStepsN.unsized_inv {R : Config O → Label O → Config O → Prop} {stop : Config O → Prop}
+    {c c' : Config O} {tr : List O.Event} {n : Nat} (h : FirstStepsN R stop c tr c' n) :
+    FirstSteps R stop c tr c' := by
+  induction h with
+  | stop hs => exact .stop hs
+  | step hn hs _ ih => exact .step hn hs ih
+
+/-- Helper (inversion). List-length consequence of the saved-boundary predicate used in return segmentation. -/
+private theorem protected_height_inv {caller : AList Var O.Val} {q : List (Frame O)}
+    {c : Config O} (h : Protected caller q c) : q.length < c.frames.length := by
+  obtain ⟨pre, he⟩ := h
+  simp only [he, List.length_append, List.length_cons]
+  omega
+
+/-- Helper (inversion). Length contradiction excluding an already returned configuration while its saved frame remains. -/
+private theorem protected_not_return_inv {caller : AList Var O.Val} {q : List (Frame O)}
+    {c : Config O} (h : Protected caller q c) : ¬ (c.ctrl = .done ∧ c.frames = q) := by
+  intro hr
+  have hh := protected_height_inv h
+  rw [hr.2] at hh
+  exact Nat.lt_irrefl _ hh
+
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). A successful path crossing a saved caller boundary first returns with the saved caller locals.
+Basis: admitted `Spec/Exec` definitions named in the subject and proof.
+`docs/decisions.md#decided-2026-11-08-foundation`, C1 / `#foundation-q1`,
+admits execution, call and cleanup laws in Lean. Caller restoration follows admitted `step`/`stepExit` and `register`;
+`#decided-2026-11-13-lifecycle-refusal` requires successful admission at each lifecycle site. -/
+theorem FirstStepsN.split_return {P : Program O} {bound : Nat}
+    {c endC : Config O} {tr : List O.Event} {n : Nat}
+    (h : FirstStepsN (Step P) (fun c => c.frames.length ≤ bound) c tr endC n) :
+    ∀ {caller : AList Var O.Val} {q : List (Frame O)}, bound < q.length → Protected caller q c →
+      ∃ n₁ n₂ tr₁ st₁ tr₂, n = n₁ + n₂ ∧ tr = tr₁ ++ tr₂ ∧
+        FirstStepsN (Step P) (fun c => c.ctrl = .done ∧ c.frames = q) c tr₁ ⟨.done, caller, st₁, q⟩ n₁ ∧
+        FirstStepsN (Step P) (fun c => c.frames.length ≤ bound) ⟨.done, caller, st₁, q⟩ tr₂ endC n₂ := by
+  induction h with
+  | stop hs =>
+    intro caller q hq hp
+    have hh := protected_height_inv hp
+    omega
+  | @step c l c' tr endC n hn hs ht ih =>
+    intro caller q hq hp
+    cases protected_step hp _ _ hs with
+    | inl hp' =>
+      obtain ⟨n₁, n₂, tr₁, st₁, tr₂, hc, he, ha, hb⟩ := ih hq hp'
+      exact ⟨n₁ + 1, n₂, l.events ++ tr₁, st₁, tr₂, by omega,
+        by simp [he, List.append_assoc], .step (protected_not_return_inv hp) hs ha, hb⟩
+    | inr hr =>
+      have he : c' = ⟨.done, caller, c'.store, q⟩ := by cases c'; simp_all
+      rw [he] at hs ht
+      have hseg : FirstStepsN (Step P) (fun c => c.ctrl = .done ∧ c.frames = q)
+          c l.events ⟨.done, caller, c'.store, q⟩ 1 := by
+        simpa using (FirstStepsN.step (protected_not_return_inv hp) hs
+          (FirstStepsN.stop (R := Step P) (stop := fun c : Config O => c.ctrl = .done ∧ c.frames = q) ⟨rfl, rfl⟩))
+      exact ⟨1, n, l.events, c'.store, tr, by omega, rfl, hseg, ht⟩
+
+/-- A call traps on its existing continuation or protects the caller boundary. -/
+def SavesCaller (R : Config O → Label O → Config O → Prop) (L : AList Var O.Val)
+    (st : O.Store) (q : List (Frame O)) (d : Deferred O) : Prop :=
+  ∀ label c', R ⟨.exec d.stmt, L, st, q⟩ label c' →
+    (∃ kd site, c'.ctrl = .trapped kd site ∧ c'.frames = q) ∨ Protected L q c'
+
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). A call either traps without changing its continuation, or saves the caller boundary.
+Basis: admitted `Spec/Exec` definitions named in the subject and proof.
+`docs/decisions.md#decided-2026-11-08-foundation`, C1 / `#foundation-q1`,
+admits execution, call and cleanup laws in Lean. Caller restoration follows admitted `step`/`stepExit` and `register`;
+`#decided-2026-11-13-lifecycle-refusal` requires successful admission at each lifecycle site. -/
+theorem call_protects {P : Program O} {L : AList Var O.Val} {st : O.Store}
+    {q : List (Frame O)} {d : Deferred O} :
+    SavesCaller (Step P) L st q d := by
+  intro label c' h
+  cases h with
+  | silent h =>
+    simp only [step, Deferred.stmt, onRes, Option.bind, Option.map] at h
+    repeat' first | simp_all [Protected] | split at h
+    all_goals try subst c'
+    all_goals try simp_all
+    all_goals try first
+      | exact .inl ⟨_, _, rfl, rfl⟩
+      | exact ⟨[_, _], rfl⟩
+      | exact ⟨[_], rfl⟩
+      | (rcases h with ⟨_, rfl⟩; exact .inr ⟨[_, _], rfl⟩)
+  | prim h _ _ =>
+    simp only [step, Deferred.stmt, onRes, Option.bind, Option.map] at h
+    repeat' first | simp_all | split at h
+
+/-- Helper (inversion). Extracts the endpoint predicate from the first-arrival certificate. -/
+private theorem FirstStepsN.end_stop_inv {P : Program O} {stop : Config O → Prop}
+    {c c' : Config O} {tr : List O.Event} {n : Nat} (h : FirstStepsN (Step P) stop c tr c' n) : stop c' := by
+  induction h with
+  | stop hs => exact hs
+  | step _ _ _ ih => exact ih
+
+/-- Helper (inversion). Combines the retained trapped-run law with the endpoint bound; no additional trap semantics. -/
+private theorem FirstStepsN.trap_impossible_inv {P : Program O} {bound : Nat}
+    {kd : TrapKind} {site : SiteId} {L : AList Var O.Val} {st : O.Store}
+    {q : List (Frame O)} {tr : List O.Event} {endC : Config O} {n : Nat}
+    (hq : bound < q.length)
+    (h : FirstStepsN (Step P) (fun c => c.frames.length ≤ bound) ⟨.trapped kd site, L, st, q⟩ tr endC n) :
+    False := by
+  have he := ((steps_from_trapped P kd site L st q tr endC).mp h.unsized_inv.steps_inv).2
+  have hs := h.end_stop_inv
+  rw [he] at hs
+  exact Nat.not_le_of_gt hq hs
+
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). Every successful deferred call path crossing its continuation first returns with its caller locals restored.
+Basis: admitted `Spec/Exec` definitions named in the subject and proof.
+`docs/decisions.md#decided-2026-11-08-foundation`, C1 / `#foundation-q1`,
+admits execution, call and cleanup laws in Lean. Caller restoration follows admitted `step`/`stepExit` and `register`;
+`#decided-2026-11-13-lifecycle-refusal` requires successful admission at each lifecycle site. -/
+theorem FirstStepsN.call_return {P : Program O} {bound : Nat}
+    {L : AList Var O.Val} {st : O.Store} {q : List (Frame O)} {d : Deferred O}
+    {tr : List O.Event} {endC : Config O} {n : Nat} (hq : bound < q.length)
+    (h : FirstStepsN (Step P) (fun c => c.frames.length ≤ bound) ⟨.exec d.stmt, L, st, q⟩ tr endC n) :
+    ∃ n₁ n₂ tr₁ st₁ tr₂, n = n₁ + n₂ ∧ tr = tr₁ ++ tr₂ ∧
+      FirstStepsN (Step P) (fun c => c.ctrl = .done ∧ c.frames = q)
+        ⟨.exec d.stmt, L, st, q⟩ tr₁ ⟨.done, L, st₁, q⟩ n₁ ∧
+      FirstStepsN (Step P) (fun c => c.frames.length ≤ bound) ⟨.done, L, st₁, q⟩ tr₂ endC n₂ := by
+  cases h with
+  | stop hs => exact False.elim (Nat.not_le_of_gt hq hs)
+  | @step _ l c' tr endC n hn hs ht =>
+    cases call_protects _ _ hs with
+    | inl hp =>
+      obtain ⟨kd, site, hc, hf⟩ := hp
+      have he : c' = ⟨.trapped kd site, c'.locals, c'.store, q⟩ := by cases c'; simp_all
+      rw [he] at ht
+      exact False.elim (FirstStepsN.trap_impossible_inv hq ht)
+    | inr hp =>
+      obtain ⟨n₁, n₂, tr₁, st₁, tr₂, hc, he, ha, hb⟩ := ht.split_return hq hp
+      exact ⟨n₁ + 1, n₂, l.events ++ tr₁, st₁, tr₂, by omega,
+        by simp [he, List.append_assoc], .step (by intro h; cases h.1) hs ha, hb⟩
+
+/-- An exit dispatcher itself contributes no event. -/
+def ExitSilent (R : Config O → Label O → Config O → Prop) (e : Exit O.Val)
+    (L : AList Var O.Val) (st : O.Store) (frames : List (Frame O)) : Prop :=
+  ∀ label c, R ⟨.exiting e, L, st, frames⟩ label c → label = .silent
+
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). Unwinding itself emits no event; effects belong to dispatched calls.
+Basis: admitted `Spec/Exec` definitions named in the subject and proof.
+`docs/decisions.md#decided-2026-11-08-foundation`, C1 / `#foundation-q1`,
+admits execution, call and cleanup laws in Lean. Caller restoration follows admitted `step`/`stepExit` and `register`;
+`#decided-2026-11-13-lifecycle-refusal` requires successful admission at each lifecycle site. -/
+theorem exit_label {P : Program O} {e : Exit O.Val} {L : AList Var O.Val}
+    {st : O.Store} {frames : List (Frame O)} :
+    ExitSilent (Step P) e L st frames := by
+  intro label c h
+  cases h with
+  | silent _ => rfl
+  | prim h _ _ => exact False.elim (stepExit_no_request_inv L st e frames _ _ _ _ _ h)
+
+/-- Helper (computation). Computes the resume dispatcher result to convert its representation inside raw-run completeness. -/
+private theorem resume_step_inv {P : Program O} {e : Exit O.Val} {L : AList Var O.Val}
+    {st : O.Store} {frames : List (Frame O)} {label : Label O} {c : Config O}
+    (h : Step P ⟨.done, L, st, .resume (.exit e) :: frames⟩ label c) :
+    label = .silent ∧ c = ⟨.exiting e, L, st, frames⟩ := by
+  cases h with
+  | silent h =>
+    simp only [step, Option.some.injEq, Out.next.injEq] at h
+    exact ⟨rfl, h.symm⟩
+  | prim h _ _ => simp [step] at h
+
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). Raw first-arrival cleanup executions admit a complete dispatch segmentation.
+Basis: admitted `Spec/Exec` definitions named in the subject and proof.
+`docs/decisions.md#decided-2026-11-08-foundation`, C1 / `#foundation-q1`,
+admits execution, call and cleanup laws in Lean. `#od2` clause (5) / `#core-q9-8` require nested reverse cleanup;
+`#od69` limits teardown to storage; `#decided-2026-11-13-lifecycle-refusal`
+requires lifecycle admission. Function-end is a boundary, as in admitted `Passes`. -/
+theorem boundary_complete {P : Program O} {e : Exit O.Val} {k pre : List (Frame O)}
+    {L Lend : AList Var O.Val} {st stEnd : O.Store} {tr : List O.Event} {n : Nat} {endC : Config O}
+    (h : FirstStepsN (Step P) (fun c => c.frames.length ≤ k.length)
+      ⟨.exiting e, L, st, pre ++ k⟩ tr endC n)
+    (he : endC = ⟨.exiting e, Lend, stEnd, k⟩)
+    (hp : ∀ f ∈ pre, Passes e f) :
+    ∃ acts, BoundaryRun P (Step P) e k pre L st acts tr Lend stEnd := by
+  induction n using Nat.strongRecOn generalizing pre L st tr endC with
+  | ind n ih =>
+    cases pre with
+    | nil =>
+      cases h with
+      | stop _ =>
+        have hm : L = Lend ∧ st = stEnd := by
+          simpa only [List.nil_append, Config.mk.injEq, true_and, and_true] using he
+        obtain ⟨rfl, rfl⟩ := hm
+        exact ⟨[], .stop⟩
+      | step hn _ _ => exact False.elim (hn (by simp))
+    | cons f pre =>
+      have hp' : ∀ f ∈ pre, Passes e f := fun f hf => hp f (List.mem_cons_of_mem _ hf)
+      have hpf : Passes e f := hp f List.mem_cons_self
+      cases h with
+      | stop hs => simp at hs; omega
+      | @step _ label c' tr₀ _ m hn hs ht =>
+        have hl := exit_label _ _ hs
+        subst label
+        have hnext := exit_step_next_inv hs
+        change step P ⟨.exiting e, L, st, f :: (pre ++ k)⟩ = _ at hnext
+        have pass (pre' : List (Frame O)) (L' : AList Var O.Val) (st' : O.Store)
+            (hc : c' = ⟨.exiting e, L', st', pre' ++ k⟩)
+            (hpp : ∀ f ∈ pre', Passes e f) :
+            ∃ acts, BoundaryRun P (Step P) e k (f :: pre) L st acts
+              (Label.silent.events ++ tr₀) Lend stEnd := by
+          rw [hc] at ht hs
+          obtain ⟨acts, hr⟩ := ih m (by omega) ht he hpp
+          exact ⟨leaving (f :: pre) L L' ++ acts,
+            by simpa [Label.events] using BoundaryRun.pass (by simp) (by cases f <;> simp_all [Passes]) hs hr⟩
+        cases f with
+        | seq t =>
+          simp only [step, stepExit, Option.some.injEq, Out.next.injEq] at hnext
+          exact pass pre L st hnext.symm hp'
+        | scope b dm ds =>
+          cases ds with
+          | nil =>
+            cases hd : dropOut O dm L st with
+            | none => simp [step, stepExit, hd] at hnext
+            | some stDrop =>
+              simp only [step, stepExit, hd, Option.map_some, Option.some.injEq, Out.next.injEq] at hnext
+              exact pass pre (restrict dm L) stDrop hnext.symm hp'
+          | cons d ds =>
+            simp only [step, stepExit, startCleanup, Option.some.injEq, Out.next.injEq] at hnext
+            subst c'
+            have hq : k.length < (.resume (.exit e) :: .scope b dm ds :: (pre ++ k)).length := by
+              simp only [List.length_cons, List.length_append]; omega
+            obtain ⟨nc, nr, trCall, stCall, trRest, hnCall, heCall, hCall, hRest⟩ :=
+              ht.call_return hq
+            cases hRest with
+            | stop hstop => simp only [List.length_cons, List.length_append] at hstop; omega
+            | @step _ lab cNext trTail _ nt hnRest hsRest hTail =>
+              obtain ⟨hl, hc⟩ := resume_step_inv hsRest
+              subst lab
+              subst cNext
+              have hpp : ∀ f ∈ (.scope b dm ds :: pre), Passes e f := by
+                intro f hf
+                cases hf with
+                | head => trivial
+                | tail _ hf => exact hp' f hf
+              obtain ⟨acts, hr⟩ := ih nt (by omega) hTail he hpp
+              refine ⟨.call L d :: acts, ?_⟩
+              have hb := BoundaryRun.call (pre := .scope b dm (d :: ds) :: pre)
+                (rest := .scope b dm ds :: pre) (by simp) hs hCall.unsized_inv hsRest hr
+              simpa [heCall, Label.events] using hb
+        | test l cr t body site dm =>
+          cases hd : dropOut O dm L st with
+          | none => simp [step, stepExit, hd] at hnext
+          | some stDrop =>
+            simp only [step, stepExit, hd, Option.map_some, Option.some.injEq, Out.next.injEq] at hnext
+            exact pass pre (restrict dm L) stDrop hnext.symm hp'
+        | body l cr t body site =>
+          cases e with
+          | ret v =>
+            simp only [step, stepExit, Option.some.injEq, Out.next.injEq] at hnext
+            exact pass pre L st hnext.symm hp'
+          | brk l' =>
+            have hne : l' ≠ l := hpf
+            simp only [step, stepExit, hne, ↓reduceIte, Option.some.injEq, Out.next.injEq] at hnext
+            exact pass pre L st hnext.symm hp'
+          | cont l' =>
+            have hne : l' ≠ l := hpf
+            simp only [step, stepExit, hne, ↓reduceIte, Option.some.injEq, Out.next.injEq] at hnext
+            exact pass pre L st hnext.symm hp'
+        | functionEnd => exact False.elim hpf
+        | resume p => exact False.elim hpf
+        | ret dst caller => exact False.elim hpf
+
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). Every raw first-boundary unwind through
+passable frames has a segmented `BoundaryRun` observation that runs `planWith` pre L, restores
+Lend = `unwindLocals` pre L, and performs every planned call and drop in order.
+Basis: admitted `Spec/Exec` definitions named in the subject and proof.
+`docs/decisions.md#decided-2026-11-08-foundation`, C1 / `#foundation-q1`,
+admits execution, call and cleanup laws in Lean. `#od2` clause (5) / `#core-q9-8` require nested reverse cleanup;
+`#od69` limits teardown to storage; `#decided-2026-11-13-lifecycle-refusal`
+requires lifecycle admission. Function-end is a boundary, as in admitted `Passes`. -/
+theorem raw_cleanup_runs_plan (P : Program O) (e : Exit O.Val) (k pre : List (Frame O))
+    (L Lend : AList Var O.Val) (st stEnd : O.Store) (tr : List O.Event)
+    (hp : ∀ (f : Frame O), f ∈ pre → Passes e f)
+    (h : FirstSteps (Step P) (fun c => c.frames.length ≤ k.length)
+      ⟨.exiting e, L, st, pre ++ k⟩ tr ⟨.exiting e, Lend, stEnd, k⟩) :
+    ∃ acts, BoundaryRun P (Step P) e k pre L st acts tr Lend stEnd ∧
+      acts = planWith pre L ∧ Lend = unwindLocals pre L ∧ Performed P acts L st tr Lend stEnd := by
+  obtain ⟨n, hn⟩ := h.sized_inv
+  obtain ⟨acts, ha⟩ := boundary_complete hn rfl hp
+  obtain ⟨_, hacts, hL, hperf⟩ :=
+    (cleanup_runs_exact_plan P e k pre L Lend st stEnd acts tr).mp ha
+  exact ⟨acts, ha, hacts, hL, hperf⟩
+
+
+/-- Law (subject `ConcreteSpec.Core.Exec.Steps`). From `Stmt.abort` the only reachable configurations
+are the initial `Stmt.abort` configuration and the `Ctrl.trapped` `TrapKind.abort` site configuration, both with empty
+event trace and unchanged locals, store, and frame stack.
+Basis: admitted `Spec/Exec` definitions named in the subject and proof.
+`docs/decisions.md#decided-2026-11-08-foundation`, C1 / `#foundation-q1`,
+admits execution, call and cleanup laws in Lean. `#od68` ends the program on a trapping deferred call;
+`#od10` and `#od2` clause (5) forbid abort cleanup. -/
+theorem abort_runs_no_cleanup (P : Program O) (site : SiteId) (L : AList Var O.Val)
+    (st : O.Store) (k : List (Frame O)) (tr : List O.Event) (c : Config O) :
+    Steps P ⟨.exec (.abort site), L, st, k⟩ tr c ↔
+      tr = [] ∧ (c = ⟨.exec (.abort site), L, st, k⟩ ∨ c = ⟨.trapped .abort site, L, st, k⟩) := by
+  constructor
+  · intro h
+    cases h with
+    | refl => exact ⟨rfl, .inl rfl⟩
+    | step hs hrest =>
+      cases hs with
+      | silent h =>
+        simp only [step, Option.some.injEq, Out.next.injEq] at h
+        subst h
+        have := (steps_from_trapped P .abort site L st k _ c).mp hrest
+        exact ⟨by simpa [Label.events] using this.1, .inr this.2⟩
+      | prim h _ _ => simp [step] at h
+  · rintro ⟨rfl, rfl | rfl⟩
+    · exact .refl _
+    · exact steps_next rfl (.refl _)
+
+/-! ### Evaluation order and determinism -/
+
+/-- Law (subject `ConcreteSpec.Core.Exec.evalArgs`). The first argument that traps decides the trap,
+whatever follows it: once the arguments before it evaluate, in whatever state they leave.
+Basis: admitted `Spec/Exec` definitions named in the subject and proof.
+`docs/decisions.md#decided-2026-11-08-foundation`, C1 / `#foundation-q1`,
+admits execution, call and cleanup laws in Lean. The first-trap result is a consequence of admitted `evalArgs`, not a new
+evaluation-order decision. -/
+theorem evalArgs_first_trap (L : AList Var O.Val) (e : O.Expr) (kd : TrapKind)
+    (es₂ : List O.Expr) :
+    ∀ (es₁ : List O.Expr) (st st₁ : O.Store) (vs : List O.Val),
+      evalArgs O L st es₁ = .ok (vs, st₁) → O.eval L st₁ e = .trap kd →
+      evalArgs O L st (es₁ ++ e :: es₂) = .trap kd
+  | [], st, st₁, _, h, he => by
+    simp only [evalArgs, Res.ok.injEq, Prod.mk.injEq] at h
+    obtain ⟨_, rfl⟩ := h
+    simp [evalArgs, he, Res.bind]
+  | e₁ :: es₁, st, st₁, vs, h, he => by
+    show evalArgs O L st (e₁ :: (es₁ ++ e :: es₂)) = _
+    cases h₁ : O.eval L st e₁ with
+    | ok p =>
+      obtain ⟨v₁, st₀⟩ := p
+      cases h₂ : evalArgs O L st₀ es₁ with
+      | ok q =>
+        obtain ⟨vs₁, st₂⟩ := q
+        have hst : st₂ = st₁ := by
+          simp [evalArgs, h₁, h₂, Res.bind, Res.map] at h; exact h.2
+        subst hst
+        have := evalArgs_first_trap L e kd es₂ es₁ st₀ st₂ vs₁ h₂ he
+        simp [evalArgs, h₁, this, Res.bind, Res.map]
+      | trap _ => simp [evalArgs, h₁, h₂, Res.bind, Res.map] at h
+      | stuck => simp [evalArgs, h₁, h₂, Res.bind, Res.map] at h
+    | trap _ => simp [evalArgs, h₁, Res.bind] at h
+    | stuck => simp [evalArgs, h₁, Res.bind] at h
+
+
+namespace CleanupEvidence
+open Demo
+
+/-- Representation lemma. A concrete first-return segment for an ordinary deferred call; unlike E1’s
+universal completion helper, this additionally certifies first arrival. -/
+private theorem logSegment (n : Int) (e : Exit Int) (L : AList Var Int)
+    (rest : List (Frame ops)) (st : DState) :
+    FirstSteps (Step prog) (fun c => c.ctrl = .done ∧ c.frames = .resume (.exit e) :: rest)
+      ⟨.exec (⟨logF, [.lit n], s⟩ : Deferred ops).stmt, L, st, .resume (.exit e) :: rest⟩ [n]
+      ⟨.done, L, st, .resume (.exit e) :: rest⟩ := by
+  let q : List (Frame ops) := .resume (.exit e) :: rest
+  let entered : DState := DState.life (.enter [x]) st
+  refine FirstSteps.step (R := Step prog) (c' := ⟨.exec logFn.body, [(x, n)], entered,
+      .scope logFn.block [x] [] :: .functionEnd :: .ret none L :: q⟩)
+    (by intro h; cases h.1) (.silent rfl) ?_
+  refine FirstSteps.step (R := Step prog) (c' := ⟨.done, [(x, n)], entered,
+      .scope logFn.block [x] [] :: .functionEnd :: .ret none L :: q⟩)
+    (by intro h; cases h.1)
+    (Step.prim (P := prog) (p := .log) (vs := [n]) (site := s) (st := entered) (a := ⟨some n, .ok 0, entered⟩) rfl (by simp [ops]) rfl) ?_
+  refine FirstSteps.step (R := Step prog) (c' := ⟨.done, [(x, n)], entered, .functionEnd :: .ret none L :: q⟩)
+    (by intro h; cases h.2) (.silent rfl) ?_
+  refine FirstSteps.step (R := Step prog) (c' := ⟨.done, [(x, n)], st, .ret none L :: q⟩)
+    (by intro h; cases h.2) (.silent rfl) ?_
+  refine FirstSteps.step (R := Step prog) (c' := ⟨.done, L, st, q⟩)
+    (by intro h; cases h.2) (.silent rfl) ?_
+  exact .stop ⟨rfl, rfl⟩
+
+/-- Populated caller state. `x` is local to the inner scope; `y` survives until the outer
+scope. Unrelated moved entries and a second activation expose accidental state replacement. -/
+def live : AList Var Int := [(x, 7), (y, 8)]
+def initial : DState := ⟨4, [[x, p], [t]]⟩
+def middle : DState := ⟨4, [[p], [t]]⟩
+def suffix : List (Frame ops) := [.seq (.abort s)]
+def d (n : Int) : Deferred ops := ⟨logF, [.lit n], s⟩
+def inner : Frame ops := .scope ⟨1⟩ [y] [d 1]
+def outer : Frame ops := .scope ⟨2⟩ [] [d 2]
+def emptyScope : Frame ops := .scope ⟨1⟩ [y] []
+def actions : List (CleanAct ops) :=
+  [.call live (d 1), .drop [y] live [(y, 8)],
+   .call [(y, 8)] (d 2), .drop [] [(y, 8)] []]
+
+/-- Helper. Both nested scope frames pass a return. -/
+private theorem nested_passes : ∀ f ∈ [inner, outer], Passes (O := ops) (.ret 7) f := by
+  intro f hf
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hf
+  rcases hf with rfl | rfl <;> trivial
+
+/-- Helper. The populated empty scope passes a return. -/
+private theorem empty_passes : ∀ f ∈ [emptyScope], Passes (O := ops) (.ret 7) f := by
+  intro f hf
+  simp only [List.mem_singleton] at hf
+  subst f
+  trivial
+
+/-- Helper. Independent execution of the nested calls and their distinct storage drops.
+The trace changes on reversal, and the second call sees the restricted local environment. -/
+private theorem performed : Performed prog actions live initial [1, 2] [] middle := by
+  exact .call (logSegment 1 (.ret 7) live [] initial)
+    (.drop rfl (.call (logSegment 2 (.ret 7) [(y, 8)] [] middle) (.drop rfl .nil)))
+
+/-- Helper (application of `ConcreteSpec.Core.Exec.cleanup_runs_exact_plan`). Two registered calls,
+both local restorations and the lifecycle update are performed before the saved suffix. -/
+example : BoundaryRun prog (Step prog) (.ret 7) suffix [inner, outer]
+    live initial actions [1, 2] [] middle :=
+  (cleanup_runs_exact_plan prog (.ret 7) suffix [inner, outer] live [] initial middle
+    actions [1, 2]).mpr ⟨nested_passes, rfl, rfl, performed⟩
+
+/-- Helper (application of `ConcreteSpec.Core.Exec.planWith_calls`). Projection retains call order,
+while removing only storage actions. -/
+example : (planWith [inner, outer] live).filterMap CleanAct.call? = plan [inner, outer] :=
+  planWith_calls [inner, outer] live
+
+/-- Planted. Reverse the action plan, preserving every action. -/
+def reversePlanWith (pre : List (Frame O)) (L : AList Var O.Val) := (planWith pre L).reverse
+/-- Planted. Omit calls from the call-only projection. -/
+def emptyPlan (_ : List (Frame O)) : List (Deferred O) := []
+/-- Planted (certificate `ConcreteSpec.Core.Exec.planWith_calls`). Reversal changes the two calls. -/
+example : (reversePlanWith [inner, outer] live).filterMap CleanAct.call? ≠ plan [inner, outer] := by
+  intro h; cases h
+/-- Planted (certificate `ConcreteSpec.Core.Exec.planWith_calls`). Omitting calls changes projection. -/
+example : (planWith [inner, outer] live).filterMap CleanAct.call? ≠ emptyPlan [inner, outer] := by
+  intro h; cases h
+
+/-- Planted. Omit only dispatch of a pending call; retain every other production transition. -/
+inductive NoDispatchStep (P : Program O) : Config O → Label O → Config O → Prop where
+  | retain {c l c'} : Step P c l c' → (match c.ctrl, c.frames with
+      | .exiting _, .scope b _ (_ :: _) :: _ => if b = ⟨1⟩ then False else True
+      | _, _ => True) → NoDispatchStep P c l c'
+
+/-- Helper. The omitted-dispatch relation cannot start the populated nested unwind. -/
+private theorem no_dispatch : ¬ BoundaryRun prog (NoDispatchStep prog) (.ret 7) suffix
+    [inner, outer] live initial actions [1, 2] [] middle := by
+  intro h
+  generalize ha : actions = acts at h
+  generalize ht : ([1, 2] : List Int) = tr at h
+  cases h with
+  | pass _ _ hs _ => cases hs with | retain _ impossible => exact impossible
+  | call _ hs _ _ _ => cases hs with | retain _ impossible => exact impossible
+
+/-- Planted (certificate `ConcreteSpec.Core.Exec.cleanup_runs_exact_plan`). All independent actions
+succeed, but omission of the first dispatch falsifies the equivalence at those same arguments. -/
+example : ¬ (BoundaryRun prog (NoDispatchStep prog) (.ret 7) suffix [inner, outer]
+      live initial actions [1, 2] [] middle ↔
+    (∀ f ∈ [inner, outer], Passes (O := ops) (.ret 7) f) ∧
+      actions = planWith [inner, outer] live ∧ [] = unwindLocals [inner, outer] live ∧
+      Performed prog actions live initial [1, 2] [] middle) := by
+  intro h
+  exact no_dispatch (h.mpr ⟨nested_passes, rfl, rfl, performed⟩)
+
+/-- Planted. Remove just the storage callback, retaining the local restriction. -/
+inductive MissingDropStep (P : Program O) : Config O → Label O → Config O → Prop where
+  | skip {e L st b dm k} : MissingDropStep P
+      ⟨.exiting e, L, st, .scope b dm [] :: k⟩ .silent
+      ⟨.exiting e, restrict dm L, st, k⟩
+/-- Planted. Remove just the local restriction, retaining the storage callback. -/
+inductive MissingRestrictStep (P : Program O) : Config O → Label O → Config O → Prop where
+  | skip {e L st b dm k stDrop} : dropOut O dm L st = some stDrop → MissingRestrictStep P
+      ⟨.exiting e, L, st, .scope b dm [] :: k⟩ .silent ⟨.exiting e, L, stDrop, k⟩
+
+/-- Helper (application of `ConcreteSpec.Core.Exec.cleanup_runs_exact_plan`). The storage drop removes
+`x` from the current activation while preserving `p`, the caller activation and counter. -/
+example : BoundaryRun prog (Step prog) (.ret 7) suffix [emptyScope] live initial
+    [.drop [y] live [(y, 8)]] [] [(y, 8)] middle :=
+  (cleanup_runs_exact_plan prog (.ret 7) suffix [emptyScope] live [(y, 8)] initial middle
+    [.drop [y] live [(y, 8)]] []).mpr ⟨empty_passes, rfl, rfl, .drop rfl .nil⟩
+
+/-- Planted (certificate `ConcreteSpec.Core.Exec.cleanup_runs_exact_plan`). Missing storage teardown
+has a real observed run with correct locals but cannot satisfy independent action execution. -/
+example : BoundaryRun prog (MissingDropStep prog) (.ret 7) suffix [emptyScope] live initial
+      [.drop [y] live [(y, 8)]] [] [(y, 8)] initial ∧
+    ¬ Performed prog [.drop [y] live [(y, 8)]] live initial [] [(y, 8)] initial := by
+  refine ⟨?_, ?_⟩
+  · simpa [leaving, emptyScope, live, restrict, x, y, suffix] using
+      (BoundaryRun.pass (pre := [emptyScope]) (pre' := []) (by simp)
+        (by simp [emptyScope]) (MissingDropStep.skip (L := live)) BoundaryRun.stop)
+  · intro h
+    cases h with
+    | drop hd rest =>
+      cases rest
+      have bad : middle = initial := Option.some.inj hd
+      cases bad
+
+/-- Planted (certificate `ConcreteSpec.Core.Exec.cleanup_runs_exact_plan`). Missing local restoration
+has correct lifecycle state but its observed post-locals disagree with the planned action. -/
+example : BoundaryRun prog (MissingRestrictStep prog) (.ret 7) suffix [emptyScope] live initial
+      [.drop [y] live live] [] live middle ∧
+    [.drop [y] live live] ≠ planWith [emptyScope] live := by
+  refine ⟨?_, ?_⟩
+  · simpa [leaving, emptyScope, live, restrict, x, y, suffix] using
+      (BoundaryRun.pass (pre := [emptyScope]) (pre' := []) (by simp)
+        (by simp [emptyScope]) (MissingRestrictStep.skip (stDrop := middle) rfl) BoundaryRun.stop)
+  · intro h; cases h
+
+/-- Planted. Add exactly one unregistered call to an empty scope; drops and resume stay real. -/
+inductive ExtraStep (P : Program O) : Config O → Label O → Config O → Prop where
+  | inject {e L st b dm k} {d : Deferred O} : ExtraStep P ⟨.exiting e, L, st, .scope b dm [] :: k⟩ .silent
+      ⟨.exec d.stmt, L, st, .resume (.exit e) :: .scope b dm [] :: k⟩
+  | retain {c l c'} : Step P c l c' → ExtraStep P c l c'
+
+/-- Planted (certificate `ConcreteSpec.Core.Exec.cleanup_runs_exact_plan`). The injected call actually
+emits 9; the sole added call is absent from the independent plan. -/
+example : BoundaryRun prog (ExtraStep prog) (.ret 7) suffix [emptyScope] live initial
+      [.call live (d 9), .drop [y] live [(y, 8)]] [9] [(y, 8)] middle ∧
+    [.call live (d 9), .drop [y] live [(y, 8)]] ≠ planWith [emptyScope] live := by
+  refine ⟨?_, ?_⟩
+  · refine BoundaryRun.call (pre := [emptyScope]) (rest := [emptyScope]) (by simp)
+      ExtraStep.inject (logSegment 9 (.ret 7) live (.resume (.exit (.ret 7)) :: emptyScope :: suffix) initial)
+      (.retain (.silent rfl)) ?_
+    simpa [leaving, emptyScope, live, restrict, x, y, suffix] using
+      (BoundaryRun.pass (pre := [emptyScope]) (pre' := []) (by simp) (by simp [emptyScope])
+        (ExtraStep.retain (Step.silent (P := prog) (c' := ⟨.exiting (.ret 7), [(y, 8)], middle, suffix⟩) rfl)) BoundaryRun.stop)
+  · intro h; cases h
+
+/-- Helper. The populated independent empty-scope drop. -/
+private theorem drop_performed : Performed prog (planWith [emptyScope] live)
+    live initial [] [(y, 8)] middle := .drop rfl .nil
+
+/-- Helper (application of `ConcreteSpec.Core.Exec.boundary_of_performed`). Independent storage and
+local restoration reconstruct the actual first-boundary execution. -/
+example : BoundaryRun prog (Step prog) (.ret 7) suffix [emptyScope] live initial
+    (planWith [emptyScope] live) [] [(y, 8)] middle :=
+  boundary_of_performed [emptyScope] empty_passes drop_performed
+
+/-- Planted. Omit only empty-scope teardown transitions. -/
+inductive NoDropStep (P : Program O) : Config O → Label O → Config O → Prop where
+  | retain {c l c'} : Step P c l c' → (match c.ctrl, c.frames with
+      | .exiting _, .scope _ _ [] :: _ => False
+      | _, _ => True) → NoDropStep P c l c'
+
+/-- Planted (certificate `ConcreteSpec.Core.Exec.boundary_of_performed`). The independent populated
+drop still succeeds, but the sole missing transition prevents reconstruction. -/
+example : Performed prog (planWith [emptyScope] live) live initial [] [(y, 8)] middle ∧
+    ¬ BoundaryRun prog (NoDropStep prog) (.ret 7) suffix [emptyScope] live initial
+      (planWith [emptyScope] live) [] [(y, 8)] middle := by
+  refine ⟨drop_performed, fun h => ?_⟩
+  generalize ha : planWith [emptyScope] live = acts at h
+  generalize ht : ([] : List Int) = tr at h
+  cases h with
+  | pass _ _ hs _ => cases hs with | retain _ impossible => exact impossible
+  | call _ hs _ _ _ => cases hs with | retain _ impossible => exact impossible
+
+/-- Helper. The nested continuation after the first scope's calls have completed. -/
+private theorem base_execution : ∀ st tr,
+    Performed prog [.drop [y] live [(y, 8)], .call [(y, 8)] (d 2), .drop [] [(y, 8)] []]
+      live st tr [] middle →
+    BoundaryRun prog (Step prog) (.ret 7) suffix [.scope ⟨1⟩ [y] [], outer] live st
+      [.drop [y] live [(y, 8)], .call [(y, 8)] (d 2), .drop [] [(y, 8)] []] tr [] middle := by
+  intro st tr h
+  exact boundary_of_performed _ (by
+    intro f hf
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hf
+    rcases hf with rfl | rfl <;> trivial) h
+
+/-- Helper (application of `ConcreteSpec.Core.Exec.boundary_scope_calls`). The final populated scope
+drop is strictly after its call; the outer scope's call remains in the continuation. -/
+example : BoundaryRun prog (Step prog) (.ret 7) suffix [inner, outer] live initial
+    actions [1, 2] [] middle :=
+  boundary_scope_calls ⟨1⟩ [y] [outer] [d 1] performed base_execution
+
+/-- Planted (certificate `ConcreteSpec.Core.Exec.boundary_scope_calls`). Dispatch omission alone
+prevents the witnessed call-then-drop execution. Independent actions remain satisfiable. -/
+example : Performed prog actions live initial [1, 2] [] middle ∧
+    ¬ BoundaryRun prog (NoDispatchStep prog) (.ret 7) suffix [inner, outer]
+      live initial actions [1, 2] [] middle := ⟨performed, no_dispatch⟩
+
+/-- A saved cleanup continuation, with an observable caller suffix below it. -/
+def returnQ : List (Frame ops) := .resume (.exit (.ret 7)) :: emptyScope :: suffix
+def entered : DState := DState.life (.enter [x]) initial
+/-- Finite path vertices retain the actual function-end boundary. -/
+def c0 : Config ops := ⟨.exec (d 1).stmt, live, initial, returnQ⟩
+def c1 : Config ops := ⟨.exec logFn.body, [(x, 1)], entered,
+  .scope logFn.block [x] [] :: .functionEnd :: .ret none live :: returnQ⟩
+def c2 : Config ops := { c1 with ctrl := .done }
+def c3 : Config ops := ⟨.done, [(x, 1)], entered, .functionEnd :: .ret none live :: returnQ⟩
+def c4 : Config ops := ⟨.done, [(x, 1)], initial, .ret none live :: returnQ⟩
+def c5 : Config ops := ⟨.done, live, initial, returnQ⟩
+def c6 : Config ops := ⟨.exiting (.ret 7), live, initial, emptyScope :: suffix⟩
+def c7 : Config ops := ⟨.exiting (.ret 7), [(y, 8)], middle, suffix⟩
+
+/-- Helper. The callee's body, scope teardown, activation leave, caller restoration and
+pending exit resume all execute before the outer cleanup boundary. -/
+private theorem callee_raw : FirstStepsN (Step prog) (fun c => c.frames.length ≤ suffix.length)
+    c1 [1] c7 6 := by
+  refine FirstStepsN.step (O := ops) (R := Step prog) (stop := fun c => c.frames.length ≤ suffix.length) (l := .emit 1) (c' := c2) (by decide)
+    (Step.prim (P := prog) (c := c1) (c' := c2) (a := ⟨some 1, .ok 0, entered⟩) rfl (by decide) rfl) ?_
+  refine FirstStepsN.step (O := ops) (R := Step prog) (stop := fun c => c.frames.length ≤ suffix.length) (l := .silent) (c' := c3) (by decide) (.silent rfl) ?_
+  refine FirstStepsN.step (O := ops) (R := Step prog) (stop := fun c => c.frames.length ≤ suffix.length) (l := .silent) (c' := c4) (by decide) (.silent rfl) ?_
+  refine FirstStepsN.step (O := ops) (R := Step prog) (stop := fun c => c.frames.length ≤ suffix.length) (l := .silent) (c' := c5) (by decide) (.silent rfl) ?_
+  refine FirstStepsN.step (O := ops) (R := Step prog) (stop := fun c => c.frames.length ≤ suffix.length) (l := .silent) (c' := c6) (by decide) (.silent rfl) ?_
+  exact FirstStepsN.step (O := ops) (R := Step prog) (stop := fun c => c.frames.length ≤ suffix.length) (l := .silent) (by decide) (.silent rfl) (.stop (by decide))
+
+/-- Helper. A full deferred call path with nonempty event trace and populated caller state. -/
+private theorem call_raw : FirstStepsN (Step prog) (fun c => c.frames.length ≤ suffix.length)
+    c0 [1] c7 7 := .step (by decide) (.silent rfl) callee_raw
+
+/-- Instance (law `ConcreteSpec.Core.Exec.FirstStepsN.split_return`). The saved caller is
+restored after a real event and activation leave, before the pending exit resumes. -/
+example : ∃ n₁ n₂ tr₁ st₁ tr₂, 6 = n₁ + n₂ ∧ [1] = tr₁ ++ tr₂ ∧
+    FirstStepsN (Step prog) (fun c => c.ctrl = .done ∧ c.frames = returnQ)
+      c1 tr₁ ⟨.done, live, st₁, returnQ⟩ n₁ ∧
+    FirstStepsN (Step prog) (fun c => c.frames.length ≤ suffix.length)
+      ⟨.done, live, st₁, returnQ⟩ tr₂ c7 n₂ :=
+  FirstStepsN.split_return callee_raw (by decide) ⟨[_, _], rfl⟩
+
+/-- Instance (law `ConcreteSpec.Core.Exec.FirstStepsN.call_return`). A deferred call crosses
+its saved continuation only after restoring populated caller locals and the prior activation. -/
+example : ∃ n₁ n₂ tr₁ st₁ tr₂, 7 = n₁ + n₂ ∧ [1] = tr₁ ++ tr₂ ∧
+    FirstStepsN (Step prog) (fun c => c.ctrl = .done ∧ c.frames = returnQ)
+      c0 tr₁ ⟨.done, live, st₁, returnQ⟩ n₁ ∧
+    FirstStepsN (Step prog) (fun c => c.frames.length ≤ suffix.length)
+      ⟨.done, live, st₁, returnQ⟩ tr₂ c7 n₂ :=
+  FirstStepsN.call_return (d := d 1) (by decide) call_raw
+
+/-- Planted. On this complete concrete path, replace only caller-local restoration by keeping
+callee locals. Every other edge is a production transition; the event and activation leave
+are unchanged. A finite path relation makes the omitted operation explicit. -/
+def bad5 : Config ops := { c5 with locals := [(x, 1)] }
+def bad6 : Config ops := { c6 with locals := [(x, 1)] }
+def bad7 : Config ops := { c7 with locals := [] }
+inductive WrongReturn : Config ops → Label ops → Config ops → Prop where
+  | enter : WrongReturn c0 .silent c1
+  | event : WrongReturn c1 (.emit 1) c2
+  | drop : WrongReturn c2 .silent c3
+  | leave : WrongReturn c3 .silent c4
+  | forget : WrongReturn c4 .silent bad5
+  | resume : WrongReturn bad5 .silent bad6
+  | finish : WrongReturn bad6 .silent bad7
+
+/-- Helper. Every unchanged edge of the planted path is checked against production. -/
+private theorem unchanged_edges : Step prog c0 .silent c1 ∧ Step prog c1 (.emit 1) c2 ∧
+    Step prog c2 .silent c3 ∧ Step prog c3 .silent c4 ∧
+    Step prog bad5 .silent bad6 ∧ Step prog bad6 .silent bad7 :=
+  ⟨.silent rfl, .prim (P := prog) (c := c1) (c' := c2) (a := ⟨some 1, .ok 0, entered⟩) rfl (by decide) rfl, .silent rfl, .silent rfl, .silent rfl, .silent rfl⟩
+
+/-- Helper. The mutant never produces the restored caller boundary. -/
+private theorem wrong_not_restored {c c' : Config ops} {label : Label ops}
+    (h : WrongReturn c label c') : ¬ (c'.ctrl = .done ∧ c'.locals = live ∧ c'.frames = returnQ) := by
+  cases h <;> simp [c1, c2, c3, c4, c5, c6, c7, bad5, bad6, bad7, returnQ, emptyScope, suffix, live]
+
+/-- Helper. A path of this mutant starting away from the restored configuration cannot visit it. -/
+private theorem wrong_no_visit {stop : Config ops → Prop} {c c' : Config ops} {tr n}
+    (h : FirstStepsN WrongReturn stop c tr c' n)
+    (hn : ¬ (c.ctrl = .done ∧ c.locals = live ∧ c.frames = returnQ)) :
+    ¬ (c'.ctrl = .done ∧ c'.locals = live ∧ c'.frames = returnQ) := by
+  induction h with
+  | stop => exact hn
+  | step _ hs _ ih => exact ih (wrong_not_restored hs)
+
+/-- Helper. The planted call still reaches the same outer boundary with its real event. -/
+private theorem wrong_tail : FirstStepsN WrongReturn (fun c => c.frames.length ≤ suffix.length)
+    c1 [1] bad7 6 := by
+  refine FirstStepsN.step (R := WrongReturn) (stop := fun c => c.frames.length ≤ suffix.length)
+    (c' := c2) (by decide) WrongReturn.event ?_
+  refine FirstStepsN.step (R := WrongReturn) (stop := fun c => c.frames.length ≤ suffix.length)
+    (c' := c3) (by decide) WrongReturn.drop ?_
+  refine FirstStepsN.step (R := WrongReturn) (stop := fun c => c.frames.length ≤ suffix.length)
+    (c' := c4) (by decide) WrongReturn.leave ?_
+  refine FirstStepsN.step (R := WrongReturn) (stop := fun c => c.frames.length ≤ suffix.length)
+    (c' := bad5) (by decide) WrongReturn.forget ?_
+  refine FirstStepsN.step (R := WrongReturn) (stop := fun c => c.frames.length ≤ suffix.length)
+    (c' := bad6) (by decide) WrongReturn.resume ?_
+  exact FirstStepsN.step (R := WrongReturn) (stop := fun c => c.frames.length ≤ suffix.length)
+    (by decide) WrongReturn.finish (.stop (by decide))
+
+/-- Helper. Extend the mutant path by its unchanged entry transition. -/
+private theorem wrong_raw : FirstStepsN WrongReturn (fun c => c.frames.length ≤ suffix.length)
+    c0 [1] bad7 7 := .step (by decide) WrongReturn.enter wrong_tail
+
+/-- Planted (law `ConcreteSpec.Core.Exec.FirstStepsN.call_return`). Raw execution, boundary
+height and the emitted event survive; restoring the caller before crossing does not. -/
+example : FirstStepsN WrongReturn (fun c => c.frames.length ≤ suffix.length) c0 [1] bad7 7 ∧
+    ¬ (∃ n₁ n₂ tr₁ st₁ tr₂, 7 = n₁ + n₂ ∧ [1] = tr₁ ++ tr₂ ∧
+      FirstStepsN WrongReturn (fun c => c.ctrl = .done ∧ c.frames = returnQ)
+        c0 tr₁ ⟨.done, live, st₁, returnQ⟩ n₁ ∧
+      FirstStepsN WrongReturn (fun c => c.frames.length ≤ suffix.length)
+        ⟨.done, live, st₁, returnQ⟩ tr₂ bad7 n₂) := by
+  refine ⟨wrong_raw, ?_⟩
+  rintro ⟨_, _, _, _, _, _, _, first, _⟩
+  exact wrong_no_visit first (by intro h; cases h.1) ⟨rfl, rfl, rfl⟩
+
+/-- Planted (law `ConcreteSpec.Core.Exec.FirstStepsN.split_return`). Starting inside the
+same callee retains its protected saved frame and raw endpoint but loses caller restoration. -/
+example : Protected (O := ops) live returnQ c1 ∧
+    FirstStepsN WrongReturn (fun c => c.frames.length ≤ suffix.length) c1 [1] bad7 6 ∧
+    ¬ (∃ n₁ n₂ tr₁ st₁ tr₂, 6 = n₁ + n₂ ∧ [1] = tr₁ ++ tr₂ ∧
+      FirstStepsN WrongReturn (fun c => c.ctrl = .done ∧ c.frames = returnQ)
+        c1 tr₁ ⟨.done, live, st₁, returnQ⟩ n₁ ∧
+      FirstStepsN WrongReturn (fun c => c.frames.length ≤ suffix.length)
+        ⟨.done, live, st₁, returnQ⟩ tr₂ bad7 n₂) := by
+  refine ⟨⟨[_, _], rfl⟩, ?_, ?_⟩
+  · exact wrong_tail
+  · rintro ⟨_, _, _, _, _, _, _, first, _⟩
+    exact wrong_no_visit first (by intro h; cases h.1) ⟨rfl, rfl, rfl⟩
+
+/-- Instance (law `ConcreteSpec.Core.Exec.protected_step`). Return restores the populated
+caller while preserving the current lifecycle store and saved suffix. -/
+example : PreservesCaller (Step prog) live returnQ c4 := protected_step ⟨[], rfl⟩
+/-- Planted (law `ConcreteSpec.Core.Exec.protected_step`). Keeping callee locals violates
+only the return-restoration operation at the actual saved boundary. -/
+example : Protected (O := ops) live returnQ c4 ∧ ¬ PreservesCaller WrongReturn live returnQ c4 := by
+  refine ⟨⟨[], rfl⟩, fun h => ?_⟩
+  cases h .silent bad5 .forget with
+  | inl hp =>
+    obtain ⟨pre, he⟩ := hp
+    have hh := congrArg List.length he
+    simp only [bad5, c5, List.length_append, List.length_cons] at hh
+    omega
+  | inr hr => have bad := hr.2.1; cases bad
+
+/-- Instance (law `ConcreteSpec.Core.Exec.call_protects`). Entering the actual deferred log
+installs a protected saved caller beneath scope and function-end frames. -/
+example : SavesCaller (Step prog) live initial returnQ (d 1) := call_protects
+
+/-- Planted. Entry is identical except that it omits the saved caller frame. -/
+inductive MissingCaller : Config ops → Label ops → Config ops → Prop where
+  | enter : MissingCaller c0 .silent
+      ⟨.exec logFn.body, [(x, 1)], entered, .scope logFn.block [x] [] :: .functionEnd :: returnQ⟩
+
+/-- Planted (law `ConcreteSpec.Core.Exec.call_protects`). Omitting the saved caller frame
+cannot protect this populated caller; the callee, event opportunity and lifecycle entry stay. -/
+example : ¬ SavesCaller MissingCaller live initial returnQ (d 1) := by
+  intro h
+  cases h .silent _ .enter with
+  | inl ht => obtain ⟨_, _, ht, _⟩ := ht; cases ht
+  | inr hp =>
+    obtain ⟨pre, he⟩ := hp
+    change .scope logFn.block [x] [] :: .functionEnd :: returnQ = _ at he
+    have hm : Frame.ret none live ∈
+        (.scope logFn.block [x] [] :: .functionEnd :: returnQ : List (Frame ops)) := by
+      rw [he]
+      simp
+    simp [returnQ, emptyScope, suffix] at hm
+
+/-- Helper. A populated raw scope unwind includes dispatch, the complete call, restoration,
+resume and storage teardown, stopping before the abort in the caller's suffix. -/
+private theorem raw_scope : FirstStepsN (Step prog) (fun c => c.frames.length ≤ suffix.length)
+    ⟨.exiting (.ret 7), live, initial, inner :: suffix⟩ [1] c7 8 :=
+  .step (by decide) (.silent rfl) call_raw
+
+/-- Helper. The singleton registered scope passes a return. -/
+private theorem inner_passes : ∀ f ∈ [inner], Passes (O := ops) (.ret 7) f := by
+  intro f hf
+  simp only [List.mem_singleton] at hf
+  subst f
+  trivial
+
+/-- Instance (law `ConcreteSpec.Core.Exec.boundary_complete`). A real first-arrival execution
+with event, populated locals and activation state admits dispatch segmentation. -/
+example : ∃ acts, BoundaryRun prog (Step prog) (.ret 7) suffix [inner]
+    live initial acts [1] [(y, 8)] middle := boundary_complete raw_scope rfl inner_passes
+
+/-- Instance (law `ConcreteSpec.Core.Exec.raw_cleanup_runs_plan`). The actual first-arrival
+path gives exactly the independent plan, restored locals and performed actions. -/
+example : ∃ acts, BoundaryRun prog (Step prog) (.ret 7) suffix [inner]
+      live initial acts [1] [(y, 8)] middle ∧
+    acts = planWith [inner] live ∧ [(y, 8)] = unwindLocals [inner] live ∧
+    Performed prog acts live initial [1] [(y, 8)] middle :=
+  raw_cleanup_runs_plan prog (.ret 7) suffix [inner] live [(y, 8)] initial middle [1]
+    inner_passes raw_scope.unsized_inv
+
+/-- Planted. Replace just the dispatched call statement by `skip`; resume and scope teardown
+are the production transitions. The other registrations and lifecycle state are retained. -/
+def skipped : Config ops := ⟨.exec .skip, live, initial, returnQ⟩
+inductive SkipCall : Config ops → Label ops → Config ops → Prop where
+  | skip : SkipCall ⟨.exiting (.ret 7), live, initial, inner :: suffix⟩ .silent skipped
+  | done : SkipCall skipped .silent c5
+  | resume : SkipCall c5 .silent c6
+  | drop : SkipCall c6 .silent c7
+
+/-- Helper. Only the selected call was omitted; all subsequent edges remain real steps. -/
+private theorem skip_edges : Step prog skipped .silent c5 ∧ Step prog c5 .silent c6 ∧
+    Step prog c6 .silent c7 := ⟨.silent rfl, .silent rfl, .silent rfl⟩
+
+/-- Helper. The planted skip still reaches the boundary, with correct final locals and store. -/
+private theorem skip_raw : FirstStepsN SkipCall (fun c => c.frames.length ≤ suffix.length)
+    ⟨.exiting (.ret 7), live, initial, inner :: suffix⟩ [] c7 4 := by
+  refine FirstStepsN.step (R := SkipCall) (stop := fun c => c.frames.length ≤ suffix.length)
+    (c' := skipped) (by decide) SkipCall.skip ?_
+  refine FirstStepsN.step (R := SkipCall) (stop := fun c => c.frames.length ≤ suffix.length)
+    (c' := c5) (by decide) SkipCall.done ?_
+  refine FirstStepsN.step (R := SkipCall) (stop := fun c => c.frames.length ≤ suffix.length)
+    (c' := c6) (by decide) SkipCall.resume ?_
+  exact FirstStepsN.step (R := SkipCall) (stop := fun c => c.frames.length ≤ suffix.length)
+    (by decide) SkipCall.drop (.stop (by decide))
+
+/-- Helper. An omitted call cannot be segmented as a real deferred-call dispatch. -/
+private theorem skip_no_boundary : ¬ ∃ acts, BoundaryRun prog SkipCall (.ret 7) suffix [inner]
+    live initial acts [] [(y, 8)] middle := by
+  rintro ⟨_, h⟩
+  generalize ht : ([] : List Int) = tr at h
+  cases h with
+  | pass _ _ hs _ => cases hs
+  | call _ hs _ _ _ => cases hs
+
+/-- Planted (law `ConcreteSpec.Core.Exec.boundary_complete`). All raw-path and endpoint
+premises survive omission of dispatch; no first-boundary segmentation exists. -/
+example : FirstStepsN SkipCall (fun c => c.frames.length ≤ suffix.length)
+      ⟨.exiting (.ret 7), live, initial, inner :: suffix⟩ [] c7 4 ∧
+    (∀ f ∈ [inner], Passes (O := ops) (.ret 7) f) ∧
+    ¬ ∃ acts, BoundaryRun prog SkipCall (.ret 7) suffix [inner]
+      live initial acts [] [(y, 8)] middle := ⟨skip_raw, inner_passes, skip_no_boundary⟩
+
+/-- Planted (law `ConcreteSpec.Core.Exec.raw_cleanup_runs_plan`). This raw first arrival
+preserves passability and storage teardown but omits the planned call, so the law fails. -/
+example : FirstSteps SkipCall (fun c => c.frames.length ≤ suffix.length)
+      ⟨.exiting (.ret 7), live, initial, inner :: suffix⟩ [] c7 ∧
+    ¬ (∃ acts, BoundaryRun prog SkipCall (.ret 7) suffix [inner]
+        live initial acts [] [(y, 8)] middle ∧
+      acts = planWith [inner] live ∧ [(y, 8)] = unwindLocals [inner] live ∧
+      Performed prog acts live initial [] [(y, 8)] middle) := by
+  refine ⟨?_, ?_⟩
+  · exact skip_raw.unsized_inv
+  · rintro ⟨acts, hb, _⟩
+    exact skip_no_boundary ⟨acts, hb⟩
+
+/-- Instance (law `ConcreteSpec.Core.Exec.register_protected`). Registration traverses a
+sequence frame and preserves populated scope, saved caller and nonempty continuation. -/
+example : register (d 2) ([.seq .skip, inner] ++ .ret none live :: returnQ) =
+      some ([.seq .skip, .scope ⟨1⟩ [y] [d 2, d 1]] ++ .ret none live :: returnQ) ∧
+    RegistrationPreservesCaller register (d 2) live returnQ := ⟨rfl, register_protected _ _ _⟩
+
+/-- Planted. Register normally in the nearest scope, but erase only the saved caller frame. -/
+def forgetRegister (d : Deferred O) (frames : List (Frame O)) : Option (List (Frame O)) :=
+  (register d frames).map (List.filter fun f => match f with | .ret .. => false | _ => true)
+
+/-- Planted (law `ConcreteSpec.Core.Exec.register_protected`). A successful populated
+registration loses its saved boundary when only that frame is erased. -/
+example : ¬ RegistrationPreservesCaller forgetRegister (d 2) live returnQ := by
+  intro h
+  obtain ⟨pre, he⟩ := h [.seq .skip, inner] _ rfl
+  change [.seq .skip, .scope ⟨1⟩ [y] [d 2, d 1]] ++ returnQ = _ at he
+  have hm : Frame.ret none live ∈
+      ([.seq .skip, .scope ⟨1⟩ [y] [d 2, d 1]] ++ returnQ : List (Frame ops)) := by
+    rw [he]; simp
+  simp [returnQ, emptyScope, suffix] at hm
+
+/-- Instance (law `ConcreteSpec.Core.Exec.exit_label`). Dispatch is silent; the event belongs
+to the call body, as witnessed by `raw_scope`. -/
+example : ExitSilent (Step prog) (.ret 7) live initial (inner :: suffix) := exit_label
+
+/-- Planted. Change only the label on the real scope dispatch. -/
+inductive NoisyExit : Config ops → Label ops → Config ops → Prop where
+  | dispatch : NoisyExit ⟨.exiting (.ret 7), live, initial, inner :: suffix⟩ (.emit 9) c0
+
+/-- Planted (law `ConcreteSpec.Core.Exec.exit_label`). A spurious dispatcher event is visible
+with the same source and target as the production silent transition. -/
+example : Step prog ⟨.exiting (.ret 7), live, initial, inner :: suffix⟩ .silent c0 ∧
+    ¬ ExitSilent NoisyExit (.ret 7) live initial (inner :: suffix) := by
+  refine ⟨.silent rfl, fun h => ?_⟩
+  cases h (.emit 9) c0 NoisyExit.dispatch
+
+/-- A trap retains queued calls, lifecycle state and saved caller frames without executing them. -/
+def trapped : Config ops := ⟨.trapped .abort s, live, initial,
+  [inner, outer, .functionEnd, .ret none [(t, 12)]]⟩
+
+/-- Instance (law `ConcreteSpec.Core.Exec.step_trapped`). The pending cleanup and caller do
+not prevent final recognition or allow another transition. -/
+example : (trapped.final? = some (.trapped .abort s) ↔ trapped.ctrl = .trapped .abort s) ∧
+    Blocked (Step prog) trapped := step_trapped prog _ _ _ _ _ _
+
+/-- Planted. Omit only trapped-state final recognition. -/
+def noTrapFinal? (c : Config O) : Option (Final O.Val) :=
+  match c.ctrl with | .trapped .. => none | _ => c.final?
+/-- Planted (law `ConcreteSpec.Core.Exec.step_trapped`). The real trap is no longer final. -/
+example : ¬ (noTrapFinal? trapped = some (.trapped .abort s) ↔
+    trapped.ctrl = .trapped .abort s) := by
+  intro h; cases h.mpr rfl
+
+/-- Planted. Add only recovery from this trapped state to `done`. -/
+inductive RecoverTrap : Config ops → Label ops → Config ops → Prop where
+  | recover : RecoverTrap trapped .silent { trapped with ctrl := .done }
+/-- Planted (law `ConcreteSpec.Core.Exec.step_trapped`). Recovery violates terminality while
+preserving final recognition, populated locals, lifecycle state and pending calls. -/
+example : trapped.final? = some (.trapped .abort s) ∧ ¬ Blocked RecoverTrap trapped := by
+  refine ⟨rfl, fun h => ?_⟩
+  exact h .silent _ RecoverTrap.recover
+
+/-- Instance (law `ConcreteSpec.Core.Exec.steps_from_trapped`). Recovery cannot change even
+just the control field of the populated trapped endpoint. -/
+example : ¬ Steps prog trapped [] { trapped with ctrl := .done } := by
+  intro h
+  have bad := ((steps_from_trapped prog .abort s live initial _ [] _).mp h).2
+  cases bad
+
+/-- Instance (law `ConcreteSpec.Core.Exec.steps_from_trapped`). No event can be emitted even
+when the endpoint remains exactly the trapped configuration. -/
+example : ¬ Steps prog trapped [9] trapped := by
+  intro h
+  have bad := ((steps_from_trapped prog .abort s live initial _ [9] trapped).mp h).1
+  cases bad
+
+/-- Planted. Add only silent recovery to a changed endpoint. -/
+inductive RecoverTrapSteps : Config ops → List Int → Config ops → Prop where
+  | recover : RecoverTrapSteps trapped [] { trapped with ctrl := .done }
+/-- Planted (law `ConcreteSpec.Core.Exec.steps_from_trapped`). The changed-endpoint exclusion
+fails with just the forbidden silent recovery. -/
+example : ¬ (¬ RecoverTrapSteps trapped [] { trapped with ctrl := .done }) :=
+  fun h => h .recover
+
+/-- Planted. Add only an event at the identical trapped endpoint. -/
+inductive NoisyTrapSteps : Config ops → List Int → Config ops → Prop where
+  | emit : NoisyTrapSteps trapped [9] trapped
+/-- Planted (law `ConcreteSpec.Core.Exec.steps_from_trapped`). The nonempty-trace exclusion
+fails with just the forbidden event, without changing the endpoint. -/
+example : ¬ (¬ NoisyTrapSteps trapped [9] trapped) := fun h => h .emit
+
+/-- Instance (law `ConcreteSpec.Core.Exec.abort_runs_no_cleanup`). Abort reaches its trap
+without touching registered calls, locals, activation markers or the caller frame. -/
+example : Steps prog { trapped with ctrl := .exec (.abort s) } [] trapped :=
+  (abort_runs_no_cleanup prog s live initial _ [] trapped).mpr ⟨rfl, .inr rfl⟩
+
+/-- Planted. Replace abort's terminal transition by unwinding; all later transitions are real. -/
+inductive AbortCleanupSteps : Config ops → List Int → Config ops → Prop where
+  | cleanup {tr c} : Steps prog ⟨.exiting (.ret 7), live, initial, inner :: suffix⟩ tr c →
+      AbortCleanupSteps ⟨.exec (.abort s), live, initial, inner :: suffix⟩ tr c
+/-- Planted (law `ConcreteSpec.Core.Exec.abort_runs_no_cleanup`). Wrongly starting cleanup
+emits the registered call's real event, violating abort's empty-trace conclusion. -/
+example : AbortCleanupSteps ⟨.exec (.abort s), live, initial, inner :: suffix⟩ [1] c7 ∧
+    ¬ ([1] = ([] : List Int) ∧
+      (c7 = ⟨.exec (.abort s), live, initial, inner :: suffix⟩ ∨
+       c7 = ⟨.trapped .abort s, live, initial, inner :: suffix⟩)) :=
+  ⟨.cleanup raw_scope.unsized_inv.steps_inv, by simp⟩
+
+/-- Instance (law `ConcreteSpec.Core.Exec.steps_from_trapped`). A deferred trap stops the
+program before either later registered log or activation leave, as OD68 requires. -/
+example : runFrom prog env 30 [13]
+    ⟨.exiting (.ret 7), live, initial,
+      [.scope ⟨1⟩ [] [⟨boomF, [], s⟩, d 2], outer, .functionEnd]⟩ =
+    ⟨[13], .final (.trapped .abort ⟨9⟩),
+      ⟨.trapped .abort ⟨9⟩, [], DState.life (.enter []) initial,
+        [.scope boomFn.block [] [], .functionEnd, .ret none live,
+         .resume (.exit (.ret 7)), .scope ⟨1⟩ [] [d 2], outer, .functionEnd]⟩, 27⟩ := rfl
+
+/-- Helper. A toy operand interface observing the earlier move: reading `y` traps with
+overflow exactly when `y` is marked moved. All other operands use the existing demo evaluator.
+This is evidence for abstract operand threading, not a Concrete operand policy. -/
+abbrev trapOps : Operands := { ops with eval := fun L st e => match e with
+  | .var v => if v = y ∧ y ∈ st.top then .trap .overflow else ops.eval L st e
+  | _ => ops.eval L st e }
+
+/-- Instance (law `ConcreteSpec.Core.Exec.evalArgs_first_trap`). Only the prefix's move makes
+this operand trap; evaluating the suffix would instead report division by zero. -/
+example : evalArgs trapOps [(y, 8)] initial
+    ([.move y] ++ .var y :: [.fail .divisionByZero]) = .trap .overflow :=
+  evalArgs_first_trap (O := trapOps) [(y, 8)] (.var y) .overflow
+    [.fail .divisionByZero] [.move y] initial ⟨4, [[y, x, p], [t]]⟩ [8] rfl rfl
+
+/-- Planted. Discard only each successful operand's updated store. -/
+def lostStateArgs (O : Operands) (L : AList Var O.Val) :
+    O.Store → List O.Expr → Res (List O.Val × O.Store)
+  | st, [] => .ok ([], st)
+  | st, e :: es => (O.eval L st e).bind fun (v, _) =>
+      (lostStateArgs O L st es).map fun (vs, st₂) => (v :: vs, st₂)
+/-- Planted (law `ConcreteSpec.Core.Exec.evalArgs_first_trap`). Losing the prefix state
+prevents the state-dependent overflow, exposing the later division-by-zero trap. -/
+example : lostStateArgs trapOps [(y, 8)] initial
+    [.move y, .var y, .fail .divisionByZero] = .trap .divisionByZero ∧
+    lostStateArgs trapOps [(y, 8)] initial
+      [.move y, .var y, .fail .divisionByZero] ≠ .trap .overflow := by decide
+
+/-- Planted. Continue past a trap only when a later operand exists. Successful effects
+remain threaded; a final trap is still propagated. -/
+def pastTrapArgs (O : Operands) (L : AList Var O.Val) :
+    O.Store → List O.Expr → Res (List O.Val × O.Store)
+  | st, [] => .ok ([], st)
+  | st, e :: es => match O.eval L st e with
+    | .ok (v, st₁) => (pastTrapArgs O L st₁ es).map fun (vs, st₂) => (v :: vs, st₂)
+    | .trap kd => match es with | [] => .trap kd | _ :: _ => pastTrapArgs O L st es
+    | .stuck => .stuck
+/-- Planted (law `ConcreteSpec.Core.Exec.evalArgs_first_trap`). Continuing replaces the
+state-dependent first trap by the suffix's distinct trap. -/
+example : pastTrapArgs trapOps [(y, 8)] initial
+    [.move y, .var y, .fail .divisionByZero] = .trap .divisionByZero ∧
+    pastTrapArgs trapOps [(y, 8)] initial
+      [.move y, .var y, .fail .divisionByZero] ≠ .trap .overflow := by decide
+
+/-- Planted. Swallow only an argument trap; successful prefix effects remain threaded. -/
+def swallowTrapEvalArgs (O : Operands) (L : AList Var O.Val) :
+    O.Store → List O.Expr → Res (List O.Val × O.Store)
+  | st, [] => .ok ([], st)
+  | st, e :: es => match O.eval L st e with
+    | .ok (v, st₁) => (swallowTrapEvalArgs O L st₁ es).map fun (vs, st₂) => (v :: vs, st₂)
+    | .trap _ => .ok ([], st)
+    | .stuck => .stuck
+/-- Planted (law `ConcreteSpec.Core.Exec.evalArgs_first_trap`). Swallowing the same first
+trap returns the moved prefix and its updated state rather than propagating overflow. -/
+example : swallowTrapEvalArgs trapOps [(y, 8)] initial
+    [.move y, .var y, .fail .divisionByZero] = .ok ([8], ⟨4, [[y, x, p], [t]]⟩) ∧
+    swallowTrapEvalArgs trapOps [(y, 8)] initial
+      [.move y, .var y, .fail .divisionByZero] ≠ .trap .overflow := by decide
+
+
+/-- Helper. With only inner dispatch omitted, the higher-order final-drop premise remains
+executable: the outer call still dispatches and both scope drops retain their callbacks. -/
+private theorem mutant_base_execution : ∀ st tr,
+    Performed prog [.drop [y] live [(y, 8)], .call [(y, 8)] (d 2), .drop [] [(y, 8)] []]
+      live st tr [] middle →
+    BoundaryRun prog (NoDispatchStep prog) (.ret 7) suffix [.scope ⟨1⟩ [y] [], outer] live st
+      [.drop [y] live [(y, 8)], .call [(y, 8)] (d 2), .drop [] [(y, 8)] []] tr [] middle := by
+  intro st tr h
+  cases h with
+  | drop hd h =>
+    cases h with
+    | call hc h =>
+      cases h with
+      | drop hd' h =>
+        cases h
+        rename_i stDrop trCall stCall q
+        refine BoundaryRun.pass (pre := [.scope ⟨1⟩ [y] [], outer])
+          (st' := stDrop) (pre' := [outer]) (by simp) (by simp) ?_ ?_
+        · exact .retain (.silent (by simp only [List.cons_append, List.nil_append, step, stepExit, hd, Option.map_some]; rfl)) True.intro
+        · refine BoundaryRun.call (pre := [outer]) (rest := [.scope ⟨2⟩ [] []]) (by simp)
+            (.retain (.silent rfl) (by change (if (⟨2⟩ : BlockId) = ⟨1⟩ then False else True); decide)) hc (.retain (.silent rfl) True.intro) ?_
+          simpa only [leaving, List.append_nil] using
+            (BoundaryRun.pass (pre := [.scope ⟨2⟩ [] []]) (pre' := []) (by simp) (by simp)
+              (NoDispatchStep.retain (Step.silent (by simp only [List.cons_append, List.nil_append, step, stepExit, hd', Option.map_some]; rfl)) True.intro)
+              BoundaryRun.stop)
+
+/-- Planted. The call-then-drop reconstruction's higher-order premise is checked against the
+mutant itself. Omitting only the inner dispatch cannot be hidden by a broken base premise. -/
+example : (∀ st tr,
+    Performed prog [.drop [y] live [(y, 8)], .call [(y, 8)] (d 2), .drop [] [(y, 8)] []]
+      live st tr [] middle →
+    BoundaryRun prog (NoDispatchStep prog) (.ret 7) suffix [.scope ⟨1⟩ [y] [], outer] live st
+      [.drop [y] live [(y, 8)], .call [(y, 8)] (d 2), .drop [] [(y, 8)] []] tr [] middle) ∧
+    Performed prog actions live initial [1, 2] [] middle ∧
+    ¬ BoundaryRun prog (NoDispatchStep prog) (.ret 7) suffix [inner, outer]
+      live initial actions [1, 2] [] middle := ⟨mutant_base_execution, performed, no_dispatch⟩
+
+/-- Helper. A concrete order-sensitive effect witness for cleanup: bump before the late
+counter read emits 5; reversing only those two registered calls emits 4. Both restore the
+same populated locals and produce the same final counter and activation state. This uses
+the admitted sole driver, not another execution policy. -/
+def orderFrames (reverse : Bool) : List (Frame ops) :=
+  [.scope ⟨1⟩ [y] (if reverse then [⟨logF, [.counter], s⟩, ⟨bumpF, [], s⟩]
+      else [⟨bumpF, [], s⟩, ⟨logF, [.counter], s⟩])] ++ suffix
+/-- Helper. Positive state-dependent call-order witness accompanying the raw cleanup law. -/
+example : (runFrom prog env 40 [13] ⟨.exiting (.ret 7), live, initial, orderFrames false⟩).events = [13, 5] ∧
+    (runFrom prog env 40 [13] ⟨.exiting (.ret 7), live, initial, orderFrames false⟩).residual.store =
+      ⟨5, [[p], [t]]⟩ := ⟨rfl, rfl⟩
+/-- Planted. Reverse just the registered calls. The counter read now observes the earlier
+state, despite identical final counter, locals and lifecycle state. -/
+example : (runFrom prog env 40 [13] ⟨.exiting (.ret 7), live, initial, orderFrames true⟩).events = [13, 4] ∧
+    (runFrom prog env 40 [13] ⟨.exiting (.ret 7), live, initial, orderFrames true⟩).residual.store =
+      ⟨5, [[p], [t]]⟩ ∧
+    (runFrom prog env 40 [13] ⟨.exiting (.ret 7), live, initial, orderFrames true⟩).residual.locals = [(y, 8)] :=
+  ⟨rfl, rfl, rfl⟩
+
+end CleanupEvidence
 end ConcreteSpec.Core.Exec
