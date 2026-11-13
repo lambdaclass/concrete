@@ -2,6 +2,7 @@ import ConcreteSpec.Spec.Basics
 import ConcreteSpec.Spec.Exec
 import ConcreteSpec.Spec.Ident
 import ConcreteSpec.Spec.Outcome
+import ConcreteSpec.Spec.Scalar
 
 /-!
 # Elementary execution and structured exits (F09a, E1)
@@ -66,17 +67,22 @@ theorem steps_request (P : Program O) (dst : Option Var) (p : O.Prim) (args : Li
   apply Step.prim (by simp only [step, onRes, he]; rfl) ha
   simp [hv, hb]
 
-/-- Helper. In the demo language, a deferred `Demo.logF` call on 1 completes from any locals,
-store, and frame stack, emitting [1]. Crosses the function-end boundary on the
+/-- Helper. In the demo language, a deferred `Demo.logF` call on v completes from any locals,
+store, and frame stack, emitting [v]. Crosses the function-end boundary on the
 ordinary call; caller locals are arbitrary. This is demo completion, not a
 general primitive-response law. -/
-theorem demo_log_completes (L : AList Var Demo.ops.Val) (st : Demo.ops.Store) :
-    Completes Demo.prog L ⟨Demo.logF, [.lit 1], Demo.s⟩ st [1] st := by
+theorem demo_log_value_completes (v : Int) (L : AList Var Demo.ops.Val) (st : Demo.ops.Store) :
+    Completes Demo.prog L ⟨Demo.logF, [.lit v], Demo.s⟩ st [v] st := by
   intro k
   refine steps_next rfl (steps_request_inv (O := Demo.ops) (P := Demo.prog)
-    (a := ⟨some (1 : Int), .ok (0 : Int), Demo.DState.life (.enter [Demo.x]) st⟩) (tr := []) rfl
+    (a := ⟨some v, .ok (0 : Int), Demo.DState.life (.enter [Demo.x]) st⟩) (tr := []) rfl
     (by simp [Demo.ops, Demo.logFn]) rfl ?_)
   exact steps_next rfl (steps_next rfl (steps_next rfl (Steps.refl _)))
+
+/-- Helper. Specialization of demo completion to event 1. -/
+theorem demo_log_completes (L : AList Var Demo.ops.Val) (st : Demo.ops.Store) :
+    Completes Demo.prog L ⟨Demo.logF, [.lit 1], Demo.s⟩ st [1] st :=
+  demo_log_value_completes 1 L st
 
 /-- Helper. In the demo language, a deferred `Demo.bumpF` call completes from any locals,
 store, and frame stack, incrementing the counter. Crosses the same function-end
@@ -384,7 +390,7 @@ theorem continue_reaches_loop (P : Program O) (l : LoopId) (cr b : Stmt O) (t : 
 
 /-! ## Concrete applications and isolated planted rules
 
-Each dispatcher mutation below removes exactly one named transition rule and
+Each dispatcher mutation below removes or reorders one named transition rule and
 otherwise delegates to `step`. `MutSteps` is a proof-only trace relation over
 that dispatcher, not a second executable fuel/oracle driver. Premises use the
 original operand contracts and lifecycle admissions unchanged.
@@ -392,10 +398,11 @@ original operand contracts and lifecycle admissions unchanged.
 namespace CoreEvidence
 open Demo
 
-/-- Planted. Remove a single transition rule; all other cases use the real dispatcher. -/
+/-- Planted. Remove or reorder a single rule; all other cases use the real dispatcher. -/
 inductive MissingRule where
   | request | registerSecond | retValue | returnBind | exitCleanup | doneCleanup
   | exitSeq | functionLeave | breakHere | continueHere
+  | reverseExit | reverseDone | outerFirst | fifoRegister | cleanupBeforeValue | bindBeforeLeave
   deriving DecidableEq
 
 /-- Planted support. Find existing registrations through sequencing frames. -/
@@ -404,9 +411,33 @@ def hasRegistered : List (Frame O) → Bool
   | .scope _ _ (_ :: _) :: _ => true
   | _ => false
 
-/-- Planted. Each case deletes only its named rule, with no change to operands or admission. -/
+/-- Planted support. FIFO registration changes only insertion order. -/
+def fifoRegister (d : Deferred O) : List (Frame O) → Option (List (Frame O))
+  | .seq t :: k => (fifoRegister d k).map (.seq t :: ·)
+  | .scope b dm ds :: k => some (.scope b dm (ds ++ [d]) :: k)
+  | _ => none
+
+/-- Planted. Each case changes only its named rule, with no change to operands or admission. -/
 def missingStep (r : MissingRule) (P : Program O) (c : Config O) : Option (Out O) :=
   match r, c.ctrl, c.frames with
+  | .bindBeforeLeave, .exiting (.ret v), .functionEnd :: .ret dst caller :: k => do
+      let st ← bindLife O dst c.store
+      let st' ← O.life .leave st
+      pure (.next ⟨.done, bindDst dst v caller, st', k⟩)
+  | .cleanupBeforeValue, .exec (.ret e site), .scope b dm (d :: ds) :: k =>
+      some (.next ⟨.exec (.seq d.stmt (.ret e site)), c.locals, c.store,
+        .scope b dm ds :: k⟩)
+  | .fifoRegister, .exec (.defer f args site), _ =>
+      (fifoRegister ⟨f, args, site⟩ c.frames).map fun k =>
+        .next ⟨.done, c.locals, c.store, k⟩
+  | .reverseExit, .exiting e, .scope b dm ds :: k =>
+      step P ⟨.exiting e, c.locals, c.store, .scope b dm (ds.reverse.take 1 ++ ds.dropLast) :: k⟩
+  | .reverseDone, .done, .scope b dm ds :: k =>
+      step P ⟨.done, c.locals, c.store, .scope b dm (ds.reverse.take 1 ++ ds.dropLast) :: k⟩
+  | .outerFirst, .exiting e,
+      .scope b dm (d :: ds) :: .scope b' dm' (d' :: ds') :: k =>
+      step P ⟨.exiting e, c.locals, c.store,
+        .scope b' dm' (d' :: ds') :: .scope b dm (d :: ds) :: k⟩
   | .request, .exec (.prim ..), _ => none
   | .registerSecond, .exec (.defer ..), _ =>
       if hasRegistered c.frames then none else step P c
@@ -495,67 +526,74 @@ theorem restrict_dom_drops_planted : p ∉ dom [(x, (10 : Int))] ∧
 /-- A real accepted answer, unchanged in the primitive mutation. -/
 def logAns : Answer Int Int DState := ⟨some 1, .ok 0, .init⟩
 
-/-- Instance (law `steps_request`). An allowed answer completes the log request. -/
+/-- Instance (law `steps_request`). The answer binds x to 0, preserves y and the
+continuation, and emits 1; dropping the binding or frames changes the result. -/
 theorem steps_request_instance :
-    Step prog ⟨.exec (.prim none .log [.lit 1] s), [], .init, []⟩ logAns.label
-      ⟨.done, [], .init, []⟩ :=
-  steps_request prog none .log [.lit 1] s [] .init .init .init [1] [] logAns 0 rfl rfl rfl rfl
+    Step prog ⟨.exec (.prim (some x) .log [.lit 1] s), [(y, 12)], .init, [.seq .skip]⟩ logAns.label
+      ⟨.done, [(x, 0), (y, 12)], .init, [.seq .skip]⟩ :=
+  steps_request prog (some x) .log [.lit 1] s [(y, 12)] .init .init .init [1] [.seq .skip] logAns 0 rfl rfl rfl rfl
 
 /-- Planted (law `steps_request`). Only primitive response admission is removed; all premises hold. -/
-theorem steps_request_planted : evalArgs ops [] .init [.lit 1] = .ok ([1], .init) ∧
+theorem steps_request_planted : evalArgs ops [(y, 12)] .init [.lit 1] = .ok ([1], .init) ∧
     ops.allows .log [1] .init logAns = true ∧ logAns.result = .ok 0 ∧
-    bindLife ops none logAns.store = some .init ∧
-    ¬ MutStep .request prog ⟨.exec (.prim none .log [.lit 1] s), [], .init, []⟩ logAns.label
-      ⟨.done, [], .init, []⟩ :=
+    bindLife ops (some x) logAns.store = some .init ∧
+    ¬ MutStep .request prog ⟨.exec (.prim (some x) .log [.lit 1] s), [(y, 12)], .init, [.seq .skip]⟩ logAns.label
+      ⟨.done, [(x, 0), (y, 12)], .init, [.seq .skip]⟩ :=
   ⟨rfl, rfl, rfl, rfl, missing_blocked rfl⟩
 
-/-- Instance (law `step_ret`). A move records its ownership change before unwinding. -/
+/-- Instance (law `step_ret`). Moving p and reading the counter returns 7 and
+records the move before cleanup. Running the deferred bump first would return 8. -/
 theorem step_ret_instance :
-    step prog ⟨.exec (.ret (.move p) s), [(p, 7)], .init, [.seq .skip]⟩ =
-      some (.next ⟨.exiting (.ret 7), [(p, 7)], DState.onTop (p :: ·) .init, [.seq .skip]⟩) :=
-  step_ret prog (.move p) s [(p, 7)] .init _ [.seq .skip] 7 rfl
+    step prog ⟨.exec (.ret (.arith .add (.move p) .counter) s), [(p, 7)], ⟨0, [[]]⟩, [.scope ⟨1⟩ [p] [⟨bumpF, [], s⟩]]⟩ =
+      some (.next ⟨.exiting (.ret 7), [(p, 7)], DState.onTop (p :: ·) ⟨0, [[]]⟩, [.scope ⟨1⟩ [p] [⟨bumpF, [], s⟩]]⟩) :=
+  step_ret prog (.arith .add (.move p) .counter) s [(p, 7)] ⟨0, [[]]⟩ _ [.scope ⟨1⟩ [p] [⟨bumpF, [], s⟩]] 7 rfl
 
 /-- Planted (law `step_ret`). The same evaluable move cannot return when only return is removed. -/
-theorem step_ret_planted : ops.eval [(p, 7)] .init (.move p) =
-      .ok (7, DState.onTop (p :: ·) .init) ∧
-    missingStep .retValue prog ⟨.exec (.ret (.move p) s), [(p, 7)], .init, [.seq .skip]⟩ ≠
-      some (.next ⟨.exiting (.ret 7), [(p, 7)], DState.onTop (p :: ·) .init, [.seq .skip]⟩) :=
+theorem step_ret_planted : ops.eval [(p, 7)] ⟨0, [[]]⟩ (.arith .add (.move p) .counter) =
+      .ok (7, DState.onTop (p :: ·) ⟨0, [[]]⟩) ∧
+    missingStep .retValue prog ⟨.exec (.ret (.arith .add (.move p) .counter) s), [(p, 7)], ⟨0, [[]]⟩, [.scope ⟨1⟩ [p] [⟨bumpF, [], s⟩]]⟩ ≠
+      some (.next ⟨.exiting (.ret 7), [(p, 7)], DState.onTop (p :: ·) ⟨0, [[]]⟩, [.scope ⟨1⟩ [p] [⟨bumpF, [], s⟩]]⟩) :=
   ⟨rfl, by intro h; cases h⟩
 
-/-- Instance (law `step_return_caller`). Distinct callee locals are discarded and result is bound. -/
+/-- Instance (law `step_return_caller`). Callee p is discarded, caller y restored,
+x bound to 7, and the moved marker for x cleared in the caller activation. -/
 theorem step_return_caller_instance :
-    step prog ⟨.exiting (.ret 7), [(p, 99)], .init, [.ret (some x) [(y, 12)]]⟩ =
-      some (.next ⟨.done, bindDst (some x) 7 [(y, 12)], .init, []⟩) :=
-  step_return_caller prog 7 (some x) [(y, 12)] [(p, 99)] .init [] .init rfl
+    step prog ⟨.exiting (.ret 7), [(p, 99)], ⟨0, [[x, p], [y]]⟩, [.ret (some x) [(y, 12)]]⟩ =
+      some (.next ⟨.done, bindDst (some x) 7 [(y, 12)], ⟨0, [[p], [y]]⟩, []⟩) :=
+  step_return_caller prog 7 (some x) [(y, 12)] [(p, 99)] ⟨0, [[x, p], [y]]⟩ [] ⟨0, [[p], [y]]⟩ rfl
 
 /-- Planted (law `step_return_caller`). Destination admission still succeeds; only caller return is removed. -/
-theorem step_return_caller_planted : bindLife ops (some x) .init = some .init ∧
-    missingStep .returnBind prog ⟨.exiting (.ret 7), [(p, 99)], .init, [.ret (some x) [(y, 12)]]⟩ ≠
-      some (.next ⟨.done, bindDst (some x) 7 [(y, 12)], .init, []⟩) :=
+theorem step_return_caller_planted : bindLife ops (some x) ⟨0, [[x, p], [y]]⟩ = some ⟨0, [[p], [y]]⟩ ∧
+    missingStep .returnBind prog ⟨.exiting (.ret 7), [(p, 99)], ⟨0, [[x, p], [y]]⟩, [.ret (some x) [(y, 12)]]⟩ ≠
+      some (.next ⟨.done, bindDst (some x) 7 [(y, 12)], ⟨0, [[p], [y]]⟩, []⟩) :=
   ⟨rfl, by intro h; cases h⟩
 
-/-- A silent state change and an observable deferred call distinguish cleanup order. -/
-def d1 : Deferred ops := ⟨bumpF, [], s⟩
+/-- Distinct events 1 and 2 distinguish both cleanup orders. -/
+def d1 : Deferred ops := ⟨logF, [.lit 1], s⟩
 /-- The second distinct deferred call. -/
-def d2 : Deferred ops := ⟨logF, [.lit 1], s⟩
-/-- State after the silent bump. -/
-def afterBumpLog : DState := { DState.init with counter := 1 }
+def d2 : Deferred ops := ⟨logF, [.lit 2], s⟩
+/-- Logging preserves the store. -/
+def afterLogs : DState := DState.init
 
 /-- Helper. Real calls satisfy both completion premises, with a nonempty event trace. -/
-private theorem realCalls : RunsAll prog [] [d1, d2] .init ([] ++ [1]) afterBumpLog :=
-  .cons (demo_bump_completes [] .init) (.cons (demo_log_completes [] afterBumpLog) (.nil _))
+private theorem realCalls : RunsAll prog [] [d1, d2] .init ([1] ++ [2]) afterLogs :=
+  .cons (demo_log_completes [] .init) (.cons (demo_log_value_completes 2 [] afterLogs) (.nil _))
 
 /-- Helper. A real enclosing scope supplies the cleanup prefix premise. -/
-private theorem realCleanup : Cleans prog [.scope ⟨1⟩ [] [d2]] [] .init ([1] ++ []) .init :=
-  .scope (.cons (demo_log_completes [] .init) (.nil _)) rfl (.nil _ _)
+private theorem realCleanup (st : DState) :
+    Cleans prog [.scope ⟨1⟩ [] [d1], .scope ⟨2⟩ [] [d2]] [] st [1, 2] st := by
+  have hd : dropOut ops [] [] st = some st := by
+    rcases st with ⟨counter, moved⟩
+    cases moved <;> simp [dropOut, dead, dom, ops, DState.life, DState.onTop]
+  exact .scope (.cons (demo_log_completes [] st) (.nil _)) hd
+    (.scope (.cons (demo_log_value_completes 2 [] st) (.nil _)) hd (.nil _ _))
 
 /-- Helper. A scope is passable for all three structured exits. -/
-private theorem passes_single_scope (e : Exit Int) :
-    ∀ (f : Frame ops), f ∈ ([.scope ⟨1⟩ [] [d2]] : List (Frame ops)) → Passes e f := by
+private theorem passes_nested_scopes (e : Exit Int) :
+    ∀ (f : Frame ops), f ∈ ([.scope ⟨1⟩ [] [d1], .scope ⟨2⟩ [] [d2]] : List (Frame ops)) → Passes e f := by
   intro f hf
-  simp only [List.mem_singleton] at hf
-  subst f
-  trivial
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hf
+  rcases hf with rfl | rfl <;> trivial
 
 /-- Instance (law `ConcreteSpec.Core.Exec.two_defers_register`, case `lifo`). A block registering
 `d1` then `d2` reaches `Stmt.skip` with its scope holding `d2` before `d1`. -/
@@ -584,60 +622,118 @@ theorem done_scope_next_instance : Step prog ⟨.done, [], .init, .scope ⟨1⟩
   done_scope_next prog ⟨1⟩ [] d1 [d2] [] .init [] .silent
     ⟨.exec d1.stmt, [], .init, .resume .fall :: .scope ⟨1⟩ [] [d2] :: []⟩
 
-/-- Instance (law `ConcreteSpec.Core.Exec.exit_scope_runs_defers`, case `bump_then_log`). Exiting a
-scope that registered `logFn` then `bumpFn` runs `bumpFn` then `logFn` and drops the scope. -/
-theorem exit_scope_runs_defers_instance : Steps prog ⟨.exiting (.ret 0), [], .init, .scope ⟨1⟩ [] [d1, d2] :: []⟩ ([] ++ [1])
-    ⟨.exiting (.ret 0), restrict [] [], afterBumpLog, []⟩ :=
-  exit_scope_runs_defers prog (.ret 0) ⟨1⟩ [] [] [] [d1, d2] .init afterBumpLog ([] ++ [1])
-    afterBumpLog (.cons (demo_bump_completes [] .init) (.cons (demo_log_completes [] afterBumpLog) (.nil _))) rfl
+/-- Instance (law `ConcreteSpec.Core.Exec.exit_scope_runs_defers`, case `log_one_then_two`). Exiting a
+scope that registered log(2) then log(1) emits [1, 2] and drops the scope. -/
+theorem exit_scope_runs_defers_instance : Steps prog ⟨.exiting (.ret 0), [], .init, .scope ⟨1⟩ [] [d1, d2] :: []⟩ ([1] ++ [2])
+    ⟨.exiting (.ret 0), restrict [] [], afterLogs, []⟩ :=
+  exit_scope_runs_defers prog (.ret 0) ⟨1⟩ [] [] [] [d1, d2] .init afterLogs ([1] ++ [2])
+    afterLogs (.cons (demo_log_completes [] .init) (.cons (demo_log_value_completes 2 [] afterLogs) (.nil _))) rfl
 
-/-- Instance (law `ConcreteSpec.Core.Exec.done_scope_runs_defers`, case `bump_then_log`). Completing
-a scope that registered `logFn` then `bumpFn` runs `bumpFn` then `logFn` and drops the scope. -/
-theorem done_scope_runs_defers_instance : Steps prog ⟨.done, [], .init, .scope ⟨1⟩ [] [d1, d2] :: []⟩ ([] ++ [1])
-    ⟨.done, restrict [] [], afterBumpLog, []⟩ :=
-  done_scope_runs_defers prog ⟨1⟩ [] [] [] [d1, d2] .init afterBumpLog ([] ++ [1]) afterBumpLog
-    (.cons (demo_bump_completes [] .init) (.cons (demo_log_completes [] afterBumpLog) (.nil _))) rfl
+/-- Instance (law `ConcreteSpec.Core.Exec.done_scope_runs_defers`, case `log_one_then_two`). Completing
+a scope that registered log(2) then log(1) emits [1, 2] and drops the scope. -/
+theorem done_scope_runs_defers_instance : Steps prog ⟨.done, [], .init, .scope ⟨1⟩ [] [d1, d2] :: []⟩ ([1] ++ [2])
+    ⟨.done, restrict [] [], afterLogs, []⟩ :=
+  done_scope_runs_defers prog ⟨1⟩ [] [] [] [d1, d2] .init afterLogs ([1] ++ [2]) afterLogs
+    (.cons (demo_log_completes [] .init) (.cons (demo_log_value_completes 2 [] afterLogs) (.nil _))) rfl
 
-/-- Instance (law `ConcreteSpec.Core.Exec.unwind_runs_plan`, case `single_scope`). Unwinding a
-single scope frame runs its deferred calls and reaches the empty boundary. -/
-theorem unwind_runs_plan_instance : Steps prog ⟨.exiting (.ret 0), [], .init, [.scope ⟨1⟩ [] [d2]] ++ []⟩ ([1] ++ [])
-    ⟨.exiting (.ret 0), unwindLocals [.scope ⟨1⟩ [] [d2]] [], .init, []⟩ :=
-  unwind_runs_plan prog (.ret 0) [] [.scope ⟨1⟩ [] [d2]] [] .init .init ([1] ++ [])
-    (.scope (.cons (demo_log_completes [] .init) (.nil _)) rfl (.nil _ _))
-    (passes_single_scope (.ret 0))
+/-- Instance (law `ConcreteSpec.Core.Exec.unwind_runs_plan`, case `nested_scopes`). Unwinding
+two nested scope frames emits inner 1 before outer 2 and reaches the empty boundary. -/
+theorem unwind_runs_plan_instance : Steps prog ⟨.exiting (.ret 0), [], .init, [.scope ⟨1⟩ [] [d1], .scope ⟨2⟩ [] [d2]] ++ []⟩ ([1] ++ ([2] ++ []))
+    ⟨.exiting (.ret 0), unwindLocals [.scope ⟨1⟩ [] [d1], .scope ⟨2⟩ [] [d2]] [], .init, []⟩ :=
+  unwind_runs_plan prog (.ret 0) [] [.scope ⟨1⟩ [] [d1], .scope ⟨2⟩ [] [d2]] [] .init .init ([1] ++ ([2] ++ []))
+    (.scope (.cons (demo_log_completes [] .init) (.nil _)) rfl
+      (.scope (.cons (demo_log_value_completes 2 [] .init) (.nil _)) rfl (.nil _ _)))
+    (passes_nested_scopes (.ret 0))
 
 /-- Instance (law `ConcreteSpec.Core.Exec.return_reaches_caller`, case `unwind_and_return`). A
-return of 7 unwinds the enclosing scope, runs its deferred `logFn`, leaves the activation, and
+return of 7 unwinds two scopes, emits inner 1 then outer 2, leaves the activation, and
 binds `x` to 7 in the caller. -/
 theorem return_reaches_caller_instance : Steps prog
-    ⟨.exiting (.ret 7), [], .init, [.scope ⟨1⟩ [] [d2]] ++ .functionEnd :: .ret (some x) [] :: []⟩ ([1] ++ [])
-    ⟨.done, bindDst (some x) 7 [], .init, []⟩ :=
-  return_reaches_caller prog 7 (some x) [] [] [.scope ⟨1⟩ [] [d2]] [] .init .init ([1] ++ [])
-    .init .init
-    (.scope (.cons (demo_log_completes [] .init) (.nil _)) rfl (.nil _ _))
-    (passes_single_scope (.ret 7)) rfl rfl
+    ⟨.exiting (.ret 7), [], ⟨0, [[p], [x]]⟩,
+      [.scope ⟨1⟩ [] [d1], .scope ⟨2⟩ [] [d2], .functionEnd, .ret (some x) [(y, 12)]]⟩ [1, 2]
+    ⟨.done, bindDst (some x) 7 [(y, 12)], ⟨0, [[]]⟩, []⟩ :=
+  return_reaches_caller prog 7 (some x) [(y, 12)] []
+    [.scope ⟨1⟩ [] [d1], .scope ⟨2⟩ [] [d2]] [] ⟨0, [[p], [x]]⟩ ⟨0, [[p], [x]]⟩ [1, 2]
+    ⟨0, [[x]]⟩ ⟨0, [[]]⟩ (realCleanup _) (passes_nested_scopes (.ret 7)) rfl rfl
 
 /-- Instance (law `ConcreteSpec.Core.Exec.break_reaches_loop`, case `unwind_and_break`). A `Stmt.brk`
-unwinds the loop body's scope, runs its deferred `logFn`, and exits the target loop `Frame.body`. -/
+unwinds nested scopes, emits inner 1 then outer 2, and exits the target loop `Frame.body`. -/
 theorem break_reaches_loop_instance : Steps prog
     ⟨.exiting (.brk ⟨1⟩), [], .init,
-      [.scope ⟨1⟩ [] [d2]] ++ .body ⟨1⟩ .skip (.lit 1) .skip s :: []⟩ ([1] ++ [])
-    ⟨.done, unwindLocals [.scope ⟨1⟩ [] [d2]] [], .init, []⟩ :=
-  break_reaches_loop prog ⟨1⟩ .skip .skip (.lit 1) s [] [.scope ⟨1⟩ [] [d2]] [] .init .init
-    ([1] ++ [])
-    (.scope (.cons (demo_log_completes [] .init) (.nil _)) rfl (.nil _ _))
-    (passes_single_scope (.brk ⟨1⟩))
+      [.scope ⟨1⟩ [] [d1], .scope ⟨2⟩ [] [d2]] ++ .body ⟨1⟩ .skip (.lit 1) .skip s :: []⟩ ([1] ++ ([2] ++ []))
+    ⟨.done, unwindLocals [.scope ⟨1⟩ [] [d1], .scope ⟨2⟩ [] [d2]] [], .init, []⟩ :=
+  break_reaches_loop prog ⟨1⟩ .skip .skip (.lit 1) s [] [.scope ⟨1⟩ [] [d1], .scope ⟨2⟩ [] [d2]] [] .init .init
+    ([1] ++ ([2] ++ []))
+    (.scope (.cons (demo_log_completes [] .init) (.nil _)) rfl
+      (.scope (.cons (demo_log_value_completes 2 [] .init) (.nil _)) rfl (.nil _ _)))
+    (passes_nested_scopes (.brk ⟨1⟩))
 
 /-- Instance (law `ConcreteSpec.Core.Exec.continue_reaches_loop`, case `unwind_and_continue`). A
-`Stmt.cont` unwinds the loop body's scope, runs its deferred `logFn`, and restarts the target loop. -/
+`Stmt.cont` unwinds nested scopes, emits inner 1 then outer 2, and restarts the target loop. -/
 theorem continue_reaches_loop_instance : Steps prog
     ⟨.exiting (.cont ⟨1⟩), [], .init,
-      [.scope ⟨1⟩ [] [d2]] ++ .body ⟨1⟩ .skip (.lit 1) .skip s :: []⟩ ([1] ++ [])
-    ⟨.exec (.loop ⟨1⟩ .skip (.lit 1) .skip s), unwindLocals [.scope ⟨1⟩ [] [d2]] [], .init, []⟩ :=
-  continue_reaches_loop prog ⟨1⟩ .skip .skip (.lit 1) s [] [.scope ⟨1⟩ [] [d2]] [] .init .init
-    ([1] ++ [])
-    (.scope (.cons (demo_log_completes [] .init) (.nil _)) rfl (.nil _ _))
-    (passes_single_scope (.cont ⟨1⟩))
+      [.scope ⟨1⟩ [] [d1], .scope ⟨2⟩ [] [d2]] ++ .body ⟨1⟩ .skip (.lit 1) .skip s :: []⟩ ([1] ++ ([2] ++ []))
+    ⟨.exec (.loop ⟨1⟩ .skip (.lit 1) .skip s), unwindLocals [.scope ⟨1⟩ [] [d1], .scope ⟨2⟩ [] [d2]] [], .init, []⟩ :=
+  continue_reaches_loop prog ⟨1⟩ .skip .skip (.lit 1) s [] [.scope ⟨1⟩ [] [d1], .scope ⟨2⟩ [] [d2]] [] .init .init
+    ([1] ++ ([2] ++ []))
+    (.scope (.cons (demo_log_completes [] .init) (.nil _)) rfl
+      (.scope (.cons (demo_log_value_completes 2 [] .init) (.nil _)) rfl (.nil _ _)))
+    (passes_nested_scopes (.cont ⟨1⟩))
+
+/-- Helper. Every allowed demo log response emits its argument. -/
+private theorem allowed_log_event (v : Int) (st : DState) (a : Answer Int Int DState)
+    (ha : ops.allows .log [v] st a = true) : a.event = some v := by
+  rcases a with ⟨event, result, store⟩
+  cases event with
+  | none => simp at ha
+  | some ev =>
+    cases result with
+    | error err => simp at ha
+    | ok n =>
+      by_cases hn : n = 0
+      · subst n; simp [ops] at ha; simp [ha.1]
+      · simp [ops, hn] at ha
+
+/-- Helper. An accepted log(2) request cannot begin a trace with 1, for any
+continuation or final configuration. This checks all allowed answers, not one oracle. -/
+private theorem log_two_not_one {r : MissingRule} {c target : Config ops}
+    {st : DState} {k : Answer Int Int DState → Option (Config ops)}
+    (hd : missingStep r prog c = some (.request .log [2] s st k))
+    : ¬ MutSteps r prog c [1, 2] target := by
+  intro h
+  generalize ht : ([1, 2] : List Int) = tr at h
+  cases h with
+  | refl => cases ht
+  | step hs tail =>
+    cases hs with
+    | silent he => rw [hd] at he; cases he
+    | prim he ha hk =>
+      rw [hd] at he
+      simp only [Option.some.injEq, Out.request.injEq] at he
+      rcases he with ⟨rfl, rfl, rfl, rfl, rfl⟩
+      have hev := allowed_log_event _ _ _ ha
+      simp [Answer.label, hev, Label.events] at ht
+
+
+/-- Helper. A log(1) request cannot reach a distinct target without emitting. -/
+private theorem log_one_not_empty {r : MissingRule} {c target : Config ops}
+    {st : DState} {k : Answer Int Int DState → Option (Config ops)}
+    (hd : missingStep r prog c = some (.request .log [1] s st k))
+    (hne : c ≠ target) : ¬ MutSteps r prog c [] target := by
+  intro h
+  generalize ht : ([] : List Int) = tr at h
+  cases h with
+  | refl => exact hne rfl
+  | step hs tail =>
+    cases hs with
+    | silent he => rw [hd] at he; cases he
+    | prim he ha hk =>
+      rw [hd] at he
+      simp only [Option.some.injEq, Out.request.injEq] at he
+      rcases he with ⟨rfl, rfl, rfl, rfl, rfl⟩
+      have hev := allowed_log_event _ _ _ ha
+      simp [Answer.label, hev, Label.events] at ht
+
 
 /-- Planted (law `two_defers_register`). Only registration into an already populated scope
 is removed. The first registration and all sequencing still run. -/
@@ -682,20 +778,20 @@ theorem done_scope_next_planted :
 
 /-- Planted (law `exit_scope_runs_defers`). Both real completion and drop premises hold;
 only the named cleanup dispatch is missing. Its trace cannot emit the required log. -/
-theorem exit_scope_runs_defers_planted : RunsAll prog [] [d1, d2] .init ([] ++ [1]) afterBumpLog ∧
-    dropOut ops [] [] afterBumpLog = some afterBumpLog ∧
-    ¬ MutSteps .exitCleanup prog ⟨.exiting (.ret 0), [], .init, [.scope ⟨1⟩ [] [d1, d2]]⟩ ([] ++ [1])
-      ⟨.exiting (.ret 0), restrict [] [], afterBumpLog, []⟩ := by
+theorem exit_scope_runs_defers_planted : RunsAll prog [] [d1, d2] .init ([1] ++ [2]) afterLogs ∧
+    dropOut ops [] [] afterLogs = some afterLogs ∧
+    ¬ MutSteps .exitCleanup prog ⟨.exiting (.ret 0), [], .init, [.scope ⟨1⟩ [] [d1, d2]]⟩ ([1] ++ [2])
+      ⟨.exiting (.ret 0), restrict [] [], afterLogs, []⟩ := by
   refine ⟨realCalls, rfl, fun h => ?_⟩
   have ht := (missing_trace rfl h).2
   cases ht
 
 /-- Planted (law `done_scope_runs_defers`). Both real completion and drop premises hold;
 only the named cleanup dispatch is missing. Its trace cannot emit the required log. -/
-theorem done_scope_runs_defers_planted : RunsAll prog [] [d1, d2] .init ([] ++ [1]) afterBumpLog ∧
-    dropOut ops [] [] afterBumpLog = some afterBumpLog ∧
-    ¬ MutSteps .doneCleanup prog ⟨.done, [], .init, [.scope ⟨1⟩ [] [d1, d2]]⟩ ([] ++ [1])
-      ⟨.done, restrict [] [], afterBumpLog, []⟩ := by
+theorem done_scope_runs_defers_planted : RunsAll prog [] [d1, d2] .init ([1] ++ [2]) afterLogs ∧
+    dropOut ops [] [] afterLogs = some afterLogs ∧
+    ¬ MutSteps .doneCleanup prog ⟨.done, [], .init, [.scope ⟨1⟩ [] [d1, d2]]⟩ ([1] ++ [2])
+      ⟨.done, restrict [] [], afterLogs, []⟩ := by
   refine ⟨realCalls, rfl, fun h => ?_⟩
   have ht := (missing_trace rfl h).2
   cases ht
@@ -745,6 +841,212 @@ theorem continue_reaches_loop_planted : Cleans prog [] [] .init [] .init ∧
   refine ⟨.nil _ _, by simp, fun h => ?_⟩
   have he := (missing_trace (by simp [missingStep]) h).1
   cases he
+
+/-- Planted (law `exit_scope_runs_defers`). Reversing the calls within the scope
+runs log(2) first, so the exact positive instance's trace [1, 2] is impossible. -/
+theorem exit_scope_runs_defers_reversed :
+    ¬ MutSteps .reverseExit prog ⟨.exiting (.ret 0), [], .init, [.scope ⟨1⟩ [] [d1, d2]]⟩ [1, 2]
+      ⟨.exiting (.ret 0), [], .init, []⟩ := by
+  intro h
+  rcases missing_next rfl h with ⟨he, ht⟩ | h
+  · cases ht
+  rcases missing_next rfl h with ⟨he, ht⟩ | h
+  · cases ht
+  exact log_two_not_one rfl h
+
+/-- Planted (law `done_scope_runs_defers`). Reversing the calls within the scope
+runs log(2) first, so the exact positive instance's trace [1, 2] is impossible. -/
+theorem done_scope_runs_defers_reversed :
+    ¬ MutSteps .reverseDone prog ⟨.done, [], .init, [.scope ⟨1⟩ [] [d1, d2]]⟩ [1, 2]
+      ⟨.done, [], .init, []⟩ := by
+  intro h
+  rcases missing_next rfl h with ⟨he, ht⟩ | h
+  · cases ht
+  rcases missing_next rfl h with ⟨he, ht⟩ | h
+  · cases ht
+  exact log_two_not_one rfl h
+
+/-- Planted (law `unwind_runs_plan`). Reversing inner and outer scopes
+runs log(2) first, so the exact positive instance's trace [1, 2] is impossible. -/
+theorem unwind_runs_plan_reversed :
+    ¬ MutSteps .outerFirst prog ⟨.exiting (.ret 0), [], .init, [.scope ⟨1⟩ [] [d1], .scope ⟨2⟩ [] [d2]]⟩ [1, 2]
+      ⟨.exiting (.ret 0), [], .init, []⟩ := by
+  intro h
+  rcases missing_next rfl h with ⟨he, ht⟩ | h
+  · cases ht
+  rcases missing_next rfl h with ⟨he, ht⟩ | h
+  · cases ht
+  exact log_two_not_one rfl h
+
+/-- Planted (law `return_reaches_caller`). Reversing inner and outer scopes
+runs log(2) first, so the exact positive instance's trace [1, 2] is impossible. -/
+theorem return_reaches_caller_reversed :
+    ¬ MutSteps .outerFirst prog ⟨.exiting (.ret 7), [], ⟨0, [[p], [x]]⟩, [.scope ⟨1⟩ [] [d1], .scope ⟨2⟩ [] [d2], .functionEnd, .ret (some x) [(y, 12)]]⟩ [1, 2]
+      ⟨.done, bindDst (some x) 7 [(y, 12)], ⟨0, [[]]⟩, []⟩ := by
+  intro h
+  rcases missing_next rfl h with ⟨he, ht⟩ | h
+  · cases ht
+  rcases missing_next rfl h with ⟨he, ht⟩ | h
+  · cases ht
+  exact log_two_not_one rfl h
+
+/-- Planted (law `break_reaches_loop`). Reversing inner and outer scopes
+runs log(2) first, so the exact positive instance's trace [1, 2] is impossible. -/
+theorem break_reaches_loop_reversed :
+    ¬ MutSteps .outerFirst prog ⟨.exiting (.brk ⟨1⟩), [], .init, [.scope ⟨1⟩ [] [d1], .scope ⟨2⟩ [] [d2], .body ⟨1⟩ .skip (.lit 1) .skip s]⟩ [1, 2]
+      ⟨.done, [], .init, []⟩ := by
+  intro h
+  rcases missing_next rfl h with ⟨he, ht⟩ | h
+  · cases ht
+  rcases missing_next rfl h with ⟨he, ht⟩ | h
+  · cases ht
+  exact log_two_not_one rfl h
+
+/-- Planted (law `continue_reaches_loop`). Reversing inner and outer scopes
+runs log(2) first, so the exact positive instance's trace [1, 2] is impossible. -/
+theorem continue_reaches_loop_reversed :
+    ¬ MutSteps .outerFirst prog ⟨.exiting (.cont ⟨1⟩), [], .init, [.scope ⟨1⟩ [] [d1], .scope ⟨2⟩ [] [d2], .body ⟨1⟩ .skip (.lit 1) .skip s]⟩ [1, 2]
+      ⟨.exec (.loop ⟨1⟩ .skip (.lit 1) .skip s), [], .init, []⟩ := by
+  intro h
+  rcases missing_next rfl h with ⟨he, ht⟩ | h
+  · cases ht
+  rcases missing_next rfl h with ⟨he, ht⟩ | h
+  · cases ht
+  exact log_two_not_one rfl h
+
+/-- Planted (law `two_defers_register`). FIFO insertion preserves both calls but
+cannot reach the LIFO instance's frame list, even by continuing execution. -/
+theorem two_defers_register_fifo :
+    ¬ MutSteps .fifoRegister prog
+      ⟨.exec (.block ⟨1⟩ (.seq (.defer d1.f d1.args d1.site)
+        (.seq (.defer d2.f d2.args d2.site) .skip))), [], .init, []⟩ []
+      ⟨.exec .skip, [], .init, [.scope ⟨1⟩ [] [d2, d1]]⟩ := by
+  intro h
+  rcases missing_next rfl h with ⟨he, _⟩ | h
+  · cases he
+  rcases missing_next rfl h with ⟨he, _⟩ | h
+  · cases he
+  rcases missing_next rfl h with ⟨he, _⟩ | h
+  · cases he
+  rcases missing_next rfl h with ⟨he, _⟩ | h
+  · cases he
+  rcases missing_next rfl h with ⟨he, _⟩ | h
+  · cases he
+  rcases missing_next rfl h with ⟨he, _⟩ | h
+  · cases he
+  rcases missing_next rfl h with ⟨he, _⟩ | h
+  · cases he
+  rcases missing_next rfl h with ⟨he, _⟩ | h
+  · cases he
+  rcases missing_next rfl h with ⟨he, _⟩ | h
+  · cases he
+  rcases missing_next rfl h with ⟨he, _⟩ | h
+  · cases he
+  exact log_one_not_empty rfl (by intro he; cases he) h
+
+/-- Planted (law `exit_scope_next`). Reversed dispatch selects log(2), not log(1). -/
+theorem exit_scope_next_reversed :
+    ¬ MutStep .reverseExit prog ⟨.exiting (.ret 0), [], .init, [.scope ⟨1⟩ [] [d1, d2]]⟩ .silent
+      ⟨.exec d1.stmt, [], .init, [.resume (.exit (.ret 0)), .scope ⟨1⟩ [] [d2]]⟩ := by
+  intro h
+  generalize hl : (Label.silent : Label ops) = l at h
+  cases h with
+  | silent he => cases he
+  | prim he _ _ => cases he
+
+/-- Planted (law `done_scope_next`). Reversed dispatch selects log(2), not log(1). -/
+theorem done_scope_next_reversed :
+    ¬ MutStep .reverseDone prog ⟨.done, [], .init, [.scope ⟨1⟩ [] [d1, d2]]⟩ .silent
+      ⟨.exec d1.stmt, [], .init, [.resume (.fall), .scope ⟨1⟩ [] [d2]]⟩ := by
+  intro h
+  generalize hl : (Label.silent : Label ops) = l at h
+  cases h with
+  | silent he => cases he
+  | prim he _ _ => cases he
+
+/-- Planted (law `step_ret`). Beginning deferred cleanup before evaluating the
+return operand runs bump first; evaluating the same expression afterwards returns
+8 instead of 7. The instance requires p moved and cleanup still pending. -/
+theorem step_ret_cleanup_first :
+    missingStep .cleanupBeforeValue prog
+      ⟨.exec (.ret (.arith .add (.move p) .counter) s), [(p, 7)], ⟨0, [[]]⟩,
+        [.scope ⟨1⟩ [p] [⟨bumpF, [], s⟩]]⟩ ≠
+      some (.next ⟨.exiting (.ret 7), [(p, 7)],
+        DState.onTop (p :: ·) ⟨0, [[]]⟩, [.scope ⟨1⟩ [p] [⟨bumpF, [], s⟩]]⟩) := by
+  intro h
+  cases h
+
+/-- Planted (law `step_ret`). The early-cleanup dispatcher preserves the return
+expression. Running its next configuration returns 8, while the real order
+returns 7; both runs complete, so failure is specifically the order of effects. -/
+theorem step_ret_cleanup_first_value :
+    (run prog env 100
+      ⟨.exec (.ret (.arith .add (.move p) .counter) s), [(p, 7)], ⟨0, [[]]⟩,
+        [.scope ⟨1⟩ [p] [⟨bumpF, [], s⟩]]⟩).ending = .final (.returned 7) ∧
+    (match missingStep .cleanupBeforeValue prog
+      ⟨.exec (.ret (.arith .add (.move p) .counter) s), [(p, 7)], ⟨0, [[]]⟩,
+        [.scope ⟨1⟩ [p] [⟨bumpF, [], s⟩]]⟩ with
+      | some (.next c) => (run prog env 100 c).ending
+      | _ => .stuck) = .final (.returned 8) := by constructor <;> rfl
+
+/-- Instance (law `return_reaches_caller`, case `leave_before_bind`). With a
+moved x in the caller, leaving first then binding clears it. Binding in the
+callee first would leave the caller's x moved. -/
+theorem return_reaches_caller_lifecycle_instance : Steps prog
+    ⟨.exiting (.ret 7), [], ⟨0, [[p], [x]]⟩, [.functionEnd, .ret (some x) [(y, 12)]]⟩ []
+    ⟨.done, bindDst (some x) 7 [(y, 12)], ⟨0, [[]]⟩, []⟩ :=
+  return_reaches_caller prog 7 (some x) [(y, 12)] [] [] []
+    ⟨0, [[p], [x]]⟩ ⟨0, [[p], [x]]⟩ [] ⟨0, [[x]]⟩ ⟨0, [[]]⟩
+    (.nil _ _) (by simp) rfl rfl
+
+/-- Planted (law `return_reaches_caller`). Reordering the two admitted lifecycle
+effects binds in the wrong activation. Both operations succeed, but the moved
+marker for the caller's x remains, refuting the lifecycle instance. -/
+theorem return_reaches_caller_bind_before_leave :
+    ¬ MutSteps .bindBeforeLeave prog
+      ⟨.exiting (.ret 7), [], ⟨0, [[p], [x]]⟩, [.functionEnd, .ret (some x) [(y, 12)]]⟩ []
+      ⟨.done, bindDst (some x) 7 [(y, 12)], ⟨0, [[]]⟩, []⟩ := by
+  intro h
+  rcases missing_next rfl h with ⟨he, _⟩ | h
+  · cases he
+  have he := (missing_trace rfl h).1
+  cases he
+
+/-- Planted support. The reverseExit mutation completes with [2, 1]; it neither
+blocks nor loops, and both original calls and their lifecycle effects run. -/
+theorem reverse_exit_completes : MutSteps .reverseExit prog
+    ⟨.exiting (.ret 0), [], .init, [.scope ⟨1⟩ [] [d1, d2]]⟩ [2, 1] ⟨.exiting (.ret 0), [], .init, []⟩ := by
+  repeat first
+    | exact MutSteps.refl _
+    | apply MutSteps.step (MutStep.silent rfl)
+    | apply MutSteps.step (O := ops) (tr := [1]) (MutStep.prim (O := ops)
+        (a := ⟨some 2, .ok 0, DState.life (.enter [x]) .init⟩) rfl rfl rfl)
+    | apply MutSteps.step (O := ops) (tr := []) (MutStep.prim (O := ops)
+        (a := ⟨some 1, .ok 0, DState.life (.enter [x]) .init⟩) rfl rfl rfl)
+
+/-- Planted support. The reverseDone mutation completes with [2, 1]; it neither
+blocks nor loops, and both original calls and their lifecycle effects run. -/
+theorem reverse_done_completes : MutSteps .reverseDone prog
+    ⟨.done, [], .init, [.scope ⟨1⟩ [] [d1, d2]]⟩ [2, 1] ⟨.done, [], .init, []⟩ := by
+  repeat first
+    | exact MutSteps.refl _
+    | apply MutSteps.step (MutStep.silent rfl)
+    | apply MutSteps.step (O := ops) (tr := [1]) (MutStep.prim (O := ops)
+        (a := ⟨some 2, .ok 0, DState.life (.enter [x]) .init⟩) rfl rfl rfl)
+    | apply MutSteps.step (O := ops) (tr := []) (MutStep.prim (O := ops)
+        (a := ⟨some 1, .ok 0, DState.life (.enter [x]) .init⟩) rfl rfl rfl)
+
+/-- Planted support. The outerFirst mutation completes with [2, 1]; it neither
+blocks nor loops, and both original calls and their lifecycle effects run. -/
+theorem outer_first_completes : MutSteps .outerFirst prog
+    ⟨.exiting (.ret 0), [], .init, [.scope ⟨1⟩ [] [d1], .scope ⟨2⟩ [] [d2]]⟩ [2, 1] ⟨.exiting (.ret 0), [], .init, []⟩ := by
+  repeat first
+    | exact MutSteps.refl _
+    | apply MutSteps.step (MutStep.silent rfl)
+    | apply MutSteps.step (O := ops) (tr := [1]) (MutStep.prim (O := ops)
+        (a := ⟨some 2, .ok 0, DState.life (.enter [x]) .init⟩) rfl rfl rfl)
+    | apply MutSteps.step (O := ops) (tr := []) (MutStep.prim (O := ops)
+        (a := ⟨some 1, .ok 0, DState.life (.enter [x]) .init⟩) rfl rfl rfl)
 
 end CoreEvidence
 end ConcreteSpec.Core.Exec
