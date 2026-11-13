@@ -1,0 +1,4 @@
+[piece 1 of 3: scripts]
+- ConcreteSpec/Proofs/Exec.lean:537: The calls do not distinguish cleanup order as claimed: `bumpF` increments the counter, while `logF [.lit 1]` emits `[1]` and preserves the store. Both orders yield counter `1` and trace `[1]`, so these concrete instances cannot detect reversed cleanup. Use order-dependent effects or two distinguishable events.
+
+Repository reads failed at sandbox startup, so owner-decision provenance could not be verified.
