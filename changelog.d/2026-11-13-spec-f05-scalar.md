@@ -22,3 +22,10 @@ Add paired diagnostics fixtures: renaming presentations preserves scalar contrac
 results, while distinct numbers sharing a spelling retain distinct results. Each
 fixture rejects a presentation-keyed valuation that respectively loses or aliases
 a binding.
+
+Complete presentation coverage for scalar assignment and scope removal under
+original, renamed and colliding spellings. Check the same observable contracts
+against spelling-based update and erasure controls: both pass with unique names
+and fail when two distinct numbers share a spelling. Cover exact-term conversion
+under renaming too, and document the boundary between scalar operations and the
+later lifecycle and ownership cases.
