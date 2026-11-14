@@ -898,7 +898,7 @@ theorem bind_fresh_progress (types : Var → Option Descriptor) (s : State) (x :
     (descriptor : types x = some d) : ∃ t, bind types x s = some t := by
   simp [bind, frame, issued, fresh, descriptor]
 
-/-- Law (authority: docs/decisions.md#foundation-q1 (C5); #decided-2026-11-05-core (Q3.8, Q9.1, Q9.10); #decided-2026-11-13-lifecycle-refusal). Fresh, distinct, typed parameters always enter in a new activation. -/
+/-- Law (authority: docs/decisions.md#foundation-q1 (C5); #decided-2026-11-05-core (Q3.8, Q9.1, Q9.10); #decided-2026-11-13-lifecycle-refusal). (subject `ConcreteSpec.Core.Own.enter`). Fresh, distinct, typed parameters always enter in a new activation. -/
 theorem enter_progress (types : Var → Option Descriptor) (s : State) (params : List Var)
     (unique : params.Nodup) (typed : ∀ x ∈ params, ∃ d, types x = some d) :
     ∃ t, enter types params s = some t := by
@@ -1011,7 +1011,6 @@ end LifecycleWitnesses
 /-- Helper (projection). Projects the owned-root clause of the well-formedness invariant for the operation-result law. -/
 theorem loan_has_owned_root_of_wf (s : State) (hs : WellFormed s) (l : Loan) (hl : l ∈ s.loans) :
     ∃ x ∈ s.slots, x.place = l.root ∧ x.status = .owned := (hs.2.2.2.1 l hl).2.2.1
-
 
 /-- Helper (inversion). Invariant consequence using uniqueness of slot identities and owned roots for the operation-result law. -/
 theorem moved_no_loan_of_wf (s : State) (hs : WellFormed s) (x : Slot) (hx : x ∈ s.slots)
@@ -1533,7 +1532,6 @@ theorem reborrow_birth_result (s t : State) (i : LoanId) (suffix : List Projecti
       List.mem_cons_of_mem _ (List.mem_of_find?_eq_some ha)⟩
   · contradiction
 
-
 /-- Helper (computation): projects the concrete result through this ownership operation. -/
 theorem endLoan_supply_result (s t : State) (i : LoanId) (h : endLoan s i = some t) :
     t.nextLoan = s.nextLoan := by
@@ -1585,7 +1583,6 @@ theorem adoptDown_only_arguments_result (s t : State) (args : List (Var × LoanI
   · rename_i guard
     exact guard.2.2.2.1 e he
   · contradiction
-
 
 /-- Helper (projection). Extracts the active-current-frame destination checked by reborrowing. -/
 theorem reborrowTo_current_result (s t : State) (i : LoanId) (suffix : List Projection)
@@ -2192,7 +2189,6 @@ example : ¬ LiveDestinations { DirectArgumentWitnesses.called.own with
     frames := DirectArgumentWitnesses.called.own.frames.tail } := by decide
 end LiveDestinationWitnesses
 
-
 /-- Helper (computation). The permission-only transition is identity. -/
 theorem accessOwner_preserves (s : State) (p : Hybrid.Place) (m : Mode) (hs : WellFormed s) : StateResult (accessOwner s p m) := by
   cases he : accessOwner s p m with
@@ -2209,31 +2205,41 @@ namespace PreservationEvidence
 /-- A fresh callee with a pending direct owner argument, before adoption. -/
 def adoptionInput : State :=
   (enter Examples.types [] DirectArgumentWitnesses.waiting.own).getD Examples.initial
-
 /-- Planted: move appends a moved slot record without replacing the existing record for `p`,
 breaking unique slot place identities (`(s.slots.map Slot.place).Nodup`). -/
 def moveDuplicateSlot (s : State) (p : Hybrid.Place) : Option State := do
   let x ← slot s p
   if x.desc.copy || x.status == .moved || s.loans.any (·.root == p) then none else
     some { s with slots := { x with status := .moved } :: s.slots }
-
 /-- Planted: reinitialization assigns an unissued place identity `⟨s.nextPlace⟩` without advancing
 `s.nextPlace`, breaking `x.place.id < s.nextPlace` and frame-local completeness. -/
 def reinitializeUnissuedPlace (s : State) (p : Hybrid.Place) : Option State := do
-  let _ ← reinitialize s p
-  some { s with slots := s.slots.map fun x =>
-    if x.place == p then { x with place := ⟨s.nextPlace⟩, status := .owned } else x }
-
+  let x ← slot s p
+  if (x.status == .moved || (x.desc.copy && x.desc.mutable)) &&
+      s.loans.all (·.root != p) then
+    some { s with slots := s.slots.map fun x =>
+      if x.place = p then { x with place := ⟨s.nextPlace⟩, status := .owned } else x }
+  else none
 /-- Planted: borrow issues `⟨s.nextLoan⟩` without advancing `nextLoan`, breaking `l.id.id < s.nextLoan`. -/
-def borrowNoAdvanceSupply (s : State) (p : Hybrid.Place) (path : List Projection) (m : Mode) : Option State := do
-  let t ← borrow s p path m
-  some { t with nextLoan := s.nextLoan }
-
+def borrowNoAdvanceSupply (s : State) (p : Hybrid.Place) (path : List Projection) (m : Mode) :
+    Option State := do
+  let f ← s.frames.head?
+  if ownerAccess s p m && decide (f.id < s.nextActivation) then
+    some { s with
+      nextLoan := s.nextLoan
+      loans := ⟨⟨s.nextLoan⟩, p, path, m, none, [], f.id, false, false⟩ :: s.loans }
+  else none
 /-- Planted: reborrowTo removes the parent loan `i` when inserting its child, breaking `ParentValid`. -/
-def reborrowToDropParent (s : State) (i : LoanId) (path : List Projection) (m : Mode) (a : Nat) : Option State := do
-  let t ← reborrowTo s i path m a
-  some { t with loans := t.loans.filter (·.id != i) }
-
+def reborrowToDropParent (s : State) (i : LoanId) (suffix : List Projection) (m : Mode)
+    (activation : Nat) : Option State := do
+  let a ← loan s i
+  if loanAccess s i m && decide (activation < s.nextActivation ∧
+      s.frames.head?.map Activation.id = some activation) then
+    some { s with
+      nextLoan := s.nextLoan + 1
+      loans := ⟨⟨s.nextLoan⟩, a.root, a.path ++ suffix, m, some i,
+        i :: a.ancestors, activation, false, false⟩ :: s.loans.filter (·.id != i) }
+  else none
 /-- Planted: reborrow clears the cached ancestor chain while retaining `parent = some i`,
 breaking `ParentValid`'s ancestor-chain agreement. -/
 def reborrowDropAncestorsTo (s : State) (i : LoanId) (suffix : List Projection) (m : Mode)
@@ -2246,28 +2252,37 @@ def reborrowDropAncestorsTo (s : State) (i : LoanId) (suffix : List Projection) 
       loans := ⟨⟨s.nextLoan⟩, a.root, a.path ++ suffix, m, some i,
         [], activation, false, false⟩ :: s.loans }
   else none
-
 def reborrowDropAncestors (s : State) (i : LoanId) (path : List Projection) (m : Mode) : Option State := do
   let f ← s.frames.head?
   reborrowDropAncestorsTo s i path m f.id
-
 /-- Planted: endLoan removes the parent of `i` instead of `i`, stranding child `i` and breaking `ParentValid`. -/
 def endLoanRemoveParent (s : State) (i : LoanId) : Option State := do
   let a ← loan s i
-  let _ ← endLoan s i
-  some { s with loans := s.loans.filter fun l => some l.id != a.parent }
-
+  if s.loans.any (·.parent == some i) then none else
+    some { s with loans := s.loans.filter (fun l => some l.id != a.parent) }
 /-- Planted: bind allocates `⟨s.nextPlace⟩` without advancing `nextPlace`, breaking `x.place.id < s.nextPlace`. -/
 def bindNoAdvancePlace (types : Var → Option Descriptor) (x : Var) (s : State) : Option State := do
-  let t ← bind types x s
-  some { t with nextPlace := s.nextPlace }
-
+  let f ← s.frames.head?
+  match AList.lookup f.locals x with
+  | some p => reinitialize s p
+  | none =>
+    let d ← types x
+    if f.id < s.nextActivation then some { s with
+      nextPlace := s.nextPlace
+      slots := ⟨⟨s.nextPlace⟩, f.id, d, .owned⟩ :: s.slots
+      frames := { f with locals := (x, ⟨s.nextPlace⟩) :: f.locals } :: s.frames.tail }
+    else none
 /-- Planted: drop removes the variable from `f.locals` while retaining its slot in `s.slots`,
 breaking the frame-local completeness clause of `WellFormed`. -/
 def dropLocalOnly (xs : List Var) (s : State) : Option State := do
-  let t ← drop xs s
-  some { t with slots := s.slots }
-
+  let f ← s.frames.head?
+  let ps := List.map Prod.snd (f.locals.filter fun e => decide (e.1 ∈ xs))
+  if s.slots.all (fun x => decide (x.place ∉ ps) || x.desc.copy || x.status == .moved) &&
+      s.loans.all (fun l => decide (l.root ∉ ps)) then
+    some { s with
+      slots := s.slots
+      frames := { f with locals := f.locals.filter (fun e => decide (e.2 ∉ ps)) } :: s.frames.tail }
+  else none
 /-- Planted: enter reuses the caller's activation ID `0` for the new frame instead of `s.nextActivation`,
 breaking `(s.frames.map Activation.id).Nodup`. -/
 def enterDuplicateFrameId (types : Var → Option Descriptor) (params : List Var) (s : State) : Option State := do
@@ -2275,19 +2290,15 @@ def enterDuplicateFrameId (types : Var → Option Descriptor) (params : List Var
     nextActivation := s.nextActivation + 1
     frames := ⟨s.nextActivation - 1, [], []⟩ :: s.frames }
   params.foldlM (fun s x => bind types x s) s
-
 /-- Planted: endLocals removes caller loans (`activation != a`) instead of ending callee loans (`activation == a`),
 breaking `ParentValid` for the callee child loan. -/
-def endLocalsCallerInstead (a : Nat) (s : State) : Option State := do
-  let _ ← endLocals a s
+def endLocalsCallerInstead (a : Nat) (s : State) : Option State :=
   some { s with loans := s.loans.filter (·.activation == a) }
-
 /-- Planted: leave ends local loans but omits dropping the departing frame’s slots. -/
 def leaveKeepSlots (s : State) : Option State := do
   let f ← s.frames.head?
   let t ← endLocals f.id s
   some { t with frames := t.frames.tail }
-
 /-- Planted: enterDown reuses the parent loan's ID `⟨0⟩` for the new child loan, breaking `(s.loans.map Loan.id).Nodup`. -/
 def reborrowReuseId (s : State) (i : LoanId) (suffix : List Projection) (m : Mode)
     (activation : Nat) : Option State := do
@@ -2299,7 +2310,6 @@ def reborrowReuseId (s : State) (i : LoanId) (suffix : List Projection) (m : Mod
       loans := ⟨i, a.root, a.path ++ suffix, m, some i,
         i :: a.ancestors, activation, false, false⟩ :: s.loans }
   else none
-
 /-- Planted: downward entry uses the ID-reusing child constructor at every lending site. -/
 def enterDownReuseParentId (s : State) (args : List (Var × LoanId)) : Option State := do
   let s ← enter (fun _ => none) [] s
@@ -2308,7 +2318,6 @@ def enterDownReuseParentId (s : State) (args : List (Var × LoanId)) : Option St
     let f ← s.frames.head?
     let s ← reborrowReuseId s i [] a.mode f.id
     some { s with frames := { f with views := (x, ⟨s.nextLoan - 1⟩) :: f.views } :: s.frames.tail }) s
-
 /-- Planted: life on `.bind` adds the new slot to `s.slots` without recording it in `f.locals`,
 breaking the frame-local completeness clause of `WellFormed`. -/
 def bindUnindexed (types : Var → Option Descriptor) (x : Var) (s : State) : Option State := do
@@ -2321,11 +2330,9 @@ def bindUnindexed (types : Var → Option Descriptor) (x : Var) (s : State) : Op
       nextPlace := s.nextPlace + 1
       slots := ⟨⟨s.nextPlace⟩, f.id, d, .owned⟩ :: s.slots }
     else none
-
 def lifeBindUnindexed (types : Var → Option Descriptor) : Exec.Life → State → Option State
   | .bind x, s => bindUnindexed types x s
   | e, s => life types e s
-
 /-- Planted: adoptDown assigns the unissued activation ID `s.nextActivation` to adopted loans,
 breaking `l.activation < s.nextActivation`. -/
 def adoptDownUnissuedActivation (s : State) (args : List (Var × LoanId)) : Option State := do
@@ -2338,20 +2345,37 @@ def adoptDownUnissuedActivation (s : State) (args : List (Var × LoanId)) : Opti
         if l.id ∈ args.map Prod.snd then { l with activation := s.nextActivation, pendingArgument := false } else l
       frames := { f with views := args ++ f.views } :: s.frames.tail }
   else none
-
 /-- Planted: passDown clears `parent` on the new non-root pending loan (`callRoot = false`),
 breaking `l.pendingArgument = true → (l.parent.isSome = true ∨ l.callRoot = true)`. -/
-def passDownClearParent (s : CallState) (i : LoanId) (x : Var) : Option CallState := do
-  let t ← passDown s i x
-  some { t with own := { t.own with loans := t.own.loans.map fun l =>
-    if l.id == ⟨s.own.nextLoan⟩ then { l with parent := none, ancestors := [] } else l } }
-
+def reborrowParentlessTo (s : State) (i : LoanId) (suffix : List Projection) (m : Mode)
+    (activation : Nat) : Option State := do
+  let a ← loan s i
+  if loanAccess s i m && decide (activation < s.nextActivation ∧
+      s.frames.head?.map Activation.id = some activation) then
+    some { s with
+      nextLoan := s.nextLoan + 1
+      loans := ⟨⟨s.nextLoan⟩, a.root, a.path ++ suffix, m, none,
+        i :: a.ancestors, activation, false, false⟩ :: s.loans }
+  else none
+def reborrowParentless (s : State) (i : LoanId) (path : List Projection) (m : Mode) : Option State := do
+  let f ← s.frames.head?
+  reborrowParentlessTo s i path m f.id
+def passDownClearParent (s : CallState) (source : LoanId) (parameter : Var) : Option CallState := do
+  if parameter ∈ s.pending.map Prod.fst then none else do
+  let l ← loan s.own source
+  let own ← reborrowParentless s.own source [] l.mode
+  let own := { own with loans := own.loans.map fun l =>
+    if l.id.id = s.own.nextLoan then { l with pendingArgument := true } else l }
+  pure ⟨own, s.pending ++ [(parameter, ⟨s.own.nextLoan⟩)]⟩
 /-- Planted: passDown marks the new loan `pendingArgument = true` in `own` without appending it to
 `s.pending`, breaking `CallState.WellFormed`'s pending-flag synchronization. -/
-def passDownOmitPending (s : CallState) (i : LoanId) (x : Var) : Option CallState := do
-  let t ← passDown s i x
-  some { t with pending := s.pending }
-
+def passDownOmitPending (s : CallState) (source : LoanId) (parameter : Var) : Option CallState := do
+  if parameter ∈ s.pending.map Prod.fst then none else do
+  let l ← loan s.own source
+  let own ← reborrow s.own source [] l.mode
+  let own := { own with loans := own.loans.map fun l =>
+    if l.id.id = s.own.nextLoan then { l with pendingArgument := true } else l }
+  pure ⟨own, s.pending⟩
 /-- Planted: callLife adopts pending loans into the unissued activation `own.nextActivation`,
 breaking `l.activation < s.nextActivation`. -/
 def callLifeUnissuedActivation (types : Var → Option Descriptor) : Exec.Life → CallState → Option CallState
@@ -2364,368 +2388,362 @@ def callLifeUnissuedActivation (types : Var → Option Descriptor) : Exec.Life �
   | e, s => if s.pending = [] then
       (life types e s.own).map fun own => { s with own := own }
     else none
-
 /-- Planted: callLife adopts pending loans (clearing their `pendingArgument` flags) without clearing
 `s.pending`, breaking `CallState.WellFormed`'s pending-flag synchronization. -/
-def callLifeKeepPending (types : Var → Option Descriptor) (e : Exec.Life) (s : CallState) : Option CallState := do
-  let t ← callLife types e s
-  some { t with pending := s.pending }
-
+def callLifeKeepPending (types : Var → Option Descriptor) : Exec.Life → CallState → Option CallState
+  | .enter params, s => do
+    if s.pending.all (fun e => decide (e.1 ∈ params)) then
+      let own ← enter types (params.filter fun x => decide (x ∉ s.pending.map Prod.fst)) s.own
+      let own ← adoptDown own s.pending
+      pure ⟨own, s.pending⟩
+    else none
+  | e, s => if s.pending = [] then
+      (life types e s.own).map fun own => { s with own := own }
+    else none
 /-- Planted: passOwner creates a parentless pending loan with `callRoot = false`,
 breaking `l.pendingArgument = true → (l.parent.isSome = true ∨ l.callRoot = true)`. -/
-def passOwnerClearCallRoot (s : CallState) (p : Hybrid.Place) (path : List Projection) (m : Mode) (x : Var) : Option CallState := do
-  let t ← passOwner s p path m x
-  some { t with own := { t.own with loans := t.own.loans.map fun l =>
-    if l.id == ⟨s.own.nextLoan⟩ then { l with callRoot := false } else l } }
-
+def passOwnerClearCallRoot (s : CallState) (root : Hybrid.Place) (path : List Projection)
+    (mode : Mode) (parameter : Var) : Option CallState := do
+  if parameter ∈ s.pending.map Prod.fst then none else do
+  let f ← s.own.frames.head?
+  if ownerAccess s.own root mode && decide (f.id < s.own.nextActivation) then
+    pure ⟨{ s.own with
+      nextLoan := s.own.nextLoan + 1
+      loans := ⟨⟨s.own.nextLoan⟩, root, path, mode, none, [], f.id, true, false⟩ :: s.own.loans },
+      s.pending ++ [(parameter, ⟨s.own.nextLoan⟩)]⟩
+  else none
 /-- Planted: passOwner marks the new root loan `pendingArgument = true` in `own` without appending
 it to `s.pending`, breaking `CallState.WellFormed`'s pending-flag synchronization. -/
-def passOwnerOmitPending (s : CallState) (p : Hybrid.Place) (path : List Projection) (m : Mode) (x : Var) : Option CallState := do
-  let t ← passOwner s p path m x
-  some { t with pending := s.pending }
-
+def passOwnerOmitPending (s : CallState) (root : Hybrid.Place) (path : List Projection)
+    (mode : Mode) (parameter : Var) : Option CallState := do
+  if parameter ∈ s.pending.map Prod.fst then none else do
+  let f ← s.own.frames.head?
+  if ownerAccess s.own root mode && decide (f.id < s.own.nextActivation) then
+    pure ⟨{ s.own with
+      nextLoan := s.own.nextLoan + 1
+      loans := ⟨⟨s.own.nextLoan⟩, root, path, mode, none, [], f.id, true, true⟩ :: s.own.loans },
+      s.pending⟩
+  else none
 /-- Planted: accessOwner consumes the accessed root slot (marking it `.moved`) while a shared loan
 remains active on `p`, breaking `∃ x ∈ s.slots, x.place = l.root ∧ x.status = .owned`. -/
-def accessOwnerConsumeRoot (s : State) (p : Hybrid.Place) (m : Mode) : Option State := do
-  let t ← accessOwner s p m
-  some { t with slots := t.slots.map fun x =>
-    if x.place == p then { x with status := .moved } else x }
-
+def accessOwnerConsumeRoot (s : State) (p : Hybrid.Place) (m : Mode) : Option State :=
+  if ownerAccess s p m then some { s with slots := s.slots.map fun x =>
+    if x.place == p then { x with status := .moved } else x } else none
 /-- Planted: accessLoan drops the parent of loan `i` while `i` remains active, breaking `ParentValid`. -/
 def accessLoanDropParent (s : State) (i : LoanId) (m : Mode) : Option State := do
   let a ← loan s i
-  let t ← accessLoan s i m
-  some { t with loans := t.loans.filter fun l => some l.id != a.parent }
-
+  if loanAccess s i m then
+    some { s with loans := s.loans.filter fun l => some l.id != a.parent }
+  else none
 end PreservationEvidence
-
 namespace PreservationEvidence
 open Examples
-
 /-- Instance (law `ConcreteSpec.Core.Own.move_preserves`, case `ConcreteSpec.Core.Own.Examples.initial`). -/
 example : StateResult (move (initial) (⟨0⟩)) :=
   @move_preserves initial ⟨0⟩ (by decide)
-
 /-- Planted (law `ConcreteSpec.Core.Own.move_preserves`, case `ConcreteSpec.Core.Own.Examples.initial`, subject `ConcreteSpec.Core.Own.move`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.moveDuplicateSlot`). -/
 example : (WellFormed (initial)) ∧ ¬ StateResult (moveDuplicateSlot (initial) (⟨0⟩)) := by decide
-
 /-- Instance (law `ConcreteSpec.Core.Own.reinitialize_preserves`, case `ConcreteSpec.Core.Own.LifecycleWitnesses.moved`). -/
 example : StateResult (reinitialize (LifecycleWitnesses.moved) (⟨0⟩)) :=
   @reinitialize_preserves LifecycleWitnesses.moved ⟨0⟩ (by decide)
-
 /-- Planted (law `ConcreteSpec.Core.Own.reinitialize_preserves`, case `ConcreteSpec.Core.Own.LifecycleWitnesses.moved`, subject `ConcreteSpec.Core.Own.reinitialize`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.reinitializeUnissuedPlace`). -/
 example : (WellFormed (LifecycleWitnesses.moved)) ∧ ¬ StateResult (reinitializeUnissuedPlace (LifecycleWitnesses.moved) (⟨0⟩)) := by decide
-
 /-- Instance (law `ConcreteSpec.Core.Own.borrow_preserves`, case `ConcreteSpec.Core.Own.Examples.shared`). -/
 example : StateResult (borrow (shared) (⟨0⟩) ([.index 1]) (.shared)) :=
   @borrow_preserves shared ⟨0⟩ [.index 1] .shared (by decide)
-
 /-- Planted (law `ConcreteSpec.Core.Own.borrow_preserves`, case `ConcreteSpec.Core.Own.Examples.shared`, subject `ConcreteSpec.Core.Own.borrow`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.borrowNoAdvanceSupply`). -/
 example : (WellFormed (shared)) ∧ ¬ StateResult (borrowNoAdvanceSupply (shared) (⟨0⟩) ([.index 1]) (.shared)) := by decide
-
 /-- Instance (law `ConcreteSpec.Core.Own.reborrowTo_preserves`, case `ConcreteSpec.Core.Own.Examples.exclusive`). -/
 example : StateResult (reborrowTo (exclusive) (⟨0⟩) ([.index 1]) (.mutable) (0)) :=
   @reborrowTo_preserves exclusive ⟨0⟩ [.index 1] .mutable 0 (by decide)
-
 /-- Planted (law `ConcreteSpec.Core.Own.reborrowTo_preserves`, case `ConcreteSpec.Core.Own.Examples.exclusive`, subject `ConcreteSpec.Core.Own.reborrowTo`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.reborrowToDropParent`). -/
 example : (WellFormed (exclusive)) ∧ ¬ StateResult (reborrowToDropParent (exclusive) (⟨0⟩) ([.index 1]) (.mutable) (0)) := by decide
-
 /-- Instance (law `ConcreteSpec.Core.Own.reborrow_preserves`, case `ConcreteSpec.Core.Own.Examples.exclusive`). -/
 example : StateResult (reborrow (exclusive) (⟨0⟩) ([.index 1]) (.mutable)) :=
   @reborrow_preserves exclusive ⟨0⟩ [.index 1] .mutable (by decide)
-
 /-- Planted (law `ConcreteSpec.Core.Own.reborrow_preserves`, case `ConcreteSpec.Core.Own.Examples.exclusive`, subject `ConcreteSpec.Core.Own.reborrow`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.reborrowDropAncestors`). -/
 example : (WellFormed (exclusive)) ∧ ¬ StateResult (reborrowDropAncestors (exclusive) (⟨0⟩) ([.index 1]) (.mutable)) := by decide
-
 /-- Instance (law `ConcreteSpec.Core.Own.endLoan_preserves`, case `ConcreteSpec.Core.Own.Examples.child`). -/
 example : StateResult (endLoan (child) (⟨1⟩)) :=
   @endLoan_preserves child ⟨1⟩ (by decide)
-
 /-- Planted (law `ConcreteSpec.Core.Own.endLoan_preserves`, case `ConcreteSpec.Core.Own.Examples.child`, subject `ConcreteSpec.Core.Own.endLoan`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.endLoanRemoveParent`). -/
 example : (WellFormed (child)) ∧ ¬ StateResult (endLoanRemoveParent (child) (⟨1⟩)) := by decide
-
 /-- Instance: Computation observation. -/
 example : StateResult (accessOwner (shared) (⟨0⟩) (.shared)) :=
   @accessOwner_preserves shared ⟨0⟩ .shared (by decide)
-
 /-- Planted: Computation observation. -/
 example : (WellFormed (shared)) ∧ ¬ StateResult (accessOwnerConsumeRoot (shared) (⟨0⟩) (.shared)) := by decide
-
 /-- Instance: Computation observation. -/
 example : StateResult (accessLoan (child) (⟨1⟩) (.mutable)) :=
   @accessLoan_preserves child ⟨1⟩ .mutable (by decide)
-
 /-- Planted: Computation observation. -/
 example : (WellFormed (child)) ∧ ¬ StateResult (accessLoanDropParent (child) (⟨1⟩) (.mutable)) := by decide
-
 /-- Instance (law `ConcreteSpec.Core.Own.bind_preserves`, case `ConcreteSpec.Core.Own.Examples.shared`). -/
 example : StateResult (bind (types) (y) (shared)) :=
   @bind_preserves types shared y (by decide)
-
 /-- Planted (law `ConcreteSpec.Core.Own.bind_preserves`, case `ConcreteSpec.Core.Own.Examples.shared`, subject `ConcreteSpec.Core.Own.bind`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.bindNoAdvancePlace`). -/
 example : (WellFormed (shared)) ∧ ¬ StateResult (bindNoAdvancePlace (types) (y) (shared)) := by decide
-
 /-- Instance (law `ConcreteSpec.Core.Own.drop_preserves`, case `ConcreteSpec.Core.Own.LifecycleWitnesses.moved`). -/
 example : StateResult (drop ([x]) (LifecycleWitnesses.moved)) :=
   @drop_preserves LifecycleWitnesses.moved [x] (by decide)
-
 /-- Planted (law `ConcreteSpec.Core.Own.drop_preserves`, case `ConcreteSpec.Core.Own.LifecycleWitnesses.moved`, subject `ConcreteSpec.Core.Own.drop`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.dropLocalOnly`). -/
 example : (WellFormed (LifecycleWitnesses.moved)) ∧ ¬ StateResult (dropLocalOnly ([x]) (LifecycleWitnesses.moved)) := by decide
-
 /-- Instance (law `ConcreteSpec.Core.Own.enter_preserves`, case `ConcreteSpec.Core.Own.Examples.shared`). -/
 example : StateResult (enter (types) ([y]) (shared)) :=
   @enter_preserves types shared [y] (by decide)
-
 /-- Planted (law `ConcreteSpec.Core.Own.enter_preserves`, case `ConcreteSpec.Core.Own.Examples.shared`, subject `ConcreteSpec.Core.Own.enter`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.enterDuplicateFrameId`). -/
 example : (WellFormed (shared)) ∧ ¬ StateResult (enterDuplicateFrameId (types) ([y]) (shared)) := by decide
-
 /-- Instance (law `ConcreteSpec.Core.Own.endLocals_preserves`, case `ConcreteSpec.Core.Own.LifecycleWitnesses.called`). -/
 example : StateResult (endLocals (1) (LifecycleWitnesses.called)) :=
   @endLocals_preserves LifecycleWitnesses.called 1 (by decide)
-
 /-- Planted (law `ConcreteSpec.Core.Own.endLocals_preserves`, case `ConcreteSpec.Core.Own.LifecycleWitnesses.called`, subject `ConcreteSpec.Core.Own.endLocals`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.endLocalsCallerInstead`). -/
 example : (WellFormed (LifecycleWitnesses.called)) ∧ ¬ StateResult (endLocalsCallerInstead (1) (LifecycleWitnesses.called)) := by decide
-
 /-- Instance (law `ConcreteSpec.Core.Own.leave_preserves`, case `ConcreteSpec.Core.Own.RoundThreeWitnesses.localLoan`). -/
 example : StateResult (leave (RoundThreeWitnesses.localLoan)) :=
   @leave_preserves RoundThreeWitnesses.localLoan (by decide)
-
 /-- Planted (law `ConcreteSpec.Core.Own.leave_preserves`, case `ConcreteSpec.Core.Own.RoundThreeWitnesses.localLoan`, subject `ConcreteSpec.Core.Own.leave`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.leaveKeepSlots`). -/
 example : WellFormed RoundThreeWitnesses.localLoan ∧
     ¬ StateResult (leaveKeepSlots RoundThreeWitnesses.localLoan) := by decide
-
 /-- Instance (law `ConcreteSpec.Core.Own.enterDown_preserves`, case `ConcreteSpec.Core.Own.Examples.exclusive`). -/
 example : StateResult (enterDown (exclusive) ([(y, ⟨0⟩)])) :=
   @enterDown_preserves exclusive [(y, ⟨0⟩)] (by decide)
-
 /-- Planted (law `ConcreteSpec.Core.Own.enterDown_preserves`, case `ConcreteSpec.Core.Own.Examples.exclusive`, subject `ConcreteSpec.Core.Own.enterDown`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.enterDownReuseParentId`). -/
 example : (WellFormed (exclusive)) ∧ ¬ StateResult (enterDownReuseParentId (exclusive) ([(y, ⟨0⟩)])) := by decide
-
 /-- Instance (law `ConcreteSpec.Core.Own.life_preserves`, case `ConcreteSpec.Core.Own.Examples.shared`). -/
 example : StateResult (life (types) ((.bind y)) (shared)) :=
   @life_preserves types (.bind y) shared (by decide)
-
 /-- Planted (law `ConcreteSpec.Core.Own.life_preserves`, case `ConcreteSpec.Core.Own.Examples.shared`, subject `ConcreteSpec.Core.Own.life`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.lifeBindUnindexed`). -/
 example : (WellFormed (shared)) ∧ ¬ StateResult (lifeBindUnindexed (types) ((.bind y)) (shared)) := by decide
-
 /-- Instance (law `ConcreteSpec.Core.Own.adoptDown_preserves`, case `ConcreteSpec.Core.Own.PreservationEvidence.adoptionInput`). -/
 example : StateResult (adoptDown (adoptionInput) (DirectArgumentWitnesses.waiting.pending)) :=
   @adoptDown_preserves adoptionInput DirectArgumentWitnesses.waiting.pending (by decide)
-
 /-- Planted (law `ConcreteSpec.Core.Own.adoptDown_preserves`, case `ConcreteSpec.Core.Own.PreservationEvidence.adoptionInput`, subject `ConcreteSpec.Core.Own.adoptDown`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.adoptDownUnissuedActivation`). -/
 example : (WellFormed (adoptionInput)) ∧ ¬ StateResult (adoptDownUnissuedActivation (adoptionInput) (DirectArgumentWitnesses.waiting.pending)) := by decide
-
 /-- Instance (law `ConcreteSpec.Core.Own.passDown_preserves`, case `ConcreteSpec.Core.Own.Examples.exclusive`). -/
 example : CallOwnResult (passDown (⟨exclusive, []⟩) (⟨0⟩) (y)) :=
   @passDown_preserves ⟨exclusive, []⟩ ⟨0⟩ y (by decide)
-
 /-- Planted (law `ConcreteSpec.Core.Own.passDown_preserves`, case `ConcreteSpec.Core.Own.Examples.exclusive`, subject `ConcreteSpec.Core.Own.passDown`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.passDownClearParent`). -/
 example : (WellFormed (⟨exclusive, []⟩ : CallState).own) ∧ ¬ CallOwnResult (passDownClearParent (⟨exclusive, []⟩) (⟨0⟩) (y)) := by decide
-
 /-- Instance (law `ConcreteSpec.Core.Own.passDown_call_preserves`, case `ConcreteSpec.Core.Own.Examples.exclusive`). -/
 example : CallResult (passDown (⟨exclusive, []⟩) (⟨0⟩) (y)) :=
   @passDown_call_preserves ⟨exclusive, []⟩ ⟨0⟩ y (by decide)
-
 /-- Planted (law `ConcreteSpec.Core.Own.passDown_call_preserves`, case `ConcreteSpec.Core.Own.Examples.exclusive`, subject `ConcreteSpec.Core.Own.passDown`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.passDownOmitPending`). -/
 example : (CallState.WellFormed (⟨exclusive, []⟩)) ∧ ¬ CallResult (passDownOmitPending (⟨exclusive, []⟩) (⟨0⟩) (y)) := by decide
-
 /-- Instance (law `ConcreteSpec.Core.Own.callLife_preserves`, case `ConcreteSpec.Core.Own.CallWitnesses.waiting`). -/
 example : CallOwnResult (callLife (types) ((.enter [y])) (CallWitnesses.waiting)) :=
   @callLife_preserves types (.enter [y]) CallWitnesses.waiting (by decide)
-
 /-- Planted (law `ConcreteSpec.Core.Own.callLife_preserves`, case `ConcreteSpec.Core.Own.CallWitnesses.waiting`, subject `ConcreteSpec.Core.Own.callLife`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.callLifeUnissuedActivation`). -/
 example : (WellFormed (CallWitnesses.waiting).own) ∧ ¬ CallOwnResult (callLifeUnissuedActivation (types) ((.enter [y])) (CallWitnesses.waiting)) := by decide
-
 /-- Instance (law `ConcreteSpec.Core.Own.callLife_call_preserves`, case `ConcreteSpec.Core.Own.CallWitnesses.waiting`). -/
 example : CallResult (callLife (types) ((.enter [y])) (CallWitnesses.waiting)) :=
   @callLife_call_preserves types (.enter [y]) CallWitnesses.waiting (by decide)
-
 /-- Planted (law `ConcreteSpec.Core.Own.callLife_call_preserves`, case `ConcreteSpec.Core.Own.CallWitnesses.waiting`, subject `ConcreteSpec.Core.Own.callLife`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.callLifeKeepPending`). -/
 example : (CallState.WellFormed (CallWitnesses.waiting)) ∧ ¬ CallResult (callLifeKeepPending (types) ((.enter [y])) (CallWitnesses.waiting)) := by decide
-
 /-- Instance (law `ConcreteSpec.Core.Own.passOwner_preserves`, case `ConcreteSpec.Core.Own.DirectArgumentWitnesses.caller`). -/
 example : CallOwnResult (passOwner (DirectArgumentWitnesses.caller) (⟨1⟩) ([.index 3]) (.mutable) (DirectArgumentWitnesses.z)) :=
   @passOwner_preserves DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z (by decide)
-
 /-- Planted (law `ConcreteSpec.Core.Own.passOwner_preserves`, case `ConcreteSpec.Core.Own.DirectArgumentWitnesses.caller`, subject `ConcreteSpec.Core.Own.passOwner`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.passOwnerClearCallRoot`). -/
 example : (WellFormed (DirectArgumentWitnesses.caller).own) ∧ ¬ CallOwnResult (passOwnerClearCallRoot (DirectArgumentWitnesses.caller) (⟨1⟩) ([.index 3]) (.mutable) (DirectArgumentWitnesses.z)) := by decide
-
 /-- Instance (law `ConcreteSpec.Core.Own.passOwner_call_preserves`, case `ConcreteSpec.Core.Own.DirectArgumentWitnesses.caller`). -/
 example : CallResult (passOwner (DirectArgumentWitnesses.caller) (⟨1⟩) ([.index 3]) (.mutable) (DirectArgumentWitnesses.z)) :=
   @passOwner_call_preserves DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z (by decide)
-
 /-- Planted (law `ConcreteSpec.Core.Own.passOwner_call_preserves`, case `ConcreteSpec.Core.Own.DirectArgumentWitnesses.caller`, subject `ConcreteSpec.Core.Own.passOwner`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.passOwnerOmitPending`). -/
 example : (CallState.WellFormed (DirectArgumentWitnesses.caller)) ∧ ¬ CallResult (passOwnerOmitPending (DirectArgumentWitnesses.caller) (⟨1⟩) ([.index 3]) (.mutable) (DirectArgumentWitnesses.z)) := by decide
-
 end PreservationEvidence
-
 namespace LifetimeEvidence
 open Examples
 /-- The callee is current, with a pending direct owner argument ready to adopt. -/
 abbrev adoptionInput := PreservationEvidence.adoptionInput
-/-- Planted: omit only slot teardown after loan cleanup and frame removal. -/
-def leaveSlots (s : State) : Option State :=
-  (leave s).map fun t => { t with slots := s.slots }
-/-- Planted: add a refusal-bypassing exit without cleanup. -/
-def leaveLocalLoans (s : State) : Option State :=
-  match leave s with
-  | some t => some t
-  | none => some { s with frames := s.frames.tail }
-
+/-- Planted: omit only the root-loan exclusion guard in drop. Linear consumption still applies. -/
+def dropWithLoans (xs : List Var) (s : State) : Option State := do
+  let f ← s.frames.head?
+  let ps := List.map Prod.snd (f.locals.filter fun e => decide (e.1 ∈ xs))
+  if s.slots.all (fun x => decide (x.place ∉ ps) || x.desc.copy || x.status == .moved) then
+    some { s with
+      slots := s.slots.filter (fun x => decide (x.place ∉ ps))
+      frames := { f with locals := f.locals.filter (fun e => decide (e.2 ∉ ps)) } :: s.frames.tail }
+  else none
+/-- Planted: substitute the root-guard mutation at the local teardown site. -/
+def leaveWithLoans (s : State) : Option State := do
+  let f ← s.frames.head?
+  let s ← endLocals f.id s
+  let s ← dropWithLoans (List.map Prod.fst f.locals) s
+  some { s with frames := s.frames.tail }
+/-- Planted: omit only activation-local loan cleanup; drop retains all its guards. -/
+def leaveWithoutEnding (s : State) : Option State := do
+  let f ← s.frames.head?
+  let s ← drop (List.map Prod.fst f.locals) s
+  some { s with frames := s.frames.tail }
+/-- Reuse the single slot-teardown omission. -/
+abbrev leaveSlots := PreservationEvidence.leaveKeepSlots
 /-- Planted: cleanup indiscriminately ends caller loans too. -/
-def leaveAllLoans (s : State) : Option State :=
-  (leave s).map fun t => { t with loans := [] }
-/-- Planted: add a refusal-bypassing exit that strands its loans. -/
-def leaveStranded (s : State) : Option State :=
-  match leave s with
-  | some t => some t
-  | none => some { s with frames := s.frames.tail }
-
+def endEveryActivation (_activation : Nat) (s : State) : Option State :=
+  s.loans.foldlM (fun s l => endLoan s l.id) s
+/-- Planted: substitute the activation-selector mutation into leave. -/
+def leaveAllLoans (s : State) : Option State := do
+  let f ← s.frames.head?
+  let s ← endEveryActivation f.id s
+  let s ← drop (List.map Prod.fst f.locals) s
+  some { s with frames := s.frames.tail }
 /-- Planted: mutable argument lending incorrectly issues a shared loan, permitting
 shared owner access during the exclusive call. All bookkeeping still runs. -/
-def passOwnerNoFreeze (s : CallState) (p : Hybrid.Place) (path : List Projection)
-    (_ : Mode) (x : Var) : Option CallState := passOwner s p path .shared x
+def passOwnerNoFreeze (s : CallState) (root : Hybrid.Place) (path : List Projection)
+    (mode : Mode) (parameter : Var) : Option CallState := do
+  if parameter ∈ s.pending.map Prod.fst then none else do
+  let f ← s.own.frames.head?
+  if ownerAccess s.own root mode && decide (f.id < s.own.nextActivation) then
+    pure ⟨{ s.own with
+      nextLoan := s.own.nextLoan + 1
+      loans := ⟨⟨s.own.nextLoan⟩, root, path, .shared, none, [], f.id, true, true⟩ :: s.own.loans },
+      s.pending ++ [(parameter, ⟨s.own.nextLoan⟩)]⟩
+  else none
 /-- Planted: only the fresh child targets an inactive activation. -/
-def reborrowToDead (s : State) (i : LoanId) (path : List Projection) (m : Mode) (a : Nat) :=
-  (reborrowTo s i path m a).map fun t => { t with loans := t.loans.map (fun (l : Loan) =>
-    if l.id == LoanId.mk s.nextLoan then { l with activation := t.nextActivation } else l) }
+def reborrowToDead (s : State) (i : LoanId) (suffix : List Projection) (m : Mode)
+    (activation : Nat) : Option State := do
+  let a ← loan s i
+  if loanAccess s i m && decide (activation < s.nextActivation ∧
+      s.frames.head?.map Activation.id = some activation) then
+    some { s with
+      nextLoan := s.nextLoan + 1
+      loans := ⟨⟨s.nextLoan⟩, a.root, a.path ++ suffix, m, some i,
+        i :: a.ancestors, s.nextActivation, false, false⟩ :: s.loans }
+  else none
 /-- Planted: only adopted arguments target an inactive activation. -/
-def adoptDownDead (s : State) (args : List (Var × LoanId)) :=
-  (adoptDown s args).map fun t => { t with loans := t.loans.map (fun (l : Loan) =>
-    if l.id ∈ (args.map Prod.snd) then { l with activation := t.nextActivation } else l) }
-
-def leave_no_local_loanCase := (RoundThreeWitnesses.localLoan)
-
+abbrev adoptDownDead := PreservationEvidence.adoptDownUnissuedActivation
+/-- A Copy local with a loan targeting the still-active caller; only the root guard prevents exit. -/
+def outerLoan : State := { RoundThreeWitnesses.localLoan with
+  loans := RoundThreeWitnesses.localLoan.loans.map fun l => { l with activation := 0 } }
+def leave_no_local_loanCase := outerLoan
 /-- Instance (law `ConcreteSpec.Core.Own.leave_no_local_loan`, case `ConcreteSpec.Core.Own.LifetimeEvidence.leave_no_local_loanCase`). -/
-example : ResultSatisfies (fun t : State => ∀ l ∈ t.loans, l.root ≠ ((y, Hybrid.Place.mk 1)).2) (leave (RoundThreeWitnesses.localLoan)) :=
-  @leave_no_local_loan RoundThreeWitnesses.localLoan ⟨1, [(y, ⟨1⟩)], []⟩ (y, ⟨1⟩) (rfl) (by decide) (.head [])
-
-/-- Planted (law `ConcreteSpec.Core.Own.leave_no_local_loan`, case `ConcreteSpec.Core.Own.Examples.shared`, subject `ConcreteSpec.Core.Own.leave`, mutant `ConcreteSpec.Core.Own.LifetimeEvidence.leaveLocalLoans`). -/
-example : shared.frames.head? = some (⟨0, [(x, ⟨0⟩)], []⟩ : Activation) ∧ WellFormed shared ∧
-    ¬ ResultSatisfies (fun t : State => ∀ l ∈ t.loans, l.root ≠ ⟨0⟩) (leaveLocalLoans shared) := by decide
-
+example : ResultSatisfies (fun t : State => ∀ l ∈ t.loans, l.root ≠ ⟨1⟩) (leave outerLoan) :=
+  @leave_no_local_loan outerLoan ⟨1, [(y, ⟨1⟩)], []⟩ (y, ⟨1⟩) rfl (by decide) (.head [])
+/-- Planted (law `ConcreteSpec.Core.Own.leave_no_local_loan`, case `ConcreteSpec.Core.Own.LifetimeEvidence.leave_no_local_loanCase`, subject `ConcreteSpec.Core.Own.leave`, mutant `ConcreteSpec.Core.Own.LifetimeEvidence.leaveWithLoans`). -/
+example : outerLoan.frames.head? = some (⟨1, [(y, ⟨1⟩)], []⟩ : Activation) ∧
+    WellFormed outerLoan ∧ (y, Hybrid.Place.mk 1) ∈ (⟨1, [(y, ⟨1⟩)], []⟩ : Activation).locals ∧
+    ¬ ResultSatisfies (fun t : State => ∀ l ∈ t.loans, l.root ≠ ⟨1⟩) (leaveWithLoans outerLoan) := by decide
 def leave_no_activation_slotCase := (RoundThreeWitnesses.localLoan)
-
 /-- Instance (law `ConcreteSpec.Core.Own.leave_no_activation_slot`, case `ConcreteSpec.Core.Own.LifetimeEvidence.leave_no_activation_slotCase`). -/
 example : ResultSatisfies (fun t : State => ∀ x ∈ t.slots, x.activation ≠ (⟨1, [(y, ⟨1⟩)], []⟩ : Activation).id) (leave (RoundThreeWitnesses.localLoan)) :=
   @leave_no_activation_slot RoundThreeWitnesses.localLoan ⟨1, [(y, ⟨1⟩)], []⟩ (by decide) (rfl)
-
 /-- Planted (law `ConcreteSpec.Core.Own.leave_no_activation_slot`, case `ConcreteSpec.Core.Own.LifetimeEvidence.leave_no_activation_slotCase`, subject `ConcreteSpec.Core.Own.leave`, mutant `ConcreteSpec.Core.Own.LifetimeEvidence.leaveSlots`). -/
 example : (WellFormed (RoundThreeWitnesses.localLoan)) ∧ ((RoundThreeWitnesses.localLoan).frames.head? = some (⟨1, [(y, ⟨1⟩)], []⟩ : Activation)) ∧ ¬ ResultSatisfies (fun t : State => ∀ x ∈ t.slots, x.activation ≠ (⟨1, [(y, ⟨1⟩)], []⟩ : Activation).id) (leaveSlots (RoundThreeWitnesses.localLoan)) := by decide
-
 def passOwner_freezesCase := (DirectArgumentWitnesses.caller)
-
 /-- Instance (law `ConcreteSpec.Core.Own.passOwner_freezes`, case `ConcreteSpec.Core.Own.LifetimeEvidence.passOwner_freezesCase`). -/
 example : ResultSatisfies (fun t : CallState => ownerAccess t.own (⟨1⟩) .mutable = false ∧ ((Mode.mutable) = .mutable → ownerAccess t.own (⟨1⟩) .shared = false)) (passOwner (DirectArgumentWitnesses.caller) (⟨1⟩) ([.index 3]) (Mode.mutable) (DirectArgumentWitnesses.z)) :=
   @passOwner_freezes DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z
-
 /-- Planted (law `ConcreteSpec.Core.Own.passOwner_freezes`, case `ConcreteSpec.Core.Own.LifetimeEvidence.passOwner_freezesCase`, subject `ConcreteSpec.Core.Own.passOwner`, mutant `ConcreteSpec.Core.Own.LifetimeEvidence.passOwnerNoFreeze`). -/
 example : ¬ ResultSatisfies (fun t : CallState => ownerAccess t.own (⟨1⟩) .mutable = false ∧ ((Mode.mutable) = .mutable → ownerAccess t.own (⟨1⟩) .shared = false)) (passOwnerNoFreeze (DirectArgumentWitnesses.caller) (⟨1⟩) ([.index 3]) (Mode.mutable) (DirectArgumentWitnesses.z)) := by decide
-
 def leave_retains_callerCase := (RoundThreeWitnesses.localLoan)
-
 /-- Instance (law `ConcreteSpec.Core.Own.leave_retains_caller`, case `ConcreteSpec.Core.Own.LifetimeEvidence.leave_retains_callerCase`). -/
 example : ResultSatisfies (fun t : State => ((Examples.shared.loans.headD ⟨⟨99⟩, ⟨99⟩, [], .shared, none, [], 99, false, false⟩)) ∈ t.loans) (leave (RoundThreeWitnesses.localLoan)) :=
   @leave_retains_caller RoundThreeWitnesses.localLoan ⟨1, [(y, ⟨1⟩)], []⟩ (Examples.shared.loans.headD ⟨⟨99⟩, ⟨99⟩, [], .shared, none, [], 99, false, false⟩) (by decide) (rfl) (.tail _ (.head [])) (by decide)
-
 /-- Planted (law `ConcreteSpec.Core.Own.leave_retains_caller`, case `ConcreteSpec.Core.Own.LifetimeEvidence.leave_retains_callerCase`, subject `ConcreteSpec.Core.Own.leave`, mutant `ConcreteSpec.Core.Own.LifetimeEvidence.leaveAllLoans`). -/
 example : (WellFormed (RoundThreeWitnesses.localLoan)) ∧ ((RoundThreeWitnesses.localLoan).frames.head? = some (⟨1, [(y, ⟨1⟩)], []⟩ : Activation)) ∧ (((Examples.shared.loans.headD ⟨⟨99⟩, ⟨99⟩, [], .shared, none, [], 99, false, false⟩)) ∈ (RoundThreeWitnesses.localLoan).loans) ∧ (((Examples.shared.loans.headD ⟨⟨99⟩, ⟨99⟩, [], .shared, none, [], 99, false, false⟩)).activation ≠ (⟨1, [(y, ⟨1⟩)], []⟩ : Activation).id) ∧ ¬ ResultSatisfies (fun t : State => ((Examples.shared.loans.headD ⟨⟨99⟩, ⟨99⟩, [], .shared, none, [], 99, false, false⟩)) ∈ t.loans) (leaveAllLoans (RoundThreeWitnesses.localLoan)) := by decide
-
-def leave_no_activation_loanCase := (RoundThreeWitnesses.localLoan)
-
+def leave_no_activation_loanCase := DirectArgumentWitnesses.called.own
 /-- Instance (law `ConcreteSpec.Core.Own.leave_no_activation_loan`, case `ConcreteSpec.Core.Own.LifetimeEvidence.leave_no_activation_loanCase`). -/
-example : ResultSatisfies (fun t : State => ∀ l ∈ t.loans, l.activation ≠ (⟨1, [(y, ⟨1⟩)], []⟩ : Activation).id) (leave (RoundThreeWitnesses.localLoan)) :=
-  @leave_no_activation_loan RoundThreeWitnesses.localLoan ⟨1, [(y, ⟨1⟩)], []⟩ (rfl)
-
-/-- Planted (law `ConcreteSpec.Core.Own.leave_no_activation_loan`, case `ConcreteSpec.Core.Own.Examples.shared`, subject `ConcreteSpec.Core.Own.leave`, mutant `ConcreteSpec.Core.Own.LifetimeEvidence.leaveLocalLoans`). -/
-example : shared.frames.head? = some (⟨0, [(x, ⟨0⟩)], []⟩ : Activation) ∧
-    ¬ ResultSatisfies (fun t : State => ∀ l ∈ t.loans, l.activation ≠ 0) (leaveLocalLoans shared) := by decide
-
+example : ResultSatisfies (fun t : State => ∀ l ∈ t.loans, l.activation ≠ 1) (leave DirectArgumentWitnesses.called.own) :=
+  @leave_no_activation_loan DirectArgumentWitnesses.called.own ⟨1, [], [(DirectArgumentWitnesses.z, ⟨1⟩)]⟩ rfl
+/-- Planted (law `ConcreteSpec.Core.Own.leave_no_activation_loan`, case `ConcreteSpec.Core.Own.LifetimeEvidence.leave_no_activation_loanCase`, subject `ConcreteSpec.Core.Own.leave`, mutant `ConcreteSpec.Core.Own.LifetimeEvidence.leaveWithoutEnding`). -/
+example : DirectArgumentWitnesses.called.own.frames.head? = some (⟨1, [], [(DirectArgumentWitnesses.z, ⟨1⟩)]⟩ : Activation) ∧
+    ¬ ResultSatisfies (fun t : State => ∀ l ∈ t.loans, l.activation ≠ 1) (leaveWithoutEnding DirectArgumentWitnesses.called.own) := by decide
 def reborrowTo_liveCase := (exclusive)
-
 /-- Instance (law `ConcreteSpec.Core.Own.reborrowTo_live`, case `ConcreteSpec.Core.Own.LifetimeEvidence.reborrowTo_liveCase`). -/
 example : ResultSatisfies (fun t : State => LiveDestinations t) (reborrowTo (exclusive) (⟨0⟩) ([.index 1]) (Mode.mutable) (0)) :=
   @reborrowTo_live exclusive ⟨0⟩ [.index 1] .mutable 0 (by decide)
-
 /-- Planted (law `ConcreteSpec.Core.Own.reborrowTo_live`, case `ConcreteSpec.Core.Own.LifetimeEvidence.reborrowTo_liveCase`, subject `ConcreteSpec.Core.Own.reborrowTo`, mutant `ConcreteSpec.Core.Own.LifetimeEvidence.reborrowToDead`). -/
 example : (LiveDestinations (exclusive)) ∧ ¬ ResultSatisfies (fun t : State => LiveDestinations t) (reborrowToDead (exclusive) (⟨0⟩) ([.index 1]) (Mode.mutable) (0)) := by decide
-
 def adoptDown_liveCase := (adoptionInput)
-
 /-- Instance (law `ConcreteSpec.Core.Own.adoptDown_live`, case `ConcreteSpec.Core.Own.LifetimeEvidence.adoptDown_liveCase`). -/
 example : ResultSatisfies (fun t : State => LiveDestinations t) (adoptDown (adoptionInput) (DirectArgumentWitnesses.waiting.pending)) :=
   @adoptDown_live adoptionInput DirectArgumentWitnesses.waiting.pending (by decide)
-
 /-- Planted (law `ConcreteSpec.Core.Own.adoptDown_live`, case `ConcreteSpec.Core.Own.LifetimeEvidence.adoptDown_liveCase`, subject `ConcreteSpec.Core.Own.adoptDown`, mutant `ConcreteSpec.Core.Own.LifetimeEvidence.adoptDownDead`). -/
 example : (LiveDestinations (adoptionInput)) ∧ ¬ ResultSatisfies (fun t : State => LiveDestinations t) (adoptDownDead (adoptionInput) (DirectArgumentWitnesses.waiting.pending)) := by decide
-
-def leave_liveCase := (RoundThreeWitnesses.localLoan)
-
+def leave_liveCase := DirectArgumentWitnesses.called.own
 /-- Instance (law `ConcreteSpec.Core.Own.leave_live`, case `ConcreteSpec.Core.Own.LifetimeEvidence.leave_liveCase`). -/
-example : ResultSatisfies (fun t : State => LiveDestinations t) (leave (RoundThreeWitnesses.localLoan)) :=
-  @leave_live RoundThreeWitnesses.localLoan ⟨1, [(y, ⟨1⟩)], []⟩ (by decide) (rfl)
-
-/-- Planted (law `ConcreteSpec.Core.Own.leave_live`, case `ConcreteSpec.Core.Own.Examples.shared`, subject `ConcreteSpec.Core.Own.leave`, mutant `ConcreteSpec.Core.Own.LifetimeEvidence.leaveStranded`). -/
-example : LiveDestinations shared ∧ shared.frames.head? = some (⟨0, [(x, ⟨0⟩)], []⟩ : Activation) ∧
-    ¬ ResultSatisfies LiveDestinations (leaveStranded shared) := by decide
-
+example : ResultSatisfies LiveDestinations (leave DirectArgumentWitnesses.called.own) :=
+  @leave_live DirectArgumentWitnesses.called.own ⟨1, [], [(DirectArgumentWitnesses.z, ⟨1⟩)]⟩ (by decide) rfl
+/-- Planted (law `ConcreteSpec.Core.Own.leave_live`, case `ConcreteSpec.Core.Own.LifetimeEvidence.leave_liveCase`, subject `ConcreteSpec.Core.Own.leave`, mutant `ConcreteSpec.Core.Own.LifetimeEvidence.leaveWithoutEnding`). -/
+example : LiveDestinations DirectArgumentWitnesses.called.own ∧ DirectArgumentWitnesses.called.own.frames.head? = some (⟨1, [], [(DirectArgumentWitnesses.z, ⟨1⟩)]⟩ : Activation) ∧
+    ¬ ResultSatisfies LiveDestinations (leaveWithoutEnding DirectArgumentWitnesses.called.own) := by decide
 /-- A state whose active frame omits a slot of its activation from `f.locals` violates
 the frame-local completeness clause of `WellFormed`. -/
 def unindexedCopy : State :=
   { initial with
     slots := initial.slots.map fun x => { x with desc := { x.desc with copy := true } }
     frames := [⟨0, [], []⟩] }
-
 /-- Planted: concrete ownership calculation. -/
 example : ¬ WellFormed unindexedCopy := by decide
 /-- Planted: concrete ownership calculation. -/
 example : ¬ WellFormed { initial with frames := [⟨0, [], []⟩] } := by decide
-
 /-- Planted: An issued but inactive activation cannot retain an owner obligation. -/
 example : ¬ WellFormed { initial with frames := [⟨1, [], []⟩], nextActivation := 2 } := by decide
-
 /-- Planted: A callee cannot index a caller's Copy owner as its own local. -/
 example : ¬ WellFormed { initial with
     slots := initial.slots.map fun x => { x with desc := { x.desc with copy := true } }
     frames := [⟨1, [(y, ⟨0⟩)], []⟩, ⟨0, [(x, ⟨0⟩)], []⟩]
     nextActivation := 2 } := by decide
-
 /-- Instance: Cleanup removes every alias of a removed place, so no local index dangles. -/
 example : let s : State := { LifecycleWitnesses.moved with
     frames := [⟨0, [(x, ⟨0⟩), (y, ⟨0⟩)], []⟩] }
     WellFormed s ∧ (drop [x] s).isSome = true ∧
       WellFormed ((drop [x] s).getD initial) := by decide
-
+/-- Planted: the root-guard mutation is used at every direct drop and leave site. -/
+def lifeWithLoans (types : Var → Option Descriptor) : Exec.Life → State → Option State
+  | .drop xs, s => dropWithLoans xs s
+  | .leave, s => leaveWithLoans s
+  | e, s => life types e s
+/-- Planted: every non-entry call event uses the substituted lifecycle. -/
+def callWithLoans (types : Var → Option Descriptor) : Exec.Life → CallState → Option CallState
+  | .enter ps, s => callLife types (.enter ps) s
+  | e, s => if s.pending = [] then
+      (lifeWithLoans types e s.own).map fun own => { s with own := own }
+    else none
+/-- Planted: the same omitted root check adds a transition and breaks each derived preservation
+postcondition, while every preservation premise holds. -/
+example : WellFormed outerLoan ∧ CallState.WellFormed ⟨outerLoan, []⟩ ∧
+    drop [y] outerLoan = none ∧ leave outerLoan = none ∧
+    ¬ StateResult (dropWithLoans [y] outerLoan) ∧
+    ¬ StateResult (leaveWithLoans outerLoan) ∧
+    ¬ StateResult (lifeWithLoans types .leave outerLoan) ∧
+    ¬ CallOwnResult (callWithLoans types .leave ⟨outerLoan, []⟩) ∧
+    ¬ CallResult (callWithLoans types .leave ⟨outerLoan, []⟩) := by decide
 end LifetimeEvidence
-
 namespace FinalEvidence
 open Examples
-
 /-- Planted: entry wrongly forbids parameter shadowing of caller locals. -/
-def enterRefuse (types : Var → Option Descriptor) (xs : List Var) (s : State) : Option State :=
-  if xs.any (fun x => (s.frames.head?.bind fun f => AList.lookup f.locals x).isSome) then none
-  else enter types xs s
-
-/-- Instance: two distinct typed parameters include a name already bound in the caller. -/
-example : [x, y].Nodup ∧ (enter types [x, y] shared).isSome = true := by decide
-/-- Planted: forbidding caller shadowing rejects a permitted fresh callee frame. -/
+def enterRefuse (types : Var → Option Descriptor) (params : List Var) (s : State) : Option State := do
+  let caller := s.frames.head?
+  let s := { s with
+    nextActivation := s.nextActivation + 1
+    frames := ⟨s.nextActivation, [], []⟩ :: s.frames }
+  params.foldlM (fun s x => do
+    if (caller.bind fun f => AList.lookup f.locals x).isSome then none
+    else bind types x s) s
+/-- Instance (law `ConcreteSpec.Core.Own.enter_progress`, case `ConcreteSpec.Core.Own.Examples.shared`). Two parameters may shadow caller locals. -/
+example : ∃ t, enter types [x, y] shared = some t :=
+  @enter_progress types shared [x, y] (by decide) (fun _ _ => ⟨_, rfl⟩)
+/-- Planted (law `ConcreteSpec.Core.Own.enter_progress`, case `ConcreteSpec.Core.Own.Examples.shared`, subject `ConcreteSpec.Core.Own.enter`, mutant `ConcreteSpec.Core.Own.FinalEvidence.enterRefuse`). -/
 example : [x, y].Nodup ∧ (∀ v ∈ [x, y], ∃ d, types v = some d) ∧
     ¬ (∃ t, enterRefuse types [x, y] shared = some t) :=
   ⟨by decide, (fun _ _ => ⟨_, rfl⟩), by change ¬ (∃ t, (none : Option State) = some t); simp⟩
-
 /-- Planted: omit endLocals only, throughout the call lifecycle adapter. -/
-def leaveLeaked (s : State) : Option State := do
-  let f ← s.frames.head?
-  let t ← drop (List.map Prod.fst f.locals) s
-  pure { t with frames := t.frames.tail }
+abbrev leaveLeaked := LifetimeEvidence.leaveWithoutEnding
 /-- Planted: every leave site uses the same cleanup omission; other events are unchanged. -/
 def callLifeLeaked (types : Var → Option Descriptor) (e : Exec.Life) (s : CallState) : Option CallState :=
   match e with
   | .leave => if s.pending = [] then (leaveLeaked s.own).map fun own => { s with own := own } else none
   | _ => callLife types e s
-
+def passOwnerWrongSupply (s : CallState) (root : Hybrid.Place) (path : List Projection)
+    (mode : Mode) (parameter : Var) : Option CallState := do
+  if parameter ∈ s.pending.map Prod.fst then none else do
+  let f ← s.own.frames.head?
+  if ownerAccess s.own root mode && decide (f.id < s.own.nextActivation) then
+    pure ⟨{ s.own with
+      nextLoan := s.own.nextLoan + 2
+      loans := ⟨⟨s.own.nextLoan⟩, root, path, mode, none, [], f.id, true, true⟩ :: s.own.loans },
+      s.pending ++ [(parameter, ⟨s.own.nextLoan⟩)]⟩
+  else none
 def callerFrame : Activation := ⟨0, [(x, ⟨0⟩), (y, ⟨1⟩)], []⟩
-
 /-- Instance (law `ConcreteSpec.Core.Own.directOwner_roundtrip`, case `ConcreteSpec.Core.Own.DirectArgumentWitnesses.caller`). -/
 example : (do
     let waiting ← passOwner DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z
@@ -2736,7 +2754,6 @@ example : (do
       nextActivation := DirectArgumentWitnesses.caller.own.nextActivation + 1 }, []⟩ :=
   @directOwner_roundtrip DirectArgumentWitnesses.caller.own ⟨1⟩ [.index 3] .mutable
     DirectArgumentWitnesses.z types callerFrame (by decide) rfl (by decide) (by decide)
-
 /-- Planted (law `ConcreteSpec.Core.Own.directOwner_roundtrip`, case `ConcreteSpec.Core.Own.DirectArgumentWitnesses.caller`, subject `ConcreteSpec.Core.Own.callLife`, mutant `ConcreteSpec.Core.Own.FinalEvidence.callLifeLeaked`). -/
 example : WellFormed DirectArgumentWitnesses.caller.own ∧
     DirectArgumentWitnesses.caller.own.frames.head? = some callerFrame ∧
@@ -2749,7 +2766,18 @@ example : WellFormed DirectArgumentWitnesses.caller.own ∧
       some ⟨{ DirectArgumentWitnesses.caller.own with
         nextLoan := DirectArgumentWitnesses.caller.own.nextLoan + 1
         nextActivation := DirectArgumentWitnesses.caller.own.nextActivation + 1 }, []⟩) := by decide
-
+/-- Planted (law `ConcreteSpec.Core.Own.directOwner_roundtrip`, case `ConcreteSpec.Core.Own.DirectArgumentWitnesses.caller`, subject `ConcreteSpec.Core.Own.passOwner`, mutant `ConcreteSpec.Core.Own.FinalEvidence.passOwnerWrongSupply`). -/
+example : WellFormed DirectArgumentWitnesses.caller.own ∧
+    DirectArgumentWitnesses.caller.own.frames.head? = some callerFrame ∧
+    callerFrame.id < DirectArgumentWitnesses.caller.own.nextActivation ∧
+    ownerAccess DirectArgumentWitnesses.caller.own ⟨1⟩ .mutable = true ∧
+    ¬ ((do
+      let waiting ← passOwnerWrongSupply DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z
+      let called ← callLife types (.enter [DirectArgumentWitnesses.z]) waiting
+      callLife types .leave called) =
+      some ⟨{ DirectArgumentWitnesses.caller.own with
+        nextLoan := DirectArgumentWitnesses.caller.own.nextLoan + 1
+        nextActivation := DirectArgumentWitnesses.caller.own.nextActivation + 1 }, []⟩) := by decide
 /-- Instance: The roundtrip mutant succeeds through `passOwner`, `enter` and `leave` (`isSome = true`),
 so the planted refutation above fails because the returned state leaks a loan, not because a step
 returns `none`. -/
@@ -2757,13 +2785,9 @@ example : (do
     let waiting ← passOwner DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z
     let called ← callLifeLeaked types (.enter [DirectArgumentWitnesses.z]) waiting
     callLifeLeaked types .leave called).isSome = true := by decide
-
 end FinalEvidence
-
-
 namespace SuccessfulInstances
 open Examples
-
 /-- Instance: preservation and lifetime fixtures actually take their successful branches.
 In particular, optional postconditions cannot hide a vacuous refusal in their tests. -/
 example : (reborrow exclusive ⟨0⟩ [.index 1] .mutable).isSome = true ∧
@@ -2775,13 +2799,9 @@ example : (reborrow exclusive ⟨0⟩ [.index 1] .mutable).isSome = true ∧
     (callLife types (.enter [y]) CallWitnesses.waiting).isSome = true ∧
     (passOwner DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable
       DirectArgumentWitnesses.z).isSome = true := by decide
-
 end SuccessfulInstances
-
-
 namespace RoundTwoEvidence
 open Examples
-
 /-- Two moved slots, including a nonzero target; frame indices are fully populated. -/
 def twoMoved : State :=
   { LifecycleWitnesses.moved with
@@ -2792,8 +2812,12 @@ def twoMoved : State :=
 def restoreZero (s : State) (_ : Hybrid.Place) := reinitialize s ⟨0⟩
 /-- Planted: reinitialization restores every moved slot instead of only its target. -/
 def restoreAll (s : State) (p : Hybrid.Place) : Option State := do
-  let _ ← reinitialize s p
-  pure { s with slots := s.slots.map fun x => { x with status := .owned } }
+  let x ← slot s p
+  if (x.status == .moved || (x.desc.copy && x.desc.mutable)) &&
+      s.loans.all (·.root != p) then
+    some { s with slots := s.slots.map fun x =>
+      { x with status := .owned } }
+  else none
 /-- Instance: a nonzero target is restored and the other moved obligation remains moved.
 This pins the selected-place behavior in addition to the preservation law's weaker invariant. -/
 example : WellFormed twoMoved ∧ StateResult (reinitialize twoMoved ⟨1⟩) ∧
@@ -2801,7 +2825,6 @@ example : WellFormed twoMoved ∧ StateResult (reinitialize twoMoved ⟨1⟩) �
 /-- Planted: each wrong selector fails the same populated selected-place observation. -/
 example : ((restoreZero twoMoved ⟨1⟩).getD initial).slots.map Slot.status ≠ [.owned, .moved] ∧
     ((restoreAll twoMoved ⟨1⟩).getD initial).slots.map Slot.status ≠ [.owned, .moved] := by decide
-
 /-- Instance: a shared direct argument freezes owner writes while preserving shared reads. -/
 example : (passOwner DirectArgumentWitnesses.caller ⟨1⟩ [] .shared y).isSome = true ∧
     ResultSatisfies (fun t : CallState => ownerAccess t.own ⟨1⟩ .mutable = false ∧
@@ -2812,49 +2835,13 @@ example : DirectArgumentWitnesses.called.own.loans.any Loan.callRoot = true ∧
     (leave DirectArgumentWitnesses.called.own).isSome = true ∧
     ResultSatisfies (fun t : State => ∀ l ∈ t.loans, l.activation ≠ 1)
       (leave DirectArgumentWitnesses.called.own) := by decide
-
 /-- Planted: omit only endLocals; dropping an empty view-only frame still succeeds. -/
-def leaveWithoutEnding (s : State) : Option State := do
-  let f ← s.frames.head?
-  let t ← drop (List.map Prod.fst f.locals) s
-  pure { t with frames := t.frames.tail }
+abbrev leaveWithoutEnding := LifetimeEvidence.leaveWithoutEnding
 /-- Planted: the callRoot survives the omitted cleanup and targets a departed activation. -/
 example : (leaveWithoutEnding DirectArgumentWitnesses.called.own).isSome = true ∧
     ¬ ResultSatisfies (fun t : State => ∀ l ∈ t.loans, l.activation ≠ 1)
       (leaveWithoutEnding DirectArgumentWitnesses.called.own) ∧
     ¬ ResultSatisfies LiveDestinations (leaveWithoutEnding DirectArgumentWitnesses.called.own) := by decide
-
-/-- Planted: add an exit transition on refusal, popping the frame without teardown.
-Successful exits are unchanged. This tests absence on an added transition. -/
-def leaveBypass (s : State) : Option State :=
-  match leave s with
-  | some t => some t
-  | none => some { s with frames := s.frames.tail }
-/-- Planted: slot exclusion, root-loan exclusion, activation-loan exclusion and live destinations
-all fail on the added transition, with the original laws' premises satisfied. -/
-example : WellFormed shared ∧ LiveDestinations shared ∧
-    shared.frames.head? = some (⟨0, [(x, ⟨0⟩)], []⟩ : Activation) ∧
-    (x, Hybrid.Place.mk 0) ∈ (⟨0, [(x, ⟨0⟩)], []⟩ : Activation).locals ∧ leave shared = none ∧
-    ¬ ResultSatisfies (fun t : State => ∀ x ∈ t.slots, x.activation ≠ 0) (leaveBypass shared) ∧
-    ¬ ResultSatisfies (fun t : State => ∀ l ∈ t.loans, l.root ≠ ⟨0⟩) (leaveBypass shared) ∧
-    ¬ ResultSatisfies (fun t : State => ∀ l ∈ t.loans, l.activation ≠ 0) (leaveBypass shared) ∧
-    ¬ ResultSatisfies LiveDestinations (leaveBypass shared) ∧
-    ¬ StateResult (leaveBypass shared) := by decide
-/-- Planted: substitute the same broken exit at every lifecycle leave site. -/
-def lifeBypass (types : Var → Option Descriptor) : Exec.Life → State → Option State
-  | .leave, s => leaveBypass s
-  | e, s => life types e s
-/-- Planted: the call adapter delegates every non-entry event to the substituted lifecycle. -/
-def callBypass (types : Var → Option Descriptor) (e : Exec.Life) (s : CallState) : Option CallState :=
-  match e with
-  | .enter _ => callLife types e s
-  | _ => if s.pending = [] then (lifeBypass types e s.own).map fun own => { s with own := own }
-    else none
-/-- Planted: the added transition also defeats derived lifecycle and call preservation closures. -/
-example : WellFormed shared ∧ CallState.WellFormed ⟨shared, []⟩ ∧
-    ¬ StateResult (lifeBypass types .leave shared) ∧
-    ¬ CallOwnResult (callBypass types .leave ⟨shared, []⟩) ∧
-    ¬ CallResult (callBypass types .leave ⟨shared, []⟩) := by decide
 /-- Planted: an added reborrow transition accepts an unissued destination, changing only
 refusal at the destination guard. Loan identity, root, ancestry and permissions are retained. -/
 def reborrowBypass (s : State) (i : LoanId) (a : Nat) : Option State := do
@@ -2869,5 +2856,65 @@ def reborrowBypass (s : State) (i : LoanId) (a : Nat) : Option State := do
 example : LiveDestinations exclusive ∧ reborrowTo exclusive ⟨0⟩ [] .mutable 1 = none ∧
     ¬ ResultSatisfies LiveDestinations (reborrowBypass exclusive ⟨0⟩ 1) := by decide
 end RoundTwoEvidence
-
+namespace PendingEvidence
+open Examples
+/-- Planted: omit only the pending-parameter admission guard. -/
+def passDownDuplicate (s : CallState) (source : LoanId) (parameter : Var) : Option CallState := do
+  let l ← loan s.own source
+  let own ← reborrow s.own source [] l.mode
+  let own := { own with loans := own.loans.map fun l =>
+    if l.id.id = s.own.nextLoan then { l with pendingArgument := true } else l }
+  pure ⟨own, s.pending ++ [(parameter, ⟨s.own.nextLoan⟩)]⟩
+/-- Planted: omit only the pending-parameter admission guard. -/
+def passOwnerDuplicate (s : CallState) (root : Hybrid.Place) (path : List Projection)
+    (mode : Mode) (parameter : Var) : Option CallState := do
+  let f ← s.own.frames.head?
+  if ownerAccess s.own root mode && decide (f.id < s.own.nextActivation) then
+    pure ⟨{ s.own with
+      nextLoan := s.own.nextLoan + 1
+      loans := ⟨⟨s.own.nextLoan⟩, root, path, mode, none, [], f.id, true, true⟩ :: s.own.loans },
+      s.pending ++ [(parameter, ⟨s.own.nextLoan⟩)]⟩
+  else none
+/-- Planted: omit only the pending-parameter admission guard. -/
+def callLifePending (types : Var → Option Descriptor) : Exec.Life → CallState → Option CallState
+  | .enter params, s => do
+    if s.pending.all (fun e => decide (e.1 ∈ params)) then
+      let own ← enter types (params.filter fun x => decide (x ∉ s.pending.map Prod.fst)) s.own
+      let own ← adoptDown own s.pending
+      pure ⟨own, []⟩
+    else none
+  | e, s => (life types e s.own).map fun own => { s with own := own }
+/-- Two shared arguments can share a root but must have distinct parameter identities. -/
+def first : CallState := (passOwner DirectArgumentWitnesses.caller ⟨1⟩ [] .shared x).getD DirectArgumentWitnesses.caller
+/-- A pending shared child permits another shared downward argument. -/
+def down : CallState := (passDown ⟨shared, []⟩ ⟨0⟩ x).getD ⟨initial, []⟩
+/-- Instance (law `ConcreteSpec.Core.Own.passOwner_call_preserves`, case `ConcreteSpec.Core.Own.PendingEvidence.first`). Duplicate parameters are refused. -/
+example : CallResult (passOwner first ⟨1⟩ [] .shared x) := @passOwner_call_preserves first ⟨1⟩ [] .shared x (by decide)
+/-- Planted (law `ConcreteSpec.Core.Own.passOwner_call_preserves`, case `ConcreteSpec.Core.Own.PendingEvidence.first`, subject `ConcreteSpec.Core.Own.passOwner`, mutant `ConcreteSpec.Core.Own.PendingEvidence.passOwnerDuplicate`). -/
+example : CallState.WellFormed first ∧ passOwner first ⟨1⟩ [] .shared x = none ∧
+    ¬ CallResult (passOwnerDuplicate first ⟨1⟩ [] .shared x) := by decide
+/-- Instance (law `ConcreteSpec.Core.Own.passDown_call_preserves`, case `ConcreteSpec.Core.Own.PendingEvidence.down`). Duplicate parameters are refused. -/
+example : CallResult (passDown down ⟨0⟩ x) := @passDown_call_preserves down ⟨0⟩ x (by decide)
+/-- Planted (law `ConcreteSpec.Core.Own.passDown_call_preserves`, case `ConcreteSpec.Core.Own.PendingEvidence.down`, subject `ConcreteSpec.Core.Own.passDown`, mutant `ConcreteSpec.Core.Own.PendingEvidence.passDownDuplicate`). -/
+example : CallState.WellFormed down ∧ passDown down ⟨0⟩ x = none ∧
+    ¬ CallResult (passDownDuplicate down ⟨0⟩ x) := by decide
+/-- Instance (law `ConcreteSpec.Core.Own.passDown_call_preserves`, case `ConcreteSpec.Core.Own.PendingEvidence.down`). Distinct numeric parameters can share a shared source. -/
+example : CallResult (passDown down ⟨0⟩ y) :=
+  @passDown_call_preserves down ⟨0⟩ y (by decide)
+/-- Instance (law `ConcreteSpec.Core.Own.passOwner_call_preserves`, case `ConcreteSpec.Core.Own.PendingEvidence.first`). -/
+example : CallResult (passOwner first ⟨1⟩ [] .shared y) :=
+  @passOwner_call_preserves first ⟨1⟩ [] .shared y (by decide)
+/-- Instance: both shared argument paths accept a second distinct parameter. -/
+example : (passDown down ⟨0⟩ y).isSome = true ∧
+    (passOwner first ⟨1⟩ [] .shared y).isSome = true := by decide
+/-- Pending call state with a moved owner can exit only after its pending list is discharged. -/
+def exiting : CallState := { first with own := { first.own with
+  slots := first.own.slots.map fun s => { s with desc := { s.desc with copy := true } } } }
+/-- Instance (law `ConcreteSpec.Core.Own.callLife_call_preserves`, case `ConcreteSpec.Core.Own.PendingEvidence.exiting`). -/
+example : CallResult (callLife types .leave exiting) :=
+  @callLife_call_preserves types .leave exiting (by decide)
+/-- Planted (law `ConcreteSpec.Core.Own.callLife_call_preserves`, case `ConcreteSpec.Core.Own.PendingEvidence.exiting`, subject `ConcreteSpec.Core.Own.callLife`, mutant `ConcreteSpec.Core.Own.PendingEvidence.callLifePending`). -/
+example : CallState.WellFormed exiting ∧ callLife types .leave exiting = none ∧
+    ¬ CallResult (callLifePending types .leave exiting) := by decide
+end PendingEvidence
 end ConcreteSpec.Core.Own

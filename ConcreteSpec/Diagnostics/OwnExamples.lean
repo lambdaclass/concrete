@@ -25,18 +25,39 @@ example : AList.lookup spellingsBefore.entries x = AList.lookup spellingsAfter.e
     eval [(x, 7), (y, 8)] initial (.read y) = .stuck ∧
     Exec.restrict [y] [(renamedX, (7 : Int)), (y, 8)] = [(y, 8)] := by decide
 
-/-- Instance: presentation collisions cannot merge numeric move/borrow/call/drop/leave operands.
-The tables disagree on spelling and identify two distinct variables with the same spelling;
-every ownership operation still selects the numeric variable's place. -/
+/-- Both numeric locals coexist despite colliding presentation text. -/
+def populated : State := { initial with
+  nextPlace := 2
+  slots := ⟨⟨1⟩, 0, ⟨.int .i32, false, true⟩, .owned⟩ :: initial.slots
+  frames := [⟨0, [(x, ⟨0⟩), (y, ⟨1⟩)], []⟩] }
+/-- Resolve the numeric variable before borrowing; spelling tables are diagnostics only. -/
+def borrowVar (s : State) (v : Var) : Option State := do
+  let f ← s.frames.head?
+  let p ← AList.lookup f.locals v
+  borrow s p [] .shared
+/-- Both linear locals have been consumed before scope teardown. -/
+def movedBoth : State := (do
+  let s ← move populated ⟨0⟩
+  move s ⟨1⟩).getD initial
+/-- One parameter is already pending; equal numeric identity is refused, distinct identity accepted. -/
+def pending : CallState := (passOwner ⟨populated, []⟩ ⟨0⟩ [] .shared x).getD ⟨initial, []⟩
+/-- Instance: numeric lookup and move evaluation select each colliding local independently;
+parameter admission, drop and exit also retain numeric identity with both locals present. -/
 example : AList.lookup spellingsBefore.entries x = AList.lookup spellingsAfter.entries y ∧ x ≠ y ∧
-    (move initial ⟨0⟩).isSome = true ∧
-    (move initial ⟨1⟩) = none ∧
-    (borrow initial ⟨0⟩ [] .shared).isSome = true ∧
-    (borrow initial ⟨1⟩ [] .shared) = none ∧
-    (passOwner ⟨initial, []⟩ ⟨0⟩ [] .shared renamedX).isSome = true ∧
-    (passOwner ⟨initial, []⟩ ⟨1⟩ [] .shared y) = none ∧
-    ((drop [renamedX] ((move initial ⟨0⟩).getD initial)).getD initial).slots = [] ∧
-    ((drop [y] ((move initial ⟨0⟩).getD initial)).getD initial).slots.length = 1 ∧
-    ((leave ((move initial ⟨0⟩).getD initial)).getD initial).frames = [] := by decide
+    (populated.frames.head?.bind fun f => AList.lookup f.locals renamedX) = some ⟨0⟩ ∧
+    (populated.frames.head?.bind fun f => AList.lookup f.locals y) = some ⟨1⟩ ∧
+    (eval [(x, 7), (y, 8)] populated (.move renamedX)) =
+      .ok (7, (move populated ⟨0⟩).getD initial) ∧
+    (eval [(x, 7), (y, 8)] populated (.move y)) =
+      .ok (8, (move populated ⟨1⟩).getD initial) ∧
+    ((borrowVar populated renamedX).getD initial).loans.head?.map Loan.root = some ⟨0⟩ ∧
+    ((borrowVar populated y).getD initial).loans.head?.map Loan.root = some ⟨1⟩ ∧
+    passOwner pending ⟨0⟩ [] .shared renamedX = none ∧
+    (passOwner pending ⟨0⟩ [] .shared y).isSome = true ∧
+    ((drop [renamedX] movedBoth).getD initial).slots.map Slot.place = [⟨1⟩] ∧
+    ((drop [y] movedBoth).getD initial).slots.map Slot.place = [⟨0⟩] ∧
+    (leave movedBoth).isSome = true ∧
+    ((leave movedBoth).getD initial).slots = [] ∧
+    ((leave movedBoth).getD initial).frames = [] := by decide
 
 end ConcreteSpec.Diagnostics.OwnExamples
