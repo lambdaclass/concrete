@@ -4065,7 +4065,7 @@ theorem assign_refused (P : Program O) (x : Var) (e : O.Expr) (site : SiteId)
   blocked_map_inv _ (fun st => ⟨.done, AList.update L x (fun _ => v), st, k⟩)
     (by simp [step, onRes, he, hx])
 
-/-- Law (subject `ConcreteSpec.Core.Exec.enter`). Matching-arity entry refuses exactly when
+/-- Law (subject `ConcreteSpec.Core.Exec.enter`). Entry refuses exactly when
 activation admission refuses. The reporting wrapper retains this as unsafe stuckness. Authority:
 `docs/decisions.md#decided-2026-11-13-lifecycle-refusal`. -/
 theorem enter_refused (fn : Fn O) (vs : List O.Val) (st : O.Store) :
@@ -4155,7 +4155,11 @@ theorem leave_refused (P : Program O) (v : O.Val) (L : AList Var O.Val)
 /-- Law (subject `ConcreteSpec.Core.Exec.runFn`). Entry refusal preserves the proposed locals,
 original store and entire budget in an unsafe, unresumable report. This is a semantic boundary
 report, never a rollback claim about outside effects. Authority:
-`docs/decisions.md#decided-2026-11-13-lifecycle-refusal`. -/
+`docs/decisions.md#decided-2026-11-13-lifecycle-refusal` (unsafe stopping) and
+`#decided-2026-11-05-core` Q9.9 (total clock-indexed instrumented evaluation).
+The exact residual fields and refusal-before-fuel precedence are the proposed reporting
+convention in `Spec/Exec.lean` (`runFn`/`runFrom`), tracked by ISS-0049; the lifecycle
+record explicitly leaves entry versus mid-run reporting undecided. -/
 theorem entry_refusal_report (P : Program O) (ρ : Oracle O) (fuel : Nat) (fn : Fn O)
     (vs : List O.Val) (st : O.Store) (hlen : fn.params.length = vs.length)
     (hl : O.life (.enter (fn.params.map Prod.fst)) st = none) :
@@ -4249,11 +4253,11 @@ theorem prim_error_bypasses_bind (P : Program O) (x : Var) (p : O.Prim) (args : 
 
 /-! ### Destruction -/
 
-/-- Helper (projection). Extracts the protocol admission obligation from `DestroyProtocol` -/
+/-- Helper (projection). Extracts the protocol admission obligation from `DestroyProtocol`. -/
 private theorem destroy_not_copy_proj {P : Program O} (D : DestroyProtocol P) (T : O.Ty) (f : FnId)
     (h : D.impl T = some f) : O.isCopy T = false := D.notCopy T f h
 
-/-- Representation lemma. Characterizes the validator checks, not admission soundness The executable
+/-- Representation lemma. Characterizes the validator checks, not admission soundness. The executable
 destroy-function validator accepts (T, f) if and only if T is non-Copy (`Operands.isCopy` T = false)
 and f is in the program table taking a single parameter of type T and returning `Operands.unitTy`.
 -/
@@ -4284,7 +4288,7 @@ theorem destroy_not_copy [DecidableEq O.Ty] (P : Program O) (T : O.Ty) (f : FnId
   · rintro ⟨hc, fn, x, hl, hp, hr⟩
     simp [validDestroyFn, hc, hl, hp, hr]
 
-/-- Representation lemma. Characterizes the checked builder, not admission soundness The executable
+/-- Representation lemma. Characterizes the checked builder, not admission soundness. The executable
 checked destroy-call builder produces `some` d if and only if impl T = `some` (`Deferred.f` d),
 `Deferred.args` d = [arg], `Deferred.site` d = site, T is non-Copy, and `Deferred.f` d has signature
 (x : T) -> Unit in `Program.fns` P. -/
@@ -4337,21 +4341,20 @@ theorem destroyCall_enters (P : Program O) (D : DestroyProtocol P) (T : O.Ty)
   obtain ⟨admitted, _, hfn, _, hr⟩ := D.sig T f hi
   rw [hf] at hfn
   cases hfn
-  refine ⟨⟨f, [arg], site⟩, ?_, hr, D.notCopy T f hi, ?_⟩
+  refine ⟨⟨f, [arg], site⟩, ?_, hr, destroy_not_copy_proj D T f hi, ?_⟩
   · simp [DestroyProtocol.destroyCall, hi]
   · apply Step.silent
     simp [Deferred.stmt, step, evalArgs, he, Res.bind, Res.map, onRes, hf, hp, hl]
 
 /-- Law (subject `ConcreteSpec.Core.Exec.seqDestroyOrder`). A sequence's element i is visited at
-position i: in increasing index order. Authority: `docs/decisions.md#foundation-q1`,
-`#decided-2026-11-05-core` Q2.3, Q2.7–Q2.8; `#od60`; `#decided-2026-11-08-language-revisions`. -/
+position i: in increasing index order. Authority:
+`docs/decisions.md#decided-2026-11-05-core` Q2.3 and Q3.8. -/
 theorem seqDestroyOrder_elem (n i : Nat) (h : i < n) : (seqDestroyOrder n)[i]? = some (.elem i) := by
   rw [seqDestroyOrder, List.getElem?_append_left (by simpa using h)]
   simp [h]
 
 /-- Law (subject `ConcreteSpec.Core.Exec.seqDestroyOrder`). A sequence's backing is released last,
-after all n elements. Authority: `docs/decisions.md#foundation-q1`, `#decided-2026-11-05-core` Q2.3,
-Q2.7–Q2.8; `#od60`; `#decided-2026-11-08-language-revisions`. -/
+after all n elements. Authority: `docs/decisions.md#decided-2026-11-05-core` Q2.3 and Q3.8. -/
 theorem seqDestroyOrder_storage (n : Nat) :
     (seqDestroyOrder n).length = n + 1 ∧ (seqDestroyOrder n)[n]? = some .storage := by
   simp [seqDestroyOrder]
@@ -4369,7 +4372,7 @@ private theorem entryParts_length : ∀ n, (entryParts n).length = 2 * n
   | 0 => rfl
   | n + 1 => by rw [entryParts_succ]; simp [entryParts_length n]; omega
 
-/-- Helper (arithmetic). Locate the key and value in the alternating entry schedule -/
+/-- Helper (arithmetic). Locate the key and value in the alternating entry schedule. -/
 private theorem entryParts_get : ∀ (n i : Nat), i < n →
     (entryParts n)[2 * i]? = some (.key i) ∧ (entryParts n)[2 * i + 1]? = some (.value i)
   | 0, _, h => absurd h (Nat.not_lt_zero _)
@@ -4387,8 +4390,7 @@ private theorem entryParts_get : ∀ (n i : Nat), i < n →
 
 /-- Law (subject `ConcreteSpec.Core.Exec.mapDestroyOrder`). A map's i-th entry (in ascending key
 order) is visited key first, at position 2i, then value, at 2i+1. Authority:
-`docs/decisions.md#foundation-q1`, `#decided-2026-11-05-core` Q2.3, Q2.7–Q2.8; `#od60`;
-`#decided-2026-11-08-language-revisions`. -/
+`docs/decisions.md#decided-2026-11-05-core` Q2.3 and Q3.8. -/
 theorem mapDestroyOrder_entry (n i : Nat) (h : i < n) :
     (mapDestroyOrder n)[2 * i]? = some (.key i) ∧
       (mapDestroyOrder n)[2 * i + 1]? = some (.value i) := by
@@ -4400,8 +4402,7 @@ theorem mapDestroyOrder_entry (n i : Nat) (h : i < n) :
   exact this
 
 /-- Law (subject `ConcreteSpec.Core.Exec.mapDestroyOrder`). A map's nodes are released last, after
-all n entries. Authority: `docs/decisions.md#foundation-q1`, `#decided-2026-11-05-core` Q2.3,
-Q2.7–Q2.8; `#od60`; `#decided-2026-11-08-language-revisions`. -/
+all n entries. Authority: `docs/decisions.md#decided-2026-11-05-core` Q2.3 and Q3.8. -/
 theorem mapDestroyOrder_storage (n : Nat) :
     (mapDestroyOrder n).length = 2 * n + 1 ∧ (mapDestroyOrder n)[2 * n]? = some .storage := by
   have hl := entryParts_length n
@@ -4409,6 +4410,36 @@ theorem mapDestroyOrder_storage (n : Nat) :
   rw [List.getElem?_append_right (by omega), hl]
   simp [hl]
 
+
+/-- Law (subject `ConcreteSpec.Core.Exec.runFrom`). Successful primitive answers bind their result
+through lifecycle admission; refusal retains the requesting configuration and budget. Authority:
+`docs/decisions.md#decided-2026-11-13-lifecycle-refusal`, `#decided-2026-11-05-core` Q9.7. -/
+theorem prim_bind_refused (P : Program O) (ρ : Oracle O) (hist : List O.Event)
+    (x : Var) (p : O.Prim) (args : List O.Expr) (site : SiteId)
+    (L : AList Var O.Val) (st st' : O.Store) (vs : List O.Val) (k : List (Frame O))
+    (a : Answer O.Val O.Event O.Store) (v : O.Val)
+    (he : evalArgs O L st args = .ok (vs, st'))
+    (ho : ρ hist p vs site st' = some a) (ha : O.allows p vs st' a = true)
+    (hv : a.result = .ok v) :
+    runFrom P ρ 1 hist ⟨.exec (.prim (some x) p args site), L, st, k⟩ =
+      ⟨hist, .stuck, ⟨.exec (.prim (some x) p args site), L, st, k⟩, 1⟩ ↔
+      O.life (.bind x) a.store = none := by
+  rw [continuation_refused P ρ hist _ p vs site st' _ a rfl (by intro h; cases h)
+    (by simp [step, onRes, he]; rfl) ho ha]
+  simp [hv, bindLife]
+
+/-- Law (subject `ConcreteSpec.Core.Exec.runFrom`). Explicit refusal is an unsafe stop, even with
+zero fuel and pending cleanup. Neither a final result nor a trap is synthesized. Authority:
+`docs/decisions.md#decided-2026-11-13-lifecycle-refusal` (unsafe stopping) and
+`#decided-2026-11-05-core` Q9.9 (total clock-indexed instrumented evaluation).
+The exact residual fields and refusal-before-fuel precedence are the proposed reporting
+convention in `Spec/Exec.lean` (`runFn`/`runFrom`), tracked by ISS-0049; the lifecycle
+record explicitly leaves entry versus mid-run reporting undecided. -/
+theorem refused_stops (P : Program O) (ρ : Oracle O) (fuel : Nat) (hist : List O.Event)
+    (L : AList Var O.Val) (st : O.Store) (k : List (Frame O)) :
+    runFrom P ρ fuel hist ⟨.refused, L, st, k⟩ =
+      ⟨hist, .stuck, ⟨.refused, L, st, k⟩, fuel⟩ := by
+  cases fuel <;> rfl
 
 namespace LifecycleEvidence
 open Demo
@@ -4574,9 +4605,9 @@ theorem test_planted : (refusing.eval live state (.move x) = .ok (17, moved) ∧
 /-- Instance (law `return_refused`). Both return modes stop before restoring the populated caller.
 -/
 theorem return_instance :
-    (Blocked (Step program) (⟨.exiting (.ret 53), live, state, .ret (some x) [(p, 67)] :: tail⟩ : Config refusing) ↔ bindLife refusing (some x) state = none) ∧
-    (Blocked (Step program) (⟨.done, live, state, .ret (some x) [(p, 67)] :: tail⟩ : Config refusing) ↔ bindLife refusing (some x) state = none) := by
-  exact return_refused program (some x) 53 [(p, 67)] live state tail
+    Blocked (Step program) (⟨.exiting (.ret 53), live, state, .ret (some x) [(p, 67)] :: tail⟩ : Config refusing) ∧
+    Blocked (Step program) (⟨.done, live, state, .ret (some x) [(p, 67)] :: tail⟩ : Config refusing) :=
+  ⟨(return_refused program (some x) 53 [(p, 67)] live state tail).1.mpr rfl, (return_refused program (some x) 53 [(p, 67)] live state tail).2.mpr rfl⟩
 
 /-- Planted (law `return_refused`). Only `returnExplicit` is added; the same mutated relation
 replaces both occurrences in the conjunction. -/
@@ -4596,9 +4627,9 @@ theorem returnImplicit_planted :
 
 /-- Instance (law `leave_refused`). Both return modes stop before restoring the populated caller. -/
 theorem leave_instance :
-    (Blocked (Step program) (⟨.exiting (.ret 53), live, state, .functionEnd :: tail⟩ : Config refusing) ↔ refusing.life .leave state = none) ∧
-    (Blocked (Step program) (⟨.done, live, state, .functionEnd :: tail⟩ : Config refusing) ↔ refusing.life .leave state = none) := by
-  exact ⟨(leave_refused program 53 live state tail).2, (leave_refused program 53 live state tail).1⟩
+    Blocked (Step program) (⟨.exiting (.ret 53), live, state, .functionEnd :: tail⟩ : Config refusing) ∧
+    Blocked (Step program) (⟨.done, live, state, .functionEnd :: tail⟩ : Config refusing) :=
+  ⟨(leave_refused program 53 live state tail).2.mpr rfl, (leave_refused program 53 live state tail).1.mpr rfl⟩
 
 /-- Planted (law `leave_refused`). Only `leaveReturn` is added; the same mutated relation replaces
 both occurrences in the conjunction. -/
@@ -4618,22 +4649,7 @@ theorem leaveNormal_planted :
 
 end LifecycleEvidence
 
-/-- Law (subject `ConcreteSpec.Core.Exec.runFrom`). Successful primitive answers bind their result
-through lifecycle admission; refusal retains the requesting configuration and budget. Authority:
-`docs/decisions.md#decided-2026-11-13-lifecycle-refusal`, `#decided-2026-11-05-core` Q9.7. -/
-theorem prim_bind_refused (P : Program O) (ρ : Oracle O) (hist : List O.Event)
-    (x : Var) (p : O.Prim) (args : List O.Expr) (site : SiteId)
-    (L : AList Var O.Val) (st st' : O.Store) (vs : List O.Val) (k : List (Frame O))
-    (a : Answer O.Val O.Event O.Store) (v : O.Val)
-    (he : evalArgs O L st args = .ok (vs, st'))
-    (ho : ρ hist p vs site st' = some a) (ha : O.allows p vs st' a = true)
-    (hv : a.result = .ok v) :
-    runFrom P ρ 1 hist ⟨.exec (.prim (some x) p args site), L, st, k⟩ =
-      ⟨hist, .stuck, ⟨.exec (.prim (some x) p args site), L, st, k⟩, 1⟩ ↔
-      O.life (.bind x) a.store = none := by
-  rw [continuation_refused P ρ hist _ p vs site st' _ a rfl (by intro h; cases h)
-    (by simp [step, onRes, he]; rfl) ho ha]
-  simp [hv, bindLife]
+
 
 namespace LifecycleEvidence
 open Demo
@@ -4648,11 +4664,10 @@ def uncheckedEnter (f : Fn O) (vs : List O.Val) (st : O.Store) : Option (Config 
   some ⟨.exec f.body, (f.params.map Prod.fst).zip vs, st,
     [.scope f.block (f.params.map Prod.fst) [], .functionEnd]⟩
 
-/-- Planted (law `enter_refused`). Matching arity and a populated entry satisfy the premises;
+/-- Planted (law `enter_refused`). A populated entry satisfies the premises;
 unadmitted entry contradicts the refusal equivalence. -/
-theorem enter_planted : fn.params.length = ([17] : List Int).length ∧
-    ¬ (uncheckedEnter fn [17] state = none ↔ refusing.life (.enter [p]) state = none) := by
-  refine ⟨rfl, fun h => ?_⟩
+theorem enter_planted : ¬ (uncheckedEnter fn [17] state = none ↔ refusing.life (.enter [p]) state = none) := by
+  intro h
   have := h.mpr rfl
   cases this
 
@@ -4701,26 +4716,34 @@ theorem continuation_instance : request.final? = none ∧ request.ctrl ≠ .refu
     step program request = some (.request .log [17] s moved continuation) ∧
     env [91] .log [17] s moved = some answer ∧
     refusing.allows .log [17] moved answer = true ∧
-    (runFrom program env 1 [91] request = ⟨[91], .stuck, request, 1⟩ ↔
+    (runFrom program env 1 [91] request = ⟨[91], .stuck, request, 1⟩ ∧
       continuation answer = none) := by
   refine ⟨rfl, (by intro h; cases h), (by simp only [step, request, (show evalArgs refusing live state [.move x] = .ok ([17], moved) from rfl), onRes]; apply congrArg some; apply congrArg (Out.request (O := refusing) .log [17] s moved); funext a; cases hr : a.result <;> simp [continuation, hr, bindLife, refusing]), rfl, by decide, ?_⟩
-  exact continuation_refused program env [91] request .log [17] s moved continuation
-    answer rfl (by intro h; cases h) (by simp only [step, request, (show evalArgs refusing live state [.move x] = .ok ([17], moved) from rfl), onRes]; apply congrArg some; apply congrArg (Out.request (O := refusing) .log [17] s moved); funext a; cases hr : a.result <;> simp [continuation, hr, bindLife, refusing]) rfl (by decide)
+  exact ⟨(continuation_refused program env [91] request .log [17] s moved continuation
+    answer rfl (by intro h; cases h) (by simp only [step, request, (show evalArgs refusing live state [.move x] = .ok ([17], moved) from rfl), onRes]; apply congrArg some; apply congrArg (Out.request (O := refusing) .log [17] s moved); funext a; cases hr : a.result <;> simp [continuation, hr, bindLife, refusing]) rfl (by decide)).mpr rfl, rfl⟩
 
 /-- Planted. Only refused response continuation handling is changed: incorrectly append its event
-while retaining the requesting machine. Other driver branches reuse runFrom. -/
-def acceptRefused (P : Program O) (ρ : Oracle O) (fuel : Nat)
-    (hist : List O.Event) (c : Config O) : Report O :=
-  match fuel, step P c with
-  | _ + 1, some (.request p vs site st cont) =>
-    match ρ hist p vs site st with
-    | some a => if O.allows p vs st a then
-        match cont a with
-        | none => { runFrom P ρ fuel hist c with events := hist ++ a.event.toList }
-        | some _ => runFrom P ρ fuel hist c
-      else runFrom P ρ fuel hist c
-    | none => runFrom P ρ fuel hist c
-  | _, _ => runFrom P ρ fuel hist c
+while retaining the requesting machine. All recursive branches use the same mutant. -/
+def acceptRefused (P : Program O) (ρ : Oracle O) : Nat → List O.Event → Config O → Report O
+  | fuel, hist, c =>
+    match c.ctrl, c.final?, fuel with
+    | .refused, _, _ => ⟨hist, .stuck, c, fuel⟩
+    | _, some f, _ => ⟨hist, .final f, c, fuel⟩
+    | _, none, 0 => ⟨hist, .outOfFuel, c, 0⟩
+    | _, none, n + 1 =>
+      match step P c with
+      | none => ⟨hist, .stuck, c, n + 1⟩
+      | some (.next c') => acceptRefused P ρ n hist c'
+      | some (.request p vs site st k) =>
+        match ρ hist p vs site st with
+        | none => ⟨hist, .noAnswer, c, n + 1⟩
+        | some a =>
+          if O.allows p vs st a then
+            match k a with
+            | some c' => acceptRefused P ρ n (hist ++ a.event.toList) c'
+            | none => ⟨hist ++ a.event.toList, .stuck, c, n + 1⟩
+          else ⟨hist, .badAnswer, c, n + 1⟩
+
 
 /-- Planted (law `continuation_refused`). The admitted answer and all other premises are the
 Instance's concrete witnesses; the mutated driver's conclusion fails. -/
@@ -4740,11 +4763,11 @@ theorem primitive_bind_instance :
     evalArgs refusing live state [.move x] = .ok ([17], moved) ∧
     env [91] .log [17] s moved = some answer ∧
     refusing.allows .log [17] moved answer = true ∧ answer.result = .ok 0 ∧
-    (runFrom program env 1 [91] request = ⟨[91], .stuck, request, 1⟩ ↔
+    (runFrom program env 1 [91] request = ⟨[91], .stuck, request, 1⟩ ∧
       refusing.life (.bind p) answer.store = none) :=
   ⟨rfl, rfl, by decide, rfl,
-    prim_bind_refused program env [91] p .log [.move x] s live state moved [17] tail
-      answer 0 rfl rfl (by decide) rfl⟩
+    ⟨(prim_bind_refused program env [91] p .log [.move x] s live state moved [17] tail
+      answer 0 rfl rfl (by decide) rfl).mpr rfl, rfl⟩⟩
 
 /-- Planted (law `prim_bind_refused`). Same premises as above; accepting the refused binding's event
 breaks the exact boundary report. -/
@@ -4760,7 +4783,7 @@ theorem primitive_bind_planted :
   cases this
 
 /-- Helper. Every allowed demo log answer succeeds; binding then refuses. -/
-theorem all_answers_refuse : ∀ a, refusing.allows .log [17] moved a = true →
+private theorem all_answers_refuse : ∀ a, refusing.allows .log [17] moved a = true →
     ∃ v, a.result = .ok v ∧ refusing.life (.bind p) a.store = none := by
   intro a ha
   cases hev : a.event with
@@ -4774,9 +4797,10 @@ theorem all_answers_refuse : ∀ a, refusing.allows .log [17] moved a = true →
 actual request has no transition. -/
 theorem primitive_step_instance :
     refusing.allows .log [17] moved answer = true ∧
-    (Blocked (Step program) request ↔ ∀ a, refusing.allows .log [17] moved a = true →
+    (Blocked (Step program) request ∧ ∀ a, refusing.allows .log [17] moved a = true →
       ∃ v, a.result = .ok v ∧ refusing.life (.bind p) a.store = none) :=
-  ⟨by decide, prim_bind_step program p .log [.move x] s live state moved [17] tail rfl⟩
+  ⟨by decide, (prim_bind_step program p .log [.move x] s live state moved [17] tail rfl).mpr
+    all_answers_refuse, all_answers_refuse⟩
 
 /-- Planted. Remove only successful primitive-result admission, leaving error responses and every
 other statement unchanged. -/
@@ -4914,10 +4938,29 @@ theorem enters_planted :
   generalize hl : (Label.silent : Label ops) = label at hs
   cases hs <;> simp [noCall, Deferred.stmt] at *
 
-/-- Instance (law `seqDestroyOrder_elem`). The middle of three distinct elements is visited at its
+/-- Planted. Delete the admitted call builder only; execution and protocol admission are fixed. -/
+def missingDestroyCall {O : Operands} {P : Program O} (D : DestroyProtocol P)
+    (T : O.Ty) (_ : O.Expr) (_ : SiteId) : Option (Deferred O) :=
+  (D.impl T).bind fun _ => none
+
+/-- Planted (law `destroyCall_enters`). All original admission and evaluation premises hold;
+the substituted builder cannot supply any call to the unchanged Step relation. -/
+theorem builder_deleted :
+    destroyProtocol.impl .tok = some eatF ∧ AList.lookup prog.fns eatF = some eatFn ∧
+    eatFn.params = [(p, .tok)] ∧ ops.eval live state (.move x) = .ok (17, moved) ∧
+    ops.life (.enter [p]) moved = some ⟨41, [[], [x, y], [p]]⟩ ∧
+    ¬ (∃ d, missingDestroyCall destroyProtocol .tok (.move x) s = some d ∧
+      eatFn.result = ops.unitTy ∧ ops.isCopy .tok = false ∧
+      Step prog ⟨.exec d.stmt, live, state, tail⟩ .silent
+        ⟨.exec eatFn.body, [(p, 17)], ⟨41, [[], [x, y], [p]]⟩,
+          .scope eatFn.block [p] [] :: .functionEnd :: .ret none live :: tail⟩) := by
+  refine ⟨rfl, rfl, rfl, rfl, rfl, ?_⟩
+  rintro ⟨d, hd, _⟩; cases hd
+
+/-- Instance (law `seqDestroyOrder_elem`). The first of three distinct elements is visited at its
 index, while both neighbors and backing remain present. -/
 theorem sequence_element_instance :
-    (seqDestroyOrder 3)[1]? = some (.elem 1) := seqDestroyOrder_elem 3 1 (by decide)
+    (seqDestroyOrder 3)[0]? = some (.elem 0) := seqDestroyOrder_elem 3 0 (by decide)
 
 /-- Planted. Reverse element order, preserving every element and the final backing. -/
 def reversedSequence (n : Nat) : List Part :=
@@ -4941,10 +4984,10 @@ theorem sequence_storage_planted :
     ¬ ((earlySequenceStorage 3).length = 4 ∧
       (earlySequenceStorage 3)[3]? = some .storage) := by decide
 
-/-- Instance (law `mapDestroyOrder_entry`). The second of three entries visits its key then value,
+/-- Instance (law `mapDestroyOrder_entry`). The first of three entries visits its key then value,
 independently of both neighboring entries. -/
-theorem map_entry_instance : (mapDestroyOrder 3)[2]? = some (.key 1) ∧
-    (mapDestroyOrder 3)[3]? = some (.value 1) := mapDestroyOrder_entry 3 1 (by decide)
+theorem map_entry_instance : (mapDestroyOrder 3)[0]? = some (.key 0) ∧
+    (mapDestroyOrder 3)[1]? = some (.value 0) := mapDestroyOrder_entry 3 0 (by decide)
 
 /-- Planted. Swap key and value within each entry; entry order and nodes remain unchanged. -/
 def valueFirstMap (n : Nat) : List Part :=
@@ -5097,14 +5140,7 @@ theorem test_deleted : (ops.eval live state (.move x) = .ok (17, moved) ∧ ops.
 
 end LifecycleEvidence
 
-/-- Law (subject `ConcreteSpec.Core.Exec.runFrom`). Explicit refusal is an unsafe stop, even with
-zero fuel and pending cleanup. Neither a final result nor a trap is synthesized. Authority:
-`docs/decisions.md#decided-2026-11-13-lifecycle-refusal`. -/
-theorem refused_stops (P : Program O) (ρ : Oracle O) (fuel : Nat) (hist : List O.Event)
-    (L : AList Var O.Val) (st : O.Store) (k : List (Frame O)) :
-    runFrom P ρ fuel hist ⟨.refused, L, st, k⟩ =
-      ⟨hist, .stuck, ⟨.refused, L, st, k⟩, fuel⟩ := by
-  cases fuel <;> rfl
+
 
 namespace LifecycleEvidence
 open Demo
@@ -5116,10 +5152,26 @@ theorem refused_stop_instance : runFrom program env 0 [91] ⟨.refused, live, st
   refused_stops program env 0 [91] live state tail
 
 /-- Planted. Change only explicit refusal's ending to normal completion. -/
-def normalizeRefusal (P : Program O) (ρ : Oracle O) (fuel : Nat)
-    (hist : List O.Event) (c : Config O) : Report O := match c.ctrl with
-  | .refused => ⟨hist, .final .normal, c, fuel⟩
-  | _ => runFrom P ρ fuel hist c
+def normalizeRefusal (P : Program O) (ρ : Oracle O) : Nat → List O.Event → Config O → Report O
+  | fuel, hist, c =>
+    match c.ctrl, c.final?, fuel with
+    | .refused, _, _ => ⟨hist, .final .normal, c, fuel⟩
+    | _, some f, _ => ⟨hist, .final f, c, fuel⟩
+    | _, none, 0 => ⟨hist, .outOfFuel, c, 0⟩
+    | _, none, n + 1 =>
+      match step P c with
+      | none => ⟨hist, .stuck, c, n + 1⟩
+      | some (.next c') => normalizeRefusal P ρ n hist c'
+      | some (.request p vs site st k) =>
+        match ρ hist p vs site st with
+        | none => ⟨hist, .noAnswer, c, n + 1⟩
+        | some a =>
+          if O.allows p vs st a then
+            match k a with
+            | some c' => normalizeRefusal P ρ n (hist ++ a.event.toList) c'
+            | none => ⟨hist, .stuck, c, n + 1⟩
+          else ⟨hist, .badAnswer, c, n + 1⟩
+
 
 /-- Planted (law `refused_stops`). Populated refusal cannot be normalized, even when all other
 fields of the boundary report are retained. -/
@@ -5133,11 +5185,11 @@ theorem refused_stop_planted :
 /-- Instance (law `test_drop_refused`). False conditions also admit temporary drop; refusal cannot
 silently take the loop-exit branch. -/
 theorem false_test_instance :
-    (Blocked (Step program)
-      ⟨.done, live, state, .test ⟨8⟩ .skip (.lit 0) (.abort s) s [y] :: tail⟩ ↔
-      dropOut refusing [y] live state = none) :=
-  test_drop_refused program ⟨8⟩ .skip (.abort s) (.lit 0) s [y] live state state
-    0 false tail rfl rfl
+    refusing.eval live state (.lit 0) = .ok (0, state) ∧ refusing.test (0 : Int) = some false ∧
+    Blocked (Step program)
+      ⟨.done, live, state, .test ⟨8⟩ .skip (.lit 0) (.abort s) s [y] :: tail⟩ :=
+  ⟨rfl, rfl, (test_drop_refused program ⟨8⟩ .skip (.abort s) (.lit 0) s [y] live state state
+    0 false tail rfl rfl).mpr rfl⟩
 
 /-- Planted (law `test_drop_refused`). Add only a false-test boundary transition; the original
 evaluated-value and Boolean-test premises remain true. -/
@@ -5147,6 +5199,197 @@ theorem false_test_planted : refusing.eval live state (.lit 0) = .ok (0, state) 
       (⟨.done, live, state, .test ⟨8⟩ .skip (.lit 0) (.abort s) s [y] :: tail⟩ : Config refusing) ↔
       dropOut refusing [y] live state = none) :=
   ⟨rfl, rfl, added_counterexample .test program _ rfl rfl _ rfl⟩
+
+
+/-- Instance (law `return_refused`). Both populated modes progress after accepted admission.
+Uncaptured returns also progress without a result-binding hook. -/
+theorem return_accepted (dst : Option Var) :
+    ¬ Blocked (Step Demo.prog) (⟨.exiting (.ret 53), live, state, .ret dst [(p, 67)] :: tail⟩ : Config ops) ∧
+    ¬ Blocked (Step Demo.prog) (⟨.done, live, state, .ret dst [(p, 67)] :: tail⟩ : Config ops) := by
+  have h := return_refused Demo.prog dst 53 [(p, 67)] live state tail
+  constructor
+  · intro hb; have hn := h.1.mp hb; cases dst <;> cases hn
+  · intro hb; have hn := h.2.mp hb; cases dst <;> cases hn
+
+/-- Planted (law `return_refused`). Delete only `returnExplicit`; use that dispatch in both clauses. -/
+theorem returnExplicit_deleted (dst : Option Var) :
+    ¬ ((Blocked (fun c l c' => ∃ a, Dispatches (deleted .returnExplicit) Demo.prog c a l c') (⟨.exiting (.ret 53), live, state, .ret dst [(p, 67)] :: tail⟩ : Config ops) ↔ bindLife ops dst state = none) ∧
+       (Blocked (fun c l c' => ∃ a, Dispatches (deleted .returnExplicit) Demo.prog c a l c') (⟨.done, live, state, .ret dst [(p, 67)] :: tail⟩ : Config ops) ↔ bindLife ops dst state = none)) := by
+  intro h
+  have hn := h.1.mp (deleted_blocked .returnExplicit Demo.prog (⟨.exiting (.ret 53), live, state, .ret dst [(p, 67)] :: tail⟩ : Config ops) rfl)
+  cases dst <;> cases hn
+
+/-- Planted (law `return_refused`). Delete only `returnImplicit`; use that dispatch in both clauses. -/
+theorem returnImplicit_deleted (dst : Option Var) :
+    ¬ ((Blocked (fun c l c' => ∃ a, Dispatches (deleted .returnImplicit) Demo.prog c a l c') (⟨.exiting (.ret 53), live, state, .ret dst [(p, 67)] :: tail⟩ : Config ops) ↔ bindLife ops dst state = none) ∧
+       (Blocked (fun c l c' => ∃ a, Dispatches (deleted .returnImplicit) Demo.prog c a l c') (⟨.done, live, state, .ret dst [(p, 67)] :: tail⟩ : Config ops) ↔ bindLife ops dst state = none)) := by
+  intro h
+  have hn := h.2.mp (deleted_blocked .returnImplicit Demo.prog (⟨.done, live, state, .ret dst [(p, 67)] :: tail⟩ : Config ops) rfl)
+  cases dst <;> cases hn
+
+/-- Instance (law `leave_refused`). Both populated modes progress after accepted admission. -/
+theorem leave_accepted :
+    ¬ Blocked (Step Demo.prog) (⟨.done, live, state, .functionEnd :: tail⟩ : Config ops) ∧
+    ¬ Blocked (Step Demo.prog) (⟨.exiting (.ret 53), live, state, .functionEnd :: tail⟩ : Config ops) := by
+  have h := leave_refused Demo.prog 53 live state tail
+  constructor
+  · intro hb; have hn := h.1.mp hb; cases hn
+  · intro hb; have hn := h.2.mp hb; cases hn
+
+/-- Planted (law `leave_refused`). Delete only `leaveNormal`; use that dispatch in both clauses. -/
+theorem leaveNormal_deleted :
+    ¬ ((Blocked (fun c l c' => ∃ a, Dispatches (deleted .leaveNormal) Demo.prog c a l c') (⟨.done, live, state, .functionEnd :: tail⟩ : Config ops) ↔ ops.life .leave state = none) ∧
+       (Blocked (fun c l c' => ∃ a, Dispatches (deleted .leaveNormal) Demo.prog c a l c') (⟨.exiting (.ret 53), live, state, .functionEnd :: tail⟩ : Config ops) ↔ ops.life .leave state = none)) := by
+  intro h
+  have hn := h.1.mp (deleted_blocked .leaveNormal Demo.prog (⟨.done, live, state, .functionEnd :: tail⟩ : Config ops) rfl)
+  cases hn
+
+/-- Planted (law `leave_refused`). Delete only `leaveReturn`; use that dispatch in both clauses. -/
+theorem leaveReturn_deleted :
+    ¬ ((Blocked (fun c l c' => ∃ a, Dispatches (deleted .leaveReturn) Demo.prog c a l c') (⟨.done, live, state, .functionEnd :: tail⟩ : Config ops) ↔ ops.life .leave state = none) ∧
+       (Blocked (fun c l c' => ∃ a, Dispatches (deleted .leaveReturn) Demo.prog c a l c') (⟨.exiting (.ret 53), live, state, .functionEnd :: tail⟩ : Config ops) ↔ ops.life .leave state = none)) := by
+  intro h
+  have hn := h.2.mp (deleted_blocked .leaveReturn Demo.prog (⟨.exiting (.ret 53), live, state, .functionEnd :: tail⟩ : Config ops) rfl)
+  cases hn
+
+/-- Instance (law `enter_refused`). Accepted entry creates a populated parameter activation. -/
+theorem enter_accepted : enter eatFn [17] state = some
+    ⟨.exec eatFn.body, [(p, 17)], ⟨41, [[], [y], [p]]⟩,
+      [.scope eatFn.block [p] [], .functionEnd]⟩ := rfl
+
+/-- Planted. Delete only successful entry; refused entry is unchanged. -/
+def deletedEnter (f : Fn O) (vs : List O.Val) (st : O.Store) : Option (Config O) :=
+  match enter f vs st with | none => none | some _ => none
+
+/-- Planted (law `enter_refused`). Accepted lifecycle admission cannot silently lose entry. -/
+theorem enter_deleted : ¬ (deletedEnter eatFn [17] state = none ↔
+    ops.life (.enter [p]) state = none) := by
+  intro h; have hn := h.mp rfl; cases hn
+
+/-- Instance support. The accepted version of the same populated primitive request. -/
+def acceptedRequest : Config ops :=
+  ⟨.exec (.prim (some p) .log [.move x] s), live, state, tail⟩
+/-- Instance support. Actual result continuation after accepted result binding. -/
+def acceptedContinuation (a : Answer Int Int DState) : Option (Config ops) := match a.result with
+  | .ok v => (bindLife ops (some p) a.store).map fun st =>
+      ⟨.done, bindDst (some p) v live, st, tail⟩
+  | .error kd => some ⟨.trapped kd s, live, a.store, tail⟩
+
+/-- Instance (law `prim_bind_step`). An allowed populated answer witnesses real progress. -/
+theorem primitive_step_accepted :
+    evalArgs ops live state [.move x] = .ok ([17], moved) ∧
+    ops.allows .log [17] moved answer = true ∧ ¬ Blocked (Step Demo.prog) acceptedRequest := by
+  refine ⟨rfl, by decide, fun hb => ?_⟩
+  have h := (prim_bind_step Demo.prog p .log [.move x] s live state moved [17] tail rfl).mp hb
+  obtain ⟨v, _, hn⟩ := h answer (by decide)
+  cases hn
+
+/-- Planted (law `prim_bind_step`). Deleting the primitive dispatch loses accepted progress. -/
+theorem primitive_deleted : evalArgs ops live state [.move x] = .ok ([17], moved) ∧
+    ops.allows .log [17] moved answer = true ∧
+    ¬ (Blocked (fun c l c' => ∃ a, Dispatches (deleted .primitive) Demo.prog c a l c')
+      acceptedRequest ↔ ∀ a, ops.allows .log [17] moved a = true →
+        ∃ v, a.result = .ok v ∧ ops.life (.bind p) a.store = none) := by
+  refine ⟨rfl, by decide, fun h => ?_⟩
+  obtain ⟨v, _, hn⟩ := h.mp (deleted_blocked .primitive Demo.prog acceptedRequest rfl)
+    answer (by decide)
+  cases hn
+
+
+/-- Planted. Delete only accepted request continuation; recursive silent steps use this mutant. -/
+def stuckContinuation (P : Program O) (ρ : Oracle O) : Nat → List O.Event → Config O → Report O
+  | fuel, hist, c =>
+    match c.ctrl, c.final?, fuel with
+    | .refused, _, _ => ⟨hist, .stuck, c, fuel⟩
+    | _, some f, _ => ⟨hist, .final f, c, fuel⟩
+    | _, none, 0 => ⟨hist, .outOfFuel, c, 0⟩
+    | _, none, n + 1 =>
+      match step P c with
+      | none => ⟨hist, .stuck, c, n + 1⟩
+      | some (.next c') => stuckContinuation P ρ n hist c'
+      | some (.request p vs site st k) =>
+        match ρ hist p vs site st with
+        | none => ⟨hist, .noAnswer, c, n + 1⟩
+        | some a =>
+          if O.allows p vs st a then
+            match k a with
+            | some _ => ⟨hist, .stuck, c, n + 1⟩
+            | none => ⟨hist, .stuck, c, n + 1⟩
+          else ⟨hist, .badAnswer, c, n + 1⟩
+
+
+
+/-- Instance (law `continuation_refused`). All allowed-request premises hold;
+accepted continuation spends fuel and progresses. -/
+theorem continuation_accepted : acceptedRequest.final? = none ∧ acceptedRequest.ctrl ≠ .refused ∧
+    step Demo.prog acceptedRequest = some (.request .log [17] s moved acceptedContinuation) ∧
+    env [91] .log [17] s moved = some answer ∧
+    ops.allows .log [17] moved answer = true ∧
+    (¬ (runFrom Demo.prog env 1 [91] acceptedRequest = ⟨[91], .stuck, acceptedRequest, 1⟩) ∧
+      acceptedContinuation answer ≠ none) := by
+  refine ⟨rfl, (by intro h; cases h), (by simp only [step, acceptedRequest, (show evalArgs ops live state [.move x] = .ok ([17], moved) from rfl), onRes]; apply congrArg some; apply congrArg (Out.request (O := ops) .log [17] s moved); funext a; cases hr : a.result <;> simp [acceptedContinuation, hr, bindLife, ops]), rfl, by decide, ?_⟩
+  constructor
+  · intro h; have hf := congrArg Report.fuel h; change 0 = 1 at hf; cases hf
+  · intro h; cases h
+
+/-- Planted (law `continuation_refused`). All allowed-request premises hold;
+accepted continuation cannot be silently discarded. -/
+theorem continuation_deleted : acceptedRequest.final? = none ∧ acceptedRequest.ctrl ≠ .refused ∧
+    step Demo.prog acceptedRequest = some (.request .log [17] s moved acceptedContinuation) ∧
+    env [91] .log [17] s moved = some answer ∧
+    ops.allows .log [17] moved answer = true ∧
+    (¬ (stuckContinuation Demo.prog env 1 [91] acceptedRequest = ⟨[91], .stuck, acceptedRequest, 1⟩ ↔
+      acceptedContinuation answer = none)) := by
+  refine ⟨rfl, (by intro h; cases h), (by simp only [step, acceptedRequest, (show evalArgs ops live state [.move x] = .ok ([17], moved) from rfl), onRes]; apply congrArg some; apply congrArg (Out.request (O := ops) .log [17] s moved); funext a; cases hr : a.result <;> simp [acceptedContinuation, hr, bindLife, ops]), rfl, by decide, ?_⟩
+  intro h; have hn := h.mp rfl; cases hn
+
+/-- Instance (law `prim_bind_refused`). Successful result admission
+advances the populated request. -/
+theorem primitive_bind_accepted :
+    evalArgs ops live state [.move x] = .ok ([17], moved) ∧
+    env [91] .log [17] s moved = some answer ∧
+    ops.allows .log [17] moved answer = true ∧ answer.result = .ok 0 ∧
+    (¬ (runFrom Demo.prog env 1 [91] acceptedRequest = ⟨[91], .stuck, acceptedRequest, 1⟩) ∧ ¬ (ops.life (.bind p) answer.store = none)) := by
+  refine ⟨rfl, rfl, by decide, rfl, ?_⟩
+  constructor
+  · intro h; have hf := congrArg Report.fuel h; change 0 = 1 at hf; cases hf
+  · intro h; cases h
+
+/-- Planted (law `prim_bind_refused`). Successful result admission
+rejects a deleted continuation. -/
+theorem primitive_bind_deleted :
+    evalArgs ops live state [.move x] = .ok ([17], moved) ∧
+    env [91] .log [17] s moved = some answer ∧
+    ops.allows .log [17] moved answer = true ∧ answer.result = .ok 0 ∧
+    (¬ (stuckContinuation Demo.prog env 1 [91] acceptedRequest = ⟨[91], .stuck, acceptedRequest, 1⟩ ↔ ops.life (.bind p) answer.store = none)) := by
+  refine ⟨rfl, rfl, by decide, rfl, ?_⟩
+  intro h; have hn := h.mp rfl; cases hn
+
+
+/-- Instance (law `return_refused`). Concrete captured and uncaptured destinations both progress. -/
+theorem return_destinations_accepted :
+    (¬ Blocked (Step Demo.prog) ⟨.exiting (.ret 53), live, state, .ret (some x) [(p, 67)] :: tail⟩) ∧
+    (¬ Blocked (Step Demo.prog) ⟨.done, live, state, .ret none [(p, 67)] :: tail⟩) :=
+  ⟨(return_accepted (some x)).1, (return_accepted none).2⟩
+
+/-- Instance (law `test_drop_refused`). Accepted drop also progresses along the false branch. -/
+theorem false_test_accepted : ops.eval live state (.lit 0) = .ok (0, state) ∧
+    ops.test (0 : Int) = some false ∧ ¬ Blocked (Step Demo.prog)
+      ⟨.done, live, state, .test ⟨8⟩ .skip (.lit 0) (.abort s) s [y] :: tail⟩ := by
+  refine ⟨rfl, rfl, fun hb => ?_⟩
+  have hn := (test_drop_refused Demo.prog ⟨8⟩ .skip (.abort s) (.lit 0) s [y] live state state
+    0 false tail rfl rfl).mp hb
+  cases hn
+
+/-- Planted (law `test_drop_refused`). The false branch also rejects deletion of accepted drop. -/
+theorem false_test_deleted : ops.eval live state (.lit 0) = .ok (0, state) ∧
+    ops.test (0 : Int) = some false ∧
+    ¬ (Blocked (fun c l c' => ∃ a, Dispatches (deleted .test) Demo.prog c a l c')
+      (⟨.done, live, state, .test ⟨8⟩ .skip (.lit 0) (.abort s) s [y] :: tail⟩ : Config ops) ↔
+      dropOut ops [y] live state = none) := by
+  refine ⟨rfl, rfl, fun h => ?_⟩
+  have hn := h.mp (deleted_blocked .test Demo.prog _ rfl)
+  cases hn
 
 end LifecycleEvidence
 
