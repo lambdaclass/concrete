@@ -72,6 +72,32 @@ def fixture(name, *, decl=rule, proof=proofs, reg=registry, evidence=links,
     print(f'  ok   {name}: {reason or "passes"}', flush=True)
 
 
+# C7 adapters keep the strict traversal: each production input shape accepts closed data,
+# but an opaque value of exactly that shape cannot certify an inspectable instance.
+for name, carrier, value in [
+    ('c7-runs', 'Leak.ReleasePolicy Unit × Leak.IntegerExecution',
+     '(⟨[⟨⟨0⟩, ()⟩]⟩, ⟨[], ⟨.prim none .release [.lit 0] ⟨0⟩, [], 1⟩⟩)'),
+    *[(f'c7-{name}', 'Leak.IntegerComparison',
+       '⟨[], ⟨.prim none .release [.lit 0] ⟨0⟩, [], 1⟩, ⟨.prim none .output [.secret] ⟨1⟩, [], 2⟩⟩')
+      for name in ['low', 'ni', 'ct']],
+    ('c7-calls', 'Leak.ReleaseInterface Unit × Leak.ReleaseCalls Unit',
+     '(⟨[], ⟨[]⟩⟩, ⟨[], []⟩)'),
+    ('c7-bound', 'Nat × Leak.Bound Nat', '(10, ⟨12, .boundEstablished⟩)'),
+    ('c7-optional', 'Option Nat × Leak.Bound Nat', '(some 10, ⟨12, .boundEstablished⟩)'),
+    ('c7-action', 'List (LineageId × Leak.Account) × Leak.Action',
+     '([(⟨0⟩, ⟨100, 5, 12, 9⟩)], .free ⟨0⟩ 5)'),
+    ('c7-sequence', 'List (LineageId × Leak.Account) × List Leak.Action',
+     '([(⟨0⟩, ⟨100, 5, 12, 9⟩)], [.free ⟨0⟩ 5, .reset ⟨0⟩])'),
+]:
+    declaration = '/-- The rule (Q9.1). -/\ndef ok (_ : ' + carrier + ') : Prop := True\n'
+    fixture(name + '-closed', decl=declaration,
+            proof='theorem accepts : RuleAccepted ok (' + value + ') := True.intro\n',
+            evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]')
+    fixture(name + '-opaque', decl='opaque hidden : ' + carrier + ' := ' + value + '\n' + declaration,
+            proof='theorem accepts : RuleAccepted ok hidden := True.intro\n',
+            evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]',
+            reason='no concrete rule acceptance/refusal proposition')
+
 # Each fixture isolates one round-4 traversal bypass.
 for name, prelude, carrier, value in [
     ('opaque-data-parameter', 'opaque hidden : Nat := 0\nstructure Carrier (n : Nat) where\n  data : Bool\n', 'Carrier hidden', '⟨true⟩'),

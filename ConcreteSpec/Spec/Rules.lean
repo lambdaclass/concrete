@@ -1,7 +1,8 @@
 import ConcreteSpec.Spec.Const
 import ConcreteSpec.Spec.Ident
 import ConcreteSpec.Spec.Own
-import ConcreteSpec.Spec.Leak
+import ConcreteSpec.Spec.ReleaseCalls
+import ConcreteSpec.Spec.LeakData
 
 /-!
 # Diagnostic rule registry
@@ -24,19 +25,20 @@ def registeredRules : List RuleId :=
   [⟨``ConstsPermitted, 1⟩, ⟨``Own.OwnerPermitted, 1⟩, ⟨``Own.LoanPermitted, 1⟩,
    ⟨``Own.EndPermitted, 1⟩, ⟨``Own.MovePermitted, 1⟩,
    ⟨``Own.DropPermitted, 1⟩, ⟨``Own.LeavePermitted, 1⟩,
+   ⟨``Leak.ReleaseInterface.Admitted, 1⟩,
    ⟨``Leak.ReleasePolicy.Permits, 1⟩,
    ⟨``Leak.ReleasePolicy.ForbidsRelease, 1⟩,
    ⟨``Leak.ReleasePolicy.Authorized, 1⟩,
-   ⟨``Leak.ReleasePolicy.RunsAuthorized, 1⟩,
-   ⟨``Leak.LowEquivalent, 1⟩,
-   ⟨``Leak.DelimitedReleaseNI, 1⟩,
-   ⟨``Leak.ConstantTime, 1⟩,
+   ⟨``Leak.IntegerRunsAuthorized, 1⟩,
+   ⟨``Leak.IntegerLowEquivalent, 1⟩,
+   ⟨``Leak.IntegerDelimitedReleaseNI, 1⟩,
+   ⟨``Leak.IntegerConstantTime, 1⟩,
    ⟨``Leak.Account.WF, 1⟩,
    ⟨``Leak.ResetConservation, 1⟩,
-   ⟨``Leak.Bound.Sound, 1⟩,
-   ⟨``Leak.Bound.SoundOptional, 1⟩,
+   ⟨``Leak.ByteBoundSound, 1⟩,
+   ⟨``Leak.ByteBoundSoundOptional, 1⟩,
    ⟨``Leak.LineageReport.Sound, 1⟩,
-   ⟨``Leak.ActionPermitted, 1⟩, ⟨``Leak.SequencePermitted, 1⟩]
+   ⟨``Leak.FiniteActionPermitted, 1⟩, ⟨``Leak.FiniteSequencePermitted, 1⟩]
 
 /-- Acceptance evidence applies the owning rule's judgment to a concrete input.
 The exporter recognizes this proposition's elaborated type, without unfolding the wrapper. -/
@@ -152,33 +154,35 @@ def registeredRuleExamples : List RuleExample :=
    ⟨``Own.DropPermitted, ``Own.Registry.dropRefused⟩,
    ⟨``Own.LeavePermitted, ``Own.Registry.leaveAccepted⟩,
    ⟨``Own.LeavePermitted, ``Own.Registry.leaveRefused⟩,
+   ⟨``Leak.ReleaseInterface.Admitted, `ConcreteSpec.Core.Leak.Registry.callsAccepted⟩,
+   ⟨``Leak.ReleaseInterface.Admitted, `ConcreteSpec.Core.Leak.Registry.callsRefused⟩,
    ⟨``Leak.ReleasePolicy.Permits, `ConcreteSpec.Core.Leak.Registry.permitsAccepted⟩,
    ⟨``Leak.ReleasePolicy.Permits, `ConcreteSpec.Core.Leak.Registry.permitsRefused⟩,
    ⟨``Leak.ReleasePolicy.ForbidsRelease, `ConcreteSpec.Core.Leak.Registry.forbidsAccepted⟩,
    ⟨``Leak.ReleasePolicy.ForbidsRelease, `ConcreteSpec.Core.Leak.Registry.forbidsRefused⟩,
    ⟨``Leak.ReleasePolicy.Authorized, `ConcreteSpec.Core.Leak.Registry.authorizedAccepted⟩,
    ⟨``Leak.ReleasePolicy.Authorized, `ConcreteSpec.Core.Leak.Registry.authorizedRefused⟩,
-   ⟨``Leak.ReleasePolicy.RunsAuthorized, `ConcreteSpec.Core.Leak.Registry.runsAccepted⟩,
-   ⟨``Leak.ReleasePolicy.RunsAuthorized, `ConcreteSpec.Core.Leak.Registry.runsRefused⟩,
-   ⟨``Leak.LowEquivalent, `ConcreteSpec.Core.Leak.Registry.lowAccepted⟩,
-   ⟨``Leak.LowEquivalent, `ConcreteSpec.Core.Leak.Registry.lowRefused⟩,
-   ⟨``Leak.DelimitedReleaseNI, `ConcreteSpec.Core.Leak.Registry.niAccepted⟩,
-   ⟨``Leak.DelimitedReleaseNI, `ConcreteSpec.Core.Leak.Registry.niRefused⟩,
-   ⟨``Leak.ConstantTime, `ConcreteSpec.Core.Leak.Registry.ctAccepted⟩,
-   ⟨``Leak.ConstantTime, `ConcreteSpec.Core.Leak.Registry.ctRefused⟩,
+   ⟨``Leak.IntegerRunsAuthorized, `ConcreteSpec.Core.Leak.Registry.runsAccepted⟩,
+   ⟨``Leak.IntegerRunsAuthorized, `ConcreteSpec.Core.Leak.Registry.runsRefused⟩,
+   ⟨``Leak.IntegerLowEquivalent, `ConcreteSpec.Core.Leak.Registry.lowAccepted⟩,
+   ⟨``Leak.IntegerLowEquivalent, `ConcreteSpec.Core.Leak.Registry.lowRefused⟩,
+   ⟨``Leak.IntegerDelimitedReleaseNI, `ConcreteSpec.Core.Leak.Registry.niAccepted⟩,
+   ⟨``Leak.IntegerDelimitedReleaseNI, `ConcreteSpec.Core.Leak.Registry.niRefused⟩,
+   ⟨``Leak.IntegerConstantTime, `ConcreteSpec.Core.Leak.Registry.ctAccepted⟩,
+   ⟨``Leak.IntegerConstantTime, `ConcreteSpec.Core.Leak.Registry.ctRefused⟩,
    ⟨``Leak.Account.WF, `ConcreteSpec.Core.Leak.Registry.wfAccepted⟩,
    ⟨``Leak.Account.WF, `ConcreteSpec.Core.Leak.Registry.wfRefused⟩,
    ⟨``Leak.ResetConservation, `ConcreteSpec.Core.Leak.Registry.resetAccepted⟩,
    ⟨``Leak.ResetConservation, `ConcreteSpec.Core.Leak.Registry.resetRefused⟩,
-   ⟨``Leak.Bound.Sound, `ConcreteSpec.Core.Leak.Registry.boundAccepted⟩,
-   ⟨``Leak.Bound.Sound, `ConcreteSpec.Core.Leak.Registry.boundRefused⟩,
-   ⟨``Leak.Bound.SoundOptional, `ConcreteSpec.Core.Leak.Registry.optionalAccepted⟩,
-   ⟨``Leak.Bound.SoundOptional, `ConcreteSpec.Core.Leak.Registry.optionalRefused⟩,
+   ⟨``Leak.ByteBoundSound, `ConcreteSpec.Core.Leak.Registry.boundAccepted⟩,
+   ⟨``Leak.ByteBoundSound, `ConcreteSpec.Core.Leak.Registry.boundRefused⟩,
+   ⟨``Leak.ByteBoundSoundOptional, `ConcreteSpec.Core.Leak.Registry.optionalAccepted⟩,
+   ⟨``Leak.ByteBoundSoundOptional, `ConcreteSpec.Core.Leak.Registry.optionalRefused⟩,
    ⟨``Leak.LineageReport.Sound, `ConcreteSpec.Core.Leak.Registry.reportAccepted⟩,
    ⟨``Leak.LineageReport.Sound, `ConcreteSpec.Core.Leak.Registry.reportRefused⟩,
-   ⟨``Leak.ActionPermitted, `ConcreteSpec.Core.Leak.Registry.actionAccepted⟩,
-   ⟨``Leak.ActionPermitted, `ConcreteSpec.Core.Leak.Registry.actionRefused⟩,
-   ⟨``Leak.SequencePermitted, `ConcreteSpec.Core.Leak.Registry.sequenceAccepted⟩,
-   ⟨``Leak.SequencePermitted, `ConcreteSpec.Core.Leak.Registry.sequenceRefused⟩]
+   ⟨``Leak.FiniteActionPermitted, `ConcreteSpec.Core.Leak.Registry.actionAccepted⟩,
+   ⟨``Leak.FiniteActionPermitted, `ConcreteSpec.Core.Leak.Registry.actionRefused⟩,
+   ⟨``Leak.FiniteSequencePermitted, `ConcreteSpec.Core.Leak.Registry.sequenceAccepted⟩,
+   ⟨``Leak.FiniteSequencePermitted, `ConcreteSpec.Core.Leak.Registry.sequenceRefused⟩]
 
 end ConcreteSpec.Core
