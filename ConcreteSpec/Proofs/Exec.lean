@@ -5,7 +5,7 @@ import ConcreteSpec.Spec.Outcome
 import ConcreteSpec.Spec.Scalar
 
 /-!
-# Execution, structured exits and cleanup boundaries (F09a/E1, F09b/E2)
+# Execution, structured exits and cleanup boundaries (F09a/E1, F09b/E2, F09c/E3)
 
 PROPOSED until Core freeze. No historical approval is inherited.
 Each Law cites the admitted Spec/Exec definitions by stable declaration name and
@@ -14,7 +14,13 @@ machine, not new choices of execution policy. The foundation C1 interface/law
 record (`docs/decisions.md#decided-2026-11-08-foundation`, `#foundation-q1`)
 approves execution, calls and cleanup laws; the rules live in Lean. Core remains
 unfrozen. The sole `runFrom` driver is unchanged.
-Classification: `docs/decisions.md#decided-2026-11-13-proof-labels`.
+E3 authority: `docs/decisions.md#decided-2026-11-14-trap-sites-and-law-tests`
+admits inductive law subjects, classifies function-tautological determinism as
+Representation lemmas, and requires independent-rule determinism and two-way
+agreement with the executable step under the same external answer. Its law tests
+use same-shape mutants breaking one rule, substituted at every occurrence, with
+Lean-checked concrete counterexamples preserving the law's premises.
+Tag vocabulary only: `docs/decisions.md#decided-2026-11-13-proof-labels`.
 Demo conditions are a toy interface, never Concrete Boolean encoding (ISS-0069).
 -/
 
@@ -3247,4 +3253,774 @@ example : (runFrom prog env 40 [13] ⟨.exiting (.ret 7), live, initial, orderFr
   ⟨rfl, rfl, rfl⟩
 
 end CleanupEvidence
+/-- Representation lemma. Function injectivity on `step`. -/
+private theorem step_silent_deterministic_inv {P : Program O} {c c₁ c₂ : Config O}
+    (h₁ : step P c = some (.next c₁)) (h₂ : step P c = some (.next c₂)) : c₁ = c₂ := by
+  rw [h₁] at h₂; cases h₂; rfl
+
+/-- Representation lemma. Function/relation bridge, not determinism evidence. When the step function returns `Out.next` c₁, a
+relational `Step` from c occurs if and only if the label is `Label.silent` and the target is c₁. -/
+theorem step_silent_representation (P : Program O) (c c₁ c₂ : Config O) (l : Label O)
+    (h : step P c = some (.next c₁)) :
+    Step P c l c₂ ↔ l = .silent ∧ c₂ = c₁ := by
+  constructor
+  · intro hs
+    cases hs with
+    | silent h' => exact ⟨rfl, step_silent_deterministic_inv h' h⟩
+    | prim h' _ _ => rw [h] at h'; cases h'
+  · rintro ⟨rfl, rfl⟩
+    exact .silent h
+
+/-- Representation lemma. The function-backed representation of `Step` separates machine steps
+from answers. -/
+private theorem step_deterministic_inv {P : Program O} {c c₁ c₂ : Config O} {l₁ l₂ : Label O}
+    (h₁ : Step P c l₁ c₁) (h₂ : Step P c l₂ c₂) :
+    (l₁ = l₂ ∧ c₁ = c₂) ∨ ∃ p vs site st k a₁ a₂, step P c = some (.request p vs site st k) ∧
+      O.allows p vs st a₁ = true ∧ O.allows p vs st a₂ = true ∧
+      l₁ = a₁.label ∧ l₂ = a₂.label ∧ k a₁ = some c₁ ∧ k a₂ = some c₂ := by
+  cases h₁ with
+  | silent h =>
+    cases h₂ with
+    | silent h' => exact .inl ⟨rfl, step_silent_deterministic_inv h h'⟩
+    | prim h' _ _ => rw [h] at h'; cases h'
+  | prim h ha hk =>
+    cases h₂ with
+    | silent h' => rw [h] at h'; cases h'
+    | prim h' ha' hk' =>
+      rw [h] at h'; cases h'
+      exact .inr ⟨_, _, _, _, _, _, _, h, ha, ha', rfl, rfl, hk, hk'⟩
+
+/-- Representation lemma. Constructor decomposition, not determinism evidence. Two relational transitions from c occur if and
+only if either they come from the same silent `Out.next` step or both arise from the same `Out.request`
+by allowed oracle answers whose continuations succeed. -/
+theorem step_pair_representation (P : Program O) (c c₁ c₂ : Config O) (l₁ l₂ : Label O) :
+    (Step P c l₁ c₁ ∧ Step P c l₂ c₂) ↔
+      (step P c = some (.next c₁) ∧ l₁ = .silent ∧ l₂ = .silent ∧ c₁ = c₂) ∨
+      ∃ p vs site st k a₁ a₂, step P c = some (.request p vs site st k) ∧
+        O.allows p vs st a₁ = true ∧ O.allows p vs st a₂ = true ∧
+        l₁ = a₁.label ∧ l₂ = a₂.label ∧ k a₁ = some c₁ ∧ k a₂ = some c₂ := by
+  constructor
+  · rintro ⟨h₁, h₂⟩
+    cases h₁ with
+    | silent h =>
+      cases h₂ with
+      | silent h' => exact .inl ⟨h, rfl, rfl, step_silent_deterministic_inv h h'⟩
+      | prim h' _ _ => rw [h] at h'; cases h'
+    | prim h ha hk =>
+      cases h₂ with
+      | silent h' => rw [h] at h'; cases h'
+      | prim h' ha' hk' =>
+        rw [h] at h'; cases h'
+        exact .inr ⟨_, _, _, _, _, _, _, h, ha, ha', rfl, rfl, hk, hk'⟩
+  · rintro (⟨h, rfl, rfl, rfl⟩ | ⟨p, vs, site, st, k, a₁, a₂, h, ha₁, ha₂, rfl, rfl, hk₁, hk₂⟩)
+    · exact ⟨.silent h, .silent h⟩
+    · exact ⟨.prim h ha₁ hk₁, .prim h ha₂ hk₂⟩
+
+/-- A dispatcher's answer-indexed observable transition. This sole adapter exposes the
+operation as a parameter so correspondence laws and their planted dispatchers use exactly
+the same transition conditions. `none` denotes an internal step; `some a` retains the
+entire answer, even when its label is silent. -/
+inductive Dispatches (dispatch : Program O → Config O → Option (Out O)) (P : Program O) :
+    Config O → Option (Answer O.Val O.Event O.Store) → Label O → Config O → Prop where
+  | silent {c c'} : dispatch P c = some (.next c') → Dispatches dispatch P c none .silent c'
+  | prim {c c' p vs site st k a} : dispatch P c = some (.request p vs site st k) →
+      O.allows p vs st a = true → k a = some c' → Dispatches dispatch P c (some a) a.label c'
+
+/-- A transition with its external input retained. `none` denotes an internal machine
+step; `some a` denotes precisely answer `a`, even when that answer emits no event. This
+relation does not identify different answers merely because their observable labels coincide.
+It specializes the shared dispatcher adapter without adding transition conditions. -/
+abbrev AnswerStep := @Dispatches O step
+
+/-- Representation lemma. Erases the input index to recover the observable transition. -/
+theorem AnswerStep.step_inv {P : Program O} {c c' : Config O}
+    {a : Option (Answer O.Val O.Event O.Store)} {l : Label O}
+    (h : AnswerStep P c a l c') : Step P c l c' := by
+  cases h with
+  | silent h => exact .silent h
+  | prim h ha hk => exact .prim h ha hk
+
+/-- Uniqueness of the observation and destination for a fixed machine input. The alternate
+transition is quantified inside this property, so it remains part of the conclusion, not an
+assumption selecting the expected answer or result. -/
+def InputDeterministic
+    (R : Program O → Config O → Option (Answer O.Val O.Event O.Store) → Label O → Config O → Prop)
+    (P : Program O) (c c₁ : Config O) (a : Option (Answer O.Val O.Event O.Store)) (l₁ : Label O) : Prop :=
+  ∀ l₂ c₂, R P c a l₂ c₂ → l₁ = l₂ ∧ c₁ = c₂
+
+/-- Representation lemma. Function-backed internal transitions compare equal dispatcher
+results; this is not independent determinism evidence. -/
+theorem step_silent_deterministic (P : Program O) (c c₁ : Config O) (l₁ : Label O)
+    (h₁ : AnswerStep P c none l₁ c₁) :
+    InputDeterministic AnswerStep P c c₁ none l₁ := by
+  intro l₂ c₂ h₂
+  cases h₁ with
+  | silent h₁ =>
+    cases h₂ with
+    | silent h₂ => exact ⟨rfl, step_silent_deterministic_inv h₁ h₂⟩
+
+/-- Representation lemma. Function-backed transitions at a fixed answer compare equal
+dispatcher and continuation results; this is not soundness evidence. -/
+theorem step_deterministic (P : Program O) (c c₁ : Config O)
+    (a : Option (Answer O.Val O.Event O.Store)) (l₁ : Label O)
+    (h₁ : AnswerStep P c a l₁ c₁) :
+    InputDeterministic AnswerStep P c c₁ a l₁ := by
+  intro l₂ c₂ h₂
+  cases h₁ with
+  | silent h₁ =>
+    cases h₂ with
+    | silent h₂ => exact ⟨rfl, step_silent_deterministic_inv h₁ h₂⟩
+  | prim h₁ _ hk₁ =>
+    cases h₂ with
+    | prim h₂ _ hk₂ =>
+      rw [h₁] at h₂
+      cases h₂
+      rw [hk₁] at hk₂
+      cases hk₂
+      exact ⟨rfl, rfl⟩
+
+/-! ### Independent operational semantics and correspondence -/
+
+/-- Representation lemma. Argument judgment and left-to-right executable argument traversal
+have the same results; proved by list/result cases. -/
+theorem arguments_representation (L : AList Var O.Val) (st : O.Store) (es : List O.Expr)
+    (r : Res (List O.Val × O.Store)) : Arguments O L st es r ↔ evalArgs O L st es = r := by
+  constructor
+  · intro h
+    induction h with
+    | nil => rfl
+    | cons h _ ih => simp [evalArgs, h, Res.bind, Res.map, ih]
+    | headStuck h => simp [evalArgs, h, Res.bind]
+    | tailStuck h _ ih => simp [evalArgs, h, Res.bind, Res.map, ih]
+    | headTrap h => simp [evalArgs, h, Res.bind]
+    | tailTrap h _ ih => simp [evalArgs, h, Res.bind, Res.map, ih]
+  · intro h
+    induction es generalizing st r with
+    | nil => cases h; exact .nil
+    | cons e es ih =>
+      cases he : O.eval L st e with
+      | stuck => simp [evalArgs, he, Res.bind] at h; subst r; exact .headStuck he
+      | trap kd => simp [evalArgs, he, Res.bind] at h; subst r; exact .headTrap he
+      | ok val =>
+        obtain ⟨v, st₁⟩ := val
+        cases hr : evalArgs O L st₁ es with
+        | stuck => simp [evalArgs, he, hr, Res.bind, Res.map] at h; subst r; exact .tailStuck he (ih st₁ _ hr)
+        | trap kd =>
+          simp [evalArgs, he, hr, Res.bind, Res.map] at h; subst r
+          exact .tailTrap he (ih st₁ _ hr)
+        | ok val =>
+          obtain ⟨vs, st₂⟩ := val
+          simp [evalArgs, he, hr, Res.bind, Res.map] at h; subst r
+          exact .cons he (ih st₁ _ hr)
+
+/-- Representation lemma. The independently specified registration judgment agrees with the
+executable stack traversal. -/
+theorem registered_representation (d : Deferred O) (k k' : List (Frame O)) :
+    Registered d k k' ↔ register d k = some k' := by
+  constructor
+  · intro h; induction h with
+    | scope => rfl
+    | seq _ ih => simp [register, ih]
+  · intro h
+    induction k generalizing k' with
+    | nil => simp [register] at h
+    | cons f k ih =>
+      cases f <;> simp only [register] at h
+      all_goals first
+      | cases h; exact .scope
+      | obtain ⟨j, hj, rfl⟩ := Option.map_eq_some_iff.mp h; exact .seq (ih _ hj)
+      | contradiction
+
+/-- Representation lemma. Destination admission agrees with the executable destination
+and lifecycle adapters. -/
+theorem destination_representation (dst : Option Var) (v : O.Val) (L L' : AList Var O.Val)
+    (st st' : O.Store) : Destination O dst v L st L' st' ↔
+      bindLife O dst st = some st' ∧ L' = bindDst dst v L := by
+  cases dst with
+  | none => constructor
+            · intro h; cases h; exact ⟨rfl, rfl⟩
+            · rintro ⟨h, rfl⟩; cases h; exact .discard
+  | some x => constructor
+              · intro h; cases h with | bind h => exact ⟨h, rfl⟩
+              · rintro ⟨h, rfl⟩; exact .bind h
+
+/-- Helper (congruence). Independent argument rules have a unique result, by induction on
+argument derivations and inversion of the other derivation. -/
+theorem arguments_unique_inv {L : AList Var O.Val} {st : O.Store} {es : List O.Expr}
+    {r r' : Res (List O.Val × O.Store)} (h : Arguments O L st es r)
+    (h' : Arguments O L st es r') : r = r' := by
+  induction h generalizing r' <;> cases h' <;> simp_all <;> grind
+
+/-- Helper (congruence). Registration is unique by stack-rule inversion. -/
+theorem registered_unique_inv {d : Deferred O} {k k₁ k₂ : List (Frame O)}
+    (h : Registered d k k₁) (h' : Registered d k k₂) : k₁ = k₂ := by
+  induction h generalizing k₂ <;> cases h' <;> simp_all <;> grind
+
+/-- Helper (congruence). Destination binding is unique by admission-rule inversion. -/
+theorem destination_unique_inv {dst : Option Var} {v : O.Val} {L L₁ L₂ : AList Var O.Val}
+    {st st₁ st₂ : O.Store} (h : Destination O dst v L st L₁ st₁)
+    (h' : Destination O dst v L st L₂ st₂) : L₁ = L₂ ∧ st₁ = st₂ := by
+  cases h <;> cases h' <;> simp_all
+
+/-- Helper (inversion). Translates each independent operational constructor into the
+function-backed representation; no uniqueness argument uses this lemma. -/
+theorem rules_answer_sound_inv {P : Program O} {c c' : Config O}
+    {a : Option (Answer O.Val O.Event O.Store)} {l : Label O}
+    (h : Rules P c a l c') : AnswerStep P c a l c' := by
+  cases h
+  case primOk L st k dst p args site vs st₁ st₂ a v L' he ha hv hd =>
+    obtain ⟨hb, rfl⟩ := (destination_representation _ _ _ _ _ _).mp hd
+    apply Dispatches.prim (by simp only [step, onRes, (arguments_representation _ _ _ _).mp he]; rfl) ha
+    simp [hv, hb]
+  case primError L st k dst p args site vs st₁ a kd he ha hv =>
+    apply Dispatches.prim (by simp only [step, onRes, (arguments_representation _ _ _ _).mp he]; rfl) ha
+    simp [hv]
+  all_goals
+    apply Dispatches.silent
+    try simp_all only [arguments_representation, registered_representation, destination_representation]
+    simp_all only [step, stepExit, onRes, startCleanup, Deferred.stmt, dropOut, dead, dom,
+      restrict, bindDst, bindLife]
+    all_goals simp_all
+
+/-- Law (subject `ConcreteSpec.Core.Exec.Rules`). A fixed external input determines both
+label and destination by operational-rule inversion, independently of the dispatcher.
+Authority: `docs/decisions.md#decided-2026-11-14-trap-sites-and-law-tests`:
+determinism over independently written rules, admitted as inductive law subjects.
+Foundation `#foundation-q1` supplies the interface/law boundary; the November 13
+`#decided-2026-11-13-proof-labels` record supplies only the tag vocabulary. -/
+theorem rules_deterministic (P : Program O) (c c₁ : Config O)
+    (a : Option (Answer O.Val O.Event O.Store)) (l₁ : Label O)
+    (h₁ : Rules P c a l₁ c₁) : InputDeterministic Rules P c c₁ a l₁ := by
+  intro l₂ c₂ h₂
+  cases h₁ <;> cases h₂ <;>
+    first | exact ⟨rfl, rfl⟩ | (expose_names; simp_all)
+  all_goals grind only [arguments_unique_inv, registered_unique_inv, destination_unique_inv]
+
+/-- Helper (inversion). Statement completeness, with explicit operand and admission cases
+rather than a product of all dispatcher branches. -/
+private theorem rules_exec_complete_inv {P : Program O} (s : Stmt O)
+    (L : AList Var O.Val) (st : O.Store) (k : List (Frame O)) {c' : Config O}
+    (hs : step P ⟨.exec s, L, st, k⟩ = some (.next c')) :
+    Rules P ⟨.exec s, L, st, k⟩ none .silent c' := by
+  cases s with
+  | skip => cases hs; exact .skip
+  | seq s t => cases hs; exact .seq
+  | block b s => cases hs; exact .block
+  | loop l cr test body site => cases hs; exact .loop
+  | brk l => cases hs; exact .brk
+  | cont l => cases hs; exact .cont
+  | abort site => cases hs; exact .abort
+  | defer f args site =>
+    simp only [step, Option.map_eq_some_iff] at hs
+    obtain ⟨k', hr, h⟩ := hs
+    cases h
+    exact .defer ((registered_representation _ _ _).mpr hr)
+  | bind x e site =>
+    cases he : O.eval L st e with
+    | stuck => simp [step, he, onRes] at hs
+    | trap kd => simp only [step, he, onRes, Option.some.injEq, Out.next.injEq] at hs
+                 cases hs; exact .bindTrap he
+    | ok val =>
+      obtain ⟨v, st₁⟩ := val
+      simp only [step, he, onRes, Option.map_eq_some_iff] at hs
+      obtain ⟨st₂, hb, h⟩ := hs
+      cases h
+      exact .bind he hb
+  | assign x e site =>
+    cases he : O.eval L st e with
+    | stuck => simp [step, he, onRes] at hs
+    | trap kd => simp only [step, he, onRes, Option.some.injEq, Out.next.injEq] at hs
+                 cases hs; exact .assignTrap he
+    | ok val =>
+      obtain ⟨v, st₁⟩ := val
+      simp only [step, he, onRes, Option.bind_eq_some_iff, Option.map_eq_some_iff] at hs
+      obtain ⟨old, hl, st₂, hb, h⟩ := hs
+      cases h
+      exact .assign he hl hb
+  | cond e yes no site =>
+    cases he : O.eval L st e with
+    | stuck => simp [step, he, onRes] at hs
+    | trap kd => simp only [step, he, onRes, Option.some.injEq, Out.next.injEq] at hs
+                 cases hs; exact .condTrap he
+    | ok val =>
+      obtain ⟨v, st₁⟩ := val
+      simp only [step, he, onRes, Option.map_eq_some_iff] at hs
+      obtain ⟨b, ht, h⟩ := hs
+      cases b <;> cases h
+      · exact .condfalse he ht
+      · exact .condtrue he ht
+  | ret e site =>
+    cases he : O.eval L st e with
+    | stuck => simp [step, he, onRes] at hs
+    | trap kd => simp only [step, he, onRes, Option.some.injEq, Out.next.injEq] at hs
+                 cases hs; exact .retTrap he
+    | ok val =>
+      obtain ⟨v, st₁⟩ := val
+      simp only [step, he, onRes, Option.some.injEq, Out.next.injEq] at hs
+      cases hs; exact .ret he
+  | call dst f args site =>
+    cases he : evalArgs O L st args with
+    | stuck => simp [step, he, onRes] at hs
+    | trap kd =>
+      simp only [step, he, onRes, Option.some.injEq, Out.next.injEq] at hs
+      cases hs; exact .callTrap ((arguments_representation _ _ _ _).mpr he)
+    | ok val =>
+      obtain ⟨vs, st₁⟩ := val
+      simp only [step, he, onRes, Option.bind_eq_some_iff] at hs
+      obtain ⟨fn, hl, hs⟩ := hs
+      split at hs
+      next har =>
+        obtain ⟨st₂, hb, h⟩ := Option.map_eq_some_iff.mp hs
+        cases h
+        exact .call ((arguments_representation _ _ _ _).mpr he) hl har hb
+      next => contradiction
+  | prim dst p args site =>
+    cases he : evalArgs O L st args with
+    | stuck => simp [step, he, onRes] at hs
+    | trap kd =>
+      simp only [step, he, onRes, Option.some.injEq, Out.next.injEq] at hs
+      cases hs; exact .primTrap ((arguments_representation _ _ _ _).mpr he)
+    | ok val => simp [step, he, onRes] at hs
+
+/-- Helper (inversion). Normal-completion completeness by frame and operand-result cases. -/
+private theorem rules_done_complete_inv {P : Program O}
+    (L : AList Var O.Val) (st : O.Store) (k : List (Frame O)) {c' : Config O}
+    (hs : step P ⟨.done, L, st, k⟩ = some (.next c')) :
+    Rules P ⟨.done, L, st, k⟩ none .silent c' := by
+  cases k with
+  | nil => simp [step] at hs
+  | cons f k =>
+    cases f with
+    | seq t => cases hs; exact .doneSeq
+    | scope b dm ds =>
+      cases ds with
+      | cons d ds => cases hs; exact .doneCleanup
+      | nil =>
+        obtain ⟨st₁, hd, h⟩ := Option.map_eq_some_iff.mp hs
+        cases h; exact .doneScope hd
+    | test l cr test body site dm =>
+      cases he : O.eval L st test with
+      | stuck => simp [step, he, onRes] at hs
+      | trap kd =>
+        simp only [step, he, onRes, Option.some.injEq, Out.next.injEq] at hs
+        cases hs; exact .testTrap he
+      | ok val =>
+        obtain ⟨v, st₁⟩ := val
+        simp only [step, he, onRes, Option.bind_eq_some_iff, Option.map_eq_some_iff] at hs
+        obtain ⟨b, ht, st₂, hd, h⟩ := hs
+        cases b <;> cases h
+        · exact .testfalse he ht hd
+        · exact .testtrue he ht hd
+    | body l cr test body site => cases hs; exact .doneBody
+    | resume pending =>
+      cases pending with
+      | fall => cases hs; exact .resumeFall
+      | exit e => cases hs; exact .resumeExit
+    | functionEnd =>
+      obtain ⟨st₁, hl, h⟩ := Option.map_eq_some_iff.mp hs
+      cases h; exact .endFall hl
+    | ret dst caller =>
+      simp only [step, Option.map_eq_some_iff] at hs
+      obtain ⟨st₂, hb, h⟩ := hs
+      cases h
+      exact .implicitReturn ((destination_representation _ _ _ _ _ _).mpr ⟨hb, rfl⟩)
+
+/-- Helper (inversion). Exit completeness by frame and, where inspected, exit kind. -/
+private theorem rules_exit_complete_inv {P : Program O}
+    (e : Exit O.Val) (L : AList Var O.Val) (st : O.Store) (k : List (Frame O)) {c' : Config O}
+    (hs : step P ⟨.exiting e, L, st, k⟩ = some (.next c')) :
+    Rules P ⟨.exiting e, L, st, k⟩ none .silent c' := by
+  cases k with
+  | nil => simp [step, stepExit] at hs
+  | cons f k =>
+    cases f with
+    | seq t => cases hs; exact .exitSeq
+    | scope b dm ds =>
+      cases ds with
+      | cons d ds => cases hs; exact .exitCleanup
+      | nil =>
+        obtain ⟨st₁, hd, h⟩ := Option.map_eq_some_iff.mp hs
+        cases h; exact .exitScope hd
+    | test l cr test body site dm =>
+      obtain ⟨st₁, hd, h⟩ := Option.map_eq_some_iff.mp hs
+      cases h; exact .exitTest hd
+    | body l cr test body site =>
+      cases e with
+      | ret v => cases hs; exact .returnBody
+      | brk l' =>
+        by_cases hl : l' = l
+        · subst l'; simp only [step, stepExit, ↓reduceIte, Option.some.injEq, Out.next.injEq] at hs
+          cases hs; exact .brkHere
+        · simp only [step, stepExit, hl, ↓reduceIte, Option.some.injEq, Out.next.injEq] at hs
+          cases hs; exact .brkOuter hl
+      | cont l' =>
+        by_cases hl : l' = l
+        · subst l'; simp only [step, stepExit, ↓reduceIte, Option.some.injEq, Out.next.injEq] at hs
+          cases hs; exact .contHere
+        · simp only [step, stepExit, hl, ↓reduceIte, Option.some.injEq, Out.next.injEq] at hs
+          cases hs; exact .contOuter hl
+    | resume pending => simp [step, stepExit] at hs
+    | functionEnd =>
+      cases e with
+      | ret v =>
+        obtain ⟨st₁, hl, h⟩ := Option.map_eq_some_iff.mp hs
+        cases h; exact .endReturn hl
+      | brk l => simp [step, stepExit] at hs
+      | cont l => simp [step, stepExit] at hs
+    | ret dst caller =>
+      cases e with
+      | brk l => simp [step, stepExit] at hs
+      | cont l => simp [step, stepExit] at hs
+      | ret v =>
+        simp only [step, stepExit, Option.map_eq_some_iff] at hs
+        obtain ⟨st₂, hb, h⟩ := hs
+        cases h
+        exact .explicitReturn ((destination_representation _ _ _ _ _ _).mpr ⟨hb, rfl⟩)
+
+/-- Helper (inversion). Silent completeness reduces to statement and frame inversion. -/
+theorem rules_silent_complete_inv {P : Program O} {c c' : Config O}
+    (hs : step P c = some (.next c')) : Rules P c none .silent c' := by
+  obtain ⟨ctrl, L, st, k⟩ := c
+  cases ctrl with
+  | exec s => exact rules_exec_complete_inv s L st k hs
+  | done => exact rules_done_complete_inv L st k hs
+  | exiting e => exact rules_exit_complete_inv e L st k hs
+  | trapped kd site => simp [step] at hs
+  | refused => simp [step] at hs
+
+/-- Helper (inversion). Every successful request continuation is a primitive operational
+transition; other statement and frame forms cannot request. -/
+private theorem rules_request_complete_inv {P : Program O} {c c' : Config O}
+    {p : O.Prim} {vs : List O.Val} {site : SiteId} {st : O.Store}
+    {cont : Answer O.Val O.Event O.Store → Option (Config O)}
+    {a : Answer O.Val O.Event O.Store}
+    (hs : step P c = some (.request p vs site st cont))
+    (ha : O.allows p vs st a = true) (hk : cont a = some c') :
+    Rules P c (some a) a.label c' := by
+  obtain ⟨ctrl, L, st₀, k⟩ := c
+  cases ctrl with
+  | trapped kd site => simp [step] at hs
+  | refused => simp [step] at hs
+  | exiting e => exact False.elim (stepExit_no_request_inv L st₀ e k _ _ _ _ _ hs)
+  | done =>
+    cases k with
+    | nil => simp [step] at hs
+    | cons f k =>
+      cases f <;> simp only [step, onRes, startCleanup, Option.bind, Option.map] at hs <;>
+        repeat' first | simp_all [bindLife] | split at hs
+  | exec stmt =>
+    cases stmt with
+    | prim dst p₀ args site₀ =>
+      cases he : evalArgs O L st₀ args with
+      | stuck => simp [step, onRes, he] at hs
+      | trap kd => simp [step, onRes, he] at hs
+      | ok val =>
+        obtain ⟨vs₀, st₁⟩ := val
+        simp only [step, onRes, he, Option.some.injEq, Out.request.injEq] at hs
+        obtain ⟨rfl, rfl, rfl, rfl, rfl⟩ := hs
+        cases hr : a.result with
+        | error kd =>
+          simp only [hr, Option.some.injEq] at hk
+          cases hk
+          exact .primError ((arguments_representation _ _ _ _).mpr he) ha hr
+        | ok v =>
+          simp only [hr, Option.map_eq_some_iff] at hk
+          obtain ⟨st₂, hb, h⟩ := hk
+          cases h
+          exact .primOk ((arguments_representation _ _ _ _).mpr he) ha hr
+            ((destination_representation _ _ _ _ _ _).mpr ⟨hb, rfl⟩)
+    | _ =>
+      simp only [step, onRes, Option.bind, Option.map] at hs
+      repeat' first | simp_all | split at hs
+
+/-- Law (subject `ConcreteSpec.Core.Exec.step`). Every independent operational transition
+is implemented by the dispatcher, including the exact answer, label and destination.
+Authority: `docs/decisions.md#decided-2026-11-14-trap-sites-and-law-tests`:
+the independent rules and executable step must agree in both directions under the
+same external answer. Foundation `#foundation-q1` supplies the interface/law boundary;
+`#decided-2026-11-13-proof-labels` supplies only the tag vocabulary. -/
+theorem rules_sound (P : Program O) (c : Config O)
+    (a : Option (Answer O.Val O.Event O.Store)) (l : Label O) (c' : Config O)
+    (h : Rules P c a l c') : Dispatches step P c a l c' := by
+  exact rules_answer_sound_inv h
+
+/-- Completeness at a fixed source and input: every implementation outcome has an
+independent operational derivation. Quantifying outcomes inside the property permits a
+premise-preserving mutant to exhibit an extra implementation transition. -/
+def DispatchComplete (dispatch : Program O → Config O → Option (Out O))
+    (P : Program O) (c : Config O) (a : Option (Answer O.Val O.Event O.Store)) : Prop :=
+  ∀ l c', Dispatches dispatch P c a l c' → Rules P c a l c'
+
+/-- Law (subject `ConcreteSpec.Core.Exec.step`). Every admitted dispatcher transition has
+an independent operational derivation; no executable transition is omitted.
+Authority: `docs/decisions.md#decided-2026-11-14-trap-sites-and-law-tests`:
+the independent rules and executable step must agree in both directions under the
+same external answer. Foundation `#foundation-q1` supplies the interface/law boundary;
+`#decided-2026-11-13-proof-labels` supplies only the tag vocabulary. -/
+theorem rules_complete (P : Program O) (c : Config O)
+    (a : Option (Answer O.Val O.Event O.Store)) : DispatchComplete step P c a := by
+  intro l c' h
+  cases h with
+  | silent hs => exact rules_silent_complete_inv hs
+  | prim hs ha hk => exact rules_request_complete_inv hs ha hk
+
+/-- Representation lemma. Exact correspondence with the answer-retaining relation follows
+from dispatcher soundness and completeness. -/
+theorem rules_iff_answerStep (P : Program O) (c : Config O)
+    (a : Option (Answer O.Val O.Event O.Store)) (l : Label O) (c' : Config O) :
+    Rules P c a l c' ↔ AnswerStep P c a l c' := by
+  constructor
+  · exact rules_answer_sound_inv
+  · exact rules_complete P c a l c'
+
+/-- Representation lemma. Erasing exactly the answer index gives the original observable
+single-step relation. -/
+theorem step_iff_rules (P : Program O) (c : Config O) (l : Label O) (c' : Config O) :
+    Step P c l c' ↔ ∃ a, Rules P c a l c' := by
+  constructor
+  · intro h
+    cases h with
+    | silent hs => exact ⟨none, rules_silent_complete_inv hs⟩
+    | prim hs ha hk => exact ⟨_, rules_request_complete_inv hs ha hk⟩
+  · rintro ⟨a, h⟩
+    exact (rules_answer_sound_inv h).step_inv
+
+/-- Law (subject `ConcreteSpec.Core.Exec.Rules`). Internal steps have a unique label and
+configuration, by independent rule inversion.
+Authority: `docs/decisions.md#decided-2026-11-14-trap-sites-and-law-tests`:
+determinism over independently written rules, admitted as inductive law subjects.
+Foundation `#foundation-q1` supplies the interface/law boundary; the November 13
+`#decided-2026-11-13-proof-labels` record supplies only the tag vocabulary. -/
+theorem rules_silent_deterministic (P : Program O) (c c₁ : Config O) (l₁ : Label O)
+    (h₁ : Rules P c none l₁ c₁) : InputDeterministic Rules P c c₁ none l₁ := by
+  exact rules_deterministic P c c₁ none l₁ h₁
+
+
+/-! ## E3 controls
+
+The fixed-input index is retained even for silent primitive answers. These controls use
+populated locals, a nonzero counter, two activations and a continuation. The overlapping
+mutant adds only a second skip conclusion; it is substituted in both occurrences of the
+relation in the determinism obligation. Agreement controls separately delete and add an
+executable transition. There is no derived closure in these one-step obligations.
+Authority: `docs/decisions.md#decided-2026-11-14-trap-sites-and-law-tests` admits
+inductive law subjects and requires same-shape mutants breaking one specific rule,
+substituted everywhere that rule occurs in the law. Lean checks concrete examples
+where the premises hold and the conclusion fails; errors and timeouts are not evidence.
+The November 13 `#decided-2026-11-13-proof-labels` record supplies only tag vocabulary.
+No held path,
+constant, Boolean representation, pointer, wiping or startup policy is introduced here.
+-/
+namespace DeterminismEvidence
+open Demo CleanupEvidence
+
+/-- Instance support. A skip in a populated running activation. -/
+def source : Config ops := ⟨.exec .skip, live, initial, suffix⟩
+/-- Instance support. Skip retains every component except control. -/
+def target : Config ops := ⟨.done, live, initial, suffix⟩
+/-- Planted support. The overlapping skip rule erroneously drops the continuation. -/
+def wrong : Config ops := ⟨.done, live, initial, []⟩
+
+/-- Instance (law `rules_deterministic`). A real skip premise and its uniqueness conclusion. -/
+theorem rules_deterministic_instance : Rules prog source none .silent target ∧
+    InputDeterministic Rules prog source target none .silent :=
+  ⟨.skip, rules_deterministic prog source target none .silent .skip⟩
+
+/-- Instance (law `rules_silent_deterministic`). Nonempty locals, store and frames are preserved. -/
+theorem rules_silent_deterministic_instance : Rules prog source none .silent target ∧
+    InputDeterministic Rules prog source target none .silent :=
+  ⟨.skip, rules_silent_deterministic prog source target .silent .skip⟩
+
+/-- Planted. Keep all original rules and add just an overlapping skip transition. -/
+inductive Overlap (P : Program ops) : Config ops → Option (Answer Int Int DState) →
+    Label ops → Config ops → Prop where
+  | original {c a l c'} : Rules P c a l c' → Overlap P c a l c'
+  | skip {L st k} : Overlap P ⟨.exec .skip, L, st, k⟩ none .silent ⟨.done, L, st, []⟩
+
+/-- Planted (law `rules_deterministic`). The original transition still satisfies the premise,
+but the uniformly substituted relation has a second destination at exactly the same input. -/
+theorem rules_deterministic_planted : Overlap prog source none .silent target ∧
+    ¬ InputDeterministic Overlap prog source target none .silent := by
+  refine ⟨.original .skip, ?_⟩
+  intro h
+  have he := (h .silent wrong .skip).2
+  have hf := congrArg Config.frames he
+  cases hf
+
+/-- Planted (law `rules_silent_deterministic`). The added skip also refutes the silent specialization. -/
+theorem rules_silent_deterministic_planted :
+    ¬ (∀ (c c₁ : Config ops) (l₁ : Label ops), Overlap prog c none l₁ c₁ →
+      InputDeterministic Overlap prog c c₁ none l₁) := by
+  intro h
+  exact rules_deterministic_planted.2 (h source target .silent rules_deterministic_planted.1)
+
+/-- Instance (law `rules_sound`). The independent skip rule is implemented exactly. -/
+theorem rules_sound_instance : Rules prog source none .silent target ∧
+    Dispatches step prog source none .silent target :=
+  ⟨.skip, rules_sound prog source none .silent target .skip⟩
+
+/-- Instance (law `rules_complete`). A populated executable skip has a rule derivation. -/
+theorem rules_complete_instance : Dispatches step prog source none .silent target ∧
+    Rules prog source none .silent target :=
+  ⟨.silent rfl, rules_complete prog source none .silent target (.silent rfl)⟩
+
+/-- Planted. Delete only the executable skip transition; every other dispatch is unchanged. -/
+def removed (P : Program O) (c : Config O) : Option (Out O) :=
+  match c.ctrl with
+  | .exec .skip => none
+  | _ => step P c
+
+/-- Planted. Add only a transition at an already trapped configuration. Traps must stop;
+the mutant resumes with the same locals, store and continuation. -/
+def added (P : Program O) (c : Config O) : Option (Out O) :=
+  match c.ctrl with
+  | .trapped _ _ => some (.next { c with ctrl := .done })
+  | _ => step P c
+
+/-- Planted (law `rules_sound`). Removing skip preserves the independent premise while
+refuting the implementation conclusion. The mutated dispatcher occurs uniformly. -/
+theorem rules_sound_planted : Rules prog source none .silent target ∧
+    ¬ Dispatches removed prog source none .silent target := by
+  refine ⟨.skip, ?_⟩
+  intro h
+  cases h with
+  | silent hs => cases hs
+
+/-- Instance support. A populated terminal trap with unexecuted cleanup frames. -/
+def stopped : Config ops := ⟨.trapped .abort s, live, initial, suffix⟩
+
+/-- Planted (law `rules_complete`). Adding a transition at a trap gives a real mutant
+premise and no independent conclusion; no failed proof or timeout is used as evidence. -/
+theorem rules_complete_planted :
+    Dispatches added prog stopped none .silent target ∧
+    ¬ DispatchComplete added prog stopped none := by
+  refine ⟨.silent rfl, ?_⟩
+  intro h
+  have hr := h .silent target (.silent rfl)
+  cases hr
+
+/-- Instance support. A contract-admitted silent primitive answer changes the counter. -/
+def bumpAnswer : Answer Int Int DState := ⟨none, .ok 0, ⟨5, initial.moved⟩⟩
+/-- Instance support. Primitive invocation with populated machine state. -/
+def bumpSource : Config ops := ⟨.exec (.prim none .bump [] s), live, initial, suffix⟩
+/-- Instance support. The admitted answer's state is retained. -/
+def bumpTarget : Config ops := ⟨.done, live, bumpAnswer.store, suffix⟩
+
+/-- Instance (law `rules_deterministic`). Primitive determinism fixes the entire external
+answer, including its store, even when its observation is silent. -/
+theorem primitive_determinism_instance :
+    Rules prog bumpSource (some bumpAnswer) .silent bumpTarget ∧
+    InputDeterministic Rules prog bumpSource bumpTarget (some bumpAnswer) .silent := by
+  have hr : Rules prog bumpSource (some bumpAnswer) .silent bumpTarget :=
+    .primOk .nil rfl rfl .discard
+  exact ⟨hr, rules_deterministic prog bumpSource bumpTarget _ .silent hr⟩
+
+/-- Instance (laws `rules_sound`, `rules_complete`). Both agreement directions use the same
+admitted primitive answer; no oracle is selected by these laws. -/
+theorem primitive_agreement_instance :
+    Dispatches step prog bumpSource (some bumpAnswer) .silent bumpTarget ∧
+    Rules prog bumpSource (some bumpAnswer) .silent bumpTarget := by
+  have hr : Rules prog bumpSource (some bumpAnswer) .silent bumpTarget :=
+    .primOk .nil rfl rfl .discard
+  have hd := rules_sound prog bumpSource _ .silent bumpTarget hr
+  exact ⟨hd, rules_complete prog bumpSource _ .silent bumpTarget hd⟩
+
+/-- Representation lemma. Absence of a transition agrees too, for any fixed input. This
+includes stuck operands, lifecycle refusals, rejected answers and refused continuations.
+No totality or rollback claim is made. -/
+theorem no_transition_agreement (P : Program O) (c : Config O)
+    (a : Option (Answer O.Val O.Event O.Store)) :
+    (¬ ∃ l c', Rules P c a l c') ↔ (¬ ∃ l c', AnswerStep P c a l c') := by
+  simp only [rules_iff_answerStep]
+
+/-- Instance. A moved local is stuck with populated state. Both semantics have no transition. -/
+theorem stuck_agreement_instance :
+    let c : Config ops := ⟨.exec (.ret (.var x) s), live, initial, suffix⟩
+    (¬ ∃ a l c', Rules prog c a l c') ∧ (¬ ∃ a l c', AnswerStep prog c a l c') := by
+  dsimp
+  have hn : ∀ a l c', ¬ AnswerStep prog
+      ⟨.exec (.ret (.var x) s), live, initial, suffix⟩ a l c' := by
+    intro a l c' h
+    cases h with
+    | silent hs => simp [step, onRes, ops, evalE, live, initial,
+        DState.top, x, y, p, t, AList.lookup] at hs
+    | prim hs _ _ => simp [step, onRes, ops, evalE, live, initial,
+        DState.top, x, y, p, t, AList.lookup] at hs
+  constructor
+  · rintro ⟨a, l, c', h⟩
+    exact hn a l c' ((rules_iff_answerStep _ _ _ _ _).mp h)
+  · rintro ⟨a, l, c', h⟩; exact hn a l c' h
+
+/-- Instance support. A toy lifecycle adapter refuses binding alone; this is unsafe
+stopping, as decided in `docs/decisions.md#decided-2026-11-13-lifecycle-refusal`. -/
+abbrev refusing : Operands := { ops with life := fun e st => match e with
+  | .bind _ => none
+  | _ => some (DState.life e st) }
+
+/-- Instance. Lifecycle binding refusal has neither a silent nor primitive transition in
+either semantics. It does not become a trap. -/
+theorem refusal_agreement_instance :
+    let P : Program refusing := ⟨[]⟩
+    let c : Config refusing := ⟨.exec (.bind x (.lit 9) s), live, initial, [.seq .skip]⟩
+    (¬ ∃ a l c', Rules P c a l c') ∧ (¬ ∃ a l c', AnswerStep P c a l c') := by
+  dsimp
+  have hn : ∀ a l c', ¬ AnswerStep (⟨[]⟩ : Program refusing)
+      ⟨.exec (.bind x (.lit 9) s), live, initial, [.seq .skip]⟩ a l c' := by
+    intro a l c' h
+    cases h with
+    | silent hs => simp [step, onRes, refusing, ops, evalE] at hs
+    | prim hs _ _ => simp [step, onRes, refusing, ops, evalE] at hs
+  constructor
+  · rintro ⟨a, l, c', h⟩
+    exact hn a l c' ((rules_iff_answerStep _ _ _ _ _).mp h)
+  · rintro ⟨a, l, c', h⟩; exact hn a l c' h
+
+/-- Representation lemma. A refused dispatcher has no answer-indexed transition, and hence
+no independent rule. This includes final configurations as well as unsafe stopping. -/
+theorem no_dispatch_no_rule {P : Program O} {c : Config O} (hs : step P c = none) :
+    (¬ ∃ a l c', Rules P c a l c') ∧ (¬ ∃ a l c', AnswerStep P c a l c') := by
+  have hn : ∀ a l c', ¬ AnswerStep P c a l c' := by
+    intro a l c' h
+    cases h with
+    | silent h => rw [hs] at h; cases h
+    | prim h _ _ => rw [hs] at h; cases h
+  constructor
+  · rintro ⟨a, l, c', h⟩
+    exact hn a l c' ((rules_iff_answerStep _ _ _ _ _).mp h)
+  · rintro ⟨a, l, c', h⟩; exact hn a l c' h
+
+/-- Instance. Explicit lifecycle refusal control remains stopped with populated state. -/
+theorem refused_control_instance :
+    let P : Program refusing := ⟨[]⟩
+    let c : Config refusing := ⟨.refused, live, initial, [.seq .skip]⟩
+    (¬ ∃ a l c', Rules P c a l c') ∧ (¬ ∃ a l c', AnswerStep P c a l c') :=
+  no_dispatch_no_rule rfl
+
+/-- Instance. A contract-admitted log answer is still refused if its destination binding
+is refused. Its event is not accepted as a semantic transition by either semantics. -/
+theorem continuation_refusal_instance :
+    let P : Program refusing := ⟨[]⟩
+    let c : Config refusing := ⟨.exec (.prim (some x) .log [.lit 7] s), live, initial, [.seq .skip]⟩
+    let a : Answer Int Int DState := ⟨some 7, .ok 0, initial⟩
+    refusing.allows .log [7] initial a = true ∧
+    (¬ ∃ l c', Rules P c (some a) l c') ∧
+    (¬ ∃ l c', AnswerStep P c (some a) l c') := by
+  dsimp
+  have hn : ∀ l c', ¬ AnswerStep (⟨[]⟩ : Program refusing)
+      ⟨.exec (.prim (some x) .log [.lit 7] s), live, initial, [.seq .skip]⟩
+      (some ⟨some 7, .ok 0, initial⟩) l c' := by
+    intro l c' h
+    cases h with
+    | prim hs _ hk =>
+      simp only [step, onRes, evalArgs, refusing, ops, evalE, Res.bind, Res.map,
+        Option.some.injEq, Out.request.injEq] at hs
+      obtain ⟨rfl, rfl, rfl, rfl, rfl⟩ := hs
+      cases hk
+  refine ⟨rfl, ?_, ?_⟩
+  · rintro ⟨l, c', h⟩
+    exact hn l c' ((rules_iff_answerStep _ _ _ _ _).mp h)
+  · rintro ⟨l, c', h⟩; exact hn l c' h
+
+end DeterminismEvidence
+
 end ConcreteSpec.Core.Exec
