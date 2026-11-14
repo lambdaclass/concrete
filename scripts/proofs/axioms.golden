@@ -1850,6 +1850,147 @@ ConcreteSpec.Core.ObligationKind.structInvariant.sizeOf_spec
 ConcreteSpec.Core.ObligationKind.termination.sizeOf_spec	
 ConcreteSpec.Core.OutOfRange.ofNat_ctorIdx	
 ConcreteSpec.Core.OutOfRange.outOfRange.sizeOf_spec	
+ConcreteSpec.Core.Own.Activation.mk.inj	
+ConcreteSpec.Core.Own.Activation.mk.injEq	propext
+ConcreteSpec.Core.Own.Activation.mk.sizeOf_spec	
+ConcreteSpec.Core.Own.CallState.mk.inj	
+ConcreteSpec.Core.Own.CallState.mk.injEq	propext
+ConcreteSpec.Core.Own.CallState.mk.sizeOf_spec	
+ConcreteSpec.Core.Own.Descriptor.mk.inj	
+ConcreteSpec.Core.Own.Descriptor.mk.injEq	propext
+ConcreteSpec.Core.Own.Descriptor.mk.sizeOf_spec	
+ConcreteSpec.Core.Own.Examples.CE.argument.inj	
+ConcreteSpec.Core.Own.Examples.CE.argument.injEq	propext
+ConcreteSpec.Core.Own.Examples.CE.argument.sizeOf_spec	
+ConcreteSpec.Core.Own.Examples.CE.ownerArgument.inj	
+ConcreteSpec.Core.Own.Examples.CE.ownerArgument.injEq	propext
+ConcreteSpec.Core.Own.Examples.CE.ownerArgument.sizeOf_spec	
+ConcreteSpec.Core.Own.Examples.CE.useView.inj	
+ConcreteSpec.Core.Own.Examples.CE.useView.injEq	propext
+ConcreteSpec.Core.Own.Examples.CE.useView.sizeOf_spec	
+ConcreteSpec.Core.Own.Examples.CE.value.inj	
+ConcreteSpec.Core.Own.Examples.CE.value.injEq	propext
+ConcreteSpec.Core.Own.Examples.CE.value.sizeOf_spec	
+ConcreteSpec.Core.Own.Examples.E.endLoan.inj	
+ConcreteSpec.Core.Own.Examples.E.endLoan.injEq	propext
+ConcreteSpec.Core.Own.Examples.E.endLoan.sizeOf_spec	
+ConcreteSpec.Core.Own.Examples.E.fail.inj	
+ConcreteSpec.Core.Own.Examples.E.fail.injEq	propext
+ConcreteSpec.Core.Own.Examples.E.fail.sizeOf_spec	
+ConcreteSpec.Core.Own.Examples.E.lend.inj	
+ConcreteSpec.Core.Own.Examples.E.lend.injEq	propext
+ConcreteSpec.Core.Own.Examples.E.lend.sizeOf_spec	
+ConcreteSpec.Core.Own.Examples.E.lit.inj	
+ConcreteSpec.Core.Own.Examples.E.lit.injEq	propext
+ConcreteSpec.Core.Own.Examples.E.lit.sizeOf_spec	
+ConcreteSpec.Core.Own.Examples.E.move.inj	
+ConcreteSpec.Core.Own.Examples.E.move.injEq	propext
+ConcreteSpec.Core.Own.Examples.E.move.sizeOf_spec	
+ConcreteSpec.Core.Own.Examples.E.read.inj	
+ConcreteSpec.Core.Own.Examples.E.read.injEq	propext
+ConcreteSpec.Core.Own.Examples.E.read.sizeOf_spec	
+ConcreteSpec.Core.Own.Examples.E.reborrow.inj	
+ConcreteSpec.Core.Own.Examples.E.reborrow.injEq	propext
+ConcreteSpec.Core.Own.Examples.E.reborrow.sizeOf_spec	
+ConcreteSpec.Core.Own.Examples.E.use.inj	
+ConcreteSpec.Core.Own.Examples.E.use.injEq	propext
+ConcreteSpec.Core.Own.Examples.E.use.sizeOf_spec	
+ConcreteSpec.Core.Own.Examples.callee._proof_1	
+ConcreteSpec.Core.Own.FiniteExecution.brecOn	
+ConcreteSpec.Core.Own.Loan.mk.inj	
+ConcreteSpec.Core.Own.Loan.mk.injEq	propext
+ConcreteSpec.Core.Own.Loan.mk.sizeOf_spec	
+ConcreteSpec.Core.Own.LoanAction.borrow.inj	
+ConcreteSpec.Core.Own.LoanAction.borrow.injEq	propext
+ConcreteSpec.Core.Own.LoanAction.borrow.sizeOf_spec	
+ConcreteSpec.Core.Own.LoanAction.endLoan.inj	
+ConcreteSpec.Core.Own.LoanAction.endLoan.injEq	propext
+ConcreteSpec.Core.Own.LoanAction.endLoan.sizeOf_spec	
+ConcreteSpec.Core.Own.LoanAction.reborrow.inj	
+ConcreteSpec.Core.Own.LoanAction.reborrow.injEq	propext
+ConcreteSpec.Core.Own.LoanAction.reborrow.sizeOf_spec	
+ConcreteSpec.Core.Own.Mode.mutable.sizeOf_spec	
+ConcreteSpec.Core.Own.Mode.ofNat_ctorIdx	
+ConcreteSpec.Core.Own.Mode.shared.sizeOf_spec	
+ConcreteSpec.Core.Own.Projection.field.inj	
+ConcreteSpec.Core.Own.Projection.field.injEq	propext
+ConcreteSpec.Core.Own.Projection.field.sizeOf_spec	
+ConcreteSpec.Core.Own.Projection.index.inj	
+ConcreteSpec.Core.Own.Projection.index.injEq	propext
+ConcreteSpec.Core.Own.Projection.index.sizeOf_spec	
+ConcreteSpec.Core.Own.Registry.dropAccepted	propext
+ConcreteSpec.Core.Own.Registry.dropRefused	propext
+ConcreteSpec.Core.Own.Registry.endAccepted	propext
+ConcreteSpec.Core.Own.Registry.endRefused	propext
+ConcreteSpec.Core.Own.Registry.leaveAccepted	propext
+ConcreteSpec.Core.Own.Registry.leaveRefused	propext
+ConcreteSpec.Core.Own.Registry.loanAccepted	propext
+ConcreteSpec.Core.Own.Registry.loanRefused	propext
+ConcreteSpec.Core.Own.Registry.moveAccepted	
+ConcreteSpec.Core.Own.Registry.moveRefused	
+ConcreteSpec.Core.Own.Registry.ownerAccepted	
+ConcreteSpec.Core.Own.Registry.ownerRefused	
+ConcreteSpec.Core.Own.Slot.mk.inj	
+ConcreteSpec.Core.Own.Slot.mk.injEq	propext
+ConcreteSpec.Core.Own.Slot.mk.sizeOf_spec	
+ConcreteSpec.Core.Own.State.mk.inj	
+ConcreteSpec.Core.Own.State.mk.injEq	propext
+ConcreteSpec.Core.Own.State.mk.sizeOf_spec	
+ConcreteSpec.Core.Own.Status.moved.sizeOf_spec	
+ConcreteSpec.Core.Own.Status.ofNat_ctorIdx	
+ConcreteSpec.Core.Own.Status.owned.sizeOf_spec	
+ConcreteSpec.Core.Own.Store.mk.inj	
+ConcreteSpec.Core.Own.Store.mk.injEq	propext
+ConcreteSpec.Core.Own.Store.mk.sizeOf_spec	
+ConcreteSpec.Core.Own.instDecidableEqActivation.decEq._proof_1	
+ConcreteSpec.Core.Own.instDecidableEqActivation.decEq._proof_2	
+ConcreteSpec.Core.Own.instDecidableEqActivation.decEq._proof_3	
+ConcreteSpec.Core.Own.instDecidableEqActivation.decEq._proof_4	
+ConcreteSpec.Core.Own.instDecidableEqCallState.decEq._proof_1	
+ConcreteSpec.Core.Own.instDecidableEqCallState.decEq._proof_2	
+ConcreteSpec.Core.Own.instDecidableEqCallState.decEq._proof_3	
+ConcreteSpec.Core.Own.instDecidableEqDescriptor.decEq._proof_1	
+ConcreteSpec.Core.Own.instDecidableEqDescriptor.decEq._proof_2	
+ConcreteSpec.Core.Own.instDecidableEqDescriptor.decEq._proof_3	
+ConcreteSpec.Core.Own.instDecidableEqDescriptor.decEq._proof_4	
+ConcreteSpec.Core.Own.instDecidableEqLoan.decEq._proof_1	
+ConcreteSpec.Core.Own.instDecidableEqLoan.decEq._proof_10	
+ConcreteSpec.Core.Own.instDecidableEqLoan.decEq._proof_2	
+ConcreteSpec.Core.Own.instDecidableEqLoan.decEq._proof_3	
+ConcreteSpec.Core.Own.instDecidableEqLoan.decEq._proof_4	
+ConcreteSpec.Core.Own.instDecidableEqLoan.decEq._proof_5	
+ConcreteSpec.Core.Own.instDecidableEqLoan.decEq._proof_6	
+ConcreteSpec.Core.Own.instDecidableEqLoan.decEq._proof_7	
+ConcreteSpec.Core.Own.instDecidableEqLoan.decEq._proof_8	
+ConcreteSpec.Core.Own.instDecidableEqLoan.decEq._proof_9	
+ConcreteSpec.Core.Own.instDecidableEqMode._proof_1	
+ConcreteSpec.Core.Own.instDecidableEqMode._proof_2	
+ConcreteSpec.Core.Own.instDecidableEqProjection.decEq._proof_1	
+ConcreteSpec.Core.Own.instDecidableEqProjection.decEq._proof_2	
+ConcreteSpec.Core.Own.instDecidableEqProjection.decEq._proof_3	
+ConcreteSpec.Core.Own.instDecidableEqProjection.decEq._proof_4	
+ConcreteSpec.Core.Own.instDecidableEqProjection.decEq._proof_5	
+ConcreteSpec.Core.Own.instDecidableEqProjection.decEq._proof_6	
+ConcreteSpec.Core.Own.instDecidableEqSlot.decEq._proof_1	
+ConcreteSpec.Core.Own.instDecidableEqSlot.decEq._proof_2	
+ConcreteSpec.Core.Own.instDecidableEqSlot.decEq._proof_3	
+ConcreteSpec.Core.Own.instDecidableEqSlot.decEq._proof_4	
+ConcreteSpec.Core.Own.instDecidableEqSlot.decEq._proof_5	
+ConcreteSpec.Core.Own.instDecidableEqState.decEq._proof_1	
+ConcreteSpec.Core.Own.instDecidableEqState.decEq._proof_2	
+ConcreteSpec.Core.Own.instDecidableEqState.decEq._proof_3	
+ConcreteSpec.Core.Own.instDecidableEqState.decEq._proof_4	
+ConcreteSpec.Core.Own.instDecidableEqState.decEq._proof_5	
+ConcreteSpec.Core.Own.instDecidableEqState.decEq._proof_6	
+ConcreteSpec.Core.Own.instDecidableEqState.decEq._proof_7	
+ConcreteSpec.Core.Own.instDecidableEqStatus._proof_1	
+ConcreteSpec.Core.Own.instDecidableEqStatus._proof_2	
+ConcreteSpec.Core.Own.instDecidableEqStore.decEq._proof_1	
+ConcreteSpec.Core.Own.instDecidableEqStore.decEq._proof_2	
+ConcreteSpec.Core.Own.instDecidableEqStore.decEq._proof_3	
+ConcreteSpec.Core.Own.instDecidableParentValid._proof_1	
+ConcreteSpec.Core.Own.instDecidableParentValid._proof_2	
+ConcreteSpec.Core.Own.instDecidableParentValid._proof_3	
 ConcreteSpec.Core.PackageId.mk.inj	
 ConcreteSpec.Core.PackageId.mk.injEq	propext
 ConcreteSpec.Core.PackageId.mk.sizeOf_spec	
@@ -3835,6 +3976,8 @@ _private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.KeyConstruct.collectKeysIn.
 _private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.KeyConstruct.collectKeysIn.match_1.eq_1	
 _private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.KeyConstruct.collectKeysIn.match_1.eq_2	
 _private.ConcreteSpec.Spec.Ident.0.PSigma.casesOn._arg_pusher	
+_private.ConcreteSpec.Spec.Own.0.ConcreteSpec.Core.Own.ParentValid.match_1.eq_1	
+_private.ConcreteSpec.Spec.Own.0.ConcreteSpec.Core.Own.ParentValid.match_1.eq_2	
 _private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.DigitsAccepted.match_1.eq_1	propext
 _private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.DigitsAccepted.match_1.eq_2	propext
 _private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.DigitsAccepted.match_1.eq_3	propext

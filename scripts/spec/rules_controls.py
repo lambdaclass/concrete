@@ -3,6 +3,7 @@
 Transport mutations happen only after successful Lean elaboration.
 """
 import json
+import re
 import os
 import threading
 import time
@@ -14,6 +15,13 @@ root = Path(__file__).resolve().parents[2]
 tmp = Path(sys.argv[1])
 base = (root / 'ConcreteSpec/Spec/Rules.lean').read_text().replace(
     'import ConcreteSpec.Spec.Ident', 'import ConcreteSpec.Spec.Ident\nimport Lean')
+# Isolate synthetic fixtures from production registrations and conformance declarations.
+# Keep the actual registry types and evidence wrappers, so every control exercises them.
+base = re.sub(r'def registeredRules : List RuleId :=.*?(?=\n/--)',
+              'def registeredRules : List RuleId := []\n', base, flags=re.S)
+base = re.sub(r'namespace Own.Registry.*?end Own.Registry\n', '', base, flags=re.S)
+base = re.sub(r'def registeredRuleExamples : List RuleExample :=.*?(?=\nend ConcreteSpec.Core)',
+              'def registeredRuleExamples : List RuleExample := []\n', base, flags=re.S)
 exporter = (root / 'scripts/spec/rules.lean').read_text().split('-- EXPORTER BODY\n')[1]
 rows = tmp / 'rows.md'
 rows.write_text('- **Q9.1** Decided.\nR-0001 is only mentioned.\n')

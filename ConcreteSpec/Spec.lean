@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.Own
 import ConcreteSpec.Spec.Rules
 import ConcreteSpec.Spec.Hybrid
 import ConcreteSpec.Spec.Exec
