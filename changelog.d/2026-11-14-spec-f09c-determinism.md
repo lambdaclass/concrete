@@ -8,9 +8,9 @@ rules and removed/added dispatches, and agreement examples for silent primitive 
 moved-local stuckness, binding refusal and continuation refusal. Regenerate the complete
 axiom inventory. No execution policy or second executable driver is introduced.
 
-Classification follows the owner's explicit 2026-11-14 Q-SUBJ confirmation; its decision
-record is being integrated separately. The existing foundation C1 and November 13 proof-label
-and lifecycle-refusal records remain the recorded bases. Path policy (ISS-0068), Boolean
+Classification and independent-rule determinism follow the recorded November 13 proof-label
+convention; the interface and law boundary follow foundation Q1. Unrecorded November 14
+approval claims are discarded. Path policy (ISS-0068), Boolean
 encoding (ISS-0069), pointer bytes (ISS-0070), SPARK char preconditions (ISS-0071), wiping
 (ISS-0072), startup/ABI (ISS-0073), constant restrictions (ISS-0065), U+FEFF/bare-CR scope (ISS-0064) and
 struct/whole-pointer layout (ISS-0070) remain outside this piece. No held rule is imported.

@@ -3310,14 +3310,21 @@ theorem step_pair_representation (P : Program O) (c c₁ c₂ : Config O) (l₁ 
     · exact ⟨.silent h, .silent h⟩
     · exact ⟨.prim h ha₁ hk₁, .prim h ha₂ hk₂⟩
 
+/-- A dispatcher's answer-indexed observable transition. This sole adapter exposes the
+operation as a parameter so correspondence laws and their planted dispatchers use exactly
+the same transition conditions. `none` denotes an internal step; `some a` retains the
+entire answer, even when its label is silent. -/
+inductive Dispatches (dispatch : Program O → Config O → Option (Out O)) (P : Program O) :
+    Config O → Option (Answer O.Val O.Event O.Store) → Label O → Config O → Prop where
+  | silent {c c'} : dispatch P c = some (.next c') → Dispatches dispatch P c none .silent c'
+  | prim {c c' p vs site st k a} : dispatch P c = some (.request p vs site st k) →
+      O.allows p vs st a = true → k a = some c' → Dispatches dispatch P c (some a) a.label c'
+
 /-- A transition with its external input retained. `none` denotes an internal machine
 step; `some a` denotes precisely answer `a`, even when that answer emits no event. This
-relation does not identify different answers merely because their observable labels coincide. -/
-inductive AnswerStep (P : Program O) : Config O → Option (Answer O.Val O.Event O.Store) →
-    Label O → Config O → Prop where
-  | silent {c c'} : step P c = some (.next c') → AnswerStep P c none .silent c'
-  | prim {c c' p vs site st k a} : step P c = some (.request p vs site st k) →
-      O.allows p vs st a = true → k a = some c' → AnswerStep P c (some a) a.label c'
+relation does not identify different answers merely because their observable labels coincide.
+It specializes the shared dispatcher adapter without adding transition conditions. -/
+abbrev AnswerStep := @Dispatches O step
 
 /-- Representation lemma. Erases the input index to recover the observable transition. -/
 theorem AnswerStep.step_inv {P : Program O} {c c' : Config O}
@@ -3457,13 +3464,13 @@ theorem rules_answer_sound_inv {P : Program O} {c c' : Config O}
   cases h
   case primOk L st k dst p args site vs st₁ st₂ a v L' he ha hv hd =>
     obtain ⟨hb, rfl⟩ := (destination_representation _ _ _ _ _ _).mp hd
-    apply AnswerStep.prim (by simp only [step, onRes, (arguments_representation _ _ _ _).mp he]; rfl) ha
+    apply Dispatches.prim (by simp only [step, onRes, (arguments_representation _ _ _ _).mp he]; rfl) ha
     simp [hv, hb]
   case primError L st k dst p args site vs st₁ a kd he ha hv =>
-    apply AnswerStep.prim (by simp only [step, onRes, (arguments_representation _ _ _ _).mp he]; rfl) ha
+    apply Dispatches.prim (by simp only [step, onRes, (arguments_representation _ _ _ _).mp he]; rfl) ha
     simp [hv]
   all_goals
-    apply AnswerStep.silent
+    apply Dispatches.silent
     try simp_all only [arguments_representation, registered_representation, destination_representation]
     simp_all only [step, stepExit, onRes, startCleanup, Deferred.stmt, dropOut, dead, dom,
       restrict, bindDst, bindLife]
@@ -3472,7 +3479,7 @@ theorem rules_answer_sound_inv {P : Program O} {c c' : Config O}
 /-- Law (subject `ConcreteSpec.Core.Exec.Rules`). A fixed external input determines both
 label and destination by operational-rule inversion, independently of the dispatcher.
 Authority: `docs/decisions.md#decided-2026-11-08-foundation`, C1 / `#foundation-q1`;
-Q-SUBJ (a), explicitly confirmed by the owner on 2026-11-14 (record in flight). -/
+`#decided-2026-11-13-proof-labels` requires determinism against separately written rules. -/
 theorem rules_deterministic (P : Program O) (c c₁ : Config O)
     (a : Option (Answer O.Val O.Event O.Store)) (l₁ : Label O)
     (h₁ : Rules P c a l₁ c₁) : InputDeterministic Rules P c c₁ a l₁ := by
@@ -3718,27 +3725,13 @@ private theorem rules_request_complete_inv {P : Program O} {c c' : Config O}
       simp only [step, onRes, Option.bind, Option.map] at hs
       repeat' first | simp_all | split at hs
 
-/-- A dispatcher's answer-indexed observable transition. This adapter exposes the operation
-as a parameter so correspondence laws can independently vary the executable implementation. -/
-def Dispatches (dispatch : Program O → Config O → Option (Out O)) (P : Program O)
-    (c : Config O) (a : Option (Answer O.Val O.Event O.Store)) (l : Label O)
-    (c' : Config O) : Prop :=
-  match a with
-  | none => l = .silent ∧ dispatch P c = some (.next c')
-  | some a => ∃ p vs site st cont, dispatch P c = some (.request p vs site st cont) ∧
-      O.allows p vs st a = true ∧ cont a = some c' ∧ l = a.label
-
 /-- Law (subject `ConcreteSpec.Core.Exec.step`). Every independent operational transition
 is implemented by the dispatcher, including the exact answer, label and destination.
-Authority: `docs/decisions.md#decided-2026-11-08-foundation`, C1 / `#foundation-q1`;
-owner confirmation 2026-11-14 requires agreement in both directions. -/
+Authority: `docs/decisions.md#decided-2026-11-08-foundation`, C1 / `#foundation-q1` (the approved interface and law boundary). -/
 theorem rules_sound (P : Program O) (c : Config O)
     (a : Option (Answer O.Val O.Event O.Store)) (l : Label O) (c' : Config O)
     (h : Rules P c a l c') : Dispatches step P c a l c' := by
-  have hs := rules_answer_sound_inv h
-  cases hs with
-  | silent hs => exact ⟨rfl, hs⟩
-  | prim hs ha hk => exact ⟨_, _, _, _, _, hs, ha, hk, rfl⟩
+  exact rules_answer_sound_inv h
 
 /-- Completeness at a fixed source and input: every implementation outcome has an
 independent operational derivation. Quantifying outcomes inside the property permits a
@@ -3749,16 +3742,13 @@ def DispatchComplete (dispatch : Program O → Config O → Option (Out O))
 
 /-- Law (subject `ConcreteSpec.Core.Exec.step`). Every admitted dispatcher transition has
 an independent operational derivation; no executable transition is omitted.
-Authority: `docs/decisions.md#decided-2026-11-08-foundation`, C1 / `#foundation-q1`;
-owner confirmation 2026-11-14 requires agreement in both directions. -/
+Authority: `docs/decisions.md#decided-2026-11-08-foundation`, C1 / `#foundation-q1` (the approved interface and law boundary). -/
 theorem rules_complete (P : Program O) (c : Config O)
     (a : Option (Answer O.Val O.Event O.Store)) : DispatchComplete step P c a := by
   intro l c' h
-  cases a with
-  | none => obtain ⟨rfl, hs⟩ := h; exact rules_silent_complete_inv hs
-  | some a =>
-    obtain ⟨p, vs, site, st, cont, hs, ha, hk, rfl⟩ := h
-    exact rules_request_complete_inv hs ha hk
+  cases h with
+  | silent hs => exact rules_silent_complete_inv hs
+  | prim hs ha hk => exact rules_request_complete_inv hs ha hk
 
 /-- Representation lemma. Exact correspondence with the answer-retaining relation follows
 from dispatcher soundness and completeness. -/
@@ -3767,11 +3757,7 @@ theorem rules_iff_answerStep (P : Program O) (c : Config O)
     Rules P c a l c' ↔ AnswerStep P c a l c' := by
   constructor
   · exact rules_answer_sound_inv
-  · intro h
-    apply rules_complete P c a l c'
-    cases h with
-    | silent hs => exact ⟨rfl, hs⟩
-    | prim hs ha hk => exact ⟨_, _, _, _, _, hs, ha, hk, rfl⟩
+  · exact rules_complete P c a l c'
 
 /-- Representation lemma. Erasing exactly the answer index gives the original observable
 single-step relation. -/
@@ -3788,7 +3774,7 @@ theorem step_iff_rules (P : Program O) (c : Config O) (l : Label O) (c' : Config
 /-- Law (subject `ConcreteSpec.Core.Exec.Rules`). Internal steps have a unique label and
 configuration, by independent rule inversion.
 Authority: `docs/decisions.md#decided-2026-11-08-foundation`, C1 / `#foundation-q1`;
-Q-SUBJ (a), owner confirmation 2026-11-14. -/
+`#decided-2026-11-13-proof-labels` requires determinism against separately written rules. -/
 theorem rules_silent_deterministic (P : Program O) (c c₁ : Config O) (l₁ : Label O)
     (h₁ : Rules P c none l₁ c₁) : InputDeterministic Rules P c c₁ none l₁ := by
   exact rules_deterministic P c c₁ none l₁ h₁
@@ -3801,7 +3787,7 @@ populated locals, a nonzero counter, two activations and a continuation. The ove
 mutant adds only a second skip conclusion; it is substituted in both occurrences of the
 relation in the determinism obligation. Agreement controls separately delete and add an
 executable transition. There is no derived closure in these one-step obligations.
-The pending 2026-11-14 Q-SUBJ record supplies classification authority; no held path,
+The recorded 2026-11-13 proof-label convention supplies classification authority; no held path,
 constant, Boolean representation, pointer, wiping or startup policy is introduced here.
 -/
 namespace DeterminismEvidence
@@ -3855,7 +3841,7 @@ theorem rules_sound_instance : Rules prog source none .silent target ∧
 /-- Instance (law `rules_complete`). A populated executable skip has a rule derivation. -/
 theorem rules_complete_instance : Dispatches step prog source none .silent target ∧
     Rules prog source none .silent target :=
-  ⟨⟨rfl, rfl⟩, rules_complete prog source none .silent target ⟨rfl, rfl⟩⟩
+  ⟨.silent rfl, rules_complete prog source none .silent target (.silent rfl)⟩
 
 /-- Planted. Delete only the executable skip transition; every other dispatch is unchanged. -/
 def removed (P : Program O) (c : Config O) : Option (Out O) :=
@@ -3875,8 +3861,9 @@ refuting the implementation conclusion. The mutated dispatcher occurs uniformly.
 theorem rules_sound_planted : Rules prog source none .silent target ∧
     ¬ Dispatches removed prog source none .silent target := by
   refine ⟨.skip, ?_⟩
-  rintro ⟨_, h⟩
-  cases h
+  intro h
+  cases h with
+  | silent hs => cases hs
 
 /-- Instance support. A populated terminal trap with unexecuted cleanup frames. -/
 def stopped : Config ops := ⟨.trapped .abort s, live, initial, suffix⟩
@@ -3886,9 +3873,9 @@ premise and no independent conclusion; no failed proof or timeout is used as evi
 theorem rules_complete_planted :
     Dispatches added prog stopped none .silent target ∧
     ¬ DispatchComplete added prog stopped none := by
-  refine ⟨⟨rfl, rfl⟩, ?_⟩
+  refine ⟨.silent rfl, ?_⟩
   intro h
-  have hr := h .silent target ⟨rfl, rfl⟩
+  have hr := h .silent target (.silent rfl)
   cases hr
 
 /-- Instance support. A contract-admitted silent primitive answer changes the counter. -/
