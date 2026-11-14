@@ -180,3 +180,37 @@ theorem lookup_append_some {l₁ l₂ : AList κ α} {k : κ} {a : α}
     (h : lookup l₁ k = some a) : lookup (l₁ ++ l₂) k = some a := by rw [lookup_append, h]
 
 end ConcreteSpec.Core.AList
+
+namespace ConcreteSpec.Core
+
+/-- Representation lemma: the sole optional-result definition is equivalent to
+requiring the postcondition for every successful observation, at every result type. -/
+theorem resultSatisfies_iff {α : Type} (P : α → Prop) (r : Option α) :
+    ResultSatisfies P r ↔ ∀ a, r = some a → P a := by
+  cases r <;> simp [ResultSatisfies]
+
+/-- Instance: refusal imposes no postcondition, even an impossible one. -/
+example : ResultSatisfies (fun _ : Nat => False) none := trivial
+
+/-- Instance: a successful result must satisfy its actual postcondition. -/
+example : ResultSatisfies (fun n : Nat => n = 7) (some 7) ∧
+    ¬ ResultSatisfies (fun n : Nat => n = 7) (some 8) := by decide
+
+/-- Planted: requiring success wrongly rejects refusal. -/
+private def resultRequiresSuccess {α : Type} (P : α → Prop) (r : Option α) : Prop :=
+  ∃ a, r = some a ∧ P a
+
+/-- Planted: the refusal case distinguishes the generic policy from mandatory success. -/
+example : ResultSatisfies (fun n : Nat => n = 7) none ∧
+    ¬ resultRequiresSuccess (fun n : Nat => n = 7) none := by
+  simp [ResultSatisfies, resultRequiresSuccess]
+
+/-- Planted: ignoring a successful value admits a failed postcondition. -/
+private def resultIgnoresValue {α : Type} (_ : α → Prop) (_ : Option α) : Prop := True
+
+/-- Planted: a wrong successful value distinguishes the policy from ignoring success. -/
+example : resultIgnoresValue (fun n : Nat => n = 7) (some 8) ∧
+    ¬ ResultSatisfies (fun n : Nat => n = 7) (some 8) := by
+  simp [resultIgnoresValue, ResultSatisfies]
+
+end ConcreteSpec.Core
