@@ -1915,6 +1915,9 @@ ConcreteSpec.Core.Res.stuck.sizeOf_spec
 ConcreteSpec.Core.Res.trap.inj	
 ConcreteSpec.Core.Res.trap.injEq	propext
 ConcreteSpec.Core.Res.trap.sizeOf_spec	
+ConcreteSpec.Core.RuleExample.mk.inj	
+ConcreteSpec.Core.RuleExample.mk.injEq	propext
+ConcreteSpec.Core.RuleExample.mk.sizeOf_spec	
 ConcreteSpec.Core.RuleId.mk.inj	
 ConcreteSpec.Core.RuleId.mk.injEq	propext
 ConcreteSpec.Core.RuleId.mk.sizeOf_spec	
