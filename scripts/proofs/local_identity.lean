@@ -100,7 +100,8 @@ partial def carriers (e : Expr) (seen : List Name := []) : ScanM (Bool × Bool) 
   return found
 
 partial def carrierCore (e : Expr) (seen : List Name := []) : ScanM (Bool × Bool) := do
-  if e.isConstOf `ConcreteSpec.Numbers then return (false, false)
+  if e.isConstOf `ConcreteSpec.Numbers || e.isConstOf `ConcreteSpec.Core.ScalarChar then
+    return (false, false)
   -- These validated nominal boundaries intentionally hide their representation.
   if e.isConstOf `ConcreteSpec.Var then return (true, false)
   if e.isConstOf `ConcreteSpec.Name then return (false, false)
@@ -286,6 +287,13 @@ def main (args : List String) : IO Unit := do
     | throw (IO.userError "missing numeric list alias")
   unless numbers.value == mkApp (mkConst `List [Level.zero]) (mkConst `Nat) do
     throw (IO.userError "Numbers must be exactly List Nat")
+  -- Scalar program values may accompany locals; raw diagnostic Char remains a spelling
+  -- carrier. Validate the annotation's exact representation before trusting that boundary.
+  if let some info := env.find? `ConcreteSpec.Core.ScalarChar then
+    unless (match info with
+      | .defnInfo d => d.value == mkConst `Char
+      | _ => false) do
+      throw (IO.userError "ScalarChar must be exactly Char")
   let _ ← contextualKeyControls.run' {} |>.toIO
     { fileName := "local_identity_key_controls", fileMap := default } { env := env }
   -- Inspect the complete dependency closure of semantic declarations. Module

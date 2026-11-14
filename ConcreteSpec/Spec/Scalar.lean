@@ -413,15 +413,21 @@ There is no character-literal constructor. ASCII byte literals belong to the lex
 No alternative with SPARK-style preconditions is specified here.
 -/
 
+/-- A semantic Unicode scalar, distinct in interfaces from diagnostic spelling characters.
+This alias retains Lean's checked `Char` representation and changes no construction rule
+(docs/decisions.md#decided-2026-11-12-char). Like Basics.Numbers, the explicit annotation
+lets the structural identity gate distinguish numeric program data from local spellings. -/
+abbrev ScalarChar := Char
+
 /-- A character's code point; this operation always succeeds. -/
-def charCodePoint (c : Char) : UInt32 := c.val
+def charCodePoint (c : ScalarChar) : UInt32 := c.val
 
 /-- Explicit checked construction. Surrogates and values above U+10FFFF return `none`. -/
-def charFromCodePoint (n : UInt32) : Option Char :=
+def charFromCodePoint (n : UInt32) : Option ScalarChar :=
   if h : n.isValidChar then some ⟨n, h⟩ else none
 
 /-- Explicit ASCII construction. Bytes above 127 return `none`, including valid UTF-8 bytes. -/
-def charFromAscii (b : UInt8) : Option Char :=
+def charFromAscii (b : UInt8) : Option ScalarChar :=
   if b.toNat ≤ 127 then charFromCodePoint b.toUInt32 else none
 
 /-- The largest scalar is accepted. -/
@@ -449,7 +455,7 @@ inductive CTy where
 inductive CVal where
   | int (t : IntTy) (n : Int)
   | bool (b : Bool)
-  | char (c : Char)
+  | char (c : ScalarChar)
   | unit
   deriving DecidableEq, Repr
 
