@@ -4,13 +4,36 @@ import Lean
 open Lean Elab Command
 
 -- EXPORTER BODY
-/-- Concrete data normalizes completely to constructors and literals. Constructor parameters
-(types and indices) are checked for closure, while data fields are checked recursively.
-Closed proof fields are permitted: they carry no observable data (proof irrelevance),
-and the evidence theorem's transitive axiom check still covers them. -/
+/-- Check closed type-level syntax without ignoring constructor parameters,
+indices or proof-field propositions. Opaque definitions and axioms are not concrete
+syntax, even when their values would be irrelevant to the evidence theorem. -/
+def concreteType (e : Expr) : MetaM Bool := do
+  if e.hasFVar || e.hasMVar || e.hasLooseBVars then return false
+  -- Follow definition bodies before reduction, so an alias or an erasing
+  -- computation cannot hide an opaque dependency. A visited set bounds shared graphs.
+  let mut pending := e.getUsedConstants
+  let mut seen : NameSet := {}
+  while !pending.isEmpty do
+    let n := pending.back!
+    pending := pending.pop
+    if seen.contains n then continue
+    seen := seen.insert n
+    match (← getEnv).find? n with
+    | some (.opaqueInfo _) | some (.axiomInfo _) => return false
+    | some (.defnInfo d) =>
+      if (← getReducibilityStatus n) == .irreducible then return false
+      pending := pending ++ d.value.getUsedConstants
+    | none => return false
+    | _ => pure ()
+  return true
+
+/-- Concrete data normalizes completely to constructors and literals. Proofs are
+permitted only as fields of concrete data, and only after checking their proposition.
+The evidence theorem's separate transitive axiom check covers the proof terms. -/
 partial def concreteData (e : Expr) : MetaM Bool := do
   if e.hasFVar || e.hasMVar || e.hasLooseBVars then return false
-  if ← Meta.isProof e then return true
+  if ← Meta.isProof e then return false
+  if !(← concreteType e) || !(← concreteType (← Meta.inferType e)) then return false
   let e ← Meta.reduce e
   match e with
   | .lit _ => return true
@@ -19,8 +42,12 @@ partial def concreteData (e : Expr) : MetaM Bool := do
     let some (.ctorInfo c) := (← getEnv).find? n | return false
     let args := e.getAppArgs
     if args.size != c.numParams + c.numFields then return false
+    for arg in args[:c.numParams] do
+      if !(← concreteType arg) then return false
     for arg in args[c.numParams:] do
-      if !(← concreteData arg) then return false
+      if ← Meta.isProof arg then
+        if !(← concreteType (← Meta.inferType arg)) then return false
+      else if !(← concreteData arg) then return false
     return true
 
 #eval show CommandElabM Unit from do

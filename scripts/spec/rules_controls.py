@@ -19,6 +19,8 @@ base = (root / 'ConcreteSpec/Spec/Rules.lean').read_text().replace(
 # Keep the actual registry types and evidence wrappers, so every control exercises them.
 base = re.sub(r'def registeredRules : List RuleId :=.*?(?=\n/--)',
               'def registeredRules : List RuleId := []\n', base, flags=re.S)
+base = base.replace('import ConcreteSpec.Spec.Const\n', '').replace('import ConcreteSpec.Spec.Own\n', '')
+base = re.sub(r'namespace ConstRegistry.*?end ConstRegistry\n', '', base, flags=re.S)
 base = re.sub(r'namespace Own.Registry.*?end Own.Registry\n', '', base, flags=re.S)
 base = re.sub(r'def registeredRuleExamples : List RuleExample :=.*?(?=\nend ConcreteSpec.Core)',
               'def registeredRuleExamples : List RuleExample := []\n', base, flags=re.S)
@@ -79,6 +81,50 @@ fixture('nonconcrete-input', proof=proofs.replace('theorem accepts : RuleAccepte
         reason='no concrete rule acceptance/refusal proposition')
 fixture('closed-opaque-input', decl=rule.replace('n = 0', 'True').replace('(n : Nat)', '(_n : Nat)') + 'opaque hidden : Nat := 0\n',
         proof='theorem accepts : RuleAccepted ok hidden := True.intro\n',
+        evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]',
+        reason='no concrete rule acceptance/refusal proposition')
+# Each bypass elaborates a trusted theorem; only input concreteness refuses it.
+fixture('proposition-input',
+        decl='/-- The rule (Q9.1). -/\ndef ok (_p : True) : Prop := True\nopaque hidden : True := True.intro\n',
+        proof='theorem accepts : RuleAccepted ok hidden := True.intro\n',
+        evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]',
+        reason='no concrete rule acceptance/refusal proposition')
+for name, carrier, value in [
+    ('opaque-constructor-parameter',
+     'structure Carrier (p : Prop) where\n  valid : p\n',
+     '(⟨rfl⟩ : Carrier (hidden = hidden))'),
+    ('opaque-dependent-proof-proposition',
+     'structure Carrier where\n  data : Nat\n  valid : hidden = hidden ∧ data = data\n',
+     '(⟨0, ⟨rfl, rfl⟩⟩ : Carrier)'),
+    ('opaque-constructor-index',
+     'inductive Carrier : Nat → Type where\n  | mk : Carrier hidden\n',
+     'Carrier.mk'),
+]:
+    fixture(name,
+            decl='opaque hidden : Nat := 0\n' + carrier +
+                 '/-- The rule (Q9.1). -/\ndef ok (_p : ' +
+                 ('Carrier (hidden = hidden)' if name == 'opaque-constructor-parameter' else
+                  'Carrier hidden' if name == 'opaque-constructor-index' else 'Carrier') +
+                 ') : Prop := True\n',
+            proof='theorem accepts : RuleAccepted ok ' + value + ' := True.intro\n',
+            evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]',
+            reason='no concrete rule acceptance/refusal proposition')
+fixture('aliased-opaque-proof-proposition',
+        decl='opaque hidden : Nat := 0\ndef aliasHidden : Nat := hidden\n'
+             'structure Carrier where\n  valid : aliasHidden = aliasHidden\n'
+             '/-- The rule (Q9.1). -/\ndef ok (_p : Carrier) : Prop := True\n',
+        proof='theorem accepts : RuleAccepted ok ⟨rfl⟩ := True.intro\n',
+        evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]',
+        reason='no concrete rule acceptance/refusal proposition')
+fixture('erased-opaque-data',
+        decl=rule + 'opaque hidden : Nat := 0\n',
+        proof=proofs.replace('RuleAccepted ok 0', 'RuleAccepted ok ((fun _ : Nat => 0) hidden)'),
+        reason='no concrete rule acceptance/refusal proposition')
+fixture('irreducible-constructor-parameter',
+        decl='@[irreducible] def hidden : Nat := 0\n'
+             'structure Carrier (p : Prop) where\n  valid : p\n'
+             '/-- The rule (Q9.1). -/\ndef ok (_p : Carrier (hidden = hidden)) : Prop := True\n',
+        proof='theorem accepts : RuleAccepted ok ⟨rfl⟩ := True.intro\n',
         evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]',
         reason='no concrete rule acceptance/refusal proposition')
 fixture('computed-concrete-input', proof=proofs.replace('RuleAccepted ok 0', 'RuleAccepted ok (1 - 1)'))

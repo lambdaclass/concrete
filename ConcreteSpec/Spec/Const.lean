@@ -14,9 +14,8 @@ Authority in `docs/decisions.md`:
 - #recovered-29-19: forward references are allowed; cycles are refused with their chain.
 - #recovered-59-26: constants are computed at compile time and have Copy values.
 - #decided-2026-11-14-constant-types: the CLOSED type list is integers and bool only;
-  checked arithmetic is allowed, and overflow refuses the constant. This owner answer is
-  explicitly supplied for F06; its decision record is in flight on
-  wip/roadmap-trap-sites-laws-2026-11-14, not yet on this reconstruction base.
+  checked arithmetic is allowed, and overflow refuses the constant. The recorded owner
+  answer on main is the authority for this fragment.
 - #od106: try_convert returns Result, so it is outside this initializer grammar.
 - #decided-2026-11-12-char supplies no special constant rule or char literal.
 
@@ -36,8 +35,8 @@ Held: Boolean-to-integer conversion (ISS-0069), SPARK character preconditions (I
 char literals, calls in initializers, richer constant/R2 preconditions and layouts. None is
 inferred from the earlier delegated recommendations. Path policy (ISS-0068), pointer bytes
 (ISS-0070), wiping (ISS-0072), startup/ABI (ISS-0073), U+FEFF, bare CR and queued partial
-items supply no constant rule. Any uncovered future extension is ISS-XXXX for coordinator
-allocation; this slice does not choose its behavior.
+items supply no constant rule. ISS-0080 tracks char/unit admission, calls in initializers
+and richer constant/R2 preconditions; this slice does not choose their behavior.
 -/
 
 namespace ConcreteSpec.Core
@@ -392,7 +391,8 @@ def CExpr.ty? (Γ : AList ConstId CTy) : CExpr → Option CTy
     | _ => none
 
 /-- Closed constant-type admission over Scalar's shared carrier vocabulary.
-Authority: #decided-2026-11-14-constant-types; char and unit are representation only. -/
+Authority: docs/decisions.md#decided-2026-11-14-constant-types; char and unit
+are representation only. -/
 def ConstantType : CTy → Prop
   | .int _ | .bool => True
   | .char | .unit => False
@@ -513,7 +513,8 @@ def scalarConstTypes : ConstTypes where
 
 /-- Rule: closed scalar constant declarations must type and evaluate successfully, including
 unused declarations (docs/decisions.md#recovered-29-18, #recovered-59-26, Q6.2).
-The closed admitted types are `ConstantType`; this uncurried diagnostic view delegates
+The closed admitted types are `ConstantType`
+(docs/decisions.md#decided-2026-11-14-constant-types); this uncurried view delegates
 all policy to `ConstsAdmitted` over Scalar's shared carriers. Source ordering remains
 elaboration's separate obligation (#recovered-29-19). -/
 def ConstsPermitted (input : Nat × List (ConstDecl scalarConstTypes)) : Prop :=
@@ -826,9 +827,22 @@ example : typeConsts U [⟨cid "CHAR", .c .char, .ref (cid "SEED")⟩]
 example : typeConsts U [⟨cid "BOOL", .c .bool, .ref (cid "SEED")⟩]
     [(cid "SEED", .bool)] = some [(cid "BOOL", .bool), (cid "SEED", .bool)] := by decide
 
-/-- Instance: whole unit-typed and char-typed declarations are refused as well. -/
-example : ¬ ConstsAdmitted U 3 [⟨cid "UNIT", .c .unit, .bool true⟩] ∧
-    ¬ ConstsAdmitted U 3 [⟨cid "CHAR", .c .char, .bool true⟩] := by decide
+/-- Instance: a whole unit declaration has a well-typed, successfully evaluating
+initializer in a matched seed environment, yet declaration admission refuses it.
+The closed grammar has no unit literal, so the seed is supplied rather than invented. -/
+example : (CExpr.ref (cid "SEED")).ty? [(cid "SEED", .unit)] = some .unit ∧
+    (evalConsts U 3 [⟨cid "UNIT", .c .unit, .ref (cid "SEED")⟩]
+      [(cid "SEED", .unit)]).isOk = true ∧
+    typeConsts U [⟨cid "UNIT", .c .unit, .ref (cid "SEED")⟩]
+      [(cid "SEED", .unit)] = none := by decide
+
+/-- Instance: the corresponding char declaration also isolates ConstantType admission;
+the environment supplies a scalar value without adding character literal syntax. -/
+example : (CExpr.ref (cid "SEED")).ty? [(cid "SEED", .char)] = some .char ∧
+    (evalConsts U 3 [⟨cid "CHAR", .c .char, .ref (cid "SEED")⟩]
+      [(cid "SEED", .char 'A')]).isOk = true ∧
+    typeConsts U [⟨cid "CHAR", .c .char, .ref (cid "SEED")⟩]
+      [(cid "SEED", .char)] = none := by decide
 
 /-- Instance: bool-to-integer conversion is held (ISS-0069); this otherwise well-typed
 bool expression is not an integer conversion operand. -/
@@ -859,6 +873,77 @@ example : evalConsts U 1 [⟨cid "BAD", .c (.int .i8),
       .plain .add (.int .i8 127) (.int .i8 1)⟩] [] =
     .error (.operation (cid "BAD") ⟨.plain .add,
       .plain .add (.int .i8 127) (.int .i8 1), .arithmetic .overflow⟩) := by decide
+
+/-- Instance: accepted endpoints adjacent to the signed and unsigned overflow refusals,
+the shift-width refusal and signed negation overflow. Exact values pin inclusive bounds. -/
+example :
+    (CExpr.plain .add (.int .i8 126) (.int .i8 1)).eval [] 3 = .value (.int .i8 127) ∧
+    (CExpr.plain .add (.int .u8 254) (.int .u8 1)).eval [] 3 = .value (.int .u8 255) ∧
+    (CExpr.plain .shl (.int .u8 1) (.int .u8 7)).eval [] 3 = .value (.int .u8 128) ∧
+    (CExpr.plainNeg (.int .i8 (-127))).eval [] 3 = .value (.int .i8 127) ∧
+    (CExpr.plainNeg (.int .u8 0)).eval [] 3 = .value (.int .u8 0) ∧
+    (CExpr.plain .div (.int .i8 (-127)) (.int .i8 (-1))).eval [] 3 =
+      .value (.int .i8 127) := by decide
+
+/-- Instance: all accepted arithmetic endpoints also pass whole-declaration admission. -/
+example : ConstsAdmitted U 3
+    [⟨cid "IADD", .c (.int .i8), .plain .add (.int .i8 126) (.int .i8 1)⟩,
+     ⟨cid "UADD", .c (.int .u8), .plain .add (.int .u8 254) (.int .u8 1)⟩,
+     ⟨cid "SHIFT", .c (.int .u8), .plain .shl (.int .u8 1) (.int .u8 7)⟩,
+     ⟨cid "INEG", .c (.int .i8), .plainNeg (.int .i8 (-127))⟩,
+     ⟨cid "UNEG", .c (.int .u8), .plainNeg (.int .u8 0)⟩,
+     ⟨cid "IDIV", .c (.int .i8), .plain .div (.int .i8 (-127)) (.int .i8 (-1))⟩] := by decide
+
+/-- Instance: signed minimum negation is a well-typed operation overflow, not invalid syntax. -/
+example : evalConsts U 3 [⟨cid "BAD", .c (.int .i8), .plainNeg (.int .i8 (-128))⟩] [] =
+    .error (.operation (cid "BAD") ⟨.plainNeg, .plainNeg (.int .i8 (-128)),
+      .arithmetic .overflow⟩) ∧
+    ¬ ConstsAdmitted U 3 [⟨cid "BAD", .c (.int .i8), .plainNeg (.int .i8 (-128))⟩] := by decide
+
+/-- Instance: even the smallest nonzero unsigned negation overflows. -/
+example : evalConsts U 3 [⟨cid "BAD", .c (.int .u8), .plainNeg (.int .u8 1)⟩] [] =
+    .error (.operation (cid "BAD") ⟨.plainNeg, .plainNeg (.int .u8 1),
+      .arithmetic .overflow⟩) ∧
+    ¬ ConstsAdmitted U 3 [⟨cid "BAD", .c (.int .u8), .plainNeg (.int .u8 1)⟩] := by decide
+
+/-- Instance: signed minimum divided by minus one overflows despite a nonzero divisor. -/
+example : evalConsts U 3 [⟨cid "BAD", .c (.int .i8),
+      .plain .div (.int .i8 (-128)) (.int .i8 (-1))⟩] [] =
+    .error (.operation (cid "BAD") ⟨.plain .div,
+      .plain .div (.int .i8 (-128)) (.int .i8 (-1)), .arithmetic .overflow⟩) ∧
+    ¬ ConstsAdmitted U 3 [⟨cid "BAD", .c (.int .i8),
+      .plain .div (.int .i8 (-128)) (.int .i8 (-1))⟩] := by decide
+
+/-- Instance: sorting preserves the blocked cyclic suffix, which both independent
+admission checks must refuse. A real cycle diagnostic alone is insufficient evidence. -/
+example : ¬ DependencyOrder U nestedCycle (sortConsts U nestedCycle) ∧
+    ¬ ConstsAdmitted U 10 (sortConsts U nestedCycle) := by
+  constructor
+  · intro h
+    have hs := h.2.2
+    simp [nestedCycle, sortConsts, sortConstsAux, takeReady, readyDecl,
+      ReferencesEarlier, CExpr.refs, cid] at hs
+  · decide
+
+/-- Three forward-linked declarations and two simultaneously ready declarations.
+The tie is broken by source order, including when A becomes ready ahead of TIE. -/
+def forwardChain : List (ConstDecl U) :=
+  [⟨cid "A", .c (.int .u8), .ref (cid "B")⟩,
+   ⟨cid "B", .c (.int .u8), .ref (cid "C")⟩,
+   ⟨cid "C", .c (.int .u8), .int .u8 7⟩,
+   ⟨cid "TIE", .c (.int .u8), .int .u8 9⟩]
+
+/-- Instance: exact output distinguishes stable ready selection from list reversal. -/
+example : (sortConsts U forwardChain).map ConstDecl.id =
+    [cid "C", cid "B", cid "A", cid "TIE"] ∧
+    sortConsts U forwardChain ≠ forwardChain.reverse ∧
+    ConstsAdmitted U 10 (sortConsts U forwardChain) := by decide
+
+/-- Instance: the longer sorted chain satisfies the full dependency-order contract. -/
+example : DependencyOrder U forwardChain (sortConsts U forwardChain) := by
+  refine ⟨?_, by decide, ?_⟩
+  · decide
+  · decide
 
 end ConstDemo
 
