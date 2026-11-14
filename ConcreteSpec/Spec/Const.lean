@@ -28,14 +28,16 @@ there is no Result-valued constant or Result elimination in this fragment.
 
 Source declarations may be forward-referencing. Elaboration supplies a dependency order or
 a real cycle chain; Core typing and evaluation consume the ordered declarations. The sort
-uses source order only to break ties. Fuel is an evaluator depth bound, with exhaustion a
+uses source order only to break ties as a deliberate implementation choice: recovered-29-19
+requires a dependency order and a real cycle diagnostic, but specifies no tie-break. Any valid
+dependency order has the same admission and values (F07); source tie-breaking is not normative. Fuel is an evaluator depth bound, with exhaustion a
 separate result from invalid syntax/types and from an arithmetic failure.
 
 Held: Boolean-to-integer conversion (ISS-0069), SPARK character preconditions (ISS-0071),
 char literals, calls in initializers, richer constant/R2 preconditions and layouts. None is
 inferred from the earlier delegated recommendations. Path policy (ISS-0068), pointer bytes
-(ISS-0070), wiping (ISS-0072), startup/ABI (ISS-0073), U+FEFF, bare CR and queued partial
-items supply no constant rule. ISS-0080 tracks char/unit admission, calls in initializers
+(ISS-0070), wiping (ISS-0072), startup/ABI (ISS-0073), U+FEFF and bare CR (ISS-0064),
+and queued partial items (ISS-0065) supply no constant rule. ISS-0080 tracks char/unit admission, calls in initializers
 and richer constant/R2 preconditions; this slice does not choose their behavior.
 -/
 
