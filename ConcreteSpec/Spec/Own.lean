@@ -20,7 +20,7 @@ remains an obligation of the raw/foreign operand language; no pointer escape rul
 here. Aggregate layout and pointer representation remain held under ISS-0070; this scalar
 instrumentation resolves no aggregate projection. There are no new policy choices here.
 
-The examples are Instances (the unsafe erasure counterexample is Planted), not the future
+The examples are Instances (including the unsafe erasure counterexamples), not the future
 preservation/erasure Laws of F14–F16. `CheckerAccepted` states that future checker obligation;
 it is not itself a checker implementation or a safety theorem.
 
@@ -982,7 +982,7 @@ def instrumentedMoveRun : Exec.Report instrumentedOps :=
 def erasedMoveRun : Exec.Report erasedOps :=
   Exec.run ⟨[]⟩ erasedOracle 100 (eraseConfig moveConfig)
 
-/-- Planted: an unsafe execution refutes unconditional equality of final classifications:
+/-- Instance: an unsafe execution refutes unconditional equality of final classifications:
 the instrumented run is stuck, but the erased concrete run returns 7. A checker-safety
 premise or a one-way successful-execution theorem is necessary for C1 erasure. -/
 example : stuck (runBody (.seq (.bind y (.move x) ⟨0⟩) (.ret (.read x) ⟨1⟩))) = true ∧
@@ -990,10 +990,39 @@ example : stuck (runBody (.seq (.bind y (.move x) ⟨0⟩) (.ret (.read x) ⟨1�
     (match erasedMoveRun.ending with
       | .final (.returned n) => n == 7
       | _ => false) = true := by decide
-/-- Planted: erased execution does not refuse the use after move. -/
+/-- Instance: erased execution does not refuse the use after move. -/
 example : ¬ (match erasedMoveRun.ending with
     | .stuck => true
     | _ => false) = true := by decide
+
+/-- Planted: omit exactly one operand's permission transition, retaining its erased
+concrete evaluation. The selector is a fixture operation kind, never a source policy. -/
+def operationKind : E → Nat
+  | .move _ => 0 | .read _ => 1 | .lend _ _ => 2
+  | .reborrow _ => 3 | .endLoan _ => 4 | .use _ => 5
+  | _ => 6
+
+def omitPermission (kind : Nat) (locals : AList Var Int) (e : E) (s : State) : Option State :=
+  if operationKind e = kind then some s else permitE locals e s
+
+/-- Instance: each populated operation is refused for its own permission violation.
+The move/read roots exist in concrete storage; lending conflicts with an existing
+exclusive loan; reborrow attempts a shared upgrade; ending a parent strands its child;
+using a parent bypasses its suspended access. -/
+def refusalCases : List (Nat × E × State) :=
+  [(0, .move x, shared), (1, .read x, exclusive),
+   (2, .lend ⟨0⟩ .shared, exclusive), (3, .reborrow ⟨0⟩, shared),
+   (4, .endLoan ⟨0⟩, child), (5, .use ⟨0⟩, child)]
+
+example : refusalCases.all (fun (_, e, own) =>
+    match instrumentEval erasedOps permitE [(x, 7)] ⟨0, own⟩ e with
+    | .stuck => true | _ => false) = true := by decide
+
+/-- Planted: six separate omission mutants all accept the corresponding refused
+operand. No concrete failure or another ownership check masks any omission. -/
+example : refusalCases.all (fun (kind, e, own) =>
+    match instrumentEval erasedOps (omitPermission kind) [(x, 7)] ⟨0, own⟩ e with
+    | .ok _ => true | _ => false) = true := by decide
 
 /-- Instance: Accepted: a C1 run lends, reborrows, ends the child, then uses its parent and ends it.
 Conditions evaluate these instrumentation-only operands without creating ordinary bindings. -/
@@ -1070,13 +1099,87 @@ example : (match (callRun (.seq (.call none callee [.argument ⟨0⟩ y] ⟨0⟩
     | .final (.returned 7) => true
     | _ => false) = true := by decide
 
-/-- Instance: Refused: OD23 applies during argument evaluation, before entry. The second argument
-cannot use the origin frozen by the first argument's mutable lending. -/
-example : (match (callRun (.call none callee
-    [.argument ⟨0⟩ y, .value (.use ⟨0⟩)] ⟨0⟩)).ending with
-    | .stuck => true
-    | _ => false) = true := by decide
+/-- Two parameters make argument refusal independent of C1's arity check. -/
+def freezeProgram : Exec.Program callOps :=
+  ⟨[(callee, ⟨[(y, ()), (x, ())], (), ⟨1⟩, .ret (.value (.move x)) ⟨0⟩⟩)]⟩
 
+def freezeArgs : List CE := [.argument ⟨0⟩ y, .value (.use ⟨0⟩)]
+
+/-- Instance: OD23 refuses the second operand itself, before lookup, arity or entry. -/
+example : Exec.evalArgs callOps [(x, 7)] ⟨exclusive, []⟩ freezeArgs = .stuck := by decide
+/-- Instance: the correctly shaped actual call stops at that same operand boundary. -/
+example : (Exec.run freezeProgram (fun _ p => nomatch p) 20
+    ⟨.exec (.call none callee freezeArgs ⟨0⟩), [(x, 7)], ⟨exclusive, []⟩,
+      [.functionEnd]⟩).fuel = 20 := by rfl
+
+/-- Planted: omit only the parent-access check on the second argument. The identical
+argument observation now succeeds, so it cannot satisfy the refusal Instance. -/
+abbrev omitArgumentAccess : Exec.Operands := { callOps with
+  eval := fun locals s e => match e with
+    | .value (.use _) => .ok (0, s)
+    | _ => callEval locals s e }
+
+/-- Planted: bypassing the second operand access check defeats argument refusal. -/
+example : (match Exec.evalArgs omitArgumentAccess [(x, 7)] ⟨exclusive, []⟩ freezeArgs with
+    | .ok _ => true | _ => false) =
+    true := by decide
+
+/-- Populated unrelated root and loan: call lending must preserve both exactly. -/
+def ownerCaller : State :=
+  { initial with
+    slots := initial.slots ++ [⟨⟨1⟩, 0, ⟨.int .i32, true, true⟩, .owned⟩]
+    frames := [⟨0, [(x, ⟨0⟩), (⟨2⟩, ⟨1⟩)], []⟩]
+    loans := [⟨⟨0⟩, ⟨1⟩, [], .shared, none, [], 0, false, false⟩]
+    nextPlace := 2
+    nextLoan := 1 }
+
+/-- Instance: direct-owner lending cannot bypass a populated conflicting loan.
+The root and current activation exist; only whole-root exclusion refuses it. -/
+example : passOwner ⟨exclusive, []⟩ ⟨0⟩ [] .shared y = none := by decide
+
+/-- Observe the loan during the callee, including whole-owner exclusion and the
+unchanged unrelated caller loan. This operand has no permission side effects. -/
+abbrev ownerOps : Exec.Operands := { callOps with eval := fun locals s e => match e with
+  | .useView _ =>
+    if !ownerAccess s.own ⟨0⟩ .shared &&
+        loan s.own ⟨0⟩ == loan ownerCaller ⟨0⟩ then callEval locals s e else .stuck
+  | _ => callEval locals s e }
+
+def ownerProgram : Exec.Program ownerOps :=
+  ⟨[(callee, ⟨[(y, ())], (), ⟨1⟩, .cond (.useView y) .skip .skip ⟨0⟩⟩)]⟩
+
+def ownerBody (deferred : Bool) : Exec.Stmt ownerOps :=
+  .block ⟨2⟩ (if deferred then
+    .seq (.defer callee [.ownerArgument ⟨0⟩ .mutable y] ⟨0⟩)
+      (.cond (.value (.read x)) .skip .skip ⟨0⟩)
+    else .call none callee [.ownerArgument ⟨0⟩ .mutable y] ⟨0⟩)
+
+def ownerRun (deferred : Bool) : Exec.Report ownerOps :=
+  Exec.run ownerProgram (fun _ p => nomatch p) 100
+    ⟨.exec (ownerBody deferred), [(x, 7), (⟨2⟩, 9)], ⟨ownerCaller, []⟩, []⟩
+
+/-- Instance: immediate direct-owner lending is live during the callee and ends on
+return. The unrelated populated loan survives unchanged; owner reads are restored. -/
+example : (match (ownerRun false).ending with | .final .normal => true | _ => false) = true ∧
+    (ownerRun false).residual.store.own.loans = ownerCaller.loans ∧
+    ownerAccess (ownerRun false).residual.store.own ⟨0⟩ .mutable = true := by decide
+
+/-- Instance: deferred registration leaves owner reads available until cleanup.
+The callee observes the same exclusion as an immediate call; return restores access
+without ending the pre-existing loan. -/
+example : (match (ownerRun true).ending with | .final .normal => true | _ => false) = true ∧
+    (ownerRun true).residual.store.own.loans = ownerCaller.loans ∧
+    ownerAccess (ownerRun true).residual.store.own ⟨0⟩ .mutable = true := by decide
+
+/-- Planted: omit direct-owner lending entirely. Both populated executions refuse,
+so neither positive call Instance can be satisfied by unconditional refusal. -/
+abbrev omitOwner : Exec.Operands := { ownerOps with eval := fun locals s e => match e with
+  | .ownerArgument _ _ _ => .stuck
+  | _ => ownerOps.eval locals s e }
+
+/-- Planted: refusing all owner arguments fails the required accepting call path. -/
+example : Exec.evalArgs omitOwner [(x, 7)] ⟨ownerCaller, []⟩
+    [.ownerArgument ⟨0⟩ .mutable y] = .stuck := by decide
 
 /-- The source can present this occurrence under the second spelling; identity remains 0. -/
 def renamedX : Var := ⟨0⟩
@@ -1112,7 +1215,24 @@ example : (runBody .skip).ending = .stuck := by rfl
 example : (runBody (.ret (.move renamedX) ⟨0⟩)).ending = .final (.returned 7) := by rfl
 
 /-- Instance: a final block cannot silently discard a newly created linear obligation. -/
-example : (runBody (.block ⟨1⟩ (.bind y (.lit 3) ⟨0⟩))).ending = .stuck := by rfl
+def finalBlock : Exec.Stmt ops :=
+  .seq (.cond (.move x) .skip .skip ⟨0⟩) (.block ⟨1⟩ (.bind y (.lit 3) ⟨0⟩))
+
+/-- Instance: the outer obligation is consumed. Refusal retains the inner scope and
+its live local, before the independent function-end check can run. -/
+example : (runBody finalBlock).residual.frames.length = 2 ∧
+    Ending.IsStuck (runBody finalBlock).ending = true := by decide
+
+/-- Planted: omit only lifecycle drop instrumentation. Function exit still refuses,
+but the scope has disappeared, violating the residual observation above. -/
+abbrev omitDrop : Exec.Operands := { ops with life := fun e s => match e with
+  | .drop _ => some s
+  | _ => Own.life types e s }
+
+/-- Planted: skipped scope admission reaches function exit with only one frame. -/
+example : (Exec.run (O := omitDrop) ⟨[]⟩ (fun _ p => nomatch p) 100
+    ⟨.exec (.seq (.cond (.move x) .skip .skip ⟨0⟩)
+      (.block ⟨1⟩ (.bind y (.lit 3) ⟨0⟩))), [(x, 7)], initial, [.functionEnd]⟩).residual.frames.length = 1 := by decide
 
 /-- Copy removes the linear-obligation obstacle, isolating the independent live-loan guard. -/
 def copyShared : State :=
