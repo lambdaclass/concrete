@@ -7,7 +7,7 @@ admission through the declaration and fixed-point proofs; remove unit expression
 Boolean conversion and inherited approval labels. Add focused kernel-checked
 Instance/Planted controls, including unused overflow, exhaustion versus refusal,
 closed types, forward references and competing valid dependency orders. Canonical
-source tie-breaking is a Representation lemma and implementation control, not a
+source tie-breaking is a Helper and implementation control, not a
 new language decision. Only Law declarations count as evidence.
 
 Authorities in docs/decisions.md: #recovered-29-18, #recovered-29-19,

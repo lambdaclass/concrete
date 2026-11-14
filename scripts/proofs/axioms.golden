@@ -2598,6 +2598,10 @@ ConcreteSpec.Core.WrapOp.add.sizeOf_spec
 ConcreteSpec.Core.WrapOp.mul.sizeOf_spec	
 ConcreteSpec.Core.WrapOp.ofNat_ctorIdx	
 ConcreteSpec.Core.WrapOp.sub.sizeOf_spec	
+ConcreteSpec.Core.adjacentOrder._proof_1	
+ConcreteSpec.Core.adjacentOrder._proof_2	
+ConcreteSpec.Core.adjacentOrder._proof_3	
+ConcreteSpec.Core.adjacentOrder._proof_4	
 ConcreteSpec.Core.admitted_copy	Classical.choice Quot.sound propext
 ConcreteSpec.Core.bitNot_inRange	Classical.choice Quot.sound propext
 ConcreteSpec.Core.bitNot_inRange._proof_1_1	Quot.sound propext
@@ -2624,6 +2628,7 @@ ConcreteSpec.Core.checkedNeg_ok_arithmetic._simp_1_1	propext
 ConcreteSpec.Core.checked_inRange	Classical.choice Quot.sound propext
 ConcreteSpec.Core.checked_wrapOp	propext
 ConcreteSpec.Core.constant_types	Quot.sound propext
+ConcreteSpec.Core.copyBoundaryU._proof_1	propext
 ConcreteSpec.Core.cycle_chain_real	Quot.sound propext
 ConcreteSpec.Core.cycle_chain_real._simp_1_11	Quot.sound propext
 ConcreteSpec.Core.cycle_chain_real._simp_1_12	Quot.sound propext
@@ -4124,6 +4129,7 @@ _private.ConcreteSpec.Proofs.Const.0.ConcreteSpec.Core.mem_split_at	propext
 _private.ConcreteSpec.Proofs.Const.0.ConcreteSpec.Core.not_inExpr_of_fallibleFree	propext
 _private.ConcreteSpec.Proofs.Const.0.ConcreteSpec.Core.readyDecl_iff	Quot.sound propext
 _private.ConcreteSpec.Proofs.Const.0.ConcreteSpec.Core.readyDecl_iff._simp_1_2	Quot.sound propext
+_private.ConcreteSpec.Proofs.Const.0.ConcreteSpec.Core.realRuleSubstitution	Classical.choice Quot.sound propext
 _private.ConcreteSpec.Proofs.Const.0.ConcreteSpec.Core.refChain.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Const.0.ConcreteSpec.Core.refChain.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Const.0.ConcreteSpec.Core.refChain.match_1.eq_3	
