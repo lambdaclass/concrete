@@ -72,6 +72,50 @@ def fixture(name, *, decl=rule, proof=proofs, reg=registry, evidence=links,
     print(f'  ok   {name}: {reason or "passes"}', flush=True)
 
 
+# Each fixture isolates one round-4 traversal bypass.
+for name, prelude, carrier, value in [
+    ('opaque-data-parameter', 'opaque hidden : Nat := 0\nstructure Carrier (n : Nat) where\n  data : Bool\n', 'Carrier hidden', '⟨true⟩'),
+    ('prop-field-family', '', 'PSigma (fun _ : Prop => Bool)', '⟨∀ n : Nat, n = n, true⟩'),
+    ('opaque-prop-field', 'opaque hidden : Prop := True\n', 'PSigma (fun _ : Prop => Bool)', '⟨hidden, true⟩'),
+    ('type-field-opaque-index', 'opaque hidden : Nat := 0\n', 'PSigma (fun _ : Type => Bool)', '⟨Fin hidden, true⟩'),
+    *[(f'opaque-index-in-{name}-parameter',
+       'opaque hidden : Nat := 0\ninductive Carrier : Nat → Type where\n  | mk : Carrier hidden\n', carrier, value)
+      for name, carrier, value in [
+          ('sum', 'Sum Bool (Carrier hidden)', 'Sum.inl true'),
+          ('option', 'Option (Carrier hidden)', 'none'),
+          ('list', 'List (Carrier hidden)', '[]'),
+          ('prod', 'Prod Bool (Option (Carrier hidden))', '⟨true, none⟩')]],
+]:
+    fixture(name, decl=prelude + '/-- The rule (Q9.1). -/\ndef ok (_p : ' + carrier + ') : Prop := True\n',
+            proof='theorem accepts : RuleAccepted ok (' + value + ' : ' + carrier + ') := True.intro\n',
+            evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]',
+            reason='no concrete rule acceptance/refusal proposition')
+
+# Direct fields isolate the sort-field refusal from PSigma's function parameter.
+for name, field_type, field_value, prelude in [
+    ('direct-prop-field-family', 'Prop', '∀ n : Nat, n = n', ''),
+    ('direct-opaque-prop-field', 'Prop', 'hidden', 'opaque hidden : Prop := True\n'),
+    ('direct-type-field-opaque-index', 'Type', 'Fin hidden', 'opaque hidden : Nat := 0\n'),
+]:
+    fixture(name,
+            decl=prelude + 'structure Carrier where\n  runtime : ' + field_type + '\n  data : Bool\n'
+                 '/-- The rule (Q9.1). -/\ndef ok (_p : Carrier) : Prop := True\n',
+            proof='theorem accepts : RuleAccepted ok ⟨' + field_value + ', true⟩ := True.intro\n',
+            evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]',
+            reason='no concrete rule acceptance/refusal proposition')
+# Concrete type and data parameters remain admissible, including empty containers.
+for name, prelude, carrier, value in [
+    ('concrete-data-parameter', 'structure Carrier (n : Nat) where\n  data : Bool\n', 'Carrier 0', '⟨true⟩'),
+    ('concrete-sum-parameter', '', 'Sum Bool (Fin 2)', 'Sum.inl true'),
+    ('concrete-option-parameter', '', 'Option (Fin 2)', 'none'),
+    ('concrete-list-parameter', '', 'List (Fin 2)', '[]'),
+    ('concrete-prod-parameter', '', 'Prod Bool (Option (Fin 2))', '⟨true, none⟩'),
+]:
+    fixture(name,
+            decl=prelude + '/-- The rule (Q9.1). -/\ndef ok (_p : ' + carrier + ') : Prop := True\n',
+            proof='theorem accepts : RuleAccepted ok (' + value + ' : ' + carrier + ') := True.intro\n',
+            evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]')
+
 fixture('good')
 fixture('empty', decl='', proof='', reg='[]', evidence='[]')
 fixture('cannot-elaborate', proof=proofs.replace('RuleAccepted ok 0 := rfl', 'False := trivial').replace('RuleRefused ok 1 := by intro h; cases h', 'False := trivial'),
@@ -121,7 +165,7 @@ for name, carrier, value in [
             proof='theorem accepts : RuleAccepted ok ' + value + ' := True.intro\n',
             evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]',
             reason=('no concrete rule acceptance/refusal proposition'
-                    if name == 'opaque-constructor-index' else None))
+                    if name != 'opaque-dependent-proof-proposition' else None))
 fixture('aliased-opaque-proof-proposition',
         decl='opaque hidden : Nat := 0\ndef aliasHidden : Nat := hidden\n'
              'structure Carrier : Type where\n  valid : aliasHidden = aliasHidden\n'
@@ -136,7 +180,8 @@ fixture('irreducible-constructor-parameter',
              'structure Carrier (p : Prop) : Type where\n  valid : p\n'
              '/-- The rule (Q9.1). -/\ndef ok (_p : Carrier (hidden = hidden)) : Prop := True\n',
         proof='theorem accepts : RuleAccepted ok ⟨rfl⟩ := True.intro\n',
-        evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]')
+        evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]',
+        reason='no concrete rule acceptance/refusal proposition')
 # Closed proof types and erased annotations do not change the reduced data example.
 for name, extra, carrier, value in [
     ('theorem-proposition-body', 'theorem witness : True := let _ := hidden; True.intro\n',
@@ -169,6 +214,20 @@ fixture('beta-erased-proof-field-domain',
              '/-- The rule (Q9.1). -/\ndef ok (_p : Carrier) : Prop := True\n',
         proof='theorem accepts : RuleAccepted ok (⟨true, True.intro⟩ : Carrier) := True.intro\n',
         evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]')
+
+# ModuleId keeps its nonempty-path proof while all identity data remains inspectable.
+fixture('module-id-proof-field',
+        decl='/-- The rule (Q9.1). -/\ndef ok (_m : ModuleId) : Prop := True\n',
+        proof='theorem accepts : RuleAccepted ok (⟨⟨⟨"pkg"⟩, ⟨⟨"v1"⟩⟩⟩, [⟨"main"⟩], by decide⟩ : ModuleId) := True.intro\n',
+        evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]')
+# A dictionary parameter has no special exemption for its function fields.
+fixture('function-dictionary-parameter',
+        decl='structure Dictionary where\n  f : Nat → Nat\n'
+             'structure Carrier (d : Dictionary) where\n  data : Bool\n'
+             '/-- The rule (Q9.1). -/\ndef ok (_p : Carrier ⟨id⟩) : Prop := True\n',
+        proof='theorem accepts : RuleAccepted ok ⟨true⟩ := True.intro\n',
+        evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]',
+        reason='no concrete rule acceptance/refusal proposition')
 
 fixture('computed-concrete-input', proof=proofs.replace('RuleAccepted ok 0', 'RuleAccepted ok (1 - 1)'))
 # Constant identities carry closed path-validity proofs. Proof irrelevance must not

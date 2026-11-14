@@ -33,13 +33,16 @@ def RuleAccepted {Input : Sort _} (rule : Input → Prop) (input : Input) : Prop
 def RuleRefused {Input : Sort _} (rule : Input → Prop) (input : Input) : Prop :=
   ¬ rule input
 
-/-- A named conformance theorem linked to its owning rule. Its proposition supplies the verdict;
-there is no separately assigned verdict. Inputs must normalize to closed constructor/literal data,
-after bounded reduction with default transparency, with no free/metavariables, axioms or
-stuck/opaque terms in data positions. Failure to finish reduction refuses the input.
-Proof fields are skipped; their propositions and proposition-valued type indices must be
-closed. The kernel checks proofs; the axiom inventory and trust ban check their trust.
-Proposition-typed inputs and unreduced families are refused. -/
+/-- A named conformance theorem linked to its owning rule. Its proposition supplies the verdict.
+An inspectable example reduces, with default transparency, to closed constructor/literal data.
+Traverse every argument of every constructor application, including parameters and dictionaries,
+without slicing: skip proofs (terms whose type is a proposition); recursively check every other
+argument. Data terms must reduce to constructor/literal trees. Type terms in parameters or indices
+must reduce to closed sort/inductive type expressions, with every argument checked by this same
+rule. Runtime fields whose type is a sort, including Prop and Type fields, are refused outright.
+Free variables, metavariables, stuck terms, unreduced families and exhausted bounds are refused.
+Top-level proof, proposition and type inputs are refused. The kernel and trust gates own proofs;
+proof bodies do not identify the example. -/
 structure RuleExample where
   rule : Lean.Name
   declaration : Lean.Name
