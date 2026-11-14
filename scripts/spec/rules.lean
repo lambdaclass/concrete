@@ -7,7 +7,7 @@ open Lean Elab Command
 -- EXPORTER BODY
 /-- Execute the single inspectable-example rule documented on RuleExample.
 Fuel bounds recursive depth; heartbeats bound reduction. All errors fail closed. -/
-def concreteData (input : Expr) : MetaM Bool := do
+def concreteData (input : Expr) (specialized : Array Expr := #[]) : MetaM Bool := do
   let rec visit (fuel : Nat) (e : Expr) (runtimeValue : Bool) : MetaM Bool := do
     let fuel + 1 := fuel | return false
     if e.hasFVar || e.hasMVar || e.hasLooseBVars then return false
@@ -37,6 +37,10 @@ def concreteData (input : Expr) : MetaM Bool := do
       return true
   try
     Meta.withTransparency .default do
+      for arg in specialized do
+        -- Parameters may be closed types or proofs, but data still has to be
+        -- a constructor tree, including all indices and dictionary fields.
+        if !(← visit 1024 arg false) then return false
       if ← Meta.isProof input then return false
       visit 1024 input true
   catch _ => return false
@@ -68,13 +72,12 @@ set_option maxHeartbeats 200000 in
       let verdict := if head == some ``ConcreteSpec.Core.RuleAccepted then "Accepted"
         else if head == some ``ConcreteSpec.Core.RuleRefused then "Refused" else "Invalid"
       if verdict == "Invalid" || args.size != 3 then return ("Invalid", false)
-      -- Static rule parameters (types, instrumentation, policy, program and entry state)
-      -- may be specialized. The final input must still normalize to concrete data.
-      -- Open specializations cannot establish conformance.
+      -- Traverse every specialized argument and the final input. Moving data
+      -- across the partial-application boundary must not change admissibility.
       let subject := args[1]!
       let linked := subject.getAppFn.isConstOf e.rule &&
         !subject.hasFVar && !subject.hasMVar && !subject.hasLooseBVars
-      let concrete ← if trusted then concreteData args[2]! else pure false
+      let concrete ← if trusted then concreteData args[2]! subject.getAppArgs else pure false
       return (if concrete then verdict else "Invalid", linked)
     IO.println (Json.compress (Json.mkObj [("kind", "example"), ("rule", toString e.rule),
       ("name", toString e.declaration),

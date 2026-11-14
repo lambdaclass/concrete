@@ -30,6 +30,64 @@ namespace ConcreteSpec.Core.Leak
 open ConcreteSpec.Core
 open ConcreteSpec.Core.Exec
 
+namespace Evidence
+
+/-- Helper definition. Transition-parametric fold for uniform planted substitution. -/
+def run (m : Memory) (actions : List Action)
+    (transition : Memory → Action → Option Memory := apply) : Option Memory :=
+  match actions with
+  | [] => some m
+  | a :: rest => (transition m a).bind fun m' => run m' rest transition
+
+/-- Helper definition. Transition-parametric fold for uniform planted substitution. -/
+def resetBytes (lineage : LineageId) (m : Memory) (actions : List Action)
+    (transition : Memory → Action → Option Memory := apply) : Nat :=
+  match actions with
+  | [] => 0
+  | action :: rest =>
+      match transition m action with
+      | none => 0
+      | some m' => resetOutflow lineage m action + resetBytes lineage m' rest transition
+
+/-- Helper definition. Transition-parametric fold for uniform planted substitution. -/
+def observedPeak (lineage : LineageId) (m : Memory) (actions : List Action)
+    (transition : Memory → Action → Option Memory := apply) : Nat :=
+  match actions with
+  | [] => (m lineage).live
+  | action :: rest =>
+      match transition m action with
+      | none => (m lineage).live
+      | some m' => max (m lineage).live (observedPeak lineage m' rest transition)
+
+/-- Helper (agreement). The evidence fold at `apply` is the normative execution. -/
+theorem run_apply (m : Memory) (actions : List Action) :
+    run m actions apply = ConcreteSpec.Core.Leak.run m actions := by
+  induction actions generalizing m with
+  | nil => rfl
+  | cons a rest ih =>
+    simp only [run, ConcreteSpec.Core.Leak.run]
+    cases h : apply m a <;> simp [ih]
+
+/-- Helper (agreement). Reset observation at `apply` is the normative reset observation. -/
+theorem resetBytes_apply (l : LineageId) (m : Memory) (actions : List Action) :
+    resetBytes l m actions apply = ConcreteSpec.Core.Leak.resetBytes l m actions := by
+  induction actions generalizing m with
+  | nil => rfl
+  | cons a rest ih =>
+    simp only [resetBytes, ConcreteSpec.Core.Leak.resetBytes]
+    cases h : apply m a <;> simp [ih]
+
+/-- Helper (agreement). Peak observation at `apply` is the normative independent observer. -/
+theorem observedPeak_apply (l : LineageId) (m : Memory) (actions : List Action) :
+    observedPeak l m actions apply = ConcreteSpec.Core.Leak.observedPeak l m actions := by
+  induction actions generalizing m with
+  | nil => rfl
+  | cons a rest ih =>
+    simp only [observedPeak, ConcreteSpec.Core.Leak.observedPeak]
+    cases h : apply m a <;> simp [ih]
+
+end Evidence
+
 /-- Helper (inversion). A missing C1 implementation result excludes every relational step. -/
 private theorem no_step_of_none {O : Operands} {P : Program O} {c : Config O}
     (h : step P c = none) : ∀ l c', ¬ Step P c l c' := by
@@ -52,6 +110,23 @@ theorem InstrumentedSteps.toSteps {O : Operands} {I : Instrumentation O} {P : Pr
   | step h rest ih =>
     obtain ⟨events, steps⟩ := ih
     exact ⟨_, Steps.step h steps⟩
+
+/-- Law (subject `InstrumentedSteps`). Instrumentation neither adds nor removes C1 runs.
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7 erasure boundary).
+The existential traces are outputs, never additional execution premises. -/
+theorem instrumentation_erasure {O : Operands} (I : Instrumentation O) (P : Program O)
+    (c c' : Config O) :
+    (∃ obs leaks rs choices, InstrumentedSteps I P c obs leaks rs choices c') ↔
+      ∃ events, Steps P c events c' := by
+  constructor
+  · rintro ⟨_, _, _, _, h⟩
+    exact h.toSteps
+  · rintro ⟨_, h⟩
+    induction h with
+    | refl c => exact ⟨[], [], [], [], .refl c⟩
+    | step h rest ih =>
+      obtain ⟨obs, leaks, rs, choices, hs⟩ := ih
+      exact ⟨_, _, _, _, .step h hs⟩
 
 /-- Law (subject `ReleasePolicy.Authorized`).
 Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
@@ -77,6 +152,12 @@ theorem release_metadata_irrelevant {Ty Val : Type} (rs : List (ReleaseFact Ty V
       ReleaseFact.semanticTrace rs := by
   simp [ReleaseFact.semanticTrace, releaseTrace, List.map_map]
 
+/-- Helper (projection). Run-connected facts use precisely the run's release premise. -/
+theorem RunFacts.trace_eq {O : Operands} {I : Instrumentation O} {P : Program O}
+    {c : Config O} {r : Run I P c} (facts : RunFacts r.releases) :
+    ReleaseFact.semanticTrace facts.entries = releaseTrace r.releases := by
+  simp only [ReleaseFact.semanticTrace, facts.erases]
+
 /-- A populated facts record, whose reason and call path never enter the semantic release. -/
 def metadataFact : ReleaseFact String Nat := ⟨typedRelease "public" 7, "example", []⟩
 
@@ -90,7 +171,8 @@ theorem release_metadata_instance :
 def reasonSensitiveTrace {Ty Val : Type} (rs : List (ReleaseFact Ty Val)) : List (ReleaseSite Ty × Val) :=
   (rs.filter fun r => !r.reason.isEmpty).map fun r => (r.release.site, r.release.value)
 
-/-- Planted: changing only reason metadata now changes the release comparison. -/
+/-- Planted (law `release_metadata_irrelevant`, case `metadataReason`, mutant `reasonSensitiveTrace`).
+changing only reason metadata now changes the release comparison. -/
 theorem release_metadata_planted :
     ¬ (reasonSensitiveTrace [{ metadataFact with reason := "", path := [Exec.Demo.logF] }] =
       reasonSensitiveTrace [metadataFact]) := by decide
@@ -463,7 +545,9 @@ theorem secure_ni (s₁ s₂ : Int) (hidden₁ hidden₂ : Nat)
   intro r₁ r₂ _ _ _
   have h₁ := secure_run_unique s₁ hidden₁ r₁
   have h₂ := secure_run_unique s₂ hidden₂ r₂
-  simp only [Run.publicObservations, h₁.1, h₂.1, h₁.2.2.2.2, h₂.2.2.2.2, hsum, Config.final?]
+  constructor
+  · simp only [Run.publicObservations, h₁.1, h₂.1, h₁.2.2.2.2, h₂.2.2.2.2, hsum, Config.final?]
+  · simp [h₁.2.1, h₂.2.1, publicLengths]
 
 /-- Law (subject `start`).
 Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
@@ -763,7 +847,9 @@ theorem timing_ni (s₁ s₂ : Int)
   intro r₁ r₂ _ _ _
   have h₁ := timing_run_unique s₁ r₁
   have h₂ := timing_run_unique s₂ r₂
-  simp only [Run.publicObservations, h₁.1, h₂.1, h₁.2.2.2.2, h₂.2.2.2.2, Config.final?]
+  constructor
+  · simp only [Run.publicObservations, h₁.1, h₂.1, h₁.2.2.2.2, h₂.2.2.2.2, Config.final?]
+  · simp [h₁.2.1, h₂.2.1, publicLengths]
 
 /-- Law: C7's distinct security obligations cannot be discharged by a weaker observation.
 Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
@@ -860,7 +946,7 @@ theorem authorized_release_not_ni (s₁ s₂ : Int)
     (hs : s₁ ≠ s₂) :
     ¬ DelimitedReleaseNI instrumentation program labelling (leakyStart s₁) (leakyStart s₂) := by
   intro hni
-  have hobs := hni (leakyRun s₁) (leakyRun s₂) hlow rfl rfl
+  have hobs := (hni (leakyRun s₁) (leakyRun s₂) hlow rfl rfl).1
   simp [Run.publicObservations, leakyRun, finished, Config.final?] at hobs
   exact hs hobs
 
@@ -998,6 +1084,13 @@ theorem free_update (m : Memory) (lineage : LineageId) (bytes : Nat)
     refine ⟨rfl, rfl, rfl, rfl, ?_⟩
     intro l hl
     simp [hl]
+
+/-- Law (subject `ActionPermitted`). Free succeeds exactly when its outflow is owned.
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
+#decided-project-memory-2026-11-06. Both implications are required. -/
+theorem free_permitted_iff (m : Memory) (l : LineageId) (bytes : Nat) :
+    ActionPermitted m (.free l bytes) ↔ bytes ≤ (m l).live := by
+  simp [ActionPermitted, apply]
 
 /-- Law (subject `apply`).
 Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
@@ -1213,6 +1306,68 @@ theorem run_peak_exact (m : Memory) (actions : List Action) (lineage : LineageId
           · exact Nat.le_max_left _ _
       rw [Nat.max_eq_right hrest, ← Nat.max_assoc, Nat.max_eq_left (hwf lineage).2]
 
+/-- Helper (arithmetic). A successful step records the exact historical high-water mark. -/
+theorem apply_historical_peak_exact {m m' : Memory} {action : Action}
+    (hwf : ∀ l, (m l).WF) (h : apply m action = some m') (lineage : LineageId) :
+    (m' lineage).peak = max (m lineage).peak (m' lineage).live := by
+  cases action with
+  | alloc l bytes =>
+    cases h
+    by_cases hl : lineage = l
+    · subst lineage; simp [Memory.set, Account.alloc]
+    · simp [Memory.set, hl, Nat.max_eq_left (hwf lineage).1]
+  | free l bytes =>
+    simp only [apply] at h
+    split at h
+    next =>
+      cases h
+      by_cases hl : lineage = l
+      · subst lineage
+        simp only [Memory.set, ↓reduceIte, Account.free]
+        exact (Nat.max_eq_left (Nat.le_trans (Nat.sub_le _ _) (hwf l).1)).symm
+      · simp [Memory.set, hl, Nat.max_eq_left (hwf lineage).1]
+    next => cases h
+  | reset l =>
+    cases h
+    by_cases hl : lineage = l
+    · subst lineage; simp [Memory.set, Account.reset]
+    · simp [Memory.set, hl, Nat.max_eq_left (hwf lineage).1]
+
+/-- Law (subject `run`).
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
+#decided-project-memory-2026-11-06.
+
+The recorded historical peak equals the maximum of the entry historical peak and the independently
+observed maximum `observedPeak` over the live-byte trajectory. -/
+theorem run_historical_peak_exact (m : Memory) (actions : List Action) (lineage : LineageId)
+    (hwf : ∀ l, (m l).WF) (hrun : (run m actions).isSome = true) :
+    ∃ m', run m actions = some m' ∧
+      (m' lineage).peak = max (m lineage).peak (observedPeak lineage m actions) := by
+  obtain ⟨m', h⟩ := Option.isSome_iff_exists.mp hrun
+  clear hrun
+  refine ⟨m', h, ?_⟩
+  induction actions generalizing m with
+  | nil =>
+    cases h
+    exact (Nat.max_eq_left (hwf lineage).1).symm
+  | cons action rest ih =>
+    cases ha : apply m action with
+    | none => simp [run, ha] at h
+    | some m₁ =>
+      have hr : run m₁ rest = some m' := by simpa [run, ha] using h
+      rw [ih m₁ (apply_wf ha hwf) hr, apply_historical_peak_exact hwf ha lineage]
+      simp only [observedPeak, ha]
+      rw [Nat.max_assoc]
+      have hrest : (m₁ lineage).live ≤ observedPeak lineage m₁ rest := by
+        cases rest with
+        | nil => exact Nat.le_refl _
+        | cons a xs =>
+          simp only [observedPeak]
+          split
+          · exact Nat.le_refl _
+          · exact Nat.le_max_left _ _
+      rw [Nat.max_eq_right hrest, ← Nat.max_assoc, Nat.max_eq_left (hwf lineage).1]
+
 /-- Law (subject `Account.enter`).
 Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
 #decided-project-memory-2026-11-06.
@@ -1255,9 +1410,9 @@ theorem report_certified (m : Memory) (actions : List Action) (allocator : Alloc
     (hentry : (m lineage).functionPeak = (m lineage).live)
     (hrun : (run m actions).isSome = true)
     (hrequested : Bound.Sound (allocated lineage actions) r.requested)
-    (hnet : Bound.Sound ((allocated lineage actions : Int) - freed lineage actions -
+    (hnet : SignedInterval.Sound ((allocated lineage actions : Int) - freed lineage actions -
       resetBytes lineage m actions) r.netChange)
-    (hpeak : Bound.Sound (observedPeak lineage m actions) r.peak)
+    (hpeak : Bound.Sound (observedPeak lineage m actions - (m lineage).live) r.peak)
     (hfootprint : Bound.SoundOptional (allocator.footprint lineage m actions) r.footprint) :
     ∃ m', run m actions = some m' ∧
       LineageReport.Sound lineage (m lineage) (m' lineage)
@@ -1276,6 +1431,7 @@ theorem report_certified (m : Memory) (actions : List Action) (allocator : Alloc
     rw [hn]
     exact hnet
   · intro hstatus
+    change (m' lineage).functionPeak - (m lineage).live ≤ r.peak.limit
     rw [hpeakEq, hentry]
     have hobserved : (m lineage).live ≤ observedPeak lineage m actions := by
       cases actions with
@@ -1368,7 +1524,7 @@ example : ¬ Bound.SoundOptional none ⟨12, .boundEstablished⟩ := by
 /-- Example allocator contract: its footprint is the independent logical trajectory maximum.
 A real allocator may include metadata and slack; no such equality is assumed generically. -/
 def demoAllocator (transition : Memory → Action → Option Memory := apply) : AllocatorContract :=
-  ⟨fun lineage m actions => some (observedPeak lineage m actions transition)⟩
+  ⟨fun lineage m actions => some (Evidence.observedPeak lineage m actions transition)⟩
 
 /-- Allocator contract that defines no footprint (`none`), exercising .notEstablished footprint
 reports. -/
@@ -1390,19 +1546,19 @@ def emptyFunctionEntryMemory : Memory :=
 
 /-- An independently written report with all fields established. -/
 def establishedReport : LineageReport :=
-  ⟨⟨0⟩, ⟨8, .boundEstablished⟩, ⟨5, .boundEstablished⟩,
-    ⟨10, .boundEstablished⟩, ⟨12, .boundEstablished⟩⟩
+  ⟨⟨0⟩, ⟨8, .boundEstablished⟩, ⟨5, 5, .boundEstablished⟩,
+    ⟨8, .boundEstablished⟩, ⟨12, .boundEstablished⟩⟩
 
 /-- A mixed-evidence report: net change is .notEstablished, while the other three fields are
 .boundEstablished. -/
 def mixedStatusReport : LineageReport :=
-  ⟨⟨0⟩, ⟨8, .boundEstablished⟩, ⟨-100, .notEstablished⟩,
-    ⟨10, .boundEstablished⟩, ⟨12, .boundEstablished⟩⟩
+  ⟨⟨0⟩, ⟨8, .boundEstablished⟩, ⟨-100, 100, .notEstablished⟩,
+    ⟨8, .boundEstablished⟩, ⟨12, .boundEstablished⟩⟩
 
 /-- Report for an empty function run under `noFootprintAllocator`: zero local request, net, and
 peak bounds are .boundEstablished, while footprint is .notEstablished. -/
 def emptyFunctionReport : LineageReport :=
-  ⟨⟨0⟩, ⟨0, .boundEstablished⟩, ⟨0, .boundEstablished⟩,
+  ⟨⟨0⟩, ⟨0, .boundEstablished⟩, ⟨0, 0, .boundEstablished⟩,
     ⟨0, .boundEstablished⟩, ⟨0, .notEstablished⟩⟩
 
 /-- Representation lemma. Concrete refusal check showing `LineageReport.Sound` rejects a report whose lineage field (⟨1⟩) does not match the queried lineage (⟨0⟩). -/
@@ -1568,9 +1724,9 @@ example : ∃ m', run reportEntryMemory reportActions = some m' ∧
       (demoAllocator.footprint ⟨0⟩ reportEntryMemory reportActions) establishedReport :=
   report_certified reportEntryMemory reportActions demoAllocator ⟨0⟩ establishedReport
     rfl reportEntry_wf rfl rfl
-    (by dsimp [Bound.Sound, establishedReport]; decide)
-    (by dsimp [Bound.Sound, establishedReport]; decide)
-    (by dsimp [Bound.Sound, establishedReport]; decide)
+    (by dsimp [Bound.Sound, SignedInterval.Sound, establishedReport]; decide)
+    (by dsimp [Bound.Sound, SignedInterval.Sound, establishedReport]; decide)
+    (by dsimp [Bound.Sound, SignedInterval.Sound, establishedReport]; decide)
     (by intro _; exact ⟨10, rfl, by decide⟩)
 
 /-- Instance (law `report_certified`, case `mixedStatus`). -/
@@ -1579,9 +1735,9 @@ example : ∃ m', run reportEntryMemory reportActions = some m' ∧
       (demoAllocator.footprint ⟨0⟩ reportEntryMemory reportActions) mixedStatusReport :=
   report_certified reportEntryMemory reportActions demoAllocator ⟨0⟩ mixedStatusReport
     rfl reportEntry_wf rfl rfl
-    (by dsimp [Bound.Sound, mixedStatusReport, establishedReport]; decide)
-    (by simp [Bound.Sound, mixedStatusReport])
-    (by dsimp [Bound.Sound, mixedStatusReport, establishedReport]; decide)
+    (by dsimp [Bound.Sound, SignedInterval.Sound, mixedStatusReport, establishedReport]; decide)
+    (by simp [SignedInterval.Sound, mixedStatusReport])
+    (by dsimp [Bound.Sound, SignedInterval.Sound, mixedStatusReport, establishedReport]; decide)
     (by intro _; exact ⟨10, rfl, by decide⟩)
 
 /-- Instance (law `report_certified`, case `emptyFunction`). -/
@@ -1590,9 +1746,9 @@ example : ∃ m', run emptyFunctionEntryMemory [] = some m' ∧
       (noFootprintAllocator.footprint ⟨0⟩ emptyFunctionEntryMemory []) emptyFunctionReport :=
   report_certified emptyFunctionEntryMemory [] noFootprintAllocator ⟨0⟩ emptyFunctionReport
     rfl emptyFunctionEntry_wf rfl rfl
-    (by dsimp [Bound.Sound, emptyFunctionReport, establishedReport]; decide)
-    (by dsimp [Bound.Sound, emptyFunctionReport, establishedReport]; decide)
-    (by dsimp [Bound.Sound, emptyFunctionReport, establishedReport]; decide)
+    (by dsimp [Bound.Sound, SignedInterval.Sound, emptyFunctionReport, establishedReport]; decide)
+    (by dsimp [Bound.Sound, SignedInterval.Sound, emptyFunctionReport, establishedReport]; decide)
+    (by dsimp [Bound.Sound, SignedInterval.Sound, emptyFunctionReport, establishedReport]; decide)
     (by simp [Bound.SoundOptional, emptyFunctionReport])
 
 /-- Representation lemma. Concrete trajectory calculation showing `observedPeak` records 10 across `reportActions` (including 2 bytes live at entry) and 2 on an empty action list. -/
@@ -1656,7 +1812,7 @@ example : LowEquivalent labelling (exposingStart 6 1) (exposingStart 5 2) ∧
   refine ⟨⟨rfl, trivial⟩, ⟨exposingRun 6 1, exposingRun 5 2, rfl, rfl⟩, ?_⟩
   intro h
   have hobs := h (exposingRun 6 1) (exposingRun 5 2) ⟨rfl, trivial⟩ rfl rfl
-  exact (by decide : (exposingRun 6 1).publicObservations ≠ (exposingRun 5 2).publicObservations) hobs
+  exact (by decide : (exposingRun 6 1).publicObservations ≠ (exposingRun 5 2).publicObservations) hobs.1
 
 /-- Instance (law `secure_ct`, case `maskedSecrets`). -/
 example : ConstantTime instrumentation program labelling (start 6 1) (start 5 2) :=
@@ -1686,7 +1842,7 @@ example : LowEquivalent labelling (leakyTimingStart 1) (leakyTimingStart 2) ∧
   refine ⟨⟨rfl, trivial⟩, ⟨leakyTimingRun 1, leakyTimingRun 2, rfl, rfl⟩, ?_⟩
   intro h
   have hobs := h (leakyTimingRun 1) (leakyTimingRun 2) ⟨rfl, trivial⟩ rfl rfl
-  exact (by decide : (leakyTimingRun 1).publicObservations ≠ (leakyTimingRun 2).publicObservations) hobs
+  exact (by decide : (leakyTimingRun 1).publicObservations ≠ (leakyTimingRun 2).publicObservations) hobs.1
 
 /-- Instance: secret-dependent work refutes constant time even with public output. -/
 example : ¬ ConstantTime instrumentation program labelling (timingStart 1) (timingStart 2) :=
@@ -1717,12 +1873,17 @@ def freeKeepsLive (m : Memory) : Action → Option Memory
   | .free l n => if n ≤ (m l).live then some m else none
   | a => apply m a
 
-/-- Planted: the populated free has all original premises, but its live-byte equation fails. -/
+/-- Planted (law `free_conservation`, case `populatedFree`, mutant `freeKeepsLive`).
+the populated free has all original premises, but its live-byte equation fails. -/
 theorem free_keeps_live : 3 ≤ (memoryA ⟨0⟩).live ∧
     ¬ (∃ m', freeKeepsLive memoryA (.free ⟨0⟩ 3) = some m' ∧
-      (m' ⟨0⟩).live + 3 = (memoryA ⟨0⟩).live) := by
+      (m' ⟨0⟩).requested = (memoryA ⟨0⟩).requested ∧
+      (m' ⟨0⟩).live + 3 = (memoryA ⟨0⟩).live ∧
+      (m' ⟨0⟩).peak = (memoryA ⟨0⟩).peak ∧
+      (m' ⟨0⟩).functionPeak = (memoryA ⟨0⟩).functionPeak ∧
+      ∀ l, l ≠ ⟨0⟩ → m' l = memoryA l) := by
   refine ⟨by decide, ?_⟩
-  rintro ⟨m', h, bad⟩
+  rintro ⟨m', h, _, bad, _, _, _⟩
   cases h
   change 5 + 3 = (5 : Nat) at bad
   omega
@@ -1744,10 +1905,11 @@ def stalePeak (m : Memory) : Action → Option Memory
       { (m l).alloc n with functionPeak := (m l).functionPeak })
   | a => apply m a
 
-/-- Planted: run_wf fails with a stale local peak on a successful allocation from populated memory. -/
+/-- Planted (law `run_wf`, case `populatedAllocation`, mutant `stalePeak`).
+run_wf fails with a stale local peak on a successful allocation from populated memory. -/
 theorem run_wf_planted : (∀ l, (memoryA l).WF) ∧
-    (run memoryA [.alloc ⟨0⟩ 8] stalePeak).isSome = true ∧
-    ¬ (∃ m', run memoryA [.alloc ⟨0⟩ 8] stalePeak = some m' ∧ ∀ l, (m' l).WF) := by
+    (Evidence.run memoryA [.alloc ⟨0⟩ 8] stalePeak).isSome = true ∧
+    ¬ (∃ m', Evidence.run memoryA [.alloc ⟨0⟩ 8] stalePeak = some m' ∧ ∀ l, (m' l).WF) := by
   refine ⟨memoryA_wf, rfl, ?_⟩
   rintro ⟨m', h, wf⟩
   cases h
@@ -1755,24 +1917,26 @@ theorem run_wf_planted : (∀ l, (memoryA l).WF) ∧
   change 13 ≤ 9 at bad
   omega
 
-/-- Planted: run_conservation rejects lost requested bytes. Reset outflows use the same mutant
+/-- Planted (law `run_conservation`, case `populatedSequence`, mutant `losesRequest`).
+run_conservation rejects lost requested bytes. Reset outflows use the same mutant
 transition at every intermediate state, including the derived observer. -/
 theorem conservation_planted :
-    (run memoryA conservationActions losesRequest).isSome = true ∧
-    ¬ (∃ m', run memoryA conservationActions losesRequest = some m' ∧
+    (Evidence.run memoryA conservationActions losesRequest).isSome = true ∧
+    ¬ (∃ m', Evidence.run memoryA conservationActions losesRequest = some m' ∧
       (m' ⟨0⟩).requested = (memoryA ⟨0⟩).requested + allocated ⟨0⟩ conservationActions ∧
       ((m' ⟨0⟩).live : Int) = (memoryA ⟨0⟩).live + allocated ⟨0⟩ conservationActions -
-        freed ⟨0⟩ conservationActions - resetBytes ⟨0⟩ memoryA conservationActions losesRequest) := by
+        freed ⟨0⟩ conservationActions - Evidence.resetBytes ⟨0⟩ memoryA conservationActions losesRequest) := by
   refine ⟨rfl, ?_⟩
   rintro ⟨m', h, bad, _⟩
   cases h
   change (100 : Nat) = 108 at bad
   omega
 
-/-- Planted: run_peak_monotone rejects resetting the historical peak on a populated account. -/
+/-- Planted (law `run_peak_monotone`, case `populatedReset`, mutant `applyBadReset`).
+run_peak_monotone rejects resetting the historical peak on a populated account. -/
 theorem monotone_planted :
-    (run memoryA conservationActions applyBadReset).isSome = true ∧
-    ¬ (∃ m', run memoryA conservationActions applyBadReset = some m' ∧
+    (Evidence.run memoryA conservationActions applyBadReset).isSome = true ∧
+    ¬ (∃ m', Evidence.run memoryA conservationActions applyBadReset = some m' ∧
       (memoryA ⟨0⟩).peak ≤ (m' ⟨0⟩).peak ∧
       (memoryA ⟨0⟩).functionPeak ≤ (m' ⟨0⟩).functionPeak) := by
   refine ⟨rfl, ?_⟩
@@ -1781,13 +1945,14 @@ theorem monotone_planted :
   change 12 ≤ 0 at bad
   omega
 
-/-- Planted: run_peak_exact rejects a one-byte overestimate. The trajectory uses the mutant too;
+/-- Planted (law `run_peak_exact`, case `oneExtraByte`, mutant `extraPeak`).
+run_peak_exact rejects a one-byte overestimate. The trajectory uses the mutant too;
 its live fields remain correct, so this is independent of both flow and well-formedness. -/
 theorem exact_peak_planted : (∀ l, (memoryA l).WF) ∧
-    (run memoryA conservationActions extraPeak).isSome = true ∧
-    ¬ (∃ m', run memoryA conservationActions extraPeak = some m' ∧
+    (Evidence.run memoryA conservationActions extraPeak).isSome = true ∧
+    ¬ (∃ m', Evidence.run memoryA conservationActions extraPeak = some m' ∧
       (m' ⟨0⟩).functionPeak = max (memoryA ⟨0⟩).functionPeak
-        (observedPeak ⟨0⟩ memoryA conservationActions extraPeak)) := by
+        (Evidence.observedPeak ⟨0⟩ memoryA conservationActions extraPeak)) := by
   refine ⟨memoryA_wf, rfl, ?_⟩
   rintro ⟨m', h, bad⟩
   cases h
@@ -1799,23 +1964,24 @@ def extraRequest (m : Memory) : Action → Option Memory
   | .alloc l n => some (Memory.set m l { (m l).alloc n with requested := (m l).requested + n + 1 })
   | a => apply m a
 
-/-- Planted: report_certified rejects an extra request even with correct independent analysis bounds.
+/-- Planted (law `report_certified`, case `populatedReport`, mutant `extraRequest`).
+report_certified rejects an extra request even with correct independent analysis bounds.
 Both reset and peak observers use the substituted transition. -/
 theorem report_planted : establishedReport.lineage = ⟨0⟩ ∧
     (∀ l, (reportEntryMemory l).WF) ∧
     (reportEntryMemory ⟨0⟩).functionPeak = (reportEntryMemory ⟨0⟩).live ∧
-    (run reportEntryMemory reportActions extraRequest).isSome = true ∧
+    (Evidence.run reportEntryMemory reportActions extraRequest).isSome = true ∧
     Bound.Sound (allocated ⟨0⟩ reportActions) establishedReport.requested ∧
-    Bound.Sound ((allocated ⟨0⟩ reportActions : Int) - freed ⟨0⟩ reportActions -
-      resetBytes ⟨0⟩ reportEntryMemory reportActions extraRequest) establishedReport.netChange ∧
-    Bound.Sound (observedPeak ⟨0⟩ reportEntryMemory reportActions extraRequest) establishedReport.peak ∧
+    SignedInterval.Sound ((allocated ⟨0⟩ reportActions : Int) - freed ⟨0⟩ reportActions -
+      Evidence.resetBytes ⟨0⟩ reportEntryMemory reportActions extraRequest) establishedReport.netChange ∧
+    Bound.Sound (Evidence.observedPeak ⟨0⟩ reportEntryMemory reportActions extraRequest - (reportEntryMemory ⟨0⟩).live) establishedReport.peak ∧
     Bound.SoundOptional ((demoAllocator extraRequest).footprint ⟨0⟩ reportEntryMemory reportActions) establishedReport.footprint ∧
-    ¬ (∃ m', run reportEntryMemory reportActions extraRequest = some m' ∧
+    ¬ (∃ m', Evidence.run reportEntryMemory reportActions extraRequest = some m' ∧
       LineageReport.Sound ⟨0⟩ (reportEntryMemory ⟨0⟩) (m' ⟨0⟩)
         ((demoAllocator extraRequest).footprint ⟨0⟩ reportEntryMemory reportActions) establishedReport) := by
-  refine ⟨rfl, reportEntry_wf, rfl, rfl, by dsimp [Bound.Sound, establishedReport]; decide,
-    by dsimp [Bound.Sound, establishedReport]; decide,
-    by dsimp [Bound.Sound, establishedReport]; decide,
+  refine ⟨rfl, reportEntry_wf, rfl, rfl, by dsimp [Bound.Sound, SignedInterval.Sound, establishedReport]; decide,
+    by dsimp [Bound.Sound, SignedInterval.Sound, establishedReport]; decide,
+    by dsimp [Bound.Sound, SignedInterval.Sound, establishedReport]; decide,
     (by intro _; exact ⟨10, rfl, by decide⟩), ?_⟩
   rintro ⟨m', h, sound⟩
   cases h
@@ -1838,13 +2004,15 @@ def blindCT {O : Operands} (I : Instrumentation O) (P : Program O)
     LowEquivalent L c₁ c₂ → r₁.choices = r₂.choices →
       releaseTrace r₁.releases = releaseTrace r₂.releases → True
 
-/-- Planted: the added leakage permission invalidates timing_not_ct with its premises inhabited. -/
+/-- Planted (law `timing_not_ct`, case `timingStart`, mutant `blindCT`).
+the added leakage permission invalidates timing_not_ct with its premises inhabited. -/
 theorem timing_absence_planted :
     LowEquivalent labelling (timingStart 1) (timingStart 2) ∧ (1 : Int) ≠ 2 ∧
     ¬ (¬ blindCT instrumentation program labelling (timingStart 1) (timingStart 2)) := by
   exact ⟨⟨rfl, trivial⟩, by decide, fun h => h (fun _ _ _ _ _ => True.intro)⟩
 
-/-- Planted: the added output permission invalidates authorized_release_not_ni on the same runs. -/
+/-- Planted (law `authorized_release_not_ni`, case `leakyStart`, mutant `blindNI`).
+the added output permission invalidates authorized_release_not_ni on the same runs. -/
 theorem authorization_ni_planted :
     policy.RunsAuthorized instrumentation program (leakyStart 1) ∧
     policy.RunsAuthorized instrumentation program (leakyStart 2) ∧
@@ -1853,7 +2021,8 @@ theorem authorization_ni_planted :
   exact ⟨release_authorized 1, release_authorized 2, leaky_low 1 2, by decide,
     fun h => h (fun _ _ _ _ _ => True.intro)⟩
 
-/-- Planted: the added leakage permission invalidates authorized_release_not_ct on the same runs. -/
+/-- Planted (law `authorized_release_not_ct`, case `leakyStart`, mutant `blindCT`).
+the added leakage permission invalidates authorized_release_not_ct on the same runs. -/
 theorem authorization_ct_planted :
     policy.RunsAuthorized instrumentation program (leakyStart 1) ∧
     policy.RunsAuthorized instrumentation program (leakyStart 2) ∧
@@ -1861,6 +2030,250 @@ theorem authorization_ct_planted :
     ¬ (¬ blindCT instrumentation program labelling (leakyStart 1) (leakyStart 2)) := by
   exact ⟨release_authorized 1, release_authorized 2, leaky_low 1 2, by decide,
     fun h => h (fun _ _ _ _ _ => True.intro)⟩
+
+/-- Instance (law `run_historical_peak_exact`, case `populatedHistory`). -/
+example : ∃ m', run memoryA conservationActions = some m' ∧
+    (m' ⟨0⟩).peak = max (memoryA ⟨0⟩).peak
+      (observedPeak ⟨0⟩ memoryA conservationActions) :=
+  run_historical_peak_exact memoryA conservationActions ⟨0⟩ memoryA_wf rfl
+
+/-- Planted definition. Add one byte only to the historical peak. -/
+def extraHistoricalPeak (m : Memory) : Action → Option Memory
+  | .alloc l n => some (Memory.set m l
+      { (m l).alloc n with peak := max (m l).peak ((m l).live + n + 1) })
+  | a => apply m a
+
+/-- Planted (law `run_historical_peak_exact`, fault `oneExtraHistoricalByte`).
+The successful run and its independent observer both use the substituted transition. -/
+theorem historical_exact_planted : (∀ l, (memoryA l).WF) ∧
+    (Evidence.run memoryA conservationActions extraHistoricalPeak).isSome = true ∧
+    ¬ (∃ m', Evidence.run memoryA conservationActions extraHistoricalPeak = some m' ∧
+      (m' ⟨0⟩).peak = max (memoryA ⟨0⟩).peak
+        (Evidence.observedPeak ⟨0⟩ memoryA conservationActions extraHistoricalPeak)) := by
+  refine ⟨memoryA_wf, rfl, ?_⟩
+  rintro ⟨m', h, bad⟩
+  cases h
+  change (14 : Nat) = 13 at bad
+  omega
+
+/-- Instance (law `free_permitted_iff`, case `ownedAndExcessive`). -/
+example : ActionPermitted memoryA (.free ⟨0⟩ 5) ∧
+    ¬ ActionPermitted memoryA (.free ⟨0⟩ 6) := by
+  constructor <;> rw [free_permitted_iff] <;> decide
+
+/-- Planted definition. Excessive frees are admitted, retaining every account update. -/
+def admitsOverfree (m : Memory) : Action → Option Memory
+  | .free l n => some (Memory.set m l ((m l).free n))
+  | a => apply m a
+
+/-- Planted (law `free_permitted_iff`, fault `admitsExcessiveOutflow`). -/
+example : ¬ ((admitsOverfree memoryA (.free ⟨0⟩ 6)).isSome = true ↔
+    6 ≤ (memoryA ⟨0⟩).live) := by decide
+
+/-- Planted definition. A valid positive free is refused as though no bytes were owned. -/
+def refusesOwnedFree (m : Memory) : Action → Option Memory
+  | .free _ _ => none
+  | a => apply m a
+
+/-- Planted (law `free_permitted_iff`, fault `refusesOwnedOutflow`). -/
+example : ¬ ((refusesOwnedFree memoryA (.free ⟨0⟩ 5)).isSome = true ↔
+    5 ≤ (memoryA ⟨0⟩).live) := by decide
+
+/-- Instance (law `free_permitted_iff`, case `doubleFree`). The second free is refused. -/
+example : run Memory.empty [.alloc ⟨0⟩ 5, .free ⟨0⟩ 5, .free ⟨0⟩ 5] = none := by decide
+
+/-- Planted (law `run_conservation`, fault `doubleFreeAdmitted`).
+All execution and observer occurrences use the same guard-dropping mutant. -/
+example : (Evidence.run Memory.empty [.alloc ⟨0⟩ 5, .free ⟨0⟩ 5, .free ⟨0⟩ 5]
+    admitsOverfree).isSome = true ∧
+    ¬ (∃ m', Evidence.run Memory.empty [.alloc ⟨0⟩ 5, .free ⟨0⟩ 5, .free ⟨0⟩ 5]
+      admitsOverfree = some m' ∧
+      ((m' ⟨0⟩).live : Int) = (Memory.empty ⟨0⟩).live +
+        allocated ⟨0⟩ [.alloc ⟨0⟩ 5, .free ⟨0⟩ 5, .free ⟨0⟩ 5] -
+        freed ⟨0⟩ [.alloc ⟨0⟩ 5, .free ⟨0⟩ 5, .free ⟨0⟩ 5] -
+        Evidence.resetBytes ⟨0⟩ Memory.empty [.alloc ⟨0⟩ 5, .free ⟨0⟩ 5, .free ⟨0⟩ 5]
+          admitsOverfree) := by
+  refine ⟨rfl, ?_⟩
+  rintro ⟨m', h, bad⟩
+  cases h
+  change (0 : Int) = -5 at bad
+  omega
+
+/-- Planted observer. The secure program is unchanged; final shared secret becomes public. -/
+abbrev secretSeeing : Instrumentation Demo.ops :=
+  { instrumentation with observeFinal := fun c => some (.output c.store) }
+
+/-- Helper (transport). A final observer cannot affect the instrumented step derivation. -/
+private theorem secretSeeingSteps {c c' : Config Demo.ops} {obs leaks rs choices}
+    (h : InstrumentedSteps instrumentation program c obs leaks rs choices c') :
+    InstrumentedSteps secretSeeing program c obs leaks rs choices c' := by
+  induction h with
+  | refl c => exact .refl c
+  | step h _ ih => exact .step h ih
+
+/-- Planted execution. All transitions and releases are the unchanged secure execution. -/
+def secretSeeingRun (s : Int) (h : Nat) : Run secretSeeing program (start s h) where
+  final := (secureRun s h).final
+  ending := .normal
+  finalEnding := rfl
+  observations := (secureRun s h).observations
+  leakage := (secureRun s h).leakage
+  releases := (secureRun s h).releases
+  choices := (secureRun s h).choices
+  steps := secretSeeingSteps (secureRun s h).steps
+
+/-- Planted (law `secure_ni`, fault `secretSeeingObserver`).
+Same program and entries as the positive instance; only the observer is changed. -/
+example : LowEquivalent labelling (start 6 1) (start 5 2) ∧
+    (secretSeeingRun 6 1).choices = (secretSeeingRun 5 2).choices ∧
+    releaseTrace (secretSeeingRun 6 1).releases = releaseTrace (secretSeeingRun 5 2).releases ∧
+    ¬ DelimitedReleaseNI secretSeeing program labelling (start 6 1) (start 5 2) := by
+  refine ⟨⟨rfl, trivial⟩, rfl, rfl, ?_⟩
+  intro h
+  have bad := (h (secretSeeingRun 6 1) (secretSeeingRun 5 2) ⟨rfl, trivial⟩ rfl rfl).1
+  exact (by decide : (secretSeeingRun 6 1).publicObservations ≠
+    (secretSeeingRun 5 2).publicObservations) bad
+
+/-- Planted observer. Secret state is misreported as public container length. -/
+abbrev metadataSeeing : Instrumentation Demo.ops :=
+  { instrumentation with leakage := fun c _ _ => [.publicLength ⟨9⟩ c.store.natAbs] }
+
+/-- Planted execution. Only public-length metadata differs from the secure observer. -/
+def metadataSeeingRun (secret : Int) (hidden : Nat := 0) : Run metadataSeeing program (start secret hidden) where
+  final := finished secret (hiddenLocals hidden)
+  ending := .normal
+  finalEnding := rfl
+  observations := [.output (secret + Int.ofNat hidden)]
+  leakage := List.replicate 4 (.publicLength ⟨9⟩ secret.natAbs)
+  releases := [releaseValue (secret + Int.ofNat hidden)]
+  choices := [(), (), (), ()]
+  steps :=
+    InstrumentedSteps.step (I := metadataSeeing)
+      (Step.silent (P := program) (c := start secret hidden)
+        (c' := afterSeq .masked .masked secret (hiddenLocals hidden)) rfl) <|
+    InstrumentedSteps.step (I := metadataSeeing)
+      (Step.prim (O := Demo.ops) (P := program)
+        (c := afterSeq .masked .masked secret (hiddenLocals hidden))
+        (c' := afterRelease .masked secret (hiddenLocals hidden))
+        (p := .release) (vs := [secret + Int.ofNat hidden]) (st := secret)
+        (a := (⟨none, .ok 0, secret⟩ : Answer Int Int Int)) rfl (by simp [allowed]) rfl) <|
+    InstrumentedSteps.step (I := metadataSeeing)
+      (Step.silent (P := program) (c := afterRelease .masked secret (hiddenLocals hidden))
+        (c' := beforeOutput .masked secret (hiddenLocals hidden)) rfl) <|
+    InstrumentedSteps.step (I := metadataSeeing)
+      (Step.prim (O := Demo.ops) (P := program)
+        (c := beforeOutput .masked secret (hiddenLocals hidden))
+        (c' := finished secret (hiddenLocals hidden))
+        (p := .output) (vs := [secret + Int.ofNat hidden]) (st := secret)
+        (a := (⟨some (secret + Int.ofNat hidden), .ok 0, secret⟩ : Answer Int Int Int))
+        rfl (by simp [allowed]) rfl) <|
+    InstrumentedSteps.refl (I := metadataSeeing) (P := program) (finished secret (hiddenLocals hidden))
+
+
+/-- Planted (law `secure_ni`, fault `secretPublicLength`).
+NI rejects secret-dependent public metadata even when ordinary outputs still match. -/
+example : LowEquivalent labelling (start 6 1) (start 5 2) ∧
+    (metadataSeeingRun 6 1).choices = (metadataSeeingRun 5 2).choices ∧
+    releaseTrace (metadataSeeingRun 6 1).releases = releaseTrace (metadataSeeingRun 5 2).releases ∧
+    ¬ DelimitedReleaseNI metadataSeeing program labelling (start 6 1) (start 5 2) := by
+  refine ⟨⟨rfl, trivial⟩, rfl, rfl, ?_⟩
+  intro h
+  have bad := (h (metadataSeeingRun 6 1) (metadataSeeingRun 5 2) ⟨rfl, trivial⟩ rfl rfl).2
+  exact (by decide : publicLengths (metadataSeeingRun 6 1).leakage ≠
+    publicLengths (metadataSeeingRun 5 2).leakage) bad
+
+/-- Planted definition. Call-path text incorrectly filters semantic release comparison. -/
+def pathSensitiveTrace {Ty Val : Type} (rs : List (ReleaseFact Ty Val)) :
+    List (ReleaseSite Ty × Val) :=
+  (rs.filter fun r => !r.path.isEmpty).map fun r => (r.release.site, r.release.value)
+
+/-- Planted (law `release_metadata_irrelevant`, fault `pathSensitiveComparison`). -/
+example : ¬ (pathSensitiveTrace [{ metadataFact with path := [Exec.Demo.logF] }] =
+    pathSensitiveTrace [metadataFact]) := by decide
+
+/-- Instance (law `instrumentation_erasure`, case `secureExecution`). -/
+example : ∃ events, Steps program (start 6 1) events (secureRun 6 1).final :=
+  (instrumentation_erasure instrumentation program _ _).mp
+    ⟨_, _, _, _, (secureRun 6 1).steps⟩
+
+/-- Planted definition. Instrumentation incorrectly deletes every reflexive execution. -/
+def filteredInstrumentation {O : Operands} (I : Instrumentation O) (P : Program O)
+    (c c' : Config O) : Prop :=
+  (∃ obs leaks rs choices, InstrumentedSteps I P c obs leaks rs choices c') ∧ c ≠ c'
+
+/-- Planted (law `instrumentation_erasure`, fault `removesC1Execution`). -/
+example : ¬ (filteredInstrumentation instrumentation program (finished 1) (finished 1) ↔
+    ∃ events, Steps program (finished 1) events (finished 1)) := by
+  intro h
+  exact (h.mpr ⟨[], .refl _⟩).2 rfl
+
+/-- Planted definition. Instrumentation admits every pair of endpoints. -/
+def admittingInstrumentation (_c _c' : Config Demo.ops) : Prop := True
+
+/-- Planted (law `instrumentation_erasure`, fault `addsC1Execution`). -/
+example : ¬ (admittingInstrumentation (finished 1) (start 1) ↔
+    ∃ events, Steps program (finished 1) events (start 1)) := by
+  intro h
+  obtain ⟨_, hs⟩ := h.mp trivial
+  cases hs with
+  | step hs _ => exact no_step_of_none (P := program) (c := finished 1) rfl _ _ hs
+
+/-- Planted definition. Explicit frees are over-counted by one byte. -/
+def extraFreed (l : LineageId) (actions : List Action) : Nat := freed l actions + 1
+
+/-- Planted (law `run_conservation`, fault `extraFreedByte`). -/
+example : (run memoryA conservationActions).isSome = true ∧
+    ¬ (∃ m', run memoryA conservationActions = some m' ∧
+      (m' ⟨0⟩).requested = (memoryA ⟨0⟩).requested + allocated ⟨0⟩ conservationActions ∧
+      ((m' ⟨0⟩).live : Int) = (memoryA ⟨0⟩).live + allocated ⟨0⟩ conservationActions -
+        extraFreed ⟨0⟩ conservationActions - resetBytes ⟨0⟩ memoryA conservationActions) := by
+  refine ⟨rfl, ?_⟩
+  rintro ⟨m', h, _, bad⟩
+  cases h
+  change (0 : Int) = -1 at bad
+  omega
+
+/-- Planted definition. Reset outflow is over-counted by one byte. -/
+def extraResetBytes (l : LineageId) (m : Memory) (actions : List Action) : Nat :=
+  resetBytes l m actions + 1
+
+/-- Planted (law `run_conservation`, fault `extraResetByte`). -/
+example : (run memoryA conservationActions).isSome = true ∧
+    ¬ (∃ m', run memoryA conservationActions = some m' ∧
+      (m' ⟨0⟩).requested = (memoryA ⟨0⟩).requested + allocated ⟨0⟩ conservationActions ∧
+      ((m' ⟨0⟩).live : Int) = (memoryA ⟨0⟩).live + allocated ⟨0⟩ conservationActions -
+        freed ⟨0⟩ conservationActions - extraResetBytes ⟨0⟩ memoryA conservationActions) := by
+  refine ⟨rfl, ?_⟩
+  rintro ⟨m', h, _, bad⟩
+  cases h
+  change (0 : Int) = -1 at bad
+  omega
+
+/-- Instance. A no-allocation call reports zero peak with two caller-live bytes. -/
+example : LineageReport.Sound ⟨0⟩ reportEntry reportEntry none
+    ⟨⟨0⟩, ⟨0, .boundEstablished⟩, ⟨0, 0, .boundEstablished⟩,
+      ⟨0, .boundEstablished⟩, ⟨0, .notEstablished⟩⟩ := by
+  simp [LineageReport.Sound, reportEntry, Bound.Sound, SignedInterval.Sound, Bound.SoundOptional]
+
+/-- Instance. A signed net interval permits released entry storage to give a negative change. -/
+example : SignedInterval.Sound (-3) ⟨-4, -2, .boundEstablished⟩ := by
+  simp [SignedInterval.Sound]
+
+/-- Planted definition. Dropping the lower endpoint falsely accepts unbounded net release. -/
+def upperOnlyNet (actual : Int) (b : SignedInterval) : Prop :=
+  b.status = .boundEstablished → actual ≤ b.hi
+
+/-- Planted. Upper-only checking cannot establish the signed interval contract. -/
+example : upperOnlyNet (-5) ⟨-4, -2, .boundEstablished⟩ ∧
+    ¬ SignedInterval.Sound (-5) ⟨-4, -2, .boundEstablished⟩ := by
+  simp [upperOnlyNet, SignedInterval.Sound]
+
+/-- Instance (law `release_metadata_irrelevant`, case `factsOfSecureRun`).
+Reasons and paths are connected to an actual run while remaining outside its release premise. -/
+example : ReleaseFact.semanticTrace
+    (ReleaseFact.attach (secureRun 6 1).releases
+      (fun _ => "changed reason") (fun _ => [Exec.Demo.logF])).entries =
+    releaseTrace (secureRun 6 1).releases := RunFacts.trace_eq _
 
 end Audit
 

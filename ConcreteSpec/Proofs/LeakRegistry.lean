@@ -87,9 +87,9 @@ theorem optionalAccepted : RuleAccepted (Bound.SoundOptional (some (10 : Nat))) 
 /-- Instance: an absent footprint cannot be established. -/
 theorem optionalRefused : RuleRefused (Bound.SoundOptional (none : Option Nat)) ⟨12, .boundEstablished⟩ := by
   simp [RuleRefused, Bound.SoundOptional]
-/-- Instance: a report distinguishes function-local peak 10 from historical peak 100. -/
+/-- Instance: a report distinguishes function-local peak 8 from historical peak 100. -/
 theorem reportAccepted : RuleAccepted (LineageReport.Sound ⟨0⟩ reportEntry reportExit (some 10)) establishedReport := by
-  simp [RuleAccepted, LineageReport.Sound, Bound.Sound, Bound.SoundOptional, establishedReport, reportEntry, reportExit]
+  simp [RuleAccepted, LineageReport.Sound, Bound.Sound, SignedInterval.Sound, Bound.SoundOptional, establishedReport, reportEntry, reportExit]
 /-- Instance: correct numbers cannot be attributed to another lineage. -/
 theorem reportRefused : RuleRefused (LineageReport.Sound ⟨1⟩ reportEntry reportExit (some 10)) establishedReport := by
   simp [RuleRefused, LineageReport.Sound, establishedReport]

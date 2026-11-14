@@ -47,6 +47,9 @@ def main(rules_path, row_paths):
     rules = [r for r in records if r["kind"] == "rule"]
     examples = [r for r in records if r["kind"] == "example"]
     declared = {a or b for t in inventories for a, b in DECLARED.findall(t)}
+    # Decisions also have stable owning anchors, including the adopted C7,
+    # memory and information-flow decisions; do not force unrelated Q citations.
+    anchors = {a for t in inventories for a in re.findall(r'<a id="([^"]+)"', t)}
     names = [r["name"] for r in rules]
     for n in sorted({n for n in names if names.count(n) > 1}):
         fails.append(f"rule {n} is registered more than once")
@@ -56,6 +59,9 @@ def main(rules_path, row_paths):
         if not r["doc"].strip(): fails.append(f"rule {r['name']} has no doc comment")
         else:
             rows = [m.group(1) for m in ROW.finditer(r["doc"])]
+            cited_anchors = re.findall(r"(?:docs/decisions\.md)?#(decided-[a-z0-9-]+)", r["doc"])
+            if any(a in anchors for a in cited_anchors):
+                continue
             if not rows: fails.append(f"rule {r['name']}'s doc comment cites no decision row")
             elif not any(x in declared for x in rows):
                 fails.append(f"rule {r['name']}'s doc comment cites no existing decision row ({', '.join(rows)})")

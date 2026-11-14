@@ -1959,6 +1959,9 @@ ConcreteSpec.Core.Leak.Audit.exact_peak_planted	Quot.sound propext
 ConcreteSpec.Core.Leak.Audit.exact_peak_planted._proof_1_1	Quot.sound propext
 ConcreteSpec.Core.Leak.Audit.free_keeps_live	Quot.sound propext
 ConcreteSpec.Core.Leak.Audit.free_keeps_live._proof_1_1	Quot.sound propext
+ConcreteSpec.Core.Leak.Audit.historical_exact_planted	Quot.sound propext
+ConcreteSpec.Core.Leak.Audit.historical_exact_planted._proof_1_1	Quot.sound propext
+ConcreteSpec.Core.Leak.Audit.metadataSeeingRun._proof_1	propext
 ConcreteSpec.Core.Leak.Audit.monotone_planted	Quot.sound propext
 ConcreteSpec.Core.Leak.Audit.monotone_planted._proof_1_1	Quot.sound propext
 ConcreteSpec.Core.Leak.Audit.reportEntry_wf	Quot.sound propext
@@ -1966,6 +1969,8 @@ ConcreteSpec.Core.Leak.Audit.report_planted	Quot.sound propext
 ConcreteSpec.Core.Leak.Audit.report_planted._proof_1_1	Quot.sound propext
 ConcreteSpec.Core.Leak.Audit.run_wf_planted	Quot.sound propext
 ConcreteSpec.Core.Leak.Audit.run_wf_planted._proof_1_1	Quot.sound propext
+ConcreteSpec.Core.Leak.Audit.secretSeeingRun._proof_1	propext
+ConcreteSpec.Core.Leak.Audit.secretSeeingRun._proof_2	propext
 ConcreteSpec.Core.Leak.Audit.timing_absence_planted	propext
 ConcreteSpec.Core.Leak.Bound.Sound.eq_1	
 ConcreteSpec.Core.Leak.Bound.SoundOptional.eq_1	
@@ -2036,6 +2041,18 @@ ConcreteSpec.Core.Leak.Demo.timingStart.eq_1	propext
 ConcreteSpec.Core.Leak.Demo.timing_ni	Quot.sound propext
 ConcreteSpec.Core.Leak.Demo.timing_not_ct	propext
 ConcreteSpec.Core.Leak.Demo.timing_run_unique	Quot.sound propext
+ConcreteSpec.Core.Leak.Evidence.observedPeak.eq_1	
+ConcreteSpec.Core.Leak.Evidence.observedPeak.eq_2	
+ConcreteSpec.Core.Leak.Evidence.observedPeak.eq_def	
+ConcreteSpec.Core.Leak.Evidence.observedPeak_apply	propext
+ConcreteSpec.Core.Leak.Evidence.resetBytes.eq_1	propext
+ConcreteSpec.Core.Leak.Evidence.resetBytes.eq_2	propext
+ConcreteSpec.Core.Leak.Evidence.resetBytes.eq_def	propext
+ConcreteSpec.Core.Leak.Evidence.resetBytes_apply	propext
+ConcreteSpec.Core.Leak.Evidence.run.eq_1	
+ConcreteSpec.Core.Leak.Evidence.run.eq_2	
+ConcreteSpec.Core.Leak.Evidence.run.eq_def	
+ConcreteSpec.Core.Leak.Evidence.run_apply	Quot.sound propext
 ConcreteSpec.Core.Leak.Instrumentation.mk.inj	
 ConcreteSpec.Core.Leak.Instrumentation.mk.injEq	propext
 ConcreteSpec.Core.Leak.Instrumentation.mk.sizeOf_spec	
@@ -2104,6 +2121,7 @@ ConcreteSpec.Core.Leak.Registry.wfRefused
 ConcreteSpec.Core.Leak.Release.mk.inj	
 ConcreteSpec.Core.Leak.Release.mk.injEq	propext
 ConcreteSpec.Core.Leak.Release.mk.sizeOf_spec	
+ConcreteSpec.Core.Leak.ReleaseFact.attach._proof_1	Quot.sound propext
 ConcreteSpec.Core.Leak.ReleaseFact.mk.inj	
 ConcreteSpec.Core.Leak.ReleaseFact.mk.injEq	propext
 ConcreteSpec.Core.Leak.ReleaseFact.mk.sizeOf_spec	
@@ -2125,6 +2143,15 @@ ConcreteSpec.Core.Leak.Run.mk.injEq	propext
 ConcreteSpec.Core.Leak.Run.mk.sizeOf_spec	propext
 ConcreteSpec.Core.Leak.Run.publicObservations.eq_1	propext
 ConcreteSpec.Core.Leak.Run.steps	propext
+ConcreteSpec.Core.Leak.RunFacts.erases	
+ConcreteSpec.Core.Leak.RunFacts.mk.inj	
+ConcreteSpec.Core.Leak.RunFacts.mk.injEq	propext
+ConcreteSpec.Core.Leak.RunFacts.mk.sizeOf_spec	
+ConcreteSpec.Core.Leak.RunFacts.trace_eq	propext
+ConcreteSpec.Core.Leak.SignedInterval.Sound.eq_1	
+ConcreteSpec.Core.Leak.SignedInterval.mk.inj	
+ConcreteSpec.Core.Leak.SignedInterval.mk.injEq	propext
+ConcreteSpec.Core.Leak.SignedInterval.mk.sizeOf_spec	
 ConcreteSpec.Core.Leak.accountA.eq_1	
 ConcreteSpec.Core.Leak.accountB.eq_1	
 ConcreteSpec.Core.Leak.allocated._sparseCasesOn_1.else_eq	propext
@@ -2136,6 +2163,7 @@ ConcreteSpec.Core.Leak.apply.eq_1
 ConcreteSpec.Core.Leak.apply.eq_2	
 ConcreteSpec.Core.Leak.apply.eq_3	
 ConcreteSpec.Core.Leak.apply_alloc_zero	Quot.sound propext
+ConcreteSpec.Core.Leak.apply_historical_peak_exact	propext
 ConcreteSpec.Core.Leak.apply_peak_exact	propext
 ConcreteSpec.Core.Leak.apply_peak_monotone	Quot.sound propext
 ConcreteSpec.Core.Leak.apply_peak_monotone._simp_1_3	propext
@@ -2145,6 +2173,7 @@ ConcreteSpec.Core.Leak.establishedReport.eq_1
 ConcreteSpec.Core.Leak.forbidsRelease_not_authorized	propext
 ConcreteSpec.Core.Leak.free_conservation	Quot.sound propext
 ConcreteSpec.Core.Leak.free_conservation._proof_1_1	Quot.sound propext
+ConcreteSpec.Core.Leak.free_permitted_iff	propext
 ConcreteSpec.Core.Leak.free_update	propext
 ConcreteSpec.Core.Leak.freed._sparseCasesOn_1.else_eq	propext
 ConcreteSpec.Core.Leak.freed.eq_1	propext
@@ -2186,11 +2215,18 @@ ConcreteSpec.Core.Leak.instDecidableEqReleaseFact.decEq._proof_4
 ConcreteSpec.Core.Leak.instDecidableEqReleaseSite.decEq._proof_1	
 ConcreteSpec.Core.Leak.instDecidableEqReleaseSite.decEq._proof_2	
 ConcreteSpec.Core.Leak.instDecidableEqReleaseSite.decEq._proof_3	
+ConcreteSpec.Core.Leak.instDecidableEqSignedInterval.decEq._proof_1	
+ConcreteSpec.Core.Leak.instDecidableEqSignedInterval.decEq._proof_2	
+ConcreteSpec.Core.Leak.instDecidableEqSignedInterval.decEq._proof_3	
+ConcreteSpec.Core.Leak.instDecidableEqSignedInterval.decEq._proof_4	
+ConcreteSpec.Core.Leak.instrumentation_erasure	propext
 ConcreteSpec.Core.Leak.memoryA.eq_1	
 ConcreteSpec.Core.Leak.memoryA_wf	Quot.sound propext
 ConcreteSpec.Core.Leak.observedPeak.eq_1	
 ConcreteSpec.Core.Leak.observedPeak.eq_2	
 ConcreteSpec.Core.Leak.observedPeak.eq_def	
+ConcreteSpec.Core.Leak.publicLengths._sparseCasesOn_1.else_eq	propext
+ConcreteSpec.Core.Leak.publicLengths.eq_1	propext
 ConcreteSpec.Core.Leak.publicLocals.eq_1	
 ConcreteSpec.Core.Leak.releaseTrace.eq_1	
 ConcreteSpec.Core.Leak.release_metadata_instance	Quot.sound propext
@@ -2217,6 +2253,7 @@ ConcreteSpec.Core.Leak.run_conservation	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Leak.run_conservation._proof_1_24	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Leak.run_conservation._proof_1_26	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Leak.run_conservation._proof_1_28	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Leak.run_historical_peak_exact	Quot.sound propext
 ConcreteSpec.Core.Leak.run_peak_exact	Quot.sound propext
 ConcreteSpec.Core.Leak.run_peak_monotone	Quot.sound propext
 ConcreteSpec.Core.Leak.run_wf	Quot.sound propext
@@ -4513,10 +4550,15 @@ _private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Exec.Config.final?.match_1
 _private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Exec.Config.final?.match_1.eq_2	propext
 _private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Exec.Config.final?.match_1.eq_3	propext
 _private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Exec.Config.final?.match_1.eq_4	propext
+_private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Leak.Audit.secretSeeingSteps	propext
 _private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Leak.Demo.allowed.match_1.eq_1	propext
 _private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Leak.Demo.allowed.match_1.eq_2	propext
 _private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Leak.Demo.allowed.match_1.eq_3	propext
 _private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Leak.Demo.allowed.match_1.eq_4	propext
+_private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Leak.Evidence.resetBytes.match_1.eq_1	
+_private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Leak.Evidence.resetBytes.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Leak.Evidence.run.match_1.eq_1	
+_private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Leak.Evidence.run.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Leak.allocated.match_1.eq_1	propext
 _private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Leak.allocated.match_1.eq_2	propext
 _private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Leak.allocated.match_1.eq_3	propext
@@ -4527,6 +4569,8 @@ _private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Leak.instReprAction.repr.m
 _private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Leak.instReprAction.repr.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Leak.instReprAction.repr.match_1.eq_3	
 _private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Leak.no_step_of_none	Quot.sound propext
+_private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Leak.publicLengths.match_1.eq_1	propext
+_private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Leak.publicLengths.match_1.eq_2	propext
 _private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Leak.resetBytes.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Leak.resetBytes.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Leak.resetOutflow.match_1.eq_1	propext

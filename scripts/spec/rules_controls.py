@@ -232,6 +232,10 @@ fixture('function-dictionary-parameter',
 fixture('computed-concrete-input', proof=proofs.replace('RuleAccepted ok 0', 'RuleAccepted ok (1 - 1)'))
 fixture('specialized-rule', decl='/-- The rule (Q9.1). -/\ndef ok (base n : Nat) : Prop := n = base\n',
         proof='theorem accepts : RuleAccepted (ok 2) 2 := rfl\ntheorem refuses : RuleRefused (ok 2) 3 := by intro h; cases h\n')
+fixture('specialized-opaque-input',
+        decl='opaque hidden : Nat := 0\n/-- The rule (Q9.1). -/\ndef ok (_base n : Nat) : Prop := n = 0\n',
+        proof='theorem accepts : RuleAccepted (ok hidden) 0 := rfl\ntheorem refuses : RuleRefused (ok hidden) 1 := by intro h; cases h\n',
+        reason='no concrete rule acceptance/refusal proposition')
 fixture('polymorphic-rule', decl='/-- The rule (Q9.1). -/\ndef ok {T : Type} (xs : List T) : Prop := xs = []\n',
         proof='theorem accepts : RuleAccepted (ok (T := Nat)) [] := rfl\ntheorem refuses : RuleRefused (ok (T := Nat)) [1] := by intro h; cases h\n')
 # Constant identities carry closed path-validity proofs. Proof irrelevance must not

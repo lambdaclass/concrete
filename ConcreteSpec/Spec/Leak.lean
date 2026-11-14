@@ -118,17 +118,17 @@ structure ReleasePolicy (Ty : Type) where
   allowed : List (ReleaseSite Ty)
 
 /-- The policy permits this exact typed site; the released value does not affect site authorization.
-Reason/path metadata is outside this semantic record. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7), Q9.10;
+Reason/path metadata is outside this semantic record. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
 #decided-project-infoflow-2026-11-06 and #decided-project-memory-2026-11-06. -/
 def ReleasePolicy.Permits {Ty Val : Type} (policy : ReleasePolicy Ty) (r : Release Ty Val) : Prop :=
   r.site ∈ policy.allowed
 
-/-- A policy with no permitted sites forbids release. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7), Q9.10;
+/-- A policy with no permitted sites forbids release. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
 #decided-project-infoflow-2026-11-06 and #decided-project-memory-2026-11-06. -/
 def ReleasePolicy.ForbidsRelease {Ty : Type} (policy : ReleasePolicy Ty) : Prop :=
   policy.allowed = []
 
-/-- Every release in an ordered execution trace is authorized by the policy. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7), Q9.10;
+/-- Every release in an ordered execution trace is authorized by the policy. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
 #decided-project-infoflow-2026-11-06 and #decided-project-memory-2026-11-06. -/
 def ReleasePolicy.Authorized {Ty Val : Type} (policy : ReleasePolicy Ty)
     (rs : List (Release Ty Val)) : Prop :=
@@ -190,7 +190,7 @@ def publicLocals {O : Operands} (L : Labelling O) (c : Config O) :
   c.locals.filterMap fun e => (L.project e.2).map fun v => (e.1, v)
 
 /-- Low-equivalence: equal public local bindings and related public shared state. Secret values may
-differ. Frames and control are execution data, not silently made public by this definition. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7), Q9.10;
+differ. Frames and control are execution data, not silently made public by this definition. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
 #decided-project-infoflow-2026-11-06 and #decided-project-memory-2026-11-06. -/
 def LowEquivalent {O : Operands} (L : Labelling O) (c₁ c₂ : Config O) : Prop :=
   publicLocals L c₁ = publicLocals L c₂ ∧ L.lowStore c₁.store c₂.store
@@ -232,30 +232,54 @@ structure Run {O : Operands} (I : Instrumentation O) (P : Program O) (initial : 
   choices : List I.Choice
   steps : InstrumentedSteps I P initial observations leakage releases choices final
 
+/-- Facts attached to one identified semantic release list. Index by that list, rather than
+by a machine configuration: diagnostic strings never share a carrier with numeric execution
+state. A projection theorem connects these facts to a run's releases in the proof layer.
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+structure RunFacts {Ty Val : Type} (releases : List (Release Ty Val)) where
+  entries : List (ReleaseFact Ty Val)
+  erases : entries.map ReleaseFact.release = releases
+
+/-- Attach fact-only metadata to every semantic release, preserving its order. This constructor
+establishes semantic correspondence; it does not certify the source reason or path. -/
+def ReleaseFact.attach {Ty Val : Type} (releases : List (Release Ty Val))
+    (reason : Release Ty Val → String) (path : Release Ty Val → List FnId) : RunFacts releases where
+  entries := releases.map fun release => ⟨release, reason release, path release⟩
+  erases := by simp [List.map_map, Function.comp_def]
+
 /-- All public observations of a run, including its final observation when it has one. -/
 def Run.publicObservations {O : Operands} {I : Instrumentation O} {P : Program O} {c : Config O}
     (r : Run I P c) : List I.Observation :=
   r.observations ++ (I.observeFinal r.final).toList
 
-/-- Every complete finite run from `c` emits only release records permitted by `policy`. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7), Q9.10;
+/-- Every complete finite run from `c` emits only release records permitted by `policy`. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
 #decided-project-infoflow-2026-11-06 and #decided-project-memory-2026-11-06. -/
 def ReleasePolicy.RunsAuthorized {O : Operands} (policy : ReleasePolicy O.Ty)
     (I : Instrumentation O) (P : Program O) (c : Config O) : Prop :=
   ∀ r : Run I P c, policy.Authorized r.releases
 
+/-- Public container-length metadata is observable independently of the timing-only entries.
+Authority: docs/decisions.md#decided-project-infoflow-2026-11-06. -/
+def publicLengths {Val Address Effect : Type} (trace : List (Leakage Val Address Effect)) :
+    List (SiteId × Nat) := trace.filterMap fun e =>
+  match e with
+  | .publicLength site length => some (site, length)
+  | _ => none
+
 /-- Delimited-release noninterference between two entry configurations of one program. For
 low-equivalent initial states, matched external choices and equal ordered release traces, every
-pair of complete finite runs has equal public observations. No equality of leakage is asserted. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7), Q9.10;
+pair of complete finite runs has equal public observations. No equality of leakage is asserted. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
 #decided-project-infoflow-2026-11-06 and #decided-project-memory-2026-11-06. -/
 def DelimitedReleaseNI {O : Operands} (I : Instrumentation O) (P : Program O)
     (L : Labelling O) (c₁ c₂ : Config O) : Prop :=
   ∀ (r₁ : Run I P c₁) (r₂ : Run I P c₂),
     LowEquivalent L c₁ c₂ → r₁.choices = r₂.choices → releaseTrace r₁.releases = releaseTrace r₂.releases →
-      r₁.publicObservations = r₂.publicObservations
+      r₁.publicObservations = r₂.publicObservations ∧
+        publicLengths r₁.leakage = publicLengths r₂.leakage
 
 /-- Constant time between the same entries and under the same delimited-release premises: the
 complete baseline leakage traces are equal. This is separate from `DelimitedReleaseNI`, not a
-consequence of authorization. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7), Q9.10;
+consequence of authorization. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
 #decided-project-infoflow-2026-11-06 and #decided-project-memory-2026-11-06. -/
 def ConstantTime {O : Operands} (I : Instrumentation O) (P : Program O)
     (L : Labelling O) (c₁ c₂ : Config O) : Prop :=
@@ -279,7 +303,7 @@ structure Account where
 def Account.empty : Account := ⟨0, 0, 0, 0⟩
 
 /-- A well-formed account has already reached at least its current live bytes, both historically
-and since function entry. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7), Q9.10;
+and since function entry. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
 #decided-project-infoflow-2026-11-06 and #decided-project-memory-2026-11-06. -/
 def Account.WF (a : Account) : Prop := a.live ≤ a.peak ∧ a.live ≤ a.functionPeak
 
@@ -335,20 +359,17 @@ def apply (m : Memory) : Action → Option Memory
 
 /-- A checked view of the one accounting transition: allocation/reset succeed and free refuses
 outflow above the actual live account. Authority: docs/decisions.md#decided-2026-11-08-foundation
-(C7), Q9.10 and #decided-project-memory-2026-11-06. -/
+(C7) and #decided-project-memory-2026-11-06. -/
 def ActionPermitted (m : Memory) (a : Action) : Prop := (apply m a).isSome = true
 
-/-- A successful sequence of abstract C4 accounting actions. The transition parameter is shared
-by the trajectory observers, so a planted transition is substituted uniformly; ordinary execution
-uses `apply`. This is the only accounting fold. -/
-def run (m : Memory) (actions : List Action)
-    (transition : Memory → Action → Option Memory := apply) : Option Memory :=
+/-- A successful sequence of abstract C4 accounting actions. Every step uses `apply`; refusal stops the sequence. -/
+def run (m : Memory) (actions : List Action) : Option Memory :=
   match actions with
   | [] => some m
-  | a :: rest => (transition m a).bind fun m' => run m' rest transition
+  | a :: rest => (apply m a).bind fun m' => run m' rest
 
 /-- A checked view of the one accounting fold; a refused action refuses the sequence.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7), Q9.10. -/
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
 def SequencePermitted (m : Memory) (actions : List Action) : Prop := (run m actions).isSome = true
 
 /-- Bytes allocated for `lineage` by a sequence. -/
@@ -370,18 +391,17 @@ def resetOutflow (lineage : LineageId) (m : Memory) : Action → Nat
 
 /-- Bytes released by resets of `lineage` while executing a sequence from `m`. Each outflow comes
 from the actual intermediate state. An unsuccessful suffix contributes nothing. -/
-def resetBytes (lineage : LineageId) (m : Memory) (actions : List Action)
-    (transition : Memory → Action → Option Memory := apply) : Nat :=
+def resetBytes (lineage : LineageId) (m : Memory) (actions : List Action) : Nat :=
   match actions with
   | [] => 0
   | action :: rest =>
-      match transition m action with
+      match apply m action with
       | none => 0
-      | some m' => resetOutflow lineage m action + resetBytes lineage m' rest transition
+      | some m' => resetOutflow lineage m action + resetBytes lineage m' rest
 
 /-- Independent conservation obligation for a reset. The recorded outflow is not an input to the
 account transition, so a wrong record makes this predicate false rather than making the reset
-inadmissible. Cumulative history and both peaks must be conserved. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7), Q9.10;
+inadmissible. Cumulative history and both peaks must be conserved. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
 #decided-project-infoflow-2026-11-06 and #decided-project-memory-2026-11-06. -/
 def ResetConservation (before after : Account) (recordedOutflow : Nat) : Prop :=
   after.requested = before.requested ∧
@@ -390,14 +410,13 @@ def ResetConservation (before after : Account) (recordedOutflow : Nat) : Prop :=
 
 /-- Independent maximum of live bytes at entry and every successful intermediate state.
 This observer never reads either recorded peak field. A failed suffix has no successor state. -/
-def observedPeak (lineage : LineageId) (m : Memory) (actions : List Action)
-    (transition : Memory → Action → Option Memory := apply) : Nat :=
+def observedPeak (lineage : LineageId) (m : Memory) (actions : List Action) : Nat :=
   match actions with
   | [] => (m lineage).live
   | action :: rest =>
-      match transition m action with
+      match apply m action with
       | none => (m lineage).live
-      | some m' => max (m lineage).live (observedPeak lineage m' rest transition)
+      | some m' => max (m lineage).live (observedPeak lineage m' rest)
 
 /-- The named allocator boundary defines footprint from the lineage, entry memory and actions.
 No logical-byte theorem invents a footprint for an allocator that does not provide one. -/
@@ -417,16 +436,28 @@ structure Bound (α : Type) where
   status : BoundStatus
   deriving DecidableEq, Repr
 
-/-- An established bound is sound for `actual`; `notEstablished` asserts no bound. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7), Q9.10;
+/-- An established bound is sound for `actual`; `notEstablished` asserts no bound. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
 #decided-project-infoflow-2026-11-06 and #decided-project-memory-2026-11-06. -/
 def Bound.Sound {α : Type} [LE α] (actual : α) (b : Bound α) : Prop :=
   b.status = .boundEstablished → actual ≤ b.limit
 
 /-- An established footprint bound needs an allocator-defined footprint; no contract-defined value
-means that footprint evidence cannot be established. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7), Q9.10;
+means that footprint evidence cannot be established. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
 #decided-project-infoflow-2026-11-06 and #decided-project-memory-2026-11-06. -/
 def Bound.SoundOptional {α : Type} [LE α] (actual : Option α) (b : Bound α) : Prop :=
   b.status = .boundEstablished → ∃ a, actual = some a ∧ a ≤ b.limit
+
+/-- A signed interval for net live-byte change, with an independent evidence status.
+Authority: docs/decisions.md#decided-project-memory-2026-11-06, adopting MEMORY §1. -/
+structure SignedInterval where
+  lo : Int
+  hi : Int
+  status : BoundStatus
+  deriving DecidableEq, Repr
+
+/-- Both endpoints bound an established net change; unknown status asserts neither endpoint. -/
+def SignedInterval.Sound (actual : Int) (b : SignedInterval) : Prop :=
+  b.status = .boundEstablished → b.lo ≤ actual ∧ actual ≤ b.hi
 
 /-- Per-lineage facts for one function: bytes requested by that function, its net live-byte change,
 its peak logical bytes since entry, and footprint when the allocator contract defines one. Each has
@@ -434,22 +465,22 @@ its own status. -/
 structure LineageReport where
   lineage : LineageId
   requested : Bound Nat
-  netChange : Bound Int
+  netChange : SignedInterval
   peak : Bound Nat
   footprint : Bound Nat
 
 /-- Soundness of a lineage report against explicitly identified entry and exit accounts.
 The identity must agree with the report; numeric bounds cannot be relabelled. Requested bytes exclude
-requests made before entry. The peak is the maximum live bytes reached since `Account.enter`, not
-the historical maximum of the whole program. The caller applies `Account.enter` at function entry
-and does not reset the local peak again before the function exits. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7), Q9.10;
+requests made before entry. The peak is the maximum live bytes above the entry level, floored at zero.
+The internal local high-water mark is measured in absolute live bytes. The caller applies `Account.enter` at function entry
+and does not reset the local peak again before the function exits. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
 #decided-project-infoflow-2026-11-06 and #decided-project-memory-2026-11-06. -/
 def LineageReport.Sound (lineage : LineageId) (entry exit : Account) (footprint : Option Nat)
     (r : LineageReport) : Prop :=
   r.lineage = lineage ∧
     Bound.Sound (exit.requested - entry.requested) r.requested ∧
-    Bound.Sound ((exit.live : Int) - (entry.live : Int)) r.netChange ∧
-    Bound.Sound exit.functionPeak r.peak ∧ Bound.SoundOptional footprint r.footprint
+    SignedInterval.Sound ((exit.live : Int) - (entry.live : Int)) r.netChange ∧
+    Bound.Sound (exit.functionPeak - entry.live) r.peak ∧ Bound.SoundOptional footprint r.footprint
 
 /-- Instance. Concrete execution check evaluating `run` on an allocate/free/reset sequence from `Memory.empty`.
 
