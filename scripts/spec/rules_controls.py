@@ -19,6 +19,8 @@ base = (root / 'ConcreteSpec/Spec/Rules.lean').read_text().replace(
 # Keep the actual registry types and evidence wrappers, so every control exercises them.
 base = re.sub(r'def registeredRules : List RuleId :=.*?(?=\n/--)',
               'def registeredRules : List RuleId := []\n', base, flags=re.S)
+base = base.replace('import ConcreteSpec.Spec.Const\n', '').replace('import ConcreteSpec.Spec.Own\n', '')
+base = re.sub(r'namespace ConstRegistry.*?end ConstRegistry\n', '', base, flags=re.S)
 base = re.sub(r'namespace Own.Registry.*?end Own.Registry\n', '', base, flags=re.S)
 base = re.sub(r'def registeredRuleExamples : List RuleExample :=.*?(?=\nend ConcreteSpec.Core)',
               'def registeredRuleExamples : List RuleExample := []\n', base, flags=re.S)
@@ -57,12 +59,62 @@ def fixture(name, *, decl=rule, proof=proofs, reg=registry, evidence=links,
         check = subprocess.run(['bash', str(root / 'scripts/spec/rules_validate.sh'),
                                 str(listing), str(rows)], capture_output=True, text=True)
         output = check.stdout + check.stderr
-        if (reason is None and check.returncode != 0) or (reason is not None and
+        # These acceptance-only fixtures deliberately define a universally true rule.
+        # Require exactly its missing-refusal diagnostic: any invalid data fails.
+        if reason is None and evidence == '[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]':
+            expected = '  FAIL rule ConcreteSpec.Core.ok has no example marked Refused (rule `ConcreteSpec.Core.ok`)'
+            if check.returncode != 1 or output.strip() != expected.strip():
+                raise SystemExit(f'{name}: expected only missing refusal: {output}')
+        elif (reason is None and check.returncode != 0) or (reason is not None and
                 (check.returncode == 0 or reason not in output)):
             raise SystemExit(f'{name}: unexpected validator result {check.returncode}: {output}')
     count += 1
     print(f'  ok   {name}: {reason or "passes"}', flush=True)
 
+
+# Each fixture isolates one round-4 traversal bypass.
+for name, prelude, carrier, value in [
+    ('opaque-data-parameter', 'opaque hidden : Nat := 0\nstructure Carrier (n : Nat) where\n  data : Bool\n', 'Carrier hidden', '⟨true⟩'),
+    ('prop-field-family', '', 'PSigma (fun _ : Prop => Bool)', '⟨∀ n : Nat, n = n, true⟩'),
+    ('opaque-prop-field', 'opaque hidden : Prop := True\n', 'PSigma (fun _ : Prop => Bool)', '⟨hidden, true⟩'),
+    ('type-field-opaque-index', 'opaque hidden : Nat := 0\n', 'PSigma (fun _ : Type => Bool)', '⟨Fin hidden, true⟩'),
+    *[(f'opaque-index-in-{name}-parameter',
+       'opaque hidden : Nat := 0\ninductive Carrier : Nat → Type where\n  | mk : Carrier hidden\n', carrier, value)
+      for name, carrier, value in [
+          ('sum', 'Sum Bool (Carrier hidden)', 'Sum.inl true'),
+          ('option', 'Option (Carrier hidden)', 'none'),
+          ('list', 'List (Carrier hidden)', '[]'),
+          ('prod', 'Prod Bool (Option (Carrier hidden))', '⟨true, none⟩')]],
+]:
+    fixture(name, decl=prelude + '/-- The rule (Q9.1). -/\ndef ok (_p : ' + carrier + ') : Prop := True\n',
+            proof='theorem accepts : RuleAccepted ok (' + value + ' : ' + carrier + ') := True.intro\n',
+            evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]',
+            reason='no concrete rule acceptance/refusal proposition')
+
+# Direct fields isolate the sort-field refusal from PSigma's function parameter.
+for name, field_type, field_value, prelude in [
+    ('direct-prop-field-family', 'Prop', '∀ n : Nat, n = n', ''),
+    ('direct-opaque-prop-field', 'Prop', 'hidden', 'opaque hidden : Prop := True\n'),
+    ('direct-type-field-opaque-index', 'Type', 'Fin hidden', 'opaque hidden : Nat := 0\n'),
+]:
+    fixture(name,
+            decl=prelude + 'structure Carrier where\n  runtime : ' + field_type + '\n  data : Bool\n'
+                 '/-- The rule (Q9.1). -/\ndef ok (_p : Carrier) : Prop := True\n',
+            proof='theorem accepts : RuleAccepted ok ⟨' + field_value + ', true⟩ := True.intro\n',
+            evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]',
+            reason='no concrete rule acceptance/refusal proposition')
+# Concrete type and data parameters remain admissible, including empty containers.
+for name, prelude, carrier, value in [
+    ('concrete-data-parameter', 'structure Carrier (n : Nat) where\n  data : Bool\n', 'Carrier 0', '⟨true⟩'),
+    ('concrete-sum-parameter', '', 'Sum Bool (Fin 2)', 'Sum.inl true'),
+    ('concrete-option-parameter', '', 'Option (Fin 2)', 'none'),
+    ('concrete-list-parameter', '', 'List (Fin 2)', '[]'),
+    ('concrete-prod-parameter', '', 'Prod Bool (Option (Fin 2))', '⟨true, none⟩'),
+]:
+    fixture(name,
+            decl=prelude + '/-- The rule (Q9.1). -/\ndef ok (_p : ' + carrier + ') : Prop := True\n',
+            proof='theorem accepts : RuleAccepted ok (' + value + ' : ' + carrier + ') := True.intro\n',
+            evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]')
 
 fixture('good')
 fixture('empty', decl='', proof='', reg='[]', evidence='[]')
@@ -81,7 +133,126 @@ fixture('closed-opaque-input', decl=rule.replace('n = 0', 'True').replace('(n : 
         proof='theorem accepts : RuleAccepted ok hidden := True.intro\n',
         evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]',
         reason='no concrete rule acceptance/refusal proposition')
+fixture('irreducible-data',
+        decl=rule.replace('n = 0', 'True').replace('(n : Nat)', '(_n : Nat)') +
+             '@[irreducible] def hidden : Nat := 0\n',
+        proof='theorem accepts : RuleAccepted ok hidden := True.intro\n',
+        evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]',
+        reason='no concrete rule acceptance/refusal proposition')
+# Trusted theorems can still describe proposition inputs or unknown runtime data.
+fixture('proposition-input',
+        decl='/-- The rule (Q9.1). -/\ndef ok (_p : True) : Prop := True\nopaque hidden : True := True.intro\n',
+        proof='theorem accepts : RuleAccepted ok hidden := True.intro\n',
+        evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]',
+        reason='no concrete rule acceptance/refusal proposition')
+for name, carrier, value in [
+    ('opaque-constructor-parameter',
+     'structure Carrier (p : Prop) : Type where\n  valid : p\n',
+     '(⟨rfl⟩ : Carrier (hidden = hidden))'),
+    ('opaque-dependent-proof-proposition',
+     'structure Carrier : Type where\n  data : Nat\n  valid : hidden = hidden ∧ data = data\n',
+     '(⟨0, ⟨rfl, rfl⟩⟩ : Carrier)'),
+    ('opaque-constructor-index',
+     'inductive Carrier : Nat → Type where\n  | mk : Carrier hidden\n',
+     'Carrier.mk'),
+]:
+    fixture(name,
+            decl='opaque hidden : Nat := 0\n' + carrier +
+                 '/-- The rule (Q9.1). -/\ndef ok (_p : ' +
+                 ('Carrier (hidden = hidden)' if name == 'opaque-constructor-parameter' else
+                  'Carrier hidden' if name == 'opaque-constructor-index' else 'Carrier') +
+                 ') : Prop := True\n',
+            proof='theorem accepts : RuleAccepted ok ' + value + ' := True.intro\n',
+            evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]',
+            reason=('no concrete rule acceptance/refusal proposition'
+                    if name != 'opaque-dependent-proof-proposition' else None))
+fixture('aliased-opaque-proof-proposition',
+        decl='opaque hidden : Nat := 0\ndef aliasHidden : Nat := hidden\n'
+             'structure Carrier : Type where\n  valid : aliasHidden = aliasHidden\n'
+             '/-- The rule (Q9.1). -/\ndef ok (_p : Carrier) : Prop := True\n',
+        proof='theorem accepts : RuleAccepted ok ⟨rfl⟩ := True.intro\n',
+        evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]')
+fixture('erased-opaque-data',
+        decl=rule + 'opaque hidden : Nat := 0\n',
+        proof=proofs.replace('RuleAccepted ok 0', 'RuleAccepted ok ((fun _ : Nat => 0) hidden)'))
+fixture('irreducible-constructor-parameter',
+        decl='@[irreducible] def hidden : Nat := 0\n'
+             'structure Carrier (p : Prop) : Type where\n  valid : p\n'
+             '/-- The rule (Q9.1). -/\ndef ok (_p : Carrier (hidden = hidden)) : Prop := True\n',
+        proof='theorem accepts : RuleAccepted ok ⟨rfl⟩ := True.intro\n',
+        evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]',
+        reason='no concrete rule acceptance/refusal proposition')
+# Closed proof types and erased annotations do not change the reduced data example.
+for name, extra, carrier, value in [
+    ('theorem-proposition-body', 'theorem witness : True := let _ := hidden; True.intro\n',
+     'structure Carrier (p : True) where\n  data : Bool\n', '(⟨true⟩ : Carrier witness)'),
+    ('theorem-proof-field-body', 'theorem witness : True := let _ := hidden; True.intro\n',
+     'structure Carrier : Type where\n  data : Bool\n  valid : True\n', '(⟨true, witness⟩ : Carrier)'),
+    ('constructor-erased-domain', '',
+     'inductive Carrier where\n  | mk : (let _ := hidden; Bool) → Carrier\n', '(Carrier.mk true)'),
+    ('inductive-proof-domain', '',
+     'inductive P : Prop where\n  | mk : (let _ := hidden; False) → P\n'
+     'structure Carrier : Type where\n  data : Bool\n  valid : P → True\n', '(⟨true, fun _ => True.intro⟩ : Carrier)'),
+    ('let-proof-field-domain', '',
+     'structure Carrier : Type where\n  data : Bool\n  valid : (let _ := hidden; True)\n', '(⟨true, True.intro⟩ : Carrier)'),
+]:
+    fixture(name, decl='opaque hidden : Nat := 0\n' + extra + carrier +
+            '/-- The rule (Q9.1). -/\ndef ok (_p : ' +
+            ('Carrier witness' if name == 'theorem-proposition-body' else 'Carrier') + ') : Prop := True\n',
+            proof='theorem accepts : RuleAccepted ok ' + value + ' := True.intro\n',
+            evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]')
+fixture('nested-definition-signature',
+        decl=rule + 'opaque hidden : Nat := 0\ndef aliasHidden : (let _ := hidden; Nat) := 0\n',
+        proof=proofs.replace('RuleAccepted ok 0', 'RuleAccepted ok (aliasHidden + 0)'))
+fixture('wrapper-erased-type', decl=rule + 'opaque hidden : Nat := 0\n',
+        proof=proofs.replace('RuleAccepted ok 0', '@RuleAccepted (let _ := hidden; Nat) ok 0'))
+# Beta-erasure leaves a closed True proof field and concrete Bool data.
+fixture('beta-erased-proof-field-domain',
+        decl='opaque hidden : Nat := 0\n'
+             'structure Carrier : Type where\n  data : Bool\n'
+             '  valid : (fun _ : Nat => True) hidden\n'
+             '/-- The rule (Q9.1). -/\ndef ok (_p : Carrier) : Prop := True\n',
+        proof='theorem accepts : RuleAccepted ok (⟨true, True.intro⟩ : Carrier) := True.intro\n',
+        evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]')
+
+# ModuleId keeps its nonempty-path proof while all identity data remains inspectable.
+fixture('module-id-proof-field',
+        decl='/-- The rule (Q9.1). -/\ndef ok (_m : ModuleId) : Prop := True\n',
+        proof='theorem accepts : RuleAccepted ok (⟨⟨⟨"pkg"⟩, ⟨⟨"v1"⟩⟩⟩, [⟨"main"⟩], by decide⟩ : ModuleId) := True.intro\n',
+        evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]')
+# A dictionary parameter has no special exemption for its function fields.
+fixture('function-dictionary-parameter',
+        decl='structure Dictionary where\n  f : Nat → Nat\n'
+             'structure Carrier (d : Dictionary) where\n  data : Bool\n'
+             '/-- The rule (Q9.1). -/\ndef ok (_p : Carrier ⟨id⟩) : Prop := True\n',
+        proof='theorem accepts : RuleAccepted ok ⟨true⟩ := True.intro\n',
+        evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]',
+        reason='no concrete rule acceptance/refusal proposition')
+
 fixture('computed-concrete-input', proof=proofs.replace('RuleAccepted ok 0', 'RuleAccepted ok (1 - 1)'))
+# Constant identities carry closed path-validity proofs. Proof irrelevance must not
+# exempt the adjacent runtime data from constructor/literal normalization.
+proof_carrier = ('structure ProofCarrier where\n  data : Nat\n  valid : data = data\n'
+                 '/-- The rule (Q9.1). -/\ndef ok (p : ProofCarrier) : Prop := p.data = 0\n')
+fixture('closed-proof-field', decl=proof_carrier,
+        proof='theorem accepts : RuleAccepted ok ⟨0, by decide⟩ := rfl\n'
+              'theorem refuses : RuleRefused ok ⟨1, by decide⟩ := by intro h; cases h\n')
+fixture('transparent-theorem-proof-field', decl=proof_carrier,
+        proof='theorem zeroWitness : 0 = 0 := rfl\n'
+              'theorem oneWitness : 1 = 1 := rfl\n'
+              'theorem accepts : RuleAccepted ok ⟨0, zeroWitness⟩ := rfl\n'
+              'theorem refuses : RuleRefused ok ⟨1, oneWitness⟩ := by intro h; cases h\n')
+fixture('proof-field-with-opaque-data',
+        decl=proof_carrier + 'opaque hidden : Nat := 0\n',
+        proof='theorem accepts : RuleAccepted ok ⟨hidden - hidden, by rfl⟩ := Nat.sub_self hidden\n',
+        evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]',
+        reason='no concrete rule acceptance/refusal proposition')
+fixture('opaque-core-proof',
+        decl='structure Carrier : Type where\n  data : Nat\n  valid : "a" ++ "b" = "ab"\n'
+             '/-- The rule (Q9.1). -/\ndef ok (p : Carrier) : Prop := p.data = 0\n',
+        proof='opaque witness : "a" ++ "b" = "ab" := rfl\n'
+              'theorem accepts : RuleAccepted ok ⟨0, witness⟩ := rfl\n'
+              'theorem refuses : RuleRefused ok ⟨1, witness⟩ := by intro h; cases h\n')
 fixture('wrong-rule', evidence=links.replace('`ConcreteSpec.Core.ok', '`ConcreteSpec.Core.other'),
         reg='[⟨`ConcreteSpec.Core.ok, 1⟩, ⟨`ConcreteSpec.Core.other, 1⟩]', reason='does not use linked rule')
 fixture('unregistered', evidence=links.replace('`ConcreteSpec.Core.ok', '`ConcreteSpec.Core.missing'),
@@ -154,4 +325,5 @@ check = subprocess.run(['bash', str(root / 'scripts/spec/rules_validate.sh'), st
 writer.join(1)
 assert check.returncode == 0 and 'recovered 0.1s' in check.stdout and '1 registered rules' in check.stdout, check
 print('  ok   hung-first-attempt: retry validates real export and reports recovered')
+
 print(f'SPEC-RULES controls: PASS={count + 3}')
