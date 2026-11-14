@@ -35,7 +35,11 @@ def RuleRefused {Input : Sort _} (rule : Input → Prop) (input : Input) : Prop 
 
 /-- A named conformance theorem linked to its owning rule. Its proposition supplies the verdict;
 there is no separately assigned verdict. Inputs must normalize to closed constructor/literal data,
-with no parameters, axioms, opaque computations or unresolved variables. -/
+after bounded reduction with default transparency, with no free/metavariables, axioms or
+stuck/opaque terms in data positions. Failure to finish reduction refuses the input.
+Proof fields are skipped; their propositions and proposition-valued type indices must be
+closed. The kernel checks proofs; the axiom inventory and trust ban check their trust.
+Proposition-typed inputs and unreduced families are refused. -/
 structure RuleExample where
   rule : Lean.Name
   declaration : Lean.Name

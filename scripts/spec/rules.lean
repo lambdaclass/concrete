@@ -4,72 +4,52 @@ import Lean
 open Lean Elab Command
 
 -- EXPORTER BODY
-/-- Inspect the complete declaration graph before reduction can erase dependencies.
-Every kernel declaration kind has an explicit policy. Signatures, theorem proofs,
-mutual inductives and recursor equations share one visited set, including cycles. -/
-def concreteType (e : Expr) : MetaM Bool := do
-  if e.hasFVar || e.hasMVar || e.hasLooseBVars then return false
-  let mut pending := e.getUsedConstants
-  let mut seen : NameSet := {}
-  while !pending.isEmpty do
-    let n := pending.back!
-    pending := pending.pop
-    if seen.contains n then continue
-    seen := seen.insert n
-    let some ci := (← getEnv).find? n | return false
-    if ci.isUnsafe then return false
-    pending := pending ++ ci.type.getUsedConstants
-    match ci with
-    | .opaqueInfo _ => return false
-    | .axiomInfo _ =>
-      if ![``propext, ``Classical.choice, ``Quot.sound].contains n then return false
-    | .defnInfo d =>
-      if (← getReducibilityStatus n) == .irreducible then return false
-      pending := pending ++ d.value.getUsedConstants
-    | .thmInfo t => pending := pending ++ t.value.getUsedConstants
-    | .inductInfo i => pending := pending ++ i.all.toArray ++ i.ctors.toArray
-    | .ctorInfo c => pending := pending.push c.induct
-    | .recInfo r =>
-      pending := pending ++ r.all.toArray
-      for rule in r.rules do
-        pending := (pending.push rule.ctor) ++ rule.rhs.getUsedConstants
-    | .quotInfo q =>
-      -- Quotient primitives have kernel computation rules, not Lean bodies.
-      -- Their signatures above remain part of the graph.
-      match q.kind with
-      | .type | .ctor | .lift | .ind => pure ()
-  return true
+/-- One bounded traversal of reduced data and its type arguments. Types and proof
+propositions must be closed; proof bodies do not identify the example and are skipped.
+Carrier parameters are closed type metadata, not data fields (they can include
+function-valued typeclass dictionaries). Non-propositional indices and fields must
+themselves be constructor/literal data.
+The fuel bounds tree depth; Lean's heartbeat bound also bounds each reduction. -/
+def concreteData (input : Expr) : MetaM Bool := do
+  let rec visit (fuel : Nat) (e : Expr) (typePosition : Bool) : MetaM Bool := do
+    let fuel + 1 := fuel | return false
+    if e.hasFVar || e.hasMVar || e.hasLooseBVars then return false
+    if ← Meta.isProof e then
+      -- Only callers inspecting constructor arguments may skip a proof field.
+      return typePosition && !(← Meta.inferType e).hasFVar &&
+        !(← Meta.inferType e).hasMVar && !(← Meta.inferType e).hasLooseBVars
+    if typePosition && (← Meta.isProp e) then return true
+    let e ← Meta.withTransparency .default <| Meta.whnf e
+    if e.hasFVar || e.hasMVar || e.hasLooseBVars then return false
+    if typePosition then
+      if e.isSort then return true
+      let .const n _ := e.getAppFn | return false
+      let some (.inductInfo i) := (← getEnv).find? n | return false
+      for arg in e.getAppArgs[i.numParams:] do
+        let proofOrType ← if ← Meta.isProof arg then pure true
+          else pure (← Meta.whnf (← Meta.inferType arg)).isSort
+        if !(← visit fuel arg proofOrType) then return false
+      return true
+    match e with
+    | .lit _ => return true
+    | _ =>
+      let .const n _ := e.getAppFn | return false
+      let some (.ctorInfo c) := (← getEnv).find? n | return false
+      let args := e.getAppArgs
+      if args.size != c.numParams + c.numFields then return false
+      if !(← visit fuel (← Meta.inferType e) true) then return false
+      for arg in args[c.numParams:] do
+        let ty ← Meta.inferType arg
+        if ← Meta.isProof arg then
+          if ty.hasFVar || ty.hasMVar || ty.hasLooseBVars then return false
+        else if !(← visit fuel arg (← Meta.whnf ty).isSort) then return false
+      return true
+  try
+    if ← Meta.isProof input then return false
+    visit 1024 input false
+  catch _ => return false
 
-/-- Concrete data normalizes completely to constructors and literals. Proofs are
-permitted only as fields of concrete data, and only after checking their proposition.
-The declaration traversal also checks proof terms before reduction. -/
-partial def concreteData (e : Expr) : MetaM Bool := do
-  if e.hasFVar || e.hasMVar || e.hasLooseBVars then return false
-  if ← Meta.isProof e then return false
-  if !(← concreteType e) || !(← concreteType (← Meta.inferType e)) then return false
-  let e ← Meta.reduce e
-  match e with
-  | .lit _ => return true
-  | _ =>
-    let .const n _ := e.getAppFn | return false
-    let some (.ctorInfo c) := (← getEnv).find? n | return false
-    let args := e.getAppArgs
-    if args.size != c.numParams + c.numFields then return false
-    -- Instantiate each declared domain before inspecting the next one. Inferred
-    -- argument types may be definitionally equal but omit an erased annotation.
-    let mut signature ← Meta.inferType e.getAppFn
-    for arg in args do
-      let .forallE _ domain body _ := signature | return false
-      if !(← concreteType domain) then return false
-      signature := body.instantiate1 arg
-    for arg in args[:c.numParams] do
-      if !(← concreteType arg) then return false
-    for arg in args[c.numParams:] do
-      if ← Meta.isProof arg then
-        if !(← concreteType arg) || !(← concreteType (← Meta.inferType arg)) then return false
-      else if !(← concreteData arg) then return false
-    return true
-
+set_option maxHeartbeats 200000 in
 #eval show CommandElabM Unit from do
   let env ← getEnv
   for r in ConcreteSpec.Core.registeredRules do
@@ -81,11 +61,12 @@ partial def concreteData (e : Expr) : MetaM Bool := do
     let proved := match ci with
       | some (.thmInfo _) => true
       | _ => false
-    -- Trust and concreteness use the same closed graph policy, including opaque
-    -- dependencies that Lean.collectAxioms intentionally does not enumerate.
-    let trusted ← liftTermElabM do
-      if ci.isNone then return false
-      concreteType (mkConst e.declaration)
+    -- Trust is independently inventoried, not inferred from reducibility.
+    let trusted ← match ci with
+      | none => pure false
+      | some _ => do
+        let axioms ← collectAxioms e.declaration
+        pure (axioms.all fun n => [``propext, ``Classical.choice, ``Quot.sound].contains n)
     let (verdict, usesRule) ← liftTermElabM do
       let some c := ci | return ("Invalid", false)
       if !c.levelParams.isEmpty then return ("Invalid", false)
@@ -96,7 +77,7 @@ partial def concreteData (e : Expr) : MetaM Bool := do
         else if head == some ``ConcreteSpec.Core.RuleRefused then "Refused" else "Invalid"
       if verdict == "Invalid" || args.size != 3 then return ("Invalid", false)
       let linked := args[1]!.isConstOf e.rule
-      let concrete ← if trusted && (← concreteType args[0]!) then concreteData args[2]! else pure false
+      let concrete ← if trusted then concreteData args[2]! else pure false
       return (if concrete then verdict else "Invalid", linked)
     IO.println (Json.compress (Json.mkObj [("kind", "example"), ("rule", toString e.rule),
       ("name", toString e.declaration),
