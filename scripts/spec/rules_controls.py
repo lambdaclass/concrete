@@ -127,6 +127,33 @@ fixture('irreducible-constructor-parameter',
         proof='theorem accepts : RuleAccepted ok ⟨rfl⟩ := True.intro\n',
         evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]',
         reason='no concrete rule acceptance/refusal proposition')
+# These signatures retain dependencies that reduction or proof irrelevance erases.
+for name, extra, carrier, value in [
+    ('theorem-proposition-body', 'theorem witness : True := let _ := hidden; True.intro\n',
+     'structure Carrier (p : True) where\n  data : Bool\n', '(⟨true⟩ : Carrier witness)'),
+    ('theorem-proof-field-body', 'theorem witness : True := let _ := hidden; True.intro\n',
+     'structure Carrier where\n  data : Bool\n  valid : True\n', '(⟨true, witness⟩ : Carrier)'),
+    ('constructor-erased-domain', '',
+     'inductive Carrier where\n  | mk : (let _ := hidden; Bool) → Carrier\n', '(Carrier.mk true)'),
+    ('inductive-proof-domain', '',
+     'inductive P : Prop where\n  | mk : (let _ := hidden; False) → P\n'
+     'structure Carrier where\n  data : Bool\n  valid : P → True\n', '(⟨true, fun _ => True.intro⟩ : Carrier)'),
+    ('let-proof-field-domain', '',
+     'structure Carrier where\n  data : Bool\n  valid : (let _ := hidden; True)\n', '(⟨true, True.intro⟩ : Carrier)'),
+]:
+    fixture(name, decl='opaque hidden : Nat := 0\n' + extra + carrier +
+            '/-- The rule (Q9.1). -/\ndef ok (_p : ' +
+            ('Carrier witness' if name == 'theorem-proposition-body' else 'Carrier') + ') : Prop := True\n',
+            proof='theorem accepts : RuleAccepted ok ' + value + ' := True.intro\n',
+            evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]',
+            reason='no concrete rule acceptance/refusal proposition')
+fixture('nested-definition-signature',
+        decl=rule + 'opaque hidden : Nat := 0\ndef aliasHidden : (let _ := hidden; Nat) := 0\n',
+        proof=proofs.replace('RuleAccepted ok 0', 'RuleAccepted ok (aliasHidden + 0)'),
+        reason='no concrete rule acceptance/refusal proposition')
+fixture('wrapper-erased-type', decl=rule + 'opaque hidden : Nat := 0\n',
+        proof=proofs.replace('RuleAccepted ok 0', '@RuleAccepted (let _ := hidden; Nat) ok 0'),
+        reason='no concrete rule acceptance/refusal proposition')
 fixture('computed-concrete-input', proof=proofs.replace('RuleAccepted ok 0', 'RuleAccepted ok (1 - 1)'))
 # Constant identities carry closed path-validity proofs. Proof irrelevance must not
 # exempt the adjacent runtime data from constructor/literal normalization.
@@ -135,6 +162,11 @@ proof_carrier = ('structure ProofCarrier where\n  data : Nat\n  valid : data = d
 fixture('closed-proof-field', decl=proof_carrier,
         proof='theorem accepts : RuleAccepted ok ⟨0, by decide⟩ := rfl\n'
               'theorem refuses : RuleRefused ok ⟨1, by decide⟩ := by intro h; cases h\n')
+fixture('transparent-theorem-proof-field', decl=proof_carrier,
+        proof='theorem zeroWitness : 0 = 0 := rfl\n'
+              'theorem oneWitness : 1 = 1 := rfl\n'
+              'theorem accepts : RuleAccepted ok ⟨0, zeroWitness⟩ := rfl\n'
+              'theorem refuses : RuleRefused ok ⟨1, oneWitness⟩ := by intro h; cases h\n')
 fixture('proof-field-with-opaque-data',
         decl=proof_carrier + 'opaque hidden : Nat := 0\n',
         proof='theorem accepts : RuleAccepted ok ⟨hidden - hidden, by rfl⟩ := Nat.sub_self hidden\n',
@@ -212,4 +244,17 @@ check = subprocess.run(['bash', str(root / 'scripts/spec/rules_validate.sh'), st
 writer.join(1)
 assert check.returncode == 0 and 'recovered 0.1s' in check.stdout and '1 registered rules' in check.stdout, check
 print('  ok   hung-first-attempt: retry validates real export and reports recovered')
+# Lean beta-reduces this annotation before storing the constructor signature.
+# This regression requires source provenance; the declaration graph alone cannot
+# distinguish it from a field explicitly declared as True. Keep the desired
+# refusal visible rather than silently accepting the erased source dependency.
+fixture('beta-erased-proof-field-domain',
+        decl='opaque hidden : Nat := 0\n'
+             'structure Carrier where\n  data : Bool\n'
+             '  valid : (fun _ : Nat => True) hidden\n'
+             '/-- The rule (Q9.1). -/\ndef ok (_p : Carrier) : Prop := True\n',
+        proof='theorem accepts : RuleAccepted ok (⟨true, True.intro⟩ : Carrier) := True.intro\n',
+        evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]',
+        reason='no concrete rule acceptance/refusal proposition')
+
 print(f'SPEC-RULES controls: PASS={count + 3}')

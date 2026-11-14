@@ -4,13 +4,11 @@ import Lean
 open Lean Elab Command
 
 -- EXPORTER BODY
-/-- Check closed type-level syntax without ignoring constructor parameters,
-indices or proof-field propositions. Opaque definitions and axioms are not concrete
-syntax, even when their values would be irrelevant to the evidence theorem. -/
+/-- Inspect the complete declaration graph before reduction can erase dependencies.
+Every kernel declaration kind has an explicit policy. Signatures, theorem proofs,
+mutual inductives and recursor equations share one visited set, including cycles. -/
 def concreteType (e : Expr) : MetaM Bool := do
   if e.hasFVar || e.hasMVar || e.hasLooseBVars then return false
-  -- Follow definition bodies before reduction, so an alias or an erasing
-  -- computation cannot hide an opaque dependency. A visited set bounds shared graphs.
   let mut pending := e.getUsedConstants
   let mut seen : NameSet := {}
   while !pending.isEmpty do
@@ -18,18 +16,33 @@ def concreteType (e : Expr) : MetaM Bool := do
     pending := pending.pop
     if seen.contains n then continue
     seen := seen.insert n
-    match (← getEnv).find? n with
-    | some (.opaqueInfo _) | some (.axiomInfo _) => return false
-    | some (.defnInfo d) =>
+    let some ci := (← getEnv).find? n | return false
+    if ci.isUnsafe then return false
+    pending := pending ++ ci.type.getUsedConstants
+    match ci with
+    | .opaqueInfo _ => return false
+    | .axiomInfo _ =>
+      if ![``propext, ``Classical.choice, ``Quot.sound].contains n then return false
+    | .defnInfo d =>
       if (← getReducibilityStatus n) == .irreducible then return false
       pending := pending ++ d.value.getUsedConstants
-    | none => return false
-    | _ => pure ()
+    | .thmInfo t => pending := pending ++ t.value.getUsedConstants
+    | .inductInfo i => pending := pending ++ i.all.toArray ++ i.ctors.toArray
+    | .ctorInfo c => pending := pending.push c.induct
+    | .recInfo r =>
+      pending := pending ++ r.all.toArray
+      for rule in r.rules do
+        pending := (pending.push rule.ctor) ++ rule.rhs.getUsedConstants
+    | .quotInfo q =>
+      -- Quotient primitives have kernel computation rules, not Lean bodies.
+      -- Their signatures above remain part of the graph.
+      match q.kind with
+      | .type | .ctor | .lift | .ind => pure ()
   return true
 
 /-- Concrete data normalizes completely to constructors and literals. Proofs are
 permitted only as fields of concrete data, and only after checking their proposition.
-The evidence theorem's separate transitive axiom check covers the proof terms. -/
+The declaration traversal also checks proof terms before reduction. -/
 partial def concreteData (e : Expr) : MetaM Bool := do
   if e.hasFVar || e.hasMVar || e.hasLooseBVars then return false
   if ← Meta.isProof e then return false
@@ -42,11 +55,18 @@ partial def concreteData (e : Expr) : MetaM Bool := do
     let some (.ctorInfo c) := (← getEnv).find? n | return false
     let args := e.getAppArgs
     if args.size != c.numParams + c.numFields then return false
+    -- Instantiate each declared domain before inspecting the next one. Inferred
+    -- argument types may be definitionally equal but omit an erased annotation.
+    let mut signature ← Meta.inferType e.getAppFn
+    for arg in args do
+      let .forallE _ domain body _ := signature | return false
+      if !(← concreteType domain) then return false
+      signature := body.instantiate1 arg
     for arg in args[:c.numParams] do
       if !(← concreteType arg) then return false
     for arg in args[c.numParams:] do
       if ← Meta.isProof arg then
-        if !(← concreteType (← Meta.inferType arg)) then return false
+        if !(← concreteType arg) || !(← concreteType (← Meta.inferType arg)) then return false
       else if !(← concreteData arg) then return false
     return true
 
@@ -58,14 +78,17 @@ partial def concreteData (e : Expr) : MetaM Bool := do
       ("rev", r.rev), ("exists", toJson (env.contains r.name)), ("doc", doc)]))
   for e in ConcreteSpec.Core.registeredRuleExamples do
     let ci := env.find? e.declaration
-    let axioms ← match ci with
-      | some _ => liftCoreM (collectAxioms e.declaration)
-      | none => pure #[]
     let proved := match ci with
       | some (.thmInfo _) => true
       | _ => false
+    -- Trust and concreteness use the same closed graph policy, including opaque
+    -- dependencies that Lean.collectAxioms intentionally does not enumerate.
+    let trusted ← liftTermElabM do
+      if ci.isNone then return false
+      concreteType (mkConst e.declaration)
     let (verdict, usesRule) ← liftTermElabM do
       let some c := ci | return ("Invalid", false)
+      if !c.levelParams.isEmpty then return ("Invalid", false)
       let ty := c.type
       let args := ty.getAppArgs
       let head := ty.getAppFn.constName?
@@ -73,9 +96,8 @@ partial def concreteData (e : Expr) : MetaM Bool := do
         else if head == some ``ConcreteSpec.Core.RuleRefused then "Refused" else "Invalid"
       if verdict == "Invalid" || args.size != 3 then return ("Invalid", false)
       let linked := args[1]!.isConstOf e.rule
-      let concrete ← concreteData args[2]!
+      let concrete ← if trusted && (← concreteType args[0]!) then concreteData args[2]! else pure false
       return (if concrete then verdict else "Invalid", linked)
-    let trusted := axioms.all fun a => [``propext, ``Classical.choice, ``Quot.sound].contains a
     IO.println (Json.compress (Json.mkObj [("kind", "example"), ("rule", toString e.rule),
       ("name", toString e.declaration),
       ("verdict", verdict),
