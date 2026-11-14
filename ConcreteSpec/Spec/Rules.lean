@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.Const
 import ConcreteSpec.Spec.Ident
 import ConcreteSpec.Spec.Own
 import ConcreteSpec.Spec.Leak
@@ -20,7 +21,7 @@ namespace ConcreteSpec.Core
 /-- Diagnostic rule identities, in specification order. Own and C7 judgments are checked views of their
 single owning definitions. C7 proof links are resolved by the exporter, keeping Proofs out of Spec. -/
 def registeredRules : List RuleId :=
-  [⟨``Own.OwnerPermitted, 1⟩, ⟨``Own.LoanPermitted, 1⟩,
+  [⟨``ConstsPermitted, 1⟩, ⟨``Own.OwnerPermitted, 1⟩, ⟨``Own.LoanPermitted, 1⟩,
    ⟨``Own.EndPermitted, 1⟩, ⟨``Own.MovePermitted, 1⟩,
    ⟨``Own.DropPermitted, 1⟩, ⟨``Own.LeavePermitted, 1⟩,
    ⟨``Leak.ReleasePolicy.Permits, 1⟩,
@@ -46,12 +47,39 @@ def RuleAccepted {Input : Sort _} (rule : Input → Prop) (input : Input) : Prop
 def RuleRefused {Input : Sort _} (rule : Input → Prop) (input : Input) : Prop :=
   ¬ rule input
 
-/-- A named conformance theorem linked to its owning rule. Its proposition supplies the verdict;
-there is no separately assigned verdict. Inputs must normalize to closed constructor/literal data,
-with no parameters, axioms, opaque computations or unresolved variables. -/
+/-- A named conformance theorem linked to its owning rule. Its proposition supplies the verdict.
+An inspectable example reduces, with default transparency, to closed constructor/literal data.
+Traverse every argument of every constructor application, including parameters and dictionaries,
+without slicing: skip proofs (terms whose type is a proposition); recursively check every other
+argument. Data terms must reduce to constructor/literal trees. Type terms in parameters or indices
+must reduce to closed sort/inductive type expressions, with every argument checked by this same
+rule. Runtime fields whose type is a sort, including Prop and Type fields, are refused outright.
+Free variables, metavariables, stuck terms, unreduced families and exhausted bounds are refused.
+Top-level proof, proposition and type inputs are refused. The kernel and trust gates own proofs;
+proof bodies do not identify the example. -/
 structure RuleExample where
   rule : Lean.Name
   declaration : Lean.Name
+
+namespace ConstRegistry
+
+/-- Instance: a populated dependency environment supports arithmetic in a later constant. -/
+theorem accepted : RuleAccepted ConstsPermitted
+    (3, [⟨ConstDemo.cid "BASE", .int .u8, .int .u8 2⟩,
+         ⟨ConstDemo.cid "NEXT", .int .u8,
+           .plain .add (.ref (ConstDemo.cid "BASE")) (.int .u8 1)⟩]) := by
+  unfold RuleAccepted ConstsPermitted
+  decide
+
+/-- Instance: the same dependency setup refuses overflow in an unused initializer. -/
+theorem refused : RuleRefused ConstsPermitted
+    (3, [⟨ConstDemo.cid "BASE", .int .u8, .int .u8 255⟩,
+         ⟨ConstDemo.cid "NEXT", .int .u8,
+           .plain .add (.ref (ConstDemo.cid "BASE")) (.int .u8 1)⟩]) := by
+  unfold RuleRefused ConstsPermitted
+  decide
+
+end ConstRegistry
 
 namespace Own.Registry
 
@@ -110,7 +138,9 @@ end Own.Registry
 
 /-- Complete conformance links, populated alongside the owning rules. -/
 def registeredRuleExamples : List RuleExample :=
-  [⟨``Own.OwnerPermitted, ``Own.Registry.ownerAccepted⟩,
+  [⟨``ConstsPermitted, ``ConstRegistry.accepted⟩,
+   ⟨``ConstsPermitted, ``ConstRegistry.refused⟩,
+   ⟨``Own.OwnerPermitted, ``Own.Registry.ownerAccepted⟩,
    ⟨``Own.OwnerPermitted, ``Own.Registry.ownerRefused⟩,
    ⟨``Own.LoanPermitted, ``Own.Registry.loanAccepted⟩,
    ⟨``Own.LoanPermitted, ``Own.Registry.loanRefused⟩,

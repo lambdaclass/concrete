@@ -1,4 +1,5 @@
 import ConcreteSpec.Spec.Leak
+import ConcreteSpec.Spec.Const
 import ConcreteSpec.Spec.Own
 import ConcreteSpec.Spec.Rules
 import ConcreteSpec.Spec.Hybrid
