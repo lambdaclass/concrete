@@ -3377,6 +3377,8 @@ ok tell me again the options choose the best long term options for everything
   settle the exact preconditions. Confirmation of these choices under this delegation is queued
   below; no additional path-character policy, unit/char admission, or rule granularity follows.
 
+  Forward note: the [2026-11-14 trap-sites and law-tests confirmation](#decided-2026-11-14-trap-sites-and-law-tests) resolves only the C6 core and Q-SUBJ rows within its stated scope.
+
   **Later disposition of report §3.5 (classification vocabulary).** The taxonomy hold
   is answered by the [2026-11-13 proof-label convention](#decided-2026-11-13-proof-labels),
   within that entry's stated scope. This does not resolve the ten delegated choices above.
@@ -3443,6 +3445,78 @@ yes it's okay
   design are not covered by this answer. They remain governed by existing records or
   open; the mention of a planned check does not approve its design. The explanation's
   account of earlier approvals does not independently settle D4's held delegated choices.
+
+- <a id="decided-2026-11-14-trap-sites-and-law-tests"></a>**Trap sites and law tests (2026-11-14).**
+  The owner confirms C6 (a) and Q-SUBJ (a), with the three additions in the
+  coordinator's follow-up below.
+
+  Provenance: session `e2c54e65-31b5-4145-8101-c2d7b071b97e`, primary transcript
+  `~/.claude/projects/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e.jsonl`,
+  recorded from `scratchpad/recq1/approval.md` in
+  `/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/`.
+  All timestamps below are UTC. The independent reviews cited by the coordinator
+  are `scratchpad/recq1/review-codex.txt`, `scratchpad/recq1/review-agy.txt` and
+  `scratchpad/recq1/review-kimi.txt` in that directory; authority here is the owner's
+  approval of the coordinator's summary, not the reviews themselves.
+
+  Owner question, L153852, 2026-11-14T17:04:15.652Z:
+
+~~~text
+what is the best decision, tell me what you think and have kimi, agy and codex review it
+~~~
+
+  Coordinator recommendation, L153927, 2026-11-14T17:04:59.972Z:
+
+~~~text
+My recommendation: confirm both Nov 9 choices.
+
+1. **Where traps can happen:** make a bad source location impossible. Every source file gets one checked path inside the project. The loader refuses empty paths, paths with `..`, absolute paths and duplicates. That way every trap can always say exactly where it happened. The alternatives either hide the trap or report a useless location. Which characters a path may contain stays a separate open question.
+2. **How laws are tested:** keep the step rules in their normal written form and test each law by planting a broken version of the rules with the same shape, which must make the law fail. The test is as strong as the one we use for functions, with no big rewrite. Determinism also gets a real proof against separately written rules, instead of a fact that holds only because of how the spec is written in Lean.
+
+Codex, agy and Kimi are each reviewing this recommendation now, independently. I'll report what they say.
+~~~
+
+  Coordinator follow-up with the three reviewer additions, L153950, 2026-11-14T17:11:37.006Z:
+
+~~~text
+Codex, agy and Kimi all agree with both choices. Each one also asked for the same three additions, and I've added them to my recommendation:
+
+1. **Trap locations:** refusing bad paths isn't enough on its own. Every place that can trap must map to exactly one valid source location, and the spec must prove it. The open path-character questions stay open, and nothing should claim paths are fully validated until you settle them.
+2. **Determinism:** proving determinism of the separately written rules isn't enough either. We must also prove that those rules and the running spec agree in both directions. The proof assumes the outside world gives the same answer both times.
+3. **Law tests:** the broken version must break one specific rule and be swapped in everywhere the law mentions that rule. Lean itself must check a concrete example where the law's conditions still hold but its conclusion fails. An error or a timeout doesn't count as the law failing.
+
+This makes the proofs somewhat larger, but they become real guarantees instead of tests that can't fail.
+
+**Your call:** do you confirm both choices with these three additions? Yes unblocks the determinism proofs and most of what follows.
+~~~
+
+  Owner reply, L153955, 2026-11-14T17:13:14.039Z:
+
+~~~text
+ok do all this
+~~~
+
+  Scope: this resolves the C6 core and Q-SUBJ held rows in
+  [D4](#decided-2026-11-13-d4-recovery): report rows 2.1–2.5 (the structured
+  project-relative path rules: one checked path per source file, loader errors,
+  nonempty paths, no parent-traversal `..`, no absolute paths, and refusal of
+  duplicate sites), 3.2 (inductive law subjects with same-shape broken rules),
+  3.3 (function-tautological determinism facts classified as Representation lemmas),
+  and 3.4 (separate determinism proofs over independently written rules).
+  Every trapping site must map to exactly one valid source location, proved.
+  The law-evidence gate accepts inductive relations as law subjects. Determinism
+  must be proved against the separately written rules, with proved agreement in
+  both directions between those rules and the executable step, under the same
+  external answer. A planted broken version breaks one specific rule and is
+  substituted everywhere the law mentions that rule; Lean must check a concrete
+  counterexample where the law's premises hold and its conclusion fails. An error
+  or timeout is not a failure of the law.
+
+  This does not resolve the C2 constant restrictions (D4 report rows 1.4–1.5),
+  path-character details (`./` and empty components, drive prefixes, backslash,
+  control characters, Unicode identity), U+FEFF, bare CR, unit/char constants,
+  or any other held item. Path-character policy stays open; nothing may claim
+  complete path validation until it is decided.
 
 - <a id="decided-project-spark-2026-11-06"></a>**What Concrete takes from SPARK** (owner, 2026-11-06: "ok do everything", after Claude, Codex, agy and Kimi chose unanimously; the
   [review](proposals/SPARK.md) items 1, 2, 3, 6, 7, 9 and 10).
