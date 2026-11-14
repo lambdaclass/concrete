@@ -1,5 +1,6 @@
 -- The gate appends this same exporter body to fixtures after their declarations.
 import ConcreteSpec.Spec.Rules
+import ConcreteSpec.Proofs.LeakRegistry
 import Lean
 open Lean Elab Command
 
@@ -42,7 +43,12 @@ partial def concreteData (e : Expr) : MetaM Bool := do
       let verdict := if head == some ``ConcreteSpec.Core.RuleAccepted then "Accepted"
         else if head == some ``ConcreteSpec.Core.RuleRefused then "Refused" else "Invalid"
       if verdict == "Invalid" || args.size != 3 then return ("Invalid", false)
-      let linked := args[1]!.isConstOf e.rule
+      -- Static rule parameters (types, instrumentation, policy, program and entry state)
+      -- may be specialized. The final input must still normalize to concrete data.
+      -- Open specializations cannot establish conformance.
+      let subject := args[1]!
+      let linked := subject.getAppFn.isConstOf e.rule &&
+        !subject.hasFVar && !subject.hasMVar && !subject.hasLooseBVars
       let concrete ← concreteData args[2]!
       return (if concrete then verdict else "Invalid", linked)
     let trusted := axioms.all fun a => [``propext, ``Classical.choice, ``Quot.sound].contains a

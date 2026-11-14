@@ -1,3 +1,4 @@
+import ConcreteSpec.Proofs.LeakRegistry
 import ConcreteSpec.Proofs.Hybrid
 import ConcreteSpec.Proofs.Memory
 -- The specification of the new compiler. Start with ConcreteSpec/README.md.

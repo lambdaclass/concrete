@@ -1,3 +1,4 @@
+import ConcreteSpec.Diagnostics.LeakExamples
 import ConcreteSpec.Diagnostics.OwnExamples
 import ConcreteSpec.Diagnostics.ExecExamples
 import ConcreteSpec.Diagnostics.Types

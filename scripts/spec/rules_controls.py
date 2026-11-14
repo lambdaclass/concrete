@@ -82,6 +82,10 @@ fixture('closed-opaque-input', decl=rule.replace('n = 0', 'True').replace('(n : 
         evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]',
         reason='no concrete rule acceptance/refusal proposition')
 fixture('computed-concrete-input', proof=proofs.replace('RuleAccepted ok 0', 'RuleAccepted ok (1 - 1)'))
+fixture('specialized-rule', decl='/-- The rule (Q9.1). -/\ndef ok (base n : Nat) : Prop := n = base\n',
+        proof='theorem accepts : RuleAccepted (ok 2) 2 := rfl\ntheorem refuses : RuleRefused (ok 2) 3 := by intro h; cases h\n')
+fixture('polymorphic-rule', decl='/-- The rule (Q9.1). -/\ndef ok {T : Type} (xs : List T) : Prop := xs = []\n',
+        proof='theorem accepts : RuleAccepted (ok (T := Nat)) [] := rfl\ntheorem refuses : RuleRefused (ok (T := Nat)) [1] := by intro h; cases h\n')
 fixture('wrong-rule', evidence=links.replace('`ConcreteSpec.Core.ok', '`ConcreteSpec.Core.other'),
         reg='[⟨`ConcreteSpec.Core.ok, 1⟩, ⟨`ConcreteSpec.Core.other, 1⟩]', reason='does not use linked rule')
 fixture('unregistered', evidence=links.replace('`ConcreteSpec.Core.ok', '`ConcreteSpec.Core.missing'),
