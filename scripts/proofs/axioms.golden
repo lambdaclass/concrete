@@ -2163,6 +2163,9 @@ ConcreteSpec.Core.RuleExample.mk.sizeOf_spec
 ConcreteSpec.Core.RuleId.mk.inj	
 ConcreteSpec.Core.RuleId.mk.injEq	propext
 ConcreteSpec.Core.RuleId.mk.sizeOf_spec	
+ConcreteSpec.Core.ScalarConstDecl.mk.inj	
+ConcreteSpec.Core.ScalarConstDecl.mk.injEq	propext
+ConcreteSpec.Core.ScalarConstDecl.mk.sizeOf_spec	
 ConcreteSpec.Core.SegmentName.named.inj	
 ConcreteSpec.Core.SegmentName.named.injEq	propext
 ConcreteSpec.Core.SegmentName.named.sizeOf_spec	
@@ -2622,6 +2625,10 @@ ConcreteSpec.Core.instDecidableEqRes.decEq._proof_9
 ConcreteSpec.Core.instDecidableEqRuleId.decEq._proof_1	
 ConcreteSpec.Core.instDecidableEqRuleId.decEq._proof_2	
 ConcreteSpec.Core.instDecidableEqRuleId.decEq._proof_3	
+ConcreteSpec.Core.instDecidableEqScalarConstDecl.decEq._proof_1	
+ConcreteSpec.Core.instDecidableEqScalarConstDecl.decEq._proof_2	
+ConcreteSpec.Core.instDecidableEqScalarConstDecl.decEq._proof_3	
+ConcreteSpec.Core.instDecidableEqScalarConstDecl.decEq._proof_4	
 ConcreteSpec.Core.instDecidableEqSegmentName.decEq._proof_1	
 ConcreteSpec.Core.instDecidableEqSegmentName.decEq._proof_10	
 ConcreteSpec.Core.instDecidableEqSegmentName.decEq._proof_11	

@@ -511,18 +511,33 @@ def scalarConstTypes : ConstTypes where
   ofC_inj := fun _ _ h => h
   ofC_copy := fun _ _ => rfl
 
+/-- A closed scalar declaration for diagnostic conformance inputs. Unlike `ConstDecl U`,
+its constructor has no type-universe dictionary parameter: every field is inspectable data
+in the shared scalar and initializer syntax. This representation adds no admission policy. -/
+structure ScalarConstDecl where
+  id : ConstId
+  ty : CTy
+  init : CExpr
+  deriving DecidableEq, Repr
+
+/-- Embed concrete scalar declaration data into the existing constant judgment's universe.
+The embedding preserves each field; typing and evaluation remain owned by `ConstsAdmitted`. -/
+def ScalarConstDecl.toConstDecl (d : ScalarConstDecl) : ConstDecl scalarConstTypes :=
+  ⟨d.id, d.ty, d.init⟩
+
 /-- Rule: closed scalar constant declarations must type and evaluate successfully, including
 unused declarations (docs/decisions.md#recovered-29-18, #recovered-59-26, Q6.2).
 The closed admitted types are `ConstantType`
 (docs/decisions.md#decided-2026-11-14-constant-types); this uncurried view delegates
-all policy to `ConstsAdmitted` over Scalar's shared carriers. Source ordering remains
+all policy to `ConstsAdmitted` over Scalar's shared carriers after a field-preserving
+embedding of concrete declaration data. The registry tests this very definition. Source ordering remains
 elaboration's separate obligation (#recovered-29-19). -/
-def ConstsPermitted (input : Nat × List (ConstDecl scalarConstTypes)) : Prop :=
-  ConstsAdmitted scalarConstTypes input.1 input.2
+def ConstsPermitted (input : Nat × List ScalarConstDecl) : Prop :=
+  ConstsAdmitted scalarConstTypes input.1 (input.2.map ScalarConstDecl.toConstDecl)
 
-instance (input : Nat × List (ConstDecl scalarConstTypes)) :
+instance (input : Nat × List ScalarConstDecl) :
     Decidable (ConstsPermitted input) := inferInstanceAs
-      (Decidable (ConstsAdmitted scalarConstTypes input.1 input.2))
+      (Decidable (ConstsAdmitted scalarConstTypes input.1 (input.2.map ScalarConstDecl.toConstDecl)))
 
 /-! ### Source dependency order and cycle refusal -/
 
