@@ -3247,6 +3247,12 @@ okay with your decisions
   - Confirm or reject the ten delegated sub-rules and the R2 reopening route in the
     [D4 evidence](#decided-2026-11-13-d4-recovery). The delegation is verified; its admission
     under the recording rule is not clear. No per-item owner selection is recovered.
+    **Forward disposition, 2026-11-14:** the [trap-sites and law-tests confirmation](#decided-2026-11-14-trap-sites-and-law-tests) resolves
+    C6 rows 2.1–2.5 and Q-SUBJ rows 3.2–3.4 within its stated scope; the
+    [constant-types confirmation](#decided-2026-11-14-constant-types) resolves C2 rows 1.4–1.5
+    (with checked arithmetic retained) and confirms the R2 reopening route.
+    All ten rows now have a disposition; exact R2 preconditions and the other
+    questions below remain open.
   - Constants: is unit admitted? L130440 (2026-11-08T23:27:37.528Z) says
     "Constants stay int, bool or unit." L134638 instead says integers and bools.
     Is `char` admitted, given normal constant typing but the scalar restriction?
@@ -3255,6 +3261,10 @@ okay with your decisions
     No shown recommendation establishes revisiting `ofC_copy`. Are table/enum constants
     and the proposed one-read-only-copy opened with `borrow` admitted? Their later proposal
     has no verified approval; the unapproved proposals still require the owner’s redo.
+    **Forward disposition, 2026-11-14:** [constant-types confirmation](#decided-2026-11-14-constant-types)
+    settles integer/bool-only admission now, leaving char and unit for later R2
+    additions when a real program needs them; exact R2 preconditions and the
+    table/enum and borrow proposals above remain open.
   - Source paths: refuse single-dot or empty components (`a//b`, trailing slash)?
     Refuse drive prefixes (`C:...`)? Neither is named in the final shown options.
     Refuse or interpret backslashes? Refuse ASCII controls U+0000–U+001F/U+007F?
@@ -3377,6 +3387,12 @@ ok tell me again the options choose the best long term options for everything
   settle the exact preconditions. Confirmation of these choices under this delegation is queued
   below; no additional path-character policy, unit/char admission, or rule granularity follows.
 
+  Forward note: the [2026-11-14 trap-sites and law-tests confirmation](#decided-2026-11-14-trap-sites-and-law-tests) resolves only the C6 core and Q-SUBJ rows within its stated scope.
+  The [constant-types confirmation](#decided-2026-11-14-constant-types) resolves C2 rows 1.4–1.5
+  with checked arithmetic retained, and confirms the R2 reopening route, without
+  settling its exact preconditions. These later answers dispose of all ten rows
+  within their stated scopes; the historical held account above is retained.
+
   **Later disposition of report §3.5 (classification vocabulary).** The taxonomy hold
   is answered by the [2026-11-13 proof-label convention](#decided-2026-11-13-proof-labels),
   within that entry's stated scope. This does not resolve the ten delegated choices above.
@@ -3443,6 +3459,162 @@ yes it's okay
   design are not covered by this answer. They remain governed by existing records or
   open; the mention of a planned check does not approve its design. The explanation's
   account of earlier approvals does not independently settle D4's held delegated choices.
+
+- <a id="decided-2026-11-14-trap-sites-and-law-tests"></a>**Trap sites and law tests (2026-11-14).**
+  The owner confirms C6 (a) and Q-SUBJ (a), with the three additions in the
+  coordinator's follow-up below.
+
+  Provenance: session `e2c54e65-31b5-4145-8101-c2d7b071b97e`, primary transcript
+  `~/.claude/projects/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e.jsonl`,
+  recorded from `scratchpad/recq1/approval.md` in
+  `/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/`.
+  All timestamps below are UTC. The independent reviews cited by the coordinator
+  are `scratchpad/recq1/review-codex.txt`, `scratchpad/recq1/review-agy.txt` and
+  `scratchpad/recq1/review-kimi.txt` in that directory; authority here is the owner's
+  approval of the coordinator's summary, not the reviews themselves.
+
+  Owner question, L153852, 2026-11-14T17:04:15.652Z:
+
+~~~text
+what is the best decision, tell me what you think and have kimi, agy and codex review it
+~~~
+
+  Coordinator recommendation, L153927, 2026-11-14T17:04:59.972Z:
+
+~~~text
+My recommendation: confirm both Nov 9 choices.
+
+1. **Where traps can happen:** make a bad source location impossible. Every source file gets one checked path inside the project. The loader refuses empty paths, paths with `..`, absolute paths and duplicates. That way every trap can always say exactly where it happened. The alternatives either hide the trap or report a useless location. Which characters a path may contain stays a separate open question.
+2. **How laws are tested:** keep the step rules in their normal written form and test each law by planting a broken version of the rules with the same shape, which must make the law fail. The test is as strong as the one we use for functions, with no big rewrite. Determinism also gets a real proof against separately written rules, instead of a fact that holds only because of how the spec is written in Lean.
+
+Codex, agy and Kimi are each reviewing this recommendation now, independently. I'll report what they say.
+~~~
+
+  Coordinator follow-up with the three reviewer additions, L153950, 2026-11-14T17:11:37.006Z:
+
+~~~text
+Codex, agy and Kimi all agree with both choices. Each one also asked for the same three additions, and I've added them to my recommendation:
+
+1. **Trap locations:** refusing bad paths isn't enough on its own. Every place that can trap must map to exactly one valid source location, and the spec must prove it. The open path-character questions stay open, and nothing should claim paths are fully validated until you settle them.
+2. **Determinism:** proving determinism of the separately written rules isn't enough either. We must also prove that those rules and the running spec agree in both directions. The proof assumes the outside world gives the same answer both times.
+3. **Law tests:** the broken version must break one specific rule and be swapped in everywhere the law mentions that rule. Lean itself must check a concrete example where the law's conditions still hold but its conclusion fails. An error or a timeout doesn't count as the law failing.
+
+This makes the proofs somewhat larger, but they become real guarantees instead of tests that can't fail.
+
+**Your call:** do you confirm both choices with these three additions? Yes unblocks the determinism proofs and most of what follows.
+~~~
+
+  Owner reply, L153955, 2026-11-14T17:13:14.039Z:
+
+~~~text
+ok do all this
+~~~
+
+  Scope: this resolves the C6 core and Q-SUBJ held rows in
+  [D4](#decided-2026-11-13-d4-recovery): report rows 2.1–2.5 (the structured
+  project-relative path rules: one checked path per source file, loader errors,
+  nonempty paths, no parent-traversal `..`, no absolute paths, and refusal of
+  duplicate sites), 3.2 (inductive law subjects with same-shape broken rules),
+  3.3 (function-tautological determinism facts classified as Representation lemmas),
+  and 3.4 (separate determinism proofs over independently written rules).
+  Every trapping site must map to exactly one valid source location, proved.
+  The law-evidence gate accepts inductive relations as law subjects. Determinism
+  must be proved against the separately written rules, with proved agreement in
+  both directions between those rules and the executable step, under the same
+  external answer. A planted broken version breaks one specific rule and is
+  substituted everywhere the law mentions that rule; Lean must check a concrete
+  counterexample where the law's premises hold and its conclusion fails. An error
+  or timeout is not a failure of the law.
+
+  This does not resolve the C2 constant restrictions (D4 report rows 1.4–1.5),
+  path-character details (`./` and empty components, drive prefixes, backslash,
+  control characters, Unicode identity), U+FEFF, bare CR, unit/char constants,
+  or any other held item. Path-character policy stays open; nothing may claim
+  complete path validation until it is decided.
+
+- <a id="decided-2026-11-14-constant-types"></a>**Constant types (2026-11-14).**
+  The owner approves the coordinator's revised recommendation below, not the
+  earlier recommendations preserved as context.
+
+  Provenance: session `e2c54e65-31b5-4145-8101-c2d7b071b97e`, primary transcript
+  `~/.claude/projects/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e.jsonl`,
+  recorded from `scratchpad/c2rec/approval.md` in
+  `/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/`.
+  All timestamps below are UTC; owner messages are user messages and coordinator
+  messages are assistant messages. The `scratchpad/c2rec/review-*.txt` reviews
+  are background, not authority; authority is the owner's approval of the revised
+  recommendation at L154255.
+
+  Coordinator message (assistant), L154172, 2026-11-14T17:22:00.964Z:
+
+~~~text
+Two questions are still open. Here's the first:
+
+**Constants.** Your Nov 9 choice keeps constants to plain integers and `bool`, and removes `try_convert` from constant formulas because it returns a `Result`. What's still open is whether `char` and `()` can also be constants.
+
+- **(a) Integers, `bool`, `char` and `()` (my recommendation).** These are all simple fixed values. Since you kept `char`, a program will want a constant like `const NEWLINE: char = ...`, and leaving `char` out would be a gap nobody intended.
+- **(b) Integers and `bool` only.** Smaller now, and the others get added later when a real program needs them.
+
+I'd have Codex, agy and Kimi check this before recording it, as with the trap question.
+
+After this, the only remaining question is one more round for the spec inventory, which I recommend.
+~~~
+
+  Owner message (user), L154177, 2026-11-14T17:22:16.329Z:
+
+~~~text
+what is the best long term thing
+~~~
+
+  Coordinator message (assistant), L154208, 2026-11-14T17:22:59.562Z:
+
+~~~text
+When I looked at this more closely, I found a problem with my earlier answer. `char` has no literal, and both ways to build one return `Option`. Constant formulas can't unwrap an `Option`, which is the same reason `try_convert` came out of them. So under today's rules, no `char` constant can actually be written, even if constants are allowed to have type `char`.
+
+What I now think is best long term is to decide this by a principle instead of a list of types. A constant can have any simple fixed-value type, as long as its formula uses only operations that always succeed. That admits integers, `bool` and `()` today. `char` constants become possible on their own, with no special rule, if the open SPARK-style precondition question makes checked construction always succeed when its condition is proved.
+
+Codex, agy and Kimi are reviewing this now. The roadmap changes and the decision record are also being reviewed. I'll report all three results together.
+~~~
+
+  Coordinator message (assistant), L154255, 2026-11-14T17:28:37.645Z:
+
+~~~text
+Here's where things stand.
+
+**Constants: the reviewers disagree with me.** They're right, and I'm changing my recommendation. All three found the same flaw in my reasoning: constant formulas can't contain function calls at all. So `char` constants would not become possible on their own later. They would need a separate decision to change the formula rules. All three also said a fixed list of types is safer than an open-ended principle, because a new type should never slip in without review.
+
+**My new recommendation is integers and `bool` only (option b).** Leave out `char`, because no `char` constant can be written today and allowing the type would promise something unusable. Leave out `()`, because a constant with only one possible value adds nothing. Two reviewers agree on `char` and one wanted to keep `()`. Both stay open to be added later through the existing route for richer constants, once a real program needs them. Checked arithmetic stays allowed in formulas: if it overflows, the compiler refuses the constant.
+
+**Roadmap and decision record:** Codex and Kimi accept both with no findings. agy is still reviewing the roadmap. Once agy finishes, one fix round will update the two old notes that still say your Nov 9 choices are waiting.
+
+**Determinism proofs:** still being written.
+
+**Your call:** constants are integers and `bool` only, with the others added later through the richer-constants route?
+~~~
+
+  Owner message (user), L154260, 2026-11-14T17:28:58.331Z:
+
+~~~text
+yes do that
+~~~
+
+  Scope: this resolves [D4](#decided-2026-11-13-d4-recovery) C2 rows 1.4–1.5:
+  constant types are a closed list, integers and `bool` only. `char` and `()` are
+  not admitted now; both remain open to later addition through the existing
+  richer-constants (R2) route when a real program needs them. Checked arithmetic
+  stays allowed in constant formulas; overflow refuses the constant. This retains
+  the [initializer grammar](#recovered-29-18) and
+  [November 8 initializer decision](#decided-2026-11-08-constants), rather than
+  adopting the checked-arithmetic exclusion in the historical D4 recommendation.
+  `try_convert` stays out of constant formulas (C2 (i)).
+
+  This confirms the R2 reopening route, not its exact preconditions or the
+  unapproved table/enum and borrow-constant proposals. It does not authorize
+  function calls in constant formulas, a char literal, SPARK preconditions
+  (ISS-0071), or char/unit layout (ISS-0076). The
+  [November 12 char decision](#decided-2026-11-12-char) remains the authority for
+  char construction; this answer settles the constant-type admission question,
+  without adding a special char construction rule. Other recovery holds remain open.
 
 - <a id="decided-project-spark-2026-11-06"></a>**What Concrete takes from SPARK** (owner, 2026-11-06: "ok do everything", after Claude, Codex, agy and Kimi chose unanimously; the
   [review](proposals/SPARK.md) items 1, 2, 3, 6, 7, 9 and 10).
