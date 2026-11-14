@@ -25,4 +25,18 @@ example : AList.lookup spellingsBefore.entries x = AList.lookup spellingsAfter.e
     eval [(x, 7), (y, 8)] initial (.read y) = .stuck ∧
     Exec.restrict [y] [(renamedX, (7 : Int)), (y, 8)] = [(y, 8)] := by decide
 
+/-- Instance: presentation collisions cannot merge numeric move/borrow/call/drop/leave operands.
+The tables disagree on spelling and identify two distinct variables with the same spelling;
+every ownership operation still selects the numeric variable's place. -/
+example : AList.lookup spellingsBefore.entries x = AList.lookup spellingsAfter.entries y ∧ x ≠ y ∧
+    (move initial ⟨0⟩).isSome = true ∧
+    (move initial ⟨1⟩) = none ∧
+    (borrow initial ⟨0⟩ [] .shared).isSome = true ∧
+    (borrow initial ⟨1⟩ [] .shared) = none ∧
+    (passOwner ⟨initial, []⟩ ⟨0⟩ [] .shared renamedX).isSome = true ∧
+    (passOwner ⟨initial, []⟩ ⟨1⟩ [] .shared y) = none ∧
+    ((drop [renamedX] ((move initial ⟨0⟩).getD initial)).getD initial).slots = [] ∧
+    ((drop [y] ((move initial ⟨0⟩).getD initial)).getD initial).slots.length = 1 ∧
+    ((leave ((move initial ⟨0⟩).getD initial)).getD initial).frames = [] := by decide
+
 end ConcreteSpec.Diagnostics.OwnExamples

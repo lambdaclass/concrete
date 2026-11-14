@@ -10,15 +10,19 @@ namespace ConcreteSpec.Core.AList
 
 variable {κ α β : Type} [DecidableEq κ]
 
+/-- Representation lemma: association-list lookup and update calculation. -/
 theorem lookup_cons (k' : κ) (a : α) (l : AList κ α) (k : κ) :
     lookup ((k', a) :: l) k = if k' = k then some a else lookup l k := rfl
 
+/-- Representation lemma: association-list lookup and update calculation. -/
 theorem update_cons (k' : κ) (a : α) (l : AList κ α) (k : κ) (f : α → α) :
     update ((k', a) :: l) k f = if k' = k then (k', f a) :: l else (k', a) :: update l k f := rfl
 
+/-- Representation lemma: association-list lookup and update calculation. -/
 theorem erase_cons (k' : κ) (a : α) (l : AList κ α) (k : κ) :
     erase ((k', a) :: l) k = if k' = k then erase l k else (k', a) :: erase l k := rfl
 
+/-- Representation lemma: association-list lookup and update calculation. -/
 theorem lookup_mem : ∀ {l : AList κ α} {k : κ} {a : α}, lookup l k = some a → (k, a) ∈ l
   | [], _, _, h => nomatch h
   | (k', b) :: l, k, a, h => by
@@ -27,6 +31,7 @@ theorem lookup_mem : ∀ {l : AList κ α} {k : κ} {a : α}, lookup l k = some 
     · rw [ite_eq_left hk] at h; cases h; subst hk; exact List.Mem.head _
     · rw [ite_eq_right hk] at h; exact List.Mem.tail _ (lookup_mem h)
 
+/-- Representation lemma: association-list lookup and update calculation. -/
 theorem lookup_isSome_of_mem : ∀ {l : AList κ α} {k : κ} {a : α}, (k, a) ∈ l →
     ∃ b, lookup l k = some b
   | [], _, _, h => nomatch h
@@ -39,6 +44,7 @@ theorem lookup_isSome_of_mem : ∀ {l : AList κ α} {k : κ} {a : α}, (k, a) �
       | head => exact absurd rfl hk
       | tail _ h => exact lookup_isSome_of_mem h
 
+/-- Representation lemma: association-list lookup and update calculation. -/
 theorem lookup_map (f : α → β) : ∀ (l : AList κ α) (k : κ), lookup (map f l) k = (lookup l k).map f
   | [], _ => rfl
   | (k', a) :: l, k => by
@@ -48,6 +54,7 @@ theorem lookup_map (f : α → β) : ∀ (l : AList κ α) (k : κ), lookup (map
     · rw [ite_eq_left hk, ite_eq_left hk]; rfl
     · rw [ite_eq_right hk, ite_eq_right hk]; exact lookup_map f l k
 
+/-- Representation lemma: association-list lookup and update calculation. -/
 theorem lookup_update (k : κ) (f : α → α) : ∀ (l : AList κ α) (q : κ),
     lookup (update l k f) q = if q = k then (lookup l k).map f else lookup l q
   | [], q => by
@@ -69,6 +76,7 @@ theorem lookup_update (k : κ) (f : α → α) : ∀ (l : AList κ α) (q : κ),
         rw [ite_eq_left hq, ite_eq_left hq, ite_eq_right hkq]
       · rw [ite_eq_right hq, ite_eq_right hq]
 
+/-- Representation lemma: association-list lookup and update calculation. -/
 theorem lookup_erase (k : κ) : ∀ (l : AList κ α) (q : κ),
     lookup (erase l k) q = if q = k then none else lookup l q
   | [], q => by
@@ -90,6 +98,7 @@ theorem lookup_erase (k : κ) : ∀ (l : AList κ α) (q : κ),
         rw [ite_eq_left hq, ite_eq_left hq, ite_eq_right hkq]
       · rw [ite_eq_right hq, ite_eq_right hq]
 
+/-- Representation lemma: association-list lookup and update calculation. -/
 theorem mem_of_mem_erase (k : κ) : ∀ {l : AList κ α} {e : κ × α}, e ∈ erase l k → e ∈ l
   | [], _, h => h
   | (k', a) :: l, e, h => by
@@ -101,6 +110,7 @@ theorem mem_of_mem_erase (k : κ) : ∀ {l : AList κ α} {e : κ × α}, e ∈ 
       | head => exact List.Mem.head _
       | tail _ h => exact List.Mem.tail _ (mem_of_mem_erase k h)
 
+/-- Representation lemma: association-list lookup and update calculation. -/
 theorem erase_map (f : α → β) (k : κ) : ∀ l : AList κ α, erase (map f l) k = map f (erase l k)
   | [] => rfl
   | (k', a) :: l => by
@@ -110,7 +120,7 @@ theorem erase_map (f : α → β) (k : κ) : ∀ l : AList κ α, erase (map f l
     · rw [ite_eq_left hk, ite_eq_left hk]; exact erase_map f k l
     · rw [ite_eq_right hk, ite_eq_right hk, erase_map f k l]; rfl
 
-/-- `update` with a function that keeps what `g` sees changes nothing `map g` sees. -/
+/-- Representation lemma: `update` with a function that keeps what `g` sees changes nothing `map g` sees. -/
 theorem map_update (g : α → β) (f : α → α) (hg : ∀ a, g (f a) = g a) :
     ∀ (l : AList κ α) (k : κ), map g (update l k f) = map g l
   | [], _ => rfl
@@ -121,7 +131,7 @@ theorem map_update (g : α → β) (f : α → α) (hg : ∀ a, g (f a) = g a) :
     · rw [ite_eq_right hk]; show (k', g a) :: map g (update l k f) = (k', g a) :: map g l
       rw [map_update g f hg l k]
 
-/-- In a list with distinct registers, every listed binding is returned by the shared lookup. For example, a single register/id pair is found. -/
+/-- Representation lemma: In a list with distinct registers, every listed binding is returned by the shared lookup. For example, a single register/id pair is found. -/
 theorem lookup_of_mem {l : AList κ α} (hn : (List.map Prod.fst l).Nodup) {r : κ} {n : α}
     (hm : (r, n) ∈ l) : AList.lookup l r = some n := by
   induction l with
@@ -139,7 +149,7 @@ theorem lookup_of_mem {l : AList κ α} (hn : (List.map Prod.fst l).Nodup) {r : 
       exact ih hn.2 hm
 
 
-/-- Search the first environment before the second. For example, a first binding of register 7 hides any later binding of 7. -/
+/-- Representation lemma: Search the first environment before the second. For example, a first binding of register 7 hides any later binding of 7. -/
 theorem lookup_append {l₁ l₂ : AList κ α} {r : κ} :
     AList.lookup (l₁ ++ l₂) r = match AList.lookup l₁ r with | some v => some v | none => AList.lookup l₂ r := by
   induction l₁ with
@@ -149,7 +159,7 @@ theorem lookup_append {l₁ l₂ : AList κ α} {r : κ} :
     simp only [List.cons_append, AList.lookup]
     split <;> simp_all
 
-/-- A lookup in zipped parameters and values has a matching position. For example, the first parameter is paired with the first value. -/
+/-- Representation lemma: A lookup in zipped parameters and values has a matching position. For example, the first parameter is paired with the first value. -/
 theorem lookup_zip {r : κ} : ∀ {ps : List κ} {vs : List α}, ps.length = vs.length →
     (∀ v, AList.lookup (ps.zip vs) r = some v → ∃ i : Nat, ps[i]? = some r ∧ vs[i]? = some v) ∧
     (AList.lookup (ps.zip vs) r = none → r ∉ ps)
@@ -173,19 +183,22 @@ theorem lookup_zip {r : κ} : ∀ {ps : List κ} {vs : List α}, ps.length = vs.
         exact ⟨fun e => hq e.symm, ih₂ hn⟩
 
 
+/-- Representation lemma: association-list lookup and update calculation. -/
 theorem lookup_append_none {l₁ l₂ : AList κ α} {k : κ} (h : lookup l₁ k = none) :
     lookup (l₁ ++ l₂) k = lookup l₂ k := by rw [lookup_append, h]
 
+/-- Representation lemma: association-list lookup and update calculation. -/
 theorem lookup_append_some {l₁ l₂ : AList κ α} {k : κ} {a : α}
     (h : lookup l₁ k = some a) : lookup (l₁ ++ l₂) k = some a := by rw [lookup_append, h]
 
 end ConcreteSpec.Core.AList
 
 namespace ConcreteSpec.Core
+universe u
 
 /-- Representation lemma: the sole optional-result definition is equivalent to
 requiring the postcondition for every successful observation, at every result type. -/
-theorem resultSatisfies_iff {α : Type} (P : α → Prop) (r : Option α) :
+theorem resultSatisfies_iff {α : Type u} (P : α → Prop) (r : Option α) :
     ResultSatisfies P r ↔ ∀ a, r = some a → P a := by
   cases r <;> simp [ResultSatisfies]
 
@@ -201,16 +214,23 @@ private def resultRequiresSuccess {α : Type} (P : α → Prop) (r : Option α) 
   ∃ a, r = some a ∧ P a
 
 /-- Planted: the refusal case distinguishes the generic policy from mandatory success. -/
-example : ResultSatisfies (fun n : Nat => n = 7) none ∧
-    ¬ resultRequiresSuccess (fun n : Nat => n = 7) none := by
-  simp [ResultSatisfies, resultRequiresSuccess]
+example : ¬ (resultRequiresSuccess (fun n : Nat => n = 7) none ↔
+    ∀ a, (none : Option Nat) = some a → a = 7) := by
+  simp [resultRequiresSuccess]
 
 /-- Planted: ignoring a successful value admits a failed postcondition. -/
 private def resultIgnoresValue {α : Type} (_ : α → Prop) (_ : Option α) : Prop := True
 
 /-- Planted: a wrong successful value distinguishes the policy from ignoring success. -/
-example : resultIgnoresValue (fun n : Nat => n = 7) (some 8) ∧
-    ¬ ResultSatisfies (fun n : Nat => n = 7) (some 8) := by
-  simp [resultIgnoresValue, ResultSatisfies]
+example : ¬ (resultIgnoresValue (fun n : Nat => n = 7) (some 8) ↔
+    ∀ a, (some 8 : Option Nat) = some a → a = 7) := by
+  simp [resultIgnoresValue]
+
+/-- Instance: the equivalence holds in both directions at a populated success and a refusal. -/
+example : (ResultSatisfies (fun n : Nat => n = 7) (some 7) ↔
+    ∀ a, (some 7 : Option Nat) = some a → a = 7) ∧
+    (ResultSatisfies (fun _ : Type => False) none ↔
+    ∀ a, (none : Option Type) = some a → False) :=
+  ⟨resultSatisfies_iff _ _, resultSatisfies_iff _ _⟩
 
 end ConcreteSpec.Core

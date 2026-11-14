@@ -110,7 +110,7 @@ example : original.code.toExact.eval (AList.lookup values) = some 13 ∧
 /-! Coverage boundary: `CTerm.eval` (including reads and arithmetic) and `CTerm.toExact` are
 Scalar's only operations consuming syntax with locals. Assignment and scope exit above exercise
 the shared `AList.update` and `AList.erase` used by scalar valuations. All other Scalar operations
-consume scalar values/types, not locals or presentations. F02's dropping and ownership cases
-belong to the later lifecycle/ownership arrivals; Scalar defines neither operation. -/
+consume scalar values/types, not locals or presentations. Dropping and ownership presentation cases are pinned in Diagnostics/OwnExamples.
+Scalar defines neither operation. -/
 
 end ConcreteSpec.Diagnostics.ScalarFixtures
