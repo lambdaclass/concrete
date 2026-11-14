@@ -14,7 +14,13 @@ machine, not new choices of execution policy. The foundation C1 interface/law
 record (`docs/decisions.md#decided-2026-11-08-foundation`, `#foundation-q1`)
 approves execution, calls and cleanup laws; the rules live in Lean. Core remains
 unfrozen. The sole `runFrom` driver is unchanged.
-Classification: `docs/decisions.md#decided-2026-11-13-proof-labels`.
+E3 authority: `docs/decisions.md#decided-2026-11-14-trap-sites-and-law-tests`
+admits inductive law subjects, classifies function-tautological determinism as
+Representation lemmas, and requires independent-rule determinism and two-way
+agreement with the executable step under the same external answer. Its law tests
+use same-shape mutants breaking one rule, substituted at every occurrence, with
+Lean-checked concrete counterexamples preserving the law's premises.
+Tag vocabulary only: `docs/decisions.md#decided-2026-11-13-proof-labels`.
 Demo conditions are a toy interface, never Concrete Boolean encoding (ISS-0069).
 -/
 
@@ -3478,8 +3484,10 @@ theorem rules_answer_sound_inv {P : Program O} {c c' : Config O}
 
 /-- Law (subject `ConcreteSpec.Core.Exec.Rules`). A fixed external input determines both
 label and destination by operational-rule inversion, independently of the dispatcher.
-Authority: `docs/decisions.md#decided-2026-11-08-foundation`, C1 / `#foundation-q1`;
-`#decided-2026-11-13-proof-labels` requires determinism against separately written rules. -/
+Authority: `docs/decisions.md#decided-2026-11-14-trap-sites-and-law-tests`:
+determinism over independently written rules, admitted as inductive law subjects.
+Foundation `#foundation-q1` supplies the interface/law boundary; the November 13
+`#decided-2026-11-13-proof-labels` record supplies only the tag vocabulary. -/
 theorem rules_deterministic (P : Program O) (c c₁ : Config O)
     (a : Option (Answer O.Val O.Event O.Store)) (l₁ : Label O)
     (h₁ : Rules P c a l₁ c₁) : InputDeterministic Rules P c c₁ a l₁ := by
@@ -3727,7 +3735,10 @@ private theorem rules_request_complete_inv {P : Program O} {c c' : Config O}
 
 /-- Law (subject `ConcreteSpec.Core.Exec.step`). Every independent operational transition
 is implemented by the dispatcher, including the exact answer, label and destination.
-Authority: `docs/decisions.md#decided-2026-11-08-foundation`, C1 / `#foundation-q1` (the approved interface and law boundary). -/
+Authority: `docs/decisions.md#decided-2026-11-14-trap-sites-and-law-tests`:
+the independent rules and executable step must agree in both directions under the
+same external answer. Foundation `#foundation-q1` supplies the interface/law boundary;
+`#decided-2026-11-13-proof-labels` supplies only the tag vocabulary. -/
 theorem rules_sound (P : Program O) (c : Config O)
     (a : Option (Answer O.Val O.Event O.Store)) (l : Label O) (c' : Config O)
     (h : Rules P c a l c') : Dispatches step P c a l c' := by
@@ -3742,7 +3753,10 @@ def DispatchComplete (dispatch : Program O → Config O → Option (Out O))
 
 /-- Law (subject `ConcreteSpec.Core.Exec.step`). Every admitted dispatcher transition has
 an independent operational derivation; no executable transition is omitted.
-Authority: `docs/decisions.md#decided-2026-11-08-foundation`, C1 / `#foundation-q1` (the approved interface and law boundary). -/
+Authority: `docs/decisions.md#decided-2026-11-14-trap-sites-and-law-tests`:
+the independent rules and executable step must agree in both directions under the
+same external answer. Foundation `#foundation-q1` supplies the interface/law boundary;
+`#decided-2026-11-13-proof-labels` supplies only the tag vocabulary. -/
 theorem rules_complete (P : Program O) (c : Config O)
     (a : Option (Answer O.Val O.Event O.Store)) : DispatchComplete step P c a := by
   intro l c' h
@@ -3773,8 +3787,10 @@ theorem step_iff_rules (P : Program O) (c : Config O) (l : Label O) (c' : Config
 
 /-- Law (subject `ConcreteSpec.Core.Exec.Rules`). Internal steps have a unique label and
 configuration, by independent rule inversion.
-Authority: `docs/decisions.md#decided-2026-11-08-foundation`, C1 / `#foundation-q1`;
-`#decided-2026-11-13-proof-labels` requires determinism against separately written rules. -/
+Authority: `docs/decisions.md#decided-2026-11-14-trap-sites-and-law-tests`:
+determinism over independently written rules, admitted as inductive law subjects.
+Foundation `#foundation-q1` supplies the interface/law boundary; the November 13
+`#decided-2026-11-13-proof-labels` record supplies only the tag vocabulary. -/
 theorem rules_silent_deterministic (P : Program O) (c c₁ : Config O) (l₁ : Label O)
     (h₁ : Rules P c none l₁ c₁) : InputDeterministic Rules P c c₁ none l₁ := by
   exact rules_deterministic P c c₁ none l₁ h₁
@@ -3787,7 +3803,12 @@ populated locals, a nonzero counter, two activations and a continuation. The ove
 mutant adds only a second skip conclusion; it is substituted in both occurrences of the
 relation in the determinism obligation. Agreement controls separately delete and add an
 executable transition. There is no derived closure in these one-step obligations.
-The recorded 2026-11-13 proof-label convention supplies classification authority; no held path,
+Authority: `docs/decisions.md#decided-2026-11-14-trap-sites-and-law-tests` admits
+inductive law subjects and requires same-shape mutants breaking one specific rule,
+substituted everywhere that rule occurs in the law. Lean checks concrete examples
+where the premises hold and the conclusion fails; errors and timeouts are not evidence.
+The November 13 `#decided-2026-11-13-proof-labels` record supplies only tag vocabulary.
+No held path,
 constant, Boolean representation, pointer, wiping or startup policy is introduced here.
 -/
 namespace DeterminismEvidence
