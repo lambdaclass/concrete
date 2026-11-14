@@ -1,0 +1,1 @@
+Add the closed integer/bool constant initializer specification, dependency ordering and cycle-chain contracts, distinct fuel exhaustion and arithmetic refusals, and concrete rule-registry evidence. Reuse Scalar carriers; exclude unit, char, try_convert and the held Boolean numeric encoding. General constant laws remain F07.

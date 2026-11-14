@@ -82,6 +82,18 @@ fixture('closed-opaque-input', decl=rule.replace('n = 0', 'True').replace('(n : 
         evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]',
         reason='no concrete rule acceptance/refusal proposition')
 fixture('computed-concrete-input', proof=proofs.replace('RuleAccepted ok 0', 'RuleAccepted ok (1 - 1)'))
+# Constant identities carry closed path-validity proofs. Proof irrelevance must not
+# exempt the adjacent runtime data from constructor/literal normalization.
+proof_carrier = ('structure ProofCarrier where\n  data : Nat\n  valid : data = data\n'
+                 '/-- The rule (Q9.1). -/\ndef ok (p : ProofCarrier) : Prop := p.data = 0\n')
+fixture('closed-proof-field', decl=proof_carrier,
+        proof='theorem accepts : RuleAccepted ok ⟨0, by decide⟩ := rfl\n'
+              'theorem refuses : RuleRefused ok ⟨1, by decide⟩ := by intro h; cases h\n')
+fixture('proof-field-with-opaque-data',
+        decl=proof_carrier + 'opaque hidden : Nat := 0\n',
+        proof='theorem accepts : RuleAccepted ok ⟨hidden - hidden, by rfl⟩ := Nat.sub_self hidden\n',
+        evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]',
+        reason='no concrete rule acceptance/refusal proposition')
 fixture('wrong-rule', evidence=links.replace('`ConcreteSpec.Core.ok', '`ConcreteSpec.Core.other'),
         reg='[⟨`ConcreteSpec.Core.ok, 1⟩, ⟨`ConcreteSpec.Core.other, 1⟩]', reason='does not use linked rule')
 fixture('unregistered', evidence=links.replace('`ConcreteSpec.Core.ok', '`ConcreteSpec.Core.missing'),

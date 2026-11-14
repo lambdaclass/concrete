@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.Const
 import ConcreteSpec.Spec.Ident
 import ConcreteSpec.Spec.Own
 
@@ -19,7 +20,7 @@ namespace ConcreteSpec.Core
 /-- Diagnostic rule identities, in specification order. Judgments are checked views of Own's
 single transition definitions. -/
 def registeredRules : List RuleId :=
-  [⟨``Own.OwnerPermitted, 1⟩, ⟨``Own.LoanPermitted, 1⟩,
+  [⟨``ConstsPermitted, 1⟩, ⟨``Own.OwnerPermitted, 1⟩, ⟨``Own.LoanPermitted, 1⟩,
    ⟨``Own.EndPermitted, 1⟩, ⟨``Own.MovePermitted, 1⟩,
    ⟨``Own.DropPermitted, 1⟩, ⟨``Own.LeavePermitted, 1⟩]
 
@@ -38,6 +39,26 @@ with no parameters, axioms, opaque computations or unresolved variables. -/
 structure RuleExample where
   rule : Lean.Name
   declaration : Lean.Name
+
+namespace ConstRegistry
+
+/-- Instance: a populated dependency environment supports arithmetic in a later constant. -/
+theorem accepted : RuleAccepted ConstsPermitted
+    (3, [⟨ConstDemo.cid "BASE", .int .u8, .int .u8 2⟩,
+         ⟨ConstDemo.cid "NEXT", .int .u8,
+           .plain .add (.ref (ConstDemo.cid "BASE")) (.int .u8 1)⟩]) := by
+  unfold RuleAccepted ConstsPermitted
+  decide
+
+/-- Instance: the same dependency setup refuses overflow in an unused initializer. -/
+theorem refused : RuleRefused ConstsPermitted
+    (3, [⟨ConstDemo.cid "BASE", .int .u8, .int .u8 255⟩,
+         ⟨ConstDemo.cid "NEXT", .int .u8,
+           .plain .add (.ref (ConstDemo.cid "BASE")) (.int .u8 1)⟩]) := by
+  unfold RuleRefused ConstsPermitted
+  decide
+
+end ConstRegistry
 
 namespace Own.Registry
 
@@ -96,7 +117,9 @@ end Own.Registry
 
 /-- Complete conformance links, populated alongside the owning rules. -/
 def registeredRuleExamples : List RuleExample :=
-  [⟨``Own.OwnerPermitted, ``Own.Registry.ownerAccepted⟩,
+  [⟨``ConstsPermitted, ``ConstRegistry.accepted⟩,
+   ⟨``ConstsPermitted, ``ConstRegistry.refused⟩,
+   ⟨``Own.OwnerPermitted, ``Own.Registry.ownerAccepted⟩,
    ⟨``Own.OwnerPermitted, ``Own.Registry.ownerRefused⟩,
    ⟨``Own.LoanPermitted, ``Own.Registry.loanAccepted⟩,
    ⟨``Own.LoanPermitted, ``Own.Registry.loanRefused⟩,

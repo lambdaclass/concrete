@@ -5,9 +5,12 @@ open Lean Elab Command
 
 -- EXPORTER BODY
 /-- Concrete data normalizes completely to constructors and literals. Constructor parameters
-(types and indices) are checked for closure, while data fields are checked recursively. -/
+(types and indices) are checked for closure, while data fields are checked recursively.
+Closed proof fields are permitted: they carry no observable data (proof irrelevance),
+and the evidence theorem's transitive axiom check still covers them. -/
 partial def concreteData (e : Expr) : MetaM Bool := do
   if e.hasFVar || e.hasMVar || e.hasLooseBVars then return false
+  if ← Meta.isProof e then return true
   let e ← Meta.reduce e
   match e with
   | .lit _ => return true
