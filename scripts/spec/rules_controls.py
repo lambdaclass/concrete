@@ -78,14 +78,18 @@ def fixture(name, *, decl=rule, proof=proofs, reg=registry, evidence=links,
 production_rows = (root / 'docs/decisions.md').read_text()
 rows.write_text(production_rows)
 valid = 'decided-2026-11-08-foundation'
-for anchor in [valid, 'decided-project-memory-2026-11-06']:
+for anchor in [valid, 'decided-project-memory-2026-11-06',
+               'decided-2026-11-14-constant-types', 'recovered-29-18',
+               'recovered-29-19', 'recovered-59-26']:
     fixture('authority-current-' + anchor,
             decl=rule.replace('(Q9.1)', '(docs/decisions.md#' + anchor + ')'))
 refused = {
+    'recovered-59-16': 'ISS-0083',
+    'decided-2026-11-13-d4-recovery': 'ISS-0083',
     'OPEN-38': 'ISS-0083',
     'decided-2026-11-08-recovery-queue': 'ISS-0083',
     'decided-2026-11-08-spelling-round': 'open in Waiting for the owner',
-    'recovered-29-22': 'ISS-0083',
+    'recovered-29-22': 'disposition in title: partial',
 }
 for anchor, diagnostic in refused.items():
     assert '<a id="' + anchor + '"></a>' in production_rows
@@ -128,6 +132,12 @@ for name, entry in [
     rows.write_text(production_rows + '\n' + entry)
     fixture('authority-' + name,
             decl=rule.replace('Q9.1', 'docs/decisions.md#control'), reason='ISS-0083')
+# A dated heading alone is not a provenance-bearing decision record.
+rows.write_text(production_rows + '\n- <a id="decided-2026-11-15-control"></a>'
+                '**Control (2026-11-15).**\n  A decision-shaped heading alone.\n')
+fixture('authority-dated-no-provenance',
+        decl=rule.replace('Q9.1', 'docs/decisions.md#decided-2026-11-15-control'),
+        reason='ISS-0083')
 for disposition in ['held', 'queued']:
     rows.write_text(production_rows + '\n- <a id="control"></a>**' + disposition +
                     '** (owner, 2026-11-08: "ok").\n')

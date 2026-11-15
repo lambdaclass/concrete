@@ -37,10 +37,10 @@ def blank_code(text):
 
 
 def authority_entries(text):
-    """Read only anchored list titles with an immediate recorded approval form.
+    """Read the three recorded entry forms, without inferring approval from prose.
 
-    No section or body prose supplies approval or disposition. ISS-0083 owns the
-    explicit status format needed to replace this deliberately narrow interim rule.
+    Dated records require entry-local provenance; recovered entries require the
+    D4 retained table. Neither enclosing sections nor other table links qualify.
     """
     text = blank_code(text)
     result = {m[1]: UNRECORDED for m in ANCHOR.finditer(text)}
@@ -50,8 +50,28 @@ def authority_entries(text):
     for item in re.split(r'\n\d+\. ', waiting):
         if not item.lstrip().startswith('Closed '):
             waiting_anchors.update(re.findall(r'\]\(#([^)]*)\)', item))
+    # Provenance cannot leak from another anchored item or section.
+    boundaries = list(re.finditer(r'^(?:- |##? |[ \t]*(?:- )?<a id=)', text, re.M))
+    def entry_body(start):
+        end = next((m.start() for m in boundaries if m.start() > start), len(text))
+        return text[start:end]
+
+    d4 = re.search(r'^- <a id="decided-2026-11-13-d4-recovery"></a>', text, re.M)
+    retained = set()
+    if d4:
+        body = entry_body(d4.start())
+        table = re.search(
+            r'^  \*\*Already recovered authority, independently checked; existing records retained\.\*\*\n'
+            r'[^|]*?(?P<table>  \| Report row \| Existing record \|[^\n]*\n'
+            r'  \|[-| ]+\|\n(?:  \|[^\n]*\n)+)', body, re.M)
+        if table:
+            for row in table['table'].splitlines()[2:]:
+                cells = row.split('|')
+                link = re.fullmatch(r'\s*\[[^]\n]+\]\(#(recovered-[^)]+)\)\s*', cells[2])
+                if link:
+                    retained.add(link[1])
     entries = re.finditer(
-        r'^[ \t]*- <a id="(?P<anchor>[^"\n]+)"></a>'
+        r'^[ \t]*(?P<list>- )?<a id="(?P<anchor>[^"\n]+)"></a>'
         r'(?P<mark>\*\*|\*)(?P<title>[^*\n]*(?:\n[ \t]+[^*\n]+)*?)(?P=mark)'
         r'(?P<after>\s*\(owner,\s*\d{4}-\d{2}-\d{2}:)?', text, re.M)
     for entry in entries:
@@ -61,7 +81,15 @@ def authority_entries(text):
             result[anchor] = 'open in Waiting for the owner'
         elif status:
             result[anchor] = 'disposition in title: ' + status[0].lower()
-        elif entry['after']:
+        elif anchor.startswith('recovered-'):
+            if anchor in retained:
+                result[anchor] = None
+        elif entry['list'] and entry['after']:
+            result[anchor] = None
+        elif (entry['list'] and entry['mark'] == '**'
+              and (dated := re.fullmatch(r'decided-(\d{4}-\d{2}-\d{2})-[a-z0-9]+(?:-[a-z0-9]+)*', anchor))
+              and entry['title'].endswith('(' + dated[1] + ').')
+              and re.search(r'^  Provenance: \S', entry_body(entry.start()), re.M)):
             result[anchor] = None
     for anchor in waiting_anchors & result.keys():
         result[anchor] = 'open in Waiting for the owner'
