@@ -19,3 +19,4 @@ import ConcreteSpec.Proofs.Ident
 import ConcreteSpec.Proofs.Exec
 import ConcreteSpec.Proofs.Const
 import ConcreteSpec.Proofs.Own
+import ConcreteSpec.Proofs.Accounting

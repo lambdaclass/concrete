@@ -20,6 +20,7 @@ base = (root / 'ConcreteSpec/Spec/Rules.lean').read_text().replace(
 base = re.sub(r'def registeredRules : List RuleId :=.*?(?=\n/--)',
               'def registeredRules : List RuleId := []\n', base, flags=re.S)
 base = base.replace('import ConcreteSpec.Spec.Const\n', '').replace('import ConcreteSpec.Spec.Own\n', '')
+base = re.sub(r'namespace Leak.Registry.*?end Leak.Registry\n', '', base, flags=re.S)
 base = re.sub(r'namespace ConstRegistry.*?end ConstRegistry\n', '', base, flags=re.S)
 base = re.sub(r'namespace Own.Registry.*?end Own.Registry\n', '', base, flags=re.S)
 base = re.sub(r'def registeredRuleExamples : List RuleExample :=.*?(?=\nend ConcreteSpec.Core)',
@@ -71,6 +72,86 @@ def fixture(name, *, decl=rule, proof=proofs, reg=registry, evidence=links,
     count += 1
     print(f'  ok   {name}: {reason or "passes"}', flush=True)
 
+
+# Authority fixtures use the real decision inventory, including the refused anchors.
+# A valid citation must never mask a non-current citation in either order.
+production_rows = (root / 'docs/decisions.md').read_text()
+rows.write_text(production_rows)
+valid = 'decided-2026-11-08-foundation'
+for anchor in [valid, 'decided-project-memory-2026-11-06',
+               'decided-2026-11-14-constant-types', 'recovered-29-18',
+               'recovered-29-19', 'recovered-59-26']:
+    fixture('authority-current-' + anchor,
+            decl=rule.replace('(Q9.1)', '(docs/decisions.md#' + anchor + ')'))
+for anchor in ['recovered-29-6', 'recovered-29-22',
+               'decided-2026-11-08-recovery-queue',
+               'decided-2026-11-13-d4-recovery',
+               'decided-2026-11-09-older-proposals',
+               'decided-2026-11-08-recovered',
+               'decided-2026-11-08-recovered-29',
+               'decided-2026-11-08-recovered-59']:
+    assert '<a id="' + anchor + '"></a>' in production_rows
+    for order, anchors in [('alone', [anchor]), ('first', [anchor, valid]),
+                            ('last', [valid, anchor])]:
+        fixture('authority-' + anchor + '-' + order,
+                decl=rule.replace('(Q9.1)', '(' + ', '.join(
+                    'docs/decisions.md#' + a for a in anchors) + ')'),
+                reason='no decided authority entry')
+for punctuation in ['.', ':', ';', ',']:
+    fixture('authority-punctuation-' + str(ord(punctuation)),
+            decl=rule.replace('(Q9.1).', 'docs/decisions.md#' + valid + punctuation))
+for name, citation in [
+    ('unknown', 'docs/decisions.md#decided-missing'),
+    ('empty', 'Q9.1, docs/decisions.md#'),
+    ('prefix', 'docs/decisions.md#' + valid + '_extra'),
+    ('suffix', 'docs/decisions.md#' + valid + '-more'),
+    ('two-dots', 'docs/decisions.md#' + valid + '..'),
+    ('four-dots', 'docs/decisions.md#' + valid + '....'),
+    ('roadmap', 'ROADMAP.md#' + valid),
+    ('proposal', 'docs/proposals/FOUNDATION.md#' + valid),
+    ('relative', '../docs/decisions.md#' + valid),
+    ('bare', '#' + valid),
+]:
+    fixture('authority-invalid-' + name,
+            decl=rule.replace('(Q9.1)', '(' + citation + ')'),
+            reason='no decided authority entry')
+# Current status, rather than a retained-anchor allowlist, determines acceptance.
+rows.write_text(production_rows.replace(
+    '**29-list item 18: RECOVERED.**', '**29-list item 18: PARTIAL; queued.**'))
+fixture('authority-status-changed', decl=rule.replace('(Q9.1)',
+        '(docs/decisions.md#recovered-29-18)'), reason='no decided authority entry')
+rows.write_text('- **Q9.1** Decided.\nR-0001 is only mentioned.\n')
+fixture('authority-row-only-existing')
+fixture('authority-row-only-missing', decl=rule.replace('Q9.1', 'Q999.1'),
+        reason='no existing decision row')
+fixture('authority-row-only-mixed', decl=rule.replace('Q9.1', 'Q9.1, Q999.1'))
+fixture('authority-roadmap-mention', decl=rule.replace('Q9.1', 'R-0001'),
+        reason='no existing decision row')
+
+# C7 adapters keep the strict traversal: each production input shape accepts closed data,
+# but an opaque value of exactly that shape cannot certify an inspectable instance.
+for name, carrier, value in [
+    ('c7-signed', 'Int × Leak.SignedInterval', '(-3, ⟨-4, -2, .boundEstablished⟩)'),
+    ('c7-reset', 'Leak.Account × Leak.Account × Nat', '(⟨8, 5, 8, 8⟩, ⟨8, 0, 8, 8⟩, 5)'),
+    ('c7-report', 'LineageId × Leak.Account × Leak.Account × Option Nat × Leak.LineageReport',
+     '(⟨0⟩, ⟨8, 5, 8, 8⟩, ⟨8, 0, 8, 8⟩, some 10, '
+     '⟨⟨0⟩, ⟨0, .boundEstablished⟩, ⟨-5, -5, .boundEstablished⟩, '
+     '⟨3, .boundEstablished⟩, ⟨10, .boundEstablished⟩⟩)'),
+    ('c7-bound', 'Nat × Leak.Bound Nat', '(10, ⟨12, .boundEstablished⟩)'),
+    ('c7-optional', 'Option Nat × Leak.Bound Nat', '(some 10, ⟨12, .boundEstablished⟩)'),
+    ('c7-action', 'List (LineageId × Leak.Account) × Leak.Action',
+     '([(⟨0⟩, ⟨100, 5, 12, 9⟩)], .free ⟨0⟩ 5)'),
+    ('c7-sequence', 'List (LineageId × Leak.Account) × List Leak.Action',
+     '([(⟨0⟩, ⟨100, 5, 12, 9⟩)], [.free ⟨0⟩ 5, .reset ⟨0⟩])'),
+]:
+    declaration = '/-- The rule (Q9.1). -/\ndef ok (_ : ' + carrier + ') : Prop := True\n'
+    fixture(name + '-closed', decl=declaration,
+            proof='theorem accepts : RuleAccepted ok (' + value + ') := True.intro\n',
+            evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]')
+    fixture(name + '-opaque', decl='opaque hidden : ' + carrier + ' := ' + value + '\n' + declaration,
+            proof='theorem accepts : RuleAccepted ok hidden := True.intro\n',
+            evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]',
+            reason='no concrete rule acceptance/refusal proposition')
 
 # Each fixture isolates one round-4 traversal bypass.
 for name, prelude, carrier, value in [

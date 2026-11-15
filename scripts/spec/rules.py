@@ -7,6 +7,58 @@ ROW = re.compile(r"\b(Q\d+(?:\.\d+)+|OD\d+|P\d+[a-z]?|R-\d{4})\b")
 DECLARED = re.compile(r"^\s*(?:- \*\*(\S+?)\*\*|\| *(\S+?) *\|)", re.M)
 
 
+# Only the decision inventory owns authority; other row inventories cannot add anchors.
+ANCHOR = re.compile(r'<a\s+id="([^"\n]+)"\s*></a>')
+CITATION = re.compile(r"([^\s`<>\[\](){},;:\"']*)#([^\s`<>\[\](){},;:\"']*)")
+
+NONCURRENT = re.compile(
+    r"\b(?:open|undecided|held|hold|partial|queued?|reopen(?:ed|ing)?|superseded|not current)\b")
+RECOVERY_WRAPPER = re.compile(r"\b(?:recovery|recovered)\b|\bthe \d+.*(?:answers|list)\b")
+
+
+def authority_entries(text):
+    """Read current status from each entry's own heading, not a parallel anchor list.
+
+    Recovered item headings explicitly distinguish RECOVERED from PARTIAL and
+    superseded/not-current evidence. The decided-* namespace identifies decision
+    records, but recovery wrappers, queues and reopening notices are not decisions.
+    This validates provenance identity, not the scope of a cited language claim.
+    """
+    entries = set()
+    for match in ANCHOR.finditer(text):
+        anchor = match.group(1)
+        tail = text[match.end():]
+        heading = re.match(r"\s*(?:\*\*([^*]+)\*\*|#{1,6} ([^\n]+))", tail)
+        if heading is None:
+            continue
+        status = (heading.group(1) or heading.group(2)).lower()
+        if NONCURRENT.search(status) or RECOVERY_WRAPPER.search(status):
+            # A fully recovered individual item is current unless its own status
+            # explicitly records a qualification that withholds current authority.
+            if (re.fullmatch(r'recovered-\d+-\d+', anchor) and 'recovered' in status
+                    and not NONCURRENT.search(status)):
+                entries.add(anchor)
+        elif anchor.startswith('decided-'):
+            entries.add(anchor)
+    return entries
+
+
+def decision_citations(doc):
+    """Consume the complete fragment token; allow one sentence-ending period.
+
+    Existing landed comments abbreviate subsequent fragments after an explicit
+    docs/decisions.md reference. Preserve those citations without rewriting them.
+    A bare fragment alone or one attached to another path has no owning inventory.
+    """
+    for match in CITATION.finditer(doc):
+        path, anchor = match.groups()
+        if anchor.endswith('.') and not anchor.endswith('..'):
+            anchor = anchor[:-1]
+        if not path and 'docs/decisions.md#' in doc[:match.start()]:
+            path = 'docs/decisions.md'
+        yield path, anchor
+
+
 def unique_object(pairs):
     """JSON must not silently overwrite an earlier field with a later one."""
     obj = {}
@@ -47,6 +99,7 @@ def main(rules_path, row_paths):
     rules = [r for r in records if r["kind"] == "rule"]
     examples = [r for r in records if r["kind"] == "example"]
     declared = {a or b for t in inventories for a, b in DECLARED.findall(t)}
+    approved = authority_entries(inventories[0])
     names = [r["name"] for r in rules]
     for n in sorted({n for n in names if names.count(n) > 1}):
         fails.append(f"rule {n} is registered more than once")
@@ -56,9 +109,16 @@ def main(rules_path, row_paths):
         if not r["doc"].strip(): fails.append(f"rule {r['name']} has no doc comment")
         else:
             rows = [m.group(1) for m in ROW.finditer(r["doc"])]
-            if not rows: fails.append(f"rule {r['name']}'s doc comment cites no decision row")
-            elif not any(x in declared for x in rows):
+            citations = list(decision_citations(r["doc"]))
+            # A row-only citation retains the existing rule: at least one declared
+            # row suffices. Fragment citations, if present, must ALL be current.
+            if not rows and not citations:
+                fails.append(f"rule {r['name']}'s doc comment cites no decision row or authority entry")
+            elif rows and not any(x in declared for x in rows):
                 fails.append(f"rule {r['name']}'s doc comment cites no existing decision row ({', '.join(rows)})")
+            for path, anchor in citations:
+                if path != 'docs/decisions.md' or anchor not in approved:
+                    fails.append(f"rule {r['name']}'s doc comment cites no decided authority entry for {path}#{anchor}")
     seen = {n: set() for n in names}
     identities = set()
     for e in examples:
