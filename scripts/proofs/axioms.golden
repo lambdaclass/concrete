@@ -2215,6 +2215,7 @@ ConcreteSpec.Core.Own.Examples.E.use.sizeOf_spec
 ConcreteSpec.Core.Own.Examples.callee._proof_1	
 ConcreteSpec.Core.Own.FinalEvidence.instDecidableCallerReady._proof_1	Quot.sound propext
 ConcreteSpec.Core.Own.FiniteExecution.brecOn	
+ConcreteSpec.Core.Own.LifetimeEvidence.instDecidableRetainsCaller._proof_1	propext
 ConcreteSpec.Core.Own.Loan.mk.inj	
 ConcreteSpec.Core.Own.Loan.mk.injEq	propext
 ConcreteSpec.Core.Own.Loan.mk.sizeOf_spec	
