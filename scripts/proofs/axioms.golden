@@ -2319,6 +2319,7 @@ ConcreteSpec.Core.Own.Projection.field.sizeOf_spec
 ConcreteSpec.Core.Own.Projection.index.inj	
 ConcreteSpec.Core.Own.Projection.index.injEq	propext
 ConcreteSpec.Core.Own.Projection.index.sizeOf_spec	
+ConcreteSpec.Core.Own.RefusalEvidence.missingPermitted	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Own.RefusalEvidence.readPermitted	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Own.RefusalEvidence.trapPermitted	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Own.Registry.dropAccepted	propext
@@ -2333,7 +2334,9 @@ ConcreteSpec.Core.Own.Registry.moveAccepted
 ConcreteSpec.Core.Own.Registry.moveRefused	
 ConcreteSpec.Core.Own.Registry.ownerAccepted	
 ConcreteSpec.Core.Own.Registry.ownerRefused	
-ConcreteSpec.Core.Own.RelationalConverseEvidence.RefuseSteps.brecOn	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Own.RelationalConverseEvidence.eventTrace	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Own.RelationalConverseEvidence.refuseAccepted	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Own.RelationalConverseEvidence.refuseEventAccepted	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Own.RelationalConverseEvidence.refuseRead	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Own.Slot.mk.inj	
 ConcreteSpec.Core.Own.Slot.mk.injEq	propext

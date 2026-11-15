@@ -892,7 +892,7 @@ example :
 
 /-- Planted (law `ConcreteSpec.Core.Own.step_next_erasure`, case
 `ConcreteSpec.Core.Own.PopulatedErasureEvidence.readConfig`,
-subject `ConcreteSpec.Core.Own.instrumentOperands`,
+subject `ConcreteSpec.Core.Own.stepInstrumented`,
 mutant `ConcreteSpec.Core.Own.PopulatedErasureEvidence.abortSuccess`).
 The sole dispatcher returns a trapped configuration instead of binding the local. -/
 example :
@@ -1066,6 +1066,63 @@ theorem readPermitted : ArgsPermitted erasedOps types permitE [(x, 7)] ⟨4, sha
 theorem trapPermitted : ArgsPermitted erasedOps types permitE [(x, 7)] ⟨4, shared⟩ [.fail .overflow] :=
   ⟨fun _ => rfl, fun _ _ _ => trivial⟩
 
+/-- Helper: the owner read is permitted even when its concrete local is missing.
+The successful-tail obligation is empty for this singleton argument list. -/
+theorem missingPermitted : ArgsPermitted erasedOps types permitE [(y, 9)] ⟨4, shared⟩ [.read x] :=
+  ⟨fun _ => by decide, fun _ _ _ => trivial⟩
+
+/-- Instance (law `ConcreteSpec.Core.Own.evalArgs_stuck_iff_of_permitted`, case
+`ConcreteSpec.Core.Own.Examples.shared`). Both evaluators successfully read the owner;
+the equivalence also covers the absence of the named failure. -/
+example : ArgsPermitted erasedOps types permitE [(x, 7)] ⟨4, shared⟩ [.read x] ∧
+    Exec.evalArgs instrumentedOps [(x, 7)] ⟨4, shared⟩ [.read x] = .ok ([7], ⟨4, shared⟩) ∧
+    (Exec.evalArgs instrumentedOps [(x, 7)] ⟨4, shared⟩ [.read x] = .stuck ↔
+      Exec.evalArgs erasedOps [(x, 7)] 4 [.read x] = .stuck) :=
+  ⟨readPermitted, rfl, evalArgs_stuck_iff_of_permitted _ _ _ readPermitted⟩
+
+/-- Instance (law `ConcreteSpec.Core.Own.evalArgs_trap_iff_of_permitted`, case
+`ConcreteSpec.Core.Own.Examples.shared`). Both evaluators successfully read the owner;
+the equivalence also covers the absence of the named failure. -/
+example : ArgsPermitted erasedOps types permitE [(x, 7)] ⟨4, shared⟩ [.read x] ∧
+    Exec.evalArgs instrumentedOps [(x, 7)] ⟨4, shared⟩ [.read x] = .ok ([7], ⟨4, shared⟩) ∧
+    (Exec.evalArgs instrumentedOps [(x, 7)] ⟨4, shared⟩ [.read x] = .trap .overflow ↔
+      Exec.evalArgs erasedOps [(x, 7)] 4 [.read x] = .trap .overflow) :=
+  ⟨readPermitted, rfl, evalArgs_trap_iff_of_permitted _ _ _ readPermitted .overflow⟩
+
+/-- Planted (law `ConcreteSpec.Core.Own.evalArgs_erasure_of_permitted`, case
+`ConcreteSpec.Core.Own.Examples.shared`, subject `ConcreteSpec.Core.Own.instrumentOperands`,
+mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.stuckOperands`).
+The singleton tail is empty, so permission remains inhabited after substitution. -/
+example : ArgsPermitted erasedOps types permitE [(x, 7)] ⟨4, shared⟩ [.read x] ∧
+    ¬ (Exec.evalArgs erasedOps [(x, 7)] 4 [.read x] =
+      (Exec.evalArgs (stuckOperands erasedOps types permitE) [(x, 7)] ⟨4, shared⟩ [.read x]).map
+        (fun (vs, t) => (vs, erase t))) := ⟨readPermitted, by decide⟩
+
+/-- Planted (law `ConcreteSpec.Core.Own.evalArgs_erasure_of_permitted`, case
+`ConcreteSpec.Core.Own.Examples.shared`, subject `ConcreteSpec.Core.Own.instrumentOperands`,
+mutant `ConcreteSpec.Core.Own.PopulatedErasureEvidence.recoverStuck`).
+The singleton tail is empty, so permission remains inhabited after substitution. -/
+example : ArgsPermitted erasedOps types permitE [(y, 9)] ⟨4, shared⟩ [.read x] ∧
+    ¬ (Exec.evalArgs erasedOps [(y, 9)] 4 [.read x] =
+      (Exec.evalArgs { instrumentedOps with eval := recoverStuck erasedOps permitE } [(y, 9)] ⟨4, shared⟩ [.read x]).map
+        (fun (vs, t) => (vs, erase t))) := ⟨missingPermitted, by decide⟩
+
+/-- Planted (law `ConcreteSpec.Core.Own.evalArgs_stuck_iff_of_permitted`, case
+`ConcreteSpec.Core.Own.Examples.shared`, subject `ConcreteSpec.Core.Own.instrumentOperands`,
+mutant `ConcreteSpec.Core.Own.PopulatedErasureEvidence.recoverStuck`).
+The singleton tail is empty, so permission remains inhabited after substitution. -/
+example : ArgsPermitted erasedOps types permitE [(y, 9)] ⟨4, shared⟩ [.read x] ∧
+    ¬ (Exec.evalArgs { instrumentedOps with eval := recoverStuck erasedOps permitE } [(y, 9)] ⟨4, shared⟩ [.read x] = .stuck ↔
+      Exec.evalArgs erasedOps [(y, 9)] 4 [.read x] = .stuck) := ⟨missingPermitted, by decide⟩
+
+/-- Planted (law `ConcreteSpec.Core.Own.evalArgs_trap_iff_of_permitted`, case
+`ConcreteSpec.Core.Own.Examples.shared`, subject `ConcreteSpec.Core.Own.instrumentOperands`,
+mutant `ConcreteSpec.Core.Own.PopulatedErasureEvidence.abortSuccess`).
+The singleton tail is empty, so permission remains inhabited after substitution. -/
+example : ArgsPermitted erasedOps types permitE [(x, 7)] ⟨4, shared⟩ [.read x] ∧
+    ¬ (Exec.evalArgs { instrumentedOps with eval := abortSuccess erasedOps permitE } [(x, 7)] ⟨4, shared⟩ [.read x] = .trap .abort ↔
+      Exec.evalArgs erasedOps [(x, 7)] 4 [.read x] = .trap .abort) := ⟨readPermitted, by decide⟩
+
 /-- Instance (law `ConcreteSpec.Core.Own.evalArgs_erasure_of_permitted`, case
 `ConcreteSpec.Core.Own.Examples.shared`). Values and concrete state survive erasure. -/
 example : ArgsPermitted erasedOps types permitE [(x, 7)] ⟨4, shared⟩ [.read x] ∧
@@ -1083,12 +1140,14 @@ example : ArgsPermitted erasedOps types permitE [(x, 7)] ⟨4, shared⟩ [.read 
         (fun (vs, t) => (vs, erase t))) := ⟨readPermitted, by decide⟩
 
 /-- Instance (law `ConcreteSpec.Core.Own.evalArgs_stuck_iff_of_permitted`, case
-`ConcreteSpec.Core.Own.Examples.shared`). Permission does not hide concrete stuckness. -/
-example : ArgsPermitted erasedOps types permitE [(x, 7)] ⟨4, shared⟩ [.read y] ∧
-    (Exec.evalArgs instrumentedOps [(x, 7)] ⟨4, shared⟩ [.read y] = .stuck ↔
-      Exec.evalArgs erasedOps [(x, 7)] 4 [.read y] = .stuck) :=
-  ⟨⟨fun h => False.elim (h rfl), fun _ _ _ => trivial⟩,
-    evalArgs_stuck_iff_of_permitted _ _ _ ⟨fun h => False.elim (h rfl), fun _ _ _ => trivial⟩⟩
+`ConcreteSpec.Core.Own.Examples.shared`). Ownership permits the owner read, while
+its absent concrete local makes both argument evaluations stuck. -/
+example : permitE [(y, 9)] (.read x) shared = some shared ∧
+    ArgsPermitted erasedOps types permitE [(y, 9)] ⟨4, shared⟩ [.read x] ∧
+    Exec.evalArgs instrumentedOps [(y, 9)] ⟨4, shared⟩ [.read x] = .stuck ∧
+    (Exec.evalArgs instrumentedOps [(y, 9)] ⟨4, shared⟩ [.read x] = .stuck ↔
+      Exec.evalArgs erasedOps [(y, 9)] 4 [.read x] = .stuck) :=
+  ⟨by decide, missingPermitted, rfl, evalArgs_stuck_iff_of_permitted _ _ _ missingPermitted⟩
 
 /-- Planted (law `ConcreteSpec.Core.Own.evalArgs_stuck_iff_of_permitted`, case
 `ConcreteSpec.Core.Own.Examples.shared`, subject `ConcreteSpec.Core.Own.instrumentOperands`,
@@ -1126,14 +1185,18 @@ example : Exec.evalArgs (swallowTrapOperands erasedOps types permitE) [(x, 7)] �
       | _ => True) := ⟨rfl, by intro h; cases h⟩
 
 /-- Planted (law `ConcreteSpec.Core.Own.step_next_erasure`, case
-`ConcreteSpec.Core.Own.Examples.shared`, subject `ConcreteSpec.Core.Own.instrumentOperands`,
+`ConcreteSpec.Core.Own.Examples.shared`, subject `ConcreteSpec.Core.Own.stepInstrumented`,
 mutant `ConcreteSpec.Core.Own.RefusalEvidence.swallowTrapOperands`). -/
-example : ¬ (match Exec.step emptyProg
+example : Exec.step emptyProg
+      ⟨.exec (.ret (.fail .overflow) ⟨0⟩), [(x, 7)], ⟨4, shared⟩, []⟩
+      (swallowTrapOperands erasedOps types permitE).eval =
+        some (.next ⟨.exiting (.ret 0), [(x, 7)], ⟨4, shared⟩, []⟩) ∧
+    ¬ (match Exec.step emptyProg
       ⟨.exec (.ret (.fail .overflow) ⟨0⟩), [(x, 7)], ⟨4, shared⟩, []⟩
       (swallowTrapOperands erasedOps types permitE).eval with
     | some (.next ci) => Exec.step (eraseProgram emptyProg)
         ⟨.exec (.ret (.fail .overflow) ⟨0⟩), [(x, 7)], 4, []⟩ = some (.next (eraseConfig ci))
-    | _ => True) := by intro h; cases h
+    | _ => True) := ⟨rfl, by intro h; cases h⟩
 
 /-- Planted (law `ConcreteSpec.Core.Own.runFrom_erasure`, case
 `ConcreteSpec.Core.Own.Examples.shared`, subject `ConcreteSpec.Core.Own.instrumentOperands`,
@@ -1171,14 +1234,6 @@ def refuseStep (P : Exec.Program instrumentedOps) (c : Exec.Config instrumentedO
     (l : Exec.Label instrumentedOps) (d : Exec.Config instrumentedOps) : Prop :=
   ∃ a, Exec.Dispatches (stepInstrumentedRefuse erasedOps types permitE) P c a l d
 
-/-- Planted: finite closure of exactly `refuseStep`, so the same operand mutation
-applies at every transition of a trace. -/
-inductive RefuseSteps (P : Exec.Program instrumentedOps) :
-    Exec.Config instrumentedOps → List Int → Exec.Config instrumentedOps → Prop where
-  | refl (c) : RefuseSteps P c [] c
-  | step {c l c' tr d} : refuseStep P c l c' → RefuseSteps P c' tr d →
-      RefuseSteps P c (l.events ++ tr) d
-
 /-- Helper: the planted evaluator refuses the populated read before any labeled step. -/
 theorem refuseRead (l : Exec.Label instrumentedOps) (d : Exec.Config instrumentedOps) :
     ¬ refuseStep emptyProg readConfig l d := by
@@ -1186,6 +1241,16 @@ theorem refuseRead (l : Exec.Label instrumentedOps) (d : Exec.Config instrumente
   cases h with
   | silent h => cases h
   | prim h _ _ => cases h
+
+/-- Helper: acceptance remains inhabited under the uniformly substituted closure.
+The mutant refuses the first read, so only the initial configuration is reachable. -/
+theorem refuseAccepted : CheckerAccepted erasedOps types permitE emptyProg readConfig
+    (FiniteExecution (stepInstrumentedRefuse erasedOps types permitE emptyProg)) := by
+  intro tr c hs
+  cases hs with
+  | refl => exact readAccepted [] readConfig (.refl _)
+  | silent h _ => cases h
+  | prim h _ _ _ => cases h
 
 /-- Instance (law `ConcreteSpec.Core.Own.Step_converse_of_accepted`, case
 `ConcreteSpec.Core.Own.PopulatedErasureEvidence.readConfig`). Both acceptance and a
@@ -1198,34 +1263,63 @@ example : CheckerAccepted erasedOps types permitE emptyProg readConfig ∧
     @Step_converse_of_accepted erasedOps types permitE _ _ readAccepted _ _ (.silent rfl)⟩
 
 /-- Planted (law `ConcreteSpec.Core.Own.Step_converse_of_accepted`, case
-`ConcreteSpec.Core.Own.PopulatedErasureEvidence.readConfig`, subject `ConcreteSpec.Core.Exec.Step`,
+`ConcreteSpec.Core.Own.PopulatedErasureEvidence.readConfig`, subject `ConcreteSpec.Core.Own.stepInstrumented`,
 mutant `ConcreteSpec.Core.Own.RelationalConverseEvidence.refuseStep`). -/
-example : CheckerAccepted erasedOps types permitE emptyProg readConfig ∧
+example : CheckerAccepted erasedOps types permitE emptyProg readConfig
+    (FiniteExecution (stepInstrumentedRefuse erasedOps types permitE emptyProg)) ∧
     Exec.Step (eraseProgram emptyProg) (eraseConfig readConfig) .silent (eraseConfig readDestination) ∧
     ¬ (∃ li ci, refuseStep emptyProg readConfig li ci ∧
       eraseLabel li = .silent ∧ eraseConfig ci = eraseConfig readDestination) :=
-  ⟨readAccepted, .silent rfl, by rintro ⟨li, ci, h, _, _⟩; exact refuseRead li ci h⟩
+  ⟨refuseAccepted, .silent rfl, by rintro ⟨li, ci, h, _, _⟩; exact refuseRead li ci h⟩
+
+/-- Helper: a primitive emits an event, then a sequence frame advances to its statement. -/
+theorem eventTrace : Exec.Steps (eraseProgram emptyProg) (eraseConfig primFrameStuckConfig)
+    [0] ⟨.exec (.assign y (.lit 1) ⟨1⟩), [(x, 7)], 0, []⟩ :=
+  .step (Exec.Step.prim (O := erasedOps)
+    (a := (⟨some 0, .ok 0, 0⟩ : Exec.Answer Int Int Int)) rfl rfl rfl)
+    (.step (.silent rfl) (.refl _))
 
 /-- Instance (law `ConcreteSpec.Core.Own.Steps_converse_of_accepted`, case
-`ConcreteSpec.Core.Own.PopulatedErasureEvidence.readConfig`). A nonempty execution lifts. -/
-example : CheckerAccepted erasedOps types permitE emptyProg readConfig ∧
-    Exec.Steps (eraseProgram emptyProg) (eraseConfig readConfig) [] (eraseConfig readDestination) ∧
-    ∃ ci, Exec.Steps emptyProg readConfig [] ci ∧ eraseConfig ci = eraseConfig readDestination :=
-  ⟨readAccepted, .step (.silent rfl) (.refl _),
-    @Steps_converse_of_accepted erasedOps types permitE _ _ readAccepted _ _ (.step (.silent rfl) (.refl _))⟩
+`ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig`). Two transitions
+lift in order, including the primitive's nonempty event trace and the concrete endpoint. -/
+example : CheckerAccepted erasedOps types permitE emptyProg primFrameStuckConfig ∧
+    Exec.Steps (eraseProgram emptyProg) (eraseConfig primFrameStuckConfig)
+      [0] ⟨.exec (.assign y (.lit 1) ⟨1⟩), [(x, 7)], 0, []⟩ ∧
+    ∃ ci, Exec.Steps emptyProg primFrameStuckConfig [0] ci ∧
+      eraseConfig ci = ⟨.exec (.assign y (.lit 1) ⟨1⟩), [(x, 7)], 0, []⟩ :=
+  ⟨primFrameStuck_checkerAccepted_inv, eventTrace,
+    @Steps_converse_of_accepted erasedOps types permitE _ _
+      primFrameStuck_checkerAccepted_inv _ _ eventTrace⟩
+
+/-- Helper: acceptance for the eventful case remains inhabited under the mutant closure.
+Refusing the primitive's successful operand leaves only the initial state reachable. -/
+theorem refuseEventAccepted : CheckerAccepted erasedOps types permitE emptyProg primFrameStuckConfig
+    (FiniteExecution (stepInstrumentedRefuse erasedOps types permitE emptyProg)) := by
+  intro tr c hs
+  cases hs with
+  | refl => exact primFrameStuck_checkerAccepted_inv [] primFrameStuckConfig (.refl _)
+  | silent h _ => cases h
+  | prim h _ _ _ => cases h
 
 /-- Planted (law `ConcreteSpec.Core.Own.Steps_converse_of_accepted`, case
-`ConcreteSpec.Core.Own.PopulatedErasureEvidence.readConfig`, subject `ConcreteSpec.Core.Exec.Steps`,
-mutant `ConcreteSpec.Core.Own.RelationalConverseEvidence.RefuseSteps`). -/
-example : CheckerAccepted erasedOps types permitE emptyProg readConfig ∧
-    Exec.Steps (eraseProgram emptyProg) (eraseConfig readConfig) [] (eraseConfig readDestination) ∧
-    ¬ (∃ ci, RefuseSteps emptyProg readConfig [] ci ∧ eraseConfig ci = eraseConfig readDestination) := by
-  refine ⟨readAccepted, .step (.silent rfl) (.refl _), ?_⟩
-  rintro ⟨ci, ht, he⟩
-  generalize ([] : List Int) = tr at ht
+`ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig`,
+subject `ConcreteSpec.Core.Own.stepInstrumented`,
+mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.stepInstrumentedRefuse`).
+The same mutated step governs acceptance and every transition of the finite execution. -/
+example : CheckerAccepted erasedOps types permitE emptyProg primFrameStuckConfig
+    (FiniteExecution (stepInstrumentedRefuse erasedOps types permitE emptyProg)) ∧
+    Exec.Steps (eraseProgram emptyProg) (eraseConfig primFrameStuckConfig)
+      [0] ⟨.exec (.assign y (.lit 1) ⟨1⟩), [(x, 7)], 0, []⟩ ∧
+    ¬ (∃ ci, FiniteExecution (stepInstrumentedRefuse erasedOps types permitE emptyProg)
+      primFrameStuckConfig [0] ci ∧
+      eraseConfig ci = ⟨.exec (.assign y (.lit 1) ⟨1⟩), [(x, 7)], 0, []⟩) := by
+  refine ⟨refuseEventAccepted, eventTrace, ?_⟩
+  rintro ⟨ci, ht, _⟩
+  generalize htr : ([0] : List Int) = tr at ht
   cases ht with
-  | refl => cases he
-  | step hs _ => exact refuseRead _ _ hs
+  | refl => cases htr
+  | silent hs _ => cases hs
+  | prim hs _ _ _ => cases hs
 
 /-- Instance (law `ConcreteSpec.Core.Own.Step_converse_of_accepted`, case
 `ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig`). This case lifts an
@@ -1237,6 +1331,18 @@ example : CheckerAccepted erasedOps types permitE emptyProg primFrameStuckConfig
   ⟨primFrameStuck_checkerAccepted_inv,
     @Step_converse_of_accepted erasedOps types permitE _ _ primFrameStuck_checkerAccepted_inv _ _
       (Exec.Step.prim (O := erasedOps) (a := (⟨some 0, .ok 0, 0⟩ : Exec.Answer Int Int Int)) rfl rfl rfl)⟩
+
+/-- Planted (law `ConcreteSpec.Core.Own.runFrom_erasure_of_accepted`, case
+`ConcreteSpec.Core.Own.PopulatedErasureEvidence.readConfig`,
+subject `ConcreteSpec.Core.Own.instrumentOperands`,
+mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.stuckOperands`). The operand mutation
+is used throughout the driver and its acceptance closure, rather than only by the oracle. -/
+example : CheckerAccepted erasedOps types permitE emptyProg readConfig
+    (FiniteExecution (stepInstrumentedRefuse erasedOps types permitE emptyProg)) ∧
+    ¬ (Exec.runFrom (eraseProgram emptyProg) erasedOracle 3 [] (eraseConfig readConfig) =
+      eraseReport (Exec.runFrom emptyProg (liftOracle erasedOps types permitE erasedOracle)
+        3 [] readConfig (stuckOperands erasedOps types permitE).eval)) :=
+  ⟨refuseAccepted, by intro h; have he := congrArg (fun r => r.ending) h; cases he⟩
 
 end RelationalConverseEvidence
 

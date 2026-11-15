@@ -17,7 +17,7 @@ obligation, not a claim that a checker implementation has been proved correct.
 O1 owns ledger preservation and lifetime facts; this module owns execution erasure.
 Source commands in the extraction's trailing preservation/lifetime/finality groups
 already belong to O1 and are not copied here. O3 remains out of scope.
-Held policies remain ISS-0064/ISS-0065, ISS-0068 through ISS-0073 and ISS-0076:
+Held policies remain ISS-0064/ISS-0065, ISS-0068 through ISS-0073, ISS-0076 and ISS-0080:
 source characters/paths, constant restrictions, codecs, wiping, startup/ABI and
 aggregate/whole-pointer layout. None is needed or encoded by these erasure laws.
 Only Law counts as evidence; Helper, Representation lemma, Instance and Planted
@@ -29,7 +29,7 @@ section ExecErasure
 variable {O : Exec.Operands} {types : Var → Option Descriptor}
   {permit : AList Var O.Val → O.Expr → State → Option State}
 
-/-- Law (authority: docs/decisions.md#decided-2026-11-13-lifecycle-refusal;
+/-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`; authority: docs/decisions.md#decided-2026-11-13-lifecycle-refusal;
 #decided-2026-11-05-core, Q9.10). Permission refusal is unsafe stopping,
 including when the concrete expression would succeed or trap. -/
 theorem eval_refusal (L : AList Var O.Val) (s : Store O.Store) (e : O.Expr)
@@ -37,21 +37,21 @@ theorem eval_refusal (L : AList Var O.Val) (s : Store O.Store) (e : O.Expr)
     (instrumentOperands O types permit).eval L s e = .stuck := by
   simp [instrumentOperands, instrumentEval, h]
 
-/-- Law (authority: docs/decisions.md#decided-2026-11-13-lifecycle-refusal).
+/-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`; authority: docs/decisions.md#decided-2026-11-13-lifecycle-refusal).
 A failed ownership lifecycle cannot be converted to a concrete success. -/
 theorem life_refusal (ev : Exec.Life) (s : Store O.Store)
     (h : life types ev s.own = none) :
     (instrumentOperands O types permit).life ev s = none := by
   simp [instrumentOperands, instrumentLife, h]
 
-/-- Law (authority: docs/decisions.md#decided-2026-11-13-lifecycle-refusal).
+/-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`; authority: docs/decisions.md#decided-2026-11-13-lifecycle-refusal).
 A refused head argument stops argument evaluation, rather than returning or trapping. -/
 theorem evalArgs_refusal (L : AList Var O.Val) (s : Store O.Store)
     (e : O.Expr) (es : List O.Expr) (h : permit L e s.own = none) :
     Exec.evalArgs (instrumentOperands O types permit) L s (e :: es) = .stuck := by
   simp [Exec.evalArgs, instrumentOperands, instrumentEval, h, Res.bind]
 
-/-- Law (authority: docs/decisions.md#decided-2026-11-13-lifecycle-refusal).
+/-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`; authority: docs/decisions.md#decided-2026-11-13-lifecycle-refusal).
 Refusal during a binding expression leaves the dispatcher without a transition. -/
 theorem step_eval_refusal (P : Exec.Program (instrumentOperands O types permit))
     (L : AList Var O.Val) (s : Store O.Store)
@@ -60,7 +60,7 @@ theorem step_eval_refusal (P : Exec.Program (instrumentOperands O types permit))
     Exec.step P ⟨.exec (.bind x e site), L, s, k⟩ = none := by
   simp [Exec.step, instrumentOperands, instrumentEval, h, Exec.onRes]
 
-/-- Law (authority: docs/decisions.md#decided-2026-11-13-lifecycle-refusal).
+/-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`; authority: docs/decisions.md#decided-2026-11-13-lifecycle-refusal).
 A failed result-binding lifecycle is unsafe stopping after a successful operand. -/
 theorem step_life_refusal (P : Exec.Program (instrumentOperands O types permit))
     (L : AList Var O.Val) (s t : Store O.Store)
@@ -72,7 +72,7 @@ theorem step_life_refusal (P : Exec.Program (instrumentOperands O types permit))
   change instrumentEval O permit L s e = .ok (v, t) at he
   simp [Exec.step, instrumentOperands, he, Exec.onRes, instrumentLife, hl]
 
-/-- Law (authority: docs/decisions.md#decided-2026-11-08-recovered-d3, C5;
+/-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`; authority: docs/decisions.md#decided-2026-11-08-recovered-d3, C5;
 #decided-2026-11-05-core, Q9.10). Permitted arguments have exactly the concrete
 result after erasure, including traps and stuckness. This converse does not assume
 that the instrumented result succeeded. -/
@@ -104,7 +104,7 @@ theorem evalArgs_erasure_of_permitted (L : AList Var O.Val)
       rw [hi]
       cases Exec.evalArgs (instrumentOperands O types permit) L ⟨concrete, own⟩ es <;> rfl
 
-/-- Law (authority: docs/decisions.md#decided-2026-11-08-recovered-d3, C5).
+/-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`; authority: docs/decisions.md#decided-2026-11-08-recovered-d3, C5).
 Permitted arguments are stuck on exactly the same inputs in either execution. -/
 theorem evalArgs_stuck_iff_of_permitted (L : AList Var O.Val)
     (args : List O.Expr) (s : Store O.Store) (hp : ArgsPermitted O types permit L s args) :
@@ -113,7 +113,7 @@ theorem evalArgs_stuck_iff_of_permitted (L : AList Var O.Val)
   rw [evalArgs_erasure_of_permitted L args s hp]
   cases Exec.evalArgs (instrumentOperands O types permit) L s args <;> simp [Res.map, Res.bind]
 
-/-- Law (authority: docs/decisions.md#decided-2026-11-08-recovered-d3, C5).
+/-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`; authority: docs/decisions.md#decided-2026-11-08-recovered-d3, C5).
 A concrete trap is also a tracked trap when argument permission holds. -/
 theorem evalArgs_trap_iff_of_permitted (L : AList Var O.Val)
     (args : List O.Expr) (s : Store O.Store) (hp : ArgsPermitted O types permit L s args)
@@ -1591,7 +1591,7 @@ private theorem request_none_of_permitted
   | trapped _ _ => cases hs
   | refused => cases hs
 
-/-- Law (authority: docs/decisions.md#decided-2026-11-08-recovered-d3, C5;
+/-- Law (subject `ConcreteSpec.Core.Own.stepInstrumented`; authority: docs/decisions.md#decided-2026-11-08-recovered-d3, C5;
 #decided-2026-11-05-core, Q9.10). Every concrete relational transition lifts
 from an accepted configuration. The answer is chosen independently at each step;
 no deterministic oracle restricts the environment. -/
@@ -1641,7 +1641,7 @@ theorem Step_converse_of_accepted
           exact ⟨(liftAnswer st.own a).label, ci, .prim hs ha' hki,
             by rw [eraseLabel_answer_proj, hea], hc.symm⟩
 
-/-- Law (authority: docs/decisions.md#decided-2026-11-08-recovered-d3, C5).
+/-- Law (subject `ConcreteSpec.Core.Own.stepInstrumented`; authority: docs/decisions.md#decided-2026-11-08-recovered-d3, C5).
 Every finite concrete trace lifts under checker acceptance, preserving its full
 ordered events and concrete endpoint, even with history-dependent answer choices. -/
 theorem Steps_converse_of_accepted
@@ -1664,7 +1664,8 @@ theorem Steps_converse_of_accepted
 
 /-- Law (authority: docs/decisions.md#decided-2026-11-05-core (Q9.10);
 #decided-2026-11-08-recovered-d3 (C5 erasure);
-#decided-2026-11-13-lifecycle-refusal). (subject `ConcreteSpec.Core.Own.liftOracle`). Exact fuel-indexed simulation
+#decided-2026-11-13-lifecycle-refusal). (subjects `ConcreteSpec.Core.Own.liftOracle`,
+`ConcreteSpec.Core.Own.instrumentOperands`). Exact fuel-indexed simulation
 for checker-accepted programs (owner decision 2026-11-08 Q3):
 when the program and initial configuration satisfy `CheckerAccepted`, the erased run equals the erased report of the
 instrumented run for every outcome, including stuck. -/

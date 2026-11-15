@@ -716,13 +716,17 @@ def StepPermitted (O : Exec.Operands) (types : Var → Option Descriptor)
 /-- Obligation (discharged by the ownership checker, slice 1, R-0571).
 A program and initial configuration accepted by the C5/C9 ownership and borrow checker
 maintain a well-formed ownership state and never fail an ownership or lifecycle guard at
-any reachable configuration where the concrete operation is defined (owner decision
+any reachable configuration where the concrete operation is defined. The default closure is
+`Exec.Steps P`; substitution controls supply the closure of the same mutated transition
+used in their conclusion (owner decision
 2026-11-08 Q3). -/
 def CheckerAccepted (O : Exec.Operands) (types : Var → Option Descriptor)
     (permit : AList Var O.Val → O.Expr → State → Option State)
     (P : Exec.Program (instrumentOperands O types permit))
-    (c₀ : Exec.Config (instrumentOperands O types permit)) : Prop :=
-  ∀ tr c, Exec.Steps P c₀ tr c → WellFormed c.store.own ∧ StepPermitted O types permit P c
+    (c₀ : Exec.Config (instrumentOperands O types permit))
+    (reachable : Exec.Config (instrumentOperands O types permit) → List O.Event →
+      Exec.Config (instrumentOperands O types permit) → Prop := Exec.Steps P) : Prop :=
+  ∀ tr c, reachable c₀ tr c → WellFormed c.store.own ∧ StepPermitted O types permit P c
 
 /-- Typed C4 reads and writes use exactly the original Hybrid operations after permission. -/
 def readOwner (tgt : Target) (p : Hybrid.Place) (s : Store Hybrid.State) :
