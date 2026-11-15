@@ -5,6 +5,7 @@ No source text supplies rule or example facts. Decision inventories declare docu
 import json
 import re
 import sys
+from markdown_it import MarkdownIt
 ROW = re.compile(r"\b(Q\d+(?:\.\d+)+|OD\d+|P\d+[a-z]?|R-\d{4})\b")
 DECLARED = re.compile(r"^\s*(?:- \*\*(\S+?)\*\*|\| *(\S+?) *\|)", re.M)
 ANCHOR = re.compile(r'<a\s+id="([^"\n]+)"\s*></a>')
@@ -17,89 +18,175 @@ UNRECORDED = ('authority status not machine-readable; cite a row or an entry wit
               'recorded owner approval (ISS-0083)')
 
 
-def blank_code(text):
-    """Hide fenced blocks and inline code, preserving line boundaries and offsets."""
-    lines = text.splitlines(keepends=True)
-    fence = None
-    for i, line in enumerate(lines):
-        marker = re.match(r'^[ \t]*(`{3,}|~{3,})(.*)$', line)
-        if fence is None and marker:
-            fence = marker[1]
-            lines[i] = re.sub(r'[^\n]', ' ', line)
-        elif fence is not None:
-            lines[i] = re.sub(r'[^\n]', ' ', line)
-            if (marker and marker[1][0] == fence[0] and len(marker[1]) >= len(fence)
-                    and not marker[2].strip()):
-                fence = None
-    text = ''.join(lines)
-    return re.sub(r'(`+)(?!`)(.*?)(?<!`)\1(?!`)',
-                  lambda m: re.sub(r'[^\n]', ' ', m[0]), text, flags=re.S)
+# CommonMark defines block and inline boundaries. The table extension is used only
+# for the inventory's explicit retained-record table, not to infer prose status.
+MARKDOWN = MarkdownIt("commonmark").enable("table")
+
+
+def inline_content(tokens):
+    """Rendered title content includes code, emphasis children and line breaks."""
+    return ''.join(t.content if t.type in ('text', 'code_inline') else
+                   '\n' if t.type in ('softbreak', 'hardbreak') else '' for t in tokens)
+
+
+def text_content(doc):
+    """Only CommonMark text tokens can carry row or anchor citations."""
+    return '\n'.join(c.content for t in MARKDOWN.parse(doc) if t.type == 'inline'
+                     for c in t.children or [] if c.type == 'text')
+
+
+def approval_prefix(tokens):
+    """A code span or other inline construct interrupts immediate approval."""
+    parts = []
+    for token in tokens:
+        if token.type == 'text':
+            parts.append(token.content)
+        elif token.type in ('softbreak', 'hardbreak'):
+            parts.append('\n')
+        else:
+            break
+    return ''.join(parts)
+
+
+def anchored_title(tokens):
+    """Read an anchor followed by a complete, nonempty emphasis subtree."""
+    children = [c for c in tokens if c.type != 'text' or c.content]
+    if len(children) < 4 or children[0].type != 'html_inline':
+        return None
+    html = children[0].content
+    offset = 1
+    if children[1].type == 'html_inline' and children[1].content == '</a>':
+        html += children[1].content
+        offset += 1
+    anchor = ANCHOR.fullmatch(html)
+    if not anchor or children[offset].type not in ('strong_open', 'em_open'):
+        return None
+    depth = 1
+    close = offset + 1
+    while close < len(children):
+        depth += children[close].nesting
+        if depth == 0:
+            title = inline_content(children[offset + 1:close])
+            if title.strip():
+                return anchor[1], title, children[offset].type, children[close + 1:]
+            return None
+        close += 1
+    return None
 
 
 def authority_entries(text):
-    """Read the three recorded entry forms, without inferring approval from prose.
+    """Accept recorded forms within one list item's own paragraph prefix.
 
-    Dated records require entry-local provenance; recovered entries require the
-    D4 retained table. Neither enclosing sections nor other table links qualify.
+    A nested list or heading ends that prefix. No section, child, sibling,
+    code block or paragraph outside the item can supply record fields.
     """
-    text = blank_code(text)
-    result = {m[1]: UNRECORDED for m in ANCHOR.finditer(text)}
-    section = text.split('## Waiting for the owner', 1)
-    waiting = section[1].split('\n## ', 1)[0] if len(section) == 2 else ''
+    tokens = MARKDOWN.parse(text)
+    result = {m[1]: UNRECORDED for t in tokens
+              for m in ANCHOR.finditer(''.join(c.content for c in (t.children or [t])
+                    if c.type in ('html_inline', 'html_block')))}
+    # Preserve informative refusal diagnostics even for non-entry anchor paragraphs.
+    # This can only refuse; it never supplies an approval form.
+    for token in tokens:
+        parsed = anchored_title(token.children or []) if token.type == 'inline' else None
+        if parsed and (status := DISPOSITION.search(parsed[1])):
+            result[parsed[0]] = 'disposition in title: ' + status[0].lower()
+    entries = []
     waiting_anchors = set()
-    for item in re.split(r'\n\d+\. ', waiting):
-        if not item.lstrip().startswith('Closed '):
-            waiting_anchors.update(re.findall(r'\]\(#([^)]*)\)', item))
-    # Provenance cannot leak from another anchored item or section.
-    boundaries = list(re.finditer(r'^(?:- |##? |[ \t]*(?:- )?<a id=)', text, re.M))
-    def entry_body(start):
-        end = next((m.start() for m in boundaries if m.start() > start), len(text))
-        return text[start:end]
-
-    d4 = re.search(r'^- <a id="decided-2026-11-13-d4-recovery"></a>', text, re.M)
+    waiting = False
     retained = set()
-    if d4:
-        body = entry_body(d4.start())
-        table = re.search(
-            r'^  \*\*Already recovered authority, independently checked; existing records retained\.\*\*\n'
-            r'[^|]*?(?P<table>  \| Report row \| Existing record \|[^\n]*\n'
-            r'  \|[-| ]+\|\n(?:  \|[^\n]*\n)+)', body, re.M)
-        if table:
-            for row in table['table'].splitlines()[2:]:
-                cells = row.split('|')
-                link = re.fullmatch(r'\s*\[[^]\n]+\]\(#(recovered-[^)]+)\)\s*', cells[2])
-                if link:
-                    retained.add(link[1])
-    entries = re.finditer(
-        r'^[ \t]*(?P<list>- )?<a id="(?P<anchor>[^"\n]+)"></a>'
-        r'(?P<mark>\*\*|\*)(?P<title>[^*\n]*(?:\n[ \t]+[^*\n]+)*?)(?P=mark)'
-        r'(?P<after>\s*\(owner,\s*\d{4}-\d{2}-\d{2}:)?', text, re.M)
-    for entry in entries:
-        anchor = entry['anchor']
-        status = DISPOSITION.search(entry['title'])
-        if anchor in waiting_anchors:
-            result[anchor] = 'open in Waiting for the owner'
-        elif status:
+    for i, token in enumerate(tokens):
+        if token.type == 'heading_open' and token.level == 0:
+            heading = inline_content(tokens[i + 1].children or [])
+            if heading == 'Waiting for the owner':
+                waiting = True
+            elif token.tag in ('h1', 'h2'):
+                waiting = False
+        if token.type != 'list_item_open':
+            continue
+        end = i + 1
+        while not (tokens[end].type == 'list_item_close' and tokens[end].level == token.level):
+            end += 1
+        body = tokens[i + 1:end]
+        if waiting and token.level == 1:
+            first = next((t for t in body if t.type == 'inline'), None)
+            if first and not re.match(r'^Closed\b', inline_content(first.children or [])):
+                waiting_anchors.update(c.attrGet('href')[1:] for t in body
+                    for c in t.children or [] if c.type == 'link_open'
+                    and (c.attrGet('href') or '').startswith('#'))
+        paragraphs = []
+        for t in body:
+            if t.type in ('bullet_list_open', 'ordered_list_open', 'heading_open'):
+                break
+            if t.type == 'inline' and t.level == token.level + 2:
+                paragraphs.append(t.children or [])
+        if not paragraphs:
+            continue
+        parsed = anchored_title(paragraphs[0])
+        if parsed is None:
+            continue
+        anchor, title, emphasis, after = parsed
+        entries.append((anchor, title, emphasis, after, paragraphs))
+        if anchor == 'decided-2026-11-13-d4-recovery':
+            # Read only the explicitly labelled table's Existing record column.
+            labelled = False
+            in_table = False
+            column = -1
+            existing_column = False
+            header = False
+            for t in body:
+                if t.type in ('bullet_list_open', 'ordered_list_open', 'heading_open'):
+                    break
+                if (t.type == 'inline' and t.level == token.level + 2
+                        and inline_content(t.children or []) == (
+                        'Already recovered authority, independently checked; existing records retained.')):
+                    labelled = True
+                elif t.type == 'table_open':
+                    in_table = labelled and t.level == token.level + 1
+                    labelled = False
+                elif t.type == 'table_close':
+                    in_table = False
+                elif in_table and t.type == 'tr_open':
+                    column = -1
+                elif in_table and t.type in ('th_open', 'td_open'):
+                    column += 1
+                    header = t.type == 'th_open'
+                elif in_table and t.type == 'inline' and column == 1:
+                    if header:
+                        existing_column = inline_content(t.children or []) == 'Existing record'
+                        continue
+                    if not existing_column:
+                        continue
+                    cs = t.children or []
+                    if len(cs) == 3 and cs[0].type == 'link_open' and cs[2].type == 'link_close':
+                        href = cs[0].attrGet('href') or ''
+                        if href.startswith('#recovered-'):
+                            retained.add(href[1:])
+    for anchor, title, emphasis, after, paragraphs in entries:
+        status = DISPOSITION.search(title)
+        if status:
             result[anchor] = 'disposition in title: ' + status[0].lower()
         elif anchor.startswith('recovered-'):
             if anchor in retained:
                 result[anchor] = None
-        elif entry['list'] and entry['after']:
+        elif re.match(r'^\s*\(owner,\s*\d{4}-\d{2}-\d{2}:',
+                      approval_prefix(after)):
             result[anchor] = None
-        elif (entry['list'] and entry['mark'] == '**'
+        elif (emphasis == 'strong_open'
               and (dated := re.fullmatch(r'decided-(\d{4}-\d{2}-\d{2})-[a-z0-9]+(?:-[a-z0-9]+)*', anchor))
-              and entry['title'].endswith('(' + dated[1] + ').')
-              and re.search(r'^  Provenance: \S', entry_body(entry.start()), re.M)):
-            result[anchor] = None
+              and title.endswith('(' + dated[1] + ').')):
+            lines = [line for paragraph in paragraphs for line in inline_content(paragraph).splitlines()]
+            if (any(re.match(r'^Provenance: \S', line) for line in lines)
+                    and any(re.match(r'^Owner (?:reply|message)\b', line) for line in lines)):
+                result[anchor] = None
     for anchor in waiting_anchors & result.keys():
         result[anchor] = 'open in Waiting for the owner'
     return result
 
 
 def decision_citations(doc):
-    """Parse citations outside code; bare fragments inherit an explicit path."""
+    """Bare fragments inherit an explicit path; code never supplies citations."""
     context = False
-    for match in CITATION.finditer(blank_code(doc)):
+    for match in CITATION.finditer(text_content(doc)):
         path = match['path'] or ('docs/decisions.md' if context else '')
         anchor = match['fragment'] if match['path'] else match['bare']
         if anchor.endswith('.') and not anchor.endswith('..'):
@@ -162,7 +249,7 @@ def main(rules_path, row_paths):
             fails.append(f"rule {r['name']} has revision {r['rev']} (revisions start at 1)")
         if not r["doc"].strip(): fails.append(f"rule {r['name']} has no doc comment")
         else:
-            rows = [m.group(1) for m in ROW.finditer(blank_code(r["doc"]))]
+            rows = [m.group(1) for m in ROW.finditer(text_content(r["doc"]))]
             citations = list(decision_citations(r["doc"]))
             if not rows and not citations:
                 fails.append(f"rule {r['name']}'s doc comment cites no decision row or authority entry")

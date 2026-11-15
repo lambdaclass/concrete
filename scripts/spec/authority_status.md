@@ -4,11 +4,17 @@ Row citations (Q/OD/P) preserve main's declared-row existence rule: at least one
 cited row must be declared by an inventory list or table. No row status is inferred.
 ROADMAP task IDs decide nothing; they may accompany real authority as context.
 
+Markdown structure is parsed by markdown-it-py in CommonMark mode, with the table
+extension for D4. An entry is one bullet or ordered list item at any depth, opening
+with an HTML anchor and emphasized title. Only its own paragraphs before a nested
+list or heading of any level supply content; parents, children, siblings and sections
+supply none. Paragraphs outside the CommonMark list item cannot supply record fields.
+
 A `docs/decisions.md#anchor` citation is accepted only in these three forms:
 
 - An anchored bold or italic list title immediately followed by `(owner, YYYY-MM-DD:`.
 - A bold list title ending `(YYYY-MM-DD).`, with a matching
-  `decided-YYYY-MM-DD-<slug>` anchor and an entry-local `Provenance:` line.
+  `decided-YYYY-MM-DD-<slug>` anchor and entry-local `Provenance:` and `Owner reply` or `Owner message` lines.
 - A `recovered-*` anchored item explicitly retained in the “Already recovered authority,
   independently checked; existing records retained” table of
   [D4](../../docs/decisions.md#decided-2026-11-13-d4-recovery).
@@ -24,7 +30,8 @@ recovered records. Other evidence/recovery wrappers lacking this record structur
 are likewise refused. No wrapper inherits provenance from nested list entries,
 code blocks or linked records. This checks record form, not the truth of provenance.
 
-Whitespace may wrap titles or the immediate approval form. Every form refuses an
+Title content includes code spans and nested emphasis. Intervening code or other
+inline constructs interrupt immediate approval. Whitespace may wrap titles or the immediate approval form. Every form refuses an
 open “Waiting for the owner” link or a title containing held, partial, queued,
 reopened, superseded, withdrawn or deferred. Recovered anchors must pass the
 retained-table check even if their title has an immediate owner approval form.
@@ -34,7 +41,9 @@ machine-readable; cite a row or an entry with recorded owner approval”. Semant
 scope and currentness beyond these checks still require an explicit status format;
 ISS-0083 closes only after owner approval, inventory migration and validator adoption.
 
-Inline code and fenced blocks are blanked before citation matching. Concrete
+Docstring citations are found only in CommonMark text tokens; code spans and
+fenced or indented code blocks supply none. Every top-level bullet or ordered
+Waiting for the owner item is open unless its content begins with `Closed`. Concrete
 `#[...]` attributes and Markdown headings are not citations. Empty explicit
 fragments are errors. Bare fragments inherit a preceding explicit decision path.
 Wrong paths, missing anchors (including empty fragments), absent recorded approval,

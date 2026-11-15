@@ -31,14 +31,17 @@ examples in `Spec/Rules.lean`. The Lean exporter is unchanged. Accounting carrie
 check concrete inputs and refuse opaque inputs of all eight shapes. The axiom golden is
 regenerated as the exact union with main, without security declarations.
 
-The authority validator preserves main's declared-row existence rule and adds a narrow
-fail-closed anchor rule: an anchored list title immediately followed by recorded dated
-owner approval, without a title disposition or an open Waiting for the owner link.
-It infers nothing from body prose or enclosing sections. Other anchor forms are refused
-under ISS-0083 pending an owner-approved status format. Code spans and fences are hidden
-before tokenization; ROADMAP tasks supply context only. Controls assert distinct failures
-and acceptance of the foundation/memory anchors and main governing row citations.
-The zero-allocation Planted transition changes only allocation and preserves free/reset.
+The authority validator uses markdown-it-py's CommonMark token stream for decision
+entries and rule docstrings, with the table extension for D4's retained records.
+It accepts immediate owner/date titles, matching dated bold records with entry-local
+Provenance and Owner reply/message lines, and explicitly retained recovered entries.
+Only one list item's own paragraph prefix supplies authority; nested lists and headings
+end that prefix. Titles retain code content and nested emphasis; intervening code cannot
+make approval immediate. Open waiting items and title dispositions refuse every form.
+Docstring citations come only from text tokens. Regression controls cover structural
+boundaries, all demonstrated inline-code bypasses, waiting bullets and dated wrappers.
+ISS-0083 tracks replacement by an owner-approved explicit status format. Existing
+Const and Own citations, the exporter and docs/decisions.md remain unchanged.
 
 Held scope remains excluded, without inferring authority from inherited approval claims:
 
@@ -59,12 +62,3 @@ Held scope remains excluded, without inferring authority from inherited approval
 
 Security and release/facts qualification (ISS-0082 on the source branch) follows separately;
 this branch neither allocates that identifier nor carries its security issue row.
-
-Round 3 removes the prose classifier under ISS-0083, destructures report inputs and
-factors the two-lineage registry fixture. No decision inventory entry is edited.
-
-Validation blocker: main's `ConstsPermitted` doc comment cites recovered-29-18,
-recovered-59-26, decided-2026-11-14-constant-types and recovered-29-19, none of which
-has the required immediate dated approval form. The narrow rule refuses those
-citations with ISS-0083. Passing every unchanged main registration requires a
-coordinator resolution; this branch does not silently exempt those citations.

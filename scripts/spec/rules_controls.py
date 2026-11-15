@@ -145,6 +145,62 @@ for disposition in ['held', 'queued']:
         fixture('authority-title-' + disposition + '-' + order,
                 decl=rule.replace('Q9.1', ', '.join('docs/decisions.md#' + a for a in anchors)),
                 reason='disposition in title: ' + disposition)
+# CommonMark boundary and inline regressions from both independent reviewers.
+control_anchor = 'decided-2026-11-15-control'
+opening = '- <a id="' + control_anchor + '"></a>**Control (2026-11-15).**\n'
+for name, entry, anchor, diagnostic in [
+    ('level-three-boundary', opening + '\n### Separate evidence log\n  Provenance: unrelated.\n  Owner reply: unrelated.\n', control_anchor, 'ISS-0083'),
+    ('nested-bullet-provenance', opening + '  Owner reply: yes.\n\n  - Child\n\n    Provenance: nested.\n', control_anchor, 'ISS-0083'),
+    ('nested-numbered-provenance', opening + '  Owner reply: yes.\n\n  1. Child\n\n     Provenance: nested.\n', control_anchor, 'ISS-0083'),
+    ('dated-no-owner-reply', opening + '  Provenance: session.\n', control_anchor, 'ISS-0083'),
+    ('held-code-title', '- <a id="control"></a>**Rule `held`** (owner, 2026-11-15: "ok").\n', 'control', 'disposition in title: held'),
+    ('intervening-code', '- <a id="control"></a>**Rule** `intervening` (owner, 2026-11-15: "ok").\n', 'control', 'ISS-0083'),
+]:
+    rows.write_text(production_rows + '\n' + entry)
+    fixture('authority-commonmark-' + name,
+            decl=rule.replace('Q9.1', 'docs/decisions.md#' + anchor), reason=diagnostic)
+rows.write_text(production_rows.replace('**29-list item 18: RECOVERED.**',
+                                      '**29-list item 18 (*old*): SUPERSEDED.**'))
+fixture('authority-commonmark-original-recovered-nested-emphasis',
+        decl=rule.replace('Q9.1', 'docs/decisions.md#recovered-29-18'),
+        reason='disposition in title: superseded')
+rows.write_text(production_rows.replace('  <a id="recovered-29-18"></a>**29-list item 18: RECOVERED.**',
+    '- <a id="recovered-29-18"></a>**29-list item 18 (*old*): SUPERSEDED.**'))
+fixture('authority-commonmark-nested-emphasis',
+        decl=rule.replace('Q9.1', 'docs/decisions.md#recovered-29-18'),
+        reason='disposition in title: superseded')
+rows.write_text(production_rows.replace('## Waiting for the owner\n',
+    '## Waiting for the owner\n\n1. Closed 2026-11-15: complete.\n\n'
+    '- [Open control](#' + valid + ')\n\n'))
+fixture('authority-commonmark-open-bullet-after-closed-number',
+        decl=rule.replace('Q9.1', 'docs/decisions.md#' + valid),
+        reason='open in Waiting for the owner')
+rows.write_text(production_rows)
+for name, prose in [
+    ('mismatched-backticks', '``docs/decisions.md#OPEN-38`'),
+    ('cross-paragraph-backticks', '`stray\n\ndocs/decisions.md#OPEN-38\n\nstray`'),
+    ('same-line-triple-backticks', '\n```inline``` docs/decisions.md#OPEN-38'),
+    ('multi-backtick-following', '``code ` inside`` docs/decisions.md#OPEN-38'),
+]:
+    fixture('authority-commonmark-' + name,
+            decl=rule.replace('Q9.1', 'docs/decisions.md#' + valid + '\n' + prose),
+            reason='OPEN-38: authority status not machine-readable')
+# All three accepted forms, ordered items and nested items remain usable.
+for name, entry in [
+    ('dated', opening + '  Provenance: session.\n  Owner reply: yes.\n'),
+    ('ordered', '1. <a id="' + control_anchor + '"></a>*Control* (owner, 2026-11-15: "yes").\n'),
+    ('nested', '- Parent\n  - <a id="' + control_anchor + '"></a>**Control** (owner, 2026-11-15: "yes").\n'),
+]:
+    rows.write_text(production_rows + '\n' + entry)
+    fixture('authority-commonmark-accepted-' + name,
+            decl=rule.replace('Q9.1', 'docs/decisions.md#' + control_anchor))
+rows.write_text('- <a id="decided-2026-11-13-d4-recovery"></a>**D4**\n\n'
+    '  **Already recovered authority, independently checked; existing records retained.**\n\n'
+    '  | Report row | Existing record |\n  |---|---|\n'
+    '  | 1 | [record](#recovered-control) |\n\n'
+    '- <a id="recovered-control"></a>**Recovered**\n')
+fixture('authority-commonmark-accepted-retained',
+        decl=rule.replace('Q9.1', 'docs/decisions.md#recovered-control'))
 rows.write_text(production_rows)
 for name, code in [('inline', '`#eval Q999.1`'),
                    ('fence', '\n```lean\n#eval Q999.1\n```\n')]:
