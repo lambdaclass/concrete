@@ -6,6 +6,7 @@ import ConcreteSpec.Spec.Basics
 import ConcreteSpec.Spec.Exec
 import ConcreteSpec.Spec.Ident
 import ConcreteSpec.Spec.Leak
+import ConcreteSpec.Spec.Outcome
 import ConcreteSpec.Spec.Rules
 
 /-! C7 registry conformance evidence. The specification registry stores names only;
@@ -13,7 +14,7 @@ the exporter loads these kernel-checked proofs without making a Spec module impo
 namespace ConcreteSpec.Core
 
 namespace Leak.Registry
-open Demo
+open Demo _root_.ConcreteSpec.Core.Exec
 
 /-- Concrete release followed by an unreleased secret output. -/
 def unreleasedOutput (secret : Int) : IntegerEntry :=
@@ -69,7 +70,7 @@ theorem forbidsRefused : RuleRefused UnitReleaseForbidden policy := by
   simp [RuleRefused, UnitReleaseForbidden, ReleasePolicy.ForbidsRelease]
 /-- Instance: both explicit releases are authorized. -/
 theorem authorizedAccepted : RuleAccepted UnitTraceAuthorized (policy, [releaseValue 7, releaseValue 8]) := by
-  simp [RuleAccepted, UnitTraceAuthorized, ReleasePolicy.Authorized, ReleasePolicy.Permits, releaseValue]
+  simp [RuleAccepted, UnitTraceAuthorized, ReleasePolicy.Authorized, ReleasePolicy.Permits, releaseValue, releaseAt]
 /-- Instance: an empty policy rejects the same populated trace. -/
 theorem authorizedRefused : RuleRefused UnitTraceAuthorized (⟨[]⟩, [releaseValue 7, releaseValue 8]) :=
   forbidsRelease_not_authorized ⟨[]⟩ (releaseValue 7) [releaseValue 8] rfl
@@ -83,6 +84,65 @@ theorem runsRefused : RuleRefused IntegerRunsAuthorized
   have bad := h (leakyRun 1)
   change ReleasePolicy.Authorized ⟨[]⟩ [releaseValue 0] at bad
   simp [ReleasePolicy.Authorized, ReleasePolicy.Permits] at bad
+/-- One release at an arbitrary source site, with a populated operand. -/
+def releaseEntry (site : SiteId) : IntegerEntry :=
+  ⟨.prim none .release [.lit 42] site, [], 0⟩
+
+/-- Helper: a complete C1 execution of the single release, for any observer and source site. -/
+def siteRun (I : Instrumentation ops) (site : SiteId) :
+    Run I program (releaseEntry site).config := by
+  let c := (releaseEntry site).config
+  let done : Config ops := ⟨.done, [], 0, []⟩
+  refine ⟨done, .normal, rfl, I.observeStep c .silent done, I.leakage c .silent done,
+    I.releases c .silent done, I.choices c .silent done, ?_⟩
+  simpa only [List.append_nil, Answer.label] using InstrumentedSteps.step (I := I)
+    (Step.prim (P := program) (c := c) (c' := done) (p := .release) (site := site)
+      (vs := [42]) (st := 0) (a := (⟨none, .ok 0, 0⟩ : Answer Int Int Int))
+      rfl (by simp [allowed]) rfl) (InstrumentedSteps.refl done)
+
+/-- Instance: a nonzero site and nonzero operand inhabit the agreement Law. -/
+example :
+    (instrumentation.releases (releaseEntry ⟨7⟩).config .silent ⟨.done, [], 0, []⟩).map Release.site =
+    statementReleases (fun p : Prim => match p with | .release => some () | _ => none)
+      (.prim none .release [.lit 42] ⟨7⟩ : ConcreteSpec.Core.Exec.Stmt ops) :=
+  release_sites_agree ⟨7⟩ [.lit 42] [] 0 0 42 .silent _ rfl
+
+/-- Planted: replace only the source site with zero, preserving the evaluated operand. -/
+abbrev zeroSite : Instrumentation ops := { instrumentation with
+  releases := fun c _ _ => match request c with
+    | some (.release, [v], _) => [releaseAt ⟨0⟩ v]
+    | _ => [] }
+
+/-- Planted: the same inhabited evaluation refutes site agreement for the zero-site observer. -/
+example : evalArgs ops [] 0 [.lit 42] = .ok ([42], 0) ∧
+    (zeroSite.releases (releaseEntry ⟨7⟩).config .silent ⟨.done, [], 0, []⟩).map Release.site ≠
+    statementReleases (fun p : Prim => match p with | .release => some () | _ => none)
+      (.prim none .release [.lit 42] ⟨7⟩ : ConcreteSpec.Core.Exec.Stmt ops) := by decide
+
+/-- Instance: all complete executions at site seven pass the site-seven policy. -/
+theorem nonzeroRunsAccepted : RuleAccepted IntegerRunsAuthorized
+    (⟨[⟨⟨7⟩, ()⟩]⟩, ⟨[], releaseEntry ⟨7⟩⟩) := by
+  intro r
+  have same := (complete_unique r (siteRun instrumentation ⟨7⟩)).2.2.1
+  rw [same]
+  change ReleasePolicy.Authorized ⟨[⟨⟨7⟩, ()⟩]⟩ [releaseAt ⟨7⟩ 42]
+  simp [ReleasePolicy.Authorized, ReleasePolicy.Permits, releaseAt]
+
+/-- Instance: changing only the policy site to zero refuses that same populated execution. -/
+theorem nonzeroRunsRefused : RuleRefused IntegerRunsAuthorized
+    (⟨[⟨⟨0⟩, ()⟩]⟩, ⟨[], releaseEntry ⟨7⟩⟩) := by
+  intro h
+  have bad := h (siteRun instrumentation ⟨7⟩)
+  change ReleasePolicy.Authorized ⟨[⟨⟨0⟩, ()⟩]⟩ [releaseAt ⟨7⟩ 42] at bad
+  simp [ReleasePolicy.Authorized, ReleasePolicy.Permits, releaseAt] at bad
+
+/-- Planted: the zero-site substitution wrongly authorizes every run under the site-zero policy. -/
+example : policy.RunsAuthorized zeroSite program (releaseEntry ⟨7⟩).config := by
+  intro r
+  rw [(complete_unique r (siteRun zeroSite ⟨7⟩)).2.2.1]
+  change ReleasePolicy.Authorized policy [releaseAt ⟨0⟩ 42]
+  simp [ReleasePolicy.Authorized, ReleasePolicy.Permits, releaseAt]
+
 /-- Instance: negative locals are secret in this integer-machine labelling. -/
 theorem lowAccepted : RuleAccepted IntegerLowEquivalent
     ⟨[], ⟨.skip, [(⟨0⟩, -1), (⟨1⟩, 7)], 0⟩,

@@ -30,7 +30,8 @@ structure Account where
 def Account.empty : Account := ⟨0, 0, 0, 0⟩
 
 /-- A well-formed account has already reached at least its current live bytes, both historically
-and since function entry. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
+and since function entry.
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
 docs/decisions.md#decided-project-memory-2026-11-06. -/
 def Account.WF (a : Account) : Prop := a.live ≤ a.peak ∧ a.live ≤ a.functionPeak
 
@@ -85,7 +86,8 @@ def apply (m : Memory) : Action → Option Memory
   | .reset lineage => some (Memory.set m lineage (m lineage).reset)
 
 /-- A checked view of the one accounting transition: allocation/reset succeed and free refuses
-outflow above the actual live account. Authority: docs/decisions.md#decided-2026-11-08-foundation
+outflow above the actual live account.
+Authority: docs/decisions.md#decided-2026-11-08-foundation
 (C7) and docs/decisions.md#decided-project-memory-2026-11-06. -/
 def ActionPermitted (m : Memory) (a : Action) : Prop := (apply m a).isSome = true
 
@@ -128,7 +130,8 @@ def resetBytes (lineage : LineageId) (m : Memory) (actions : List Action) : Nat 
 
 /-- Independent conservation obligation for a reset. The recorded outflow is not an input to the
 account transition, so a wrong record makes this predicate false rather than making the reset
-inadmissible. Cumulative history and both peaks must be conserved. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
+inadmissible. Cumulative history and both peaks must be conserved.
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
 docs/decisions.md#decided-project-memory-2026-11-06. -/
 def ResetConservation (before after : Account) (recordedOutflow : Nat) : Prop :=
   after.requested = before.requested ∧
@@ -163,13 +166,15 @@ structure Bound (α : Type) where
   status : BoundStatus
   deriving DecidableEq, Repr
 
-/-- An established bound is sound for `actual`; `notEstablished` asserts no bound. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
+/-- An established bound is sound for `actual`; `notEstablished` asserts no bound.
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
 docs/decisions.md#decided-project-memory-2026-11-06. -/
 def Bound.Sound {α : Type} [LE α] (actual : α) (b : Bound α) : Prop :=
   b.status = .boundEstablished → actual ≤ b.limit
 
 /-- An established footprint bound needs an allocator-defined footprint; no contract-defined value
-means that footprint evidence cannot be established. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
+means that footprint evidence cannot be established.
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
 docs/decisions.md#decided-project-memory-2026-11-06. -/
 def Bound.SoundOptional {α : Type} [LE α] (actual : Option α) (b : Bound α) : Prop :=
   b.status = .boundEstablished → ∃ a, actual = some a ∧ a ≤ b.limit
@@ -200,8 +205,10 @@ structure LineageReport where
 /-- Soundness of a lineage report against explicitly identified entry and exit accounts.
 The identity must agree with the report; numeric bounds cannot be relabelled. Requested bytes exclude
 requests made before entry. The peak is the maximum live bytes above the entry level, floored at zero.
-The internal local high-water mark is measured in absolute live bytes. The caller applies `Account.enter` at function entry
-and does not reset the local peak again before the function exits. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
+The internal local high-water mark is measured in absolute live bytes. The caller applies `Account.enter`
+at function entry
+and does not reset the local peak again before the function exits.
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
 docs/decisions.md#decided-project-memory-2026-11-06. -/
 def LineageReport.Sound (lineage : LineageId) (entry exit : Account) (footprint : Option Nat)
     (r : LineageReport) : Prop :=
@@ -249,7 +256,9 @@ def ResetConserved (d : Account × Account × Nat) : Prop := ResetConservation d
 
 /-- Monomorphic data view of lineage report soundness; delegates to the owning judgment.
 Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
-def ReportSound (d : LineageId × Account × Account × Option Nat × LineageReport) : Prop := LineageReport.Sound d.1 d.2.1 d.2.2.1 d.2.2.2.1 d.2.2.2.2
+def ReportSound (d : LineageId × Account × Account × Option Nat × LineageReport) : Prop :=
+  let (lineage, entry, exit, footprint, report) := d
+  LineageReport.Sound lineage entry exit footprint report
 
 /-- Concrete signed-net interval evidence, delegated to its owning judgment.
 Authority: docs/decisions.md#decided-project-memory-2026-11-06. -/

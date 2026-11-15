@@ -6,13 +6,13 @@ import ConcreteSpec.Spec.ReleaseCalls
 import ConcreteSpec.Spec.LeakData
 
 /-! Call-chain admission laws and isolated wrong-definition controls.
-Authority: docs/decisions.md#foundation-q1 (C7). -/
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
 namespace ConcreteSpec.Core.Leak
 open Exec
 
 /-- Law: every source call or release occurrence is retained by its extraction fold.
 The premise uses source constructors, so omitting a traversal cannot erase the premise.
-Authority: docs/decisions.md#foundation-q1 (C7). -/
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
 theorem extraction_complete {O : Operands} (declared : O.Prim → Option O.Ty)
     {s : Stmt O} {e : Sum FnId (ReleaseSite O.Ty)} (h : SourceOccurrence declared s e) :
     match e with
@@ -32,7 +32,7 @@ theorem extraction_complete {O : Operands} (declared : O.Prim → Option O.Ty)
 
 /-- Law: every source call path is reachable in the extracted graph, including its empty path.
 Source membership and occurrence premises remain inhabited under an extraction substitution.
-Authority: docs/decisions.md#foundation-q1 (C7). -/
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
 theorem source_reaches_complete {O : Operands} (declared : O.Prim → Option O.Ty)
     (p : Program O) {f g : FnId} (h : SourceReaches declared p f g) :
     (ReleaseCalls.ofProgram declared p).Reaches f g := by
@@ -45,7 +45,7 @@ theorem source_reaches_complete {O : Operands} (declared : O.Prim → Option O.T
 
 /-- Law: a declared release occurrence in any source function appears in the program graph.
 Neither source-table membership nor the syntax occurrence depends on extraction.
-Authority: docs/decisions.md#foundation-q1 (C7). -/
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
 theorem program_release_complete {O : Operands} (declared : O.Prim → Option O.Ty)
     (p : Program O) {owner : FnId} {body : Fn O} {site : ReleaseSite O.Ty}
     (hm : (owner, body) ∈ p.fns) (hr : SourceOccurrence declared body.body (.inr site)) :
@@ -54,7 +54,7 @@ theorem program_release_complete {O : Operands} (declared : O.Prim → Option O.
   exact ⟨_, hm, _, extraction_complete declared hr, rfl⟩
 
 /-- Law: an unlisted caller cannot reach a release in an admitted program, at any call depth.
-Authority: docs/decisions.md#foundation-q1 (C7). -/
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
 theorem unlisted_caller_refused {Ty : Type} (p : ReleaseInterface Ty) (g : ReleaseCalls Ty)
     (caller owner : FnId) (site : ReleaseSite Ty) (hcall : g.Reaches caller owner)
     (hrelease : (owner, site) ∈ g.releases) (hnot : caller ∉ p.functions) : ¬ p.Admitted g := by
@@ -62,7 +62,7 @@ theorem unlisted_caller_refused {Ty : Type} (p : ReleaseInterface Ty) (g : Relea
   exact hnot (h caller owner site hcall hrelease).1
 
 /-- Law: reaching an unlisted typed release site refuses admission even when every function is listed.
-Authority: docs/decisions.md#foundation-q1 (C7). -/
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
 theorem unlisted_site_refused {Ty : Type} (p : ReleaseInterface Ty) (g : ReleaseCalls Ty)
     (caller owner : FnId) (site : ReleaseSite Ty) (hc : g.Reaches caller owner)
     (hr : (owner, site) ∈ g.releases)
@@ -70,7 +70,7 @@ theorem unlisted_site_refused {Ty : Type} (p : ReleaseInterface Ty) (g : Release
   fun h => hn (h caller owner site hc hr).2
 
 /-- Law: a forbid-release policy refuses every reachable release, independently of its value.
-Authority: docs/decisions.md#foundation-q1 (C7). -/
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
 theorem forbidden_release_refused {Ty : Type} (p : ReleaseInterface Ty) (g : ReleaseCalls Ty)
     (caller owner : FnId) (site : ReleaseSite Ty) (hc : g.Reaches caller owner)
     (hr : (owner, site) ∈ g.releases) (hf : p.sites.ForbidsRelease) : ¬ p.Admitted g := by
@@ -80,7 +80,7 @@ theorem forbidden_release_refused {Ty : Type} (p : ReleaseInterface Ty) (g : Rel
 /-- Law: C1 program admission refuses an unlisted caller reaching a declared release through
 ordinary/deferred calls and nested regions in the source program.
 All premises describe source syntax, independently of extraction or admission.
-Authority: docs/decisions.md#foundation-q1 (C7). -/
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
 theorem unlisted_program_caller_refused {O : Operands} (p : ReleaseInterface O.Ty)
     (declared : O.Prim → Option O.Ty) (program : Program O) (caller owner : FnId)
     (site : ReleaseSite O.Ty)

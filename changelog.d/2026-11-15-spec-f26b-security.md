@@ -1,20 +1,18 @@
 # C7 security and source-grounded release admission
 
-Carries the security half of `19d577d68` onto the accounting base, preserving declaration
-identities. `Spec/Leak.lean` owns leakage, ordered typed-site/value releases, separate reason/path
+`Spec/Leak.lean` owns leakage, ordered typed-site/value releases, separate reason/path
 facts, public-state equivalence, C1 instrumentation, delimited release noninterference (NI) and
 constant time (CT). `Spec/ReleaseCalls.lean` owns conservative source occurrences, source paths,
 call/release extraction and function/site admission. `Spec/LeakData.lean` supplies closed integer
-machine data adapters, not a Concrete scalar or Boolean representation policy. Accounting and the
-base's validator remain unchanged; Const and Own retain their existing authority provenance.
+machine data adapters, not a Concrete scalar or Boolean representation policy.
 
-Authority is docs/decisions.md#foundation-q1 (the approved C7 interface and laws)
+Authority is docs/decisions.md#decided-2026-11-08-foundation (the approved C7 interface and laws)
 and docs/decisions.md#decided-project-infoflow-2026-11-06 (separate NI/CT obligations, public
 lengths and the baseline observer). Numeric local fixtures follow
 docs/decisions.md#decided-2026-11-08-c9-identities; diagnostic spellings stay outside execution.
 No inherited approval claim supplies authority.
 
-`Proofs/Leak.lean` carries nine Laws: `instrumentation_erasure`,
+`Proofs/Leak.lean` carries ten Laws: `release_sites_agree`, `instrumentation_erasure`,
 `forbidsRelease_not_authorized`, `release_metadata_irrelevant`, `secure_ni`, `secure_ct`,
 `timing_ni`, `timing_not_ct`, `authorized_release_not_ni`, `authorized_release_not_ct`.
 `Proofs/ReleaseCalls.lean` carries seven: `extraction_complete`, `source_reaches_complete`,
@@ -37,10 +35,10 @@ can disappear under substitution. A separate function-table drop control qualifi
 Exactly nine security rules join the eight accounting rules: `UnitCallsAdmitted`,
 `IntegerProgramAdmitted`, `StringReleasePermitted`, `UnitReleaseForbidden`, `UnitTraceAuthorized`,
 `IntegerRunsAuthorized`, `IntegerLowEquivalent`, `IntegerDelimitedReleaseNI`, `IntegerConstantTime`.
-Their eighteen closed accepted/refused examples live in `Proofs/LeakRegistry.lean` because they use
+Their twenty closed accepted/refused examples live in `Proofs/LeakRegistry.lean` because they use
 security Laws and execution witnesses; Spec cannot import Proofs. The exporter gains only that
 registry import. All nine input shapes have closed-data and opaque-carrier controls. The axiom
-golden is regenerated from the combined environment. ISS-0082 is copied verbatim from the source;
+golden is regenerated from the combined environment. ISS-0082 tracks the release/facts boundary;
 run-connected facts and separate reason/path mutants qualify its semantic projection boundary.
 
 Held scope remains excluded; existing tracking covers every excluded family:
@@ -59,3 +57,11 @@ Held scope remains excluded; existing tracking covers every excluded family:
 Secret typing, speculative leakage and binary constant-time guarantees remain later-slice or
 backend obligations; these proofs concern the explicit C1 source observer. No new issue number
 is allocated by this branch.
+
+Runtime release instrumentation preserves the actual source site and evaluated value. A per-step
+site agreement Law connects runtime release sites to static extraction, with nonzero-site positive
+and zero-site substitution controls. Registry evidence accepts site 7 under its own policy and
+refuses it under a policy permitting only site 0. Information-flow authorities are recorded directly
+on the registered judgments. Root modules explicitly import all security modules in dependency order.
+Compound extraction controls isolate each child traversal; reachability includes a two-edge witness
+and a direct-only mutant, and erasure has witnesses in both directions.
