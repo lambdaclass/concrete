@@ -17,17 +17,15 @@ def unique_object(pairs):
     return obj
 
 
-def main(rules_path, row_paths):
+def main(rules_path, decisions_path):
     fails = []
     try:
         rules = [json.loads(l, object_pairs_hook=unique_object) for l in open(rules_path, encoding="utf-8") if l.strip()]
-        inventories = [open(p, encoding="utf-8").read() for p in row_paths]
+        decisions = open(decisions_path, encoding="utf-8").read()
     except (OSError, UnicodeDecodeError, ValueError) as e:
         print(f"error: {e}", file=sys.stderr); return 3
     if not rules or type(rules[-1]) is not dict or rules[-1] != {"end": True} or type(rules[-1].get("end")) is not bool:
         print("error: the rule listing is truncated (no end record)", file=sys.stderr); return 3
-    if not inventories:
-        print("error: no decision inventory given", file=sys.stderr); return 3
     records = rules[:-1]
     schemas = {
         "rule": {"kind": str, "name": str, "rev": int, "exists": bool, "doc": str},
@@ -46,7 +44,7 @@ def main(rules_path, row_paths):
             return 3
     rules = [r for r in records if r["kind"] == "rule"]
     examples = [r for r in records if r["kind"] == "example"]
-    declared = {a or b for t in inventories for a, b in DECLARED.findall(t)}
+    declared = {a or b for a, b in DECLARED.findall(decisions)}
     # Explicit authority entries reviewed against main, not a prefix heuristic:
     # hold, recovery and queue anchors deliberately confer no rule authority.
     approved = {"decided-2026-11-08-foundation",
@@ -54,7 +52,7 @@ def main(rules_path, row_paths):
                 "decided-project-infoflow-2026-11-06",
                 "decided-2026-11-13-lifecycle-refusal",
                 "decided-2026-11-14-constant-types"}
-    anchors = approved & {a for t in inventories for a in re.findall(r'<a id="([^"]+)"', t)}
+    anchors = approved & {a for a in re.findall(r'<a id="([^"]+)"', decisions)}
     names = [r["name"] for r in rules]
     for n in sorted({n for n in names if names.count(n) > 1}):
         fails.append(f"rule {n} is registered more than once")
@@ -64,14 +62,18 @@ def main(rules_path, row_paths):
         if not r["doc"].strip(): fails.append(f"rule {r['name']} has no doc comment")
         else:
             rows = [m.group(1) for m in ROW.finditer(r["doc"])]
-            cited_anchors = re.findall(r"(?:docs/decisions\.md)?#(decided-[a-z0-9-]+)", r["doc"])
-            if not rows and not cited_anchors:
+            # Read the whole fragment token, including underscores and suffixes. A prefix
+            # match would promote an unknown anchor to an approved one. Every citation
+            # must name the owning file; a second citation cannot mask a held entry.
+            citations = re.findall(r"([^\s()<>`\[\],;]+)?#([^\s()<>`\[\],;]+)", r["doc"])
+            citations = [(path, anchor.rstrip(".")) for path, anchor in citations]
+            if not citations:
                 fails.append(f"rule {r['name']}'s doc comment cites no decision row")
             for row in rows:
                 if row not in declared:
                     fails.append(f"rule {r['name']}'s doc comment cites no existing decision row ({row})")
-            for anchor in cited_anchors:
-                if anchor not in anchors:
+            for path, anchor in citations:
+                if path != "docs/decisions.md" or anchor not in anchors:
                     fails.append(f"rule {r['name']}'s doc comment cites no decided authority entry ({anchor})")
     seen = {n: set() for n in names}
     identities = set()
@@ -93,6 +95,6 @@ def main(rules_path, row_paths):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        print(f"usage: {sys.argv[0]} RULES.jsonl ROWS...", file=sys.stderr); sys.exit(2)
-    sys.exit(main(sys.argv[1], sys.argv[2:]))
+    if len(sys.argv) != 3:
+        print(f"usage: {sys.argv[0]} RULES.jsonl DECISIONS.md", file=sys.stderr); sys.exit(2)
+    sys.exit(main(sys.argv[1], sys.argv[2]))

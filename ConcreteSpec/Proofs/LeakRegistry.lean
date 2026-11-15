@@ -20,6 +20,26 @@ theorem callsAccepted : RuleAccepted UnitCallsAdmitted (CallControls.allAllowed,
 /-- Instance: omitting only the outer caller refuses the same two-level release chain. -/
 theorem callsRefused : RuleRefused UnitCallsAdmitted (CallControls.outerDenied, CallControls.chain) := CallControls.refused
 
+/-- Instance: a declared release in an allowlisted function passes program admission. -/
+theorem programAccepted : RuleAccepted IntegerProgramAdmitted
+    (⟨[CallControls.fn "2"], ⟨[⟨⟨7⟩, ()⟩]⟩⟩,
+     [(CallControls.fn "2", ⟨[], ⟨0⟩, .prim none .release [] ⟨7⟩⟩)]) := by
+  intro caller owner site hc hr
+  have hs : owner = CallControls.fn "2" ∧ site = ⟨⟨7⟩, ()⟩ := by
+    simpa [integerProgram, ReleaseCalls.ofProgram, statementReleases, IntegerStatement.statement] using hr
+  obtain ⟨rfl, rfl⟩ := hs
+  cases hc with
+  | self => simp [ReleasePolicy.Permits]
+  | call edge _ => simp [integerProgram, ReleaseCalls.ofProgram, statementCalls, IntegerStatement.statement] at edge
+/-- Instance: removing only that function refuses the same populated program. -/
+theorem programRefused : RuleRefused IntegerProgramAdmitted
+    (⟨[], ⟨[⟨⟨7⟩, ()⟩]⟩⟩,
+     [(CallControls.fn "2", ⟨[], ⟨0⟩, .prim none .release [] ⟨7⟩⟩)]) := by
+  intro h
+  have denied := (h (CallControls.fn "2") (CallControls.fn "2") ⟨⟨7⟩, ()⟩ (.self _)
+    (by simp [integerProgram, ReleaseCalls.ofProgram, statementReleases, IntegerStatement.statement])).1
+  exact List.not_mem_nil denied
+
 /-- Instance: the listed typed site is permitted. -/
 theorem permitsAccepted : RuleAccepted StringReleasePermitted (typedReleasePolicy, typedRelease "public" 7) := by simp [RuleAccepted, StringReleasePermitted, ReleasePolicy.Permits, typedReleasePolicy, typedRelease]
 /-- Instance: changing only the type at that site is refused. -/
@@ -120,6 +140,13 @@ theorem sequenceRefused : RuleRefused FiniteSequencePermitted ([(⟨0⟩, ⟨100
     [.alloc ⟨0⟩ 8, .free ⟨0⟩ 14, .reset ⟨0⟩]) := by
   change ¬ (false = true)
   decide
+
+/-- Instance: a negative net change lies inside an established signed interval. -/
+theorem signedAccepted : RuleAccepted SignedNetSound (-3, ⟨-4, -2, .boundEstablished⟩) := by
+  simp [RuleAccepted, SignedNetSound, SignedInterval.Sound]
+/-- Instance: changing only the lower endpoint excludes the same negative net change. -/
+theorem signedRefused : RuleRefused SignedNetSound (-3, ⟨-2, -2, .boundEstablished⟩) := by
+  simp [RuleRefused, SignedNetSound, SignedInterval.Sound]
 
 end Leak.Registry
 

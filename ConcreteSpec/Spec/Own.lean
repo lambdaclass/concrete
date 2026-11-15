@@ -755,24 +755,29 @@ def writeLoan (tgt : Target) (i : LoanId) (v : Hybrid.Value) (s : Store Hybrid.S
   else none
 
 
-/-- Owner permission judgment (Q3.4, OD15): the read/write check on a concrete ledger/root/mode. -/
+/-- Owner permission judgment (Q3.4, OD15): the read/write check on a concrete ledger/root/mode.
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C5). -/
 def OwnerPermitted (input : State × Hybrid.Place × Mode) : Prop :=
   ownerAccess input.1 input.2.1 input.2.2 = true
 
-/-- Loan permission judgment (Q3.2, Q3.4, OD23): lending freezes apply through aliases too. -/
+/-- Loan permission judgment (Q3.2, Q3.4, OD23): lending freezes apply through aliases too.
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C5). -/
 def LoanPermitted (input : State × LoanId × Mode) : Prop :=
   loanAccess input.1 input.2.1 input.2.2 = true
 
-/-- Ending judgment (Q3.2): only a live loan without live children may end. -/
+/-- Ending judgment (Q3.2): only a live loan without live children may end.
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C5). -/
 def EndPermitted (input : State × LoanId) : Prop :=
   (endLoan input.1 input.2).isSome = true
 
-/-- Consuming judgment (OD60, OD62, Q3.8): consume an available unborrowed linear owner once. -/
+/-- Consuming judgment (OD60, OD62, Q3.8): consume an available unborrowed linear owner once.
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C5). -/
 def MovePermitted (input : State × Hybrid.Place) : Prop :=
   (move input.1 input.2).isSome = true
 
 /-- Scope-exit judgment (OD62, OD69, Q3.8): storage teardown cannot discard a linear
-obligation or invalidate a live loan. The lifecycle-refusal record requires refusal here. -/
+obligation or invalidate a live loan. The lifecycle-refusal record requires refusal here.
+Authority: docs/decisions.md#decided-2026-11-13-lifecycle-refusal. -/
 def DropPermitted (input : List Var × State) : Prop :=
   (drop input.1 input.2).isSome = true
 

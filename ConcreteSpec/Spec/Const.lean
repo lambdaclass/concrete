@@ -526,12 +526,13 @@ def ScalarConstDecl.toConstDecl (d : ScalarConstDecl) : ConstDecl scalarConstTyp
   ⟨d.id, d.ty, d.init⟩
 
 /-- Rule: closed scalar constant declarations must type and evaluate successfully, including
-unused declarations (docs/decisions.md#recovered-29-18, #recovered-59-26, Q6.2).
+unused declarations (Q6.2). The decided constant-types record retains initializer grammar
+and successful checked evaluation; recovery records confer no additional authority.
 The closed admitted types are `ConstantType`
 (docs/decisions.md#decided-2026-11-14-constant-types); this uncurried view delegates
 all policy to `ConstsAdmitted` over Scalar's shared carriers after a field-preserving
 embedding of concrete declaration data. The registry tests this very definition. Source ordering remains
-elaboration's separate obligation (#recovered-29-19). -/
+elaboration's separate obligation. -/
 def ConstsPermitted (input : Nat × List ScalarConstDecl) : Prop :=
   ConstsAdmitted scalarConstTypes input.1 (input.2.map ScalarConstDecl.toConstDecl)
 

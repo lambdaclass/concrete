@@ -17,6 +17,30 @@ structure ReleaseCalls (Ty : Type) where
   calls : List (FnId × FnId)
   releases : List (FnId × ReleaseSite Ty)
 
+/-- Source occurrence, independent of either extraction fold. Both sides of each control
+region are included conservatively; this states a syntax contract, not path feasibility. -/
+inductive SourceOccurrence {O : Operands} (declared : O.Prim → Option O.Ty) :
+    Stmt O → Sum FnId (ReleaseSite O.Ty) → Prop where
+  | call {dst f args site} : SourceOccurrence declared (.call dst f args site) (.inl f)
+  | defer {f args site} : SourceOccurrence declared (.defer f args site) (.inl f)
+  | release {p ty dst args site} : declared p = some ty →
+      SourceOccurrence declared (.prim dst p args site) (.inr ⟨site, ty⟩)
+  | seqLeft {s t e} : SourceOccurrence declared s e → SourceOccurrence declared (.seq s t) e
+  | seqRight {s t e} : SourceOccurrence declared t e → SourceOccurrence declared (.seq s t) e
+  | condLeft {s t e c site} : SourceOccurrence declared s e → SourceOccurrence declared (.cond c s t site) e
+  | condRight {s t e c site} : SourceOccurrence declared t e → SourceOccurrence declared (.cond c s t site) e
+  | loopTest {s t e l c site} : SourceOccurrence declared s e → SourceOccurrence declared (.loop l s c t site) e
+  | loopBody {s t e l c site} : SourceOccurrence declared t e → SourceOccurrence declared (.loop l s c t site) e
+  | block {s e b} : SourceOccurrence declared s e → SourceOccurrence declared (.block b s) e
+
+/-- Source call paths refer only to function-body syntax and the program table, never to
+extracted edges. The empty path includes the release owner itself. -/
+inductive SourceReaches {O : Operands} (declared : O.Prim → Option O.Ty)
+    (p : Program O) : FnId → FnId → Prop where
+  | self (f) : SourceReaches declared p f f
+  | call {f body middle last} : (f, body) ∈ p.fns → SourceOccurrence declared body.body (.inl middle) →
+      SourceReaches declared p middle last → SourceReaches declared p f last
+
 /-- All ordinary and deferred calls in a statement, including nested control regions. -/
 def statementCalls {O : Operands} : Stmt O → List FnId
   | .call _ f _ _ | .defer f _ _ => [f]

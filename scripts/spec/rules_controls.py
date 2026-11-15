@@ -26,7 +26,7 @@ base = re.sub(r'def registeredRuleExamples : List RuleExample :=.*?(?=\nend Conc
               'def registeredRuleExamples : List RuleExample := []\n', base, flags=re.S)
 exporter = (root / 'scripts/spec/rules.lean').read_text().split('-- EXPORTER BODY\n')[1]
 rows = tmp / 'rows.md'
-rows.write_text('- **Q9.1** Decided.\nR-0001 is only mentioned.\n')
+rows.write_text('- **Q9.1** Decided.\n<a id="decided-2026-11-08-foundation"></a>\nR-0001 is only mentioned.\n')
 rule = '/-- The rule (Q9.1). -/\ndef ok (n : Nat) : Prop := n = 0\ndef other (n : Nat) : Prop := n = 0\n'
 proofs = 'theorem accepts : RuleAccepted ok 0 := rfl\ntheorem refuses : RuleRefused ok 1 := by intro h; cases h\n'
 registry = '[⟨`ConcreteSpec.Core.ok, 1⟩]'
@@ -35,8 +35,10 @@ count = 0
 
 
 def fixture(name, *, decl=rule, proof=proofs, reg=registry, evidence=links,
-            reason=None, lean_error=False, mutate=None):
+            reason=None, lean_error=False, mutate=None, add_authority=True):
     global count
+    if add_authority:
+        decl = decl.replace('-/', ' Authority: docs/decisions.md#decided-2026-11-08-foundation. -/', 1)
     src = base.replace('def registeredRules : List RuleId := []',
                        'def registeredRules : List RuleId := ' + reg)
     src = src.replace('namespace ConcreteSpec.Core', 'set_option warningAsError true\nnamespace ConcreteSpec.Core\n' + decl)
@@ -89,24 +91,44 @@ for anchor in ['decided-2026-11-08-foundation', 'decided-project-memory-2026-11-
                'decided-2026-11-14-constant-types', 'decided-2026-11-09-older-proposals',
                'decided-2026-11-08-recovery-queue', 'decided-2026-11-13-d4-recovery']:
     rows.write_text('- **Q9.1** Decided.\n<a id="' + anchor + '"></a>\n')
-    fixture('authority-' + anchor, decl=rule.replace('(Q9.1)', '(docs/decisions.md#' + anchor + ')'),
+    fixture('authority-' + anchor, add_authority=False, decl=rule.replace('(Q9.1)', '(docs/decisions.md#' + anchor + ')'),
             reason=None if anchor in {'decided-2026-11-08-foundation', 'decided-project-memory-2026-11-06',
                                       'decided-project-infoflow-2026-11-06', 'decided-2026-11-13-lifecycle-refusal',
                                       'decided-2026-11-14-constant-types'} else 'no decided authority entry')
 rows.write_text('- **Q9.1** Decided.\n<a id="decided-2026-11-08-foundation"></a>\n')
-fixture('authority-invalid-row', decl=rule.replace('(Q9.1)',
+fixture('authority-invalid-row', add_authority=False, decl=rule.replace('(Q9.1)',
         '(Q999.1, docs/decisions.md#decided-2026-11-08-foundation)'), reason='no existing decision row')
-fixture('authority-valid-row', decl=rule.replace('(Q9.1)',
+fixture('authority-valid-row', add_authority=False, decl=rule.replace('(Q9.1)',
         '(Q9.1, docs/decisions.md#decided-2026-11-08-foundation)'))
-fixture('authority-mixed-rows', decl=rule.replace('(Q9.1)',
+fixture('authority-mixed-rows', add_authority=False, decl=rule.replace('(Q9.1)',
         '(Q9.1, Q999.1, docs/decisions.md#decided-2026-11-08-foundation)'), reason='no existing decision row')
-fixture('authority-unknown', decl=rule.replace('(Q9.1)',
+fixture('authority-unknown', add_authority=False, decl=rule.replace('(Q9.1)',
         '(docs/decisions.md#decided-missing)'), reason='no decided authority entry')
-rows.write_text('- **Q9.1** Decided.\nR-0001 is only mentioned.\n')
+for name, citation in [
+    ('prefix', 'docs/decisions.md#decided-2026-11-08-foundation_extra'),
+    ('suffix', 'docs/decisions.md#decided-2026-11-08-foundation-more'),
+    ('roadmap-path', 'ROADMAP.md#decided-2026-11-08-foundation'),
+    ('proposal-path', 'docs/proposals/FOUNDATION.md#decided-2026-11-08-foundation'),
+    ('relative-path', '../docs/decisions.md#decided-2026-11-08-foundation'),
+    ('bare-anchor', '#decided-2026-11-08-foundation'),
+    ('roadmap-only', 'R-0001'),
+    *[(kind, 'docs/decisions.md#decided-2026-11-08-foundation docs/decisions.md#' + anchor)
+      for kind, anchor in [('mixed-hold', 'hold-open'), ('mixed-reopened', 'reopened-policy'),
+                           ('mixed-queue', 'queued-partial')]],
+    *[(kind + '-first', 'docs/decisions.md#' + anchor + ' docs/decisions.md#decided-2026-11-08-foundation')
+      for kind, anchor in [('hold', 'hold-open'), ('reopened', 'reopened-policy'),
+                           ('queue', 'decided-2026-11-08-recovery-queue')]],
+]:
+    fixture('authority-' + name, add_authority=False, decl=rule.replace('(Q9.1)', '(' + citation + ')'),
+            reason='no decision row' if name == 'roadmap-only' else 'no decided authority entry')
+rows.write_text('- **Q9.1** Decided.\n<a id="decided-2026-11-08-foundation"></a>\nR-0001 is only mentioned.\n')
 
 # C7 adapters keep the strict traversal: each production input shape accepts closed data,
 # but an opaque value of exactly that shape cannot certify an inspectable instance.
 for name, carrier, value in [
+    ('c7-signed', 'Int × Leak.SignedInterval', '(-3, ⟨-4, -2, .boundEstablished⟩)'),
+    ('c7-program', 'Leak.ReleaseInterface Unit × List (FnId × Leak.IntegerFunction)',
+     '(⟨[], ⟨[]⟩⟩, [])'),
     ('c7-runs', 'Leak.ReleasePolicy Unit × Leak.IntegerExecution',
      '(⟨[⟨⟨0⟩, ()⟩]⟩, ⟨[], ⟨.prim none .release [.lit 0] ⟨0⟩, [], 1⟩⟩)'),
     *[(f'c7-{name}', 'Leak.IntegerComparison',
@@ -349,7 +371,7 @@ fixture('duplicate-rule', reg='[⟨`ConcreteSpec.Core.ok, 1⟩, ⟨`ConcreteSpec
 fixture('absent-rule', reg=registry.replace('Core.ok', 'Core.missing'), reason='names no declaration')
 fixture('revision-zero', reg=registry.replace(', 1', ', 0'), reason='revision 0')
 fixture('no-doc', decl=rule.replace('/-- The rule (Q9.1). -/\n', ''), reason='has no doc comment')
-fixture('no-row', decl=rule.replace('Q9.1', 'plain words'), reason='cites no decision row')
+fixture('no-row', add_authority=False, decl=rule.replace('Q9.1', 'plain words'), reason='cites no decision row')
 fixture('unknown-row', decl=rule.replace('Q9.1', 'Q999.999'), reason='no existing decision row')
 fixture('mention-only-row', decl=rule.replace('Q9.1', 'R-0001'), reason='no existing decision row')
 fixture('truncated', mutate=lambda s: '\n'.join(s.splitlines()[:-1]), reason='no end record')

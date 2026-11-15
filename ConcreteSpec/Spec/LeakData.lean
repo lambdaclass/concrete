@@ -329,6 +329,12 @@ def ByteBoundSoundOptional (d : Option Nat × Bound Nat) : Prop := Bound.SoundOp
 Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
 def UnitCallsAdmitted (d : ReleaseInterface Unit × ReleaseCalls Unit) : Prop := d.1.Admitted d.2
 
+/-- Concrete program admission, with the integer primitive interface's fixed release classifier.
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+def IntegerProgramAdmitted (d : ReleaseInterface Unit × List (FnId × IntegerFunction)) : Prop :=
+  d.1.ProgramAdmitted (fun p : Demo.Prim => match p with | .release => some () | _ => none)
+    (integerProgram d.2)
+
 /-- Monomorphic data view of typed-site permission; delegates to the owning judgment.
 Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
 def StringReleasePermitted (d : ReleasePolicy String × Release String Nat) : Prop := d.1.Permits d.2
@@ -348,5 +354,10 @@ def ResetConserved (d : Account × Account × Nat) : Prop := ResetConservation d
 /-- Monomorphic data view of lineage report soundness; delegates to the owning judgment.
 Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
 def ReportSound (d : LineageId × Account × Account × Option Nat × LineageReport) : Prop := LineageReport.Sound d.1 d.2.1 d.2.2.1 d.2.2.2.1 d.2.2.2.2
+
+/-- Concrete signed-net interval evidence, delegated to its owning judgment.
+Authority: docs/decisions.md#decided-project-memory-2026-11-06. -/
+def SignedNetSound (d : Int × SignedInterval) : Prop := SignedInterval.Sound d.1 d.2
+
 
 end ConcreteSpec.Core.Leak

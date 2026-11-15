@@ -10,6 +10,49 @@ Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
 namespace ConcreteSpec.Core.Leak
 open Exec
 
+/-- Law: every source call or release occurrence is retained by its extraction fold.
+The premise uses source constructors, so omitting a traversal cannot erase the premise.
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+theorem extraction_complete {O : Operands} (declared : O.Prim → Option O.Ty)
+    {s : Stmt O} {e : Sum FnId (ReleaseSite O.Ty)} (h : SourceOccurrence declared s e) :
+    match e with
+    | .inl f => f ∈ statementCalls s
+    | .inr r => r ∈ statementReleases declared s := by
+  induction h with
+  | call => simp [statementCalls]
+  | defer => simp [statementCalls]
+  | release hp => simp [statementReleases, hp]
+  | @seqLeft s t e h ih => cases e <;> simp_all [statementCalls, statementReleases]
+  | @seqRight s t e h ih => cases e <;> simp_all [statementCalls, statementReleases]
+  | @condLeft s t e c site h ih => cases e <;> simp_all [statementCalls, statementReleases]
+  | @condRight s t e c site h ih => cases e <;> simp_all [statementCalls, statementReleases]
+  | @loopTest s t e l c site h ih => cases e <;> simp_all [statementCalls, statementReleases]
+  | @loopBody s t e l c site h ih => cases e <;> simp_all [statementCalls, statementReleases]
+  | @block s e b h ih => cases e <;> simpa [statementCalls, statementReleases] using ih
+
+/-- Law: every source call path is reachable in the extracted graph, including its empty path.
+Source membership and occurrence premises remain inhabited under an extraction substitution.
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+theorem source_reaches_complete {O : Operands} (declared : O.Prim → Option O.Ty)
+    (p : Program O) {f g : FnId} (h : SourceReaches declared p f g) :
+    (ReleaseCalls.ofProgram declared p).Reaches f g := by
+  induction h with
+  | self f => exact .self f
+  | call member occurrence _ ih =>
+      apply ReleaseCalls.Reaches.call (middle := _) _ ih
+      simp only [ReleaseCalls.ofProgram, List.mem_flatMap, List.mem_map]
+      exact ⟨_, member, _, extraction_complete declared occurrence, rfl⟩
+
+/-- Law: a declared release occurrence in any source function appears in the program graph.
+Neither source-table membership nor the syntax occurrence depends on extraction.
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+theorem program_release_complete {O : Operands} (declared : O.Prim → Option O.Ty)
+    (p : Program O) {owner : FnId} {body : Fn O} {site : ReleaseSite O.Ty}
+    (hm : (owner, body) ∈ p.fns) (hr : SourceOccurrence declared body.body (.inr site)) :
+    (owner, site) ∈ (ReleaseCalls.ofProgram declared p).releases := by
+  simp only [ReleaseCalls.ofProgram, List.mem_flatMap, List.mem_map]
+  exact ⟨_, hm, _, extraction_complete declared hr, rfl⟩
+
 /-- Law: an unlisted caller cannot reach a release in an admitted program, at any call depth.
 Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
 theorem unlisted_caller_refused {Ty : Type} (p : ReleaseInterface Ty) (g : ReleaseCalls Ty)
@@ -192,9 +235,9 @@ example : statementCalls (O := Demo.ops)
       (.loop ⟨0⟩ (.call none (fn "2") [] ⟨4⟩) (.lit 1) .skip ⟨5⟩) ⟨6⟩)) = [fn "1", fn "2"] := rfl
 /-- Wrong extraction fold: drops exactly the named constructor; every other traversal is unchanged. -/
 def droppedCalls (drop : Nat) : Stmt Demo.ops → List FnId
-  | .call _ f _ _ => [f]
+  | .call _ f _ _ => if drop = 5 then [] else [f]
   | .defer f _ _ => if drop = 0 then [] else [f]
-  | .seq s t => droppedCalls drop s ++ droppedCalls drop t
+  | .seq s t => if drop = 4 then [] else droppedCalls drop s ++ droppedCalls drop t
   | .cond _ s t _ => if drop = 1 then [] else droppedCalls drop s ++ droppedCalls drop t
   | .loop _ s _ t _ => if drop = 2 then [] else droppedCalls drop s ++ droppedCalls drop t
   | .block _ s => if drop = 3 then [] else droppedCalls drop s
@@ -222,9 +265,9 @@ theorem dropped_admitted (drop : Nat) (hd : drop < 4) : outerDenied.Admitted (dr
       simp [he, outerDenied]
   · simp [outerDenied, ReleasePolicy.Permits]
 
-/-- Planted: unlisted_program_caller_refused kills each single-constructor omission:
-defer, conditional region, loop region, and block. The real extracted path and missing
-caller premises hold, while substituting each wrong graph admits that same program. -/
+/-- Instance: comparison of admission after each single-constructor omission:
+defer, conditional region, loop region, and block. This admission comparison is not a uniform-substitution law control; the source-grounded
+extraction controls below qualify the traversals independently. -/
 example : (ReleaseCalls.ofProgram
       (fun p : Demo.Prim => match p with | .release => some () | _ => none) program).Reaches (fn "0") (fn "2") ∧
     (fn "2", ⟨⟨7⟩, ()⟩) ∈ chain.releases ∧ fn "0" ∉ outerDenied.functions ∧
@@ -232,6 +275,322 @@ example : (ReleaseCalls.ofProgram
     ¬ outerDenied.ProgramAdmitted
       (fun p : Demo.Prim => match p with | .release => some () | _ => none) program :=
   ⟨twoLevels, by simp [chain], by decide, dropped_admitted, refused⟩
+
+
+/-- Primitive classification in the integer control machine. -/
+def declared : Demo.Prim → Option Unit
+  | .release => some ()
+  | _ => none
+
+/-- Wrong release fold: omit exactly one constructor, preserving every other case. -/
+def droppedReleases (drop : Nat) : Stmt Demo.ops → List (ReleaseSite Unit)
+  | .prim _ p _ site => if drop = 0 then [] else (declared p).toList.map fun ty => ⟨site, ty⟩
+  | .seq s t => if drop = 1 then [] else droppedReleases drop s ++ droppedReleases drop t
+  | .cond _ s t _ => if drop = 2 then [] else droppedReleases drop s ++ droppedReleases drop t
+  | .loop _ s _ t _ => if drop = 3 then [] else droppedReleases drop s ++ droppedReleases drop t
+  | .block _ s => if drop = 4 then [] else droppedReleases drop s
+  | _ => []
+
+/-- Instance: extraction_complete retains the call occurrence in leaf syntax. -/
+example : (fn "1") ∈ statementCalls (O := Demo.ops) ((.call none (fn "1") [] ⟨7⟩)) :=
+  extraction_complete (O := Demo.ops) declared (show SourceOccurrence (O := Demo.ops) declared ((.call none (fn "1") [] ⟨7⟩)) (.inl (fn "1")) from .call)
+
+/-- Planted: extraction_complete rejects omitting only call/leaf traversal.
+The same source occurrence inhabits the uniformly substituted law's premise. -/
+example : SourceOccurrence (O := Demo.ops) declared ((.call none (fn "1") [] ⟨7⟩)) (.inl (fn "1")) ∧
+    (fn "1") ∉ droppedCalls 5 ((.call none (fn "1") [] ⟨7⟩)) := by
+  exact ⟨.call, by decide⟩
+
+/-- Instance: extraction_complete retains the call occurrence in seqLeft syntax. -/
+example : (fn "1") ∈ statementCalls (O := Demo.ops) (.seq (.call none (fn "1") [] ⟨7⟩) .skip) :=
+  extraction_complete (O := Demo.ops) declared (show SourceOccurrence (O := Demo.ops) declared (.seq (.call none (fn "1") [] ⟨7⟩) .skip) (.inl (fn "1")) from .seqLeft (.call))
+
+/-- Planted: extraction_complete rejects omitting only call/seqLeft traversal.
+The same source occurrence inhabits the uniformly substituted law's premise. -/
+example : SourceOccurrence (O := Demo.ops) declared (.seq (.call none (fn "1") [] ⟨7⟩) .skip) (.inl (fn "1")) ∧
+    (fn "1") ∉ droppedCalls 4 (.seq (.call none (fn "1") [] ⟨7⟩) .skip) := by
+  exact ⟨.seqLeft (.call), by decide⟩
+
+/-- Instance: extraction_complete retains the call occurrence in seqRight syntax. -/
+example : (fn "1") ∈ statementCalls (O := Demo.ops) (.seq .skip (.call none (fn "1") [] ⟨7⟩)) :=
+  extraction_complete (O := Demo.ops) declared (show SourceOccurrence (O := Demo.ops) declared (.seq .skip (.call none (fn "1") [] ⟨7⟩)) (.inl (fn "1")) from .seqRight (.call))
+
+/-- Planted: extraction_complete rejects omitting only call/seqRight traversal.
+The same source occurrence inhabits the uniformly substituted law's premise. -/
+example : SourceOccurrence (O := Demo.ops) declared (.seq .skip (.call none (fn "1") [] ⟨7⟩)) (.inl (fn "1")) ∧
+    (fn "1") ∉ droppedCalls 4 (.seq .skip (.call none (fn "1") [] ⟨7⟩)) := by
+  exact ⟨.seqRight (.call), by decide⟩
+
+/-- Instance: extraction_complete retains the call occurrence in condLeft syntax. -/
+example : (fn "1") ∈ statementCalls (O := Demo.ops) (.cond (.lit 1) (.call none (fn "1") [] ⟨7⟩) .skip ⟨6⟩) :=
+  extraction_complete (O := Demo.ops) declared (show SourceOccurrence (O := Demo.ops) declared (.cond (.lit 1) (.call none (fn "1") [] ⟨7⟩) .skip ⟨6⟩) (.inl (fn "1")) from .condLeft (.call))
+
+/-- Planted: extraction_complete rejects omitting only call/condLeft traversal.
+The same source occurrence inhabits the uniformly substituted law's premise. -/
+example : SourceOccurrence (O := Demo.ops) declared (.cond (.lit 1) (.call none (fn "1") [] ⟨7⟩) .skip ⟨6⟩) (.inl (fn "1")) ∧
+    (fn "1") ∉ droppedCalls 1 (.cond (.lit 1) (.call none (fn "1") [] ⟨7⟩) .skip ⟨6⟩) := by
+  exact ⟨.condLeft (.call), by decide⟩
+
+/-- Instance: extraction_complete retains the call occurrence in condRight syntax. -/
+example : (fn "1") ∈ statementCalls (O := Demo.ops) (.cond (.lit 1) .skip (.call none (fn "1") [] ⟨7⟩) ⟨6⟩) :=
+  extraction_complete (O := Demo.ops) declared (show SourceOccurrence (O := Demo.ops) declared (.cond (.lit 1) .skip (.call none (fn "1") [] ⟨7⟩) ⟨6⟩) (.inl (fn "1")) from .condRight (.call))
+
+/-- Planted: extraction_complete rejects omitting only call/condRight traversal.
+The same source occurrence inhabits the uniformly substituted law's premise. -/
+example : SourceOccurrence (O := Demo.ops) declared (.cond (.lit 1) .skip (.call none (fn "1") [] ⟨7⟩) ⟨6⟩) (.inl (fn "1")) ∧
+    (fn "1") ∉ droppedCalls 1 (.cond (.lit 1) .skip (.call none (fn "1") [] ⟨7⟩) ⟨6⟩) := by
+  exact ⟨.condRight (.call), by decide⟩
+
+/-- Instance: extraction_complete retains the call occurrence in loopTest syntax. -/
+example : (fn "1") ∈ statementCalls (O := Demo.ops) (.loop ⟨0⟩ (.call none (fn "1") [] ⟨7⟩) (.lit 1) .skip ⟨6⟩) :=
+  extraction_complete (O := Demo.ops) declared (show SourceOccurrence (O := Demo.ops) declared (.loop ⟨0⟩ (.call none (fn "1") [] ⟨7⟩) (.lit 1) .skip ⟨6⟩) (.inl (fn "1")) from .loopTest (.call))
+
+/-- Planted: extraction_complete rejects omitting only call/loopTest traversal.
+The same source occurrence inhabits the uniformly substituted law's premise. -/
+example : SourceOccurrence (O := Demo.ops) declared (.loop ⟨0⟩ (.call none (fn "1") [] ⟨7⟩) (.lit 1) .skip ⟨6⟩) (.inl (fn "1")) ∧
+    (fn "1") ∉ droppedCalls 2 (.loop ⟨0⟩ (.call none (fn "1") [] ⟨7⟩) (.lit 1) .skip ⟨6⟩) := by
+  exact ⟨.loopTest (.call), by decide⟩
+
+/-- Instance: extraction_complete retains the call occurrence in loopBody syntax. -/
+example : (fn "1") ∈ statementCalls (O := Demo.ops) (.loop ⟨0⟩ .skip (.lit 1) (.call none (fn "1") [] ⟨7⟩) ⟨6⟩) :=
+  extraction_complete (O := Demo.ops) declared (show SourceOccurrence (O := Demo.ops) declared (.loop ⟨0⟩ .skip (.lit 1) (.call none (fn "1") [] ⟨7⟩) ⟨6⟩) (.inl (fn "1")) from .loopBody (.call))
+
+/-- Planted: extraction_complete rejects omitting only call/loopBody traversal.
+The same source occurrence inhabits the uniformly substituted law's premise. -/
+example : SourceOccurrence (O := Demo.ops) declared (.loop ⟨0⟩ .skip (.lit 1) (.call none (fn "1") [] ⟨7⟩) ⟨6⟩) (.inl (fn "1")) ∧
+    (fn "1") ∉ droppedCalls 2 (.loop ⟨0⟩ .skip (.lit 1) (.call none (fn "1") [] ⟨7⟩) ⟨6⟩) := by
+  exact ⟨.loopBody (.call), by decide⟩
+
+/-- Instance: extraction_complete retains the call occurrence in block syntax. -/
+example : (fn "1") ∈ statementCalls (O := Demo.ops) (.block ⟨0⟩ (.call none (fn "1") [] ⟨7⟩)) :=
+  extraction_complete (O := Demo.ops) declared (show SourceOccurrence (O := Demo.ops) declared (.block ⟨0⟩ (.call none (fn "1") [] ⟨7⟩)) (.inl (fn "1")) from .block (.call))
+
+/-- Planted: extraction_complete rejects omitting only call/block traversal.
+The same source occurrence inhabits the uniformly substituted law's premise. -/
+example : SourceOccurrence (O := Demo.ops) declared (.block ⟨0⟩ (.call none (fn "1") [] ⟨7⟩)) (.inl (fn "1")) ∧
+    (fn "1") ∉ droppedCalls 3 (.block ⟨0⟩ (.call none (fn "1") [] ⟨7⟩)) := by
+  exact ⟨.block (.call), by decide⟩
+
+/-- Instance: extraction_complete retains the defer occurrence in leaf syntax. -/
+example : (fn "1") ∈ statementCalls (O := Demo.ops) ((.defer (fn "1") [] ⟨7⟩)) :=
+  extraction_complete (O := Demo.ops) declared (show SourceOccurrence (O := Demo.ops) declared ((.defer (fn "1") [] ⟨7⟩)) (.inl (fn "1")) from .defer)
+
+/-- Planted: extraction_complete rejects omitting only defer/leaf traversal.
+The same source occurrence inhabits the uniformly substituted law's premise. -/
+example : SourceOccurrence (O := Demo.ops) declared ((.defer (fn "1") [] ⟨7⟩)) (.inl (fn "1")) ∧
+    (fn "1") ∉ droppedCalls 0 ((.defer (fn "1") [] ⟨7⟩)) := by
+  exact ⟨.defer, by decide⟩
+
+/-- Instance: extraction_complete retains the defer occurrence in seqLeft syntax. -/
+example : (fn "1") ∈ statementCalls (O := Demo.ops) (.seq (.defer (fn "1") [] ⟨7⟩) .skip) :=
+  extraction_complete (O := Demo.ops) declared (show SourceOccurrence (O := Demo.ops) declared (.seq (.defer (fn "1") [] ⟨7⟩) .skip) (.inl (fn "1")) from .seqLeft (.defer))
+
+/-- Planted: extraction_complete rejects omitting only defer/seqLeft traversal.
+The same source occurrence inhabits the uniformly substituted law's premise. -/
+example : SourceOccurrence (O := Demo.ops) declared (.seq (.defer (fn "1") [] ⟨7⟩) .skip) (.inl (fn "1")) ∧
+    (fn "1") ∉ droppedCalls 4 (.seq (.defer (fn "1") [] ⟨7⟩) .skip) := by
+  exact ⟨.seqLeft (.defer), by decide⟩
+
+/-- Instance: extraction_complete retains the defer occurrence in seqRight syntax. -/
+example : (fn "1") ∈ statementCalls (O := Demo.ops) (.seq .skip (.defer (fn "1") [] ⟨7⟩)) :=
+  extraction_complete (O := Demo.ops) declared (show SourceOccurrence (O := Demo.ops) declared (.seq .skip (.defer (fn "1") [] ⟨7⟩)) (.inl (fn "1")) from .seqRight (.defer))
+
+/-- Planted: extraction_complete rejects omitting only defer/seqRight traversal.
+The same source occurrence inhabits the uniformly substituted law's premise. -/
+example : SourceOccurrence (O := Demo.ops) declared (.seq .skip (.defer (fn "1") [] ⟨7⟩)) (.inl (fn "1")) ∧
+    (fn "1") ∉ droppedCalls 4 (.seq .skip (.defer (fn "1") [] ⟨7⟩)) := by
+  exact ⟨.seqRight (.defer), by decide⟩
+
+/-- Instance: extraction_complete retains the defer occurrence in condLeft syntax. -/
+example : (fn "1") ∈ statementCalls (O := Demo.ops) (.cond (.lit 1) (.defer (fn "1") [] ⟨7⟩) .skip ⟨6⟩) :=
+  extraction_complete (O := Demo.ops) declared (show SourceOccurrence (O := Demo.ops) declared (.cond (.lit 1) (.defer (fn "1") [] ⟨7⟩) .skip ⟨6⟩) (.inl (fn "1")) from .condLeft (.defer))
+
+/-- Planted: extraction_complete rejects omitting only defer/condLeft traversal.
+The same source occurrence inhabits the uniformly substituted law's premise. -/
+example : SourceOccurrence (O := Demo.ops) declared (.cond (.lit 1) (.defer (fn "1") [] ⟨7⟩) .skip ⟨6⟩) (.inl (fn "1")) ∧
+    (fn "1") ∉ droppedCalls 1 (.cond (.lit 1) (.defer (fn "1") [] ⟨7⟩) .skip ⟨6⟩) := by
+  exact ⟨.condLeft (.defer), by decide⟩
+
+/-- Instance: extraction_complete retains the defer occurrence in condRight syntax. -/
+example : (fn "1") ∈ statementCalls (O := Demo.ops) (.cond (.lit 1) .skip (.defer (fn "1") [] ⟨7⟩) ⟨6⟩) :=
+  extraction_complete (O := Demo.ops) declared (show SourceOccurrence (O := Demo.ops) declared (.cond (.lit 1) .skip (.defer (fn "1") [] ⟨7⟩) ⟨6⟩) (.inl (fn "1")) from .condRight (.defer))
+
+/-- Planted: extraction_complete rejects omitting only defer/condRight traversal.
+The same source occurrence inhabits the uniformly substituted law's premise. -/
+example : SourceOccurrence (O := Demo.ops) declared (.cond (.lit 1) .skip (.defer (fn "1") [] ⟨7⟩) ⟨6⟩) (.inl (fn "1")) ∧
+    (fn "1") ∉ droppedCalls 1 (.cond (.lit 1) .skip (.defer (fn "1") [] ⟨7⟩) ⟨6⟩) := by
+  exact ⟨.condRight (.defer), by decide⟩
+
+/-- Instance: extraction_complete retains the defer occurrence in loopTest syntax. -/
+example : (fn "1") ∈ statementCalls (O := Demo.ops) (.loop ⟨0⟩ (.defer (fn "1") [] ⟨7⟩) (.lit 1) .skip ⟨6⟩) :=
+  extraction_complete (O := Demo.ops) declared (show SourceOccurrence (O := Demo.ops) declared (.loop ⟨0⟩ (.defer (fn "1") [] ⟨7⟩) (.lit 1) .skip ⟨6⟩) (.inl (fn "1")) from .loopTest (.defer))
+
+/-- Planted: extraction_complete rejects omitting only defer/loopTest traversal.
+The same source occurrence inhabits the uniformly substituted law's premise. -/
+example : SourceOccurrence (O := Demo.ops) declared (.loop ⟨0⟩ (.defer (fn "1") [] ⟨7⟩) (.lit 1) .skip ⟨6⟩) (.inl (fn "1")) ∧
+    (fn "1") ∉ droppedCalls 2 (.loop ⟨0⟩ (.defer (fn "1") [] ⟨7⟩) (.lit 1) .skip ⟨6⟩) := by
+  exact ⟨.loopTest (.defer), by decide⟩
+
+/-- Instance: extraction_complete retains the defer occurrence in loopBody syntax. -/
+example : (fn "1") ∈ statementCalls (O := Demo.ops) (.loop ⟨0⟩ .skip (.lit 1) (.defer (fn "1") [] ⟨7⟩) ⟨6⟩) :=
+  extraction_complete (O := Demo.ops) declared (show SourceOccurrence (O := Demo.ops) declared (.loop ⟨0⟩ .skip (.lit 1) (.defer (fn "1") [] ⟨7⟩) ⟨6⟩) (.inl (fn "1")) from .loopBody (.defer))
+
+/-- Planted: extraction_complete rejects omitting only defer/loopBody traversal.
+The same source occurrence inhabits the uniformly substituted law's premise. -/
+example : SourceOccurrence (O := Demo.ops) declared (.loop ⟨0⟩ .skip (.lit 1) (.defer (fn "1") [] ⟨7⟩) ⟨6⟩) (.inl (fn "1")) ∧
+    (fn "1") ∉ droppedCalls 2 (.loop ⟨0⟩ .skip (.lit 1) (.defer (fn "1") [] ⟨7⟩) ⟨6⟩) := by
+  exact ⟨.loopBody (.defer), by decide⟩
+
+/-- Instance: extraction_complete retains the defer occurrence in block syntax. -/
+example : (fn "1") ∈ statementCalls (O := Demo.ops) (.block ⟨0⟩ (.defer (fn "1") [] ⟨7⟩)) :=
+  extraction_complete (O := Demo.ops) declared (show SourceOccurrence (O := Demo.ops) declared (.block ⟨0⟩ (.defer (fn "1") [] ⟨7⟩)) (.inl (fn "1")) from .block (.defer))
+
+/-- Planted: extraction_complete rejects omitting only defer/block traversal.
+The same source occurrence inhabits the uniformly substituted law's premise. -/
+example : SourceOccurrence (O := Demo.ops) declared (.block ⟨0⟩ (.defer (fn "1") [] ⟨7⟩)) (.inl (fn "1")) ∧
+    (fn "1") ∉ droppedCalls 3 (.block ⟨0⟩ (.defer (fn "1") [] ⟨7⟩)) := by
+  exact ⟨.block (.defer), by decide⟩
+
+/-- Instance: extraction_complete retains the release occurrence in leaf syntax. -/
+example : (⟨⟨7⟩, ()⟩ : ReleaseSite Unit) ∈ statementReleases (O := Demo.ops) declared ((.prim none .release [] ⟨7⟩)) :=
+  extraction_complete (O := Demo.ops) declared (show SourceOccurrence (O := Demo.ops) declared ((.prim none .release [] ⟨7⟩)) (.inr ⟨⟨7⟩, ()⟩) from .release rfl)
+
+/-- Planted: extraction_complete rejects omitting only release/leaf traversal.
+The same source occurrence inhabits the uniformly substituted law's premise. -/
+example : SourceOccurrence (O := Demo.ops) declared ((.prim none .release [] ⟨7⟩)) (.inr ⟨⟨7⟩, ()⟩) ∧
+    (⟨⟨7⟩, ()⟩ : ReleaseSite Unit) ∉ droppedReleases 0 ((.prim none .release [] ⟨7⟩)) := by
+  exact ⟨.release rfl, by decide⟩
+
+/-- Instance: extraction_complete retains the release occurrence in seqLeft syntax. -/
+example : (⟨⟨7⟩, ()⟩ : ReleaseSite Unit) ∈ statementReleases (O := Demo.ops) declared (.seq (.prim none .release [] ⟨7⟩) .skip) :=
+  extraction_complete (O := Demo.ops) declared (show SourceOccurrence (O := Demo.ops) declared (.seq (.prim none .release [] ⟨7⟩) .skip) (.inr ⟨⟨7⟩, ()⟩) from .seqLeft (.release rfl))
+
+/-- Planted: extraction_complete rejects omitting only release/seqLeft traversal.
+The same source occurrence inhabits the uniformly substituted law's premise. -/
+example : SourceOccurrence (O := Demo.ops) declared (.seq (.prim none .release [] ⟨7⟩) .skip) (.inr ⟨⟨7⟩, ()⟩) ∧
+    (⟨⟨7⟩, ()⟩ : ReleaseSite Unit) ∉ droppedReleases 1 (.seq (.prim none .release [] ⟨7⟩) .skip) := by
+  exact ⟨.seqLeft (.release rfl), by decide⟩
+
+/-- Instance: extraction_complete retains the release occurrence in seqRight syntax. -/
+example : (⟨⟨7⟩, ()⟩ : ReleaseSite Unit) ∈ statementReleases (O := Demo.ops) declared (.seq .skip (.prim none .release [] ⟨7⟩)) :=
+  extraction_complete (O := Demo.ops) declared (show SourceOccurrence (O := Demo.ops) declared (.seq .skip (.prim none .release [] ⟨7⟩)) (.inr ⟨⟨7⟩, ()⟩) from .seqRight (.release rfl))
+
+/-- Planted: extraction_complete rejects omitting only release/seqRight traversal.
+The same source occurrence inhabits the uniformly substituted law's premise. -/
+example : SourceOccurrence (O := Demo.ops) declared (.seq .skip (.prim none .release [] ⟨7⟩)) (.inr ⟨⟨7⟩, ()⟩) ∧
+    (⟨⟨7⟩, ()⟩ : ReleaseSite Unit) ∉ droppedReleases 1 (.seq .skip (.prim none .release [] ⟨7⟩)) := by
+  exact ⟨.seqRight (.release rfl), by decide⟩
+
+/-- Instance: extraction_complete retains the release occurrence in condLeft syntax. -/
+example : (⟨⟨7⟩, ()⟩ : ReleaseSite Unit) ∈ statementReleases (O := Demo.ops) declared (.cond (.lit 1) (.prim none .release [] ⟨7⟩) .skip ⟨6⟩) :=
+  extraction_complete (O := Demo.ops) declared (show SourceOccurrence (O := Demo.ops) declared (.cond (.lit 1) (.prim none .release [] ⟨7⟩) .skip ⟨6⟩) (.inr ⟨⟨7⟩, ()⟩) from .condLeft (.release rfl))
+
+/-- Planted: extraction_complete rejects omitting only release/condLeft traversal.
+The same source occurrence inhabits the uniformly substituted law's premise. -/
+example : SourceOccurrence (O := Demo.ops) declared (.cond (.lit 1) (.prim none .release [] ⟨7⟩) .skip ⟨6⟩) (.inr ⟨⟨7⟩, ()⟩) ∧
+    (⟨⟨7⟩, ()⟩ : ReleaseSite Unit) ∉ droppedReleases 2 (.cond (.lit 1) (.prim none .release [] ⟨7⟩) .skip ⟨6⟩) := by
+  exact ⟨.condLeft (.release rfl), by decide⟩
+
+/-- Instance: extraction_complete retains the release occurrence in condRight syntax. -/
+example : (⟨⟨7⟩, ()⟩ : ReleaseSite Unit) ∈ statementReleases (O := Demo.ops) declared (.cond (.lit 1) .skip (.prim none .release [] ⟨7⟩) ⟨6⟩) :=
+  extraction_complete (O := Demo.ops) declared (show SourceOccurrence (O := Demo.ops) declared (.cond (.lit 1) .skip (.prim none .release [] ⟨7⟩) ⟨6⟩) (.inr ⟨⟨7⟩, ()⟩) from .condRight (.release rfl))
+
+/-- Planted: extraction_complete rejects omitting only release/condRight traversal.
+The same source occurrence inhabits the uniformly substituted law's premise. -/
+example : SourceOccurrence (O := Demo.ops) declared (.cond (.lit 1) .skip (.prim none .release [] ⟨7⟩) ⟨6⟩) (.inr ⟨⟨7⟩, ()⟩) ∧
+    (⟨⟨7⟩, ()⟩ : ReleaseSite Unit) ∉ droppedReleases 2 (.cond (.lit 1) .skip (.prim none .release [] ⟨7⟩) ⟨6⟩) := by
+  exact ⟨.condRight (.release rfl), by decide⟩
+
+/-- Instance: extraction_complete retains the release occurrence in loopTest syntax. -/
+example : (⟨⟨7⟩, ()⟩ : ReleaseSite Unit) ∈ statementReleases (O := Demo.ops) declared (.loop ⟨0⟩ (.prim none .release [] ⟨7⟩) (.lit 1) .skip ⟨6⟩) :=
+  extraction_complete (O := Demo.ops) declared (show SourceOccurrence (O := Demo.ops) declared (.loop ⟨0⟩ (.prim none .release [] ⟨7⟩) (.lit 1) .skip ⟨6⟩) (.inr ⟨⟨7⟩, ()⟩) from .loopTest (.release rfl))
+
+/-- Planted: extraction_complete rejects omitting only release/loopTest traversal.
+The same source occurrence inhabits the uniformly substituted law's premise. -/
+example : SourceOccurrence (O := Demo.ops) declared (.loop ⟨0⟩ (.prim none .release [] ⟨7⟩) (.lit 1) .skip ⟨6⟩) (.inr ⟨⟨7⟩, ()⟩) ∧
+    (⟨⟨7⟩, ()⟩ : ReleaseSite Unit) ∉ droppedReleases 3 (.loop ⟨0⟩ (.prim none .release [] ⟨7⟩) (.lit 1) .skip ⟨6⟩) := by
+  exact ⟨.loopTest (.release rfl), by decide⟩
+
+/-- Instance: extraction_complete retains the release occurrence in loopBody syntax. -/
+example : (⟨⟨7⟩, ()⟩ : ReleaseSite Unit) ∈ statementReleases (O := Demo.ops) declared (.loop ⟨0⟩ .skip (.lit 1) (.prim none .release [] ⟨7⟩) ⟨6⟩) :=
+  extraction_complete (O := Demo.ops) declared (show SourceOccurrence (O := Demo.ops) declared (.loop ⟨0⟩ .skip (.lit 1) (.prim none .release [] ⟨7⟩) ⟨6⟩) (.inr ⟨⟨7⟩, ()⟩) from .loopBody (.release rfl))
+
+/-- Planted: extraction_complete rejects omitting only release/loopBody traversal.
+The same source occurrence inhabits the uniformly substituted law's premise. -/
+example : SourceOccurrence (O := Demo.ops) declared (.loop ⟨0⟩ .skip (.lit 1) (.prim none .release [] ⟨7⟩) ⟨6⟩) (.inr ⟨⟨7⟩, ()⟩) ∧
+    (⟨⟨7⟩, ()⟩ : ReleaseSite Unit) ∉ droppedReleases 3 (.loop ⟨0⟩ .skip (.lit 1) (.prim none .release [] ⟨7⟩) ⟨6⟩) := by
+  exact ⟨.loopBody (.release rfl), by decide⟩
+
+/-- Instance: extraction_complete retains the release occurrence in block syntax. -/
+example : (⟨⟨7⟩, ()⟩ : ReleaseSite Unit) ∈ statementReleases (O := Demo.ops) declared (.block ⟨0⟩ (.prim none .release [] ⟨7⟩)) :=
+  extraction_complete (O := Demo.ops) declared (show SourceOccurrence (O := Demo.ops) declared (.block ⟨0⟩ (.prim none .release [] ⟨7⟩)) (.inr ⟨⟨7⟩, ()⟩) from .block (.release rfl))
+
+/-- Planted: extraction_complete rejects omitting only release/block traversal.
+The same source occurrence inhabits the uniformly substituted law's premise. -/
+example : SourceOccurrence (O := Demo.ops) declared (.block ⟨0⟩ (.prim none .release [] ⟨7⟩)) (.inr ⟨⟨7⟩, ()⟩) ∧
+    (⟨⟨7⟩, ()⟩ : ReleaseSite Unit) ∉ droppedReleases 4 (.block ⟨0⟩ (.prim none .release [] ⟨7⟩)) := by
+  exact ⟨.block (.release rfl), by decide⟩
+
+/-- Instance: the source empty path includes the release owner, with no graph premise. -/
+example : (ReleaseCalls.ofProgram declared program).Reaches (fn "2") (fn "2") :=
+  source_reaches_complete (O := Demo.ops) declared program (.self _)
+
+/-- Instance: the deferred source call survives the nested block, branch and loop. -/
+example : (ReleaseCalls.ofProgram declared program).Reaches (fn "0") (fn "1") :=
+  source_reaches_complete (O := Demo.ops) declared program
+    (.call (O := Demo.ops) (body := ⟨[], (), ⟨0⟩, .block ⟨3⟩ (.cond (.lit 1) (.loop ⟨0⟩ .skip (.lit 1) (.defer (fn "1") [] ⟨3⟩) ⟨5⟩) .skip ⟨6⟩)⟩) (by simp [program]) (.block (.condLeft (.loopBody .defer))) (.self _))
+
+/-- Wrong reachability: nonempty paths retain every edge but drop the empty path. -/
+inductive NonemptyReaches (g : ReleaseCalls Unit) : FnId → FnId → Prop where
+  | direct {f t} : (f, t) ∈ g.calls → NonemptyReaches g f t
+  | call {f m t} : (f, m) ∈ g.calls → NonemptyReaches g m t → NonemptyReaches g f t
+
+/-- Planted: source_reaches_complete rejects deleting reflexive reachability. The source
+empty path is inhabited independently; the unchanged release owner has no outgoing edge. -/
+example : SourceReaches declared program (fn "2") (fn "2") ∧
+    ¬ NonemptyReaches (ReleaseCalls.ofProgram declared program) (fn "2") (fn "2") := by
+  refine ⟨.self _, ?_⟩
+  intro h
+  cases h with
+  | direct edge => simp [program, ReleaseCalls.ofProgram, statementCalls, fn] at edge
+  | call edge _ => simp [program, ReleaseCalls.ofProgram, statementCalls, fn] at edge
+
+/-- Planted: source_reaches_complete rejects each omitted nested call traversal. Unlike the
+admission comparison, its source path premise is independent of the replacement graph. -/
+example : SourceReaches declared program (fn "0") (fn "1") ∧
+    ∀ drop, drop < 4 → ¬ (droppedGraph drop).Reaches (fn "0") (fn "1") := by
+  refine ⟨.call (O := Demo.ops) (body := ⟨[], (), ⟨0⟩, .block ⟨3⟩ (.cond (.lit 1) (.loop ⟨0⟩ .skip (.lit 1) (.defer (fn "1") [] ⟨3⟩) ⟨5⟩) .skip ⟨6⟩)⟩) (by simp [program]) (.block (.condLeft (.loopBody .defer))) (.self _), ?_⟩
+  intro drop hd h
+  have hg : droppedGraph drop = { chain with calls := [(fn "1", fn "2")] } := by
+    have cases4 : drop = 0 ∨ drop = 1 ∨ drop = 2 ∨ drop = 3 := by omega
+    rcases cases4 with rfl | rfl | rfl | rfl <;> rfl
+  rw [hg] at h
+  generalize h0 : fn "0" = f at h
+  cases h with
+  | self => simp [fn] at h0
+  | call edge _ => simp [← h0, fn] at edge
+
+/-- The single releasing source function used to qualify graph release extraction. -/
+def releaseBody : Fn Demo.ops := ⟨[], (), ⟨2⟩,
+  .block ⟨2⟩ (.prim none .release [.lit 7] ⟨7⟩)⟩
+
+/-- Instance: program_release_complete retains a declared release inside its function block. -/
+example : (fn "2", ⟨⟨7⟩, ()⟩) ∈ (ReleaseCalls.ofProgram declared program).releases :=
+  program_release_complete declared program (body := releaseBody) (by simp [program, releaseBody])
+    (.block (.release rfl))
+
+/-- Wrong program extraction: retain calls and omit exactly the chosen release traversal case. -/
+def droppedReleaseGraph (drop : Nat) : ReleaseCalls Unit :=
+  { ReleaseCalls.ofProgram declared program with
+    releases := program.fns.flatMap fun (f, b) => (droppedReleases drop b.body).map fun r => (f, r) }
+
+/-- Planted: program_release_complete rejects omitted primitive and block release traversal.
+The same source function and declared occurrence inhabit its premises under either substitution. -/
+example : (fn "2", releaseBody) ∈ program.fns ∧
+    SourceOccurrence declared releaseBody.body (.inr ⟨⟨7⟩, ()⟩) ∧
+    (fn "2", ⟨⟨7⟩, ()⟩) ∉ (droppedReleaseGraph 0).releases ∧
+    (fn "2", ⟨⟨7⟩, ()⟩) ∉ (droppedReleaseGraph 4).releases := by
+  exact ⟨by simp [program, releaseBody], .block (.release rfl), by decide, by decide⟩
 
 end CallControls
 end ConcreteSpec.Core.Leak
