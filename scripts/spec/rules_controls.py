@@ -246,6 +246,21 @@ for prefix in ['`Closed`', '[Closed](x)', 'Not Closed', 'Possibly Closed']:
     fixture('authority-closed-marker-' + str(len(prefix)) + prefix[:1],
             decl=rule.replace('Q9.1', 'docs/decisions.md#' + valid),
             reason='open in Waiting for the owner')
+# Round 8: waiting destinations use exactly the citation normalizer.
+for name, link, diagnostic in [
+    ('review-reproducer', '[control](docs/decisions.md#' + valid + ')', 'open in Waiting for the owner'),
+    ('dot', '[control](./docs/decisions.md#' + valid + ')', 'open in Waiting for the owner'),
+    ('parent', '[control](docs/../docs/decisions.md#' + valid + ')', 'open in Waiting for the owner'),
+    ('reference', '[control][waiting-control]\n\n[waiting-control]: ./docs/decisions.md#' + valid, 'open in Waiting for the owner'),
+    ('encoded', '[control](docs/%64ecisions.md#' + valid + ')', 'open in Waiting for the owner'),
+    ('wrong-path', '[control](other/decisions.md#' + valid + ')', 'wrong authority path'),
+    ('autolink', '<https://example.org/docs/decisions.md#' + valid + '>', 'wrong authority path'),
+    ('query', '[control](docs/decisions.md?unsupported#' + valid + ')', 'wrong authority path'),
+]:
+    rows.write_text(production_rows.replace('## Waiting for the owner\n',
+        '## Waiting for the owner\n\n- Still open ' + link + '\n\n'))
+    fixture('authority-waiting-destination-' + name,
+            decl=rule.replace('Q9.1', 'docs/decisions.md#' + valid), reason=diagnostic)
 rows.write_text(production_rows)
 for name, target, diagnostic in [
     ('open', 'docs/decisions.md#OPEN-38', 'ISS-0083'),

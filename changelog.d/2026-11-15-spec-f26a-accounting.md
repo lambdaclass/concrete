@@ -33,7 +33,8 @@ regenerated as the exact union with main, without security declarations.
 
 The authority validator uses CommonMark entry boundaries, a closed title allowlist
 (text, emphasis, code), plain paragraph-leading record markers and entry-local owner
-utterance fences. Unsupported titles, dispositions and open waiting links refuse.
+utterance fences. Unsupported titles and dispositions refuse. Open waiting links share citation path/fragment
+normalization, including equivalent paths and reference links; wrong paths refuse.
 Text citations and normalized Markdown link/image targets are checked independently,
 including reference links. Raw anchor counts independently require unique entry,
 navigation or table-quotation accounting; concealed entries and outdented fields/code

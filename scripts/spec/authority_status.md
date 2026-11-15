@@ -22,7 +22,8 @@ are checked across the full allowed title text. Code and other inline constructs
 cannot supply structural markers. Each marker begins its own paragraph; immediate
 owner approval begins the plain suffix after the title. Negated/qualified prose
 supplies none. A top-level Waiting for the owner item stays open unless it begins
-plain `Closed YYYY-MM-DD:`. Its links refuse authority in every qualifying form.
+plain `Closed YYYY-MM-DD:`. Its links use the citation destination normalizer: equivalent repository paths and
+reference links veto the target; other paths and unsupported URL forms refuse authority.
 
 The inventory guard independently scans raw text for every HTML anchor opener.
 Every occurrence must be accounted for exactly once, with globally unique IDs:

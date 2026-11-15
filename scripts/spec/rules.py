@@ -92,6 +92,23 @@ def anchored_title(tokens):
     return None
 
 
+def decision_destination(target):
+    """Normalize Markdown authority destinations relative to the repository root.
+
+    Fragment-only destinations select the decision inventory. Unsupported URL forms
+    retain a non-authority path, so neither caller can accept them as authority.
+    """
+    try:
+        url = urlsplit(target)
+        path = posixpath.normpath(unquote(url.path)) if url.path else 'docs/decisions.md'
+        if url.scheme or url.netloc or url.query or re.search(r'%(?![0-9a-fA-F]{2})', target):
+            path = target.split('#', 1)[0] or '(unsupported destination)'
+        return path, unquote(url.fragment)
+    except ValueError:
+        path, _, anchor = target.partition('#')
+        return path or '(unsupported destination)', unquote(anchor)
+
+
 def authority_entries(text):
     """Accept recorded forms within one list item's own paragraph prefix.
 
@@ -110,7 +127,7 @@ def authority_entries(text):
         elif parsed and (status := DISPOSITION.search(parsed[1])):
             result[parsed[0]] = 'disposition in title: ' + status[0].lower()
     entries = []
-    waiting_anchors = set()
+    waiting_targets = {}
     waiting = False
     retained = set()
     for i, token in enumerate(tokens):
@@ -129,9 +146,17 @@ def authority_entries(text):
         if waiting and token.level == 1:
             first = next((t for t in body if t.type == 'inline'), None)
             if first and not re.match(r'^Closed \d{4}-\d{2}-\d{2}:', approval_prefix(first.children or [])):
-                waiting_anchors.update(c.attrGet('href')[1:] for t in body
-                    for c in t.children or [] if c.type == 'link_open'
-                    and (c.attrGet('href') or '').startswith('#'))
+                for t in body:
+                    for c in t.children or []:
+                        if c.type != 'link_open':
+                            continue
+                        target = c.attrGet('href') or ''
+                        if '#' not in target:
+                            continue
+                        path, anchor = decision_destination(target)
+                        diagnostic = ('open in Waiting for the owner' if path == 'docs/decisions.md'
+                                      else 'wrong authority path ' + path + '#' + anchor)
+                        waiting_targets[anchor] = diagnostic
         paragraphs = []
         utterance = False
         owner_header = False
@@ -208,8 +233,8 @@ def authority_entries(text):
                     and any(OWNER_HEADER.match(line) for line in lines)
                     and utterance):
                 result[anchor] = None
-    for anchor in waiting_anchors & result.keys():
-        result[anchor] = 'open in Waiting for the owner'
+    for anchor in waiting_targets.keys() & result.keys():
+        result[anchor] = waiting_targets[anchor]
     for anchor, count in counts.items():
         if count != 1:
             result[anchor] = 'duplicate authority anchor: ' + anchor
@@ -252,15 +277,7 @@ def decision_citations(doc):
                     continue
                 yield from text_citations(''.join(parts))
                 parts = ['\ufffc']
-                try:
-                    url = urlsplit(target)
-                    path = posixpath.normpath(unquote(url.path))
-                    if url.scheme or url.netloc:
-                        path = target.split('#', 1)[0]
-                    anchor = unquote(url.fragment)
-                except ValueError:
-                    # Malformed URL syntax cannot select the decision inventory.
-                    path, anchor = target.split('#', 1)
+                path, anchor = decision_destination(target)
                 if path == 'docs/decisions.md':
                     context = True
                 yield path, anchor
