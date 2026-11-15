@@ -165,9 +165,28 @@ abbrev releaseValue (value : Int) : Release Unit Int := releaseAt ⟨0⟩ value
 
 def releaseZero : Release Unit Int := releaseValue 0
 
-/-- C7 instrumentation of the example. Every primitive is treated as variable-time, so its evaluated
-operands are leaked. The external choice records only that a step was taken; answers themselves are
-fixed by `allowed`. -/
+/-- The evaluated decision at an actual C1 conditional or loop-test configuration.
+Loop tests record their source site and loop identity. A successful test contributes one iteration;
+a false test contributes zero. The ordered decisions retain every test, including loop exit.
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
+docs/decisions.md#decided-project-infoflow-2026-11-06. -/
+def controlLeakage (c : Config ops) : List (Leakage Int Unit Unit) :=
+  let decision (e : Expr) (site : SiteId) (loop : Option LoopId) :=
+    match eval c.locals c.store e with
+    | .ok (v, _) => match ops.test v with
+      | some b => [.branch site b] ++
+          (loop.toList.map fun l => .loop l (if b then 1 else 0))
+      | none => []
+    | _ => []
+  match c.ctrl, c.frames with
+  | .exec (.cond e _ _ site), _ => decision e site none
+  | .done, .test l _ e _ site _ :: _ => decision e site (some l)
+  | _, _ => []
+
+/-- C7 instrumentation of the deterministic integer example. Evaluated control decisions retain
+source sites, and primitive operands are conservatively treated as variable-time. There are no
+external choices: both expression evaluation and every allowed primitive answer are deterministic.
+No memory, allocation, container or external-effect operations exist in this operand instance. -/
 abbrev instrumentation : Instrumentation ops where
   Address := Unit
   Effect := Unit
@@ -177,13 +196,13 @@ abbrev instrumentation : Instrumentation ops where
     | .silent => []
     | .emit v => [.output v]
   observeFinal := fun c => (c.final?).map .final
-  leakage := fun c _ _ => match request c with
+  leakage := fun c _ _ => controlLeakage c ++ (match request c with
     | some (_, vs, site) => [.variableTime site vs]
-    | none => []
+    | none => [])
   releases := fun c _ _ => match request c with
     | some (.release, [v], site) => [releaseAt site v]
     | _ => []
-  choices := fun _ _ _ => [()]
+  choices := fun _ _ _ => []
 
 /-- Negative local values are secret; nonnegative local values are public. The shared store remains
 secret, which is what lets the input configurations be low-equivalent. -/

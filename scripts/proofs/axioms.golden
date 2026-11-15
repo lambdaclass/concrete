@@ -2083,6 +2083,33 @@ ConcreteSpec.Core.Leak.CallControls.site_refused	propext
 ConcreteSpec.Core.Leak.CallControls.sourceRelease	propext
 ConcreteSpec.Core.Leak.CallControls.sourceTwoLevels	propext
 ConcreteSpec.Core.Leak.CallControls.twoLevels	propext
+ConcreteSpec.Core.Leak.ControlAudit.asymmetric_ct_refused	propext
+ConcreteSpec.Core.Leak.ControlAudit.asymmetric_ni_refused	propext
+ConcreteSpec.Core.Leak.ControlAudit.branchEntry.eq_1	propext
+ConcreteSpec.Core.Leak.ControlAudit.branchRun._proof_1	Quot.sound propext
+ConcreteSpec.Core.Leak.ControlAudit.branchRun._proof_2	propext
+ConcreteSpec.Core.Leak.ControlAudit.condition_ct_refused	Quot.sound propext
+ConcreteSpec.Core.Leak.ControlAudit.conditional_leakage	Quot.sound propext
+ConcreteSpec.Core.Leak.ControlAudit.counted_leak_admitted	Quot.sound propext
+ConcreteSpec.Core.Leak.ControlAudit.deterministic_choices	propext
+ConcreteSpec.Core.Leak.ControlAudit.doneRun._proof_1	propext
+ConcreteSpec.Core.Leak.ControlAudit.left._proof_1	propext
+ConcreteSpec.Core.Leak.ControlAudit.loopLeft._proof_1	propext
+ConcreteSpec.Core.Leak.ControlAudit.loopLeft._proof_2	propext
+ConcreteSpec.Core.Leak.ControlAudit.loopLeft._proof_3	propext
+ConcreteSpec.Core.Leak.ControlAudit.loopRight._proof_1	propext
+ConcreteSpec.Core.Leak.ControlAudit.loopRight._proof_2	propext
+ConcreteSpec.Core.Leak.ControlAudit.loopRight._proof_3	propext
+ConcreteSpec.Core.Leak.ControlAudit.loopRight._proof_4	propext
+ConcreteSpec.Core.Leak.ControlAudit.loopRight._proof_5	propext
+ConcreteSpec.Core.Leak.ControlAudit.loop_ct_refused	propext
+ConcreteSpec.Core.Leak.ControlAudit.loop_leakage	Quot.sound propext
+ConcreteSpec.Core.Leak.ControlAudit.outputRun._proof_1	propext
+ConcreteSpec.Core.Leak.ControlAudit.prepend._proof_1	propext
+ConcreteSpec.Core.Leak.ControlAudit.right._proof_1	propext
+ConcreteSpec.Core.Leak.ControlAudit.right._proof_2	propext
+ConcreteSpec.Core.Leak.ControlAudit.right._proof_3	propext
+ConcreteSpec.Core.Leak.ControlAudit.right._proof_4	propext
 ConcreteSpec.Core.Leak.Demo.Expr.lit.inj	
 ConcreteSpec.Core.Leak.Demo.Expr.lit.injEq	propext
 ConcreteSpec.Core.Leak.Demo.Expr.lit.sizeOf_spec	
@@ -2111,8 +2138,12 @@ ConcreteSpec.Core.Leak.Demo.bodyRun._proof_1	propext
 ConcreteSpec.Core.Leak.Demo.bodyRun._proof_2	propext
 ConcreteSpec.Core.Leak.Demo.bodyRun.eq_1	propext
 ConcreteSpec.Core.Leak.Demo.complete_unique	Quot.sound propext
+ConcreteSpec.Core.Leak.Demo.controlLeakage.eq_1	propext
 ConcreteSpec.Core.Leak.Demo.ct_release_authorized	Quot.sound propext
 ConcreteSpec.Core.Leak.Demo.ct_run_unique	Quot.sound propext
+ConcreteSpec.Core.Leak.Demo.eval.eq_1	
+ConcreteSpec.Core.Leak.Demo.eval.eq_2	
+ConcreteSpec.Core.Leak.Demo.eval.eq_3	
 ConcreteSpec.Core.Leak.Demo.finished.eq_1	propext
 ConcreteSpec.Core.Leak.Demo.instDecidableEqObservation.decEq._proof_1	
 ConcreteSpec.Core.Leak.Demo.instDecidableEqObservation.decEq._proof_2	
@@ -2285,17 +2316,21 @@ ConcreteSpec.Core.Leak.Memory.set_same	Quot.sound propext
 ConcreteSpec.Core.Leak.Registry.accountA.eq_1	
 ConcreteSpec.Core.Leak.Registry.actionAccepted	
 ConcreteSpec.Core.Leak.Registry.actionRefused	propext
+ConcreteSpec.Core.Leak.Registry.asymmetricCTRefused	propext
+ConcreteSpec.Core.Leak.Registry.asymmetricNIRefused	propext
 ConcreteSpec.Core.Leak.Registry.authorizedAccepted	Quot.sound propext
 ConcreteSpec.Core.Leak.Registry.authorizedRefused	propext
 ConcreteSpec.Core.Leak.Registry.boundAccepted	propext
 ConcreteSpec.Core.Leak.Registry.boundRefused	propext
 ConcreteSpec.Core.Leak.Registry.callsAccepted	propext
 ConcreteSpec.Core.Leak.Registry.callsRefused	propext
+ConcreteSpec.Core.Leak.Registry.conditionalCTRefused	Quot.sound propext
 ConcreteSpec.Core.Leak.Registry.ctAccepted	Quot.sound propext
 ConcreteSpec.Core.Leak.Registry.ctRefused	propext
 ConcreteSpec.Core.Leak.Registry.establishedReport.eq_1	
 ConcreteSpec.Core.Leak.Registry.forbidsAccepted	
 ConcreteSpec.Core.Leak.Registry.forbidsRefused	propext
+ConcreteSpec.Core.Leak.Registry.loopCTRefused	propext
 ConcreteSpec.Core.Leak.Registry.lowAccepted	Quot.sound propext
 ConcreteSpec.Core.Leak.Registry.lowRefused	Quot.sound propext
 ConcreteSpec.Core.Leak.Registry.niAccepted	Quot.sound propext
@@ -5205,6 +5240,9 @@ _private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Leak.Demo.allowed.match_1.
 _private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Leak.Demo.allowed.match_1.eq_2	propext
 _private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Leak.Demo.allowed.match_1.eq_3	propext
 _private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Leak.Demo.allowed.match_1.eq_4	propext
+_private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Leak.Demo.eval.match_1.eq_1	
+_private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Leak.Demo.eval.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Leak.Demo.eval.match_1.eq_3	
 _private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Leak.Demo.final_no_step	propext
 _private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Leak.Demo.instrumentation.match_3.eq_1	
 _private.ConcreteSpec.Proofs.Leak.0.ConcreteSpec.Core.Leak.Demo.instrumentation.match_3.eq_2	

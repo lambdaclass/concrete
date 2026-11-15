@@ -248,7 +248,7 @@ theorem secure_run_unique (secret : Int) (hidden : Nat := 0)
       r.leakage = [.variableTime ⟨0⟩ [secret + Int.ofNat hidden],
         .variableTime ⟨1⟩ [secret + Int.ofNat hidden]] ∧
       r.releases = [releaseValue (secret + Int.ofNat hidden)] ∧
-      r.choices = [(), (), (), ()] ∧
+      r.choices = [] ∧
       r.final = ⟨.done, hiddenLocals hidden, secret, []⟩ := by
   exact complete_unique r (secureRun secret hidden)
 
@@ -321,7 +321,7 @@ def ctRun (secret : Int) : Run instrumentation program (ctStart secret) :=
 theorem ct_run_unique (secret : Int) (r : Run instrumentation program (ctStart secret)) :
     r.observations = [.output 7] ∧
       r.leakage = [.variableTime ⟨0⟩ [0], .variableTime ⟨1⟩ [7]] ∧
-      r.releases = [releaseZero] ∧ r.choices = [(), (), (), ()] ∧
+      r.releases = [releaseZero] ∧ r.choices = [] ∧
       r.final = ⟨.done, [], secret, []⟩ := complete_unique r (ctRun secret)
 
 /-- Representation lemma. Concrete projection check showing secureRun 1 maps via `InstrumentedSteps.toSteps` to an underlying C1 `Steps` derivation.
@@ -338,7 +338,7 @@ def timingRun (secret : Int) : Run instrumentation program (timingStart secret) 
   observations := [.output 7]
   leakage := [.variableTime ⟨2⟩ [secret], .variableTime ⟨0⟩ [0], .variableTime ⟨1⟩ [7]]
   releases := [releaseZero]
-  choices := [(), (), (), (), (), (), ()]
+  choices := []
   steps :=
     InstrumentedSteps.step (I := instrumentation)
       (Step.silent (P := program) (c := timingStart secret) (c' := timingAfterSeq secret) rfl) <|
@@ -370,7 +370,7 @@ theorem timing_run_unique (secret : Int)
     (r : Run instrumentation program (timingStart secret)) :
     r.observations = [.output 7] ∧
       r.leakage = [.variableTime ⟨2⟩ [secret], .variableTime ⟨0⟩ [0], .variableTime ⟨1⟩ [7]] ∧
-      r.releases = [releaseZero] ∧ r.choices = [(), (), (), (), (), (), ()] ∧
+      r.releases = [releaseZero] ∧ r.choices = [] ∧
       r.final = ⟨.done, [], secret, []⟩ := complete_unique r (timingRun secret)
 
 /-- Planted definition: change only the output operand, retaining secret-dependent work. -/
@@ -393,7 +393,7 @@ def leakyTimingRun (secret : Int) : Run instrumentation program (leakyTimingStar
   observations := [.output secret]
   leakage := [.variableTime ⟨2⟩ [secret], .variableTime ⟨0⟩ [0], .variableTime ⟨1⟩ [secret]]
   releases := [releaseZero]
-  choices := [(), (), (), (), (), (), ()]
+  choices := []
   steps :=
     InstrumentedSteps.step (I := instrumentation)
       (Step.silent (P := program) (c := leakyTimingStart secret) (c' := leakyTimingAfterSeq secret) rfl) <|
@@ -568,11 +568,12 @@ Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
 docs/decisions.md#decided-project-infoflow-2026-11-06. -/
 theorem release_sites_agree (site : SiteId) (args : List Demo.Expr) (locals : AList Var Int)
     (st next : Int) (v : Int) (label : Label ops) (target : Config ops)
+    (dst : Option Var) (frames : List (Frame ops))
     (evaluated : evalArgs ops locals st args = .ok ([v], next)) :
-    (instrumentation.releases ⟨.exec (.prim none .release args site), locals, st, []⟩ label target).map
+    (instrumentation.releases ⟨.exec (.prim dst .release args site), locals, st, frames⟩ label target).map
       Release.site =
     statementReleases (fun p : Prim => match p with | .release => some () | _ => none)
-      (.prim none .release args site : ConcreteSpec.Core.Exec.Stmt ops) := by
+      (.prim dst .release args site : ConcreteSpec.Core.Exec.Stmt ops) := by
   simp [request, evaluated, releaseAt, statementReleases]
 
 end Demo
@@ -688,7 +689,8 @@ example : LowEquivalent labelling (leakyTimingStart 1) (leakyTimingStart 2) ∧
 example : ¬ ConstantTime instrumentation program labelling (timingStart 1) (timingStart 2) :=
   timing_not_ct 1 2 ⟨rfl, trivial⟩ (by decide)
 
-/-- Representation lemma. Concrete witness confirming that ctRun 1 and ctRun 2 inhabit all `ConstantTime` and `DelimitedReleaseNI` premises (`LowEquivalent`, equal choices, equal releases) for `ctStart`. -/
+/-- Representation lemma: `ctRun 1` and `ctRun 2` inhabit all CT and NI premises:
+low equivalence, equal choices and equal releases for `ctStart`. -/
 example : ctStart 1 ≠ ctStart 2 ∧
     LowEquivalent labelling (ctStart 1) (ctStart 2) ∧
     (ctRun 1).choices = (ctRun 2).choices ∧
@@ -894,3 +896,249 @@ example : ReleaseFact.semanticTrace
 
 end Audit
 end ConcreteSpec.Core.Leak
+
+namespace ConcreteSpec.Core.Leak.ControlAudit
+open _root_.ConcreteSpec.Core.Exec
+open _root_.ConcreteSpec.Core.Leak.Demo
+
+/-- Helper: prepend one actual C1 transition. -/
+def prepend {I : Instrumentation ops} {c d : Config ops} {l : Label ops}
+    (h : Step program c l d) (r : Run I program d) : Run I program c :=
+  ⟨r.final, r.ending, r.finalEnding, I.observeStep c l d ++ r.observations,
+   I.leakage c l d ++ r.leakage, I.releases c l d ++ r.releases,
+   I.choices c l d ++ r.choices, .step h r.steps⟩
+/-- Helper: complete normal execution at an empty continuation. -/
+def doneRun (I : Instrumentation ops) (s : Int) : Run I program (finished s) :=
+  ⟨finished s, .normal, rfl, [], [], [], [], .refl _⟩
+/-- Helper: a literal output at source site eight. -/
+def out (n : Int) : ConcreteSpec.Core.Exec.Stmt ops := .prim none .output [.lit n] ⟨8⟩
+/-- Helper: asymmetric secret branching with distinct public outputs. -/
+def entry (s : Int) : Config ops :=
+  ⟨.exec (.cond .secret (.seq .skip (out 1)) (out 0) ⟨7⟩), [], s, []⟩
+/-- Helper: the deterministic primitive output transition. -/
+def outputRun (I : Instrumentation ops) (s n : Int) :
+    Run I program ⟨.exec (out n), [], s, []⟩ :=
+  prepend (Step.prim (vs := [n]) (st := s)
+    (a := (⟨some n, .ok 0, s⟩ : Answer Int Int Int)) rfl (by simp [allowed]) rfl) (doneRun I s)
+/-- Helper: the false arm takes two C1 steps. -/
+def left (I : Instrumentation ops) : Run I program (entry 0) :=
+  prepend (.silent rfl) (outputRun I 0 0)
+/-- Helper: the true arm takes five C1 steps. -/
+def right (I : Instrumentation ops) : Run I program (entry 1) :=
+  prepend (.silent rfl) (prepend (.silent rfl)
+    (prepend (.silent rfl) (prepend (.silent rfl) (outputRun I 1 1))))
+/-- Helper: secret branching with identical silent arms. -/
+def branchEntry (s : Int) : Config ops := ⟨.exec (.cond .secret .skip .skip ⟨7⟩), [], s, []⟩
+/-- Helper: complete execution of either silent arm. -/
+def branchRun (I : Instrumentation ops) (s : Int) : Run I program (branchEntry s) := by
+  apply prepend (d := ⟨.exec .skip, [], s, []⟩) (.silent ?_)
+    (prepend (.silent rfl) (doneRun I s))
+  simp [step, branchEntry, eval, onRes, ops, opsWith]
+
+/-- Law: deterministic steps contribute no external environment choices.
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7 matched external choices). -/
+theorem deterministic_choices (c d : Config ops) (label : Label ops) :
+    instrumentation.choices c label d = [] := rfl
+
+/-- Instance: the asymmetric execution has matched choices and releases despite different lengths. -/
+example : (left instrumentation).choices = (right instrumentation).choices ∧
+    (left instrumentation).releases = (right instrumentation).releases := ⟨rfl, rfl⟩
+
+/-- Planted: only the choice projection is replaced by an internal step counter. -/
+abbrev stepCount : Instrumentation ops := { instrumentation with choices := fun _ _ _ => [()] }
+
+/-- Instance: an inhabited output transition exercises the deterministic-choice Law. -/
+example : instrumentation.choices ⟨.exec (out 0), [], 0, []⟩ (.emit 0) (finished 0) = [] :=
+  deterministic_choices _ _ _
+
+/-- Planted (law `deterministic_choices`): the same actual output transition is wrongly counted. -/
+example : stepCount.choices ⟨.exec (out 0), [], 0, []⟩ (.emit 0) (finished 0) ≠ [] := by decide
+
+/-- Instance: NI refuses an asymmetric unreleased output leak with matched external choices. -/
+theorem asymmetric_ni_refused :
+    ¬ DelimitedReleaseNI instrumentation program labelling (entry 0) (entry 1) := by
+  intro h
+  exact (by decide : (left instrumentation).publicObservations ≠
+    (right instrumentation).publicObservations)
+      (h (left instrumentation) (right instrumentation) ⟨rfl, trivial⟩ rfl rfl).1
+
+/-- Helper: project the first recorded control decision for constructor discrimination. -/
+def firstDecision : List (Leakage Int Unit Unit) → Bool
+  | .branch _ b :: _ => b
+  | _ => false
+
+/-- Instance: CT independently refuses the same asymmetric execution. -/
+theorem asymmetric_ct_refused :
+    ¬ ConstantTime instrumentation program labelling (entry 0) (entry 1) := by
+  intro h
+  exact (show (left instrumentation).leakage ≠ (right instrumentation).leakage from by
+    intro eq
+    have bad := congrArg firstDecision eq
+    change false = true at bad
+    cases bad)
+    (h (left instrumentation) (right instrumentation) ⟨rfl, trivial⟩ rfl rfl)
+
+/-- Planted: changing only choices to the step counter wrongly admits the asymmetric leak
+under both judgments. All other observer projections are the production projections. -/
+theorem counted_leak_admitted :
+    LowEquivalent labelling (entry 0) (entry 1) ∧
+    DelimitedReleaseNI stepCount program labelling (entry 0) (entry 1) ∧
+    ConstantTime stepCount program labelling (entry 0) (entry 1) := by
+  have impossible : ∀ (a : Run stepCount program (entry 0))
+      (b : Run stepCount program (entry 1)), a.choices ≠ b.choices := by
+    intro a b h
+    rw [(complete_unique a (left stepCount)).2.2.2.1,
+        (complete_unique b (right stepCount)).2.2.2.1] at h
+    exact (by decide : (left stepCount).choices ≠ (right stepCount).choices) h
+  exact ⟨⟨rfl, trivial⟩, fun a b _ h _ => (impossible a b h).elim,
+    fun a b _ h _ => (impossible a b h).elim⟩
+
+/-- Law: evaluated conditionals retain the real source site and Boolean decision.
+Authority: docs/decisions.md#decided-project-infoflow-2026-11-06 (baseline branches),
+docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+theorem conditional_leakage (e : Demo.Expr) (s t : ConcreteSpec.Core.Exec.Stmt ops)
+    (site : SiteId) (locals : AList Var Int) (st next v : Int) (frames : List (Frame ops))
+    (label : Label ops) (target : Config ops)
+    (evaluated : eval locals st e = .ok (v, next)) :
+    instrumentation.leakage ⟨.exec (.cond e s t site), locals, st, frames⟩ label target =
+      [.branch site (decide (v ≠ 0))] := by
+  simp [controlLeakage, request, evaluated]
+
+/-- Instance: site seven and a true decision exercise conditional leakage. -/
+example : instrumentation.leakage (branchEntry 1) .silent (finished 1) = [.branch ⟨7⟩ true] :=
+  conditional_leakage .secret .skip .skip ⟨7⟩ [] 1 1 1 [] .silent _ rfl
+
+/-- Planted: omit only conditional leakage; loop and primitive observations are unchanged. -/
+abbrev noCondition : Instrumentation ops := { instrumentation with leakage := fun c l d =>
+  match c.ctrl with
+  | .exec (.cond _ _ _ _) => []
+  | _ => instrumentation.leakage c l d }
+
+/-- Planted (law `conditional_leakage`): omitting just conditionals loses the real decision. -/
+example : noCondition.leakage (branchEntry 1) .silent (finished 1) ≠ [.branch ⟨7⟩ true] := by
+  intro h
+  cases h
+
+/-- Instance: secret conditions with identical arms are refused by CT, with premises inhabited. -/
+theorem condition_ct_refused :
+    LowEquivalent labelling (branchEntry 0) (branchEntry 1) ∧
+    (branchRun instrumentation 0).choices = (branchRun instrumentation 1).choices ∧
+    (branchRun instrumentation 0).releases = (branchRun instrumentation 1).releases ∧
+    ¬ ConstantTime instrumentation program labelling (branchEntry 0) (branchEntry 1) := by
+  refine ⟨⟨rfl, trivial⟩, rfl, rfl, ?_⟩
+  intro h
+  exact (show (branchRun instrumentation 0).leakage ≠ (branchRun instrumentation 1).leakage from by
+    intro eq
+    have bad := congrArg firstDecision eq
+    change false = true at bad
+    cases bad)
+    (h (branchRun instrumentation 0) (branchRun instrumentation 1) ⟨rfl, trivial⟩ rfl rfl)
+
+/-- Planted: omitting only conditional leakage wrongly accepts the same secret condition. -/
+example : ConstantTime noCondition program labelling (branchEntry 0) (branchEntry 1) := by
+  intro a b _ _ _
+  rw [(complete_unique a (branchRun noCondition 0)).2.1,
+      (complete_unique b (branchRun noCondition 1)).2.1]
+  rfl
+
+/-- Law: every evaluated loop test records its source decision and the iteration contribution.
+True contributes one iteration, false zero; the complete ordered trace retains the exit test.
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7 loop counts),
+docs/decisions.md#decided-project-infoflow-2026-11-06 (baseline branches). -/
+theorem loop_leakage (l : LoopId) (cr body : ConcreteSpec.Core.Exec.Stmt ops)
+    (e : Demo.Expr) (site : SiteId) (dom : List Var) (locals : AList Var Int)
+    (st next v : Int) (frames : List (Frame ops)) (label : Label ops) (target : Config ops)
+    (evaluated : eval locals st e = .ok (v, next)) :
+    instrumentation.leakage ⟨.done, locals, st, .test l cr e body site dom :: frames⟩ label target =
+      [.branch site (decide (v ≠ 0)), .loop l (if v ≠ 0 then 1 else 0)] := by
+  simp [controlLeakage, request, evaluated]
+
+/-- Helper: a finite loop takes zero or one iteration, breaking immediately in its body. -/
+def loopEntry (s : Int) : Config ops :=
+  ⟨.exec (.loop ⟨3⟩ .skip .secret (.brk ⟨3⟩) ⟨9⟩), [], s, []⟩
+
+/-- Helper: actual C1 execution of the false loop test. -/
+def loopLeft (I : Instrumentation ops) : Run I program (loopEntry 0) :=
+  prepend (.silent rfl) (prepend (.silent rfl) (prepend (.silent rfl) (doneRun I 0)))
+
+/-- Helper: actual C1 execution of the true test and the matching break. -/
+def loopRight (I : Instrumentation ops) : Run I program (loopEntry 1) :=
+  prepend (.silent rfl) (prepend (.silent rfl) (prepend (.silent rfl)
+    (prepend (.silent rfl) (prepend (.silent rfl) (doneRun I 1)))))
+
+/-- Instance: nonzero loop identity and site, true decision, and a nonempty continuation. -/
+example : instrumentation.leakage
+    ⟨.done, [], 1, [.test ⟨3⟩ .skip .secret (.brk ⟨3⟩) ⟨9⟩ [], .seq .skip]⟩
+    .silent (finished 1) = [.branch ⟨9⟩ true, .loop ⟨3⟩ 1] :=
+  loop_leakage ⟨3⟩ .skip (.brk ⟨3⟩) .secret ⟨9⟩ [] [] 1 1 1 [.seq .skip] .silent _ rfl
+
+/-- Planted: omit only loop-test leakage. Conditional and primitive projections are unchanged. -/
+abbrev noLoop : Instrumentation ops := { instrumentation with leakage := fun c l d =>
+  match c.ctrl, c.frames with
+  | .done, .test _ _ _ _ _ _ :: _ => []
+  | _, _ => instrumentation.leakage c l d }
+
+/-- Planted (law `loop_leakage`): omitting loop tests loses both site and iteration evidence. -/
+example : noLoop.leakage
+    ⟨.done, [], 1, [.test ⟨3⟩ .skip .secret (.brk ⟨3⟩) ⟨9⟩ [], .seq .skip]⟩
+    .silent (finished 1) ≠ [.branch ⟨9⟩ true, .loop ⟨3⟩ 1] := by decide
+
+/-- Instance: CT refuses a secret-dependent finite loop, with matched choices and no releases. -/
+theorem loop_ct_refused :
+    LowEquivalent labelling (loopEntry 0) (loopEntry 1) ∧
+    (loopLeft instrumentation).choices = (loopRight instrumentation).choices ∧
+    (loopLeft instrumentation).releases = (loopRight instrumentation).releases ∧
+    ¬ ConstantTime instrumentation program labelling (loopEntry 0) (loopEntry 1) := by
+  refine ⟨⟨rfl, trivial⟩, rfl, rfl, ?_⟩
+  intro h
+  exact (show (loopLeft instrumentation).leakage ≠ (loopRight instrumentation).leakage from by
+    intro eq
+    have bad := congrArg firstDecision eq
+    change false = true at bad
+    cases bad)
+    (h (loopLeft instrumentation) (loopRight instrumentation) ⟨rfl, trivial⟩ rfl rfl)
+
+/-- Planted: omitting only loop tests wrongly accepts that same finite loop. -/
+example : ConstantTime noLoop program labelling (loopEntry 0) (loopEntry 1) := by
+  intro a b _ _ _
+  rw [(complete_unique a (loopLeft noLoop)).2.1,
+      (complete_unique b (loopRight noLoop)).2.1]
+  rfl
+
+/-- Planted: retain all releases except those with a bound result destination. -/
+abbrev unboundOnly : Instrumentation ops := { instrumentation with releases := fun c l d =>
+  match c.ctrl with
+  | .exec (.prim (some _) _ _ _) => []
+  | _ => instrumentation.releases c l d }
+
+/-- Planted: retain all releases except those with a nonempty continuation. -/
+abbrev emptyStackOnly : Instrumentation ops := { instrumentation with releases := fun c l d =>
+  match c.frames with
+  | [] => instrumentation.releases c l d
+  | _ :: _ => [] }
+
+/-- Instance: bound destination and nonempty stack both inhabit the generalized site Law. -/
+example : (instrumentation.releases
+    ⟨.exec (.prim (some ⟨2⟩) .release [.lit 42] ⟨7⟩), [], 0, [.seq .skip]⟩
+    .silent (finished 0)).map Release.site =
+    statementReleases (fun p : Prim => match p with | .release => some () | _ => none)
+      (.prim (some ⟨2⟩) .release [.lit 42] ⟨7⟩ : ConcreteSpec.Core.Exec.Stmt ops) :=
+  release_sites_agree ⟨7⟩ [.lit 42] [] 0 0 42 .silent _ (some ⟨2⟩) [.seq .skip] rfl
+
+/-- Planted (law `release_sites_agree`): bound-destination filtering alone breaks agreement. -/
+example : evalArgs ops [] 0 [.lit 42] = .ok ([42], 0) ∧
+    (unboundOnly.releases
+      ⟨.exec (.prim (some ⟨2⟩) .release [.lit 42] ⟨7⟩), [], 0, []⟩
+      .silent (finished 0)).map Release.site ≠
+    statementReleases (fun p : Prim => match p with | .release => some () | _ => none)
+      (.prim (some ⟨2⟩) .release [.lit 42] ⟨7⟩ : ConcreteSpec.Core.Exec.Stmt ops) := by decide
+
+/-- Planted (law `release_sites_agree`): stack filtering alone breaks agreement. -/
+example : evalArgs ops [] 0 [.lit 42] = .ok ([42], 0) ∧
+    (emptyStackOnly.releases
+      ⟨.exec (.prim none .release [.lit 42] ⟨7⟩), [], 0, [.seq .skip]⟩
+      .silent (finished 0)).map Release.site ≠
+    statementReleases (fun p : Prim => match p with | .release => some () | _ => none)
+      (.prim none .release [.lit 42] ⟨7⟩ : ConcreteSpec.Core.Exec.Stmt ops) := by decide
+
+end ConcreteSpec.Core.Leak.ControlAudit

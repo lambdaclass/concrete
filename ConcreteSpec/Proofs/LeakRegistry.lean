@@ -105,7 +105,7 @@ example :
     (instrumentation.releases (releaseEntry ⟨7⟩).config .silent ⟨.done, [], 0, []⟩).map Release.site =
     statementReleases (fun p : Prim => match p with | .release => some () | _ => none)
       (.prim none .release [.lit 42] ⟨7⟩ : ConcreteSpec.Core.Exec.Stmt ops) :=
-  release_sites_agree ⟨7⟩ [.lit 42] [] 0 0 42 .silent _ rfl
+  release_sites_agree ⟨7⟩ [.lit 42] [] 0 0 42 .silent _ none [] rfl
 
 /-- Planted: replace only the source site with zero, preserving the evaluated operand. -/
 abbrev zeroSite : Instrumentation ops := { instrumentation with
@@ -171,6 +171,29 @@ theorem ctAccepted : RuleAccepted IntegerConstantTime
 theorem ctRefused : RuleRefused IntegerConstantTime
     ⟨[], variableWork 1, variableWork 2⟩ :=
   timing_not_ct 1 2 ⟨rfl, trivial⟩ (by decide)
+
+/-- An asymmetric secret branch with two different public outputs. -/
+def asymmetricOutput (secret : Int) : IntegerEntry :=
+  ⟨.cond .secret (.seq .skip (.prim none .output [.lit 1] ⟨8⟩))
+    (.prim none .output [.lit 0] ⟨8⟩) ⟨7⟩, [], secret⟩
+
+/-- Instance: matched external choices cannot hide an asymmetric unreleased output. -/
+theorem asymmetricNIRefused : RuleRefused IntegerDelimitedReleaseNI
+    ⟨[], asymmetricOutput 0, asymmetricOutput 1⟩ := ControlAudit.asymmetric_ni_refused
+
+/-- Instance: CT separately refuses the asymmetric secret branch. -/
+theorem asymmetricCTRefused : RuleRefused IntegerConstantTime
+    ⟨[], asymmetricOutput 0, asymmetricOutput 1⟩ := ControlAudit.asymmetric_ct_refused
+
+/-- Instance: CT refuses secret decisions even when both arms are silent and identical. -/
+theorem conditionalCTRefused : RuleRefused IntegerConstantTime
+    ⟨[], ⟨.cond .secret .skip .skip ⟨7⟩, [], 0⟩,
+         ⟨.cond .secret .skip .skip ⟨7⟩, [], 1⟩⟩ := ControlAudit.condition_ct_refused.2.2.2
+
+/-- Instance: CT refuses a finite secret loop with zero versus one entered iteration. -/
+theorem loopCTRefused : RuleRefused IntegerConstantTime
+    ⟨[], ⟨.loop ⟨3⟩ .skip .secret (.brk ⟨3⟩) ⟨9⟩, [], 0⟩,
+         ⟨.loop ⟨3⟩ .skip .secret (.brk ⟨3⟩) ⟨9⟩, [], 1⟩⟩ := ControlAudit.loop_ct_refused.2.2.2
 
 end Leak.Registry
 end ConcreteSpec.Core
