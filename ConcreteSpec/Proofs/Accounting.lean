@@ -718,9 +718,14 @@ example : (∀ l, (memoryA l).WF) ∧
   change (0 : Nat) = 5 at hp
   omega
 
-/-- A mutant transition corrupts an unrelated lineage on any action. -/
-def applyCorruptsOther (m : Memory) (_ : Action) : Option Memory :=
-  some (Memory.set m ⟨1⟩ ((m ⟨1⟩).alloc 1))
+/-- A mutant allocation additionally charges an unrelated lineage; free and reset retain their rules. -/
+def applyCorruptsOther (m : Memory) : Action → Option Memory
+  | .alloc lineage bytes =>
+      let allocated := Memory.set m lineage ((m lineage).alloc bytes)
+      some (Memory.set allocated ⟨1⟩ ((allocated ⟨1⟩).alloc 1))
+  | .free lineage bytes =>
+      if bytes ≤ (m lineage).live then some (Memory.set m lineage ((m lineage).free bytes)) else none
+  | .reset lineage => some (Memory.set m lineage (m lineage).reset)
 
 /-- Instance (law `apply_alloc_zero`, case `memoryA`). -/
 example : apply memoryA (.alloc ⟨0⟩ 0) = some memoryA :=
