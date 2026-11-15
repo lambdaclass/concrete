@@ -11,7 +11,7 @@ import ConcreteSpec.Spec.Target
 
 Structural preservation uses F13's local operational guards, not a run-time invariant
 scan. Every Law below has a populated Instance and a kernel-checked Planted refutation
-in PreservationEvidence, LifetimeEvidence or FinalEvidence. The same postcondition is
+in PreservationEvidence, LifetimeEvidence, FinalEvidence or Proofs/OwnProtocols.lean. The same postcondition is
 applied to the real and substituted operation. These are not checker admission proofs.
 
 Authority: docs/decisions.md#decided-2026-11-05-core (Q3.1–Q3.4, Q3.8, Q9.10),
@@ -23,8 +23,10 @@ Result/Option admission and OD64 raw-pointer confinement remain later typed-lang
 obligations, not claims of these scalar owner proofs.
 
 Only Law counts as evidence; tags follow #decided-2026-11-13-proof-labels and controls
-follow #decided-2026-11-14-trap-sites-and-law-tests. O2 execution erasure lives in Proofs/OwnErasure.lean; O3 protocols
-and history are outside this slice. No inherited approval receipt is evidence.
+follow #decided-2026-11-14-trap-sites-and-law-tests. O2 execution erasure lives in
+Proofs/OwnErasure.lean. The O3 move protocol below reuses the private slot-uniqueness helper;
+remaining O3 protocols and their evidence live in Proofs/OwnProtocols.lean.
+No inherited approval receipt is evidence.
 Held policies remain outside the imported F13 interface: ISS-0064/ISS-0065, ISS-0068
 through ISS-0073 and ISS-0076 (source policy, constant restrictions, codecs, wiping,
 ABI and aggregate layout). No law here resolves those decisions.
@@ -2880,4 +2882,65 @@ example : CallResult (callLife types .leave exiting) :=
 example : CallState.WellFormed exiting ∧ callLife types .leave exiting = none ∧
     ¬ CallResult (callLifePending types .leave exiting) := by decide
 end PendingEvidence
+end ConcreteSpec.Core.Own
+
+namespace ConcreteSpec.Core.Own
+
+/-- Linear consumption denies both owner accesses until reinitialization restores the exact
+original state. Unrelated owners, loans and activation indices survive the whole protocol. -/
+def MoveLifecycle (consume : State → Hybrid.Place → Option State) (s : State) (p : Hybrid.Place) : Prop :=
+  ∃ t, consume s p = some t ∧ accessOwner t p .shared = none ∧
+    accessOwner t p .mutable = none ∧ reinitialize t p = some s
+
+/-- Law (authority: docs/decisions.md#decided-2026-11-08-foundation, C5;
+#decided-2026-11-05-core Q3.8; #od15; #od60; #od69). (subject `ConcreteSpec.Core.Own.move`).
+A discharged linear owner is unusable between consumption and reinitialization, and replacement restores all
+previous state. -/
+theorem move_reinitialize_protocol (s : State) (p : Hybrid.Place) (x : Slot)
+    (hs : WellFormed s) (found : slot s p = some x) (linear : x.desc.copy = false)
+    (owned : x.status = .owned) (clear : ∀ l ∈ s.loans, l.root ≠ p) :
+    MoveLifecycle move s p := by
+  have xp : x.place = p := by simpa using List.find?_some found
+  have xm : x ∈ s.slots := List.mem_of_find?_eq_some found
+  let change := fun a : Slot => if a.place = p then { a with status := .moved } else a
+  have place (a : Slot) : (change a).place = a.place := by simp [change]; split <;> rfl
+  let t : State := { s with slots := s.slots.map change }
+  have sf : slot t p = some { x with status := .moved } := by
+    unfold slot at found ⊢
+    simp only [t, List.find?_map, Function.comp_def, place, found, Option.map_some]
+    simp [change, xp]
+  have clearBool : s.loans.any (·.root == p) = false := by
+    apply Bool.eq_false_iff.mpr
+    intro h
+    obtain ⟨l, hl, he⟩ := List.any_eq_true.mp h
+    exact clear l hl (by simpa using he)
+  have allClear : s.loans.all (·.root != p) = true := by
+    apply List.all_eq_true.mpr
+    intro l hl
+    simpa using clear l hl
+  have restoration :
+      (s.slots.map change).map (fun a => if a.place = p then { a with status := .owned } else a) = s.slots := by
+    rw [List.map_map]
+    calc
+      _ = s.slots.map id := by
+        apply List.map_congr_left
+        intro a ha
+        dsimp only [Function.comp_def]
+        rw [place]
+        by_cases hp : a.place = p
+        · have ax := slot_unique s.slots hs.1 a x ha xm (hp.trans xp.symm)
+          subst a
+          simp only [change, xp, ↓reduceIte]
+          rw [← xp]
+          cases x
+          cases owned
+          rfl
+        · simp [change, hp]
+      _ = s.slots := List.map_id _
+  refine ⟨t, ?_, ?_, ?_, ?_⟩
+  · simp [move, found, linear, owned, clearBool, t, change]
+  · simp [accessOwner, ownerAccess, sf]
+  · simp [accessOwner, ownerAccess, sf]
+  · simp [reinitialize, sf, t, allClear, restoration]
+
 end ConcreteSpec.Core.Own

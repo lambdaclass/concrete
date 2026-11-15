@@ -21,3 +21,4 @@ import ConcreteSpec.Proofs.Const
 import ConcreteSpec.Proofs.Own
 import ConcreteSpec.Proofs.OwnErasure
 import ConcreteSpec.Proofs.OwnErasureEvidence
+import ConcreteSpec.Proofs.OwnProtocols
