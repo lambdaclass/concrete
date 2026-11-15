@@ -31,13 +31,13 @@ examples in `Spec/Rules.lean`. The Lean exporter is unchanged. Accounting carrie
 check concrete inputs and refuse opaque inputs of all eight shapes. The axiom golden is
 regenerated as the exact union with main, without security declarations.
 
-The authority validator uses one entry-status map for rows and anchors, documented in
-`scripts/spec/authority_status.md`. Every citation must exist and be current; ROADMAP tasks
-supply tracking context only. Distinct diagnostics identify wrong paths, missing entries and
-non-authority status. Controls cover all seven D4-retained records, italic sub-entries,
-anchored Core rows, withdrawn OD94, superseded recovery, wrappers, held/reopened/queued
-entries in both citation orders, malformed fragments and noncitation attribute/heading syntax.
-Ambiguous recovery currentness fails closed under ISS-0083; no decision record is edited.
+The authority validator preserves main's declared-row existence rule and adds a narrow
+fail-closed anchor rule: an anchored list title immediately followed by recorded dated
+owner approval, without a title disposition or an open Waiting for the owner link.
+It infers nothing from body prose or enclosing sections. Other anchor forms are refused
+under ISS-0083 pending an owner-approved status format. Code spans and fences are hidden
+before tokenization; ROADMAP tasks supply context only. Controls assert distinct failures
+and acceptance of the foundation/memory anchors and main governing row citations.
 The zero-allocation Planted transition changes only allocation and preserves free/reset.
 
 Held scope remains excluded, without inferring authority from inherited approval claims:
@@ -59,3 +59,12 @@ Held scope remains excluded, without inferring authority from inherited approval
 
 Security and release/facts qualification (ISS-0082 on the source branch) follows separately;
 this branch neither allocates that identifier nor carries its security issue row.
+
+Round 3 removes the prose classifier under ISS-0083, destructures report inputs and
+factors the two-lineage registry fixture. No decision inventory entry is edited.
+
+Validation blocker: main's `ConstsPermitted` doc comment cites recovered-29-18,
+recovered-59-26, decided-2026-11-14-constant-types and recovered-29-19, none of which
+has the required immediate dated approval form. The narrow rule refuses those
+citations with ISS-0083. Passing every unchanged main registration requires a
+coordinator resolution; this branch does not silently exempt those citations.

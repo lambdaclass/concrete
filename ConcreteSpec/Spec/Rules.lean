@@ -130,6 +130,9 @@ namespace Leak.Registry
 
 /-- Closed populated accounting input for registry conformance. -/
 def accountA : Account := ⟨100, 5, 12, 9⟩
+/-- Closed memory with two independently populated allocator lineages. -/
+def twoLineages : List (LineageId × Account) :=
+  [(⟨0⟩, accountA), (⟨1⟩, ⟨7, 2, 2, 2⟩)]
 /-- Closed function-entry account. -/
 def reportEntry : Account := ⟨100, 2, 100, 2⟩
 /-- Closed function-exit account. -/
@@ -169,20 +172,23 @@ theorem optionalRefused : RuleRefused ByteBoundSoundOptional (none, ⟨12, .boun
   simp [RuleRefused, ByteBoundSoundOptional, Bound.SoundOptional]
 /-- Instance: a report distinguishes function-local peak 8 from historical peak 100. -/
 theorem reportAccepted : RuleAccepted ReportSound (⟨0⟩, reportEntry, reportExit, some 10, establishedReport) := by
-  simp [RuleAccepted, ReportSound, LineageReport.Sound, Bound.Sound, SignedInterval.Sound, Bound.SoundOptional, establishedReport, reportEntry, reportExit]
+  simp [RuleAccepted, ReportSound, LineageReport.Sound, Bound.Sound, SignedInterval.Sound,
+    Bound.SoundOptional, establishedReport, reportEntry, reportExit]
 /-- Instance: correct numbers cannot be attributed to another lineage. -/
 theorem reportRefused : RuleRefused ReportSound (⟨1⟩, reportEntry, reportExit, some 10, establishedReport) := by
   simp [RuleRefused, ReportSound, LineageReport.Sound, establishedReport]
 
 /-- Instance: a populated lineage admits an allocation without affecting another lineage. -/
-theorem actionAccepted : RuleAccepted FiniteActionPermitted ([(⟨0⟩, ⟨100, 5, 12, 9⟩), (⟨1⟩, ⟨7, 2, 2, 2⟩)], .alloc ⟨0⟩ 8) := rfl
+theorem actionAccepted : RuleAccepted FiniteActionPermitted (twoLineages, .alloc ⟨0⟩ 8) := rfl
 /-- Instance: the same lineage refuses an excessive free. -/
-theorem actionRefused : RuleRefused FiniteActionPermitted ([(⟨0⟩, ⟨100, 5, 12, 9⟩), (⟨1⟩, ⟨7, 2, 2, 2⟩)], .free ⟨0⟩ 6) := by
-  simp [RuleRefused, FiniteActionPermitted, accountMemory, ActionPermitted, apply, Memory.set]
+theorem actionRefused : RuleRefused FiniteActionPermitted (twoLineages, .free ⟨0⟩ 6) := by
+  simp [RuleRefused, FiniteActionPermitted, accountMemory, twoLineages, accountA, ActionPermitted, apply, Memory.set]
 /-- Instance: allocation, free and reset compose through the production fold. -/
-theorem sequenceAccepted : RuleAccepted FiniteSequencePermitted ([(⟨0⟩, ⟨100, 5, 12, 9⟩), (⟨1⟩, ⟨7, 2, 2, 2⟩)], [.alloc ⟨0⟩ 8, .free ⟨0⟩ 3, .reset ⟨0⟩]) := rfl
+theorem sequenceAccepted :
+    RuleAccepted FiniteSequencePermitted
+      (twoLineages, [.alloc ⟨0⟩ 8, .free ⟨0⟩ 3, .reset ⟨0⟩]) := rfl
 /-- Instance: a bad middle free refuses the whole sequence even though its first action succeeds. -/
-theorem sequenceRefused : RuleRefused FiniteSequencePermitted ([(⟨0⟩, ⟨100, 5, 12, 9⟩), (⟨1⟩, ⟨7, 2, 2, 2⟩)],
+theorem sequenceRefused : RuleRefused FiniteSequencePermitted (twoLineages,
     [.alloc ⟨0⟩ 8, .free ⟨0⟩ 14, .reset ⟨0⟩]) := by
   change ¬ (false = true)
   decide

@@ -1,42 +1,27 @@
 # Decision authority validation
 
-`scripts/spec/rules.py` applies one structural rule to every cited entry, whether
-named by a row or an HTML fragment: a delimited decision entry with recorded owner
-provenance and established current disposition is authority. All citations must pass.
-ROADMAP decides nothing; a task ID can accompany authority as tracking context.
+Row citations (Q/OD/P) preserve main's declared-row existence rule: at least one
+cited row must be declared by an inventory list or table. No row status is inferred.
+ROADMAP task IDs decide nothing; they may accompany real authority as context.
 
-The inventory's entry delimiters are list entries (bold or italic titles, optionally
-preceded by an anchor) and anchored dated decision headings. Emphasis only delimits
-text; it is never evidence of approval. Owner provenance comes from the entry or
-its enclosing heading/list introduction, never an intervening sibling. Core and
-project rows inherit the recorded owner answer in their dated section introduction.
-OD rows instead use their final disposition column; their historical question,
-implementation status and options do not establish disposition. Row and anchor names
-index the same status, including inline Core anchors and OD table anchors.
+A `docs/decisions.md#anchor` citation is accepted only when the anchor opens a
+list entry of the form `- <a id="anchor"></a>**Title** (owner, YYYY-MM-DD:`
+(or an italic title). Whitespace may wrap the title or approval form across lines.
+The title must immediately precede the recorded approval form. An entry linked
+from an open item in “Waiting for the owner” is refused, as is a title containing
+held, partial, queued, reopened, superseded, withdrawn or deferred.
 
-Explicit title dispositions (held, partial, queued, reopened, superseded, withdrawn,
-deferred) refuse authority. An entry whose text explicitly says its status is held, deferred, queued, partial,
-superseded, withdrawn, reopened or not current also refuses. Fenced quotations are
-data rather than inventory structure.
-Unclosed entries linked by the Waiting for the owner list are held. Section wrappers,
-recovery inventories, revision registers and evidence/process status notes do not
-constitute individual decisions. A recovered item needs independent currentness:
-the D4 table explicitly says its seven existing records are retained. That table
-supplies currentness/provenance, never overrides a non-current title. Other recovered
-items are refused with `recovery currentness not established (ISS-0083)`: a historical
-owner quotation alone cannot prove that later decisions have not superseded it.
-In particular this refuses the old char-removal and slice-0 sign-off records without
-inventing dispositions or changing the decision inventory.
+No approval is inherited from sections or inferred from body prose. All other
+existing anchors fail closed with ISS-0083: “authority status not machine-readable;
+cite a row or an entry with recorded owner approval”. This deliberately refuses
+uncited entries whose approval uses other forms, including recovered records and
+redirect stubs. It does not classify the inventory or establish semantic scope or
+currentness beyond these structural checks. ISS-0083 closes only after the owner
+approves an explicit status format, entries are migrated and the validator consumes it.
 
-This conservative format reader cannot prove the semantic scope of a citation.
-It does not infer that arbitrary prose about an operation is a disposition marker
-(for example deferred scopes or partial moves). Missing or ambiguous provenance
-and currentness fail closed, naming ISS-0083. The long-term structural repair is an
-explicit status field, with its format approved by the owner, consumed here. The
-issue records the decision writer's outstanding historical-heading corrections too.
-
-Fragment parsing requires a path or a nonempty fragment token, so `#[proof(...)]`
-and Markdown headings are prose. An explicit `docs/decisions.md#` is a missing
-fragment error. Subsequent bare fragments inherit a preceding explicit decision
-path, preserving landed citations. Wrong paths, absent anchors/rows and non-authority
-status have distinct diagnostics; one valid citation never masks a bad one.
+Inline code and fenced blocks are blanked before citation matching. Concrete
+`#[...]` attributes and Markdown headings are not citations. Empty explicit
+fragments are errors. Bare fragments inherit a preceding explicit decision path.
+Wrong paths, missing anchors (including empty fragments), absent recorded approval,
+open waiting items, title dispositions and roadmap-only citations have distinct
+diagnostics. Every anchor citation must pass, in either order beside a valid one.

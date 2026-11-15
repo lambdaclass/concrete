@@ -2,121 +2,76 @@
 """Validate the Lean export's closed schema, rule documentation and conformance links.
 No source text supplies rule or example facts. Decision inventories declare documentation rows.
 """
-import json, re, sys
+import json
+import re
+import sys
 ROW = re.compile(r"\b(Q\d+(?:\.\d+)+|OD\d+|P\d+[a-z]?|R-\d{4})\b")
-# Inventory parsing is deliberately conservative; see ISS-0083 and authority_status.md.
+DECLARED = re.compile(r"^\s*(?:- \*\*(\S+?)\*\*|\| *(\S+?) *\|)", re.M)
 ANCHOR = re.compile(r'<a\s+id="([^"\n]+)"\s*></a>')
-CITATION = re.compile(r"(?:(?P<path>[^\s`<>\[\](){},;:\"'#]+)#(?P<fragment>[^\s`<>\[\](){},;:\"']*)|(?<![\w#])#(?P<bare>[A-Za-z0-9][^\s`<>\[\](){},;:\"']*))")
-NONCURRENT = re.compile(r'\b(?:withdrawn|superseded|not current|partial|queued?|reopen(?:ed|ing)?|held|hold|deferred|undecided)\b', re.I)
+CITATION = re.compile(
+    r"(?:(?P<path>[^\s`<>\[\](){},;:\"'#]+)#"
+    r"(?P<fragment>[^\s`<>\[\](){},;:\"']*)|"
+    r"(?<![\w#])#(?P<bare>[A-Za-z0-9][^\s`<>\[\](){},;:\"']*))")
+DISPOSITION = re.compile(r'\b(?:held|partial|queued|reopened|superseded|withdrawn|deferred)\b', re.I)
+UNRECORDED = ('authority status not machine-readable; cite a row or an entry with '
+              'recorded owner approval (ISS-0083)')
 
 
-def authority_entries(text):
-    """One status map for rows and fragments, based on delimited entries and provenance.
-
-    Markdown emphasis delimits entries, never establishes their status. See the
-    documented rule for provenance inheritance and the retained recovery boundary.
-    """
-    # Quoted recommendations are data, not inventory structure. Preserve offsets
-    # and newlines while hiding fenced contents from the structural reader.
+def blank_code(text):
+    """Hide fenced blocks and inline code, preserving line boundaries and offsets."""
     lines = text.splitlines(keepends=True)
     fence = None
     for i, line in enumerate(lines):
-        marker = re.match(r'^[ \t]*(`{3,}|~{3,})', line)
-        if marker and fence is None:
-            fence = marker[1][0]
+        marker = re.match(r'^[ \t]*(`{3,}|~{3,})(.*)$', line)
+        if fence is None and marker:
+            fence = marker[1]
             lines[i] = re.sub(r'[^\n]', ' ', line)
         elif fence is not None:
             lines[i] = re.sub(r'[^\n]', ' ', line)
-            if marker and marker[1][0] == fence:
+            if (marker and marker[1][0] == fence[0] and len(marker[1]) >= len(fence)
+                    and not marker[2].strip()):
                 fence = None
     text = ''.join(lines)
-    result = {m.group(1): 'non-authority status: not a decision entry' for m in ANCHOR.finditer(text)}
-    # Blocks are headings or list entries. An anchor may be on the preceding line.
-    blocks = list(re.finditer(
-        r'^(?P<indent>[ \t]*)(?:(?:- |\d+\. )?(?:<a id="(?P<anchor>[^"\n]+)"></a>\s*)?'
-        r'(?P<title>\*\*[^\n]+|\*[^\n]+|#{1,6} [^\n]+))', text, re.M))
-    retained_section = text.split('Already recovered authority, independently checked; existing records retained.', 1)
-    retained = set()
-    if len(retained_section) == 2:
-        table = retained_section[1].split('\n- <a ', 1)[0]
-        retained = set(re.findall(r'\]\(#([^)]*)\)', table))
-    waiting_section = text.split('## Waiting for the owner', 1)
-    waiting = waiting_section[1].split('\n## ', 1)[0] if len(waiting_section) == 2 else ''
+    return re.sub(r'(`+)(?!`)(.*?)(?<!`)\1(?!`)',
+                  lambda m: re.sub(r'[^\n]', ' ', m[0]), text, flags=re.S)
+
+
+def authority_entries(text):
+    """Read only anchored list titles with an immediate recorded approval form.
+
+    No section or body prose supplies approval or disposition. ISS-0083 owns the
+    explicit status format needed to replace this deliberately narrow interim rule.
+    """
+    text = blank_code(text)
+    result = {m[1]: UNRECORDED for m in ANCHOR.finditer(text)}
+    section = text.split('## Waiting for the owner', 1)
+    waiting = section[1].split('\n## ', 1)[0] if len(section) == 2 else ''
     waiting_anchors = set()
     for item in re.split(r'\n\d+\. ', waiting):
         if not item.lstrip().startswith('Closed '):
             waiting_anchors.update(re.findall(r'\]\(#([^)]*)\)', item))
-    for i, m in enumerate(blocks):
-        title = m['title']; anchor = m['anchor']
-        row = re.match(r'\*\*(Q\d+(?:\.\d+)+|P\d+[a-z]?)\*\*', title)
-        keys = ([anchor] if anchor else []) + ([row[1]] if row else [])
-        if not keys:
-            continue
-        end = blocks[i+1].start() if i+1 < len(blocks) else len(text)
-        body = text[m.start():end]
-        # Provenance can be inherited only from the enclosing heading or list entry.
-        context = body
-        indent = len(m['indent'])
-        for j in range(i - 1, -1, -1):
-            prev = blocks[j]
-            if prev['title'].startswith('#') or len(prev['indent']) < indent:
-                # Only the parent's introduction, never intervening siblings, can
-                # supply provenance. Continue outward for a nested list's owner.
-                context += text[prev.start():blocks[j+1].start()]
-                if prev['title'].startswith('#'):
-                    break
-                indent = len(prev['indent'])
-        provenance = bool(re.search(r'owner(?:[- ](?:approved|confirmed)|[, :])|Owner reply(?:,|:)|owner answered every row', context, re.I))
-        # Status markers belong to the entry title, not arbitrary language examples
-        # ("deferred scopes", "partial moves") or references to other decisions.
-        if title.startswith('#'):
-            status_text = title
-        else:
-            delimiter = '**' if title.startswith('**') else '*'
-            status_text = title[len(delimiter):].split(delimiter, 1)[0]
-        status = NONCURRENT.search(status_text)
-        nonentry = re.search(r'primary approvals recovered|authority recovery|recovery.*(?:list|items)|revision register|review implementation|source rules and authority limits|the \d+(?: answers|-item list)|^(?:Core rows|Project rows)', status_text, re.I)
-        if title.startswith('#') and not re.match(r'#{1,6} (?:Decided|Owner decisions) \d{4}-', title):
-            reason = 'non-authority status: section wrapper'
-        elif nonentry:
-            reason = 'non-authority status: inventory or status record'
-        elif anchor in waiting_anchors:
-            reason = 'non-authority status: waiting for owner'
-        elif (qualification := re.search(
-                r'\b(?:is|remains?|status:)\s+(?:explicitly\s+)?'
-                r'(deferred|held|queued|partial|superseded|withdrawn|reopened|not current)\b',
-                body, re.I)):
-            reason = 'non-authority status: ' + qualification[1].lower()
+    entries = re.finditer(
+        r'^[ \t]*- <a id="(?P<anchor>[^"\n]+)"></a>'
+        r'(?P<mark>\*\*|\*)(?P<title>[^*\n]*(?:\n[ \t]+[^*\n]+)*?)(?P=mark)'
+        r'(?P<after>\s*\(owner,\s*\d{4}-\d{2}-\d{2}:)?', text, re.M)
+    for entry in entries:
+        anchor = entry['anchor']
+        status = DISPOSITION.search(entry['title'])
+        if anchor in waiting_anchors:
+            result[anchor] = 'open in Waiting for the owner'
         elif status:
-            reason = 'non-authority status: ' + status[0].lower()
-        elif anchor and anchor.startswith('recovered-') and anchor not in retained:
-            reason = 'non-authority status: recovery currentness not established (ISS-0083)'
-        elif anchor in retained:
-            reason = None
-        elif not provenance:
-            reason = 'non-authority status: owner provenance not established (ISS-0083)'
-        else:
-            reason = None
-        for key in keys:
-            result[key] = reason
-    # OD table disposition, rather than its historical question/options, owns status.
-    for line in text.splitlines():
-        if not re.match(r'\| OD\d+ \|', line):
-            continue
-        cells = re.split(r'(?<!\\)\|', line)
-        row = cells[1].strip(); disposition = cells[-2].strip()
-        status = re.search(r'\b(?:withdrawn|superseded|reopened|not current)\b', disposition, re.I) or re.match(r'(held|queued|partial)\b', disposition, re.I)
-        reason = ('non-authority status: ' + status[0].lower() if status else
-                  None if re.match(r'decided .*owner', disposition) else
-                  'non-authority status: OD disposition unclear (ISS-0083)')
-        result[row] = result[row.lower()] = reason
+            result[anchor] = 'disposition in title: ' + status[0].lower()
+        elif entry['after']:
+            result[anchor] = None
+    for anchor in waiting_anchors & result.keys():
+        result[anchor] = 'open in Waiting for the owner'
     return result
 
 
 def decision_citations(doc):
-    """Fragments require a token; path# also captures a missing fragment explicitly."""
+    """Parse citations outside code; bare fragments inherit an explicit path."""
     context = False
-    for match in CITATION.finditer(doc):
+    for match in CITATION.finditer(blank_code(doc)):
         path = match['path'] or ('docs/decisions.md' if context else '')
         anchor = match['fragment'] if match['path'] else match['bare']
         if anchor.endswith('.') and not anchor.endswith('..'):
@@ -139,11 +94,13 @@ def unique_object(pairs):
 def main(rules_path, row_paths):
     fails = []
     try:
-        rules = [json.loads(l, object_pairs_hook=unique_object) for l in open(rules_path, encoding="utf-8") if l.strip()]
+        rules = [json.loads(l, object_pairs_hook=unique_object)
+                 for l in open(rules_path, encoding="utf-8") if l.strip()]
         inventories = [open(p, encoding="utf-8").read() for p in row_paths]
     except (OSError, UnicodeDecodeError, ValueError) as e:
         print(f"error: {e}", file=sys.stderr); return 3
-    if not rules or type(rules[-1]) is not dict or rules[-1] != {"end": True} or type(rules[-1].get("end")) is not bool:
+    if (not rules or type(rules[-1]) is not dict or rules[-1] != {"end": True}
+            or type(rules[-1].get("end")) is not bool):
         print("error: the rule listing is truncated (no end record)", file=sys.stderr); return 3
     if not inventories:
         print("error: no decision inventory given", file=sys.stderr); return 3
@@ -154,7 +111,8 @@ def main(rules_path, row_paths):
                     "elaborated": bool, "usesRule": bool},
     }
     for r in records:
-        schema = schemas.get(r.get("kind")) if type(r) is dict and type(r.get("kind")) is str else None
+        schema = (schemas.get(r.get("kind"))
+                  if type(r) is dict and type(r.get("kind")) is str else None)
         if (schema is None or set(r) != set(schema)
                 or any(type(r[k]) is not t for k, t in schema.items())
                 or not r["name"].strip()
@@ -166,27 +124,26 @@ def main(rules_path, row_paths):
     rules = [r for r in records if r["kind"] == "rule"]
     examples = [r for r in records if r["kind"] == "example"]
     approved = authority_entries(inventories[0])
+    declared = {a or b for t in inventories for a, b in DECLARED.findall(t)}
     names = [r["name"] for r in rules]
     for n in sorted({n for n in names if names.count(n) > 1}):
         fails.append(f"rule {n} is registered more than once")
     for r in rules:
         if not r["exists"]: fails.append(f"rule {r['name']} names no declaration")
-        if r["rev"] < 1: fails.append(f"rule {r['name']} has revision {r['rev']} (revisions start at 1)")
+        if r["rev"] < 1:
+            fails.append(f"rule {r['name']} has revision {r['rev']} (revisions start at 1)")
         if not r["doc"].strip(): fails.append(f"rule {r['name']} has no doc comment")
         else:
-            rows = [m.group(1) for m in ROW.finditer(r["doc"])]
+            rows = [m.group(1) for m in ROW.finditer(blank_code(r["doc"]))]
             citations = list(decision_citations(r["doc"]))
             if not rows and not citations:
                 fails.append(f"rule {r['name']}'s doc comment cites no decision row or authority entry")
-            for row in rows:
-                if row.startswith('R-'):
-                    if citations or any(not x.startswith('R-') for x in rows):
-                        continue
-                    fails.append(f"rule {r['name']}: non-authority status: ROADMAP task {row} decides nothing")
-                elif row not in approved:
-                    fails.append(f"rule {r['name']}: no existing decision row {row}")
-                elif approved[row]:
-                    fails.append(f"rule {r['name']}: {row}: {approved[row]}")
+            real_rows = [row for row in rows if not row.startswith('R-')]
+            if real_rows and not any(row in declared for row in real_rows):
+                fails.append(f"rule {r['name']}'s doc comment cites no existing decision row "
+                             f"({', '.join(real_rows)})")
+            if rows and not real_rows and not citations:
+                fails.append(f"rule {r['name']}: roadmap-only: ROADMAP task {rows[0]} decides nothing")
             for path, anchor in citations:
                 if path != 'docs/decisions.md':
                     fails.append(f"rule {r['name']}: wrong authority path {path}#{anchor}")
@@ -202,7 +159,8 @@ def main(rules_path, row_paths):
         identities.add(identity)
         if n not in seen: fails.append(f"example {identity} cites unregistered rule {n}")
         if not e["elaborated"]: fails.append(f"example {identity} is not an elaborated trusted theorem")
-        if e["verdict"] == "Invalid": fails.append(f"example {identity} has no concrete rule acceptance/refusal proposition")
+        if e["verdict"] == "Invalid":
+            fails.append(f"example {identity} has no concrete rule acceptance/refusal proposition")
         if not e["usesRule"]: fails.append(f"example {identity} does not use linked rule {n}")
         if n in seen and e["elaborated"] and e["usesRule"]: seen[n].add(e["verdict"])
     for n in names:

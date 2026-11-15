@@ -78,40 +78,22 @@ def fixture(name, *, decl=rule, proof=proofs, reg=registry, evidence=links,
 production_rows = (root / 'docs/decisions.md').read_text()
 rows.write_text(production_rows)
 valid = 'decided-2026-11-08-foundation'
-for anchor in [valid, 'decided-project-memory-2026-11-06',
-               'decided-2026-11-14-constant-types', 'recovered-29-18',
-               'recovered-29-19', 'recovered-59-26', 'decided-2026-11-12-char',
-               'decided-project-runtime-2026-11-06', 'decided-2026-11-08-c9-identities',
-               'decided-2026-11-08-recovered-d3', 'decided-2026-11-08-constants',
-               'core-q3-12', 'core-q9-8']:
+for anchor in [valid, 'decided-project-memory-2026-11-06']:
     fixture('authority-current-' + anchor,
             decl=rule.replace('(Q9.1)', '(docs/decisions.md#' + anchor + ')'))
-refused_status = {
-    'recovered-59-16': 'recovery currentness not established (ISS-0083)',
-    'recovered-59-5': 'recovery currentness not established (ISS-0083)',
-    'decided-project': 'section wrapper', 'od94': 'withdrawn',
-    'recovered-29-6': 'superseded', 'recovered-29-22': 'partial',
-    'decided-2026-11-08-recovery-queue': 'queue',
-    'decided-2026-11-09-older-proposals': 'reopened',
-    'decided-2026-11-08-spelling-round': 'waiting for owner',
-    'foundation-q11': 'deferred', 'foundation-q14': 'deferred',
+refused = {
+    'OPEN-38': 'ISS-0083',
+    'decided-2026-11-08-recovery-queue': 'ISS-0083',
+    'decided-2026-11-08-spelling-round': 'open in Waiting for the owner',
+    'recovered-29-22': 'ISS-0083',
 }
-for anchor in ['recovered-59-16', 'recovered-59-5', 'decided-project', 'od94', 'recovered-29-6', 'recovered-29-22',
-               'decided-2026-11-08-recovery-queue',
-               'decided-2026-11-13-d4-recovery',
-               'decided-2026-11-09-older-proposals',
-               'decided-2026-11-08-recovered',
-               'decided-2026-11-08-recovered-29',
-               'decided-2026-11-08-recovered-59', 'decided-2026-11-08-spelling-round',
-               'foundation-q11', 'foundation-q14', 'decided-2026-11-08-process',
-               'decided-2026-11-08-language-revisions', 'decided-2026-11-08-source-evidence']:
+for anchor, diagnostic in refused.items():
     assert '<a id="' + anchor + '"></a>' in production_rows
     for order, anchors in [('alone', [anchor]), ('first', [anchor, valid]),
-                            ('last', [valid, anchor])]:
+                           ('last', [valid, anchor])]:
         fixture('authority-' + anchor + '-' + order,
                 decl=rule.replace('(Q9.1)', '(' + ', '.join(
-                    'docs/decisions.md#' + a for a in anchors) + ')'),
-                reason=anchor + ': non-authority status: ' + refused_status.get(anchor, 'inventory or status record'))
+                    'docs/decisions.md#' + a for a in anchors) + ')'), reason=diagnostic)
 for punctuation in ['.', ':', ';', ',']:
     fixture('authority-punctuation-' + str(ord(punctuation)),
             decl=rule.replace('(Q9.1).', 'docs/decisions.md#' + valid + punctuation))
@@ -134,39 +116,36 @@ for name, citation in [
 for name, prose in [('attribute', '#[proof(example)]'), ('heading', '\n# Example heading\n')]:
     fixture('authority-noncitation-' + name, decl=rule.replace('(Q9.1)',
             '(docs/decisions.md#' + valid + ') ' + prose))
-for badrow, diagnostic in [('Q999.1', 'no existing decision row Q999.1'),
-                            ('OD94', 'OD94: non-authority status: withdrawn')]:
-    for order, pair in [('first', badrow + ', Q9.1'), ('last', 'Q9.1, ' + badrow)]:
-        fixture('authority-row-' + badrow + '-' + order,
-                decl=rule.replace('Q9.1', pair), reason=diagnostic)
-fixture('authority-real-roadmap', decl=rule.replace('Q9.1', 'R-0578'),
-        reason='non-authority status: ROADMAP task R-0578 decides nothing')
-assert re.search(r'^\|.*\bR-0578\b', (root / 'ROADMAP.md').read_text(), re.M)
-# Status is read from entry text, not only the emphasized title; owner
-# provenance cannot leak from a sibling. These use the same production parser.
-for name, entry, diagnostic in [
-    ('body-held', '- <a id="control-body-held"></a>**Decision** (owner: approved).\n  Its status: held.\n',
-     'non-authority status: held'),
-    ('missing-provenance', '- <a id="control-missing-provenance"></a>*Decision*.\n  A recommendation only.\n',
-     'non-authority status: owner provenance not established (ISS-0083)'),
+# Preserve main's row existence rule, including governing rows with revision notes.
+for row in ['Q4.7', 'OD47', 'OD42', 'OD8', 'OD137', 'OD94']:
+    fixture('authority-row-' + row, decl=rule.replace('Q9.1', row))
+fixture('authority-real-roadmap', decl=rule.replace('Q9.1', 'R-0578'), reason='roadmap-only')
+for name, entry in [
+    ('proposal', '- <a id="control"></a>*Proposal for the owner to review*.\n'),
+    ('linear', '- <a id="control"></a>**Rule**. The linear owner releases its slot.\n'),
+    ('questions', '## Owner questions\n- <a id="control"></a>*Open item*. Options a or b.\n'),
 ]:
-    rows.write_text(production_rows + '\n## Controls\n\n' + entry)
+    rows.write_text(production_rows + '\n' + entry)
     fixture('authority-' + name,
-            decl=rule.replace('(Q9.1)', '(docs/decisions.md#control-' + name + ')'),
-            reason='control-' + name + ': ' + diagnostic)
+            decl=rule.replace('Q9.1', 'docs/decisions.md#control'), reason='ISS-0083')
+for disposition in ['held', 'queued']:
+    rows.write_text(production_rows + '\n- <a id="control"></a>**' + disposition +
+                    '** (owner, 2026-11-08: "ok").\n')
+    for order, anchors in [('first', ['control', valid]), ('last', [valid, 'control'])]:
+        fixture('authority-title-' + disposition + '-' + order,
+                decl=rule.replace('Q9.1', ', '.join('docs/decisions.md#' + a for a in anchors)),
+                reason='disposition in title: ' + disposition)
 rows.write_text(production_rows)
-# Current status, rather than a retained-anchor allowlist, determines acceptance.
-rows.write_text(production_rows.replace(
-    '**29-list item 18: RECOVERED.**', '**29-list item 18: PARTIAL; queued.**'))
-fixture('authority-status-changed', decl=rule.replace('(Q9.1)',
-        '(docs/decisions.md#recovered-29-18)'), reason='recovered-29-18: non-authority status: partial')
+for name, code in [('inline', '`#eval Q999.1`'),
+                   ('fence', '\n```lean\n#eval Q999.1\n```\n')]:
+    fixture('authority-code-' + name,
+            decl=rule.replace('Q9.1', 'docs/decisions.md#' + valid + ' ' + code))
 rows.write_text('- **Q9.1** Decided (owner: approved).\nR-0001 is only mentioned.\n')
 fixture('authority-row-only-existing')
 fixture('authority-row-only-missing', decl=rule.replace('Q9.1', 'Q999.1'),
         reason='no existing decision row')
-fixture('authority-row-only-mixed', decl=rule.replace('Q9.1', 'Q9.1, Q999.1'), reason='no existing decision row')
-fixture('authority-roadmap-mention', decl=rule.replace('Q9.1', 'R-0001'),
-        reason='non-authority status: ROADMAP task')
+fixture('authority-row-only-mixed', decl=rule.replace('Q9.1', 'Q9.1, Q999.1'))
+fixture('authority-roadmap-mention', decl=rule.replace('Q9.1', 'R-0001'), reason='roadmap-only')
 
 # C7 adapters keep the strict traversal: each production input shape accepts closed data,
 # but an opaque value of exactly that shape cannot certify an inspectable instance.
@@ -397,7 +376,7 @@ fixture('revision-zero', reg=registry.replace(', 1', ', 0'), reason='revision 0'
 fixture('no-doc', decl=rule.replace('/-- The rule (Q9.1). -/\n', ''), reason='has no doc comment')
 fixture('no-row', decl=rule.replace('Q9.1', 'plain words'), reason='cites no decision row')
 fixture('unknown-row', decl=rule.replace('Q9.1', 'Q999.999'), reason='no existing decision row')
-fixture('mention-only-row', decl=rule.replace('Q9.1', 'R-0001'), reason='non-authority status: ROADMAP task R-0001 decides nothing')
+fixture('mention-only-row', decl=rule.replace('Q9.1', 'R-0001'), reason='roadmap-only')
 fixture('truncated', mutate=lambda s: '\n'.join(s.splitlines()[:-1]), reason='no end record')
 for i, bad in enumerate([None, [], {}, {'kind': 'unknown'},
                         {'kind': 'rule', 'name': 'x', 'rev': True, 'exists': True, 'doc': 'Q9.1'}]):

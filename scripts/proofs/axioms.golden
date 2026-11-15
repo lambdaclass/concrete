@@ -2071,6 +2071,7 @@ ConcreteSpec.Core.Leak.LineageReport.mk.sizeOf_spec
 ConcreteSpec.Core.Leak.Memory.empty.eq_1	
 ConcreteSpec.Core.Leak.Memory.set.eq_1	
 ConcreteSpec.Core.Leak.Memory.set_same	Quot.sound propext
+ConcreteSpec.Core.Leak.Registry.accountA.eq_1	
 ConcreteSpec.Core.Leak.Registry.actionAccepted	
 ConcreteSpec.Core.Leak.Registry.actionRefused	propext
 ConcreteSpec.Core.Leak.Registry.boundAccepted	propext
@@ -2088,6 +2089,7 @@ ConcreteSpec.Core.Leak.Registry.sequenceAccepted
 ConcreteSpec.Core.Leak.Registry.sequenceRefused	
 ConcreteSpec.Core.Leak.Registry.signedAccepted	propext
 ConcreteSpec.Core.Leak.Registry.signedRefused	propext
+ConcreteSpec.Core.Leak.Registry.twoLineages.eq_1	
 ConcreteSpec.Core.Leak.Registry.wfAccepted	
 ConcreteSpec.Core.Leak.Registry.wfRefused	
 ConcreteSpec.Core.Leak.ReportSound.eq_1	
@@ -5164,6 +5166,7 @@ _private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.KeyConstruct.collectKeysIn.
 _private.ConcreteSpec.Spec.Ident.0.PSigma.casesOn._arg_pusher	
 _private.ConcreteSpec.Spec.Own.0.ConcreteSpec.Core.Own.ParentValid.match_1.eq_1	
 _private.ConcreteSpec.Spec.Own.0.ConcreteSpec.Core.Own.ParentValid.match_1.eq_2	
+_private.ConcreteSpec.Spec.Rules.0.ConcreteSpec.Core.Leak.ReportSound.match_1.eq_1	
 _private.ConcreteSpec.Spec.Rules.0.ConcreteSpec.Core.Leak.instReprAction.repr.match_1.eq_1	
 _private.ConcreteSpec.Spec.Rules.0.ConcreteSpec.Core.Leak.instReprAction.repr.match_1.eq_2	
 _private.ConcreteSpec.Spec.Rules.0.ConcreteSpec.Core.Leak.instReprAction.repr.match_1.eq_3	
