@@ -31,16 +31,14 @@ examples in `Spec/Rules.lean`. The Lean exporter is unchanged. Accounting carrie
 check concrete inputs and refuse opaque inputs of all eight shapes. The axiom golden is
 regenerated as the exact union with main, without security declarations.
 
-The authority validator reads entry headings/statuses from the decision inventory, including
-fully recovered current item records. It refuses PARTIAL, held, superseded/reopened,
-recovery-wrapper and queue records, checking every fragment even beside a valid citation.
-The retained D4 records pass without changing main's rule provenance. Existing row-only
-citations retain the existing declared-row test and diagnostic. Fragment tokenization allows
-one sentence-ending period and ordinary sentence punctuation, but rejects repeated-dot or
-other suffix corruption. Landed abbreviated subsequent fragments retain their explicit
-preceding decision-document context. New citations spell out `docs/decisions.md#anchor`.
-Controls use actual anchors from the decision inventory in their fixture rows, in both
-citation orders; changing a recovered row's status to PARTIAL also makes it fail.
+The authority validator uses one entry-status map for rows and anchors, documented in
+`scripts/spec/authority_status.md`. Every citation must exist and be current; ROADMAP tasks
+supply tracking context only. Distinct diagnostics identify wrong paths, missing entries and
+non-authority status. Controls cover all seven D4-retained records, italic sub-entries,
+anchored Core rows, withdrawn OD94, superseded recovery, wrappers, held/reopened/queued
+entries in both citation orders, malformed fragments and noncitation attribute/heading syntax.
+Ambiguous recovery currentness fails closed under ISS-0083; no decision record is edited.
+The zero-allocation Planted transition changes only allocation and preserves free/reset.
 
 Held scope remains excluded, without inferring authority from inherited approval claims:
 

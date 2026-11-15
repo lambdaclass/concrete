@@ -15,10 +15,26 @@ namespace ConcreteSpec.Core
 namespace Leak.Registry
 open Demo
 
+/-- Concrete release followed by an unreleased secret output. -/
+def unreleasedOutput (secret : Int) : IntegerEntry :=
+  ⟨.seq (.prim none .release [.lit 0] ⟨0⟩) (.prim none .output [.secret] ⟨1⟩), [], secret⟩
+
+/-- Concrete release and public output of the same masked sum. -/
+def releasedSum (publicValue secret : Int) : IntegerEntry :=
+  ⟨.seq (.prim none .release [.masked] ⟨0⟩) (.prim none .output [.masked] ⟨1⟩),
+    [(⟨0⟩, -secret)], publicValue⟩
+
+/-- Variable-time secret work followed by a fixed authorized release and public output. -/
+def variableWork (secret : Int) : IntegerEntry :=
+  ⟨.seq (.prim none .work [.secret] ⟨2⟩)
+    (.seq (.prim none .release [.lit 0] ⟨0⟩) (.prim none .output [.lit 7] ⟨1⟩)), [], secret⟩
+
 /-- Instance: the concrete call graph passes the full function and site policy. -/
-theorem callsAccepted : RuleAccepted UnitCallsAdmitted (CallControls.allAllowed, CallControls.chain) := CallControls.admitted
+theorem callsAccepted : RuleAccepted UnitCallsAdmitted (CallControls.allAllowed, CallControls.chain) :=
+    CallControls.admitted
 /-- Instance: omitting only the outer caller refuses the same two-level release chain. -/
-theorem callsRefused : RuleRefused UnitCallsAdmitted (CallControls.outerDenied, CallControls.chain) := CallControls.refused
+theorem callsRefused : RuleRefused UnitCallsAdmitted (CallControls.outerDenied, CallControls.chain) :=
+    CallControls.refused
 
 /-- Instance: a declared release in an allowlisted function passes program admission. -/
 theorem programAccepted : RuleAccepted IntegerProgramAdmitted
@@ -41,9 +57,11 @@ theorem programRefused : RuleRefused IntegerProgramAdmitted
   exact List.not_mem_nil denied
 
 /-- Instance: the listed typed site is permitted. -/
-theorem permitsAccepted : RuleAccepted StringReleasePermitted (typedReleasePolicy, typedRelease "public" 7) := by simp [RuleAccepted, StringReleasePermitted, ReleasePolicy.Permits, typedReleasePolicy, typedRelease]
+theorem permitsAccepted : RuleAccepted StringReleasePermitted (typedReleasePolicy, typedRelease "public" 7) := by
+    simp [RuleAccepted, StringReleasePermitted, ReleasePolicy.Permits, typedReleasePolicy, typedRelease]
 /-- Instance: changing only the type at that site is refused. -/
-theorem permitsRefused : RuleRefused StringReleasePermitted (typedReleasePolicy, typedRelease "secret" 7) := by simp [RuleRefused, StringReleasePermitted, ReleasePolicy.Permits, typedReleasePolicy, typedRelease]
+theorem permitsRefused : RuleRefused StringReleasePermitted (typedReleasePolicy, typedRelease "secret" 7) := by simp
+    [RuleRefused, StringReleasePermitted, ReleasePolicy.Permits, typedReleasePolicy, typedRelease]
 /-- Instance: an empty policy forbids releases. -/
 theorem forbidsAccepted : RuleAccepted UnitReleaseForbidden ⟨[]⟩ := rfl
 /-- Instance: the populated policy does not forbid release. -/
@@ -57,10 +75,10 @@ theorem authorizedRefused : RuleRefused UnitTraceAuthorized (⟨[]⟩, [releaseV
   forbidsRelease_not_authorized ⟨[]⟩ (releaseValue 7) [releaseValue 8] rfl
 /-- Instance: authorization quantifies over every complete execution of this concrete entry. -/
 theorem runsAccepted : RuleAccepted IntegerRunsAuthorized
-    (⟨[⟨⟨0⟩, ()⟩]⟩, ⟨[], ⟨.seq (.prim none .release [.lit 0] ⟨0⟩) (.prim none .output [.secret] ⟨1⟩), [], 1⟩⟩) := release_authorized 1
+    (⟨[⟨⟨0⟩, ()⟩]⟩, ⟨[], unreleasedOutput 1⟩) := release_authorized 1
 /-- Instance: the same populated execution is refused by the empty policy. -/
 theorem runsRefused : RuleRefused IntegerRunsAuthorized
-    (⟨[]⟩, ⟨[], ⟨.seq (.prim none .release [.lit 0] ⟨0⟩) (.prim none .output [.secret] ⟨1⟩), [], 1⟩⟩) := by
+    (⟨[]⟩, ⟨[], unreleasedOutput 1⟩) := by
   intro h
   have bad := h (leakyRun 1)
   change ReleasePolicy.Authorized ⟨[]⟩ [releaseValue 0] at bad
@@ -77,21 +95,21 @@ theorem lowRefused : RuleRefused IntegerLowEquivalent
   simp [RuleRefused, IntegerLowEquivalent, IntegerEntry.config, LowEquivalent, publicLocals, labelling]
 /-- Instance: distinct secrets with equal released sums satisfy NI. -/
 theorem niAccepted : RuleAccepted IntegerDelimitedReleaseNI
-    ⟨[], ⟨.seq (.prim none .release [.masked] ⟨0⟩) (.prim none .output [.masked] ⟨1⟩), [(⟨0⟩, .negSucc 1)], 6⟩,
-     ⟨.seq (.prim none .release [.masked] ⟨0⟩) (.prim none .output [.masked] ⟨1⟩), [(⟨0⟩, .negSucc 2)], 5⟩⟩ :=
+    ⟨[], releasedSum 6 2,
+     releasedSum 5 3⟩ :=
   secure_ni 6 5 1 2 ⟨rfl, trivial⟩ ⟨secureRun 6 1, secureRun 5 2, rfl, rfl⟩
 /-- Instance: an unreleased output is refused despite authorized releases. -/
 theorem niRefused : RuleRefused IntegerDelimitedReleaseNI
-    ⟨[], ⟨.seq (.prim none .release [.lit 0] ⟨0⟩) (.prim none .output [.secret] ⟨1⟩), [], 1⟩, ⟨.seq (.prim none .release [.lit 0] ⟨0⟩) (.prim none .output [.secret] ⟨1⟩), [], 2⟩⟩ :=
+    ⟨[], unreleasedOutput 1, unreleasedOutput 2⟩ :=
   authorized_release_not_ni 1 2 (release_authorized 1) (release_authorized 2) (leaky_low 1 2) (by decide)
 /-- Instance: equal sums independently satisfy CT. -/
 theorem ctAccepted : RuleAccepted IntegerConstantTime
-    ⟨[], ⟨.seq (.prim none .release [.masked] ⟨0⟩) (.prim none .output [.masked] ⟨1⟩), [(⟨0⟩, .negSucc 1)], 6⟩,
-     ⟨.seq (.prim none .release [.masked] ⟨0⟩) (.prim none .output [.masked] ⟨1⟩), [(⟨0⟩, .negSucc 2)], 5⟩⟩ :=
+    ⟨[], releasedSum 6 2,
+     releasedSum 5 3⟩ :=
   secure_ct 6 5 1 2 ⟨rfl, trivial⟩ ⟨secureRun 6 1, secureRun 5 2, rfl, rfl⟩
 /-- Instance: variable-time work leaks while public output agrees. -/
 theorem ctRefused : RuleRefused IntegerConstantTime
-    ⟨[], ⟨.seq (.prim none .work [.secret] ⟨2⟩) (.seq (.prim none .release [.lit 0] ⟨0⟩) (.prim none .output [.lit 7] ⟨1⟩)), [], 1⟩, ⟨.seq (.prim none .work [.secret] ⟨2⟩) (.seq (.prim none .release [.lit 0] ⟨0⟩) (.prim none .output [.lit 7] ⟨1⟩)), [], 2⟩⟩ :=
+    ⟨[], variableWork 1, variableWork 2⟩ :=
   timing_not_ct 1 2 ⟨rfl, trivial⟩ (by decide)
 
 end Leak.Registry

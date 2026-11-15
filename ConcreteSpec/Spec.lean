@@ -1,30 +1,32 @@
-import ConcreteSpec.Spec.LeakData
-import ConcreteSpec.Spec.Accounting
-import ConcreteSpec.Spec.Const
-import ConcreteSpec.Spec.Own
-import ConcreteSpec.Spec.Rules
-import ConcreteSpec.Spec.Hybrid
-import ConcreteSpec.Spec.Exec
-import ConcreteSpec.Spec.Memory
 import ConcreteSpec.Spec.Basics
 import ConcreteSpec.Spec.Ident
-import ConcreteSpec.Spec.Target
+import ConcreteSpec.Spec.Accounting
 import ConcreteSpec.Spec.Outcome
 import ConcreteSpec.Spec.Scalar
-import ConcreteSpec.Spec.Surface0
+import ConcreteSpec.Spec.Const
+import ConcreteSpec.Spec.Target
+import ConcreteSpec.Spec.Memory
+import ConcreteSpec.Spec.Exec
 import ConcreteSpec.Spec.Slice1Syntax
+import ConcreteSpec.Spec.Slice1Semantics
+import ConcreteSpec.Spec.Rep
+import ConcreteSpec.Spec.Hybrid
+import ConcreteSpec.Spec.Own
+import ConcreteSpec.Spec.Leak
+import ConcreteSpec.Spec.ReleaseCalls
+import ConcreteSpec.Spec.LeakData
+import ConcreteSpec.Spec.Rules
+import ConcreteSpec.Spec.Borrow
+import ConcreteSpec.Spec.Surface0
 import ConcreteSpec.Spec.Statics
 import ConcreteSpec.Spec.Slice1Ownership
-import ConcreteSpec.Spec.Slice1Semantics
 import ConcreteSpec.Spec.Slice1Checker
+import ConcreteSpec.Spec.Observation
 import ConcreteSpec.Spec.Examples
 import ConcreteSpec.Spec.Slice0
-import ConcreteSpec.Spec.Rep
 import ConcreteSpec.Spec.Cleanup
-import ConcreteSpec.Spec.Borrow
 import ConcreteSpec.Spec.Brand
 import ConcreteSpec.Spec.Authority
-import ConcreteSpec.Spec.Observation
 
 /-!
 # The Concrete specification

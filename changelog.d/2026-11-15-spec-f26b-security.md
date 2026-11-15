@@ -8,7 +8,7 @@ call/release extraction and function/site admission. `Spec/LeakData.lean` suppli
 machine data adapters, not a Concrete scalar or Boolean representation policy. Accounting and the
 base's validator remain unchanged; Const and Own retain their existing authority provenance.
 
-Authority is docs/decisions.md#decided-2026-11-08-foundation (the approved C7 interface and laws)
+Authority is docs/decisions.md#foundation-q1 (the approved C7 interface and laws)
 and docs/decisions.md#decided-project-infoflow-2026-11-06 (separate NI/CT obligations, public
 lengths and the baseline observer). Numeric local fixtures follow
 docs/decisions.md#decided-2026-11-08-c9-identities; diagnostic spellings stay outside execution.

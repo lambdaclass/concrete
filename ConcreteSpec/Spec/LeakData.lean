@@ -284,45 +284,45 @@ structure IntegerComparison where
   right : IntegerEntry
 
 /-- Integer-machine instance of complete-run authorization, with concrete policy and entry data.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+Authority: docs/decisions.md#foundation-q1 (C7). -/
 def IntegerRunsAuthorized (d : ReleasePolicy Unit × IntegerExecution) : Prop :=
   d.1.RunsAuthorized Demo.instrumentation (integerProgram d.2.functions) d.2.entry.config
 
 /-- Integer-machine instance of public-state equivalence.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+Authority: docs/decisions.md#foundation-q1 (C7). -/
 def IntegerLowEquivalent (d : IntegerComparison) : Prop :=
   LowEquivalent Demo.labelling d.left.config d.right.config
 
 /-- Integer-machine instance of delimited release NI, quantifying over all C1 runs.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+Authority: docs/decisions.md#foundation-q1 (C7). -/
 def IntegerDelimitedReleaseNI (d : IntegerComparison) : Prop :=
   DelimitedReleaseNI Demo.instrumentation (integerProgram d.functions) Demo.labelling d.left.config d.right.config
 
 /-- Integer-machine instance of CT, quantifying over all C1 runs separately from NI.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+Authority: docs/decisions.md#foundation-q1 (C7). -/
 def IntegerConstantTime (d : IntegerComparison) : Prop :=
   ConstantTime Demo.instrumentation (integerProgram d.functions) Demo.labelling d.left.config d.right.config
 
 /-- Monomorphic data view of call graph admission; delegates to the owning judgment.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+Authority: docs/decisions.md#foundation-q1 (C7). -/
 def UnitCallsAdmitted (d : ReleaseInterface Unit × ReleaseCalls Unit) : Prop := d.1.Admitted d.2
 
 /-- Concrete program admission, with the integer primitive interface's fixed release classifier.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+Authority: docs/decisions.md#foundation-q1 (C7). -/
 def IntegerProgramAdmitted (d : ReleaseInterface Unit × List (FnId × IntegerFunction)) : Prop :=
   d.1.ProgramAdmitted (fun p : Demo.Prim => match p with | .release => some () | _ => none)
     (integerProgram d.2)
 
 /-- Monomorphic data view of typed-site permission; delegates to the owning judgment.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+Authority: docs/decisions.md#foundation-q1 (C7). -/
 def StringReleasePermitted (d : ReleasePolicy String × Release String Nat) : Prop := d.1.Permits d.2
 
 /-- Monomorphic data view of empty release policy; delegates to the owning judgment.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+Authority: docs/decisions.md#foundation-q1 (C7). -/
 def UnitReleaseForbidden (d : ReleasePolicy Unit) : Prop := d.ForbidsRelease
 
 /-- Monomorphic data view of ordered release authorization; delegates to the owning judgment.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+Authority: docs/decisions.md#foundation-q1 (C7). -/
 def UnitTraceAuthorized (d : ReleasePolicy Unit × List (Release Unit Int)) : Prop := d.1.Authorized d.2
 
 

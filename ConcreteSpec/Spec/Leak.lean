@@ -4,9 +4,8 @@ import ConcreteSpec.Spec.Exec
 # Secret leakage and release
 
 PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). Part of `ConcreteSpec.Spec`;
-see `ConcreteSpec/README.md`. Foundation contract C7 under docs/decisions.md#decided-2026-11-08-foundation,
-docs/decisions.md#decided-project-infoflow-2026-11-06 and
-docs/decisions.md#decided-project-memory-2026-11-06.
+see `ConcreteSpec/README.md`. Foundation contract C7 under docs/decisions.md#foundation-q1,
+docs/decisions.md#decided-project-infoflow-2026-11-06.
 No historical approval receipts are inherited. Wiping is held under ISS-0072.
 
 Leakage is what the baseline timing observer sees, not ordinary output. It is separate from public
@@ -82,7 +81,7 @@ structure ReleaseSite (Ty : Type) where
 /-- One semantic release: exactly a typed site and its explicitly released value. Its order in
 an execution matters. Source reasons and call paths belong to `ReleaseFact`, outside semantic run
 types; fact text cannot become an input to execution or strengthen the security premise.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+Authority: docs/decisions.md#foundation-q1 (C7). -/
 structure Release (Ty Val : Type) where
   site : ReleaseSite Ty
   value : Val
@@ -91,7 +90,7 @@ structure Release (Ty Val : Type) where
 /-- A release fact retains the semantic release plus its source reason and call path. This is a
 facts record, not a field of the execution instrumentation. The source/site facts producer supplies
 metadata; the execution traces and policies consume only its `release` projection.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+Authority: docs/decisions.md#foundation-q1 (C7). -/
 structure ReleaseFact (Ty Val : Type) where
   release : Release Ty Val
   reason : String
@@ -100,7 +99,7 @@ structure ReleaseFact (Ty Val : Type) where
 
 /-- The security comparison keeps exactly the ordered typed sites and released values.
 Reason and call-path metadata remain available to facts but do not strengthen the premise.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+Authority: docs/decisions.md#foundation-q1 (C7). -/
 def releaseTrace {Ty Val : Type} (rs : List (Release Ty Val)) : List (ReleaseSite Ty × Val) :=
   rs.map fun r => (r.site, r.value)
 
@@ -114,21 +113,18 @@ structure ReleasePolicy (Ty : Type) where
   allowed : List (ReleaseSite Ty)
 
 /-- The policy permits this exact typed site; the released value does not affect site authorization.
-Reason/path metadata is outside this semantic record. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
-docs/decisions.md#decided-project-infoflow-2026-11-06 and
-docs/decisions.md#decided-project-memory-2026-11-06. -/
+Reason/path metadata is outside this semantic record. Authority: docs/decisions.md#foundation-q1 (C7);
+docs/decisions.md#decided-project-infoflow-2026-11-06. -/
 def ReleasePolicy.Permits {Ty Val : Type} (policy : ReleasePolicy Ty) (r : Release Ty Val) : Prop :=
   r.site ∈ policy.allowed
 
-/-- A policy with no permitted sites forbids release. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
-docs/decisions.md#decided-project-infoflow-2026-11-06 and
-docs/decisions.md#decided-project-memory-2026-11-06. -/
+/-- A policy with no permitted sites forbids release. Authority: docs/decisions.md#foundation-q1 (C7);
+docs/decisions.md#decided-project-infoflow-2026-11-06. -/
 def ReleasePolicy.ForbidsRelease {Ty : Type} (policy : ReleasePolicy Ty) : Prop :=
   policy.allowed = []
 
-/-- Every release in an ordered execution trace is authorized by the policy. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
-docs/decisions.md#decided-project-infoflow-2026-11-06 and
-docs/decisions.md#decided-project-memory-2026-11-06. -/
+/-- Every release in an ordered execution trace is authorized by the policy. Authority: docs/decisions.md#foundation-q1 (C7);
+docs/decisions.md#decided-project-infoflow-2026-11-06. -/
 def ReleasePolicy.Authorized {Ty Val : Type} (policy : ReleasePolicy Ty)
     (rs : List (Release Ty Val)) : Prop :=
   ∀ r ∈ rs, policy.Permits r
@@ -189,9 +185,8 @@ def publicLocals {O : Operands} (L : Labelling O) (c : Config O) :
   c.locals.filterMap fun e => (L.project e.2).map fun v => (e.1, v)
 
 /-- Low-equivalence: equal public local bindings and related public shared state. Secret values may
-differ. Frames and control are execution data, not silently made public by this definition. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
-docs/decisions.md#decided-project-infoflow-2026-11-06 and
-docs/decisions.md#decided-project-memory-2026-11-06. -/
+differ. Frames and control are execution data, not silently made public by this definition. Authority: docs/decisions.md#foundation-q1 (C7);
+docs/decisions.md#decided-project-infoflow-2026-11-06. -/
 def LowEquivalent {O : Operands} (L : Labelling O) (c₁ c₂ : Config O) : Prop :=
   publicLocals L c₁ = publicLocals L c₂ ∧ L.lowStore c₁.store c₂.store
 
@@ -235,7 +230,7 @@ structure Run {O : Operands} (I : Instrumentation O) (P : Program O) (initial : 
 /-- Facts attached to one identified semantic release list. Index by that list, rather than
 by a machine configuration: diagnostic strings never share a carrier with numeric execution
 state. A projection theorem connects these facts to a run's releases in the proof layer.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+Authority: docs/decisions.md#foundation-q1 (C7). -/
 structure RunFacts {Ty Val : Type} (releases : List (Release Ty Val)) where
   entries : List (ReleaseFact Ty Val)
   erases : entries.map ReleaseFact.release = releases
@@ -252,9 +247,8 @@ def Run.publicObservations {O : Operands} {I : Instrumentation O} {P : Program O
     (r : Run I P c) : List I.Observation :=
   r.observations ++ (I.observeFinal r.final).toList
 
-/-- Every complete finite run from `c` emits only release records permitted by `policy`. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
-docs/decisions.md#decided-project-infoflow-2026-11-06 and
-docs/decisions.md#decided-project-memory-2026-11-06. -/
+/-- Every complete finite run from `c` emits only release records permitted by `policy`. Authority: docs/decisions.md#foundation-q1 (C7);
+docs/decisions.md#decided-project-infoflow-2026-11-06. -/
 def ReleasePolicy.RunsAuthorized {O : Operands} (policy : ReleasePolicy O.Ty)
     (I : Instrumentation O) (P : Program O) (c : Config O) : Prop :=
   ∀ r : Run I P c, policy.Authorized r.releases
@@ -269,9 +263,8 @@ def publicLengths {Val Address Effect : Type} (trace : List (Leakage Val Address
 
 /-- Delimited-release noninterference between two entry configurations of one program. For
 low-equivalent initial states, matched external choices and equal ordered release traces, every
-pair of complete finite runs has equal public observations. No equality of leakage is asserted. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
-docs/decisions.md#decided-project-infoflow-2026-11-06 and
-docs/decisions.md#decided-project-memory-2026-11-06. -/
+pair of complete finite runs has equal public observations. No equality of leakage is asserted. Authority: docs/decisions.md#foundation-q1 (C7);
+docs/decisions.md#decided-project-infoflow-2026-11-06. -/
 def DelimitedReleaseNI {O : Operands} (I : Instrumentation O) (P : Program O)
     (L : Labelling O) (c₁ c₂ : Config O) : Prop :=
   ∀ (r₁ : Run I P c₁) (r₂ : Run I P c₂),
@@ -281,9 +274,8 @@ def DelimitedReleaseNI {O : Operands} (I : Instrumentation O) (P : Program O)
 
 /-- Constant time between the same entries and under the same delimited-release premises: the
 complete baseline leakage traces are equal. This is separate from `DelimitedReleaseNI`, not a
-consequence of authorization. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
-docs/decisions.md#decided-project-infoflow-2026-11-06 and
-docs/decisions.md#decided-project-memory-2026-11-06. -/
+consequence of authorization. Authority: docs/decisions.md#foundation-q1 (C7);
+docs/decisions.md#decided-project-infoflow-2026-11-06. -/
 def ConstantTime {O : Operands} (I : Instrumentation O) (P : Program O)
     (L : Labelling O) (c₁ c₂ : Config O) : Prop :=
   ∀ (r₁ : Run I P c₁) (r₂ : Run I P c₂),

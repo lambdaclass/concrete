@@ -1,4 +1,3 @@
-import ConcreteSpec.Proofs.LeakRegistry
 import ConcreteSpec.Proofs.Hybrid
 import ConcreteSpec.Proofs.Memory
 -- The specification of the new compiler. Start with ConcreteSpec/README.md.
@@ -21,3 +20,6 @@ import ConcreteSpec.Proofs.Exec
 import ConcreteSpec.Proofs.Const
 import ConcreteSpec.Proofs.Own
 import ConcreteSpec.Proofs.Accounting
+import ConcreteSpec.Proofs.Leak
+import ConcreteSpec.Proofs.ReleaseCalls
+import ConcreteSpec.Proofs.LeakRegistry

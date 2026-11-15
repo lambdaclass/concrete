@@ -47,7 +47,7 @@ theorem InstrumentedSteps.toSteps {O : Operands} {I : Instrumentation O} {P : Pr
     exact ⟨_, Steps.step h steps⟩
 
 /-- Law (subject `InstrumentedSteps`). Instrumentation neither adds nor removes C1 runs.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7 erasure boundary).
+Authority: docs/decisions.md#foundation-q1 (C7 erasure boundary).
 The existential traces are outputs, never additional execution premises. -/
 theorem instrumentation_erasure {O : Operands} (I : Instrumentation O) (P : Program O)
     (c c' : Config O) :
@@ -64,7 +64,7 @@ theorem instrumentation_erasure {O : Operands} (I : Instrumentation O) (P : Prog
       exact ⟨_, _, _, _, .step h hs⟩
 
 /-- Law (subject `ReleasePolicy.Authorized`).
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
+Authority: docs/decisions.md#foundation-q1 (C7),
 docs/decisions.md#decided-project-infoflow-2026-11-06.
 
 A policy that forbids release rejects every nonempty release trace. -/
@@ -79,7 +79,7 @@ theorem forbidsRelease_not_authorized {Ty Val : Type} (policy : ReleasePolicy Ty
   contradiction
 
 /-- Law: reason and call-path facts do not strengthen the ordered release premise.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
+Authority: docs/decisions.md#foundation-q1 (C7),
 docs/decisions.md#decided-project-infoflow-2026-11-06. -/
 theorem release_metadata_irrelevant {Ty Val : Type} (rs : List (ReleaseFact Ty Val))
     (reason : String) (path : List FnId) :
@@ -152,7 +152,7 @@ theorem step_det {P : Program ops} {c c₁ c₂ : Config ops} {l₁ l₂ : Label
       exact ⟨by rw [hab], rfl⟩
 
 /-- Representation lemma. Function-backed step uniqueness for the toy oracle.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
+Authority: docs/decisions.md#foundation-q1 (C7),
 docs/decisions.md#decided-project-infoflow-2026-11-06.
 
 Fixed external choices make primitive transitions of the example machine deterministic in both
@@ -256,7 +256,7 @@ def exposingRun (secret : Int) (hidden : Nat := 0) : Run instrumentation program
   bodyRun instrumentation .masked .secret secret (hiddenLocals hidden)
 
 /-- Law (subject `start`).
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
+Authority: docs/decisions.md#foundation-q1 (C7),
 docs/decisions.md#decided-project-infoflow-2026-11-06.
 
 **Delimited-release NI, proved for the secure example.** Equality of the ordered release records
@@ -282,7 +282,7 @@ theorem secure_ni (s₁ s₂ : Int) (hidden₁ hidden₂ : Nat)
   · simp [h₁.2.1, h₂.2.1, publicLengths]
 
 /-- Law (subject `start`).
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
+Authority: docs/decisions.md#foundation-q1 (C7),
 docs/decisions.md#decided-project-infoflow-2026-11-06.
 
 **Constant time, proved separately for the secure example.** Equality of the ordered release
@@ -420,7 +420,7 @@ def leakyTimingRun (secret : Int) : Run instrumentation program (leakyTimingStar
     InstrumentedSteps.refl (I := instrumentation) (P := program) (finished secret)
 
 /-- Law (subject `timingStart`).
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
+Authority: docs/decisions.md#foundation-q1 (C7),
 docs/decisions.md#decided-project-infoflow-2026-11-06.
 
 Every pair of timing runs from low-equivalent entries with matched choices and releases emits the
@@ -439,7 +439,7 @@ theorem timing_ni (s₁ s₂ : Int)
   · simp [h₁.2.1, h₂.2.1, publicLengths]
 
 /-- Law: C7's distinct security obligations cannot be discharged by a weaker observation.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
+Authority: docs/decisions.md#foundation-q1 (C7),
 docs/decisions.md#decided-project-infoflow-2026-11-06. This theorem concerns the explicit countermodel below;
 it does not claim that every program has this behavior.
 
@@ -521,7 +521,7 @@ theorem ct_release_authorized (secret : Int) :
   simp [ReleasePolicy.Authorized, ReleasePolicy.Permits, releaseZero, releaseValue]
 
 /-- Law: C7's distinct security obligations cannot be discharged by a weaker observation.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
+Authority: docs/decisions.md#foundation-q1 (C7),
 docs/decisions.md#decided-project-infoflow-2026-11-06. This theorem concerns the explicit countermodel below;
 it does not claim that every program has this behavior.
 
@@ -540,7 +540,7 @@ theorem authorized_release_not_ni (s₁ s₂ : Int)
   exact hs hobs
 
 /-- Law: C7's distinct security obligations cannot be discharged by a weaker observation.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
+Authority: docs/decisions.md#foundation-q1 (C7),
 docs/decisions.md#decided-project-infoflow-2026-11-06. This theorem concerns the explicit countermodel below;
 it does not claim that every program has this behavior.
 
@@ -810,6 +810,13 @@ example : ¬ (pathSensitiveTrace [{ metadataFact with path := [Exec.Demo.logF] }
 example : ∃ events, Steps program (start 6 1) events (secureRun 6 1).final :=
   (instrumentation_erasure instrumentation program _ _).mp
     ⟨_, _, _, _, (secureRun 6 1).steps⟩
+
+/-- Instance: erasure also reconstructs instrumentation from the concrete C1 execution. -/
+example : ∃ obs leaks rs choices,
+    InstrumentedSteps instrumentation program (start 6 1) obs leaks rs choices (secureRun 6 1).final :=
+  (instrumentation_erasure instrumentation program _ _).mpr
+    ((instrumentation_erasure instrumentation program _ _).mp
+      ⟨_, _, _, _, (secureRun 6 1).steps⟩)
 
 /-- Planted relation: only reflexivity is restricted, to non-final configurations.
 All trace indices and the step constructor retain their production shape. -/

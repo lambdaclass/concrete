@@ -1,7 +1,7 @@
 import ConcreteSpec.Spec.Leak
 
 /-! C7 release admission over the transitive call graph, including deferred calls.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7).
+Authority: docs/decisions.md#foundation-q1 (C7).
 This is static reachability, conservatively including both branches and loop regions. -/
 namespace ConcreteSpec.Core.Leak
 open Exec
@@ -71,14 +71,14 @@ inductive ReleaseCalls.Reaches {Ty : Type} (g : ReleaseCalls Ty) : FnId → FnId
 
 /-- A release is permitted only if every caller that can reach it is allowlisted and its exact
  typed site is listed. This delegates site membership to ReleasePolicy.Permits.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+Authority: docs/decisions.md#foundation-q1 (C7). -/
 def ReleaseInterface.Admitted {Ty : Type} (policy : ReleaseInterface Ty) (g : ReleaseCalls Ty) : Prop :=
   ∀ caller owner site, g.Reaches caller owner → (owner, site) ∈ g.releases →
     caller ∈ policy.functions ∧ policy.sites.Permits (⟨site, ()⟩ : Release Ty Unit)
 
 /-- Program admission uses the extracted C1 call graph and declared primitive release sites.
 The classifier is part of the primitive interface; clients cannot replace call reachability.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+Authority: docs/decisions.md#foundation-q1 (C7). -/
 def ReleaseInterface.ProgramAdmitted {O : Operands} (policy : ReleaseInterface O.Ty)
     (declared : O.Prim → Option O.Ty) (p : Program O) : Prop :=
   policy.Admitted (ReleaseCalls.ofProgram declared p)
