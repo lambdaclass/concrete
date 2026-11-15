@@ -1,4 +1,5 @@
 import ConcreteSpec.Spec.Leak
+import ConcreteSpec.Spec.ReleaseCalls
 
 /-! Monomorphic C7 data adapters. These interpret closed data into the generic execution and
 accounting judgments; they neither approximate runs nor define a second security relation.
@@ -323,5 +324,29 @@ def ByteBoundSound (d : Nat × Bound Nat) : Prop := Bound.Sound d.1 d.2
 /-- Natural-byte instance of optional footprint evidence, retaining the same absence rule.
 Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
 def ByteBoundSoundOptional (d : Option Nat × Bound Nat) : Prop := Bound.SoundOptional d.1 d.2
+
+/-- Monomorphic data view of call graph admission; delegates to the owning judgment.
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+def UnitCallsAdmitted (d : ReleaseInterface Unit × ReleaseCalls Unit) : Prop := d.1.Admitted d.2
+
+/-- Monomorphic data view of typed-site permission; delegates to the owning judgment.
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+def StringReleasePermitted (d : ReleasePolicy String × Release String Nat) : Prop := d.1.Permits d.2
+
+/-- Monomorphic data view of empty release policy; delegates to the owning judgment.
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+def UnitReleaseForbidden (d : ReleasePolicy Unit) : Prop := d.ForbidsRelease
+
+/-- Monomorphic data view of ordered release authorization; delegates to the owning judgment.
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+def UnitTraceAuthorized (d : ReleasePolicy Unit × List (Release Unit Int)) : Prop := d.1.Authorized d.2
+
+/-- Monomorphic data view of reset conservation; delegates to the owning judgment.
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+def ResetConserved (d : Account × Account × Nat) : Prop := ResetConservation d.1 d.2.1 d.2.2
+
+/-- Monomorphic data view of lineage report soundness; delegates to the owning judgment.
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+def ReportSound (d : LineageId × Account × Account × Option Nat × LineageReport) : Prop := LineageReport.Sound d.1 d.2.1 d.2.2.1 d.2.2.2.1 d.2.2.2.2
 
 end ConcreteSpec.Core.Leak

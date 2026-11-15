@@ -72,6 +72,38 @@ def fixture(name, *, decl=rule, proof=proofs, reg=registry, evidence=links,
     print(f'  ok   {name}: {reason or "passes"}', flush=True)
 
 
+# Partial application must never hide runtime sorts or opaque proof inputs.
+for name, ty, value, prelude in [
+    ('curried-prop', 'Prop', 'True', ''),
+    ('curried-type', 'Type', 'Nat', ''),
+    ('curried-proof', 'True', 'hidden', 'opaque hidden : True := True.intro\n'),
+]:
+    fixture(name, decl=prelude + '/-- Rule (Q9.1). -/\ndef ok (_ : ' + ty + ') (b : Bool) : Prop := b = true\n',
+            proof='theorem accepts : RuleAccepted (ok ' + value + ') true := rfl\n'
+                  'theorem refuses : RuleRefused (ok ' + value + ') false := by intro h; cases h\n',
+            reason='does not use linked rule')
+
+# Authority entries are explicit; a valid anchor never masks an invalid row.
+for anchor in ['decided-2026-11-08-foundation', 'decided-project-memory-2026-11-06',
+               'decided-project-infoflow-2026-11-06', 'decided-2026-11-13-lifecycle-refusal',
+               'decided-2026-11-14-constant-types', 'decided-2026-11-09-older-proposals',
+               'decided-2026-11-08-recovery-queue', 'decided-2026-11-13-d4-recovery']:
+    rows.write_text('- **Q9.1** Decided.\n<a id="' + anchor + '"></a>\n')
+    fixture('authority-' + anchor, decl=rule.replace('(Q9.1)', '(docs/decisions.md#' + anchor + ')'),
+            reason=None if anchor in {'decided-2026-11-08-foundation', 'decided-project-memory-2026-11-06',
+                                      'decided-project-infoflow-2026-11-06', 'decided-2026-11-13-lifecycle-refusal',
+                                      'decided-2026-11-14-constant-types'} else 'no decided authority entry')
+rows.write_text('- **Q9.1** Decided.\n<a id="decided-2026-11-08-foundation"></a>\n')
+fixture('authority-invalid-row', decl=rule.replace('(Q9.1)',
+        '(Q999.1, docs/decisions.md#decided-2026-11-08-foundation)'), reason='no existing decision row')
+fixture('authority-valid-row', decl=rule.replace('(Q9.1)',
+        '(Q9.1, docs/decisions.md#decided-2026-11-08-foundation)'))
+fixture('authority-mixed-rows', decl=rule.replace('(Q9.1)',
+        '(Q9.1, Q999.1, docs/decisions.md#decided-2026-11-08-foundation)'), reason='no existing decision row')
+fixture('authority-unknown', decl=rule.replace('(Q9.1)',
+        '(docs/decisions.md#decided-missing)'), reason='no decided authority entry')
+rows.write_text('- **Q9.1** Decided.\nR-0001 is only mentioned.\n')
+
 # C7 adapters keep the strict traversal: each production input shape accepts closed data,
 # but an opaque value of exactly that shape cannot certify an inspectable instance.
 for name, carrier, value in [
@@ -82,6 +114,16 @@ for name, carrier, value in [
       for name in ['low', 'ni', 'ct']],
     ('c7-calls', 'Leak.ReleaseInterface Unit × Leak.ReleaseCalls Unit',
      '(⟨[], ⟨[]⟩⟩, ⟨[], []⟩)'),
+    ('c7-typed-site', 'Leak.ReleasePolicy String × Leak.Release String Nat',
+     '(⟨[⟨⟨7⟩, "public"⟩]⟩, ⟨⟨⟨7⟩, "public"⟩, 3⟩)'),
+    ('c7-forbidden', 'Leak.ReleasePolicy Unit', '⟨[]⟩'),
+    ('c7-authorized', 'Leak.ReleasePolicy Unit × List (Leak.Release Unit Int)',
+     '(⟨[⟨⟨7⟩, ()⟩]⟩, [⟨⟨⟨7⟩, ()⟩, 3⟩])'),
+    ('c7-reset', 'Leak.Account × Leak.Account × Nat', '(⟨8, 5, 8, 8⟩, ⟨8, 0, 8, 8⟩, 5)'),
+    ('c7-report', 'LineageId × Leak.Account × Leak.Account × Option Nat × Leak.LineageReport',
+     '(⟨0⟩, ⟨8, 5, 8, 8⟩, ⟨8, 0, 8, 8⟩, some 10, '
+     '⟨⟨0⟩, ⟨0, .boundEstablished⟩, ⟨-5, -5, .boundEstablished⟩, '
+     '⟨3, .boundEstablished⟩, ⟨10, .boundEstablished⟩⟩)'),
     ('c7-bound', 'Nat × Leak.Bound Nat', '(10, ⟨12, .boundEstablished⟩)'),
     ('c7-optional', 'Option Nat × Leak.Bound Nat', '(some 10, ⟨12, .boundEstablished⟩)'),
     ('c7-action', 'List (LineageId × Leak.Account) × Leak.Action',
@@ -257,13 +299,13 @@ fixture('function-dictionary-parameter',
 
 fixture('computed-concrete-input', proof=proofs.replace('RuleAccepted ok 0', 'RuleAccepted ok (1 - 1)'))
 fixture('specialized-rule', decl='/-- The rule (Q9.1). -/\ndef ok (base n : Nat) : Prop := n = base\n',
-        proof='theorem accepts : RuleAccepted (ok 2) 2 := rfl\ntheorem refuses : RuleRefused (ok 2) 3 := by intro h; cases h\n')
+        proof='theorem accepts : RuleAccepted (ok 2) 2 := rfl\ntheorem refuses : RuleRefused (ok 2) 3 := by intro h; cases h\n', reason='does not use linked rule')
 fixture('specialized-opaque-input',
         decl='opaque hidden : Nat := 0\n/-- The rule (Q9.1). -/\ndef ok (_base n : Nat) : Prop := n = 0\n',
         proof='theorem accepts : RuleAccepted (ok hidden) 0 := rfl\ntheorem refuses : RuleRefused (ok hidden) 1 := by intro h; cases h\n',
-        reason='no concrete rule acceptance/refusal proposition')
+        reason='does not use linked rule')
 fixture('polymorphic-rule', decl='/-- The rule (Q9.1). -/\ndef ok {T : Type} (xs : List T) : Prop := xs = []\n',
-        proof='theorem accepts : RuleAccepted (ok (T := Nat)) [] := rfl\ntheorem refuses : RuleRefused (ok (T := Nat)) [1] := by intro h; cases h\n')
+        proof='theorem accepts : RuleAccepted (ok (T := Nat)) [] := rfl\ntheorem refuses : RuleRefused (ok (T := Nat)) [1] := by intro h; cases h\n', reason='does not use linked rule')
 # Constant identities carry closed path-validity proofs. Proof irrelevance must not
 # exempt the adjacent runtime data from constructor/literal normalization.
 proof_carrier = ('structure ProofCarrier where\n  data : Nat\n  valid : data = data\n'

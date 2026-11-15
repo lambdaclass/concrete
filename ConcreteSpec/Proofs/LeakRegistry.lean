@@ -16,30 +16,24 @@ namespace Leak.Registry
 open Demo
 
 /-- Instance: the concrete call graph passes the full function and site policy. -/
-theorem callsAccepted : RuleAccepted (ReleaseInterface.Admitted CallControls.allAllowed)
-    CallControls.chain := CallControls.admitted
+theorem callsAccepted : RuleAccepted UnitCallsAdmitted (CallControls.allAllowed, CallControls.chain) := CallControls.admitted
 /-- Instance: omitting only the outer caller refuses the same two-level release chain. -/
-theorem callsRefused : RuleRefused (ReleaseInterface.Admitted CallControls.outerDenied)
-    CallControls.chain := CallControls.refused
+theorem callsRefused : RuleRefused UnitCallsAdmitted (CallControls.outerDenied, CallControls.chain) := CallControls.refused
 
 /-- Instance: the listed typed site is permitted. -/
-theorem permitsAccepted : RuleAccepted (ReleasePolicy.Permits typedReleasePolicy)
-    (typedRelease "public" 7) := by simp [RuleAccepted, ReleasePolicy.Permits, typedReleasePolicy, typedRelease]
+theorem permitsAccepted : RuleAccepted StringReleasePermitted (typedReleasePolicy, typedRelease "public" 7) := by simp [RuleAccepted, StringReleasePermitted, ReleasePolicy.Permits, typedReleasePolicy, typedRelease]
 /-- Instance: changing only the type at that site is refused. -/
-theorem permitsRefused : RuleRefused (ReleasePolicy.Permits typedReleasePolicy)
-    (typedRelease "secret" 7) := by simp [RuleRefused, ReleasePolicy.Permits, typedReleasePolicy, typedRelease]
+theorem permitsRefused : RuleRefused StringReleasePermitted (typedReleasePolicy, typedRelease "secret" 7) := by simp [RuleRefused, StringReleasePermitted, ReleasePolicy.Permits, typedReleasePolicy, typedRelease]
 /-- Instance: an empty policy forbids releases. -/
-theorem forbidsAccepted : RuleAccepted (ReleasePolicy.ForbidsRelease (Ty := Unit)) ⟨[]⟩ := rfl
+theorem forbidsAccepted : RuleAccepted UnitReleaseForbidden ⟨[]⟩ := rfl
 /-- Instance: the populated policy does not forbid release. -/
-theorem forbidsRefused : RuleRefused (ReleasePolicy.ForbidsRelease (Ty := Unit)) policy := by
-  simp [RuleRefused, ReleasePolicy.ForbidsRelease]
+theorem forbidsRefused : RuleRefused UnitReleaseForbidden policy := by
+  simp [RuleRefused, UnitReleaseForbidden, ReleasePolicy.ForbidsRelease]
 /-- Instance: both explicit releases are authorized. -/
-theorem authorizedAccepted : RuleAccepted (ReleasePolicy.Authorized policy)
-    [releaseValue 7, releaseValue 8] := by
-  simp [RuleAccepted, ReleasePolicy.Authorized, ReleasePolicy.Permits, releaseValue]
+theorem authorizedAccepted : RuleAccepted UnitTraceAuthorized (policy, [releaseValue 7, releaseValue 8]) := by
+  simp [RuleAccepted, UnitTraceAuthorized, ReleasePolicy.Authorized, ReleasePolicy.Permits, releaseValue]
 /-- Instance: an empty policy rejects the same populated trace. -/
-theorem authorizedRefused : RuleRefused (ReleasePolicy.Authorized (ReleasePolicy.mk ([] : List (ReleaseSite Unit))))
-    [releaseValue 7, releaseValue 8] :=
+theorem authorizedRefused : RuleRefused UnitTraceAuthorized (⟨[]⟩, [releaseValue 7, releaseValue 8]) :=
   forbidsRelease_not_authorized ⟨[]⟩ (releaseValue 7) [releaseValue 8] rfl
 /-- Instance: authorization quantifies over every complete execution of this concrete entry. -/
 theorem runsAccepted : RuleAccepted IntegerRunsAuthorized
@@ -49,7 +43,8 @@ theorem runsRefused : RuleRefused IntegerRunsAuthorized
     (⟨[]⟩, ⟨[], ⟨.seq (.prim none .release [.lit 0] ⟨0⟩) (.prim none .output [.secret] ⟨1⟩), [], 1⟩⟩) := by
   intro h
   have bad := h (leakyRun 1)
-  simp [leakyRun, ReleasePolicy.Authorized, ReleasePolicy.Permits] at bad
+  change ReleasePolicy.Authorized ⟨[]⟩ [releaseValue 0] at bad
+  simp [ReleasePolicy.Authorized, ReleasePolicy.Permits] at bad
 /-- Instance: negative locals are secret in this integer-machine labelling. -/
 theorem lowAccepted : RuleAccepted IntegerLowEquivalent
     ⟨[], ⟨.skip, [(⟨0⟩, -1), (⟨1⟩, 7)], 0⟩,
@@ -87,12 +82,12 @@ theorem wfRefused : RuleRefused Account.WF { accountA with functionPeak := 4 } :
   simp only [RuleRefused, Account.WF]
   decide
 /-- Instance: reset records its actual outflow. -/
-theorem resetAccepted : RuleAccepted (ResetConservation accountA accountA.reset) 5 := by
-  simp only [RuleAccepted, ResetConservation]
+theorem resetAccepted : RuleAccepted ResetConserved (accountA, accountA.reset, 5) := by
+  simp only [RuleAccepted, ResetConserved, ResetConservation]
   decide
 /-- Instance: an incorrect outflow cannot certify the same reset. -/
-theorem resetRefused : RuleRefused (ResetConservation accountA accountA.reset) 4 := by
-  simp only [RuleRefused, ResetConservation]
+theorem resetRefused : RuleRefused ResetConserved (accountA, accountA.reset, 4) := by
+  simp only [RuleRefused, ResetConserved, ResetConservation]
   decide
 /-- Instance: an established bound covers the actual bytes. -/
 theorem boundAccepted : RuleAccepted ByteBoundSound (10, ⟨12, .boundEstablished⟩) := by
@@ -107,11 +102,11 @@ theorem optionalAccepted : RuleAccepted ByteBoundSoundOptional (some 10, ⟨12, 
 theorem optionalRefused : RuleRefused ByteBoundSoundOptional (none, ⟨12, .boundEstablished⟩) := by
   simp [RuleRefused, ByteBoundSoundOptional, Bound.SoundOptional]
 /-- Instance: a report distinguishes function-local peak 8 from historical peak 100. -/
-theorem reportAccepted : RuleAccepted (LineageReport.Sound ⟨0⟩ reportEntry reportExit (some 10)) establishedReport := by
-  simp [RuleAccepted, LineageReport.Sound, Bound.Sound, SignedInterval.Sound, Bound.SoundOptional, establishedReport, reportEntry, reportExit]
+theorem reportAccepted : RuleAccepted ReportSound (⟨0⟩, reportEntry, reportExit, some 10, establishedReport) := by
+  simp [RuleAccepted, ReportSound, LineageReport.Sound, Bound.Sound, SignedInterval.Sound, Bound.SoundOptional, establishedReport, reportEntry, reportExit]
 /-- Instance: correct numbers cannot be attributed to another lineage. -/
-theorem reportRefused : RuleRefused (LineageReport.Sound ⟨1⟩ reportEntry reportExit (some 10)) establishedReport := by
-  simp [RuleRefused, LineageReport.Sound, establishedReport]
+theorem reportRefused : RuleRefused ReportSound (⟨1⟩, reportEntry, reportExit, some 10, establishedReport) := by
+  simp [RuleRefused, ReportSound, LineageReport.Sound, establishedReport]
 
 /-- Instance: a populated lineage admits an allocation without affecting another lineage. -/
 theorem actionAccepted : RuleAccepted FiniteActionPermitted ([(⟨0⟩, ⟨100, 5, 12, 9⟩), (⟨1⟩, ⟨7, 2, 2, 2⟩)], .alloc ⟨0⟩ 8) := rfl
