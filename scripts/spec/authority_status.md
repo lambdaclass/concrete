@@ -9,6 +9,12 @@ extension for D4. An entry is one bullet or ordered list item at any depth, open
 with an HTML anchor and emphasized title. Only its own paragraphs before a nested
 list or heading of any level supply content; parents, children, siblings and sections
 supply none. Paragraphs outside the CommonMark list item cannot supply record fields.
+The root decision-inventory gate requires each entry anchor to open one unique
+list item and keeps record fields and fences inside items. Section-navigation
+anchors immediately before headings and historical table-row anchors are not
+list entries. The migration control pins the text of `2362cb403`, excluding only
+anchor-line list markers and whitespace; it must be updated explicitly when new
+owner decisions change that text.
 
 A `docs/decisions.md#anchor` citation is accepted only in these three forms:
 

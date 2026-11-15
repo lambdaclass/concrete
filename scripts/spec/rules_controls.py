@@ -3,6 +3,7 @@
 Transport mutations happen only after successful Lean elaboration.
 """
 import json
+import hashlib
 import re
 import os
 import threading
@@ -76,6 +77,16 @@ def fixture(name, *, decl=rule, proof=proofs, reg=registry, evidence=links,
 # Authority fixtures use the real decision inventory, including the refused anchors.
 # A valid citation must never mask a non-current citation in either order.
 production_rows = (root / 'docs/decisions.md').read_text()
+# Migration control: SHA-256 of 2362cb403:docs/decisions.md after stripping only
+# list markers immediately before explicit anchors, then all Python Unicode whitespace.
+# New recorded owner decisions require an explicit update of this migration baseline.
+normalized_inventory = re.sub(r'(?m)^\s*- (?=<a id=")', '', production_rows)
+normalized_inventory = re.sub(r'\s', '', normalized_inventory)
+assert hashlib.sha256(normalized_inventory.encode()).hexdigest() == (
+    '2573410e6e76e93b282ea9684a4c6cb6091713221ec409708a5c32743ef28735'
+), 'decision inventory wording differs from 2362cb403 (excluding anchor list markers)'
+print('  ok   inventory migration: wording and anchors equal 2362cb403')
+
 rows.write_text(production_rows)
 valid = 'decided-2026-11-08-foundation'
 for anchor in [valid, 'decided-project-memory-2026-11-06',
@@ -164,7 +175,7 @@ rows.write_text(production_rows.replace('**29-list item 18: RECOVERED.**',
 fixture('authority-commonmark-original-recovered-nested-emphasis',
         decl=rule.replace('Q9.1', 'docs/decisions.md#recovered-29-18'),
         reason='disposition in title: superseded')
-rows.write_text(production_rows.replace('  <a id="recovered-29-18"></a>**29-list item 18: RECOVERED.**',
+rows.write_text(production_rows.replace('- <a id="recovered-29-18"></a>**29-list item 18: RECOVERED.**',
     '- <a id="recovered-29-18"></a>**29-list item 18 (*old*): SUPERSEDED.**'))
 fixture('authority-commonmark-nested-emphasis',
         decl=rule.replace('Q9.1', 'docs/decisions.md#recovered-29-18'),

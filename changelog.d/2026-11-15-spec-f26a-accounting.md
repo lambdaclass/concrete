@@ -41,7 +41,21 @@ make approval immediate. Open waiting items and title dispositions refuse every 
 Docstring citations come only from text tokens. Regression controls cover structural
 boundaries, all demonstrated inline-code bypasses, waiting bullets and dated wrappers.
 ISS-0083 tracks replacement by an owner-approved explicit status format. Existing
-Const and Own citations, the exporter and docs/decisions.md remain unchanged.
+Const and Own citations and the exporter remain unchanged.
+
+The decision inventory now gives each anchored entry its own CommonMark list
+item, including recovered paragraphs, dated records and their fences. D4’s retained
+table label is its own paragraph. The root decision-inventory check permanently
+asserts unique entry containers and refuses outdented record fields and fences;
+section-navigation and historical table-row anchors retain their separate roles.
+The migration control compares SHA-256 after applying
+`re.sub(r'(?m)^\s*- (?=<a id=")', '', text)`, then `re.sub(r'\s', '', text)`, to the same normalization of
+`2362cb403:docs/decisions.md`: digest
+`2573410e6e76e93b282ea9684a4c6cb6091713221ec409708a5c32743ef28735`.
+That is exact non-whitespace equality except for list markers immediately before
+anchors; literal whitespace-only equality cannot hold when required list markers
+are added. No wording, quotation, link or anchor changes. The four ConstsPermitted
+citations pass through retained-record and dated-record forms without exceptions.
 
 Held scope remains excluded, without inferring authority from inherited approval claims:
 
