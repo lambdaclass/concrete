@@ -2293,6 +2293,8 @@ ConcreteSpec.Core.Own.Examples.E.use.inj
 ConcreteSpec.Core.Own.Examples.E.use.injEq	propext
 ConcreteSpec.Core.Own.Examples.E.use.sizeOf_spec	
 ConcreteSpec.Core.Own.Examples.callee._proof_1	
+ConcreteSpec.Core.Own.ExecErasureWitnesses.bindReadErasure	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Own.ExecErasureWitnesses.requestErasure	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Own.ExecErasureWitnesses.unconditionalRunConverse_refuted	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Own.FinalEvidence.instDecidableCallerReady._proof_1	Quot.sound propext
 ConcreteSpec.Core.Own.FiniteExecution.brecOn	
