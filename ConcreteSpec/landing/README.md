@@ -206,7 +206,7 @@ command belongs to the named resolved pair), `law-dependent` (it transitively us
 (its zero-range declaration has the census-validated observed emission), and `auxiliary-dependent`
 (it uses the named auxiliary at that observed emission). Every reference is checked against the
 row graph, shared-fixture list and census; a real but unrelated law/control pair is refused too.
-`VALIDATION.md` lists every relocation and reports plan deltas for the coordinator without
+`VALIDATION.md` is the generated, drift-checked relocation view for the coordinator without
 rewriting the supplied plan.
 
 Shared fixture commands are explicitly declared by snapshot command identity in `shared-fixtures.json`; selection never tests declaration-name substrings. The generator moves these fixtures with their earliest consumers, and the judgment requires equality with its earliest consumer piece and refuses unused fixtures; `fixture-selection.json` records the Lean-observed consumers and selection basis for each identity; `fixture-selection-changes.json` explains each addition/removal from the reviewed fixture set. Snapshot Instance/Planted law annotations define groups: laws, annotated Instance/Planted commands and single-law mutants must share a destination (or BASE migration destination). Laws move later when their controls require later material, as directed by the coordinator; controls never pull unrelated dependencies earlier. A mutant explicitly referenced by several laws is reusable support, declared in `shared-fixtures.json` and placed at its earliest consumer; it is available to every later law rather than reassigned repeatedly. Whole-module realization phases and global attribute registrations are material commands, never scoped templates. Attribute targets and doc-comment law/mutant names are resolved by Lean in their elaboration namespace and open-declaration context, and participate in dependency checking. Namespace/section openings, matching
@@ -227,7 +227,8 @@ Dependency mismatches are reported together, by entry, with added and removed ke
 and a likely cause class. Instance constants are real elaborated dependencies, not source-name
 aliases. A toolchain upgrade can change proof bodies and generated recursors without changing
 the source or proof-irrelevant identity; classify each delta before updating its recorded edges.
-Round 16 classifications are in [DEPENDENCY_DRIFT.md](DEPENDENCY_DRIFT.md).
+The causal explanation and reproducible comparison procedure are in
+[DEPENDENCY_DRIFT.md](DEPENDENCY_DRIFT.md); per-entry facts live in the inventory.
 
 The judgment refuses missing/extra census records, duplicate identities, empty/unknown pieces,
 changed source digests or dependency lists, split commands, prerequisite cycles, incomplete contract prerequisite closures, and dependencies

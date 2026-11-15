@@ -2,6 +2,10 @@
 """Dependency drift must be complete, actionable, and validated by required CI."""
 import copy
 import json
+import os
+import sys
+import tempfile
+from unittest.mock import patch
 from pathlib import Path
 import yaml
 import landing_manifest as inventory
@@ -62,6 +66,46 @@ def main():
         except ValueError as exc:
             if 'census toolchain changed:' not in str(exc): raise
         else: raise ValueError('unclassified toolchain change accepted')
+    # Exercise the production CLI path, including export and the early-failure
+    # boundary. Only external census inputs are fixtures; no diagnostic helper
+    # is substituted. Mutating/judgment stages must remain unreachable.
+    for changed in (True, False):
+        with tempfile.TemporaryDirectory(prefix='landing-toolchain-control-') as tmp:
+            output = Path(tmp)/'census.jsonl'
+            recorded = marker + old
+            expected = new if changed else old
+            census_data = [dict(record='control', name='fresh')]
+            with patch.dict(os.environ, CONCRETE_GATES_SHELL='1'), \
+                 patch.object(sys, 'argv', ['landing_manifest.py', '--census-output', str(output)]), \
+                 patch.object(inventory, 'read', return_value=recorded), \
+                 patch.object(inventory, 'census_toolchain', return_value='new-lean'), \
+                 patch.object(inventory, 'check_census'), \
+                 patch.object(inventory, 'ensure_objects'), \
+                 patch.object(inventory, 'configure_migrations'), \
+                 patch.object(inventory, 'extract'), \
+                 patch.object(inventory, 'census', return_value=census_data) as census, \
+                 patch.object(inventory, 'records_from_census', return_value=expected), \
+                 patch.object(inventory, 'judgment', side_effect=AssertionError('diagnostic reached judgment')), \
+                 patch.object(inventory, 'generate', side_effect=AssertionError('diagnostic regenerated inventory')):
+                try:
+                    inventory.main()
+                except ValueError as exc:
+                    message = str(exc)
+                    if 'census toolchain changed:' not in message:
+                        raise
+                    if changed:
+                        for fragment in ('a:1:2', 'Generated.recOn', 'Moved',
+                                         'added=["instDecidable"]', 'removed=["old"]',
+                                         'likely cause=', 'changed digest'):
+                            if fragment not in message:
+                                raise ValueError('entrypoint diagnostic missing '+fragment) from exc
+                else:
+                    raise ValueError('production entrypoint accepted mismatched toolchain')
+                census.assert_called_once()
+                if [json.loads(line) for line in output.read_text().splitlines()] != census_data:
+                    raise ValueError('toolchain failure did not export fresh census')
+                if sorted(p.name for p in Path(tmp).iterdir()) != ['census.jsonl']:
+                    raise ValueError('diagnostic wrote unexpected artifacts')
     root = Path(__file__).resolve().parents[2]
     workflow = yaml.safe_load((root/'.github/workflows/lean_action_ci.yml').read_text())
     required = (root/'required-checks.txt').read_text()

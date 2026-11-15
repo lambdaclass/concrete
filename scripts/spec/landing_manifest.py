@@ -1722,8 +1722,12 @@ def main():
         raise ValueError('run inside nix develop -c')
     if args.remaining and args.remaining not in PREREQS and args.remaining != 'all':
         raise ValueError(f'unknown remaining piece: {args.remaining}')
+    toolchain_error = None
     if not args.write:
-        check_census_toolchain(read(), census_toolchain())
+        try:
+            check_census_toolchain(read(), census_toolchain())
+        except ValueError as exc:
+            toolchain_error = str(exc)
     check_census(ROOT/'scripts/spec/landing_inventory.lean')
     ensure_objects()
     configure_migrations()
@@ -1734,6 +1738,31 @@ def main():
         data = census(root,ROOT/'scripts/spec/landing_inventory.lean',regenerate_modules=REGENERATE_MODULES)
         if args.census_output:
             args.census_output.write_text(''.join(json.dumps(r,sort_keys=True)+'\n' for r in data))
+        if toolchain_error:
+            # Diagnostic only: never judge, regenerate assignments or generated views
+            # across toolchains. Export first so even a failed comparison is inspectable.
+            diagnostics = [toolchain_error]
+            recorded = read()
+            expected = records_from_census(data)
+            try:
+                census_drift(recorded, expected)
+            except ValueError as exc:
+                diagnostics.append(str(exc))
+            old = {(r['record'], r['name']): r for r in recorded
+                   if r['record'] in ('command', 'declaration')}
+            new = {(r['record'], r['name']): r for r in expected
+                   if r['record'] in ('command', 'declaration')}
+            for key in sorted(old.keys() | new.keys()):
+                if key not in old or key not in new:
+                    diagnostics.append(f'{key[0]} {key[1]}: population '
+                                       f'{"added" if key in new else "removed"}; '
+                                       'likely cause=toolchain-generated population or extraction')
+                else:
+                    fields = [k for k in ('digest', 'term_digest') if old[key][k] != new[key][k]]
+                    if fields:
+                        diagnostics.append(f'{key[0]} {key[1]}: changed {", ".join(fields)}; '
+                                           'likely cause=source, toolchain elaboration or extraction; compare pinned sources')
+            raise ValueError('\n'.join(diagnostics))
         existing_replacements = [r for r in read() if r['record']=='replacement'] if args.write else []
         rows = generate(data)+existing_replacements if args.write else read()
         closure = judgment(rows,data,dependencies=False)
