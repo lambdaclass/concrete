@@ -18,3 +18,4 @@ import ConcreteSpec.Diagnostics.ScalarFixtures
 import ConcreteSpec.Proofs.Ident
 import ConcreteSpec.Proofs.Exec
 import ConcreteSpec.Proofs.Const
+import ConcreteSpec.Proofs.Own

@@ -46,6 +46,20 @@ abbrev Numbers := List Nat
 end ConcreteSpec
 
 namespace ConcreteSpec.Core
+universe u
+
+/-- Apply a postcondition to an optional successful result. Refusal has no result
+on which to impose a postcondition; success must satisfy `P`.
+This is proof vocabulary, not a claim that refusal is safe or normal completion
+(docs/decisions.md#decided-2026-11-13-lifecycle-refusal). Own and future Grant
+postconditions specialize this definition rather than owning copies. -/
+def ResultSatisfies {α : Type u} (P : α → Prop) : Option α → Prop
+  | none => True
+  | some a => P a
+
+instance {α : Type u} (P : α → Prop) [∀ a, Decidable (P a)] (r : Option α) :
+    Decidable (ResultSatisfies P r) := by
+  cases r <;> unfold ResultSatisfies <;> infer_instance
 
 /-- A finite map as a list of key–value pairs. A key may occur more than once; the first entry
 for a key is the one that counts. -/
