@@ -20,3 +20,4 @@ import ConcreteSpec.Proofs.Exec
 import ConcreteSpec.Proofs.Const
 import ConcreteSpec.Proofs.Own
 import ConcreteSpec.Proofs.OwnErasure
+import ConcreteSpec.Proofs.OwnErasureEvidence

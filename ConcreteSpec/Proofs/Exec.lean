@@ -1955,7 +1955,7 @@ def Blocked (R : Config O → Label O → Config O → Prop) (c : Config O) : Pr
   ∀ l c', ¬ R c l c'
 
 /-- Helper (inversion). A missing implementation result has no relational transition. -/
-private theorem no_step_of_none_inv {P : Program O} {c : Config O} (h : step P c = none) :
+theorem no_step_of_none_inv {P : Program O} {c : Config O} (h : step P c = none) :
     Blocked (Step P) c := by
   intro l c' hs
   cases hs with

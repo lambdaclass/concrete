@@ -336,17 +336,20 @@ def stepExit (L : AList Var O.Val) (st : O.Store) (e : Exit O.Val) :
   | .resume _ :: _ => none
   | [] => none
 
-/-- One step of the machine. `none`: the configuration is final, or no rule applies (unsafe
-stuckness). -/
-def step (P : Program O) (c : Config O) : Option (Out O) :=
+/-- The single machine dispatcher. `none` means finality or unsafe stopping.
+The optional evaluator defaults to `O.eval`; substitution tests replace it uniformly,
+including argument lists, without copying the dispatcher. -/
+def step (P : Program O) (c : Config O)
+    (evaluate : AList Var O.Val → O.Store → O.Expr → Res (O.Val × O.Store) := O.eval) :
+    Option (Out O) :=
   let L := c.locals
   let st := c.store
   match c.ctrl, c.frames with
   -- running a statement
   | .exec .skip, k => some (.next ⟨.done, L, st, k⟩)
-  | .exec (.bind x e site), k => onRes (O.eval L st e) site L st k fun v st' =>
+  | .exec (.bind x e site), k => onRes (evaluate L st e) site L st k fun v st' =>
       (O.life (.bind x) st').map fun st'' => .next ⟨.done, (x, v) :: L, st'', k⟩
-  | .exec (.assign x e site), k => onRes (O.eval L st e) site L st k fun v st' =>
+  | .exec (.assign x e site), k => onRes (evaluate L st e) site L st k fun v st' =>
       (AList.lookup L x).bind fun _ =>
         (O.life (.bind x) st').map fun st'' =>
           .next ⟨.done, AList.update L x (fun _ => v), st'', k⟩
@@ -354,22 +357,22 @@ def step (P : Program O) (c : Config O) : Option (Out O) :=
   | .exec (.block b s), k => some (.next ⟨.exec s, L, st, .scope b (dom L) [] :: k⟩)
   | .exec (.defer f args site), k =>
       (register ⟨f, args, site⟩ k).map fun k' => .next ⟨.done, L, st, k'⟩
-  | .exec (.cond e s t site), k => onRes (O.eval L st e) site L st k fun v st' =>
+  | .exec (.cond e s t site), k => onRes (evaluate L st e) site L st k fun v st' =>
       (O.test v).map fun b => .next ⟨.exec (if b then s else t), L, st', k⟩
   | .exec (.loop l cr t b site), k =>
       some (.next ⟨.exec cr, L, st, .test l cr t b site (dom L) :: k⟩)
   | .exec (.brk l), k => some (.next ⟨.exiting (.brk l), L, st, k⟩)
   | .exec (.cont l), k => some (.next ⟨.exiting (.cont l), L, st, k⟩)
-  | .exec (.ret e site), k => onRes (O.eval L st e) site L st k fun v st' =>
+  | .exec (.ret e site), k => onRes (evaluate L st e) site L st k fun v st' =>
       some (.next ⟨.exiting (.ret v), L, st', k⟩)
-  | .exec (.call dst f args site), k => onRes (evalArgs O L st args) site L st k fun vs st' =>
+  | .exec (.call dst f args site), k => onRes (evalArgs { O with eval := evaluate } L st args) site L st k fun vs st' =>
       (AList.lookup P.fns f).bind fun fn =>
         if fn.params.length = vs.length then
           (O.life (.enter (fn.params.map Prod.fst)) st').map fun st'' =>
             .next ⟨.exec fn.body, (fn.params.map Prod.fst).zip vs, st'',
               .scope fn.block (fn.params.map Prod.fst) [] :: .functionEnd :: .ret dst L :: k⟩
         else none
-  | .exec (.prim x p args site), k => onRes (evalArgs O L st args) site L st k fun vs st' =>
+  | .exec (.prim x p args site), k => onRes (evalArgs { O with eval := evaluate } L st args) site L st k fun vs st' =>
       some (.request p vs site st' fun a => match a.result with
         | .ok v => (bindLife O x a.store).map fun st' => ⟨.done, bindDst x v L, st', k⟩
         | .error kd => some ⟨.trapped kd site, L, a.store, k⟩)
@@ -378,7 +381,7 @@ def step (P : Program O) (c : Config O) : Option (Out O) :=
   | .done, .seq t :: k => some (.next ⟨.exec t, L, st, k⟩)
   | .done, .scope b dm (d :: ds) :: k => some (startCleanup L st b dm d ds .fall k)
   | .done, .scope _ dm [] :: k => (dropOut O dm L st).map fun st' => .next ⟨.done, restrict dm L, st', k⟩
-  | .done, .test l cr t b site dm :: k => onRes (O.eval L st t) site L st k fun v st' =>
+  | .done, .test l cr t b site dm :: k => onRes (evaluate L st t) site L st k fun v st' =>
       (O.test v).bind fun go =>
         (dropOut O dm L st').map fun st'' =>
           if go then .next ⟨.exec b, restrict dm L, st'', .body l cr t b site :: k⟩
@@ -841,30 +844,32 @@ structure Report (O : Operands) where
   fuel : Nat
 
 /-- Run for at most `fuel` steps; `hist` are the events so far. A final configuration is reported
-as final whatever fuel is left, so a run that ends on its last unit of fuel is not "out of fuel". -/
-def runFrom (P : Program O) (ρ : Oracle O) : Nat → List O.Event → Config O → Report O
-  | fuel, hist, c =>
-    match c.ctrl, c.final?, fuel with
-    | .refused, _, _ => ⟨hist, .stuck, c, fuel⟩
-    | _, some f, _ => ⟨hist, .final f, c, fuel⟩
-    | _, none, 0 => ⟨hist, .outOfFuel, c, 0⟩
-    | _, none, n + 1 =>
-      match step P c with
-      | none => ⟨hist, .stuck, c, n + 1⟩
-      | some (.next c') => runFrom P ρ n hist c'
-      | some (.request p vs site st k) =>
-        match ρ hist p vs site st with
-        | none => ⟨hist, .noAnswer, c, n + 1⟩
-        | some a =>
-          if O.allows p vs st a then
-            match k a with
-            | some c' => runFrom P ρ n (hist ++ a.event.toList) c'
-            | none => ⟨hist, .stuck, c, n + 1⟩
-          else ⟨hist, .badAnswer, c, n + 1⟩
+as final whatever fuel is left, so a run that ends on its last unit of fuel is not "out of fuel".
+The optional evaluator is passed to the sole dispatcher at every recursive transition. -/
+def runFrom (P : Program O) (ρ : Oracle O) (fuel : Nat) (hist : List O.Event) (c : Config O)
+    (evaluate : AList Var O.Val → O.Store → O.Expr → Res (O.Val × O.Store) := O.eval) : Report O :=
+  match c.ctrl, c.final?, fuel with
+  | .refused, _, _ => ⟨hist, .stuck, c, fuel⟩
+  | _, some f, _ => ⟨hist, .final f, c, fuel⟩
+  | _, none, 0 => ⟨hist, .outOfFuel, c, 0⟩
+  | _, none, n + 1 =>
+    match step P c evaluate with
+    | none => ⟨hist, .stuck, c, n + 1⟩
+    | some (.next c') => runFrom P ρ n hist c' evaluate
+    | some (.request p vs site st k) =>
+      match ρ hist p vs site st with
+      | none => ⟨hist, .noAnswer, c, n + 1⟩
+      | some a =>
+        if O.allows p vs st a then
+          match k a with
+          | some c' => runFrom P ρ n (hist ++ a.event.toList) c' evaluate
+          | none => ⟨hist, .stuck, c, n + 1⟩
+        else ⟨hist, .badAnswer, c, n + 1⟩
 
 /-- Run from `c` with no events yet. -/
-def run (P : Program O) (ρ : Oracle O) (fuel : Nat) (c : Config O) : Report O :=
-  runFrom P ρ fuel [] c
+def run (P : Program O) (ρ : Oracle O) (fuel : Nat) (c : Config O)
+    (evaluate : AList Var O.Val → O.Store → O.Expr → Res (O.Val × O.Store) := O.eval) : Report O :=
+  runFrom P ρ fuel [] c evaluate
 
 /-- Enter and run using the sole driver. `none` means argument-count mismatch,
 not lifecycle refusal. Refused entry returns the same unsafe-stuck classification as
