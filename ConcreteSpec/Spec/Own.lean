@@ -607,15 +607,19 @@ def EvalPermitted (O : Exec.Operands)
   O.eval L s.concrete e ≠ .stuck → (permit L e s.own).isSome = true
 
 /-- Left-to-right argument permission: each argument whose concrete evaluation is not
-stuck is permitted in the state left by the preceding arguments. -/
+stuck is permitted in the state left by the preceding arguments. The optional evaluator
+is the one being tested, so substitutions also govern every intermediate store. -/
 def ArgsPermitted (O : Exec.Operands) (types : Var → Option Descriptor)
     (permit : AList Var O.Val → O.Expr → State → Option State)
-    (L : AList Var O.Val) : Store O.Store → List O.Expr → Prop
-  | _, [] => True
-  | s, e :: es =>
+    (L : AList Var O.Val) (s : Store O.Store) (args : List O.Expr)
+    (evaluate : AList Var O.Val → Store O.Store → O.Expr → Res (O.Val × Store O.Store) :=
+      (instrumentOperands O types permit).eval) : Prop :=
+  match args with
+  | [] => True
+  | e :: es =>
     EvalPermitted O permit L s e ∧
-      ∀ v s₁, (instrumentOperands O types permit).eval L s e = .ok (v, s₁) →
-        ArgsPermitted O types permit L s₁ es
+      ∀ v s₁, evaluate L s e = .ok (v, s₁) →
+        ArgsPermitted O types permit L s₁ es evaluate
 
 /-- Local lifecycle permission: when the concrete lifecycle transition succeeds,
 the ownership lifecycle transition also succeeds. -/
@@ -638,45 +642,55 @@ def ReturnPermitted (O : Exec.Operands) (types : Var → Option Descriptor)
     ∀ s', (instrumentOperands O types permit).life .leave s = some s' →
       BindDstPermitted O types dst s'
 
-/-- Statement-level non-refusal at the active control point. -/
+/-- Statement-level non-refusal at the active control point. Operand evaluation,
+including argument lists, uses the same optional evaluator as the machine dispatcher. -/
 def StmtPermitted (O : Exec.Operands) (types : Var → Option Descriptor)
     (permit : AList Var O.Val → O.Expr → State → Option State)
     (P : Exec.Program (instrumentOperands O types permit))
-    (L : AList Var O.Val) (s : Store O.Store) :
-    Exec.Stmt (instrumentOperands O types permit) → Prop
+    (L : AList Var O.Val) (s : Store O.Store) (active : Exec.Stmt (instrumentOperands O types permit))
+    (evaluate : AList Var O.Val → Store O.Store → O.Expr → Res (O.Val × Store O.Store) :=
+      (instrumentOperands O types permit).eval) : Prop :=
+  match active with
   | .bind x e _ =>
     EvalPermitted O permit L s e ∧
-      ∀ v s', (instrumentOperands O types permit).eval L s e = .ok (v, s') →
+      ∀ v s', evaluate L s e = .ok (v, s') →
         LifePermitted O types (.bind x) s'
   | .assign x e _ =>
     EvalPermitted O permit L s e ∧
-      ∀ v s', (instrumentOperands O types permit).eval L s e = .ok (v, s') →
+      ∀ v s', evaluate L s e = .ok (v, s') →
         (AList.lookup L x).isSome = true →
           LifePermitted O types (.bind x) s'
   | .cond e _ _ _ => EvalPermitted O permit L s e
   | .ret e _ => EvalPermitted O permit L s e
   | .call _ f args _ =>
-    ArgsPermitted O types permit L s args ∧
-      ∀ vs s' fn, Exec.evalArgs (instrumentOperands O types permit) L s args = .ok (vs, s') →
+    ArgsPermitted O types permit L s args evaluate ∧
+      ∀ vs s' fn,
+        Exec.evalArgs { instrumentOperands O types permit with eval := evaluate } L s args =
+          .ok (vs, s') →
         AList.lookup P.fns f = some fn → fn.params.length = vs.length →
           LifePermitted O types (.enter (fn.params.map Prod.fst)) s'
   | .prim x p args _ =>
-    ArgsPermitted O types permit L s args ∧
-      ∀ vs s' a, Exec.evalArgs (instrumentOperands O types permit) L s args = .ok (vs, s') →
+    ArgsPermitted O types permit L s args evaluate ∧
+      ∀ vs s' a,
+        Exec.evalArgs { instrumentOperands O types permit with eval := evaluate } L s args =
+          .ok (vs, s') →
         (instrumentOperands O types permit).allows p vs s' a = true →
           a.result.isOk = true →
             BindDstPermitted O types x a.store
   | _ => True
 
-/-- Frame-level non-refusal when the current statement has completed normally. -/
+/-- Frame-level non-refusal when the current statement has completed normally.
+A test frame uses the supplied evaluator to select its post-evaluation lifecycle state. -/
 def DoneFramePermitted (O : Exec.Operands) (types : Var → Option Descriptor)
     (permit : AList Var O.Val → O.Expr → State → Option State)
-    (L : AList Var O.Val) (s : Store O.Store) :
-    Exec.Frame (instrumentOperands O types permit) → Prop
+    (L : AList Var O.Val) (s : Store O.Store) (active : Exec.Frame (instrumentOperands O types permit))
+    (evaluate : AList Var O.Val → Store O.Store → O.Expr → Res (O.Val × Store O.Store) :=
+      (instrumentOperands O types permit).eval) : Prop :=
+  match active with
   | .scope _ dm [] => LifePermitted O types (.drop (Exec.dead dm L)) s
   | .test _ _ t _ _ dm =>
     EvalPermitted O permit L s t ∧
-      ∀ v s', (instrumentOperands O types permit).eval L s t = .ok (v, s') →
+      ∀ v s', evaluate L s t = .ok (v, s') →
         (O.test v).isSome = true →
           LifePermitted O types (.drop (Exec.dead dm L)) s'
   | .functionEnd => LifePermitted O types .leave s
@@ -701,11 +715,13 @@ the active control point do not refuse when the concrete operation is defined. -
 def StepPermitted (O : Exec.Operands) (types : Var → Option Descriptor)
     (permit : AList Var O.Val → O.Expr → State → Option State)
     (P : Exec.Program (instrumentOperands O types permit))
-    (c : Exec.Config (instrumentOperands O types permit)) : Prop :=
+    (c : Exec.Config (instrumentOperands O types permit))
+    (evaluate : AList Var O.Val → Store O.Store → O.Expr → Res (O.Val × Store O.Store) :=
+      (instrumentOperands O types permit).eval) : Prop :=
   match c.ctrl with
-  | .exec s => StmtPermitted O types permit P c.locals c.store s
+  | .exec s => StmtPermitted O types permit P c.locals c.store s evaluate
   | .done => match c.frames with
-    | f :: _ => DoneFramePermitted O types permit c.locals c.store f
+    | f :: _ => DoneFramePermitted O types permit c.locals c.store f evaluate
     | [] => True
   | .exiting e => match c.frames with
     | f :: _ => ExitFramePermitted O types permit c.locals c.store e f
@@ -718,15 +734,19 @@ A program and initial configuration accepted by the C5/C9 ownership and borrow c
 maintain a well-formed ownership state and never fail an ownership or lifecycle guard at
 any reachable configuration where the concrete operation is defined. The default closure is
 `Exec.Steps P`; substitution controls supply the closure of the same mutated transition
-used in their conclusion (owner decision
-2026-11-08 Q3). -/
+used in their conclusion, together with its operand evaluator for local permission.
+Lifecycle-only obligations do not evaluate operands and need no evaluator parameter.
+Authority: docs/decisions.md#decided-2026-11-08-recovered-d3 (C5) and
+#decided-2026-11-14-trap-sites-and-law-tests (uniform substitution). -/
 def CheckerAccepted (O : Exec.Operands) (types : Var → Option Descriptor)
     (permit : AList Var O.Val → O.Expr → State → Option State)
     (P : Exec.Program (instrumentOperands O types permit))
     (c₀ : Exec.Config (instrumentOperands O types permit))
     (reachable : Exec.Config (instrumentOperands O types permit) → List O.Event →
-      Exec.Config (instrumentOperands O types permit) → Prop := Exec.Steps P) : Prop :=
-  ∀ tr c, reachable c₀ tr c → WellFormed c.store.own ∧ StepPermitted O types permit P c
+      Exec.Config (instrumentOperands O types permit) → Prop := Exec.Steps P)
+    (evaluate : AList Var O.Val → Store O.Store → O.Expr → Res (O.Val × Store O.Store) :=
+      (instrumentOperands O types permit).eval) : Prop :=
+  ∀ tr c, reachable c₀ tr c → WellFormed c.store.own ∧ StepPermitted O types permit P c evaluate
 
 /-- Typed C4 reads and writes use exactly the original Hybrid operations after permission. -/
 def readOwner (tgt : Target) (p : Hybrid.Place) (s : Store Hybrid.State) :

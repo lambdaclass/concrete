@@ -29,30 +29,33 @@ section ExecErasure
 variable {O : Exec.Operands} {types : Var → Option Descriptor}
   {permit : AList Var O.Val → O.Expr → State → Option State}
 
-/-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`; authority: docs/decisions.md#decided-2026-11-13-lifecycle-refusal;
-#decided-2026-11-05-core, Q9.10). Permission refusal is unsafe stopping,
-including when the concrete expression would succeed or trap. -/
+/-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`; authority:
+docs/decisions.md#decided-2026-11-13-lifecycle-refusal; #decided-2026-11-05-core, Q9.10). Permission
+refusal is unsafe stopping, including when the concrete expression would succeed or trap. -/
 theorem eval_refusal (L : AList Var O.Val) (s : Store O.Store) (e : O.Expr)
     (h : permit L e s.own = none) :
     (instrumentOperands O types permit).eval L s e = .stuck := by
   simp [instrumentOperands, instrumentEval, h]
 
-/-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`; authority: docs/decisions.md#decided-2026-11-13-lifecycle-refusal).
-A failed ownership lifecycle cannot be converted to a concrete success. -/
+/-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`; authority:
+docs/decisions.md#decided-2026-11-13-lifecycle-refusal). A failed ownership lifecycle cannot be
+converted to a concrete success. -/
 theorem life_refusal (ev : Exec.Life) (s : Store O.Store)
     (h : life types ev s.own = none) :
     (instrumentOperands O types permit).life ev s = none := by
   simp [instrumentOperands, instrumentLife, h]
 
-/-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`; authority: docs/decisions.md#decided-2026-11-13-lifecycle-refusal).
-A refused head argument stops argument evaluation, rather than returning or trapping. -/
+/-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`; authority:
+docs/decisions.md#decided-2026-11-13-lifecycle-refusal). A refused head argument stops argument
+evaluation, rather than returning or trapping. -/
 theorem evalArgs_refusal (L : AList Var O.Val) (s : Store O.Store)
     (e : O.Expr) (es : List O.Expr) (h : permit L e s.own = none) :
     Exec.evalArgs (instrumentOperands O types permit) L s (e :: es) = .stuck := by
   simp [Exec.evalArgs, instrumentOperands, instrumentEval, h, Res.bind]
 
-/-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`; authority: docs/decisions.md#decided-2026-11-13-lifecycle-refusal).
-Refusal during a binding expression leaves the dispatcher without a transition. -/
+/-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`; authority:
+docs/decisions.md#decided-2026-11-13-lifecycle-refusal). Refusal during a binding expression leaves
+the dispatcher without a transition. -/
 theorem step_eval_refusal (P : Exec.Program (instrumentOperands O types permit))
     (L : AList Var O.Val) (s : Store O.Store)
     (k : List (Exec.Frame (instrumentOperands O types permit)))
@@ -60,8 +63,9 @@ theorem step_eval_refusal (P : Exec.Program (instrumentOperands O types permit))
     Exec.step P ⟨.exec (.bind x e site), L, s, k⟩ = none := by
   simp [Exec.step, instrumentOperands, instrumentEval, h, Exec.onRes]
 
-/-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`; authority: docs/decisions.md#decided-2026-11-13-lifecycle-refusal).
-A failed result-binding lifecycle is unsafe stopping after a successful operand. -/
+/-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`; authority:
+docs/decisions.md#decided-2026-11-13-lifecycle-refusal). A failed result-binding lifecycle is unsafe
+stopping after a successful operand. -/
 theorem step_life_refusal (P : Exec.Program (instrumentOperands O types permit))
     (L : AList Var O.Val) (s t : Store O.Store)
     (k : List (Exec.Frame (instrumentOperands O types permit)))
@@ -72,10 +76,10 @@ theorem step_life_refusal (P : Exec.Program (instrumentOperands O types permit))
   change instrumentEval O permit L s e = .ok (v, t) at he
   simp [Exec.step, instrumentOperands, he, Exec.onRes, instrumentLife, hl]
 
-/-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`; authority: docs/decisions.md#decided-2026-11-08-recovered-d3, C5;
-#decided-2026-11-05-core, Q9.10). Permitted arguments have exactly the concrete
-result after erasure, including traps and stuckness. This converse does not assume
-that the instrumented result succeeded. -/
+/-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`; authority:
+docs/decisions.md#decided-2026-11-08-recovered-d3, C5; #decided-2026-11-05-core, Q9.10). Permitted
+arguments have exactly the concrete result after erasure, including traps and stuckness. This
+converse does not assume that the instrumented result succeeded. -/
 theorem evalArgs_erasure_of_permitted (L : AList Var O.Val)
     (args : List O.Expr) (s : Store O.Store) (hp : ArgsPermitted O types permit L s args) :
     Exec.evalArgs O L (erase s) args =
@@ -104,8 +108,9 @@ theorem evalArgs_erasure_of_permitted (L : AList Var O.Val)
       rw [hi]
       cases Exec.evalArgs (instrumentOperands O types permit) L ⟨concrete, own⟩ es <;> rfl
 
-/-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`; authority: docs/decisions.md#decided-2026-11-08-recovered-d3, C5).
-Permitted arguments are stuck on exactly the same inputs in either execution. -/
+/-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`; authority:
+docs/decisions.md#decided-2026-11-08-recovered-d3, C5). Permitted arguments are stuck on exactly the
+same inputs in either execution. -/
 theorem evalArgs_stuck_iff_of_permitted (L : AList Var O.Val)
     (args : List O.Expr) (s : Store O.Store) (hp : ArgsPermitted O types permit L s args) :
     Exec.evalArgs (instrumentOperands O types permit) L s args = .stuck ↔
@@ -113,8 +118,9 @@ theorem evalArgs_stuck_iff_of_permitted (L : AList Var O.Val)
   rw [evalArgs_erasure_of_permitted L args s hp]
   cases Exec.evalArgs (instrumentOperands O types permit) L s args <;> simp [Res.map, Res.bind]
 
-/-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`; authority: docs/decisions.md#decided-2026-11-08-recovered-d3, C5).
-A concrete trap is also a tracked trap when argument permission holds. -/
+/-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`; authority:
+docs/decisions.md#decided-2026-11-08-recovered-d3, C5). A concrete trap is also a tracked trap when
+argument permission holds. -/
 theorem evalArgs_trap_iff_of_permitted (L : AList Var O.Val)
     (args : List O.Expr) (s : Store O.Store) (hp : ArgsPermitted O types permit L s args)
     (kd : TrapKind) :
@@ -141,8 +147,8 @@ theorem eval_ok_erasure_result (L : AList Var O.Val) (s t : Store O.Store) (e : 
     | trap _ => rw [he] at h; cases h
     | stuck => rw [he] at h; cases h
 
-/-- Helper (computation). Calculates one lifted operand result; the independently stated finite execution contract
-is Steps_erasure. -/
+/-- Helper (computation). Calculates one lifted operand result; the independently stated finite
+execution contract is Steps_erasure. -/
 theorem eval_ok_erasure (L : AList Var O.Val) (s : Store O.Store) (e : O.Expr) :
     match (instrumentOperands O types permit).eval L s e with
     | .ok (v, t) => O.eval L (erase s) e = .ok (v, erase t)
@@ -166,8 +172,8 @@ theorem eval_trap_erasure_result (L : AList Var O.Val) (s : Store O.Store) (e : 
     | trap _ => rw [he] at h; cases h; exact he
     | stuck => rw [he] at h; cases h
 
-/-- Helper (computation). Calculates one lifted trap result; runFrom_erasure establishes terminal execution
-agreement. -/
+/-- Helper (computation). Calculates one lifted trap result; runFrom_erasure establishes terminal
+execution agreement. -/
 theorem eval_trap_erasure (L : AList Var O.Val) (s : Store O.Store) (e : O.Expr) :
     match (instrumentOperands O types permit).eval L s e with
     | .trap kd => O.eval L (erase s) e = .trap kd
@@ -178,11 +184,10 @@ theorem eval_trap_erasure (L : AList Var O.Val) (s : Store O.Store) (e : O.Expr)
   | stuck => trivial
 
 /-- Law (authority: docs/decisions.md#decided-2026-11-05-core (Q9.10);
-#decided-2026-11-08-recovered-d3 (C5 erasure);
-#decided-2026-11-13-lifecycle-refusal). (subject `ConcreteSpec.Core.Own.instrumentOperands`). Successful argument
-evaluation
-preserves values and concrete storage. The result remains inside the conclusion so a mutant
-cannot hide a wrong value behind an output fixed as a theorem argument. -/
+#decided-2026-11-08-recovered-d3 (C5 erasure); #decided-2026-11-13-lifecycle-refusal). (subject
+`ConcreteSpec.Core.Own.instrumentOperands`). Successful argument evaluation preserves values and
+concrete storage. The result remains inside the conclusion so a mutant cannot hide a wrong value
+behind an output fixed as a theorem argument. -/
 theorem evalArgs_ok_erasure (L : AList Var O.Val) (args : List O.Expr) (s : Store O.Store) :
     match Exec.evalArgs (instrumentOperands O types permit) L s args with
     | .ok (vs, t) => Exec.evalArgs O L (erase s) args = .ok (vs, erase t)
@@ -222,10 +227,9 @@ theorem evalArgs_ok_erasure (L : AList Var O.Val) (args : List O.Expr) (s : Stor
       | stuck => rw [he] at h; cases h
 
 /-- Law (authority: docs/decisions.md#decided-2026-11-05-core (Q9.10);
-#decided-2026-11-08-recovered-d3 (C5 erasure);
-#decided-2026-11-13-lifecycle-refusal). (subject `ConcreteSpec.Core.Own.instrumentOperands`). A trapping argument
-evaluation
-preserves the actual trap kind, without fixing that kind in a success premise. -/
+#decided-2026-11-08-recovered-d3 (C5 erasure); #decided-2026-11-13-lifecycle-refusal). (subject
+`ConcreteSpec.Core.Own.instrumentOperands`). A trapping argument evaluation preserves the actual
+trap kind, without fixing that kind in a success premise. -/
 theorem evalArgs_trap_erasure (L : AList Var O.Val) (args : List O.Expr) (s : Store O.Store) :
     match Exec.evalArgs (instrumentOperands O types permit) L s args with
     | .trap kd => Exec.evalArgs O L (erase s) args = .trap kd
@@ -267,12 +271,13 @@ theorem evalArgs_trap_erasure (L : AList Var O.Val) (args : List O.Expr) (s : St
         rfl
       | stuck => rw [he] at h; cases h
 
-/-- Helper (projection). Condition tests are identical in the instrumented and erased operand instances. -/
+/-- Helper (projection). Condition tests are identical in the instrumented and erased operand
+instances. -/
 theorem test_erasure_result (v : O.Val) :
     (instrumentOperands O types permit).test v = O.test v := rfl
 
-/-- Helper (computation). Projects the unchanged concrete test; Steps_erasure establishes agreement of actual branch
-execution. -/
+/-- Helper (computation). Projects the unchanged concrete test; Steps_erasure establishes agreement
+of actual branch execution. -/
 theorem test_erasure (v : O.Val) :
     match (instrumentOperands O types permit).test v with
     | some b => O.test v = some b
@@ -280,7 +285,8 @@ theorem test_erasure (v : O.Val) :
   dsimp [instrumentOperands]
   cases O.test v <;> rfl
 
-/-- Helper (inversion). Structural inversion for `instrumentLife_erasure` on a given output store. -/
+/-- Helper (inversion). Structural inversion for `instrumentLife_erasure` on a given output store.
+-/
 theorem instrumentLife_erasure_result (ev : Exec.Life) (s t : Store O.Store)
     (h : (instrumentOperands O types permit).life ev s = some t) :
     O.life ev (erase s) = some (erase t) := by
@@ -296,8 +302,8 @@ theorem instrumentLife_erasure_result (ev : Exec.Life) (s t : Store O.Store)
       cases h
       exact hc
 
-/-- Helper (computation). Calculates the lifted lifecycle result; Steps_erasure establishes execution agreement
-through cleanup. -/
+/-- Helper (computation). Calculates the lifted lifecycle result; Steps_erasure establishes
+execution agreement through cleanup. -/
 theorem instrumentLife_erasure (ev : Exec.Life) (s : Store O.Store) :
     match (instrumentOperands O types permit).life ev s with
     | some t => O.life ev (erase s) = some (erase t) ∧ life types ev s.own = some t.own
@@ -324,8 +330,8 @@ theorem allows_erasure_result (p : O.Prim) (vs : List O.Val) (s : Store O.Store)
   obtain ⟨ha, hown⟩ := Bool.and_eq_true_iff.mp h
   exact ⟨ha, of_decide_eq_true hown⟩
 
-/-- Helper (computation). Unpacks the primitive answer guard; Steps_erasure and runFrom_erasure establish actual
-primitive execution agreement. -/
+/-- Helper (computation). Unpacks the primitive answer guard; Steps_erasure and runFrom_erasure
+establish actual primitive execution agreement. -/
 theorem allows_erasure (p : O.Prim) (vs : List O.Val) (s : Store O.Store)
     (a : Exec.Answer O.Val O.Event (Store O.Store)) :
     ((instrumentOperands O types permit).allows p vs s a = true ↔
@@ -378,10 +384,9 @@ private theorem lookup_eraseProgram_proj :
     · simp [h, lookup_eraseProgram_proj fns f]
 
 /-- Law (authority: docs/decisions.md#decided-2026-11-05-core (Q9.10);
-#decided-2026-11-08-recovered-d3 (C5 erasure);
-#decided-2026-11-13-lifecycle-refusal). (subject `ConcreteSpec.Core.Own.stepInstrumented`). Silent machine-step
-forward simulation
-(owner decision 2026-11-08 Q3): whenever `stepInstrumented` on the instrumented C1 machine produces a next
+#decided-2026-11-08-recovered-d3 (C5 erasure); #decided-2026-11-13-lifecycle-refusal). (subject
+`ConcreteSpec.Core.Own.stepInstrumented`). Silent machine-step forward simulation (owner decision
+2026-11-08 Q3): whenever `stepInstrumented` on the instrumented C1 machine produces a next
 configuration, `Exec.step` on the erased machine produces the erased configuration. -/
 theorem step_next_erasure (P : Exec.Program (instrumentOperands O types permit))
     (c : Exec.Config (instrumentOperands O types permit)) :
@@ -448,7 +453,8 @@ theorem step_next_erasure (P : Exec.Program (instrumentOperands O types permit))
           simp only [Exec.step, Option.map_eq_some_iff] at h
           obtain ⟨k', hk', hnext⟩ := h
           cases hnext
-          have hreg := register_erasure_proj (O := O) (types := types) (permit := permit) ⟨f, args, site⟩ k k' hk'
+          have hreg := register_erasure_proj (O := O) (types := types) (permit := permit) ⟨f, args,
+              site⟩ k k' hk'
           simp only [eraseDeferred] at hreg
           simp [Exec.step, eraseConfig, eraseCtrl, eraseStmt, hreg]
         | cond e s t site =>
@@ -624,7 +630,8 @@ theorem step_next_erasure (P : Exec.Program (instrumentOperands O types permit))
               simp only [Exec.stepExit, Option.map_eq_some_iff] at h
               obtain ⟨st', hst', hnext⟩ := h
               cases hnext
-              simp [Exec.stepExit, eraseFrame, dropOut_erasure_proj (O := O) (permit := permit) dm L st st' hst']
+              simp [Exec.stepExit, eraseFrame, dropOut_erasure_proj (O := O) (permit := permit) dm L
+                  st st' hst']
             | cons d ds =>
               cases h
               rfl
@@ -632,7 +639,8 @@ theorem step_next_erasure (P : Exec.Program (instrumentOperands O types permit))
             simp only [Exec.stepExit, Option.map_eq_some_iff] at h
             obtain ⟨st', hst', hnext⟩ := h
             cases hnext
-            simp [Exec.stepExit, eraseFrame, dropOut_erasure_proj (O := O) (permit := permit) dm L st st' hst']
+            simp [Exec.stepExit, eraseFrame, dropOut_erasure_proj (O := O) (permit := permit) dm L
+                st st' hst']
           | body l cr t b site =>
             cases e with
             | brk l' =>
@@ -680,13 +688,158 @@ theorem step_next_erasure (P : Exec.Program (instrumentOperands O types permit))
       | trapped _ _ => cases h
       | refused => cases h
 
+/-- Helper: only an active primitive statement can issue a request. Both continuation-erasure proofs
+use this common control inversion. -/
+private theorem step_request_ctrl_inv
+    (P : Exec.Program (instrumentOperands O types permit))
+    (c : Exec.Config (instrumentOperands O types permit))
+    (p : O.Prim) (vs : List O.Val) (site : SiteId) (st : Store O.Store)
+    (k : Exec.Answer O.Val O.Event (Store O.Store) →
+      Option (Exec.Config (instrumentOperands O types permit)))
+    (h : Exec.step P c = some (.request p vs site st k)) :
+    ∃ x p' args site', c.ctrl = .exec (.prim x p' args site') := by
+  rcases c with ⟨ctrl, L, s, frames⟩
+  cases ctrl with
+  | exec stmt =>
+    cases stmt with
+    | skip => cases h
+    | bind x e site' =>
+      simp only [Exec.step, instrumentOperands] at h
+      cases he : instrumentEval O permit L s e with
+      | ok r =>
+        rcases r with ⟨_, _⟩
+        rw [he] at h
+        simp only [Exec.onRes, Option.map_eq_some_iff] at h
+        obtain ⟨_, _, h⟩ := h; cases h
+      | trap _ => rw [he] at h; cases h
+      | stuck => rw [he] at h; cases h
+    | assign x e site' =>
+      simp only [Exec.step, instrumentOperands] at h
+      cases he : instrumentEval O permit L s e with
+      | ok r =>
+        rcases r with ⟨_, _⟩
+        rw [he] at h
+        simp only [Exec.onRes, Option.bind_eq_some_iff, Option.map_eq_some_iff] at h
+        obtain ⟨_, _, _, _, h⟩ := h; cases h
+      | trap _ => rw [he] at h; cases h
+      | stuck => rw [he] at h; cases h
+    | seq _ _ => cases h
+    | block _ _ => cases h
+    | defer _ _ _ =>
+      simp only [Exec.step, Option.map_eq_some_iff] at h
+      obtain ⟨_, _, h⟩ := h; cases h
+    | cond e _ _ _ =>
+      simp only [Exec.step, instrumentOperands] at h
+      cases he : instrumentEval O permit L s e with
+      | ok r =>
+        rcases r with ⟨_, _⟩
+        rw [he] at h
+        simp only [Exec.onRes, Option.map_eq_some_iff] at h
+        obtain ⟨_, _, h⟩ := h; cases h
+      | trap _ => rw [he] at h; cases h
+      | stuck => rw [he] at h; cases h
+    | loop _ _ _ _ _ => cases h
+    | brk _ => cases h
+    | cont _ => cases h
+    | ret e _ =>
+      simp only [Exec.step, instrumentOperands] at h
+      cases he : instrumentEval O permit L s e with
+      | ok r => rcases r with ⟨_, _⟩; rw [he] at h; cases h
+      | trap _ => rw [he] at h; cases h
+      | stuck => rw [he] at h; cases h
+    | call dst f args site' =>
+      simp only [Exec.step] at h
+      cases he : Exec.evalArgs (instrumentOperands O types permit) L s args with
+      | ok r =>
+        rcases r with ⟨vs', st'⟩
+        rw [he] at h
+        simp only [Exec.onRes, Option.bind_eq_some_iff] at h
+        obtain ⟨fn, _, h⟩ := h
+        by_cases hlen : fn.params.length = vs'.length
+        · simp only [hlen, ↓reduceIte, Option.map_eq_some_iff] at h
+          obtain ⟨_, _, h⟩ := h; cases h
+        · simp only [hlen, ↓reduceIte] at h; cases h
+      | trap _ => rw [he] at h; cases h
+      | stuck => rw [he] at h; cases h
+    | prim x p' args site' => exact ⟨x, p', args, site', rfl⟩
+    | abort _ => cases h
+  | done =>
+    cases frames with
+    | nil => cases h
+    | cons f k' =>
+      cases f with
+      | seq _ => cases h
+      | scope b dm ds =>
+        cases ds with
+        | nil =>
+          simp only [Exec.step, Option.map_eq_some_iff] at h
+          obtain ⟨_, _, h⟩ := h; cases h
+        | cons _ _ => cases h
+      | test l cr t b site' dm =>
+        simp only [Exec.step, instrumentOperands] at h
+        cases he : instrumentEval O permit L s t with
+        | ok r =>
+          rcases r with ⟨_, _⟩
+          rw [he] at h
+          simp only [Exec.onRes, Option.bind_eq_some_iff, Option.map_eq_some_iff] at h
+          obtain ⟨go, _, _, _, h⟩ := h
+          cases go <;> cases h
+        | trap _ => rw [he] at h; cases h
+        | stuck => rw [he] at h; cases h
+      | body _ _ _ _ _ => cases h
+      | resume p' => cases p' <;> cases h
+      | functionEnd =>
+        simp only [Exec.step, Option.map_eq_some_iff] at h
+        obtain ⟨_, _, h⟩ := h; cases h
+      | ret _ _ =>
+        simp only [Exec.step, Option.map_eq_some_iff] at h
+        obtain ⟨_, _, h⟩ := h; cases h
+  | exiting e =>
+    dsimp [Exec.step] at h
+    cases frames with
+    | nil => cases h
+    | cons f k' =>
+      cases f with
+      | seq _ => cases h
+      | scope b dm ds =>
+        cases ds with
+        | nil =>
+          simp only [Exec.stepExit, Option.map_eq_some_iff] at h
+          obtain ⟨_, _, h⟩ := h; cases h
+        | cons _ _ => cases h
+      | test _ _ _ _ _ _ =>
+        simp only [Exec.stepExit, Option.map_eq_some_iff] at h
+        obtain ⟨_, _, h⟩ := h; cases h
+      | body l _ _ _ _ =>
+        cases e with
+        | brk l' => by_cases hl : l' = l <;> simp [Exec.stepExit, hl] at h
+        | cont l' => by_cases hl : l' = l <;> simp [Exec.stepExit, hl] at h
+        | ret _ => cases h
+      | resume _ => cases h
+      | functionEnd =>
+        cases e with
+        | brk _ => cases h
+        | cont _ => cases h
+        | ret _ =>
+          simp only [Exec.stepExit, Option.map_eq_some_iff] at h
+          obtain ⟨_, _, h⟩ := h; cases h
+      | ret _ _ =>
+        cases e with
+        | brk _ => cases h
+        | cont _ => cases h
+        | ret _ =>
+          simp only [Exec.stepExit, Option.map_eq_some_iff] at h
+          obtain ⟨_, _, h⟩ := h; cases h
+  | trapped _ _ => cases h
+  | refused => cases h
+
+
 /-- Law (authority: docs/decisions.md#decided-2026-11-05-core (Q9.10);
-#decided-2026-11-08-recovered-d3 (C5 erasure);
-#decided-2026-11-13-lifecycle-refusal). (subject `ConcreteSpec.Core.Own.stepInstrumented`). Primitive-request
-forward simulation
-(owner decision 2026-11-08 Q3): whenever `stepInstrumented` on the instrumented C1 machine issues a primitive
-request, `Exec.step` on the erased machine issues the matching request with the erased store and agreeing
-continuation. -/
+#decided-2026-11-08-recovered-d3 (C5 erasure); #decided-2026-11-13-lifecycle-refusal). (subject
+`ConcreteSpec.Core.Own.stepInstrumented`). Primitive-request forward simulation (owner decision
+2026-11-08 Q3): whenever `stepInstrumented` on the instrumented C1 machine issues a primitive
+request, `Exec.step` on the erased machine issues the matching request with the erased store and
+agreeing continuation. -/
 theorem step_request_erasure (P : Exec.Program (instrumentOperands O types permit))
     (c : Exec.Config (instrumentOperands O types permit)) :
     match stepInstrumented O types permit P c with
@@ -703,173 +856,43 @@ theorem step_request_erasure (P : Exec.Program (instrumentOperands O types permi
     | next _ => trivial
     | request p vs site st k =>
       change Exec.step P c = some (.request p vs site st k) at h
+      obtain ⟨x, p', args, site', hc⟩ := step_request_ctrl_inv P c p vs site st k h
       rcases c with ⟨ctrl, L, s, frames⟩
-      cases ctrl with
-      | exec stmt =>
-        cases stmt with
-        | skip => cases h
-        | bind x e site' =>
-          simp only [Exec.step, instrumentOperands] at h
-          cases he : instrumentEval O permit L s e with
-          | ok r =>
-            rcases r with ⟨_, _⟩
-            rw [he] at h
-            simp only [Exec.onRes, Option.map_eq_some_iff] at h
-            obtain ⟨_, _, h⟩ := h; cases h
-          | trap _ => rw [he] at h; cases h
-          | stuck => rw [he] at h; cases h
-        | assign x e site' =>
-          simp only [Exec.step, instrumentOperands] at h
-          cases he : instrumentEval O permit L s e with
-          | ok r =>
-            rcases r with ⟨_, _⟩
-            rw [he] at h
-            simp only [Exec.onRes, Option.bind_eq_some_iff, Option.map_eq_some_iff] at h
-            obtain ⟨_, _, _, _, h⟩ := h; cases h
-          | trap _ => rw [he] at h; cases h
-          | stuck => rw [he] at h; cases h
-        | seq _ _ => cases h
-        | block _ _ => cases h
-        | defer _ _ _ =>
-          simp only [Exec.step, Option.map_eq_some_iff] at h
-          obtain ⟨_, _, h⟩ := h; cases h
-        | cond e _ _ _ =>
-          simp only [Exec.step, instrumentOperands] at h
-          cases he : instrumentEval O permit L s e with
-          | ok r =>
-            rcases r with ⟨_, _⟩
-            rw [he] at h
-            simp only [Exec.onRes, Option.map_eq_some_iff] at h
-            obtain ⟨_, _, h⟩ := h; cases h
-          | trap _ => rw [he] at h; cases h
-          | stuck => rw [he] at h; cases h
-        | loop _ _ _ _ _ => cases h
-        | brk _ => cases h
-        | cont _ => cases h
-        | ret e _ =>
-          simp only [Exec.step, instrumentOperands] at h
-          cases he : instrumentEval O permit L s e with
-          | ok r => rcases r with ⟨_, _⟩; rw [he] at h; cases h
-          | trap _ => rw [he] at h; cases h
-          | stuck => rw [he] at h; cases h
-        | call dst f args site' =>
-          simp only [Exec.step] at h
-          cases he : Exec.evalArgs (instrumentOperands O types permit) L s args with
-          | ok r =>
-            rcases r with ⟨vs', st'⟩
-            rw [he] at h
-            simp only [Exec.onRes, Option.bind_eq_some_iff] at h
-            obtain ⟨fn, _, h⟩ := h
-            by_cases hlen : fn.params.length = vs'.length
-            · simp only [hlen, ↓reduceIte, Option.map_eq_some_iff] at h
-              obtain ⟨_, _, h⟩ := h; cases h
-            · simp only [hlen, ↓reduceIte] at h; cases h
-          | trap _ => rw [he] at h; cases h
-          | stuck => rw [he] at h; cases h
-        | prim x p' args site' =>
-          dsimp [Exec.step, eraseConfig, eraseCtrl, eraseStmt] at h ⊢
-          cases he : Exec.evalArgs (instrumentOperands O types permit) L s args with
-          | ok r =>
-            rcases r with ⟨vs', st'⟩
-            have he_erased : Exec.evalArgs O L (erase s) args = .ok (vs', erase st') := by
-              have h0 := evalArgs_ok_erasure (O := O) (types := types) (permit := permit) L args s
-              rw [he] at h0
-              exact h0
-            rw [he] at h
-            dsimp [Exec.onRes] at h
-            injection h with h
-            injection h with hp hvs hsite hst hk_eq
-            subst hp; subst hvs; subst hsite; subst hst; subst hk_eq
-            refine ⟨_, by rw [he_erased]; rfl, ?_⟩
-            intro a c' hk
-            dsimp at hk
-            cases ha : a.result with
-            | ok v =>
-              rw [ha] at hk
-              simp only [Option.map_eq_some_iff] at hk
-              obtain ⟨st'', hst'', rfl⟩ := hk
-              dsimp [eraseAnswer]
-              rw [ha]
-              dsimp
-              rw [bindLife_erasure_proj (O := O) (permit := permit) x a.store st'' hst'']
-              rfl
-            | error kd =>
-              rw [ha] at hk
-              cases hk
-              dsimp [eraseAnswer]
-              rw [ha]
-          | trap _ => rw [he] at h; cases h
-          | stuck => rw [he] at h; cases h
-        | abort _ => cases h
-      | done =>
-        cases frames with
-        | nil => cases h
-        | cons f k' =>
-          cases f with
-          | seq _ => cases h
-          | scope b dm ds =>
-            cases ds with
-            | nil =>
-              simp only [Exec.step, Option.map_eq_some_iff] at h
-              obtain ⟨_, _, h⟩ := h; cases h
-            | cons _ _ => cases h
-          | test l cr t b site' dm =>
-            simp only [Exec.step, instrumentOperands] at h
-            cases he : instrumentEval O permit L s t with
-            | ok r =>
-              rcases r with ⟨_, _⟩
-              rw [he] at h
-              simp only [Exec.onRes, Option.bind_eq_some_iff, Option.map_eq_some_iff] at h
-              obtain ⟨go, _, _, _, h⟩ := h
-              cases go <;> cases h
-            | trap _ => rw [he] at h; cases h
-            | stuck => rw [he] at h; cases h
-          | body _ _ _ _ _ => cases h
-          | resume p' => cases p' <;> cases h
-          | functionEnd =>
-            simp only [Exec.step, Option.map_eq_some_iff] at h
-            obtain ⟨_, _, h⟩ := h; cases h
-          | ret _ _ =>
-            simp only [Exec.step, Option.map_eq_some_iff] at h
-            obtain ⟨_, _, h⟩ := h; cases h
-      | exiting e =>
-        dsimp [Exec.step] at h
-        cases frames with
-        | nil => cases h
-        | cons f k' =>
-          cases f with
-          | seq _ => cases h
-          | scope b dm ds =>
-            cases ds with
-            | nil =>
-              simp only [Exec.stepExit, Option.map_eq_some_iff] at h
-              obtain ⟨_, _, h⟩ := h; cases h
-            | cons _ _ => cases h
-          | test _ _ _ _ _ _ =>
-            simp only [Exec.stepExit, Option.map_eq_some_iff] at h
-            obtain ⟨_, _, h⟩ := h; cases h
-          | body l _ _ _ _ =>
-            cases e with
-            | brk l' => by_cases hl : l' = l <;> simp [Exec.stepExit, hl] at h
-            | cont l' => by_cases hl : l' = l <;> simp [Exec.stepExit, hl] at h
-            | ret _ => cases h
-          | resume _ => cases h
-          | functionEnd =>
-            cases e with
-            | brk _ => cases h
-            | cont _ => cases h
-            | ret _ =>
-              simp only [Exec.stepExit, Option.map_eq_some_iff] at h
-              obtain ⟨_, _, h⟩ := h; cases h
-          | ret _ _ =>
-            cases e with
-            | brk _ => cases h
-            | cont _ => cases h
-            | ret _ =>
-              simp only [Exec.stepExit, Option.map_eq_some_iff] at h
-              obtain ⟨_, _, h⟩ := h; cases h
-      | trapped _ _ => cases h
-      | refused => cases h
+      dsimp at hc
+      subst ctrl
+      dsimp [Exec.step, eraseConfig, eraseCtrl, eraseStmt] at h ⊢
+      cases he : Exec.evalArgs (instrumentOperands O types permit) L s args with
+      | ok r =>
+        rcases r with ⟨vs', st'⟩
+        have he_erased : Exec.evalArgs O L (erase s) args = .ok (vs', erase st') := by
+          have h0 := evalArgs_ok_erasure (O := O) (types := types) (permit := permit) L args s
+          rw [he] at h0
+          exact h0
+        rw [he] at h
+        dsimp [Exec.onRes] at h
+        injection h with h
+        injection h with hp hvs hsite hst hk_eq
+        subst hp; subst hvs; subst hsite; subst hst; subst hk_eq
+        refine ⟨_, by rw [he_erased]; rfl, ?_⟩
+        intro a c' hk
+        dsimp at hk
+        cases ha : a.result with
+        | ok v =>
+          rw [ha] at hk
+          simp only [Option.map_eq_some_iff] at hk
+          obtain ⟨st'', hst'', rfl⟩ := hk
+          dsimp [eraseAnswer]
+          rw [ha]
+          dsimp
+          rw [bindLife_erasure_proj (O := O) (permit := permit) x a.store st'' hst'']
+          rfl
+        | error kd =>
+          rw [ha] at hk
+          cases hk
+          dsimp [eraseAnswer]
+          rw [ha]
+      | trap _ => rw [he] at h; cases h
+      | stuck => rw [he] at h; cases h
 
 /-- Helper (projection). Erasing a step label preserves its emitted event list. -/
 private theorem eraseLabel_events_proj (l : Exec.Label (instrumentOperands O types permit)) :
@@ -883,11 +906,10 @@ private theorem eraseLabel_answer_proj (a : Exec.Answer O.Val O.Event (Store O.S
   cases ev <;> rfl
 
 /-- Law (authority: docs/decisions.md#decided-2026-11-05-core (Q9.10);
-#decided-2026-11-08-recovered-d3 (C5 erasure);
-#decided-2026-11-13-lifecycle-refusal). (subject `ConcreteSpec.Core.Own.stepInstrumented`). Single-step forward
-simulation
-(owner decision 2026-11-08 Q3): every labeled step produced by `stepInstrumented` on the instrumented C1 machine is
-matched by a step of the erased machine with the same event label and concrete store. -/
+#decided-2026-11-08-recovered-d3 (C5 erasure); #decided-2026-11-13-lifecycle-refusal). (subject
+`ConcreteSpec.Core.Own.stepInstrumented`). Single-step forward simulation (owner decision 2026-11-08
+Q3): every labeled step produced by `stepInstrumented` on the instrumented C1 machine is matched by
+a step of the erased machine with the same event label and concrete store. -/
 theorem Step_erasure (P : Exec.Program (instrumentOperands O types permit))
     (c : Exec.Config (instrumentOperands O types permit)) :
     match stepInstrumented O types permit P c with
@@ -916,11 +938,10 @@ theorem Step_erasure (P : Exec.Program (instrumentOperands O types permit))
       exact .prim hs_erased hallows_erased (hk_erased _ _ hk)
 
 /-- Law (authority: docs/decisions.md#decided-2026-11-05-core (Q9.10);
-#decided-2026-11-08-recovered-d3 (C5 erasure);
-#decided-2026-11-13-lifecycle-refusal). (subject `ConcreteSpec.Core.Own.stepInstrumented`). Every finite execution
-of the
-instrumented machine is simulated by C1 with the instrumentation erased. This is the
-unconditional Q3 obligation, separate from oracle evaluation and its `Ending.NotStuck` premise. -/
+#decided-2026-11-08-recovered-d3 (C5 erasure); #decided-2026-11-13-lifecycle-refusal). (subject
+`ConcreteSpec.Core.Own.stepInstrumented`). Every finite execution of the instrumented machine is
+simulated by C1 with the instrumentation erased. This is the unconditional Q3 obligation, separate
+from oracle evaluation and its `Ending.NotStuck` premise. -/
 theorem Steps_erasure (P : Exec.Program (instrumentOperands O types permit))
     (c : Exec.Config (instrumentOperands O types permit)) :
     FiniteSimulation O types permit (stepInstrumented O types permit P) P c := by
@@ -965,8 +986,8 @@ private theorem refused_erase (c : Exec.Config (instrumentOperands O types permi
   rcases c with ⟨ctrl, L, s, k⟩
   cases ctrl <;> simp [eraseConfig, eraseCtrl]
 
-/-- Helper (computation). Exposes the sole driver's non-refused branch for induction.
-It is an equation for Exec.runFrom, not a second execution policy. -/
+/-- Helper (computation). Exposes the sole driver's non-refused branch for induction. It is an
+equation for Exec.runFrom, not a second execution policy. -/
 private theorem runFrom_active {A : Exec.Operands} (P : Exec.Program A) (ρ : Exec.Oracle A)
     (fuel : Nat) (hist : List A.Event) (c : Exec.Config A) (h : c.ctrl ≠ .refused) :
     Exec.runFrom P ρ fuel hist c =
@@ -991,12 +1012,11 @@ private theorem runFrom_active {A : Exec.Operands} (P : Exec.Program A) (ρ : Ex
 
 
 /-- Law (authority: docs/decisions.md#decided-2026-11-05-core (Q9.10);
-#decided-2026-11-08-recovered-d3 (C5 erasure);
-#decided-2026-11-13-lifecycle-refusal). (subject `ConcreteSpec.Core.Own.liftOracle`). Fuel-indexed evaluator forward
-simulation (owner decision 2026-11-08 Q3): whenever
-the instrumented run reaches a non-stuck outcome (final—normal, returned or trapped—
-noAnswer, badAnswer or outOfFuel), the erased run reaches the matching outcome with
-the same events in order and the same concrete store. -/
+#decided-2026-11-08-recovered-d3 (C5 erasure); #decided-2026-11-13-lifecycle-refusal). (subject
+`ConcreteSpec.Core.Own.instrumentOperands`, `ConcreteSpec.Core.Own.liftOracle`). Fuel-indexed
+evaluator forward simulation (owner decision 2026-11-08 Q3): whenever the instrumented run reaches a
+non-stuck outcome (final—normal, returned or trapped— noAnswer, badAnswer or outOfFuel), the erased
+run reaches the matching outcome with the same events in order and the same concrete store. -/
 theorem runFrom_erasure (P : Exec.Program (instrumentOperands O types permit))
     (ρ : Exec.Oracle O) :
     ∀ (fuel : Nat) (hist : List O.Event)
@@ -1075,9 +1095,9 @@ theorem runFrom_erasure (P : Exec.Program (instrumentOperands O types permit))
 
 
 /-- Law (authority: docs/decisions.md#decided-2026-11-05-core (Q9.10);
-#decided-2026-11-08-recovered-d3 (C5 erasure);
-#decided-2026-11-13-lifecycle-refusal). (subject `ConcreteSpec.Core.Own.liftOracle`). Whole-run forward simulation
-from an empty event history (owner decision 2026-11-08 Q3). -/
+#decided-2026-11-08-recovered-d3 (C5 erasure); #decided-2026-11-13-lifecycle-refusal). (subject
+`ConcreteSpec.Core.Own.instrumentOperands`, `ConcreteSpec.Core.Own.liftOracle`). Whole-run forward
+simulation from an empty event history (owner decision 2026-11-08 Q3). -/
 theorem run_erasure (P : Exec.Program (instrumentOperands O types permit))
     (ρ : Exec.Oracle O) (fuel : Nat)
     (c : Exec.Config (instrumentOperands O types permit))
@@ -1087,8 +1107,8 @@ theorem run_erasure (P : Exec.Program (instrumentOperands O types permit))
   runFrom_erasure P ρ fuel [] c h
 
 
-/-- Helper (inversion). Under `EvalPermitted`, an instrumented operand evaluation that is
-stuck is also stuck in the erased operand instance. -/
+/-- Helper (inversion). Under `EvalPermitted`, an instrumented operand evaluation that is stuck is
+also stuck in the erased operand instance. -/
 private theorem eval_stuck_of_permitted_inv (L : AList Var O.Val) (s : Store O.Store)
     (e : O.Expr) (hp : EvalPermitted O permit L s e)
     (hs : (instrumentOperands O types permit).eval L s e = .stuck) :
@@ -1108,8 +1128,8 @@ private theorem eval_stuck_of_permitted_inv (L : AList Var O.Val) (s : Store O.S
     cases hs
   | stuck => exact hc
 
-/-- Helper (inversion). Under `LifePermitted`, an instrumented lifecycle transition that
-returns `none` also returns `none` on the erased store. -/
+/-- Helper (inversion). Under `LifePermitted`, an instrumented lifecycle transition that returns
+`none` also returns `none` on the erased store. -/
 private theorem life_none_of_permitted_inv (ev : Exec.Life) (s : Store O.Store)
     (hp : LifePermitted O types ev s)
     (hs : (instrumentOperands O types permit).life ev s = none) :
@@ -1123,8 +1143,8 @@ private theorem life_none_of_permitted_inv (ev : Exec.Life) (s : Store O.Store)
     rw [hown, hc] at hs
     cases hs
 
-/-- Helper (inversion). Under `BindDstPermitted`, an instrumented destination-binding
-lifecycle that returns `none` also returns `none` on the erased store. -/
+/-- Helper (inversion). Under `BindDstPermitted`, an instrumented destination-binding lifecycle that
+returns `none` also returns `none` on the erased store. -/
 private theorem bindLife_none_of_permitted_inv (dst : Option Var) (s : Store O.Store)
     (hp : BindDstPermitted O types dst s)
     (hs : Exec.bindLife (instrumentOperands O types permit) dst s = none) :
@@ -1133,8 +1153,8 @@ private theorem bindLife_none_of_permitted_inv (dst : Option Var) (s : Store O.S
   | none => cases hs
   | some x => exact life_none_of_permitted_inv (O := O) (permit := permit) (.bind x) s hp hs
 
-/-- Helper (inversion). Under `LifePermitted`, an instrumented scope-exit drop that
-returns `none` also returns `none` on the erased store. -/
+/-- Helper (inversion). Under `LifePermitted`, an instrumented scope-exit drop that returns `none`
+also returns `none` on the erased store. -/
 private theorem dropOut_none_of_permitted_inv (dm : List Var) (L : AList Var O.Val)
     (s : Store O.Store) (hp : LifePermitted O types (.drop (Exec.dead dm L)) s)
     (hs : Exec.dropOut (instrumentOperands O types permit) dm L s = none) :
@@ -1168,11 +1188,11 @@ private theorem checkerAccepted_step_inv
   fun tr c'' hsteps => hacc (l.events ++ tr) c'' (.step hs hsteps)
 
 /-- Law (authority: docs/decisions.md#decided-2026-11-05-core (Q9.10);
-#decided-2026-11-08-recovered-d3 (C5 erasure);
-#decided-2026-11-13-lifecycle-refusal). (subject `ConcreteSpec.Core.Own.stepInstrumented`). Single-step stuck
-equivalence for checker-accepted programs (owner decision 2026-11-08 Q3):
-at any configuration accepted by the ownership checker, the instrumented C1 machine has no
-step iff the erased machine has no step. -/
+#decided-2026-11-08-recovered-d3 (C5 erasure); #decided-2026-11-13-lifecycle-refusal). (subject
+`ConcreteSpec.Core.Own.instrumentOperands`, `ConcreteSpec.Core.Own.stepInstrumented`). Single-step
+stuck equivalence for checker-accepted programs (owner decision 2026-11-08 Q3): at any configuration
+accepted by the ownership checker, the instrumented C1 machine has no step iff the erased machine
+has no step. -/
 theorem step_stuck_iff_of_accepted
     (P : Exec.Program (instrumentOperands O types permit))
     (c : Exec.Config (instrumentOperands O types permit))
@@ -1189,7 +1209,8 @@ theorem step_stuck_iff_of_accepted
         ArgsPermitted O types permit L s args →
         Exec.evalArgs (instrumentOperands O types permit) L s args = .stuck →
         Exec.evalArgs O L (erase s) args = .stuck :=
-      fun args s hp hs => (evalArgs_stuck_iff_of_permitted (O := O) (types := types) (permit := permit) L args s hp).mp hs
+      fun args s hp hs => (evalArgs_stuck_iff_of_permitted (O := O) (types := types) (permit :=
+          permit) L args s hp).mp hs
     cases ctrl with
     | exec s =>
       cases s with
@@ -1415,8 +1436,8 @@ theorem step_stuck_iff_of_accepted
         rw [herased] at h'
         cases h'
 
-/-- Helper: accepted request continuations preserve failure as well as success.
-This is shared by relational converse and oracle report erasure. -/
+/-- Helper: accepted request continuations preserve failure as well as success. This is shared by
+relational converse and oracle report erasure. -/
 private theorem request_none_of_permitted
     (P : Exec.Program (instrumentOperands O types permit))
     (c : Exec.Config (instrumentOperands O types permit))
@@ -1429,172 +1450,47 @@ private theorem request_none_of_permitted
     (hk : k a = none) :
     ∃ ke, Exec.step (eraseProgram P) (eraseConfig c) =
       some (.request p vs site (erase st) ke) ∧ ke (eraseAnswer a) = none := by
+  obtain ⟨x, p', args, site', hc⟩ := step_request_ctrl_inv P c p vs site st k hs
   rcases c with ⟨ctrl, L, s, frames⟩
-  cases ctrl with
-  | exec stmt =>
-    cases stmt with
-    | skip => cases hs
-    | bind x e _ =>
-      simp only [Exec.step, instrumentOperands] at hs
-      cases he : instrumentEval O permit L s e with
-      | ok r =>
-        rcases r with ⟨_, _⟩; rw [he] at hs
-        simp only [Exec.onRes, Option.map_eq_some_iff] at hs
-        obtain ⟨_, _, hs⟩ := hs; cases hs
-      | trap _ => rw [he] at hs; cases hs
-      | stuck => rw [he] at hs; cases hs
-    | assign x e _ =>
-      simp only [Exec.step, instrumentOperands] at hs
-      cases he : instrumentEval O permit L s e with
-      | ok r =>
-        rcases r with ⟨_, _⟩; rw [he] at hs
-        simp only [Exec.onRes, Option.bind_eq_some_iff, Option.map_eq_some_iff] at hs
-        obtain ⟨_, _, _, _, hs⟩ := hs; cases hs
-      | trap _ => rw [he] at hs; cases hs
-      | stuck => rw [he] at hs; cases hs
-    | seq _ _ => cases hs
-    | block _ _ => cases hs
-    | defer _ _ _ =>
-      simp only [Exec.step, Option.map_eq_some_iff] at hs
-      obtain ⟨_, _, hs⟩ := hs; cases hs
-    | cond e _ _ _ =>
-      simp only [Exec.step, instrumentOperands] at hs
-      cases he : instrumentEval O permit L s e with
-      | ok r =>
-        rcases r with ⟨_, _⟩; rw [he] at hs
-        simp only [Exec.onRes, Option.map_eq_some_iff] at hs
-        obtain ⟨_, _, hs⟩ := hs; cases hs
-      | trap _ => rw [he] at hs; cases hs
-      | stuck => rw [he] at hs; cases hs
-    | loop _ _ _ _ _ => cases hs
-    | brk _ => cases hs
-    | cont _ => cases hs
-    | ret e _ =>
-      simp only [Exec.step, instrumentOperands] at hs
-      cases he : instrumentEval O permit L s e with
-      | ok r => rcases r with ⟨_, _⟩; rw [he] at hs; cases hs
-      | trap _ => rw [he] at hs; cases hs
-      | stuck => rw [he] at hs; cases hs
-    | call dst f args _ =>
-      simp only [Exec.step] at hs
-      cases he : Exec.evalArgs (instrumentOperands O types permit) L s args with
-      | ok r =>
-        rcases r with ⟨vs', st'⟩; rw [he] at hs
-        simp only [Exec.onRes, Option.bind_eq_some_iff] at hs
-        obtain ⟨fn, _, hs⟩ := hs
-        by_cases hlen : fn.params.length = vs'.length
-        · simp only [hlen, ↓reduceIte, Option.map_eq_some_iff] at hs
-          obtain ⟨_, _, hs⟩ := hs; cases hs
-        · simp only [hlen, ↓reduceIte] at hs; cases hs
-      | trap _ => rw [he] at hs; cases hs
-      | stuck => rw [he] at hs; cases hs
-    | prim x p' args site' =>
-      obtain ⟨_, hpb⟩ := hperm
-      dsimp [Exec.step, eraseConfig, eraseCtrl, eraseStmt] at hs ⊢
-      cases he : Exec.evalArgs (instrumentOperands O types permit) L s args with
-      | ok r =>
-        rcases r with ⟨vs', st'⟩
-        have he_erased : Exec.evalArgs O L (erase s) args = .ok (vs', erase st') := by
-          have h0 := evalArgs_ok_erasure (O := O) (types := types) (permit := permit) L args s
-          rw [he] at h0
-          exact h0
-        rw [he] at hs
-        dsimp [Exec.onRes] at hs
-        injection hs with hs
-        injection hs with hp_eq hvs hsite hst hk_eq
-        subst hp_eq; subst hvs; subst hsite; subst hst; subst hk_eq
-        refine ⟨_, by rw [he_erased]; rfl, ?_⟩
-        dsimp at hk ⊢
-        cases ha : a.result with
-        | ok v =>
-          rw [ha] at hk
-          simp only [Option.map_eq_none_iff] at hk
-          have hok : a.result.isOk = true := by rw [ha]; rfl
-          have hbind := hpb vs' st' a he ha' hok
-          dsimp [eraseAnswer]
-          rw [ha]
-          dsimp
-          rw [bindLife_none_of_permitted_inv (O := O) (permit := permit) x a.store hbind hk]
-          rfl
-        | error kd =>
-          rw [ha] at hk
-          cases hk
-      | trap _ => rw [he] at hs; cases hs
-      | stuck => rw [he] at hs; cases hs
-    | abort _ => cases hs
-  | done =>
-    cases frames with
-    | nil => cases hs
-    | cons f k' =>
-      cases f with
-      | seq _ => cases hs
-      | scope b dm ds =>
-        cases ds with
-        | nil =>
-          simp only [Exec.step, Option.map_eq_some_iff] at hs
-          obtain ⟨_, _, hs⟩ := hs; cases hs
-        | cons _ _ => cases hs
-      | test l cr t b site' dm =>
-        simp only [Exec.step, instrumentOperands] at hs
-        cases he : instrumentEval O permit L s t with
-        | ok r =>
-          rcases r with ⟨_, _⟩; rw [he] at hs
-          simp only [Exec.onRes, Option.bind_eq_some_iff, Option.map_eq_some_iff] at hs
-          obtain ⟨go, _, _, _, hs⟩ := hs
-          cases go <;> cases hs
-        | trap _ => rw [he] at hs; cases hs
-        | stuck => rw [he] at hs; cases hs
-      | body _ _ _ _ _ => cases hs
-      | resume p' => cases p' <;> cases hs
-      | functionEnd =>
-        simp only [Exec.step, Option.map_eq_some_iff] at hs
-        obtain ⟨_, _, hs⟩ := hs; cases hs
-      | ret _ _ =>
-        simp only [Exec.step, Option.map_eq_some_iff] at hs
-        obtain ⟨_, _, hs⟩ := hs; cases hs
-  | exiting e =>
-    dsimp [Exec.step] at hs
-    cases frames with
-    | nil => cases hs
-    | cons f k' =>
-      cases f with
-      | seq _ => cases hs
-      | scope b dm ds =>
-        cases ds with
-        | nil =>
-          simp only [Exec.stepExit, Option.map_eq_some_iff] at hs
-          obtain ⟨_, _, hs⟩ := hs; cases hs
-        | cons _ _ => cases hs
-      | test _ _ _ _ _ _ =>
-        simp only [Exec.stepExit, Option.map_eq_some_iff] at hs
-        obtain ⟨_, _, hs⟩ := hs; cases hs
-      | body l _ _ _ _ =>
-        cases e with
-        | brk l' => by_cases hl : l' = l <;> simp [Exec.stepExit, hl] at hs
-        | cont l' => by_cases hl : l' = l <;> simp [Exec.stepExit, hl] at hs
-        | ret _ => cases hs
-      | resume _ => cases hs
-      | functionEnd =>
-        cases e with
-        | brk _ => cases hs
-        | cont _ => cases hs
-        | ret _ =>
-          simp only [Exec.stepExit, Option.map_eq_some_iff] at hs
-          obtain ⟨_, _, hs⟩ := hs; cases hs
-      | ret _ _ =>
-        cases e with
-        | brk _ => cases hs
-        | cont _ => cases hs
-        | ret _ =>
-          simp only [Exec.stepExit, Option.map_eq_some_iff] at hs
-          obtain ⟨_, _, hs⟩ := hs; cases hs
-  | trapped _ _ => cases hs
-  | refused => cases hs
+  dsimp at hc
+  subst ctrl
+  obtain ⟨_, hpb⟩ := hperm
+  dsimp [Exec.step, eraseConfig, eraseCtrl, eraseStmt] at hs ⊢
+  cases he : Exec.evalArgs (instrumentOperands O types permit) L s args with
+  | ok r =>
+    rcases r with ⟨vs', st'⟩
+    have he_erased : Exec.evalArgs O L (erase s) args = .ok (vs', erase st') := by
+      have h0 := evalArgs_ok_erasure (O := O) (types := types) (permit := permit) L args s
+      rw [he] at h0
+      exact h0
+    rw [he] at hs
+    dsimp [Exec.onRes] at hs
+    injection hs with hs
+    injection hs with hp_eq hvs hsite hst hk_eq
+    subst hp_eq; subst hvs; subst hsite; subst hst; subst hk_eq
+    refine ⟨_, by rw [he_erased]; rfl, ?_⟩
+    dsimp at hk ⊢
+    cases ha : a.result with
+    | ok v =>
+      rw [ha] at hk
+      simp only [Option.map_eq_none_iff] at hk
+      have hok : a.result.isOk = true := by rw [ha]; rfl
+      have hbind := hpb vs' st' a he ha' hok
+      dsimp [eraseAnswer]
+      rw [ha]
+      dsimp
+      rw [bindLife_none_of_permitted_inv (O := O) (permit := permit) x a.store hbind hk]
+      rfl
+    | error kd =>
+      rw [ha] at hk
+      cases hk
+  | trap _ => rw [he] at hs; cases hs
+  | stuck => rw [he] at hs; cases hs
 
-/-- Law (subject `ConcreteSpec.Core.Own.stepInstrumented`; authority: docs/decisions.md#decided-2026-11-08-recovered-d3, C5;
-#decided-2026-11-05-core, Q9.10). Every concrete relational transition lifts
-from an accepted configuration. The answer is chosen independently at each step;
-no deterministic oracle restricts the environment. -/
+/-- Law (subject `ConcreteSpec.Core.Own.stepInstrumented`; authority:
+docs/decisions.md#decided-2026-11-08-recovered-d3, C5; #decided-2026-11-05-core, Q9.10). Every
+concrete relational transition lifts from an accepted configuration. The answer is chosen
+independently at each step; no deterministic oracle restricts the environment. -/
 theorem Step_converse_of_accepted
     (P : Exec.Program (instrumentOperands O types permit))
     (c : Exec.Config (instrumentOperands O types permit))
@@ -1624,7 +1520,8 @@ theorem Step_converse_of_accepted
         cases h
         rename_i a
         have ha' : (instrumentOperands O types permit).allows p vs st
-            (liftAnswer st.own a) = true := (allows_liftAnswer_proj (O := O) (types := types) (permit := permit) p vs st a).trans ha
+            (liftAnswer st.own a) = true := (allows_liftAnswer_proj (O := O) (types := types)
+                (permit := permit) p vs st a).trans ha
         have hea : eraseAnswer (liftAnswer st.own a) = a := by cases a; rfl
         cases hki : k (liftAnswer st.own a) with
         | none =>
@@ -1641,9 +1538,10 @@ theorem Step_converse_of_accepted
           exact ⟨(liftAnswer st.own a).label, ci, .prim hs ha' hki,
             by rw [eraseLabel_answer_proj, hea], hc.symm⟩
 
-/-- Law (subject `ConcreteSpec.Core.Own.stepInstrumented`; authority: docs/decisions.md#decided-2026-11-08-recovered-d3, C5).
-Every finite concrete trace lifts under checker acceptance, preserving its full
-ordered events and concrete endpoint, even with history-dependent answer choices. -/
+/-- Law (subject `ConcreteSpec.Core.Own.stepInstrumented`; authority:
+docs/decisions.md#decided-2026-11-08-recovered-d3, C5). Every finite concrete trace lifts under
+checker acceptance, preserving its full ordered events and concrete endpoint, even with
+history-dependent answer choices. -/
 theorem Steps_converse_of_accepted
     (P : Exec.Program (instrumentOperands O types permit))
     (c : Exec.Config (instrumentOperands O types permit))
@@ -1663,11 +1561,10 @@ theorem Steps_converse_of_accepted
     simpa only [hev] using Exec.Steps.step hsi hdest
 
 /-- Law (authority: docs/decisions.md#decided-2026-11-05-core (Q9.10);
-#decided-2026-11-08-recovered-d3 (C5 erasure);
-#decided-2026-11-13-lifecycle-refusal). (subjects `ConcreteSpec.Core.Own.liftOracle`,
-`ConcreteSpec.Core.Own.instrumentOperands`). Exact fuel-indexed simulation
-for checker-accepted programs (owner decision 2026-11-08 Q3):
-when the program and initial configuration satisfy `CheckerAccepted`, the erased run equals the erased report of the
+#decided-2026-11-08-recovered-d3 (C5 erasure); #decided-2026-11-13-lifecycle-refusal). (subject
+`ConcreteSpec.Core.Own.liftOracle`, `ConcreteSpec.Core.Own.instrumentOperands`). Exact fuel-indexed
+simulation for checker-accepted programs (owner decision 2026-11-08 Q3): when the program and
+initial configuration satisfy `CheckerAccepted`, the erased run equals the erased report of the
 instrumented run for every outcome, including stuck. -/
 theorem runFrom_erasure_of_accepted
     (P : Exec.Program (instrumentOperands O types permit))
@@ -1769,11 +1666,10 @@ theorem runFrom_erasure_of_accepted
 
 
 /-- Law (authority: docs/decisions.md#decided-2026-11-05-core (Q9.10);
-#decided-2026-11-08-recovered-d3 (C5 erasure);
-#decided-2026-11-13-lifecycle-refusal). (subject `ConcreteSpec.Core.Own.liftOracle`). Converse stuck equivalence for
-checker-accepted programs (owner decision 2026-11-08 Q3):
-for a program and initial configuration accepted by the ownership checker, the instrumented
-C1 machine is stuck iff the erased machine is stuck. -/
+#decided-2026-11-08-recovered-d3 (C5 erasure); #decided-2026-11-13-lifecycle-refusal). (subject
+`ConcreteSpec.Core.Own.liftOracle`). Converse stuck equivalence for checker-accepted programs (owner
+decision 2026-11-08 Q3): for a program and initial configuration accepted by the ownership checker,
+the instrumented C1 machine is stuck iff the erased machine is stuck. -/
 theorem run_stuck_iff_of_accepted
     (P : Exec.Program (instrumentOperands O types permit))
     (ρ : Exec.Oracle O) (fuel : Nat)

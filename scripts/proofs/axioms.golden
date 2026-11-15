@@ -2320,6 +2320,7 @@ ConcreteSpec.Core.Own.Projection.index.inj
 ConcreteSpec.Core.Own.Projection.index.injEq	propext
 ConcreteSpec.Core.Own.Projection.index.sizeOf_spec	
 ConcreteSpec.Core.Own.RefusalEvidence.missingPermitted	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Own.RefusalEvidence.readPairPermitted	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Own.RefusalEvidence.readPermitted	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Own.RefusalEvidence.trapPermitted	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Own.Registry.dropAccepted	propext
@@ -2582,7 +2583,6 @@ ConcreteSpec.Core.Own.step_next_erasure._simp_1_23	Quot.sound propext
 ConcreteSpec.Core.Own.step_next_erasure._simp_1_24	Quot.sound propext
 ConcreteSpec.Core.Own.step_request_erasure	Quot.sound propext
 ConcreteSpec.Core.Own.step_request_erasure._simp_1_1	Quot.sound propext
-ConcreteSpec.Core.Own.step_request_erasure._simp_1_2	Quot.sound propext
 ConcreteSpec.Core.Own.step_stuck_iff_of_accepted	Quot.sound propext
 ConcreteSpec.Core.Own.step_stuck_iff_of_accepted._simp_1_1	propext
 ConcreteSpec.Core.Own.test_erasure	propext
@@ -4931,9 +4931,7 @@ _private.ConcreteSpec.Proofs.OwnErasure.0.ConcreteSpec.Core.Own.register_erasure
 _private.ConcreteSpec.Proofs.OwnErasure.0.ConcreteSpec.Core.Own.register_none_proj	propext
 _private.ConcreteSpec.Proofs.OwnErasure.0.ConcreteSpec.Core.Own.register_none_proj._simp_1_3	propext
 _private.ConcreteSpec.Proofs.OwnErasure.0.ConcreteSpec.Core.Own.request_none_of_permitted	Quot.sound propext
-_private.ConcreteSpec.Proofs.OwnErasure.0.ConcreteSpec.Core.Own.request_none_of_permitted._simp_1_1	Quot.sound propext
-_private.ConcreteSpec.Proofs.OwnErasure.0.ConcreteSpec.Core.Own.request_none_of_permitted._simp_1_2	Quot.sound propext
-_private.ConcreteSpec.Proofs.OwnErasure.0.ConcreteSpec.Core.Own.request_none_of_permitted._simp_1_3	propext
+_private.ConcreteSpec.Proofs.OwnErasure.0.ConcreteSpec.Core.Own.request_none_of_permitted._simp_1_1	propext
 _private.ConcreteSpec.Proofs.OwnErasure.0.ConcreteSpec.Core.Own.runFrom_active	propext
 _private.ConcreteSpec.Proofs.OwnErasure.0.ConcreteSpec.Core.Own.runFrom_active.match_1.eq_1	
 _private.ConcreteSpec.Proofs.OwnErasure.0.ConcreteSpec.Core.Own.runFrom_active.match_1.eq_2	
@@ -4946,6 +4944,9 @@ _private.ConcreteSpec.Proofs.OwnErasure.0.ConcreteSpec.Core.Own.runFrom_active.m
 _private.ConcreteSpec.Proofs.OwnErasure.0.ConcreteSpec.Core.Own.runFrom_active.match_7.eq_2	
 _private.ConcreteSpec.Proofs.OwnErasure.0.ConcreteSpec.Core.Own.runFrom_active.match_9.eq_1	
 _private.ConcreteSpec.Proofs.OwnErasure.0.ConcreteSpec.Core.Own.runFrom_active.match_9.eq_2	
+_private.ConcreteSpec.Proofs.OwnErasure.0.ConcreteSpec.Core.Own.step_request_ctrl_inv	Quot.sound propext
+_private.ConcreteSpec.Proofs.OwnErasure.0.ConcreteSpec.Core.Own.step_request_ctrl_inv._simp_1_1	Quot.sound propext
+_private.ConcreteSpec.Proofs.OwnErasure.0.ConcreteSpec.Core.Own.step_request_ctrl_inv._simp_1_2	Quot.sound propext
 _private.ConcreteSpec.Proofs.OwnErasure.0.ConcreteSpec.Core.Res.bind.match_1.eq_1	
 _private.ConcreteSpec.Proofs.OwnErasure.0.ConcreteSpec.Core.Res.bind.match_1.eq_2	
 _private.ConcreteSpec.Proofs.OwnErasure.0.ConcreteSpec.Core.Res.bind.match_1.eq_3	
