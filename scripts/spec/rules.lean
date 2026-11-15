@@ -1,3 +1,4 @@
+import ConcreteSpec.Proofs.LeakRegistry
 -- The gate appends this same exporter body to fixtures after their declarations.
 import ConcreteSpec.Spec.Rules
 import Lean

@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.LeakData
 import ConcreteSpec.Spec.Accounting
 import ConcreteSpec.Spec.Const
 import ConcreteSpec.Spec.Ident
@@ -24,6 +25,11 @@ def registeredRules : List RuleId :=
   [⟨``ConstsPermitted, 1⟩, ⟨``Own.OwnerPermitted, 1⟩, ⟨``Own.LoanPermitted, 1⟩,
    ⟨``Own.EndPermitted, 1⟩, ⟨``Own.MovePermitted, 1⟩,
    ⟨``Own.DropPermitted, 1⟩, ⟨``Own.LeavePermitted, 1⟩,
+   ⟨``Leak.UnitCallsAdmitted, 1⟩, ⟨``Leak.IntegerProgramAdmitted, 1⟩,
+   ⟨``Leak.StringReleasePermitted, 1⟩, ⟨``Leak.UnitReleaseForbidden, 1⟩,
+   ⟨``Leak.UnitTraceAuthorized, 1⟩, ⟨``Leak.IntegerRunsAuthorized, 1⟩,
+   ⟨``Leak.IntegerLowEquivalent, 1⟩, ⟨``Leak.IntegerDelimitedReleaseNI, 1⟩,
+   ⟨``Leak.IntegerConstantTime, 1⟩,
    ⟨``Leak.Account.WF, 1⟩, ⟨``Leak.ResetConserved, 1⟩, ⟨``Leak.SignedNetSound, 1⟩,
    ⟨``Leak.ByteBoundSound, 1⟩, ⟨``Leak.ByteBoundSoundOptional, 1⟩, ⟨``Leak.ReportSound, 1⟩,
    ⟨``Leak.FiniteActionPermitted, 1⟩, ⟨``Leak.FiniteSequencePermitted, 1⟩]
@@ -213,6 +219,24 @@ def registeredRuleExamples : List RuleExample :=
    ⟨``Own.DropPermitted, ``Own.Registry.dropRefused⟩,
    ⟨``Own.LeavePermitted, ``Own.Registry.leaveAccepted⟩,
    ⟨``Own.LeavePermitted, ``Own.Registry.leaveRefused⟩,
+   ⟨``Leak.UnitCallsAdmitted, `ConcreteSpec.Core.Leak.Registry.callsAccepted⟩,
+   ⟨``Leak.UnitCallsAdmitted, `ConcreteSpec.Core.Leak.Registry.callsRefused⟩,
+   ⟨``Leak.IntegerProgramAdmitted, `ConcreteSpec.Core.Leak.Registry.programAccepted⟩,
+   ⟨``Leak.IntegerProgramAdmitted, `ConcreteSpec.Core.Leak.Registry.programRefused⟩,
+   ⟨``Leak.StringReleasePermitted, `ConcreteSpec.Core.Leak.Registry.permitsAccepted⟩,
+   ⟨``Leak.StringReleasePermitted, `ConcreteSpec.Core.Leak.Registry.permitsRefused⟩,
+   ⟨``Leak.UnitReleaseForbidden, `ConcreteSpec.Core.Leak.Registry.forbidsAccepted⟩,
+   ⟨``Leak.UnitReleaseForbidden, `ConcreteSpec.Core.Leak.Registry.forbidsRefused⟩,
+   ⟨``Leak.UnitTraceAuthorized, `ConcreteSpec.Core.Leak.Registry.authorizedAccepted⟩,
+   ⟨``Leak.UnitTraceAuthorized, `ConcreteSpec.Core.Leak.Registry.authorizedRefused⟩,
+   ⟨``Leak.IntegerRunsAuthorized, `ConcreteSpec.Core.Leak.Registry.runsAccepted⟩,
+   ⟨``Leak.IntegerRunsAuthorized, `ConcreteSpec.Core.Leak.Registry.runsRefused⟩,
+   ⟨``Leak.IntegerLowEquivalent, `ConcreteSpec.Core.Leak.Registry.lowAccepted⟩,
+   ⟨``Leak.IntegerLowEquivalent, `ConcreteSpec.Core.Leak.Registry.lowRefused⟩,
+   ⟨``Leak.IntegerDelimitedReleaseNI, `ConcreteSpec.Core.Leak.Registry.niAccepted⟩,
+   ⟨``Leak.IntegerDelimitedReleaseNI, `ConcreteSpec.Core.Leak.Registry.niRefused⟩,
+   ⟨``Leak.IntegerConstantTime, `ConcreteSpec.Core.Leak.Registry.ctAccepted⟩,
+   ⟨``Leak.IntegerConstantTime, `ConcreteSpec.Core.Leak.Registry.ctRefused⟩,
    ⟨``Leak.Account.WF, ``Leak.Registry.wfAccepted⟩,
    ⟨``Leak.Account.WF, ``Leak.Registry.wfRefused⟩,
    ⟨``Leak.ResetConserved, ``Leak.Registry.resetAccepted⟩,

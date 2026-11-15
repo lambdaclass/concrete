@@ -132,6 +132,20 @@ fixture('authority-roadmap-mention', decl=rule.replace('Q9.1', 'R-0001'),
 # but an opaque value of exactly that shape cannot certify an inspectable instance.
 for name, carrier, value in [
     ('c7-signed', 'Int × Leak.SignedInterval', '(-3, ⟨-4, -2, .boundEstablished⟩)'),
+    ('c7-program', 'Leak.ReleaseInterface Unit × List (FnId × Leak.IntegerFunction)',
+     '(⟨[], ⟨[]⟩⟩, [])'),
+    ('c7-runs', 'Leak.ReleasePolicy Unit × Leak.IntegerExecution',
+     '(⟨[⟨⟨0⟩, ()⟩]⟩, ⟨[], ⟨.prim none .release [.lit 0] ⟨0⟩, [], 1⟩⟩)'),
+    *[(f'c7-{name}', 'Leak.IntegerComparison',
+       '⟨[], ⟨.prim none .release [.lit 0] ⟨0⟩, [], 1⟩, ⟨.prim none .output [.secret] ⟨1⟩, [], 2⟩⟩')
+      for name in ['low', 'ni', 'ct']],
+    ('c7-calls', 'Leak.ReleaseInterface Unit × Leak.ReleaseCalls Unit',
+     '(⟨[], ⟨[]⟩⟩, ⟨[], []⟩)'),
+    ('c7-typed-site', 'Leak.ReleasePolicy String × Leak.Release String Nat',
+     '(⟨[⟨⟨7⟩, "public"⟩]⟩, ⟨⟨⟨7⟩, "public"⟩, 3⟩)'),
+    ('c7-forbidden', 'Leak.ReleasePolicy Unit', '⟨[]⟩'),
+    ('c7-authorized', 'Leak.ReleasePolicy Unit × List (Leak.Release Unit Int)',
+     '(⟨[⟨⟨7⟩, ()⟩]⟩, [⟨⟨⟨7⟩, ()⟩, 3⟩])'),
     ('c7-reset', 'Leak.Account × Leak.Account × Nat', '(⟨8, 5, 8, 8⟩, ⟨8, 0, 8, 8⟩, 5)'),
     ('c7-report', 'LineageId × Leak.Account × Leak.Account × Option Nat × Leak.LineageReport',
      '(⟨0⟩, ⟨8, 5, 8, 8⟩, ⟨8, 0, 8, 8⟩, some 10, '
