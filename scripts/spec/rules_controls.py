@@ -165,6 +165,8 @@ for name, entry, anchor, diagnostic in [
     ('nested-numbered-provenance', opening + '  Owner reply: yes.\n\n  1. Child\n\n     Provenance: nested.\n', control_anchor, 'ISS-0083'),
     ('dated-no-owner-reply', opening + '  Provenance: session.\n', control_anchor, 'ISS-0083'),
     ('held-code-title', '- <a id="control"></a>**Rule `held`** (owner, 2026-11-15: "ok").\n', 'control', 'disposition in title: held'),
+    ('softbroken-owner-marker', '- <a id="control"></a>**Rule** (owner,\n  2026-11-15: "ok").\n', 'control', 'ISS-0083'),
+    ('hardbroken-owner-marker', '- <a id="control"></a>**Rule** (owner,  \n  2026-11-15: "ok").\n', 'control', 'ISS-0083'),
     ('intervening-code', '- <a id="control"></a>**Rule** `intervening` (owner, 2026-11-15: "ok").\n', 'control', 'ISS-0083'),
 ]:
     rows.write_text(production_rows + '\n' + entry)
@@ -198,7 +200,7 @@ for name, prose in [
             reason='OPEN-38: authority status not machine-readable')
 # All three accepted forms, ordered items and nested items remain usable.
 for name, entry in [
-    ('dated', opening + '  Provenance: session.\n  Owner reply: yes.\n'),
+    ('dated', opening + '\n  Provenance: session.\n\n  Owner reply: yes.\n\n  ```text\n  yes\n  ```\n'),
     ('ordered', '1. <a id="' + control_anchor + '"></a>*Control* (owner, 2026-11-15: "yes").\n'),
     ('nested', '- Parent\n  - <a id="' + control_anchor + '"></a>**Control** (owner, 2026-11-15: "yes").\n'),
 ]:
@@ -212,6 +214,70 @@ rows.write_text('- <a id="decided-2026-11-13-d4-recovery"></a>**D4**\n\n'
     '- <a id="recovered-control"></a>**Recovered**\n')
 fixture('authority-commonmark-accepted-retained',
         decl=rule.replace('Q9.1', 'docs/decisions.md#recovered-control'))
+# Round 7: every concrete round-5/6 reproducer must name its refusal.
+for name, entry, anchor, diagnostic in [
+    ('image-held', '- <a id="control"></a>**Rule ![held](x)** (owner, 2026-11-15: "ok").\n', 'control', 'unsupported title construct: image'),
+    ('code-provenance', opening + '\n  `Provenance: transcript`\n\n  Owner reply: yes.\n\n  ```text\n  yes\n  ```\n', control_anchor, 'ISS-0083'),
+    ('code-owner-reply', opening + '\n  Provenance: transcript\n\n  `Owner reply: verbatim`\n\n  ```text\n  yes\n  ```\n', control_anchor, 'ISS-0083'),
+    ('negated-owner-reply', opening + '\n  Provenance: audit note.\n\n  Owner reply is missing; held for confirmation.\n\n  ```text\n  yes\n  ```\n', control_anchor, 'ISS-0083'),
+    ('softwrapped-owner-reply', opening + '\n  Provenance: audit note.\n\n  Missing header\n  Owner reply: yes.\n\n  ```text\n  yes\n  ```\n', control_anchor, 'ISS-0083'),
+    ('duplicate-entry', '- <a id="control"></a>**Held**\n- <a id="control"></a>**Rule** (owner, 2026-11-15: "ok").\n', 'control', 'duplicate authority anchor: control'),
+    ('qualified-owner-reply', opening + '\n  Provenance: audit note.\n\n  Owner reply, probably yes:\n\n  ```text\n  yes\n  ```\n', control_anchor, 'ISS-0083'),
+    ('linked-provenance', opening + '\n  [Provenance:](x) transcript\n\n  Owner reply:\n\n  ```text\n  yes\n  ```\n', control_anchor, 'ISS-0083'),
+    ('linked-owner-reply', opening + '\n  Provenance: transcript\n\n  [Owner reply:](x)\n\n  ```text\n  yes\n  ```\n', control_anchor, 'ISS-0083'),
+    ('duplicate-table', '| Entry |\n|---|\n| <a id="control"></a>Text |\n\n- <a id="control"></a>**Rule** (owner, 2026-11-15: "ok").\n', 'control', 'duplicate authority anchor: control'),
+    ('duplicate-navigation', '- <a id="waiting-for-the-owner"></a>**Rule** (owner, 2026-11-15: "ok").\n', 'waiting-for-the-owner', 'duplicate authority anchor'),
+]:
+    rows.write_text(production_rows + '\n' + entry)
+    fixture('authority-closed-' + name,
+            decl=rule.replace('Q9.1', 'docs/decisions.md#' + anchor), reason=diagnostic)
+for name, title, diagnostic in [
+    ('link', '[held](x)', 'link_open'), ('html', '<span>held</span>', 'html_inline'),
+    ('autolink', '<https://example.org>', 'link_open'), ('footnote', '[^held]', 'footnote-like syntax'),
+    ('softbreak', 'Rule\n  held', 'softbreak'), ('hardbreak', 'Rule  \n  held', 'hardbreak'),
+]:
+    rows.write_text(production_rows + '\n- <a id="control"></a>**' + title + '** (owner, 2026-11-15: "ok").\n')
+    fixture('authority-title-allowlist-' + name,
+            decl=rule.replace('Q9.1', 'docs/decisions.md#control'),
+            reason='unsupported title construct: ' + diagnostic)
+for prefix in ['`Closed`', '[Closed](x)', 'Not Closed', 'Possibly Closed']:
+    rows.write_text(production_rows.replace('## Waiting for the owner\n',
+        '## Waiting for the owner\n\n- ' + prefix + ' [control](#' + valid + ')\n\n'))
+    fixture('authority-closed-marker-' + str(len(prefix)) + prefix[:1],
+            decl=rule.replace('Q9.1', 'docs/decisions.md#' + valid),
+            reason='open in Waiting for the owner')
+rows.write_text(production_rows)
+for name, target, diagnostic in [
+    ('open', 'docs/decisions.md#OPEN-38', 'ISS-0083'),
+    ('waiting', 'docs/decisions.md#decided-2026-11-08-spelling-round', 'open in Waiting'),
+    ('partial', 'docs/decisions.md#recovered-29-22', 'disposition in title: partial'),
+    ('missing', 'docs/decisions.md#missing', 'missing authority anchor'),
+    ('wrong', 'ROADMAP.md#' + valid, 'wrong authority path'),
+]:
+    for kind in ['inline', 'reference', 'image']:
+        linked = ('![label](' + target + ')' if kind == 'image' else
+                  '[label](' + target + ')' if kind == 'inline' else
+                  '[label][ref]\n\n[ref]: ' + target)
+        for order in ['first', 'last']:
+            prose = ('docs/decisions.md#' + valid + '\n' + linked if order == 'last'
+                     else linked + '\n\ndocs/decisions.md#' + valid)
+            fixture('authority-link-' + name + '-' + kind + '-' + order,
+                    decl=rule.replace('Q9.1', prose), reason=diagnostic)
+for target in ['docs/decisions.md', './docs/decisions.md', 'docs/../docs/decisions.md']:
+    fixture('authority-relative-link-' + str(len(target)),
+            decl=rule.replace('Q9.1', '[authority](' + target + '#' + valid + ')'))
+fixture('authority-reference-beside-row', decl=rule.replace('Q9.1',
+        'Q4.7 [authority][ref]\n\n[ref]: docs/decisions.md#OPEN-38'), reason='ISS-0083')
+fixture('authority-link-context', decl=rule.replace('Q9.1',
+        '[authority](./docs/decisions.md#' + valid + '), #missing'), reason='missing authority anchor')
+rows.write_text(production_rows + '\n- <a id="control"></a>**Rule *with* `code`** (owner, 2026-11-15: "ok").\n')
+fixture('authority-allowed-title', decl=rule.replace('Q9.1', 'docs/decisions.md#control'))
+rows.write_text(production_rows + '\n- <a id="control"></a>**he*ld*** (owner, 2026-11-15: "ok").\n')
+fixture('authority-nested-disposition', decl=rule.replace('Q9.1', 'docs/decisions.md#control'),
+        reason='disposition in title: held')
+rows.write_text(production_rows)
+fixture('authority-code-boundary', decl=rule.replace('Q9.1',
+        'docs/decisions.md#' + valid + ' `code`#not-a-citation'))
 rows.write_text(production_rows)
 for name, code in [('inline', '`#eval Q999.1`'),
                    ('fence', '\n```lean\n#eval Q999.1\n```\n')]:

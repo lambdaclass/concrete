@@ -31,31 +31,16 @@ examples in `Spec/Rules.lean`. The Lean exporter is unchanged. Accounting carrie
 check concrete inputs and refuse opaque inputs of all eight shapes. The axiom golden is
 regenerated as the exact union with main, without security declarations.
 
-The authority validator uses markdown-it-py's CommonMark token stream for decision
-entries and rule docstrings, with the table extension for D4's retained records.
-It accepts immediate owner/date titles, matching dated bold records with entry-local
-Provenance and Owner reply/message lines, and explicitly retained recovered entries.
-Only one list item's own paragraph prefix supplies authority; nested lists and headings
-end that prefix. Titles retain code content and nested emphasis; intervening code cannot
-make approval immediate. Open waiting items and title dispositions refuse every form.
-Docstring citations come only from text tokens. Regression controls cover structural
-boundaries, all demonstrated inline-code bypasses, waiting bullets and dated wrappers.
-ISS-0083 tracks replacement by an owner-approved explicit status format. Existing
-Const and Own citations and the exporter remain unchanged.
-
-The decision inventory now gives each anchored entry its own CommonMark list
-item, including recovered paragraphs, dated records and their fences. D4’s retained
-table label is its own paragraph. The root decision-inventory check permanently
-asserts unique entry containers and refuses outdented record fields and fences;
-section-navigation and historical table-row anchors retain their separate roles.
-The migration control compares SHA-256 after applying
-`re.sub(r'(?m)^\s*- (?=<a id=")', '', text)`, then `re.sub(r'\s', '', text)`, to the same normalization of
-`2362cb403:docs/decisions.md`: digest
-`2573410e6e76e93b282ea9684a4c6cb6091713221ec409708a5c32743ef28735`.
-That is exact non-whitespace equality except for list markers immediately before
-anchors; literal whitespace-only equality cannot hold when required list markers
-are added. No wording, quotation, link or anchor changes. The four ConstsPermitted
-citations pass through retained-record and dated-record forms without exceptions.
+The authority validator uses CommonMark entry boundaries, a closed title allowlist
+(text, emphasis, code), plain paragraph-leading record markers and entry-local owner
+utterance fences. Unsupported titles, dispositions and open waiting links refuse.
+Text citations and normalized Markdown link/image targets are checked independently,
+including reference links. Raw anchor counts independently require unique entry,
+navigation or table-quotation accounting; concealed entries and outdented fields/code
+refuse. Diagnostic controls cover both reviewers’ concrete reproducers. ISS-0083
+tracks the explicit owner-approved status format still needed. Main’s rules, citations
+and exporter are unchanged. The foundation title and memory approval prefix are joined onto single lines
+as required by the plain-token allowlists; the existing normalized word-equality gate still passes.
 
 Held scope remains excluded, without inferring authority from inherited approval claims:
 

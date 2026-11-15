@@ -3,6 +3,9 @@
 No source text supplies rule or example facts. Decision inventories declare documentation rows.
 """
 import json
+from collections import Counter
+import posixpath
+from urllib.parse import urlsplit, unquote
 import re
 import sys
 from markdown_it import MarkdownIt
@@ -10,10 +13,15 @@ ROW = re.compile(r"\b(Q\d+(?:\.\d+)+|OD\d+|P\d+[a-z]?|R-\d{4})\b")
 DECLARED = re.compile(r"^\s*(?:- \*\*(\S+?)\*\*|\| *(\S+?) *\|)", re.M)
 ANCHOR = re.compile(r'<a\s+id="([^"\n]+)"\s*></a>')
 CITATION = re.compile(
-    r"(?:(?P<path>[^\s`<>\[\](){},;:\"'#]+)#"
+    r"(?:(?P<path>[^\s`<>\[\](){},;:\"'\ufffc#]+)#"
     r"(?P<fragment>[^\s`<>\[\](){},;:\"']*)|"
-    r"(?<![\w#])#(?P<bare>[A-Za-z0-9][^\s`<>\[\](){},;:\"']*))")
+    r"(?<![\w#\ufffc])#(?P<bare>[A-Za-z0-9][^\s`<>\[\](){},;:\"']*))")
 DISPOSITION = re.compile(r'\b(?:held|partial|queued|reopened|superseded|withdrawn|deferred)\b', re.I)
+# Only the inventory's literal utterance header and transcript locator qualify.
+# In particular, prose such as "Owner reply is missing" is not a header.
+OWNER_HEADER = re.compile(
+    r'^Owner (?:reply|message)(?: \(user\))?'
+    r'(?:, L\d+, \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)?:')
 UNRECORDED = ('authority status not machine-readable; cite a row or an entry with '
               'recorded owner approval (ISS-0083)')
 
@@ -24,15 +32,26 @@ MARKDOWN = MarkdownIt("commonmark").enable("table")
 
 
 def inline_content(tokens):
-    """Rendered title content includes code, emphasis children and line breaks."""
+    """Text of known inline tokens; authority titles are separately allowlisted."""
     return ''.join(t.content if t.type in ('text', 'code_inline') else
                    '\n' if t.type in ('softbreak', 'hardbreak') else '' for t in tokens)
 
 
 def text_content(doc):
-    """Only CommonMark text tokens can carry row or anchor citations."""
-    return '\n'.join(c.content for t in MARKDOWN.parse(doc) if t.type == 'inline'
-                     for c in t.children or [] if c.type == 'text')
+    """Preserve inline boundaries: omitted constructs cannot create a word boundary."""
+    return '\n'.join(''.join(c.content if c.type == 'text' else
+                              '' if c.type in ('em_open', 'em_close', 'strong_open', 'strong_close')
+                              else '\n' if c.type in ('softbreak', 'hardbreak') else '\ufffc'
+                              for c in t.children or [])
+                     for t in MARKDOWN.parse(doc) if t.type == 'inline')
+
+
+def title_error(tokens):
+    allowed = {'text', 'code_inline', 'em_open', 'em_close', 'strong_open', 'strong_close'}
+    if any(t.type == 'text' and '[^' in t.content for t in tokens):
+        return 'unsupported title construct: footnote-like syntax'
+    return next(('unsupported title construct: ' + t.type for t in tokens
+                 if t.type not in allowed), None)
 
 
 def approval_prefix(tokens):
@@ -41,8 +60,6 @@ def approval_prefix(tokens):
     for token in tokens:
         if token.type == 'text':
             parts.append(token.content)
-        elif token.type in ('softbreak', 'hardbreak'):
-            parts.append('\n')
         else:
             break
     return ''.join(parts)
@@ -67,8 +84,9 @@ def anchored_title(tokens):
         depth += children[close].nesting
         if depth == 0:
             title = inline_content(children[offset + 1:close])
-            if title.strip():
-                return anchor[1], title, children[offset].type, children[close + 1:]
+            unsupported = title_error(children[offset + 1:close])
+            if title.strip() or unsupported:
+                return anchor[1], title, children[offset].type, children[close + 1:], unsupported
             return None
         close += 1
     return None
@@ -81,14 +99,15 @@ def authority_entries(text):
     code block or paragraph outside the item can supply record fields.
     """
     tokens = MARKDOWN.parse(text)
-    result = {m[1]: UNRECORDED for t in tokens
-              for m in ANCHOR.finditer(''.join(c.content for c in (t.children or [t])
-                    if c.type in ('html_inline', 'html_block')))}
+    counts = Counter(re.findall(r'<a\s+id="([^"\n]+)"[^>]*>', text))
+    result = dict.fromkeys(counts, UNRECORDED)
     # Preserve informative refusal diagnostics even for non-entry anchor paragraphs.
     # This can only refuse; it never supplies an approval form.
     for token in tokens:
         parsed = anchored_title(token.children or []) if token.type == 'inline' else None
-        if parsed and (status := DISPOSITION.search(parsed[1])):
+        if parsed and parsed[4]:
+            result[parsed[0]] = parsed[4]
+        elif parsed and (status := DISPOSITION.search(parsed[1])):
             result[parsed[0]] = 'disposition in title: ' + status[0].lower()
     entries = []
     waiting_anchors = set()
@@ -109,23 +128,31 @@ def authority_entries(text):
         body = tokens[i + 1:end]
         if waiting and token.level == 1:
             first = next((t for t in body if t.type == 'inline'), None)
-            if first and not re.match(r'^Closed\b', inline_content(first.children or [])):
+            if first and not re.match(r'^Closed \d{4}-\d{2}-\d{2}:', approval_prefix(first.children or [])):
                 waiting_anchors.update(c.attrGet('href')[1:] for t in body
                     for c in t.children or [] if c.type == 'link_open'
                     and (c.attrGet('href') or '').startswith('#'))
         paragraphs = []
+        utterance = False
+        owner_header = False
         for t in body:
             if t.type in ('bullet_list_open', 'ordered_list_open', 'heading_open'):
                 break
+            if t.type not in ('paragraph_open', 'paragraph_close', 'inline', 'fence'):
+                owner_header = False
+            if t.type == 'fence' and t.level == token.level + 1:
+                utterance |= owner_header
+                owner_header = False
             if t.type == 'inline' and t.level == token.level + 2:
                 paragraphs.append(t.children or [])
-        if not paragraphs:
+                owner_header = bool(OWNER_HEADER.match(approval_prefix(t.children or [])))
+        if not paragraphs or not body or body[0].type != 'paragraph_open':
             continue
         parsed = anchored_title(paragraphs[0])
         if parsed is None:
             continue
-        anchor, title, emphasis, after = parsed
-        entries.append((anchor, title, emphasis, after, paragraphs))
+        anchor, title, emphasis, after, unsupported = parsed
+        entries.append((anchor, title, emphasis, after, paragraphs, unsupported, utterance))
         if anchor == 'decided-2026-11-13-d4-recovery':
             # Read only the explicitly labelled table's Existing record column.
             labelled = False
@@ -161,9 +188,11 @@ def authority_entries(text):
                         href = cs[0].attrGet('href') or ''
                         if href.startswith('#recovered-'):
                             retained.add(href[1:])
-    for anchor, title, emphasis, after, paragraphs in entries:
+    for anchor, title, emphasis, after, paragraphs, unsupported, utterance in entries:
         status = DISPOSITION.search(title)
-        if status:
+        if unsupported:
+            result[anchor] = unsupported
+        elif status:
             result[anchor] = 'disposition in title: ' + status[0].lower()
         elif anchor.startswith('recovered-'):
             if anchor in retained:
@@ -174,26 +203,68 @@ def authority_entries(text):
         elif (emphasis == 'strong_open'
               and (dated := re.fullmatch(r'decided-(\d{4}-\d{2}-\d{2})-[a-z0-9]+(?:-[a-z0-9]+)*', anchor))
               and title.endswith('(' + dated[1] + ').')):
-            lines = [line for paragraph in paragraphs for line in inline_content(paragraph).splitlines()]
+            lines = [approval_prefix(paragraph) for paragraph in paragraphs]
             if (any(re.match(r'^Provenance: \S', line) for line in lines)
-                    and any(re.match(r'^Owner (?:reply|message)\b', line) for line in lines)):
+                    and any(OWNER_HEADER.match(line) for line in lines)
+                    and utterance):
                 result[anchor] = None
     for anchor in waiting_anchors & result.keys():
         result[anchor] = 'open in Waiting for the owner'
+    for anchor, count in counts.items():
+        if count != 1:
+            result[anchor] = 'duplicate authority anchor: ' + anchor
     return result
 
 
 def decision_citations(doc):
-    """Bare fragments inherit an explicit path; code never supplies citations."""
+    """Read citations in source order, preserving boundaries around inline constructs."""
     context = False
-    for match in CITATION.finditer(text_content(doc)):
-        path = match['path'] or ('docs/decisions.md' if context else '')
-        anchor = match['fragment'] if match['path'] else match['bare']
-        if anchor.endswith('.') and not anchor.endswith('..'):
-            anchor = anchor[:-1]
-        if path == 'docs/decisions.md':
-            context = True
-        yield path, anchor
+
+    def text_citations(prose):
+        nonlocal context
+        for match in CITATION.finditer(prose):
+            path = match['path'] or ('docs/decisions.md' if context else '')
+            anchor = match['fragment'] if match['path'] else match['bare']
+            if anchor.endswith('.') and not anchor.endswith('..'):
+                anchor = anchor[:-1]
+            if path == 'docs/decisions.md':
+                context = True
+            yield path, anchor
+
+    for token in MARKDOWN.parse(doc):
+        if token.type != 'inline':
+            continue
+        parts = []
+        for child in token.children or []:
+            if child.type == 'text':
+                parts.append(child.content)
+            elif child.type in ('em_open', 'em_close', 'strong_open', 'strong_close'):
+                continue
+            elif child.type in ('softbreak', 'hardbreak'):
+                parts.append('\n')
+            else:
+                # The placeholder cannot become a path or create a bare-fragment boundary.
+                parts.append('\ufffc')
+                if child.type not in ('link_open', 'image'):
+                    continue
+                target = child.attrGet('href' if child.type == 'link_open' else 'src') or ''
+                if '#' not in target:
+                    continue
+                yield from text_citations(''.join(parts))
+                parts = ['\ufffc']
+                try:
+                    url = urlsplit(target)
+                    path = posixpath.normpath(unquote(url.path))
+                    if url.scheme or url.netloc:
+                        path = target.split('#', 1)[0]
+                    anchor = unquote(url.fragment)
+                except ValueError:
+                    # Malformed URL syntax cannot select the decision inventory.
+                    path, anchor = target.split('#', 1)
+                if path == 'docs/decisions.md':
+                    context = True
+                yield path, anchor
+        yield from text_citations(''.join(parts))
 
 
 def unique_object(pairs):

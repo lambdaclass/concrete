@@ -904,8 +904,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   `--format=human|json`. The checker result type is fixed in A2i, before the freeze (R-0592); the
   record, its JSON schema, goldens and the parser's diagnostics land in B0 (R-0593). It refines
   R-0479.
-- <a id="decided-project-memory-2026-11-06"></a>**Heap facts and memory policies** (owner,
-  2026-11-06: "a", option (a) on every question of the [proposal](archive/crucial-2026-11-06/MEMORY.md), reviewed by Codex,
+- <a id="decided-project-memory-2026-11-06"></a>**Heap facts and memory policies** (owner, 2026-11-06: "a", option (a) on every question of the [proposal](archive/crucial-2026-11-06/MEMORY.md), reviewed by Codex,
   agy and Kimi). Each function reports, per allocator lineage, requested bytes, net change and peak
   in logical bytes, and the allocator footprint where its contract defines one; each is a sound
   bound with a status, or "not established". Bounds are polynomials with `max` over counts, lengths
@@ -1111,8 +1110,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   [spec plan](proposals/SPEC_UNIFICATION.md#51-answered-scheduling-questions-coordinator-2026-11-06),
   which had proposed writing every slice's spec side before the freeze. What the foundation contains
   is the [next row](#decided-2026-11-08-foundation).
-- <a id="decided-2026-11-08-foundation"></a>**The Lean foundation: contracts C1–C10 and the answers to
-  its questions** (owner, 2026-11-08: "ok all recommended", answering every question of the
+- <a id="decided-2026-11-08-foundation"></a>**The Lean foundation: contracts C1–C10 and the answers to its questions** (owner, 2026-11-08: "ok all recommended", answering every question of the
   [foundation proposal](proposals/FOUNDATION.md), draft 3, with its recommendation; the proposal was
   reviewed by Codex, Kimi and agy in four rounds and by Claude, and its last edit was checked by Codex
   and Kimi). The foundation is ten contracts, each an interface with its laws, written in the Lean

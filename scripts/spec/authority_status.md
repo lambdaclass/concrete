@@ -1,57 +1,44 @@
 # Decision authority validation
 
-Row citations (Q/OD/P) preserve main's declared-row existence rule: at least one
-cited row must be declared by an inventory list or table. No row status is inferred.
-ROADMAP task IDs decide nothing; they may accompany real authority as context.
+Q/OD/P citations preserve main's declared-row existence check (at least one cited row
+must exist); ROADMAP IDs decide nothing. Semantic scope still requires checking the
+recorded owner answer. ISS-0083 tracks an owner-approved explicit status format.
 
-Markdown structure is parsed by markdown-it-py in CommonMark mode, with the table
-extension for D4. An entry is one bullet or ordered list item at any depth, opening
-with an HTML anchor and emphasized title. Only its own paragraphs before a nested
-list or heading of any level supply content; parents, children, siblings and sections
-supply none. Paragraphs outside the CommonMark list item cannot supply record fields.
-The root decision-inventory gate requires each entry anchor to open one unique
-list item and keeps record fields and fences inside items. Section-navigation
-anchors immediately before headings and historical table-row anchors are not
-list entries. The migration control pins the text of `2362cb403`, excluding only
-anchor-line list markers and whitespace; it must be updated explicitly when new
-owner decisions change that text.
+CommonMark (markdown-it-py, with tables) bounds each entry to its opening list item’s
+own paragraphs before a nested list or heading. Only these forms qualify:
 
-A `docs/decisions.md#anchor` citation is accepted only in these three forms:
+- An anchored emphasized title immediately followed by plain `(owner, YYYY-MM-DD:`.
+- A bold title ending `(YYYY-MM-DD).` with matching `decided-YYYY-MM-DD-slug`, a
+  paragraph beginning plain `Provenance:`, and an entry-local owner utterance fence
+  following a plain `Owner reply:` or `Owner message:` paragraph header. Headers may
+  include `(user)` and a transcript line number plus UTC timestamp, as recorded.
+- A recovered entry linked in D4’s explicitly labelled retained table, Existing record
+  column. Recovery anchors require this form even with immediate approval text.
 
-- An anchored bold or italic list title immediately followed by `(owner, YYYY-MM-DD:`.
-- A bold list title ending `(YYYY-MM-DD).`, with a matching
-  `decided-YYYY-MM-DD-<slug>` anchor and entry-local `Provenance:` and `Owner reply` or `Owner message` lines.
-- A `recovered-*` anchored item explicitly retained in the “Already recovered authority,
-  independently checked; existing records retained” table of
-  [D4](../../docs/decisions.md#decided-2026-11-13-d4-recovery).
-  The validator parses the Existing record column, never a maintained row list.
+Titles allow only text, nested emphasis and inline code. Images, links, HTML,
+autolinks, footnote-like `[^` text and line breaks refuse with a construct diagnostic.
+Disposition words (held, partial, queued, reopened, superseded, withdrawn, deferred)
+are checked across the full allowed title text. Code and other inline constructs
+cannot supply structural markers. Each marker begins its own paragraph; immediate
+owner approval begins the plain suffix after the title. Negated/qualified prose
+supplies none. A top-level Waiting for the owner item stays open unless it begins
+plain `Closed YYYY-MM-DD:`. Its links refuse authority in every qualifying form.
 
-The [recording rule](../../docs/decisions.md#decided-project-recording) requires
-answers to be recorded here with their date and defines whose decisions qualify;
-provenance-bearing dated records are the inventory's format for recording those
-answers. The rule does not turn an evidence collection into an answer. Structurally,
-D4 has no entry-local `Provenance:` field and is therefore refused as a dated
-record, even though its nested retained table supplies authority for individual
-recovered records. Other evidence/recovery wrappers lacking this record structure
-are likewise refused. No wrapper inherits provenance from nested list entries,
-code blocks or linked records. This checks record form, not the truth of provenance.
+The inventory guard independently scans raw text for every HTML anchor opener.
+Every occurrence must be accounted for exactly once, with globally unique IDs:
+entry opener; anchor-only block/paragraph immediately before a heading (navigation);
+or HTML anchor token in a parsed table cell (historical quotation). Code, link
+attributes and other hidden anchors have no exemption. Outdented record fields and
+fenced/indented code refuse. The migration control pins non-whitespace text and
+anchor-line marker normalization to `2362cb403`; the round-7 foundation-title and memory-approval joins
+change only whitespace. No quotation words change.
 
-Title content includes code spans and nested emphasis. Intervening code or other
-inline constructs interrupt immediate approval. Whitespace may wrap titles or the immediate approval form. Every form refuses an
-open “Waiting for the owner” link or a title containing held, partial, queued,
-reopened, superseded, withdrawn or deferred. Recovered anchors must pass the
-retained-table check even if their title has an immediate owner approval form.
-No body keyword search or enclosing section supplies approval or disposition.
-All other existing anchors fail closed with ISS-0083: “authority status not
-machine-readable; cite a row or an entry with recorded owner approval”. Semantic
-scope and currentness beyond these checks still require an explicit status format;
-ISS-0083 closes only after owner approval, inventory migration and validator adoption.
-
-Docstring citations are found only in CommonMark text tokens; code spans and
-fenced or indented code blocks supply none. Every top-level bullet or ordered
-Waiting for the owner item is open unless its content begins with `Closed`. Concrete
-`#[...]` attributes and Markdown headings are not citations. Empty explicit
-fragments are errors. Bare fragments inherit a preceding explicit decision path.
-Wrong paths, missing anchors (including empty fragments), absent recorded approval,
-open waiting items, title dispositions and roadmap-only citations have distinct
-diagnostics. Every anchor citation must pass, in either order beside a valid one.
+Docstring text and Markdown link/image destinations supply citations; code supplies
+none. Omitted inline constructs preserve token boundaries. Relative destinations
+are normalized against the repository root; other paths refuse. Bare text fragments
+inherit an explicit decision path. Every citation must pass, including mixed inline
+and reference links beside valid citations. Duplicate anchors refuse in the standalone
+validator too. Wrong paths, missing anchors, unsupported titles, dispositions and
+open waiting items have distinct diagnostics; all other unrecorded anchors fail
+closed with ISS-0083. These structural forms check recording, not provenance truth,
+under [the recording rule](../../docs/decisions.md#decided-project-recording).
