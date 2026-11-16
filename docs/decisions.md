@@ -281,10 +281,15 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **Q1.13** Can resetting the system allocator return `Allocator<Sys>` again? — Fresh brand after any supported system reset.
 - **Q2.1** Are storage release, destruction and resource cleanup separate? — Separate storage release, destruction and resource cleanup.
 - **Q2.2** Which containers implement `Destroy`? — Exactly sixteen named Destroy impls: Array (T: Destroy); Heap, HeapArray and Vec (two each: T: Copy; T: Destroy); String (unconditional); Option (T: Destroy); Result (three: T: Destroy/E: Copy, T: Destroy/E: Destroy, T: Copy/E: Destroy); OrderedMap (four: each of K and V Copy or Destroy). HashMap excluded. <a id="q2-2-revision"></a>Revised 2026-11-06 by [information flow](#decided-project-infoflow-2026-11-06): `Secret<T>` is `Copy` only for scalar `T`; secret arrays and heap secrets are linear and their destruction wipes them.
-  Status: replaced
-  Source: owner
-  Replaced by: [2026-11-16 secret wiping answer](#decided-2026-11-16-secret-wiping)
-  Replacement scope: wiping wording only; the other decisions and historical text remain.
+
+  - **2026-11-06 wiping-on-destroy clause only.**
+
+    Status: replaced\
+    Source: owner\
+    Replaced by: [2026-11-16 secret wiping answer](#decided-2026-11-16-secret-wiping)
+
+    Only the wiping-on-destroy clause is replaced; the other decisions and historical text remain.
+
 - **Q2.3** In what order are contents destroyed? — Index order 0..len−1, then the backing; OrderedMap in ascending key order, key then value, then the nodes.
 - **Q2.4** How does a container of non-`Destroy` resources release its storage? — `drain(v, ctx, f)` with `f: fn(&mut C, T) with(K) -> Step<T, E>`; the only way to empty a container of non-Destroy elements.
 - **Q2.5** What happens when drain processing fails? — On Stop, `Drained { at, survivor, rest, err }`; `map_into` returns `Stopped { done, survivor, rest, err }`.
@@ -930,10 +935,6 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   [Q2.2](#q2-2-revision). The observer model is the baseline constant-time model (branches, exact
   addresses, variable-time operations); speculative leakage is not covered. The leakage-trace
   interface is fixed in A2i (R-0592); `Secret<T>` lands as its own slice with its proofs (R-0596).
-  Status: replaced
-  Source: owner
-  Replaced by: [2026-11-16 secret wiping answer](#decided-2026-11-16-secret-wiping)
-  Replacement scope: wiping wording only; the other decisions and historical text remain.
   Its sources include the pure `classify` of a value passed in; grant-backed sources come with the
   console, files and network ([vertical slices](#decided-project-vertical-slices-2026-11-06)).
   Revised 2026-11-07 by the [randomness decision](#decided-2026-11-07-stack-randomness): the entropy capability arrives at slice 6, yields
@@ -941,6 +942,15 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   in facts.
   Extended 2026-11-08 by the [foundation decision](#foundation-q18): `Secret<T>` has exactly `T`'s
   layout; layout does not establish constant time, the information-flow rules do.
+
+  - **2026-11-06 wiping-on-destroy clause only.**
+
+    Status: replaced\
+    Source: owner\
+    Replaced by: [2026-11-16 secret wiping answer](#decided-2026-11-16-secret-wiping)
+
+    Only the wiping-on-destroy clause is replaced; the other decisions and historical text remain.
+
 - <a id="decided-project-pipeline-2026-11-06"></a>**The new compiler pipeline** (owner, 2026-11-06,
   relayed by the orchestrator from the owner session: the owner asked "is there any way to improve the full compiler design or pipeline?"; after
   the Codex, agy and Kimi pipeline review was reported, "did we also log that we will have the new
