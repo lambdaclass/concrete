@@ -281,6 +281,10 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **Q1.13** Can resetting the system allocator return `Allocator<Sys>` again? — Fresh brand after any supported system reset.
 - **Q2.1** Are storage release, destruction and resource cleanup separate? — Separate storage release, destruction and resource cleanup.
 - **Q2.2** Which containers implement `Destroy`? — Exactly sixteen named Destroy impls: Array (T: Destroy); Heap, HeapArray and Vec (two each: T: Copy; T: Destroy); String (unconditional); Option (T: Destroy); Result (three: T: Destroy/E: Copy, T: Destroy/E: Destroy, T: Copy/E: Destroy); OrderedMap (four: each of K and V Copy or Destroy). HashMap excluded. <a id="q2-2-revision"></a>Revised 2026-11-06 by [information flow](#decided-project-infoflow-2026-11-06): `Secret<T>` is `Copy` only for scalar `T`; secret arrays and heap secrets are linear and their destruction wipes them.
+  Status: replaced
+  Source: owner
+  Replaced by: [2026-11-16 secret wiping answer](#decided-2026-11-16-secret-wiping)
+  Replacement scope: wiping wording only; the other decisions and historical text remain.
 - **Q2.3** In what order are contents destroyed? — Index order 0..len−1, then the backing; OrderedMap in ascending key order, key then value, then the nodes.
 - **Q2.4** How does a container of non-`Destroy` resources release its storage? — `drain(v, ctx, f)` with `f: fn(&mut C, T) with(K) -> Step<T, E>`; the only way to empty a container of non-Destroy elements.
 - **Q2.5** What happens when drain processing fails? — On Stop, `Drained { at, survivor, rest, err }`; `map_into` returns `Stopped { done, survivor, rest, err }`.
@@ -926,6 +930,10 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   [Q2.2](#q2-2-revision). The observer model is the baseline constant-time model (branches, exact
   addresses, variable-time operations); speculative leakage is not covered. The leakage-trace
   interface is fixed in A2i (R-0592); `Secret<T>` lands as its own slice with its proofs (R-0596).
+  Status: replaced
+  Source: owner
+  Replaced by: [2026-11-16 secret wiping answer](#decided-2026-11-16-secret-wiping)
+  Replacement scope: wiping wording only; the other decisions and historical text remain.
   Its sources include the pure `classify` of a value passed in; grant-backed sources come with the
   console, files and network ([vertical slices](#decided-project-vertical-slices-2026-11-06)).
   Revised 2026-11-07 by the [randomness decision](#decided-2026-11-07-stack-randomness): the entropy capability arrives at slice 6, yields
@@ -3703,6 +3711,102 @@ yes
 
   This approves the format only. Implementation of ISS-0083 remains pending,
   tracked in [ISSUES.tsv](../ISSUES.tsv).
+
+- <a id="decided-2026-11-16-file-paths"></a>**File paths and spec-inventory round 18
+  (2026-11-16).**
+  Status: decided
+  Source: owner
+
+  Provenance: verbatim owner reply relayed by the coordinator (Claude) from the
+  owner session, recorded 2026-11-16 under the [recording rule](#decided-project-recording).
+  Question summary by Claude, not owner wording: choose the rules Codex and agy
+  both proposed (agree): ASCII only; `/` is the only separator; refuse `\`, drive
+  prefixes, empty and `.` components, spaces, control characters, leading or
+  trailing dots and Windows reserved names; never rewrite a path. Choose mixed
+  case (mixed): uppercase A-Z allowed, but refuse two paths that differ only in
+  letter case, including directory prefixes. Choose the cap (cap): at most
+  100 bytes per path component and 200 bytes per whole path. This summary comes
+  from Codex/agy owner-question drafts in coordinator scratch; those drafts are
+  not quoted owner text. The accompanying question was whether to approve one
+  more review round (round 18) for the spec-inventory branch, fixing only two leftovers.
+
+  Owner reply, verbatim:
+
+~~~text
+agree, mixed, cap. yes to round 18
+~~~
+
+  This settles the path choices summarized above (ISS-0068) and authorizes that
+  round 18 within its stated scope. It does not claim implementation or complete
+  path validation; details beyond the supplied question remain unsettled.
+
+- <a id="decided-2026-11-16-accounting-validator"></a>**Accounting validator:
+  owner replies and coordinator action (2026-11-16).**
+  Status: partly decided
+  Source: owner
+
+  Provenance: verbatim owner replies relayed by the coordinator (Claude) from the
+  owner session, recorded 2026-11-16 under the [recording rule](#decided-project-recording).
+  Context summarized by Claude, not owner wording: the coordinator explained that
+  the accounting branch's new interim decision-status validator kept failing
+  review. No preceding question text was supplied. The owner then asked, verbatim:
+
+~~~text
+i don't care about the small helper tool why do we nee di t
+~~~
+
+  The owner's subsequent reply, verbatim (no intervening question supplied):
+
+~~~text
+let's finish the spec
+~~~
+
+  Coordinator's resulting action, not an additional owner quotation or a broader
+  owner decision: the new interim validator is dropped from the accounting branch;
+  the accounting spec lands with main's existing checks. This records the
+  coordinator's disposition, not a claim that landing has happened. The status line
+  of the [approved decision-status format](#decided-2026-11-16-decision-status-format)
+  remains the planned structural fix (ISS-0083); its implementation remains pending.
+
+- <a id="decided-2026-11-16-secret-wiping"></a>**Keep Secret; defer wiping
+  (2026-11-16).**
+  Status: decided
+  Source: owner
+
+  Provenance: verbatim owner replies relayed by the coordinator (Claude) from the
+  owner session, recorded 2026-11-16 under the [recording rule](#decided-project-recording).
+  Context summarized by Claude, not owner wording: secret wiping (ISS-0072).
+  No exact questions preceding the first three replies were supplied. Owner
+  replies, verbatim, in order:
+
+~~~text
+i mean i don{t think the secret is important now
+~~~
+
+~~~text
+we coudl even remove this from the spec
+~~~
+
+~~~text
+maybe we can remove secret and add it later
+~~~
+
+  Question replied to by the final answer, summarized by Claude: choose (1) keep
+  `Secret`, the no-leak rule and the constant-time rules, and drop only wiping
+  from the spec; or (2) drop all of `Secret` and add it back later.
+
+  Owner reply, verbatim:
+
+~~~text
+1 keep secret, drop wiping
+~~~
+
+  Wiping leaves the spec for now and may be added back later; reopening is the
+  owner's call. `Secret`, no-leak and constant-time stay. This sets aside only
+  the earlier wiping wording in the [Q2.2 revision](#q2-2-revision) and the
+  [information-flow entry](#decided-project-infoflow-2026-11-06), whose history is
+  retained. This record does not implement the spec change or choose a future
+  wiping policy.
 
 - <a id="owner-goals-2026-11-15-provability-errors"></a>**Design goals: owner
   question (2026-11-15).**
