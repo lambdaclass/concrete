@@ -2,7 +2,7 @@
 
 Reproduce the round-1 surviving mutants before repairing the Law statements.
 Reject parentless and unusable children, upward shared lending, second moves,
-overwrite without consumption, recycled places and call-issued loan identities,
+overwrite without consumption, recycled places and direct-owner call-issued loan identities,
 premature callee cleanup, ignored owner freezes, unusable adoption, eager defer
 argument evaluation, leaked callee loans, lost caller loans and enclosing-scope
 loan removal. A lifecycle Law preserves retired place and loan histories through

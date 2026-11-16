@@ -24,8 +24,8 @@ obligations, not claims of these scalar owner proofs.
 
 Only Law counts as evidence; tags follow #decided-2026-11-13-proof-labels and controls
 follow #decided-2026-11-14-trap-sites-and-law-tests. O2 execution erasure lives in
-Proofs/OwnErasure.lean. The O3 move protocol below reuses the private slot-uniqueness helper;
-remaining O3 protocols and their evidence live in Proofs/OwnProtocols.lean.
+Proofs/OwnErasure.lean. All O3 protocols and their evidence live in
+Proofs/OwnProtocols.lean, reusing the public O1 helpers.
 No inherited approval receipt is evidence.
 Held policies remain outside the imported F13 interface: ISS-0064/ISS-0065, ISS-0068
 through ISS-0073 and ISS-0076 (source policy, constant restrictions, codecs, wiping,
@@ -649,8 +649,8 @@ theorem endLocals_preserves (s : State) (a : Nat) (hs : WellFormed s) : StateRes
       have h' := endLoan_preserves s l.id hs
       rwa [h] at h') _ _ _ hs h
 
-/-- Helper (computation). Ending a loan leaves activation frames unchanged. -/
-/- O3 reuses this existing helper through a public name; the proof and policy stay in O1. -/
+/-- Helper (computation). Ending a loan leaves activation frames unchanged.
+O3 reuses this public helper; the proof and policy stay in O1. -/
 theorem endLoan_frames (s t : State) (i : LoanId) (h : endLoan s i = some t) :
     t.frames = s.frames := by
   unfold endLoan at h
