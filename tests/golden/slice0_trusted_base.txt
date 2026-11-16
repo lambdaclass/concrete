@@ -87,6 +87,18 @@ theorem Concrete.Lex.integerLiteral_sound axioms: propext, Quot.sound
 theorem Concrete.Lex.decimal_prefixed_refused axioms: propext
 theorem Concrete.Lex.integerLiteral_complete axioms: propext, Quot.sound
 theorem Concrete.Lex.integerLiteral_unique axioms: propext, Quot.sound
+theorem Concrete.BIR.ScalarBridge.fromCore_toCore axioms: 
+theorem Concrete.BIR.ScalarBridge.toCore_fromCore axioms: 
+theorem Concrete.BIR.ScalarBridge.bits axioms: 
+theorem Concrete.BIR.ScalarBridge.signed axioms: propext
+theorem Concrete.BIR.ScalarBridge.min axioms: propext
+theorem Concrete.BIR.ScalarBridge.max axioms: propext
+theorem Concrete.BIR.ScalarBridge.inRange axioms: propext
+theorem Concrete.BIR.ScalarBridge.checked axioms: propext
+theorem Concrete.BIR.ScalarBridge.wrap axioms: propext, Quot.sound
+theorem Concrete.BIR.ScalarBridge.intValue_valid axioms: propext
+theorem Concrete.BIR.hasTy_int_core axioms: propext
+theorem Concrete.Backend.LCB.Proof.enc_int_core axioms: propext
 theorem Concrete.BIR.decode_encode axioms: propext, Quot.sound
 theorem Concrete.BIR.run_progress axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.BIR.behaviour_diverges_iff axioms: propext, Classical.choice, Quot.sound

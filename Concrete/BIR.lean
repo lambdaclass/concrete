@@ -1,4 +1,5 @@
 import ConcreteSpec.Spec.Slice1Semantics
+import ConcreteSpec.Spec.Scalar
 
 /-!
 # BIR: the backend IR, the contract both backends read
@@ -25,6 +26,57 @@ open ConcreteSpec.Core (AList)
 
 namespace Concrete.BIR
 open ConcreteSpec (IntTy Trap)
+
+/-! ## Scalar representation bridge
+
+This is a checked view of the two existing integer representations, not another scalar policy.
+F31 will retire the old representation and this translation atomically with its consumers.
+Authority: `docs/decisions.md#foundation-q3` ("u64 lengths/indices across profiles") and
+`#od126` ("the integer types' widths follow from their names (TYPE-19)"). Arithmetic admission
+remains governed by `#decided-project-no-hidden-traps`: "every build refuses an operation without
+discharged evidence". No admission or backend operation calls this bridge in F30.
+
+The correspondence results are Representation lemmas under
+`#decided-2026-11-13-proof-labels`: they compare Lean representations, not independent language rules.
+-/
+namespace ScalarBridge
+
+/-- Translate an existing compiler integer tag to the shared scalar tag, preserving its name.
+For example, the compiler's `i16` maps to Core's `i16`. -/
+def toCore : IntTy → ConcreteSpec.Core.IntTy
+  | .i8 => .i8 | .i16 => .i16 | .i32 => .i32 | .i64 => .i64
+  | .u8 => .u8 | .u16 => .u16 | .u32 => .u32 | .u64 => .u64
+
+/-- The inverse tag translation. This does not translate characters, units or pointer bytes. -/
+def fromCore : ConcreteSpec.Core.IntTy → IntTy
+  | .i8 => .i8 | .i16 => .i16 | .i32 => .i32 | .i64 => .i64
+  | .u8 => .u8 | .u16 => .u16 | .u32 => .u32 | .u64 => .u64
+
+/-- Representation lemma: no compiler integer tag is lost. -/
+theorem fromCore_toCore (t : IntTy) : fromCore (toCore t) = t := by cases t <;> rfl
+
+/-- Representation lemma: no shared integer tag is lost. -/
+theorem toCore_fromCore (t : ConcreteSpec.Core.IntTy) : toCore (fromCore t) = t := by cases t <;> rfl
+
+/-- Representation lemma: the bridge preserves bit width. -/
+theorem bits (t : IntTy) : (toCore t).bits = t.bits := by cases t <;> rfl
+
+/-- Representation lemma: the bridge preserves signedness. -/
+theorem signed (t : IntTy) : (toCore t).signed = t.signed := by cases t <;> rfl
+
+/-- Representation lemma: the existing lower endpoints agree. -/
+theorem min (t : IntTy) : (toCore t).min = t.min := by cases t <;> rfl
+
+/-- Representation lemma: the existing upper endpoints agree. -/
+theorem max (t : IntTy) : (toCore t).max = t.max := by cases t <;> rfl
+
+/-- Representation lemma: the compiler's Boolean test reflects Core's range proposition.
+The mathematical integer is unchanged, including at both endpoints. -/
+theorem inRange (t : IntTy) (n : Int) :
+    t.inRange n = true ↔ (toCore t).InRange n := by
+  simp [IntTy.inRange, ConcreteSpec.Core.IntTy.InRange, min, max]
+
+end ScalarBridge
 
 /-! ## Sites -/
 
@@ -154,6 +206,46 @@ def BinOp.exact : BinOp → Int → Int → Int
 
 /-- `n` reduced into `t`'s range, modulo `2^bits` (two's complement for a signed type). -/
 def wrap (t : IntTy) (n : Int) : Int := (n - t.min) % ((2 : Int) ^ t.bits) + t.min
+
+namespace ScalarBridge
+
+/-- Translate the three BIR arithmetic operation tags to their shared checked counterparts.
+This is a tag view, not another implementation of arithmetic. -/
+def arithOp : BinOp → ConcreteSpec.Core.ArithOp
+  | .add => .add | .sub => .sub | .mul => .mul
+
+/-- Representation lemma: Core's existing checked operation returns the exact BIR result when it
+fits, and the existing overflow error otherwise. No operand-range premise is needed. Authority for
+checked errors: `docs/decisions.md#decided-project-no-hidden-traps`, "Result<T, ArithmeticError>",
+and `#recovered-59-4`, "The trap names are `overflow`, `division_by_zero`, `invalid_shift`". This
+comparison neither traps nor discharges admission evidence. -/
+theorem checked (op : BinOp) (t : IntTy) (a b : Int) :
+    ConcreteSpec.Core.checked (toCore t) (arithOp op) a b =
+      if t.inRange (op.exact a b) then .ok (op.exact a b) else .error .overflow := by
+  have hr := inRange t (op.exact a b)
+  cases op <;>
+    simp only [arithOp, ConcreteSpec.Core.checked, ConcreteSpec.Core.inRangeOr, BinOp.exact] at * <;>
+    simp only [← hr] <;> rfl
+
+/-- Representation lemma: the two existing modulo encodings agree for every integer, including
+out-of-range inputs. No range premise hides overflow or narrows the comparison to valid literals. -/
+theorem wrap (t : IntTy) (n : Int) :
+    Concrete.BIR.wrap t n = ConcreteSpec.Core.wrap (toCore t) n := by
+  cases t <;>
+    dsimp only [Concrete.BIR.wrap, ConcreteSpec.Core.wrap, ConcreteSpec.Core.ofBits,
+      ConcreteSpec.Core.toBits, toCore, IntTy.min, IntTy.bits, IntTy.signed,
+      ConcreteSpec.Core.IntTy.bits, ConcreteSpec.Core.IntTy.signed] <;>
+    simp <;> (try split) <;> omega
+
+/-- Translate only integer BIR values. Flags remain outside this bridge because their physical
+encoding is held by ISS-0069. No new scalar relation or evaluator is introduced. -/
+def intValue (t : IntTy) (n : Int) : ConcreteSpec.Core.CVal := .int (toCore t) n
+
+/-- Representation lemma: validity uses the shared range proposition without changing the payload. -/
+theorem intValue_valid (t : IntTy) (n : Int) :
+    (intValue t n).Valid ↔ t.inRange n = true := (inRange t n).symm
+
+end ScalarBridge
 
 abbrev Env := List (Reg × Val)
 
