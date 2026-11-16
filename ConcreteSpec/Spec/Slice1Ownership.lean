@@ -222,7 +222,7 @@ inductive BodyOk (Δ : Decls) : Ctx → List Stmt → Atom → Prop where
 /-- Struct declarations are well formed: struct names are distinct, none is `main`, and each
 struct's field names are distinct. -/
 def DeclsOk (Δ : Decls) : Prop :=
-  (Δ.map StructDecl.name).Nodup ∧ (∀ d ∈ Δ, d.name ≠ "main" ∧ (d.fields.map Prod.fst).Nodup)
+  (Δ.map StructDecl.name).Nodup ∧ (∀ d ∈ Δ, d.name ≠ ⟨"main"⟩ ∧ (d.fields.map Prod.fst).Nodup)
 
 /-- A slice-1 program is accepted: its declarations are well formed and its body is accepted,
 including the mandatory static refusal of every operation without evidence (no hidden traps, which

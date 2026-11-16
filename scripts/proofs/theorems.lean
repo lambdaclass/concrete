@@ -8,6 +8,9 @@ source): every constant the `ConcreteSpec` library declares. The proof-integrity
       one line per theorem: `<name>\t<axiom> <axiom> …` (transitive axioms, sorted; empty when none).
       EVERY theorem constant is listed: private ones (`_private.…`) and generated ones (`proof_N`,
       `match_N.eq_N`, `eq_N`) included, so none can be dropped from the inventory or the export.
+  PROOF_PKG=Concrete …
+      selects compiler constants/imported modules; the default is ConcreteSpec. Both roots are
+      imported explicitly, and an unknown package fails before any row is written.
   PROOF_MODE=encoded …
       one line per theorem: `<name as Lean writes it>\t<encoded name>` (encoding below). The first is
       what lean4export reads on its command line; the second is what the stream is compared by.
@@ -44,12 +47,13 @@ fail; nothing else is ever declared under that namespace.
 -/
 import Lean
 import ConcreteSpec
+import Concrete
 
 open Lean
 
-def inPopulation (env : Environment) (n : Name) : Bool :=
+def inPopulation (env : Environment) (n : Name) (pkg : Name := `ConcreteSpec) : Bool :=
   match env.getModuleIdxFor? n with
-  | some i => (env.header.moduleNames[i.toNat]?.map (·.getRoot)) == some `ConcreteSpec
+  | some i => (env.header.moduleNames[i.toNat]?.map (·.getRoot)) == some pkg
   | none => (`ConcreteSpecControl).isPrefixOf (privateToUserName n)
 
 def nm : Name → String
@@ -173,6 +177,10 @@ def rowSafe : Name → Bool
 
 #eval show CoreM Unit from do
   let env ← getEnv
+  let pkgString := (← IO.getEnv "PROOF_PKG").getD "ConcreteSpec"
+  unless ["ConcreteSpec", "Concrete"].contains pkgString do
+    throwError s!"unknown PROOF_PKG '{pkgString}'"
+  let pkg := Name.mkSimple pkgString
   let mode := (← IO.getEnv "PROOF_MODE").getD "theorems"
   unless ["theorems", "encoded", "constants", "modules", "imported", "decls", "heads", "examples"].contains mode do
     throwError s!"unknown PROOF_MODE '{mode}'"
@@ -216,11 +224,11 @@ def rowSafe : Name → Bool
           rows := rows.push s!"{n}\t{" ".intercalate (((← collectAxioms n).map toString).qsort (· < ·)).toList}"
   else if mode == "imported" then
     for m in env.header.moduleNames do
-      if m.getRoot == `ConcreteSpec then rows := rows.push (nm m)
+      if m.getRoot == pkg then rows := rows.push (nm m)
   else
     let consts := env.constants.map₁.toList ++ env.constants.map₂.toList
     for (n, ci) in consts do
-      if !inPopulation env n then continue
+      if !inPopulation env n pkg then continue
       let axs := fun () => do
         return " ".intercalate (((← collectAxioms n).map toString).qsort (· < ·)).toList
       if mode == "constants" then

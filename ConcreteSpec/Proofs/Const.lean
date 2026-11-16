@@ -1,11 +1,31 @@
-import ConcreteSpec.Spec.Const
 import ConcreteSpec.Proofs.Scalar
+import ConcreteSpec.Spec.Basics
+import ConcreteSpec.Spec.Const
+import ConcreteSpec.Spec.Ident
+import ConcreteSpec.Spec.Outcome
+import ConcreteSpec.Spec.Scalar
 
 /-!
 # The laws of constants (`Spec/Const.lean`, foundation contract C2)
 
 PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `ConcreteSpec/README.md`.
+Adapted from integration-head's C2 proofs; historical approval labels confer no authority.
+Tags follow docs/decisions.md#decided-2026-11-13-proof-labels; only Laws are evidence.
+Controls follow #decided-2026-11-14-trap-sites-and-law-tests. All evaluation, typing,
+reference lookup, admission and sorting definitions are imported from Spec/Const.
 
+Held under ISS-0080: unit/char admission, calls and richer R2 preconditions; char literals
+and SPARK construction preconditions stay outside this grammar (ISS-0071). Boolean
+encoding/conversion (ISS-0069), pointer bytes (ISS-0070), path characters (ISS-0068),
+wiping (ISS-0072), startup/ABI (ISS-0073), layout (ISS-0076), U+FEFF scope and bare CR (ISS-0064), and
+queued partial decisions (ISS-0065) supply no rules here. No assumed-yes approval is used.
+Canonical source tie-breaking is tested as an implementation property, not asserted as
+an additional owner-decided language rule.
+
+- `constant_types`: admission is exactly integers and bool.
+- `typed_constant_closed`: successful typing introduces only admitted types.
+- `exhausted_refuses`: budget exhaustion refuses the entire declaration list.
+- `cycle_chain_real`: diagnostic checks reflect independently stated source references.
 - `eval_agrees`: exact agreement with independent primitive-grounded, fuel-indexed semantics.
 - `semantic_failure_refuses`: a semantic failure after any successful prefix refuses the whole
   list with the failing identity and prevents admission, regardless of usage.
@@ -38,14 +58,13 @@ namespace ConcreteSpec.Core
 def Agree (env : AList ConstId CVal) (Γ : AList ConstId CTy) : Prop :=
   ∀ c T, AList.lookup Γ c = some T → ∃ v, AList.lookup env c = some v ∧ v.ty = T ∧ v.Valid
 
-/-- Helper (computation). Empty environments trivially agree. (approved: APPR-C2-agy-5372ad2a0) -/
+/-- Helper (computation). Empty environments trivially agree. -/
 private theorem agree_nil : Agree [] [] := by
   intro _ _ h
   cases h
 
 /-- Helper (computation). Every evaluator result has an independent syntax-directed derivation,
-proved by induction on fuel and case analysis on the expression and primitive outcomes.
-(approved: REV-C2-agy-59d4c501d) -/
+proved by induction on fuel and case analysis on the expression and primitive outcomes. -/
 private theorem eval_derivation_inv (env : AList ConstId CVal) :
     ∀ (fuel : Nat) (e : CExpr), ConstEval env fuel e (e.eval env fuel)
   | 0, e => .exhausted e
@@ -55,7 +74,6 @@ private theorem eval_derivation_inv (env : AList ConstId CVal) :
     · rename_i h; exact .int_ok h
     · rename_i h; exact .int_outOfRange h
   | fuel + 1, .bool b => .bool fuel b
-  | fuel + 1, .unit => .unit fuel
   | fuel + 1, .ref c => by
     simp only [CExpr.eval]
     split
@@ -76,7 +94,7 @@ private theorem eval_derivation_inv (env : AList ConstId CVal) :
           simp only [CExpr.eval, ha, CEvalResult.bind, hop]
           exact .plainNeg_failure iha hop
         | stuck => exact (plainNeg_not_stuck t x hop).elim
-      | bool _ | unit =>
+      | bool _ | char _ | unit =>
         simp only [CExpr.eval, ha, CEvalResult.bind]
         exact .intUnary_invalid (.plainNeg a) iha (by intro _ _ h; cases h)
     | failure _ | outOfFuel | invalid _ =>
@@ -92,7 +110,7 @@ private theorem eval_derivation_inv (env : AList ConstId CVal) :
       | int t x =>
         simp only [CExpr.eval, ha, CEvalResult.bind]
         exact .bitNot_ok iha
-      | bool _ | unit =>
+      | bool _ | char _ | unit =>
         simp only [CExpr.eval, ha, CEvalResult.bind]
         exact .intUnary_invalid (.bitNot a) iha (by intro _ _ h; cases h)
     | failure _ | outOfFuel | invalid _ =>
@@ -108,7 +126,7 @@ private theorem eval_derivation_inv (env : AList ConstId CVal) :
       | bool x =>
         simp only [CExpr.eval, ha, CEvalResult.bind]
         exact .not_ok iha
-      | int _ _ | unit =>
+      | int _ _ | char _ | unit =>
         simp only [CExpr.eval, ha, CEvalResult.bind]
         exact .not_invalid iha (by intro _ h; cases h)
     | failure _ | outOfFuel | invalid _ =>
@@ -127,12 +145,9 @@ private theorem eval_derivation_inv (env : AList ConstId CVal) :
           exact .convert_int_ok iha hloss
         · simp only [CExpr.eval, ha, CEvalResult.bind, hloss, ↓reduceIte]
           exact .convert_int_invalid iha hloss
-      | bool b =>
+      | bool _ | char _ | unit =>
         simp only [CExpr.eval, ha, CEvalResult.bind]
-        exact .convert_bool_ok iha
-      | unit =>
-        simp only [CExpr.eval, ha, CEvalResult.bind]
-        exact .convert_unit_invalid iha
+        exact .convert_nonint_invalid iha (by intros; intro h; cases h)
     | failure _ | outOfFuel | invalid _ =>
       rw [ha] at iha
       simp only [CExpr.eval, ha, CEvalResult.bind]
@@ -160,10 +175,10 @@ private theorem eval_derivation_inv (env : AList ConstId CVal) :
                 by_cases h1 : t = t₀
                 · right; intro h2; cases h2; exact htt h1
                 · left; intro h2; cases h2; exact h1 rfl)
-          | bool _ | unit =>
+          | bool _ | char _ | unit =>
             simp only [CExpr.eval, ha, hb, CEvalResult.bind, sameInt]
             exact .intBinary_invalid (.wrapping op a b) iha ihb (by intro _ _ _; right; intro h; cases h)
-        | bool _ | unit =>
+        | bool _ | char _ | unit =>
           simp only [CExpr.eval, ha, hb, CEvalResult.bind, sameInt]
           exact .intBinary_invalid (.wrapping op a b) iha ihb (by intro _ _ _; left; intro h; cases h)
       | failure _ | outOfFuel | invalid _ =>
@@ -197,10 +212,10 @@ private theorem eval_derivation_inv (env : AList ConstId CVal) :
                 by_cases h1 : t = t₀
                 · right; intro h2; cases h2; exact htt h1
                 · left; intro h2; cases h2; exact h1 rfl)
-          | bool _ | unit =>
+          | bool _ | char _ | unit =>
             simp only [CExpr.eval, ha, hb, CEvalResult.bind, sameInt]
             exact .intBinary_invalid (.saturating op a b) iha ihb (by intro _ _ _; right; intro h; cases h)
-        | bool _ | unit =>
+        | bool _ | char _ | unit =>
           simp only [CExpr.eval, ha, hb, CEvalResult.bind, sameInt]
           exact .intBinary_invalid (.saturating op a b) iha ihb (by intro _ _ _; left; intro h; cases h)
       | failure _ | outOfFuel | invalid _ =>
@@ -240,10 +255,10 @@ private theorem eval_derivation_inv (env : AList ConstId CVal) :
                 by_cases h1 : t = t₀
                 · right; intro h2; cases h2; exact htt h1
                 · left; intro h2; cases h2; exact h1 rfl)
-          | bool _ | unit =>
+          | bool _ | char _ | unit =>
             simp only [CExpr.eval, ha, hb, CEvalResult.bind, sameInt]
             exact .intBinary_invalid (.plain op a b) iha ihb (by intro _ _ _; right; intro h; cases h)
-        | bool _ | unit =>
+        | bool _ | char _ | unit =>
           simp only [CExpr.eval, ha, hb, CEvalResult.bind, sameInt]
           exact .intBinary_invalid (.plain op a b) iha ihb (by intro _ _ _; left; intro h; cases h)
       | failure _ | outOfFuel | invalid _ =>
@@ -277,10 +292,10 @@ private theorem eval_derivation_inv (env : AList ConstId CVal) :
                 by_cases h1 : t = t₀
                 · right; intro h2; cases h2; exact htt h1
                 · left; intro h2; cases h2; exact h1 rfl)
-          | bool _ | unit =>
+          | bool _ | char _ | unit =>
             simp only [CExpr.eval, ha, hb, CEvalResult.bind, sameInt]
             exact .intBinary_invalid (.bit op a b) iha ihb (by intro _ _ _; right; intro h; cases h)
-        | bool _ | unit =>
+        | bool _ | char _ | unit =>
           simp only [CExpr.eval, ha, hb, CEvalResult.bind, sameInt]
           exact .intBinary_invalid (.bit op a b) iha ihb (by intro _ _ _; left; intro h; cases h)
       | failure _ | outOfFuel | invalid _ =>
@@ -314,10 +329,10 @@ private theorem eval_derivation_inv (env : AList ConstId CVal) :
                 by_cases h1 : t = t₀
                 · right; intro h2; cases h2; exact htt h1
                 · left; intro h2; cases h2; exact h1 rfl)
-          | bool _ | unit =>
+          | bool _ | char _ | unit =>
             simp only [CExpr.eval, ha, hb, CEvalResult.bind, sameInt]
             exact .intBinary_invalid (.cmp op a b) iha ihb (by intro _ _ _; right; intro h; cases h)
-        | bool _ | unit =>
+        | bool _ | char _ | unit =>
           simp only [CExpr.eval, ha, hb, CEvalResult.bind, sameInt]
           exact .intBinary_invalid (.cmp op a b) iha ihb (by intro _ _ _; left; intro h; cases h)
       | failure _ | outOfFuel | invalid _ =>
@@ -343,10 +358,10 @@ private theorem eval_derivation_inv (env : AList ConstId CVal) :
           | bool y =>
             simp only [CExpr.eval, ha, hb, CEvalResult.bind, twoBools]
             exact .and_ok iha ihb
-          | int _ _ | unit =>
+          | int _ _ | char _ | unit =>
             simp only [CExpr.eval, ha, hb, CEvalResult.bind, twoBools]
             exact .boolBinary_invalid (.and a b) iha ihb (by intro _ _; right; intro h; cases h)
-        | int _ _ | unit =>
+        | int _ _ | char _ | unit =>
           simp only [CExpr.eval, ha, hb, CEvalResult.bind, twoBools]
           exact .boolBinary_invalid (.and a b) iha ihb (by intro _ _; left; intro h; cases h)
       | failure _ | outOfFuel | invalid _ =>
@@ -372,10 +387,10 @@ private theorem eval_derivation_inv (env : AList ConstId CVal) :
           | bool y =>
             simp only [CExpr.eval, ha, hb, CEvalResult.bind, twoBools]
             exact .or_ok iha ihb
-          | int _ _ | unit =>
+          | int _ _ | char _ | unit =>
             simp only [CExpr.eval, ha, hb, CEvalResult.bind, twoBools]
             exact .boolBinary_invalid (.or a b) iha ihb (by intro _ _; right; intro h; cases h)
-        | int _ _ | unit =>
+        | int _ _ | char _ | unit =>
           simp only [CExpr.eval, ha, hb, CEvalResult.bind, twoBools]
           exact .boolBinary_invalid (.or a b) iha ihb (by intro _ _; left; intro h; cases h)
       | failure _ | outOfFuel | invalid _ =>
@@ -387,8 +402,7 @@ private theorem eval_derivation_inv (env : AList ConstId CVal) :
       simp only [CExpr.eval, ha, CEvalResult.bind]
       exact .binary_nonValue_left (.or a b) iha trivial
 
-/-- Helper (inversion). Independent syntax-directed derivations determine the evaluator result.
-(approved: REV-C2-agy-59d4c501d) -/
+/-- Helper (inversion). Independent syntax-directed derivations determine the evaluator result. -/
 private theorem eval_derivation_unique_inv {env : AList ConstId CVal} {fuel : Nat}
     {e : CExpr} {r : CEvalResult} (h : ConstEval env fuel e r) : e.eval env fuel = r := by
   induction h with
@@ -396,7 +410,6 @@ private theorem eval_derivation_unique_inv {env : AList ConstId CVal} {fuel : Na
   | int_ok h => simp [CExpr.eval, h]
   | int_outOfRange h => simp [CExpr.eval, h]
   | bool fuel b => rfl
-  | unit fuel => rfl
   | ref_ok h => simp [CExpr.eval, h]
   | ref_missing h => simp [CExpr.eval, h]
   | @unary_nonValue fuel e a r hchild ha hr iha =>
@@ -419,16 +432,18 @@ private theorem eval_derivation_unique_inv {env : AList ConstId CVal} {fuel : Na
   | or_ok _ _ iha ihb => simp [CExpr.eval, CEvalResult.bind, twoBools, iha, ihb]
   | convert_int_ok _ hloss iha => simp [CExpr.eval, CEvalResult.bind, iha, hloss]
   | convert_int_invalid _ hloss iha => simp [CExpr.eval, CEvalResult.bind, iha, hloss]
-  | convert_bool_ok _ iha => simp [CExpr.eval, CEvalResult.bind, iha]
-  | convert_unit_invalid _ iha => simp [CExpr.eval, CEvalResult.bind, iha]
+  | @convert_nonint_invalid fuel t a v ha hv iha =>
+    cases v with
+    | int s x => exact (hv s x rfl).elim
+    | bool _ | char _ | unit => simp [CExpr.eval, CEvalResult.bind, iha]
   | @intUnary_invalid fuel e a va hchild ha hnot iha =>
     cases hchild <;> cases va with
     | int t x => exact (hnot t x rfl).elim
-    | bool _ | unit => simp [CExpr.eval, CEvalResult.bind, iha]
+    | bool _ | char _ | unit => simp [CExpr.eval, CEvalResult.bind, iha]
   | @not_invalid fuel a va ha hnot iha =>
     cases va with
     | bool b => exact (hnot b rfl).elim
-    | int _ _ | unit => simp [CExpr.eval, CEvalResult.bind, iha]
+    | int _ _ | char _ | unit => simp [CExpr.eval, CEvalResult.bind, iha]
   | @intBinary_invalid fuel e a b va vb hchild ha hb hnot iha ihb =>
     have hnone : sameInt (some va) (some vb) = none := by
       cases va with
@@ -438,8 +453,8 @@ private theorem eval_derivation_unique_inv {env : AList ConstId CVal} {fuel : Na
           by_cases htt : t = t'
           · subst htt; rcases hnot t x y with h | h <;> exact (h rfl).elim
           · simp [sameInt, htt]
-        | bool _ | unit => rfl
-      | bool _ | unit => rfl
+        | bool _ | char _ | unit => rfl
+      | bool _ | char _ | unit => rfl
     cases hchild <;> simp [CExpr.eval, CEvalResult.bind, iha, ihb, hnone]
   | @boolBinary_invalid fuel e a b va vb hchild ha hb hnot iha ihb =>
     have hnone : twoBools (some va) (some vb) = none := by
@@ -447,24 +462,23 @@ private theorem eval_derivation_unique_inv {env : AList ConstId CVal} {fuel : Na
       | bool x =>
         cases vb with
         | bool y => rcases hnot x y with h | h <;> exact (h rfl).elim
-        | int _ _ | unit => rfl
-      | int _ _ | unit => rfl
+        | int _ _ | char _ | unit => rfl
+      | int _ _ | char _ | unit => rfl
     cases hchild <;> simp [CExpr.eval, CEvalResult.bind, iha, ihb, hnone]
 
 /-- Law (subject `ConcreteSpec.Core.CExpr.eval`). The evaluator agrees exactly with independent
-primitive-grounded semantics, including failures, invented failures, and fuel exhaustion. -/
+primitive-grounded semantics, including failures, invented failures, and fuel exhaustion. Authority: docs/decisions.md#decided-2026-11-08-constants; closed admission: #decided-2026-11-14-constant-types. -/
 theorem eval_agrees (env : AList ConstId CVal) (fuel : Nat) (e : CExpr) :
     ConstEval env fuel e (e.eval env fuel) ∧
     ∀ r, ConstEval env fuel e r → e.eval env fuel = r := by
   exact ⟨eval_derivation_inv env fuel e, fun _ h => eval_derivation_unique_inv h⟩
 
-/-- Helper (inversion). Successful binding exposes both successful computations.
-(approved: APPR-C2-agy-5372ad2a0) -/
+/-- Helper (inversion). Successful binding exposes both successful computations. -/
 private theorem bind_value_inv (r : CEvalResult) (f : CVal → CEvalResult) (v : CVal) :
     r.bind f = .value v ↔ ∃ a, r = .value a ∧ f a = .value v := by
   cases r <;> simp [CEvalResult.bind]
 
-/-- Helper (inversion). Integer operand extraction. (approved: APPR-C2-agy-5372ad2a0) -/
+/-- Helper (inversion). Integer operand extraction. -/
 private theorem sameInt_some_inv {x y : CVal} {t : IntTy} {a b : Int}
     (h : sameInt (some x) (some y) = some (t, a, b)) :
     x = .int t a ∧ y = .int t b := by
@@ -472,7 +486,7 @@ private theorem sameInt_some_inv {x y : CVal} {t : IntTy} {a b : Int}
   obtain ⟨rfl, rfl, rfl, rfl⟩ := h
   exact ⟨rfl, rfl⟩
 
-/-- Helper (inversion). Boolean operand extraction. (approved: APPR-C2-agy-5372ad2a0) -/
+/-- Helper (inversion). Boolean operand extraction. -/
 private theorem twoBools_some_inv {x y : CVal} {a b : Bool}
     (h : twoBools (some x) (some y) = some (a, b)) :
     x = .bool a ∧ y = .bool b := by
@@ -481,7 +495,7 @@ private theorem twoBools_some_inv {x y : CVal} {a b : Bool}
   exact ⟨rfl, rfl⟩
 
 /-- Helper (computation). Structural preservation for successful initializer evaluation;
-used by declaration soundness rather than counted as independent evidence. (approved: REV-C2-agy-59d4c501d) -/
+used by declaration soundness rather than counted as independent evidence. -/
 private theorem eval_sound_inv (env : AList ConstId CVal) (Γ : AList ConstId CTy)
     (hm : ∀ c v, AList.lookup env c = some v → AList.lookup Γ c = some v.ty ∧ v.Valid) :
     ∀ (e : CExpr) (fuel : Nat) (v : CVal), e.eval env fuel = .value v →
@@ -497,9 +511,6 @@ private theorem eval_sound_inv (env : AList ConstId CVal) (Γ : AList ConstId CT
       · rename_i hr; cases h; exact ⟨by simp [CExpr.ty?, hr, CVal.ty], hr⟩
       · cases h
   | bool b =>
-    intro fuel v h; cases fuel <;> cases h
-    exact ⟨rfl, trivial⟩
-  | unit =>
     intro fuel v h; cases fuel <;> cases h
     exact ⟨rfl, trivial⟩
   | ref c =>
@@ -561,7 +572,7 @@ private theorem eval_sound_inv (env : AList ConstId CVal) (Γ : AList ConstId CT
         exact ⟨by simp [CExpr.ty?, hta, CVal.ty], bitNot_inRange _ _⟩
       | bool b =>
         cases h
-      | unit => cases h
+      | char _ | unit => cases h
   | not a ih =>
     intro fuel v h; cases fuel with
     | zero => cases h
@@ -575,7 +586,7 @@ private theorem eval_sound_inv (env : AList ConstId CVal) (Γ : AList ConstId CT
       | bool b =>
         cases h
         exact ⟨by simp [CExpr.ty?, hta, CVal.ty], trivial⟩
-      | unit => cases h
+      | char _ | unit => cases h
   | plainNeg a ih =>
     intro fuel v h; cases fuel with
     | zero => cases h
@@ -595,7 +606,7 @@ private theorem eval_sound_inv (env : AList ConstId CVal) (Γ : AList ConstId CT
         | stuck => simp [hr] at h
       | bool b =>
         cases h
-      | unit => cases h
+      | char _ | unit => cases h
   | convert t a ih =>
     intro fuel v h; cases fuel with
     | zero => cases h
@@ -612,24 +623,23 @@ private theorem eval_sound_inv (env : AList ConstId CVal) (Γ : AList ConstId CT
         · cases h
       | bool b =>
         cases h
-        exact ⟨by simp [CExpr.ty?, hta, CVal.ty], boolToInt_inRange _ _⟩
-      | unit => cases h
+      | char _ | unit => cases h
 
-/-- Helper (inversion). Operand typing inversion. (approved: APPR-C2-agy-5372ad2a0) -/
+/-- Helper (inversion). Operand typing inversion. -/
 private theorem CVal.int_of_ty {v : CVal} {t : IntTy} (h : v.ty = .int t) : ∃ n, v = .int t n := by
   cases v with
   | int t' n => cases h; exact ⟨n, rfl⟩
   | bool _ => cases h
-  | unit => cases h
+  | char _ | unit => cases h
 
-/-- Helper (inversion). Operand typing inversion. (approved: APPR-C2-agy-5372ad2a0) -/
+/-- Helper (inversion). Operand typing inversion. -/
 private theorem CVal.bool_of_ty {v : CVal} (h : v.ty = .bool) : ∃ b, v = .bool b := by
   cases v with
   | int _ _ => cases h
   | bool b => exact ⟨b, rfl⟩
-  | unit => cases h
+  | char _ | unit => cases h
 
-/-- Helper (inversion). Operand typing inversion. (approved: APPR-C2-agy-5372ad2a0) -/
+/-- Helper (inversion). Operand typing inversion. -/
 private theorem sameIntTy_some {x y : Option CTy} {t : IntTy} (h : sameIntTy x y = some t) :
     x = some (.int t) ∧ y = some (.int t) := by
   match x, y, h with
@@ -639,19 +649,18 @@ private theorem sameIntTy_some {x y : Option CTy} {t : IntTy} (h : sameIntTy x y
     · cases h; rename_i hab; subst hab; exact ⟨rfl, rfl⟩
     · cases h
 
-/-- Helper (inversion). Operand typing inversion. (approved: APPR-C2-agy-5372ad2a0) -/
+/-- Helper (inversion). Operand typing inversion. -/
 private theorem bothBool_true {x y : Option CTy} (h : bothBool x y = true) :
     x = some .bool ∧ y = some .bool := by
   match x, y, h with
   | some .bool, some .bool, _ => exact ⟨rfl, rfl⟩
 
-/-- Helper (inversion). A fallible-free expression contains no located operation failure.
-(approved: REV-C2-agy-59d4c501d) -/
+/-- Helper (inversion). A fallible-free expression contains no located operation failure. -/
 private theorem not_inExpr_of_fallibleFree (f : ConstFailure) :
     ∀ e : CExpr, e.fallibleFree = true → ¬ f.InExpr e := by
   intro e
   induction e with
-  | int _ _ | bool _ | unit | ref _ =>
+  | int _ _ | bool _ | ref _ =>
     intro _ hf; nomatch hf
   | wrapping _ a b iha ihb | saturating _ a b iha ihb | bit _ a b iha ihb
   | cmp _ a b iha ihb | and a b iha ihb | or a b iha ihb =>
@@ -670,7 +679,7 @@ private theorem not_inExpr_of_fallibleFree (f : ConstFailure) :
 /-- Law (subject `ConcreteSpec.Core.CExpr.eval`). With sufficient fuel, a well-typed initializer in
 the full closed grammar (including fallible operations) never runs out of fuel and never fails
 static validation (.invalid): it either produces a valid value of its static type or reports a
-located failure of a fallible sub-expression. -/
+located failure of a fallible sub-expression. Authority: docs/decisions.md#decided-2026-11-08-constants; closed admission: #decided-2026-11-14-constant-types. -/
 theorem eval_wellTyped_progress (env : AList ConstId CVal) (Γ : AList ConstId CTy)
     (hag : Agree env Γ) :
     ∀ (e : CExpr) (T : CTy), e.ty? Γ = some T →
@@ -691,11 +700,6 @@ theorem eval_wellTyped_progress (env : AList ConstId CVal) (Γ : AList ConstId C
     | zero => simp [CExpr.height] at hn
     | succ fuel =>
       cases h; exact Or.inl ⟨.bool b, rfl, rfl, trivial⟩
-  | .unit, T, h, fuel, hn => by
-    cases fuel with
-    | zero => simp [CExpr.height] at hn
-    | succ fuel =>
-      cases h; exact Or.inl ⟨.unit, rfl, rfl, trivial⟩
   | .ref c, T, h, fuel, hn => by
     cases fuel with
     | zero => simp [CExpr.height] at hn
@@ -899,18 +903,19 @@ theorem eval_wellTyped_progress (env : AList ConstId CVal) (Γ : AList ConstId C
               by simp [CExpr.eval, hea, hl, CEvalResult.bind], rfl, (lossless_iff s t).1 hl x hva⟩
           · exact Or.inr ⟨f, by simp [CExpr.eval, hea, CEvalResult.bind], hfa⟩
         · cases h
-      · rename_i ha
-        cases h
-        rcases eval_wellTyped_progress env Γ hag a _ ha fuel hna with ⟨va, hea, hta, _⟩ | ⟨f, hea, hfa⟩
-        · obtain ⟨x, rfl⟩ := CVal.bool_of_ty hta
-          exact Or.inl ⟨.int t (boolToInt x),
-            by simp [CExpr.eval, hea, CEvalResult.bind], rfl, boolToInt_inRange t x⟩
-        · exact Or.inr ⟨f, by simp [CExpr.eval, hea, CEvalResult.bind], hfa⟩
       · cases h
 
-/-- A deliberately broken evaluator, retaining the exact evaluator interface. -/
-def noConstValues (_env : AList ConstId CVal) (_fuel : Nat) (_e : CExpr) : CEvalResult :=
-  .outOfFuel
+/-- Mutant: only division-by-zero is misreported as budget exhaustion. -/
+def divisionAsFuel (env : AList ConstId CVal) (fuel : Nat) (e : CExpr) : CEvalResult :=
+  match e.eval env fuel with
+  | .failure ⟨.plain .div, _, .arithmetic .divisionByZero⟩ => .outOfFuel
+  | r => r
+
+/-- Mutant: only wrapping addition is incorrectly refused as invalid. -/
+def refuseWrappingAdd (env : AList ConstId CVal) (fuel : Nat) (e : CExpr) : CEvalResult :=
+  match e with
+  | .wrapping .add _ _ => .invalid e
+  | _ => e.eval env fuel
 
 /-- Instance (law `ConcreteSpec.Core.eval_wellTyped_progress`, case `div_zero`). -/
 example : (∃ v, (CExpr.plain .div (.int .i8 1) (.int .i8 0)).eval [] 2 = .value v ∧
@@ -921,19 +926,21 @@ example : (∃ v, (CExpr.plain .div (.int .i8 1) (.int .i8 0)).eval [] 2 = .valu
     (.plain .div (.int .i8 1) (.int .i8 0)) (.int .i8) (by decide) 2 (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.eval_wellTyped_progress`, case `div_zero`,
-subject `ConcreteSpec.Core.CExpr.eval`, mutant `ConcreteSpec.Core.noConstValues`). -/
+subject `ConcreteSpec.Core.CExpr.eval`, mutant `ConcreteSpec.Core.divisionAsFuel`). -/
 example : Agree [] [] ∧
     (CExpr.plain .div (.int .i8 1) (.int .i8 0)).ty? [] = some (.int .i8) ∧
     (CExpr.plain .div (.int .i8 1) (.int .i8 0)).height ≤ 2 ∧
-    ¬ ((∃ v, noConstValues [] 2 (.plain .div (.int .i8 1) (.int .i8 0)) = .value v ∧
+    ¬ ((∃ v, divisionAsFuel [] 2 (.plain .div (.int .i8 1) (.int .i8 0)) = .value v ∧
         v.ty = .int .i8 ∧ v.Valid) ∨
-      (∃ f, noConstValues [] 2 (.plain .div (.int .i8 1) (.int .i8 0)) = .failure f ∧
+      (∃ f, divisionAsFuel [] 2 (.plain .div (.int .i8 1) (.int .i8 0)) = .failure f ∧
         f.InExpr (.plain .div (.int .i8 1) (.int .i8 0)))) := by
   refine ⟨agree_nil, by decide, by decide, ?_⟩
-  simp [noConstValues]
+  change ¬ ((∃ v, CEvalResult.outOfFuel = .value v ∧ v.ty = .int .i8 ∧ v.Valid) ∨
+    (∃ f, CEvalResult.outOfFuel = .failure f ∧ f.InExpr (.plain .div (.int .i8 1) (.int .i8 0))))
+  simp
 
 /-- Law (subject `ConcreteSpec.Core.CExpr.eval`). The old fragment evaluates with sufficient
-fuel; static typing supplies the result type and scalar validity. -/
+fuel; static typing supplies the result type and scalar validity. Authority: docs/decisions.md#decided-2026-11-08-constants; closed admission: #decided-2026-11-14-constant-types. -/
 theorem eval_total (env : AList ConstId CVal) (Γ : AList ConstId CTy) (hag : Agree env Γ) :
     ∀ (e : CExpr) (T : CTy), e.ty? Γ = some T → e.fallibleFree = true →
       ∀ fuel, e.height ≤ fuel → ∃ v, e.eval env fuel = .value v ∧ v.ty = T ∧ v.Valid := by
@@ -949,20 +956,20 @@ example : ∃ v, (CExpr.wrapping .add (.int .u8 255) (.int .u8 1)).eval [] 2 = .
     (.wrapping .add (.int .u8 255) (.int .u8 1)) (.int .u8) (by decide) (by decide) 2 (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.eval_total`, case `wrap`,
-subject `ConcreteSpec.Core.CExpr.eval`, mutant `ConcreteSpec.Core.noConstValues`). -/
+subject `ConcreteSpec.Core.CExpr.eval`, mutant `ConcreteSpec.Core.refuseWrappingAdd`). -/
 example : Agree [] [] ∧
     (CExpr.wrapping .add (.int .u8 255) (.int .u8 1)).ty? [] = some (.int .u8) ∧
     (CExpr.wrapping .add (.int .u8 255) (.int .u8 1)).fallibleFree = true ∧
     (CExpr.wrapping .add (.int .u8 255) (.int .u8 1)).height ≤ 2 ∧
-    ¬ ∃ v, noConstValues [] 2 (.wrapping .add (.int .u8 255) (.int .u8 1)) = .value v ∧
+    ¬ ∃ v, refuseWrappingAdd [] 2 (.wrapping .add (.int .u8 255) (.int .u8 1)) = .value v ∧
       v.ty = .int .u8 ∧ v.Valid := by
   refine ⟨agree_nil, by decide, by decide, by decide, ?_⟩
-  simp [noConstValues]
+  simp [refuseWrappingAdd]
 
 /-! ### Declaration typing, evaluation soundness, refusal progress, and `Copy` derivation -/
 
 /-- Helper (computation). Static typing preserves previous type bindings because declaration
-names must be fresh. (approved: APPR-C2-agy-5372ad2a0) -/
+names must be fresh. -/
 private theorem typeConsts_mono_inv (U : ConstTypes) : ∀ ds Γ Γ',
     typeConsts U ds Γ = some Γ' → ∀ c T, AList.lookup Γ c = some T →
       AList.lookup Γ' c = some T
@@ -979,10 +986,10 @@ private theorem typeConsts_mono_inv (U : ConstTypes) : ∀ ds Γ Γ',
     · cases h
 
 /-- Helper (computation). Static declarations determine the type binding for each declared
-identity, independently of evaluation. (approved: APPR-C2-agy-5372ad2a0) -/
+identity, independently of evaluation. -/
 private theorem typeConsts_decls_inv (U : ConstTypes) : ∀ ds Γ Γ',
     typeConsts U ds Γ = some Γ' → ∀ d ∈ ds,
-      ∃ T, AList.lookup Γ' d.id = some T ∧ U.ofC T = d.ty
+      ∃ T, AList.lookup Γ' d.id = some T ∧ U.ofC T = d.ty ∧ ConstantType T
   | [], _, _, _, _, hd => nomatch hd
   | d :: ds, Γ, Γ', h, d', hd => by
     simp only [typeConsts] at h
@@ -992,7 +999,7 @@ private theorem typeConsts_decls_inv (U : ConstTypes) : ∀ ds Γ Γ',
       · rename_i cond
         cases hd with
         | head => exact ⟨T, typeConsts_mono_inv U ds _ Γ' h d.id T (by simp [AList.lookup]),
-            cond.1⟩
+            cond.2.1, cond.1⟩
         | tail _ hm => exact typeConsts_decls_inv U ds _ Γ' h d' hm
       · cases h
     · cases h
@@ -1002,8 +1009,7 @@ def Matches (env : AList ConstId CVal) (Γ : AList ConstId CTy) : Prop :=
   ∀ c, (AList.lookup env c).map CVal.ty = AList.lookup Γ c ∧
     ∀ v, AList.lookup env c = some v → v.Valid
 
-/-- Helper (computation). Independent typing and evaluation produce matching environments.
-(approved: APPR-C2-agy-5372ad2a0) -/
+/-- Helper (computation). Independent typing and evaluation produce matching environments. -/
 private theorem typed_eval_matches_inv (U : ConstTypes) (fuel : Nat) : ∀ ds env env' Γ Γ',
     Matches env Γ → typeConsts U ds Γ = some Γ' → evalConsts U fuel ds env = .ok env' →
     Matches env' Γ'
@@ -1034,7 +1040,7 @@ private theorem typed_eval_matches_inv (U : ConstTypes) (fuel : Nat) : ∀ ds en
     · cases ht
 
 /-- Helper (computation). Independent static typing and evaluation imply
-that every declaration has a valid value of its declared type. (approved: APPR-C2-agy-5372ad2a0) -/
+that every declaration has a valid value of its declared type. -/
 private theorem evalConsts_sound_inv (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U))
     (env : AList ConstId CVal) (Γ : AList ConstId CTy)
     (ht : typeConsts U ds [] = some Γ) (he : evalConsts U fuel ds [] = .ok env) :
@@ -1042,7 +1048,7 @@ private theorem evalConsts_sound_inv (U : ConstTypes) (fuel : Nat) (ds : List (C
   have hm := typed_eval_matches_inv U fuel ds [] env [] Γ
     (by intro c; exact ⟨rfl, by intro v h; cases h⟩) ht he
   intro d hd
-  obtain ⟨T, hT, hty⟩ := typeConsts_decls_inv U ds [] Γ ht d hd
+  obtain ⟨T, hT, hty, hclosed⟩ := typeConsts_decls_inv U ds [] Γ ht d hd
   have hv := (hm d.id).1
   rw [hT] at hv
   cases hc : AList.lookup env d.id with
@@ -1053,7 +1059,7 @@ private theorem evalConsts_sound_inv (U : ConstTypes) (fuel : Nat) (ds : List (C
 
 /-- Law (subject `ConcreteSpec.Core.evalConsts`). When a declaration list is statically typed and
 evaluates within fuel, `evalConsts` produces a value environment env in which every declared
-constant has a valid value of its declared type. -/
+constant has a valid value of its declared type. Authority: docs/decisions.md#decided-2026-11-08-constants; closed admission: #decided-2026-11-14-constant-types. -/
 theorem evalConsts_sound (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U))
     (ht : ConstsTyped U ds) (he : ConstsEvaluate U fuel ds) :
     ∃ env, evalConsts U fuel ds [] = .ok env ∧
@@ -1068,9 +1074,11 @@ theorem evalConsts_sound (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U))
     | ok env => exact ⟨env, rfl, evalConsts_sound_inv U fuel ds env Γ ht' he'⟩
 
 /-- A broken declaration evaluator that returns `bool` for every declaration. -/
-def boolConstValues (U : ConstTypes) (_fuel : Nat) (ds : List (ConstDecl U))
+def boolConstValues (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U))
     (env : AList ConstId CVal) : Except ConstEvalRefusal (AList ConstId CVal) :=
-  .ok (ds.map (fun d => (d.id, CVal.bool true)) ++ env)
+  match evalConsts U fuel ds env with
+  | .ok _ => .ok (ds.map (fun d => (d.id, CVal.bool true)) ++ env)
+  | .error r => .error r
 
 /-- A concrete successful division declaration. -/
 def divisionDecls : List (ConstDecl ConstDemo.U) :=
@@ -1102,7 +1110,7 @@ example : ConstsTyped ConstDemo.U divisionDecls ∧
 
 /-- Helper (computation). Structural induction for declaration evaluation under sufficient fuel:
 every well-typed list either evaluates to .ok env' or stops at a declared constant with a located
-operation failure. (approved: APPR-C2-agy-5372ad2a0) -/
+operation failure. -/
 private theorem typed_evalConsts_refusal_inv (U : ConstTypes) (fuel : Nat) :
     ∀ (ds : List (ConstDecl U)) (env : AList ConstId CVal) (Γ Γ' : AList ConstId CTy),
       Agree env Γ →
@@ -1140,7 +1148,7 @@ private theorem typed_evalConsts_refusal_inv (U : ConstTypes) (fuel : Nat) :
 /-- Law (subject `ConcreteSpec.Core.evalConsts`). With sufficient fuel for every initializer (used
 or unused), declaration evaluation on a statically typed list never fails with .invalid or
 .outOfFuel: it either produces .ok env or refuses with .error (.operation d.id f) for a
-declared constant d ∈ ds and a located failure f.InExpr d.init. -/
+declared constant d ∈ ds and a located failure f.InExpr d.init. Authority: docs/decisions.md#decided-2026-11-08-constants; closed admission: #decided-2026-11-14-constant-types. -/
 theorem typed_evalConsts_refusal (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U))
     (ht : ConstsTyped U ds) (hfuel : ∀ d ∈ ds, d.init.height ≤ fuel) :
     (∃ env, evalConsts U fuel ds [] = .ok env) ∨
@@ -1152,11 +1160,11 @@ theorem typed_evalConsts_refusal (U : ConstTypes) (fuel : Nat) (ds : List (Const
     exact typed_evalConsts_refusal_inv U fuel ds [] [] Γ (by intro c T h; cases h) ht' hfuel
 
 /-- A broken declaration evaluator that misclassifies an arithmetic failure as .invalid. -/
-def invalidRefusalEvalConsts (U : ConstTypes) (_fuel : Nat) (ds : List (ConstDecl U))
+def invalidRefusalEvalConsts (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U))
     (env : AList ConstId CVal) : Except ConstEvalRefusal (AList ConstId CVal) :=
-  match ds with
-  | [] => .ok env
-  | d :: _ => .error (.invalid d.id d.init)
+  match evalConsts U fuel ds env with
+  | .error (.operation c f) => .error (.invalid c f.expression)
+  | r => r
 
 /-- Instance (law `ConcreteSpec.Core.typed_evalConsts_refusal`, case `unused_div_zero`). -/
 example : (∃ env, evalConsts ConstDemo.U 2
@@ -1195,15 +1203,17 @@ example : ConstsTyped ConstDemo.U
   refine ⟨by decide, by decide, ?_⟩
   rintro (⟨env, h⟩ | ⟨d, _, f, h, _⟩) <;> cases h
 
-/-- A broken declaration typechecker that binds every declaration to `CTy.unit` without checking
-declared-type agreement U.ofC T = d.ty. -/
+/-- Mutant: replace each newly established static binding with unit, retaining the closed
+admission, declared-type agreement and freshness guards. This corrupts only the binding rule. -/
 def unitTypeConsts (U : ConstTypes) : List (ConstDecl U) → AList ConstId CTy →
     Option (AList ConstId CTy)
   | [], Γ => some Γ
-  | d :: ds, Γ =>
-    if AList.lookup Γ d.id = none then
-      unitTypeConsts U ds ((d.id, .unit) :: Γ)
-    else none
+  | d :: ds, Γ => match d.init.ty? Γ with
+    | some T =>
+      if ConstantType T ∧ U.ofC T = d.ty ∧ AList.lookup Γ d.id = none then
+        unitTypeConsts U ds ((d.id, .unit) :: Γ)
+      else none
+    | none => none
 
 /-- A broken declaration typechecker that omits the U.ofC T = d.ty check. -/
 def uncheckedTypeConsts (U : ConstTypes) : List (ConstDecl U) → AList ConstId CTy →
@@ -1211,7 +1221,7 @@ def uncheckedTypeConsts (U : ConstTypes) : List (ConstDecl U) → AList ConstId 
   | [], Γ => some Γ
   | d :: ds, Γ => match d.init.ty? Γ with
     | some T =>
-      if AList.lookup Γ d.id = none then
+      if ConstantType T ∧ AList.lookup Γ d.id = none then
         uncheckedTypeConsts U ds ((d.id, T) :: Γ)
       else none
     | none => none
@@ -1219,7 +1229,7 @@ def uncheckedTypeConsts (U : ConstTypes) : List (ConstDecl U) → AList ConstId 
 /-- Law (subject `ConcreteSpec.Core.typeConsts`, `ConcreteSpec.Core.evalConsts`). Every admitted
 declaration list produces a static type environment Γ and value environment env in which every
 declaration's declared type, static scalar type, and evaluated value type are Copy in U,
-derived structurally from U.ofC T = d.ty and U.ofC_copy without a runtime isCopy check. -/
+derived structurally from U.ofC T = d.ty and U.ofC_copy without a runtime isCopy check. Authority: docs/decisions.md#recovered-59-26; closed admission: #decided-2026-11-14-constant-types. -/
 theorem admitted_copy (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U))
     (ht : ConstsTyped U ds) (he : ConstsEvaluate U fuel ds) :
     ∃ Γ env, typeConsts U ds [] = some Γ ∧ evalConsts U fuel ds [] = .ok env ∧
@@ -1236,11 +1246,13 @@ theorem admitted_copy (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U))
     | ok env =>
       refine ⟨Γ, env, rfl, rfl, ?_, ?_⟩
       · intro d hd
-        obtain ⟨T, hT, hty⟩ := typeConsts_decls_inv U ds [] Γ ht' d hd
-        exact ⟨T, hT, hty, hty ▸ U.ofC_copy T⟩
+        obtain ⟨T, hT, hty, hclosed⟩ := typeConsts_decls_inv U ds [] Γ ht' d hd
+        exact ⟨T, hT, hty, hty ▸ U.ofC_copy T hclosed⟩
       · intro d hd
         obtain ⟨v, hv, hty, _⟩ := evalConsts_sound_inv U fuel ds env Γ ht' he' d hd
-        exact ⟨v, hv, hty, U.ofC_copy v.ty⟩
+        obtain ⟨T, _, hdecl, hclosed⟩ := typeConsts_decls_inv U ds [] Γ ht' d hd
+        have heq : v.ty = T := U.ofC_inj _ _ (hty.trans hdecl.symm)
+        exact ⟨v, hv, hty, U.ofC_copy v.ty (heq ▸ hclosed)⟩
 
 /-- Instance (law `ConcreteSpec.Core.admitted_copy`, case `division_type`). -/
 example : ∃ Γ env, typeConsts ConstDemo.U divisionDecls [] = some Γ ∧
@@ -1251,83 +1263,39 @@ example : ∃ Γ env, typeConsts ConstDemo.U divisionDecls [] = some Γ ∧
       ConstDemo.U.ofC v.ty = d.ty ∧ ConstDemo.U.isCopy (ConstDemo.U.ofC v.ty) = true) :=
   admitted_copy ConstDemo.U 3 divisionDecls (by decide) (by decide)
 
-/-- Planted (law `ConcreteSpec.Core.admitted_copy`, case `division_type`,
-subject `ConcreteSpec.Core.typeConsts`, mutant `ConcreteSpec.Core.unitTypeConsts`). -/
-example : (unitTypeConsts ConstDemo.U divisionDecls []).isSome = true ∧
-    ConstsEvaluate ConstDemo.U 3 divisionDecls ∧
-    ¬ (∃ Γ env, unitTypeConsts ConstDemo.U divisionDecls [] = some Γ ∧
-      evalConsts ConstDemo.U 3 divisionDecls [] = .ok env ∧
-      (∀ d ∈ divisionDecls, ∃ T, AList.lookup Γ d.id = some T ∧
-        ConstDemo.U.ofC T = d.ty ∧ ConstDemo.U.isCopy d.ty = true) ∧
-      (∀ d ∈ divisionDecls, ∃ v, AList.lookup env d.id = some v ∧
-        ConstDemo.U.ofC v.ty = d.ty ∧ ConstDemo.U.isCopy (ConstDemo.U.ofC v.ty) = true)) := by
-  refine ⟨by decide, by decide, ?_⟩
-  rintro ⟨Γ, _, ht, _, hdecl, _⟩
-  cases ht
-  obtain ⟨T, hT, hty, _⟩ := hdecl
-    ⟨ConstDemo.cid "Q", .c (.int .i8), .plain .div (.int .i8 100) (.int .i8 7)⟩
-    (by simp [divisionDecls])
-  simp only [AList.lookup, ↓reduceIte, Option.some.injEq] at hT
-  change ConstDemo.U.ofC T = .c (.int .i8) at hty
-  subst T
-  cases hty
-
-/-- Planted (law `ConcreteSpec.Core.admitted_copy`, case `division_type`,
-subject `ConcreteSpec.Core.evalConsts`, mutant `ConcreteSpec.Core.boolConstValues`). -/
-example : ConstsTyped ConstDemo.U divisionDecls ∧
-    (boolConstValues ConstDemo.U 3 divisionDecls []).isOk = true ∧
-    ¬ (∃ Γ env, typeConsts ConstDemo.U divisionDecls [] = some Γ ∧
-      boolConstValues ConstDemo.U 3 divisionDecls [] = .ok env ∧
-      (∀ d ∈ divisionDecls, ∃ T, AList.lookup Γ d.id = some T ∧
-        ConstDemo.U.ofC T = d.ty ∧ ConstDemo.U.isCopy d.ty = true) ∧
-      (∀ d ∈ divisionDecls, ∃ v, AList.lookup env d.id = some v ∧
-        ConstDemo.U.ofC v.ty = d.ty ∧ ConstDemo.U.isCopy (ConstDemo.U.ofC v.ty) = true)) := by
-  refine ⟨by decide, by decide, ?_⟩
-  rintro ⟨_, env, _, he, _, hval⟩
-  cases he
-  obtain ⟨v, hv, hty, _⟩ := hval
-    ⟨ConstDemo.cid "Q", .c (.int .i8), .plain .div (.int .i8 100) (.int .i8 7)⟩
-    (by simp [divisionDecls])
-  simp only [divisionDecls, List.map, List.append_nil, AList.lookup,
-    ↓reduceIte, Option.some.injEq] at hv
-  change ConstDemo.U.ofC v.ty = .c (.int .i8) at hty
-  subst v
-  cases hty
-
 /-- Law (subject `ConcreteSpec.Core.typeConsts`). Any declaration list containing a non-Copy
 declared type is statically refused by `typeConsts`, derived from U.ofC T = d.ty and U.ofC_copy
-without a runtime isCopy check. -/
+without a runtime isCopy check. Authority: docs/decisions.md#recovered-59-26; closed admission: #decided-2026-11-14-constant-types. -/
 theorem typeConsts_refuses_nonCopy (U : ConstTypes) (ds : List (ConstDecl U))
     (d : ConstDecl U) (hd : d ∈ ds) (hnc : U.isCopy d.ty = false) :
     typeConsts U ds [] = none := by
   cases ht : typeConsts U ds [] with
   | none => rfl
   | some Γ =>
-    obtain ⟨T, _, hty⟩ := typeConsts_decls_inv U ds [] Γ ht d hd
-    have hcopy : U.isCopy d.ty = true := hty ▸ U.ofC_copy T
+    obtain ⟨T, _, hty, hclosed⟩ := typeConsts_decls_inv U ds [] Γ ht d hd
+    have hcopy : U.isCopy d.ty = true := hty ▸ U.ofC_copy T hclosed
     rw [hnc] at hcopy
     cases hcopy
 
 /-- Scalar success followed by a mismatched non-Copy declaration. -/
 def copyAuditDecls : List (ConstDecl ConstDemo.U) :=
   [⟨ConstDemo.cid "Q", .c (.int .i8), .int .i8 1⟩,
-   ⟨ConstDemo.cid "S", .text, .unit⟩]
+   ⟨ConstDemo.cid "S", .text, .bool true⟩]
 
 /-- Instance (law `ConcreteSpec.Core.typeConsts_refuses_nonCopy`, case `mixed_declarations`). -/
 example : typeConsts ConstDemo.U copyAuditDecls [] = none :=
   typeConsts_refuses_nonCopy ConstDemo.U copyAuditDecls
-    ⟨ConstDemo.cid "S", .text, .unit⟩ (by decide) rfl
+    ⟨ConstDemo.cid "S", .text, .bool true⟩ (by decide) rfl
 
 /-- Planted (law `ConcreteSpec.Core.typeConsts_refuses_nonCopy`, case `mixed_declarations`,
 subject `ConcreteSpec.Core.typeConsts`, mutant `ConcreteSpec.Core.uncheckedTypeConsts`). -/
-example : ⟨ConstDemo.cid "S", .text, .unit⟩ ∈ copyAuditDecls ∧
-    ConstDemo.U.isCopy (⟨ConstDemo.cid "S", .text, .unit⟩ : ConstDecl ConstDemo.U).ty = false ∧
+example : ⟨ConstDemo.cid "S", .text, .bool true⟩ ∈ copyAuditDecls ∧
+    ConstDemo.U.isCopy (⟨ConstDemo.cid "S", .text, .bool true⟩ : ConstDecl ConstDemo.U).ty = false ∧
     ¬ (uncheckedTypeConsts ConstDemo.U copyAuditDecls [] = none) := by
   refine ⟨by decide, rfl, ?_⟩
   decide
 
-/-- Helper (inversion). Lift primitive-grounded declaration derivations to executable evaluation.
-(approved: APPR-C2-agy-5372ad2a0) -/
+/-- Helper (inversion). Lift primitive-grounded declaration derivations to executable evaluation. -/
 private theorem constsRun_eval_inv {U : ConstTypes} {fuel : Nat} {ds : List (ConstDecl U)}
     {env : AList ConstId CVal} {r : Except ConstEvalRefusal (AList ConstId CVal)}
     (h : ConstsRun U fuel ds env r) : evalConsts U fuel ds env = r := by
@@ -1339,8 +1307,7 @@ private theorem constsRun_eval_inv {U : ConstTypes} {fuel : Nat} {ds : List (Con
   | exhausted d ds env head => simp [evalConsts, eval_derivation_unique_inv head]
   | invalid d ds env e head => simp [evalConsts, eval_derivation_unique_inv head]
 
-/-- Helper (computation). Evaluation of a successful prefix composes with the remaining list.
-(approved: APPR-C2-agy-5372ad2a0) -/
+/-- Helper (computation). Evaluation of a successful prefix composes with the remaining list. -/
 private theorem evalConsts_append_inv (U : ConstTypes) (fuel : Nat)
     (pre suffix : List (ConstDecl U)) (env out : AList ConstId CVal)
     (h : evalConsts U fuel pre env = .ok out) :
@@ -1355,7 +1322,7 @@ private theorem evalConsts_append_inv (U : ConstTypes) (fuel : Nat)
 /-- Law (subject `ConcreteSpec.Core.evalConsts`, `ConcreteSpec.Core.ConstsAdmitted`). A
 primitive-grounded failing initializer after any successful pre refuses the whole list with its
 identity and failure, even if unused. There is no typing or usage guard: evaluation failure alone
-prevents admission. -/
+prevents admission. Authority: docs/decisions.md#decided-2026-11-08-constants; closed admission: #decided-2026-11-14-constant-types. -/
 theorem semantic_failure_refuses (U : ConstTypes) (fuel : Nat)
     (pre suffix : List (ConstDecl U)) (d : ConstDecl U) (env : AList ConstId CVal)
     (f : ConstFailure) (hp : ConstsRun U fuel pre [] (.ok env))
@@ -1404,8 +1371,10 @@ def swallowFailure (env : AList ConstId CVal) (fuel : Nat) (e : CExpr) : CEvalRe
   | r => r
 
 /-- Fabricated-failure expression evaluator. -/
-def fabricateFailure (_env : AList ConstId CVal) (_fuel : Nat) (e : CExpr) : CEvalResult :=
-  .failure ⟨.plain .div, e, .arithmetic .divisionByZero⟩
+def fabricateFailure (env : AList ConstId CVal) (fuel : Nat) (e : CExpr) : CEvalResult :=
+  match e, e.eval env fuel with
+  | .plain .div _ _, .value _ => .failure ⟨.plain .div, e, .arithmetic .divisionByZero⟩
+  | _, r => r
 
 /-- A failing closed division and its primitive diagnostic. -/
 def zeroDivision : CExpr := .plain .div (.int .i8 1) (.int .i8 0)
@@ -1450,7 +1419,7 @@ example : ¬ (ConstEval [] 3 (.plain .div (.int .i8 100) (.int .i8 7))
 
 /-- A preceding successful declaration. -/
 def failurePrefix : List (ConstDecl ConstDemo.U) :=
-  [⟨ConstDemo.cid "P", .c .unit, .unit⟩]
+  [⟨ConstDemo.cid "P", .c .bool, .bool true⟩]
 /-- The failed constant is unused by both neighbours. -/
 def unusedFailureDecl : ConstDecl ConstDemo.U :=
   ⟨ConstDemo.cid "unused", .c (.int .i8), zeroDivision⟩
@@ -1463,46 +1432,34 @@ example : evalConsts ConstDemo.U 3 (failurePrefix ++ unusedFailureDecl :: divisi
       .error (.operation unusedFailureDecl.id zeroFailure) ∧
     ¬ ConstsAdmitted ConstDemo.U 3 (failurePrefix ++ unusedFailureDecl :: divisionDecls) :=
   semantic_failure_refuses ConstDemo.U 3 failurePrefix divisionDecls unusedFailureDecl
-    [(ConstDemo.cid "P", .unit)] zeroFailure
-    (.value _ [] [] .unit _ (.unit 2) (.nil _))
+    [(ConstDemo.cid "P", .bool true)] zeroFailure
+    (.value _ [] [] (.bool true) _ (.bool 2 true) (.nil _))
     (.plain_failure (.int_ok (by decide)) (.int_ok (by decide)) rfl)
 
 /-- Planted (law `ConcreteSpec.Core.semantic_failure_refuses`, case `unused_after_prefix`,
-subject `ConcreteSpec.Core.evalConsts`, mutant `ConcreteSpec.Core.skipUnusedEvalConsts`). -/
-example : ConstsRun ConstDemo.U 3 failurePrefix [] (.ok [(ConstDemo.cid "P", .unit)]) ∧
-    ConstEval [(ConstDemo.cid "P", .unit)] 3 unusedFailureDecl.init (.failure zeroFailure) ∧
+subject `ConcreteSpec.Core.evalConsts`, mutant `ConcreteSpec.Core.skipUnusedEvalConsts`).
+The independent successful-prefix derivation is retained; derived admission uses the
+substituted evaluator everywhere. -/
+example : ConstsRun ConstDemo.U 3 failurePrefix [] (.ok [(ConstDemo.cid "P", .bool true)]) ∧
+    ConstEval [(ConstDemo.cid "P", .bool true)] 3 unusedFailureDecl.init (.failure zeroFailure) ∧
     ¬ (skipUnusedEvalConsts ConstDemo.U 3 (failurePrefix ++ unusedFailureDecl :: divisionDecls) [] =
       .error (.operation unusedFailureDecl.id zeroFailure) ∧
-      ¬ ConstsAdmitted ConstDemo.U 3 (failurePrefix ++ unusedFailureDecl :: divisionDecls)) := by
-  refine ⟨.value _ [] [] .unit _ (.unit 2) (.nil _),
-    .plain_failure (.int_ok (by decide)) (.int_ok (by decide)) rfl, ?_⟩
-  intro h
-  have h1 := h.1
-  revert h1
-  decide
-
-/-- Planted (law `ConcreteSpec.Core.semantic_failure_refuses`, case `unused_after_prefix`,
-subject `ConcreteSpec.Core.ConstsAdmitted`, mutant `ConcreteSpec.Core.skipUnusedConstsAdmitted`). -/
-example : ConstsRun ConstDemo.U 3 failurePrefix [] (.ok [(ConstDemo.cid "P", .unit)]) ∧
-    ConstEval [(ConstDemo.cid "P", .unit)] 3 unusedFailureDecl.init (.failure zeroFailure) ∧
-    ¬ (evalConsts ConstDemo.U 3 (failurePrefix ++ unusedFailureDecl :: divisionDecls) [] =
-      .error (.operation unusedFailureDecl.id zeroFailure) ∧
       ¬ skipUnusedConstsAdmitted ConstDemo.U 3 (failurePrefix ++ unusedFailureDecl :: divisionDecls)) := by
-  refine ⟨.value _ [] [] .unit _ (.unit 2) (.nil _),
+  refine ⟨.value _ [] [] (.bool true) _ (.bool 2 true) (.nil _),
     .plain_failure (.int_ok (by decide)) (.int_ok (by decide)) rfl, ?_⟩
   intro h
   exact h.2 ⟨by decide, by decide⟩
 
 /-! ### Cycle reflection and mutual exclusion of cycles and dependency orders -/
 
-/-- Helper (computation). Boolean dependency testing agrees with source membership.
-(approved: APPR-C2-agy-5372ad2a0) -/
+/-- Helper (computation). Boolean dependency testing agrees with source membership. -/
 private theorem dependsOn_reference_inv (U : ConstTypes) (ds : List (ConstDecl U)) (a b : ConstId) :
     dependsOn U ds a b = true ↔ SourceReference U ds a b := by
   simp [dependsOn, SourceReference, List.any_eq_true, Bool.and_eq_true]
 
-/-- Representation lemma. Diagnostic chain checking agrees with independent source-reference
-membership, including every edge and the final declared identity. (approved: APPR-C2-agy-5372ad2a0) -/
+/-- Law (subject `ConcreteSpec.Core.refChain`). Diagnostic chain checking agrees with
+independent source-reference membership, including every edge and the final declared identity.
+Authority: docs/decisions.md#recovered-29-19 requires the error to show the chain. -/
 theorem cycle_chain_real (U : ConstTypes) (ds : List (ConstDecl U)) :
     ∀ chain, refChain U ds chain = true ↔ ActualRefChain U ds chain
   | [] => by simp [refChain, ActualRefChain]
@@ -1517,7 +1474,7 @@ private def idPos : List ConstId → ConstId → Nat
   | x :: xs, c => if x = c then 0 else idPos xs c + 1
 
 /-- Helper (computation). Every reference in a list satisfying `ReferencesEarlier` either lies in
-earlier or precedes the referencing declaration in ds. (approved: APPR-C2-agy-5372ad2a0) -/
+earlier or precedes the referencing declaration in ds. -/
 private theorem referencesEarlier_idPos_inv (U : ConstTypes) :
     ∀ (ds : List (ConstDecl U)) (earlier : List ConstId),
       ReferencesEarlier U ds earlier →
@@ -1557,7 +1514,7 @@ private theorem referencesEarlier_idPos_inv (U : ConstTypes) :
           omega
 
 /-- Helper (computation). Under a `DependencyOrder`, every `SourceReference` strictly decreases
-position in order. (approved: APPR-C2-agy-5372ad2a0) -/
+position in order. -/
 private theorem sourceReference_idPos_lt (U : ConstTypes) (source order : List (ConstDecl U))
     (hord : DependencyOrder U source order) {a b : ConstId}
     (href : SourceReference U source a b) :
@@ -1573,7 +1530,7 @@ private theorem sourceReference_idPos_lt (U : ConstTypes) (source order : List (
   · exact hlt
 
 /-- Helper (computation). Any `ActualRefChain` from a to b strictly decreases position in
-order. (approved: APPR-C2-agy-5372ad2a0) -/
+order. -/
 private theorem actualRefChain_idPos_lt (U : ConstTypes) (source order : List (ConstDecl U))
     (hord : DependencyOrder U source order) :
     ∀ (rest : List ConstId) (a b : ConstId),
@@ -1586,7 +1543,7 @@ private theorem actualRefChain_idPos_lt (U : ConstTypes) (source order : List (C
 
 /-- Law (subject `ConcreteSpec.Core.DependencyOrder`). A real reference cycle in source precludes
 every `DependencyOrder` of source: the ordered and cycle constructors of `ElaboratedConsts` are
-mutually exclusive. -/
+mutually exclusive. Authority: docs/decisions.md#recovered-29-19; closed admission: #decided-2026-11-14-constant-types. -/
 theorem cycle_excludes_dependencyOrder (U : ConstTypes) (source : List (ConstDecl U))
     (chain : List ConstId) (order : List (ConstDecl U))
     (hcycle : CycleChain U source chain) :
@@ -1597,7 +1554,7 @@ theorem cycle_excludes_dependencyOrder (U : ConstTypes) (source : List (ConstDec
     (cycle_chain_real U source (c :: rest ++ [c])).1 href
   exact Nat.lt_irrefl _ (actualRefChain_idPos_lt U source order hord rest c c hactual)
 
-/-- Helper (computation). A `DependencyOrder` witnesses `Acyclic`. (approved: APPR-C2-agy-5372ad2a0) -/
+/-- Helper (computation). A `DependencyOrder` witnesses `Acyclic`. -/
 private theorem acyclic_of_dependencyOrder (U : ConstTypes) (source order : List (ConstDecl U))
     (hord : DependencyOrder U source order) : Acyclic U source :=
   fun chain hcycle => cycle_excludes_dependencyOrder U source chain order hcycle hord
@@ -1638,14 +1595,13 @@ example : CycleChain ConstDemo.U
 
 /-! ### Constructive completeness of dependency sorting (`DependencySortingComplete`) -/
 
-/-- Helper (inversion). `readyDecl` reflects membership of every reference in earlier.
-(approved: APPR-C2-agy-5372ad2a0) -/
+/-- Helper (inversion). `readyDecl` reflects membership of every reference in earlier. -/
 private theorem readyDecl_iff (U : ConstTypes) (earlier : List ConstId) (d : ConstDecl U) :
     readyDecl U earlier d = true ↔ ∀ c ∈ d.init.refs, c ∈ earlier := by
   simp [readyDecl, List.all_eq_true]
 
 /-- Helper (inversion). When `takeReady` succeeds, the picked declaration is ready and d :: rest
-is a permutation of remaining. (approved: APPR-C2-agy-5372ad2a0) -/
+is a permutation of remaining. -/
 private theorem takeReady_some_inv (U : ConstTypes) (earlier : List ConstId) :
     ∀ (remaining : List (ConstDecl U)) (d : ConstDecl U) (rest : List (ConstDecl U)),
       takeReady U earlier remaining = some (d, rest) →
@@ -1663,8 +1619,7 @@ private theorem takeReady_some_inv (U : ConstTypes) (earlier : List ConstId) :
       obtain ⟨hready, hperm⟩ := takeReady_some_inv U earlier ds picked tail htake
       exact ⟨hready, (List.Perm.swap d₀ picked tail).trans (hperm.cons d₀)⟩
 
-/-- Helper (inversion). When `takeReady` returns `none`, no declaration in remaining is ready.
-(approved: APPR-C2-agy-5372ad2a0) -/
+/-- Helper (inversion). When `takeReady` returns `none`, no declaration in remaining is ready. -/
 private theorem takeReady_none_inv (U : ConstTypes) (earlier : List ConstId) :
     ∀ (remaining : List (ConstDecl U)),
       takeReady U earlier remaining = none →
@@ -1680,8 +1635,7 @@ private theorem takeReady_none_inv (U : ConstTypes) (earlier : List ConstId) :
       | head => exact Bool.eq_false_iff.mpr hnot
       | tail _ hm => exact takeReady_none_inv U earlier ds h d hm
 
-/-- Helper (computation). Extending a `refChain` by one edge at the right end.
-(approved: APPR-C2-agy-5372ad2a0) -/
+/-- Helper (computation). Extending a `refChain` by one edge at the right end. -/
 private theorem refChain_snoc (U : ConstTypes) (source : List (ConstDecl U)) :
     ∀ (xs : List ConstId) (a b : ConstId),
       refChain U source (xs ++ [a]) = true →
@@ -1697,8 +1651,7 @@ private theorem refChain_snoc (U : ConstTypes) (source : List (ConstDecl U)) :
     simp only [List.cons_append, refChain, Bool.and_eq_true] at h ⊢
     exact ⟨h.1, refChain_snoc U source (y :: rest) a b h.2 hab hb⟩
 
-/-- Helper (computation). Any non-empty suffix of a valid `refChain` is a valid `refChain`.
-(approved: APPR-C2-agy-5372ad2a0) -/
+/-- Helper (computation). Any non-empty suffix of a valid `refChain` is a valid `refChain`. -/
 private theorem refChain_suffix (U : ConstTypes) (source : List (ConstDecl U)) :
     ∀ (pre : List ConstId) (c : ConstId) (suf : List ConstId),
       refChain U source (pre ++ c :: suf) = true →
@@ -1711,7 +1664,7 @@ private theorem refChain_suffix (U : ConstTypes) (source : List (ConstDecl U)) :
     simp only [List.cons_append, refChain, Bool.and_eq_true] at h
     exact refChain_suffix U source (y :: rest) c suf h.2
 
-/-- Helper (inversion). Splitting a list at a member element. (approved: APPR-C2-agy-5372ad2a0) -/
+/-- Helper (inversion). Splitting a list at a member element. -/
 private theorem mem_split_at {α : Type} :
     ∀ (xs : List α) (v : α), v ∈ xs → ∃ pre suf, xs = pre ++ v :: suf
   | [], _, h => nomatch h
@@ -1722,8 +1675,7 @@ private theorem mem_split_at {α : Type} :
       obtain ⟨pre, suf, rfl⟩ := mem_split_at xs v hmem
       exact ⟨x :: pre, suf, rfl⟩
 
-/-- Helper (arithmetic). Filtering out a member strictly decreases list length.
-(approved: APPR-C2-agy-5372ad2a0) -/
+/-- Helper (arithmetic). Filtering out a member strictly decreases list length. -/
 private theorem length_filter_ne_lt (v : ConstId) :
     ∀ (xs : List ConstId), v ∈ xs → (xs.filter (· != v)).length < xs.length
   | [], h => nomatch h
@@ -1741,7 +1693,7 @@ private theorem length_filter_ne_lt (v : ConstId) :
       split <;> simp only [List.length_cons] <;> omega
 
 /-- Helper (computation). A walk in a finite vertex subset where every vertex has an outgoing edge
-eventually closes a `CycleChain`. (approved: APPR-C2-agy-5372ad2a0) -/
+eventually closes a `CycleChain`. -/
 private theorem walk_finds_cycle (U : ConstTypes) (source : List (ConstDecl U))
     (V : List ConstId)
     (hV_src : ∀ u ∈ V, u ∈ source.map ConstDecl.id)
@@ -1785,7 +1737,7 @@ private theorem walk_finds_cycle (U : ConstTypes) (source : List (ConstDecl U))
               exact List.mem_filter.mpr ⟨hx_unseen, bne_iff_ne.mpr hxv⟩
 
 /-- Helper (inversion). A finite list that does not lie entirely in earlier has a member outside
-earlier. (approved: APPR-C2-agy-5372ad2a0) -/
+earlier. -/
 private theorem exists_not_mem_of_not_all (earlier : List ConstId) :
     ∀ (xs : List ConstId), ¬ (∀ c ∈ xs, c ∈ earlier) → ∃ c ∈ xs, c ∉ earlier
   | [], h => (h (fun _ hc => nomatch hc)).elim
@@ -1802,8 +1754,7 @@ private theorem exists_not_mem_of_not_all (earlier : List ConstId) :
       exact ⟨c, List.Mem.tail _ hc_rs, hc_ne⟩
     · exact ⟨r, List.Mem.head _, hr⟩
 
-/-- Helper (computation). Correctness of `sortConstsAux` on any acyclic suffix with resolved names.
-(approved: APPR-C2-agy-5372ad2a0) -/
+/-- Helper (computation). Correctness of `sortConstsAux` on any acyclic suffix with resolved names. -/
 private theorem sortConstsAux_spec (U : ConstTypes) (source : List (ConstDecl U))
     (hacyc : Acyclic U source) :
     ∀ (fuel : Nat) (earlier : List ConstId) (remaining : List (ConstDecl U)),
@@ -1875,7 +1826,7 @@ private theorem sortConstsAux_spec (U : ConstTypes) (source : List (ConstDecl U)
         exact (hacyc chain hcycle).elim
 
 /-- Helper (computation). sortConsts U source produces a valid `DependencyOrder` whenever
-source is name-resolved and acyclic. (approved: APPR-C2-agy-5372ad2a0) -/
+source is name-resolved and acyclic. -/
 private theorem sortConsts_dependencyOrder (U : ConstTypes) (source : List (ConstDecl U))
     (hres : SourceNamesResolved U source) (hacyc : Acyclic U source) :
     DependencyOrder U source (sortConsts U source) := by
@@ -1885,7 +1836,7 @@ private theorem sortConsts_dependencyOrder (U : ConstTypes) (source : List (Cons
   exact ⟨hperm, hnodup, hearlier⟩
 
 /-- Law (subject `ConcreteSpec.Core.DependencyOrder`). Every name-resolved, acyclic source
-declaration list has a `DependencyOrder`, constructed by `sortConsts`. -/
+declaration list has a `DependencyOrder`, constructed by `sortConsts`. Authority: docs/decisions.md#recovered-29-19; closed admission: #decided-2026-11-14-constant-types. -/
 theorem DependencySortingComplete (U : ConstTypes) (source : List (ConstDecl U))
     (hres : SourceNamesResolved U source) (hacyc : Acyclic U source) :
     ∃ order, DependencyOrder U source order :=
@@ -1934,14 +1885,13 @@ example : SourceNamesResolved ConstDemo.U
 
 /-! ### Order independence (`ConstOrderIndependent`) -/
 
-/-- Helper (congruence). Static expression typing depends only on the bindings of e.refs.
-(approved: REV-C2-agy-59d4c501d) -/
+/-- Helper (congruence). Static expression typing depends only on the bindings of e.refs. -/
 private theorem ty?_congr_refs (Γ₁ Γ₂ : AList ConstId CTy) :
     ∀ (e : CExpr), (∀ c ∈ e.refs, AList.lookup Γ₁ c = AList.lookup Γ₂ c) →
       e.ty? Γ₁ = e.ty? Γ₂ := by
   intro e
   induction e with
-  | int _ _ | bool _ | unit => intro _; rfl
+  | int _ _ | bool _ => intro _; rfl
   | ref c => intro h; exact h c (List.Mem.head _)
   | wrapping _ a b iha ihb | saturating _ a b iha ihb | plain _ a b iha ihb
   | bit _ a b iha ihb | cmp _ a b iha ihb | and a b iha ihb | or a b iha ihb =>
@@ -1954,14 +1904,13 @@ private theorem ty?_congr_refs (Γ₁ Γ₂ : AList ConstId CTy) :
     have ha := iha h
     simp [CExpr.ty?, ha]
 
-/-- Helper (congruence). Initializer evaluation depends only on the bindings of e.refs.
-(approved: REV-C2-agy-59d4c501d) -/
+/-- Helper (congruence). Initializer evaluation depends only on the bindings of e.refs. -/
 private theorem eval_congr_refs (env₁ env₂ : AList ConstId CVal) :
     ∀ (e : CExpr) (fuel : Nat), (∀ c ∈ e.refs, AList.lookup env₁ c = AList.lookup env₂ c) →
       e.eval env₁ fuel = e.eval env₂ fuel := by
   intro e
   induction e with
-  | int _ _ | bool _ | unit =>
+  | int _ _ | bool _ =>
     intro fuel _
     cases fuel <;> rfl
   | ref c =>
@@ -1986,8 +1935,7 @@ private theorem eval_congr_refs (env₁ env₂ : AList ConstId CVal) :
       have ha := iha fuel h
       simp [CExpr.eval, ha]
 
-/-- Helper (computation). `typeConsts` preserves bindings of identities absent from ds.
-(approved: APPR-C2-agy-5372ad2a0) -/
+/-- Helper (computation). `typeConsts` preserves bindings of identities absent from ds. -/
 private theorem typeConsts_lookup_not_mem (U : ConstTypes) :
     ∀ (ds : List (ConstDecl U)) (Γ Γ' : AList ConstId CTy) (c : ConstId),
       typeConsts U ds Γ = some Γ' →
@@ -2005,8 +1953,7 @@ private theorem typeConsts_lookup_not_mem (U : ConstTypes) :
       · cases h
     · cases h
 
-/-- Helper (computation). `evalConsts` preserves bindings of identities absent from ds.
-(approved: APPR-C2-agy-5372ad2a0) -/
+/-- Helper (computation). `evalConsts` preserves bindings of identities absent from ds. -/
 private theorem evalConsts_lookup_not_mem (U : ConstTypes) (fuel : Nat) :
     ∀ (ds : List (ConstDecl U)) (env env' : AList ConstId CVal) (c : ConstId),
       evalConsts U fuel ds env = .ok env' →
@@ -2026,14 +1973,14 @@ private theorem evalConsts_lookup_not_mem (U : ConstTypes) (fuel : Nat) :
 
 /-- Helper (computation). Along a `ReferencesEarlier` suffix with duplicate-free names disjoint
 from earlier, a successful `typeConsts` produces a global fixed point for all declarations in
-ds. (approved: APPR-C2-agy-5372ad2a0) -/
+ds. -/
 private theorem typeConsts_fixedPoint_inv (U : ConstTypes) :
     ∀ (ds : List (ConstDecl U)) (earlier : List ConstId) (Γ Γ' : AList ConstId CTy),
       ReferencesEarlier U ds earlier →
       (ds.map ConstDecl.id).Nodup →
       (∀ x ∈ earlier, x ∉ ds.map ConstDecl.id) →
       typeConsts U ds Γ = some Γ' →
-      ∀ d ∈ ds, ∃ T, d.init.ty? Γ' = some T ∧ U.ofC T = d.ty ∧ AList.lookup Γ' d.id = some T
+      ∀ d ∈ ds, ∃ T, d.init.ty? Γ' = some T ∧ ConstantType T ∧ U.ofC T = d.ty ∧ AList.lookup Γ' d.id = some T
   | [], _, _, _, _, _, _, _, _, hd => nomatch hd
   | d₀ :: ds, earlier, Γ, Γ', ⟨hd₀_refs, hds_earlier⟩, hnodup, hdisj, ht, d, hd => by
     simp only [List.map_cons, List.nodup_cons] at hnodup
@@ -2062,7 +2009,7 @@ private theorem typeConsts_fixedPoint_inv (U : ConstTypes) :
             rw [typeConsts_lookup_not_mem U ds _ Γ' c ht hc_not_d₀ds.2]
             have hne : d₀.id ≠ c := Ne.symm hc_not_d₀ds.1
             simp [AList.lookup, hne]
-          exact ⟨T₀, hcongr.trans hT₀, hcond.1, hlookup_d₀⟩
+          exact ⟨T₀, hcongr.trans hT₀, hcond.1, hcond.2.1, hlookup_d₀⟩
         | tail _ hd_mem =>
           exact typeConsts_fixedPoint_inv U ds (d₀.id :: earlier) ((d₀.id, T₀) :: Γ) Γ'
             hds_earlier hnodup_ds hdisj' ht d hd_mem
@@ -2070,7 +2017,7 @@ private theorem typeConsts_fixedPoint_inv (U : ConstTypes) :
     · cases ht
 
 /-- Helper (computation). Conversely, any global typing fixed point Γ₁ drives `typeConsts` to
-succeed along any `ReferencesEarlier` order ds with identical bindings. (approved: APPR-C2-agy-5372ad2a0) -/
+succeed along any `ReferencesEarlier` order ds with identical bindings. -/
 private theorem typeConsts_from_fixedPoint_inv (U : ConstTypes) (Γ₁ : AList ConstId CTy) :
     ∀ (ds : List (ConstDecl U)) (earlier : List ConstId) (Γ : AList ConstId CTy),
       ReferencesEarlier U ds earlier →
@@ -2078,7 +2025,7 @@ private theorem typeConsts_from_fixedPoint_inv (U : ConstTypes) (Γ₁ : AList C
       (∀ x ∈ earlier, x ∉ ds.map ConstDecl.id) →
       (∀ c, c ∉ earlier → AList.lookup Γ c = none) →
       (∀ c ∈ earlier, AList.lookup Γ c = AList.lookup Γ₁ c) →
-      (∀ d ∈ ds, ∃ T, d.init.ty? Γ₁ = some T ∧ U.ofC T = d.ty ∧ AList.lookup Γ₁ d.id = some T) →
+      (∀ d ∈ ds, ∃ T, d.init.ty? Γ₁ = some T ∧ ConstantType T ∧ U.ofC T = d.ty ∧ AList.lookup Γ₁ d.id = some T) →
       ∃ Γ₂, typeConsts U ds Γ = some Γ₂ ∧
         (∀ c, c ∉ earlier → c ∉ ds.map ConstDecl.id → AList.lookup Γ₂ c = none) ∧
         (∀ c, c ∈ earlier ∨ c ∈ ds.map ConstDecl.id → AList.lookup Γ₂ c = AList.lookup Γ₁ c)
@@ -2090,7 +2037,7 @@ private theorem typeConsts_from_fixedPoint_inv (U : ConstTypes) (Γ₁ : AList C
   | d₀ :: ds, earlier, Γ, ⟨hd₀_refs, hds_earlier⟩, hnodup, hdisj, hnone, heq, hfp => by
     simp only [List.map_cons, List.nodup_cons] at hnodup
     obtain ⟨hd₀_not_ds, hnodup_ds⟩ := hnodup
-    obtain ⟨T₀, hT₀_Γ₁, hofC, hlookup_Γ₁⟩ := hfp d₀ (List.Mem.head _)
+    obtain ⟨T₀, hT₀_Γ₁, hclosed, hofC, hlookup_Γ₁⟩ := hfp d₀ (List.Mem.head _)
     have hT₀_Γ : d₀.init.ty? Γ = some T₀ := by
       rw [ty?_congr_refs Γ Γ₁ d₀.init (fun c hc => heq c (hd₀_refs c hc))]
       exact hT₀_Γ₁
@@ -2117,7 +2064,7 @@ private theorem typeConsts_from_fixedPoint_inv (U : ConstTypes) (Γ₁ : AList C
     obtain ⟨Γ₂, ht₂, hnone₂, heq₂⟩ := typeConsts_from_fixedPoint_inv U Γ₁ ds (d₀.id :: earlier)
       ((d₀.id, T₀) :: Γ) hds_earlier hnodup_ds hdisj' hnone' heq'
       (fun d hd => hfp d (List.Mem.tail _ hd))
-    refine ⟨Γ₂, by simp [typeConsts, hT₀_Γ, hofC, hfresh, ht₂], ?_, ?_⟩
+    refine ⟨Γ₂, by simp [typeConsts, hT₀_Γ, hclosed, hofC, hfresh, ht₂], ?_, ?_⟩
     · intro c hce hcd₀ds
       simp only [List.map_cons, List.mem_cons, not_or] at hcd₀ds
       exact hnone₂ c (by simp [List.mem_cons, hcd₀ds.1, hce]) hcd₀ds.2
@@ -2131,7 +2078,7 @@ private theorem typeConsts_from_fixedPoint_inv (U : ConstTypes) (Γ₁ : AList C
 
 /-- Helper (computation). Along a `ReferencesEarlier` suffix with duplicate-free names disjoint
 from earlier, a successful `evalConsts` produces a global fixed point for all declarations in
-ds. (approved: APPR-C2-agy-5372ad2a0) -/
+ds. -/
 private theorem evalConsts_fixedPoint_inv (U : ConstTypes) (fuel : Nat) :
     ∀ (ds : List (ConstDecl U)) (earlier : List ConstId) (env env' : AList ConstId CVal),
       ReferencesEarlier U ds earlier →
@@ -2174,7 +2121,7 @@ private theorem evalConsts_fixedPoint_inv (U : ConstTypes) (fuel : Nat) :
     · cases he
 
 /-- Helper (computation). Conversely, any global evaluation fixed point env₁ drives `evalConsts`
-to succeed along any `ReferencesEarlier` order ds with identical bindings. (approved: APPR-C2-agy-5372ad2a0) -/
+to succeed along any `ReferencesEarlier` order ds with identical bindings. -/
 private theorem evalConsts_from_fixedPoint_inv (U : ConstTypes) (fuel : Nat)
     (env₁ : AList ConstId CVal) :
     ∀ (ds : List (ConstDecl U)) (earlier : List ConstId) (env : AList ConstId CVal),
@@ -2232,7 +2179,7 @@ private theorem evalConsts_from_fixedPoint_inv (U : ConstTypes) (fuel : Nat)
         | inl h => exact Or.inl (h ▸ List.Mem.head _)
         | inr h => exact Or.inr h
 
-/-- Helper (computation). One direction of `typeConsts` order independence. (approved: APPR-C2-agy-5372ad2a0) -/
+/-- Helper (computation). One direction of `typeConsts` order independence. -/
 private theorem typeConsts_order_transfer (U : ConstTypes)
     (source first second : List (ConstDecl U))
     (hfirst : DependencyOrder U source first)
@@ -2248,7 +2195,7 @@ private theorem typeConsts_order_transfer (U : ConstTypes)
   have hfp₁ := typeConsts_fixedPoint_inv U first [] [] Γ₁ hearlier₁ hnodup₁
     (by intro x hx; nomatch hx) ht₁
   have hfp₂ : ∀ d ∈ second,
-      ∃ T, d.init.ty? Γ₁ = some T ∧ U.ofC T = d.ty ∧ AList.lookup Γ₁ d.id = some T :=
+      ∃ T, d.init.ty? Γ₁ = some T ∧ ConstantType T ∧ U.ofC T = d.ty ∧ AList.lookup Γ₁ d.id = some T :=
     fun d hd => hfp₁ d (hperm₁.mem_iff.mpr (hperm₂.mem_iff.mp hd))
   obtain ⟨Γ₂, ht₂, hnone₂, heq₂⟩ := typeConsts_from_fixedPoint_inv U Γ₁ second [] []
     hearlier₂ hnodup₂ (by intro x hx; nomatch hx) (by intro c _; rfl) (by intro c hc; nomatch hc) hfp₂
@@ -2264,7 +2211,7 @@ private theorem typeConsts_order_transfer (U : ConstTypes)
       typeConsts_lookup_not_mem U first [] Γ₁ c ht₁ hc₁]
     rfl
 
-/-- Helper (computation). One direction of `evalConsts` order independence. (approved: APPR-C2-agy-5372ad2a0) -/
+/-- Helper (computation). One direction of `evalConsts` order independence. -/
 private theorem evalConsts_order_transfer (U : ConstTypes) (fuel : Nat)
     (source first second : List (ConstDecl U))
     (hfirst : DependencyOrder U source first)
@@ -2297,9 +2244,11 @@ private theorem evalConsts_order_transfer (U : ConstTypes) (fuel : Nat)
       evalConsts_lookup_not_mem U fuel first [] env₁ c he₁ hc₁]
     rfl
 
-/-- Law (subject `ConcreteSpec.Core.ConstsAdmitted`, `ConcreteSpec.Core.evalConsts`). Any two
+/-- Law (subject `ConcreteSpec.Core.typeConsts`, `ConcreteSpec.Core.evalConsts`,
+`ConcreteSpec.Core.ConstsTyped`, `ConcreteSpec.Core.ConstsEvaluate`,
+`ConcreteSpec.Core.ConstsAdmitted`). Any two
 dependency orders of source agree on static typing, evaluation success, admission, and the
-computed value of every constant identity. -/
+computed value of every constant identity. Authority: docs/decisions.md#recovered-29-19; closed admission: #decided-2026-11-14-constant-types. -/
 theorem ConstOrderIndependent (U : ConstTypes) (fuel : Nat)
     (source first second : List (ConstDecl U))
     (hfirst : DependencyOrder U source first)
@@ -2351,268 +2300,530 @@ theorem ConstOrderIndependent (U : ConstTypes) (fuel : Nat)
   cases he₂'
   exact (hlookup c).symm
 
-/-- A broken admission predicate that depends on which declaration appears first in the list. -/
-def firstIdAdmitted (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U)) : Prop :=
-  ConstsAdmitted U fuel ds ∧ ds.head?.map ConstDecl.id = some (ConstDemo.cid "A")
+/-- Law (subject `ConcreteSpec.Core.ConstantType`). The admitted types are exactly integers
+and bool, rather than every scalar carrier. Authority:
+docs/decisions.md#decided-2026-11-14-constant-types. -/
+theorem constant_types (T : CTy) :
+    ConstantType T ↔ (∃ i, T = .int i) ∨ T = .bool := by
+  cases T <;> simp [ConstantType]
 
-/-- A broken declaration evaluator whose values depend on declaration position rather than only on
-initializer semantics. -/
-def orderSensitiveEvalConsts (U : ConstTypes) (_fuel : Nat) (ds : List (ConstDecl U))
+/-- Instance (law `ConcreteSpec.Core.constant_types`, case `closed_list`).
+Both directions are populated for integer and Boolean carriers. -/
+example : ConstantType (.int .u8) ∧ ConstantType .bool ∧
+    ¬ ConstantType .unit ∧ ¬ ConstantType .char := by decide
+
+/-- Mutant: extend only the closed type list with unit, keeping char refused. -/
+def admitUnit (T : CTy) : Prop := ConstantType T ∨ T = .unit
+
+/-- Planted (law `ConcreteSpec.Core.constant_types`, case `unit`,
+subject `ConcreteSpec.Core.ConstantType`, mutant `ConcreteSpec.Core.admitUnit`). -/
+example : admitUnit .unit ∧ ¬ (admitUnit .unit ↔ (∃ i, CTy.unit = .int i) ∨ CTy.unit = .bool) := by
+  simp [admitUnit, ConstantType]
+
+/-- Law (subject `ConcreteSpec.Core.typeConsts`). Every static binding introduced by a
+successfully typed declaration has an admitted integer or Boolean type.
+Authority: docs/decisions.md#decided-2026-11-14-constant-types. -/
+theorem typed_constant_closed (U : ConstTypes) (ds : List (ConstDecl U))
+    (Γ : AList ConstId CTy) (ht : typeConsts U ds [] = some Γ) :
+    ∀ d ∈ ds, ∃ T, AList.lookup Γ d.id = some T ∧ U.ofC T = d.ty ∧ ConstantType T :=
+  typeConsts_decls_inv U ds [] Γ ht
+
+/-- Instance (law `ConcreteSpec.Core.typed_constant_closed`, case `division`). -/
+example : ∀ d ∈ divisionDecls, ∃ T,
+    AList.lookup [(ConstDemo.cid "Q", CTy.int .i8)] d.id = some T ∧
+    ConstDemo.U.ofC T = d.ty ∧ ConstantType T :=
+  typed_constant_closed ConstDemo.U divisionDecls _ (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.typed_constant_closed`, case `unit_binding`,
+subject `ConcreteSpec.Core.typeConsts`, mutant `ConcreteSpec.Core.unitTypeConsts`).
+The static-success premise uses the mutant too; its fabricated unit binding is not admitted. -/
+example : unitTypeConsts ConstDemo.U divisionDecls [] =
+      some [(ConstDemo.cid "Q", CTy.unit)] ∧
+    ¬ (∀ d ∈ divisionDecls, ∃ T,
+      AList.lookup [(ConstDemo.cid "Q", CTy.unit)] d.id = some T ∧
+      ConstDemo.U.ofC T = d.ty ∧ ConstantType T) := by
+  refine ⟨by decide, ?_⟩
+  intro h
+  obtain ⟨T, hT, _, hc⟩ := h _ (List.Mem.head _)
+  have heq : CTy.unit = T := by simpa [AList.lookup] using hT
+  subst T
+  exact hc
+
+/-- Law (subject `ConcreteSpec.Core.evalConsts`). Exhaustion at a declaration after a
+successful prefix refuses admission with the budget diagnostic, independently of whether
+an operation would fail with more fuel. Authority: docs/decisions.md#recovered-29-18 and
+#decided-2026-11-08-constants. -/
+theorem exhausted_refuses (U : ConstTypes) (fuel : Nat)
+    (pre suffix : List (ConstDecl U)) (d : ConstDecl U) (env : AList ConstId CVal)
+    (hp : ConstsRun U fuel pre [] (.ok env))
+    (hf : ConstEval env fuel d.init .outOfFuel) :
+    evalConsts U fuel (pre ++ d :: suffix) [] = .error (.outOfFuel d.id) ∧
+      ¬ ConstsAdmitted U fuel (pre ++ d :: suffix) := by
+  have he : evalConsts U fuel (pre ++ d :: suffix) [] = .error (.outOfFuel d.id) := by
+    rw [evalConsts_append_inv U fuel pre (d :: suffix) [] env (constsRun_eval_inv hp)]
+    simp [evalConsts, eval_derivation_unique_inv hf]
+  refine ⟨he, ?_⟩
+  intro h
+  have bad := h.2
+  unfold ConstsEvaluate at bad
+  rw [he] at bad
+  cases bad
+
+/-- Mutant: erase only the distinction between budget exhaustion and static invalidity. -/
+def fuelAsInvalid (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U))
+    (env : AList ConstId CVal) : Except ConstEvalRefusal (AList ConstId CVal) :=
+  match evalConsts U fuel ds env with
+  | .error (.outOfFuel c) => .error (.invalid c (.bool false))
+  | r => r
+
+/-- Instance (law `ConcreteSpec.Core.exhausted_refuses`, case `zero_budget`). -/
+example : evalConsts ConstDemo.U 0 divisionDecls [] =
+      .error (.outOfFuel (ConstDemo.cid "Q")) ∧
+    ¬ ConstsAdmitted ConstDemo.U 0 divisionDecls :=
+  exhausted_refuses ConstDemo.U 0 [] [] (divisionDecls.head (by decide)) []
+    (.nil []) (.exhausted _)
+
+/-- Planted (law `ConcreteSpec.Core.exhausted_refuses`, case `zero_budget`,
+subject `ConcreteSpec.Core.evalConsts`, mutant `ConcreteSpec.Core.fuelAsInvalid`).
+The independent empty-prefix derivation stays unchanged; the derived admission closure
+uses the mutant. -/
+example : ConstsRun ConstDemo.U 0 [] [] (.ok []) ∧
+    ConstEval [] 0 (divisionDecls.head (by decide)).init .outOfFuel ∧
+    ¬ (fuelAsInvalid ConstDemo.U 0 divisionDecls [] =
+        .error (.outOfFuel (ConstDemo.cid "Q")) ∧
+      ¬ (ConstsTyped ConstDemo.U divisionDecls ∧
+        (fuelAsInvalid ConstDemo.U 0 divisionDecls []).isOk = true)) := by
+  refine ⟨.nil [], .exhausted _, ?_⟩
+  intro h
+  cases h.1
+
+/-- Helper (computation). Kahn's implementation picks the first ready declaration:
+a blocked source prefix cannot move a later ready declaration ahead of this one.
+This records `takeReady`'s implementation, not an additional language admission rule. -/
+theorem takeReady_first (U : ConstTypes) (earlier : List ConstId)
+    (pre : List (ConstDecl U)) (d : ConstDecl U) (suffix : List (ConstDecl U))
+    (hpre : ∀ x ∈ pre, readyDecl U earlier x = false)
+    (hd : readyDecl U earlier d = true) :
+    takeReady U earlier (pre ++ d :: suffix) = some (d, pre ++ suffix) := by
+  induction pre with
+  | nil => simp [takeReady, hd]
+  | cons x xs ih =>
+    have hx := hpre x (List.Mem.head _)
+    have hs := ih (fun y hy => hpre y (List.Mem.tail _ hy))
+    simp [takeReady, hx, hs]
+
+/-- A forward reference followed by two independent ready declarations. -/
+def tiedSource : List (ConstDecl ConstDemo.U) :=
+  [⟨ConstDemo.cid "A", .c .bool, .ref (ConstDemo.cid "C")⟩,
+   ⟨ConstDemo.cid "B", .c .bool, .bool true⟩,
+   ⟨ConstDemo.cid "C", .c .bool, .bool false⟩]
+
+/-- Instance: the implementation tie-break selects B before C, then C before A. -/
+example : (sortConsts ConstDemo.U tiedSource).map ConstDecl.id =
+    [ConstDemo.cid "B", ConstDemo.cid "C", ConstDemo.cid "A"] := by decide
+
+/-- Mutant: reverse source tie-breaking while retaining a valid dependency order. -/
+def reverseTies (U : ConstTypes) (source : List (ConstDecl U)) : List (ConstDecl U) :=
+  sortConsts U source.reverse
+
+/-- Planted: both outputs satisfy the dependency contract, so a naive validity-only test
+misses the reversed tie-break. The implementation's exact ordering check rejects it. -/
+example : DependencyOrder ConstDemo.U tiedSource (sortConsts ConstDemo.U tiedSource) ∧
+    DependencyOrder ConstDemo.U tiedSource (reverseTies ConstDemo.U tiedSource) ∧
+    (reverseTies ConstDemo.U tiedSource).map ConstDecl.id ≠
+      [ConstDemo.cid "B", ConstDemo.cid "C", ConstDemo.cid "A"] := by decide
+
+/-- Instance (law `ConcreteSpec.Core.ConstOrderIndependent`, case `forward_and_ties`).
+Different valid orders produce different association-list orderings but equal lookups;
+syntactic environment equality would incorrectly reject this permutation. -/
+example : (ConstsAdmitted ConstDemo.U 3 (sortConsts ConstDemo.U tiedSource) ↔
+      ConstsAdmitted ConstDemo.U 3 (reverseTies ConstDemo.U tiedSource)) ∧
+    ∀ env₁ env₂,
+      evalConsts ConstDemo.U 3 (sortConsts ConstDemo.U tiedSource) [] = .ok env₁ →
+      evalConsts ConstDemo.U 3 (reverseTies ConstDemo.U tiedSource) [] = .ok env₂ →
+      ∀ c, AList.lookup env₁ c = AList.lookup env₂ c := by
+  have h := ConstOrderIndependent ConstDemo.U 3 tiedSource
+    (sortConsts ConstDemo.U tiedSource) (reverseTies ConstDemo.U tiedSource)
+    (by decide) (by decide)
+  exact ⟨h.2.2.1, h.2.2.2⟩
+
+/-- Instance: both directions of admission are populated, and list equality is too strong. -/
+example : ConstsAdmitted ConstDemo.U 3 (sortConsts ConstDemo.U tiedSource) ∧
+    ConstsAdmitted ConstDemo.U 3 (reverseTies ConstDemo.U tiedSource) ∧
+    evalConsts ConstDemo.U 3 (sortConsts ConstDemo.U tiedSource) [] ≠
+      evalConsts ConstDemo.U 3 (reverseTies ConstDemo.U tiedSource) [] := by decide
+
+/-- Planted (law `ConcreteSpec.Core.eval_agrees`, case `forward_failure`,
+subject `ConcreteSpec.Core.CExpr.eval`, mutant `ConcreteSpec.Core.swallowFailure`).
+Test the forward implication alone, so the reverse implication cannot mask a defect. -/
+example : ¬ ConstEval [] 3 zeroDivision (swallowFailure [] 3 zeroDivision) := by
+  intro h
+  have bad := eval_derivation_unique_inv h
+  revert bad
+  decide
+
+/-- Planted (law `ConcreteSpec.Core.eval_agrees`, case `forward_success`,
+subject `ConcreteSpec.Core.CExpr.eval`, mutant `ConcreteSpec.Core.fabricateFailure`). -/
+example : ¬ ConstEval [] 3 (.plain .div (.int .i8 100) (.int .i8 7))
+    (fabricateFailure [] 3 (.plain .div (.int .i8 100) (.int .i8 7))) := by
+  intro h
+  have bad := eval_derivation_unique_inv h
+  revert bad
+  decide
+
+/-- An unused overflowing initializer, independent of the successful neighbours. -/
+def unusedOverflow : ConstDecl ConstDemo.U :=
+  ⟨ConstDemo.cid "OVER", .c (.int .i8), .plain .add (.int .i8 127) (.int .i8 1)⟩
+
+/-- Instance (law `ConcreteSpec.Core.semantic_failure_refuses`, case `unused_overflow`).
+Overflow in an unused constant is a compile-time refusal, never a deferred runtime trap.
+Authority: docs/decisions.md#decided-2026-11-14-constant-types. -/
+example : evalConsts ConstDemo.U 3 (failurePrefix ++ unusedOverflow :: divisionDecls) [] =
+      .error (.operation unusedOverflow.id
+        ⟨.plain .add, unusedOverflow.init, .arithmetic .overflow⟩) ∧
+    ¬ ConstsAdmitted ConstDemo.U 3 (failurePrefix ++ unusedOverflow :: divisionDecls) :=
+  semantic_failure_refuses ConstDemo.U 3 failurePrefix divisionDecls unusedOverflow
+    [(ConstDemo.cid "P", .bool true)] _
+    (.value _ [] [] (.bool true) _ (.bool 2 true) (.nil _))
+    (.plain_failure (.int_ok (by decide)) (.int_ok (by decide)) (by decide))
+
+/-- Planted (law `ConcreteSpec.Core.semantic_failure_refuses`, case `unused_overflow`,
+subject `ConcreteSpec.Core.evalConsts`, mutant `ConcreteSpec.Core.skipUnusedEvalConsts`).
+The independent prefix premise remains populated; derived admission uses the
+substituted evaluator uniformly. -/
+example : ConstsRun ConstDemo.U 3 failurePrefix [] (.ok [(ConstDemo.cid "P", .bool true)]) ∧
+    ConstEval [(ConstDemo.cid "P", .bool true)] 3 unusedOverflow.init
+      (.failure ⟨.plain .add, unusedOverflow.init, .arithmetic .overflow⟩) ∧
+    ¬ (skipUnusedEvalConsts ConstDemo.U 3 (failurePrefix ++ unusedOverflow :: divisionDecls) [] =
+        .error (.operation unusedOverflow.id
+          ⟨.plain .add, unusedOverflow.init, .arithmetic .overflow⟩) ∧
+      ¬ skipUnusedConstsAdmitted ConstDemo.U 3 (failurePrefix ++ unusedOverflow :: divisionDecls)) := by
+  refine ⟨.value _ [] [] (.bool true) _ (.bool 2 true) (.nil _),
+    .plain_failure (.int_ok (by decide)) (.int_ok (by decide)) (by decide), ?_⟩
+  intro h
+  exact h.2 ⟨by decide, by decide⟩
+
+/-- Mutant: remove only Boolean admission from the closed list. -/
+def intOnlyConstantType (T : CTy) : Prop := ∃ i, T = .int i
+
+/-- Planted (law `ConcreteSpec.Core.constant_types`, case `bool_reverse`,
+subject `ConcreteSpec.Core.ConstantType`, mutant `ConcreteSpec.Core.intOnlyConstantType`). -/
+example : ((∃ i, CTy.bool = .int i) ∨ CTy.bool = .bool) ∧
+    ¬ intOnlyConstantType .bool := by simp [intOnlyConstantType]
+
+/-- An asymmetric three-cycle makes reversing edges observable. -/
+def diagnosticCycle : List (ConstDecl ConstDemo.U) :=
+  [⟨ConstDemo.cid "A", .c .bool, .ref (ConstDemo.cid "B")⟩,
+   ⟨ConstDemo.cid "B", .c .bool, .ref (ConstDemo.cid "C")⟩,
+   ⟨ConstDemo.cid "C", .c .bool, .ref (ConstDemo.cid "A")⟩]
+
+/-- The populated diagnostic traverses all three source edges. -/
+def diagnosticChain : List ConstId :=
+  [ConstDemo.cid "A", ConstDemo.cid "B", ConstDemo.cid "C", ConstDemo.cid "A"]
+
+/-- Instance (law `ConcreteSpec.Core.cycle_chain_real`, case `three_cycle`). -/
+example : refChain ConstDemo.U diagnosticCycle diagnosticChain = true ∧
+    ActualRefChain ConstDemo.U diagnosticCycle diagnosticChain :=
+  ⟨by decide, (cycle_chain_real _ _ _).mp (by decide)⟩
+
+/-- Mutant: accept just the empty chain in addition to the real checker. -/
+def acceptEmptyChain (U : ConstTypes) (ds : List (ConstDecl U)) (cs : List ConstId) : Bool :=
+  cs.isEmpty || refChain U ds cs
+
+/-- Planted (law `ConcreteSpec.Core.cycle_chain_real`, case `empty_forward`,
+subject `ConcreteSpec.Core.refChain`, mutant `ConcreteSpec.Core.acceptEmptyChain`). -/
+example : acceptEmptyChain ConstDemo.U diagnosticCycle [] = true ∧
+    ¬ ActualRefChain ConstDemo.U diagnosticCycle [] := by
+  exact ⟨rfl, id⟩
+
+/-- Mutant: inspect source references backwards, preserving the nonempty-chain checks. -/
+def backwardsChain (U : ConstTypes) (ds : List (ConstDecl U)) : List ConstId → Bool
+  | [] => false
+  | [c] => (ds.map ConstDecl.id).contains c
+  | a :: b :: rest => dependsOn U ds b a && backwardsChain U ds (b :: rest)
+
+/-- Planted (law `ConcreteSpec.Core.cycle_chain_real`, case `real_reverse`,
+subject `ConcreteSpec.Core.refChain`, mutant `ConcreteSpec.Core.backwardsChain`). -/
+example : ActualRefChain ConstDemo.U diagnosticCycle diagnosticChain ∧
+    backwardsChain ConstDemo.U diagnosticCycle diagnosticChain ≠ true :=
+  ⟨(cycle_chain_real _ _ _).mp (by decide), by decide⟩
+
+/-- Planted (law `ConcreteSpec.Core.cycle_chain_real`, case `backwards_forward`,
+subject `ConcreteSpec.Core.refChain`, mutant `ConcreteSpec.Core.backwardsChain`). -/
+example : backwardsChain ConstDemo.U diagnosticCycle diagnosticChain.reverse = true ∧
+    ¬ ActualRefChain ConstDemo.U diagnosticCycle diagnosticChain.reverse := by
+  refine ⟨by decide, ?_⟩
+  intro h
+  have := (cycle_chain_real _ _ _).mpr h
+  revert this
+  decide
+
+/-- Planted (law `ConcreteSpec.Core.admitted_copy`, case `noncopy_declaration`,
+subject `ConcreteSpec.Core.typeConsts`, mutant `ConcreteSpec.Core.uncheckedTypeConsts`).
+Dropping only declared-type agreement admits text. The failed conclusion is Copy itself. -/
+example : (uncheckedTypeConsts ConstDemo.U copyAuditDecls []).isSome = true ∧
+    ConstsEvaluate ConstDemo.U 2 copyAuditDecls ∧
+    ¬ (∀ d ∈ copyAuditDecls, ConstDemo.U.isCopy d.ty = true) := by decide
+
+/-- Mutant: corrupt only a successful i8 value's range, retaining its scalar type. -/
+def outOfRangeEval (env : AList ConstId CVal) (fuel : Nat) (e : CExpr) : CEvalResult :=
+  match e.eval env fuel with
+  | .value (.int .i8 _) => .value (.int .i8 128)
+  | r => r
+
+/-- Mutant: use the same range-corrupting scalar rule in declaration evaluation. -/
+def outOfRangeConstValues (U : ConstTypes) (fuel : Nat) :
+    List (ConstDecl U) → AList ConstId CVal → Except ConstEvalRefusal (AList ConstId CVal)
+  | [], env => .ok env
+  | d :: ds, env => match outOfRangeEval env fuel d.init with
+    | .value v => outOfRangeConstValues U fuel ds ((d.id, v) :: env)
+    | .failure f => .error (.operation d.id f)
+    | .outOfFuel => .error (.outOfFuel d.id)
+    | .invalid e => .error (.invalid d.id e)
+
+/-- Planted (law `ConcreteSpec.Core.eval_total`, case `same_type_range`,
+subject `ConcreteSpec.Core.CExpr.eval`, mutant `ConcreteSpec.Core.outOfRangeEval`). -/
+example : (CExpr.int .i8 1).ty? [] = some (.int .i8) ∧
+    (CExpr.int .i8 1).fallibleFree = true ∧ (CExpr.int .i8 1).height ≤ 1 ∧
+    outOfRangeEval [] 1 (.int .i8 1) = .value (.int .i8 128) ∧
+    (CVal.int .i8 128).ty = .int .i8 ∧ ¬ (CVal.int .i8 128).Valid := by
+  unfold CVal.Valid
+  decide
+
+/-- Planted (law `ConcreteSpec.Core.eval_wellTyped_progress`, case `same_type_range`,
+subject `ConcreteSpec.Core.CExpr.eval`, mutant `ConcreteSpec.Core.outOfRangeEval`). -/
+example : ¬ ((∃ v, outOfRangeEval [] 1 (.int .i8 1) = .value v ∧
+      v.ty = .int .i8 ∧ v.Valid) ∨
+    ∃ f, outOfRangeEval [] 1 (.int .i8 1) = .failure f ∧ f.InExpr (.int .i8 1)) := by
+  have he : outOfRangeEval [] 1 (.int .i8 1) = .value (.int .i8 128) := by decide
+  rw [he]
+  simp only [CEvalResult.value.injEq, exists_eq_left', CVal.ty, true_and,
+    reduceCtorEq, false_and, exists_false, or_false]
+  unfold CVal.Valid
+  decide
+
+/-- Planted (law `ConcreteSpec.Core.evalConsts_sound`, case `same_type_range`,
+subject `ConcreteSpec.Core.evalConsts`, mutant `ConcreteSpec.Core.outOfRangeConstValues`). -/
+example : ConstsTyped ConstDemo.U divisionDecls ∧
+    outOfRangeConstValues ConstDemo.U 3 divisionDecls [] =
+      .ok [(ConstDemo.cid "Q", .int .i8 128)] ∧
+    ¬ (∀ d ∈ divisionDecls, ∃ v,
+      AList.lookup [(ConstDemo.cid "Q", CVal.int .i8 128)] d.id = some v ∧
+      ConstDemo.U.ofC v.ty = d.ty ∧ v.Valid) := by
+  refine ⟨by decide, by decide, ?_⟩
+  intro h
+  obtain ⟨v, hv, _, hr⟩ := h _ (List.Mem.head _)
+  have heq : CVal.int .i8 128 = v := by simpa [divisionDecls, AList.lookup] using hv
+  subst v
+  exact (by unfold CVal.Valid; decide : ¬ (CVal.int .i8 128).Valid) hr
+
+/-- Mutant: type references using only the immediately preceding declaration. All other
+checks, including declared type, closed admission and duplicate names, are unchanged. -/
+def adjacentTypeConsts (U : ConstTypes) : List (ConstDecl U) → AList ConstId CTy →
+    Option (AList ConstId CTy)
+  | [], Γ => some Γ
+  | d :: ds, Γ => match d.init.ty? (Γ.take 1) with
+    | some T =>
+      if ConstantType T ∧ U.ofC T = d.ty ∧ AList.lookup Γ d.id = none then
+        adjacentTypeConsts U ds ((d.id, T) :: Γ)
+      else none
+    | none => none
+
+/-- Mutant: evaluate references using only the immediately preceding declaration.
+Every initializer still runs, with unchanged fuel, operations and refusal propagation. -/
+def adjacentEvalConsts (U : ConstTypes) (fuel : Nat) :
+    List (ConstDecl U) → AList ConstId CVal → Except ConstEvalRefusal (AList ConstId CVal)
+  | [], env => .ok env
+  | d :: ds, env => match d.init.eval (env.take 1) fuel with
+    | .value v => adjacentEvalConsts U fuel ds ((d.id, v) :: env)
+    | .failure f => .error (.operation d.id f)
+    | .outOfFuel => .error (.outOfFuel d.id)
+    | .invalid e => .error (.invalid d.id e)
+
+/-- Mutant: add only the spurious rule that true literals cannot follow A's binding. -/
+def lateBoolTypeConsts (U : ConstTypes) : List (ConstDecl U) → AList ConstId CTy →
+    Option (AList ConstId CTy)
+  | [], Γ => some Γ
+  | d :: ds, Γ =>
+    if d.init = .bool true ∧ (AList.lookup Γ (ConstDemo.cid "A")).isSome then none
+    else match typeConsts U [d] Γ with
+      | none => none
+      | some Γ' => lateBoolTypeConsts U ds Γ'
+
+/-- Mutant: add the same spurious true-literal precondition to evaluation only. -/
+def lateBoolEvalConsts (U : ConstTypes) (fuel : Nat) :
+    List (ConstDecl U) → AList ConstId CVal → Except ConstEvalRefusal (AList ConstId CVal)
+  | [], env => .ok env
+  | d :: ds, env =>
+    if d.init = .bool true ∧ (AList.lookup env (ConstDemo.cid "A")).isSome then
+      .error (.invalid d.id d.init)
+    else match evalConsts U fuel [d] env with
+      | .error e => .error e
+      | .ok env' => lateBoolEvalConsts U fuel ds env'
+
+/-- Test substitution at the underlying rule, exactly as ConstsTyped is defined. -/
+def typedWith (typeRule : List (ConstDecl ConstDemo.U) → AList ConstId CTy →
+    Option (AList ConstId CTy)) (ds : List (ConstDecl ConstDemo.U)) : Prop :=
+  (typeRule ds []).isSome = true
+
+/-- Test substitution at the underlying rule, exactly as ConstsEvaluate is defined. -/
+def evaluatesWith (evalRule : List (ConstDecl ConstDemo.U) → AList ConstId CVal →
+    Except ConstEvalRefusal (AList ConstId CVal)) (ds : List (ConstDecl ConstDemo.U)) : Prop :=
+  (evalRule ds []).isOk = true
+
+/-- Admission always closes over the same substituted rules as typing and evaluation. -/
+def admittedWith (typeRule : List (ConstDecl ConstDemo.U) → AList ConstId CTy →
+    Option (AList ConstId CTy)) (evalRule : List (ConstDecl ConstDemo.U) →
+    AList ConstId CVal → Except ConstEvalRefusal (AList ConstId CVal))
+    (ds : List (ConstDecl ConstDemo.U)) : Prop :=
+  typedWith typeRule ds ∧ evaluatesWith evalRule ds
+
+/-- Helper (computation). Real-rule substitution is exactly the three shared judgments;
+these equalities prevent the test closures from drifting from the definitions they exercise. -/
+private theorem realRuleSubstitution (ds : List (ConstDecl ConstDemo.U)) (fuel : Nat) :
+    (typedWith (typeConsts ConstDemo.U) ds ↔ ConstsTyped ConstDemo.U ds) ∧
+    (evaluatesWith (evalConsts ConstDemo.U fuel) ds ↔ ConstsEvaluate ConstDemo.U fuel ds) ∧
+    (admittedWith (typeConsts ConstDemo.U) (evalConsts ConstDemo.U fuel) ds ↔
+      ConstsAdmitted ConstDemo.U fuel ds) := ⟨Iff.rfl, Iff.rfl, Iff.rfl⟩
+
+/-- A two-edge dependency chain plus an unrelated declaration. -/
+def chainSource : List (ConstDecl ConstDemo.U) :=
+  tiedSource ++ [⟨ConstDemo.cid "D", .c .bool, .ref (ConstDemo.cid "A")⟩]
+
+/-- Keep both references adjacent to their dependencies. -/
+def adjacentOrder : List (ConstDecl ConstDemo.U) :=
+  [chainSource[2], chainSource[0], chainSource[3], chainSource[1]]
+
+/-- Insert B between C and A. A naive permutation/dependency-order check still passes. -/
+def separatedOrder : List (ConstDecl ConstDemo.U) :=
+  [chainSource[2], chainSource[1], chainSource[0], chainSource[3]]
+
+/-- Instance (law `ConcreteSpec.Core.ConstOrderIndependent`, case `two_edge_chain`).
+All three equivalences have populated premises in both directions. -/
+example : DependencyOrder ConstDemo.U chainSource adjacentOrder ∧
+    DependencyOrder ConstDemo.U chainSource separatedOrder ∧
+    ConstsTyped ConstDemo.U adjacentOrder ∧ ConstsTyped ConstDemo.U separatedOrder ∧
+    ConstsEvaluate ConstDemo.U 3 adjacentOrder ∧ ConstsEvaluate ConstDemo.U 3 separatedOrder ∧
+    ConstsAdmitted ConstDemo.U 3 adjacentOrder ∧ ConstsAdmitted ConstDemo.U 3 separatedOrder := by
+  decide
+
+/-- Planted (law `ConcreteSpec.Core.ConstOrderIndependent`, case `typing_forward`,
+subject `ConcreteSpec.Core.typeConsts`, mutant `ConcreteSpec.Core.adjacentTypeConsts`).
+Both orders satisfy the full dependency contract. The unchanged rule succeeds in both;
+the changed rule and admission reject only the destination of this implication. -/
+example : DependencyOrder ConstDemo.U chainSource adjacentOrder ∧
+    DependencyOrder ConstDemo.U chainSource separatedOrder ∧
+    evaluatesWith (evalConsts ConstDemo.U 3) adjacentOrder ∧
+    evaluatesWith (evalConsts ConstDemo.U 3) separatedOrder ∧
+    ¬ (typedWith (adjacentTypeConsts ConstDemo.U) adjacentOrder →
+       typedWith (adjacentTypeConsts ConstDemo.U) separatedOrder) ∧
+    ¬ (admittedWith (adjacentTypeConsts ConstDemo.U) (evalConsts ConstDemo.U 3) adjacentOrder →
+       admittedWith (adjacentTypeConsts ConstDemo.U) (evalConsts ConstDemo.U 3) separatedOrder) := by
+  unfold admittedWith typedWith evaluatesWith
+  decide
+
+/-- Planted (law `ConcreteSpec.Core.ConstOrderIndependent`, case `typing_reverse`,
+subject `ConcreteSpec.Core.typeConsts`, mutant `ConcreteSpec.Core.lateBoolTypeConsts`).
+Both orders satisfy the full dependency contract. The unchanged rule succeeds in both;
+the changed rule and admission reject only the destination of this implication. -/
+example : DependencyOrder ConstDemo.U chainSource adjacentOrder ∧
+    DependencyOrder ConstDemo.U chainSource separatedOrder ∧
+    evaluatesWith (evalConsts ConstDemo.U 3) adjacentOrder ∧
+    evaluatesWith (evalConsts ConstDemo.U 3) separatedOrder ∧
+    ¬ (typedWith (lateBoolTypeConsts ConstDemo.U) separatedOrder →
+       typedWith (lateBoolTypeConsts ConstDemo.U) adjacentOrder) ∧
+    ¬ (admittedWith (lateBoolTypeConsts ConstDemo.U) (evalConsts ConstDemo.U 3) separatedOrder →
+       admittedWith (lateBoolTypeConsts ConstDemo.U) (evalConsts ConstDemo.U 3) adjacentOrder) := by
+  unfold admittedWith typedWith evaluatesWith
+  decide
+
+/-- Planted (law `ConcreteSpec.Core.ConstOrderIndependent`, case `evaluation_forward`,
+subject `ConcreteSpec.Core.evalConsts`, mutant `ConcreteSpec.Core.adjacentEvalConsts`).
+Both orders satisfy the full dependency contract. The unchanged rule succeeds in both;
+the changed rule and admission reject only the destination of this implication. -/
+example : DependencyOrder ConstDemo.U chainSource adjacentOrder ∧
+    DependencyOrder ConstDemo.U chainSource separatedOrder ∧
+    typedWith (typeConsts ConstDemo.U) adjacentOrder ∧
+    typedWith (typeConsts ConstDemo.U) separatedOrder ∧
+    ¬ (evaluatesWith (adjacentEvalConsts ConstDemo.U 3) adjacentOrder →
+       evaluatesWith (adjacentEvalConsts ConstDemo.U 3) separatedOrder) ∧
+    ¬ (admittedWith (typeConsts ConstDemo.U) (adjacentEvalConsts ConstDemo.U 3) adjacentOrder →
+       admittedWith (typeConsts ConstDemo.U) (adjacentEvalConsts ConstDemo.U 3) separatedOrder) := by
+  unfold admittedWith typedWith evaluatesWith
+  decide
+
+/-- Planted (law `ConcreteSpec.Core.ConstOrderIndependent`, case `evaluation_reverse`,
+subject `ConcreteSpec.Core.evalConsts`, mutant `ConcreteSpec.Core.lateBoolEvalConsts`).
+Both orders satisfy the full dependency contract. The unchanged rule succeeds in both;
+the changed rule and admission reject only the destination of this implication. -/
+example : DependencyOrder ConstDemo.U chainSource adjacentOrder ∧
+    DependencyOrder ConstDemo.U chainSource separatedOrder ∧
+    typedWith (typeConsts ConstDemo.U) adjacentOrder ∧
+    typedWith (typeConsts ConstDemo.U) separatedOrder ∧
+    ¬ (evaluatesWith (lateBoolEvalConsts ConstDemo.U 3) separatedOrder →
+       evaluatesWith (lateBoolEvalConsts ConstDemo.U 3) adjacentOrder) ∧
+    ¬ (admittedWith (typeConsts ConstDemo.U) (lateBoolEvalConsts ConstDemo.U 3) separatedOrder →
+       admittedWith (typeConsts ConstDemo.U) (lateBoolEvalConsts ConstDemo.U 3) adjacentOrder) := by
+  unfold admittedWith typedWith evaluatesWith
+  decide
+
+/-- A legal embedding in which the unadmitted unit carrier is not Copy. -/
+def copyBoundaryU : ConstTypes where
+  Ty := CTy
+  deq := inferInstance
+  isCopy := fun T => decide (ConstantType T)
+  ofC := id
+  ofC_inj := fun _ _ h => h
+  ofC_copy := fun _ h => by simpa using h
+
+/-- A scalar declaration in the Copy-auditing universe. -/
+def copyBoundaryDecls : List (ConstDecl copyBoundaryU) :=
+  [⟨ConstDemo.cid "Q", .int .i8, .int .i8 1⟩]
+
+/-- Mutant: replace successful values by unit, retaining failures. -/
+def unitConstValues (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U))
+    (env : AList ConstId CVal) : Except ConstEvalRefusal (AList ConstId CVal) :=
+  match evalConsts U fuel ds env with
+  | .ok vs => .ok (List.map (fun cv => (cv.1, CVal.unit)) vs)
+  | .error e => .error e
+
+/-- Planted (law `ConcreteSpec.Core.admitted_copy`, case `noncopy_value`,
+subject `ConcreteSpec.Core.evalConsts`, mutant `ConcreteSpec.Core.unitConstValues`).
+The declared type remains Copy; the evaluated value's Copy conclusion itself fails. -/
+example : ConstsTyped copyBoundaryU copyBoundaryDecls ∧
+    unitConstValues copyBoundaryU 1 copyBoundaryDecls [] =
+      .ok [(ConstDemo.cid "Q", .unit)] ∧
+    copyBoundaryU.isCopy (.int .i8) = true ∧
+    copyBoundaryU.isCopy (copyBoundaryU.ofC CVal.unit.ty) ≠ true := by decide
+
+/-- Mutant: invert only the first successful Boolean binding, then evaluate the remaining
+initializers normally. This breaks binding-value preservation, not initializer demand. -/
+def invertFirstBinding (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U))
     (env : AList ConstId CVal) : Except ConstEvalRefusal (AList ConstId CVal) :=
   match ds with
   | [] => .ok env
-  | d :: rest =>
-    .ok ((d.id, .int .u8 1) :: rest.map (fun d' => (d'.id, .int .u8 2)) ++ env)
+  | d :: rest => match evalConsts U fuel [d] env with
+    | .ok ((c, .bool b) :: vs) => evalConsts U fuel rest ((c, .bool (!b)) :: vs)
+    | .ok vs => evalConsts U fuel rest vs
+    | .error e => .error e
 
-/-- Instance (law `ConcreteSpec.Core.ConstOrderIndependent`, case `admission`). -/
-example : (ConstsTyped ConstDemo.U
-      [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-       ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] ↔
-    ConstsTyped ConstDemo.U
-      [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-       ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩]) ∧
-    (ConstsEvaluate ConstDemo.U 5
-      [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-       ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] ↔
-    ConstsEvaluate ConstDemo.U 5
-      [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-       ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩]) ∧
-    (ConstsAdmitted ConstDemo.U 5
-      [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-       ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] ↔
-    ConstsAdmitted ConstDemo.U 5
-      [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-       ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩]) ∧
-    ∀ env₁ env₂, evalConsts ConstDemo.U 5
-      [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-       ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] [] = .ok env₁ →
-      evalConsts ConstDemo.U 5
-      [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-       ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩] [] = .ok env₂ →
-      ∀ c, AList.lookup env₁ c = AList.lookup env₂ c :=
-  ConstOrderIndependent ConstDemo.U 5
-    [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-     ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩]
-    [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-     ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩]
-    [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-     ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩]
-    (by decide) (by decide)
-
-/-- Planted (law `ConcreteSpec.Core.ConstOrderIndependent`, case `admission`,
-subject `ConcreteSpec.Core.ConstsAdmitted`, mutant `ConcreteSpec.Core.firstIdAdmitted`). -/
-example : DependencyOrder ConstDemo.U
-      [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-       ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩]
-      [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-       ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] ∧
-    DependencyOrder ConstDemo.U
-      [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-       ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩]
-      [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-       ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩] ∧
-    ¬ ((ConstsTyped ConstDemo.U
-        [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-         ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] ↔
-      ConstsTyped ConstDemo.U
-        [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-         ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩]) ∧
-      (ConstsEvaluate ConstDemo.U 5
-        [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-         ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] ↔
-      ConstsEvaluate ConstDemo.U 5
-        [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-         ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩]) ∧
-      (firstIdAdmitted ConstDemo.U 5
-        [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-         ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] ↔
-      firstIdAdmitted ConstDemo.U 5
-        [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-         ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩]) ∧
-      ∀ env₁ env₂, evalConsts ConstDemo.U 5
-        [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-         ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] [] = .ok env₁ →
-        evalConsts ConstDemo.U 5
-        [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-         ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩] [] = .ok env₂ →
-        ∀ c, AList.lookup env₁ c = AList.lookup env₂ c) := by
-  refine ⟨by decide, by decide, ?_⟩
-  rintro ⟨_, _, hadm, _⟩
-  have h1 : firstIdAdmitted ConstDemo.U 5
-      [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-       ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] := ⟨by decide, rfl⟩
-  have h2 := (hadm.mp h1).2
-  revert h2
-  decide
-
-/-- Planted (law `ConcreteSpec.Core.ConstOrderIndependent`, case `admission`,
-subject `ConcreteSpec.Core.evalConsts`, mutant `ConcreteSpec.Core.orderSensitiveEvalConsts`). -/
-example : DependencyOrder ConstDemo.U
-      [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-       ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩]
-      [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-       ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] ∧
-    DependencyOrder ConstDemo.U
-      [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-       ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩]
-      [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-       ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩] ∧
-    ¬ ((ConstsTyped ConstDemo.U
-        [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-         ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] ↔
-      ConstsTyped ConstDemo.U
-        [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-         ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩]) ∧
-      (((orderSensitiveEvalConsts ConstDemo.U 5 [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-         ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] []).isOk = true) ↔
-      ((orderSensitiveEvalConsts ConstDemo.U 5 [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-         ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩] []).isOk = true)) ∧
-      ((ConstsTyped ConstDemo.U [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-         ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] ∧ (orderSensitiveEvalConsts ConstDemo.U 5 [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-         ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] []).isOk = true) ↔
-      (ConstsTyped ConstDemo.U [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-         ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩] ∧ (orderSensitiveEvalConsts ConstDemo.U 5 [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-         ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩] []).isOk = true)) ∧
-      ∀ env₁ env₂, orderSensitiveEvalConsts ConstDemo.U 5
-        [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-         ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] [] = .ok env₁ →
-        orderSensitiveEvalConsts ConstDemo.U 5
-        [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-         ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩] [] = .ok env₂ →
-        ∀ c, AList.lookup env₁ c = AList.lookup env₂ c) := by
-  refine ⟨by decide, by decide, ?_⟩
-  rintro ⟨_, _, _, hvals⟩
-  have h := hvals
-    [(ConstDemo.cid "A", .int .u8 1), (ConstDemo.cid "B", .int .u8 2)]
-    [(ConstDemo.cid "B", .int .u8 1), (ConstDemo.cid "A", .int .u8 2)]
-    rfl rfl (ConstDemo.cid "A")
-  revert h
-  decide
-
-/-- Instance (law `ConcreteSpec.Core.ConstOrderIndependent`, case `values`). -/
-example : (ConstsTyped ConstDemo.U
-      [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-       ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] ↔
-    ConstsTyped ConstDemo.U
-      [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-       ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩]) ∧
-    (ConstsEvaluate ConstDemo.U 5
-      [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-       ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] ↔
-    ConstsEvaluate ConstDemo.U 5
-      [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-       ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩]) ∧
-    (ConstsAdmitted ConstDemo.U 5
-      [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-       ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] ↔
-    ConstsAdmitted ConstDemo.U 5
-      [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-       ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩]) ∧
-    ∀ env₁ env₂, evalConsts ConstDemo.U 5
-      [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-       ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] [] = .ok env₁ →
-      evalConsts ConstDemo.U 5
-      [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-       ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩] [] = .ok env₂ →
-      ∀ c, AList.lookup env₁ c = AList.lookup env₂ c :=
-  ConstOrderIndependent ConstDemo.U 5
-    [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-     ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩]
-    [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-     ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩]
-    [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-     ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩]
-    (by decide) (by decide)
-
-/-- Planted (law `ConcreteSpec.Core.ConstOrderIndependent`, case `values`,
-subject `ConcreteSpec.Core.evalConsts`, mutant `ConcreteSpec.Core.orderSensitiveEvalConsts`). -/
-example : DependencyOrder ConstDemo.U
-      [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-       ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩]
-      [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-       ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] ∧
-    DependencyOrder ConstDemo.U
-      [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-       ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩]
-      [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-       ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩] ∧
-    ¬ ((ConstsTyped ConstDemo.U
-        [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-         ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] ↔
-      ConstsTyped ConstDemo.U
-        [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-         ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩]) ∧
-      (((orderSensitiveEvalConsts ConstDemo.U 5 [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-         ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] []).isOk = true) ↔
-      ((orderSensitiveEvalConsts ConstDemo.U 5 [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-         ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩] []).isOk = true)) ∧
-      ((ConstsTyped ConstDemo.U [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-         ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] ∧ (orderSensitiveEvalConsts ConstDemo.U 5 [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-         ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] []).isOk = true) ↔
-      (ConstsTyped ConstDemo.U [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-         ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩] ∧ (orderSensitiveEvalConsts ConstDemo.U 5 [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-         ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩] []).isOk = true)) ∧
-      ∀ env₁ env₂, orderSensitiveEvalConsts ConstDemo.U 5
-        [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-         ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] [] = .ok env₁ →
-        orderSensitiveEvalConsts ConstDemo.U 5
-        [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-         ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩] [] = .ok env₂ →
-        ∀ c, AList.lookup env₁ c = AList.lookup env₂ c) := by
-  refine ⟨by decide, by decide, ?_⟩
-  rintro ⟨_, _, _, hvals⟩
-  have h := hvals
-    [(ConstDemo.cid "A", .int .u8 1), (ConstDemo.cid "B", .int .u8 2)]
-    [(ConstDemo.cid "B", .int .u8 1), (ConstDemo.cid "A", .int .u8 2)]
-    rfl rfl (ConstDemo.cid "A")
-  revert h
-  decide
-
-/-- Planted (law `ConcreteSpec.Core.ConstOrderIndependent`, case `values`,
-subject `ConcreteSpec.Core.ConstsAdmitted`, mutant `ConcreteSpec.Core.firstIdAdmitted`). -/
-example : DependencyOrder ConstDemo.U
-      [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-       ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩]
-      [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-       ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] ∧
-    DependencyOrder ConstDemo.U
-      [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-       ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩]
-      [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-       ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩] ∧
-    ¬ ((ConstsTyped ConstDemo.U
-        [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-         ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] ↔
-      ConstsTyped ConstDemo.U
-        [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-         ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩]) ∧
-      (ConstsEvaluate ConstDemo.U 5
-        [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-         ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] ↔
-      ConstsEvaluate ConstDemo.U 5
-        [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-         ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩]) ∧
-      (firstIdAdmitted ConstDemo.U 5
-        [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-         ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] ↔
-      firstIdAdmitted ConstDemo.U 5
-        [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-         ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩]) ∧
-      ∀ env₁ env₂, evalConsts ConstDemo.U 5
-        [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-         ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] [] = .ok env₁ →
-        evalConsts ConstDemo.U 5
-        [⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩,
-         ⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩] [] = .ok env₂ →
-        ∀ c, AList.lookup env₁ c = AList.lookup env₂ c) := by
-  refine ⟨by decide, by decide, ?_⟩
-  rintro ⟨_, _, hadm, _⟩
-  have h1 : firstIdAdmitted ConstDemo.U 5
-      [⟨ConstDemo.cid "A", .c (.int .u8), .int .u8 10⟩,
-       ⟨ConstDemo.cid "B", .c (.int .u8), .int .u8 20⟩] := ⟨by decide, rfl⟩
-  have h2 := (hadm.mp h1).2
-  revert h2
-  decide
-
+/-- Planted (law `ConcreteSpec.Core.ConstOrderIndependent`, case `binding_value`,
+subject `ConcreteSpec.Core.evalConsts`, mutant `ConcreteSpec.Core.invertFirstBinding`).
+Both valid orders type, evaluate and admit under uniform substitution. Only the value
+agreement conclusion fails: C is inverted exactly when it is the first binding. -/
+example : DependencyOrder ConstDemo.U tiedSource (sortConsts ConstDemo.U tiedSource) ∧
+    DependencyOrder ConstDemo.U tiedSource (reverseTies ConstDemo.U tiedSource) ∧
+    admittedWith (typeConsts ConstDemo.U) (invertFirstBinding ConstDemo.U 3)
+      (sortConsts ConstDemo.U tiedSource) ∧
+    admittedWith (typeConsts ConstDemo.U) (invertFirstBinding ConstDemo.U 3)
+      (reverseTies ConstDemo.U tiedSource) ∧
+    ∃ env₁ env₂,
+      invertFirstBinding ConstDemo.U 3 (sortConsts ConstDemo.U tiedSource) [] = .ok env₁ ∧
+      invertFirstBinding ConstDemo.U 3 (reverseTies ConstDemo.U tiedSource) [] = .ok env₂ ∧
+      AList.lookup env₁ (ConstDemo.cid "C") ≠ AList.lookup env₂ (ConstDemo.cid "C") := by
+  refine ⟨by decide, by decide, ?_, ?_, ?_⟩
+  · unfold admittedWith typedWith evaluatesWith; decide
+  · unfold admittedWith typedWith evaluatesWith; decide
+  · exact ⟨_, _, rfl, rfl, by decide⟩
 
 end ConcreteSpec.Core

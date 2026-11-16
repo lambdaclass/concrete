@@ -24,3 +24,6 @@ fi
 
 # Every gate matches text with has_match, never a pipe into grep -q (bug 283).
 source "$(dirname "${BASH_SOURCE[0]}")/has_match.sh" || exit 2
+
+# Shared worker policy applies even to gates that need no OS resource cap.
+source "$(dirname "${BASH_SOURCE[0]}")/limits.sh" || exit 2

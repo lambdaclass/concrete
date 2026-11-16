@@ -1,61 +1,44 @@
 import ConcreteSpec.Spec.Scalar
+import ConcreteSpec.Spec.Ident
 
 /-!
-# Constants: the closed, kernel-checked initializer subset
+# Constants: closed compile-time initializers
 
-PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). Part of `ConcreteSpec.Spec`;
-see `ConcreteSpec/README.md`. Foundation contract C2, with owner decisions 2026-11-08, items 18,
-19 and 26.
+PROPOSED before Core freeze. This module defines the constant fragment; F07 supplies its
+laws. The examples here are Instance checks, not general law evidence.
 
-A module constant (`const N: T = e;`) is computed once at compile time, and its value must be of a
-`Copy` type (item 26). Its initializer is in a *closed grammar*: integer literals in range, `true`,
-`false`, `()`, references to earlier Core constants, wrapping and saturating arithmetic, bitwise
-operations, integer comparisons, boolean operations, lossless conversion, and the fallible scalar
-operations `plain` / `plainNeg` (item 18, revising TYPE-22). There are no calls,
-loops, effects, state, authority or target-profile inputs. Even the scalar operations depend only
-on the fixed width in their `IntTy`, not on a target profile.
+Authority in `docs/decisions.md`:
+- #recovered-29-18 and #decided-2026-11-08-constants: a closed grammar without calls,
+  loops or effects; evaluate every initializer, including unused ones; failure and fuel
+  exhaustion refuse admission. Evaluation is checked by kernel reduction.
+- #recovered-29-19: forward references are allowed; cycles are refused with their chain.
+- #recovered-59-26: constants are computed at compile time and have Copy values.
+- #decided-2026-11-14-constant-types: the CLOSED type list is integers and bool only;
+  checked arithmetic is allowed, and overflow refuses the constant. The recorded owner
+  answer on main is the authority for this fragment.
+- #od106: try_convert returns Result, so it is outside this initializer grammar.
+- #decided-2026-11-12-char supplies no special constant rule or char literal.
 
-Evaluation is partial and fuel-bounded. A fallible operation is evaluated with the definitions in
-`Spec/Scalar.lean`; its failure is a compile-time refusal carrying the operation and the exact
-sub-expression, never a trap. Constants are scalar. Checked forms (`Result<T, ArithmeticError>`) and
-`try_convert` (`Result<T, OutOfRange>`) are excluded from initializers because their surface types
-are not scalar. Authority: owner decision 2026-11-09, item 2, “ok tell me again the options choose
-the best long term options for everything”, selecting (a)+(i). The single reopening path is
-option (c), aggregate/enum constants: it requires a ConstTy separate from C4's CTy, revisiting
-`ofC_copy`, an answer to the Err-as-value question, and a motivating workload. Every operation terminates; fuel bounds the evaluator as item 18
-requires, rather than making an operation partial.
+`CTy` and `CVal` are Scalar's shared representation vocabulary. Representation membership
+alone does not admit a constant type: `ConstantType` closes admission to integers and bool.
+`ConstTypes` embeds those carriers in a surrounding language type universe without giving
+new types admission automatically. `plain` and `plainNeg` use Scalar's checked primitive
+semantics and turn an arithmetic error into compile-time refusal, never a runtime trap;
+there is no Result-valued constant or Result elimination in this fragment.
 
-**Static admission and kernel checking.** `typeConsts` checks the closed grammar, declared-type
-agreement and freshness; because every scalar constant type in `CTy` is `Copy` (`ofC_copy`),
-declared-type agreement entails `Copy` without a redundant runtime `isCopy` guard (`admitted_copy`,
-`typeConsts_refuses_nonCopy`).
-Independently, `evalConsts` evaluates every declaration, used or unused, and reports the first
-failing constant, operation failure, invalid expression or fuel exhaustion. `ConstsAdmitted` is
-their conjunction and is decidable: concrete admission examples use `decide`, hence Lean's kernel
-reduction, never `native_decide` (item 18). With sufficient fuel, well-typed initializers either
-compute a valid value of their static type or report a located failure of a fallible sub-expression
-(`eval_wellTyped_progress`, `typed_evalConsts_refusal`); the old fallible-free fragment remains
-total (`eval_total`); admitted declarations have valid values of their declared types
-(`evalConsts_sound`). `eval_agrees` additionally proves exact agreement with the independent
-primitive-grounded `ConstEval` relation, so neither swallowed nor fabricated arithmetic failures
-are permitted. `semantic_failure_refuses` propagates a semantic failure after any successful
-prefix to declaration refusal and non-admission, including unused initializers.
+Source declarations may be forward-referencing. Elaboration supplies a dependency order or
+a real cycle chain; Core typing and evaluation consume the ordered declarations. The sort
+uses source order only to break ties as a deliberate implementation choice: recovered-29-19
+requires a dependency order and a real cycle diagnostic, but specifies no tie-break. Any valid
+dependency order has the same admission and values (F07); source tie-breaking is not normative. Fuel is an evaluator depth bound, with exhaustion a
+separate result from invalid syntax/types and from an arithmetic failure.
 
-**Source order and elaboration** (owner decision 2026-11-08, item 19). A source initializer may
-name a later declaration. `dependsOn` extracts the actual reference relation, including references
-nested in operands. `DependencyOrder` is README obligation O1: elaboration supplies a permutation
-of the source list in which every referenced declaration occurs earlier (`sortConsts`).
-`ElaboratedConsts` requires either such an order or a cycle refusal whose chain is
-`c₀ → c₁ → … → c₀`, with every edge an actual reference (`cycle_chain_real`). In `Proofs/Const.lean`,
-`cycle_excludes_dependencyOrder` proves that a cycle precludes every dependency order,
-`DependencySortingComplete` proves constructively via `sortConsts` that every resolved acyclic
-source list has a dependency order, and `ConstOrderIndependent` proves that any two dependency
-orders of a source list agree on typing, evaluation, admission and the values of all constants. Core
-continues to receive only the ordered form.
-
-The constant types are an interface (`ConstTypes`): the language's type universe, a `Copy`
-predicate and an injective embedding of the scalar types (`ofC`), which are all `Copy`
-(`ofC_copy`), while `Ty` may also contain non-`Copy` types outside `ofC`. Aggregate/enum constants may reopen only under the preconditions above.
+Held: Boolean-to-integer conversion (ISS-0069), SPARK character preconditions (ISS-0071),
+char literals, calls in initializers, richer constant/R2 preconditions and layouts. None is
+inferred from the earlier delegated recommendations. Path policy (ISS-0068), pointer bytes
+(ISS-0070), wiping (ISS-0072), startup/ABI (ISS-0073), U+FEFF and bare CR (ISS-0064),
+and queued partial items (ISS-0065) supply no constant rule. ISS-0080 tracks char/unit admission, calls in initializers
+and richer constant/R2 preconditions; this slice does not choose their behavior.
 -/
 
 namespace ConcreteSpec.Core
@@ -65,7 +48,6 @@ fallible operations; their meanings come from `Spec/Scalar.lean`. -/
 inductive CExpr where
   | int (t : IntTy) (n : Int)
   | bool (b : Bool)
-  | unit
   | ref (c : ConstId)
   | wrapping (op : WrapOp) (a b : CExpr)
   | saturating (op : WrapOp) (a b : CExpr)
@@ -85,7 +67,7 @@ namespace CExpr
 
 /-- All constant identities referenced by an initializer, including nested operands. -/
 def refs : CExpr → List ConstId
-  | .int _ _ | .bool _ | .unit => []
+  | .int _ _ | .bool _ => []
   | .ref c => [c]
   | .wrapping _ a b | .saturating _ a b | .plain _ a b | .bit _ a b | .cmp _ a b
   | .and a b | .or a b => a.refs ++ b.refs
@@ -93,7 +75,7 @@ def refs : CExpr → List ConstId
 
 /-- The old fragment, in which no operation can fail. -/
 def fallibleFree : CExpr → Bool
-  | .int _ _ | .bool _ | .unit | .ref _ => true
+  | .int _ _ | .bool _ | .ref _ => true
   | .wrapping _ a b | .saturating _ a b | .bit _ a b | .cmp _ a b | .and a b | .or a b =>
     a.fallibleFree && b.fallibleFree
   | .bitNot a | .not a | .convert _ a => a.fallibleFree
@@ -102,7 +84,7 @@ def fallibleFree : CExpr → Bool
 /-- Sufficient fuel for every path through an initializer; operands share the remaining depth
 budget, so this is a depth bound rather than an operation-count bound. -/
 def height : CExpr → Nat
-  | .int _ _ | .bool _ | .unit | .ref _ => 1
+  | .int _ _ | .bool _ | .ref _ => 1
   | .wrapping _ a b | .saturating _ a b | .plain _ a b | .bit _ a b | .cmp _ a b
   | .and a b | .or a b => max a.height b.height + 1
   | .plainNeg a | .bitNot a | .not a | .convert _ a => a.height + 1
@@ -132,7 +114,7 @@ structure ConstFailure where
 constructor matches the reported `operation` and `error` category. This is location evidence
 only; primitive failure correctness is specified independently by `ConstEval`. -/
 def ConstFailure.InExpr (f : ConstFailure) : CExpr → Prop
-  | .int _ _ | .bool _ | .unit | .ref _ => False
+  | .int _ _ | .bool _ | .ref _ => False
   | .wrapping _ a b | .saturating _ a b | .bit _ a b | .cmp _ a b
   | .and a b | .or a b => f.InExpr a ∨ f.InExpr b
   | .bitNot a | .not a | .convert _ a => f.InExpr a
@@ -179,7 +161,6 @@ def CExpr.eval (env : AList ConstId CVal) : Nat → CExpr → CEvalResult
   | 0, _ => .outOfFuel
   | _ + 1, .int t n => if t.InRange n then .value (.int t n) else .invalid (.int t n)
   | _ + 1, .bool b => .value (.bool b)
-  | _ + 1, .unit => .value .unit
   | _ + 1, .ref c => match AList.lookup env c with
     | some v => .value v
     | none => .invalid (.ref c)
@@ -232,8 +213,7 @@ def CExpr.eval (env : AList ConstId CVal) : Nat → CExpr → CEvalResult
   | fuel + 1, .convert t a => (a.eval env fuel).bind fun va =>
     match va with
     | .int s x => if Lossless s t then .value (.int t x) else .invalid (.convert t a)
-    | .bool b => .value (.int t (boolToInt b))
-    | .unit => .invalid (.convert t a)
+    | _ => .invalid (.convert t a)
 
 /-- A non-value evaluation outcome (`.failure`, `.outOfFuel`, or `.invalid`), which propagates
 immediately left-to-right through enclosing operations. -/
@@ -279,7 +259,7 @@ inductive CExpr.BoolBinaryChildren : CExpr → CExpr → CExpr → Prop where
 /-- Independent syntax-directed, fuel-indexed evaluation semantics. Each constructor specifies
 an inference rule over immediate sub-expressions at the smaller budget `fuel` and grounds scalar
 outcomes directly in `Core.wrapping`, `Core.saturating`, `Core.plain`, `Core.plainNeg`,
-`Core.bitwise`, `Core.bitNot`, `CmpOp.eval`, `Lossless` and `boolToInt`,
+`Core.bitwise`, `Core.bitNot`, `CmpOp.eval` and `Lossless`,
 without calling `CExpr.eval`, `CEvalResult.bind`, `sameInt` or `twoBools`. -/
 inductive ConstEval (env : AList ConstId CVal) : Nat → CExpr → CEvalResult → Prop where
   | exhausted (e) : ConstEval env 0 e .outOfFuel
@@ -288,7 +268,6 @@ inductive ConstEval (env : AList ConstId CVal) : Nat → CExpr → CEvalResult �
   | int_outOfRange {fuel t n} (h : ¬ t.InRange n) :
       ConstEval env (fuel + 1) (.int t n) (.invalid (.int t n))
   | bool (fuel b) : ConstEval env (fuel + 1) (.bool b) (.value (.bool b))
-  | unit (fuel) : ConstEval env (fuel + 1) .unit (.value .unit)
   | ref_ok {fuel c v} (h : AList.lookup env c = some v) :
       ConstEval env (fuel + 1) (.ref c) (.value v)
   | ref_missing {fuel c} (h : AList.lookup env c = none) :
@@ -361,11 +340,8 @@ inductive ConstEval (env : AList ConstId CVal) : Nat → CExpr → CEvalResult �
       (ha : ConstEval env fuel a (.value (.int s x)))
       (hloss : ¬ Lossless s t) :
       ConstEval env (fuel + 1) (.convert t a) (.invalid (.convert t a))
-  | convert_bool_ok {fuel t a b}
-      (ha : ConstEval env fuel a (.value (.bool b))) :
-      ConstEval env (fuel + 1) (.convert t a) (.value (.int t (boolToInt b)))
-  | convert_unit_invalid {fuel t a}
-      (ha : ConstEval env fuel a (.value .unit)) :
+  | convert_nonint_invalid {fuel t a v}
+      (ha : ConstEval env fuel a (.value v)) (hv : ∀ s x, v ≠ .int s x) :
       ConstEval env (fuel + 1) (.convert t a) (.invalid (.convert t a))
   | intUnary_invalid {fuel e a va} (hchild : CExpr.IntUnaryChild e a)
       (ha : ConstEval env fuel a (.value va))
@@ -401,7 +377,6 @@ grammar and operand rules but deliberately does not predict arithmetic success. 
 def CExpr.ty? (Γ : AList ConstId CTy) : CExpr → Option CTy
   | .int t n => if t.InRange n then some (.int t) else none
   | .bool _ => some .bool
-  | .unit => some .unit
   | .ref c => AList.lookup Γ c
   | .wrapping _ a b | .saturating _ a b | .plain _ a b | .bit _ a b =>
     (sameIntTy (a.ty? Γ) (b.ty? Γ)).map .int
@@ -415,10 +390,19 @@ def CExpr.ty? (Γ : AList ConstId CTy) : CExpr → Option CTy
   | .and a b | .or a b => if bothBool (a.ty? Γ) (b.ty? Γ) then some .bool else none
   | .convert t a => match a.ty? Γ with
     | some (.int s) => if Lossless s t then some (.int t) else none
-    | some .bool => some (.int t)
     | _ => none
 
-/-- The language's types as far as constants need them. Every scalar constant type in `CTy` is
+/-- Closed constant-type admission over Scalar's shared carrier vocabulary.
+Authority: docs/decisions.md#decided-2026-11-14-constant-types; char and unit
+are representation only. -/
+def ConstantType : CTy → Prop
+  | .int _ | .bool => True
+  | .char | .unit => False
+
+instance (t : CTy) : Decidable (ConstantType t) := by
+  cases t <;> unfold ConstantType <;> infer_instance
+
+/-- The language's types as far as constants need them. Every admitted constant type in `CTy` is
 `Copy` (`ofC_copy`), while the surrounding type universe `Ty` may also contain non-`Copy` types. -/
 structure ConstTypes where
   Ty : Type
@@ -426,7 +410,7 @@ structure ConstTypes where
   isCopy : Ty → Bool
   ofC : CTy → Ty
   ofC_inj : ∀ a b, ofC a = ofC b → a = b
-  ofC_copy : ∀ c, isCopy (ofC c) = true
+  ofC_copy : ∀ c, ConstantType c → isCopy (ofC c) = true
 
 attribute [instance] ConstTypes.deq
 
@@ -473,14 +457,14 @@ inductive ConstsRun (U : ConstTypes) (fuel : Nat) :
 
 /-- Type the constants in dependency order, without evaluating. Each initializer is typed with the
 types of earlier constants; its declared type must equal the initializer's scalar type, and a name
-may be declared once. Because every scalar type in `CTy` is `Copy` (`U.ofC_copy`), `U.ofC T = d.ty`
+may be declared once. Because `ConstantType T` entails `Copy` (`U.ofC_copy`), type agreement
 already entails `U.isCopy d.ty = true` without a separate runtime `isCopy` check. -/
 def typeConsts (U : ConstTypes) : List (ConstDecl U) → AList ConstId CTy →
     Option (AList ConstId CTy)
   | [], Γ => some Γ
   | d :: ds, Γ => match d.init.ty? Γ with
     | some T =>
-      if U.ofC T = d.ty ∧ AList.lookup Γ d.id = none then
+      if ConstantType T ∧ U.ofC T = d.ty ∧ AList.lookup Γ d.id = none then
         typeConsts U ds ((d.id, T) :: Γ)
       else none
     | none => none
@@ -517,6 +501,45 @@ instance (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U)) :
     Decidable (ConstsAdmitted U fuel ds) := by
   unfold ConstsAdmitted ConstsTyped ConstsEvaluate
   infer_instance
+
+/-- The shared scalar carrier as a surrounding type universe. Copy alone does not admit
+char or unit: admission still requires `ConstantType`. This is the identity embedding,
+not a second type vocabulary. -/
+def scalarConstTypes : ConstTypes where
+  Ty := CTy
+  deq := inferInstance
+  isCopy := fun _ => true
+  ofC := id
+  ofC_inj := fun _ _ h => h
+  ofC_copy := fun _ _ => rfl
+
+/-- A closed scalar declaration for diagnostic conformance inputs. Unlike `ConstDecl U`,
+its constructor has no type-universe dictionary parameter: every field is inspectable data
+in the shared scalar and initializer syntax. This representation adds no admission policy. -/
+structure ScalarConstDecl where
+  id : ConstId
+  ty : CTy
+  init : CExpr
+  deriving DecidableEq, Repr
+
+/-- Embed concrete scalar declaration data into the existing constant judgment's universe.
+The embedding preserves each field; typing and evaluation remain owned by `ConstsAdmitted`. -/
+def ScalarConstDecl.toConstDecl (d : ScalarConstDecl) : ConstDecl scalarConstTypes :=
+  ⟨d.id, d.ty, d.init⟩
+
+/-- Rule: closed scalar constant declarations must type and evaluate successfully, including
+unused declarations (docs/decisions.md#recovered-29-18, #recovered-59-26, Q6.2).
+The closed admitted types are `ConstantType`
+(docs/decisions.md#decided-2026-11-14-constant-types); this uncurried view delegates
+all policy to `ConstsAdmitted` over Scalar's shared carriers after a field-preserving
+embedding of concrete declaration data. The registry tests this very definition. Source ordering remains
+elaboration's separate obligation (#recovered-29-19). -/
+def ConstsPermitted (input : Nat × List ScalarConstDecl) : Prop :=
+  ConstsAdmitted scalarConstTypes input.1 (input.2.map ScalarConstDecl.toConstDecl)
+
+instance (input : Nat × List ScalarConstDecl) :
+    Decidable (ConstsPermitted input) := inferInstanceAs
+      (Decidable (ConstsAdmitted scalarConstTypes input.1 (input.2.map ScalarConstDecl.toConstDecl)))
 
 /-! ### Source dependency order and cycle refusal -/
 
@@ -613,8 +636,7 @@ def sortConstsAux (U : ConstTypes) :
     | none => remaining
 
 /-- Canonical fuel-free topological sort of `source` (Kahn's algorithm with source tie-breaking).
-When `source` is name-resolved and acyclic, `sortConsts U source` is a certified `DependencyOrder`
-(`DependencySortingComplete` in `Proofs/Const.lean`). -/
+The `DependencyOrder` judgment separately certifies its result; sorting alone is not admission. -/
 def sortConsts (U : ConstTypes) (source : List (ConstDecl U)) : List (ConstDecl U) :=
   sortConstsAux U source.length [] source
 
@@ -644,86 +666,87 @@ def U : ConstTypes where
     | .text => false
   ofC := .c
   ofC_inj := fun _ _ h => by cases h; rfl
-  ofC_copy := fun _ => rfl
+  ofC_copy := fun _ _ => rfl
 
-def cid (n : String) : ConstId := ConstId.mk (ModuleId.mk ⟨"const", ⟨"0"⟩⟩ ["m"] (by decide)) n
+def cid (n : String) : ConstId := ConstId.mk (ModuleId.mk ⟨⟨"const"⟩, ⟨⟨"0"⟩⟩⟩ [⟨"m"⟩] (by decide)) ⟨n⟩
 
-/-- Accepted (rule `ConcreteSpec.Core.ConstsAdmitted`): wrapping, bitwise and lossless operations
+/-- Instance: accepted (rule `ConcreteSpec.Core.ConstsAdmitted`): wrapping, bitwise and lossless operations
 from the old fragment still compute their values. -/
 example : ConstsAdmitted U 20 [⟨cid "MASK", .c (.int .u8), .int .u8 0x0f⟩,
     ⟨cid "HIGH", .c (.int .u8), .wrapping .mul (.ref (cid "MASK")) (.int .u8 16)⟩,
     ⟨cid "BOTH", .c (.int .u8), .bit .or (.ref (cid "MASK")) (.ref (cid "HIGH"))⟩,
     ⟨cid "WIDE", .c (.int .u16), .convert .u16 (.ref (cid "BOTH"))⟩] := by decide
 
-/-- Accepted (rule `ConcreteSpec.Core.ConstsAdmitted`): plain division succeeds as `100 / 7 = 14`,
+/-- Instance: accepted (rule `ConcreteSpec.Core.ConstsAdmitted`): plain division succeeds as `100 / 7 = 14`,
 and an unused successful constant is evaluated and admitted too. -/
 example : ConstsAdmitted U 20 [⟨cid "QUOT", .c (.int .i16), .plain .div (.int .i16 100) (.int .i16 7)⟩,
     ⟨cid "UNUSED", .c (.int .u8), .plain .add (.int .u8 2) (.int .u8 3)⟩] := by decide
 
-/-- The accepted division and unused constant have these values. -/
+/-- Instance: The accepted division and unused constant have these values. -/
 example : (evalConsts U 20 [⟨cid "QUOT", .c (.int .i16),
       .plain .div (.int .i16 100) (.int .i16 7)⟩,
     ⟨cid "UNUSED", .c (.int .u8), .plain .add (.int .u8 2) (.int .u8 3)⟩] []).toOption.bind
       (fun env => AList.lookup env (cid "QUOT")) = some (.int .i16 14) := by decide
 
-/-- Accepted (rule `ConcreteSpec.Core.ConstsAdmitted`): fallible negation succeeds. -/
+/-- Instance: accepted (rule `ConcreteSpec.Core.ConstsAdmitted`): fallible negation succeeds. -/
 example : ConstsAdmitted U 20 [⟨cid "M", .c (.int .i8), .plainNeg (.int .i8 5)⟩] := by decide
 
-/-- Refused (rule `ConcreteSpec.Core.ConstsAdmitted`): `1 / 0` reports division by zero at the
+/-- Instance: refused (rule `ConcreteSpec.Core.ConstsAdmitted`): `1 / 0` reports division by zero at the
 plain-division sub-expression; it is not a trap. -/
 example : ¬ ConstsAdmitted U 20 [⟨cid "BAD", .c (.int .i8),
     .plain .div (.int .i8 1) (.int .i8 0)⟩] := by decide
 
-/-- The division refusal names both the constant and the operation. -/
+/-- Instance: The division refusal names both the constant and the operation. -/
 example : evalConsts U 20 [⟨cid "BAD", .c (.int .i8),
     .plain .div (.int .i8 1) (.int .i8 0)⟩] [] =
     .error (.operation (cid "BAD") ⟨.plain .div,
       .plain .div (.int .i8 1) (.int .i8 0), .arithmetic .divisionByZero⟩) := by decide
 
-/-- Refused (rule `ConcreteSpec.Core.ConstsAdmitted`): signed `i8` addition `127 + 1` overflows. -/
+/-- Instance: refused (rule `ConcreteSpec.Core.ConstsAdmitted`): signed `i8` addition `127 + 1` overflows. -/
 example : ¬ ConstsAdmitted U 20 [⟨cid "BAD", .c (.int .i8),
     .plain .add (.int .i8 127) (.int .i8 1)⟩] := by decide
 
-/-- Refused (rule `ConcreteSpec.Core.ConstsAdmitted`): a shift by the width is out of range. -/
+/-- Instance: refused (rule `ConcreteSpec.Core.ConstsAdmitted`): a shift by the width is out of range. -/
 example : ¬ ConstsAdmitted U 20 [⟨cid "BAD", .c (.int .u8),
     .plain .shl (.int .u8 1) (.int .u8 8)⟩] := by decide
 
-/-- Refused (rule `ConcreteSpec.Core.ConstsAdmitted`): an UNUSED constant is evaluated and its
+/-- Instance: refused (rule `ConcreteSpec.Core.ConstsAdmitted`): an UNUSED constant is evaluated and its
 failure refuses the module although no other constant refers to it. -/
 example : ¬ ConstsAdmitted U 20 [⟨cid "USED", .c (.int .u8), .int .u8 1⟩,
     ⟨cid "UNUSED", .c (.int .i8), .plain .add (.int .i8 127) (.int .i8 1)⟩] := by decide
 
-/-- Refused (rule `ConcreteSpec.Core.ConstsAdmitted`): a finite initializer exhausts an explicitly
+/-- Instance: refused (rule `ConcreteSpec.Core.ConstsAdmitted`): a finite initializer exhausts an explicitly
 too-small fuel bound. -/
 example : ¬ ConstsAdmitted U 1 [⟨cid "DEEP", .c (.int .u8),
     .plain .add (.plain .add (.int .u8 1) (.int .u8 2)) (.int .u8 3)⟩] := by decide
 
-/-- The same finite initializer succeeds with adequate fuel. -/
+/-- Instance: The same finite initializer succeeds with adequate fuel. -/
 example : ConstsAdmitted U 5 [⟨cid "DEEP", .c (.int .u8),
     .plain .add (.plain .add (.int .u8 1) (.int .u8 2)) (.int .u8 3)⟩] := by decide
 
-/-- Refused (rule `ConcreteSpec.Core.ConstsAdmitted`): a non-`Copy` declared type (`text`) lies
+/-- Instance: refused (rule `ConcreteSpec.Core.ConstsAdmitted`): a non-`Copy` declared type (`text`) lies
 outside the `Copy` scalar constant universe (`U.ofC_copy`), so no constant initializer can inhabit
 it. -/
 example : U.isCopy .text = false ∧
-    ¬ ConstsAdmitted U 20 [⟨cid "S", .text, .unit⟩] := by
+    ¬ ConstsAdmitted U 20 [⟨cid "S", .text, .bool true⟩] := by
   exact ⟨rfl, by decide⟩
 
-/-- Refused: a reference later in an already supplied Core dependency order is invalid. -/
+/-- Instance: refused: a reference later in an already supplied Core dependency order is invalid. -/
 example : ¬ ConstsAdmitted U 20 [⟨cid "A", .c (.int .u8), .ref (cid "B")⟩,
     ⟨cid "B", .c (.int .u8), .int .u8 1⟩] := by decide
 
-/-- Refused: a literal out of range, and operands of different types. -/
+/-- Instance: refused: a literal out of range, and operands of different types. -/
 example : ¬ ConstsAdmitted U 20 [⟨cid "A", .c (.int .u8), .int .u8 256⟩] := by decide
 
+/-- Instance: mixed integer widths are refused. -/
 example : ¬ ConstsAdmitted U 20 [⟨cid "A", .c (.int .u16),
     .wrapping .add (.int .u8 1) (.int .u16 1)⟩] := by decide
 
-/-- Refused: one name declared twice. -/
+/-- Instance: refused: one name declared twice. -/
 example : ¬ ConstsAdmitted U 20 [⟨cid "A", .c .bool, .bool true⟩,
     ⟨cid "A", .c .bool, .bool false⟩] := by decide
 
-/-- Accepted (rule `ConcreteSpec.Core.ConstsAdmitted`): source `A = B + 1` before `B = 2` is sorted
+/-- Instance: accepted (rule `ConcreteSpec.Core.ConstsAdmitted`): source `A = B + 1` before `B = 2` is sorted
 to `[B, A]` by `sortConsts`; this is item 19's forward reference. -/
 example : DependencyOrder U [⟨cid "A", .c (.int .u8),
       .plain .add (.ref (cid "B")) (.int .u8 1)⟩,
@@ -737,18 +760,18 @@ example : DependencyOrder U [⟨cid "A", .c (.int .u8),
   refine ⟨⟨List.Perm.swap _ _ [], by decide, ?_⟩, by decide⟩
   simp [sortConsts, sortConstsAux, takeReady, readyDecl, ReferencesEarlier, CExpr.refs, cid]
 
-/-- Refused (rule `ConcreteSpec.Core.ConstsAdmitted`): elaboration reports the real two-constant
+/-- Instance: refused (rule `ConcreteSpec.Core.ConstsAdmitted`): elaboration reports the real two-constant
 cycle `A → B → A`, and neither declaration order is admissible. -/
 example : CycleChain U [⟨cid "A", .c (.int .u8), .ref (cid "B")⟩,
     ⟨cid "B", .c (.int .u8), .ref (cid "A")⟩] [cid "A", cid "B", cid "A"] := by
   exact ⟨cid "A", [cid "B"], rfl, by decide⟩
 
-/-- Refused (rule `ConcreteSpec.Core.ConstsAdmitted`): self-reference reports `A → A`. -/
+/-- Instance: refused (rule `ConcreteSpec.Core.ConstsAdmitted`): self-reference reports `A → A`. -/
 example : CycleChain U [⟨cid "A", .c (.int .u8), .ref (cid "A")⟩]
     [cid "A", cid "A"] := by
   exact ⟨cid "A", [], rfl, by decide⟩
 
-/-- A malformed diagnostic: the claimed chain `A → B → A` is
+/-- Instance: A malformed diagnostic: the claimed chain `A → B → A` is
 not real when `A` has no reference to `B`, so it cannot justify cycle refusal. -/
 example : ¬ CycleChain U [⟨cid "A", .c (.int .u8), .int .u8 1⟩,
     ⟨cid "B", .c (.int .u8), .ref (cid "A")⟩] [cid "A", cid "B", cid "A"] := by
@@ -759,47 +782,185 @@ example : ¬ CycleChain U [⟨cid "A", .c (.int .u8), .int .u8 1⟩,
   rw [this] at href
   cases href
 
-/-- Accepted (rule `ConcreteSpec.Core.ConstsAdmitted`): the sorted forward reference computes
+/-- Instance: accepted (rule `ConcreteSpec.Core.ConstsAdmitted`): the sorted forward reference computes
 `A = 3`, rather than merely accepting a sorting certificate. -/
 example : (evalConsts U 3
     [⟨cid "B", .c (.int .u8), .int .u8 2⟩,
      ⟨cid "A", .c (.int .u8), .plain .add (.ref (cid "B")) (.int .u8 1)⟩] []).toOption.bind
     (fun env => AList.lookup env (cid "A")) = some (.int .u8 3) := by decide
 
-/-- Refused (rule `ConcreteSpec.Core.ConstsAdmitted`): neither order of a two-constant cycle
+/-- Instance: refused (rule `ConcreteSpec.Core.ConstsAdmitted`): neither order of a two-constant cycle
 passes the independent static and evaluation checks. -/
 example : ¬ ConstsAdmitted U 3
     [⟨cid "A", .c .bool, .ref (cid "B")⟩, ⟨cid "B", .c .bool, .ref (cid "A")⟩] ∧
     ¬ ConstsAdmitted U 3
     [⟨cid "B", .c .bool, .ref (cid "A")⟩, ⟨cid "A", .c .bool, .ref (cid "B")⟩] := by decide
 
-/-- Refused (rule `ConcreteSpec.Core.ConstsAdmitted`): self-reference has no Core value. -/
+/-- Instance: refused (rule `ConcreteSpec.Core.ConstsAdmitted`): self-reference has no Core value. -/
 example : ¬ ConstsAdmitted U 3 [⟨cid "A", .c .bool, .ref (cid "A")⟩] := by decide
 
-/-- Self-reference also fails the dependency-order contract, even for a singleton list. -/
+/-- Instance: Self-reference also fails the dependency-order contract, even for a singleton list. -/
 example : ¬ DependencyOrder U [⟨cid "A", .c .bool, .ref (cid "A")⟩]
     [⟨cid "A", .c .bool, .ref (cid "A")⟩] := by
   intro h
   have hs := h.2.2
   simp [ReferencesEarlier, CExpr.refs] at hs
 
-/-- Fuel refusal carries the identity of the constant, including an unused one. -/
+/-- Instance: Fuel refusal carries the identity of the constant, including an unused one. -/
 example : evalConsts U 1 [⟨cid "UNUSED", .c (.int .u8),
     .plain .add (.int .u8 1) (.int .u8 2)⟩] [] = .error (.outOfFuel (cid "UNUSED")) := by decide
 
-/-- An unresolved reference is not a dependency-order certificate, even for an acyclic singleton. -/
+/-- Instance: An unresolved reference is not a dependency-order certificate, even for an acyclic singleton. -/
 example : ¬ DependencyOrder U [⟨cid "A", .c .bool, .ref (cid "MISSING")⟩]
     [⟨cid "A", .c .bool, .ref (cid "MISSING")⟩] := by
   intro h
   have hs := h.2.2
   simp [ReferencesEarlier, CExpr.refs] at hs
 
-/-- The evaluation check is independent: this list types but division by zero refuses it. -/
+/-- Instance: The evaluation check is independent: this list types but division by zero refuses it. -/
 example : ConstsTyped U [⟨cid "BAD", .c (.int .i8),
     .plain .div (.int .i8 1) (.int .i8 0)⟩] ∧
     ¬ ConstsEvaluate U 3 [⟨cid "BAD", .c (.int .i8),
     .plain .div (.int .i8 1) (.int .i8 0)⟩] := by
   exact ⟨by decide, by decide⟩
+
+/-- Instance: the closed admission list accepts integer and bool, independently of
+expression typing; adding unit or char to Scalar cannot silently extend constants. -/
+example : ConstantType (.int .u32) ∧ ConstantType .bool ∧
+    ¬ ConstantType .unit ∧ ¬ ConstantType .char := by decide
+
+/-- Instance: a unit-typed declaration is refused even in a populated environment with a
+matching unit-typed reference. Thus this tests closed admission, not a missing reference
+or a declared/initializer type mismatch. -/
+example : typeConsts U [⟨cid "UNIT", .c .unit, .ref (cid "SEED")⟩]
+    [(cid "SEED", .unit)] = none := by decide
+
+/-- Instance: a char-typed declaration is refused with the same matched-type setup.
+No char literal or construction policy is chosen. -/
+example : typeConsts U [⟨cid "CHAR", .c .char, .ref (cid "SEED")⟩]
+    [(cid "SEED", .char)] = none := by decide
+
+/-- Instance: the analogous populated bool environment admits the reference. -/
+example : typeConsts U [⟨cid "BOOL", .c .bool, .ref (cid "SEED")⟩]
+    [(cid "SEED", .bool)] = some [(cid "BOOL", .bool), (cid "SEED", .bool)] := by decide
+
+/-- Instance: a whole unit declaration has a well-typed, successfully evaluating
+initializer in a matched seed environment, yet declaration admission refuses it.
+The closed grammar has no unit literal, so the seed is supplied rather than invented. -/
+example : (CExpr.ref (cid "SEED")).ty? [(cid "SEED", .unit)] = some .unit ∧
+    (evalConsts U 3 [⟨cid "UNIT", .c .unit, .ref (cid "SEED")⟩]
+      [(cid "SEED", .unit)]).isOk = true ∧
+    typeConsts U [⟨cid "UNIT", .c .unit, .ref (cid "SEED")⟩]
+      [(cid "SEED", .unit)] = none := by decide
+
+/-- Instance: the corresponding char declaration also isolates ConstantType admission;
+the environment supplies a scalar value without adding character literal syntax. -/
+example : (CExpr.ref (cid "SEED")).ty? [(cid "SEED", .char)] = some .char ∧
+    (evalConsts U 3 [⟨cid "CHAR", .c .char, .ref (cid "SEED")⟩]
+      [(cid "SEED", .char 'A')]).isOk = true ∧
+    typeConsts U [⟨cid "CHAR", .c .char, .ref (cid "SEED")⟩]
+      [(cid "SEED", .char)] = none := by decide
+
+/-- Instance: bool-to-integer conversion is held (ISS-0069); this otherwise well-typed
+bool expression is not an integer conversion operand. -/
+example : (CExpr.convert .u8 (.not (.bool false))).ty? [] = none ∧
+    (CExpr.convert .u8 (.not (.bool false))).eval [] 3 =
+      .invalid (CExpr.convert .u8 (.not (.bool false))) := by decide
+
+/-- A source prefix leads into a cycle nested inside arithmetic. A self-edge-only check,
+or a check limited to cycles through the first declaration, would miss it. -/
+def nestedCycle : List (ConstDecl U) :=
+  [⟨cid "ENTRY", .c (.int .u8), .ref (cid "B")⟩,
+   ⟨cid "B", .c (.int .u8), .plain .add (.int .u8 1) (.ref (cid "C"))⟩,
+   ⟨cid "C", .c (.int .u8), .ref (cid "D")⟩,
+   ⟨cid "D", .c (.int .u8), .ref (cid "B")⟩]
+
+/-- Instance: the diagnostic names the actual nested three-edge cycle. -/
+example : SourceNamesResolved U nestedCycle ∧
+    CycleChain U nestedCycle [cid "B", cid "C", cid "D", cid "B"] := by
+  refine ⟨by decide, cid "B", [cid "C", cid "D"], rfl, ?_⟩
+  decide
+
+/-- Instance: exhausted fuel and overflow are observably different outcomes for the same
+well-typed arithmetic; neither can be mistaken for a successful value. -/
+example : evalConsts U 1 [⟨cid "BAD", .c (.int .i8),
+      .plain .add (.int .i8 127) (.int .i8 1)⟩] [] =
+    .error (.outOfFuel (cid "BAD")) ∧
+    evalConsts U 2 [⟨cid "BAD", .c (.int .i8),
+      .plain .add (.int .i8 127) (.int .i8 1)⟩] [] =
+    .error (.operation (cid "BAD") ⟨.plain .add,
+      .plain .add (.int .i8 127) (.int .i8 1), .arithmetic .overflow⟩) := by decide
+
+/-- Instance: accepted endpoints adjacent to the signed and unsigned overflow refusals,
+the shift-width refusal and signed negation overflow. Exact values pin inclusive bounds. -/
+example :
+    (CExpr.plain .add (.int .i8 126) (.int .i8 1)).eval [] 3 = .value (.int .i8 127) ∧
+    (CExpr.plain .add (.int .u8 254) (.int .u8 1)).eval [] 3 = .value (.int .u8 255) ∧
+    (CExpr.plain .shl (.int .u8 1) (.int .u8 7)).eval [] 3 = .value (.int .u8 128) ∧
+    (CExpr.plainNeg (.int .i8 (-127))).eval [] 3 = .value (.int .i8 127) ∧
+    (CExpr.plainNeg (.int .u8 0)).eval [] 3 = .value (.int .u8 0) ∧
+    (CExpr.plain .div (.int .i8 (-127)) (.int .i8 (-1))).eval [] 3 =
+      .value (.int .i8 127) := by decide
+
+/-- Instance: all accepted arithmetic endpoints also pass whole-declaration admission. -/
+example : ConstsAdmitted U 3
+    [⟨cid "IADD", .c (.int .i8), .plain .add (.int .i8 126) (.int .i8 1)⟩,
+     ⟨cid "UADD", .c (.int .u8), .plain .add (.int .u8 254) (.int .u8 1)⟩,
+     ⟨cid "SHIFT", .c (.int .u8), .plain .shl (.int .u8 1) (.int .u8 7)⟩,
+     ⟨cid "INEG", .c (.int .i8), .plainNeg (.int .i8 (-127))⟩,
+     ⟨cid "UNEG", .c (.int .u8), .plainNeg (.int .u8 0)⟩,
+     ⟨cid "IDIV", .c (.int .i8), .plain .div (.int .i8 (-127)) (.int .i8 (-1))⟩] := by decide
+
+/-- Instance: signed minimum negation is a well-typed operation overflow, not invalid syntax. -/
+example : evalConsts U 3 [⟨cid "BAD", .c (.int .i8), .plainNeg (.int .i8 (-128))⟩] [] =
+    .error (.operation (cid "BAD") ⟨.plainNeg, .plainNeg (.int .i8 (-128)),
+      .arithmetic .overflow⟩) ∧
+    ¬ ConstsAdmitted U 3 [⟨cid "BAD", .c (.int .i8), .plainNeg (.int .i8 (-128))⟩] := by decide
+
+/-- Instance: even the smallest nonzero unsigned negation overflows. -/
+example : evalConsts U 3 [⟨cid "BAD", .c (.int .u8), .plainNeg (.int .u8 1)⟩] [] =
+    .error (.operation (cid "BAD") ⟨.plainNeg, .plainNeg (.int .u8 1),
+      .arithmetic .overflow⟩) ∧
+    ¬ ConstsAdmitted U 3 [⟨cid "BAD", .c (.int .u8), .plainNeg (.int .u8 1)⟩] := by decide
+
+/-- Instance: signed minimum divided by minus one overflows despite a nonzero divisor. -/
+example : evalConsts U 3 [⟨cid "BAD", .c (.int .i8),
+      .plain .div (.int .i8 (-128)) (.int .i8 (-1))⟩] [] =
+    .error (.operation (cid "BAD") ⟨.plain .div,
+      .plain .div (.int .i8 (-128)) (.int .i8 (-1)), .arithmetic .overflow⟩) ∧
+    ¬ ConstsAdmitted U 3 [⟨cid "BAD", .c (.int .i8),
+      .plain .div (.int .i8 (-128)) (.int .i8 (-1))⟩] := by decide
+
+/-- Instance: sorting preserves the blocked cyclic suffix, which both independent
+admission checks must refuse. A real cycle diagnostic alone is insufficient evidence. -/
+example : ¬ DependencyOrder U nestedCycle (sortConsts U nestedCycle) ∧
+    ¬ ConstsAdmitted U 10 (sortConsts U nestedCycle) := by
+  constructor
+  · intro h
+    have hs := h.2.2
+    simp [nestedCycle, sortConsts, sortConstsAux, takeReady, readyDecl,
+      ReferencesEarlier, CExpr.refs, cid] at hs
+  · decide
+
+/-- Three forward-linked declarations and two simultaneously ready declarations.
+The tie is broken by source order, including when A becomes ready ahead of TIE. -/
+def forwardChain : List (ConstDecl U) :=
+  [⟨cid "A", .c (.int .u8), .ref (cid "B")⟩,
+   ⟨cid "B", .c (.int .u8), .ref (cid "C")⟩,
+   ⟨cid "C", .c (.int .u8), .int .u8 7⟩,
+   ⟨cid "TIE", .c (.int .u8), .int .u8 9⟩]
+
+/-- Instance: exact output distinguishes stable ready selection from list reversal. -/
+example : (sortConsts U forwardChain).map ConstDecl.id =
+    [cid "C", cid "B", cid "A", cid "TIE"] ∧
+    sortConsts U forwardChain ≠ forwardChain.reverse ∧
+    ConstsAdmitted U 10 (sortConsts U forwardChain) := by decide
+
+/-- Instance: the longer sorted chain satisfies the full dependency-order contract. -/
+example : DependencyOrder U forwardChain (sortConsts U forwardChain) := by
+  refine ⟨?_, by decide, ?_⟩
+  · decide
+  · decide
 
 end ConstDemo
 

@@ -1,5 +1,15 @@
+import ConcreteSpec.Spec.Const
+import ConcreteSpec.Spec.Own
+import ConcreteSpec.Spec.Rules
+import ConcreteSpec.Spec.Hybrid
+import ConcreteSpec.Spec.Exec
+import ConcreteSpec.Spec.Memory
 import ConcreteSpec.Spec.Basics
 import ConcreteSpec.Spec.Ident
+import ConcreteSpec.Spec.Target
+import ConcreteSpec.Spec.Outcome
+import ConcreteSpec.Spec.Scalar
+import ConcreteSpec.Spec.Surface0
 import ConcreteSpec.Spec.Slice1Syntax
 import ConcreteSpec.Spec.Statics
 import ConcreteSpec.Spec.Slice1Ownership
@@ -13,21 +23,6 @@ import ConcreteSpec.Spec.Borrow
 import ConcreteSpec.Spec.Brand
 import ConcreteSpec.Spec.Authority
 import ConcreteSpec.Spec.Observation
-import ConcreteSpec.Spec.Target
-import ConcreteSpec.Spec.Outcome
-import ConcreteSpec.Spec.Exec
-import ConcreteSpec.Spec.Prim
-import ConcreteSpec.Spec.Observe
-import ConcreteSpec.Spec.Adequacy
-import ConcreteSpec.Spec.Scalar
-import ConcreteSpec.Spec.Const
-import ConcreteSpec.Spec.Leak
-import ConcreteSpec.Spec.Memory
-import ConcreteSpec.Spec.Hybrid
-import ConcreteSpec.Spec.Own
-import ConcreteSpec.Spec.Grant
-import ConcreteSpec.Spec.Frame
-import ConcreteSpec.Spec.Rules
 
 /-!
 # The Concrete specification
@@ -57,15 +52,6 @@ recorded rule ids of the archived prose specification, legacy/docs/spec (ODnn, T
 
 The parts are separate Core fragments, each with its own judgments, defined only as far as its
 theorems need (R4 F8). Unifying them into one Core is A2i work (R-0571).
-
-The foundation (owner decision 2026-11-08, "ok all recommended": the shared interfaces and their
-laws, written, proved and tested before the freeze) is in the namespace `ConcreteSpec.Core`, from
-`Target` on: `Target` (C3, target profiles), `Outcome` (trap kinds and the ways a run stops),
-`Exec` (C1, execution, calls and cleanup), `Scalar` (C2, scalars and arithmetic), `Const` (C2,
-the constant initializer subset), `Memory` (C4, byte memory and scalar representation), and
-`Hybrid` (C4, structured places and stable materialized ranges), `Own` (C5, ownership and loans),
-`Observe` (C6, observations and the environment), and `Grant` (C5, brand lifetimes and grant attenuation), and `Frame` (C10, logical footprints, call restoration and target-independent ABI contracts). Each module's header says which contract it states and what it
-leaves to a later slice.
 
 Only Lean core is imported (Q9.16). No proof uses `native_decide` or `sorry` (Q9.17).
 

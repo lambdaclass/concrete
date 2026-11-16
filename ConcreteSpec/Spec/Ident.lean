@@ -10,38 +10,48 @@ Core names everything by a typed identity, never by a bare string or number: loc
 constants, fields, functions, packages, modules, trait instances, specializations, loop labels,
 brands, allocator lineages, loans, grants, blocks, capability variables, theorems, obligations and
 premises each have their own type. A module contains its package and non-empty package-rooted path,
-so a declaration, field, variant, function or constant carries that complete identity. A local is
-numbered by elaboration and keeps its source name only as a diagnostic hint. Equality of identities
-is what the rules use (the facts decision: no bare-name collisions).
+so a declaration, field, variant, function or constant carries that complete identity. A local uses Basics’ numeric `ConcreteSpec.Var`; spellings live only in the diagnostics side
+table. Equality of identities is what the rules use (the facts decision: no bare-name collisions).
 
 A *site* (`SiteId`) is one per operation and per refusable statement. Diagnostics, facts, traps
-and discharge tokens are keyed by site; a program's site table maps each site to its byte-ranged
-source `Span`, which elaboration produces (README obligation O1). Lexical site and trait-instance
-numbers are distinct from persistent `StableKey`s. Specialization request edges retain their sites
+and discharge tokens are keyed by site. Source ranges and their path policy are held for F03p.
+Lexical site and trait-instance numbers are distinct from persistent `StableKey`s. Specialization request edges retain their sites
 separately from identities keyed by generic arguments. Obligations carry site, kind and a same-site
 discriminator; conditional facts carry typed premise identities.
 
 A rule is cited by `RuleId`: the Lean name of the declaration that states it and that rule's own
-revision. Every output carries one `specVersion`. Which rules exist is the registry in `Rules`;
+revision. Every output carries one `specVersion`. The rule registry is a later piece;
 this module depends on nothing downstream.
 
 These types are part of the diagnostics and facts interface: the Lean types are the source of its
 JSON schema (owner decision 2026-11-07), so a field's name is part of the interface and renaming
 one is an interface change.
+
+Authority (all in `docs/decisions.md` on main):
+- `decided-project-facts-report`: typed identities and conditional evidence;
+  Q9.1–Q9.3, Q9.6–Q9.8: fresh locals, nominal declarations, loops and primitives;
+  OD77/OD148: no generic trait-method/trait-parameter category; OD109: capability-sensitive specialization.
+- `decided-2026-11-08-c9-identities`: structured stable keys, package name/version,
+  origin collision refusal, closed versioned premise categories; OD44: top-level collisions.
+- `decided-project-concrete-toml`, `decided-2026-11-07-stack-randomness`, OD80:
+  the seven premise categories. Numeric wire tags are this schema's closed encoding.
+- Q1.1, Q3.7, Q5.1–Q5.4, `decided-project-memory-2026-11-06`:
+  brands, blocks, loans, grants, capability variables and allocator lineages.
+- `decided-project-diagnostics-2026-11-06`, `decided-project-runtime-2026-11-06`:
+  rule revisions, spec versions and source positions; `foundation-q10`: byte columns,
+  with a tab counting one byte. Byte arithmetic is not a lexer or source-admission policy.
+- `decided-project-vertical-slices-2026-11-06`: slice identities 0–28.
+
+All identity text uses Basics.Name, preserving exact text equality while
+keeping nominal identity distinct from local diagnostic spellings. Numeric routes
+use Basics.Numbers; neither wrapper adds source-path or normalization policy.
+
+The key-assignment helpers implement the settled structured-key interface, not a source parser.
+The source-path/Span group and its dependent examples are held for F03p;
+the six general byte-coordinate laws and their controls belong to F04.
 -/
 
 namespace ConcreteSpec.Core
-
-/-- A local variable: a source-name hint for presentation and a numeric semantic identity.
-Elaboration gives every local of a function its own number (a local is bound at most once, Q9.1)
-and its source name as the hint, so two locals of one function never share a number. The hint never
-determines binding or evaluation; `Prim.eval_rehint` proves that changing every hint consistently
-changes no result. Rehinting must be applied consistently to binders and occurrences because C1's
-`AList.lookup` compares the whole `Var`, including its hint. -/
-structure Var where
-  hint : String
-  id : Nat
-  deriving DecidableEq, Repr
 
 /-- A place of safe structured storage. C4 and C5 will relate this identity to their root/projection
 and hybrid-state representations; this C9 base deliberately does not edit or choose that mapping. -/
@@ -96,31 +106,31 @@ structure ObligationId where
 /-- A package version. Its own syntax and ordering are deliberately opaque: semver has not been
 chosen. This is part of package identity, not an artifact content hash (owner decision 2026-11-08). -/
 structure PackageVersion where
-  token : String
+  token : Name
   deriving DecidableEq, Repr
 
 /-- A package identity is its name and version. Artifact hashes and load origins are separate. -/
 structure PackageId where
-  name : String
+  name : Name
   version : PackageVersion
   deriving DecidableEq, Repr
 
 /-- Where a loaded package came from. Origin is deliberately outside `PackageId`: equal name and
 version from different origins are a load-time collision, not two package identities. -/
 structure PackageOrigin where
-  token : String
+  token : Name
   deriving DecidableEq, Repr
 
-/-- A module: its package and its non-empty path from that package's root (`["std", "bytes"]`).
+/-- A module: its package and its non-empty path from that package's root (`[⟨"std"⟩, ⟨"bytes"⟩]`).
 The first segment is therefore always a real top-level module name. -/
 structure ModuleId where
   package : PackageId
-  path : List String
+  path : List Name
   path_nonempty : path ≠ []
   deriving DecidableEq, Repr
 
 /-- The module's required top-level name. -/
-def ModuleId.topLevel (m : ModuleId) : String := m.path.head m.path_nonempty
+def ModuleId.topLevel (m : ModuleId) : Name := m.path.head m.path_nonempty
 
 /-- One loaded module and the origin of its package. -/
 structure LoadedModule where
@@ -198,13 +208,13 @@ def LoadedModules.load (modules : List LoadedModule) : LoadResult :=
 nominal (Q9.2): two declarations are the same exactly when their identities are equal. -/
 structure DeclId where
   module : ModuleId
-  name : String
+  name : Name
   deriving DecidableEq, Repr
 
 /-- A variant of an enum declaration, by its declaration and name. -/
 structure VariantId where
   decl : DeclId
-  name : String
+  name : Name
   deriving DecidableEq, Repr
 
 /-- What a field belongs to: a struct declaration, or one variant of an enum. -/
@@ -217,19 +227,19 @@ inductive FieldOwner where
 they are different fields. -/
 structure FieldId where
   owner : FieldOwner
-  name : String
+  name : Name
   deriving DecidableEq, Repr
 
 /-- A function: its module and its name there. -/
 structure FnId where
   module : ModuleId
-  name : String
+  name : Name
   deriving DecidableEq, Repr
 
 /-- A module constant (`const N: T = e;`): its module and its name there. -/
 structure ConstId where
   module : ModuleId
-  name : String
+  name : Name
   deriving DecidableEq, Repr
 
 /-- A trait instance, numbered by elaboration. -/
@@ -331,16 +341,16 @@ inductive ConstructKind where
 /-- Source naming of one construct. A named item and an unnamed item remain different even when an
 unnamed item has a user label; this is what lets renaming preserve its siblings' ordinals. -/
 inductive ConstructName where
-  | named (name : String)
-  | unnamed (label : Option String)
+  | named (name : Name)
+  | unnamed (label : Option Name)
   deriving DecidableEq, Repr
 
 /-- A named segment is keyed by its source item name; an unnamed segment with a user label by its
 pinned label; an unlabelled unnamed segment by its per-kind ordinal within the enclosing named
 scope. -/
 inductive SegmentName where
-  | named (name : String)
-  | pinned (label : String)
+  | named (name : Name)
+  | pinned (label : Name)
   | ordinal (n : Nat)
   deriving DecidableEq, Repr
 
@@ -383,22 +393,22 @@ def ConstructName.isUnnamed : ConstructName → Bool
 
 /-- Rename a named construct without changing named/unnamed status. Unnamed constructs have no item
 name to rename; pinning or unpinning an unnamed construct's user label is `ConstructName.pin`. -/
-def ConstructName.rename : ConstructName → String → ConstructName
+def ConstructName.rename : ConstructName → Name → ConstructName
   | .named _, name => .named name
   | .unnamed label, _ => .unnamed label
 
 /-- Pin or unpin an unnamed construct's user label without changing its unnamed status, so
 siblings' ordinals cannot change. Named constructs are unchanged. -/
-def ConstructName.pin : ConstructName → Option String → ConstructName
+def ConstructName.pin : ConstructName → Option Name → ConstructName
   | .named name, _ => .named name
   | .unnamed _, label => .unnamed label
 
 /-- Rename one named construct root, retaining its kind and complete subtree. -/
-def KeyConstruct.rename (construct : KeyConstruct) (name : String) : KeyConstruct :=
+def KeyConstruct.rename (construct : KeyConstruct) (name : Name) : KeyConstruct :=
   { construct with name := construct.name.rename name }
 
 /-- Pin or unpin one unnamed construct root's label, retaining its kind and complete subtree. -/
-def KeyConstruct.pin (construct : KeyConstruct) (label : Option String) : KeyConstruct :=
+def KeyConstruct.pin (construct : KeyConstruct) (label : Option Name) : KeyConstruct :=
   { construct with name := construct.name.pin label }
 
 /-- The persistent segment assigned among these preceding constructs in the enclosing named scope.
@@ -418,7 +428,7 @@ def KeyConstruct.key (preceding : List KeyConstruct) (construct : KeyConstruct) 
 
 /-- The enclosing named scope passed to a construct's children: a `.named` construct establishes a
 fresh named scope (`[]`), whereas an `.unnamed` construct retains the enclosing named scope's
-preceding constructs (`localPreceding`) (Owner Decision 8). -/
+preceding constructs (`localPreceding`) (docs/decisions.md#decided-2026-11-08-c9-identities). -/
 def KeyConstruct.childScope (localPreceding : List KeyConstruct) (construct : KeyConstruct) :
     List KeyConstruct :=
   match construct.name with
@@ -431,7 +441,7 @@ no child index enters the assigned key. Every level counts its per-kind unnamed 
 `scope ++ forest.take index` and resets the child scope to `[]` only when entering a `.named`
 construct. -/
 def KeyConstruct.pathAtIn (scope : List KeyConstruct) (forest : List KeyConstruct) :
-    List Nat → Option FunctionRelativeKey
+    Numbers → Option FunctionRelativeKey
   | [] => some ⟨[]⟩
   | index :: route => do
     let construct ← forest[index]?
@@ -441,21 +451,21 @@ def KeyConstruct.pathAtIn (scope : List KeyConstruct) (forest : List KeyConstruc
 
 /-- Assign the complete persistent path to an occurrence from the root of an enclosing item's
 construct forest. -/
-def KeyConstruct.pathAt (forest : List KeyConstruct) (route : List Nat) :
+def KeyConstruct.pathAt (forest : List KeyConstruct) (route : Numbers) :
     Option FunctionRelativeKey :=
   KeyConstruct.pathAtIn [] forest route
 
 /-- Assign a descendant path beneath a located root with preceding constructs `preceding` in the
 enclosing named scope. -/
 def KeyConstruct.descendantKey (preceding : List KeyConstruct) (construct : KeyConstruct)
-    (route : List Nat) : Option FunctionRelativeKey :=
+    (route : Numbers) : Option FunctionRelativeKey :=
   (KeyConstruct.pathAtIn (construct.childScope preceding) construct.children route).map
     fun descendant => ⟨construct.segment preceding :: descendant.path⟩
 
 /-- Check that every construct encountered along `route` in `forest` within the current enclosing
 named scope has kind different from `k`. Entering a `.named` construct starts a new named scope and
 needs no further check on `k`. -/
-def KeyConstruct.routeAvoidsKind (k : ConstructKind) : List KeyConstruct → List Nat → Bool
+def KeyConstruct.routeAvoidsKind (k : ConstructKind) : List KeyConstruct → Numbers → Bool
   | _, [] => true
   | forest, index :: route =>
     match forest[index]? with
@@ -469,10 +479,10 @@ def KeyConstruct.routeAvoidsKind (k : ConstructKind) : List KeyConstruct → Lis
 /-- Every construct encountered along `route` in `forest` within the current enclosing named scope
 has kind different from `k`. -/
 def KeyConstruct.RouteAvoidsKind (k : ConstructKind) (forest : List KeyConstruct)
-    (route : List Nat) : Prop :=
+    (route : Numbers) : Prop :=
   KeyConstruct.routeAvoidsKind k forest route = true
 
-instance (k : ConstructKind) (forest : List KeyConstruct) (route : List Nat) :
+instance (k : ConstructKind) (forest : List KeyConstruct) (route : Numbers) :
     Decidable (KeyConstruct.RouteAvoidsKind k forest route) := by
   unfold KeyConstruct.RouteAvoidsKind
   infer_instance
@@ -480,7 +490,7 @@ instance (k : ConstructKind) (forest : List KeyConstruct) (route : List Nat) :
 /-- Check that every construct encountered from `target` along `route` within `target`'s enclosing
 named scope has kind different from `k`. -/
 def KeyConstruct.subtreeAvoidsKind (k : ConstructKind) (target : KeyConstruct)
-    (route : List Nat) : Bool :=
+    (route : Numbers) : Bool :=
   (k != target.kind) &&
     match target.name with
     | .named _ => true
@@ -489,10 +499,10 @@ def KeyConstruct.subtreeAvoidsKind (k : ConstructKind) (target : KeyConstruct)
 /-- Every construct encountered from `target` along `route` within `target`'s enclosing named scope
 has kind different from `k`. -/
 def KeyConstruct.SubtreeAvoidsKind (k : ConstructKind) (target : KeyConstruct)
-    (route : List Nat) : Prop :=
+    (route : Numbers) : Prop :=
   KeyConstruct.subtreeAvoidsKind k target route = true
 
-instance (k : ConstructKind) (target : KeyConstruct) (route : List Nat) :
+instance (k : ConstructKind) (target : KeyConstruct) (route : Numbers) :
     Decidable (KeyConstruct.SubtreeAvoidsKind k target route) := by
   unfold KeyConstruct.SubtreeAvoidsKind
   infer_instance
@@ -556,7 +566,7 @@ def PremiseKind.encode : PremiseKind → Nat
 
 /-- An opaque key relative to a package's `Concrete.toml`. -/
 structure PackageRelativeKey where
-  token : String
+  token : Name
   deriving DecidableEq, Repr
 
 /-- The scope that makes a premise identity unique. Project assumptions use their package and a
@@ -640,7 +650,7 @@ instance (table : SiteKeyTable) : Decidable table.NoDupSites := by
   unfold SiteKeyTable.NoDupSites
   infer_instance
 
-/-- Obligation (discharged at slice 1, R-0492). Editing outside `edited` leaves the
+/-- The outside-function edit obligation. Editing outside `edited` leaves the
 complete sequence of persistent keys of every other function unchanged. Lexical sites may be
 renumbered independently; persistent keys may not be rewritten by the edit. -/
 def OutsideFunctionEdit (before after : FnId → SiteKeyTable) (edited : FnId) : Prop :=
@@ -701,130 +711,6 @@ question 10 (2026-11-08). -/
 def SourceText.columnAt (source : SourceText) (offset : Nat) : Nat :=
   ((source.take offset).reverse.takeWhile (fun byte => byte != 10)).length + 1
 
-/-- A Windows drive introducer is an ASCII alphabetic character followed by a colon. -/
-def SourcePath.DrivePrefix : List Char → Prop
-  | c :: ':' :: _ => c.isAlpha = true
-  | _ => False
-
-instance (cs : List Char) : Decidable (SourcePath.DrivePrefix cs) := by
-  unfold SourcePath.DrivePrefix
-  split <;> infer_instance
-
-/-- ASCII controls are U+0000 through U+001F and U+007F. AY-3: assumed-yes,
-pending owner confirmation. -/
-def SourcePath.Control (c : Char) : Prop := c.toNat < 32 ∨ c.toNat = 127
-
-instance (c : Char) : Decidable (SourcePath.Control c) := by
-  unfold SourcePath.Control
-  infer_instance
-
-/-- The component boundary excludes traversal, separators and drives. AY-2 refuses backslash;
-AY-3 refuses every ASCII control, including NUL; AY-4 accepts all other Unicode scalars with
-identity given by the exact scalar sequence, without normalization. These three character
-policies are assumed-yes pending owner confirmation. -/
-def SourcePath.ComponentOk (cs : List Char) : Prop :=
-  cs ≠ [] ∧ cs ≠ ['.'] ∧ cs ≠ ['.', '.'] ∧
-    '/' ∉ cs ∧ '\\' ∉ cs ∧ ¬ SourcePath.DrivePrefix cs ∧
-    ∀ c ∈ cs, ¬ SourcePath.Control c
-
-instance (cs : List Char) : Decidable (SourcePath.ComponentOk cs) := by
-  unfold SourcePath.ComponentOk
-  infer_instance
-
-/-- One project-relative source identity. There is no absolute/root constructor and no
-unchecked string constructor. Components retain their exact spelling, with no normalization. -/
-structure SourcePath where
-  components : List (List Char)
-  nonempty : components ≠ []
-  valid : ∀ cs ∈ components, SourcePath.ComponentOk cs
-  deriving DecidableEq, Repr
-
-/-- The sole external spelling: the nonempty components joined by a single forward slash. -/
-def SourcePath.render (path : SourcePath) : String :=
-  String.ofList (['/'].intercalate path.components)
-
-/-- Typed character refusals implement AY-2 and AY-3 (assumed-yes pending owner confirmation).
-AY-4 introduces no refusal for other Unicode scalars and performs no normalization. -/
-inductive SourcePath.Reason where
-  | empty | dot | outOfProject | absolute | drivePrefixed | emptyComponent | backslash
-  | controlCharacter
-  deriving DecidableEq, Repr
-
-/-- A refusal names both the entire input and the offending component, without rewriting either. -/
-structure SourcePath.Refusal where
-  input : String
-  component : List Char
-  reason : SourcePath.Reason
-  deriving DecidableEq, Repr
-
-/-- Diagnose the first malformed component; the raw input remains available in the refusal. -/
-def SourcePath.componentReason (cs : List Char) : Reason :=
-  if cs = [] then .emptyComponent
-  else if cs = ['.'] then .dot
-  else if cs = ['.', '.'] then .outOfProject
-  else if DrivePrefix cs then .drivePrefixed
-  else if '\\' ∈ cs then .backslash
-  else .controlCharacter
-
-/-- Parse at the source-identity boundary. Splitting preserves empty components, including a
-trailing slash. Admission checks the components once; rendering never rechecks or filters them. -/
-def SourcePath.parse (raw : String) : Except Refusal SourcePath :=
-  let parts := raw.toList.splitOn '/'
-  if raw.toList = [] then .error ⟨raw, [], .empty⟩
-  else if raw.toList.head? = some '/' then .error ⟨raw, [], .absolute⟩
-  else if good : ∀ cs ∈ parts, ComponentOk cs then
-    .ok ⟨parts, List.splitOn_ne_nil '/' raw.toList, good⟩
-  else
-    let bad? := parts.find? fun cs => !decide (ComponentOk cs)
-    have present : bad?.isSome := by
-      cases found : bad? with
-      | some _ => rfl
-      | none =>
-        have all := List.find?_eq_none.mp found
-        exact False.elim (good (by
-          intro cs member
-          simpa using all cs member))
-    let bad := bad?.get present
-    .error ⟨raw, bad, componentReason bad⟩
-
-/-- A closed source identity used by the existing examples. -/
-def mainSourcePath : SourcePath :=
-  ⟨["src".toList, "main.con".toList], by decide, by decide⟩
-
-/-- A source range and the start position used by the trap-line decision (R-0496). The path is
-relative to the project root with forward slashes; `startOffset` and `endOffset` are byte offsets
-with `startOffset ≤ endOffset`. Line and column are 1-based and describe the start. They are stored
-for diagnostics and rendering, while `Span.LocationOk` checks them against the actual source bytes.
-The structured path carries its syntactic invariants; the loader binds it to source bytes. -/
-structure Span where
-  path : SourcePath
-  startOffset : Nat
-  endOffset : Nat
-  range_ok : startOffset ≤ endOffset
-  line : Nat
-  col : Nat
-  line_pos : 0 < line
-  col_pos : 0 < col
-  deriving DecidableEq, Repr
-
-/-- A span's range is in bounds and its stored start line and byte column are exactly those
-determined by its start offset in the source bytes. -/
-def Span.LocationOk (sp : Span) (source : SourceText) : Prop :=
-  sp.endOffset ≤ source.length ∧ sp.line = source.lineAt sp.startOffset ∧
-    sp.col = source.columnAt sp.startOffset
-
-instance (sp : Span) (source : SourceText) : Decidable (sp.LocationOk source) := by
-  unfold Span.LocationOk
-  infer_instance
-
-/-- A compatibility view of the older rendering properties. Every structured path satisfies
-this proposition; it is never a reporting admission check. `SourcePath` additionally excludes
-traversal, empty components and drive prefixes in its representation. -/
-def Span.PathOk (sp : Span) : Prop :=
-  sp.path.render.toList ≠ [] ∧ sp.path.render.toList.head? ≠ some '/' ∧ '\\' ∉ sp.path.render.toList
-
-instance (sp : Span) : Decidable sp.PathOk := by unfold Span.PathOk; infer_instance
-
 /-- A slice of the language, in the agreed slice order: 0 to 28, concurrency last (2026-11-07). -/
 structure SliceId where
   n : Fin 29
@@ -845,7 +731,8 @@ structure SpecVersion where
   minor : Nat
   deriving DecidableEq, Repr
 
-/-- The version every output carries, in one header covering all its records. -/
+/-- The initial pre-freeze schema version every output carries in one header.
+This extraction starts the schema at 0.1; it does not claim foundation freeze. -/
 def specVersion : SpecVersion := ⟨0, 1⟩
 
 /-- A premise record as stored in the versioned evidence schema. -/
@@ -893,43 +780,129 @@ def EncodedPremise.read (reader : SpecVersion) (record : EncodedPremise) : Optio
 
 /-! ### Examples -/
 
+/-- Two loaded modules with the same package identity and origin coexist. -/
+def loadedA : LoadedModule := ⟨⟨⟨⟨"p"⟩, ⟨⟨"1"⟩⟩⟩, [⟨"a"⟩], by decide⟩, ⟨⟨"origin-a"⟩⟩⟩
+
+/-- A second module from the same package and origin. -/
+def loadedB : LoadedModule := ⟨⟨loadedA.module.package, [⟨"b"⟩], by decide⟩, loadedA.origin⟩
+
+example : (LoadedModules.findCollision [loadedA, loadedB]).isNone = true := by decide
+
+/-- A collision refuses the entire load and retains both inputs for diagnostics. -/
+example : (match LoadedModules.load [loadedA, { loadedA with origin := ⟨⟨"origin-b"⟩⟩ }] with
+    | .refused collision => decide (collision.first = loadedA ∧
+        collision.second.origin = ⟨⟨"origin-b"⟩⟩)
+    | .admitted _ => false) = true := by decide
+
+/-- OD44 refuses one top-level module name shared by distinct packages. -/
+example : (match LoadedModules.load [loadedA,
+      { loadedA with module := { loadedA.module with package := ⟨⟨"q"⟩, ⟨⟨"1"⟩⟩⟩ } }] with
+    | .refused (.topLevel _ _ _ _) => true
+    | _ => false) = true := by decide
+
+/-- Ordinals are per kind; named siblings consume none, while pinned unnamed siblings still
+consume one. The literal list checks both completeness and traversal order. -/
+example : KeyConstruct.collectKeys
+    [⟨.call, .unnamed none, []⟩,
+     ⟨.binding, .unnamed none, []⟩,
+     ⟨.call, .named ⟨"helper"⟩, []⟩,
+     ⟨.call, .unnamed (some ⟨"keep"⟩), []⟩,
+     ⟨.call, .unnamed none, []⟩,
+     ⟨.binding, .unnamed none, []⟩] =
+    [⟨[⟨.call, .ordinal 0⟩]⟩,
+     ⟨[⟨.binding, .ordinal 0⟩]⟩,
+     ⟨[⟨.call, .named ⟨"helper"⟩⟩]⟩,
+     ⟨[⟨.call, .pinned ⟨"keep"⟩⟩]⟩,
+     ⟨[⟨.call, .ordinal 2⟩]⟩,
+     ⟨[⟨.binding, .ordinal 1⟩]⟩] := by cbv
+
+/-- Entering a named construct resets the scope, but entering an unnamed one inherits it.
+Both the collector and the occurrence resolver must retain the complete ancestor path. -/
+example : let body : List KeyConstruct :=
+    [⟨.call, .unnamed none, []⟩,
+     ⟨.block, .named ⟨"inner"⟩, [⟨.call, .unnamed none, []⟩]⟩,
+     ⟨.block, .unnamed none,
+       [⟨.call, .unnamed none,
+         [⟨.binding, .unnamed none, []⟩]⟩]⟩]
+    KeyConstruct.collectKeys body =
+      [⟨[⟨.call, .ordinal 0⟩]⟩,
+       ⟨[⟨.block, .named ⟨"inner"⟩⟩]⟩,
+       ⟨[⟨.block, .named ⟨"inner"⟩⟩, ⟨.call, .ordinal 0⟩]⟩,
+       ⟨[⟨.block, .ordinal 0⟩]⟩,
+       ⟨[⟨.block, .ordinal 0⟩, ⟨.call, .ordinal 1⟩]⟩,
+       ⟨[⟨.block, .ordinal 0⟩, ⟨.call, .ordinal 1⟩, ⟨.binding, .ordinal 0⟩]⟩] ∧
+    KeyConstruct.pathAt body [1, 0] =
+      some ⟨[⟨.block, .named ⟨"inner"⟩⟩, ⟨.call, .ordinal 0⟩]⟩ ∧
+    KeyConstruct.pathAt body [2, 0, 0] =
+      some ⟨[⟨.block, .ordinal 0⟩, ⟨.call, .ordinal 1⟩, ⟨.binding, .ordinal 0⟩]⟩ := by cbv
+
+/-- Descendant assignment retains a pinned ancestor and inherited per-kind ordinals. -/
+example : KeyConstruct.descendantKey [⟨.call, .unnamed none, []⟩]
+    ⟨.block, .unnamed (some ⟨"outer"⟩), [⟨.call, .unnamed none, []⟩]⟩ [0] =
+    some ⟨[⟨.block, .pinned ⟨"outer"⟩⟩, ⟨.call, .ordinal 1⟩]⟩ := by cbv
+
+/-- Assigned tables attach every key, in preorder, to its actual owner and sequential sites
+starting at a nonzero offset. Program assignment uses the selected function's body and offset. -/
+example : let f : FnId := ⟨loadedA.module, ⟨"f"⟩⟩
+    let g : FnId := ⟨loadedA.module, ⟨"g"⟩⟩
+    let body : List KeyConstruct :=
+      [⟨.block, .named ⟨"inner"⟩, [⟨.call, .unnamed (some ⟨"invoke"⟩), []⟩]⟩]
+    KeyConstruct.assignFunctionTable f 7 body =
+      [(⟨7⟩, ⟨.function f, ⟨[⟨.block, .named ⟨"inner"⟩⟩]⟩⟩),
+       (⟨8⟩, ⟨.function f, ⟨[⟨.block, .named ⟨"inner"⟩⟩, ⟨.call, .pinned ⟨"invoke"⟩⟩]⟩⟩)] ∧
+    KeyConstruct.assignProgramTables
+      (fun owner => if owner = f then body else [⟨.abort, .unnamed none, []⟩])
+      (fun owner => if owner = f then 7 else 20) g =
+      [(⟨20⟩, ⟨.function g, ⟨[⟨.abort, .ordinal 0⟩]⟩⟩)] := by cbv
+
+/-- Equal specialization requests at different sites share one entry, retaining both edges. -/
+example : let generic := GenericId.function ⟨loadedA.module, ⟨"f"⟩⟩
+    let table := SpecializationTable.canonicalize
+      [SpecializationRequest.for ⟨0⟩ generic ([1] : Numbers) ([2] : Numbers),
+       SpecializationRequest.for ⟨1⟩ generic [1] [2]]
+    table.entries.length = 1 ∧ table.edges.map SpecializationEdge.entry = [0, 0] := by decide
+
+/-- Known premise categories round-trip; unknown tags and mismatched versions are refused. -/
+example : let scope := PremiseScope.package loadedA.module.package ⟨⟨"heap"⟩⟩
+    (PremiseRecord.mk .heap scope specVersion).encode.read specVersion =
+      some ⟨.heap, scope, specVersion⟩ ∧
+    EncodedPremise.read specVersion ⟨99, scope, specVersion⟩ = none ∧
+    EncodedPremise.read specVersion ⟨0, scope, ⟨9, 9⟩⟩ = none := by decide
+
 /-- Two declarations named `Pair` in different modules are different declarations. -/
-example : DeclId.mk (ModuleId.mk ⟨"p", ⟨"1"⟩⟩ ["a"] (by decide)) "Pair" ≠
-    DeclId.mk (ModuleId.mk ⟨"p", ⟨"1"⟩⟩ ["b"] (by decide)) "Pair" := by decide
+example : DeclId.mk (ModuleId.mk ⟨⟨"p"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"a"⟩] (by decide)) ⟨"Pair"⟩ ≠
+    DeclId.mk (ModuleId.mk ⟨⟨"p"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"b"⟩] (by decide)) ⟨"Pair"⟩ := by decide
 
 /-- The same module path in two packages also yields different declarations. -/
-example : DeclId.mk (ModuleId.mk ⟨"p1", ⟨"1"⟩⟩ ["a"] (by decide)) "Pair" ≠
-    DeclId.mk (ModuleId.mk ⟨"p2", ⟨"1"⟩⟩ ["a"] (by decide)) "Pair" := by decide
+example : DeclId.mk (ModuleId.mk ⟨⟨"p1"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"a"⟩] (by decide)) ⟨"Pair"⟩ ≠
+    DeclId.mk (ModuleId.mk ⟨⟨"p2"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"a"⟩] (by decide)) ⟨"Pair"⟩ := by decide
 
 /-- A field belongs to its owner: `a` of `Pair` is not `a` of `Point`, and `value` of variant
 `E.A` is not `value` of variant `E.B`. -/
-example : FieldId.mk (.struct ⟨ModuleId.mk ⟨"p", ⟨"1"⟩⟩ ["m"] (by decide), "Pair"⟩) "a" ≠
-    FieldId.mk (.struct ⟨ModuleId.mk ⟨"p", ⟨"1"⟩⟩ ["m"] (by decide), "Point"⟩) "a" := by decide
+example : FieldId.mk (.struct ⟨ModuleId.mk ⟨⟨"p"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"m"⟩] (by decide), ⟨"Pair"⟩⟩) ⟨"a"⟩ ≠
+    FieldId.mk (.struct ⟨ModuleId.mk ⟨⟨"p"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"m"⟩] (by decide), ⟨"Point"⟩⟩) ⟨"a"⟩ := by decide
 
-example : FieldId.mk (.variant ⟨⟨ModuleId.mk ⟨"p", ⟨"1"⟩⟩ ["m"] (by decide), "E"⟩, "A"⟩) "value" ≠
-    FieldId.mk (.variant ⟨⟨ModuleId.mk ⟨"p", ⟨"1"⟩⟩ ["m"] (by decide), "E"⟩, "B"⟩) "value" := by decide
+example : FieldId.mk (.variant ⟨⟨ModuleId.mk ⟨⟨"p"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"m"⟩] (by decide), ⟨"E"⟩⟩, ⟨"A"⟩⟩) ⟨"value"⟩ ≠
+    FieldId.mk (.variant ⟨⟨ModuleId.mk ⟨⟨"p"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"m"⟩] (by decide), ⟨"E"⟩⟩, ⟨"B"⟩⟩) ⟨"value"⟩ := by decide
 
 /-- The first and the last slice. -/
 example : (SliceId.mk 0).n.val = 0 ∧ (SliceId.mk 28).n.val = 28 := ⟨rfl, rfl⟩
 
 /-- Bytes for `a`, a tab, and `b`. After the tab, the range starts at line 1, byte column 3. -/
 def tabSource : SourceText := [97, 9, 98]
-def tabSpan : Span := ⟨mainSourcePath, 2, 3, by decide, 1, 3, by decide, by decide⟩
 
-/-- Accepted: the tab advances exactly one byte column. -/
-example : tabSpan.LocationOk tabSource := by decide
+/-- A tab advances one byte column, independently of any source-path policy. -/
+example : tabSource.lineAt 2 = 1 ∧ tabSource.columnAt 2 = 3 := by decide
 
-/-- Refused: treating the tab as zero-width does not satisfy the location relation. -/
-example : ¬ ({ tabSpan with col := 2, col_pos := by decide }.LocationOk tabSource) := by decide
+/-- Counting the tab as zero bytes gives the wrong column. -/
+example : tabSource.columnAt 2 ≠ 2 := by decide
 
-/-- Two locals named `x` that elaboration numbered differently (in two separate blocks, say) are
-different locals. -/
-example : Var.mk "x" 0 ≠ Var.mk "x" 1 := by decide
+/-- A newline starts a new 1-based byte column; offsets count bytes, not scalars. -/
+example : SourceText.lineAt [97, 10, 195, 169] 3 = 2 ∧
+    SourceText.columnAt [97, 10, 195, 169] 3 = 2 := by decide
 
-/-- Hints can distinguish two raw records for diagnostics, but they are not semantic names:
-elaboration never gives two locals of one function one number, and evaluation is invariant under
-consistent rehinting. -/
-example : Var.mk "x" 0 ≠ Var.mk "y" 0 := by decide
+/-- Local identity is the numeric type from Basics, with no presentation component. -/
+example : (⟨0⟩ : ConcreteSpec.Var) ≠ ⟨1⟩ := by decide
 
 /-- Places, primitives and contract revisions have distinct typed identities. -/
 example : PlaceId.mk 0 ≠ PlaceId.mk 1 ∧ PrimId.mk 0 ≠ PrimId.mk 1 ∧

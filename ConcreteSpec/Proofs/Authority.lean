@@ -1,4 +1,5 @@
-import ConcreteSpec.Proofs.Basics
+import ConcreteSpec.Spec.Authority
+import ConcreteSpec.Spec.CapabilityBase
 
 /-!
 # Part 6: `sub_iff` and `authority_contained`

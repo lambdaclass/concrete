@@ -33,18 +33,18 @@ inductive Lock where
 /-- A place: its owner root, whether it may be written, whether it owns its value (only owners
 move), and its lock. -/
 structure Place where
-  root : Nat
+  root : Var
   mutable : Bool
   owner : Bool
   lock : Lock
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 /-- The places in scope, by fresh identity (Q9.1). -/
-abbrev Ctx := AList Nat Place
+abbrev Ctx := AList Var Place
 
 /-- The lock a borrow of root `r` puts on each place: a mutable open freezes every place of the
 root; a shared open locks the free ones against writes and moves. -/
-def lockFor (m : Bool) (r : Nat) (q : Place) : Place :=
+def lockFor (m : Bool) (r : Var) (q : Place) : Place :=
   if q.root = r then
     if m then { q with lock := .excl }
     else if q.lock = .free then { q with lock := .shared } else q
@@ -56,14 +56,14 @@ def view (m : Bool) (src : Place) : Place :=
   { root := src.root, mutable := m, owner := false, lock := .free }
 
 /-- The places inside `borrow [mut] src as v { … }`. -/
-def bodyCtx (m : Bool) (v : Nat) (src : Place) (Γ : Ctx) : Ctx :=
+def bodyCtx (m : Bool) (v : Var) (src : Place) (Γ : Ctx) : Ctx :=
   (v, view m src) :: AList.map (lockFor m src.root) Γ
 
 inductive Stmt where
-  | read (p : Nat)
-  | write (p : Nat)
-  | move (p : Nat)
-  | borrow (m : Bool) (src v : Nat) (body : List Stmt)
+  | read (p : Var)
+  | write (p : Var)
+  | move (p : Var)
+  | borrow (m : Bool) (src v : Var) (body : List Stmt)
 
 /-- The outer places after a borrow block: those the block did not move, with the locks they
 had before it. The view goes out of scope with the block. -/
@@ -87,7 +87,7 @@ inductive Ok : Ctx → List Stmt → Ctx → Prop where
       Ok Γ (.borrow m s v body :: rest) Γ'
 
 /-- A statement list names place `p`, at any depth. -/
-inductive Touches (p : Nat) : List Stmt → Prop where
+inductive Touches (p : Var) : List Stmt → Prop where
   | read {rest} : Touches p (.read p :: rest)
   | write {rest} : Touches p (.write p :: rest)
   | move {rest} : Touches p (.move p :: rest)
@@ -97,7 +97,7 @@ inductive Touches (p : Nat) : List Stmt → Prop where
 
 /-- A statement list writes root `r`, or grants a write to it, at any depth: a write or move of a
 place of `r`, or a mutable open of one, with places resolved as the checker resolves them. -/
-inductive WritesRoot (r : Nat) : Ctx → List Stmt → Prop where
+inductive WritesRoot (r : Var) : Ctx → List Stmt → Prop where
   | write {Γ p q rest} : AList.lookup Γ p = some q → q.root = r → WritesRoot r Γ (.write p :: rest)
   | move {Γ p q rest} : AList.lookup Γ p = some q → q.root = r → WritesRoot r Γ (.move p :: rest)
   | mutOpen {Γ s q v body rest} : AList.lookup Γ s = some q → q.root = r →
@@ -126,7 +126,7 @@ branching. Without a range there is no `else` (the whole view always opens). Ele
 /-- A source's value at run time: an array of `len` elements, or text with its bytes. -/
 inductive Source where
   | array (len : Nat)
-  | text (bytes : List Nat)
+  | text (bytes : Numbers)
   deriving DecidableEq, Repr
 
 /-- The length of a source: elements for an array, bytes for text. -/
@@ -136,7 +136,7 @@ def Source.len : Source → Nat
 
 /-- `i` is a UTF-8 scalar boundary of the text `bs` (R4 F4.2): `0`, the length, or an offset
 whose byte is not a continuation byte (`x / 64 = 2` is `0b10xxxxxx`). -/
-def boundary (bs : List Nat) (i : Nat) : Bool :=
+def boundary (bs : Numbers) (i : Nat) : Bool :=
   i == 0 || i == bs.length ||
     (match bs[i]? with
      | some x => x / 64 != 2
@@ -201,7 +201,7 @@ evidence that it is valid (`knownValid`), so the form without `else` never traps
 decision of 2026-11-06 ("the form without `else` needs evidence of a valid range; a provably
 out-of-range view index is covered by the same rule"), which subsumes OD118's refusal of a range
 proven invalid. -/
-def RangeOk (Γ : Ctx) (m : Bool) (src v : Nat) (k : RangeFacts) (body : List Stmt)
+def RangeOk (Γ : Ctx) (m : Bool) (src v : Var) (k : RangeFacts) (body : List Stmt)
     (els : Option (List Stmt)) (rest : List Stmt) (Γ' : Ctx) : Prop :=
   Ok Γ (.borrow m src v body :: rest) Γ' ∧
     match els with
@@ -212,30 +212,30 @@ def RangeOk (Γ : Ctx) (m : Bool) (src v : Nat) (k : RangeFacts) (body : List St
 
 Place 0 is a mutable owned variable; views take fresh numbers. -/
 
-def x0 : Ctx := [(0, { root := 0, mutable := true, owner := true, lock := .free })]
+def x0 : Ctx := [(⟨0⟩, { root := ⟨0⟩, mutable := true, owner := true, lock := .free })]
 
 /-- `x0` and a second owned variable, place 5. -/
-def xy : Ctx := (5, { root := 5, mutable := true, owner := true, lock := .free }) :: x0
+def xy : Ctx := (⟨5⟩, { root := ⟨5⟩, mutable := true, owner := true, lock := .free }) :: x0
 
 /-- `borrow mut x as v { v = …; } x = …;` is accepted: the view writes, and the root is usable
 again after the block. -/
-example : ∃ Γ', Ok x0 [.borrow true 0 1 [.write 1], .write 0] Γ' :=
+example : ∃ Γ', Ok x0 [.borrow true ⟨0⟩ ⟨1⟩ [.write ⟨1⟩], .write ⟨0⟩] Γ' :=
   ⟨_, .borrow rfl (by decide) (fun _ => ⟨rfl, rfl⟩) rfl
     (.write rfl rfl rfl .nil) (.write rfl rfl rfl .nil)⟩
 
 /-- Shared opens nest, and the root stays readable under them (REF-11). -/
-example : ∃ Γ', Ok x0 [.borrow false 0 1 [.borrow false 1 2 [.read 0, .read 2]]] Γ' :=
+example : ∃ Γ', Ok x0 [.borrow false ⟨0⟩ ⟨1⟩ [.borrow false ⟨1⟩ ⟨2⟩ [.read ⟨0⟩, .read ⟨2⟩]]] Γ' :=
   ⟨_, .borrow rfl (by decide) (by intro h; cases h) rfl
     (.borrow rfl (by decide) (by intro h; cases h) rfl
       (.read rfl (by decide) (.read rfl (by decide) .nil)) .nil) .nil⟩
 
 /-- Moving another owner inside a block is accepted, and stays a move after the block:
 `borrow mut x as v { consume(y); } read(y)` is refused. -/
-example : ∃ Γ', Ok xy [.borrow true 0 1 [.move 5], .write 0] Γ' :=
+example : ∃ Γ', Ok xy [.borrow true ⟨0⟩ ⟨1⟩ [.move ⟨5⟩], .write ⟨0⟩] Γ' :=
   ⟨_, .borrow rfl (by decide) (fun _ => ⟨rfl, rfl⟩) rfl
     (.move rfl rfl rfl .nil) (.write rfl rfl rfl .nil)⟩
 
-example : ¬ ∃ Γ', Ok xy [.borrow true 0 1 [.move 5], .read 5] Γ' := by
+example : ¬ ∃ Γ', Ok xy [.borrow true ⟨0⟩ ⟨1⟩ [.move ⟨5⟩], .read ⟨5⟩] Γ' := by
   rintro ⟨Γ', h⟩
   cases h with
   | borrow hs _ _ _ hb hr =>
@@ -247,7 +247,7 @@ example : ¬ ∃ Γ', Ok xy [.borrow true 0 1 [.move 5], .read 5] Γ' := by
       | read hf _ _ => simp [restore, AList.erase, bodyCtx, AList.map, lockFor, view, AList.lookup, xy, x0] at hf
 
 /-- Reading the root inside its mutable open is refused. -/
-example : ¬ ∃ Γ', Ok x0 [.borrow true 0 1 [.read 0]] Γ' := by
+example : ¬ ∃ Γ', Ok x0 [.borrow true ⟨0⟩ ⟨1⟩ [.read ⟨0⟩]] Γ' := by
   rintro ⟨Γ', h⟩
   cases h with
   | borrow hs _ _ _ hb _ =>
@@ -256,7 +256,7 @@ example : ¬ ∃ Γ', Ok x0 [.borrow true 0 1 [.read 0]] Γ' := by
     | read hf hl _ => simp [bodyCtx, AList.lookup, AList.map, lockFor, x0, view] at hf; subst hf; simp at hl
 
 /-- Writing the root inside a shared open is refused. -/
-example : ¬ ∃ Γ', Ok x0 [.borrow false 0 1 [.write 0]] Γ' := by
+example : ¬ ∃ Γ', Ok x0 [.borrow false ⟨0⟩ ⟨1⟩ [.write ⟨0⟩]] Γ' := by
   rintro ⟨Γ', h⟩
   cases h with
   | borrow hs _ _ _ hb _ =>
@@ -265,7 +265,7 @@ example : ¬ ∃ Γ', Ok x0 [.borrow false 0 1 [.write 0]] Γ' := by
     | write hf hl _ _ => simp [bodyCtx, AList.lookup, AList.map, lockFor, x0, view] at hf; subst hf; simp at hl
 
 /-- Writing through a shared view is refused. -/
-example : ¬ ∃ Γ', Ok x0 [.borrow false 0 1 [.write 1]] Γ' := by
+example : ¬ ∃ Γ', Ok x0 [.borrow false ⟨0⟩ ⟨1⟩ [.write ⟨1⟩]] Γ' := by
   rintro ⟨Γ', h⟩
   cases h with
   | borrow hs _ _ _ hb _ =>
@@ -274,7 +274,7 @@ example : ¬ ∃ Γ', Ok x0 [.borrow false 0 1 [.write 1]] Γ' := by
     | write hf _ hm _ => simp [bodyCtx, AList.lookup, view] at hf; subst hf; simp at hm
 
 /-- A shared view never upgrades to a mutable one. -/
-example : ¬ ∃ Γ', Ok x0 [.borrow false 0 1 [.borrow true 1 2 []]] Γ' := by
+example : ¬ ∃ Γ', Ok x0 [.borrow false ⟨0⟩ ⟨1⟩ [.borrow true ⟨1⟩ ⟨2⟩ []]] Γ' := by
   rintro ⟨Γ', h⟩
   cases h with
   | borrow hs _ _ _ hb _ =>
@@ -283,7 +283,7 @@ example : ¬ ∃ Γ', Ok x0 [.borrow false 0 1 [.borrow true 1 2 []]] Γ' := by
     | borrow hf _ hm _ _ _ => simp [bodyCtx, AList.lookup, view] at hf; subst hf; have := (hm rfl).2; simp at this
 
 /-- Moving the root inside its shared open is refused. -/
-example : ¬ ∃ Γ', Ok x0 [.borrow false 0 1 [.move 0]] Γ' := by
+example : ¬ ∃ Γ', Ok x0 [.borrow false ⟨0⟩ ⟨1⟩ [.move ⟨0⟩]] Γ' := by
   rintro ⟨Γ', h⟩
   cases h with
   | borrow hs _ _ _ hb _ =>
@@ -309,23 +309,23 @@ example : openRange (.text [0xC3, 0xA9, 0x21]) 3 3 false = .enter := by decide
 without `else`. -/
 example : knownValid ⟨some (.array 4), some 1, some 3⟩ = true := by decide
 
-example : ∃ Γ', RangeOk x0 false 0 1 ⟨some (.array 4), some 1, some 3⟩ [.read 1] none [] Γ' :=
+example : ∃ Γ', RangeOk x0 false ⟨0⟩ ⟨1⟩ ⟨some (.array 4), some 1, some 3⟩ [.read ⟨1⟩] none [] Γ' :=
   ⟨_, .borrow rfl (by decide) (by intro h; cases h) rfl (.read rfl (by decide) .nil) .nil, rfl⟩
 
 /-- `borrow xs from 2 until 9 as s { … }` over an array of 4 is invalid: refused without `else`. -/
-example : ¬ ∃ Γ', RangeOk x0 false 0 1 ⟨some (.array 4), some 2, some 9⟩ [.read 1] none [] Γ' := by
+example : ¬ ∃ Γ', RangeOk x0 false ⟨0⟩ ⟨1⟩ ⟨some (.array 4), some 2, some 9⟩ [.read ⟨1⟩] none [] Γ' := by
   rintro ⟨_, _, h⟩
   exact absurd (show knownValid ⟨some (.array 4), some 2, some 9⟩ = true from h) (by decide)
 
 /-- With `else` the same range is accepted, and the `else` runs (ordinary branching). -/
-example : ∃ Γ', RangeOk x0 false 0 1 ⟨some (.array 4), some 2, some 9⟩ [.read 1] (some [.read 0])
+example : ∃ Γ', RangeOk x0 false ⟨0⟩ ⟨1⟩ ⟨some (.array 4), some 2, some 9⟩ [.read ⟨1⟩] (some [.read ⟨0⟩])
     [] Γ' :=
   ⟨_, .borrow rfl (by decide) (by intro h; cases h) rfl (.read rfl (by decide) .nil) .nil,
     .read rfl (by decide) .nil⟩
 
 /-- An unknown bound is no evidence: `from 2` with an unknown end over an array of 4 could trap,
 so without `else` it is refused. -/
-example : ¬ ∃ Γ', RangeOk x0 false 0 1 ⟨some (.array 4), some 2, none⟩ [.read 1] none [] Γ' := by
+example : ¬ ∃ Γ', RangeOk x0 false ⟨0⟩ ⟨1⟩ ⟨some (.array 4), some 2, none⟩ [.read ⟨1⟩] none [] Γ' := by
   rintro ⟨_, _, h⟩
   exact absurd (show knownValid ⟨some (.array 4), some 2, none⟩ = true from h) (by decide)
 
@@ -345,7 +345,7 @@ freeze of a mutable open ends with the block (`root_restored`). -/
 
 /-- `p` is named in `ss` where it refers to the outer place `p`: not inside a block whose view
 is also called `p`. -/
-inductive FreeUse (p : Nat) : List Stmt → Prop where
+inductive FreeUse (p : Var) : List Stmt → Prop where
   | read {rest} : FreeUse p (.read p :: rest)
   | write {rest} : FreeUse p (.write p :: rest)
   | move {rest} : FreeUse p (.move p :: rest)
@@ -354,7 +354,7 @@ inductive FreeUse (p : Nat) : List Stmt → Prop where
   | tail {s rest} : FreeUse p rest → FreeUse p (s :: rest)
 
 /-- Returning, storing or passing the view is a move of it, and is refused. -/
-example : ¬ ∃ Γ', Ok x0 [.borrow true 0 1 [.move 1]] Γ' := by
+example : ¬ ∃ Γ', Ok x0 [.borrow true ⟨0⟩ ⟨1⟩ [.move ⟨1⟩]] Γ' := by
   rintro ⟨Γ', h⟩
   cases h with
   | borrow hs _ _ _ hb _ =>
@@ -363,7 +363,7 @@ example : ¬ ∃ Γ', Ok x0 [.borrow true 0 1 [.move 1]] Γ' := by
     | move hf _ ho _ => simp [bodyCtx, AList.lookup, view] at hf; subst hf; simp at ho
 
 /-- Naming the view after its block is refused: `borrow mut x as v { } read(v)`. -/
-example : ¬ ∃ Γ', Ok x0 [.borrow true 0 1 [], .read 1] Γ' := by
+example : ¬ ∃ Γ', Ok x0 [.borrow true ⟨0⟩ ⟨1⟩ [], .read ⟨1⟩] Γ' := by
   rintro ⟨Γ', h⟩
   cases h with
   | borrow hs _ _ _ hb hr =>
@@ -391,20 +391,20 @@ not yet joined to the access rules `Ok` in one theorem (they are separate fragme
 -/
 
 /-- Memory: each owner array place and its elements. -/
-abbrev Mem := AList Nat (List Nat)
+abbrev Mem := AList Var Numbers
 
 /-- The element `j` of place `p`. -/
-def elem (μ : Mem) (p j : Nat) : Option Nat := (AList.lookup μ p).bind (·[j]?)
+def elem (μ : Mem) (p : Var) (j : Nat) : Option Nat := (AList.lookup μ p).bind (·[j]?)
 
 /-- A view at run time: its source place, its range `[a, b)`, and whether it is mutable. -/
 structure VInfo where
-  src : Nat
+  src : Var
   a : Nat
   b : Nat
   mutable : Bool
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
-abbrev Views := AList Nat VInfo
+abbrev Views := AList Var VInfo
 
 /-- The source index of the view's index `i`: `a + i` when `i < b - a` (Q4.7: indexed relative
 to the start), else none (the access traps). -/
@@ -412,29 +412,29 @@ def elemIdx (w : VInfo) (i : Nat) : Option Nat := if i < w.b - w.a then some (w.
 
 inductive VStmt where
   /-- Read `v[i]` and output it. -/
-  | get (v i : Nat)
+  | get (v : Var) (i : Nat)
   /-- `v[i] = x`. -/
-  | set (v i x : Nat)
+  | set (v : Var) (i x : Nat)
   /-- Read `p[i]` of an owner array, and output it. -/
-  | getS (p i : Nat)
+  | getS (p : Var) (i : Nat)
   /-- `p[i] = x` on an owner array. -/
-  | setS (p i x : Nat)
+  | setS (p : Var) (i x : Nat)
   /-- `borrow [mut] p from a until b as v { body } [else { els }]`. -/
-  | range (m : Bool) (p v a b : Nat) (body : List VStmt) (els : Option (List VStmt))
+  | range (m : Bool) (p v : Var) (a b : Nat) (body : List VStmt) (els : Option (List VStmt))
 
 /-- The outcome of a run: the memory and the values output, a trap, stuck (an unbound name or a
 write through a shared view, which the access rules refuse), or out of fuel. -/
 inductive VR where
-  | ok (μ : Mem) (out : List Nat)
+  | ok (μ : Mem) (out : Numbers)
   | trap
   | stuck
   | outOfFuel
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 /-- The run. The fuel bounds the depth of the run's recursion, not the number of statements it
 executes: each statement passes one unit less to what follows it, and a block and the statements
 after it each start with the fuel left at its open. The view is bound inside its block only. -/
-def vrun : Nat → Mem → Views → List Nat → List VStmt → VR
+def vrun : Nat → Mem → Views → Numbers → List VStmt → VR
   | 0, _, _, _, _ => .outOfFuel
   | _ + 1, μ, _, out, [] => .ok μ out
   | n + 1, μ, V, out, .get v i :: rest => match AList.lookup V v with
@@ -480,30 +480,30 @@ def vrun : Nat → Mem → Views → List Nat → List VStmt → VR
 
 /-- `xs = [10, 20, 30, 40, 50]`; `borrow mut xs from 1 until 4 as s { s[0] = 7; s[2] = 9;
 print(s[1]); }`: the writes land on `xs[1]` and `xs[3]`, the read is `xs[2]`. -/
-example : vrun 10 [(0, [10, 20, 30, 40, 50])] [] []
-    [.range true 0 1 1 4 [.set 1 0 7, .set 1 2 9, .get 1 1] none] =
-    .ok [(0, [10, 7, 30, 9, 50])] [30] := by decide
+example : vrun 10 [(⟨0⟩, [10, 20, 30, 40, 50])] [] []
+    [.range true ⟨0⟩ ⟨1⟩ 1 4 [.set ⟨1⟩ 0 7, .set ⟨1⟩ 2 9, .get ⟨1⟩ 1] none] =
+    .ok [(⟨0⟩, [10, 7, 30, 9, 50])] [30] := by decide
 
 /-- `s[3]` in a view of length 3 traps, even though `xs[4]` exists. -/
-example : vrun 10 [(0, [10, 20, 30, 40, 50])] [] [] [.range true 0 1 1 4 [.set 1 3 7] none] =
+example : vrun 10 [(⟨0⟩, [10, 20, 30, 40, 50])] [] [] [.range true ⟨0⟩ ⟨1⟩ 1 4 [.set ⟨1⟩ 3 7] none] =
     .trap := by decide
 
 /-- An invalid range runs `else` when there is one, and traps when there is none. -/
-example : vrun 10 [(0, [10, 20])] [] [] [.range false 0 1 1 5 [.get 1 0] (some [.getS 0 0])] =
-    .ok [(0, [10, 20])] [10] := by decide
-example : vrun 10 [(0, [10, 20])] [] [] [.range false 0 1 1 5 [.get 1 0] none] = .trap := by
+example : vrun 10 [(⟨0⟩, [10, 20])] [] [] [.range false ⟨0⟩ ⟨1⟩ 1 5 [.get ⟨1⟩ 0] (some [.getS ⟨0⟩ 0])] =
+    .ok [(⟨0⟩, [10, 20])] [10] := by decide
+example : vrun 10 [(⟨0⟩, [10, 20])] [] [] [.range false ⟨0⟩ ⟨1⟩ 1 5 [.get ⟨1⟩ 0] none] = .trap := by
   decide
 
 /-- After the block the view is gone: naming it is stuck (and the access rules refuse it). -/
-example : vrun 10 [(0, [10, 20])] [] [] [.range false 0 1 0 2 [] none, .get 1 0] = .stuck := by
+example : vrun 10 [(⟨0⟩, [10, 20])] [] [] [.range false ⟨0⟩ ⟨1⟩ 0 2 [] none, .get ⟨1⟩ 0] = .stuck := by
   decide
 
 /-- A write through a shared view is stuck (the access rules refuse it). -/
-example : vrun 10 [(0, [10, 20])] [] [] [.range false 0 1 0 2 [.set 1 0 5] none] = .stuck := by
+example : vrun 10 [(⟨0⟩, [10, 20])] [] [] [.range false ⟨0⟩ ⟨1⟩ 0 2 [.set ⟨1⟩ 0 5] none] = .stuck := by
   decide
 
 /-- A block whose statements all access its view `v`. -/
-inductive ViewOnly (v : Nat) : List VStmt → Prop where
+inductive ViewOnly (v : Var) : List VStmt → Prop where
   | nil : ViewOnly v []
   | get {i rest} : ViewOnly v rest → ViewOnly v (.get v i :: rest)
   | set {i x rest} : ViewOnly v rest → ViewOnly v (.set v i x :: rest)
@@ -520,7 +520,7 @@ well formed. A text range on scalar boundaries of well-formed text is itself wel
 def cont (c : Nat) : Bool := 0x80 ≤ c && c ≤ 0xBF
 
 /-- One well-formed UTF-8 encoded scalar. -/
-def isScalar : List Nat → Bool
+def isScalar : Numbers → Bool
   | [x] => x < 0x80
   | [x, c] => 0xC2 ≤ x && x ≤ 0xDF && cont c
   | [x, c, d] =>
@@ -533,12 +533,12 @@ def isScalar : List Nat → Bool
   | _ => false
 
 /-- Well-formed UTF-8: a sequence of well-formed scalars. -/
-inductive Utf8 : List Nat → Prop where
+inductive Utf8 : Numbers → Prop where
   | nil : Utf8 []
   | cons {s rest} : isScalar s = true → Utf8 rest → Utf8 (s ++ rest)
 
 /-- The bytes of the text range `[a, b)`. -/
-def textSlice (bs : List Nat) (a b : Nat) : List Nat := (bs.drop a).take (b - a)
+def textSlice (bs : Numbers) (a b : Nat) : Numbers := (bs.drop a).take (b - a)
 
 /-- `"é!"` is well formed, and so is its range `[0, 2)`, `"é"`. -/
 example : Utf8 [0xC3, 0xA9, 0x21] := .cons (s := [0xC3, 0xA9]) rfl (.cons (s := [0x21]) rfl .nil)

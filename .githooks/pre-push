@@ -10,7 +10,8 @@
 #   - only refs/heads/wip/* updates or deletions: a backup of unfinished work, which can never become
 #     main. Conflict markers are refused; nothing else runs.
 #   - only the review-note refs (refs/notes/concrete-review, refs/notes/concrete-review-findings,
-#     written by scripts/review/review.sh): no source tree, nothing to check.
+#     written by scripts/review/review.sh) and owner sign-off records (refs/owner-signoff/<sha>,
+#     written by scripts/land/signoff.sh): no source tree, nothing to check.
 #   - anything else, including a by-hand run with no stdin: the full root set, and only from a full
 #     clone (a linked worktree is refused; ISS-0015).
 #
@@ -45,6 +46,19 @@ while read -r _localref localsha remoteref _remotesha; do
         *[!0]*) wip_refs=$((wip_refs+1)); wip_shas="$wip_shas $localsha" ;;
         *) wip_dels=$((wip_dels+1)) ;;
       esac ;;
+    refs/owner-signoff/*)
+      # Only a record takes the notes tier: a parentless commit, under its subject's 40-hex name, whose
+      # tree is exactly the sign-off's seven plain files (record.txt plus each reviewer's request and
+      # output), no directory among them. Anything else pushed here, including the old four-file shape
+      # or a source commit, takes the full tier, as does a deletion.
+      if [[ "${remoteref#refs/owner-signoff/}" =~ ^[0-9a-f]{40}$ ]] && [ "$(git rev-list --parents -n 1 "$localsha" 2>/dev/null)" = "$localsha" ] \
+         && [ "$(git ls-tree --format='%(objectmode) %(objecttype) %(path)' "$localsha" 2>/dev/null | LC_ALL=C sort | tr '\n' ' ')" \
+              = "100644 blob agy-request.txt 100644 blob agy.txt 100644 blob codex-request.txt 100644 blob codex.txt 100644 blob kimi-request.txt 100644 blob kimi.txt 100644 blob record.txt " ]; then
+        note_refs=$((note_refs+1))
+      else
+        other_refs=$((other_refs+1))
+        case "$localsha" in *[!0]*) full_shas="$full_shas $localsha" ;; esac
+      fi ;;
     refs/notes/concrete-review|refs/notes/concrete-review-findings)
       case "$localsha" in
         *[!0]*) note_refs=$((note_refs+1)) ;;
@@ -70,7 +84,7 @@ if [ "$other_refs" -eq 0 ] && [ $((wip_refs + wip_dels)) -gt 0 ]; then
   exit 0
 fi
 if [ "$other_refs" -eq 0 ] && [ "$note_refs" -gt 0 ]; then
-  echo "pre-push: review-notes push — no source tree, no gates"
+  echo "pre-push: review-notes push (review notes, owner sign-offs) — no source tree, no gates"
   exit 0
 fi
 

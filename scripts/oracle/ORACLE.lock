@@ -7,8 +7,7 @@
 # release_tag pointing at commit). fetch.sh downloads it and trusts it only through artifact_sha256.
 tag=legacy-compiler-final
 commit=066c9d9b8836a2b176aa37f6c8313195a4b4ee29
-url=https://github.com/unbalancedparentheses/concrete2.git
-mirror_url=https://github.com/lambdaclass/concrete.git
+url=https://github.com/lambdaclass/concrete.git
 build_command=nix develop <checkout> --command lake build concrete
 binary=.lake/build/bin/concrete (bin/concrete in the artifact)
 lean_toolchain=leanprover/lean4:v4.34.1
@@ -23,9 +22,9 @@ binary_sha256=fa25a30a585d63faa8e65abbc5bd74b668b22f3c0a33731f8d1316b9470aab74
 manifest_sha256=7d70da4d74de97e6c54833297b6811597612ee7821d97ecdea6b6afe83fa36fd
 artifact_sha256=74d8f1e3b5214d9c64c25736a24c19458736a2dacc7977ff784506839b9f26a2
 platform=x86_64-linux
-release_repo=unbalancedparentheses/concrete2
+release_repo=lambdaclass/concrete
 release_tag=oracle-legacy-compiler-final
-artifact_url=https://github.com/unbalancedparentheses/concrete2/releases/download/oracle-legacy-compiler-final/oracle-legacy-compiler-final-x86_64-linux.tar.gz
+artifact_url=https://github.com/lambdaclass/concrete/releases/download/oracle-legacy-compiler-final/oracle-legacy-compiler-final-x86_64-linux.tar.gz
 # Reproducibility, 2026-11-04: fresh builds from the public clone reproduced binary_sha256 five times
 # (four on concrete-ci-2, Arch, in different directories; one on fede-256gb, Ubuntu) and
 # artifact_sha256 four times (three on concrete-ci-2, one on fede-256gb, with different gzip

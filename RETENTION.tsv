@@ -29,6 +29,7 @@ required-checks.txt required-checks-transition.tsv	landing	retained	root (script
 RETENTION.tsv	landing	retained	RETENTION.tsv	R-0562	root: never; survives the deletion of legacy/; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
 ISSUES.tsv	issue record	retained	ISSUES.tsv (minimal issue record, P12)	R-0558	root: never; the full ledger joins it with slice 1; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
 ConcreteSpec ConcreteSpec.lean	spec	retained	root (the normative Lean specification)	R-0560	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+tests/manifest.tsv tests/slice0	corpus	retained	root (the manifest-driven test corpus)	R-0558	root: never; legacy/ copy: none (new at the root, nothing to delete)	open
 scripts/proofs	proof integrity	retained	scripts/proofs (the proof-integrity checks of ConcreteSpec: axiom inventory, trust ban, kernel replay, external re-check; rewritten from legacy/scripts/tests/check_external_checker.sh and legacy/scripts/tools, which stay governed by their own rows)	R-0560	root: never; legacy/ copy: none (new at the root, nothing to delete)	open
 .github	ci	retained	rewritten for the new root; the old workflows move to legacy/.github and are not run	R-0563	root: never (the new root's workflows); legacy/ copy (the old workflows, never run): at LD (R-0590)	open
 .githooks	landing	retained	.githooks (pre-push, re-pointed at the new gate set)	R-0563	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
@@ -36,7 +37,7 @@ scripts/proofs	proof integrity	retained	scripts/proofs (the proof-integrity chec
 .gitignore .gitattributes .envrc	repo	retained	root	R-0558	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
 scripts/land scripts/checks	landing	retained	scripts/land	R-0563	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
 scripts/review	landing	retained	scripts/review	R-0563	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
-scripts/push-both.sh scripts/worktree-new.sh	landing	retained	scripts/	R-0563	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+scripts/worktree-new.sh	landing	retained	scripts/	R-0563	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
 scripts/oracle	oracle	retained	scripts/oracle (ORACLE.lock, build, fetch, publish, run)	R-0564	root: when the differential no longer uses the legacy oracle (after D); legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
 scripts/tests/check_oracle_fetch.sh	oracle	retained	scripts/checks/oracle_fetch.sh (the controls of the required job Oracle (GitHub-hosted fetch + smoke); at the move its guard line is repointed at the new root's gate guard and the job runs it there)	R-0564	root: with scripts/oracle; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
 docs/project/LANDING.md docs/project/SELF_HOSTED_RUNNERS.md docs/project/REVIEW.md docs/LANDING.md docs/SELF_HOSTED_RUNNERS.md docs/REVIEW.md	process	retained	docs/	R-0563	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
@@ -71,3 +72,4 @@ docs/spec	prose spec	archived	legacy/docs/spec (non-normative once the Lean rule
 docs	docs	archived	legacy/docs; a page returns when a task needs it (more specific rows above govern their paths)	R-0558	never deleted with the pipeline	open
 editor	tooling	archived	legacy/editor	R-0558	never deleted automatically; returns with an editor task (phase G)	open
 research paper bench tasks logo.png	research	archived	legacy/	R-0558	never deleted with the pipeline	open
+scripts/push-both.sh	landing	retire	legacy/scripts/push-both.sh	R-0590	LD (R-0590) and owner approval; root helper retired 2026-11-11 by sole-repository decision	open

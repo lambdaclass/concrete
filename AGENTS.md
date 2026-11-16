@@ -3,7 +3,7 @@
 Status: operational procedure. How work is done in this repository: the agent playbooks, the
 rules they share, and [concurrent work](#concurrent-work-one-worktree-per-writer) (one worktree per
 writer, the server gate runs, publishing). It absorbed `CONCURRENT_WORK.md` on 2026-10-29. The
-tool manuals it points to stay separate: [LANDING.md](docs/LANDING.md) (landing trains and the bot),
+tool manuals it points to stay separate: [LANDING.md](docs/LANDING.md) (landing trains),
 [REVIEW.md](docs/REVIEW.md) (`scripts/review/review.sh`), [WORK_QUEUE.md](legacy/docs/archive/roadmap-2026-11/WORK_QUEUE.md) (the agent work
 queue), [STATUS_PAGE.md](legacy/docs/project/STATUS_PAGE.md) and [PROMOTION_PIPELINE.md](legacy/docs/project/PROMOTION_PIPELINE.md) (the
 validation stages, CI tiers and result vocabulary).
@@ -75,7 +75,15 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
   are recorded against `legacy-compiler-final`, never repaired, under
   [ROADMAP's defect disposition and frozen-compiler rule](ROADMAP.md#defect-disposition-rule).
 
+**Who works on what** (owner, 2026-11-08, [decision](docs/decisions.md#decided-2026-11-08-eleven)).
+- Claude's quota goes to the critical path: the spec, slice 0 and the front end. Mechanical work
+  goes to Codex and Kimi as writers.
+- One writer edits `docs/decisions.md` and `ROADMAP.md` at a time; other workers send that writer
+  their records instead of editing those files.
+
 **Branches.**
+- Every branch's full clone is `~/projects/clones/<branch>`, removed after the branch lands (owner,
+  2026-11-08; R-0619).
 - One bug or one rule per branch, in its own worktree (`scripts/worktree-new.sh`,
   [concurrent work](#concurrent-work-one-worktree-per-writer)). This applies to all agent work now, not only once
   R-0545 closes. A branch that changes a language rule lands first and stays small; work that
@@ -85,12 +93,12 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
 - Commit each validated slice. Push the branch to `wip/<branch>` at least every 5 minutes of work
   (`git push origin HEAD:refs/heads/wip/<branch>`); the hook's wip tier only scans for conflict
   markers.
-- Never push to `main`, `ci/*` or the remote `fork`. Landings go to both `origin` and
-  `lambdaclass`, only through the landing script (`scripts/land/train.sh`) or the landing bot.
-  `train.sh check` runs the checks before the push, and the push runs the root hook's full set again;
-  the train's push to `ci/<name>` and both pushes of `land` are read back with `ls-remote` and
-  retried when they did not move the ref (GitHub drops the connection during long hooks); `land` checks that both remotes are at
-  the head ([LANDING.md](docs/LANDING.md#land)).
+- Never push to `main` or `ci/*`. Only the remote name `origin` is permitted, with both fetch
+  and all push URLs targeting `lambdaclass/concrete`; there is no mirror. Landings go through
+  `scripts/land/train.sh`.
+  `train.sh check` runs the checks before the push, and the push runs the root hook's full set again.
+  The train reads back `ci/<name>` and `main` with `ls-remote` and retries dropped connections;
+  `land` requires origin/main at the exact head.
 - After any push of your own whose hook ran gates, check that the remote ref moved
   (`git ls-remote origin refs/heads/<branch>`) and push again if it did not.
 
@@ -134,10 +142,13 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
 - Have Codex confirm each bug is real (a reproducer and a verdict line in the record) before
   filing it.
 
-**Review.** Codex reviews everything before it is published or brought to the owner, and a second
-independent reviewer reviews too when one is available; its absence is recorded, never assumed
-([decision](docs/decisions.md#decided-project-review)). Every slice gets a Codex review before it lands, through `scripts/review/review.sh`:
-at most 5 rounds, the first over the whole diff and each later round over the delta since the
+**Review.** Codex reviews everything before it is published or brought to the owner, and Kimi and
+agy (Gemini) review every branch too; a reviewer's absence is recorded, never assumed
+([decision](docs/decisions.md#decided-project-review)). agy cannot read files: run it as
+`bounded_run 1500 -- agy -p "<prompt>"` with the diff and the context it needs in the prompt, ending with a
+required verdict line. Every slice gets a Codex review before it lands, through `scripts/review/review.sh`:
+at most 2 rounds for docs and the roadmap, 3 for scripts and 5 for the compiler and the spec
+(owner, 2026-11-08; `review.sh` enforces 5 until R-0618 lands), the first over the whole diff and each later round over the delta since the
 previous one. Answer each finding with a fix or a stated reason. Run Codex by hand only with
 `GIT_OPTIONAL_LOCKS=0` (and `</dev/null`): its sandboxed `git status` otherwise takes the
 worktree's `index.lock` and can leave it behind (bug 209).
@@ -198,7 +209,7 @@ confirms the corruption it was meant to catch.
 
 So worktrees fix file-level races, not coordination:
 
-- Pushes must still be sequenced — hence the lock in `push-both.sh`.
+- Local landings are sequenced by the train’s common-git-directory `concrete-land.lock`.
 - `git stash` is still unsafe across worktrees; bare `git stash` / `git stash pop`
   is banned repo-wide. Use a temporary WIP commit, or
   `git stash push -u -m "<unique-tag>"` and recover by SHA with `apply`, never
@@ -225,7 +236,7 @@ matters. So concurrency is caught where the signal is a fact:
   means a third party wrote the file: it **refuses to restore**, preserves their
   version under `CONCURRENT-EDIT/`, keeps its own backup for reconciliation, and
   fails the run. It cannot silently overwrite an edit it did not make.
-- **`scripts/push-both.sh`** takes an exclusive lock in the **common** git dir
+- **`scripts/land/train.sh land`** takes an exclusive lock in the **common** git dir
   (`git rev-parse --git-common-dir`), not the worktree — remotes are shared, so a
   per-worktree lock would miss two worktrees publishing at once.
 
@@ -238,7 +249,7 @@ Long-running work does not always require an idle tree. Distinguish the phases:
 | pre-push hook running gates | **yes** — gates read the working tree |
 | `run_ci_gates_local.sh` | **yes** — same reason |
 | `test_mutation.sh` | **yes** — it rewrites source in place |
-| `push-both.sh` waiting for remote CI | **no** — it only polls `gh` |
+| `train.sh watch` waiting for remote CI | **no** — it only polls `gh` |
 
 The CI wait touches no files, so work can continue during it — in another
 worktree. Treating the whole publish as tree-freezing is over-caution; treating
@@ -254,7 +265,8 @@ roadmap owns the repair. These rules apply to every writer now:
   checker rule lands first and small, with the migrations of main's fixtures and
   nothing else. A branch that needs two rules is two branches.
 - **Review per slice, delta after the first pass** (R-0544). After the first full
-  review, each round reviews only the diff since the previous round. Past 5 rounds,
+  review, each round reviews only the diff since the previous round. Past the risk
+  cap (the round caps under **Review** above),
   split the slice. Review ownership and memory-safety work with neutral prompts and
   piecewise diffs.
 - **At most 2 heavy local runs per machine** (R-0543). Full gate sets, closure-mode
@@ -306,6 +318,9 @@ to fix, not as noise.
 
 ### Killing a publish does not un-publish it
 
+The following 2026-07-31 incident concerns the retired `push-both.sh`. The same child-process
+and remote-readback rules apply to current train publication to origin.
+
 `push-both.sh` runs `git push` as a CHILD process. Killing the script does not
 kill that child, and a `git push` already in flight will complete.
 
@@ -321,6 +336,9 @@ AFTER the process tree is gone (`pgrep -f "git push"` clear), and treat the
 remote's actual state as the answer rather than the state you saw before killing.
 
 ### Orchestrating a publish: never infer state from process names
+
+The `push-both` examples below are historical; use captured PIDs and exact origin refs for current
+train operations.
 
 `pgrep -f "push-both"` matches the WAITER'S OWN command line, which contains that
 string. Every `until ! pgrep -f "push-both"; do sleep 30; done` loop therefore

@@ -2,6 +2,13 @@ name = "concrete"
 version = "0.2.0"
 defaultTargets = ["ConcreteSpec"]
 
+# The Lean Compiler Backend (LCB), pinned: slice 0's second backend. Its verified source semantics
+# (LeanCompilerBackend.Verified.Source) is imported, never restated; core Lean only, no Mathlib.
+[[require]]
+name = "lean-compiler-backend"
+git = "https://github.com/unbalancedparentheses/lean-compiler-backend"
+rev = "4bea4b3ffd8a43a73a0016012d865044067b3275"
+
 [leanOptions]
 warningAsError = true
 
@@ -9,4 +16,10 @@ warningAsError = true
 # Core Lean only; root ConcreteSpec.lean.
 [[lean_lib]]
 name = "ConcreteSpec"
+leanOptions = { autoImplicit = false }
+
+# The compiler (ROADMAP B0, slice 0; provisional): Lean code importing ConcreteSpec. Root Concrete.lean;
+# design in Concrete/README.md.
+[[lean_lib]]
+name = "Concrete"
 leanOptions = { autoImplicit = false }

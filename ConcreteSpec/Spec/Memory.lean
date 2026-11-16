@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.Ident
 import ConcreteSpec.Spec.Target
 import ConcreteSpec.Spec.Scalar
 
@@ -6,7 +7,7 @@ import ConcreteSpec.Spec.Scalar
 
 PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). Part of `ConcreteSpec.Spec`;
 see `ConcreteSpec/README.md`. Foundation contract C4, first part: the raw store (rows Q3.7–Q3.10)
-and the byte representation of scalars (Q3.11's `Rep`, for integers and `bool`). The hybrid state
+and the byte representation of integers (Q3.11's `Rep`). The hybrid state
 (structured places with a partial projection to these blocks, materialization, padding, and typed
 writes to materialized storage) is the second part and is not here.
 
@@ -19,8 +20,8 @@ owner's question 3 of 2026-11-08). Live blocks never overlap in occupied bytes (
 means overlapping occupied bytes; a zero-sized block occupies none, Q3.8).
 
 **Bytes.** A byte is uninitialized, or an initialized octet; an initialized byte may in addition
-be a fragment of a stored pointer, carrying that pointer and the byte's index in it (proposal C4:
-pointer fragments carry provenance separately from the numeric byte). There is no poison value.
+be a fragment of a stored pointer, carrying that pointer and the byte's index in it (Q3.7 and #recovered-29-20:
+whole-pointer storage records provenance separately from numeric octets; recovered item 20). There is no poison value.
 
 **Pointers** (Q3.7). A pointer is an address space, an address and a provenance: the block it was
 derived from, or none. Integers carry no provenance. `expose` records a block as exposed;
@@ -43,26 +44,43 @@ fit in a target space is a failure, not a trap. The allocator's own availability
 19–23), not this module's.
 
 **Scalar representation** (OD126, TYPE-19). An integer of type `t` occupies `bits / 8` bytes in the
-profile's byte order, holding its two's-complement pattern (`toBits`); a `bool` is one byte, `0` or
-`1`. Decoding is partial: an uninitialized byte, or a `bool` byte other than `0` and `1`, has no
-value. An integer decoded from bytes that are pointer fragments is the integer the octets spell,
+profile's byte order, holding its two's-complement pattern (`toBits`). Decoding is partial: an uninitialized byte has no value. An integer decoded from bytes that are pointer fragments is the integer the octets spell,
 without provenance (integers carry none, Q3.7). Bytes other than exactly one whole stored
 pointer have no pointer value: decoding fails (owner decision 2026-11-08, item 20).
+
+Authority (anchors in `docs/decisions.md` on main):
+
+- #decided-2026-11-05-core, Q3.7: blocks, provenance, explicit access premises,
+  initialization and the aligned non-null zero-byte exception; Q3.8: zero-sized occupied ranges;
+  Q3.9: exposure and in-bounds-before-one-past reconstruction; Q3.10: occupied-byte collisions
+  and the checked one-past bound. The full row recommendations are linked there.
+- Q1.8–Q1.11: ordinary allocation failure, surviving state conserved, allocator availability
+  separate from memory geometry. This module receives the chosen address; it does not choose
+  an allocator strategy or implement its availability contract.
+- #foundation-q2: byte/provenance blocks; #foundation-q3 and #od126: target widths, spaces,
+  byte order and the unchanged existing profile; integer bits reuse Spec/Scalar.
+- #recovered-29-20: only one whole stored pointer has pointer meaning. Fragment annotations
+  are semantic bookkeeping for stored-pointer identity, not a physical target-layout extension.
+  No bytes-to-address conversion, struct layout, pointer compression or ABI rule is added.
+
+Held: Boolean encoding and its dependent laws/controls (ISS-0069); main's Spec/Rep behavior
+is preserved without a second Boolean definition. Struct layout and further pointer-representation
+and pointer-byte mapping belong to F12/F33 and remain held (ISS-0070). U+FEFF scope
+and bare CR (ISS-0064), the five queued partial items (ISS-0065), path policy (ISS-0068),
+and constant restrictions (ISS-0065, D4 queue) supply no rule here.
+No historical approval annotation is evidence. Block identities reuse Ident.BlockId; association
+lookup reuses Basics.AList. There are no local-variable fixtures in this module.
+
 -/
 
 namespace ConcreteSpec.Core.Mem
 open ConcreteSpec.Core
 
-/-- A memory block's identity (Q3.7): fresh at allocation, never reused. -/
-structure MemBlockId where
-  id : Nat
-  deriving DecidableEq, Repr
-
 /-- A pointer (Q3.7): an address in a space, and its provenance. -/
 structure Ptr where
   space : AddrSpace
   addr : Nat
-  prov : Option MemBlockId
+  prov : Option BlockId
   deriving DecidableEq, Repr
 
 /-- A pointer's numeric address and space belong to this target. Provenance is checked
@@ -93,7 +111,7 @@ structure Block where
 
 /-- The memory: its blocks by identity, and the next fresh identity. -/
 structure Memory where
-  blocks : AList MemBlockId Block
+  blocks : AList BlockId Block
   next : Nat
   deriving Repr
 
@@ -101,10 +119,10 @@ structure Memory where
 def Memory.empty : Memory := ⟨[], 0⟩
 
 /-- The block of an identity. -/
-def Memory.block (m : Memory) (b : MemBlockId) : Option Block := AList.lookup m.blocks b
+def Memory.block (m : Memory) (b : BlockId) : Option Block := AList.lookup m.blocks b
 
 /-- Change the block of an identity. -/
-def Memory.modify (m : Memory) (b : MemBlockId) (f : Block → Block) : Memory :=
+def Memory.modify (m : Memory) (b : BlockId) (f : Block → Block) : Memory :=
   { m with blocks := AList.update m.blocks b f }
 
 /-- Two blocks' occupied bytes overlap: both nonempty, in one space, with intersecting ranges. -/
@@ -157,7 +175,7 @@ instance (tgt : Target) (m : Memory) (x : Block) : Decidable (m.Fits tgt x) := b
 /-- Allocate `size` bytes aligned to `align` in `space`, at the address `base` the allocator chose:
 a fresh, live, unexposed block of uninitialized bytes, or a failure that leaves memory as it was. -/
 def Memory.alloc (tgt : Target) (m : Memory) (space : AddrSpace) (base size align : Nat) :
-    Except AllocError (MemBlockId × Memory) :=
+    Except AllocError (BlockId × Memory) :=
   let x := candidate space base size align
   if m.Fits tgt x then .ok (⟨m.next⟩, ⟨(⟨m.next⟩, x) :: m.blocks, m.next + 1⟩)
   else .error .unavailable
@@ -165,7 +183,7 @@ def Memory.alloc (tgt : Target) (m : Memory) (space : AddrSpace) (base size alig
 /-- Release a live block: it is no longer live, nor exposed (Q3.9), and its identity is kept, so it
 is never reused. `none`: the block is not live (a double release); the caller's contract excludes
 it. -/
-def Memory.free (m : Memory) (b : MemBlockId) : Option Memory :=
+def Memory.free (m : Memory) (b : BlockId) : Option Memory :=
   match m.block b with
   | some x => if x.live then some (m.modify b fun x => { x with live := false, exposed := false }) else none
   | none => none
@@ -175,7 +193,7 @@ def Memory.free (m : Memory) (b : MemBlockId) : Option Memory :=
 /-- A target-valid pointer `p` may access `n` bytes aligned to `a`: for `n = 0`, an aligned non-null address
 (Q3.7's exception); otherwise a live block of `p`'s provenance, in `p`'s space, holding all `n`
 bytes, with `p` aligned. The block and the offset of the first byte, or `none`. -/
-def Memory.access (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat) : Option (Option (MemBlockId × Nat)) :=
+def Memory.access (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat) : Option (Option (BlockId × Nat)) :=
   if n = 0 then
     if p.addr % a = 0 ∧ p.addr ≠ tgt.null ∧ p.Valid tgt then some none else none
   else
@@ -274,34 +292,10 @@ def decodeInt (tgt : Target) (t : IntTy) (bs : List MByte) : Option Int :=
     (octets bs).map fun os => ofBits t (leValue (ordered tgt.byteOrder os))
   else none
 
-/-- The byte of a `bool`. -/
-def encodeBool (b : Bool) : List MByte := [.init ⟨boolToBits b, by cases b <;> decide⟩ none]
-
-/-- The `bool` a byte holds: an initialized `0` or `1`. -/
-def decodeBool : List MByte → Option Bool
-  | [.init v _] => boolOfBits v.val
-  | _ => none
-
-/-- The bytes of a stored pointer: its address in the profile's order and pointer width, each byte
-a fragment of the pointer. Encoding is total; decoding checks target validity. -/
-def encodePtr (tgt : Target) (p : Ptr) : List MByte :=
-  ((ordered tgt.byteOrder (leBytes tgt.ptrSize p.addr)).zipIdx).map fun (v, i) => .init v (some (p, i))
-
-/-- The pointer the bytes hold: one pointer-width sequence of that pointer's fragments,
-in order, whose initialized octets decode its target-valid address. All other byte patterns
-have no pointer meaning (owner decision 2026-11-08, item 20). -/
-def decodePtr (tgt : Target) (bs : List MByte) : Option Ptr :=
-  match bs with
-  | .init _ (some (p, 0)) :: _ =>
-    if bs.length = tgt.ptrSize then
-      match octets bs with
-      | some os =>
-        if bs = (os.zipIdx.map fun (v, i) => .init v (some (p, i))) ∧
-            leValue (ordered tgt.byteOrder os) = p.addr ∧ p.Valid tgt
-        then some p else none
-      | none => none
-    else none
-  | _ => none
+/-! Pointer encoding and decoding are omitted pending source-backed owner authority
+(ISS-0070). Recovered item 20 constrains whole-pointer meaning, but does not select
+any octet mapping. Fragment annotations describe provenance bookkeeping only; neither
+an address-to-octets rule nor its converse follows from them. -/
 
 /-! ### Examples -/
 
@@ -314,12 +308,14 @@ private def tinyTarget : Target :=
 
 example : tinyTarget.WellFormed := by decide
 
-/-- Refused: even a zero-byte access requires an address and space of the target. -/
-example : Memory.empty.access tinyTarget ⟨⟨0⟩, 256, none⟩ 0 1 = none ∧
-    Memory.empty.access tgt ⟨⟨99⟩, 8, none⟩ 0 1 = none ∧
-    decodePtr tinyTarget
-      [.init 0 (some (⟨⟨0⟩, 256, none⟩, 0))] = none ∧
-    (Memory.empty.alloc tgt ⟨99⟩ 4096 1 1).toOption = none := by decide
+/-- Refused: a zero-byte access still needs a representable address. -/
+example : Memory.empty.access tinyTarget ⟨⟨0⟩, 256, none⟩ 0 1 = none := by decide
+
+/-- Refused: an aligned, representable address in an unknown space. -/
+example : Memory.empty.access tgt ⟨⟨99⟩, 8, none⟩ 0 1 = none := by decide
+
+/-- Refused: allocation in an unknown space, with otherwise valid geometry. -/
+example : (Memory.empty.alloc tgt ⟨99⟩ 4096 1 1).toOption = none := by decide
 
 /-- A `u16` `0x1234` is stored little-endian on the x86-64 profile, and reads back. -/
 example : encodeInt tgt .u16 0x1234 = [.init 0x34 none, .init 0x12 none] := by decide
@@ -330,9 +326,8 @@ example : decodeInt tgt .i16 (encodeInt tgt .i16 (-2)) = some (-2) := by decide
 example : encodeInt { tgt with byteOrder := .big } .u16 0x1234 = [.init 0x12 none, .init 0x34 none] :=
   by decide
 
-/-- An uninitialized byte has no value; byte `2` is no `bool`. -/
-example : decodeInt tgt .u8 [.uninit] = none ∧ decodeBool [.init 2 none] = none ∧
-    decodeBool (encodeBool true) = some true := by decide
+/-- An uninitialized byte has no integer value (Q3.7). -/
+example : decodeInt tgt .u8 [.uninit] = none := by decide
 
 /-- A fresh block is uninitialized: reading it gives bytes, but no integer. -/
 example : (do
@@ -372,15 +367,5 @@ example : (do
     let m ← m.expose ⟨⟨0⟩, 4096, some b⟩
     pure ((m.fromExposed ⟨0⟩ 4100).prov, (m.fromExposed ⟨0⟩ 4112).prov,
       (m.fromExposed ⟨0⟩ 8192).prov)) = some (some ⟨0⟩, some ⟨0⟩, none) := by decide
-
-/-- A stored pointer reads back with its provenance; the same bytes read as an integer give its
-address, with no provenance. -/
-example : (do
-    let (b, m) ← (Memory.empty.alloc tgt ⟨0⟩ 4096 16 8).toOption
-    let p : Ptr := ⟨⟨0⟩, 4100, some b⟩
-    let m ← m.store tgt ⟨⟨0⟩, 4104, some b⟩ (encodePtr tgt p) 8
-    let bs ← m.load tgt ⟨⟨0⟩, 4104, some b⟩ 8 8
-    pure (decodePtr tgt bs == some p, decodeInt tgt .u64 bs)) = some (true, some 4100) := by
-  decide
 
 end ConcreteSpec.Core.Mem

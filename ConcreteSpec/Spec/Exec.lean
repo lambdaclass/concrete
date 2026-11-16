@@ -1,78 +1,55 @@
+import ConcreteSpec.Spec.Ident
+import ConcreteSpec.Spec.Outcome
 import ConcreteSpec.Spec.Scalar
 
 /-!
 # Execution, calls and cleanup
 
-PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). Part of `ConcreteSpec.Spec`;
-see `ConcreteSpec/README.md`. Foundation contract C1 (the foundation proposal approved by the
-owner on 2026-11-08, "ok all recommended", question 1: the interfaces and their laws are written,
-proved and tested before the freeze).
+PROPOSED: not normative until Core freeze. Authority is `docs/decisions.md`:
 
-This module is the shape of every Core execution: a machine configuration, one labeled step, and
-the laws that sequencing, scopes, exits, calls and cleanup obey. It is *parametric* in the operand
-language (`Operands`): what a value is, how an operand is evaluated, which types exist, what the
-shared state is (memory, C4; the loan and ownership instrumentation, C5) and which primitive
-operations read and change it or talk to the environment. The scalar operations (C2), memory (C4)
-and the environment (C6) are instances; they add operations, never change what the statements below
-mean (the freeze boundary: an extension preserves the old fragment's executions).
+* #decided-2026-11-05-core, Q9.1–Q9.4: ANF, fresh locals, structured exits,
+  condition-region loops; Q9.8: nested defers, late reads and reverse cleanup;
+  Q9.9–Q9.10: clock-indexed execution and ghost instrumentation;
+  Q2.1, Q2.3, Q2.6–Q2.8 and Q3.8: separate storage teardown, ordered consuming
+  destruction, ordinary partial correctness and zero-sized obligations.
+* #decided-2026-11-08-language-revisions: ordinary first parameters, no receiver.
+* #decided-2026-11-02-authority, rule 10; #od68, #od69 and
+  #decided-2026-11-02-audit: terminal abort, no unwinding after a trap.
+* #od60 and #decided-2026-11-08-language-revisions: the single ordinary
+  consuming destruction function, returning Unit.
+* #decided-project-no-hidden-traps: plain arithmetic needs safety evidence;
+  this raw executor does not claim that its demo programs pass the checker.
+* #foundation-q16: lawful primitive contracts, unknown operations refused.
+* #decided-2026-11-13-lifecycle-refusal: optional lifecycle admission at every
+  site, including function end and final scope exit; refusal is unsafe stuckness without reasons,
+  never completion, a trap or recoverable failure. Scope teardown only removes
+  storage; explicit destruction consumes values. A trapping deferred call stops
+  the program without running the remaining defers.
 
-**The configuration.** A `Config` holds the current control (a statement to run, a statement just
-completed, an exit in progress, or a trap), the locals, the shared state, and the stack of
-continuation frames that says where execution resumes. Call frames are frames of the same stack. A
-call saves its caller's locals and restores them on return; the shared state is *not* saved, so
-what a callee (or a cleanup call) does to memory is seen after it returns.
+Classification follows docs/decisions.md#decided-2026-11-13-proof-labels.
+The examples are kernel-checked computations, not general safety or adequacy
+proofs. Those arrive in F09a–F10. No historical review or approval is inherited.
 
-**Places and moves.** Writing a place other than a local (a field, an element, memory behind a
-pointer) is a primitive operation of the instance: its operands, the place's index operands and the
-value, are evaluated before it runs, and in A-normal form elaboration has already evaluated the
-right-hand side before any destination subexpression. Core's operands are explicit `copy x` and
-`move x` (Q9.1): which a type allows, and that a moved value is used exactly once, is the ownership
-instrumentation (C5), which is part of the instance's state; a move has no other run-time effect.
+The machine is parameterized by values, operands, types, a shared store and
+primitive contracts. It saves caller locals, threads shared state, and unwinds
+scope frames from inside out. Every activation installs a `functionEnd` frame
+between its body scope and continuation. Both fallthrough and explicit return
+admit leave there before finality or caller restoration, using the same rules
+for initial and nested calls. A trap remains terminal without unwinding. Defers run newest first, reading operands when
+called. Return evaluates its operand before cleanup. Scope exit restricts locals
+to their entering identities; it never synthesizes a destructor.
 
-**Evaluation order** (C1, STMT-4/5). Core is in A-normal form (Q9.1): an operand has no run-time
-effects, so after erasure (C9) the only order that can be observed among operands is which failure
-is reported first; before erasure, the instrumentation also sees the left-to-right order (a later
-operand sees what an earlier one moved). Arguments
-are evaluated left to right, and the first that traps decides the trap (`evalArgs`); every argument
-is evaluated before the callee is entered. An assignment evaluates its right-hand side before
-storing it. Source-level orders (STMT-4: receiver before arguments, left operand before right, a
-base before its index, an assignment's right-hand side before its destination's subexpressions,
-fields and elements in written order, `&&` and `||` evaluating their right operand only when needed) are
-elaboration's obligation: it lowers them to this sequential Core, and the checker checks both
-operands of a short-circuit operator (Q6.5). That belongs to the elaboration slices (README O1).
+`runFrom` is the only executable fuel/oracle dispatcher. Its report always
+retains the exact residual configuration and unused fuel. Finality is checked
+before fuel exhaustion. Only an accepted silent or answered transition consumes
+one unit. Absent answers, invalid answers and refused continuations retain the
+requesting configuration, history and budget. Accepted response events append
+in order. A refused response transition does not imply external-effect rollback.
 
-**Calls.** A call names its callee by typed identity (`FnId`, never a string), evaluates its
-arguments, and enters the callee with its parameters bound in order. There is no receiver: what a
-source method calls its receiver is the callee's ordinary, typed first parameter (owner decision
-2026-11-08, item 7). Destruction is one consuming protocol (`DestroyProtocol`): for a type with
-`Destroy`, exactly one function, taking that type's value as its only parameter and returning
-`Unit` (OD60, Q2.7).
-
-**Exits and cleanup** (Q9.4, Q9.8). `break L` and `continue L` name their loop (Q9.3); `return`
-evaluates its value *before* leaving any scope. On every structured exit (falling off the end of a
-block, `break`, `continue`, `return`) the deferred calls of each scope the exit leaves run, the
-innermost scope first and, within a scope, the newest registration first; their operands are read
-when they run (late reads, Q9.8). A deferred call is an ordinary call: if it traps, the run stops at
-once and no remaining cleanup runs. An explicit `abort()` is terminal: it runs no deferred call and
-does not unwind. Ordinary locals get no implicit destructor: cleanup happens only through what a
-scope registered (Q2.1 keeps release, destruction and resource cleanup apart).
-
-**The loop** (Q9.3) is `while L { C } test t do { B }`: the condition region `C` runs, then the test
-`t`; if it holds, the body runs and the loop starts again from `C`; `continue L` also starts again
-from `C`. A counted loop is lowered to this form by elaboration, with its bound snapshot taken
-before the loop and its counter advanced in `C` (slice 4). Exits inside a condition region are
-restricted by the checker (Q9.3); the machine passes such an exit through the loop's test frame
-without matching it. The temporaries the condition region binds (Q9.3's `t1 = next(...)`,
-`t2 = t1 != 0`, test `t2`) are visible to the test and are dropped right after it, so every
-iteration, the body and the code after the loop see only the locals the loop started with.
-
-The laws are in `Proofs/Exec.lean`: sequencing, scope restoration (`lookup_restrict`), that an exit
-carries its value unchanged through cleanup, that the deferred calls run in the stated order
-(`exit_scope_runs_defers`, `unwind_runs_plan`), that a trap is terminal and that `abort()` runs no
-cleanup.
-
-`run` is the fuel-indexed driver of this step relation, the skeleton of the reference evaluator
-(Q9.9); its adequacy (C8) is stated against `Step`.
+The operand language owns condition testing; the demo's nonzero integer test is
+a toy interface instance, not Concrete Boolean encoding (ISS-0069). Scalar
+arithmetic is reused from Scalar, identities from Ident and numeric locals and
+lookup from Basics. No memory policy is redefined here.
 -/
 
 namespace ConcreteSpec.Core.Exec
@@ -108,7 +85,7 @@ statements keep their meaning whatever the instance.
 - `life`: how a change in the life of locals (`Life`) changes the state. Like the state an
   operand returns, it may change only instrumentation; an instance without instrumentation
   ignores it by returning `some st`. `none` refuses the event: execution is stuck, including
-  cleanup steps (owner decision 2026-11-08, 15:08 UTC, item 21).
+  cleanup steps (docs/decisions.md#decided-2026-11-13-lifecycle-refusal).
 - `test`: the truth value of a condition (`none`: not a condition; unsafe stuckness).
 - `Ty`, `unitTy`, `unitVal`, `isCopy`: the types, `Unit` and its value, and which types are `Copy`
   (a declared and checked instance; the checker owns that check, C9).
@@ -201,6 +178,7 @@ inductive Pending (V : Type) where
   drop the region's locals, keeping those in `dom`, the locals the loop started with.
 - `body l c t body site`: loop `l`'s body is running; then start the loop again.
 - `resume p`: a cleanup call is running; then continue with `p`.
+- `functionEnd`: admit leave for every activation, preserving fallthrough versus return.
 - `ret dst caller`: a call is running; on its return, restore the caller's locals and bind the
   result to `dst`. -/
 inductive Frame (O : Operands) where
@@ -209,6 +187,8 @@ inductive Frame (O : Operands) where
   | test (l : LoopId) (c : Stmt O) (t : O.Expr) (body : Stmt O) (site : SiteId) (dom : List Var)
   | body (l : LoopId) (c : Stmt O) (t : O.Expr) (body : Stmt O) (site : SiteId)
   | resume (p : Pending O.Val)
+  /-- Every activation admits leave here, before finality or caller restoration. -/
+  | functionEnd
   | ret (dst : Option Var) (caller : AList Var O.Val)
 
 /-- What the machine is doing. -/
@@ -221,6 +201,8 @@ inductive Ctrl (O : Operands) where
   | exiting (e : Exit O.Val)
   /-- The run trapped: terminal. -/
   | trapped (k : TrapKind) (site : SiteId)
+  /-- Initial lifecycle admission was refused; no execution can resume. -/
+  | refused
 
 /-- A machine configuration. -/
 structure Config (O : Operands) where
@@ -301,10 +283,12 @@ def register (d : Deferred O) : List (Frame O) → Option (List (Frame O))
   | _ => none
 
 /-- Request continuations are partial: `none` refuses result binding through lifecycle
-instrumentation (owner decision 2026-11-08, 15:08 UTC, item 21: a cleanup step may
+instrumentation (docs/decisions.md#decided-2026-11-13-lifecycle-refusal: a cleanup step may
 be refused, and refusal ends stuck). This is unsafe stuckness, not a different primitive answer or a trap;
 `Step.prim` requires success, and `runFrom` reports the requesting configuration as stuck
-without accepting the response event when continuation fails.
+without accepting the response event when continuation fails. This records no
+accepted semantic transition; it does not claim rollback of an external effect
+that may already have happened when the oracle produced its response.
 
 What one step does: move to a configuration, or make a request of a primitive operation (its
 arguments, its site, the state it is made in, and the configuration each answer leads to). -/
@@ -343,24 +327,29 @@ def stepExit (L : AList Var O.Val) (st : O.Store) (e : Exit O.Val) :
       if l' = l then some (.next ⟨.exec (.loop l cr t b site), L, st, k⟩)
       else some (.next ⟨.exiting e, L, st, k⟩)
     | .ret _ => some (.next ⟨.exiting e, L, st, k⟩)
+  | .functionEnd :: k => match e with
+    | .ret _ => (O.life .leave st).map fun st' => .next ⟨.exiting e, L, st', k⟩
+    | _ => none
   | .ret dst caller :: k => match e with
-    | .ret v => (O.life .leave st).bind fun st' =>
-        (bindLife O dst st').map fun st'' => .next ⟨.done, bindDst dst v caller, st'', k⟩
+    | .ret v => (bindLife O dst st).map fun st'' => .next ⟨.done, bindDst dst v caller, st'', k⟩
     | _ => none
   | .resume _ :: _ => none
   | [] => none
 
-/-- One step of the machine. `none`: the configuration is final, or no rule applies (unsafe
-stuckness). -/
-def step (P : Program O) (c : Config O) : Option (Out O) :=
+/-- The single machine dispatcher. `none` means finality or unsafe stopping.
+The optional evaluator defaults to `O.eval`; substitution tests replace it uniformly,
+including argument lists, without copying the dispatcher. -/
+def step (P : Program O) (c : Config O)
+    (evaluate : AList Var O.Val → O.Store → O.Expr → Res (O.Val × O.Store) := O.eval) :
+    Option (Out O) :=
   let L := c.locals
   let st := c.store
   match c.ctrl, c.frames with
   -- running a statement
   | .exec .skip, k => some (.next ⟨.done, L, st, k⟩)
-  | .exec (.bind x e site), k => onRes (O.eval L st e) site L st k fun v st' =>
+  | .exec (.bind x e site), k => onRes (evaluate L st e) site L st k fun v st' =>
       (O.life (.bind x) st').map fun st'' => .next ⟨.done, (x, v) :: L, st'', k⟩
-  | .exec (.assign x e site), k => onRes (O.eval L st e) site L st k fun v st' =>
+  | .exec (.assign x e site), k => onRes (evaluate L st e) site L st k fun v st' =>
       (AList.lookup L x).bind fun _ =>
         (O.life (.bind x) st').map fun st'' =>
           .next ⟨.done, AList.update L x (fun _ => v), st'', k⟩
@@ -368,22 +357,22 @@ def step (P : Program O) (c : Config O) : Option (Out O) :=
   | .exec (.block b s), k => some (.next ⟨.exec s, L, st, .scope b (dom L) [] :: k⟩)
   | .exec (.defer f args site), k =>
       (register ⟨f, args, site⟩ k).map fun k' => .next ⟨.done, L, st, k'⟩
-  | .exec (.cond e s t site), k => onRes (O.eval L st e) site L st k fun v st' =>
+  | .exec (.cond e s t site), k => onRes (evaluate L st e) site L st k fun v st' =>
       (O.test v).map fun b => .next ⟨.exec (if b then s else t), L, st', k⟩
   | .exec (.loop l cr t b site), k =>
       some (.next ⟨.exec cr, L, st, .test l cr t b site (dom L) :: k⟩)
   | .exec (.brk l), k => some (.next ⟨.exiting (.brk l), L, st, k⟩)
   | .exec (.cont l), k => some (.next ⟨.exiting (.cont l), L, st, k⟩)
-  | .exec (.ret e site), k => onRes (O.eval L st e) site L st k fun v st' =>
+  | .exec (.ret e site), k => onRes (evaluate L st e) site L st k fun v st' =>
       some (.next ⟨.exiting (.ret v), L, st', k⟩)
-  | .exec (.call dst f args site), k => onRes (evalArgs O L st args) site L st k fun vs st' =>
+  | .exec (.call dst f args site), k => onRes (evalArgs { O with eval := evaluate } L st args) site L st k fun vs st' =>
       (AList.lookup P.fns f).bind fun fn =>
         if fn.params.length = vs.length then
           (O.life (.enter (fn.params.map Prod.fst)) st').map fun st'' =>
             .next ⟨.exec fn.body, (fn.params.map Prod.fst).zip vs, st'',
-              .scope fn.block (fn.params.map Prod.fst) [] :: .ret dst L :: k⟩
+              .scope fn.block (fn.params.map Prod.fst) [] :: .functionEnd :: .ret dst L :: k⟩
         else none
-  | .exec (.prim x p args site), k => onRes (evalArgs O L st args) site L st k fun vs st' =>
+  | .exec (.prim x p args site), k => onRes (evalArgs { O with eval := evaluate } L st args) site L st k fun vs st' =>
       some (.request p vs site st' fun a => match a.result with
         | .ok v => (bindLife O x a.store).map fun st' => ⟨.done, bindDst x v L, st', k⟩
         | .error kd => some ⟨.trapped kd site, L, a.store, k⟩)
@@ -392,7 +381,7 @@ def step (P : Program O) (c : Config O) : Option (Out O) :=
   | .done, .seq t :: k => some (.next ⟨.exec t, L, st, k⟩)
   | .done, .scope b dm (d :: ds) :: k => some (startCleanup L st b dm d ds .fall k)
   | .done, .scope _ dm [] :: k => (dropOut O dm L st).map fun st' => .next ⟨.done, restrict dm L, st', k⟩
-  | .done, .test l cr t b site dm :: k => onRes (O.eval L st t) site L st k fun v st' =>
+  | .done, .test l cr t b site dm :: k => onRes (evaluate L st t) site L st k fun v st' =>
       (O.test v).bind fun go =>
         (dropOut O dm L st').map fun st'' =>
           if go then .next ⟨.exec b, restrict dm L, st'', .body l cr t b site :: k⟩
@@ -402,14 +391,16 @@ def step (P : Program O) (c : Config O) : Option (Out O) :=
   | .done, .resume (.exit e) :: k => some (.next ⟨.exiting e, L, st, k⟩)
   -- a function body that ends without `return`: only a `Unit` function may (the checker refuses
   -- any other, C9), and its result is `()`
+  | .done, .functionEnd :: k =>
+      (O.life .leave st).map fun st' => .next ⟨.done, L, st', k⟩
   | .done, .ret dst caller :: k =>
-      (O.life .leave st).bind fun st' =>
-        (bindLife O dst st').map fun st'' => .next ⟨.done, bindDst dst O.unitVal caller, st'', k⟩
+      (bindLife O dst st).map fun st'' => .next ⟨.done, bindDst dst O.unitVal caller, st'', k⟩
   | .done, [] => none
   -- an exit unwinding
   | .exiting e, k => stepExit L st e k
   -- a trap is terminal
   | .trapped .., _ => none
+  | .refused, _ => none
 
 /-- A step's label: silent, or an event the environment saw. -/
 inductive Label (O : Operands) where
@@ -442,7 +433,7 @@ helpers. Argument evaluation and defer registration have their own inductive jud
 operand evaluation, tests, lifecycle admission and primitive admission are the `Operands`
 interface. List and association-list operations below describe the configuration's data.
 No rule applies to a final or stuck configuration. In particular, a refused lifecycle event
-has no transition (owner decision 2026-11-08, item 21).
+has no transition (docs/decisions.md#decided-2026-11-13-lifecycle-refusal).
 -/
 
 /-- Left-to-right argument evaluation, independent of `evalArgs`. Stuck operands propagate
@@ -533,7 +524,7 @@ inductive Rules (P : Program O) : Config O → Option (Answer O.Val O.Event O.St
       fn.params.length = vs.length →
       O.life (.enter (fn.params.map Prod.fst)) st₁ = some st₂ →
       Rules P ⟨.exec (.call dst f args site), L, st, k⟩ none .silent ⟨.exec fn.body, ((fn.params.map
-        Prod.fst).zip vs), st₂, .scope fn.block (fn.params.map Prod.fst) [] :: .ret dst L :: k⟩
+        Prod.fst).zip vs), st₂, .scope fn.block (fn.params.map Prod.fst) [] :: .functionEnd :: .ret dst L :: k⟩
   | bindTrap {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {x : Var} {e : O.Expr}
       {site : SiteId} {kd : TrapKind} :
       O.eval L st e = .trap kd →
@@ -631,17 +622,21 @@ inductive Rules (P : Program O) : Config O → Option (Answer O.Val O.Event O.St
       Rules P ⟨.done, L, st, .resume .fall :: k⟩ none .silent ⟨.done, L, st, k⟩
   | resumeExit {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {ex : Exit O.Val} :
       Rules P ⟨.done, L, st, .resume (.exit ex) :: k⟩ none .silent ⟨.exiting ex, L, st, k⟩
-  | implicitReturn {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {dst : Option Var}
-      {caller : AList Var O.Val} {st₁ : O.Store} {st₂ : O.Store} {L' : AList Var O.Val} :
-      O.life .leave st = some st₁ →
-      Destination O dst O.unitVal caller st₁ L' st₂ →
-      Rules P ⟨.done, L, st, .ret dst caller :: k⟩ none .silent ⟨.done, L', st₂, k⟩
-  | explicitReturn {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {v : O.Val}
-      {dst : Option Var} {caller : AList Var O.Val} {st₁ : O.Store} {st₂ : O.Store}
-      {L' : AList Var O.Val} :
-      O.life .leave st = some st₁ →
-      Destination O dst v caller st₁ L' st₂ →
-      Rules P ⟨.exiting (.ret v), L, st, .ret dst caller :: k⟩ none .silent ⟨.done, L', st₂, k⟩
+  | endFall {L : AList Var O.Val} {st st' : O.Store} {k : List (Frame O)} :
+      O.life .leave st = some st' →
+      Rules P ⟨.done, L, st, .functionEnd :: k⟩ none .silent ⟨.done, L, st', k⟩
+  | endReturn {L : AList Var O.Val} {st st' : O.Store} {k : List (Frame O)} {v : O.Val} :
+      O.life .leave st = some st' →
+      Rules P ⟨.exiting (.ret v), L, st, .functionEnd :: k⟩ none .silent
+        ⟨.exiting (.ret v), L, st', k⟩
+  | implicitReturn {L : AList Var O.Val} {st st' : O.Store} {k : List (Frame O)}
+      {dst : Option Var} {caller L' : AList Var O.Val} :
+      Destination O dst O.unitVal caller st L' st' →
+      Rules P ⟨.done, L, st, .ret dst caller :: k⟩ none .silent ⟨.done, L', st', k⟩
+  | explicitReturn {L : AList Var O.Val} {st st' : O.Store} {k : List (Frame O)} {v : O.Val}
+      {dst : Option Var} {caller L' : AList Var O.Val} :
+      Destination O dst v caller st L' st' →
+      Rules P ⟨.exiting (.ret v), L, st, .ret dst caller :: k⟩ none .silent ⟨.done, L', st', k⟩
   | brkHere {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {l : LoopId} {cr : Stmt O}
       {test : O.Expr} {body : Stmt O} {site : SiteId} :
       Rules P ⟨.exiting (.brk l), L, st, .body l cr test body site :: k⟩ none .silent ⟨.done, L, st, k⟩
@@ -676,7 +671,7 @@ without one ends it normally (`Final.normal`). How either becomes the process's 
 def enter (fn : Fn O) (vs : List O.Val) (st : O.Store) : Option (Config O) :=
   (O.life (.enter (fn.params.map Prod.fst)) st).map fun st' =>
     ⟨.exec fn.body, (fn.params.map Prod.fst).zip vs, st',
-      [.scope fn.block (fn.params.map Prod.fst) []]⟩
+      [.scope fn.block (fn.params.map Prod.fst) [], .functionEnd]⟩
 
 /-! ## Cleanup plans
 
@@ -694,6 +689,7 @@ def Passes (e : Exit O.Val) : Frame O → Prop
     | .cont l' => l' ≠ l
     | .ret _ => True
   | .resume _ => False
+  | .functionEnd => False
   | .ret .. => False
 
 /-- The deferred calls frames hold, in the order an exit through them runs them: the innermost
@@ -823,56 +819,71 @@ its site and the current state. -/
 abbrev Oracle (O : Operands) :=
   List O.Event → O.Prim → List O.Val → SiteId → O.Store → Option (Answer O.Val O.Event O.Store)
 
-/-- How a run of `run` ended. A finished run retains both its `Final` classification and the
-final shared store `O.Store`, so C6 can project the externally visible final state. -/
+/-- How a run of `run` ended. The report retains its classification separately
+from the complete residual configuration, whose store is the final shared state. -/
 inductive Ending (O : Operands) where
-  /-- The program finished in `store`. -/
-  | final (f : Final O.Val) (store : O.Store)
+  /-- The program finished; see `Report.residual` for its complete final state. -/
+  | final (f : Final O.Val)
   /-- No rule applies: unsafe stuckness. -/
-  | stuck (c : Config O)
+  | stuck
   /-- The oracle gave no answer: the run waits on the environment. C8 refines this (a run that
   blocks forever keeps this classification), and C6 splits a request from its response. -/
-  | noAnswer (c : Config O)
+  | noAnswer
   /-- The oracle gave an answer outside the operation's contract: refused, never taken. -/
-  | badAnswer (c : Config O)
+  | badAnswer
   /-- The fuel ran out: a statement about the budget only. -/
-  | outOfFuel (c : Config O)
+  | outOfFuel
 
 /-- A run's events, in order, and how it ended. -/
 structure Report (O : Operands) where
   events : List O.Event
   ending : Ending O
+  /-- Exact configuration at the stopping boundary, also for final runs. -/
+  residual : Config O
+  /-- Unused transition budget. Only an accepted transition spends fuel. -/
+  fuel : Nat
 
 /-- Run for at most `fuel` steps; `hist` are the events so far. A final configuration is reported
-as final whatever fuel is left, so a run that ends on its last unit of fuel is not "out of fuel". -/
-def runFrom (P : Program O) (ρ : Oracle O) : Nat → List O.Event → Config O → Report O
-  | fuel, hist, c =>
-    match c.final?, fuel with
-    | some f, _ => ⟨hist, .final f c.store⟩
-    | none, 0 => ⟨hist, .outOfFuel c⟩
-    | none, n + 1 =>
-      match step P c with
-      | none => ⟨hist, .stuck c⟩
-      | some (.next c') => runFrom P ρ n hist c'
-      | some (.request p vs site st k) =>
-        match ρ hist p vs site st with
-        | none => ⟨hist, .noAnswer c⟩
-        | some a =>
-          if O.allows p vs st a then
-            match k a with
-            | some c' => runFrom P ρ n (hist ++ a.event.toList) c'
-            | none => ⟨hist, .stuck c⟩
-          else ⟨hist, .badAnswer c⟩
+as final whatever fuel is left, so a run that ends on its last unit of fuel is not "out of fuel".
+The optional evaluator is passed to the sole dispatcher at every recursive transition. -/
+def runFrom (P : Program O) (ρ : Oracle O) (fuel : Nat) (hist : List O.Event) (c : Config O)
+    (evaluate : AList Var O.Val → O.Store → O.Expr → Res (O.Val × O.Store) := O.eval) : Report O :=
+  match c.ctrl, c.final?, fuel with
+  | .refused, _, _ => ⟨hist, .stuck, c, fuel⟩
+  | _, some f, _ => ⟨hist, .final f, c, fuel⟩
+  | _, none, 0 => ⟨hist, .outOfFuel, c, 0⟩
+  | _, none, n + 1 =>
+    match step P c evaluate with
+    | none => ⟨hist, .stuck, c, n + 1⟩
+    | some (.next c') => runFrom P ρ n hist c' evaluate
+    | some (.request p vs site st k) =>
+      match ρ hist p vs site st with
+      | none => ⟨hist, .noAnswer, c, n + 1⟩
+      | some a =>
+        if O.allows p vs st a then
+          match k a with
+          | some c' => runFrom P ρ n (hist ++ a.event.toList) c' evaluate
+          | none => ⟨hist, .stuck, c, n + 1⟩
+        else ⟨hist, .badAnswer, c, n + 1⟩
 
 /-- Run from `c` with no events yet. -/
-def run (P : Program O) (ρ : Oracle O) (fuel : Nat) (c : Config O) : Report O :=
-  runFrom P ρ fuel [] c
+def run (P : Program O) (ρ : Oracle O) (fuel : Nat) (c : Config O)
+    (evaluate : AList Var O.Val → O.Store → O.Expr → Res (O.Val × O.Store) := O.eval) : Report O :=
+  runFrom P ρ fuel [] c evaluate
 
-/-- Enter `fn` on argument values `vs` in state `st` and run for at most `fuel` steps, when the
-argument count matches `fn.params` and initial activation succeeds. -/
+/-- Enter and run using the sole driver. `none` means argument-count mismatch,
+not lifecycle refusal. Refused entry returns the same unsafe-stuck classification as
+mid-run refusal, with the original store, proposed parameter locals and scope, and
+all fuel unused. The `refused` control makes this residual impossible to resume.
+This reporting convention is an interface choice, not an additional owner decision. -/
 def runFn (P : Program O) (ρ : Oracle O) (fuel : Nat) (fn : Fn O) (vs : List O.Val)
     (st : O.Store) : Option (Report O) :=
-  if fn.params.length = vs.length then (enter fn vs st).map (run P ρ fuel) else none
+  if fn.params.length = vs.length then
+    let c := (enter fn vs st).getD
+      ⟨.refused, (fn.params.map Prod.fst).zip vs, st,
+        [.scope fn.block (fn.params.map Prod.fst) [], .functionEnd]⟩
+    some (run P ρ fuel c)
+  else none
 
 /-! ## Examples
 
@@ -976,15 +987,15 @@ def env : Oracle ops := fun _ p vs _ st => match p, vs with
   | .bump, [] => some ⟨none, .ok 0, { st with counter := st.counter + 1 }⟩
   | _, _ => none
 
-def x : Var := ⟨"x", 0⟩
-def y : Var := ⟨"y", 1⟩
-def a : Var := ⟨"a", 2⟩
-def t : Var := ⟨"t", 3⟩
-def p : Var := ⟨"p", 4⟩
+def x : Var := ⟨0⟩
+def y : Var := ⟨1⟩
+def a : Var := ⟨2⟩
+def t : Var := ⟨3⟩
+def p : Var := ⟨4⟩
 def s : SiteId := ⟨0⟩
-def logF : FnId := FnId.mk (ModuleId.mk ⟨"exec", ⟨"0"⟩⟩ ["exec"] (by decide)) "log"
-def boomF : FnId := FnId.mk (ModuleId.mk ⟨"exec", ⟨"0"⟩⟩ ["exec"] (by decide)) "boom"
-def mainF : FnId := FnId.mk (ModuleId.mk ⟨"exec", ⟨"0"⟩⟩ ["exec"] (by decide)) "main"
+def logF : FnId := FnId.mk (ModuleId.mk ⟨⟨"exec"⟩, ⟨⟨"0"⟩⟩⟩ [⟨"exec"⟩] (by decide)) ⟨"log"⟩
+def boomF : FnId := FnId.mk (ModuleId.mk ⟨⟨"exec"⟩, ⟨⟨"0"⟩⟩⟩ [⟨"exec"⟩] (by decide)) ⟨"boom"⟩
+def mainF : FnId := FnId.mk (ModuleId.mk ⟨⟨"exec"⟩, ⟨⟨"0"⟩⟩⟩ [⟨"exec"⟩] (by decide)) ⟨"main"⟩
 
 /-- `fn log(x: Int) -> Unit { log x }` -/
 def logFn : Fn ops := ⟨[(x, .int)], .unit, ⟨100⟩, .prim none .log [.var x] s⟩
@@ -992,12 +1003,12 @@ def logFn : Fn ops := ⟨[(x, .int)], .unit, ⟨100⟩, .prim none .log [.var x]
 /-- `fn boom() -> Unit { abort() }` -/
 def boomFn : Fn ops := ⟨[], .unit, ⟨101⟩, .abort ⟨9⟩⟩
 
-def bumpF : FnId := FnId.mk (ModuleId.mk ⟨"exec", ⟨"0"⟩⟩ ["exec"] (by decide)) "bump"
+def bumpF : FnId := FnId.mk (ModuleId.mk ⟨⟨"exec"⟩, ⟨⟨"0"⟩⟩⟩ [⟨"exec"⟩] (by decide)) ⟨"bump"⟩
 
 /-- `fn bump() -> Unit { bump }` -/
 def bumpFn : Fn ops := ⟨[], .unit, ⟨102⟩, .prim none .bump [] s⟩
 
-def eatF : FnId := FnId.mk (ModuleId.mk ⟨"exec", ⟨"0"⟩⟩ ["exec"] (by decide)) "eat"
+def eatF : FnId := FnId.mk (ModuleId.mk ⟨⟨"exec"⟩, ⟨⟨"0"⟩⟩⟩ [⟨"exec"⟩] (by decide)) ⟨"eat"⟩
 
 /-- `fn eat(p: Tok) -> Unit { log(move p) }` -/
 def eatFn : Fn ops := ⟨[(p, .tok)], .unit, ⟨103⟩, .prim none .log [.move p] s⟩
@@ -1011,8 +1022,9 @@ def callLog (n : Int) : Stmt ops := .call none logF [.lit n] s
 def start (fn : Fn ops) (vs : List Int) (st : DState) : Config ops :=
   ⟨.exec fn.body, (fn.params.map Prod.fst).zip vs,
     DState.life (.enter (fn.params.map Prod.fst)) st,
-    [.scope fn.block (fn.params.map Prod.fst) []]⟩
+    [.scope fn.block (fn.params.map Prod.fst) [], .functionEnd]⟩
 
+-- Representation lemma: demo entry expands the chosen encoding.
 example (fn : Fn ops) (vs : List Int) (st : DState) :
     enter fn vs st = some (start fn vs st) := rfl
 
@@ -1028,30 +1040,32 @@ abbrev refusingOps : Operands := { ops with
 
 /-- Accepted: unflagged locals leave scope normally. Refused: dropping the flagged local
 ends in unsafe stuckness, including at the final scope exit. -/
+-- Instance: concrete execution case; not a general safety law.
 example : (match (run (O := refusingOps) ⟨[]⟩ (fun _ _ _ _ _ => none) 10
     ⟨.exec (.block ⟨0⟩ (.bind x (.lit 1) s)), [], .init, []⟩).ending with
-    | .stuck _ => true
+    | .stuck => true
     | _ => false) = true := by decide
 
+-- Instance: concrete execution case; not a general safety law.
 example : (match (run (O := refusingOps) ⟨[]⟩ (fun _ _ _ _ _ => none) 10
     ⟨.exec (.block ⟨0⟩ (.bind y (.lit 1) s)), [], .init, []⟩).ending with
-    | .final .normal _ => true
+    | .final .normal => true
     | _ => false) = true := by decide
 
 /-- A report's events and, if the program finished, how. -/
 def brief (r : Report ops) : List Int × Option (Final Int) :=
   (r.events, match r.ending with
-    | .final f _ => some f
+    | .final f => some f
     | _ => none)
 
 /-- The report says the run was stuck. -/
 def isStuck (r : Report ops) : Bool := match r.ending with
-  | .stuck _ => true
+  | .stuck => true
   | _ => false
 
 /-- The report says the fuel ran out. -/
 def isOutOfFuel (r : Report ops) : Bool := match r.ending with
-  | .outOfFuel _ => true
+  | .outOfFuel => true
   | _ => false
 
 /-- Normal block exit runs the innermost scope's calls first, and the newest registration of each
@@ -1060,6 +1074,7 @@ scope first:
 { defer log(1); defer log(2); { defer log(3); } } log(4);
 ```
 logs 3, 2, 1, then 4. -/
+-- Instance: concrete execution case; not a general safety law.
 example : (go (.seq (.block ⟨1⟩ (.seq (dlog 1) (.seq (dlog 2) (.block ⟨2⟩ (dlog 3)))))
     (callLog 4))).events = [3, 2, 1, 4] := by decide
 
@@ -1069,6 +1084,7 @@ value comes out unchanged:
 { defer log(1); { defer log(2); return 7; } }
 ```
 logs 2, 1 and returns 7. -/
+-- Instance: concrete execution case; not a general safety law.
 example : brief (go (.block ⟨1⟩ (.seq (dlog 1) (.block ⟨2⟩ (.seq (dlog 2) (.ret (.lit 7) s)))))) =
     ([2, 1], some (.returned 7)) := by decide
 
@@ -1077,6 +1093,7 @@ example : brief (go (.block ⟨1⟩ (.seq (dlog 1) (.block ⟨2⟩ (.seq (dlog 2
 { defer log(1); abort(); }
 ```
 logs nothing and traps with `abort`. -/
+-- Instance: concrete execution case; not a general safety law.
 example : brief (go (.block ⟨1⟩ (.seq (dlog 1) (.abort ⟨5⟩)))) = ([], some (.trapped .abort ⟨5⟩)) := by
   decide
 
@@ -1085,6 +1102,7 @@ example : brief (go (.block ⟨1⟩ (.seq (dlog 1) (.abort ⟨5⟩)))) = ([], so
 { defer log(1); defer boom(); }
 ```
 `boom` runs first (the newest registration) and aborts, so `log(1)` never runs. -/
+-- Instance: concrete execution case; not a general safety law.
 example : brief (go (.block ⟨1⟩ (.seq (dlog 1) (.defer boomF [] s)))) =
     ([], some (.trapped .abort ⟨9⟩)) := by decide
 
@@ -1093,6 +1111,7 @@ example : brief (go (.block ⟨1⟩ (.seq (dlog 1) (.defer boomF [] s)))) =
 while 'l { } test 1 do { defer log(5); break 'l; } log(6);
 ```
 logs 5, then 6. -/
+-- Instance: concrete execution case; not a general safety law.
 example : (go (.seq (.loop ⟨0⟩ .skip (.lit 1) (.block ⟨1⟩ (.seq (dlog 5) (.brk ⟨0⟩))) s)
     (callLog 6))).events = [5, 6] := by decide
 
@@ -1101,11 +1120,13 @@ example : (go (.seq (.loop ⟨0⟩ .skip (.lit 1) (.block ⟨1⟩ (.seq (dlog 5)
 let x = 1; { defer log(x); x = 2; }
 ```
 logs 2. -/
+-- Instance: concrete execution case; not a general safety law.
 example : (go (.seq (.bind x (.lit 1) s)
     (.block ⟨1⟩ (.seq (.defer logF [.var x] s) (.assign x (.lit 2) s))))).events = [2] := by
   decide
 
 /-- Arguments are evaluated left to right; the first that traps decides the trap. -/
+-- Instance: concrete execution case; not a general safety law.
 example : brief (go (.call none logF [.fail .overflow, .fail .divisionByZero] ⟨3⟩)) =
     ([], some (.trapped .overflow ⟨3⟩)) := by decide
 
@@ -1114,10 +1135,12 @@ example : brief (go (.call none logF [.fail .overflow, .fail .divisionByZero] �
 let x = 1; { let y = 5; x = 2; } return x;
 ```
 returns 2; reading `y` after the block is stuck. -/
+-- Instance: concrete execution case; not a general safety law.
 example : brief (go (.seq (.bind x (.lit 1) s)
     (.seq (.block ⟨1⟩ (.seq (.bind y (.lit 5) s) (.assign x (.lit 2) s))) (.ret (.var x) s)))) =
     ([], some (.returned 2)) := by decide
 
+-- Instance: concrete execution case; not a general safety law.
 example : isStuck (go (.seq (.block ⟨1⟩ (.bind y (.lit 5) s)) (.ret (.var y) s))) = true := by
   decide
 
@@ -1127,14 +1150,17 @@ block.
 { defer bump(); defer bump(); } log(counter);
 ```
 logs 2. -/
+-- Instance: concrete execution case; not a general safety law.
 example : (go (.seq (.block ⟨1⟩ (.seq (.defer bumpF [] s) (.defer bumpF [] s)))
     (.prim none .log [.counter] s))).events = [2] := by decide
 
 /-- Plain arithmetic of C2 runs inside the machine: `log(2147483647 + 1)` traps with kind
 `overflow` at its site, and `log(7 / 2)` logs 3. -/
+-- Instance: concrete execution case; not a general safety law.
 example : brief (go (.prim none .log [.arith .add (.lit 2147483647) (.lit 1)] ⟨4⟩)) =
     ([], some (.trapped .overflow ⟨4⟩)) := by decide
 
+-- Instance: concrete execution case; not a general safety law.
 example : (go (.prim none .log [.arith .div (.lit 7) (.lit 2)] s)).events = [3] := by decide
 
 /-- A cleanup call whose argument overflows traps when it runs, after the newer calls ran:
@@ -1142,21 +1168,25 @@ example : (go (.prim none .log [.arith .div (.lit 7) (.lit 2)] s)).events = [3] 
 { defer log(2147483647 + 1); defer log(1); }
 ```
 logs 1, then traps with `overflow`. -/
+-- Instance: concrete execution case; not a general safety law.
 example : brief (go (.block ⟨1⟩ (.seq (.defer logF [.arith .add (.lit 2147483647) (.lit 1)] ⟨6⟩)
     (dlog 1)))) = ([1], some (.trapped .overflow ⟨6⟩)) := by decide
 
 /-- A run that is final on its last unit of fuel is final, not out of fuel. -/
+-- Instance: concrete execution case; not a general safety law.
 example : brief (run prog env 0 ⟨.done, [], .init, []⟩) = ([], some .normal) := by decide
 
 /-- An oracle that does not answer leaves the run waiting, which is not a refused answer; an answer
 outside the contract is refused. -/
+-- Instance: concrete execution case; not a general safety law.
 example : (match (run prog (fun _ _ _ _ _ => none) 10 (start ⟨[], .int, ⟨0⟩, callLog 1⟩ [] .init)).ending with
-    | .noAnswer _ => true
+    | .noAnswer => true
     | _ => false) = true := by decide
 
+-- Instance: concrete execution case; not a general safety law.
 example : (match (run prog (fun _ _ _ _ st => some ⟨some 5, .ok 0, st⟩) 10
     (start ⟨[], .int, ⟨0⟩, callLog 1⟩ [] .init)).ending with
-    | .badAnswer _ => true
+    | .badAnswer => true
     | _ => false) = true := by decide
 
 /-- Operands thread the instrumentation, left to right. Moving a local into a call transfers it:
@@ -1167,9 +1197,11 @@ let a: Tok = 7; log(move a); return a;   // logs 7, then reading a is stuck
 let a: Tok = 7; log(move a + move a);    // stuck before the call: a is moved by the first operand
 ```
 -/
+-- Instance: concrete execution case; not a general safety law.
 example : (fun r : Report ops => (r.events, isStuck r)) (go (.seq (.bind a (.lit 7) s)
     (.seq (.call none logF [.move a] s) (.ret (.var a) s)))) = ([7], true) := by decide
 
+-- Instance: concrete execution case; not a general safety law.
 example : (fun r : Report ops => (r.events, isStuck r)) (go (.seq (.bind a (.lit 7) s)
     (.call none logF [.arith .add (.move a) (.move a)] s))) = ([], true) := by decide
 
@@ -1180,9 +1212,11 @@ let a: Tok = 7; log(move a); a = 8; log(move a);   // logs 7, 8
 fn eat(p: Tok) { log(move p) }   eat(1); eat(2);    // logs 1, 2
 ```
 -/
+-- Instance: concrete execution case; not a general safety law.
 example : (go (.seq (.bind a (.lit 7) s) (.seq (.call none logF [.move a] s)
     (.seq (.assign a (.lit 8) s) (.call none logF [.move a] s))))).events = [7, 8] := by decide
 
+-- Instance: concrete execution case; not a general safety law.
 example : brief (go (.seq (.call none eatF [.lit 1] s) (.call none eatF [.lit 2] s))) =
     ([1, 2], some .normal) := by decide
 
@@ -1192,16 +1226,216 @@ while 'l { bump(); let t = counter - 3; } test t do { log(counter); continue 'l;
 log(counter);
 ```
 logs 1, 2 (the test is `t ≠ 0`), then 3; reading `t` after the loop is stuck. -/
+-- Instance: concrete execution case; not a general safety law.
 example : brief (go (.seq (.loop ⟨0⟩ (.seq (.call none bumpF [] s) (.bind t (.arith .sub .counter
     (.lit 3)) s)) (.var t) (.block ⟨1⟩ (.seq (.prim none .log [.counter] s) (.cont ⟨0⟩))) s)
     (.prim none .log [.counter] s))) = ([1, 2, 3], some .normal) := by decide
 
+-- Instance: concrete execution case; not a general safety law.
 example : isStuck (go (.seq (.loop ⟨0⟩ (.bind t (.lit 0) s) (.var t) .skip s) (.ret (.var t) s)))
     = true := by decide
 
 /-- Running out of fuel is reported as such: a loop that never ends is not a result. -/
+-- Instance: concrete execution case; not a general safety law.
 example : isOutOfFuel (run prog env 50 (start ⟨[], .int, ⟨0⟩, .loop ⟨0⟩ .skip (.lit 1) .skip s⟩ [] .init))
     = true := by decide
+
+/-! ### Lifecycle admission and residual boundaries
+
+Each pair changes only admission at the named site. These are executable
+examples, not ownership safety theorems. The real ownership instance and its
+accepted-program non-refusal proof arrive later. Exact report equalities also
+pin history, store, locals, frames and fuel, rather than merely testing stuckness.
+-/
+
+/-- A toy admission policy refusing entry only. -/
+abbrev noEntry : Operands := { ops with life := fun e st => match e with
+  | .enter _ => none
+  | _ => some (DState.life e st) }
+
+/-- Successful entry runs the body and final storage teardown. -/
+-- Instance: concrete execution case; not a general safety law.
+example : runFn (O := ops) ⟨[]⟩ env 9 ⟨[], .unit, ⟨0⟩, .skip⟩ [] .init =
+    some ⟨[], .final .normal, ⟨.done, [], .init, []⟩, 6⟩ := rfl
+
+/-- Refused initial entry is unsafe stuckness, even with zero fuel. Its state
+has not been admitted and cannot be resumed as a function body. -/
+-- Instance: concrete execution case; not a general safety law.
+example : runFn (O := noEntry) ⟨[]⟩ (fun _ _ _ _ _ => none) 0
+    ⟨[], .unit, ⟨0⟩, .skip⟩ [] .init =
+    some ⟨[], .stuck, ⟨.refused, [], .init, [.scope ⟨0⟩ [] [], .functionEnd]⟩, 0⟩ := rfl
+
+/-- Argument-count mismatch remains distinguishable from refused entry. -/
+-- Instance: concrete execution case; not a general safety law.
+example : runFn (O := noEntry) ⟨[]⟩ (fun _ _ _ _ _ => none) 9
+    ⟨[(x, .int)], .unit, ⟨0⟩, .skip⟩ [] .init = none := rfl
+
+/-- Refuse only initialization of x; all unrelated lifecycle events succeed. -/
+abbrev noBind : Operands := { ops with life := fun e st => match e with
+  | .bind v => if v = x then none else some (DState.life e st)
+  | _ => some (DState.life e st) }
+
+/-- Binding succeeds and spends one transition. -/
+-- Instance: concrete execution case; not a general safety law.
+example : run (O := ops) ⟨[]⟩ env 4
+    ⟨.exec (.bind x (.lit 8) s), [], .init, []⟩ =
+    ⟨[], .final .normal, ⟨.done, [(x, 8)], .init, []⟩, 3⟩ := rfl
+
+/-- Refused binding preserves the entire source configuration and budget. -/
+-- Instance: concrete execution case; not a general safety law.
+example : run (O := noBind) ⟨[]⟩ (fun _ _ _ _ _ => none) 4
+    ⟨.exec (.bind x (.lit 8) s), [], .init, []⟩ =
+    ⟨[], .stuck, ⟨.exec (.bind x (.lit 8) s), [], .init, []⟩, 4⟩ := rfl
+
+/-- A permitted primitive response binds its result and records its event. -/
+-- Instance: concrete execution case; not a general safety law.
+example : run (O := ops) ⟨[]⟩ env 4
+    ⟨.exec (.prim (some x) .log [.lit 8] s), [], .init, []⟩ =
+    ⟨[8], .final .normal, ⟨.done, [(x, 0)], .init, []⟩, 3⟩ := rfl
+
+/-- Refused primitive continuation has no accepted response transition or
+accepted event. The oracle may already have performed an external effect:
+this residual is a semantic boundary, not an assertion of rollback. -/
+-- Instance: concrete execution case; not a general safety law.
+example : run (O := noBind) ⟨[]⟩ env 4
+    ⟨.exec (.prim (some x) .log [.lit 8] s), [], .init, []⟩ =
+    ⟨[], .stuck, ⟨.exec (.prim (some x) .log [.lit 8] s), [], .init, []⟩, 4⟩ := rfl
+
+/-- The very last scope exit succeeds only after its drop is admitted. -/
+-- Instance: concrete execution case; not a general safety law.
+example : run (O := refusingOps) ⟨[]⟩ env 4
+    ⟨.done, [(y, 8)], .init, [.scope ⟨0⟩ [] []]⟩ =
+    ⟨[], .final .normal, ⟨.done, [], .init, []⟩, 3⟩ := rfl
+
+/-- Refusing that last drop cannot turn into normal completion. -/
+-- Instance: concrete execution case; not a general safety law.
+example : run (O := refusingOps) ⟨[]⟩ env 4
+    ⟨.done, [(x, 8)], .init, [.scope ⟨0⟩ [] []]⟩ =
+    ⟨[], .stuck, ⟨.done, [(x, 8)], .init, [.scope ⟨0⟩ [] []]⟩, 4⟩ := rfl
+
+/-- No fuel: preserve a nonfinal configuration and an existing history. -/
+-- Instance: concrete execution case; not a general safety law.
+example : runFrom prog env 0 [9] ⟨.exec .skip, [(x, 2)], .init, []⟩ =
+    ⟨[9], .outOfFuel, ⟨.exec .skip, [(x, 2)], .init, []⟩, 0⟩ := rfl
+
+/-- Finality takes precedence over zero fuel and preserves locals and frames. -/
+-- Instance: concrete execution case; not a general safety law.
+example : runFrom prog env 0 [9] ⟨.trapped .abort s, [(x, 2)], .init, [.seq .skip]⟩ =
+    ⟨[9], .final (.trapped .abort s),
+      ⟨.trapped .abort s, [(x, 2)], .init, [.seq .skip]⟩, 0⟩ := rfl
+
+/-- One silent step spends exactly one unit, retaining the next continuation. -/
+-- Instance: concrete execution case; not a general safety law.
+example : runFrom prog env 1 [9] ⟨.exec .skip, [(x, 2)], .init, [.seq .skip]⟩ =
+    ⟨[9], .outOfFuel, ⟨.done, [(x, 2)], .init, [.seq .skip]⟩, 0⟩ := rfl
+
+/-- Silence without an event still accepts a primitive response and its store. -/
+-- Instance: concrete execution case; not a general safety law.
+example : runFrom prog env 4 [9] ⟨.exec (.prim none .bump [] s), [], .init, []⟩ =
+    ⟨[9], .final .normal, ⟨.done, [], ⟨1, []⟩, []⟩, 3⟩ := rfl
+
+/-- Append, never replace or reverse, the previously accepted events. -/
+-- Instance: concrete execution case; not a general safety law.
+example : runFrom prog env 4 [9] ⟨.exec (.prim none .log [.lit 8] s), [], .init, []⟩ =
+    ⟨[9, 8], .final .normal, ⟨.done, [], .init, []⟩, 3⟩ := rfl
+
+/-- An unanswered request spends no transition budget. -/
+-- Instance: concrete execution case; not a general safety law.
+example : runFrom prog (fun _ _ _ _ _ => none) 4 [9]
+    ⟨.exec (.prim none .log [.lit 8] s), [], .init, []⟩ =
+    ⟨[9], .noAnswer, ⟨.exec (.prim none .log [.lit 8] s), [], .init, []⟩, 4⟩ := rfl
+
+/-- An answer violating the operation's contract is distinct from no answer. -/
+-- Instance: concrete execution case; not a general safety law.
+example : runFrom prog (fun _ _ _ _ st => some ⟨some 7, .ok 0, st⟩) 4 [9]
+    ⟨.exec (.prim none .log [.lit 8] s), [], .init, []⟩ =
+    ⟨[9], .badAnswer, ⟨.exec (.prim none .log [.lit 8] s), [], .init, []⟩, 4⟩ := rfl
+
+/-- The same accepted store update survives even when the budget ends at it. -/
+-- Instance: concrete execution case; not a general safety law.
+example : runFrom prog env 1 [9]
+    ⟨.exec (.prim none .bump [] s), [], .init, [.seq .skip]⟩ =
+    ⟨[9], .outOfFuel, ⟨.done, [], ⟨1, []⟩, [.seq .skip]⟩, 0⟩ := rfl
+
+/-- Return admission is independent of admission to bind its result. -/
+abbrev noLeave : Operands := { ops with life := fun e st => match e with
+  | .leave => none
+  | _ => some (DState.life e st) }
+
+-- Instance: concrete execution case; not a general safety law.
+example : run (O := noLeave) ⟨[]⟩ env 4
+    ⟨.exiting (.ret 8), [(y, 3)], ⟨0, [[], []]⟩, [.functionEnd, .ret none [(x, 2)]]⟩ =
+    ⟨[], .stuck, ⟨.exiting (.ret 8), [(y, 3)], ⟨0, [[], []]⟩,
+      [.functionEnd, .ret none [(x, 2)]]⟩, 4⟩ := rfl
+
+-- Instance: concrete execution case; not a general safety law.
+example : run (O := ops) ⟨[]⟩ env 4
+    ⟨.exiting (.ret 8), [(y, 3)], ⟨0, [[], []]⟩, [.functionEnd, .ret (some x) [(y, 2)]]⟩ =
+    ⟨[], .final .normal, ⟨.done, [(x, 8), (y, 2)], ⟨0, [[]]⟩, []⟩, 2⟩ := rfl
+
+/-- A return whose leave succeeds can still be refused at destination binding;
+the caller remains unrestored; the admitted leave remains in the residual store. -/
+-- Instance: concrete execution case; not a general safety law.
+example : run (O := noBind) ⟨[]⟩ env 4
+    ⟨.exiting (.ret 8), [(y, 3)], ⟨0, [[], []]⟩, [.functionEnd, .ret (some x) [(y, 2)]]⟩ =
+    ⟨[], .stuck, ⟨.exiting (.ret 8), [(y, 3)], ⟨0, [[]]⟩,
+      [.ret (some x) [(y, 2)]]⟩, 3⟩ := rfl
+
+/-- Fallthrough return also admits leave before restoring the caller. -/
+-- Instance: concrete execution case; not a general safety law.
+example : run (O := noLeave) ⟨[]⟩ env 4
+    ⟨.done, [], ⟨0, [[], []]⟩, [.functionEnd, .ret none [(x, 2)]]⟩ =
+    ⟨[], .stuck, ⟨.done, [], ⟨0, [[], []]⟩, [.functionEnd, .ret none [(x, 2)]]⟩, 4⟩ := rfl
+
+/-- Nested function entry uses the same refusal channel as initial entry. -/
+-- Instance: concrete execution case; not a general safety law.
+example : run (O := noEntry)
+    ⟨[(logF, ⟨[(x, .int)], .unit, ⟨100⟩, .skip⟩)]⟩ env 4
+    ⟨.exec (.call none logF [.lit 8] s), [], .init, []⟩ =
+    ⟨[], .stuck, ⟨.exec (.call none logF [.lit 8] s), [], .init, []⟩, 4⟩ := rfl
+
+/-! Function-end admission: the body has no bindings, nested scopes, calls or
+primitives. Each case isolates leave from every other refusal site. The same
+`functionEnd` rules apply with or without a caller continuation. -/
+
+/-- Instance: accepting fallthrough tears down the last activation. -/
+example : runFn (O := ops) ⟨[]⟩ env 9 ⟨[], .unit, ⟨0⟩, .skip⟩ [] .init =
+    some ⟨[], .final .normal, ⟨.done, [], .init, []⟩, 6⟩ := rfl
+
+/-- Instance: refusing fallthrough is unsafe stuck before finality. -/
+example : runFn (O := noLeave) ⟨[]⟩ env 9 ⟨[], .unit, ⟨0⟩, .skip⟩ [] .init =
+    some ⟨[], .stuck, ⟨.done, [], ⟨0, [[]]⟩, [.functionEnd]⟩, 7⟩ := rfl
+
+/-- Instance: accepting explicit return preserves its value and classification. -/
+example : runFn (O := ops) ⟨[]⟩ env 9 ⟨[], .int, ⟨0⟩, .ret (.lit 8) s⟩ [] .init =
+    some ⟨[], .final (.returned 8), ⟨.exiting (.ret 8), [], .init, []⟩, 6⟩ := rfl
+
+/-- Instance: refusing explicit return cannot publish a returned value. -/
+example : runFn (O := noLeave) ⟨[]⟩ env 9 ⟨[], .int, ⟨0⟩, .ret (.lit 8) s⟩ [] .init =
+    some ⟨[], .stuck, ⟨.exiting (.ret 8), [], ⟨0, [[]]⟩, [.functionEnd]⟩, 7⟩ := rfl
+
+/-- Instance: independent fallthrough rule, with exactly one leave premise. -/
+example : Rules (O := ops) ⟨[]⟩ ⟨.done, [], ⟨0, [[]]⟩, [.functionEnd]⟩
+    none .silent ⟨.done, [], .init, []⟩ := .endFall rfl
+
+/-- Instance: independent explicit-return rule preserves returned control. -/
+example : Rules (O := ops) ⟨[]⟩ ⟨.exiting (.ret 8), [], ⟨0, [[]]⟩, [.functionEnd]⟩
+    none .silent ⟨.exiting (.ret 8), [], .init, []⟩ := .endReturn rfl
+
+/-- Instance: no relational label, answer or destination can bypass refused fallthrough. -/
+example (a : Option (Answer Int Int DState)) (label : Label noLeave) (c : Config noLeave) :
+    ¬ Rules (O := noLeave) ⟨[]⟩ ⟨.done, [], ⟨0, [[]]⟩, [.functionEnd]⟩ a label c := by
+  intro h
+  cases h with
+  | endFall admission => cases admission
+
+/-- Instance: no relational label, answer or destination can bypass refused return. -/
+example (a : Option (Answer Int Int DState)) (label : Label noLeave) (c : Config noLeave) :
+    ¬ Rules (O := noLeave) ⟨[]⟩ ⟨.exiting (.ret 8), [], ⟨0, [[]]⟩, [.functionEnd]⟩
+      a label c := by
+  intro h
+  cases h with
+  | endReturn admission => cases admission
 
 end Demo
 

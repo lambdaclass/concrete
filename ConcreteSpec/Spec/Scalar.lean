@@ -4,8 +4,8 @@ import ConcreteSpec.Spec.Outcome
 # Scalars, failure and arithmetic
 
 PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). Part of `ConcreteSpec.Spec`;
-see `ConcreteSpec/README.md`. Foundation contract C2 (the foundation proposal approved by the owner
-on 2026-11-08, "ok all recommended").
+see `ConcreteSpec/README.md`. Foundation contract C2. The authority map below records
+current decisions; historical approval annotations are not authority.
 
 An integer value *is* a mathematical integer within its type's range; its bits are a separate,
 derived thing (`toBits`, `ofBits`). The widths are the ones the type names say, `i8` … `i64` and
@@ -29,25 +29,52 @@ Signed values are two's complement.
   one.
 - Bitwise and, or, xor and not act on the bit patterns.
 
-**Conversions.** The one canonical lossless conversion (owner decision 2026-11-08, item 11(a),
+**Conversions.** The one canonical lossless conversion (docs/decisions.md#recovered-59-11,
 replacing `as`; its spelling is not yet approved) is allowed exactly when every value of the source
 type is a value of the target type (OD11's value-domain rule, ARITH-5), and it never changes the
-value: between integer types exactly when the source range lies inside the target's (`Lossless`),
-and from `bool` to every integer type, `false` as `0` and `true` as `1` (`boolToInt`). The checked
+value: between integer types exactly when the source range lies inside the target's (`Lossless`). The checked
 conversion `try_convert` returns `Except OutOfRange` (OD106), a different error type from
 `ArithmeticError`. A lossy integer conversion keeps the low bits of the target's
 width (`wrap`); the names of the lossy conversions are OD99's.
 
 **Errors are not trap kinds.** `ArithmeticError` and `OutOfRange` are values a program handles;
 `TrapKind` (in `Outcome`) names why a run stopped. `ArithmeticError.trapKind` is the one map from
-the first to the second, used by the plain operations (owner decision 2026-11-08, item 4).
+the first to the second, used by the plain operations (docs/decisions.md#recovered-59-4).
 
-**Contracts: machine and exact arithmetic** (OD12, OD145; owner decision 2026-11-08, item 10). A
+**Contracts: machine and exact arithmetic** (OD12, OD145; docs/decisions.md#recovered-59-10). A
 contract term says which arithmetic it means: a *machine* operation at a width (`CTerm.machine`),
 which means exactly the runtime operation and is undefined where that one fails, or *exact*
 arithmetic on mathematical integers (`CTerm.exact`), which never overflows. The surface spelling of
 the exact boundary is not yet approved by the owner; `exact` here is a neutral name for its
 meaning only.
+
+Authority (all links refer to docs/decisions.md on the reconstruction base):
+
+- Integer widths: #od126 (widths follow the type names) and
+  #decided-2026-11-08-language-literals (the eight integer types).
+- Checked/plain failures, named wrapping and saturating arithmetic, shift counts:
+  #od10 as revised by #decided-project-no-hidden-traps; its checked-operation
+  follow-up explicitly specifies signed MIN division/remainder overflow and
+  shift-count-only failure. Division's rounding and remainder sign: #od114.
+- Conversion value domains: #od11; named lossy conversions: #od99;
+  checked conversion's separate Result error: #od106. Removal of `as`:
+  #recovered-59-11. These definitions specify meanings, not replacement syntax.
+- Machine/exact contracts: #od12, #od145 and #recovered-59-10.
+- Arithmetic error to trap mapping: #decided-project-no-hidden-traps and
+  trap spellings #recovered-59-4. The trap vocabulary itself is imported.
+- Character construction and projection: #decided-2026-11-12-char.
+
+Held, with dependent examples and proofs omitted: new Boolean bit-encoding and
+Boolean-to-integer definitions, pending owner authority (ISS-0069). #od126 fixes
+size, not encoding; #od11 does not choose a numeric mapping. For Boolean storage
+bytes this module defers to the existing definition in Spec/Rep.lean (false = 0,
+true = 1; other or uninitialized bytes invalid), without extending or reversing it.
+That existing behavior remains an authority conflict tracked by ISS-0069; it is
+not authority for a Boolean-to-integer conversion.
+Also held: replacement conversion/exact surface spellings, SPARK-style character
+conversion preconditions, floats, and constant-expression restrictions. The five
+items in #decided-2026-11-08-recovery-queue, U+FEFF scope, bare CR in comments and
+path-character policy supply no scalar rule here.
 
 Floats come at slice 26; nothing here decides their rules.
 -/
@@ -110,16 +137,7 @@ def wrap (t : IntTy) (n : Int) : Int := ofBits t (toBits t n)
 def saturate (t : IntTy) (n : Int) : Int :=
   if n < t.min then t.min else if t.max < n then t.max else n
 
-/-- The bit pattern of a `bool`: `0` for `false`, `1` for `true` (TYPE-19, OD126). C4 lays it into
-one byte; the old fragment `Rep` already encodes it so. -/
-def boolToBits (b : Bool) : Nat := if b then 1 else 0
 
-/-- The `bool` a bit pattern denotes: only `0` and `1` are `bool` values; any other pattern is not
-a valid `bool` (reading one is a refused representation, never a value). -/
-def boolOfBits : Nat → Option Bool
-  | 0 => some false
-  | 1 => some true
-  | _ => none
 
 /-! ## Errors -/
 
@@ -240,9 +258,6 @@ def Lossless (s t : IntTy) : Prop := t.min ≤ s.min ∧ s.max ≤ t.max
 
 instance (s t : IntTy) : Decidable (Lossless s t) := by unfold Lossless; infer_instance
 
-/-- The lossless conversion of a `bool` to an integer type: `0` or `1`, a value of every integer
-type (ARITH-5). -/
-def boolToInt (b : Bool) : Int := if b then 1 else 0
 
 /-- The checked conversion: the same value if it is a value of `t` (OD106). -/
 def tryConvert (t : IntTy) (n : Int) : Except OutOfRange Int :=
@@ -275,14 +290,14 @@ def MachineOp.operandsOk (t : IntTy) (op : MachineOp) (x y : Int) : Bool :=
 
 /-- An arithmetic term of a contract. `machine` means the runtime operation at width `t`; `exact`
 means mathematical integers. The two are distinct constructors so a reader, a checker and a proof
-always know which is meant (owner decision 2026-11-08, item 10; the source spelling of `exact` is
+always know which is meant (docs/decisions.md#recovered-59-10; the source spelling of `exact` is
 still to be approved). -/
 inductive CTerm where
   | lit (n : Int)
   | var (x : Var)
   | machine (t : IntTy) (op : MachineOp) (a b : CTerm)
   | exact (op : WrapOp) (a b : CTerm)
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 /-- What a contract term denotes, given the values of its variables. `none` where a machine
 operation is not defined: an operand that is not a value of its width (the runtime never sees one),
@@ -381,8 +396,6 @@ example : (CTerm.machine .u8 (.wrapping .add) (.lit 300) (.lit 1)).eval (fun _ =
     (CTerm.machine .u8 (.plain .shl) (.lit 1) (.lit 7)).eval (fun _ => none) = some 128 := by
   decide
 
-/-- `bool` patterns: only `0` and `1`. -/
-example : boolToBits true = 1 ∧ boolOfBits 0 = some false ∧ boolOfBits 2 = none := by decide
 
 /-- Negation: `-(-128)` overflows `i8` (there is no wrapping negation: ARITH-4 has wrapping add,
 subtract and multiply only). A lossy conversion keeps the low bits: `300` to `u8` is `44`, `255`
@@ -390,11 +403,51 @@ to `i8` is `-1`. -/
 example : plainNeg .i8 (-128) = .trap .overflow ∧ plainNeg .i8 5 = .ok (-5) ∧
     lossyConvert .u8 300 = 44 ∧ lossyConvert .i8 255 = -1 := by decide
 
-/-- Shared scalar types, used by constants and typed storage. Hybrid storage currently
-represents only int/bool; unit remains available to the constant subset. -/
+/-! ## Characters
+
+Authority: docs/decisions.md#decided-2026-11-12-char. A character is a Unicode
+scalar value, represented here by Lean's proof-carrying `Char`. These functions
+model `char::code_point`, `char::from_code_point` and `char::from_ascii`.
+`UInt32` and `UInt8` express the decided input widths, without extra preconditions.
+There is no character-literal constructor. ASCII byte literals belong to the lexer.
+No alternative with SPARK-style preconditions is specified here.
+-/
+
+/-- A semantic Unicode scalar, distinct in interfaces from diagnostic spelling characters.
+This alias retains Lean's checked `Char` representation and changes no construction rule
+(docs/decisions.md#decided-2026-11-12-char). Like Basics.Numbers, the explicit annotation
+lets the structural identity gate distinguish numeric program data from local spellings. -/
+abbrev ScalarChar := Char
+
+/-- A character's code point; this operation always succeeds. -/
+def charCodePoint (c : ScalarChar) : UInt32 := c.val
+
+/-- Explicit checked construction. Surrogates and values above U+10FFFF return `none`. -/
+def charFromCodePoint (n : UInt32) : Option ScalarChar :=
+  if h : n.isValidChar then some ⟨n, h⟩ else none
+
+/-- Explicit ASCII construction. Bytes above 127 return `none`, including valid UTF-8 bytes. -/
+def charFromAscii (b : UInt8) : Option ScalarChar :=
+  if b.toNat ≤ 127 then charFromCodePoint b.toUInt32 else none
+
+/-- The largest scalar is accepted. -/
+example : (charFromCodePoint 0x10ffff).map charCodePoint = some 0x10ffff := by decide
+
+/-- Surrogates are refused independently of the upper-bound check. -/
+example : charFromCodePoint 0xd800 = none := by decide
+
+/-- A non-surrogate above Unicode's range is refused. -/
+example : charFromCodePoint 0x110000 = none := by decide
+
+/-- ASCII's upper endpoint is accepted; the immediately following byte is refused. -/
+example : (charFromAscii 127).map charCodePoint = some 127 := by decide
+example : charFromAscii 128 = none := by decide
+
+/-- Shared scalar types, used by constants and typed storage. This is a value/type vocabulary, not a decision about which constant expressions are admitted. -/
 inductive CTy where
   | int (t : IntTy)
   | bool
+  | char
   | unit
   deriving DecidableEq, Repr
 
@@ -402,6 +455,7 @@ inductive CTy where
 inductive CVal where
   | int (t : IntTy) (n : Int)
   | bool (b : Bool)
+  | char (c : ScalarChar)
   | unit
   deriving DecidableEq, Repr
 
@@ -409,6 +463,7 @@ inductive CVal where
 def CVal.ty : CVal → CTy
   | .int t _ => .int t
   | .bool _ => .bool
+  | .char _ => .char
   | .unit => .unit
 
 /-- A value is valid: an integer is in its type's range. -/

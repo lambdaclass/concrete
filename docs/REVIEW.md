@@ -6,9 +6,8 @@ Every branch is reviewed by `scripts/review/review.sh` before it lands. The
 script picks the diff, splits it, runs the reviewer, records the verdict as a
 git note on the reviewed commit, and enforces the round cap.
 `scripts/review/verify.sh` validates that note. The landing tools in `scripts/land/`
-([LANDING.md](LANDING.md)) read its verdict through `scripts/land/notes.sh`: a branch is
-ready to land only when its head carries a clean review note, and the landing bot carries
-a clean verdict across a conflict-free rebase.
+([LANDING.md](LANDING.md)) use that verifier, including for readiness and sign-off
+evidence; see the [range contract](#verifysh).
 
 ## Why one script
 
@@ -22,13 +21,13 @@ Measured on 2026-10-22:
   ("a compiler ownership-checker review") and the diff was sent in smaller pieces.
 
 Each agent had been solving both problems by hand, differently. The script does
-it the same way every time, and its note is the record the landing bot checks.
+it the same way every time, and its note is the record the landing train checks.
 
 ## Usage
 
 ```sh
 scripts/review/review.sh [--base <ref>] [--head <ref>] [--max-rounds 5] [--pieces auto|N] [--prompt-extra "..."]
-scripts/review/verify.sh [--fetch] <commit>
+scripts/review/verify.sh [--fetch] [--notes-ref <ref>] [--required-base <commit>] <commit>
 ```
 
 One invocation runs **one round** on `HEAD`. Commit fixes between rounds; the
@@ -59,6 +58,13 @@ uncommitted tree is never reviewed, and the script warns when it is dirty.
   script finds that commit by walking the branch (`base..HEAD`) for the newest
   note under `refs/notes/concrete-review`. The prompt includes the previous
   round's findings and asks the reviewer to list each one that is still open.
+  Only notes satisfying the [range contract](#verifysh) can advance the delta
+  start or skip an already-clean HEAD. Otherwise the round reviews the full
+  `base..HEAD` diff. If the last reviewed commit does not descend from the current base (for
+  example, after merging newer main changes), the round reviews the full
+  `base..HEAD` diff instead. This excludes changes imported from the base and
+  includes merge resolutions. It preserves the round count and cap; the prompt
+  identifies the patch as the complete branch change.
 - A `blocked` round does not count as having reviewed its diff, so the next
   round starts from the last `clean` or `findings` round, or from the base.
   Running again on a blocked `HEAD` is allowed and counts as a round. A round
@@ -137,12 +143,10 @@ base: <40-hex sha>
 pieces: K
 ```
 
-**The format is an interface.** The landing bot parses it, and `verify.sh`
-rejects any note that lacks one of these six keys, repeats a key, or carries a
-key other than these and the landing pipeline's two optional ones
-(`carried-from: <sha>`, which the bot writes when it carries a clean verdict
-across a conflict-free rebase, and `order: N`). Keys are matched by name, not
-position. Change the format only together with both.
+**The format is an interface.** `verify.sh` parses it, and the train's review
+leg reads it through `verify.sh`, which rejects any note that lacks one of these
+six keys, repeats a key, or carries any other key. Keys are matched by name, not
+position. Change the format only together with `verify.sh`.
 
 - `rounds` is this round's number, which is also the number of rounds run on the
   branch so far.
@@ -176,16 +180,44 @@ findings, and exits 3. Asking for another round exits 3 without calling the
 reviewer. Do not work around the cap: split the branch into smaller branches or
 escalate to a human reviewer, and pass on the open findings.
 
+The owner may then approve one exact commit (R-0618), after Codex, Kimi and agy have all reviewed
+that commit. The cap is the class of the branch's diff against its base, by path, the highest class
+present winning: docs and roadmap 2 rounds, scripts 3, compiler and spec 5 (an unclassified path
+counts as compiler and spec); it counts the rounds used, whatever their verdicts. The approval is
+recorded, from the owner's own words only, with `scripts/land/signoff.sh record <sha> --base <base>
+--rounds-at <the review.sh-noted commit> --date --quote`, plus `--codex-request <request> --codex
+<output>` and the corresponding kimi and agy options. For each reviewer `r`, the recorder stores the
+verbatim request as `r-request.txt` after prepending `reviewed: <sha>`, and the output separately as
+`r.txt`. The request body must name that commit by an unambiguous prefix, and only the output's last
+verdict line counts; it must be `VERDICT: ACCEPT` or `VERDICT: REJECT`. A completed REJECT is
+recorded and reported, not a refusal of the owner's sign-off; an output with no verdict line does
+not qualify. Recording refuses a record that does not qualify.
+Push the resulting `refs/owner-signoff/<sha>` to origin. The landing train accepts it as that
+commit's review provenance ([LANDING.md](LANDING.md)); it approves no other commit.
+
 ## verify.sh
 
 ```sh
-scripts/review/verify.sh <commit>          # exit 0 clean, 1 findings/blocked, 2 none or malformed
-scripts/review/verify.sh --fetch <commit>  # fetch the notes ref from origin first
+scripts/review/verify.sh [--notes-ref <ref>] --required-base <base> <commit> # exit 0 clean, 1 findings/blocked, 2 invalid
+scripts/review/verify.sh --fetch [--notes-ref <ref>] --required-base <base> <commit> # fetch origin notes first
 ```
 
 It judges the exact commit. A clean note on an ancestor says nothing about the
 commits after it, so a branch that gains a commit after its clean round needs
-another round.
+another round. All consumers use this verifier for schema and range validation:
+landing supplies the recorded train base, sign-off supplies its diff base for
+`rounds-at`, readiness supplies its selected base (`notes.sh ready` defaults to
+`origin/main`), and incremental review supplies its current review base.
+With `--required-base`, the note's base must be an ancestor-or-equal
+of the required commit; an unknown or insufficient base exits 2. This applies to
+clean, findings and blocked evidence alike. Incremental review ignores malformed
+notes and retains the maximum round count across all schema-valid notes in the
+branch history, including merge parents. Uncovered insufficient-range evidence
+triggers a full review without resetting rounds or the cap. A covering descendant
+review supersedes earlier findings and narrow ancestor notes.
+Without this option, verification judges the note without a required range.
+`--notes-ref <ref>` explicitly selects the notes ref (default `refs/notes/concrete-review`);
+readiness uses the fetched `refs/notes/remote/concrete-review` snapshot.
 
 ## Tests
 

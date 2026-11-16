@@ -1,4 +1,4 @@
-import ConcreteSpec.Spec.Ident
+import ConcreteSpec.Spec.Basics
 
 /-!
 # Traps and the ways a run stops
@@ -25,6 +25,10 @@ evaluator fuel (C8) is a report about the simulation budget, not about the progr
 The trap kinds are diagnostic categories (owner decision 2026-11-08, item 4): they name why a run
 trapped. They are a different type from the error values a checked operation returns
 (`ArithmeticError`, `OutOfRange`, C2), which are ordinary values a program handles.
+
+Authority: `docs/decisions.md#foundation-q1`, Q6.7 and
+`#decided-project-no-hidden-traps` distinguish traps from unsafe stuckness;
+`#recovered-59-4` fixes all six trap names. Q1.8/Q1.9 keep allocation failure typed.
 -/
 
 namespace ConcreteSpec.Core
@@ -52,7 +56,7 @@ inductive TrapKind where
   deriving DecidableEq, Repr
 
 /-- The name of a trap kind, as the trap line prints it (owner decision 2026-11-08, item 4). How the
-whole line is rendered is C6 (`concrete: trap: <kind> at <path>:<line>:<col> (site <id>)`). -/
+whole line is rendered is held with the path-dependent C6 reporting interface. -/
 def TrapKind.name : TrapKind → String
   | .overflow => "overflow"
   | .divisionByZero => "division_by_zero"
@@ -98,5 +102,12 @@ example : TrapKind.all.map TrapKind.name =
 
 /-- A trap passes through `bind`; the continuation never runs. -/
 example : (Res.trap .overflow : Res Nat).bind (fun n => .ok (n + 1)) = .trap .overflow := rfl
+
+/-- Stuckness propagates without being converted to a trap or fabricated value. -/
+example : (Res.stuck : Res Nat).bind (fun n => .ok (n + 1)) = .stuck := rfl
+
+/-- A successful value continues normally, while mapping a trap preserves its kind. -/
+example : (Res.ok 4).bind (fun n => .ok (n + 1)) = .ok 5 ∧
+    Res.map (fun n : Nat => n + 1) (.trap .abort) = .trap .abort := ⟨rfl, rfl⟩
 
 end ConcreteSpec.Core

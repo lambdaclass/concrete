@@ -1,8 +1,12 @@
 /-!
-# Basics: association lists
+# Basics: numeric local identity, diagnostics and association lists
 
 PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). Part of `ConcreteSpec.Spec`;
 see `ConcreteSpec/README.md`.
+
+`Var` has its only home here. A local is identified only by its number.
+Diagnostics tables belong to a particular elaborated program or function; no semantic definition
+takes or refers to the diagnostics spelling table.
 
 Every finite map in the specification (a context, an environment, a memory, a field list) is an
 association list: a list of key–value pairs, read from the front. This module is the one
@@ -13,7 +17,49 @@ map first; `map` takes the function first, as `List.map` does. Call them qualifi
 (`AList.lookup Γ x`): on a plain `List` the dotted form would reach `List.erase` or `List.map`.
 -/
 
+namespace ConcreteSpec
+
+/-- A local's fresh numeric identity. For example, `⟨7⟩` denotes local 7 regardless of
+its spelling in the source; two different numbers denote different locals. -/
+structure Var where
+  /-- The identity number; for example, local `⟨7⟩` has number 7. -/
+  id : Nat
+  deriving DecidableEq
+
+/-- Nominal identity text (Q9.2): a declaration, module component or opaque
+identity token, never a local diagnostic spelling. No character, path, version
+or normalization policy is imposed by this wrapper.
+For example, `⟨"count"⟩ : Name` names a field. -/
+structure Name where
+  /-- The declaration spelling; for example, `(⟨"count"⟩ : Name).text = "count"`. -/
+  text : String
+  deriving DecidableEq
+
+-- Keep diagnostic rendering identical to the previous String representation.
+instance : Repr Name where
+  reprPrec name prec := reprPrec name.text prec
+
+/-- Numeric data rather than source spelling scalars. For example, `[1, 2] : Numbers`
+can hold array elements, program text bytes or allocator generations; never identifier spellings. This alias changes no list operation. -/
+abbrev Numbers := List Nat
+
+end ConcreteSpec
+
 namespace ConcreteSpec.Core
+universe u
+
+/-- Apply a postcondition to an optional successful result. Refusal has no result
+on which to impose a postcondition; success must satisfy `P`.
+This is proof vocabulary, not a claim that refusal is safe or normal completion
+(docs/decisions.md#decided-2026-11-13-lifecycle-refusal). Own and future Grant
+postconditions specialize this definition rather than owning copies. -/
+def ResultSatisfies {α : Type u} (P : α → Prop) : Option α → Prop
+  | none => True
+  | some a => P a
+
+instance {α : Type u} (P : α → Prop) [∀ a, Decidable (P a)] (r : Option α) :
+    Decidable (ResultSatisfies P r) := by
+  cases r <;> unfold ResultSatisfies <;> infer_instance
 
 /-- A finite map as a list of key–value pairs. A key may occur more than once; the first entry
 for a key is the one that counts. -/

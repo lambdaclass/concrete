@@ -60,13 +60,24 @@ base="$(git rev-parse --verify "$BASE^{commit}")"; btree="$(git rev-parse "$base
 [ -z "$(git status --porcelain)" ] || die "the checkout is not clean (tracked or untracked changes)"
 
 # Handwritten root files: the new root's own, not derived from the base.
-OVERLAY=(README.md CHANGELOG.md required-checks.txt required-checks-transition.tsv .gitignore flake.nix lakefile.toml
+OVERLAY=(
+  scripts/checks/archived_references.sh scripts/checks/lib/archived_references.py
+  scripts/checks/landing_sources.sh scripts/land/bundle_source.py
+  README.md CHANGELOG.md required-checks.txt required-checks-transition.tsv .gitignore flake.nix lakefile.toml
   lake-manifest.json ConcreteSpec.lean ConcreteSpec/Spec.lean .githooks/pre-push .github/workflows/lean_action_ci.yml
   changelog.d/2026-11-04-legacy-move.md scripts/land/legacy_move.sh scripts/checks/run.sh
   scripts/checks/legacy_frozen.sh scripts/checks/root_inventory.sh scripts/checks/root_inventory.txt
   .claude/codex-review-prompt.md .claude/commands/rebase.md .claude/commands/roadmap-item.md
   .claude/commands/cstatus.md scripts/land/move_prereqs.py
-  docs/archive/bugs-2026-11/README.md docs/archive/bugs-2026-11/bug_disposition.tsv)
+  docs/archive/bugs-2026-11/README.md docs/archive/bugs-2026-11/bug_disposition.tsv
+  # Sole-repository migration: overlay current tools and guidance after historical rewrites.
+  scripts/checks/workflow_yaml.sh .claude/commands/land.md docs/proposals/SPEC_UNIFICATION.md
+  scripts/land/impact_gates.sh scripts/land/ready.sh scripts/land/notes.sh scripts/land/gates_transport_ssh.sh scripts/land/run-at-ref.sh
+  scripts/review/review.sh scripts/review/verify.sh
+  RETENTION.tsv AGENTS.md docs/LANDING.md docs/REVIEW.md docs/SELF_HOSTED_RUNNERS.md
+  scripts/checks/landing_script.sh scripts/checks/landing_ready.sh scripts/checks/retention_manifest.sh
+  scripts/land/train.sh scripts/land/acceptance.sh scripts/land/signoff.sh scripts/worktree-new.sh
+  scripts/oracle/ORACLE.lock scripts/oracle/build.sh .github/workflows/oracle.yml)
 # Copied from the base: "src dst [optional]". A directory source ends in /.
 COPY=(
   "ROADMAP.md ROADMAP.md" "CLAUDE.md CLAUDE.md" "LICENSE LICENSE" ".gitattributes .gitattributes"
@@ -80,7 +91,7 @@ COPY=(
   "docs/archive/site-down.md docs/archive/site-down.md optional"
   ".github/workflows/oracle.yml .github/workflows/oracle.yml optional"
   "scripts/land/ scripts/land/" "scripts/review/ scripts/review/" "scripts/oracle/ scripts/oracle/ optional"
-  "scripts/push-both.sh scripts/push-both.sh" "scripts/worktree-new.sh scripts/worktree-new.sh"
+  "scripts/worktree-new.sh scripts/worktree-new.sh"
   ".claude/commands/creview.md .claude/commands/creview.md" ".claude/commands/land.md .claude/commands/land.md"
   "scripts/tests/check_landing_script.sh scripts/checks/landing_script.sh"
   "scripts/tests/check_landing_bot.sh scripts/checks/landing_bot.sh"

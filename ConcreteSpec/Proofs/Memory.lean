@@ -1,43 +1,49 @@
-import ConcreteSpec.Spec.Memory
-import ConcreteSpec.Proofs.Scalar
 import ConcreteSpec.Proofs.Basics
+import ConcreteSpec.Proofs.Scalar
+import ConcreteSpec.Spec.Basics
+import ConcreteSpec.Spec.Ident
+import ConcreteSpec.Spec.Memory
+import ConcreteSpec.Spec.Rep
+import ConcreteSpec.Spec.Scalar
+import ConcreteSpec.Spec.Slice1Syntax
+import ConcreteSpec.Spec.Target
 
 /-!
 # Laws of byte memory (foundation C4)
 
-Representation round trips, range and bool validity; allocation freshness and initialization;
+Representation round trips, range validity; allocation freshness and initialization;
 retained identities on release; access failure without provenance or after release; store/load
 and frame laws; exposed reconstruction soundness and uniqueness; address equality ignores
 provenance. Empty memory is well-formed; geometry-preserving updates, store, free and exposure
 preserve well-formedness. Exposure preserves byte reads. Reconstruction is complete at both
-priorities, with no containing or one-past ties. Pointer round trips require a well-formed
-target and a target-valid pointer.
+priorities, with no containing or one-past ties. Pointer codecs and their dependent
+laws and controls are omitted pending ISS-0070; no numeric encoding is assumed.
 -/
 namespace ConcreteSpec.Core.Mem
 open ConcreteSpec
 
-/-- Representation lemma. Applying the byte-order permutation twice is the identity (approved: APPR-C4-agy-78ee5a2db). -/
+/-- Representation lemma. Applying the byte-order permutation twice is the identity. -/
 @[simp] theorem ordered_ordered (o : ByteOrder) (bs : List (Fin 256)) :
     ordered o (ordered o bs) = bs := by cases o <;> simp [ordered]
 
-/-- Representation lemma. Fixed-width little-endian encoding produces the requested octet count (approved: APPR-C4-agy-78ee5a2db). -/
+/-- Representation lemma. Fixed-width little-endian encoding produces the requested octet count. -/
 @[simp] theorem leBytes_length (k n : Nat) : (leBytes k n).length = k := by
   induction k generalizing n with
   | zero => rfl
   | succ k ih => simp [leBytes, ih]
 
-/-- Representation lemma. Byte-order permutation preserves octet count (approved: APPR-C4-agy-78ee5a2db). -/
+/-- Representation lemma. Byte-order permutation preserves octet count. -/
 @[simp] theorem ordered_length (o : ByteOrder) (bs : List (Fin 256)) :
     (ordered o bs).length = bs.length := by cases o <;> simp [ordered]
 
-/-- Representation lemma. Plain initialized bytes extract to their underlying octets (approved: APPR-C4-agy-78ee5a2db). -/
+/-- Representation lemma. Plain initialized bytes extract to their underlying octets. -/
 @[simp] theorem octets_init (bs : List (Fin 256)) :
     octets (bs.map (.init · none)) = some bs := by
   induction bs with
   | nil => rfl
   | cons b bs ih => simp [octets, ih]
 
-/-- Representation lemma. Little-endian decoding inverts fixed-width little-endian encoding below the width bound (approved: APPR-C4-agy-78ee5a2db). -/
+/-- Representation lemma. Little-endian decoding inverts fixed-width little-endian encoding below the width bound. -/
 theorem leValue_leBytes (k n : Nat) (h : n < 256 ^ k) : leValue (leBytes k n) = n := by
   induction k generalizing n with
   | zero => simp at h; subst n; rfl
@@ -48,7 +54,7 @@ theorem leValue_leBytes (k n : Nat) (h : n < 256 ^ k) : leValue (leBytes k n) = 
     simp only [leBytes, leValue, ih _ hd]
     omega
 
-/-- Representation lemma. Little-endian value is bounded by 256 to the octet length (approved: APPR-C4-agy-78ee5a2db). -/
+/-- Representation lemma. Little-endian value is bounded by 256 to the octet length. -/
 theorem leValue_lt (bs : List (Fin 256)) : leValue bs < 256 ^ bs.length := by
   induction bs with
   | nil => simp [leValue]
@@ -57,10 +63,10 @@ theorem leValue_lt (bs : List (Fin 256)) : leValue bs < 256 ^ bs.length := by
     have := b.isLt
     omega
 
-/-- Representation lemma. Byte width of an integer type matches its bit-width power (approved: APPR-C4-agy-78ee5a2db). -/
+/-- Representation lemma. Byte width of an integer type matches its bit-width power. -/
 theorem intByte_power (t : IntTy) : 256 ^ intBytes t = 2 ^ t.bits := by cases t <;> decide
 
-/-- Representation lemma. Integer encoding produces intBytes octets (approved: APPR-C4-agy-78ee5a2db). -/
+/-- Representation lemma. Integer encoding produces intBytes octets. -/
 @[simp] theorem encodeInt_length (tgt : Target) (t : IntTy) (n : Int) :
     (encodeInt tgt t n).length = intBytes t := by simp [encodeInt]
 
@@ -72,7 +78,7 @@ theorem decodeInt_encodeInt (tgt : Target) (t : IntTy) (n : Int) (h : t.InRange 
   simp only [encodeInt, octets_init, Option.map_some, ordered_ordered]
   rw [leValue_leBytes _ _ (by rw [intByte_power]; exact toBits_lt t n), ofBits_toBits t n h]
 
-/-- Representation lemma. Extracted octets preserve the byte-list length (approved: APPR-C4-agy-78ee5a2db). -/
+/-- Representation lemma. Extracted octets preserve the byte-list length. -/
 theorem octets_length {bs : List MByte} {os : List (Fin 256)}
     (h : octets bs = some os) : os.length = bs.length := by
   induction bs generalizing os with
@@ -107,29 +113,14 @@ theorem decodeInt_inRange (tgt : Target) (t : IntTy) (bs : List MByte) :
         exact hb
     next => cases h
 
-/-- Representation lemma. Computes the canonical boolean encoding round trip; semantic byte admission is covered by decodeBool_valid (approved: APPR-C4-agy-78ee5a2db). -/
-@[simp] theorem decodeBool_encodeBool (b : Bool) : decodeBool (encodeBool b) = some b := by
-  cases b <;> rfl
-
-/-- Law (subject `ConcreteSpec.Core.Mem.decodeBool`). A byte list decodes to a boolean if and only if it is one initialized 0 or 1 byte. -/
-theorem decodeBool_valid (bs : List MByte) (b : Bool) :
-    decodeBool bs = some b ↔ ∃ v f, bs = [.init v f] ∧ v.val = boolToBits b := by
-  constructor
-  · intro h
-    match bs with
-    | [.init v f] => exact ⟨v, f, rfl, (boolOfBits_some_iff _ _).1 h⟩
-    | [] | .uninit :: _ | .init _ _ :: _ :: _ => cases h
-  · rintro ⟨v, f, rfl, hv⟩
-    exact (boolOfBits_some_iff v.val b).2 hv
-
-/-- Representation lemma. Fragment annotations do not alter the numeric octets (approved: APPR-C4-agy-78ee5a2db). -/
+/-- Representation lemma. Fragment annotations do not alter the numeric octets. -/
 private theorem octets_fragments (os : List (Fin 256)) (p : Ptr) (start : Nat) :
     octets ((os.zipIdx start).map (fun (v, i) => MByte.init v (some (p, i)))) = some os := by
   induction os generalizing start with
   | nil => rfl
   | cons v vs ih => simp [List.zipIdx_cons, octets, ih]
 
-/-- Representation lemma. Reading a fixed-width octet sequence and writing it back is exact (approved: APPR-C4-agy-78ee5a2db). -/
+/-- Representation lemma. Reading a fixed-width octet sequence and writing it back is exact. -/
 private theorem leBytes_leValue (os : List (Fin 256)) : leBytes os.length (leValue os) = os := by
   induction os with
   | nil => rfl
@@ -137,33 +128,8 @@ private theorem leBytes_leValue (os : List (Fin 256)) : leBytes os.length (leVal
     simp [leBytes, leValue, Nat.add_mod, Nat.add_div, Nat.mod_eq_of_lt v.isLt,
       Nat.div_eq_of_lt v.isLt, Nat.not_le_of_gt v.isLt, ih]
 
-/-- Law (subject `ConcreteSpec.Core.Mem.decodePtr`, `ConcreteSpec.Core.Mem.encodePtr`). A valid pointer round-trips by numeric octet decoding, independently of fragment validation. -/
-theorem decodePtr_encodePtr (tgt : Target) (ht : tgt.WellFormed) (p : Ptr) (hpv : p.Valid tgt) :
-    decodePtr tgt (encodePtr tgt p) = some p := by
-  have hp : 0 < tgt.ptrSize := by have := ht.1; have := ht.2.1; omega
-  have hl : (ordered tgt.byteOrder (leBytes tgt.ptrSize p.addr)).length > 0 := by simpa using hp
-  have hb : p.addr < 256 ^ tgt.ptrSize := by
-    have hh := Nat.pow_le_pow_right (by decide : 1 ≤ 2) ht.2.1
-    have he : 256 ^ tgt.ptrSize = 2 ^ (8 * tgt.ptrSize) := by rw [Nat.pow_mul]
-    rw [he]
-    exact Nat.lt_of_lt_of_le hpv.1 hh
-  have ho : octets (encodePtr tgt p) = some (ordered tgt.byteOrder (leBytes tgt.ptrSize p.addr)) :=
-    octets_fragments _ _ 0
-  have hlen : (encodePtr tgt p).length = tgt.ptrSize := by simp [encodePtr]
-  cases hs : ordered tgt.byteOrder (leBytes tgt.ptrSize p.addr) with
-  | nil => simp [hs] at hl
-  | cons v vs =>
-    have he : encodePtr tgt p = .init v (some (p, 0)) ::
-        (vs.zipIdx 1).map (fun (v, i) => .init v (some (p, i))) := by
-      simp [encodePtr, hs, List.zipIdx_cons]
-    rw [he]
-    simp only [decodePtr]
-    rw [← he]
-    simp only [hlen, ↓reduceIte, ho]
-    simp [encodePtr, ordered_ordered, leValue_leBytes _ _ hb, hpv]
-
-/-- Helper (computation). Block lookup after modify reduces to association-list update (approved: APPR-C4-agy-78ee5a2db). -/
-@[simp] theorem block_modify (m : Memory) (b c : MemBlockId) (f : Block → Block) :
+/-- Helper (computation). Block lookup after modify reduces to association-list update. -/
+@[simp] theorem block_modify (m : Memory) (b c : BlockId) (f : Block → Block) :
     (m.modify b f).block c = if c = b then (m.block b).map f else m.block c := by
   exact AList.lookup_update b f m.blocks c
 
@@ -171,8 +137,8 @@ theorem decodePtr_encodePtr (tgt : Target) (ht : tgt.WellFormed) (p : Ptr) (hpv 
 theorem empty_wellFormed (tgt : Target) : Memory.empty.WellFormed tgt := by
   constructor <;> simp [Memory.empty, Memory.block, AList.lookup]
 
-/-- Helper (congruence). Updating an association-list entry preserves the key list (approved: APPR-C4-agy-78ee5a2db). -/
-private theorem keys_update (xs : AList MemBlockId Block) (b : MemBlockId) (f : Block → Block) :
+/-- Helper (congruence). Updating an association-list entry preserves the key list. -/
+private theorem keys_update (xs : AList BlockId Block) (b : BlockId) (f : Block → Block) :
     List.map Prod.fst (AList.update xs b f) = List.map Prod.fst xs := by
   induction xs with
   | nil => rfl
@@ -180,8 +146,8 @@ private theorem keys_update (xs : AList MemBlockId Block) (b : MemBlockId) (f : 
     simp only [AList.update]
     split <;> simp_all
 
-/-- Helper (inversion). Nodup keys ensure every stored entry is returned by lookup (approved: APPR-C4-agy-78ee5a2db). -/
-private theorem canonical_of_unique (xs : AList MemBlockId Block)
+/-- Helper (inversion). Nodup keys ensure every stored entry is returned by lookup. -/
+private theorem canonical_of_unique (xs : AList BlockId Block)
     (hu : (List.map Prod.fst xs).Nodup) :
     ∀ e ∈ xs, AList.lookup xs e.1 = some e.2 := by
   induction xs with
@@ -197,9 +163,9 @@ private theorem canonical_of_unique (xs : AList MemBlockId Block)
       simp [AList.lookup, hn, ih hu.2 e he]
 
 /-- Helper (congruence). A block update preserving geometry and byte count, and never reviving a dead block,
-preserves the whole memory invariant (approved: APPR-C4-agy-78ee5a2db). -/
+preserves the whole memory invariant. -/
 theorem modify_wellFormed (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
-    (b : MemBlockId) (f : Block → Block)
+    (b : BlockId) (f : Block → Block)
     (hg : ∀ x, (f x).space = x.space ∧ (f x).base = x.base ∧
       (f x).size = x.size ∧ (f x).align = x.align)
     (hs : ∀ x, m.block b = some x → (f x).bytes.length = x.size)
@@ -248,9 +214,9 @@ theorem modify_wellFormed (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
     simpa only [Block.Overlaps, hspace, hbase, hsize, hspace', hbase', hsize'] using
       hw.disjoint c x d w hx hw' hne (hlive hyl) (hlive' hzl)
 
-/-- Helper (inversion). Unpack the block identity, updated memory and fit condition of a successful allocation (approved: APPR-C4-agy-78ee5a2db). -/
+/-- Helper (inversion). Unpack the block identity, updated memory and fit condition of a successful allocation. -/
 theorem alloc_result (tgt : Target) (m : Memory) (s : AddrSpace) (base size align : Nat)
-    (b : MemBlockId) (m' : Memory) (h : m.alloc tgt s base size align = .ok (b, m')) :
+    (b : BlockId) (m' : Memory) (h : m.alloc tgt s base size align = .ok (b, m')) :
     b = ⟨m.next⟩ ∧ m' = ⟨(b, candidate s base size align) :: m.blocks, m.next + 1⟩ ∧
     m.Fits tgt (candidate s base size align) := by
   simp only [Memory.alloc] at h
@@ -319,8 +285,8 @@ theorem access_no_provenance (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat)
     (hn : n ≠ 0) (hp : p.prov = none) : m.access tgt p n a = none := by
   simp [Memory.access, hn, hp]
 
-/-- Helper (inversion). Decomposes a successful release for the result-oriented free_retains law and access-after-free proof (approved: APPR-C4-agy-78ee5a2db). -/
-theorem free_retains_inv (m : Memory) (b : MemBlockId) (m' : Memory) (h : m.free b = some m') :
+/-- Helper (inversion). Decomposes a successful release for the result-oriented free_retains law and access-after-free proof. -/
+theorem free_retains_inv (m : Memory) (b : BlockId) (m' : Memory) (h : m.free b = some m') :
     ∃ x, m.block b = some x ∧
       m'.block b = some { x with live := false, exposed := false } ∧ m'.next = m.next := by
   unfold Memory.free at h
@@ -335,14 +301,14 @@ theorem free_retains_inv (m : Memory) (b : MemBlockId) (m' : Memory) (h : m.free
     · simp [hl] at h
 
 /-- Law (subject `ConcreteSpec.Core.Mem.Memory.access`). Any nonzero access through a pointer to a released block fails. -/
-theorem access_after_free (tgt : Target) (m m' : Memory) (b : MemBlockId)
+theorem access_after_free (tgt : Target) (m m' : Memory) (b : BlockId)
     (p : Ptr) (n a : Nat) (hf : m.free b = some m') (hp : p.prov = some b)
     (hn : n ≠ 0) : m'.access tgt p n a = none := by
   obtain ⟨x, _, hx, _⟩ := free_retains_inv m b m' hf
   simp [Memory.access, hn, hp, hx]
 
-/-- Helper (computation). Computes equality of identical space/address components; comparison separation is covered by eqAddr_separation (approved: APPR-C4-agy-78ee5a2db). -/
-theorem eqAddr_provenance (s : AddrSpace) (a : Nat) (b c : Option MemBlockId) :
+/-- Helper (computation). Computes equality of identical space/address components; comparison separation is covered by eqAddr_separation. -/
+theorem eqAddr_provenance (s : AddrSpace) (a : Nat) (b c : Option BlockId) :
     Ptr.eqAddr ⟨s, a, b⟩ ⟨s, a, c⟩ = true := by simp [Ptr.eqAddr]
 
 /-- Law (subject `ConcreteSpec.Core.Mem.Ptr.eqAddr`). Unequal pointers are separated by space or by strict numeric order, regardless of provenance. -/
@@ -362,7 +328,7 @@ theorem eqAddr_separation (p q : Ptr) :
 
 /-- Law (subject `ConcreteSpec.Core.Mem.Memory.alloc`). Any later allocation differs from every identity still present, including released blocks. -/
 theorem alloc_ne_existing (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
-    (s : AddrSpace) (base size align : Nat) (c : MemBlockId) (x : Block)
+    (s : AddrSpace) (base size align : Nat) (c : BlockId) (x : Block)
     (hc : m.block c = some x) :
     match m.alloc tgt s base size align with
     | .ok (b, _) => b ≠ c
@@ -376,7 +342,7 @@ theorem alloc_ne_existing (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
     have := hw.fresh c x hc
     intro he; subst c; omega
 
-/-- Helper (projection). Block overlap is symmetric (approved: APPR-C4-agy-78ee5a2db). -/
+/-- Helper (projection). Block overlap is symmetric. -/
 private theorem overlaps_symm (x y : Block) (h : x.Overlaps y) : y.Overlaps x :=
   ⟨h.1.symm, h.2.2.1, h.2.1, h.2.2.2.2, h.2.2.2.1⟩
 
@@ -391,9 +357,9 @@ theorem alloc_wellFormed (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
   | ok pair =>
     obtain ⟨b, m'⟩ := pair
     obtain ⟨rfl, rfl, hf⟩ := alloc_result tgt m s base size align b m' h
-    let z : MemBlockId := ⟨m.next⟩
+    let z : BlockId := ⟨m.next⟩
     let x := candidate s base size align
-    have lookup (c : MemBlockId) :
+    have lookup (c : BlockId) :
         (Memory.mk ((z, x) :: m.blocks) (m.next + 1)).block c =
           if z = c then some x else m.block c := rfl
     constructor
@@ -453,9 +419,9 @@ theorem alloc_wellFormed (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
         next => cases hw'; exact hf.2.2.2.2.2.1 _ (AList.lookup_mem hy) hyl
         next => exact hw.disjoint c y d w hy hw' hne hyl hwl
 
-/-- Helper (inversion). Non-overlap makes the in-bounds provenance unique; no order on identities is used (approved: APPR-C4-agy-78ee5a2db). -/
+/-- Helper (inversion). Non-overlap makes the in-bounds provenance unique; no order on identities is used. -/
 theorem candidate_contains_unique (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
-    (s : AddrSpace) (addr : Nat) (b c : MemBlockId) (x y : Block)
+    (s : AddrSpace) (addr : Nat) (b c : BlockId) (x y : Block)
     (hx : m.block b = some x) (hy : m.block c = some y)
     (hxc : x.Candidate s = true) (hyc : y.Candidate s = true)
     (hxi : x.base ≤ addr ∧ addr < x.base + x.size)
@@ -467,7 +433,7 @@ theorem candidate_contains_unique (tgt : Target) (m : Memory) (hw : m.WellFormed
   apply hw.disjoint b x c y hx hy hn hxc.1.1.1 hyc.1.1.1
   refine ⟨hxc.2.trans hyc.2.symm, hxc.1.2, hyc.1.2, ?_, ?_⟩ <;> omega
 
-/-- Helper (inversion). Extracts block properties from successful reconstruction for inversion clients and the result-oriented law (approved: APPR-C4-agy-951060caa). -/
+/-- Helper (inversion). Extracts block properties from successful reconstruction for inversion clients and the result-oriented law. -/
 theorem fromExposed_sound_inv (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
     (s : AddrSpace) (addr : Nat) :
     ∀ b, (m.fromExposed s addr).prov = some b →
@@ -511,9 +477,9 @@ theorem fromExposed_sound (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
   | none => trivial
   | some b => exact fromExposed_sound_inv tgt m hw s addr b h
 
-/-- Helper (inversion). An eligible containing or one-past candidate suffices to recover some provenance (approved: APPR-C4-agy-78ee5a2db). -/
+/-- Helper (inversion). An eligible containing or one-past candidate suffices to recover some provenance. -/
 theorem fromExposed_exists (m : Memory) (s : AddrSpace) (addr : Nat)
-    (e : MemBlockId × Block) (he : e ∈ m.blocks) (hc : e.2.Candidate s = true)
+    (e : BlockId × Block) (he : e ∈ m.blocks) (hc : e.2.Candidate s = true)
     (ha : (e.2.base ≤ addr ∧ addr < e.2.base + e.2.size) ∨
       addr = e.2.base + e.2.size) :
     ∃ b, (m.fromExposed s addr).prov = some b := by
@@ -534,7 +500,7 @@ theorem fromExposed_exists (m : Memory) (s : AddrSpace) (addr : Nat)
 
 /-- Law (subject `ConcreteSpec.Core.Mem.Memory.fromExposed`). Completeness at the containing-block priority; no list-order tie-break enters the result. -/
 theorem fromExposed_contains (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
-    (s : AddrSpace) (addr : Nat) (b : MemBlockId) (x : Block)
+    (s : AddrSpace) (addr : Nat) (b : BlockId) (x : Block)
     (hx : m.block b = some x) (hc : x.Candidate s = true)
     (hi : x.base ≤ addr ∧ addr < x.base + x.size) :
     (m.fromExposed s addr).prov = some b := by
@@ -545,9 +511,9 @@ theorem fromExposed_contains (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
     simpa only [← this] using hp
   · exact False.elim (hn (b, x) (AList.lookup_mem hx) hc hi)
 
-/-- Helper (inversion). Nonempty disjoint blocks in one space cannot share their one-past endpoint either (approved: APPR-C4-agy-78ee5a2db). -/
+/-- Helper (inversion). Nonempty disjoint blocks in one space cannot share their one-past endpoint either. -/
 theorem candidate_onePast_unique (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
-    (s : AddrSpace) (addr : Nat) (b c : MemBlockId) (x y : Block)
+    (s : AddrSpace) (addr : Nat) (b c : BlockId) (x y : Block)
     (hx : m.block b = some x) (hy : m.block c = some y)
     (hxc : x.Candidate s = true) (hyc : y.Candidate s = true)
     (hxi : addr = x.base + x.size) (hyi : addr = y.base + y.size) : b = c := by
@@ -560,7 +526,7 @@ theorem candidate_onePast_unique (tgt : Target) (m : Memory) (hw : m.WellFormed 
 
 /-- Law (subject `ConcreteSpec.Core.Mem.Memory.fromExposed`). In the absence of any containing candidate, a one-past candidate is recovered exactly. -/
 theorem fromExposed_onePast (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
-    (s : AddrSpace) (addr : Nat) (b : MemBlockId) (x : Block)
+    (s : AddrSpace) (addr : Nat) (b : BlockId) (x : Block)
     (hx : m.block b = some x) (hc : x.Candidate s = true) (hi : addr = x.base + x.size)
     (hn : ∀ e ∈ m.blocks, e.2.Candidate s = true →
       ¬ (e.2.base ≤ addr ∧ addr < e.2.base + e.2.size)) :
@@ -587,8 +553,8 @@ theorem fromExposed_none (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
     · exact False.elim (hh.1 hi)
     · exact False.elim (hh.2 hi)
 
-/-- Helper (inversion). Extract the block and bounds of a successful nonempty access (approved: APPR-C4-agy-78ee5a2db). -/
-theorem access_some_inv (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat) (b : MemBlockId)
+/-- Helper (inversion). Extract the block and bounds of a successful nonempty access. -/
+theorem access_some_inv (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat) (b : BlockId)
     (off : Nat) (h : m.access tgt p n a = some (some (b, off))) :
     ∃ x, p.prov = some b ∧ m.block b = some x ∧ n ≠ 0 ∧ x.live = true ∧
       x.space = p.space ∧ x.base ≤ p.addr ∧ p.addr + n ≤ x.base + x.size ∧
@@ -634,7 +600,7 @@ theorem access_valid (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
       have hpos : 0 < 2 ^ tgt.addrBits := Nat.two_pow_pos tgt.addrBits
       exact ⟨by have hnpos := Nat.pos_of_ne_zero hn; omega, hs ▸ hw.spaces b x hx⟩
 
-/-- Helper (inversion). Zero-size access explicitly checks validity; this extracts that guard only (approved: APPR-C4-agy-78ee5a2db). -/
+/-- Helper (inversion). Zero-size access explicitly checks validity; this extracts that guard only. -/
 theorem access_zero_valid_inv (tgt : Target) (m : Memory) (p : Ptr) (a : Nat)
     (h : m.access tgt p 0 a = some none) : p.Valid tgt := by
   unfold Memory.access at h
@@ -643,60 +609,24 @@ theorem access_zero_valid_inv (tgt : Target) (m : Memory) (p : Ptr) (a : Nat)
   next hv => exact hv.2.2
   next => cases h
 
-/-- Helper (inversion). Extract the independent width, fragment, numeric and validity checks (approved: APPR-C4-agy-78ee5a2db). -/
-private theorem decodePtr_checks_inv (tgt : Target) (bs : List MByte) (p : Ptr)
-    (h : decodePtr tgt bs = some p) :
-    ∃ os, octets bs = some os ∧ bs.length = tgt.ptrSize ∧
-      bs = (os.zipIdx.map fun (v, i) => .init v (some (p, i))) ∧
-      leValue (ordered tgt.byteOrder os) = p.addr ∧ p.Valid tgt := by
-  match bs with
-  | .init _ (some (q, 0)) :: _ =>
-    simp only [decodePtr] at h
-    split at h
-    next hlen =>
-      split at h
-      next os ho =>
-        split at h
-        next hc => cases h; exact ⟨os, ho, hlen, hc⟩
-        next => cases h
-      next => cases h
-    next => cases h
-  | [] | .uninit :: _ | .init _ none :: _ | .init _ (some (_, Nat.succ _)) :: _ => cases h
-
-/-- Law (subject `ConcreteSpec.Core.Mem.decodePtr`, `ConcreteSpec.Core.Mem.encodePtr`). Successful pointer decoding recovers exactly a whole stored representation and a valid
-pointer. The representation follows from numeric byte reconstruction, not encoder comparison. -/
-theorem decodePtr_some (tgt : Target) (ht : tgt.WellFormed) (bs : List MByte) (p : Ptr) :
-    decodePtr tgt bs = some p ↔ bs = encodePtr tgt p ∧ p.Valid tgt := by
-  constructor
-  · intro h
-    obtain ⟨os, ho, hlen, hf, hn, hv⟩ := decodePtr_checks_inv tgt bs p h
-    have hos : os = ordered tgt.byteOrder (leBytes tgt.ptrSize p.addr) := by
-      have hr := leBytes_leValue (ordered tgt.byteOrder os)
-      rw [ordered_length, octets_length ho, hlen, hn] at hr
-      have hh := congrArg (ordered tgt.byteOrder) hr
-      simpa using hh.symm
-    exact ⟨by rw [hf, hos]; rfl, hv⟩
-  · rintro ⟨rfl, hv⟩
-    exact decodePtr_encodePtr tgt ht p hv
-
 /-- Law (subject `ConcreteSpec.Core.Mem.Memory.access`). Nonempty access succeeds on the independent liveness, provenance and geometry obligations.
 Together with access_valid this proves deleting the redundant target-validity guard preserves
 success on well-formed memory. -/
 theorem access_success (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat)
-    (b : MemBlockId) (x : Block) (hn : n ≠ 0) (hp : p.prov = some b)
+    (b : BlockId) (x : Block) (hn : n ≠ 0) (hp : p.prov = some b)
     (hx : m.block b = some x) (hl : x.live = true) (hs : x.space = p.space)
     (hlo : x.base ≤ p.addr) (hhi : p.addr + n ≤ x.base + x.size)
     (ha : p.addr % a = 0) :
     m.access tgt p n a = some (some (b, p.addr - x.base)) := by
   simp [Memory.access, hn, hp, hx, hl, hs, hlo, hhi, ha]
 
-/-- Representation lemma. Replacing a range reads back exactly that range (approved: APPR-C4-agy-78ee5a2db). -/
+/-- Representation lemma. Replacing a range reads back exactly that range. -/
 theorem splice_read (xs bs : List MByte) (off : Nat) (h : off ≤ xs.length) :
     ((xs.take off ++ bs ++ xs.drop (off + bs.length)).drop off).take bs.length = bs := by
   rw [List.append_assoc, List.drop_append_of_le_length (by simp [List.length_take, Nat.min_eq_left h])]
   simp
 
-/-- Representation lemma. The bytes before and after a splice are unchanged, including uninitialized bytes and fragments (approved: APPR-C4-agy-78ee5a2db). -/
+/-- Representation lemma. The bytes before and after a splice are unchanged, including uninitialized bytes and fragments. -/
 theorem splice_frame (xs bs : List MByte) (off i : Nat)
     (hb : off + bs.length ≤ xs.length) (hi : i < off ∨ off + bs.length ≤ i) :
     (xs.take off ++ bs ++ xs.drop (off + bs.length))[i]? = xs[i]? := by
@@ -745,14 +675,14 @@ theorem store_load (tgt : Target) (m m' : Memory) (hw : m.WellFormed tgt)
 
 /-- Law (subject `ConcreteSpec.Core.Mem.Memory.store`). A store frames every block except its access block. -/
 theorem store_other_block (tgt : Target) (m : Memory) (p : Ptr) (bs : List MByte)
-    (a : Nat) (b : MemBlockId) (off : Nat) (c : MemBlockId)
+    (a : Nat) (b : BlockId) (off : Nat) (c : BlockId)
     (ha : m.access tgt p bs.length a = some (some (b, off))) (hc : c ≠ b) :
     (m.store tgt p bs a).bind (fun m' => m'.block c) = m.block c := by
   simp [Memory.store, ha, hc]
 
 /-- Law (subject `ConcreteSpec.Core.Mem.Memory.store`). A store also frames each byte outside its range in the accessed block. -/
 theorem store_same_block_frame (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
-    (p : Ptr) (bs : List MByte) (a : Nat) (b : MemBlockId) (off i : Nat) (x : Block)
+    (p : Ptr) (bs : List MByte) (a : Nat) (b : BlockId) (off i : Nat) (x : Block)
     (ha : m.access tgt p bs.length a = some (some (b, off)))
     (hx : m.block b = some x) (hi : i < off ∨ off + bs.length ≤ i) :
     ((m.store tgt p bs a).bind fun m' => m'.block b).map (fun y => y.bytes[i]?) =
@@ -812,7 +742,7 @@ theorem store_wellFormed (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
 
 /-- Law (subject `ConcreteSpec.Core.Mem.Memory.free`). Successful release preserves the invariant without deleting the identity. -/
 theorem free_wellFormed (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
-    (b : MemBlockId) :
+    (b : BlockId) :
     match m.free b with
     | some m' => m'.WellFormed tgt
     | none => True := by
@@ -832,7 +762,7 @@ theorem free_wellFormed (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
       next => cases h
     next => cases h
 
-/-- Helper (inversion). Exposure changes exactly the exposed flag of a live provenance block (approved: APPR-C4-agy-78ee5a2db). -/
+/-- Helper (inversion). Exposure changes exactly the exposed flag of a live provenance block. -/
 theorem expose_result (m m' : Memory) (p : Ptr) (h : m.expose p = some m') :
     ∃ b x, p.prov = some b ∧ m.block b = some x ∧ x.live = true ∧
       m' = m.modify b (fun y => { y with exposed := true }) := by
@@ -848,12 +778,12 @@ theorem expose_result (m m' : Memory) (p : Ptr) (h : m.expose p = some m') :
     next => cases h
 
 /-- Law (subject `ConcreteSpec.Core.Mem.Memory.expose`). Conversely every live provenance block can be exposed, preserving all other fields. -/
-theorem expose_success (m : Memory) (p : Ptr) (b : MemBlockId) (x : Block)
+theorem expose_success (m : Memory) (p : Ptr) (b : BlockId) (x : Block)
     (hp : p.prov = some b) (hx : m.block b = some x) (hl : x.live = true) :
     m.expose p = some (m.modify b (fun y => { y with exposed := true })) := by
   simp [Memory.expose, hp, hx, hl]
 
-/-- Helper (inversion). Decomposes a successful exposure for the result-oriented expose_frame law (approved: APPR-C4-agy-78ee5a2db). -/
+/-- Helper (inversion). Decomposes a successful exposure for the result-oriented expose_frame law. -/
 theorem expose_frame_inv (m m' : Memory) (p : Ptr) (h : m.expose p = some m') :
     ∃ b x, p.prov = some b ∧ m.block b = some x ∧
       m'.block b = some { x with exposed := true } ∧ m'.next = m.next ∧
@@ -880,9 +810,9 @@ theorem expose_wellFormed (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
 def Block.geometry (x : Block) : AddrSpace × Nat × Nat × Nat :=
   (x.space, x.base, x.size, x.align)
 
-/-- Helper (congruence). Decomposes a successful store for store_geometry and hybrid invariant transport (approved: APPR-C4-agy-78ee5a2db). -/
+/-- Helper (congruence). Decomposes a successful store for store_geometry and hybrid invariant transport. -/
 theorem store_geometry_inv (tgt : Target) (m m' : Memory) (p : Ptr) (bs : List MByte)
-    (a : Nat) (h : m.store tgt p bs a = some m') (b : MemBlockId) :
+    (a : Nat) (h : m.store tgt p bs a = some m') (b : BlockId) :
     (m'.block b).map Block.geometry = (m.block b).map Block.geometry := by
   unfold Memory.store at h
   split at h
@@ -897,9 +827,9 @@ theorem store_geometry_inv (tgt : Target) (m m' : Memory) (p : Ptr) (bs : List M
     · rfl
   next => cases h
 
-/-- Helper (congruence). Decomposes a successful exposure for expose_geometry and hybrid invariant transport (approved: APPR-C4-agy-78ee5a2db). -/
+/-- Helper (congruence). Decomposes a successful exposure for expose_geometry and hybrid invariant transport. -/
 theorem expose_geometry_inv (m m' : Memory) (p : Ptr) (h : m.expose p = some m')
-    (b : MemBlockId) :
+    (b : BlockId) :
     (m'.block b).map Block.geometry = (m.block b).map Block.geometry := by
   obtain ⟨c, _, _, _, _, rfl⟩ := expose_result m m' p h
   simp only [block_modify]
@@ -910,7 +840,7 @@ theorem expose_geometry_inv (m m' : Memory) (p : Ptr) (h : m.expose p = some m')
   · rfl
 
 /-- Law (subject `ConcreteSpec.Core.Mem.Memory.free`). Releasing storage retains its identity and freshness, while marking the block dead and unexposed. -/
-theorem free_retains (m : Memory) (b : MemBlockId) :
+theorem free_retains (m : Memory) (b : BlockId) :
     match m.free b with
     | none => True
     | some m' => ∃ x, m.block b = some x ∧
@@ -948,7 +878,7 @@ theorem expose_geometry (m : Memory) (p : Ptr) :
   | none => trivial
   | some m' => exact expose_geometry_inv m m' p h
 
-/-- Helper (congruence). Reads depend only on their provenance block, independently of every other block (approved: APPR-C4-agy-78ee5a2db). -/
+/-- Helper (congruence). Reads depend only on their provenance block, independently of every other block. -/
 theorem load_congr (tgt : Target) (m m' : Memory) (p : Ptr) (n a : Nat)
     (h : ∀ b, p.prov = some b → m'.block b = m.block b) :
     m'.load tgt p n a = m.load tgt p n a := by
@@ -1033,7 +963,7 @@ theorem load_prefix (tgt : Target) (m : Memory) (p : Ptr) (n k a : Nat) (bs : Li
 /-- Law (subject `ConcreteSpec.Core.Mem.Memory.alloc`). Releasing a block cannot permit any existing identity to be reused by the next allocation,
 even when the allocator reuses the released address. -/
 theorem free_alloc_ne_existing (tgt : Target) (m freed : Memory)
-    (hw : m.WellFormed tgt) (b c : MemBlockId) (x : Block)
+    (hw : m.WellFormed tgt) (b c : BlockId) (x : Block)
     (hf : m.free b = some freed) (hc : m.block c = some x)
     (s : AddrSpace) (base size align : Nat) :
     match freed.alloc tgt s base size align with
@@ -1048,10 +978,44 @@ theorem free_alloc_ne_existing (tgt : Target) (m freed : Memory)
     have hlt := hw.fresh c x hc
     intro heq
     rw [heq] at he
-    have hid := congrArg MemBlockId.id he
+    have hid := congrArg BlockId.id he
     dsimp at hid
     omega
 
+
+/-! Compatibility with main's existing representation. These are checked views across the
+old slice integer type and the foundation type, not new representation policies. -/
+
+/-- Representation view of the eight existing integer type names. -/
+def sliceIntTy : IntTy → ConcreteSpec.IntTy
+  | .i8 => .i8 | .i16 => .i16 | .i32 => .i32 | .i64 => .i64
+  | .u8 => .u8 | .u16 => .u16 | .u32 => .u32 | .u64 => .u64
+
+/-- Representation view: forget provenance while retaining initialization and octets. -/
+def sliceByte : MByte → ConcreteSpec.Rep.MByte
+  | .uninit => .undef
+  | .init v _ => .byte v
+
+/-- Representation lemma. The shared little-endian integer algorithm agrees with Rep. -/
+theorem leBytes_rep (k n : Nat) :
+    (leBytes k n).map ConcreteSpec.Rep.MByte.byte = ConcreteSpec.Rep.encodeNat k n := by
+  induction k generalizing n with
+  | zero => rfl
+  | succ k ih => simp [leBytes, ConcreteSpec.Rep.encodeNat, ih]
+
+/-- Representation lemma. Every integer encoding on the existing profile agrees with main's
+Rep, after forgetting the memory-byte annotation. Boolean policy is deliberately absent. -/
+theorem encodeInt_rep (t : IntTy) (n : Int) :
+    (encodeInt linuxX8664 t n).map sliceByte =
+      ConcreteSpec.Rep.encodeScalar (.int (sliceIntTy t) n) := by
+  cases t <;>
+    simp [encodeInt, ordered, linuxX8664, intBytes, toBits, IntTy.bits, sliceIntTy,
+      ConcreteSpec.Rep.encodeScalar, ConcreteSpec.IntTy.bits, List.map_map, sliceByte,
+      Function.comp_def, leBytes_rep]
+
+/-- Representation application. The checked view covers a negative signed value. -/
+example : (encodeInt linuxX8664 .i16 (-2)).map sliceByte =
+    ConcreteSpec.Rep.encodeScalar (.int .i16 (-2)) := encodeInt_rep .i16 (-2)
 
 namespace Audit
 
@@ -1062,7 +1026,6 @@ def other : Ptr := ⟨⟨0⟩, 41, some ⟨1⟩⟩
 def badPtr : Ptr := ⟨⟨0⟩, 256, some ⟨0⟩⟩
 def nullPtr : Ptr := ⟨⟨0⟩, 0, none⟩
 def rawPtr : Ptr := ⟨⟨0⟩, 40, none⟩
-def bytes : List MByte := [.init 40 (some (ptr, 0)), .init 0 (some (ptr, 1))]
 def initBlock : Block := candidate ⟨0⟩ 40 8 1
 def memory : Memory := ⟨[(⟨0⟩, initBlock)], 1⟩
 def freedBlock : Block := { initBlock with live := false, exposed := false }
@@ -1080,31 +1043,29 @@ def frameStoredMemory : Memory := ⟨[(⟨1⟩, frameBlock), (⟨0⟩, storedBlo
 def frameOther : Ptr := ⟨⟨0⟩, 80, some ⟨1⟩⟩
 
 
-def badDecodeInt : Target → IntTy → List MByte → Option Int := fun _ _ _ => none
-def badDecodeIntRange : Target → IntTy → List MByte → Option Int := fun _ _ _ => some 200
-def badEncodeInt : Target → IntTy → Int → List MByte := fun _ _ _ => []
-def badDecodeBool : List MByte → Option Bool := fun _ => none
-def badEncodeBool : Bool → List MByte := fun _ => []
-def badDecodePtr (tgt : Target) (bs : List MByte) : Option Ptr :=
-  decodePtr { tgt with byteOrder := .big } bs
-def badEncodePtr : Target → Ptr → List MByte := fun _ _ => []
-def firstFragment : Target → List MByte → Option Ptr
-  | _, .init _ (some (p, _)) :: _ => some p
-  | _, _ => none
-
+/-- Fault: signed octets are interpreted as unsigned. -/
+def badDecodeInt (tgt : Target) (t : IntTy) (bs : List MByte) : Option Int :=
+  if bs.length = intBytes t then
+    (octets bs).map fun os => (leValue (ordered tgt.byteOrder os) : Int)
+  else none
+/-- The same missing sign interpretation also violates the signed range. -/
+def badDecodeIntRange := badDecodeInt
+/-- Fault: magnitude replaces the two's-complement pattern. -/
+def badEncodeInt (tgt : Target) (t : IntTy) (n : Int) : List MByte :=
+  (ordered tgt.byteOrder (leBytes (intBytes t) n.natAbs)).map (.init · none)
 def badEmpty : Memory := ⟨[(⟨1⟩, initBlock)], 0⟩
 
 def badAllocId : Target → Memory → AddrSpace → Nat → Nat → Nat →
-    Except AllocError (MemBlockId × Memory) :=
+    Except AllocError (BlockId × Memory) :=
   fun _ m s base size align =>
     .ok (⟨m.next + 1⟩, ⟨(⟨m.next + 1⟩, candidate s base size align) :: m.blocks, m.next + 1⟩)
 
 def badAllocEmpty : Target → Memory → AddrSpace → Nat → Nat → Nat →
-    Except AllocError (MemBlockId × Memory) :=
+    Except AllocError (BlockId × Memory) :=
   fun _ m _ _ _ _ => .ok (⟨m.next⟩, m)
 
 def badAllocReuseZero : Target → Memory → AddrSpace → Nat → Nat → Nat →
-    Except AllocError (MemBlockId × Memory) :=
+    Except AllocError (BlockId × Memory) :=
   fun _ m _ _ _ _ => .ok (⟨0⟩, m)
 
 /-- Deliberately wrong allocator for planted checks: skip exactly one geometry obligation.
@@ -1112,7 +1073,7 @@ def badAllocReuseZero : Target → Memory → AddrSpace → Nat → Nat → Nat 
 3 skips maxObject, 4 skips the non-null base check, 5 skips live overlap,
 6 skips address-space membership. -/
 def mutatedAlloc (skip : Nat) (tgt : Target) (m : Memory) (s : AddrSpace)
-    (base size align : Nat) : Except AllocError (MemBlockId × Memory) :=
+    (base size align : Nat) : Except AllocError (BlockId × Memory) :=
   let x := candidate s base size align
   if (skip = 0 ∨ IsPow2 align) ∧ (skip = 1 ∨ base % align = 0) ∧
       (skip = 2 ∨ base + size ≤ 2 ^ tgt.addrBits - 1) ∧
@@ -1124,59 +1085,71 @@ def mutatedAlloc (skip : Nat) (tgt : Target) (m : Memory) (s : AddrSpace)
   else .error .unavailable
 
 def mutatedAllocPow2 : Target → Memory → AddrSpace → Nat → Nat → Nat →
-    Except AllocError (MemBlockId × Memory) := mutatedAlloc 0
+    Except AllocError (BlockId × Memory) := mutatedAlloc 0
 def mutatedAllocAlign : Target → Memory → AddrSpace → Nat → Nat → Nat →
-    Except AllocError (MemBlockId × Memory) := mutatedAlloc 1
+    Except AllocError (BlockId × Memory) := mutatedAlloc 1
 def mutatedAllocBound : Target → Memory → AddrSpace → Nat → Nat → Nat →
-    Except AllocError (MemBlockId × Memory) := mutatedAlloc 2
+    Except AllocError (BlockId × Memory) := mutatedAlloc 2
 def mutatedAllocMaxObj : Target → Memory → AddrSpace → Nat → Nat → Nat →
-    Except AllocError (MemBlockId × Memory) := mutatedAlloc 3
+    Except AllocError (BlockId × Memory) := mutatedAlloc 3
 def mutatedAllocNull : Target → Memory → AddrSpace → Nat → Nat → Nat →
-    Except AllocError (MemBlockId × Memory) := mutatedAlloc 4
+    Except AllocError (BlockId × Memory) := mutatedAlloc 4
 def mutatedAllocOverlap : Target → Memory → AddrSpace → Nat → Nat → Nat →
-    Except AllocError (MemBlockId × Memory) := mutatedAlloc 5
+    Except AllocError (BlockId × Memory) := mutatedAlloc 5
 def mutatedAllocSpace : Target → Memory → AddrSpace → Nat → Nat → Nat →
-    Except AllocError (MemBlockId × Memory) := mutatedAlloc 6
+    Except AllocError (BlockId × Memory) := mutatedAlloc 6
 
 def badLoadNone : Target → Memory → Ptr → Nat → Nat → Option (List MByte) :=
-  fun _ _ _ _ _ => none
+  fun tgt m p n a => if n < 2 then none else m.load tgt p n a
+/-- Fault: a load serializes the block table, including exposure metadata, rather than its slice. -/
 def badLoadDiff : Target → Memory → Ptr → Nat → Nat → Option (List MByte) :=
-  fun _ m _ _ _ =>
-    match m.block ⟨0⟩ with
-    | some x => if x.bytes == initBlock.bytes && !x.exposed then none else some []
-    | none => none
+  fun _ m _ _ _ => some (m.blocks.flatMap fun e =>
+    .init (if e.2.exposed then 1 else 0) none :: e.2.bytes)
 def badLoadPrefix : Target → Memory → Ptr → Nat → Nat → Option (List MByte) :=
-  fun tgt m p sz a => if sz == 2 then m.load tgt p sz a else none
+  fun tgt m p sz a => if sz % 2 = 0 then m.load tgt p sz a else none
 def badStoreNone : Target → Memory → Ptr → List MByte → Nat → Option Memory :=
-  fun _ _ _ _ _ => none
+  fun tgt m p bs a => if bs.length < 2 then none else m.store tgt p bs a
 def badStoreDup : Target → Memory → Ptr → List MByte → Nat → Option Memory :=
-  fun _ m _ _ _ => some ⟨(⟨1⟩, candidate ⟨0⟩ 80 8 1) :: m.blocks, m.next + 1⟩
+  fun tgt m p bs a => (m.store tgt p bs a).map fun m' =>
+    m'.modify ⟨1⟩ fun x => { x with bytes := bs ++ x.bytes }
 def badStoreWf : Target → Memory → Ptr → List MByte → Nat → Option Memory :=
-  fun _ _ _ _ _ => some badEmpty
-def badAccessSome : Target → Memory → Ptr → Nat → Nat → Option (Option (MemBlockId × Nat)) :=
-  fun _ _ _ _ _ => some none
-def badAccessPair : Target → Memory → Ptr → Nat → Nat → Option (Option (MemBlockId × Nat)) :=
-  fun _ _ _ _ _ => some (some (⟨0⟩, 0))
-def badAccessNone : Target → Memory → Ptr → Nat → Nat → Option (Option (MemBlockId × Nat)) :=
-  fun _ _ _ _ _ => none
+  fun tgt m p bs a => (m.store tgt p bs a).map fun m' => { m' with next := 0 }
+def badAccessSome : Target → Memory → Ptr → Nat → Nat → Option (Option (BlockId × Nat)) :=
+  fun tgt m p _ a => m.access tgt p 0 a
+def badAccessPair : Target → Memory → Ptr → Nat → Nat → Option (Option (BlockId × Nat)) :=
+  fun _ m p _ a => do
+    let b ← p.prov
+    let x ← m.block b
+    if x.live = true ∧ x.space = p.space ∧ p.addr % a = 0 then
+      some (some (b, p.addr - x.base)) else none
+def badAccessNone : Target → Memory → Ptr → Nat → Nat → Option (Option (BlockId × Nat)) :=
+  fun tgt m p n a => m.access tgt p (n + 2 ^ tgt.addrBits) a
 def badEqAddr : Ptr → Ptr → Bool := fun p q => p == q
 def badFromExposedNone : Memory → AddrSpace → Nat → Ptr := fun _ s addr => ⟨s, addr, none⟩
-def badFromExposedSome : Memory → AddrSpace → Nat → Ptr := fun _ s addr => ⟨s, addr, some ⟨0⟩⟩
-def badFreeWf : Memory → MemBlockId → Option Memory := fun _ _ => some badEmpty
-def badExposeNone : Memory → Ptr → Option Memory := fun _ _ => none
-def badExposeWf : Memory → Ptr → Option Memory := fun _ _ => some badEmpty
+/-- Fault: attach the first stored block without checking its address range. -/
+def badFromExposedSome : Memory → AddrSpace → Nat → Ptr :=
+  fun m s addr => ⟨s, addr, (m.blocks.head?).map Prod.fst⟩
+def badFreeWf : Memory → BlockId → Option Memory :=
+  fun m b => (m.free b).map fun m' => { m' with next := 0 }
+/-- Fault: exposure wrongly requires the block to have been exposed already. -/
+def badExposeNone (m : Memory) (p : Ptr) : Option Memory := do
+  let b ← p.prov
+  let x ← m.block b
+  if x.exposed then m.expose p else none
+def badExposeWf : Memory → Ptr → Option Memory :=
+  fun m p => (m.expose p).map fun m' => { m' with next := 0 }
 
-/-- Helper (inversion). The out-of-range block identity in badEmpty violates the freshness invariant (approved: APPR-C4-agy-78ee5a2db). -/
+/-- Helper (inversion). The out-of-range block identity in badEmpty violates the freshness invariant. -/
 private theorem not_badEmpty_wf : ¬ badEmpty.WellFormed target := by
   intro hw
   have h := hw.fresh ⟨1⟩ initBlock rfl
   cases h
 
-/-- Helper (congruence). The audit fixture memory satisfies the target memory invariant (approved: APPR-C4-agy-78ee5a2db). -/
+/-- Helper (congruence). The audit fixture memory satisfies the target memory invariant. -/
 private theorem memory_wf : memory.WellFormed target :=
   alloc_wellFormed target Memory.empty (empty_wellFormed target) ⟨0⟩ 40 8 1
 
-/-- Helper (congruence). The exposed audit fixture memory satisfies the target memory invariant (approved: APPR-C4-agy-78ee5a2db). -/
+/-- Helper (congruence). The exposed audit fixture memory satisfies the target memory invariant. -/
 private theorem exposedMemory_wf : exposedMemory.WellFormed target :=
   expose_wellFormed target memory memory_wf ptr
 
@@ -1204,83 +1177,8 @@ example : match decodeInt target .i8 [.init 251 none] with
 example : ¬ (match badDecodeIntRange target .i8 [.init 251 none] with
     | some n => IntTy.i8.InRange n
     | none => True) := by
-  dsimp [badDecodeIntRange]
+  change ¬ IntTy.i8.InRange 251
   decide
-
--- 3. decodeBool_encodeBool
-/-- Representation check. Canonical computation. -/
-example : decodeBool (encodeBool true) = some true :=
-  decodeBool_encodeBool true
-
-/-- Representation check. Canonical computation. -/
-example : ¬ (badDecodeBool (encodeBool true) = some true) := by decide
-
-/-- Representation check. Canonical computation. -/
-example : ¬ (decodeBool (badEncodeBool true) = some true) := by decide
-
--- 4. decodeBool_valid
-/-- Instance (law `ConcreteSpec.Core.Mem.decodeBool_valid`, case `true`). -/
-example : decodeBool (encodeBool true) = some true ↔
-    ∃ v f, encodeBool true = [.init v f] ∧ v.val = boolToBits true :=
-  decodeBool_valid (encodeBool true) true
-
-/-- Planted (law `ConcreteSpec.Core.Mem.decodeBool_valid`, case `true`, subject `ConcreteSpec.Core.Mem.decodeBool`, mutant `ConcreteSpec.Core.Mem.Audit.badDecodeBool`). -/
-example : ¬ (badDecodeBool (encodeBool true) = some true ↔
-    ∃ v f, encodeBool true = [.init v f] ∧ v.val = boolToBits true) := by
-  intro h
-  have hh := h.mpr ⟨⟨1, by decide⟩, none, rfl, rfl⟩
-  cases hh
-
--- 5. decodePtr_encodePtr
-/-- Instance (law `ConcreteSpec.Core.Mem.decodePtr_encodePtr`, case `valid`). Accepted: a valid whole pointer. -/
-example : decodePtr target (encodePtr target ptr) = some ptr :=
-  decodePtr_encodePtr target (by decide) ptr (by decide)
-
-/-- Planted (law `ConcreteSpec.Core.Mem.decodePtr_encodePtr`, case `valid`, subject `ConcreteSpec.Core.Mem.decodePtr`, mutant `ConcreteSpec.Core.Mem.Audit.badDecodePtr`). A decoder mutated to reverse violates the round trip at this valid pointer. -/
-example : target.WellFormed ∧ ptr.Valid target ∧
-    ¬ (badDecodePtr target (encodePtr target ptr) = some ptr) := by decide
-
-/-- Planted (law `ConcreteSpec.Core.Mem.decodePtr_encodePtr`, case `valid`, subject `ConcreteSpec.Core.Mem.encodePtr`, mutant `ConcreteSpec.Core.Mem.Audit.badEncodePtr`). -/
-example : target.WellFormed ∧ ptr.Valid target ∧
-    ¬ (decodePtr target (badEncodePtr target ptr) = some ptr) := by decide
-
--- 6. decodePtr_some
-/-- Instance (law `ConcreteSpec.Core.Mem.decodePtr_some`, case `valid`). Accepted: successful decoding has exactly the stored encoding, including provenance. -/
-example : decodePtr target bytes = some ptr ↔ bytes = encodePtr target ptr ∧ ptr.Valid target :=
-  decodePtr_some target (by decide) bytes ptr
-
-/-- Planted (law `ConcreteSpec.Core.Mem.decodePtr_some`, case `valid`, subject `ConcreteSpec.Core.Mem.decodePtr`, mutant `ConcreteSpec.Core.Mem.Audit.badDecodePtr`). -/
-example : target.WellFormed ∧
-    ¬ (badDecodePtr target bytes = some ptr ↔ bytes = encodePtr target ptr ∧ ptr.Valid target) := by
-  decide
-
-/-- Planted (law `ConcreteSpec.Core.Mem.decodePtr_some`, case `valid`, subject `ConcreteSpec.Core.Mem.encodePtr`, mutant `ConcreteSpec.Core.Mem.Audit.badEncodePtr`). -/
-example : target.WellFormed ∧
-    ¬ (decodePtr target bytes = some ptr ↔ bytes = badEncodePtr target ptr ∧ ptr.Valid target) := by
-  decide
-
-/-- Instance (law `ConcreteSpec.Core.Mem.decodePtr_some`, case `partial`). Refused: partial pointer, with the second fragment missing. -/
-example : decodePtr target [.init 40 (some (ptr, 0))] = some ptr ↔
-    [.init 40 (some (ptr, 0))] = encodePtr target ptr ∧ ptr.Valid target :=
-  decodePtr_some target (by decide) [.init 40 (some (ptr, 0))] ptr
-
-/-- Planted (law `ConcreteSpec.Core.Mem.decodePtr_some`, case `partial`, subject `ConcreteSpec.Core.Mem.decodePtr`, mutant `ConcreteSpec.Core.Mem.Audit.firstFragment`). The first-fragment-only mutant violates the converse on a partial pointer. -/
-example : target.WellFormed ∧
-    ¬ (firstFragment target [.init 40 (some (ptr, 0))] = some ptr ↔
-      [.init 40 (some (ptr, 0))] = encodePtr target ptr ∧ ptr.Valid target) := by decide
-
-/-- Refused: partial pointer, with the second fragment missing. -/
-example : decodePtr target [.init 40 (some (ptr, 0))] = none := by decide
-/-- Refused: two pointers' fragments, with otherwise correct octets and indices. -/
-example : decodePtr target [.init 40 (some (ptr, 0)), .init 0 (some (other, 1))] = none := by decide
-/-- Refused: the right pointer's fragments in the wrong order. -/
-example : decodePtr target [.init 0 (some (ptr, 1)), .init 40 (some (ptr, 0))] = none := by decide
-/-- Refused: correct fragments and indices, but one corrupted octet. -/
-example : decodePtr target [.init 41 (some (ptr, 0)), .init 0 (some (ptr, 1))] = none := by decide
-/-- Refused: integer bytes spell a valid address but carry no pointer meaning. -/
-example : decodePtr target [.init 40 none, .init 0 none] = none := by decide
-/-- Refused: uninitialized bytes cannot supply a pointer. -/
-example : decodePtr target [.uninit, .uninit] = none := by decide
 
 -- 7. empty_wellFormed
 /-- Instance (law `ConcreteSpec.Core.Mem.empty_wellFormed`, case `default`). -/
@@ -1580,7 +1478,7 @@ example : (frameMemory.store target ptr [.init 7 none] 1).bind (fun m' => m'.blo
 
 /-- Planted (law `ConcreteSpec.Core.Mem.store_other_block`, case `otherBlock`, subject `ConcreteSpec.Core.Mem.Memory.store`, mutant `ConcreteSpec.Core.Mem.Audit.badStoreDup`). -/
 example : frameMemory.access target ptr ([MByte.init 7 none]).length 1 = some (some (⟨0⟩, 0)) ∧
-    (⟨1⟩ : MemBlockId) ≠ ⟨0⟩ ∧
+    (⟨1⟩ : BlockId) ≠ ⟨0⟩ ∧
     ¬ ((badStoreDup target frameMemory ptr [.init 7 none] 1).bind (fun m' => m'.block ⟨1⟩) =
       frameMemory.block ⟨1⟩) :=
   ⟨rfl, by decide, by intro h; cases h⟩
@@ -1628,7 +1526,10 @@ example : memory.WellFormed target ∧
     ¬ (match badStoreWf target memory ptr [.init 7 none] 1 with
       | some m' => m'.WellFormed target
       | none => True) :=
-  ⟨memory_wf, not_badEmpty_wf⟩
+  ⟨memory_wf, by
+    intro hw
+    have h : (0 : Nat) < 0 := hw.fresh ⟨0⟩ storedBlock rfl
+    exact (Nat.lt_irrefl 0) h⟩
 
 -- 27. free_wellFormed
 /-- Instance (law `ConcreteSpec.Core.Mem.free_wellFormed`, case `live`). -/
@@ -1642,7 +1543,10 @@ example : memory.WellFormed target ∧
     ¬ (match badFreeWf memory ⟨0⟩ with
       | some m' => m'.WellFormed target
       | none => True) :=
-  ⟨memory_wf, not_badEmpty_wf⟩
+  ⟨memory_wf, by
+    intro hw
+    have h : (0 : Nat) < 0 := hw.fresh ⟨0⟩ freedBlock rfl
+    exact (Nat.lt_irrefl 0) h⟩
 
 -- 28. expose_success
 /-- Instance (law `ConcreteSpec.Core.Mem.expose_success`, case `live`). -/
@@ -1667,7 +1571,10 @@ example : memory.WellFormed target ∧
     ¬ (match badExposeWf memory ptr with
       | some m' => m'.WellFormed target
       | none => True) :=
-  ⟨memory_wf, not_badEmpty_wf⟩
+  ⟨memory_wf, by
+    intro hw
+    have h : (0 : Nat) < 0 := hw.fresh ⟨0⟩ exposedBlock rfl
+    exact (Nat.lt_irrefl 0) h⟩
 
 -- 30. store_load_other
 /-- Instance (law `ConcreteSpec.Core.Mem.store_load_other`, case `disjointProv`). -/
@@ -1719,14 +1626,15 @@ example : memory.WellFormed target ∧ memory.free ⟨0⟩ = some freedMemory �
   ⟨memory_wf, rfl, rfl, fun h => h rfl⟩
 
 
-def skipFree : Memory → MemBlockId → Option Memory := fun m _ => some m
-def corruptExpose : Memory → Ptr → Option Memory := fun _ _ => some badEmpty
+def skipFree : Memory → BlockId → Option Memory := fun m _ => some m
+def corruptExpose : Memory → Ptr → Option Memory :=
+  fun m p => (m.expose p).map fun m' => { m' with next := 0 }
 def corruptStoreGeometry : Target → Memory → Ptr → List MByte → Nat → Option Memory :=
   fun _ m _ _ _ => some (m.modify ⟨0⟩ fun x => { x with base := x.base + 1 })
 def corruptExposeGeometry : Memory → Ptr → Option Memory :=
   fun m _ => some (m.modify ⟨0⟩ fun x => { x with size := x.size + 1 })
 def wrongReconstruction : Memory → AddrSpace → Nat → Ptr :=
-  fun _ s a => ⟨s, a, some ⟨1⟩⟩
+  fun m s a => ⟨s, a, some ⟨m.next⟩⟩
 
 /-- Instance (law `ConcreteSpec.Core.Mem.eqAddr_separation`, case `provenance`). -/
 example : Ptr.eqAddr ptr rawPtr = false ↔ ptr.space ≠ rawPtr.space ∨
@@ -1734,7 +1642,11 @@ example : Ptr.eqAddr ptr rawPtr = false ↔ ptr.space ≠ rawPtr.space ∨
 /-- Planted (law `ConcreteSpec.Core.Mem.eqAddr_separation`, case `provenance`, subject `ConcreteSpec.Core.Mem.Ptr.eqAddr`, mutant `ConcreteSpec.Core.Mem.Audit.badEqAddr`). -/
 example : ¬ (badEqAddr ptr rawPtr = false ↔ ptr.space ≠ rawPtr.space ∨
     ptr.addr < rawPtr.addr ∨ rawPtr.addr < ptr.addr) := by decide
-def alwaysEqual : Ptr → Ptr → Bool := fun _ _ => true
+/-- Fault: same address space is mistaken for equal addresses. -/
+def alwaysEqual : Ptr → Ptr → Bool := fun p q => decide (p.space = q.space)
+
+/-- Fault: numeric equality forgets address-space identity. -/
+def ignoreSpace : Ptr → Ptr → Bool := fun p q => decide (p.addr = q.addr)
 /-- Instance (law `ConcreteSpec.Core.Mem.eqAddr_separation`, case `address`). -/
 example : Ptr.eqAddr ptr other = false ↔ ptr.space ≠ other.space ∨
     ptr.addr < other.addr ∨ other.addr < ptr.addr := eqAddr_separation ptr other
@@ -1812,9 +1724,89 @@ example : frameMemory.load target frameOther 2 1 = some [.init 9 none, .init 10 
 /-- Instance (law `ConcreteSpec.Core.Mem.eqAddr_separation`, case `space`). -/
 example : Ptr.eqAddr ptr ⟨⟨1⟩, 40, none⟩ = false ↔ ptr.space ≠ (⟨1⟩ : AddrSpace) ∨
     ptr.addr < 40 ∨ 40 < ptr.addr := eqAddr_separation ptr ⟨⟨1⟩, 40, none⟩
-/-- Planted (law `ConcreteSpec.Core.Mem.eqAddr_separation`, case `space`, subject `ConcreteSpec.Core.Mem.Ptr.eqAddr`, mutant `ConcreteSpec.Core.Mem.Audit.alwaysEqual`). -/
-example : ¬ (alwaysEqual ptr ⟨⟨1⟩, 40, none⟩ = false ↔ ptr.space ≠ (⟨1⟩ : AddrSpace) ∨
+/-- Planted (law `ConcreteSpec.Core.Mem.eqAddr_separation`, case `space`, subject `ConcreteSpec.Core.Mem.Ptr.eqAddr`, mutant `ConcreteSpec.Core.Mem.Audit.ignoreSpace`). -/
+example : ¬ (ignoreSpace ptr ⟨⟨1⟩, 40, none⟩ = false ↔ ptr.space ≠ (⟨1⟩ : AddrSpace) ∨
     ptr.addr < 40 ∨ 40 < ptr.addr) := by decide
+
+/-! The following controls delete one guard at a time. Their other obligations are
+satisfied, so each refusal observes its named rule rather than an unrelated failure. -/
+
+/-- Fault injector for access: omit just liveness, space, lower bound, upper bound or alignment. -/
+def accessSkipping (skip : Nat) (m : Memory) (p : Ptr) (n a : Nat) :
+    Option (Option (BlockId × Nat)) := do
+  let b ← p.prov
+  let x ← m.block b
+  if (skip = 0 ∨ x.live = true) ∧ (skip = 1 ∨ x.space = p.space) ∧
+      (skip = 2 ∨ x.base ≤ p.addr) ∧ (skip = 3 ∨ p.addr + n ≤ x.base + x.size) ∧
+      (skip = 4 ∨ p.addr % a = 0) then some (some (b, p.addr - x.base)) else none
+
+/-- Released memory fails only liveness here. -/
+example : freedMemory.access target ptr 1 1 = none ∧
+    accessSkipping 0 freedMemory ptr 1 1 = some (some (⟨0⟩, 0)) := by decide
+
+/-- A pointer in a second admitted space fails the allocation's space check alone. -/
+example : let twoSpaces := { target with spaces := [⟨0⟩, ⟨1⟩] }
+    let p := { ptr with space := ⟨1⟩ }
+    twoSpaces.WellFormed ∧ p.Valid twoSpaces ∧ memory.WellFormed twoSpaces ∧
+    memory.access twoSpaces p 1 1 = none ∧
+    accessSkipping 1 memory p 1 1 = some (some (⟨0⟩, 0)) := by
+  refine ⟨by decide, by decide, ?_, by decide, by decide⟩
+  exact alloc_wellFormed { target with spaces := [⟨0⟩, ⟨1⟩] } Memory.empty
+    (empty_wellFormed _) ⟨0⟩ 40 8 1
+
+/-- A byte before the base fails only the lower bound. -/
+example : memory.access target { ptr with addr := 39 } 1 1 = none ∧
+    accessSkipping 2 memory { ptr with addr := 39 } 1 1 = some (some (⟨0⟩, 0)) := by decide
+
+/-- The one-past pointer is not a one-byte access. -/
+example : memory.access target { ptr with addr := 48 } 1 1 = none ∧
+    accessSkipping 3 memory { ptr with addr := 48 } 1 1 = some (some (⟨0⟩, 8)) := by decide
+
+/-- Interior and in bounds, but not aligned to two bytes. -/
+example : memory.access target { ptr with addr := 41 } 1 2 = none ∧
+    accessSkipping 4 memory { ptr with addr := 41 } 1 2 = some (some (⟨0⟩, 1)) := by decide
+
+/-- Fault: reverse reconstruction priority by trying one-past before containing. -/
+def onePastFirst (m : Memory) (space : AddrSpace) (addr : Nat) : Ptr :=
+  match m.blocks.find? (fun e => e.2.Candidate space && decide (addr = e.2.base + e.2.size)) with
+  | some e => ⟨space, addr, some e.1⟩
+  | none => m.fromExposed space addr
+
+/-- Adjacent exposed blocks make the priority observable, independent of list order. -/
+def adjacent : Memory :=
+  ⟨[(⟨1⟩, { candidate ⟨0⟩ 48 8 1 with exposed := true }),
+    (⟨0⟩, { candidate ⟨0⟩ 40 8 1 with exposed := true })], 2⟩
+
+example : adjacent.WellFormed target ∧
+    (adjacent.fromExposed ⟨0⟩ 48).prov = some ⟨1⟩ ∧
+    (onePastFirst adjacent ⟨0⟩ 48).prov = some ⟨0⟩ := by
+  refine ⟨?_, by decide, by decide⟩
+  exact expose_wellFormed target _
+    (alloc_wellFormed target exposedMemory exposedMemory_wf ⟨0⟩ 48 8 1)
+    ⟨⟨0⟩, 48, some ⟨1⟩⟩
+
+/-- Fault: reconstruct without requiring exposure. -/
+def ignoreExposure (m : Memory) (space : AddrSpace) (addr : Nat) : Ptr :=
+  let exposed : Memory := { m with blocks := List.map (fun (b, x) => (b, { x with exposed := true })) m.blocks }
+  exposed.fromExposed space addr
+
+example : (memory.fromExposed ⟨0⟩ 42).prov = none ∧
+    (ignoreExposure memory ⟨0⟩ 42).prov = some ⟨0⟩ := by decide
+
+/-- Fault: forgetting the nonempty condition admits a zero-sized block at its one-past address. -/
+def includeEmpty (m : Memory) (space : AddrSpace) (addr : Nat) : Ptr :=
+  match m.blocks.find? (fun e => e.2.live && e.2.exposed && decide (e.2.space = space) &&
+      decide (addr = e.2.base + e.2.size)) with
+  | some e => ⟨space, addr, some e.1⟩
+  | none => m.fromExposed space addr
+
+example : let m : Memory := ⟨[(⟨0⟩, { candidate ⟨0⟩ 40 0 1 with exposed := true })], 1⟩
+    m.WellFormed target ∧ (m.fromExposed ⟨0⟩ 40).prov = none ∧
+    (includeEmpty m ⟨0⟩ 40).prov = some ⟨0⟩ := by
+  refine ⟨?_, by decide, by decide⟩
+  exact expose_wellFormed target _
+    (alloc_wellFormed target Memory.empty (empty_wellFormed target) ⟨0⟩ 40 0 1)
+    ⟨⟨0⟩, 40, some ⟨0⟩⟩
 
 end Audit
 

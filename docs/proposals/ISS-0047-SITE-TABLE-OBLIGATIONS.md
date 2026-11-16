@@ -1,13 +1,14 @@
-# ISS-0047: site table obligations
+# ISS-0047: site table admission and diagnostic provenance
 
-Design only. Owner authorized both redesigns on 2026-11-15 (“yes do all this”).
-Goals: total proofs and informative refusals. Follow [PHILOSOPHY.md](../PHILOSOPHY.md).
-Anchors resolve at `origin/wip/spec-integration-head`,
-`aa44140a33747fa37ece59c76090972e564c65b4`; proposed laws below have not been run in Lean.
+Design round 2; proposed types/functions/laws below are proof and implementation
+obligations, not completed Lean verification. Authority: [redesign authorization](../decisions.md#decided-2026-11-15-audit-redesigns),
+[owner goals](../decisions.md#owner-goals-2026-11-15-provability-errors),
+[Philosophy](../PHILOSOPHY.md#the-rules). Evidence anchors refer to integration
+snapshot `aa44140a33747fa37ece59c76090972e564c65b4`, not newer main line numbers.
 
 ## One decidable invariant
 
-Introduce the sole whole-table coordinate predicate in `Spec/Observe`:
+In Spec/Observe introduce the sole whole-table coordinate predicate:
 
 ```lean
 def SiteTable.EntriesValid (sources : SourceTable) (sites : SiteTable) : Prop :=
@@ -17,142 +18,347 @@ def SiteTable.EntriesValid (sources : SourceTable) (sites : SiteTable) : Prop :=
     | some bytes => entry.2.LocationOk bytes
 ```
 
-Supply its constructive `Decidable` instance by bounded list traversal and existing decidability
-of `Span.LocationOk`. No unbounded existential search or classical instance is needed.
-`ProjectSources.Realizes` reuses this predicate as its final conjunct, retaining exact file
-spellings/bytes, exact sites, file-key Nodup and site-key Nodup separately. Duplicate-good entries
-satisfy EntriesValid but cannot be admitted. Source lookup keeps its current raw-table behavior.
+Construct its Decidable instance by finite traversal. Factor the last conjunct of
+existing `ProjectSources.Realizes` through it, keeping exact file spellings/bytes,
+exact site table, file-key Nodup and site-key Nodup distinct. Duplicate-good sites
+satisfy EntriesValid but fail admission. Raw source/site lookup laws remain unchanged.
+Delete `SiteTable.Valid`, self-lookup filters and compatibility aliases: lookup-visible
+validity is weaker on shadowed raw tables, so no unconditional equivalence is claimed.
+Derive membership from lookup, then trap coordinate conclusions from EntriesValid.
+`Span.PathOk` follows the structured path; preserve useful conclusions but remove
+redundant premises. Derive proposed `ExecAdapter.source_entries_valid` from `A.loaded`
+and `LoadedProject.load_admitted`, without a new field or `WellFormed` premise.
+Retire `sites_valid` after migration; retain WellFormed's event/request obligations.
 
-Delete `SiteTable.Valid` and the proposed self-lookup filter view and compatibility aliases.
-Migrate callers to EntriesValid; lookup-visible validity is strictly weaker on shadowed raw input,
-so this migration is deliberate, not an unconditional equivalence claim. Preserve trap resolution
-and byte-location conclusions by deriving membership from lookup and using EntriesValid.
-`Span.PathOk` follows structured paths; remove it as a redundant hypothesis in new table laws,
-while preserving existing externally useful PathOk conclusions.
-Derive the proposed `ExecAdapter.source_entries_valid` from `A.loaded` and
-`LoadedProject.load_admitted`; do not add a proof field or an unused `A.WellFormed` premise.
-Keep event/request fields of `ExecAdapter.WellFormed` unchanged. Retire the duplicate
-`ExecAdapter.sites_valid` view after migrating callers; no extra WellFormed alias is needed.
+Keep the raw site traversal subject `F : SourceTable → SiteTable → Option SiteIssue`
+with `F s t = none ↔ EntriesValid s t`. `SiteIssue` retains exact entry index and
+record. A refusal decomposes the input into a valid prefix, that invalid entry and
+suffix. This is a raw semantic search law, not the compiler's cross-file scheduler.
+For each entry select missing-file first; otherwise tag location failures in
+`Span.LocationOk` conjunction order: end offset beyond byte length, wrong line,
+wrong byte column. Include actual/bound values or expected/actual coordinates.
+Span construction already ensures start ≤ end; hence bounded end bounds start.
+Only compute coordinate mismatch after bounds pass: `lineAt`/`columnAt` clamp at EOF
+and cannot explain an out-of-bounds span. Prove each reason iff its check fails and
+all earlier checks at that entry pass.
 
-## Laws and premise-preserving controls
+Closed controls use empty bytes, a valid point at offset 0/line 1/column 1, and
+`bad` differing only in line 2. Shadowed `[(0,good),(0,bad)]` violates EntriesValid;
+a lookup-only finder misses it. Coordinate-ignoring and offset-only finders miss
+`[(0,bad)]`. Reject-duplicate-good fails the reverse correspondence. Add bounds,
+line and column failures separately, with a mutant reporting clamped coordinates
+for a bounds failure. Quantify laws over same-type executable subjects; mutants
+retain exactly the same inputs and premises, including any uniqueness premises.
 
-Laws quantify over the exact executable subject being tested, with identical inputs and premises
-for the implementation and mutant. Closed cases are constructive proof obligations.
+## Semantic admission, raw inputs and erasure
 
-* `F sources sites = none ↔ SiteTable.EntriesValid sources sites`, with
-  `F : SourceTable → SiteTable → Option SourceLoadRefusal`, instantiated by
-  `LoadedProject.findSiteIssue`. Success/refusal soundness additionally decomposes the list
-  into an all-valid prefix, the first invalid entry, and a suffix; the returned payload names
-  that exact occurrence and distinguishes missing bytes from invalid coordinates.
-* Closed source bytes `[]`, valid point span `good` at offset 0, line/column 1;
-  `bad` differs only in line 2. On `[(⟨0⟩,good),(⟨0⟩,bad)]`, EntriesValid is false.
-  A lookup-only issue finder sees only good and returns none, violating correspondence.
-  An offset-only/ignore-coordinates finder returns none on `[(⟨0⟩,bad)]` and also fails.
-  A finder that rejects duplicate-good entries fails correspondence in the opposite direction.
-* Preserve the full `LoadedProject.load_admitted` biconditional with factored Realizes,
-  rejection iff no realization, exact preservation, uniqueness, admission reorder laws,
-  diagnostic naming and trap-resolution conclusions. Do not weaken to success-only soundness.
-  Test a loader that checks lookup-visible validity and drops site Nodup on the shadowed
-  good/bad table: it admits a project for which Realizes and EntriesValid are false.
-  A coordinate-ignoring loader fails on the bad singleton; a keep-first loader fails exact
-  preservation/uniqueness on duplicate-good input. These are executable admission controls,
-  not fabricated invalid adapters retaining an impossible `loaded` proof.
-* Adapter EntriesValid is an admission corollary without WellFormed premises. Old raw-table
-  lookup-visible examples are restated explicitly as shadowing counterexamples, not silently
-  strengthened or supplied inconsistent Nodup premises. Reprove all affected trap/report laws.
+Proposed `loadChecked (input : ProjectSources) (plan : CheckPlan input) : CheckedLoadResult`
+remains TOTAL over the
+existing raw type (including `SourceLoadDemo.missing`, with no bytes anywhere).
+Its semantic refusals retain tagged file/site occurrence indices, offending raw
+records/fields and prerequisite facts. File and site indices are disjoint sorts.
+Collision refusals retain both complete records and indices, including equal values.
+For the raw first-collision projection of each table, traverse by increasing later index `j`; a collision exists when its
+key occurred in the prefix. Choose the least such `j`, then its unique earlier match
+`i` (prefix before the first collision is Nodup). On A-B-B-A choose `(1,2)` rather
+than `(0,3)`. `firstDuplicate`'s old earlier-key scan is intentionally replaced.
+For source files collisions compare successfully parsed path identities, including
+any additional collision checks required by the approved path policy; a malformed
+record has its own refusal, never a guessed parsed identity.
 
-## Diagnostic boundary
+`CheckedLoadResult` is either exact `LoadedProject` admission or a NONEMPTY finite
+collection of semantic refusals, at most one per attributed file occurrence under
+the scheduler below. Admission remains all-or-nothing. Prove the full existing
+`load_admitted` biconditional using factored Realizes, rejection iff no realization,
+exact preservation, uniqueness and admission reorder invariance. Refusal ordering
+may change; old category-priority refusal equality is NOT promised. A retained raw
+Option loader is solely this result's success erasure using the canonical raw plan
+over identical raw inputs. `CheckPlan` stores finite indexed checks, grouping/order
+and a constructive coverage/dependency certificate, not assumed check outcomes.
+A total raw-plan constructor gives the existing one-argument API.
+Existing `SourceLoadRefusal.Names` is a weaker derived membership corollary, never
+a substitute for occurrence precision. Existing fixture types and `ExecAdapter.sourceInput`
+remain unchanged; adapters retain their admission evidence over those raw inputs.
 
-Each refusal must project to exactly one registered rule and one primary precise input location.
-Related locations may supplement that primary. Add located input occurrences: stable occurrence
-indices plus byte ranges into actual input/manifest bytes, with line/column derived from bytes.
-Generate provenance during total parsing, before checking candidate paths or site coordinates;
-prove ranges bounded and occurrences tied to the decoded records. Externally supplied metadata
-is located at its actual serialized declaration. In-memory fixtures must supply such a located
-input too; a raw SiteId is not a source location. This changes the boundary explicitly.
+A lookup-only loader dropping site Nodup must fail on shadowed good/bad input;
+a keep-first loader must fail preservation/uniqueness on duplicate-good input.
+Test coordinate-ignoring acceptance, rejecting valid projects, later-collision and
+equal-record index substitution. Do not construct an invalid adapter with an
+impossible `loaded` proof to test these laws.
 
-Never validate diagnostic provenance using the candidate span being rejected. Malformed path,
-missing-file and out-of-range/incorrect-coordinate errors point to the relevant input declaration,
-not to fictitious bytes in a missing file. Refusals retain raw input and parser/component byte
-ranges, including repeated components, rather than reconstructing an occurrence from string equality.
+## Located boundary
 
-`duplicateSite` retains both complete `(SiteId × Span)` entries and their distinct occurrences;
-`duplicateFile` retains both raw file entries and their parsed common path. Keep existing outer
-priority: first malformed file, file collision, site collision, then first site issue.
-Preserve the existing first-colliding-key scan; choose its earliest later matching occurrence,
-make that later declaration primary, and retain the earlier occurrence as related evidence.
-Equal entries remain distinct occurrences. Prove the selection instead of relying on membership.
+Place shared provenance carriers alongside SourceText/Span/RuleId in the lower
+Ident layer (or an Ident-only leaf), not in Observe. Prim never imports Observe.
+No serialized site/obligation manifest is assumed: these are elaborator tables.
+A byte document has a stable document-occurrence identity, raw path spelling and
+actual `SourceText`; its identity does not require its raw path to parse successfully.
+A `ByteRange` carries `start ≤ end ≤ bytes.length`; derived line/column use the
+existing byte functions. A diagnostic for a malformed path can therefore point
+into its real declaring source/config document without trusting the rejected path.
+A shared `ByteLocation` carries document identity, range and byte-derived line/column;
+its validity law is exactly bounds and the line/column conjuncts of `Span.LocationOk`.
+It does not require the rejected raw path to be a SourcePath. Projection to a public
+checked Span requires an admitted path for that DOCUMENT, not the candidate path
+field being rejected. Diagnostic rendering preserves raw document identity when
+that conversion is unavailable; it never invents an admitted path. Capture an external
+source-path argument as its actual argument byte sequence and indexed range when
+that is the producing input, rather than pretending it was a serialized table file.
 
-Change authoritative `Frame.assembleProject` to an informative result preserving the exact
-`SourceLoadRefusal`; build only on admission. Any retained Option interface is a proved erasure,
-and diagnostic consumers use the informative result. Preserve source-launcher and build relations
-through this erasure; source admission never becomes a runtime status or startup refusal.
+Proposed `OccurrenceRef` is a tagged index (file declaration, site-table entry,
+obligation registration, operation or proof attribute). Proposed `Origin` contains
+the document id and range, plus a field/component selector when applicable.
+`LocatedProjectInput` contains `(documents, raw : ProjectSources, origins)` with
+origins for every checkable occurrence and relevant field, including both collision
+occurrences. A `Decoded documents raw origins` proof is required at its constructor.
+This is a relation on ACTUAL decoding/elaboration derivations, not another admission
+semantics: erase instrumentation from the existing parser/elaborator derivation to
+obtain exactly `raw`; each origin is the range consumed for that indexed occurrence
+in that SAME derivation. Repeated equal strings and zero-width generated nodes are
+identified by occurrence and derivation, never by searching bytes for equal text.
+Generated site/obligation entries map to the producing operation/proof attribute;
+record the producing-node link and derive it during elaboration. Imported/cached
+entries carry their original document and checked derivation links, not new spans.
 
-Prove for every refusal: the selected reason is true; earlier checks pass; the payload identifies
-the selected occurrence(s); its single rule denotes that failing check; its single primary
-location is the specified occurrence in actual bytes. Prove assembly preserves the refusal
-payload and diagnostic projection exactly. Existing `SourceLoadRefusal.Names` is only a corollary.
-Controls: swap rule/reason, replace the primary with another existing valid input location,
-lose either colliding entry, replace an occurrence with an equal-valued duplicate, trust malformed
-candidate coordinates, and erase the assembly refusal. Each must fail its corresponding law at
-unchanged inputs. Membership-only and valid-location-only laws cannot catch these substitutions.
+Implementation must define this relation inductively over the real producer's
+constructors, with erasure/coverage/bounds proofs for every constructor. For an
+existing raw in-memory value with no producer bytes, `Decoded` need not be inhabited.
+Do not add an axiom, a free-form asserted origin map or a total raw-to-located coercion.
+Fixtures testing diagnostics construct real byte inputs and instrumented derivations;
+raw semantic fixtures continue unchanged. No new total parser is postulated here.
+If an external table-input surface is later required, its syntax needs an owner
+proposal; neither these designs nor Concrete.toml's existing policy tables authorize it.
 
-## Proof boundary and owner dependencies
+Proposed authoritative compiler entry `checkLocatedProject (x : LocatedProjectInput)`
+constructs `x.plan` from its verified origins and runs `loadChecked x.raw x.plan` ONCE, then projects its semantic failures through `x`'s
+verified origins. Raw validity is the semantic kernel's success predicate, independent
+of decoration. Prove, for every raw `r`, every document set `d`, origins `p` and
+`h : Decoded d r p`, erasing diagnostics from `checkLocatedProject ⟨d,r,p,h⟩` equals
+`loadChecked r (planOf h)` with the same admitted data/refusal indices and reasons. Conversely
+admission of any verified lift iff `∃ project, r.Realizes project`. These quantified
+laws keep raw inputs working without promising every raw value has a byte origin.
+Two byte layouts decoding to the same tables may give different diagnostic ranges;
+they must have identical semantic erasures. No coordinates are derivable from tables alone.
 
-Use total finite parsing, traversals, decidable equality and constructive induction. Prove all
-new rules and controls without new axioms, held assumptions or classical choice. Located inputs
-are constructed and checked, not an assumed provenance oracle. Existing runtime/native assumptions
-are neither strengthened nor evidence for these source-boundary laws.
+Every located refusal has exactly one approved rule, one primary origin and any
+related evidence. Primary for a collision is the later declaration; earlier is
+related. Missing-file/invalid-span errors point at the PRODUCING declaration, not
+the absent file or invalid candidate span. Prove exact occurrence/range identity,
+bounds, byte-derived coordinates and rule/check association. If a producer cannot
+construct verified provenance, it cannot call the compiler diagnostic boundary;
+that integration is unfinished, never silently reported as an ordinary source error.
 
-ISS-0068 is an explicit unresolved dependency: `SourcePath.ComponentOk` currently embeds AY-2/3/4
-backslash, control-character and Unicode policies. Laws here refer to the current definitions;
-they neither approve, extend nor revert those policies. Parser/provenance migration must preserve
-the conflict until the owner answers. Do not declare this design dependency-free.
-Rule registration is separately pending: `Proofs/Observe2.lean:722–729` records the owner's open
-choice about registering the loader. Present a check-to-rule mapping for approval, including
-whether loader refusals use the loader rule or approved per-check rules; do not decide or register
-it here. Exactly-one-rule diagnostic completion is blocked on that answer, not waived.
-ISS-0048 (startup refusal state) and ISS-0073 (startup/ABI) remain open and untouched.
-`launchObservation`'s erased missing-grant provenance and unregistered-site `trapTerminal` /
-`ExecAdapter.terminal?` / `reportObservation` failures remain adjacent findings: ISS-XXXX,
-coordinator to allocate, owned by startup/report diagnostic boundaries. Closure requires typed
-rule/location refusals, preservation laws and payload-loss mutants there; these proposals do
-not claim to settle startup policy or complete all compiler diagnostics.
+## First error per file
 
-## Resolved names and anchored migration evidence
+Governing owner record [29-list item 12](../decisions.md#recovered-29-12), verbatim:
+“12. Each file is checked separately, and checking a file stops at its first error. (yes)”
+No multi-error recovery is introduced. The compiler checks each document independently
+until its first failure; one failed document does not stop checking other documents.
 
-All paths below are under `ConcreteSpec/` at the pinned ref. Mechanical source-name checks found:
+Attribution is to the primary origin's DOCUMENT OCCURRENCE, not its path string or
+the file claimed by a candidate Span. A repeated file declaration in one config/source
+file belongs to that declaring document; a site generated in another source belongs
+to that source. For raw-only checking, the attribution key is the tagged input file
+occurrence or, for sites, the producing-site occurrence; this is a semantic grouping,
+not a claim of physical file provenance. The located scheduler regroups by verified
+physical document origins; it must not merely decorate the raw collection after
+raw grouping has suppressed a needed failure. Thus `loadChecked`'s raw grouping is
+parameterized: default occurrence grouping for fixtures, document grouping supplied
+by `Decoded` at the compiler boundary. Erasure equality above uses that SAME supplied
+grouping/order; success/admission is invariant under either grouping.
 
-* `Spec/Observe.lean:167,180,192,199,205,217,227,237,251,260`:
-  `SiteTable.Valid`, `SourceLoadRefusal` (all five cited constructors), `LoadedProject`,
-  `SourceLoadResult`, `LoadedProject.parseFiles`, `LoadedProject.siteIssue`,
-  `LoadedProject.findSiteIssue`, `LoadedProject.load`, `ProjectSources.Realizes`,
-  `SourceLoadRefusal.Names` exist. `firstDuplicate` is at :212.
-* `Spec/Observe.lean:318,350,454,461,576,593,618,639`:
-  `trapTerminal`, `launch`, `ExecAdapter`, its `loaded` field, `ExecAdapter.WellFormed`,
-  `ExecAdapter.terminal?`, `reportObservation`, `launchObservation` exist.
-  `A.loaded`, `A.state`, `A.WellFormed`, `S.initState`, `input.files`, `requested.site`
-  and `e.context.obligation.site` are field/local projections, not missing global names.
-* `Proofs/Observe2.lean:80,95,160,245,1078`: `LoadedProject.findSiteIssue_none`,
-  `LoadedProject.load_admitted`, `LoadedProject.load_locations`,
-  `LoadedProject.load_refusal_names`, `ExecAdapter.sites_valid` exist.
-  `Spec/Ident.lean:134,143,147,725,754,812,823`: `LoadCollision`, its `first`/`second`,
-  `SourcePath.ComponentOk`, `SourcePath.Refusal`, `Span.LocationOk`, `Span.PathOk` exist.
-* `Spec/Frame.lean:721,868,907`: `Frame.KeptPair`, `Startup.refused125` (constructor),
-  `Frame.assembleProject` exist (the latter two resolve under `ConcreteSpec.Core.Frame.ABI`); `Proofs/Frame.lean` contains `startup125_admitted` and
-  `LoadBoundaryDemo`. Observe's `Demo.signature` and `Environment.adapter` also exist.
-* Missing: `load_realizes` has no declaration; use `LoadedProject.load_admitted`.
-  `SiteTable.EntriesValid`, `ExecAdapter.source_entries_valid`,
-  `WellFormed.source_entries_valid`, `lookup_eq_some_iff`, `lookup_eq_none_iff`,
-  `reverseLookup`, `headOnlyLookup`, `alwaysNoneLookup`, `lookupValidOnly`, `ignoreCoords`
-  are proposed names, not existing declarations. Do not cite them as implemented evidence.
-  Lean library names `List.find?`, `List.filter`, `Iff.rfl`, `Classical.choice`,
-  `Option.none`, `DecidableEq`, `LawfulBEq` resolve by `#check` under `nix develop`
-  (Lean 4.34.1, `import Init`); they are external to the tracked spec;
-  `Law`, `Helper`, `Representation lemma`, `Planted` are proof labels, not declarations.
+Define a finite ordered check plan, derived from indexed input and verified origins.
+Within each document order by `(primary.startOffset, primary.endOffset, occurrence
+index, check rank)`. The rank breaks ties ONLY at the same occurrence: path parse,
+file-key collision, site-key collision, missing source, bounds, line, column; discharge
+uses the context/request/lookup order in ISS-0050. Tie occurrence indices are producer
+preorder indices, not table key sorting. Raw order uses tagged occurrence preorder,
+then rank, without fabricating byte positions. This tuple is the ready-node priority:
+construct the plan by finite stable topological sorting, selecting the least ready
+node (document index, then this tuple) at each step. A dependency necessarily precedes
+its consumer even if its range is later; “first” means this explicit check-plan order,
+not a promise to diagnose an error whose prerequisite cannot be checked. Prove the
+sort respects every dependency and tuple order among simultaneously ready nodes.
+Document results are enumerated in
+document-input order, not host filesystem order. Collision primary is always the
+later indexed declaration, with origins preserving producer order within a document.
+The diagnostic plan includes a collision check at EVERY later occurrence against
+its full prefix, with earliest prior matching index as related evidence; it cannot
+reuse a single global first-collision result and lose another document’s collision.
+For the global first-collision law that prior match is unique; for later per-file
+collisions it need not be unique, so choose the least earlier match explicitly.
+This same plan rule applies to obligation admission (ISS-0050); only raw admission
+uses its single first-collision projection. No discharge executes after failed admission.
 
-Migrate Spec/Observe, Proofs/Observe2, Proofs/ObserveReport and Frame spec/proofs and demos.
-Reproduce affected uses with `git grep -n -E
-'SiteTable\.Valid|ProjectSources\.Realizes|LoadedProject\.(findSiteIssue|load)|ExecAdapter\.sites_valid|SourceLoadRefusal|assembleProject'
-<ref> -- ConcreteSpec`. Inspect namespace-local calls in the anchored declarations too.
-Unanchored `WellFormed`/`loaded` inventories and unrelated English matches are removed.
+Check nodes have explicit decidable prerequisites: parse before its key comparison,
+resolved source before coordinates, admission before executing a built artifact.
+Malformed source identity suppresses dependent coordinate checks, not independent
+checks in that file or another file. Missing bytes are a site error only when lookup
+absence is genuine in the successfully admitted source identities, not caused by
+an earlier failed source declaration. Any failed prerequisite has its OWN root
+refusal. Evaluate prerequisites in a finite topological traversal; schedule eligible
+checks in document order; after a document fails, execute no later checks attributed
+to it. Cross-file prerequisite failure blocks dependents with its root failure,
+without manufacturing cascades. A blocked node never masquerades as successful
+admission. Prove prerequisite closure and that any invalid Realizes input has a root
+failure (structural induction on finite dependencies); this is part of implementation.
+The plan cannot include execution of user code or an unbounded search for evidence.
+
+Selection law: for each document `f`, output contains exactly one failure iff the
+eligible check plan for `f` has a failure before its stop; it is the least failing
+node in that plan, with all earlier eligible checks successful. Documents without a
+failure have none. The output is EXACTLY the map of these per-file minima, with no
+extra/omitted file. Eligibility and roots are defined from the original inputs and
+prerequisite results, not from which diagnostic a mutant chose to retain. This law
+covers ALL checks together, so later malformed paths cannot outrank earlier coordinate
+errors in the same document merely by category. Global admission succeeds iff all
+checks succeed; collecting first errors is not partial project admission.
+
+Controls: earlier coordinate failure followed by later malformed declaration in ONE
+physical document; two different failing documents; A-B-B-A; two failures tied at one
+occurrence; malformed-source dependency versus independent failure in a second file.
+Mutants choose the later/category-priority failure, emit two in one file, stop the
+whole project at the first file, suppress another file's first error, merge equal
+path spellings from distinct document occurrences, or report dependent cascades.
+Keep the same plan, grouping, prerequisites and input in every mutant comparison.
+
+## Assembly and adjacent reporting issue
+
+`Frame.assembleProject` returns the informative load result on refusal and builds
+only on admission. Preserve the exact whole refusal collection, including origins,
+rules and related locations. Any retained Option interface is its proved erasure;
+source-launch/build relations use that erasure with unchanged success data.
+Source admission is never translated into a runtime status/startup refusal.
+Prove all payload preservation laws, not merely successful assembly soundness.
+Mutants swap rule/reason, replace primary by another valid occurrence, lose a
+collision entry, substitute equal-record indices, trust candidate coordinates or
+erase assembly refusal. All must fail exact laws at fixed inputs.
+
+ISS-0084 separately owns the confirmed `ExecAdapter.terminal?` / `reportObservation`
+diagnostic gap: an unregistered trap site becomes absence in `trapTerminal`, terminal
+conversion and final-report observation. Admission validates supplied entries, not
+registration of every site an arbitrary execution can reference. Scope excludes
+ordinary nonterminal evaluator reports: `.stuck`, `.badAnswer`, `.outOfFuel`, and
+non-request `.noAnswer` intentionally have no external observation. Inventory also
+records `.normal` and unmapped returned status as terminal conversion none arms,
+and `.noAnswer` request projection failure as a separate boundary to classify, not
+an automatic bug or authorization to invent observations. Missing launch-grant
+provenance belongs to held startup policy (ISS-0073), not this allocated trap issue.
+ISS-0084 closure requires typed unregistered-site refusal, exact site/request origin
+and approved rule, preservation through final reports, and payload-loss controls;
+existing registered-site trap theorems remain intact. Do not expand its scope just
+because another arm returns none (agy I2 is adopted as an inventory, with Codex's
+explicit nonterminal-scope correction).
+
+## Rule registration owner question
+
+Open question, not a chosen language rule: approve per-check declarations below,
+or one composite rule for each admission/discharge entry point? Existing authority
+[diagnostics decision](../decisions.md#decided-project-diagnostics-2026-11-06)
+requires typed results and rule identities; snapshot Proofs/Observe2.lean:722–729
+explicitly leaves loader registration open. Check the actual decision anchor before
+registering; each rule doc comment must link its governing owner record, as required
+by Spec/Rules and scripts/spec/rules.py. No IDs/revisions are allocated in this design.
+
+| Semantic refusal | Candidate declaration (proposed only) |
+|---|---|
+| malformed source path | SourcePathPermitted (reason tag from approved path check) |
+| duplicate file identity | SourceFileKeysUnique |
+| duplicate site identity | SiteKeysUnique |
+| missing source bytes | SiteSourceRegistered |
+| out-of-bounds span | SiteRangeBounded |
+| wrong line / wrong byte column | SiteLineMatches / SiteColumnMatches |
+| duplicate obligation identity | ObligationIdsUnique |
+| context mismatch (field tag retained) | EvidenceContextMatches |
+| requested identity mismatch | EvidenceRequestMatches |
+| missing obligation | ObligationRegistered |
+
+Option A: approve these per-premise declarations with one rule per refusal; costs
+more registration/example/revision tracking, gives stable precise blame. Option B:
+register `ProjectSourcesPermitted`, `ObligationTablePermitted`, `EvidenceDischargePermitted`
+with reason tags; fewer declarations, broader revisions and less precise rule links.
+Recommend A under Philosophy 3/5/6: the checked premise and cited authoritative rule
+stay directly connected. Constructor/context-field tags remain payloads, not invented
+additional rules. Exact names, granularity and decision links return to the owner;
+no registration or diagnostic-completeness claim before the answer. Semantic admission
+and raw search proofs do not depend on that answer.
+
+No manifest/table syntax is REQUIRED by this design, so no new syntax decision is
+needed to prove it. If a later consumer requires serialized tables, the explicit
+owner question is: A, keep tables internal and instrument existing source/proof/config
+producers (recommended; moderate producer proof cost, no grammar/schema expansion);
+or B, add a separately designed serialized table surface (large grammar, versioning,
+malformed-syntax rule/provenance and parser-proof cost). B needs its own full proposal
+and answer before implementation; neither option is silently encoded here.
+
+## Governing records and concrete landing sequence
+
+Main's ISS-0068 records the held SourcePath/Span extraction. The newer owner answer
+is now faithfully copied from `origin/wip/record-2026-11-16b` into
+[November 16 file paths](../decisions.md#decided-2026-11-16-file-paths): ASCII, slash
+separators, strict refusal/no rewriting, mixed-case spelling with case-collision
+refusal including prefixes, 100-byte components/200-byte paths, and the enumerated
+forbidden components/names. This supersedes the former blanket character-policy
+hold ONLY within its stated scope; F03p/F04p must implement and prove that policy
+before dependent location interfaces land. Do not retain AY-2/3/4 as provisional
+approval or assume older path predicates already implement the new answer.
+ISS-0073 on main still holds startup/ABI for F28/F29. ISS-0048's initial-world
+ownership is decided separately, not startup/ABI authorization.
+
+Coordinator plan `scratchpad/f03/plan.md` (supplied writer input) rows F18–F20p,
+F28–F29p budget F19 under 1.7k lines (large), F20 under 2.7k (large), F20p under
+0.6k (small); these extraction estimates do NOT include all new diagnostic work.
+Each line below is a landable slice only with all affected compiling consumers:
+
+1. F03p/F04p approved paths/Span and full dependent controls after F03/F04:
+   medium implementation/proofs; reconcile the November 16 policy first.
+2. Shared located carriers and instrumented producer construction, decoding erasure,
+   bounds/coverage and per-file scheduling: medium-to-large; measure actual parser,
+   elaborator and cache/import producers, no provenance oracle. Keep lower imports
+   acyclic; no new manifest parser. This is explicit added work beyond predicate factoring.
+3. Owner rule-mapping answer → decision-linked registration/examples and registry
+   gates: small-to-medium, prerequisite for the located diagnostic slices.
+4. F18 follows F10/F04/CAP and accepted ISS-0050; independent semantic search/admission
+   then checked/located discharge and consumer migrations as detailed there. F19
+   follows F10/F04p and accepted ISS-0047, incorporating ISS-0045 coordinate delegation
+   FIRST (separate adjacent Observe:278–307 hunk), main numeric variable identity,
+   ISS-0048 explicit launch world, EntriesValid and checked raw admission: large.
+5. F19 located loader/scheduler and informative assembly integration, erasure and
+   refusal-preservation proofs: large additional slice after 2–4 as applicable;
+   Frame integration waits for F28 authority instead of importing unapproved startup.
+   The loader boundary is independently useful before Frame; closure waits for both.
+6. F20 migrates Observe2, report/output/environment/source evidence and all adapter
+   literals; F20p closes approved path controls. F28/F29 migrate Frame/build/launch
+   consumers after ISS-0073 authority; F29p covers end-to-end source-policy refusal
+   propagation. Medium-to-large consumer/proof work beyond the extraction budgets.
+   F35's hosted compiler switch preserves all distinctions and production diagnostics.
+
+Measure changed declarations/consumers before implementation, revise budgets, and
+split only independently useful preparation; never split a semantic API switch from
+required consumers. Each slice has exact-SHA gates and eligible reviews when landing
+is authorized. This writer round changes designs only and runs no review/push.
+
+## Anchored inventory and proof method
+
+Snapshot Spec/Observe.lean:167 SiteTable.Valid; :180 SourceLoadRefusal; :190 LoadedProject;
+:196 SourceLoadResult; :202 parseFiles; :213 firstDuplicate; :219 siteIssue; :227 findSiteIssue;
+:237 load; :251 Realizes; :260 Names. Spec/Observe:318 trapTerminal, :454 ExecAdapter,
+:461 loaded, :576 WellFormed, :593 terminal?, :618 reportObservation, :639 launchObservation.
+Proofs/Observe2:80 findSiteIssue_none, :95 load_admitted, :160 load_locations,
+:245 load_refusal_names, :1078 sites_valid. Spec/Frame:907 assembleProject;
+Startup is :868, its refused125 constructor :869 (not a source-load failure).
+Spec/Ident:812 LocationOk; SourcePath/Span anchors are snapshot-only pending F03p.
+
+Explicit missed consumers now included: Proofs/ObserveOutput.lean:200–212 OutputDemo.adapter;
+Proofs/Adequacy.lean:1871–1889 erasingAdapter/keepingAdapter; Proofs/Frame.lean:2235–2340
+LoadBoundaryDemo; Observe's Environment.adapter and all source/report demo constructors.
+Inventory actual calls and struct literals with
+`git grep -n -E 'SiteTable\.Valid|ProjectSources|LoadedProject|ExecAdapter|SourceLoadRefusal|assembleProject' -- ConcreteSpec`,
+then inspect namespace-local calls; keep the bounded declaration inventory, not raw English hits.
+`load_realizes` does not exist; use `LoadedProject.load_admitted`. EntriesValid and
+source_entries_valid are proposed names, not existing evidence. Reviewer CheckM is
+legacy-only. All laws quantify over the real Spec admission/execution relations;
+use finite structural recursion, existing decidability and equality transport, with
+no new axiom, trusted search, classical choice or second semantic relation.
+Provenance instrumentation and check-plan laws require kernel proofs and positive/
+negative closed controls; prose plausibility is not qualification.

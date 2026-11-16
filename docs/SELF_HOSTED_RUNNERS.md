@@ -77,23 +77,19 @@ back to GitHub-hosted. So turn the variable off before taking the servers down.
 
 ```sh
 # on (landing tier)
-gh variable set CONCRETE_SELF_HOSTED --body true -R unbalancedparentheses/concrete2
+gh variable set CONCRETE_SELF_HOSTED --body true -R lambdaclass/concrete
 # off (back to GitHub-hosted)
-gh variable delete CONCRETE_SELF_HOSTED -R unbalancedparentheses/concrete2
+gh variable delete CONCRETE_SELF_HOSTED -R lambdaclass/concrete
 # campaign tier, separately (normally left off)
-gh variable set CONCRETE_SELF_HOSTED_CAMPAIGN --body true -R unbalancedparentheses/concrete2
+gh variable set CONCRETE_SELF_HOSTED_CAMPAIGN --body true -R lambdaclass/concrete
 ```
 
 The variable is read when a run starts. Runs already queued keep the routing they started with.
 
-**lambdaclass/concrete** is a separate repository. Variables and repository-level runners do not
-carry over: it stays on GitHub-hosted runners until it gets its own runners (registered against
-`https://github.com/lambdaclass/concrete`, or through an org runner group that grants that repo the
-`concrete` label) and its own `CONCRETE_SELF_HOSTED` variable. The nightly campaign (`nightly.yml`,
-which dispatches CI with `campaign=true` on `main`) runs there, so `CONCRETE_SELF_HOSTED_CAMPAIGN`
-matters there for the nightly campaign. On concrete2 the nightly runs only when the variable
-`CONCRETE_NIGHTLY_QUALIFICATION` is `true`; otherwise the campaign variable only affects campaign
-runs you dispatch with `-f campaign=true`.
+Following the [repository rules](../AGENTS.md#rules), repository variables and runners must be
+registered on the destination; copied Git refs do not migrate registration or routing configuration.
+Use `https://github.com/lambdaclass/concrete` for registration. The frozen nightly workflow
+under legacy/ is historical and is not an active campaign scheduler.
 
 ## Security rules (public repository)
 
@@ -114,7 +110,7 @@ because a pull request can run arbitrary code on them. We use them anyway, under
    stay on the machine. Isolation comes from destroying the VM or container after each job and
    starting a fresh one from a clean image, which registers a new ephemeral runner. Automate that
    with actions-runner-controller, or with a supervisor **outside** the job's VM or container that
-   calls `gh api -X POST repos/unbalancedparentheses/concrete2/actions/runners/registration-token`.
+   calls `gh api -X POST repos/lambdaclass/concrete/actions/runners/registration-token`.
    The supervisor's admin token must never be readable from inside a job. Persistent runners (or
    `--ephemeral` re-registered on the same machine, which is the same thing) are acceptable only
    with rule 2, the cleanup hook below and a dedicated low-privilege user, and with the
@@ -155,7 +151,8 @@ sudo -iu runner1 sh -c 'curl --proto =https --tlsv1.2 -sSf https://sh.rustup.rs 
 ```
 
 - `rustc` is used by the LL(1) grammar job. `cargo` builds nanoda for the external-checker job
-  whenever `~/.cache/concrete-ext` has no build for the pinned SHA. Ubuntu's `rustc` package does
+  whenever `~/.cache/concrete-ext` has no build for the pinned SHA, resolved cargo and rustc paths,
+  `rustc -vV` output and build recipe hash. Ubuntu's `rustc` package does
   not pull in `cargo`, so use rustup (or install both `rustc` and `cargo`), and check it once by
   running the external-checker job with an empty `~/.cache/concrete-ext`. Rustup puts its tools in
   `~/.cargo/bin`, so install it before `./config.sh`, or add that directory to the runner's `.path`.
@@ -199,8 +196,8 @@ mkdir actions-runner && cd actions-runner
 # Take the current version and checksum from Settings, Actions, Runners, New self-hosted runner.
 curl -o actions-runner.tar.gz -L https://github.com/actions/runner/releases/download/v<VERSION>/actions-runner-linux-x64-<VERSION>.tar.gz
 tar xzf actions-runner.tar.gz
-# The token is shown on that settings page (or: gh api -X POST repos/unbalancedparentheses/concrete2/actions/runners/registration-token)
-./config.sh --url https://github.com/unbalancedparentheses/concrete2 --token <TOKEN> \
+# The token is shown on that settings page (or: gh api -X POST repos/lambdaclass/concrete/actions/runners/registration-token)
+./config.sh --url https://github.com/lambdaclass/concrete --token <TOKEN> \
   --name "$(hostname)-runner1" --labels concrete --unattended   # add --ephemeral (recommended)
 exit
 cd /home/runner1/actions-runner
@@ -247,12 +244,24 @@ already handles, and what the host has to handle.
   An ephemeral runner in a fresh container or VM needs neither.
 - **`$HOME` caches** persist: `~/.elan` (the toolchain, keyed by `lean-toolchain`) and
   `~/.cache/concrete-ext`. In that cache, each tool is built into a directory named by its pinned
-  SHA and checked against it, and lean4export, which is rebuilt with this repository's toolchain,
-  also has that toolchain in its directory name. So a toolchain bump builds a new exporter instead of
-  reusing one that cannot read the new `.olean` files. Both caches are keyed by everything their
-  builds depend on, so keeping them between jobs makes runs faster without affecting correctness.
-  They live in the user's HOME, so each runner has its own. Old directories are never deleted; prune
-  `~/.cache/concrete-ext` now and then.
+  SHA and recipe hash, plus its builder identity: Lake trees include the toolchain and resolved
+  elan path/version; nanoda trees include resolved cargo/rustc paths and `rustc -vV` measured
+  in the build checkout. Each Lake tool's
+  declared toolchain is verified on cache hits and misses; builds dispatch it through elan. The
+  exporter must match the project's toolchain to read its `.olean` files. External builds use
+  `~/.cache/concrete-ext/elan-<identity>` as their isolated elan home, even if `ELAN_HOME` is set by the
+  runner, only during pinned Lean tool builds. Project builds and queries retain the
+  caller’s ELAN_HOME unchanged. Ambient `ELAN_TOOLCHAIN` and `LEAN_PATH`
+  are cleared. The extcheck shell passes elan by absolute path without adding its
+  Lean/Lake proxies to PATH, preserving the caller’s toolchain. Nix elan can patch
+  downloaded Linux binaries, so it must not modify shared `~/.elan`.
+  These Nix-patched external toolchains are build dependencies, not receipt checker identities.
+  The cache lives in the user's HOME, so each runner has its own. Old directories are never
+  deleted; prune `~/.cache/concrete-ext` now and then. The resolved elan path and version
+  identify isolated homes and Lake tool trees on hosted and persistent runners.
+  Switching between Nix and upstream elan, or changing its Nix store path, selects fresh trees.
+  All build recipes, including the nanoda stack patch, live in `lake_tool.sh`; its content
+  hash also keys every tool tree. CI additionally keys the archive on both flake files.
 - **Processes.** The runner kills a job's process tree when the job ends. A gate that leaves a
   daemon behind would survive on a persistent runner. That is one more reason to prefer ephemeral
   runners.
@@ -261,12 +270,19 @@ already handles, and what the host has to handle.
 
 1. Settings, Actions, Runners lists each runner as Idle, with labels
    `self-hosted, Linux, X64, concrete`.
-2. `gh variable set CONCRETE_SELF_HOSTED --body true -R unbalancedparentheses/concrete2`.
-3. `gh workflow run CI --ref main -R unbalancedparentheses/concrete2` (landing tier only), then
+2. `gh variable set CONCRETE_SELF_HOSTED --body true -R lambdaclass/concrete`.
+3. `gh workflow run CI --ref main -R lambdaclass/concrete` (landing tier only), then
    check in the run's job pages that "Runner name" is one of yours and that `Install clang` printed
    `self-hosted runner, using preinstalled clang`.
 4. To turn it off, delete the variable. Queued jobs that are still waiting for a self-hosted
    runner have to be cancelled and re-run.
+
+The external-tool cache also retains per-revision `source-nanoda-<rev>` checkouts and
+builder-keyed `registry-<identity>` Cargo downloads. Completed nanoda cache hits work
+offline. Cargo uses an allowlisted environment and private Cargo home, ignoring caller
+wrappers and profile/target overrides; `--locked` enforces Cargo.lock. Builds run outside
+HOME and refuse ancestor Cargo configuration. See the isolation contract in
+[`scripts/proofs/external.sh`](../scripts/proofs/external.sh).
 
 ## Build cache (R-0546)
 

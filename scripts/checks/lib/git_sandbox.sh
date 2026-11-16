@@ -22,6 +22,12 @@ git_sandbox() { # [gitconfig-file]
   [ -n "$vars" ] || { echo "git_sandbox: git listed no repository-local variables" >&2; return 2; }
   for v in $vars; do unset "$v"; done
   if [ $# -ge 1 ]; then
+    if [ "${_CONCRETE_GIT_SANDBOX_CONFIG+x}" = x ] && [ "$_CONCRETE_GIT_SANDBOX_CONFIG" != "$1" ]; then
+      echo "git_sandbox: conflicting isolated config: $_CONCRETE_GIT_SANDBOX_CONFIG (requested $1)" >&2
+      return 2
+    fi
+    _CONCRETE_GIT_SANDBOX_CONFIG=$1
+    export -n _CONCRETE_GIT_SANDBOX_CONFIG
     export GIT_CONFIG_GLOBAL="$1" GIT_CONFIG_NOSYSTEM=1
   fi
   return 0

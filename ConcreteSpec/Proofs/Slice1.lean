@@ -1,4 +1,9 @@
 import ConcreteSpec.Proofs.Basics
+import ConcreteSpec.Spec.Basics
+import ConcreteSpec.Spec.Slice1Ownership
+import ConcreteSpec.Spec.Slice1Semantics
+import ConcreteSpec.Spec.Slice1Syntax
+import ConcreteSpec.Spec.Statics
 
 /-!
 # Slice-1 proofs: fuel properties of the evaluator, and safety (`checked_never_stuck`, `checked_no_implicit_traps`, `checked_exits`).

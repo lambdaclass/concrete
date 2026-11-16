@@ -1,3 +1,5 @@
+import ConcreteSpec.Spec.Basics
+import ConcreteSpec.Spec.Outcome
 import ConcreteSpec.Spec.Scalar
 
 /-!
@@ -22,7 +24,7 @@ PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `Concret
   whole term read in exact arithmetic (`eval_toExact`).
 - **Bits**: wrapping keeps the bit pattern (`toBits_wrap`, `toBits_wrapping`), a valid left shift
   drops the bits shifted out (`toBits_shl`), and an unsigned right shift is the logical shift of
-  the pattern (`toBits_shr_unsigned`); a `bool` pattern is `0` or `1` (`boolOfBits_some_iff`).
+  the pattern (`toBits_shr_unsigned`).
 - **Negation and lossy conversion**: plain negation traps exactly when checked negation fails
   (`plainNeg_ok_iff`, `plainNeg_trap_iff`; there is no wrapping negation, ARITH-4); a lossy
   conversion lands in range and keeps a value that fits (`lossyConvert_inRange`,
@@ -74,7 +76,7 @@ theorem wrap_inRange (t : IntTy) (n : Int) : t.InRange (wrap t n) :=
 theorem wrap_of_inRange (t : IntTy) (n : Int) (h : t.InRange n) : wrap t n = n :=
   ofBits_toBits t n h
 
-/-- Helper (arithmetic). Finite endpoint ordering used by interval arguments (approved: APPR-C1-codex-5531d9e34). -/
+/-- Helper (arithmetic). Finite endpoint ordering used by interval arguments. -/
 theorem IntTy.min_le_max (t : IntTy) : t.min ≤ t.max := by
   cases t <;> decide
 
@@ -113,14 +115,14 @@ theorem bitNot_inRange (t : IntTy) (a : Int) : t.InRange (bitNot t a) := by
 
 /-! ### Checked operations stay in range -/
 
-/-- Helper (inversion). Extracts the explicit range validator result (approved: APPR-C1-codex-5531d9e34). -/
+/-- Helper (inversion). Extracts the explicit range validator result. -/
 theorem inRangeOr_inRange {t : IntTy} {r s : Int} (h : inRangeOr t r = .ok s) : t.InRange s := by
   unfold inRangeOr at h
   split at h
   · cases h; assumption
   · cases h
 
-/-- Helper (arithmetic). Internal integer division bound used in checked shift preservation (approved: APPR-C1-codex-5531d9e34). -/
+/-- Helper (arithmetic). Internal integer division bound used in checked shift preservation. -/
 theorem shr_inRange (t : IntTy) (a : Int) (d : Nat) (ha : t.InRange a) :
     t.InRange (a / (2 : Int) ^ d) := by
   have hd : (0 : Int) < 2 ^ d := Int.pow_pos (by decide)
@@ -139,7 +141,7 @@ theorem shr_inRange (t : IntTy) (a : Int) (d : Nat) (ha : t.InRange a) :
     · exact Int.le_trans (Int.ediv_le_self _ ha0) h2
     · exact Int.le_trans (Int.le_of_lt (Int.ediv_neg_of_neg_of_pos (Int.lt_of_not_ge ha0) hd)) hmax
 
-/-- Helper (arithmetic). Internal remainder bound used in checked arithmetic preservation (approved: APPR-C1-codex-5531d9e34). -/
+/-- Helper (arithmetic). Internal remainder bound used in checked arithmetic preservation. -/
 theorem tmod_inRange (t : IntTy) (a b : Int) (ha : t.InRange a) : t.InRange (a.tmod b) := by
   have hmin : t.min ≤ 0 := by cases t <;> decide
   have hmax : 0 ≤ t.max := by cases t <;> decide
@@ -152,7 +154,7 @@ theorem tmod_inRange (t : IntTy) (a b : Int) (ha : t.InRange a) : t.InRange (a.t
     rw [Int.neg_tmod] at hnp
     constructor <;> omega
 
-/-- Helper (inversion). Checked result bound combining validator inversion and the independent division and remainder bounds (approved: APPR-C1-codex-5531d9e34). -/
+/-- Law (subject `ConcreteSpec.Core.checked`). Checked result bound combining validator inversion and the independent division and remainder bounds. -/
 theorem checked_inRange (t : IntTy) (op : ArithOp) (a b r : Int) (ha : t.InRange a)
     (h : checked t op a b = .ok r) : t.InRange r := by
   cases op <;> simp only [checked] at h
@@ -176,19 +178,19 @@ theorem checked_inRange (t : IntTy) (op : ArithOp) (a b r : Int) (ha : t.InRange
 
 /-! ### Plain, wrapping and saturating -/
 
-/-- Representation lemma. Plain/checked adapter representation (approved: APPR-C1-codex-5531d9e34). -/
+/-- Representation lemma. Plain/checked adapter representation. -/
 theorem plain_ok_iff (t : IntTy) (op : ArithOp) (a b r : Int) :
     plain t op a b = .ok r ↔ checked t op a b = .ok r := by
   unfold plain
   cases checked t op a b <;> simp
 
-/-- Representation lemma. Plain/checked error adapter representation (approved: APPR-C1-codex-5531d9e34). -/
+/-- Representation lemma. Plain/checked error adapter representation. -/
 theorem plain_trap_iff (t : IntTy) (op : ArithOp) (a b : Int) (k : TrapKind) :
     plain t op a b = .trap k ↔ ∃ e, checked t op a b = .error e ∧ e.trapKind = k := by
   unfold plain
   cases checked t op a b <;> simp
 
-/-- Helper (inversion). Adapter result-shape inversion (approved: APPR-C1-codex-5531d9e34). -/
+/-- Helper (inversion). Adapter result-shape inversion. -/
 theorem plain_not_stuck (t : IntTy) (op : ArithOp) (a b : Int) : plain t op a b ≠ .stuck := by
   unfold plain
   cases checked t op a b <;> simp
@@ -199,7 +201,7 @@ def WrapOp.arith : WrapOp → ArithOp
   | .sub => .sub
   | .mul => .mul
 
-/-- Helper (computation). Unfolds the checked arithmetic adapter (approved: APPR-C1-codex-5531d9e34). -/
+/-- Helper (computation). Unfolds the checked arithmetic adapter. -/
 theorem checked_wrapOp (t : IntTy) (op : WrapOp) (a b : Int) :
     checked t op.arith a b = inRangeOr t (op.exact a b) := by
   cases op <;> rfl
@@ -235,11 +237,8 @@ theorem lossless_iff (s t : IntTy) : Lossless s t ↔ ∀ n, s.InRange n → t.I
     have hm := s.min_le_max
     exact ⟨(h s.min ⟨Int.le_refl _, hm⟩).1, (h s.max ⟨hm, Int.le_refl _⟩).2⟩
 
-/-- Law (subject `ConcreteSpec.Core.boolToInt`). `bool` converts losslessly to every integer type. -/
-theorem boolToInt_inRange (t : IntTy) (b : Bool) : t.InRange (boolToInt b) := by
-  cases t <;> cases b <;> decide
 
-/-- Representation lemma. Explicit conversion validator characterization (approved: APPR-C1-codex-5531d9e34). -/
+/-- Representation lemma. Explicit conversion validator characterization. -/
 theorem tryConvert_ok_iff (t : IntTy) (n r : Int) :
     tryConvert t n = .ok r ↔ t.InRange n ∧ r = n := by
   unfold tryConvert
@@ -249,7 +248,7 @@ theorem tryConvert_ok_iff (t : IntTy) (n r : Int) :
 
 /-! ### Machine and exact arithmetic in contracts -/
 
-/-- Helper (computation). Unfolds exact-term evaluation after successful operands (approved: APPR-C1-codex-5531d9e34). -/
+/-- Helper (computation). Unfolds exact-term evaluation after successful operands. -/
 theorem exact_defined (ρ : Var → Option Int) (op : WrapOp) (a b : CTerm) (x y : Int)
     (ha : a.eval ρ = some x) (hb : b.eval ρ = some y) :
     (CTerm.exact op a b).eval ρ = some (op.exact x y) := by
@@ -277,7 +276,7 @@ theorem machine_plain_eq_exact (ρ : Var → Option Int) (t : IntTy) (op : WrapO
         · simp [hr] at h; subst h; rfl
         · simp [hr] at h
 
-/-- Helper (inversion). Extracts the runtime operand guard; not independent typing soundness (approved: APPR-C1-codex-5531d9e34). -/
+/-- Helper (inversion). Extracts the runtime operand guard; not independent typing soundness. -/
 theorem machine_operands_inv (ρ : Var → Option Int) (t : IntTy) (op : MachineOp) (a b : CTerm)
     (r : Int) (h : (CTerm.machine t op a b).eval ρ = some r) :
     ∃ x y, a.eval ρ = some x ∧ b.eval ρ = some y ∧ t.InRange x ∧
@@ -298,7 +297,7 @@ theorem machine_operands_inv (ρ : Var → Option Int) (t : IntTy) (op : Machine
           Bool.or_eq_true] at hok
         exact ⟨x, y, rfl, rfl, hok.1, hok.2⟩
 
-/-- Helper (inversion). Combines evaluator guard inversion with checked arithmetic bounds; independent soundness is typed_eval_range (approved: APPR-C1-codex-5531d9e34). -/
+/-- Helper (inversion). Combines evaluator guard inversion with checked arithmetic bounds; independent soundness is typed_eval_range. -/
 theorem machine_inRange_inv (ρ : Var → Option Int) (t : IntTy) (op : MachineOp) (a b : CTerm)
     (r : Int) (h : (CTerm.machine t op a b).eval ρ = some r) : t.InRange r := by
   obtain ⟨x, y, ha, hb, hx, _⟩ := machine_operands_inv ρ t op a b r h
@@ -314,7 +313,7 @@ theorem machine_inRange_inv (ρ : Var → Option Int) (t : IntTy) (op : MachineO
     | wrapping o => cases h; exact wrap_inRange t _
     | saturating o => cases h; exact saturate_inRange t _
 
-/-- Helper (inversion). Decodes the machine-operation representation (approved: APPR-C1-codex-5531d9e34). -/
+/-- Helper (inversion). Decodes the machine-operation representation. -/
 theorem exactOf?_some {op : MachineOp} {w : WrapOp} (h : op.exactOf? = some w) :
     op = .plain w.arith := by
   cases op with
@@ -373,7 +372,7 @@ inductive CTerm.HasWidth (Γ : Var → Option IntTy) : CTerm → IntTy → Prop 
 def WidthEnv (Γ : Var → Option IntTy) (ρ : Var → Option Int) : Prop :=
   ∀ x t n, Γ x = some t → ρ x = some n → t.InRange n
 
-/-- Every successful evaluation of a term belongs to its independently derived width. -/
+/-- A proposition describing successful width preservation. Every successful evaluation of a term belongs to its independently derived width. -/
 def WidthSound (eval : (Var → Option Int) → CTerm → Option Int)
     (ρ : Var → Option Int) (e : CTerm) (t : IntTy) : Prop :=
   ∀ r, eval ρ e = some r → t.InRange r
@@ -454,11 +453,11 @@ theorem machine_inRange (Γ : Var → Option IntTy) (ρ : Var → Option Int) (t
   exact typed_eval_range Γ ρ (.machine t op a b) t (.machine ha hb hc) hρ r hr
 
 namespace ScalarEvidence
-/-- A mutant valuation semantics that invents an out-of-width value for every term. -/
-def wideEval (_ρ : Var → Option Int) (_e : CTerm) : Option Int := some 300
+/-- A mutant valuation forgets to reduce the carry bit after evaluating a term. -/
+def wideEval (ρ : Var → Option Int) (e : CTerm) : Option Int :=
+  (e.eval ρ).map fun n => n + 256
 
-/-- Helper (inversion). The closed empty width environment has no assigned variables
-(approved: APPR-C1-codex-5531d9e34). -/
+/-- Helper (inversion). The closed empty width environment has no assigned variables. -/
 private theorem empty_width_env : WidthEnv (fun _ => none) (fun _ => none) := by
   intro x t n hx
   cases hx
@@ -472,7 +471,7 @@ example : (CTerm.lit 7).HasWidth (fun _ => none) .i8 ∧
     WidthEnv (fun _ => none) (fun _ => none) ∧
     ¬ (∀ r, wideEval (fun _ => none) (.lit 7) = some r → IntTy.i8.InRange r) := by
   refine ⟨.lit (by decide), empty_width_env, fun h => ?_⟩
-  have hh := h 300 rfl
+  have hh := h 263 rfl
   revert hh
   decide
 
@@ -490,7 +489,7 @@ example : (CTerm.lit 7).HasWidth (fun _ => none) .i8 ∧ (CTerm.lit 8).HasWidth 
     ¬ (∀ x y, wideEval (fun _ => none) (.lit 7) = some x → wideEval (fun _ => none) (.lit 8) = some y →
       IntTy.i8.InRange x ∧ ((MachineOp.plain .add).countOperand = true ∨ IntTy.i8.InRange y)) := by
   refine ⟨.lit (by decide), .lit (by decide), .inr rfl, empty_width_env, fun h => ?_⟩
-  have hh := (h 300 300 rfl rfl).1
+  have hh := (h 263 264 rfl rfl).1
   revert hh
   decide
 /-- Instance (law `ConcreteSpec.Core.machine_inRange`, case `typed_machine`). -/
@@ -506,33 +505,32 @@ example : (CTerm.lit 7).HasWidth (fun _ => none) .i8 ∧ (CTerm.lit 8).HasWidth 
     ¬ (∀ r, wideEval (fun _ => none) (.machine .i8 (.plain .add) (.lit 7) (.lit 8)) = some r →
       IntTy.i8.InRange r) := by
   refine ⟨.lit (by decide), .lit (by decide), .inr rfl, empty_width_env, fun h => ?_⟩
-  have hh := h 300 rfl
+  have hh := h 271 rfl
   revert hh
   decide
 
 end ScalarEvidence
 
-/-! ### Negation, `bool` patterns, lossy conversion -/
+/-! ### Negation and lossy conversion -/
 
-/-- Representation lemma. Negation success adapter representation (approved: APPR-C1-codex-5531d9e34). -/
+/-- Representation lemma. Negation success adapter representation. -/
 theorem plainNeg_ok_iff (t : IntTy) (a r : Int) : plainNeg t a = .ok r ↔ checkedNeg t a = .ok r := by
   unfold plainNeg
   cases checkedNeg t a <;> simp
 
-/-- Representation lemma. Negation error adapter representation (approved: APPR-C1-codex-5531d9e34). -/
+/-- Representation lemma. Negation error adapter representation. -/
 theorem plainNeg_trap_iff (t : IntTy) (a : Int) (k : TrapKind) :
     plainNeg t a = .trap k ↔ ∃ e, checkedNeg t a = .error e ∧ e.trapKind = k := by
   unfold plainNeg
   cases checkedNeg t a <;> simp
 
-/-- Helper (arithmetic). Plain negation is never stuck: it has a result or a trap.
-(approved: APPR-C2-agy-5372ad2a0) -/
+/-- Helper (arithmetic). Plain negation is never stuck: it has a result or a trap. -/
 theorem plainNeg_not_stuck (t : IntTy) (a : Int) : plainNeg t a ≠ .stuck := by
   unfold plainNeg
   cases checkedNeg t a <;> simp
 
 /-- Helper (arithmetic). Representability of mathematical negation, independently of the
-`checkedNeg` result wrapper. (approved: APPR-C2-agy-5372ad2a0) -/
+`checkedNeg` result wrapper. -/
 private theorem neg_inRange_iff (t : IntTy) (a : Int) (ha : t.InRange a) :
     t.InRange (-a) ↔ (if t.signed = true then a ≠ t.min else a = 0) := by
   cases t <;> simp [IntTy.InRange, IntTy.min, IntTy.max, IntTy.signed, IntTy.bits] at * <;> omega
@@ -609,21 +607,12 @@ example : IntTy.i8.InRange (-128) ∧ ¬(uncheckedNeg .i8 (-128) = .error .overf
     ArithmeticError.overflow = .overflow ∧
       ¬(if IntTy.i8.signed = true then (-128 : Int) ≠ IntTy.i8.min else (-128 : Int) = 0)) := by decide
 
-/-- Law (subject `ConcreteSpec.Core.boolOfBits`). -/
-theorem boolOfBits_boolToBits (b : Bool) : boolOfBits (boolToBits b) = some b := by
-  cases b <;> rfl
 
-/-- Representation lemma. Finite Boolean decoder characterization (approved: APPR-C1-codex-5531d9e34). -/
-theorem boolOfBits_some_iff (m : Nat) (b : Bool) : boolOfBits m = some b ↔ m = boolToBits b := by
-  match m with
-  | 0 => cases b <;> simp [boolOfBits, boolToBits]
-  | 1 => cases b <;> simp [boolOfBits, boolToBits]
-  | m + 2 => cases b <;> simp [boolOfBits, boolToBits]
 
-/-- Helper (computation). Alias consequence of wrap_inRange; no additional conversion semantics (approved: APPR-C1-codex-5531d9e34). -/
+/-- Helper (computation). Alias consequence of wrap_inRange; no additional conversion semantics. -/
 theorem lossyConvert_inRange (t : IntTy) (n : Int) : t.InRange (lossyConvert t n) := wrap_inRange t n
 
-/-- Helper (computation). Alias consequence of wrap_of_inRange; no additional conversion semantics (approved: APPR-C1-codex-5531d9e34). -/
+/-- Helper (computation). Alias consequence of wrap_of_inRange; no additional conversion semantics. -/
 theorem lossyConvert_of_inRange (t : IntTy) (n : Int) (h : t.InRange n) : lossyConvert t n = n :=
   wrap_of_inRange t n h
 
@@ -704,27 +693,38 @@ theorem saturate_above (t : IntTy) (n : Int) (h : t.max < n) : saturate t n = t.
   simp [saturate, h, this]
 
 namespace ScalarLawEvidence
+/-- A checked implementation that forgets to reduce a spurious high carry bit. -/
+def carriedChecked (t : IntTy) (op : ArithOp) (a b : Int) : Except ArithmeticError Int :=
+  (checked t op a b).map fun r => r + (2 : Int) ^ t.bits
+
+/-- Instance (law `ConcreteSpec.Core.checked_inRange`, case `addition`). -/
+example : IntTy.i8.InRange 15 := checked_inRange .i8 .add 7 8 15 (by decide) rfl
+/-- Planted (law `ConcreteSpec.Core.checked_inRange`, case `addition`,
+subject `ConcreteSpec.Core.checked`, mutant `ConcreteSpec.Core.ScalarLawEvidence.carriedChecked`). -/
+example : IntTy.i8.InRange 7 ∧ carriedChecked .i8 .add 7 8 = .ok 271 ∧
+    ¬ IntTy.i8.InRange 271 := by decide
 /-- Mutant encoders collapse distinct failures. -/
 def sameName (_ : TrapKind) : String := "same"
 def sameTrap (_ : ArithmeticError) : TrapKind := .abort
 /-- Mutant bit encodings and arithmetic results. -/
-def hugeBits (_ : IntTy) (_ : Int) : Nat := 999
-def wideOfBits (_ : IntTy) (_ : Nat) : Int := 300
-def zeroOfBits (_ : IntTy) (_ : Nat) : Int := 0
-def wideUnary (_ : IntTy) (_ : Int) : Int := 300
-def zeroUnary (_ : IntTy) (_ : Int) : Int := 0
+def unreducedBits (t : IntTy) (n : Int) : Nat := toBits t n + 2 ^ t.bits
+def offsetOfBits (t : IntTy) (m : Nat) : Int := ofBits t m + (2 : Int) ^ t.bits
+def offByOneOfBits (t : IntTy) (m : Nat) : Int := ofBits t (m + 1)
+def unreducedUnary (t : IntTy) (n : Int) : Int := n + (2 : Int) ^ t.bits
+def incrementWrap (t : IntTy) (n : Int) : Int := wrap t (n + 1)
 def increment (_ : IntTy) (n : Int) : Int := n + 1
-def wideBitwise (_ : IntTy) (_ : BitOp) (_ _ : Int) : Int := 300
-def zeroBitwise (_ : IntTy) (_ : BitOp) (_ _ : Int) : Int := 0
-def zeroPolicy (_ : IntTy) (_ : WrapOp) (_ _ : Int) : Int := 0
-def wideBool (_ : Bool) : Int := 300
-def noBool (_ : Nat) : Option Bool := none
+def unreducedBitwise (t : IntTy) (op : BitOp) (a b : Int) : Int :=
+  bitwise t op a b + (2 : Int) ^ t.bits
+def xorForAll (t : IntTy) (_ : BitOp) (a b : Int) : Int := bitwise t .xor a b
+def subtractForAll (t : IntTy) (_ : WrapOp) (a b : Int) : Int := wrapping t .sub a b
 /-- This mutant leaves machine evaluation intact but corrupts exact evaluation. -/
 def corruptExact (ρ : Var → Option Int) (e : CTerm) : Option Int :=
   match e with
-  | .exact .. => some 0
+  | .exact op a b => (a.eval ρ).bind fun x => (b.eval ρ).map fun y => wrap .u8 (op.exact x y + 1)
   | _ => e.eval ρ
-def eraseExact (_ : CTerm) : CTerm := .lit 0
+def eraseExact (e : CTerm) : CTerm := match e with
+  | .machine _ _ a _ => a.toExact
+  | _ => e.toExact
 /-- Forgetting low-bit truncation breaks a signed left shift. -/
 def unboundedBits (_ : IntTy) (n : Int) : Nat := n.toNat
 /-- An encoder that shifts the bit pattern by one breaks logical right shift. -/
@@ -754,106 +754,96 @@ example : ¬ (∀ (a b : ArithmeticError), sameTrap a = sameTrap b → a = b) :=
 example : toBits .i8 7 < 2 ^ IntTy.i8.bits :=
   toBits_lt .i8 7
 
-/-- Planted (law `ConcreteSpec.Core.toBits_lt`, case `concrete`, subject `ConcreteSpec.Core.toBits`, mutant `ConcreteSpec.Core.ScalarLawEvidence.hugeBits`). -/
-example : ¬ (hugeBits .i8 7 < 2 ^ IntTy.i8.bits) := by decide
+/-- Planted (law `ConcreteSpec.Core.toBits_lt`, case `concrete`, subject `ConcreteSpec.Core.toBits`, mutant `ConcreteSpec.Core.ScalarLawEvidence.unreducedBits`). -/
+example : ¬ (unreducedBits .i8 7 < 2 ^ IntTy.i8.bits) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.ofBits_inRange`, case `concrete`). -/
 example : IntTy.i8.InRange (ofBits .i8 7) :=
   ofBits_inRange .i8 7 (by decide)
 
-/-- Planted (law `ConcreteSpec.Core.ofBits_inRange`, case `concrete`, subject `ConcreteSpec.Core.ofBits`, mutant `ConcreteSpec.Core.ScalarLawEvidence.wideOfBits`). -/
+/-- Planted (law `ConcreteSpec.Core.ofBits_inRange`, case `concrete`, subject `ConcreteSpec.Core.ofBits`, mutant `ConcreteSpec.Core.ScalarLawEvidence.offsetOfBits`). -/
 example : 7 < 2 ^ IntTy.i8.bits ∧
-    ¬ (IntTy.i8.InRange (wideOfBits .i8 7)) := by decide
+    ¬ (IntTy.i8.InRange (offsetOfBits .i8 7)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.ofBits_toBits`, case `concrete`). -/
 example : ofBits .i8 (toBits .i8 7) = 7 :=
   ofBits_toBits .i8 7 (by decide)
 
-/-- Planted (law `ConcreteSpec.Core.ofBits_toBits`, case `concrete`, subject `ConcreteSpec.Core.ofBits`, mutant `ConcreteSpec.Core.ScalarLawEvidence.zeroOfBits`). -/
+/-- Planted (law `ConcreteSpec.Core.ofBits_toBits`, case `concrete`, subject `ConcreteSpec.Core.ofBits`, mutant `ConcreteSpec.Core.ScalarLawEvidence.offByOneOfBits`). -/
 example : IntTy.i8.InRange 7 ∧
-    ¬ (zeroOfBits .i8 (toBits .i8 7) = 7) := by decide
+    ¬ (offByOneOfBits .i8 (toBits .i8 7) = 7) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.wrap_inRange`, case `concrete`). -/
 example : IntTy.i8.InRange (wrap .i8 300) :=
   wrap_inRange .i8 300
 
-/-- Planted (law `ConcreteSpec.Core.wrap_inRange`, case `concrete`, subject `ConcreteSpec.Core.wrap`, mutant `ConcreteSpec.Core.ScalarLawEvidence.wideUnary`). -/
-example : ¬ (IntTy.i8.InRange (wideUnary .i8 300)) := by decide
+/-- Planted (law `ConcreteSpec.Core.wrap_inRange`, case `concrete`, subject `ConcreteSpec.Core.wrap`, mutant `ConcreteSpec.Core.ScalarLawEvidence.unreducedUnary`). -/
+example : ¬ (IntTy.i8.InRange (unreducedUnary .i8 300)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.wrap_of_inRange`, case `concrete`). -/
 example : wrap .i8 7 = 7 :=
   wrap_of_inRange .i8 7 (by decide)
 
-/-- Planted (law `ConcreteSpec.Core.wrap_of_inRange`, case `concrete`, subject `ConcreteSpec.Core.wrap`, mutant `ConcreteSpec.Core.ScalarLawEvidence.zeroUnary`). -/
+/-- Planted (law `ConcreteSpec.Core.wrap_of_inRange`, case `concrete`, subject `ConcreteSpec.Core.wrap`, mutant `ConcreteSpec.Core.ScalarLawEvidence.incrementWrap`). -/
 example : IntTy.i8.InRange 7 ∧
-    ¬ (zeroUnary .i8 7 = 7) := by decide
+    ¬ (incrementWrap .i8 7 = 7) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.saturate_inRange`, case `concrete`). -/
 example : IntTy.i8.InRange (saturate .i8 300) :=
   saturate_inRange .i8 300
 
-/-- Planted (law `ConcreteSpec.Core.saturate_inRange`, case `concrete`, subject `ConcreteSpec.Core.saturate`, mutant `ConcreteSpec.Core.ScalarLawEvidence.wideUnary`). -/
-example : ¬ (IntTy.i8.InRange (wideUnary .i8 300)) := by decide
+/-- Planted (law `ConcreteSpec.Core.saturate_inRange`, case `concrete`, subject `ConcreteSpec.Core.saturate`, mutant `ConcreteSpec.Core.ScalarLawEvidence.unreducedUnary`). -/
+example : ¬ (IntTy.i8.InRange (unreducedUnary .i8 300)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.saturate_of_inRange`, case `concrete`). -/
 example : saturate .i8 7 = 7 :=
   saturate_of_inRange .i8 7 (by decide)
 
-/-- Planted (law `ConcreteSpec.Core.saturate_of_inRange`, case `concrete`, subject `ConcreteSpec.Core.saturate`, mutant `ConcreteSpec.Core.ScalarLawEvidence.zeroUnary`). -/
+/-- Planted (law `ConcreteSpec.Core.saturate_of_inRange`, case `concrete`, subject `ConcreteSpec.Core.saturate`, mutant `ConcreteSpec.Core.ScalarLawEvidence.incrementWrap`). -/
 example : IntTy.i8.InRange 7 ∧
-    ¬ (zeroUnary .i8 7 = 7) := by decide
+    ¬ (incrementWrap .i8 7 = 7) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.bitwise_inRange`, case `concrete`). -/
 example : IntTy.i8.InRange (bitwise .i8 .and 7 3) :=
   bitwise_inRange .i8 .and 7 3
 
-/-- Planted (law `ConcreteSpec.Core.bitwise_inRange`, case `concrete`, subject `ConcreteSpec.Core.bitwise`, mutant `ConcreteSpec.Core.ScalarLawEvidence.wideBitwise`). -/
-example : ¬ (IntTy.i8.InRange (wideBitwise .i8 .and 7 3)) := by decide
+/-- Planted (law `ConcreteSpec.Core.bitwise_inRange`, case `concrete`, subject `ConcreteSpec.Core.bitwise`, mutant `ConcreteSpec.Core.ScalarLawEvidence.unreducedBitwise`). -/
+example : ¬ (IntTy.i8.InRange (unreducedBitwise .i8 .and 7 3)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.bitNot_inRange`, case `concrete`). -/
 example : IntTy.i8.InRange (bitNot .i8 7) :=
   bitNot_inRange .i8 7
 
-/-- Planted (law `ConcreteSpec.Core.bitNot_inRange`, case `concrete`, subject `ConcreteSpec.Core.bitNot`, mutant `ConcreteSpec.Core.ScalarLawEvidence.wideUnary`). -/
-example : ¬ (IntTy.i8.InRange (wideUnary .i8 7)) := by decide
+/-- Planted (law `ConcreteSpec.Core.bitNot_inRange`, case `concrete`, subject `ConcreteSpec.Core.bitNot`, mutant `ConcreteSpec.Core.ScalarLawEvidence.unreducedUnary`). -/
+example : ¬ (IntTy.i8.InRange (unreducedUnary .i8 7)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.wrapping_of_checked`, case `concrete`). -/
 example : wrapping .i8 .add 7 8 = 15 :=
   wrapping_of_checked .i8 .add 7 8 15 rfl
 
-/-- Planted (law `ConcreteSpec.Core.wrapping_of_checked`, case `concrete`, subject `ConcreteSpec.Core.wrapping`, mutant `ConcreteSpec.Core.ScalarLawEvidence.zeroPolicy`). -/
+/-- Planted (law `ConcreteSpec.Core.wrapping_of_checked`, case `concrete`, subject `ConcreteSpec.Core.wrapping`, mutant `ConcreteSpec.Core.ScalarLawEvidence.subtractForAll`). -/
 example : checked .i8 WrapOp.add.arith 7 8 = .ok 15 ∧
-    ¬ (zeroPolicy .i8 .add 7 8 = 15) := by decide
+    ¬ (subtractForAll .i8 .add 7 8 = 15) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.saturating_of_checked`, case `concrete`). -/
 example : saturating .i8 .add 7 8 = 15 :=
   saturating_of_checked .i8 .add 7 8 15 rfl
 
-/-- Planted (law `ConcreteSpec.Core.saturating_of_checked`, case `concrete`, subject `ConcreteSpec.Core.saturating`, mutant `ConcreteSpec.Core.ScalarLawEvidence.zeroPolicy`). -/
+/-- Planted (law `ConcreteSpec.Core.saturating_of_checked`, case `concrete`, subject `ConcreteSpec.Core.saturating`, mutant `ConcreteSpec.Core.ScalarLawEvidence.subtractForAll`). -/
 example : checked .i8 WrapOp.add.arith 7 8 = .ok 15 ∧
-    ¬ (zeroPolicy .i8 .add 7 8 = 15) := by decide
+    ¬ (subtractForAll .i8 .add 7 8 = 15) := by decide
 
-/-- Instance (law `ConcreteSpec.Core.boolToInt_inRange`, case `concrete`). -/
-example : IntTy.i8.InRange (boolToInt true) :=
-  boolToInt_inRange .i8 true
 
-/-- Planted (law `ConcreteSpec.Core.boolToInt_inRange`, case `concrete`, subject `ConcreteSpec.Core.boolToInt`, mutant `ConcreteSpec.Core.ScalarLawEvidence.wideBool`). -/
-example : ¬ (IntTy.i8.InRange (wideBool true)) := by decide
 
-/-- Instance (law `ConcreteSpec.Core.boolOfBits_boolToBits`, case `concrete`). -/
-example : boolOfBits (boolToBits true) = some true :=
-  boolOfBits_boolToBits true
 
-/-- Planted (law `ConcreteSpec.Core.boolOfBits_boolToBits`, case `concrete`, subject `ConcreteSpec.Core.boolOfBits`, mutant `ConcreteSpec.Core.ScalarLawEvidence.noBool`). -/
-example : ¬ (noBool (boolToBits true) = some true) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.toBits_ofBits`, case `concrete`). -/
 example : toBits .i8 (ofBits .i8 7) = 7 :=
   toBits_ofBits .i8 7 (by decide)
 
-/-- Planted (law `ConcreteSpec.Core.toBits_ofBits`, case `concrete`, subject `ConcreteSpec.Core.ofBits`, mutant `ConcreteSpec.Core.ScalarLawEvidence.zeroOfBits`). -/
+/-- Planted (law `ConcreteSpec.Core.toBits_ofBits`, case `concrete`, subject `ConcreteSpec.Core.ofBits`, mutant `ConcreteSpec.Core.ScalarLawEvidence.offByOneOfBits`). -/
 example : 7 < 2 ^ IntTy.i8.bits ∧
-    ¬ (toBits .i8 (zeroOfBits .i8 7) = 7) := by decide
+    ¬ (toBits .i8 (offByOneOfBits .i8 7) = 7) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.toBits_wrap`, case `concrete`). -/
 example : toBits .i8 (wrap .i8 7) = toBits .i8 7 :=
@@ -866,8 +856,8 @@ example : ¬ (toBits .i8 (increment .i8 7) = toBits .i8 7) := by decide
 example : toBits .i8 (wrapping .i8 .add 7 8) = toBits .i8 (WrapOp.add.exact 7 8) :=
   toBits_wrapping .i8 .add 7 8
 
-/-- Planted (law `ConcreteSpec.Core.toBits_wrapping`, case `concrete`, subject `ConcreteSpec.Core.wrapping`, mutant `ConcreteSpec.Core.ScalarLawEvidence.zeroPolicy`). -/
-example : ¬ (toBits .i8 (zeroPolicy .i8 .add 7 8) = toBits .i8 (WrapOp.add.exact 7 8)) := by decide
+/-- Planted (law `ConcreteSpec.Core.toBits_wrapping`, case `concrete`, subject `ConcreteSpec.Core.wrapping`, mutant `ConcreteSpec.Core.ScalarLawEvidence.subtractForAll`). -/
+example : ¬ (toBits .i8 (subtractForAll .i8 .add 7 8) = toBits .i8 (WrapOp.add.exact 7 8)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.toBits_shl`, case `concrete`). -/
 example : toBits .i8 (-56) = toBits .i8 (100 * (2 : Int) ^ (1 : Int).toNat) :=
@@ -891,31 +881,31 @@ example : IntTy.u8.signed = false ∧ IntTy.u8.InRange 8 ∧ checked .u8 .shr 8 
 example : toBits .i8 (bitwise .i8 .and 7 3) = (match BitOp.and with | .and => toBits .i8 7 &&& toBits .i8 3 | .or => toBits .i8 7 ||| toBits .i8 3 | .xor => toBits .i8 7 ^^^ toBits .i8 3) :=
   toBits_bitwise .i8 .and 7 3
 
-/-- Planted (law `ConcreteSpec.Core.toBits_bitwise`, case `concrete`, subject `ConcreteSpec.Core.bitwise`, mutant `ConcreteSpec.Core.ScalarLawEvidence.zeroBitwise`). -/
-example : ¬ (toBits .i8 (zeroBitwise .i8 .and 7 3) = (match BitOp.and with | .and => toBits .i8 7 &&& toBits .i8 3 | .or => toBits .i8 7 ||| toBits .i8 3 | .xor => toBits .i8 7 ^^^ toBits .i8 3)) := by decide
+/-- Planted (law `ConcreteSpec.Core.toBits_bitwise`, case `concrete`, subject `ConcreteSpec.Core.bitwise`, mutant `ConcreteSpec.Core.ScalarLawEvidence.xorForAll`). -/
+example : ¬ (toBits .i8 (xorForAll .i8 .and 7 3) = (match BitOp.and with | .and => toBits .i8 7 &&& toBits .i8 3 | .or => toBits .i8 7 ||| toBits .i8 3 | .xor => toBits .i8 7 ^^^ toBits .i8 3)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.toBits_bitNot`, case `concrete`). -/
 example : toBits .i8 (bitNot .i8 7) = 2 ^ IntTy.i8.bits - 1 - toBits .i8 7 :=
   toBits_bitNot .i8 7
 
-/-- Planted (law `ConcreteSpec.Core.toBits_bitNot`, case `concrete`, subject `ConcreteSpec.Core.bitNot`, mutant `ConcreteSpec.Core.ScalarLawEvidence.zeroUnary`). -/
-example : ¬ (toBits .i8 (zeroUnary .i8 7) = 2 ^ IntTy.i8.bits - 1 - toBits .i8 7) := by decide
+/-- Planted (law `ConcreteSpec.Core.toBits_bitNot`, case `concrete`, subject `ConcreteSpec.Core.bitNot`, mutant `ConcreteSpec.Core.ScalarLawEvidence.incrementWrap`). -/
+example : ¬ (toBits .i8 (incrementWrap .i8 7) = 2 ^ IntTy.i8.bits - 1 - toBits .i8 7) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.saturate_below`, case `concrete`). -/
 example : saturate .i8 (-300) = IntTy.i8.min :=
   saturate_below .i8 (-300) (by decide)
 
-/-- Planted (law `ConcreteSpec.Core.saturate_below`, case `concrete`, subject `ConcreteSpec.Core.saturate`, mutant `ConcreteSpec.Core.ScalarLawEvidence.zeroUnary`). -/
+/-- Planted (law `ConcreteSpec.Core.saturate_below`, case `concrete`, subject `ConcreteSpec.Core.saturate`, mutant `ConcreteSpec.Core.ScalarLawEvidence.incrementWrap`). -/
 example : (-300 : Int) < IntTy.i8.min ∧
-    ¬ (zeroUnary .i8 (-300) = IntTy.i8.min) := by decide
+    ¬ (incrementWrap .i8 (-300) = IntTy.i8.min) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.saturate_above`, case `concrete`). -/
 example : saturate .i8 300 = IntTy.i8.max :=
   saturate_above .i8 300 (by decide)
 
-/-- Planted (law `ConcreteSpec.Core.saturate_above`, case `concrete`, subject `ConcreteSpec.Core.saturate`, mutant `ConcreteSpec.Core.ScalarLawEvidence.zeroUnary`). -/
+/-- Planted (law `ConcreteSpec.Core.saturate_above`, case `concrete`, subject `ConcreteSpec.Core.saturate`, mutant `ConcreteSpec.Core.ScalarLawEvidence.incrementWrap`). -/
 example : IntTy.i8.max < 300 ∧
-    ¬ (zeroUnary .i8 300 = IntTy.i8.max) := by decide
+    ¬ (incrementWrap .i8 300 = IntTy.i8.max) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.machine_plain_eq_exact`, case `concrete`). -/
 example : (CTerm.exact .add (.lit 7) (.lit 8)).eval (fun _ => none) = some 15 :=
@@ -933,16 +923,98 @@ example : (CTerm.machine .i8 (.plain .add) (.lit 7) (.lit 8)).toExact.eval (fun 
 example : (CTerm.machine .i8 (.plain .add) (.lit 7) (.lit 8)).eval (fun _ => none) = some 15 ∧
     ¬ ((eraseExact (.machine .i8 (.plain .add) (.lit 7) (.lit 8))).eval (fun _ => none) = some 15) := by decide
 
-/-- Mutant interval admission discards even an identical source and target. -/
-def noLossless (_ _ : IntTy) : Prop := False
+/-- Wrong strict interval inclusion refuses a valid conversion at equal endpoints. -/
+def strictLossless (s t : IntTy) : Prop := t.min < s.min ∧ s.max < t.max
 /-- Instance (law `ConcreteSpec.Core.lossless_iff`, case `same_width`). -/
 example : Lossless .i8 .i8 ↔ ∀ n, IntTy.i8.InRange n → IntTy.i8.InRange n :=
   lossless_iff .i8 .i8
-/-- Planted (law `ConcreteSpec.Core.lossless_iff`, case `same_width`, subject `ConcreteSpec.Core.Lossless`, mutant `ConcreteSpec.Core.ScalarLawEvidence.noLossless`). -/
-example : ¬ (noLossless .i8 .i8 ↔ ∀ n, IntTy.i8.InRange n → IntTy.i8.InRange n) := by
+/-- Planted (law `ConcreteSpec.Core.lossless_iff`, case `same_width`, subject `ConcreteSpec.Core.Lossless`, mutant `ConcreteSpec.Core.ScalarLawEvidence.strictLossless`). -/
+example : ¬ (strictLossless .i8 .i8 ↔ ∀ n, IntTy.i8.InRange n → IntTy.i8.InRange n) := by
   intro h
-  exact h.mpr (fun _ hn => hn)
+  have bad := h.mpr (fun _ hn => hn)
+  exact (Int.lt_irrefl _) bad.1
 
 end ScalarLawEvidence
+
+/-! ### Numeric contract variables
+
+`Var` is the numeric identity from Basics. Valuations below use only `AList.lookup`;
+there is no scalar-specific lookup or spelling interface. Paired presentation-renaming fixtures live in Diagnostics/ScalarFixtures.lean;
+the LocalIdentity population controls separately enforce the structural boundary.
+-/
+namespace ScalarVariableEvidence
+/-- A scalar valuation over two different numeric identities. -/
+def values : AList Var Int := [(⟨7⟩, 12), (⟨8⟩, 19)]
+
+/-- Reading a numeric variable does not merge it with another number. -/
+example : (CTerm.var ⟨7⟩).eval (AList.lookup values) = some 12 ∧
+    (CTerm.var ⟨8⟩).eval (AList.lookup values) = some 19 := by decide
+
+/-- Assignment uses the shared map; the other number retains its value. -/
+example : (CTerm.var ⟨7⟩).eval (AList.lookup (AList.update values ⟨7⟩ (fun _ => 42))) = some 42 ∧
+    (CTerm.var ⟨8⟩).eval (AList.lookup (AList.update values ⟨7⟩ (fun _ => 42))) = some 19 := by decide
+
+/-- Scope removal erases only the chosen number. -/
+example : (CTerm.var ⟨7⟩).eval (AList.lookup (AList.erase values ⟨7⟩)) = none ∧
+    (CTerm.var ⟨8⟩).eval (AList.lookup (AList.erase values ⟨7⟩)) = some 19 := by decide
+end ScalarVariableEvidence
+
+/-! ### Character conversions (docs/decisions.md#decided-2026-11-12-char) -/
+
+/-- Law (subject `ConcreteSpec.Core.charFromCodePoint`). Construction preserves precisely
+Unicode scalar values; it never substitutes a replacement character. -/
+theorem charFromCodePoint_map (n : UInt32) :
+    (charFromCodePoint n).map charCodePoint = if n.isValidChar then some n else none := by
+  unfold charFromCodePoint
+  split <;> rfl
+
+/-- Law (subject `ConcreteSpec.Core.charFromCodePoint`). Every existing character can be
+reconstructed from its code point, without a safety precondition on the conversion API. -/
+theorem charFromCodePoint_roundtrip (c : Char) :
+    charFromCodePoint (charCodePoint c) = some c := by
+  cases c with
+  | mk n h => simp [charCodePoint, charFromCodePoint, h]
+
+/-- Law (subject `ConcreteSpec.Core.charFromAscii`). Exactly ASCII bytes construct characters,
+with the same code point. -/
+theorem charFromAscii_map (b : UInt8) :
+    (charFromAscii b).map charCodePoint = if b.toNat ≤ 127 then some b.toUInt32 else none := by
+  unfold charFromAscii
+  split
+  · rename_i h
+    rw [charFromCodePoint_map]
+    have hv : b.toUInt32.isValidChar := by
+      simp only [UInt32.isValidChar]
+      have hb : b.toUInt32.toNat = b.toNat := by simp
+      rw [hb]
+      omega
+    simp [hv]
+  · rfl
+
+namespace CharEvidence
+/-- Wrong construction through Lean's replacement-character conversion accepts invalid scalars. -/
+def replacementConstructor (n : UInt32) : Option Char := some (Char.ofNat n.toNat)
+/-- Wrong ASCII construction admits all Unicode Latin-1 bytes. -/
+def latin1Constructor (b : UInt8) : Option Char := charFromCodePoint b.toUInt32
+
+/-- Instance (law `ConcreteSpec.Core.charFromCodePoint_map`, case `surrogate`). -/
+example : (charFromCodePoint 0xd800).map charCodePoint = none := charFromCodePoint_map 0xd800
+/-- Planted (law `ConcreteSpec.Core.charFromCodePoint_map`, case `surrogate`,
+subject `ConcreteSpec.Core.charFromCodePoint`, mutant `ConcreteSpec.Core.CharEvidence.replacementConstructor`). -/
+example : ¬ ((replacementConstructor 0xd800).map charCodePoint = none) := by decide
+/-- Instance (law `ConcreteSpec.Core.charFromCodePoint_roundtrip`, case `ascii`). -/
+example : charFromCodePoint (charCodePoint (Char.ofNat 65)) = some (Char.ofNat 65) :=
+  charFromCodePoint_roundtrip (Char.ofNat 65)
+/-- Wrong construction increments the code point before checking. -/
+def nextConstructor (n : UInt32) : Option Char := charFromCodePoint (n + 1)
+/-- Planted (law `ConcreteSpec.Core.charFromCodePoint_roundtrip`, case `ascii`,
+subject `ConcreteSpec.Core.charFromCodePoint`, mutant `ConcreteSpec.Core.CharEvidence.nextConstructor`). -/
+example : nextConstructor (charCodePoint (Char.ofNat 65)) ≠ some (Char.ofNat 65) := by decide
+/-- Instance (law `ConcreteSpec.Core.charFromAscii_map`, case `high_byte`). -/
+example : (charFromAscii 128).map charCodePoint = none := charFromAscii_map 128
+/-- Planted (law `ConcreteSpec.Core.charFromAscii_map`, case `high_byte`,
+subject `ConcreteSpec.Core.charFromAscii`, mutant `ConcreteSpec.Core.CharEvidence.latin1Constructor`). -/
+example : ¬ ((latin1Constructor 128).map charCodePoint = none) := by decide
+end CharEvidence
 
 end ConcreteSpec.Core

@@ -194,10 +194,212 @@ check "note: rounds 2, verdict clean" test "$(field rounds)/$(field verdict)" = 
 (cd "$W" && bash "$VERIFY" HEAD >"$T/v" 2>&1); rc=$?
 check "verify.sh: clean exit 0 (got $rc)" test "$rc" -eq 0
 check "verify.sh prints the verdict" grep -q "clean (round 2" "$T/v"
+(cd "$W" && bash "$VERIFY" --required-base "$BASE" HEAD >"$T/vr" 2>&1); rc=$?
+check "verify.sh accepts a note based at the required base" test "$rc" -eq 0
+(cd "$W" && bash "$VERIFY" --required-base "$R1" HEAD >"$T/vr" 2>&1); rc=$?
+check "verify.sh accepts a note based before the required base" test "$rc" -eq 0
+(cd "$W" && bash "$VERIFY" --required-base missing-required-base HEAD >"$T/vr" 2>&1); rc=$?
+check "verify.sh refuses an unknown required base" test "$rc" -eq 2
+check "unknown required base has its own diagnostic" grep -q 'required base is not a commit' "$T/vr"
 (cd "$W" && bash "$VERIFY" "$R1" >/dev/null 2>&1); rc=$?
 check "verify.sh judges the exact commit, not the branch (R1 still 1)" test "$rc" -eq 1
 review >/dev/null 2>&1; rc=$?
 check "an already-clean HEAD reports clean without a call (exit 0)" test "$rc" -eq 0 -a "$(calls)" -eq 2
+
+echo "=== advanced base: full branch fallback preserves rounds and excludes main ==="
+g checkout -qb advanced-base main
+commit_file member.txt "member reviewed" "member change"
+reset_fake
+review --max-rounds 3 >"$T/advanced-first" 2>&1; rc=$?
+check "member initially reviewed clean" test "$rc/$(field rounds)" = "0/1"
+g checkout -q main
+commit_file upstream.txt "MARK_FINDING unrelated main change" "main advances"
+# No push: explicit base matches the train's invocation.
+g checkout -q advanced-base
+g merge -q --no-edit main
+commit_file member-new.txt "member added after merging main" "member continues"
+reset_fake
+review --base main --head HEAD --max-rounds 3 >"$T/advanced-second" 2>&1; rc=$?
+check "advanced-base round is clean and remains round 2" test "$rc/$(field rounds)" = "0/2"
+check "fallback reviews the complete member contribution" grep -q 'files=member-new.txt,member.txt,$' "$FAKE_LOG/calls"
+check "fallback excludes unrelated main changes" bash -c '! grep -q upstream.txt "$1"' _ "$FAKE_LOG/stdin.1"
+check "fallback prompt describes full branch scope" grep -q 'complete change of a branch' "$FAKE_LOG/prompt.1"
+check "fallback is announced" grep -q 'reviewing full base..HEAD diff (round 2)' "$T/advanced-second"
+commit_file member-new.txt "member changed again" "member delta"
+reset_fake
+review --base main --max-rounds 3 >"$T/advanced-third" 2>&1; rc=$?
+check "descendant review resumes delta at round 3" test "$rc/$(field rounds)" = "0/3"
+check "resumed delta contains only the new member change" grep -q 'files=member-new.txt,$' "$FAKE_LOG/calls"
+commit_file cap.txt "no fourth round" "cap probe"
+review --base main --max-rounds 3 >"$T/advanced-cap" 2>&1; rc=$?
+check "base advance did not reset the cap" test "$rc" -eq 3
+check "cap calls no additional reviewer" test "$(calls)" -eq 1
+g checkout -q feature
+# Restore the fixture base for the independent legs below.
+g branch -f main origin/main
+reset_fake
+
+echo "=== ISS-0019: prior review ranges cannot hide branch changes ==="
+g checkout -q -b range-controls origin/main
+RANGE_BASE="$(g rev-parse HEAD)"
+commit_file hidden.txt hidden hidden
+RANGE_MID="$(g rev-parse HEAD)"
+commit_file visible.txt visible visible
+range_note() {
+  g notes --ref=concrete-review add -f -m "$(printf 'verdict: %s\nrounds: %s\nreviewer: codex\nutc: 2026-11-11T00:00:00Z\nbase: %s\npieces: 1' "$1" "$2" "$3")" HEAD
+}
+for verdict in clean findings blocked; do
+  range_note "$verdict" 1 "$RANGE_MID"
+  reset_fake
+  REVIEW_PUSH=0 review --base "$RANGE_BASE" >"$T/range" 2>&1; rc=$?
+  check "HEAD $verdict intermediate note triggers full review" test "$rc" -eq 0 -a "$(calls)" -eq 1
+  check "HEAD $verdict full review includes hidden change" grep -q '^+hidden$' "$FAKE_LOG/stdin.1"
+  check "HEAD $verdict fallback preserves rounds" test "$(field rounds)" = 2
+done
+range_note clean 1 "$RANGE_MID"
+commit_file later.txt later later
+reset_fake
+REVIEW_PUSH=0 review --base "$RANGE_BASE" >"$T/range" 2>&1; rc=$?
+check "ancestor intermediate note triggers full review" test "$rc" -eq 0 -a "$(calls)" -eq 1
+check "ancestor fallback includes hidden and new changes" grep -q 'files=hidden.txt,later.txt,visible.txt,' "$FAKE_LOG/calls"
+# A train merge may have no tree delta from the inadequately reviewed member.
+range_note clean 1 "$RANGE_MID"
+MERGE_HEAD="$(printf merge | g commit-tree "$(g rev-parse HEAD^{tree})" -p "$(g rev-parse HEAD)" -p "$RANGE_BASE")"
+g reset -q --hard "$MERGE_HEAD"
+reset_fake
+REVIEW_PUSH=0 review --base "$RANGE_BASE" >"$T/range" 2>&1; rc=$?
+check "identical-tree train merge falls back instead of nothing-to-review" test "$rc" -eq 0 -a "$(calls)" -eq 1
+check "identical-tree fallback includes unreviewed contribution" grep -q '^+hidden$' "$FAKE_LOG/stdin.1"
+range_note clean 5 "$RANGE_MID"
+reset_fake
+REVIEW_PUSH=0 review --base "$RANGE_BASE" >"$T/range" 2>&1; rc=$?
+check "invalid range cannot reset exhausted cap" test "$rc" -eq 3 -a "$(calls)" -eq 0
+# Stacked notes must not conceal ancestor caps or unresolved findings.
+for mode in capped malformed uncapped merge; do
+  g checkout -q -B "stack-$mode" "$RANGE_BASE"
+  commit_file ancestor.txt ancestor "ancestor-$mode"
+  STACK_B="$(g rev-parse HEAD)"
+  rounds=5; [ "$mode" != uncapped ] || rounds=2
+  range_note findings "$rounds" "$RANGE_BASE"
+  g notes --ref=concrete-review-findings add -f -m 'ANCESTOR_OPEN_FINDING' HEAD
+  commit_file child.txt child "child-$mode"
+  rounds=1; [ "$mode" != malformed ] || rounds=0
+  range_note clean "$rounds" "$STACK_B"
+  if [ "$mode" = merge ]; then
+    # Review evidence on both parents must contribute to the cap.
+    g checkout -q -b stack-side "$RANGE_BASE"
+    commit_file side.txt side side
+    range_note clean 1 "$RANGE_BASE"
+    g merge -q --no-ff "stack-$mode" -m merge
+  fi
+  reset_fake
+  REVIEW_PUSH=0 review --base "$RANGE_BASE" >"$T/stack" 2>&1; rc=$?
+  if [ "$mode" = uncapped ]; then
+    check "stacked narrow clean preserves round 3" test "$rc/$(field rounds)" = 0/3 -a "$(calls)" -eq 1
+    check "stacked narrow clean forces full review" grep -q '^+ancestor$' "$FAKE_LOG/stdin.1"
+    check "stacked narrow clean carries ancestor findings" grep -q ANCESTOR_OPEN_FINDING "$FAKE_LOG/prompt.1"
+  else
+    check "stacked $mode cannot bypass ancestor cap" test "$rc" -eq 3 -a "$(calls)" -eq 0
+    check "stacked $mode fails for cap reason" grep -q 'cap' "$T/stack"
+  fi
+done
+# A valid first blocked round has no completed delta start, but has valid scope.
+g checkout -q -B blocked-first "$RANGE_BASE"
+commit_file initial.txt initial initial
+range_note blocked 1 "$RANGE_BASE"
+reset_fake
+REVIEW_PUSH=0 review --base "$RANGE_BASE" >"$T/blocked-first" 2>&1; rc=$?
+check "covering first blocked round resumes at round 2" test "$rc/$(field rounds)" = 0/2 -a "$(calls)" -eq 1
+check "covering first blocked round has no false range diagnostic" test -z "$(grep 'prior review does not cover' "$T/blocked-first")"
+# A blocked round contributes its count, but never advances the delta start.
+for mode in narrow covering; do
+  g checkout -q -B "blocked-$mode" "$RANGE_BASE"
+  commit_file prior.txt prior "prior-$mode"
+  range_note clean 2 "$RANGE_BASE"
+  commit_file pending.txt pending "pending-$mode"
+  BLOCKED_BASE="$(g rev-parse HEAD)"
+  commit_file blocked.txt blocked "blocked-$mode"
+  nb="$RANGE_BASE"; [ "$mode" != narrow ] || nb="$BLOCKED_BASE"
+  range_note blocked 1 "$nb"
+  commit_file after.txt after "after-$mode"
+  reset_fake
+  REVIEW_PUSH=0 review --base "$RANGE_BASE" >"$T/blocked-scope" 2>&1; rc=$?
+  check "$mode blocked note preserves maximum round count" test "$rc/$(field rounds)" = 0/3
+  check "$mode blocked invokes reviewer once" test "$(calls)" -eq 1
+  check "$mode blocked reviewer diff exists" test -f "$FAKE_LOG/stdin.1"
+  if [ "$mode" = narrow ]; then
+    check "narrow blocked note forces full scope despite older clean" grep -q '^+prior$' "$FAKE_LOG/stdin.1"
+  else
+    for hunk in pending blocked after; do
+      check "covering blocked delta includes $hunk" grep -q "^+$hunk$" "$FAKE_LOG/stdin.1"
+    done
+    check "covering blocked note retains delta scope" bash -c '[ -f "$1" ] && ! grep -q "^+prior$" "$1"' _ "$FAKE_LOG/stdin.1"
+    check "covering blocked note has no false range diagnostic" test -z "$(grep 'prior review does not cover' "$T/blocked-scope")"
+  fi
+done
+# A completed covering review supersedes narrow ancestor scope, including at the cap.
+for verdict in clean findings; do
+  g checkout -q -B "recovered-$verdict" "$RANGE_BASE"
+  commit_file narrow.txt narrow "narrow-$verdict"
+  RECOVERY_MID="$(g rev-parse HEAD)"
+  commit_file old-scope.txt old-scope "old-scope-$verdict"
+  range_note clean 2 "$RECOVERY_MID"
+  commit_file covering.txt covering "covering-$verdict"
+  range_note "$verdict" 3 "$RANGE_BASE"
+  reset_fake
+  cap=5; expected=4
+  if [ "$verdict" = clean ]; then cap=3; expected=0; fi
+  REVIEW_PUSH=0 review --base "$RANGE_BASE" --max-rounds "$cap" >"$T/recovered" 2>&1; rc=$?
+  check "covering $verdict supersedes narrow ancestor shortcut" test "$rc" -eq "$expected" -a "$(calls)" -eq 0
+  if [ "$verdict" = clean ]; then reason='already reviewed clean'; else reason='HEAD already reviewed in round'; fi
+  check "covering $verdict shortcut gives intended reason" grep -q "$reason" "$T/recovered"
+  commit_file resumed.txt resumed "resumed-$verdict"
+  reset_fake
+  REVIEW_PUSH=0 review --base "$RANGE_BASE" >"$T/recovered" 2>&1; rc=$?
+  check "covering $verdict descendant calls reviewer once" test "$rc" -eq 0 -a "$(calls)" -eq 1
+  check "covering $verdict descendant logs diff" test -f "$FAKE_LOG/stdin.1"
+  check "covering $verdict descendant reviews new delta" grep -q '^+resumed$' "$FAKE_LOG/stdin.1"
+  check "covering $verdict descendant excludes superseded scope" bash -c '[ -f "$1" ] && ! grep -q "^+old-scope$" "$1"' _ "$FAKE_LOG/stdin.1"
+done
+# Coverage on one merge parent must not hide a narrow note on the other.
+g checkout -q -B uncovered-side "$RANGE_BASE"
+commit_file side-base.txt side-base side-base
+SIDE_BASE="$(g rev-parse HEAD)"
+commit_file uncovered.txt uncovered uncovered
+range_note clean 2 "$SIDE_BASE"
+g checkout -q -B covered-side "$RANGE_BASE"
+commit_file covered.txt covered covered
+range_note clean 2 "$RANGE_BASE"
+g merge -q --no-ff uncovered-side -m uncovered-merge
+reset_fake
+REVIEW_PUSH=0 review --base "$RANGE_BASE" >"$T/uncovered" 2>&1; rc=$?
+check "uncovered merge sibling calls reviewer once" test "$rc" -eq 0 -a "$(calls)" -eq 1
+check "uncovered merge sibling gives full-scope reason" grep -q 'prior review does not cover' "$T/uncovered"
+check "uncovered merge sibling includes already-covered parent" grep -q '^+covered$' "$FAKE_LOG/stdin.1"
+check "uncovered merge sibling includes narrow contribution" grep -q '^+side-base$' "$FAKE_LOG/stdin.1"
+g checkout -q range-controls
+# A real unrelated commit is syntactically valid but cannot cover the required base.
+UNRELATED="$(printf unrelated | g commit-tree "$(g rev-parse HEAD^{tree})")"
+range_note clean 1 "$UNRELATED"
+(cd "$W" && bash "$VERIFY" --required-base "$RANGE_BASE" HEAD >"$T/vr" 2>&1); rc=$?
+check "real non-ancestor note base exits 2 with range reason" test "$rc" -eq 2 -a -n "$(grep 'review range does not cover required base' "$T/vr")"
+for args in missing empty flag; do
+  case "$args" in
+    missing) (cd "$W" && bash "$VERIFY" --required-base >"$T/vr" 2>&1) ;;
+    empty) (cd "$W" && bash "$VERIFY" --required-base '' HEAD >"$T/vr" 2>&1) ;;
+    flag) (cd "$W" && bash "$VERIFY" --required-base --fetch HEAD >"$T/vr" 2>&1) ;;
+  esac; rc=$?
+  check "$args required-base argument exits 2 with argument reason" test "$rc" -eq 2 -a -n "$(grep -E 'needs a commit|required base is not a commit' "$T/vr")"
+done
+# Both endpoints exist, but the path between them is shallowly truncated.
+range_note clean 1 "$RANGE_BASE"
+g clone -q --no-local --depth 1 --branch range-controls "$W" "$T/shallow"
+git -C "$T/shallow" fetch -q --depth 1 "$W" "$RANGE_BASE"
+git -C "$T/shallow" fetch -q "$W" refs/notes/concrete-review:refs/notes/concrete-review
+(cd "$T/shallow" && bash "$VERIFY" --required-base HEAD HEAD >"$T/vr" 2>&1); rc=$?
+check "shallow ancestry fails closed with range reason" test "$rc" -eq 2 -a -n "$(grep 'review range does not cover required base' "$T/vr")"
+g checkout -q feature
+reset_fake
 
 echo "=== verify.sh: missing and malformed notes ==="
 commit_file x.txt "x" "unreviewed"
@@ -207,11 +409,20 @@ g notes --ref=refs/notes/concrete-review add -f -m "verdict: clean" HEAD
 (cd "$W" && bash "$VERIFY" HEAD >/dev/null 2>&1); rc=$?
 check "malformed note (verdict line alone): exit 2 (got $rc)" test "$rc" -eq 2
 B40="$(printf '%040d' 0 | tr 0 a)"
-# The landing bot's carried note (notes.sh put: keys in its own order, utc last) is well formed.
-g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nbase: %s\npieces: 1\ncarried-from: %s\nutc: 2026-10-22T00:00:00Z' "$B40" "$B40")" HEAD
+# A note notes.sh put wrote (keys in its own order, utc last) is well formed.
+g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nbase: %s\npieces: 1\nutc: 2026-10-22T00:00:00Z' "$B40")" HEAD
 (cd "$W" && bash "$VERIFY" HEAD >"$T/vc" 2>&1); rc=$?
-check "the landing bot's carried note verifies clean (exit 0, got $rc)" test "$rc" -eq 0
-check "a carried verdict says where it came from" grep -q "carried from $B40" "$T/vc"
+check "a note with utc last verifies clean (exit 0, got $rc)" test "$rc" -eq 0
+(cd "$W" && bash "$VERIFY" --required-base HEAD HEAD >"$T/vr" 2>&1); rc=$?
+check "verify.sh refuses a syntactically valid but unknown note base" test "$rc" -eq 2
+check "unknown note base fails for range coverage" grep -q 'review range does not cover required base' "$T/vr"
+# The landing bot's keys went with it: a verdict carried across a rebase, or a landing order, is no
+# longer a key a review note may hold.
+for extra in "carried-from: $B40" "order: 1"; do
+  g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nbase: %s\npieces: 1\nutc: 2026-10-22T00:00:00Z\n%s' "$B40" "$extra")" HEAD
+  out="$(cd "$W" && bash "$VERIFY" HEAD 2>&1)"; rc=$?
+  check "a note with '${extra%%:*}' is malformed: exit 2, bad ${extra%%:*} (got $rc)" test "$rc" -eq 2 -a -n "$(printf '%s' "$out" | grep -F "malformed review note (bad ${extra%%:*})")"
+done
 g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nutc: 2026-10-22T00:00:00Z\nbase: %s\npieces: 1\nsurprise: 1' "$B40")" HEAD
 (cd "$W" && bash "$VERIFY" HEAD >/dev/null 2>&1); rc=$?
 check "an unknown key is malformed: exit 2 (got $rc)" test "$rc" -eq 2
@@ -299,6 +510,34 @@ hook_out="$(cd "$W" && printf 'refs/notes/concrete-review %s refs/notes/concrete
   "$NOTES_SHA" "$Z" "$(g rev-parse refs/notes/concrete-review-findings)" "$Z" | bash "$HOOK" 2>&1)"; rc=$?
 check "notes-only push: hook exits 0 (got $rc)" test "$rc" -eq 0
 check "notes-only push: hook takes the review-notes tier" grep -q "review-notes push" <<<"$hook_out"
+# Owner sign-off refs: only a record (parentless, its subject's 40-hex name, exactly the seven files)
+# takes the notes tier. Anything else takes the full tier, which a linked worktree refuses before it
+# runs anything: that refusal is how these legs see the tier without running the gates.
+SO_BLOB="$(printf 'x\n' | g hash-object -w --stdin)"
+SO_TREE="$(printf '100644 blob %s\tagy-request.txt\n100644 blob %s\tagy.txt\n100644 blob %s\tcodex-request.txt\n100644 blob %s\tcodex.txt\n100644 blob %s\tkimi-request.txt\n100644 blob %s\tkimi.txt\n100644 blob %s\trecord.txt\n' "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" | g mktree)"
+SO_REC="$(g commit-tree "$SO_TREE" -m record)"; SO_SUBJ="$(g rev-parse HEAD)"
+SO_OLD_TREE="$(printf '100644 blob %s\tagy.txt\n100644 blob %s\tcodex.txt\n100644 blob %s\tkimi.txt\n100644 blob %s\trecord.txt\n' "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" | g mktree)"
+SO_OLD_REC="$(g commit-tree "$SO_OLD_TREE" -m old-record)"
+g worktree add -q --detach "$T/so-wt" HEAD
+so_hook(){ (cd "$T/so-wt" && printf '%s %s %s %s\n' "$1" "$2" "$1" "$Z" | CONCRETE_GATES_SHELL= bash "$HOOK" origin x 2>&1); }
+hook_out="$(so_hook "refs/owner-signoff/$SO_SUBJ" "$SO_REC")"; rc=$?
+check "a seven-file owner sign-off record takes the review-notes tier (exit $rc)" \
+  bash -c "[ $rc -eq 0 ] && grep -q 'review-notes push' <<<'$hook_out'"
+hook_out="$(so_hook "refs/owner-signoff/$SO_SUBJ" "$SO_OLD_REC")"; rc=$?
+check "the old four-file owner sign-off shape takes the full tier (exit $rc)" \
+  bash -c "[ $rc -eq 1 ] && grep -q 'is a linked worktree' <<<'$hook_out'"
+hook_out="$(so_hook "refs/owner-signoff/$SO_SUBJ" "$SO_SUBJ")"; rc=$?
+check "a source commit pushed as a sign-off takes the full tier (exit $rc)" \
+  bash -c "[ $rc -eq 1 ] && grep -q 'is a linked worktree' <<<'$hook_out'"
+SO_DTREE="$(printf '100644 blob %s\tsrc.lean\n' "$SO_BLOB" | g mktree)"
+SO_DIRS="$(g commit-tree "$(printf '040000 tree %s\tagy-request.txt\n040000 tree %s\tagy.txt\n040000 tree %s\tcodex-request.txt\n040000 tree %s\tcodex.txt\n040000 tree %s\tkimi-request.txt\n040000 tree %s\tkimi.txt\n040000 tree %s\trecord.txt\n' "$SO_DTREE" "$SO_DTREE" "$SO_DTREE" "$SO_DTREE" "$SO_DTREE" "$SO_DTREE" "$SO_DTREE" | g mktree)" -m dirs)"
+hook_out="$(so_hook "refs/owner-signoff/$SO_SUBJ" "$SO_DIRS")"; rc=$?
+check "seven directories named like a record's files take the full tier (exit $rc)" \
+  bash -c "[ $rc -eq 1 ] && grep -q 'is a linked worktree' <<<'$hook_out'"
+hook_out="$(so_hook "refs/owner-signoff/not-a-sha" "$SO_REC")"; rc=$?
+check "a record under a name that is no SHA takes the full tier (exit $rc)" \
+  bash -c "[ $rc -eq 1 ] && grep -q 'is a linked worktree' <<<'$hook_out'"
+g worktree remove --force "$T/so-wt"
 hook_out="$(cd "$W" && printf 'refs/heads/mixed %s refs/heads/wip/x %s\nrefs/notes/concrete-review %s refs/notes/concrete-review %s\n' \
   "$(g rev-parse HEAD)" "$Z" "$NOTES_SHA" "$Z" | bash "$HOOK" 2>&1)"; rc=$?
 check "notes alongside a wip push take the wip tier (exit $rc)" \

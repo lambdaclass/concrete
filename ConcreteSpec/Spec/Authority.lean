@@ -1,3 +1,5 @@
+import ConcreteSpec.Spec.CapabilityBase
+
 /-!
 # Part 6: authority
 
@@ -36,16 +38,6 @@ cleanup (rules 5 and 7; this part has direct calls only), and reserving the capa
 against other uses (rule 13). The operations are a representative part of the hosted table (row
 Q7.10), one per grant type used here.
 -/
-
-/-- The reserved capability names (authority rule 13). `Console` is the permission for operations
-on the standard-stream grants `StdIn`, `StdOut` and `StdErr` (row Q7.11); `Device` is for device
-grants; `Unsafe` is not an operational capability (rule 5). -/
-inductive Cap where
-  | fs | network | env | time | alloc | device | console | process | «unsafe»
-  deriving DecidableEq, Repr
-
-/-- Every capability, once. -/
-def Cap.all : List Cap := [.fs, .network, .env, .time, .alloc, .device, .console, .process, .«unsafe»]
 
 /-- A capability-set expression as written in `with(...)` or as an explicit capability argument
 (Q5.2): named capabilities and capability variables, joined by union. A function's capability

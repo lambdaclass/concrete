@@ -1,4 +1,4 @@
-import ConcreteSpec.Spec.Ident
+import ConcreteSpec.Spec.Basics
 
 /-!
 # Target profiles
@@ -22,6 +22,9 @@ program can have fits (question 7, option (c)), and that proof is not part of th
 
 There is one profile today, `linuxX8664`, the existing 64-bit little-endian target of row Q7.1,
 unchanged. Another target is another profile (OD126), and must satisfy `Target.WellFormed`.
+
+Authority: `docs/decisions.md#foundation-q1`, `#foundation-q3`, `#foundation-q7`,
+Q3.5, Q3.9, Q3.10 and Q7.1 authorize the profile interface, layout bounds and existing target.
 -/
 
 namespace ConcreteSpec.Core
@@ -114,7 +117,7 @@ example : ¬ ({ linuxX8664 with
     maxObject := 2 ^ 16 } : Target).WellFormed := by decide
 
 /-- Nor is one whose pointer alignment is not a power of two. -/
-example : ¬ ({ linuxX8664 with ptrAlign := 6 } : Target).WellFormed := by decide
+example : ¬ ({ linuxX8664 with ptrSize := 12, ptrAlign := 6 } : Target).WellFormed := by decide
 
 /-- Nor one whose pointer size is not a multiple of its alignment. -/
 example : ¬ ({ linuxX8664 with ptrAlign := 16 } : Target).WellFormed := by decide

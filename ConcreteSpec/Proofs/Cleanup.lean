@@ -1,4 +1,4 @@
-import ConcreteSpec.Proofs.Basics
+import ConcreteSpec.Spec.Cleanup
 
 /-!
 # Part 3: `defer_cleanup_releases`, every exit runs what is registered for the scopes it leaves, in order.

@@ -1,0 +1,1 @@
+Fix landing readiness invoked by a relative path from a subdirectory, and anchor landing/review help and the external proof call-site scan to their script directories (ISS-0055). Add bounded controls for relative invocations and relocated self-reads.

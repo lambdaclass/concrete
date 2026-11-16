@@ -22,15 +22,14 @@ while [ $# -gt 0 ]; do
     --dry-run) DRY=1 ;;
     --no-review) review=0 ;;
     --no-remote) remote=0 ;;
-    --base) baseref="$2"; shift ;;
+    --base) [ $# -ge 2 ] && [ -n "$2" ] || die "--base needs a nonempty ref"; baseref="$2"; shift ;;
     -*) die "unknown option $1" ;;
     *) branch="$1" ;;
   esac; shift
 done
 [ -n "$branch" ] || die "name the pushed branch (e.g. wip/my-fix)"
 cd "$(git rev-parse --show-toplevel)"
-REMOTE="${LAND_REMOTE:-origin}"
-[ "$REMOTE" != fork ] || die "refusing the remote named 'fork'"
+REMOTE=origin
 [ -z "$(git status --porcelain --untracked-files=no)" ] || die "the work tree has uncommitted changes"
 land_assert_no_op start
 git fetch -q "$REMOTE"
@@ -92,4 +91,4 @@ bash "$SELF_DIR/notes.sh" put gates "$head" "${kv[@]}"
 bash "$SELF_DIR/notes.sh" fetch
 verdict="$(bash "$SELF_DIR/notes.sh" get review "$head" verdict)"
 echo "ready: ${head:0:10} gates=$gates review=${verdict:-none}"
-[ "$gates" = pass ] && [ "$verdict" = clean ]
+[ "$gates" = pass ] && bash "$SELF_DIR/notes.sh" ready "$head" "$base"

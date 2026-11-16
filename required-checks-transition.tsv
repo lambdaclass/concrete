@@ -5,3 +5,5 @@
 # "Root checks" keeps its name and is required on both sides, so it has no row. Delete a row once main
 # no longer requires its job (required_checks.py reports it stale).
 old_job	replacements	reason
+Slice 0 backends (x86-64)	Tests (x86-64)	The manifest-driven runner replaces the slice-0 backend gate.
+Slice 0 backends (aarch64-macos)	Tests (aarch64-macos)	The manifest-driven runner replaces the slice-0 backend gate.

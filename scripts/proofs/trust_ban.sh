@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# TRUST BAN: no `sorry` and no `native_decide` anywhere in the specification (Q9.17), checked
+# TRUST BAN: no `sorry` and no `native_decide` anywhere in the specification or compiler (Q9.17), checked
 # transitively in the kernel's terms and in the sources the environment does not keep.
 #
+#   I  every proof module, recursively enumerated, imports exactly the modules defining its
+#      directly referenced constants (including anonymous examples); see scripts/proofs/IMPORTS.md.
 #   E  no constant of ANY kind the ConcreteSpec library declares (definitions, instances and
 #      generated helpers included, not only theorems) depends transitively on sorryAx, on
 #      Lean.ofReduceBool or Lean.ofReduceNat (what native_decide and `decide +native` reduce through),
 #      on Lean.trustCompiler, or on a generated `._native.` axiom;
-#   D  the library declares no axiom of its own;
+#   D  neither library declares an axiom of its own;
 #   X  every `example`, which the kernel checks and Lean then discards (so E and D never see it),
 #      depends only on the standard axioms: in a copy of the library each `example` becomes a
 #      named declaration (scripts/proofs/lean_lex.py), the copy is built, and its axioms are
@@ -17,6 +19,9 @@
 #      option on `decide`, ofReduceBool, ofReduceNat, trustCompiler or skipKernelTC, and define no
 #      syntax extension, run no meta code, set no option and import nothing outside the library
 #      (the lexer reads what Lean reads only for syntax it knows).
+#
+# IMPORT CONTROLS: unused and transitive-only imports, open namespaces, recursive/nonempty
+# populations, and comment/EOL-preserving idempotent header rewrites are checked by imports.py.
 #
 # NEGATIVE CONTROLS: a theorem proved by sorry, a definition whose body is sorry (no theorem about
 # it), a theorem proved by native_decide and a declared axiom each fail E or D naming the constant;
@@ -29,6 +34,21 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 CHECK_NAME=PROOF-TRUST-BAN
 source scripts/proofs/lib.sh
+
+# Exact direct imports are part of this required Lean-enabled gate.
+if python3 scripts/proofs/imports.py; then
+  ok "direct proof imports and controls"
+else
+  no "direct proof imports or controls failed"
+fi
+
+# Identity and diagnostics are structural trust properties; the environment scan is load-bearing.
+# Compiling negative controls cover spelling-carrier forms and the numeric/lookup invariants.
+if python3 scripts/proofs/local_identity.py; then
+  ok "numeric local identity, structural diagnostics separation and negative controls"
+else
+  no "local identity or a negative control failed"
+fi
 
 BANNED_AXIOM_RE='^(sorryAx|Lean[.]ofReduceBool|Lean[.]ofReduceNat|Lean[.]trustCompiler)$|[.]_native[.]'
 BANNED_WORD_RE='\b(sorry|sorryAx|admit|native_decide|ofReduceBool|ofReduceNat|trustCompiler|skipKernelTC)\b|\+native\b|\bnative»?\s*:=|\bdecide\s*\(\s*config\b|\bdecide\s*[+-]|\bDecide[.]Config\b'
@@ -75,8 +95,38 @@ W=$(scan "${SRC[@]}"); RC=$?
 [ "$RC" = 0 ] && [ "${#SRC[@]}" -ge 10 ] && [ -z "$W" ] && ok "none of the ${#SRC[@]} source files spells a banned word outside comments" \
   || no "the source scan (rc=$RC) of ${#SRC[@]} files: $(printf '%s\n' "$W" | head -5 | tr '\n' '|')"
 
-# lake_options LAKEFILE → empty when the one library builds from ConcreteSpec.lean and ConcreteSpec/
-# (Lake's defaults: no srcDir, roots or globs) with warningAsError, and nothing can turn it off
+# Compiler sources obey the same trust-word/option/extension ban. Compiler imports
+# include Lean's premise-reporting API and the pinned backend, so scan their header
+# grammar separately; no compiler file is exempt from the ban.
+mapfile -t COMPILER_SRC < <({ echo Concrete.lean; find Concrete -name '*.lean'; } | sort)
+W=$(python3 "$PROOFS_DIR/lean_lex.py" scan-compiler "$BANNED_WORD_RE|$EXTENSION_RE" "${COMPILER_SRC[@]}"); RC=$?
+[ "$RC" = 0 ] && [ -z "$W" ] && ok "all compiler sources obey the trust ban" \
+  || no "compiler source scan (rc=$RC): $(printf '%s\n' "$W" | head -5 | tr '\n' '|')"
+
+# Read every compiler constant as well, including declarations not reachable from
+# the headline theorem registry. The compiler root must import every source module.
+"$LAKE" build Concrete > "$TMP/compiler-build.log" 2>&1 \
+  || { cat "$TMP/compiler-build.log" >&2; no "compiler build failed"; finish; }
+PROOF_PKG=Concrete PROOF_MODE=constants "$LAKE" env lean "$ENUMERATOR" > "$TMP/compiler-consts.tsv" \
+  || { no "compiler constant enumeration failed"; finish; }
+B=$(banned "$TMP/compiler-consts.tsv"); A=$(declared "$TMP/compiler-consts.tsv")
+[ -s "$TMP/compiler-consts.tsv" ] && [ -z "$B$A" ] \
+  && ok "all compiler constants obey the axiom ban" \
+  || no "compiler banned dependencies: $B; declared axioms: $A"
+PROOF_PKG=Concrete PROOF_MODE=imported "$LAKE" env lean "$ENUMERATOR" > "$TMP/compiler-imported.txt" \
+  || { no "compiler import enumeration failed"; finish; }
+{ echo Concrete.lean; find Concrete -name '*.lean'; } | sed -E 's#\.lean$##; s#/#.#g' | sort -u > "$TMP/compiler-modules.txt"
+GAP=$(comm -23 "$TMP/compiler-modules.txt" <(sort -u "$TMP/compiler-imported.txt"))
+[ -z "$GAP" ] && ok "all compiler modules are in the checked import closure" \
+  || no "compiler modules outside checked closure: $GAP"
+
+# lake_options LAKEFILE → empty when the specification library builds from ConcreteSpec.lean and
+# ConcreteSpec/ (Lake's defaults: no srcDir, roots or globs) with warningAsError, and nothing can turn
+# it off. The package holds exactly two libraries, ConcreteSpec and the compiler, Concrete (ROADMAP B0),
+# under the same key allow-list. A dependency is a `require` of a git URL pinned to a full commit,
+# which lake-manifest.json (beside the lakefile) records at the same URL and commit: the spec may
+# import nothing outside itself (S), so a dependency reaches only the compiler. This ban's scope is
+# both libraries; the compiler's imports additionally include Lean and its pinned backend.
 lake_options() {
   python3 - "$1" <<'EOF'
 import sys, tomllib
@@ -92,12 +142,29 @@ if cfg.get("leanOptions", {}).get("warningAsError") is not True:
     bad.append("[leanOptions] warningAsError is not true")
 # Allow-lists, not deny-lists: a key not named here (srcDir, roots, globs, moreLeanArgs, …) could
 # point the build at other sources or pass options, so it is refused.
-extra = set(cfg) - {"name", "version", "defaultTargets", "leanOptions", "lean_lib"}
+extra = set(cfg) - {"name", "version", "defaultTargets", "leanOptions", "lean_lib", "require"}
 if extra: bad.append(f"the package sets {sorted(extra)}")
 if set(cfg.get("leanOptions", {})) != {"warningAsError"}:
     bad.append(f"[leanOptions] sets {sorted(set(cfg.get('leanOptions', {})) - {'warningAsError'})}")
+import json, re
+reqs = cfg.get("require", [])
+if reqs:
+    try:
+        man = json.load(open(os.path.join(os.path.dirname(sys.argv[1]) or ".", "lake-manifest.json")))
+        pkgs = {p.get("name", "").strip("«»"): p for p in man.get("packages", [])}
+    except Exception as e:
+        bad.append(f"lake-manifest.json unreadable: {e}"); pkgs = {}
+    for r in reqs:
+        n = r.get("name")
+        if set(r) != {"name", "git", "rev"}:
+            bad.append(f"the require {n} sets {sorted(set(r) ^ {'name', 'git', 'rev'})}"); continue
+        if not re.fullmatch(r"[0-9a-f]{40}", str(r["rev"])):
+            bad.append(f"the require {n} is not pinned to a full commit ({r['rev']})")
+        p = pkgs.get(n)
+        if not p or p.get("type") != "git" or p.get("url") != r["git"] or p.get("rev") != r["rev"] or p.get("inputRev") != r["rev"]:
+            bad.append(f"lake-manifest.json does not record the require {n} at {r['git']} {r['rev']}")
 libs = cfg.get("lean_lib", [])
-if [l.get("name") for l in libs] != ["ConcreteSpec"]: bad.append(f"libraries {[l.get('name') for l in libs]}")
+if [l.get("name") for l in libs] != ["ConcreteSpec", "Concrete"]: bad.append(f"libraries {[l.get('name') for l in libs]}")
 for l in libs:
     extra = set(l) - {"name", "leanOptions"}
     if extra: bad.append(f"the library sets {sorted(extra)}")
@@ -111,17 +178,19 @@ L=$(lake_options lakefile.toml)
 
 echo "=== X: the examples, in the kernel's terms ==="
 # A copy of the library in which every `example` is a named declaration, built, and its axioms
-# collected as E collects a theorem's. warningAsError is off in the copy only: a definition may draw
-# a linter warning the example did not, and the copy is read for axioms, not judged for warnings.
+# collected as E collects a theorem's. Each example becomes a noncomputable abbreviation.
+# warningAsError stays off in this axiom-only copy: named abbreviations can trigger declaration
+# linters that anonymous examples do not; warnings remain errors in the original library.
 EX="$TMP/ex"; mkdir -p "$EX"
 cp lakefile.toml lean-toolchain lake-manifest.json "$EX"/ || { no "could not copy the Lake files"; finish; }
 [ -d .lake/build ] && mkdir -p "$EX/.lake" && cp -r .lake/build "$EX/.lake/"
 sed -i 's/^warningAsError = true$/warningAsError = false/' "$EX/lakefile.toml"
-NEX=$(python3 "$PROOFS_DIR/lean_lex.py" examples . "$EX" "${SRC[@]}") \
+cp "$ENUMERATOR" "$TMP/examples-enumerator.lean"
+NEX=$(python3 "$PROOFS_DIR/lean_lex.py" examples . "$EX" "${SRC[@]}" "${COMPILER_SRC[@]}") \
   || { no "the examples could not be rewritten: $NEX"; finish; }
-(cd "$EX" && "$LAKE" build ConcreteSpec) > "$TMP/ex-build.log" 2>&1 \
+(cd "$EX" && "$LAKE" build ConcreteSpec Concrete) > "$TMP/ex-build.log" 2>&1 \
   || { no "the library with its examples as declarations does not build: $(grep -m3 error "$TMP/ex-build.log" | tr '\n' ' ')"; finish; }
-(cd "$EX" && PROOF_MODE=examples "$LAKE" env lean "$ENUMERATOR") > "$TMP/examples.out" 2> "$TMP/examples.err" \
+(cd "$EX" && PROOF_MODE=examples "$LAKE" env lean "$TMP/examples-enumerator.lean") > "$TMP/examples.out" 2> "$TMP/examples.err" \
   || { no "PROOF_MODE=examples failed: $(head -2 "$TMP/examples.err" | tr '\n' ' ')"; finish; }
 grep -P '\t' "$TMP/examples.out" > "$TMP/examples.tsv"
 # nonstandard FILE → `<name> (<axiom>)` for every row whose axioms are not among the standard three
@@ -131,10 +200,40 @@ nonstandard() {
 }
 NE=$(grep -c . "$TMP/examples.tsv"); X=$(nonstandard "$TMP/examples.tsv")
 [ "$NEX" -ge 100 ] && [ "$NE" = "$NEX" ] && [ -z "$X" ] \
-  && ok "all $NEX examples, kept as declarations, depend only on the standard axioms" \
+  && ok "all $NEX spec and compiler examples, kept as declarations, depend only on the standard axioms" \
   || no "examples: $NEX rewritten, $NE in the environment; on other axioms: $(echo $X | cut -c1-300)"
 
 echo "=== negative controls ==="
+python3 "$PROOFS_DIR/test_lean_lex.py" > "$TMP/lexer-tests.log" 2>&1; RC=$?
+[ "$RC" = 0 ] && ok "control: literal boundaries, interpolation spoofing and compiler module graph regressions" \
+  || { cat "$TMP/lexer-tests.log" >&2; no "lexer regression controls (rc=$RC)"; }
+# Exercise the compiler CLI itself: these must be reported, even with an otherwise valid header.
+for body in 'import Std' 'import Lean.DoesNotExist' 'def bad : Nat := sorry' 'set_option maxRecDepth 100000'; do
+  printf 'import Concrete.Lex\n%s\n' "$body" > "$TMP/compiler-bad.lean"
+  W=$(python3 "$PROOFS_DIR/lean_lex.py" scan-compiler "$BANNED_WORD_RE|$EXTENSION_RE" "$TMP/compiler-bad.lean"); RC=$?
+  [ "$RC" = 0 ] && [[ "$W" == *"$body"* ]] \
+    && ok "control: compiler scan reports $body" || no "compiler scan missed $body (rc=$RC): $W"
+done
+# A private synthetic build tests deletion and preservation for both library roots and IR.
+ORPHAN="$TMP/orphan-build"
+for dir in lib/lean ir; do
+  for pkg in ConcreteSpec Concrete; do
+    mkdir -p "$ORPHAN/$dir/$pkg"
+    for ext in olean ilean trace olean.hash c; do
+      touch "$ORPHAN/$dir/$pkg/Gone.$ext" "$ORPHAN/$dir/$pkg.$ext"
+    done
+  done
+  mkdir -p "$ORPHAN/$dir/Concrete/Lex" "$ORPHAN/$dir/Other"
+  touch "$ORPHAN/$dir/Concrete/Lex.olean" "$ORPHAN/$dir/Other/Gone.olean"
+done
+prune_orphans "$ORPHAN" > "$TMP/pruned.log"; RC=$?
+REMAIN=$(find "$ORPHAN" -type f -path '*/Concrete*/Gone.*')
+[ "$RC" = 0 ] && [ -z "$REMAIN" ] \
+  && [ -f "$ORPHAN/lib/lean/Concrete.olean" ] && [ -f "$ORPHAN/ir/ConcreteSpec.c" ] \
+  && [ -f "$ORPHAN/lib/lean/Concrete/Lex.olean" ] && [ -f "$ORPHAN/ir/Other/Gone.olean" ] \
+  && ok "control: orphan spec/compiler artifacts are pruned, live and foreign artifacts retained" \
+  || no "orphan pruning control (rc=$RC): remaining $REMAIN"
+
 # control NAME BODY AXIOM-ERE WHAT: the declarations in BODY must be refused at ConcreteSpecControl.NAME
 control() {
   printf '%s\n' "$2" > "$TMP/c-$1.lean"
@@ -218,13 +317,29 @@ import ConcreteSpec.Spec'; do
 done
 printf '[leanOptions]\nwarningAsError = true\n\n[[lean_lib]]\nname = "ConcreteSpec"\nleanOptions = { autoImplicit = false, warningAsError = false }\n' > "$TMP/lake-off.toml"
 L=$(lake_options "$TMP/lake-off.toml")
-[ -n "$L" ] && ok "control: a library that turns warningAsError off is refused ($L)" \
+has_match -F "the library sets options ['warningAsError']" <<<"$L" && ok "control: a library that turns warningAsError off is refused ($L)" \
   || no "control: a lakefile turning warningAsError off was accepted"
 printf '[leanOptions]\nwarningAsError = true\n\n[[lean_lib]]\nname = "ConcreteSpec"\nsrcDir = "shadow"\n' > "$TMP/lake-src.toml"
 L=$(lake_options "$TMP/lake-src.toml")
-[ -n "$L" ] && ok "control: a library built from another source directory is refused ($L)" \
+has_match -F "the library sets ['srcDir']" <<<"$L" && ok "control: a library built from another source directory is refused ($L)" \
   || no "control: a lakefile with srcDir was accepted"
-for f in missing Open Brace Quote; do
+# The dependency controls run on a copy of this lakefile, beside a manifest, so each varies one thing.
+mkdir -p "$TMP/lk"
+lake_variant() { # NAME PYTHON-EDIT: lakefile.toml and lake-manifest.json copied to $TMP/lk/NAME, then edited
+  mkdir -p "$TMP/lk/$1"; cp lakefile.toml lake-manifest.json "$TMP/lk/$1/"
+  (cd "$TMP/lk/$1" && python3 -I -c "$2")
+}
+lake_variant short 'import re; p="lakefile.toml"; s=open(p).read(); r=re.search("[0-9a-f]{40}", s).group(0); open(p,"w").write(s.replace(r, r[:12]))'
+lake_variant branch 'import re; p="lakefile.toml"; s=open(p).read(); open(p,"w").write(re.sub(r"rev = \"[0-9a-f]+\"", "rev = \"main\"", s))'
+lake_variant drift 'import json; p="lake-manifest.json"; m=json.load(open(p)); m["packages"][0]["rev"]="0"*40; json.dump(m, open(p,"w"))'
+lake_variant subdir 'p="lakefile.toml"; s=open(p).read(); open(p,"w").write(s.replace("[[require]]\n", "[[require]]\nsubDir = \"x\"\n", 1))'
+lake_variant thirdlib 'p="lakefile.toml"; s=open(p).read(); open(p,"w").write(s + "\n[[lean_lib]]\nname = \"Other\"\n")'
+for v in short:"not pinned to a full commit" branch:"not pinned to a full commit" drift:"does not record the require" subdir:"sets ['subDir']" thirdlib:"libraries ['ConcreteSpec', 'Concrete', 'Other']"; do
+  L=$(lake_options "$TMP/lk/${v%%:*}/lakefile.toml")
+  case "$L" in *"${v#*:}"*) ok "control: a lakefile whose dependency or library set is changed (${v%%:*}) is refused ($L)" ;;
+    *) no "control: the ${v%%:*} lakefile was not refused for '${v#*:}': '$L'" ;; esac
+done
+for f in missing Open Quote Brace; do
   scan "$TMP/src/$f.lean" > /dev/null 2>&1; RC=$?
   [ "$RC" != 0 ] && ok "control: a source the scan cannot read or lex ($f) fails it (rc=$RC)" \
     || no "control: the scan of $f exited 0"

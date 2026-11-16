@@ -1,3 +1,5 @@
+import ConcreteSpec.Proofs.Hybrid
+import ConcreteSpec.Proofs.Memory
 -- The specification of the new compiler. Start with ConcreteSpec/README.md.
 -- The rules and their examples: ConcreteSpec/Spec.lean. The proofs: ConcreteSpec/Proofs/.
 import ConcreteSpec.Spec
@@ -5,26 +7,17 @@ import ConcreteSpec.Proofs.Examples
 import ConcreteSpec.Proofs.Authority
 import ConcreteSpec.Proofs.Observe
 import ConcreteSpec.Proofs.Slice0
-import ConcreteSpec.Proofs.Exec
-import ConcreteSpec.Proofs.Ident
-import ConcreteSpec.Proofs.Prim
-import ConcreteSpec.Proofs.Observe2
-import ConcreteSpec.Proofs.Adequacy
+import ConcreteSpec.Proofs.Surface0
+import ConcreteSpec.Proofs.Rep
+import ConcreteSpec.Proofs.Borrow
+
+import ConcreteSpec.Diagnostics
+import ConcreteSpec.Proofs.LocalIdentity
 import ConcreteSpec.Proofs.Scalar
+import ConcreteSpec.Diagnostics.ScalarFixtures
+import ConcreteSpec.Proofs.Ident
+import ConcreteSpec.Proofs.Exec
 import ConcreteSpec.Proofs.Const
-import ConcreteSpec.Proofs.Leak
-
-import ConcreteSpec.Proofs.Memory
-
-import ConcreteSpec.Proofs.Hybrid
-
 import ConcreteSpec.Proofs.Own
-
-import ConcreteSpec.Proofs.Grant
-import ConcreteSpec.Proofs.Frame
-import ConcreteSpec.Proofs.ObserveSource
-import ConcreteSpec.Proofs.ObserveReport
-import ConcreteSpec.Proofs.ObserveEnvironment
-import ConcreteSpec.Proofs.ObserveTransform
-import ConcreteSpec.Proofs.ObserveEvidence
-import ConcreteSpec.Proofs.ObserveOutput
+import ConcreteSpec.Proofs.OwnErasure
+import ConcreteSpec.Proofs.OwnErasureEvidence

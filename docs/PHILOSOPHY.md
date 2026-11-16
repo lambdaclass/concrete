@@ -139,8 +139,9 @@ Each rule states what holds and why. Its history is in the changelog and the dec
 
 16. **Predictable execution and a separable core.** Recursion, loop bounds, allocation, blocking and
     foreign calls stay visible, so a bounded, analyzable core can be told apart from an effectful
-    shell, and writing code that way is natural. Termination is known before a program runs: every
-    loop, recursive cycle, indirect call and blocking or foreign boundary either has termination
+    shell, and writing code that way is natural. Before a program runs, every function has
+    termination evidence with its premises, or a report naming the explicitly permitted unresolved
+    obligations: every loop, recursive cycle, indirect call and blocking or foreign boundary either has termination
     evidence or carries a written permission at that source, which every report traces to its
     callers. Recursion depth, stack use, allocation, blocking, foreign calls and possible aborts are
     reported per function with their evidence, and a module or project policy may require them;

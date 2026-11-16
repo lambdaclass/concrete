@@ -4,13 +4,33 @@ import ConcreteSpec.Spec.Exec
 /-!
 # C5: ownership instrumentation
 
-PROPOSED, before Core freeze. Q3.2–Q3.4, OD15 and OD23. Roots reuse `Hybrid.Place`,
-not addresses or a third place identity. The monotonically increasing place supply distinguishes
+PROPOSED, before Core freeze. Authority on main: `docs/decisions.md`, Q3.1–Q3.4
+(second-class downward views, root plus path, whole-root conflicts), Q3.8 (zero-byte
+obligations), Q9.10 (ghost instrumentation and proved erasure), OD15/OD23 (root exclusion
+including re-lending), OD60/OD62/OD69 (explicit consumption, no implicit destruction).
+The recovered C5 answers at `#decided-2026-11-08-recovered-d3` authorize current/callee
+loan destinations, call-duration owner lending, and conditional converse erasure.
+`#decided-2026-11-13-lifecycle-refusal` authorizes every optional lifecycle result.
+Capability permissions and grant values remain separate under Q5/Q7 and
+`#decided-2026-11-08-capabilities-kept`; this module supplies no new authority rule.
+
+OD62's source-name usage and Result/Option discard checks belong to typed checker admission;
+`Descriptor.copy` alone does not implement them. OD64's borrow-derived raw-pointer confinement
+remains an obligation of the raw/foreign operand language; no pointer escape rule is invented
+here. Aggregate layout and pointer representation remain held under ISS-0070; this scalar
+instrumentation resolves no aggregate projection. There are no new policy choices here.
+
+The examples are Instances (including the unsafe erasure counterexamples), not the future
+preservation/erasure Laws of F14–F16. `CheckerAccepted` states that future checker obligation;
+it is not itself a checker implementation or a safety theorem.
+
+Roots reuse `Hybrid.Place`, not addresses or a third place identity. The monotonically increasing place supply distinguishes
 recursive activations. A slot carries its type and checked Copy/mutability facts; C9 must bind
 those facts to its richer type identity when the scalar-only Hybrid universe is extended.
 
 Transitions check operational permissions, resource status and issued identities only.
-Preservation is proved from a well-formed input, without a run-time invariant recheck.
+The later preservation laws must start from a well-formed input; transitions do not
+recheck the invariant at run time.
 Parent links record lending dependencies only: no stacked/tree borrow validity model is assumed.
 Projection paths are logical selectors; resolving their types/values belongs to aggregate slices.
 -/
@@ -18,17 +38,17 @@ namespace ConcreteSpec.Core.Own
 
 inductive Status where
   | owned | moved
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 inductive Mode where
   | shared | mutable
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 /-- A logical projection, retaining field identity or element index (Q3.3). -/
 inductive Projection where
   | field (id : FieldId)
   | index (n : Nat)
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 /-- The checked binding descriptor supplied by the operand instance, not guessed from a value.
 `ty` describes its C4 scalar payload representation: a linear token may have an integer or
@@ -38,14 +58,14 @@ structure Descriptor where
   ty : CTy
   copy : Bool
   mutable : Bool
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 structure Slot where
   place : Hybrid.Place
   activation : Nat
   desc : Descriptor
   status : Status
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 /-- A loan retains its original owner and full projection. `ancestors` caches the parent chain;
 the invariant checks the cache, including strict birth order. No loan identity is recycled. -/
@@ -59,13 +79,13 @@ structure Loan where
   activation : Nat
   pendingArgument : Bool := false
   callRoot : Bool := false
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 structure Activation where
   id : Nat
   locals : AList Var Hybrid.Place := []
   views : AList Var LoanId := []
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 structure State where
   slots : List Slot := []
@@ -74,7 +94,7 @@ structure State where
   nextPlace : Nat := 0
   nextLoan : Nat := 0
   nextActivation : Nat := 0
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 def slot (s : State) (p : Hybrid.Place) : Option Slot := s.slots.find? (·.place == p)
 def loan (s : State) (i : LoanId) : Option Loan := s.loans.find? (·.id == i)
@@ -112,10 +132,10 @@ def WellFormed (s : State) : Prop :=
     (∃ x ∈ s.slots, x.place = l.root ∧ x.status = .owned) ∧
     ParentValid s l ∧ (l.pendingArgument = true → (l.parent.isSome = true ∨ l.callRoot = true))) ∧
   (∀ a ∈ s.loans, ∀ b ∈ s.loans, Compatible a b) ∧
-  (s.frames.map Activation.id).Nodup ∧
+  s.frames.Pairwise (fun a b => a.id ≠ b.id) ∧
   (∀ f ∈ s.frames, f.id < s.nextActivation ∧
     ∀ x ∈ s.slots, x.activation = f.id → x.place ∈ List.map Prod.snd f.locals) ∧
-  (∀ x ∈ s.slots, x.activation ∈ s.frames.map Activation.id) ∧
+  (∀ x ∈ s.slots, (∃ f ∈ s.frames, f.id = x.activation)) ∧
   (∀ f ∈ s.frames, ∀ p ∈ (List.map Prod.snd f.locals),
     ∃ x ∈ s.slots, x.place = p ∧ x.activation = f.id)
 
@@ -126,7 +146,7 @@ instance (s : State) : Decidable (WellFormed s) := by
 /-- Loan destinations refer to frames still active in the call stack.
 This lifetime invariant is independent of the monotonically increasing activation supply. -/
 def LiveDestinations (s : State) : Prop :=
-  ∀ l ∈ s.loans, l.activation ∈ s.frames.map Activation.id
+  ∀ l ∈ s.loans, ∃ f ∈ s.frames, f.id = l.activation
 
 instance (s : State) : Decidable (LiveDestinations s) := by
   unfold LiveDestinations
@@ -145,14 +165,14 @@ def loanAccess (s : State) (i : LoanId) (m : Mode) : Bool :=
     s.loans.all (fun b => b.id == i || decide (b.id ∈ a.ancestors) || b.root != a.root ||
       (m == .shared && b.mode == .shared))
 
-/-- Move is only for non-Copy owners; it changes no concrete value. -/
+/-- OD60/OD62, Q3.8: move is only for non-Copy owners; it changes no concrete value. -/
 def move (s : State) (p : Hybrid.Place) : Option State := do
   let x ← slot s p
   if x.desc.copy || x.status != .owned || s.loans.any (·.root == p) then none else
     some { s with slots := s.slots.map fun x =>
       if x.place = p then { x with status := .moved } else x }
 
-/-- Reinitialization requires no active loan. Replacing an owned linear value is refused:
+/-- OD62/OD69: reinitialization requires no active loan. Replacing an owned linear value is refused:
 consume it first, rather than silently discarding its obligation. -/
 def reinitialize (s : State) (p : Hybrid.Place) : Option State := do
   let x ← slot s p
@@ -290,7 +310,8 @@ def enterDown (s : State) (args : List (Var × LoanId)) : Option State := do
     let s ← reborrowTo s i [] a.mode f.id
     some { s with frames := { f with views := (x, ⟨s.nextLoan - 1⟩) :: f.views } :: s.frames.tail }) s
 
-/-- The C1-compatible lifecycle callback. -/
+/-- The Exec lifecycle callback: optional admission at every site, including the final
+function boundary (`docs/decisions.md#decided-2026-11-13-lifecycle-refusal`). -/
 def life (types : Var → Option Descriptor) : Exec.Life → State → Option State
   | .bind x, s => bind types x s
   | .enter ps, s => enter types ps s
@@ -317,7 +338,7 @@ concrete value: the callee parameter is associated with its loan only in this in
 structure CallState where
   own : State
   pending : List (Var × LoanId) := []
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 /-- Call argument bookkeeping: names/identities are unique, every pending identity exists,
 and precisely the listed loans carry the pending flag. This is instrumentation metadata,
@@ -383,7 +404,7 @@ def callLifeStore {σ : Type} (types : Var → Option Descriptor) (e : Exec.Life
 structure Store (σ : Type) where
   concrete : σ
   own : State
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 def erase {σ : Type} (s : Store σ) : σ := s.concrete
 
@@ -508,6 +529,7 @@ def eraseFrame : Exec.Frame (instrumentOperands O types permit) → Exec.Frame O
   | .test l c t body site dom => .test l (eraseStmt c) t (eraseStmt body) site dom
   | .body l c t body site => .body l (eraseStmt c) t (eraseStmt body) site
   | .resume p => .resume p
+  | .functionEnd => .functionEnd
   | .ret dst caller => .ret dst caller
 
 /-- Erase machine control to `O`. -/
@@ -516,6 +538,7 @@ def eraseCtrl : Exec.Ctrl (instrumentOperands O types permit) → Exec.Ctrl O
   | .done => .done
   | .exiting e => .exiting e
   | .trapped k site => .trapped k site
+  | .refused => .refused
 
 /-- Erase an instrumented C1 configuration by projecting its store to `erase c.store`. -/
 def eraseConfig (c : Exec.Config (instrumentOperands O types permit)) : Exec.Config O :=
@@ -548,15 +571,15 @@ def eraseLabel : Exec.Label (instrumentOperands O types permit) → Exec.Label O
 
 /-- Erase a run ending to `O`. -/
 def eraseEnding : Exec.Ending (instrumentOperands O types permit) → Exec.Ending O
-  | .final f st => .final f (erase st)
-  | .stuck c => .stuck (eraseConfig c)
-  | .noAnswer c => .noAnswer (eraseConfig c)
-  | .badAnswer c => .badAnswer (eraseConfig c)
-  | .outOfFuel c => .outOfFuel (eraseConfig c)
+  | .final f => .final f
+  | .stuck => .stuck
+  | .noAnswer => .noAnswer
+  | .badAnswer => .badAnswer
+  | .outOfFuel => .outOfFuel
 
-/-- Erase an evaluator report to `O`, preserving its ordered events and erased ending. -/
+/-- Erase a report, retaining its residual configuration and unused budget. -/
 def eraseReport (r : Exec.Report (instrumentOperands O types permit)) : Exec.Report O :=
-  ⟨r.events, eraseEnding r.ending⟩
+  ⟨r.events, eraseEnding r.ending, eraseConfig r.residual, r.fuel⟩
 
 end
 
@@ -569,7 +592,7 @@ def liftOracle (O : Exec.Operands) (types : Var → Option Descriptor)
 
 /-- Whether a C1 run ending is `stuck`. -/
 def Ending.IsStuck {O : Exec.Operands} : Exec.Ending O → Bool
-  | .stuck _ => true
+  | .stuck => true
   | _ => false
 
 /-- A C1 run ending that is not `stuck` (`final`, `noAnswer`, `badAnswer` or `outOfFuel`). -/
@@ -584,15 +607,19 @@ def EvalPermitted (O : Exec.Operands)
   O.eval L s.concrete e ≠ .stuck → (permit L e s.own).isSome = true
 
 /-- Left-to-right argument permission: each argument whose concrete evaluation is not
-stuck is permitted in the state left by the preceding arguments. -/
+stuck is permitted in the state left by the preceding arguments. The optional evaluator
+is the one being tested, so substitutions also govern every intermediate store. -/
 def ArgsPermitted (O : Exec.Operands) (types : Var → Option Descriptor)
     (permit : AList Var O.Val → O.Expr → State → Option State)
-    (L : AList Var O.Val) : Store O.Store → List O.Expr → Prop
-  | _, [] => True
-  | s, e :: es =>
+    (L : AList Var O.Val) (s : Store O.Store) (args : List O.Expr)
+    (evaluate : AList Var O.Val → Store O.Store → O.Expr → Res (O.Val × Store O.Store) :=
+      (instrumentOperands O types permit).eval) : Prop :=
+  match args with
+  | [] => True
+  | e :: es =>
     EvalPermitted O permit L s e ∧
-      ∀ v s₁, (instrumentOperands O types permit).eval L s e = .ok (v, s₁) →
-        ArgsPermitted O types permit L s₁ es
+      ∀ v s₁, evaluate L s e = .ok (v, s₁) →
+        ArgsPermitted O types permit L s₁ es evaluate
 
 /-- Local lifecycle permission: when the concrete lifecycle transition succeeds,
 the ownership lifecycle transition also succeeds. -/
@@ -615,48 +642,59 @@ def ReturnPermitted (O : Exec.Operands) (types : Var → Option Descriptor)
     ∀ s', (instrumentOperands O types permit).life .leave s = some s' →
       BindDstPermitted O types dst s'
 
-/-- Statement-level non-refusal at the active control point. -/
+/-- Statement-level non-refusal at the active control point. Operand evaluation,
+including argument lists, uses the same optional evaluator as the machine dispatcher. -/
 def StmtPermitted (O : Exec.Operands) (types : Var → Option Descriptor)
     (permit : AList Var O.Val → O.Expr → State → Option State)
     (P : Exec.Program (instrumentOperands O types permit))
-    (L : AList Var O.Val) (s : Store O.Store) :
-    Exec.Stmt (instrumentOperands O types permit) → Prop
+    (L : AList Var O.Val) (s : Store O.Store) (active : Exec.Stmt (instrumentOperands O types permit))
+    (evaluate : AList Var O.Val → Store O.Store → O.Expr → Res (O.Val × Store O.Store) :=
+      (instrumentOperands O types permit).eval) : Prop :=
+  match active with
   | .bind x e _ =>
     EvalPermitted O permit L s e ∧
-      ∀ v s', (instrumentOperands O types permit).eval L s e = .ok (v, s') →
+      ∀ v s', evaluate L s e = .ok (v, s') →
         LifePermitted O types (.bind x) s'
   | .assign x e _ =>
     EvalPermitted O permit L s e ∧
-      ∀ v s', (instrumentOperands O types permit).eval L s e = .ok (v, s') →
+      ∀ v s', evaluate L s e = .ok (v, s') →
         (AList.lookup L x).isSome = true →
           LifePermitted O types (.bind x) s'
   | .cond e _ _ _ => EvalPermitted O permit L s e
   | .ret e _ => EvalPermitted O permit L s e
   | .call _ f args _ =>
-    ArgsPermitted O types permit L s args ∧
-      ∀ vs s' fn, Exec.evalArgs (instrumentOperands O types permit) L s args = .ok (vs, s') →
+    ArgsPermitted O types permit L s args evaluate ∧
+      ∀ vs s' fn,
+        Exec.evalArgs { instrumentOperands O types permit with eval := evaluate } L s args =
+          .ok (vs, s') →
         AList.lookup P.fns f = some fn → fn.params.length = vs.length →
           LifePermitted O types (.enter (fn.params.map Prod.fst)) s'
   | .prim x p args _ =>
-    ArgsPermitted O types permit L s args ∧
-      ∀ vs s' a, Exec.evalArgs (instrumentOperands O types permit) L s args = .ok (vs, s') →
+    ArgsPermitted O types permit L s args evaluate ∧
+      ∀ vs s' a,
+        Exec.evalArgs { instrumentOperands O types permit with eval := evaluate } L s args =
+          .ok (vs, s') →
         (instrumentOperands O types permit).allows p vs s' a = true →
           a.result.isOk = true →
             BindDstPermitted O types x a.store
   | _ => True
 
-/-- Frame-level non-refusal when the current statement has completed normally. -/
+/-- Frame-level non-refusal when the current statement has completed normally.
+A test frame uses the supplied evaluator to select its post-evaluation lifecycle state. -/
 def DoneFramePermitted (O : Exec.Operands) (types : Var → Option Descriptor)
     (permit : AList Var O.Val → O.Expr → State → Option State)
-    (L : AList Var O.Val) (s : Store O.Store) :
-    Exec.Frame (instrumentOperands O types permit) → Prop
+    (L : AList Var O.Val) (s : Store O.Store) (active : Exec.Frame (instrumentOperands O types permit))
+    (evaluate : AList Var O.Val → Store O.Store → O.Expr → Res (O.Val × Store O.Store) :=
+      (instrumentOperands O types permit).eval) : Prop :=
+  match active with
   | .scope _ dm [] => LifePermitted O types (.drop (Exec.dead dm L)) s
   | .test _ _ t _ _ dm =>
     EvalPermitted O permit L s t ∧
-      ∀ v s', (instrumentOperands O types permit).eval L s t = .ok (v, s') →
+      ∀ v s', evaluate L s t = .ok (v, s') →
         (O.test v).isSome = true →
           LifePermitted O types (.drop (Exec.dead dm L)) s'
-  | .ret dst _ => ReturnPermitted O types permit dst s
+  | .functionEnd => LifePermitted O types .leave s
+  | .ret dst _ => BindDstPermitted O types dst s
   | _ => True
 
 /-- Frame-level non-refusal when a structured exit is unwinding. -/
@@ -666,8 +704,9 @@ def ExitFramePermitted (O : Exec.Operands) (types : Var → Option Descriptor)
     Exec.Frame (instrumentOperands O types permit) → Prop
   | .scope _ dm [] => LifePermitted O types (.drop (Exec.dead dm L)) s
   | .test _ _ _ _ _ dm => LifePermitted O types (.drop (Exec.dead dm L)) s
+  | .functionEnd => LifePermitted O types .leave s
   | .ret dst _ => match e with
-    | .ret _ => ReturnPermitted O types permit dst s
+    | .ret _ => BindDstPermitted O types dst s
     | _ => True
   | _ => True
 
@@ -676,27 +715,38 @@ the active control point do not refuse when the concrete operation is defined. -
 def StepPermitted (O : Exec.Operands) (types : Var → Option Descriptor)
     (permit : AList Var O.Val → O.Expr → State → Option State)
     (P : Exec.Program (instrumentOperands O types permit))
-    (c : Exec.Config (instrumentOperands O types permit)) : Prop :=
+    (c : Exec.Config (instrumentOperands O types permit))
+    (evaluate : AList Var O.Val → Store O.Store → O.Expr → Res (O.Val × Store O.Store) :=
+      (instrumentOperands O types permit).eval) : Prop :=
   match c.ctrl with
-  | .exec s => StmtPermitted O types permit P c.locals c.store s
+  | .exec s => StmtPermitted O types permit P c.locals c.store s evaluate
   | .done => match c.frames with
-    | f :: _ => DoneFramePermitted O types permit c.locals c.store f
+    | f :: _ => DoneFramePermitted O types permit c.locals c.store f evaluate
     | [] => True
   | .exiting e => match c.frames with
     | f :: _ => ExitFramePermitted O types permit c.locals c.store e f
     | [] => True
   | .trapped .. => True
+  | .refused => False
 
 /-- Obligation (discharged by the ownership checker, slice 1, R-0571).
 A program and initial configuration accepted by the C5/C9 ownership and borrow checker
 maintain a well-formed ownership state and never fail an ownership or lifecycle guard at
-any reachable configuration where the concrete operation is defined (owner decision
-2026-11-08 Q3). -/
+any reachable configuration where the concrete operation is defined. The default closure is
+`Exec.Steps P`; substitution controls supply the closure of the same mutated transition
+used in their conclusion, together with its operand evaluator for local permission.
+Lifecycle-only obligations do not evaluate operands and need no evaluator parameter.
+Authority: docs/decisions.md#decided-2026-11-08-recovered-d3 (C5) and
+#decided-2026-11-14-trap-sites-and-law-tests (uniform substitution). -/
 def CheckerAccepted (O : Exec.Operands) (types : Var → Option Descriptor)
     (permit : AList Var O.Val → O.Expr → State → Option State)
     (P : Exec.Program (instrumentOperands O types permit))
-    (c₀ : Exec.Config (instrumentOperands O types permit)) : Prop :=
-  ∀ tr c, Exec.Steps P c₀ tr c → WellFormed c.store.own ∧ StepPermitted O types permit P c
+    (c₀ : Exec.Config (instrumentOperands O types permit))
+    (reachable : Exec.Config (instrumentOperands O types permit) → List O.Event →
+      Exec.Config (instrumentOperands O types permit) → Prop := Exec.Steps P)
+    (evaluate : AList Var O.Val → Store O.Store → O.Expr → Res (O.Val × Store O.Store) :=
+      (instrumentOperands O types permit).eval) : Prop :=
+  ∀ tr c, reachable c₀ tr c → WellFormed c.store.own ∧ StepPermitted O types permit P c evaluate
 
 /-- Typed C4 reads and writes use exactly the original Hybrid operations after permission. -/
 def readOwner (tgt : Target) (p : Hybrid.Place) (s : Store Hybrid.State) :
@@ -728,10 +778,37 @@ def writeLoan (tgt : Target) (i : LoanId) (v : Hybrid.Value) (s : Store Hybrid.S
       (fun st => (st.write tgt l.root v).map fun st => ((), st)) s
   else none
 
+
+/-- Owner permission judgment (Q3.4, OD15): the read/write check on a concrete ledger/root/mode. -/
+def OwnerPermitted (input : State × Hybrid.Place × Mode) : Prop :=
+  ownerAccess input.1 input.2.1 input.2.2 = true
+
+/-- Loan permission judgment (Q3.2, Q3.4, OD23): lending freezes apply through aliases too. -/
+def LoanPermitted (input : State × LoanId × Mode) : Prop :=
+  loanAccess input.1 input.2.1 input.2.2 = true
+
+/-- Ending judgment (Q3.2): only a live loan without live children may end. -/
+def EndPermitted (input : State × LoanId) : Prop :=
+  (endLoan input.1 input.2).isSome = true
+
+/-- Consuming judgment (OD60, OD62, Q3.8): consume an available unborrowed linear owner once. -/
+def MovePermitted (input : State × Hybrid.Place) : Prop :=
+  (move input.1 input.2).isSome = true
+
+/-- Scope-exit judgment (OD62, OD69, Q3.8): storage teardown cannot discard a linear
+obligation or invalidate a live loan. The lifecycle-refusal record requires refusal here. -/
+def DropPermitted (input : List Var × State) : Prop :=
+  (drop input.1 input.2).isSome = true
+
+/-- Function-exit judgment (OD69): end this activation's loans before tearing down
+its storage, without consuming any remaining linear owner implicitly. Lifecycle refusal
+is recorded in `docs/decisions.md#decided-2026-11-13-lifecycle-refusal`. -/
+def LeavePermitted (s : State) : Prop := (leave s).isSome = true
+
 namespace Examples
 
-def x : Var := ⟨"x", 0⟩
-def y : Var := ⟨"y", 1⟩
+def x : Var := ⟨0⟩
+def y : Var := ⟨1⟩
 def types (_ : Var) : Option Descriptor := some ⟨.int .i32, false, true⟩
 def initial : State :=
   { slots := [⟨⟨0⟩, 0, ⟨.int .i32, false, true⟩, .owned⟩]
@@ -743,58 +820,58 @@ def shared : State := (borrow initial ⟨0⟩ [.index 0] .shared).getD initial
 def exclusive : State := (borrow initial ⟨0⟩ [.index 0] .mutable).getD initial
 def child : State := (reborrow exclusive ⟨0⟩ [.index 1] .mutable).getD initial
 
-/-- Accepted (rule `ConcreteSpec.Core.Own.ownerAccess`): shared loans allow owner reads. -/
+/-- Instance: Accepted (rule `ConcreteSpec.Core.Own.ownerAccess`): shared loans allow owner reads. -/
 example : ownerAccess shared ⟨0⟩ .shared = true := by decide
-/-- Refused (rule `ConcreteSpec.Core.Own.ownerAccess`): shared loans freeze owner writes. -/
+/-- Instance: Refused (rule `ConcreteSpec.Core.Own.ownerAccess`): shared loans freeze owner writes. -/
 example : ownerAccess shared ⟨0⟩ .mutable = false := by decide
-/-- Refused: shared loans also prevent moving the owner. -/
+/-- Instance: Refused: shared loans also prevent moving the owner. -/
 example : move shared ⟨0⟩ = none := by decide
-/-- Accepted: shared loans of disjoint or overlapping projections coexist. -/
+/-- Instance: Accepted: shared loans of disjoint or overlapping projections coexist. -/
 example : (borrow shared ⟨0⟩ [.index 1] .shared).isSome = true := by decide
-/-- Refused: disjoint indices do not bypass mutable whole-root conflicts. -/
+/-- Instance: Refused: disjoint indices do not bypass mutable whole-root conflicts. -/
 example : borrow exclusive ⟨0⟩ [.index 999] .shared = none := by decide
-/-- Refused: an exclusive loan blocks even owner reads. -/
+/-- Instance: Refused: an exclusive loan blocks even owner reads. -/
 example : ownerAccess exclusive ⟨0⟩ .shared = false := by decide
-/-- Accepted (rule `ConcreteSpec.Core.Own.loanAccess`): the mutable child accesses its root. -/
+/-- Instance: Accepted (rule `ConcreteSpec.Core.Own.loanAccess`): the mutable child accesses its root. -/
 example : loanAccess child ⟨1⟩ .mutable = true := by decide
-/-- Refused (rule `ConcreteSpec.Core.Own.loanAccess`): a mutable child suspends its parent. -/
+/-- Instance: Refused (rule `ConcreteSpec.Core.Own.loanAccess`): a mutable child suspends its parent. -/
 example : loanAccess child ⟨0⟩ .shared = false := by decide
-/-- Refused: shared lending cannot upgrade to mutable access. -/
+/-- Instance: Refused: shared lending cannot upgrade to mutable access. -/
 example : reborrow shared ⟨0⟩ [] .mutable = none := by decide
-/-- Refused: a shared child freezes writes through its mutable parent, but permits reads. -/
+/-- Instance: Refused: a shared child freezes writes through its mutable parent, but permits reads. -/
 example : (do
     let s ← reborrow exclusive ⟨0⟩ [] .shared
     pure (loanAccess s ⟨0⟩ .shared, loanAccess s ⟨0⟩ .mutable)) = some (true, false) := by decide
-/-- Accepted (rule `ConcreteSpec.Core.Own.endLoan`): end the child, then use the parent. -/
+/-- Instance: Accepted (rule `ConcreteSpec.Core.Own.endLoan`): end the child, then use the parent. -/
 example : ((endLoan child ⟨1⟩).map fun s => loanAccess s ⟨0⟩ .mutable) = some true := by decide
-/-- Refused (rule `ConcreteSpec.Core.Own.endLoan`): parents cannot end before their children. -/
+/-- Instance: Refused (rule `ConcreteSpec.Core.Own.endLoan`): parents cannot end before their children. -/
 example : endLoan child ⟨0⟩ = none := by decide
-/-- Refused: moving twice or reading a moved slot; reinitializing makes it usable again. -/
+/-- Instance: Refused: moving twice or reading a moved slot; reinitializing makes it usable again. -/
 example : (do
     let s ← move initial ⟨0⟩
     pure ((move s ⟨0⟩).isNone, ownerAccess s ⟨0⟩ .shared,
       (reinitialize s ⟨0⟩).isSome)) = some (true, false, true) := by decide
-/-- Refused: leaving a live linear owner would silently discard its obligation. -/
+/-- Instance: Refused: leaving a live linear owner would silently discard its obligation. -/
 example : leave initial = none := by decide
-/-- Accepted: downward lending preserves the root; leaving restores the caller's parent access. -/
+/-- Instance: Accepted: downward lending preserves the root; leaving restores the caller's parent access. -/
 example : (do
     let s ← enterDown exclusive [(y, ⟨0⟩)]
     let frozen := loanAccess s ⟨0⟩ .shared
     let s ← leave s
     pure (frozen, loanAccess s ⟨0⟩ .mutable, s.nextLoan)) = some (false, true, 2) := by decide
-/-- Refused: a root with a loan cannot leave scope. -/
+/-- Instance: Refused: a root with a loan cannot leave scope. -/
 example : drop [x] { shared with slots := shared.slots.map fun x =>
     { x with desc := { x.desc with copy := true } } } = none := by decide
-/-- Accepted: identities are not reused even after the prior loan ends. -/
+/-- Instance: Accepted: identities are not reused even after the prior loan ends. -/
 example : (do
     let s ← endLoan shared ⟨0⟩
     let s ← borrow s ⟨0⟩ [] .shared
     pure (s.loans.map Loan.id)) = some [⟨1⟩] := by decide
 
-/-- Refused: a logical token has a linear obligation independently of representation
+/-- Instance: Refused: a logical token has a linear obligation independently of representation
 (Q3.8). No C4 representation-size sentinel is used as evidence. -/
 example : drop [x] { initial with slots := [⟨⟨0⟩, 0, ⟨.unit, false, true⟩, .owned⟩] } = none := by decide
-/-- Accepted: explicitly consuming the zero-byte obligation permits its slot to end. -/
+/-- Instance: Accepted: explicitly consuming the logical unit obligation, without selecting its byte layout permits its slot to end. -/
 example : (do
     let s ← move { initial with slots := [⟨⟨0⟩, 0, ⟨.unit, false, true⟩, .owned⟩] } ⟨0⟩
     drop [x] s).isSome = true := by decide
@@ -851,13 +928,13 @@ abbrev ops : Exec.Operands where
   allows := fun p => nomatch p
 
 def runBody (body : Exec.Stmt ops) : Exec.Report ops :=
-  Exec.run ⟨[]⟩ (fun _ p => nomatch p) 100 ⟨.exec body, [(x, 7)], initial, []⟩
+  Exec.run ⟨[]⟩ (fun _ p => nomatch p) 100 ⟨.exec body, [(x, 7)], initial, [.functionEnd]⟩
 
 def stuck (r : Exec.Report ops) : Bool := match r.ending with
-  | .stuck _ => true
+  | .stuck => true
   | _ => false
 
-/-- Refused: an actual C1 run gets stuck when its next operand reads a moved owner. -/
+/-- Instance: Refused: an actual C1 run gets stuck when its next operand reads a moved owner. -/
 example : stuck (runBody (.seq (.bind y (.move x) ⟨0⟩) (.ret (.read x) ⟨1⟩))) = true := by decide
 
 /-- Ownership permission transition for `E`, coupled to `erasedOps` through
@@ -908,17 +985,17 @@ def erasedOracle : Exec.Oracle erasedOps := fun _ _ vs _ st => match vs with
   | _ => none
 
 def moveConfig : Exec.Config instrumentedOps :=
-  ⟨.exec (.seq (.bind y (.move x) ⟨0⟩) (.ret (.read x) ⟨1⟩)), [(x, 7)], ⟨0, initial⟩, []⟩
+  ⟨.exec (.seq (.bind y (.move x) ⟨0⟩) (.ret (.read x) ⟨1⟩)), [(x, 7)], ⟨0, initial⟩, [.functionEnd]⟩
 
 def acceptedMoveConfig : Exec.Config instrumentedOps :=
-  ⟨.exec (.seq (.bind y (.move x) ⟨0⟩) (.ret (.read y) ⟨1⟩)), [(x, 7)], ⟨0, initial⟩, []⟩
+  ⟨.exec (.seq (.bind y (.move x) ⟨0⟩) (.ret (.move y) ⟨1⟩)), [(x, 7)], ⟨0, initial⟩, [.functionEnd]⟩
 
 def acceptedStuckConfig : Exec.Config instrumentedOps :=
-  ⟨.exec (.assign y (.lit 1) ⟨0⟩), [(x, 7)], ⟨0, initial⟩, []⟩
+  ⟨.exec (.assign y (.lit 1) ⟨0⟩), [(x, 7)], ⟨0, initial⟩, [.functionEnd]⟩
 
 def primTraceConfig : Exec.Config instrumentedOps :=
-  ⟨.exec (.seq (.prim (some y) () [.read x] ⟨0⟩)
-    (.seq (.prim none () [.lit 3] ⟨1⟩) (.ret (.read y) ⟨2⟩))), [(x, 7)], ⟨0, initial⟩, []⟩
+  ⟨.exec (.seq (.prim (some y) () [.move x] ⟨0⟩)
+    (.seq (.prim none () [.lit 3] ⟨1⟩) (.ret (.move y) ⟨2⟩))), [(x, 7)], ⟨0, initial⟩, [.functionEnd]⟩
 
 def badOracle : Exec.Oracle erasedOps := fun _ _ _ _ st =>
   some ⟨some 99, .ok st, st⟩
@@ -929,38 +1006,69 @@ def instrumentedMoveRun : Exec.Report instrumentedOps :=
 def erasedMoveRun : Exec.Report erasedOps :=
   Exec.run ⟨[]⟩ erasedOracle 100 (eraseConfig moveConfig)
 
-/-- A planted unsafe execution refutes unconditional equality of final classifications:
+/-- Instance: an unsafe execution refutes unconditional equality of final classifications:
 the instrumented run is stuck, but the erased concrete run returns 7. A checker-safety
 premise or a one-way successful-execution theorem is necessary for C1 erasure. -/
 example : stuck (runBody (.seq (.bind y (.move x) ⟨0⟩) (.ret (.read x) ⟨1⟩))) = true ∧
     Ending.IsStuck instrumentedMoveRun.ending = true ∧
     (match erasedMoveRun.ending with
-      | .final (.returned n) _ => n == 7
+      | .final (.returned n) => n == 7
       | _ => false) = true := by decide
+/-- Instance: erased execution does not refuse the use after move. -/
 example : ¬ (match erasedMoveRun.ending with
-    | .stuck _ => true
+    | .stuck => true
     | _ => false) = true := by decide
 
-/-- Accepted: a C1 run lends, reborrows, ends the child, then uses its parent and ends it.
+/-- Planted: omit exactly one operand's permission transition, retaining its erased
+concrete evaluation. The selector is a fixture operation kind, never a source policy. -/
+def operationKind : E → Nat
+  | .move _ => 0 | .read _ => 1 | .lend _ _ => 2
+  | .reborrow _ => 3 | .endLoan _ => 4 | .use _ => 5
+  | _ => 6
+
+def omitPermission (kind : Nat) (locals : AList Var Int) (e : E) (s : State) : Option State :=
+  if operationKind e = kind then some s else permitE locals e s
+
+/-- Instance: each populated operation is refused for its own permission violation.
+The move/read roots exist in concrete storage; lending conflicts with an existing
+exclusive loan; reborrow attempts a shared upgrade; ending a parent strands its child;
+using a parent bypasses its suspended access. -/
+def refusalCases : List (Nat × E × State) :=
+  [(0, .move x, shared), (1, .read x, exclusive),
+   (2, .lend ⟨0⟩ .shared, exclusive), (3, .reborrow ⟨0⟩, shared),
+   (4, .endLoan ⟨0⟩, child), (5, .use ⟨0⟩, child)]
+
+example : refusalCases.all (fun (_, e, own) =>
+    match instrumentEval erasedOps permitE [(x, 7)] ⟨0, own⟩ e with
+    | .stuck => true | _ => false) = true := by decide
+
+/-- Planted: six separate omission mutants all accept the corresponding refused
+operand. No concrete failure or another ownership check masks any omission. -/
+example : refusalCases.all (fun (kind, e, own) =>
+    match instrumentEval erasedOps (omitPermission kind) [(x, 7)] ⟨0, own⟩ e with
+    | .ok _ => true | _ => false) = true := by decide
+
+/-- Instance: Accepted: a C1 run lends, reborrows, ends the child, then uses its parent and ends it.
 Conditions evaluate these instrumentation-only operands without creating ordinary bindings. -/
 example : (match (runBody
     (.cond (.lend ⟨0⟩ .mutable) .skip
       (.cond (.reborrow ⟨0⟩) .skip
         (.cond (.endLoan ⟨1⟩) .skip
           (.cond (.use ⟨0⟩) .skip
-            (.cond (.endLoan ⟨0⟩) .skip .skip ⟨0⟩) ⟨0⟩) ⟨0⟩) ⟨0⟩) ⟨0⟩)).ending with
-    | .final .normal _ => true
+            (.cond (.endLoan ⟨0⟩) .skip (.ret (.move x) ⟨1⟩) ⟨0⟩) ⟨0⟩) ⟨0⟩) ⟨0⟩) ⟨0⟩)).ending with
+    | .final (.returned 7) => true
     | _ => false) = true := by decide
 
-/-- Refused: an existing owner loan or reborrow is not a pending argument child and cannot
+/-- Instance: Refused: an existing owner loan or reborrow is not a pending argument child and cannot
 be adopted into a callee, even when all supplied loan identities exist. -/
 example : (do
     let s ← enter types [] exclusive
     adoptDown s [(y, ⟨0⟩)]) = none := by decide
+/-- Instance: an existing child is not a pending argument. -/
 example : (do
     let s ← enter types [] child
     adoptDown s [(y, ⟨1⟩)]) = none := by decide
-/-- Refused: an incomplete locals table that omits an active frame's slot violates `WellFormed`. -/
+/-- Instance: Refused: an incomplete locals table that omits an active frame's slot violates `WellFormed`. -/
 example : ¬ WellFormed { initial with frames := [⟨0, [], []⟩] } := by decide
 
 /-- The following C1 instance exercises actual calls with downward view parameters. -/
@@ -997,28 +1105,178 @@ abbrev callOps : Exec.Operands where
   test := fun n => some (n != 0)
   allows := fun p => nomatch p
 
-def callee : FnId := ⟨ModuleId.mk ⟨"integration-fixtures", ⟨"0"⟩⟩ ["fixtures"] (by decide), "callee"⟩
+def callee : FnId := ⟨ModuleId.mk ⟨⟨"integration-fixtures"⟩, ⟨⟨"0"⟩⟩⟩ [⟨"fixtures"⟩] (by decide), ⟨"callee"⟩⟩
 def callProgram : Exec.Program callOps :=
   ⟨[(callee, ⟨[(y, ())], (), ⟨1⟩,
     .cond (.useView y) .skip .skip ⟨0⟩⟩)]⟩
 
 def callRun (body : Exec.Stmt callOps) : Exec.Report callOps :=
   Exec.run callProgram (fun _ p => nomatch p) 100
-    ⟨.exec body, [(x, 7)], ⟨exclusive, []⟩, []⟩
+    ⟨.exec body, [(x, 7)], ⟨exclusive, []⟩, [.functionEnd]⟩
 
-/-- Accepted: a real C1 call lends the mutable parent to its parameter; return ends the child,
+/-- Instance: Accepted: a real C1 call lends the mutable parent to its parameter; return ends the child,
 then the caller can use its original parent again. No reference is a returned/stored value. -/
 example : (match (callRun (.seq (.call none callee [.argument ⟨0⟩ y] ⟨0⟩)
-    (.cond (.value (.use ⟨0⟩)) .skip .skip ⟨0⟩))).ending with
-    | .final .normal _ => true
+    (.seq (.cond (.value (.use ⟨0⟩)) .skip .skip ⟨0⟩)
+      (.seq (.cond (.value (.endLoan ⟨0⟩)) .skip .skip ⟨0⟩)
+        (.ret (.value (.move x)) ⟨1⟩))))).ending with
+    | .final (.returned 7) => true
     | _ => false) = true := by decide
 
-/-- Refused: OD23 applies during argument evaluation, before entry. The second argument
-cannot use the origin frozen by the first argument's mutable lending. -/
-example : (match (callRun (.call none callee
-    [.argument ⟨0⟩ y, .value (.use ⟨0⟩)] ⟨0⟩)).ending with
-    | .stuck _ => true
-    | _ => false) = true := by decide
+/-- Two parameters make argument refusal independent of C1's arity check. -/
+def freezeProgram : Exec.Program callOps :=
+  ⟨[(callee, ⟨[(y, ()), (x, ())], (), ⟨1⟩, .ret (.value (.move x)) ⟨0⟩⟩)]⟩
+
+def freezeArgs : List CE := [.argument ⟨0⟩ y, .value (.use ⟨0⟩)]
+
+/-- Instance: OD23 refuses the second operand itself, before lookup, arity or entry. -/
+example : Exec.evalArgs callOps [(x, 7)] ⟨exclusive, []⟩ freezeArgs = .stuck := by decide
+/-- Instance: the correctly shaped actual call stops at that same operand boundary. -/
+example : (Exec.run freezeProgram (fun _ p => nomatch p) 20
+    ⟨.exec (.call none callee freezeArgs ⟨0⟩), [(x, 7)], ⟨exclusive, []⟩,
+      [.functionEnd]⟩).fuel = 20 := by rfl
+
+/-- Planted: omit only the parent-access check on the second argument. The identical
+argument observation now succeeds, so it cannot satisfy the refusal Instance. -/
+abbrev omitArgumentAccess : Exec.Operands := { callOps with
+  eval := fun locals s e => match e with
+    | .value (.use _) => .ok (0, s)
+    | _ => callEval locals s e }
+
+/-- Planted: bypassing the second operand access check defeats argument refusal. -/
+example : (match Exec.evalArgs omitArgumentAccess [(x, 7)] ⟨exclusive, []⟩ freezeArgs with
+    | .ok _ => true | _ => false) =
+    true := by decide
+
+/-- Populated unrelated root and loan: call lending must preserve both exactly. -/
+def ownerCaller : State :=
+  { initial with
+    slots := initial.slots ++ [⟨⟨1⟩, 0, ⟨.int .i32, true, true⟩, .owned⟩]
+    frames := [⟨0, [(x, ⟨0⟩), (⟨2⟩, ⟨1⟩)], []⟩]
+    loans := [⟨⟨0⟩, ⟨1⟩, [], .shared, none, [], 0, false, false⟩]
+    nextPlace := 2
+    nextLoan := 1 }
+
+/-- Instance: direct-owner lending cannot bypass a populated conflicting loan.
+The root and current activation exist; only whole-root exclusion refuses it. -/
+example : passOwner ⟨exclusive, []⟩ ⟨0⟩ [] .shared y = none := by decide
+
+/-- Observe the loan during the callee, including whole-owner exclusion and the
+unchanged unrelated caller loan. This operand has no permission side effects. -/
+abbrev ownerOps : Exec.Operands := { callOps with eval := fun locals s e => match e with
+  | .useView _ =>
+    if !ownerAccess s.own ⟨0⟩ .shared &&
+        loan s.own ⟨0⟩ == loan ownerCaller ⟨0⟩ then callEval locals s e else .stuck
+  | _ => callEval locals s e }
+
+def ownerProgram : Exec.Program ownerOps :=
+  ⟨[(callee, ⟨[(y, ())], (), ⟨1⟩, .cond (.useView y) .skip .skip ⟨0⟩⟩)]⟩
+
+def ownerBody (deferred : Bool) : Exec.Stmt ownerOps :=
+  .block ⟨2⟩ (if deferred then
+    .seq (.defer callee [.ownerArgument ⟨0⟩ .mutable y] ⟨0⟩)
+      (.cond (.value (.read x)) .skip .skip ⟨0⟩)
+    else .call none callee [.ownerArgument ⟨0⟩ .mutable y] ⟨0⟩)
+
+def ownerRun (deferred : Bool) : Exec.Report ownerOps :=
+  Exec.run ownerProgram (fun _ p => nomatch p) 100
+    ⟨.exec (ownerBody deferred), [(x, 7), (⟨2⟩, 9)], ⟨ownerCaller, []⟩, []⟩
+
+/-- Instance: immediate direct-owner lending is live during the callee and ends on
+return. The unrelated populated loan survives unchanged; owner reads are restored. -/
+example : (match (ownerRun false).ending with | .final .normal => true | _ => false) = true ∧
+    (ownerRun false).residual.store.own.loans = ownerCaller.loans ∧
+    ownerAccess (ownerRun false).residual.store.own ⟨0⟩ .mutable = true := by decide
+
+/-- Instance: deferred registration leaves owner reads available until cleanup.
+The callee observes the same exclusion as an immediate call; return restores access
+without ending the pre-existing loan. -/
+example : (match (ownerRun true).ending with | .final .normal => true | _ => false) = true ∧
+    (ownerRun true).residual.store.own.loans = ownerCaller.loans ∧
+    ownerAccess (ownerRun true).residual.store.own ⟨0⟩ .mutable = true := by decide
+
+/-- Planted: omit direct-owner lending entirely. Both populated executions refuse,
+so neither positive call Instance can be satisfied by unconditional refusal. -/
+abbrev omitOwner : Exec.Operands := { ownerOps with eval := fun locals s e => match e with
+  | .ownerArgument _ _ _ => .stuck
+  | _ => ownerOps.eval locals s e }
+
+/-- Planted: refusing all owner arguments fails the required accepting call path. -/
+example : Exec.evalArgs omitOwner [(x, 7)] ⟨ownerCaller, []⟩
+    [.ownerArgument ⟨0⟩ .mutable y] = .stuck := by decide
+
+/-- The source can present this occurrence under the second spelling; identity remains 0. -/
+def renamedX : Var := ⟨0⟩
+
+/-- Instance: assignment after consumption uses the same numeric local, then its fresh
+obligation is explicitly consumed before the shared function-end boundary. -/
+example : (runBody (.seq (.cond (.move x) .skip .skip ⟨0⟩)
+    (.seq (.assign renamedX (.lit 9) ⟨1⟩) (.ret (.move x) ⟨2⟩)))).ending =
+    .final (.returned 9) := by rfl
+
+/-- Instance: numeric identity removes a renamed local's storage; the other number stays.
+This populated two-owner state distinguishes removal of one identity from removal of all. -/
+example : (do
+    let s ← bind types y initial
+    let s ← move s ⟨0⟩
+    let s ← drop [renamedX] s
+    pure ((slot s ⟨0⟩).isNone, (slot s ⟨1⟩).isSome,
+      s.frames.head?.bind fun f => AList.lookup f.locals y)) = some (true, true, some ⟨1⟩) := by decide
+
+/-- Instance: moving twice refuses even with no loan present; reinitialization restores the
+obligation but does not create a second slot for the renamed occurrence. -/
+example : (do
+    let s ← move initial ⟨0⟩
+    let refused := (move s ⟨0⟩).isNone
+    let s ← bind types renamedX s
+    pure (refused, s.nextPlace, s.slots.length, ownerAccess s ⟨0⟩ .shared)) =
+    some (true, 1, 1, true) := by decide
+
+/-- Instance: the final function boundary refuses a still-live linear owner. -/
+example : (runBody .skip).ending = .stuck := by rfl
+
+/-- Instance: explicit consumption permits that same final boundary. -/
+example : (runBody (.ret (.move renamedX) ⟨0⟩)).ending = .final (.returned 7) := by rfl
+
+/-- Instance: a final block cannot silently discard a newly created linear obligation. -/
+def finalBlock : Exec.Stmt ops :=
+  .seq (.cond (.move x) .skip .skip ⟨0⟩) (.block ⟨1⟩ (.bind y (.lit 3) ⟨0⟩))
+
+/-- Instance: the outer obligation is consumed. Refusal retains the inner scope and
+its live local, before the independent function-end check can run. -/
+example : (runBody finalBlock).residual.frames.length = 2 ∧
+    Ending.IsStuck (runBody finalBlock).ending = true := by decide
+
+/-- Planted: omit only lifecycle drop instrumentation. Function exit still refuses,
+but the scope has disappeared, violating the residual observation above. -/
+abbrev omitDrop : Exec.Operands := { ops with life := fun e s => match e with
+  | .drop _ => some s
+  | _ => Own.life types e s }
+
+/-- Planted: skipped scope admission reaches function exit with only one frame. -/
+example : (Exec.run (O := omitDrop) ⟨[]⟩ (fun _ p => nomatch p) 100
+    ⟨.exec (.seq (.cond (.move x) .skip .skip ⟨0⟩)
+      (.block ⟨1⟩ (.bind y (.lit 3) ⟨0⟩))), [(x, 7)], initial, [.functionEnd]⟩).residual.frames.length = 1 := by decide
+
+/-- Copy removes the linear-obligation obstacle, isolating the independent live-loan guard. -/
+def copyShared : State :=
+  { shared with slots := shared.slots.map fun x => { x with desc := { x.desc with copy := true } } }
+
+/-- Instance: real scope-exit instrumentation refuses a live loan even for a Copy root. -/
+example : (Exec.run (O := ops) ⟨[]⟩ (fun _ p => nomatch p) 20
+    ⟨.done, [(renamedX, 7)], copyShared, [.scope ⟨1⟩ [] [], .functionEnd]⟩).ending = .stuck := by rfl
+
+/-- Instance: ending just that loan permits scope teardown and then final function teardown. -/
+example : (Exec.run (O := ops) ⟨[]⟩ (fun _ p => nomatch p) 20
+    ⟨.done, [(renamedX, 7)], (endLoan copyShared ⟨0⟩).getD copyShared,
+      [.scope ⟨1⟩ [] [], .functionEnd]⟩).ending = .final .normal := by rfl
+
+/-- Instance: downward-only lending rejects an issued but noncurrent activation, with the
+same live parent that successfully lends into the current frame. -/
+example : (do
+    let s ← enter types [] exclusive
+    pure ((reborrowTo s ⟨0⟩ [] .mutable 0).isNone,
+      (reborrowTo s ⟨0⟩ [] .mutable 1).isSome)) = some (true, true) := by decide
 
 end Examples
 end ConcreteSpec.Core.Own
