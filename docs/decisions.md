@@ -3618,15 +3618,15 @@ yes do that
 
 - <a id="decided-2026-11-15-review-followups"></a>**Review follow-ups (2026-11-15).**
   Status: decided for answers 1, 2, 3 and 5; question 4 unanswered.
-  Source: owner quotations and reply mapping supplied by the owner for this recording task
-  (2026-11-16), under the [recording rule](#decided-project-recording).
+  Source: verbatim owner reply relayed by the coordinator from the owner session
+  (2026-11-15), question context summarized by the coordinator, recorded 2026-11-16,
+  under the [recording rule](#decided-project-recording).
 
   Questions replied to (numbering retained from the supplied context):
   1. One more review round for the spec inventory branch?
-  2. Fix the review tool that cuts files mid-file? Tracked as ISS-0078 in
-     [ISSUES.tsv](../ISSUES.tsv), also present on `origin/main`.
+  2. Fix the review tool that cuts files mid-file?
   3. Widen ISS-0071 from integer-to-char to all checked conversions and link it to slice 8?
-  4. No question text supplied; no answer recorded.
+  4. Add a status field to decision entries, in a format the owner approves (ISS-0083)?
   5. One extra round (round 8) for the accounting branch to fix the waiting-link
      normalization only?
 
@@ -3637,13 +3637,15 @@ yes do that
 ~~~
 
   Answer 4 records lack of understanding, not a decision. Answer 5 authorizes only
-  the waiting-link normalization round described in question 5.
+  the waiting-link normalization round described in question 5. The review-tool
+  repair in question 2 is tracked as ISS-0078 in [ISSUES.tsv](../ISSUES.tsv).
 
 - <a id="decided-2026-11-16-conversions-records-gaps"></a>**Checked conversions,
   decision status and design-gap check (2026-11-16).**
   Status: decided for the three questions below, with their stated open details.
-  Source: owner quotation and reply mapping supplied by the owner for this recording task
-  (2026-11-16), under the [recording rule](#decided-project-recording).
+  Source: verbatim owner reply relayed by the coordinator from the owner session
+  (2026-11-16), question context summarized by the coordinator, recorded 2026-11-16,
+  under the [recording rule](#decided-project-recording).
 
   Questions replied to (supplied context):
   1. Checked conversions option C: keep `try_convert` returning
@@ -3667,13 +3669,45 @@ ok yes 1 2 3
   The chosen conversion direction is tracked by ISS-0071 in
   [ISSUES.tsv](../ISSUES.tsv), linked to [slice 8](../ROADMAP.md#vertical-slices).
   Its spelling and exact acceptance rule remain open for the owner. Question 2
-  records the authorized status-line work; it does not finalize its format here.
+  records the authorized status-line work; its format was subsequently approved in
+  the [status-format decision](#decided-2026-11-16-decision-status-format).
+  Implementation of ISS-0083 remains pending.
   Question 3 records the authorized gap check; it does not claim a check was run
   or any resulting roadmap item was agreed.
 
+- <a id="decided-2026-11-16-decision-status-format"></a>**Decision status format
+  (2026-11-16).**
+  Status: decided for the format below; implementation of ISS-0083 pending.
+  Source: verbatim owner reply relayed by the coordinator from the owner session
+  (2026-11-16), question context summarized by the coordinator, recorded 2026-11-16,
+  under the [recording rule](#decided-project-recording).
+
+  Question context summarized by the coordinator: after Codex and agy reviewed
+  the status-line proposal, both asked for a richer format. The coordinator asked
+  the owner to approve:
+
+~~~text
+Status: decided | open | partly decided | replaced | reopened | withdrawn
+Source: owner | recovered from old notes
+Replaced by: <link>   (only when replaced or reopened)
+~~~
+
+  A missing or malformed line fails the check (never inferred), and every line
+  is verified against the owner's words and later revisions.
+
+  Owner reply, verbatim:
+
+~~~text
+yes
+~~~
+
+  This approves the format only. Implementation of ISS-0083 remains pending,
+  tracked in [ISSUES.tsv](../ISSUES.tsv).
+
 - <a id="owner-goals-2026-11-15-provability-errors"></a>**Design goals: owner
   question (2026-11-15).**
-  Source: owner quotation supplied by the owner for this recording task (2026-11-16).
+  Source: verbatim owner reply relayed by the coordinator from the owner session
+  (2026-11-15), question context summarized by the coordinator, recorded 2026-11-16.
   This is an owner question/goal statement, not a new rule or an answered decision.
   No preceding question was supplied; this quotation is itself the owner's question:
 
