@@ -1,0 +1,35 @@
+{
+  "declarations": 3053,
+  "kinds": {
+    "constructor": 158,
+    "definition": 1321,
+    "inductive": 57,
+    "recursor": 57,
+    "theorem": 1460
+  },
+  "modules": 31,
+  "roles": {
+    "authoritative": 780,
+    "dependent": 1003,
+    "direct": 1082,
+    "protocol": 82,
+    "seed": 106
+  },
+  "sha256": {
+    "declarations.json": "0d50450cadf8ef4092140492ecc52fb97aaaf1123d10237aa00c3fede22a3fce",
+    "surface.json": "240d7bed7f4a47010bf06447351d3cbc2df420175f659ffa4997855b113c84a3"
+  },
+  "surface": 1676,
+  "surface_kinds": {
+    "anonymous-example": 1300,
+    "check": 30,
+    "golden": 2,
+    "headline": 101,
+    "integration": 8,
+    "premise": 9,
+    "probe-declaration": 187,
+    "probe-evaluation": 2,
+    "proof-tool": 5,
+    "test": 32
+  }
+}

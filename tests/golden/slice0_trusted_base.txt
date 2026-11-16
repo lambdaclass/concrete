@@ -96,6 +96,8 @@ theorem Concrete.BIR.ScalarBridge.max axioms: propext
 theorem Concrete.BIR.ScalarBridge.inRange axioms: propext
 theorem Concrete.BIR.ScalarBridge.checked axioms: propext
 theorem Concrete.BIR.ScalarBridge.wrap axioms: propext, Quot.sound
+theorem Concrete.BIR.ScalarBridge.toBits axioms: 
+theorem Concrete.BIR.ScalarBridge.ofBits axioms: propext
 theorem Concrete.BIR.ScalarBridge.intValue_valid axioms: propext
 theorem Concrete.BIR.hasTy_int_core axioms: propext
 theorem Concrete.Backend.LCB.Proof.enc_int_core axioms: propext

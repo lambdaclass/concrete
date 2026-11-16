@@ -3,8 +3,9 @@ import ConcreteSpec
 import Concrete
 
 /-!
+F31 migration tool: retire with the manifest and companion tool when F31 closes.
 F31's measured elaborated dependency surface. Run after `lake build ConcreteSpec Concrete`:
-`lake env lean scripts/spec/f31_consumers.lean > docs/proposals/f31-declarations.json`.
+`python3 -I scripts/spec/f31_inventory.py --output /tmp/f31-inventory`.
 
 This is an engineering inventory, not a semantic driver or proof classifier. It includes generated
 and private declarations, because their types and bodies must elaborate after the switch too.
@@ -29,6 +30,11 @@ private def declKind : ConstantInfo → String
   | .recInfo _ => "recursor"
   | .quotInfo _ => "quotient"
 
+private def nameParts : Name → List Json
+  | .anonymous => []
+  | .str p s => nameParts p ++ [Json.mkObj [("string", toJson s)]]
+  | .num p n => nameParts p ++ [Json.mkObj [("number", toJson n)]]
+
 #eval show CoreM Unit from do
   let env ← getEnv
   let mut decls : Array (Name × ConstantInfo × Name) := #[]
@@ -50,17 +56,25 @@ private def declKind : ConstantInfo → String
         changed := true
   let mut rows : Array (String × Json) := #[]
   for (n, ci, m) in decls do
-    let authoritative := m == `ConcreteSpec.Spec.Scalar || m == `ConcreteSpec.Proofs.Scalar
+    let authoritative := m == `ConcreteSpec.Spec.Scalar || m == `ConcreteSpec.Proofs.Scalar ||
+      m == `ConcreteSpec.Diagnostics.ScalarFixtures
     let protocol := m == `Concrete.Backend.Runtime || m == `Concrete.Premises
     if reached.contains n || authoritative || protocol then
       let deps := ci.getUsedConstantsAsSet.toList.filter reached.contains
       let role := if !reached.contains n then (if authoritative then "authoritative" else "protocol")
         else if seed n then "seed" else if deps.any seed then "direct" else "dependent"
-      let edges := (deps.map toString).toArray.qsort (· < ·)
-      let nameParts := fun (s : String) => toJson (s.splitOn ".")
+      let edges := deps.toArray.qsort (fun a b =>
+        (toJson (nameParts a)).compress < (toJson (nameParts b)).compress)
       let row := Json.mkObj [
-        ("module", toJson (toString m)), ("declaration", nameParts (toString n)),
+        ("module", toJson (toString m)), ("declaration", toJson (nameParts n)),
         ("kind", toJson (declKind ci)), ("role", toJson role),
-        ("dependencies", toJson (edges.map nameParts))]
-      rows := rows.push (toString n, row)
+        ("dependencies", toJson (edges.map (fun d => toJson (nameParts d))))]
+      rows := rows.push ((toJson (nameParts n)).compress, row)
   IO.println (toJson ((rows.qsort (fun a b => a.1 < b.1)).map (·.2))).pretty
+
+-- Read the live registry through its owning Lean definitions, never scrape its source text.
+#eval do
+  for p in Concrete.Premises.all do
+    IO.eprintln s!"F31-REGISTRY\tpremise\t{p.id}"
+  for n in Concrete.Premises.theorems do
+    IO.eprintln s!"F31-REGISTRY\theadline\t{n}"

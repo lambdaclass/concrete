@@ -31,10 +31,11 @@ open ConcreteSpec (IntTy Trap)
 
 This is a checked view of the two existing integer representations, not another scalar policy.
 F31 will retire the old representation and this translation atomically with its consumers.
-Authority: `docs/decisions.md#foundation-q3` ("u64 lengths/indices across profiles") and
-`#od126` ("the integer types' widths follow from their names (TYPE-19)"). Arithmetic admission
-remains governed by `#decided-project-no-hidden-traps`: "every build refuses an operation without
-discharged evidence". No admission or backend operation calls this bridge in F30.
+Authority: `docs/decisions.md#od126`:
+"the integer types' widths follow from their names (TYPE-19)".
+Arithmetic admission remains governed by `#decided-project-no-hidden-traps`:
+"Plain `a + b` stays the normal spelling; it needs evidence."
+No admission or backend operation calls this bridge in F30.
 
 The correspondence results are Representation lemmas under
 `#decided-2026-11-13-proof-labels`: they compare Lean representations, not independent language rules.
@@ -217,7 +218,7 @@ def arithOp : BinOp → ConcreteSpec.Core.ArithOp
 /-- Representation lemma: Core's existing checked operation returns the exact BIR result when it
 fits, and the existing overflow error otherwise. No operand-range premise is needed. Authority for
 checked errors: `docs/decisions.md#decided-project-no-hidden-traps`, "Result<T, ArithmeticError>",
-and `#recovered-59-4`, "The trap names are `overflow`, `division_by_zero`, `invalid_shift`". This
+and "ArithmeticError { Overflow, DivisionByZero, InvalidShift }" at the same anchor. This
 comparison neither traps nor discharges admission evidence. -/
 theorem checked (op : BinOp) (t : IntTy) (a b : Int) :
     ConcreteSpec.Core.checked (toCore t) (arithOp op) a b =
@@ -236,6 +237,18 @@ theorem wrap (t : IntTy) (n : Int) :
       ConcreteSpec.Core.toBits, toCore, IntTy.min, IntTy.bits, IntTy.signed,
       ConcreteSpec.Core.IntTy.bits, ConcreteSpec.Core.IntTy.signed] <;>
     simp <;> (try split) <;> omega
+
+/-- Representation lemma: the existing unsigned bit-pattern formula is Core's encoding. -/
+theorem toBits (t : IntTy) (n : Int) :
+    (n % (2 : Int) ^ t.bits).toNat = ConcreteSpec.Core.toBits (toCore t) n := by
+  rw [ConcreteSpec.Core.toBits, bits]
+
+/-- Representation lemma: the existing signed bit-pattern formula is Core's decoding. -/
+theorem ofBits (t : IntTy) (m : Nat) :
+    (if t.signed = true ∧ m ≥ 2 ^ (t.bits - 1) then
+      (m : Int) - (2 : Int) ^ t.bits else (m : Int)) =
+      ConcreteSpec.Core.ofBits (toCore t) m := by
+  rw [ConcreteSpec.Core.ofBits, bits, signed]
 
 /-- Translate only integer BIR values. Flags remain outside this bridge because their physical
 encoding is held by ISS-0069. No new scalar relation or evaluator is introduced. -/

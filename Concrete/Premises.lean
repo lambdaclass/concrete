@@ -147,6 +147,8 @@ def theorems : List Lean.Name := [
   ``Concrete.BIR.ScalarBridge.inRange,
   ``Concrete.BIR.ScalarBridge.checked,
   ``Concrete.BIR.ScalarBridge.wrap,
+  ``Concrete.BIR.ScalarBridge.toBits,
+  ``Concrete.BIR.ScalarBridge.ofBits,
   ``Concrete.BIR.ScalarBridge.intValue_valid,
   ``Concrete.BIR.hasTy_int_core,
   ``Concrete.Backend.LCB.Proof.enc_int_core,

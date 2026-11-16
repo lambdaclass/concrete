@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Supplement the elaborated F31 census with erased examples and non-library consumers.
 
+F31 migration tool: retire with the manifest and companion tool when F31 closes.
 Run from the repository root after f31_consumers.lean. Writes deterministic JSON to stdout.
 This is a conservative qualification surface: inclusion never asserts a semantic change is allowed.
 """
@@ -20,11 +21,9 @@ def add(kind, path, line, subject):
     assert "\t" not in subject and "\n" not in subject
     rows.add((kind, str(path), line, subject))
 
-with open("docs/proposals/f31-declarations.json") as stream:
-    modules = {row["module"] for row in json.load(stream)}
-for module in sorted(modules):
-    path = Path(module.replace(".", "/") + ".lean")
-    code = lex(path.read_text())
+# Examples are erased from environments: scan every library module, even those with no named consumer.
+for path in sorted(list(Path("ConcreteSpec").rglob("*.lean")) + list(Path("Concrete").rglob("*.lean"))):
+    code = lex(path.read_text(), literals=False)
     for match in re.finditer(r"(?m)^\s*example\b", code):
         line = code.count("\n", 0, match.end()) + 1
         add("anonymous-example", path, line, "example")
@@ -38,7 +37,9 @@ probe_suffix = r"""
     if (env.getModuleIdxFor? n).isNone then
       IO.println s!"F31-PROBE\t{n}"
 """
-for path in sorted(Path("scripts/checks/compiler").glob("*.lean")):
+for path in sorted(Path("scripts").rglob("*.lean")):
+    if path.parts[1] == "spec":
+        continue
     with tempfile.TemporaryDirectory(prefix="f31-probe-") as directory:
         probe = Path(directory) / "Inventory.lean"
         probe.write_text("import Lean\n" + path.read_text() + probe_suffix)
@@ -51,12 +52,14 @@ for path in sorted(Path("scripts/checks/compiler").glob("*.lean")):
     for name in names:
         add("probe-declaration", path, 1, name)
 
-path = Path("Concrete/Premises.lean")
-for line, text in enumerate(path.read_text().splitlines(), 1):
-    if match := re.search(r'⟨"(P_[^"]+)"', text):
-        add("premise", path, line, match[1])
-    if match := re.search(r"``([^,]+),?", text):
-        add("headline", path, line, match[1])
+for text in Path(sys.argv[1]).read_text().splitlines():
+    if text.startswith("F31-REGISTRY\t"):
+        _, kind, subject = text.split("\t", 2)
+        add(kind, "Concrete/Premises.lean", 1, subject)
+
+# Synthetic modules and exact-name consumers in proof-tool generators must be requalified too.
+for path in sorted(Path("scripts/proofs").glob("*.py")):
+    add("proof-tool", path, 1, "requalify generated controls and exact-name consumers")
 
 path = Path("tests/manifest.tsv")
 for line, text in enumerate(path.read_text().splitlines(), 1):
