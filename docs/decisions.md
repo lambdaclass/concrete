@@ -3616,6 +3616,105 @@ yes do that
   char construction; this answer settles the constant-type admission question,
   without adding a special char construction rule. Other recovery holds remain open.
 
+- <a id="decided-2026-11-15-review-followups"></a>**Review follow-ups (2026-11-15).**
+  Status: decided for answers 1, 2, 3 and 5; question 4 unanswered.
+  Source: verbatim owner reply relayed by the coordinator from the owner session
+  (2026-11-15), question context summarized by the coordinator, recorded 2026-11-16,
+  under the [recording rule](#decided-project-recording).
+
+  Questions replied to (numbering retained from the supplied context):
+  1. One more review round for the spec inventory branch?
+  2. Fix the review tool that cuts files mid-file?
+  3. Widen ISS-0071 from integer-to-char to all checked conversions and link it to slice 8?
+  4. Add a status field to decision entries, in a format the owner approves (ISS-0083)?
+  5. One extra round (round 8) for the accounting branch to fix the waiting-link
+     normalization only?
+
+  Owner reply, verbatim:
+
+~~~text
+1. yes run one more round on the spec 2. fix the review tool 3. widen the precondition issue 4. i don't understand 5. ok
+~~~
+
+  Answer 4 records lack of understanding, not a decision. Answer 5 authorizes only
+  the waiting-link normalization round described in question 5. The review-tool
+  repair in question 2 is tracked as ISS-0078 in [ISSUES.tsv](../ISSUES.tsv).
+
+- <a id="decided-2026-11-16-conversions-records-gaps"></a>**Checked conversions,
+  decision status and design-gap check (2026-11-16).**
+  Status: decided for the three questions below, with their stated open details.
+  Source: verbatim owner reply relayed by the coordinator from the owner session
+  (2026-11-16), question context summarized by the coordinator, recorded 2026-11-16,
+  under the [recording rule](#decided-project-recording).
+
+  Questions replied to (supplied context):
+  1. Checked conversions option C: keep `try_convert` returning
+     `Result<T, OutOfRange>` ([OD106](#od106)) for values that may not fit, and add
+     one named evidence-required conversion admitted only when the already-decided
+     Lean-proved deterministic checker (CheckedCore evidence) or a checked Lean
+     theorem discharges one shared spec-defined "fits" predicate; never a run-time
+     trap. The conversion's spelling and exact acceptance rule return to the owner.
+  2. Add an explicit status line to every decision entry with values
+     decided / open / recovered (ISS-0083); exact format to be finalized after the
+     Codex/agy format review, and any format change returns to the owner.
+  3. Codex and agy check the costly-to-retrofit list for gaps, and agreed items
+     become roadmap entries.
+
+  Owner reply, verbatim:
+
+~~~text
+ok yes 1 2 3
+~~~
+
+  The chosen conversion direction is tracked by ISS-0071 in
+  [ISSUES.tsv](../ISSUES.tsv), linked to [slice 8](../ROADMAP.md#vertical-slices).
+  Its spelling and exact acceptance rule remain open for the owner. Question 2
+  records the authorized status-line work; its format was subsequently approved in
+  the [status-format decision](#decided-2026-11-16-decision-status-format).
+  Implementation of ISS-0083 remains pending.
+  Question 3 records the authorized gap check; it does not claim a check was run
+  or any resulting roadmap item was agreed.
+
+- <a id="decided-2026-11-16-decision-status-format"></a>**Decision status format
+  (2026-11-16).**
+  Status: decided for the format below; implementation of ISS-0083 pending.
+  Source: verbatim owner reply relayed by the coordinator from the owner session
+  (2026-11-16), question context summarized by the coordinator, recorded 2026-11-16,
+  under the [recording rule](#decided-project-recording).
+
+  Question context summarized by the coordinator: after Codex and agy reviewed
+  the status-line proposal, both asked for a richer format. The coordinator asked
+  the owner to approve:
+
+~~~text
+Status: decided | open | partly decided | replaced | reopened | withdrawn
+Source: owner | recovered from old notes
+Replaced by: <link>   (only when replaced or reopened)
+~~~
+
+  A missing or malformed line fails the check (never inferred), and every line
+  is verified against the owner's words and later revisions.
+
+  Owner reply, verbatim:
+
+~~~text
+yes
+~~~
+
+  This approves the format only. Implementation of ISS-0083 remains pending,
+  tracked in [ISSUES.tsv](../ISSUES.tsv).
+
+- <a id="owner-goals-2026-11-15-provability-errors"></a>**Design goals: owner
+  question (2026-11-15).**
+  Source: verbatim owner reply relayed by the coordinator from the owner session
+  (2026-11-15), question context summarized by the coordinator, recorded 2026-11-16.
+  This is an owner question/goal statement, not a new rule or an answered decision.
+  No preceding question was supplied; this quotation is itself the owner's question:
+
+~~~text
+the design is done so that a) everything can be proven b) we can find get errors with good results?
+~~~
+
 - <a id="decided-project-spark-2026-11-06"></a>**What Concrete takes from SPARK** (owner, 2026-11-06: "ok do everything", after Claude, Codex, agy and Kimi chose unanimously; the
   [review](proposals/SPARK.md) items 1, 2, 3, 6, 7, 9 and 10).
   - *Function values with safety preconditions.* A function whose `#[requires]` is a safety
