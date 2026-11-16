@@ -14,71 +14,71 @@ the earlier behaviour, the answer below governs, and the code follows as its new
 
 The shape of Core was approved provisionally on 2026-11-05 ([stage A2a](#decided-2026-11-05)): it binds the design, and the owner freezes Core at stage A2c, after the four design theorems are proved against the proposed `Spec.lean` and the integration stage A2i (2026-11-06) is accepted. The project and architecture decisions are recorded here too, [below](#decided-project).
 
-- <a id="decided-2026-11-13-lifecycle-refusal"></a>
-  ## Decided 2026-11-13: lifecycle refusal
+<a id="decided-2026-11-13-lifecycle-refusal"></a>
+## Decided 2026-11-13: lifecycle refusal
 
-  This answers the lifecycle-signature part of the [November 9 reopening](#decided-2026-11-09-older-proposals).
+This answers the lifecycle-signature part of the [November 9 reopening](#decided-2026-11-09-older-proposals).
 
-  Assistant recommendation, verbatim. Provenance: session
-  `e2c54e65-31b5-4145-8101-c2d7b071b97e`, physical transcript line 151131,
-  2026-11-13T17:21:38.208Z (UTC):
+Assistant recommendation, verbatim. Provenance: session
+`e2c54e65-31b5-4145-8101-c2d7b071b97e`, physical transcript line 151131,
+2026-11-13T17:21:38.208Z (UTC):
 
-  ~~~text
-  Both recommend the same solution: the ledger is allowed to answer **"refused"**, and the spec already does this.
+~~~text
+Both recommend the same solution: the ledger is allowed to answer **"refused"**, and the spec already does this.
 
-  How it works:
-  1. **The ledger has two answers.** Every time a variable is created, a function starts or ends, or a block closes, the ledger answers either "OK, here is the updated ledger" or "refused".
-  2. **A refusal stops the run.** It is labelled unsafe. It can never be reported as "finished normally". It is also not a trap and not a recoverable error: it means the program broke the ownership rules, which a real Concrete program can never do.
-  3. **The checker carries the guarantee.** It must prove that any program it accepts never gets a "refused", at every point: when a function starts, when a result is stored, and when the last block closes. The spec's safety theorem rests on that.
-  4. **No reasons in the spec.** The spec only says "refused". Error messages for the programmer come from the checker.
+How it works:
+1. **The ledger has two answers.** Every time a variable is created, a function starts or ends, or a block closes, the ledger answers either "OK, here is the updated ledger" or "refused".
+2. **A refusal stops the run.** It is labelled unsafe. It can never be reported as "finished normally". It is also not a trap and not a recoverable error: it means the program broke the ownership rules, which a real Concrete program can never do.
+3. **The checker carries the guarantee.** It must prove that any program it accepts never gets a "refused", at every point: when a function starts, when a result is stored, and when the last block closes. The spec's safety theorem rests on that.
+4. **No reasons in the spec.** The spec only says "refused". Error messages for the programmer come from the checker.
 
-  Example:
-  ```
-  let x = make();
-  borrow x as r { ... }  // something still borrows x
-  }                      // block closes and frees x
-  ```
-  Before the fix, the spec said "finished normally". With it, the ledger refuses, the run stops as unsafe, and the checker must have rejected this program in the first place.
+Example:
+```
+let x = make();
+borrow x as r { ... }  // something still borrows x
+}                      // block closes and frees x
+```
+Before the fix, the spec said "finished normally". With it, the ledger refuses, the run stops as unsafe, and the checker must have rejected this program in the first place.
 
-  Nothing changes in the language you write, and the existing rules stay as they are: destruction is always written by the programmer, closing a block never destroys anything by itself, and a trap during cleanup ends the program.
+Nothing changes in the language you write, and the existing rules stay as they are: destruction is always written by the programmer, closing a block never destroys anything by itself, and a trap during cleanup ends the program.
 
-  Do you approve it? If yes, I'll record your answer and start the execution spec, which unblocks about 15 pieces after it.
-  ~~~
+Do you approve it? If yes, I'll record your answer and start the execution spec, which unblocks about 15 pieces after it.
+~~~
 
-  Owner reply, verbatim. Provenance: the same session, physical transcript line 151136,
-  2026-11-13T17:21:41.810Z (UTC):
+Owner reply, verbatim. Provenance: the same session, physical transcript line 151136,
+2026-11-13T17:21:41.810Z (UTC):
 
-  ~~~text
-  yes approve it
-  ~~~
+~~~text
+yes approve it
+~~~
 
-  Decided by that approval:
+Decided by that approval:
 
-  - The ownership-bookkeeping (lifecycle) step answers either "OK, here is the updated ledger"
-    or "refused".
-  - Refusal stops the run, classified unsafe; it is never normal completion, a program trap,
-    or a recoverable error.
-  - The checker must prove that an accepted program is never refused at every lifecycle site:
-    function entry, result binding, and scope exit including the final one.
-  - The spec carries no refusal reasons; diagnostics come from the checker.
-  - Unchanged: [explicit consuming destruction](#od60), with the
-    [receiver-syntax revision](#decided-2026-11-08-language-revisions);
-    [no synthesized destruction at scope exit, only storage teardown](#od69);
-    [a trap in a deferred call ends the program and runs no further deferred call](#od68).
+- The ownership-bookkeeping (lifecycle) step answers either "OK, here is the updated ledger"
+  or "refused".
+- Refusal stops the run, classified unsafe; it is never normal completion, a program trap,
+  or a recoverable error.
+- The checker must prove that an accepted program is never refused at every lifecycle site:
+  function entry, result binding, and scope exit including the final one.
+- The spec carries no refusal reasons; diagnostics come from the checker.
+- Unchanged: [explicit consuming destruction](#od60), with the
+  [receiver-syntax revision](#decided-2026-11-08-language-revisions);
+  [no synthesized destruction at scope exit, only storage teardown](#od69);
+  [a trap in a deferred call ends the program and runs no further deferred call](#od68).
 
-  **NOT decided:** how refusal at initial function entry is reported versus refusal mid-run;
-  that a refused response to a primitive request does not roll back an already-performed
-  external effect (the spec only stops). These are open spec-detail questions raised by the
-  Codex review for the execution piece to state explicitly, not owner decisions to encode
-  from this record.
+**NOT decided:** how refusal at initial function entry is reported versus refusal mid-run;
+that a refused response to a primitive request does not roll back an already-performed
+external effect (the spec only stops). These are open spec-detail questions raised by the
+Codex review for the execution piece to state explicitly, not owner decisions to encode
+from this record.
 
-  Evidence: `scratchpad/f08/approval.md`, `proposal.md`, `review-codex.md` and
-  `review-kimi.md` under session `e2c54e65-31b5-4145-8101-c2d7b071b97e`'s scratchpad
-  (`/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/`). The primary transcript is
-  `~/.claude/projects/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e.jsonl`.
-  The full proposal presents options A–F, history and sources. Codex and Kimi independently
-  confirmed the defect and agreed with the recommendation, both with changes
-  (`AGREE-WITH-CHANGES`). agy could not review because of quota.
+Evidence: `scratchpad/f08/approval.md`, `proposal.md`, `review-codex.md` and
+`review-kimi.md` under session `e2c54e65-31b5-4145-8101-c2d7b071b97e`'s scratchpad
+(`/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/`). The primary transcript is
+`~/.claude/projects/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e.jsonl`.
+The full proposal presents options A–F, history and sources. Codex and Kimi independently
+confirmed the defect and agreed with the recommendation, both with changes
+(`AGREE-WITH-CHANGES`). agy could not review because of quota.
 
 <a id="waiting-for-the-owner"></a>
 ## Waiting for the owner
@@ -251,54 +251,53 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 
 **The Core rows are a provisional approval (stage A2a).** They bind the design without freezing it. Stage A2b formalizes them in a proposed `ConcreteSpec/Spec.lean` and proves the four design theorems; any row the formalization changes returns to the owner; stage A2i integrates the parts (2026-11-06); the owner freezes Core at A2c (row Q9.19 as revised). Until a rule is written in Lean, the answer below governs over any chapter text that differs.
 
-- <a id="decided-2026-11-05-revisions"></a>**Owner-approved revisions of recorded rules** (each also noted at the rule it revises):
+<a id="decided-2026-11-05-revisions"></a>**Owner-approved revisions of recorded rules** (each also noted at the rule it revises):
 
-  - **OD45 and OD87** (rows Q5.1, Q5.4): capability arguments are written explicitly at every polymorphic call and checked against the callee; there is no capability inference and no inference solver. OD46 (type arguments from checked argument types) is unchanged.
-  - **TYPE-22@1's examples** (row Q6.4): a constant whose initializer provably fails is refused at compile time whether or not it is used (OD118); both examples, `unused-constant-never-runs` and `constant-traps-at-use`, become reject examples. When a constant is evaluated (at each use, never at start) is unchanged. Revised 2026-11-08: the [initializer answer](#decided-2026-11-08-constants) supersedes the claim that evaluation occurs only at use.
-  - **TRAIT-1@1** (row Q2.8): two impls with equal heads may coexist only when Copy/Destroy disjointness (OD28) makes their domains disjoint, as in `impl<T: Copy> Destroy for Vec<T, A>` beside `impl<T: Destroy> Destroy for Vec<T, A>`. No other coherence or orphan rule changes, and no disjunctive bound syntax is added.
-  - **The generated-chapter requirement** (rows Q9.15, P3): Lean is the specification, in one main normative file with doc comments and examples; no prose is generated from it. This confirms the [2026-11-04 decision](#decided-project-lean-is-the-spec). The "one main normative file" wording is revised 2026-11-06 by the [long-term changes](#decided-project-long-term-2026-11-06): one authoritative specification library in cohesive modules, with `ConcreteSpec/Spec.lean` as its public import.
-  - **Authority rules 13, 5 and 7** (row Q7.11): `Console` joins the reserved capability set, for operations on the `StdIn`, `StdOut` and `StdErr` grants; rule 5's operational list and rule 7's primitive table include it. `Device` stays for device grants.
-  - **The text-only slice of R4 F4.3** (row Q4.7) is replaced before it was recorded: one scoped form opens every view, `borrow [mut] source [from a until b] as view { … } [else { … }]`. Without `else` an invalid range traps, like indexing; with `else` it is handled; a proven invalid range without `else` is refused (OD118). Arrays need `a ≤ b ≤ len`; text also needs UTF-8 scalar boundaries at both byte offsets. The `as` surface is superseded by the [removed-word answer](#decided-2026-11-08-removed-words); its replacement spelling is pending.
+- **OD45 and OD87** (rows Q5.1, Q5.4): capability arguments are written explicitly at every polymorphic call and checked against the callee; there is no capability inference and no inference solver. OD46 (type arguments from checked argument types) is unchanged.
+- **TYPE-22@1's examples** (row Q6.4): a constant whose initializer provably fails is refused at compile time whether or not it is used (OD118); both examples, `unused-constant-never-runs` and `constant-traps-at-use`, become reject examples. When a constant is evaluated (at each use, never at start) is unchanged. Revised 2026-11-08: the [initializer answer](#decided-2026-11-08-constants) supersedes the claim that evaluation occurs only at use.
+- **TRAIT-1@1** (row Q2.8): two impls with equal heads may coexist only when Copy/Destroy disjointness (OD28) makes their domains disjoint, as in `impl<T: Copy> Destroy for Vec<T, A>` beside `impl<T: Destroy> Destroy for Vec<T, A>`. No other coherence or orphan rule changes, and no disjunctive bound syntax is added.
+- **The generated-chapter requirement** (rows Q9.15, P3): Lean is the specification, in one main normative file with doc comments and examples; no prose is generated from it. This confirms the [2026-11-04 decision](#decided-project-lean-is-the-spec). The "one main normative file" wording is revised 2026-11-06 by the [long-term changes](#decided-project-long-term-2026-11-06): one authoritative specification library in cohesive modules, with `ConcreteSpec/Spec.lean` as its public import.
+- **Authority rules 13, 5 and 7** (row Q7.11): `Console` joins the reserved capability set, for operations on the `StdIn`, `StdOut` and `StdErr` grants; rule 5's operational list and rule 7's primitive table include it. `Device` stays for device grants.
+- **The text-only slice of R4 F4.3** (row Q4.7) is replaced before it was recorded: one scoped form opens every view, `borrow [mut] source [from a until b] as view { … } [else { … }]`. Without `else` an invalid range traps, like indexing; with `else` it is handled; a proven invalid range without `else` is refused (OD118). Arrays need `a ≤ b ≤ len`; text also needs UTF-8 scalar boundaries at both byte offsets. The `as` surface is superseded by the [removed-word answer](#decided-2026-11-08-removed-words); its replacement spelling is pending.
 - <a id="decided-2026-11-05-q6-2-fields"></a>**Q6.2 and R4 F12, known values through structs** (owner-approved revision, 2026-11-05, made during A2b): known values propagate field by field through immutable struct construction and destructuring. The checker tracks an abstract value for each binding: unknown, a known scalar, or a constructor whose fields carry their own abstract values. Constructing a struct records each field's fact independently; an immutable binding keeps the fact; destructuring hands each field's fact, recursively, to the corresponding immutable binder; an unknown component stays unknown without discarding its known siblings; an ownership transfer keeps the facts for the receiving binding without permitting reuse of the consumed one. Q6.2's exclusions stay (mutable state, branches and paths, user-function calls, calls outside the table, elaborator temporaries). So `let S { a } = S { a: 200 }; a + 100` is refused, in trusted and unreachable code too (OD118 as revised by Q6.4). Before this revision a field bound by destructuring was not known and that program was accepted and trapped. Revised 2026-11-08 by [complementary suffix typing](#decided-2026-11-08-language-literals): the field has no suffix because it has an expected type.
 - <a id="decided-2026-11-05-q9-1-reads"></a>**Q9.1, read forms** (owner-confirmed, 2026-11-05): `copy x` is allowed only when `x` has a Copy type and `move x` only when it has a non-Copy (linear) type. Each read has one form; `move` of a Copy value and `copy` of a linear value are both refused.
 
-- <a id="decided-2026-11-05-new-rules"></a>**New rules** (P4): duplicate variant names in one enum and duplicate method names in one impl are refused, like duplicate fields (bug 313); the rule gets its ID and diagnostic when it is written in Lean.
+<a id="decided-2026-11-05-new-rules"></a>**New rules** (P4): duplicate variant names in one enum and duplicate method names in one impl are refused, like duplicate fields (bug 313); the rule gets its ID and diagnostic when it is written in Lean.
 
-- <a id="decided-2026-11-05-core"></a>**Core rows** (the answer is the row's recommendation):
+<a id="decided-2026-11-05-core"></a>**Core rows** (the answer is the row's recommendation):
 
-  - **Q1.1** What is an allocator brand? — Separate erased `Brand` kind.
-  - **Q1.2** How are fresh brands introduced, including loop resets? — Generative binders; existential loop state.
-  - **Q1.3** How are packages formed and opened? — Explicit pack; lexical unpack; repackage escapes.
-  - **Q1.4** How are brands compared and supplied? — Nominal brand equality; explicit brand arguments.
-  - **Q1.5** How are allocator dependencies tracked across calls? — Structural dependencies; checked interface summaries.
-  - **Q1.6** Who owns a child allocator’s backing? — Child owns backing; parent brand exposed in type. *Revises or adds: Clarify/extend allocator interface.*
-  - **Q1.7** Where does release information live? — Stable release state and raw context; no safe references. *Revised 2026-11-08 by the [foundation decision](#foundation-q6): release-context erasure is allowed only with a proof (release statically known, no per-instance information), including owning Text where applicable; no unconditional one-pointer claim.*
-  - **Q1.8** What if creating allocator state fails? — Fallible allocator construction conserving surviving inputs.
-  - **Q1.9** What do allocation failures contain? — `AllocFailure<T>` returns rejected `T`; operation-specific recovery.
-  - **Q1.10** Are capacity and addresses observable? — Observable capacity; explicit raw-address exposure.
-  - **Q1.11** What does “unchanged” require of allocator state? — Availability predicate plus four laws: progress, unchanged state on failure, release never reduces availability, a concrete success witness.
-  - **Q1.12** What rolls back around callbacks? — No rollback of callback effects; every element accounted for in a typed result.
-  - **Q1.13** Can resetting the system allocator return `Allocator<Sys>` again? — Fresh brand after any supported system reset.
-  - **Q2.1** Are storage release, destruction and resource cleanup separate? — Separate storage release, destruction and resource cleanup.
-  - **Q2.2** Which containers implement `Destroy`? — Exactly sixteen named Destroy impls: Array (T: Destroy); Heap, HeapArray and Vec (two each: T: Copy; T: Destroy); String (unconditional); Option (T: Destroy); Result (three: T: Destroy/E: Copy, T: Destroy/E: Destroy, T: Copy/E: Destroy); OrderedMap (four: each of K and V Copy or Destroy). HashMap excluded.
-  - <a id="q2-2-revision"></a>Revised 2026-11-06 by [information flow](#decided-project-infoflow-2026-11-06): `Secret<T>` is `Copy` only for scalar `T`; secret arrays and heap secrets are linear and their destruction wipes them.
-  - **Q2.3** In what order are contents destroyed? — Index order 0..len−1, then the backing; OrderedMap in ascending key order, key then value, then the nodes.
-  - **Q2.4** How does a container of non-`Destroy` resources release its storage? — `drain(v, ctx, f)` with `f: fn(&mut C, T) with(K) -> Step<T, E>`; the only way to empty a container of non-Destroy elements.
-  - **Q2.5** What happens when drain processing fails? — On Stop, `Drained { at, survivor, rest, err }`; `map_into` returns `Stopped { done, survivor, rest, err }`.
-  - **Q2.6** Must `destroy` terminate and avoid traps? — Ordinary partial correctness; prove stronger guarantees separately.
-  - **Q2.7** Does user destruction have special execution semantics? — Ordinary consuming checked `destroy`; at most `Alloc`.
-  - **Q2.8** How is 'Copy or Destroy' written for container impls? — (a) separate impls for every admitted combination of Copy/Destroy payload bounds, no disjunctive-bound syntax: two each for Heap, HeapArray and Vec, three for Result, four for OrderedMap; coherence may use Copy/Destroy disjointness. *Revises or adds: TRAIT-1@1 (under OD6): equal generic impl heads allowed only when Copy/Destroy disjointness makes their domains disjoint; all other coherence and orphan rules unchanged. Option (b) would also add new bound syntax.*
-  - **Q3.1** What does opening a heap array produce? — Second-class shared/mutable array views; no element references.
-  - **Q3.2** How are views passed and lent? — Downward parameters; mutable lending freezes origin.
-  - **Q3.3** What is a view’s root identity? — Original owner identity plus projection path.
-  - **Q3.4** Which view accesses conflict? — Existing whole-root conflict rules.
-  - **Q3.5** What is the index type? — `u64` lengths/indices across profiles; checked target limits.
-  - **Q3.6** How are nested linear elements traversed without substitutes? — `drain` / `map_into` for consuming traversal; `swap_at(v, i, x) -> T` for in-place replacement.
-  - **Q3.7** What is the raw-memory model and validity taxonomy? — Blocks with provenance; pointer = (prov: Option<BlockId>, addr: u64); integers carry no provenance; every access needs explicit validity premises. *Generalized 2026-11-08 by the [foundation decision](#foundation-q3): the address is read from a read-only target profile; the existing 64-bit little-endian profile is unchanged, and the provenance rules and the zero-byte exception are preserved.*
-  - **Q3.8** How do zero-sized elements behave? — Zero-sized slots own their obligations; they occupy no bytes and may share addresses.
-  - **Q3.9** What do pointer equality and integer round trips mean? — `expose` records the block; `from_exposed` picks in-bounds, then one-past, else no provenance. *Generalized 2026-11-08 by the [foundation decision](#foundation-q3): over the target profile's address spaces; the reconstruction policy is unchanged.*
-  - **Q3.10** What happens when address space runs out? — A collision means overlapping occupied bytes; address exhaustion is part of Avail. *Generalized 2026-11-08 by the [foundation decision](#foundation-q3): the existing profile keeps the `base + size ≤ 2^64−1` one-past bound; any generalized profile needs an analogous checked bound.*
-  - **Q3.11** How are typed values related to raw bytes? — Structured values and raw store joined by `Rep`.
+- **Q1.1** What is an allocator brand? — Separate erased `Brand` kind.
+- **Q1.2** How are fresh brands introduced, including loop resets? — Generative binders; existential loop state.
+- **Q1.3** How are packages formed and opened? — Explicit pack; lexical unpack; repackage escapes.
+- **Q1.4** How are brands compared and supplied? — Nominal brand equality; explicit brand arguments.
+- **Q1.5** How are allocator dependencies tracked across calls? — Structural dependencies; checked interface summaries.
+- **Q1.6** Who owns a child allocator’s backing? — Child owns backing; parent brand exposed in type. *Revises or adds: Clarify/extend allocator interface.*
+- **Q1.7** Where does release information live? — Stable release state and raw context; no safe references. *Revised 2026-11-08 by the [foundation decision](#foundation-q6): release-context erasure is allowed only with a proof (release statically known, no per-instance information), including owning Text where applicable; no unconditional one-pointer claim.*
+- **Q1.8** What if creating allocator state fails? — Fallible allocator construction conserving surviving inputs.
+- **Q1.9** What do allocation failures contain? — `AllocFailure<T>` returns rejected `T`; operation-specific recovery.
+- **Q1.10** Are capacity and addresses observable? — Observable capacity; explicit raw-address exposure.
+- **Q1.11** What does “unchanged” require of allocator state? — Availability predicate plus four laws: progress, unchanged state on failure, release never reduces availability, a concrete success witness.
+- **Q1.12** What rolls back around callbacks? — No rollback of callback effects; every element accounted for in a typed result.
+- **Q1.13** Can resetting the system allocator return `Allocator<Sys>` again? — Fresh brand after any supported system reset.
+- **Q2.1** Are storage release, destruction and resource cleanup separate? — Separate storage release, destruction and resource cleanup.
+- **Q2.2** Which containers implement `Destroy`? — Exactly sixteen named Destroy impls: Array (T: Destroy); Heap, HeapArray and Vec (two each: T: Copy; T: Destroy); String (unconditional); Option (T: Destroy); Result (three: T: Destroy/E: Copy, T: Destroy/E: Destroy, T: Copy/E: Destroy); OrderedMap (four: each of K and V Copy or Destroy). HashMap excluded. <a id="q2-2-revision"></a>Revised 2026-11-06 by [information flow](#decided-project-infoflow-2026-11-06): `Secret<T>` is `Copy` only for scalar `T`; secret arrays and heap secrets are linear and their destruction wipes them.
+- **Q2.3** In what order are contents destroyed? — Index order 0..len−1, then the backing; OrderedMap in ascending key order, key then value, then the nodes.
+- **Q2.4** How does a container of non-`Destroy` resources release its storage? — `drain(v, ctx, f)` with `f: fn(&mut C, T) with(K) -> Step<T, E>`; the only way to empty a container of non-Destroy elements.
+- **Q2.5** What happens when drain processing fails? — On Stop, `Drained { at, survivor, rest, err }`; `map_into` returns `Stopped { done, survivor, rest, err }`.
+- **Q2.6** Must `destroy` terminate and avoid traps? — Ordinary partial correctness; prove stronger guarantees separately.
+- **Q2.7** Does user destruction have special execution semantics? — Ordinary consuming checked `destroy`; at most `Alloc`.
+- **Q2.8** How is 'Copy or Destroy' written for container impls? — (a) separate impls for every admitted combination of Copy/Destroy payload bounds, no disjunctive-bound syntax: two each for Heap, HeapArray and Vec, three for Result, four for OrderedMap; coherence may use Copy/Destroy disjointness. *Revises or adds: TRAIT-1@1 (under OD6): equal generic impl heads allowed only when Copy/Destroy disjointness makes their domains disjoint; all other coherence and orphan rules unchanged. Option (b) would also add new bound syntax.*
+- **Q3.1** What does opening a heap array produce? — Second-class shared/mutable array views; no element references.
+- **Q3.2** How are views passed and lent? — Downward parameters; mutable lending freezes origin.
+- **Q3.3** What is a view’s root identity? — Original owner identity plus projection path.
+- **Q3.4** Which view accesses conflict? — Existing whole-root conflict rules.
+- **Q3.5** What is the index type? — `u64` lengths/indices across profiles; checked target limits.
+- **Q3.6** How are nested linear elements traversed without substitutes? — `drain` / `map_into` for consuming traversal; `swap_at(v, i, x) -> T` for in-place replacement.
+- **Q3.7** What is the raw-memory model and validity taxonomy? — Blocks with provenance; pointer = (prov: Option<BlockId>, addr: u64); integers carry no provenance; every access needs explicit validity premises. *Generalized 2026-11-08 by the [foundation decision](#foundation-q3): the address is read from a read-only target profile; the existing 64-bit little-endian profile is unchanged, and the provenance rules and the zero-byte exception are preserved.*
+- **Q3.8** How do zero-sized elements behave? — Zero-sized slots own their obligations; they occupy no bytes and may share addresses.
+- **Q3.9** What do pointer equality and integer round trips mean? — `expose` records the block; `from_exposed` picks in-bounds, then one-past, else no provenance. *Generalized 2026-11-08 by the [foundation decision](#foundation-q3): over the target profile's address spaces; the reconstruction policy is unchanged.*
+- **Q3.10** What happens when address space runs out? — A collision means overlapping occupied bytes; address exhaustion is part of Avail. *Generalized 2026-11-08 by the [foundation decision](#foundation-q3): the existing profile keeps the `base + size ≤ 2^64−1` one-past bound; any generalized profile needs an analogous checked bound.*
+- **Q3.11** How are typed values related to raw bytes? — Structured values and raw store joined by `Rep`.
 - <a id="core-q3-12"></a>**Q3.12** How are extern pointer parameters marked, and how does C keep memory past the call? — (a) `kept` parameter marker; `Kept<H>` receipt ended only by the paired extern. *Revises or adds: New design + spelling: owner decision.*
 - **Q4.1** What is a literal’s type? — Copy `StaticStr`; explicit fallible dynamic conversion.
 - **Q4.2** Which encoding and NUL policy apply? — UTF-8 including embedded NUL.
@@ -330,8 +329,7 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **Q7.10** Do you approve the linux-x86_64-hosted grant table? — Approve R4 F6's complete grant table below as part of this row: every launch configuration, operation signature, permission, narrowing rule and ending contract. Standard-stream operations require Console (Q7.11), not Device; where the R4 F6 table says with(Device) for StdIn/StdOut/StdErr, read with(Console). A missing configured grant refuses startup with exit 125; a trap exits 134. *Revises or adds: New target contract: owner decision.* *Extended 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): the stack target contract (adequate stack excludes exhaustion, launch refusal 125 when the reservation is smaller than the bound; then a defined outcome for inadequate stack) is a future target-contract obligation, not a current guarantee.* *Revised 2026-11-08 by the [foundation decision](#foundation-q16): the grant table is a lawful extensible registry; the existing grant contracts are preserved, an unknown operation is refused, and the Entropy grant's shape waits for slice 6 ([question 14](#foundation-q14)).*
 - **Q7.11** Which permission do the standard streams use? — Add a Console capability for StdIn/StdOut/StdErr operations; keep Device for device grants. *Revises or adds: Authority rule 13 (adds Console); rules 5 and 7 lists include it.*
 - **Q8.1** What is the first proof endpoint? — Proved source→BIR; qualified native; conditional image claim.
-- **Q8.2** What exact source subset is admitted? — A1 minimal `u8`/linear-struct component subset.
-- <a id="q8-2-revision"></a>Confirmed 2026-11-06 by [vertical slices](#decided-project-vertical-slices-2026-11-06): this is slice 1; its defined trap is an explicit `abort()`, with the refused `200 + 56` as its known-violation control; integers are complete at slice 2.
+- **Q8.2** What exact source subset is admitted? — A1 minimal `u8`/linear-struct component subset. <a id="q8-2-revision"></a>Confirmed 2026-11-06 by [vertical slices](#decided-project-vertical-slices-2026-11-06): this is slice 1; its defined trap is an explicit `abort()`, with the refused `200 + 56` as its known-violation control; integers are complete at slice 2.
 - **Q8.3** What establishes frontend correspondence? — Independent byte-to-Core correspondence judgments.
 - **Q8.4** Does the first artifact qualify as a complete executable? — Component plus bound launcher first.
 - **Q8.5** What launcher ABI and observations are fixed? — Pinned launcher ABI, inputs, startup and trap mapping. *Extended 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): the stack target contract (adequate stack excludes exhaustion, launch refusal 125 when the reservation is smaller than the bound; then a defined outcome for inadequate stack) is a future target-contract obligation, not a current guarantee.*
@@ -357,32 +355,32 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **Q9.18** How is the old compiler retained? — Frozen isolated `legacy/`; no normative fallback.
 - **Q9.19** How do approval, formalization and Core freeze relate? — A2a → A2b → A2c; Spec.lean headed PROPOSED until freeze; R-0560 depends on the freeze. *Revises or adds: Process: owner decision.* Revised 2026-11-06 by the [long-term changes](#decided-project-long-term-2026-11-06): integration (A2i) comes between A2b and the A2c freeze, and the modular layout (R-0560) precedes the freeze.
 
-- <a id="decided-2026-11-05-project"></a>**Project rows:**
+<a id="decided-2026-11-05-project"></a>**Project rows:**
 
-  - **P1** Where agent discretion ends — Claude and Codex reason every question from the philosophy and recommend; they never pick a language answer through code, fixtures, diagnostics or docs. 'Important' = anything that revises a decided rule, changes observable language meaning you have not ruled on, or that you reserved. Every important decision comes to you.
-  - **P2** Priority order when principles conflict — Soundness and provability > transparency (with auditability, honest trust boundaries and compiler-owned identity) > one authoritative definition (checked derived views allowed) > explicitness at the use site > brevity. The philosophy guides open choices and never silently reopens decided rules.
-  - **P3** Lean is the spec: confirm the amendment — Lean is the specification: confirmed together with Q9.15 (revision below).
-  - **P4** Duplicate enum variants or methods (bug 313) — Refuse duplicate variant names in one enum and duplicate method names in one impl, with a new rule and diagnostic, the same as duplicate fields.
-  - **P5** legacy/ is a byte-frozen snapshot, never patched or run — legacy/ is main's tree at the move commit, byte-frozen. A root check compares its tree hash, allowing only deletions a satisfied RETENTION.tsv entry authorizes. No legacy gate ever runs. The oracle is the tag-built artifact (P13), not the legacy/ copy.
-  - **P6** Retention manifest gates deleting legacy/ — RETENTION.tsv at the root gives every legacy asset (corpus, regressions, examples, std, bug ledger, site, docs, research) a destination and deletion criterion. Revised 2026-11-06 ([restart row](#decided-project-restart)): nothing is deleted at B3; legacy/, the old pipeline included, is deleted way later (LD: once the new compiler implements a full real program such as RocksDB, ethrex or similar), when RETENTION.tsv has no live entry, a final ideas sweep has dispositioned every idea and the owner explicitly approves.
-  - **P7** Prove the new landing path before moving — T0: land beside the old tree the new root CI, required-checks.txt (enforced by train watch and land), RETENTION.tsv, the task disposition table, ORACLE.lock with the oracle artifact, and ISSUES.tsv. T1: rehearse the move on a throwaway branch: fresh clone, build, hook, exact-SHA CI, train --dry-run land; a broken build, a failing gate and a missing required check must each be refused. T2: the move in one train.
-  - **P8** Server services under scripts/ — Keep only landing services: train, review, hook, landing bot. The status page, work queue, fuzz farm, perf tracking and nightly campaign all stop and are recorded as archived in RETENTION.tsv; each returns only with a roadmap task.
-  - **P9** Website during the transition — The website goes down at the move and is redone from scratch with the new compiler; no frozen playground is served. Unpublishing the live site is an outward action whose moment the owner confirms.
-  - **P10** What 'closed' means for old-compiler bugs — Old-compiler defects become 'retired with the old implementation', never 'fixed'. Each keeps its reproducer, ruling and structural class; 106 reproducers feed the oracle comparisons. Bugs the frozen browser compiler still shows stay visible while the site serves it.
-  - **P11** Std bugs and rulings are carried — Add a 'std' class: 12 std bugs move with std as contracts plus regressions. The 112 language rulings (26 still open) keep their ruling and become conformance examples.
-  - **P12** Issue record from day one — From day one, ISSUES.tsv at the root: id, date, area (spec|proof|compiler|launcher|ci|migration), evidence, owner, severity, closure condition, status, with a small root check. Spec, proof, launcher, CI and migration defects go there. The full bug ledger and tool return with slice 1.
-  - **P13** concrete-ci-2 as the only CI host — CI runs on concrete-ci-2 (self-hosted) and on GitHub-hosted runners as a regular second pool, not only a fallback. Jobs that need ci-2 caches run there; the oracle is fetched as a release asset verified by digest; a check neither pool can run is incomplete and blocks landing. Self-hosted runners never run pull_request jobs.
-  - **P14** ci-3 handover: an exception to the archive requirement — Done by the owner on 2026-11-04: concrete-ci-3 was handed to stabileo; its fuzz corpus, perf history and leanprof data were not copied (an exception to the archive requirement).
-  - **P15** New roadmap: retiring obligations — Accept the new single-file ROADMAP.md (wip/new-roadmap, reconciled: prepare → rehearse → move, assurance wording per Q8.1, Phase E per P18, decides nothing itself): 79 tasks kept as rows, 345 folded into area tasks with their obligations, 109 deferred with triggers, 7 retired, 15 done.
-  - **P16** Status changes in the refusal list — Accept the new statuses in PHILOSOPHY.md. Now Permanent: operator overloading (OD26), capability hiding (authority rule 5), derived equality, mutable global state (OD8), umbrella capabilities and aliases, old/quantifiers in contracts (OD117), lexical shadowing (OD67), and ghost code that affects execution. Ghost code itself is admitted as decided (OD81). Foreign function values reopen when typed extern fn types are admitted (OD4); concurrency reopens on R-0399's trigger.
-  - **P17a** Default arguments — Default arguments: a Permanent refusal, reopened only by a new decision from you. They conflict with visible arguments.
-  - **P17b** Compile-time evaluation and broad #[cfg] — comptime and broad #[cfg]: keep evidence-based reopening, only with a workload, a proof story, phase separation and an audit report, and only by a new decision from you.
-  - **P18** Phase E: contracts and termination within OD115–OD117 — Phase E: no source old, quantifier, implication or snapshot construct (OD117); entry/exit and frame properties are Lean theorems (a source frame clause would be a new decision for you); spec functions have a body and are total (OD115); ordinary functions have no total category (OD116) and get per-function termination theorems where wanted. R-0524 becomes 'Frame and entry/exit theorems in Lean, no old'; R-0526 stays 'checked totality of spec functions'.
-  - **P19** Mutation testing for the new compiler — Retire the old mutation-harness defect work (R-0518). The new compiler gets its own mutation harness under R-0498, not a port of the old one.
-  - **P20** One home for binding decisions — Move the still-binding roadmap decisions (new compiler, retention contract, authority, allocation, Lean as the spec) into docs/decisions.md beside your language answers. The dated log becomes history; ROADMAP.md links to decisions.md and restates nothing.
-  - **P21** Retention records outlive legacy/ — RETENTION.tsv, ISSUES.tsv, required-checks.txt, scripts/oracle/ and docs/archive/roadmap-2026-11/ (with task_disposition.tsv) are part of the day-one root, outside legacy/, so they survive deleting it. *Revised 2026-11-06 (owner, verbatim: "do the whole movement"): of docs/archive/roadmap-2026-11/, the files that are decision sources or disposition records stay at the root (task_disposition.tsv, the decision log ROADMAP_DECISIONS.md, the task register ROADMAP_TASKS.md, ROADMAP_RECONCILIATION.md, ROADMAP_RESTRUCTURE.md with its table, and the archive README); the old control plane ROADMAP.md, ROADMAP_BACKLOG.md, ROADMAP_DIRECTION.md and WORK_QUEUE.md were duplicates of their frozen legacy/ copies apart from the move's mechanical rewrites, and nothing cites them as a decision source, so their root copies were removed and links point at the legacy/ copies, which stay until the legacy deletion point. The other docs/archive/ records (the site takedown record, the old bug ledger's disposition, the landing audit and the dated decision archives) stay at the root.*
-  - **P22** The work-queue dispatcher — Stop the dispatcher for the lean start. Agents are started by hand from the roadmap; bring the dispatcher back only when there is enough parallel work to need it.
-  - **P23** Precedence between decisions, rows and drafts — Recorded decisions govern. An accepted row supersedes a recorded rule only through an explicitly identified, owner-approved revision (Q5.1/Q5.4 for OD45/OD87, Q6.4 for TYPE-22, Q2.8 for TRAIT-1, Q9.15/P3 for generated chapters). R4's replacements govern conflicting draft recommendations. Before your acceptance is recorded, every passage R4 F18 lists is reconciled (capability inference, generated chapters, roadmap authority, assurance wording, restart order and retention, Phase E, freeze dependencies, superseded Core recommendations), and historical conflicting text is marked superseded.
+- **P1** Where agent discretion ends — Claude and Codex reason every question from the philosophy and recommend; they never pick a language answer through code, fixtures, diagnostics or docs. 'Important' = anything that revises a decided rule, changes observable language meaning you have not ruled on, or that you reserved. Every important decision comes to you.
+- **P2** Priority order when principles conflict — Soundness and provability > transparency (with auditability, honest trust boundaries and compiler-owned identity) > one authoritative definition (checked derived views allowed) > explicitness at the use site > brevity. The philosophy guides open choices and never silently reopens decided rules.
+- **P3** Lean is the spec: confirm the amendment — Lean is the specification: confirmed together with Q9.15 (revision below).
+- **P4** Duplicate enum variants or methods (bug 313) — Refuse duplicate variant names in one enum and duplicate method names in one impl, with a new rule and diagnostic, the same as duplicate fields.
+- **P5** legacy/ is a byte-frozen snapshot, never patched or run — legacy/ is main's tree at the move commit, byte-frozen. A root check compares its tree hash, allowing only deletions a satisfied RETENTION.tsv entry authorizes. No legacy gate ever runs. The oracle is the tag-built artifact (P13), not the legacy/ copy.
+- **P6** Retention manifest gates deleting legacy/ — RETENTION.tsv at the root gives every legacy asset (corpus, regressions, examples, std, bug ledger, site, docs, research) a destination and deletion criterion. Revised 2026-11-06 ([restart row](#decided-project-restart)): nothing is deleted at B3; legacy/, the old pipeline included, is deleted way later (LD: once the new compiler implements a full real program such as RocksDB, ethrex or similar), when RETENTION.tsv has no live entry, a final ideas sweep has dispositioned every idea and the owner explicitly approves.
+- **P7** Prove the new landing path before moving — T0: land beside the old tree the new root CI, required-checks.txt (enforced by train watch and land), RETENTION.tsv, the task disposition table, ORACLE.lock with the oracle artifact, and ISSUES.tsv. T1: rehearse the move on a throwaway branch: fresh clone, build, hook, exact-SHA CI, train --dry-run land; a broken build, a failing gate and a missing required check must each be refused. T2: the move in one train.
+- **P8** Server services under scripts/ — Keep only landing services: train, review, hook, landing bot. The status page, work queue, fuzz farm, perf tracking and nightly campaign all stop and are recorded as archived in RETENTION.tsv; each returns only with a roadmap task.
+- **P9** Website during the transition — The website goes down at the move and is redone from scratch with the new compiler; no frozen playground is served. Unpublishing the live site is an outward action whose moment the owner confirms.
+- **P10** What 'closed' means for old-compiler bugs — Old-compiler defects become 'retired with the old implementation', never 'fixed'. Each keeps its reproducer, ruling and structural class; 106 reproducers feed the oracle comparisons. Bugs the frozen browser compiler still shows stay visible while the site serves it.
+- **P11** Std bugs and rulings are carried — Add a 'std' class: 12 std bugs move with std as contracts plus regressions. The 112 language rulings (26 still open) keep their ruling and become conformance examples.
+- **P12** Issue record from day one — From day one, ISSUES.tsv at the root: id, date, area (spec|proof|compiler|launcher|ci|migration), evidence, owner, severity, closure condition, status, with a small root check. Spec, proof, launcher, CI and migration defects go there. The full bug ledger and tool return with slice 1.
+- **P13** concrete-ci-2 as the only CI host — CI runs on concrete-ci-2 (self-hosted) and on GitHub-hosted runners as a regular second pool, not only a fallback. Jobs that need ci-2 caches run there; the oracle is fetched as a release asset verified by digest; a check neither pool can run is incomplete and blocks landing. Self-hosted runners never run pull_request jobs.
+- **P14** ci-3 handover: an exception to the archive requirement — Done by the owner on 2026-11-04: concrete-ci-3 was handed to stabileo; its fuzz corpus, perf history and leanprof data were not copied (an exception to the archive requirement).
+- **P15** New roadmap: retiring obligations — Accept the new single-file ROADMAP.md (wip/new-roadmap, reconciled: prepare → rehearse → move, assurance wording per Q8.1, Phase E per P18, decides nothing itself): 79 tasks kept as rows, 345 folded into area tasks with their obligations, 109 deferred with triggers, 7 retired, 15 done.
+- **P16** Status changes in the refusal list — Accept the new statuses in PHILOSOPHY.md. Now Permanent: operator overloading (OD26), capability hiding (authority rule 5), derived equality, mutable global state (OD8), umbrella capabilities and aliases, old/quantifiers in contracts (OD117), lexical shadowing (OD67), and ghost code that affects execution. Ghost code itself is admitted as decided (OD81). Foreign function values reopen when typed extern fn types are admitted (OD4); concurrency reopens on R-0399's trigger.
+- **P17a** Default arguments — Default arguments: a Permanent refusal, reopened only by a new decision from you. They conflict with visible arguments.
+- **P17b** Compile-time evaluation and broad #[cfg] — comptime and broad #[cfg]: keep evidence-based reopening, only with a workload, a proof story, phase separation and an audit report, and only by a new decision from you.
+- **P18** Phase E: contracts and termination within OD115–OD117 — Phase E: no source old, quantifier, implication or snapshot construct (OD117); entry/exit and frame properties are Lean theorems (a source frame clause would be a new decision for you); spec functions have a body and are total (OD115); ordinary functions have no total category (OD116) and get per-function termination theorems where wanted. R-0524 becomes 'Frame and entry/exit theorems in Lean, no old'; R-0526 stays 'checked totality of spec functions'.
+- **P19** Mutation testing for the new compiler — Retire the old mutation-harness defect work (R-0518). The new compiler gets its own mutation harness under R-0498, not a port of the old one.
+- **P20** One home for binding decisions — Move the still-binding roadmap decisions (new compiler, retention contract, authority, allocation, Lean as the spec) into docs/decisions.md beside your language answers. The dated log becomes history; ROADMAP.md links to decisions.md and restates nothing.
+- **P21** Retention records outlive legacy/ — RETENTION.tsv, ISSUES.tsv, required-checks.txt, scripts/oracle/ and docs/archive/roadmap-2026-11/ (with task_disposition.tsv) are part of the day-one root, outside legacy/, so they survive deleting it. *Revised 2026-11-06 (owner, verbatim: "do the whole movement"): of docs/archive/roadmap-2026-11/, the files that are decision sources or disposition records stay at the root (task_disposition.tsv, the decision log ROADMAP_DECISIONS.md, the task register ROADMAP_TASKS.md, ROADMAP_RECONCILIATION.md, ROADMAP_RESTRUCTURE.md with its table, and the archive README); the old control plane ROADMAP.md, ROADMAP_BACKLOG.md, ROADMAP_DIRECTION.md and WORK_QUEUE.md were duplicates of their frozen legacy/ copies apart from the move's mechanical rewrites, and nothing cites them as a decision source, so their root copies were removed and links point at the legacy/ copies, which stay until the legacy deletion point. The other docs/archive/ records (the site takedown record, the old bug ledger's disposition, the landing audit and the dated decision archives) stay at the root.*
+- **P22** The work-queue dispatcher — Stop the dispatcher for the lean start. Agents are started by hand from the roadmap; bring the dispatcher back only when there is enough parallel work to need it.
+- **P23** Precedence between decisions, rows and drafts — Recorded decisions govern. An accepted row supersedes a recorded rule only through an explicitly identified, owner-approved revision (Q5.1/Q5.4 for OD45/OD87, Q6.4 for TYPE-22, Q2.8 for TRAIT-1, Q9.15/P3 for generated chapters). R4's replacements govern conflicting draft recommendations. Before your acceptance is recorded, every passage R4 F18 lists is reconciled (capability inference, generated chapters, roadmap authority, assurance wording, restart order and retention, Phase E, freeze dependencies, superseded Core recommendations), and historical conflicting text is marked superseded.
 
 <a id="decided-project"></a>
 ## Project and architecture decisions
@@ -904,7 +902,8 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   `--format=human|json`. The checker result type is fixed in A2i, before the freeze (R-0592); the
   record, its JSON schema, goldens and the parser's diagnostics land in B0 (R-0593). It refines
   R-0479.
-- <a id="decided-project-memory-2026-11-06"></a>**Heap facts and memory policies** (owner, 2026-11-06: "a", option (a) on every question of the [proposal](archive/crucial-2026-11-06/MEMORY.md), reviewed by Codex,
+- <a id="decided-project-memory-2026-11-06"></a>**Heap facts and memory policies** (owner,
+  2026-11-06: "a", option (a) on every question of the [proposal](archive/crucial-2026-11-06/MEMORY.md), reviewed by Codex,
   agy and Kimi). Each function reports, per allocator lineage, requested bytes, net change and peak
   in logical bytes, and the allocator footprint where its contract defines one; each is a sound
   bound with a status, or "not established". Bounds are polynomials with `max` over counts, lengths
@@ -1110,7 +1109,8 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   [spec plan](proposals/SPEC_UNIFICATION.md#51-answered-scheduling-questions-coordinator-2026-11-06),
   which had proposed writing every slice's spec side before the freeze. What the foundation contains
   is the [next row](#decided-2026-11-08-foundation).
-- <a id="decided-2026-11-08-foundation"></a>**The Lean foundation: contracts C1–C10 and the answers to its questions** (owner, 2026-11-08: "ok all recommended", answering every question of the
+- <a id="decided-2026-11-08-foundation"></a>**The Lean foundation: contracts C1–C10 and the answers to
+  its questions** (owner, 2026-11-08: "ok all recommended", answering every question of the
   [foundation proposal](proposals/FOUNDATION.md), draft 3, with its recommendation; the proposal was
   reviewed by Codex, Kimi and agy in four rounds and by Claude, and its last edit was checked by Codex
   and Kimi). The foundation is ten contracts, each an interface with its laws, written in the Lean
@@ -1225,13 +1225,12 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   std source, its proof status and the showcases that need it
   ([table](../ROADMAP.md#std-per-slice)). Item 3, a user-guide chapter per slice, is not done for
   now; it has no roadmap item. Item 1 was then approved (owner, 2026-11-08: "ok do the written
-  grammar"):
-- <a id="decided-2026-11-08-written-grammar"></a>before the parser is built, the full
+  grammar"): <a id="decided-2026-11-08-written-grammar"></a>before the parser is built, the full
   surface grammar is written down for the owner's review, every construct with its decided row and
   the open spellings flagged; after approval it is encoded in Lean as the independent grammar
   judgment (row Q8.3), and only then is the parser built against it (R-0622). Item 4 was approved
   too (owner, 2026-11-08: "and yes speed target is fine"):
-- <a id="decided-2026-11-08-speed-target"></a>speed and size stay report-only until the first real
+  <a id="decided-2026-11-08-speed-target"></a>speed and size stay report-only until the first real
   showcase (grep, slice 16); then a performance target against C is set from measured data, as an
   owner decision (R-0623).
 - <a id="decided-2026-11-08-capabilities-kept"></a>**Capabilities stay as decided: `with(...)` permission
@@ -1382,14 +1381,14 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   A blanket reply is not a separate per-item reply. Recovery records only the shown text;
   references such as "as proposed" do not recover an unshown proposal.
 
-- <a id="decided-2026-11-08-recovered-29"></a>**The 29 answers.** The full recommendations
+  <a id="decided-2026-11-08-recovered-29"></a>**The 29 answers.** The full recommendations
   were shown at L124574, 2026-11-08T15:05:01.527Z; the final compact restatement
   at L124693, 2026-11-08T15:08:10.131Z is also reproduced per item.
   The owner answered all of them at L124708, 2026-11-08T15:08:56.319Z:
 
-  ```text
-  ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
-  ```
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
 
   The final restatement also presented a separate Decision 2, sign-off of exactly
   `e997548d`, and L124700 kept both decisions pending. The reply above is a blanket
@@ -1398,271 +1397,271 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   No earlier literal "all yes" is recovered. The owner's reference to an earlier approval
   is not used as evidence of another utterance.
 
-- <a id="recovered-29-1"></a>**29-list item 1: RECOVERED.**
+  <a id="recovered-29-1"></a>**29-list item 1: RECOVERED.**
 
-  ```text
-  1. **Yes:** when Codex wrote a branch, Kimi or agy reviews it, never Codex itself. This is what's blocking the lexer and the C1 and C5 fixes.
-  ```
-
-  Final restatement:
-
-  ```text
-  1. When Codex wrote a branch, Kimi or agy reviews it instead of Codex. This unblocks the lexer. (yes)
-  ```
-
-  Owner reply:
-
-  ```text
-  ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
-  ```
-
-  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
-
-- <a id="recovered-29-2"></a>**29-list item 2: RECOVERED.**
-
-  ```text
-  2. **Yes:** the operator and punctuation list is closed, and adding a token later takes an explicit revision.
-  ```
+```text
+1. **Yes:** when Codex wrote a branch, Kimi or agy reviews it, never Codex itself. This is what's blocking the lexer and the C1 and C5 fixes.
+```
 
   Final restatement:
 
-  ```text
-  2. The operator and punctuation list is closed. (yes)
-  ```
+```text
+1. When Codex wrote a branch, Kimi or agy reviews it instead of Codex. This unblocks the lexer. (yes)
+```
 
   Owner reply:
 
-  ```text
-  ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
-  ```
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
 
   Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
 
-- <a id="recovered-29-3"></a>**29-list item 3: RECOVERED.**
+  <a id="recovered-29-2"></a>**29-list item 2: RECOVERED.**
 
-  ```text
-  3. **`'a'` is the ASCII byte `97u8`.** It has its own small escape list, and anything non-ASCII is refused. Tests pin down both the literal and how it's told apart from labels.
-  ```
+```text
+2. **Yes:** the operator and punctuation list is closed, and adding a token later takes an explicit revision.
+```
 
   Final restatement:
 
-  ```text
-  3. `'a'` is the ASCII byte 97, and anything non-ASCII is refused. (yes)
-  ```
+```text
+2. The operator and punctuation list is closed. (yes)
+```
 
   Owner reply:
 
-  ```text
-  ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
-  ```
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
 
   Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
 
-- <a id="recovered-29-4"></a>**29-list item 4: RECOVERED.**
+  <a id="recovered-29-3"></a>**29-list item 3: RECOVERED.**
 
-  ```text
-  4. **No raw tabs or control characters inside strings;** write `\t` instead.
-  ```
+```text
+3. **`'a'` is the ASCII byte `97u8`.** It has its own small escape list, and anything non-ASCII is refused. Tests pin down both the literal and how it's told apart from labels.
+```
 
   Final restatement:
 
-  ```text
-  4. Strings may not contain raw tabs or control characters; write `\t`. (yes)
-  ```
+```text
+3. `'a'` is the ASCII byte 97, and anything non-ASCII is refused. (yes)
+```
 
   Owner reply:
 
-  ```text
-  ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
-  ```
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
 
   Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
 
-- <a id="recovered-29-5"></a>**29-list item 5: RECOVERED.**
+  <a id="recovered-29-4"></a>**29-list item 4: RECOVERED.**
 
-  ```text
-  5. **Numbers:**
+```text
+4. **No raw tabs or control characters inside strings;** write `\t` instead.
+```
+
+  Final restatement:
+
+```text
+4. Strings may not contain raw tabs or control characters; write `\t`. (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+
+  <a id="recovered-29-5"></a>**29-list item 5: RECOVERED.**
+
+```text
+5. **Numbers:**
    - suffixes such as `200u8`;
    - prefixes `0x`, `0b` and `0o`;
    - no `_` separators;
    - typos like `123u9` are refused.
-  ```
+```
 
   Final restatement:
 
-  ```text
-  5. Numbers: `200u8`, `0x`/`0b`/`0o`, no `_`, and `123u9` is refused. (yes)
-  ```
+```text
+5. Numbers: `200u8`, `0x`/`0b`/`0o`, no `_`, and `123u9` is refused. (yes)
+```
 
   Owner reply:
 
-  ```text
-  ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
-  ```
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
 
   Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
 
-- <a id="recovered-29-6"></a>**29-list item 6: RECOVERED; recovered evidence superseded by the November 9 reopening (not current).**
+  <a id="recovered-29-6"></a>**29-list item 6: RECOVERED; recovered evidence superseded by the November 9 reopening (not current).**
 
-  ```text
-  6. **The compiler accepts a stated part of the spec,** with proofs. We don't cut the spec down.
-  ```
-
-  Final restatement:
-
-  ```text
-  6. Slice 1 implements a stated part of the spec, without cutting the spec down. (yes)
-  ```
-
-  Owner reply:
-
-  ```text
-  ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
-  ```
-
-  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
-  Current authority: [November 9 reopening](#decided-2026-11-09-older-proposals); bring the full proposal before deciding.
-
-- <a id="recovered-29-7"></a>**29-list item 7: RECOVERED; recovered evidence superseded by the November 9 reopening (not current).**
-
-  ```text
-  7. **Consuming a value is written `move t`.**
-  ```
+```text
+6. **The compiler accepts a stated part of the spec,** with proofs. We don't cut the spec down.
+```
 
   Final restatement:
 
-  ```text
-  7. Consuming a value is written `move t`. (yes)
-  ```
+```text
+6. Slice 1 implements a stated part of the spec, without cutting the spec down. (yes)
+```
 
   Owner reply:
 
-  ```text
-  ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
-  ```
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
 
   Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
   Current authority: [November 9 reopening](#decided-2026-11-09-older-proposals); bring the full proposal before deciding.
 
-- <a id="recovered-29-8"></a>**29-list item 8: RECOVERED; recovered evidence superseded by the November 9 reopening (not current).**
+  <a id="recovered-29-7"></a>**29-list item 7: RECOVERED; recovered evidence superseded by the November 9 reopening (not current).**
 
-  ```text
-  8. **`abort()` appears only as `return abort();`.** It never produces a value and runs no cleanup.
-  ```
+```text
+7. **Consuming a value is written `move t`.**
+```
 
   Final restatement:
 
-  ```text
-  8. `abort()` is written only as `return abort();` and runs no cleanup. (yes)
-  ```
+```text
+7. Consuming a value is written `move t`. (yes)
+```
 
   Owner reply:
 
-  ```text
-  ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
-  ```
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
 
   Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
   Current authority: [November 9 reopening](#decided-2026-11-09-older-proposals); bring the full proposal before deciding.
 
-- <a id="recovered-29-9"></a>**29-list item 9: RECOVERED; recovered evidence superseded by the November 9 reopening (not current).**
+  <a id="recovered-29-8"></a>**29-list item 8: RECOVERED; recovered evidence superseded by the November 9 reopening (not current).**
 
-  ```text
-  9. **`Concrete.toml`:** each table gets its own version, the policy is picked by name (for example `profile = "predictable"`), and trusted assumptions get an explicit setting. Version 1 fixes exactly what each named policy means.
-  ```
+```text
+8. **`abort()` appears only as `return abort();`.** It never produces a value and runs no cleanup.
+```
 
   Final restatement:
 
-  ```text
-  9. Each `Concrete.toml` table has its own version, the policy is chosen by name, and trusted assumptions get an explicit setting. (yes)
-  ```
+```text
+8. `abort()` is written only as `return abort();` and runs no cleanup. (yes)
+```
 
   Owner reply:
 
-  ```text
-  ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
-  ```
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
 
   Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
   Current authority: [November 9 reopening](#decided-2026-11-09-older-proposals); bring the full proposal before deciding.
 
-- <a id="recovered-29-10"></a>**29-list item 10: RECOVERED; recovered evidence superseded by the November 9 reopening (not current).**
+  <a id="recovered-29-9"></a>**29-list item 9: RECOVERED; recovered evidence superseded by the November 9 reopening (not current).**
 
-  ```text
-  10. **R-0600, the "always aborts" fact, goes in slice 5.**
-  ```
+```text
+9. **`Concrete.toml`:** each table gets its own version, the policy is picked by name (for example `profile = "predictable"`), and trusted assumptions get an explicit setting. Version 1 fixes exactly what each named policy means.
+```
 
   Final restatement:
 
-  ```text
-  10. The "always aborts" fact (R-0600) belongs in slice 5. (yes)
-  ```
+```text
+9. Each `Concrete.toml` table has its own version, the policy is chosen by name, and trusted assumptions get an explicit setting. (yes)
+```
 
   Owner reply:
 
-  ```text
-  ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
-  ```
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
 
   Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
   Current authority: [November 9 reopening](#decided-2026-11-09-older-proposals); bring the full proposal before deciding.
 
-- <a id="recovered-29-11"></a>**29-list item 11: RECOVERED; recovered evidence superseded by the November 9 reopening (not current).**
+  <a id="recovered-29-10"></a>**29-list item 10: RECOVERED; recovered evidence superseded by the November 9 reopening (not current).**
 
-  ```text
-  11. **NaN:**
+```text
+10. **R-0600, the "always aborts" fact, goes in slice 5.**
+```
+
+  Final restatement:
+
+```text
+10. The "always aborts" fact (R-0600) belongs in slice 5. (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+  Current authority: [November 9 reopening](#decided-2026-11-09-older-proposals); bring the full proposal before deciding.
+
+  <a id="recovered-29-11"></a>**29-list item 11: RECOVERED; recovered evidence superseded by the November 9 reopening (not current).**
+
+```text
+11. **NaN:**
     - operations that can create NaN need a proof, or a checked form;
     - arithmetic that does produce NaN gives the one canonical bit pattern;
     - bit conversions, `abs`, `neg` and `copysign` keep the exact bits;
     - `==` follows IEEE, and a separate `bit_eq` compares bits.
-  ```
+```
 
   Final restatement:
 
-  ```text
-  11. NaN:
+```text
+11. NaN:
     - operations that can create NaN need a proof, or a checked form;
     - arithmetic that does produce NaN gives the one canonical bit pattern;
     - bit conversions, `abs`, `neg` and `copysign` keep the exact bits;
     - `==` follows IEEE, and a separate `bit_eq` compares bits.
 
     (yes)
-  ```
+```
 
   Owner reply:
 
-  ```text
-  ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
-  ```
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
 
   Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
   The additional claim that this chooses S5 option (a) was not shown and is not recovered.
   Current authority: [November 9 reopening](#decided-2026-11-09-older-proposals); bring the full proposal before deciding.
 
-- <a id="recovered-29-12"></a>**29-list item 12: RECOVERED.**
+  <a id="recovered-29-12"></a>**29-list item 12: RECOVERED.**
 
-  ```text
-  12. **Each file is checked separately,** and checking a file stops at its first error.
-  ```
+```text
+12. **Each file is checked separately,** and checking a file stops at its first error.
+```
 
   Final restatement:
 
-  ```text
-  12. Each file is checked separately, and checking a file stops at its first error. (yes)
-  ```
+```text
+12. Each file is checked separately, and checking a file stops at its first error. (yes)
+```
 
   Owner reply:
 
-  ```text
-  ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
-  ```
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
 
   Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
 
-- <a id="recovered-29-13"></a>**29-list item 13: RECOVERED.**
+  <a id="recovered-29-13"></a>**29-list item 13: RECOVERED.**
 
-  ```text
-  13. **Exit codes:**
+```text
+13. **Exit codes:**
     - 0 OK;
     - 1 refused;
     - 2 incomplete;
@@ -1670,364 +1669,364 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     - 4 internal error.
 
     `concrete facts` doubles as the check mode.
-  ```
+```
 
   Final restatement:
 
-  ```text
-  13. Exit codes: 0 OK, 1 refused, 2 incomplete, 3 usage error, 4 internal error. (yes)
-  ```
+```text
+13. Exit codes: 0 OK, 1 refused, 2 incomplete, 3 usage error, 4 internal error. (yes)
+```
 
   Owner reply:
 
-  ```text
-  ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
-  ```
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
 
   Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
 
-- <a id="recovered-29-14"></a>**29-list item 14: RECOVERED.**
+  <a id="recovered-29-14"></a>**29-list item 14: RECOVERED.**
 
-  ```text
-  14. **`help` exists now.** `emit`, `trace` and `interp` each arrive once the data they show exists. There's **no `run` command**: building and then executing is the one way to run a program. This revises the slice-0 surface.
-  ```
+```text
+14. **`help` exists now.** `emit`, `trace` and `interp` each arrive once the data they show exists. There's **no `run` command**: building and then executing is the one way to run a program. This revises the slice-0 surface.
+```
 
   Final restatement:
 
-  ```text
-  14. `help` exists now, and `emit`, `trace` and `interp` arrive later. There is no `run` command. (yes)
-  ```
+```text
+14. `help` exists now, and `emit`, `trace` and `interp` arrive later. There is no `run` command. (yes)
+```
 
   Owner reply:
 
-  ```text
-  ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
-  ```
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
 
   Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
 
-- <a id="recovered-29-15"></a>**29-list item 15: RECOVERED.**
+  <a id="recovered-29-15"></a>**29-list item 15: RECOVERED.**
 
-  ```text
-  15. **The formatter has `--check`, `--write` and `--stdin`,** and combining them is refused.
-  ```
+```text
+15. **The formatter has `--check`, `--write` and `--stdin`,** and combining them is refused.
+```
 
   Final restatement:
 
-  ```text
-  15. The formatter has `--check`, `--write` and `--stdin`. (yes)
-  ```
+```text
+15. The formatter has `--check`, `--write` and `--stdin`. (yes)
+```
 
   Owner reply:
 
-  ```text
-  ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
-  ```
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
 
   Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
 
-- <a id="recovered-29-16"></a>**29-list item 16: RECOVERED.**
+  <a id="recovered-29-16"></a>**29-list item 16: RECOVERED.**
 
-  ```text
-  16. **Yes to `concrete schema` and `concrete capabilities`,** so an agent can discover what the compiler supports.
-  ```
+```text
+16. **Yes to `concrete schema` and `concrete capabilities`,** so an agent can discover what the compiler supports.
+```
 
   Final restatement:
 
-  ```text
-  16. Add `concrete schema` and `concrete capabilities`. (yes)
-  ```
+```text
+16. Add `concrete schema` and `concrete capabilities`. (yes)
+```
 
   Owner reply:
 
-  ```text
-  ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
-  ```
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
 
   Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
 
-- <a id="recovered-29-17"></a>**29-list item 17: RECOVERED.**
+  <a id="recovered-29-17"></a>**29-list item 17: RECOVERED.**
 
-  ```text
-  17. **A `[policy]` key sets the minimum proof strength for your own contracts,** and vacuous proofs are rejected.
-  ```
+```text
+17. **A `[policy]` key sets the minimum proof strength for your own contracts,** and vacuous proofs are rejected.
+```
 
   Final restatement:
 
-  ```text
-  17. A `[policy]` key sets the minimum proof strength, and vacuous proofs are rejected. (yes)
-  ```
+```text
+17. A `[policy]` key sets the minimum proof strength, and vacuous proofs are rejected. (yes)
+```
 
   Owner reply:
 
-  ```text
-  ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
-  ```
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
 
   Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
 
-- <a id="recovered-29-18"></a>**29-list item 18: RECOVERED.**
+  <a id="recovered-29-18"></a>**29-list item 18: RECOVERED.**
 
-  ```text
-  18. **A constant's initializer may use primitive operations that can fail,** inside a closed grammar with no calls, loops or effects.
+```text
+18. **A constant's initializer may use primitive operations that can fail,** inside a closed grammar with no calls, loops or effects.
     - The compiler evaluates every initializer, and the kernel checks that it succeeded.
     - A failure, or running out of evaluation budget, means the constant is refused.
     - `1 + 2` is allowed.
     - This changes the TYPE-22 decision, so it gets recorded.
-  ```
+```
 
   Final restatement:
 
-  ```text
-  18. A constant's initializer may use primitive operations that can fail, but no calls, loops or effects. The kernel checks that its evaluation succeeds, and failure means refusal. (yes)
-  ```
+```text
+18. A constant's initializer may use primitive operations that can fail, but no calls, loops or effects. The kernel checks that its evaluation succeeds, and failure means refusal. (yes)
+```
 
   Owner reply:
 
-  ```text
-  ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
-  ```
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
 
   Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
 
-- <a id="recovered-29-19"></a>**29-list item 19: RECOVERED.**
+  <a id="recovered-29-19"></a>**29-list item 19: RECOVERED.**
 
-  ```text
-  19. **A constant may refer to one declared later.** Cycles are refused, and the error shows the chain.
-  ```
+```text
+19. **A constant may refer to one declared later.** Cycles are refused, and the error shows the chain.
+```
 
   Final restatement:
 
-  ```text
-  19. A constant may refer to one declared later, and cycles are refused. (yes)
-  ```
+```text
+19. A constant may refer to one declared later, and cycles are refused. (yes)
+```
 
   Owner reply:
 
-  ```text
-  ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
-  ```
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
 
   Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
 
-- <a id="recovered-29-20"></a>**29-list item 20: RECOVERED.**
+  <a id="recovered-29-20"></a>**29-list item 20: RECOVERED.**
 
-  ```text
-  20. **Bytes that aren't a whole stored pointer have no pointer meaning.** A named bytes-to-address conversion is added only when a workload needs it.
-  ```
+```text
+20. **Bytes that aren't a whole stored pointer have no pointer meaning.** A named bytes-to-address conversion is added only when a workload needs it.
+```
 
   Final restatement:
 
-  ```text
-  20. Bytes that aren't a whole pointer carry no pointer meaning. (yes)
-  ```
+```text
+20. Bytes that aren't a whole pointer carry no pointer meaning. (yes)
+```
 
   Owner reply:
 
-  ```text
-  ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
-  ```
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
 
   Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
 
-- <a id="recovered-29-21"></a>**29-list item 21: RECOVERED.**
+  <a id="recovered-29-21"></a>**29-list item 21: RECOVERED.**
 
-  ```text
-  21. **Confirm the C1 change:** a cleanup step can be refused, and a refused step ends the run.
-  ```
+```text
+21. **Confirm the C1 change:** a cleanup step can be refused, and a refused step ends the run.
+```
 
   Final restatement:
 
-  ```text
-  21. A cleanup step can be refused, and a refused step ends the run. (yes)
-  ```
+```text
+21. A cleanup step can be refused, and a refused step ends the run. (yes)
+```
 
   Owner reply:
 
-  ```text
-  ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
-  ```
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
 
   Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
 
-- <a id="recovered-29-22"></a>**29-list item 22: PARTIAL; queued for owner re-confirmation.**
+  <a id="recovered-29-22"></a>**29-list item 22: PARTIAL; queued for owner re-confirmation.**
 
-  ```text
-  22. **The std placement plan and O1–O12, as recommended.**
-  ```
+```text
+22. **The std placement plan and O1–O12, as recommended.**
+```
 
   Final restatement:
 
-  ```text
-  22. The std placement plan, O1–O12. (yes)
-  ```
+```text
+22. The std placement plan, O1–O12. (yes)
+```
 
   Owner reply:
 
-  ```text
-  ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
-  ```
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
 
   Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
   Missing: The full std-placement O1–O12 recommendations were not shown; "as recommended" does not recover their substance.
 
-- <a id="recovered-29-23"></a>**29-list item 23: RECOVERED; recovered evidence superseded by the November 9 reopening (not current).**
+  <a id="recovered-29-23"></a>**29-list item 23: RECOVERED; recovered evidence superseded by the November 9 reopening (not current).**
 
-  ```text
-  23. **A safe `replace` at slice 13, and `swap` at slice 15.**
-  ```
+```text
+23. **A safe `replace` at slice 13, and `swap` at slice 15.**
+```
 
   Final restatement:
 
-  ```text
-  23. Safe `replace` at slice 13, `swap` at slice 15. (yes)
-  ```
+```text
+23. Safe `replace` at slice 13, `swap` at slice 15. (yes)
+```
 
   Owner reply:
 
-  ```text
-  ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
-  ```
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
 
   Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
   Current authority: [November 9 reopening](#decided-2026-11-09-older-proposals); bring the full proposal before deciding.
 
-- <a id="recovered-29-24"></a>**29-list item 24: RECOVERED.**
+  <a id="recovered-29-24"></a>**29-list item 24: RECOVERED.**
 
-  ```text
-  24. **A view may lend several of its elements at once for reading only,** never two for writing.
-  ```
+```text
+24. **A view may lend several of its elements at once for reading only,** never two for writing.
+```
 
   Final restatement:
 
-  ```text
-  24. A view may lend several of its elements at once for reading only, never for writing. (yes)
-  ```
+```text
+24. A view may lend several of its elements at once for reading only, never for writing. (yes)
+```
 
   Owner reply:
 
-  ```text
-  ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
-  ```
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
 
   Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
 
-- <a id="recovered-29-25"></a>**29-list item 25: PARTIAL; queued for owner re-confirmation; recovered evidence superseded by the November 9 reopening (not current).**
+  <a id="recovered-29-25"></a>**29-list item 25: PARTIAL; queued for owner re-confirmation; recovered evidence superseded by the November 9 reopening (not current).**
 
-  ```text
-  25. **The stream interface is one generic function with a capability parameter.**
-  ```
+```text
+25. **The stream interface is one generic function with a capability parameter.**
+```
 
   Final restatement:
 
-  ```text
-  25. A stream is one generic function with a capability parameter. (yes)
-  ```
+```text
+25. A stream is one generic function with a capability parameter. (yes)
+```
 
   Owner reply:
 
-  ```text
-  ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
-  ```
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
 
   Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
   Missing: The owner asked what item 25 meant at L124740, 2026-11-08T15:09:26.525Z. No answer to that question is recovered. The staged slice-18/per-family, slice-20/generic and D4 wording was not shown. Re-confirm the full S3 proposal.
   Current authority: [November 9 reopening](#decided-2026-11-09-older-proposals); bring the full proposal before deciding.
 
-- <a id="recovered-29-26"></a>**29-list item 26: RECOVERED; recovered evidence superseded by the November 9 reopening (not current).**
+  <a id="recovered-29-26"></a>**29-list item 26: RECOVERED; recovered evidence superseded by the November 9 reopening (not current).**
 
-  ```text
-  26. **Walking a structure through borrows uses the decided function pointer plus explicit context.** The design probe at slices 20–21 has the final say.
-  ```
+```text
+26. **Walking a structure through borrows uses the decided function pointer plus explicit context.** The design probe at slices 20–21 has the final say.
+```
 
   Final restatement:
 
-  ```text
-  26. Walking a structure through borrows uses a function pointer plus an explicit context. (yes)
-  ```
+```text
+26. Walking a structure through borrows uses a function pointer plus an explicit context. (yes)
+```
 
   Owner reply:
 
-  ```text
-  ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
-  ```
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
 
   Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
   Current authority: [November 9 reopening](#decided-2026-11-09-older-proposals); bring the full proposal before deciding.
 
-- <a id="recovered-29-27"></a>**29-list item 27: PARTIAL; queued for owner re-confirmation.**
+  <a id="recovered-29-27"></a>**29-list item 27: PARTIAL; queued for owner re-confirmation.**
 
-  ```text
-  27. **Sign off the roadmap sweep `35b489e4`.**
-  ```
+```text
+27. **Sign off the roadmap sweep `35b489e4`.**
+```
 
   Final restatement:
 
-  ```text
-  27. Sign off the roadmap sweep `35b489e4`. (yes)
-  ```
+```text
+27. Sign off the roadmap sweep `35b489e4`. (yes)
+```
 
   Owner reply:
 
-  ```text
-  ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
-  ```
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
 
   Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
   Missing: The final two lists call 35b489e4 a roadmap sweep; the earlier list called it a legacy sweep. The correction came after approval, without an owner re-confirmation. Re-confirm the intended sign-off.
 
-- <a id="recovered-29-28"></a>**29-list item 28: RECOVERED.**
+  <a id="recovered-29-28"></a>**29-list item 28: RECOVERED.**
 
-  ```text
-  28. **Approve the `main` protection settings in `d6159bf6`.** You apply them on GitHub yourself.
-  ```
-
-  Final restatement:
-
-  ```text
-  28. Apply the `main` protection settings in `d6159bf6`; you do this on GitHub yourself. (yes)
-  ```
-
-  Owner reply:
-
-  ```text
-  ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
-  ```
-
-  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
-
-- <a id="recovered-29-29"></a>**29-list item 29: RECOVERED.**
-
-  ```text
-  29. **Yes:** sketch the showcase programs before the C1–C10 freeze, to test the design.
-  ```
+```text
+28. **Approve the `main` protection settings in `d6159bf6`.** You apply them on GitHub yourself.
+```
 
   Final restatement:
 
-  ```text
-  29. Sketch the showcase programs before the spec freeze. (yes)
-  ```
+```text
+28. Apply the `main` protection settings in `d6159bf6`; you do this on GitHub yourself. (yes)
+```
 
   Owner reply:
 
-  ```text
-  ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
-  ```
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
 
   Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
 
-- <a id="decided-2026-11-09-older-proposals"></a>**Current authority for reopened older proposals.**
+  <a id="recovered-29-29"></a>**29-list item 29: RECOVERED.**
+
+```text
+29. **Yes:** sketch the showcase programs before the C1–C10 freeze, to test the design.
+```
+
+  Final restatement:
+
+```text
+29. Sketch the showcase programs before the spec freeze. (yes)
+```
+
+  Owner reply:
+
+```text
+ok but i said already all yes based on the best long term reviews of each agent and what we said before right?
+```
+
+  Provenance: recommendation L124574 / L124693; owner L124708, 2026-11-08T15:08:56.319Z.
+
+  <a id="decided-2026-11-09-older-proposals"></a>**Current authority for reopened older proposals.**
   The assistant's agreed-list recommendation at L140586, 2026-11-09T19:56:40.977Z included exactly:
 
-  ```text
-  - **Older questions** (lifecycle signature, standard-library coverage, slice 1, syntax spellings, NaN): bring the full proposals before deciding.
-  ```
+```text
+- **Older questions** (lifecycle signature, standard-library coverage, slice 1, syntax spellings, NaN): bring the full proposals before deciding.
+```
 
   The owner answered at L140591, 2026-11-09T19:58:06.514Z:
 
-  ```text
-  ok too many questions do what all of you agree
-  ```
+```text
+ok too many questions do what all of you agree
+```
 
   Thus 29-list items 6–10 (slice 1), 23, 25, 26 (S1/S3/S4), and 11 through S5
   (NaN) are historical recovered evidence, superseded by this requirement to bring full
@@ -2037,946 +2036,946 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   [November 13 lifecycle-refusal decision](#decided-2026-11-13-lifecycle-refusal).
   The other reopened questions retain their existing status.
 
-- <a id="decided-2026-11-08-recovered-59"></a>**The 59-item list.** Recommendations last shown
+  <a id="decided-2026-11-08-recovered-59"></a>**The 59-item list.** Recommendations last shown
   in full at L119002, 2026-11-08T04:03:06.062Z. The owner answered at L119110, 2026-11-08T04:05:31.772Z
   (human queued command, `attachment.type: queued_command`, `attachment.prompt`):
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Items 11 and 40 also carry the later owner-shown changes and owner qualification below.
 
-- <a id="recovered-59-1"></a>**59-list item 1: RECOVERED.**
+  <a id="recovered-59-1"></a>**59-list item 1: RECOVERED.**
 
-  ```text
-  1. When a branch reaches its review-round cap, you can approve one exact commit after all three models have reviewed it, and that approval is recorded.
-  ```
-
-  Owner reply:
-
-  ```text
-  record, yes to all recommended
-  ```
-
-  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
-
-- <a id="recovered-59-2"></a>**59-list item 2: RECOVERED.**
-
-  ```text
-  2. A branch that mixes classes gets the highest cap.
-  ```
+```text
+1. When a branch reaches its review-round cap, you can approve one exact commit after all three models have reviewed it, and that approval is recorded.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-3"></a>**59-list item 3: RECOVERED.**
+  <a id="recovered-59-2"></a>**59-list item 2: RECOVERED.**
 
-  ```text
-  3. There will be one review round on where each std item lives.
-  ```
+```text
+2. A branch that mixes classes gets the highest cap.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-4"></a>**59-list item 4: RECOVERED.**
+  <a id="recovered-59-3"></a>**59-list item 3: RECOVERED.**
 
-  ```text
-  4. The trap names are `overflow`, `division_by_zero`, `invalid_shift`, `out_of_bounds`, `invalid_range` and `abort`.
-  ```
+```text
+3. There will be one review round on where each std item lives.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-5"></a>**59-list item 5: RECOVERED.**
+  <a id="recovered-59-4"></a>**59-list item 4: RECOVERED.**
 
-  ```text
-  5. Slice 0 lands now.
-  ```
+```text
+4. The trap names are `overflow`, `division_by_zero`, `invalid_shift`, `out_of_bounds`, `invalid_range` and `abort`.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-6"></a>**59-list item 6: RECOVERED.**
+  <a id="recovered-59-5"></a>**59-list item 5: RECOVERED.**
 
-  ```text
-  6. Dot method calls are removed. You write `Type::f(x)` or `Trait::f(x)`.
-  ```
+```text
+5. Slice 0 lands now.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-7"></a>**59-list item 7: RECOVERED.**
+  <a id="recovered-59-6"></a>**59-list item 6: RECOVERED.**
 
-  ```text
-  7. `self`, `&self` and `&mut self` are removed in favour of a typed first parameter. There is still exactly one Destroy protocol.
-  ```
+```text
+6. Dot method calls are removed. You write `Type::f(x)` or `Trait::f(x)`.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-8"></a>**59-list item 8: RECOVERED.**
+  <a id="recovered-59-7"></a>**59-list item 7: RECOVERED.**
 
-  ```text
-  8. Constructors always write `field: value`.
-  ```
+```text
+7. `self`, `&self` and `&mut self` are removed in favour of a typed first parameter. There is still exactly one Destroy protocol.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-9"></a>**59-list item 9: RECOVERED.**
+  <a id="recovered-59-8"></a>**59-list item 8: RECOVERED.**
 
-  ```text
-  9. Patterns always write `field: binder`.
-  ```
+```text
+8. Constructors always write `field: value`.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-10"></a>**59-list item 10: RECOVERED.**
+  <a id="recovered-59-9"></a>**59-list item 9: RECOVERED.**
 
-  ```text
-  10. Exact (mathematical) arithmetic in contracts is marked explicitly, e.g. `math { … }`.
-  ```
+```text
+9. Patterns always write `field: binder`.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-11"></a>**59-list item 11: RECOVERED.**
+  <a id="recovered-59-10"></a>**59-list item 10: RECOVERED.**
 
-  ```text
-  11. `as` is removed entirely, pending round 4:
+```text
+10. Exact (mathematical) arithmetic in contracts is marked explicitly, e.g. `math { … }`.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-11"></a>**59-list item 11: RECOVERED.**
+
+```text
+11. `as` is removed entirely, pending round 4:
     - casts become one named lossless conversion;
     - imports can't be renamed;
     - a borrow is written `borrow v = x { … }`;
     - an unpack is written `unpack x = p { … }`.
-  ```
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
   The final follow-up approval ask (L119060, 2026-11-08T04:04:18.088Z) replaced the item-11 recommendation with full removal of `as`:
 
-  ```text
-  Yes, I recommend it. All three reviewers now agree on every item. The only part still under review is the import fix (round 5), and the most it can change is that one item.
+```text
+Yes, I recommend it. All three reviewers now agree on every item. The only part still under review is the import fix (round 5), and the most it can change is that one item.
 
-  To start, I need from you:
-  1. **Approve the list:** all 59 items as recommended, with item 11 as "remove `as` entirely".
-  2. **`self` and `as`:** reserved with no use, which I recommend, or fully gone.
-  3. **Slice 0:** go to land it.
+To start, I need from you:
+1. **Approve the list:** all 59 items as recommended, with item 11 as "remove `as` entirely".
+2. **`self` and `as`:** reserved with no use, which I recommend, or fully gone.
+3. **Slice 0:** go to land it.
 
-  The import detail in item 11b stays pending until round 5 is back; if the reviewers raise a problem, I'll bring you that one choice with examples.
+The import detail in item 11b stays pending until round 5 is back; if the reviewers raise a problem, I'll bring you that one choice with examples.
 
-  Once you approve, the work goes in this order:
-  1. **Record now.** The spec worker writes your answer word for word and every decision into `decisions.md`, with each revised row named, and the work into ROADMAP. That's one branch through the normal train, after the branches already queued.
-  2. **Spec now, for the foundation-level rules.** These are the trap names, `out_of_bounds`, constants computed at compile time and Copy-only, the dead-store refusal, the `#[depends]` check, the math boundary in contracts, and receivers as typed first parameters. They go into the C1–C10 Lean work already under way, before the freeze.
-  3. **The spelling round next.** Exact names and punctuation come to you as before/after code: the conversion function, the move-out, `math { }`, the output and append functions, import punctuation and the item-59 sub-rules. The grammar is encoded in Lean only after you approve those.
-  4. **Then the parser,** built against the Lean grammar and proven to match it.
+Once you approve, the work goes in this order:
+1. **Record now.** The spec worker writes your answer word for word and every decision into `decisions.md`, with each revised row named, and the work into ROADMAP. That's one branch through the normal train, after the branches already queued.
+2. **Spec now, for the foundation-level rules.** These are the trap names, `out_of_bounds`, constants computed at compile time and Copy-only, the dead-store refusal, the `#[depends]` check, the math boundary in contracts, and receivers as typed first parameters. They go into the C1–C10 Lean work already under way, before the freeze.
+3. **The spelling round next.** Exact names and punctuation come to you as before/after code: the conversion function, the move-out, `math { }`, the output and append functions, import punctuation and the item-59 sub-rules. The grammar is encoded in Lean only after you approve those.
+4. **Then the parser,** built against the Lean grammar and proven to match it.
 
-  Just answer "yes, all recommended, reserved, land slice 0", or tell me which parts to change.
-  ```
+Just answer "yes, all recommended, reserved, land slice 0", or tell me which parts to change.
+```
   Import qualification was separately answered by the owner at L119176, 2026-11-08T04:07:58.873Z:
 
-  ```text
-  i like 3
-  ```
+```text
+i like 3
+```
   The options actually shown (L119171, 2026-11-08T04:07:42.215Z) were:
 
-  ```text
-  All three reviewers rejected my recommendation (option 2). Their objection is right: under option 2, adding one import elsewhere in a module would force rewriting existing bare uses, so how a name is written would depend on something far away.
+```text
+All three reviewers rejected my recommendation (option 2). Their objection is right: under option 2, adding one import elsewhere in a module would force rewriting existing bare uses, so how a name is written would depend on something far away.
 
-  Codex and Kimi pick option 3; agy picks option 1. This is your decision, item 11b. With `as` gone there is no renaming, so the question is how code uses two imported items that share a name.
+Codex and Kimi pick option 3; agy picks option 1. This is your decision, item 11b. With `as` gone there is no renaming, so the question is how code uses two imported items that share a name.
 
-  **Option 1: refuse the clash.**
+**Option 1: refuse the clash.**
 
-  ```con
-  import std::json::{parse};
-  import std::csv::{parse};      // error: `parse` imported twice
-  ```
+```con
+import std::json::{parse};
+import std::csv::{parse};      // error: `parse` imported twice
+```
 
-  A module can't use both `parse` functions. You split the code into two modules, one per format. Names are always bare: `parse(s)`, `Vec<u8>`.
-  - **For:** the simplest rule, one bare form, and every name means one thing in a module (agy).
-  - **Against:** a naming accident forces you to restructure your code.
+A module can't use both `parse` functions. You split the code into two modules, one per format. Names are always bare: `parse(s)`, `Vec<u8>`.
+- **For:** the simplest rule, one bare form, and every name means one thing in a module (agy).
+- **Against:** a naming accident forces you to restructure your code.
 
-  **Option 3: always qualify by the module.**
+**Option 3: always qualify by the module.**
 
-  ```con
-  import std::json::{parse};
-  import std::csv::{parse};
-  import std::vec::{Vec};
+```con
+import std::json::{parse};
+import std::csv::{parse};
+import std::vec::{Vec};
 
-  fn load(a: vec::Vec<u8>, b: vec::Vec<u8>) {
+fn load(a: vec::Vec<u8>, b: vec::Vec<u8>) {
     let x: json::Value = json::parse(a);
     let y: csv::Table  = csv::parse(b);
-  }
-  ```
+}
+```
 
-  Every imported item is written `module::name` everywhere, never bare. Items defined in the same module stay bare.
-  - **For:** you see where every name comes from at the point of use, which is the "know everything" goal. There is only one form, clashes can't happen, and adding an import never changes other code (Codex, Kimi).
-  - **Against:** it's noisier everywhere, especially in types (`vec::Vec<u8>`, `option::Option<T>`). Builtin types such as `u8` and `bool` stay bare.
+Every imported item is written `module::name` everywhere, never bare. Items defined in the same module stay bare.
+- **For:** you see where every name comes from at the point of use, which is the "know everything" goal. There is only one form, clashes can't happen, and adding an import never changes other code (Codex, Kimi).
+- **Against:** it's noisier everywhere, especially in types (`vec::Vec<u8>`, `option::Option<T>`). Builtin types such as `u8` and `bool` stay bare.
 
-  Two details of option 3 that would come in the spelling round:
-  - If two imported modules share a last segment (`a::util` and `b::util`), the clash is refused, as in option 1. That should be rare.
-  - A local variable named like a module (`let json = …`) is refused. This follows from the existing no-shadowing rule.
+Two details of option 3 that would come in the spelling round:
+- If two imported modules share a last segment (`a::util` and `b::util`), the clash is refused, as in option 1. That should be rare.
+- A local variable named like a module (`let json = …`) is refused. This follows from the existing no-shadowing rule.
 
-  **I now recommend option 3.** You've said verbosity is fine when it's clearer, and option 3 is the most transparent choice that never forces you to restructure code. Option 1 is cleaner to read, but it lets a name collision dictate your module layout.
+**I now recommend option 3.** You've said verbosity is fine when it's clearer, and option 3 is the most transparent choice that never forces you to restructure code. Option 1 is cleaner to read, but it lets a name collision dictate your module layout.
 
-  Which do you want: 1 or 3?
-  ```
+Which do you want: 1 or 3?
+```
 
-- <a id="recovered-59-12"></a>**59-list item 12: RECOVERED.**
+  <a id="recovered-59-12"></a>**59-list item 12: RECOVERED.**
 
-  ```text
-  12. The consuming `*h` is replaced by a named move-out.
-  ```
-
-  Owner reply:
-
-  ```text
-  record, yes to all recommended
-  ```
-
-  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
-
-- <a id="recovered-59-13"></a>**59-list item 13: RECOVERED.**
-
-  ```text
-  13. Assertions are always written `assert(e);`.
-  ```
+```text
+12. The consuming `*h` is replaced by a named move-out.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-14"></a>**59-list item 14: RECOVERED.**
+  <a id="recovered-59-13"></a>**59-list item 13: RECOVERED.**
 
-  ```text
-  14. Link and export names are written `#[link_name("sym")]` and `#[export_name("sym")]`.
-  ```
+```text
+13. Assertions are always written `assert(e);`.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-15"></a>**59-list item 15: RECOVERED.**
+  <a id="recovered-59-14"></a>**59-list item 14: RECOVERED.**
 
-  ```text
-  15. Imports use `::`.
-  ```
+```text
+14. Link and export names are written `#[link_name("sym")]` and `#[export_name("sym")]`.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-16"></a>**59-list item 16: RECOVERED.**
+  <a id="recovered-59-15"></a>**59-list item 15: RECOVERED.**
 
-  ```text
-  16. `char` is removed. Use `u8` plus explicit UTF-8 operations.
-  ```
+```text
+15. Imports use `::`.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-17"></a>**59-list item 17: RECOVERED.**
+  <a id="recovered-59-16"></a>**59-list item 16: RECOVERED.**
 
-  ```text
-  17. The `print`, `println` and `append` builtins are removed:
+```text
+16. `char` is removed. Use `u8` plus explicit UTF-8 operations.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="recovered-59-17"></a>**59-list item 17: RECOVERED.**
+
+```text
+17. The `print`, `println` and `append` builtins are removed:
     - output becomes ordinary calls with Console;
     - append becomes an ordinary call under `with(Alloc)`.
-  ```
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-18"></a>**59-list item 18: RECOVERED.**
+  <a id="recovered-59-18"></a>**59-list item 18: RECOVERED.**
 
-  ```text
-  18. Every local has a written type, and every function has a result arrow, including `-> Unit`.
-  ```
+```text
+18. Every local has a written type, and every function has a result arrow, including `-> Unit`.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-19"></a>**59-list item 19: RECOVERED.**
+  <a id="recovered-59-19"></a>**59-list item 19: RECOVERED.**
 
-  ```text
-  19. OrderedMap only for now. HashMap waits until the KV store measures a need.
-  ```
+```text
+19. OrderedMap only for now. HashMap waits until the KV store measures a need.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-20"></a>**59-list item 20: RECOVERED.**
+  <a id="recovered-59-20"></a>**59-list item 20: RECOVERED.**
 
-  ```text
-  20. Process is removed if an audit of the foreign declarations shows nothing needs it.
-  ```
+```text
+20. Process is removed if an audit of the foreign declarations shows nothing needs it.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-21"></a>**59-list item 21: RECOVERED.**
+  <a id="recovered-59-21"></a>**59-list item 21: RECOVERED.**
 
-  ```text
-  21. `defer` keeps late reads.
-  ```
+```text
+21. `defer` keeps late reads.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-22"></a>**59-list item 22: RECOVERED.**
+  <a id="recovered-59-22"></a>**59-list item 22: RECOVERED.**
 
-  ```text
-  22. Handwritten bodyless functions are refused. Compiler-generated interfaces, traits and `extern` keep theirs.
-  ```
+```text
+22. Handwritten bodyless functions are refused. Compiler-generated interfaces, traits and `extern` keep theirs.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-23"></a>**59-list item 23: RECOVERED.**
+  <a id="recovered-59-23"></a>**59-list item 23: RECOVERED.**
 
-  ```text
-  23. Packed structs are removed until a real foreign ABI needs them.
-  ```
+```text
+23. Packed structs are removed until a real foreign ABI needs them.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-24"></a>**59-list item 24: RECOVERED.**
+  <a id="recovered-59-24"></a>**59-list item 24: RECOVERED.**
 
-  ```text
-  24. Local `assume` is removed only after its replacement is shown working.
-  ```
+```text
+24. Local `assume` is removed only after its replacement is shown working.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-25"></a>**59-list item 25: RECOVERED.**
+  <a id="recovered-59-25"></a>**59-list item 25: RECOVERED.**
 
-  ```text
-  25. Function values are kept: function pointer plus explicit context.
-  ```
+```text
+25. Function values are kept: function pointer plus explicit context.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-26"></a>**59-list item 26: RECOVERED.**
+  <a id="recovered-59-26"></a>**59-list item 26: RECOVERED.**
 
-  ```text
-  26. Constants are computed at compile time, their values are Copy, and the allowed operations are defined first.
-  ```
+```text
+26. Constants are computed at compile time, their values are Copy, and the allowed operations are defined first.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-27"></a>**59-list item 27: RECOVERED.**
+  <a id="recovered-59-27"></a>**59-list item 27: RECOVERED.**
 
-  ```text
-  27. Value-producing `if`/`match`, both proof scopes, and existential brands are kept.
-  ```
+```text
+27. Value-producing `if`/`match`, both proof scopes, and existential brands are kept.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-28"></a>**59-list item 28: RECOVERED.**
+  <a id="recovered-59-28"></a>**59-list item 28: RECOVERED.**
 
-  ```text
-  28. An optional checked annotation `#[depends(result <- a, b)]` is added.
-  ```
+```text
+28. An optional checked annotation `#[depends(result <- a, b)]` is added.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-29"></a>**59-list item 29: RECOVERED.**
+  <a id="recovered-59-29"></a>**59-list item 29: RECOVERED.**
 
-  ```text
-  29. A dead store to a `mut` local is refused.
-  ```
+```text
+29. A dead store to a `mut` local is refused.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-30"></a>**59-list item 30: RECOVERED.**
+  <a id="recovered-59-30"></a>**59-list item 30: RECOVERED.**
 
-  ```text
-  30. Source is UTF-8, comments are `//` only, and there are no block comments, byte-order mark, shebang or NUL bytes.
-  ```
+```text
+30. Source is UTF-8, comments are `//` only, and there are no block comments, byte-order mark, shebang or NUL bytes.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
   Earlier fuller recommendation (L118703, 2026-11-08T03:38:31.490Z):
 
-  ```text
-  30. Source files are UTF-8; whitespace is space, tab, LF or CR; only `//` comments; no block comments, byte-order mark, shebang or NUL bytes. **Yes.**
-  ```
+```text
+30. Source files are UTF-8; whitespace is space, tab, LF or CR; only `//` comments; no block comments, byte-order mark, shebang or NUL bytes. **Yes.**
+```
   The final restatement omits the whitespace clause; it does not name a replacement. Neither version specifies U+FEFF position scope or when CR ends a comment.
 
-- <a id="recovered-59-31"></a>**59-list item 31: RECOVERED.**
+  <a id="recovered-59-31"></a>**59-list item 31: RECOVERED.**
 
-  ```text
-  31. Identifiers are ASCII and case-sensitive.
-  ```
+```text
+31. Identifiers are ASCII and case-sensitive.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-32"></a>**59-list item 32: RECOVERED.**
+  <a id="recovered-59-32"></a>**59-list item 32: RECOVERED.**
 
-  ```text
-  32. There is one closed table of builtin names, with no aliases.
-  ```
+```text
+32. There is one closed table of builtin names, with no aliases.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-33"></a>**59-list item 33: RECOVERED.**
+  <a id="recovered-59-33"></a>**59-list item 33: RECOVERED.**
 
-  ```text
-  33. There are two escape lists, and quoted text can't contain raw newlines.
-  ```
+```text
+33. There are two escape lists, and quoted text can't contain raw newlines.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-34"></a>**59-list item 34: RECOVERED.**
+  <a id="recovered-59-34"></a>**59-list item 34: RECOVERED.**
 
-  ```text
-  34. The lexer takes the longest matching token; `>>` is split only where it closes generics.
-  ```
+```text
+34. The lexer takes the longest matching token; `>>` is split only where it closes generics.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-35"></a>**59-list item 35: RECOVERED.**
+  <a id="recovered-59-35"></a>**59-list item 35: RECOVERED.**
 
-  ```text
-  35. Aliases and constants are written `type N = T;` and `const N: T = e;`.
-  ```
+```text
+35. Aliases and constants are written `type N = T;` and `const N: T = e;`.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-36"></a>**59-list item 36: RECOVERED.**
+  <a id="recovered-59-36"></a>**59-list item 36: RECOVERED.**
 
-  ```text
-  36. The set of attributes is closed.
-  ```
+```text
+36. The set of attributes is closed.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-37"></a>**59-list item 37: PARTIAL; queued for owner re-confirmation.**
+  <a id="recovered-59-37"></a>**59-list item 37: PARTIAL; queued for owner re-confirmation.**
 
-  ```text
-  37. Borrow and defer restrictions are as proposed.
-  ```
+```text
+37. Borrow and defer restrictions are as proposed.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
   Missing: OPEN-19 borrow/defer restrictions were never shown; re-confirm the complete proposal behind "as proposed".
 
-- <a id="recovered-59-38"></a>**59-list item 38: RECOVERED.**
+  <a id="recovered-59-38"></a>**59-list item 38: RECOVERED.**
 
-  ```text
-  38. Views and the constant-time APIs are ordinary calls.
-  ```
+```text
+38. Views and the constant-time APIs are ordinary calls.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-39"></a>**59-list item 39: RECOVERED.**
+  <a id="recovered-59-39"></a>**59-list item 39: RECOVERED.**
 
-  ```text
-  39. There is no concurrency syntax until the concurrency model is reviewed.
-  ```
+```text
+39. There is no concurrency syntax until the concurrency model is reviewed.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-40"></a>**59-list item 40: RECOVERED.**
+  <a id="recovered-59-40"></a>**59-list item 40: RECOVERED.**
 
-  ```text
-  40. The reserved words are `spec`, `by`, `kept`, `Self`, `while`, `Entropy`, and `self` (and `as`) with no use. Obsolete reservations are dropped.
-  ```
+```text
+40. The reserved words are `spec`, `by`, `kept`, `Self`, `while`, `Entropy`, and `self` (and `as`) with no use. Obsolete reservations are dropped.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
   The dropped set was explicitly shown at L118854, 2026-11-08T03:55:58.322Z:
 
-  ```text
-  Old reservations that no rule needs (`in`, `newtype`, `union`, `total`) are dropped.
-  ```
+```text
+Old reservations that no rule needs (`in`, `newtype`, `union`, `total`) are dropped.
+```
   Before the blanket reply, the owner qualified `self`/`as` at L119065, 2026-11-08T04:05:14.946Z:
 
-  ```text
-  i prefer fully gone, self and as are irrelevant from what i see
-  ```
+```text
+i prefer fully gone, self and as are irrelevant from what i see
+```
   The resulting recommendation shown at L119080, 2026-11-08T04:05:26.518Z:
 
-  ```text
-  I've recorded your answer word for word: `self` and `as` are fully gone and not reserved. They're ordinary identifiers with no special meaning. The reserved words in item 40 become `spec`, `by`, `kept`, `Self`, `while` and `Entropy`.
+```text
+I've recorded your answer word for word: `self` and `as` are fully gone and not reserved. They're ordinary identifiers with no special meaning. The reserved words in item 40 become `spec`, `by`, `kept`, `Self`, `while` and `Entropy`.
 
-  One small consequence: Rust-style `&self` or `x as u32` now gets an ordinary syntax or name error, not a tailored message. That's fine.
+One small consequence: Rust-style `&self` or `x as u32` now gets an ordinary syntax or name error, not a tailored message. That's fine.
 
-  Two things are still open before the spec worker starts:
-  1. **The rest of the list:** do you approve all 59 items as recommended, with item 11 as "remove `as` entirely"? The import detail in 11b waits for round 5.
-  2. **Slice 0:** may it land?
-  ```
+Two things are still open before the spec worker starts:
+1. **The rest of the list:** do you approve all 59 items as recommended, with item 11 as "remove `as` entirely"? The import detail in 11b waits for round 5.
+2. **Slice 0:** may it land?
+```
 
-- <a id="recovered-59-41"></a>**59-list item 41: RECOVERED.**
+  <a id="recovered-59-41"></a>**59-list item 41: RECOVERED.**
 
-  ```text
-  41. Typed number suffixes like `200u8` stay.
-  ```
+```text
+41. Typed number suffixes like `200u8` stay.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-42"></a>**59-list item 42: RECOVERED.**
+  <a id="recovered-59-42"></a>**59-list item 42: RECOVERED.**
 
-  ```text
-  42. The old precedence table stays.
-  ```
+```text
+42. The old precedence table stays.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-43"></a>**59-list item 43: RECOVERED.**
+  <a id="recovered-59-43"></a>**59-list item 43: RECOVERED.**
 
-  ```text
-  43. A declaration is attributes, then `pub`, then the item. Commas are required and a trailing comma is optional.
-  ```
+```text
+43. A declaration is attributes, then `pub`, then the item. Commas are required and a trailing comma is optional.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-44"></a>**59-list item 44: RECOVERED.**
+  <a id="recovered-59-44"></a>**59-list item 44: RECOVERED.**
 
-  ```text
-  44. Imports are written `import a::b::{x, y};`.
-  ```
+```text
+44. Imports are written `import a::b::{x, y};`.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-45"></a>**59-list item 45: RECOVERED.**
+  <a id="recovered-59-45"></a>**59-list item 45: RECOVERED.**
 
-  ```text
-  45. Specification functions are written `spec fn f(...) -> T = e;`, and proof steps `assert(e) by lemma(args);`.
-  ```
+```text
+45. Specification functions are written `spec fn f(...) -> T = e;`, and proof steps `assert(e) by lemma(args);`.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-46"></a>**59-list item 46: RECOVERED.**
+  <a id="recovered-59-46"></a>**59-list item 46: RECOVERED.**
 
-  ```text
-  46. Type parameters come before capability parameters, written `cap C`, `+` and `{}`.
-  ```
+```text
+46. Type parameters come before capability parameters, written `cap C`, `+` and `{}`.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-47"></a>**59-list item 47: RECOVERED.**
+  <a id="recovered-59-47"></a>**59-list item 47: RECOVERED.**
 
-  ```text
-  47. Blocks keep the decided statement/value behaviour.
-  ```
+```text
+47. Blocks keep the decided statement/value behaviour.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-48"></a>**59-list item 48: RECOVERED.**
+  <a id="recovered-59-48"></a>**59-list item 48: RECOVERED.**
 
-  ```text
-  48. Match arms use qualified enum patterns, and every arm ends with a comma.
-  ```
+```text
+48. Match arms use qualified enum patterns, and every arm ends with a comma.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-49"></a>**59-list item 49: RECOVERED.**
+  <a id="recovered-59-49"></a>**59-list item 49: RECOVERED.**
 
-  ```text
-  49. Labels work on both `while` and `for`, with `break 'label;` and `continue 'label;`.
-  ```
+```text
+49. Labels work on both `while` and `for`, with `break 'label;` and `continue 'label;`.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-50"></a>**59-list item 50: RECOVERED.**
+  <a id="recovered-59-50"></a>**59-list item 50: RECOVERED.**
 
-  ```text
-  50. Empty array literals are refused; empty struct literals are kept.
-  ```
+```text
+50. Empty array literals are refused; empty struct literals are kept.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-51"></a>**59-list item 51: PARTIAL; queued for owner re-confirmation.**
+  <a id="recovered-59-51"></a>**59-list item 51: PARTIAL; queued for owner re-confirmation.**
 
-  ```text
-  51. Brands use an explicit `exists`, `pack` and `unpack` surface.
-  ```
+```text
+51. Brands use an explicit `exists`, `pack` and `unpack` surface.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
   Missing: the drafted OPEN-22 exists/pack/unpack surface was never shown; re-confirm its exact grammar. Brand scope remains deferred to item 59.
 
-- <a id="recovered-59-52"></a>**59-list item 52: RECOVERED.**
+  <a id="recovered-59-52"></a>**59-list item 52: RECOVERED.**
 
-  ```text
-  52. FFI keeps `kept buf: H`, and borrowed arguments can't be kept.
-  ```
-
-  Owner reply:
-
-  ```text
-  record, yes to all recommended
-  ```
-
-  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
-
-- <a id="recovered-59-53"></a>**59-list item 53: RECOVERED.**
-
-  ```text
-  53. `while…else` and postfix `->` are refused.
-  ```
+```text
+52. FFI keeps `kept buf: H`, and borrowed arguments can't be kept.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-54"></a>**59-list item 54: RECOVERED.**
+  <a id="recovered-59-53"></a>**59-list item 53: RECOVERED.**
 
-  ```text
-  54. The Core freeze, once the proofs are done.
-  ```
+```text
+53. `while…else` and postfix `->` are refused.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-55"></a>**59-list item 55: RECOVERED.**
+  <a id="recovered-59-54"></a>**59-list item 54: RECOVERED.**
 
-  ```text
-  55. Exact names and spellings, as before/after code.
-  ```
+```text
+54. The Core freeze, once the proofs are done.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-56"></a>**59-list item 56: RECOVERED.**
+  <a id="recovered-59-55"></a>**59-list item 55: RECOVERED.**
 
-  ```text
-  56. The Entropy grant's shape, at slice 6.
-  ```
+```text
+55. Exact names and spellings, as before/after code.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-57"></a>**59-list item 57: RECOVERED.**
+  <a id="recovered-59-56"></a>**59-list item 56: RECOVERED.**
 
-  ```text
-  57. The concurrency model, at slice 28.
-  ```
+```text
+56. The Entropy grant's shape, at slice 6.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-58"></a>**59-list item 58: RECOVERED.**
+  <a id="recovered-59-57"></a>**59-list item 57: RECOVERED.**
 
-  ```text
-  58. Niches and smaller enum tags, only if needed.
-  ```
+```text
+57. The concurrency model, at slice 28.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="recovered-59-59"></a>**59-list item 59: RECOVERED.**
+  <a id="recovered-59-58"></a>**59-list item 58: RECOVERED.**
 
-  ```text
-  59. The remaining grammar sub-rules, in the spelling round.
-  ```
+```text
+58. Niches and smaller enum tags, only if needed.
+```
 
   Owner reply:
 
-  ```text
-  record, yes to all recommended
-  ```
+```text
+record, yes to all recommended
+```
 
   Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
 
-- <a id="decided-2026-11-08-recovered-d3"></a>**D3 primary-source chain.** The landing-plan
+  <a id="recovered-59-59"></a>**59-list item 59: RECOVERED.**
+
+```text
+59. The remaining grammar sub-rules, in the spelling round.
+```
+
+  Owner reply:
+
+```text
+record, yes to all recommended
+```
+
+  Provenance: recommendation L119002, 2026-11-08T04:03:06.062Z; owner L119110, 2026-11-08T04:05:31.772Z (queued).
+
+  <a id="decided-2026-11-08-recovered-d3"></a>**D3 primary-source chain.** The landing-plan
   prerequisites are sourced here independently of branch descriptions or later transcriptions.
   Fuel-bounded fallible constants, forward references/cycle chains and non-whole-pointer
   decoding are [29-list items 18–20](#recovered-29-18); refused cleanup is item 21.
@@ -2984,166 +2983,166 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
 
   **C9 identity**, recommendation L125750, 2026-11-08T15:28:04.788Z:
 
-  ```text
-  The C9 identity questions have finished their round with all three models, so here they are. Reply "yes to all three", or name the ones you'd change.
+```text
+The C9 identity questions have finished their round with all three models, so here they are. Reply "yes to all three", or name the ones you'd change.
 
-  1. **How an item inside a function is identified.** Facts, proofs and caches must still find the same item after you edit code nearby.
+1. **How an item inside a function is identified.** Facts, proofs and caches must still find the same item after you edit code nearby.
    - **My pick:** a path of named parts, each one a kind of construct plus its name, such as function `parse` → loop `'outer` → assert. Unnamed items get a number counted among siblings of the same kind, under the nearest named parent, and you can add a label to pin one down.
    - **Why:** this is agy's design, which also answers Codex's warning. Plain counters renumber everything when you insert an item earlier, so stored facts would point at the wrong thing.
-  2. **What a package ID contains.**
+2. **What a package ID contains.**
    - **My pick:** name and version, kept as separate fields rather than one string, with no content hash.
    - **Why:** a hash changes on every edit and would break stored proof evidence, so hashes belong to build-artifact identity instead.
    - **Codex's point:** two packages with the same name and version but different origins are refused when loading, consistent with your earlier rule against two versions coexisting (OD44).
-  3. **Adding new kinds of trusted assumptions later.**
+3. **Adding new kinds of trusted assumptions later.**
    - **My pick:** a new kind is added only when a decision row names it.
    - **Also:** the schema carries a version number, and an unknown kind is refused. There is no catch-all string option. All three models agree.
 
-  **Separately:** C9 round 3 isn't accepted. Codex and agy found that several identity laws only restate their own record's shape. The identities also can't yet name trait items or obligations outside functions, such as struct invariants and constants. Round 4 will tie the laws to the operations that actually assign identities.
+**Separately:** C9 round 3 isn't accepted. Codex and agy found that several identity laws only restate their own record's shape. The identities also can't yet name trait items or obligations outside functions, such as struct invariants and constants. Round 4 will tie the laws to the operations that actually assign identities.
 
-  The spec worker has also written the tagging convention that the planned check for laws that prove nothing will use, and I've passed it to the gates worker.
-  ```
+The spec worker has also written the tagging convention that the planned check for laws that prove nothing will use, and I've passed it to the gates worker.
+```
 
   This shares a blanket reply with the lexer-spelling recommendations below. Before
   the answer, L125791, 2026-11-08T15:29:09.145Z restated the pending asks:
 
-  ```text
-  Everything in that update was already in my last message. The other news: the stack-bound fix's second round is now being written, covering both reviewers' findings:
-  - read the segment form that GDB prints without brackets;
-  - refuse every register-relative `fs:` or `gs:` access;
-  - check the whole byte range of each access;
-  - refuse writes to segment registers, and refuse `gs:` outright on x86-64 Linux;
-  - limit `fs:` offsets using the binary's real thread-local layout instead of a fixed number.
+```text
+Everything in that update was already in my last message. The other news: the stack-bound fix's second round is now being written, covering both reviewers' findings:
+- read the segment form that GDB prints without brackets;
+- refuse every register-relative `fs:` or `gs:` access;
+- check the whole byte range of each access;
+- refuse writes to segment registers, and refuse `gs:` outright on x86-64 Linux;
+- limit `fs:` offsets using the binary's real thread-local layout instead of a fixed number.
 
-  Waiting for you:
-  1. **"yes codex login":** to start the Codex re-login on concrete-ci-2. This unblocks every landing.
-  2. **Lexer spellings:** "yes to the block, 1 permit, 2 complementary", or your own picks.
-  3. **The three C9 identity questions:** "yes to all three", or your changes.
-  ```
+Waiting for you:
+1. **"yes codex login":** to start the Codex re-login on concrete-ci-2. This unblocks every landing.
+2. **Lexer spellings:** "yes to the block, 1 permit, 2 complementary", or your own picks.
+3. **The three C9 identity questions:** "yes to all three", or your changes.
+```
   C9 remains an explicit pending ask; this is not a separate C9-only answer. The
   Codex-login ask is operational and is not recorded here as a language decision.
 
   Owner, L125820, 2026-11-08T15:31:48.674Z:
 
-  ```text
-  okay with your decisions
-  ```
+```text
+okay with your decisions
+```
 
   **Six improvements**, recommendation L121997, 2026-11-08T13:31:34.909Z:
 
-  ```text
-  Yes. Tonight showed six things worth changing, mostly in how we work. The language design itself held up: no reviewer found a contradiction in the decided rules. The one real gap is at the edge between borrows and calls, which C5 found.
+```text
+Yes. Tonight showed six things worth changing, mostly in how we work. The language design itself held up: no reviewer found a contradiction in the decided rules. The one real gap is at the edge between borrows and calls, which C5 found.
 
-  **What to fix:**
+**What to fix:**
 
-  1. **"True by definition" proofs are the main spec risk.** Three contracts did it independently:
+1. **"True by definition" proofs are the main spec risk.** Three contracts did it independently:
    - C5 re-checks the ownership invariant at every step, so "operations keep the invariant" holds automatically.
    - C6's preservation theorem just restated its own definition.
    - C8's termination evidence holds trivially when the program fails to start.
 
    The fix is a standing rule in every writer brief and reviewer checklist. Each law needs a planted counterexample that must fail. No guard may make a law true by construction, and the brief says what a law with real content looks like. This is the most important item.
 
-  2. **The approved-axioms file is noise.** Almost every new branch failed CI the first time on it: the lexer, C4, C6 and C7. C4's update removed 34 of its lines, all helper lemmas Lean generates automatically. The file compares exact lists when what we care about is a property. Simpler: check that every declaration uses only the standard axioms, and pin only the named theorems.
+2. **The approved-axioms file is noise.** Almost every new branch failed CI the first time on it: the lexer, C4, C6 and C7. C4's update removed 34 of its lines, all helper lemmas Lean generates automatically. The file compares exact lists when what we care about is a property. Simpler: check that every declaration uses only the standard axioms, and pin only the named theorems.
 
-  3. **The spec is fanning out instead of coming together.** C7 and C8 are stacked on the unreviewed C1 change, C10 is built on a merge, and nothing has been merged into `spec-core` since C1 and C2. A2i, the integration step meant to join the contracts, keeps getting further away. Simpler: merge each accepted contract into `spec-core` as soon as it is accepted, so the next one builds on a single base. C4, C6 and the C1 change could go in now.
+3. **The spec is fanning out instead of coming together.** C7 and C8 are stacked on the unreviewed C1 change, C10 is built on a merge, and nothing has been merged into `spec-core` since C1 and C2. A2i, the integration step meant to join the contracts, keeps getting further away. Simpler: merge each accepted contract into `spec-core` as soon as it is accepted, so the next one builds on a single base. C4, C6 and the C1 change could go in now.
 
-  4. **Process tooling took most of the night.** The sign-off mechanism took three review rounds plus a follow-up, and one capped branch blocked seven finished branches behind it. I'd stop building process machinery once the sign-off fix and the landing-script shrink land. I'd also stop chaining landings that don't depend on each other: the decision records never needed the sign-off fix.
+4. **Process tooling took most of the night.** The sign-off mechanism took three review rounds plus a follow-up, and one capped branch blocked seven finished branches behind it. I'd stop building process machinery once the sign-off fix and the landing-script shrink land. I'd also stop chaining landings that don't depend on each other: the decision records never needed the sign-off fix.
 
-  5. **Workers kept stalling.** The spec worker sat idle for 1–2 hours three times, because jobs it started in the background never told it they had finished. The fix is one shared launcher that always starts a bounded watcher with each job, instead of each worker remembering to.
+5. **Workers kept stalling.** The spec worker sat idle for 1–2 hours three times, because jobs it started in the background never told it they had finished. The fix is one shared launcher that always starts a bounded watcher with each job, instead of each worker remembering to.
 
-  6. **Questions reached you before Codex, Kimi and agy had reviewed them.** You caught this on the slice-1 and lexer questions. The rule should be that every owner question gets the three-model round before it reaches you. That round is running now for the ones that missed it.
+6. **Questions reached you before Codex, Kimi and agy had reviewed them.** You caught this on the slice-1 and lexer questions. The rule should be that every owner question gets the three-model round before it reaches you. That round is running now for the ones that missed it.
 
-  Smaller ones:
-  - **Writer and reviewer overlap:** the mandatory review script always uses Codex, so whenever Codex writes, it reviews its own work. Kimi now writes by default, but the script should accept any reviewer.
-  - **Slice scope:** the slice-1 spec covers more than slice 1 builds. Each slice brief should state up front which part of the spec the slice implements.
+Smaller ones:
+- **Writer and reviewer overlap:** the mandatory review script always uses Codex, so whenever Codex writes, it reviews its own work. Kimi now writes by default, but the script should accept any reviewer.
+- **Slice scope:** the slice-1 spec covers more than slice 1 builds. Each slice brief should state up front which part of the spec the slice implements.
 
-  My recommendation is to do 1, 2, 3 and 5 now; Kimi writes and Codex and agy review, as usual. Item 4 is a policy change. Approving it means: freeze process tooling after the two landing branches, and land independent branches independently. Should I go ahead with 1, 2, 3 and 5, and do you approve 4?
-  ```
+My recommendation is to do 1, 2, 3 and 5 now; Kimi writes and Codex and agy review, as usual. Item 4 is a policy change. Approving it means: freeze process tooling after the two landing branches, and land independent branches independently. Should I go ahead with 1, 2, 3 and 5, and do you approve 4?
+```
 
   Owner, L122066, 2026-11-08T13:33:02.706Z:
 
-  ```text
-  yes to 6 things
-  ```
+```text
+yes to 6 things
+```
   Follow-up before approval (L122051, 2026-11-08T13:32:34.970Z):
 
-  ```text
-  Agreed. I've put the two spec-quality fixes into effect now, and the spec worker is applying them alongside the running reviews.
+```text
+Agreed. I've put the two spec-quality fixes into effect now, and the spec worker is applying them alongside the running reviews.
 
-  1. **No more laws that are true by definition.**
+1. **No more laws that are true by definition.**
    - **The rule:** every writer brief and every reviewer prompt now says the same thing. Each law needs a real example where it holds, and a planted bad case (a broken rule or a bad state) that it must reject. Reviewers must also check each law for this explicitly.
    - **The audit:** Codex, Kimi and agy are checking the contracts already accepted (C1, C2, C4, C6 and the C1 cleanup change) law by law. Any law that turns out to be empty goes back for a fix round.
-  2. **One spec instead of many branches.**
+2. **One spec instead of many branches.**
    - **Merging now:** the accepted contracts are going into the single spec branch: the C1 change, C4 and C6. Every accepted contract after that goes in as soon as it is accepted.
    - **Checks and review:** the merged result has to pass all seven checks, and agy and Kimi review the merge itself.
    - **Fix rounds:** the C5, C7, C8 and C10 fixes are then rebuilt on top of that one branch.
 
    This is the start of joining the contracts into one spec, the step called A2i. It is the precondition for freezing them.
 
-  I'm leaving the approved-axioms check (item 2) unchanged until you say yes: it changes what a CI gate checks.
+I'm leaving the approved-axioms check (item 2) unchanged until you say yes: it changes what a CI gate checks.
 
-  Still waiting on you:
-  - item 2: may I change that check?
-  - item 4: freeze the process tooling and land independent branches independently;
-  - the sign-off of `fb097fa4`.
-  ```
+Still waiting on you:
+- item 2: may I change that check?
+- item 4: freeze the process tooling and land independent branches independently;
+- the sign-off of `fb097fa4`.
+```
 
   The answer names the six improvements, so it covers those six recommendations;
   it is not used as sign-off of `fb097fa4`, the separate pending ask in the follow-up.
 
   **C5 loan/erasure answers**, recommendation L125401, 2026-11-08T15:20:29.681Z:
 
-  ```text
-  The three C5 questions are about how borrows and the borrow checker are specified. Codex, Kimi and agy agree on all three.
+```text
+The three C5 questions are about how borrows and the borrow checker are specified. Codex, Kimi and agy agree on all three.
 
-  1. **Where can a borrow point?** A borrow passed into a function can point only into the current call, or into the function being called. It can never point back up into a caller. This follows your decisions that borrows flow downward and that references are second-class. The spec adds a planted example of an upward borrow, which it refuses. (yes)
+1. **Where can a borrow point?** A borrow passed into a function can point only into the current call, or into the function being called. It can never point back up into a caller. This follows your decisions that borrows flow downward and that references are second-class. The spec adds a planted example of an upward borrow, which it refuses. (yes)
 
-  2. **Passing a variable straight into a call.** In `f(&mut x)`, the borrow of `x` lasts exactly as long as the call. You don't write a separate borrow scope, and `x` is usable again the moment `f` returns. There are two extra conditions:
+2. **Passing a variable straight into a call.** In `f(&mut x)`, the borrow of `x` lasts exactly as long as the call. You don't write a separate borrow scope, and `x` is usable again the moment `f` returns. There are two extra conditions:
    - if the call is deferred, the borrow lasts until the deferred call actually runs, not until it is scheduled;
    - an existing borrow is never ended implicitly.
 
    (yes)
 
-  3. **What the borrow-checker proof promises.** The spec has two versions of execution: one with the borrow-tracking machinery, and one with it erased, which is what actually runs. The proof says that every step the tracked version takes, the erased version takes too, with the same events, the same memory and the same final result. The stronger claim, "the tracked version gets stuck exactly when the erased one does", is promised only for programs the checker accepts.
+3. **What the borrow-checker proof promises.** The spec has two versions of execution: one with the borrow-tracking machinery, and one with it erased, which is what actually runs. The proof says that every step the tracked version takes, the erased version takes too, with the same events, the same memory and the same final result. The stronger claim, "the tracked version gets stuck exactly when the erased one does", is promised only for programs the checker accepts.
 
    Codex has a checked example showing why it can't be promised for every program. In that example, a value used after being moved stops the tracked run, while the erased run happily returns 7. (yes)
 
-  Reply "yes to all three", or name the ones you'd change.
-  ```
+Reply "yes to all three", or name the ones you'd change.
+```
 
   **Intervening source-links/diagnostics context.** The owner wrote at L125406,
   2026-11-08T15:20:41.115Z:
 
-  ```text
-  i want to have elm like errors for item 1 so we need to make sure they are good
-  ```
+```text
+i want to have elm like errors for item 1 so we need to make sure they are good
+```
   This is not recorded as a clarification of C5 question 1. The assistant interpreted it
   as the source-links item and restated three pending asks at L125426,
   2026-11-08T15:21:05.921Z:
 
-  ```text
-  I've read "item 1" as the source-links item, since good errors depend on it. Elm-quality errors are now their own item (K13) in the same review round, which compares the design against Elm, Rust, Gleam and Roc.
+```text
+I've read "item 1" as the source-links item, since good errors depend on it. Elm-quality errors are now their own item (K13) in the same review round, which compares the design against Elm, Rust, Gleam and Roc.
 
-  What it covers:
-  - **Errors as data.** Each error has a title, rule ID, the main code location, labelled secondary locations ("moved here", "used again here"), a plain-language explanation and, when certain, a fix hint. The same data prints as Elm-style text for people and as JSON for agents.
-  - **Source links built for it.** They carry full ranges, locations that survive across passes, and where a type came from ("this is `u8` because of here"). These requirements feed back into item 1's design.
-  - **An explanation page for every rule,** with a failing example and its fix. A `concrete explain <rule>` command is an option, but it's new CLI, so it would come to you.
-  - **A message style guide.** Errors talk to you, avoid unexplained jargon, show the code and say what to do next. A hint appears only when it is certain to be right.
-  - **No error cascades.** Your earlier decision to stop at the first error in each file already prevents them.
-  - **A quality gate.** Every error message has a snapshot test, and a reviewer model scores each new or changed message against the style guide. An error without a reviewed snapshot fails the gate.
+What it covers:
+- **Errors as data.** Each error has a title, rule ID, the main code location, labelled secondary locations ("moved here", "used again here"), a plain-language explanation and, when certain, a fix hint. The same data prints as Elm-style text for people and as JSON for agents.
+- **Source links built for it.** They carry full ranges, locations that survive across passes, and where a type came from ("this is `u8` because of here"). These requirements feed back into item 1's design.
+- **An explanation page for every rule,** with a failing example and its fix. A `concrete explain <rule>` command is an option, but it's new CLI, so it would come to you.
+- **A message style guide.** Errors talk to you, avoid unexplained jargon, show the code and say what to do next. A hint appears only when it is certain to be right.
+- **No error cascades.** Your earlier decision to stop at the first error in each file already prevents them.
+- **A quality gate.** Every error message has a snapshot test, and a reviewer model scores each new or changed message against the style guide. An error without a reviewed snapshot fails the gate.
 
-  It's ranked to start before slice 1, because the lexer and parser are already writing errors. I've saved your words exactly as you wrote them.
+It's ranked to start before slice 1, because the lexer and parser are already writing errors. I've saved your words exactly as you wrote them.
 
-  Still waiting for you:
-  1. **The three C5 questions:** reply "yes to all three", or name the ones you'd change.
-  2. **Runner label:** reply "yes runner label" or "no".
-  3. **The 12 architecture items:** reply "add all 12".
-  ```
+Still waiting for you:
+1. **The three C5 questions:** reply "yes to all three", or name the ones you'd change.
+2. **Runner label:** reply "yes runner label" or "no".
+3. **The 12 architecture items:** reply "add all 12".
+```
 
   **Reply to the three pending asks**, owner L125431, 2026-11-08T15:21:17.612Z:
 
-  ```text
-  yes to everythiong
-  ```
+```text
+yes to everythiong
+```
   C5's three recommendations above are covered by this blanket answer to the pending
   asks, not by the Elm-errors clarification or the architecture-specific replies below.
   The runner-label and architecture asks are identified here only by the restatement;
@@ -3153,76 +3152,76 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   **Architecture-only confirmations**, human queued commands (`attachment.prompt`,
   human origin), L125465, 2026-11-08T15:21:20.598Z:
 
-  ```text
-  yes to adding all the 12
-  ```
+```text
+yes to adding all the 12
+```
   Human queued command, L125466, 2026-11-08T15:21:23.073Z:
 
-  ```text
-  add all 12
-  ```
+```text
+add all 12
+```
   These answer the 12-architecture-items ask, not C5. Their substance remains queued
   for recovery of the full proposal.
 
   **Further blanket confirmation**, human queued command, L125467,
   2026-11-08T15:21:27.008Z:
 
-  ```text
-  the three things are all good
-  ```
+```text
+the three things are all good
+```
   The intervening prompt lists three pending asks, while C5 itself has three questions.
   This reply does not name either set. It is preserved in that context, without treating
   it as an additional C5-only answer or deriving any unshown proposal from it.
 
   **Writer revision**, owner directive with no preceding recommendation, L126064, 2026-11-08T15:37:39.012Z:
 
-  ```text
-  can you use only kimi codex and agy to code and you just review things?
-  ```
+```text
+can you use only kimi codex and agy to code and you just review things?
+```
   It revises the earlier writer directive at L120476, 2026-11-08T05:53:40.428Z:
 
-  ```text
-  can you have kimi, codex and agy implement things and we just review it
-  ```
+```text
+can you have kimi, codex and agy implement things and we just review it
+```
 
   **Lexer approval context**, recommendation L125775, 2026-11-08T15:29:01.548Z:
 
-  ```text
-  The lexer spelling round is back, and two of the questions split the reviewers. Reply "yes to the block, 1 permit, 2 complementary", or give your own picks.
+```text
+The lexer spelling round is back, and two of the questions split the reviewers. Reply "yes to the block, 1 permit, 2 complementary", or give your own picks.
 
-  **Agreed by all three models, to approve as a block:**
-  - **(a) Escapes in `'a'`:** exactly `\n \t \r \0 \\ \'`. Anything else is written as a number, for example `0x1bu8`. `\xHH` is refused, because it would be a second way to write integers.
-  - **(b) Characters refused inside strings:**
+**Agreed by all three models, to approve as a block:**
+- **(a) Escapes in `'a'`:** exactly `\n \t \r \0 \\ \'`. Anything else is written as a number, for example `0x1bu8`. `\xHH` is refused, because it would be a second way to write integers.
+- **(b) Characters refused inside strings:**
   - every control character, which includes raw tab and newline (so no raw multiline strings; write `\t` or `\n`);
   - the Unicode line and paragraph separators;
   - the bidi reordering controls, which can make code display differently from what it does ("Trojan Source").
 
   These go beyond plain control characters, which is why the reviewers ask for your explicit yes. A `'a'` literal allows only printable ASCII.
-  - **(c) Case:** only lowercase `0x`, `0b`, `0o` and lowercase hex digits, so `0xFF` is refused and written `0xff`. A few older spec examples get updated.
-  - **(d) Suffixes:** exactly `i8 i16 i32 i64 u8 u16 u32 u64`, allowed on any base (`0xffu8`). A malformed suffix such as `123u9`, `200U8` or `200u8foo` is refused as one error, never split into pieces.
+- **(c) Case:** only lowercase `0x`, `0b`, `0o` and lowercase hex digits, so `0xFF` is refused and written `0xff`. A few older spec examples get updated.
+- **(d) Suffixes:** exactly `i8 i16 i32 i64 u8 u16 u32 u64`, allowed on any base (`0xffu8`). A malformed suffix such as `123u9`, `200U8` or `200u8foo` is refused as one error, never split into pieces.
 
-  **The two split questions:**
+**The two split questions:**
 
-  1. **Raw tab inside a `//` comment.**
+1. **Raw tab inside a `//` comment.**
    - **My pick:** permit it, as Codex and agy say. Item 30 already decided that tab is whitespace, and a comment is plain text for people.
    - **Kimi:** refuse it.
 
-  2. **When a suffix like `200u8` may be written.**
+2. **When a suffix like `200u8` may be written.**
    - **My pick:** a suffix only where nothing else gives the type, as Codex and agy say. Under this rule `let x: u8 = 200u8;` is refused as redundant, and so is `x + 1u8`. A suffix is needed only where no type is known, for example `id(200u8)`.
      - This keeps one way to write each thing, your firm rule.
      - The cost: it revises the literal-typing rows (OD31/OD138), and the approved example `S { a: 200u8 }` becomes `S { a: 200 }`.
    - **Kimi:** a suffix allowed anywhere, as long as it agrees with the expected type. That's simpler, but it's a recorded second way to write the same code.
 
-  **Also waiting for you:**
-  - **Codex login:** "yes codex login" to start it on concrete-ci-2. This unblocks all landings.
-  - **The three C9 identity questions.**
-  ```
+**Also waiting for you:**
+- **Codex login:** "yes codex login" to start it on concrete-ci-2. This unblocks all landings.
+- **The three C9 identity questions.**
+```
 
   Owner, L125820, 2026-11-08T15:31:48.674Z:
 
-  ```text
-  okay with your decisions
-  ```
+```text
+okay with your decisions
+```
 
   This proposal does not say LF/CR ends comments. The report's claim that this particular
   15:31 approval explicitly settles bare CR is not verified and is not recorded as authority.
@@ -3236,7 +3235,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   of the split Q5 options in L140586. The 29-list, six-improvements and C9/lexer
   shared-ask contexts are preserved above on the same basis.
 
-- <a id="decided-2026-11-08-recovery-queue"></a>**Remaining owner queue (ISS-0065).**
+  <a id="decided-2026-11-08-recovery-queue"></a>**Remaining owner queue (ISS-0065).**
   Precisely: 29-list items 22 (O1–O12 substance), 25 (unanswered clarification and unshown
   staged S3 wording), 27 (roadmap/legacy sign-off mismatch); 59-list items 37 (OPEN-19
   restrictions) and 51 (OPEN-22 grammar); source-rule U+FEFF scope and bare-CR comment
@@ -3282,9 +3281,9 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   Additional bare-CR context (ISS-0064): assistant L118779,
   2026-11-08T03:47:36.473Z, before item 30's approval, says verbatim:
 
-  ```text
-  - If that byte is `/`, it skips everything up to LF, CR or end of file.
-  ```
+```text
+- If that byte is `/`, it skips everything up to LF, CR or end of file.
+```
 
   This answers a parsing question; it is not the numbered recommendation approved at
   L119110 and does not distinguish bare CR from CRLF. It is context, not approval.
@@ -3315,67 +3314,67 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
 
   Options and recommendations actually shown, L134638, 2026-11-09T04:51:38.623Z:
 
-  ```text
-  ### 2. C6: what happens to an invalid source location
-  **Background.** When a program traps, for example on overflow, the rule you decided (OD101) says it must print where it happened: file and position. Today, if a source file's path is malformed or two entries share a site key, the spec silently drops that entry. A trap there then prints no location at all.
+```text
+### 2. C6: what happens to an invalid source location
+**Background.** When a program traps, for example on overflow, the rule you decided (OD101) says it must print where it happened: file and position. Today, if a source file's path is malformed or two entries share a site key, the spec silently drops that entry. A trap there then prints no location at all.
 
-  - **(a) Make it impossible.** Every source file gets one structured, project-relative path (never empty, never `..`, never absolute), and the loader refuses bad paths or duplicate sites with an error. Every accepted program can then always report its trap location. It costs a little more spec work across C9, C10 and C6.
-  - **(b) Refuse only where trap sites are built.** Paths stay plain strings, and the compiler errors only when a bad one is used for a trap. That's simpler, but the raw string stays the real identity, so other places could still mishandle it. Codex calls this a shortcut.
-  - **(c) Keep silently dropping.** No work, but it breaks OD101 and your no-hidden-traps rule.
-  - **(d) Print a placeholder** such as `<unknown>`. The program doesn't break, but the trap line doesn't say where the trap happened.
+- **(a) Make it impossible.** Every source file gets one structured, project-relative path (never empty, never `..`, never absolute), and the loader refuses bad paths or duplicate sites with an error. Every accepted program can then always report its trap location. It costs a little more spec work across C9, C10 and C6.
+- **(b) Refuse only where trap sites are built.** Paths stay plain strings, and the compiler errors only when a bad one is used for a trap. That's simpler, but the raw string stays the real identity, so other places could still mishandle it. Codex calls this a shortcut.
+- **(c) Keep silently dropping.** No work, but it breaks OD101 and your no-hidden-traps rule.
+- **(d) Print a placeholder** such as `<unknown>`. The program doesn't break, but the trap line doesn't say where the trap happened.
 
-  **Recommendation: (a).** Codex and agy both chose it independently.
-  ```
+**Recommendation: (a).** Codex and agy both chose it independently.
+```
 
-  ```text
-  ### 3. C2: what a constant's value may be computed from
-  **Background.** A constant such as `const MAX: u32 = 4 * 1024` is computed at compile time.
-  - **Checked arithmetic** returns a `Result`: `Ok(value)`, or `Err` on overflow.
-  - **`try_convert`** turns a number into a smaller type, also returning a `Result`.
+```text
+### 3. C2: what a constant's value may be computed from
+**Background.** A constant such as `const MAX: u32 = 4 * 1024` is computed at compile time.
+- **Checked arithmetic** returns a `Result`: `Ok(value)`, or `Err` on overflow.
+- **`try_convert`** turns a number into a smaller type, also returning a `Result`.
 
-  The question is whether constants can involve `Result` values.
+The question is whether constants can involve `Result` values.
 
-  **Part 1, what types constants can have:**
-  - **(a) Constants stay plain scalars** (integers and bools). Checked arithmetic is not allowed in a constant's formula; plain, wrapping and saturating arithmetic are. If the formula overflows, the constant is refused at compile time, so you still never get a wrong constant.
-  - **(b) Allow `Result`-typed constants now.** That needs new syntax for unpacking a `Result` inside a constant, and a decision on whether an `Err` can be a constant's value. Both models say it breaks rules 1 and 2 and the admission tests, and no program needs it yet.
-  - **(c) Later:** reopen through R2 (aggregate and enum constants) when a real program needs it, with listed preconditions. This isn't really a separate choice now; it's how (a) would be extended later.
+**Part 1, what types constants can have:**
+- **(a) Constants stay plain scalars** (integers and bools). Checked arithmetic is not allowed in a constant's formula; plain, wrapping and saturating arithmetic are. If the formula overflows, the constant is refused at compile time, so you still never get a wrong constant.
+- **(b) Allow `Result`-typed constants now.** That needs new syntax for unpacking a `Result` inside a constant, and a decision on whether an `Err` can be a constant's value. Both models say it breaks rules 1 and 2 and the admission tests, and no program needs it yet.
+- **(c) Later:** reopen through R2 (aggregate and enum constants) when a real program needs it, with listed preconditions. This isn't really a separate choice now; it's how (a) would be extended later.
 
-  **Part 2, what to do with `try_convert`.** The spec currently lets it appear in constants, as if it returned a plain number, but your decision OD106 says it returns a `Result`. That's an inconsistency.
-  - **(i)** Remove `try_convert` from constant formulas, consistent with (a).
-  - **(ii)** Keep it, but only if we add a separate conversion that returns a plain number and refuses the constant on failure. That would be a new language feature for you to approve.
+**Part 2, what to do with `try_convert`.** The spec currently lets it appear in constants, as if it returned a plain number, but your decision OD106 says it returns a `Result`. That's an inconsistency.
+- **(i)** Remove `try_convert` from constant formulas, consistent with (a).
+- **(ii)** Keep it, but only if we add a separate conversion that returns a plain number and refuses the constant on failure. That would be a new language feature for you to approve.
 
-  **Recommendation: (a) with (i).** Both models agree.
-  ```
+**Recommendation: (a) with (i).** Both models agree.
+```
 
-  ```text
-  ### 5. Q-SUBJ: how to test laws about step relations
-  **Background.** The N2 gate makes sure every law is actually tested. Each law needs a concrete example where it holds, plus a planted wrong version of the thing it's about, which must make the law fail. That proves the law says something. The convention you approved assumes the law is about a function, which N2 swaps for a broken one.
+```text
+### 5. Q-SUBJ: how to test laws about step relations
+**Background.** The N2 gate makes sure every law is actually tested. Each law needs a concrete example where it holds, plus a planted wrong version of the thing it's about, which must make the law fail. That proves the law says something. The convention you approved assumes the law is about a function, which N2 swaps for a broken one.
 
-  36 laws in C1 are instead about `Step`, `Steps` and `AnswerStep`, the "program takes one step" relations. These are written as inductive rules, not functions.
+36 laws in C1 are instead about `Step`, `Steps` and `AnswerStep`, the "program takes one step" relations. These are written as inductive rules, not functions.
 
-  - **(a) Let N2 accept rules too.** The planted wrong version is then a broken set of rules with the same shape, such as "a step that never moves". Those are already written. It's the same strength of test, and it's how semantics are normally written. It's a small change to the convention you approved.
-  - **(b) Rewrite `Step` and the others as functions.** The convention stays as it is, but this changes how the semantics are written in every spec branch: a large change, and a less natural form.
-  - **(c) Restate the 36 laws in terms of the existing `step` function.** Only C1 is affected, but the laws then talk about one implementation rather than the semantics.
+- **(a) Let N2 accept rules too.** The planted wrong version is then a broken set of rules with the same shape, such as "a step that never moves". Those are already written. It's the same strength of test, and it's how semantics are normally written. It's a small change to the convention you approved.
+- **(b) Rewrite `Step` and the others as functions.** The convention stays as it is, but this changes how the semantics are written in every spec branch: a large change, and a less natural form.
+- **(c) Restate the 36 laws in terms of the existing `step` function.** Only C1 is affected, but the laws then talk about one implementation rather than the semantics.
 
-  **Codex's related finding:** C1's two determinism laws ("a program has only one next step") are currently true just because `step` is a function, so they prove nothing. Codex suggests labelling them as facts about the representation, and proving determinism separately against independently written rules. If you pick (a), that follows naturally.
+**Codex's related finding:** C1's two determinism laws ("a program has only one next step") are currently true just because `step` is a function, so they prove nothing. Codex suggests labelling them as facts about the representation, and proving determinism separately against independently written rules. If you pick (a), that follows naturally.
 
-  **Recommendation: (a)**, plus Codex's determinism fix.
-  ```
+**Recommendation: (a)**, plus Codex's determinism fix.
+```
 
   Verbatim owner delegation, L134801, 2026-11-09T05:14:16.260Z:
 
-  ```text
-  ok tell me again the options choose the best long term options for everything
-  ```
+```text
+ok tell me again the options choose the best long term options for everything
+```
 
   The options were **not re-shown before the choice**. The coordinator's choices,
   L134888, 2026-11-09T05:18:25.409Z (verbatim rows):
 
-  ```text
-  | 2 | C6: invalid source locations | **(a) Make them impossible** | Every source file gets one checked project-relative path, and the loader refuses bad paths and duplicate sites. Every trap can then always say where it happened. The other options either hide traps, keep a shortcut, or print a useless location. |
-  | 3 | C2: constants | **(a)+(i)** | Constants stay plain integers and bools, and `try_convert` comes out of constant formulas. That matches OD106, which says it returns a `Result`. Richer constants come later through R2, when a real program needs them. |
-  | 5 | Q-SUBJ: laws about steps | **(a)** | N2 accepts inductive rules when a broken version of the same shape is planted. That keeps the semantics in their natural form, with the same strength of test. C1's two determinism laws will also be proved against independently written rules, so they actually say something. |
-  ```
+```text
+| 2 | C6: invalid source locations | **(a) Make them impossible** | Every source file gets one checked project-relative path, and the loader refuses bad paths and duplicate sites. Every trap can then always say where it happened. The other options either hide traps, keep a shortcut, or print a useless location. |
+| 3 | C2: constants | **(a)+(i)** | Constants stay plain integers and bools, and `try_convert` comes out of constant formulas. That matches OD106, which says it returns a `Result`. Richer constants come later through R2, when a real program needs them. |
+| 5 | Q-SUBJ: laws about steps | **(a)** | N2 accepts inductive rules when a broken version of the same shape is planted. That keeps the semantics in their natural form, with the same strength of test. C1's two determinism laws will also be proved against independently written rules, so they actually say something. |
+```
 
   Scope of the ten held delegated sub-rules (report rows 1.4–1.5, 2.1–2.5, 3.2–3.4):
   scalar integer/bool constants excluding checked arithmetic; exclusion of `try_convert`
@@ -3399,7 +3398,6 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   within that entry's stated scope. This does not resolve the ten delegated choices above.
 
   **Already recovered authority, independently checked; existing records retained.**
-
   These seven report rows need no duplicate decision or expanded scope:
 
   | Report row | Existing record | Primary recommendation and owner reply (UTC) |
@@ -3425,35 +3423,35 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
 
   Owner question, L151435, 2026-11-13T17:56:00.435Z:
 
-  ~~~text
-  what do you mean theorems classifed?
-  ~~~
+~~~text
+what do you mean theorems classifed?
+~~~
 
   Assistant explanation and question, L151464, 2026-11-13T17:56:15.556Z:
 
-  ~~~text
-  Every theorem in the spec carries a small tag in its comment saying what kind of proof it is. A planned check uses those tags to catch theorems that look like guarantees but prove nothing. The tags are:
+~~~text
+Every theorem in the spec carries a small tag in its comment saying what kind of proof it is. A planned check uses those tags to catch theorems that look like guarantees but prove nothing. The tags are:
 
-  - **Law:** a real guarantee about the language, for example "a refused step never finishes normally". These are what the spec promises.
-  - **Helper:** a stepping stone used to prove a law. It isn't a promise by itself.
-  - **Representation lemma:** something that is true only because of how the spec happens to be written in Lean, not a fact about the language. Example: "a program has only one next step" is automatically true when the step is written as a function, so it proves nothing about determinism.
-  - **Instance:** a law checked on one concrete example.
-  - **Planted:** a deliberately broken version of a rule, used to show the law's test would catch a wrong definition.
+- **Law:** a real guarantee about the language, for example "a refused step never finishes normally". These are what the spec promises.
+- **Helper:** a stepping stone used to prove a law. It isn't a promise by itself.
+- **Representation lemma:** something that is true only because of how the spec happens to be written in Lean, not a fact about the language. Example: "a program has only one next step" is automatically true when the step is written as a function, so it proves nothing about determinism.
+- **Instance:** a law checked on one concrete example.
+- **Planted:** a deliberately broken version of a rule, used to show the law's test would catch a wrong definition.
 
-  Only laws count as evidence. Helpers and representation lemmas don't.
+Only laws count as evidence. Helpers and representation lemmas don't.
 
-  **What you already approved:** the substance. Every law needs positive and negative tests. Determinism must be proved against separately written rules. Laws that hold only because of how the spec is written are relabelled as representation lemmas.
+**What you already approved:** the substance. Every law needs positive and negative tests. Determinism must be proved against separately written rules. Laws that hold only because of how the spec is written are relabelled as representation lemmas.
 
-  **What has no recorded approval:** the tag names and format themselves. The workers invented that vocabulary. I told you about it twice on Nov 8 as an update, but never asked you.
+**What has no recorded approval:** the tag names and format themselves. The workers invented that vocabulary. I told you about it twice on Nov 8 as an update, but never asked you.
 
-  **The question:** is this vocabulary engineering I can just record as the convention, or do you want to approve it yourself? I recommend treating it as engineering: it changes nothing in the language, and the real rules behind it are already yours. It does block the proof pieces after the execution spec, so I need one or the other.
-  ~~~
+**The question:** is this vocabulary engineering I can just record as the convention, or do you want to approve it yourself? I recommend treating it as engineering: it changes nothing in the language, and the real rules behind it are already yours. It does block the proof pieces after the execution spec, so I need one or the other.
+~~~
 
   Owner reply, L151469, 2026-11-13T17:56:44.839Z:
 
-  ~~~text
-  yes it's okay
-  ~~~
+~~~text
+yes it's okay
+~~~
 
   Scope: this resolves the vocabulary hold in [D4](#decided-2026-11-13-d4-recovery),
   report §3.5, for the convention actually explained above. The `(approved: ...)`
@@ -3477,40 +3475,40 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
 
   Owner question, L153852, 2026-11-14T17:04:15.652Z:
 
-  ~~~text
-  what is the best decision, tell me what you think and have kimi, agy and codex review it
-  ~~~
+~~~text
+what is the best decision, tell me what you think and have kimi, agy and codex review it
+~~~
 
   Coordinator recommendation, L153927, 2026-11-14T17:04:59.972Z:
 
-  ~~~text
-  My recommendation: confirm both Nov 9 choices.
+~~~text
+My recommendation: confirm both Nov 9 choices.
 
-  1. **Where traps can happen:** make a bad source location impossible. Every source file gets one checked path inside the project. The loader refuses empty paths, paths with `..`, absolute paths and duplicates. That way every trap can always say exactly where it happened. The alternatives either hide the trap or report a useless location. Which characters a path may contain stays a separate open question.
-  2. **How laws are tested:** keep the step rules in their normal written form and test each law by planting a broken version of the rules with the same shape, which must make the law fail. The test is as strong as the one we use for functions, with no big rewrite. Determinism also gets a real proof against separately written rules, instead of a fact that holds only because of how the spec is written in Lean.
+1. **Where traps can happen:** make a bad source location impossible. Every source file gets one checked path inside the project. The loader refuses empty paths, paths with `..`, absolute paths and duplicates. That way every trap can always say exactly where it happened. The alternatives either hide the trap or report a useless location. Which characters a path may contain stays a separate open question.
+2. **How laws are tested:** keep the step rules in their normal written form and test each law by planting a broken version of the rules with the same shape, which must make the law fail. The test is as strong as the one we use for functions, with no big rewrite. Determinism also gets a real proof against separately written rules, instead of a fact that holds only because of how the spec is written in Lean.
 
-  Codex, agy and Kimi are each reviewing this recommendation now, independently. I'll report what they say.
-  ~~~
+Codex, agy and Kimi are each reviewing this recommendation now, independently. I'll report what they say.
+~~~
 
   Coordinator follow-up with the three reviewer additions, L153950, 2026-11-14T17:11:37.006Z:
 
-  ~~~text
-  Codex, agy and Kimi all agree with both choices. Each one also asked for the same three additions, and I've added them to my recommendation:
+~~~text
+Codex, agy and Kimi all agree with both choices. Each one also asked for the same three additions, and I've added them to my recommendation:
 
-  1. **Trap locations:** refusing bad paths isn't enough on its own. Every place that can trap must map to exactly one valid source location, and the spec must prove it. The open path-character questions stay open, and nothing should claim paths are fully validated until you settle them.
-  2. **Determinism:** proving determinism of the separately written rules isn't enough either. We must also prove that those rules and the running spec agree in both directions. The proof assumes the outside world gives the same answer both times.
-  3. **Law tests:** the broken version must break one specific rule and be swapped in everywhere the law mentions that rule. Lean itself must check a concrete example where the law's conditions still hold but its conclusion fails. An error or a timeout doesn't count as the law failing.
+1. **Trap locations:** refusing bad paths isn't enough on its own. Every place that can trap must map to exactly one valid source location, and the spec must prove it. The open path-character questions stay open, and nothing should claim paths are fully validated until you settle them.
+2. **Determinism:** proving determinism of the separately written rules isn't enough either. We must also prove that those rules and the running spec agree in both directions. The proof assumes the outside world gives the same answer both times.
+3. **Law tests:** the broken version must break one specific rule and be swapped in everywhere the law mentions that rule. Lean itself must check a concrete example where the law's conditions still hold but its conclusion fails. An error or a timeout doesn't count as the law failing.
 
-  This makes the proofs somewhat larger, but they become real guarantees instead of tests that can't fail.
+This makes the proofs somewhat larger, but they become real guarantees instead of tests that can't fail.
 
-  **Your call:** do you confirm both choices with these three additions? Yes unblocks the determinism proofs and most of what follows.
-  ~~~
+**Your call:** do you confirm both choices with these three additions? Yes unblocks the determinism proofs and most of what follows.
+~~~
 
   Owner reply, L153955, 2026-11-14T17:13:14.039Z:
 
-  ~~~text
-  ok do all this
-  ~~~
+~~~text
+ok do all this
+~~~
 
   Scope: this resolves the C6 core and Q-SUBJ held rows in
   [D4](#decided-2026-11-13-d4-recovery): report rows 2.1–2.5 (the structured
@@ -3549,56 +3547,56 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
 
   Coordinator message (assistant), L154172, 2026-11-14T17:22:00.964Z:
 
-  ~~~text
-  Two questions are still open. Here's the first:
+~~~text
+Two questions are still open. Here's the first:
 
-  **Constants.** Your Nov 9 choice keeps constants to plain integers and `bool`, and removes `try_convert` from constant formulas because it returns a `Result`. What's still open is whether `char` and `()` can also be constants.
+**Constants.** Your Nov 9 choice keeps constants to plain integers and `bool`, and removes `try_convert` from constant formulas because it returns a `Result`. What's still open is whether `char` and `()` can also be constants.
 
-  - **(a) Integers, `bool`, `char` and `()` (my recommendation).** These are all simple fixed values. Since you kept `char`, a program will want a constant like `const NEWLINE: char = ...`, and leaving `char` out would be a gap nobody intended.
-  - **(b) Integers and `bool` only.** Smaller now, and the others get added later when a real program needs them.
+- **(a) Integers, `bool`, `char` and `()` (my recommendation).** These are all simple fixed values. Since you kept `char`, a program will want a constant like `const NEWLINE: char = ...`, and leaving `char` out would be a gap nobody intended.
+- **(b) Integers and `bool` only.** Smaller now, and the others get added later when a real program needs them.
 
-  I'd have Codex, agy and Kimi check this before recording it, as with the trap question.
+I'd have Codex, agy and Kimi check this before recording it, as with the trap question.
 
-  After this, the only remaining question is one more round for the spec inventory, which I recommend.
-  ~~~
+After this, the only remaining question is one more round for the spec inventory, which I recommend.
+~~~
 
   Owner message (user), L154177, 2026-11-14T17:22:16.329Z:
 
-  ~~~text
-  what is the best long term thing
-  ~~~
+~~~text
+what is the best long term thing
+~~~
 
   Coordinator message (assistant), L154208, 2026-11-14T17:22:59.562Z:
 
-  ~~~text
-  When I looked at this more closely, I found a problem with my earlier answer. `char` has no literal, and both ways to build one return `Option`. Constant formulas can't unwrap an `Option`, which is the same reason `try_convert` came out of them. So under today's rules, no `char` constant can actually be written, even if constants are allowed to have type `char`.
+~~~text
+When I looked at this more closely, I found a problem with my earlier answer. `char` has no literal, and both ways to build one return `Option`. Constant formulas can't unwrap an `Option`, which is the same reason `try_convert` came out of them. So under today's rules, no `char` constant can actually be written, even if constants are allowed to have type `char`.
 
-  What I now think is best long term is to decide this by a principle instead of a list of types. A constant can have any simple fixed-value type, as long as its formula uses only operations that always succeed. That admits integers, `bool` and `()` today. `char` constants become possible on their own, with no special rule, if the open SPARK-style precondition question makes checked construction always succeed when its condition is proved.
+What I now think is best long term is to decide this by a principle instead of a list of types. A constant can have any simple fixed-value type, as long as its formula uses only operations that always succeed. That admits integers, `bool` and `()` today. `char` constants become possible on their own, with no special rule, if the open SPARK-style precondition question makes checked construction always succeed when its condition is proved.
 
-  Codex, agy and Kimi are reviewing this now. The roadmap changes and the decision record are also being reviewed. I'll report all three results together.
-  ~~~
+Codex, agy and Kimi are reviewing this now. The roadmap changes and the decision record are also being reviewed. I'll report all three results together.
+~~~
 
   Coordinator message (assistant), L154255, 2026-11-14T17:28:37.645Z:
 
-  ~~~text
-  Here's where things stand.
+~~~text
+Here's where things stand.
 
-  **Constants: the reviewers disagree with me.** They're right, and I'm changing my recommendation. All three found the same flaw in my reasoning: constant formulas can't contain function calls at all. So `char` constants would not become possible on their own later. They would need a separate decision to change the formula rules. All three also said a fixed list of types is safer than an open-ended principle, because a new type should never slip in without review.
+**Constants: the reviewers disagree with me.** They're right, and I'm changing my recommendation. All three found the same flaw in my reasoning: constant formulas can't contain function calls at all. So `char` constants would not become possible on their own later. They would need a separate decision to change the formula rules. All three also said a fixed list of types is safer than an open-ended principle, because a new type should never slip in without review.
 
-  **My new recommendation is integers and `bool` only (option b).** Leave out `char`, because no `char` constant can be written today and allowing the type would promise something unusable. Leave out `()`, because a constant with only one possible value adds nothing. Two reviewers agree on `char` and one wanted to keep `()`. Both stay open to be added later through the existing route for richer constants, once a real program needs them. Checked arithmetic stays allowed in formulas: if it overflows, the compiler refuses the constant.
+**My new recommendation is integers and `bool` only (option b).** Leave out `char`, because no `char` constant can be written today and allowing the type would promise something unusable. Leave out `()`, because a constant with only one possible value adds nothing. Two reviewers agree on `char` and one wanted to keep `()`. Both stay open to be added later through the existing route for richer constants, once a real program needs them. Checked arithmetic stays allowed in formulas: if it overflows, the compiler refuses the constant.
 
-  **Roadmap and decision record:** Codex and Kimi accept both with no findings. agy is still reviewing the roadmap. Once agy finishes, one fix round will update the two old notes that still say your Nov 9 choices are waiting.
+**Roadmap and decision record:** Codex and Kimi accept both with no findings. agy is still reviewing the roadmap. Once agy finishes, one fix round will update the two old notes that still say your Nov 9 choices are waiting.
 
-  **Determinism proofs:** still being written.
+**Determinism proofs:** still being written.
 
-  **Your call:** constants are integers and `bool` only, with the others added later through the richer-constants route?
-  ~~~
+**Your call:** constants are integers and `bool` only, with the others added later through the richer-constants route?
+~~~
 
   Owner message (user), L154260, 2026-11-14T17:28:58.331Z:
 
-  ~~~text
-  yes do that
-  ~~~
+~~~text
+yes do that
+~~~
 
   Scope: this resolves [D4](#decided-2026-11-13-d4-recovery) C2 rows 1.4–1.5:
   constant types are a closed list, integers and `bool` only. `char` and `()` are
@@ -3617,6 +3615,105 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   [November 12 char decision](#decided-2026-11-12-char) remains the authority for
   char construction; this answer settles the constant-type admission question,
   without adding a special char construction rule. Other recovery holds remain open.
+
+- <a id="decided-2026-11-15-review-followups"></a>**Review follow-ups (2026-11-15).**
+  Status: decided for answers 1, 2, 3 and 5; question 4 unanswered.
+  Source: verbatim owner reply relayed by the coordinator from the owner session
+  (2026-11-15), question context summarized by the coordinator, recorded 2026-11-16,
+  under the [recording rule](#decided-project-recording).
+
+  Questions replied to (numbering retained from the supplied context):
+  1. One more review round for the spec inventory branch?
+  2. Fix the review tool that cuts files mid-file?
+  3. Widen ISS-0071 from integer-to-char to all checked conversions and link it to slice 8?
+  4. Add a status field to decision entries, in a format the owner approves (ISS-0083)?
+  5. One extra round (round 8) for the accounting branch to fix the waiting-link
+     normalization only?
+
+  Owner reply, verbatim:
+
+~~~text
+1. yes run one more round on the spec 2. fix the review tool 3. widen the precondition issue 4. i don't understand 5. ok
+~~~
+
+  Answer 4 records lack of understanding, not a decision. Answer 5 authorizes only
+  the waiting-link normalization round described in question 5. The review-tool
+  repair in question 2 is tracked as ISS-0078 in [ISSUES.tsv](../ISSUES.tsv).
+
+- <a id="decided-2026-11-16-conversions-records-gaps"></a>**Checked conversions,
+  decision status and design-gap check (2026-11-16).**
+  Status: decided for the three questions below, with their stated open details.
+  Source: verbatim owner reply relayed by the coordinator from the owner session
+  (2026-11-16), question context summarized by the coordinator, recorded 2026-11-16,
+  under the [recording rule](#decided-project-recording).
+
+  Questions replied to (supplied context):
+  1. Checked conversions option C: keep `try_convert` returning
+     `Result<T, OutOfRange>` ([OD106](#od106)) for values that may not fit, and add
+     one named evidence-required conversion admitted only when the already-decided
+     Lean-proved deterministic checker (CheckedCore evidence) or a checked Lean
+     theorem discharges one shared spec-defined "fits" predicate; never a run-time
+     trap. The conversion's spelling and exact acceptance rule return to the owner.
+  2. Add an explicit status line to every decision entry with values
+     decided / open / recovered (ISS-0083); exact format to be finalized after the
+     Codex/agy format review, and any format change returns to the owner.
+  3. Codex and agy check the costly-to-retrofit list for gaps, and agreed items
+     become roadmap entries.
+
+  Owner reply, verbatim:
+
+~~~text
+ok yes 1 2 3
+~~~
+
+  The chosen conversion direction is tracked by ISS-0071 in
+  [ISSUES.tsv](../ISSUES.tsv), linked to [slice 8](../ROADMAP.md#vertical-slices).
+  Its spelling and exact acceptance rule remain open for the owner. Question 2
+  records the authorized status-line work; its format was subsequently approved in
+  the [status-format decision](#decided-2026-11-16-decision-status-format).
+  Implementation of ISS-0083 remains pending.
+  Question 3 records the authorized gap check; it does not claim a check was run
+  or any resulting roadmap item was agreed.
+
+- <a id="decided-2026-11-16-decision-status-format"></a>**Decision status format
+  (2026-11-16).**
+  Status: decided for the format below; implementation of ISS-0083 pending.
+  Source: verbatim owner reply relayed by the coordinator from the owner session
+  (2026-11-16), question context summarized by the coordinator, recorded 2026-11-16,
+  under the [recording rule](#decided-project-recording).
+
+  Question context summarized by the coordinator: after Codex and agy reviewed
+  the status-line proposal, both asked for a richer format. The coordinator asked
+  the owner to approve:
+
+~~~text
+Status: decided | open | partly decided | replaced | reopened | withdrawn
+Source: owner | recovered from old notes
+Replaced by: <link>   (only when replaced or reopened)
+~~~
+
+  A missing or malformed line fails the check (never inferred), and every line
+  is verified against the owner's words and later revisions.
+
+  Owner reply, verbatim:
+
+~~~text
+yes
+~~~
+
+  This approves the format only. Implementation of ISS-0083 remains pending,
+  tracked in [ISSUES.tsv](../ISSUES.tsv).
+
+- <a id="owner-goals-2026-11-15-provability-errors"></a>**Design goals: owner
+  question (2026-11-15).**
+  Source: verbatim owner reply relayed by the coordinator from the owner session
+  (2026-11-15), question context summarized by the coordinator, recorded 2026-11-16.
+  This is an owner question/goal statement, not a new rule or an answered decision.
+  No preceding question was supplied; this quotation is itself the owner's question:
+
+~~~text
+the design is done so that a) everything can be proven b) we can find get errors with good results?
+~~~
 
 - <a id="decided-project-spark-2026-11-06"></a>**What Concrete takes from SPARK** (owner, 2026-11-06: "ok do everything", after Claude, Codex, agy and Kimi chose unanimously; the
   [review](proposals/SPARK.md) items 1, 2, 3, 6, 7, 9 and 10).
@@ -3662,8 +3759,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   agy and codex and kimi if it's available"). The outside-reader pass (R-0559) is done by the owner and
   independent models: agy (Gemini), Codex, and Kimi when available. They read the browsable owner view of the
   integrated spec. The pass runs before the freeze (A2c) and again for each feature
-  ([long-term changes](#decided-project-long-term-2026-11-06)).
-- <a id="outside-readers-ordering"></a>*Reading
+  ([long-term changes](#decided-project-long-term-2026-11-06)). <a id="outside-readers-ordering"></a>*Reading
   order* (owner, 2026-11-07: "ok go ahead all yes then as you said right", approving the recorded
   recommendation): Codex, agy and Kimi read first; every point one of them finds unclear is recorded
   and resolved before the owner's formal read and before the freeze. A real design question still
@@ -3916,11 +4012,11 @@ These entries were retired when the owner answered them; their IDs are never reu
   the grants, run no user code and do nothing else a program could observe beyond what the target's
   table states.
 
-- <a id="decided-2026-11-02"></a>
-  **Decided 2026-11-02 by the owner's rule** (the owner: "anything where you and codex agree that is the
-  best decision, record the solution"; each answer below is the one Claude and Codex both judged the best
-  long-term answer, Codex having read the repository; the owner answered the first four directly on
-  2026-11-01):
+<a id="decided-2026-11-02"></a>
+**Decided 2026-11-02 by the owner's rule** (the owner: "anything where you and codex agree that is the
+best decision, record the solution"; each answer below is the one Claude and Codex both judged the best
+long-term answer, Codex having read the repository; the owner answered the first four directly on
+2026-11-01):
 
 - <a id="decided-2026-11-02-aliases"></a>**Type-name aliases** (after OD102): the aliases `Int`,
   `Uint`, `Float64` and `Bool` are removed. A builtin type has one spelling (`i64`, `u64`, `f64`,
@@ -3936,177 +4032,177 @@ These entries were retired when the owner answered them; their IDs are never reu
   2026-11-01. Revised 2026-11-08 by [import qualification](#decided-2026-11-08-imports-qualified): import no longer
   permits bare `T`.
 
-- <a id="decided-2026-11-02-authority"></a>**The authority rules** (they replace the twelve rules approved
-    in summary on 2026-11-01):
+<a id="decided-2026-11-02-authority"></a>**The authority rules** (they replace the twelve rules approved
+in summary on 2026-11-01):
 
-    1. **A value is not a permission, and a permission is not a value.** Holding a value never satisfies
-     a `with` requirement, and holding a permission never supplies a required value.
-    2. **Every operation needs both a resource value and a permission.** There are no permission-only
-     operations: the target's services are values too (an `Allocator<A>`, a `Directory`, an
-     `Environment`, a `Clock`, network endpoint grants, devices), each selecting what the operation may
-     reach.
-    3. **Capability variables range over sets** of capabilities, the empty set included. A generic body is
-     checked parametrically; at each instantiation the exact sets are substituted into its types and
-     requirements and the instantiation is rechecked. Inconsistent bindings are refused, never merged
-     into a union. No set-bound syntax is added.
-    4. **Function-pointer types keep their exact capability set** (canonical current rule; OD93 refers here). No conversion changes it. A function
-     that calls a callback declares the callback's set plus its own effects, and a context value adds no
-     authority. Foreign function values stay refused (OD4); the permissions of foreign callbacks are
-     decided when they are admitted.
-    5. **`trusted` and `with(Unsafe)` never discharge an operational capability** (`Fs`, `Network`, `Env`,
-     `Time`, `Alloc`, `Device`, `Console`, `Process`; `Console` added by the [owner revision, 2026-11-05](#decided-2026-11-05-revisions), row Q7.11). Effect checking applies inside trusted bodies and at foreign
-     calls; no capability can be hidden. What native code actually does is a named assumption of the
-     theorem, never an exemption.
-    6. **There are no umbrella capabilities** (`Std`, `Io`, `Block`). Behavioural classes such as "may
-     block" are a conservative table over the capabilities, which also covers allocation, destruction
-     and foreign calls; unknown foreign behaviour counts as "may block". The table never claims that a
-     particular call does not block.
-    7. **Primitive effects come from one exhaustive table** (externs, intrinsics, compiler-generated
-     operations, runtime entry, startup and shutdown); compound effects follow checked composition. A
-     declaration may never understate the effects of what it calls. A body uses only its declared
-     permissions, and a call requires the callee's set to be included in the caller's (TRUST-4), across
-     trait dispatch, generic methods and generated cleanup alike; one Lean judgment states this. The table includes the `Console` operations on the standard-stream
-     grants (row Q7.11, [owner revision, 2026-11-05](#decided-2026-11-05-revisions)).
-    8. **Returned values never supply permissions.** A returned `File` or function value still carries its
-     ownership and its effect requirements, but no permission.
-    9. **Cleanup returns what survives it.** Cleanup with effects is explicit (`close(f) with(Fs)`), and
-     `Destroy` requires at most `Alloc`. On every returning path, a consuming operation releases its
-     input or returns every ownership obligation that remains: a cleanup that can leave a resource live
-     returns it in its error. `close` on a `File` consumes the handle in every outcome only through a
-     platform adapter that guarantees the descriptor is released (POSIX alone does not); a handle whose
-     number may have been reused is never handed back. `defer close(f)` is written with a named function
-     that returns `Unit` and handles the error (OD62, OD140, referring to the canonical Unit-only audit rule below); there is no new syntax for errors of
-     deferred calls.
-    10. **Ownership on failure and exit.** Error branches and early returns keep every linear obligation.
-      Abort runs no cleanup and a trapping deferred call stops the sequence (OD68, OD69); these are the
-      only exceptions.
-    11. **Resources are introduced only by checked acquisition or unforgeable constructors**, and each
-      grant the target creates is minted once. Every extern, intrinsic and minting wrapper is listed in
-      the trusted base, with its identity preserved through interfaces, specialization and linking.
-      Who may introduce them is decided [below](#decided-2026-11-02-audit).
-    12. **`main` receives the target's grants and consumes them.** There is no `Root` type. The target
-      declares the grants it offers (its allocator, directories, environment, clock, devices); `main`'s
-      parameters and `with(...)` must be within them, checked at compile time. `main` consumes every
-      grant explicitly before it returns; abort is the exception. Effects outside ordinary calls (the
-      trap message, flushing output, startup, shutdown) come from the target's table and appear in the
-      semantics and its traces; no source code gains a hidden `Console` or `Alloc`.
-    13. **Capability names are reserved and differ from resource type names**: `with(Fs)` against a
-      `File` value. The reserved set is `Fs`, `Network`, `Env`, `Time`, `Alloc`, `Device`, `Console`, `Process` and
-      `Unsafe` (meanings per OD95; `Console` is the permission for operations on the `StdIn`, `StdOut` and
-      `StdErr` grants, added by the [owner revision, 2026-11-05](#decided-2026-11-05-revisions), row Q7.11; there is no `Net` spelling and no alias). They are reserved everywhere,
-      including import aliases, capability parameters and other binders. Revised 2026-11-08:
-      the `as` import-alias spelling is removed by the [removed-word answer](#decided-2026-11-08-removed-words).
-    14. **What the theorem claims.** Effect containment, resource safety and information-flow security are
-      separate claims with separate assumptions; none implies another. The trusted base is an explicit
-      list of assumptions, and being listed proves nothing.
+1. **A value is not a permission, and a permission is not a value.** Holding a value never satisfies
+   a `with` requirement, and holding a permission never supplies a required value.
+2. **Every operation needs both a resource value and a permission.** There are no permission-only
+   operations: the target's services are values too (an `Allocator<A>`, a `Directory`, an
+   `Environment`, a `Clock`, network endpoint grants, devices), each selecting what the operation may
+   reach.
+3. **Capability variables range over sets** of capabilities, the empty set included. A generic body is
+   checked parametrically; at each instantiation the exact sets are substituted into its types and
+   requirements and the instantiation is rechecked. Inconsistent bindings are refused, never merged
+   into a union. No set-bound syntax is added.
+4. **Function-pointer types keep their exact capability set** (canonical current rule; OD93 refers here). No conversion changes it. A function
+   that calls a callback declares the callback's set plus its own effects, and a context value adds no
+   authority. Foreign function values stay refused (OD4); the permissions of foreign callbacks are
+   decided when they are admitted.
+5. **`trusted` and `with(Unsafe)` never discharge an operational capability** (`Fs`, `Network`, `Env`,
+   `Time`, `Alloc`, `Device`, `Console`, `Process`; `Console` added by the [owner revision, 2026-11-05](#decided-2026-11-05-revisions), row Q7.11). Effect checking applies inside trusted bodies and at foreign
+   calls; no capability can be hidden. What native code actually does is a named assumption of the
+   theorem, never an exemption.
+6. **There are no umbrella capabilities** (`Std`, `Io`, `Block`). Behavioural classes such as "may
+   block" are a conservative table over the capabilities, which also covers allocation, destruction
+   and foreign calls; unknown foreign behaviour counts as "may block". The table never claims that a
+   particular call does not block.
+7. **Primitive effects come from one exhaustive table** (externs, intrinsics, compiler-generated
+   operations, runtime entry, startup and shutdown); compound effects follow checked composition. A
+   declaration may never understate the effects of what it calls. A body uses only its declared
+   permissions, and a call requires the callee's set to be included in the caller's (TRUST-4), across
+   trait dispatch, generic methods and generated cleanup alike; one Lean judgment states this. The table includes the `Console` operations on the standard-stream
+   grants (row Q7.11, [owner revision, 2026-11-05](#decided-2026-11-05-revisions)).
+8. **Returned values never supply permissions.** A returned `File` or function value still carries its
+   ownership and its effect requirements, but no permission.
+9. **Cleanup returns what survives it.** Cleanup with effects is explicit (`close(f) with(Fs)`), and
+   `Destroy` requires at most `Alloc`. On every returning path, a consuming operation releases its
+   input or returns every ownership obligation that remains: a cleanup that can leave a resource live
+   returns it in its error. `close` on a `File` consumes the handle in every outcome only through a
+   platform adapter that guarantees the descriptor is released (POSIX alone does not); a handle whose
+   number may have been reused is never handed back. `defer close(f)` is written with a named function
+   that returns `Unit` and handles the error (OD62, OD140, referring to the canonical Unit-only audit rule below); there is no new syntax for errors of
+   deferred calls.
+10. **Ownership on failure and exit.** Error branches and early returns keep every linear obligation.
+    Abort runs no cleanup and a trapping deferred call stops the sequence (OD68, OD69); these are the
+    only exceptions.
+11. **Resources are introduced only by checked acquisition or unforgeable constructors**, and each
+    grant the target creates is minted once. Every extern, intrinsic and minting wrapper is listed in
+    the trusted base, with its identity preserved through interfaces, specialization and linking.
+    Who may introduce them is decided [below](#decided-2026-11-02-audit).
+12. **`main` receives the target's grants and consumes them.** There is no `Root` type. The target
+    declares the grants it offers (its allocator, directories, environment, clock, devices); `main`'s
+    parameters and `with(...)` must be within them, checked at compile time. `main` consumes every
+    grant explicitly before it returns; abort is the exception. Effects outside ordinary calls (the
+    trap message, flushing output, startup, shutdown) come from the target's table and appear in the
+    semantics and its traces; no source code gains a hidden `Console` or `Alloc`.
+13. **Capability names are reserved and differ from resource type names**: `with(Fs)` against a
+    `File` value. The reserved set is `Fs`, `Network`, `Env`, `Time`, `Alloc`, `Device`, `Console`, `Process` and
+    `Unsafe` (meanings per OD95; `Console` is the permission for operations on the `StdIn`, `StdOut` and
+    `StdErr` grants, added by the [owner revision, 2026-11-05](#decided-2026-11-05-revisions), row Q7.11; there is no `Net` spelling and no alias). They are reserved everywhere,
+    including import aliases, capability parameters and other binders. Revised 2026-11-08:
+    the `as` import-alias spelling is removed by the [removed-word answer](#decided-2026-11-08-removed-words).
+14. **What the theorem claims.** Effect containment, resource safety and information-flow security are
+    separate claims with separate assumptions; none implies another. The trusted base is an explicit
+    list of assumptions, and being listed proves nothing.
 
-- <a id="decided-2026-11-02-allocation"></a>**Allocation** (revises OD83, the former authority rule 10
-    of 2026-11-01 "one allocator form per target", and the terminal out-of-memory failure of STMT-2):
+<a id="decided-2026-11-02-allocation"></a>**Allocation** (revises OD83, the former authority rule 10
+of 2026-11-01 "one allocator form per target", and the terminal out-of-memory failure of STMT-2):
 
-  - **One allocation form on every target**: an allocator value plus `with(Alloc)`. A hosted target hands
-    `main` the system allocator; a freestanding target hands it its arenas. There is no allocation by
-    permission alone.
-  - **The common type is `Allocator<A>`**, whose parameter `A` is a fresh, unforgeable identity of one
-    allocator domain (`Sys` for the system allocator); an arena is one kind of allocator.
-  - **Allocations carry their allocator's identity in their type**: `Heap<T, A>`, `Vec<T, A>`, `String<A>`.
-    Each records how to release its storage (never a reference to the allocator), so `*h` and
-    `destroy(h)` (OD59) need no allocator argument and `Destroy` still requires at most `Alloc`.
-    Moving a value to another allocator allocates there explicitly.
-  - **An allocator can be given up only when nothing allocated from it is alive.** This dependency is a
-    language rule that holds across function boundaries, generics, containers and callbacks, and it is
-    not implemented by reference counting.
-  - **Allocation is fallible and conserves its input**:
-    `alloc(a: &mut Allocator<A>, v: T) with(Alloc) -> Result<Heap<T, A>, AllocFailure<T>>` returns the
-    value on failure. The failure value itself never allocates, and the allocator stays valid after a
-    failure. A container whose growth fails is unchanged and returns the rejected element; a failed
-    reserve keeps the original storage; an operation that allocates several times accounts for what it
-    had already built; a consuming container operation returns the container when an obligation
-    survives. Running out of memory is an ordinary error, not a terminal failure. Allocating string operations
-    (OD154) take an allocator and report failure; static text needs no allocation.
+- **One allocation form on every target**: an allocator value plus `with(Alloc)`. A hosted target hands
+  `main` the system allocator; a freestanding target hands it its arenas. There is no allocation by
+  permission alone.
+- **The common type is `Allocator<A>`**, whose parameter `A` is a fresh, unforgeable identity of one
+  allocator domain (`Sys` for the system allocator); an arena is one kind of allocator.
+- **Allocations carry their allocator's identity in their type**: `Heap<T, A>`, `Vec<T, A>`, `String<A>`.
+  Each records how to release its storage (never a reference to the allocator), so `*h` and
+  `destroy(h)` (OD59) need no allocator argument and `Destroy` still requires at most `Alloc`.
+  Moving a value to another allocator allocates there explicitly.
+- **An allocator can be given up only when nothing allocated from it is alive.** This dependency is a
+  language rule that holds across function boundaries, generics, containers and callbacks, and it is
+  not implemented by reference counting.
+- **Allocation is fallible and conserves its input**:
+  `alloc(a: &mut Allocator<A>, v: T) with(Alloc) -> Result<Heap<T, A>, AllocFailure<T>>` returns the
+  value on failure. The failure value itself never allocates, and the allocator stays valid after a
+  failure. A container whose growth fails is unchanged and returns the rejected element; a failed
+  reserve keeps the original storage; an operation that allocates several times accounts for what it
+  had already built; a consuming container operation returns the container when an obligation
+  survives. Running out of memory is an ordinary error, not a terminal failure. Allocating string operations
+  (OD154) take an allocator and report failure; static text needs no allocation.
 
-- <a id="decided-2026-11-02-filesystem"></a>**Filesystem, environment, time and network** (revises
-    the former authority rule 9 of 2026-11-01 on `get_args`, and OD156):
+<a id="decided-2026-11-02-filesystem"></a>**Filesystem, environment, time and network** (revises
+the former authority rule 9 of 2026-11-01 on `get_args`, and OD156):
 
-  - **Every filesystem namespace operation takes a `Directory` value plus `with(Fs)`**: opening,
-    creating, listing, probing, removing, renaming, linking and metadata lookup. Renaming and linking need
-    the authority of both directories involved. A file that is opened owns its own handle, which borrows
-    nothing from the directory; operations on an open file take that file. `main` receives the
-    directories the target grants; a directory value can be narrowed (for example to read-only) and
-    handed to a library alone.
-  - **A path stays inside its directory**, enforced during lookup: absolute paths, `..` components and
-    symbolic links anywhere in the path are refused, confinement is enforced by the lookup primitive
-    itself (never by checking a path and then opening it), and the mount-crossing policy is stated. A
-    target without such a primitive refuses filesystem access.
-  - **The environment and the clock are grants**: an `Environment` value selects which variables and
-    arguments are visible, a `Clock` value which clock and what precision. `get_args` takes the
-    `Environment` and `with(Env)`, and an allocator when it allocates.
-  - **Network**: connecting needs a grant naming the permitted destinations, and binding or listening a
-    grant naming the endpoint, each plus `with(Network)`; accepting takes the listener, and communicating
-    takes the connected socket, still with `with(Network)` (holding a socket supplies no permission).
-    Name resolution (DNS) needs its own stated authority contract.
+- **Every filesystem namespace operation takes a `Directory` value plus `with(Fs)`**: opening,
+  creating, listing, probing, removing, renaming, linking and metadata lookup. Renaming and linking need
+  the authority of both directories involved. A file that is opened owns its own handle, which borrows
+  nothing from the directory; operations on an open file take that file. `main` receives the
+  directories the target grants; a directory value can be narrowed (for example to read-only) and
+  handed to a library alone.
+- **A path stays inside its directory**, enforced during lookup: absolute paths, `..` components and
+  symbolic links anywhere in the path are refused, confinement is enforced by the lookup primitive
+  itself (never by checking a path and then opening it), and the mount-crossing policy is stated. A
+  target without such a primitive refuses filesystem access.
+- **The environment and the clock are grants**: an `Environment` value selects which variables and
+  arguments are visible, a `Clock` value which clock and what precision. `get_args` takes the
+  `Environment` and `with(Env)`, and an allocator when it allocates.
+- **Network**: connecting needs a grant naming the permitted destinations, and binding or listening a
+  grant naming the endpoint, each plus `with(Network)`; accepting takes the listener, and communicating
+  takes the connected socket, still with `with(Network)` (holding a socket supplies no permission).
+  Name resolution (DNS) needs its own stated authority contract.
 
-- <a id="decided-2026-11-02-audit"></a>**Decided 2026-11-02, the questions the spec audit raised** (same rule: Claude's proposal
-    and Codex's review agreed, Codex's refinement adopted where it gave one):
+<a id="decided-2026-11-02-audit"></a>**Decided 2026-11-02, the questions the spec audit raised** (same rule: Claude's proposal
+and Codex's review agreed, Codex's refinement adopted where it gave one):
 
-  - **Allocator reset** is allowed under the condition for giving an allocator up: it consumes the
-    allocator, requires `with(Alloc)` and no live allocation or conflicting loan from it, and returns an
-    allocator whose identity the operation generates fresh (never chosen by the caller). How fresh
-    identities are introduced and scoped in Core, including repeated resets in a loop, is part of the
-    target Core proposal.
-  - **Who introduces primitives.** Any library may declare externs, in trusted code, each listed in the
-    trusted base with an accurate primitive contract. Only the compiler introduces intrinsics. Only the
-    target runtime mints the initial grants; ordinary libraries may acquire or narrow authority only
-    from grants they already hold, and an extern never bypasses this.
-  - **What "every operation" covers** (authority rule 2): the operations on resources. Pure computation
-    and checked traps need neither a value nor a permission. `abort()` is the same terminal trap and
-    needs neither (this revises STMT-13, which required `Process`). The target's diagnostics and output
-    flushing stay accounted for in traces and target assumptions, and `Unsafe` keeps its own validity
-    requirements.
-  - **`main` declares the grants it wants**, as parameters, out of those the target offers; a grant it
-    does not declare is never minted, and it consumes every grant it declares.
-  - **Opening a heap.** `&h` gives `&Heap<T, A>`, a reference to the heap's shell. A borrow block opens
-    exactly one heap layer; opening mutably needs exclusive access, and opening through a shell
-    reference keeps that reference's root and lifetime and never upgrades shared access. A `HeapArray`
-    exposes a bounded element view, never an element `&T` or an extra heap layer; the view's exact type
-    is part of the target Core proposal.
-  - **Qualified trait calls** (syntax completion of the canonical [OD6](#od6) rule): an ambiguous method call is written `Trait::method(&x, ...)`,
-    a path call resolved by the trait's identity, and is refused otherwise; qualification never relaxes
-    coherence. Revised 2026-11-08: receiver syntax is historical under the
-    [removed-word answer](#decided-2026-11-08-removed-words); identity-based qualification remains.
-  - **Traits cross modules like any other declaration** (owner, 2026-11-02): a `pub` trait is exported,
-    and another module imports it explicitly (OD139) to implement it, bound by it or call
-    it qualified as `Trait::method(&x, ...)`. Revised 2026-11-08: see the
-    [imported-use qualification](#decided-2026-11-08-imports-qualified) and the receiver revision above.
-  - **Mounts and name resolution.** A lookup that crosses a mount point is refused. Name resolution
-    (DNS) takes a resolver grant naming the permitted service, query scope and transport, plus
-    `with(Network)`, and an allocator when it allocates; resolving grants no connection, and connecting
-    to a returned address still needs the destination grant.
-  - **`defer` takes a call whose result is `Unit`** (canonical current rule; revised OD140 and authority rule 9 refer here). Any other call is wrapped in a named
-    function that returns `Unit` and consumes a linear result, handles a `Result` or `Option`, or
-    discards an eligible Copy result; there is no discard form inside `defer`.
-  - **A projection base is a place**: a local, or a projection through a place. A call result is bound
-    with `let` before it is projected.
-  - **Deferred arguments.** A by-value argument of a deferred call is reserved and read when the call runs
-    (OWN-12, kept by OD2); a borrowed argument is a loan held until the call runs (OWN-16). Both
-    restrictions apply together. Allocator dependencies are checked when the deferred call runs: an
-    allocation may still be alive at registration only if the cleanup removes it before its allocator is
-    consumed.
-  - **`_` names an unused binding.** It never discards a linear value or a `Result` or `Option` (OD62);
-    those are consumed or handled explicitly.
-  - **Postconditions are partial correctness over normal returns.** A trap is not a return, so `ensures`
-    says nothing about trapping or diverging executions, and a proved postcondition is never reported as
-    freedom from traps.
-  - **What a function contract sees.** `requires` and `ensures` see the function's parameters, `result`
-    (in `ensures` only) and the declarations they may name, such as specification functions; never the
-    body's locals. `requires` reads the parameters at entry; `ensures` reads the parameters' surviving
-    state after every deferred call (OD144), with no implicit entry snapshot, and a parameter the body
-    consumed is not visible. Loop clauses and body assertions use their own lexical scope, permitted
-    ghost locals included.
-  - **User capability aliases** (`cap IO = ...`) are removed: they are umbrella capabilities by another
-    name. Capability parameters remain.
+- **Allocator reset** is allowed under the condition for giving an allocator up: it consumes the
+  allocator, requires `with(Alloc)` and no live allocation or conflicting loan from it, and returns an
+  allocator whose identity the operation generates fresh (never chosen by the caller). How fresh
+  identities are introduced and scoped in Core, including repeated resets in a loop, is part of the
+  target Core proposal.
+- **Who introduces primitives.** Any library may declare externs, in trusted code, each listed in the
+  trusted base with an accurate primitive contract. Only the compiler introduces intrinsics. Only the
+  target runtime mints the initial grants; ordinary libraries may acquire or narrow authority only
+  from grants they already hold, and an extern never bypasses this.
+- **What "every operation" covers** (authority rule 2): the operations on resources. Pure computation
+  and checked traps need neither a value nor a permission. `abort()` is the same terminal trap and
+  needs neither (this revises STMT-13, which required `Process`). The target's diagnostics and output
+  flushing stay accounted for in traces and target assumptions, and `Unsafe` keeps its own validity
+  requirements.
+- **`main` declares the grants it wants**, as parameters, out of those the target offers; a grant it
+  does not declare is never minted, and it consumes every grant it declares.
+- **Opening a heap.** `&h` gives `&Heap<T, A>`, a reference to the heap's shell. A borrow block opens
+  exactly one heap layer; opening mutably needs exclusive access, and opening through a shell
+  reference keeps that reference's root and lifetime and never upgrades shared access. A `HeapArray`
+  exposes a bounded element view, never an element `&T` or an extra heap layer; the view's exact type
+  is part of the target Core proposal.
+- **Qualified trait calls** (syntax completion of the canonical [OD6](#od6) rule): an ambiguous method call is written `Trait::method(&x, ...)`,
+  a path call resolved by the trait's identity, and is refused otherwise; qualification never relaxes
+  coherence. Revised 2026-11-08: receiver syntax is historical under the
+  [removed-word answer](#decided-2026-11-08-removed-words); identity-based qualification remains.
+- **Traits cross modules like any other declaration** (owner, 2026-11-02): a `pub` trait is exported,
+  and another module imports it explicitly (OD139) to implement it, bound by it or call
+  it qualified as `Trait::method(&x, ...)`. Revised 2026-11-08: see the
+  [imported-use qualification](#decided-2026-11-08-imports-qualified) and the receiver revision above.
+- **Mounts and name resolution.** A lookup that crosses a mount point is refused. Name resolution
+  (DNS) takes a resolver grant naming the permitted service, query scope and transport, plus
+  `with(Network)`, and an allocator when it allocates; resolving grants no connection, and connecting
+  to a returned address still needs the destination grant.
+- **`defer` takes a call whose result is `Unit`** (canonical current rule; revised OD140 and authority rule 9 refer here). Any other call is wrapped in a named
+  function that returns `Unit` and consumes a linear result, handles a `Result` or `Option`, or
+  discards an eligible Copy result; there is no discard form inside `defer`.
+- **A projection base is a place**: a local, or a projection through a place. A call result is bound
+  with `let` before it is projected.
+- **Deferred arguments.** A by-value argument of a deferred call is reserved and read when the call runs
+  (OWN-12, kept by OD2); a borrowed argument is a loan held until the call runs (OWN-16). Both
+  restrictions apply together. Allocator dependencies are checked when the deferred call runs: an
+  allocation may still be alive at registration only if the cleanup removes it before its allocator is
+  consumed.
+- **`_` names an unused binding.** It never discards a linear value or a `Result` or `Option` (OD62);
+  those are consumed or handled explicitly.
+- **Postconditions are partial correctness over normal returns.** A trap is not a return, so `ensures`
+  says nothing about trapping or diverging executions, and a proved postcondition is never reported as
+  freedom from traps.
+- **What a function contract sees.** `requires` and `ensures` see the function's parameters, `result`
+  (in `ensures` only) and the declarations they may name, such as specification functions; never the
+  body's locals. `requires` reads the parameters at entry; `ensures` reads the parameters' surviving
+  state after every deferred call (OD144), with no implicit entry snapshot, and a parameter the body
+  consumed is not visible. Loop clauses and body assertions use their own lexical scope, permitted
+  ghost locals included.
+- **User capability aliases** (`cap IO = ...`) are removed: they are umbrella capabilities by another
+  name. Capability parameters remain.
 
-  **Decided 2026-10-31 by the owner's rule** (every reviewer agreed, and the answer is as strict as
-  Austral or stricter):
+**Decided 2026-10-31 by the owner's rule** (every reviewer agreed, and the answer is as strict as
+Austral or stricter):
 
 - <a id="OPEN-33"></a>**OPEN-33** (OD33, Inline submodules under one file per module): See [OD33](#od33).
 - <a id="OPEN-43"></a>**OPEN-43** (OD43, How a type position resolves a name): See [OD43](#od43).

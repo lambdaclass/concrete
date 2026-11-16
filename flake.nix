@@ -56,9 +56,8 @@
               installPhase = "mkdir -p $out && cp -R lean-4.35.0-${asset.name}/. $out/";
             };
           # pyyaml so scripts/tests/check_workflow_yaml.sh can actually run: it needs pyyaml or ruby
-          # and FAILS (rather than skips) without either. markdown-it-py supplies CommonMark
-          # structure for the authority validator and its regression controls.
-          python = pkgs.python3.withPackages (ps: [ ps.pyyaml ps.markdown-it-py ]);
+          # and FAILS (rather than skips) without either. The only non-stdlib module any gate imports.
+          python = pkgs.python3.withPackages (ps: [ ps.pyyaml ]);
 
           # THE GATE USERLAND: the programs scripts/tests (and the scripts/ci, scripts/gen,
           # scripts/land helpers they call) run, and nothing else. Gates run in three places, the
