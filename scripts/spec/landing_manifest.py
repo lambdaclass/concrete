@@ -407,9 +407,7 @@ def generate(data):
             row(record='snapshot',name='baseline',kind='git-commit',source=BASE,piece='BASE',disposition='retain'),
             row(record='snapshot',name='plan',kind='sha256',source='ConcreteSpec/landing/plan.md',piece='P',
                 digest=sha((ROOT/'ConcreteSpec/landing/plan.md').read_bytes()),disposition='retain')]
-    rows.append(row(record='snapshot', name='toolchain', kind='lean-commit',
-                    source=census_toolchain(), piece='P', disposition='retain',
-                    note='Elaboration identity; classify every cross-toolchain census delta before updating.'))
+    rows.append(toolchain_snapshot(census_toolchain()))
     for p, deps in sorted(PREREQS.items()):
         rows.append(row(record='piece',name=p,kind='landing-piece',piece=p,prerequisites=','.join(deps),
                         disposition='owner-held' if p in HOLDS else 'retain',note=HOLDS.get(p,'')))
@@ -1062,11 +1060,21 @@ def census_toolchain():
     return subprocess.check_output(['lean', '--githash'], text=True).strip()
 
 
+def toolchain_snapshot(source):
+    return row(record='snapshot', name='toolchain', kind='lean-commit',
+               source=source, piece='P', disposition='retain',
+               note='Elaboration identity; classify every cross-toolchain census delta before updating.')
+
+
 def check_census_toolchain(rows, actual):
     recorded = next((r['source'] for r in rows if r['record']=='snapshot' and r['name']=='toolchain'), None)
     if recorded != actual:
         raise ValueError(f'census toolchain changed: recorded={recorded}; actual={actual}; '
                          'classify dependency, generated-population and term-digest changes before updating the inventory')
+
+    markers = [r for r in rows if r['record']=='snapshot' and r['name']=='toolchain']
+    if markers != [toolchain_snapshot(actual)]:
+        raise ValueError('toolchain snapshot metadata mismatch')
 
 
 def census_drift(recorded, expected):

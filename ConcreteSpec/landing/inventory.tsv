@@ -42864,4 +42864,4 @@ piece	T3b2	landing-piece				T3b2	T3b1	retain
 snapshot	baseline	git-commit	1a50c64ff1b6f3a2899522f279eccc86d3b004a2			BASE		retain							
 snapshot	plan	sha256	ConcreteSpec/landing/plan.md			P		retain		6f7fc0ead811164c3c36265c81f02b47f1845512342a5c12779202b8eff98691					
 snapshot	source	git-commit	aa44140a33747fa37ece59c76090972e564c65b4			P		retain							
-snapshot	toolchain	lean-commit	eb6cafb7290e8bd5f2937522d8d804f58f02bafc			P		retain					Round 16: cross-version reconciliation in toolchain-drift.json; every original census field reproduced under Lean 4.34.1 before updating to Lean 4.35.0.		
+snapshot	toolchain	lean-commit	eb6cafb7290e8bd5f2937522d8d804f58f02bafc			P		retain					Elaboration identity; classify every cross-toolchain census delta before updating.		

@@ -59,13 +59,19 @@ def main():
     else:
         raise ValueError('changed dependencies accepted')
     inventory.census_drift(old, old)
-    marker = [inventory.row(record='snapshot', name='toolchain', source='old-lean')]
+    marker = [inventory.toolchain_snapshot('old-lean')]
     inventory.check_census_toolchain(marker, 'old-lean')
     for rows, actual in ((marker, 'new-lean'), ([], 'old-lean')):
         try: inventory.check_census_toolchain(rows, actual)
         except ValueError as exc:
             if 'census toolchain changed:' not in str(exc): raise
         else: raise ValueError('unclassified toolchain change accepted')
+    for field in inventory.FIELDS:
+        if field == 'source': continue  # Cross-toolchain changes are checked above.
+        bad = [dict(marker[0], **{field: 'stale'})]
+        try: inventory.check_census_toolchain(bad, 'old-lean')
+        except ValueError: pass
+        else: raise ValueError('toolchain snapshot drift accepted: '+field)
     # Exercise the production CLI path, including export and the early-failure
     # boundary. Only external census inputs are fixtures; no diagnostic helper
     # is substituted. Mutating/judgment stages must remain unreachable.
