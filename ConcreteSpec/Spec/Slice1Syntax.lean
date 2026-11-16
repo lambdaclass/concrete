@@ -79,17 +79,6 @@ neither, so its examples show only reachable positions and a discarded one (`ove
 
 namespace ConcreteSpec
 
-/-- A declaration name: a struct or a field. Declaration names are nominal (Q9.2).
-For example, `⟨"count"⟩ : Name` names a field. -/
-structure Name where
-  /-- The declaration spelling; for example, `(⟨"count"⟩ : Name).text = "count"`. -/
-  text : String
-  deriving DecidableEq
-
--- Keep diagnostic rendering identical to the previous String representation.
-instance : Repr Name where
-  reprPrec name prec := reprPrec name.text prec
-
 /-! ### Types -/
 
 /-- The integer types (TYPE-19): signed `i8`…`i64` and unsigned `u8`…`u64`, each as many bits wide

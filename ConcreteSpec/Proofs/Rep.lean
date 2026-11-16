@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.Basics
 import ConcreteSpec.Spec.Rep
 import ConcreteSpec.Spec.Slice1Semantics
 import ConcreteSpec.Spec.Slice1Syntax
@@ -11,10 +12,12 @@ PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `Concret
 namespace ConcreteSpec.Rep
 open ConcreteSpec
 
+/-- Helper: byte-width computation used by the representation round trip. -/
 theorem encodeNat_length : ∀ (w n : Nat), (encodeNat w n).length = w
   | 0, _ => rfl
   | w + 1, n => by simp [encodeNat, encodeNat_length w (n / 256)]
 
+/-- Helper: modular byte codec identity used by the representation round trip. -/
 theorem decodeNat_encodeNat : ∀ (w n : Nat), decodeNat (encodeNat w n) = some (n % 256 ^ w)
   | 0, n => by simp [encodeNat, decodeNat, Nat.mod_one]
   | w + 1, n => by
@@ -22,7 +25,7 @@ theorem decodeNat_encodeNat : ∀ (w n : Nat), decodeNat (encodeNat w n) = some 
       Option.some.injEq]
     rw [Nat.pow_succ, Nat.mul_comm (256 ^ w) 256, Nat.mod_mul]
 
-/-- The integer round trip, for every integer type: the bit pattern of an in-range value decodes
+/-- Helper: the integer round trip, for every integer type: the bit pattern of an in-range value decodes
 to the value. -/
 theorem int_roundtrip (t : IntTy) (n : Int) (h : t.inRange n = true) :
     ofBits t ((n % (2 : Int) ^ t.bits).toNat % 256 ^ (t.bits / 8)) = n := by
@@ -53,7 +56,7 @@ theorem int_roundtrip (t : IntTy) (n : Int) (h : t.inRange n = true) :
         Nat.reduceSub, ↓reduceIte, Bool.false_eq_true, false_and, true_and, Nat.not_le] at hc h hm ⊢ <;>
       omega
 
-/-- **`rep_roundtrip`** (Q9.14, Q3.11). For every slice-1 type this part covers (`u8`…`u64`,
+/-- Law: **`rep_roundtrip`** (Q9.14, Q3.11). For every slice-1 type this part covers (`u8`…`u64`,
 `i8`…`i64`, `bool` and a struct with no fields), encoding a well-typed value gives exactly the
 type's size in bytes, and decoding those bytes gives the value back. -/
 theorem rep_roundtrip {Δ : Decls} {v : Val} {t : Ty} (h : RepVal Δ v t) :

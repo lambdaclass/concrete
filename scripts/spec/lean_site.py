@@ -296,6 +296,8 @@ def main():
         oth = [u for u in ub if u not in prf]
         priv = 'private ' if d['private'] else ''
         parts = [f'<span>{priv}{esc(d["kind"])} <code>{esc(d["display"])}</code></span>']
+        if d['ruleExample']:
+            parts.append('registered rule example')
         if uses:
             parts.append('uses: ' + ''.join(f'<a href="{href(u)}">{short(u)}</a>' for u in uses))
         if prf:
@@ -313,7 +315,8 @@ def main():
         refs = ilean_refs(mod)
         body = []
         nthm = ndef = 0
-        nex = lean_lex.count_examples('\n'.join(src))
+        nex = lean_lex.count_examples('\n'.join(src)) + sum(
+            d['ruleExample'] for d in decls.values() if d['module'] == mod)
         for blk in blocks(src):
             if blk[0] == 'doc':
                 body.append('<div class="prose">' + prose(blk[1]) + '</div>')

@@ -158,7 +158,19 @@ def main():
                       'NumericDataControl'], env=env)
         reject(result, 'scanner mutant', 'Numbers must be exactly List Nat')
         print('control: numeric data alias cannot hide a spelling table')
+        require(compile_file('ScalarCharacterShapeControl',
+                'import ConcreteSpec.Diagnostics.Types\n'
+                'import ConcreteSpec.Spec.Slice1Syntax\n'
+                'namespace ConcreteSpec.Core\n'
+                'abbrev ScalarChar := Var × Char\nend ConcreteSpec.Core\n'),
+                'semantic scalar annotation mutant builds')
+        result = run(['lean', '--run', 'scripts/proofs/local_identity.lean',
+                      'ScalarCharacterShapeControl'], env=env)
+        reject(result, 'semantic scalar annotation mutant', 'ScalarChar must be exactly Char')
+        print('control: semantic character annotation cannot hide a variable/spelling pair')
         accepted = {
+            'semantic scalar character': 'import ConcreteSpec.Spec.Scalar\ndef field (_ : ConcreteSpec.Var) (c : ConcreteSpec.Core.ScalarChar) : ConcreteSpec.Core.ScalarChar := c',
+
             'type constructor with declaration names': 'def field (F : Type → Type) (v : F ConcreteSpec.Var) (_name : ConcreteSpec.Name) : F ConcreteSpec.Var := v',
             'type class with numeric data': 'class Family where\n  Carrier : Type → Type\ndef field [f : Family] (v : f.Carrier ConcreteSpec.Var) (_numbers : ConcreteSpec.Numbers) : f.Carrier ConcreteSpec.Var := v',
 
@@ -216,6 +228,7 @@ def main():
             'type argument inside numeric index': 'inductive Hidden : ConcreteSpec.Numbers → Type where\n  | entry (xs) : Hidden xs\ndef leak (f : Type → ConcreteSpec.Numbers) (x : Hidden (f ConcreteSpec.Var)) (_spelling : String) : Hidden (f ConcreteSpec.Var) := x',
             'erased alias argument': 'abbrev Ignore (_ : Type) := Nat\ndef leak (_x : Ignore ConcreteSpec.Var) (_spelling : String) : Bool := true',
 
+            'raw character spelling': 'def leak (_ : ConcreteSpec.Var) (_ : Char) : Bool := true',
             'character list spelling': 'def leak : List (ConcreteSpec.Var × List Char) := []',
             'scalar list spelling': 'def leak : List (ConcreteSpec.Var × List Nat) := []',
             'UTF-8 byte list spelling': 'def leak : List (ConcreteSpec.Var × List UInt8) := []',

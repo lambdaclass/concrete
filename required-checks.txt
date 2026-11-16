@@ -4,6 +4,7 @@
 # .github/workflows/lean_action_ci.yml is listed, each matrix leg under the name GitHub shows for it:
 # the root has no campaign tier.
 Root checks
+# Includes Lean-derived spec publication and rule-registry controls.
 Spec build
 Oracle (GitHub-hosted fetch + smoke)
 Landing record

@@ -26,6 +26,19 @@ structure Var where
   id : Nat
   deriving DecidableEq
 
+/-- Nominal identity text (Q9.2): a declaration, module component or opaque
+identity token, never a local diagnostic spelling. No character, path, version
+or normalization policy is imposed by this wrapper.
+For example, `⟨"count"⟩ : Name` names a field. -/
+structure Name where
+  /-- The declaration spelling; for example, `(⟨"count"⟩ : Name).text = "count"`. -/
+  text : String
+  deriving DecidableEq
+
+-- Keep diagnostic rendering identical to the previous String representation.
+instance : Repr Name where
+  reprPrec name prec := reprPrec name.text prec
+
 /-- Numeric data rather than source spelling scalars. For example, `[1, 2] : Numbers`
 can hold array elements, program text bytes or allocator generations; never identifier spellings. This alias changes no list operation. -/
 abbrev Numbers := List Nat
@@ -33,6 +46,20 @@ abbrev Numbers := List Nat
 end ConcreteSpec
 
 namespace ConcreteSpec.Core
+universe u
+
+/-- Apply a postcondition to an optional successful result. Refusal has no result
+on which to impose a postcondition; success must satisfy `P`.
+This is proof vocabulary, not a claim that refusal is safe or normal completion
+(docs/decisions.md#decided-2026-11-13-lifecycle-refusal). Own and future Grant
+postconditions specialize this definition rather than owning copies. -/
+def ResultSatisfies {α : Type u} (P : α → Prop) : Option α → Prop
+  | none => True
+  | some a => P a
+
+instance {α : Type u} (P : α → Prop) [∀ a, Decidable (P a)] (r : Option α) :
+    Decidable (ResultSatisfies P r) := by
+  cases r <;> unfold ResultSatisfies <;> infer_instance
 
 /-- A finite map as a list of key–value pairs. A key may occur more than once; the first entry
 for a key is the one that counts. -/

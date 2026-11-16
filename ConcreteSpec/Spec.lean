@@ -1,3 +1,8 @@
+import ConcreteSpec.Spec.Const
+import ConcreteSpec.Spec.Own
+import ConcreteSpec.Spec.Rules
+import ConcreteSpec.Spec.Hybrid
+import ConcreteSpec.Spec.Exec
 import ConcreteSpec.Spec.Memory
 import ConcreteSpec.Spec.Basics
 import ConcreteSpec.Spec.Ident

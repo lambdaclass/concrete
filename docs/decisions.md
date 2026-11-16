@@ -14,6 +14,72 @@ the earlier behaviour, the answer below governs, and the code follows as its new
 
 The shape of Core was approved provisionally on 2026-11-05 ([stage A2a](#decided-2026-11-05)): it binds the design, and the owner freezes Core at stage A2c, after the four design theorems are proved against the proposed `Spec.lean` and the integration stage A2i (2026-11-06) is accepted. The project and architecture decisions are recorded here too, [below](#decided-project).
 
+<a id="decided-2026-11-13-lifecycle-refusal"></a>
+## Decided 2026-11-13: lifecycle refusal
+
+This answers the lifecycle-signature part of the [November 9 reopening](#decided-2026-11-09-older-proposals).
+
+Assistant recommendation, verbatim. Provenance: session
+`e2c54e65-31b5-4145-8101-c2d7b071b97e`, physical transcript line 151131,
+2026-11-13T17:21:38.208Z (UTC):
+
+~~~text
+Both recommend the same solution: the ledger is allowed to answer **"refused"**, and the spec already does this.
+
+How it works:
+1. **The ledger has two answers.** Every time a variable is created, a function starts or ends, or a block closes, the ledger answers either "OK, here is the updated ledger" or "refused".
+2. **A refusal stops the run.** It is labelled unsafe. It can never be reported as "finished normally". It is also not a trap and not a recoverable error: it means the program broke the ownership rules, which a real Concrete program can never do.
+3. **The checker carries the guarantee.** It must prove that any program it accepts never gets a "refused", at every point: when a function starts, when a result is stored, and when the last block closes. The spec's safety theorem rests on that.
+4. **No reasons in the spec.** The spec only says "refused". Error messages for the programmer come from the checker.
+
+Example:
+```
+let x = make();
+borrow x as r { ... }  // something still borrows x
+}                      // block closes and frees x
+```
+Before the fix, the spec said "finished normally". With it, the ledger refuses, the run stops as unsafe, and the checker must have rejected this program in the first place.
+
+Nothing changes in the language you write, and the existing rules stay as they are: destruction is always written by the programmer, closing a block never destroys anything by itself, and a trap during cleanup ends the program.
+
+Do you approve it? If yes, I'll record your answer and start the execution spec, which unblocks about 15 pieces after it.
+~~~
+
+Owner reply, verbatim. Provenance: the same session, physical transcript line 151136,
+2026-11-13T17:21:41.810Z (UTC):
+
+~~~text
+yes approve it
+~~~
+
+Decided by that approval:
+
+- The ownership-bookkeeping (lifecycle) step answers either "OK, here is the updated ledger"
+  or "refused".
+- Refusal stops the run, classified unsafe; it is never normal completion, a program trap,
+  or a recoverable error.
+- The checker must prove that an accepted program is never refused at every lifecycle site:
+  function entry, result binding, and scope exit including the final one.
+- The spec carries no refusal reasons; diagnostics come from the checker.
+- Unchanged: [explicit consuming destruction](#od60), with the
+  [receiver-syntax revision](#decided-2026-11-08-language-revisions);
+  [no synthesized destruction at scope exit, only storage teardown](#od69);
+  [a trap in a deferred call ends the program and runs no further deferred call](#od68).
+
+**NOT decided:** how refusal at initial function entry is reported versus refusal mid-run;
+that a refused response to a primitive request does not roll back an already-performed
+external effect (the spec only stops). These are open spec-detail questions raised by the
+Codex review for the execution piece to state explicitly, not owner decisions to encode
+from this record.
+
+Evidence: `scratchpad/f08/approval.md`, `proposal.md`, `review-codex.md` and
+`review-kimi.md` under session `e2c54e65-31b5-4145-8101-c2d7b071b97e`'s scratchpad
+(`/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/`). The primary transcript is
+`~/.claude/projects/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e.jsonl`.
+The full proposal presents options A–F, history and sources. Codex and Kimi independently
+confirmed the defect and agreed with the recommendation, both with changes
+(`AGREE-WITH-CHANGES`). agy could not review because of quota.
+
 <a id="waiting-for-the-owner"></a>
 ## Waiting for the owner
 
@@ -1966,6 +2032,10 @@ ok too many questions do what all of you agree
   (NaN) are historical recovered evidence, superseded by this requirement to bring full
   proposals. Recovery does not restore their former current status.
 
+  Forward note: the lifecycle-signature question is answered by the
+  [November 13 lifecycle-refusal decision](#decided-2026-11-13-lifecycle-refusal).
+  The other reopened questions retain their existing status.
+
   <a id="decided-2026-11-08-recovered-59"></a>**The 59-item list.** Recommendations last shown
   in full at L119002, 2026-11-08T04:03:06.062Z. The owner answered at L119110, 2026-11-08T04:05:31.772Z
   (human queued command, `attachment.type: queued_command`, `attachment.prompt`):
@@ -3177,6 +3247,12 @@ okay with your decisions
   - Confirm or reject the ten delegated sub-rules and the R2 reopening route in the
     [D4 evidence](#decided-2026-11-13-d4-recovery). The delegation is verified; its admission
     under the recording rule is not clear. No per-item owner selection is recovered.
+    **Forward disposition, 2026-11-14:** the [trap-sites and law-tests confirmation](#decided-2026-11-14-trap-sites-and-law-tests) resolves
+    C6 rows 2.1–2.5 and Q-SUBJ rows 3.2–3.4 within its stated scope; the
+    [constant-types confirmation](#decided-2026-11-14-constant-types) resolves C2 rows 1.4–1.5
+    (with checked arithmetic retained) and confirms the R2 reopening route.
+    All ten rows now have a disposition; exact R2 preconditions and the other
+    questions below remain open.
   - Constants: is unit admitted? L130440 (2026-11-08T23:27:37.528Z) says
     "Constants stay int, bool or unit." L134638 instead says integers and bools.
     Is `char` admitted, given normal constant typing but the scalar restriction?
@@ -3185,6 +3261,10 @@ okay with your decisions
     No shown recommendation establishes revisiting `ofC_copy`. Are table/enum constants
     and the proposed one-read-only-copy opened with `borrow` admitted? Their later proposal
     has no verified approval; the unapproved proposals still require the owner’s redo.
+    **Forward disposition, 2026-11-14:** [constant-types confirmation](#decided-2026-11-14-constant-types)
+    settles integer/bool-only admission now, leaving char and unit for later R2
+    additions when a real program needs them; exact R2 preconditions and the
+    table/enum and borrow proposals above remain open.
   - Source paths: refuse single-dot or empty components (`a//b`, trailing slash)?
     Refuse drive prefixes (`C:...`)? Neither is named in the final shown options.
     Refuse or interpret backslashes? Refuse ASCII controls U+0000–U+001F/U+007F?
@@ -3192,11 +3272,11 @@ okay with your decisions
     No verified approval settles these. The owner-approved held plan at L144552,
     2026-11-11T13:33:37.630Z ("ok go ahead with" the pasted plan), expressly keeps
     backslashes and Unicode waiting for the owner.
-  - Classification: is the `Law` / `Helper` / `Representation lemma` /
-    `Instance (law, case)` / `Planted (law, case, subject, mutant)` taxonomy,
-    `(approved: ...)` receipt suffix, and exclusion of helpers/representation lemmas
-    from evidence an owner rule or an engineering convention? L125750 reports tagging
-    as information, not a proposal for approval. No owner approval is verified.
+  - Classification: the taxonomy was held here because L125750 reported tagging as
+    information, not a proposal for approval. **Answered 2026-11-13:** see the
+    [proof-label convention](#decided-2026-11-13-proof-labels). The `(approved: ...)`
+    receipt suffix and detailed tag format were not covered by that answer; their
+    authority remains governed by existing records or open.
 
   Additional bare-CR context (ISS-0064): assistant L118779,
   2026-11-08T03:47:36.473Z, before item 30's approval, says verbatim:
@@ -3207,8 +3287,9 @@ okay with your decisions
 
   This answers a parsing question; it is not the numbered recommendation approved at
   L119110 and does not distinguish bare CR from CRLF. It is context, not approval.
-  Bare CR and U+FEFF remain PARTIAL; the other missing path/constant/taxonomy approvals
-  are NOT FOUND, not inferred from implementation or assistant assertions.
+  Bare CR and U+FEFF remain PARTIAL; the other missing path/constant approvals
+  are NOT FOUND, not inferred from implementation or assistant assertions. The taxonomy
+  hold is resolved only within the scope of the later [answer](#decided-2026-11-13-proof-labels).
 
   For U+FEFF, does "no byte-order mark" prohibit only a source-leading BOM
   or every U+FEFF scalar, including comments and literals? For comments, does bare CR end
@@ -3306,6 +3387,16 @@ ok tell me again the options choose the best long term options for everything
   settle the exact preconditions. Confirmation of these choices under this delegation is queued
   below; no additional path-character policy, unit/char admission, or rule granularity follows.
 
+  Forward note: the [2026-11-14 trap-sites and law-tests confirmation](#decided-2026-11-14-trap-sites-and-law-tests) resolves only the C6 core and Q-SUBJ rows within its stated scope.
+  The [constant-types confirmation](#decided-2026-11-14-constant-types) resolves C2 rows 1.4–1.5
+  with checked arithmetic retained, and confirms the R2 reopening route, without
+  settling its exact preconditions. These later answers dispose of all ten rows
+  within their stated scopes; the historical held account above is retained.
+
+  **Later disposition of report §3.5 (classification vocabulary).** The taxonomy hold
+  is answered by the [2026-11-13 proof-label convention](#decided-2026-11-13-proof-labels),
+  within that entry's stated scope. This does not resolve the ten delegated choices above.
+
   **Already recovered authority, independently checked; existing records retained.**
   These seven report rows need no duplicate decision or expanded scope:
 
@@ -3318,6 +3409,311 @@ ok tell me again the options choose the best long term options for everything
   | 2.6 | [Rendered trap paths](#decided-project-runtime-2026-11-06) | L112704, 2026-11-06T14:44:30.004Z; L112976, 16:41:07.983Z; L112979, 16:43:18.861Z: "ok do everything". Rendering with forward slashes does not decide input backslashes. |
   | 2.14 | [Function-relative identity](#decided-2026-11-08-c9-identities) | L125750, 2026-11-08T15:28:04.788Z; L125820, 15:31:48.674Z: "okay with your decisions". Construct-kind/name paths are not source-file paths. |
   | 3.1 | [Six improvements](#decided-2026-11-08-recovered-d3) | L121997, 2026-11-08T13:31:34.909Z / L122051, 13:32:34.970Z; L122066, 13:33:02.706Z: "yes to 6 things". Real examples and planted bad cases do not approve a tag vocabulary. |
+
+- <a id="decided-2026-11-13-proof-labels"></a>**Theorem-classification vocabulary (2026-11-13).**
+  The owner accepts recording the vocabulary explained below as the project convention.
+  The quoted explanation is the definition of the five tags and their evidence status;
+  no additional meanings or format requirements are inferred from the reply.
+
+  Provenance: session `e2c54e65-31b5-4145-8101-c2d7b071b97e`, primary transcript
+  `~/.claude/projects/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e.jsonl`,
+  independently checked against `scratchpad/labels/approval.md` in
+  `/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/`.
+  All timestamps below are UTC; the owner messages are human, typed user messages.
+
+  Owner question, L151435, 2026-11-13T17:56:00.435Z:
+
+~~~text
+what do you mean theorems classifed?
+~~~
+
+  Assistant explanation and question, L151464, 2026-11-13T17:56:15.556Z:
+
+~~~text
+Every theorem in the spec carries a small tag in its comment saying what kind of proof it is. A planned check uses those tags to catch theorems that look like guarantees but prove nothing. The tags are:
+
+- **Law:** a real guarantee about the language, for example "a refused step never finishes normally". These are what the spec promises.
+- **Helper:** a stepping stone used to prove a law. It isn't a promise by itself.
+- **Representation lemma:** something that is true only because of how the spec happens to be written in Lean, not a fact about the language. Example: "a program has only one next step" is automatically true when the step is written as a function, so it proves nothing about determinism.
+- **Instance:** a law checked on one concrete example.
+- **Planted:** a deliberately broken version of a rule, used to show the law's test would catch a wrong definition.
+
+Only laws count as evidence. Helpers and representation lemmas don't.
+
+**What you already approved:** the substance. Every law needs positive and negative tests. Determinism must be proved against separately written rules. Laws that hold only because of how the spec is written are relabelled as representation lemmas.
+
+**What has no recorded approval:** the tag names and format themselves. The workers invented that vocabulary. I told you about it twice on Nov 8 as an update, but never asked you.
+
+**The question:** is this vocabulary engineering I can just record as the convention, or do you want to approve it yourself? I recommend treating it as engineering: it changes nothing in the language, and the real rules behind it are already yours. It does block the proof pieces after the execution spec, so I need one or the other.
+~~~
+
+  Owner reply, L151469, 2026-11-13T17:56:44.839Z:
+
+~~~text
+yes it's okay
+~~~
+
+  Scope: this resolves the vocabulary hold in [D4](#decided-2026-11-13-d4-recovery),
+  report §3.5, for the convention actually explained above. The `(approved: ...)`
+  reviewer-receipt suffix, detailed tag argument syntax, rule granularity, and any check
+  design are not covered by this answer. They remain governed by existing records or
+  open; the mention of a planned check does not approve its design. The explanation's
+  account of earlier approvals does not independently settle D4's held delegated choices.
+
+- <a id="decided-2026-11-14-trap-sites-and-law-tests"></a>**Trap sites and law tests (2026-11-14).**
+  The owner confirms C6 (a) and Q-SUBJ (a), with the three additions in the
+  coordinator's follow-up below.
+
+  Provenance: session `e2c54e65-31b5-4145-8101-c2d7b071b97e`, primary transcript
+  `~/.claude/projects/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e.jsonl`,
+  recorded from `scratchpad/recq1/approval.md` in
+  `/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/`.
+  All timestamps below are UTC. The independent reviews cited by the coordinator
+  are `scratchpad/recq1/review-codex.txt`, `scratchpad/recq1/review-agy.txt` and
+  `scratchpad/recq1/review-kimi.txt` in that directory; authority here is the owner's
+  approval of the coordinator's summary, not the reviews themselves.
+
+  Owner question, L153852, 2026-11-14T17:04:15.652Z:
+
+~~~text
+what is the best decision, tell me what you think and have kimi, agy and codex review it
+~~~
+
+  Coordinator recommendation, L153927, 2026-11-14T17:04:59.972Z:
+
+~~~text
+My recommendation: confirm both Nov 9 choices.
+
+1. **Where traps can happen:** make a bad source location impossible. Every source file gets one checked path inside the project. The loader refuses empty paths, paths with `..`, absolute paths and duplicates. That way every trap can always say exactly where it happened. The alternatives either hide the trap or report a useless location. Which characters a path may contain stays a separate open question.
+2. **How laws are tested:** keep the step rules in their normal written form and test each law by planting a broken version of the rules with the same shape, which must make the law fail. The test is as strong as the one we use for functions, with no big rewrite. Determinism also gets a real proof against separately written rules, instead of a fact that holds only because of how the spec is written in Lean.
+
+Codex, agy and Kimi are each reviewing this recommendation now, independently. I'll report what they say.
+~~~
+
+  Coordinator follow-up with the three reviewer additions, L153950, 2026-11-14T17:11:37.006Z:
+
+~~~text
+Codex, agy and Kimi all agree with both choices. Each one also asked for the same three additions, and I've added them to my recommendation:
+
+1. **Trap locations:** refusing bad paths isn't enough on its own. Every place that can trap must map to exactly one valid source location, and the spec must prove it. The open path-character questions stay open, and nothing should claim paths are fully validated until you settle them.
+2. **Determinism:** proving determinism of the separately written rules isn't enough either. We must also prove that those rules and the running spec agree in both directions. The proof assumes the outside world gives the same answer both times.
+3. **Law tests:** the broken version must break one specific rule and be swapped in everywhere the law mentions that rule. Lean itself must check a concrete example where the law's conditions still hold but its conclusion fails. An error or a timeout doesn't count as the law failing.
+
+This makes the proofs somewhat larger, but they become real guarantees instead of tests that can't fail.
+
+**Your call:** do you confirm both choices with these three additions? Yes unblocks the determinism proofs and most of what follows.
+~~~
+
+  Owner reply, L153955, 2026-11-14T17:13:14.039Z:
+
+~~~text
+ok do all this
+~~~
+
+  Scope: this resolves the C6 core and Q-SUBJ held rows in
+  [D4](#decided-2026-11-13-d4-recovery): report rows 2.1–2.5 (the structured
+  project-relative path rules: one checked path per source file, loader errors,
+  nonempty paths, no parent-traversal `..`, no absolute paths, and refusal of
+  duplicate sites), 3.2 (inductive law subjects with same-shape broken rules),
+  3.3 (function-tautological determinism facts classified as Representation lemmas),
+  and 3.4 (separate determinism proofs over independently written rules).
+  Every trapping site must map to exactly one valid source location, proved.
+  The law-evidence gate accepts inductive relations as law subjects. Determinism
+  must be proved against the separately written rules, with proved agreement in
+  both directions between those rules and the executable step, under the same
+  external answer. A planted broken version breaks one specific rule and is
+  substituted everywhere the law mentions that rule; Lean must check a concrete
+  counterexample where the law's premises hold and its conclusion fails. An error
+  or timeout is not a failure of the law.
+
+  This does not resolve the C2 constant restrictions (D4 report rows 1.4–1.5),
+  path-character details (`./` and empty components, drive prefixes, backslash,
+  control characters, Unicode identity), U+FEFF, bare CR, unit/char constants,
+  or any other held item. Path-character policy stays open; nothing may claim
+  complete path validation until it is decided.
+
+- <a id="decided-2026-11-14-constant-types"></a>**Constant types (2026-11-14).**
+  The owner approves the coordinator's revised recommendation below, not the
+  earlier recommendations preserved as context.
+
+  Provenance: session `e2c54e65-31b5-4145-8101-c2d7b071b97e`, primary transcript
+  `~/.claude/projects/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e.jsonl`,
+  recorded from `scratchpad/c2rec/approval.md` in
+  `/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/`.
+  All timestamps below are UTC; owner messages are user messages and coordinator
+  messages are assistant messages. The `scratchpad/c2rec/review-*.txt` reviews
+  are background, not authority; authority is the owner's approval of the revised
+  recommendation at L154255.
+
+  Coordinator message (assistant), L154172, 2026-11-14T17:22:00.964Z:
+
+~~~text
+Two questions are still open. Here's the first:
+
+**Constants.** Your Nov 9 choice keeps constants to plain integers and `bool`, and removes `try_convert` from constant formulas because it returns a `Result`. What's still open is whether `char` and `()` can also be constants.
+
+- **(a) Integers, `bool`, `char` and `()` (my recommendation).** These are all simple fixed values. Since you kept `char`, a program will want a constant like `const NEWLINE: char = ...`, and leaving `char` out would be a gap nobody intended.
+- **(b) Integers and `bool` only.** Smaller now, and the others get added later when a real program needs them.
+
+I'd have Codex, agy and Kimi check this before recording it, as with the trap question.
+
+After this, the only remaining question is one more round for the spec inventory, which I recommend.
+~~~
+
+  Owner message (user), L154177, 2026-11-14T17:22:16.329Z:
+
+~~~text
+what is the best long term thing
+~~~
+
+  Coordinator message (assistant), L154208, 2026-11-14T17:22:59.562Z:
+
+~~~text
+When I looked at this more closely, I found a problem with my earlier answer. `char` has no literal, and both ways to build one return `Option`. Constant formulas can't unwrap an `Option`, which is the same reason `try_convert` came out of them. So under today's rules, no `char` constant can actually be written, even if constants are allowed to have type `char`.
+
+What I now think is best long term is to decide this by a principle instead of a list of types. A constant can have any simple fixed-value type, as long as its formula uses only operations that always succeed. That admits integers, `bool` and `()` today. `char` constants become possible on their own, with no special rule, if the open SPARK-style precondition question makes checked construction always succeed when its condition is proved.
+
+Codex, agy and Kimi are reviewing this now. The roadmap changes and the decision record are also being reviewed. I'll report all three results together.
+~~~
+
+  Coordinator message (assistant), L154255, 2026-11-14T17:28:37.645Z:
+
+~~~text
+Here's where things stand.
+
+**Constants: the reviewers disagree with me.** They're right, and I'm changing my recommendation. All three found the same flaw in my reasoning: constant formulas can't contain function calls at all. So `char` constants would not become possible on their own later. They would need a separate decision to change the formula rules. All three also said a fixed list of types is safer than an open-ended principle, because a new type should never slip in without review.
+
+**My new recommendation is integers and `bool` only (option b).** Leave out `char`, because no `char` constant can be written today and allowing the type would promise something unusable. Leave out `()`, because a constant with only one possible value adds nothing. Two reviewers agree on `char` and one wanted to keep `()`. Both stay open to be added later through the existing route for richer constants, once a real program needs them. Checked arithmetic stays allowed in formulas: if it overflows, the compiler refuses the constant.
+
+**Roadmap and decision record:** Codex and Kimi accept both with no findings. agy is still reviewing the roadmap. Once agy finishes, one fix round will update the two old notes that still say your Nov 9 choices are waiting.
+
+**Determinism proofs:** still being written.
+
+**Your call:** constants are integers and `bool` only, with the others added later through the richer-constants route?
+~~~
+
+  Owner message (user), L154260, 2026-11-14T17:28:58.331Z:
+
+~~~text
+yes do that
+~~~
+
+  Scope: this resolves [D4](#decided-2026-11-13-d4-recovery) C2 rows 1.4–1.5:
+  constant types are a closed list, integers and `bool` only. `char` and `()` are
+  not admitted now; both remain open to later addition through the existing
+  richer-constants (R2) route when a real program needs them. Checked arithmetic
+  stays allowed in constant formulas; overflow refuses the constant. This retains
+  the [initializer grammar](#recovered-29-18) and
+  [November 8 initializer decision](#decided-2026-11-08-constants), rather than
+  adopting the checked-arithmetic exclusion in the historical D4 recommendation.
+  `try_convert` stays out of constant formulas (C2 (i)).
+
+  This confirms the R2 reopening route, not its exact preconditions or the
+  unapproved table/enum and borrow-constant proposals. It does not authorize
+  function calls in constant formulas, a char literal, SPARK preconditions
+  (ISS-0071), or char/unit layout (ISS-0076). The
+  [November 12 char decision](#decided-2026-11-12-char) remains the authority for
+  char construction; this answer settles the constant-type admission question,
+  without adding a special char construction rule. Other recovery holds remain open.
+
+- <a id="decided-2026-11-15-review-followups"></a>**Review follow-ups (2026-11-15).**
+  Status: decided for answers 1, 2, 3 and 5; question 4 unanswered.
+  Source: verbatim owner reply relayed by the coordinator from the owner session
+  (2026-11-15), question context summarized by the coordinator, recorded 2026-11-16,
+  under the [recording rule](#decided-project-recording).
+
+  Questions replied to (numbering retained from the supplied context):
+  1. One more review round for the spec inventory branch?
+  2. Fix the review tool that cuts files mid-file?
+  3. Widen ISS-0071 from integer-to-char to all checked conversions and link it to slice 8?
+  4. Add a status field to decision entries, in a format the owner approves (ISS-0083)?
+  5. One extra round (round 8) for the accounting branch to fix the waiting-link
+     normalization only?
+
+  Owner reply, verbatim:
+
+~~~text
+1. yes run one more round on the spec 2. fix the review tool 3. widen the precondition issue 4. i don't understand 5. ok
+~~~
+
+  Answer 4 records lack of understanding, not a decision. Answer 5 authorizes only
+  the waiting-link normalization round described in question 5. The review-tool
+  repair in question 2 is tracked as ISS-0078 in [ISSUES.tsv](../ISSUES.tsv).
+
+- <a id="decided-2026-11-16-conversions-records-gaps"></a>**Checked conversions,
+  decision status and design-gap check (2026-11-16).**
+  Status: decided for the three questions below, with their stated open details.
+  Source: verbatim owner reply relayed by the coordinator from the owner session
+  (2026-11-16), question context summarized by the coordinator, recorded 2026-11-16,
+  under the [recording rule](#decided-project-recording).
+
+  Questions replied to (supplied context):
+  1. Checked conversions option C: keep `try_convert` returning
+     `Result<T, OutOfRange>` ([OD106](#od106)) for values that may not fit, and add
+     one named evidence-required conversion admitted only when the already-decided
+     Lean-proved deterministic checker (CheckedCore evidence) or a checked Lean
+     theorem discharges one shared spec-defined "fits" predicate; never a run-time
+     trap. The conversion's spelling and exact acceptance rule return to the owner.
+  2. Add an explicit status line to every decision entry with values
+     decided / open / recovered (ISS-0083); exact format to be finalized after the
+     Codex/agy format review, and any format change returns to the owner.
+  3. Codex and agy check the costly-to-retrofit list for gaps, and agreed items
+     become roadmap entries.
+
+  Owner reply, verbatim:
+
+~~~text
+ok yes 1 2 3
+~~~
+
+  The chosen conversion direction is tracked by ISS-0071 in
+  [ISSUES.tsv](../ISSUES.tsv), linked to [slice 8](../ROADMAP.md#vertical-slices).
+  Its spelling and exact acceptance rule remain open for the owner. Question 2
+  records the authorized status-line work; its format was subsequently approved in
+  the [status-format decision](#decided-2026-11-16-decision-status-format).
+  Implementation of ISS-0083 remains pending.
+  Question 3 records the authorized gap check; it does not claim a check was run
+  or any resulting roadmap item was agreed.
+
+- <a id="decided-2026-11-16-decision-status-format"></a>**Decision status format
+  (2026-11-16).**
+  Status: decided for the format below; implementation of ISS-0083 pending.
+  Source: verbatim owner reply relayed by the coordinator from the owner session
+  (2026-11-16), question context summarized by the coordinator, recorded 2026-11-16,
+  under the [recording rule](#decided-project-recording).
+
+  Question context summarized by the coordinator: after Codex and agy reviewed
+  the status-line proposal, both asked for a richer format. The coordinator asked
+  the owner to approve:
+
+~~~text
+Status: decided | open | partly decided | replaced | reopened | withdrawn
+Source: owner | recovered from old notes
+Replaced by: <link>   (only when replaced or reopened)
+~~~
+
+  A missing or malformed line fails the check (never inferred), and every line
+  is verified against the owner's words and later revisions.
+
+  Owner reply, verbatim:
+
+~~~text
+yes
+~~~
+
+  This approves the format only. Implementation of ISS-0083 remains pending,
+  tracked in [ISSUES.tsv](../ISSUES.tsv).
+
+- <a id="owner-goals-2026-11-15-provability-errors"></a>**Design goals: owner
+  question (2026-11-15).**
+  Source: verbatim owner reply relayed by the coordinator from the owner session
+  (2026-11-15), question context summarized by the coordinator, recorded 2026-11-16.
+  This is an owner question/goal statement, not a new rule or an answered decision.
+  No preceding question was supplied; this quotation is itself the owner's question:
+
+~~~text
+the design is done so that a) everything can be proven b) we can find get errors with good results?
+~~~
 
 - <a id="decided-project-spark-2026-11-06"></a>**What Concrete takes from SPARK** (owner, 2026-11-06: "ok do everything", after Claude, Codex, agy and Kimi chose unanimously; the
   [review](proposals/SPARK.md) items 1, 2, 3, 6, 7, 9 and 10).

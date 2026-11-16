@@ -1,3 +1,4 @@
+import ConcreteSpec.Proofs.Hybrid
 import ConcreteSpec.Proofs.Memory
 -- The specification of the new compiler. Start with ConcreteSpec/README.md.
 -- The rules and their examples: ConcreteSpec/Spec.lean. The proofs: ConcreteSpec/Proofs/.
@@ -15,3 +16,8 @@ import ConcreteSpec.Proofs.LocalIdentity
 import ConcreteSpec.Proofs.Scalar
 import ConcreteSpec.Diagnostics.ScalarFixtures
 import ConcreteSpec.Proofs.Ident
+import ConcreteSpec.Proofs.Exec
+import ConcreteSpec.Proofs.Const
+import ConcreteSpec.Proofs.Own
+import ConcreteSpec.Proofs.OwnErasure
+import ConcreteSpec.Proofs.OwnErasureEvidence
