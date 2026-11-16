@@ -1776,7 +1776,7 @@ theorem leave_retains_caller (s : State) (f : Activation) (l : Loan)
     exact retained
 
 /-- Helper (inversion). Ending loans removes every scheduled identity and never adds loans. -/
-private theorem endLoans_removed (xs : List Loan) (s t : State)
+theorem endLoans_removed (xs : List Loan) (s t : State)
     (h : xs.foldlM (fun s a => endLoan s a.id) s = some t) :
     ∀ l ∈ t.loans, l ∈ s.loans ∧ ∀ a ∈ xs, l.id ≠ a.id := by
   induction xs generalizing s with

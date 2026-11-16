@@ -4,8 +4,10 @@ Strengthen downward lending with an output-child activation obligation: the new
 loan targets the current frame, never its caller. Admit same-root parent and
 ancestor loans during adoption in both modes; prove the child usable. Add a
 return Law preserving every caller loan and restoring access through the caller
-parent after callee children end. The existing owner-return Law remains the
-direct-owner case, with its explicit no-surviving-loan premise.
+parent after callee children end. These round-3 return Laws were conditional on
+success; round 4 adds structural progress for both and adoption activation/caller
+preservation outputs. The owner-return restoration Law remains the direct-owner
+case, with its explicit no-surviving-loan premise.
 
 Route nested entry through the uniformly substituted lifecycle callback and its
 pending-argument reset. Remove the entry/adoption bypass constructors and restrict

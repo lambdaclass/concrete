@@ -15,10 +15,10 @@ Authority: docs/decisions.md#decided-2026-11-08-foundation (C5), #decided-2026-1
 call duration and no implicit ending), and #decided-2026-11-13-lifecycle-refusal.
 The classification and control conventions are #decided-2026-11-13-proof-labels and
 #decided-2026-11-14-trap-sites-and-law-tests. Only Laws count as evidence.
-Tag inventory: 15 Law, 13 Helper, 32 Instance, 40 Planted.
+Tag inventory: 18 Law, 14 Helper, 36 Instance, 51 Planted.
 
 Source disposition: the O3 optional-result restatements of O1's owned-root, moved-root,
-birth/supply, adoption and passOwner results add no independent fact;
+birth/supply and passOwner results add no independent fact;
 reuse their existing result helpers and preservation Laws. Likewise the instrument, life,
 callLife, readOwner/writeOwner/readLoan/writeLoan erasure restatements remain owned by O2
 and O1's result helpers. The generic instrument preservation wrapper remains O1's helper.
@@ -30,7 +30,7 @@ use an unbounded inductive certificate of actual machine steps and admitted owne
 Source run-then-overwrite,
 whole-function-refusal and whole-function-no-op mutants are replaced by one-rule body mutants.
 All O3 declarations live here. O1's existing slot/loan uniqueness, fold projection,
-entry-loan, leave inversion, ending-frame and lifecycle-subset Helpers are public so this
+entry-loan, leave inversion, ending-frame, removed-loan and lifecycle-subset Helpers are public so this
 module can reuse their private dependencies without copying their proofs. Their statements
 and proof ownership stay in O1; no O3 declaration remains beside a private helper.
 No duplicate declaration or inherited APPR receipt is imported.
@@ -53,7 +53,9 @@ def DownwardProtocol (lend : State → LoanId → List Projection → Mode → N
       endLoan t i = none ∧ accessLoan t ⟨s.nextLoan⟩ m = some t ∧
       accessLoan t i .mutable = none ∧
       (m = .mutable → accessLoan t i .shared = none) ∧
-      ∃ l ∈ t.loans, l.id = ⟨s.nextLoan⟩ ∧ l.activation = current
+      ∃ l ∈ t.loans, l.id = ⟨s.nextLoan⟩ ∧ l.activation = current ∧
+        ∃ a, loan s i = some a ∧ l.root = a.root ∧ l.path = a.path ++ path ∧
+          l.parent = some i ∧ a ∈ t.loans
 
 /-- Helper (induction on birth order). Cached ancestors predate their descendant. -/
 private theorem ancestor_older (s : State) (hs : WellFormed s) (a : Loan)
@@ -153,7 +155,8 @@ theorem downward_reborrow_protocol (s : State) (i : LoanId) (path : List Project
       · intro hm
         subst m
         simp [accessLoan, loanAccess, loan, Ne.symm ine, foundRaw, newNotAncestor]
-      · exact ⟨_, List.mem_cons_self, rfl, rfl⟩
+      · exact ⟨_, List.mem_cons_self, rfl, rfl, a, found, rfl, rfl, rfl,
+          List.mem_cons_of_mem _ am⟩
 
 namespace DownwardProtocolEvidence
 open Examples
@@ -535,8 +538,8 @@ example : RetiredLoan endedChild ⟨1⟩ ∧
       (recycleStep endedChild (.reborrow ⟨0⟩ [.index 2] .mutable 0)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.Own.ended_loans_never_revive`, case
-`ConcreteSpec.Core.Own.LoanHistoryEvidence.endedChild`, subject `ConcreteSpec.Core.Own.runLoanSequence`). The populated state is
-well formed; the history succeeds with a live parent and retires its intermediate loan. -/
+`ConcreteSpec.Core.Own.LoanHistoryEvidence.endedChild`, subject `ConcreteSpec.Core.Own.runLoanSequence`). The populated
+state is well formed; the history succeeds with a live parent and retires its intermediate loan. -/
 example : WellFormed endedChild ∧
     (runLoanSequence endedChild actions).isSome = true ∧
     (loan endedChild ⟨0⟩).isSome = true ∧
@@ -558,8 +561,8 @@ example : RetiredLoan endedChild ⟨1⟩ ∧
     ¬ ResultSatisfies (fun t => RetiredLoan t ⟨1⟩) (recycle endedChild actions) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.Own.loanSequence_retired_step`, case
-`ConcreteSpec.Core.Own.LoanHistoryEvidence.endedChild`, subject `ConcreteSpec.Core.Own.loanAction`). Both other action arms
-succeed on real loans; retirement survives a birth on another root and ending the live parent. -/
+`ConcreteSpec.Core.Own.LoanHistoryEvidence.endedChild`, subject `ConcreteSpec.Core.Own.loanAction`). Both other
+action arms succeed on real loans; retirement survives a birth on another root and ending the live parent. -/
 example : RetiredLoan endedChild ⟨1⟩ ∧
     (loanAction endedChild (.borrow ⟨1⟩ [] .shared)).isSome = true ∧
     (loanAction endedChild (.endLoan ⟨0⟩)).isSome = true ∧
@@ -604,8 +607,8 @@ example : RetiredLoan endedChild ⟨1⟩ ∧
       (recycleBorrowStep endedChild (.borrow ⟨1⟩ [] .shared)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.Own.ended_loans_never_revive`, case
-`ConcreteSpec.Core.Own.LoanHistoryEvidence.endedChild`, subject `ConcreteSpec.Core.Own.runLoanSequence`). Both kinds of birth
-remain fresh after an intermediate child ends. -/
+`ConcreteSpec.Core.Own.LoanHistoryEvidence.endedChild`, subject `ConcreteSpec.Core.Own.runLoanSequence`). Both kinds
+of birth remain fresh after an intermediate child ends. -/
 example : (runLoanSequence endedChild borrowActions).isSome = true ∧
     ResultSatisfies (fun t => RetiredLoan t ⟨1⟩)
       (runLoanSequence endedChild borrowActions) := by
@@ -1070,6 +1073,114 @@ private theorem endLocals_slots (a : Nat) (s t : State) (h : endLocals a s = som
   · contradiction
   · cases hv; rfl
 
+/-- Helper (list induction). A closed, newest-first loan graph can be unwound. -/
+private theorem fold_end_progress (todo : List Loan) (s : State)
+    (present : ∀ a ∈ todo, a ∈ s.loans)
+    (order : todo.Pairwise (fun a b => b.id.id < a.id.id))
+    (closed : ∀ a ∈ todo, ∀ b ∈ s.loans, b.parent = some a.id →
+      a.id.id < b.id.id ∧ b ∈ todo) :
+    ∃ t, todo.foldlM (fun s a => endLoan s a.id) s = some t := by
+  induction todo generalizing s with
+  | nil => exact ⟨s, rfl⟩
+  | cons a rest ih =>
+    have ord := List.pairwise_cons.mp order
+    have children : ∀ b ∈ s.loans, b.parent ≠ some a.id := by
+      intro b hb he
+      obtain ⟨older, mem⟩ := closed a (by simp) b hb he
+      rcases List.mem_cons.mp mem with eq | mem
+      · subst b; omega
+      · have := ord.1 b mem; omega
+    have found : ∃ b, loan s a.id = some b := by
+      cases h : loan s a.id with
+      | some b => exact ⟨b, rfl⟩
+      | none =>
+        have := List.find?_eq_none.mp h a (present a (by simp))
+        simp at this
+    obtain ⟨b, hb⟩ := found
+    have noChild : s.loans.any (·.parent == some a.id) = false := by
+      apply Bool.eq_false_iff.mpr
+      intro h
+      obtain ⟨c, hc, he⟩ := List.any_eq_true.mp h
+      exact children c hc (by simpa using he)
+    let u := { s with loans := s.loans.filter (·.id != a.id) }
+    have step : endLoan s a.id = some u := by simp [endLoan, hb, noChild, u]
+    have retained : ∀ c ∈ rest, c ∈ u.loans := by
+      intro c hc
+      have lower := ord.1 c hc
+      have ne : c.id ≠ a.id := by intro h; rw [h] at lower; omega
+      exact List.mem_filter.mpr ⟨present c (by simp [hc]), by simpa using ne⟩
+    obtain ⟨t, ht⟩ := ih u retained ord.2 (by
+      intro c hc d hd he
+      have hd' := (List.mem_filter.mp hd).1
+      obtain ⟨older, mem⟩ := closed c (by simp [hc]) d hd' he
+      refine ⟨older, ?_⟩
+      rcases List.mem_cons.mp mem with eq | mem
+      · subst d
+        have bad := (List.mem_filter.mp hd).2
+        simp at bad
+      · exact mem)
+    exact ⟨t, by simp [List.foldlM_cons, step, ht]⟩
+/-- Structural return admission: birth order, no caller child of a callee loan,
+linear locals discharged, and surviving loans do not point into callee storage.
+These are input graph/storage properties, not assumptions of successful execution. -/
+def ValidReturn (s : State) (f : Activation) : Prop :=
+  s.loans.Pairwise (fun a b => b.id.id < a.id.id) ∧
+  (∀ a ∈ s.loans, a.activation = f.id → ∀ b ∈ s.loans,
+    b.parent = some a.id → b.activation = f.id) ∧
+  (∀ x ∈ s.slots, x.place ∈ List.map Prod.snd f.locals →
+    x.desc.copy = true ∨ x.status = .moved) ∧
+  (∀ b ∈ s.loans, b.activation ≠ f.id → b.root ∉ List.map Prod.snd f.locals)
+
+instance (s : State) (f : Activation) : Decidable (ValidReturn s f) := by
+  unfold ValidReturn
+  infer_instance
+
+/-- Non-vacuous boundary progress, shared by both return restoration Laws. -/
+def ReturnProgress (depart : State → Option State) (s : State) : Prop :=
+  ∃ t, depart s = some t
+
+/-- Law (authority: docs/decisions.md#od2; #decided-2026-11-13-lifecycle-refusal;
+#decided-2026-11-08-recovered-d3 C5 Q2). (subject `ConcreteSpec.Core.Own.leave`).
+Every structurally valid return succeeds, including plain lending with arbitrarily many
+local descendants. Paired with deferred_return_view and deferred_return_lifetime, this
+rules out refusal as a way of satisfying restoration. -/
+theorem return_progress (s : State) (f : Activation) (hs : WellFormed s)
+    (hf : s.frames.head? = some f) (valid : ValidReturn s f) : ReturnProgress leave s := by
+  let todo := s.loans.filter (·.activation == f.id)
+  obtain ⟨u, hu⟩ := fold_end_progress todo s
+    (fun a ha => (List.mem_filter.mp ha).1) (valid.1.filter _) (by
+      intro a ha b hb he
+      have ham := (List.mem_filter.mp ha).1
+      have haa : a.activation = f.id := by simpa using (List.mem_filter.mp ha).2
+      have hp := (hs.2.2.2.1 b hb).2.2.2.1
+      unfold ParentValid at hp
+      rw [he] at hp
+      obtain ⟨p, hm, hid, _, older, _⟩ := hp
+      have eq := loan_unique s.loans hs.2.1 p a hm ham hid
+      subst p
+      exact ⟨older, List.mem_filter.mpr ⟨hb, by simpa using valid.2.1 a ham haa b hb he⟩⟩)
+  have slots := endLocals_slots f.id s u hu
+  have frames : u.frames = s.frames :=
+    fold_projection State.frames _ (fun a l b hb => endLoan_frames a b l.id hb) _ s u hu
+  have remaining := endLoans_removed todo s u hu
+  obtain ⟨v, hv⟩ := drop_progress u (List.map Prod.fst f.locals) f (by rwa [frames]) (by
+    intro x hx hp
+    apply valid.2.2.1 x (by rwa [slots] at hx)
+    exact List.mem_map.mpr (by
+      obtain ⟨e, he, heq⟩ := List.mem_map.mp hp
+      exact ⟨e, (List.mem_filter.mp he).1, heq⟩)) (by
+    intro b hb
+    obtain ⟨old, absent⟩ := remaining b hb
+    have outer : b.activation ≠ f.id := by
+      intro he
+      exact absent b (List.mem_filter.mpr ⟨old, by simpa using he⟩) rfl
+    intro hp
+    apply valid.2.2.2 b old outer
+    obtain ⟨e, he, heq⟩ := List.mem_map.mp hp
+    exact List.mem_map.mpr ⟨e, (List.mem_filter.mp he).1, heq⟩)
+  have hu' : endLocals f.id s = some u := hu
+  exact ⟨{ v with frames := v.frames.tail }, by simp [leave, hf, hu', hv]⟩
+
 /-- The complete return-boundary postcondition, independent of the callee's body length. -/
 def ReturnedCall (depart : State → Option State) (s : State) (f : Activation)
     (held : Loan) (root : Hybrid.Place) : Prop :=
@@ -1197,11 +1308,16 @@ theorem deferred_return_view (s : State) (f : Activation) (parent : Loan) (m : M
 def AdoptedView (adopt : State → List (Var × LoanId) → Option State)
     (s : State) (parameter : Var) (i : LoanId) (m : Mode := .mutable) : Prop :=
   ∃ t, adopt s [(parameter, i)] = some t ∧ loanAccess t i m = true ∧
-    t.frames.head?.bind (fun f => AList.lookup f.views parameter) = some i
+    t.frames.head?.bind (fun f => AList.lookup f.views parameter) = some i ∧
+    (∃ f b, t.frames.head? = some f ∧ loan t i = some b ∧ b.activation = f.id) ∧
+    (∀ b ∈ s.loans, b.id ≠ i → b ∈ t.loans) ∧
+    ∃ f, t.frames.head? = some f ∧ t.loans = s.loans.map (fun b =>
+      if b.id = i then { b with activation := f.id, pendingArgument := false } else b)
 
 /-- Law (authority: docs/decisions.md#decided-2026-11-08-recovered-d3 C5 question 2;
 #decided-2026-11-05-core Q3.2; #od23). (subject `ConcreteSpec.Core.Own.adoptDown`).
-A pending shared or mutable argument becomes a usable callee view, including
+A pending shared or mutable argument becomes a usable view in the callee activation,
+preserving all other caller loans, including
 plain lending from an existing parent view with the same root. The explicit premises
 state the issued destination, unique fresh loan, free binder and whole-root compatibility with ancestors;
 no body or execution fuel is fixed. -/
@@ -1231,7 +1347,15 @@ theorem adopted_view_usable (s : State) (f : Activation) (l : Loan) (old : List 
   · simp [adoptDown, hf, issued, table, pending, free, oldMap]
   · simp only [loanAccess, loan, List.find?_cons, beq_self_eq_true, Option.any_some]
     cases m <;> simp_all
-  · simp [AList.lookup]
+  · refine ⟨by simp [AList.lookup], ?_, ?_⟩
+    · exact ⟨_, { l with activation := f.id, pendingArgument := false }, rfl, by simp [loan], rfl⟩
+    · refine ⟨?_, ?_⟩
+      · intro b hb different
+        rw [table] at hb
+        rcases List.mem_cons.mp hb with he | hb
+        · exact False.elim (different (he ▸ rfl))
+        · exact List.mem_cons_of_mem _ hb
+      · exact ⟨_, rfl, by simp [table, oldMap]⟩
 
 /-- Law (authority: docs/decisions.md#od69; #od2;
 #decided-2026-11-08-recovered-d3 C5 question 2).
@@ -1303,7 +1427,8 @@ example : ∃ c, Exec.step (heldProgram (callLife types) z)
   exact deferred_registration _ (heldProgram (callLife types) z) callee
     [.ownerArgument ⟨1⟩ .mutable z] ⟨0⟩ [] caller [.scope ⟨0⟩ [] []] _ rfl
 
-/-- Instance (execution). Real view use and all enclosing cleanup reach normal finality;
+/-- Instance (execution, case `heldRegistration`, subject `ConcreteSpec.Core.Exec.run`). Real view use and all
+enclosing cleanup reach normal finality;
 the unrelated caller loan remains live. This replaces the old skip/fuel-6 observation. -/
 example : DeferredExecution (callLife types) caller ⟨1⟩ z := by
   exact ⟨rfl, rfl, rfl, rfl, rfl⟩
@@ -1335,7 +1460,7 @@ def callLifeWith (depart : State → Option State) (adopt : State → List (Var 
         | _ => life types e s.own)).map fun own => { s with own := own }
     else none
 
-/-- Planted (execution, subject `ConcreteSpec.Core.Own.adoptDown`, mutant
+/-- Planted (execution, case `heldRegistration`, subject `ConcreteSpec.Core.Own.adoptDown`, mutant
 `ConcreteSpec.Core.Own.DeferredLifetimeEvidence.deadAdopt`). A pending view cannot be used. -/
 example : ¬ DeferredExecution (callLifeWith leave deadAdopt types) caller ⟨1⟩ z := by
   intro h
@@ -1476,7 +1601,7 @@ mutant `ConcreteSpec.Core.Own.DeferredLifetimeEvidence.outerWipe`). The final sc
 silently end a caller loan after the deferred callee has returned. -/
 example : ∃ t, outerWipe (.drop []) caller = some t ∧ t.own.loans ≠ caller.own.loans := by
   exact ⟨_, rfl, by decide⟩
-/-- Planted (execution, subject `ConcreteSpec.Core.Own.callLife`, mutant
+/-- Planted (execution, case `heldRegistration`, subject `ConcreteSpec.Core.Own.callLife`, mutant
 `ConcreteSpec.Core.Own.DeferredLifetimeEvidence.outerWipe`). Normal enclosing completion
 exposes the late corruption that the old out-of-fuel endpoint missed. -/
 example : ¬ DeferredExecution outerWipe caller ⟨1⟩ z := by
@@ -1538,7 +1663,8 @@ example : ¬ DeferredLifetime (callLife types) unfreezeShared ∧
 corrected to evaluate the actual owner argument late, with an empty pending buffer. -/
 def skipProgram : Exec.Program (protocolOps (callLife types)) :=
   ⟨[(callee, ⟨[(z, ())], (), ⟨1⟩, .skip⟩)]⟩
-/-- Instance (execution). The original skip callee now runs through normal enclosing-scope
+/-- Instance (execution, case `skipProgram`, subject `ConcreteSpec.Core.Exec.run`). The original skip callee
+now runs through normal enclosing-scope
 completion, retaining all caller loans rather than stopping at an intermediate fuel budget. -/
 example : let r := (Exec.run skipProgram (fun _ p => nomatch p) 30
     (heldRegistration (callLife types) caller ⟨1⟩ z));
@@ -1908,6 +2034,138 @@ example : ¬ LifecycleNonrevival rewindLoan source (.drop []) ⟨3⟩ ⟨1⟩ :=
 end LifecycleHistoryEvidence
 
 
+/-- Law (authority: docs/decisions.md#od2; #od23;
+#decided-2026-11-08-recovered-d3 C5 Q2). (subject `ConcreteSpec.Core.Own.passDown`).
+Plain lending of either mode succeeds and returns the entire caller state after the call,
+with no implicit ending of existing loans. -/
+theorem plain_lending_roundtrip (s : State) (i : LoanId) (x : Var)
+    (types : Var → Option Descriptor) (f : Activation) (a : Loan)
+    (hs : WellFormed s) (hf : s.frames.head? = some f)
+    (issued : f.id < s.nextActivation) (found : loan s i = some a)
+    (allowed : loanAccess s i a.mode = true) :
+    (do let waiting ← passDown ⟨s, []⟩ i x
+        let called ← callLife types (.enter [x]) waiting
+        callLife types .leave called) =
+      some ⟨{ s with nextLoan := s.nextLoan + 1, nextActivation := s.nextActivation + 1 }, []⟩ := by
+  have fresh : ∀ l ∈ s.loans, l.id ≠ LoanId.mk s.nextLoan := by
+    intro l hl he
+    have hb := (hs.2.2.2.1 l hl).1
+    rw [he] at hb
+    exact Nat.lt_irrefl _ hb
+  have oldAct : ∀ l ∈ s.loans, l.activation ≠ s.nextActivation := by
+    intro l hl he
+    have hb := (hs.2.2.2.1 l hl).2.1
+    omega
+  have oldSlots : ∀ a ∈ s.slots, a.activation ≠ s.nextActivation := by
+    intro a ha he
+    have hb := (hs.2.2.1 a ha).2
+    omega
+  have noChild : ∀ l ∈ s.loans, l.parent ≠ some (LoanId.mk s.nextLoan) := by
+    intro l hl he
+    have hp := (hs.2.2.2.1 l hl).2.2.2.1
+    unfold ParentValid at hp
+    rw [he] at hp
+    obtain ⟨a, ha, hid, _⟩ := hp
+    exact fresh a ha hid
+  have noChildBool : s.loans.any (·.parent == some (LoanId.mk s.nextLoan)) = false := by
+    apply Bool.eq_false_iff.mpr
+    intro h
+    obtain ⟨l, hl, he⟩ := List.any_eq_true.mp h
+    exact noChild l hl (by simpa using he)
+  have filterId : s.loans.filter (·.id != LoanId.mk s.nextLoan) = s.loans := by
+    apply List.filter_eq_self.mpr
+    intro l hl
+    simpa using fresh l hl
+  have filterAct : s.loans.filter (·.activation == s.nextActivation) = [] := by
+    apply List.filter_eq_nil_iff.mpr
+    intro l hl
+    simpa using oldAct l hl
+  have slotsBool : s.slots.any (·.activation == s.nextActivation) = false := by
+    apply Bool.eq_false_iff.mpr
+    intro h
+    obtain ⟨a, ha, he⟩ := List.any_eq_true.mp h
+    exact oldSlots a ha (by simpa using he)
+  have mapOld : (s.loans.map fun l => if l.id = LoanId.mk s.nextLoan then
+      { l with activation := s.nextActivation, pendingArgument := false } else l) = s.loans := by
+    calc
+      _ = s.loans.map id := by
+        apply List.map_congr_left
+        intro l hl
+        simp [fresh l hl]
+      _ = s.loans := List.map_id _
+  have noChildExists : ¬ ∃ l ∈ s.loans, l.parent = some (LoanId.mk s.nextLoan) := by
+    rintro ⟨l, hl, he⟩
+    exact noChild l hl he
+  have raw : s.loans.find? (·.id == i) = some a := found
+  have pendingOld : (s.loans.map fun l => if l.id.id = s.nextLoan then
+      { l with pendingArgument := true } else l) = s.loans := by
+    calc
+      _ = s.loans.map id := by
+        apply List.map_congr_left
+        intro l hl
+        have ne : l.id.id ≠ s.nextLoan := by
+          intro h
+          apply fresh l hl
+          have eq : l.id = ⟨l.id.id⟩ := by cases l.id; rfl
+          rw [eq, h]
+        simp [ne]
+      _ = s.loans := List.map_id _
+  have ine : i ≠ LoanId.mk s.nextLoan := by
+    have ai : a.id = i := by simpa using List.find?_some found
+    simpa [ai] using fresh a (List.mem_of_find?_eq_some found)
+  simp [passDown, reborrow, reborrowTo, raw, hf, issued, allowed, callLife, enter, adoptDown, life, leave,
+    endLocals, endLoan, drop, loan, AList.lookup, pendingOld, mapOld, filterAct, noChildExists,
+    filterId, ine]
+
+/-- Argument-time plain lending succeeds and immediately suspends conflicting parent use. -/
+def PassedView (pass : CallState → LoanId → Var → Option CallState)
+    (s : CallState) (i : LoanId) (x : Var) (m : Mode) : Prop :=
+  ∃ t, pass s i x = some t ∧ loanAccess t.own i .mutable = false ∧
+    (m = .mutable → loanAccess t.own i .shared = false)
+
+/-- Law (authority: docs/decisions.md#od2; #od23;
+#decided-2026-11-08-recovered-d3 C5 Q2). (subject `ConcreteSpec.Core.Own.passDown`).
+Every available view argument succeeds before the next argument is evaluated, including
+when other arguments are already pending; conflicting parent access is suspended now. -/
+theorem passDown_protocol (s : CallState) (i : LoanId) (x : Var) (f : Activation) (a : Loan)
+    (hs : WellFormed s.own) (hf : s.own.frames.head? = some f)
+    (issued : f.id < s.own.nextActivation) (found : loan s.own i = some a)
+    (allowed : loanAccess s.own i a.mode = true) (free : x ∉ s.pending.map Prod.fst) :
+    PassedView passDown s i x a.mode := by
+  have am := List.mem_of_find?_eq_some found
+  have ai : a.id = i := by simpa using List.find?_some found
+  have fresh (b : Loan) (hb : b ∈ s.own.loans) : b.id.id ≠ s.own.nextLoan := by
+    have := (hs.2.2.2.1 b hb).1
+    omega
+  have ine : i ≠ LoanId.mk s.own.nextLoan := by
+    intro h
+    have := fresh a am
+    rw [ai, h] at this
+    exact this rfl
+  have newNotAncestor : LoanId.mk s.own.nextLoan ∉ a.ancestors := by
+    intro h
+    have older := ancestor_older s.own hs a am _ h
+    change s.own.nextLoan < a.id.id at older
+    have := (hs.2.2.2.1 a am).1
+    omega
+  have pendingOld : (s.own.loans.map fun l => if l.id.id = s.own.nextLoan then
+      { l with pendingArgument := true } else l) = s.own.loans := by
+    calc
+      _ = s.own.loans.map id := by
+        apply List.map_congr_left
+        intro b hb
+        simp [fresh b hb]
+      _ = s.own.loans := List.map_id _
+  have raw : s.own.loans.find? (·.id == i) = some a := found
+  refine ⟨⟨{ s.own with
+      nextLoan := s.own.nextLoan + 1
+      loans := ⟨⟨s.own.nextLoan⟩, a.root, a.path, a.mode, some i, i :: a.ancestors,
+      f.id, true, false⟩ :: s.own.loans }, s.pending ++ [(x, ⟨s.own.nextLoan⟩)]⟩, ?_, ?_, ?_⟩
+  · simp [passDown, free, reborrow, reborrowTo, found, allowed, hf, issued, pendingOld]
+  · simp [loanAccess, loan, Ne.symm ine, raw, newNotAncestor]
+  · intro hm
+    simp [loanAccess, loan, Ne.symm ine, raw, newNotAncestor, hm]
+
 namespace Round3Evidence
 open Examples DirectArgumentWitnesses DeferredLifetimeEvidence
 /-- Mutant: the child inherits its parent activation, pointing back into the caller. -/
@@ -1942,7 +2200,10 @@ def ancestorDeadAdopt (s : State) (args : List (Var × LoanId)) : Option State :
       (∀ e ∈ args, AList.lookup f.locals e.1 = none) then
     some { s with
       loans := s.loans.map fun l =>
-        if l.id ∈ args.map Prod.snd then { l with activation := f.id, pendingArgument := s.loans.any (fun b => b.id != l.id && b.root == l.root) } else l
+        if l.id ∈ args.map Prod.snd then
+          { l with
+            activation := f.id
+            pendingArgument := s.loans.any (fun b => b.id != l.id && b.root == l.root) } else l
       frames := { f with views := args ++ f.views } :: s.frames.tail }
   else none
 
@@ -2002,7 +2263,7 @@ The child must target the current frame, never its caller. -/
 example : ¬ DownwardProtocol inheritActivation upSource ⟨0⟩ [] .mutable 1 0 := by
   have noActivation : ∀ l ∈ (inheritActivation upSource ⟨0⟩ [] .mutable 1).getD initial |>.loans,
       l.activation ≠ 1 := by decide
-  rintro ⟨_, t, ht, _, _, _, _, _, l, hl, hid, ha⟩
+  rintro ⟨_, t, ht, _, _, _, _, _, l, hl, hid, ha, _⟩
   cases ht
   exact noActivation l hl ha
 
@@ -2193,5 +2454,215 @@ example : ¬ IssuanceNonrevival recycleEntryStep := by
   revert bad
   decide
 end Round3Evidence
+
+namespace Round4Evidence
+open Examples DirectArgumentWitnesses DeferredLifetimeEvidence Round3Evidence
+/-- Mutant: relending retains the caller activation; direct-owner arguments adopt normally. -/
+def keepActivation (s : State) (args : List (Var × LoanId)) : Option State := do
+  let f ← s.frames.head?
+  if f.id < s.nextActivation ∧ (args.map Prod.fst).Nodup ∧ (args.map Prod.snd).Nodup ∧
+      (∀ e ∈ args, ∃ l ∈ s.loans, l.id = e.2 ∧ l.pendingArgument = true) ∧
+      (∀ e ∈ args, AList.lookup f.locals e.1 = none) then
+    some { s with
+      loans := s.loans.map fun l =>
+        if l.id ∈ args.map Prod.snd then
+          { l with
+            activation := if l.callRoot then f.id else l.activation
+            pendingArgument := false } else l
+      frames := { f with views := args ++ f.views } :: s.frames.tail }
+  else none
+
+/-- Mutant: retain argument loans and their ancestors, silently deleting other caller loans. -/
+def dropUnrelated (s : State) (args : List (Var × LoanId)) : Option State := do
+  let f ← s.frames.head?
+  if f.id < s.nextActivation ∧ (args.map Prod.fst).Nodup ∧ (args.map Prod.snd).Nodup ∧
+      (∀ e ∈ args, ∃ l ∈ s.loans, l.id = e.2 ∧ l.pendingArgument = true) ∧
+      (∀ e ∈ args, AList.lookup f.locals e.1 = none) then
+    some { s with
+      loans := (s.loans.filter fun b => args.any fun e =>
+        e.2 == b.id || (loan s e.2).any (fun a => decide (b.id ∈ a.ancestors))).map fun l =>
+        if l.id ∈ args.map Prod.snd then { l with activation := f.id, pendingArgument := false } else l
+      frames := { f with views := args ++ f.views } :: s.frames.tail }
+  else none
+
+/-- Mutant: downward lending discards the requested suffix. -/
+def discardSuffix (s : State) (i : LoanId) (_ : List Projection) (m : Mode) (a : Nat) :=
+  reborrowTo s i [] m a
+/-- Mutant: return refuses any callee loan lent from a caller view. -/
+def refuseRelend (s : State) : Option State := do
+  let f ← s.frames.head?
+  if s.loans.any (fun b => b.activation == f.id && b.parent.isSome) then none else leave s
+/-- Mutant: unwind callee loans oldest first, attempting parents before their children. -/
+def reverseLeave (s : State) : Option State := do
+  let f ← s.frames.head?
+  let t ← (s.loans.filter (·.activation == f.id)).reverse.foldlM (fun t b => endLoan t b.id) s
+  let u ← drop (List.map Prod.fst f.locals) t
+  pure { u with frames := u.frames.tail }
+/-- Mutant: plain lending refuses mutable views while leaving shared lending unchanged. -/
+def refuseMutable (s : CallState) (i : LoanId) (x : Var) : Option CallState := do
+  let b ← loan s.own i
+  if b.mode == .mutable then none else passDown s i x
+
+/-- A valid return with a local child of the adopted view, newest first. -/
+def localChild : State := (reborrow relendEntry ⟨1⟩ [.index 1] .mutable).getD initial
+/-- Instance (law `return_progress`, case `localChild`, subject `ConcreteSpec.Core.Own.leave`).
+Both a local child and the adopted child end before the caller parent resumes. -/
+example : WellFormed localChild ∧ ValidReturn localChild ⟨1, [], [(z, ⟨1⟩)]⟩ ∧
+    ReturnProgress leave localChild :=
+  ⟨by decide, by decide, return_progress localChild _ (by decide) rfl (by decide)⟩
+/-- Planted (law `return_progress`, case `relendEntry`, subject `ConcreteSpec.Core.Own.leave`,
+mutant `refuseRelend`). Refusal of plain lending violates progress, not just an Instance. -/
+example : WellFormed relendEntry ∧ ValidReturn relendEntry ⟨1, [], [(z, ⟨1⟩)]⟩ ∧
+    ¬ ReturnProgress refuseRelend relendEntry := by
+  refine ⟨by decide, by decide, ?_⟩
+  rintro ⟨t, ht⟩
+  cases ht
+/-- Planted (law `return_progress`, case `localChild`, subject `ConcreteSpec.Core.Own.leave`,
+mutant `reverseLeave`). Parent-before-child unwinding refuses this structurally valid return. -/
+example : WellFormed localChild ∧ ValidReturn localChild ⟨1, [], [(z, ⟨1⟩)]⟩ ∧
+    ¬ ReturnProgress reverseLeave localChild := by
+  refine ⟨by decide, by decide, ?_⟩
+  rintro ⟨t, ht⟩
+  cases ht
+/-- Planted (law `adopted_view_usable`, case `relendBefore`, subject `ConcreteSpec.Core.Own.adoptDown`,
+mutant `keepActivation`). All old premises still hold; the callee activation output fails. -/
+example : ¬ AdoptedView keepActivation relendBefore z ⟨1⟩ := by
+  rintro ⟨t, ht, _, _, ⟨f, b, hf, hb, ha⟩, _⟩
+  cases ht
+  cases hf
+  cases hb
+  cases ha
+/-- Planted (law `adopted_view_usable`, case `beforeAdopt`, subject `ConcreteSpec.Core.Own.adoptDown`,
+mutant `dropUnrelated`). Adoption must preserve the unrelated caller borrow as well as ancestors. -/
+example : ¬ AdoptedView dropUnrelated beforeAdopt z pendingLoan.id := by
+  rintro ⟨t, ht, _, _, _, keep⟩
+  cases ht
+  have bad := keep.1 (caller.own.loans.headD held) (by decide) (by decide)
+  revert bad
+  decide
+/-- Instance (law `passDown_protocol`, case `relendCaller`, subject `ConcreteSpec.Core.Own.passDown`). -/
+example : PassedView passDown relendCaller ⟨0⟩ z .mutable :=
+  passDown_protocol relendCaller ⟨0⟩ z _ _ (by decide) rfl (by decide) rfl rfl (by decide)
+/-- Instance (law `plain_lending_roundtrip`, case `relendCaller`, subject `ConcreteSpec.Core.Own.passDown`). -/
+example : (do
+      let waiting ← passDown relendCaller ⟨0⟩ z
+      let called ← callLife types (.enter [z]) waiting
+      callLife types .leave called) =
+    some ⟨{ relendCaller.own with nextLoan := 2, nextActivation := 2 }, []⟩ :=
+  plain_lending_roundtrip relendCaller.own ⟨0⟩ z types _ _ (by decide) rfl (by decide) rfl rfl
+/-- Planted (law `passDown_protocol`, case `relendCaller`, subject `ConcreteSpec.Core.Own.passDown`,
+mutant `refuseMutable`). OD2 plain mutable lending cannot be refused. -/
+example : ¬ PassedView refuseMutable relendCaller ⟨0⟩ z .mutable := by
+  rintro ⟨t, ht, _⟩
+  cases ht
+/-- Planted (law `downward_reborrow_protocol`, case `upSource`, subject `ConcreteSpec.Core.Own.reborrowTo`,
+mutant `discardSuffix`). A supplied projection must be appended, rather than discarded. -/
+example : ¬ DownwardProtocol discardSuffix upSource ⟨0⟩ [.index 1] .mutable 1 0 := by
+  rintro ⟨_, t, ht, _, _, _, _, _, l, hl, hid, _, a, found, _, path, _⟩
+  cases ht
+  cases found
+  change l ∈ [_, _] at hl
+  rcases List.mem_cons.mp hl with he | hl
+  · subst l
+    cases path
+  · simp only [List.mem_singleton] at hl
+    subst l
+    cases hid
+
+/-- Planted (law `plain_lending_roundtrip`, case `relendCaller`, subject `ConcreteSpec.Core.Own.passDown`,
+mutant `refuseMutable`). The same refusal also breaks the complete call composition. -/
+example : ¬ ((do
+      let waiting ← refuseMutable relendCaller ⟨0⟩ z
+      let called ← callLife types (.enter [z]) waiting
+      callLife types .leave called) =
+    some ⟨{ relendCaller.own with nextLoan := 2, nextActivation := 2 }, []⟩) := by decide
+
+/-- Extra activation mutant: adoption assigns the next, unissued frame rather than the callee. -/
+def futureActivation (s : State) (args : List (Var × LoanId)) : Option State := do
+  let f ← s.frames.head?
+  if f.id < s.nextActivation ∧ (args.map Prod.fst).Nodup ∧ (args.map Prod.snd).Nodup ∧
+      (∀ e ∈ args, ∃ l ∈ s.loans, l.id = e.2 ∧ l.pendingArgument = true) ∧
+      (∀ e ∈ args, AList.lookup f.locals e.1 = none) then
+    some { s with
+      loans := s.loans.map fun l =>
+        if l.id ∈ args.map Prod.snd then { l with activation := s.nextActivation, pendingArgument := false } else l
+      frames := { f with views := args ++ f.views } :: s.frames.tail }
+  else none
+
+/-- Planted (law `adopted_view_usable`, case `relendBefore`, subject `ConcreteSpec.Core.Own.adoptDown`,
+mutant `futureActivation`). Independent activation-family attempt, kernel-rejected. -/
+example : ¬ AdoptedView futureActivation relendBefore z ⟨1⟩ := by
+  rintro ⟨t, ht, _, _, ⟨f, b, hf, hb, ha⟩, _⟩
+  cases ht
+  cases hf
+  cases hb
+  cases ha
+/-- Extra path mutant: use only the suffix, discarding the parent's projection. -/
+def replacePath (s : State) (i : LoanId) (suffix : List Projection) (m : Mode)
+    (activation : Nat) : Option State := do
+  let a ← loan s i
+  if loanAccess s i m && decide (activation < s.nextActivation ∧
+      s.frames.head?.map Activation.id = some activation) then
+    some { s with
+      nextLoan := s.nextLoan + 1
+      loans := ⟨⟨s.nextLoan⟩, a.root, suffix, m, some i,
+        i :: a.ancestors, activation, false, false⟩ :: s.loans }
+  else none
+
+def reborrow (s : State) (i : LoanId) (suffix : List Projection) (m : Mode) :
+    Option State := do
+  let f ← s.frames.head?
+  reborrowTo s i suffix m f.id
+
+/-- Planted (law `downward_reborrow_protocol`, case `upSource`, subject `ConcreteSpec.Core.Own.reborrowTo`,
+mutant `replacePath`). Independent path-family attempt, kernel-rejected. -/
+example : ¬ DownwardProtocol replacePath upSource ⟨0⟩ [.index 1] .mutable 1 0 := by
+  rintro ⟨_, t, ht, _, _, _, _, _, l, hl, hid, _, a, found, _, path, _⟩
+  cases ht
+  cases found
+  change l ∈ [_, _] at hl
+  rcases List.mem_cons.mp hl with he | hl
+  · subst l
+    cases path
+  · simp only [List.mem_singleton] at hl
+    subst l
+    cases hid
+/-- Extra progress mutant: refuse shared call returns alone. -/
+def refuseShared (s : State) : Option State := do
+  let f ← s.frames.head?
+  if s.loans.any (fun b => b.activation == f.id && b.mode == .shared) then none else leave s
+/-- Instance (law `return_progress`, case `sharedStore`, subject `ConcreteSpec.Core.Own.leave`). -/
+example : ReturnProgress leave sharedStore.own :=
+  return_progress sharedStore.own ⟨1, [], [(z, ⟨1⟩)]⟩ (by decide) rfl (by decide)
+/-- Planted (law `return_progress`, case `sharedStore`, subject `ConcreteSpec.Core.Own.leave`,
+mutant `refuseShared`). Independent progress-family attempt in the other mode, kernel-rejected. -/
+example : WellFormed sharedStore.own ∧ ValidReturn sharedStore.own ⟨1, [], [(z, ⟨1⟩)]⟩ ∧
+    ¬ ReturnProgress refuseShared sharedStore.own := by
+  refine ⟨by decide, by decide, ?_⟩
+  rintro ⟨t, ht⟩
+  cases ht
+
+/-- Extra path mutant: adoption clears the child's existing projection during transfer. -/
+def forgetAdoptionPath (s : State) (args : List (Var × LoanId)) : Option State := do
+  let f ← s.frames.head?
+  if f.id < s.nextActivation ∧ (args.map Prod.fst).Nodup ∧ (args.map Prod.snd).Nodup ∧
+      (∀ e ∈ args, ∃ l ∈ s.loans, l.id = e.2 ∧ l.pendingArgument = true) ∧
+      (∀ e ∈ args, AList.lookup f.locals e.1 = none) then
+    some { s with
+      loans := s.loans.map fun l =>
+        if l.id ∈ args.map Prod.snd then { l with path := [], activation := f.id, pendingArgument := false } else l
+      frames := { f with views := args ++ f.views } :: s.frames.tail }
+  else none
+
+
+/-- Planted (law `adopted_view_usable`, case `relendBefore`, subject `ConcreteSpec.Core.Own.adoptDown`,
+mutant `forgetAdoptionPath`). This fourth extra mutant survived the intermediate outputs;
+the exact transfer-table output now rules it out without an additional premise. -/
+example : ¬ AdoptedView forgetAdoptionPath relendBefore z ⟨1⟩ := by
+  rintro ⟨t, ht, _, _, _, _, f, hf, table⟩
+  cases ht
+  cases hf
+  cases table
+end Round4Evidence
 
 end ConcreteSpec.Core.Own
