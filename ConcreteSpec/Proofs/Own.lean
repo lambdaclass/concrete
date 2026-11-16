@@ -508,8 +508,9 @@ theorem bind_preserves (types : Var → Option Descriptor) (s : State) (x : Var)
                 exact ⟨a, List.mem_cons_of_mem _ ha, he, hact⟩
       · contradiction
 
-/-- Helper (inversion). Uses a duplicate-free place index to identify two slot records. -/
-private theorem slot_unique (xs : List Slot) (hn : (xs.map Slot.place).Nodup)
+/-- Helper (inversion). Uses a duplicate-free place index to identify two slot records.
+Public so O3 can reuse this fact without duplicating the index proof. -/
+theorem slot_unique (xs : List Slot) (hn : (xs.map Slot.place).Nodup)
     (x y : Slot) (hx : x ∈ xs) (hy : y ∈ xs) (he : x.place = y.place) : x = y := by
   induction xs with
   | nil => simp at hx
@@ -649,7 +650,8 @@ theorem endLocals_preserves (s : State) (a : Nat) (hs : WellFormed s) : StateRes
       rwa [h] at h') _ _ _ hs h
 
 /-- Helper (computation). Ending a loan leaves activation frames unchanged. -/
-private theorem endLoan_frames (s t : State) (i : LoanId) (h : endLoan s i = some t) :
+/- O3 reuses this existing helper through a public name; the proof and policy stay in O1. -/
+theorem endLoan_frames (s t : State) (i : LoanId) (h : endLoan s i = some t) :
     t.frames = s.frames := by
   unfold endLoan at h
   obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp h
@@ -659,7 +661,7 @@ private theorem endLoan_frames (s t : State) (i : LoanId) (h : endLoan s i = som
     rfl
 
 /-- Helper (congruence). A monadic fold retains any projection retained at each step. -/
-private theorem fold_projection {α β : Type} (project : State → β) (f : State → α → Option State)
+theorem fold_projection {α β : Type} (project : State → β) (f : State → α → Option State)
     (hf : ∀ s a t, f s a = some t → project t = project s) (xs : List α)
     (s t : State) (h : xs.foldlM f s = some t) : project t = project s := by
   induction xs generalizing s with
@@ -675,7 +677,7 @@ private theorem fold_frames {α : Type} (f : State → α → Option State)
   fold_projection State.frames f hf xs s t h
 
 /-- Helper (inversion). Expose the two successful cleanup steps and final frame pop once. -/
-private theorem leave_parts (s t : State) (f : Activation)
+theorem leave_parts (s t : State) (f : Activation)
     (hf : s.frames.head? = some f) (h : leave s = some t) :
     ∃ u v, endLocals f.id s = some u ∧ drop (List.map Prod.fst f.locals) u = some v ∧
       t = { v with frames := v.frames.tail } := by
@@ -1291,7 +1293,7 @@ private theorem fold_loans {α : Type} (f : State → α → Option State)
     exact fun l hl => hf s a u hu l (ih u h l hl)
 
 /-- Helper (congruence). Composes binding loan-table equalities through parameter entry. -/
-private theorem enter_loans (types : Var → Option Descriptor) (s t : State) (xs : List Var)
+theorem enter_loans (types : Var → Option Descriptor) (s t : State) (xs : List Var)
     (h : enter types xs s = some t) : t.loans = s.loans := by
   unfold enter at h
   dsimp at h
@@ -1319,7 +1321,7 @@ private theorem endLoan_subset (s t : State) (i : LoanId) (h : endLoan s i = som
     exact fun _ hl => (List.mem_filter.mp hl).1
 
 /-- Helper (inversion). Combines lifecycle branch inversions to trace surviving loans to their input. -/
-private theorem life_subset (types : Var → Option Descriptor) (e : Exec.Life) (s t : State)
+theorem life_subset (types : Var → Option Descriptor) (e : Exec.Life) (s t : State)
     (h : life types e s = some t) : ∀ l ∈ t.loans, l ∈ s.loans := by
   cases e with
   | bind x => rw [bind_loans types s t x h]; exact fun _ h => h
@@ -1721,7 +1723,7 @@ theorem passOwner_birth_result (s t : CallState) (p : Hybrid.Place) (path : List
     · contradiction
 
 /-- Helper (inversion). Unique loan identities identify the full loan record. -/
-private theorem loan_unique (xs : List Loan) (hn : (xs.map Loan.id).Nodup)
+theorem loan_unique (xs : List Loan) (hn : (xs.map Loan.id).Nodup)
     (x y : Loan) (hx : x ∈ xs) (hy : y ∈ xs) (he : x.id = y.id) : x = y := by
   induction xs with
   | nil => simp at hx
@@ -2882,65 +2884,4 @@ example : CallResult (callLife types .leave exiting) :=
 example : CallState.WellFormed exiting ∧ callLife types .leave exiting = none ∧
     ¬ CallResult (callLifePending types .leave exiting) := by decide
 end PendingEvidence
-end ConcreteSpec.Core.Own
-
-namespace ConcreteSpec.Core.Own
-
-/-- Linear consumption denies both owner accesses until reinitialization restores the exact
-original state. Unrelated owners, loans and activation indices survive the whole protocol. -/
-def MoveLifecycle (consume : State → Hybrid.Place → Option State) (s : State) (p : Hybrid.Place) : Prop :=
-  ∃ t, consume s p = some t ∧ accessOwner t p .shared = none ∧
-    accessOwner t p .mutable = none ∧ reinitialize t p = some s
-
-/-- Law (authority: docs/decisions.md#decided-2026-11-08-foundation, C5;
-#decided-2026-11-05-core Q3.8; #od15; #od60; #od69). (subject `ConcreteSpec.Core.Own.move`).
-A discharged linear owner is unusable between consumption and reinitialization, and replacement restores all
-previous state. -/
-theorem move_reinitialize_protocol (s : State) (p : Hybrid.Place) (x : Slot)
-    (hs : WellFormed s) (found : slot s p = some x) (linear : x.desc.copy = false)
-    (owned : x.status = .owned) (clear : ∀ l ∈ s.loans, l.root ≠ p) :
-    MoveLifecycle move s p := by
-  have xp : x.place = p := by simpa using List.find?_some found
-  have xm : x ∈ s.slots := List.mem_of_find?_eq_some found
-  let change := fun a : Slot => if a.place = p then { a with status := .moved } else a
-  have place (a : Slot) : (change a).place = a.place := by simp [change]; split <;> rfl
-  let t : State := { s with slots := s.slots.map change }
-  have sf : slot t p = some { x with status := .moved } := by
-    unfold slot at found ⊢
-    simp only [t, List.find?_map, Function.comp_def, place, found, Option.map_some]
-    simp [change, xp]
-  have clearBool : s.loans.any (·.root == p) = false := by
-    apply Bool.eq_false_iff.mpr
-    intro h
-    obtain ⟨l, hl, he⟩ := List.any_eq_true.mp h
-    exact clear l hl (by simpa using he)
-  have allClear : s.loans.all (·.root != p) = true := by
-    apply List.all_eq_true.mpr
-    intro l hl
-    simpa using clear l hl
-  have restoration :
-      (s.slots.map change).map (fun a => if a.place = p then { a with status := .owned } else a) = s.slots := by
-    rw [List.map_map]
-    calc
-      _ = s.slots.map id := by
-        apply List.map_congr_left
-        intro a ha
-        dsimp only [Function.comp_def]
-        rw [place]
-        by_cases hp : a.place = p
-        · have ax := slot_unique s.slots hs.1 a x ha xm (hp.trans xp.symm)
-          subst a
-          simp only [change, xp, ↓reduceIte]
-          rw [← xp]
-          cases x
-          cases owned
-          rfl
-        · simp [change, hp]
-      _ = s.slots := List.map_id _
-  refine ⟨t, ?_, ?_, ?_, ?_⟩
-  · simp [move, found, linear, owned, clearBool, t, change]
-  · simp [accessOwner, ownerAccess, sf]
-  · simp [accessOwner, ownerAccess, sf]
-  · simp [reinitialize, sf, t, allClear, restoration]
-
 end ConcreteSpec.Core.Own
