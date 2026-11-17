@@ -1,4 +1,5 @@
 import ConcreteSpec.Proofs.Basics
+import ConcreteSpec.Proofs.Exec
 import ConcreteSpec.Proofs.Own
 import ConcreteSpec.Spec.Basics
 import ConcreteSpec.Spec.Exec
@@ -16,15 +17,16 @@ Authority: docs/decisions.md#decided-2026-11-08-foundation (C5), #decided-2026-1
 call duration and no implicit ending), and #decided-2026-11-13-lifecycle-refusal.
 The classification and control conventions are #decided-2026-11-13-proof-labels and
 #decided-2026-11-14-trap-sites-and-law-tests. Only Laws count as evidence.
-Tag inventory: 18 Law, 14 Helper, 37 Instance, 57 Planted.
+Tag inventory: 18 Law, 14 Helper, 38 Instance, 58 Planted.
 
 Source disposition: the O3 optional-result restatements of O1's owned-root, moved-root,
 birth/supply and passOwner results add no independent fact;
 reuse their existing result helpers and preservation Laws. Likewise the instrument, life,
 callLife, readOwner/writeOwner/readLoan/writeLoan erasure restatements remain owned by O2
 and O1's result helpers. The generic instrument preservation wrapper remains O1's helper.
-The registration Law reuses O1's defer_keeps_store_result inversion helper; its planted
-control changes only the dispatcher's registration branch, evaluating arguments too early.
+The registration Law reuses Exec's independent registration rule and dispatcher soundness.
+Its planted controls evaluate arguments too early, either retaining their store effects or
+refusing registration when evaluation fails.
 The source deferredStep alias and silentPrefix driver are retired: protocolOps, Exec.step and
 Exec.run supply the actual execution and uniform lifecycle substitution. Prefix Laws instead
 use an unbounded inductive certificate of actual machine steps and admitted ownership effects.
@@ -1055,14 +1057,16 @@ theorem deferred_call_lifetime (types : Var → Option Descriptor) :
   deferred_prefix_result types
 
 /-- Law (authority: docs/decisions.md#decided-2026-11-05-core Q9.8;
-#decided-2026-11-08-recovered-d3 C5 question 2; #od2).
-(subject `ConcreteSpec.Core.Exec.step`). Registering a deferred call does not evaluate any
-operand, stage any pending argument, or change any ownership fact, for any operand list. -/
+#foundation-q1 C1). (subject `ConcreteSpec.Core.Exec.step`). Whenever the independent
+registration rule admits a defer, the dispatcher queues the original operands in the
+innermost scope, leaving locals and store intact and deferring operand reads to cleanup. -/
 theorem deferred_registration (O : Exec.Operands) (P : Exec.Program O)
     (f : FnId) (args : List O.Expr) (site : SiteId) (L : AList Var O.Val)
-    (s : O.Store) (k : List (Exec.Frame O)) (c : Exec.Config O)
-    (h : Exec.step P ⟨.exec (.defer f args site), L, s, k⟩ = some (.next c)) : c.store = s :=
-  defer_keeps_store_result O P f args site L s k c h
+    (s : O.Store) (k k' : List (Exec.Frame O))
+    (h : Exec.Registered ⟨f, args, site⟩ k k') :
+    Exec.step P ⟨.exec (.defer f args site), L, s, k⟩ = some (.next ⟨.done, L, s, k'⟩) := by
+  cases Exec.rules_sound P _ none .silent _ (.defer h) with
+  | silent hs => exact hs
 
 /-- Helper (list induction). Filtering cannot change a successful search when its selected
 record passes the filter. Earlier rejected search candidates stay rejected. -/
@@ -1445,9 +1449,8 @@ example : HeldAt entry.store held :=
 example : ∃ c, Exec.step (heldProgram (callLife types) z)
     (heldRegistration (callLife types) caller ⟨1⟩ z) = some (.next c) ∧
     c.store = caller ∧ c.store.pending = [] := by
-  refine ⟨_, rfl, ?_, rfl⟩
-  exact deferred_registration _ (heldProgram (callLife types) z) callee
-    [.ownerArgument ⟨1⟩ .mutable z] ⟨0⟩ [] caller [.scope ⟨0⟩ [] []] _ rfl
+  exact ⟨_, deferred_registration _ (heldProgram (callLife types) z) callee
+    [.ownerArgument ⟨1⟩ .mutable z] ⟨0⟩ [] caller _ _ .scope, rfl, rfl⟩
 
 /-- Instance (execution, case `heldRegistration`, subject `ConcreteSpec.Core.Exec.run`). Real view use and all
 enclosing cleanup reach normal finality;
@@ -1650,6 +1653,42 @@ example : ∃ c, eagerRegistration (heldProgram (callLife types) z)
     (heldRegistration (callLife types) caller ⟨1⟩ z) = some (.next c) ∧
     c.store ≠ caller ∧ c.store.pending ≠ [] ∧ callLife types (.drop []) c.store = none := by
   exact ⟨_, rfl, by decide, by decide, rfl⟩
+
+/-- Mutant: evaluate deferred operands at registration, discarding their store effects
+but refusing registration if evaluation fails. -/
+private def eagerGate {O : Exec.Operands} (P : Exec.Program O)
+    (c : Exec.Config O) : Option (Exec.Out O) :=
+  match c.ctrl with
+  | .exec (.defer _ args _) =>
+    match Exec.evalArgs O c.locals c.store args with
+    | .ok _ => Exec.step P c
+    | _ => none
+  | _ => Exec.step P c
+
+/-- The owner used by the deferred argument is moved until the following assignment. -/
+private def repairAfterRegistration : Exec.Config (protocolOps (callLife types)) :=
+  ⟨.exec (.seq (.defer callee [.ownerArgument ⟨1⟩ .mutable z] ⟨0⟩)
+    (.assign y (.value (.lit 7)) ⟨1⟩)), [(y, 0)], cleanupSource, [.scope ⟨0⟩ [y] []]⟩
+
+/-- Instance (execution, case `repairAfterRegistration`, subject `ConcreteSpec.Core.Exec.run`).
+The assignment reinitializes the owner in time for the deferred call to use it at cleanup. -/
+example : (Exec.run (heldProgram (callLife types) z) (fun _ p => nomatch p) 30
+    repairAfterRegistration).ending = .final .normal := rfl
+
+/-- Planted (law `ConcreteSpec.Core.Own.deferred_registration`, case
+`repairAfterRegistration`, subject `ConcreteSpec.Core.Exec.step`, mutant `eagerGate`).
+The scope admits registration, but an eager read of the moved owner prevents the next
+statement from reinitializing it. -/
+example :
+    let d : Exec.Deferred (protocolOps (callLife types)) :=
+      ⟨callee, [.ownerArgument ⟨1⟩ .mutable z], ⟨0⟩⟩
+    let next : Exec.Stmt (protocolOps (callLife types)) := .assign y (.value (.lit 7)) ⟨1⟩
+    let k' := [.seq next, .scope ⟨0⟩ [y] [d]]
+    let P := heldProgram (callLife types) z
+    let c := (Exec.run P (fun _ p => nomatch p) 1 repairAfterRegistration).residual
+    c.ctrl = .exec (.defer d.f d.args d.site) ∧ Exec.Registered d c.frames k' ∧
+      ¬ (eagerGate P c = some (.next ⟨.done, c.locals, c.store, k'⟩)) :=
+  ⟨rfl, .seq .scope, by intro h; cases h⟩
 
 /-- Mutant: only mutable owner access ignores active loans. Shared access is unchanged. -/
 def unfreezeMutable (s : State) (p : Hybrid.Place) : Mode → Bool
@@ -2794,7 +2833,7 @@ example : WellFormed LifecycleWitnesses.called ∧
 /-- Planted (law `ConcreteSpec.Core.Own.passDown_protocol`, case `relendCaller`,
 subject `ConcreteSpec.Core.Own.passDown`, mutant `ConcreteSpec.Core.Own.Round5Evidence.passDownBogusSuffix`).
 The exact child projection rejects a corruption that successful return would erase. -/
-theorem bogusSuffix_rejected : WellFormed relendCaller.own ∧
+private theorem bogusSuffix_rejected : WellFormed relendCaller.own ∧
     loanAccess relendCaller.own ⟨0⟩ .mutable = true ∧
     ¬ PassedView passDownBogusSuffix relendCaller ⟨0⟩ z .mutable := by
   refine ⟨by decide, by decide, ?_⟩
@@ -2819,8 +2858,9 @@ def twoWaiting : CallState :=
 def twoBefore : State := (enter types [] twoWaiting.own).getD initial
 /-- Instance (law `ConcreteSpec.Core.Own.adopted_view_usable`, case `twoBefore`,
 subject `ConcreteSpec.Core.Own.adoptDown`). Both arguments satisfy every admission premise. -/
-example : WellFormed twoBefore ∧ AdoptedView adoptDown twoBefore ⟨1, [], []⟩ twoWaiting.pending :=
-  ⟨by decide, adopted_view_usable twoBefore _ _ rfl (by decide) (by decide) (by decide)
+example : twoWaiting.pending = [(y, ⟨1⟩), (z, ⟨2⟩)] ∧
+    WellFormed twoBefore ∧ AdoptedView adoptDown twoBefore ⟨1, [], []⟩ twoWaiting.pending :=
+  ⟨rfl, by decide, adopted_view_usable twoBefore _ _ rfl (by decide) (by decide) (by decide)
     (by decide) (by decide)⟩
 /-- Planted (law `ConcreteSpec.Core.Own.adopted_view_usable`, case `relendBefore`,
 subject `ConcreteSpec.Core.Own.adoptDown`, mutant `ConcreteSpec.Core.Own.Round5Evidence.adoptCallerSwap`).

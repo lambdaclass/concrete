@@ -1,4 +1,4 @@
-# Pin the mode, identity and destination of C5 view arguments
+### Pin the mode, identity and destination of C5 view arguments
 
 The downward reborrow Law now requires the exact requested child mode. Shared
 children refuse mutation and preserve the parent's shared access.

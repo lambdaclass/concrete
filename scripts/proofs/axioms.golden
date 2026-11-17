@@ -2546,7 +2546,6 @@ ConcreteSpec.Core.Own.RelationalConverseEvidence.eventTrace	Classical.choice Quo
 ConcreteSpec.Core.Own.RelationalConverseEvidence.refuseAccepted	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Own.RelationalConverseEvidence.refuseEventAccepted	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Own.RelationalConverseEvidence.refuseRead	Classical.choice Quot.sound propext
-ConcreteSpec.Core.Own.Round5Evidence.bogusSuffix_rejected	Quot.sound propext
 ConcreteSpec.Core.Own.Slot.mk.inj	
 ConcreteSpec.Core.Own.Slot.mk.injEq	propext
 ConcreteSpec.Core.Own.Slot.mk.sizeOf_spec	
@@ -5224,6 +5223,7 @@ _private.ConcreteSpec.Proofs.OwnErasureEvidence.0.ConcreteSpec.Core.Own.ExecEras
 _private.ConcreteSpec.Proofs.OwnErasureEvidence.0.ConcreteSpec.Core.Own.ExecErasureWitnesses.step_det_none_inv	propext
 _private.ConcreteSpec.Proofs.OwnErasureEvidence.0.ConcreteSpec.Core.Own.PopulatedErasureEvidence.missingAccepted	Classical.choice Quot.sound propext
 _private.ConcreteSpec.Proofs.OwnErasureEvidence.0.ConcreteSpec.Core.Own.PopulatedErasureEvidence.readAccepted	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.OwnProtocols.0.ConcreteSpec.Core.Own.Round5Evidence.bogusSuffix_rejected	Quot.sound propext
 _private.ConcreteSpec.Proofs.OwnProtocols.0.ConcreteSpec.Core.Own.ancestor_older	Quot.sound propext
 _private.ConcreteSpec.Proofs.OwnProtocols.0.ConcreteSpec.Core.Own.ancestor_older._proof_1_1	Quot.sound propext
 _private.ConcreteSpec.Proofs.OwnProtocols.0.ConcreteSpec.Core.Own.ancestor_older._proof_1_2	Quot.sound propext
