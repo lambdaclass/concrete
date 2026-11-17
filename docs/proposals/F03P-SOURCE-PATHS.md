@@ -219,9 +219,14 @@ A file here means an input file occurrence, not an equivalence class of spelling
 4. Apply the following site checks. Pre-admission site entries bind to file-entry
    ordinals and retain raw path bytes. A binding naming no input occurrence is a
    project-level failure and its entry is excluded from file-bound checks. Report
-   unmapped trapping sites as project-level failures. Test absence against the raw
-   site table, so an existing mapping blocked by a refusal is linked to that
-   refusal instead of generating an unmapped-site report.
+   unmapped trapping sites as project-level failures. The authoritative inventory
+   is the execution input's trap-site inventory, derived from the executable
+   program's trap-capable places independently of the raw site table. Enumerate
+   distinct `SiteId`s in ascending numeric order and use their zero-based
+   positions as trapping-site input ordinals. The loader checks each inventory
+   ID for absence against the raw site table. If raw bindings exist but are
+   blocked, link the mapping check to the first blocking report for any of
+   those bindings, by the selection order below.
 
    - Check local span coordinates independently on each file still eligible after
      Stage 3. For each file with a local site failure, select the first by the final
@@ -238,6 +243,12 @@ A file here means an input file occurrence, not an equivalence class of spelling
      files and block them for later candidates and dependent checks. A same-file
      pair carries both spans and counts once for its file. Link each suppressed
      candidate to the first selected duplicate-site report touching either endpoint.
+   - For a raw duplicate pair excluded before enumeration, link it to the first
+     report blocking either endpoint. For all Stage 4 blocking links, take the
+     first applicable report in selection order: Stage 1 local path reports in
+     final report-key order, Stage 3 reports in traversal order, missing-file
+     reports in final report-key order, local coordinate reports in final
+     report-key order, then duplicate-site reports in traversal order.
 
 No executable partial project is returned. Prove pair enumeration complete, selected
 witnesses sound, and the greedy traversal maximal: every unselected candidate touches
@@ -251,7 +262,7 @@ For `a.con`, `a.con`, `A.con`, only one collision report can be selected, with t
 remaining pair checks blocked; invalidity is still detected. Include this control
 and a disjoint-pairs control showing independent failures are both reported.
 For site completeness, each duplicate pair over the raw table either has an
-endpoint blocked by a missing-file, path or local site failure, or enters the
+explicit blocking link to a missing-file, path or local site failure, or enters the
 complete Stage 4 pair enumeration. Maximal selection then supplies a duplicate
 report or an explicit blocking report for each enumerated pair. Require controls
 for three distinct files sharing a site ID (one report), a same-file duplicate
@@ -473,6 +484,13 @@ Specific departures from the old snapshot:
   `firstDuplicate` on exact SourcePath identities cannot implement this rule.
   Strengthen `Realizes` independently of executable success, then prove both
   directions for the actual loader. Do not define Realizes as “load succeeded”.
+  `Realizes` independently requires exactly one valid source location for every
+  ID in the same execution input inventory. In first-arrival F19, prove against
+  the execution rules that every place that can trap emits an ID in that
+  inventory, and require that proof at the execution boundary for the program
+  whose inventory the loader checks. Compose it with loader soundness to prove
+  unique valid source coverage for every trapping place, as required by the
+  [November 14 trap-site decision](../decisions.md#decided-2026-11-14-trap-sites-and-law-tests).
 - Retain Span's ordered byte range, positive stored line/column and
   `LocationOk` source checks. `Span.PathOk` is only a derived compatibility view,
   never an independent weak path-admission policy. Keep it as the compatibility view and prove it once from SourcePath in F04p;
