@@ -1,0 +1,4 @@
+[piece 3 of 4: scripts]
+- scripts/spec/f31_surface.py:51: Script probes inventory only persistent declarations. Anonymous `example` commands are erased, and the separate example scan covers only `ConcreteSpec/` and `Concrete/`. Adding an example to an existing script probe therefore leaves the inventory unchanged, despite the stated requirement to include every command outside the library import closures.
+
+Repository reads failed because the execution sandbox could not start, so owner-decision verification was limited to the supplied diff.
