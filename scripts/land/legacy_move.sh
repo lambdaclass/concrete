@@ -74,7 +74,7 @@ OVERLAY=(
   scripts/checks/workflow_yaml.sh .claude/commands/land.md docs/proposals/SPEC_UNIFICATION.md
   scripts/land/impact_gates.sh scripts/land/ready.sh scripts/land/notes.sh scripts/land/gates_transport_ssh.sh scripts/land/run-at-ref.sh
   scripts/review/invoke.sh scripts/review/read_evidence.py scripts/checks/review_tool.sh .claude/commands/creview.md scripts/review/supervise.py
-  scripts/review/review.sh scripts/review/verify.sh
+  scripts/review/review.sh scripts/review/verify.sh scripts/review/runtime.sh
   RETENTION.tsv AGENTS.md docs/LANDING.md docs/REVIEW.md docs/SELF_HOSTED_RUNNERS.md
   scripts/checks/landing_script.sh scripts/checks/landing_ready.sh scripts/checks/retention_manifest.sh
   scripts/land/train.sh scripts/land/acceptance.sh scripts/land/signoff.sh scripts/worktree-new.sh

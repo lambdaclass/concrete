@@ -15,7 +15,9 @@ def main():
     pr_set_child_subreaper = 36
     if (sys.platform != "linux" or not children.is_file()
             or ctypes.CDLL(None, use_errno=True).prctl(pr_set_child_subreaper, 1, 0, 0, 0) != 0):
-        sys.exit("review runner: Linux child subreaping and procfs are required")
+        sys.exit("review runner: running reviews requires Linux with procfs and child subreaping")
+    if sys.argv[1:] == ["--check"]:
+        return 0
 
     cancelled = False
 

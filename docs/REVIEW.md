@@ -95,10 +95,18 @@ do not check what they claim, and docs that contradict the code. It runs
 stdin. Each invocation extracts a fresh `git archive` of the exact reviewed SHA
 outside the caller’s worktree, verifies paths, blob identities, executable bits
 and symlink targets, and removes the copy after the reviewer and its descendants
-exit. The runner uses Linux child subreaping so it can also clean up processes
-in separate sessions. Diff, archive and verification all disable Git object
-replacement. Unsupported gitlinks or archive
-attributes that omit or rewrite content fail closed. Codex runs there with
+exit. Running reviews requires Linux with procfs and child subreaping to clean
+up processes in separate sessions. The driver checks these facilities before
+starting a round and reports the requirement on macOS and other unsupported
+hosts. Reading review notes with `verify.sh` remains available there. The driver
+resolves the external reviewer executable to an absolute path from the invoking
+directory before entering the repository root.
+
+Diff, archive and verification all disable Git object replacement. Review
+patches also disable external diff and text conversion drivers. Absolute
+symlinks, symlink chains that leave the archive, hardlinks, special files,
+unsupported gitlinks and archive attributes that omit or rewrite content fail
+closed before the reviewer starts. Codex runs there with
 `--sandbox danger-full-access --skip-git-repo-check --json`; the prompt requires
 read-only review. This disposable copy keeps ordinary reviewer writes away from
 the caller, but is not a security boundary for arbitrary code with host access.
@@ -112,19 +120,22 @@ SSL_CERT_DIR and LEAN_NUM_THREADS when set. Its TMPDIR is private to the invocat
 around the copy and disables object replacement in the reviewer environment.
 
 Every completed review must include a successful command event for the exact
-read probe supplied in the prompt, with the expected SHA-256 digest of the
-file in the private archive. An unrelated command that prints the digest
-cannot supply evidence. Missing evidence, startup errors and execution failures
-exit 2 before recording a note. Policy refusals go through the retry below.
-The exact prompt, final output and raw JSON event stream are saved beside the
-round report in `.review/<sha>-<round>-invocation-<n>.*` for all invocations.
+read probe supplied in the prompt. The probe invokes a runner-selected absolute
+Python executable and computes SHA-256 over a fresh random nonce followed by
+the archived file bytes. The nonce file lives inside the private copy, and the
+runner holds the expected digest in memory.
+Missing evidence, malformed events, startup errors and execution failures exit
+2 before recording a note. Policy refusals go through the retry below.
+The exact prompt, final output, raw JSON event stream and stderr are saved beside
+the round report in `.review/<sha>-<round>-invocation-<n>.*` for all invocations.
+The report also includes runner stderr.
 
 The reply must end with a line that is exactly `VERDICT: clean` or
 `VERDICT: findings`. Markdown emphasis around it is tolerated; anything after it
 is not. A reply without that line is treated as no answer, never as clean.
 
 **Retry.** The runner retries a policy refusal, including a structured CLI
-refusal before the read probe. It also retries a reply that supplied read
+refusal or a plain refusal before the read probe. It also retries a reply that supplied read
 evidence but omitted a valid final verdict. In either case it halves the piece
 and sends each half once with a more neutral prompt that leaves out the project
 framing. If a half is refused or still lacks a verdict, the piece becomes

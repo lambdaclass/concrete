@@ -98,12 +98,20 @@ elif has MARK_CLI_REFUSE && [ "$kind" = standard ]; then
   printf '{"type":"error","message":"%s"}\n{"type":"turn.failed","error":{"message":"%s"}}\n' "$message" "$message"
   touch "$FAKE_LOG/cli-refusal"
   exit 1
+elif has MARK_PLAIN_REFUSE && [ "$kind" = standard ]; then
+  reply "I'm not able to assist with that request."
+  exit 0
 elif has MARK_REFUSE_STANDARD && [ "$kind" = standard ]; then
   reply "I can't help with that request."
   exit 0
 fi
 if has MARK_EXACT; then
-  python3 -I "$FAKE_VERIFIER" tree "$FAKE_SOURCE" "$(git -C "$FAKE_SOURCE" rev-parse HEAD)" "$directory" >"$FAKE_LOG/identity.$n" || exit 2
+  # The exact-tree fixture has one runner-created nonce, added after verification.
+  nonce_path=("$directory"/.concrete-review-nonce-*)
+  [ "${#nonce_path[@]}" = 1 ] && mv "${nonce_path[0]}" "$TMPDIR/nonce" || exit 2
+  python3 -I "$FAKE_VERIFIER" tree "$FAKE_SOURCE" "$(git -C "$FAKE_SOURCE" rev-parse HEAD)" "$directory" || exit 2
+  mv "$TMPDIR/nonce" "${nonce_path[0]}" || exit 2
+  echo verified >"$FAKE_LOG/identity.$n"
 fi
 if has MARK_SLEEP; then
   # Create both an ordinary child and a separate session, with an intermediate
@@ -123,20 +131,38 @@ if has MARK_DISCOVERY; then
   git -C "$directory" rev-parse --show-toplevel >"$FAKE_LOG/discovered" 2>/dev/null
   printf '%s\n' "$?" >"$FAKE_LOG/discovery-status"
 fi
+if has MARK_WRITE_LINK; then
+  printf 'reviewer mutation\n' >"$directory/escape" && touch "$FAKE_LOG/followed-link"
+fi
 if has MARK_WRITE; then
   printf 'reviewer mutation\n' >"$directory/README.md" && touch "$directory/reviewer-created" && touch "$FAKE_LOG/wrote"
 fi
 if has MARK_NO_READ; then
   touch "$FAKE_LOG/skipped-read"
 else
-  probe="$(sed -n '/^python3 -I -c /p' "$FAKE_LOG/prompt.$n")"
+  probe="$(awk '/run this repository-read probe verbatim/{getline; print}' "$FAKE_LOG/prompt.$n")"
   if has MARK_PRINT_DIGEST; then
     expected="$(git -C "$FAKE_SOURCE" show HEAD:.gitignore | sha256sum)"
     expected="${expected%% *}"
     probe="printf '%s\n' '$expected'"
     touch "$FAKE_LOG/printed-digest"
   fi
-  digest="$(cd "$directory" && eval "$probe")"
+  if has MARK_SHIM_PROBE; then
+    expected="$(git -C "$FAKE_SOURCE" show HEAD:.gitignore | sha256sum)"
+    expected="${expected%% *}"
+    mkdir "$TMPDIR/shim"
+    printf '#!/bin/sh\nprintf "%%s\\n" "%s"\n' "$expected" >"$TMPDIR/shim/python3"
+    chmod +x "$TMPDIR/shim/python3"
+    rm "$directory/.gitignore"
+    [ "$("$TMPDIR/shim/python3")" = "$expected" ] || exit 2
+    digest="$(cd "$directory" && PATH="$TMPDIR/shim:$PATH" bash -c "$probe" 2>"$FAKE_LOG/probe-error")"
+    printf '%s\n' "$?" >"$FAKE_LOG/probe-status"
+    printf '%s\n' "$probe" >"$FAKE_LOG/probe-command"
+    # Even an event claiming success and returning the old content hash must fail.
+    digest="$expected"
+  else
+    digest="$(cd "$directory" && eval "$probe")" || exit 2
+  fi
   python3 -I -c '
 import json
 import shlex
@@ -149,6 +175,12 @@ print(json.dumps({"type": "item.completed", "item": {
 }}))
 ' "$probe" "$digest"
 fi
+if has MARK_BAD_EVENT; then
+  echo '[]'
+fi
+if has MARK_BAD_ITEM; then
+  echo '{"type":"item.completed","item":[]}'
+fi
 if has MARK_UNICODE; then
   printf '{"type":"item.completed","item":{"type":"agent_message","text":"left\342\200\250right"}}\n'
 fi
@@ -157,14 +189,14 @@ if has MARK_SANDBOX; then
   touch "$FAKE_LOG/reported-error"
 fi
 if has MARK_MENTION_FILTER; then
-  echo '{"type":"item.completed","item":{"type":"command_execution","exit_code":0,"aggregated_output":"Repository reads failed because the execution sandbox could not start"}}'
+  echo '{"type":"item.completed","item":{"type":"command_execution","exit_code":0,"status":"completed","command":"probe report","aggregated_output":"Repository reads failed because the execution sandbox could not start"}}'
   reply "The patch handles sandbox failure and the content filter.
-VERDICT: clean"
+**VERDICT**: clean"
 elif has MARK_ERROR; then
   echo "stream error: 500" >&2; exit 1
 elif has MARK_FINDING; then
   reply "- a.txt:1: the counter is never reset
-VERDICT: findings"
+**VERDICT**: findings"
 elif has MARK_NOVERDICT; then
   reply "I looked at it and it seems fine."
 elif has MARK_TRAILING; then
@@ -203,6 +235,21 @@ review() { (cd "$W" && bash "$REVIEW" "$@"); }
 note() { g notes --ref=refs/notes/concrete-review show "${1:-HEAD}" 2>/dev/null; }
 field() { note "${2:-HEAD}" | sed -n "s/^$1: //p"; }
 
+echo "=== review host contract ==="
+# Exercise the supervisor's non-Linux launch path on Linux CI too.
+python3 -I -c 'import runpy, sys; sys.platform = "darwin"; runpy.run_path(sys.argv.pop(1), run_name="__main__")' \
+  "$ROOT_DIR/scripts/review/supervise.py" touch "$T/unsupported-launched" >"$T/unsupported" 2>&1; rc=$?
+check "unsupported supervisor exits before launching a child" test "$rc" -ne 0 -a ! -e "$T/unsupported-launched"
+check "unsupported supervisor explains required host facilities" grep -q 'requires Linux with procfs and child subreaping' "$T/unsupported"
+if [ "$(uname -s)" != Linux ]; then
+  review >"$T/unsupported-review" 2>&1; rc=$?
+  check "review driver rejects this host before contacting reviewer" test "$rc" = 2 -a "$(calls)" = 0 -a ! -e "$W/.review"
+  check "review driver reports its host requirement" grep -q 'requires Linux with procfs and child subreaping' "$T/unsupported-review"
+  echo "check_review_tool: PASS=$PASS FAIL=$FAIL"
+  [ "$FAIL" -eq 0 ]
+  exit $?
+fi
+
 echo "=== round 1: full diff, findings, note written and pushed ==="
 g checkout -qb feature
 commit_file old.txt "MARK_FINDING in the first change" "first change"
@@ -234,6 +281,8 @@ check "note: pieces 1" test "$(field pieces)" = 1
 check "raw output at .review/<sha>-1.md" test -s "$W/.review/$R1-1.md"
 check "findings recorded under the findings ref" \
   bash -c "git -C '$W' notes --ref=refs/notes/concrete-review-findings show $R1 | has_match 'counter is never reset'"
+check "findings note omits the parsed emphasized verdict" bash -c \
+  'note="$(git -C "$1" notes --ref=concrete-review-findings show "$2")" && ! grep -q VERDICT <<<"$note"' _ "$W" "$R1"
 check "notes ref pushed to origin" test "$(git -C "$T/origin.git" rev-parse refs/notes/concrete-review)" = "$(g rev-parse refs/notes/concrete-review)"
 check ".review/ stays untracked" test -z "$(g status --porcelain)"
 (cd "$W" && bash "$VERIFY" HEAD >/dev/null); rc=$?
@@ -539,6 +588,19 @@ parse_case MARK_NO_READ 2 "" "missing repository-read evidence is an error"
 check "reviewer deliberately skipped read" test -f "$FAKE_LOG/skipped-read"
 parse_case MARK_PRINT_DIGEST 2 "" "printing the expected digest without running the read command is rejected"
 check "digest-only control executed" test -f "$FAKE_LOG/printed-digest"
+parse_case MARK_SHIM_PROBE 2 "" "same probe with missing target and a PATH shim cannot supply evidence"
+check "absolute probe fails when its target is missing despite a working shim" \
+  grep -q '^FileNotFoundError:.*[.]gitignore' "$FAKE_LOG/probe-error"
+check "the exact prompted command was used with the shim on PATH" \
+  cmp "$FAKE_LOG/probe-command" <(awk '/run this repository-read probe verbatim/{getline; print}' "$FAKE_LOG/prompt.1")
+check "a forged success event with the old content hash cannot produce a note" \
+  grep -q 'missing successful repository-read command evidence' "$W/.review/$(g rev-parse HEAD)-1.md"
+parse_case MARK_BAD_EVENT 2 "" "non-object event fails without a note"
+check "round report includes malformed event diagnostic" grep -q 'malformed reviewer event on line 2' "$W/.review/$(g rev-parse HEAD)-1.md"
+parse_case MARK_BAD_ITEM 2 "" "non-object item fails without a note"
+check "round report includes malformed item diagnostic" grep -q 'malformed reviewer item on line 2' "$W/.review/$(g rev-parse HEAD)-1.md"
+parse_case MARK_PLAIN_REFUSE 0 clean "plain pre-read refusal reaches a successful neutral retry"
+check "plain refusal actually invoked the neutral prompt" grep -q ' neutral ' "$FAKE_LOG/calls"
 parse_case MARK_UNICODE 0 clean "literal U+2028 stays inside its JSONL record"
 parse_case MARK_CLI_REFUSE 0 clean "CLI Invalid prompt event reaches a successful neutral retry"
 check "CLI refusal event emitted" test -f "$FAKE_LOG/cli-refusal"
@@ -564,7 +626,10 @@ printf '\000\377binary\n' >"$W/binary"
 printf '#!/bin/sh\nexit 0\n' >"$W/executable"
 chmod +x "$W/executable"
 ln -s exact.txt "$W/link"
-g add binary executable link && g commit -qm 'archive entry types'
+mkdir "$W/nested"
+ln -s ../link "$W/nested/link"
+g add binary executable link nested/link && g commit -qm 'archive entry types'
+exact_sha="$(g rev-parse HEAD)"
 printf dirty >"$W/README.md"
 printf untracked >"$W/untracked"
 review >"$T/exact-review.log" 2>&1; rc=$?
@@ -592,6 +657,70 @@ mkdir -p "$W/sub"
 commit_file relative.txt relative relative
 (cd "$W/sub" && REVIEW_CODEX_BIN=../../bin/codex bash "$REVIEW") >"$T/relative-review.log" 2>&1; rc=$?
 check "relative reviewer executable works from caller subdirectory" test "$rc" = 0
+reset_fake
+commit_file path-reviewer.txt path relative-path
+(cd "$W/sub" && PATH="../../bin:$PATH" REVIEW_CODEX_BIN=codex bash "$REVIEW") >"$T/relative-path.log" 2>&1; rc=$?
+check "bare reviewer on caller-relative PATH runs after the driver changes directory" test "$rc" = 0 -a "$(calls)" = 1
+reset_fake
+printf '#!/bin/sh\ntouch "%s"\n' "$FAKE_LOG/builtin-ran" >"$W/sub/:"
+chmod +x "$W/sub/:"
+(cd "$W/sub" && REVIEW_CODEX_BIN=: bash "$REVIEW") >"$T/builtin.log" 2>&1; rc=$?
+check "builtin name does not resolve to an implicit caller-local executable" test "$rc" = 2 -a ! -e "$FAKE_LOG/builtin-ran"
+check "builtin lookup gives the executable diagnostic" grep -q 'reviewer executable not found' "$T/builtin.log"
+rm "$W/sub/:"
+
+reset_fake
+g checkout -q main && g checkout -qb diff-drivers
+commit_file .gitattributes 'driver.txt diff=hide' 'configure diff attribute'
+commit_file driver.txt original 'driver original'
+driver_base="$(g rev-parse HEAD)"
+commit_file driver.txt MARK_FINDING 'driver changed'
+g config diff.hide.textconv true
+g diff "$driver_base" HEAD >"$T/converted"
+check "fixture textconv driver hides the edit with an ordinary git diff" test ! -s "$T/converted"
+g config diff.hide.command true
+g diff --no-textconv "$driver_base" HEAD >"$T/external-diff"
+check "fixture external diff driver also hides the edit" test ! -s "$T/external-diff"
+review --base "$driver_base" >"$T/raw-diff.log" 2>&1; rc=$?
+check "review bypasses both configured drivers and receives the raw edit" test "$rc" = 1 -a "$(calls)" = 1
+check "raw review patch contains the hidden line" grep -q '^+MARK_FINDING$' "$FAKE_LOG/stdin.1"
+g config --unset diff.hide.textconv
+g config --unset diff.hide.command
+
+reset_fake
+g checkout -q main && g checkout -qb escaping-link
+ln -s "$W/README.md" "$W/escape"
+commit_file link-control.txt MARK_WRITE_LINK 'archive escape control'
+mkdir "$T/escape-tree"
+g archive HEAD | tar -xf - -C "$T/escape-tree"
+printf 'control mutation\n' >"$T/escape-tree/escape"
+check "following the fixture archive link can write into the caller" grep -q '^control mutation$' "$W/README.md"
+g restore README.md
+review >"$T/escape.log" 2>&1; rc=$?
+check "runner rejects an escaping link before reviewer launch or note" test "$rc" = 2 -a "$(calls)" = 0 -a -z "$(note)"
+check "caller remains unchanged when review rejects the link" test "$(cat "$W/README.md")" = base
+check "round report identifies the escaping symlink" grep -q 'archive symlink has an absolute target: escape' "$W/.review/$(g rev-parse HEAD)-1.md"
+
+rm "$W/escape"
+ln -s . "$W/jump"
+ln -s "jump/../../../${W#/}/README.md" "$W/escape"
+g add jump escape && g commit -qm 'relative archive escape through an intermediate link'
+review >"$T/relative-escape.log" 2>&1; rc=$?
+check "relative symlink chain that escapes the tree is rejected before launch" test "$rc" = 2 -a "$(calls)" = 0 -a -z "$(note)"
+check "round report identifies the relative escape" grep -q 'archive symlink escapes the private tree: escape' "$W/.review/$(g rev-parse HEAD)-1.md"
+
+verifier="$ROOT_DIR/scripts/review/read_evidence.py"
+rm "$T/exact/README.md"
+ln "$W/README.md" "$T/exact/README.md"
+python3 -I "$verifier" tree "$W" "$exact_sha" "$T/exact" >"$T/hardlink.log" 2>&1; rc=$?
+check "archive verifier rejects a hardlink to the caller" test "$rc" -ne 0
+check "hardlink rejection identifies the path" grep -q 'archive hardlink or special file: README.md' "$T/hardlink.log"
+rm "$T/exact/README.md"
+mkfifo "$T/exact/README.md"
+python3 -I "$verifier" tree "$W" "$exact_sha" "$T/exact" >"$T/fifo.log" 2>&1; rc=$?
+check "archive verifier rejects a FIFO before reading it" test "$rc" -ne 0
+check "FIFO rejection identifies the path" grep -q 'archive hardlink or special file: README.md' "$T/fifo.log"
+
 # Ignore an installed replacement both when selecting the review diff and
 # when creating and independently checking the archived tree.
 reset_fake

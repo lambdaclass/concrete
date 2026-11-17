@@ -46,9 +46,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../checks/lib/has_match.sh" || exit 2  # bug 283: never a pipe into grep -q
 ROOT="$(git rev-parse --show-toplevel)"
 
+source "$SCRIPT_DIR/runtime.sh"
 CODEX_BIN="${REVIEW_CODEX_BIN:-codex}"
-case "$CODEX_BIN" in /*) ;; */*) CODEX_BIN="$PWD/$CODEX_BIN" ;; esac
-cd "$ROOT"
 REMOTE=origin
 MAIN_REF="${REVIEW_MAIN_REF:-$REMOTE/main}"
 PUSH="${REVIEW_PUSH:-1}"
@@ -78,12 +77,15 @@ while [ $# -gt 0 ]; do
 done
 [[ "$MAX_ROUNDS" =~ ^[1-9][0-9]*$ ]] || die "--max-rounds must be a positive integer"
 [[ "$PIECES" == auto || "$PIECES" =~ ^[1-9][0-9]*$ ]] || die "--pieces must be auto or a positive integer"
+PYTHON="$(review_executable python3)" || die "python3 executable not found"
+"$PYTHON" -I "$SCRIPT_DIR/supervise.py" --check || exit 2
+CODEX_BIN="$(review_executable "$CODEX_BIN")" || die "reviewer executable not found: ${REVIEW_CODEX_BIN:-codex}"
+cd "$ROOT"
 if [ -n "${WANT_HEAD:-}" ]; then
   want="$(git rev-parse -q --verify "$WANT_HEAD^{commit}")" || die "--head $WANT_HEAD is not a commit"
   [ "$want" = "$(git rev-parse HEAD)" ] || die "--head $WANT_HEAD is ${want:0:12}, but the checkout is at $(git rev-parse --short=12 HEAD)"
 fi
 [[ "$PIECE_BYTES" =~ ^[1-9][0-9]*$ ]] || die "REVIEW_PIECE_BYTES must be a positive integer"
-command -v "$CODEX_BIN" >/dev/null 2>&1 || die "reviewer binary not found: $CODEX_BIN"
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -251,7 +253,7 @@ if [ "$INSUFFICIENT_RANGE" = 1 ] ||
   FULL_REVIEW=1
   echo "review: prior review does not cover current branch scope; reviewing full base..HEAD diff (round $ROUND)" >&2
 fi
-git diff --no-color --no-ext-diff -M "$FROM" "$HEAD_SHA" >"$WORK/full.diff"
+git diff --no-color --no-ext-diff --no-textconv -M "$FROM" "$HEAD_SHA" >"$WORK/full.diff"
 if [ ! -s "$WORK/full.diff" ]; then
   echo "review: nothing to review: no changes between $FROM and HEAD" >&2
   exit 4
@@ -259,7 +261,7 @@ fi
 
 # ---------------------------------------------------------------- split
 TOTAL="$(wc -c <"$WORK/full.diff" | tr -d ' ')"
-split_at() { rm -rf "$WORK/pieces"; python3 -I "$SCRIPT_DIR/split_diff.py" "$WORK/full.diff" "$WORK/pieces" "$1"; }
+split_at() { rm -rf "$WORK/pieces"; "$PYTHON" -I "$SCRIPT_DIR/split_diff.py" "$WORK/full.diff" "$WORK/pieces" "$1"; }
 if [ "$PIECES" = auto ]; then
   K="$(split_at "$PIECE_BYTES")"
 else
@@ -320,12 +322,15 @@ EOF
 
 LAST_RESULT=""
 LAST_BODY=""
+LAST_FINDINGS=""
 RUN_N=0
 # run_one <prompt-kind> <piece-file> <label> <group> <paths>; sets LAST_RESULT to
-# clean|findings|refused|noverdict and LAST_BODY to the reviewer's message.
+# clean|findings|refused|noverdict, LAST_BODY to the full reply and LAST_FINDINGS
+# to the findings text without the final verdict.
 run_one() {
-  local kind="$1" piece="$2" label="$3" group="$4" paths="$5" rc=0 msg last
+  local kind="$1" piece="$2" label="$3" group="$4" paths="$5" rc=0
   RUN_N=$((RUN_N + 1))
+  LAST_FINDINGS=""
   local out="$WORK/out.$RUN_N.txt" log="$WORK/log.$RUN_N.txt"
   : >"$out"
   local prompt="$RAW_DIR/$HEAD_SHA-$ROUND-invocation-$RUN_N.prompt.txt"
@@ -334,7 +339,8 @@ run_one() {
   : >"$log"
   local cancelled=0
   trap 'cancelled=1' HUP INT TERM
-  REVIEW_CODEX_BIN="$CODEX_BIN" bash "$SCRIPT_DIR/invoke.sh" "$ROOT" "$HEAD_SHA" "$prompt" "$piece" "$out" "$log" 2>"$evidence.stderr.txt" &
+  bash "$SCRIPT_DIR/invoke.sh" "$ROOT" "$HEAD_SHA" "$prompt" "$piece" "$out" "$log" "$CODEX_BIN" "$PYTHON" \
+    >"$WORK/result.$RUN_N" 2>"$evidence.stderr.txt" &
   runner=$!
   trap cancel_review HUP INT TERM
   [ "$cancelled" = 0 ] || cancel_review
@@ -342,6 +348,9 @@ run_one() {
   runner=
   cp "$out" "$evidence.output.txt"
   cp "$log" "$evidence.events.jsonl"
+  if [ -s "$evidence.stderr.txt" ]; then
+    { echo; echo "### Runner stderr ($label, invocation $RUN_N)"; echo; cat "$evidence.stderr.txt"; } >>"$RAW"
+  fi
   if [ "$rc" -eq 3 ]; then
     LAST_RESULT=refused
     LAST_BODY="$(cat "$out" "$log")"
@@ -350,12 +359,10 @@ run_one() {
     { echo; echo "## $label: error (invocation $RUN_N)"; cat "$out" "$log"; } >>"$RAW"
     die "reviewer execution or repository-read evidence failed; see $evidence.* (no note recorded)"
   fi
-  msg="$(cat "$out")"
-  LAST_BODY="$msg"
-  last="$(printf '%s\n' "$msg" | sed -e 's/[`*]//g' -e 's/[[:space:]]*$//' | awk 'NF { l = $0 } END { print l }')"
-  if [ "$last" = "VERDICT: clean" ]; then LAST_RESULT=clean
-  elif [ "$last" = "VERDICT: findings" ]; then LAST_RESULT=findings
-  else LAST_RESULT=noverdict
+  LAST_BODY="$(cat "$out")"
+  IFS= read -r LAST_RESULT <"$WORK/result.$RUN_N"
+  if [ "$LAST_RESULT" = findings ]; then
+    LAST_FINDINGS="$(tail -n +2 "$WORK/result.$RUN_N")"
   fi
 }
 
@@ -377,17 +384,17 @@ while IFS=$'\t' read -r name group bytes paths; do
   label="piece $i of $K"
   echo "review: round $ROUND, $label ($group, $bytes bytes)" >&2
   run_one standard "$WORK/pieces/$name" "$label" "$group" "$paths"
-  result="$LAST_RESULT" body="$LAST_BODY"
+  result="$LAST_RESULT" details="$LAST_FINDINGS"
   {
     echo; echo "## $label: $group ($bytes bytes): $result"; echo; echo "files: $paths"; echo
-    echo "$body"
+    echo "$LAST_BODY"
   } >>"$RAW"
   if [ "$result" = refused ] || [ "$result" = noverdict ]; then
     # Retry once: smaller pieces (the piece halved) and a more neutral prompt.
     half_dir="$WORK/half-$i"
     half_limit=$(( (bytes + 1) / 2 ))
-    python3 -I "$SCRIPT_DIR/split_diff.py" "$WORK/pieces/$name" "$half_dir" "$half_limit" --no-groups >/dev/null
-    result=clean body=""
+    "$PYTHON" -I "$SCRIPT_DIR/split_diff.py" "$WORK/pieces/$name" "$half_dir" "$half_limit" --no-groups >/dev/null
+    result=clean details=""
     j=0
     while IFS=$'\t' read -r hname _hgroup hbytes hpaths; do
       j=$((j + 1))
@@ -397,25 +404,24 @@ while IFS=$'\t' read -r name group bytes paths; do
       { echo; echo "### retry, $hlabel ($hbytes bytes): $LAST_RESULT"; echo; echo "$LAST_BODY"; } >>"$RAW"
       case "$LAST_RESULT" in
         clean) ;;
-        findings) [ "$result" = blocked ] || result=findings; body="$body
-$LAST_BODY" ;;
+        findings) [ "$result" = blocked ] || result=findings; details="$details
+$LAST_FINDINGS" ;;
         *) result=blocked ;;
       esac
     done <"$half_dir/manifest.tsv"
   fi
-  stripped="$(printf '%s\n' "$body" | grep -vE '^[`*[:space:]]*VERDICT:' || true)"
   case "$result" in
     findings)
       N_FINDINGS=$((N_FINDINGS + 1))
       FINDINGS_TEXT="$FINDINGS_TEXT
 [$label: $group]
-$stripped"
+$details"
       ;;
     blocked)
       N_BLOCKED=$((N_BLOCKED + 1))
       FINDINGS_TEXT="$FINDINGS_TEXT
 [$label: $group] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: $paths
-$stripped"
+$details"
       ;;
   esac
 done <"$WORK/pieces/manifest.tsv"
