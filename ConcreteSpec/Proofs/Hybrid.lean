@@ -1129,4 +1129,36 @@ example : matState.memory.WellFormed linuxX8664 ∧
 
 end Audit
 
+-- Law-linked conformance examples follow their laws so inventory annotations resolve
+-- in the same Lean namespace and elaboration environment as the examples.
+/-- Instance (law `materialize_read`). First materialization preserves a signed integer
+on a big-endian profile, independently of the trailing byte's initialization. -/
+example : (do
+    let st : State := ⟨[(⟨0⟩, ⟨.int .i16, .structured (.int .i16 (-37))⟩)], Memory.empty⟩
+    let (_, out) ← st.materialize { linuxX8664 with byteOrder := .big } ⟨0⟩ ⟨0⟩ 4096 2 [.uninit]
+    pure (out.read { linuxX8664 with byteOrder := .big } ⟨0⟩)) =
+      some (some (.int .i16 (-37))) := by decide
+
+/-- Instance (law `typed_store_frame`, law `rawWrite_read`). A typed write preserves both
+initialized and uninitialized trailing bytes. A raw overwrite with an uninitialized active
+byte then refuses a typed value; there is no old-value fallback. -/
+example : (do
+    let st : State := ⟨[(⟨0⟩, ⟨.int .u8, .structured (.int .u8 1)⟩)], Memory.empty⟩
+    let (r, st) ← st.materialize linuxX8664 ⟨0⟩ ⟨0⟩ 4096 1 [.uninit, .init 73 none]
+    let st ← st.write linuxX8664 ⟨0⟩ (.int .u8 2)
+    let typed := st.read linuxX8664 ⟨0⟩
+    let padding := st.memory.load linuxX8664 { r.ptr with addr := 4097 } 2 1
+    let st ← st.rawWrite linuxX8664 r.ptr [.uninit] 1
+    pure (typed, padding, st.read linuxX8664 ⟨0⟩)) =
+      some (some (.int .u8 2), some [.uninit, .init 73 none], none) := by decide
+
+/-- Instance (law `materialize_reuse`). Later raw address-taking keeps the first mapping
+and padding even when proposed addresses, alignment and trailing bytes differ. -/
+example : (do
+    let st : State := ⟨[(⟨0⟩, ⟨.int .u8, .structured (.int .u8 1)⟩)], Memory.empty⟩
+    let (r, st) ← st.materialize linuxX8664 ⟨0⟩ ⟨0⟩ 4096 1 [.init 73 none]
+    let (r', st) ← st.materialize linuxX8664 ⟨0⟩ ⟨0⟩ 8192 8 [.init 99 none]
+    pure (r.ptr == r'.ptr, st.memory.load linuxX8664 r'.ptr 2 1)) =
+      some (true, some [.init 1 none, .init 73 none]) := by decide
+
 end ConcreteSpec.Core.Hybrid

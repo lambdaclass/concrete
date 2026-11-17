@@ -821,15 +821,12 @@ example : ¬ (IntTy.i8.InRange (unreducedUnary .i8 7)) := by decide
 example : wrapping .i8 .add 7 8 = 15 :=
   wrapping_of_checked .i8 .add 7 8 15 rfl
 
-/-- Planted (law `ConcreteSpec.Core.wrapping_of_checked`, case `concrete`, subject `ConcreteSpec.Core.wrapping`, mutant `ConcreteSpec.Core.ScalarLawEvidence.subtractForAll`). -/
-example : checked .i8 WrapOp.add.arith 7 8 = .ok 15 ∧
-    ¬ (subtractForAll .i8 .add 7 8 = 15) := by decide
-
 /-- Instance (law `ConcreteSpec.Core.saturating_of_checked`, case `concrete`). -/
 example : saturating .i8 .add 7 8 = 15 :=
   saturating_of_checked .i8 .add 7 8 15 rfl
 
-/-- Planted (law `ConcreteSpec.Core.saturating_of_checked`, case `concrete`, subject `ConcreteSpec.Core.saturating`, mutant `ConcreteSpec.Core.ScalarLawEvidence.subtractForAll`). -/
+/-- Planted (law `ConcreteSpec.Core.wrapping_of_checked`, law `ConcreteSpec.Core.saturating_of_checked`, case `concrete`, subject `ConcreteSpec.Core.wrapping`, subject `ConcreteSpec.Core.saturating`, mutant `ConcreteSpec.Core.ScalarLawEvidence.subtractForAll`).
+Both checked-success policies reject the same subtract-instead-of-add mutation. -/
 example : checked .i8 WrapOp.add.arith 7 8 = .ok 15 ∧
     ¬ (subtractForAll .i8 .add 7 8 = 15) := by decide
 
