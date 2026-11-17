@@ -20,6 +20,7 @@
 # Writers: scripts/review/review.sh (review) and scripts/land/ready.sh (gates).
 # `put` never force-pushes: it rewrites on top of the remote's notes tip and retries on a race.
 set -euo pipefail
+export GIT_NO_REPLACE_OBJECTS=1
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REMOTE=origin
 DRY="${LAND_NOTES_DRY:-0}"

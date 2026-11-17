@@ -27,7 +27,7 @@ it the same way every time, and its note is the record the landing train checks.
 
 ```sh
 scripts/review/review.sh [--base <ref>] [--head <ref>] [--max-rounds 5] [--pieces auto|N] [--prompt-extra "..."]
-scripts/review/verify.sh [--fetch] [--notes-ref <ref>] [--required-base <commit>] <commit>
+scripts/review/verify.sh [--fetch] [--notes-ref <ref>] [--required-base <commit>] [--round-history] <commit>
 ```
 
 One invocation runs **one round** on `HEAD`. Commit fixes between rounds; the
@@ -95,12 +95,12 @@ do not check what they claim, and docs that contradict the code. It runs
 stdin. Each invocation extracts a fresh `git archive` of the exact reviewed SHA
 outside the caller’s worktree, verifies paths, blob identities, executable bits
 and symlink targets, and removes the copy after the reviewer and its descendants
-exit. Running reviews requires Linux with procfs and child subreaping to clean
-up processes in separate sessions. The driver checks these facilities before
-starting a round and reports the requirement on macOS and other unsupported
-hosts. Reading review notes with `verify.sh` remains available there. The driver
-resolves the external reviewer executable to an absolute path from the invoking
-directory before entering the repository root.
+exit. Running reviews requires Python 3.9 or newer and Linux with procfs and
+child subreaping to clean up processes in separate sessions. The driver checks
+the Python version and host facilities before starting a round. Reading review
+notes with `verify.sh` remains available on other hosts. The driver resolves
+the external reviewer executable to an absolute path from the invoking directory
+before entering the repository root.
 
 Diff, archive and verification all disable Git object replacement. Review
 patches also disable external diff and text conversion drivers. Absolute
@@ -118,6 +118,8 @@ the caller's bug-209 index.lock hazard independently of that setting.
 The reviewer inherits only PATH, HOME, CODEX_HOME, TERM, LANG, LC_ALL, SSL_CERT_FILE,
 SSL_CERT_DIR and LEAN_NUM_THREADS when set. Its TMPDIR is private to the invocation. The runner sets a Git discovery ceiling
 around the copy and disables object replacement in the reviewer environment.
+The supervisor stays outside the archive and starts the absolute reviewer
+executable directly with this environment and the archive as its working directory.
 
 Every completed review must include a successful command event for the exact
 read probe supplied in the prompt. The probe invokes a runner-selected absolute
@@ -191,10 +193,10 @@ position. Change the format only together with `verify.sh`.
   before accepting its verdict. A blocked note records the protocol and cannot
   establish coverage.
 
-Historical six-field notes still count toward the round cap and can carry
-forward open findings. Review coverage and landing provenance require the
-evidence field, including when the train checks notes on its members. If a
-historical note would otherwise supply coverage, the next round reviews the
+Historical six-field notes still count toward the round cap, including for
+owner sign-off, and can carry forward open findings. The evidence field is
+required for review notes to establish coverage or serve as landing provenance.
+If a historical note would otherwise supply coverage, the next round reviews the
 full branch diff unless a newer evidence-bearing review already covers it.
 
 When the verdict is not clean, the findings text goes in a second note under
@@ -244,6 +246,7 @@ commit's review provenance ([LANDING.md](LANDING.md)); it approves no other comm
 ```sh
 scripts/review/verify.sh [--notes-ref <ref>] --required-base <base> <commit> # exit 0 clean, 1 findings/blocked, 2 invalid
 scripts/review/verify.sh --fetch [--notes-ref <ref>] --required-base <base> <commit> # fetch origin notes first
+scripts/review/verify.sh --round-history --required-base <base> <commit> # include historical notes for round accounting
 ```
 
 It judges the exact commit. A clean note on an ancestor says nothing about the
@@ -252,6 +255,8 @@ another round. All consumers use this verifier for schema and range validation:
 landing supplies the recorded train base, sign-off supplies its diff base for
 `rounds-at`, readiness supplies its selected base (`notes.sh ready` defaults to
 `origin/main`), and incremental review supplies its current review base.
+Sign-off and incremental review use `--round-history` when counting rounds. Standalone sign-off,
+readiness and notes helpers disable Git object replacement as the train does.
 With `--required-base`, the note's base must be an ancestor-or-equal
 of the required commit; an unknown or insufficient base exits 2. This applies to
 clean, findings and blocked evidence alike. Incremental review ignores malformed

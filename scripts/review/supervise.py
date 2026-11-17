@@ -9,9 +9,11 @@ import time
 
 
 def main():
+    if sys.version_info < (3, 9):
+        sys.exit("review runner: running reviews requires Python 3.9 or newer")
     # An orphaned grandchild is reparented here even after setsid/setpgid.
     # Fail before launch if this host cannot provide that guarantee.
-    children = Path(f"/proc/self/task/{os.getpid()}/children")
+    children = Path("/proc/self/task/{}/children".format(os.getpid()))
     pr_set_child_subreaper = 36
     if (sys.platform != "linux" or not children.is_file()
             or ctypes.CDLL(None, use_errno=True).prctl(pr_set_child_subreaper, 1, 0, 0, 0) != 0):
@@ -30,7 +32,14 @@ def main():
     if cancelled:
         return 2
 
-    reviewer = subprocess.Popen(sys.argv[1:], start_new_session=True)
+    directory = sys.argv[1]
+    arguments = sys.argv[2:]
+    separator = arguments.index("--")
+    environment = dict(entry.split("=", 1) for entry in arguments[:separator])
+    command = arguments[separator + 1:]
+    if not command or not os.path.isabs(command[0]):
+        sys.exit("review runner: reviewer path must be absolute")
+    reviewer = subprocess.Popen(command, cwd=directory, env=environment, start_new_session=True)
     while not cancelled and reviewer.poll() is None:
         time.sleep(0.01)
 

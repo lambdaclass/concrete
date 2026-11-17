@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import secrets
 import shlex
+import shutil
 import stat
 import subprocess
 import sys
@@ -42,7 +43,11 @@ def check_links(links):
 
 def verify_tree(root, sha, directory):
     tree = Path(directory)
-    git = ["git", "--no-replace-objects", "-C", root]
+    # This verifier runs in the caller's directory, even when inspecting an archive.
+    git_path = shutil.which("git")
+    if git_path is None:
+        fail("git executable not found")
+    git = [os.path.abspath(git_path), "--no-replace-objects", "-C", root]
     object_format = subprocess.check_output(
         git + ["rev-parse", "--show-object-format"], text=True).strip()
     entries = subprocess.check_output(git + ["ls-tree", "-rz", sha]).split(b"\0")
@@ -128,6 +133,8 @@ def verify_events(log, output, rc):
         status = item.get("status")
         aggregated_output = item.get("aggregated_output")
         exit_code = item.get("exit_code")
+        if aggregated_output is None:
+            aggregated_output = ""
         if (not all(isinstance(value, str) for value in (recorded, status, aggregated_output))
                 or (exit_code is not None and type(exit_code) is not int)):
             fail(f"malformed reviewer command item on line {number}")
@@ -142,14 +149,16 @@ def verify_events(log, output, rc):
                 and argv[1] in ("-c", "-lc") and argv[2] == command):
             read = True
 
-    policy = r"invalid[_ ]prompt\b|content[_ -](?:filter|policy)|safety (?:system|filter|policy)|cybersecurity policy"
+    policy = (r"invalid[_ ]prompt\b|content[_ -](?:filter|policy)|safety (?:system|filter|policy)"
+              r"|cyber ?security|usage polic|flagged (?:as|for)|potentially (?:harmful|malicious)"
+              r"|violat(?:es|ion of) .*polic")
     if errors:
         if all(re.search(policy, error, re.I) for error in errors):
             sys.exit(3)
         fail("reviewer reported an execution error")
     body = output.read_text(errors="replace")
     verdict, details = final_verdict(body)
-    refusal = (r"\b(?:I can['’]t|I cannot|I won['’]t|I(?:['’]m| am) not able to|unable to)"
+    refusal = (r"\b(?:I can['’]t|I cannot|I won['’]t|I(?:['’]m| am) (?:not able|unable) to|unable to)"
                r"\s+(?:help|assist|comply|review|continue|provide)\b")
     if verdict == "noverdict" and re.search(policy + "|" + refusal, body, re.I):
         sys.exit(3)
@@ -174,11 +183,14 @@ def main():
             challenge.write(nonce)
             nonce_name = challenge.name
         code = (
-            "import hashlib; "
-            f"print(hashlib.sha256(open({nonce_name!r}, 'rb').read() + "
-            f"open({str(target)!r}, 'rb').read()).hexdigest())"
+            'import hashlib, sys; '
+            'nonce, target = (bytes.fromhex(path) for path in sys.argv[1:]); '
+            'print(hashlib.sha256(open(nonce, "rb").read() + '
+            'open(target, "rb").read()).hexdigest())'
         )
-        print(shlex.join([python, "-I", "-c", code]))
+        # Keep the command on one line even with newlines or non-UTF-8 path bytes.
+        paths = [os.fsencode(path).hex() for path in (nonce_name, target)]
+        print(shlex.join([python, "-I", "-c", code, *paths]))
         print(hashlib.sha256(nonce + content).hexdigest())
     elif action == "events":
         verify_events(*map(Path, sys.argv[2:4]), int(sys.argv[4]))

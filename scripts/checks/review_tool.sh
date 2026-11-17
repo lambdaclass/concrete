@@ -94,7 +94,7 @@ if has MARK_REFUSE_ALWAYS; then
   echo '{"type":"turn.failed","error":{"message":"invalid_prompt"}}'
   exit 1
 elif has MARK_CLI_REFUSE && [ "$kind" = standard ]; then
-  message='Invalid prompt: your prompt was flagged as potentially violating our usage policy. Please try again with a different prompt: https://platform.openai.com/docs/guides/reasoning#advice-on-prompting'
+  message='Your request was flagged as potentially violating our usage policy. Please try again with a different prompt: https://platform.openai.com/docs/guides/reasoning#advice-on-prompting'
   printf '{"type":"error","message":"%s"}\n{"type":"turn.failed","error":{"message":"%s"}}\n' "$message" "$message"
   touch "$FAKE_LOG/cli-refusal"
   exit 1
@@ -175,6 +175,9 @@ print(json.dumps({"type": "item.completed", "item": {
 }}))
 ' "$probe" "$digest"
 fi
+if has MARK_NULL_OUTPUT; then
+  echo '{"type":"item.completed","item":{"type":"command_execution","exit_code":0,"status":"completed","command":"unrelated command","aggregated_output":null}}'
+fi
 if has MARK_BAD_EVENT; then
   echo '[]'
 fi
@@ -238,9 +241,13 @@ field() { note "${2:-HEAD}" | sed -n "s/^$1: //p"; }
 echo "=== review host contract ==="
 # Exercise the supervisor's non-Linux launch path on Linux CI too.
 python3 -I -c 'import runpy, sys; sys.platform = "darwin"; runpy.run_path(sys.argv.pop(1), run_name="__main__")' \
-  "$ROOT_DIR/scripts/review/supervise.py" touch "$T/unsupported-launched" >"$T/unsupported" 2>&1; rc=$?
+  "$ROOT_DIR/scripts/review/supervise.py" "$T" -- "$(type -P touch)" "$T/unsupported-launched" >"$T/unsupported" 2>&1; rc=$?
 check "unsupported supervisor exits before launching a child" test "$rc" -ne 0 -a ! -e "$T/unsupported-launched"
 check "unsupported supervisor explains required host facilities" grep -q 'requires Linux with procfs and child subreaping' "$T/unsupported"
+python3 -I -c 'import runpy, sys; sys.version_info = (3, 8); runpy.run_path(sys.argv.pop(1), run_name="__main__")' \
+  "$ROOT_DIR/scripts/review/supervise.py" --check >"$T/unsupported-python" 2>&1; rc=$?
+check "Python preflight rejects 3.8" test "$rc" -ne 0
+check "Python preflight gives the minimum version" grep -q 'requires Python 3.9 or newer' "$T/unsupported-python"
 if [ "$(uname -s)" != Linux ]; then
   review >"$T/unsupported-review" 2>&1; rc=$?
   check "review driver rejects this host before contacting reviewer" test "$rc" = 2 -a "$(calls)" = 0 -a ! -e "$W/.review"
@@ -575,7 +582,7 @@ parse_case() { # parse_case <marker> <want-exit> <want-verdict> <label>
   reset_fake
   g checkout -q main && g checkout -qb "parse-$marker"
   commit_file "p/$marker.txt" "$marker" "case $marker"
-  review >/dev/null 2>&1; rc=$?
+  review >"$T/parse.log" 2>&1; rc=$?
   check "$label (exit $rc, verdict $(field verdict))" test "$rc" = "$want" -a "$(field verdict)" = "$wantv"
 }
 parse_case MARK_BOLD 0 clean "markdown-emphasised verdict line is accepted"
@@ -595,14 +602,16 @@ check "the exact prompted command was used with the shim on PATH" \
   cmp "$FAKE_LOG/probe-command" <(awk '/run this repository-read probe verbatim/{getline; print}' "$FAKE_LOG/prompt.1")
 check "a forged success event with the old content hash cannot produce a note" \
   grep -q 'missing successful repository-read command evidence' "$W/.review/$(g rev-parse HEAD)-1.md"
+parse_case MARK_NULL_OUTPUT 0 clean "null output from another command preserves valid read evidence"
 parse_case MARK_BAD_EVENT 2 "" "non-object event fails without a note"
 check "round report includes malformed event diagnostic" grep -q 'malformed reviewer event on line 2' "$W/.review/$(g rev-parse HEAD)-1.md"
+check "review failure surfaces the runner diagnostic on stderr" grep -q 'malformed reviewer event on line 2' "$T/parse.log"
 parse_case MARK_BAD_ITEM 2 "" "non-object item fails without a note"
 check "round report includes malformed item diagnostic" grep -q 'malformed reviewer item on line 2' "$W/.review/$(g rev-parse HEAD)-1.md"
 parse_case MARK_PLAIN_REFUSE 0 clean "plain pre-read refusal reaches a successful neutral retry"
 check "plain refusal actually invoked the neutral prompt" grep -q ' neutral ' "$FAKE_LOG/calls"
 parse_case MARK_UNICODE 0 clean "literal U+2028 stays inside its JSONL record"
-parse_case MARK_CLI_REFUSE 0 clean "CLI Invalid prompt event reaches a successful neutral retry"
+parse_case MARK_CLI_REFUSE 0 clean "CLI usage-policy event reaches a successful neutral retry"
 check "CLI refusal event emitted" test -f "$FAKE_LOG/cli-refusal"
 check "CLI refusal actually invoked the neutral prompt" grep -q ' neutral ' "$FAKE_LOG/calls"
 parse_case MARK_WRITE 0 clean "reviewer writes are confined to the private archive"
@@ -628,7 +637,9 @@ chmod +x "$W/executable"
 ln -s exact.txt "$W/link"
 mkdir "$W/nested"
 ln -s ../link "$W/nested/link"
-g add binary executable link nested/link && g commit -qm 'archive entry types'
+probe_name=$'!probe\nfile'
+printf 'probe path with a newline\n' >"$W/$probe_name"
+g add binary executable link nested/link "$probe_name" && g commit -qm 'archive entry types'
 exact_sha="$(g rev-parse HEAD)"
 printf dirty >"$W/README.md"
 printf untracked >"$W/untracked"
@@ -668,6 +679,18 @@ chmod +x "$W/sub/:"
 check "builtin name does not resolve to an implicit caller-local executable" test "$rc" = 2 -a ! -e "$FAKE_LOG/builtin-ran"
 check "builtin lookup gives the executable diagnostic" grep -q 'reviewer executable not found' "$T/builtin.log"
 rm "$W/sub/:"
+
+reset_fake
+g checkout -q main && g checkout -qb archive-launcher
+mkdir "$W/launcher-bin"
+printf '#!/bin/sh\nprintf ran >"%s"\nexit 99\n' "$FAKE_LOG/launcher-ran" >"$W/launcher-bin/env"
+chmod +x "$W/launcher-bin/env"
+g add launcher-bin/env && g commit -qm 'archive-only PATH launcher'
+rm "$W/launcher-bin/env"
+(cd "$W" && PATH="launcher-bin:$PATH" bash "$REVIEW") >"$T/archive-launcher.log" 2>&1; rc=$?
+check "relative PATH launcher control reaches the selected reviewer" test "$rc" = 0 -a "$(calls)" = 1
+check "committed archive launcher never runs" test ! -e "$FAKE_LOG/launcher-ran"
+g restore launcher-bin/env
 
 reset_fake
 g checkout -q main && g checkout -qb diff-drivers
@@ -720,6 +743,33 @@ mkfifo "$T/exact/README.md"
 python3 -I "$verifier" tree "$W" "$exact_sha" "$T/exact" >"$T/fifo.log" 2>&1; rc=$?
 check "archive verifier rejects a FIFO before reading it" test "$rc" -ne 0
 check "FIFO rejection identifies the path" grep -q 'archive hardlink or special file: README.md' "$T/fifo.log"
+
+# Inject each file type at extraction so the real runner must reject it before
+# launching the reviewer. Use a safe commit so no other archive check can mask it.
+reset_fake
+g checkout -q main && g checkout -qb archive-file-types
+commit_file file-types.txt control 'runner file-type controls'
+mkdir "$T/tar-shim"
+printf '#!/usr/bin/env bash\nset -e\nreal_tar=%q\ncaller_file=%q\n' "$(type -P tar)" "$W/README.md" >"$T/tar-shim/tar"
+cat >>"$T/tar-shim/tar" <<'EOF'
+"$real_tar" "$@"
+target="${!#}/README.md"
+rm "$target"
+case "$ARCHIVE_FILE_TYPE" in
+  hardlink) ln "$caller_file" "$target" ;;
+  fifo) mkfifo "$target" ;;
+  *) exit 2 ;;
+esac
+EOF
+chmod +x "$T/tar-shim/tar"
+for file_type in hardlink fifo; do
+  (cd "$W" && ARCHIVE_FILE_TYPE="$file_type" PATH="$T/tar-shim:$PATH" \
+    bash "$ROOT_DIR/scripts/checks/lib/bounded.sh" 10 bash "$REVIEW") >"$T/runner-$file_type.log" 2>&1; rc=$?
+  check "runner rejects injected $file_type before reviewer launch or note" test "$rc" = 2 -a "$(calls)" = 0 -a -z "$(note)"
+  check "runner reports injected $file_type at the expected path" \
+    grep -q 'archive hardlink or special file: README.md' "$T/runner-$file_type.log"
+done
+check "caller file survives runner hardlink and FIFO controls" test "$(cat "$W/README.md")" = base
 
 # Ignore an installed replacement both when selecting the review diff and
 # when creating and independently checking the archived tree.
@@ -1012,6 +1062,7 @@ git -C "$T/other" fetch -q origin "+refs/notes/concrete-review:refs/notes/concre
 cat >"$T/bin/codex-race" <<EOF
 #!/usr/bin/env bash
 set -e
+export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
 git -C "$T/other" -c user.name="Race fixture" -c user.email=race@example.invalid notes --ref=refs/notes/concrete-review add -f -m "race note" "$OTHER_SHA"
 git -C "$T/other" push -q origin refs/notes/concrete-review
 touch "$T/race-pushed"

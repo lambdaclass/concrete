@@ -353,10 +353,11 @@ run_one() {
   fi
   if [ "$rc" -eq 3 ]; then
     LAST_RESULT=refused
-    LAST_BODY="$(cat "$out" "$log")"
+    if [ -s "$out" ]; then LAST_BODY="$(cat "$out")"; else LAST_BODY="$(cat "$log")"; fi
     return
   elif [ "$rc" -ne 0 ]; then
     { echo; echo "## $label: error (invocation $RUN_N)"; cat "$out" "$log"; } >>"$RAW"
+    cat "$evidence.stderr.txt" >&2
     die "reviewer execution or repository-read evidence failed; see $evidence.* (no note recorded)"
   fi
   LAST_BODY="$(cat "$out")"

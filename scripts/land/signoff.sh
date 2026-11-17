@@ -51,6 +51,7 @@
 # Exit codes: 0 a valid sign-off; 1 a sign-off that does not qualify (the reason is printed);
 #             2 no sign-off, or a usage error.
 set -euo pipefail
+export GIT_NO_REPLACE_OBJECTS=1
 PREFIX=refs/owner-signoff
 NOTES_REF=refs/notes/concrete-review
 REVIEWERS="codex kimi agy"
@@ -183,7 +184,7 @@ check() {
   # verify.sh judges the note as review.sh wrote it: 0 clean, 1 findings or blocked (both well formed,
   # and both count: the cap is rounds used); 2 is no note or a malformed one.
   local vout vrc=0
-  vout="$(bash "$VERIFY" --required-base "$base" "$at" 2>&1)" || vrc=$?
+  vout="$(bash "$VERIFY" --round-history --required-base "$base" "$at" 2>&1)" || vrc=$?
   [ "$vrc" = 0 ] || [ "$vrc" = 1 ] || bad "rounds-at ${at:0:10} carries no well-formed review.sh note: ${vout//$'\n'/ }"
   rounds="$(printf '%s\n' "$vout" | sed -n 's/.*(round \([1-9][0-9]*\), reviewer .*/\1/p' | head -1)"
   [ -n "$rounds" ] || bad "rounds-at ${at:0:10}: no round count in '$vout'"

@@ -12,6 +12,7 @@
 # (a failed review leg also fails it). Exit 0 iff the head is ready (review note clean, gates pass). The wall time and the
 # sequential sum of the legs go to <git-common-dir>/concrete-landing/ready.tsv.
 set -euo pipefail
+export GIT_NO_REPLACE_OBJECTS=1
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/land/lib.sh
 . "$SELF_DIR/lib.sh"

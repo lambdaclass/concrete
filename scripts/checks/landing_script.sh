@@ -1172,7 +1172,7 @@ git update-ref -d "$R/$sha" 2>/dev/null || true
 CONCRETE_SKIP_GATES=1 git push -q origin ":$R/$sha" 2>/dev/null || true
 [ "$mode" = none ] && exit 0
 # The member's own review.sh note: the rounds it used (any verdict), which the cap is judged against.
-bash "$(dirname "$0")/put-review" "$sha" "findings@$rounds" "${SO_NOTE_BASE:-$base}"
+bash "$(dirname "$0")/put-review" "$sha" "${SO_NOTE_VERDICT:-findings}@$rounds" "${SO_NOTE_BASE:-$base}"
 d="$(mktemp -d)"
 trap 'rm -rf "$d"' EXIT
 for r in codex kimi agy; do
@@ -1305,6 +1305,12 @@ so_leg(){ # label mode expect(refuse|pass) text
   prov_leg "$1" none clean "$( [ "$2" = none ] && echo none || echo findings@5)" "$3" "$4"
 }
 so_leg "a member with a valid owner sign-off and a clean merge" valid pass "owner sign-off (1) at its exact SHA, and the head is their clean merge"
+if SO_NOTE_VERDICT=historical bash "$TMP/put-signoff" "$R2" valid "$R1"; then
+  prov_leg "a valid owner sign-off counts historical rounds at the cap" none clean historical@5 pass \
+    "owner sign-off (1) at its exact SHA, and the head is their clean merge"
+else
+  no "recording owner sign-off using historical rounds"
+fi
 so_leg "a sign-off recorded for another commit" othersha refuse "the record is for $R1, not $R2"
 so_leg "a sign-off whose verdict file was changed after recording" tampered refuse "the sha256 of kimi.txt is"
 so_leg "a sign-off whose kimi request body names another commit" otherreview refuse "the kimi request body does not name ${R2:0:10}"

@@ -7,11 +7,13 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$here/runtime.sh"
 if [ "$#" -eq 6 ]; then
   python="$(review_executable python3)" || { echo "review runner: python3 executable not found" >&2; exit 2; }
-  "$python" -I "$here/supervise.py" --check || exit 2
   bin="$(review_executable "${REVIEW_CODEX_BIN:-codex}")" || { echo "review runner: reviewer executable not found" >&2; exit 2; }
 else
   bin="$7" python="$8"
 fi
+case "$bin" in /*) ;; *) echo "review runner: reviewer path must be absolute" >&2; exit 2 ;; esac
+case "$python" in /*) ;; *) echo "review runner: Python path must be absolute" >&2; exit 2 ;; esac
+"$python" -I "$here/supervise.py" --check || exit 2
 case "$out" in /*) ;; *) out="$PWD/$out" ;; esac
 export GIT_NO_REPLACE_OBJECTS=1
 root="$(cd "$root" && pwd -P)"
@@ -53,11 +55,9 @@ for variable in HOME CODEX_HOME TERM LANG LC_ALL SSL_CERT_FILE SSL_CERT_DIR LEAN
 done
 cancelled=0
 trap 'cancelled=1' HUP INT TERM
-(
-  cd "$private/tree"
-  exec "$python" -I "$here/supervise.py" env -i "${environment[@]}" "$bin" exec --sandbox danger-full-access \
-    --skip-git-repo-check --json --ephemeral --color never -C "$private/tree" -o "$out" "$final_prompt"
-) <"$piece" >"$log" &
+"$python" -I "$here/supervise.py" "$private/tree" "${environment[@]}" -- "$bin" exec --sandbox danger-full-access \
+  --skip-git-repo-check --json --ephemeral --color never -C "$private/tree" -o "$out" "$final_prompt" \
+  <"$piece" >"$log" &
 child=$!
 trap cancel HUP INT TERM
 [ "$cancelled" = 0 ] || cancel
