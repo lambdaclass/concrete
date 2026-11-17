@@ -3289,7 +3289,11 @@ okay with your decisions
     Accept other Unicode unchanged, with exact-scalar identity and no normalization?
     No verified approval settles these. The owner-approved held plan at L144552,
     2026-11-11T13:33:37.630Z ("ok go ahead with" the pasted plan), expressly keeps
-    backslashes and Unicode waiting for the owner.
+    backslashes and Unicode waiting for the owner. **Answered 2026-11-16 and
+    2026-11-17:** the [file-path decision](#decided-2026-11-16-file-paths) settles
+    these historical authority gaps with ASCII-only paths and no rewriting.
+    The [file-name decision](#decided-2026-11-17-file-names) closes F03p Q1, Q2
+    and Q6. See ISS-0068 for the remaining implementation and dependent evidence.
   - Classification: the taxonomy was held here because L125750 reported tagging as
     information, not a proposal for approval. **Answered 2026-11-13:** see the
     [proof-label convention](#decided-2026-11-13-proof-labels). The `(approved: ...)`
@@ -3838,7 +3842,7 @@ wait but the decisions should be in the spec
 
   The coordinator recommended keeping proposals off main, registering one rule
   per distinct refusal (per check, with no composite rule per entry point), and
-  repairing the spec-inventory landing. Owner reply, verbatim:
+  repairing the inventory landing. Owner reply, verbatim:
 
 ~~~text
 ok yes
@@ -3848,6 +3852,9 @@ ok yes
   `docs/proposals/ISS-0047-SITE-TABLE-OBLIGATIONS.md`,
   `docs/proposals/ISS-0050-OBLIGATION-TABLE-SEARCH.md`, and
   `docs/proposals/F03P-SOURCE-PATHS.md` stay on their WIP branches as writer briefs.
+  ISS-0084 references the [site-table obligations brief](https://github.com/lambdaclass/concrete/blob/576f69780bd5ab16d9249c4991e7383ff5124d3e/docs/proposals/ISS-0047-SITE-TABLE-OBLIGATIONS.md)
+  from `origin/wip/spec-redesign-0047-0050` at commit
+  `576f69780bd5ab16d9249c4991e7383ff5124d3e`.
   Each distinct refusal gets its own registered rule, identified by its Lean
   declaration name and revision. The approval authorizes the inventory landing
   repair.
