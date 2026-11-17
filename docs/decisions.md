@@ -281,6 +281,15 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **Q1.13** Can resetting the system allocator return `Allocator<Sys>` again? — Fresh brand after any supported system reset.
 - **Q2.1** Are storage release, destruction and resource cleanup separate? — Separate storage release, destruction and resource cleanup.
 - **Q2.2** Which containers implement `Destroy`? — Exactly sixteen named Destroy impls: Array (T: Destroy); Heap, HeapArray and Vec (two each: T: Copy; T: Destroy); String (unconditional); Option (T: Destroy); Result (three: T: Destroy/E: Copy, T: Destroy/E: Destroy, T: Copy/E: Destroy); OrderedMap (four: each of K and V Copy or Destroy). HashMap excluded. <a id="q2-2-revision"></a>Revised 2026-11-06 by [information flow](#decided-project-infoflow-2026-11-06): `Secret<T>` is `Copy` only for scalar `T`; secret arrays and heap secrets are linear and their destruction wipes them.
+
+  - **2026-11-06 wiping-on-destroy clause only.**
+
+    Status: replaced\
+    Source: owner\
+    Replaced by: [2026-11-16 secret wiping answer](#decided-2026-11-16-secret-wiping)
+
+    Only the wiping-on-destroy clause is replaced; the other decisions and historical text remain.
+
 - **Q2.3** In what order are contents destroyed? — Index order 0..len−1, then the backing; OrderedMap in ascending key order, key then value, then the nodes.
 - **Q2.4** How does a container of non-`Destroy` resources release its storage? — `drain(v, ctx, f)` with `f: fn(&mut C, T) with(K) -> Step<T, E>`; the only way to empty a container of non-Destroy elements.
 - **Q2.5** What happens when drain processing fails? — On Stop, `Drained { at, survivor, rest, err }`; `map_into` returns `Stopped { done, survivor, rest, err }`.
@@ -933,6 +942,15 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   in facts.
   Extended 2026-11-08 by the [foundation decision](#foundation-q18): `Secret<T>` has exactly `T`'s
   layout; layout does not establish constant time, the information-flow rules do.
+
+  - **2026-11-06 wiping-on-destroy clause only.**
+
+    Status: replaced\
+    Source: owner\
+    Replaced by: [2026-11-16 secret wiping answer](#decided-2026-11-16-secret-wiping)
+
+    Only the wiping-on-destroy clause is replaced; the other decisions and historical text remain.
+
 - <a id="decided-project-pipeline-2026-11-06"></a>**The new compiler pipeline** (owner, 2026-11-06,
   relayed by the orchestrator from the owner session: the owner asked "is there any way to improve the full compiler design or pipeline?"; after
   the Codex, agy and Kimi pipeline review was reported, "did we also log that we will have the new
@@ -3615,6 +3633,201 @@ yes do that
   [November 12 char decision](#decided-2026-11-12-char) remains the authority for
   char construction; this answer settles the constant-type admission question,
   without adding a special char construction rule. Other recovery holds remain open.
+
+- <a id="decided-2026-11-15-review-followups"></a>**Review follow-ups (2026-11-15).**
+  Status: decided for answers 1, 2, 3 and 5; question 4 unanswered.
+  Source: verbatim owner reply relayed by the coordinator from the owner session
+  (2026-11-15), question context summarized by the coordinator, recorded 2026-11-16,
+  under the [recording rule](#decided-project-recording).
+
+  Questions replied to (numbering retained from the supplied context):
+  1. One more review round for the spec inventory branch?
+  2. Fix the review tool that cuts files mid-file?
+  3. Widen ISS-0071 from integer-to-char to all checked conversions and link it to slice 8?
+  4. Add a status field to decision entries, in a format the owner approves (ISS-0083)?
+  5. One extra round (round 8) for the accounting branch to fix the waiting-link
+     normalization only?
+
+  Owner reply, verbatim:
+
+~~~text
+1. yes run one more round on the spec 2. fix the review tool 3. widen the precondition issue 4. i don't understand 5. ok
+~~~
+
+  Answer 4 records lack of understanding, not a decision. Answer 5 authorizes only
+  the waiting-link normalization round described in question 5. The review-tool
+  repair in question 2 is tracked as ISS-0078 in [ISSUES.tsv](../ISSUES.tsv).
+
+- <a id="decided-2026-11-16-conversions-records-gaps"></a>**Checked conversions,
+  decision status and design-gap check (2026-11-16).**
+  Status: decided for the three questions below, with their stated open details.
+  Source: verbatim owner reply relayed by the coordinator from the owner session
+  (2026-11-16), question context summarized by the coordinator, recorded 2026-11-16,
+  under the [recording rule](#decided-project-recording).
+
+  Questions replied to (supplied context):
+  1. Checked conversions option C: keep `try_convert` returning
+     `Result<T, OutOfRange>` ([OD106](#od106)) for values that may not fit, and add
+     one named evidence-required conversion admitted only when the already-decided
+     Lean-proved deterministic checker (CheckedCore evidence) or a checked Lean
+     theorem discharges one shared spec-defined "fits" predicate; never a run-time
+     trap. The conversion's spelling and exact acceptance rule return to the owner.
+  2. Add an explicit status line to every decision entry with values
+     decided / open / recovered (ISS-0083); exact format to be finalized after the
+     Codex/agy format review, and any format change returns to the owner.
+  3. Codex and agy check the costly-to-retrofit list for gaps, and agreed items
+     become roadmap entries.
+
+  Owner reply, verbatim:
+
+~~~text
+ok yes 1 2 3
+~~~
+
+  The chosen conversion direction is tracked by ISS-0071 in
+  [ISSUES.tsv](../ISSUES.tsv), linked to [slice 8](../ROADMAP.md#vertical-slices).
+  Its spelling and exact acceptance rule remain open for the owner. Question 2
+  records the authorized status-line work; its format was subsequently approved in
+  the [status-format decision](#decided-2026-11-16-decision-status-format).
+  Implementation of ISS-0083 remains pending.
+  Question 3 records the authorized gap check; it does not claim a check was run
+  or any resulting roadmap item was agreed.
+
+- <a id="decided-2026-11-16-decision-status-format"></a>**Decision status format
+  (2026-11-16).**
+  Status: decided for the format below; implementation of ISS-0083 pending.
+  Source: verbatim owner reply relayed by the coordinator from the owner session
+  (2026-11-16), question context summarized by the coordinator, recorded 2026-11-16,
+  under the [recording rule](#decided-project-recording).
+
+  Question context summarized by the coordinator: after Codex and agy reviewed
+  the status-line proposal, both asked for a richer format. The coordinator asked
+  the owner to approve:
+
+~~~text
+Status: decided | open | partly decided | replaced | reopened | withdrawn
+Source: owner | recovered from old notes
+Replaced by: <link>   (only when replaced or reopened)
+~~~
+
+  A missing or malformed line fails the check (never inferred), and every line
+  is verified against the owner's words and later revisions.
+
+  Owner reply, verbatim:
+
+~~~text
+yes
+~~~
+
+  This approves the format only. Implementation of ISS-0083 remains pending,
+  tracked in [ISSUES.tsv](../ISSUES.tsv).
+
+- <a id="decided-2026-11-16-file-paths"></a>**File paths and spec-inventory round 18
+  (2026-11-16).**
+  Status: decided
+  Source: owner
+
+  Provenance: verbatim owner reply relayed by the coordinator (Claude) from the
+  owner session, recorded 2026-11-16 under the [recording rule](#decided-project-recording).
+  Question summary by Claude, not owner wording: choose the rules Codex and agy
+  both proposed (agree): ASCII only; `/` is the only separator; refuse `\`, drive
+  prefixes, empty and `.` components, spaces, control characters, leading or
+  trailing dots and Windows reserved names; never rewrite a path. Choose mixed
+  case (mixed): uppercase A-Z allowed, but refuse two paths that differ only in
+  letter case, including directory prefixes. Choose the cap (cap): at most
+  100 bytes per path component and 200 bytes per whole path. This summary comes
+  from Codex/agy owner-question drafts in coordinator scratch; those drafts are
+  not quoted owner text. The accompanying question was whether to approve one
+  more review round (round 18) for the spec-inventory branch, fixing only two leftovers.
+
+  Owner reply, verbatim:
+
+~~~text
+agree, mixed, cap. yes to round 18
+~~~
+
+  This settles the path choices summarized above (ISS-0068) and authorizes that
+  round 18 within its stated scope. It does not claim implementation or complete
+  path validation; details beyond the supplied question remain unsettled.
+
+- <a id="decided-2026-11-16-accounting-validator"></a>**Accounting validator:
+  owner replies and coordinator action (2026-11-16).**
+  Status: partly decided
+  Source: owner
+
+  Provenance: verbatim owner replies relayed by the coordinator (Claude) from the
+  owner session, recorded 2026-11-16 under the [recording rule](#decided-project-recording).
+  Context summarized by Claude, not owner wording: the coordinator explained that
+  the accounting branch's new interim decision-status validator kept failing
+  review. No preceding question text was supplied. The owner then asked, verbatim:
+
+~~~text
+i don't care about the small helper tool why do we nee di t
+~~~
+
+  The owner's subsequent reply, verbatim (no intervening question supplied):
+
+~~~text
+let's finish the spec
+~~~
+
+  Coordinator's resulting action, not an additional owner quotation or a broader
+  owner decision: the new interim validator is dropped from the accounting branch;
+  the accounting spec lands with main's existing checks. This records the
+  coordinator's disposition, not a claim that landing has happened. The status line
+  of the [approved decision-status format](#decided-2026-11-16-decision-status-format)
+  remains the planned structural fix (ISS-0083); its implementation remains pending.
+
+- <a id="decided-2026-11-16-secret-wiping"></a>**Keep Secret; defer wiping
+  (2026-11-16).**
+  Status: decided
+  Source: owner
+
+  Provenance: verbatim owner replies relayed by the coordinator (Claude) from the
+  owner session, recorded 2026-11-16 under the [recording rule](#decided-project-recording).
+  Context summarized by Claude, not owner wording: secret wiping (ISS-0072).
+  No exact questions preceding the first three replies were supplied. Owner
+  replies, verbatim, in order:
+
+~~~text
+i mean i don{t think the secret is important now
+~~~
+
+~~~text
+we coudl even remove this from the spec
+~~~
+
+~~~text
+maybe we can remove secret and add it later
+~~~
+
+  Question replied to by the final answer, summarized by Claude: choose (1) keep
+  `Secret`, the no-leak rule and the constant-time rules, and drop only wiping
+  from the spec; or (2) drop all of `Secret` and add it back later.
+
+  Owner reply, verbatim:
+
+~~~text
+1 keep secret, drop wiping
+~~~
+
+  Wiping leaves the spec for now and may be added back later; reopening is the
+  owner's call. `Secret`, no-leak and constant-time stay. This sets aside only
+  the earlier wiping wording in the [Q2.2 revision](#q2-2-revision) and the
+  [information-flow entry](#decided-project-infoflow-2026-11-06), whose history is
+  retained. This record does not implement the spec change or choose a future
+  wiping policy.
+
+- <a id="owner-goals-2026-11-15-provability-errors"></a>**Design goals: owner
+  question (2026-11-15).**
+  Source: verbatim owner reply relayed by the coordinator from the owner session
+  (2026-11-15), question context summarized by the coordinator, recorded 2026-11-16.
+  This is an owner question/goal statement, not a new rule or an answered decision.
+  No preceding question was supplied; this quotation is itself the owner's question:
+
+~~~text
+the design is done so that a) everything can be proven b) we can find get errors with good results?
+~~~
 
 - <a id="decided-project-spark-2026-11-06"></a>**What Concrete takes from SPARK** (owner, 2026-11-06: "ok do everything", after Claude, Codex, agy and Kimi chose unanimously; the
   [review](proposals/SPARK.md) items 1, 2, 3, 6, 7, 9 and 10).
