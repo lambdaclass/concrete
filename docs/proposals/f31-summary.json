@@ -16,19 +16,19 @@
     "seed": 106
   },
   "sha256": {
-    "declarations.json": "0d50450cadf8ef4092140492ecc52fb97aaaf1123d10237aa00c3fede22a3fce",
-    "surface.json": "a48bc5c55e46078c97c10034842499527bc12f2a32de60edd8d22fcf8e1fd12c"
+    "declarations.json": "4c0206b9fba72f78b2903f90792ef586b451166184cd321ba102a2d70f24468a",
+    "surface.json": "e30e53721abd857169e1a47ecf219120ad0c7b956768f8cc0a8b54d4e125a849"
   },
-  "surface": 1800,
+  "surface": 1853,
   "surface_kinds": {
-    "anonymous-example": 1300,
+    "anonymous-example": 1350,
     "check": 30,
     "golden": 2,
     "headline": 101,
     "integration": 8,
     "premise": 9,
-    "probe-command": 88,
-    "probe-declaration": 225,
+    "probe-command": 89,
+    "probe-declaration": 227,
     "proof-tool": 5,
     "test": 32
   }

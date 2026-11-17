@@ -13,13 +13,9 @@ private def commandRow (ctx : Parser.InputContext) (stx : Syntax) : IO Json := d
   let source := range.start.extract ctx.inputString range.stop
   return toJson (("probe-command", pos.line), s!"{pos.column}: {source}")
 
-def main (args : List String) : IO Unit := do
-  let [path, sourcePath, output] := args
-    | throw <| IO.userError "usage: f31_probes.lean PATH SOURCE OUTPUT"
-  unsafe enableInitializersExecution
-  initSearchPath (← findSysroot)
+private def probe (root path sourcePath output : String) : IO Unit := do
   let ctx := Parser.mkInputContext (← IO.FS.readFile sourcePath) path
-  let mainModuleName ← moduleNameOfFileName path none
+  let mainModuleName ← moduleNameOfFileName (System.FilePath.mk root / path) (some root)
   let setup header := pure <| .ok {
     mainModuleName
     imports := header.imports
@@ -48,3 +44,21 @@ def main (args : List String) : IO Unit := do
     if (env.getModuleIdxFor? name).isNone then
       rows := rows.push (toJson (("probe-declaration", 1), toString name))
   IO.FS.writeFile output (Json.compress (toJson rows))
+
+def main (args : List String) : IO Unit := do
+  unsafe enableInitializersExecution
+  initSearchPath (← findSysroot)
+  match args with
+  | ["library-sources"] =>
+    let env ← importModules #[{ module := `ConcreteSpec }, { module := `Concrete }] {}
+    -- Use the resolved artifact to distinguish repository modules from dependency modules.
+    let some packageLib := (← realPathNormalized (← findOLean `Concrete)).parent
+      | throw <| IO.userError "F31: missing library artifact directory"
+    let mut paths := #[]
+    for name in env.header.moduleNames do
+      let artifact ← realPathNormalized (← findOLean name)
+      if artifact == modToFilePath packageLib name "olean" then
+        paths := paths.push (modToFilePath "." name "lean").toString
+    IO.println (toJson paths).compress
+  | [root, path, sourcePath, output] => probe root path sourcePath output
+  | _ => throw <| IO.userError "usage: f31_probes (library-sources | ROOT PATH SOURCE OUTPUT)"

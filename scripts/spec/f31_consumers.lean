@@ -3,7 +3,7 @@ import ConcreteSpec
 import Concrete
 
 /-!
-F31 migration tool: retire with the manifest and companion tool when F31 closes.
+F31 migration tool: retire with the manifest and companion tools when F31 closes.
 F31's measured elaborated dependency surface. Run after `lake build ConcreteSpec Concrete`:
 `python3 -I scripts/spec/f31_inventory.py --output /tmp/f31-inventory`.
 
@@ -70,7 +70,7 @@ private def nameParts : Name → List Json
         ("kind", toJson (declKind ci)), ("role", toJson role),
         ("dependencies", toJson (edges.map (fun d => toJson (nameParts d))))]
       rows := rows.push ((toJson (nameParts n)).compress, row)
-  IO.println (toJson ((rows.qsort (fun a b => a.1 < b.1)).map (·.2))).pretty
+  IO.println s!"F31-DECLARATIONS\t{(toJson ((rows.qsort (fun a b => a.1 < b.1)).map (·.2))).compress}"
 
 -- Read the live registry through its owning Lean definitions, never scrape its source text.
 #eval do

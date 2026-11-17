@@ -22,21 +22,9 @@ with tempfile.TemporaryDirectory(prefix='f31-inventory-') as temporary:
     output.mkdir(parents=True, exist_ok=True)
     for path in Path('scripts/spec').glob('f31_*.py'):
         compile(path.read_text(), str(path), 'exec')
-    result = subprocess.run(['lake', 'env', 'lean', 'scripts/spec/f31_consumers.lean'],
-                            check=True, text=True, capture_output=True)
-    # Lean routes #eval IO diagnostics to stdout on some toolchain versions.
-    registry = []
-    declarations = []
-    for line in result.stdout.splitlines():
-        (registry if line.startswith('F31-REGISTRY\t') else declarations).append(line)
-    registry += [line for line in result.stderr.splitlines() if line.startswith('F31-REGISTRY\t')]
-    if not registry:
-        raise SystemExit('F31: empty live premise registry')
-    (output / 'registry.txt').write_text('\n'.join(registry) + '\n')
-    decls = json.loads('\n'.join(declarations))
-    (output / 'declarations.json').write_text(json.dumps(decls, indent=2, ensure_ascii=False) + '\n')
-    surface = subprocess.run(['python3', '-I', 'scripts/spec/f31_surface.py', str(output / 'registry.txt')],
+    surface = subprocess.run(['python3', '-I', 'scripts/spec/f31_surface.py', str(output)],
                              check=True, text=True, stdout=subprocess.PIPE)
+    decls = json.loads((output / 'declarations.json').read_text())
     rows = json.loads(surface.stdout)
     (output / 'surface.json').write_text(surface.stdout)
     summary = dict(

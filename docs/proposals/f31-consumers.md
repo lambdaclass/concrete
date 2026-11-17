@@ -101,17 +101,24 @@ definition (checked derived views allowed)"; this preparation chooses no new lan
 
 ## Examples, premises, goldens and checks
 
-The generated surface inventory covers anonymous examples across **all** library modules, including
-modules with no named dependent declaration. Lean's frontend records every written command in
-standalone scripts under `scripts/`, including imports, directives and anonymous examples. Each
-command row has its source line, column and text. Persistent declarations from the same elaboration
-remain listed at the file entry point. The gate appends an anonymous example to a scratch copy of
-`slice0_bir.lean` and requires exactly one new command row and no declaration changes.
+The surface census starts with every Git-tracked Lean source. It excludes `legacy/` because that
+tree contains the frozen compiler and archived gates, which are outside the F31 migration
+([AGENTS.md](../../AGENTS.md)). Lean resolves the transitive imports of `ConcreteSpec` and
+`Concrete`; the census scans their tracked sources for erased anonymous examples, including modules
+with no named dependent declaration. The frontend driver is built once and records every written
+command in the remaining tracked Lean files, including imports, directives and anonymous examples.
+Each command row has its source line, column and text. The same elaboration records persistent
+declarations and runs the declaration census and premise-registry reads.
+
+The gate stages a scratch `tests/F31StandaloneControl.lean` in an isolated Git index and requires
+the census to find its import and scope command with no declaration rows. It also appends an
+anonymous example to a scratch copy of `slice0_bir.lean` and requires exactly one new command row
+with no declaration changes.
 Proof-tool Python generators are explicit obligations, including `local_identity.py` and its synthetic
 control modules. Site and rule tools also have check entries.
 
-The companion has **1,800 entries**: 1,300 library anonymous examples, 88 standalone commands,
-225 probe declarations, nine premises, 101 headlines, 32 tests, 30 checks, two goldens, eight
+The companion has **1,853 entries**: 1,350 library anonymous examples, 89 standalone commands,
+227 probe declarations, nine premises, 101 headlines, 32 tests, 30 checks, two goldens, eight
 integration files and five proof-tool generators. Premises and headlines are read through the owning
 Lean registry definitions, with no source regex or duplicated list. All 14 bridge proofs are included.
 F31 must preserve trust classes, report distinctions and diagnostic controls.
@@ -194,8 +201,6 @@ HEAD remains harness snapshot `c228d1f86e5c32a7c300e72809b734c28ede044b`; the ha
 final commit and publication. These results qualify the working content, not the unchanged snapshot
 commit. No commit, push, review invocation or review note was made by this writer.
 
-The final F30 delta against base `038ec12142fbbe67e8c3ec81c336a048250a38da` adds **215 Lean lines**:
-135 in the four compiler files and 80 in the elaborated census tool, with none removed.
 All 14 new theorems are Representation lemmas; there are zero new Laws.
 
 - Both libraries: `lake build ConcreteSpec Concrete` passes (97 jobs).
