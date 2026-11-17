@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # R-0544 — does a commit carry a clean review verdict? See docs/REVIEW.md.
 #
 #   scripts/review/verify.sh [--fetch] [--notes-ref <ref>] [--required-base <commit>] [--round-history] <commit>
@@ -16,6 +16,11 @@
 #             2 missing evidence, missing or invalid note, insufficient range, or usage error.
 
 set -euo pipefail
+# Load the PATH check with builtins only, before any executable lookup.
+script=${BASH_SOURCE[0]}
+case "$script" in */*) ;; *) script="./$script" ;; esac
+source "${script%/*}/runtime.sh" || exit 2
+review_require_absolute_path "${PATH-}" || exit 2
 export GIT_NO_REPLACE_OBJECTS=1
 
 NOTES_REF="refs/notes/concrete-review"

@@ -669,10 +669,6 @@ commit_file relative.txt relative relative
 (cd "$W/sub" && REVIEW_CODEX_BIN=../../bin/codex bash "$REVIEW") >"$T/relative-review.log" 2>&1; rc=$?
 check "relative reviewer executable works from caller subdirectory" test "$rc" = 0
 reset_fake
-commit_file path-reviewer.txt path relative-path
-(cd "$W/sub" && PATH="../../bin:$PATH" REVIEW_CODEX_BIN=codex bash "$REVIEW") >"$T/relative-path.log" 2>&1; rc=$?
-check "bare reviewer on caller-relative PATH runs after the driver changes directory" test "$rc" = 0 -a "$(calls)" = 1
-reset_fake
 printf '#!/bin/sh\ntouch "%s"\n' "$FAKE_LOG/builtin-ran" >"$W/sub/:"
 chmod +x "$W/sub/:"
 (cd "$W/sub" && REVIEW_CODEX_BIN=: bash "$REVIEW") >"$T/builtin.log" 2>&1; rc=$?
@@ -681,16 +677,54 @@ check "builtin lookup gives the executable diagnostic" grep -q 'reviewer executa
 rm "$W/sub/:"
 
 reset_fake
-g checkout -q main && g checkout -qb archive-launcher
-mkdir "$W/launcher-bin"
-printf '#!/bin/sh\nprintf ran >"%s"\nexit 99\n' "$FAKE_LOG/launcher-ran" >"$W/launcher-bin/env"
-chmod +x "$W/launcher-bin/env"
-g add launcher-bin/env && g commit -qm 'archive-only PATH launcher'
-rm "$W/launcher-bin/env"
-(cd "$W" && PATH="launcher-bin:$PATH" bash "$REVIEW") >"$T/archive-launcher.log" 2>&1; rc=$?
-check "relative PATH launcher control reaches the selected reviewer" test "$rc" = 0 -a "$(calls)" = 1
-check "committed archive launcher never runs" test ! -e "$FAKE_LOG/launcher-ran"
-g restore launcher-bin/env
+g checkout -q main && g checkout -qb archive-interpreters
+mkdir "$W/launcher-bin" "$T/path-archive"
+for interpreter in bash node; do
+  # Absolute shebang and builtin marker so the sentinel works even with an empty PATH.
+  printf '#!/bin/sh\nprintf ran >"%s"\nexit 99\n' "$FAKE_LOG/archive-$interpreter-ran" \
+    >"$W/$interpreter"
+  cp "$W/$interpreter" "$W/launcher-bin/$interpreter"
+  chmod +x "$W/$interpreter" "$W/launcher-bin/$interpreter"
+  printf '#!/usr/bin/env %s\n' "$interpreter" >"$T/bin/reviewer-$interpreter"
+  chmod +x "$T/bin/reviewer-$interpreter"
+done
+g add bash node launcher-bin && g commit -qm 'archive-only PATH interpreters'
+path_sha="$(g rev-parse HEAD)"
+g archive "$path_sha" >"$T/path-archive.tar"
+tar -xf "$T/path-archive.tar" -C "$T/path-archive"
+rm "$W/bash" "$W/node" "$W/launcher-bin/bash" "$W/launcher-bin/node"
+runner="$ROOT_DIR/scripts/review/invoke.sh"
+supervisor="$ROOT_DIR/scripts/review/supervise.py"
+python="$(type -P python3)"
+for interpreter in bash node; do
+  reviewer="$T/bin/reviewer-$interpreter"
+  for path_case in empty leading trailing doubled dot relative; do
+    case "$path_case" in
+      empty) bad_path= ;;
+      leading) bad_path=":$PATH" ;;
+      trailing) bad_path="$PATH:" ;;
+      doubled) bad_path="$T/bin::$PATH" ;;
+      dot) bad_path=".:$PATH" ;;
+      relative) bad_path="launcher-bin:$PATH" ;;
+    esac
+    label="$interpreter/$path_case"
+    (cd "$W" && PATH="$bad_path" REVIEW_CODEX_BIN="$reviewer" "$REVIEW") >"$T/path-driver.log" 2>&1; rc=$?
+    check "$label: driver rejects PATH without recording a note" test "$rc" = 2 -a -z "$(note)"
+    check "$label: driver explains the PATH rejection" grep -q 'PATH entries must be absolute' "$T/path-driver.log"
+    PATH="$bad_path" "$BASH" "$runner" "$W" "$path_sha" "$T/relative/prompt" "$T/relative/piece" \
+      "$T/path-output" "$T/path-events" "$reviewer" "$python" >"$T/path-runner.log" 2>&1; rc=$?
+    check "$label: standalone runner rejects PATH" test "$rc" = 2 -a ! -e "$T/path-events"
+    check "$label: runner explains the PATH rejection" grep -q 'PATH entries must be absolute' "$T/path-runner.log"
+    "$python" -I "$supervisor" "$T/path-archive" "PATH=$bad_path" -- "$reviewer" >"$T/path-supervisor.log" 2>&1; rc=$?
+    check "$label: supervisor rejects PATH before launching the env shebang" test "$rc" = 1
+    check "$label: supervisor explains the PATH rejection" grep -q 'PATH entries must be absolute' "$T/path-supervisor.log"
+    check "$label: archive interpreter never executes" test ! -e "$FAKE_LOG/archive-$interpreter-ran"
+  done
+done
+"$python" -I "$supervisor" "$T/path-archive" -- "$T/bin/reviewer-bash" >"$T/path-supervisor.log" 2>&1; rc=$?
+check "supervisor rejects missing PATH" test "$rc" = 1
+check "supervisor explains missing PATH rejection" grep -q 'PATH entries must be absolute' "$T/path-supervisor.log"
+g restore bash node launcher-bin
 
 reset_fake
 g checkout -q main && g checkout -qb diff-drivers

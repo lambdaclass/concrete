@@ -36,6 +36,8 @@ def main():
     arguments = sys.argv[2:]
     separator = arguments.index("--")
     environment = dict(entry.split("=", 1) for entry in arguments[:separator])
+    if any(not os.path.isabs(entry) for entry in environment.get("PATH", "").split(os.pathsep)):
+        sys.exit("review runner: PATH entries must be absolute directories")
     command = arguments[separator + 1:]
     if not command or not os.path.isabs(command[0]):
         sys.exit("review runner: reviewer path must be absolute")

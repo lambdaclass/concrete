@@ -102,6 +102,16 @@ notes with `verify.sh` remains available on other hosts. The driver resolves
 the external reviewer executable to an absolute path from the invoking directory
 before entering the repository root.
 
+The review scripts require an absolute directory in every PATH entry. The
+shell entry points use an absolute Bash shebang and reject empty entries,
+`.`, and other relative entries before running any external command. This
+keeps command lookup independent of the working directory and avoids silently
+turning the caller’s checkout into a source of executables. An explicitly
+configured relative reviewer filename still resolves from the invoking
+directory. The supervisor checks the exact PATH it will pass to the reviewer
+before launching it in the archive, so an `/usr/bin/env bash` or
+`/usr/bin/env node` shebang also searches only absolute directories.
+
 Diff, archive and verification all disable Git object replacement. Review
 patches also disable external diff and text conversion drivers. Absolute
 symlinks, symlink chains that leave the archive, hardlinks, special files,

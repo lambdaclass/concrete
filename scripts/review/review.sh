@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # R-0544 — one review procedure for every agent. See docs/REVIEW.md.
 #
 #   scripts/review/review.sh [--base <ref>] [--head <ref>] [--max-rounds 5]
@@ -40,13 +40,17 @@
 #   REVIEW_PIECE_BYTES  size limit of one piece in bytes (default: 60000)
 
 set -euo pipefail
+# Load the PATH check with builtins only, before any executable lookup.
+script=${BASH_SOURCE[0]}
+case "$script" in */*) ;; *) script="./$script" ;; esac
+source "${script%/*}/runtime.sh" || exit 2
+review_require_absolute_path "${PATH-}" || exit 2
 export GIT_NO_REPLACE_OBJECTS=1
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(CDPATH= cd -- "${script%/*}/" && pwd)"
 source "$SCRIPT_DIR/../checks/lib/has_match.sh" || exit 2  # bug 283: never a pipe into grep -q
 ROOT="$(git rev-parse --show-toplevel)"
 
-source "$SCRIPT_DIR/runtime.sh"
 CODEX_BIN="${REVIEW_CODEX_BIN:-codex}"
 REMOTE=origin
 MAIN_REF="${REVIEW_MAIN_REF:-$REMOTE/main}"

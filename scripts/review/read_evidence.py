@@ -43,11 +43,14 @@ def check_links(links):
 
 def verify_tree(root, sha, directory):
     tree = Path(directory)
-    # This verifier runs in the caller's directory, even when inspecting an archive.
-    git_path = shutil.which("git")
+    # Check before resolving Git, including when this verifier is called directly.
+    path = os.environ.get("PATH", "")
+    if any(not os.path.isabs(entry) for entry in path.split(os.pathsep)):
+        fail("PATH entries must be absolute directories")
+    git_path = shutil.which("git", path=path)
     if git_path is None:
         fail("git executable not found")
-    git = [os.path.abspath(git_path), "--no-replace-objects", "-C", root]
+    git = [git_path, "--no-replace-objects", "-C", root]
     object_format = subprocess.check_output(
         git + ["rev-parse", "--show-object-format"], text=True).strip()
     entries = subprocess.check_output(git + ["ls-tree", "-rz", sha]).split(b"\0")

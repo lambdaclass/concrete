@@ -1,10 +1,14 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Single Codex review runner. Arguments: root sha prompt piece output log [absolute reviewer and interpreter].
 # The private archive is disposable, not a security boundary for arbitrary code.
 set -euo pipefail
+# Load the PATH check with builtins only, before any executable lookup.
+script=${BASH_SOURCE[0]}
+case "$script" in */*) ;; *) script="./$script" ;; esac
+source "${script%/*}/runtime.sh" || exit 2
+review_require_absolute_path "${PATH-}" || exit 2
 root="$1" sha="$2" prompt="$3" piece="$4" out="$5" log="$6"
-here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$here/runtime.sh"
+here="$(CDPATH= cd -- "${script%/*}/" && pwd)"
 if [ "$#" -eq 6 ]; then
   python="$(review_executable python3)" || { echo "review runner: python3 executable not found" >&2; exit 2; }
   bin="$(review_executable "${REVIEW_CODEX_BIN:-codex}")" || { echo "review runner: reviewer executable not found" >&2; exit 2; }
