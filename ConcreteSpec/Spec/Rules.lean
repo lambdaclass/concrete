@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.Accounting
 import ConcreteSpec.Spec.Const
 import ConcreteSpec.Spec.Ident
 import ConcreteSpec.Spec.Own
@@ -17,12 +18,15 @@ for each entry. Example links use Lean declaration names, the identities used by
 
 namespace ConcreteSpec.Core
 
-/-- Diagnostic rule identities, in specification order. Judgments are checked views of Own's
-single transition definitions. -/
+/-- Diagnostic rule identities, in specification order. Each judgment delegates to its owning
+definition; registration adds no language policy. -/
 def registeredRules : List RuleId :=
   [⟨``ConstsPermitted, 1⟩, ⟨``Own.OwnerPermitted, 1⟩, ⟨``Own.LoanPermitted, 1⟩,
    ⟨``Own.EndPermitted, 1⟩, ⟨``Own.MovePermitted, 1⟩,
-   ⟨``Own.DropPermitted, 1⟩, ⟨``Own.LeavePermitted, 1⟩]
+   ⟨``Own.DropPermitted, 1⟩, ⟨``Own.LeavePermitted, 1⟩,
+   ⟨``Leak.Account.WF, 1⟩, ⟨``Leak.ResetConserved, 1⟩, ⟨``Leak.SignedNetSound, 1⟩,
+   ⟨``Leak.ByteBoundSound, 1⟩, ⟨``Leak.ByteBoundSoundOptional, 1⟩, ⟨``Leak.ReportSound, 1⟩,
+   ⟨``Leak.FiniteActionPermitted, 1⟩, ⟨``Leak.FiniteSequencePermitted, 1⟩]
 
 /-- Acceptance evidence applies the owning rule's judgment to a concrete input.
 The exporter recognizes this proposition's elaborated type, without unfolding the wrapper. -/
@@ -122,6 +126,83 @@ theorem leaveRefused : RuleRefused LeavePermitted Examples.initial := by
 
 end Own.Registry
 
+namespace Leak.Registry
+
+/-- Closed populated accounting input for registry conformance. -/
+def accountA : Account := ⟨100, 5, 12, 9⟩
+/-- Closed memory with two independently populated allocator lineages. -/
+def twoLineages : List (LineageId × Account) :=
+  [(⟨0⟩, accountA), (⟨1⟩, ⟨7, 2, 2, 2⟩)]
+/-- Closed function-entry account. -/
+def reportEntry : Account := ⟨100, 2, 100, 2⟩
+/-- Closed function-exit account. -/
+def reportExit : Account := ⟨108, 7, 100, 10⟩
+/-- Independently stated bounds for the closed report example. -/
+def establishedReport : LineageReport :=
+  ⟨⟨0⟩, ⟨8, .boundEstablished⟩, ⟨5, 5, .boundEstablished⟩,
+    ⟨8, .boundEstablished⟩, ⟨12, .boundEstablished⟩⟩
+
+/-- Instance: populated history bounds live bytes. -/
+theorem wfAccepted : RuleAccepted Account.WF accountA := by
+  simp only [RuleAccepted, Account.WF]
+  decide
+/-- Instance: a local peak below live bytes is refused. -/
+theorem wfRefused : RuleRefused Account.WF { accountA with functionPeak := 4 } := by
+  simp only [RuleRefused, Account.WF]
+  decide
+/-- Instance: reset records its actual outflow. -/
+theorem resetAccepted : RuleAccepted ResetConserved (accountA, accountA.reset, 5) := by
+  simp only [RuleAccepted, ResetConserved, ResetConservation]
+  decide
+/-- Instance: an incorrect outflow cannot certify the same reset. -/
+theorem resetRefused : RuleRefused ResetConserved (accountA, accountA.reset, 4) := by
+  simp only [RuleRefused, ResetConserved, ResetConservation]
+  decide
+/-- Instance: an established bound covers the actual bytes. -/
+theorem boundAccepted : RuleAccepted ByteBoundSound (10, ⟨12, .boundEstablished⟩) := by
+  simp [RuleAccepted, ByteBoundSound, Bound.Sound]
+/-- Instance: an established underestimate is refused. -/
+theorem boundRefused : RuleRefused ByteBoundSound (10, ⟨9, .boundEstablished⟩) := by
+  simp [RuleRefused, ByteBoundSound, Bound.Sound]
+/-- Instance: a defined allocator footprint supports evidence. -/
+theorem optionalAccepted : RuleAccepted ByteBoundSoundOptional (some 10, ⟨12, .boundEstablished⟩) := by
+  simp [RuleAccepted, ByteBoundSoundOptional, Bound.SoundOptional]
+/-- Instance: an absent footprint cannot be established. -/
+theorem optionalRefused : RuleRefused ByteBoundSoundOptional (none, ⟨12, .boundEstablished⟩) := by
+  simp [RuleRefused, ByteBoundSoundOptional, Bound.SoundOptional]
+/-- Instance: a report distinguishes function-local peak 8 from historical peak 100. -/
+theorem reportAccepted : RuleAccepted ReportSound (⟨0⟩, reportEntry, reportExit, some 10, establishedReport) := by
+  simp [RuleAccepted, ReportSound, LineageReport.Sound, Bound.Sound, SignedInterval.Sound,
+    Bound.SoundOptional, establishedReport, reportEntry, reportExit]
+/-- Instance: correct numbers cannot be attributed to another lineage. -/
+theorem reportRefused : RuleRefused ReportSound (⟨1⟩, reportEntry, reportExit, some 10, establishedReport) := by
+  simp [RuleRefused, ReportSound, LineageReport.Sound, establishedReport]
+
+/-- Instance: a populated lineage admits an allocation without affecting another lineage. -/
+theorem actionAccepted : RuleAccepted FiniteActionPermitted (twoLineages, .alloc ⟨0⟩ 8) := rfl
+/-- Instance: the same lineage refuses an excessive free. -/
+theorem actionRefused : RuleRefused FiniteActionPermitted (twoLineages, .free ⟨0⟩ 6) := by
+  simp [RuleRefused, FiniteActionPermitted, accountMemory, twoLineages, accountA, ActionPermitted, apply, Memory.set]
+/-- Instance: allocation, free and reset compose through the production fold. -/
+theorem sequenceAccepted :
+    RuleAccepted FiniteSequencePermitted
+      (twoLineages, [.alloc ⟨0⟩ 8, .free ⟨0⟩ 3, .reset ⟨0⟩]) := rfl
+/-- Instance: a bad middle free refuses the whole sequence even though its first action succeeds. -/
+theorem sequenceRefused : RuleRefused FiniteSequencePermitted (twoLineages,
+    [.alloc ⟨0⟩ 8, .free ⟨0⟩ 14, .reset ⟨0⟩]) := by
+  change ¬ (false = true)
+  decide
+
+/-- Instance: a negative net change lies inside an established signed interval. -/
+theorem signedAccepted : RuleAccepted SignedNetSound (-3, ⟨-4, -2, .boundEstablished⟩) := by
+  simp [RuleAccepted, SignedNetSound, SignedInterval.Sound]
+/-- Instance: changing only the lower endpoint excludes the same negative net change. -/
+theorem signedRefused : RuleRefused SignedNetSound (-3, ⟨-2, -2, .boundEstablished⟩) := by
+  simp [RuleRefused, SignedNetSound, SignedInterval.Sound]
+
+
+end Leak.Registry
+
 /-- Complete conformance links, populated alongside the owning rules. -/
 def registeredRuleExamples : List RuleExample :=
   [⟨``ConstsPermitted, ``ConstRegistry.accepted⟩,
@@ -137,6 +218,22 @@ def registeredRuleExamples : List RuleExample :=
    ⟨``Own.DropPermitted, ``Own.Registry.dropAccepted⟩,
    ⟨``Own.DropPermitted, ``Own.Registry.dropRefused⟩,
    ⟨``Own.LeavePermitted, ``Own.Registry.leaveAccepted⟩,
-   ⟨``Own.LeavePermitted, ``Own.Registry.leaveRefused⟩]
+   ⟨``Own.LeavePermitted, ``Own.Registry.leaveRefused⟩,
+   ⟨``Leak.Account.WF, ``Leak.Registry.wfAccepted⟩,
+   ⟨``Leak.Account.WF, ``Leak.Registry.wfRefused⟩,
+   ⟨``Leak.ResetConserved, ``Leak.Registry.resetAccepted⟩,
+   ⟨``Leak.ResetConserved, ``Leak.Registry.resetRefused⟩,
+   ⟨``Leak.SignedNetSound, ``Leak.Registry.signedAccepted⟩,
+   ⟨``Leak.SignedNetSound, ``Leak.Registry.signedRefused⟩,
+   ⟨``Leak.ByteBoundSound, ``Leak.Registry.boundAccepted⟩,
+   ⟨``Leak.ByteBoundSound, ``Leak.Registry.boundRefused⟩,
+   ⟨``Leak.ByteBoundSoundOptional, ``Leak.Registry.optionalAccepted⟩,
+   ⟨``Leak.ByteBoundSoundOptional, ``Leak.Registry.optionalRefused⟩,
+   ⟨``Leak.ReportSound, ``Leak.Registry.reportAccepted⟩,
+   ⟨``Leak.ReportSound, ``Leak.Registry.reportRefused⟩,
+   ⟨``Leak.FiniteActionPermitted, ``Leak.Registry.actionAccepted⟩,
+   ⟨``Leak.FiniteActionPermitted, ``Leak.Registry.actionRefused⟩,
+   ⟨``Leak.FiniteSequencePermitted, ``Leak.Registry.sequenceAccepted⟩,
+   ⟨``Leak.FiniteSequencePermitted, ``Leak.Registry.sequenceRefused⟩]
 
 end ConcreteSpec.Core
