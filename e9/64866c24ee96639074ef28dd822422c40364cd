@@ -1,0 +1,4 @@
+[piece 3 of 4: scripts]
+- scripts/proofs/axioms.golden:4265: The golden file attributes generated private declarations such as `Leak.run.match_1` to `ConcreteSpec.Proofs.Accounting`, although their definitions now live in `ConcreteSpec.Spec.Accounting`. Similarly, `ReportSound.match_1` is attributed to `Spec.Rules`. Lean’s private names include the defining module, so these entries will disagree with freshly generated axiom output and fail the golden comparison.
+
+Owner-decision verification was blocked by the sandbox failure preventing repository reads.
