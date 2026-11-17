@@ -698,18 +698,50 @@ structure TheoremId where
   name : Lean.Name
   deriving DecidableEq, Repr
 
-/-- Source text as its actual bytes, before any Unicode-scalar interpretation. -/
-abbrev SourceText := List UInt8
+/-- The shared carrier for loaded source text and raw path bytes. Each number records one
+byte in input order, including bytes of ill-formed UTF-8. The bound makes conversion to
+a host byte exact. This common representation lets path admission inspect the original bytes,
+as required by docs/decisions.md#decided-2026-11-16-file-paths. Source coordinates use
+the same bytes under docs/decisions.md#foundation-q10. -/
+structure SourceText where
+  bytes : ConcreteSpec.Numbers
+  byte_lt : ∀ byte ∈ bytes, byte < 256
+
+/-- Store each input byte as its exact numeric value, preserving order. -/
+def SourceText.ofBytes (bytes : List UInt8) : SourceText where
+  bytes := bytes.map UInt8.toNat
+  byte_lt := by
+    intro byte member
+    obtain ⟨original, _, rfl⟩ := List.mem_map.mp member
+    exact original.toNat_lt_size
+
+/-- Recover the bytes in their original order. -/
+def SourceText.toBytes (source : SourceText) : List UInt8 :=
+  source.bytes.map UInt8.ofNat
+
+/-- The length in bytes, including every byte of a multibyte sequence. -/
+def SourceText.length (source : SourceText) : Nat :=
+  source.bytes.length
+
+/-- Add one byte at the end of the source. -/
+def SourceText.push (source : SourceText) (byte : UInt8) : SourceText where
+  bytes := source.bytes ++ [byte.toNat]
+  byte_lt := by
+    intro value member
+    rcases List.mem_append.mp member with original | last
+    · exact source.byte_lt value original
+    · rw [List.mem_singleton.mp last]
+      exact byte.toNat_lt_size
 
 /-- The 1-based line at a byte offset: one plus the number of newline bytes before it. -/
 def SourceText.lineAt (source : SourceText) (offset : Nat) : Nat :=
-  (source.take offset).count 10 + 1
+  ((source.bytes.take offset).map UInt8.ofNat).count 10 + 1
 
 /-- The 1-based byte column at an offset: one plus the number of bytes since the last newline.
-Every byte advances one column; in particular a tab (`9`) counts one byte, as decided by foundation
-question 10 (2026-11-08). -/
+Every byte advances one column, including tab (`9`) and each byte of a multibyte sequence
+(docs/decisions.md#foundation-q10). -/
 def SourceText.columnAt (source : SourceText) (offset : Nat) : Nat :=
-  ((source.take offset).reverse.takeWhile (fun byte => byte != 10)).length + 1
+  (((source.bytes.take offset).map UInt8.ofNat).reverse.takeWhile (fun byte => byte != 10)).length + 1
 
 /-- A slice of the language, in the agreed slice order: 0 to 28, concurrency last (2026-11-07). -/
 structure SliceId where
@@ -889,7 +921,7 @@ example : FieldId.mk (.variant ⟨⟨ModuleId.mk ⟨⟨"p"⟩, ⟨⟨"1"⟩⟩�
 example : (SliceId.mk 0).n.val = 0 ∧ (SliceId.mk 28).n.val = 28 := ⟨rfl, rfl⟩
 
 /-- Bytes for `a`, a tab, and `b`. After the tab, the range starts at line 1, byte column 3. -/
-def tabSource : SourceText := [97, 9, 98]
+def tabSource : SourceText := SourceText.ofBytes [97, 9, 98]
 
 /-- A tab advances one byte column, independently of any source-path policy. -/
 example : tabSource.lineAt 2 = 1 ∧ tabSource.columnAt 2 = 3 := by decide
@@ -898,8 +930,8 @@ example : tabSource.lineAt 2 = 1 ∧ tabSource.columnAt 2 = 3 := by decide
 example : tabSource.columnAt 2 ≠ 2 := by decide
 
 /-- A newline starts a new 1-based byte column; offsets count bytes, not scalars. -/
-example : SourceText.lineAt [97, 10, 195, 169] 3 = 2 ∧
-    SourceText.columnAt [97, 10, 195, 169] 3 = 2 := by decide
+example : (SourceText.ofBytes [97, 10, 195, 169]).lineAt 3 = 2 ∧
+    (SourceText.ofBytes [97, 10, 195, 169]).columnAt 3 = 2 := by decide
 
 /-- Local identity is the numeric type from Basics, with no presentation component. -/
 example : (⟨0⟩ : ConcreteSpec.Var) ≠ ⟨1⟩ := by decide
