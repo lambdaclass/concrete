@@ -281,6 +281,15 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **Q1.13** Can resetting the system allocator return `Allocator<Sys>` again? — Fresh brand after any supported system reset.
 - **Q2.1** Are storage release, destruction and resource cleanup separate? — Separate storage release, destruction and resource cleanup.
 - **Q2.2** Which containers implement `Destroy`? — Exactly sixteen named Destroy impls: Array (T: Destroy); Heap, HeapArray and Vec (two each: T: Copy; T: Destroy); String (unconditional); Option (T: Destroy); Result (three: T: Destroy/E: Copy, T: Destroy/E: Destroy, T: Copy/E: Destroy); OrderedMap (four: each of K and V Copy or Destroy). HashMap excluded. <a id="q2-2-revision"></a>Revised 2026-11-06 by [information flow](#decided-project-infoflow-2026-11-06): `Secret<T>` is `Copy` only for scalar `T`; secret arrays and heap secrets are linear and their destruction wipes them.
+
+  - **2026-11-06 wiping-on-destroy clause only.**
+
+    Status: replaced\
+    Source: owner\
+    Replaced by: [2026-11-16 secret wiping answer](#decided-2026-11-16-secret-wiping)
+
+    Only the wiping-on-destroy clause is replaced; the other decisions and historical text remain.
+
 - **Q2.3** In what order are contents destroyed? — Index order 0..len−1, then the backing; OrderedMap in ascending key order, key then value, then the nodes.
 - **Q2.4** How does a container of non-`Destroy` resources release its storage? — `drain(v, ctx, f)` with `f: fn(&mut C, T) with(K) -> Step<T, E>`; the only way to empty a container of non-Destroy elements.
 - **Q2.5** What happens when drain processing fails? — On Stop, `Drained { at, survivor, rest, err }`; `map_into` returns `Stopped { done, survivor, rest, err }`.
@@ -933,6 +942,15 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   in facts.
   Extended 2026-11-08 by the [foundation decision](#foundation-q18): `Secret<T>` has exactly `T`'s
   layout; layout does not establish constant time, the information-flow rules do.
+
+  - **2026-11-06 wiping-on-destroy clause only.**
+
+    Status: replaced\
+    Source: owner\
+    Replaced by: [2026-11-16 secret wiping answer](#decided-2026-11-16-secret-wiping)
+
+    Only the wiping-on-destroy clause is replaced; the other decisions and historical text remain.
+
 - <a id="decided-project-pipeline-2026-11-06"></a>**The new compiler pipeline** (owner, 2026-11-06,
   relayed by the orchestrator from the owner session: the owner asked "is there any way to improve the full compiler design or pipeline?"; after
   the Codex, agy and Kimi pipeline review was reported, "did we also log that we will have the new
@@ -3271,7 +3289,11 @@ okay with your decisions
     Accept other Unicode unchanged, with exact-scalar identity and no normalization?
     No verified approval settles these. The owner-approved held plan at L144552,
     2026-11-11T13:33:37.630Z ("ok go ahead with" the pasted plan), expressly keeps
-    backslashes and Unicode waiting for the owner.
+    backslashes and Unicode waiting for the owner. **Answered 2026-11-16 and
+    2026-11-17:** the [file-path decision](#decided-2026-11-16-file-paths) settles
+    these historical authority gaps with ASCII-only paths and no rewriting.
+    The [file-name decision](#decided-2026-11-17-file-names) closes F03p Q1, Q2
+    and Q6. See ISS-0068 for the remaining implementation and dependent evidence.
   - Classification: the taxonomy was held here because L125750 reported tagging as
     information, not a proposal for approval. **Answered 2026-11-13:** see the
     [proof-label convention](#decided-2026-11-13-proof-labels). The `(approved: ...)`
@@ -3703,6 +3725,179 @@ yes
 
   This approves the format only. Implementation of ISS-0083 remains pending,
   tracked in [ISSUES.tsv](../ISSUES.tsv).
+
+- <a id="decided-2026-11-16-file-paths"></a>**File paths and spec-inventory round 18
+  (2026-11-16).**
+  Status: decided
+  Source: owner
+
+  Provenance: verbatim owner reply relayed by the coordinator (Claude) from the
+  owner session, recorded 2026-11-16 under the [recording rule](#decided-project-recording).
+  Question summary by Claude, not owner wording: choose the rules Codex and agy
+  both proposed (agree): ASCII only; `/` is the only separator; refuse `\`, drive
+  prefixes, empty and `.` components, spaces, control characters, leading or
+  trailing dots and Windows reserved names; never rewrite a path. Choose mixed
+  case (mixed): uppercase A-Z allowed, but refuse two paths that differ only in
+  letter case, including directory prefixes. Choose the cap (cap): at most
+  100 bytes per path component and 200 bytes per whole path. This summary comes
+  from Codex/agy owner-question drafts in coordinator scratch; those drafts are
+  not quoted owner text. The accompanying question was whether to approve one
+  more review round (round 18) for the spec-inventory branch, fixing only two leftovers.
+
+  Owner reply, verbatim:
+
+~~~text
+agree, mixed, cap. yes to round 18
+~~~
+
+  This settles the path choices summarized above (ISS-0068) and authorizes that
+  round 18 within its stated scope. It does not claim implementation or complete
+  path validation; details beyond the supplied question remain unsettled.
+  The [November 17 file-name decision](#decided-2026-11-17-file-names) settles
+  the character whitelist and internal dots, the exact reserved-name matcher,
+  and exact file/directory prefix conflicts.
+
+- <a id="decided-2026-11-16-accounting-validator"></a>**Accounting validator:
+  owner replies and coordinator action (2026-11-16).**
+  Status: partly decided
+  Source: owner
+
+  Provenance: verbatim owner replies relayed by the coordinator (Claude) from the
+  owner session, recorded 2026-11-16 under the [recording rule](#decided-project-recording).
+  Context summarized by Claude, not owner wording: the coordinator explained that
+  the accounting branch's new interim decision-status validator kept failing
+  review. No preceding question text was supplied. The owner then asked, verbatim:
+
+~~~text
+i don't care about the small helper tool why do we nee di t
+~~~
+
+  The owner's subsequent reply, verbatim (no intervening question supplied):
+
+~~~text
+let's finish the spec
+~~~
+
+  Coordinator's resulting action, not an additional owner quotation or a broader
+  owner decision: the new interim validator is dropped from the accounting branch;
+  the accounting spec lands with main's existing checks. This records the
+  coordinator's disposition, not a claim that landing has happened. The status line
+  of the [approved decision-status format](#decided-2026-11-16-decision-status-format)
+  remains the planned structural fix (ISS-0083); its implementation remains pending.
+
+- <a id="decided-2026-11-16-secret-wiping"></a>**Keep Secret; defer wiping
+  (2026-11-16).**
+  Status: decided
+  Source: owner
+
+  Provenance: verbatim owner replies relayed by the coordinator (Claude) from the
+  owner session, recorded 2026-11-16 under the [recording rule](#decided-project-recording).
+  Context summarized by Claude, not owner wording: secret wiping (ISS-0072).
+  No exact questions preceding the first three replies were supplied. Owner
+  replies, verbatim, in order:
+
+~~~text
+i mean i don{t think the secret is important now
+~~~
+
+~~~text
+we coudl even remove this from the spec
+~~~
+
+~~~text
+maybe we can remove secret and add it later
+~~~
+
+  Question replied to by the final answer, summarized by Claude: choose (1) keep
+  `Secret`, the no-leak rule and the constant-time rules, and drop only wiping
+  from the spec; or (2) drop all of `Secret` and add it back later.
+
+  Owner reply, verbatim:
+
+~~~text
+1 keep secret, drop wiping
+~~~
+
+  Wiping leaves the spec for now and may be added back later; reopening is the
+  owner's call. `Secret`, no-leak and constant-time stay. This sets aside only
+  the earlier wiping wording in the [Q2.2 revision](#q2-2-revision) and the
+  [information-flow entry](#decided-project-infoflow-2026-11-06), whose history is
+  retained. This record does not implement the spec change or choose a future
+  wiping policy.
+
+- <a id="decided-2026-11-17-proposals-in-lean"></a>**Design proposals and Lean rule
+  registration (2026-11-17).**
+  Status: decided
+  Source: owner
+
+  Provenance: verbatim owner replies relayed by the coordinator from the owner
+  session, recorded 2026-11-17 under the [recording rule](#decided-project-recording).
+  The coordinator asked whether to keep design proposal files off main and give
+  them to writers only as instructions, with decisions living only in the Lean
+  spec. Owner context, verbatim:
+
+~~~text
+wait but the decisions should be in the spec
+~~~
+
+  The coordinator recommended keeping proposals off main, registering one rule
+  per distinct refusal (per check, with no composite rule per entry point), and
+  repairing the inventory landing. Owner reply, verbatim:
+
+~~~text
+ok yes
+~~~
+
+  The Lean spec carries the normative decisions. The files
+  `docs/proposals/ISS-0047-SITE-TABLE-OBLIGATIONS.md`,
+  `docs/proposals/ISS-0050-OBLIGATION-TABLE-SEARCH.md`, and
+  `docs/proposals/F03P-SOURCE-PATHS.md` stay on their WIP branches as writer briefs.
+  ISS-0084 references the [site-table obligations brief](https://github.com/lambdaclass/concrete/blob/576f69780bd5ab16d9249c4991e7383ff5124d3e/docs/proposals/ISS-0047-SITE-TABLE-OBLIGATIONS.md)
+  from `origin/wip/spec-redesign-0047-0050` at commit
+  `576f69780bd5ab16d9249c4991e7383ff5124d3e`.
+  Each distinct refusal gets its own registered rule, identified by its Lean
+  declaration name and revision. The approval authorizes the inventory landing
+  repair.
+
+- <a id="decided-2026-11-17-file-names"></a>**File-name characters, reserved names and
+  exact file/directory prefix conflicts (2026-11-17).**
+  Status: decided
+  Source: owner
+
+  Provenance: verbatim owner replies relayed by the coordinator from the owner
+  session, recorded 2026-11-17 under the [recording rule](#decided-project-recording).
+  The coordinator recommended options 1a, 2a and 3a for F03p questions Q1, Q2
+  and Q6, following the [November 16 file-path decision](#decided-2026-11-16-file-paths).
+  Owner question, verbatim:
+
+~~~text
+what is the best
+~~~
+
+  The coordinator restated the recommendation, summarized here by question:
+
+  - **Q1 (1a).** File-name characters are exactly `A-Z a-z 0-9 _ - .`, with
+    the previously decided leading- and trailing-dot exclusions. Repeated dots
+    are allowed internally. Noninitial colons and all punctuation outside the
+    whitelist are refused.
+  - **Q2 (2a).** Match the stem before the first dot, ignoring ASCII case,
+    against the closed list `CON PRN AUX NUL COM1-COM9 LPT1-LPT9`. Only those
+    spellings are reserved. For example, `con.con` is refused and `main.con`
+    is valid.
+  - **Q6 (3a).** The single project checker refuses an exact proper
+    file/directory prefix conflict, such as file `a` beside `a/b.con`. It
+    reports both occurrences under a dedicated registered rule.
+
+  Owner reply, verbatim:
+
+~~~text
+ok go ahead
+~~~
+
+  This closes F03p's open policy questions Q1 (character whitelist and internal
+  repeated dots), Q2 (exact reserved-name matcher), and Q6 (exact proper
+  file/directory prefix conflicts). ISS-0068 remains open for implementation
+  and dependent evidence.
 
 - <a id="owner-goals-2026-11-15-provability-errors"></a>**Design goals: owner
   question (2026-11-15).**

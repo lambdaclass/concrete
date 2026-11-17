@@ -78,7 +78,7 @@ def main():
                 commands = inventory.census(root,exporter,examples=False)
                 expected.append(next(c['exampleTypeIdentity'] for c in commands
                                      if c['record']=='command' and c.get('example')))
-            probe.write_text(' '.join(examples)+'\n')
+            probe.write_text('/- λ -/ '+' '.join(examples)+'\n')
             commands = inventory.census(root,exporter)
             paired = [c for c in commands if c['record']=='command' and c.get('example')]
             if (len(paired)!=2 or paired[0]['line']!=paired[1]['line'] or
@@ -86,7 +86,13 @@ def main():
                     expected[0]==expected[1] or
                     [c['exampleTypeIdentity'] for c in paired]!=expected):
                 raise ValueError('same-line examples lost their distinct elaborated type identities')
-            print('control PASS: same-line examples retain distinct and correct elaborated type identities')
+            rows = inventory.records_from_census(commands, root)
+            receipts = [r for r in rows if r['kind']=='example']
+            if [r['digest'] for r in receipts] != [inventory.sha(s.encode()) for s in examples]:
+                raise ValueError('same-line examples were not sliced by their UTF-8 parser spans')
+            refused(lambda: inventory.records_from_census(commands+[paired[0]], root),
+                    f'duplicate command span: {inventory.span_key(paired[0])}')
+            print('control PASS: same-line examples retain distinct types and exact UTF-8 source spans')
             probe.write_text(original)
             snapshot = inventory.head_population()
             def assert_reason(expected):
@@ -304,6 +310,29 @@ def main():
             still_present = inventory.Digests(commands={'old':next(iter(inventory.command_match_keys(command_rows).values()))})
             if inventory.replacement_progress(command_rows+[dict(crec,note=json.dumps(retired))],cr,still_present,fixture_slots=True)['command:old-example']!='superseded unit still present: command:old-example':
                 raise ValueError('retirement closed with the old command still present')
+            # Exercise a reviewed retirement through the real committed HEAD census.
+            probe.write_text('open Nat\n')
+            commit()
+            open_snapshot = inventory.head_population()
+            open_unit, open_key = next(iter(open_snapshot.commands.items()))
+            open_row = dict(command_rows[0], name=open_unit.removeprefix('command:'),
+                            source=open_key[0], kind=open_key[2], digest=open_key[3])
+            review_path.write_text(review_path.read_text().replace('VERDICT: ACCEPT',
+                                          f'UNIT: {open_unit}\nVERDICT: ACCEPT'))
+            open_retirement = dict(retired, supersedes=[open_unit])
+            accept(open_retirement, 'F02')
+            open_population = [open_row, dict(crec, note=json.dumps(open_retirement))]
+            for source, expected in (
+                    ('open Nat example : 13 = 13 := rfl\n', 'superseded unit still present: '+open_unit),
+                    ('example : 13 = 13 := rfl\n', 'reconciled by retirement')):
+                probe.write_text(source)
+                commit()
+                checked = inventory.head_population()
+                observed = inventory.replacement_progress(open_population,
+                    inventory.progress_reasons(open_snapshot, checked), checked, open_snapshot)
+                if observed[open_unit] != expected:
+                    raise ValueError(f'same-line retirement expected {expected!r}, got {observed!r}')
+            print('control PASS: committed same-line open refuses retirement until removed')
             d_retired = dict(spec,action='retire',declarations={},commands=[])
             accept(d_retired)
             d_record = dict(replacement,note=json.dumps(d_retired))
@@ -439,7 +468,7 @@ def main():
             print('control PASS: production missing snapshot command identity refuses explicitly')
             collision_output = io.StringIO()
             with contextlib.redirect_stdout(collision_output):
-                inventory.report_command_collisions(twins)
+                inventory.report_command_collisions(twins, git('rev-parse','HEAD'))
             if 'command identity collision' not in collision_output.getvalue():
                 raise ValueError('snapshot twin collision omitted from census')
             ambiguous = inventory.Digests()

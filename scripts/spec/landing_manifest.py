@@ -17,7 +17,7 @@ import subprocess
 import sys
 import tempfile
 
-from landing_census import census
+from landing_census import census, span_index, span_key
 from landing_controls import check_census
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -185,39 +185,61 @@ def row(**kw):
     return {k: str(kw.get(k, '')) for k in FIELDS}
 
 
+def span_name(record):
+    file, start, stop = span_key(record)
+    return f'{file}:{start}:{stop}'
+
+
+def command_order(row):
+    parts = row['name'].rsplit(':', 2)
+    # Named synthetic control rows have no source span and retain input order.
+    start, stop = map(int, parts[1:]) if len(parts) == 3 else (0, 0)
+    return row['source'], start, stop
+
+
 def records_from_census(data, source_root=None, ref=SOURCE):
     """Stable identity and source digests independent of the manual assignment columns."""
     result = []
-    example_deps = {(r['file'],r['line']):r['uses'] for r in data if r['record']=='example'}
-    files = {}
-    commands = defaultdict(list)
+    examples = span_index(data, 'example')
+    resolved = span_index(data, 'resolved-command')
+    parsed = span_index(data, 'command')
+    files, commands = {}, {}
     decls = [r for r in data if r['record'] == 'declaration']
     names = {r['name'] for r in decls}
-    for c in data:
-        if c['record'] != 'command':
-            continue
-        f = c['file']
+    if examples and examples.keys() != {key for key, c in parsed.items() if c['example']}:
+        raise ValueError('example dependency spans differ from parsed examples')
+    for key, c in parsed.items():
+        f, start, stop = key
         if f not in files:
-            files[f] = (source(ref, f) if source_root is None else (source_root/f).read_bytes()).decode().splitlines(keepends=True)
-        digest = sha((''.join(files[f]) if c['syntax']=='module-realization' else ''.join(files[f][c['line']-1:c['endLine']])).encode())
-        uses = example_deps.get((f,c['line']),[])
+            files[f] = source(ref, f) if source_root is None else (source_root/f).read_bytes()
+        body = files[f]
+        if c['syntax']=='module-realization':
+            chunk = body
+        else:
+            if not 0 <= start < stop <= len(body):
+                raise ValueError(f'invalid command span: {key}')
+            chunk = body[start:stop]
+        uses = examples.get(key, {}).get('uses', [])
         if c['syntax']=='Lean.Parser.Command.attribute':
-            metadata = next(r for r in data if r['record']=='resolved-command' and r['file']==f and r['line']==c['line'])
-            uses = metadata['targets']
-        r = row(record='command', name=f"{f}:{c['line']}:{c['endLine']}",
+            uses = resolved[key]['targets']
+        r = row(record='command', name=span_name(c),
                 kind='example' if c['example'] else c['syntax'], source=f,
-                line=c['line'], end_line=c['endLine'], digest=digest,
+                line=c['line'], end_line=c['endLine'], digest=sha(chunk),
                 contract=contract(f), dependencies=json.dumps(sorted(set(uses)), separators=(',',':')))
-        commands[f].append(r)
+        commands[key] = r
         result.append(r)
-    origins = {(r['file'],r['name']):r for r in data if r['record']=='origin'}
+    origins = {}
+    for origin in (r for r in data if r['record']=='origin'):
+        key = origin['file'], origin['name']
+        if key in origins:
+            raise ValueError(f'duplicate declaration origin: {key}')
+        origins[key] = origin
     for d in decls:
         f = d['module'].replace('.', '/') + '.lean'
         origin = origins.get((f,d['name']))
-        if origin is None:
+        if origin is None or span_key(origin) not in commands:
             raise ValueError(f'no observed command origin: {d["name"]}')
-        command = next(c for c in commands[f]
-                       if int(c['line']) == origin['line'] and int(c['end_line']) == origin['endLine'])
+        command = commands[span_key(origin)]
         result.append(row(record='declaration', name=d['name'], kind=d['kind'], source=f,
                           line=d['line'], end_line=command['end_line'], term_digest=d['shape'],
                           digest=command['digest'],
@@ -274,20 +296,14 @@ def baseline_census():
 
 @lru_cache(maxsize=1)
 def baseline_members():
-    data = baseline_census()
-    origins = {(r['file'],r['name']):r for r in data if r['record']=='origin'}
+    rows = records_from_census(baseline_census(), ref=BASE)
     commands = defaultdict(set)
-    declarations = {}
-    for name, key in command_match_keys(records_from_census(data, ref=BASE)).items():
-        commands[name.rsplit(':',2)[0]].add(key)
-    for r in data:
+    keys = command_match_keys(rows)
+    for r in rows:
         if r['record']=='command':
-            lines = source(BASE,r['file']).splitlines(keepends=True)
-            commands[r['file']].add(sha(b''.join(lines if r['syntax']=='module-realization' else lines[r['line']-1:r['endLine']])))
-        elif r['record']=='declaration':
-            o = origins[(r['module'].replace('.','/')+'.lean',r['name'])]
-            lines = source(BASE,o['file']).splitlines(keepends=True)
-            declarations[r['name']] = (o['file'],sha(b''.join(lines[o['line']-1:o['endLine']])),r['shape'])
+            commands[r['source']].add(keys[r['name']])
+    declarations = {r['name']:(r['source'],r['digest'],r['term_digest'])
+                    for r in rows if r['record']=='declaration'}
     return commands, declarations
 
 
@@ -315,7 +331,7 @@ def emission_choices(data):
         if o['shape']!=d['shape'] or (o['line']==0 and d['kind']!='theorem'):
             continue
         deps = set().union(*(expand(o['file'],n,set()) for n in o['uses']))
-        out[o['name']].append((f"{o['file']}:{o['line']}:{o['endLine']}",sorted(deps)))
+        out[o['name']].append((span_name(o),sorted(deps)))
     return out
 
 
@@ -369,7 +385,7 @@ def context_destinations(population):
         # material command in its scope (including nested scopes), in original order.
         scopes = [[]]
         openings = []
-        for c in sorted((r for r in commands if r['source']==file),key=lambda r:int(r['line'])):
+        for c in sorted((r for r in commands if r['source']==file),key=command_order):
             if c['kind'] in ('Lean.Parser.Command.namespace','Lean.Parser.Command.section'):
                 result[c['name']] = set()
                 scopes.append([c['name']])
@@ -413,6 +429,7 @@ def generate(data):
                         disposition='owner-held' if p in HOLDS else 'retain',note=HOLDS.get(p,'')))
     LAW_METADATA[:] = [r for r in data if r["record"]=="resolved-command"]
     population = records_from_census(data)
+    command_rows = {r['name']:r for r in population if r['record']=='command'}
     anchors = {}
     for r in population:
         if r['record']=='declaration' and r['line']!='0':
@@ -421,7 +438,7 @@ def generate(data):
     for r in population:
         key = command_identity(r)
         p = (WHOLE[r['source'].removeprefix('ConcreteSpec/').removesuffix('.lean')]
-             if key.endswith(':0:0') else piece(r['source'],anchors.get(key,int(key.rsplit(':',2)[1]))))
+             if key.endswith(':0:0') else piece(r['source'],anchors.get(key,int(command_rows[key]['line']))))
         r.update(piece=p, prerequisites=','.join(PREREQS[p]),
                  disposition='owner-held' if p in HOLDS else 'repair',
                  note=r['note'] + ('; '+HOLDS[p] if p in HOLDS else ''))
@@ -586,18 +603,20 @@ def read():
 def command_match_keys(rows):
     """Content and ordinal within the enclosing namespace/section sequence.
 
-    Snapshot line ranges only order the parsed sequence; they never enter a key.
+    Snapshot byte ranges only order the parsed sequence; they never enter a key.
     Equal commands remain distinct, including repeated identical scopes.
     """
     result, stacks, counts = {}, defaultdict(list), Counter()
     for r in sorted((r for r in rows if r['record']=='command'),
-                    key=lambda r:(r['source'],int(r['line']),int(r['end_line']))):
+                    key=command_order):
         stack = stacks[r['source']]
         scope = tuple(stack)
         token = (r['source'], scope, r['kind'], r['digest'])
         ordinal = counts[token]
         counts[token] += 1
         key = (*token, ordinal)
+        if r['name'] in result:
+            raise ValueError('duplicate command identity: '+r['name'])
         result[r['name']] = key
         if r['kind'] in ('Lean.Parser.Command.namespace','Lean.Parser.Command.section'):
             stack.append((r['kind'],r['digest'],ordinal))
@@ -648,11 +667,11 @@ def full_digests(data, root):
     """
     rows = records_from_census(data, root)
     authored = authored_names(data)
-    commands = {(r['source'],int(r['line'])):r for r in rows if r['record']=='command'}
+    commands = {r['name']:r for r in rows if r['record']=='command'}
     attributes = defaultdict(list)
     for metadata in data:
         if metadata['record']=='resolved-command' and metadata['targets']:
-            digest = commands[(metadata['file'],metadata['line'])]['digest']
+            digest = commands[span_name(metadata)]['digest']
             for target in metadata['targets']:
                 attributes[target].append(digest)
     result = Digests({r['name']:sha(json.dumps([r['digest'],r['term_digest'],attributes[r['name']]],
@@ -666,11 +685,11 @@ def full_digests(data, root):
             result['command:'+r['name']] = r['digest']
             result.commands['command:'+r['name']] = keys[r['name']]
     counts = Counter()
-    metadata = {(c['file'],c['line']):c for c in data if c['record']=='command'}
+    metadata = {span_name(c):c for c in span_index(data, 'command').values()}
     for r in sorted((r for r in rows if r['record']=='command' and r['kind']!='module-realization'),
-                    key=lambda r:(r['source'],int(r['line']),int(r['end_line']))):
+                    key=command_order):
         key = keys[r['name']]
-        command = metadata.get((r['source'],int(r['line'])),{})
+        command = metadata[r['name']]
         if r['kind']=='example':
             identity = command.get('exampleTypeIdentity')
             if not identity:
@@ -882,10 +901,10 @@ def command_identity_groups(population):
     return groups
 
 
-def report_command_collisions(snapshot):
+def report_command_collisions(snapshot, revision):
     for base,members in sorted(command_identity_groups(snapshot).items()):
         if len(members)>1:
-            print('command identity collision\t'+json.dumps(base)+'\t'+
+            print(f'diagnostic: command identity collision at {revision}\t'+json.dumps(base)+'\t'+
                   json.dumps([dict(occurrence=i,key=k) for i,k in sorted(members)]))
 
 
@@ -1279,10 +1298,10 @@ def fixture_placement(rows, consumers, closure, write_basis=False):
 
 def law_control_groups(rows):
     decls = {r['name']:r for r in rows if r['record']=='declaration'}
-    commands = {(r['source'],int(r['line'])):r for r in rows if r['record']=='command'}
+    commands = {r['name']:r for r in rows if r['record']=='command'}
     for metadata in LAW_METADATA:
         for law in metadata['laws']:
-            yield decls[law], [commands[(metadata['file'],metadata['line'])]] + [decls[n] for n in metadata['mutants']]
+            yield decls[law], [commands[span_name(metadata)]] + [decls[n] for n in metadata['mutants']]
 
 
 def check_law_controls(rows):
@@ -1409,6 +1428,7 @@ def relocation_causes(rows, normalize=False):
 
 
 def relocation_evidence(rows, write=False):
+    command_rows = {r['name']:r for r in rows if r['record']=='command'}
     anchors = {}
     for r in rows:
         if r['record']=='declaration' and r['line']!='0':
@@ -1420,7 +1440,7 @@ def relocation_evidence(rows, write=False):
         if r['record'] not in ('declaration','command'): continue
         key = command_identity(r)
         old = (WHOLE[r['source'].removeprefix('ConcreteSpec/').removesuffix('.lean')]
-               if key.endswith(':0:0') else piece(r['source'],anchors.get(key,int(key.rsplit(':',2)[1]))))
+               if key.endswith(':0:0') else piece(r['source'],anchors.get(key,int(command_rows[key]['line']))))
         dest = r['migration'] or r['piece']
         if old==dest: continue
         causes = verified_causes[(r['record'],r['name'])]
@@ -1920,7 +1940,7 @@ def main():
         relocation_evidence(rows)
         law_control_schedule(rows)
         snapshot = full_digests(data,root)
-        report_command_collisions(snapshot)
+        report_command_collisions(snapshot, SOURCE)
         snapshot.update(header_targets())
         checked = head_population()
         if args.head_digests:

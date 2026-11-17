@@ -2,7 +2,7 @@
 """Small production-census regression controls, independent of the historical snapshot."""
 from pathlib import Path
 import tempfile
-from landing_census import census
+from landing_census import census, span_key
 
 
 def check_census(exporter):
@@ -28,9 +28,10 @@ def other : Nat := 99
 end Decoy
 attribute [reducible] dep
 /- Instance (law `does.not.exist`, mutant `also.missing`). -/
-/-- Instance (law `proofA`, case `one`). -/
+/-- Instance (laws `proofA`, `proofB`, case `one`). -/
 example : True := proofA
-/-- Planted (law `proofA`, case `one`, mutant `other`). -/
+/-- Planted (law `proofA`, case `one`, mutant
+  `other`). -/
 example : other = 8 := rfl
 def accepted (n : Nat) : Prop := n = dep
 instance instAccepted (n : Nat) : Decidable (accepted n) :=
@@ -47,6 +48,9 @@ end ConcreteSpec.Control
             raise ValueError('reducible attribute target was not resolved by Lean')
         if not any(r['laws']==['ConcreteSpec.Control.proofA'] and r['mutants']==['ConcreteSpec.Control.other'] for r in metadata):
             raise ValueError('namespace-relative law/mutant names were not resolved by Lean')
+        if not any(r['laws']==['ConcreteSpec.Control.proofA', 'ConcreteSpec.Control.proofB']
+                   for r in metadata):
+            raise ValueError('plural law annotation lost a law')
         print('control PASS: reducible targets and namespace-relative annotations resolved by Lean')
         origins = {r['name']:r for r in data if r['record']=='origin'}
         decls = {r['name']:r for r in data if r['record']=='declaration'}
@@ -58,12 +62,13 @@ end ConcreteSpec.Control
         helper = opaque+'._unsafe_rec'
         if origins[opaque]['line']!=6 or origins[opaque]['endLine']!=6:
             raise ValueError('partial definition origin lost its parsed command range')
-        if any(origins[opaque][k]!=origins[helper][k] for k in ('file','line','endLine')):
+        if any(origins[opaque][k]!=origins[helper][k] for k in ('file','startByte','endByte')):
             raise ValueError('partial definition and body helper have different command origins')
         if 'ConcreteSpec.Control.dep' not in decls[helper]['uses']:
             raise ValueError('partial body dependency absent from census')
-        examples = {(r['file'],r['line']) for r in data if r['record']=='example'}
-        required = {('ConcreteSpec/Control.lean',line) for line in (2,3,4)}
+        examples = {span_key(r) for r in data if r['record']=='example'}
+        required = {span_key(r) for r in data if r['record']=='command'
+                    and r['file']=='ConcreteSpec/Control.lean' and r['line'] in (2,3,4)}
         if not required <= examples:
             raise ValueError('private/noncomputable/unsafe example control missing')
         if not any(r['record']=='origin' and r['file']=='ConcreteSpec/Control.lean' and r['line']==0 and r['name']=='ConcreteSpec.Control.branch.eq_1' for r in data):
@@ -73,8 +78,7 @@ end ConcreteSpec.Control
         instance_command = next(r for r in data if r['record']=='command' and r['example']
                                 and 'instAccepted' in r['identifiers'])
         instance_example = next(r for r in data if r['record']=='example'
-                                and r['line']==instance_command['line']
-                                and r['file']==instance_command['file'])
+                                and span_key(r)==span_key(instance_command))
         if 'ConcreteSpec.Control.instAccepted' not in instance_example['uses']:
             raise ValueError('example census replaced a kernel instance dependency with source policy names')
         print('control PASS: example instance constant preserved as an elaborated dependency')

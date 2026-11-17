@@ -17,14 +17,14 @@ def main():
         validation.write_text('Control validation\n')
         (landing/'shared-fixtures.json').write_text('[]\n')
         file = 'ConcreteSpec/Proofs/ObserveEnvironment.lean'
-        command = inventory.row(record='command',name=file+':1:1',source=file,line=1,
+        command = inventory.row(record='command',name=file+':12:24',source=file,line=1,
                                 piece='F23',note='law fixture.law with control fixture.control')
         declaration = inventory.row(record='declaration',name='fixture.law',source=file,line=1,
                                     piece='F23',note=command['name']+'; '+command['note'])
         control = inventory.row(record='declaration',name='fixture.control',source=file,line=1,
                                 piece='F23',note=command['name']+'; '+command['note'])
         rows = [command,declaration,control]
-        inventory.LAW_METADATA = [dict(laws=['fixture.law'], mutants=['fixture.control'],file=file,line=1)]
+        inventory.LAW_METADATA = [dict(laws=['fixture.law'], mutants=['fixture.control'],file=file,startByte=12,endByte=24)]
         inventory.ROOT = root
         try:
             expected = inventory.relocation_evidence(rows,write=True)
@@ -53,7 +53,7 @@ def main():
             # Each structured cause kind must be justified by the row graph/census.
             def causes(population):
                 return inventory.relocation_causes(population)
-            unrelated = dict(command,name=file+':50:50',line='50',note=command['note'])
+            unrelated = dict(command,name=file+':50:70',line='50',note=command['note'])
             try: causes(rows+[unrelated])
             except ValueError as exc:
                 if not str(exc).startswith('unrelated relocation law/control:'): raise

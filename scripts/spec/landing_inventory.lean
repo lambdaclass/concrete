@@ -52,6 +52,10 @@ private partial def syntaxIdentity (s : Syntax) : Json :=
   | .ident _ _ name _ => toJson name.toString
   | _ => Json.arr (#[toJson s.getKind.toString] ++ s.getArgs.map syntaxIdentity)
 
+private def commandSpan (stx : Syntax) : List (String × Json) :=
+  [("startByte", toJson (stx.getPos?.getD 0).byteIdx),
+   ("endByte", toJson (stx.getTailPos?.getD 0).byteIdx)]
+
 private partial def commands (ctx : Parser.InputContext) (env : Environment)
     (ps : Parser.ModuleParserState) (messages : MessageLog) : IO Unit := do
   let (stx, next, messages) := Parser.parseCommand ctx { env, options := {} } ps messages
@@ -61,14 +65,14 @@ private partial def commands (ctx : Parser.InputContext) (env : Environment)
   unless Parser.isTerminalCommand stx do
     let start := ctx.fileMap.toPosition (stx.getPos?.getD 0)
     let stop := ctx.fileMap.toPosition (stx.getTailPos?.getD 0)
-    emit [("record", toJson "command"), ("file", toJson ctx.fileName),
+    emit (commandSpan stx ++ [("record", toJson "command"), ("file", toJson ctx.fileName),
       ("commandIdentity", syntaxIdentity stx),
       ("scopeIdentity", if stx.isOfKind ``Parser.Command.namespace || stx.isOfKind ``Parser.Command.section
         then syntaxIdentity stx else Json.null),
       ("noncomputable", toJson (noncomputableModifier stx)),
       ("noncomputableInsert", toJson (noncomputableInsert stx)),
       ("syntax", toJson stx.getKind.toString), ("example", toJson (containsExample stx)), ("exampleToken", toJson (exampleToken stx)), ("line", toJson start.line),
-      ("endLine", toJson stop.line), ("sourceIdentifiers", Json.arr (sourceIdentifiers ctx stx)), ("identifiers", toJson (identifiers stx))]
+      ("endLine", toJson stop.line), ("sourceIdentifiers", Json.arr (sourceIdentifiers ctx stx)), ("identifiers", toJson (identifiers stx))])
     commands ctx env next messages
 
 -- Observe the environment after each elaborated command. This is extraction provenance,
@@ -203,37 +207,60 @@ private def resolvedMetadata (ctx : Parser.InputContext) (stx : Syntax)
   let mut laws : Array String := #[]
   let mut mutants : Array String := #[]
   if let some doc := docComment? stx then
-    if doc.trimAscii.toString.startsWith "Instance (" || doc.trimAscii.toString.startsWith "Planted (" then
-      let parts := doc.splitOn "`"
+    let doc := doc.trimAscii.toString
+    if doc.startsWith "Instance (" || doc.startsWith "Planted (" then
+      let invalid := IO.userError s!"invalid inventory annotation in {ctx.fileName}: {doc}"
+      let head := (doc.splitOn "(")[1]!.splitOn ")"
+      if head.length < 2 then throw invalid
+      let parts := head[0]!.splitOn "`"
+      if parts.length < 3 || parts.length % 2 == 0 || !(parts.getLast!.trimAscii.toString.isEmpty) then
+        throw invalid
+      let mut pluralLaws := false
       for i in [:parts.length / 2] do
-        let label := parts[2*i]!
-        let name := parts[2*i+1]!.toName
-        if label.endsWith "law " then laws := laws.push (← resolve name)
-        if label.endsWith "mutant " then mutants := mutants.push (← resolve name)
-  emit [("record", toJson "resolved-command"), ("file", toJson ctx.fileName),
+        let label := parts[2*i]!.trimAscii.toString
+        if i > 0 && !label.startsWith "," then throw invalid
+        let key := (if i > 0 then (label.drop 1).toString else label).trimAscii.toString
+        let value := parts[2*i+1]!.trimAscii.toString
+        if value.isEmpty then throw invalid
+        let name := value.toName
+        match key with
+        | "law" | "laws" =>
+          laws := laws.push (← resolve name)
+          pluralLaws := key == "laws"
+        | "" =>
+          unless pluralLaws do throw invalid
+          laws := laws.push (← resolve name)
+        | "mutant" =>
+          mutants := mutants.push (← resolve name)
+          pluralLaws := false
+        | "case" | "subject" | "fault" | "certificate" | "Representation lemma" =>
+          pluralLaws := false
+        | _ => throw invalid
+  emit (commandSpan stx ++ [("record", toJson "resolved-command"), ("file", toJson ctx.fileName),
     ("line", toJson (ctx.fileMap.toPosition (stx.getPos?.getD 0)).line),
-    ("targets", toJson targets), ("laws", toJson laws), ("mutants", toJson mutants)]
+    ("targets", toJson targets), ("laws", toJson laws), ("mutants", toJson mutants)])
 
 private partial def originCommands (input output : IO.FS.Handle) (ctx : Parser.InputContext) (before : NameSet)
     (snap : Lean.Language.Lean.CommandParsedSnapshot) : IO Environment := do
   let state := snap.elabSnap.resultSnap.get.cmdState
   let after := state.env
   let stx := snap.stx
-  resolvedMetadata ctx stx state
+  unless Parser.isTerminalCommand stx do
+    resolvedMetadata ctx stx state
   if containsExample stx then
-    emit [("record", toJson "example-identity"), ("file", toJson ctx.fileName),
+    emit (commandSpan stx ++ [("record", toJson "example-identity"), ("file", toJson ctx.fileName),
       ("exampleToken", toJson (exampleToken stx)),
       ("line", toJson (ctx.fileMap.toPosition (stx.getPos?.getD 0)).line),
-      ("identity", toJson (← exampleIdentity stx state))]
+      ("identity", toJson (← exampleIdentity stx state))])
   let start := ctx.fileMap.toPosition (stx.getPos?.getD 0)
   let stop := ctx.fileMap.toPosition (stx.getTailPos?.getD 0)
   let mut names := before
   for (n, ci) in after.constants.map₂.toList do
     unless before.contains n do
-      emit [("record", toJson "origin"), ("name", toJson n.toString),
+      emit (commandSpan stx ++ [("record", toJson "origin"), ("name", toJson n.toString),
         ("file", toJson ctx.fileName), ("line", toJson start.line),
         ("endLine", toJson stop.line), ("shape", toJson (← fingerprint input output ci)),
-        ("uses", toJson (ci.getUsedConstantsAsSet.toList.map Name.toString))]
+        ("uses", toJson (ci.getUsedConstantsAsSet.toList.map Name.toString))])
       names := names.insert n
   if state.messages.hasErrors then
     for msg in state.messages.toList do IO.eprintln (← msg.toString)
@@ -295,6 +322,7 @@ unsafe def main (args : List String) : IO Unit := do
           unless existing.contains n do
             emit [("record", toJson "origin"), ("name", toJson n.toString),
               ("file", toJson file), ("line", toJson (0 : Nat)), ("endLine", toJson (0 : Nat)),
+              ("startByte", toJson (0 : Nat)), ("endByte", toJson (0 : Nat)),
               ("shape", toJson (← fingerprint input output ci)),
               ("uses", toJson (ci.getUsedConstantsAsSet.toList.map Name.toString))]
     | ["constants", modulesFile] =>

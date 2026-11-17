@@ -68,7 +68,7 @@ resolved attribute commands, and kernel shape. Other source commands compare the
 by the same content-and-sequence matcher used for BASE membership: file, enclosing
 namespace/section sequence, command kind and source digest, with an ordinal among identical
 commands in that scope. Parsed positions order the sequence but never enter matching identities.
-The original positional names remain audit keys. Moving an unchanged example past unrelated
+The pinned snapshot’s byte-span names serve as audit keys. Moving an unchanged example past unrelated
 declarations or changing an import header therefore preserves its progress; changing its source does not. A command containing multiple authored declarations is
 represented by those declarations, never counted again. Anonymous examples count in their
 piece's landed total and stop contributing to remaining-examples when their digest matches.
@@ -163,10 +163,12 @@ a local pass alone does not publish them.
 
 `--census-output <path>` exports the fresh snapshot census for inspection, never cached input.
 
-Ranges describe complete commands, rather than line slices used as implementation sources.
+Lean supplies half-open UTF-8 byte spans for complete commands. The census slices the original
+bytes and joins parsed commands to elaborated metadata by file and span. The line columns
+remain available for source citations and plan boundaries.
 A separate elaboration pass observes the local constant-map delta after every command, including
 zero-range helpers and opaque partial-definition implementations. Each declaration's note starts
-with its observed command identity (`file:start:end`). Authored declarations and single-emission
+with its observed command identity (`file:startByte:endByte`). Authored declarations and single-emission
 computational helpers move with their command; equal text at distinct
 source positions remains distinct. This includes body helpers whose dependencies are absent from an
 opaque declaration's signature. Shared realizations can be emitted by several importers. Their

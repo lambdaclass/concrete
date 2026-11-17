@@ -9,6 +9,21 @@ import shutil
 import tempfile
 
 
+def span_key(record):
+    return record['file'], record['startByte'], record['endByte']
+
+
+def span_index(records, kind):
+    index = {}
+    for record in records:
+        if record['record'] == kind:
+            key = span_key(record)
+            if key in index:
+                raise ValueError(f'duplicate {kind} span: {key}')
+            index[key] = record
+    return index
+
+
 def run(args, cwd, env):
     p = subprocess.run(args, cwd=cwd, env=env, text=True, capture_output=True)
     if p.returncode:
@@ -81,15 +96,22 @@ def _census(root, exporter, include_examples, regenerate_modules, validator=None
             ['lean', '--run', str(exporter), 'origins', modules[m], m, requested], root, env).splitlines())
         if m in regenerate_modules:
             records.append({'record':'command','file':modules[m], 'line':0,'endLine':0,
-                            'syntax':'module-realization','example':False})
-    identities = {(r['file'],r['exampleToken']):r['identity'] for r in records
-                  if r['record']=='example-identity'}
-    for c in parsed:
-        if c['record']=='command' and c['example']:
-            identity = identities.get((c['file'],c['exampleToken']))
+                            'startByte':0,'endByte':0,'syntax':'module-realization','example':False})
+    commands = span_index(records, 'command')
+    parsed_spans = {span_key(c) for c in parsed if c['record']=='command'}
+    resolved = span_index(records, 'resolved-command')
+    if resolved.keys() != parsed_spans:
+        raise ValueError('parsed and elaborated command spans differ: ' +
+                         str(sorted(resolved.keys() ^ parsed_spans)))
+    identities = span_index(records, 'example-identity')
+    for key, c in commands.items():
+        if c['example']:
+            identity = identities.pop(key, {}).get('identity')
             if not identity:
-                raise ValueError(f"missing elaborated example type identity: {c['file']}:{c['line']}")
+                raise ValueError(f'missing elaborated example type identity: {key}')
             c['exampleTypeIdentity'] = identity
+    if identities:
+        raise ValueError(f'unmatched example identities: {sorted(identities)}')
     if not include_examples:
         return records
     names = {d['name'] for d in original}
@@ -133,7 +155,8 @@ def _census(root, exporter, include_examples, regenerate_modules, validator=None
         if key in examples:
             c = examples.pop(key)
             records.append({'record':'example', 'file':c['file'], 'line':c['line'],
-                            'endLine':c['endLine'], 'uses':sorted(used(d['name'],set()))})
+                            'endLine':c['endLine'], 'startByte':c['startByte'],
+                            'endByte':c['endByte'], 'uses':sorted(used(d['name'],set()))})
     if examples:
         raise ValueError('instrumented examples absent from environment: '+str(sorted(examples)))
     return records
