@@ -437,6 +437,8 @@ and a fake hook that fails exactly when the checkout contains `BAD`. It covers:
   lands;
 - `ready.sh`: a failed review leg publishing `gates: fail` over an older clean verdict, and
   passing legs making a head ready;
+- the pre-push WIP tier accepts a clean off-HEAD commit and rejects a conflict in the
+  second advertised ref with both the checkout and its upstream clean;
 - a static check that nothing under `scripts/land` force-pushes main.
 
 ### Fetch sources for isolated gate runs

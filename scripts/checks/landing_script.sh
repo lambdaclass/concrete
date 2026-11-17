@@ -1427,6 +1427,41 @@ out="$(cd "$TMP/linked-wt" && printf 'refs/heads/main %s refs/heads/ci/twt %s\n'
   && ok "the pre-push hook refuses a gated push from a linked worktree (before any check runs)" || { no "hook in a linked worktree: exit $rc"; echo "$out" | sed 's/^/      /'; }
 out="$(cd "$TMP/linked-wt" && printf 'refs/heads/x %s refs/heads/wip/twt %s\n' "$mh" "$Z" | bash "$hook" origin "$TMP/origin.git" 2>&1)"; rc=$?
 [ "$rc" = 0 ] && has "$out" "wip/* backup push" && ok "a wip/* backup push from a linked worktree still passes (it runs nothing)" || { no "wip push from a worktree: exit $rc"; echo "$out" | sed 's/^/      /'; }
+
+echo "=== pre-push checks the refs Git advertises on stdin ==="
+# Keep HEAD and its upstream clean while advertising commits from a different branch.
+# Invoke the hook directly in the sandbox with its real wire format. No hook is installed
+# for this probe, and the linked-worktree guard keeps it from re-entering the root suite.
+(
+  set -e
+  cd "$TMP/linked-wt"
+  git switch -qc stdin-source
+  printf 'ordinary content\n' > stdin-control.txt
+  git add -- stdin-control.txt
+  git commit -qm "clean push input"
+  git branch stdin-clean
+  git rev-parse HEAD > "$TMP/stdin-clean"
+  printf '%s\n' '<<<<<<< planted' > stdin-control.txt
+  git add -- stdin-control.txt
+  git commit -qm "conflicted push input"
+  git rev-parse HEAD > "$TMP/stdin-conflicted"
+  git switch -qc stdin-checkout --track main
+) || exit 2
+clean="$(cat "$TMP/stdin-clean")"
+conflicted="$(cat "$TMP/stdin-conflicted")"
+stdin_hook() {
+  (cd "$TMP/linked-wt" && CONCRETE_SKIP_GATES=0 bash "$hook" origin "$TMP/origin.git")
+}
+printf 'refs/heads/stdin-clean %s refs/heads/wip/clean %s\n' "$clean" "$Z" > "$TMP/push-clean"
+cp "$TMP/push-clean" "$TMP/push-conflicted"
+printf 'refs/heads/stdin-source %s refs/heads/wip/conflicted %s\n' "$conflicted" "$Z" >> "$TMP/push-conflicted"
+out="$(stdin_hook < "$TMP/push-clean" 2>&1)"; rc=$?
+[ "$rc" = 0 ] && has "$out" "wip/* backup push (1 update(s)" \
+  && ok "a clean advertised commit away from HEAD passes" || no "clean stdin push: exit $rc, $out"
+out="$(stdin_hook < "$TMP/push-conflicted" 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "conflict markers in $conflicted" \
+  && ok "a conflict in the second advertised ref is refused despite a clean HEAD and upstream" || no "conflicted stdin push: exit $rc, $out"
+
 git worktree remove --force "$TMP/linked-wt"
 # hook off: not executable, missing, or some other hook that does not run the repository's.
 chmod -x "$TMP/nohooks/pre-push"

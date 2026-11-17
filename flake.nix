@@ -89,6 +89,7 @@
             gnumake
             git
             jq
+            shellcheck          # SC2318: dependent assignments in one local declaration
             xxd                # check_hexdump_differential.sh skips its format legs without it
             # perl for `shasum`: the checker identity hashes the Lean images with it
             # (Concrete/Proof/Replay.lean, sha256Files), and without it every receipt is withheld
