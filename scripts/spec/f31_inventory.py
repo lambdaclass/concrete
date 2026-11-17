@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""F31 migration tool; retire with both census tools and the summary when F31 closes.
+"""F31 migration tool; retire with the census tools and the summary when F31 closes.
 
 Regenerate full inventories into a caller-selected directory; compare only their compact summary.
 The source registries remain the owners. --update explicitly accepts a reviewed inventory change.
@@ -36,7 +36,7 @@ with tempfile.TemporaryDirectory(prefix='f31-inventory-') as temporary:
     decls = json.loads('\n'.join(declarations))
     (output / 'declarations.json').write_text(json.dumps(decls, indent=2, ensure_ascii=False) + '\n')
     surface = subprocess.run(['python3', '-I', 'scripts/spec/f31_surface.py', str(output / 'registry.txt')],
-                             check=True, text=True, capture_output=True)
+                             check=True, text=True, stdout=subprocess.PIPE)
     rows = json.loads(surface.stdout)
     (output / 'surface.json').write_text(surface.stdout)
     summary = dict(

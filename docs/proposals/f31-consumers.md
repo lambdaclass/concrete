@@ -57,7 +57,7 @@ There is no independent bridge implementation of arithmetic, range, representati
 
 [f31-summary.json](f31-summary.json) records counts and SHA-256 digests of the generated declaration
 and surface inventories. Full JSON is generated into scratch on demand, never maintained as a second
-copy of live registries. The spec-job gate `scripts/checks/compiler/f31_inventory.sh` runs both tools (including
+copy of live registries. The spec-job gate `scripts/checks/compiler/f31_inventory.sh` runs the census tools (including
 Lean elaboration and Python compilation), regenerates all entries, and compares the summary exactly.
 A changed inventoried entry or dependency fails until inspected and accepted.
 
@@ -102,15 +102,16 @@ definition (checked derived views allowed)"; this preparation chooses no new lan
 ## Examples, premises, goldens and checks
 
 The generated surface inventory covers anonymous examples across **all** library modules, including
-modules with no named dependent declaration. Standalone Lean scripts outside `scripts/spec/` are
-elaborated in private temporary copies and their local declarations listed. Site and rule tools have
-separate check entries; the migration tools have the explicit retirement obligation below.
+modules with no named dependent declaration. Lean's frontend records every written command in
+standalone scripts under `scripts/`, including imports, directives and anonymous examples. Each
+command row has its source line, column and text. Persistent declarations from the same elaboration
+remain listed at the file entry point. The gate appends an anonymous example to a scratch copy of
+`slice0_bir.lean` and requires exactly one new command row and no declaration changes.
 Proof-tool Python generators are explicit obligations, including `local_identity.py` and its synthetic
-control modules; `local_identity.lean` is elaborated and inventoried too. Probe line numbers identify
-file entry points, not declaration ranges.
+control modules. Site and rule tools also have check entries.
 
-The companion has **1,676 entries**: 1,300 anonymous examples, 187 probe declarations, two
-evaluation-only probes, nine premises, 101 headlines, 32 tests, 30 checks, two goldens, eight
+The companion has **1,800 entries**: 1,300 library anonymous examples, 88 standalone commands,
+225 probe declarations, nine premises, 101 headlines, 32 tests, 30 checks, two goldens, eight
 integration files and five proof-tool generators. Premises and headlines are read through the owning
 Lean registry definitions, with no source regex or duplicated list. All 14 bridge proofs are included.
 F31 must preserve trust classes, report distinctions and diagnostic controls.
@@ -142,7 +143,7 @@ structurally as tagged string or numeric components, including private scopes, w
 printed names on dots. Surface subjects remain string fragments joined without a separator.
 
 These are F31 migration tools, not semantic drivers. F31 starts by regenerating the full inventory
-on then-current main and reconciling every entry. Its closure must retire the three `f31_*` tools,
+on then-current main and reconciling every entry. Its closure must retire the four `f31_*` tools,
 the inventory gate, its CI spec-job step, this migration document and the summary atomically with
 removal of the old representation and the bridge. Do not keep a stale seed inventory after F31.
 The source registries remain the sole owners; the checked summary is only a derived drift alarm.

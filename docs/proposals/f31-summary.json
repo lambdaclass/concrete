@@ -17,9 +17,9 @@
   },
   "sha256": {
     "declarations.json": "0d50450cadf8ef4092140492ecc52fb97aaaf1123d10237aa00c3fede22a3fce",
-    "surface.json": "240d7bed7f4a47010bf06447351d3cbc2df420175f659ffa4997855b113c84a3"
+    "surface.json": "a48bc5c55e46078c97c10034842499527bc12f2a32de60edd8d22fcf8e1fd12c"
   },
-  "surface": 1676,
+  "surface": 1800,
   "surface_kinds": {
     "anonymous-example": 1300,
     "check": 30,
@@ -27,8 +27,8 @@
     "headline": 101,
     "integration": 8,
     "premise": 9,
-    "probe-declaration": 187,
-    "probe-evaluation": 2,
+    "probe-command": 88,
+    "probe-declaration": 225,
     "proof-tool": 5,
     "test": 32
   }

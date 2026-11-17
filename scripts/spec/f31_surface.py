@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Supplement the elaborated F31 census with erased examples and non-library consumers.
 
-F31 migration tool: retire with the manifest and companion tool when F31 closes.
+F31 migration tool: retire with the manifest and companion tools when F31 closes.
 Run from the repository root after f31_consumers.lean. Writes deterministic JSON to stdout.
 This is a conservative qualification surface: inclusion never asserts a semantic change is allowed.
 """
@@ -18,7 +18,6 @@ from lean_lex import lex
 rows = set()
 
 def add(kind, path, line, subject):
-    assert "\t" not in subject and "\n" not in subject
     rows.add((kind, str(path), line, subject))
 
 # Examples are erased from environments: scan every library module, even those with no named consumer.
@@ -28,29 +27,38 @@ for path in sorted(list(Path("ConcreteSpec").rglob("*.lean")) + list(Path("Concr
         line = code.count("\n", 0, match.end()) + 1
         add("anonymous-example", path, line, "example")
 
-# These commands are elaborated by gates, outside both library import closures. Include every
-# command, not only text mentioning IntTy: inferred constructor tags are common in probes.
-probe_suffix = r"""
-#eval show Lean.CoreM Unit from do
-  let env ← Lean.getEnv
-  for (n, _) in env.constants.map₂.toList do
-    if (env.getModuleIdxFor? n).isNone then
-      IO.println s!"F31-PROBE\t{n}"
-"""
-for path in sorted(Path("scripts").rglob("*.lean")):
-    if path.parts[1] == "spec":
-        continue
-    with tempfile.TemporaryDirectory(prefix="f31-probe-") as directory:
-        probe = Path(directory) / "Inventory.lean"
-        probe.write_text("import Lean\n" + path.read_text() + probe_suffix)
-        result = subprocess.run(["lake", "env", "lean", str(probe)],
-                                check=True, text=True, capture_output=True)
-    names = [line.split("\t", 1)[1] for line in result.stdout.splitlines()
-             if line.startswith("F31-PROBE\t")]
-    if not names:
-        add("probe-evaluation", path, 1, "elaborated; no persistent declarations")
-    for name in names:
-        add("probe-declaration", path, 1, name)
+def probe_rows(path, source, output):
+    result = subprocess.run(
+        ["lake", "env", "lean", "--run", "scripts/spec/f31_probes.lean",
+         str(path), str(source), str(output)],
+        text=True, capture_output=True,
+    )
+    if result.returncode:
+        raise SystemExit(f"F31: probe {path} failed\n{result.stdout}{result.stderr}")
+    return [(kind, line, subject) for (kind, line), subject in json.loads(output.read_text())]
+
+
+# Elaborate each standalone script as written. The frontend captures commands that leave
+# no persistent declaration, including examples, directives and commands that change scope.
+control_probe = Path("scripts/checks/compiler/slice0_bir.lean")
+with tempfile.TemporaryDirectory(prefix="f31-probe-") as directory:
+    output = Path(directory) / "probe.json"
+    for path in sorted(Path("scripts").rglob("*.lean")):
+        probe = probe_rows(path, path, output)
+        for kind, line, subject in probe:
+            add(kind, path, line, subject)
+
+    # Plant an anonymous example in a scratch copy of an existing probe. Preserve the
+    # logical filename and require exactly the new command row, with no declaration delta.
+    example = "example : True := True.intro"
+    prefix = control_probe.read_text().rstrip("\n") + "\n\n"
+    planted = Path(directory) / control_probe.name
+    planted.write_text(prefix + example + "\n")
+    expected = ("probe-command", prefix.count("\n") + 1, f"0: {example}")
+    baseline = [(kind, line, subject) for kind, path, line, subject in rows
+                if path == str(control_probe)]
+    if sorted(probe_rows(control_probe, planted, output)) != sorted(baseline + [expected]):
+        raise SystemExit("F31: planted standalone example did not add exactly one command row")
 
 for text in Path(sys.argv[1]).read_text().splitlines():
     if text.startswith("F31-REGISTRY\t"):
