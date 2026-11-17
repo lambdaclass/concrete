@@ -706,6 +706,7 @@ the same bytes under docs/decisions.md#foundation-q10. -/
 structure SourceText where
   bytes : ConcreteSpec.Numbers
   byte_lt : ∀ byte ∈ bytes, byte < 256
+  deriving DecidableEq, Repr
 
 /-- Store each input byte as its exact numeric value, preserving order. -/
 def SourceText.ofBytes (bytes : List UInt8) : SourceText where
@@ -735,13 +736,13 @@ def SourceText.push (source : SourceText) (byte : UInt8) : SourceText where
 
 /-- The 1-based line at a byte offset: one plus the number of newline bytes before it. -/
 def SourceText.lineAt (source : SourceText) (offset : Nat) : Nat :=
-  ((source.bytes.take offset).map UInt8.ofNat).count 10 + 1
+  (source.bytes.take offset).count 10 + 1
 
 /-- The 1-based byte column at an offset: one plus the number of bytes since the last newline.
-Every byte advances one column, including tab (`9`) and each byte of a multibyte sequence
+Every non-newline byte advances one column, including tab (`9`) and each byte of a multibyte sequence
 (docs/decisions.md#foundation-q10). -/
 def SourceText.columnAt (source : SourceText) (offset : Nat) : Nat :=
-  (((source.bytes.take offset).map UInt8.ofNat).reverse.takeWhile (fun byte => byte != 10)).length + 1
+  ((source.bytes.take offset).reverse.takeWhile (fun byte => byte != 10)).length + 1
 
 /-- A slice of the language, in the agreed slice order: 0 to 28, concurrency last (2026-11-07). -/
 structure SliceId where

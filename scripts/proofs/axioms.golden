@@ -2884,20 +2884,18 @@ ConcreteSpec.Core.SliceId.mk.injEq	propext
 ConcreteSpec.Core.SliceId.mk.sizeOf_spec	
 ConcreteSpec.Core.SourceReference.eq_1	
 ConcreteSpec.Core.SourceText.byte_lt	
-ConcreteSpec.Core.SourceText.columnAt.eq_1	Classical.choice Quot.sound propext
-ConcreteSpec.Core.SourceText.columnAt_append	Classical.choice Quot.sound propext
-ConcreteSpec.Core.SourceText.columnAt_append._simp_1_2	propext
-ConcreteSpec.Core.SourceText.columnAt_append._simp_1_3	propext
-ConcreteSpec.Core.SourceText.columnAt_append_newline	Classical.choice Quot.sound propext
-ConcreteSpec.Core.SourceText.columnAt_append_tab	Classical.choice Quot.sound propext
+ConcreteSpec.Core.SourceText.columnAt.eq_1	
+ConcreteSpec.Core.SourceText.columnAt_append	Quot.sound propext
+ConcreteSpec.Core.SourceText.columnAt_append_newline	Quot.sound propext
+ConcreteSpec.Core.SourceText.columnAt_append_tab	Quot.sound propext
+ConcreteSpec.Core.SourceText.columnAt_zero	
 ConcreteSpec.Core.SourceText.length.eq_1	
 ConcreteSpec.Core.SourceText.length_toBytes	propext
-ConcreteSpec.Core.SourceText.lineAt.eq_1	Classical.choice Quot.sound propext
-ConcreteSpec.Core.SourceText.lineAt_append	Classical.choice Quot.sound propext
-ConcreteSpec.Core.SourceText.lineAt_append._simp_1_2	propext
-ConcreteSpec.Core.SourceText.lineAt_append._simp_1_3	propext
-ConcreteSpec.Core.SourceText.lineAt_append_newline	Classical.choice Quot.sound propext
-ConcreteSpec.Core.SourceText.lineAt_append_other	Classical.choice Quot.sound propext
+ConcreteSpec.Core.SourceText.lineAt.eq_1	
+ConcreteSpec.Core.SourceText.lineAt_append	Quot.sound propext
+ConcreteSpec.Core.SourceText.lineAt_append_newline	Quot.sound propext
+ConcreteSpec.Core.SourceText.lineAt_append_other	Quot.sound propext
+ConcreteSpec.Core.SourceText.lineAt_zero	
 ConcreteSpec.Core.SourceText.mk.congr_simp	
 ConcreteSpec.Core.SourceText.mk.inj	
 ConcreteSpec.Core.SourceText.mk.injEq	propext
@@ -3382,6 +3380,9 @@ ConcreteSpec.Core.instDecidableEqSiteId.decEq._proof_1
 ConcreteSpec.Core.instDecidableEqSiteId.decEq._proof_2	
 ConcreteSpec.Core.instDecidableEqSliceId.decEq._proof_1	
 ConcreteSpec.Core.instDecidableEqSliceId.decEq._proof_2	
+ConcreteSpec.Core.instDecidableEqSourceText.decEq._proof_1	
+ConcreteSpec.Core.instDecidableEqSourceText.decEq._proof_2	
+ConcreteSpec.Core.instDecidableEqSourceText.decEq._proof_3	
 ConcreteSpec.Core.instDecidableEqSpecVersion.decEq._proof_1	
 ConcreteSpec.Core.instDecidableEqSpecVersion.decEq._proof_2	
 ConcreteSpec.Core.instDecidableEqSpecVersion.decEq._proof_3	

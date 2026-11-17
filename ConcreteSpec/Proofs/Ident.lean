@@ -1047,15 +1047,24 @@ theorem SourceText.take_toBytes (source : SourceText) (offset : Nat) :
   simp [SourceText.push, SourceText.toBytes]
 
 /-- Law (subject `ConcreteSpec.Core.SourceText.lineAt`).
+The line at byte offset zero is one. -/
+theorem SourceText.lineAt_zero (source : SourceText) : source.lineAt 0 = 1 := rfl
+
+/-- Law (subject `ConcreteSpec.Core.SourceText.columnAt`).
+The column at byte offset zero is one. -/
+theorem SourceText.columnAt_zero (source : SourceText) : source.columnAt 0 = 1 := rfl
+
+/-- Law (subject `ConcreteSpec.Core.SourceText.lineAt`).
 Appending a byte updates the source line count by its actual newline step. -/
 theorem SourceText.lineAt_append (source : SourceText) (byte : UInt8) :
     (source.push byte).lineAt (source.length + 1) = source.lineAt source.length + if byte = 10 then 1 else 0 := by
-  have whole : (source.toBytes ++ [byte]).take (source.toBytes.length + 1) = source.toBytes ++ [byte] :=
+  have whole : (source.bytes ++ [byte.toNat]).take (source.bytes.length + 1) =
+      source.bytes ++ [byte.toNat] :=
     List.take_of_length_le (by simp)
-  simp only [SourceText.lineAt, ← SourceText.take_toBytes, SourceText.toBytes_push,
-    ← SourceText.length_toBytes, List.take_length]
-  rw [whole]
-  by_cases newline : byte = 10 <;> simp [newline]
+  have newline_iff : byte.toNat = 10 ↔ byte = 10 := by
+    simpa using (UInt8.toNat_inj (a := byte) (b := 10))
+  simp only [SourceText.lineAt, SourceText.push, whole, SourceText.length, List.take_length]
+  by_cases newline : byte = 10 <;> simp [newline_iff, newline]
 
 /-- Law (subject `ConcreteSpec.Core.SourceText.lineAt`).
 A newline starts a new line. -/
@@ -1074,12 +1083,13 @@ Appending a byte updates the byte column: newline resets to one, every other byt
 theorem SourceText.columnAt_append (source : SourceText) (byte : UInt8) :
     (source.push byte).columnAt (source.length + 1) =
       if byte = 10 then 1 else source.columnAt source.length + 1 := by
-  have whole : (source.toBytes ++ [byte]).take (source.toBytes.length + 1) = source.toBytes ++ [byte] :=
+  have whole : (source.bytes ++ [byte.toNat]).take (source.bytes.length + 1) =
+      source.bytes ++ [byte.toNat] :=
     List.take_of_length_le (by simp)
-  simp only [SourceText.columnAt, ← SourceText.take_toBytes, SourceText.toBytes_push,
-    ← SourceText.length_toBytes, List.take_length]
-  rw [whole]
-  by_cases newline : byte = 10 <;> simp [newline]
+  have newline_iff : byte.toNat = 10 ↔ byte = 10 := by
+    simpa using (UInt8.toNat_inj (a := byte) (b := 10))
+  simp only [SourceText.columnAt, SourceText.push, whole, SourceText.length, List.take_length]
+  by_cases newline : byte = 10 <;> simp [newline_iff, newline]
 
 /-- Law (subject `ConcreteSpec.Core.SourceText.columnAt`).
 A tab is one byte and therefore advances exactly one column. -/
@@ -2056,6 +2066,28 @@ def aTabNewline : SourceText := aTab.push 10
 def utf8Prefix : SourceText := SourceText.ofBytes [195]
 def utf8Source : SourceText := SourceText.ofBytes [195, 169]
 def otherTabSource : SourceText := SourceText.ofBytes [10, 97, 98]
+
+example : aSource ≠ aTab := by decide
+
+/-- Mutant line function with a zero-based origin. -/
+def zeroBasedLine (source : SourceText) (offset : Nat) : Nat :=
+  (source.bytes.take offset).count 10
+
+/-- Instance (law `ConcreteSpec.Core.SourceText.lineAt_zero`, case `ConcreteSpec.Core.Vacuity.aSource`). -/
+example : aSource.lineAt 0 = 1 := SourceText.lineAt_zero aSource
+
+/-- Planted (law `ConcreteSpec.Core.SourceText.lineAt_zero`, case `ConcreteSpec.Core.Vacuity.aSource`, subject `ConcreteSpec.Core.SourceText.lineAt`, mutant `ConcreteSpec.Core.Vacuity.zeroBasedLine`). -/
+example : ¬ (zeroBasedLine aSource 0 = 1) := by decide
+
+/-- Mutant column function with a zero-based origin. -/
+def zeroBasedColumn (source : SourceText) (offset : Nat) : Nat :=
+  ((source.bytes.take offset).reverse.takeWhile (fun byte => byte != 10)).length
+
+/-- Instance (law `ConcreteSpec.Core.SourceText.columnAt_zero`, case `ConcreteSpec.Core.Vacuity.aSource`). -/
+example : aSource.columnAt 0 = 1 := SourceText.columnAt_zero aSource
+
+/-- Planted (law `ConcreteSpec.Core.SourceText.columnAt_zero`, case `ConcreteSpec.Core.Vacuity.aSource`, subject `ConcreteSpec.Core.SourceText.columnAt`, mutant `ConcreteSpec.Core.Vacuity.zeroBasedColumn`). -/
+example : ¬ (zeroBasedColumn aSource 0 = 1) := by decide
 
 /-- Mutant line function that always returns line 1. -/
 def constantLine (_source : SourceText) (_offset : Nat) : Nat := 1
