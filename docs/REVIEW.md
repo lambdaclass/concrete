@@ -91,18 +91,31 @@ well-formed diff. `scripts/review/split_diff.py` does the splitting.
 The prompt describes the repository as a compiler and asks for correctness
 findings: wrong behaviour, logic errors, regressions, unhandled cases, tests that
 do not check what they claim, and docs that contradict the code. It runs
-`codex exec --sandbox read-only` from the repository root, with the piece on
-stdin, so the reviewer can open other files for context but cannot change them.
-It runs with `GIT_OPTIONAL_LOCKS=0`: the sandbox does not stop git from taking the
-worktree's `index.lock` for an index refresh, and a reviewer command stopped
-mid-refresh left that lock behind (bug 209).
+`scripts/review/invoke.sh`, the single Codex review runner, with the piece on
+stdin. Each invocation extracts a fresh `git archive` of the exact reviewed SHA
+into a temporary directory, verifies paths, bytes, executable bits and symlink
+targets against Git blobs, and removes it on exit. Unsupported gitlinks or archive
+attributes that omit or rewrite content fail closed. Codex runs there with
+`--sandbox danger-full-access --skip-git-repo-check --json`; the prompt requires
+read-only review. This disposable copy keeps ordinary reviewer writes away from
+the caller, but is not a security boundary for arbitrary code with host access.
+The owner authorized unsandboxed Codex on 2026-11-02, "run codex without sandbox",
+and 2026-11-08, "you can use codex without sandbox it's okay".
+`GIT_OPTIONAL_LOCKS=0` remains defense in depth; the copy has no Git index, retiring
+the caller's bug-209 index.lock hazard independently of that setting.
+
+Every invocation must produce a completed successful command event reporting the
+expected SHA-256 digest of a repository file. Missing read evidence, startup or
+sandbox failure diagnostics, or nonzero execution exit is an error (exit 2),
+never clean or findings; no review note is recorded and no retry hides the error.
+The exact prompt, final output and raw JSON event stream are saved beside the
+round report in `.review/<sha>-<round>-invocation-<n>.*` for all invocations.
 
 The reply must end with a line that is exactly `VERDICT: clean` or
 `VERDICT: findings`. Markdown emphasis around it is tolerated; anything after it
 is not. A reply without that line is treated as no answer, never as clean.
 
-**Refusals.** A piece that comes back refused, with no verdict line, or with a
-reviewer error is retried **once**: the piece is halved and each half is sent
+**Refusals.** A piece that comes back refused, with no verdict line is retried **once**: the piece is halved and each half is sent
 with a more neutral prompt that leaves out the project framing. If any half
 fails again, the piece is `blocked` and the script moves on. It does not loop.
 Refusal text is matched only when the reply has no verdict line, so a real

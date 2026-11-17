@@ -52,22 +52,24 @@ EOF
 FAKE_LOG="$T/fake"
 mkdir -p "$FAKE_LOG" "$T/bin"
 export FAKE_LOG
+export FAKE_VERIFIER="$ROOT_DIR/scripts/review/read_evidence.py"
 # Bug 209's legs prove review.sh OVERRIDES the caller's setting: the gate runs with optional locks
 # explicitly on, so a value inherited from whoever launched it cannot satisfy them.
 export GIT_OPTIONAL_LOCKS=1
 cat >"$T/bin/codex" <<'EOF'
 #!/usr/bin/env bash
-# Fake reviewer: `codex exec --sandbox read-only ... -o <file> <prompt>`, diff on stdin.
+# Fake reviewer: `codex exec --sandbox danger-full-access ... -o <file> <prompt>`, diff on stdin.
 set -uo pipefail
 [ "${1:-}" = exec ] || { echo "fake codex: expected exec" >&2; exit 64; }
 shift
-out="" prompt="" sandbox=""
+out="" prompt="" sandbox="" directory=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -o|--output-last-message) out="$2"; shift 2 ;;
     -s|--sandbox) sandbox="$2"; shift 2 ;;
-    -C|--cd|--color|-m|--model|-c) shift 2 ;;
-    --ephemeral|--skip-git-repo-check) shift ;;
+    -C|--cd) directory="$2"; shift 2 ;;
+    --color|-m|--model|-c) shift 2 ;;
+    --json|--ephemeral|--skip-git-repo-check) shift ;;
     *) prompt="$1"; shift ;;
   esac
 done
@@ -81,6 +83,22 @@ echo "$n $kind sandbox=$sandbox bytes=$(wc -c <"$FAKE_LOG/stdin.$n" | tr -d ' ')
 echo "$n optional_locks=${GIT_OPTIONAL_LOCKS:-unset}" >>"$FAKE_LOG/locks"
 added="$(grep '^+' "$FAKE_LOG/stdin.$n" || true)"
 has() { grep -q "$1" <<<"$added"; }
+# Read the actual private tree, execute the requested digest probe, and emit
+# the same successful command event schema as codex --json.
+printf '%s' "$directory" >"$FAKE_LOG/directory.$n"
+python3 "$FAKE_VERIFIER" tree "$FAKE_SOURCE" "$(git -C "$FAKE_SOURCE" rev-parse HEAD)" "$directory" >"$FAKE_LOG/identity.$n" || exit 2
+if ! has MARK_NO_READ; then
+  probe="$(printf '%s\n' "$prompt" | sed -n '/^python3 -c /p')"
+  digest="$(cd "$directory" && eval "$probe")"
+  python3 -c 'import json,sys; print(json.dumps({"type":"item.completed", "item":{"type":"command_execution", "exit_code":0,"aggregated_output":sys.argv[1]}}))' "$digest"
+fi
+if has MARK_WRITE; then
+  printf 'reviewer mutation\n' >"$directory/README.md"
+  touch "$directory/reviewer-created"
+fi
+if has MARK_SANDBOX; then
+  printf 'Repository reads failed because the execution sandbox could not start\n' >&2
+fi
 reply() { printf '%s\n' "$1" >"$out"; }
 if has MARK_REFUSE_ALWAYS || { has MARK_REFUSE_STANDARD && [ "$kind" = standard ]; }; then
   reply "I'm sorry, but I can't help with that request because it was flagged by our cybersecurity policy."
@@ -115,6 +133,7 @@ reset_fake() { rm -f "$FAKE_LOG"/*; }
 git init -q --bare "$T/origin.git"
 git clone -q "$T/origin.git" "$T/w" 2>/dev/null
 W="$T/w"
+export FAKE_SOURCE="$W"
 g() { git -C "$W" "$@"; }
 commit_file() { # commit_file <path> <content> <message>
   mkdir -p "$(dirname "$W/$1")"
@@ -135,7 +154,7 @@ commit_file old.txt "MARK_FINDING in the first change" "first change"
 review >"$T/out1" 2>&1; rc=$?
 check "findings exit 1 (got $rc)" test "$rc" -eq 1
 check "one reviewer call" test "$(calls)" -eq 1
-check "reviewer runs with --sandbox read-only" grep -q "sandbox=read-only" "$FAKE_LOG/calls"
+check "reviewer runs with --sandbox danger-full-access" grep -q "sandbox=danger-full-access" "$FAKE_LOG/calls"
 # Bug 209: every reviewer call runs without git's optional locks, so a reviewer command stopped
 # mid-`git status` cannot leave the caller's worktree with a stale index.lock.
 check "reviewer runs with GIT_OPTIONAL_LOCKS=0" grep -q " optional_locks=0$" "$FAKE_LOG/locks"
@@ -443,7 +462,39 @@ parse_case() { # parse_case <marker> <want-exit> <want-verdict> <label>
 parse_case MARK_BOLD 0 clean "markdown-emphasised verdict line is accepted"
 parse_case MARK_TRAILING 5 blocked "text after the verdict line is not a verdict"
 parse_case MARK_NOVERDICT 5 blocked "a reply with no verdict line is blocked, not clean"
-parse_case MARK_ERROR 5 blocked "a reviewer that exits nonzero is blocked"
+parse_case MARK_ERROR 2 "" "a reviewer that exits nonzero is an error without a note"
+parse_case MARK_SANDBOX 2 "" "sandbox failure overrides a clean verdict and successful probe"
+parse_case MARK_NO_READ 2 "" "missing repository-read evidence is an error"
+parse_case MARK_WRITE 0 clean "reviewer writes are confined to the private archive"
+check "caller README unchanged" test "$(cat "$W/README.md")" = base
+check "caller has no reviewer-created file" test ! -e "$W/reviewer-created"
+check "private archive removed on exit" test ! -e "$(cat "$FAKE_LOG/directory.1")"
+check "exact prompt retained" cmp "$FAKE_LOG/prompt.1" "$W/.review/$(g rev-parse HEAD)-1-invocation-1.prompt.txt"
+
+# A dirty tracked file and an untracked file must never enter the reviewed tree.
+reset_fake
+g checkout -q main && g checkout -qb exact-tree
+commit_file exact.txt exact exact
+printf '\000\377binary\n' >"$W/binary"
+printf '#!/bin/sh\nexit 0\n' >"$W/executable"
+chmod +x "$W/executable"
+ln -s exact.txt "$W/link"
+g add binary executable link && g commit -qm 'archive entry types'
+printf dirty >"$W/README.md"
+printf untracked >"$W/untracked"
+review >"$T/exact-review.log" 2>&1; rc=$?
+check "review invocation sees exact SHA with dirty caller" test "$rc" -eq 0
+check "private invocation tree identity verified" test -s "$FAKE_LOG/identity.1"
+# Independently compare archive verifier against the commit, including binary,
+# executable and symlink paths, then plant a byte mismatch.
+mkdir "$T/exact"
+g archive HEAD >"$T/exact.tar"
+tar -xf "$T/exact.tar" -C "$T/exact"
+check "copy matches committed SHA despite dirty caller" python3 "$ROOT_DIR/scripts/review/read_evidence.py" tree "$W" "$(g rev-parse HEAD)" "$T/exact"
+printf altered >"$T/exact/README.md"
+if python3 "$ROOT_DIR/scripts/review/read_evidence.py" tree "$W" "$(g rev-parse HEAD)" "$T/exact" >/dev/null 2>&1; then no "altered archive refused"; else ok "altered archive refused"; fi
+g restore README.md
+rm "$W/untracked"
 parse_case MARK_MENTION_FILTER 0 clean "a real review that mentions content filters is not a refusal"
 
 echo "=== content-filter refusal: one neutral retry on smaller pieces ==="

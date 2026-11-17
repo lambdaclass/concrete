@@ -7,14 +7,11 @@ Review this branch against: $ARGUMENTS (`origin/main` when empty; written `<base
 
 Rules: [AGENTS.md](../../AGENTS.md) ("Review").
 
-**Dependency.** `scripts/review/review.sh` is being built on its own branch. Read its usage header
-before the first call and follow it; it owns the prompt, the round count and the delta between
-rounds. Until it is on your base, run the equivalent by hand:
-
-```sh
-git diff <base>...HEAD | GIT_OPTIONAL_LOCKS=0 codex exec --sandbox read-only "$(cat .claude/codex-review-prompt.md)"   # round 1
-git diff <sha reviewed last round>..HEAD | GIT_OPTIONAL_LOCKS=0 codex exec --sandbox read-only "<same prompt; say it is a delta>"   # rounds 2-5
-```
+Use `scripts/review/review.sh`; read its usage header before the first call.
+It owns the prompt, round count and delta between rounds. Its shared runner uses
+an exact-SHA private archive and owner-authorized `--sandbox danger-full-access`,
+requires repository-read evidence, and preserves the exact prompt and raw output.
+Do not invoke Codex directly against a live checkout. See [REVIEW.md](../../docs/REVIEW.md).
 
 The prompt is neutral: it states what the change claims and asks Codex to refute it. Do not tell
 Codex what you believe is correct.
@@ -26,9 +23,8 @@ Codex what you believe is correct.
 3. **Rounds 2 to 5** see only the delta since the last reviewed SHA, plus the open findings.
 4. Stop when a round reports no remaining findings, or after round 5. Never exceed 5 rounds; list
    whatever is still open as follow-ups in the report and, when it matters, in the record or roadmap.
-5. Always run Codex with `GIT_OPTIONAL_LOCKS=0` (bug 209): its sandboxed `git status` otherwise
-   takes the worktree's `index.lock`, and a command stopped mid-refresh leaves it behind. If a lock
-   is still found, remove it only when no process owns it.
+5. The runner keeps `GIT_OPTIONAL_LOCKS=0` as defense in depth. Its archive has no
+   Git index; the caller's index.lock is no longer exposed (bug 209).
 
 Report: the rounds run, each round's findings with the fix commit or the rejection reason, the
 final verdict, and the head SHA reviewed.

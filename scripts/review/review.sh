@@ -274,7 +274,7 @@ prompt_for() { # prompt_for <standard|neutral> <piece label> <group> <paths>
   [ -n "$REVIEWED_SHA" ] && [ "$FULL_REVIEW" = 0 ] && scope="$SCOPE_DELTA"
   if [ "$1" = standard ]; then
     cat <<EOF
-You are reviewing a patch to Concrete, a compiler for a small systems programming language. The compiler is written in Lean 4; the repository also holds its standard library, test programs, test scripts and documentation. The repository is checked out read-only in the working directory, and you may open any file in it for context.
+You are reviewing a patch to Concrete, a compiler for a small systems programming language. The compiler is written in Lean 4; the repository also holds its standard library, test programs, test scripts and documentation. Read repository files in the working directory for context; this is a read-only review.
 
 This is review round $ROUND. $scope
 This is $2 (file group: $3; files: $4).
@@ -318,12 +318,16 @@ run_one() {
   RUN_N=$((RUN_N + 1))
   local out="$WORK/out.$RUN_N.txt" log="$WORK/log.$RUN_N.txt"
   : >"$out"
-  # GIT_OPTIONAL_LOCKS=0 (bug 209): the reviewer runs git in the caller's worktree, and its sandbox
-  # does not stop `git status` from taking .git's index.lock to refresh the index. A command it
-  # stops mid-refresh left that lock behind, 0 bytes, and the next commit in the worktree failed.
-  # Without optional locks a status reads the index and writes nothing.
-  GIT_OPTIONAL_LOCKS=0 "$CODEX_BIN" exec --sandbox read-only --ephemeral --color never -C "$ROOT" -o "$out" \
-    "$(prompt_for "$kind" "$label" "$group" "$paths")" <"$piece" >"$log" 2>&1 || rc=$?
+  local prompt="$RAW_DIR/$HEAD_SHA-$ROUND-invocation-$RUN_N.prompt.txt"
+  local evidence="$RAW_DIR/$HEAD_SHA-$ROUND-invocation-$RUN_N"
+  prompt_for "$kind" "$label" "$group" "$paths" >"$prompt"
+  bash "$SCRIPT_DIR/invoke.sh" "$ROOT" "$HEAD_SHA" "$prompt" "$piece" "$out" "$log" 2>>"$log" || rc=$?
+  cp "$out" "$evidence.output.txt"
+  cp "$log" "$evidence.events.jsonl"
+  if [ "$rc" -ne 0 ]; then
+    { echo; echo "## $label: error (invocation $RUN_N)"; cat "$out" "$log"; } >>"$RAW"
+    die "reviewer execution or repository-read evidence failed; see $evidence.* (no note recorded)"
+  fi
   msg="$(cat "$out")"
   [ -n "$msg" ] || [ "$rc" -ne 0 ] || msg="$(cat "$log")"
   LAST_BODY="$msg"
