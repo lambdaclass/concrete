@@ -3289,11 +3289,7 @@ okay with your decisions
     Accept other Unicode unchanged, with exact-scalar identity and no normalization?
     No verified approval settles these. The owner-approved held plan at L144552,
     2026-11-11T13:33:37.630Z ("ok go ahead with" the pasted plan), expressly keeps
-    backslashes and Unicode waiting for the owner. **Answered 2026-11-16 and
-    2026-11-17:** the [file-path decision](#decided-2026-11-16-file-paths) settles
-    these historical authority gaps with ASCII-only paths and no rewriting.
-    The [file-name decision](#decided-2026-11-17-file-names) closes F03p Q1, Q2
-    and Q6. See ISS-0068 for the remaining implementation and dependent evidence.
+    backslashes and Unicode waiting for the owner.
   - Classification: the taxonomy was held here because L125750 reported tagging as
     information, not a proposal for approval. **Answered 2026-11-13:** see the
     [proof-label convention](#decided-2026-11-13-proof-labels). The `(approved: ...)`
@@ -3753,9 +3749,6 @@ agree, mixed, cap. yes to round 18
   This settles the path choices summarized above (ISS-0068) and authorizes that
   round 18 within its stated scope. It does not claim implementation or complete
   path validation; details beyond the supplied question remain unsettled.
-  The [November 17 file-name decision](#decided-2026-11-17-file-names) settles
-  the character whitelist and internal dots, the exact reserved-name matcher,
-  and exact file/directory prefix conflicts.
 
 - <a id="decided-2026-11-16-accounting-validator"></a>**Accounting validator:
   owner replies and coordinator action (2026-11-16).**
@@ -3824,80 +3817,6 @@ maybe we can remove secret and add it later
   [information-flow entry](#decided-project-infoflow-2026-11-06), whose history is
   retained. This record does not implement the spec change or choose a future
   wiping policy.
-
-- <a id="decided-2026-11-17-proposals-in-lean"></a>**Design proposals and Lean rule
-  registration (2026-11-17).**
-  Status: decided
-  Source: owner
-
-  Provenance: verbatim owner replies relayed by the coordinator from the owner
-  session, recorded 2026-11-17 under the [recording rule](#decided-project-recording).
-  The coordinator asked whether to keep design proposal files off main and give
-  them to writers only as instructions, with decisions living only in the Lean
-  spec. Owner context, verbatim:
-
-~~~text
-wait but the decisions should be in the spec
-~~~
-
-  The coordinator recommended keeping proposals off main, registering one rule
-  per distinct refusal (per check, with no composite rule per entry point), and
-  repairing the inventory landing. Owner reply, verbatim:
-
-~~~text
-ok yes
-~~~
-
-  The Lean spec carries the normative decisions. The files
-  `docs/proposals/ISS-0047-SITE-TABLE-OBLIGATIONS.md`,
-  `docs/proposals/ISS-0050-OBLIGATION-TABLE-SEARCH.md`, and
-  `docs/proposals/F03P-SOURCE-PATHS.md` stay on their WIP branches as writer briefs.
-  ISS-0084 references the [site-table obligations brief](https://github.com/lambdaclass/concrete/blob/576f69780bd5ab16d9249c4991e7383ff5124d3e/docs/proposals/ISS-0047-SITE-TABLE-OBLIGATIONS.md)
-  from `origin/wip/spec-redesign-0047-0050` at commit
-  `576f69780bd5ab16d9249c4991e7383ff5124d3e`.
-  Each distinct refusal gets its own registered rule, identified by its Lean
-  declaration name and revision. The approval authorizes the inventory landing
-  repair.
-
-- <a id="decided-2026-11-17-file-names"></a>**File-name characters, reserved names and
-  exact file/directory prefix conflicts (2026-11-17).**
-  Status: decided
-  Source: owner
-
-  Provenance: verbatim owner replies relayed by the coordinator from the owner
-  session, recorded 2026-11-17 under the [recording rule](#decided-project-recording).
-  The coordinator recommended options 1a, 2a and 3a for F03p questions Q1, Q2
-  and Q6, following the [November 16 file-path decision](#decided-2026-11-16-file-paths).
-  Owner question, verbatim:
-
-~~~text
-what is the best
-~~~
-
-  The coordinator restated the recommendation, summarized here by question:
-
-  - **Q1 (1a).** File-name characters are exactly `A-Z a-z 0-9 _ - .`, with
-    the previously decided leading- and trailing-dot exclusions. Repeated dots
-    are allowed internally. Noninitial colons and all punctuation outside the
-    whitelist are refused.
-  - **Q2 (2a).** Match the stem before the first dot, ignoring ASCII case,
-    against the closed list `CON PRN AUX NUL COM1-COM9 LPT1-LPT9`. Only those
-    spellings are reserved. For example, `con.con` is refused and `main.con`
-    is valid.
-  - **Q6 (3a).** The single project checker refuses an exact proper
-    file/directory prefix conflict, such as file `a` beside `a/b.con`. It
-    reports both occurrences under a dedicated registered rule.
-
-  Owner reply, verbatim:
-
-~~~text
-ok go ahead
-~~~
-
-  This closes F03p's open policy questions Q1 (character whitelist and internal
-  repeated dots), Q2 (exact reserved-name matcher), and Q6 (exact proper
-  file/directory prefix conflicts). ISS-0068 remains open for implementation
-  and dependent evidence.
 
 - <a id="owner-goals-2026-11-15-provability-errors"></a>**Design goals: owner
   question (2026-11-15).**

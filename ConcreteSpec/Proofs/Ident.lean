@@ -1015,92 +1015,49 @@ theorem LoadedModules.load_admitted (modules admitted : List LoadedModule) :
     · rintro ⟨rfl, _⟩
       rfl
 
-/-- Helper (erasure). The host byte view recovers every original byte in order. -/
-@[simp] theorem SourceText.toBytes_ofBytes (bytes : List UInt8) :
-    (SourceText.ofBytes bytes).toBytes = bytes := by
-  simp [SourceText.toBytes, SourceText.ofBytes, List.map_map, Function.comp_def]
-
-/-- Helper (erasure). The byte bound makes the numeric projection exact in the other direction. -/
-@[simp] theorem SourceText.ofBytes_toBytes (source : SourceText) :
-    SourceText.ofBytes source.toBytes = source := by
-  cases source with
-  | mk bytes byte_lt =>
-    simp only [SourceText.ofBytes, SourceText.toBytes, List.map_map, SourceText.mk.injEq]
-    calc
-      bytes.map (UInt8.toNat ∘ UInt8.ofNat) = bytes.map id :=
-        List.map_congr_left (fun byte member => UInt8.toNat_ofNat_of_lt' (byte_lt byte member))
-      _ = bytes := List.map_id bytes
-
-/-- Helper (erasure). Taking a prefix commutes with the exact byte projection. -/
-theorem SourceText.take_toBytes (source : SourceText) (offset : Nat) :
-    source.toBytes.take offset = (source.bytes.take offset).map UInt8.ofNat :=
-  (List.map_take ..).symm
-
-/-- Helper (erasure). The byte projection preserves length. -/
-@[simp] theorem SourceText.length_toBytes (source : SourceText) :
-    source.toBytes.length = source.length := by
-  simp [SourceText.toBytes, SourceText.length]
-
-/-- Helper (erasure). Appending a byte commutes with projection. -/
-@[simp] theorem SourceText.toBytes_push (source : SourceText) (byte : UInt8) :
-    (source.push byte).toBytes = source.toBytes ++ [byte] := by
-  simp [SourceText.push, SourceText.toBytes]
-
-/-- Law (subject `ConcreteSpec.Core.SourceText.lineAt`).
-The line at byte offset zero is one. -/
-theorem SourceText.lineAt_zero (source : SourceText) : source.lineAt 0 = 1 := rfl
-
-/-- Law (subject `ConcreteSpec.Core.SourceText.columnAt`).
-The column at byte offset zero is one. -/
-theorem SourceText.columnAt_zero (source : SourceText) : source.columnAt 0 = 1 := rfl
-
 /-- Law (subject `ConcreteSpec.Core.SourceText.lineAt`).
 Appending a byte updates the source line count by its actual newline step. -/
 theorem SourceText.lineAt_append (source : SourceText) (byte : UInt8) :
-    (source.push byte).lineAt (source.length + 1) = source.lineAt source.length + if byte = 10 then 1 else 0 := by
-  have whole : (source.bytes ++ [byte.toNat]).take (source.bytes.length + 1) =
-      source.bytes ++ [byte.toNat] :=
+    (source ++ [byte]).lineAt (source.length + 1) = source.lineAt source.length + if byte = 10 then 1 else 0 := by
+  have whole : (source ++ [byte]).take (source.length + 1) = source ++ [byte] :=
     List.take_of_length_le (by simp)
-  have newline_iff : byte.toNat = 10 ↔ byte = 10 := by
-    simpa using (UInt8.toNat_inj (a := byte) (b := 10))
-  simp only [SourceText.lineAt, SourceText.push, whole, SourceText.length, List.take_length]
-  by_cases newline : byte = 10 <;> simp [newline_iff, newline]
+  simp only [SourceText.lineAt]
+  rw [whole]
+  by_cases newline : byte = 10 <;> simp [newline]
 
 /-- Law (subject `ConcreteSpec.Core.SourceText.lineAt`).
 A newline starts a new line. -/
 theorem SourceText.lineAt_append_newline (source : SourceText) :
-    (source.push 10).lineAt (source.length + 1) = source.lineAt source.length + 1 := by
+    (source ++ [10]).lineAt (source.length + 1) = source.lineAt source.length + 1 := by
   simpa using SourceText.lineAt_append source 10
 
 /-- Law (subject `ConcreteSpec.Core.SourceText.lineAt`).
 A non-newline byte leaves the line unchanged. -/
 theorem SourceText.lineAt_append_other (source : SourceText) (byte : UInt8) (other : byte ≠ 10) :
-    (source.push byte).lineAt (source.length + 1) = source.lineAt source.length := by
+    (source ++ [byte]).lineAt (source.length + 1) = source.lineAt source.length := by
   simpa [other] using SourceText.lineAt_append source byte
 
 /-- Law (subject `ConcreteSpec.Core.SourceText.columnAt`).
 Appending a byte updates the byte column: newline resets to one, every other byte adds one. -/
 theorem SourceText.columnAt_append (source : SourceText) (byte : UInt8) :
-    (source.push byte).columnAt (source.length + 1) =
+    (source ++ [byte]).columnAt (source.length + 1) =
       if byte = 10 then 1 else source.columnAt source.length + 1 := by
-  have whole : (source.bytes ++ [byte.toNat]).take (source.bytes.length + 1) =
-      source.bytes ++ [byte.toNat] :=
+  have whole : (source ++ [byte]).take (source.length + 1) = source ++ [byte] :=
     List.take_of_length_le (by simp)
-  have newline_iff : byte.toNat = 10 ↔ byte = 10 := by
-    simpa using (UInt8.toNat_inj (a := byte) (b := 10))
-  simp only [SourceText.columnAt, SourceText.push, whole, SourceText.length, List.take_length]
-  by_cases newline : byte = 10 <;> simp [newline_iff, newline]
+  simp only [SourceText.columnAt]
+  rw [whole]
+  by_cases newline : byte = 10 <;> simp [newline]
 
 /-- Law (subject `ConcreteSpec.Core.SourceText.columnAt`).
 A tab is one byte and therefore advances exactly one column. -/
 theorem SourceText.columnAt_append_tab (source : SourceText) :
-    (source.push 9).columnAt (source.length + 1) = source.columnAt source.length + 1 := by
+    (source ++ [9]).columnAt (source.length + 1) = source.columnAt source.length + 1 := by
   simpa using SourceText.columnAt_append source 9
 
 /-- Law (subject `ConcreteSpec.Core.SourceText.columnAt`).
 A newline resets the byte column to one. -/
 theorem SourceText.columnAt_append_newline (source : SourceText) :
-    (source.push 10).columnAt (source.length + 1) = 1 := by
+    (source ++ [10]).columnAt (source.length + 1) = 1 := by
   simpa using SourceText.columnAt_append source 10
 
 /-- Law (subject `ConcreteSpec.Core.EncodedPremise.read`, `ConcreteSpec.Core.PremiseRecord.encode`).
@@ -2059,35 +2016,13 @@ example : ¬ (admitAll [firstModule, collidingModule] =
   exact wf collidingTop ⟨by decide, by decide⟩
 
 /-- Typed byte strings for newline, tab, EOF and multibyte examples. -/
-def aSource : SourceText := SourceText.ofBytes [97]
-def aNewline : SourceText := aSource.push 10
-def aTab : SourceText := aSource.push 9
-def aTabNewline : SourceText := aTab.push 10
-def utf8Prefix : SourceText := SourceText.ofBytes [195]
-def utf8Source : SourceText := SourceText.ofBytes [195, 169]
-def otherTabSource : SourceText := SourceText.ofBytes [10, 97, 98]
-
-example : aSource ≠ aTab := by decide
-
-/-- Mutant line function with a zero-based origin. -/
-def zeroBasedLine (source : SourceText) (offset : Nat) : Nat :=
-  (source.bytes.take offset).count 10
-
-/-- Instance (law `ConcreteSpec.Core.SourceText.lineAt_zero`, case `ConcreteSpec.Core.Vacuity.aSource`). -/
-example : aSource.lineAt 0 = 1 := SourceText.lineAt_zero aSource
-
-/-- Planted (law `ConcreteSpec.Core.SourceText.lineAt_zero`, case `ConcreteSpec.Core.Vacuity.aSource`, subject `ConcreteSpec.Core.SourceText.lineAt`, mutant `ConcreteSpec.Core.Vacuity.zeroBasedLine`). -/
-example : ¬ (zeroBasedLine aSource 0 = 1) := by decide
-
-/-- Mutant column function with a zero-based origin. -/
-def zeroBasedColumn (source : SourceText) (offset : Nat) : Nat :=
-  ((source.bytes.take offset).reverse.takeWhile (fun byte => byte != 10)).length
-
-/-- Instance (law `ConcreteSpec.Core.SourceText.columnAt_zero`, case `ConcreteSpec.Core.Vacuity.aSource`). -/
-example : aSource.columnAt 0 = 1 := SourceText.columnAt_zero aSource
-
-/-- Planted (law `ConcreteSpec.Core.SourceText.columnAt_zero`, case `ConcreteSpec.Core.Vacuity.aSource`, subject `ConcreteSpec.Core.SourceText.columnAt`, mutant `ConcreteSpec.Core.Vacuity.zeroBasedColumn`). -/
-example : ¬ (zeroBasedColumn aSource 0 = 1) := by decide
+def aSource : SourceText := [97]
+def aNewline : SourceText := aSource ++ [10]
+def aTab : SourceText := aSource ++ [9]
+def aTabNewline : SourceText := aTab ++ [10]
+def utf8Prefix : SourceText := [195]
+def utf8Source : SourceText := [195, 169]
+def otherTabSource : SourceText := [10, 97, 98]
 
 /-- Mutant line function that always returns line 1. -/
 def constantLine (_source : SourceText) (_offset : Nat) : Nat := 1
@@ -2096,67 +2031,67 @@ def constantLine (_source : SourceText) (_offset : Nat) : Nat := 1
 def offsetLine (_source : SourceText) (offset : Nat) : Nat := offset + 1
 
 /-- Instance (law `ConcreteSpec.Core.SourceText.lineAt_append_newline`, case `ConcreteSpec.Core.Vacuity.aSource`). -/
-example : (aSource.push 10).lineAt (aSource.length + 1) = aSource.lineAt aSource.length + 1 :=
+example : (aSource ++ [10]).lineAt (aSource.length + 1) = aSource.lineAt aSource.length + 1 :=
   SourceText.lineAt_append_newline aSource
 
 /-- Planted (law `ConcreteSpec.Core.SourceText.lineAt_append_newline`, case `ConcreteSpec.Core.Vacuity.aSource`, subject `ConcreteSpec.Core.SourceText.lineAt`, mutant `ConcreteSpec.Core.Vacuity.constantLine`). -/
-example : ¬ (constantLine (aSource.push 10) (aSource.length + 1) =
+example : ¬ (constantLine (aSource ++ [10]) (aSource.length + 1) =
     constantLine aSource aSource.length + 1) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.SourceText.lineAt_append_other`, case `ConcreteSpec.Core.Vacuity.aSource`). -/
-example : (aSource.push 9).lineAt (aSource.length + 1) = aSource.lineAt aSource.length :=
+example : (aSource ++ [9]).lineAt (aSource.length + 1) = aSource.lineAt aSource.length :=
   SourceText.lineAt_append_other aSource 9 (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.SourceText.lineAt_append_other`, case `ConcreteSpec.Core.Vacuity.aSource`, subject `ConcreteSpec.Core.SourceText.lineAt`, mutant `ConcreteSpec.Core.Vacuity.offsetLine`). -/
 example : (9 : UInt8) ≠ 10 ∧
-    ¬ (offsetLine (aSource.push 9) (aSource.length + 1) = offsetLine aSource aSource.length) :=
+    ¬ (offsetLine (aSource ++ [9]) (aSource.length + 1) = offsetLine aSource aSource.length) :=
   ⟨by decide, by decide⟩
 
 /-- Mutant column function that counts a tab byte (`9`) as four columns instead of one. -/
 def tabStopFour (source : SourceText) (offset : Nat) : Nat :=
-  ((source.toBytes.take offset).reverse.takeWhile (fun byte => byte != 10)).foldl
+  ((source.take offset).reverse.takeWhile (fun byte => byte != 10)).foldl
     (fun acc byte => acc + if byte == 9 then 4 else 1) 1
 
 /-- Instance (law `ConcreteSpec.Core.SourceText.columnAt_append_tab`, case `ConcreteSpec.Core.Vacuity.aSource`). -/
-example : (aSource.push 9).columnAt (aSource.length + 1) = aSource.columnAt aSource.length + 1 :=
+example : (aSource ++ [9]).columnAt (aSource.length + 1) = aSource.columnAt aSource.length + 1 :=
   SourceText.columnAt_append_tab aSource
 
 /-- Planted (law `ConcreteSpec.Core.SourceText.columnAt_append_tab`, case `ConcreteSpec.Core.Vacuity.aSource`, subject `ConcreteSpec.Core.SourceText.columnAt`, mutant `ConcreteSpec.Core.Vacuity.tabStopFour`). -/
-example : ¬ (tabStopFour (aSource.push 9) (aSource.length + 1) =
+example : ¬ (tabStopFour (aSource ++ [9]) (aSource.length + 1) =
     tabStopFour aSource aSource.length + 1) := by decide
 
 /-- Mutant column function that never resets at a newline byte. -/
 def noResetColumn (source : SourceText) (offset : Nat) : Nat :=
-  (source.toBytes.take offset).length + 1
+  (source.take offset).length + 1
 
 /-- Instance (law `ConcreteSpec.Core.SourceText.columnAt_append_newline`, case `ConcreteSpec.Core.Vacuity.aTab`). -/
-example : (aTab.push 10).columnAt (aTab.length + 1) = 1 :=
+example : (aTab ++ [10]).columnAt (aTab.length + 1) = 1 :=
   SourceText.columnAt_append_newline aTab
 
 /-- Planted (law `ConcreteSpec.Core.SourceText.columnAt_append_newline`, case `ConcreteSpec.Core.Vacuity.aTab`, subject `ConcreteSpec.Core.SourceText.columnAt`, mutant `ConcreteSpec.Core.Vacuity.noResetColumn`). -/
-example : ¬ (noResetColumn (aTab.push 10) (aTab.length + 1) = 1) := by decide
+example : ¬ (noResetColumn (aTab ++ [10]) (aTab.length + 1) = 1) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.SourceText.lineAt_append`, case `ConcreteSpec.Core.Vacuity.aSource`). -/
-example : (aSource.push 10).lineAt (aSource.length + 1) =
+example : (aSource ++ [10]).lineAt (aSource.length + 1) =
     aSource.lineAt aSource.length + if (10 : UInt8) = 10 then 1 else 0 :=
   SourceText.lineAt_append aSource 10
 
 /-- Planted (law `ConcreteSpec.Core.SourceText.lineAt_append`, case `ConcreteSpec.Core.Vacuity.aSource`, subject `ConcreteSpec.Core.SourceText.lineAt`, mutant `ConcreteSpec.Core.Vacuity.constantLine`). -/
-example : ¬ (constantLine (aSource.push 10) (aSource.length + 1) =
+example : ¬ (constantLine (aSource ++ [10]) (aSource.length + 1) =
     constantLine aSource aSource.length + if (10 : UInt8) = 10 then 1 else 0) := by decide
 
 /-- Mutant column function that skips UTF-8 continuation bytes (`128 ≤ b < 192`). -/
 def scalarColumn (source : SourceText) (offset : Nat) : Nat :=
-  (((source.toBytes.take offset).reverse.takeWhile (fun byte => byte != 10)).filter
+  (((source.take offset).reverse.takeWhile (fun byte => byte != 10)).filter
     (fun byte => decide (byte < 128 ∨ 192 ≤ byte))).length + 1
 
 /-- Instance (law `ConcreteSpec.Core.SourceText.columnAt_append`, case `ConcreteSpec.Core.Vacuity.utf8Prefix`). -/
-example : (utf8Prefix.push 169).columnAt (utf8Prefix.length + 1) =
+example : (utf8Prefix ++ [169]).columnAt (utf8Prefix.length + 1) =
     if (169 : UInt8) = 10 then 1 else utf8Prefix.columnAt utf8Prefix.length + 1 :=
   SourceText.columnAt_append utf8Prefix 169
 
 /-- Planted (law `ConcreteSpec.Core.SourceText.columnAt_append`, case `ConcreteSpec.Core.Vacuity.utf8Prefix`, subject `ConcreteSpec.Core.SourceText.columnAt`, mutant `ConcreteSpec.Core.Vacuity.scalarColumn`). -/
-example : ¬ (scalarColumn (utf8Prefix.push 169) (utf8Prefix.length + 1) =
+example : ¬ (scalarColumn (utf8Prefix ++ [169]) (utf8Prefix.length + 1) =
     if (169 : UInt8) = 10 then 1 else scalarColumn utf8Prefix utf8Prefix.length + 1) := by decide
 
 /-- A source `assume`, a package stack assumption, and their wire records. -/
