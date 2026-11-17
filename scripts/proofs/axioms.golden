@@ -2546,6 +2546,7 @@ ConcreteSpec.Core.Own.RelationalConverseEvidence.eventTrace	Classical.choice Quo
 ConcreteSpec.Core.Own.RelationalConverseEvidence.refuseAccepted	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Own.RelationalConverseEvidence.refuseEventAccepted	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Own.RelationalConverseEvidence.refuseRead	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Own.Round5Evidence.bogusSuffix_rejected	Quot.sound propext
 ConcreteSpec.Core.Own.Slot.mk.inj	
 ConcreteSpec.Core.Own.Slot.mk.injEq	propext
 ConcreteSpec.Core.Own.Slot.mk.sizeOf_spec	
@@ -2574,7 +2575,7 @@ ConcreteSpec.Core.Own.adoptDown.eq_1	propext
 ConcreteSpec.Core.Own.adoptDown_live	Quot.sound propext
 ConcreteSpec.Core.Own.adoptDown_only_arguments_result	Quot.sound propext
 ConcreteSpec.Core.Own.adoptDown_preserves	Quot.sound propext
-ConcreteSpec.Core.Own.adopted_view_usable	Quot.sound propext
+ConcreteSpec.Core.Own.adopted_view_usable	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Own.allows_erasure	propext
 ConcreteSpec.Core.Own.allows_erasure_result	propext
 ConcreteSpec.Core.Own.bind.eq_1	
@@ -2609,7 +2610,7 @@ ConcreteSpec.Core.Own.deferred_return_view	Quot.sound propext
 ConcreteSpec.Core.Own.directOwner_roundtrip	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Own.directOwner_roundtrip._proof_1_1	Quot.sound propext
 ConcreteSpec.Core.Own.directOwner_roundtrip._proof_1_2	Quot.sound propext
-ConcreteSpec.Core.Own.downward_reborrow_protocol	Quot.sound propext
+ConcreteSpec.Core.Own.downward_reborrow_protocol	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Own.downward_reborrow_protocol._proof_1_3	Quot.sound propext
 ConcreteSpec.Core.Own.downward_reborrow_protocol._simp_1_2	propext
 ConcreteSpec.Core.Own.downward_reborrow_protocol._simp_1_5	propext
