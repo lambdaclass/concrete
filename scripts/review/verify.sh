@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # R-0544 — does a commit carry a clean review verdict? See docs/REVIEW.md.
 #
-#   scripts/review/verify.sh [--fetch] [--notes-ref <ref>] [--required-base <commit>] <commit>
+#   scripts/review/verify.sh [--fetch] [--notes-ref <ref>] [--required-base <commit>] [--round-history] <commit>
 #
 # Reads the git note that scripts/review/review.sh wrote on <commit> under
 # refs/notes/concrete-review. The verdict counts only for that exact commit: a
@@ -9,23 +9,27 @@
 #
 #   --fetch  first fetch refs/notes/concrete-review from origin, replacing the local copy (a reader, not a writer).
 #
-#   --required-base  require the note base to be an ancestor-or-equal of this commit.
+#   --required-base  require the note base to be an ancestor-or-equal of the supplied base.
+#   --round-history  include historical notes for round accounting only.
 #
 # Exit codes: 0 clean; 1 reviewed, not clean (findings or blocked);
-#             2 no note, a malformed or insufficient-range note, or a usage error.
+#             2 missing evidence, missing or invalid note, insufficient range, or usage error.
 
 set -euo pipefail
+export GIT_NO_REPLACE_OBJECTS=1
 
 NOTES_REF="refs/notes/concrete-review"
 REMOTE=origin
 FETCH=0
 REQUIRED_BASE=""
+ROUND_HISTORY=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --fetch) FETCH=1; shift ;;
     --notes-ref)
       [ $# -ge 2 ] && git check-ref-format "$2" || { echo "verify: --notes-ref needs a full ref" >&2; exit 2; }
       NOTES_REF="$2"; shift 2 ;;
+    --round-history) ROUND_HISTORY=1; shift ;;
     --required-base)
       [ $# -ge 2 ] || { echo "verify: --required-base needs a commit" >&2; exit 2; }
       REQUIRED_BASE="$(git rev-parse -q --verify "$2^{commit}")" \
@@ -34,7 +38,7 @@ while [ $# -gt 0 ]; do
     *) break ;;
   esac
 done
-[ $# -eq 1 ] || { echo "usage: verify.sh [--fetch] [--notes-ref <ref>] [--required-base <commit>] <commit>" >&2; exit 2; }
+[ $# -eq 1 ] || { echo "usage: verify.sh [--fetch] [--notes-ref <ref>] [--required-base <commit>] [--round-history] <commit>" >&2; exit 2; }
 
 if [ "$FETCH" = 1 ]; then
   git fetch -q "$REMOTE" "+$NOTES_REF:$NOTES_REF" \
@@ -47,9 +51,8 @@ NOTE="$(git notes --ref="$NOTES_REF" show "$SHA" 2>/dev/null)" || {
   exit 2
 }
 
-# The note must carry each of the six fields review.sh writes exactly once, each well formed. Any
-# other key, a repeated key, or a line that is not `key: value` makes the note malformed. Keys are
-# matched by name, not position, because notes.sh `put` appends `utc` last.
+# Validate the six original fields and the evidence protocol when present.
+# Each field must occur once. Unknown keys and invalid lines are malformed.
 malformed() {
   echo "$SHA malformed review note${1:+ ($1)}:"
   printf '%s\n' "$NOTE" | sed 's/^/  /'
@@ -69,6 +72,7 @@ while IFS= read -r line; do
     reviewer)     [[ "$v" =~ ^[^[:space:]]+$ ]] ;;
     utc)          [[ "$v" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] ;;
     base)         [[ "$v" =~ ^[0-9a-f]{40}$ ]] ;;
+    read-evidence) [[ "$v" = v1 ]] ;;
     pieces)       [[ "$v" =~ ^[0-9]+$ ]] ;;
     *)            false ;;
   esac || malformed "bad $k"
@@ -76,6 +80,11 @@ done <<< "$NOTE"
 for k in verdict rounds reviewer utc base pieces; do
   case "$SEEN" in *" $k "*) ;; *) malformed "missing $k" ;; esac
 done
+
+if [ "$ROUND_HISTORY" = 0 ] && [[ "$SEEN" != *" read-evidence "* ]]; then
+  echo "$SHA unqualified: review note predates repository-read evidence"
+  exit 2
+fi
 
 field() { local n="F_${1//-/_}"; printf '%s' "${!n:-}"; }
 if [ -n "$REQUIRED_BASE" ]; then

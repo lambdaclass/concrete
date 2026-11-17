@@ -52,6 +52,7 @@
 # gate host of `check`'s impact leg, else `git config land.gatesHost`; see gates_host below) and
 # LAND_GATES_TRANSPORT (scripts/land/gates_remote.sh's transport).
 set -euo pipefail
+export GIT_NO_REPLACE_OBJECTS=1
 
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESOLVER="$SELF_DIR/resolve_conflicts.py"
@@ -474,7 +475,7 @@ review_cmd() {
 # built or rebuilt from reviewed branches). Each note base must be an ancestor-or-equal of the
 # recorded train base, so its range covers the whole change being landed. Every note is judged by scripts/review/verify.sh, on
 # $REMOTE's notes (fetched first, replacing the local copy, as verify.sh --fetch does): an absent,
-# malformed, blocked or findings note qualifies nothing, and a head note that is not clean is not
+# malformed, historical, blocked or findings note qualifies nothing, and a head note that is not clean is not
 # overridden by its members. Prints what qualified; on failure prints why and returns 1.
 #
 # OWNER SIGN-OFF (R-0618). A member without a clean note qualifies instead by a valid owner sign-off

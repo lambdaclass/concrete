@@ -6,7 +6,8 @@
 # MARK_* markers on the ADDED lines of the diff it receives on stdin, and logs
 # every call (prompt kind, stdin size, files) so the legs can check what was sent.
 # All git work happens in throwaway repositories with a bare repository as
-# `origin`, so the notes push, including the non-fast-forward path, runs for real.
+# `origin`. The publication legs exercise real fetches and pushes, including the
+# non-fast-forward retry. Other legs keep notes local to their fixture.
 #
 # Legs: verdict parsing, note writing and its exact format, notes push and the
 # non-fast-forward merge, delta selection (round 2 sees only the delta and the
@@ -92,6 +93,11 @@ reply() { printf '%s\n' "$1" >"$out"; }
 if has MARK_REFUSE_ALWAYS; then
   echo '{"type":"turn.failed","error":{"message":"invalid_prompt"}}'
   exit 1
+elif has MARK_CLI_REFUSE && [ "$kind" = standard ]; then
+  message='Invalid prompt: your prompt was flagged as potentially violating our usage policy. Please try again with a different prompt: https://platform.openai.com/docs/guides/reasoning#advice-on-prompting'
+  printf '{"type":"error","message":"%s"}\n{"type":"turn.failed","error":{"message":"%s"}}\n' "$message" "$message"
+  touch "$FAKE_LOG/cli-refusal"
+  exit 1
 elif has MARK_REFUSE_STANDARD && [ "$kind" = standard ]; then
   reply "I can't help with that request."
   exit 0
@@ -100,11 +106,22 @@ if has MARK_EXACT; then
   python3 -I "$FAKE_VERIFIER" tree "$FAKE_SOURCE" "$(git -C "$FAKE_SOURCE" rev-parse HEAD)" "$directory" >"$FAKE_LOG/identity.$n" || exit 2
 fi
 if has MARK_SLEEP; then
+  # Create both an ordinary child and a separate session, with an intermediate
+  # parent that must be reaped before its detached child can be adopted.
   sleep 9 &
   sleeper=$!
-  trap 'wait "$sleeper"; exit 1' TERM
-  echo "$$ $sleeper" >"$FAKE_LOG/sleeping"
-  wait "$sleeper"
+  (
+    setsid bash -c 'echo "$$" >"$1"; exec sleep 9' _ "$FAKE_LOG/detached" &
+    wait
+  ) &
+  intermediate=$!
+  while [ ! -s "$FAKE_LOG/detached" ]; do sleep 0.01; done
+  echo "$$ $sleeper $intermediate $(cat "$FAKE_LOG/detached")" >"$FAKE_LOG/sleeping"
+  wait
+fi
+if has MARK_DISCOVERY; then
+  git -C "$directory" rev-parse --show-toplevel >"$FAKE_LOG/discovered" 2>/dev/null
+  printf '%s\n' "$?" >"$FAKE_LOG/discovery-status"
 fi
 if has MARK_WRITE; then
   printf 'reviewer mutation\n' >"$directory/README.md" && touch "$directory/reviewer-created" && touch "$FAKE_LOG/wrote"
@@ -113,8 +130,27 @@ if has MARK_NO_READ; then
   touch "$FAKE_LOG/skipped-read"
 else
   probe="$(sed -n '/^python3 -I -c /p' "$FAKE_LOG/prompt.$n")"
+  if has MARK_PRINT_DIGEST; then
+    expected="$(git -C "$FAKE_SOURCE" show HEAD:.gitignore | sha256sum)"
+    expected="${expected%% *}"
+    probe="printf '%s\n' '$expected'"
+    touch "$FAKE_LOG/printed-digest"
+  fi
   digest="$(cd "$directory" && eval "$probe")"
-  printf '{"type":"item.completed","item":{"type":"command_execution","exit_code":0,"aggregated_output":"%s"}}\n' "$digest"
+  python3 -I -c '
+import json
+import shlex
+import sys
+
+print(json.dumps({"type": "item.completed", "item": {
+    "type": "command_execution", "exit_code": 0, "status": "completed",
+    "command": "/bin/bash -lc " + shlex.quote(sys.argv[1]),
+    "aggregated_output": sys.argv[2],
+}}))
+' "$probe" "$digest"
+fi
+if has MARK_UNICODE; then
+  printf '{"type":"item.completed","item":{"type":"agent_message","text":"left\342\200\250right"}}\n'
 fi
 if has MARK_SANDBOX; then
   echo '{"type":"error","message":"execution sandbox could not start"}'
@@ -144,7 +180,7 @@ fi
 EOF
 } >"$T/bin/codex"
 chmod +x "$T/bin/codex"
-export REVIEW_CODEX_BIN="$T/bin/codex"
+export REVIEW_CODEX_BIN="$T/bin/codex" REVIEW_PUSH=0
 
 calls() { [ -f "$FAKE_LOG/calls" ] && wc -l <"$FAKE_LOG/calls" | tr -d ' ' || echo 0; }
 reset_fake() { rm -f "$FAKE_LOG"/*; }
@@ -170,7 +206,7 @@ field() { note "${2:-HEAD}" | sed -n "s/^$1: //p"; }
 echo "=== round 1: full diff, findings, note written and pushed ==="
 g checkout -qb feature
 commit_file old.txt "MARK_FINDING in the first change" "first change"
-review >"$T/out1" 2>&1; rc=$?
+REVIEW_PUSH=1 review >"$T/out1" 2>&1; rc=$?
 check "findings exit 1 (got $rc)" test "$rc" -eq 1
 check "one reviewer call" test "$(calls)" -eq 1
 check "reviewer runs with --sandbox danger-full-access" grep -q "sandbox=danger-full-access" "$FAKE_LOG/calls"
@@ -187,9 +223,10 @@ rounds: [0-9]+
 reviewer: codex
 utc: [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z
 base: [0-9a-f]{40}
-pieces: [0-9]+$'
+pieces: [0-9]+
+read-evidence: v1$'
 n1="$(note "$R1")"
-if [[ "$n1" =~ $FORMAT_RE ]]; then ok "note has exactly the six fields, in order"; else no "note format: $n1"; fi
+if [[ "$n1" =~ $FORMAT_RE ]]; then ok "note has exactly the seven fields, in order"; else no "note format: $n1"; fi
 check "note: verdict findings" test "$(field verdict)" = findings
 check "note: rounds 1" test "$(field rounds)" = 1
 check "note: base is the merge-base" test "$(field base)" = "$BASE"
@@ -284,7 +321,7 @@ commit_file hidden.txt hidden hidden
 RANGE_MID="$(g rev-parse HEAD)"
 commit_file visible.txt visible visible
 range_note() {
-  g notes --ref=concrete-review add -f -m "$(printf 'verdict: %s\nrounds: %s\nreviewer: codex\nutc: 2026-11-11T00:00:00Z\nbase: %s\npieces: 1' "$1" "$2" "$3")" HEAD
+  g notes --ref=concrete-review add -f -m "$(printf 'verdict: %s\nrounds: %s\nreviewer: codex\nutc: 2026-11-11T00:00:00Z\nbase: %s\npieces: 1\nread-evidence: v1' "$1" "$2" "$3")" HEAD
 }
 for verdict in clean findings blocked; do
   range_note "$verdict" 1 "$RANGE_MID"
@@ -447,8 +484,8 @@ g notes --ref=refs/notes/concrete-review add -f -m "verdict: clean" HEAD
 (cd "$W" && bash "$VERIFY" HEAD >/dev/null 2>&1); rc=$?
 check "malformed note (verdict line alone): exit 2 (got $rc)" test "$rc" -eq 2
 B40="$(printf '%040d' 0 | tr 0 a)"
-# A note notes.sh put wrote (keys in its own order, utc last) is well formed.
-g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nbase: %s\npieces: 1\nutc: 2026-10-22T00:00:00Z' "$B40")" HEAD
+# Field order does not affect verification.
+g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nbase: %s\npieces: 1\nread-evidence: v1\nutc: 2026-10-22T00:00:00Z' "$B40")" HEAD
 (cd "$W" && bash "$VERIFY" HEAD >"$T/vc" 2>&1); rc=$?
 check "a note with utc last verifies clean (exit 0, got $rc)" test "$rc" -eq 0
 (cd "$W" && bash "$VERIFY" --required-base HEAD HEAD >"$T/vr" 2>&1); rc=$?
@@ -457,17 +494,31 @@ check "unknown note base fails for range coverage" grep -q 'review range does no
 # The landing bot's keys went with it: a verdict carried across a rebase, or a landing order, is no
 # longer a key a review note may hold.
 for extra in "carried-from: $B40" "order: 1"; do
-  g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nbase: %s\npieces: 1\nutc: 2026-10-22T00:00:00Z\n%s' "$B40" "$extra")" HEAD
+  g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nbase: %s\npieces: 1\nread-evidence: v1\nutc: 2026-10-22T00:00:00Z\n%s' "$B40" "$extra")" HEAD
   out="$(cd "$W" && bash "$VERIFY" HEAD 2>&1)"; rc=$?
   check "a note with '${extra%%:*}' is malformed: exit 2, bad ${extra%%:*} (got $rc)" test "$rc" -eq 2 -a -n "$(printf '%s' "$out" | grep -F "malformed review note (bad ${extra%%:*})")"
 done
 g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nutc: 2026-10-22T00:00:00Z\nbase: %s\npieces: 1\nsurprise: 1' "$B40")" HEAD
 (cd "$W" && bash "$VERIFY" HEAD >/dev/null 2>&1); rc=$?
 check "an unknown key is malformed: exit 2 (got $rc)" test "$rc" -eq 2
-g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: findings\nverdict: clean\nrounds: 2\nreviewer: codex\nutc: 2026-10-22T00:00:00Z\nbase: %s\npieces: 1' "$B40")" HEAD
+g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: findings\nverdict: clean\nrounds: 2\nreviewer: codex\nutc: 2026-10-22T00:00:00Z\nbase: %s\npieces: 1\nread-evidence: v1' "$B40")" HEAD
 (cd "$W" && bash "$VERIFY" HEAD >/dev/null 2>&1); rc=$?
 check "a repeated key is malformed: exit 2 (got $rc)" test "$rc" -eq 2
 g notes --ref=refs/notes/concrete-review remove HEAD 2>/dev/null
+
+echo "=== historical notes keep round accounting without supplying coverage ==="
+reset_fake
+g checkout -q main && g checkout -qb historical-note
+commit_file historical.txt historical historical
+historical_base="$(g rev-parse main)"
+g notes --ref=refs/notes/concrete-review add -m "$(printf 'verdict: clean\nrounds: 1\nreviewer: codex\nutc: 2026-10-22T00:00:00Z\nbase: %s\npieces: 1' "$historical_base")" HEAD
+(cd "$W" && bash "$VERIFY" --required-base "$historical_base" HEAD) >"$T/historical.verify" 2>&1; rc=$?
+check "historical clean note is unqualified" test "$rc" -eq 2
+check "historical note diagnostic identifies missing read evidence" grep -q 'predates repository-read evidence' "$T/historical.verify"
+commit_file current.txt current current
+review >"$T/historical.review" 2>&1; rc=$?
+check "review after a historical note succeeds and counts the earlier round" test "$rc" = 0 -a "$(field rounds)" = 2
+check "review after a historical note includes the entire branch diff" grep -q 'files=current.txt,historical.txt,$' "$FAKE_LOG/calls"
 
 echo "=== verdict parsing ==="
 parse_case() { # parse_case <marker> <want-exit> <want-verdict> <label>
@@ -486,6 +537,12 @@ parse_case MARK_SANDBOX 2 "" "sandbox failure overrides a clean verdict and succ
 check "sandbox error event emitted" test -f "$FAKE_LOG/reported-error"
 parse_case MARK_NO_READ 2 "" "missing repository-read evidence is an error"
 check "reviewer deliberately skipped read" test -f "$FAKE_LOG/skipped-read"
+parse_case MARK_PRINT_DIGEST 2 "" "printing the expected digest without running the read command is rejected"
+check "digest-only control executed" test -f "$FAKE_LOG/printed-digest"
+parse_case MARK_UNICODE 0 clean "literal U+2028 stays inside its JSONL record"
+parse_case MARK_CLI_REFUSE 0 clean "CLI Invalid prompt event reaches a successful neutral retry"
+check "CLI refusal event emitted" test -f "$FAKE_LOG/cli-refusal"
+check "CLI refusal actually invoked the neutral prompt" grep -q ' neutral ' "$FAKE_LOG/calls"
 parse_case MARK_WRITE 0 clean "reviewer writes are confined to the private archive"
 check "reviewer completed both writes" test -f "$FAKE_LOG/wrote"
 check "caller README unchanged" test "$(cat "$W/README.md")" = base
@@ -535,6 +592,45 @@ mkdir -p "$W/sub"
 commit_file relative.txt relative relative
 (cd "$W/sub" && REVIEW_CODEX_BIN=../../bin/codex bash "$REVIEW") >"$T/relative-review.log" 2>&1; rc=$?
 check "relative reviewer executable works from caller subdirectory" test "$rc" = 0
+# Ignore an installed replacement both when selecting the review diff and
+# when creating and independently checking the archived tree.
+reset_fake
+g checkout -q main && g checkout -qb original-object
+commit_file original.txt MARK_EXACT original
+original="$(g rev-parse HEAD)"
+g checkout -q --detach main
+commit_file replacement.txt MARK_FINDING replacement
+replacement="$(g rev-parse HEAD)"
+g checkout -q original-object
+g replace "$original" "$replacement"
+check "fixture activates the replacement" g cat-file -e "$original:replacement.txt"
+review >"$T/replacement.log" 2>&1; rc=$?
+check "review uses the original commit and records a clean note" test "$rc" = 0 -a "$(field verdict)" = clean
+check "diff includes the original path only" grep -q 'files=original.txt,$' "$FAKE_LOG/calls"
+check "runner archive matches the original commit despite replacement" test -s "$FAKE_LOG/identity.1"
+mkdir "$T/replaced-tree"
+g archive "$original" | tar -xf - -C "$T/replaced-tree"
+check "fixture actually archived the replacement" test -f "$T/replaced-tree/replacement.txt"
+if python3 -I "$ROOT_DIR/scripts/review/read_evidence.py" tree "$W" "$original" "$T/replaced-tree" >"$T/replaced.verify" 2>&1; then
+  no "independent verification rejects the replacement tree"
+else
+  check "independent verification rejects the replacement tree" grep -q 'archive file missing or wrong type: original.txt' "$T/replaced.verify"
+fi
+g replace -d "$original" >/dev/null
+
+reset_fake
+g checkout -q exact-tree
+commit_file discovery.txt MARK_DISCOVERY discovery
+mkdir "$W/caller-tmp"
+(cd "$W" && TMPDIR="$W/caller-tmp" bash "$REVIEW") >"$T/discovery.log" 2>&1; rc=$?
+check "review completed with TMPDIR inside the caller" test "$rc" = 0
+check "Git discovery ran and found no caller repository" grep -qx 128 "$FAKE_LOG/discovery-status"
+if [[ "$(cat "$FAKE_LOG/directory.1")/" == "$W/"* ]]; then
+  no "private archive allocated outside the caller"
+else
+  check "private archive allocated outside the caller" test -s "$FAKE_LOG/directory.1"
+fi
+
 for attribute in export-ignore export-subst; do
   printf '$Format:%%H$\n' >"$W/target"
   printf 'target %s\n' "$attribute" >"$W/.gitattributes"
@@ -559,12 +655,13 @@ check "cancellation reached reviewer and descendant" test -s "$FAKE_LOG/sleeping
 kill -TERM "$review_pid"
 wait "$review_pid"; rc=$?
 check "cancelled review returned an error" test "$rc" -ne 0
-if read -r reviewer descendant <"$FAKE_LOG/sleeping"; then
-  for pid in "$reviewer" "$descendant"; do
+check "detached process has an independent session" test -s "$FAKE_LOG/detached"
+if read -r reviewer descendant intermediate detached <"$FAKE_LOG/sleeping"; then
+  for pid in "$reviewer" "$descendant" "$intermediate" "$detached"; do
     if kill -0 "$pid" 2>/dev/null; then no "process $pid terminated"; else ok "process $pid terminated"; fi
   done
 fi
-check "cancelled review removed both temporary directories" test -z "$(ls -A "$T/cancel-tmp")"
+check "cancelled review removed both temporary directories" test -z "$(ls -A "$T/cancel-tmp")" -a ! -e "$(cat "$FAKE_LOG/directory.1")"
 parse_case MARK_MENTION_FILTER 0 clean "a real review that mentions content filters is not a refusal"
 
 echo "=== content-filter refusal: one neutral retry on smaller pieces ==="
@@ -765,15 +862,17 @@ rounds: 1
 reviewer: codex
 utc: 2026-10-22T00:00:00Z
 base: $OTHER_SHA
-pieces: 1" "$OTHER_SHA"
+pieces: 1
+read-evidence: v1" "$OTHER_SHA"
 git -C "$T/other" push -q origin refs/notes/concrete-review
 reset_fake
 g checkout -q main && g checkout -qb nonff
 commit_file z.txt "z" "z"
 # Our local notes ref lacks the other writer's note: the start-of-round sync
 # must merge it, or the push below would be a non-fast-forward.
-review >"$T/out6" 2>&1; rc=$?
+REVIEW_PUSH=1 review >"$T/out6" 2>&1; rc=$?
 check "review after a concurrent notes push succeeds (exit $rc)" test "$rc" -eq 0
+check "start-of-round sync avoids a rejected push" bash -c '! grep -q "rejected; fetching and merging" "$1"' _ "$T/out6"
 check "origin keeps the other writer's note" \
   bash -c "git -C '$T/origin.git' notes --ref=refs/notes/concrete-review show $OTHER_SHA | has_match 'verdict: clean'"
 check "origin has our note" \
@@ -783,15 +882,18 @@ check "origin has our note" \
 git -C "$T/other" fetch -q origin "+refs/notes/concrete-review:refs/notes/concrete-review"
 cat >"$T/bin/codex-race" <<EOF
 #!/usr/bin/env bash
-git -C "$T/other" notes --ref=refs/notes/concrete-review add -f -m "race note" "$OTHER_SHA"
+set -e
+git -C "$T/other" -c user.name="Race fixture" -c user.email=race@example.invalid notes --ref=refs/notes/concrete-review add -f -m "race note" "$OTHER_SHA"
 git -C "$T/other" push -q origin refs/notes/concrete-review
+touch "$T/race-pushed"
 exec "$T/bin/codex" "\$@"
 EOF
 chmod +x "$T/bin/codex-race"
 reset_fake
 commit_file z2.txt "z2" "z2"
-REVIEW_CODEX_BIN="$T/bin/codex-race" review >"$T/out7" 2>&1; rc=$?
+REVIEW_CODEX_BIN="$T/bin/codex-race" REVIEW_PUSH=1 review >"$T/out7" 2>&1; rc=$?
 check "push rejected once, then merged and pushed (exit $rc)" test "$rc" -eq 0
+check "the competing push completed inside the reviewer" test -f "$T/race-pushed"
 check "the retry path ran" grep -q "rejected; fetching and merging" "$T/out7"
 check "origin holds the racing note" \
   bash -c "git -C '$T/origin.git' notes --ref=refs/notes/concrete-review show $OTHER_SHA | has_match 'race note'"
@@ -803,7 +905,7 @@ printf '#!/bin/sh\necho "remote policy says no" >&2\nexit 1\n' >"$T/origin.git/h
 chmod +x "$T/origin.git/hooks/pre-receive"
 reset_fake
 commit_file z3.txt "z3" "z3"
-review >"$T/out9" 2>&1; rc=$?
+REVIEW_PUSH=1 review >"$T/out9" 2>&1; rc=$?
 rm -f "$T/origin.git/hooks/pre-receive"
 check "a refused (not non-fast-forward) push exits 6 (got $rc)" test "$rc" -eq 6
 check "and is not retried as if it were a race" bash -c "! grep -q 'rejected; fetching and merging' '$T/out9'"

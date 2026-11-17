@@ -103,8 +103,8 @@ esac
 GH
 chmod +x "$TMP/fake-gh"
 
-# A review note as scripts/review/review.sh writes it (scripts/review/verify.sh's six keys), published
-# to origin. put-review <sha> <clean|findings|blocked|malformed|none>[@rounds] [base]; none removes the note.
+# A review note as scripts/review/review.sh writes it (scripts/review/verify.sh's seven keys), published
+# to origin. put-review <sha> <clean|findings|blocked|historical|malformed|none>[@rounds] [base]; none removes the note.
 cat > "$TMP/put-review" <<'EOF'
 #!/usr/bin/env bash
 set -e
@@ -113,12 +113,16 @@ git fetch -q origin "+$R:$R" 2>/dev/null || true
 case "$2" in
   none) git notes --ref=$R remove --ignore-missing "$sha" 2>/dev/null ;;
   malformed) git notes --ref=$R add -f -m "verdict: clean" "$sha" ;;
-  *) git notes --ref=$R add -f -m "verdict: ${2%@*}
+  *)
+    verdict="${2%@*}"
+    evidence=$'\nread-evidence: v1'
+    if [ "$verdict" = historical ]; then verdict=clean; evidence=; fi
+    git notes --ref=$R add -f -m "verdict: $verdict
 rounds: $(case "$2" in *@*) echo "${2#*@}" ;; *) echo 1 ;; esac)
 reviewer: codex
 utc: 2026-11-06T00:00:00Z
 base: $(git rev-parse "${3:-origin/main}")
-pieces: 1" "$sha" ;;
+pieces: 1$evidence" "$sha" ;;
 esac
 git show-ref -q --verify $R || exit 0
 CONCRETE_SKIP_GATES=1 git push -q origin $R
@@ -1275,6 +1279,8 @@ for m in malformed blocked findings; do
 done
 prov_leg "an unreviewed head with one member unreviewed" none clean none refuse "member brv2:"
 prov_leg "an unreviewed head whose every member is clean at its exact SHA" none clean clean pass "every member (2) carries a clean one"
+prov_leg "a historical clean head note" historical clean clean refuse "predates repository-read evidence"
+prov_leg "a historical clean member note" none clean historical refuse "predates repository-read evidence"
 prov_leg "a clean head note" clean none none pass "the head ${HR:0:10} carries a clean review note"
 # ISS-0019: R1 is an unlanded intermediate base, reachable from the train head.
 # A syntactically clean note must fail specifically for its insufficient range.

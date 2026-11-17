@@ -120,7 +120,7 @@ sha_of(){ git --git-dir="$TMP/origin.git" rev-parse "refs/heads/$1"; }
 mark(){ # branch [review-verdict] [gates] [extra review key=value]
   local s; s="$(sha_of "$1")"
   ( cd "$A" && git fetch -q origin \
-    && bash "$NOTES" put review "$s" verdict="${2:-clean}" rounds=1 reviewer=codex base="$(git -C "$W" rev-parse origin/main)" pieces=1 ${4:+"$4"} >/dev/null \
+    && bash "$NOTES" put review "$s" verdict="${2:-clean}" rounds=1 reviewer=codex base="$(git -C "$W" rev-parse origin/main)" pieces=1 read-evidence=v1 ${4:+"$4"} >/dev/null \
     && bash "$NOTES" put gates "$s" gates="${3:-pass}" selected=3 >/dev/null ) || no "mark $1"
 }
 land_refs(){ git --git-dir="$TMP/origin.git" for-each-ref --format='%(refname)' 'refs/heads/wip/land-*'; }
@@ -173,7 +173,7 @@ for mode in intermediate self malformed; do
   mk "wip/range-$mode" visible "src/visible-$mode" visible "$MID"
   RH="$(sha_of "wip/range-$mode")"
   nb="$MID"; [ "$mode" != self ] || nb="$RH"
-  (cd "$A" && bash "$NOTES" put review "$RH" verdict=clean rounds=1 reviewer=codex base="$nb" pieces=1 >/dev/null && bash "$NOTES" put gates "$RH" gates=pass >/dev/null)
+  (cd "$A" && bash "$NOTES" put review "$RH" verdict=clean rounds=1 reviewer=codex base="$nb" pieces=1 read-evidence=v1 >/dev/null && bash "$NOTES" put gates "$RH" gates=pass >/dev/null)
   if [ "$mode" = malformed ]; then
     (cd "$A" && bash "$NOTES" put review "$RH" verdict=clean >/dev/null)
   fi
@@ -198,7 +198,7 @@ for arg in empty missing; do
   [ "$rc" != 0 ] && has "$out" '--base needs a nonempty ref' && ok "ready rejects $arg base argument" || no "ready $arg base: $rc $out"
 done
 # Keep the published clean snapshot, but replace canonical local evidence with findings.
-(cd "$A" && git notes --ref=concrete-review add -f -m "$(printf 'verdict: findings\nrounds: 2\nreviewer: codex\nutc: 2026-11-11T00:00:00Z\nbase: %s\npieces: 1' "$BASE")" "$EH")
+(cd "$A" && git notes --ref=concrete-review add -f -m "$(printf 'verdict: findings\nrounds: 2\nreviewer: codex\nutc: 2026-11-11T00:00:00Z\nbase: %s\npieces: 1\nread-evidence: v1' "$BASE")" "$EH")
 out="$(cd "$A" && REVIEW_NOTES_REF=refs/notes/remote/concrete-review bash "$ROOT_DIR/scripts/review/verify.sh" --required-base "$BASE" "$EH" 2>&1)"; rc=$?
 [ "$rc" = 1 ] && has "$out" 'findings (round 2' && ok "ambient notes ref cannot override canonical evidence" || no "ambient ref: $rc $out"
 out="$(cd "$A" && bash "$NOTES" ready "$EH" "$BASE" 2>&1)"; rc=$?

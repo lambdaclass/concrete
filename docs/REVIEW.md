@@ -71,7 +71,7 @@ uncommitted tree is never reviewed, and the script warns when it is dirty.
   with both findings and a blocked piece is `blocked` for this reason; its
   findings are still recorded and carried into the next prompt, together with
   those of the last fully reviewed round.
-- A `HEAD` that is already `clean` exits 0 without calling the reviewer.
+- A `HEAD` with a qualifying `clean` note exits 0 without calling the reviewer.
 
 Rounds are counted from the notes, so the cap holds across invocations,
 worktrees and agents. Rebasing creates new commits without notes, which
@@ -93,8 +93,11 @@ findings: wrong behaviour, logic errors, regressions, unhandled cases, tests tha
 do not check what they claim, and docs that contradict the code. It runs
 `scripts/review/invoke.sh`, the single Codex review runner, with the piece on
 stdin. Each invocation extracts a fresh `git archive` of the exact reviewed SHA
-into a temporary directory, verifies paths, bytes, executable bits and symlink
-targets against Git blobs, and removes it on exit. Unsupported gitlinks or archive
+outside the caller’s worktree, verifies paths, blob identities, executable bits
+and symlink targets, and removes the copy after the reviewer and its descendants
+exit. The runner uses Linux child subreaping so it can also clean up processes
+in separate sessions. Diff, archive and verification all disable Git object
+replacement. Unsupported gitlinks or archive
 attributes that omit or rewrite content fail closed. Codex runs there with
 `--sandbox danger-full-access --skip-git-repo-check --json`; the prompt requires
 read-only review. This disposable copy keeps ordinary reviewer writes away from
@@ -105,12 +108,14 @@ and 2026-11-08, "you can use codex without sandbox it's okay".
 the caller's bug-209 index.lock hazard independently of that setting.
 
 The reviewer inherits only PATH, HOME, CODEX_HOME, TERM, LANG, LC_ALL, SSL_CERT_FILE,
-SSL_CERT_DIR and LEAN_NUM_THREADS when set. Its TMPDIR is private to the invocation.
+SSL_CERT_DIR and LEAN_NUM_THREADS when set. Its TMPDIR is private to the invocation. The runner sets a Git discovery ceiling
+around the copy and disables object replacement in the reviewer environment.
 
-Every completed review must produce a completed successful command event reporting the
-expected SHA-256 digest of a repository file. Missing read evidence, startup or
-reviewer error events, or nonzero execution exit is an error (exit 2),
-never clean or findings; no review note is recorded and policy refusals before the first read follow the neutral retry below.
+Every completed review must include a successful command event for the exact
+read probe supplied in the prompt, with the expected SHA-256 digest of the
+file in the private archive. An unrelated command that prints the digest
+cannot supply evidence. Missing evidence, startup errors and execution failures
+exit 2 before recording a note. Policy refusals go through the retry below.
 The exact prompt, final output and raw JSON event stream are saved beside the
 round report in `.review/<sha>-<round>-invocation-<n>.*` for all invocations.
 
@@ -118,11 +123,13 @@ The reply must end with a line that is exactly `VERDICT: clean` or
 `VERDICT: findings`. Markdown emphasis around it is tolerated; anything after it
 is not. A reply without that line is treated as no answer, never as clean.
 
-**Refusals.** A piece that comes back refused, with no verdict line, is retried **once**: the piece is halved and each half is sent
-with a more neutral prompt that leaves out the project framing. If any half
-fails again, the piece is `blocked` and the script moves on. It does not loop.
-Refusal text is matched only when the reply has no verdict line, so a real
-review that discusses content filters still parses.
+**Retry.** The runner retries a policy refusal, including a structured CLI
+refusal before the read probe. It also retries a reply that supplied read
+evidence but omitted a valid final verdict. In either case it halves the piece
+and sends each half once with a more neutral prompt that leaves out the project
+framing. If a half is refused or still lacks a verdict, the piece becomes
+`blocked`. Discussion of content filters in a valid review is ordinary review
+text.
 
 ## Owner decisions: choosing versus recording
 
@@ -157,17 +164,27 @@ reviewer: codex
 utc: 2026-10-22T14:03:11Z
 base: <40-hex sha>
 pieces: K
+read-evidence: v1
 ```
 
 **The format is an interface.** `verify.sh` parses it, and the train's review
 leg reads it through `verify.sh`, which rejects any note that lacks one of these
-six keys, repeats a key, or carries any other key. Keys are matched by name, not
+seven keys, repeats a key, or carries any other key. Keys are matched by name, not
 position. Change the format only together with `verify.sh`.
 
 - `rounds` is this round's number, which is also the number of rounds run on the
   branch so far.
 - `base` is the branch base (the merge-base), not the start of the delta.
 - `pieces` counts the pieces before any refusal retry.
+- `read-evidence: v1` identifies the runner protocol that checked every piece
+  before accepting its verdict. A blocked note records the protocol and cannot
+  establish coverage.
+
+Historical six-field notes still count toward the round cap and can carry
+forward open findings. Review coverage and landing provenance require the
+evidence field, including when the train checks notes on its members. If a
+historical note would otherwise supply coverage, the next round reviews the
+full branch diff unless a newer evidence-bearing review already covers it.
 
 When the verdict is not clean, the findings text goes in a second note under
 `refs/notes/concrete-review-findings`, which is pushed too. It is how the next

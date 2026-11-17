@@ -40,6 +40,7 @@
 #   REVIEW_PIECE_BYTES  size limit of one piece in bytes (default: 60000)
 
 set -euo pipefail
+export GIT_NO_REPLACE_OBJECTS=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../checks/lib/has_match.sh" || exit 2  # bug 283: never a pipe into grep -q
@@ -184,9 +185,10 @@ PREV_FINDINGS=""
 COVERING_REVIEWS=""
 while read -r c; do
   [ -n "$c" ] || continue
-  # Schema first: malformed notes supply neither rounds nor review evidence.
+  # Historical notes count toward the cap and preserve findings.
+  # Only evidence-bearing notes can establish coverage below.
   vrc=0
-  bash "$SCRIPT_DIR/verify.sh" "$c" >/dev/null 2>&1 || vrc=$?
+  bash "$SCRIPT_DIR/verify.sh" --round-history "$c" >/dev/null 2>&1 || vrc=$?
   [ "$vrc" -le 1 ] || continue
   n="$(git notes --ref="$NOTES_REF" show "$c")"
   v="$(note_field "$n" verdict)"
@@ -438,6 +440,7 @@ reviewer: $REVIEWER
 utc: $UTC
 base: $BASE_SHA
 pieces: $K
+read-evidence: v1
 EOF
 git notes --ref="$NOTES_REF" add -f -F "$WORK/note" "$HEAD_SHA"
 if [ "$VERDICT" = blocked ] && [ -n "$PREV_FINDINGS" ]; then

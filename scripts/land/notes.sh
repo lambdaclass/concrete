@@ -3,7 +3,7 @@
 # commit carries BOTH notes, published on origin:
 #
 #   refs/notes/concrete-review   verdict: clean|findings|blocked   rounds: N   reviewer: codex   utc: ...
-#                                base: <sha>   pieces: N   (format owned by scripts/review/review.sh and
+#                                base: <sha>   pieces: N   read-evidence: v1   (format owned by scripts/review/review.sh and
 #                                checked by scripts/review/verify.sh)
 #   refs/notes/concrete-gates    gates: pass|fail          selected: N                   utc: ...
 #
