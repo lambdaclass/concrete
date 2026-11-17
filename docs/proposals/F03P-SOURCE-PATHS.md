@@ -1,6 +1,6 @@
 # F03p: checked source paths and spans
 
-Status: round-2 authoritative writer brief for F03/F19 Lean writers; not a landing artifact.
+Status: round-3 authoritative writer brief for F03/F19 Lean writers; not a landing artifact.
 Owner instruction (2026-11-17, “ok yes”): design proposals do not land on main;
 they are writer instructions only, and decisions live in the Lean spec. The harness
 retains this brief outside main. No Lean implementation is changed this round.
@@ -79,10 +79,13 @@ including whole-path byte length in that same predicate. It must remain impossib
 `SourcePath` through an unchecked external constructor. A locally valid path is
 not evidence that a project containing it is admissible.
 
-Use a byte-preserving input carrier: a validated byte sequence whose storage is
-`ConcreteSpec.Numbers` with a proof every element is below 256. Reuse F03
-`SourceText` arithmetic through a proved exact view; do not introduce a second
-line/column scanner. A thin String adapter encodes UTF-8 exactly and calls the
+Use exactly one nominal byte/source-text carrier: make F03 `SourceText` a
+`structure` with a field declared syntactically as `ConcreteSpec.Numbers` and a
+proof every element is below 256. Never use an `abbrev` or `def` alias for this
+carrier, nor introduce a separate byte-sequence structure alongside it. Raw paths
+and loaded source text use this same carrier; ASCII path admission is a predicate
+over it, not another byte representation. Preserve F03 `SourceText` arithmetic
+through proved exact projections; do not introduce a second line/column scanner. A thin String adapter encodes UTF-8 exactly and calls the
 byte parser; it is not the primary admission boundary. Every byte >= 128 is
 refused, including ill-formed UTF-8. Host adapters must preserve bytes or explicitly
 refuse unrepresentable input; replacement-character conversion violates never-rewrite.
@@ -127,7 +130,7 @@ shared directories. Folded comparison keys never become stored identities.
 The domain of this predicate is the **whole supplied project path set**, not only
 files mentioned by sites, one module, or adjacent entries. For this foundation the set is every source file relative to one project root
 (decisions.md:3487, “one checked path inside the project”; line 3743, “relative to
-the project root”). Future multi-package layout is Phase F / R-0383, not an F19
+the project root”). Future multi-package layout is Phase G / R-0383, not an F19
 prerequisite. It must later choose between isolated package roots (cheap, needs a
 separate coexistence check), one flat closure (rejects even two packages each using
 `src/lib.con`), or explicit root namespaces (more representation/proof work, recommended
@@ -151,7 +154,7 @@ facts; a definitional projection alone is not admission correctness.
 | Uppercase A–Z allowed | Same `parse` | Positive mixed-case admission instances and completeness, so an all-lowercase-only mutant fails |
 | Never rewrite | `parse` and exact `render` | `accepted_render`, `parse_render`, `render_injective`, `refusal_input`; project success preserves raw names, bytes and order; case folding cannot alter output |
 | At most 100 bytes/component, 200 bytes/path | Same `parse`; one constant each | `component_bytes_le`, `path_bytes_le`, and completeness at equality; reason includes limit and offending range; whole length includes slash bytes |
-| Exact duplicates refused | `admitProject` | Project admission biconditional, duplicate refusal soundness/completeness, with both original input occurrences |
+| Exact duplicates refused | `admitProject` | Project admission biconditional, duplicate witness soundness and existential detection completeness, with both original input occurrences; reporting obeys selection/blocking below |
 | Case-only collisions, including directory prefixes | Same `admitProject`, prefix relation above | Project admission iff all local `RawOk`, no duplicate files and prefix case safety; collision witness contains both paths, prefixes and folded equality/exact inequality |
 | First error per file | File-check result consumed by loader | At most one reported failure per file; every selected failure is real; no later file-local checking after its selected first failure; independent files remain checkable |
 | Valid stored byte coordinates | `Span.LocationOk`, loader site binding | `Span.locationOk_iff`, loader admission iff strengthened `ProjectSources.Realizes`; exactly one source binding and correct start coordinates for each admitted site |
@@ -159,8 +162,11 @@ facts; a definitional projection alone is not admission correctness.
 For caps, exercise 99/100/101-byte components and 199/200/201-byte paths where
 all other predicates hold (construct multiple components for whole-path cases).
 Prove the universal bounds, not just these examples. For collision completeness,
-prove existential witness detection and admission invariance under permutation of
-the path set. Diagnostic ordering follows the decided file/span/rule ordering; admission
+prove that every violating pair yields a candidate and that any invalid locally
+admitted set yields at least one selected collision report. Do not require a report
+for every pair: an occurrence already attributed a failure blocks further checks
+involving it. Prove admission invariance under permutation of the path set;
+occurrence ordinals may affect attribution for equal identities, never admission. Diagnostic ordering follows the decided file/span/rule ordering; admission
 must not. Test nonadjacent collision pairs, shared exact prefixes, different
 suffixes, uppercase-only valid names and three-file sets. Mutants must actually
 change the production path-set subject, not a toy equality check.
@@ -185,17 +191,58 @@ as blocked by r inside the result, never as another refusal. Order is by file,
 span, then rule ID.” Apply also decisions.md:1650: “Each file is checked separately,
 and checking a file stops at its first error.” None of these is an owner question.
 
-Check every file independently. Select its first local failure, then stop that
-file's dependent checks. Check collisions among all locally admitted identities;
-collision records name both occurrences, with the lexicographically earlier exact
-path primary (input ordinal breaks identical-path ties). Coalesce pair witnesses
-in deterministic order. Collision participants' dependent site checks are blocked;
-independent admitted files' site checks continue. A site on a malformed path is
-blocked by that refusal, not reported again as missing. Keep raw file identity
-and occurrence provenance for this association. No executable partial project is
-returned. Every report item has a real premise witness; sort output by exact raw
-file bytes, span, then registered rule ID, using occurrence ordinal only for equal
-keys. Never sort by folded identities.
+Use the following deterministic stages; detecting witnesses is not reporting failures.
+Input file occurrences have stable input ordinals, even when their bytes are equal.
+An occurrence key is `(exact raw path bytes, input ordinal)`, compared
+lexicographically (bytes numerically, a proper prefix first; ordinals numerically).
+A file here means an input file occurrence, not an equivalence class of spellings.
+
+1. Check local paths independently. Select one local failure per occurrence by the
+   offset/priority convention below and stop that occurrence's dependent checks.
+2. Among locally admitted occurrences, enumerate unordered distinct occurrence
+   pairs. Exact equal full paths yield a duplicate candidate. For each pair with a
+   case collision, retain only its shortest colliding component-prefix length;
+   this uniquely fixes both prefix ranges even when several prefixes collide.
+   If Q6 approves refusal, an exact proper-file-prefix pair yields a separate
+   candidate of that rule. These are separate registered predicates/reasons.
+3. Orient each candidate by occurrence key (earlier primary, later related). Sort
+   candidates by `(primary occurrence key, primary offset, primary range end,
+   related occurrence key, related offset, related range end, rule key)`.
+   Greedily select a candidate only if neither occurrence already participates in
+   a selected collision report. Attribute that one failure to **both** occurrences;
+   a related span is part of that report, not a second reported failure. Mark both
+   blocked for further collisions and dependent site checks. Unselected candidates
+   touching a selected occurrence are blocked evidence linked to the first selected
+   report touching either endpoint in this traversal, never additional refusals.
+4. Check sites only for occurrences without local or selected collision failures.
+   Select at most one site failure per file, by the report key below; stop later
+   dependent checks. Independent files remain checkable. Pre-admission site entries
+   bind to file-entry ordinals and retain raw path bytes, not validated `Span`s.
+   A malformed path therefore blocks its raw sites without fabricating a checked
+   path or reporting a second missing-file failure. A binding naming no input file
+   is a project-level binding failure, not a fictitious file occurrence.
+
+No executable partial project is returned. Prove pair enumeration complete, selected
+witnesses sound, and the greedy traversal maximal: every unselected candidate touches
+an occurrence blocked by a selected report. Thus any nonempty candidate set selects
+at least one failure, while each file occurs in at most one reported failure across
+all stages (including primary and related occurrences). Independent valid files
+continue through sites. Local refusal completeness and project admission iff the
+independent validity relation remain universal; diagnostic completeness requires
+coverage by a report or its explicit blocking dependency, not a report per pair.
+For `a.con`, `a.con`, `A.con`, only one collision report can be selected, with the
+remaining pair checks blocked; invalidity is still detected. Include this control
+and a disjoint-pairs control showing independent failures are both reported.
+
+Sort final reports by `(exact primary raw file bytes, primary span start, primary
+span end, rule key, primary ordinal, related occurrence key if present)`. Never
+sort by folded identity. The exact RuleId key is `(declaration-name components,
+revision)`: compare root-to-leaf `Lean.Name` components lexicographically, string
+components by UTF-8 bytes and numeric components numerically, with string before
+numeric and a proper component-list prefix first; revision is numerical. This is
+structural name comparison, not pretty-printed names or registry insertion order.
+Use this same key wherever a rule tie-break is required. Project-level bindings
+without a file sort after file reports, by raw site-entry ordinal then rule key.
 
 Offsets are zero-based byte boundaries, with EOF equal to byte length, as in
 `Spec/Surface0.lean`'s `ScalarFailure`, `FirstError`, and `SourceFailure`.
@@ -209,8 +256,18 @@ Carry a half-open offending component range as context as well as the offset:
 | Single dot / parent traversal / reserved name | Component start |
 | Backslash / non-ASCII / space / control / additional prohibited punctuation if approved | First offending byte |
 | Leading / trailing dot | First / last component byte |
-| Component / whole cap | First excess byte, indices 100 / 200 respectively |
-| Duplicate / case collision | Both full-path starts / both first case-differing prefix bytes |
+| Component / whole cap | First excess byte in whole-path coordinates: `componentStart + 100` / `200` respectively |
+| Duplicate / case collision | Both full-path starts (0), full-path ranges / both first case-differing bytes in the selected shortest prefix, with both prefix ranges |
+| Exact proper-file-prefix conflict, only if Q6 approves refusal | Shorter file EOF (`shorter.length`), a boundary with context range `[0, shorter.length)`; longer file separating slash at `shorter.length`, with context range `[0, shorter.length + 1)` |
+
+For `dir/` followed by a 101-byte component, the component witness is 104, not
+100. For component lengths 60, 60, 101, the third component starts at 122:
+whole-cap offset 200 precedes component-cap offset 222. Require both controls,
+and prove a component-cap witness identifies the actual first excess byte, not
+merely an in-bounds location. Conditional Q6 witnesses prove the shorter path is
+an exact component prefix of the longer, both context ranges are in bounds, and
+the longer witness is the actual separating slash. These offsets are a proposed
+engineering convention conditional on approval, not approval of the exclusion.
 
 Classify `.` and `..` before generic endpoint-dot rules; define the generic
 endpoint-dot refusal premises to exclude these exact components. This keeps each
@@ -234,10 +291,10 @@ fixture or registered example may partially choose a side before its answer.
 | Question and plain-language background | Every option and its cost | Recommendation (requires explicit answer) |
 |---|---|---|
 | Q1: ASCII alone permits punctuation that common filesystems cannot store. Which remaining printable characters and internal repeated dots may a filename contain? | All printable ASCII except decided exclusions: broad, but allows noninitial `:`, `*`, `?`, quotes, `<`, `>`, pipe. A complete whitelist: less expressive, easiest to audit. A complete extra blacklist: flexible, more omissions to audit. Independently, allowing internal `a..b` preserves ordinary names; forbidding it simplifies appearance but rejects names unrelated to traversal. | Whitelist exactly `A-Z a-z 0-9 _ - .`, with the already decided endpoint-dot exclusions, and allow internal repeated dots. This adds policy and is not yet implemented. |
-| Q2: Windows treats device names specially even with file extensions; does `con.con` count? | Exact case-insensitive whole-component matching against `CON PRN AUX NUL COM1–COM9 LPT1–LPT9`: small but extensions escape. Match the stem before the first dot against that same complete ASCII list, ignoring ASCII case: more proof cases, catches extensions. Host API matching: version/platform-dependent, prevents a closed portable Lean authority. Additional device spellings require an explicit list and add refusals. | The stated closed list, case-insensitive stem-before-first-dot matching, no additional spellings. This supplies the currently missing exact matcher, not a new assumption about OD142. |
+| Q2: Windows treats device names specially even with file extensions; does `con.con` count? | Exact case-insensitive whole-component matching against `CON PRN AUX NUL COM1–COM9 LPT1–LPT9`: small but extensions escape. Match the stem before the first dot against that same complete ASCII list, ignoring ASCII case: more proof cases, catches extensions; forbids module/directory stems `con`, `prn`, `aux`, `nul`, `com1`–`com9`, `lpt1`–`lpt9`, including `con.con`, while `main.con` remains valid. Host API matching: version/platform-dependent, prevents a closed portable Lean authority. Additional device spellings require an explicit list and add refusals. | The stated closed list, case-insensitive stem-before-first-dot matching, no additional spellings. This supplies the currently missing exact matcher, not a decision about module layout. |
 | Q6: A regular file `a` cannot also be the directory containing `a/b.con`. Current case-collision authority rejects `A` beside `a/b.con` but does not settle the exact-case pair. | Add an exact proper-file-prefix exclusion to the single project checker: a new typed rule and proof family, uniformly rejects both cases. Admit exact prefixes syntactically: fewer rules but permits an unmaterializable source set and preserves the asymmetry. | Refuse exact proper-file-prefix conflicts in `SourcePath.admitProject` with both occurrences and a dedicated registered reason. This follows PHILOSOPHY rules 1 and 5; there is no second materialization admission boundary. Until answered, do not add the exclusion or claim the asymmetry resolved in Lean. |
 
-Q3 is deferred to Phase F rather than left as a foundation blocker. Q4/Q5/Q7
+Q3 is deferred to Phase G rather than left as a foundation blocker. Q4/Q5/Q7
 are closed by the existing authority and engineering choices above. Representation,
 byte-coordinate work and proof infrastructure can proceed now. Concrete local
 admission/fixtures wait on Q1/Q2; final project admission and F19 wait additionally
@@ -259,17 +316,19 @@ split only at independently qualified boundaries.
 
 | Slice / authority dependencies | Exact targets and complete closure | Estimated changed Lean lines |
 |---|---|---|
-| F03p, after Q1/Q2; project-check portion also Q6 | `Spec/Ident.lean`: replace the held `SourcePath.DrivePrefix` through `Span.PathOk` group and held `mainSourcePath`, `tabSpan` and location examples. Define byte carrier, `RawOk`, parser/render, refusals, project predicate/checker and Span. `Spec/Rules.lean`: register every distinct check with its own accepted/refused conformance examples. `Proofs/Ident.lean`: include the minimal actual admission/refusal biconditionals, identity/bounds, prefix detection and reason witnesses needed to qualify those new rules, plus corresponding planted controls. | 1,800–2,600; plan two qualified families (local then project), roughly 900–1,300 each, with allocated labels before implementation |
+| F03b (proposed coordinator label), immediate; no open policy dependency | Atomic F03/F04 nominal `SourceText` migration: `Spec/Ident.lean` snapshot 702–712 (carrier/arithmetic), 892–902 (`tabSource` and byte-offset examples); `Proofs/Ident.lean` 1018–1062 (six line/column Laws), 2019–2095 (`aSource` through `scalarColumn`, fixtures/mutants); `scripts/proofs/axioms.golden` 2696–2703 and all transitive consumers. Preserve exact byte facts and reuse `otherTabSource`. Enumerate complete commands and regenerate the golden through its owning tooling. Run unchanged local-identity scan now and again on strengthened F19's entire closure. | 350–650 Lean lines, plus generated golden changes; one atomic qualified slice |
+| F03p, after F03b and Q1/Q2; project-check portion also Q6 | `Spec/Ident.lean`: replace the held `SourcePath.DrivePrefix` through `Span.PathOk` group and held `mainSourcePath`, `tabSpan` and location examples. Reuse F03b SourceText; define `RawOk`, parser/render, refusals, project predicate/checker and Span. `Spec/Rules.lean`: register every distinct check with its own accepted/refused conformance examples. `Proofs/Ident.lean`: include the minimal actual admission/refusal biconditionals, identity/bounds, prefix detection and reason witnesses needed to qualify those new rules, plus corresponding planted controls. | 1,800–2,600; plan two qualified families (local then project), roughly 900–1,300 each, with allocated labels before implementation |
 | F04p, after F03p and existing F04; no further authority | Remaining `Proofs/Ident.lean` path family (snapshot commands in 13–279), Span projection (1300–1305), and complete Span controls (2341–2355). Reuse F03 `tabSource` and F04 `otherTabSource`; never extract snapshot line 2269 again. Prove `Span.pathOk` once for all spans from SourcePath; migrate projection proofs without duplicating F03p correctness. | 500–900 |
-| F19 first arrival, after F04p and Q1/Q2/Q6; no Q3 dependency | `Spec/Observe.lean`: replace `ProjectSources`, `SourceLoadRefusal`, `SourceLoadResult`, `LoadedProject.parseFiles/load`, `SourceLoadRefusal.Names`, `ProjectSources.Realizes`, `SiteTable.Valid`; use sole project checker and list diagnostics with blocking. Add independent full-set prefix case safety (and Q6 outcome), exact identity/source preservation and site uniqueness/coordinates to Realizes. Include complete loader soundness/completeness and refusal witness evidence in `Proofs/Observe.lean` at first arrival, registry examples in Spec/Rules, and trust-safe execution adapter/terminal closure described below. | 1,500–2,300 path-related lines beyond base F19; split unrelated observation families first, never land a weak loader |
+| F19 first arrival, after F04p and Q1/Q2/Q6; no Q3 dependency | `Spec/Observe.lean`: replace `ProjectSources`, `SourceLoadRefusal`, `SourceLoadResult`, `LoadedProject.parseFiles/load`, `SourceLoadRefusal.Names`, `ProjectSources.Realizes`, `SiteTable.Valid`; use sole project checker and list diagnostics with blocking. Add independent full-set prefix case safety (and Q6 outcome), exact identity/source preservation and site uniqueness/coordinates to Realizes. Include complete loader soundness/completeness and refusal witness evidence in dedicated `Proofs/SourceLoad.lean` at first arrival (imported by Observe/Observe2 consumers; leave Slice-1 `checked_observation` in `Proofs/Observe.lean:10–77`), registry examples in Spec/Rules, and trust-safe execution adapter/terminal closure described below. | 1,500–2,300 path-related lines beyond base F19; split unrelated observation families first, never land a weak loader |
 | F20, after strengthened F19 | `Proofs/Observe2.lean`: migrate every positional path/refusal fixture in complete commands intersecting 847–1072, including 1003–1011 in full. Import first-arrival loader Laws; remaining observation proofs use the strengthened relation. | 350–650 migration lines beyond base F20 |
 | F20p, after F20 | Additional production-loader controls for nonadjacent prefix collisions, shared directories, case preservation, caps and new reasons. No production policy or correctness deferred here. | 350–600 |
-| F22 and F23, after F19 and F04p respectively | F22 `Proofs/ObserveSource.lean` coordinate consumers use canonical byte views; F23 `Proofs/ObserveReport.lean` migrates all PathOk references (snapshot 249–799), structured path/refusal fixtures (complete commands intersecting 818–850), and report ordering/blocking Laws. | 150–300 F22; 250–450 F23 |
+| F22 and F23, both after strengthened F19 and F20 (and transitively F04p) | F22 `Proofs/ObserveSource.lean` coordinate consumers use canonical byte views; F23 `Proofs/ObserveReport.lean` migrates all PathOk references (snapshot 249–799), structured path/refusal fixtures (complete commands intersecting 818–850), and report ordering/blocking Laws. | 150–300 F22; 250–450 F23 |
 | F29 then F29p, after F20p and relevant report closure | `Proofs/Frame.lean`: command closure across 2334–2368 and 2429–2457. The empty-path invalidity helper at 2340–2341 belongs with F29's consuming examples 2354–2368, not stranded in F29p. F29p takes backslash/control helpers with their Instance/Planted consumers 2429–2457 and new cap/collision final-boundary controls. Prove actual boundary/Realizes equivalence, preserving satisfiable positive mixed-case controls. | 150–250 F29 migration; 450–750 F29p |
 
-Sequence: byte/representation support may proceed immediately; answered Q1/Q2 →
+Sequence: atomic F03b byte/representation migration may proceed immediately; answered Q1/Q2 →
 qualified local F03p; Q6 → qualified project F03p → F04p → strengthened F19 →
-F20 → F20p → F29/F29p. F22/F23 follow their consumers' prerequisites above.
+F20 → F20p → F29/F29p. Both F22/F23 follow strengthened F19 and F20;
+F29/F29p also wait on the report closure they consume.
 F03p-design itself never lands. F20p adds controls, not an overdue contract.
 
 ### F19 local-identity closure (mandatory, unchanged gate)
@@ -280,9 +339,15 @@ structure fields, bodies and inferred application types. A new wrapper alone is
 not a scanner exemption. Use the already admitted nominal boundaries:
 `ConcreteSpec.Name` for exact path/rendered identity text, and `ConcreteSpec.Numbers`
 for program/source bytes (see `Spec/Basics.lean:24–45` and ISS-0074).
-The validated byte carrier above stores Numbers, never an unannotated `List Nat`
-or `List UInt8`. Make F03's `SourceText` representation use the Numbers boundary
-without changing its byte facts; exact views preserve `lineAt`/`columnAt`.
+The single `SourceText` structure stores a field whose declared type is literally
+`ConcreteSpec.Numbers`, never an unannotated `List Nat` or `List UInt8`. F03b owns
+this atomic migration, including the F04 Laws/fixtures and axiom golden listed
+above. A reducible alias fails: `normalType` at all transparency unfolds it through
+Numbers to `List Nat`; a nominal structure stops `whnf`, and constructor inspection
+sees the syntactically declared Numbers field (`local_identity.lean:6–7,102–114,
+154–168`). Exact projections preserve `lineAt`/`columnAt` without another scanner.
+F19 qualification must demonstrate this over the full elaborated execution closure,
+not infer a pass from the earlier Ident-only import graph.
 
 F19 semantic `Terminal.trapped`, loaded sources, source-input payloads, and execution
 adapter observations carry these types. A rendered trap line is nominal `Name`,
@@ -317,7 +382,43 @@ examples and per-check registration. Proofs owns Law theorems and planted mutant
 A slice spans both modules when necessary for qualification; this is not permission
 to put Law or Planted families into Spec. Every distinct refusal, including cap,
 collision and site checks, gets its own registered rule and reachable witnesses;
-no composite registration substitutes for these. Coordinator allocates missing IDs.
+no composite registration substitutes for these.
+
+Registration must satisfy the existing gates, not merely list refusal constructors:
+
+- `scripts/spec/rules.lean:67–72` and `Spec/Rules.lean` require each registered
+  declaration to be a unary `Input → Prop` judgment. Package component position,
+  pair occurrences or site/source context in a nominal input record as needed;
+  curried predicates, Boolean validators and refusal constructors are not entries.
+  Assemble `RawOk` and project validity from these same per-check judgments.
+- Link separate trusted, elaborated `RuleAccepted judgment input` and
+  `RuleRefused judgment input` theorems on closed constructor/literal data;
+  the exporter must recognize the exact linked declaration. Inputs must satisfy
+  its inspectable-data test, not contain runtime type/policy fields or free variables.
+- A RuleId is the declaration name plus its revision (starting at 1), never an
+  allocated code. Revision changes follow the existing semantic revision contract.
+- `scripts/spec/rules.py:6–7,49,58–61` requires each rule doc comment to cite a
+  governing declared decision row (`Q` with dotted digits, `OD`, `P`, or `R-NNNN`)
+  AND this brief requires the precise decision anchor. The row must actually match
+  a standalone `- **ID**` or `| ID |` declaration. A local question label such as
+  Q1/Q2/Q6, an anchor alone, ISS-0068, or the HTML-prefixed R-0615 row is insufficient.
+
+Use declared R-0496 plus `decided-2026-11-14-trap-sites-and-law-tests` for the
+already governed basic loader/path and site-location rules; R-0612 governs C6
+observation rules and R-0592 plus `decided-project-diagnostics-2026-11-06` governs
+diagnostic composition. Do not cite unrelated OD142 merely to pass the row gate.
+ISS-XXXX (coordinator): the November 16 extended path-character, case-prefix and
+100/200-byte-cap decision at `decided-2026-11-16-file-paths` needs a declared
+governing row, or an explicit update of the existing R-0496 row to govern those
+extensions. Its current text leaves path-character policy open. The final Q1
+punctuation/internal-dot answer, Q2 exact reserved-name matcher answer, and Q6
+proper-file-prefix answer likewise each need a declared governing row (or explicit
+coverage in that updated row) with their recorded decision anchors after owner
+approval. Do not manufacture row IDs, hand-edit the inventories in this writer
+round, use a merely syntactically accepted unrelated citation, or register those
+checks before both their authority and documentation prerequisites exist. Record
+this coordination dependency in F03p's manifest; diagnostic and carrier engineering
+work need not wait for it.
 
 Specific departures from the old snapshot:
 
