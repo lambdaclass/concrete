@@ -93,6 +93,34 @@ def main():
             refused(lambda: inventory.records_from_census(commands+[paired[0]], root),
                     f'duplicate command span: {inventory.span_key(paired[0])}')
             print('control PASS: same-line examples retain distinct types and exact UTF-8 source spans')
+            declaration = 'theorem «λ» : True := /- preserve\r\n  this break -/\n  True.intro'
+            other = 'theorem second : True := True.intro'
+            for separator in ('\n', ' '):
+                body = ('-- prefix λ\n' + declaration + separator + other +
+                        separator + 'example : True := «λ»\n').replace('\n', '\r\n').encode()
+                probe.write_bytes(body)
+                data = inventory.census(root, exporter)
+                rows = inventory.records_from_census(data, root)
+                expected_commands = [declaration, other, 'example : True := «λ»']
+                if [r['digest'] for r in rows if r['record']=='command'] != [
+                        inventory.sha(s.encode()) for s in expected_commands]:
+                    raise ValueError('CRLF commands lost their canonical UTF-8 source spans')
+                if inventory.authored_names(data) != {'«λ»', 'second'}:
+                    raise ValueError('authored declaration selections lost their exact UTF-8 identifier spans')
+                receipt = next(r for r in data if r['record']=='example')
+                if '«λ»' not in receipt['uses'] or probe.read_bytes()!=body:
+                    raise ValueError('CRLF example lost its dependency or modified caller source')
+                first = next(r for r in data if r['record']=='origin' and r['name']=='«λ»')
+                second = next(r for r in data if r['record']=='origin' and r['name']=='second')
+                start, stop = first['selectionBytes']
+                first['selectionBytes'] = [start, stop+1]
+                if inventory.authored_names(data) != {'second'}:
+                    raise ValueError('selection matched with only its start byte')
+                first['selectionBytes'] = [start, stop]
+                first.update(startByte=second['startByte'], endByte=second['endByte'])
+                if inventory.authored_names(data) != {'second'}:
+                    raise ValueError('selection matched an identifier outside the observed command')
+            print('control PASS: CRLF slicing and instrumentation with separate and same-line commands; authored spans stay inside their observed commands')
             probe.write_text(original)
             snapshot = inventory.head_population()
             def assert_reason(expected):
@@ -333,6 +361,34 @@ def main():
                 if observed[open_unit] != expected:
                     raise ValueError(f'same-line retirement expected {expected!r}, got {observed!r}')
             print('control PASS: committed same-line open refuses retirement until removed')
+            middle = 'example : 13 = 13 := rfl\n'
+            probe.write_text('open Nat\n' + middle + 'open Nat\n')
+            commit()
+            duplicate_snapshot = inventory.head_population()
+            duplicate_rows = [dict(open_row, name=n.removeprefix('command:'))
+                              for n,k in duplicate_snapshot.commands.items() if k[:4]==open_key[:4]]
+            if len(duplicate_rows)!=2:
+                raise ValueError('expected two identical commands around the example')
+            later = 'command:' + duplicate_rows[1]['name']
+            review_path.write_text(review_path.read_text().replace('VERDICT: ACCEPT',
+                                          f'UNIT: {later}\nVERDICT: ACCEPT'))
+            duplicate_retirement = dict(retired, supersedes=[later])
+            accept(duplicate_retirement, 'F02')
+            duplicate_population = duplicate_rows+[dict(crec, note=json.dumps(duplicate_retirement))]
+            later_key = duplicate_snapshot.commands[later]
+            ambiguity = 'ambiguous command occurrence assignment: '+json.dumps(duplicate_snapshot.presence[later_key][:2])
+            for source, expected in [(middle+'open Nat\n', ambiguity),
+                                     ('open Nat\n'+middle, ambiguity),
+                                     (middle+'open Nat\nnamespace Elsewhere\nopen Nat\nend Elsewhere\n', ambiguity),
+                                     (middle, 'reconciled by retirement')]:
+                probe.write_text(source)
+                commit()
+                checked = inventory.head_population()
+                observed = inventory.replacement_progress(duplicate_population,
+                    inventory.progress_reasons(duplicate_snapshot, checked), checked, duplicate_snapshot)
+                if observed[later]!=expected:
+                    raise ValueError(f'identical open retirement expected {expected!r}, got {observed[later]!r}')
+            print('control PASS: either surviving identical open leaves retirement ambiguous, even with a new copy elsewhere; removing both closes it')
             d_retired = dict(spec,action='retire',declarations={},commands=[])
             accept(d_retired)
             d_record = dict(replacement,note=json.dumps(d_retired))
@@ -467,10 +523,12 @@ def main():
                     'missing HEAD command identity: '+json.dumps(min(twins.commands.values())))
             print('control PASS: production missing snapshot command identity refuses explicitly')
             collision_output = io.StringIO()
+            revision = git('rev-parse','HEAD')
             with contextlib.redirect_stdout(collision_output):
-                inventory.report_command_collisions(twins, git('rev-parse','HEAD'))
-            if 'command identity collision' not in collision_output.getvalue():
-                raise ValueError('snapshot twin collision omitted from census')
+                inventory.report_command_collisions(twins, revision)
+            prefix = f'diagnostic: command identity collision at {revision}\t'
+            if not any(line.startswith(prefix) for line in collision_output.getvalue().splitlines()):
+                raise ValueError('snapshot twin collision omitted its diagnostic label or revision')
             ambiguous = inventory.Digests()
             ambiguous.presence = dict(twins.presence)
             ambiguous.presence[twin_keys[1]] = ambiguous.presence[twin_keys[0]]

@@ -17,7 +17,7 @@ import subprocess
 import sys
 import tempfile
 
-from landing_census import census, span_index, span_key
+from landing_census import census, source_bytes, span_index, span_key
 from landing_controls import check_census
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -211,7 +211,7 @@ def records_from_census(data, source_root=None, ref=SOURCE):
     for key, c in parsed.items():
         f, start, stop = key
         if f not in files:
-            files[f] = source(ref, f) if source_root is None else (source_root/f).read_bytes()
+            files[f] = source_bytes(source(ref, f) if source_root is None else (source_root/f).read_bytes())
         body = files[f]
         if c['syntax']=='module-realization':
             chunk = body
@@ -647,13 +647,19 @@ class Digests(dict):
 
 
 def authored_names(data):
-    tokens = {(c['file'], i['line'], i['column']): i['name']
-              for c in data if c['record']=='command'
-              for i in c.get('sourceIdentifiers', [])}
+    tokens = {key: {(i['startByte'], i['endByte']): i['name']
+                    for i in c.get('sourceIdentifiers', [])}
+              for key,c in span_index(data, 'command').items()}
+    declarations = {(d['module'].replace('.', '/')+'.lean', d['name']): d
+                    for d in data if d['record']=='declaration'}
     authored = set()
-    for d in data:
-        if d['record']!='declaration': continue
-        token = tokens.get((d['module'].replace('.', '/')+'.lean', d['line'], d['column']))
+    for origin in data:
+        if origin['record']!='origin' or origin.get('selectionBytes') is None:
+            continue
+        d = declarations.get((origin['file'], origin['name']))
+        if d is None:
+            continue
+        token = tokens[span_key(origin)].get(tuple(origin['selectionBytes']))
         if token and (d['userName']==token or d['userName'].endswith('.'+token)):
             authored.add(d['name'])
     return authored
@@ -908,6 +914,11 @@ def report_command_collisions(snapshot, revision):
                   json.dumps([dict(occurrence=i,key=k) for i,k in sorted(members)]))
 
 
+def partial_multiplicity(before, after):
+    """Equal payloads for which a surviving copy cannot identify its predecessor."""
+    return {key for key,count in before.items() if 0 < after[key] < count}
+
+
 def replacement_progress(rows, reasons, checked, snapshot=None, *, fixture_slots=False):
     reasons = dict(reasons)
     command_keys = list(getattr(checked,'commands',{}).values())
@@ -921,7 +932,7 @@ def replacement_progress(rows, reasons, checked, snapshot=None, *, fixture_slots
         head_slots = command_presence_slots(command_keys)
     else:
         old_groups = command_identity_groups(snapshot)
-        command_identity_groups(checked)
+        head_groups = command_identity_groups(checked)
         for n in sorted({n for r,s in records for n in s['supersedes'] if n.startswith('command:')}):
             key = snapshot_commands[n.removeprefix('command:')]
             if key not in getattr(snapshot,'presence',{}):
@@ -930,15 +941,29 @@ def replacement_progress(rows, reasons, checked, snapshot=None, *, fixture_slots
             if key not in getattr(checked,'presence',{}):
                 raise ValueError('missing HEAD command identity: '+json.dumps(key))
         pinned = {k for r,s in records for k in s['_command_keys']}
-        head_groups = command_identity_groups(checked)
+        old_keys_all = [key for members in old_groups.values() for _,key in members]
+        head_keys_all = [key for members in head_groups.values() for _,key in members]
+        # Ordinals are scoped. A new copy elsewhere can mask a drop in the
+        # original sequence even when the file-wide or global count is stable.
+        ambiguous_scopes = partial_multiplicity(
+            Counter(k[:4] for k in old_keys_all), Counter(k[:4] for k in head_keys_all))
+        # Compare exact payloads across files and contexts as well. A surviving
+        # example can elaborate to a different statement after a context edit.
+        ambiguous_payloads = partial_multiplicity(
+            Counter(k[2:4] for k in old_keys_all), Counter(k[2:4] for k in head_keys_all))
         # Occurrence numbers are census-local, not evidence of which twin landed.
         # Exact keys explain their own occurrences. Only unmatched occurrences need
         # assignment; with multiple remaining snapshot keys no count can select one.
-        unmatched = {}
+        unmatched, ambiguous_digests = {}, {}
         for base,members in sorted(old_groups.items()):
             old_keys = {k for _,k in members}
-            head_keys = {k for _,k in head_groups.get(base,[]) if k not in pinned}
-            unmatched[base] = (sorted(old_keys-head_keys), sorted(head_keys-old_keys))
+            head_keys = {k for _,k in head_groups.get(base,[])}
+            # A surviving equal digest can inherit a different occurrence's key.
+            # Even a pinned target cannot identify which source occurrence survived.
+            ambiguous_digests[base] = partial_multiplicity(
+                Counter(k[3] for k in old_keys), Counter(k[3] for k in head_keys))
+            unpinned = head_keys-pinned
+            unmatched[base] = (sorted(old_keys-unpinned), sorted(unpinned-old_keys))
     for r,spec in records:
         refusal = None
         for n in sorted(spec['supersedes']):
@@ -949,6 +974,10 @@ def replacement_progress(rows, reasons, checked, snapshot=None, *, fixture_slots
                                   for k in sorted(commands))
                 else:
                     base = snapshot.presence[old_key][:2]
+                    if (old_key[:4] in ambiguous_scopes or old_key[2:4] in ambiguous_payloads
+                            or old_key[3] in ambiguous_digests[base]):
+                        refusal = 'ambiguous command occurrence assignment: '+json.dumps(base)
+                        break
                     candidates, occurrences = unmatched[base]
                     present = old_key in commands and old_key not in pinned
                     if not present and occurrences:
@@ -1134,7 +1163,8 @@ def judgment(rows, data, dependencies=True, extra_root=None):
         if key in seen:
             raise ValueError(f'duplicate assignment: {r["name"]}')
         seen[key] = r
-    authored = authored_names(data if extra_root is None else data[0]+data[1])
+    authored = (authored_names(data) if extra_root is None
+                else authored_names(data[0]) | authored_names(data[1]))
     represented = {command_identity(d) for d in rows if d['record']=='declaration' and d['name'] in authored}
     replacement_rows(rows,authored | {'command:'+r['name'] for r in rows if r['record']=='command'
                                     and r['kind']!='module-realization' and r['name'] not in represented})

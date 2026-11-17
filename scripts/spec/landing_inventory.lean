@@ -5,6 +5,10 @@ open Lean
 private def emit (fields : List (String × Json)) : IO Unit :=
   IO.println (Json.compress (Json.mkObj fields))
 
+-- Match Lean's CLI and the Python census source_bytes coordinate system.
+private def sourceContext (file : String) : IO Parser.InputContext := do
+  return Parser.mkInputContext (← IO.FS.readFile file) file (normalizeLineEndings := true)
+
 private partial def containsExample (s : Syntax) : Bool :=
   s.isOfKind ``Parser.Command.example || s.getArgs.any containsExample
 
@@ -37,13 +41,12 @@ private partial def identifiers (s : Syntax) : Array String :=
   | .ident _ _ n _ => #[n.toString]
   | _ => s.getArgs.flatMap identifiers
 
-private partial def sourceIdentifiers (ctx : Parser.InputContext) (s : Syntax) : Array Json :=
+private partial def sourceIdentifiers (s : Syntax) : Array Json :=
   match s with
-  | .ident _ _ n _ =>
-    let pos := ctx.fileMap.toPosition (s.getPos?.getD 0)
-    #[Json.mkObj [("name", toJson n.toString), ("line", toJson pos.line),
-      ("column", toJson pos.column)]]
-  | _ => s.getArgs.flatMap (sourceIdentifiers ctx)
+  | .ident (.original _ start _ stop) _ n _ =>
+    #[Json.mkObj [("name", toJson n.toString), ("startByte", toJson start.byteIdx),
+      ("endByte", toJson stop.byteIdx)]]
+  | _ => s.getArgs.flatMap sourceIdentifiers
 
 -- Parsed syntax for non-example commands excludes source positions.
 private partial def syntaxIdentity (s : Syntax) : Json :=
@@ -72,7 +75,7 @@ private partial def commands (ctx : Parser.InputContext) (env : Environment)
       ("noncomputable", toJson (noncomputableModifier stx)),
       ("noncomputableInsert", toJson (noncomputableInsert stx)),
       ("syntax", toJson stx.getKind.toString), ("example", toJson (containsExample stx)), ("exampleToken", toJson (exampleToken stx)), ("line", toJson start.line),
-      ("endLine", toJson stop.line), ("sourceIdentifiers", Json.arr (sourceIdentifiers ctx stx)), ("identifiers", toJson (identifiers stx))])
+      ("endLine", toJson stop.line), ("sourceIdentifiers", Json.arr (sourceIdentifiers stx)), ("identifiers", toJson (identifiers stx))])
     commands ctx env next messages
 
 -- Observe the environment after each elaborated command. This is extraction provenance,
@@ -257,9 +260,15 @@ private partial def originCommands (input output : IO.FS.Handle) (ctx : Parser.I
   let mut names := before
   for (n, ci) in after.constants.map₂.toList do
     unless before.contains n do
+      let selection := (declRangeExt.find? after n).map fun ranges =>
+        let r := ranges.selectionRange
+        let first := ctx.fileMap.ofPosition r.pos
+        let last := ctx.fileMap.ofPosition r.endPos
+        (first.byteIdx, last.byteIdx)
       emit (commandSpan stx ++ [("record", toJson "origin"), ("name", toJson n.toString),
         ("file", toJson ctx.fileName), ("line", toJson start.line),
-        ("endLine", toJson stop.line), ("shape", toJson (← fingerprint input output ci)),
+        ("endLine", toJson stop.line), ("selectionBytes", toJson selection),
+        ("shape", toJson (← fingerprint input output ci)),
         ("uses", toJson (ci.getUsedConstantsAsSet.toList.map Name.toString))])
       names := names.insert n
   if state.messages.hasErrors then
@@ -282,7 +291,7 @@ unsafe def main (args : List String) : IO Unit := do
     | "parse" :: files =>
       let env ← importModules (loadExts := true) #[{module := `Lean}] {} 0
       for file in files do
-        let ctx := Parser.mkInputContext (← IO.FS.readFile file) file
+        let ctx ← sourceContext file
         let (header, ps, messages) ← Parser.parseHeader ctx
         if messages.hasErrors then throw (IO.userError "header parse failed")
         let mut imports : Array Name := #[]
@@ -295,7 +304,7 @@ unsafe def main (args : List String) : IO Unit := do
           ("headerEnd", toJson (header.raw.getTailPos?.getD 0).byteIdx)]
         commands ctx env ps messages
     | ["origins", file, mod, requests] =>
-      let ctx := Parser.mkInputContext (← IO.FS.readFile file) file
+      let ctx ← sourceContext file
       let (header, ps, messages) ← Parser.parseHeader ctx
       -- Match runFrontend's defaults: async elaboration affects auxiliary name generators.
       let opts := ({} : Options).setBool `autoImplicit false
@@ -340,7 +349,6 @@ unsafe def main (args : List String) : IO Unit := do
         let ranges := declRangeExt.find? env n
         emit [("record", toJson "declaration"), ("name", toJson n.toString),
           ("shape", toJson (← fingerprint input output ci)), ("kind", toJson kind), ("userName", toJson (privateToUserName n).toString), ("module", toJson m.toString),
-          ("column", toJson (ranges.map (·.selectionRange.pos.column) |>.getD 0)),
           ("line", toJson (ranges.map (·.selectionRange.pos.line) |>.getD 0)),
           ("uses", toJson (ci.getUsedConstantsAsSet.toList.map Name.toString))]
     | _ => throw (IO.userError "expected: parse FILE | constants MODULES_FILE")

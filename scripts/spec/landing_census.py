@@ -9,6 +9,11 @@ import shutil
 import tempfile
 
 
+def source_bytes(body):
+    """Canonical UTF-8 bytes used for Lean input, spans, digests and edits."""
+    return body.replace(b'\r\n', b'\n')
+
+
 def span_key(record):
     return record['file'], record['startByte'], record['endByte']
 
@@ -121,7 +126,9 @@ def _census(root, exporter, include_examples, regenerate_modules, validator=None
     examples = {}
     for rel in rels:
         cs = [c for c in parsed if c['record']=='command' and c['file']==rel and c['example']]
-        body = (root/rel).read_bytes()
+        if not cs:
+            continue
+        body = source_bytes((root/rel).read_bytes())
         for c in sorted(cs, key=lambda c:c['exampleToken'], reverse=True):
             pos = c['exampleToken']
             if body[pos:pos+7] != b'example':
@@ -135,7 +142,9 @@ def _census(root, exporter, include_examples, regenerate_modules, validator=None
             if not c['noncomputable'] and insertion<pos:
                 body = body[:insertion]+b'noncomputable '+body[insertion:]
             examples[(rel[:-5].replace('/','.'),marker)] = c
-        (root/rel).write_bytes(body)
+        # Lean normalizes on input. Encode each LF so that exactly one pass
+        # restores our edited bytes, including a bare CR immediately before LF.
+        (root/rel).write_bytes(body.replace(b'\n', b'\r\n'))
     build(instrumented=True)
     instrumented = constants()
     byname = {d['name']:d for d in instrumented}

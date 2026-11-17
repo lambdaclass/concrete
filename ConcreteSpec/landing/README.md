@@ -125,8 +125,11 @@ identity is its Lean-elaborated type closed over the complete local context, plu
 occurrence among equal identities. Explicitly typed and inferred examples use the same
 elaboration-info path; proof syntax and source positions never enter this identity. Missing,
 ambiguous or unresolved type identities refuse reconciliation. Other commands use parsed syntax plus occurrence. The census lists
-every collision group with all occurrence keys. Reconciliation first matches each HEAD
-command by its own exact key. A superseded key still at HEAD always refuses, regardless
+every collision group with all occurrence keys. When some copies of identical source
+survive and multiplicity falls, reconciliation refuses to infer which snapshot occurrence
+survived from the renumbered keys, even when a surviving key is pinned as a replacement.
+For the remaining cases, reconciliation first matches each HEAD
+command by its own exact key. A superseded key still at HEAD refuses, regardless
 of whether equal-statement twins have landed. Pinned targets and exact-key twins explain
 only their own occurrences. Remaining equal-statement occurrences are assigned only when
 there is a single unmatched snapshot key; multiple candidate keys refuse as ambiguous,
@@ -163,9 +166,13 @@ a local pass alone does not publish them.
 
 `--census-output <path>` exports the fresh snapshot census for inspection, never cached input.
 
-Lean supplies half-open UTF-8 byte spans for complete commands. The census slices the original
-bytes and joins parsed commands to elaborated metadata by file and span. The line columns
-remain available for source citations and plan boundaries.
+Lean supplies half-open UTF-8 byte spans for complete commands. Both exporter passes, source
+digests and example edits use the same single CRLF-to-LF conversion as Lean's CLI.
+The instrumenter encodes each LF before writing its edited bytes so the next Lean build
+recovers those bytes exactly, including any bare carriage returns. The census joins parsed commands to
+elaborated metadata by file and span. It identifies an authored declaration by matching its
+selection's byte span to an identifier within its observed command. The line columns
+serve source citations, plan boundaries and zero-range generated-declaration classification.
 A separate elaboration pass observes the local constant-map delta after every command, including
 zero-range helpers and opaque partial-definition implementations. Each declaration's note starts
 with its observed command identity (`file:startByte:endByte`). Authored declarations and single-emission
