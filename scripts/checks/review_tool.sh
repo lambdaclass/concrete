@@ -51,13 +51,14 @@ EOF
 # ------------------------------------------------------------------ fake codex
 FAKE_LOG="$T/fake"
 mkdir -p "$FAKE_LOG" "$T/bin"
-export FAKE_LOG
-export FAKE_VERIFIER="$ROOT_DIR/scripts/review/read_evidence.py"
+export REVIEW_GATE_SECRET=must_be_absent
 # Bug 209's legs prove review.sh OVERRIDES the caller's setting: the gate runs with optional locks
 # explicitly on, so a value inherited from whoever launched it cannot satisfy them.
 export GIT_OPTIONAL_LOCKS=1
-cat >"$T/bin/codex" <<'EOF'
-#!/usr/bin/env bash
+{
+printf '#!/usr/bin/env bash\n'
+printf 'FAKE_LOG=%q\nFAKE_VERIFIER=%q\nFAKE_SOURCE=%q\n' "$FAKE_LOG" "$ROOT_DIR/scripts/review/read_evidence.py" "$T/w"
+cat <<'EOF'
 # Fake reviewer: `codex exec --sandbox danger-full-access ... -o <file> <prompt>`, diff on stdin.
 set -uo pipefail
 [ "${1:-}" = exec ] || { echo "fake codex: expected exec" >&2; exit 64; }
@@ -81,27 +82,48 @@ grep -q "routine code review" "$FAKE_LOG/prompt.$n" && kind=neutral
 files="$(grep '^diff --git ' "$FAKE_LOG/stdin.$n" | sed 's#.* b/##' | sort -u | tr '\n' ',')"
 echo "$n $kind sandbox=$sandbox bytes=$(wc -c <"$FAKE_LOG/stdin.$n" | tr -d ' ') files=$files" >>"$FAKE_LOG/calls"
 echo "$n optional_locks=${GIT_OPTIONAL_LOCKS:-unset}" >>"$FAKE_LOG/locks"
+printf '%s\n' "${REVIEW_GATE_SECRET-unset}" "${GIT_CONFIG_GLOBAL-unset}" "${TMPDIR:-}" >"$FAKE_LOG/environment.$n"
 added="$(grep '^+' "$FAKE_LOG/stdin.$n" || true)"
 has() { grep -q "$1" <<<"$added"; }
 # Read the actual private tree, execute the requested digest probe, and emit
 # the same successful command event schema as codex --json.
 printf '%s' "$directory" >"$FAKE_LOG/directory.$n"
-python3 "$FAKE_VERIFIER" tree "$FAKE_SOURCE" "$(git -C "$FAKE_SOURCE" rev-parse HEAD)" "$directory" >"$FAKE_LOG/identity.$n" || exit 2
-if ! has MARK_NO_READ; then
-  probe="$(printf '%s\n' "$prompt" | sed -n '/^python3 -c /p')"
-  digest="$(cd "$directory" && eval "$probe")"
-  python3 -c 'import json,sys; print(json.dumps({"type":"item.completed", "item":{"type":"command_execution", "exit_code":0,"aggregated_output":sys.argv[1]}}))' "$digest"
+reply() { printf '%s\n' "$1" >"$out"; }
+if has MARK_REFUSE_ALWAYS; then
+  echo '{"type":"turn.failed","error":{"message":"invalid_prompt"}}'
+  exit 1
+elif has MARK_REFUSE_STANDARD && [ "$kind" = standard ]; then
+  reply "I can't help with that request."
+  exit 0
+fi
+if has MARK_EXACT; then
+  python3 -I "$FAKE_VERIFIER" tree "$FAKE_SOURCE" "$(git -C "$FAKE_SOURCE" rev-parse HEAD)" "$directory" >"$FAKE_LOG/identity.$n" || exit 2
+fi
+if has MARK_SLEEP; then
+  sleep 9 &
+  sleeper=$!
+  trap 'wait "$sleeper"; exit 1' TERM
+  echo "$$ $sleeper" >"$FAKE_LOG/sleeping"
+  wait "$sleeper"
 fi
 if has MARK_WRITE; then
-  printf 'reviewer mutation\n' >"$directory/README.md"
-  touch "$directory/reviewer-created"
+  printf 'reviewer mutation\n' >"$directory/README.md" && touch "$directory/reviewer-created" && touch "$FAKE_LOG/wrote"
+fi
+if has MARK_NO_READ; then
+  touch "$FAKE_LOG/skipped-read"
+else
+  probe="$(sed -n '/^python3 -I -c /p' "$FAKE_LOG/prompt.$n")"
+  digest="$(cd "$directory" && eval "$probe")"
+  printf '{"type":"item.completed","item":{"type":"command_execution","exit_code":0,"aggregated_output":"%s"}}\n' "$digest"
 fi
 if has MARK_SANDBOX; then
-  printf 'Repository reads failed because the execution sandbox could not start\n' >&2
+  echo '{"type":"error","message":"execution sandbox could not start"}'
+  touch "$FAKE_LOG/reported-error"
 fi
-reply() { printf '%s\n' "$1" >"$out"; }
-if has MARK_REFUSE_ALWAYS || { has MARK_REFUSE_STANDARD && [ "$kind" = standard ]; }; then
-  reply "I'm sorry, but I can't help with that request because it was flagged by our cybersecurity policy."
+if has MARK_MENTION_FILTER; then
+  echo '{"type":"item.completed","item":{"type":"command_execution","exit_code":0,"aggregated_output":"Repository reads failed because the execution sandbox could not start"}}'
+  reply "The patch handles sandbox failure and the content filter.
+VERDICT: clean"
 elif has MARK_ERROR; then
   echo "stream error: 500" >&2; exit 1
 elif has MARK_FINDING; then
@@ -115,14 +137,12 @@ Also, one more thought."
 elif has MARK_BOLD; then
   reply "Nothing to report.
 **VERDICT: clean**"
-elif has MARK_MENTION_FILTER; then
-  reply "The content filter detection and the cybersecurity wording look right.
-VERDICT: clean"
 else
   reply "Nothing to report.
 VERDICT: clean"
 fi
 EOF
+} >"$T/bin/codex"
 chmod +x "$T/bin/codex"
 export REVIEW_CODEX_BIN="$T/bin/codex"
 
@@ -133,7 +153,6 @@ reset_fake() { rm -f "$FAKE_LOG"/*; }
 git init -q --bare "$T/origin.git"
 git clone -q "$T/origin.git" "$T/w" 2>/dev/null
 W="$T/w"
-export FAKE_SOURCE="$W"
 g() { git -C "$W" "$@"; }
 commit_file() { # commit_file <path> <content> <message>
   mkdir -p "$(dirname "$W/$1")"
@@ -464,17 +483,26 @@ parse_case MARK_TRAILING 5 blocked "text after the verdict line is not a verdict
 parse_case MARK_NOVERDICT 5 blocked "a reply with no verdict line is blocked, not clean"
 parse_case MARK_ERROR 2 "" "a reviewer that exits nonzero is an error without a note"
 parse_case MARK_SANDBOX 2 "" "sandbox failure overrides a clean verdict and successful probe"
+check "sandbox error event emitted" test -f "$FAKE_LOG/reported-error"
 parse_case MARK_NO_READ 2 "" "missing repository-read evidence is an error"
+check "reviewer deliberately skipped read" test -f "$FAKE_LOG/skipped-read"
 parse_case MARK_WRITE 0 clean "reviewer writes are confined to the private archive"
+check "reviewer completed both writes" test -f "$FAKE_LOG/wrote"
 check "caller README unchanged" test "$(cat "$W/README.md")" = base
 check "caller has no reviewer-created file" test ! -e "$W/reviewer-created"
 check "private archive removed on exit" test ! -e "$(cat "$FAKE_LOG/directory.1")"
 check "exact prompt retained" cmp "$FAKE_LOG/prompt.1" "$W/.review/$(g rev-parse HEAD)-1-invocation-1.prompt.txt"
 
+check "reviewer environment excludes caller secret and Git config, scopes temp files" \
+  cmp "$FAKE_LOG/environment.1" <(printf '%s\n' unset unset "$(dirname "$(cat "$FAKE_LOG/directory.1")")/tmp")
+# Restore the throwaway fixture even when the runner under test is reverted.
+g restore README.md
+rm -f "$W/reviewer-created"
+
 # A dirty tracked file and an untracked file must never enter the reviewed tree.
 reset_fake
 g checkout -q main && g checkout -qb exact-tree
-commit_file exact.txt exact exact
+commit_file exact.txt MARK_EXACT exact
 printf '\000\377binary\n' >"$W/binary"
 printf '#!/bin/sh\nexit 0\n' >"$W/executable"
 chmod +x "$W/executable"
@@ -490,11 +518,53 @@ check "private invocation tree identity verified" test -s "$FAKE_LOG/identity.1"
 mkdir "$T/exact"
 g archive HEAD >"$T/exact.tar"
 tar -xf "$T/exact.tar" -C "$T/exact"
-check "copy matches committed SHA despite dirty caller" python3 "$ROOT_DIR/scripts/review/read_evidence.py" tree "$W" "$(g rev-parse HEAD)" "$T/exact"
+check "copy matches committed SHA despite dirty caller" python3 -I "$ROOT_DIR/scripts/review/read_evidence.py" tree "$W" "$(g rev-parse HEAD)" "$T/exact"
 printf altered >"$T/exact/README.md"
-if python3 "$ROOT_DIR/scripts/review/read_evidence.py" tree "$W" "$(g rev-parse HEAD)" "$T/exact" >/dev/null 2>&1; then no "altered archive refused"; else ok "altered archive refused"; fi
+if python3 -I "$ROOT_DIR/scripts/review/read_evidence.py" tree "$W" "$(g rev-parse HEAD)" "$T/exact" >/dev/null 2>&1; then no "altered archive refused"; else ok "altered archive refused"; fi
 g restore README.md
 rm "$W/untracked"
+# Resolve relative inputs and the executable in the invoking directory.
+mkdir "$T/relative"
+printf 'review\n' >"$T/relative/prompt"
+printf 'diff\n' >"$T/relative/piece"
+(cd "$T/relative" && REVIEW_CODEX_BIN=../bin/codex bash "$ROOT_DIR/scripts/review/invoke.sh" \
+  ../w "$(g rev-parse HEAD)" prompt piece output events) >"$T/relative.log" 2>&1; rc=$?
+check "relative helper arguments produce caller output and events" test "$rc" = 0 \
+  -a -s "$T/relative/output" -a -s "$T/relative/events"
+mkdir -p "$W/sub"
+commit_file relative.txt relative relative
+(cd "$W/sub" && REVIEW_CODEX_BIN=../../bin/codex bash "$REVIEW") >"$T/relative-review.log" 2>&1; rc=$?
+check "relative reviewer executable works from caller subdirectory" test "$rc" = 0
+for attribute in export-ignore export-subst; do
+  printf '$Format:%%H$\n' >"$W/target"
+  printf 'target %s\n' "$attribute" >"$W/.gitattributes"
+  g add target .gitattributes && g commit -qm "$attribute"
+  reset_fake
+  review >/dev/null 2>&1; rc=$?
+  check "$attribute rejects altered archive before invocation" test "$rc" = 2 -a "$(calls)" = 0 -a -z "$(note)"
+done
+g update-index --add --cacheinfo "160000,$(g rev-parse HEAD),submodule"
+g rm -q .gitattributes && g commit -qm gitlink
+review >/dev/null 2>&1; rc=$?
+check "gitlink rejected before invocation" test "$rc" = 2 -a "$(calls)" = 0 -a -z "$(note)"
+
+reset_fake
+g checkout -q main && g checkout -qb cancel
+commit_file signal MARK_SLEEP signal
+mkdir "$T/cancel-tmp"
+(cd "$W" && TMPDIR="$T/cancel-tmp" exec bash "$REVIEW") >"$T/signal.log" 2>&1 &
+review_pid=$!
+for _ in {1..200}; do [ ! -s "$FAKE_LOG/sleeping" ] || break; sleep 0.025; done
+check "cancellation reached reviewer and descendant" test -s "$FAKE_LOG/sleeping"
+kill -TERM "$review_pid"
+wait "$review_pid"; rc=$?
+check "cancelled review returned an error" test "$rc" -ne 0
+if read -r reviewer descendant <"$FAKE_LOG/sleeping"; then
+  for pid in "$reviewer" "$descendant"; do
+    if kill -0 "$pid" 2>/dev/null; then no "process $pid terminated"; else ok "process $pid terminated"; fi
+  done
+fi
+check "cancelled review removed both temporary directories" test -z "$(ls -A "$T/cancel-tmp")"
 parse_case MARK_MENTION_FILTER 0 clean "a real review that mentions content filters is not a refusal"
 
 echo "=== content-filter refusal: one neutral retry on smaller pieces ==="

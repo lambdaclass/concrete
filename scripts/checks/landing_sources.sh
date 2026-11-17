@@ -22,7 +22,8 @@ text = (root / 'scripts/land/legacy_move.sh').read_text()
 overlay = set(shlex.split(text.split('OVERLAY=(', 1)[1].split(')\n', 1)[0], comments=True))
 required = {'scripts/land/run-at-ref.sh', 'scripts/land/bundle_source.py', 'scripts/land/impact_gates.sh',
             'scripts/checks/landing_sources.sh', 'scripts/checks/archived_references.sh',
-            'scripts/checks/lib/archived_references.py'}
+            'scripts/checks/lib/archived_references.py', 'scripts/review/invoke.sh',
+            'scripts/review/read_evidence.py', 'scripts/checks/review_tool.sh', '.claude/commands/creview.md'}
 assert required <= overlay
 assert all((root / path).is_file() for path in overlay), 'missing migration overlay file'
 PYSOURCE

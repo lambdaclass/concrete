@@ -104,10 +104,13 @@ and 2026-11-08, "you can use codex without sandbox it's okay".
 `GIT_OPTIONAL_LOCKS=0` remains defense in depth; the copy has no Git index, retiring
 the caller's bug-209 index.lock hazard independently of that setting.
 
-Every invocation must produce a completed successful command event reporting the
+The reviewer inherits only PATH, HOME, CODEX_HOME, TERM, LANG, LC_ALL, SSL_CERT_FILE,
+SSL_CERT_DIR and LEAN_NUM_THREADS when set. Its TMPDIR is private to the invocation.
+
+Every completed review must produce a completed successful command event reporting the
 expected SHA-256 digest of a repository file. Missing read evidence, startup or
-sandbox failure diagnostics, or nonzero execution exit is an error (exit 2),
-never clean or findings; no review note is recorded and no retry hides the error.
+reviewer error events, or nonzero execution exit is an error (exit 2),
+never clean or findings; no review note is recorded and policy refusals before the first read follow the neutral retry below.
 The exact prompt, final output and raw JSON event stream are saved beside the
 round report in `.review/<sha>-<round>-invocation-<n>.*` for all invocations.
 
@@ -115,7 +118,7 @@ The reply must end with a line that is exactly `VERDICT: clean` or
 `VERDICT: findings`. Markdown emphasis around it is tolerated; anything after it
 is not. A reply without that line is treated as no answer, never as clean.
 
-**Refusals.** A piece that comes back refused, with no verdict line is retried **once**: the piece is halved and each half is sent
+**Refusals.** A piece that comes back refused, with no verdict line, is retried **once**: the piece is halved and each half is sent
 with a more neutral prompt that leaves out the project framing. If any half
 fails again, the piece is `blocked` and the script moves on. It does not loop.
 Refusal text is matched only when the reply has no verdict line, so a real

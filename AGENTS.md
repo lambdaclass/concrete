@@ -149,9 +149,9 @@ agy (Gemini) review every branch too; a reviewer's absence is recorded, never as
 required verdict line. Every slice gets a Codex review before it lands, through `scripts/review/review.sh`:
 at most 2 rounds for docs and the roadmap, 3 for scripts and 5 for the compiler and the spec
 (owner, 2026-11-08; `review.sh` enforces 5 until R-0618 lands), the first over the whole diff and each later round over the delta since the
-previous one. Answer each finding with a fix or a stated reason. Run Codex by hand only with
-`GIT_OPTIONAL_LOCKS=0` (and `</dev/null`): its sandboxed `git status` otherwise takes the
-worktree's `index.lock` and can leave it behind (bug 209).
+previous one. Answer each finding with a fix or a stated reason. Use `scripts/review/review.sh` for Codex reviews. Its runner
+(`scripts/review/invoke.sh`) uses a private copy of the reviewed commit. Never run a reviewer
+directly against a live checkout.
 
 **Git safety.**
 - Never pipe `git rebase` (or `git merge`, `git cherry-pick`) into anything: a pipe hides the stop.

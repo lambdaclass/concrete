@@ -13,7 +13,7 @@
 __pycache__/
 *.pyc
 
-# Raw review output of scripts/review/review.sh: .review/<sha>-<round>.md
+# Raw review output of scripts/review/review.sh: round reports and per-invocation prompts, outputs, events and stderr
 .review/
 
 # Scratch

@@ -8,7 +8,7 @@ Review this branch against: $ARGUMENTS (`origin/main` when empty; written `<base
 Rules: [AGENTS.md](../../AGENTS.md) ("Review").
 
 Use `scripts/review/review.sh`; read its usage header before the first call.
-It owns the prompt, round count and delta between rounds. Its shared runner uses
+It owns the prompt, round count and delta between rounds. Its shared runner (`scripts/review/invoke.sh`) uses
 an exact-SHA private archive and owner-authorized `--sandbox danger-full-access`,
 requires repository-read evidence, and preserves the exact prompt and raw output.
 Do not invoke Codex directly against a live checkout. See [REVIEW.md](../../docs/REVIEW.md).

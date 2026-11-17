@@ -44,9 +44,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../checks/lib/has_match.sh" || exit 2  # bug 283: never a pipe into grep -q
 ROOT="$(git rev-parse --show-toplevel)"
-cd "$ROOT"
 
 CODEX_BIN="${REVIEW_CODEX_BIN:-codex}"
+case "$CODEX_BIN" in /*) ;; */*) CODEX_BIN="$PWD/$CODEX_BIN" ;; esac
+cd "$ROOT"
 REMOTE=origin
 MAIN_REF="${REVIEW_MAIN_REF:-$REMOTE/main}"
 PUSH="${REVIEW_PUSH:-1}"
@@ -85,6 +86,17 @@ command -v "$CODEX_BIN" >/dev/null 2>&1 || die "reviewer binary not found: $CODE
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
+
+runner=
+cancel_review() {
+  trap '' HUP INT TERM
+  if [ -n "$runner" ]; then
+    kill -TERM "$runner" 2>/dev/null || true
+    wait "$runner" 2>/dev/null || true
+  fi
+  exit 2
+}
+trap cancel_review HUP INT TERM
 
 # ---------------------------------------------------------------- notes sync
 # Fetch the remote notes refs and merge them into the local ones. On a conflict
@@ -245,7 +257,7 @@ fi
 
 # ---------------------------------------------------------------- split
 TOTAL="$(wc -c <"$WORK/full.diff" | tr -d ' ')"
-split_at() { rm -rf "$WORK/pieces"; python3 "$SCRIPT_DIR/split_diff.py" "$WORK/full.diff" "$WORK/pieces" "$1"; }
+split_at() { rm -rf "$WORK/pieces"; python3 -I "$SCRIPT_DIR/split_diff.py" "$WORK/full.diff" "$WORK/pieces" "$1"; }
 if [ "$PIECES" = auto ]; then
   K="$(split_at "$PIECE_BYTES")"
 else
@@ -304,15 +316,11 @@ EOF
   printf '\n%s\n' "$VERDICT_RULE"
 }
 
-# A refusal is recognized only when there is no verdict line: a real review that
-# merely discusses content filters (as a review of this tool does) still parses.
-REFUSAL_RE="(I can.?t|I cannot|I won.?t|I.?m (not able|unable)|unable to) (help|assist|comply|review|continue|provide)|cyber ?security|content (filter|policy)|usage polic|safety (system|filter|policy)|flagged (as|for)|potentially (harmful|malicious)|invalid_prompt|violat(es|ion of) .*polic"
-
 LAST_RESULT=""
 LAST_BODY=""
 RUN_N=0
 # run_one <prompt-kind> <piece-file> <label> <group> <paths>; sets LAST_RESULT to
-# clean|findings|refused|noverdict|error and LAST_BODY to the reviewer's message.
+# clean|findings|refused|noverdict and LAST_BODY to the reviewer's message.
 run_one() {
   local kind="$1" piece="$2" label="$3" group="$4" paths="$5" rc=0 msg last
   RUN_N=$((RUN_N + 1))
@@ -321,25 +329,30 @@ run_one() {
   local prompt="$RAW_DIR/$HEAD_SHA-$ROUND-invocation-$RUN_N.prompt.txt"
   local evidence="$RAW_DIR/$HEAD_SHA-$ROUND-invocation-$RUN_N"
   prompt_for "$kind" "$label" "$group" "$paths" >"$prompt"
-  bash "$SCRIPT_DIR/invoke.sh" "$ROOT" "$HEAD_SHA" "$prompt" "$piece" "$out" "$log" 2>>"$log" || rc=$?
+  : >"$log"
+  local cancelled=0
+  trap 'cancelled=1' HUP INT TERM
+  REVIEW_CODEX_BIN="$CODEX_BIN" bash "$SCRIPT_DIR/invoke.sh" "$ROOT" "$HEAD_SHA" "$prompt" "$piece" "$out" "$log" 2>"$evidence.stderr.txt" &
+  runner=$!
+  trap cancel_review HUP INT TERM
+  [ "$cancelled" = 0 ] || cancel_review
+  wait "$runner" || rc=$?
+  runner=
   cp "$out" "$evidence.output.txt"
   cp "$log" "$evidence.events.jsonl"
-  if [ "$rc" -ne 0 ]; then
+  if [ "$rc" -eq 3 ]; then
+    LAST_RESULT=refused
+    LAST_BODY="$(cat "$out" "$log")"
+    return
+  elif [ "$rc" -ne 0 ]; then
     { echo; echo "## $label: error (invocation $RUN_N)"; cat "$out" "$log"; } >>"$RAW"
     die "reviewer execution or repository-read evidence failed; see $evidence.* (no note recorded)"
   fi
   msg="$(cat "$out")"
-  [ -n "$msg" ] || [ "$rc" -ne 0 ] || msg="$(cat "$log")"
   LAST_BODY="$msg"
   last="$(printf '%s\n' "$msg" | sed -e 's/[`*]//g' -e 's/[[:space:]]*$//' | awk 'NF { l = $0 } END { print l }')"
-  if [ "$rc" -eq 0 ] && [ "$last" = "VERDICT: clean" ]; then LAST_RESULT=clean
-  elif [ "$rc" -eq 0 ] && [ "$last" = "VERDICT: findings" ]; then LAST_RESULT=findings
-  elif { printf '%s\n' "$msg"; cat "$log"; } | has_match -iE "$REFUSAL_RE"; then LAST_RESULT=refused
-  elif [ "$rc" -ne 0 ]; then
-    LAST_RESULT=error
-    LAST_BODY="$msg
-(reviewer exited $rc; last lines of its log:)
-$(tail -n 20 "$log")"
+  if [ "$last" = "VERDICT: clean" ]; then LAST_RESULT=clean
+  elif [ "$last" = "VERDICT: findings" ]; then LAST_RESULT=findings
   else LAST_RESULT=noverdict
   fi
 }
@@ -367,11 +380,11 @@ while IFS=$'\t' read -r name group bytes paths; do
     echo; echo "## $label: $group ($bytes bytes): $result"; echo; echo "files: $paths"; echo
     echo "$body"
   } >>"$RAW"
-  if [ "$result" = refused ] || [ "$result" = noverdict ] || [ "$result" = error ]; then
+  if [ "$result" = refused ] || [ "$result" = noverdict ]; then
     # Retry once: smaller pieces (the piece halved) and a more neutral prompt.
     half_dir="$WORK/half-$i"
     half_limit=$(( (bytes + 1) / 2 ))
-    python3 "$SCRIPT_DIR/split_diff.py" "$WORK/pieces/$name" "$half_dir" "$half_limit" --no-groups >/dev/null
+    python3 -I "$SCRIPT_DIR/split_diff.py" "$WORK/pieces/$name" "$half_dir" "$half_limit" --no-groups >/dev/null
     result=clean body=""
     j=0
     while IFS=$'\t' read -r hname _hgroup hbytes hpaths; do
