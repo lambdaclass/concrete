@@ -23,6 +23,12 @@ fixture() {
   printf '%s\n' "$path"
 }
 CONTROL
+  cat >> split <<'CONTROL'
+literal() {
+  local path='${name}.con' name="$1"
+  printf '%s\n' "$path" "$name"
+}
+CONTROL
   cat > dependent <<'CONTROL'
 fixture() {
   local name="$1" \
@@ -40,10 +46,10 @@ CONTROL
   check
 
   expect_failure() {
-    local expected="$1" out rc=0
+    local expected="$1" status="${2:-1}" out rc=0
     out="$(check 2>&1)" || rc=$?
-    if [ "$rc" -ne 1 ] || [[ "$out" != *"$expected"* ]]; then
-      printf 'shell_assignments: expected %s (exit %s)\n%s\n' "$expected" "$rc" "$out" >&2
+    if [ "$rc" -ne "$status" ] || [[ "$out" != *"$expected"* ]]; then
+      printf 'shell_assignments: expected %s (exit %s, got %s)\n%s\n' "$expected" "$status" "$rc" "$out" >&2
       exit 1
     fi
   }
@@ -51,7 +57,11 @@ CONTROL
   cp dependent "$library"
   SHELLCHECK_OPTS=--exclude=SC2318 expect_failure '[SC2318]'
   printf '\nif true; then\n  true\n' >> "$library"
-  expect_failure '[SC1072]'
+  expect_failure "$library: shfmt:" 2
+  for initializer in '"${name}.con"' '"${prefix:-$name}"' '"$((name + 1))"'; do
+    printf 'fixture() { local path=%s name="$1"; printf "%%s\\n" "$path" "$name"; }\n' "$initializer" > "$library"
+    expect_failure 'path expands name in the same declaration'
+  done
   cp split "$library"
 
   printf '#!/usr/bin/env -S bash -e\n#\tshellcheck disable="SC2000-SC3000"\n' > "$entry"

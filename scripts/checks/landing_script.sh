@@ -1491,7 +1491,8 @@ out="$(gated_hook "$TMP/push-gated" 2>&1)"; rc=$?
 [ "$rc" = 0 ] && [ "$(cat "$TMP/gated-calls" 2>/dev/null)" = "$(printf 'build\nchecks')" ] \
   && ok "the full tier validates a matching advertised SHA" || no "matching gated push: exit $rc, $out"
 rm -f "$TMP/gated-calls"
-printf 'refs/heads/stdin-clean %s refs/heads/ci/off-head %s\n' "$clean" "$Z" >> "$TMP/push-gated"
+git -C "$gated_repo" branch stdin-off-head "$clean" || exit 2
+printf 'refs/heads/stdin-off-head %s refs/heads/ci/off-head %s\n' "$clean" "$Z" >> "$TMP/push-gated"
 out="$(gated_hook "$TMP/push-gated" 2>&1)"; rc=$?
 [ "$rc" = 1 ] && has "$out" "pushing ${clean:0:10}, but the checkout is at ${gated_head:0:10}" \
   && [ ! -e "$TMP/gated-calls" ] \
