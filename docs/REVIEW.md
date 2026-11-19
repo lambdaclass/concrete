@@ -149,6 +149,7 @@ Missing evidence, malformed events, startup errors and execution failures exit
 2 before recording a note. Policy refusals go through the retry below.
 The exact prompt, final output, raw JSON event stream and stderr are saved beside
 the round report in `.review/<sha>-<round>-invocation-<n>.*` for all invocations.
+Each invocation also retains its exact stdin in the corresponding `.patch.diff` file.
 The report also includes runner stderr.
 
 The reply must end with a line that is exactly `VERDICT: clean` or
@@ -197,11 +198,12 @@ utc: 2026-10-22T14:03:11Z
 base: <40-hex sha>
 pieces: K
 read-evidence: v1
+patch-coverage: v1
 ```
 
 **The format is an interface.** `verify.sh` parses it, and the train's review
 leg reads it through `verify.sh`, which rejects any note that lacks one of these
-seven keys, repeats a key, or carries any other key. Keys are matched by name, not
+eight keys, repeats a key, or carries any other key. Keys are matched by name, not
 position. Change the format only together with `verify.sh`.
 
 - `rounds` is this round's number, which is also the number of rounds run on the
@@ -212,11 +214,13 @@ position. Change the format only together with `verify.sh`.
   before accepting its verdict. A blocked note records the protocol and cannot
   establish coverage.
 
-Historical six-field notes still count toward the round cap, including for
-owner sign-off, and can carry forward open findings. The evidence field is
-required for review notes to establish coverage or serve as landing provenance.
-If a historical note would otherwise supply coverage, the next round reviews the
-full branch diff unless a newer evidence-bearing review already covers it.
+- `patch-coverage: v1` identifies the patch-generation and splitting protocol.
+  Advance this version when earlier patch inputs may have omitted or altered changes.
+
+Historical notes missing either version still count toward the round cap, including
+for owner sign-off, and can carry forward open findings. Current versions of both
+fields are required for coverage and landing provenance. The next round reviews
+the full branch diff unless a newer qualifying review already covers it.
 
 When the verdict is not clean, the findings text goes in a second note under
 `refs/notes/concrete-review-findings`, which is pushed too. It is how the next

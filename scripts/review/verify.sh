@@ -56,7 +56,7 @@ NOTE="$(git notes --ref="$NOTES_REF" show "$SHA" 2>/dev/null)" || {
   exit 2
 }
 
-# Validate the six original fields and the evidence protocol when present.
+# Validate the six original fields and the protocol versions when present.
 # Each field must occur once. Unknown keys and invalid lines are malformed.
 malformed() {
   echo "$SHA malformed review note${1:+ ($1)}:"
@@ -78,6 +78,7 @@ while IFS= read -r line; do
     utc)          [[ "$v" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] ;;
     base)         [[ "$v" =~ ^[0-9a-f]{40}$ ]] ;;
     read-evidence) [[ "$v" = v1 ]] ;;
+    patch-coverage) [[ "$v" = v1 ]] ;;
     pieces)       [[ "$v" =~ ^[0-9]+$ ]] ;;
     *)            false ;;
   esac || malformed "bad $k"
@@ -88,6 +89,11 @@ done
 
 if [ "$ROUND_HISTORY" = 0 ] && [[ "$SEEN" != *" read-evidence "* ]]; then
   echo "$SHA unqualified: review note predates repository-read evidence"
+  exit 2
+fi
+
+if [ "$ROUND_HISTORY" = 0 ] && [[ "$SEEN" != *" patch-coverage "* ]]; then
+  echo "$SHA unqualified: review note predates current patch coverage"
   exit 2
 fi
 

@@ -192,7 +192,7 @@ COVERING_REVIEWS=""
 while read -r c; do
   [ -n "$c" ] || continue
   # Historical notes count toward the cap and preserve findings.
-  # Only evidence-bearing notes can establish coverage below.
+  # Only notes with current read evidence and patch coverage qualify below.
   vrc=0
   bash "$SCRIPT_DIR/verify.sh" --round-history "$c" >/dev/null 2>&1 || vrc=$?
   [ "$vrc" -le 1 ] || continue
@@ -356,11 +356,12 @@ run_one() {
   : >"$out"
   local prompt="$RAW_DIR/$HEAD_SHA-$ROUND-invocation-$RUN_N.prompt.txt"
   local evidence="$RAW_DIR/$HEAD_SHA-$ROUND-invocation-$RUN_N"
+  cp "$piece" "$evidence.patch.diff"
   prompt_for "$kind" "$label" "$group" "$paths" >"$prompt"
   : >"$log"
   local cancelled=0
   trap 'cancelled=1' HUP INT TERM
-  bash "$SCRIPT_DIR/invoke.sh" "$ROOT" "$HEAD_SHA" "$prompt" "$piece" "$out" "$log" "$CODEX_BIN" "$PYTHON" \
+  bash "$SCRIPT_DIR/invoke.sh" "$ROOT" "$HEAD_SHA" "$prompt" "$evidence.patch.diff" "$out" "$log" "$CODEX_BIN" "$PYTHON" \
     >"$WORK/result.$RUN_N" 2>"$evidence.stderr.txt" &
   runner=$!
   trap cancel_review HUP INT TERM
@@ -469,6 +470,7 @@ utc: $UTC
 base: $BASE_SHA
 pieces: $K
 read-evidence: v1
+patch-coverage: v1
 EOF
 git notes --ref="$NOTES_REF" add -f -F "$WORK/note" "$HEAD_SHA"
 if [ "$VERDICT" = blocked ] && [ -n "$PREV_FINDINGS" ]; then

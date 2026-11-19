@@ -103,7 +103,7 @@ esac
 GH
 chmod +x "$TMP/fake-gh"
 
-# A review note as scripts/review/review.sh writes it (scripts/review/verify.sh's seven keys), published
+# A review note as scripts/review/review.sh writes it (scripts/review/verify.sh's eight keys), published
 # to origin. put-review <sha> <clean|findings|blocked|historical|malformed|none>[@rounds] [base]; none removes the note.
 cat > "$TMP/put-review" <<'EOF'
 #!/usr/bin/env bash
@@ -115,7 +115,7 @@ case "$2" in
   malformed) git notes --ref=$R add -f -m "verdict: clean" "$sha" ;;
   *)
     verdict="${2%@*}"
-    evidence=$'\nread-evidence: v1'
+    evidence=$'\nread-evidence: v1\npatch-coverage: v1'
     if [ "$verdict" = historical ]; then verdict=clean; evidence=; fi
     git notes --ref=$R add -f -m "verdict: $verdict
 rounds: $(case "$2" in *@*) echo "${2#*@}" ;; *) echo 1 ;; esac)

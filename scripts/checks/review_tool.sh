@@ -297,9 +297,10 @@ reviewer: codex
 utc: [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z
 base: [0-9a-f]{40}
 pieces: [0-9]+
-read-evidence: v1$'
+read-evidence: v1
+patch-coverage: v1$'
 n1="$(note "$R1")"
-if [[ "$n1" =~ $FORMAT_RE ]]; then ok "note has exactly the seven fields, in order"; else no "note format: $n1"; fi
+if [[ "$n1" =~ $FORMAT_RE ]]; then ok "note has exactly the eight fields, in order"; else no "note format: $n1"; fi
 check "note: verdict findings" test "$(field verdict)" = findings
 check "note: rounds 1" test "$(field rounds)" = 1
 check "note: base is the merge-base" test "$(field base)" = "$BASE"
@@ -396,7 +397,7 @@ commit_file hidden.txt hidden hidden
 RANGE_MID="$(g rev-parse HEAD)"
 commit_file visible.txt visible visible
 range_note() {
-  g notes --ref=concrete-review add -f -m "$(printf 'verdict: %s\nrounds: %s\nreviewer: codex\nutc: 2026-11-11T00:00:00Z\nbase: %s\npieces: 1\nread-evidence: v1' "$1" "$2" "$3")" HEAD
+  g notes --ref=concrete-review add -f -m "$(printf 'verdict: %s\nrounds: %s\nreviewer: codex\nutc: 2026-11-11T00:00:00Z\nbase: %s\npieces: 1\nread-evidence: v1\npatch-coverage: v1' "$1" "$2" "$3")" HEAD
 }
 for verdict in clean findings blocked; do
   range_note "$verdict" 1 "$RANGE_MID"
@@ -560,7 +561,7 @@ g notes --ref=refs/notes/concrete-review add -f -m "verdict: clean" HEAD
 check "malformed note (verdict line alone): exit 2 (got $rc)" test "$rc" -eq 2
 B40="$(printf '%040d' 0 | tr 0 a)"
 # Field order does not affect verification.
-g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nbase: %s\npieces: 1\nread-evidence: v1\nutc: 2026-10-22T00:00:00Z' "$B40")" HEAD
+g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nbase: %s\npieces: 1\nread-evidence: v1\npatch-coverage: v1\nutc: 2026-10-22T00:00:00Z' "$B40")" HEAD
 (cd "$W" && bash "$VERIFY" HEAD >"$T/vc" 2>&1); rc=$?
 check "a note with utc last verifies clean (exit 0, got $rc)" test "$rc" -eq 0
 (cd "$W" && bash "$VERIFY" --required-base HEAD HEAD >"$T/vr" 2>&1); rc=$?
@@ -569,14 +570,14 @@ check "unknown note base fails for range coverage" grep -q 'review range does no
 # The landing bot's keys went with it: a verdict carried across a rebase, or a landing order, is no
 # longer a key a review note may hold.
 for extra in "carried-from: $B40" "order: 1"; do
-  g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nbase: %s\npieces: 1\nread-evidence: v1\nutc: 2026-10-22T00:00:00Z\n%s' "$B40" "$extra")" HEAD
+  g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nbase: %s\npieces: 1\nread-evidence: v1\npatch-coverage: v1\nutc: 2026-10-22T00:00:00Z\n%s' "$B40" "$extra")" HEAD
   out="$(cd "$W" && bash "$VERIFY" HEAD 2>&1)"; rc=$?
   check "a note with '${extra%%:*}' is malformed: exit 2, bad ${extra%%:*} (got $rc)" test "$rc" -eq 2 -a -n "$(printf '%s' "$out" | grep -F "malformed review note (bad ${extra%%:*})")"
 done
 g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nutc: 2026-10-22T00:00:00Z\nbase: %s\npieces: 1\nsurprise: 1' "$B40")" HEAD
 (cd "$W" && bash "$VERIFY" HEAD >/dev/null 2>&1); rc=$?
 check "an unknown key is malformed: exit 2 (got $rc)" test "$rc" -eq 2
-g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: findings\nverdict: clean\nrounds: 2\nreviewer: codex\nutc: 2026-10-22T00:00:00Z\nbase: %s\npieces: 1\nread-evidence: v1' "$B40")" HEAD
+g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: findings\nverdict: clean\nrounds: 2\nreviewer: codex\nutc: 2026-10-22T00:00:00Z\nbase: %s\npieces: 1\nread-evidence: v1\npatch-coverage: v1' "$B40")" HEAD
 (cd "$W" && bash "$VERIFY" HEAD >/dev/null 2>&1); rc=$?
 check "a repeated key is malformed: exit 2 (got $rc)" test "$rc" -eq 2
 g notes --ref=refs/notes/concrete-review remove HEAD 2>/dev/null
@@ -594,6 +595,20 @@ commit_file current.txt current current
 review >"$T/historical.review" 2>&1; rc=$?
 check "review after a historical note succeeds and counts the earlier round" test "$rc" = 0 -a "$(field rounds)" = 2
 check "review after a historical note includes the entire branch diff" grep -q 'files=current.txt,historical.txt,$' "$FAKE_LOG/calls"
+
+echo "=== notes from before patch coverage keep their round but force a full diff ==="
+reset_fake
+g checkout -q main && g checkout -qb old-patch-coverage
+commit_file Concrete/Earlier.lean 'def earlier := 1' 'earlier Lean change'
+g notes --ref=refs/notes/concrete-review add -m "$(printf 'verdict: clean\nrounds: 1\nreviewer: codex\nutc: 2026-10-22T00:00:00Z\nbase: %s\npieces: 1\nread-evidence: v1' "$historical_base")" HEAD
+(cd "$W" && bash "$VERIFY" --required-base "$historical_base" HEAD) >"$T/old-patch.verify" 2>&1; rc=$?
+check "old patch coverage cannot qualify as clean" test "$rc" = 2
+check "old patch coverage diagnostic identifies the missing version" grep -q 'predates current patch coverage' "$T/old-patch.verify"
+commit_file unrelated.txt unrelated 'unrelated change after old review'
+review >"$T/old-patch.review" 2>&1; rc=$?
+check "a note with read evidence alone still counts toward the round" test "$rc" = 0 -a "$(field rounds)" = 2
+check "the next review sends the earlier Lean change" grep -Fxq -- '+def earlier := 1' "$FAKE_LOG/stdin.1"
+check "the next review also sends the unrelated change" grep -Fxq -- '+unrelated' "$FAKE_LOG/stdin.2"
 
 echo "=== verdict parsing ==="
 parse_case() { # parse_case <marker> <want-exit> <want-verdict> <label>
@@ -811,6 +826,23 @@ for source in checkout info global committed; do
     global) g config --global --unset core.attributesFile ;;
   esac
 done
+
+echo "=== review patch preserves Git's record bytes ==="
+reset_fake
+g checkout -q main && g checkout -qb patch-bytes
+mkdir -p "$W/Concrete"
+printf 'def lineEnding := 1\r\n' >"$W/Concrete/Patch.lean"
+g add Concrete/Patch.lean && g commit -qm 'Lean source with CRLF'
+patch_base="$(g rev-parse HEAD)"
+printf 'def lineEnding := 1\ndef separator := "left\342\200\250diff --git a/docs/x b/docs/x"\n' >"$W/Concrete/Patch.lean"
+g add Concrete/Patch.lean && g commit -qm 'LF and embedded Unicode separator'
+g diff --no-color --no-ext-diff --no-textconv -M "$patch_base" HEAD >"$T/expected-patch.diff"
+review --base "$patch_base" >"$T/patch-bytes.review" 2>&1; rc=$?
+check "embedded diff header stays in its original file piece" test "$rc" = 0 -a "$(calls)" = 1
+check "removed Lean line retains its carriage return" grep -Fxq -- $'-def lineEnding := 1\r' "$FAKE_LOG/stdin.1"
+check "reviewer stdin matches Git's patch byte for byte" cmp "$T/expected-patch.diff" "$FAKE_LOG/stdin.1"
+check "saved invocation patch matches reviewer stdin" \
+  cmp "$FAKE_LOG/stdin.1" "$W/.review/$(g rev-parse HEAD)-1-invocation-1.patch.diff"
 
 reset_fake
 g checkout -q main && g checkout -qb escaping-link
@@ -1144,7 +1176,8 @@ reviewer: codex
 utc: 2026-10-22T00:00:00Z
 base: $OTHER_SHA
 pieces: 1
-read-evidence: v1" "$OTHER_SHA"
+read-evidence: v1
+patch-coverage: v1" "$OTHER_SHA"
 git -C "$T/other" push -q origin refs/notes/concrete-review
 reset_fake
 g checkout -q main && g checkout -qb nonff

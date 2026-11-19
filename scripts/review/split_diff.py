@@ -13,6 +13,7 @@ diff. A single hunk that is still too large is cut at line boundaries.
 --no-groups packs everything as one group; review.sh uses it to halve a piece
 that a reviewer refused.
 """
+import io
 import os
 import re
 import sys
@@ -35,49 +36,45 @@ def classify(path):
     return "scripts"
 
 
-def parse_files(text):
-    """Return [(path, header, [hunk, ...])] from a `git diff` text."""
+def parse_files(patch):
+    """Return [(path, header, [hunk, ...])] from the bytes of a `git diff`."""
     files = []
     cur = None
-    for line in text.splitlines(keepends=True):
-        if line.startswith("diff --git "):
+    for line in io.BytesIO(patch):
+        if line.startswith(b"diff --git "):
             # "diff --git a/X b/X": take the b/ side (the post-image path).
-            rest = line[len("diff --git "):].rstrip("\n")
-            path = rest.split(" b/", 1)[1] if " b/" in rest else rest
+            rest = line[len(b"diff --git "):].removesuffix(b"\n")
+            path = rest.split(b" b/", 1)[-1].decode("utf-8", errors="replace")
             cur = [path, [line], []]
             files.append(cur)
         elif cur is None:
             # Text before any file section: keep it as its own pseudo-file.
             cur = ["(preamble)", [], [[line]]]
             files.append(cur)
-        elif line.startswith("@@"):
+        elif line.startswith(b"@@"):
             cur[2].append([line])
         elif cur[2]:
             cur[2][-1].append(line)
         else:
             cur[1].append(line)
-    return [(p, "".join(h), ["".join(x) for x in hs]) for p, h, hs in files]
+    return [(p, b"".join(h), [b"".join(x) for x in hs]) for p, h, hs in files]
 
 
-def size(s):
-    return len(s.encode())
-
-
-HUNK_RE = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+HUNK_RE = re.compile(rb"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 
 
 def split_hunk(hunk, budget):
     """Cut one oversized hunk at line boundaries. Every part gets its own,
     recomputed @@ header, so each part is itself a well-formed hunk."""
-    lines = hunk.splitlines(keepends=True)
+    lines = list(io.BytesIO(hunk))
     m = HUNK_RE.match(lines[0])
     if not m:
         # Not a hunk we can renumber: plain line cut.
-        parts, part = [], ""
+        parts, part = [], b""
         for line in lines:
-            if part and size(part + line) > budget:
+            if part and len(part + line) > budget:
                 parts.append(part)
-                part = ""
+                part = b""
             part += line
         return parts + ([part] if part else [])
     old, new = int(m.group(1)), int(m.group(3))
@@ -88,14 +85,14 @@ def split_hunk(hunk, budget):
 
     def flush():
         nonlocal old, new
-        o = sum(1 for l in cur if l[:1] in (" ", "-"))
-        n = sum(1 for l in cur if l[:1] in (" ", "+"))
-        parts.append("@@ -%d,%d +%d,%d @@\n" % (old, o, new, n) + "".join(cur))
+        o = sum(1 for l in cur if l[:1] in (b" ", b"-"))
+        n = sum(1 for l in cur if l[:1] in (b" ", b"+"))
+        parts.append(b"@@ -%d,%d +%d,%d @@\n" % (old, o, new, n) + b"".join(cur))
         old += o
         new += n
 
     for line in body:
-        if cur and size("".join(cur) + line) > room:
+        if cur and len(b"".join(cur) + line) > room:
             flush()
             cur = []
         cur.append(line)
@@ -106,23 +103,23 @@ def split_hunk(hunk, budget):
 
 def file_chunks(header, hunks, limit):
     """Yield diff texts for one file, each <= limit where possible."""
-    whole = header + "".join(hunks)
-    if size(whole) <= limit or not hunks:
+    whole = header + b"".join(hunks)
+    if len(whole) <= limit or not hunks:
         yield whole
         return
-    budget = max(limit - size(header), 256)
-    buf = ""
+    budget = max(limit - len(header), 256)
+    buf = b""
     for h in hunks:
-        if size(h) > budget:
+        if len(h) > budget:
             if buf:
                 yield header + buf
-                buf = ""
+                buf = b""
             for part in split_hunk(h, budget):
                 yield header + part
             continue
-        if buf and size(buf + h) > budget:
+        if buf and len(buf + h) > budget:
             yield header + buf
-            buf = ""
+            buf = b""
         buf += h
     if buf:
         yield header + buf
@@ -142,35 +139,35 @@ def main():
     except ValueError:
         print("split_diff.py: limit-bytes must be a positive integer", file=sys.stderr)
         return 2
-    with open(diff_file, encoding="utf-8", errors="replace") as f:
-        text = f.read()
+    with open(diff_file, "rb") as f:
+        patch = f.read()
     os.makedirs(out_dir, exist_ok=True)
 
     by_group = {}
-    for path, header, hunks in parse_files(text):
+    for path, header, hunks in parse_files(patch):
         g = "all" if no_groups else classify(path)
         for chunk in file_chunks(header, hunks, limit):
             by_group.setdefault(g, []).append((path, chunk))
 
     pieces = []  # (group, [paths], text)
     for g in (["all"] if no_groups else GROUP_ORDER):
-        cur_paths, cur = [], ""
+        cur_paths, cur = [], b""
         for path, chunk in by_group.get(g, []):
-            if cur and size(cur + chunk) > limit:
+            if cur and len(cur + chunk) > limit:
                 pieces.append((g, cur_paths, cur))
-                cur_paths, cur = [], ""
+                cur_paths, cur = [], b""
             cur += chunk
             if path not in cur_paths:
                 cur_paths.append(path)
         if cur:
             pieces.append((g, cur_paths, cur))
 
-    with open(os.path.join(out_dir, "manifest.tsv"), "w") as m:
+    with open(os.path.join(out_dir, "manifest.tsv"), "w", encoding="utf-8") as m:
         for i, (g, paths, body) in enumerate(pieces, 1):
             name = "piece-%03d.diff" % i
-            with open(os.path.join(out_dir, name), "w") as f:
+            with open(os.path.join(out_dir, name), "wb") as f:
                 f.write(body)
-            m.write("%s\t%s\t%d\t%s\n" % (name, g, size(body), ",".join(paths)))
+            m.write("%s\t%s\t%d\t%s\n" % (name, g, len(body), ",".join(paths)))
     print(len(pieces))
     return 0
 
