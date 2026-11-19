@@ -168,7 +168,7 @@ def releaseZero : Release Unit Int := releaseValue 0
 /-- The evaluated decision at an actual C1 conditional or loop-test configuration.
 Loop tests record their source site and loop identity. A successful test contributes one iteration;
 a false test contributes zero. The ordered decisions retain every test, including loop exit.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
+Authority: R-0613 (C7 security); docs/decisions.md#decided-2026-11-08-foundation (C7),
 docs/decisions.md#decided-project-infoflow-2026-11-06. -/
 def controlLeakage (c : Config ops) : List (Leakage Int Unit Unit) :=
   let decision (e : Expr) (site : SiteId) (loop : Option LoopId) :=
@@ -306,53 +306,53 @@ structure IntegerComparison where
   right : IntegerEntry
 
 /-- Integer-machine instance of complete-run authorization, with concrete policy and entry data.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
+Authority: R-0613 (C7 security); docs/decisions.md#decided-2026-11-08-foundation (C7),
 docs/decisions.md#decided-project-infoflow-2026-11-06. -/
 def IntegerRunsAuthorized (d : ReleasePolicy Unit × IntegerExecution) : Prop :=
   d.1.RunsAuthorized Demo.instrumentation (integerProgram d.2.functions) d.2.entry.config
 
 /-- Integer-machine instance of public-state equivalence.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
+Authority: R-0613 (C7 security); docs/decisions.md#decided-2026-11-08-foundation (C7),
 docs/decisions.md#decided-project-infoflow-2026-11-06. -/
 def IntegerLowEquivalent (d : IntegerComparison) : Prop :=
   LowEquivalent Demo.labelling d.left.config d.right.config
 
 /-- Integer-machine instance of delimited release NI, quantifying over all C1 runs.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
+Authority: R-0613 (C7 security); docs/decisions.md#decided-2026-11-08-foundation (C7),
 docs/decisions.md#decided-project-infoflow-2026-11-06. -/
 def IntegerDelimitedReleaseNI (d : IntegerComparison) : Prop :=
   DelimitedReleaseNI Demo.instrumentation (integerProgram d.functions) Demo.labelling d.left.config d.right.config
 
 /-- Integer-machine instance of CT, quantifying over all C1 runs separately from NI.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
+Authority: R-0613 (C7 security); docs/decisions.md#decided-2026-11-08-foundation (C7),
 docs/decisions.md#decided-project-infoflow-2026-11-06. -/
 def IntegerConstantTime (d : IntegerComparison) : Prop :=
   ConstantTime Demo.instrumentation (integerProgram d.functions) Demo.labelling d.left.config d.right.config
 
 /-- Monomorphic data view of call graph admission; delegates to the owning judgment.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
+Authority: R-0613 (C7 security); docs/decisions.md#decided-2026-11-08-foundation (C7),
 docs/decisions.md#decided-project-infoflow-2026-11-06. -/
 def UnitCallsAdmitted (d : ReleaseInterface Unit × ReleaseCalls Unit) : Prop := d.1.Admitted d.2
 
 /-- Concrete program admission, with the integer primitive interface's fixed release classifier.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
+Authority: R-0613 (C7 security); docs/decisions.md#decided-2026-11-08-foundation (C7),
 docs/decisions.md#decided-project-infoflow-2026-11-06. -/
 def IntegerProgramAdmitted (d : ReleaseInterface Unit × List (FnId × IntegerFunction)) : Prop :=
   d.1.ProgramAdmitted (fun p : Demo.Prim => match p with | .release => some () | _ => none)
     (integerProgram d.2)
 
 /-- Monomorphic data view of typed-site permission; delegates to the owning judgment.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
+Authority: R-0613 (C7 security); docs/decisions.md#decided-2026-11-08-foundation (C7),
 docs/decisions.md#decided-project-infoflow-2026-11-06. -/
 def StringReleasePermitted (d : ReleasePolicy String × Release String Nat) : Prop := d.1.Permits d.2
 
 /-- Monomorphic data view of empty release policy; delegates to the owning judgment.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
+Authority: R-0613 (C7 security); docs/decisions.md#decided-2026-11-08-foundation (C7),
 docs/decisions.md#decided-project-infoflow-2026-11-06. -/
 def UnitReleaseForbidden (d : ReleasePolicy Unit) : Prop := d.ForbidsRelease
 
 /-- Monomorphic data view of ordered release authorization; delegates to the owning judgment.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
+Authority: R-0613 (C7 security); docs/decisions.md#decided-2026-11-08-foundation (C7),
 docs/decisions.md#decided-project-infoflow-2026-11-06. -/
 def UnitTraceAuthorized (d : ReleasePolicy Unit × List (Release Unit Int)) : Prop := d.1.Authorized d.2
 

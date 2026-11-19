@@ -31,7 +31,7 @@ def Account.empty : Account := ⟨0, 0, 0, 0⟩
 
 /-- A well-formed account has already reached at least its current live bytes, both historically
 and since function entry.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
+Authority: R-0613 (C7 accounting); docs/decisions.md#decided-2026-11-08-foundation (C7);
 docs/decisions.md#decided-project-memory-2026-11-06. -/
 def Account.WF (a : Account) : Prop := a.live ≤ a.peak ∧ a.live ≤ a.functionPeak
 
@@ -87,7 +87,7 @@ def apply (m : Memory) : Action → Option Memory
 
 /-- A checked view of the one accounting transition: allocation/reset succeed and free refuses
 outflow above the actual live account.
-Authority: docs/decisions.md#decided-2026-11-08-foundation
+Authority: R-0613 (C7 accounting); docs/decisions.md#decided-2026-11-08-foundation
 (C7) and docs/decisions.md#decided-project-memory-2026-11-06. -/
 def ActionPermitted (m : Memory) (a : Action) : Prop := (apply m a).isSome = true
 
@@ -98,7 +98,7 @@ def run (m : Memory) (actions : List Action) : Option Memory :=
   | a :: rest => (apply m a).bind fun m' => run m' rest
 
 /-- A checked view of the one accounting fold; a refused action refuses the sequence.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+Authority: R-0613 (C7 accounting); docs/decisions.md#decided-2026-11-08-foundation (C7). -/
 def SequencePermitted (m : Memory) (actions : List Action) : Prop := (run m actions).isSome = true
 
 /-- Bytes allocated for `lineage` by a sequence. -/
@@ -131,7 +131,7 @@ def resetBytes (lineage : LineageId) (m : Memory) (actions : List Action) : Nat 
 /-- Independent conservation obligation for a reset. The recorded outflow is not an input to the
 account transition, so a wrong record makes this predicate false rather than making the reset
 inadmissible. Cumulative history and both peaks must be conserved.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
+Authority: R-0613 (C7 accounting); docs/decisions.md#decided-2026-11-08-foundation (C7);
 docs/decisions.md#decided-project-memory-2026-11-06. -/
 def ResetConservation (before after : Account) (recordedOutflow : Nat) : Prop :=
   after.requested = before.requested ∧
@@ -167,20 +167,20 @@ structure Bound (α : Type) where
   deriving DecidableEq, Repr
 
 /-- An established bound is sound for `actual`; `notEstablished` asserts no bound.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
+Authority: R-0613 (C7 accounting); docs/decisions.md#decided-2026-11-08-foundation (C7);
 docs/decisions.md#decided-project-memory-2026-11-06. -/
 def Bound.Sound {α : Type} [LE α] (actual : α) (b : Bound α) : Prop :=
   b.status = .boundEstablished → actual ≤ b.limit
 
 /-- An established footprint bound needs an allocator-defined footprint; no contract-defined value
 means that footprint evidence cannot be established.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
+Authority: R-0613 (C7 accounting); docs/decisions.md#decided-2026-11-08-foundation (C7);
 docs/decisions.md#decided-project-memory-2026-11-06. -/
 def Bound.SoundOptional {α : Type} [LE α] (actual : Option α) (b : Bound α) : Prop :=
   b.status = .boundEstablished → ∃ a, actual = some a ∧ a ≤ b.limit
 
 /-- A signed interval for net live-byte change, with an independent evidence status.
-Authority: docs/decisions.md#decided-project-memory-2026-11-06, adopting MEMORY §1. -/
+Authority: R-0613 (C7 accounting); docs/decisions.md#decided-project-memory-2026-11-06, adopting MEMORY §1. -/
 structure SignedInterval where
   lo : Int
   hi : Int
@@ -188,7 +188,7 @@ structure SignedInterval where
   deriving DecidableEq, Repr
 
 /-- Both endpoints bound an established net change; unknown status asserts neither endpoint.
-Authority: docs/decisions.md#decided-project-memory-2026-11-06, adopting MEMORY §1. -/
+Authority: R-0613 (C7 accounting); docs/decisions.md#decided-project-memory-2026-11-06, adopting MEMORY §1. -/
 def SignedInterval.Sound (actual : Int) (b : SignedInterval) : Prop :=
   b.status = .boundEstablished → b.lo ≤ actual ∧ actual ≤ b.hi
 
@@ -208,7 +208,7 @@ requests made before entry. The peak is the maximum live bytes above the entry l
 The internal local high-water mark is measured in absolute live bytes. The caller applies `Account.enter`
 at function entry
 and does not reset the local peak again before the function exits.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
+Authority: R-0613 (C7 accounting); docs/decisions.md#decided-2026-11-08-foundation (C7);
 docs/decisions.md#decided-project-memory-2026-11-06. -/
 def LineageReport.Sound (lineage : LineageId) (entry exit : Account) (footprint : Option Nat)
     (r : LineageReport) : Prop :=
@@ -233,35 +233,35 @@ def accountMemory (entries : List (LineageId × Account)) : Memory :=
   entries.foldl (fun m e => Memory.set m e.1 e.2) Memory.empty
 
 /-- Finite-data instance of the accounting transition judgment.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+Authority: R-0613 (C7 accounting); docs/decisions.md#decided-2026-11-08-foundation (C7). -/
 def FiniteActionPermitted (d : List (LineageId × Account) × Action) : Prop :=
   ActionPermitted (accountMemory d.1) d.2
 
 /-- Finite-data instance of the accounting sequence judgment.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+Authority: R-0613 (C7 accounting); docs/decisions.md#decided-2026-11-08-foundation (C7). -/
 def FiniteSequencePermitted (d : List (LineageId × Account) × List Action) : Prop :=
   SequencePermitted (accountMemory d.1) d.2
 
 /-- Natural-byte instance of the generic bound judgment; its ordering is fixed by the adapter.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+Authority: R-0613 (C7 accounting); docs/decisions.md#decided-2026-11-08-foundation (C7). -/
 def ByteBoundSound (d : Nat × Bound Nat) : Prop := Bound.Sound d.1 d.2
 
 /-- Natural-byte instance of optional footprint evidence, retaining the same absence rule.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+Authority: R-0613 (C7 accounting); docs/decisions.md#decided-2026-11-08-foundation (C7). -/
 def ByteBoundSoundOptional (d : Option Nat × Bound Nat) : Prop := Bound.SoundOptional d.1 d.2
 
 /-- Monomorphic data view of reset conservation; delegates to the owning judgment.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+Authority: R-0613 (C7 accounting); docs/decisions.md#decided-2026-11-08-foundation (C7). -/
 def ResetConserved (d : Account × Account × Nat) : Prop := ResetConservation d.1 d.2.1 d.2.2
 
 /-- Monomorphic data view of lineage report soundness; delegates to the owning judgment.
-Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+Authority: R-0613 (C7 accounting); docs/decisions.md#decided-2026-11-08-foundation (C7). -/
 def ReportSound (d : LineageId × Account × Account × Option Nat × LineageReport) : Prop :=
   let (lineage, entry, exit, footprint, report) := d
   LineageReport.Sound lineage entry exit footprint report
 
 /-- Concrete signed-net interval evidence, delegated to its owning judgment.
-Authority: docs/decisions.md#decided-project-memory-2026-11-06. -/
+Authority: R-0613 (C7 accounting); docs/decisions.md#decided-project-memory-2026-11-06. -/
 def SignedNetSound (d : Int × SignedInterval) : Prop := SignedInterval.Sound d.1 d.2
 
 

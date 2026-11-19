@@ -79,6 +79,14 @@ theorem forbidsRelease_not_authorized {Ty Val : Type} (policy : ReleasePolicy Ty
   rw [hforbids] at hr
   contradiction
 
+/-- Law: a trace whose typed sites are all listed is authorized, including the empty trace
+under a forbid-release policy.
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+theorem listed_trace_authorized {Ty Val : Type} (policy : ReleasePolicy Ty)
+    (rs : List (Release Ty Val)) (listed : ∀ r ∈ rs, r.site ∈ policy.allowed) :
+    policy.Authorized rs :=
+  listed
+
 /-- Law: reason and call-path facts do not strengthen the ordered release premise.
 Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
 docs/decisions.md#decided-project-infoflow-2026-11-06. -/
@@ -86,6 +94,12 @@ theorem release_metadata_irrelevant {Ty Val : Type} (rs : List (ReleaseFact Ty V
     (reason : String) (path : List FnId) :
     ReleaseFact.semanticTrace (rs.map fun r => { r with reason := reason, path := path }) =
       ReleaseFact.semanticTrace rs := by
+  simp [ReleaseFact.semanticTrace, releaseTrace, List.map_map]
+
+/-- Law: metadata projection preserves every typed site and value in order, including repeats.
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+theorem release_metadata_preserves_trace {Ty Val : Type} (facts : List (ReleaseFact Ty Val)) :
+    ReleaseFact.semanticTrace facts = facts.map (fun f => (f.release.site, f.release.value)) := by
   simp [ReleaseFact.semanticTrace, releaseTrace, List.map_map]
 
 /-- Helper (projection). Run-connected facts use precisely the run's release premise. -/
@@ -106,6 +120,13 @@ theorem release_metadata_instance :
 /-- Planted definition: incorrectly suppress releases with an empty reason. -/
 def reasonSensitiveTrace {Ty Val : Type} (rs : List (ReleaseFact Ty Val)) : List (ReleaseSite Ty × Val) :=
   (rs.filter fun r => !r.reason.isEmpty).map fun r => (r.release.site, r.release.value)
+
+/-- Planted control for trace preservation: an empty reason cannot suppress a release. -/
+theorem empty_reason_still_projects_release :
+    let fact := { metadataFact with reason := "" }
+    ReleaseFact.semanticTrace [fact] = [(fact.release.site, fact.release.value)] ∧
+      reasonSensitiveTrace [fact] ≠ [(fact.release.site, fact.release.value)] :=
+  ⟨release_metadata_preserves_trace _, by decide⟩
 
 /-- Planted (law `release_metadata_irrelevant`, case `metadataReason`, mutant `reasonSensitiveTrace`).
 changing only reason metadata now changes the release comparison. -/
@@ -327,7 +348,7 @@ theorem ct_run_unique (secret : Int) (r : Run instrumentation program (ctStart s
 /-- Representation lemma. Concrete projection check showing secureRun 1 maps via `InstrumentedSteps.toSteps` to an underlying C1 `Steps` derivation.
 
 The concrete instrumented run projects to C1, not to a second semantics. -/
-example : ∃ events, Steps program (start 1) events (finished 1 (hiddenLocals 0)) :=
+theorem bound_execution : ∃ events, Steps program (start 1) events (finished 1 (hiddenLocals 0)) :=
   (secureRun 1).steps.toSteps
 
 /-- One complete seven-step timing execution. -/
@@ -455,6 +476,12 @@ theorem timing_not_ct (s₁ s₂ : Int)
   simp [timingRun] at hl
   exact hs hl
 
+/-- Law: identical timing inputs satisfy CT even when they execute variable-time work.
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+theorem same_timing_input_ct (secret : Int) :
+    ConstantTime instrumentation program labelling (timingStart secret) (timingStart secret) :=
+  fun a b _ _ _ => (complete_unique a b).2.1
+
 /-- A deliberately permissive output oracle admits two distinct labels for one machine request. -/
 def permissiveAllowed (p : Prim) (vs : List Int) (st : Int) (a : Answer Int Int Int) : Bool :=
   match p, vs with
@@ -464,19 +491,19 @@ def permissiveAllowed (p : Prim) (vs : List Int) (st : Int) (a : Answer Int Int 
 /-- Representation lemma. Concrete order-sensitivity check showing secureRun 1's leakage list is not equal to its reversal.
 
 Planted trace mutations: reversed leakage and a missing final observation are detectable. -/
-example : (secureRun 1).leakage ≠ [.variableTime ⟨1⟩ [1], .variableTime ⟨0⟩ [1]] := by
+theorem leakage_order_matters : (secureRun 1).leakage ≠ [.variableTime ⟨1⟩ [1], .variableTime ⟨0⟩ [1]] := by
   intro h
   change [Leakage.variableTime ⟨0⟩ [1], .variableTime ⟨1⟩ [1]] =
     [.variableTime ⟨1⟩ [1], .variableTime ⟨0⟩ [1]] at h
   cases h
 
 /-- Representation lemma. Concrete finality check showing `Run.publicObservations` includes .final .normal beyond the step output. -/
-example : (secureRun 1).publicObservations ≠ [.output 1] := by decide
+theorem public_output_uses_released_sum : (secureRun 1).publicObservations ≠ [.output 1] := by decide
 
 /-- Representation lemma. Concrete non-finality check showing the intermediate `afterRelease` state has final? = none.
 
 A nonfinal execution prefix is not a complete run. -/
-example : ¬ ∃ ending, (afterRelease .secret 1).final? = some ending := by
+theorem release_transition_is_nonterminal : ¬ ∃ ending, (afterRelease .secret 1).final? = some ending := by
   simp [afterRelease, Config.final?]
 
 /-- A configuration with one secret and one public local. -/
@@ -486,11 +513,11 @@ def mixedConfig (secret publicValue : Int) : Config ops :=
 /-- Instance. Concrete `LowEquivalent` acceptance check when only negative (secret) local bindings differ.
 
 Secret local changes are invisible; a planted public local change rejects low-equivalence. -/
-example : LowEquivalent labelling (mixedConfig (-1) 7) (mixedConfig (-2) 7) := by
+theorem secret_local_change_is_low_equivalent : LowEquivalent labelling (mixedConfig (-1) 7) (mixedConfig (-2) 7) := by
   simp [LowEquivalent, publicLocals, labelling, mixedConfig]
 
 /-- Instance. Concrete `LowEquivalent` refusal check when non-negative (public) local bindings differ. -/
-example : ¬ LowEquivalent labelling (mixedConfig (-1) 7) (mixedConfig (-2) 8) := by
+theorem public_local_change_breaks_low_equivalence : ¬ LowEquivalent labelling (mixedConfig (-1) 7) (mixedConfig (-2) 8) := by
   simp [LowEquivalent, publicLocals, labelling, mixedConfig]
 
 /-- A store-sensitive labelling supplies the corresponding public-store negative control. -/
@@ -500,7 +527,7 @@ abbrev storeSensitiveLabelling : Labelling ops where
   lowStore := fun s₁ s₂ => s₁ = s₂
 
 /-- Instance. Concrete `LowEquivalent` refusal check under `storeSensitiveLabelling` when store states differ. -/
-example : ¬ LowEquivalent storeSensitiveLabelling (leakyStart 1) (leakyStart 2) := by
+theorem public_store_change_breaks_low_equivalence : ¬ LowEquivalent storeSensitiveLabelling (leakyStart 1) (leakyStart 2) := by
   simp [LowEquivalent, storeSensitiveLabelling, leakyStart]
 
 /-- Helper (computation). Evaluates `publicLocals` on `Demo.leakyStart` to show secret store states are `LowEquivalent` under `Demo.labelling`. -/
@@ -584,12 +611,22 @@ def ignoresPolicyAuthorized {Ty Val : Type} (_ : ReleasePolicy Ty)
     (rs : List (Release Ty Val)) : Prop :=
   ∀ r ∈ rs, (True : Prop)
 
+/-- Planted: requiring a release wrongly refuses an empty trace under the empty policy. -/
+def requiresRelease {Ty Val : Type} (policy : ReleasePolicy Ty) (rs : List (Release Ty Val)) : Prop :=
+  rs ≠ [] ∧ policy.Authorized rs
+
+/-- Instance and planted control for `listed_trace_authorized`. -/
+theorem requires_release_refuses_empty_trace :
+    (ReleasePolicy.mk ([] : List (ReleaseSite Unit))).Authorized ([] : List (Release Unit Int)) ∧
+    ¬ requiresRelease (ReleasePolicy.mk ([] : List (ReleaseSite Unit))) ([] : List (Release Unit Int)) :=
+  ⟨listed_trace_authorized _ _ (by simp), fun h => h.1 rfl⟩
+
 /-- Instance (law `forbidsRelease_not_authorized`, case `emptyPolicy`). -/
-example : ¬ (ReleasePolicy.mk ([] : List (ReleaseSite Unit))).Authorized [Demo.releaseZero] :=
+theorem empty_policy_refuses_release : ¬ (ReleasePolicy.mk ([] : List (ReleaseSite Unit))).Authorized [Demo.releaseZero] :=
   forbidsRelease_not_authorized (ReleasePolicy.mk []) Demo.releaseZero [] rfl
 
 /-- Planted (law `forbidsRelease_not_authorized`, case `emptyPolicy`, subject `ReleasePolicy.Authorized`, mutant `ignoresPolicyAuthorized`). -/
-example : (ReleasePolicy.mk ([] : List (ReleaseSite Unit))).ForbidsRelease ∧
+theorem ignores_policy_accepts_release : (ReleasePolicy.mk ([] : List (ReleaseSite Unit))).ForbidsRelease ∧
     ¬ (¬ ignoresPolicyAuthorized (ReleasePolicy.mk ([] : List (ReleaseSite Unit)))
       [Demo.releaseZero]) :=
   ⟨rfl, fun h => h (fun _ _ => True.intro)⟩
@@ -597,7 +634,7 @@ example : (ReleasePolicy.mk ([] : List (ReleaseSite Unit))).ForbidsRelease ∧
 open Demo
 
 /-- Representation lemma: a concrete control for a function-backed identity, not Law evidence. -/
-example : ∃ (l : Label (opsWith allowed)) (c' : Config (opsWith allowed)),
+theorem allowed_identity_step : ∃ (l : Label (opsWith allowed)) (c' : Config (opsWith allowed)),
     Step (⟨[]⟩ : Program (opsWith allowed))
       ⟨.exec (.prim none .output [.lit 7] ⟨1⟩), [], 0, []⟩ l c' ∧
     ∀ (l₂ : Label (opsWith allowed)) (c₂ : Config (opsWith allowed)),
@@ -610,7 +647,7 @@ example : ∃ (l : Label (opsWith allowed)) (c' : Config (opsWith allowed)),
       (a := (⟨some 7, .ok 0, 0⟩ : Answer Int Int Int)) rfl (by simp [allowed]) rfl⟩
 
 /-- Representation lemma: a concrete control for a function-backed identity, not Law evidence. -/
-example : (∃ (l : Label (opsWith permissiveAllowed)) (c' : Config (opsWith permissiveAllowed)),
+theorem permissive_identity_adds_step : (∃ (l : Label (opsWith permissiveAllowed)) (c' : Config (opsWith permissiveAllowed)),
     Step (⟨[]⟩ : Program (opsWith permissiveAllowed))
       ⟨.exec (.prim none .output [.lit 7] ⟨1⟩), [], 0, []⟩ l c') ∧
     ¬ (∃ (l : Label (opsWith permissiveAllowed)) (c' : Config (opsWith permissiveAllowed)),
@@ -639,11 +676,11 @@ example : (∃ (l : Label (opsWith permissiveAllowed)) (c' : Config (opsWith per
   exact (by decide : (7 : Int) ≠ 8) hv
 
 /-- Instance (law `secure_ni`, case `maskedSecrets`). -/
-example : DelimitedReleaseNI instrumentation program labelling (start 6 1) (start 5 2) :=
+theorem masked_secrets_ni : DelimitedReleaseNI instrumentation program labelling (start 6 1) (start 5 2) :=
   secure_ni 6 5 1 2 ⟨rfl, trivial⟩ ⟨secureRun 6 1, secureRun 5 2, rfl, rfl⟩
 
 /-- Planted (law `secure_ni`, case `maskedSecrets`, subject `ConcreteSpec.Core.Leak.Demo.start`, mutant `exposingStart`). -/
-example : LowEquivalent labelling (exposingStart 6 1) (exposingStart 5 2) ∧
+theorem exposing_start_breaks_ni : LowEquivalent labelling (exposingStart 6 1) (exposingStart 5 2) ∧
     (∃ (r₁ : Run instrumentation program (exposingStart 6 1))
        (r₂ : Run instrumentation program (exposingStart 5 2)),
        r₁.choices = r₂.choices ∧ releaseTrace r₁.releases = releaseTrace r₂.releases) ∧
@@ -654,11 +691,11 @@ example : LowEquivalent labelling (exposingStart 6 1) (exposingStart 5 2) ∧
   exact (by decide : (exposingRun 6 1).publicObservations ≠ (exposingRun 5 2).publicObservations) hobs.1
 
 /-- Instance (law `secure_ct`, case `maskedSecrets`). -/
-example : ConstantTime instrumentation program labelling (start 6 1) (start 5 2) :=
+theorem masked_secrets_ct : ConstantTime instrumentation program labelling (start 6 1) (start 5 2) :=
   secure_ct 6 5 1 2 ⟨rfl, trivial⟩ ⟨secureRun 6 1, secureRun 5 2, rfl, rfl⟩
 
 /-- Planted (law `secure_ct`, case `maskedSecrets`, subject `ConcreteSpec.Core.Leak.Demo.start`, mutant `exposingStart`). -/
-example : LowEquivalent labelling (exposingStart 6 1) (exposingStart 5 2) ∧
+theorem exposing_start_breaks_ct : LowEquivalent labelling (exposingStart 6 1) (exposingStart 5 2) ∧
     (∃ (r₁ : Run instrumentation program (exposingStart 6 1))
        (r₂ : Run instrumentation program (exposingStart 5 2)),
        r₁.choices = r₂.choices ∧ releaseTrace r₁.releases = releaseTrace r₂.releases) ∧
@@ -671,11 +708,11 @@ example : LowEquivalent labelling (exposingStart 6 1) (exposingStart 5 2) ∧
   cases hleak
 
 /-- Instance (law `timing_ni`, case `timingStart`). -/
-example : DelimitedReleaseNI instrumentation program labelling (timingStart 1) (timingStart 2) :=
+theorem timing_pair_ni : DelimitedReleaseNI instrumentation program labelling (timingStart 1) (timingStart 2) :=
   timing_ni 1 2 ⟨rfl, trivial⟩ ⟨timingRun 1, timingRun 2, rfl, rfl⟩
 
 /-- Planted (law `timing_ni`, case `timingStart`, subject `timingStart`, mutant `leakyTimingStart`). -/
-example : LowEquivalent labelling (leakyTimingStart 1) (leakyTimingStart 2) ∧
+theorem leaky_timing_start_breaks_ni : LowEquivalent labelling (leakyTimingStart 1) (leakyTimingStart 2) ∧
     (∃ (r₁ : Run instrumentation program (leakyTimingStart 1))
        (r₂ : Run instrumentation program (leakyTimingStart 2)),
        r₁.choices = r₂.choices ∧ releaseTrace r₁.releases = releaseTrace r₂.releases) ∧
@@ -686,12 +723,12 @@ example : LowEquivalent labelling (leakyTimingStart 1) (leakyTimingStart 2) ∧
   exact (by decide : (leakyTimingRun 1).publicObservations ≠ (leakyTimingRun 2).publicObservations) hobs.1
 
 /-- Instance: secret-dependent work refutes constant time even with public output. -/
-example : ¬ ConstantTime instrumentation program labelling (timingStart 1) (timingStart 2) :=
+theorem timing_pair_not_ct : ¬ ConstantTime instrumentation program labelling (timingStart 1) (timingStart 2) :=
   timing_not_ct 1 2 ⟨rfl, trivial⟩ (by decide)
 
 /-- Representation lemma: `ctRun 1` and `ctRun 2` inhabit all CT and NI premises:
 low equivalence, equal choices and equal releases for `ctStart`. -/
-example : ctStart 1 ≠ ctStart 2 ∧
+theorem distinct_ct_entries : ctStart 1 ≠ ctStart 2 ∧
     LowEquivalent labelling (ctStart 1) (ctStart 2) ∧
     (ctRun 1).choices = (ctRun 2).choices ∧
     (ctRun 1).releases = (ctRun 2).releases := by
@@ -701,14 +738,38 @@ example : ctStart 1 ≠ ctStart 2 ∧
   exact (by decide : (1 : Int) ≠ 2) hs
 
 /-- Instance: authorized release cannot excuse an unreleased public output. -/
-example : ¬ DelimitedReleaseNI instrumentation program labelling (leakyStart 1) (leakyStart 2) :=
+theorem authorized_pair_not_ni : ¬ DelimitedReleaseNI instrumentation program labelling (leakyStart 1) (leakyStart 2) :=
   authorized_release_not_ni 1 2 (release_authorized 1) (release_authorized 2)
     (leaky_low 1 2) (by decide)
 
 /-- Instance: authorized release cannot excuse unreleased timing leakage. -/
-example : ¬ ConstantTime instrumentation program labelling (leakyStart 1) (leakyStart 2) :=
+theorem authorized_pair_not_ct : ¬ ConstantTime instrumentation program labelling (leakyStart 1) (leakyStart 2) :=
   authorized_release_not_ct 1 2 (release_authorized 1) (release_authorized 2)
     (leaky_low 1 2) (by decide)
+
+/-- Planted: require equality of the raw store in addition to the security judgment. -/
+def requiresSameStore (judgment : Config Demo.ops → Config Demo.ops → Prop) (a b : Config Demo.ops) : Prop :=
+  a.store = b.store ∧ judgment a b
+
+/-- Planted control: raw-store equality wrongly refuses both admitted masked-secret
+comparisons and the timing pair admitted by NI. -/
+theorem raw_store_equality_refuses_allowed_pairs :
+    ¬ requiresSameStore (DelimitedReleaseNI instrumentation program labelling) (start 6 1) (start 5 2) ∧
+    ¬ requiresSameStore (ConstantTime instrumentation program labelling) (start 6 1) (start 5 2) ∧
+    ¬ requiresSameStore (DelimitedReleaseNI instrumentation program labelling) (timingStart 1) (timingStart 2) :=
+  ⟨fun h => (by decide : (6 : Int) ≠ 5) h.1, fun h => (by decide : (6 : Int) ≠ 5) h.1,
+    fun h => (by decide : (1 : Int) ≠ 2) h.1⟩
+
+/-- Planted: require empty leakage even when CT already guarantees equal traces. -/
+def requiresEmptyLeakage (a b : Config Demo.ops) : Prop :=
+  ConstantTime instrumentation program labelling a b ∧
+    ∀ r : Run instrumentation program a, r.leakage = []
+
+/-- Instance and planted control for `same_timing_input_ct`: equal nonempty traces pass CT. -/
+theorem empty_leakage_requirement_refuses_matched_work :
+    ConstantTime instrumentation program labelling (timingStart 1) (timingStart 1) ∧
+    ¬ requiresEmptyLeakage (timingStart 1) (timingStart 1) :=
+  ⟨same_timing_input_ct 1, fun h => by have empty := h.2 (timingRun 1); simp [timingRun] at empty⟩
 
 /-- Planted definition: omit only public-output equality from NI. The complete-run domain,
 all premises and public-length equality remain unchanged. -/
@@ -783,7 +844,7 @@ def secretSeeingRun (s : Int) (h : Nat) : Run secretSeeing program (start s h) w
 
 /-- Planted (law `secure_ni`, fault `secretSeeingObserver`).
 Same program and entries as the positive instance; only the observer is changed. -/
-example : LowEquivalent labelling (start 6 1) (start 5 2) ∧
+theorem secret_observer_breaks_ni : LowEquivalent labelling (start 6 1) (start 5 2) ∧
     (secretSeeingRun 6 1).choices = (secretSeeingRun 5 2).choices ∧
     releaseTrace (secretSeeingRun 6 1).releases = releaseTrace (secretSeeingRun 5 2).releases ∧
     ¬ DelimitedReleaseNI secretSeeing program labelling (start 6 1) (start 5 2) := by
@@ -803,7 +864,7 @@ def metadataSeeingRun (secret : Int) (hidden : Nat := 0) : Run metadataSeeing pr
 
 /-- Planted (law `secure_ni`, fault `secretPublicLength`).
 NI rejects secret-dependent public metadata even when ordinary outputs still match. -/
-example : LowEquivalent labelling (start 6 1) (start 5 2) ∧
+theorem secret_length_breaks_ni : LowEquivalent labelling (start 6 1) (start 5 2) ∧
     (metadataSeeingRun 6 1).choices = (metadataSeeingRun 5 2).choices ∧
     releaseTrace (metadataSeeingRun 6 1).releases = releaseTrace (metadataSeeingRun 5 2).releases ∧
     ¬ DelimitedReleaseNI metadataSeeing program labelling (start 6 1) (start 5 2) := by
@@ -819,16 +880,16 @@ def pathSensitiveTrace {Ty Val : Type} (rs : List (ReleaseFact Ty Val)) :
   (rs.filter fun r => !r.path.isEmpty).map fun r => (r.release.site, r.release.value)
 
 /-- Planted (law `release_metadata_irrelevant`, fault `pathSensitiveComparison`). -/
-example : ¬ (pathSensitiveTrace [{ metadataFact with path := [Exec.Demo.logF] }] =
+theorem path_sensitive_trace_changes : ¬ (pathSensitiveTrace [{ metadataFact with path := [Exec.Demo.logF] }] =
     pathSensitiveTrace [metadataFact]) := by decide
 
 /-- Instance (law `instrumentation_erasure`, case `secureExecution`). -/
-example : ∃ events, Steps program (start 6 1) events (secureRun 6 1).final :=
+theorem secure_execution_erases : ∃ events, Steps program (start 6 1) events (secureRun 6 1).final :=
   (instrumentation_erasure instrumentation program _ _).mp
     ⟨_, _, _, _, (secureRun 6 1).steps⟩
 
 /-- Instance: erasure also reconstructs instrumentation from the concrete C1 execution. -/
-example : ∃ obs leaks rs choices,
+theorem secure_execution_instruments : ∃ obs leaks rs choices,
     InstrumentedSteps instrumentation program (start 6 1) obs leaks rs choices (secureRun 6 1).final :=
   (instrumentation_erasure instrumentation program _ _).mpr
     ((instrumentation_erasure instrumentation program _ _).mp
@@ -847,7 +908,7 @@ inductive RestrictedSteps {O : Operands} (I : Instrumentation O) (P : Program O)
 
 /-- Planted (law `instrumentation_erasure`, fault `restrictedRefl`).
 The erased reflexive run inhabits the reverse implication's premise. -/
-example : (∃ events, Steps program (finished 1) events (finished 1)) ∧
+theorem restricted_refl_loses_execution : (∃ events, Steps program (finished 1) events (finished 1)) ∧
     ¬ ((∃ obs leaks rs choices, RestrictedSteps instrumentation program
       (finished 1) obs leaks rs choices (finished 1)) ↔
       ∃ events, Steps program (finished 1) events (finished 1)) := by
@@ -872,7 +933,7 @@ inductive AdmittingSteps (I : Instrumentation Demo.ops) (P : Program Demo.ops) :
 
 /-- Planted (law `instrumentation_erasure`, fault `illicitStep`).
 The added transition inhabits the forward implication's premise. -/
-example : (∃ obs leaks rs choices, AdmittingSteps instrumentation program
+theorem illicit_step_adds_execution : (∃ obs leaks rs choices, AdmittingSteps instrumentation program
       (finished 1) obs leaks rs choices (start 1)) ∧
     ¬ ((∃ obs leaks rs choices, AdmittingSteps instrumentation program
       (finished 1) obs leaks rs choices (start 1)) ↔
@@ -888,7 +949,7 @@ example : (∃ obs leaks rs choices, AdmittingSteps instrumentation program
 
 /-- Instance (law `release_metadata_irrelevant`, case `factsOfSecureRun`).
 Reasons and paths are connected to an actual run while remaining outside its release premise. -/
-example : ReleaseFact.semanticTrace
+theorem run_facts_keep_release_trace : ReleaseFact.semanticTrace
     (ReleaseFact.attach (secureRun 6 1).releases
       (fun _ => "changed reason") (fun _ => [Exec.Demo.logF])).entries =
     releaseTrace (secureRun 6 1).releases := RunFacts.trace_eq _
@@ -941,18 +1002,18 @@ theorem deterministic_choices (c d : Config ops) (label : Label ops) :
     instrumentation.choices c label d = [] := rfl
 
 /-- Instance: the asymmetric execution has matched choices and releases despite different lengths. -/
-example : (left instrumentation).choices = (right instrumentation).choices ∧
+theorem asymmetric_pair_choices_match : (left instrumentation).choices = (right instrumentation).choices ∧
     (left instrumentation).releases = (right instrumentation).releases := ⟨rfl, rfl⟩
 
 /-- Planted: only the choice projection is replaced by an internal step counter. -/
 abbrev stepCount : Instrumentation ops := { instrumentation with choices := fun _ _ _ => [()] }
 
 /-- Instance: an inhabited output transition exercises the deterministic-choice Law. -/
-example : instrumentation.choices ⟨.exec (out 0), [], 0, []⟩ (.emit 0) (finished 0) = [] :=
+theorem output_has_no_choices : instrumentation.choices ⟨.exec (out 0), [], 0, []⟩ (.emit 0) (finished 0) = [] :=
   deterministic_choices _ _ _
 
 /-- Planted (law `deterministic_choices`): the same actual output transition is wrongly counted. -/
-example : stepCount.choices ⟨.exec (out 0), [], 0, []⟩ (.emit 0) (finished 0) ≠ [] := by decide
+theorem step_count_adds_choice : stepCount.choices ⟨.exec (out 0), [], 0, []⟩ (.emit 0) (finished 0) ≠ [] := by decide
 
 /-- Instance: NI refuses an asymmetric unreleased output leak with matched external choices. -/
 theorem asymmetric_ni_refused :
@@ -1005,7 +1066,7 @@ theorem conditional_leakage (e : Demo.Expr) (s t : ConcreteSpec.Core.Exec.Stmt o
   simp [controlLeakage, request, evaluated]
 
 /-- Instance: site seven and a true decision exercise conditional leakage. -/
-example : instrumentation.leakage (branchEntry 1) .silent (finished 1) = [.branch ⟨7⟩ true] :=
+theorem conditional_true_leakage : instrumentation.leakage (branchEntry 1) .silent (finished 1) = [.branch ⟨7⟩ true] :=
   conditional_leakage .secret .skip .skip ⟨7⟩ [] 1 1 1 [] .silent _ rfl
 
 /-- Planted: omit only conditional leakage; loop and primitive observations are unchanged. -/
@@ -1015,7 +1076,7 @@ abbrev noCondition : Instrumentation ops := { instrumentation with leakage := fu
   | _ => instrumentation.leakage c l d }
 
 /-- Planted (law `conditional_leakage`): omitting just conditionals loses the real decision. -/
-example : noCondition.leakage (branchEntry 1) .silent (finished 1) ≠ [.branch ⟨7⟩ true] := by
+theorem no_condition_loses_decision : noCondition.leakage (branchEntry 1) .silent (finished 1) ≠ [.branch ⟨7⟩ true] := by
   intro h
   cases h
 
@@ -1035,7 +1096,7 @@ theorem condition_ct_refused :
     (h (branchRun instrumentation 0) (branchRun instrumentation 1) ⟨rfl, trivial⟩ rfl rfl)
 
 /-- Planted: omitting only conditional leakage wrongly accepts the same secret condition. -/
-example : ConstantTime noCondition program labelling (branchEntry 0) (branchEntry 1) := by
+theorem no_condition_wrongly_passes_ct : ConstantTime noCondition program labelling (branchEntry 0) (branchEntry 1) := by
   intro a b _ _ _
   rw [(complete_unique a (branchRun noCondition 0)).2.1,
       (complete_unique b (branchRun noCondition 1)).2.1]
@@ -1067,7 +1128,7 @@ def loopRight (I : Instrumentation ops) : Run I program (loopEntry 1) :=
     (prepend (.silent rfl) (prepend (.silent rfl) (doneRun I 1)))))
 
 /-- Instance: nonzero loop identity and site, true decision, and a nonempty continuation. -/
-example : instrumentation.leakage
+theorem loop_test_leakage : instrumentation.leakage
     ⟨.done, [], 1, [.test ⟨3⟩ .skip .secret (.brk ⟨3⟩) ⟨9⟩ [], .seq .skip]⟩
     .silent (finished 1) = [.branch ⟨9⟩ true, .loop ⟨3⟩ 1] :=
   loop_leakage ⟨3⟩ .skip (.brk ⟨3⟩) .secret ⟨9⟩ [] [] 1 1 1 [.seq .skip] .silent _ rfl
@@ -1079,7 +1140,7 @@ abbrev noLoop : Instrumentation ops := { instrumentation with leakage := fun c l
   | _, _ => instrumentation.leakage c l d }
 
 /-- Planted (law `loop_leakage`): omitting loop tests loses both site and iteration evidence. -/
-example : noLoop.leakage
+theorem no_loop_loses_test : noLoop.leakage
     ⟨.done, [], 1, [.test ⟨3⟩ .skip .secret (.brk ⟨3⟩) ⟨9⟩ [], .seq .skip]⟩
     .silent (finished 1) ≠ [.branch ⟨9⟩ true, .loop ⟨3⟩ 1] := by decide
 
@@ -1099,7 +1160,7 @@ theorem loop_ct_refused :
     (h (loopLeft instrumentation) (loopRight instrumentation) ⟨rfl, trivial⟩ rfl rfl)
 
 /-- Planted: omitting only loop tests wrongly accepts that same finite loop. -/
-example : ConstantTime noLoop program labelling (loopEntry 0) (loopEntry 1) := by
+theorem no_loop_wrongly_passes_ct : ConstantTime noLoop program labelling (loopEntry 0) (loopEntry 1) := by
   intro a b _ _ _
   rw [(complete_unique a (loopLeft noLoop)).2.1,
       (complete_unique b (loopRight noLoop)).2.1]
@@ -1118,7 +1179,7 @@ abbrev emptyStackOnly : Instrumentation ops := { instrumentation with releases :
   | _ :: _ => [] }
 
 /-- Instance: bound destination and nonempty stack both inhabit the generalized site Law. -/
-example : (instrumentation.releases
+theorem bound_stacked_release_agrees : (instrumentation.releases
     ⟨.exec (.prim (some ⟨2⟩) .release [.lit 42] ⟨7⟩), [], 0, [.seq .skip]⟩
     .silent (finished 0)).map Release.site =
     statementReleases (fun p : Prim => match p with | .release => some () | _ => none)
@@ -1126,7 +1187,7 @@ example : (instrumentation.releases
   release_sites_agree ⟨7⟩ [.lit 42] [] 0 0 42 .silent _ (some ⟨2⟩) [.seq .skip] rfl
 
 /-- Planted (law `release_sites_agree`): bound-destination filtering alone breaks agreement. -/
-example : evalArgs ops [] 0 [.lit 42] = .ok ([42], 0) ∧
+theorem bound_filter_loses_release : evalArgs ops [] 0 [.lit 42] = .ok ([42], 0) ∧
     (unboundOnly.releases
       ⟨.exec (.prim (some ⟨2⟩) .release [.lit 42] ⟨7⟩), [], 0, []⟩
       .silent (finished 0)).map Release.site ≠
@@ -1134,7 +1195,7 @@ example : evalArgs ops [] 0 [.lit 42] = .ok ([42], 0) ∧
       (.prim (some ⟨2⟩) .release [.lit 42] ⟨7⟩ : ConcreteSpec.Core.Exec.Stmt ops) := by decide
 
 /-- Planted (law `release_sites_agree`): stack filtering alone breaks agreement. -/
-example : evalArgs ops [] 0 [.lit 42] = .ok ([42], 0) ∧
+theorem stack_filter_loses_release : evalArgs ops [] 0 [.lit 42] = .ok ([42], 0) ∧
     (emptyStackOnly.releases
       ⟨.exec (.prim none .release [.lit 42] ⟨7⟩), [], 0, [.seq .skip]⟩
       .silent (finished 0)).map Release.site ≠

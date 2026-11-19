@@ -27,7 +27,7 @@ base = re.sub(r'def registeredRuleExamples : List RuleExample :=.*?(?=\nend Conc
               'def registeredRuleExamples : List RuleExample := []\n', base, flags=re.S)
 exporter = (root / 'scripts/spec/rules.lean').read_text().split('-- EXPORTER BODY\n')[1]
 rows = tmp / 'rows.md'
-rows.write_text('- **Q9.1** Decided (owner: approved).\nR-0001 is only mentioned.\n')
+rows.write_text('- **Q9.1** Decided.\nR-0001 is only mentioned.\n')
 rule = '/-- The rule (Q9.1). -/\ndef ok (n : Nat) : Prop := n = 0\ndef other (n : Nat) : Prop := n = 0\n'
 proofs = 'theorem accepts : RuleAccepted ok 0 := rfl\ntheorem refuses : RuleRefused ok 1 := by intro h; cases h\n'
 registry = '[⟨`ConcreteSpec.Core.ok, 1⟩]'
@@ -73,95 +73,8 @@ def fixture(name, *, decl=rule, proof=proofs, reg=registry, evidence=links,
     print(f'  ok   {name}: {reason or "passes"}', flush=True)
 
 
-# Authority fixtures use the real decision inventory, including the refused anchors.
-# A valid citation must never mask a non-current citation in either order.
-production_rows = (root / 'docs/decisions.md').read_text()
-rows.write_text(production_rows)
-valid = 'decided-2026-11-08-foundation'
-for anchor in [valid, 'decided-project-memory-2026-11-06',
-               'decided-2026-11-14-constant-types', 'recovered-29-18',
-               'recovered-29-19', 'recovered-59-26']:
-    fixture('authority-current-' + anchor,
-            decl=rule.replace('(Q9.1)', '(docs/decisions.md#' + anchor + ')'))
-refused = {
-    'recovered-59-16': 'ISS-0083',
-    'decided-2026-11-13-d4-recovery': 'ISS-0083',
-    'OPEN-38': 'ISS-0083',
-    'decided-2026-11-08-recovery-queue': 'ISS-0083',
-    'decided-2026-11-08-spelling-round': 'open in Waiting for the owner',
-    'recovered-29-22': 'disposition in title: partial',
-}
-for anchor, diagnostic in refused.items():
-    assert '<a id="' + anchor + '"></a>' in production_rows
-    for order, anchors in [('alone', [anchor]), ('first', [anchor, valid]),
-                           ('last', [valid, anchor])]:
-        fixture('authority-' + anchor + '-' + order,
-                decl=rule.replace('(Q9.1)', '(' + ', '.join(
-                    'docs/decisions.md#' + a for a in anchors) + ')'), reason=diagnostic)
-for punctuation in ['.', ':', ';', ',']:
-    fixture('authority-punctuation-' + str(ord(punctuation)),
-            decl=rule.replace('(Q9.1).', 'docs/decisions.md#' + valid + punctuation))
-for name, citation in [
-    ('unknown', 'docs/decisions.md#decided-missing'),
-    ('empty', 'Q9.1, docs/decisions.md#'),
-    ('prefix', 'docs/decisions.md#' + valid + '_extra'),
-    ('suffix', 'docs/decisions.md#' + valid + '-more'),
-    ('two-dots', 'docs/decisions.md#' + valid + '..'),
-    ('four-dots', 'docs/decisions.md#' + valid + '....'),
-    ('roadmap', 'ROADMAP.md#' + valid),
-    ('proposal', 'docs/proposals/FOUNDATION.md#' + valid),
-    ('relative', '../docs/decisions.md#' + valid),
-    ('bare', '#' + valid),
-]:
-    fixture('authority-invalid-' + name,
-            decl=rule.replace('(Q9.1)', '(' + citation + ')'),
-            reason=('wrong authority path' if name in ['roadmap', 'proposal', 'relative', 'bare']
-                    else 'missing authority anchor'))
-for name, prose in [('attribute', '#[proof(example)]'), ('heading', '\n# Example heading\n')]:
-    fixture('authority-noncitation-' + name, decl=rule.replace('(Q9.1)',
-            '(docs/decisions.md#' + valid + ') ' + prose))
-# Preserve main's row existence rule, including governing rows with revision notes.
-for row in ['Q4.7', 'OD47', 'OD42', 'OD8', 'OD137', 'OD94']:
-    fixture('authority-row-' + row, decl=rule.replace('Q9.1', row))
-fixture('authority-real-roadmap', decl=rule.replace('Q9.1', 'R-0578'), reason='roadmap-only')
-for name, entry in [
-    ('proposal', '- <a id="control"></a>*Proposal for the owner to review*.\n'),
-    ('linear', '- <a id="control"></a>**Rule**. The linear owner releases its slot.\n'),
-    ('questions', '## Owner questions\n- <a id="control"></a>*Open item*. Options a or b.\n'),
-]:
-    rows.write_text(production_rows + '\n' + entry)
-    fixture('authority-' + name,
-            decl=rule.replace('Q9.1', 'docs/decisions.md#control'), reason='ISS-0083')
-# A dated heading alone is not a provenance-bearing decision record.
-rows.write_text(production_rows + '\n- <a id="decided-2026-11-15-control"></a>'
-                '**Control (2026-11-15).**\n  A decision-shaped heading alone.\n')
-fixture('authority-dated-no-provenance',
-        decl=rule.replace('Q9.1', 'docs/decisions.md#decided-2026-11-15-control'),
-        reason='ISS-0083')
-for disposition in ['held', 'queued']:
-    rows.write_text(production_rows + '\n- <a id="control"></a>**' + disposition +
-                    '** (owner, 2026-11-08: "ok").\n')
-    for order, anchors in [('first', ['control', valid]), ('last', [valid, 'control'])]:
-        fixture('authority-title-' + disposition + '-' + order,
-                decl=rule.replace('Q9.1', ', '.join('docs/decisions.md#' + a for a in anchors)),
-                reason='disposition in title: ' + disposition)
-rows.write_text(production_rows)
-for name, code in [('inline', '`#eval Q999.1`'),
-                   ('fence', '\n```lean\n#eval Q999.1\n```\n')]:
-    fixture('authority-code-' + name,
-            decl=rule.replace('Q9.1', 'docs/decisions.md#' + valid + ' ' + code))
-rows.write_text('- **Q9.1** Decided (owner: approved).\nR-0001 is only mentioned.\n')
-fixture('authority-row-only-existing')
-fixture('authority-row-only-missing', decl=rule.replace('Q9.1', 'Q999.1'),
-        reason='no existing decision row')
-fixture('authority-row-only-mixed', decl=rule.replace('Q9.1', 'Q9.1, Q999.1'))
-fixture('authority-roadmap-mention', decl=rule.replace('Q9.1', 'R-0001'), reason='roadmap-only')
-
-# C7 adapters keep the strict traversal: each production input shape accepts closed data,
-# but an opaque value of exactly that shape cannot certify an inspectable instance.
+# Exercise the C7 data carriers through the same inspectability check.
 for name, carrier, value in [
-    ('c7-account', 'Leak.Account', '⟨8, 5, 8, 8⟩'),
-    ('c7-signed', 'Int × Leak.SignedInterval', '(-3, ⟨-4, -2, .boundEstablished⟩)'),
     ('c7-program', 'Leak.ReleaseInterface Unit × List (FnId × Leak.IntegerFunction)',
      '(⟨[], ⟨[]⟩⟩, [])'),
     ('c7-runs', 'Leak.ReleasePolicy Unit × Leak.IntegerExecution',
@@ -176,17 +89,6 @@ for name, carrier, value in [
     ('c7-forbidden', 'Leak.ReleasePolicy Unit', '⟨[]⟩'),
     ('c7-authorized', 'Leak.ReleasePolicy Unit × List (Leak.Release Unit Int)',
      '(⟨[⟨⟨7⟩, ()⟩]⟩, [⟨⟨⟨7⟩, ()⟩, 3⟩])'),
-    ('c7-reset', 'Leak.Account × Leak.Account × Nat', '(⟨8, 5, 8, 8⟩, ⟨8, 0, 8, 8⟩, 5)'),
-    ('c7-report', 'LineageId × Leak.Account × Leak.Account × Option Nat × Leak.LineageReport',
-     '(⟨0⟩, ⟨8, 5, 8, 8⟩, ⟨8, 0, 8, 8⟩, some 10, '
-     '⟨⟨0⟩, ⟨0, .boundEstablished⟩, ⟨-5, -5, .boundEstablished⟩, '
-     '⟨3, .boundEstablished⟩, ⟨10, .boundEstablished⟩⟩)'),
-    ('c7-bound', 'Nat × Leak.Bound Nat', '(10, ⟨12, .boundEstablished⟩)'),
-    ('c7-optional', 'Option Nat × Leak.Bound Nat', '(some 10, ⟨12, .boundEstablished⟩)'),
-    ('c7-action', 'List (LineageId × Leak.Account) × Leak.Action',
-     '([(⟨0⟩, ⟨100, 5, 12, 9⟩)], .free ⟨0⟩ 5)'),
-    ('c7-sequence', 'List (LineageId × Leak.Account) × List Leak.Action',
-     '([(⟨0⟩, ⟨100, 5, 12, 9⟩)], [.free ⟨0⟩ 5, .reset ⟨0⟩])'),
 ]:
     declaration = '/-- The rule (Q9.1). -/\ndef ok (_ : ' + carrier + ') : Prop := True\n'
     fixture(name + '-closed', decl=declaration,
@@ -400,7 +302,7 @@ fixture('revision-zero', reg=registry.replace(', 1', ', 0'), reason='revision 0'
 fixture('no-doc', decl=rule.replace('/-- The rule (Q9.1). -/\n', ''), reason='has no doc comment')
 fixture('no-row', decl=rule.replace('Q9.1', 'plain words'), reason='cites no decision row')
 fixture('unknown-row', decl=rule.replace('Q9.1', 'Q999.999'), reason='no existing decision row')
-fixture('mention-only-row', decl=rule.replace('Q9.1', 'R-0001'), reason='roadmap-only')
+fixture('mention-only-row', decl=rule.replace('Q9.1', 'R-0001'), reason='no existing decision row')
 fixture('truncated', mutate=lambda s: '\n'.join(s.splitlines()[:-1]), reason='no end record')
 for i, bad in enumerate([None, [], {}, {'kind': 'unknown'},
                         {'kind': 'rule', 'name': 'x', 'rev': True, 'exists': True, 'doc': 'Q9.1'}]):

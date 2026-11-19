@@ -101,7 +101,7 @@ def siteRun (I : Instrumentation ops) (site : SiteId) :
       rfl (by simp [allowed]) rfl) (InstrumentedSteps.refl done)
 
 /-- Instance: a nonzero site and nonzero operand inhabit the agreement Law. -/
-example :
+theorem nonzero_site_agreement :
     (instrumentation.releases (releaseEntry ⟨7⟩).config .silent ⟨.done, [], 0, []⟩).map Release.site =
     statementReleases (fun p : Prim => match p with | .release => some () | _ => none)
       (.prim none .release [.lit 42] ⟨7⟩ : ConcreteSpec.Core.Exec.Stmt ops) :=
@@ -114,7 +114,7 @@ abbrev zeroSite : Instrumentation ops := { instrumentation with
     | _ => [] }
 
 /-- Planted: the same inhabited evaluation refutes site agreement for the zero-site observer. -/
-example : evalArgs ops [] 0 [.lit 42] = .ok ([42], 0) ∧
+theorem zero_site_breaks_agreement : evalArgs ops [] 0 [.lit 42] = .ok ([42], 0) ∧
     (zeroSite.releases (releaseEntry ⟨7⟩).config .silent ⟨.done, [], 0, []⟩).map Release.site ≠
     statementReleases (fun p : Prim => match p with | .release => some () | _ => none)
       (.prim none .release [.lit 42] ⟨7⟩ : ConcreteSpec.Core.Exec.Stmt ops) := by decide
@@ -137,7 +137,7 @@ theorem nonzeroRunsRefused : RuleRefused IntegerRunsAuthorized
   simp [ReleasePolicy.Authorized, ReleasePolicy.Permits, releaseAt] at bad
 
 /-- Planted: the zero-site substitution wrongly authorizes every run under the site-zero policy. -/
-example : policy.RunsAuthorized zeroSite program (releaseEntry ⟨7⟩).config := by
+theorem zero_site_wrongly_authorizes : policy.RunsAuthorized zeroSite program (releaseEntry ⟨7⟩).config := by
   intro r
   rw [(complete_unique r (siteRun zeroSite ⟨7⟩)).2.2.1]
   change ReleasePolicy.Authorized policy [releaseAt ⟨0⟩ 42]

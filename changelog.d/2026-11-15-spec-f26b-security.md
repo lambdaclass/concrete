@@ -51,7 +51,8 @@ Held scope remains excluded; existing tracking covers every excluded family:
   decisions do not authorize physical mapping or padding.
 - Constant restrictions and queued partial recovery items: ISS-0080 / ISS-0065, unrecorded or
   reopened restrictions do not become security rules.
-- Wiping: ISS-0072, reopened policy; no wiping operation or dependent evidence is carried.
+- The owner deferred wiping out of the spec and retained Secret, no-leak and constant-time
+  ([2026-11-16 decision](docs/decisions.md#decided-2026-11-16-secret-wiping)).
 - Startup/ABI: ISS-0073, no source-backed startup or calling-convention policy is added.
 
 Secret typing, speculative leakage and binary constant-time guarantees remain later-slice or

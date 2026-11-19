@@ -6,7 +6,8 @@ import ConcreteSpec.Spec.Exec
 PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). Part of `ConcreteSpec.Spec`;
 see `ConcreteSpec/README.md`. Foundation contract C7 under docs/decisions.md#decided-2026-11-08-foundation,
 docs/decisions.md#decided-project-infoflow-2026-11-06.
-No historical approval receipts are inherited. Wiping is held under ISS-0072.
+Secret, no-leak and constant-time remain in scope under
+docs/decisions.md#decided-2026-11-16-secret-wiping, which defers wiping out of the spec.
 
 Leakage is what the baseline timing observer sees, not ordinary output. It is separate from public
 observations. `InstrumentedSteps` instruments C1's existing `Exec.Step` relation without changing
@@ -19,8 +20,8 @@ initial states, matched external choices and the same ordered release sites and 
 the same public observations; CT requires the same leakage. A release policy authorizes sites; it
 does not discharge either claim. No scalar secret typing rule is chosen here (slice 7).
 
-Byte accounting is owned separately by `Spec/Accounting.lean`. Wiping declarations and evidence
-are held (ISS-0072). Secret typing, hardware timing, binary constant time and speculation remain
+Byte accounting is owned separately by `Spec/Accounting.lean`. Secret typing, hardware timing,
+binary constant time and speculation remain
 in their named later slices or trust premises.
 -/
 
@@ -46,30 +47,30 @@ def leakageCatalog : List (Leakage Nat Nat Nat) :=
     .loop ⟨4⟩ 3, .variableTime ⟨5⟩ [1, 2], .publicLength ⟨6⟩ 2, .external 7]
 
 /-- Representation lemma. Concrete length check showing `leakageCatalog` covers all seven `Leakage` constructors. -/
-example : leakageCatalog.length = 7 := by decide
+theorem leakage_catalog_size : leakageCatalog.length = 7 := by decide
 
 /-- Representation lemma. Concrete inequality check distinguishing `Leakage.branch` true and false decisions at the same site.
 
 Planted changed-event controls for every constructor. -/
-example : (show Leakage Nat Nat Nat from .branch ⟨0⟩ true) ≠ .branch ⟨0⟩ false := by simp
+theorem branch_decision_visible : (show Leakage Nat Nat Nat from .branch ⟨0⟩ true) ≠ .branch ⟨0⟩ false := by simp
 
 /-- Representation lemma. Concrete inequality check distinguishing `Leakage.address` entries with different addresses. -/
-example : (show Leakage Nat Nat Nat from .address ⟨1⟩ 4096) ≠ .address ⟨1⟩ 8192 := by simp
+theorem address_visible : (show Leakage Nat Nat Nat from .address ⟨1⟩ 4096) ≠ .address ⟨1⟩ 8192 := by simp
 
 /-- Representation lemma. Concrete inequality check distinguishing `Leakage.allocation` entries with different byte counts. -/
-example : (show Leakage Nat Nat Nat from .allocation ⟨2⟩ ⟨3⟩ 8) ≠ .allocation ⟨2⟩ ⟨3⟩ 9 := by simp
+theorem allocation_bytes_visible : (show Leakage Nat Nat Nat from .allocation ⟨2⟩ ⟨3⟩ 8) ≠ .allocation ⟨2⟩ ⟨3⟩ 9 := by simp
 
 /-- Representation lemma. Concrete inequality check distinguishing `Leakage.loop` entries with different iteration counts. -/
-example : (show Leakage Nat Nat Nat from .loop ⟨4⟩ 3) ≠ .loop ⟨4⟩ 4 := by simp
+theorem loop_count_visible : (show Leakage Nat Nat Nat from .loop ⟨4⟩ 3) ≠ .loop ⟨4⟩ 4 := by simp
 
 /-- Representation lemma. Concrete inequality check distinguishing `Leakage.variableTime` entries with different operand values. -/
-example : (show Leakage Nat Nat Nat from .variableTime ⟨5⟩ [1]) ≠ .variableTime ⟨5⟩ [2] := by simp
+theorem variable_time_operand_visible : (show Leakage Nat Nat Nat from .variableTime ⟨5⟩ [1]) ≠ .variableTime ⟨5⟩ [2] := by simp
 
 /-- Representation lemma. Concrete inequality check distinguishing `Leakage.publicLength` entries with different container lengths. -/
-example : (show Leakage Nat Nat Nat from .publicLength ⟨6⟩ 2) ≠ .publicLength ⟨6⟩ 3 := by simp
+theorem public_length_visible : (show Leakage Nat Nat Nat from .publicLength ⟨6⟩ 2) ≠ .publicLength ⟨6⟩ 3 := by simp
 
 /-- Representation lemma. Concrete inequality check distinguishing `Leakage.external` entries with different effect payloads. -/
-example : (show Leakage Nat Nat Nat from .external 7) ≠ .external 8 := by simp
+theorem external_effect_visible : (show Leakage Nat Nat Nat from .external 7) ≠ .external 8 := by simp
 
 /-- A typed release site. The site identifies the operation in the facts; `ty` is the type of the
 value explicitly declared for release there. -/
@@ -132,23 +133,23 @@ def ReleasePolicy.Authorized {Ty Val : Type} (policy : ReleasePolicy Ty)
 /-- Instance. Concrete acceptance check that a single release at the listed site satisfies `ReleasePolicy.Authorized`.
 
 Accepted: a release at the one listed site is authorized. Refused: another typed site is not. -/
-example : (ReleasePolicy.mk [⟨⟨0⟩, ()⟩]).Authorized
+theorem listed_release_authorized : (ReleasePolicy.mk [⟨⟨0⟩, ()⟩]).Authorized
     [⟨⟨⟨0⟩, ()⟩, 7⟩] := by
   simp [ReleasePolicy.Authorized, ReleasePolicy.Permits]
 
 /-- Instance. Concrete refusal check that a release at an unlisted site fails `ReleasePolicy.Authorized`. -/
-example : ¬ (ReleasePolicy.mk [⟨⟨0⟩, ()⟩]).Authorized
+theorem unlisted_release_unauthorized : ¬ (ReleasePolicy.mk [⟨⟨0⟩, ()⟩]).Authorized
     [⟨⟨⟨1⟩, ()⟩, 7⟩] := by
   simp [ReleasePolicy.Authorized, ReleasePolicy.Permits]
 
 /-- Representation lemma. Concrete unfolding check that an empty allowed-site list satisfies `ReleasePolicy.ForbidsRelease`. -/
-example : (ReleasePolicy.mk ([] : List (ReleaseSite Unit))).ForbidsRelease := rfl
+theorem empty_policy_forbids_release : (ReleasePolicy.mk ([] : List (ReleaseSite Unit))).ForbidsRelease := rfl
 
 /-- Instance. Concrete refusal check that a nonempty release trace fails `ReleasePolicy.Authorized` under the empty policy.
 
 A concrete nonempty release trace is unauthorized under the empty policy; the general law
 `forbidsRelease_not_authorized` is proved in `ConcreteSpec/Proofs/Leak.lean`. -/
-example : ¬ (ReleasePolicy.mk ([] : List (ReleaseSite Unit))).Authorized
+theorem empty_policy_refuses_populated_trace : ¬ (ReleasePolicy.mk ([] : List (ReleaseSite Unit))).Authorized
     [⟨⟨⟨0⟩, ()⟩, 7⟩] := by
   simp [ReleasePolicy.Authorized, ReleasePolicy.Permits]
 
@@ -158,18 +159,18 @@ def typedRelease (ty : String) (value : Nat) : Release String Nat :=
 def typedReleasePolicy : ReleasePolicy String := ⟨[⟨⟨0⟩, "public"⟩]⟩
 
 /-- Representation lemma. Concrete check that `typedReleasePolicy` permits a release at site 0 with matching type `"public"`. -/
-example : typedReleasePolicy.Permits (typedRelease "public" 7) := by
+theorem exact_type_permitted : typedReleasePolicy.Permits (typedRelease "public" 7) := by
   simp [typedReleasePolicy, ReleasePolicy.Permits, typedRelease]
 
 /-- Representation lemma. Concrete check that `typedReleasePolicy` rejects a release at site 0 with mismatched type `"secret"`. -/
-example : ¬ typedReleasePolicy.Permits (typedRelease "secret" 7) := by
+theorem different_type_refused : ¬ typedReleasePolicy.Permits (typedRelease "secret" 7) := by
   simp [typedReleasePolicy, ReleasePolicy.Permits, typedRelease]
 
 /-- Representation lemma. Concrete inequality check showing `Release` records with distinct released values are not equal. -/
-example : typedRelease "public" 7 ≠ typedRelease "public" 8 := by decide
+theorem release_values_distinguished : typedRelease "public" 7 ≠ typedRelease "public" 8 := by decide
 
 /-- Representation lemma. Concrete inequality check showing ordered release traces with swapped elements are not equal. -/
-example : [typedRelease "public" 7, typedRelease "public" 8] ≠
+theorem release_order_distinguished : [typedRelease "public" 7, typedRelease "public" 8] ≠
     [typedRelease "public" 8, typedRelease "public" 7] := by decide
 
 /-- What is public in a C1 state, parametric in a labelling. `project` exposes the public view of a

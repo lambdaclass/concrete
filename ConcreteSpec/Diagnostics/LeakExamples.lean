@@ -26,17 +26,17 @@ def afterNames : LocalNames := ⟨[(hiddenVar, "secret_offset"), (⟨1⟩, "hidd
 def fixture : Elaborated (AList Var Int) := ⟨hiddenLocals 2, beforeNames⟩
 
 /-- Instance: rehinting preserves reads of C7's numeric secret local; another number stays distinct. -/
-example : AList.lookup beforeNames.entries hiddenVar ≠ AList.lookup afterNames.entries hiddenVar ∧
+theorem renaming_preserves_hidden_lookup : AList.lookup beforeNames.entries hiddenVar ≠ AList.lookup afterNames.entries hiddenVar ∧
     AList.lookup beforeNames.entries hiddenVar = AList.lookup afterNames.entries ⟨1⟩ ∧
     hiddenVar ≠ (⟨1⟩ : Var) ∧ hiddenOffset (hiddenLocals 2) = 2 := by decide
 
 /-- Instance: assignment and scope removal use the same numeric identity and shared operations. -/
-example : hiddenOffset (AList.update (hiddenLocals 2) ⟨0⟩ (fun _ => -5)) = 4 ∧
+theorem update_preserves_hidden_offset : hiddenOffset (AList.update (hiddenLocals 2) ⟨0⟩ (fun _ => -5)) = 4 ∧
     Exec.restrict [⟨1⟩] (hiddenLocals 2 ++ [(⟨1⟩, 7)]) = [(⟨1⟩, 7)] := by decide
 
 /-- Instance: the migrated local zero is also the ownership fixture's zero. Dropping its live linear
 obligation is refused, and consuming it permits storage teardown, regardless of either name table. -/
-example : hiddenVar = Own.Examples.x ∧
+theorem hidden_var_uses_numeric_identity : hiddenVar = Own.Examples.x ∧
     Own.drop [hiddenVar] Own.Examples.initial = none ∧
     (Own.move Own.Examples.initial ⟨0⟩ >>= Own.drop [hiddenVar]).isSome = true := by decide
 

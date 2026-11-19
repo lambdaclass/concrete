@@ -1,0 +1,3 @@
+### Record November 16 owner answers on paths, validator and wiping
+
+Record the November 16 owner replies on file paths and spec-inventory round 18, the accounting-validator discussion and coordinator disposition, and keeping Secret while deferring wiping. Preserve historical wiping wording with replacement links; update ISS-0068 and ISS-0072 without claiming implementation.
