@@ -45,6 +45,7 @@ script=${BASH_SOURCE[0]}
 case "$script" in */*) ;; *) script="./$script" ;; esac
 source "${script%/*}/runtime.sh" || exit 2
 review_require_absolute_path "${PATH-}" || exit 2
+review_resolve_paths || exit 2
 export GIT_NO_REPLACE_OBJECTS=1
 
 SCRIPT_DIR="$(CDPATH= cd -- "${script%/*}/" && pwd)"

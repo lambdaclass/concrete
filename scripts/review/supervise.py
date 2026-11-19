@@ -55,6 +55,14 @@ def main():
 
     if any(not os.path.isabs(entry) for entry in environment.get("PATH", "").split(os.pathsep)):
         sys.exit("review runner: PATH entries must be absolute directories")
+    for name in ("HOME", "CODEX_HOME", "TMPDIR", "SSL_CERT_FILE", "SSL_CERT_DIR",
+                 "GIT_CEILING_DIRECTORIES"):
+        if name not in environment:
+            continue
+        value = environment[name]
+        entries = value.split(os.pathsep) if name in ("SSL_CERT_DIR", "GIT_CEILING_DIRECTORIES") else [value]
+        if any(not os.path.isabs(entry) for entry in entries):
+            sys.exit(f"review runner: {name} entries must be absolute paths")
     if not os.path.isabs(command[0]):
         print("review runner: reviewer path must be absolute", file=sys.stderr)
         return 2

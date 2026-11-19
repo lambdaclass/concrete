@@ -29,3 +29,30 @@ review_executable() {
   [ -f "$executable" ] && [ -x "$executable" ] || return 1
   printf '%s\n' "$executable"
 }
+
+# Anchor caller-supplied paths before the driver enters the repository or the
+# runner enters the archive. Keep ".." intact for paths that cross symlinks.
+review_resolve_paths() {
+  local variable rest entry resolved
+  for variable in HOME CODEX_HOME TMPDIR SSL_CERT_FILE SSL_CERT_DIR; do
+    [ "${!variable+x}" = x ] || continue
+    rest=${!variable}
+    resolved=
+    while :; do
+      entry=$rest
+      if [ "$variable" = SSL_CERT_DIR ]; then entry=${rest%%:*}; fi
+      case "$entry" in
+        /*) ;;
+        "")
+          printf 'review: %s requires nonempty paths\n' "$variable" >&2
+          return 1
+          ;;
+        *) entry="$PWD/$entry" ;;
+      esac
+      resolved="${resolved:+$resolved:}$entry"
+      if [ "$variable" != SSL_CERT_DIR ] || [[ "$rest" != *:* ]]; then break; fi
+      rest=${rest#*:}
+    done
+    export "$variable=$resolved"
+  done
+}

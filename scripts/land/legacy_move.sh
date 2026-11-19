@@ -74,7 +74,8 @@ OVERLAY=(
   scripts/checks/workflow_yaml.sh .claude/commands/land.md docs/proposals/SPEC_UNIFICATION.md
   scripts/land/impact_gates.sh scripts/land/ready.sh scripts/land/notes.sh scripts/land/gates_transport_ssh.sh scripts/land/run-at-ref.sh
   scripts/review/invoke.sh scripts/review/read_evidence.py scripts/checks/review_tool.sh .claude/commands/creview.md scripts/review/supervise.py
-  scripts/review/review.sh scripts/review/verify.sh scripts/review/runtime.sh
+  scripts/review/review.sh scripts/review/verify.sh scripts/review/runtime.sh scripts/review/split_diff.py
+  scripts/checks/lib/has_match.sh scripts/checks/lib/git_sandbox.sh
   RETENTION.tsv AGENTS.md docs/LANDING.md docs/REVIEW.md docs/SELF_HOSTED_RUNNERS.md
   scripts/checks/landing_script.sh scripts/checks/landing_ready.sh scripts/checks/retention_manifest.sh
   scripts/land/train.sh scripts/land/acceptance.sh scripts/land/signoff.sh scripts/worktree-new.sh
@@ -129,6 +130,32 @@ else
   git archive "$(git rev-parse --verify "$OVL^{commit}")" -- "${OVERLAY[@]}" | tar -x -C "$TMP/ovl"
   for f in "${OVERLAY[@]}"; do [ -f "$TMP/ovl/$f" ] || die "overlay $OVL lacks $f"; done
 fi
+
+# Follow the driver’s literal script paths transitively in the extracted overlay.
+# Keep local script calls anchored to a script directory as below so they can be checked.
+python3 -I - "$TMP/ovl" <<'PY_CHECK' || die "incomplete review driver overlay"
+import posixpath
+import re
+import sys
+from pathlib import Path
+
+overlay = Path(sys.argv[1])
+script_path = re.compile(r'"(?:\$SCRIPT_DIR|\$here|\$\{script%/\*\})/([\w./-]+\.(?:sh|py))"')
+pending = ["scripts/review/review.sh"]
+seen = set()
+while pending:
+    script = pending.pop()
+    if script in seen:
+        continue
+    seen.add(script)
+    source = overlay / script
+    if not source.is_file():
+        sys.exit(f"legacy_move: review driver dependency missing from OVERLAY: {script}")
+    for line in source.read_text(encoding="utf-8").splitlines():
+        if not line.lstrip().startswith("#"):
+            for dependency in script_path.findall(line):
+                pending.append(posixpath.normpath(posixpath.join(posixpath.dirname(script), dependency)))
+PY_CHECK
 
 # The landing prerequisites (header). P2 and P4 are judged on content by move_prereqs.py, whose
 # negative controls run first.

@@ -86,6 +86,9 @@ files="$(grep '^diff --git ' "$FAKE_LOG/stdin.$n" | sed 's#.* b/##' | sort -u | 
 echo "$n $kind sandbox=$sandbox bytes=$(wc -c <"$FAKE_LOG/stdin.$n" | tr -d ' ') files=$files" >>"$FAKE_LOG/calls"
 echo "$n optional_locks=${GIT_OPTIONAL_LOCKS:-unset}" >>"$FAKE_LOG/locks"
 printf '%s\n' "${REVIEW_GATE_SECRET-unset}" "${GIT_CONFIG_GLOBAL-unset}" "${TMPDIR:-}" >"$FAKE_LOG/environment.$n"
+for setting in HOME CODEX_HOME SSL_CERT_FILE SSL_CERT_DIR TMPDIR GIT_CEILING_DIRECTORIES; do
+  printf '%s\n' "${!setting-}" >"$FAKE_LOG/$setting.$n"
+done
 added="$(grep '^+' "$FAKE_LOG/stdin.$n" || true)"
 has() { grep -q "$1" <<<"$added"; }
 # Read the actual private tree, execute the requested digest probe, and emit
@@ -700,14 +703,44 @@ rm "$W/untracked"
 mkdir "$T/relative"
 printf 'review\n' >"$T/relative/prompt"
 printf 'diff\n' >"$T/relative/piece"
-(cd "$T/relative" && REVIEW_CODEX_BIN=../bin/codex bash "$ROOT_DIR/scripts/review/invoke.sh" \
+reset_fake
+(cd "$T/relative" && HOME=../review-home CODEX_HOME=codex-home SSL_CERT_FILE=cert.pem \
+  SSL_CERT_DIR="certs:$T/absolute-certs:../more-certs" REVIEW_CODEX_BIN=../bin/codex bash "$ROOT_DIR/scripts/review/invoke.sh" \
   ../w "$(g rev-parse HEAD)" prompt piece output events) >"$T/relative.log" 2>&1; rc=$?
 check "relative helper arguments produce caller output and events" test "$rc" = 0 \
   -a -s "$T/relative/output" -a -s "$T/relative/events"
 mkdir -p "$W/sub"
 commit_file relative.txt relative relative
-(cd "$W/sub" && REVIEW_CODEX_BIN=../../bin/codex bash "$REVIEW") >"$T/relative-review.log" 2>&1; rc=$?
+(cd "$W/sub" && HOME=../review-home CODEX_HOME=codex-home SSL_CERT_FILE=cert.pem \
+  SSL_CERT_DIR="certs:$T/absolute-certs:../more-certs" REVIEW_CODEX_BIN=../../bin/codex bash "$REVIEW") >"$T/relative-review.log" 2>&1; rc=$?
 check "relative reviewer executable works from caller subdirectory" test "$rc" = 0
+# Check values observed by the fake and reject malformed settings at direct launch.
+for setting in HOME CODEX_HOME SSL_CERT_FILE SSL_CERT_DIR TMPDIR GIT_CEILING_DIRECTORIES; do
+  for call in 1 2; do
+    caller="$T/relative"
+    [ "$call" = 1 ] || caller="$W/sub"
+    archive="$(cat "$FAKE_LOG/directory.$call")"
+    case "$setting" in
+      HOME) expected="$caller/../review-home" ;;
+      CODEX_HOME) expected="$caller/codex-home" ;;
+      SSL_CERT_FILE) expected="$caller/cert.pem" ;;
+      SSL_CERT_DIR) expected="$caller/certs:$T/absolute-certs:$caller/../more-certs" ;;
+      TMPDIR) expected="${archive%/*}/tmp" ;;
+      GIT_CEILING_DIRECTORIES) expected="${archive%/*}" ;;
+    esac
+    check "$setting: invocation $call forwarded the expected absolute value" \
+      grep -Fxq -- "$expected" "$FAKE_LOG/$setting.$call"
+  done
+  for invalid in relative ""; do
+    case "$setting" in
+      SSL_CERT_DIR|GIT_CEILING_DIRECTORIES) invalid="$T/absolute:$invalid:$T/also-absolute" ;;
+    esac
+    python3 -I "$ROOT_DIR/scripts/review/supervise.py" "$T/relative" "PATH=$PATH" "$setting=$invalid" \
+      -- "$(type -P touch)" "$T/invalid-setting-launched" >"$T/invalid-setting.log" 2>&1; rc=$?
+    check "$setting: invalid setting prevents supervisor launch" test "$rc" = 1 -a ! -e "$T/invalid-setting-launched"
+    check "$setting: supervisor identifies invalid setting" grep -Fq "$setting entries must be absolute" "$T/invalid-setting.log"
+  done
+done
 reset_fake
 printf '#!/bin/sh\ntouch "%s"\n' "$FAKE_LOG/builtin-ran" >"$W/sub/:"
 chmod +x "$W/sub/:"
