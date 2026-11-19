@@ -96,18 +96,18 @@ end Res
 /-! ### Examples -/
 
 /-- The names are the decided ones. -/
-example : TrapKind.all.map TrapKind.name =
+theorem example_names_are_decided_ones : TrapKind.all.map TrapKind.name =
     ["overflow", "division_by_zero", "invalid_shift", "out_of_bounds", "invalid_range", "abort"] :=
   rfl
 
 /-- A trap passes through `bind`; the continuation never runs. -/
-example : (Res.trap .overflow : Res Nat).bind (fun n => .ok (n + 1)) = .trap .overflow := rfl
+theorem example_trap_passes_through_bind_continuation_never : (Res.trap .overflow : Res Nat).bind (fun n => .ok (n + 1)) = .trap .overflow := rfl
 
 /-- Stuckness propagates without being converted to a trap or fabricated value. -/
-example : (Res.stuck : Res Nat).bind (fun n => .ok (n + 1)) = .stuck := rfl
+theorem example_Stuckness_propagates_without_being_converted_trap : (Res.stuck : Res Nat).bind (fun n => .ok (n + 1)) = .stuck := rfl
 
 /-- A successful value continues normally, while mapping a trap preserves its kind. -/
-example : (Res.ok 4).bind (fun n => .ok (n + 1)) = .ok 5 ∧
+theorem example_successful_value_continues_normally_while_mapping : (Res.ok 4).bind (fun n => .ok (n + 1)) = .ok 5 ∧
     Res.map (fun n : Nat => n + 1) (.trap .abort) = .trap .abort := ⟨rfl, rfl⟩
 
 end ConcreteSpec.Core

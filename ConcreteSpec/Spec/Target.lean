@@ -106,31 +106,31 @@ def linuxX8664 : Target where
 /-! ### Examples -/
 
 /-- The existing profile is well formed. -/
-example : linuxX8664.WellFormed := by decide
+theorem example_existing_profile_is_well_formed : linuxX8664.WellFormed := by decide
 
 /-- A profile whose pointers have no room for its addresses is not: 32-bit addresses in a 2-byte
 pointer. -/
-example : ¬ ({ linuxX8664 with
+theorem example_profile_whose_pointers_have_no_room : ¬ ({ linuxX8664 with
     addrBits := 32
     ptrSize := 2
     ptrAlign := 2
     maxObject := 2 ^ 16 } : Target).WellFormed := by decide
 
 /-- Nor is one whose pointer alignment is not a power of two. -/
-example : ¬ ({ linuxX8664 with ptrSize := 12, ptrAlign := 6 } : Target).WellFormed := by decide
+theorem example_Nor_is_one_whose_pointer_alignment : ¬ ({ linuxX8664 with ptrSize := 12, ptrAlign := 6 } : Target).WellFormed := by decide
 
 /-- Nor one whose pointer size is not a multiple of its alignment. -/
-example : ¬ ({ linuxX8664 with ptrAlign := 16 } : Target).WellFormed := by decide
+theorem example_Nor_one_whose_pointer_size_is : ¬ ({ linuxX8664 with ptrAlign := 16 } : Target).WellFormed := by decide
 
 /-- Nor one whose objects are too small to hold a pointer. -/
-example : ¬ ({ linuxX8664 with maxObject := 4 } : Target).WellFormed := by decide
+theorem example_Nor_one_whose_objects_are_too : ¬ ({ linuxX8664 with maxObject := 4 } : Target).WellFormed := by decide
 
 /-- Nor one whose objects may be as large as the whole address range. -/
-example : ¬ ({ linuxX8664 with maxObject := 2 ^ 64 } : Target).WellFormed := by decide
+theorem example_Nor_one_whose_objects_may_be : ¬ ({ linuxX8664 with maxObject := 2 ^ 64 } : Target).WellFormed := by decide
 
 /-- A small target with 16-bit addresses and 16-bit stored lengths is well formed: nothing assumes
 64 bits. -/
-example : ({ linuxX8664 with
+theorem example_small_target_bit_addresses_and_bit : ({ linuxX8664 with
     addrBits := 16
     ptrSize := 2
     ptrAlign := 2

@@ -1238,20 +1238,20 @@ def collapseRenumber (_r : SiteRenumbering) (table : SiteKeyTable) : SiteKeyTabl
   table.renumberSites collapse
 
 /-- Instance (law `ConcreteSpec.Core.SiteKeyTable.lookup_renumber`, case `ConcreteSpec.Core.Vacuity.siteTable`). -/
-example : AList.lookup (siteTable.renumber successor) ⟨successor.apply (⟨1⟩ : SiteId).id⟩ =
+theorem lookup_renumber_example_siteTable : AList.lookup (siteTable.renumber successor) ⟨successor.apply (⟨1⟩ : SiteId).id⟩ =
     AList.lookup siteTable ⟨1⟩ :=
   SiteKeyTable.lookup_renumber successor siteTable ⟨1⟩
 
 /-- Planted (law `ConcreteSpec.Core.SiteKeyTable.lookup_renumber`, case `ConcreteSpec.Core.Vacuity.siteTable`, subject `ConcreteSpec.Core.SiteKeyTable.renumber`, mutant `ConcreteSpec.Core.Vacuity.collapseRenumber`). -/
-example : ¬ (AList.lookup (collapseRenumber successor siteTable) ⟨successor.apply (⟨1⟩ : SiteId).id⟩ =
+theorem lookup_renumber_planted_siteTable_collapseRenumber : ¬ (AList.lookup (collapseRenumber successor siteTable) ⟨successor.apply (⟨1⟩ : SiteId).id⟩ =
     AList.lookup siteTable ⟨1⟩) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.SiteKeyTable.nodup_renumber`, case `ConcreteSpec.Core.Vacuity.siteTable`). -/
-example : (siteTable.renumber successor).NoDupSites :=
+theorem nodup_renumber_example_siteTable : (siteTable.renumber successor).NoDupSites :=
   SiteKeyTable.nodup_renumber successor siteTable (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.SiteKeyTable.nodup_renumber`, case `ConcreteSpec.Core.Vacuity.siteTable`, subject `ConcreteSpec.Core.SiteKeyTable.renumber`, mutant `ConcreteSpec.Core.Vacuity.collapseRenumber`). -/
-example : siteTable.NoDupSites ∧ ¬ (collapseRenumber successor siteTable).NoDupSites :=
+theorem nodup_renumber_planted_siteTable_collapseRenumber : siteTable.NoDupSites ∧ ¬ (collapseRenumber successor siteTable).NoDupSites :=
   ⟨by decide, by decide⟩
 
 /-- An unnamed binding, a named binding, a named call, and an unnamed loop used by key-stability examples. -/
@@ -1282,7 +1282,7 @@ def assignProgramTablesFromSiteOffset (bodies : FnId → List KeyConstruct)
     (⟨startSite f⟩, ⟨.function f, ⟨[⟨c.kind, .ordinal (startSite f)⟩]⟩⟩)
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.assignProgramTables_outsideEdit`, case `ConcreteSpec.Core.Vacuity.bodiesBefore`). -/
-example : OutsideFunctionEdit
+theorem assignProgramTables_outsideEdit_example_bodiesBefore : OutsideFunctionEdit
     (KeyConstruct.assignProgramTables bodiesBefore startSitesBefore)
     (KeyConstruct.assignProgramTables bodiesAfter startSitesAfter)
     otherFunction :=
@@ -1291,7 +1291,7 @@ example : OutsideFunctionEdit
     (fun f hf => by simp [bodiesAfter, hf])
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.assignProgramTables_outsideEdit`, case `ConcreteSpec.Core.Vacuity.bodiesBefore`, subject `ConcreteSpec.Core.KeyConstruct.assignProgramTables`, mutant `ConcreteSpec.Core.Vacuity.assignProgramTablesFromSiteOffset`). -/
-example : (∀ f, f ≠ otherFunction → bodiesAfter f = bodiesBefore f) ∧
+theorem assignProgramTables_outsideEdit_planted_bodiesBefore_assignProgramTablesFromSiteOffset : (∀ f, f ≠ otherFunction → bodiesAfter f = bodiesBefore f) ∧
     ¬ OutsideFunctionEdit
       (assignProgramTablesFromSiteOffset bodiesBefore startSitesBefore)
       (assignProgramTablesFromSiteOffset bodiesAfter startSitesAfter)
@@ -1332,14 +1332,14 @@ def missingPathAtIn (_scope _forest : List KeyConstruct) (_route : Numbers) :
     Option FunctionRelativeKey := none
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.collectKeysIn_sound`, case `ConcreteSpec.Core.Vacuity.nestedBody`). -/
-example : ∃ route, route ≠ [] ∧
+theorem collectKeysIn_sound_example_nestedBody : ∃ route, route ≠ [] ∧
     KeyConstruct.pathAtIn [] [nestedBody] route = some nestedPath :=
   KeyConstruct.collectKeysIn_sound [] [nestedBody] nestedPath
     (KeyConstruct.collectKeysIn_complete [] [nestedBody] [0, 0, 0] nestedPath
       (by decide) (by decide))
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.collectKeysIn_sound`, case `ConcreteSpec.Core.Vacuity.nestedBody`, subject `ConcreteSpec.Core.KeyConstruct.pathAtIn`, mutant `ConcreteSpec.Core.Vacuity.missingPathAtIn`). -/
-example : nestedPath ∈ KeyConstruct.collectKeysIn [] [nestedBody] ∧
+theorem collectKeysIn_sound_planted_nestedBody_missingPathAtIn : nestedPath ∈ KeyConstruct.collectKeysIn [] [nestedBody] ∧
     ¬ (∃ route, route ≠ [] ∧ missingPathAtIn [] [nestedBody] route = some nestedPath) := by
   refine ⟨KeyConstruct.collectKeysIn_complete [] [nestedBody] [0, 0, 0] nestedPath
     (by decide) (by decide), ?_⟩
@@ -1347,12 +1347,12 @@ example : nestedPath ∈ KeyConstruct.collectKeysIn [] [nestedBody] ∧
   cases found
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.collectKeysIn_collectionSound`, case `ConcreteSpec.Core.Vacuity.nestedBody`). -/
-example : KeyConstruct.CollectionSound [] [nestedBody]
+theorem collectKeysIn_collectionSound_example_nestedBody : KeyConstruct.CollectionSound [] [nestedBody]
     (KeyConstruct.collectKeysIn [] [nestedBody]) :=
   KeyConstruct.collectKeysIn_collectionSound [] [nestedBody]
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.collectKeysIn_collectionSound`, case `ConcreteSpec.Core.Vacuity.nestedBody`, subject `ConcreteSpec.Core.KeyConstruct.collectKeysIn`, mutant `ConcreteSpec.Core.Vacuity.unprefixedCollect`). -/
-example : ¬ KeyConstruct.CollectionSound [] [nestedBody]
+theorem collectKeysIn_collectionSound_planted_nestedBody_unprefixedCollect : ¬ KeyConstruct.CollectionSound [] [nestedBody]
     (unprefixedCollect [] [nestedBody]) := by
   intro sound
   obtain ⟨route, nonempty, found⟩ := sound ⟨[⟨.loop, .ordinal 0⟩]⟩ (by
@@ -1377,11 +1377,11 @@ example : ¬ KeyConstruct.CollectionSound [] [nestedBody]
       simp [KeyConstruct.pathAtIn] at found
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.collectKeysIn_complete`, case `ConcreteSpec.Core.Vacuity.nestedBody`). -/
-example : nestedPath ∈ KeyConstruct.collectKeysIn [] [nestedBody] :=
+theorem collectKeysIn_complete_example_nestedBody : nestedPath ∈ KeyConstruct.collectKeysIn [] [nestedBody] :=
   KeyConstruct.collectKeysIn_complete [] [nestedBody] [0, 0, 0] nestedPath (by decide) (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.collectKeysIn_complete`, case `ConcreteSpec.Core.Vacuity.nestedBody`, subject `ConcreteSpec.Core.KeyConstruct.collectKeysIn`, mutant `ConcreteSpec.Core.Vacuity.shallowCollect`). -/
-example : (([0, 0, 0] : Numbers) ≠ [] ∧
+theorem collectKeysIn_complete_planted_nestedBody_shallowCollect : (([0, 0, 0] : Numbers) ≠ [] ∧
     KeyConstruct.pathAtIn [] [nestedBody] [0, 0, 0] = some nestedPath) ∧
     ¬ nestedPath ∈ shallowCollect [] [nestedBody] := by decide
 
@@ -1390,13 +1390,13 @@ def shallowAssign (f : FnId) (startSite : Nat) (body : List KeyConstruct) : Site
   KeyConstruct.numberFunctionKeys f startSite (shallowCollect [] body)
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_occurrences`, case `ConcreteSpec.Core.Vacuity.nestedBody`). -/
-example : (⟨.function function, nestedPath⟩ : StableKey) ∈
+theorem assignFunctionTable_occurrences_example_nestedBody : (⟨.function function, nestedPath⟩ : StableKey) ∈
       (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7 [nestedBody])) ↔
     ∃ route, route ≠ [] ∧ KeyConstruct.pathAt [nestedBody] route = some nestedPath :=
   KeyConstruct.assignFunctionTable_occurrences function 7 [nestedBody] nestedPath
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_occurrences`, case `ConcreteSpec.Core.Vacuity.nestedBody`, subject `ConcreteSpec.Core.KeyConstruct.assignFunctionTable`, mutant `ConcreteSpec.Core.Vacuity.shallowAssign`). -/
-example : ¬ ((⟨.function function, nestedPath⟩ : StableKey) ∈
+theorem assignFunctionTable_occurrences_planted_nestedBody_shallowAssign : ¬ ((⟨.function function, nestedPath⟩ : StableKey) ∈
       (List.map Prod.snd (shallowAssign function 7 [nestedBody])) ↔
     ∃ route, route ≠ [] ∧ KeyConstruct.pathAt [nestedBody] route = some nestedPath) := by
   intro equal
@@ -1405,14 +1405,14 @@ example : ¬ ((⟨.function function, nestedPath⟩ : StableKey) ∈
   decide
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_lookup`, case `ConcreteSpec.Core.Vacuity.nestedBody`). -/
-example : AList.lookup (KeyConstruct.assignFunctionTable function 7 [nestedBody]) ⟨7 + 2⟩ =
+theorem assignFunctionTable_lookup_example_nestedBody : AList.lookup (KeyConstruct.assignFunctionTable function 7 [nestedBody]) ⟨7 + 2⟩ =
       some ⟨.function function, nestedPath⟩ ↔
     (KeyConstruct.collectKeys [nestedBody])[2]? = some nestedPath ∧
       ∃ route, route ≠ [] ∧ KeyConstruct.pathAt [nestedBody] route = some nestedPath :=
   KeyConstruct.assignFunctionTable_lookup function 7 2 [nestedBody] nestedPath
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_lookup`, case `ConcreteSpec.Core.Vacuity.nestedBody`, subject `ConcreteSpec.Core.KeyConstruct.assignFunctionTable`, mutant `ConcreteSpec.Core.Vacuity.shallowAssign`). -/
-example : ¬ (AList.lookup (shallowAssign function 7 [nestedBody]) ⟨7 + 2⟩ =
+theorem assignFunctionTable_lookup_planted_nestedBody_shallowAssign : ¬ (AList.lookup (shallowAssign function 7 [nestedBody]) ⟨7 + 2⟩ =
       some ⟨.function function, nestedPath⟩ ↔
     (KeyConstruct.collectKeys [nestedBody])[2]? = some nestedPath ∧
       ∃ route, route ≠ [] ∧ KeyConstruct.pathAt [nestedBody] route = some nestedPath) := by
@@ -1455,7 +1455,7 @@ def unresetScopeAssign (f : FnId) (startSite : Nat) (body : List KeyConstruct) :
   KeyConstruct.numberFunctionKeys f startSite (unresetScopeCollect [] body)
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_named_scope`, case `ConcreteSpec.Core.Vacuity.namedNested`). -/
-example : ((List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
+theorem assignFunctionTable_named_scope_example_namedNested : ((List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
       ([unnamedLoop] ++ KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children :: [namedCall]))).drop
         (KeyConstruct.collectKeys [unnamedLoop]).length).take
           (KeyConstruct.collectKeys [KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children]).length =
@@ -1467,7 +1467,7 @@ example : ((List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
     [] [unnamedBinding] .block ⟨"body"⟩ nestedBody.children
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_named_scope`, case `ConcreteSpec.Core.Vacuity.namedNested`, subject `ConcreteSpec.Core.KeyConstruct.assignFunctionTable`, mutant `ConcreteSpec.Core.Vacuity.unresetScopeAssign`). -/
-example : ¬ (((List.map Prod.snd (unresetScopeAssign function 7
+theorem assignFunctionTable_named_scope_planted_namedNested_unresetScopeAssign : ¬ (((List.map Prod.snd (unresetScopeAssign function 7
       ([unnamedLoop] ++ KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children :: [namedCall]))).drop
         (KeyConstruct.collectKeys [unnamedLoop]).length).take
           (KeyConstruct.collectKeys [KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children]).length =
@@ -1481,7 +1481,7 @@ example : ¬ (((List.map Prod.snd (unresetScopeAssign function 7
     unnamedLoop, nestedBody, namedCall, unnamedBinding]
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_rename_named`, case `ConcreteSpec.Core.Vacuity.namedNested`). -/
-example : (⟨.function function, renamedRootKey⟩ : StableKey) ∈
+theorem assignFunctionTable_rename_named_example_namedNested : (⟨.function function, renamedRootKey⟩ : StableKey) ∈
       (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
         ([unnamedLoop] ++ (KeyConstruct.mk .block (.named ⟨"old"⟩) nestedBody.children).rename ⟨"new"⟩ :: []))) ∧
     (⟨.function function, renamedPath⟩ : StableKey) ∈
@@ -1491,7 +1491,7 @@ example : (⟨.function function, renamedRootKey⟩ : StableKey) ∈
     nestedBody.children [0, 0] nestedSuffix (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_rename_named`, case `ConcreteSpec.Core.Vacuity.namedNested`, subject `ConcreteSpec.Core.KeyConstruct.rename`, mutant `ConcreteSpec.Core.Vacuity.noopRename`). -/
-example : KeyConstruct.pathAt nestedBody.children [0, 0] = some nestedSuffix ∧
+theorem assignFunctionTable_rename_named_planted_namedNested_noopRename : KeyConstruct.pathAt nestedBody.children [0, 0] = some nestedSuffix ∧
     ¬ ((⟨.function function, renamedRootKey⟩ : StableKey) ∈
         (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
           ([unnamedLoop] ++ noopRename (KeyConstruct.mk .block (.named ⟨"old"⟩) nestedBody.children) ⟨"new"⟩ :: []))) ∧
@@ -1505,7 +1505,7 @@ example : KeyConstruct.pathAt nestedBody.children [0, 0] = some nestedSuffix ∧
     renamedRootKey, KeyConstruct.key, KeyConstruct.segment, KeyConstruct.childScope] at member
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_rename_named`, case `ConcreteSpec.Core.Vacuity.namedNested`, subject `ConcreteSpec.Core.KeyConstruct.assignFunctionTable`, mutant `ConcreteSpec.Core.Vacuity.unresetScopeAssign`). -/
-example : KeyConstruct.pathAt nestedBody.children [0, 0] = some nestedSuffix ∧
+theorem assignFunctionTable_rename_named_planted_namedNested_unresetScopeAssign : KeyConstruct.pathAt nestedBody.children [0, 0] = some nestedSuffix ∧
     ¬ ((⟨.function function, renamedRootKey⟩ : StableKey) ∈
         (List.map Prod.snd (unresetScopeAssign function 7
           ([unnamedLoop] ++ (KeyConstruct.mk .block (.named ⟨"old"⟩) nestedBody.children).rename ⟨"new"⟩ :: []))) ∧
@@ -1521,7 +1521,7 @@ example : KeyConstruct.pathAt nestedBody.children [0, 0] = some nestedSuffix ∧
   decide
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_rename_named`, case `ConcreteSpec.Core.Vacuity.namedCall`). -/
-example : (⟨.function function, ⟨[⟨.call, .named ⟨"renamed"⟩⟩]⟩⟩ : StableKey) ∈
+theorem assignFunctionTable_rename_named_example_namedCall : (⟨.function function, ⟨[⟨.call, .named ⟨"renamed"⟩⟩]⟩⟩ : StableKey) ∈
       (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
         ([] ++ (KeyConstruct.mk .call (.named ⟨"work"⟩) []).rename ⟨"renamed"⟩ :: []))) ∧
     (⟨.function function, ⟨⟨.call, .named ⟨"renamed"⟩⟩ :: ([] : List KeySegment)⟩⟩ : StableKey) ∈
@@ -1531,7 +1531,7 @@ example : (⟨.function function, ⟨[⟨.call, .named ⟨"renamed"⟩⟩]⟩⟩
     [] [] ⟨[]⟩ rfl
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_rename_named`, case `ConcreteSpec.Core.Vacuity.namedCall`, subject `ConcreteSpec.Core.KeyConstruct.rename`, mutant `ConcreteSpec.Core.Vacuity.noopRename`). -/
-example : KeyConstruct.pathAt ([] : List KeyConstruct) [] = some ⟨[]⟩ ∧
+theorem assignFunctionTable_rename_named_planted_namedCall_noopRename : KeyConstruct.pathAt ([] : List KeyConstruct) [] = some ⟨[]⟩ ∧
     ¬ ((⟨.function function, ⟨[⟨.call, .named ⟨"renamed"⟩⟩]⟩⟩ : StableKey) ∈
         (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
           ([] ++ noopRename (KeyConstruct.mk .call (.named ⟨"work"⟩) []) ⟨"renamed"⟩ :: []))) ∧
@@ -1545,7 +1545,7 @@ example : KeyConstruct.pathAt ([] : List KeyConstruct) [] = some ⟨[]⟩ ∧
     KeyConstruct.segment] at member
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_pin`, case `ConcreteSpec.Core.Vacuity.nestedBody`). -/
-example : (⟨.function function, pinnedRootKey⟩ : StableKey) ∈
+theorem assignFunctionTable_pin_example_nestedBody : (⟨.function function, pinnedRootKey⟩ : StableKey) ∈
       (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
         ([] ++ (KeyConstruct.mk .block (.unnamed none) nestedBody.children).pin (some ⟨"pin"⟩) :: []))) ∧
     (⟨.function function, pinnedPath⟩ : StableKey) ∈
@@ -1555,7 +1555,7 @@ example : (⟨.function function, pinnedRootKey⟩ : StableKey) ∈
     [0, 0] nestedSuffix (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_pin`, case `ConcreteSpec.Core.Vacuity.nestedBody`, subject `ConcreteSpec.Core.KeyConstruct.pin`, mutant `ConcreteSpec.Core.Vacuity.noopPin`). -/
-example : KeyConstruct.pathAtIn [] nestedBody.children [0, 0] = some nestedSuffix ∧
+theorem assignFunctionTable_pin_planted_nestedBody_noopPin : KeyConstruct.pathAtIn [] nestedBody.children [0, 0] = some nestedSuffix ∧
     ¬ ((⟨.function function, pinnedRootKey⟩ : StableKey) ∈
         (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
           ([] ++ noopPin (KeyConstruct.mk .block (.unnamed none) nestedBody.children) (some ⟨"pin"⟩) :: []))) ∧
@@ -1569,7 +1569,7 @@ example : KeyConstruct.pathAtIn [] nestedBody.children [0, 0] = some nestedSuffi
     KeyConstruct.key, KeyConstruct.segment, KeyConstruct.childScope] at member
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_pin`, case `ConcreteSpec.Core.Vacuity.unnamedBinding`). -/
-example : (⟨.function function, ⟨[⟨.binding, .pinned ⟨"pinned"⟩⟩]⟩⟩ : StableKey) ∈
+theorem assignFunctionTable_pin_example_unnamedBinding : (⟨.function function, ⟨[⟨.binding, .pinned ⟨"pinned"⟩⟩]⟩⟩ : StableKey) ∈
       (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
         ([] ++ (KeyConstruct.mk .binding (.unnamed none) []).pin (some ⟨"pinned"⟩) :: []))) ∧
     (⟨.function function, ⟨⟨.binding, .pinned ⟨"pinned"⟩⟩ :: ([] : List KeySegment)⟩⟩ : StableKey) ∈
@@ -1578,7 +1578,7 @@ example : (⟨.function function, ⟨[⟨.binding, .pinned ⟨"pinned"⟩⟩]⟩
   KeyConstruct.assignFunctionTable_pin function 7 [] [] .binding none ⟨"pinned"⟩ [] [] ⟨[]⟩ rfl
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_pin`, case `ConcreteSpec.Core.Vacuity.unnamedBinding`, subject `ConcreteSpec.Core.KeyConstruct.pin`, mutant `ConcreteSpec.Core.Vacuity.noopPin`). -/
-example : KeyConstruct.pathAtIn [] ([] : List KeyConstruct) [] = some ⟨[]⟩ ∧
+theorem assignFunctionTable_pin_planted_unnamedBinding_noopPin : KeyConstruct.pathAtIn [] ([] : List KeyConstruct) [] = some ⟨[]⟩ ∧
     ¬ ((⟨.function function, ⟨[⟨.binding, .pinned ⟨"pinned"⟩⟩]⟩⟩ : StableKey) ∈
         (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
           ([] ++ noopPin (KeyConstruct.mk .binding (.unnamed none) []) (some ⟨"pinned"⟩) :: []))) ∧
@@ -1596,11 +1596,11 @@ def allKindsOrdinal (preceding : List KeyConstruct) (target : KeyConstruct) : Fu
   ⟨[⟨target.kind, .ordinal (preceding.filter fun sibling => sibling.name.isUnnamed).length⟩]⟩
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.key_insert_differentKind`, case `ConcreteSpec.Core.Vacuity.unnamedBinding`). -/
-example : unnamedBinding.key ([] ++ insertedCall :: []) = unnamedBinding.key ([] ++ []) :=
+theorem key_insert_differentKind_example_unnamedBinding : unnamedBinding.key ([] ++ insertedCall :: []) = unnamedBinding.key ([] ++ []) :=
   KeyConstruct.key_insert_differentKind [] [] insertedCall unnamedBinding (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.key_insert_differentKind`, case `ConcreteSpec.Core.Vacuity.unnamedBinding`, subject `ConcreteSpec.Core.KeyConstruct.key`, mutant `ConcreteSpec.Core.Vacuity.allKindsOrdinal`). -/
-example : insertedCall.kind ≠ unnamedBinding.kind ∧
+theorem key_insert_differentKind_planted_unnamedBinding_allKindsOrdinal : insertedCall.kind ≠ unnamedBinding.kind ∧
     ¬ (allKindsOrdinal ([] ++ insertedCall :: []) unnamedBinding =
       allKindsOrdinal ([] ++ []) unnamedBinding) :=
   ⟨by decide, by decide⟩
@@ -1610,12 +1610,12 @@ def countNamedKey (preceding : List KeyConstruct) (target : KeyConstruct) : Func
   ⟨[⟨target.kind, .ordinal (preceding.filter fun sibling => sibling.kind == target.kind).length⟩]⟩
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.key_insert_named`, case `ConcreteSpec.Core.Vacuity.unnamedBinding`). -/
-example : unnamedBinding.key ([] ++ KeyConstruct.mk .binding (.named ⟨"x"⟩) [] :: []) =
+theorem key_insert_named_example_unnamedBinding : unnamedBinding.key ([] ++ KeyConstruct.mk .binding (.named ⟨"x"⟩) [] :: []) =
     unnamedBinding.key ([] ++ []) :=
   KeyConstruct.key_insert_named [] [] ⟨"x"⟩ .binding [] unnamedBinding
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.key_insert_named`, case `ConcreteSpec.Core.Vacuity.unnamedBinding`, subject `ConcreteSpec.Core.KeyConstruct.key`, mutant `ConcreteSpec.Core.Vacuity.countNamedKey`). -/
-example : ¬ (countNamedKey ([] ++ KeyConstruct.mk .binding (.named ⟨"x"⟩) [] :: []) unnamedBinding =
+theorem key_insert_named_planted_unnamedBinding_countNamedKey : ¬ (countNamedKey ([] ++ KeyConstruct.mk .binding (.named ⟨"x"⟩) [] :: []) unnamedBinding =
     countNamedKey ([] ++ []) unnamedBinding) := by decide
 
 /-- Mutant rename that demotes a named construct to an unnamed pinned construct, causing it to
@@ -1624,12 +1624,12 @@ def demoteRename (construct : KeyConstruct) (name : Name) : KeyConstruct :=
   { construct with name := .unnamed (some name) }
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.key_rename_other`, case `ConcreteSpec.Core.Vacuity.namedBinding`). -/
-example : unnamedBinding.key ([] ++ namedBinding.rename ⟨"y"⟩ :: [unnamedBinding]) =
+theorem key_rename_other_example_namedBinding : unnamedBinding.key ([] ++ namedBinding.rename ⟨"y"⟩ :: [unnamedBinding]) =
     unnamedBinding.key ([] ++ namedBinding :: [unnamedBinding]) :=
   KeyConstruct.key_rename_other [] [unnamedBinding] namedBinding unnamedBinding ⟨"y"⟩
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.key_rename_other`, case `ConcreteSpec.Core.Vacuity.namedBinding`, subject `ConcreteSpec.Core.KeyConstruct.rename`, mutant `ConcreteSpec.Core.Vacuity.demoteRename`). -/
-example : ¬ (unnamedBinding.key ([] ++ demoteRename namedBinding ⟨"y"⟩ :: [unnamedBinding]) =
+theorem key_rename_other_planted_namedBinding_demoteRename : ¬ (unnamedBinding.key ([] ++ demoteRename namedBinding ⟨"y"⟩ :: [unnamedBinding]) =
     unnamedBinding.key ([] ++ namedBinding :: [unnamedBinding])) := by decide
 
 /-- Mutant key assignment that excludes pinned unnamed siblings from the per-kind ordinal count. -/
@@ -1639,21 +1639,21 @@ def labelOnlyOrdinal (preceding : List KeyConstruct) (target : KeyConstruct) : F
   ⟨[⟨target.kind, .ordinal count⟩]⟩
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.key_pin_other`, case `ConcreteSpec.Core.Vacuity.unnamedBinding`). -/
-example : unnamedBinding.key ([] ++ unnamedBinding.pin (some ⟨"x"⟩) :: [unnamedBinding]) =
+theorem key_pin_other_example_unnamedBinding : unnamedBinding.key ([] ++ unnamedBinding.pin (some ⟨"x"⟩) :: [unnamedBinding]) =
     unnamedBinding.key ([] ++ unnamedBinding :: [unnamedBinding]) :=
   KeyConstruct.key_pin_other [] [unnamedBinding] unnamedBinding unnamedBinding (some ⟨"x"⟩)
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.key_pin_other`, case `ConcreteSpec.Core.Vacuity.unnamedBinding`, subject `ConcreteSpec.Core.KeyConstruct.key`, mutant `ConcreteSpec.Core.Vacuity.labelOnlyOrdinal`). -/
-example : ¬ (labelOnlyOrdinal ([] ++ unnamedBinding.pin (some ⟨"x"⟩) :: [unnamedBinding]) unnamedBinding =
+theorem key_pin_other_planted_unnamedBinding_labelOnlyOrdinal : ¬ (labelOnlyOrdinal ([] ++ unnamedBinding.pin (some ⟨"x"⟩) :: [unnamedBinding]) unnamedBinding =
     labelOnlyOrdinal ([] ++ unnamedBinding :: [unnamedBinding]) unnamedBinding) := by decide
 
 /-- Helper computation example (not law evidence). -/
-example : ((KeyConstruct.mk .call (.named ⟨"work"⟩) []).rename ⟨"renamed"⟩).key [] =
+theorem example_Helper_computation_not_law_evidence : ((KeyConstruct.mk .call (.named ⟨"work"⟩) []).rename ⟨"renamed"⟩).key [] =
     ⟨[⟨.call, .named ⟨"renamed"⟩⟩]⟩ :=
   KeyConstruct.key_rename_named [] .call ⟨"work"⟩ [] ⟨"renamed"⟩
 
 /-- Helper computation example (not law evidence). -/
-example : ((KeyConstruct.mk .binding (.unnamed none) []).pin (some ⟨"pinned"⟩)).key [] =
+theorem example_Helper_computation_not_law_evidence_2 : ((KeyConstruct.mk .binding (.unnamed none) []).pin (some ⟨"pinned"⟩)).key [] =
     ⟨[⟨.binding, .pinned ⟨"pinned"⟩⟩]⟩ :=
   KeyConstruct.key_pin_unnamed [] .binding none [] ⟨"pinned"⟩
 
@@ -1664,12 +1664,12 @@ def allKindsDescendantKey (preceding : List KeyConstruct) (construct : KeyConstr
     fun descendant => ⟨(allKindsOrdinal preceding construct).path ++ descendant.path⟩
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.descendant_insert_differentKind`, case `ConcreteSpec.Core.Vacuity.nestedBody`). -/
-example : nestedBody.descendantKey ([] ++ insertedCall :: []) [0, 0] =
+theorem descendant_insert_differentKind_example_nestedBody : nestedBody.descendantKey ([] ++ insertedCall :: []) [0, 0] =
     nestedBody.descendantKey ([] ++ []) [0, 0] :=
   KeyConstruct.descendant_insert_differentKind [] [] insertedCall nestedBody [0, 0] (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.descendant_insert_differentKind`, case `ConcreteSpec.Core.Vacuity.nestedBody`, subject `ConcreteSpec.Core.KeyConstruct.descendantKey`, mutant `ConcreteSpec.Core.Vacuity.allKindsDescendantKey`). -/
-example : KeyConstruct.SubtreeAvoidsKind insertedCall.kind nestedBody [0, 0] ∧
+theorem descendant_insert_differentKind_planted_nestedBody_allKindsDescendantKey : KeyConstruct.SubtreeAvoidsKind insertedCall.kind nestedBody [0, 0] ∧
     ¬ (allKindsDescendantKey ([] ++ insertedCall :: []) nestedBody [0, 0] =
       allKindsDescendantKey ([] ++ []) nestedBody [0, 0]) :=
   ⟨by decide, by decide⟩
@@ -1681,12 +1681,12 @@ def countNamedDescendantKey (preceding : List KeyConstruct) (construct : KeyCons
     fun descendant => ⟨(countNamedKey preceding construct).path ++ descendant.path⟩
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.descendant_insert_named`, case `ConcreteSpec.Core.Vacuity.nestedBody`). -/
-example : nestedBody.descendantKey ([] ++ KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children :: []) [0, 0] =
+theorem descendant_insert_named_example_nestedBody : nestedBody.descendantKey ([] ++ KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children :: []) [0, 0] =
     nestedBody.descendantKey ([] ++ []) [0, 0] :=
   KeyConstruct.descendant_insert_named [] [] ⟨"body"⟩ .block nestedBody.children nestedBody [0, 0]
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.descendant_insert_named`, case `ConcreteSpec.Core.Vacuity.nestedBody`, subject `ConcreteSpec.Core.KeyConstruct.descendantKey`, mutant `ConcreteSpec.Core.Vacuity.countNamedDescendantKey`). -/
-example : ¬ (countNamedDescendantKey ([] ++ KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children :: []) nestedBody [0, 0] =
+theorem descendant_insert_named_planted_nestedBody_countNamedDescendantKey : ¬ (countNamedDescendantKey ([] ++ KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children :: []) nestedBody [0, 0] =
     countNamedDescendantKey ([] ++ []) nestedBody [0, 0]) := by decide
 
 /-- Mutant `pathAt` that counts ordinals across the whole forest rather than `forest.take index`,
@@ -1699,14 +1699,14 @@ def wholeForestPathAt (forest : List KeyConstruct) : Numbers → Option Function
     pure ⟨construct.segment forest :: descendant.path⟩
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.pathAt_insert_after`, case `ConcreteSpec.Core.Vacuity.nestedBody`). -/
-example : KeyConstruct.pathAt ([] ++ nestedBody :: ([] ++ unnamedBlock :: []))
+theorem pathAt_insert_after_example_nestedBody : KeyConstruct.pathAt ([] ++ nestedBody :: ([] ++ unnamedBlock :: []))
       (([] : List KeyConstruct).length :: [0, 0]) =
     KeyConstruct.pathAt ([] ++ nestedBody :: ([] ++ []))
       (([] : List KeyConstruct).length :: [0, 0]) :=
   KeyConstruct.pathAt_insert_after [] [] [] nestedBody unnamedBlock [0, 0]
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.pathAt_insert_after`, case `ConcreteSpec.Core.Vacuity.nestedBody`, subject `ConcreteSpec.Core.KeyConstruct.pathAt`, mutant `ConcreteSpec.Core.Vacuity.wholeForestPathAt`). -/
-example : ¬ (wholeForestPathAt ([] ++ nestedBody :: ([] ++ unnamedBlock :: []))
+theorem pathAt_insert_after_planted_nestedBody_wholeForestPathAt : ¬ (wholeForestPathAt ([] ++ nestedBody :: ([] ++ unnamedBlock :: []))
       (([] : List KeyConstruct).length :: [0, 0]) =
     wholeForestPathAt ([] ++ nestedBody :: ([] ++ []))
       (([] : List KeyConstruct).length :: [0, 0])) := by decide
@@ -1721,7 +1721,7 @@ def countNamedPathAt (forest : List KeyConstruct) : Numbers → Option FunctionR
       countNamedDescendantKey (forest.take index) construct route
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.pathAt_insert_named`, case `ConcreteSpec.Core.Vacuity.nestedBody`). -/
-example : KeyConstruct.pathAt
+theorem pathAt_insert_named_example_nestedBody : KeyConstruct.pathAt
       (([] ++ KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children :: []) ++ nestedBody :: [])
       (([] ++ KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children :: []).length :: [0, 0]) =
     KeyConstruct.pathAt
@@ -1730,7 +1730,7 @@ example : KeyConstruct.pathAt
   KeyConstruct.pathAt_insert_named [] [] [] ⟨"body"⟩ .block nestedBody.children nestedBody [0, 0]
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.pathAt_insert_named`, case `ConcreteSpec.Core.Vacuity.nestedBody`, subject `ConcreteSpec.Core.KeyConstruct.pathAt`, mutant `ConcreteSpec.Core.Vacuity.countNamedPathAt`). -/
-example : ¬ (countNamedPathAt
+theorem pathAt_insert_named_planted_nestedBody_countNamedPathAt : ¬ (countNamedPathAt
       (([] ++ KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children :: []) ++ nestedBody :: [])
       (([] ++ KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children :: []).length :: [0, 0]) =
     countNamedPathAt
@@ -1747,7 +1747,7 @@ def allKindsPathAt (forest : List KeyConstruct) : Numbers → Option FunctionRel
       allKindsDescendantKey (forest.take index) construct route
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.pathAt_insert_differentKind`, case `ConcreteSpec.Core.Vacuity.nestedBody`). -/
-example : KeyConstruct.pathAt
+theorem pathAt_insert_differentKind_example_nestedBody : KeyConstruct.pathAt
       (([] ++ insertedCall :: []) ++ nestedBody :: [])
       (([] ++ insertedCall :: []).length :: [0, 0]) =
     KeyConstruct.pathAt
@@ -1756,7 +1756,7 @@ example : KeyConstruct.pathAt
   KeyConstruct.pathAt_insert_differentKind [] [] [] insertedCall nestedBody [0, 0] (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.pathAt_insert_differentKind`, case `ConcreteSpec.Core.Vacuity.nestedBody`, subject `ConcreteSpec.Core.KeyConstruct.pathAt`, mutant `ConcreteSpec.Core.Vacuity.allKindsPathAt`). -/
-example : KeyConstruct.SubtreeAvoidsKind insertedCall.kind nestedBody [0, 0] ∧
+theorem pathAt_insert_differentKind_planted_nestedBody_allKindsPathAt : KeyConstruct.SubtreeAvoidsKind insertedCall.kind nestedBody [0, 0] ∧
     ¬ (allKindsPathAt
         (([] ++ insertedCall :: []) ++ nestedBody :: [])
         (([] ++ insertedCall :: []).length :: [0, 0]) =
@@ -1782,7 +1782,7 @@ def unresetScopePathAt (forest : List KeyConstruct) : Numbers → Option Functio
       unresetScopeDescendantKey (forest.take index) construct route
 
 /-- Regression example (not independent soundness evidence). -/
-example : KeyConstruct.pathAt
+theorem example_Regression_not_independent_soundness_evidence : KeyConstruct.pathAt
       ([unnamedLoop] ++ KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children :: [])
       (([unnamedLoop] : List KeyConstruct).length :: [0, 0]) =
     KeyConstruct.pathAt
@@ -1792,7 +1792,7 @@ example : KeyConstruct.pathAt
     nestedBody.children [0, 0]
 
 /-- Regression example (not independent soundness evidence). -/
-example : ¬ (unresetScopePathAt
+theorem example_Regression_not_independent_soundness_evidence_2 : ¬ (unresetScopePathAt
       ([unnamedLoop] ++ KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children :: [])
       (([unnamedLoop] : List KeyConstruct).length :: [0, 0]) =
     unresetScopePathAt
@@ -1800,12 +1800,12 @@ example : ¬ (unresetScopePathAt
       (([] : List KeyConstruct).length :: [0, 0])) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.descendant_rename_other`, case `ConcreteSpec.Core.Vacuity.nestedBody`). -/
-example : nestedBody.descendantKey ([] ++ namedNested.rename ⟨"otherName"⟩ :: []) [0, 0] =
+theorem descendant_rename_other_example_nestedBody : nestedBody.descendantKey ([] ++ namedNested.rename ⟨"otherName"⟩ :: []) [0, 0] =
     nestedBody.descendantKey ([] ++ namedNested :: []) [0, 0] :=
   KeyConstruct.descendant_rename_other [] [] namedNested nestedBody ⟨"otherName"⟩ [0, 0]
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.descendant_rename_other`, case `ConcreteSpec.Core.Vacuity.nestedBody`, subject `ConcreteSpec.Core.KeyConstruct.rename`, mutant `ConcreteSpec.Core.Vacuity.demoteRename`). -/
-example : ¬ (nestedBody.descendantKey ([] ++ demoteRename namedNested ⟨"otherName"⟩ :: []) [0, 0] =
+theorem descendant_rename_other_planted_nestedBody_demoteRename : ¬ (nestedBody.descendantKey ([] ++ demoteRename namedNested ⟨"otherName"⟩ :: []) [0, 0] =
     nestedBody.descendantKey ([] ++ namedNested :: []) [0, 0]) := by decide
 
 /-- Mutant `descendantKey` that excludes pinned unnamed siblings from the root's ordinal count. -/
@@ -1815,22 +1815,22 @@ def labelOnlyDescendantKey (preceding : List KeyConstruct) (construct : KeyConst
     fun descendant => ⟨(labelOnlyOrdinal preceding construct).path ++ descendant.path⟩
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.descendant_pin_other`, case `ConcreteSpec.Core.Vacuity.nestedBody`). -/
-example : nestedBody.descendantKey ([] ++ nestedBody.pin (some ⟨"pinned"⟩) :: []) [0, 0] =
+theorem descendant_pin_other_example_nestedBody : nestedBody.descendantKey ([] ++ nestedBody.pin (some ⟨"pinned"⟩) :: []) [0, 0] =
     nestedBody.descendantKey ([] ++ nestedBody :: []) [0, 0] :=
   KeyConstruct.descendant_pin_other [] [] nestedBody nestedBody (some ⟨"pinned"⟩) [0, 0]
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.descendant_pin_other`, case `ConcreteSpec.Core.Vacuity.nestedBody`, subject `ConcreteSpec.Core.KeyConstruct.descendantKey`, mutant `ConcreteSpec.Core.Vacuity.labelOnlyDescendantKey`). -/
-example : ¬ (labelOnlyDescendantKey ([] ++ nestedBody.pin (some ⟨"pinned"⟩) :: []) nestedBody [0, 0] =
+theorem descendant_pin_other_planted_nestedBody_labelOnlyDescendantKey : ¬ (labelOnlyDescendantKey ([] ++ nestedBody.pin (some ⟨"pinned"⟩) :: []) nestedBody [0, 0] =
     labelOnlyDescendantKey ([] ++ nestedBody :: []) nestedBody [0, 0]) := by decide
 
 /-- Representation example (not law evidence). -/
-example : ((KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children).rename ⟨"renamed"⟩).descendantKey [] [0, 0] =
+theorem example_Representation_not_law_evidence : ((KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children).rename ⟨"renamed"⟩).descendantKey [] [0, 0] =
     (KeyConstruct.pathAt nestedBody.children [0, 0]).map (fun suffix =>
       ⟨⟨.block, .named ⟨"renamed"⟩⟩ :: suffix.path⟩) :=
   KeyConstruct.descendant_rename_named [] .block ⟨"body"⟩ ⟨"renamed"⟩ nestedBody.children [0, 0]
 
 /-- Representation example (not law evidence). -/
-example : ¬ ((noopRename (KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children) ⟨"renamed"⟩).descendantKey [] [0, 0] =
+theorem example_Representation_not_law_evidence_2 : ¬ ((noopRename (KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children) ⟨"renamed"⟩).descendantKey [] [0, 0] =
     (KeyConstruct.pathAt nestedBody.children [0, 0]).map (fun suffix =>
       ⟨⟨.block, .named ⟨"renamed"⟩⟩ :: suffix.path⟩)) := by decide
 
@@ -1852,14 +1852,14 @@ def dropFirstEdges {Ty Cap : Type} [DecidableEq Ty] [DecidableEq Cap]
   { SpecializationTable.canonicalize requests with edges := (SpecializationTable.canonicalize requests).edges.tail }
 
 /-- Instance (law `ConcreteSpec.Core.SpecializationTable.canonicalize_complete`, case `ConcreteSpec.Core.Vacuity.requestZero`). -/
-example : ∃ edge ∈ (SpecializationTable.canonicalize [requestZero, requestOne]).edges,
+theorem canonicalize_complete_example_requestZero : ∃ edge ∈ (SpecializationTable.canonicalize [requestZero, requestOne]).edges,
     edge.request = requestZero ∧
       SpecializationTable.entryAt (SpecializationTable.canonicalize [requestZero, requestOne]).entries edge.entry =
         some requestZero.specialization :=
   SpecializationTable.canonicalize_complete [requestZero, requestOne] requestZero (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.SpecializationTable.canonicalize_complete`, case `ConcreteSpec.Core.Vacuity.requestZero`, subject `ConcreteSpec.Core.SpecializationTable.canonicalize`, mutant `ConcreteSpec.Core.Vacuity.dropFirstEdges`). -/
-example : requestZero ∈ [requestZero, requestOne] ∧
+theorem canonicalize_complete_planted_requestZero_dropFirstEdges : requestZero ∈ [requestZero, requestOne] ∧
     ¬ (∃ edge ∈ (dropFirstEdges [requestZero, requestOne]).edges,
       edge.request = requestZero ∧
         SpecializationTable.entryAt (dropFirstEdges [requestZero, requestOne]).entries edge.entry =
@@ -1872,19 +1872,19 @@ def oobEntryAt {Ty Cap : Type} (entries : List (SpecializationId Ty Cap))
   entries[index + 9]?
 
 /-- Instance (law `ConcreteSpec.Core.SpecializationTable.canonicalize_edge_sound`, case `ConcreteSpec.Core.Vacuity.edgeZero`). -/
-example : SpecializationTable.entryAt
+theorem canonicalize_edge_sound_example_edgeZero : SpecializationTable.entryAt
     (SpecializationTable.canonicalize [requestZero, requestOne]).entries edgeZero.entry =
     some edgeZero.request.specialization :=
   SpecializationTable.canonicalize_edge_sound [requestZero, requestOne] edgeZero (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.SpecializationTable.canonicalize_edge_sound`, case `ConcreteSpec.Core.Vacuity.edgeZero`, subject `ConcreteSpec.Core.SpecializationTable.entryAt`, mutant `ConcreteSpec.Core.Vacuity.oobEntryAt`). -/
-example : edgeZero ∈ (SpecializationTable.canonicalize [requestZero, requestOne]).edges ∧
+theorem canonicalize_edge_sound_planted_edgeZero_oobEntryAt : edgeZero ∈ (SpecializationTable.canonicalize [requestZero, requestOne]).edges ∧
     ¬ (oobEntryAt (SpecializationTable.canonicalize [requestZero, requestOne]).entries edgeZero.entry =
       some edgeZero.request.specialization) :=
   ⟨by decide, by decide⟩
 
 /-- Instance (law `ConcreteSpec.Core.SpecializationTable.canonicalize_share`, case `ConcreteSpec.Core.Vacuity.requestZero`). -/
-example : ∃ zeroEdge oneEdge, zeroEdge ∈ (SpecializationTable.canonicalize
+theorem canonicalize_share_example_requestZero : ∃ zeroEdge oneEdge, zeroEdge ∈ (SpecializationTable.canonicalize
     [requestZero, requestOne]).edges ∧ oneEdge ∈ (SpecializationTable.canonicalize
     [requestZero, requestOne]).edges ∧ zeroEdge.request = requestZero ∧
     oneEdge.request = requestOne ∧ zeroEdge.entry = oneEdge.entry :=
@@ -1913,7 +1913,7 @@ def bySite {Ty Cap : Type} [DecidableEq Ty] [DecidableEq Cap]
     requests.zipIdx.map fun (req, idx) => ⟨req, idx⟩⟩
 
 /-- Planted (law `ConcreteSpec.Core.SpecializationTable.canonicalize_share`, case `ConcreteSpec.Core.Vacuity.requestZero`, subject `ConcreteSpec.Core.SpecializationTable.canonicalize`, mutant `ConcreteSpec.Core.Vacuity.bySite`). -/
-example : (requestZero ∈ [requestZero, requestOne] ∧
+theorem canonicalize_share_planted_requestZero_bySite : (requestZero ∈ [requestZero, requestOne] ∧
     requestOne ∈ [requestZero, requestOne] ∧
     requestZero.specialization = requestOne.specialization) ∧
     ¬ (∃ first second, first ∈ (bySite [requestZero, requestOne]).edges ∧
@@ -1923,7 +1923,7 @@ example : (requestZero ∈ [requestZero, requestOne] ∧
   simp [bySite, requestZero, requestOne]
 
 /-- Instance (law `ConcreteSpec.Core.SpecializationTable.canonicalize_distinct`, case `ConcreteSpec.Core.Vacuity.requestOtherType`). -/
-example : ∃ typeEdge otherEdge, typeEdge ∈ (SpecializationTable.canonicalize
+theorem canonicalize_distinct_example_requestOtherType : ∃ typeEdge otherEdge, typeEdge ∈ (SpecializationTable.canonicalize
     [requestZero, requestOtherType]).edges ∧ otherEdge ∈ (SpecializationTable.canonicalize
     [requestZero, requestOtherType]).edges ∧ typeEdge.request = requestZero ∧
     otherEdge.request = requestOtherType ∧ typeEdge.entry ≠ otherEdge.entry :=
@@ -1931,7 +1931,7 @@ example : ∃ typeEdge otherEdge, typeEdge ∈ (SpecializationTable.canonicalize
     (by simp) (by simp) (by decide)
 
 /-- Instance (law `ConcreteSpec.Core.SpecializationTable.canonicalize_distinct`, case `ConcreteSpec.Core.Vacuity.requestOtherCapability`). -/
-example : ∃ capabilityEdge otherEdge, capabilityEdge ∈ (SpecializationTable.canonicalize
+theorem canonicalize_distinct_example_requestOtherCapability : ∃ capabilityEdge otherEdge, capabilityEdge ∈ (SpecializationTable.canonicalize
     [requestZero, requestOtherCapability]).edges ∧ otherEdge ∈ (SpecializationTable.canonicalize
     [requestZero, requestOtherCapability]).edges ∧ capabilityEdge.request = requestZero ∧
     otherEdge.request = requestOtherCapability ∧ capabilityEdge.entry ≠ otherEdge.entry :=
@@ -1945,7 +1945,7 @@ def onlyGeneric {Ty Cap : Type} [DecidableEq Ty] [DecidableEq Cap]
     requests.map fun req => ⟨req, 0⟩⟩
 
 /-- Planted (law `ConcreteSpec.Core.SpecializationTable.canonicalize_distinct`, case `ConcreteSpec.Core.Vacuity.requestOtherType`, subject `ConcreteSpec.Core.SpecializationTable.canonicalize`, mutant `ConcreteSpec.Core.Vacuity.onlyGeneric`). -/
-example : (requestZero ∈ [requestZero, requestOtherType] ∧
+theorem canonicalize_distinct_planted_requestOtherType_onlyGeneric : (requestZero ∈ [requestZero, requestOtherType] ∧
     requestOtherType ∈ [requestZero, requestOtherType] ∧
     requestZero.specialization ≠ requestOtherType.specialization) ∧
     ¬ (∃ first second, first ∈ (onlyGeneric [requestZero, requestOtherType]).edges ∧
@@ -1955,7 +1955,7 @@ example : (requestZero ∈ [requestZero, requestOtherType] ∧
   simp [onlyGeneric]
 
 /-- Planted (law `ConcreteSpec.Core.SpecializationTable.canonicalize_distinct`, case `ConcreteSpec.Core.Vacuity.requestOtherCapability`, subject `ConcreteSpec.Core.SpecializationTable.canonicalize`, mutant `ConcreteSpec.Core.Vacuity.onlyGeneric`). -/
-example : (requestZero ∈ [requestZero, requestOtherCapability] ∧
+theorem canonicalize_distinct_planted_requestOtherCapability_onlyGeneric : (requestZero ∈ [requestZero, requestOtherCapability] ∧
     requestOtherCapability ∈ [requestZero, requestOtherCapability] ∧
     requestZero.specialization ≠ requestOtherCapability.specialization) ∧
     ¬ (∃ first second, first ∈ (onlyGeneric [requestZero, requestOtherCapability]).edges ∧
@@ -1965,11 +1965,11 @@ example : (requestZero ∈ [requestZero, requestOtherCapability] ∧
   simp [onlyGeneric]
 
 /-- Instance (law `ConcreteSpec.Core.SpecializationTable.canonicalize_nodup`, case `ConcreteSpec.Core.Vacuity.requestZero`). -/
-example : (SpecializationTable.canonicalize [requestZero, requestOne]).entries.Nodup :=
+theorem canonicalize_nodup_example_requestZero : (SpecializationTable.canonicalize [requestZero, requestOne]).entries.Nodup :=
   SpecializationTable.canonicalize_nodup [requestZero, requestOne]
 
 /-- Planted (law `ConcreteSpec.Core.SpecializationTable.canonicalize_nodup`, case `ConcreteSpec.Core.Vacuity.requestZero`, subject `ConcreteSpec.Core.SpecializationTable.canonicalize`, mutant `ConcreteSpec.Core.Vacuity.bySite`). -/
-example : ¬ (bySite [requestZero, requestOne]).entries.Nodup := by decide
+theorem canonicalize_nodup_planted_requestZero_bySite : ¬ (bySite [requestZero, requestOne]).entries.Nodup := by decide
 
 /-- Loaded modules with explicit package versions and origins. -/
 def firstModule : LoadedModule := ⟨⟨package ⟨"p1"⟩, [⟨"first"⟩], by decide⟩, ⟨⟨"registry-a"⟩⟩⟩
@@ -1984,14 +1984,14 @@ def fabricatedRefusalLoad (_modules : List LoadedModule) : LoadResult :=
   .refused collidingOrigin
 
 /-- Instance (law `ConcreteSpec.Core.LoadedModules.load_refusal_sound`, case `ConcreteSpec.Core.Vacuity.collidingTop`). -/
-example : match LoadedModules.load [firstModule, collidingModule] with
+theorem load_refusal_sound_example_collidingTop : match LoadedModules.load [firstModule, collidingModule] with
     | .refused collision => LoadedModules.HasCollision [firstModule, collidingModule] collision
     | .admitted admitted => admitted = [firstModule, collidingModule] ∧
         LoadedModules.WellFormed [firstModule, collidingModule] :=
   LoadedModules.load_refusal_sound [firstModule, collidingModule]
 
 /-- Planted (law `ConcreteSpec.Core.LoadedModules.load_refusal_sound`, case `ConcreteSpec.Core.Vacuity.collidingTop`, subject `ConcreteSpec.Core.LoadedModules.load`, mutant `ConcreteSpec.Core.Vacuity.fabricatedRefusalLoad`). -/
-example : ¬ (match fabricatedRefusalLoad [firstModule, collidingModule] with
+theorem load_refusal_sound_planted_collidingTop_fabricatedRefusalLoad : ¬ (match fabricatedRefusalLoad [firstModule, collidingModule] with
     | .refused collision => LoadedModules.HasCollision [firstModule, collidingModule] collision
     | .admitted admitted => admitted = [firstModule, collidingModule] ∧
         LoadedModules.WellFormed [firstModule, collidingModule]) := by
@@ -2003,7 +2003,7 @@ example : ¬ (match fabricatedRefusalLoad [firstModule, collidingModule] with
 def admitAll (modules : List LoadedModule) : LoadResult := .admitted modules
 
 /-- Planted (law `ConcreteSpec.Core.LoadedModules.load_refusal_sound`, case `ConcreteSpec.Core.Vacuity.collidingTop`, subject `ConcreteSpec.Core.LoadedModules.load`, mutant `ConcreteSpec.Core.Vacuity.admitAll`). -/
-example : ¬ (match admitAll [firstModule, collidingModule] with
+theorem load_refusal_sound_planted_collidingTop_admitAll : ¬ (match admitAll [firstModule, collidingModule] with
     | .refused collision => LoadedModules.HasCollision [firstModule, collidingModule] collision
     | .admitted admitted => admitted = [firstModule, collidingModule] ∧
         LoadedModules.WellFormed [firstModule, collidingModule]) := by
@@ -2011,19 +2011,19 @@ example : ¬ (match admitAll [firstModule, collidingModule] with
   exact wf collidingTop ⟨by decide, by decide⟩
 
 /-- Instance (law `ConcreteSpec.Core.LoadedModules.load_refusal_complete`, case `ConcreteSpec.Core.Vacuity.collidingOrigin`). -/
-example : ∃ detected, LoadedModules.load [firstModule, samePackageOtherOrigin] = .refused detected :=
+theorem load_refusal_complete_example_collidingOrigin : ∃ detected, LoadedModules.load [firstModule, samePackageOtherOrigin] = .refused detected :=
   LoadedModules.load_refusal_complete [firstModule, samePackageOtherOrigin] collidingOrigin
     ⟨by decide, by decide⟩
 
 /-- Planted (law `ConcreteSpec.Core.LoadedModules.load_refusal_complete`, case `ConcreteSpec.Core.Vacuity.collidingOrigin`, subject `ConcreteSpec.Core.LoadedModules.load`, mutant `ConcreteSpec.Core.Vacuity.admitAll`). -/
-example : LoadedModules.HasCollision [firstModule, samePackageOtherOrigin] collidingOrigin ∧
+theorem load_refusal_complete_planted_collidingOrigin_admitAll : LoadedModules.HasCollision [firstModule, samePackageOtherOrigin] collidingOrigin ∧
     ¬ (∃ detected, admitAll [firstModule, samePackageOtherOrigin] = .refused detected) := by
   refine ⟨⟨by decide, by decide⟩, ?_⟩
   rintro ⟨detected, h⟩
   cases h
 
 /-- Instance (law `ConcreteSpec.Core.LoadedModules.load_admitted`, case `ConcreteSpec.Core.Vacuity.firstModule`). -/
-example : LoadedModules.load [firstModule, secondModule] =
+theorem load_admitted_example_firstModule : LoadedModules.load [firstModule, secondModule] =
       .admitted [firstModule, secondModule] ↔
     [firstModule, secondModule] = [firstModule, secondModule] ∧
       LoadedModules.WellFormed [firstModule, secondModule] :=
@@ -2033,7 +2033,7 @@ example : LoadedModules.load [firstModule, secondModule] =
 def discardLoad (_modules : List LoadedModule) : LoadResult := .admitted []
 
 /-- Planted (law `ConcreteSpec.Core.LoadedModules.load_admitted`, case `ConcreteSpec.Core.Vacuity.firstModule`, subject `ConcreteSpec.Core.LoadedModules.load`, mutant `ConcreteSpec.Core.Vacuity.discardLoad`). -/
-example : ¬ (discardLoad [firstModule, secondModule] =
+theorem load_admitted_planted_firstModule_discardLoad : ¬ (discardLoad [firstModule, secondModule] =
       .admitted [firstModule, secondModule] ↔
     [firstModule, secondModule] = [firstModule, secondModule] ∧
       LoadedModules.WellFormed [firstModule, secondModule]) := by
@@ -2043,14 +2043,14 @@ example : ¬ (discardLoad [firstModule, secondModule] =
   cases admitted
 
 /-- Instance (law `ConcreteSpec.Core.LoadedModules.load_admitted`, case `ConcreteSpec.Core.Vacuity.collidingModule`). -/
-example : LoadedModules.load [firstModule, collidingModule] =
+theorem load_admitted_example_collidingModule : LoadedModules.load [firstModule, collidingModule] =
       .admitted [firstModule, collidingModule] ↔
     [firstModule, collidingModule] = [firstModule, collidingModule] ∧
       LoadedModules.WellFormed [firstModule, collidingModule] :=
   LoadedModules.load_admitted [firstModule, collidingModule] [firstModule, collidingModule]
 
 /-- Planted (law `ConcreteSpec.Core.LoadedModules.load_admitted`, case `ConcreteSpec.Core.Vacuity.collidingModule`, subject `ConcreteSpec.Core.LoadedModules.load`, mutant `ConcreteSpec.Core.Vacuity.admitAll`). -/
-example : ¬ (admitAll [firstModule, collidingModule] =
+theorem load_admitted_planted_collidingModule_admitAll : ¬ (admitAll [firstModule, collidingModule] =
       .admitted [firstModule, collidingModule] ↔
     [firstModule, collidingModule] = [firstModule, collidingModule] ∧
       LoadedModules.WellFormed [firstModule, collidingModule]) := by
@@ -2067,27 +2067,27 @@ def utf8Prefix : SourceText := SourceText.ofBytes [195]
 def utf8Source : SourceText := SourceText.ofBytes [195, 169]
 def otherTabSource : SourceText := SourceText.ofBytes [10, 97, 98]
 
-example : aSource ≠ aTab := by decide
+theorem example_aSource_aTab : aSource ≠ aTab := by decide
 
 /-- Mutant line function with a zero-based origin. -/
 def zeroBasedLine (source : SourceText) (offset : Nat) : Nat :=
   (source.bytes.take offset).count 10
 
 /-- Instance (law `ConcreteSpec.Core.SourceText.lineAt_zero`, case `ConcreteSpec.Core.Vacuity.aSource`). -/
-example : aSource.lineAt 0 = 1 := SourceText.lineAt_zero aSource
+theorem lineAt_zero_example_aSource : aSource.lineAt 0 = 1 := SourceText.lineAt_zero aSource
 
 /-- Planted (law `ConcreteSpec.Core.SourceText.lineAt_zero`, case `ConcreteSpec.Core.Vacuity.aSource`, subject `ConcreteSpec.Core.SourceText.lineAt`, mutant `ConcreteSpec.Core.Vacuity.zeroBasedLine`). -/
-example : ¬ (zeroBasedLine aSource 0 = 1) := by decide
+theorem lineAt_zero_planted_aSource_zeroBasedLine : ¬ (zeroBasedLine aSource 0 = 1) := by decide
 
 /-- Mutant column function with a zero-based origin. -/
 def zeroBasedColumn (source : SourceText) (offset : Nat) : Nat :=
   ((source.bytes.take offset).reverse.takeWhile (fun byte => byte != 10)).length
 
 /-- Instance (law `ConcreteSpec.Core.SourceText.columnAt_zero`, case `ConcreteSpec.Core.Vacuity.aSource`). -/
-example : aSource.columnAt 0 = 1 := SourceText.columnAt_zero aSource
+theorem columnAt_zero_example_aSource : aSource.columnAt 0 = 1 := SourceText.columnAt_zero aSource
 
 /-- Planted (law `ConcreteSpec.Core.SourceText.columnAt_zero`, case `ConcreteSpec.Core.Vacuity.aSource`, subject `ConcreteSpec.Core.SourceText.columnAt`, mutant `ConcreteSpec.Core.Vacuity.zeroBasedColumn`). -/
-example : ¬ (zeroBasedColumn aSource 0 = 1) := by decide
+theorem columnAt_zero_planted_aSource_zeroBasedColumn : ¬ (zeroBasedColumn aSource 0 = 1) := by decide
 
 /-- Mutant line function that always returns line 1. -/
 def constantLine (_source : SourceText) (_offset : Nat) : Nat := 1
@@ -2096,19 +2096,19 @@ def constantLine (_source : SourceText) (_offset : Nat) : Nat := 1
 def offsetLine (_source : SourceText) (offset : Nat) : Nat := offset + 1
 
 /-- Instance (law `ConcreteSpec.Core.SourceText.lineAt_append_newline`, case `ConcreteSpec.Core.Vacuity.aSource`). -/
-example : (aSource.push 10).lineAt (aSource.length + 1) = aSource.lineAt aSource.length + 1 :=
+theorem lineAt_append_newline_example_aSource : (aSource.push 10).lineAt (aSource.length + 1) = aSource.lineAt aSource.length + 1 :=
   SourceText.lineAt_append_newline aSource
 
 /-- Planted (law `ConcreteSpec.Core.SourceText.lineAt_append_newline`, case `ConcreteSpec.Core.Vacuity.aSource`, subject `ConcreteSpec.Core.SourceText.lineAt`, mutant `ConcreteSpec.Core.Vacuity.constantLine`). -/
-example : ¬ (constantLine (aSource.push 10) (aSource.length + 1) =
+theorem lineAt_append_newline_planted_aSource_constantLine : ¬ (constantLine (aSource.push 10) (aSource.length + 1) =
     constantLine aSource aSource.length + 1) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.SourceText.lineAt_append_other`, case `ConcreteSpec.Core.Vacuity.aSource`). -/
-example : (aSource.push 9).lineAt (aSource.length + 1) = aSource.lineAt aSource.length :=
+theorem lineAt_append_other_example_aSource : (aSource.push 9).lineAt (aSource.length + 1) = aSource.lineAt aSource.length :=
   SourceText.lineAt_append_other aSource 9 (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.SourceText.lineAt_append_other`, case `ConcreteSpec.Core.Vacuity.aSource`, subject `ConcreteSpec.Core.SourceText.lineAt`, mutant `ConcreteSpec.Core.Vacuity.offsetLine`). -/
-example : (9 : UInt8) ≠ 10 ∧
+theorem lineAt_append_other_planted_aSource_offsetLine : (9 : UInt8) ≠ 10 ∧
     ¬ (offsetLine (aSource.push 9) (aSource.length + 1) = offsetLine aSource aSource.length) :=
   ⟨by decide, by decide⟩
 
@@ -2118,11 +2118,11 @@ def tabStopFour (source : SourceText) (offset : Nat) : Nat :=
     (fun acc byte => acc + if byte == 9 then 4 else 1) 1
 
 /-- Instance (law `ConcreteSpec.Core.SourceText.columnAt_append_tab`, case `ConcreteSpec.Core.Vacuity.aSource`). -/
-example : (aSource.push 9).columnAt (aSource.length + 1) = aSource.columnAt aSource.length + 1 :=
+theorem columnAt_append_tab_example_aSource : (aSource.push 9).columnAt (aSource.length + 1) = aSource.columnAt aSource.length + 1 :=
   SourceText.columnAt_append_tab aSource
 
 /-- Planted (law `ConcreteSpec.Core.SourceText.columnAt_append_tab`, case `ConcreteSpec.Core.Vacuity.aSource`, subject `ConcreteSpec.Core.SourceText.columnAt`, mutant `ConcreteSpec.Core.Vacuity.tabStopFour`). -/
-example : ¬ (tabStopFour (aSource.push 9) (aSource.length + 1) =
+theorem columnAt_append_tab_planted_aSource_tabStopFour : ¬ (tabStopFour (aSource.push 9) (aSource.length + 1) =
     tabStopFour aSource aSource.length + 1) := by decide
 
 /-- Mutant column function that never resets at a newline byte. -/
@@ -2130,19 +2130,19 @@ def noResetColumn (source : SourceText) (offset : Nat) : Nat :=
   (source.toBytes.take offset).length + 1
 
 /-- Instance (law `ConcreteSpec.Core.SourceText.columnAt_append_newline`, case `ConcreteSpec.Core.Vacuity.aTab`). -/
-example : (aTab.push 10).columnAt (aTab.length + 1) = 1 :=
+theorem columnAt_append_newline_example_aTab : (aTab.push 10).columnAt (aTab.length + 1) = 1 :=
   SourceText.columnAt_append_newline aTab
 
 /-- Planted (law `ConcreteSpec.Core.SourceText.columnAt_append_newline`, case `ConcreteSpec.Core.Vacuity.aTab`, subject `ConcreteSpec.Core.SourceText.columnAt`, mutant `ConcreteSpec.Core.Vacuity.noResetColumn`). -/
-example : ¬ (noResetColumn (aTab.push 10) (aTab.length + 1) = 1) := by decide
+theorem columnAt_append_newline_planted_aTab_noResetColumn : ¬ (noResetColumn (aTab.push 10) (aTab.length + 1) = 1) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.SourceText.lineAt_append`, case `ConcreteSpec.Core.Vacuity.aSource`). -/
-example : (aSource.push 10).lineAt (aSource.length + 1) =
+theorem lineAt_append_example_aSource : (aSource.push 10).lineAt (aSource.length + 1) =
     aSource.lineAt aSource.length + if (10 : UInt8) = 10 then 1 else 0 :=
   SourceText.lineAt_append aSource 10
 
 /-- Planted (law `ConcreteSpec.Core.SourceText.lineAt_append`, case `ConcreteSpec.Core.Vacuity.aSource`, subject `ConcreteSpec.Core.SourceText.lineAt`, mutant `ConcreteSpec.Core.Vacuity.constantLine`). -/
-example : ¬ (constantLine (aSource.push 10) (aSource.length + 1) =
+theorem lineAt_append_planted_aSource_constantLine : ¬ (constantLine (aSource.push 10) (aSource.length + 1) =
     constantLine aSource aSource.length + if (10 : UInt8) = 10 then 1 else 0) := by decide
 
 /-- Mutant column function that skips UTF-8 continuation bytes (`128 ≤ b < 192`). -/
@@ -2151,12 +2151,12 @@ def scalarColumn (source : SourceText) (offset : Nat) : Nat :=
     (fun byte => decide (byte < 128 ∨ 192 ≤ byte))).length + 1
 
 /-- Instance (law `ConcreteSpec.Core.SourceText.columnAt_append`, case `ConcreteSpec.Core.Vacuity.utf8Prefix`). -/
-example : (utf8Prefix.push 169).columnAt (utf8Prefix.length + 1) =
+theorem columnAt_append_example_utf8Prefix : (utf8Prefix.push 169).columnAt (utf8Prefix.length + 1) =
     if (169 : UInt8) = 10 then 1 else utf8Prefix.columnAt utf8Prefix.length + 1 :=
   SourceText.columnAt_append utf8Prefix 169
 
 /-- Planted (law `ConcreteSpec.Core.SourceText.columnAt_append`, case `ConcreteSpec.Core.Vacuity.utf8Prefix`, subject `ConcreteSpec.Core.SourceText.columnAt`, mutant `ConcreteSpec.Core.Vacuity.scalarColumn`). -/
-example : ¬ (scalarColumn (utf8Prefix.push 169) (utf8Prefix.length + 1) =
+theorem columnAt_append_planted_utf8Prefix_scalarColumn : ¬ (scalarColumn (utf8Prefix.push 169) (utf8Prefix.length + 1) =
     if (169 : UInt8) = 10 then 1 else scalarColumn utf8Prefix utf8Prefix.length + 1) := by decide
 
 /-- A source `assume`, a package stack assumption, and their wire records. -/
@@ -2169,7 +2169,7 @@ def futureVersion : SpecVersion := ⟨0, 2⟩
 def mismatchedRecord : EncodedPremise := ⟨PremiseKind.stack.encode, stackAssumption.scope, futureVersion⟩
 
 /-- Instance (law `ConcreteSpec.Core.EncodedPremise.read_encode`, case `ConcreteSpec.Core.Vacuity.stackRecord`). -/
-example : stackRecord.encode.read specVersion = some stackRecord :=
+theorem read_encode_example_stackRecord : stackRecord.encode.read specVersion = some stackRecord :=
   EncodedPremise.read_encode stackRecord rfl
 
 /-- A faulty encoder that discards the known premise category, retaining the writer version and
@@ -2178,12 +2178,12 @@ def encodeDroppingKind (record : PremiseRecord) : EncodedPremise :=
   { record.encode with category := 0 }
 
 /-- Planted (law `ConcreteSpec.Core.EncodedPremise.read_encode`, case `ConcreteSpec.Core.Vacuity.stackRecord`, subject `ConcreteSpec.Core.PremiseRecord.encode`, mutant `ConcreteSpec.Core.Vacuity.encodeDroppingKind`). -/
-example : stackRecord.spec = specVersion ∧
+theorem read_encode_planted_stackRecord_encodeDroppingKind : stackRecord.spec = specVersion ∧
     ¬ ((encodeDroppingKind stackRecord).read specVersion = some stackRecord) :=
   ⟨rfl, by decide⟩
 
 /-- Instance (law `ConcreteSpec.Core.EncodedPremise.read_unknown`, case `ConcreteSpec.Core.Vacuity.unknownRecord`). -/
-example : unknownRecord.read specVersion = none :=
+theorem read_unknown_example_unknownRecord : unknownRecord.read specVersion = none :=
   EncodedPremise.read_unknown specVersion unknownRecord (by intro kind; cases kind <;> decide)
 
 /-- Mutated reader that assigns a catch-all `.assume` category to unknown numbers. -/
@@ -2191,7 +2191,7 @@ def catchAllRead (reader : SpecVersion) (record : EncodedPremise) : Option Premi
   if record.spec = reader then some ⟨.assume, record.scope, record.spec⟩ else none
 
 /-- Planted (law `ConcreteSpec.Core.EncodedPremise.read_unknown`, case `ConcreteSpec.Core.Vacuity.unknownRecord`, subject `ConcreteSpec.Core.EncodedPremise.read`, mutant `ConcreteSpec.Core.Vacuity.catchAllRead`). -/
-example : (∀ kind : PremiseKind, kind.encode ≠ unknownRecord.category) ∧
+theorem read_unknown_planted_unknownRecord_catchAllRead : (∀ kind : PremiseKind, kind.encode ≠ unknownRecord.category) ∧
     ¬ (catchAllRead specVersion unknownRecord = none) :=
   ⟨by intro kind; cases kind <;> decide, by decide⟩
 
@@ -2203,14 +2203,14 @@ def versionIgnoringRead (_reader : SpecVersion) (record : EncodedPremise) : Opti
 def mismatchedDecoded : PremiseRecord := ⟨.stack, stackAssumption.scope, futureVersion⟩
 
 /-- Instance (law `ConcreteSpec.Core.EncodedPremise.read_iff`, case `ConcreteSpec.Core.Vacuity.mismatchedRecord`). -/
-example : mismatchedRecord.read specVersion = some mismatchedDecoded ↔
+theorem read_iff_example_mismatchedRecord : mismatchedRecord.read specVersion = some mismatchedDecoded ↔
     mismatchedRecord.spec = specVersion ∧ specVersion = specVersion ∧
       ∃ kind : PremiseKind, kind.encode = mismatchedRecord.category ∧
         mismatchedDecoded = ⟨kind, mismatchedRecord.scope, mismatchedRecord.spec⟩ :=
   EncodedPremise.read_iff specVersion mismatchedRecord mismatchedDecoded
 
 /-- Planted (law `ConcreteSpec.Core.EncodedPremise.read_iff`, case `ConcreteSpec.Core.Vacuity.mismatchedRecord`, subject `ConcreteSpec.Core.EncodedPremise.read`, mutant `ConcreteSpec.Core.Vacuity.versionIgnoringRead`). -/
-example : ¬ (versionIgnoringRead specVersion mismatchedRecord = some mismatchedDecoded ↔
+theorem read_iff_planted_mismatchedRecord_versionIgnoringRead : ¬ (versionIgnoringRead specVersion mismatchedRecord = some mismatchedDecoded ↔
     mismatchedRecord.spec = specVersion ∧ specVersion = specVersion ∧
       ∃ kind : PremiseKind, kind.encode = mismatchedRecord.category ∧
         mismatchedDecoded = ⟨kind, mismatchedRecord.scope, mismatchedRecord.spec⟩) := by
@@ -2221,7 +2221,7 @@ example : ¬ (versionIgnoringRead specVersion mismatchedRecord = some mismatched
 
 /-- Instance (law `ConcreteSpec.Core.EncodedPremise.read_iff`, case `ConcreteSpec.Core.Vacuity.futureVersion`).
 Writer and reader agree on the future version, isolating the current-schema guard. -/
-example : mismatchedRecord.read futureVersion = some mismatchedDecoded ↔
+theorem read_iff_example_futureVersion : mismatchedRecord.read futureVersion = some mismatchedDecoded ↔
     mismatchedRecord.spec = futureVersion ∧ futureVersion = specVersion ∧
       ∃ kind : PremiseKind, kind.encode = mismatchedRecord.category ∧
         mismatchedDecoded = ⟨kind, mismatchedRecord.scope, mismatchedRecord.spec⟩ :=
@@ -2229,7 +2229,7 @@ example : mismatchedRecord.read futureVersion = some mismatchedDecoded ↔
 
 /-- Planted (law `ConcreteSpec.Core.EncodedPremise.read_iff`, case `ConcreteSpec.Core.Vacuity.futureVersion`, subject `ConcreteSpec.Core.EncodedPremise.read`, mutant `ConcreteSpec.Core.Vacuity.versionIgnoringRead`).
 The category is known and writer equals reader; only the current-schema guard fails. -/
-example : mismatchedRecord.spec = futureVersion ∧
+theorem read_iff_planted_futureVersion_versionIgnoringRead : mismatchedRecord.spec = futureVersion ∧
     PremiseKind.decode specVersion mismatchedRecord.category = some .stack ∧
     ¬ (versionIgnoringRead futureVersion mismatchedRecord = some mismatchedDecoded ↔
       mismatchedRecord.spec = futureVersion ∧ futureVersion = specVersion ∧
@@ -2242,7 +2242,7 @@ example : mismatchedRecord.spec = futureVersion ∧
   decide
 
 /-- Accepted: declaration and constant owners cover non-function obligations without fake functions. -/
-example : invariantKey.owner = .declaration declaration ∧ initializerKey.owner = .constant constant := by
+theorem example_Accepted_declaration_and_constant_owners_cover : invariantKey.owner = .declaration declaration ∧ initializerKey.owner = .constant constant := by
   exact ⟨rfl, rfl⟩
 
 /-- Two facts with the same conclusion but different premise dependencies. -/
@@ -2253,7 +2253,7 @@ def unconditional : ConditionalFact Name := ⟨⟨"bounded"⟩, []⟩
 def conclusionOnly (first second : ConditionalFact Name) : Prop :=
   first.conclusion = second.conclusion
 
-example : conclusionOnly conditional unconditional ∧ conditional ≠ unconditional := by
+theorem example_conclusionOnly_conditional_unconditional_conditional_unconditional : conclusionOnly conditional unconditional ∧ conditional ≠ unconditional := by
   exact ⟨rfl, by decide⟩
 
 end Vacuity

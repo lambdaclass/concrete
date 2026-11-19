@@ -1014,7 +1014,7 @@ theorem encodeInt_rep (t : IntTy) (n : Int) :
       Function.comp_def, leBytes_rep]
 
 /-- Representation application. The checked view covers a negative signed value. -/
-example : (encodeInt linuxX8664 .i16 (-2)).map sliceByte =
+theorem example_Representation_application_checked_view_covers_negative : (encodeInt linuxX8664 .i16 (-2)).map sliceByte =
     ConcreteSpec.Rep.encodeScalar (.int .i16 (-2)) := encodeInt_rep .i16 (-2)
 
 namespace Audit
@@ -1155,26 +1155,26 @@ private theorem exposedMemory_wf : exposedMemory.WellFormed target :=
 
 -- 1. decodeInt_encodeInt
 /-- Instance (law `ConcreteSpec.Core.Mem.decodeInt_encodeInt`, case `i8`). -/
-example : decodeInt target .i8 (encodeInt target .i8 (-5)) = some (-5) :=
+theorem decodeInt_encodeInt_example_i8 : decodeInt target .i8 (encodeInt target .i8 (-5)) = some (-5) :=
   decodeInt_encodeInt target .i8 (-5) (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Mem.decodeInt_encodeInt`, case `i8`, subject `ConcreteSpec.Core.Mem.decodeInt`, mutant `ConcreteSpec.Core.Mem.Audit.badDecodeInt`). -/
-example : IntTy.i8.InRange (-5) ∧
+theorem decodeInt_encodeInt_planted_i8_badDecodeInt : IntTy.i8.InRange (-5) ∧
     ¬ (badDecodeInt target .i8 (encodeInt target .i8 (-5)) = some (-5)) := by decide
 
 /-- Planted (law `ConcreteSpec.Core.Mem.decodeInt_encodeInt`, case `i8`, subject `ConcreteSpec.Core.Mem.encodeInt`, mutant `ConcreteSpec.Core.Mem.Audit.badEncodeInt`). -/
-example : IntTy.i8.InRange (-5) ∧
+theorem decodeInt_encodeInt_planted_i8_badEncodeInt : IntTy.i8.InRange (-5) ∧
     ¬ (decodeInt target .i8 (badEncodeInt target .i8 (-5)) = some (-5)) := by decide
 
 -- 2. decodeInt_inRange
 /-- Instance (law `ConcreteSpec.Core.Mem.decodeInt_inRange`, case `i8`). -/
-example : match decodeInt target .i8 [.init 251 none] with
+theorem decodeInt_inRange_example_i8 : match decodeInt target .i8 [.init 251 none] with
     | some n => IntTy.i8.InRange n
     | none => True :=
   decodeInt_inRange target .i8 [.init 251 none]
 
 /-- Planted (law `ConcreteSpec.Core.Mem.decodeInt_inRange`, case `i8`, subject `ConcreteSpec.Core.Mem.decodeInt`, mutant `ConcreteSpec.Core.Mem.Audit.badDecodeIntRange`). -/
-example : ¬ (match badDecodeIntRange target .i8 [.init 251 none] with
+theorem decodeInt_inRange_planted_i8_badDecodeIntRange : ¬ (match badDecodeIntRange target .i8 [.init 251 none] with
     | some n => IntTy.i8.InRange n
     | none => True) := by
   change ¬ IntTy.i8.InRange 251
@@ -1182,21 +1182,21 @@ example : ¬ (match badDecodeIntRange target .i8 [.init 251 none] with
 
 -- 7. empty_wellFormed
 /-- Instance (law `ConcreteSpec.Core.Mem.empty_wellFormed`, case `default`). -/
-example : Memory.empty.WellFormed target :=
+theorem empty_wellFormed_example_default : Memory.empty.WellFormed target :=
   empty_wellFormed target
 
 /-- Planted (law `ConcreteSpec.Core.Mem.empty_wellFormed`, case `default`, subject `ConcreteSpec.Core.Mem.Memory.empty`, mutant `ConcreteSpec.Core.Mem.Audit.badEmpty`). -/
-example : ¬ badEmpty.WellFormed target := not_badEmpty_wf
+theorem empty_wellFormed_planted_default_badEmpty : ¬ badEmpty.WellFormed target := not_badEmpty_wf
 
 -- 8. alloc_fresh
 /-- Instance (law `ConcreteSpec.Core.Mem.alloc_fresh`, case `first`). -/
-example : match Memory.empty.alloc target ⟨0⟩ 40 8 1 with
+theorem alloc_fresh_example_first : match Memory.empty.alloc target ⟨0⟩ 40 8 1 with
     | .ok (b, _) => b.id = Memory.empty.next ∧ Memory.empty.block b = none
     | .error _ => True :=
   alloc_fresh target Memory.empty (empty_wellFormed target) ⟨0⟩ 40 8 1
 
 /-- Planted (law `ConcreteSpec.Core.Mem.alloc_fresh`, case `first`, subject `ConcreteSpec.Core.Mem.Memory.alloc`, mutant `ConcreteSpec.Core.Mem.Audit.badAllocId`). -/
-example : Memory.empty.WellFormed target ∧
+theorem alloc_fresh_planted_first_badAllocId : Memory.empty.WellFormed target ∧
     ¬ (match badAllocId target Memory.empty ⟨0⟩ 40 8 1 with
       | .ok (b, _) => b.id = Memory.empty.next ∧ Memory.empty.block b = none
       | .error _ => True) :=
@@ -1204,24 +1204,24 @@ example : Memory.empty.WellFormed target ∧
 
 -- 9. alloc_block
 /-- Instance (law `ConcreteSpec.Core.Mem.alloc_block`, case `first`). -/
-example : match Memory.empty.alloc target ⟨0⟩ 40 8 1 with
+theorem alloc_block_example_first : match Memory.empty.alloc target ⟨0⟩ 40 8 1 with
     | .ok (b, m') => m'.block b = some (candidate ⟨0⟩ 40 8 1)
     | .error _ => True :=
   alloc_block target Memory.empty ⟨0⟩ 40 8 1
 
 /-- Planted (law `ConcreteSpec.Core.Mem.alloc_block`, case `first`, subject `ConcreteSpec.Core.Mem.Memory.alloc`, mutant `ConcreteSpec.Core.Mem.Audit.badAllocEmpty`). -/
-example : ¬ (match badAllocEmpty target Memory.empty ⟨0⟩ 40 8 1 with
+theorem alloc_block_planted_first_badAllocEmpty : ¬ (match badAllocEmpty target Memory.empty ⟨0⟩ 40 8 1 with
     | .ok (b, m') => m'.block b = some (candidate ⟨0⟩ 40 8 1)
     | .error _ => True) := by
   intro h; cases h
 
 -- 10. alloc_failure (all 7 failure branches)
 /-- Instance (law `ConcreteSpec.Core.Mem.alloc_failure`, case `pow2`). -/
-example : Memory.empty.alloc target ⟨0⟩ 42 2 3 = .error .unavailable :=
+theorem alloc_failure_example_pow2 : Memory.empty.alloc target ⟨0⟩ 42 2 3 = .error .unavailable :=
   alloc_failure target Memory.empty ⟨0⟩ 42 2 3 (.inl (by decide))
 
 /-- Planted (law `ConcreteSpec.Core.Mem.alloc_failure`, case `pow2`, subject `ConcreteSpec.Core.Mem.Memory.alloc`, mutant `ConcreteSpec.Core.Mem.Audit.mutatedAllocPow2`). -/
-example : (¬ IsPow2 3 ∨ 42 % 3 ≠ 0 ∨ 2 ^ target.addrBits - 1 < 42 + 2 ∨
+theorem alloc_failure_planted_pow2_mutatedAllocPow2 : (¬ IsPow2 3 ∨ 42 % 3 ≠ 0 ∨ 2 ^ target.addrBits - 1 < 42 + 2 ∨
       target.maxObject < 2 ∨ (0 < 2 ∧ 42 = target.null) ∨
       (∃ e ∈ Memory.empty.blocks, e.2.live = true ∧ e.2.Overlaps (candidate ⟨0⟩ 42 2 3)) ∨
       (⟨0⟩ : AddrSpace) ∉ target.spaces) ∧
@@ -1229,11 +1229,11 @@ example : (¬ IsPow2 3 ∨ 42 % 3 ≠ 0 ∨ 2 ^ target.addrBits - 1 < 42 + 2 ∨
   ⟨.inl (by decide), by intro h; cases h⟩
 
 /-- Instance (law `ConcreteSpec.Core.Mem.alloc_failure`, case `align`). -/
-example : Memory.empty.alloc target ⟨0⟩ 41 2 2 = .error .unavailable :=
+theorem alloc_failure_example_align : Memory.empty.alloc target ⟨0⟩ 41 2 2 = .error .unavailable :=
   alloc_failure target Memory.empty ⟨0⟩ 41 2 2 (.inr (.inl (by decide)))
 
 /-- Planted (law `ConcreteSpec.Core.Mem.alloc_failure`, case `align`, subject `ConcreteSpec.Core.Mem.Memory.alloc`, mutant `ConcreteSpec.Core.Mem.Audit.mutatedAllocAlign`). -/
-example : (¬ IsPow2 2 ∨ 41 % 2 ≠ 0 ∨ 2 ^ target.addrBits - 1 < 41 + 2 ∨
+theorem alloc_failure_planted_align_mutatedAllocAlign : (¬ IsPow2 2 ∨ 41 % 2 ≠ 0 ∨ 2 ^ target.addrBits - 1 < 41 + 2 ∨
       target.maxObject < 2 ∨ (0 < 2 ∧ 41 = target.null) ∨
       (∃ e ∈ Memory.empty.blocks, e.2.live = true ∧ e.2.Overlaps (candidate ⟨0⟩ 41 2 2)) ∨
       (⟨0⟩ : AddrSpace) ∉ target.spaces) ∧
@@ -1241,11 +1241,11 @@ example : (¬ IsPow2 2 ∨ 41 % 2 ≠ 0 ∨ 2 ^ target.addrBits - 1 < 41 + 2 ∨
   ⟨.inr (.inl (by decide)), by intro h; cases h⟩
 
 /-- Instance (law `ConcreteSpec.Core.Mem.alloc_failure`, case `bound`). -/
-example : Memory.empty.alloc target ⟨0⟩ 254 2 1 = .error .unavailable :=
+theorem alloc_failure_example_bound : Memory.empty.alloc target ⟨0⟩ 254 2 1 = .error .unavailable :=
   alloc_failure target Memory.empty ⟨0⟩ 254 2 1 (.inr (.inr (.inl (by decide))))
 
 /-- Planted (law `ConcreteSpec.Core.Mem.alloc_failure`, case `bound`, subject `ConcreteSpec.Core.Mem.Memory.alloc`, mutant `ConcreteSpec.Core.Mem.Audit.mutatedAllocBound`). -/
-example : (¬ IsPow2 1 ∨ 254 % 1 ≠ 0 ∨ 2 ^ target.addrBits - 1 < 254 + 2 ∨
+theorem alloc_failure_planted_bound_mutatedAllocBound : (¬ IsPow2 1 ∨ 254 % 1 ≠ 0 ∨ 2 ^ target.addrBits - 1 < 254 + 2 ∨
       target.maxObject < 2 ∨ (0 < 2 ∧ 254 = target.null) ∨
       (∃ e ∈ Memory.empty.blocks, e.2.live = true ∧ e.2.Overlaps (candidate ⟨0⟩ 254 2 1)) ∨
       (⟨0⟩ : AddrSpace) ∉ target.spaces) ∧
@@ -1253,11 +1253,11 @@ example : (¬ IsPow2 1 ∨ 254 % 1 ≠ 0 ∨ 2 ^ target.addrBits - 1 < 254 + 2 �
   ⟨.inr (.inr (.inl (by decide))), by intro h; cases h⟩
 
 /-- Instance (law `ConcreteSpec.Core.Mem.alloc_failure`, case `maxObject`). -/
-example : Memory.empty.alloc target ⟨0⟩ 1 251 1 = .error .unavailable :=
+theorem alloc_failure_example_maxObject : Memory.empty.alloc target ⟨0⟩ 1 251 1 = .error .unavailable :=
   alloc_failure target Memory.empty ⟨0⟩ 1 251 1 (.inr (.inr (.inr (.inl (by decide)))))
 
 /-- Planted (law `ConcreteSpec.Core.Mem.alloc_failure`, case `maxObject`, subject `ConcreteSpec.Core.Mem.Memory.alloc`, mutant `ConcreteSpec.Core.Mem.Audit.mutatedAllocMaxObj`). -/
-example : (¬ IsPow2 1 ∨ 1 % 1 ≠ 0 ∨ 2 ^ target.addrBits - 1 < 1 + 251 ∨
+theorem alloc_failure_planted_maxObject_mutatedAllocMaxObj : (¬ IsPow2 1 ∨ 1 % 1 ≠ 0 ∨ 2 ^ target.addrBits - 1 < 1 + 251 ∨
       target.maxObject < 251 ∨ (0 < 251 ∧ 1 = target.null) ∨
       (∃ e ∈ Memory.empty.blocks, e.2.live = true ∧ e.2.Overlaps (candidate ⟨0⟩ 1 251 1)) ∨
       (⟨0⟩ : AddrSpace) ∉ target.spaces) ∧
@@ -1265,11 +1265,11 @@ example : (¬ IsPow2 1 ∨ 1 % 1 ≠ 0 ∨ 2 ^ target.addrBits - 1 < 1 + 251 ∨
   ⟨.inr (.inr (.inr (.inl (by decide)))), by intro h; cases h⟩
 
 /-- Instance (law `ConcreteSpec.Core.Mem.alloc_failure`, case `null`). -/
-example : Memory.empty.alloc target ⟨0⟩ 0 2 1 = .error .unavailable :=
+theorem alloc_failure_example_null : Memory.empty.alloc target ⟨0⟩ 0 2 1 = .error .unavailable :=
   alloc_failure target Memory.empty ⟨0⟩ 0 2 1 (.inr (.inr (.inr (.inr (.inl (by decide))))))
 
 /-- Planted (law `ConcreteSpec.Core.Mem.alloc_failure`, case `null`, subject `ConcreteSpec.Core.Mem.Memory.alloc`, mutant `ConcreteSpec.Core.Mem.Audit.mutatedAllocNull`). -/
-example : (¬ IsPow2 1 ∨ 0 % 1 ≠ 0 ∨ 2 ^ target.addrBits - 1 < 0 + 2 ∨
+theorem alloc_failure_planted_null_mutatedAllocNull : (¬ IsPow2 1 ∨ 0 % 1 ≠ 0 ∨ 2 ^ target.addrBits - 1 < 0 + 2 ∨
       target.maxObject < 2 ∨ (0 < 2 ∧ 0 = target.null) ∨
       (∃ e ∈ Memory.empty.blocks, e.2.live = true ∧ e.2.Overlaps (candidate ⟨0⟩ 0 2 1)) ∨
       (⟨0⟩ : AddrSpace) ∉ target.spaces) ∧
@@ -1277,11 +1277,11 @@ example : (¬ IsPow2 1 ∨ 0 % 1 ≠ 0 ∨ 2 ^ target.addrBits - 1 < 0 + 2 ∨
   ⟨.inr (.inr (.inr (.inr (.inl (by decide))))), by intro h; cases h⟩
 
 /-- Instance (law `ConcreteSpec.Core.Mem.alloc_failure`, case `overlap`). -/
-example : memory.alloc target ⟨0⟩ 44 2 1 = .error .unavailable :=
+theorem alloc_failure_example_overlap : memory.alloc target ⟨0⟩ 44 2 1 = .error .unavailable :=
   alloc_failure target memory ⟨0⟩ 44 2 1 (.inr (.inr (.inr (.inr (.inr (.inl (by decide)))))))
 
 /-- Planted (law `ConcreteSpec.Core.Mem.alloc_failure`, case `overlap`, subject `ConcreteSpec.Core.Mem.Memory.alloc`, mutant `ConcreteSpec.Core.Mem.Audit.mutatedAllocOverlap`). -/
-example : (¬ IsPow2 1 ∨ 44 % 1 ≠ 0 ∨ 2 ^ target.addrBits - 1 < 44 + 2 ∨
+theorem alloc_failure_planted_overlap_mutatedAllocOverlap : (¬ IsPow2 1 ∨ 44 % 1 ≠ 0 ∨ 2 ^ target.addrBits - 1 < 44 + 2 ∨
       target.maxObject < 2 ∨ (0 < 2 ∧ 44 = target.null) ∨
       (∃ e ∈ memory.blocks, e.2.live = true ∧ e.2.Overlaps (candidate ⟨0⟩ 44 2 1)) ∨
       (⟨0⟩ : AddrSpace) ∉ target.spaces) ∧
@@ -1289,11 +1289,11 @@ example : (¬ IsPow2 1 ∨ 44 % 1 ≠ 0 ∨ 2 ^ target.addrBits - 1 < 44 + 2 ∨
   ⟨.inr (.inr (.inr (.inr (.inr (.inl (by decide)))))), by intro h; cases h⟩
 
 /-- Instance (law `ConcreteSpec.Core.Mem.alloc_failure`, case `space`). -/
-example : Memory.empty.alloc target ⟨1⟩ 40 2 1 = .error .unavailable :=
+theorem alloc_failure_example_space : Memory.empty.alloc target ⟨1⟩ 40 2 1 = .error .unavailable :=
   alloc_failure target Memory.empty ⟨1⟩ 40 2 1 (.inr (.inr (.inr (.inr (.inr (.inr (by decide)))))))
 
 /-- Planted (law `ConcreteSpec.Core.Mem.alloc_failure`, case `space`, subject `ConcreteSpec.Core.Mem.Memory.alloc`, mutant `ConcreteSpec.Core.Mem.Audit.mutatedAllocSpace`). -/
-example : (¬ IsPow2 1 ∨ 40 % 1 ≠ 0 ∨ 2 ^ target.addrBits - 1 < 40 + 2 ∨
+theorem alloc_failure_planted_space_mutatedAllocSpace : (¬ IsPow2 1 ∨ 40 % 1 ≠ 0 ∨ 2 ^ target.addrBits - 1 < 40 + 2 ∨
       target.maxObject < 2 ∨ (0 < 2 ∧ 40 = target.null) ∨
       (∃ e ∈ Memory.empty.blocks, e.2.live = true ∧ e.2.Overlaps (candidate ⟨1⟩ 40 2 1)) ∨
       (⟨1⟩ : AddrSpace) ∉ target.spaces) ∧
@@ -1302,13 +1302,13 @@ example : (¬ IsPow2 1 ∨ 40 % 1 ≠ 0 ∨ 2 ^ target.addrBits - 1 < 40 + 2 ∨
 
 -- 11. access_zero
 /-- Instance (law `ConcreteSpec.Core.Mem.access_zero`, case `alignedNonNull`). Accepted: zero-size load/store need no provenance, and the empty store preserves the complete memory. -/
-example : (Memory.empty.load target rawPtr 0 2 = some [] ∧
+theorem access_zero_example_alignedNonNull : (Memory.empty.load target rawPtr 0 2 = some [] ∧
       Memory.empty.store target rawPtr [] 2 = some Memory.empty) ↔
     rawPtr.addr % 2 = 0 ∧ rawPtr.addr ≠ target.null ∧ rawPtr.Valid target :=
   access_zero target Memory.empty rawPtr 2
 
 /-- Planted (law `ConcreteSpec.Core.Mem.access_zero`, case `alignedNonNull`, subject `ConcreteSpec.Core.Mem.Memory.load`, mutant `ConcreteSpec.Core.Mem.Audit.badLoadNone`). -/
-example : ¬ ((badLoadNone target Memory.empty rawPtr 0 2 = some [] ∧
+theorem access_zero_planted_alignedNonNull_badLoadNone : ¬ ((badLoadNone target Memory.empty rawPtr 0 2 = some [] ∧
       Memory.empty.store target rawPtr [] 2 = some Memory.empty) ↔
     rawPtr.addr % 2 = 0 ∧ rawPtr.addr ≠ target.null ∧ rawPtr.Valid target) := by
   intro h
@@ -1316,7 +1316,7 @@ example : ¬ ((badLoadNone target Memory.empty rawPtr 0 2 = some [] ∧
   cases hh
 
 /-- Planted (law `ConcreteSpec.Core.Mem.access_zero`, case `alignedNonNull`, subject `ConcreteSpec.Core.Mem.Memory.store`, mutant `ConcreteSpec.Core.Mem.Audit.badStoreNone`). -/
-example : ¬ ((Memory.empty.load target rawPtr 0 2 = some [] ∧
+theorem access_zero_planted_alignedNonNull_badStoreNone : ¬ ((Memory.empty.load target rawPtr 0 2 = some [] ∧
       badStoreNone target Memory.empty rawPtr [] 2 = some Memory.empty) ↔
     rawPtr.addr % 2 = 0 ∧ rawPtr.addr ≠ target.null ∧ rawPtr.Valid target) := by
   intro h
@@ -1325,40 +1325,40 @@ example : ¬ ((Memory.empty.load target rawPtr 0 2 = some [] ∧
 
 -- 12. access_no_provenance
 /-- Instance (law `ConcreteSpec.Core.Mem.access_no_provenance`, case `nonzero`). -/
-example : memory.access target rawPtr 1 1 = none :=
+theorem access_no_provenance_example_nonzero : memory.access target rawPtr 1 1 = none :=
   access_no_provenance target memory rawPtr 1 1 (by decide) rfl
 
 /-- Planted (law `ConcreteSpec.Core.Mem.access_no_provenance`, case `nonzero`, subject `ConcreteSpec.Core.Mem.Memory.access`, mutant `ConcreteSpec.Core.Mem.Audit.badAccessSome`). -/
-example : (1 : Nat) ≠ 0 ∧ rawPtr.prov = none ∧
+theorem access_no_provenance_planted_nonzero_badAccessSome : (1 : Nat) ≠ 0 ∧ rawPtr.prov = none ∧
     ¬ (badAccessSome target memory rawPtr 1 1 = none) := by decide
 
 -- 13. access_after_free
 /-- Instance (law `ConcreteSpec.Core.Mem.access_after_free`, case `freed`). -/
-example : freedMemory.access target ptr 1 1 = none :=
+theorem access_after_free_example_freed : freedMemory.access target ptr 1 1 = none :=
   access_after_free target memory freedMemory ⟨0⟩ ptr 1 1 rfl rfl (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Mem.access_after_free`, case `freed`, subject `ConcreteSpec.Core.Mem.Memory.access`, mutant `ConcreteSpec.Core.Mem.Audit.badAccessSome`). -/
-example : memory.free ⟨0⟩ = some freedMemory ∧ ptr.prov = some ⟨0⟩ ∧ (1 : Nat) ≠ 0 ∧
+theorem access_after_free_planted_freed_badAccessSome : memory.free ⟨0⟩ = some freedMemory ∧ ptr.prov = some ⟨0⟩ ∧ (1 : Nat) ≠ 0 ∧
     ¬ (badAccessSome target freedMemory ptr 1 1 = none) :=
   ⟨rfl, rfl, by decide, by decide⟩
 
 -- 14. eqAddr_provenance
 /-- Representation check. Canonical computation. -/
-example : Ptr.eqAddr ⟨⟨0⟩, 40, some ⟨0⟩⟩ ⟨⟨0⟩, 40, none⟩ = true :=
+theorem example_Representation_check_Canonical_computation : Ptr.eqAddr ⟨⟨0⟩, 40, some ⟨0⟩⟩ ⟨⟨0⟩, 40, none⟩ = true :=
   eqAddr_provenance ⟨0⟩ 40 (some ⟨0⟩) none
 
 /-- Representation check. Canonical computation. -/
-example : ¬ (badEqAddr ⟨⟨0⟩, 40, some ⟨0⟩⟩ ⟨⟨0⟩, 40, none⟩ = true) := by decide
+theorem example_Representation_check_Canonical_computation_2 : ¬ (badEqAddr ⟨⟨0⟩, 40, some ⟨0⟩⟩ ⟨⟨0⟩, 40, none⟩ = true) := by decide
 
 -- 15. alloc_ne_existing
 /-- Instance (law `ConcreteSpec.Core.Mem.alloc_ne_existing`, case `second`). -/
-example : match memory.alloc target ⟨0⟩ 60 8 1 with
+theorem alloc_ne_existing_example_second : match memory.alloc target ⟨0⟩ 60 8 1 with
     | .ok (b, _) => b ≠ ⟨0⟩
     | .error _ => True :=
   alloc_ne_existing target memory memory_wf ⟨0⟩ 60 8 1 ⟨0⟩ initBlock rfl
 
 /-- Planted (law `ConcreteSpec.Core.Mem.alloc_ne_existing`, case `second`, subject `ConcreteSpec.Core.Mem.Memory.alloc`, mutant `ConcreteSpec.Core.Mem.Audit.badAllocReuseZero`). -/
-example : memory.WellFormed target ∧ memory.block ⟨0⟩ = some initBlock ∧
+theorem alloc_ne_existing_planted_second_badAllocReuseZero : memory.WellFormed target ∧ memory.block ⟨0⟩ = some initBlock ∧
     ¬ (match badAllocReuseZero target memory ⟨0⟩ 60 8 1 with
       | .ok (b, _) => b ≠ ⟨0⟩
       | .error _ => True) :=
@@ -1366,13 +1366,13 @@ example : memory.WellFormed target ∧ memory.block ⟨0⟩ = some initBlock ∧
 
 -- 16. alloc_wellFormed
 /-- Instance (law `ConcreteSpec.Core.Mem.alloc_wellFormed`, case `first`). -/
-example : match Memory.empty.alloc target ⟨0⟩ 40 8 1 with
+theorem alloc_wellFormed_example_first : match Memory.empty.alloc target ⟨0⟩ 40 8 1 with
     | .ok (_, m') => m'.WellFormed target
     | .error _ => True :=
   alloc_wellFormed target Memory.empty (empty_wellFormed target) ⟨0⟩ 40 8 1
 
 /-- Planted (law `ConcreteSpec.Core.Mem.alloc_wellFormed`, case `first`, subject `ConcreteSpec.Core.Mem.Memory.alloc`, mutant `ConcreteSpec.Core.Mem.Audit.badAllocId`). -/
-example : Memory.empty.WellFormed target ∧
+theorem alloc_wellFormed_planted_first_badAllocId : Memory.empty.WellFormed target ∧
     ¬ (match badAllocId target Memory.empty ⟨0⟩ 40 8 1 with
       | .ok (_, m') => m'.WellFormed target
       | .error _ => True) := by
@@ -1383,12 +1383,12 @@ example : Memory.empty.WellFormed target ∧
 
 -- 17. fromExposed_contains
 /-- Instance (law `ConcreteSpec.Core.Mem.fromExposed_contains`, case `interior`). -/
-example : (exposedMemory.fromExposed ⟨0⟩ 42).prov = some ⟨0⟩ :=
+theorem fromExposed_contains_example_interior : (exposedMemory.fromExposed ⟨0⟩ 42).prov = some ⟨0⟩ :=
   fromExposed_contains target exposedMemory exposedMemory_wf ⟨0⟩ 42 ⟨0⟩ exposedBlock
     rfl rfl (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Mem.fromExposed_contains`, case `interior`, subject `ConcreteSpec.Core.Mem.Memory.fromExposed`, mutant `ConcreteSpec.Core.Mem.Audit.badFromExposedNone`). -/
-example : exposedMemory.WellFormed target ∧ exposedMemory.block ⟨0⟩ = some exposedBlock ∧
+theorem fromExposed_contains_planted_interior_badFromExposedNone : exposedMemory.WellFormed target ∧ exposedMemory.block ⟨0⟩ = some exposedBlock ∧
     exposedBlock.Candidate ⟨0⟩ = true ∧
     (exposedBlock.base ≤ 42 ∧ 42 < exposedBlock.base + exposedBlock.size) ∧
     ¬ ((badFromExposedNone exposedMemory ⟨0⟩ 42).prov = some ⟨0⟩) :=
@@ -1396,12 +1396,12 @@ example : exposedMemory.WellFormed target ∧ exposedMemory.block ⟨0⟩ = some
 
 -- 18. fromExposed_onePast
 /-- Instance (law `ConcreteSpec.Core.Mem.fromExposed_onePast`, case `boundary`). -/
-example : (exposedMemory.fromExposed ⟨0⟩ 48).prov = some ⟨0⟩ :=
+theorem fromExposed_onePast_example_boundary : (exposedMemory.fromExposed ⟨0⟩ 48).prov = some ⟨0⟩ :=
   fromExposed_onePast target exposedMemory exposedMemory_wf ⟨0⟩ 48 ⟨0⟩ exposedBlock
     rfl rfl rfl (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Mem.fromExposed_onePast`, case `boundary`, subject `ConcreteSpec.Core.Mem.Memory.fromExposed`, mutant `ConcreteSpec.Core.Mem.Audit.badFromExposedNone`). -/
-example : exposedMemory.WellFormed target ∧ exposedMemory.block ⟨0⟩ = some exposedBlock ∧
+theorem fromExposed_onePast_planted_boundary_badFromExposedNone : exposedMemory.WellFormed target ∧ exposedMemory.block ⟨0⟩ = some exposedBlock ∧
     exposedBlock.Candidate ⟨0⟩ = true ∧ 48 = exposedBlock.base + exposedBlock.size ∧
     (∀ e ∈ exposedMemory.blocks, e.2.Candidate ⟨0⟩ = true →
       ¬ (e.2.base ≤ 48 ∧ 48 < e.2.base + e.2.size)) ∧
@@ -1410,11 +1410,11 @@ example : exposedMemory.WellFormed target ∧ exposedMemory.block ⟨0⟩ = some
 
 -- 19. fromExposed_none
 /-- Instance (law `ConcreteSpec.Core.Mem.fromExposed_none`, case `outside`). -/
-example : (exposedMemory.fromExposed ⟨0⟩ 100).prov = none :=
+theorem fromExposed_none_example_outside : (exposedMemory.fromExposed ⟨0⟩ 100).prov = none :=
   fromExposed_none target exposedMemory exposedMemory_wf ⟨0⟩ 100 (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Mem.fromExposed_none`, case `outside`, subject `ConcreteSpec.Core.Mem.Memory.fromExposed`, mutant `ConcreteSpec.Core.Mem.Audit.badFromExposedSome`). -/
-example : exposedMemory.WellFormed target ∧
+theorem fromExposed_none_planted_outside_badFromExposedSome : exposedMemory.WellFormed target ∧
     (∀ e ∈ exposedMemory.blocks, e.2.Candidate ⟨0⟩ = true →
       ¬ (e.2.base ≤ 100 ∧ 100 < e.2.base + e.2.size) ∧
         100 ≠ e.2.base + e.2.size) ∧
@@ -1423,20 +1423,20 @@ example : exposedMemory.WellFormed target ∧
 
 -- 20. access_valid
 /-- Instance (law `ConcreteSpec.Core.Mem.access_valid`, case `nonempty`). An out-of-range closed pointer cannot yield a successful nonempty access. -/
-example : match memory.access target badPtr 2 1 with
+theorem access_valid_example_nonempty : match memory.access target badPtr 2 1 with
     | some _ => badPtr.Valid target
     | none => True :=
   access_valid target memory memory_wf 2 1 (by decide) badPtr
 
 /-- Accepted (rule C4). Successful nonempty access remains covered at a valid closed pointer. -/
-example : (memory.access target ptr 2 1 = some (some (⟨0⟩, 0))) ∧
+theorem example_Accepted_rule_C4_Successful_nonempty_access : (memory.access target ptr 2 1 = some (some (⟨0⟩, 0))) ∧
     (match memory.access target ptr 2 1 with
     | some _ => ptr.Valid target
     | none => True) :=
   ⟨rfl, access_valid target memory memory_wf 2 1 (by decide) ptr⟩
 
 /-- Planted (law `ConcreteSpec.Core.Mem.access_valid`, case `nonempty`, subject `ConcreteSpec.Core.Mem.Memory.access`, mutant `ConcreteSpec.Core.Mem.Audit.badAccessPair`). -/
-example : memory.WellFormed target ∧ (2 : Nat) ≠ 0 ∧
+theorem access_valid_planted_nonempty_badAccessPair : memory.WellFormed target ∧ (2 : Nat) ≠ 0 ∧
     ¬ (match badAccessPair target memory badPtr 2 1 with
       | some _ => badPtr.Valid target
       | none => True) :=
@@ -1446,12 +1446,12 @@ example : memory.WellFormed target ∧ (2 : Nat) ≠ 0 ∧
 
 -- 21. access_success
 /-- Instance (law `ConcreteSpec.Core.Mem.access_success`, case `interior`). Independent provenance, liveness, alignment and bounds obligations hold for an interior two-byte access. -/
-example : memory.access target ptr 2 1 = some (some (⟨0⟩, ptr.addr - initBlock.base)) :=
+theorem access_success_example_interior : memory.access target ptr 2 1 = some (some (⟨0⟩, ptr.addr - initBlock.base)) :=
   access_success target memory ptr 2 1 ⟨0⟩ initBlock (by decide) rfl rfl rfl rfl
     (by decide) (by decide) (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Mem.access_success`, case `interior`, subject `ConcreteSpec.Core.Mem.Memory.access`, mutant `ConcreteSpec.Core.Mem.Audit.badAccessNone`). -/
-example : (2 : Nat) ≠ 0 ∧ ptr.prov = some ⟨0⟩ ∧ memory.block ⟨0⟩ = some initBlock ∧
+theorem access_success_planted_interior_badAccessNone : (2 : Nat) ≠ 0 ∧ ptr.prov = some ⟨0⟩ ∧ memory.block ⟨0⟩ = some initBlock ∧
     initBlock.live = true ∧ initBlock.space = ptr.space ∧ initBlock.base ≤ ptr.addr ∧
     ptr.addr + 2 ≤ initBlock.base + initBlock.size ∧ ptr.addr % 1 = 0 ∧
     ¬ (badAccessNone target memory ptr 2 1 = some (some (⟨0⟩, ptr.addr - initBlock.base))) := by
@@ -1459,12 +1459,12 @@ example : (2 : Nat) ≠ 0 ∧ ptr.prov = some ⟨0⟩ ∧ memory.block ⟨0⟩ =
 
 -- 22. store_load
 /-- Instance (law `ConcreteSpec.Core.Mem.store_load`, case `oneByte`). -/
-example : storedMemory.load target ptr ([MByte.init 7 none]).length 1 =
+theorem store_load_example_oneByte : storedMemory.load target ptr ([MByte.init 7 none]).length 1 =
     some [MByte.init 7 none] :=
   store_load target memory storedMemory memory_wf ptr [.init 7 none] 1 rfl
 
 /-- Planted (law `ConcreteSpec.Core.Mem.store_load`, case `oneByte`, subject `ConcreteSpec.Core.Mem.Memory.load`, mutant `ConcreteSpec.Core.Mem.Audit.badLoadNone`). -/
-example : memory.WellFormed target ∧
+theorem store_load_planted_oneByte_badLoadNone : memory.WellFormed target ∧
     memory.store target ptr [.init 7 none] 1 = some storedMemory ∧
     ¬ (badLoadNone target storedMemory ptr ([MByte.init 7 none]).length 1 =
       some [MByte.init 7 none]) :=
@@ -1472,12 +1472,12 @@ example : memory.WellFormed target ∧
 
 -- 23. store_other_block
 /-- Instance (law `ConcreteSpec.Core.Mem.store_other_block`, case `otherBlock`). -/
-example : (frameMemory.store target ptr [.init 7 none] 1).bind (fun m' => m'.block ⟨1⟩) =
+theorem store_other_block_example_otherBlock : (frameMemory.store target ptr [.init 7 none] 1).bind (fun m' => m'.block ⟨1⟩) =
     frameMemory.block ⟨1⟩ :=
   store_other_block target frameMemory ptr [.init 7 none] 1 ⟨0⟩ 0 ⟨1⟩ rfl (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Mem.store_other_block`, case `otherBlock`, subject `ConcreteSpec.Core.Mem.Memory.store`, mutant `ConcreteSpec.Core.Mem.Audit.badStoreDup`). -/
-example : frameMemory.access target ptr ([MByte.init 7 none]).length 1 = some (some (⟨0⟩, 0)) ∧
+theorem store_other_block_planted_otherBlock_badStoreDup : frameMemory.access target ptr ([MByte.init 7 none]).length 1 = some (some (⟨0⟩, 0)) ∧
     (⟨1⟩ : BlockId) ≠ ⟨0⟩ ∧
     ¬ ((badStoreDup target frameMemory ptr [.init 7 none] 1).bind (fun m' => m'.block ⟨1⟩) =
       frameMemory.block ⟨1⟩) :=
@@ -1485,13 +1485,13 @@ example : frameMemory.access target ptr ([MByte.init 7 none]).length 1 = some (s
 
 -- 24. store_same_block_frame
 /-- Instance (law `ConcreteSpec.Core.Mem.store_same_block_frame`, case `afterSlice`). -/
-example : ((memory.store target ptr [.init 7 none] 1).bind fun m' => m'.block ⟨0⟩).map
+theorem store_same_block_frame_example_afterSlice : ((memory.store target ptr [.init 7 none] 1).bind fun m' => m'.block ⟨0⟩).map
       (fun y => y.bytes[2]?) = some (initBlock.bytes[2]?) :=
   store_same_block_frame target memory memory_wf ptr [.init 7 none] 1 ⟨0⟩ 0 2 initBlock
     rfl rfl (.inr (by decide))
 
 /-- Planted (law `ConcreteSpec.Core.Mem.store_same_block_frame`, case `afterSlice`, subject `ConcreteSpec.Core.Mem.Memory.store`, mutant `ConcreteSpec.Core.Mem.Audit.badStoreNone`). -/
-example : memory.WellFormed target ∧
+theorem store_same_block_frame_planted_afterSlice_badStoreNone : memory.WellFormed target ∧
     memory.access target ptr ([MByte.init 7 none]).length 1 = some (some (⟨0⟩, 0)) ∧
     memory.block ⟨0⟩ = some initBlock ∧ (2 < 0 ∨ 0 + ([MByte.init 7 none]).length ≤ 2) ∧
     ¬ (((badStoreNone target memory ptr [.init 7 none] 1).bind fun m' => m'.block ⟨0⟩).map
@@ -1500,14 +1500,14 @@ example : memory.WellFormed target ∧
 
 -- 25. alloc_initialized
 /-- Instance (law `ConcreteSpec.Core.Mem.alloc_initialized`, case `first`). -/
-example : match Memory.empty.alloc target ⟨0⟩ 40 8 1 with
+theorem alloc_initialized_example_first : match Memory.empty.alloc target ⟨0⟩ 40 8 1 with
     | .ok (b, m') => ∃ x, m'.block b = some x ∧ x.live = true ∧ x.exposed = false ∧
         x.bytes = List.replicate 8 .uninit
     | .error _ => True :=
   alloc_initialized target Memory.empty ⟨0⟩ 40 8 1
 
 /-- Planted (law `ConcreteSpec.Core.Mem.alloc_initialized`, case `first`, subject `ConcreteSpec.Core.Mem.Memory.alloc`, mutant `ConcreteSpec.Core.Mem.Audit.badAllocEmpty`). -/
-example : ¬ (match badAllocEmpty target Memory.empty ⟨0⟩ 40 8 1 with
+theorem alloc_initialized_planted_first_badAllocEmpty : ¬ (match badAllocEmpty target Memory.empty ⟨0⟩ 40 8 1 with
     | .ok (b, m') => ∃ x, m'.block b = some x ∧ x.live = true ∧ x.exposed = false ∧
         x.bytes = List.replicate 8 .uninit
     | .error _ => True) := by
@@ -1516,13 +1516,13 @@ example : ¬ (match badAllocEmpty target Memory.empty ⟨0⟩ 40 8 1 with
 
 -- 26. store_wellFormed
 /-- Instance (law `ConcreteSpec.Core.Mem.store_wellFormed`, case `oneByte`). -/
-example : match memory.store target ptr [.init 7 none] 1 with
+theorem store_wellFormed_example_oneByte : match memory.store target ptr [.init 7 none] 1 with
     | some m' => m'.WellFormed target
     | none => True :=
   store_wellFormed target memory memory_wf ptr [.init 7 none] 1
 
 /-- Planted (law `ConcreteSpec.Core.Mem.store_wellFormed`, case `oneByte`, subject `ConcreteSpec.Core.Mem.Memory.store`, mutant `ConcreteSpec.Core.Mem.Audit.badStoreWf`). -/
-example : memory.WellFormed target ∧
+theorem store_wellFormed_planted_oneByte_badStoreWf : memory.WellFormed target ∧
     ¬ (match badStoreWf target memory ptr [.init 7 none] 1 with
       | some m' => m'.WellFormed target
       | none => True) :=
@@ -1533,13 +1533,13 @@ example : memory.WellFormed target ∧
 
 -- 27. free_wellFormed
 /-- Instance (law `ConcreteSpec.Core.Mem.free_wellFormed`, case `live`). -/
-example : match memory.free ⟨0⟩ with
+theorem free_wellFormed_example_live : match memory.free ⟨0⟩ with
     | some m' => m'.WellFormed target
     | none => True :=
   free_wellFormed target memory memory_wf ⟨0⟩
 
 /-- Planted (law `ConcreteSpec.Core.Mem.free_wellFormed`, case `live`, subject `ConcreteSpec.Core.Mem.Memory.free`, mutant `ConcreteSpec.Core.Mem.Audit.badFreeWf`). -/
-example : memory.WellFormed target ∧
+theorem free_wellFormed_planted_live_badFreeWf : memory.WellFormed target ∧
     ¬ (match badFreeWf memory ⟨0⟩ with
       | some m' => m'.WellFormed target
       | none => True) :=
@@ -1550,24 +1550,24 @@ example : memory.WellFormed target ∧
 
 -- 28. expose_success
 /-- Instance (law `ConcreteSpec.Core.Mem.expose_success`, case `live`). -/
-example : memory.expose ptr = some (memory.modify ⟨0⟩ (fun y => { y with exposed := true })) :=
+theorem expose_success_example_live : memory.expose ptr = some (memory.modify ⟨0⟩ (fun y => { y with exposed := true })) :=
   expose_success memory ptr ⟨0⟩ initBlock rfl rfl rfl
 
 /-- Planted (law `ConcreteSpec.Core.Mem.expose_success`, case `live`, subject `ConcreteSpec.Core.Mem.Memory.expose`, mutant `ConcreteSpec.Core.Mem.Audit.badExposeNone`). -/
-example : ptr.prov = some ⟨0⟩ ∧ memory.block ⟨0⟩ = some initBlock ∧ initBlock.live = true ∧
+theorem expose_success_planted_live_badExposeNone : ptr.prov = some ⟨0⟩ ∧ memory.block ⟨0⟩ = some initBlock ∧ initBlock.live = true ∧
     ¬ (badExposeNone memory ptr =
       some (memory.modify ⟨0⟩ (fun y => { y with exposed := true }))) :=
   ⟨rfl, rfl, rfl, by intro h; cases h⟩
 
 -- 29. expose_wellFormed
 /-- Instance (law `ConcreteSpec.Core.Mem.expose_wellFormed`, case `live`). -/
-example : match memory.expose ptr with
+theorem expose_wellFormed_example_live : match memory.expose ptr with
     | some m' => m'.WellFormed target
     | none => True :=
   expose_wellFormed target memory memory_wf ptr
 
 /-- Planted (law `ConcreteSpec.Core.Mem.expose_wellFormed`, case `live`, subject `ConcreteSpec.Core.Mem.Memory.expose`, mutant `ConcreteSpec.Core.Mem.Audit.badExposeWf`). -/
-example : memory.WellFormed target ∧
+theorem expose_wellFormed_planted_live_badExposeWf : memory.WellFormed target ∧
     ¬ (match badExposeWf memory ptr with
       | some m' => m'.WellFormed target
       | none => True) :=
@@ -1578,47 +1578,47 @@ example : memory.WellFormed target ∧
 
 -- 30. store_load_other
 /-- Instance (law `ConcreteSpec.Core.Mem.store_load_other`, case `disjointProv`). -/
-example : frameStoredMemory.load target frameOther 1 1 = frameMemory.load target frameOther 1 1 :=
+theorem store_load_other_example_disjointProv : frameStoredMemory.load target frameOther 1 1 = frameMemory.load target frameOther 1 1 :=
   store_load_other target frameMemory frameStoredMemory ptr frameOther [.init 7 none] 1 1 1 rfl (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Mem.store_load_other`, case `disjointProv`, subject `ConcreteSpec.Core.Mem.Memory.load`, mutant `ConcreteSpec.Core.Mem.Audit.badLoadDiff`). -/
-example : frameMemory.store target ptr [.init 7 none] 1 = some frameStoredMemory ∧
+theorem store_load_other_planted_disjointProv_badLoadDiff : frameMemory.store target ptr [.init 7 none] 1 = some frameStoredMemory ∧
     frameOther.prov ≠ ptr.prov ∧
     ¬ (badLoadDiff target frameStoredMemory frameOther 1 1 = badLoadDiff target frameMemory frameOther 1 1) :=
   ⟨rfl, by decide, by decide⟩
 
 -- 31. expose_load
 /-- Instance (law `ConcreteSpec.Core.Mem.expose_load`, case `samePtr`). -/
-example : exposedMemory.load target ptr 1 1 = memory.load target ptr 1 1 :=
+theorem expose_load_example_samePtr : exposedMemory.load target ptr 1 1 = memory.load target ptr 1 1 :=
   expose_load target memory exposedMemory ptr ptr 1 1 rfl
 
 /-- Planted (law `ConcreteSpec.Core.Mem.expose_load`, case `samePtr`, subject `ConcreteSpec.Core.Mem.Memory.load`, mutant `ConcreteSpec.Core.Mem.Audit.badLoadDiff`). -/
-example : memory.expose ptr = some exposedMemory ∧
+theorem expose_load_planted_samePtr_badLoadDiff : memory.expose ptr = some exposedMemory ∧
     ¬ (badLoadDiff target exposedMemory ptr 1 1 = badLoadDiff target memory ptr 1 1) :=
   ⟨rfl, by decide⟩
 
 -- 32. load_prefix
 /-- Instance (law `ConcreteSpec.Core.Mem.load_prefix`, case `twoToOne`). -/
-example : memory.load target ptr 1 1 = some ([MByte.uninit, MByte.uninit].take 1) :=
+theorem load_prefix_example_twoToOne : memory.load target ptr 1 1 = some ([MByte.uninit, MByte.uninit].take 1) :=
   load_prefix target memory ptr 2 1 1 [.uninit, .uninit]
     (by decide) (by decide) (by decide) rfl
 
 /-- Planted (law `ConcreteSpec.Core.Mem.load_prefix`, case `twoToOne`, subject `ConcreteSpec.Core.Mem.Memory.load`, mutant `ConcreteSpec.Core.Mem.Audit.badLoadPrefix`). -/
-example : (2 : Nat) ≠ 0 ∧ (1 : Nat) ≠ 0 ∧ 1 ≤ 2 ∧
+theorem load_prefix_planted_twoToOne_badLoadPrefix : (2 : Nat) ≠ 0 ∧ (1 : Nat) ≠ 0 ∧ 1 ≤ 2 ∧
     badLoadPrefix target memory ptr 2 1 = some [.uninit, .uninit] ∧
     ¬ (badLoadPrefix target memory ptr 1 1 = some ([MByte.uninit, MByte.uninit].take 1)) := by
   decide
 
 -- 33. free_alloc_ne_existing
 /-- Instance (law `ConcreteSpec.Core.Mem.free_alloc_ne_existing`, case `reuseAddr`). -/
-example : match freedMemory.alloc target ⟨0⟩ 40 8 1 with
+theorem free_alloc_ne_existing_example_reuseAddr : match freedMemory.alloc target ⟨0⟩ 40 8 1 with
     | .ok (new, _) => new ≠ ⟨0⟩
     | .error _ => True :=
   free_alloc_ne_existing target memory freedMemory memory_wf ⟨0⟩ ⟨0⟩ initBlock rfl rfl
     ⟨0⟩ 40 8 1
 
 /-- Planted (law `ConcreteSpec.Core.Mem.free_alloc_ne_existing`, case `reuseAddr`, subject `ConcreteSpec.Core.Mem.Memory.alloc`, mutant `ConcreteSpec.Core.Mem.Audit.badAllocReuseZero`). -/
-example : memory.WellFormed target ∧ memory.free ⟨0⟩ = some freedMemory ∧
+theorem free_alloc_ne_existing_planted_reuseAddr_badAllocReuseZero : memory.WellFormed target ∧ memory.free ⟨0⟩ = some freedMemory ∧
     memory.block ⟨0⟩ = some initBlock ∧
     ¬ (match badAllocReuseZero target freedMemory ⟨0⟩ 40 8 1 with
       | .ok (new, _) => new ≠ ⟨0⟩
@@ -1637,10 +1637,10 @@ def wrongReconstruction : Memory → AddrSpace → Nat → Ptr :=
   fun m s a => ⟨s, a, some ⟨m.next⟩⟩
 
 /-- Instance (law `ConcreteSpec.Core.Mem.eqAddr_separation`, case `provenance`). -/
-example : Ptr.eqAddr ptr rawPtr = false ↔ ptr.space ≠ rawPtr.space ∨
+theorem eqAddr_separation_example_provenance : Ptr.eqAddr ptr rawPtr = false ↔ ptr.space ≠ rawPtr.space ∨
     ptr.addr < rawPtr.addr ∨ rawPtr.addr < ptr.addr := eqAddr_separation ptr rawPtr
 /-- Planted (law `ConcreteSpec.Core.Mem.eqAddr_separation`, case `provenance`, subject `ConcreteSpec.Core.Mem.Ptr.eqAddr`, mutant `ConcreteSpec.Core.Mem.Audit.badEqAddr`). -/
-example : ¬ (badEqAddr ptr rawPtr = false ↔ ptr.space ≠ rawPtr.space ∨
+theorem eqAddr_separation_planted_provenance_badEqAddr : ¬ (badEqAddr ptr rawPtr = false ↔ ptr.space ≠ rawPtr.space ∨
     ptr.addr < rawPtr.addr ∨ rawPtr.addr < ptr.addr) := by decide
 /-- Fault: same address space is mistaken for equal addresses. -/
 def alwaysEqual : Ptr → Ptr → Bool := fun p q => decide (p.space = q.space)
@@ -1648,17 +1648,17 @@ def alwaysEqual : Ptr → Ptr → Bool := fun p q => decide (p.space = q.space)
 /-- Fault: numeric equality forgets address-space identity. -/
 def ignoreSpace : Ptr → Ptr → Bool := fun p q => decide (p.addr = q.addr)
 /-- Instance (law `ConcreteSpec.Core.Mem.eqAddr_separation`, case `address`). -/
-example : Ptr.eqAddr ptr other = false ↔ ptr.space ≠ other.space ∨
+theorem eqAddr_separation_example_address : Ptr.eqAddr ptr other = false ↔ ptr.space ≠ other.space ∨
     ptr.addr < other.addr ∨ other.addr < ptr.addr := eqAddr_separation ptr other
 /-- Planted (law `ConcreteSpec.Core.Mem.eqAddr_separation`, case `address`, subject `ConcreteSpec.Core.Mem.Ptr.eqAddr`, mutant `ConcreteSpec.Core.Mem.Audit.alwaysEqual`). -/
-example : ¬ (alwaysEqual ptr other = false ↔ ptr.space ≠ other.space ∨
+theorem eqAddr_separation_planted_address_alwaysEqual : ¬ (alwaysEqual ptr other = false ↔ ptr.space ≠ other.space ∨
     ptr.addr < other.addr ∨ other.addr < ptr.addr) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.Mem.free_retains`, case `live`). -/
-example : match memory.free ⟨0⟩ with | none => True | some m' => ∃ x, memory.block ⟨0⟩ = some x ∧ m'.block ⟨0⟩ = some { x with live := false, exposed := false } ∧ m'.next = memory.next :=
+theorem free_retains_example_live : match memory.free ⟨0⟩ with | none => True | some m' => ∃ x, memory.block ⟨0⟩ = some x ∧ m'.block ⟨0⟩ = some { x with live := false, exposed := false } ∧ m'.next = memory.next :=
   free_retains memory ⟨0⟩
 /-- Planted (law `ConcreteSpec.Core.Mem.free_retains`, case `live`, subject `ConcreteSpec.Core.Mem.Memory.free`, mutant `ConcreteSpec.Core.Mem.Audit.skipFree`). -/
-example : ¬ (match skipFree memory ⟨0⟩ with | none => True | some m' => ∃ x, memory.block ⟨0⟩ = some x ∧ m'.block ⟨0⟩ = some { x with live := false, exposed := false } ∧ m'.next = memory.next) := by
+theorem free_retains_planted_live_skipFree : ¬ (match skipFree memory ⟨0⟩ with | none => True | some m' => ∃ x, memory.block ⟨0⟩ = some x ∧ m'.block ⟨0⟩ = some { x with live := false, exposed := false } ∧ m'.next = memory.next) := by
   intro h
   obtain ⟨x, hx, hh, _⟩ := h
   have he : x = initBlock := Option.some.inj hx.symm
@@ -1667,37 +1667,37 @@ example : ¬ (match skipFree memory ⟨0⟩ with | none => True | some m' => ∃
   cases hf
 
 /-- Instance (law `ConcreteSpec.Core.Mem.expose_frame`, case `live`). -/
-example : match memory.expose ptr with | none => True | some m' => ∃ b x, ptr.prov = some b ∧ memory.block b = some x ∧ m'.block b = some { x with exposed := true } ∧ m'.next = memory.next ∧ ∀ c, c ≠ b → m'.block c = memory.block c :=
+theorem expose_frame_example_live : match memory.expose ptr with | none => True | some m' => ∃ b x, ptr.prov = some b ∧ memory.block b = some x ∧ m'.block b = some { x with exposed := true } ∧ m'.next = memory.next ∧ ∀ c, c ≠ b → m'.block c = memory.block c :=
   expose_frame memory ptr
 /-- Planted (law `ConcreteSpec.Core.Mem.expose_frame`, case `live`, subject `ConcreteSpec.Core.Mem.Memory.expose`, mutant `ConcreteSpec.Core.Mem.Audit.corruptExpose`). -/
-example : ¬ (match corruptExpose memory ptr with | none => True | some m' => ∃ b x, ptr.prov = some b ∧ memory.block b = some x ∧ m'.block b = some { x with exposed := true } ∧ m'.next = memory.next ∧ ∀ c, c ≠ b → m'.block c = memory.block c) := by
+theorem expose_frame_planted_live_corruptExpose : ¬ (match corruptExpose memory ptr with | none => True | some m' => ∃ b x, ptr.prov = some b ∧ memory.block b = some x ∧ m'.block b = some { x with exposed := true } ∧ m'.next = memory.next ∧ ∀ c, c ≠ b → m'.block c = memory.block c) := by
   intro h
   obtain ⟨b, x, hp, hx, _, hn, _⟩ := h
   have : (0 : Nat) = 1 := hn
   cases this
 
 /-- Instance (law `ConcreteSpec.Core.Mem.store_geometry`, case `live`). -/
-example : match memory.store target ptr [.init 7 none] 1 with | none => True | some m' => ∀ b, (m'.block b).map Block.geometry = (memory.block b).map Block.geometry :=
+theorem store_geometry_example_live : match memory.store target ptr [.init 7 none] 1 with | none => True | some m' => ∀ b, (m'.block b).map Block.geometry = (memory.block b).map Block.geometry :=
   store_geometry target memory ptr [.init 7 none] 1
 /-- Planted (law `ConcreteSpec.Core.Mem.store_geometry`, case `live`, subject `ConcreteSpec.Core.Mem.Memory.store`, mutant `ConcreteSpec.Core.Mem.Audit.corruptStoreGeometry`). -/
-example : ¬ (match corruptStoreGeometry target memory ptr [.init 7 none] 1 with | none => True | some m' => ∀ b, (m'.block b).map Block.geometry = (memory.block b).map Block.geometry) := by
+theorem store_geometry_planted_live_corruptStoreGeometry : ¬ (match corruptStoreGeometry target memory ptr [.init 7 none] 1 with | none => True | some m' => ∀ b, (m'.block b).map Block.geometry = (memory.block b).map Block.geometry) := by
   intro h
   have hh := h ⟨0⟩
   revert hh
   decide
 
 /-- Instance (law `ConcreteSpec.Core.Mem.expose_geometry`, case `live`). -/
-example : match memory.expose ptr with | none => True | some m' => ∀ b, (m'.block b).map Block.geometry = (memory.block b).map Block.geometry :=
+theorem expose_geometry_example_live : match memory.expose ptr with | none => True | some m' => ∀ b, (m'.block b).map Block.geometry = (memory.block b).map Block.geometry :=
   expose_geometry memory ptr
 /-- Planted (law `ConcreteSpec.Core.Mem.expose_geometry`, case `live`, subject `ConcreteSpec.Core.Mem.Memory.expose`, mutant `ConcreteSpec.Core.Mem.Audit.corruptExposeGeometry`). -/
-example : ¬ (match corruptExposeGeometry memory ptr with | none => True | some m' => ∀ b, (m'.block b).map Block.geometry = (memory.block b).map Block.geometry) := by
+theorem expose_geometry_planted_live_corruptExposeGeometry : ¬ (match corruptExposeGeometry memory ptr with | none => True | some m' => ∀ b, (m'.block b).map Block.geometry = (memory.block b).map Block.geometry) := by
   intro h
   have hh := h ⟨0⟩
   revert hh
   decide
 
 /-- Instance (law `ConcreteSpec.Core.Mem.fromExposed_sound`, case `interior`). -/
-example : match (exposedMemory.fromExposed ⟨0⟩ 42).prov with
+theorem fromExposed_sound_example_interior : match (exposedMemory.fromExposed ⟨0⟩ 42).prov with
     | none => True
     | some b => ∃ x, exposedMemory.block b = some x ∧ x.Candidate ⟨0⟩ = true ∧
         ((x.base ≤ 42 ∧ 42 < x.base + x.size) ∨
@@ -1705,7 +1705,7 @@ example : match (exposedMemory.fromExposed ⟨0⟩ 42).prov with
            ¬ (e.2.base ≤ 42 ∧ 42 < e.2.base + e.2.size))) :=
   fromExposed_sound target exposedMemory exposedMemory_wf ⟨0⟩ 42
 /-- Planted (law `ConcreteSpec.Core.Mem.fromExposed_sound`, case `interior`, subject `ConcreteSpec.Core.Mem.Memory.fromExposed`, mutant `ConcreteSpec.Core.Mem.Audit.wrongReconstruction`). -/
-example : exposedMemory.WellFormed target ∧
+theorem fromExposed_sound_planted_interior_wrongReconstruction : exposedMemory.WellFormed target ∧
     ¬ (match (wrongReconstruction exposedMemory ⟨0⟩ 42).prov with
       | none => True
       | some b => ∃ x, exposedMemory.block b = some x ∧ x.Candidate ⟨0⟩ = true ∧
@@ -1718,14 +1718,14 @@ example : exposedMemory.WellFormed target ∧
   cases hx
 
 /-- Accepted (rule C4). Framing observes initialized bytes in a second live allocation. -/
-example : frameMemory.load target frameOther 2 1 = some [.init 9 none, .init 10 none] ∧
+theorem example_Accepted_rule_C4_Framing_observes_initialized : frameMemory.load target frameOther 2 1 = some [.init 9 none, .init 10 none] ∧
     frameStoredMemory.load target frameOther 2 1 = some [.init 9 none, .init 10 none] := by decide
 
 /-- Instance (law `ConcreteSpec.Core.Mem.eqAddr_separation`, case `space`). -/
-example : Ptr.eqAddr ptr ⟨⟨1⟩, 40, none⟩ = false ↔ ptr.space ≠ (⟨1⟩ : AddrSpace) ∨
+theorem eqAddr_separation_example_space : Ptr.eqAddr ptr ⟨⟨1⟩, 40, none⟩ = false ↔ ptr.space ≠ (⟨1⟩ : AddrSpace) ∨
     ptr.addr < 40 ∨ 40 < ptr.addr := eqAddr_separation ptr ⟨⟨1⟩, 40, none⟩
 /-- Planted (law `ConcreteSpec.Core.Mem.eqAddr_separation`, case `space`, subject `ConcreteSpec.Core.Mem.Ptr.eqAddr`, mutant `ConcreteSpec.Core.Mem.Audit.ignoreSpace`). -/
-example : ¬ (ignoreSpace ptr ⟨⟨1⟩, 40, none⟩ = false ↔ ptr.space ≠ (⟨1⟩ : AddrSpace) ∨
+theorem eqAddr_separation_planted_space_ignoreSpace : ¬ (ignoreSpace ptr ⟨⟨1⟩, 40, none⟩ = false ↔ ptr.space ≠ (⟨1⟩ : AddrSpace) ∨
     ptr.addr < 40 ∨ 40 < ptr.addr) := by decide
 
 /-! The following controls delete one guard at a time. Their other obligations are
@@ -1741,11 +1741,11 @@ def accessSkipping (skip : Nat) (m : Memory) (p : Ptr) (n a : Nat) :
       (skip = 4 ∨ p.addr % a = 0) then some (some (b, p.addr - x.base)) else none
 
 /-- Released memory fails only liveness here. -/
-example : freedMemory.access target ptr 1 1 = none ∧
+theorem example_Released_memory_fails_only_liveness_here : freedMemory.access target ptr 1 1 = none ∧
     accessSkipping 0 freedMemory ptr 1 1 = some (some (⟨0⟩, 0)) := by decide
 
 /-- A pointer in a second admitted space fails the allocation's space check alone. -/
-example : let twoSpaces := { target with spaces := [⟨0⟩, ⟨1⟩] }
+theorem example_pointer_in_second_admitted_space_fails : let twoSpaces := { target with spaces := [⟨0⟩, ⟨1⟩] }
     let p := { ptr with space := ⟨1⟩ }
     twoSpaces.WellFormed ∧ p.Valid twoSpaces ∧ memory.WellFormed twoSpaces ∧
     memory.access twoSpaces p 1 1 = none ∧
@@ -1755,15 +1755,15 @@ example : let twoSpaces := { target with spaces := [⟨0⟩, ⟨1⟩] }
     (empty_wellFormed _) ⟨0⟩ 40 8 1
 
 /-- A byte before the base fails only the lower bound. -/
-example : memory.access target { ptr with addr := 39 } 1 1 = none ∧
+theorem example_byte_before_base_fails_only_lower : memory.access target { ptr with addr := 39 } 1 1 = none ∧
     accessSkipping 2 memory { ptr with addr := 39 } 1 1 = some (some (⟨0⟩, 0)) := by decide
 
 /-- The one-past pointer is not a one-byte access. -/
-example : memory.access target { ptr with addr := 48 } 1 1 = none ∧
+theorem example_one_past_pointer_is_not_one : memory.access target { ptr with addr := 48 } 1 1 = none ∧
     accessSkipping 3 memory { ptr with addr := 48 } 1 1 = some (some (⟨0⟩, 8)) := by decide
 
 /-- Interior and in bounds, but not aligned to two bytes. -/
-example : memory.access target { ptr with addr := 41 } 1 2 = none ∧
+theorem example_Interior_and_in_bounds_but_not : memory.access target { ptr with addr := 41 } 1 2 = none ∧
     accessSkipping 4 memory { ptr with addr := 41 } 1 2 = some (some (⟨0⟩, 1)) := by decide
 
 /-- Fault: reverse reconstruction priority by trying one-past before containing. -/
@@ -1777,7 +1777,7 @@ def adjacent : Memory :=
   ⟨[(⟨1⟩, { candidate ⟨0⟩ 48 8 1 with exposed := true }),
     (⟨0⟩, { candidate ⟨0⟩ 40 8 1 with exposed := true })], 2⟩
 
-example : adjacent.WellFormed target ∧
+theorem example_adjacent_WellFormed_target : adjacent.WellFormed target ∧
     (adjacent.fromExposed ⟨0⟩ 48).prov = some ⟨1⟩ ∧
     (onePastFirst adjacent ⟨0⟩ 48).prov = some ⟨0⟩ := by
   refine ⟨?_, by decide, by decide⟩
@@ -1790,7 +1790,7 @@ def ignoreExposure (m : Memory) (space : AddrSpace) (addr : Nat) : Ptr :=
   let exposed : Memory := { m with blocks := List.map (fun (b, x) => (b, { x with exposed := true })) m.blocks }
   exposed.fromExposed space addr
 
-example : (memory.fromExposed ⟨0⟩ 42).prov = none ∧
+theorem example_memory_fromExposed_prov : (memory.fromExposed ⟨0⟩ 42).prov = none ∧
     (ignoreExposure memory ⟨0⟩ 42).prov = some ⟨0⟩ := by decide
 
 /-- Fault: forgetting the nonempty condition admits a zero-sized block at its one-past address. -/
@@ -1800,7 +1800,7 @@ def includeEmpty (m : Memory) (space : AddrSpace) (addr : Nat) : Ptr :=
   | some e => ⟨space, addr, some e.1⟩
   | none => m.fromExposed space addr
 
-example : let m : Memory := ⟨[(⟨0⟩, { candidate ⟨0⟩ 40 0 1 with exposed := true })], 1⟩
+theorem example_m_Memory : let m : Memory := ⟨[(⟨0⟩, { candidate ⟨0⟩ 40 0 1 with exposed := true })], 1⟩
     m.WellFormed target ∧ (m.fromExposed ⟨0⟩ 40).prov = none ∧
     (includeEmpty m ⟨0⟩ 40).prov = some ⟨0⟩ := by
   refine ⟨?_, by decide, by decide⟩
