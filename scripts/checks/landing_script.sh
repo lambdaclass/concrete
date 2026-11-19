@@ -1462,6 +1462,41 @@ out="$(stdin_hook < "$TMP/push-conflicted" 2>&1)"; rc=$?
 [ "$rc" = 1 ] && has "$out" "conflict markers in $conflicted" \
   && ok "a conflict in the second advertised ref is refused despite a clean HEAD and upstream" || no "conflicted stdin push: exit $rc, $out"
 
+# Use a full clone so the real hook reaches its checkout guard. The build and root
+# runner are local stand-ins, and this clone never installs the real hook.
+gated_repo="$TMP/gated-push"
+git clone -q --no-local --branch stdin-clean "$TMP/linked-wt" "$gated_repo" || exit 2
+mkdir -p "$gated_repo/scripts/checks" "$TMP/gated-bin" "$TMP/gated-logs" || exit 2
+cat > "$TMP/gated-bin/lake" <<'EOF'
+#!/usr/bin/env bash
+[ "$#" = 1 ] && [ "$1" = build ] || exit 2
+printf 'build\n' >> "$GATED_CALLS"
+EOF
+printf '#!/usr/bin/env bash\nprintf "checks\\n" >> "$GATED_CALLS"\n' > "$gated_repo/scripts/checks/run.sh"
+chmod +x "$TMP/gated-bin/lake" || exit 2
+git -C "$gated_repo" add -f -- scripts/checks/run.sh || exit 2
+git -C "$gated_repo" commit -qm "install fixture check runner" || exit 2
+gated_head="$(git -C "$gated_repo" rev-parse HEAD)" || exit 2
+BOUNDED_PARENT="$TMP" source "$ROOT_DIR/scripts/checks/lib/bounded.sh" || exit 2
+gated_hook() {
+  (
+    cd "$gated_repo" || exit 2
+    PATH="$TMP/gated-bin:$PATH" TMPDIR="$TMP/gated-logs" GATED_CALLS="$TMP/gated-calls" \
+      CONCRETE_GATES_SHELL=1 CONCRETE_SKIP_GATES=0 bounded_run -i "$1" 15 -- \
+      bash "$hook" origin "$TMP/origin.git"
+  )
+}
+printf 'refs/heads/stdin-clean %s refs/heads/ci/matching %s\n' "$gated_head" "$Z" > "$TMP/push-gated"
+out="$(gated_hook "$TMP/push-gated" 2>&1)"; rc=$?
+[ "$rc" = 0 ] && [ "$(cat "$TMP/gated-calls" 2>/dev/null)" = "$(printf 'build\nchecks')" ] \
+  && ok "the full tier validates a matching advertised SHA" || no "matching gated push: exit $rc, $out"
+rm -f "$TMP/gated-calls"
+printf 'refs/heads/stdin-clean %s refs/heads/ci/off-head %s\n' "$clean" "$Z" >> "$TMP/push-gated"
+out="$(gated_hook "$TMP/push-gated" 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "pushing ${clean:0:10}, but the checkout is at ${gated_head:0:10}" \
+  && [ ! -e "$TMP/gated-calls" ] \
+  && ok "the full tier refuses a second advertised SHA away from HEAD before validation" || no "off-HEAD gated push: exit $rc, $out"
+
 git worktree remove --force "$TMP/linked-wt"
 # hook off: not executable, missing, or some other hook that does not run the repository's.
 chmod -x "$TMP/nohooks/pre-push"

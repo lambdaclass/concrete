@@ -2,52 +2,68 @@
 # Bash expands the right-hand sides of a local declaration before assigning any of them.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
-cd "$(dirname "${BASH_SOURCE[0]}")/../.."
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT_DIR/scripts/checks/lib/git_sandbox.sh" || exit 2
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-lint() {
-  shellcheck --norc --shell=bash --include=SC2318 --format=gcc "$@"
+check() {
+  python3 -I "$ROOT_DIR/scripts/checks/lib/shell_assignments.py"
 }
 
-# The bad declaration lives in a sourced library without a shebang.
-cat > "$tmp/bad.sh" <<'EOF'
+(
+  git_sandbox "$tmp/gitconfig"
+  cd "$tmp"
+  git init -q
+  mkdir -p scripts/nested .githooks
+  cat > split <<'CONTROL'
+fixture() {
+  local name="$1"
+  local path="${name}.con"
+  printf '%s\n' "$path"
+}
+CONTROL
+  cat > dependent <<'CONTROL'
 fixture() {
   local name="$1" \
     path="${name}.con"
   printf '%s\n' "$path"
 }
-EOF
-cat > "$tmp/good.sh" <<'EOF'
-#!/usr/bin/env bash
-fixture() {
-  local name="$1"
-  local path="${name}.con" suffix="$2"
-  printf '%s%s\n' "$path" "$suffix"
-}
-EOF
+CONTROL
+  library=scripts/nested/library.sh
+  entry=.githooks/entry
+  cp split "$library"
+  printf '#!/usr/bin/env -S bash -e\n' > "$entry"
+  cat split >> "$entry"
+  git add -- "$library" "$entry"
+  cp dependent scripts/untracked.sh
+  check
 
-lint "$tmp/good.sh"
-rc=0
-out="$(lint "$tmp/bad.sh")" || rc=$?
-if [ "$rc" -ne 1 ] || [[ "$out" != *'[SC2318]'* ]]; then
-  printf 'shell_assignments: expected SC2318 on the planted declaration (exit %s)\n%s\n' "$rc" "$out" >&2
-  exit 1
-fi
-echo "shell_assignments: dependent declaration refused and split declaration accepted"
+  expect_failure() {
+    local expected="$1" out rc=0
+    out="$(check 2>&1)" || rc=$?
+    if [ "$rc" -ne 1 ] || [[ "$out" != *"$expected"* ]]; then
+      printf 'shell_assignments: expected %s (exit %s)\n%s\n' "$expected" "$rc" "$out" >&2
+      exit 1
+    fi
+  }
 
-# Include extensionless bash/sh entry points and shell libraries without a shebang.
-find scripts .githooks -type f -print0 > "$tmp/files"
-shell_files=()
-while IFS= read -r -d '' path; do
-  case "$path" in
-    *.sh) shell_files+=("$path") ;;
-    *)
-      first=
-      IFS= read -r first < "$path" || :
-      if [[ "$first" =~ ^\#!.*[/[:blank:]](bash|sh)([[:blank:]]|$) ]]; then
-        shell_files+=("$path")
-      fi ;;
-  esac
-done < "$tmp/files"
-lint "${shell_files[@]}"
+  cp dependent "$library"
+  SHELLCHECK_OPTS=--exclude=SC2318 expect_failure '[SC2318]'
+  printf '\nif true; then\n  true\n' >> "$library"
+  expect_failure '[SC1072]'
+  cp split "$library"
+
+  printf '#!/usr/bin/env -S bash -e\n#\tshellcheck disable="SC2000-SC3000"\n' > "$entry"
+  cat dependent >> "$entry"
+  expect_failure '[SC2318]'
+  printf '#!/usr/bin/env -S bash -e\n# shellcheck disable=all\n' > "$entry"
+  cat dependent >> "$entry"
+  expect_failure '[SC2318]'
+  printf '#!/usr/bin/env -S bash -e\n' > "$entry"
+  cat split >> "$entry"
+  check
+)
+
+cd "$ROOT_DIR"
+check
