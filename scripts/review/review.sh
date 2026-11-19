@@ -257,7 +257,24 @@ if [ "$INSUFFICIENT_RANGE" = 1 ] ||
   FULL_REVIEW=1
   echo "review: prior review does not cover current branch scope; reviewing full base..HEAD diff (round $ROUND)" >&2
 fi
-git diff --no-color --no-ext-diff --no-textconv -M "$FROM" "$HEAD_SHA" >"$WORK/full.diff"
+# Compare the original objects in a bare repository with no worktree, index,
+# attribute source, or inherited Git configuration. The empty template also
+# rules out injected info/attributes. Git's built-in binary detection keeps
+# binary payloads out of the prompt while still emitting their named changes.
+object_format="$(git rev-parse --show-object-format)"
+object_directory="$(git rev-parse --path-format=absolute --git-path objects)"
+object_alternates="${GIT_ALTERNATE_OBJECT_DIRECTORIES-}"
+(
+  source "$SCRIPT_DIR/../checks/lib/git_sandbox.sh" || exit 2
+  git_sandbox /dev/null || exit 2
+  unset GIT_ATTR_SOURCE
+  export GIT_ATTR_NOSYSTEM=1
+  git init -q --bare --template= --object-format="$object_format" "$WORK/diff.git"
+  # Keep the current directory so relative paths in the object alternates still resolve.
+  GIT_OBJECT_DIRECTORY="$object_directory" GIT_ALTERNATE_OBJECT_DIRECTORIES="$object_alternates" \
+    git --git-dir="$WORK/diff.git" -c core.attributesFile=/dev/null \
+      diff --no-color --no-ext-diff --no-textconv -M "$FROM" "$HEAD_SHA"
+) >"$WORK/full.diff"
 if [ ! -s "$WORK/full.diff" ]; then
   echo "review: nothing to review: no changes between $FROM and HEAD" >&2
   exit 4

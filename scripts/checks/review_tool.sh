@@ -115,6 +115,9 @@ if has MARK_EXACT; then
   mv "$TMPDIR/nonce" "${nonce_path[0]}" || exit 2
   echo verified >"$FAKE_LOG/identity.$n"
 fi
+if has MARK_READ_AGENTS; then
+  cat "$directory/AGENTS.md" >"$FAKE_LOG/agents.$n" || exit 2
+fi
 if has MARK_SLEEP; then
   # Create both an ordinary child and a separate session, with an intermediate
   # parent that must be reaped before its detached child can be adopted.
@@ -646,7 +649,9 @@ rm -f "$W/reviewer-created"
 # A dirty tracked file and an untracked file must never enter the reviewed tree.
 reset_fake
 g checkout -q main && g checkout -qb exact-tree
-commit_file exact.txt MARK_EXACT exact
+commit_file exact.txt 'MARK_EXACT MARK_READ_AGENTS' exact
+printf '# Review instructions\n\nPreserve trailing spaces.  \nFinal line without newline' >"$T/expected-agents"
+cp "$T/expected-agents" "$W/AGENTS.md"
 printf '\000\377binary\n' >"$W/binary"
 printf '#!/bin/sh\nexit 0\n' >"$W/executable"
 chmod +x "$W/executable"
@@ -655,13 +660,17 @@ mkdir "$W/nested"
 ln -s ../link "$W/nested/link"
 probe_name=$'!probe\nfile'
 printf 'probe path with a newline\n' >"$W/$probe_name"
-g add binary executable link nested/link "$probe_name" && g commit -qm 'archive entry types'
+g add AGENTS.md binary executable link nested/link "$probe_name" && g commit -qm 'archive entry types'
 exact_sha="$(g rev-parse HEAD)"
 printf dirty >"$W/README.md"
+printf dirty >"$W/AGENTS.md"
 printf untracked >"$W/untracked"
 review >"$T/exact-review.log" 2>&1; rc=$?
 check "review invocation sees exact SHA with dirty caller" test "$rc" -eq 0
 check "private invocation tree identity verified" test -s "$FAKE_LOG/identity.1"
+check "reviewer reads the exact committed AGENTS.md bytes" cmp "$T/expected-agents" "$FAKE_LOG/agents.1"
+check "reviewer input names the binary file without dumping its payload" \
+  grep -Fxq 'Binary files /dev/null and b/binary differ' "$FAKE_LOG/stdin.1"
 # Independently compare archive verifier against the commit, including binary,
 # executable and symlink paths, then plant a byte mismatch.
 mkdir "$T/exact"
@@ -670,7 +679,7 @@ tar -xf "$T/exact.tar" -C "$T/exact"
 check "copy matches committed SHA despite dirty caller" python3 -I "$ROOT_DIR/scripts/review/read_evidence.py" tree "$W" "$(g rev-parse HEAD)" "$T/exact"
 printf altered >"$T/exact/README.md"
 if python3 -I "$ROOT_DIR/scripts/review/read_evidence.py" tree "$W" "$(g rev-parse HEAD)" "$T/exact" >/dev/null 2>&1; then no "altered archive refused"; else ok "altered archive refused"; fi
-g restore README.md
+g restore AGENTS.md README.md
 rm "$W/untracked"
 # Resolve relative inputs and the executable in the invoking directory.
 mkdir "$T/relative"
@@ -773,6 +782,35 @@ check "review bypasses both configured drivers and receives the raw edit" test "
 check "raw review patch contains the hidden line" grep -q '^+MARK_FINDING$' "$FAKE_LOG/stdin.1"
 g config --unset diff.hide.textconv
 g config --unset diff.hide.command
+
+commit_file proof.lean 'def before := 1' 'original Lean line'
+lean_base="$(g rev-parse HEAD)"
+printf '*.lean -diff\n' >"$T/lean-attributes"
+for source in checkout info global committed; do
+  reset_fake
+  g checkout -qB lean-diff-attributes "$lean_base"
+  commit_file proof.lean 'def after := 2' "changed Lean line ($source)"
+  case "$source" in
+    checkout) cp "$T/lean-attributes" "$W/.gitattributes" ;;
+    info) cp "$T/lean-attributes" "$W/.git/info/attributes" ;;
+    global) g config --global core.attributesFile "$T/lean-attributes" ;;
+    committed) commit_file .gitattributes '*.lean -diff' 'committed binary attribute' ;;
+  esac
+  g diff "$lean_base" HEAD -- proof.lean >"$T/ordinary-lean.diff"
+  check "$source attribute marks the Lean edit binary in an ordinary diff" \
+    grep -Fxq 'Binary files a/proof.lean and b/proof.lean differ' "$T/ordinary-lean.diff"
+  review --base "$lean_base" >"$T/lean-review.log" 2>&1; rc=$?
+  check "$source attribute permits a complete review invocation" test "$rc" = 0 -a "$(calls)" = 1
+  check "$source attribute leaves the old Lean line in reviewer input" \
+    grep -Fxq -- '-def before := 1' "$FAKE_LOG/stdin.1"
+  check "$source attribute leaves the new Lean line in reviewer input" \
+    grep -Fxq -- '+def after := 2' "$FAKE_LOG/stdin.1"
+  case "$source" in
+    checkout) g restore .gitattributes ;;
+    info) rm "$W/.git/info/attributes" ;;
+    global) g config --global --unset core.attributesFile ;;
+  esac
+done
 
 reset_fake
 g checkout -q main && g checkout -qb escaping-link
