@@ -28,6 +28,9 @@ fixture() {
   declare -x -- single="$name"
   typeset -'x' quoted_option="$name"
   local - option_state="$name"
+  export "$name" PATH
+  export "$name=literal" PATH
+  export "${name:-fallback=literal}" PATH
 }
 CONTROL
   cat > failing <<'CONTROL'
@@ -77,6 +80,7 @@ readonly first="`printf literal`" second=literal
 export -- first=literal second="$unrelated"
 local -a first=("$unrelated") second
 local "first=$unrelated" second
+export "$name=$value" PATH
 CONTROL
   cp passing "$library"
 

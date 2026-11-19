@@ -88,6 +88,34 @@ def declaration_operands(declaration):
         yield arg
 
 
+def word_parts(parts):
+    for part in parts:
+        if part["Type"] == "DblQuoted":
+            yield from word_parts(part.get("Parts", []))
+        else:
+            yield part
+
+
+def expanded_initializer(operand):
+    if not operand.get("Naked"):
+        return any(
+            node.get("Type") in EXPANSIONS
+            for field in ("Value", "Array")
+            for node in nodes(operand.get(field))
+        )
+
+    # shfmt represents quoted or computed assignments as ordinary words.
+    # Only literal parts can supply the separator. Expansions are opaque.
+    value_side = False
+    for part in word_parts(operand.get("Value", {}).get("Parts", [])):
+        kind = part["Type"]
+        if kind in {"Lit", "SglQuoted"} and "=" in part["Value"]:
+            value_side = True
+        if value_side and kind in EXPANSIONS:
+            return True
+    return False
+
+
 def expanded_declarations(tree):
     for declaration in nodes(tree):
         if declaration.get("Type") != "DeclClause":
@@ -95,9 +123,7 @@ def expanded_declarations(tree):
         if declaration["Variant"]["Value"] not in DECLARATIONS:
             continue
         operands = list(declaration_operands(declaration))
-        if len(operands) > 1 and any(
-            node.get("Type") in EXPANSIONS for node in nodes(operands)
-        ):
+        if len(operands) > 1 and any(map(expanded_initializer, operands)):
             yield declaration["Pos"]
 
 
