@@ -14,27 +14,42 @@ inductive Scope where
   | original | addition | qualification
   deriving BEq
 
+inductive PieceId where
+  | F01 | F02 | F03 | F03b | «F03p-design» | F03p | F04 | F04p
+  | R | F05 | F06 | F07 | F08 | F09a | F09b | F09c
+  | F10 | F11 | F12 | F13 | F14 | F15 | F16 | CAP
+  | F17 | F18 | F19 | F20 | F20p | F21 | F22 | F23
+  | F24a | F24b | F25a | F25b | F26 | F26a | F27 | F28
+  | F29 | F29p | F30 | F31 | F32 | F33 | F34 | F35
+  | F36 | F37 | F38 | «F39-design» | F39 | F40 | M01 | M02
+  | M03 | M04 | M05 | M06 | M07 | M08 | M09 | M10
+  | M11 | M12
+  deriving BEq, Hashable, ToExpr
+
+instance : ToString PieceId where
+  toString id := (toExpr id).constName!.getString!
+
 structure Piece where
-  id : String
+  id : PieceId
   scope : String
   groups : List Group
   remaining : List String := []
   scopeKind : Scope := .original
   disposition : Option String := none
 
-private def present (id scope : String) (groups : List Group) : Piece :=
+private def present (id : PieceId) (scope : String) (groups : List Group) : Piece :=
   { id, scope, groups }
 
-private def added (id scope record : String) (groups : List Group) : Piece :=
+private def added (id : PieceId) (scope record : String) (groups : List Group) : Piece :=
   { present id s!"{scope} ({record})" groups with scopeKind := .addition }
 
-private def pending (id : String) (records : List String) : Piece :=
+private def pending (id : PieceId) (records : List String) : Piece :=
   { id, scope := "", groups := [], remaining := records }
 
-private def disposition (id status record : String) : Piece :=
+private def disposition (id : PieceId) (status record : String) : Piece :=
   { id, scope := record, groups := [], disposition := some status }
 
-private def qualifies (id family : String) (groups : List Group := []) : Piece :=
+private def qualifies (id : PieceId) (family : String) (groups : List Group := []) : Piece :=
   { id, scope := family, groups, scopeKind := .qualification
     remaining := ["ROADMAP.md R-0700; docs/decisions.md#decided-2026-11-13-proof-labels"] }
 
@@ -47,15 +62,133 @@ private def evidence (origin namespaceName : Name) (names : List Name) : Group :
 private def laws (origin : Name) (names : List Name) : Group :=
   { origin, laws := names }
 
+-- The planned subject is independent of both the status and its supplied evidence.
+-- Names are allowed to refer to modules that have not landed yet.
+private def specModules (modules : List Name) : List Name :=
+  modules.map (`ConcreteSpec ++ ·)
+
+private def subject : PieceId → List Name
+  | .F01 | .M01 =>
+    specModules [`Proofs.Basics]
+  | .F02 =>
+    specModules [`Spec.Basics, `Diagnostics.Types, `Proofs.Basics]
+  | .F03 =>
+    specModules [`Spec.Ident, `Spec.Target, `Spec.Outcome]
+  | .F03b =>
+    specModules [`Spec.Ident, `Proofs.Ident]
+  | .«F03p-design» | .F03p =>
+    specModules [`Spec.Ident]
+  | .F04 | .F04p =>
+    specModules [`Proofs.Ident]
+  | .R =>
+    specModules [`Spec.Rules]
+  | .F05 =>
+    specModules [`Proofs.Scalar, `Spec.Scalar]
+  | .F06 =>
+    specModules [`Spec.Const, `Spec.Rules]
+  | .F07 =>
+    specModules [`Proofs.Const]
+  | .F08 =>
+    specModules [`Spec.Exec]
+  | .F09a | .F09b | .F09c | .F10 =>
+    specModules [`Proofs.Exec]
+  | .F11 =>
+    specModules [`Spec.Memory, `Proofs.Memory]
+  | .F12 =>
+    specModules [`Spec.Hybrid, `Proofs.Hybrid]
+  | .F13 =>
+    specModules [`Spec.Own, `Spec.Rules]
+  | .F14 =>
+    specModules [`Proofs.Own, `Proofs.Basics, `Spec.Basics]
+  | .F15 =>
+    specModules [`Proofs.OwnErasureEvidence, `Proofs.OwnErasure]
+  | .F16 =>
+    specModules [`Proofs.Own]
+  | .CAP =>
+    specModules [`Spec.CapabilityBase]
+  | .F17 =>
+    specModules [`Spec.Grant, `Proofs.Grant, `Spec.Rules]
+  | .F18 =>
+    specModules [`Spec.Prim, `Proofs.Prim]
+  | .F19 =>
+    specModules [`Spec.Observe]
+  | .F20 | .F20p =>
+    specModules [`Proofs.Observe2]
+  | .F21 =>
+    specModules [`Proofs.ObserveEnvironment, `Proofs.ObserveOutput]
+  | .F22 =>
+    specModules [`Proofs.ObserveSource, `Proofs.ObserveEvidence, `Proofs.ObserveTransform]
+  | .F23 =>
+    specModules [`Proofs.ObserveReport]
+  | .F24a =>
+    specModules [`Spec.Adequacy, `Proofs.Adequacy]
+  | .F24b | .F25a | .F25b =>
+    specModules [`Proofs.Adequacy]
+  | .F26 | .F27 =>
+    specModules [`Spec.Leak, `Proofs.Leak]
+  | .F26a =>
+    specModules [`Spec.Accounting, `Proofs.Accounting, `Spec.Rules]
+  | .F28 =>
+    specModules [`Spec.Frame]
+  | .F29 | .F29p =>
+    specModules [`Proofs.Frame]
+  | .F30 =>
+    [`Concrete.BIR, `Concrete.BIR.Progress, `Concrete.Backend.LCB]
+  | .F31 =>
+    specModules [`Spec.Slice1Syntax, `Spec.Statics, `Spec.Slice1Semantics, `Spec.Slice1Ownership,
+      `Spec.Slice1Checker, `Spec.Slice0, `Spec.Rep, `Spec.Examples] ++
+      [`Concrete.BIR.Progress, `Concrete.Backend.LCB, `Concrete.Backend.LLVM, `Concrete.Backend.Runtime]
+  | .F32 | .M05 =>
+    specModules [`Proofs.Checker]
+  | .F33 =>
+    specModules [`Spec.Rep, `Proofs.Rep]
+  | .F34 | .M11 =>
+    specModules [`Proofs.Slice1]
+  | .F35 =>
+    specModules [`Spec.Slice1Semantics, `Spec.Slice1Checker, `Spec.Observation, `Spec.Slice0,
+      `Spec.Examples, `Proofs.Slice1, `Proofs.Checker, `Proofs.Observe, `Proofs.Slice0,
+      `Proofs.Examples] ++
+      [`Concrete.BIR.Progress, `Concrete.Backend.LCB, `Concrete.Backend.LLVM, `Concrete.Backend.Runtime]
+  | .F36 =>
+    specModules [`Spec.Borrow, `Proofs.Borrow, `Spec.Surface0, `Proofs.Surface0] ++
+      [`Concrete.Lex]
+  | .F37 =>
+    specModules [`Spec.Brand, `Proofs.Brand]
+  | .F38 =>
+    specModules [`Spec.Cleanup, `Proofs.Cleanup]
+  | .«F39-design» | .F39 =>
+    specModules [`Spec.Authority, `Proofs.Authority]
+  | .F40 =>
+    specModules [`Spec.Examples, `Proofs.Examples] ++
+      [`ConcreteSpec, `Concrete.BIR]
+  | .M02 =>
+    specModules [`Proofs.Authority]
+  | .M03 =>
+    specModules [`Proofs.Borrow]
+  | .M04 =>
+    specModules [`Proofs.Brand]
+  | .M06 =>
+    specModules [`Proofs.Cleanup, `Spec.Cleanup]
+  | .M07 =>
+    specModules [`Proofs.Examples]
+  | .M08 =>
+    specModules [`Proofs.Observe]
+  | .M09 =>
+    specModules [`Proofs.Rep]
+  | .M10 =>
+    specModules [`Proofs.Slice0]
+  | .M12 =>
+    specModules [`Proofs.Surface0]
+
 -- Name literals quote planned identities without requiring them to resolve here.
 private def plan : List Piece := [
-  present "F01" "Explicit proof imports and a complete specification root" [
+  present .F01 "Explicit proof imports and a complete specification root" [
     decls `ConcreteSpec.Proofs.Basics [`ConcreteSpec.Core.AList.lookup_cons]],
-  present "F02" "Numeric variables, shared lookup, and separate diagnostics" [
+  present .F02 "Numeric variables, shared lookup, and separate diagnostics" [
     decls `ConcreteSpec.Spec.Basics [`ConcreteSpec.Var, `ConcreteSpec.Core.AList.lookup],
     decls `ConcreteSpec.Diagnostics.Types [`ConcreteSpec.LocalNames, `ConcreteSpec.Elaborated],
     decls `ConcreteSpec.Proofs.Basics [`ConcreteSpec.Core.AList.lookup_of_mem]],
-  present "F03" "Stable identities, target, outcome, and byte coordinates" [
+  present .F03 "Stable identities, target, outcome, and byte coordinates" [
     evidence `ConcreteSpec.Spec.Ident `ConcreteSpec.Core [
       `example_LoadedModules_findCollision_loadedA_loadedB_isNone,
       `example_collision_refuses_entire_load_and_retains, `example_OD44_refuses_one_top_level_module,
@@ -81,7 +214,7 @@ private def plan : List Piece := [
     decls `ConcreteSpec.Spec.Ident [`ConcreteSpec.Core.PlaceId, `ConcreteSpec.Core.PrimId, `ConcreteSpec.Core.ModuleId, `ConcreteSpec.Core.SourceText, `ConcreteSpec.Core.SourceText.lineAt, `ConcreteSpec.Core.SourceText.columnAt],
     decls `ConcreteSpec.Spec.Target [`ConcreteSpec.Core.Target, `ConcreteSpec.Core.Target.WellFormed],
     decls `ConcreteSpec.Spec.Outcome [`ConcreteSpec.Core.Res, `ConcreteSpec.Core.TrapKind]],
-  added "F03b" "F03 SourceText follow-on"
+  added .F03b "F03 SourceText follow-on"
     "changelog.d/2026-11-17-spec-f03b-sourcetext.md" [
     evidence `ConcreteSpec.Spec.Ident `ConcreteSpec.Core [
       `example_newline_starts_new_based_byte_column],
@@ -92,10 +225,10 @@ private def plan : List Piece := [
     decls `ConcreteSpec.Proofs.Ident [`ConcreteSpec.Core.SourceText.take_toBytes],
     laws `ConcreteSpec.Proofs.Ident [
       `ConcreteSpec.Core.SourceText.columnAt_zero, `ConcreteSpec.Core.SourceText.lineAt_zero]],
-  disposition "F03p-design" "folded into F03p"
+  disposition .«F03p-design» "folded into F03p"
     "ISSUES.tsv ISS-0068; docs/decisions.md#decided-2026-11-17-proposals-in-lean",
-  pending "F03p" ["ISSUES.tsv ISS-0068"],
-  present "F04" "Stable-key, namespace, obligation, contract, and byte-coordinate proofs" [
+  pending .F03p ["ISSUES.tsv ISS-0068"],
+  present .F04 "Stable-key, namespace, obligation, contract, and byte-coordinate proofs" [
     evidence `ConcreteSpec.Proofs.Ident `ConcreteSpec.Core.Vacuity [
       `lookup_renumber_example_siteTable, `lookup_renumber_planted_siteTable_collapseRenumber,
       `nodup_renumber_example_siteTable, `nodup_renumber_planted_siteTable_collapseRenumber,
@@ -203,13 +336,13 @@ private def plan : List Piece := [
       `ConcreteSpec.Core.SpecializationTable.canonicalize_edge_sound,
       `ConcreteSpec.Core.SpecializationTable.canonicalize_nodup,
       `ConcreteSpec.Core.SpecializationTable.canonicalize_share]],
-  pending "F04p" ["ISSUES.tsv ISS-0068"],
-  added "R" "Rule registry, prerequisite of F06, F13 and F17"
+  pending .F04p ["ISSUES.tsv ISS-0068"],
+  added .R "Rule registry, prerequisite of F06, F13 and F17"
     "changelog.d/2026-11-13-spec-rule-registry.md; ROADMAP.md R-0615" [
     decls `ConcreteSpec.Spec.Rules [`ConcreteSpec.Core.registeredRules,
       `ConcreteSpec.Core.registeredRuleExamples, `ConcreteSpec.Core.RuleAccepted,
       `ConcreteSpec.Core.RuleRefused]],
-  present "F05" "Fixed-width arithmetic and exact-term correspondence" [
+  present .F05 "Fixed-width arithmetic and exact-term correspondence" [
     evidence `ConcreteSpec.Proofs.Scalar `ConcreteSpec.Core.ScalarEvidence [
       `typed_eval_range_example_literal, `typed_eval_range_planted_literal_wideEval,
       `machine_operands_example_typed_pair, `machine_operands_planted_typed_pair_wideEval,
@@ -302,7 +435,7 @@ private def plan : List Piece := [
       `ConcreteSpec.Core.wrap_inRange,
       `ConcreteSpec.Core.wrap_of_inRange,
       `ConcreteSpec.Core.wrapping_of_checked]],
-  present "F06" "Constant expressions, admission, evaluation, and registry controls" [
+  present .F06 "Constant expressions, admission, evaluation, and registry controls" [
     evidence `ConcreteSpec.Spec.Const `ConcreteSpec.Core.ConstDemo [
       `example_accepted_rule_ConcreteSpec_Core_ConstsAdmitted_wrapping,
       `example_accepted_rule_ConcreteSpec_Core_ConstsAdmitted_plain,
@@ -344,7 +477,7 @@ private def plan : List Piece := [
       `example_longer_sorted_chain_satisfies_full_dependency],
     decls `ConcreteSpec.Spec.Const [`ConcreteSpec.Core.CExpr, `ConcreteSpec.Core.CExpr.eval, `ConcreteSpec.Core.ConstsPermitted],
     decls `ConcreteSpec.Spec.Rules [`ConcreteSpec.Core.ConstRegistry.accepted, `ConcreteSpec.Core.ConstRegistry.refused]],
-  present "F07" "Constant typing, evaluation, dependency order, and cycle laws" [
+  present .F07 "Constant typing, evaluation, dependency order, and cycle laws" [
     evidence `ConcreteSpec.Proofs.Const `ConcreteSpec.Core [
       `eval_wellTyped_progress_example_div_zero, `eval_wellTyped_progress_planted_div_zero_divisionAsFuel,
       `eval_total_example_wrap, `eval_total_planted_wrap_refuseWrappingAdd,
@@ -402,7 +535,7 @@ private def plan : List Piece := [
       `ConcreteSpec.Core.typeConsts_refuses_nonCopy,
       `ConcreteSpec.Core.typed_constant_closed,
       `ConcreteSpec.Core.typed_evalConsts_refusal]],
-  present "F08" "Parameterized executor, lifecycle transitions, residual state, and fuel" [
+  present .F08 "Parameterized executor, lifecycle transitions, residual state, and fuel" [
     evidence `ConcreteSpec.Spec.Exec `ConcreteSpec.Core.Exec.Demo [
       `example_fn_Fn_ops_vs_List, `example_match_run_O, `example_match_run_O_2,
       `example_go_seq_block_seq_dlog, `example_brief_go_block_seq_dlog, `example_brief_go_block_seq_dlog_2,
@@ -427,7 +560,7 @@ private def plan : List Piece := [
       `example_independent_explicit_return_rule_preserves_returned,
       `example_no_relational_label_answer_or_destination, `example_no_relational_label_answer_or_destination_2],
     decls `ConcreteSpec.Spec.Exec [`ConcreteSpec.Core.Exec.Operands, `ConcreteSpec.Core.Exec.Config, `ConcreteSpec.Core.Exec.step, `ConcreteSpec.Core.Exec.runFrom, `ConcreteSpec.Core.Exec.Report]],
-  present "F09a" "Elementary execution and structured exits" [
+  present .F09a "Elementary execution and structured exits" [
     evidence `ConcreteSpec.Proofs.Exec `ConcreteSpec.Core.Exec.CoreEvidence [
       `lookup_restrict_instance, `lookup_restrict_planted, `restrict_dom_drops_instance,
       `restrict_dom_drops_planted, `steps_request_instance, `steps_request_planted, `step_ret_instance,
@@ -470,7 +603,7 @@ private def plan : List Piece := [
       `ConcreteSpec.Core.Exec.steps_request,
       `ConcreteSpec.Core.Exec.two_defers_register,
       `ConcreteSpec.Core.Exec.unwind_runs_plan]],
-  present "F09b" "Cleanup and saved-caller segmentation" [
+  present .F09b "Cleanup and saved-caller segmentation" [
     evidence `ConcreteSpec.Proofs.Exec `ConcreteSpec.Core.Exec.CleanupEvidence [
       `example_Helper_application_ConcreteSpec_Core_Exec_cleanup_runs_exact_plan,
       `example_Helper_application_ConcreteSpec_Core_Exec_planWith_calls,
@@ -508,7 +641,7 @@ private def plan : List Piece := [
       `ConcreteSpec.Core.Exec.register_protected,
       `ConcreteSpec.Core.Exec.step_trapped,
       `ConcreteSpec.Core.Exec.steps_from_trapped]],
-  present "F09c" "Relational determinism and dispatcher agreement" [
+  present .F09c "Relational determinism and dispatcher agreement" [
     evidence `ConcreteSpec.Proofs.Exec `ConcreteSpec.Core.Exec.DeterminismEvidence [
       `rules_deterministic_instance, `rules_silent_deterministic_instance, `rules_deterministic_planted,
       `rules_silent_deterministic_planted, `rules_sound_instance, `rules_complete_instance,
@@ -520,7 +653,7 @@ private def plan : List Piece := [
       `ConcreteSpec.Core.Exec.rules_deterministic,
       `ConcreteSpec.Core.Exec.rules_silent_deterministic,
       `ConcreteSpec.Core.Exec.rules_sound]],
-  present "F10" "Lifecycle refusals and destruction ordering" [
+  present .F10 "Lifecycle refusals and destruction ordering" [
     evidence `ConcreteSpec.Proofs.Exec `ConcreteSpec.Core.Exec.LifecycleEvidence [
       `bind_instance, `bind_planted, `assign_instance, `assign_planted, `call_instance, `call_planted,
       `scope_instance, `scope_planted, `exitScope_instance, `exitScope_planted, `exitTest_instance,
@@ -564,7 +697,7 @@ private def plan : List Piece := [
       `ConcreteSpec.Core.Exec.seqDestroyOrder_elem,
       `ConcreteSpec.Core.Exec.seqDestroyOrder_storage,
       `ConcreteSpec.Core.Exec.test_drop_refused]],
-  present "F11" "Byte memory, provenance, and encoding" [
+  present .F11 "Byte memory, provenance, and encoding" [
     evidence `ConcreteSpec.Spec.Memory `ConcreteSpec.Core.Mem [
       `example_tinyTarget_WellFormed, `example_Refused_zero_byte_access_still_needs,
       `example_Refused_aligned_representable_address_in_unknown,
@@ -664,7 +797,7 @@ private def plan : List Piece := [
       `ConcreteSpec.Core.Mem.store_other_block,
       `ConcreteSpec.Core.Mem.store_same_block_frame,
       `ConcreteSpec.Core.Mem.store_wellFormed]],
-  present "F12" "Integer hybrid storage and preservation" [
+  present .F12 "Integer hybrid storage and preservation" [
     evidence `ConcreteSpec.Spec.Hybrid `ConcreteSpec.Core.Hybrid [
       `example_encoding_hold_does_not_hold_decided, `example_Missing_layout_authority_refuses_query_rather,
       `example_integer_is_readable_before_taking_its, `example_Boolean_byte_storage_is_outside_this,
@@ -717,7 +850,7 @@ private def plan : List Piece := [
       `ConcreteSpec.Core.Hybrid.write_frame_disjoint,
       `ConcreteSpec.Core.Hybrid.write_read,
       `ConcreteSpec.Core.Hybrid.write_wellFormed]],
-  present "F13" "Ownership state, lending, and rule registry" [
+  present .F13 "Ownership state, lending, and rule registry" [
     evidence `ConcreteSpec.Spec.Own `ConcreteSpec.Core.Own.Examples [
       `example_Accepted_rule_ConcreteSpec_Core_Own_ownerAccess,
       `example_Refused_rule_ConcreteSpec_Core_Own_ownerAccess,
@@ -759,7 +892,7 @@ private def plan : List Piece := [
       `ownerAccepted, `ownerRefused, `loanAccepted, `loanRefused,
       `endAccepted, `endRefused, `moveAccepted, `moveRefused,
       `dropAccepted, `dropRefused, `leaveAccepted, `leaveRefused]],
-  present "F14" "Ownership preservation, activation and local lifetime proofs" [
+  present .F14 "Ownership preservation, activation and local lifetime proofs" [
     evidence `ConcreteSpec.Proofs.Own `ConcreteSpec.Core.Own.PrimitiveWitnesses [
       `example_Positive_preservation_progress_instances_use_live, `example_ownership_calculation,
       `example_ownership_calculation_2, `example_ownership_calculation_3, `example_ownership_calculation_4,
@@ -923,7 +1056,7 @@ private def plan : List Piece := [
       `ConcreteSpec.Core.Own.reborrowTo_preserves,
       `ConcreteSpec.Core.Own.reborrow_preserves,
       `ConcreteSpec.Core.Own.reinitialize_preserves]],
-  present "F15" "Execution and argument erasure" [
+  present .F15 "Execution and argument erasure" [
     evidence `ConcreteSpec.Proofs.OwnErasureEvidence `ConcreteSpec.Core.Own.ExecErasureWitnesses [
       `example_Moving_initialized_owner_in_instrumented_operand,
       `example_trapping_operand_in_instrumented_instance_traps,
@@ -994,23 +1127,23 @@ private def plan : List Piece := [
       `ConcreteSpec.Core.Own.step_next_erasure,
       `ConcreteSpec.Core.Own.step_request_erasure,
       `ConcreteSpec.Core.Own.step_stuck_iff_of_accepted]],
-  pending "F16" ["ROADMAP.md R-0611"],
-  present "CAP" "Shared capability type and enumeration" [
+  pending .F16 ["ROADMAP.md R-0611"],
+  present .CAP "Shared capability type and enumeration" [
     decls `ConcreteSpec.Spec.CapabilityBase [`ConcreteSpec.Authority.Cap, `ConcreteSpec.Authority.Cap.all]],
-  pending "F17" ["ROADMAP.md R-0611", "ISSUES.tsv ISS-0081"],
-  pending "F18" ["ROADMAP.md R-0615", "ISSUES.tsv ISS-0049", "docs/decisions.md#decided-2026-11-17-proposals-in-lean (ISS-0050 writer brief)"],
-  pending "F19" ["ROADMAP.md R-0612", "ISSUES.tsv ISS-0084"],
-  pending "F20" ["ROADMAP.md R-0612", "ISSUES.tsv ISS-0084"],
-  pending "F20p" ["ISSUES.tsv ISS-0068", "ROADMAP.md R-0612"],
-  pending "F21" ["ROADMAP.md R-0612"],
-  pending "F22" ["ROADMAP.md R-0612", "ISSUES.tsv ISS-0068"],
-  pending "F23" ["ROADMAP.md R-0612", "ISSUES.tsv ISS-0084"],
-  pending "F24a" ["ROADMAP.md R-0614"],
-  pending "F24b" ["ROADMAP.md R-0614"],
-  pending "F25a" ["ROADMAP.md R-0614"],
-  pending "F25b" ["ROADMAP.md R-0614"],
-  pending "F26" ["ROADMAP.md R-0613"],
-  added "F26a" "F26 accounting slice in C7"
+  pending .F17 ["ROADMAP.md R-0611", "ISSUES.tsv ISS-0081"],
+  pending .F18 ["ROADMAP.md R-0615", "ISSUES.tsv ISS-0049", "docs/decisions.md#decided-2026-11-17-proposals-in-lean (ISS-0050 writer brief)"],
+  pending .F19 ["ROADMAP.md R-0612", "ISSUES.tsv ISS-0084"],
+  pending .F20 ["ROADMAP.md R-0612", "ISSUES.tsv ISS-0084"],
+  pending .F20p ["ISSUES.tsv ISS-0068", "ROADMAP.md R-0612"],
+  pending .F21 ["ROADMAP.md R-0612"],
+  pending .F22 ["ROADMAP.md R-0612", "ISSUES.tsv ISS-0068"],
+  pending .F23 ["ROADMAP.md R-0612", "ISSUES.tsv ISS-0084"],
+  pending .F24a ["ROADMAP.md R-0614"],
+  pending .F24b ["ROADMAP.md R-0614"],
+  pending .F25a ["ROADMAP.md R-0614"],
+  pending .F25b ["ROADMAP.md R-0614"],
+  pending .F26 ["ROADMAP.md R-0613"],
+  added .F26a "F26 accounting slice in C7"
     "changelog.d/2026-11-15-spec-f26a-accounting.md; ROADMAP.md R-0613" [
     evidence `ConcreteSpec.Spec.Accounting `ConcreteSpec.Core.Leak [
       `example_execution_check_evaluating_run_on_allocate, `example_refusal_check_showing_apply_returns_none],
@@ -1071,37 +1204,42 @@ private def plan : List Piece := [
       `ConcreteSpec.Core.Leak.run_peak_exact,
       `ConcreteSpec.Core.Leak.run_peak_monotone,
       `ConcreteSpec.Core.Leak.run_wf]],
-  disposition "F27" "deferred by owner"
+  disposition .F27 "wiping is out of the spec and only the owner can reopen it"
     "ISSUES.tsv ISS-0072; docs/decisions.md#decided-2026-11-16-secret-wiping",
-  pending "F28" ["ROADMAP.md R-0616", "ISSUES.tsv ISS-0073"],
-  pending "F29" ["ROADMAP.md R-0616", "ISSUES.tsv ISS-0073"],
-  pending "F29p" ["ROADMAP.md R-0616", "ISSUES.tsv ISS-0068"],
-  pending "F30" ["ROADMAP.md R-0608 and R-0571"],
-  pending "F31" ["ROADMAP.md R-0608 and R-0571", "ISSUES.tsv ISS-0069"],
-  pending "F32" ["ROADMAP.md R-0574 and R-0571"],
-  pending "F33" ["ROADMAP.md R-0571 and R-0609", "ISSUES.tsv ISS-0069, ISS-0070 and ISS-0076"],
-  pending "F34" ["ROADMAP.md R-0607 and R-0571"],
-  pending "F35" ["ROADMAP.md R-0607, R-0612 and R-0571"],
-  pending "F36" ["ROADMAP.md R-0611 and R-0571"],
-  pending "F37" ["ROADMAP.md R-0611 and R-0571"],
-  pending "F38" ["ROADMAP.md R-0607 and R-0571"],
-  disposition "F39-design" "folded into F39"
+  pending .F28 ["ROADMAP.md R-0616", "ISSUES.tsv ISS-0073"],
+  pending .F29 ["ROADMAP.md R-0616", "ISSUES.tsv ISS-0073"],
+  pending .F29p ["ROADMAP.md R-0616", "ISSUES.tsv ISS-0068"],
+  pending .F30 ["ROADMAP.md R-0608 and R-0571"],
+  pending .F31 ["ROADMAP.md R-0608 and R-0571", "ISSUES.tsv ISS-0069"],
+  pending .F32 ["ROADMAP.md R-0574 and R-0571"],
+  pending .F33 ["ROADMAP.md R-0571 and R-0609", "ISSUES.tsv ISS-0069, ISS-0070 and ISS-0076"],
+  pending .F34 ["ROADMAP.md R-0607 and R-0571"],
+  pending .F35 ["ROADMAP.md R-0607, R-0612 and R-0571"],
+  pending .F36 ["ROADMAP.md R-0611 and R-0571"],
+  pending .F37 ["ROADMAP.md R-0611 and R-0571"],
+  pending .F38 ["ROADMAP.md R-0607 and R-0571"],
+  disposition .«F39-design» "folded into F39"
     "ROADMAP.md R-0611; docs/decisions.md#decided-2026-11-17-proposals-in-lean",
-  pending "F39" ["ROADMAP.md R-0611 and R-0571"],
-  pending "F40" ["ROADMAP.md R-0571 and R-0555"],
-  qualifies "M01" "Basics",
-  qualifies "M02" "Authority",
-  qualifies "M03" "Borrow",
-  qualifies "M04" "Brand",
-  qualifies "M05" "Checker",
-  qualifies "M06" "Cleanup",
-  qualifies "M07" "Examples",
-  qualifies "M08" "Observe",
-  qualifies "M09" "Rep" [laws `ConcreteSpec.Proofs.Rep [`ConcreteSpec.Rep.rep_roundtrip]],
-  qualifies "M10" "Slice0",
-  qualifies "M11" "Slice1",
-  qualifies "M12" "Surface0"]
+  pending .F39 ["ROADMAP.md R-0611 and R-0571"],
+  pending .F40 ["ROADMAP.md R-0571 and R-0555"],
+  qualifies .M01 "Basics",
+  qualifies .M02 "Authority",
+  qualifies .M03 "Borrow",
+  qualifies .M04 "Brand",
+  qualifies .M05 "Checker",
+  qualifies .M06 "Cleanup",
+  qualifies .M07 "Examples",
+  qualifies .M08 "Observe",
+  qualifies .M09 "Rep" [laws `ConcreteSpec.Proofs.Rep [`ConcreteSpec.Rep.rep_roundtrip]],
+  qualifies .M10 "Slice0",
+  qualifies .M11 "Slice1",
+  qualifies .M12 "Surface0"]
 
+private abbrev occursOnce (pieces : List Piece) (id : PieceId) : Prop :=
+  (pieces.map (·.id)).count id = 1
+
+private theorem planCoversEveryId (id : PieceId) : occursOnce plan id := by
+  cases id <;> decide
 
 private def origin? (env : Environment) (name : Name) : Option Name :=
   if let some i := env.getModuleIdxFor? name then
@@ -1137,11 +1275,12 @@ structure Result where
   rows : Array String := #[]
 
 private def inventory (env : Environment) (observedLaws : NameMap Name)
-    (plan : List Piece) (integrityErrors : Array String := #[]) : Result := Id.run do
+    (plan : List Piece) (integrityErrors : Array String := #[])
+    (subjectModules : PieceId → List Name := subject) : Result := Id.run do
   let mut result : Result := { errors := integrityErrors }
   let mut seen : NameSet := {}
   let mut seenLaws : NameSet := {}
-  let mut ids : Std.HashSet String := {}
+  let mut ids : Std.HashSet PieceId := {}
   for piece in plan do
     let mut errors := #[]
     if ids.contains piece.id then
@@ -1151,6 +1290,8 @@ private def inventory (env : Environment) (observedLaws : NameMap Name)
     if claimsLanding && piece.groups.isEmpty then
       errors := errors.push s!"{piece.id}: a landed piece needs evidence"
     for group in piece.groups do
+      if !(subjectModules piece.id).contains group.origin then
+        errors := errors.push s!"{piece.id}: evidence module {group.origin} is outside its subject"
       if group.declarations.isEmpty && group.laws.isEmpty then
         errors := errors.push s!"{piece.id}: empty evidence group"
       if (env.getModuleIdx? group.origin).isNone && group.origin != env.header.mainModule then
@@ -1189,21 +1330,6 @@ private def inventory (env : Environment) (observedLaws : NameMap Name)
     if seenLaws.contains name then none else some s!"unplanned Law {name} ({origin})"
   return { result with errors := result.errors ++ unplanned.toArray.qsort (· < ·) }
 
--- Guard the reconciled totals without a second list of rows.
-private def checkPlanSize (plan : List Piece) : Array String := Id.run do
-  let mut errors := #[]
-  for (kind, label, expected) in [
-      (Scope.original, "original spec plan", 51), (.addition, "recorded additions", 3),
-      (.qualification, "theorem qualification", 12)] do
-    let actual := (plan.filter (·.scopeKind == kind)).length
-    if actual != expected then
-      errors := errors.push s!"{label}: expected {expected} rows, found {actual}"
-  return errors
-
-private def checkInventory (env : Environment) (observedLaws : NameMap Name) (plan : List Piece)
-    (rootErrors : Array String) : Result :=
-  inventory env observedLaws plan (rootErrors ++ checkPlanSize plan)
-
 private def rootErrors (env : Environment) (modules : Array Name) : Array String :=
   (modules.filterMap fun name =>
     if (env.getModuleIdx? name).isNone then
@@ -1228,36 +1354,49 @@ theorem newName : True := trivial
 /-- Law: this tagged definition must be excluded. -/
 def nonTheorem : Bool := true
 
+-- Planted mutations fail the same coverage obligation as the production plan.
+example : ¬ occursOnce (plan.filter (·.id != .F04p)) .F04p := by decide
+
+private def substituted := plan.map fun piece =>
+  if piece.id == .F39 then { piece with id := .F40 } else piece
+
+example : substituted.length = plan.length ∧
+    ¬ occursOnce substituted .F39 ∧ ¬ occursOnce substituted .F40 := by decide
+
 def verify (env : Environment) (specLaws : NameMap Name) : CommandElabM Unit := do
   let origin := env.header.mainModule
   let observed ← readLaws env (· == origin)
-  let good := present "test" "" [laws origin [`SpecLanding.Control.newName]]
-  let check (pieces : List Piece) := (inventory env observed pieces).errors
+  let good := present .F01 "" [laws origin [`SpecLanding.Control.newName]]
+  let check (pieces : List Piece) := (inventory env observed pieces #[]
+    (fun _ => [origin, `ConcreteSpec.Proofs.Basics, `MissingModule])).errors
   let hasError (pieces : List Piece) (message : String) : CommandElabM Unit := do
     unless (check pieces).contains message do
       throwError "inventory control missed {message}"
   unless (check [good]).isEmpty do
     throwError "inventory control: updated plan did not resolve the rename"
-  hasError [present "test" "" [laws origin [`SpecLanding.Control.oldName]]]
-    s!"test: missing declaration SpecLanding.Control.oldName in {origin}"
-  hasError [present "test" "" [decls origin [`SpecLanding.Control.absent]]]
-    s!"test: missing declaration SpecLanding.Control.absent in {origin}"
-  hasError [present "test" "" [decls origin [`SpecLanding.Control.newName]]]
+  hasError [present .F01 "" [laws origin [`SpecLanding.Control.oldName]]]
+    s!"F01: missing declaration SpecLanding.Control.oldName in {origin}"
+  hasError [present .F01 "" [decls origin [`SpecLanding.Control.absent]]]
+    s!"F01: missing declaration SpecLanding.Control.absent in {origin}"
+  hasError [present .F01 "" [decls origin [`SpecLanding.Control.newName]]]
     s!"unplanned Law SpecLanding.Control.newName ({origin})"
   for name in [`SpecLanding.Control.retained, `SpecLanding.Control.nonTheorem] do
-    hasError [present "test" "" [laws origin [name]]]
-      s!"test: {name} is not an authored Law theorem"
-  hasError [present "test" "" [decls origin []]] "test: empty evidence group"
-  hasError [present "test" "" []] "test: a landed piece needs evidence"
-  hasError [good, good] "duplicate piece test"
-  hasError [good, { good with id := "other" }] "other: duplicate planned declaration SpecLanding.Control.newName"
-  hasError [present "test" "" [laws `ConcreteSpec.Proofs.Basics [`SpecLanding.Control.newName]]]
-    s!"test: SpecLanding.Control.newName is in {origin}, expected ConcreteSpec.Proofs.Basics"
-  hasError [present "test" "" [laws `MissingModule [`SpecLanding.Control.newName]]]
-    "test: missing module MissingModule"
-  let removed := checkInventory env specLaws (plan.filter (·.id != "F04p")) #[]
-  unless removed.errors == #["original spec plan: expected 51 rows, found 50"] do
-    throwError "inventory control: removing a planned row was accepted"
+    hasError [present .F01 "" [laws origin [name]]]
+      s!"F01: {name} is not an authored Law theorem"
+  hasError [present .F01 "" [decls origin []]] "F01: empty evidence group"
+  hasError [present .F01 "" []] "F01: a landed piece needs evidence"
+  hasError [good, good] "duplicate piece F01"
+  hasError [good, { good with id := .F02 }] "F02: duplicate planned declaration SpecLanding.Control.newName"
+  hasError [present .F01 "" [laws `ConcreteSpec.Proofs.Basics [`SpecLanding.Control.newName]]]
+    s!"F01: SpecLanding.Control.newName is in {origin}, expected ConcreteSpec.Proofs.Basics"
+  hasError [present .F01 "" [laws `MissingModule [`SpecLanding.Control.newName]]]
+    "F01: missing module MissingModule"
+  let unrelated := decls `ConcreteSpec.Spec.Basics [`ConcreteSpec.Core.AList.erase]
+  let falseLanding := plan.map fun piece =>
+    if piece.id == .F39 then { piece with remaining := [], groups := [unrelated] } else piece
+  unless (inventory env specLaws falseLanding).errors ==
+      #["F39: evidence module ConcreteSpec.Spec.Basics is outside its subject"] do
+    throwError "inventory control: unrelated evidence was accepted for F39"
   let orphan := rootErrors env #[`ConcreteSpec.Spec.Basics, `ConcreteSpec.PlantedOrphan]
   let checked := inventory env {} [] orphan
   unless checked.errors == #["spec module outside the root import closure: ConcreteSpec.PlantedOrphan"] do
@@ -1269,7 +1408,7 @@ end Control
 #eval show CommandElabM Unit from do
   let env ← getEnv
   let observed ← readLaws env (fun origin => origin.getRoot == `ConcreteSpec)
-  let result := checkInventory env observed plan (← checkRoot env)
+  let result := inventory env observed plan (← checkRoot env)
   for row in result.rows ++ result.errors do
     IO.println row
   if !result.errors.isEmpty then throwError "spec landing inventory failed"
