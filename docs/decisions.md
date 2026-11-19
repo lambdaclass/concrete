@@ -3287,8 +3287,9 @@ okay with your decisions
     Refuse drive prefixes (`C:...`)? Neither is named in the final shown options.
     Refuse or interpret backslashes? Refuse ASCII controls U+0000–U+001F/U+007F?
     Accept other Unicode unchanged, with exact-scalar identity and no normalization?
-    No verified approval settles these. The owner-approved held plan at L144552,
-    2026-11-11T13:33:37.630Z ("ok go ahead with" the pasted plan), expressly keeps
+    At the time of recovery, no verified approval settled these. The owner-approved
+    held plan at L144552, 2026-11-11T13:33:37.630Z ("ok go ahead with" the
+    pasted plan), expressly kept
     backslashes and Unicode waiting for the owner. **Answered 2026-11-16 and
     2026-11-17:** the [file-path decision](#decided-2026-11-16-file-paths) settles
     these historical authority gaps with ASCII-only paths and no rewriting.
@@ -3551,8 +3552,11 @@ ok do all this
   This does not resolve the C2 constant restrictions (D4 report rows 1.4–1.5),
   path-character details (`./` and empty components, drive prefixes, backslash,
   control characters, Unicode identity), U+FEFF, bare CR, unit/char constants,
-  or any other held item. Path-character policy stays open; nothing may claim
-  complete path validation until it is decided.
+  or any other held item. As of November 14, path-character policy was open
+  and claims of complete path validation had to wait for a decision. The
+  [November 16 file-path decision](#decided-2026-11-16-file-paths) and the
+  [November 17 file-name decision](#decided-2026-11-17-file-names) record the
+  later answers. ISS-0068 tracks implementation and dependent evidence.
 
 - <a id="decided-2026-11-14-constant-types"></a>**Constant types (2026-11-14).**
   The owner approves the coordinator's revised recommendation below, not the
