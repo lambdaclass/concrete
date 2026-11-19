@@ -2883,14 +2883,32 @@ ConcreteSpec.Core.SliceId.mk.inj
 ConcreteSpec.Core.SliceId.mk.injEq	propext
 ConcreteSpec.Core.SliceId.mk.sizeOf_spec	
 ConcreteSpec.Core.SourceReference.eq_1	
-ConcreteSpec.Core.SourceText.columnAt.eq_1	Classical.choice Quot.sound propext
-ConcreteSpec.Core.SourceText.columnAt_append	Classical.choice Quot.sound propext
-ConcreteSpec.Core.SourceText.columnAt_append_newline	Classical.choice Quot.sound propext
-ConcreteSpec.Core.SourceText.columnAt_append_tab	Classical.choice Quot.sound propext
-ConcreteSpec.Core.SourceText.lineAt.eq_1	Classical.choice Quot.sound propext
-ConcreteSpec.Core.SourceText.lineAt_append	Classical.choice Quot.sound propext
-ConcreteSpec.Core.SourceText.lineAt_append_newline	Classical.choice Quot.sound propext
-ConcreteSpec.Core.SourceText.lineAt_append_other	Classical.choice Quot.sound propext
+ConcreteSpec.Core.SourceText.byte_lt	
+ConcreteSpec.Core.SourceText.columnAt.eq_1	
+ConcreteSpec.Core.SourceText.columnAt_append	Quot.sound propext
+ConcreteSpec.Core.SourceText.columnAt_append_newline	Quot.sound propext
+ConcreteSpec.Core.SourceText.columnAt_append_tab	Quot.sound propext
+ConcreteSpec.Core.SourceText.columnAt_zero	
+ConcreteSpec.Core.SourceText.length.eq_1	
+ConcreteSpec.Core.SourceText.length_toBytes	propext
+ConcreteSpec.Core.SourceText.lineAt.eq_1	
+ConcreteSpec.Core.SourceText.lineAt_append	Quot.sound propext
+ConcreteSpec.Core.SourceText.lineAt_append_newline	Quot.sound propext
+ConcreteSpec.Core.SourceText.lineAt_append_other	Quot.sound propext
+ConcreteSpec.Core.SourceText.lineAt_zero	
+ConcreteSpec.Core.SourceText.mk.congr_simp	
+ConcreteSpec.Core.SourceText.mk.inj	
+ConcreteSpec.Core.SourceText.mk.injEq	propext
+ConcreteSpec.Core.SourceText.mk.sizeOf_spec	
+ConcreteSpec.Core.SourceText.ofBytes._proof_1	Quot.sound propext
+ConcreteSpec.Core.SourceText.ofBytes.eq_1	Quot.sound propext
+ConcreteSpec.Core.SourceText.ofBytes_toBytes	Quot.sound propext
+ConcreteSpec.Core.SourceText.push._proof_1	propext
+ConcreteSpec.Core.SourceText.push.eq_1	propext
+ConcreteSpec.Core.SourceText.take_toBytes	propext
+ConcreteSpec.Core.SourceText.toBytes.eq_1	
+ConcreteSpec.Core.SourceText.toBytes_ofBytes	Quot.sound propext
+ConcreteSpec.Core.SourceText.toBytes_push	propext
 ConcreteSpec.Core.SpecVersion.mk.inj	
 ConcreteSpec.Core.SpecVersion.mk.injEq	propext
 ConcreteSpec.Core.SpecVersion.mk.sizeOf_spec	
@@ -3362,6 +3380,9 @@ ConcreteSpec.Core.instDecidableEqSiteId.decEq._proof_1
 ConcreteSpec.Core.instDecidableEqSiteId.decEq._proof_2	
 ConcreteSpec.Core.instDecidableEqSliceId.decEq._proof_1	
 ConcreteSpec.Core.instDecidableEqSliceId.decEq._proof_2	
+ConcreteSpec.Core.instDecidableEqSourceText.decEq._proof_1	
+ConcreteSpec.Core.instDecidableEqSourceText.decEq._proof_2	
+ConcreteSpec.Core.instDecidableEqSourceText.decEq._proof_3	
 ConcreteSpec.Core.instDecidableEqSpecVersion.decEq._proof_1	
 ConcreteSpec.Core.instDecidableEqSpecVersion.decEq._proof_2	
 ConcreteSpec.Core.instDecidableEqSpecVersion.decEq._proof_3	
