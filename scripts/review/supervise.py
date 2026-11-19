@@ -8,7 +8,28 @@ import sys
 import time
 
 
+def launch_arguments(arguments):
+    try:
+        directory, *arguments = arguments
+        separator = arguments.index("--")
+        environment = dict(entry.split("=", 1) for entry in arguments[:separator])
+    except ValueError:
+        return None
+    command = arguments[separator + 1:]
+    if not directory or "" in environment or not command:
+        return None
+    return directory, environment, command
+
+
 def main():
+    check_only = sys.argv[1:] == ["--check"]
+    if not check_only:
+        launch = launch_arguments(sys.argv[1:])
+        if launch is None:
+            print("usage: supervise.py {--check | DIRECTORY [NAME=VALUE ...] -- REVIEWER [ARG ...]}",
+                  file=sys.stderr)
+            return 2
+        directory, environment, command = launch
     if sys.version_info < (3, 9):
         sys.exit("review runner: running reviews requires Python 3.9 or newer")
     # An orphaned grandchild is reparented here even after setsid/setpgid.
@@ -18,7 +39,7 @@ def main():
     if (sys.platform != "linux" or not children.is_file()
             or ctypes.CDLL(None, use_errno=True).prctl(pr_set_child_subreaper, 1, 0, 0, 0) != 0):
         sys.exit("review runner: running reviews requires Linux with procfs and child subreaping")
-    if sys.argv[1:] == ["--check"]:
+    if check_only:
         return 0
 
     cancelled = False
@@ -32,15 +53,11 @@ def main():
     if cancelled:
         return 2
 
-    directory = sys.argv[1]
-    arguments = sys.argv[2:]
-    separator = arguments.index("--")
-    environment = dict(entry.split("=", 1) for entry in arguments[:separator])
     if any(not os.path.isabs(entry) for entry in environment.get("PATH", "").split(os.pathsep)):
         sys.exit("review runner: PATH entries must be absolute directories")
-    command = arguments[separator + 1:]
-    if not command or not os.path.isabs(command[0]):
-        sys.exit("review runner: reviewer path must be absolute")
+    if not os.path.isabs(command[0]):
+        print("review runner: reviewer path must be absolute", file=sys.stderr)
+        return 2
     reviewer = subprocess.Popen(command, cwd=directory, env=environment, start_new_session=True)
     while not cancelled and reviewer.poll() is None:
         time.sleep(0.01)

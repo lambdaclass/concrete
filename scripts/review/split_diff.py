@@ -1,7 +1,6 @@
-#!/usr/bin/env python3
 """Split a unified git diff into review pieces (R-0544).
 
-Usage: split_diff.py <diff-file> <out-dir> <limit-bytes> [--no-groups]
+Usage: python3 -I split_diff.py <diff-file> <out-dir> <limit-bytes> [--no-groups]
 
 Writes <out-dir>/piece-NNN.diff and <out-dir>/manifest.tsv (one line per piece:
 "<file>\t<group>\t<bytes>\t<paths, comma separated>"). Prints the piece count.
@@ -130,13 +129,19 @@ def file_chunks(header, hunks, limit):
 
 
 def main():
-    argv = sys.argv[1:]
-    no_groups = "--no-groups" in argv
-    args = [a for a in argv if not a.startswith("--")]
-    if len(args) != 3:
-        sys.stderr.write(__doc__)
+    args = sys.argv[1:]
+    no_groups = len(args) == 4 and args[-1] == "--no-groups"
+    if not (len(args) == 3 or no_groups) or any(arg.startswith("--") for arg in args[:3]):
+        print(__doc__, file=sys.stderr)
         return 2
-    diff_file, out_dir, limit = args[0], args[1], int(args[2])
+    diff_file, out_dir, limit_text = args[:3]
+    try:
+        limit = int(limit_text)
+        if limit < 1:
+            raise ValueError
+    except ValueError:
+        print("split_diff.py: limit-bytes must be a positive integer", file=sys.stderr)
+        return 2
     with open(diff_file, encoding="utf-8", errors="replace") as f:
         text = f.read()
     os.makedirs(out_dir, exist_ok=True)

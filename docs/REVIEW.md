@@ -103,7 +103,7 @@ the external reviewer executable to an absolute path from the invoking directory
 before entering the repository root.
 
 The review scripts require an absolute directory in every PATH entry. The
-shell entry points use an absolute Bash shebang and reject empty entries,
+shell entry points require `/bin/bash` and reject empty entries,
 `.`, and other relative entries before running any external command. This
 keeps command lookup independent of the working directory and avoids silently
 turning the caller’s checkout into a source of executables. An explicitly
@@ -116,7 +116,16 @@ Diff, archive and verification all disable Git object replacement. Review
 patches also disable external diff and text conversion drivers. Absolute
 symlinks, symlink chains that leave the archive, hardlinks, special files,
 unsupported gitlinks and archive attributes that omit or rewrite content fail
-closed before the reviewer starts. Codex runs there with
+closed before the reviewer starts. The archive verifier also rejects any
+committed path with a `.codex` or `.agents` component. Codex discovers project
+configuration in `.codex` and repository skills and plugins in `.agents`.
+The runner disables automatic project instructions with
+`project_doc_max_bytes=0` so files such as `AGENTS.md` remain available as
+review material. See the
+[Codex configuration reference](https://developers.openai.com/codex/config-reference)
+and [plugin documentation](https://developers.openai.com/plugins/build/plugins).
+
+Codex runs in the copy with
 `--sandbox danger-full-access --skip-git-repo-check --json`; the prompt requires
 read-only review. This disposable copy keeps ordinary reviewer writes away from
 the caller, but is not a security boundary for arbitrary code with host access.

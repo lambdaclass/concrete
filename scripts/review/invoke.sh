@@ -2,6 +2,10 @@
 # Single Codex review runner. Arguments: root sha prompt piece output log [absolute reviewer and interpreter].
 # The private archive is disposable, not a security boundary for arbitrary code.
 set -euo pipefail
+if [ "$#" -ne 6 ] && [ "$#" -ne 8 ]; then
+  echo "usage: invoke.sh ROOT SHA PROMPT PIECE OUTPUT LOG [REVIEWER PYTHON]" >&2
+  exit 2
+fi
 # Load the PATH check with builtins only, before any executable lookup.
 script=${BASH_SOURCE[0]}
 case "$script" in */*) ;; *) script="./$script" ;; esac
@@ -60,7 +64,8 @@ done
 cancelled=0
 trap 'cancelled=1' HUP INT TERM
 "$python" -I "$here/supervise.py" "$private/tree" "${environment[@]}" -- "$bin" exec --sandbox danger-full-access \
-  --skip-git-repo-check --json --ephemeral --color never -C "$private/tree" -o "$out" "$final_prompt" \
+  -c project_doc_max_bytes=0 --skip-git-repo-check --json --ephemeral --color never \
+  -C "$private/tree" -o "$out" "$final_prompt" \
   <"$piece" >"$log" &
 child=$!
 trap cancel HUP INT TERM

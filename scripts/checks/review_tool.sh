@@ -64,13 +64,14 @@ cat <<'EOF'
 set -uo pipefail
 [ "${1:-}" = exec ] || { echo "fake codex: expected exec" >&2; exit 64; }
 shift
-out="" prompt="" sandbox="" directory=""
+out="" prompt="" sandbox="" directory="" project_doc_limit=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -o|--output-last-message) out="$2"; shift 2 ;;
     -s|--sandbox) sandbox="$2"; shift 2 ;;
     -C|--cd) directory="$2"; shift 2 ;;
-    --color|-m|--model|-c) shift 2 ;;
+    -c) case "$2" in project_doc_max_bytes=*) project_doc_limit="${2#*=}" ;; esac; shift 2 ;;
+    --color|-m|--model) shift 2 ;;
     --json|--ephemeral|--skip-git-repo-check) shift ;;
     *) prompt="$1"; shift ;;
   esac
@@ -78,6 +79,7 @@ done
 n=$(( $(ls "$FAKE_LOG" | grep -c '^stdin\.' || true) + 1 ))
 cat >"$FAKE_LOG/stdin.$n"
 printf '%s' "$prompt" >"$FAKE_LOG/prompt.$n"
+printf '%s\n' "$project_doc_limit" >"$FAKE_LOG/project-doc-limit.$n"
 kind=standard
 grep -q "routine code review" "$FAKE_LOG/prompt.$n" && kind=neutral
 files="$(grep '^diff --git ' "$FAKE_LOG/stdin.$n" | sed 's#.* b/##' | sort -u | tr '\n' ',')"
@@ -239,6 +241,19 @@ note() { g notes --ref=refs/notes/concrete-review show "${1:-HEAD}" 2>/dev/null;
 field() { note "${2:-HEAD}" | sed -n "s/^$1: //p"; }
 
 echo "=== review host contract ==="
+reject_args() {
+  local diagnostic="$1" rc=0
+  shift
+  "$@" >"$T/bad-arguments" 2>&1 || rc=$?
+  check "$diagnostic (exit $rc)" test "$rc" -eq 2
+  check "$diagnostic diagnostic" grep -Fq -- "$diagnostic" "$T/bad-arguments"
+}
+reject_args 'usage: invoke.sh' /bin/bash "$ROOT_DIR/scripts/review/invoke.sh"
+reject_args 'usage: invoke.sh' /bin/bash "$ROOT_DIR/scripts/review/invoke.sh" a b c d e f g
+reject_args 'usage: supervise.py' python3 -I "$ROOT_DIR/scripts/review/supervise.py" "$T"
+reject_args 'usage: supervise.py' python3 -I "$ROOT_DIR/scripts/review/supervise.py" "$T" BAD -- /bin/sh
+reject_args 'usage: read_evidence.py' python3 -I "$ROOT_DIR/scripts/review/read_evidence.py" probe
+reject_args 'limit-bytes must be a positive integer' python3 -I "$SPLIT" a b 0
 # Exercise the supervisor's non-Linux launch path on Linux CI too.
 python3 -I -c 'import runpy, sys; sys.platform = "darwin"; runpy.run_path(sys.argv.pop(1), run_name="__main__")' \
   "$ROOT_DIR/scripts/review/supervise.py" "$T" -- "$(type -P touch)" "$T/unsupported-launched" >"$T/unsupported" 2>&1; rc=$?
@@ -264,6 +279,7 @@ REVIEW_PUSH=1 review >"$T/out1" 2>&1; rc=$?
 check "findings exit 1 (got $rc)" test "$rc" -eq 1
 check "one reviewer call" test "$(calls)" -eq 1
 check "reviewer runs with --sandbox danger-full-access" grep -q "sandbox=danger-full-access" "$FAKE_LOG/calls"
+check "reviewer disables automatic project instructions" grep -qx 0 "$FAKE_LOG/project-doc-limit.1"
 # Bug 209: every reviewer call runs without git's optional locks, so a reviewer command stopped
 # mid-`git status` cannot leave the caller's worktree with a stale index.lock.
 check "reviewer runs with GIT_OPTIONAL_LOCKS=0" grep -q " optional_locks=0$" "$FAKE_LOG/locks"
@@ -726,6 +742,20 @@ check "supervisor rejects missing PATH" test "$rc" = 1
 check "supervisor explains missing PATH rejection" grep -q 'PATH entries must be absolute' "$T/path-supervisor.log"
 g restore bash node launcher-bin
 
+echo "=== committed reviewer configuration ==="
+for config in .codex/config.toml nested/.codex/rules/default.rules .agents/skills/local/SKILL.md; do
+  reset_fake
+  g checkout -q main && g checkout -qB committed-reviewer-config
+  mkdir -p "$W/${config%/*}"
+  printf '# committed reviewer configuration\n' >"$W/$config"
+  g add -f -- "$config" && g commit -qm "add $config"
+  rm -- "$W/$config"
+  review >"$T/reviewer-config.log" 2>&1; rc=$?
+  check "$config stops review before launch and leaves no note" test "$rc" = 2 -a "$(calls)" = 0 -a -z "$(note)"
+  check "$config rejection identifies the committed path" \
+    grep -Fq "committed reviewer configuration is prohibited: $config" "$T/reviewer-config.log"
+done
+
 reset_fake
 g checkout -q main && g checkout -qb diff-drivers
 commit_file .gitattributes 'driver.txt diff=hide' 'configure diff attribute'
@@ -1006,9 +1036,9 @@ check "each split part repeats the file header and starts a hunk" \
 
 g diff "$(g merge-base HEAD main)" HEAD >"$T/split.diff"
 total="$(wc -c <"$T/split.diff" | tr -d ' ')"
-n="$(python3 "$SPLIT" "$T/split.diff" "$T/sp3" $(( (total + 2) / 3 )))"
+n="$(python3 -I "$SPLIT" "$T/split.diff" "$T/sp3" $(( (total + 2) / 3 )))"
 check "--pieces N sizing: a third of the diff gives about three pieces ($n)" test "$n" -ge 3 -a "$n" -le 6
-n1p="$(python3 "$SPLIT" "$T/split.diff" "$T/sp1" "$total")"
+n1p="$(python3 -I "$SPLIT" "$T/split.diff" "$T/sp1" "$total")"
 check "a limit of the whole diff still separates the four groups ($n1p)" test "$n1p" -eq 4
 # Hunk headers are excluded: a hunk cut in parts gets renumbered headers.
 cat "$T"/sp3/piece-*.diff | grep -v '^@@' | sort >"$T/sp3.sorted"
@@ -1045,7 +1075,7 @@ if expect_new != 301:
     sys.exit("parts end at +%s, want +301 (300 lines)" % expect_new)
 EOF
 check "split parts carry correct, contiguous @@ headers" \
-  python3 "$T/hunks.py" $(ls "$FAKE_LOG"/stdin.* | sort -t. -k2 -n)
+  python3 -I "$T/hunks.py" $(ls "$FAKE_LOG"/stdin.* | sort -t. -k2 -n)
 
 echo "=== the round cap ==="
 reset_fake

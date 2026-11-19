@@ -17,6 +17,12 @@ def fail(message):
     sys.exit("review runner: " + message)
 
 
+def usage():
+    print("usage: read_evidence.py {tree ROOT SHA DIRECTORY | probe ROOT SHA DIRECTORY PYTHON | events LOG OUTPUT STATUS}",
+          file=sys.stderr)
+    return 2
+
+
 def check_links(links):
     for path in links:
         pending = list(reversed(path.parts))
@@ -74,6 +80,8 @@ def verify_tree(root, sha, directory):
         metadata, name = entry.split(b"\t", 1)
         mode, kind, oid = metadata.split()
         path = Path(os.fsdecode(name))
+        if any(part in (".codex", ".agents") for part in path.parts):
+            fail(f"committed reviewer configuration is prohibited: {path}")
         target = tree / path
         if kind != b"blob":
             fail(f"unsupported tree entry: {path}")
@@ -175,11 +183,13 @@ def verify_events(log, output, rc):
 
 
 def main():
-    action = sys.argv[1]
+    action, *args = sys.argv[1:] or [""]
+    if len(args) != {"tree": 3, "probe": 4, "events": 3}.get(action):
+        return usage()
     if action == "tree":
-        verify_tree(*sys.argv[2:])
+        verify_tree(*args)
     elif action == "probe":
-        root, sha, directory, python = sys.argv[2:]
+        root, sha, directory, python = args
         target, content = verify_tree(root, sha, directory)
         nonce = secrets.token_bytes(32)
         with tempfile.NamedTemporaryFile(dir=directory, prefix=".concrete-review-nonce-", delete=False) as challenge:
@@ -196,8 +206,13 @@ def main():
         print(shlex.join([python, "-I", "-c", code, *paths]))
         print(hashlib.sha256(nonce + content).hexdigest())
     elif action == "events":
-        verify_events(*map(Path, sys.argv[2:4]), int(sys.argv[4]))
+        log, output, status = args
+        try:
+            status = int(status)
+        except ValueError:
+            return usage()
+        verify_events(Path(log), Path(output), status)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
