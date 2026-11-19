@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Supplement the elaborated F31 census with erased examples and non-library consumers.
+"""Supplement the elaborated F31 census with parsed commands and non-library declarations.
 
 F31 migration tool: retire with the manifest and companion tools when F31 closes.
 Run from the repository root after building both libraries. Writes deterministic JSON to stdout.
@@ -8,13 +8,9 @@ This is a conservative qualification surface: inclusion never asserts a semantic
 import json
 import os
 from pathlib import Path
-import re
 import subprocess
 import sys
 import tempfile
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "proofs"))
-from lean_lex import lex
 
 rows = set()
 
@@ -37,14 +33,14 @@ def driver_output(driver, *args):
     return result
 
 
-def probe_rows(driver, root, path, source, output):
-    result = driver_output(driver, root, path, source, output)
+def probe_rows(driver, mode, root, path, source, output):
+    result = driver_output(driver, mode, root, path, source, output)
     return [(kind, line, subject) for (kind, line), subject in json.loads(output.read_text())], result
 
 
 def standalone_probes(driver, library_paths, source_root, output, env=None):
     for path in sorted(tracked_lean_sources(env) - library_paths):
-        probe, result = probe_rows(driver, source_root, path, source_root / path, output)
+        probe, result = probe_rows(driver, "standalone", source_root, path, source_root / path, output)
         yield path, probe, result
 
 
@@ -63,14 +59,16 @@ with tempfile.TemporaryDirectory(prefix="f31-probe-") as directory:
     if not {Path("Concrete.lean"), Path("ConcreteSpec.lean")} <= library_paths:
         raise SystemExit("F31: missing library roots in Lean's import closure")
 
-    # The environment erases examples, so inspect the tracked sources in the closure.
-    for path in sorted(tracked_lean_sources() & library_paths):
-        code = lex(path.read_text(), literals=False)
-        for match in re.finditer(r"(?m)^\s*example\b", code):
-            line = code.count("\n", 0, match.end()) + 1
-            add("anonymous-example", path, line, "example")
+    missing = library_paths - tracked_lean_sources()
+    if missing:
+        raise SystemExit(f"F31: library sources outside the active tracked tree: {sorted(missing)}")
 
     output = scratch / "probe.json"
+    for path in sorted(library_paths):
+        probe, _ = probe_rows(driver, "library", Path("."), path, path, output)
+        for kind, line, subject in probe:
+            add(kind, path, line, subject)
+
     declarations, registry = [], []
     for path, probe, result in standalone_probes(driver, library_paths, Path("."), output):
         for kind, line, subject in probe:
@@ -115,9 +113,27 @@ with tempfile.TemporaryDirectory(prefix="f31-probe-") as directory:
     expected = ("probe-command", prefix.count("\n") + 1, f"0: {example}")
     baseline = [(kind, line, subject) for kind, path, line, subject in rows
                 if path == str(control_probe)]
-    probe, _ = probe_rows(driver, Path("."), control_probe, planted, output)
+    probe, _ = probe_rows(driver, "standalone", Path("."), control_probe, planted, output)
     if sorted(probe) != sorted(baseline + [expected]):
         raise SystemExit("F31: planted standalone example did not add exactly one command row")
+
+    # Exercise the library census on a scratch copy of the compiler root.
+    library_root = Path("Concrete.lean")
+    prefix = library_root.read_text().rstrip("\n") + "\n\n"
+    scoped = f"open Nat in {example}"
+    planted = scratch / library_root.name
+    planted.write_text(f"{prefix}{scoped}\n{example} {example}\n")
+    line = prefix.count("\n") + 1
+    expected = [("library-command", line, f"0: {scoped}"),
+                ("library-command", line, "0: open Nat"),
+                ("anonymous-example", line, f"{len('open Nat in ')}: {example}"),
+                ("anonymous-example", line + 1, f"0: {example}"),
+                ("anonymous-example", line + 1, f"{len(example) + 1}: {example}")]
+    baseline = [(kind, line, subject) for kind, path, line, subject in rows
+                if path == str(library_root) and kind in {"library-command", "anonymous-example"}]
+    probe, _ = probe_rows(driver, "library", Path("."), library_root, planted, output)
+    if sorted(probe) != sorted(baseline + expected):
+        raise SystemExit("F31: planted scoped library example was not inventoried exactly")
 
 # Synthetic modules and exact-name consumers in proof-tool generators must be requalified too.
 for path in sorted(Path("scripts/proofs").glob("*.py")):

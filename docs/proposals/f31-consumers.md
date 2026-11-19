@@ -1,11 +1,7 @@
 # F30 scalar bridge and F31 switch manifest
 
-Round-2 preparation on harness snapshot `c228d1f86`, based on
-`038ec12142fbbe67e8c3ec81c336a048250a38da`. The live inventory is gated until F31 retires it.
-No inherited approval or historical implementation is authority. F30 changes no executable definition
-used by either backend; the only additions to the execution libraries are translations and proofs.
-The harness owns the candidate commit and publication. Validation of this working tree is recorded
-separately from qualification of the eventual candidate SHA.
+The live inventory is gated until F31 retires it. F30 changes no executable definition used by
+either backend. The additions to the execution libraries are translations and proofs.
 
 ## Authority and proof status
 
@@ -104,22 +100,25 @@ definition (checked derived views allowed)"; this preparation chooses no new lan
 The surface census starts with every Git-tracked Lean source. It excludes `legacy/` because that
 tree contains the frozen compiler and archived gates, which are outside the F31 migration
 ([AGENTS.md](../../AGENTS.md)). Lean resolves the transitive imports of `ConcreteSpec` and
-`Concrete`; the census scans their tracked sources for erased anonymous examples, including modules
-with no named dependent declaration. The frontend driver is built once and records every written
-command in the remaining tracked Lean files, including imports, directives and anonymous examples.
-Each command row has its source line, column and text. The same elaboration records persistent
-declarations and runs the declaration census and premise-registry reads.
+`Concrete`. The frontend driver is built once and records every written command across both
+the library closure and the remaining tracked Lean files. It uses Lean's parsed command syntax
+and records each command's line, column and text, including commands on the same line and
+anonymous examples nested inside scoped commands. Library anonymous examples have their own
+row kind because they leave no persistent declaration. The standalone elaborations also record
+persistent declarations and run the declaration census and premise-registry reads.
 
 The gate stages a scratch `tests/F31StandaloneControl.lean` in an isolated Git index and requires
-the census to find its import and scope command with no declaration rows. It also appends an
-anonymous example to a scratch copy of `slice0_bir.lean` and requires exactly one new command row
-with no declaration changes.
+the census to find its import and scope command with no declaration rows. It appends an anonymous
+example to a scratch copy of `slice0_bir.lean` and requires one new command row with no declaration
+changes. It also appends `open Nat in example : True := True.intro` to a scratch copy of the compiler
+root and requires the scoped command and both nested commands at their source positions. Two
+further examples on the same line must appear as separate rows.
 Proof-tool Python generators are explicit obligations, including `local_identity.py` and its synthetic
 control modules. Site and rule tools also have check entries.
 
-The companion has **1,853 entries**: 1,350 library anonymous examples, 89 standalone commands,
-227 probe declarations, nine premises, 101 headlines, 32 tests, 30 checks, two goldens, eight
-integration files and five proof-tool generators. Premises and headlines are read through the owning
+The companion has **5,801 entries**. It contains 3,935 other library commands, 1,350 library
+anonymous examples, 99 standalone commands, 230 probe declarations, nine premises, 101 headlines,
+32 tests, 30 checks, two goldens, eight integration files and five proof-tool generators. Premises and headlines are read through the owning
 Lean registry definitions, with no source regex or duplicated list. All 14 bridge proofs are included.
 F31 must preserve trust classes, report distinctions and diagnostic controls.
 
@@ -193,51 +192,3 @@ closure agreement (R-0707). This branch removes its own trigger; it does not
 claim to repair the compiler/tooling class. Keep the full fidelity check and its controls required.
 The current bridge's declaration export also checks that all 14 requested theorem names are present,
 that all exported definitions/proofs equal Lean's environment, and that both external kernels accept.
-
-## Round-2 validation
-
-2026-11-16, x86_64 Linux. Every command ran under `nix develop -c` on the uncommitted tree.
-HEAD remains harness snapshot `c228d1f86e5c32a7c300e72809b734c28ede044b`; the harness owns the
-final commit and publication. These results qualify the working content, not the unchanged snapshot
-commit. No commit, push, review invocation or review note was made by this writer.
-
-All 14 new theorems are Representation lemmas; there are zero new Laws.
-
-- Both libraries: `lake build ConcreteSpec Concrete` passes (97 jobs).
-- Root checks: all 17 pass after moving inventory qualification into the CI spec job.
-- Backend tests: 32 examples, 68 LLVM/LCB runs including controls, pass.
-- Trusted base: pass, including report/table controls. Its golden is exactly the original sequence
-  plus 14 theorem rows, with no old row or premise removed.
-- Artifacts: both backends, ASan and stack controls pass.
-- Reproducibility: independent builds and comparator controls pass.
-- Axioms: PASS=9 FAIL=0; the spec golden is unchanged.
-- Trust ban: PASS=39 FAIL=0, including compiler constants and erased examples.
-- Kernel replay: PASS=17 FAIL=0, including fresh replay, orphan and forgery controls.
-- Full external recheck: PASS=22 FAIL=0. All 15,014 exported declarations equal Lean's environment;
-  con-leche and nanoda accept, and all export corruption/name controls pass.
-- Additional `leanchecker --fresh Concrete`: exit 0.
-- Additional bridge export: all 14 requested names present, full declaration fidelity,
-  con-leche accepts 1,512 declarations and nanoda checks 1,727 without errors.
-- Site: 56 modules, 3,435 declarations and 1,134 examples; rules: seven rules and 14 example links pass.
-- Final inventory gate: builds both libraries, elaborates Lean, compiles Python, regenerates the full
-  inventories and matches the summary. Names are unique, dependency edges close, and diagnostic/proof
-  tool consumers are present. A planted digest mismatch in a private checkout is rejected specifically
-  as inventory drift. The 43,184 snapshot lines are replaced by the compact checked summary.
-- All authority quotations were checked against the text at their cited anchors and in its context.
-
-The trusted-base printer canonically emits a space after `axioms:` for empty axiom sets. The new
-`toBits` row retains that byte-exact output; it is the sole round-2 `git diff --check` whitespace report.
-External runs use `CONCRETE_EXT_ELAN=/home/unbalancedparen/.elan/bin/elan`, as in round 1.
-
-Logs: `/tmp/f30-r2-*.log`, with final root results in `/tmp/f30-r2-root-final.log`, and the gate list
-in `/tmp/f30-r2-results.txt`. Full generated inventories are in `/tmp/f30-r2-final-inventory/`.
-The separate bridge harness is `/tmp/f30-r2-bridge-external.sh`; the drift control is
-`/tmp/f30-r2-drift-control.py`.
-
-The source fingerprint excludes this narrative to avoid self-reference. It hashes the sorted
-`<SHA-256>  <relative path>\n` records for net changed files versus the base above, including new
-untracked files. Records are retained in `/tmp/f30-r2-source-fingerprints.txt`; their aggregate is:
-
-```text
-82a127fee08befee3635e4708affd71d07ab3b3739e53b2129f18989067bb9c1
-```

@@ -17,18 +17,19 @@
   },
   "sha256": {
     "declarations.json": "4c0206b9fba72f78b2903f90792ef586b451166184cd321ba102a2d70f24468a",
-    "surface.json": "e30e53721abd857169e1a47ecf219120ad0c7b956768f8cc0a8b54d4e125a849"
+    "surface.json": "3edc242c8e627d66883b8d0be6b9b7e2a0642005d5a274cea0a26e80dbc7fa56"
   },
-  "surface": 1853,
+  "surface": 5801,
   "surface_kinds": {
     "anonymous-example": 1350,
     "check": 30,
     "golden": 2,
     "headline": 101,
     "integration": 8,
+    "library-command": 3935,
     "premise": 9,
-    "probe-command": 89,
-    "probe-declaration": 227,
+    "probe-command": 99,
+    "probe-declaration": 230,
     "proof-tool": 5,
     "test": 32
   }

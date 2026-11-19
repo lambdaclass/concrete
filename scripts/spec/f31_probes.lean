@@ -7,13 +7,35 @@ persistent declarations from the same elaboration. Run through f31_surface.py.
 
 open Lean Language
 
-private def commandRow (ctx : Parser.InputContext) (stx : Syntax) : IO Json := do
+private def commandRow (ctx : Parser.InputContext) (kind : String) (stx : Syntax) : IO Json := do
   let some range := stx.getRange? | throw <| IO.userError "F31: missing command range"
   let pos := ctx.fileMap.toPosition range.start
   let source := range.start.extract ctx.inputString range.stop
-  return toJson (("probe-command", pos.line), s!"{pos.column}: {source}")
+  return toJson ((kind, pos.line), s!"{pos.column}: {source}")
 
-private def probe (root path sourcePath output : String) : IO Unit := do
+-- Nested commands use the same parser category as top-level commands. Syntax quotations
+-- contain command-shaped data, so do not walk into them.
+private partial def commandRows (ctx : Parser.InputContext) (kinds : Parser.SyntaxNodeKindSet)
+    (library : Bool) (stx : Syntax) (rows : Array Json) (knownCommand := true) : IO (Array Json) := do
+  if stx.isQuot then return rows
+  let mut rows := rows
+  if knownCommand || kinds.contains stx.getKind then
+    let isExample := stx.isOfKind ``Parser.Command.declaration &&
+      stx[1].isOfKind ``Parser.Command.example
+    let kind := if !library then "probe-command"
+      else if isExample then "anonymous-example" else "library-command"
+    rows := rows.push (← commandRow ctx kind stx)
+  if stx.isOfKind ``Parser.Command.in then
+    -- The RHS is parsed with the scope introduced by the LHS. Its command kind
+    -- may be absent from the parser category outside that scope.
+    rows ← commandRows ctx kinds library stx[0] rows
+    rows ← commandRows ctx kinds library stx[2] rows
+  else
+    for child in stx.getArgs do
+      rows ← commandRows ctx kinds library child rows false
+  return rows
+
+private def probe (library : Bool) (root path sourcePath output : String) : IO Unit := do
   let ctx := Parser.mkInputContext (← IO.FS.readFile sourcePath) path
   let mainModuleName ← moduleNameOfFileName (System.FilePath.mk root / path) (some root)
   let setup header := pure <| .ok {
@@ -31,18 +53,23 @@ private def probe (root path sourcePath output : String) : IO Unit := do
   let `(Parser.Module.header| $[module%$moduleTk?]? $[prelude%$preludeTk?]? $imports*) := snapshot.stx
     | throw <| IO.userError s!"F31: unrecognized module header in {path}"
   let headerCommands := #[moduleTk?, preludeTk?].filterMap id ++ imports.map (·.raw)
-  let mut rows ← headerCommands.mapM (commandRow ctx)
+  let headerKind := if library then "library-command" else "probe-command"
+  let mut rows ← headerCommands.mapM (commandRow ctx headerKind)
+  let mut env := header.cmdState.env
   let mut command := header.firstCmdSnap.get
   repeat
     unless command.stx.isOfKind ``Parser.Command.eoi do
-      rows := rows.push (← commandRow ctx command.stx)
+      let some category := Parser.getParserCategory? env `command
+        | throw <| IO.userError "F31: missing command parser category"
+      rows ← commandRows ctx category.kinds library command.stx rows
+    env := command.elabSnap.resultSnap.get.cmdState.env
     let some next := command.nextCmdSnap? | break
     command := next.get
 
-  let env := command.elabSnap.resultSnap.get.cmdState.env
-  for (name, _) in env.constants.map₂.toList do
-    if (env.getModuleIdxFor? name).isNone then
-      rows := rows.push (toJson (("probe-declaration", 1), toString name))
+  unless library do
+    for (name, _) in env.constants.map₂.toList do
+      if (env.getModuleIdxFor? name).isNone then
+        rows := rows.push (toJson (("probe-declaration", 1), toString name))
   IO.FS.writeFile output (Json.compress (toJson rows))
 
 def main (args : List String) : IO Unit := do
@@ -60,5 +87,9 @@ def main (args : List String) : IO Unit := do
       if artifact == modToFilePath packageLib name "olean" then
         paths := paths.push (modToFilePath "." name "lean").toString
     IO.println (toJson paths).compress
-  | [root, path, sourcePath, output] => probe root path sourcePath output
-  | _ => throw <| IO.userError "usage: f31_probes (library-sources | ROOT PATH SOURCE OUTPUT)"
+  | [mode, root, path, sourcePath, output] =>
+    unless mode == "library" || mode == "standalone" do
+      throw <| IO.userError s!"F31: unknown probe mode {mode}"
+    probe (mode == "library") root path sourcePath output
+  | _ =>
+    throw <| IO.userError "usage: f31_probes (library-sources | MODE ROOT PATH SOURCE OUTPUT)"
