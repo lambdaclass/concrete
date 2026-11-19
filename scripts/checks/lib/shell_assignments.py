@@ -6,11 +6,11 @@ from pathlib import Path
 import re
 import subprocess
 import sys
-import tempfile
 
 
 SHELL_SHEBANG = re.compile(rb"^#!.*[/ \t](?:bash|sh)(?:[ \t\r\n]|$)")
-SHELLCHECK = re.compile(r"^\s*shellcheck\b")
+DECLARATIONS = {"local", "declare", "typeset", "readonly", "export"}
+EXPANSIONS = {"ParamExp", "ArithmExp", "CmdSubst"}
 
 
 def shell_sources():
@@ -54,105 +54,68 @@ def parse(path, content):
     return json.loads(result.stdout)
 
 
-def without_directives(content, tree):
-    rewritten = bytearray(content)
-    for comment in nodes(tree):
-        if "Hash" in comment and SHELLCHECK.match(comment.get("Text", "")):
-            offset = comment["Hash"]["Offset"]
-            # A second hash makes this an ordinary comment while preserving offsets.
-            rewritten[offset + 1] = ord("#")
-    return rewritten
+def literal_word(parts):
+    text = []
+    for part in parts:
+        kind = part["Type"]
+        if kind == "Lit":
+            text.append(re.sub(r"\\(.)", r"\1", part["Value"]))
+        elif kind == "SglQuoted":
+            text.append(part["Value"])
+        elif kind == "DblQuoted" and not part.get("Dollar"):
+            contents = part.get("Parts", [])
+            if any(item["Type"] != "Lit" for item in contents):
+                return None
+            text.extend(item["Value"] for item in contents)
+        else:
+            return None
+    return "".join(text)
 
 
-def arithmetic_names(operand):
-    if operand["Type"] == "Word":
-        parts = operand["Parts"]
-        if len(parts) == 1 and parts[0]["Type"] == "Lit":
-            yield operand["Pos"], parts[0]["Value"]
-        return
-    for key in ("X", "Y"):
-        if key in operand:
-            yield from arithmetic_names(operand[key])
+def declaration_operands(declaration):
+    options = True
+    for arg in declaration.get("Args", []):
+        if options and arg.get("Naked") and "Name" not in arg:
+            value = literal_word(arg["Value"]["Parts"])
+            if value == "--":
+                options = False
+                continue
+            if value and re.fullmatch(r"[-+][a-zA-Z]+", value):
+                continue
+            if value == "-" and declaration["Variant"]["Value"] == "local":
+                continue
+        options = False
+        yield arg
 
 
-def variable_reads(node):
-    for expansion in nodes(node):
-        kind = expansion.get("Type")
-        if kind == "ParamExp":
-            yield expansion["Pos"], expansion["Param"]["Value"]
-        if kind == "ArithmExp":
-            yield from arithmetic_names(expansion["X"])
-
-
-def declaration_dependencies(tree):
-    """Find expansions that read another initializer's target in either order."""
+def expanded_declarations(tree):
     for declaration in nodes(tree):
         if declaration.get("Type") != "DeclClause":
             continue
-        args = declaration.get("Args", [])
-        initialized = {
-            arg["Name"]["Value"]
-            for arg in args
-            if "Name" in arg and ("Value" in arg or "Array" in arg)
-        }
-        if len(initialized) < 2:
+        if declaration["Variant"]["Value"] not in DECLARATIONS:
             continue
-        for arg in args:
-            if "Name" not in arg:
-                continue
-            name = arg["Name"]["Value"]
-            for pos, param in variable_reads(arg):
-                if param != name and param in initialized:
-                    yield pos, name, param
+        operands = list(declaration_operands(declaration))
+        if len(operands) > 1 and any(
+            node.get("Type") in EXPANSIONS for node in nodes(operands)
+        ):
+            yield declaration["Pos"]
 
 
 def check():
-    with tempfile.TemporaryDirectory() as directory:
-        paths = []
-        dependencies = []
-        for path, content in shell_sources():
-            tree = parse(path, content)
-            dependencies.extend(
-                (str(path), pos, name, param)
-                for pos, name, param in declaration_dependencies(tree)
+    found_source = False
+    failed = False
+    for path, content in shell_sources():
+        found_source = True
+        for pos in expanded_declarations(parse(path, content)):
+            print(
+                f"{path}:{pos['Line']}:{pos['Col']}: expansion in a multi-name "
+                "declaration. Split into one declaration per line.",
+                file=sys.stderr,
             )
-            copy = Path(directory) / path
-            copy.parent.mkdir(parents=True, exist_ok=True)
-            copy.write_bytes(without_directives(content, tree))
-            paths.append(str(path))
-        if not paths:
-            raise ValueError("no tracked shell sources")
-        env = os.environ.copy()
-        env.pop("SHELLCHECK_OPTS", None)
-        result = subprocess.run(
-            ["shellcheck", "--norc", "--shell=bash", "--format=json", *paths],
-            cwd=directory,
-            env=env,
-            stdout=subprocess.PIPE,
-        )
-        if result.returncode not in (0, 1):
-            raise ValueError(f"ShellCheck exited {result.returncode}")
-        # Filter after parsing. ShellCheck's --include can suppress parser errors.
-        failed = False
-        reported = set()
-        for diagnostic in json.loads(result.stdout):
-            if diagnostic["level"] == "error" or diagnostic["code"] == 2318:
-                print(
-                    "{file}:{line}:{column}: {message} [SC{code}]".format(**diagnostic),
-                    file=sys.stderr,
-                )
-                reported.add((diagnostic["file"], diagnostic["line"], diagnostic["column"]))
-                failed = True
-        for path, pos, name, param in dependencies:
-            line, column = pos["Line"], pos["Col"]
-            if (path, line, column) not in reported:
-                print(
-                    f"{path}:{line}:{column}: {name} expands {param} in the same "
-                    "declaration. Split the assignments. [declaration dependency]",
-                    file=sys.stderr,
-                )
             failed = True
-        return int(failed)
+    if not found_source:
+        raise ValueError("no tracked shell sources")
+    return int(failed)
 
 
 if __name__ == "__main__":

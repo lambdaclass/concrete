@@ -81,7 +81,10 @@ standin_hook() {
   chmod +x "$TMP/nohooks/pre-push"
 }
 standin_hook
-export LAND_NO_NIX=1 LAND_STATE_DIR="$TMP/state" LAND_GH="$TMP/fake-gh" LAND_REPO=test/repo
+export LAND_NO_NIX=1
+export LAND_STATE_DIR="$TMP/state"
+export LAND_GH="$TMP/fake-gh"
+export LAND_REPO=test/repo
 export LAND_PUSH_RETRY_SLEEP=0
 unset LAND_GATES_HOST LAND_GATES_TRANSPORT CONCRETE_PREPUSH_NO_REUSE
 export FAKE_GH_DIR="$TMP/gh"; mkdir -p "$FAKE_GH_DIR"
@@ -445,7 +448,8 @@ R1="$(git -C "$R" rev-parse HEAD~1)" R2="$(git -C "$R" rev-parse HEAD)"
 printf 'bash scripts/g.sh\n' > "$TMP/plan"; printf 'scripts/g2.sh\n' > "$TMP/changed"
 lib(){ ( unset CONCRETE_TEST_FWD; cd "$R" && source "$ROOT_DIR/scripts/checks/lib/prepush_record.sh" && "$@" ); }
 mklog(){ # sha exit-rc extra-record-lines... -> $TMP/rlog: a run-at-ref log carrying a record of this push
-  local sha="$1" erc="$2"; shift 2
+  local sha="$1"
+  local erc="$2"; shift 2
   lib ppr_remote_components "$R" "$sha" "$TMP/changed" "$TMP/plan" "$TMP/rcomp" || return 1
   { echo "[concrete-remote] ref=refs/land-remote/x sha=$sha clone=/runs/x host=gatehost"
     echo "gate output"
@@ -565,7 +569,10 @@ python3 -I -c 'import sys; sys.exit(0 if ("CONCRETE_INJ=" + sys.argv[2]).encode(
 ! grep -qz '^CONCRETE_SKIP_GATES=' "$TMP/remote.env" && ok "the host's own CONCRETE_SKIP_GATES is cleared before the hook" || no "host-side bypass reached the hook"
 [ -z "$(ls -A "$HH" | grep -v '^concrete2$\|^runs$')" ] && ok "the host keeps no bundle or script after the run" || no "host leftovers: $(ls -A "$HH")"
 printf 'scripts/g2.sh\n' > "$TMP/ri.changed"; printf 'bash scripts/g.sh\n' > "$TMP/ri.plan"
-dec="$( cd "$RI" && export CONCRETE_TEST_OUT="$TMP" CONCRETE_TEST_LIB="$ROOT_DIR/scripts/checks/lib/prepush_record.sh" CONCRETE_INJ="$INJ" \
+dec="$( cd "$RI" \
+  && export CONCRETE_TEST_OUT="$TMP" \
+  && export CONCRETE_TEST_LIB="$ROOT_DIR/scripts/checks/lib/prepush_record.sh" \
+  && export CONCRETE_INJ="$INJ" \
   && source "$ROOT_DIR/scripts/checks/lib/prepush_record.sh" && ppr_remote_components "$RI" "$RIH" "$TMP/ri.changed" "$TMP/ri.plan" "$TMP/ri.comp" \
   && ppr_remote_check "$RI" "$TMP/ri.comp" && echo REUSE || echo "refused:$PPR_REASON" )"
 [ "$dec" = REUSE ] && ok "the push's hook reuses the record the host's run produced" || no "e2e reuse: $dec"
@@ -821,7 +828,10 @@ rjobs(){ # id sha jobs-json
 GREEN='[{"name":"Build","conclusion":"success","databaseId":31},{"name":"Other","conclusion":"success","databaseId":32},{"name":"Campaign: gate mutation shard 1","conclusion":"skipped","databaseId":33}]'
 rec(){ bash "$TRAIN" record "$@" 2>&1; }
 rec_refuses(){ # label expected-text args...
-  local label="$1" want="$2" o r; shift 2
+  local label="$1"
+  local want="$2"
+  local o
+  local r; shift 2
   o="$(rec "$@")"; r=$?
   [ "$r" != 0 ] && has "$o" "$want" && ! has "$o" "qualifying_run=" && ok "record refuses $label" \
     || { no "record accepted $label (exit $r)"; echo "$o" | sed 's/^/      /'; }
@@ -1315,7 +1325,13 @@ o="$(bash "$ROOT_DIR/scripts/land/signoff.sh" verify "$R2" --base "$MR" 2>&1)"; 
 # validating. Verify forged records with matching hashes as well as record's refusal
 # to create a ref. Both canonical outcomes remain legitimate owner sign-offs.
 verdict_case(){ # label output expected-status expected-verdict
-  local label="$1" output="$2" expected="$3" value="$4" mode o r
+  local label="$1"
+  local output="$2"
+  local expected="$3"
+  local value="$4"
+  local mode
+  local o
+  local r
   for mode in recordverdict verdict; do
     o="$(SO_OUTPUT="$output" bash "$TMP/put-signoff" "$R2" "$mode" 2>&1)"; r=$?
     if [ "$mode" = verdict ] || [ "$expected" = pass ]; then
