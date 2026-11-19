@@ -14,7 +14,7 @@ so a declaration, field, variant, function or constant carries that complete ide
 table. Equality of identities is what the rules use (the facts decision: no bare-name collisions).
 
 A *site* (`SiteId`) is one per operation and per refusable statement. Diagnostics, facts, traps
-and discharge tokens are keyed by site. Source ranges and their path policy are held for F03p.
+and discharge tokens are keyed by site. Source spans carry checked local path identities.
 Lexical site and trait-instance numbers are distinct from persistent `StableKey`s. Specialization request edges retain their sites
 separately from identities keyed by generic arguments. Obligations carry site, kind and a same-site
 discriminator; conditional facts carry typed premise identities.
@@ -47,8 +47,8 @@ keeping nominal identity distinct from local diagnostic spellings. Numeric route
 use Basics.Numbers; neither wrapper adds source-path or normalization policy.
 
 The key-assignment helpers implement the settled structured-key interface, not a source parser.
-The source-path/Span group and its dependent examples are held for F03p;
-the six general byte-coordinate laws and their controls belong to F04.
+Local path admission is defined below. Project-wide path admission and source binding
+belong to the dependent slices.
 -/
 
 namespace ConcreteSpec.Core
@@ -744,6 +744,322 @@ Every non-newline byte advances one column, including tab (`9`) and each byte of
 def SourceText.columnAt (source : SourceText) (offset : Nat) : Nat :=
   ((source.bytes.take offset).reverse.takeWhile (fun byte => byte != 10)).length + 1
 
+namespace SourcePath
+
+/-- Maximum number of bytes in a single component. -/
+def componentLimit : Nat := 100
+
+/-- Maximum number of bytes in the full path, including separators. -/
+def pathLimit : Nat := 200
+
+/-- One reason per local check. `Reason.inOrder` determines the diagnostic tie-break order. -/
+inductive Reason where
+  | empty | absolute | drive | traversal | singleDot | emptyComponent
+  | nonAscii | backslash | control | space | leadingDot | trailingDot
+  | reserved | componentCap | pathCap | disallowed
+  deriving DecidableEq, Repr
+
+/-- Local checks in their fixed tie-break order. An earlier byte always takes precedence. -/
+def Reason.inOrder : List Reason :=
+  [.empty, .absolute, .drive, .traversal, .singleDot, .emptyComponent, .nonAscii, .backslash,
+   .control, .space, .leadingDot, .trailingDot, .reserved, .componentCap, .pathCap, .disallowed]
+
+/-- A half-open component range, with the byte or boundary selected within it. -/
+structure Location (length : Nat) where
+  start : Nat
+  stop : Nat
+  offset : Nat
+  start_le : start ≤ offset
+  offset_le : offset ≤ stop
+  stop_le : stop ≤ length
+  deriving DecidableEq, Repr
+
+/-- A derived component view of the path bytes. The separator is outside the range. -/
+structure Component (length : Nat) where
+  start : Nat
+  bytes : ConcreteSpec.Numbers
+  stop_le : start + bytes.length ≤ length
+
+/-- Split at every slash and emit a component at EOF, including an empty final component. -/
+def scan {length : Nat} (start : Nat) (rev : ConcreteSpec.Numbers) :
+    (rest : ConcreteSpec.Numbers) → start + rev.length + rest.length = length →
+      List (Component length)
+  | [], total => [⟨start, rev.reverse, by simpa using Nat.le_of_eq total⟩]
+  | byte :: rest, total =>
+    if byte = 47 then
+      ⟨start, rev.reverse, by simp at total ⊢; omega⟩ ::
+        scan (start + rev.length + 1) [] rest (by simp at total ⊢; omega)
+    else
+      scan start (byte :: rev) rest (by simp at total ⊢; omega)
+
+/-- The exact components in byte order. -/
+def components (raw : SourceText) : List (Component raw.length) :=
+  scan 0 [] raw.bytes (by simp [SourceText.length])
+
+/-- The same ASCII fold serves reserved stems and project comparison keys. -/
+def foldAscii (byte : Nat) : Nat :=
+  if 65 ≤ byte ∧ byte ≤ 90 then byte + 32 else byte
+
+private def asciiLetter (byte : Nat) : Bool :=
+  (65 ≤ byte && byte ≤ 90) || (97 ≤ byte && byte ≤ 122)
+
+private def filenameByte (byte : Nat) : Bool :=
+  asciiLetter byte || (48 ≤ byte && byte ≤ 57) || byte == 95 || byte == 45 || byte == 46
+
+/-- Match the stem before the first dot against the closed ASCII-insensitive list. -/
+def reservedStem (bytes : ConcreteSpec.Numbers) : Bool :=
+  match (bytes.takeWhile (· != 46)).map foldAscii with
+  | [99, 111, 110] | [112, 114, 110] | [97, 117, 120] | [110, 117, 108] => true
+  | [99, 111, 109, digit] | [108, 112, 116, digit] => 49 ≤ digit && digit ≤ 57
+  | _ => false
+
+private def componentLocation {length : Nat} (c : Component length)
+    (relative : Nat) (bound : relative ≤ c.bytes.length) : Location length :=
+  ⟨c.start, c.start + c.bytes.length, c.start + relative, by omega,
+    Nat.add_le_add_left bound _, c.stop_le⟩
+
+private def firstByte {length : Nat} (c : Component length)
+    (test : Nat → Bool) : Option (Location length) :=
+  (c.bytes.findFinIdx? test).map fun (i : Fin c.bytes.length) => componentLocation c i (Nat.le_of_lt i.isLt)
+
+private def endpointDot {length : Nat} (c : Component length) (leading : Bool) :
+    Option (Location length) :=
+  if c.bytes == [46] || c.bytes == [46, 46] then none
+  else if (if leading then c.bytes.head? else c.bytes.getLast?) == some 46 then
+    some (componentLocation c (if leading then 0 else c.bytes.length - 1) (by split <;> omega))
+  else none
+
+/-- Select the first witness of a given check in a component. Whole-path checks have
+their own context and do not run in this view. -/
+def checkComponent {length : Nat} (reason : Reason) (c : Component length) :
+    Option (Location length) :=
+  match reason with
+  | .traversal => if c.bytes == [46, 46] then some (componentLocation c 0 (Nat.zero_le _)) else none
+  | .singleDot => if c.bytes == [46] then some (componentLocation c 0 (Nat.zero_le _)) else none
+  | .emptyComponent => if c.bytes.isEmpty then some (componentLocation c 0 (Nat.zero_le _)) else none
+  | .nonAscii => firstByte c (128 ≤ ·)
+  | .backslash => firstByte c (· == 92)
+  | .control => firstByte c (fun byte => byte < 32 || byte == 127)
+  | .space => firstByte c (· == 32)
+  | .leadingDot => endpointDot c true
+  | .trailingDot => endpointDot c false
+  | .reserved => if reservedStem c.bytes then some (componentLocation c 0 (Nat.zero_le _)) else none
+  | .componentCap =>
+    if h : componentLimit < c.bytes.length then
+      some (componentLocation c componentLimit (Nat.le_of_lt h))
+    else none
+  | .disallowed => firstByte c fun byte => 32 < byte && byte < 127 && byte != 92 && !filenameByte byte
+  | .empty | .absolute | .drive | .pathCap => none
+
+private def wholeLocation (raw : SourceText) (offset : Nat) (bound : offset ≤ raw.length) :
+    Location raw.length :=
+  ⟨0, raw.length, offset, Nat.zero_le _, bound, Nat.le_refl _⟩
+
+/-- One rule probe for the whole path, or one per component for a component rule. -/
+def probes (raw : SourceText) (parts : List (Component raw.length)) (reason : Reason) :
+    List (Option (Location raw.length)) :=
+  match reason with
+  | .empty => [if raw.bytes.isEmpty then some (wholeLocation raw 0 (Nat.zero_le _)) else none]
+  | .absolute => [if raw.bytes.head? == some 47 then some (wholeLocation raw 0 (Nat.zero_le _)) else none]
+  | .drive =>
+    [match h : raw.bytes with
+     | letter :: 58 :: _ =>
+       if asciiLetter letter then some (wholeLocation raw 1 (by simp [SourceText.length, h])) else none
+     | _ => none]
+  | .pathCap =>
+    [if h : pathLimit < raw.length then some (wholeLocation raw pathLimit (Nat.le_of_lt h)) else none]
+  | other => parts.map (checkComponent other)
+
+/-- Collect the violations of a single check. -/
+def check (raw : SourceText) (parts : List (Component raw.length)) (reason : Reason) :
+    List (Location raw.length) :=
+  (probes raw parts reason).filterMap id
+
+/-- Each applicable probe of the rule must pass. -/
+def Permitted (reason : Reason) (raw : SourceText) : Prop :=
+  ∀ probe ∈ probes raw (components raw) reason, probe = none
+
+instance (reason : Reason) (raw : SourceText) : Decidable (Permitted reason raw) := by
+  unfold Permitted
+  infer_instance
+
+/-- Connect the diagnostic collection to the individual validity judgments. -/
+theorem check_eq_nil_iff (reason : Reason) (raw : SourceText) :
+    check raw (components raw) reason = [] ↔ Permitted reason raw := by
+  simp [check, Permitted]
+
+/-- The full path has at least one byte. See also
+docs/decisions.md#decided-2026-11-14-trap-sites-and-law-tests.
+R-0709, docs/decisions.md#decided-2026-11-16-file-paths. -/
+def Nonempty (raw : SourceText) : Prop := Permitted .empty raw
+
+/-- The first byte is not a slash. See also
+docs/decisions.md#decided-2026-11-14-trap-sites-and-law-tests.
+R-0709, docs/decisions.md#decided-2026-11-16-file-paths. -/
+def Relative (raw : SourceText) : Prop := Permitted .absolute raw
+
+/-- An initial ASCII letter followed by a colon is forbidden.
+R-0709, docs/decisions.md#decided-2026-11-16-file-paths. -/
+def NoDrivePrefix (raw : SourceText) : Prop := Permitted .drive raw
+
+/-- A parent component is forbidden. See also
+docs/decisions.md#decided-2026-11-14-trap-sites-and-law-tests.
+R-0709, docs/decisions.md#decided-2026-11-16-file-paths. -/
+def NoTraversal (raw : SourceText) : Prop := Permitted .traversal raw
+
+/-- A single-dot component is forbidden.
+R-0709, docs/decisions.md#decided-2026-11-16-file-paths. -/
+def NoSingleDot (raw : SourceText) : Prop := Permitted .singleDot raw
+
+/-- Each slash-delimited component has at least one byte.
+R-0709, docs/decisions.md#decided-2026-11-16-file-paths. -/
+def NonemptyComponents (raw : SourceText) : Prop := Permitted .emptyComponent raw
+
+/-- Every byte is ASCII, including when the input is ill-formed UTF-8.
+R-0709, docs/decisions.md#decided-2026-11-16-file-paths. -/
+def Ascii (raw : SourceText) : Prop := Permitted .nonAscii raw
+
+/-- Backslash is forbidden. Slash is the sole separator.
+R-0709, docs/decisions.md#decided-2026-11-16-file-paths. -/
+def SlashSeparator (raw : SourceText) : Prop := Permitted .backslash raw
+
+/-- Bytes below 32 and DEL are forbidden.
+R-0709, docs/decisions.md#decided-2026-11-16-file-paths. -/
+def NoControls (raw : SourceText) : Prop := Permitted .control raw
+
+/-- ASCII space is forbidden.
+R-0709, docs/decisions.md#decided-2026-11-16-file-paths. -/
+def NoSpaces (raw : SourceText) : Prop := Permitted .space raw
+
+/-- A component cannot start with a dot. Single dot and parent traversal have separate checks.
+R-0709, docs/decisions.md#decided-2026-11-16-file-paths. -/
+def NoLeadingDot (raw : SourceText) : Prop := Permitted .leadingDot raw
+
+/-- A component cannot end with a dot. Single dot and parent traversal have separate checks.
+R-0709, docs/decisions.md#decided-2026-11-16-file-paths. -/
+def NoTrailingDot (raw : SourceText) : Prop := Permitted .trailingDot raw
+
+/-- Windows reserved stems are forbidden, ignoring ASCII case and inspecting only the bytes before the first dot.
+R-0709, docs/decisions.md#decided-2026-11-17-file-names. -/
+def NoReservedStem (raw : SourceText) : Prop := Permitted .reserved raw
+
+/-- Each component is at most 100 bytes.
+R-0709, docs/decisions.md#decided-2026-11-16-file-paths. -/
+def ComponentByteCap (raw : SourceText) : Prop := Permitted .componentCap raw
+
+/-- The whole path is at most 200 bytes, counting slashes.
+R-0709, docs/decisions.md#decided-2026-11-16-file-paths. -/
+def PathByteCap (raw : SourceText) : Prop := Permitted .pathCap raw
+
+/-- Component bytes admit exactly ASCII letters, digits, underscore, hyphen and dot, subject to the dedicated character checks.
+R-0709, docs/decisions.md#decided-2026-11-17-file-names. -/
+def FilenameCharacters (raw : SourceText) : Prop := Permitted .disallowed raw
+
+/-- Local validity is the conjunction of the individual checks. -/
+def RawOk (raw : SourceText) : Prop :=
+  ∀ reason ∈ Reason.inOrder, Permitted reason raw
+
+instance (raw : SourceText) : Decidable (RawOk raw) := by
+  unfold RawOk
+  infer_instance
+
+/-- A reason with its byte or boundary witness. -/
+structure Violation (length : Nat) where
+  reason : Reason
+  location : Location length
+  deriving DecidableEq, Repr
+
+/-- Candidates grouped in tie-break order, with each component checked against the same rule
+used by local validity. -/
+def candidates (raw : SourceText) : List (Violation raw.length) :=
+  let parts := components raw
+  Reason.inOrder.flatMap fun reason => (check raw parts reason).map (Violation.mk reason)
+
+/-- Encode the lexicographic pair of witness offset and check priority as a natural number. -/
+def Violation.key {length : Nat} (violation : Violation length) : Nat :=
+  violation.location.offset * Reason.inOrder.length + Reason.inOrder.idxOf violation.reason
+
+/-- Select the earliest offset, keeping the first check in priority order on a tie. -/
+def firstViolation (raw : SourceText) : Option (Violation raw.length) :=
+  (candidates raw).minOn? Violation.key
+
+/-- The original bytes and the selected local refusal. -/
+structure Refusal where
+  raw : SourceText
+  violation : Violation raw.length
+  deriving Repr
+
+/-- The byte slice named by the refusal, retaining its exact spelling. -/
+def Refusal.contextBytes (refusal : Refusal) : ConcreteSpec.Numbers :=
+  let location := refusal.violation.location
+  (refusal.raw.bytes.drop location.start).take (location.stop - location.start)
+
+end SourcePath
+
+/-- A checked project-relative path. Its identity is exactly the original bytes. -/
+structure SourcePath where
+  raw : SourceText
+  valid : SourcePath.RawOk raw
+  deriving DecidableEq, Repr
+
+namespace SourcePath
+
+/-- A successful diagnostic search establishes all local validity judgments. -/
+theorem rawOk_of_noViolation (raw : SourceText) (clear : firstViolation raw = none) :
+    RawOk raw := by
+  intro reason member
+  apply (check_eq_nil_iff reason raw).1
+  cases found : check raw (components raw) reason with
+  | nil => rfl
+  | cons location rest =>
+    have present : Violation.mk reason location ∈ candidates raw := by
+      apply List.mem_flatMap.mpr
+      exact ⟨reason, member, List.mem_map.mpr ⟨location, by simp [found], rfl⟩⟩
+    have someViolation := List.isSome_minOn?_of_mem (f := Violation.key) present
+    change (firstViolation raw).isSome = true at someViolation
+    simp [clear] at someViolation
+
+/-- The local admission boundary over original bytes. -/
+def parse (raw : SourceText) : Except Refusal SourcePath :=
+  match h : firstViolation raw with
+  | some violation => .error ⟨raw, violation⟩
+  | none => .ok ⟨raw, rawOk_of_noViolation raw h⟩
+
+/-- The exact admitted bytes. -/
+def renderBytes (path : SourcePath) : SourceText := path.raw
+
+/-- Render the admitted ASCII byte values as the identical ASCII name. -/
+def render (path : SourcePath) : ConcreteSpec.Name :=
+  ⟨String.ofList (path.raw.bytes.map Char.ofNat)⟩
+
+end SourcePath
+
+/-- A source span has an ordered half-open byte range and positive coordinates at its start.
+The loader binds its checked path and coordinates to source bytes. -/
+structure Span where
+  path : SourcePath
+  startOffset : Nat
+  endOffset : Nat
+  range_ok : startOffset ≤ endOffset
+  line : Nat
+  col : Nat
+  line_pos : 0 < line
+  col_pos : 0 < col
+  deriving DecidableEq, Repr
+
+/-- The range fits the source, and the stored line and column describe its exact start. -/
+def Span.LocationOk (span : Span) (source : SourceText) : Prop :=
+  span.endOffset ≤ source.length ∧ span.line = source.lineAt span.startOffset ∧
+    span.col = source.columnAt span.startOffset
+
+instance (span : Span) (source : SourceText) : Decidable (span.LocationOk source) := by
+  unfold Span.LocationOk
+  infer_instance
+
+/-- Compatibility view of the admitted path carried by a span. -/
+def Span.PathOk (span : Span) : Prop :=
+  SourcePath.RawOk span.path.renderBytes
+
 /-- A slice of the language, in the agreed slice order: 0 to 28, concurrency last (2026-11-07). -/
 structure SliceId where
   n : Fin 29
@@ -756,6 +1072,26 @@ structure RuleId where
   name : Lean.Name
   rev : Nat
   deriving DecidableEq, Repr
+
+/-- The diagnostic citation of a local refusal. Priority is set separately by
+`Reason.inOrder`. -/
+def SourcePath.Reason.ruleId : SourcePath.Reason → RuleId
+  | .empty => ⟨``SourcePath.Nonempty, 1⟩
+  | .absolute => ⟨``SourcePath.Relative, 1⟩
+  | .drive => ⟨``SourcePath.NoDrivePrefix, 1⟩
+  | .traversal => ⟨``SourcePath.NoTraversal, 1⟩
+  | .singleDot => ⟨``SourcePath.NoSingleDot, 1⟩
+  | .emptyComponent => ⟨``SourcePath.NonemptyComponents, 1⟩
+  | .nonAscii => ⟨``SourcePath.Ascii, 1⟩
+  | .backslash => ⟨``SourcePath.SlashSeparator, 1⟩
+  | .control => ⟨``SourcePath.NoControls, 1⟩
+  | .space => ⟨``SourcePath.NoSpaces, 1⟩
+  | .leadingDot => ⟨``SourcePath.NoLeadingDot, 1⟩
+  | .trailingDot => ⟨``SourcePath.NoTrailingDot, 1⟩
+  | .reserved => ⟨``SourcePath.NoReservedStem, 1⟩
+  | .componentCap => ⟨``SourcePath.ComponentByteCap, 1⟩
+  | .pathCap => ⟨``SourcePath.PathByteCap, 1⟩
+  | .disallowed => ⟨``SourcePath.FilenameCharacters, 1⟩
 
 /-- A version of this specification: `0.x` before the freeze, `1.0` at the freeze (A2c), bumped
 by every normative change (R-0603). -/
@@ -923,6 +1259,13 @@ example : (SliceId.mk 0).n.val = 0 ∧ (SliceId.mk 28).n.val = 28 := ⟨rfl, rfl
 
 /-- Bytes for `a`, a tab, and `b`. After the tab, the range starts at line 1, byte column 3. -/
 def tabSource : SourceText := SourceText.ofBytes [97, 9, 98]
+
+/-- Example: a path carrying the exact spelling `main.con`. -/
+def mainSourcePath : SourcePath :=
+  ⟨SourceText.ofBytes [109, 97, 105, 110, 46, 99, 111, 110], by decide⟩
+
+/-- Example: the byte after the tab is at line 1, byte column 3. -/
+def tabSpan : Span := ⟨mainSourcePath, 2, 3, by decide, 1, 3, by decide, by decide⟩
 
 /-- A tab advances one byte column, independently of any source-path policy. -/
 example : tabSource.lineAt 2 = 1 ∧ tabSource.columnAt 2 = 3 := by decide
