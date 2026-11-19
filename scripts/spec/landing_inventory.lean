@@ -225,7 +225,7 @@ private def plan : List Piece := [
     decls `ConcreteSpec.Proofs.Ident [`ConcreteSpec.Core.SourceText.take_toBytes],
     laws `ConcreteSpec.Proofs.Ident [
       `ConcreteSpec.Core.SourceText.columnAt_zero, `ConcreteSpec.Core.SourceText.lineAt_zero]],
-  disposition .«F03p-design» "folded into F03p"
+  disposition .«F03p-design» "design proposals never land on main and stay on WIP branches as writer briefs. The Lean spec carries the normative decisions for F03p"
     "ISSUES.tsv ISS-0068; docs/decisions.md#decided-2026-11-17-proposals-in-lean",
   pending .F03p ["ISSUES.tsv ISS-0068"],
   present .F04 "Stable-key, namespace, obligation, contract, and byte-coordinate proofs" [
@@ -1218,7 +1218,7 @@ private def plan : List Piece := [
   pending .F36 ["ROADMAP.md R-0611 and R-0571"],
   pending .F37 ["ROADMAP.md R-0611 and R-0571"],
   pending .F38 ["ROADMAP.md R-0607 and R-0571"],
-  disposition .«F39-design» "folded into F39"
+  disposition .«F39-design» "design proposals never land on main and stay on WIP branches as writer briefs. The Lean spec carries the normative decisions for F39"
     "ROADMAP.md R-0611; docs/decisions.md#decided-2026-11-17-proposals-in-lean",
   pending .F39 ["ROADMAP.md R-0611 and R-0571"],
   pending .F40 ["ROADMAP.md R-0571 and R-0555"],
@@ -1254,16 +1254,25 @@ private def isLawDoc (doc : String) : Bool :=
   doc.startsWith "Law" && ((doc.drop 3).toString.toList.head?).all
     (fun c => c.isWhitespace || ":.(".contains c)
 
+private def isAuthored (env : Environment) (name : Name) : Bool := Id.run do
+  if (privateToUserName name).isInternal then return false
+  -- Do not use inherited ranges, such as the parent range of a generated recursor.
+  let some ranges := declRangeExt.find? (level := .exported) env name <|>
+      declRangeExt.find? (level := .server) env name | return false
+  -- Derived declarations can have a command range with no distinct name selection.
+  return ranges.selectionRange.pos != ranges.range.pos ||
+    ranges.selectionRange.endPos != ranges.range.endPos
+
 private def readLaws (env : Environment) (inScope : Name → Bool) :
     CommandElabM (NameMap Name) := do
   let mut found := {}
   for (name, info) in env.constants do
     let .thmInfo _ := info | continue
-    if (privateToUserName name).isInternal then continue
+    if !isAuthored env name then continue
     let some origin := origin? env name | continue
     if !inScope origin then continue
     if let some doc ← findDocString? env name then
-      if isLawDoc doc && (← liftCoreM (findDeclarationRanges? name)).isSome then
+      if isLawDoc doc then
         found := found.insert name origin
   return found
 
@@ -1307,6 +1316,8 @@ private def inventory (env : Environment) (observedLaws : NameMap Name)
         | some actual =>
           if actual != group.origin then
             errors := errors.push s!"{piece.id}: {name} is in {actual}, expected {group.origin}"
+          else if !isAuthored env name then
+            errors := errors.push s!"{piece.id}: {name} is not an authored declaration"
           else if expectsLaw && !observedLaws.contains name then
             errors := errors.push s!"{piece.id}: {name} is not an authored Law theorem"
     let landed := errors.isEmpty && claimsLanding
@@ -1368,7 +1379,7 @@ def verify (env : Environment) (specLaws : NameMap Name) : CommandElabM Unit := 
   let observed ← readLaws env (· == origin)
   let good := present .F01 "" [laws origin [`SpecLanding.Control.newName]]
   let check (pieces : List Piece) := (inventory env observed pieces #[]
-    (fun _ => [origin, `ConcreteSpec.Proofs.Basics, `MissingModule])).errors
+    (fun _ => [origin, `ConcreteSpec.Proofs.Basics, `ConcreteSpec.Spec.Basics, `MissingModule])).errors
   let hasError (pieces : List Piece) (message : String) : CommandElabM Unit := do
     unless (check pieces).contains message do
       throwError "inventory control missed {message}"
@@ -1383,6 +1394,9 @@ def verify (env : Environment) (specLaws : NameMap Name) : CommandElabM Unit := 
   for name in [`SpecLanding.Control.retained, `SpecLanding.Control.nonTheorem] do
     hasError [present .F01 "" [laws origin [name]]]
       s!"F01: {name} is not an authored Law theorem"
+  for name in [`ConcreteSpec.Var.mk.inj, `ConcreteSpec.Var.recOn, `ConcreteSpec.instDecidableEqVar] do
+    hasError [present .F01 "" [decls `ConcreteSpec.Spec.Basics [name]]]
+      s!"F01: {name} is not an authored declaration"
   hasError [present .F01 "" [decls origin []]] "F01: empty evidence group"
   hasError [present .F01 "" []] "F01: a landed piece needs evidence"
   hasError [good, good] "duplicate piece F01"
@@ -1415,11 +1429,11 @@ end Control
   Control.verify env observed
   let (qualifications, spec) := plan.partition (·.scopeKind == .qualification)
   let (original, additions) := spec.partition (·.scopeKind == .original)
-  let dispositionCount := (original.filter (·.disposition.isSome)).length
+  let dispositionCount := (spec.filter (·.disposition.isSome)).length
   let landed := result.originalLanded + result.additionLanded
   IO.println s!"spec landing inventory: {landed}/{spec.length} spec pieces landed"
   IO.println s!"  original plan: {result.originalLanded}/{original.length} landed; recorded additions: {result.additionLanded}/{additions.length} landed"
-  IO.println s!"  active spec scope: {landed}/{spec.length - dispositionCount} landed ({dispositionCount} historical rows folded or deferred)"
+  IO.println s!"  active spec scope: {landed}/{spec.length - dispositionCount} landed ({dispositionCount} historical rows outside active scope)"
   IO.println s!"theorem qualification: {result.qualificationLanded}/{qualifications.length} rows landed"
 
 end SpecLanding

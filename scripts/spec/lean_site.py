@@ -155,6 +155,12 @@ def written(d):
     return t == last or t.endswith('.' + last) or t == 'instance'
 
 
+def is_example(d):
+    return d['ruleExample'] or (d['kind'] == 'theorem' and (
+        re.match(r'^(Instance|Planted)(?=$|[\s:.(])', d['doc'].lstrip())
+        or re.search(r'(?:^|_)(?:example|planted)(?:_|$)', d['last'])))
+
+
 def module_order(env_mods):
     """The modules of the library: the root, the specification in `Spec.lean`'s import order, then
     every other module sorted. Every source file under `ConcreteSpec/` must be in the root's import
@@ -230,6 +236,8 @@ def main():
         elif d['kind'] == 'module':
             env_mods.append(d['module'])
         elif d['kind'] != 'recursor' and written(d):
+            if is_example(d):
+                d['kind'] = 'example'
             decls[d['name']] = d
     mods = module_order(env_mods)
     spec_mods = [m for m in mods if m == 'ConcreteSpec.Spec' or m.startswith('ConcreteSpec.Spec.')]
@@ -315,8 +323,7 @@ def main():
         refs = ilean_refs(mod)
         body = []
         nthm = ndef = 0
-        nex = lean_lex.count_examples('\n'.join(src)) + sum(
-            d['ruleExample'] for d in decls.values() if d['module'] == mod)
+        nex = lean_lex.count_examples('\n'.join(src))
         for blk in blocks(src):
             if blk[0] == 'doc':
                 body.append('<div class="prose">' + prose(blk[1]) + '</div>')
@@ -334,7 +341,9 @@ def main():
                     body.append(f'<div class="decl" id="{esc(n)}">' + meta(n) + '</div>')
         for n, d in decls.items():
             if d['module'] == mod:
-                nthm += d['kind'] == 'theorem'; ndef += d['kind'] != 'theorem'
+                nthm += d['kind'] == 'theorem'
+                nex += d['kind'] == 'example'
+                ndef += d['kind'] not in ('theorem', 'example')
         counts[mod] = (ndef, nthm, nex)
         rel = os.path.relpath(path, ROOT)
         head = f'<h1>{esc(mod)}</h1><p class="meta">source: <code>{esc(rel)}</code></p>'

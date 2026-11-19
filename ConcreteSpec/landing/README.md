@@ -9,11 +9,14 @@ The [Lean plan](../../scripts/spec/landing_inventory.lean) owns the piece list a
 Its original scope reconciles the 51 IDs in the `F01`–`F40` foundation and migration tables of
 `origin/wip/spec-inventory:ConcreteSpec/landing/plan.md`, including the split IDs and CAP.
 The headline includes the original rows and the three recorded additions. The report also
-shows active scope, with F03p-design tracked under F03p, F39-design tracked under F39, and
-F27 deferred by the owner. The historical rows stay visible for reconciliation. The
-[proposal decision](../../docs/decisions.md#decided-2026-11-17-proposals-in-lean) keeps design
-proposals on WIP branches and puts decisions in the Lean spec. The
-[wiping decision](../../docs/decisions.md#decided-2026-11-16-secret-wiping) owns F27's disposition.
+shows active scope and keeps the historical rows visible for reconciliation. For F03p-design
+and F39-design, design proposals never land on main and stay on WIP branches as writer briefs.
+The Lean spec carries the normative decisions for F03p and F39.
+[Owner decision on design proposals](../../docs/decisions.md#decided-2026-11-17-proposals-in-lean)
+
+For F27, wiping is out of the spec and only the owner can reopen it. Secret, no-leak and
+constant-time stay.
+[Owner decision on wiping](../../docs/decisions.md#decided-2026-11-16-secret-wiping)
 
 | Addition | Placement and record |
 | --- | --- |
@@ -40,7 +43,7 @@ The inventory checks root reachability independently of the rows. The existing
 `scripts/checks/spec_imports.sh` owns the Basics direct-import rule.
 
 Built-in controls reject deleted rows, empty evidence, absent or renamed declarations,
-duplicate IDs and names, wrong or missing modules, an unassigned or mistagged Law,
+duplicate IDs and names, wrong or missing modules, generated declarations, an unassigned or mistagged Law,
 a Law-tagged definition, and an orphan module with an empty plan.
 
 | Old feature | Disposition and reason |
