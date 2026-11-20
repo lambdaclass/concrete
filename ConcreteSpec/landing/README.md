@@ -34,10 +34,12 @@ A piece counts as landed when its completion evidence passes and it has no remai
 obligations or historical disposition. The Lean plan defines completion independently of
 status. Spec-only pieces with separate proof pieces must resolve their specific named spec
 declarations when they claim landing. Other reservations require listed, authored evidence
-from each reserved module and namespace. Proof reservations also require a cited Law theorem
-and a separate planted control in the reserved proof namespaces. A qualification row can use
-a Law from its named completion evidence and must still cite a control from its reserved
-qualification namespace. Shared modules have piece-specific evidence. Migration namespaces
+from each reserved module and namespace. Each proof reservation also requires a cited Law theorem
+and a separate planted control in its own module and namespace. M09 uses its existing named
+Law and still requires a control from its qualification reservation. F03p checks every expected
+source-path rule against the live registry and requires linked acceptance and refusal theorems
+from Spec.Rules. The local rules contribute partial evidence while project-wide admission
+and its registry evidence are outstanding. Shared modules have piece-specific evidence. Migration namespaces
 reserve names for evidence produced by the migration. If a name or defining module changes, update the completion requirements in
 the same patch. Partial rows retain the references for their remaining work.
 
@@ -51,7 +53,9 @@ The inventory checks root reachability independently of the rows. The existing
 Built-in controls reject deleted rows, empty evidence, absent or renamed declarations,
 duplicate IDs and names, wrong or missing modules, generated declarations, an unassigned or mistagged Law,
 a Law-tagged definition, borrowed declarations from shared or pre-existing modules,
-and an orphan module with an empty plan.
+an output reservation with only a helper, missing source-path registry entries and examples,
+overlapping reservations, uncited declarations in reserved namespaces, and an orphan module
+with an empty plan.
 
 | Old feature | Disposition and reason |
 | --- | --- |
