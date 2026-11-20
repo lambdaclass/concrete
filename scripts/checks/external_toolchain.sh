@@ -191,7 +191,9 @@ ln -s lake "$TMP/bin/lean"
 ln -s lake "$TMP/bin/leanchecker"
 mkdir "$TMP/proxies"
 for tool in lake lean leanchecker; do ln -s "$TMP/bin/elan" "$TMP/proxies/$tool"; done
-export CALLER_BIN="$TMP/bin" FIXTURE_STREAM="$TMP/stream.ndjson" FIXTURE_ARTIFACT="$TMP/artifact"
+export CALLER_BIN="$TMP/bin"
+export FIXTURE_STREAM="$TMP/stream.ndjson"
+export FIXTURE_ARTIFACT="$TMP/artifact"
 if PATH="$TMP/proxies:$TMP/bin:$PATH" bash "$TMP/check-path" > "$TMP/negative" 2>&1; then
   echo 'FAIL: proxy-leak negative control accepted'; exit 1
 fi
@@ -201,18 +203,25 @@ rc=0
 PATH="$TMP/bin:$PATH" bounded_run 120 -- nix develop "$ROOT#extcheck" -c bash "$TMP/check-path" || rc=$?
 if bounded_is_incomplete "$rc"; then bounded_gate_status; exit 1; fi
 [ "$rc" = 0 ]
-export PATH="$TMP/bin:$PATH" DISPATCH_LOG="$TMP/dispatched" PHASE_LOG="$TMP/phases"
-export FIXTURE_TOOLS="$TMP/tools" CONCRETE_EXT_TOOLS="$TMP/tools" ELAN_HOME="$TMP/shared-elan"
+export PATH="$TMP/bin:$PATH"
+export DISPATCH_LOG="$TMP/dispatched"
+export PHASE_LOG="$TMP/phases"
+export FIXTURE_TOOLS="$TMP/tools"
+export CONCRETE_EXT_TOOLS="$TMP/tools"
+export ELAN_HOME="$TMP/shared-elan"
 export RUST_MEASUREMENT="$TMP/rust-measurement"
 export RUSTC=/conflicting/rustc RUSTC_WRAPPER=/conflicting/wrapper RUSTC_WORKSPACE_WRAPPER=/conflicting/workspace-wrapper
 export CARGO_BUILD_RUSTC_WRAPPER=/conflicting/config-wrapper CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER=/conflicting/config-workspace-wrapper
 export RUSTFLAGS=conflicting CARGO_ENCODED_RUSTFLAGS=conflicting CARGO_BUILD_RUSTFLAGS=conflicting
-export CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS=true CARGO_TARGET_DIR="$TMP/escaped-target"
-export CARGO_HOME="$TMP/cargo-home" AMBIENT_CARGO_HOME="$TMP/cargo-home"
+export CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS=true
+export CARGO_TARGET_DIR="$TMP/escaped-target"
+export CARGO_HOME="$TMP/cargo-home"
+export AMBIENT_CARGO_HOME="$TMP/cargo-home"
 mkdir -p "$CARGO_HOME"
 printf '[build]\nrustc-wrapper = "/conflicting/config-wrapper"\nrustflags = ["conflicting"]\n' > "$CARGO_HOME/config.toml"
 export ELAN_TOOLCHAIN=deliberately-conflicting-ambient-toolchain LEAN_PATH=/conflicting/lean/path
-export CONCRETE_EXT_ELAN="$TMP/bin/elan" CALLER_ELAN_HOME="$ELAN_HOME"
+export CONCRETE_EXT_ELAN="$TMP/bin/elan"
+export CALLER_ELAN_HOME="$ELAN_HOME"
 mkdir -p "$ELAN_HOME"
 echo untouched > "$ELAN_HOME/sentinel"
 # Stub context is fixed in its script, never passed through the production allowlist.
@@ -227,7 +236,9 @@ p.write_text(p.read_text().replace('set -eu\n', 'set -eu\n'+context, 1))
 CONTROL
 run_driver() {
   printf '%s\n' "${FIXTURE_STACK_SIZE:-268_435_456}" > "$TMP/stack-expectation"
-  local diagnostic=$1 expected_rc=${2:-1} rc=0
+  local diagnostic=$1
+  local expected_rc=${2:-1}
+  local rc=0
   bounded_run 30 -- bash "$TMP/project/scripts/proofs/external.sh" > "$TMP/out" 2>&1 || rc=$?
   if bounded_is_incomplete "$rc"; then bounded_gate_status; exit 1; fi
   if [ "$rc" != "$expected_rc" ] || ! grep -qF "$diagnostic" "$TMP/out"; then

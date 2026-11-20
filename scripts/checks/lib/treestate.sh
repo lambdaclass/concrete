@@ -138,7 +138,8 @@ ts_tracked() { # root
 # disappear from the digest entirely. Records are read with `read -d ''` and never pass through a
 # newline-delimited stage.
 ts_untracked() { # root
-  local root="$1" u
+  local root="$1"
+  local u
   # ONE INVOCATION, VIA A TEMP FILE, AND ITS STATUS IS CHECKED. Probing with one `git status` and
   # then hashing the output of a SECOND, unchecked one meant the probe could succeed while the command
   # feeding the digest failed. The obvious repair — capturing the output in a variable — is WRONG here
@@ -187,7 +188,8 @@ ts_untracked() { # root
   # `grep` and a `_ts_digest` had already run, so it described THOSE — in practice a successful
   # function call — and never the `while | sort` pipeline it was meant to check. If `sort` or its
   # redirection failed, an empty or partial record file was hashed into an ordinary-looking digest.
-  local _recst=("${PIPESTATUS[@]}") _s
+  local _recst=("${PIPESTATUS[@]}")
+  local _s
   for _s in "${_recst[@]}"; do
     [ "$_s" = "0" ] || { rm -f "$raw_f" "$raw_f.recs"; _ts_fail "untracked-pipeline"; return 0; }
   done

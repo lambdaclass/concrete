@@ -3554,6 +3554,12 @@ ok do all this
   or any other held item. Path-character policy stays open; nothing may claim
   complete path validation until it is decided.
 
+  **Answered 2026-11-16 and 2026-11-17.** The
+  [November 16 file-path decision](#decided-2026-11-16-file-paths) and the
+  [November 17 file-name decision](#decided-2026-11-17-file-names) record the
+  owner's answers. [ISS-0068](../ISSUES.tsv) tracks implementation, dependent
+  evidence, and the limit on validation claims to implemented and evidenced scope.
+
 - <a id="decided-2026-11-14-constant-types"></a>**Constant types (2026-11-14).**
   The owner approves the coordinator's revised recommendation below, not the
   earlier recommendations preserved as context.

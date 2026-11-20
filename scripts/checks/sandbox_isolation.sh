@@ -56,7 +56,11 @@ shell_scripts() {
 # skipped): `ok<TAB>file<TAB>why` or `FAIL<TAB>file<TAB>why`. The helper must be sourced and
 # called, as statements, before the first repository is made.
 scan_makers() {
-  local dir="$1" f first_make src_line call_line
+  local dir="$1"
+  local f
+  local first_make
+  local src_line
+  local call_line
   shell_scripts "$dir" | while IFS= read -r f; do
     [ "$f" = scripts/checks/sandbox_isolation.sh ] && continue
     case "$EXEMPT" in *" $f "*) continue ;; esac
@@ -186,13 +190,20 @@ snap() { # dir
 # run_as_hook <dir> <script relative to the linked worktree>: GIT_DIR exported as a linked
 # worktree's hook sees it; prints the script's exit code.
 run_as_hook() {
-  local d="$1" s="$2" gd
+  local d="$1"
+  local s="$2"
+  local gd
   gd="$(git -C "$d/linked" rev-parse --absolute-git-dir)"
   ( cd "$d/linked" && GIT_DIR="$gd" && export GIT_DIR && bounded bash "$s" ) > "$d/run.log" 2>&1
   echo $?
 }
 probe() { # label script expect-change [completion-marker]
-  local label="$1" s="$2" want="$3" marker="${4:-}" d rc
+  local label="$1"
+  local s="$2"
+  local want="$3"
+  local marker="${4:-}"
+  local d
+  local rc
   d="$(mktemp -d "$TMP/caller.XXXXXX")"
   mk_caller "$d" || { no "$label: could not build the caller"; return; }
   [ -z "$(ls "$d/nohooks")" ] || { no "$label: a hook is installed"; return; }

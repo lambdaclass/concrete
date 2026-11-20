@@ -4,18 +4,25 @@ git_sandbox || exit 2
 # All recipe content (including the nanoda patch) participates in every tree key.
 recipe_identity() { sha256sum "${BASH_SOURCE[0]}" | cut -d' ' -f1; }
 elan_identity() {
-  local elan=$1 resolved version
+  local elan=$1
+  local resolved
+  local version
   resolved=$(realpath "$elan") || return 1
   version=$("$elan" --version) || return 1
   printf '%s\n%s\n' "$resolved" "$version" | sha256sum | cut -d' ' -f1
 }
 publish() {
-  local dir=$1 work="$1.partial.$$"; shift
+  local dir=$1
+  local work="$1.partial.$$"; shift
   (cd "$work" && "$@" >&2) && touch "$work/.built" && rm -rf "$dir" && mv "$work" "$dir"
 }
 # Verify the revision's declaration even on a cache hit; never rewrite lean-toolchain.
 verify_toolchain() {
-  local dir=$1 rev=$2 tc=$3 declared worktree
+  local dir=$1
+  local rev=$2
+  local tc=$3
+  local declared
+  local worktree
   declared=$(git -C "$dir" show "$rev:lean-toolchain") || return 1
   worktree=$(cat "$dir/lean-toolchain") || return 1
   [ "$declared" = "$tc" ] && [ "$worktree" = "$tc" ] || {
@@ -24,7 +31,12 @@ verify_toolchain() {
   }
 }
 build_lake_tool() {
-  local tools=$1 name=$2 url=$3 rev=$4 tc=$5 target=$6
+  local tools=$1
+  local name=$2
+  local url=$3
+  local rev=$4
+  local tc=$5
+  local target=$6
   local elan identity recipe
   elan=$(command -v "${CONCRETE_EXT_ELAN:-elan}") || return 1
   # Preserve the proxy name, but make invocation independent of publish's cwd.
@@ -47,7 +59,18 @@ build_lake_tool() {
 }
 
 build_cargo_tool() {
-  local tools=$1 url=$2 rev=$3 cargo rustc identity recipe dir work source home ancestor
+  local tools=$1
+  local url=$2
+  local rev=$3
+  local cargo
+  local rustc
+  local identity
+  local recipe
+  local dir
+  local work
+  local source
+  local home
+  local ancestor
   local -a cargo_env=(env -i "PATH=$PATH" "HOME=$HOME")
   # Rustup proxies need their selected installation, but no ambient Cargo/Rust overrides.
   [ -z "${RUSTUP_HOME+x}" ] || cargo_env+=("RUSTUP_HOME=$RUSTUP_HOME")
