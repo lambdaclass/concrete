@@ -379,6 +379,7 @@ def main():
     open(os.path.join(out_dir, 'theorems.html'), 'w').write(page('Theorems', '\n'.join(th)))
     # link check
     bad = []
+    anchors_by_file = {}
     for root, _, files in os.walk(out_dir):
         for f in files:
             if not f.endswith('.html'):
@@ -387,9 +388,14 @@ def main():
             for tgt in re.findall(r'href="([^"]+)"', s):
                 file, _, frag = tgt.partition('#')
                 fp = os.path.normpath(os.path.join(root, file)) if file else p
-                if not os.path.exists(fp):
-                    bad.append((p, tgt)); continue
-                if frag and f'id="{esc(urllib.parse.unquote(frag))}"' not in open(fp).read():
+                if fp not in anchors_by_file:
+                    if os.path.isfile(fp):
+                        with open(fp) as target:
+                            anchors_by_file[fp] = set(re.findall(r'\sid="([^"]+)"', target.read()))
+                    else:
+                        anchors_by_file[fp] = None
+                anchors = anchors_by_file[fp]
+                if anchors is None or (frag and esc(urllib.parse.unquote(frag)) not in anchors):
                     bad.append((p, tgt))
     if bad:
         sys.exit('error: broken links: ' + '; '.join(f'{a} -> {b}' for a, b in bad[:20]))

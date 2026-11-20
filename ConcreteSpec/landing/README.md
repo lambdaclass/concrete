@@ -30,10 +30,13 @@ contracts C1–C10 are ROADMAP R-0607 through R-0616. ROADMAP R-0571 owns integr
 and interaction proofs across those contracts. The inventory measures landed slices of that
 work. Contract closure and the freeze have their own criteria.
 
-A piece counts as landed when it has checked declarations and no remaining obligations or
-historical disposition. Every example and planted control used as landing evidence has a
-stable name listed in its row. If a name or defining module changes, update the row in the
-same patch. Partial rows retain the references for their remaining work.
+A piece counts as landed when its completion evidence passes and it has no remaining
+obligations or historical disposition. The Lean plan defines completion independently of
+status. It checks each required named declaration and requires a listed, authored declaration
+from each reserved module and namespace before a piece can land. Shared modules have
+piece-specific evidence. Migration namespaces reserve names for evidence produced by the
+migration. If a name or defining module changes, update the completion requirements in
+the same patch. Partial rows retain the references for their remaining work.
 
 Lean selects authored theorems with a `Law` doc tag from the environment, including `Law:`
 and tags followed by whitespace. A missing or unassigned Law fails the gate. Instances,
@@ -44,7 +47,8 @@ The inventory checks root reachability independently of the rows. The existing
 
 Built-in controls reject deleted rows, empty evidence, absent or renamed declarations,
 duplicate IDs and names, wrong or missing modules, generated declarations, an unassigned or mistagged Law,
-a Law-tagged definition, and an orphan module with an empty plan.
+a Law-tagged definition, borrowed declarations from shared or pre-existing modules,
+and an orphan module with an empty plan.
 
 | Old feature | Disposition and reason |
 | --- | --- |
