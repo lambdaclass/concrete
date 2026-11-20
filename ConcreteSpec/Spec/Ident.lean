@@ -836,6 +836,7 @@ structure ProbePolicy where
   componentCap : Nat
   pathCap : Nat
   disallowed : Nat → Bool
+  findByte : Reason → (bytes : ConcreteSpec.Numbers) → (Nat → Bool) → Option (Fin bytes.length)
 
 /-- The production policy for project-relative source paths. -/
 def localPolicy : ProbePolicy where
@@ -855,6 +856,7 @@ def localPolicy : ProbePolicy where
   componentCap := componentLimit
   pathCap := pathLimit
   disallowed := fun byte => 32 < byte && byte < 127 && byte != 92 && !filenameByte byte
+  findByte := fun _ bytes test => bytes.findFinIdx? test
 
 /-- Translate a component-relative byte or boundary into whole-path coordinates. -/
 def componentLocation {length : Nat} (c : Component length)
@@ -862,10 +864,10 @@ def componentLocation {length : Nat} (c : Component length)
   ⟨c.start, c.start + c.bytes.length, c.start + relative, by omega,
     Nat.add_le_add_left bound _, c.stop_le⟩
 
-/-- Locate the first byte satisfying the predicate in this component. -/
-def firstByte {length : Nat} (c : Component length)
+/-- Locate the match selected by a byte probe in whole-path coordinates. -/
+def firstByte {length : Nat} (policy : ProbePolicy) (reason : Reason) (c : Component length)
     (test : Nat → Bool) : Option (Location length) :=
-  (c.bytes.findFinIdx? test).map fun (i : Fin c.bytes.length) => componentLocation c i (Nat.le_of_lt i.isLt)
+  (policy.findByte reason c.bytes test).map fun (i : Fin c.bytes.length) => componentLocation c i (Nat.le_of_lt i.isLt)
 
 /-- Locate a rejected endpoint, leaving the special dot components to their own probes. -/
 def endpointDot {length : Nat} (c : Component length) (leading : Bool)
@@ -892,10 +894,10 @@ def checkComponentWith (policy : ProbePolicy) {length : Nat} (reason : Reason)
   | .traversal => startIf c (policy.traversal c.bytes)
   | .singleDot => startIf c (policy.singleDot c.bytes)
   | .emptyComponent => startIf c (policy.emptyComponent c.bytes)
-  | .nonAscii => firstByte c policy.nonAscii
-  | .backslash => firstByte c policy.backslash
-  | .control => firstByte c policy.control
-  | .space => firstByte c policy.space
+  | .nonAscii => firstByte policy .nonAscii c policy.nonAscii
+  | .backslash => firstByte policy .backslash c policy.backslash
+  | .control => firstByte policy .control c policy.control
+  | .space => firstByte policy .space c policy.space
   | .leadingDot => endpointDot c true policy.leadingDot
   | .trailingDot => endpointDot c false policy.trailingDot
   | .reserved => startIf c (policy.reserved c.bytes)
@@ -903,7 +905,7 @@ def checkComponentWith (policy : ProbePolicy) {length : Nat} (reason : Reason)
     if h : policy.componentCap < c.bytes.length then
       some (componentLocation c policy.componentCap (Nat.le_of_lt h))
     else none
-  | .disallowed => firstByte c policy.disallowed
+  | .disallowed => firstByte policy .disallowed c policy.disallowed
   | .empty | .absolute | .pathCap => none
 
 /-- The production component check. -/
@@ -936,17 +938,119 @@ def checkWith (policy : ProbePolicy) (raw : SourceText) (parts : List (Component
 def check := checkWith localPolicy
 
 /-- Each applicable probe of the rule must pass. -/
-def Permitted (reason : Reason) (raw : SourceText) : Prop :=
+def ProbePermitted (reason : Reason) (raw : SourceText) : Prop :=
   ∀ probe ∈ probes raw (components raw) reason, probe = none
 
-instance (reason : Reason) (raw : SourceText) : Decidable (Permitted reason raw) := by
-  unfold Permitted
+instance (reason : Reason) (raw : SourceText) : Decidable (ProbePermitted reason raw) := by
+  unfold ProbePermitted
   infer_instance
 
 /-- Helper: connect the diagnostic collection to the individual validity judgments. -/
 theorem check_witness_iff (reason : Reason) (raw : SourceText) :
-    check raw (components raw) reason = [] ↔ Permitted reason raw := by
-  simp [check, checkWith, Permitted, probes]
+    check raw (components raw) reason = [] ↔ ProbePermitted reason raw := by
+  simp [check, checkWith, ProbePermitted, probes]
+
+namespace Reference
+
+/-- Tie-break order from the local diagnostic design. Byte offsets take precedence. -/
+def priority : List Reason :=
+  [.empty, .absolute, .drive, .traversal, .singleDot, .emptyComponent, .nonAscii, .backslash,
+   .control, .space, .leadingDot, .trailingDot, .reserved, .componentCap, .pathCap, .disallowed]
+
+/-- Number the pieces of a slash split by their original byte offsets. -/
+def locate (start : Nat) : List ConcreteSpec.Numbers → List (Nat × ConcreteSpec.Numbers)
+  | [] => []
+  | bytes :: rest => (start, bytes) :: locate (start + bytes.length + 1) rest
+
+/-- The slash-delimited pieces, including any empty pieces. -/
+def pieces (bytes : ConcreteSpec.Numbers) : List (Nat × ConcreteSpec.Numbers) :=
+  locate 0 (bytes.splitOn 47)
+
+/-- ASCII A–Z or a–z. -/
+def letter (byte : Nat) : Bool :=
+  (65 ≤ byte && byte ≤ 90) || (97 ≤ byte && byte ≤ 122)
+
+/-- ASCII letters, digits, underscore, hyphen and dot. -/
+def filename (byte : Nat) : Bool :=
+  letter byte || (48 ≤ byte && byte ≤ 57) || byte == 95 || byte == 45 || byte == 46
+
+/-- ASCII lowercase for reserved stem comparison. -/
+def lower (byte : Nat) : Nat :=
+  if 65 ≤ byte ∧ byte ≤ 90 then byte + 32 else byte
+
+/-- CON, PRN, AUX, NUL, COM1–COM9 and LPT1–LPT9 before the first dot, ignoring ASCII case. -/
+def reserved (bytes : ConcreteSpec.Numbers) : Bool :=
+  match (bytes.takeWhile (· != 46)).map lower with
+  | [99, 111, 110] | [112, 114, 110] | [97, 117, 120] | [110, 117, 108] => true
+  | [99, 111, 109, digit] | [108, 112, 116, digit] => 49 ≤ digit && digit ≤ 57
+  | _ => false
+
+/-- All indices where a byte fails a byte rule, including repeated violations. -/
+def byteOffsets (bytes : ConcreteSpec.Numbers) (offends : Nat → Bool) : List Nat :=
+  bytes.zipIdx.filterMap fun (byte, offset) => if offends byte then some offset else none
+
+/-- Relative offsets of all offenses in one component. Component-wide offenses use its
+start, and a length offense uses the first excess byte. -/
+def componentOffsets (reason : Reason) (start : Nat) (bytes : ConcreteSpec.Numbers) : List Nat :=
+  match reason with
+  | .drive =>
+    if start == 0 && bytes[0]?.any letter && bytes[1]? == some 58 then [1] else []
+  | .traversal => if bytes == [46, 46] then [0] else []
+  | .singleDot => if bytes == [46] then [0] else []
+  | .emptyComponent => if bytes == [] then [0] else []
+  | .nonAscii => byteOffsets bytes (128 ≤ ·)
+  | .backslash => byteOffsets bytes (· == 92)
+  | .control => byteOffsets bytes (fun byte => byte < 32 || byte == 127)
+  | .space => byteOffsets bytes (· == 32)
+  | .leadingDot =>
+    if bytes == [46] || bytes == [46, 46] then []
+    else if bytes[0]?.any (· == 46) then [0] else []
+  | .trailingDot =>
+    if bytes == [46] || bytes == [46, 46] then []
+    else if bytes.getLast?.any (· == 46) then [bytes.length - 1] else []
+  | .reserved => if reserved bytes then [0] else []
+  | .componentCap => if 100 < bytes.length then [100] else []
+  | .disallowed =>
+    byteOffsets bytes (fun byte => 32 < byte && byte < 127 && byte != 92 && !filename byte)
+  | .empty | .absolute | .pathCap => []
+
+/-- Absolute byte or boundary offsets for every applicable offense of a rule. -/
+def offsets (reason : Reason) (raw : SourceText) : List Nat :=
+  match reason with
+  | .empty => if raw.bytes == [] then [0] else []
+  | .absolute => if raw.bytes[0]? == some 47 then [0] else []
+  | .pathCap => if 200 < raw.bytes.length then [200] else []
+  | other => (pieces raw.bytes).flatMap fun (start, bytes) =>
+      (componentOffsets other start bytes).map (start + ·)
+
+/-- Lexicographic precedence on the original byte offset and then the design tie-break order. -/
+def Precedes (leftReason : Reason) (leftOffset : Nat)
+    (rightReason : Reason) (rightOffset : Nat) : Prop :=
+  leftOffset < rightOffset ∨
+    (leftOffset = rightOffset ∧ priority.idxOf leftReason ≤ priority.idxOf rightReason)
+
+/-- An applicable offense that precedes every applicable offense of every rule. -/
+def IsFirst (raw : SourceText) (reason : Reason) (offset : Nat) : Prop :=
+  offset ∈ offsets reason raw ∧
+    ∀ otherReason, ∀ otherOffset ∈ offsets otherReason raw,
+      Precedes reason offset otherReason otherOffset
+
+end Reference
+
+/-- A rule permits the original byte sequence exactly when it has no reference offenses. -/
+def Permitted (reason : Reason) (raw : SourceText) : Prop :=
+  Reference.offsets reason raw = []
+
+instance (reason : Reason) (raw : SourceText) : Decidable (Permitted reason raw) :=
+  inferInstanceAs (Decidable (Reference.offsets reason raw = []))
+
+/-- All sixteen local byte rules permit this input. -/
+def Reference.Valid (raw : SourceText) : Prop :=
+  ∀ reason ∈ Reference.priority, Permitted reason raw
+
+instance (raw : SourceText) : Decidable (Reference.Valid raw) := by
+  unfold Reference.Valid
+  infer_instance
 
 /-- The full path has at least one byte. See also
 docs/decisions.md#decided-2026-11-14-trap-sites-and-law-tests.
@@ -1015,9 +1119,9 @@ def PathByteCap (raw : SourceText) : Prop := Permitted .pathCap raw
 R-0709, docs/decisions.md#decided-2026-11-17-file-names. -/
 def FilenameCharacters (raw : SourceText) : Prop := Permitted .disallowed raw
 
-/-- Local validity is the conjunction of the individual checks. -/
+/-- The certificate carried by a successful production search. -/
 def RawOk (raw : SourceText) : Prop :=
-  ∀ reason ∈ Reason.inOrder, Permitted reason raw
+  ∀ reason ∈ Reason.inOrder, ProbePermitted reason raw
 
 instance (raw : SourceText) : Decidable (RawOk raw) := by
   unfold RawOk

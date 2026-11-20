@@ -382,9 +382,12 @@ def pathCapRefusedInput : SourceText :=
     omega⟩
 /-- Instance: the refused byte input for the PathByteCap check. -/
 theorem pathCapRefused : RuleRefused PathByteCap pathCapRefusedInput := by
-  unfold RuleRefused PathByteCap
-  apply of_decide_eq_true
-  cbv
+  have length : pathCapRefusedInput.bytes.length = 201 := by
+    simp only [pathCapRefusedInput, List.length_append, List.length_replicate,
+      List.length_cons, List.length_nil]
+  unfold RuleRefused PathByteCap Permitted
+  simp only [Reference.offsets, length]
+  decide
 
 /-- Instance: the accepted byte input for the FilenameCharacters check. -/
 theorem disallowedAccepted : RuleAccepted FilenameCharacters mixedCaseInput := by
