@@ -17,7 +17,7 @@ Authority: docs/decisions.md#decided-2026-11-08-foundation (C5), #decided-2026-1
 call duration and no implicit ending), and #decided-2026-11-13-lifecycle-refusal.
 The classification and control conventions are #decided-2026-11-13-proof-labels and
 #decided-2026-11-14-trap-sites-and-law-tests. Only Laws count as evidence.
-Tag inventory: 18 Law, 18 Helper, 38 Instance, 65 Planted.
+Tag inventory: 27 Law, 25 Helper, 56 Instance, 90 Planted.
 
 Source disposition: the O3 optional-result restatements of O1's owned-root, moved-root,
 birth/supply and passOwner results add no independent fact;
@@ -25,9 +25,11 @@ reuse their existing result helpers and preservation Laws. Likewise the instrume
 callLife, readOwner/writeOwner/readLoan/writeLoan erasure restatements remain owned by O2
 and O1's result helpers. The generic instrument preservation wrapper remains O1's helper.
 Single-step Laws with independent admission require progress as well as preservation.
-Nonrevival over arbitrary event lists and loan retention along certified prefixes are
-safety properties of produced transitions. The boundary Laws supply progress at their
-respective admitted operations.
+The generic dispatcher Laws pair progress under structural admission with result safety.
+Lifecycle, loan and issuance admission enumerate their event constructors. Admitted traces
+compose ledger rules so earlier events can change the permissions of later events.
+Nonrevival over arbitrary event lists and loan retention along certified prefixes remain
+safety properties of produced transitions.
 The registration Law reuses Exec's independent registration rule and dispatcher soundness.
 Its planted controls evaluate arguments too early, either retaining their store effects or
 refusing registration when evaluation fails.
@@ -598,9 +600,11 @@ example : AdmittedLoanAction endedChild (.endLoan ⟨0⟩) ∧
 /-- Planted (law `ConcreteSpec.Core.Own.loanSequence_retired_step`, case
 `ConcreteSpec.Core.Own.LoanHistoryEvidence.endedChild`, subject `ConcreteSpec.Core.Own.loanAction`, mutant
 `ConcreteSpec.Core.Own.LoanHistoryEvidence.recycleStep`). -/
-example : RetiredLoan endedChild ⟨1⟩ ∧
-    ¬ ResultSatisfies (fun t => RetiredLoan t ⟨1⟩)
-      (recycleStep endedChild (.reborrow ⟨0⟩ [.index 2] .mutable 0)) := by decide
+example : ¬ RetiringLoanAction recycleStep endedChild (.reborrow ⟨0⟩ [.index 2] .mutable 0) := by
+  intro law
+  have safe := law.1 ⟨1⟩ (by decide)
+  exact (by decide : ¬ ResultSatisfies (fun t => RetiredLoan t ⟨1⟩)
+    (recycleStep endedChild (.reborrow ⟨0⟩ [.index 2] .mutable 0))) safe
 
 /-- Instance (law `ConcreteSpec.Core.Own.ended_loans_never_revive`, case
 `ConcreteSpec.Core.Own.LoanHistoryEvidence.endedChild`, subject `ConcreteSpec.Core.Own.runLoanSequence`). The populated
@@ -667,9 +671,11 @@ def borrowActions : List LoanAction :=
 `ConcreteSpec.Core.Own.LoanHistoryEvidence.endedChild`, subject `ConcreteSpec.Core.Own.loanAction`,
 mutant `ConcreteSpec.Core.Own.LoanHistoryEvidence.recycleBorrowStep`). The retired identity is
 reissued by an owner borrow, independently of the projected-reborrow mutation. -/
-example : RetiredLoan endedChild ⟨1⟩ ∧
-    ¬ ResultSatisfies (fun t => RetiredLoan t ⟨1⟩)
-      (recycleBorrowStep endedChild (.borrow ⟨1⟩ [] .shared)) := by decide
+example : ¬ RetiringLoanAction recycleBorrowStep endedChild (.borrow ⟨1⟩ [] .shared) := by
+  intro law
+  have safe := law.1 ⟨1⟩ (by decide)
+  exact (by decide : ¬ ResultSatisfies (fun t => RetiredLoan t ⟨1⟩)
+    (recycleBorrowStep endedChild (.borrow ⟨1⟩ [] .shared))) safe
 
 /-- Instance (law `ConcreteSpec.Core.Own.ended_loans_never_revive`, case
 `ConcreteSpec.Core.Own.LoanHistoryEvidence.endedChild`, subject `ConcreteSpec.Core.Own.runLoanSequence`). Both kinds
@@ -704,9 +710,11 @@ def rewindStep (s : State) : LoanAction → Option State
 `ConcreteSpec.Core.Own.LoanHistoryEvidence.endedChild`, subject `ConcreteSpec.Core.Own.loanAction`,
 mutant `ConcreteSpec.Core.Own.LoanHistoryEvidence.rewindStep`). Ending a real parent
 must retain the fact that the retired child's identity was already issued. -/
-example : RetiredLoan endedChild ⟨1⟩ ∧
-    ¬ ResultSatisfies (fun t => RetiredLoan t ⟨1⟩)
-      (rewindStep endedChild (.endLoan ⟨0⟩)) := by decide
+example : ¬ RetiringLoanAction rewindStep endedChild (.endLoan ⟨0⟩) := by
+  intro law
+  have safe := law.1 ⟨1⟩ (by decide)
+  exact (by decide : ¬ ResultSatisfies (fun t => RetiredLoan t ⟨1⟩)
+    (rewindStep endedChild (.endLoan ⟨0⟩))) safe
 
 end LoanHistoryEvidence
 
@@ -929,6 +937,7 @@ def recyclePass (s : CallState) (root : Hybrid.Place) (path : List Projection)
       s.pending ++ [(parameter, ⟨1⟩)]⟩
   else none
 
+/-- Instance (admission for the corresponding retirement fixture). -/
 private theorem retiredBindingAdmitted :
     AdmittedBinding types retired x (retired.frames.headD ⟨0, [], []⟩) :=
   ⟨rfl, by exact ⟨by decide, _, rfl⟩⟩
@@ -993,6 +1002,7 @@ example : AdmittedDrop departingLocal [x] (departingLocal.frames.headD ⟨0, [],
 
 private def ownerArgumentSource : CallState := ⟨LoanHistoryEvidence.endedChild, []⟩
 
+/-- Instance (admission for the corresponding retirement fixture). -/
 private theorem ownerArgumentAdmitted :
     AdmittedOwnerArgument ownerArgumentSource ⟨1⟩ .mutable DirectArgumentWitnesses.z :=
   ⟨by decide, rfl, _, rfl, by decide⟩
@@ -1910,6 +1920,18 @@ example : ∃ c, eagerRegistration (heldProgram (callLife types) z)
     (heldRegistration (callLife types) caller ⟨1⟩ z) = some (.next c) ∧
     c.store ≠ caller ∧ c.store.pending ≠ [] ∧ callLife types (.drop []) c.store = none := by
   exact ⟨_, rfl, by decide, by decide, rfl⟩
+
+/-- Planted (law `ConcreteSpec.Core.Own.deferred_registration`, mutant
+`eagerRegistration`). Independent registration succeeds using the original store. -/
+example :
+    let c := heldRegistration (callLife types) caller ⟨1⟩ z
+    let d : Exec.Deferred (protocolOps (callLife types)) :=
+      ⟨callee, [.ownerArgument ⟨1⟩ .mutable z], ⟨0⟩⟩
+    let k' := [.scope ⟨0⟩ [] [d]]
+    c.ctrl = .exec (.defer d.f d.args d.site) ∧ Exec.Registered d c.frames k' ∧
+      ¬ (eagerRegistration (heldProgram (callLife types) z) c =
+        some (.next ⟨.done, c.locals, c.store, k'⟩)) := by
+  exact ⟨rfl, .scope, by intro h; cases h⟩
 
 /-- Mutant: evaluate deferred operands at registration, discarding their store effects
 but refusing registration if evaluation fails. -/
@@ -3153,4 +3175,933 @@ example : ¬ AdoptedView adoptFirstActivation twoBefore ⟨1, [], []⟩ twoWaiti
   cases table
 end Round5Evidence
 
+
+/-! ## Dispatcher admission and progress -/
+
+/-- An admitted event must produce a result. -/
+def Advances {α : Type} (admitted : Prop) (result : Option α) : Prop :=
+  admitted → ∃ t, result = some t
+
+/-- A dispatcher must complete admitted events and preserve safety on every returned result. -/
+def Dispatches {α : Type} (admitted : Prop) (safe : α → Prop) (result : Option α) : Prop :=
+  Advances admitted result ∧ ResultSatisfies safe result
+
+/-- Owning parameters designate distinct fresh locals with checked descriptors. -/
+def AdmittedEntry (types : Var → Option Descriptor) (params : List Var) : Prop :=
+  params.Nodup ∧ ∀ x ∈ params, ∃ d, types x = some d
+
+/-- The departing activation must discharge storage and close its local loan graph. -/
+def AdmittedLeave (s : State) : Prop :=
+  WellFormed s ∧ ∃ f, s.frames.head? = some f ∧ ValidReturn s f
+
+/-- Exhaustive admission for the ownership-only lifecycle interface. -/
+def AdmittedLife (types : Var → Option Descriptor) (s : State) : Exec.Life → Prop
+  | .bind x => ∃ f, AdmittedBinding types s x f
+  | .enter params => AdmittedEntry types params
+  | .leave => AdmittedLeave s
+  | .drop xs => ∃ f, AdmittedDrop s xs f
+
+/-- Pending view operands must match the signature, be distinct and designate pending loans.
+Only the remaining parameters allocate owner storage. -/
+def AdmittedCallEntry (types : Var → Option Descriptor) (s : CallState)
+    (params : List Var) : Prop :=
+  params.Nodup ∧
+  (∀ x ∈ params, x ∉ s.pending.map Prod.fst → ∃ d, types x = some d) ∧
+  (s.pending.map Prod.fst).Nodup ∧ (s.pending.map Prod.snd).Nodup ∧
+  ∀ e ∈ s.pending, e.1 ∈ params ∧
+    ∃ l ∈ s.own.loans, l.id = e.2 ∧ l.pendingArgument = true
+
+/-- Pending argument evaluation can cross only the matching call entry. -/
+def AdmittedCallLife (types : Var → Option Descriptor) (s : CallState) : Exec.Life → Prop
+  | .enter params => AdmittedCallEntry types s params
+  | .bind x => s.pending = [] ∧ AdmittedLife types s.own (.bind x)
+  | .leave => s.pending = [] ∧ AdmittedLife types s.own .leave
+  | .drop xs => s.pending = [] ∧ AdmittedLife types s.own (.drop xs)
+
+/-- Law (authority: docs/decisions.md#decided-2026-11-13-lifecycle-refusal).
+The ownership-only dispatcher completes every admitted lifecycle event. -/
+theorem life_dispatch (types : Var → Option Descriptor) (s : State) (e : Exec.Life) :
+    Dispatches (AdmittedLife types s e) (fun t => WellFormed s → WellFormed t)
+      (life types e s) := by
+  constructor
+  · intro admitted
+    cases e with
+    | bind x =>
+      obtain ⟨f, hf⟩ := admitted
+      obtain ⟨t, ht, _⟩ := bind_retired_place types s x f hf
+      exact ⟨t, ht⟩
+    | enter params => exact enter_progress types s params admitted.1 admitted.2
+    | leave =>
+      obtain ⟨hs, f, hf, valid⟩ := admitted
+      exact return_progress s f hs hf valid
+    | drop xs =>
+      obtain ⟨f, hf⟩ := admitted
+      obtain ⟨t, ht, _⟩ := drop_retired_place s xs f hf
+      exact ⟨t, ht⟩
+  · cases h : life types e s with
+    | none => trivial
+    | some t =>
+      intro hs
+      have safe := life_preserves types e s hs
+      rwa [h] at safe
+
+/-- Helper (fold induction). Binding the owned parameters leaves all other names free in
+the fresh activation and preserves its issued identity. -/
+private theorem entry_frame (types : Var → Option Descriptor) (xs : List Var)
+    (s t : State) (f : Activation) (hf : s.frames.head? = some f)
+    (issued : f.id < s.nextActivation)
+    (h : xs.foldlM (fun s x => bind types x s) s = some t) :
+    ∃ g, t.frames.head? = some g ∧ g.id < t.nextActivation ∧
+      ∀ x, x ∉ xs → AList.lookup f.locals x = none → AList.lookup g.locals x = none := by
+  induction xs generalizing s f with
+  | nil =>
+    simp at h
+    subst t
+    exact ⟨f, hf, issued, fun _ _ free => free⟩
+  | cons x xs ih =>
+    simp only [List.foldlM_cons] at h
+    obtain ⟨u, hu, ht⟩ := Option.bind_eq_some_iff.mp h
+    unfold bind at hu
+    rw [hf] at hu
+    dsimp at hu
+    split at hu
+    · unfold reinitialize at hu
+      obtain ⟨a, _, hu⟩ := Option.bind_eq_some_iff.mp hu
+      split at hu
+      · cases hu
+        obtain ⟨g, hg, hi, free⟩ := ih _ f (by exact hf) (by exact issued) ht
+        exact ⟨g, hg, hi, fun y hy => free y (fun hm => hy (List.mem_cons_of_mem _ hm))⟩
+      · contradiction
+    · obtain ⟨d, _, hu⟩ := Option.bind_eq_some_iff.mp hu
+      simp [issued] at hu
+      subst u
+      obtain ⟨g, hg, hi, free⟩ := ih _ { f with locals := (x, ⟨s.nextPlace⟩) :: f.locals } (by rfl) (by exact issued) ht
+      refine ⟨g, hg, hi, fun y hy old => free y (fun hm => hy (List.mem_cons_of_mem _ hm)) ?_⟩
+      have ne : x ≠ y := fun eq => hy (eq ▸ List.mem_cons_self)
+      simp [AList.lookup, ne, old]
+
+/-- Preserve ownership, the pending argument buffer invariant, and retired identities. -/
+def CallLifeSafe (s t : CallState) : Prop :=
+  (WellFormed s.own → WellFormed t.own) ∧
+  (s.WellFormed → t.WellFormed) ∧
+  ∀ p i, RetiredPlace s.own p → RetiredLoan s.own i →
+    RetiredPlace t.own p ∧ RetiredLoan t.own i
+
+/-- Law (authority: docs/decisions.md#decided-2026-11-13-lifecycle-refusal; #od23).
+The C1 adapter completes every admitted lifecycle event, including mixed-parameter calls. -/
+theorem callLife_dispatch (types : Var → Option Descriptor) (s : CallState) (e : Exec.Life) :
+    Dispatches (AdmittedCallLife types s e)
+      (CallLifeSafe s) (callLife types e s) := by
+  constructor
+  · intro admitted
+    have plain (e : Exec.Life) (h : AdmittedLife types s.own e)
+        (adapt : callLife types e s = (life types e s.own).map
+          (fun own => { s with own := own })) : ∃ t, callLife types e s = some t := by
+      obtain ⟨u, hu⟩ := (life_dispatch types s.own e).1 h
+      exact ⟨{ s with own := u }, by simp [adapt, hu]⟩
+    cases e with
+    | bind x => exact plain _ admitted.2 (by simp [callLife, admitted.1])
+    | leave => exact plain _ admitted.2 (by simp [callLife, admitted.1])
+    | drop xs => exact plain _ admitted.2 (by simp [callLife, admitted.1])
+    | enter params =>
+      obtain ⟨unique, typed, names, ids, pending⟩ := admitted
+      let owned := params.filter fun x => decide (x ∉ s.pending.map Prod.fst)
+      obtain ⟨u, hu⟩ := enter_progress types s.own owned (unique.filter _) (by
+        intro x hx
+        have hm := List.mem_filter.mp hx
+        exact typed x hm.1 (of_decide_eq_true hm.2))
+      have loans := enter_loans types s.own u owned hu
+      have fold := hu
+      change owned.foldlM (fun s x => bind types x s)
+        { s.own with nextActivation := s.own.nextActivation + 1
+                     frames := ⟨s.own.nextActivation, [], []⟩ :: s.own.frames } = some u at fold
+      obtain ⟨f, frame, issued, free⟩ := entry_frame types owned _ u
+        ⟨s.own.nextActivation, [], []⟩ rfl (Nat.lt_succ_self _) fold
+      obtain ⟨v, hv, _⟩ := adopted_view_usable u f s.pending frame issued names ids
+        (fun e he => by rw [loans]; exact (pending e he).2)
+        (fun e he => free e.1 (by simp [owned, List.mem_map_of_mem he]) rfl)
+      have supplied : s.pending.all (fun e => decide (e.1 ∈ params)) = true :=
+        List.all_eq_true.mpr fun e he => decide_eq_true ((pending e he).1)
+      refine ⟨⟨v, []⟩, ?_⟩
+      simp only [callLife, supplied, ite_true]
+      change (enter types owned s.own >>= fun own =>
+        adoptDown own s.pending >>= fun own => some (CallState.mk own [])) = some (CallState.mk v [])
+      simp [hu, hv]
+  · cases h : callLife types e s with
+    | none => trivial
+    | some t =>
+      refine ⟨?_, ?_, ?_⟩
+      · intro hs
+        have safe := callLife_preserves types e s hs
+        rwa [h] at safe
+      · intro hs
+        have safe := callLife_call_preserves types e s hs
+        rwa [h] at safe
+      · intro p i hp hi
+        have safe := lifecycle_nonrevival types s e p i hp hi
+        unfold LifecycleNonrevival at safe
+        rwa [h] at safe
+
+/-- Law (authority: docs/decisions.md#decided-2026-11-13-lifecycle-refusal).
+Transporting the lifecycle through a concrete store preserves its admission and safety. -/
+theorem callLifeStore_dispatch {σ : Type} (types : Var → Option Descriptor)
+    (s : σ × CallState) (e : Exec.Life) :
+    Dispatches (AdmittedCallLife types s.2 e)
+      (fun t => t.1 = s.1 ∧ CallLifeSafe s.2 t.2) (callLifeStore types e s) := by
+  have law := callLife_dispatch types s.2 e
+  constructor
+  · intro h
+    obtain ⟨t, ht⟩ := law.1 h
+    exact ⟨(s.1, t), by simp [callLifeStore, ht]⟩
+  · unfold callLifeStore
+    cases h : callLife types e s.2 with
+    | none => trivial
+    | some t => exact ⟨rfl, by simpa only [h, ResultSatisfies] using law.2⟩
+
+
+/-- A finite protocol is admitted when its independent ledger rules compose in order. -/
+inductive AdmittedTrace {α β : Type} (rule : α → β → α → Prop) : α → List β → Prop
+  | nil (s) : AdmittedTrace rule s []
+  | cons {s e u es} : rule s e u → AdmittedTrace rule u es → AdmittedTrace rule s (e :: es)
+
+/-- Helper (induction). A fold completes whenever each ledger rule has its required successor. -/
+private theorem admitted_fold {α β : Type} {rule : α → β → α → Prop}
+    (step : α → β → Option α)
+    (implements : ∀ s e t, rule s e t → step s e = some t)
+    {s : α} {es : List β} (h : AdmittedTrace rule s es) :
+    ∃ t, es.foldlM step s = some t := by
+  induction h with
+  | nil s => exact ⟨s, rfl⟩
+  | cons h _ ih =>
+    obtain ⟨t, ht⟩ := ih
+    exact ⟨t, by simp [List.foldlM_cons, implements _ _ _ h, ht]⟩
+
+/-- The loan ledger adds a fresh grant or removes an ended leaf. The graph premises are
+the same single-event admission used by the retirement Law. -/
+inductive LoanLedger : State → LoanAction → State → Prop
+  | borrow {s p path m f}
+      (h : AdmittedLoanAction s (.borrow p path m))
+      (frame : s.frames.head? = some f) :
+      LoanLedger s (.borrow p path m) { s with
+        nextLoan := s.nextLoan + 1
+        loans := ⟨⟨s.nextLoan⟩, p, path, m, none, [], f.id, false, false⟩ :: s.loans }
+  | reborrow {s i path m activation a}
+      (h : AdmittedLoanAction s (.reborrow i path m activation))
+      (parent : loan s i = some a) :
+      LoanLedger s (.reborrow i path m activation) { s with
+        nextLoan := s.nextLoan + 1
+        loans := ⟨⟨s.nextLoan⟩, a.root, a.path ++ path, m, some i, i :: a.ancestors,
+          activation, false, false⟩ :: s.loans }
+  | endLoan {s i} (h : AdmittedLoanAction s (.endLoan i)) :
+      LoanLedger s (.endLoan i) { s with loans := s.loans.filter (·.id != i) }
+
+/-- Helper (computation). Loan actions realize the independent ledger rules. -/
+private theorem loanLedger_step (s : State) (e : LoanAction) (t : State)
+    (h : LoanLedger s e t) : loanAction s e = some t := by
+  cases h with
+  | borrow admitted frame =>
+    obtain ⟨_, hf, issued, allowed⟩ := admitted
+    rw [frame] at hf
+    cases hf
+    simp [loanAction, borrow, frame, issued, allowed]
+  | reborrow admitted parent =>
+    obtain ⟨_, _, issued, current, allowed⟩ := admitted
+    simp [loanAction, reborrowTo, parent, issued, current, allowed]
+  | @endLoan i admitted =>
+    obtain ⟨a, found, children⟩ := admitted
+    have clear : s.loans.any (·.parent == some i) = false := by
+      apply Bool.eq_false_iff.mpr
+      intro h
+      obtain ⟨b, hb, eq⟩ := List.any_eq_true.mp h
+      exact children b hb (by simpa using eq)
+    simp [loanAction, endLoan, found, clear]
+
+/-- Law (authority: docs/decisions.md#decided-2026-11-13-lifecycle-refusal; #od15).
+Every admitted loan trace completes and all completed traces preserve retirement. -/
+theorem runLoanSequence_dispatch (s : State) (ops : List LoanAction) :
+    Dispatches (AdmittedTrace LoanLedger s ops)
+      (fun t => ∀ i, RetiredLoan s i → RetiredLoan t i) (runLoanSequence s ops) := by
+  refine ⟨admitted_fold loanAction loanLedger_step, ?_⟩
+  cases h : runLoanSequence s ops with
+  | none => trivial
+  | some t =>
+    intro i hr
+    have safe := ended_loans_never_revive s ops i hr
+    rwa [h] at safe
+
+/-- A downward parameter lends at the source mode into the new current activation.
+The next argument sees the extended loan graph and therefore the earlier argument's freeze. -/
+inductive DownwardParameter : State → Var × LoanId → State → Prop
+  | lend {s x i a f u}
+      (frame : s.frames.head? = some f)
+      (source : loan s i = some a)
+      (grant : LoanLedger s (.reborrow i [] a.mode f.id) u) :
+      DownwardParameter s (x, i)
+        { u with frames := { f with views := (x, ⟨s.nextLoan⟩) :: f.views } :: s.frames.tail }
+
+/-- Standalone entry introduces a fresh activation followed by its downward grants. -/
+def AdmittedDownwardEntry (s : State) (args : List (Var × LoanId)) : Prop :=
+  AdmittedTrace DownwardParameter
+    { s with nextActivation := s.nextActivation + 1
+             frames := ⟨s.nextActivation, [], []⟩ :: s.frames } args
+
+/-- Law (authority: docs/decisions.md#decided-2026-11-13-lifecycle-refusal;
+#decided-2026-11-08-recovered-d3). Every admitted standalone downward entry completes. -/
+theorem enterDown_dispatch (s : State) (args : List (Var × LoanId)) :
+    Dispatches (AdmittedDownwardEntry s args)
+      (fun t => (WellFormed s → WellFormed t) ∧
+        ∀ i, RetiredLoan s i → RetiredLoan t i) (enterDown s args) := by
+  constructor
+  · intro h
+    unfold enterDown
+    simp only [enter, List.foldlM_nil]
+    dsimp
+    apply admitted_fold _ _ h
+    intro v e t rule
+    cases rule with
+    | lend frame source grant =>
+      have hg := loanLedger_step _ _ _ grant
+      cases grant
+      simp [frame, source, loanAction] at hg ⊢
+      simp [hg]
+  · cases h : enterDown s args with
+    | none => trivial
+    | some t =>
+      constructor
+      · intro hs
+        have safe := enterDown_preserves s args hs
+        rwa [h] at safe
+      · intro i hr
+        have safe := enterDown_retired s args i hr
+        rwa [h] at safe
+
+/-- View operands need an available source grant and an unsupplied parameter. -/
+def AdmittedViewArgument (s : CallState) (i : LoanId) (x : Var) : Prop :=
+  x ∉ s.pending.map Prod.fst ∧ ∃ a f, loan s.own i = some a ∧
+    s.own.frames.head? = some f ∧ f.id < s.own.nextActivation ∧
+    loanAccess s.own i a.mode = true
+
+/-- Law (authority: docs/decisions.md#od23; #decided-2026-11-13-lifecycle-refusal).
+View argument evaluation completes at every available source, including with earlier pending arguments. -/
+theorem passDown_dispatch (s : CallState) (i : LoanId) (x : Var) :
+    Dispatches (AdmittedViewArgument s i x)
+      (fun t => (WellFormed s.own → WellFormed t.own) ∧ (s.WellFormed → t.WellFormed))
+      (passDown s i x) := by
+  constructor
+  · rintro ⟨free, a, f, found, frame, issued, access⟩
+    obtain ⟨t, ht⟩ := reborrowTo_progress s.own i [] a.mode f.id a found issued
+      (by simp [frame]) access
+    exact ⟨_, by simp [passDown, free, found, reborrow, frame, ht] <;> rfl⟩
+  · cases h : passDown s i x with
+    | none => trivial
+    | some t =>
+      constructor
+      · intro hs
+        have safe := passDown_preserves s i x hs
+        rwa [h] at safe
+      · intro hs
+        have safe := passDown_call_preserves s i x hs
+        rwa [h] at safe
+
+/-- Exhaustive admission for the mixed issuance history alphabet. -/
+def AdmittedIssuance (types : Var → Option Descriptor) (s : CallState) :
+    IssuanceAction → Prop
+  | .ordinary op => AdmittedLoanAction s.own op
+  | .owner p _ m x => AdmittedOwnerArgument s p m x
+  | .view i x => AdmittedViewArgument s i x
+  | .entry args => AdmittedDownwardEntry s.own args
+  | .lifecycle e => AdmittedCallLife types s e
+
+/-- Ownership well-formedness and identity retirement at the mixed issuance boundary. -/
+def IssuanceSafe (s t : CallState) : Prop :=
+  (WellFormed s.own → WellFormed t.own) ∧ ∀ i, RetiredLoan s.own i → RetiredLoan t.own i
+
+/-- Law (authority: docs/decisions.md#decided-2026-11-13-lifecycle-refusal; #od15; #od23).
+The mixed dispatcher completes every admitted issuance event and preserves retirement. -/
+theorem issuanceStep_dispatch (types : Var → Option Descriptor) (s : CallState)
+    (e : IssuanceAction) :
+    Dispatches (AdmittedIssuance types s e)
+      (IssuanceSafe s) (issuanceStep types s e) := by
+  constructor
+  · intro h
+    cases e with
+    | ordinary op =>
+      obtain ⟨t, ht⟩ := (loanSequence_retired_step s.own op).2 h
+      exact ⟨_, by simp [issuanceStep, ht] <;> rfl⟩
+    | owner p path m x =>
+      obtain ⟨t, ht, _⟩ := call_birth_retired s p path m x h
+      exact ⟨t, ht⟩
+    | view i x => exact (passDown_dispatch s i x).1 h
+    | entry args =>
+      obtain ⟨t, ht⟩ := (enterDown_dispatch s.own args).1 h
+      exact ⟨_, by simp [issuanceStep, ht] <;> rfl⟩
+    | lifecycle e => exact (callLife_dispatch types s e).1 h
+  · cases h : issuanceStep types s e with
+    | none => trivial
+    | some t =>
+      constructor
+      · intro hs
+        cases e with
+        | ordinary op =>
+          have safe : StateResult (loanAction s.own op) := by
+            cases op with
+            | borrow p path m => exact borrow_preserves s.own p path m hs
+            | reborrow i path m a => exact reborrowTo_preserves s.own i path m a hs
+            | endLoan i => exact endLoan_preserves s.own i hs
+          simp only [issuanceStep] at h
+          obtain ⟨u, hu, rfl⟩ := Option.map_eq_some_iff.mp h
+          rwa [hu] at safe
+        | owner p path m x =>
+          have safe := passOwner_preserves s p path m x hs
+          change passOwner s p path m x = some t at h
+          rwa [h] at safe
+        | view i x =>
+          have safe := passDown_preserves s i x hs
+          change passDown s i x = some t at h
+          rwa [h] at safe
+        | entry args =>
+          have safe := enterDown_preserves s.own args hs
+          simp only [issuanceStep] at h
+          obtain ⟨u, hu, rfl⟩ := Option.map_eq_some_iff.mp h
+          rwa [hu] at safe
+        | lifecycle e =>
+          have safe := callLife_preserves types e s hs
+          change callLife types e s = some t at h
+          rwa [h] at safe
+      · intro i hr
+        have safe := issuance_history_nonrevival types s [e] i hr
+        simpa [List.foldlM_cons, h, ResultSatisfies] using safe
+
+/-- Helper (constructor enumeration). Each match is exhaustive without a fallback,
+so extending any event alphabet requires an explicit admission obligation. -/
+theorem admission_cases (types : Var → Option Descriptor) (s : CallState) :
+    (∀ e, AdmittedLife types s.own e ↔ match e with
+      | .bind x => ∃ f, AdmittedBinding types s.own x f
+      | .enter ps => AdmittedEntry types ps
+      | .leave => AdmittedLeave s.own
+      | .drop xs => ∃ f, AdmittedDrop s.own xs f) ∧
+    (∀ e, AdmittedCallLife types s e ↔ match e with
+      | .bind x => s.pending = [] ∧ AdmittedLife types s.own (.bind x)
+      | .enter ps => AdmittedCallEntry types s ps
+      | .leave => s.pending = [] ∧ AdmittedLeave s.own
+      | .drop xs => s.pending = [] ∧ AdmittedLife types s.own (.drop xs)) ∧
+    (∀ e, AdmittedLoanAction s.own e ↔ match e with
+      | .borrow p _ m => ∃ f, s.own.frames.head? = some f ∧
+          f.id < s.own.nextActivation ∧ ownerAccess s.own p m = true
+      | .reborrow i _ m a => ∃ parent, loan s.own i = some parent ∧
+          a < s.own.nextActivation ∧ s.own.frames.head?.map Activation.id = some a ∧
+          loanAccess s.own i m = true
+      | .endLoan i => ∃ a, loan s.own i = some a ∧ ∀ b ∈ s.own.loans, b.parent ≠ some i) ∧
+    (∀ e, AdmittedIssuance types s e ↔ match e with
+      | .ordinary op => AdmittedLoanAction s.own op
+      | .owner p _ m x => AdmittedOwnerArgument s p m x
+      | .view i x => AdmittedViewArgument s i x
+      | .entry args => AdmittedDownwardEntry s.own args
+      | .lifecycle e => AdmittedCallLife types s e) :=
+  ⟨fun _ => Iff.rfl, by intro e; cases e <;> rfl, fun _ => Iff.rfl, fun _ => Iff.rfl⟩
+
+/-- Adoption uses a fresh issued destination and distinct pending loans and names. -/
+def AdmittedAdoption (s : State) (args : List (Var × LoanId)) : Prop :=
+  ∃ f, s.frames.head? = some f ∧ f.id < s.nextActivation ∧
+    (args.map Prod.fst).Nodup ∧ (args.map Prod.snd).Nodup ∧
+    (∀ e ∈ args, ∃ l ∈ s.loans, l.id = e.2 ∧ l.pendingArgument = true) ∧
+    (∀ e ∈ args, AList.lookup f.locals e.1 = none)
+
+/-- Law (authority: docs/decisions.md#od23; #decided-2026-11-13-lifecycle-refusal).
+Every admitted adoption completes and preserves ownership. -/
+theorem adoptDown_dispatch (s : State) (args : List (Var × LoanId)) :
+    Dispatches (AdmittedAdoption s args) (fun t => WellFormed s → WellFormed t)
+      (adoptDown s args) := by
+  constructor
+  · rintro ⟨f, frame, issued, names, ids, pending, free⟩
+    obtain ⟨t, ht, _⟩ := adopted_view_usable s f args frame issued names ids pending free
+    exact ⟨t, ht⟩
+  · cases h : adoptDown s args with
+    | none => trivial
+    | some t =>
+      intro hs
+      have safe := adoptDown_preserves s args hs
+      rwa [h] at safe
+
+/-- Only an unborrowed linear owner may be consumed. -/
+def AdmittedMove (s : State) (p : Hybrid.Place) : Prop :=
+  ∃ a, slot s p = some a ∧ a.desc.copy = false ∧ a.status = .owned ∧
+    ∀ l ∈ s.loans, l.root ≠ p
+
+/-- Law (authority: docs/decisions.md#od60; #od62).
+Every admitted move completes and preserves ownership. -/
+theorem move_dispatch (s : State) (p : Hybrid.Place) :
+    Dispatches (AdmittedMove s p) (fun t => WellFormed s → WellFormed t) (move s p) := by
+  constructor
+  · rintro ⟨a, found, linear, owned, clear⟩
+    exact move_progress s p a found linear owned clear
+  · cases h : move s p with
+    | none => trivial
+    | some t =>
+      intro hs
+      have safe := move_preserves s p hs
+      rwa [h] at safe
+
+namespace DispatchEvidence
+open Examples DirectArgumentWitnesses
+
+/-- The fixture lends a mutable view into a fresh standalone activation. -/
+def singletonEntry : List (Var × LoanId) := [(y, ⟨0⟩)]
+
+/-- Instance (admission for `enterDown_dispatch` and `issuanceStep_dispatch`). -/
+private theorem singletonAdmitted : AdmittedDownwardEntry exclusive singletonEntry := by
+  apply AdmittedTrace.cons
+  · apply DownwardParameter.lend rfl (a := exclusive.loans.head (by decide)) rfl
+    exact LoanLedger.reborrow ⟨_, rfl, by decide, rfl, by decide⟩ rfl
+  · exact .nil _
+
+/-- Mutant: accept an empty standalone entry only. -/
+def refuseStandaloneEntry (s : State) (args : List (Var × LoanId)) : Option State :=
+  if args.isEmpty then enterDown s args else none
+
+/-- Mutant: refuse nested zero-argument calls at the adapter. -/
+def refuseEmptyCallEntry (e : Exec.Life) (s : CallState) : Option CallState :=
+  match e with
+  | .enter [] => if s.own.frames.length ≥ 2 then none else callLife types e s
+  | _ => callLife types e s
+
+/-- Mutant: retain only singleton view entry, empty-local return, and teardown. -/
+def refuseAdmittedCallLife (e : Exec.Life) (s : CallState) : Option CallState :=
+  match e with
+  | .bind _ => none
+  | .enter ps =>
+    if ps.length = 1 ∧ s.pending.length = 1 then callLife types e s else none
+  | .leave =>
+    if s.own.frames.head?.any (fun f =>
+        !f.locals.isEmpty || (s.own.loans.filter (·.activation == f.id)).length > 1)
+    then none else callLife types e s
+  | .drop _ => callLife types e s
+
+/-- Mutant: refuse binding and entry in the ownership-only dispatcher. -/
+def refuseLifeBindAndEnter (e : Exec.Life) (s : State) : Option State :=
+  match e with
+  | .bind _ | .enter _ => none
+  | _ => life types e s
+
+/-- Mutant: refuse adoption after the first argument. -/
+def refuseMultiAdopt (s : State) (args : List (Var × LoanId)) : Option State :=
+  if args.length > 1 then none else adoptDown s args
+
+/-- Mutant: refuse projected reborrows. -/
+def refuseProjectedReborrow (s : State) (e : LoanAction) : Option State :=
+  match e with
+  | .reborrow _ (_ :: _) _ _ => none
+  | _ => loanAction s e
+
+/-- Mutant: refuse consumption outside place zero. -/
+def refuseNonzeroMove (s : State) (p : Hybrid.Place) : Option State :=
+  if p.id = 0 then move s p else none
+
+/-- Mutant: refuse a view if an earlier view argument is pending. -/
+def refuseSecondPendingView (s : CallState) (i : LoanId) (x : Var) : Option CallState :=
+  if s.pending.isEmpty then passDown s i x else none
+
+/-- Helper (inversion). A refused admitted event contradicts progress. -/
+private theorem refuses {α : Type} {admitted : Prop} {result : Option α}
+    (h : admitted) (hr : result = none) : ¬ Advances admitted result := by
+  intro advance
+  obtain ⟨t, ht⟩ := advance h
+  rw [hr] at ht
+  cases ht
+
+/-- Instance (law `enterDown_dispatch`, case `singletonEntry`). -/
+example : Advances (AdmittedDownwardEntry exclusive singletonEntry)
+    (enterDown exclusive singletonEntry) :=
+  (enterDown_dispatch _ _).1
+
+/-- Planted (law `enterDown_dispatch`, mutant `refuseStandaloneEntry`). -/
+example : ¬ Advances (AdmittedDownwardEntry exclusive singletonEntry)
+    (refuseStandaloneEntry exclusive singletonEntry) :=
+  refuses singletonAdmitted rfl
+
+/-- The nested call starts inside the active deferred callee. -/
+def nestedCaller := (Round3Evidence.nestedStart (callLife types)).store
+
+/-- Instance (admission for a zero-argument call). -/
+private theorem emptyEntry (s : CallState) (h : s.pending = []) :
+    AdmittedCallEntry types s [] := by
+  simp [AdmittedCallEntry, h]
+
+/-- Instance (law `callLife_dispatch`, case `nestedCaller`). -/
+example : Advances (AdmittedCallLife types nestedCaller (.enter []))
+    (callLife types (.enter []) nestedCaller) := (callLife_dispatch _ _ _).1
+
+/-- Planted (law `callLife_dispatch`, mutant `refuseEmptyCallEntry`).
+Actual machine entry stalls when the adapter refuses the nested call. -/
+example : ¬ Advances (AdmittedCallLife types nestedCaller (.enter []))
+      (refuseEmptyCallEntry (.enter []) nestedCaller) ∧
+    (Exec.step (Round3Evidence.nestedProgram (callLife types))
+      (Round3Evidence.nestedStart (callLife types))).isSome = true ∧
+    Exec.step (Round3Evidence.nestedProgram refuseEmptyCallEntry)
+      (Round3Evidence.nestedStart refuseEmptyCallEntry) = none :=
+  ⟨refuses (emptyEntry _ rfl) rfl, rfl, rfl⟩
+
+/-- Instance (admission for binding a fresh local). -/
+private theorem freshBind : AdmittedLife types caller.own (.bind z) :=
+  ⟨caller.own.frames.head (by decide), rfl, by decide, _, rfl⟩
+
+/-- A callee with a moved linear local still has storage to tear down. -/
+def localReturn : CallState :=
+  let entered := (enter types [z] initial).getD initial
+  ⟨(move entered ⟨1⟩).getD entered, []⟩
+
+/-- Instance (admission for return with a nonempty local table). -/
+private theorem localReturnAdmitted : AdmittedCallLife types localReturn .leave :=
+  ⟨rfl, by decide, ⟨1, [(z, ⟨1⟩)], []⟩, rfl, by decide⟩
+
+/-- Instance (admission for return with a callee descendant loan). -/
+private theorem descendantReturnAdmitted :
+    AdmittedCallLife types ⟨Round4Evidence.localChild, []⟩ .leave :=
+  ⟨rfl, by decide, ⟨1, [], [(z, ⟨1⟩)]⟩, rfl, by decide⟩
+
+/-- Instance (admission for two adopted views and a fresh owning parameter). -/
+private theorem mixedEntry : AdmittedCallEntry types Round5Evidence.twoWaiting [x, y, z] := by
+  refine ⟨by decide, fun _ _ _ => ⟨_, rfl⟩, by decide, by decide, ?_⟩
+  intro e he
+  change e ∈ [(y, ⟨1⟩), (z, ⟨2⟩)] at he
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at he
+  rcases he with rfl | rfl <;> decide
+
+/-- Planted (law `callLife_dispatch`, mutant `refuseAdmittedCallLife`). -/
+example :
+    ¬ Advances (AdmittedCallLife types caller (.bind z))
+      (refuseAdmittedCallLife (.bind z) caller) ∧
+    ¬ Advances (AdmittedCallLife types nestedCaller (.enter []))
+      (refuseAdmittedCallLife (.enter []) nestedCaller) ∧
+    ¬ Advances (AdmittedCallLife types Round5Evidence.twoWaiting (.enter [x, y, z]))
+      (refuseAdmittedCallLife (.enter [x, y, z]) Round5Evidence.twoWaiting) ∧
+    ¬ Advances (AdmittedCallLife types localReturn .leave)
+      (refuseAdmittedCallLife .leave localReturn) ∧
+    ¬ Advances (AdmittedCallLife types ⟨Round4Evidence.localChild, []⟩ .leave)
+      (refuseAdmittedCallLife .leave ⟨Round4Evidence.localChild, []⟩) :=
+  ⟨refuses ⟨rfl, freshBind⟩ rfl, refuses (emptyEntry _ rfl) rfl, refuses mixedEntry rfl,
+    refuses localReturnAdmitted rfl, refuses descendantReturnAdmitted rfl⟩
+
+/-- Instance (law `life_dispatch`, case `caller`). -/
+example : Advances (AdmittedLife types caller.own (.bind z)) (life types (.bind z) caller.own) :=
+  (life_dispatch _ _ _).1
+
+/-- Planted (law `life_dispatch`, mutant `refuseLifeBindAndEnter`). -/
+example : ¬ Advances (AdmittedLife types caller.own (.bind z))
+      (refuseLifeBindAndEnter (.bind z) caller.own) ∧
+    ¬ Advances (AdmittedLife types caller.own (.enter []))
+      (refuseLifeBindAndEnter (.enter []) caller.own) :=
+  ⟨refuses freshBind rfl, refuses ⟨by decide, by simp⟩ rfl⟩
+
+/-- Instance (law `adoptDown_dispatch`, case `Round5Evidence.twoBefore`). -/
+example : Advances (AdmittedAdoption Round5Evidence.twoBefore Round5Evidence.twoWaiting.pending)
+    (adoptDown Round5Evidence.twoBefore Round5Evidence.twoWaiting.pending) :=
+  (adoptDown_dispatch _ _).1
+
+/-- Planted (law `adoptDown_dispatch`, mutant `refuseMultiAdopt`). -/
+example : ¬ Advances (AdmittedAdoption Round5Evidence.twoBefore Round5Evidence.twoWaiting.pending)
+    (refuseMultiAdopt Round5Evidence.twoBefore Round5Evidence.twoWaiting.pending) :=
+  refuses ⟨⟨1, [], []⟩, rfl, by decide, by decide, by decide, by decide, by decide⟩ rfl
+
+/-- Planted (law `loanSequence_retired_step`, mutant `refuseProjectedReborrow`). -/
+example : ¬ RetiringLoanAction refuseProjectedReborrow LifecycleWitnesses.called
+    (.reborrow ⟨1⟩ [.index 2] .mutable 1) := by
+  intro law
+  exact refuses ⟨DownwardProtocolEvidence.source, rfl, by decide, rfl, by decide⟩ rfl law.2
+
+/-- Instance (law `move_dispatch`, case `MoveLifecycleEvidence.source`). -/
+example : Advances (AdmittedMove MoveLifecycleEvidence.source ⟨1⟩)
+    (move MoveLifecycleEvidence.source ⟨1⟩) := (move_dispatch _ _).1
+
+/-- Planted (law `move_dispatch`, mutant `refuseNonzeroMove`). -/
+example : ¬ Advances (AdmittedMove MoveLifecycleEvidence.source ⟨1⟩)
+    (refuseNonzeroMove MoveLifecycleEvidence.source ⟨1⟩) :=
+  refuses ⟨MoveLifecycleEvidence.selected, rfl, rfl, rfl, by decide⟩ rfl
+
+/-- Instance (law `issuanceStep_dispatch`, case `PendingEvidence.down`). -/
+example : Advances (AdmittedIssuance types PendingEvidence.down (.view ⟨0⟩ y))
+    (issuanceStep types PendingEvidence.down (.view ⟨0⟩ y)) := (issuanceStep_dispatch _ _ _).1
+
+/-- Instance (law `passDown_dispatch`, case `PendingEvidence.down`). -/
+example : Advances (AdmittedViewArgument PendingEvidence.down ⟨0⟩ y)
+    (passDown PendingEvidence.down ⟨0⟩ y) := (passDown_dispatch _ _ _).1
+
+/-- Planted (law `passDown_dispatch`, mutant `refuseSecondPendingView`). -/
+example : ¬ Advances (AdmittedViewArgument PendingEvidence.down ⟨0⟩ y)
+    (refuseSecondPendingView PendingEvidence.down ⟨0⟩ y) :=
+  refuses ⟨by decide, shared.loans.head (by decide), ⟨0, [(x, ⟨0⟩)], []⟩,
+    rfl, rfl, by decide, by decide⟩ rfl
+
+/-- Instance (law `runLoanSequence_dispatch`, a live parent is ended before a fresh loan issues). -/
+example :
+    AdmittedTrace LoanLedger exclusive [.endLoan ⟨0⟩, .borrow ⟨0⟩ [] .mutable] ∧
+    Advances (AdmittedTrace LoanLedger exclusive [.endLoan ⟨0⟩, .borrow ⟨0⟩ [] .mutable])
+      (runLoanSequence exclusive [.endLoan ⟨0⟩, .borrow ⟨0⟩ [] .mutable]) := by
+  refine ⟨?_, (runLoanSequence_dispatch _ _).1⟩
+  apply AdmittedTrace.cons (LoanLedger.endLoan ⟨_, rfl, by decide⟩)
+  exact .cons (LoanLedger.borrow ⟨_, rfl, by decide, by decide⟩ rfl) (.nil _)
+
+/-- Mutant: the trace wrapper refuses even the empty trace. -/
+def refuseRunLoanSequence (_ : State) (_ : List LoanAction) : Option State := none
+
+/-- Mutant: the mixed dispatcher refuses all events. -/
+def refuseIssuanceStep (_ : CallState) (_ : IssuanceAction) : Option CallState := none
+
+/-- Instance (law `runLoanSequence_dispatch`, empty trace). -/
+example : Advances (AdmittedTrace LoanLedger initial []) (runLoanSequence initial []) :=
+  (runLoanSequence_dispatch _ _).1
+
+/-- Planted (law `runLoanSequence_dispatch`, mutant `refuseRunLoanSequence`). -/
+example : ¬ Advances (AdmittedTrace LoanLedger initial []) (refuseRunLoanSequence initial []) :=
+  refuses (.nil _) rfl
+
+/-- Planted (law `issuanceStep_dispatch`, mutant `refuseIssuanceStep`). -/
+example : ¬ Advances (AdmittedIssuance types ⟨exclusive, []⟩ (.entry singletonEntry))
+    (refuseIssuanceStep ⟨exclusive, []⟩ (.entry singletonEntry)) :=
+  refuses singletonAdmitted rfl
+
+end DispatchEvidence
+
+namespace DispatchEvidence
+open Examples
+
+/-- Mutant: invent storage for an untyped result, indexing it as an unissued place. -/
+def acceptUntypedBinding (e : Exec.Life) (s : State) : Option State :=
+  match e with
+  | .bind v =>
+    if (AList.lookup (s.frames.head?.getD ⟨0, [], []⟩).locals v).isNone then
+      some { s with slots :=
+        ⟨⟨s.nextPlace⟩, 0, ⟨.int .i32, false, true⟩, .owned⟩ :: s.slots }
+    else life (fun _ => none) e s
+  | _ => life (fun _ => none) e s
+
+/-- Mutant: bypass signature checking and enter without advancing the activation supply. -/
+def acceptUntypedEntry (e : Exec.Life) (s : State) : Option State :=
+  match e with
+  | .enter (_ :: _) => some { s with frames := ⟨s.nextActivation, [], []⟩ :: s.frames }
+  | _ => life (fun _ => none) e s
+
+/-- Mutant: pop the activation without checking or tearing down its owners. -/
+def acceptLiveReturn (e : Exec.Life) (s : State) : Option State :=
+  match e with
+  | .leave => some { s with frames := s.frames.tail }
+  | _ => life types e s
+
+/-- Mutant: drop selected storage even when it still has a loan. -/
+def acceptBorrowedDrop (e : Exec.Life) (s : State) : Option State := do
+  match e with
+  | .drop xs =>
+    let f ← s.frames.head?
+    let ps := departingPlaces f xs
+    some { s with
+      slots := s.slots.filter (fun a => decide (a.place ∉ ps))
+      frames := { f with locals := f.locals.filter (fun e => decide (e.2 ∉ ps)) } :: s.frames.tail }
+  | _ => life types e s
+
+/-- Helper (inversion). Well-formed inputs rule out success with a malformed ledger. -/
+private theorem unsafeSuccess {s : State} {r : Option State}
+    (hs : WellFormed s) (bad : ¬ StateResult r) :
+    ¬ ResultSatisfies (fun t => WellFormed s → WellFormed t) r := by
+  cases r with
+  | none => exact False.elim (bad trivial)
+  | some t => exact fun safe => bad (safe hs)
+
+/-- Planted (law `life_dispatch`, mutant `acceptUntypedBinding`). -/
+example : ¬ ResultSatisfies (fun t => WellFormed initial → WellFormed t)
+    (acceptUntypedBinding (.bind y) initial) := unsafeSuccess (by decide) (by decide)
+
+/-- Planted (law `life_dispatch`, mutant `acceptUntypedEntry`). -/
+example : ¬ ResultSatisfies (fun t => WellFormed initial → WellFormed t)
+    (acceptUntypedEntry (.enter [y]) initial) := unsafeSuccess (by decide) (by decide)
+
+/-- Planted (law `life_dispatch`, mutant `acceptLiveReturn`). -/
+example : ¬ ResultSatisfies (fun t => WellFormed initial → WellFormed t)
+    (acceptLiveReturn .leave initial) := unsafeSuccess (by decide) (by decide)
+
+/-- Planted (law `life_dispatch`, mutant `acceptBorrowedDrop`). -/
+example : ¬ ResultSatisfies (fun t => WellFormed exclusive → WellFormed t)
+    (acceptBorrowedDrop (.drop [x]) exclusive) := unsafeSuccess (by decide) (by decide)
+
+/-- Mutant: lend a requested owner place without checking that it exists. -/
+def acceptMissingRoot (s : State) (e : LoanAction) : Option State :=
+  match e with
+  | .borrow p path mode => s.frames.head?.map fun f => { s with
+      loans := ⟨⟨s.nextLoan⟩, p, path, mode, none, [], f.id, false, false⟩ :: s.loans
+      nextLoan := s.nextLoan + 1 }
+  | _ => loanAction s e
+
+/-- Mutant: create a child even when the requested activation has never been issued. -/
+def acceptUnissuedDestination (s : State) (e : LoanAction) : Option State :=
+  match e with
+  | .reborrow i path mode a => (loan s i).map fun parent => { s with
+      loans := ⟨⟨s.nextLoan⟩, parent.root, parent.path ++ path, mode, some i,
+        i :: parent.ancestors, a, false, false⟩ :: s.loans
+      nextLoan := s.nextLoan + 1 }
+  | _ => loanAction s e
+
+/-- Mutant: end a loan with surviving descendants. -/
+def acceptParentEnd (s : State) (e : LoanAction) : Option State :=
+  match e with
+  | .endLoan i => some { s with loans := s.loans.filter (·.id != i) }
+  | _ => loanAction s e
+
+/-- Mutant: open a view of an owner already under a conflicting loan. -/
+def acceptFrozenOwner (s : CallState) (p : Hybrid.Place) (path : List Projection)
+    (mode : Mode) (v : Var) : Option CallState :=
+  s.own.frames.head?.map fun f =>
+    ⟨{ s.own with
+        loans := ⟨⟨s.own.nextLoan⟩, p, path, mode, none, [], f.id, true, true⟩ :: s.own.loans
+        nextLoan := s.own.nextLoan + 1 }, s.pending ++ [(v, ⟨s.own.nextLoan⟩)]⟩
+
+/-- Mutant: ignore a child that has frozen the source view during argument evaluation. -/
+def acceptFrozenView (s : CallState) (i : LoanId) (v : Var) : Option CallState := do
+  let parent ← loan s.own i
+  let f ← s.own.frames.head?
+  some ⟨{ s.own with
+    loans := ⟨⟨s.own.nextLoan⟩, parent.root, parent.path, parent.mode, some i,
+      i :: parent.ancestors, f.id, true, false⟩ :: s.own.loans
+    nextLoan := s.own.nextLoan + 1 }, s.pending ++ [(v, ⟨s.own.nextLoan⟩)]⟩
+
+/-- Mutant: grant a standalone downward parameter despite an earlier conflicting grant. -/
+def acceptFrozenDownward (s : State) (args : List (Var × LoanId)) : Option State := do
+  let u ← enter (fun _ => none) [] s
+  args.foldlM (fun v (x, i) => do
+    let f ← v.frames.head?
+    let parent ← loan v i
+    let w ← acceptUnissuedDestination v (.reborrow i [] parent.mode f.id)
+    pure { w with frames := { f with views := (x, ⟨v.nextLoan⟩) :: f.views } :: v.frames.tail }) u
+
+/-- Mutant: the mixed dispatcher selects a permissive operation at each event. -/
+def overAdmitIssuance (s : CallState) : IssuanceAction → Option CallState
+  | .ordinary op =>
+    let result := match op with
+      | .borrow .. => acceptMissingRoot s.own op
+      | .reborrow .. => acceptUnissuedDestination s.own op
+      | .endLoan .. => acceptParentEnd s.own op
+    result.map fun own => { s with own := own }
+  | .owner p path m v => acceptFrozenOwner s p path m v
+  | .view i v => acceptFrozenView s i v
+  | .entry args => (acceptFrozenDownward s.own args).map fun own => { s with own := own }
+  | .lifecycle e => (acceptLiveReturn e s.own).map fun own => { s with own := own }
+
+/-- Helper (inversion). Project the ownership invariant from issuance safety. -/
+private theorem unsafeIssuance (s : CallState) (e : IssuanceAction)
+    (hs : WellFormed s.own) (bad : ¬ CallOwnResult (overAdmitIssuance s e)) :
+    ¬ ResultSatisfies (IssuanceSafe s) (overAdmitIssuance s e) := by
+  cases h : overAdmitIssuance s e with
+  | none => exact False.elim (bad (by rw [h]; trivial))
+  | some t => exact fun safe => bad (by rw [h]; exact safe.1 hs)
+
+/-- Planted (law `issuanceStep_dispatch`, mutant `overAdmitIssuance`, ordinary loan kinds). -/
+example :
+    ¬ ResultSatisfies (IssuanceSafe ⟨initial, []⟩)
+      (overAdmitIssuance ⟨initial, []⟩ (.ordinary (.borrow ⟨9⟩ [] .mutable))) ∧
+    ¬ ResultSatisfies (IssuanceSafe ⟨exclusive, []⟩)
+      (overAdmitIssuance ⟨exclusive, []⟩ (.ordinary (.reborrow ⟨0⟩ [] .mutable 99))) ∧
+    ¬ ResultSatisfies (IssuanceSafe ⟨child, []⟩)
+      (overAdmitIssuance ⟨child, []⟩ (.ordinary (.endLoan ⟨0⟩))) :=
+  ⟨unsafeIssuance ⟨initial, []⟩ _ (by decide) (by decide),
+   unsafeIssuance ⟨exclusive, []⟩ _ (by decide) (by decide),
+   unsafeIssuance ⟨child, []⟩ _ (by decide) (by decide)⟩
+
+/-- Planted (law `issuanceStep_dispatch`, mutant `overAdmitIssuance`, owner, view, entry and lifecycle). -/
+example :
+    (∀ e ∈ [IssuanceAction.owner ⟨0⟩ [] .mutable y, .entry [(x, ⟨0⟩), (y, ⟨0⟩)],
+        .lifecycle .leave],
+      ¬ ResultSatisfies (IssuanceSafe ⟨exclusive, []⟩)
+      (overAdmitIssuance ⟨exclusive, []⟩ e)) ∧
+    ¬ ResultSatisfies (IssuanceSafe ⟨child, []⟩)
+      (overAdmitIssuance ⟨child, []⟩ (.view ⟨0⟩ y)) := by
+  constructor
+  · intro e he
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at he
+    rcases he with rfl | rfl | rfl <;> exact unsafeIssuance ⟨exclusive, []⟩ _ (by decide) (by decide)
+  · exact unsafeIssuance ⟨child, []⟩ _ (by decide) (by decide)
+
+/-- Planted (law `enterDown_dispatch`, mutant `acceptFrozenDownward`).
+Two mutable arguments cannot lend the same suspended parent. -/
+example : ¬ ResultSatisfies (fun t => (WellFormed exclusive → WellFormed t) ∧
+      ∀ i, RetiredLoan exclusive i → RetiredLoan t i)
+    (acceptFrozenDownward exclusive [(x, ⟨0⟩), (y, ⟨0⟩)]) := by
+  intro safe
+  exact unsafeSuccess (s := exclusive) (r := acceptFrozenDownward exclusive
+    [(x, ⟨0⟩), (y, ⟨0⟩)]) (by decide) (by decide) safe.1
+
+/-- Mutant: a binding may allocate storage but cannot reinitialize a moved local. -/
+def refuseReinitBind (e : Exec.Life) (s : State) : Option State :=
+  match e with
+  | .bind v =>
+    if (s.frames.head?.bind (fun f => AList.lookup f.locals v)).isSome then none
+    else life types e s
+  | _ => life types e s
+
+/-- Planted (law `life_dispatch`, mutant `refuseReinitBind`). -/
+example : ¬ Advances (AdmittedLife types localReturn.own (.bind DirectArgumentWitnesses.z))
+    (refuseReinitBind (.bind DirectArgumentWitnesses.z) localReturn.own) :=
+  refuses ⟨⟨1, [(DirectArgumentWitnesses.z, ⟨1⟩)], []⟩, rfl,
+    localReturn.own.slots.head (by decide), rfl, Or.inl rfl, by decide⟩ rfl
+
+/-- Mutant: move a linear owner even though an active loan points to it. -/
+def acceptBorrowedMove (s : State) (p : Hybrid.Place) : Option State :=
+  (slot s p).map fun _ => { s with slots := s.slots.map fun a =>
+    if a.place = p then { a with status := .moved } else a }
+
+/-- Planted (law `move_dispatch`, mutant `acceptBorrowedMove`). -/
+example : ¬ ResultSatisfies (fun t => WellFormed exclusive → WellFormed t)
+    (acceptBorrowedMove exclusive ⟨0⟩) := unsafeSuccess (by decide) (by decide)
+
+/-- Planted (law `adoptDown_dispatch`, mutant `PreservationEvidence.adoptDownUnissuedActivation`).
+An argument cannot be transferred into an activation beyond the current supply. -/
+example : ¬ ResultSatisfies (fun t => WellFormed Round5Evidence.twoBefore → WellFormed t)
+    (PreservationEvidence.adoptDownUnissuedActivation Round5Evidence.twoBefore
+      Round5Evidence.twoWaiting.pending) := unsafeSuccess (by decide) (by decide)
+
+/-- Planted (law `callLife_dispatch`, mutant `PreservationEvidence.callLifeKeepPending`).
+Successful adoption must retire the pending entries in the call buffer. -/
+example : ¬ ResultSatisfies (CallLifeSafe Round5Evidence.twoWaiting)
+    (PreservationEvidence.callLifeKeepPending types (.enter [y, DirectArgumentWitnesses.z])
+      Round5Evidence.twoWaiting) := by
+  intro safe
+  have bad := safe.2.1 (by decide)
+  revert bad
+  decide
+
+/-- Instance (law `callLifeStore_dispatch`, case `nestedCaller`). -/
+example : Advances (AdmittedCallLife types nestedCaller (.enter []))
+    (callLifeStore types (.enter []) (7, nestedCaller)) :=
+  (callLifeStore_dispatch types (7, nestedCaller) (.enter [])).1
+
+/-- Mutant: the store wrapper resets the concrete store after a successful transition. -/
+def resetStore (e : Exec.Life) (s : Nat × CallState) : Option (Nat × CallState) :=
+  (callLife types e s.2).map fun t => (0, t)
+
+/-- Planted (law `callLifeStore_dispatch`, mutant `resetStore`). -/
+example : ¬ ResultSatisfies
+    (fun t : Nat × CallState => t.1 = 7 ∧ CallLifeSafe nestedCaller t.2)
+    (resetStore (.enter []) (7, nestedCaller)) := by
+  intro safe
+  exact (by decide : ¬ (0 : Nat) = 7) safe.1
+
+/-- Planted (law `passDown_dispatch`, mutant `acceptFrozenView`). -/
+example :
+    passDown ⟨child, []⟩ ⟨0⟩ y = none ∧
+    ¬ ResultSatisfies (fun t => (WellFormed child → WellFormed t.own) ∧
+      ((⟨child, []⟩ : CallState).WellFormed → t.WellFormed))
+      (acceptFrozenView ⟨child, []⟩ ⟨0⟩ y) := by
+  refine ⟨rfl, ?_⟩
+  intro safe
+  have owned := safe.1 (by decide)
+  revert owned
+  decide
+
+/-- Planted (law `runLoanSequence_dispatch`, mutant `LoanHistoryEvidence.recycle`). -/
+example :
+    ¬ ResultSatisfies (fun t => ∀ i, RetiredLoan LoanHistoryEvidence.endedChild i → RetiredLoan t i)
+      (LoanHistoryEvidence.recycle LoanHistoryEvidence.endedChild LoanHistoryEvidence.actions) := by
+  intro safe
+  have retired := safe ⟨1⟩ (by decide)
+  revert retired
+  decide
+
+end DispatchEvidence
 end ConcreteSpec.Core.Own
