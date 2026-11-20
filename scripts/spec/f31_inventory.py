@@ -38,5 +38,11 @@ with tempfile.TemporaryDirectory(prefix='f31-inventory-') as temporary:
     if args.update:
         summary_path.write_text(rendered)
     elif summary_path.read_text() != rendered:
-        raise SystemExit('F31 inventory drift: regenerate with --output, inspect, then accept with --update')
+        raise SystemExit(
+            'F31 inventory drift. Regenerate and inspect the full inventories:\n'
+            '  nix develop -c lake build ConcreteSpec Concrete\n'
+            '  nix develop -c python3 -I scripts/spec/f31_inventory.py --output /tmp/f31-inventory\n'
+            'For an intentional change, repeat the inventory command with --update and '
+            'reconcile the counts in docs/proposals/f31-consumers.md.'
+        )
     print(rendered, end='')

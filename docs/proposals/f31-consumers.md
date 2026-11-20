@@ -57,6 +57,15 @@ copy of live registries. The spec-job gate `scripts/checks/compiler/f31_inventor
 Lean elaboration and Python compilation), regenerates all entries, and compares the summary exactly.
 A changed inventoried entry or dependency fails until inspected and accepted.
 
+Regenerate both inventories and reconcile this document whenever an inventory input changes.
+Inputs include the Lean toolchain and build configuration, the `scripts/spec/f31_*` census tools,
+and all tracked Lean sources outside `legacy/`. The two library import closures supply elaborated
+declarations and library commands, standalone Lean files supply probe rows, and the live premise
+registry supplies premises and headlines. The surface census also reads `tests/manifest.tsv`
+and inventories paths for test fixtures, shell checks, proof-tool Python generators, goldens
+and integration files. Changes to discovered paths or to the explicit path lists in
+[f31_surface.py](../../scripts/spec/f31_surface.py) are inventory inputs too.
+
 The summary contains **3,053 constants in 31 modules**, including **1,460 theorem constants**:
 
 - `seed` — 106 — Retire/adapt the old `IntTy`, `STy`, `Scalar` families and BIR `wrap`.
@@ -116,9 +125,9 @@ further examples on the same line must appear as separate rows.
 Proof-tool Python generators are explicit obligations, including `local_identity.py` and its synthetic
 control modules. Site and rule tools also have check entries.
 
-The companion has **5,801 entries**. It contains 3,935 other library commands, 1,350 library
+The companion has **6,239 entries**. It contains 4,367 other library commands, 1,355 library
 anonymous examples, 99 standalone commands, 230 probe declarations, nine premises, 101 headlines,
-32 tests, 30 checks, two goldens, eight integration files and five proof-tool generators. Premises and headlines are read through the owning
+32 tests, 31 checks, two goldens, eight integration files and five proof-tool generators. Premises and headlines are read through the owning
 Lean registry definitions, with no source regex or duplicated list. All 14 bridge proofs are included.
 F31 must preserve trust classes, report distinctions and diagnostic controls.
 
@@ -130,7 +139,7 @@ the spec axiom golden regenerates without changes. No old theorem or premise was
 
 All 32 manifest test rows are listed, including arithmetic overflow, boundaries, conversions and
 wrapping, and both physical backend legs remain required. The external compiler and proof probes are
-included in full. The 30 check entries cover every root check/runner, all compiler shell gates,
+included in full. The 31 check entries cover every root check/runner, all compiler shell gates,
 axioms, trust ban, kernel replay, external recheck, site publication and rule controls. The eight
 integration entries cover roots, workflow/required jobs, READMEs and build-source machinery.
 This conservative surface includes checks which need requalification rather than source changes.

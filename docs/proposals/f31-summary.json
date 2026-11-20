@@ -17,16 +17,16 @@
   },
   "sha256": {
     "declarations.json": "4c0206b9fba72f78b2903f90792ef586b451166184cd321ba102a2d70f24468a",
-    "surface.json": "3edc242c8e627d66883b8d0be6b9b7e2a0642005d5a274cea0a26e80dbc7fa56"
+    "surface.json": "0dc207d712496efc066a6edd2a976c701b92d8df202e5fc5f593828bc5610d39"
   },
-  "surface": 5801,
+  "surface": 6239,
   "surface_kinds": {
-    "anonymous-example": 1350,
-    "check": 30,
+    "anonymous-example": 1355,
+    "check": 31,
     "golden": 2,
     "headline": 101,
     "integration": 8,
-    "library-command": 3935,
+    "library-command": 4367,
     "premise": 9,
     "probe-command": 99,
     "probe-declaration": 230,
