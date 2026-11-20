@@ -83,13 +83,16 @@ private def laws (origin : Name) (names : List Name) : Group :=
 structure EvidenceNamespace where
   origin : Name
   namespaceName : Name
+  isProof : Bool := false
 
 structure Completion where
   named : List Group := []
+  requiredSpec : List Group := [] -- Resolve planned spec declarations when the piece claims landing.
   namespaces : List EvidenceNamespace := []
 
 private def specNamespace (origin namespaceName : Name) : EvidenceNamespace :=
-  ⟨`ConcreteSpec ++ origin, `ConcreteSpec ++ namespaceName⟩
+  { origin := `ConcreteSpec ++ origin, namespaceName := `ConcreteSpec ++ namespaceName
+    isProof := (`Proofs).isPrefixOf origin }
 
 private def namedEvidence (groups : List Group) : Completion :=
   { named := groups }
@@ -144,8 +147,10 @@ private def completion : PieceId → Completion
     decls `ConcreteSpec.Proofs.Ident [`ConcreteSpec.Core.SourceText.take_toBytes],
     laws `ConcreteSpec.Proofs.Ident [
       `ConcreteSpec.Core.SourceText.columnAt_zero, `ConcreteSpec.Core.SourceText.lineAt_zero]]
-  | .F03p => reservedEvidence [
-    specNamespace `Spec.Ident `Core.SourcePathSpan]
+  | .F03p => { requiredSpec := [
+    evidence `ConcreteSpec.Spec.Ident `ConcreteSpec.Core [
+      `SourcePath, `SourcePath.parse, `SourcePath.render, `Span, `Span.LocationOk,
+      `mainSourcePath, `tabSpan]] }
   | .F04 => namedEvidence [
     evidence `ConcreteSpec.Proofs.Ident `ConcreteSpec.Core.Vacuity [
       `lookup_renumber_example_siteTable, `lookup_renumber_planted_siteTable_collapseRenumber,
@@ -1056,8 +1061,9 @@ private def completion : PieceId → Completion
   | .F18 => reservedEvidence [
     specNamespace `Spec.Prim `Core.Prim,
     specNamespace `Proofs.Prim `Core.Prim]
-  | .F19 => reservedEvidence [
-    specNamespace `Spec.Observe `Core.Observe]
+  | .F19 => { requiredSpec := [
+    evidence `ConcreteSpec.Spec.Observe `ConcreteSpec.Core.Observe [
+      `Observation, `FullObservation, `ExecAdapter, `reportObservation, `launchObservation]] }
   | .F20 => reservedEvidence [
     specNamespace `Proofs.Observe2 `Core.Observe.CodecLaunch]
   | .F20p => reservedEvidence [
@@ -1143,23 +1149,24 @@ private def completion : PieceId → Completion
       `ConcreteSpec.Core.Leak.run_peak_exact,
       `ConcreteSpec.Core.Leak.run_peak_monotone,
       `ConcreteSpec.Core.Leak.run_wf]]
-  | .F28 => reservedEvidence [
-    specNamespace `Spec.Frame `Core.Frame]
+  | .F28 => { requiredSpec := [
+    evidence `ConcreteSpec.Spec.Frame `ConcreteSpec.Core.Frame [
+      `C1Frames, `Machine.RegisterFrame, `callStack, `Launcher, `ProjectStartup]] }
   | .F29 => reservedEvidence [
     specNamespace `Proofs.Frame `Core.Frame.BoundaryEvidence]
   | .F29p => reservedEvidence [
     specNamespace `Proofs.Frame `Core.Frame.SourcePolicy]
   | .F30 => reservedEvidence [
     specNamespace `Proofs.Scalar `Core.ScalarBridge]
-  | .F31 => reservedEvidence [
-    specNamespace `Spec.Slice1Syntax `ScalarMigration,
-    specNamespace `Spec.Statics `ScalarMigration,
-    specNamespace `Spec.Slice1Semantics `ScalarMigration,
-    specNamespace `Spec.Slice1Ownership `ScalarMigration,
-    specNamespace `Spec.Slice1Checker `ScalarMigration,
-    specNamespace `Spec.Slice0 `ScalarMigration,
-    specNamespace `Spec.Rep `Rep.ScalarMigration,
-    specNamespace `Spec.Examples `Examples.ScalarMigration]
+  | .F31 => { requiredSpec := [
+    evidence `ConcreteSpec.Spec.Slice1Syntax `ConcreteSpec.ScalarMigration [`intType],
+    evidence `ConcreteSpec.Spec.Statics `ConcreteSpec.ScalarMigration [`literalType],
+    evidence `ConcreteSpec.Spec.Slice1Semantics `ConcreteSpec.ScalarMigration [`checkedAdd],
+    evidence `ConcreteSpec.Spec.Slice1Ownership `ConcreteSpec.ScalarMigration [`atomBounds],
+    evidence `ConcreteSpec.Spec.Slice1Checker `ConcreteSpec.ScalarMigration [`checkLiteral],
+    evidence `ConcreteSpec.Spec.Slice0 `ConcreteSpec.ScalarMigration [`literalToCore],
+    evidence `ConcreteSpec.Spec.Rep `ConcreteSpec.Rep.ScalarMigration [`decodeScalar],
+    evidence `ConcreteSpec.Spec.Examples `ConcreteSpec.Examples.ScalarMigration [`literalTooBig]] }
   | .F32 => reservedEvidence [
     specNamespace `Proofs.Checker `CheckerMigration]
   | .F33 => reservedEvidence [
@@ -1370,7 +1377,8 @@ private def inventory (env : Environment) (observed : EvidenceMetadata)
     ids := ids.insert piece.id
     let claimsLanding := piece.remaining.isEmpty && piece.disposition.isNone
     let required := requirements piece.id
-    let groups := required.named ++ piece.groups
+    let groups := required.named ++ piece.groups ++
+      (if claimsLanding then required.requiredSpec else [])
     if claimsLanding && groups.isEmpty then
       errors := errors.push s!"{piece.id}: a landed piece needs evidence"
     if claimsLanding then
@@ -1378,14 +1386,19 @@ private def inventory (env : Environment) (observed : EvidenceMetadata)
         unless piece.groups.any (fun group =>
             (group.declarations ++ group.laws).any (ns.matches group.origin)) do
           errors := errors.push s!"{piece.id}: missing completion evidence under {ns.namespaceName} in {ns.origin}"
-      unless required.namespaces.isEmpty do
-        let citesReserved (classified : NameMap Name) (names : Group → List Name) :=
+      let proofNamespaces := required.namespaces.filter (·.isProof)
+      unless proofNamespaces.isEmpty do
+        let citesLaw (group : Group) (name : Name) :=
+          observed.laws.find? name == some group.origin
+        let citesReserved (names : Group → List Name) (classified : Group → Name → Bool) :=
           piece.groups.any fun group => (names group).any fun name =>
-            classified.find? name == some group.origin &&
-              required.namespaces.any (fun ns => ns.matches group.origin name)
-        unless citesReserved observed.laws (·.laws) do
+            classified group name && proofNamespaces.any (fun ns => ns.matches group.origin name)
+        let namedQualificationLaw := scopeKind piece.id == .qualification &&
+          required.named.any (fun group => group.laws.any (citesLaw group))
+        unless namedQualificationLaw || citesReserved (·.laws) citesLaw do
           errors := errors.push s!"{piece.id}: missing reserved Law theorem"
-        unless citesReserved observed.planted (·.declarations) do
+        unless citesReserved (·.declarations) (fun group name =>
+            observed.planted.find? name == some group.origin) do
           errors := errors.push s!"{piece.id}: missing reserved planted control"
     for group in piece.groups do
       for name in group.declarations ++ group.laws do
@@ -1448,6 +1461,18 @@ private def checkRoot (env : Environment) : IO (Array String) := do
 
 namespace Control
 
+namespace Fixture.ConcreteSpec.Core
+
+abbrev SourcePath := String
+def SourcePath.parse (raw : String) : SourcePath := raw
+def SourcePath.render (path : SourcePath) : String := path
+abbrev Span := Nat
+def Span.LocationOk (span : Span) : Prop := span > 0
+def mainSourcePath : SourcePath := "main.concrete"
+def tabSpan : Span := 1
+
+end Fixture.ConcreteSpec.Core
+
 theorem retained : True := trivial
 
 /-- Law: inventory control. -/
@@ -1458,6 +1483,9 @@ theorem wrongIncrement : 0 + 1 ≠ (0 : Nat) := by decide
 
 /-- Law: this tagged definition must be excluded. -/
 def nonTheorem : Bool := true
+
+/-- Planted: this tagged definition must be excluded. -/
+def nonTheoremControl : Bool := false
 
 -- Planted mutations fail the same coverage obligation as the production plan.
 example : ¬ occursOnce (plan.filter (·.id != .F04p)) .F04p := by decide
@@ -1475,7 +1503,7 @@ def verify (env : Environment) (specEvidence : EvidenceMetadata) : CommandElabM 
   let good := claim [
     laws origin [`SpecLanding.Control.newName], decls origin [`SpecLanding.Control.wrongIncrement]]
   let check (pieces : List Piece) := (inventory env observed pieces #[]
-    (fun _ => { namespaces := [⟨origin, `SpecLanding.Control⟩] })).errors
+    (fun _ => { namespaces := [⟨origin, `SpecLanding.Control, true⟩] })).errors
   let hasError (pieces : List Piece) (message : String) : CommandElabM Unit := do
     unless (check pieces).contains message do
       throwError "inventory control missed {message}"
@@ -1535,9 +1563,53 @@ def verify (env : Environment) (specEvidence : EvidenceMetadata) : CommandElabM 
     throwError "inventory control: helper-only F04p claim was not refused for missing Law and control"
   hasError [claim [laws origin [`SpecLanding.Control.newName]]]
     "F01: missing reserved planted control"
+  hasError [claim [decls origin [`SpecLanding.Control.retained, `SpecLanding.Control.wrongIncrement]]]
+    "F01: missing reserved Law theorem"
+  hasError [claim [laws origin [`SpecLanding.Control.newName],
+      decls origin [`SpecLanding.Control.nonTheoremControl]]]
+    "F01: missing reserved planted control"
+  let land (id : PieceId) (groups : List Group := []) : List Piece :=
+    [{ present id "" with groups }]
+  let sourcePathFixture (missing : Bool) (id : PieceId) :=
+    let required := completion id
+    if id == .F03p then
+      { required with requiredSpec := required.requiredSpec.map fun group =>
+        { group with origin, declarations := group.declarations.map fun name =>
+          if missing && name == `ConcreteSpec.Core.Span then
+            `SpecLanding.Control.Fixture.missingSpan
+          else `SpecLanding.Control.Fixture ++ name } }
+    else required
+  let sourcePathClaim := land .F03p
+  let checked := inventory env {} sourcePathClaim #[] (sourcePathFixture false)
+  unless checked.errors.isEmpty && checked.rows.any (·.startsWith "F03p: landed") do
+    throwError "inventory control: F03p with named spec declarations did not land: {checked.errors}"
+  let checked := inventory env {} sourcePathClaim #[] (sourcePathFixture true)
+  unless checked.errors.contains
+      s!"F03p: missing declaration SpecLanding.Control.Fixture.missingSpan in {origin}" &&
+      !checked.rows.any (·.startsWith "F03p: landed") do
+    throwError "inventory control: F03p landed without its named spec declarations"
+  let qualificationFixture (id : PieceId) :=
+    let required := completion id
+    if id == .M09 then
+      { required with namespaces := required.namespaces.map fun ns =>
+        { ns with origin, namespaceName := `SpecLanding.Control } }
+    else required
+  let repLaw := `ConcreteSpec.Rep.rep_roundtrip
+  let some repOrigin := specEvidence.laws.find? repLaw
+    | throwError "inventory control: M09's named Law is missing"
+  let qualifiedEvidence := { observed with laws := ({} : NameMap Name).insert repLaw repOrigin }
+  let checked := inventory env qualifiedEvidence
+    (land .M09 [decls origin [`SpecLanding.Control.wrongIncrement]]) #[] qualificationFixture
+  unless checked.errors.isEmpty && checked.qualificationLanded == 1 do
+    throwError "inventory control: M09 with an existing Law and reserved control did not land: {checked.errors}"
+  let checked := inventory env qualifiedEvidence
+    (land .M09 [decls origin [`SpecLanding.Control.retained]]) #[] qualificationFixture
+  unless checked.errors == #["M09: missing reserved planted control"] &&
+      checked.qualificationLanded == 0 do
+    throwError "inventory control: M09 without a reserved planted control was accepted: {checked.errors}"
   let registryOnly := { present .F17 "" with groups := [decls origin [`SpecLanding.Control.retained]] }
   let needsSpecAndRegistry (id : PieceId) :=
-    { completion id with namespaces := ⟨origin, `SpecLanding.Control⟩ :: (completion id).namespaces }
+    { completion id with namespaces := ⟨origin, `SpecLanding.Control, false⟩ :: (completion id).namespaces }
   let incomplete := inventory env {} [registryOnly] #[] needsSpecAndRegistry
   unless incomplete.errors.contains
       "F17: missing completion evidence under ConcreteSpec.Core.Grants in ConcreteSpec.Spec.Grant" do

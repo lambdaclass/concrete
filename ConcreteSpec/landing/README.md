@@ -32,10 +32,13 @@ work. Contract closure and the freeze have their own criteria.
 
 A piece counts as landed when its completion evidence passes and it has no remaining
 obligations or historical disposition. The Lean plan defines completion independently of
-status. It checks each required named declaration and requires a listed, authored declaration
-from each reserved module and namespace before a piece can land. Shared modules have
-piece-specific evidence. Migration namespaces reserve names for evidence produced by the
-migration. If a name or defining module changes, update the completion requirements in
+status. Spec-only pieces with separate proof pieces must resolve their specific named spec
+declarations when they claim landing. Other reservations require listed, authored evidence
+from each reserved module and namespace. Proof reservations also require a cited Law theorem
+and a separate planted control in the reserved proof namespaces. A qualification row can use
+a Law from its named completion evidence and must still cite a control from its reserved
+qualification namespace. Shared modules have piece-specific evidence. Migration namespaces
+reserve names for evidence produced by the migration. If a name or defining module changes, update the completion requirements in
 the same patch. Partial rows retain the references for their remaining work.
 
 Lean selects authored theorems with a `Law` doc tag from the environment, including `Law:`
