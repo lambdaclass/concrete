@@ -12,12 +12,12 @@ docs/decisions.md#decided-2026-11-16-secret-wiping, which defers wiping out of t
 Leakage is what the baseline timing observer sees, not ordinary output. It is separate from public
 observations. `InstrumentedSteps` instruments C1's existing `Exec.Step` relation without changing
 the machine: each step contributes public observations, leakage, ordered release records and the
-external choices on which it depended. The operand machine installs these projections and proves that choices come from accepted
-primitive answers. C6 can supply an external-interaction contract at this boundary.
+external choices on which it depended. The observing semantics derives these projections from the machine and its primitive contract. C6 can supply an external-interaction contract at this boundary.
 
 `DelimitedReleaseNI` and `ConstantTime` are different claims about executions. Both assume low-equivalent
 initial states, matched external choices and the same ordered release sites and values. NI requires
-the same public observations; CT requires the same leakage. A release policy authorizes sites; it
+prefix compatibility on public observations and public lengths; CT requires prefix compatibility
+on leakage. Completed runs still compare their traces in full. A release policy authorizes sites; it
 does not discharge either claim. No scalar secret typing rule is chosen here (slice 7).
 
 Byte accounting is owned separately by `Spec/Accounting.lean`. Secret typing, hardware timing,
@@ -28,18 +28,6 @@ in their named later slices or trust premises.
 namespace ConcreteSpec.Core.Leak
 open ConcreteSpec.Core
 open ConcreteSpec.Core.Exec
-
-/-- One entry of the baseline timing-observer trace. Branch decisions, exact addresses, allocation
-sizes, loop counts and operands of variable-time operations are distinct entries. Container lengths
-are public; contracted external effects are recorded as such rather than confused with output. -/
-inductive Leakage (Val Address Effect : Type) where
-  | branch (site : SiteId) (decision : Bool)
-  | address (site : SiteId) (address : Address)
-  | allocation (lineage : LineageId) (site : SiteId) (bytes : Nat)
-  | loop (loop : LoopId) (iterations : Nat)
-  | variableTime (site : SiteId) (operands : List Val)
-  | publicLength (site : SiteId) (length : Nat)
-  | external (effect : Effect)
 
 /-- Every leakage constructor has a nonempty representative. -/
 def leakageCatalog : List (Leakage Nat Nat Nat) :=
@@ -191,48 +179,141 @@ docs/decisions.md#decided-project-infoflow-2026-11-06. -/
 def LowEquivalent {O : Operands} (L : Labelling O) (c₁ c₂ : Config O) : Prop :=
   publicLocals L c₁ = publicLocals L c₂ ∧ L.lowStore c₁.store c₂.store
 
+/-- Public observations retain the exact C1 output and final-outcome payloads. -/
+inductive Observation (Event Val : Type) where
+  | output (event : Event)
+  | final (outcome : Final Val)
+  deriving DecidableEq, Repr
+
 /-- C1 instrumentation for C7. Each step projection observes an existing machine transition.
-The machine observer qualifies the projections used in NI and CT. The final observation
-includes termination when the machine exposes it. The timing and public traces are separate. -/
+The machine observer qualifies the projections used in authorization, NI and CT.
+Final observations are used in the comparison of completed runs. Timing and public traces are separate. -/
 structure Instrumentation (O : Operands) where
-  Address : Type
-  Effect : Type
-  Observation : Type
-  Choice : Type
-  observeStep : Config O → Label O → Config O → List Observation
-  observeFinal : Config O → Option Observation
-  leakage : Config O → Label O → Config O → List (Leakage O.Val Address Effect)
+  observeStep : Config O → Label O → Config O → List (Observation O.Event O.Val)
+  observeFinal : Config O → Option (Observation O.Event O.Val)
+  leakage : Config O → Label O → Config O → Option (Answer O.Val O.Event O.Store) →
+    List (Leakage O.Val O.Address O.Effect)
   releases : Config O → Label O → Config O → List (Release O.Ty O.Val)
-  choices : Config O → Label O → Config O → List Choice
+  choices : Config O → Label O → Config O → Option (Answer O.Val O.Event O.Store) →
+    List (Answer O.Val O.Event O.Store)
 
-/-- The observing semantics installed by the operand machine. The external-choice contract
-projects only accepted primitive answers. It can omit deterministic primitive operations.
-Internal transitions consume no external choices. The machine supplies its public observations,
-leakage and releases together with this contract, independently of a security claim. -/
-class MachineObserver (O : Operands) where
-  instrumentation : Instrumentation O
-  externalChoice : O.Prim → List O.Val → SiteId → Answer O.Val O.Event O.Store →
-    Option instrumentation.Choice
-  internalChoices {P : Program O} {c d : Config O} :
-    step P c = some (.next d) → instrumentation.choices c .silent d = []
-  answerChoices {P : Program O} {c d : Config O} {p vs site st k a} :
-    step P c = some (.request p vs site st k) → O.allows p vs st a = true →
-    k a = some d → instrumentation.choices c a.label d = (externalChoice p vs site a).toList
+/-- Read the same evaluated request and post-evaluation store as the C1 dispatcher. -/
+def primitiveRequest {O : Operands} (c : Config O) :
+    Option (O.Prim × List O.Val × SiteId × O.Store) :=
+  match c.ctrl with
+  | .exec (.prim _ p args site) =>
+    match evalArgs O c.locals c.store args with
+    | .ok (vs, st) => some (p, vs, site, st)
+    | _ => none
+  | _ => none
 
-/-- Qualification fixes all projections to the operand machine's installed semantics. -/
-def ObserverQualified {O : Operands} [M : MachineObserver O] (I : Instrumentation O) : Prop :=
-  I = M.instrumentation
+/-- Record every evaluated branch and loop-test decision on the C1 transition.
+A true loop test contributes one iteration and a false loop test contributes zero. -/
+def controlLeakage {O : Operands} (c : Config O) : List (Leakage O.Val O.Address O.Effect) :=
+  let decision (e : O.Expr) (site : SiteId) (loop : Option LoopId) :=
+    match O.eval c.locals c.store e with
+    | .ok (v, _) =>
+      match O.test v with
+      | some b => [.branch site b] ++ (loop.toList.map fun l => .loop l (if b then 1 else 0))
+      | none => []
+    | _ => []
+  match c.ctrl, c.frames with
+  | .exec (.cond e _ _ site), _ => decision e site none
+  | .done, .test l _ e _ site _ :: _ => decision e site (some l)
+  | _, _ => []
 
-/-- C1 steps with their C7 traces in execution order. A primitive step is still answered within its
-C1 contract; instrumentation only observes the transition and cannot authorize a new one. -/
-inductive InstrumentedSteps {O : Operands} (I : Instrumentation O) (P : Program O) :
-    Config O → List I.Observation → List (Leakage O.Val I.Address I.Effect) →
-      List (Release O.Ty O.Val) → List I.Choice → Config O → Prop where
-  | refl (c : Config O) : InstrumentedSteps I P c [] [] [] [] c
-  | step {c l c' obs leaks rs choices c''} (h : Step P c l c')
-      (rest : InstrumentedSteps I P c' obs leaks rs choices c'') :
-      InstrumentedSteps I P c (I.observeStep c l c' ++ obs) (I.leakage c l c' ++ leaks)
-        (I.releases c l c' ++ rs) (I.choices c l c' ++ choices) c''
+/-- The C1 oracle answer is an external choice only when the contract admits an alternative. -/
+noncomputable def externalChoices {O : Operands} (c : Config O)
+    (answer : Option (Answer O.Val O.Event O.Store)) : List (Answer O.Val O.Event O.Store) :=
+  match answer with
+  | none => []
+  | some a =>
+    match primitiveRequest c with
+    | none => []
+    | some (p, vs, _, st) =>
+      open Classical in
+      if O.allows p vs st a = true ∧ (∃ b, b ≠ a ∧ O.allows p vs st b = true) then [a] else []
+
+/-- Shared projection construction, with an executable choice implementation when available. -/
+abbrev instrumentationWithChoices (O : Operands)
+    (choices : Config O → Option (Answer O.Val O.Event O.Store) →
+      List (Answer O.Val O.Event O.Store)) : Instrumentation O where
+  observeStep := fun _ label _ => label.events.map .output
+  observeFinal := fun c => c.final?.map .final
+  leakage := fun c _ _ answer => controlLeakage c ++
+    (match primitiveRequest c with
+    | some (p, vs, site, st) => O.primitiveLeakage p vs site st answer
+    | none => [])
+  releases := fun c _ _ =>
+    match primitiveRequest c with
+    | some (p, [v], site, _) => ((O.releaseType p).map fun ty => (⟨⟨site, ty⟩, v⟩ : Release O.Ty O.Val)).toList
+    | _ => []
+  choices := fun c _ _ answer => choices c answer
+
+/-- All qualified projections are determined by C1 and the operand machine's primitive contract. -/
+noncomputable def machineInstrumentation (O : Operands) : Instrumentation O :=
+  instrumentationWithChoices O externalChoices
+
+/-- Qualification has no replaceable instance. -/
+def ObserverQualified {O : Operands} (I : Instrumentation O) : Prop :=
+  I = machineInstrumentation O
+
+/-- A C1 step indexed by its oracle answer, retained even if the continuation discards the result.
+The constructors mirror `Exec.Step`; erasure forgets only the answer index. -/
+inductive AnsweredStep {O : Operands} (P : Program O) :
+    Config O → Label O → Config O → Option (Answer O.Val O.Event O.Store) → Prop where
+  | silent {c c'} : step P c = some (.next c') → AnsweredStep P c .silent c' none
+  | prim {c c' p vs site st k a} :
+      step P c = some (.request p vs site st k) → O.allows p vs st a = true →
+      k a = some c' → AnsweredStep P c a.label c' (some a)
+
+/-- The four ordered traces accumulated by an instrumented C1 execution. -/
+structure ExecutionTrace (O : Operands) where
+  observations : List (Observation O.Event O.Val)
+  leakage : List (Leakage O.Val O.Address O.Effect)
+  releases : List (Release O.Ty O.Val)
+  choices : List (Answer O.Val O.Event O.Store)
+
+/-- The empty trace of a zero-step execution. -/
+def ExecutionTrace.empty {O : Operands} : ExecutionTrace O := ⟨[], [], [], []⟩
+
+/-- Join two consecutive trace contributions in execution order. -/
+def ExecutionTrace.append {O : Operands} (a b : ExecutionTrace O) : ExecutionTrace O :=
+  ⟨a.observations ++ b.observations, a.leakage ++ b.leakage,
+    a.releases ++ b.releases, a.choices ++ b.choices⟩
+
+/-- Record all projections of one step and its actual answer, when present. -/
+def Instrumentation.trace {O : Operands} (I : Instrumentation O)
+    (c : Config O) (l : Label O) (d : Config O)
+    (a : Option (Answer O.Val O.Event O.Store)) : ExecutionTrace O :=
+  ⟨I.observeStep c l d, I.leakage c l d a, I.releases c l d, I.choices c l d a⟩
+
+/-- Every trace contribution is justified by an underlying C1 transition. -/
+inductive InstrumentedExecution {O : Operands} (I : Instrumentation O) (P : Program O) :
+    Config O → ExecutionTrace O → Config O → Prop where
+  | refl (c : Config O) : InstrumentedExecution I P c .empty c
+  | step {c l d answer tail f} (h : AnsweredStep P c l d answer)
+      (rest : InstrumentedExecution I P d tail f) :
+      InstrumentedExecution I P c ((I.trace c l d answer).append tail) f
+
+/-- View an instrumented execution through its four individual traces. -/
+abbrev InstrumentedSteps {O : Operands} (I : Instrumentation O) (P : Program O)
+    (c : Config O) (obs : List (Observation O.Event O.Val)) (leaks : List (Leakage O.Val O.Address O.Effect))
+    (rs : List (Release O.Ty O.Val)) (choices : List (Answer O.Val O.Event O.Store)) (d : Config O) : Prop :=
+  InstrumentedExecution I P c ⟨obs, leaks, rs, choices⟩ d
+
+/-- The four trace projections of a zero-step execution are empty. -/
+theorem InstrumentedSteps.refl {O : Operands} {I : Instrumentation O} {P : Program O} (c : Config O) :
+    InstrumentedSteps I P c [] [] [] [] c :=
+  InstrumentedExecution.refl c
+
+/-- Add one C1 transition and its observations to an instrumented execution. -/
+theorem InstrumentedSteps.step {O : Operands} {I : Instrumentation O} {P : Program O}
+    {c l c' answer obs leaks rs choices c''} (h : AnsweredStep P c l c' answer)
+    (rest : InstrumentedSteps I P c' obs leaks rs choices c'') :
+    InstrumentedSteps I P c (I.observeStep c l c' ++ obs) (I.leakage c l c' answer ++ leaks)
+      (I.releases c l c' ++ rs) (I.choices c l c' answer ++ choices) c'' :=
+  InstrumentedExecution.step h rest
 
 /-- One complete finite instrumented execution. Its proof is a C1 execution, not a separate
 semantics, and `ending` is its C1 final outcome. -/
@@ -240,10 +321,10 @@ structure Run {O : Operands} (I : Instrumentation O) (P : Program O) (initial : 
   final : Config O
   ending : Final O.Val
   finalEnding : final.final? = some ending
-  observations : List I.Observation
-  leakage : List (Leakage O.Val I.Address I.Effect)
+  observations : List (Observation O.Event O.Val)
+  leakage : List (Leakage O.Val O.Address O.Effect)
   releases : List (Release O.Ty O.Val)
-  choices : List I.Choice
+  choices : List (Answer O.Val O.Event O.Store)
   steps : InstrumentedSteps I P initial observations leakage releases choices final
 
 /-- Facts attached to one identified semantic release list. Index by that list, rather than
@@ -263,15 +344,21 @@ def ReleaseFact.attach {Ty Val : Type} (releases : List (Release Ty Val))
 
 /-- All public observations of a run, including its final observation when it has one. -/
 def Run.publicObservations {O : Operands} {I : Instrumentation O} {P : Program O} {c : Config O}
-    (r : Run I P c) : List I.Observation :=
+    (r : Run I P c) : List (Observation O.Event O.Val) :=
   r.observations ++ (I.observeFinal r.final).toList
 
-/-- Every reachable finite execution prefix from `c` emits only permitted releases, including
-prefixes of stuck or diverging executions. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
+/-- The raw trace check used to state authorization and exercise observer mutants. -/
+def ReleasePolicy.PrefixesAuthorized {O : Operands} (policy : ReleasePolicy O.Ty)
+    (I : Instrumentation O) (P : Program O) (c : Config O) : Prop :=
+  ∀ ⦃obs leaks rs choices d⦄, InstrumentedSteps I P c obs leaks rs choices d → policy.Authorized rs
+
+/-- Every reachable finite prefix, including one of a stuck or diverging execution,
+emits only permitted releases under the qualified observer.
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
 docs/decisions.md#decided-project-infoflow-2026-11-06. -/
 def ReleasePolicy.RunsAuthorized {O : Operands} (policy : ReleasePolicy O.Ty)
     (I : Instrumentation O) (P : Program O) (c : Config O) : Prop :=
-  ∀ ⦃obs leaks rs choices d⦄, InstrumentedSteps I P c obs leaks rs choices d → policy.Authorized rs
+  ObserverQualified I ∧ policy.PrefixesAuthorized I P c
 
 /-- Public container-length metadata is observable independently of the timing-only entries.
 Authority: docs/decisions.md#decided-project-infoflow-2026-11-06. -/
@@ -285,7 +372,7 @@ def publicLengths {Val Address Effect : Type} (trace : List (Leakage Val Address
 low-equivalent initial states, matched external choices and equal ordered release traces, every
 pair of complete finite runs has equal public observations. No equality of leakage is asserted. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
 docs/decisions.md#decided-project-infoflow-2026-11-06. -/
-def NIComparison {O : Operands} (I : Instrumentation O) (P : Program O)
+def CompletedNIComparison {O : Operands} (I : Instrumentation O) (P : Program O)
     (L : Labelling O) (c₁ c₂ : Config O) : Prop :=
   ∀ (r₁ : Run I P c₁) (r₂ : Run I P c₂),
     LowEquivalent L c₁ c₂ → r₁.choices = r₂.choices → releaseTrace r₁.releases = releaseTrace r₂.releases →
@@ -296,20 +383,51 @@ def NIComparison {O : Operands} (I : Instrumentation O) (P : Program O)
 complete baseline leakage traces are equal. This is separate from `DelimitedReleaseNI`, not a
 consequence of authorization. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
 docs/decisions.md#decided-project-infoflow-2026-11-06. -/
-def TimingComparison {O : Operands} (I : Instrumentation O) (P : Program O)
+def CompletedTimingComparison {O : Operands} (I : Instrumentation O) (P : Program O)
     (L : Labelling O) (c₁ c₂ : Config O) : Prop :=
   ∀ (r₁ : Run I P c₁) (r₂ : Run I P c₂),
     LowEquivalent L c₁ c₂ → r₁.choices = r₂.choices → releaseTrace r₁.releases = releaseTrace r₂.releases →
       r₁.leakage = r₂.leakage
 
 
+/-- Two finite traces agree up to the shorter trace. -/
+def PrefixCompatible {α : Type} (xs ys : List α) : Prop := xs <+: ys ∨ ys <+: xs
+
+/-- Compare public observations and public lengths on reachable prefixes. -/
+def NIPrefixComparison {O : Operands} (I : Instrumentation O) (P : Program O)
+    (L : Labelling O) (c₁ c₂ : Config O) : Prop :=
+  ∀ ⦃o₁ l₁ r₁ x₁ d₁ o₂ l₂ r₂ x₂ d₂⦄,
+    InstrumentedSteps I P c₁ o₁ l₁ r₁ x₁ d₁ →
+    InstrumentedSteps I P c₂ o₂ l₂ r₂ x₂ d₂ →
+    LowEquivalent L c₁ c₂ → x₁ = x₂ → releaseTrace r₁ = releaseTrace r₂ →
+    PrefixCompatible o₁ o₂ ∧ PrefixCompatible (publicLengths l₁) (publicLengths l₂)
+
+/-- Compare timing leakage on reachable prefixes. -/
+def TimingPrefixComparison {O : Operands} (I : Instrumentation O) (P : Program O)
+    (L : Labelling O) (c₁ c₂ : Config O) : Prop :=
+  ∀ ⦃o₁ l₁ r₁ x₁ d₁ o₂ l₂ r₂ x₂ d₂⦄,
+    InstrumentedSteps I P c₁ o₁ l₁ r₁ x₁ d₁ →
+    InstrumentedSteps I P c₂ o₂ l₂ r₂ x₂ d₂ →
+    LowEquivalent L c₁ c₂ → x₁ = x₂ → releaseTrace r₁ = releaseTrace r₂ →
+    PrefixCompatible l₁ l₂
+
+/-- NI compares finite prefixes and retains full equality for two complete runs. -/
+def NIComparison {O : Operands} (I : Instrumentation O) (P : Program O)
+    (L : Labelling O) (c₁ c₂ : Config O) : Prop :=
+  CompletedNIComparison I P L c₁ c₂ ∧ NIPrefixComparison I P L c₁ c₂
+
+/-- CT compares finite prefixes and retains full equality for two complete runs. -/
+def TimingComparison {O : Operands} (I : Instrumentation O) (P : Program O)
+    (L : Labelling O) (c₁ c₂ : Config O) : Prop :=
+  CompletedTimingComparison I P L c₁ c₂ ∧ TimingPrefixComparison I P L c₁ c₂
+
 /-- Delimited-release noninterference uses the machine's qualified observing semantics. -/
-def DelimitedReleaseNI {O : Operands} [MachineObserver O] (I : Instrumentation O) (P : Program O)
+def DelimitedReleaseNI {O : Operands} (I : Instrumentation O) (P : Program O)
     (L : Labelling O) (c₁ c₂ : Config O) : Prop :=
   ObserverQualified I ∧ NIComparison I P L c₁ c₂
 
 /-- Constant time uses the same qualified observing semantics and compares baseline leakage. -/
-def ConstantTime {O : Operands} [MachineObserver O] (I : Instrumentation O) (P : Program O)
+def ConstantTime {O : Operands} (I : Instrumentation O) (P : Program O)
     (L : Labelling O) (c₁ c₂ : Config O) : Prop :=
   ObserverQualified I ∧ TimingComparison I P L c₁ c₂
 

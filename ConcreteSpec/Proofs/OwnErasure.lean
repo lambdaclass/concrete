@@ -105,6 +105,9 @@ theorem evalArgs_erasure_of_permitted (L : AList Var O.Val)
       change instrumentEval O permit L s e = .ok (v, ⟨concrete, own⟩) at he
       simp only [Exec.evalArgs, instrumentOperands, he, Res.bind, erase, hc]
       change Exec.evalArgs O L concrete es = _ at hi
+      change (Exec.evalArgs O L concrete es).map (fun (vs, t) => (v :: vs, t)) =
+        ((Exec.evalArgs (instrumentOperands O types permit) L ⟨concrete, own⟩ es).map
+          (fun (vs, t) => (v :: vs, t))).map (fun (vs, t) => (vs, erase t))
       rw [hi]
       cases Exec.evalArgs (instrumentOperands O types permit) L ⟨concrete, own⟩ es <;> rfl
 

@@ -15,15 +15,21 @@ No inherited approval claim supplies authority.
 `Proofs/Leak.lean` carries these Laws:
 
 - Traces and metadata: `instrumentation_erasure`, `release_sites_agree`,
-  `release_metadata_irrelevant`, `release_metadata_preserves_trace`.
+  `release_metadata_irrelevant`, `release_metadata_preserves_trace`,
+  `release_value_agrees`, `executed_release_value`.
 - Policy: `permits_listed_site`, `listed_site_permitted`, `forbidding_policy_empty`,
   `empty_policy_forbidding`, `forbidsRelease_not_authorized`, `unlisted_trace_refused`,
-  `listed_trace_authorized`, `unlisted_prefix_refused`, `listed_prefixes_authorized`.
+  `listed_trace_authorized`, `unlisted_prefix_refused`, `listed_prefixes_authorized`,
+  `authorization_observer_qualified`.
 - Public state: `low_equivalent_public_state`, `public_state_low_equivalent`.
 - Observers: `ni_observer_qualified`, `ct_observer_qualified`, `deterministic_choices`,
-  `conditional_leakage`, `loop_leakage`.
+  `conditional_leakage`, `loop_leakage`, `qualified_observers_agree`,
+  `emitted_observations`, `final_observations`, `machine_conditional_leakage`,
+  `machine_loop_leakage`, `internal_choices_empty`, `deterministic_primitive_choices`,
+  `nondeterministic_primitive_choices`.
 - NI and CT: `secure_ni`, `secure_ct`, `timing_ni`, `timing_not_ct`,
-  `same_timing_input_ct`, `authorized_release_not_ni`, `authorized_release_not_ct`.
+  `same_timing_input_ct`, `authorized_release_not_ni`, `authorized_release_not_ct`,
+  `ni_prefixes_compatible`, `ct_prefixes_compatible`.
 
 `Proofs/ReleaseCalls.lean` carries these Laws:
 
@@ -53,7 +59,7 @@ can disappear under substitution. A separate function-table drop control qualifi
 Exactly nine security rules join the eight accounting rules: `UnitCallsAdmitted`,
 `IntegerProgramAdmitted`, `StringReleasePermitted`, `UnitReleaseForbidden`, `UnitTraceAuthorized`,
 `IntegerRunsAuthorized`, `IntegerLowEquivalent`, `IntegerDelimitedReleaseNI`, `IntegerConstantTime`.
-Their twenty-five closed accepted/refused examples live in `Proofs/LeakRegistry.lean` because they use
+Their twenty-seven closed accepted/refused examples live in `Proofs/LeakRegistry.lean` because they use
 security Laws and execution witnesses; Spec cannot import Proofs. The exporter gains only that
 registry import. All nine input shapes have closed-data and opaque-carrier controls. The axiom
 golden is regenerated from the combined environment. ISS-0082 tracks the release/facts boundary;
@@ -79,10 +85,19 @@ is allocated by this branch.
 
 Runtime authorization checks all reachable finite prefixes. A release at site seven followed by
 a missing call is refused under the empty policy. The completed-run-only mutant accepts that entry
-because the endpoint is stuck. NI and CT require qualification against the installed machine
-observer. The external-choice contract receives accepted primitive answers and internal steps
-contribute no choices. Empty projections and an internal step counter pass the raw run comparisons
-on the asymmetric leak and fail both qualified judgments.
+because the endpoint is stuck. Authorization, NI and CT require the canonical C1 observer.
+Two qualified observers agree on every projection. C1 emission labels and final outcomes supply
+observations, C1 test decisions supply branch and loop leakage, and the operand contract supplies
+primitive leakage and classifies release primitives. The accepted answer is retained in the
+instrumented transition and contributes an external choice exactly when the contract allows an
+alternative. The controls separately erase output, final outcome, leakage, releases and choices,
+and reject deterministic primitive counters and answer-store choice injection.
+
+NI and CT compare reachable finite prefixes with matched choices and releases. NI checks prefix
+compatibility of both output and public lengths. CT checks prefix compatibility of leakage.
+Complete pairs still compare in full. Prefix comparison excludes final observations, leaving the
+termination channel to the owner. The output-then-stuck entry is refused by both judgments and
+kills the completed-runs-only mutant.
 
 Runtime release instrumentation preserves the actual source site and evaluated value. A per-step
 site agreement Law connects runtime release sites to static extraction, with nonzero-site positive
@@ -119,5 +134,5 @@ operands; releases preserve typed sites, values and order; public-local projecti
 relations explicitly mark the toy machine's secret state; facts erase only reason/path metadata.
 All continuation and destination shapes are retained. The toy operand language has no address,
 allocation, container-length or external-effect operations, so it manufactures none of those
-events; the generic observer retains their payloads and public-length comparison. The Unit choice,
-address and effect carriers do not stand in for any existing nondeterministic or memory operation.
+events; the generic observer retains their payloads and public-length comparison. The integer machine has Unit address and effect carriers and its deterministic answer contract
+produces an empty choice trace.

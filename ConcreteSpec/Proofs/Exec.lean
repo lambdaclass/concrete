@@ -4825,7 +4825,9 @@ theorem primitive_step_planted :
     ⟨some answer, .prim rfl (by decide) rfl⟩
 
 /-- Instance support. An error-capable contract and refusing result ledger. -/
-abbrev errorOps : Operands := { refusing with allows := fun _ _ _ _ => true }
+abbrev errorOps : Operands := { refusing with
+  allows := fun _ _ _ _ => true
+  release := PrimitiveRelease.none _ }
 /-- Instance support. A visible error answer changes the outside store. -/
 def errorAnswer : Answer Int Int DState := ⟨some 93, .error .abort, ⟨84, [[x], [p]]⟩⟩
 /-- Instance support. Pending frames and moved argument distinguish the retained stores. -/

@@ -52,6 +52,23 @@ arithmetic is reused from Scalar, identities from Ident and numeric locals and
 lookup from Basics. No memory policy is redefined here.
 -/
 
+namespace ConcreteSpec.Core.Leak
+open ConcreteSpec.Core
+
+/-- One entry of the baseline timing-observer trace. Branch decisions, exact addresses, allocation
+sizes, loop counts and operands of variable-time operations are distinct entries. Container lengths
+are public; contracted external effects are recorded as such rather than confused with output. -/
+inductive Leakage (Val Address Effect : Type) where
+  | branch (site : SiteId) (decision : Bool)
+  | address (site : SiteId) (address : Address)
+  | allocation (lineage : LineageId) (site : SiteId) (bytes : Nat)
+  | loop (loop : LoopId) (iterations : Nat)
+  | variableTime (site : SiteId) (operands : List Val)
+  | publicLength (site : SiteId) (length : Nat)
+  | external (effect : Effect)
+
+end ConcreteSpec.Core.Leak
+
 namespace ConcreteSpec.Core.Exec
 open ConcreteSpec.Core
 
@@ -61,6 +78,20 @@ structure Answer (Val Event Store : Type) where
   event : Option Event
   result : Except TrapKind Val
   store : Store
+
+/-- Primitive release classification and its operand invariant on accepted answers. -/
+structure PrimitiveRelease (Prim Ty Val Event Store : Type)
+    (allows : Prim → List Val → Store → Answer Val Event Store → Bool) where
+  classify : Prim → Option Ty
+  singleOperand {p vs st a ty} :
+    classify p = some ty → allows p vs st a = true → ∃ v, vs = [v]
+
+/-- A machine with no release primitives. -/
+def PrimitiveRelease.none {Prim Ty Val Event Store : Type}
+    (allows : Prim → List Val → Store → Answer Val Event Store → Bool) :
+    PrimitiveRelease Prim Ty Val Event Store allows where
+  classify := fun _ => Option.none
+  singleOperand := by intros; contradiction
 
 /-- A change in the life of locals, which an instrumentation may track (C5): a local is initialized
 (by `bind`, by `assign`, or as the result of a call or a primitive operation), an activation starts
@@ -109,6 +140,16 @@ structure Operands where
   life : Life → Store → Option Store
   test : Val → Option Bool
   allows : Prim → List Val → Store → Answer Val Event Store → Bool
+  /-- Baseline leakage of the machine's primitive operations. -/
+  Address : Type := Unit
+  Effect : Type := Unit
+  primitiveLeakage : Prim → List Val → SiteId → Store → Option (Answer Val Event Store) →
+    List (Leak.Leakage Val Address Effect) := fun _ _ _ _ _ => []
+  /-- The same release classification is used by static admission and execution. -/
+  release : PrimitiveRelease Prim Ty Val Event Store allows := PrimitiveRelease.none allows
+
+/-- The primitive's declared release type, when it is a release operation. -/
+abbrev Operands.releaseType (O : Operands) : O.Prim → Option O.Ty := O.release.classify
 
 variable {O : Operands} {V : Type}
 

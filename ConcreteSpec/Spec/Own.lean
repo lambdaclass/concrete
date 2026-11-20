@@ -474,6 +474,15 @@ abbrev instrumentOperands (O : Exec.Operands) (types : Var → Option Descriptor
   life := instrumentLife O types
   test := O.test
   allows := instrumentAllows O
+  Address := O.Address
+  Effect := O.Effect
+  primitiveLeakage := fun p vs site s answer =>
+    O.primitiveLeakage p vs site (erase s) (answer.map eraseAnswer)
+  release := {
+    classify := O.releaseType
+    singleOperand := by
+      intro p vs st a ty classified accepted
+      exact O.release.singleOperand classified ((Bool.and_eq_true_iff.mp accepted).1) }
 
 /-- Execute one C1 machine step on the ownership-instrumented operand instance. -/
 def stepInstrumented (O : Exec.Operands) (types : Var → Option Descriptor)

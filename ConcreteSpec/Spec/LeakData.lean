@@ -82,7 +82,21 @@ abbrev opsWith (oracle : Prim → List Int → Int → Answer Int Int Int → Bo
   eval := eval
   life := fun _ st => some st
   test := fun v => some (v ≠ 0)
-  allows := oracle
+  allows := fun p vs st a => match p with
+    | .release => allowed p vs st a
+    | _ => oracle p vs st a
+  primitiveLeakage := fun _ vs site _ _ => [.variableTime site vs]
+  release := {
+    classify := fun p => match p with | .release => some () | _ => none
+    singleOperand := by
+      intro p vs st a ty release accepted
+      cases p <;> try contradiction
+      cases vs with
+      | nil => contradiction
+      | cons v rest =>
+        cases rest with
+        | nil => exact ⟨v, rfl⟩
+        | cons => contradiction }
 
 /-- The example C1 operand instance with deterministic primitive answers `allowed`. -/
 abbrev ops : Operands := opsWith allowed
@@ -141,21 +155,6 @@ def timingBeforeBody (secret : Int) : Config ops :=
 /-- The common final configuration. -/
 def finished (secret : Int) (locals : AList Var Int := []) : Config ops := ⟨.done, locals, secret, []⟩
 
-/-- Public observations are output values and the C1 final outcome. -/
-inductive Observation where
-  | output (v : Int)
-  | final (f : Final Int)
-  deriving DecidableEq, Repr
-
-/-- The primitive request at a configuration, with its evaluated operands, if that is what C1 is
-about to execute. -/
-def request : Config ops → Option (Prim × List Int × SiteId)
-  | ⟨.exec (.prim _ p args site), locals, st, _⟩ =>
-      match evalArgs ops locals st args with
-      | .ok (vs, _) => some (p, vs, site)
-      | _ => none
-  | _ => none
-
 /-- A release record carries the actual evaluated operand, not a constant chosen by the observer. -/
 def releaseAt (site : SiteId) (value : Int) : Release Unit Int :=
   ⟨⟨site, ()⟩, value⟩
@@ -165,51 +164,40 @@ abbrev releaseValue (value : Int) : Release Unit Int := releaseAt ⟨0⟩ value
 
 def releaseZero : Release Unit Int := releaseValue 0
 
-/-- The evaluated decision at an actual C1 conditional or loop-test configuration.
-Loop tests record their source site and loop identity. A successful test contributes one iteration;
-a false test contributes zero. The ordered decisions retain every test, including loop exit.
-Authority: R-0613 (C7 security); docs/decisions.md#decided-2026-11-08-foundation (C7),
-docs/decisions.md#decided-project-infoflow-2026-11-06. -/
-def controlLeakage (c : Config ops) : List (Leakage Int Unit Unit) :=
-  let decision (e : Expr) (site : SiteId) (loop : Option LoopId) :=
-    match eval c.locals c.store e with
-    | .ok (v, _) => match ops.test v with
-      | some b => [.branch site b] ++
-          (loop.toList.map fun l => .loop l (if b then 1 else 0))
-      | none => []
-    | _ => []
-  match c.ctrl, c.frames with
-  | .exec (.cond e _ _ site), _ => decision e site none
-  | .done, .test l _ e _ site _ :: _ => decision e site (some l)
-  | _, _ => []
+/-- Executable presentation of the canonical observer for a deterministic operand machine. -/
+abbrev instrumentation : Instrumentation ops :=
+  instrumentationWithChoices ops (fun _ _ => [])
 
-/-- C7 instrumentation of the deterministic integer example. Evaluated control decisions retain
-source sites, and primitive operands are conservatively treated as variable-time. There are no
-external choices: both expression evaluation and every allowed primitive answer are deterministic.
-No memory, allocation, container or external-effect operations exist in this operand instance. -/
-abbrev instrumentation : Instrumentation ops where
-  Address := Unit
-  Effect := Unit
-  Observation := Observation
-  Choice := Unit
-  observeStep := fun _ label _ => match label with
-    | .silent => []
-    | .emit v => [.output v]
-  observeFinal := fun c => (c.final?).map .final
-  leakage := fun c _ _ => controlLeakage c ++ (match request c with
-    | some (_, vs, site) => [.variableTime site vs]
-    | none => [])
-  releases := fun c _ _ => match request c with
-    | some (.release, [v], site) => [releaseAt site v]
-    | _ => []
-  choices := fun _ _ _ => []
+/-- Every accepted request on this machine has at most one answer. -/
+theorem allowed_unique {p : Prim} {vs : List Int} {st : Int} {a b : Answer Int Int Int}
+    (ha : ops.allows p vs st a = true) (hb : ops.allows p vs st b = true) : a = b := by
+  cases p <;> cases vs with
+  | nil => contradiction
+  | cons v rest =>
+    cases rest with
+    | nil =>
+      simp only [allowed, decide_eq_true_eq] at ha hb
+      exact ha.trans hb.symm
+    | cons => contradiction
 
-/-- The installed integer-machine observer has no external choices on any transition. -/
-instance machineObserver : MachineObserver ops where
-  instrumentation := instrumentation
-  externalChoice := fun _ _ _ _ => none
-  internalChoices := fun _ => rfl
-  answerChoices := fun _ _ _ => rfl
+/-- The integer observer is the C1 observer. Its answer contract eliminates every choice. -/
+theorem instrumentation_qualified : ObserverQualified instrumentation := by
+  unfold ObserverQualified machineInstrumentation instrumentation
+  congr 1
+  funext c answer
+  change [] = externalChoices c answer
+  cases answer with
+  | none => rfl
+  | some a =>
+    cases request : primitiveRequest c with
+    | none => simp [externalChoices, request]
+    | some args =>
+      obtain ⟨p, vs, site, st⟩ := args
+      have noChoice : ¬ (ops.allows p vs st a = true ∧
+          ∃ b, b ≠ a ∧ ops.allows p vs st b = true) :=
+        fun ⟨accepted, b, distinct, allowedB⟩ => distinct (allowed_unique allowedB accepted)
+      simp only [externalChoices, request]
+      rw [ite_eq_right noChoice]
 
 /-- Negative local values are secret; nonnegative local values are public. The shared store remains
 secret, which is what lets the input configurations be low-equivalent. -/
@@ -345,7 +333,7 @@ def UnitCallsAdmitted (d : ReleaseInterface Unit × ReleaseCalls Unit) : Prop :=
 Authority: R-0613 (C7 security); docs/decisions.md#decided-2026-11-08-foundation (C7),
 docs/decisions.md#decided-project-infoflow-2026-11-06. -/
 def IntegerProgramAdmitted (d : ReleaseInterface Unit × List (FnId × IntegerFunction)) : Prop :=
-  d.1.ProgramAdmitted (fun p : Demo.Prim => match p with | .release => some () | _ => none)
+  d.1.ProgramAdmitted Demo.ops.releaseType
     (integerProgram d.2)
 
 /-- Monomorphic data view of typed-site permission; delegates to the owning judgment.

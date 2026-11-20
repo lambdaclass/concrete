@@ -43,7 +43,8 @@ theorem programAccepted : RuleAccepted IntegerProgramAdmitted
      [(CallControls.fn "2", ⟨[], ⟨0⟩, .prim none .release [] ⟨7⟩⟩)]) := by
   intro caller owner site hc hr
   have hs : owner = CallControls.fn "2" ∧ site = ⟨⟨7⟩, ()⟩ := by
-    simpa [integerProgram, ReleaseCalls.ofProgram, statementReleases, IntegerStatement.statement] using hr
+    change (owner, site) ∈ [(CallControls.fn "2", ⟨⟨7⟩, ()⟩)] at hr
+    simpa using hr
   obtain ⟨rfl, rfl⟩ := hs
   cases hc with
   | self => simp [ReleasePolicy.Permits]
@@ -161,7 +162,7 @@ theorem runsAccepted : RuleAccepted IntegerRunsAuthorized
 theorem runsRefused : RuleRefused IntegerRunsAuthorized
     (⟨[]⟩, ⟨[], unreleasedOutput 1⟩) := by
   intro h
-  have bad := h (leakyRun 1).steps
+  have bad := h.2 (leakyRun 1).steps
   change ReleasePolicy.Authorized ⟨[]⟩ [releaseValue 0] at bad
   simp [ReleasePolicy.Authorized, ReleasePolicy.Permits] at bad
 /-- One release at an arbitrary source site, with a populated operand. -/
@@ -173,10 +174,11 @@ def siteRun (I : Instrumentation ops) (site : SiteId) :
     Run I program (releaseEntry site).config := by
   let c := (releaseEntry site).config
   let done : Config ops := ⟨.done, [], 0, []⟩
-  refine ⟨done, .normal, rfl, I.observeStep c .silent done, I.leakage c .silent done,
-    I.releases c .silent done, I.choices c .silent done, ?_⟩
+  let answer : Answer Int Int Int := ⟨none, .ok 0, 0⟩
+  refine ⟨done, .normal, rfl, I.observeStep c .silent done, I.leakage c .silent done (some answer),
+    I.releases c .silent done, I.choices c .silent done (some answer), ?_⟩
   simpa only [List.append_nil, Answer.label] using InstrumentedSteps.step (I := I)
-    (Step.prim (P := program) (c := c) (c' := done) (p := .release) (site := site)
+    (AnsweredStep.prim (P := program) (c := c) (c' := done) (p := .release) (site := site)
       (vs := [42]) (st := 0) (a := (⟨none, .ok 0, 0⟩ : Answer Int Int Int))
       rfl (by simp [allowed]) rfl) (InstrumentedSteps.refl done)
 
@@ -196,12 +198,31 @@ theorem release_then_stuck_prefix :
       [.variableTime ⟨7⟩ [42]] [releaseAt ⟨7⟩ 42] [] stuckAfterRelease := by
   let pending : Config ops := ⟨.exec (.prim none .release [.lit 42] ⟨7⟩), [], 0, [.seq missingCall]⟩
   let released : Config ops := ⟨.done, [], 0, [.seq missingCall]⟩
-  have enter : Step program releaseThenStuck.config .silent pending := .silent rfl
-  have emitRelease : Step program pending .silent released :=
-    Step.prim (P := program) (c := pending) (c' := released) (p := .release) (site := ⟨7⟩) (vs := [42]) (st := 0)
+  have enter : AnsweredStep program releaseThenStuck.config .silent pending none := .silent rfl
+  have emitRelease : AnsweredStep program pending .silent released (some ⟨none, .ok 0, 0⟩) :=
+    AnsweredStep.prim (P := program) (c := pending) (c' := released) (p := .release) (site := ⟨7⟩) (vs := [42]) (st := 0)
       (a := (⟨none, .ok 0, 0⟩ : Answer Int Int Int)) rfl (by simp [allowed]) rfl
-  have resume : Step program released .silent stuckAfterRelease := .silent rfl
+  have resume : AnsweredStep program released .silent stuckAfterRelease none := .silent rfl
   exact .step enter (.step emitRelease (.step resume (.refl _)))
+
+/-- A prefix reaching a stuck endpoint excludes all complete runs on this deterministic machine. -/
+theorem no_complete_run_from_stuck_prefix {c d : Config ops} {obs leaks rs choices}
+    (pre : InstrumentedSteps instrumentation program c obs leaks rs choices d)
+    (stuck : step program d = none) (unfinished : d.final? = none) :
+    ¬ Nonempty (Run instrumentation program c) := by
+  rintro ⟨r⟩
+  obtain ⟨_, _, _, _, suffix, _, _, _, _⟩ := terminal_execution_suffix r.steps pre stuck
+  have endpoint : r.final = d := by
+    have terminal : step program r.final = none := final_no_step r.finalEnding
+    have erased := suffix.toSteps
+    generalize r.final = f at terminal erased ⊢
+    obtain ⟨_, steps⟩ := erased
+    cases steps with
+    | refl => rfl
+    | step h _ => exact (no_step_of_none terminal _ _ h).elim
+  have ending := r.finalEnding
+  rw [endpoint, unfinished] at ending
+  cases ending
 
 /-- Instance of `unlisted_prefix_refused`: the empty policy refuses the release followed by a stuck call. -/
 theorem stuckRunsRefused : RuleRefused IntegerRunsAuthorized (⟨[]⟩, ⟨[], releaseThenStuck⟩) :=
@@ -219,17 +240,7 @@ theorem completed_only_admits_stuck_release :
       ¬ (ReleasePolicy.mk []).RunsAuthorized instrumentation program releaseThenStuck.config := by
   refine ⟨?_, stuckRunsRefused⟩
   intro r
-  have stuck : step program stuckAfterRelease = none := rfl
-  obtain ⟨_, _, _, _, suffix, _⟩ := terminal_execution_suffix r.steps release_then_stuck_prefix stuck
-  have endpoint : r.final = stuckAfterRelease := by
-    have terminal : step program r.final = none := final_no_step r.finalEnding
-    generalize r.final = f at terminal suffix ⊢
-    cases suffix with
-    | refl => rfl
-    | step h _ => exact (no_step_of_none terminal _ _ h).elim
-  have ending := r.finalEnding
-  rw [endpoint] at ending
-  cases ending
+  exact (no_complete_run_from_stuck_prefix release_then_stuck_prefix rfl rfl ⟨r⟩).elim
 
 /-- Planted: require a release on every prefix in addition to checking authorization. -/
 def requiresReleaseOnEveryPrefix {O : Operands} (p : ReleasePolicy O.Ty)
@@ -242,23 +253,34 @@ a permitted entry whose initial prefix is empty and whose later release is liste
 theorem release_requirement_refuses_prefixes :
     policy.RunsAuthorized instrumentation program (releaseEntry ⟨0⟩).config ∧
       ¬ requiresReleaseOnEveryPrefix policy instrumentation program (releaseEntry ⟨0⟩).config := by
-  refine ⟨prefixes_authorized_of_complete policy (siteRun instrumentation ⟨0⟩) ?_, ?_⟩
+  refine ⟨⟨instrumentation_qualified, prefixes_authorized_of_complete policy (siteRun instrumentation ⟨0⟩) ?_⟩, ?_⟩
   · change policy.Authorized [releaseAt ⟨0⟩ 42]
     simp [ReleasePolicy.Authorized, ReleasePolicy.Permits, releaseAt]
   · intro h
     exact (h (.refl _)).2 rfl
+
+/-- Instance of `executed_release_value`: a C1 request and accepted answer witness the release. -/
+theorem nonzero_release_execution :
+    (machineInstrumentation ops).releases (releaseEntry ⟨7⟩).config .silent (finished 0) =
+      [releaseAt ⟨7⟩ 42] := by
+  let a : Answer Int Int Int := ⟨none, .ok 0, 0⟩
+  obtain ⟨v, operand, observed⟩ := executed_release_value (P := program) ⟨7⟩ .release
+    [.lit 42] [] 0 0 [42] none [] (finished 0) (a := a) (ty := ()) rfl rfl rfl rfl
+  have value : v = 42 := (List.cons.inj operand).1.symm
+  rw [value] at observed
+  exact observed
 
 /-- Instance: a nonzero site and nonzero operand inhabit the agreement Law. -/
 theorem nonzero_site_agreement :
     (instrumentation.releases (releaseEntry ⟨7⟩).config .silent ⟨.done, [], 0, []⟩).map Release.site =
     statementReleases (fun p : Prim => match p with | .release => some () | _ => none)
       (.prim none .release [.lit 42] ⟨7⟩ : ConcreteSpec.Core.Exec.Stmt ops) :=
-  release_sites_agree ⟨7⟩ [.lit 42] [] 0 0 42 .silent _ none [] rfl
+  release_sites_agree (O := ops) ⟨7⟩ .release [.lit 42] [] 0 0 42 .silent (finished 0) none [] rfl
 
 /-- Planted: replace only the source site with zero, preserving the evaluated operand. -/
 abbrev zeroSite : Instrumentation ops := { instrumentation with
-  releases := fun c _ _ => match request c with
-    | some (.release, [v], _) => [releaseAt ⟨0⟩ v]
+  releases := fun c _ _ => match primitiveRequest c with
+    | some (.release, [v], _, _) => [releaseAt ⟨0⟩ v]
     | _ => [] }
 
 /-- Planted: the same inhabited evaluation refutes site agreement for the zero-site observer. -/
@@ -270,6 +292,7 @@ theorem zero_site_breaks_agreement : evalArgs ops [] 0 [.lit 42] = .ok ([42], 0)
 /-- Instance: all execution prefixes at site seven pass the site-seven policy. -/
 theorem nonzeroRunsAccepted : RuleAccepted IntegerRunsAuthorized
     (⟨[⟨⟨7⟩, ()⟩]⟩, ⟨[], releaseEntry ⟨7⟩⟩) := by
+  refine ⟨instrumentation_qualified, ?_⟩
   apply prefixes_authorized_of_complete _ (siteRun instrumentation ⟨7⟩)
   change ReleasePolicy.Authorized ⟨[⟨⟨7⟩, ()⟩]⟩ [releaseAt ⟨7⟩ 42]
   simp [ReleasePolicy.Authorized, ReleasePolicy.Permits, releaseAt]
@@ -278,15 +301,57 @@ theorem nonzeroRunsAccepted : RuleAccepted IntegerRunsAuthorized
 theorem nonzeroRunsRefused : RuleRefused IntegerRunsAuthorized
     (⟨[⟨⟨0⟩, ()⟩]⟩, ⟨[], releaseEntry ⟨7⟩⟩) := by
   intro h
-  have bad := h (siteRun instrumentation ⟨7⟩).steps
+  have bad := h.2 (siteRun instrumentation ⟨7⟩).steps
   change ReleasePolicy.Authorized ⟨[⟨⟨0⟩, ()⟩]⟩ [releaseAt ⟨7⟩ 42] at bad
   simp [ReleasePolicy.Authorized, ReleasePolicy.Permits, releaseAt] at bad
 
 /-- Planted: the zero-site substitution wrongly authorizes every run under the site-zero policy. -/
-theorem zero_site_wrongly_authorizes : policy.RunsAuthorized zeroSite program (releaseEntry ⟨7⟩).config := by
+theorem zero_site_wrongly_authorizes : policy.PrefixesAuthorized zeroSite program (releaseEntry ⟨7⟩).config := by
   apply prefixes_authorized_of_complete policy (siteRun zeroSite ⟨7⟩)
   change ReleasePolicy.Authorized policy [releaseAt ⟨0⟩ 42]
   simp [ReleasePolicy.Authorized, ReleasePolicy.Permits, releaseAt]
+
+/-- Planted: only the release projection is erased. -/
+abbrev noReleases : Instrumentation ops := { instrumentation with releases := fun _ _ _ => [] }
+
+/-- Helper: erasing releases forces every raw prefix trace to be empty. -/
+private theorem erased_release_trace {c d : Config ops} {trace : ExecutionTrace ops}
+    (pre : InstrumentedExecution noReleases program c trace d) : trace.releases = [] := by
+  induction pre with
+  | refl => rfl
+  | step _ _ ih => exact ih
+
+/-- Planted (Laws `release_sites_agree`, `authorization_observer_qualified`):
+erasure passes raw authorization on the very release-then-stuck entry that emits site seven. -/
+theorem erased_releases_refused :
+    (ReleasePolicy.mk []).PrefixesAuthorized noReleases program releaseThenStuck.config ∧
+    ¬ (ReleasePolicy.mk []).RunsAuthorized noReleases program releaseThenStuck.config := by
+  constructor
+  · intro obs leaks rs choices d pre
+    have erased : rs = [] := erased_release_trace pre
+    rw [erased]
+    exact fun _ h => (List.not_mem_nil h).elim
+  · intro h
+    let pending : Config ops := ⟨.exec (.prim none .release [.lit 42] ⟨7⟩), [], 0, [.seq missingCall]⟩
+    let released : Config ops := ⟨.done, [], 0, [.seq missingCall]⟩
+    have expected := release_sites_agree (O := ops) ⟨7⟩ .release [.lit 42] [] 0 0 42
+      .silent released none [.seq missingCall] rfl
+    have same := authorization_observer_qualified h
+    have site := congrArg (fun I : Instrumentation ops =>
+      (I.releases pending .silent released).map Release.site) same
+    change [] = ((machineInstrumentation ops).releases pending .silent released).map Release.site at site
+    rw [expected] at site
+    cases site
+
+/-- Planted (Laws `release_sites_agree`, `authorization_observer_qualified`):
+the forged site passes the raw helper and fails qualified authorization. -/
+theorem zero_site_qualification_refused :
+    ¬ policy.RunsAuthorized zeroSite program (releaseEntry ⟨7⟩).config := by
+  intro h
+  have same := qualified_observers_agree (authorization_observer_qualified h) instrumentation_qualified
+  have site := congrArg (fun I : Instrumentation ops =>
+    (I.releases (releaseEntry ⟨7⟩).config .silent (finished 0)).map Release.site) same
+  exact zero_site_breaks_agreement.2 (site.trans nonzero_site_agreement)
 
 /-- Instance: negative locals are secret in this integer-machine labelling. -/
 theorem lowAccepted : RuleAccepted IntegerLowEquivalent
@@ -339,6 +404,53 @@ theorem conditionalCTRefused : RuleRefused IntegerConstantTime
 theorem loopCTRefused : RuleRefused IntegerConstantTime
     ⟨[], ⟨.loop ⟨3⟩ .skip .secret (.brk ⟨3⟩) ⟨9⟩, [], 0⟩,
          ⟨.loop ⟨3⟩ .skip .secret (.brk ⟨3⟩) ⟨9⟩, [], 1⟩⟩ := ControlAudit.loop_ct_refused.2.2.2
+
+/-- Emit an unreleased secret, then attempt a missing call. -/
+def outputThenStuck (secret : Int) : IntegerEntry :=
+  ⟨.seq (.prim none .output [.secret] ⟨7⟩) (IntegerStatement.encode missingCall), [], secret⟩
+
+/-- The output and variable-time leakage both precede the stuck call. -/
+theorem output_then_stuck_prefix (secret : Int) :
+    InstrumentedSteps instrumentation program (outputThenStuck secret).config
+      [.output secret] [.variableTime ⟨7⟩ [secret]] [] [] ⟨.exec missingCall, [], secret, []⟩ := by
+  let pending : Config ops := ⟨.exec (.prim none .output [.secret] ⟨7⟩), [], secret, [.seq missingCall]⟩
+  let emitted : Config ops := ⟨.done, [], secret, [.seq missingCall]⟩
+  have emit : AnsweredStep program pending (.emit secret) emitted
+      (some ⟨some secret, .ok 0, secret⟩) :=
+    AnsweredStep.prim (P := program) (c := pending) (c' := emitted)
+      (p := .output) (site := ⟨7⟩) (vs := [secret]) (st := secret)
+      (a := (⟨some secret, .ok 0, secret⟩ : Answer Int Int Int)) rfl (by simp [allowed]) rfl
+  exact .step (.silent rfl) (.step emit (.step (.silent rfl) (.refl _)))
+
+/-- Instance of `ni_prefixes_compatible`: the public output differs before stuckness. -/
+theorem stuckNIRefused : RuleRefused IntegerDelimitedReleaseNI
+    ⟨[], outputThenStuck 1, outputThenStuck 2⟩ := by
+  intro h
+  have bad := (ni_prefixes_compatible h (output_then_stuck_prefix 1) (output_then_stuck_prefix 2)
+    ⟨rfl, trivial⟩ rfl rfl).1
+  simp [PrefixCompatible] at bad
+
+/-- Instance of `ct_prefixes_compatible`: variable-time leakage differs before stuckness. -/
+theorem stuckCTRefused : RuleRefused IntegerConstantTime
+    ⟨[], outputThenStuck 1, outputThenStuck 2⟩ := by
+  intro h
+  have bad := ct_prefixes_compatible h (output_then_stuck_prefix 1) (output_then_stuck_prefix 2)
+    ⟨rfl, trivial⟩ rfl rfl
+  simp [PrefixCompatible] at bad
+
+/-- Planted (Laws `ni_prefixes_compatible` and `ct_prefixes_compatible`):
+keep qualification and completed-run equality, deleting only the prefix obligations. -/
+theorem completed_only_admits_stuck_output :
+    ObserverQualified instrumentation ∧
+    CompletedNIComparison instrumentation program labelling
+      (outputThenStuck 1).config (outputThenStuck 2).config ∧
+    CompletedTimingComparison instrumentation program labelling
+      (outputThenStuck 1).config (outputThenStuck 2).config ∧
+    ¬ IntegerDelimitedReleaseNI ⟨[], outputThenStuck 1, outputThenStuck 2⟩ ∧
+    ¬ IntegerConstantTime ⟨[], outputThenStuck 1, outputThenStuck 2⟩ := by
+  have absent := no_complete_run_from_stuck_prefix (output_then_stuck_prefix 1) rfl rfl
+  exact ⟨instrumentation_qualified, fun r _ _ _ _ => (absent ⟨r⟩).elim,
+    fun r _ _ _ _ => (absent ⟨r⟩).elim, stuckNIRefused, stuckCTRefused⟩
 
 end Leak.Registry
 end ConcreteSpec.Core

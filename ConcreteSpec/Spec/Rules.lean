@@ -250,6 +250,8 @@ def registeredRuleExamples : List RuleExample :=
    ⟨``Leak.IntegerConstantTime, `ConcreteSpec.Core.Leak.Registry.asymmetricCTRefused⟩,
    ⟨``Leak.IntegerConstantTime, `ConcreteSpec.Core.Leak.Registry.conditionalCTRefused⟩,
    ⟨``Leak.IntegerConstantTime, `ConcreteSpec.Core.Leak.Registry.loopCTRefused⟩,
+   ⟨``Leak.IntegerDelimitedReleaseNI, `ConcreteSpec.Core.Leak.Registry.stuckNIRefused⟩,
+   ⟨``Leak.IntegerConstantTime, `ConcreteSpec.Core.Leak.Registry.stuckCTRefused⟩,
    ⟨``Leak.Account.WF, ``Leak.Registry.wfAccepted⟩,
    ⟨``Leak.Account.WF, ``Leak.Registry.wfRefused⟩,
    ⟨``Leak.ResetConserved, ``Leak.Registry.resetAccepted⟩,
