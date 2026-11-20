@@ -107,7 +107,8 @@ CAMPAIGN_RE="${LAND_CAMPAIGN_JOBS:-^Campaign: }"
 
 # No git operation may be left half-done. Called after every git command that can stop.
 assert_no_op() {
-  local what="$1" p
+  local what="$1"
+  local p
   for p in MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD rebase-merge rebase-apply; do
     if [ -e "$(git rev-parse --git-path "$p")" ]; then
       die "after $what: a git operation is still in progress ($p exists). Stopping; resolve or abort it by hand."
@@ -156,7 +157,16 @@ stage_start() { STAGE_T0="$(date +%s)"; }
 # utc, train, stage, base, head, members (ref@sha, comma-joined), run id, result, duration_s, note
 log_row() { # name stage result note
   [ "$DRY" = 1 ] && return 0
-  local name="$1" stage="$2" result="$3" notes="${4:-}" now dur base head members run
+  local name="$1"
+  local stage="$2"
+  local result="$3"
+  local notes="${4:-}"
+  local now
+  local dur
+  local base
+  local head
+  local members
+  local run
   now="$(date +%s)"; dur=$(( now - STAGE_T0 ))
   base="$(state_get_soft "$name" base)"; head="$(state_get_soft "$name" head)"
   members="$(state_get_soft "$name" members)"; run="$(state_get_soft "$name" run_id)"
@@ -192,9 +202,15 @@ remote_main() { git ls-remote "$REMOTE" refs/heads/main | cut -f1; }
 # of the same range. A ref that moved to anything else stops at once. Prints nothing under --dry-run
 # except the command.
 push_verified() { # remote sha ref [env assignments...]
-  local remote="$1" sha="$2" ref="$3"; shift 3
+  local remote="$1"
+  local sha="$2"
+  local ref="$3"; shift 3
   if [ "$DRY" = 1 ]; then run_or_print env "$@" git push "$remote" "$sha:refs/heads/$ref"; return 0; fi
-  local before now attempt=1 max="${LAND_PUSH_ATTEMPTS:-3}" rc
+  local before
+  local now
+  local attempt=1
+  local max="${LAND_PUSH_ATTEMPTS:-3}"
+  local rc
   before="$(git ls-remote "$remote" "refs/heads/$ref" | cut -f1)"
   while :; do
     rc=0
@@ -214,7 +230,8 @@ push_verified() { # remote sha ref [env assignments...]
 
 # The train's state must describe the checkout: same branch, same HEAD, clean.
 require_train_checkout() { # name
-  local name="$1" head
+  local name="$1"
+  local head
   head="$(state_get "$name" head)"
   [ "$(git symbolic-ref -q --short HEAD || true)" = "train/$name" ] \
     || die "check out train/$name first (state is bound to that branch)"
@@ -396,7 +413,10 @@ remote_runner() {
 }
 
 remote_leg() { # name head
-  local name="$1" head="$2" runner ref
+  local name="$1"
+  local head="$2"
+  local runner
+  local ref
   runner="$(remote_runner)"
   ref="$head"
   if [ "${LAND_REMOTE_PUSH:-1}" = 1 ]; then
@@ -491,7 +511,13 @@ SIGNOFF="$SELF_DIR/signoff.sh"
 # pure_merge BASE HEAD SHA... → empty when HEAD is BASE plus exactly one clean merge of each SHA, in
 # order; otherwise prints why.
 pure_merge() {
-  local base="$1" head="$2" cur="$2" i p t want; shift 2
+  local base="$1"
+  local head="$2"
+  local cur="$2"
+  local i
+  local p
+  local t
+  local want; shift 2
   local shas=("$@")
   for ((i = ${#shas[@]} - 1; i >= 0; i--)); do
     read -r -a p <<< "$(git rev-list --parents -n 1 "$cur")"
@@ -511,7 +537,13 @@ pure_merge() {
   [ "$cur" = "$base" ] || echo "${head:0:10} is not the clean merge of its members onto ${base:0:10}: the merges start at ${cur:0:10}"
 }
 review_provenance() { # name head
-  local name="$1" head="$2" out m n=0 bad="" base
+  local name="$1"
+  local head="$2"
+  local out
+  local m
+  local n=0
+  local bad=""
+  local base
   base="$(state_get_soft "$name" base)"
   [ -n "$base" ] || { echo "train has no recorded base"; return 1; }
   [ -f "$VERIFY" ] || { echo "no review verifier ($VERIFY is missing)"; return 1; }
@@ -576,7 +608,8 @@ cmd_check() {
     die "check: no review command (LAND_REVIEW_CMD is unset and scripts/review/review.sh is missing); the review leg is required and is never skipped silently. Restore the reviewer, or pass --no-review explicitly (land still requires review provenance)"
   fi
   local ghost=""; [ "$local_gates" = 1 ] || ghost="$(gates_host)"
-  local impact_cmd=(bash "$SELF_DIR/impact_gates.sh") impact_where="here"
+  local impact_cmd=(bash "$SELF_DIR/impact_gates.sh")
+  local impact_where="here"
   if [ -n "$ghost" ]; then impact_cmd=(bash "$SELF_DIR/gates_remote.sh" --host "$ghost"); impact_where="on $ghost"
   elif [ "$local_gates" = 0 ]; then note "no gate host configured (LAND_GATES_HOST / git config land.gatesHost): the impact gates run on this machine"; fi
   # The attestation describes one run; a new check withdraws the previous one before it starts.
@@ -600,7 +633,8 @@ cmd_check() {
   if [ "$remote" = 1 ]; then legs_start remote "$dir/remote.log" remote_leg "$name" "$head"; fi
   if [ "$review" = 1 ]; then legs_start review "$dir/review.log" review_leg "$name" "$base" "$head"; fi
   legs_wait
-  local wall=$(( $(date +%s) - t0 )) leg
+  local wall=$(( $(date +%s) - t0 ))
+  local leg
   cat "$dir/impact.log"
   for leg in $LEGS_FAILED; do
     [ "$leg" = impact ] && continue
@@ -736,7 +770,9 @@ required_notes() { # base head jobs
 }
 
 cmd_watch() {
-  local name="" interval=60 timeout=$((4*3600))
+  local name=""
+  local interval=60
+  local timeout=$((4*3600))
   while [ $# -gt 0 ]; do
     case "$1" in
       --interval) interval="$2"; shift ;;
@@ -932,7 +968,11 @@ is_move_candidate() { # base head
   [ "$(root_entries "$1")" != "$(root_entries "$2")" ]
 }
 require_rehearsal() { # name base head
-  local name="$1" base="$2" head="$3" tree why=""
+  local name="$1"
+  local base="$2"
+  local head="$3"
+  local tree
+  local why=""
   is_move_candidate "$base" "$head" || return 0
   tree="$(git rev-parse "$head^{tree}")"
   if [ ! -s "$REHEARSALS" ]; then
@@ -1054,7 +1094,8 @@ cmd_land() {
 # between members shows up as a culprit that is green alone, and the report says to check it.
 
 subset_red() { # sub-name test-cmd|"" members...
-  local sub="$1" test="$2"; shift 2
+  local sub="$1"
+  local test="$2"; shift 2
   local refs=() m
   for m in "$@"; do refs+=("${m%@*}"); done
   # Members are pinned to their recorded SHAs via the temporary refs below, so a moved branch tip
@@ -1104,7 +1145,8 @@ cmd_bisect() {
   local step=0 half verdict
   while [ "${#list[@]}" -gt 1 ]; do
     step=$((step+1)); half=$(( ${#list[@]} / 2 ))
-    local first=("${list[@]:0:$half}") second=("${list[@]:$half}")
+    local first=("${list[@]:0:$half}")
+    local second=("${list[@]:$half}")
     verdict="$(subset_red "$name-b$step" "$test" "${first[@]}")"
     note "step $step: first half [$(printf '%s ' "${first[@]%@*}")] -> $verdict"
     case "$verdict" in

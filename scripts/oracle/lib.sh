@@ -20,7 +20,8 @@ oracle_artifact_name() { echo "oracle-$(lock tag)-$(lock platform).tar.gz"; }
 # oracle_pack STAGE OUT: write the artifact for staged directory STAGE (which must hold the files above
 # except MANIFEST.sha256, which this adds) to OUT.
 oracle_pack() {
-  local stage="$1" out="$2"
+  local stage="$1"
+  local out="$2"
   ( cd "$stage" && rm -f MANIFEST.sha256 && find . -type f ! -name MANIFEST.sha256 | LC_ALL=C sort \
       | sed 's#^\./##' | xargs -d '\n' sha256sum > MANIFEST.sha256 ) || return 1
   tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=gnu \
@@ -29,7 +30,9 @@ oracle_pack() {
 
 # oracle_verify_install DIR: exit 0 iff DIR is an intact install (prints the reason otherwise).
 oracle_verify_install() {
-  local d="$1" want got
+  local d="$1"
+  local want
+  local got
   [ -f "$d/MANIFEST.sha256" ] && [ -x "$d/bin/concrete" ] || { echo "no installed artifact at $d"; return 1; }
   [ ! -L "$d" ] || { echo "$d is a symlink"; return 1; }
   want="$(lock manifest_sha256)"; got="$(sha256sum "$d/MANIFEST.sha256" | cut -d' ' -f1)"
@@ -49,7 +52,10 @@ oracle_verify_install() {
 
 # oracle_install TARBALL DEST: verify the tarball's sha256 against the lock, unpack, verify the install.
 oracle_install() {
-  local tb="$1" dest="$2" want got
+  local tb="$1"
+  local dest="$2"
+  local want
+  local got
   want="$(lock artifact_sha256)"; got="$(sha256sum "$tb" | cut -d' ' -f1)"
   [ -n "$want" ] && [ "$got" = "$want" ] || { echo "artifact is $got, the lock says ${want:-nothing}"; return 1; }
   rm -rf "$dest.new" && mkdir -p "$dest.new" && tar -xzf "$tb" -C "$dest.new" || { echo "cannot unpack $tb"; return 1; }
