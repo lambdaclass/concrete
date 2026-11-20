@@ -69,7 +69,12 @@ else
 fi
 
 control() { # control LABEL EXPECTED-MESSAGE MUTATION-FUNCTION CHANGED-PATH
-  local label=$1 expected=$2 mutation=$3 changed=$4 dir="$TMP/control-$1" rc=0
+  local label=$1
+  local expected=$2
+  local mutation=$3
+  local changed=$4
+  local dir="$TMP/control-$1"
+  local rc=0
   mkdir -p "$dir"
   if ! cp -R "$TEST_DIR" "$dir/tests"; then no "control: $label could not copy tests/"; return; fi
   if ! "$mutation" "$dir"; then no "control: $label mutation failed"; return; fi

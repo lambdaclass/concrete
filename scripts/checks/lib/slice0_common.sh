@@ -40,7 +40,8 @@ capped=(bash "$root/scripts/checks/lib/limited_exec.sh" 65536)
 # re-run once with a larger budget; a second timeout writes no output, returns 124 and is reported
 # INCOMPLETE, never a pass).
 bounded() {
-  local secs=$1 rc=0
+  local secs=$1
+  local rc=0
   shift
   bounded_run -i /dev/null "$secs" -- "${capped[@]}" "$@" || rc=$?
   if [ "$rc" != 0 ] && bounded_is_incomplete "$rc"; then
@@ -72,7 +73,8 @@ expected_timeout() {
 }
 
 observe() {
-  local rc=0 mem=${5:-1024}
+  local rc=0
+  local mem=${5:-1024}
   local envs=("${@:6}")
   bounded_run -i /dev/null -r "$4" "$3" -- env ${envs[@]+"${envs[@]}"} \
     bash "$root/scripts/checks/lib/limited_exec.sh" "$mem" "$1" \
@@ -85,7 +87,8 @@ judge() {
 }
 
 build() {
-  local name=$1 log=$2; shift 2
+  local name=$1
+  local log=$2; shift 2
   "$@" >"$log" 2>&1 || { cat "$log" >&2; echo "slice0: $name: build failed: $*" >&2; exit 1; }
 }
 

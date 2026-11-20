@@ -51,7 +51,12 @@ TOOL_PATH="$("$LAKE" env printenv LEAN_PATH)" || { no "lake env printenv LEAN_PA
 # stage_lib FROM DEST < MODULES: copy each listed module's .olean files (FROM/A/B.olean*, no .hash)
 # into DEST. A listed module with no .olean is a problem line; nothing unlisted is copied.
 stage_lib() {
-  local from="$1" dest="$2" m p f n
+  local from="$1"
+  local dest="$2"
+  local m
+  local p
+  local f
+  local n
   mkdir -p "$dest"
   while read -r m; do
     p="${m//.//}"; n=0

@@ -28,7 +28,8 @@ git_sandbox() { # [gitconfig-file]
     fi
     _CONCRETE_GIT_SANDBOX_CONFIG=$1
     export -n _CONCRETE_GIT_SANDBOX_CONFIG
-    export GIT_CONFIG_GLOBAL="$1" GIT_CONFIG_NOSYSTEM=1
+    export GIT_CONFIG_GLOBAL="$1"
+    export GIT_CONFIG_NOSYSTEM=1
   fi
   return 0
 }

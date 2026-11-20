@@ -116,7 +116,15 @@ measure() {
 
 # stack_check NAME BACKEND EXE: derive the bound, measure a run where supported, record both.
 stack_check() {
-  local name=$1 backend=$2 exe=$3 dis="$3.dis" out bound ext m measured=not-run
+  local name=$1
+  local backend=$2
+  local exe=$3
+  local dis="$3.dis"
+  local out
+  local bound
+  local ext
+  local m
+  local measured=not-run
   if ! "${objdump[@]}" "$exe" >"$dis" 2>"$dis.err"; then
     echo "FAIL $name [$backend] stack: disassembly failed: $(head -c 300 "$dis.err")"; fail=1; return
   fi

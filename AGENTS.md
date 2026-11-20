@@ -91,8 +91,7 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
 - Rebase onto `origin/main` after every landing (`/rebase`), not only before your own landing, so a
   conflict or a changed rule shows up while the branch is small.
 - Commit each validated slice. Push the branch to `wip/<branch>` at least every 5 minutes of work
-  (`git push origin HEAD:refs/heads/wip/<branch>`); the hook's wip tier only scans for conflict
-  markers.
+  (`git push origin HEAD:refs/heads/wip/<branch>`); the [pre-push hook](.githooks/pre-push) enforces the WIP tier.
 - Never push to `main` or `ci/*`. Only the remote name `origin` is permitted, with both fetch
   and all push URLs targeting `lambdaclass/concrete`; there is no mirror. Landings go through
   `scripts/land/train.sh`.
@@ -171,6 +170,79 @@ references, §15), [the spec's overview](legacy/docs/spec/overview.md),
 [STATEMENT_EXPRESSION_MODEL.md](legacy/docs/archive/design-records/STATEMENT_EXPRESSION_MODEL.md) (evaluation order, value
 vs statement position), [KNOWN_HOLES.md](legacy/docs/verification/KNOWN_HOLES.md) (the only authority on
 hole status) and [VERIFIED_PIPELINE.md](legacy/docs/compiler/VERIFIED_PIPELINE.md) (the structural owners).
+
+## Turning recurring mistakes into checks
+
+The owner approved mechanical enforcement of recurring workflow mistakes on 2026-11-17.
+[R-0710](ROADMAP.md#r-0710) owns the follow-through. Use the root gate or the tool that
+can observe the failure, with passing and failing controls. The rows classify the
+active repository concern in each lesson. For compound lessons, the scope and any
+remaining work are explicit. Historical commands and machine procedures are omitted.
+
+### A. Already enforced
+
+| Lesson | Check and scope |
+|---|---|
+| Read push refs from Git and run the checks selected for the push | The [pre-push hook](.githooks/pre-push#L38-L70) reads the advertised refs. Its [WIP-only tier](.githooks/pre-push#L72-L85) scans the advertised WIP tips. The full tier [checks the advertised gated SHAs against HEAD](.githooks/pre-push#L113-L123) and runs the root suite. [`landing_script.sh`](scripts/checks/landing_script.sh) exercises both tiers. The old compiler’s gate-selection rules are frozen. |
+| Require review provenance before landing | [`train.sh:1063`](scripts/land/train.sh#L1063) requires verified clean notes or exact-SHA owner sign-off through [`review_provenance`](scripts/land/train.sh#L539). [`verify.sh:69`](scripts/review/verify.sh#L69) checks the reviewer field for non-whitespace and [its final check](scripts/review/verify.sh#L87) requires a clean verdict. Check and CI dispatch can proceed before review. |
+| Check CI for the candidate and inspect its actual conclusion | [`train.sh:697`](scripts/land/train.sh#L697) checks the published SHA and filters for [the train’s CI event](scripts/land/train.sh#L705). [`train.sh:1028`](scripts/land/train.sh#L1028) requires a completed run at the exact head with successful landing-tier jobs, and [`required_checks.py:109`](scripts/land/required_checks.py) checks required jobs. Interactive triage still distinguishes infrastructure failures from code defects. |
+| Plan for a long hook to finish without the ref moving | [`train.sh:204`](scripts/land/train.sh#L204) retries verified publication and reads the exact ref after each attempt, including for [main publication](scripts/land/train.sh#L1077). Transport configuration and manual process cleanup are machine procedures. |
+| Split declarations with expansions | The [shell assignment check](scripts/checks/lib/shell_assignments.py#L91-L143) parses tracked scripts and hooks with shfmt and fails on parse errors. A `local`, `declare`, `typeset`, `readonly`, or `export` statement with more than one name must have no parameter, arithmetic, or command expansions in its initializers. Split a declaration that uses one of those expansions into one declaration per line. |
+
+### B. Mechanically checkable in this repository
+
+| Lesson | Check or remaining work under R-0710 |
+|---|---|
+| Detect dependencies that require Bash runtime context | Under R-0710, qualify computed variable names and context-dependent subscript evaluation beyond the explicit expansions covered by the shell assignment check if these patterns enter maintained tooling. Qualify with a same-declaration reference resolved through a nameref and an indexed-array subscript, plus passing controls with split assignments and a literal associative-array key. |
+| Reject fabricated review citations | Bind review targets and citations to the exact Git tree. Require resolvable evidence for a positive verdict. Citation resolution can test existence, while reviewers still assess relevance. |
+| Bound a reproducer and prevent recursive hooks | Extend the task, memory and wall-time bounds already used by [`sandbox_isolation.sh:154`](scripts/checks/sandbox_isolation.sh) to a shared entry point for live repository probes. Prove that it refuses to start without containment and that nested test Git processes cannot re-enter the hook. |
+| Require two independent reviews for cleanup | Bind review identities and their evidence to the same reviewed tree and require the configured reviewers or a recorded exception. The existing sign-off path covers a narrower case. Bind standard review notes to the configured reviewer identity as well. |
+| Confirm a defect independently before filing it | Verify that a new defect record links an independent, matching reproduction verdict when that evidence is machine-readable. Whether the observation violates the specification remains a review judgment. |
+| Launch branch CI early and keep independent landings moving | Have the writer-round completion path dispatch and record CI for its exact SHA. Schedule independent candidates from declared dependencies and test that an unrelated red candidate leaves ready work eligible. |
+| Sweep the full fixture corpus after behavior or API changes | Extend the active [`test_manifest.sh:24`](scripts/checks/test_manifest.sh) inventory approach to gate-only Lean probes and exercised job obligations. Test that an unregistered or stale fixture is surfaced by the relevant check. Frozen fixtures stay archived. |
+| Stop a commit or push when a check piped into a formatter fails | Give tracked validation-to-publication paths a status-preserving entry point, then plant a failed check whose trailing formatter succeeds. Interactive shell lines require use of that entry point. |
+| Avoid changing the running harness and accepting a writer's self-review | Run writer rounds from a fixed harness snapshot and record the writer identity in evidence that the review publisher checks. Plant a mid-run edit and a review from the recorded writer. |
+| Reserve issue IDs with the coordinator | Bind new IDs to a reservation before publication and test a collision across branches. [`issues.sh:25`](scripts/checks/issues.sh) checks ordering and uniqueness in a single ledger. |
+| Prevent repeat integration failures | Extend exact-SHA qualification for currently active gaps: assert structured edits took effect, extend the train’s stopped-operation guard to other repository generators and publishers, validate deletion targets, exercise retained fixture inventories, and refuse hook bypasses or unauthorized forced ref updates in publication tools. Keep the train’s intentional scratch-ref leases and CI reset covered by explicit controls. [`git_sandbox.sh:18`](scripts/checks/lib/git_sandbox.sh) already isolates fixture repositories. The hook already uses a private build log, and [`review.sh:325`](scripts/review/review.sh) suppresses optional index locking. Retired inventory and campaign checks stay frozen. |
+| Validate the train’s configured destination | Require the approved repository for the fetch URL and every effective push URL, including rewritten URLs. [`landing_sources.sh:15`](scripts/checks/landing_sources.sh#L15) checks the gate runner’s source contract, and [`archived_references.sh`](scripts/checks/archived_references.sh) checks stale references. Arbitrary manual publication requires hosting policy. |
+| Include the long-term design requirement in generated writer and reviewer prompts | Put the instruction in repository-owned prompt builders and test the rendered prompts. Reviewer judgment about a shortcut stays with the reviewer. |
+| Bind validation throughout a gated push and cover mixed-tier pushes | Validate an immutable snapshot for the full gate run, or otherwise prove that the reviewed state stayed stable, with a checkout-change control. Scan advertised WIP tips even when the push also contains a full-tier ref. Clone allocation remains operator coordination. |
+| Stop publication when preparation fails and bind gates to the intended source | Exercise the repository publication path with a failed preparation command and prove it sends nothing. Keep passing the explicit candidate SHA, and validate the remote gate endpoint against its configured source contract. Provisioning the execution identity is external. |
+| Require the complete review footer and validate each output | [ISS-0087](ISSUES.tsv#L59) tracks the intake gap. Generate the footer and validate the repository marker, verdict position and cited evidence in every repository review intake. [`review_tool.sh:445`](scripts/checks/review_tool.sh) already rejects a missing Codex verdict and [`signoff.sh:217`](scripts/land/signoff.sh) checks the final sign-off verdict declaration. |
+| Keep status tags out of roadmap tasks | Lint the roadmap task rows for retired status tags and qualify the check with a tagged row and an ordinary bracketed link. |
+| Record structural cause and owner for defects | Check the structure and owner reference of new defect records in the active issue workflow. The relevance of the cause and suitability of the owner still need review. Frozen bug records stay archived. |
+
+### C. Requires owner process, judgment or external operations
+
+| Lesson | Reason |
+|---|---|
+| Default build-host OS and core-dump policy | Host provisioning and kernel settings are external infrastructure. |
+| Require train publication to main, including roadmap changes | The historical roadmap exception was superseded by the branch rules above. The train qualifies its own publications. Requiring train provenance for arbitrary direct pushes depends on hosting permissions or a server-side rule. |
+| Limit autonomous research to stable, agreed objectives | Choosing worthwhile objectives and granting research authority are owner decisions. |
+| Batch validated slices when publication costs dominate | This was based on retired publication tooling and was superseded by frequent WIP backups. Batching independent landings depends on readiness. |
+| Prefer a structural long-term fix and treat shortcuts as findings | Assessing the tradeoff and whether a fix removes the whole class requires judgment. Generated prompts are covered above. |
+| Assign writers and reviewers by role and available capacity | The coordinator assigns and provisions agents outside the repository. Review provenance is separately checkable. |
+| Commit validated slices and back them up frequently | A repository check cannot observe uncommitted work on another machine or know when a slice becomes ready. |
+| Commit coherent slices promptly | A gate cannot decide whether a partial change is coherent or schedule the writer's commits. |
+| Reason from project philosophy and put important decisions to the owner | Importance and tradeoffs require judgment, and the decision comes from the owner. |
+| Defer features until a real workload needs them | Workload demand and its design implications need project judgment. |
+| Explain the background, tradeoffs and recommendation for each owner option | Understanding and faithfully explaining the options requires judgment. |
+| Keep machine provisioning outside the public repository | Fleet layout and provisioning belong to external operations. Identifying sensitive information in arbitrary prose requires context. |
+| Recheck missed worker exit notifications | Monitoring external jobs and notifications is a coordinator responsibility. |
+| Distinguish mutation kills from toolchain failure and restore pristine binaries | The lesson's harness is frozen. Its checks would matter when an active mutation driver returns. |
+| Negotiate language decisions before implementation | Only the owner can give an explicit disposition. Determining whether an implementation picks a side requires review. |
+| Prefer one transparent form and keep semantic authority in the Lean spec | Deciding if two forms or descriptions express the same rule requires semantic judgment. |
+| Discuss decisions in text without a popup | This is an interaction preference for tools outside the repository. |
+| Let the owner review every change to language design, syntax or grammar | Identifying a semantic change and its approval scope requires owner process and review. |
+| Speak in plain language about concrete changes | Clarity for the owner depends on the conversation and audience. |
+| Read the proof obligation itself and assert the property under test | Interpreting the theorem and choosing the property that distinguishes a regression from a valid improvement require judgment. |
+| Resume only workers stopped by a usage limit | Usage limits and session notifications belong to external agent orchestration. |
+| Keep owner updates short and give each question context | Whether a message gives enough context requires conversational judgment. |
+| Stay silent on no-op watchdog ticks | The watchdog and its chat response policy run outside the repository. |
+| Prioritize specification work on the critical path | Allocation of quota and judgment about blockers are coordinator work. |
+| Place heavy work on the designated CI capacity | Host availability and fleet assignment are external operations. The train can enforce configured gate results. |
+| Delegate mechanical work when orchestration capacity is scarce | Quota and writer availability are external to the repository. |
+| Accept verbosity where it improves clarity or safety | Evaluating clarity and safety requires design judgment. |
 
 ## Concurrent work: one worktree per writer
 
