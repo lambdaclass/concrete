@@ -2266,7 +2266,7 @@ private theorem candidate_iff (raw : SourceText) (violation : Violation raw.leng
       violation.location ∈ check raw (components raw) violation.reason := by
   cases violation with
   | mk reason location =>
-    simp [candidates, List.mem_flatMap, List.mem_map, reason_inOrder]
+    simp [candidates, candidatesWith, check, List.mem_flatMap, List.mem_map, reason_inOrder]
 
 private theorem noViolation_iff (raw : SourceText) : firstViolation raw = none ↔ RawOk raw := by
   refine ⟨rawOk_of_noViolation raw, ?_⟩
@@ -2275,7 +2275,7 @@ private theorem noViolation_iff (raw : SourceText) : firstViolation raw = none �
   | none => rfl
   | some violation =>
     have found := (candidate_iff raw violation).1 (List.minOn?_mem selected)
-    have clear := (check_eq_nil_iff violation.reason raw).2
+    have clear := (check_witness_iff violation.reason raw).2
       (valid violation.reason (reason_inOrder _))
     simp [clear] at found
 
@@ -2318,6 +2318,10 @@ theorem admitted_iff (raw : SourceText) : (∃ path, parse raw = .ok path) ↔ R
 def OtherRules (reason : Reason) (raw : SourceText) : Prop :=
   ∀ rule ∈ Reason.inOrder, rule ≠ reason → Permitted rule raw
 
+instance otherRulesDecidable (reason : Reason) (raw : SourceText) : Decidable (OtherRules reason raw) := by
+  unfold OtherRules
+  infer_instance
+
 /-- Law (subject `ConcreteSpec.Core.SourcePath.parse`).
 Admission implies this individual rule. Conversely this rule and all remaining rules
 suffice for admission. The safety direction places no restriction on overlapping failures. -/
@@ -2332,7 +2336,8 @@ theorem admission_rule_iff (reason : Reason) (raw : SourceText) :
     · exact other rule member equal
 
 /-- Law (subject `ConcreteSpec.Core.SourcePath.parse`).
-The full path has at least one byte.
+The full path has at least one byte. NonemptyComponents already excludes the empty
+input, so deleting this probe is observable through refusal selection.
 -/
 theorem admission_empty_iff (raw : SourceText) :
     (∃ path, parse raw = .ok path) ↔
@@ -2340,7 +2345,8 @@ theorem admission_empty_iff (raw : SourceText) :
   admission_rule_iff .empty raw
 
 /-- Law (subject `ConcreteSpec.Core.SourcePath.parse`).
-The first byte is not a slash.
+The first byte is not a slash. NonemptyComponents already excludes an initial
+slash, so deleting this probe is observable through refusal selection.
 -/
 theorem admission_absolute_iff (raw : SourceText) :
     (∃ path, parse raw = .ok path) ↔
@@ -2348,7 +2354,8 @@ theorem admission_absolute_iff (raw : SourceText) :
   admission_rule_iff .absolute raw
 
 /-- Law (subject `ConcreteSpec.Core.SourcePath.parse`).
-An initial ASCII letter followed by a colon is forbidden.
+An initial ASCII letter followed by a colon is forbidden. FilenameCharacters
+already excludes the colon, so deleting this probe is observable through refusal selection.
 -/
 theorem admission_drive_iff (raw : SourceText) :
     (∃ path, parse raw = .ok path) ↔
@@ -2537,14 +2544,14 @@ theorem parse_refusal_order (raw : SourceText) (refusal : Refusal)
 The whole-path cap passes exactly when there are at most 200 bytes, including slash bytes. -/
 theorem pathCap_iff (raw : SourceText) : PathByteCap raw ↔ raw.length ≤ pathLimit := by
   by_cases over : pathLimit < raw.length
-  · simp [PathByteCap, Permitted, probes, over, Nat.not_le_of_gt over]
-  · simp [PathByteCap, Permitted, probes, over, Nat.le_of_not_gt over]
+  · simp [PathByteCap, Permitted, probes, probesWith, localPolicy, over, Nat.not_le_of_gt over]
+  · simp [PathByteCap, Permitted, probes, probesWith, localPolicy, over, Nat.le_of_not_gt over]
 
 /-- Law (subject `ConcreteSpec.Core.SourcePath.probes`).
 The component cap passes exactly when every component has at most 100 bytes. -/
 theorem componentCap_iff (raw : SourceText) :
     ComponentByteCap raw ↔ ∀ part ∈ components raw, part.bytes.length ≤ componentLimit := by
-  simp only [ComponentByteCap, Permitted, probes, List.forall_mem_map, checkComponent]
+  simp only [ComponentByteCap, Permitted, probes, probesWith, List.forall_mem_map, checkComponentWith, localPolicy]
   constructor
   · intro clear part member
     by_cases over : componentLimit < part.bytes.length
@@ -2572,13 +2579,13 @@ theorem component_cap_offset {length : Nat} (part : Component length) (hit : Loc
     (found : checkComponent .componentCap part = some hit) :
     hit.start = part.start ∧ hit.stop = part.start + part.bytes.length ∧
       hit.offset = part.start + componentLimit ∧ hit.offset < hit.stop := by
-  simp only [checkComponent] at found
-  split at found
-  · rename_i over
-    injection found with equal
+  change (if h : componentLimit < part.bytes.length then
+    some (componentLocation part componentLimit (Nat.le_of_lt h)) else none) = some hit at found
+  by_cases over : componentLimit < part.bytes.length
+  · rw [dite_eq_left over, Option.some.injEq] at found
     subst hit
     exact ⟨rfl, rfl, rfl, Nat.add_lt_add_left over _⟩
-  · contradiction
+  · simp [over] at found
 
 private theorem scan_split {length : Nat} (start : Nat) (rev rest : ConcreteSpec.Numbers)
     (total : start + rev.length + rest.length = length) :
@@ -2599,41 +2606,55 @@ theorem components_exact (raw : SourceText) :
   rw [scan_split]
   exact List.intercalate_splitOn 47
 
-private theorem scan_slices {length : Nat} (start : Nat) (rev rest : ConcreteSpec.Numbers)
+-- A scanned component starts and ends at the input boundaries or at slash delimiters.
+private theorem scan_partition {length : Nat} (start : Nat) (rev rest : ConcreteSpec.Numbers)
     (total : start + rev.length + rest.length = length) (part : Component length)
     (member : part ∈ scan start rev rest total) :
-    start ≤ part.start ∧
-      ((rev.reverse ++ rest).drop (part.start - start)).take part.bytes.length = part.bytes := by
+    ∃ before after : ConcreteSpec.Numbers,
+      rev.reverse ++ rest = before ++ part.bytes ++ after ∧
+      start + before.length = part.start ∧
+      (before = [] ∨ before.getLast? = some 47) ∧ (after = [] ∨ after.head? = some 47) := by
   induction rest generalizing start rev with
   | nil =>
     simp [scan] at member
     subst part
-    simpa using (List.take_length (l := rev.reverse))
+    exact ⟨[], [], by simp, by simp, Or.inl rfl, Or.inl rfl⟩
   | cons byte rest ih =>
     by_cases slash : byte = 47
-    · simp only [scan, slash, ↓reduceIte, List.mem_cons] at member
+    · subst byte
+      simp only [scan, ↓reduceIte, List.mem_cons] at member
       rcases member with rfl | later
-      · simp
-      · obtain ⟨lower, slice⟩ := ih _ [] _ later
-        have index : part.start - start = (rev.reverse ++ [47]).length +
-            (part.start - (start + rev.length + 1)) := by
-          simp
+      · exact ⟨[], 47 :: rest, by simp, by simp, Or.inl rfl, Or.inr rfl⟩
+      · obtain ⟨before, after, partition, position, left, right⟩ := ih _ [] _ later
+        simp only [List.reverse_nil, List.nil_append] at partition
+        refine ⟨rev.reverse ++ [47] ++ before, after, ?_, ?_, Or.inr ?_, right⟩
+        · rw [partition]
+          simp [List.append_assoc]
+        · simp only [List.length_append, List.length_reverse, List.length_cons, List.length_nil]
           omega
-        refine ⟨by omega, ?_⟩
-        have original : rev.reverse ++ byte :: rest = (rev.reverse ++ [47]) ++ rest := by
-          simp [slash, List.append_assoc]
-        rw [index, original, ← List.drop_drop, List.drop_append_length]
-        simpa using slice
+        · rcases left with rfl | delimiter
+          · simp
+          · rw [List.getLast?_append, delimiter]
+            rfl
     · simp only [scan, slash, ↓reduceIte] at member
       simpa [List.reverse_cons, List.append_assoc] using ih _ _ _ member
+
+/-- Helper: the exact component slice is delimited by slashes or by the ends of the input. -/
+theorem component_partition (raw : SourceText) (part : Component raw.length)
+    (member : part ∈ components raw) :
+    ∃ before after : ConcreteSpec.Numbers,
+      raw.bytes = before ++ part.bytes ++ after ∧ before.length = part.start ∧
+      (before = [] ∨ before.getLast? = some 47) ∧ (after = [] ∨ after.head? = some 47) := by
+  simpa using scan_partition 0 [] raw.bytes _ part member
 
 /-- Law (subject `ConcreteSpec.Core.SourcePath.components`).
 Each component is the exact original slice at its reported byte range. -/
 theorem component_slice (raw : SourceText) (part : Component raw.length)
     (member : part ∈ components raw) :
     (raw.bytes.drop part.start).take part.bytes.length = part.bytes := by
-  have exactSlice := (scan_slices 0 [] raw.bytes _ part member).2
-  simpa using exactSlice
+  obtain ⟨before, after, partition, position, _, _⟩ := component_partition raw part member
+  rw [← position, partition, List.append_assoc, List.drop_append_length]
+  simp
 
 /-- Law (subject `ConcreteSpec.Core.SourcePath.checkComponent`).
 The selected cap byte in the original path is byte 100 of the offending component. -/
@@ -2649,6 +2670,214 @@ theorem component_cap_byte (raw : SourceText) (part : Component raw.length)
   rw [offset, ← List.getElem?_drop]
   have atIndex := congrArg (fun bytes : List Nat => bytes[componentLimit]?) slice
   simpa [List.getElem?_take, over] using atIndex
+
+/-- The reason-specific condition at the component-relative byte or boundary. -/
+def ComponentOffense (reason : Reason) (start : Nat) (bytes : ConcreteSpec.Numbers)
+    (index : Nat) : Prop :=
+  match reason with
+  | .drive => start = 0 ∧ index = 1 ∧ bytes[1]? = some 58 ∧
+      ∃ letter, bytes[0]? = some letter ∧ asciiLetter letter = true
+  | .traversal => index = 0 ∧ bytes = [46, 46]
+  | .singleDot => index = 0 ∧ bytes = [46]
+  | .emptyComponent => index = 0 ∧ bytes = []
+  | .nonAscii => ∃ byte, bytes[index]? = some byte ∧ 128 ≤ byte
+  | .backslash => bytes[index]? = some 92
+  | .control => ∃ byte, bytes[index]? = some byte ∧ (byte < 32 ∨ byte = 127)
+  | .space => bytes[index]? = some 32
+  | .leadingDot => index = 0 ∧ bytes[index]? = some 46
+  | .trailingDot => index = bytes.length - 1 ∧ bytes[index]? = some 46
+  | .reserved => index = 0 ∧ reservedStem bytes = true
+  | .componentCap => index = componentLimit ∧ componentLimit < bytes.length
+  | .disallowed => ∃ byte, bytes[index]? = some byte ∧
+      32 < byte ∧ byte < 127 ∧ byte ≠ 92 ∧ filenameByte byte = false
+  | .empty | .absolute | .pathCap => False
+
+private theorem firstByte_witness {length : Nat} (part : Component length) (test : Nat → Bool)
+    (hit : Location length) (found : firstByte part test = some hit) :
+    ∃ index : Fin part.bytes.length, hit = componentLocation part index (Nat.le_of_lt index.isLt) ∧
+      test part.bytes[index] = true := by
+  obtain ⟨index, selected, equal⟩ := Option.map_eq_some_iff.mp found
+  exact ⟨index, equal.symm, (List.findFinIdx?_eq_some_iff.mp selected).1⟩
+
+private theorem startIf_witness {length : Nat} (part : Component length) (test : Bool)
+    (hit : Location length) (found : startIf part test = some hit) :
+    hit = componentLocation part 0 (Nat.zero_le _) ∧ test = true := by
+  cases test <;> simp_all [startIf]
+
+private theorem endpointDot_witness {length : Nat} (part : Component length) (leading : Bool)
+    (hit : Location length) (found : endpointDot part leading (· == 46) = some hit) :
+    ∃ index, ∃ bound : index ≤ part.bytes.length,
+      hit = componentLocation part index bound ∧
+      index = (if leading then 0 else part.bytes.length - 1) ∧ part.bytes[index]? = some 46 := by
+  unfold endpointDot at found
+  split at found
+  · contradiction
+  · let endpoint := if leading then part.bytes.head? else part.bytes.getLast?
+    by_cases selected : endpoint.any (· == 46) = true
+    · obtain ⟨byte, atEnd, isDot⟩ := (Option.any_eq_true _ _).1 selected
+      have dot : byte = 46 := beq_iff_eq.mp isDot
+      subst byte
+      rw [ite_eq_left selected, Option.some.injEq] at found
+      refine ⟨_, _, found.symm, rfl, ?_⟩
+      cases leading <;> simpa [endpoint, List.head?_eq_getElem?, List.getLast?_eq_getElem?] using atEnd
+    · rw [ite_eq_right selected] at found
+      contradiction
+
+private theorem component_offense {length : Nat} (part : Component length) (reason : Reason)
+    (hit : Location length) (found : checkComponent reason part = some hit) :
+    ∃ index, ∃ bound : index ≤ part.bytes.length,
+      hit = componentLocation part index bound ∧ ComponentOffense reason part.start part.bytes index := by
+  cases reason with
+  | empty | absolute | pathCap => contradiction
+  | drive =>
+    simp only [checkComponent, checkComponentWith, localPolicy] at found
+    by_cases size : 1 < part.bytes.length
+    · simp only [dite_eq_left size] at found
+      change (if part.start == 0 && (asciiLetter (part.bytes[0]'(by omega)) && part.bytes[1] == 58)
+        then some (componentLocation part 1 (Nat.le_of_lt size)) else none) = some hit at found
+      by_cases drive : (part.start == 0 && (asciiLetter (part.bytes[0]'(by omega)) &&
+          part.bytes[1] == 58)) = true
+      · rw [ite_eq_left drive] at found
+        simp only [Bool.and_eq_true, beq_iff_eq] at drive
+        rcases drive with ⟨start, letter, colon⟩
+        injection found with equal
+        exact ⟨1, Nat.le_of_lt size, equal.symm, start, rfl,
+          (List.getElem?_eq_some_iff.mpr ⟨size, colon⟩),
+          part.bytes[0]'(by omega), by simp, letter⟩
+      · rw [ite_eq_right drive] at found
+        contradiction
+    · simp [size] at found
+  | traversal | singleDot | emptyComponent | reserved =>
+    simp only [checkComponent, checkComponentWith, localPolicy] at found
+    obtain ⟨equal, test⟩ := startIf_witness part _ hit found
+    exact ⟨0, Nat.zero_le _, equal, rfl, by simpa using test⟩
+  | nonAscii | backslash | control | space | disallowed =>
+    simp only [checkComponent, checkComponentWith, localPolicy] at found
+    obtain ⟨index, equal, test⟩ := firstByte_witness part _ hit found
+    refine ⟨index, Nat.le_of_lt index.isLt, equal, ?_⟩
+    simp [ComponentOffense, and_assoc] at test ⊢
+    exact test
+  | leadingDot | trailingDot =>
+    simp only [checkComponent, checkComponentWith, localPolicy] at found
+    obtain ⟨index, bound, equal, endpoint, dot⟩ := endpointDot_witness part _ hit found
+    exact ⟨index, bound, equal, endpoint, dot⟩
+  | componentCap =>
+    obtain ⟨start, stop, offset, inside⟩ := component_cap_offset part hit found
+    have over : componentLimit < part.bytes.length := by omega
+    refine ⟨componentLimit, Nat.le_of_lt over, ?_, rfl, over⟩
+    cases hit
+    simp_all [componentLocation]
+
+/-- Helper: the empty input and an initial slash each emit an empty first component. -/
+theorem nonemptyComponents_implies_nonempty_relative (raw : SourceText)
+    (valid : NonemptyComponents raw) : Nonempty raw ∧ Relative raw := by
+  have neither : raw.bytes ≠ [] ∧ raw.bytes.head? ≠ some 47 := by
+    obtain ⟨bytes, bounded⟩ := raw
+    cases bytes with
+    | nil =>
+      simp [NonemptyComponents, Permitted, probes, probesWith, components, scan,
+        checkComponentWith, localPolicy, startIf] at valid
+    | cons byte rest =>
+      refine ⟨by simp, ?_⟩
+      intro initialSlash
+      have slash : byte = 47 := by simpa using initialSlash
+      subst byte
+      simp [NonemptyComponents, Permitted, probes, probesWith, components, scan,
+        checkComponentWith, localPolicy, startIf] at valid
+  rcases neither with ⟨nonempty, relative⟩
+  constructor
+  · simp [Nonempty, Permitted, probes, probesWith, localPolicy,
+      List.isEmpty_eq_false_iff.mpr nonempty]
+  · simp [Relative, Permitted, probes, probesWith, localPolicy, relative]
+
+/-- Helper: a drive prefix necessarily has a colon that fails the filename whitelist. -/
+theorem filenameCharacters_implies_noDrivePrefix (raw : SourceText)
+    (valid : FilenameCharacters raw) : NoDrivePrefix raw := by
+  change ∀ probe ∈ (components raw).map (checkComponent .drive), probe = none
+  intro probe member
+  obtain ⟨part, partMember, rfl⟩ := List.mem_map.mp member
+  cases found : checkComponent .drive part with
+  | none => rfl
+  | some hit =>
+    obtain ⟨_, _, _, offense⟩ := component_offense part .drive hit found
+    obtain ⟨_, _, colon, _⟩ := offense
+    have clear := valid (checkComponent .disallowed part) (List.mem_map_of_mem partMember)
+    change (part.bytes.findFinIdx? localPolicy.disallowed).map _ = none at clear
+    have allowed := List.findFinIdx?_eq_none_iff.mp (Option.map_eq_none_iff.mp clear)
+    have passes := allowed 58 (List.mem_of_getElem? colon)
+    simp [localPolicy, filenameByte, asciiLetter] at passes
+
+private theorem checkComponent_member (raw : SourceText) (reason : Reason)
+    (hit : Location raw.length)
+    (found : hit ∈ ((components raw).map (checkComponent reason)).filterMap id) :
+    ∃ part ∈ components raw, checkComponent reason part = some hit := by
+  obtain ⟨probe, member, selected⟩ := List.mem_filterMap.mp found
+  obtain ⟨part, partMember, equal⟩ := List.mem_map.mp member
+  exact ⟨part, partMember, equal ▸ selected⟩
+
+/-- Meaning of the exact byte range and offset reported by the parser. Whole-path checks
+name the entire input. Component checks name an original slash-delimited component and
+identify the offending byte or boundary within it. -/
+def Refusal.LocationOk (refusal : Refusal) : Prop :=
+  let raw := refusal.raw
+  let hit := refusal.violation.location
+  match refusal.violation.reason with
+  | .empty => hit.start = 0 ∧ hit.stop = 0 ∧ hit.offset = 0 ∧ raw.bytes = [] ∧ refusal.contextBytes = []
+  | .absolute => hit.start = 0 ∧ hit.stop = raw.length ∧ hit.offset = 0 ∧
+      raw.bytes[0]? = some 47 ∧ refusal.contextBytes = raw.bytes
+  | .pathCap => hit.start = 0 ∧ hit.stop = raw.length ∧ hit.offset = pathLimit ∧
+      pathLimit < raw.length ∧ refusal.contextBytes = raw.bytes
+  | reason =>
+    ∃ part ∈ components raw, ∃ index,
+      hit.start = part.start ∧ hit.stop = part.start + part.bytes.length ∧
+      hit.offset = part.start + index ∧ refusal.contextBytes = part.bytes ∧
+      ComponentOffense reason part.start part.bytes index ∧
+      (∀ i, i < part.bytes.length → raw.bytes[part.start + i]? = part.bytes[i]?) ∧
+      (∃ before after : ConcreteSpec.Numbers,
+        raw.bytes = before ++ part.bytes ++ after ∧ before.length = part.start ∧
+        (before = [] ∨ before.getLast? = some 47) ∧ (after = [] ∨ after.head? = some 47))
+
+/-- Law (subject `ConcreteSpec.Core.SourcePath.parse`).
+Every refusal points to the actual offending byte or boundary and preserves the exact original context. -/
+theorem parse_refusal_location (raw : SourceText) (refusal : Refusal)
+    (failed : parse raw = .error refusal) : refusal.LocationOk := by
+  have found := (parse_refusal_sound raw refusal failed).2
+  obtain ⟨raw, ⟨reason, hit⟩⟩ := refusal
+  cases reason with
+  | empty =>
+    simp only [check, checkWith, probesWith, localPolicy] at found
+    by_cases empty : raw.bytes = []
+    · have same : hit = wholeLocation raw 0 (Nat.zero_le _) := by simpa [empty] using found
+      subst hit
+      simp [Refusal.LocationOk, Refusal.contextBytes, wholeLocation, SourceText.length, empty]
+    · simp [List.isEmpty_eq_false_iff.mpr empty] at found
+  | absolute =>
+    simp only [check, checkWith, probesWith, localPolicy] at found
+    by_cases slash : raw.bytes.head? = some 47
+    · have same : hit = wholeLocation raw 0 (Nat.zero_le _) := by simpa [slash] using found
+      subst hit
+      simp [Refusal.LocationOk, Refusal.contextBytes, wholeLocation, SourceText.length,
+        ← List.head?_eq_getElem?, slash]
+    · simp [slash] at found
+  | pathCap =>
+    simp only [check, checkWith, probesWith, localPolicy] at found
+    by_cases over : pathLimit < raw.length
+    · have same : hit = wholeLocation raw pathLimit (Nat.le_of_lt over) := by simpa [over] using found
+      subst hit
+      simpa [Refusal.LocationOk, Refusal.contextBytes, wholeLocation, SourceText.length] using over
+    · simp [over] at found
+  | drive | traversal | singleDot | emptyComponent | nonAscii | backslash | control | space |
+    leadingDot | trailingDot | reserved | componentCap | disallowed =>
+    obtain ⟨part, member, selected⟩ := checkComponent_member raw _ hit found
+    obtain ⟨index, bound, equal, offense⟩ := component_offense part _ hit selected
+    clear failed found selected
+    rw [equal]
+    have slice := component_slice raw part member
+    refine ⟨part, member, index, rfl, rfl, rfl, ?_, offense, ?_, component_partition raw part member⟩
+    · simpa [Refusal.contextBytes, componentLocation] using slice
+    · intro i inside
+      have atIndex := congrArg (fun bytes : List Nat => bytes[i]?) slice
+      simpa [List.getElem?_take, List.getElem?_drop, inside] using atIndex
 
 private theorem intercalate_ascii (parts : List ConcreteSpec.Numbers)
     (ascii : ∀ part ∈ parts, ∀ byte ∈ part, byte < 128) :
@@ -2733,7 +2962,7 @@ end SourcePath
 /-- Helper: a source span carries the checked path invariant. -/
 theorem Span.pathOk (span : Span) : span.PathOk := span.path.valid
 
-/-- Law (subject `ConcreteSpec.Core.Span.LocationOk`).
+/-- Representation lemma (subject `ConcreteSpec.Core.Span.LocationOk`).
 A valid span starts within the source and stores the exact line and byte column at that start. -/
 theorem Span.locationOk_iff (span : Span) (source : SourceText) :
     span.LocationOk source ↔
@@ -2741,50 +2970,39 @@ theorem Span.locationOk_iff (span : Span) (source : SourceText) :
       span.line = source.lineAt span.startOffset ∧ span.col = source.columnAt span.startOffset := by
   simp [Span.LocationOk, span.range_ok]
 
-/-- Instance: the span after a tab matches the original source's byte coordinates. -/
-theorem tabSpan_location : tabSpan.LocationOk tabSource := by decide
+/-- Instance (law `ConcreteSpec.Core.Span.locationOk_iff`, case `ConcreteSpec.Core.tabSpan`).
+the span after a tab matches the original source's byte coordinates. -/
+theorem tabSpan_location : tabSpan.LocationOk tabSource :=
+  (Span.locationOk_iff _ _).2 (by decide)
 
-/-- Instance: the unchanged span fails for the source with a different line structure. -/
-theorem tabSpan_otherSource : ¬tabSpan.LocationOk Vacuity.otherTabSource := by decide
+/-- Instance (law `ConcreteSpec.Core.Span.locationOk_iff`, case `ConcreteSpec.Core.Vacuity.otherTabSource`).
+the unchanged span fails for the source with a different line structure. -/
+theorem tabSpan_otherSource : ¬tabSpan.LocationOk Vacuity.otherTabSource := by
+  rw [Span.locationOk_iff]
+  decide
 
-/-- Instance: an incorrect column or an out-of-bounds end invalidates the span. -/
+/-- Instance (law `ConcreteSpec.Core.Span.locationOk_iff`, case `ConcreteSpec.Core.tabSpan`).
+an incorrect column or an out-of-bounds end invalidates the span. -/
 theorem tabSpan_badCoordinates :
     ¬({ tabSpan with col := 2, col_pos := by decide }).LocationOk tabSource ∧
-    ¬({ tabSpan with endOffset := 4, range_ok := by decide }).LocationOk tabSource := by decide
+    ¬({ tabSpan with endOffset := 4, range_ok := by decide }).LocationOk tabSource := by
+  simp only [Span.locationOk_iff]
+  decide
 
 namespace SourcePath
-
-/-- Law (subject `ConcreteSpec.Core.SourcePath.check`).
-A rule has no diagnostic witnesses exactly when all its applicable probes pass. -/
-theorem check_witness_iff (reason : Reason) (raw : SourceText) :
-    check raw (components raw) reason = [] ↔ Permitted reason raw :=
-  check_eq_nil_iff reason raw
 
 namespace LocalControls
 
 open Registry
 
-/-- Add an invalid witness to one check, leaving every other production check intact. -/
-def addRefusal (changed : Reason) (raw : SourceText) (parts : List (Component raw.length))
-    (reason : Reason) : List (Location raw.length) :=
-  if reason = changed then
-    ⟨0, raw.length, 0, Nat.zero_le _, Nat.zero_le _, Nat.le_refl _⟩ :: check raw parts reason
-  else check raw parts reason
-
-/-- Drop every violation for one check, leaving every other production check intact. -/
-def eraseRefusal (changed : Reason) (raw : SourceText) (parts : List (Component raw.length))
-    (reason : Reason) : List (Location raw.length) :=
-  if reason = changed then [] else check raw parts reason
-
-private theorem refuteAdded {reason : Reason} {raw : SourceText} (valid : Permitted reason raw) :
-    ¬ (addRefusal reason raw (components raw) reason = [] ↔ Permitted reason raw) := by
-  intro equivalence
-  simpa [addRefusal] using equivalence.mpr valid
-
-private theorem refuteErased {reason : Reason} {raw : SourceText} (invalid : ¬Permitted reason raw) :
-    ¬ (eraseRefusal reason raw (components raw) reason = [] ↔ Permitted reason raw) := by
-  intro equivalence
-  exact invalid (equivalence.mp (by simp [eraseRefusal]))
+/-- The selected reason, half-open range, byte offset and exact context. -/
+def reportedLocation (result : Except Refusal SourcePath) :
+    Option (Reason × Nat × Nat × Nat × ConcreteSpec.Numbers) :=
+  match result with
+  | .ok _ => none
+  | .error refusal =>
+    let location := refusal.violation.location
+    some (refusal.violation.reason, location.start, location.stop, location.offset, refusal.contextBytes)
 
 /-- Read the selected reason and byte offset from a production parse. -/
 def reported (result : Except Refusal SourcePath) : Option (Reason × Nat) :=
@@ -2800,22 +3018,9 @@ theorem emptyAdmitted : ∃ path, parse mixedCaseInput = .ok path :=
 theorem emptyRejected : ¬∃ path, parse emptyRefusedInput = .ok path :=
   fun admitted => emptyRefused ((admission_empty_iff _).1 admitted).1
 
-/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_sound`, case `ConcreteSpec.Core.SourcePath.Registry.emptyRefusedInput`). -/
-theorem emptyReported : reported (parse emptyRefusedInput) = some (.empty, 0) := by decide
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.mixedCaseInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.addRefusal`). -/
-theorem emptyRejectsAllowed :
-    ¬ (addRefusal .empty mixedCaseInput (components mixedCaseInput) .empty = [] ↔ Nonempty mixedCaseInput) :=
-  refuteAdded emptyAccepted
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.emptyRefusedInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.eraseRefusal`). -/
-theorem emptyAllowsRefused :
-    ¬ (eraseRefusal .empty emptyRefusedInput (components emptyRefusedInput) .empty = [] ↔ Nonempty emptyRefusedInput) :=
-  refuteErased emptyRefused
+/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_location`, case `ConcreteSpec.Core.SourcePath.Registry.emptyRefusedInput`). -/
+theorem emptyReported :
+    reportedLocation (parse emptyRefusedInput) = some (.empty, 0, 0, 0, []) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.SourcePath.admission_absolute_iff`, case `ConcreteSpec.Core.SourcePath.Registry.mixedCaseInput`). -/
 theorem absoluteAdmitted : ∃ path, parse mixedCaseInput = .ok path :=
@@ -2825,22 +3030,9 @@ theorem absoluteAdmitted : ∃ path, parse mixedCaseInput = .ok path :=
 theorem absoluteRejected : ¬∃ path, parse absoluteRefusedInput = .ok path :=
   fun admitted => absoluteRefused ((admission_absolute_iff _).1 admitted).1
 
-/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_sound`, case `ConcreteSpec.Core.SourcePath.Registry.absoluteRefusedInput`). -/
-theorem absoluteReported : reported (parse absoluteRefusedInput) = some (.absolute, 0) := by decide
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.mixedCaseInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.addRefusal`). -/
-theorem absoluteRejectsAllowed :
-    ¬ (addRefusal .absolute mixedCaseInput (components mixedCaseInput) .absolute = [] ↔ Relative mixedCaseInput) :=
-  refuteAdded absoluteAccepted
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.absoluteRefusedInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.eraseRefusal`). -/
-theorem absoluteAllowsRefused :
-    ¬ (eraseRefusal .absolute absoluteRefusedInput (components absoluteRefusedInput) .absolute = [] ↔ Relative absoluteRefusedInput) :=
-  refuteErased absoluteRefused
+/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_location`, case `ConcreteSpec.Core.SourcePath.Registry.absoluteRefusedInput`). -/
+theorem absoluteReported :
+    reportedLocation (parse absoluteRefusedInput) = some (.absolute, 0, 2, 0, [47, 65]) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.SourcePath.admission_drive_iff`, case `ConcreteSpec.Core.SourcePath.Registry.mixedCaseInput`). -/
 theorem driveAdmitted : ∃ path, parse mixedCaseInput = .ok path :=
@@ -2850,22 +3042,9 @@ theorem driveAdmitted : ∃ path, parse mixedCaseInput = .ok path :=
 theorem driveRejected : ¬∃ path, parse driveRefusedInput = .ok path :=
   fun admitted => driveRefused ((admission_drive_iff _).1 admitted).1
 
-/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_sound`, case `ConcreteSpec.Core.SourcePath.Registry.driveRefusedInput`). -/
-theorem driveReported : reported (parse driveRefusedInput) = some (.drive, 1) := by decide
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.mixedCaseInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.addRefusal`). -/
-theorem driveRejectsAllowed :
-    ¬ (addRefusal .drive mixedCaseInput (components mixedCaseInput) .drive = [] ↔ NoDrivePrefix mixedCaseInput) :=
-  refuteAdded driveAccepted
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.driveRefusedInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.eraseRefusal`). -/
-theorem driveAllowsRefused :
-    ¬ (eraseRefusal .drive driveRefusedInput (components driveRefusedInput) .drive = [] ↔ NoDrivePrefix driveRefusedInput) :=
-  refuteErased driveRefused
+/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_location`, case `ConcreteSpec.Core.SourcePath.Registry.driveRefusedInput`). -/
+theorem driveReported :
+    reportedLocation (parse driveRefusedInput) = some (.drive, 0, 2, 1, [67, 58]) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.SourcePath.admission_traversal_iff`, case `ConcreteSpec.Core.SourcePath.Registry.mixedCaseInput`). -/
 theorem traversalAdmitted : ∃ path, parse mixedCaseInput = .ok path :=
@@ -2875,22 +3054,9 @@ theorem traversalAdmitted : ∃ path, parse mixedCaseInput = .ok path :=
 theorem traversalRejected : ¬∃ path, parse traversalRefusedInput = .ok path :=
   fun admitted => traversalRefused ((admission_traversal_iff _).1 admitted).1
 
-/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_sound`, case `ConcreteSpec.Core.SourcePath.Registry.traversalRefusedInput`). -/
-theorem traversalReported : reported (parse traversalRefusedInput) = some (.traversal, 2) := by decide
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.mixedCaseInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.addRefusal`). -/
-theorem traversalRejectsAllowed :
-    ¬ (addRefusal .traversal mixedCaseInput (components mixedCaseInput) .traversal = [] ↔ NoTraversal mixedCaseInput) :=
-  refuteAdded traversalAccepted
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.traversalRefusedInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.eraseRefusal`). -/
-theorem traversalAllowsRefused :
-    ¬ (eraseRefusal .traversal traversalRefusedInput (components traversalRefusedInput) .traversal = [] ↔ NoTraversal traversalRefusedInput) :=
-  refuteErased traversalRefused
+/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_location`, case `ConcreteSpec.Core.SourcePath.Registry.traversalRefusedInput`). -/
+theorem traversalReported :
+    reportedLocation (parse traversalRefusedInput) = some (.traversal, 2, 4, 2, [46, 46]) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.SourcePath.admission_singleDot_iff`, case `ConcreteSpec.Core.SourcePath.Registry.mixedCaseInput`). -/
 theorem singleDotAdmitted : ∃ path, parse mixedCaseInput = .ok path :=
@@ -2900,22 +3066,9 @@ theorem singleDotAdmitted : ∃ path, parse mixedCaseInput = .ok path :=
 theorem singleDotRejected : ¬∃ path, parse singleDotRefusedInput = .ok path :=
   fun admitted => singleDotRefused ((admission_singleDot_iff _).1 admitted).1
 
-/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_sound`, case `ConcreteSpec.Core.SourcePath.Registry.singleDotRefusedInput`). -/
-theorem singleDotReported : reported (parse singleDotRefusedInput) = some (.singleDot, 2) := by decide
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.mixedCaseInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.addRefusal`). -/
-theorem singleDotRejectsAllowed :
-    ¬ (addRefusal .singleDot mixedCaseInput (components mixedCaseInput) .singleDot = [] ↔ NoSingleDot mixedCaseInput) :=
-  refuteAdded singleDotAccepted
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.singleDotRefusedInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.eraseRefusal`). -/
-theorem singleDotAllowsRefused :
-    ¬ (eraseRefusal .singleDot singleDotRefusedInput (components singleDotRefusedInput) .singleDot = [] ↔ NoSingleDot singleDotRefusedInput) :=
-  refuteErased singleDotRefused
+/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_location`, case `ConcreteSpec.Core.SourcePath.Registry.singleDotRefusedInput`). -/
+theorem singleDotReported :
+    reportedLocation (parse singleDotRefusedInput) = some (.singleDot, 2, 3, 2, [46]) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.SourcePath.admission_emptyComponent_iff`, case `ConcreteSpec.Core.SourcePath.Registry.mixedCaseInput`). -/
 theorem emptyComponentAdmitted : ∃ path, parse mixedCaseInput = .ok path :=
@@ -2925,22 +3078,9 @@ theorem emptyComponentAdmitted : ∃ path, parse mixedCaseInput = .ok path :=
 theorem emptyComponentRejected : ¬∃ path, parse emptyComponentRefusedInput = .ok path :=
   fun admitted => emptyComponentRefused ((admission_emptyComponent_iff _).1 admitted).1
 
-/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_sound`, case `ConcreteSpec.Core.SourcePath.Registry.emptyComponentRefusedInput`). -/
-theorem emptyComponentReported : reported (parse emptyComponentRefusedInput) = some (.emptyComponent, 2) := by decide
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.mixedCaseInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.addRefusal`). -/
-theorem emptyComponentRejectsAllowed :
-    ¬ (addRefusal .emptyComponent mixedCaseInput (components mixedCaseInput) .emptyComponent = [] ↔ NonemptyComponents mixedCaseInput) :=
-  refuteAdded emptyComponentAccepted
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.emptyComponentRefusedInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.eraseRefusal`). -/
-theorem emptyComponentAllowsRefused :
-    ¬ (eraseRefusal .emptyComponent emptyComponentRefusedInput (components emptyComponentRefusedInput) .emptyComponent = [] ↔ NonemptyComponents emptyComponentRefusedInput) :=
-  refuteErased emptyComponentRefused
+/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_location`, case `ConcreteSpec.Core.SourcePath.Registry.emptyComponentRefusedInput`). -/
+theorem emptyComponentReported :
+    reportedLocation (parse emptyComponentRefusedInput) = some (.emptyComponent, 2, 2, 2, []) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.SourcePath.admission_nonAscii_iff`, case `ConcreteSpec.Core.SourcePath.Registry.mixedCaseInput`). -/
 theorem nonAsciiAdmitted : ∃ path, parse mixedCaseInput = .ok path :=
@@ -2950,22 +3090,9 @@ theorem nonAsciiAdmitted : ∃ path, parse mixedCaseInput = .ok path :=
 theorem nonAsciiRejected : ¬∃ path, parse nonAsciiRefusedInput = .ok path :=
   fun admitted => nonAsciiRefused ((admission_nonAscii_iff _).1 admitted).1
 
-/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_sound`, case `ConcreteSpec.Core.SourcePath.Registry.nonAsciiRefusedInput`). -/
-theorem nonAsciiReported : reported (parse nonAsciiRefusedInput) = some (.nonAscii, 1) := by decide
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.mixedCaseInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.addRefusal`). -/
-theorem nonAsciiRejectsAllowed :
-    ¬ (addRefusal .nonAscii mixedCaseInput (components mixedCaseInput) .nonAscii = [] ↔ Ascii mixedCaseInput) :=
-  refuteAdded nonAsciiAccepted
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.nonAsciiRefusedInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.eraseRefusal`). -/
-theorem nonAsciiAllowsRefused :
-    ¬ (eraseRefusal .nonAscii nonAsciiRefusedInput (components nonAsciiRefusedInput) .nonAscii = [] ↔ Ascii nonAsciiRefusedInput) :=
-  refuteErased nonAsciiRefused
+/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_location`, case `ConcreteSpec.Core.SourcePath.Registry.nonAsciiRefusedInput`). -/
+theorem nonAsciiReported :
+    reportedLocation (parse nonAsciiRefusedInput) = some (.nonAscii, 0, 2, 1, [65, 128]) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.SourcePath.admission_backslash_iff`, case `ConcreteSpec.Core.SourcePath.Registry.mixedCaseInput`). -/
 theorem backslashAdmitted : ∃ path, parse mixedCaseInput = .ok path :=
@@ -2975,22 +3102,9 @@ theorem backslashAdmitted : ∃ path, parse mixedCaseInput = .ok path :=
 theorem backslashRejected : ¬∃ path, parse backslashRefusedInput = .ok path :=
   fun admitted => backslashRefused ((admission_backslash_iff _).1 admitted).1
 
-/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_sound`, case `ConcreteSpec.Core.SourcePath.Registry.backslashRefusedInput`). -/
-theorem backslashReported : reported (parse backslashRefusedInput) = some (.backslash, 1) := by decide
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.mixedCaseInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.addRefusal`). -/
-theorem backslashRejectsAllowed :
-    ¬ (addRefusal .backslash mixedCaseInput (components mixedCaseInput) .backslash = [] ↔ SlashSeparator mixedCaseInput) :=
-  refuteAdded backslashAccepted
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.backslashRefusedInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.eraseRefusal`). -/
-theorem backslashAllowsRefused :
-    ¬ (eraseRefusal .backslash backslashRefusedInput (components backslashRefusedInput) .backslash = [] ↔ SlashSeparator backslashRefusedInput) :=
-  refuteErased backslashRefused
+/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_location`, case `ConcreteSpec.Core.SourcePath.Registry.backslashRefusedInput`). -/
+theorem backslashReported :
+    reportedLocation (parse backslashRefusedInput) = some (.backslash, 0, 3, 1, [65, 92, 66]) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.SourcePath.admission_control_iff`, case `ConcreteSpec.Core.SourcePath.Registry.mixedCaseInput`). -/
 theorem controlAdmitted : ∃ path, parse mixedCaseInput = .ok path :=
@@ -3000,22 +3114,9 @@ theorem controlAdmitted : ∃ path, parse mixedCaseInput = .ok path :=
 theorem controlRejected : ¬∃ path, parse controlRefusedInput = .ok path :=
   fun admitted => controlRefused ((admission_control_iff _).1 admitted).1
 
-/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_sound`, case `ConcreteSpec.Core.SourcePath.Registry.controlRefusedInput`). -/
-theorem controlReported : reported (parse controlRefusedInput) = some (.control, 1) := by decide
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.mixedCaseInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.addRefusal`). -/
-theorem controlRejectsAllowed :
-    ¬ (addRefusal .control mixedCaseInput (components mixedCaseInput) .control = [] ↔ NoControls mixedCaseInput) :=
-  refuteAdded controlAccepted
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.controlRefusedInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.eraseRefusal`). -/
-theorem controlAllowsRefused :
-    ¬ (eraseRefusal .control controlRefusedInput (components controlRefusedInput) .control = [] ↔ NoControls controlRefusedInput) :=
-  refuteErased controlRefused
+/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_location`, case `ConcreteSpec.Core.SourcePath.Registry.controlRefusedInput`). -/
+theorem controlReported :
+    reportedLocation (parse controlRefusedInput) = some (.control, 0, 2, 1, [65, 127]) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.SourcePath.admission_space_iff`, case `ConcreteSpec.Core.SourcePath.Registry.mixedCaseInput`). -/
 theorem spaceAdmitted : ∃ path, parse mixedCaseInput = .ok path :=
@@ -3025,22 +3126,9 @@ theorem spaceAdmitted : ∃ path, parse mixedCaseInput = .ok path :=
 theorem spaceRejected : ¬∃ path, parse spaceRefusedInput = .ok path :=
   fun admitted => spaceRefused ((admission_space_iff _).1 admitted).1
 
-/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_sound`, case `ConcreteSpec.Core.SourcePath.Registry.spaceRefusedInput`). -/
-theorem spaceReported : reported (parse spaceRefusedInput) = some (.space, 1) := by decide
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.mixedCaseInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.addRefusal`). -/
-theorem spaceRejectsAllowed :
-    ¬ (addRefusal .space mixedCaseInput (components mixedCaseInput) .space = [] ↔ NoSpaces mixedCaseInput) :=
-  refuteAdded spaceAccepted
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.spaceRefusedInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.eraseRefusal`). -/
-theorem spaceAllowsRefused :
-    ¬ (eraseRefusal .space spaceRefusedInput (components spaceRefusedInput) .space = [] ↔ NoSpaces spaceRefusedInput) :=
-  refuteErased spaceRefused
+/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_location`, case `ConcreteSpec.Core.SourcePath.Registry.spaceRefusedInput`). -/
+theorem spaceReported :
+    reportedLocation (parse spaceRefusedInput) = some (.space, 0, 2, 1, [65, 32]) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.SourcePath.admission_leadingDot_iff`, case `ConcreteSpec.Core.SourcePath.Registry.mixedCaseInput`). -/
 theorem leadingDotAdmitted : ∃ path, parse mixedCaseInput = .ok path :=
@@ -3050,22 +3138,9 @@ theorem leadingDotAdmitted : ∃ path, parse mixedCaseInput = .ok path :=
 theorem leadingDotRejected : ¬∃ path, parse leadingDotRefusedInput = .ok path :=
   fun admitted => leadingDotRefused ((admission_leadingDot_iff _).1 admitted).1
 
-/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_sound`, case `ConcreteSpec.Core.SourcePath.Registry.leadingDotRefusedInput`). -/
-theorem leadingDotReported : reported (parse leadingDotRefusedInput) = some (.leadingDot, 0) := by decide
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.mixedCaseInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.addRefusal`). -/
-theorem leadingDotRejectsAllowed :
-    ¬ (addRefusal .leadingDot mixedCaseInput (components mixedCaseInput) .leadingDot = [] ↔ NoLeadingDot mixedCaseInput) :=
-  refuteAdded leadingDotAccepted
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.leadingDotRefusedInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.eraseRefusal`). -/
-theorem leadingDotAllowsRefused :
-    ¬ (eraseRefusal .leadingDot leadingDotRefusedInput (components leadingDotRefusedInput) .leadingDot = [] ↔ NoLeadingDot leadingDotRefusedInput) :=
-  refuteErased leadingDotRefused
+/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_location`, case `ConcreteSpec.Core.SourcePath.Registry.leadingDotRefusedInput`). -/
+theorem leadingDotReported :
+    reportedLocation (parse leadingDotRefusedInput) = some (.leadingDot, 0, 2, 0, [46, 65]) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.SourcePath.admission_trailingDot_iff`, case `ConcreteSpec.Core.SourcePath.Registry.mixedCaseInput`). -/
 theorem trailingDotAdmitted : ∃ path, parse mixedCaseInput = .ok path :=
@@ -3075,22 +3150,9 @@ theorem trailingDotAdmitted : ∃ path, parse mixedCaseInput = .ok path :=
 theorem trailingDotRejected : ¬∃ path, parse trailingDotRefusedInput = .ok path :=
   fun admitted => trailingDotRefused ((admission_trailingDot_iff _).1 admitted).1
 
-/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_sound`, case `ConcreteSpec.Core.SourcePath.Registry.trailingDotRefusedInput`). -/
-theorem trailingDotReported : reported (parse trailingDotRefusedInput) = some (.trailingDot, 1) := by decide
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.mixedCaseInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.addRefusal`). -/
-theorem trailingDotRejectsAllowed :
-    ¬ (addRefusal .trailingDot mixedCaseInput (components mixedCaseInput) .trailingDot = [] ↔ NoTrailingDot mixedCaseInput) :=
-  refuteAdded trailingDotAccepted
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.trailingDotRefusedInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.eraseRefusal`). -/
-theorem trailingDotAllowsRefused :
-    ¬ (eraseRefusal .trailingDot trailingDotRefusedInput (components trailingDotRefusedInput) .trailingDot = [] ↔ NoTrailingDot trailingDotRefusedInput) :=
-  refuteErased trailingDotRefused
+/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_location`, case `ConcreteSpec.Core.SourcePath.Registry.trailingDotRefusedInput`). -/
+theorem trailingDotReported :
+    reportedLocation (parse trailingDotRefusedInput) = some (.trailingDot, 0, 2, 1, [65, 46]) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.SourcePath.admission_reserved_iff`, case `ConcreteSpec.Core.SourcePath.Registry.reservedAcceptedInput`). -/
 theorem reservedAdmitted : ∃ path, parse reservedAcceptedInput = .ok path :=
@@ -3100,22 +3162,9 @@ theorem reservedAdmitted : ∃ path, parse reservedAcceptedInput = .ok path :=
 theorem reservedRejected : ¬∃ path, parse reservedRefusedInput = .ok path :=
   fun admitted => reservedRefused ((admission_reserved_iff _).1 admitted).1
 
-/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_sound`, case `ConcreteSpec.Core.SourcePath.Registry.reservedRefusedInput`). -/
-theorem reservedReported : reported (parse reservedRefusedInput) = some (.reserved, 0) := by decide
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.reservedAcceptedInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.addRefusal`). -/
-theorem reservedRejectsAllowed :
-    ¬ (addRefusal .reserved reservedAcceptedInput (components reservedAcceptedInput) .reserved = [] ↔ NoReservedStem reservedAcceptedInput) :=
-  refuteAdded reservedAccepted
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.reservedRefusedInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.eraseRefusal`). -/
-theorem reservedAllowsRefused :
-    ¬ (eraseRefusal .reserved reservedRefusedInput (components reservedRefusedInput) .reserved = [] ↔ NoReservedStem reservedRefusedInput) :=
-  refuteErased reservedRefused
+/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_location`, case `ConcreteSpec.Core.SourcePath.Registry.reservedRefusedInput`). -/
+theorem reservedReported :
+    reportedLocation (parse reservedRefusedInput) = some (.reserved, 0, 5, 0, [99, 79, 78, 46, 67]) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.SourcePath.admission_componentCap_iff`, case `ConcreteSpec.Core.SourcePath.Registry.componentCapAcceptedInput`). -/
 theorem componentCapAdmitted : ∃ path, parse componentCapAcceptedInput = .ok path :=
@@ -3125,22 +3174,9 @@ theorem componentCapAdmitted : ∃ path, parse componentCapAcceptedInput = .ok p
 theorem componentCapRejected : ¬∃ path, parse componentCapRefusedInput = .ok path :=
   fun admitted => componentCapRefused ((admission_componentCap_iff _).1 admitted).1
 
-/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_sound`, case `ConcreteSpec.Core.SourcePath.Registry.componentCapRefusedInput`). -/
-theorem componentCapReported : reported (parse componentCapRefusedInput) = some (.componentCap, 100) := of_decide_eq_true (by cbv)
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.componentCapAcceptedInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.addRefusal`). -/
-theorem componentCapRejectsAllowed :
-    ¬ (addRefusal .componentCap componentCapAcceptedInput (components componentCapAcceptedInput) .componentCap = [] ↔ ComponentByteCap componentCapAcceptedInput) :=
-  refuteAdded componentCapAccepted
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.componentCapRefusedInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.eraseRefusal`). -/
-theorem componentCapAllowsRefused :
-    ¬ (eraseRefusal .componentCap componentCapRefusedInput (components componentCapRefusedInput) .componentCap = [] ↔ ComponentByteCap componentCapRefusedInput) :=
-  refuteErased componentCapRefused
+/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_location`, case `ConcreteSpec.Core.SourcePath.Registry.componentCapRefusedInput`). -/
+theorem componentCapReported :
+    reportedLocation (parse componentCapRefusedInput) = some (.componentCap, 0, 101, 100, List.replicate 101 65) := of_decide_eq_true (by cbv)
 
 /-- Instance (law `ConcreteSpec.Core.SourcePath.admission_pathCap_iff`, case `ConcreteSpec.Core.SourcePath.Registry.pathCapAcceptedInput`). -/
 theorem pathCapAdmitted : ∃ path, parse pathCapAcceptedInput = .ok path :=
@@ -3217,30 +3253,43 @@ private theorem pathCapRefusedInput_components :
         scan_repeat_slash 99 [67] 66 100 (by decide), scan]
       rfl
 
-/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_sound`, case `ConcreteSpec.Core.SourcePath.Registry.pathCapRefusedInput`). -/
-theorem pathCapReported : reported (parse pathCapRefusedInput) = some (.pathCap, 200) := by
+private theorem pathCapAcceptedInput_length : pathCapAcceptedInput.length = 200 := by
+  simp only [pathCapAcceptedInput, SourceText.length, List.length_append, List.length_replicate,
+    List.length_cons, List.length_nil]
+
+private theorem pathCapAcceptedInput_components :
+    components pathCapAcceptedInput =
+      [⟨0, List.replicate 99 65, by simp [pathCapAcceptedInput_length]⟩,
+       ⟨100, List.replicate 100 66, by simp [pathCapAcceptedInput_length]⟩] := by
+  unfold components
+  calc
+    _ = scan 0 [] (List.replicate 99 65 ++ 47 :: List.replicate 100 66)
+          (by simp only [pathCapAcceptedInput_length, List.length_append, List.length_cons,
+                List.length_replicate, List.length_nil]) := by
+      apply scan_rest_congr
+      simp only [pathCapAcceptedInput, List.append_assoc, List.cons_append, List.nil_append]
+    _ = _ := by
+      simp only [scan_repeat_slash 0 _ 65 99 (by decide)]
+      have last := scan_repeat_end (length := pathCapAcceptedInput.length) 100 66 100 (by decide)
+        (by simp [pathCapAcceptedInput_length])
+      simpa only [List.append_nil] using congrArg (List.cons ⟨0, List.replicate 99 65,
+        by simp [pathCapAcceptedInput_length]⟩) last
+
+/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_location`, case `ConcreteSpec.Core.SourcePath.Registry.pathCapRefusedInput`). -/
+theorem pathCapReported :
+    reportedLocation (parse pathCapRefusedInput) =
+      some (.pathCap, 0, 201, 200, List.replicate 98 65 ++ [47] ++ List.replicate 100 66 ++ [47, 67]) := by
   let witness : Violation pathCapRefusedInput.length :=
     ⟨.pathCap, ⟨0, 201, 200, by decide, by decide, by simp [pathCapRefusedInput_length]⟩⟩
   have hit : firstViolation pathCapRefusedInput = some witness := by
-    unfold firstViolation candidates
+    unfold firstViolation selectViolation candidatesWith
     rw [pathCapRefusedInput_components]
     cbv
   rw [parse_of_hit _ _ hit]
-  rfl
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.pathCapAcceptedInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.addRefusal`). -/
-theorem pathCapRejectsAllowed :
-    ¬ (addRefusal .pathCap pathCapAcceptedInput (components pathCapAcceptedInput) .pathCap = [] ↔ PathByteCap pathCapAcceptedInput) :=
-  refuteAdded pathCapAccepted
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.pathCapRefusedInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.eraseRefusal`). -/
-theorem pathCapAllowsRefused :
-    ¬ (eraseRefusal .pathCap pathCapRefusedInput (components pathCapRefusedInput) .pathCap = [] ↔ PathByteCap pathCapRefusedInput) :=
-  refuteErased pathCapRefused
+  change some (Reason.pathCap, 0, 201, 200, pathCapRefusedInput.bytes.take 201) =
+    some (Reason.pathCap, 0, 201, 200, pathCapRefusedInput.bytes)
+  rw [← pathCapRefusedInput_length]
+  simp [SourceText.length]
 
 /-- Instance (law `ConcreteSpec.Core.SourcePath.admission_disallowed_iff`, case `ConcreteSpec.Core.SourcePath.Registry.mixedCaseInput`). -/
 theorem disallowedAdmitted : ∃ path, parse mixedCaseInput = .ok path :=
@@ -3250,22 +3299,9 @@ theorem disallowedAdmitted : ∃ path, parse mixedCaseInput = .ok path :=
 theorem disallowedRejected : ¬∃ path, parse disallowedRefusedInput = .ok path :=
   fun admitted => disallowedRefused ((admission_disallowed_iff _).1 admitted).1
 
-/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_sound`, case `ConcreteSpec.Core.SourcePath.Registry.disallowedRefusedInput`). -/
-theorem disallowedReported : reported (parse disallowedRefusedInput) = some (.disallowed, 3) := by decide
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.mixedCaseInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.addRefusal`). -/
-theorem disallowedRejectsAllowed :
-    ¬ (addRefusal .disallowed mixedCaseInput (components mixedCaseInput) .disallowed = [] ↔ FilenameCharacters mixedCaseInput) :=
-  refuteAdded disallowedAccepted
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.check_witness_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.disallowedRefusedInput`,
-subject `ConcreteSpec.Core.SourcePath.check`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.eraseRefusal`). -/
-theorem disallowedAllowsRefused :
-    ¬ (eraseRefusal .disallowed disallowedRefusedInput (components disallowedRefusedInput) .disallowed = [] ↔ FilenameCharacters disallowedRefusedInput) :=
-  refuteErased disallowedRefused
+/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_location`, case `ConcreteSpec.Core.SourcePath.Registry.disallowedRefusedInput`). -/
+theorem disallowedReported :
+    reportedLocation (parse disallowedRefusedInput) = some (.disallowed, 2, 5, 3, [66, 58, 67]) := by decide
 
 /-- Case: a noninitial 101-byte component starts at byte 4. -/
 def noninitialCap : SourceText := SourceText.ofBytes ([100, 105, 114, 47] ++ List.replicate 101 65)
@@ -3277,8 +3313,12 @@ def competingCaps : SourceText :=
     simp only [List.mem_append, List.mem_replicate, List.mem_cons, List.not_mem_nil, or_false] at member
     omega⟩
 
-/-- Instance: component-cap coordinates are absolute byte offsets. -/
-theorem noninitialCapReported : reported (parse noninitialCap) = some (.componentCap, 104) := of_decide_eq_true (by cbv)
+/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_location`,
+case `ConcreteSpec.Core.SourcePath.LocalControls.noninitialCap`).
+Component-cap coordinates are absolute byte offsets. -/
+theorem noninitialCapReported :
+    reportedLocation (parse noninitialCap) = some (.componentCap, 4, 105, 104, List.replicate 101 65) :=
+  of_decide_eq_true (by cbv)
 
 private theorem competingCaps_length : competingCaps.length = 223 := by
   simp only [competingCaps, SourceText.length, List.length_append, List.length_replicate,
@@ -3306,7 +3346,7 @@ theorem competingCapsReported : reported (parse competingCaps) = some (.pathCap,
   let witness : Violation competingCaps.length :=
     ⟨.pathCap, ⟨0, 223, 200, by decide, by decide, by simp [competingCaps_length]⟩⟩
   have hit : firstViolation competingCaps = some witness := by
-    unfold firstViolation candidates
+    unfold firstViolation selectViolation candidatesWith
     rw [competingCaps_components]
     cbv
   rw [parse_of_hit _ _ hit]
@@ -3343,7 +3383,7 @@ theorem foldedRenderingChangesIdentity :
 
 /-- Mutant: select a reason by priority before looking at byte offset. -/
 def priorityFirst (raw : SourceText) : Option (Violation raw.length) :=
-  (candidates raw).minOn? fun v => Reason.inOrder.idxOf v.reason
+  selectViolation localPolicy raw fun v => Reason.inOrder.idxOf v.reason
 
 /-- Case: the early backslash should precede the later non-ASCII byte. -/
 def earlyBackslash : SourceText := SourceText.ofBytes [65, 92, 66, 128]
@@ -3359,21 +3399,6 @@ theorem priorityFirstMissesEarlyByte :
       ∃ other ∈ candidates earlyBackslash, other.location.offset < chosen.location.offset := by
   refine ⟨⟨.nonAscii, ⟨0, 4, 3, by decide, by decide, by decide⟩⟩, rfl, ?_⟩
   exact ⟨⟨.backslash, ⟨0, 4, 1, by decide, by decide, by decide⟩⟩, by decide, by decide⟩
-
-/-- Mutant: select the later rule on a tie at the same byte. -/
-def lastOnTie (raw : SourceText) : Option (Violation raw.length) :=
-  (candidates raw).reverse.minOn? (·.location.offset)
-
-/-- Planted (law `ConcreteSpec.Core.SourcePath.firstViolation_order`,
-case `ConcreteSpec.Core.SourcePath.Registry.driveRefusedInput`,
-subject `ConcreteSpec.Core.SourcePath.firstViolation`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.lastOnTie`). -/
-theorem lastOnTieLosesDriveReason :
-    ∃ chosen, lastOnTie driveRefusedInput = some chosen ∧
-      ∃ other ∈ candidates driveRefusedInput,
-        other.location.offset = chosen.location.offset ∧
-          Reason.inOrder.idxOf other.reason < Reason.inOrder.idxOf chosen.reason := by
-  let colon : Location driveRefusedInput.length := ⟨0, 2, 1, by decide, by decide, by decide⟩
-  exact ⟨⟨.disallowed, colon⟩, rfl, ⟨⟨.drive, colon⟩, by decide, rfl, by decide⟩⟩
 
 /-- Observe the exact admitted bytes without projecting the representation's proof. -/
 def admittedBytes (result : Except Refusal SourcePath) : Option SourceText :=
@@ -3391,92 +3416,551 @@ theorem admittedBytes_iff (raw : SourceText) : admittedBytes (parse raw) = some 
   | error refusal =>
     simp [admittedBytes, (parse_refusal_iff raw).1 ⟨refusal, parsed⟩]
 
-/-- Mutant: add a witness for one rule to the diagnostic selection of the actual parser.
-Compare the resulting admission observation, which carries no fabricated proof. -/
-def addRefusalToParser (changed : Reason) (raw : SourceText) : Option SourceText :=
-  let artificial : Violation raw.length :=
-    ⟨changed, ⟨0, raw.length, 0, Nat.zero_le _, Nat.zero_le _, Nat.le_refl _⟩⟩
-  match (artificial :: candidates raw).minOn? Violation.key with
-  | some _ => none
-  | none => some raw
+/-- A mutation uses the parser's decision before the successful branch packages its proof.
+The production specialization is equivalent to observing an actual successful parse. -/
+def admitsWith (policy : ProbePolicy) (raw : SourceText) : Prop :=
+  selectViolation policy raw Violation.key = none
 
-/-- Mutant: report a selected failure of one rule as admission through the actual parser's
-refusal branch. Other reasons and successful parses retain their exact observations. -/
-def acceptParserRefusal (changed : Reason) (raw : SourceText) : Option SourceText :=
-  match parse raw with
-  | .error refusal => if refusal.violation.reason = changed then some raw else none
-  | .ok path => some path.renderBytes
+/-- Representation lemma for substituting a probe policy in an admission counterexample. -/
+theorem admitsWith_local_iff (raw : SourceText) :
+    admitsWith localPolicy raw ↔ ∃ path, parse raw = .ok path :=
+  (noViolation_iff raw).trans (admitted_iff raw).symm
 
-/-- Closed refused input for each rule, selecting that rule even where failures overlap. -/
-def refusedInput : Reason → SourceText
-  | .empty => emptyRefusedInput
-  | .absolute => absoluteRefusedInput
-  | .drive => driveRefusedInput
-  | .traversal => traversalRefusedInput
-  | .singleDot => singleDotRefusedInput
-  | .emptyComponent => emptyComponentRefusedInput
-  | .nonAscii => nonAsciiRefusedInput
-  | .backslash => backslashRefusedInput
-  | .control => controlRefusedInput
-  | .space => spaceRefusedInput
-  | .leadingDot => leadingDotRefusedInput
-  | .trailingDot => trailingDotRefusedInput
-  | .reserved => reservedRefusedInput
-  | .componentCap => componentCapRefusedInput
-  | .pathCap => pathCapRefusedInput
-  | .disallowed => disallowedRefusedInput
+private theorem rejectsValid {policy : ProbePolicy} {raw : SourceText} {reason : Reason}
+    (valid : RawOk raw) (rejected : ¬ admitsWith policy raw) :
+    ¬ (admitsWith policy raw ↔ Permitted reason raw ∧ OtherRules reason raw) :=
+  fun law => rejected (law.mpr ⟨valid reason (reason_inOrder reason), fun r member _ => valid r member⟩)
 
-/-- Planted (law `ConcreteSpec.Core.SourcePath.LocalControls.admittedBytes_iff`,
-case `ConcreteSpec.Core.SourcePath.Registry.mixedCaseInput`,
-subject `ConcreteSpec.Core.SourcePath.parse`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.addRefusalToParser`).
-Adding a refusal for any of the 16 rules rejects an allowed path. -/
-theorem mutantRejectsAllowed (changed : Reason) :
-    ¬ (addRefusalToParser changed mixedCaseInput = some mixedCaseInput ↔ RawOk mixedCaseInput) := by
-  intro equivalence
-  have rejected := equivalence.mpr (by decide)
-  simp [addRefusalToParser, List.minOn?_cons_eq_some_minOn] at rejected
+private theorem admitsInvalid {policy : ProbePolicy} {raw : SourceText} {reason : Reason}
+    (_other : OtherRules reason raw) (invalid : ¬ Permitted reason raw)
+    (admitted : admitsWith policy raw) :
+    ¬ (admitsWith policy raw ↔ Permitted reason raw ∧ OtherRules reason raw) :=
+  fun law => invalid (law.mp admitted).1
 
-/-- Planted (law `ConcreteSpec.Core.SourcePath.LocalControls.admittedBytes_iff`,
-case `ConcreteSpec.Core.SourcePath.LocalControls.refusedInput`,
-subject `ConcreteSpec.Core.SourcePath.parse`, mutant `ConcreteSpec.Core.SourcePath.LocalControls.acceptParserRefusal`).
-Reversing the parser's decision for any selected rule admits its corresponding refused bytes. -/
-theorem mutantAdmitsRefused (changed : Reason) :
-    ¬ (acceptParserRefusal changed (refusedInput changed) = some (refusedInput changed) ↔
-      RawOk (refusedInput changed)) := by
-  have selectsChanged :
-      (reported (parse (refusedInput changed))).map Prod.fst = some changed := by
-    cases changed <;> simp [refusedInput, emptyReported, absoluteReported, driveReported,
-      traversalReported, singleDotReported, emptyComponentReported, nonAsciiReported, backslashReported,
-      controlReported, spaceReported, leadingDotReported, trailingDotReported, reservedReported,
-      componentCapReported, pathCapReported, disallowedReported]
-  have violatesChanged : ¬Permitted changed (refusedInput changed) := by
-    cases changed
-    · exact emptyRefused
-    · exact absoluteRefused
-    · exact driveRefused
-    · exact traversalRefused
-    · exact singleDotRefused
-    · exact emptyComponentRefused
-    · exact nonAsciiRefused
-    · exact backslashRefused
-    · exact controlRefused
-    · exact spaceRefused
-    · exact leadingDotRefused
-    · exact trailingDotRefused
-    · exact reservedRefused
-    · exact componentCapRefused
-    · exact pathCapRefused
-    · exact disallowedRefused
-  intro equivalence
-  have corruptAdmission : acceptParserRefusal changed (refusedInput changed) =
-      some (refusedInput changed) := by
-    unfold acceptParserRefusal
-    cases parsed : parse (refusedInput changed) with
-    | ok path => simp [parsed, reported] at selectsChanged
-    | error refusal =>
-      simp [parsed, reported] at selectsChanged
-      simp [selectsChanged]
-  exact violatesChanged (equivalence.mp corruptAdmission changed (reason_inOrder changed))
+/-- Case: valid input at a tightened probe boundary. -/
+def oneByteInput : SourceText := SourceText.ofBytes [65]
+
+/-- Mutant: refuse a one-byte path as empty. -/
+def tightEmpty : ProbePolicy :=
+  { localPolicy with empty := fun bytes => bytes.length ≤ 1 }
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.admission_empty_iff`,
+case `ConcreteSpec.Core.SourcePath.LocalControls.oneByteInput`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.tightEmpty`). -/
+theorem emptyRejectsAllowed :
+    ¬ (admitsWith tightEmpty oneByteInput ↔
+      Nonempty oneByteInput ∧ OtherRules .empty oneByteInput) := by
+  exact rejectsValid (of_decide_eq_true (by cbv)) (by unfold admitsWith; exact of_decide_eq_true (by cbv))
+
+/-- Mutant: delete the empty-path probe. -/
+def withoutEmpty : ProbePolicy :=
+  { localPolicy with empty := fun _ => false }
+
+/-- Mutant: treat an initial A as a root marker. -/
+def tightAbsolute : ProbePolicy :=
+  { localPolicy with absolute := fun bytes => localPolicy.absolute bytes || bytes.head? == some 65 }
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.admission_absolute_iff`,
+case `ConcreteSpec.Core.SourcePath.LocalControls.oneByteInput`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.tightAbsolute`). -/
+theorem absoluteRejectsAllowed :
+    ¬ (admitsWith tightAbsolute oneByteInput ↔
+      Relative oneByteInput ∧ OtherRules .absolute oneByteInput) := by
+  exact rejectsValid (of_decide_eq_true (by cbv)) (by unfold admitsWith; exact of_decide_eq_true (by cbv))
+
+/-- Mutant: delete the absolute-path probe. -/
+def withoutAbsolute : ProbePolicy :=
+  { localPolicy with absolute := fun _ => false }
+
+/-- Case: valid input at a tightened probe boundary. -/
+def digitAfterInitialLetter : SourceText := SourceText.ofBytes [67, 49]
+
+/-- Mutant: treat a 1 after an initial ASCII letter as a drive separator. -/
+def tightDrive : ProbePolicy :=
+  { localPolicy with drive := fun letter next => asciiLetter letter && (next == 58 || next == 49) }
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.admission_drive_iff`,
+case `ConcreteSpec.Core.SourcePath.LocalControls.digitAfterInitialLetter`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.tightDrive`). -/
+theorem driveRejectsAllowed :
+    ¬ (admitsWith tightDrive digitAfterInitialLetter ↔
+      NoDrivePrefix digitAfterInitialLetter ∧ OtherRules .drive digitAfterInitialLetter) := by
+  exact rejectsValid (of_decide_eq_true (by cbv)) (by unfold admitsWith; exact of_decide_eq_true (by cbv))
+
+/-- Mutant: delete the drive probe. -/
+def withoutDrive : ProbePolicy :=
+  { localPolicy with drive := fun _ _ => false }
+
+/-- Case: valid input at a tightened probe boundary. -/
+def ordinaryTwoByteComponent : SourceText := SourceText.ofBytes [65, 47, 65, 65]
+
+/-- Mutant: treat all two-byte components as traversal. -/
+def tightTraversal : ProbePolicy :=
+  { localPolicy with traversal := fun bytes => bytes.length == 2 }
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.admission_traversal_iff`,
+case `ConcreteSpec.Core.SourcePath.LocalControls.ordinaryTwoByteComponent`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.tightTraversal`). -/
+theorem traversalRejectsAllowed :
+    ¬ (admitsWith tightTraversal ordinaryTwoByteComponent ↔
+      NoTraversal ordinaryTwoByteComponent ∧ OtherRules .traversal ordinaryTwoByteComponent) := by
+  exact rejectsValid (of_decide_eq_true (by cbv)) (by unfold admitsWith; exact of_decide_eq_true (by cbv))
+
+/-- Mutant: look for three dots instead of two. -/
+def looseTraversal : ProbePolicy :=
+  { localPolicy with traversal := (· == [46, 46, 46]) }
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.admission_traversal_iff`,
+case `ConcreteSpec.Core.SourcePath.Registry.traversalRefusedInput`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.looseTraversal`). -/
+theorem traversalAllowsRefused :
+    ¬ (admitsWith looseTraversal traversalRefusedInput ↔
+      NoTraversal traversalRefusedInput ∧ OtherRules .traversal traversalRefusedInput) := by
+  exact admitsInvalid (of_decide_eq_true (by cbv)) traversalRefused (by unfold admitsWith; exact of_decide_eq_true (by cbv))
+
+/-- Case: valid input at a tightened probe boundary. -/
+def ordinaryOneByteComponent : SourceText := SourceText.ofBytes [65, 47, 66]
+
+/-- Mutant: treat every one-byte component as a single-dot component. -/
+def tightSingleDot : ProbePolicy :=
+  { localPolicy with singleDot := fun bytes => bytes.length == 1 }
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.admission_singleDot_iff`,
+case `ConcreteSpec.Core.SourcePath.LocalControls.ordinaryOneByteComponent`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.tightSingleDot`). -/
+theorem singleDotRejectsAllowed :
+    ¬ (admitsWith tightSingleDot ordinaryOneByteComponent ↔
+      NoSingleDot ordinaryOneByteComponent ∧ OtherRules .singleDot ordinaryOneByteComponent) := by
+  exact rejectsValid (of_decide_eq_true (by cbv)) (by unfold admitsWith; exact of_decide_eq_true (by cbv))
+
+/-- Mutant: look for two dots instead of one. -/
+def looseSingleDot : ProbePolicy :=
+  { localPolicy with singleDot := (· == [46, 46]) }
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.admission_singleDot_iff`,
+case `ConcreteSpec.Core.SourcePath.Registry.singleDotRefusedInput`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.looseSingleDot`). -/
+theorem singleDotAllowsRefused :
+    ¬ (admitsWith looseSingleDot singleDotRefusedInput ↔
+      NoSingleDot singleDotRefusedInput ∧ OtherRules .singleDot singleDotRefusedInput) := by
+  exact admitsInvalid (of_decide_eq_true (by cbv)) singleDotRefused (by unfold admitsWith; exact of_decide_eq_true (by cbv))
+
+/-- Mutant: treat one-byte components as empty. -/
+def tightEmptyComponent : ProbePolicy :=
+  { localPolicy with emptyComponent := fun bytes => bytes.length ≤ 1 }
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.admission_emptyComponent_iff`,
+case `ConcreteSpec.Core.SourcePath.LocalControls.ordinaryOneByteComponent`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.tightEmptyComponent`). -/
+theorem emptyComponentRejectsAllowed :
+    ¬ (admitsWith tightEmptyComponent ordinaryOneByteComponent ↔
+      NonemptyComponents ordinaryOneByteComponent ∧ OtherRules .emptyComponent ordinaryOneByteComponent) := by
+  exact rejectsValid (of_decide_eq_true (by cbv)) (by unfold admitsWith; exact of_decide_eq_true (by cbv))
+
+/-- Mutant: allow empty components. -/
+def looseEmptyComponent : ProbePolicy :=
+  { localPolicy with emptyComponent := fun _ => false }
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.admission_emptyComponent_iff`,
+case `ConcreteSpec.Core.SourcePath.Registry.emptyComponentRefusedInput`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.looseEmptyComponent`). -/
+theorem emptyComponentAllowsRefused :
+    ¬ (admitsWith looseEmptyComponent emptyComponentRefusedInput ↔
+      NonemptyComponents emptyComponentRefusedInput ∧ OtherRules .emptyComponent emptyComponentRefusedInput) := by
+  exact admitsInvalid (of_decide_eq_true (by cbv)) emptyComponentRefused (by unfold admitsWith; exact of_decide_eq_true (by cbv))
+
+/-- Case: valid input at a tightened probe boundary. -/
+def highestFilenameLetter : SourceText := SourceText.ofBytes [65, 122]
+
+/-- Mutant: move the non-ASCII cutoff to 122. -/
+def tightNonAscii : ProbePolicy :=
+  { localPolicy with nonAscii := (122 ≤ ·) }
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.admission_nonAscii_iff`,
+case `ConcreteSpec.Core.SourcePath.LocalControls.highestFilenameLetter`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.tightNonAscii`). -/
+theorem nonAsciiRejectsAllowed :
+    ¬ (admitsWith tightNonAscii highestFilenameLetter ↔
+      Ascii highestFilenameLetter ∧ OtherRules .nonAscii highestFilenameLetter) := by
+  exact rejectsValid (of_decide_eq_true (by cbv)) (by unfold admitsWith; exact of_decide_eq_true (by cbv))
+
+/-- Mutant: allow the first non-ASCII byte. -/
+def looseNonAscii : ProbePolicy :=
+  { localPolicy with nonAscii := (129 ≤ ·) }
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.admission_nonAscii_iff`,
+case `ConcreteSpec.Core.SourcePath.Registry.nonAsciiRefusedInput`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.looseNonAscii`). -/
+theorem nonAsciiAllowsRefused :
+    ¬ (admitsWith looseNonAscii nonAsciiRefusedInput ↔
+      Ascii nonAsciiRefusedInput ∧ OtherRules .nonAscii nonAsciiRefusedInput) := by
+  exact admitsInvalid (of_decide_eq_true (by cbv)) nonAsciiRefused (by unfold admitsWith; exact of_decide_eq_true (by cbv))
+
+/-- Case: valid input at a tightened probe boundary. -/
+def underscoreInput : SourceText := SourceText.ofBytes [65, 95, 66]
+
+/-- Mutant: treat underscore as another backslash. -/
+def tightBackslash : ProbePolicy :=
+  { localPolicy with backslash := fun byte => byte == 92 || byte == 95 }
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.admission_backslash_iff`,
+case `ConcreteSpec.Core.SourcePath.LocalControls.underscoreInput`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.tightBackslash`). -/
+theorem backslashRejectsAllowed :
+    ¬ (admitsWith tightBackslash underscoreInput ↔
+      SlashSeparator underscoreInput ∧ OtherRules .backslash underscoreInput) := by
+  exact rejectsValid (of_decide_eq_true (by cbv)) (by unfold admitsWith; exact of_decide_eq_true (by cbv))
+
+/-- Mutant: check for a closing bracket in place of backslash. -/
+def looseBackslash : ProbePolicy :=
+  { localPolicy with backslash := (· == 93) }
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.admission_backslash_iff`,
+case `ConcreteSpec.Core.SourcePath.Registry.backslashRefusedInput`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.looseBackslash`). -/
+theorem backslashAllowsRefused :
+    ¬ (admitsWith looseBackslash backslashRefusedInput ↔
+      SlashSeparator backslashRefusedInput ∧ OtherRules .backslash backslashRefusedInput) := by
+  exact admitsInvalid (of_decide_eq_true (by cbv)) backslashRefused (by unfold admitsWith; exact of_decide_eq_true (by cbv))
+
+/-- Case: valid input at a tightened probe boundary. -/
+def hyphenInput : SourceText := SourceText.ofBytes [65, 45]
+
+/-- Mutant: classify hyphen as a control byte. -/
+def tightControl : ProbePolicy :=
+  { localPolicy with control := fun byte => localPolicy.control byte || byte == 45 }
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.admission_control_iff`,
+case `ConcreteSpec.Core.SourcePath.LocalControls.hyphenInput`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.tightControl`). -/
+theorem controlRejectsAllowed :
+    ¬ (admitsWith tightControl hyphenInput ↔
+      NoControls hyphenInput ∧ OtherRules .control hyphenInput) := by
+  exact rejectsValid (of_decide_eq_true (by cbv)) (by unfold admitsWith; exact of_decide_eq_true (by cbv))
+
+/-- Mutant: omit DEL from the control bytes. -/
+def looseControl : ProbePolicy :=
+  { localPolicy with control := (· < 32) }
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.admission_control_iff`,
+case `ConcreteSpec.Core.SourcePath.Registry.controlRefusedInput`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.looseControl`). -/
+theorem controlAllowsRefused :
+    ¬ (admitsWith looseControl controlRefusedInput ↔
+      NoControls controlRefusedInput ∧ OtherRules .control controlRefusedInput) := by
+  exact admitsInvalid (of_decide_eq_true (by cbv)) controlRefused (by unfold admitsWith; exact of_decide_eq_true (by cbv))
+
+/-- Mutant: classify hyphen as a space. -/
+def tightSpace : ProbePolicy :=
+  { localPolicy with space := fun byte => byte == 32 || byte == 45 }
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.admission_space_iff`,
+case `ConcreteSpec.Core.SourcePath.LocalControls.hyphenInput`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.tightSpace`). -/
+theorem spaceRejectsAllowed :
+    ¬ (admitsWith tightSpace hyphenInput ↔
+      NoSpaces hyphenInput ∧ OtherRules .space hyphenInput) := by
+  exact rejectsValid (of_decide_eq_true (by cbv)) (by unfold admitsWith; exact of_decide_eq_true (by cbv))
+
+/-- Mutant: look for byte 160 instead of ASCII space. -/
+def looseSpace : ProbePolicy :=
+  { localPolicy with space := (· == 160) }
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.admission_space_iff`,
+case `ConcreteSpec.Core.SourcePath.Registry.spaceRefusedInput`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.looseSpace`). -/
+theorem spaceAllowsRefused :
+    ¬ (admitsWith looseSpace spaceRefusedInput ↔
+      NoSpaces spaceRefusedInput ∧ OtherRules .space spaceRefusedInput) := by
+  exact admitsInvalid (of_decide_eq_true (by cbv)) spaceRefused (by unfold admitsWith; exact of_decide_eq_true (by cbv))
+
+/-- Case: valid input at a tightened probe boundary. -/
+def leadingUnderscore : SourceText := SourceText.ofBytes [95, 65]
+
+/-- Mutant: reject an initial underscore as a dot. -/
+def tightLeadingDot : ProbePolicy :=
+  { localPolicy with leadingDot := fun byte => byte == 46 || byte == 95 }
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.admission_leadingDot_iff`,
+case `ConcreteSpec.Core.SourcePath.LocalControls.leadingUnderscore`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.tightLeadingDot`). -/
+theorem leadingDotRejectsAllowed :
+    ¬ (admitsWith tightLeadingDot leadingUnderscore ↔
+      NoLeadingDot leadingUnderscore ∧ OtherRules .leadingDot leadingUnderscore) := by
+  exact rejectsValid (of_decide_eq_true (by cbv)) (by unfold admitsWith; exact of_decide_eq_true (by cbv))
+
+/-- Mutant: look for an initial underscore in place of a dot. -/
+def looseLeadingDot : ProbePolicy :=
+  { localPolicy with leadingDot := (· == 95) }
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.admission_leadingDot_iff`,
+case `ConcreteSpec.Core.SourcePath.Registry.leadingDotRefusedInput`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.looseLeadingDot`). -/
+theorem leadingDotAllowsRefused :
+    ¬ (admitsWith looseLeadingDot leadingDotRefusedInput ↔
+      NoLeadingDot leadingDotRefusedInput ∧ OtherRules .leadingDot leadingDotRefusedInput) := by
+  exact admitsInvalid (of_decide_eq_true (by cbv)) leadingDotRefused (by unfold admitsWith; exact of_decide_eq_true (by cbv))
+
+/-- Case: valid input at a tightened probe boundary. -/
+def trailingUnderscore : SourceText := SourceText.ofBytes [65, 95]
+
+/-- Mutant: reject a final underscore as a dot. -/
+def tightTrailingDot : ProbePolicy :=
+  { localPolicy with trailingDot := fun byte => byte == 46 || byte == 95 }
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.admission_trailingDot_iff`,
+case `ConcreteSpec.Core.SourcePath.LocalControls.trailingUnderscore`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.tightTrailingDot`). -/
+theorem trailingDotRejectsAllowed :
+    ¬ (admitsWith tightTrailingDot trailingUnderscore ↔
+      NoTrailingDot trailingUnderscore ∧ OtherRules .trailingDot trailingUnderscore) := by
+  exact rejectsValid (of_decide_eq_true (by cbv)) (by unfold admitsWith; exact of_decide_eq_true (by cbv))
+
+/-- Mutant: look for a final underscore in place of a dot. -/
+def looseTrailingDot : ProbePolicy :=
+  { localPolicy with trailingDot := (· == 95) }
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.admission_trailingDot_iff`,
+case `ConcreteSpec.Core.SourcePath.Registry.trailingDotRefusedInput`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.looseTrailingDot`). -/
+theorem trailingDotAllowsRefused :
+    ¬ (admitsWith looseTrailingDot trailingDotRefusedInput ↔
+      NoTrailingDot trailingDotRefusedInput ∧ OtherRules .trailingDot trailingDotRefusedInput) := by
+  exact admitsInvalid (of_decide_eq_true (by cbv)) trailingDotRefused (by unfold admitsWith; exact of_decide_eq_true (by cbv))
+
+/-- Mutant: add COM0 and LPT0 to the reserved stems. -/
+def tightReserved : ProbePolicy :=
+  { localPolicy with reserved := reservedStemWith foldAscii 48 }
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.admission_reserved_iff`,
+case `ConcreteSpec.Core.SourcePath.Registry.reservedAcceptedInput`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.tightReserved`). -/
+theorem reservedRejectsAllowed :
+    ¬ (admitsWith tightReserved reservedAcceptedInput ↔
+      NoReservedStem reservedAcceptedInput ∧ OtherRules .reserved reservedAcceptedInput) := by
+  exact rejectsValid (of_decide_eq_true (by cbv)) (by unfold admitsWith; exact of_decide_eq_true (by cbv))
+
+/-- Mutant: match reserved stems without ASCII case folding. -/
+def looseReserved : ProbePolicy :=
+  { localPolicy with reserved := reservedStemWith id 49 }
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.admission_reserved_iff`,
+case `ConcreteSpec.Core.SourcePath.Registry.reservedRefusedInput`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.looseReserved`). -/
+theorem reservedAllowsRefused :
+    ¬ (admitsWith looseReserved reservedRefusedInput ↔
+      NoReservedStem reservedRefusedInput ∧ OtherRules .reserved reservedRefusedInput) := by
+  exact admitsInvalid (of_decide_eq_true (by cbv)) reservedRefused (by unfold admitsWith; exact of_decide_eq_true (by cbv))
+
+/-- Mutant: cap components at 99 bytes. -/
+def tightComponentCap : ProbePolicy :=
+  { localPolicy with componentCap := 99 }
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.admission_componentCap_iff`,
+case `ConcreteSpec.Core.SourcePath.Registry.componentCapAcceptedInput`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.tightComponentCap`). -/
+theorem componentCapRejectsAllowed :
+    ¬ (admitsWith tightComponentCap componentCapAcceptedInput ↔
+      ComponentByteCap componentCapAcceptedInput ∧ OtherRules .componentCap componentCapAcceptedInput) := by
+  exact rejectsValid (of_decide_eq_true (by cbv)) (by unfold admitsWith; exact of_decide_eq_true (by cbv))
+
+/-- Mutant: cap components at 101 bytes. -/
+def looseComponentCap : ProbePolicy :=
+  { localPolicy with componentCap := 101 }
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.admission_componentCap_iff`,
+case `ConcreteSpec.Core.SourcePath.Registry.componentCapRefusedInput`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.looseComponentCap`). -/
+theorem componentCapAllowsRefused :
+    ¬ (admitsWith looseComponentCap componentCapRefusedInput ↔
+      ComponentByteCap componentCapRefusedInput ∧ OtherRules .componentCap componentCapRefusedInput) := by
+  exact admitsInvalid (of_decide_eq_true (by cbv)) componentCapRefused (by unfold admitsWith; exact of_decide_eq_true (by cbv))
+
+/-- Mutant: cap paths at 199 bytes. -/
+def tightPathCap : ProbePolicy :=
+  { localPolicy with pathCap := 199 }
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.admission_pathCap_iff`,
+case `ConcreteSpec.Core.SourcePath.Registry.pathCapAcceptedInput`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.tightPathCap`). -/
+theorem pathCapRejectsAllowed :
+    ¬ (admitsWith tightPathCap pathCapAcceptedInput ↔
+      PathByteCap pathCapAcceptedInput ∧ OtherRules .pathCap pathCapAcceptedInput) := by
+  apply rejectsValid (of_decide_eq_true (by cbv))
+  intro admitted
+  let witness : Violation pathCapAcceptedInput.length :=
+    ⟨.pathCap, ⟨0, 200, 199, by decide, by decide, by simp [pathCapAcceptedInput_length]⟩⟩
+  have hit : selectViolation tightPathCap pathCapAcceptedInput Violation.key = some witness := by
+    unfold selectViolation candidatesWith
+    rw [pathCapAcceptedInput_components]
+    cbv
+  change selectViolation tightPathCap pathCapAcceptedInput Violation.key = none at admitted
+  rw [admitted] at hit
+  contradiction
+
+/-- Mutant: cap paths at 201 bytes. -/
+def loosePathCap : ProbePolicy :=
+  { localPolicy with pathCap := 201 }
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.admission_pathCap_iff`,
+case `ConcreteSpec.Core.SourcePath.Registry.pathCapRefusedInput`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.loosePathCap`). -/
+theorem pathCapAllowsRefused :
+    ¬ (admitsWith loosePathCap pathCapRefusedInput ↔
+      PathByteCap pathCapRefusedInput ∧ OtherRules .pathCap pathCapRefusedInput) := by
+  apply admitsInvalid (of_decide_eq_true (by cbv)) pathCapRefused
+  unfold admitsWith selectViolation candidatesWith
+  rw [pathCapRefusedInput_components]
+  cbv
+
+/-- Mutant: remove hyphen from the filename whitelist. -/
+def tightDisallowed : ProbePolicy :=
+  { localPolicy with disallowed := fun byte => localPolicy.disallowed byte || byte == 45 }
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.admission_disallowed_iff`,
+case `ConcreteSpec.Core.SourcePath.LocalControls.hyphenInput`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.tightDisallowed`). -/
+theorem disallowedRejectsAllowed :
+    ¬ (admitsWith tightDisallowed hyphenInput ↔
+      FilenameCharacters hyphenInput ∧ OtherRules .disallowed hyphenInput) := by
+  exact rejectsValid (of_decide_eq_true (by cbv)) (by unfold admitsWith; exact of_decide_eq_true (by cbv))
+
+/-- Mutant: allow colons through the filename whitelist. -/
+def looseDisallowed : ProbePolicy :=
+  { localPolicy with disallowed := fun byte => localPolicy.disallowed byte && byte != 58 }
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.admission_disallowed_iff`,
+case `ConcreteSpec.Core.SourcePath.Registry.disallowedRefusedInput`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.looseDisallowed`). -/
+theorem disallowedAllowsRefused :
+    ¬ (admitsWith looseDisallowed disallowedRefusedInput ↔
+      FilenameCharacters disallowedRefusedInput ∧ OtherRules .disallowed disallowedRefusedInput) := by
+  exact admitsInvalid (of_decide_eq_true (by cbv)) disallowedRefused (by unfold admitsWith; exact of_decide_eq_true (by cbv))
+
+
+/-- The parser's refusal-order obligation under a replacement diagnostic search. -/
+def KeepsRefusalOrder (policy : ProbePolicy) (raw : SourceText) (key : Violation raw.length → Nat) : Prop :=
+  ∀ chosen, selectViolation policy raw key = some chosen →
+    ∀ other ∈ candidates raw,
+      chosen.location.offset < other.location.offset ∨
+      (chosen.location.offset = other.location.offset ∧
+        Reason.inOrder.idxOf chosen.reason ≤ Reason.inOrder.idxOf other.reason)
+
+/-- Representation lemma for substituting the search used by the parser's refusal branch. -/
+theorem keepsProductionRefusalOrder (raw : SourceText) :
+    KeepsRefusalOrder localPolicy raw Violation.key :=
+  fun chosen found => parse_refusal_order raw ⟨raw, chosen⟩ (parse_of_hit raw chosen found)
+
+/-- Mutant: preserve byte order but prefer later rules when offsets tie. -/
+def reverseTieKey {length : Nat} (violation : Violation length) : Nat :=
+  violation.location.offset * Reason.inOrder.length +
+    (Reason.inOrder.length - 1 - Reason.inOrder.idxOf violation.reason)
+
+private theorem losesRefusalOrder {policy : ProbePolicy} {raw : SourceText}
+    {key : Violation raw.length → Nat} (chosen other : Violation raw.length)
+    (found : selectViolation policy raw key = some chosen) (present : other ∈ candidates raw)
+    (sameOffset : chosen.location.offset = other.location.offset)
+    (earlier : Reason.inOrder.idxOf other.reason < Reason.inOrder.idxOf chosen.reason) :
+    ¬ KeepsRefusalOrder policy raw key := by
+  intro order
+  rcases order chosen found other present with earlierOffset | ⟨_, priority⟩ <;> omega
+
+/-- Case: a drive prefix with a following component. -/
+def driveWithSuffix : SourceText := SourceText.ofBytes [67, 58, 47, 65]
+
+/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_location`,
+case `ConcreteSpec.Core.SourcePath.LocalControls.driveWithSuffix`). -/
+theorem driveWithSuffixReported :
+    reportedLocation (parse driveWithSuffix) = some (.drive, 0, 2, 1, [67, 58]) := by decide
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.parse_refusal_order`,
+case `ConcreteSpec.Core.SourcePath.Registry.emptyRefusedInput`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.withoutEmpty`). -/
+theorem deleteEmptyLosesPriority :
+    ¬ KeepsRefusalOrder withoutEmpty emptyRefusedInput Violation.key := by
+  exact losesRefusalOrder
+    ⟨.emptyComponent, ⟨0, 0, 0, by decide, by decide, by decide⟩⟩
+    ⟨.empty, ⟨0, 0, 0, by decide, by decide, by decide⟩⟩ rfl (by decide) rfl (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.parse_refusal_order`,
+case `ConcreteSpec.Core.SourcePath.Registry.emptyRefusedInput`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.reverseTieKey`). -/
+theorem reverseEmptyLosesPriority :
+    ¬ KeepsRefusalOrder localPolicy emptyRefusedInput reverseTieKey := by
+  exact losesRefusalOrder
+    ⟨.emptyComponent, ⟨0, 0, 0, by decide, by decide, by decide⟩⟩
+    ⟨.empty, ⟨0, 0, 0, by decide, by decide, by decide⟩⟩ rfl (by decide) rfl (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.parse_refusal_order`,
+case `ConcreteSpec.Core.SourcePath.Registry.absoluteRefusedInput`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.withoutAbsolute`). -/
+theorem deleteAbsoluteLosesPriority :
+    ¬ KeepsRefusalOrder withoutAbsolute absoluteRefusedInput Violation.key := by
+  exact losesRefusalOrder
+    ⟨.emptyComponent, ⟨0, 0, 0, by decide, by decide, by decide⟩⟩
+    ⟨.absolute, ⟨0, 2, 0, by decide, by decide, by decide⟩⟩ rfl (by decide) rfl (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.parse_refusal_order`,
+case `ConcreteSpec.Core.SourcePath.Registry.absoluteRefusedInput`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.reverseTieKey`). -/
+theorem reverseAbsoluteLosesPriority :
+    ¬ KeepsRefusalOrder localPolicy absoluteRefusedInput reverseTieKey := by
+  exact losesRefusalOrder
+    ⟨.emptyComponent, ⟨0, 0, 0, by decide, by decide, by decide⟩⟩
+    ⟨.absolute, ⟨0, 2, 0, by decide, by decide, by decide⟩⟩ rfl (by decide) rfl (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.parse_refusal_order`,
+case `ConcreteSpec.Core.SourcePath.LocalControls.driveWithSuffix`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.withoutDrive`). -/
+theorem deleteDriveLosesPriority :
+    ¬ KeepsRefusalOrder withoutDrive driveWithSuffix Violation.key := by
+  exact losesRefusalOrder
+    ⟨.disallowed, ⟨0, 2, 1, by decide, by decide, by decide⟩⟩
+    ⟨.drive, ⟨0, 2, 1, by decide, by decide, by decide⟩⟩ rfl (by decide) rfl (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.parse_refusal_order`,
+case `ConcreteSpec.Core.SourcePath.LocalControls.driveWithSuffix`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.reverseTieKey`). -/
+theorem reverseDriveLosesPriority :
+    ¬ KeepsRefusalOrder localPolicy driveWithSuffix reverseTieKey := by
+  exact losesRefusalOrder
+    ⟨.disallowed, ⟨0, 2, 1, by decide, by decide, by decide⟩⟩
+    ⟨.drive, ⟨0, 2, 1, by decide, by decide, by decide⟩⟩ rfl (by decide) rfl (by decide)
+
+
+/-- Mutant: admit ASCII filenames only if they have no uppercase letters. -/
+def lowercaseOnly : ProbePolicy :=
+  { localPolicy with disallowed := fun byte => localPolicy.disallowed byte || (65 ≤ byte && byte ≤ 90) }
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.admission_disallowed_iff`,
+case `ConcreteSpec.Core.SourcePath.Registry.mixedCaseInput`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.lowercaseOnly`). -/
+theorem lowercaseOnlyRejectsMixedCase :
+    ¬ (admitsWith lowercaseOnly mixedCaseInput ↔
+      FilenameCharacters mixedCaseInput ∧ OtherRules .disallowed mixedCaseInput) := by
+  exact rejectsValid (of_decide_eq_true (by cbv)) (by unfold admitsWith; decide)
+
+/-- Case: the exact UTF-8 bytes for Aé, including both bytes of é. -/
+def utf8Input : SourceText := SourceText.ofBytes [65, 195, 169]
+
+/-- Mutant: replace non-ASCII bytes with underscores before admission. -/
+def replaceNonAscii (raw : SourceText) : Prop :=
+  let replaced := SourceText.ofBytes (raw.toBytes.map fun byte => if byte.toNat < 128 then byte else 95)
+  admitsWith localPolicy replaced
+
+/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_refusal_location`,
+case `ConcreteSpec.Core.SourcePath.LocalControls.utf8Input`). -/
+theorem utf8RefusalPreservesBytes :
+    reportedLocation (parse utf8Input) = some (.nonAscii, 0, 3, 1, [65, 195, 169]) := by decide
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.admission_nonAscii_iff`,
+case `ConcreteSpec.Core.SourcePath.LocalControls.utf8Input`, subject `ConcreteSpec.Core.SourcePath.parse`,
+mutant `ConcreteSpec.Core.SourcePath.LocalControls.replaceNonAscii`). -/
+theorem replacementAdmitsNonAscii :
+    ¬ (replaceNonAscii utf8Input ↔ Ascii utf8Input ∧ OtherRules .nonAscii utf8Input) := by
+  have admitted : replaceNonAscii utf8Input := by rfl
+  have invalid : ¬ Permitted .nonAscii utf8Input := by decide
+  exact fun law => invalid (law.mp admitted).1
 
 end LocalControls
 end SourcePath

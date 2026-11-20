@@ -800,80 +800,140 @@ def components (raw : SourceText) : List (Component raw.length) :=
 def foldAscii (byte : Nat) : Nat :=
   if 65 ≤ byte ∧ byte ≤ 90 then byte + 32 else byte
 
-private def asciiLetter (byte : Nat) : Bool :=
+/-- Test for one of the 52 ASCII letters. -/
+def asciiLetter (byte : Nat) : Bool :=
   (65 ≤ byte && byte ≤ 90) || (97 ≤ byte && byte ≤ 122)
 
-private def filenameByte (byte : Nat) : Bool :=
+/-- Test the ASCII filename whitelist before component-level exclusions. -/
+def filenameByte (byte : Nat) : Bool :=
   asciiLetter byte || (48 ≤ byte && byte ≤ 57) || byte == 95 || byte == 45 || byte == 46
 
-/-- Match the stem before the first dot against the closed ASCII-insensitive list. -/
-def reservedStem (bytes : ConcreteSpec.Numbers) : Bool :=
-  match (bytes.takeWhile (· != 46)).map foldAscii with
+/-- Match the stem before the first dot using a supplied byte fold and lower digit bound. -/
+def reservedStemWith (fold : Nat → Nat) (firstDigit : Nat) (bytes : ConcreteSpec.Numbers) : Bool :=
+  match (bytes.takeWhile (· != 46)).map fold with
   | [99, 111, 110] | [112, 114, 110] | [97, 117, 120] | [110, 117, 108] => true
-  | [99, 111, 109, digit] | [108, 112, 116, digit] => 49 ≤ digit && digit ≤ 57
+  | [99, 111, 109, digit] | [108, 112, 116, digit] => firstDigit ≤ digit && digit ≤ 57
   | _ => false
 
-private def componentLocation {length : Nat} (c : Component length)
+/-- Match a reserved stem using the production case fold and digit range. -/
+def reservedStem := reservedStemWith foldAscii 49
+
+/-- The local predicates and limits used by the diagnostic search. -/
+structure ProbePolicy where
+  empty : ConcreteSpec.Numbers → Bool
+  absolute : ConcreteSpec.Numbers → Bool
+  drive : Nat → Nat → Bool
+  traversal : ConcreteSpec.Numbers → Bool
+  singleDot : ConcreteSpec.Numbers → Bool
+  emptyComponent : ConcreteSpec.Numbers → Bool
+  nonAscii : Nat → Bool
+  backslash : Nat → Bool
+  control : Nat → Bool
+  space : Nat → Bool
+  leadingDot : Nat → Bool
+  trailingDot : Nat → Bool
+  reserved : ConcreteSpec.Numbers → Bool
+  componentCap : Nat
+  pathCap : Nat
+  disallowed : Nat → Bool
+
+/-- The production policy for project-relative source paths. -/
+def localPolicy : ProbePolicy where
+  empty := List.isEmpty
+  absolute := fun bytes => bytes.head? == some 47
+  drive := fun letter next => asciiLetter letter && next == 58
+  traversal := (· == [46, 46])
+  singleDot := (· == [46])
+  emptyComponent := List.isEmpty
+  nonAscii := (128 ≤ ·)
+  backslash := (· == 92)
+  control := fun byte => byte < 32 || byte == 127
+  space := (· == 32)
+  leadingDot := (· == 46)
+  trailingDot := (· == 46)
+  reserved := reservedStem
+  componentCap := componentLimit
+  pathCap := pathLimit
+  disallowed := fun byte => 32 < byte && byte < 127 && byte != 92 && !filenameByte byte
+
+/-- Translate a component-relative byte or boundary into whole-path coordinates. -/
+def componentLocation {length : Nat} (c : Component length)
     (relative : Nat) (bound : relative ≤ c.bytes.length) : Location length :=
   ⟨c.start, c.start + c.bytes.length, c.start + relative, by omega,
     Nat.add_le_add_left bound _, c.stop_le⟩
 
-private def firstByte {length : Nat} (c : Component length)
+/-- Locate the first byte satisfying the predicate in this component. -/
+def firstByte {length : Nat} (c : Component length)
     (test : Nat → Bool) : Option (Location length) :=
   (c.bytes.findFinIdx? test).map fun (i : Fin c.bytes.length) => componentLocation c i (Nat.le_of_lt i.isLt)
 
-private def endpointDot {length : Nat} (c : Component length) (leading : Bool) :
-    Option (Location length) :=
+/-- Locate a rejected endpoint, leaving the special dot components to their own probes. -/
+def endpointDot {length : Nat} (c : Component length) (leading : Bool)
+    (test : Nat → Bool) : Option (Location length) :=
   if c.bytes == [46] || c.bytes == [46, 46] then none
-  else if (if leading then c.bytes.head? else c.bytes.getLast?) == some 46 then
+  else if (if leading then c.bytes.head? else c.bytes.getLast?).any test then
     some (componentLocation c (if leading then 0 else c.bytes.length - 1) (by split <;> omega))
   else none
 
-/-- Select the first witness of a given check in a component. Whole-path checks have
-their own context and do not run in this view. -/
-def checkComponent {length : Nat} (reason : Reason) (c : Component length) :
-    Option (Location length) :=
-  match reason with
-  | .traversal => if c.bytes == [46, 46] then some (componentLocation c 0 (Nat.zero_le _)) else none
-  | .singleDot => if c.bytes == [46] then some (componentLocation c 0 (Nat.zero_le _)) else none
-  | .emptyComponent => if c.bytes.isEmpty then some (componentLocation c 0 (Nat.zero_le _)) else none
-  | .nonAscii => firstByte c (128 ≤ ·)
-  | .backslash => firstByte c (· == 92)
-  | .control => firstByte c (fun byte => byte < 32 || byte == 127)
-  | .space => firstByte c (· == 32)
-  | .leadingDot => endpointDot c true
-  | .trailingDot => endpointDot c false
-  | .reserved => if reservedStem c.bytes then some (componentLocation c 0 (Nat.zero_le _)) else none
-  | .componentCap =>
-    if h : componentLimit < c.bytes.length then
-      some (componentLocation c componentLimit (Nat.le_of_lt h))
-    else none
-  | .disallowed => firstByte c fun byte => 32 < byte && byte < 127 && byte != 92 && !filenameByte byte
-  | .empty | .absolute | .drive | .pathCap => none
+/-- Locate a component-wide violation at the start of its component. -/
+def startIf {length : Nat} (c : Component length) (found : Bool) : Option (Location length) :=
+  if found then some (componentLocation c 0 (Nat.zero_le _)) else none
 
-private def wholeLocation (raw : SourceText) (offset : Nat) (bound : offset ≤ raw.length) :
+/-- Select the first witness of a given check in a component. -/
+def checkComponentWith (policy : ProbePolicy) {length : Nat} (reason : Reason)
+    (c : Component length) : Option (Location length) :=
+  match reason with
+  | .drive =>
+    if size : 1 < c.bytes.length then
+      if c.start == 0 && policy.drive (c.bytes[0]'(by omega)) c.bytes[1] then
+        some (componentLocation c 1 (Nat.le_of_lt size))
+      else none
+    else none
+  | .traversal => startIf c (policy.traversal c.bytes)
+  | .singleDot => startIf c (policy.singleDot c.bytes)
+  | .emptyComponent => startIf c (policy.emptyComponent c.bytes)
+  | .nonAscii => firstByte c policy.nonAscii
+  | .backslash => firstByte c policy.backslash
+  | .control => firstByte c policy.control
+  | .space => firstByte c policy.space
+  | .leadingDot => endpointDot c true policy.leadingDot
+  | .trailingDot => endpointDot c false policy.trailingDot
+  | .reserved => startIf c (policy.reserved c.bytes)
+  | .componentCap =>
+    if h : policy.componentCap < c.bytes.length then
+      some (componentLocation c policy.componentCap (Nat.le_of_lt h))
+    else none
+  | .disallowed => firstByte c policy.disallowed
+  | .empty | .absolute | .pathCap => none
+
+/-- The production component check. -/
+def checkComponent := @checkComponentWith localPolicy
+
+/-- Locate a violation of a whole-path rule. -/
+def wholeLocation (raw : SourceText) (offset : Nat) (bound : offset ≤ raw.length) :
     Location raw.length :=
   ⟨0, raw.length, offset, Nat.zero_le _, bound, Nat.le_refl _⟩
 
 /-- One rule probe for the whole path, or one per component for a component rule. -/
-def probes (raw : SourceText) (parts : List (Component raw.length)) (reason : Reason) :
-    List (Option (Location raw.length)) :=
+def probesWith (policy : ProbePolicy) (raw : SourceText) (parts : List (Component raw.length))
+    (reason : Reason) : List (Option (Location raw.length)) :=
   match reason with
-  | .empty => [if raw.bytes.isEmpty then some (wholeLocation raw 0 (Nat.zero_le _)) else none]
-  | .absolute => [if raw.bytes.head? == some 47 then some (wholeLocation raw 0 (Nat.zero_le _)) else none]
-  | .drive =>
-    [match h : raw.bytes with
-     | letter :: 58 :: _ =>
-       if asciiLetter letter then some (wholeLocation raw 1 (by simp [SourceText.length, h])) else none
-     | _ => none]
+  | .empty => [if policy.empty raw.bytes then some (wholeLocation raw 0 (Nat.zero_le _)) else none]
+  | .absolute => [if policy.absolute raw.bytes then some (wholeLocation raw 0 (Nat.zero_le _)) else none]
   | .pathCap =>
-    [if h : pathLimit < raw.length then some (wholeLocation raw pathLimit (Nat.le_of_lt h)) else none]
-  | other => parts.map (checkComponent other)
+    [if h : policy.pathCap < raw.length then some (wholeLocation raw policy.pathCap (Nat.le_of_lt h)) else none]
+  | other => parts.map (checkComponentWith policy other)
 
-/-- Collect the violations of a single check. -/
-def check (raw : SourceText) (parts : List (Component raw.length)) (reason : Reason) :
-    List (Location raw.length) :=
-  (probes raw parts reason).filterMap id
+/-- The production probes for an individual rule. -/
+def probes := probesWith localPolicy
+
+/-- Collect the violations of a single check under the supplied policy. -/
+def checkWith (policy : ProbePolicy) (raw : SourceText) (parts : List (Component raw.length))
+    (reason : Reason) : List (Location raw.length) :=
+  (probesWith policy raw parts reason).filterMap id
+
+/-- Collect the production violations of a single check. -/
+def check := checkWith localPolicy
 
 /-- Each applicable probe of the rule must pass. -/
 def Permitted (reason : Reason) (raw : SourceText) : Prop :=
@@ -883,10 +943,10 @@ instance (reason : Reason) (raw : SourceText) : Decidable (Permitted reason raw)
   unfold Permitted
   infer_instance
 
-/-- Connect the diagnostic collection to the individual validity judgments. -/
-theorem check_eq_nil_iff (reason : Reason) (raw : SourceText) :
+/-- Helper: connect the diagnostic collection to the individual validity judgments. -/
+theorem check_witness_iff (reason : Reason) (raw : SourceText) :
     check raw (components raw) reason = [] ↔ Permitted reason raw := by
-  simp [check, Permitted]
+  simp [check, checkWith, Permitted, probes]
 
 /-- The full path has at least one byte. See also
 docs/decisions.md#decided-2026-11-14-trap-sites-and-law-tests.
@@ -969,19 +1029,26 @@ structure Violation (length : Nat) where
   location : Location length
   deriving DecidableEq, Repr
 
-/-- Candidates grouped in tie-break order, with each component checked against the same rule
-used by local validity. -/
-def candidates (raw : SourceText) : List (Violation raw.length) :=
+/-- Candidates grouped in rule order, with each component checked against the supplied policy. -/
+def candidatesWith (policy : ProbePolicy) (raw : SourceText) : List (Violation raw.length) :=
   let parts := components raw
-  Reason.inOrder.flatMap fun reason => (check raw parts reason).map (Violation.mk reason)
+  Reason.inOrder.flatMap fun reason => (checkWith policy raw parts reason).map (Violation.mk reason)
+
+/-- The production refusal candidates. -/
+def candidates := candidatesWith localPolicy
 
 /-- Encode the lexicographic pair of witness offset and check priority as a natural number. -/
 def Violation.key {length : Nat} (violation : Violation length) : Nat :=
   violation.location.offset * Reason.inOrder.length + Reason.inOrder.idxOf violation.reason
 
+/-- Select a refusal candidate using the supplied ordering. -/
+def selectViolation (policy : ProbePolicy) (raw : SourceText) (key : Violation raw.length → Nat) :
+    Option (Violation raw.length) :=
+  (candidatesWith policy raw).minOn? key
+
 /-- Select the earliest offset, keeping the first check in priority order on a tie. -/
 def firstViolation (raw : SourceText) : Option (Violation raw.length) :=
-  (candidates raw).minOn? Violation.key
+  selectViolation localPolicy raw Violation.key
 
 /-- The original bytes and the selected local refusal. -/
 structure Refusal where
@@ -1008,13 +1075,16 @@ namespace SourcePath
 theorem rawOk_of_noViolation (raw : SourceText) (clear : firstViolation raw = none) :
     RawOk raw := by
   intro reason member
-  apply (check_eq_nil_iff reason raw).1
+  apply (check_witness_iff reason raw).1
   cases found : check raw (components raw) reason with
   | nil => rfl
   | cons location rest =>
     have present : Violation.mk reason location ∈ candidates raw := by
+      unfold candidates candidatesWith
       apply List.mem_flatMap.mpr
-      exact ⟨reason, member, List.mem_map.mpr ⟨location, by simp [found], rfl⟩⟩
+      exact ⟨reason, member, List.mem_map.mpr ⟨location, by
+        change location ∈ check raw (components raw) reason
+        simp [found], rfl⟩⟩
     have someViolation := List.isSome_minOn?_of_mem (f := Violation.key) present
     change (firstViolation raw).isSome = true at someViolation
     simp [clear] at someViolation
