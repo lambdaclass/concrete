@@ -57,6 +57,86 @@ theorem programRefused : RuleRefused IntegerProgramAdmitted
     (by simp [integerProgram, ReleaseCalls.ofProgram, statementReleases, IntegerStatement.statement])).1
   exact List.not_mem_nil denied
 
+/-- Planted: compare only the numeric site, discarding its declared type. -/
+def permitsUntyped (p : ReleasePolicy String) (r : Release String Nat) : Prop :=
+  r.site.site ∈ p.allowed.map ReleaseSite.site
+
+/-- Planted control for `permits_listed_site`: a site with the wrong type is admitted. -/
+theorem untyped_permission_admits_wrong_type :
+    permitsUntyped typedReleasePolicy (typedRelease "secret" 7) ∧
+      (typedRelease "secret" 7).site ∉ typedReleasePolicy.allowed := by
+  simp [permitsUntyped, typedRelease, typedReleasePolicy]
+
+/-- Planted: also require a zero value, even at an exactly listed typed site. -/
+def permitsOnlyZero (p : ReleasePolicy String) (r : Release String Nat) : Prop :=
+  p.Permits r ∧ r.value = 0
+
+/-- Planted control for `listed_site_permitted`: a listed release has a nonzero value. -/
+theorem zero_requirement_refuses_listed_site :
+    (typedRelease "public" 7).site ∈ typedReleasePolicy.allowed ∧
+      ¬ permitsOnlyZero typedReleasePolicy (typedRelease "public" 7) :=
+  ⟨by decide, fun h => by cases h.2⟩
+
+/-- Planted: classify a singleton allowlist as forbidding releases. -/
+def forbidsSingleton (p : ReleasePolicy Unit) : Prop :=
+  p.allowed.length ≤ 1
+
+/-- Planted control for `forbidding_policy_empty`: a populated list is misclassified. -/
+theorem singleton_is_misclassified :
+    forbidsSingleton policy ∧ policy.allowed ≠ [] := by
+  simp [forbidsSingleton]
+
+/-- Planted: an off-by-one test requires the empty list to have negative length. -/
+def forbidsTooStrict (p : ReleasePolicy Unit) : Prop :=
+  p.allowed.length < 0
+
+/-- Planted control for `empty_policy_forbidding`: an empty list is misclassified. -/
+theorem empty_policy_is_misclassified :
+    ∃ p : ReleasePolicy Unit, p.allowed = [] ∧ ¬ forbidsTooStrict p :=
+  ⟨⟨[]⟩, rfl, by simp [forbidsTooStrict]⟩
+
+/-- Planted: replace exact permission with mere nonemptiness of the allowlist. -/
+def authorizesWithAnySite (p : ReleasePolicy Unit) (rs : List (Release Unit Int)) : Prop :=
+  ∀ _r ∈ rs, p.allowed ≠ []
+
+/-- Planted control for `unlisted_trace_refused`: a populated policy still omits site seven. -/
+theorem populated_policy_admits_unlisted_release :
+    let release := releaseAt ⟨7⟩ 42
+    release ∈ [release] ∧ release.site ∉ policy.allowed ∧ authorizesWithAnySite policy [release] := by
+  refine ⟨by simp, by decide, ?_⟩
+  exact fun _ _ => by decide
+
+/-- Planted: drop just the public-local equality conjunct. -/
+def lowIgnoresLocals {O : Operands} (L : Labelling O) (c d : Config O) : Prop :=
+  L.lowStore c.store d.store
+
+/-- Planted control for `low_equivalent_public_state`: differing public locals are admitted. -/
+theorem ignoring_locals_admits_public_change :
+    lowIgnoresLocals labelling (mixedConfig (-1) 7) (mixedConfig (-2) 8) ∧
+      publicLocals labelling (mixedConfig (-1) 7) ≠ publicLocals labelling (mixedConfig (-2) 8) :=
+  ⟨trivial, by decide⟩
+
+/-- Planted: retain public-local equality and drop the public-store relation. -/
+def lowIgnoresStore {O : Operands} (L : Labelling O) (c d : Config O) : Prop :=
+  publicLocals L c = publicLocals L d
+
+/-- Planted control for `low_equivalent_public_state`: unrelated public stores are admitted. -/
+theorem ignoring_store_admits_public_change :
+    lowIgnoresStore storeSensitiveLabelling (leakyStart 1) (leakyStart 2) ∧
+      ¬ storeSensitiveLabelling.lowStore (leakyStart 1).store (leakyStart 2).store :=
+  ⟨rfl, by decide⟩
+
+/-- Planted: additionally require exact equality of all local bindings. -/
+def lowRequiresRawLocals {O : Operands} (L : Labelling O) (c d : Config O) : Prop :=
+  LowEquivalent L c d ∧ c.locals = d.locals
+
+/-- Planted control for `public_state_low_equivalent`: differing secret locals are refused. -/
+theorem raw_locals_refuse_secret_change :
+    publicLocals labelling (mixedConfig (-1) 7) = publicLocals labelling (mixedConfig (-2) 7) ∧
+      labelling.lowStore (mixedConfig (-1) 7).store (mixedConfig (-2) 7).store ∧
+      ¬ lowRequiresRawLocals labelling (mixedConfig (-1) 7) (mixedConfig (-2) 7) :=
+  ⟨rfl, trivial, fun h => (by decide : (mixedConfig (-1) 7).locals ≠ (mixedConfig (-2) 7).locals) h.2⟩
+
 /-- Instance: the listed typed site is permitted. -/
 theorem permitsAccepted : RuleAccepted StringReleasePermitted (typedReleasePolicy, typedRelease "public" 7) := by
     simp [RuleAccepted, StringReleasePermitted, ReleasePolicy.Permits, typedReleasePolicy, typedRelease]
@@ -74,14 +154,14 @@ theorem authorizedAccepted : RuleAccepted UnitTraceAuthorized (policy, [releaseV
 /-- Instance: an empty policy rejects the same populated trace. -/
 theorem authorizedRefused : RuleRefused UnitTraceAuthorized (⟨[]⟩, [releaseValue 7, releaseValue 8]) :=
   forbidsRelease_not_authorized ⟨[]⟩ (releaseValue 7) [releaseValue 8] rfl
-/-- Instance: authorization quantifies over every complete execution of this concrete entry. -/
+/-- Instance: authorization quantifies over every reachable execution prefix of this concrete entry. -/
 theorem runsAccepted : RuleAccepted IntegerRunsAuthorized
     (⟨[⟨⟨0⟩, ()⟩]⟩, ⟨[], unreleasedOutput 1⟩) := release_authorized 1
 /-- Instance: the same populated execution is refused by the empty policy. -/
 theorem runsRefused : RuleRefused IntegerRunsAuthorized
     (⟨[]⟩, ⟨[], unreleasedOutput 1⟩) := by
   intro h
-  have bad := h (leakyRun 1)
+  have bad := h (leakyRun 1).steps
   change ReleasePolicy.Authorized ⟨[]⟩ [releaseValue 0] at bad
   simp [ReleasePolicy.Authorized, ReleasePolicy.Permits] at bad
 /-- One release at an arbitrary source site, with a populated operand. -/
@@ -99,6 +179,74 @@ def siteRun (I : Instrumentation ops) (site : SiteId) :
     (Step.prim (P := program) (c := c) (c' := done) (p := .release) (site := site)
       (vs := [42]) (st := 0) (a := (⟨none, .ok 0, 0⟩ : Answer Int Int Int))
       rfl (by simp [allowed]) rfl) (InstrumentedSteps.refl done)
+
+/-- Release at site seven, then invoke a function absent from the empty program. -/
+def releaseThenStuck : IntegerEntry :=
+  ⟨.seq (.prim none .release [.lit 42] ⟨7⟩) (.call none (CallControls.fn "missing") [] ⟨8⟩),
+    [], 0⟩
+
+def missingCall : Exec.Stmt ops :=
+  .call none (CallControls.fn "missing") [] ⟨8⟩
+
+def stuckAfterRelease : Config ops := ⟨.exec missingCall, [], 0, []⟩
+
+/-- The executed release is retained in a finite prefix whose endpoint is stuck. -/
+theorem release_then_stuck_prefix :
+    InstrumentedSteps instrumentation program releaseThenStuck.config []
+      [.variableTime ⟨7⟩ [42]] [releaseAt ⟨7⟩ 42] [] stuckAfterRelease := by
+  let pending : Config ops := ⟨.exec (.prim none .release [.lit 42] ⟨7⟩), [], 0, [.seq missingCall]⟩
+  let released : Config ops := ⟨.done, [], 0, [.seq missingCall]⟩
+  have enter : Step program releaseThenStuck.config .silent pending := .silent rfl
+  have emitRelease : Step program pending .silent released :=
+    Step.prim (P := program) (c := pending) (c' := released) (p := .release) (site := ⟨7⟩) (vs := [42]) (st := 0)
+      (a := (⟨none, .ok 0, 0⟩ : Answer Int Int Int)) rfl (by simp [allowed]) rfl
+  have resume : Step program released .silent stuckAfterRelease := .silent rfl
+  exact .step enter (.step emitRelease (.step resume (.refl _)))
+
+/-- Instance of `unlisted_prefix_refused`: the empty policy refuses the release followed by a stuck call. -/
+theorem stuckRunsRefused : RuleRefused IntegerRunsAuthorized (⟨[]⟩, ⟨[], releaseThenStuck⟩) :=
+  unlisted_prefix_refused ⟨[]⟩ release_then_stuck_prefix (releaseAt ⟨7⟩ 42)
+    (by simp) (List.not_mem_nil)
+
+/-- Planted: replace the prefix quantifier with a completed-run quantifier. -/
+def completeRunsOnly {O : Operands} (p : ReleasePolicy O.Ty)
+    (I : Instrumentation O) (P : Exec.Program O) (c : Config O) : Prop :=
+  ∀ r : Run I P c, p.Authorized r.releases
+
+/-- Planted control for `unlisted_prefix_refused` with `completeRunsOnly`. -/
+theorem completed_only_admits_stuck_release :
+    completeRunsOnly ⟨[]⟩ instrumentation program releaseThenStuck.config ∧
+      ¬ (ReleasePolicy.mk []).RunsAuthorized instrumentation program releaseThenStuck.config := by
+  refine ⟨?_, stuckRunsRefused⟩
+  intro r
+  have stuck : step program stuckAfterRelease = none := rfl
+  obtain ⟨_, _, _, _, suffix, _⟩ := terminal_execution_suffix r.steps release_then_stuck_prefix stuck
+  have endpoint : r.final = stuckAfterRelease := by
+    have terminal : step program r.final = none := final_no_step r.finalEnding
+    generalize r.final = f at terminal suffix ⊢
+    cases suffix with
+    | refl => rfl
+    | step h _ => exact (no_step_of_none terminal _ _ h).elim
+  have ending := r.finalEnding
+  rw [endpoint] at ending
+  cases ending
+
+/-- Planted: require a release on every prefix in addition to checking authorization. -/
+def requiresReleaseOnEveryPrefix {O : Operands} (p : ReleasePolicy O.Ty)
+    (I : Instrumentation O) (P : Exec.Program O) (c : Config O) : Prop :=
+  ∀ ⦃obs leaks rs choices d⦄, InstrumentedSteps I P c obs leaks rs choices d →
+    p.Authorized rs ∧ rs ≠ []
+
+/-- Planted control for `listed_prefixes_authorized`: requiring a release wrongly refuses
+a permitted entry whose initial prefix is empty and whose later release is listed. -/
+theorem release_requirement_refuses_prefixes :
+    policy.RunsAuthorized instrumentation program (releaseEntry ⟨0⟩).config ∧
+      ¬ requiresReleaseOnEveryPrefix policy instrumentation program (releaseEntry ⟨0⟩).config := by
+  refine ⟨prefixes_authorized_of_complete policy (siteRun instrumentation ⟨0⟩) ?_, ?_⟩
+  · change policy.Authorized [releaseAt ⟨0⟩ 42]
+    simp [ReleasePolicy.Authorized, ReleasePolicy.Permits, releaseAt]
+  · intro h
+    exact (h (.refl _)).2 rfl
 
 /-- Instance: a nonzero site and nonzero operand inhabit the agreement Law. -/
 theorem nonzero_site_agreement :
@@ -119,12 +267,10 @@ theorem zero_site_breaks_agreement : evalArgs ops [] 0 [.lit 42] = .ok ([42], 0)
     statementReleases (fun p : Prim => match p with | .release => some () | _ => none)
       (.prim none .release [.lit 42] ⟨7⟩ : ConcreteSpec.Core.Exec.Stmt ops) := by decide
 
-/-- Instance: all complete executions at site seven pass the site-seven policy. -/
+/-- Instance: all execution prefixes at site seven pass the site-seven policy. -/
 theorem nonzeroRunsAccepted : RuleAccepted IntegerRunsAuthorized
     (⟨[⟨⟨7⟩, ()⟩]⟩, ⟨[], releaseEntry ⟨7⟩⟩) := by
-  intro r
-  have same := (complete_unique r (siteRun instrumentation ⟨7⟩)).2.2.1
-  rw [same]
+  apply prefixes_authorized_of_complete _ (siteRun instrumentation ⟨7⟩)
   change ReleasePolicy.Authorized ⟨[⟨⟨7⟩, ()⟩]⟩ [releaseAt ⟨7⟩ 42]
   simp [ReleasePolicy.Authorized, ReleasePolicy.Permits, releaseAt]
 
@@ -132,14 +278,13 @@ theorem nonzeroRunsAccepted : RuleAccepted IntegerRunsAuthorized
 theorem nonzeroRunsRefused : RuleRefused IntegerRunsAuthorized
     (⟨[⟨⟨0⟩, ()⟩]⟩, ⟨[], releaseEntry ⟨7⟩⟩) := by
   intro h
-  have bad := h (siteRun instrumentation ⟨7⟩)
+  have bad := h (siteRun instrumentation ⟨7⟩).steps
   change ReleasePolicy.Authorized ⟨[⟨⟨0⟩, ()⟩]⟩ [releaseAt ⟨7⟩ 42] at bad
   simp [ReleasePolicy.Authorized, ReleasePolicy.Permits, releaseAt] at bad
 
 /-- Planted: the zero-site substitution wrongly authorizes every run under the site-zero policy. -/
 theorem zero_site_wrongly_authorizes : policy.RunsAuthorized zeroSite program (releaseEntry ⟨7⟩).config := by
-  intro r
-  rw [(complete_unique r (siteRun zeroSite ⟨7⟩)).2.2.1]
+  apply prefixes_authorized_of_complete policy (siteRun zeroSite ⟨7⟩)
   change ReleasePolicy.Authorized policy [releaseAt ⟨0⟩ 42]
   simp [ReleasePolicy.Authorized, ReleasePolicy.Permits, releaseAt]
 

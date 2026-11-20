@@ -25,7 +25,7 @@ namespace ConcreteSpec.Core.Leak
 open ConcreteSpec.Core Exec
 
 /-- Helper (inversion). A missing C1 implementation result excludes every relational step. -/
-private theorem no_step_of_none {O : Operands} {P : Program O} {c : Config O}
+theorem no_step_of_none {O : Operands} {P : Program O} {c : Config O}
     (h : step P c = none) : ∀ l c', ¬ Step P c l c' := by
   intro l c' hs
   obtain ⟨answer, rule⟩ := (step_iff_rules P c l c').mp hs
@@ -87,6 +87,64 @@ theorem listed_trace_authorized {Ty Val : Type} (policy : ReleasePolicy Ty)
     policy.Authorized rs :=
   listed
 
+/-- Law: permission implies membership of the exact typed site. -/
+theorem permits_listed_site {Ty Val : Type} (p : ReleasePolicy Ty) (r : Release Ty Val) :
+    p.Permits r → r.site ∈ p.allowed := id
+
+/-- Law: membership suffices for permission for any released value. -/
+theorem listed_site_permitted {Ty Val : Type} (p : ReleasePolicy Ty) (r : Release Ty Val) :
+    r.site ∈ p.allowed → p.Permits r := id
+
+/-- Law: a forbidding policy has no listed site. -/
+theorem forbidding_policy_empty {Ty : Type} (p : ReleasePolicy Ty) :
+    p.ForbidsRelease → p.allowed = [] := id
+
+/-- Law: an empty policy forbids release. -/
+theorem empty_policy_forbidding {Ty : Type} (p : ReleasePolicy Ty) :
+    p.allowed = [] → p.ForbidsRelease := id
+
+/-- Law: an unlisted release refutes trace authorization under any policy. -/
+theorem unlisted_trace_refused {Ty Val : Type} (p : ReleasePolicy Ty)
+    (rs : List (Release Ty Val)) (r : Release Ty Val)
+    (hr : r ∈ rs) (unlisted : r.site ∉ p.allowed) : ¬ p.Authorized rs :=
+  fun authorized => unlisted (permits_listed_site p r (authorized r hr))
+
+/-- Law: an unlisted release on any reachable prefix refutes runtime authorization. -/
+theorem unlisted_prefix_refused {O : Operands} (p : ReleasePolicy O.Ty)
+    {I : Instrumentation O} {P : Program O} {c d : Config O} {obs leaks rs choices}
+    (prefixSteps : InstrumentedSteps I P c obs leaks rs choices d)
+    (r : Release O.Ty O.Val) (hr : r ∈ rs) (unlisted : r.site ∉ p.allowed) :
+    ¬ p.RunsAuthorized I P c :=
+  fun authorized => unlisted_trace_refused p rs r hr unlisted (authorized prefixSteps)
+
+/-- Law: runtime authorization holds if every emitted release on a reachable prefix is listed. -/
+theorem listed_prefixes_authorized {O : Operands} (p : ReleasePolicy O.Ty)
+    (I : Instrumentation O) (P : Program O) (c : Config O)
+    (listed : ∀ ⦃obs leaks rs choices d⦄, InstrumentedSteps I P c obs leaks rs choices d →
+      ∀ r ∈ rs, r.site ∈ p.allowed) :
+    p.RunsAuthorized I P c := by
+  intro _ _ _ _ _ steps r member
+  exact listed_site_permitted p r (listed steps r member)
+
+/-- Law: low equivalence preserves public locals and the public-store relation. -/
+theorem low_equivalent_public_state {O : Operands} (L : Labelling O) (c d : Config O) :
+    LowEquivalent L c d → publicLocals L c = publicLocals L d ∧ L.lowStore c.store d.store := id
+
+/-- Law: equality of public locals and related public stores suffice for low equivalence. -/
+theorem public_state_low_equivalent {O : Operands} (L : Labelling O) (c d : Config O) :
+    publicLocals L c = publicLocals L d → L.lowStore c.store d.store → LowEquivalent L c d :=
+  And.intro
+
+/-- Law: NI evidence retains machine qualification independently of the run comparison. -/
+theorem ni_observer_qualified {O : Operands} [MachineObserver O] {I : Instrumentation O}
+    {P : Program O} {L : Labelling O} {c d : Config O} :
+    DelimitedReleaseNI I P L c d → ObserverQualified I := And.left
+
+/-- Law: CT evidence retains machine qualification independently of the run comparison. -/
+theorem ct_observer_qualified {O : Operands} [MachineObserver O] {I : Instrumentation O}
+    {P : Program O} {L : Labelling O} {c d : Config O} :
+    ConstantTime I P L c d → ObserverQualified I := And.left
+
 /-- Law: reason and call-path facts do not strengthen the ordered release premise.
 Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
 docs/decisions.md#decided-project-infoflow-2026-11-06. -/
@@ -128,7 +186,7 @@ theorem empty_reason_still_projects_release :
       reasonSensitiveTrace [fact] ≠ [(fact.release.site, fact.release.value)] :=
   ⟨release_metadata_preserves_trace _, by decide⟩
 
-/-- Planted (law `release_metadata_irrelevant`, case `metadataReason`, mutant `reasonSensitiveTrace`).
+/-- Planted (law `release_metadata_irrelevant`, mutant `reasonSensitiveTrace`).
 changing only reason metadata now changes the release comparison. -/
 theorem release_metadata_planted :
     ¬ (reasonSensitiveTrace [{ metadataFact with reason := "", path := [Exec.Demo.logF] }] =
@@ -194,7 +252,7 @@ theorem step_unique (p : Prim) (arg : Int) (st : Int) (site : SiteId)
   exact ⟨l, c', hstep, fun _ _ h₂ => step_det hstep h₂⟩
 
 /-- Helper: a C1 final configuration has no machine step. -/
-private theorem final_no_step {P : Program ops} {c : Config ops} {e : Final Int}
+theorem final_no_step {P : Program ops} {c : Config ops} {e : Final Int}
     (hf : c.final? = some e) : step P c = none := by
   obtain ⟨ctrl, locals, store, frames⟩ := c
   cases ctrl with
@@ -222,6 +280,35 @@ theorem complete_unique {I : Instrumentation ops} {P : Program ops} {c : Config 
       obtain ⟨rfl, rfl⟩ := step_det h h'
       obtain ⟨rfl, rfl, rfl, rfl, rfl⟩ := ih ah _ bh _ _ _ _ rest'
       exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+
+/-- On the deterministic integer machine, a reachable prefix can be canceled from an
+execution to a terminal configuration. Its releases are a prefix of the terminal trace. -/
+theorem terminal_execution_suffix {I : Instrumentation ops} {P : Program ops}
+    {c d f : Config ops} {obs leaks rs choices fullObs fullLeaks fullRs fullChoices}
+    (pre : InstrumentedSteps I P c obs leaks rs choices d)
+    (full : InstrumentedSteps I P c fullObs fullLeaks fullRs fullChoices f)
+    (terminal : step P f = none) :
+    ∃ tailObs tailLeaks tailRs tailChoices,
+      InstrumentedSteps I P d tailObs tailLeaks tailRs tailChoices f ∧ fullRs = rs ++ tailRs := by
+  induction pre generalizing fullObs fullLeaks fullRs fullChoices with
+  | refl => exact ⟨_, _, _, _, full, rfl⟩
+  | step h _ ih =>
+    cases full with
+    | refl => exact (no_step_of_none terminal _ _ h).elim
+    | step h' rest =>
+      obtain ⟨rfl, rfl⟩ := step_det h h'
+      obtain ⟨_, _, _, _, suffix, hr⟩ := ih rest
+      exact ⟨_, _, _, _, suffix, by rw [hr, List.append_assoc]⟩
+
+/-- Authorization of a known complete trace covers every reachable prefix of that
+deterministic execution, including prefixes ending before the final outcome. -/
+theorem prefixes_authorized_of_complete {I : Instrumentation ops} {P : Program ops}
+    {c : Config ops} (p : ReleasePolicy Unit) (r : Run I P c)
+    (authorized : p.Authorized r.releases) : p.RunsAuthorized I P c := by
+  apply listed_prefixes_authorized
+  intro obs leaks rs choices d pre release member
+  obtain ⟨_, _, _, _, _, hr⟩ := terminal_execution_suffix pre r.steps (final_no_step r.finalEnding)
+  exact permits_listed_site p release (authorized release (hr ▸ List.mem_append_left _ member))
 
 /-- Helper: total value of a toy expression, shared by the execution witnesses. -/
 def value (locals : AList Var Int) (secret : Int) : Expr → Int
@@ -296,6 +383,7 @@ theorem secure_ni (s₁ s₂ : Int) (hidden₁ hidden₂ : Nat)
   have hsum : s₁ + Int.ofNat hidden₁ = s₂ + Int.ofNat hidden₂ := by
     rw [h₁₀.2.2.1, h₂₀.2.2.1] at hreleases
     simpa [releaseTrace, releaseValue, releaseAt] using hreleases
+  refine ⟨rfl, ?_⟩
   intro r₁ r₂ _ _ _
   have h₁ := secure_run_unique s₁ hidden₁ r₁
   have h₂ := secure_run_unique s₂ hidden₂ r₂
@@ -321,6 +409,7 @@ theorem secure_ct (s₁ s₂ : Int) (hidden₁ hidden₂ : Nat)
   have hsum : s₁ + Int.ofNat hidden₁ = s₂ + Int.ofNat hidden₂ := by
     rw [h₁₀.2.2.1, h₂₀.2.2.1] at hreleases
     simpa [releaseTrace, releaseValue, releaseAt] using hreleases
+  refine ⟨rfl, ?_⟩
   intro r₁ r₂ _ _ _
   have h₁ := secure_run_unique s₁ hidden₁ r₁
   have h₂ := secure_run_unique s₂ hidden₂ r₂
@@ -453,6 +542,7 @@ theorem timing_ni (s₁ s₂ : Int)
                (r₂ : Run instrumentation program (timingStart s₂)),
                r₁.choices = r₂.choices ∧ releaseTrace r₁.releases = releaseTrace r₂.releases) :
     DelimitedReleaseNI instrumentation program labelling (timingStart s₁) (timingStart s₂) := by
+  refine ⟨rfl, ?_⟩
   intro r₁ r₂ _ _ _
   have h₁ := timing_run_unique s₁ r₁
   have h₂ := timing_run_unique s₂ r₂
@@ -472,7 +562,7 @@ theorem timing_not_ct (s₁ s₂ : Int)
     (hs : s₁ ≠ s₂) :
     ¬ ConstantTime instrumentation program labelling (timingStart s₁) (timingStart s₂) := by
   intro hct
-  have hl := hct (timingRun s₁) (timingRun s₂) hlow rfl rfl
+  have hl := hct.2 (timingRun s₁) (timingRun s₂) hlow rfl rfl
   simp [timingRun] at hl
   exact hs hl
 
@@ -480,7 +570,7 @@ theorem timing_not_ct (s₁ s₂ : Int)
 Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
 theorem same_timing_input_ct (secret : Int) :
     ConstantTime instrumentation program labelling (timingStart secret) (timingStart secret) :=
-  fun a b _ _ _ => (complete_unique a b).2.1
+  ⟨rfl, fun a b _ _ _ => (complete_unique a b).2.1⟩
 
 /-- A deliberately permissive output oracle admits two distinct labels for one machine request. -/
 def permissiveAllowed (p : Prim) (vs : List Int) (st : Int) (a : Answer Int Int Int) : Bool :=
@@ -537,16 +627,16 @@ theorem leaky_low (s₁ s₂ : Int) : LowEquivalent labelling (leakyStart s₁) 
 /-- Helper (computation). Checks that every run from `Demo.leakyStart` emits only releases permitted by `Demo.policy`. -/
 theorem release_authorized (secret : Int) :
     policy.RunsAuthorized instrumentation program (leakyStart secret) := by
-  intro r
-  rw [leaky_run_releases secret r]
-  simp [ReleasePolicy.Authorized, ReleasePolicy.Permits, releaseZero, releaseValue, releaseAt]
+  apply prefixes_authorized_of_complete policy (leakyRun secret)
+  change policy.Authorized [releaseValue 0]
+  simp [ReleasePolicy.Authorized, ReleasePolicy.Permits, releaseValue, releaseAt]
 
 /-- Helper (computation). Checks that every run from `Demo.ctStart` emits only releases permitted by `Demo.policy`. -/
 theorem ct_release_authorized (secret : Int) :
     policy.RunsAuthorized instrumentation program (ctStart secret) := by
-  intro r
-  rw [(ct_run_unique secret r).2.2.1]
-  simp [ReleasePolicy.Authorized, ReleasePolicy.Permits, releaseZero, releaseValue, releaseAt]
+  apply prefixes_authorized_of_complete policy (ctRun secret)
+  change policy.Authorized [releaseValue 0]
+  simp [ReleasePolicy.Authorized, ReleasePolicy.Permits, releaseValue, releaseAt]
 
 /-- Law: C7's distinct security obligations cannot be discharged by a weaker observation.
 Authority: docs/decisions.md#decided-2026-11-08-foundation (C7),
@@ -563,7 +653,7 @@ theorem authorized_release_not_ni (s₁ s₂ : Int)
     (hs : s₁ ≠ s₂) :
     ¬ DelimitedReleaseNI instrumentation program labelling (leakyStart s₁) (leakyStart s₂) := by
   intro hni
-  have hobs := (hni (leakyRun s₁) (leakyRun s₂) hlow rfl rfl).1
+  have hobs := (hni.2 (leakyRun s₁) (leakyRun s₂) hlow rfl rfl).1
   simp [Run.publicObservations, leakyRun, finished, Config.final?, bodyRun] at hobs
   exact hs hobs
 
@@ -582,7 +672,7 @@ theorem authorized_release_not_ct (s₁ s₂ : Int)
     (hs : s₁ ≠ s₂) :
     ¬ ConstantTime instrumentation program labelling (leakyStart s₁) (leakyStart s₂) := by
   intro hct
-  have hleak := hct (leakyRun s₁) (leakyRun s₂) hlow rfl rfl
+  have hleak := hct.2 (leakyRun s₁) (leakyRun s₂) hlow rfl rfl
   change [Leakage.variableTime ⟨0⟩ [0], .variableTime ⟨1⟩ [s₁]] =
     [.variableTime ⟨0⟩ [0], .variableTime ⟨1⟩ [s₂]] at hleak
   simp only [List.cons.injEq, Leakage.variableTime.injEq] at hleak
@@ -621,11 +711,11 @@ theorem requires_release_refuses_empty_trace :
     ¬ requiresRelease (ReleasePolicy.mk ([] : List (ReleaseSite Unit))) ([] : List (Release Unit Int)) :=
   ⟨listed_trace_authorized _ _ (by simp), fun h => h.1 rfl⟩
 
-/-- Instance (law `forbidsRelease_not_authorized`, case `emptyPolicy`). -/
+/-- Instance (law `forbidsRelease_not_authorized`). -/
 theorem empty_policy_refuses_release : ¬ (ReleasePolicy.mk ([] : List (ReleaseSite Unit))).Authorized [Demo.releaseZero] :=
   forbidsRelease_not_authorized (ReleasePolicy.mk []) Demo.releaseZero [] rfl
 
-/-- Planted (law `forbidsRelease_not_authorized`, case `emptyPolicy`, subject `ReleasePolicy.Authorized`, mutant `ignoresPolicyAuthorized`). -/
+/-- Planted (law `forbidsRelease_not_authorized`, subject `ReleasePolicy.Authorized`, mutant `ignoresPolicyAuthorized`). -/
 theorem ignores_policy_accepts_release : (ReleasePolicy.mk ([] : List (ReleaseSite Unit))).ForbidsRelease ∧
     ¬ (¬ ignoresPolicyAuthorized (ReleasePolicy.mk ([] : List (ReleaseSite Unit)))
       [Demo.releaseZero]) :=
@@ -675,11 +765,11 @@ theorem permissive_identity_adds_step : (∃ (l : Label (opsWith permissiveAllow
   injection h78 with hv
   exact (by decide : (7 : Int) ≠ 8) hv
 
-/-- Instance (law `secure_ni`, case `maskedSecrets`). -/
+/-- Instance (law `secure_ni`). -/
 theorem masked_secrets_ni : DelimitedReleaseNI instrumentation program labelling (start 6 1) (start 5 2) :=
   secure_ni 6 5 1 2 ⟨rfl, trivial⟩ ⟨secureRun 6 1, secureRun 5 2, rfl, rfl⟩
 
-/-- Planted (law `secure_ni`, case `maskedSecrets`, subject `ConcreteSpec.Core.Leak.Demo.start`, mutant `exposingStart`). -/
+/-- Planted (law `secure_ni`, subject `ConcreteSpec.Core.Leak.Demo.start`, mutant `exposingStart`). -/
 theorem exposing_start_breaks_ni : LowEquivalent labelling (exposingStart 6 1) (exposingStart 5 2) ∧
     (∃ (r₁ : Run instrumentation program (exposingStart 6 1))
        (r₂ : Run instrumentation program (exposingStart 5 2)),
@@ -687,14 +777,14 @@ theorem exposing_start_breaks_ni : LowEquivalent labelling (exposingStart 6 1) (
     ¬ DelimitedReleaseNI instrumentation program labelling (exposingStart 6 1) (exposingStart 5 2) := by
   refine ⟨⟨rfl, trivial⟩, ⟨exposingRun 6 1, exposingRun 5 2, rfl, rfl⟩, ?_⟩
   intro h
-  have hobs := h (exposingRun 6 1) (exposingRun 5 2) ⟨rfl, trivial⟩ rfl rfl
+  have hobs := h.2 (exposingRun 6 1) (exposingRun 5 2) ⟨rfl, trivial⟩ rfl rfl
   exact (by decide : (exposingRun 6 1).publicObservations ≠ (exposingRun 5 2).publicObservations) hobs.1
 
-/-- Instance (law `secure_ct`, case `maskedSecrets`). -/
+/-- Instance (law `secure_ct`). -/
 theorem masked_secrets_ct : ConstantTime instrumentation program labelling (start 6 1) (start 5 2) :=
   secure_ct 6 5 1 2 ⟨rfl, trivial⟩ ⟨secureRun 6 1, secureRun 5 2, rfl, rfl⟩
 
-/-- Planted (law `secure_ct`, case `maskedSecrets`, subject `ConcreteSpec.Core.Leak.Demo.start`, mutant `exposingStart`). -/
+/-- Planted (law `secure_ct`, subject `ConcreteSpec.Core.Leak.Demo.start`, mutant `exposingStart`). -/
 theorem exposing_start_breaks_ct : LowEquivalent labelling (exposingStart 6 1) (exposingStart 5 2) ∧
     (∃ (r₁ : Run instrumentation program (exposingStart 6 1))
        (r₂ : Run instrumentation program (exposingStart 5 2)),
@@ -702,7 +792,7 @@ theorem exposing_start_breaks_ct : LowEquivalent labelling (exposingStart 6 1) (
     ¬ ConstantTime instrumentation program labelling (exposingStart 6 1) (exposingStart 5 2) := by
   refine ⟨⟨rfl, trivial⟩, ⟨exposingRun 6 1, exposingRun 5 2, rfl, rfl⟩, ?_⟩
   intro h
-  have hleak := h (exposingRun 6 1) (exposingRun 5 2) ⟨rfl, trivial⟩ rfl rfl
+  have hleak := h.2 (exposingRun 6 1) (exposingRun 5 2) ⟨rfl, trivial⟩ rfl rfl
   change [Leakage.variableTime ⟨0⟩ [7], .variableTime ⟨1⟩ [6]] =
     [.variableTime ⟨0⟩ [7], .variableTime ⟨1⟩ [5]] at hleak
   cases hleak
@@ -719,7 +809,7 @@ theorem leaky_timing_start_breaks_ni : LowEquivalent labelling (leakyTimingStart
     ¬ DelimitedReleaseNI instrumentation program labelling (leakyTimingStart 1) (leakyTimingStart 2) := by
   refine ⟨⟨rfl, trivial⟩, ⟨leakyTimingRun 1, leakyTimingRun 2, rfl, rfl⟩, ?_⟩
   intro h
-  have hobs := h (leakyTimingRun 1) (leakyTimingRun 2) ⟨rfl, trivial⟩ rfl rfl
+  have hobs := h.2 (leakyTimingRun 1) (leakyTimingRun 2) ⟨rfl, trivial⟩ rfl rfl
   exact (by decide : (leakyTimingRun 1).publicObservations ≠ (leakyTimingRun 2).publicObservations) hobs.1
 
 /-- Instance: secret-dependent work refutes constant time even with public output. -/
@@ -773,26 +863,26 @@ theorem empty_leakage_requirement_refuses_matched_work :
 
 /-- Planted definition: omit only public-output equality from NI. The complete-run domain,
 all premises and public-length equality remain unchanged. -/
-def blindNI {O : Operands} (I : Instrumentation O) (P : Program O)
+def blindNI {O : Operands} [MachineObserver O] (I : Instrumentation O) (P : Program O)
     (L : Labelling O) (c₁ c₂ : Config O) : Prop :=
-  ∀ (r₁ : Run I P c₁) (r₂ : Run I P c₂),
+  ObserverQualified I ∧ ∀ (r₁ : Run I P c₁) (r₂ : Run I P c₂),
     LowEquivalent L c₁ c₂ → r₁.choices = r₂.choices →
       releaseTrace r₁.releases = releaseTrace r₂.releases →
       True ∧ publicLengths r₁.leakage = publicLengths r₂.leakage
 
 /-- Planted definition: CT's single leakage-equality obligation is omitted; every premise remains. -/
-def blindCT {O : Operands} (I : Instrumentation O) (P : Program O)
+def blindCT {O : Operands} [MachineObserver O] (I : Instrumentation O) (P : Program O)
     (L : Labelling O) (c₁ c₂ : Config O) : Prop :=
-  ∀ (r₁ : Run I P c₁) (r₂ : Run I P c₂),
+  ObserverQualified I ∧ ∀ (r₁ : Run I P c₁) (r₂ : Run I P c₂),
     LowEquivalent L c₁ c₂ → r₁.choices = r₂.choices →
       releaseTrace r₁.releases = releaseTrace r₂.releases → True
 
 /-- Planted (law `timing_not_ct`, case `timingStart`, mutant `blindCT`).
-the added leakage permission invalidates timing_not_ct with its premises inhabited. -/
+The added leakage permission invalidates `timing_not_ct` with its premises inhabited. -/
 theorem timing_absence_planted :
     LowEquivalent labelling (timingStart 1) (timingStart 2) ∧ (1 : Int) ≠ 2 ∧
     ¬ (¬ blindCT instrumentation program labelling (timingStart 1) (timingStart 2)) := by
-  exact ⟨⟨rfl, trivial⟩, by decide, fun h => h (fun _ _ _ _ _ => True.intro)⟩
+  exact ⟨⟨rfl, trivial⟩, by decide, fun h => h ⟨rfl, fun _ _ _ _ _ => True.intro⟩⟩
 
 /-- Planted (law `authorized_release_not_ni`, case `leakyStart`, mutant `blindNI`).
 the added output permission invalidates authorized_release_not_ni on the same runs. -/
@@ -804,6 +894,7 @@ theorem authorization_ni_planted :
   refine ⟨release_authorized 1, release_authorized 2, leaky_low 1 2, by decide, ?_⟩
   intro h
   apply h
+  refine ⟨rfl, ?_⟩
   intro r₁ r₂ _ _ _
   have h₁ := (complete_unique r₁ (leakyRun 1)).2.1
   have h₂ := (complete_unique r₂ (leakyRun 2)).2.1
@@ -817,7 +908,7 @@ theorem authorization_ct_planted :
     LowEquivalent labelling (leakyStart 1) (leakyStart 2) ∧ (1 : Int) ≠ 2 ∧
     ¬ (¬ blindCT instrumentation program labelling (leakyStart 1) (leakyStart 2)) := by
   exact ⟨release_authorized 1, release_authorized 2, leaky_low 1 2, by decide,
-    fun h => h (fun _ _ _ _ _ => True.intro)⟩
+    fun h => h ⟨rfl, fun _ _ _ _ _ => True.intro⟩⟩
 
 /-- Planted observer. The secure program is unchanged; final shared secret becomes public. -/
 abbrev secretSeeing : Instrumentation Demo.ops :=
@@ -842,12 +933,12 @@ def secretSeeingRun (s : Int) (h : Nat) : Run secretSeeing program (start s h) w
   choices := (secureRun s h).choices
   steps := secretSeeingSteps (secureRun s h).steps
 
-/-- Planted (law `secure_ni`, fault `secretSeeingObserver`).
+/-- Planted (law `secure_ni`, mutant `secretSeeing`).
 Same program and entries as the positive instance; only the observer is changed. -/
 theorem secret_observer_breaks_ni : LowEquivalent labelling (start 6 1) (start 5 2) ∧
     (secretSeeingRun 6 1).choices = (secretSeeingRun 5 2).choices ∧
     releaseTrace (secretSeeingRun 6 1).releases = releaseTrace (secretSeeingRun 5 2).releases ∧
-    ¬ DelimitedReleaseNI secretSeeing program labelling (start 6 1) (start 5 2) := by
+    ¬ NIComparison secretSeeing program labelling (start 6 1) (start 5 2) := by
   refine ⟨⟨rfl, trivial⟩, rfl, rfl, ?_⟩
   intro h
   have bad := (h (secretSeeingRun 6 1) (secretSeeingRun 5 2) ⟨rfl, trivial⟩ rfl rfl).1
@@ -862,12 +953,12 @@ abbrev metadataSeeing : Instrumentation Demo.ops :=
 def metadataSeeingRun (secret : Int) (hidden : Nat := 0) : Run metadataSeeing program (start secret hidden) :=
   bodyRun metadataSeeing .masked .masked secret (hiddenLocals hidden)
 
-/-- Planted (law `secure_ni`, fault `secretPublicLength`).
+/-- Planted (law `secure_ni`, mutant `metadataSeeing`).
 NI rejects secret-dependent public metadata even when ordinary outputs still match. -/
 theorem secret_length_breaks_ni : LowEquivalent labelling (start 6 1) (start 5 2) ∧
     (metadataSeeingRun 6 1).choices = (metadataSeeingRun 5 2).choices ∧
     releaseTrace (metadataSeeingRun 6 1).releases = releaseTrace (metadataSeeingRun 5 2).releases ∧
-    ¬ DelimitedReleaseNI metadataSeeing program labelling (start 6 1) (start 5 2) := by
+    ¬ NIComparison metadataSeeing program labelling (start 6 1) (start 5 2) := by
   refine ⟨⟨rfl, trivial⟩, rfl, rfl, ?_⟩
   intro h
   have bad := (h (metadataSeeingRun 6 1) (metadataSeeingRun 5 2) ⟨rfl, trivial⟩ rfl rfl).2
@@ -879,11 +970,11 @@ def pathSensitiveTrace {Ty Val : Type} (rs : List (ReleaseFact Ty Val)) :
     List (ReleaseSite Ty × Val) :=
   (rs.filter fun r => !r.path.isEmpty).map fun r => (r.release.site, r.release.value)
 
-/-- Planted (law `release_metadata_irrelevant`, fault `pathSensitiveComparison`). -/
+/-- Planted (law `release_metadata_irrelevant`, mutant `pathSensitiveTrace`). -/
 theorem path_sensitive_trace_changes : ¬ (pathSensitiveTrace [{ metadataFact with path := [Exec.Demo.logF] }] =
     pathSensitiveTrace [metadataFact]) := by decide
 
-/-- Instance (law `instrumentation_erasure`, case `secureExecution`). -/
+/-- Instance (law `instrumentation_erasure`). -/
 theorem secure_execution_erases : ∃ events, Steps program (start 6 1) events (secureRun 6 1).final :=
   (instrumentation_erasure instrumentation program _ _).mp
     ⟨_, _, _, _, (secureRun 6 1).steps⟩
@@ -906,7 +997,7 @@ inductive RestrictedSteps {O : Operands} (I : Instrumentation O) (P : Program O)
       RestrictedSteps I P c (I.observeStep c l c' ++ obs) (I.leakage c l c' ++ leaks)
         (I.releases c l c' ++ rs) (I.choices c l c' ++ choices) c''
 
-/-- Planted (law `instrumentation_erasure`, fault `restrictedRefl`).
+/-- Planted (law `instrumentation_erasure`, mutant `RestrictedSteps`).
 The erased reflexive run inhabits the reverse implication's premise. -/
 theorem restricted_refl_loses_execution : (∃ events, Steps program (finished 1) events (finished 1)) ∧
     ¬ ((∃ obs leaks rs choices, RestrictedSteps instrumentation program
@@ -931,7 +1022,7 @@ inductive AdmittingSteps (I : Instrumentation Demo.ops) (P : Program Demo.ops) :
       AdmittingSteps I P c (I.observeStep c l c' ++ obs) (I.leakage c l c' ++ leaks)
         (I.releases c l c' ++ rs) (I.choices c l c' ++ choices) c''
 
-/-- Planted (law `instrumentation_erasure`, fault `illicitStep`).
+/-- Planted (law `instrumentation_erasure`, mutant `AdmittingSteps`).
 The added transition inhabits the forward implication's premise. -/
 theorem illicit_step_adds_execution : (∃ obs leaks rs choices, AdmittingSteps instrumentation program
       (finished 1) obs leaks rs choices (start 1)) ∧
@@ -947,7 +1038,7 @@ theorem illicit_step_adds_execution : (∃ obs leaks rs choices, AdmittingSteps 
   cases hs with
   | step hs _ => exact no_step_of_none (P := program) (c := finished 1) rfl _ _ hs
 
-/-- Instance (law `release_metadata_irrelevant`, case `factsOfSecureRun`).
+/-- Instance (law `release_metadata_irrelevant`).
 Reasons and paths are connected to an actual run while remaining outside its release premise. -/
 theorem run_facts_keep_release_trace : ReleaseFact.semanticTrace
     (ReleaseFact.attach (secureRun 6 1).releases
@@ -1021,7 +1112,7 @@ theorem asymmetric_ni_refused :
   intro h
   exact (by decide : (left instrumentation).publicObservations ≠
     (right instrumentation).publicObservations)
-      (h (left instrumentation) (right instrumentation) ⟨rfl, trivial⟩ rfl rfl).1
+      (h.2 (left instrumentation) (right instrumentation) ⟨rfl, trivial⟩ rfl rfl).1
 
 /-- Helper: project the first recorded control decision for constructor discrimination. -/
 def firstDecision : List (Leakage Int Unit Unit) → Bool
@@ -1037,14 +1128,14 @@ theorem asymmetric_ct_refused :
     have bad := congrArg firstDecision eq
     change false = true at bad
     cases bad)
-    (h (left instrumentation) (right instrumentation) ⟨rfl, trivial⟩ rfl rfl)
+    (h.2 (left instrumentation) (right instrumentation) ⟨rfl, trivial⟩ rfl rfl)
 
 /-- Planted: changing only choices to the step counter wrongly admits the asymmetric leak
 under both judgments. All other observer projections are the production projections. -/
 theorem counted_leak_admitted :
     LowEquivalent labelling (entry 0) (entry 1) ∧
-    DelimitedReleaseNI stepCount program labelling (entry 0) (entry 1) ∧
-    ConstantTime stepCount program labelling (entry 0) (entry 1) := by
+    NIComparison stepCount program labelling (entry 0) (entry 1) ∧
+    TimingComparison stepCount program labelling (entry 0) (entry 1) := by
   have impossible : ∀ (a : Run stepCount program (entry 0))
       (b : Run stepCount program (entry 1)), a.choices ≠ b.choices := by
     intro a b h
@@ -1053,6 +1144,55 @@ theorem counted_leak_admitted :
     exact (by decide : (left stepCount).choices ≠ (right stepCount).choices) h
   exact ⟨⟨rfl, trivial⟩, fun a b _ h _ => (impossible a b h).elim,
     fun a b _ h _ => (impossible a b h).elim⟩
+
+/-- Dropping all public and timing observations leaves choices and releases unchanged. -/
+abbrev emptyObserver : Instrumentation ops := { instrumentation with
+  observeStep := fun _ _ _ => []
+  observeFinal := fun _ => none
+  leakage := fun _ _ _ => [] }
+
+/-- Planted: run comparison alone admits the known leak when observations are erased.
+The qualification Laws kill this substitution for both security judgments. -/
+theorem empty_observer_killed :
+    NIComparison emptyObserver program labelling (entry 0) (entry 1) ∧
+    TimingComparison emptyObserver program labelling (entry 0) (entry 1) ∧
+    ¬ DelimitedReleaseNI emptyObserver program labelling (entry 0) (entry 1) ∧
+    ¬ ConstantTime emptyObserver program labelling (entry 0) (entry 1) := by
+  have unqualified : ¬ ObserverQualified emptyObserver := by
+    intro h
+    have final := congrArg (fun I : Instrumentation ops => (I.observeFinal (finished 0)).isSome) h
+    change false = true at final
+    cases final
+  refine ⟨?_, ?_, fun h => unqualified (ni_observer_qualified h),
+    fun h => unqualified (ct_observer_qualified h)⟩
+  · intro a b _ _ _
+    have leftTrace := complete_unique a (left emptyObserver)
+    have rightTrace := complete_unique b (right emptyObserver)
+    simp only [Run.publicObservations, leftTrace.1, rightTrace.1, leftTrace.2.1, rightTrace.2.1]
+    exact ⟨rfl, rfl⟩
+  · intro a b _ _ _
+    rw [(complete_unique a (left emptyObserver)).2.1, (complete_unique b (right emptyObserver)).2.1]
+    rfl
+
+/-- Planted: comparisons made vacuous by a step counter fail both qualification Laws.
+The witnessed conditional transition is internal and consumes no external answer. -/
+theorem step_counter_killed :
+    NIComparison stepCount program labelling (entry 0) (entry 1) ∧
+    TimingComparison stepCount program labelling (entry 0) (entry 1) ∧
+    ¬ DelimitedReleaseNI stepCount program labelling (entry 0) (entry 1) ∧
+    ¬ ConstantTime stepCount program labelling (entry 0) (entry 1) := by
+  have unqualified : ¬ ObserverQualified stepCount := by
+    intro h
+    let target : Config ops := ⟨.exec (out 0), [], 0, []⟩
+    have transition : step program (entry 0) = some (.next target) := rfl
+    have noChoice := MachineObserver.internalChoices transition
+    have choice := congrArg (fun I : Instrumentation ops =>
+      (I.choices (entry 0) .silent target).isEmpty) h
+    change false = (instrumentation.choices (entry 0) .silent target).isEmpty at choice
+    rw [show instrumentation.choices (entry 0) .silent target = [] from noChoice] at choice
+    cases choice
+  exact ⟨counted_leak_admitted.2.1, counted_leak_admitted.2.2,
+    fun h => unqualified (ni_observer_qualified h), fun h => unqualified (ct_observer_qualified h)⟩
 
 /-- Law: evaluated conditionals retain the real source site and Boolean decision.
 Authority: docs/decisions.md#decided-project-infoflow-2026-11-06 (baseline branches),
@@ -1093,10 +1233,10 @@ theorem condition_ct_refused :
     have bad := congrArg firstDecision eq
     change false = true at bad
     cases bad)
-    (h (branchRun instrumentation 0) (branchRun instrumentation 1) ⟨rfl, trivial⟩ rfl rfl)
+    (h.2 (branchRun instrumentation 0) (branchRun instrumentation 1) ⟨rfl, trivial⟩ rfl rfl)
 
 /-- Planted: omitting only conditional leakage wrongly accepts the same secret condition. -/
-theorem no_condition_wrongly_passes_ct : ConstantTime noCondition program labelling (branchEntry 0) (branchEntry 1) := by
+theorem no_condition_wrongly_passes_ct : TimingComparison noCondition program labelling (branchEntry 0) (branchEntry 1) := by
   intro a b _ _ _
   rw [(complete_unique a (branchRun noCondition 0)).2.1,
       (complete_unique b (branchRun noCondition 1)).2.1]
@@ -1157,10 +1297,10 @@ theorem loop_ct_refused :
     have bad := congrArg firstDecision eq
     change false = true at bad
     cases bad)
-    (h (loopLeft instrumentation) (loopRight instrumentation) ⟨rfl, trivial⟩ rfl rfl)
+    (h.2 (loopLeft instrumentation) (loopRight instrumentation) ⟨rfl, trivial⟩ rfl rfl)
 
 /-- Planted: omitting only loop tests wrongly accepts that same finite loop. -/
-theorem no_loop_wrongly_passes_ct : ConstantTime noLoop program labelling (loopEntry 0) (loopEntry 1) := by
+theorem no_loop_wrongly_passes_ct : TimingComparison noLoop program labelling (loopEntry 0) (loopEntry 1) := by
   intro a b _ _ _
   rw [(complete_unique a (loopLeft noLoop)).2.1,
       (complete_unique b (loopRight noLoop)).2.1]

@@ -92,6 +92,31 @@ theorem unlisted_program_caller_refused {O : Operands} (p : ReleaseInterface O.T
     (source_reaches_complete declared program hc)
     (program_release_complete declared program hm hr) hn
 
+/-- Law: a reachable unlisted typed site refuses admission directly from source premises.
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+theorem unlisted_program_site_refused {O : Operands} (p : ReleaseInterface O.Ty)
+    (declared : O.Prim → Option O.Ty) (program : Program O) (caller owner : FnId)
+    (site : ReleaseSite O.Ty) (hc : SourceReaches declared program caller owner)
+    {body : Fn O} (hm : (owner, body) ∈ program.fns)
+    (hr : SourceOccurrence declared body.body (.inr site))
+    (hn : ¬ p.sites.Permits (⟨site, ()⟩ : Release O.Ty Unit)) :
+    ¬ p.ProgramAdmitted declared program :=
+  unlisted_site_refused p _ caller owner site
+    (source_reaches_complete declared program hc)
+    (program_release_complete declared program hm hr) hn
+
+/-- Law: a forbid-release policy refuses any reachable declared source release.
+Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
+theorem forbidden_program_release_refused {O : Operands} (p : ReleaseInterface O.Ty)
+    (declared : O.Prim → Option O.Ty) (program : Program O) (caller owner : FnId)
+    (site : ReleaseSite O.Ty) (hc : SourceReaches declared program caller owner)
+    {body : Fn O} (hm : (owner, body) ∈ program.fns)
+    (hr : SourceOccurrence declared body.body (.inr site)) (hf : p.sites.ForbidsRelease) :
+    ¬ p.ProgramAdmitted declared program :=
+  forbidden_release_refused p _ caller owner site
+    (source_reaches_complete declared program hc)
+    (program_release_complete declared program hm hr) hf
+
 /-- Law: each extracted call or typed release comes from a source occurrence.
 Authority: docs/decisions.md#decided-2026-11-08-foundation (C7). -/
 theorem extraction_sound {O : Operands} (declared : O.Prim → Option O.Ty)
@@ -779,7 +804,7 @@ def directOnlyProgram (p : ReleaseInterface Unit) (d : Demo.Prim → Option Unit
 def ignoresFunctionsProgram (p : ReleaseInterface Unit) (d : Demo.Prim → Option Unit)
     (prog : Program Demo.ops) : Prop := ignoresFunctions p (ReleaseCalls.ofProgram d prog)
 
-/-- Planted (law `unlisted_program_caller_refused`, subject `ProgramAdmitted`,
+/-- Planted (law `unlisted_program_caller_refused`, subject `ReleaseInterface.ProgramAdmitted`,
 mutant `directOnlyProgram`): all source premises hold but the substituted refusal is false. -/
 theorem direct_only_program_admits_unlisted_caller : SourceReaches declared program (fn "0") (fn "2") ∧
     (fn "2", releaseBody) ∈ program.fns ∧
@@ -789,7 +814,7 @@ theorem direct_only_program_admits_unlisted_caller : SourceReaches declared prog
   ⟨sourceTwoLevels, sourceRelease.1, sourceRelease.2, by decide,
     fun h => h kills_directOnly.2.2.2.1⟩
 
-/-- Planted (law `unlisted_program_caller_refused`, subject `ProgramAdmitted`,
+/-- Planted (law `unlisted_program_caller_refused`, subject `ReleaseInterface.ProgramAdmitted`,
 mutant `ignoresFunctionsProgram`): the same source witnesses survive uniform substitution. -/
 theorem ignores_functions_program_admits_unlisted_caller : SourceReaches declared program (fn "0") (fn "2") ∧
     (fn "2", releaseBody) ∈ program.fns ∧
@@ -831,6 +856,31 @@ theorem dropped_release_graph_admits_unlisted_caller : SourceReaches declared pr
   intro caller owner site _ hr
   simp [droppedReleaseGraph, program, statementReleases, fn] at hr
 
+/-- Planted: omit the site check at program admission, retaining extraction and caller checks. -/
+def ignoresSitesProgram (p : ReleaseInterface Unit) (d : Demo.Prim → Option Unit)
+    (program : Program Demo.ops) : Prop :=
+  ignoresSites p (ReleaseCalls.ofProgram d program)
+
+/-- The program-site Laws kill `ignoresSitesProgram` with a source path to a declared release. -/
+theorem ignoring_sites_admits_source_release :
+    SourceReaches declared program (fn "0") (fn "2") ∧
+      (fn "2", releaseBody) ∈ program.fns ∧
+      SourceOccurrence declared releaseBody.body (.inr ⟨⟨7⟩, ()⟩) ∧
+      (¬ siteDenied.sites.Permits (⟨⟨⟨7⟩, ()⟩, ()⟩ : Release Unit Unit)) ∧
+      siteDenied.sites.ForbidsRelease ∧ ignoresSitesProgram siteDenied declared program ∧
+      ¬ siteDenied.ProgramAdmitted declared program := by
+  have unlisted : ¬ siteDenied.sites.Permits (⟨⟨⟨7⟩, ()⟩, ()⟩ : Release Unit Unit) :=
+    fun h => List.not_mem_nil h
+  have refused := unlisted_program_site_refused siteDenied declared program _ _ _
+    sourceTwoLevels sourceRelease.1 sourceRelease.2 unlisted
+  exact ⟨sourceTwoLevels, sourceRelease.1, sourceRelease.2, unlisted, rfl,
+    ignores_sites_admits_chain.2.2.2.2.1, refused⟩
+
+/-- Instance: the forbid-release Law refuses the same concrete source program. -/
+theorem source_forbid_release_refused : ¬ siteDenied.ProgramAdmitted declared program :=
+  forbidden_program_release_refused siteDenied declared program _ _ _
+    sourceTwoLevels sourceRelease.1 sourceRelease.2 (show siteDenied.sites.ForbidsRelease from rfl)
+
 /-- Planted: require an actual release in addition to the production admission check. -/
 def requiresReachableRelease (p : ReleaseInterface Unit) (g : ReleaseCalls Unit) : Prop :=
   g.releases ≠ [] ∧ p.Admitted g
@@ -858,12 +908,16 @@ theorem source_permissions_admit_program : allAllowed.ProgramAdmitted declared p
   exact admission caller owner site (source_reaches_complete declared program path)
     (program_release_complete declared program member occurrence)
 
+/-- Planted: also require the program's extracted call table to be empty. -/
+def prohibitsProgramCalls (p : ReleaseInterface Unit) (d : Demo.Prim → Option Unit)
+    (program : Program Demo.ops) : Prop :=
+  prohibitsCalls p (ReleaseCalls.ofProgram d program)
+
 /-- Planted control for `permitted_program_admitted`: the call ban wrongly rejects the same
 source program with all of its calls and release sites permitted. -/
 theorem call_ban_refuses_permitted_program :
-    allAllowed.ProgramAdmitted declared program ∧
-      ¬ prohibitsCalls allAllowed (ReleaseCalls.ofProgram declared program) := by
-  exact ⟨source_permissions_admit_program, call_ban_refuses_permitted_chain.2⟩
+    allAllowed.ProgramAdmitted declared program ∧ ¬ prohibitsProgramCalls allAllowed declared program :=
+  ⟨source_permissions_admit_program, call_ban_refuses_permitted_chain.2⟩
 
 /-- Planted: append a call to a statement that has no call syntax. -/
 def addsCall (s : Stmt Demo.ops) : List FnId := statementCalls s ++ [fn "1"]
@@ -873,16 +927,31 @@ theorem fabricated_call_fails_extraction_soundness :
     fn "1" ∈ addsCall .skip ∧ ¬ SourceOccurrence (O := Demo.ops) declared .skip (.inl (fn "1")) :=
   ⟨by simp [addsCall], fun h => by cases h⟩
 
-/-- Planted: add an edge and a release to a program with an empty function table. -/
-def addsGraphEntries (p : Program Demo.ops) : ReleaseCalls Unit :=
+/-- Planted: append a release to statement extraction, leaving call extraction unchanged. -/
+def addsStatementRelease (s : Stmt Demo.ops) : List (ReleaseSite Unit) :=
+  statementReleases declared s ++ [⟨⟨7⟩, ()⟩]
+
+/-- Planted control for the release branch of `extraction_sound`: skip has no release occurrence. -/
+theorem fabricated_release_fails_extraction_soundness :
+    ⟨⟨7⟩, ()⟩ ∈ addsStatementRelease .skip ∧
+      ¬ SourceOccurrence (O := Demo.ops) declared .skip (.inr ⟨⟨7⟩, ()⟩) :=
+  ⟨by simp [addsStatementRelease], fun h => by cases h⟩
+
+/-- Planted: append only one edge, preserving the release table. -/
+def addsGraphEdge (p : Program Demo.ops) : ReleaseCalls Unit :=
   let extracted := ReleaseCalls.ofProgram declared p
-  ⟨extracted.calls ++ [(fn "0", fn "1")], extracted.releases ++ [(fn "1", ⟨⟨7⟩, ()⟩)]⟩
+  { extracted with calls := extracted.calls ++ [(fn "0", fn "1")] }
+
+/-- Planted: append only one release, preserving the call table. -/
+def addsGraphRelease (p : Program Demo.ops) : ReleaseCalls Unit :=
+  let extracted := ReleaseCalls.ofProgram declared p
+  { extracted with releases := extracted.releases ++ [(fn "1", ⟨⟨7⟩, ()⟩)] }
 
 /-- Planted control for `source_reaches_sound`: the added edge has no source path. -/
 theorem fabricated_edge_fails_path_soundness :
-    (addsGraphEntries ⟨[]⟩).Reaches (fn "0") (fn "1") ∧
+    (addsGraphEdge ⟨[]⟩).Reaches (fn "0") (fn "1") ∧
       ¬ SourceReaches (O := Demo.ops) declared ⟨[]⟩ (fn "0") (fn "1") := by
-  refine ⟨.call (middle := fn "1") (by simp [addsGraphEntries, ReleaseCalls.ofProgram]) (.self _), ?_⟩
+  refine ⟨.call (middle := fn "1") (by simp [addsGraphEdge, ReleaseCalls.ofProgram]) (.self _), ?_⟩
   have onlySelf {f g : FnId} (path : SourceReaches (O := Demo.ops) declared ⟨[]⟩ f g) :
       f = g := by
     cases path with
@@ -892,10 +961,10 @@ theorem fabricated_edge_fails_path_soundness :
 
 /-- Planted control for `program_release_sound`: the added release has no declaring body. -/
 theorem fabricated_release_fails_program_release_soundness :
-    (fn "1", ⟨⟨7⟩, ()⟩) ∈ (addsGraphEntries ⟨[]⟩).releases ∧
+    (fn "1", ⟨⟨7⟩, ()⟩) ∈ (addsGraphRelease ⟨[]⟩).releases ∧
       ¬ ∃ body, (fn "1", body) ∈ (Program.mk [] : Program Demo.ops).fns ∧
         SourceOccurrence declared body.body (.inr ⟨⟨7⟩, ()⟩) :=
-  ⟨by simp [addsGraphEntries, ReleaseCalls.ofProgram], by simp⟩
+  ⟨by simp [addsGraphRelease, ReleaseCalls.ofProgram], by simp⟩
 
 end CallControls
 end ConcreteSpec.Core.Leak

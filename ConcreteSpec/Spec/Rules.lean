@@ -237,6 +237,7 @@ def registeredRuleExamples : List RuleExample :=
    ⟨``Leak.UnitTraceAuthorized, `ConcreteSpec.Core.Leak.Registry.authorizedRefused⟩,
    ⟨``Leak.IntegerRunsAuthorized, `ConcreteSpec.Core.Leak.Registry.runsAccepted⟩,
    ⟨``Leak.IntegerRunsAuthorized, `ConcreteSpec.Core.Leak.Registry.runsRefused⟩,
+   ⟨``Leak.IntegerRunsAuthorized, `ConcreteSpec.Core.Leak.Registry.stuckRunsRefused⟩,
    ⟨``Leak.IntegerRunsAuthorized, `ConcreteSpec.Core.Leak.Registry.nonzeroRunsAccepted⟩,
    ⟨``Leak.IntegerRunsAuthorized, `ConcreteSpec.Core.Leak.Registry.nonzeroRunsRefused⟩,
    ⟨``Leak.IntegerLowEquivalent, `ConcreteSpec.Core.Leak.Registry.lowAccepted⟩,

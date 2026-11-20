@@ -12,13 +12,31 @@ lengths and the baseline observer). Numeric local fixtures follow
 docs/decisions.md#decided-2026-11-08-c9-identities; diagnostic spellings stay outside execution.
 No inherited approval claim supplies authority.
 
-`Proofs/Leak.lean` carries ten original Laws: `release_sites_agree`, `instrumentation_erasure`,
-`forbidsRelease_not_authorized`, `release_metadata_irrelevant`, `secure_ni`, `secure_ct`,
-`timing_ni`, `timing_not_ct`, `authorized_release_not_ni`, `authorized_release_not_ct`.
-`Proofs/ReleaseCalls.lean` carries seven: `extraction_complete`, `source_reaches_complete`,
-`program_release_complete`, `unlisted_caller_refused`, `unlisted_site_refused`,
-`forbidden_release_refused`, `unlisted_program_caller_refused`. Each has populated Instance
-witnesses and single-rule, uniformly substituted Planted counterexamples with inhabited premises.
+`Proofs/Leak.lean` carries these Laws:
+
+- Traces and metadata: `instrumentation_erasure`, `release_sites_agree`,
+  `release_metadata_irrelevant`, `release_metadata_preserves_trace`.
+- Policy: `permits_listed_site`, `listed_site_permitted`, `forbidding_policy_empty`,
+  `empty_policy_forbidding`, `forbidsRelease_not_authorized`, `unlisted_trace_refused`,
+  `listed_trace_authorized`, `unlisted_prefix_refused`, `listed_prefixes_authorized`.
+- Public state: `low_equivalent_public_state`, `public_state_low_equivalent`.
+- Observers: `ni_observer_qualified`, `ct_observer_qualified`, `deterministic_choices`,
+  `conditional_leakage`, `loop_leakage`.
+- NI and CT: `secure_ni`, `secure_ct`, `timing_ni`, `timing_not_ct`,
+  `same_timing_input_ct`, `authorized_release_not_ni`, `authorized_release_not_ct`.
+
+`Proofs/ReleaseCalls.lean` carries these Laws:
+
+- Extraction: `extraction_complete`, `extraction_sound`, `source_reaches_complete`,
+  `source_reaches_sound`, `program_release_complete`, `program_release_sound`.
+- Graph admission: `unlisted_caller_refused`, `unlisted_site_refused`,
+  `forbidden_release_refused`, `permitted_calls_admitted`, `release_free_graph_admitted`.
+- Program admission: `unlisted_program_caller_refused`, `unlisted_program_site_refused`,
+  `forbidden_program_release_refused`, `permitted_program_admitted`.
+
+The Laws have concrete witnesses and planted counterexamples with inhabited premises.
+The extraction soundness controls fabricate a statement call, statement release, graph edge,
+or graph release independently.
 Helper and Representation lemma tags distinguish support from Law evidence, following
 docs/decisions.md#decided-2026-11-13-proof-labels and
 docs/decisions.md#decided-2026-11-14-trap-sites-and-law-tests.
@@ -35,7 +53,7 @@ can disappear under substitution. A separate function-table drop control qualifi
 Exactly nine security rules join the eight accounting rules: `UnitCallsAdmitted`,
 `IntegerProgramAdmitted`, `StringReleasePermitted`, `UnitReleaseForbidden`, `UnitTraceAuthorized`,
 `IntegerRunsAuthorized`, `IntegerLowEquivalent`, `IntegerDelimitedReleaseNI`, `IntegerConstantTime`.
-Their twenty-four closed accepted/refused examples live in `Proofs/LeakRegistry.lean` because they use
+Their twenty-five closed accepted/refused examples live in `Proofs/LeakRegistry.lean` because they use
 security Laws and execution witnesses; Spec cannot import Proofs. The exporter gains only that
 registry import. All nine input shapes have closed-data and opaque-carrier controls. The axiom
 golden is regenerated from the combined environment. ISS-0082 tracks the release/facts boundary;
@@ -58,6 +76,13 @@ Held scope remains excluded; existing tracking covers every excluded family:
 Secret typing, speculative leakage and binary constant-time guarantees remain later-slice or
 backend obligations; these proofs concern the explicit C1 source observer. No additional issue number beyond ISS-0082
 is allocated by this branch.
+
+Runtime authorization checks all reachable finite prefixes. A release at site seven followed by
+a missing call is refused under the empty policy. The completed-run-only mutant accepts that entry
+because the endpoint is stuck. NI and CT require qualification against the installed machine
+observer. The external-choice contract receives accepted primitive answers and internal steps
+contribute no choices. Empty projections and an internal step counter pass the raw run comparisons
+on the asymmetric leak and fail both qualified judgments.
 
 Runtime release instrumentation preserves the actual source site and evaluated value. A per-step
 site agreement Law connects runtime release sites to static extraction, with nonzero-site positive
@@ -96,4 +121,3 @@ All continuation and destination shapes are retained. The toy operand language h
 allocation, container-length or external-effect operations, so it manufactures none of those
 events; the generic observer retains their payloads and public-length comparison. The Unit choice,
 address and effect carriers do not stand in for any existing nondeterministic or memory operation.
-The accounting base's files remain byte-for-byte unchanged.

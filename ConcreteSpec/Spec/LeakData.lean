@@ -204,6 +204,13 @@ abbrev instrumentation : Instrumentation ops where
     | _ => []
   choices := fun _ _ _ => []
 
+/-- The installed integer-machine observer has no external choices on any transition. -/
+instance machineObserver : MachineObserver ops where
+  instrumentation := instrumentation
+  externalChoice := fun _ _ _ _ => none
+  internalChoices := fun _ => rfl
+  answerChoices := fun _ _ _ => rfl
+
 /-- Negative local values are secret; nonnegative local values are public. The shared store remains
 secret, which is what lets the input configurations be low-equivalent. -/
 abbrev labelling : Labelling ops where
@@ -299,13 +306,13 @@ structure IntegerExecution where
   entry : IntegerEntry
 
 /-- Two entries of the same concrete program, observed by the integer machine's baseline
-instrumentation and public-state labelling. Generic observers remain in the owning judgments. -/
+instrumentation and public-state labelling. -/
 structure IntegerComparison where
   functions : List (FnId × IntegerFunction)
   left : IntegerEntry
   right : IntegerEntry
 
-/-- Integer-machine instance of complete-run authorization, with concrete policy and entry data.
+/-- Integer-machine instance of reachable-prefix authorization, with concrete policy and entry data.
 Authority: R-0613 (C7 security); docs/decisions.md#decided-2026-11-08-foundation (C7),
 docs/decisions.md#decided-project-infoflow-2026-11-06. -/
 def IntegerRunsAuthorized (d : ReleasePolicy Unit × IntegerExecution) : Prop :=

@@ -12,8 +12,8 @@ docs/decisions.md#decided-2026-11-16-secret-wiping, which defers wiping out of t
 Leakage is what the baseline timing observer sees, not ordinary output. It is separate from public
 observations. `InstrumentedSteps` instruments C1's existing `Exec.Step` relation without changing
 the machine: each step contributes public observations, leakage, ordered release records and the
-external choices on which it depended. C6's observation and environment contracts can supply the
-observation and choice instances; the instrumentation keeps those types explicit at this boundary.
+external choices on which it depended. The operand machine installs these projections and proves that choices come from accepted
+primitive answers. C6 can supply an external-interaction contract at this boundary.
 
 `DelimitedReleaseNI` and `ConstantTime` are different claims about executions. Both assume low-equivalent
 initial states, matched external choices and the same ordered release sites and values. NI requires
@@ -191,9 +191,9 @@ docs/decisions.md#decided-project-infoflow-2026-11-06. -/
 def LowEquivalent {O : Operands} (L : Labelling O) (c₁ c₂ : Config O) : Prop :=
   publicLocals L c₁ = publicLocals L c₂ ∧ L.lowStore c₁.store c₂.store
 
-/-- C1 instrumentation for C7. Each function projects one existing machine step; C6 can supply the
-public observation and external-choice instances later. The final observation includes termination
-when the instrumentation exposes it. Leakage is never read from the public observation trace. -/
+/-- C1 instrumentation for C7. Each step projection observes an existing machine transition.
+The machine observer qualifies the projections used in NI and CT. The final observation
+includes termination when the machine exposes it. The timing and public traces are separate. -/
 structure Instrumentation (O : Operands) where
   Address : Type
   Effect : Type
@@ -204,6 +204,24 @@ structure Instrumentation (O : Operands) where
   leakage : Config O → Label O → Config O → List (Leakage O.Val Address Effect)
   releases : Config O → Label O → Config O → List (Release O.Ty O.Val)
   choices : Config O → Label O → Config O → List Choice
+
+/-- The observing semantics installed by the operand machine. The external-choice contract
+projects only accepted primitive answers. It can omit deterministic primitive operations.
+Internal transitions consume no external choices. The machine supplies its public observations,
+leakage and releases together with this contract, independently of a security claim. -/
+class MachineObserver (O : Operands) where
+  instrumentation : Instrumentation O
+  externalChoice : O.Prim → List O.Val → SiteId → Answer O.Val O.Event O.Store →
+    Option instrumentation.Choice
+  internalChoices {P : Program O} {c d : Config O} :
+    step P c = some (.next d) → instrumentation.choices c .silent d = []
+  answerChoices {P : Program O} {c d : Config O} {p vs site st k a} :
+    step P c = some (.request p vs site st k) → O.allows p vs st a = true →
+    k a = some d → instrumentation.choices c a.label d = (externalChoice p vs site a).toList
+
+/-- Qualification fixes all projections to the operand machine's installed semantics. -/
+def ObserverQualified {O : Operands} [M : MachineObserver O] (I : Instrumentation O) : Prop :=
+  I = M.instrumentation
 
 /-- C1 steps with their C7 traces in execution order. A primitive step is still answered within its
 C1 contract; instrumentation only observes the transition and cannot authorize a new one. -/
@@ -248,11 +266,12 @@ def Run.publicObservations {O : Operands} {I : Instrumentation O} {P : Program O
     (r : Run I P c) : List I.Observation :=
   r.observations ++ (I.observeFinal r.final).toList
 
-/-- Every complete finite run from `c` emits only release records permitted by `policy`. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
+/-- Every reachable finite execution prefix from `c` emits only permitted releases, including
+prefixes of stuck or diverging executions. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
 docs/decisions.md#decided-project-infoflow-2026-11-06. -/
 def ReleasePolicy.RunsAuthorized {O : Operands} (policy : ReleasePolicy O.Ty)
     (I : Instrumentation O) (P : Program O) (c : Config O) : Prop :=
-  ∀ r : Run I P c, policy.Authorized r.releases
+  ∀ ⦃obs leaks rs choices d⦄, InstrumentedSteps I P c obs leaks rs choices d → policy.Authorized rs
 
 /-- Public container-length metadata is observable independently of the timing-only entries.
 Authority: docs/decisions.md#decided-project-infoflow-2026-11-06. -/
@@ -262,26 +281,36 @@ def publicLengths {Val Address Effect : Type} (trace : List (Leakage Val Address
   | .publicLength site length => some (site, length)
   | _ => none
 
-/-- Delimited-release noninterference between two entry configurations of one program. For
+/-- The run comparison underlying delimited-release noninterference. For
 low-equivalent initial states, matched external choices and equal ordered release traces, every
 pair of complete finite runs has equal public observations. No equality of leakage is asserted. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
 docs/decisions.md#decided-project-infoflow-2026-11-06. -/
-def DelimitedReleaseNI {O : Operands} (I : Instrumentation O) (P : Program O)
+def NIComparison {O : Operands} (I : Instrumentation O) (P : Program O)
     (L : Labelling O) (c₁ c₂ : Config O) : Prop :=
   ∀ (r₁ : Run I P c₁) (r₂ : Run I P c₂),
     LowEquivalent L c₁ c₂ → r₁.choices = r₂.choices → releaseTrace r₁.releases = releaseTrace r₂.releases →
       r₁.publicObservations = r₂.publicObservations ∧
         publicLengths r₁.leakage = publicLengths r₂.leakage
 
-/-- Constant time between the same entries and under the same delimited-release premises: the
+/-- The run comparison underlying constant time between the same entries and under the same delimited-release premises: the
 complete baseline leakage traces are equal. This is separate from `DelimitedReleaseNI`, not a
 consequence of authorization. Authority: docs/decisions.md#decided-2026-11-08-foundation (C7);
 docs/decisions.md#decided-project-infoflow-2026-11-06. -/
-def ConstantTime {O : Operands} (I : Instrumentation O) (P : Program O)
+def TimingComparison {O : Operands} (I : Instrumentation O) (P : Program O)
     (L : Labelling O) (c₁ c₂ : Config O) : Prop :=
   ∀ (r₁ : Run I P c₁) (r₂ : Run I P c₂),
     LowEquivalent L c₁ c₂ → r₁.choices = r₂.choices → releaseTrace r₁.releases = releaseTrace r₂.releases →
       r₁.leakage = r₂.leakage
 
+
+/-- Delimited-release noninterference uses the machine's qualified observing semantics. -/
+def DelimitedReleaseNI {O : Operands} [MachineObserver O] (I : Instrumentation O) (P : Program O)
+    (L : Labelling O) (c₁ c₂ : Config O) : Prop :=
+  ObserverQualified I ∧ NIComparison I P L c₁ c₂
+
+/-- Constant time uses the same qualified observing semantics and compares baseline leakage. -/
+def ConstantTime {O : Operands} [MachineObserver O] (I : Instrumentation O) (P : Program O)
+    (L : Labelling O) (c₁ c₂ : Config O) : Prop :=
+  ObserverQualified I ∧ TimingComparison I P L c₁ c₂
 
 end ConcreteSpec.Core.Leak
