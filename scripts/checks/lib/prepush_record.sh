@@ -61,7 +61,9 @@ ppr_path() { # root -> absolute record path inside that worktree's git dir
 }
 
 _ppr_toolver() { # tool -> "path|version" or nothing
-  local t="$1" path ver
+  local t="$1"
+  local path
+  local ver
   path="$(command -v "$t" 2>/dev/null)" || return 1
   [ -n "$path" ] || return 1
   ver="$("$t" --version 2>/dev/null | tr '\n' ' ' | sed 's/[[:space:]]*$//')" || return 1
@@ -85,7 +87,9 @@ _ppr_checker_build() { # -> digest of the toolchain's executables and native lib
 }
 
 _ppr_gate_defs() { # root -> digest
-  local root="$1" list hashes
+  local root="$1"
+  local list
+  local hashes
   list="$(mktemp)" || return 1
   hashes="$(mktemp)" || { rm -f "$list"; return 1; }
   if ! git -C "$root" ls-files -co --exclude-standard -- scripts .githooks .github/workflows \
@@ -121,7 +125,11 @@ _ppr_env_digest() { # -> digest of the CONCRETE_* environment that can change wh
 # Writes `key=value` lines to OUT_FILE. Returns 1 with PPR_REASON when this push cannot be recorded
 # or matched at all — in which case the caller runs the gates and writes no record.
 ppr_components() {
-  local root="$1" pushed="$2" changed_f="$3" plan_f="$4" out="$5"
+  local root="$1"
+  local pushed="$2"
+  local changed_f="$3"
+  local plan_f="$4"
+  local out="$5"
   PPR_REASON=""
   command -v ts_require >/dev/null 2>&1 && ts_require 2>/dev/null \
     || { PPR_REASON="treestate_library_unavailable"; return 1; }
@@ -187,7 +195,13 @@ ppr_components() {
 # ppr_check RECORD COMPONENTS_FILE -> 0 when the record matches every component.
 # On mismatch PPR_REASON names every dimension that differs.
 ppr_check() {
-  local rec="$1" comp="$2" line k v rv diff=""
+  local rec="$1"
+  local comp="$2"
+  local line
+  local k
+  local v
+  local rv
+  local diff=""
   PPR_REASON=""
   [ -f "$rec" ] || { PPR_REASON="no_record"; return 1; }
   [ -s "$comp" ] || { PPR_REASON="no_components"; return 1; }
@@ -218,7 +232,10 @@ ppr_check() {
 # here only. DEFERRED_FILE lists the commands the run deferred to CI, one per line: any line makes the
 # status pass-deferred and is recorded as deferred_gate=<command>.
 ppr_write() {
-  local rec="$1" comp="$2" deferred="${3:-}" tmp
+  local rec="$1"
+  local comp="$2"
+  local deferred="${3:-}"
+  local tmp
   [ -s "$comp" ] || return 1
   tmp="$(mktemp "$rec.XXXXXX" 2>/dev/null)" || return 1
   if ! { cat "$comp"
@@ -278,7 +295,9 @@ ppr_remote_log_path() { # root -> the remote run's log, kept beside the attestat
 _ppr_gate_defs_tracked() { # root -> digest of the COMMITTED gate definitions (tracked files only)
   # The same paths and the same digest as _ppr_gate_defs, over tracked files only. A clean clone of
   # the commit on the gate host has no untracked files there, so its _ppr_gate_defs equals this.
-  local root="$1" list hashes
+  local root="$1"
+  local list
+  local hashes
   list="$(mktemp)" || return 1
   hashes="$(mktemp)" || { rm -f "$list"; return 1; }
   if ! git -C "$root" ls-files -c -- scripts .githooks .github/workflows \
@@ -299,7 +318,11 @@ _ppr_gate_defs_tracked() { # root -> digest of the COMMITTED gate definitions (t
 # The host-independent components of this push, as key=value lines; 1 with PPR_REASON when this push
 # cannot use a remote attestation at all.
 ppr_remote_components() {
-  local root="$1" pushed="$2" changed_f="$3" plan_f="$4" out="$5"
+  local root="$1"
+  local pushed="$2"
+  local changed_f="$3"
+  local plan_f="$4"
+  local out="$5"
   PPR_REASON=""
   command -v ts_require >/dev/null 2>&1 && ts_require 2>/dev/null \
     || { PPR_REASON="treestate_library_unavailable"; return 1; }
@@ -339,7 +362,8 @@ ppr_remote_components() {
 
 # ppr_remote_block LOG -> the remote record carried in the log (exactly one marked block), or 1.
 ppr_remote_block() {
-  local log="$1" n
+  local log="$1"
+  local n
   n="$(grep -cx -- "$PPR_REMOTE_BEGIN" "$log" 2>/dev/null)" || n=0
   [ "$n" = 1 ] || return 1
   [ "$(grep -cx -- "$PPR_REMOTE_END" "$log" 2>/dev/null)" = 1 ] || return 1
@@ -350,7 +374,14 @@ ppr_remote_block() {
 # attestation for SHA. Refuses (1, PPR_REASON) unless the log says the run at SHA exited 0 and carries
 # a complete passing remote record for SHA: an attestation is only ever written for a usable result.
 ppr_remote_attest() {
-  local root="$1" log="$2" host="$3" sha="$4" rec dlog tmp block
+  local root="$1"
+  local log="$2"
+  local host="$3"
+  local sha="$4"
+  local rec
+  local dlog
+  local tmp
+  local block
   PPR_REASON=""
   rec="$(ppr_remote_path "$root")" || { PPR_REASON="no_attestation_path"; return 1; }
   dlog="$rec.log"
@@ -368,7 +399,9 @@ ppr_remote_attest() {
 }
 
 _ppr_remote_log_ok() { # log sha -> 0 when the log is a passing run at sha carrying a passing record for sha
-  local log="$1" sha="$2" block
+  local log="$1"
+  local sha="$2"
+  local block
   [ -s "$log" ] || { PPR_REASON="no_remote_log"; return 1; }
   # Exactly one start and one exit line from run-at-ref.sh, both naming this SHA, and the exit is 0.
   [ "$(grep -c '^\[concrete-remote\] ref=' "$log")" = 1 ] || { PPR_REASON="remote_log_start_not_unique"; return 1; }
@@ -383,7 +416,8 @@ _ppr_remote_log_ok() { # log sha -> 0 when the log is a passing run at sha carry
 }
 
 _ppr_record_ok() { # file sha -> the remote record in FILE is complete, passing, ours and about SHA
-  local f="$1" sha="$2"
+  local f="$1"
+  local sha="$2"
   # The same rules as ppr_check.
   [ "$(tail -n 1 "$f")" = "complete=1" ] || { PPR_REASON="remote_record_incomplete"; return 1; }
   [ "$(grep -c '^status=' "$f")" = 1 ] || { PPR_REASON="remote_record_status_not_unique"; return 1; }
@@ -402,7 +436,17 @@ _ppr_record_ok() { # file sha -> the remote record in FILE is complete, passing,
 # ppr_remote_check ROOT COMPONENTS_FILE -> 0 when this worktree's attestation and log prove that the
 # gate host ran exactly this push's selection on exactly this commit and passed. PPR_REASON otherwise.
 ppr_remote_check() {
-  local root="$1" comp="$2" rec dlog head line k v rv block diff=""
+  local root="$1"
+  local comp="$2"
+  local rec
+  local dlog
+  local head
+  local line
+  local k
+  local v
+  local rv
+  local block
+  local diff=""
   PPR_REASON=""
   rec="$(ppr_remote_path "$root")" || { PPR_REASON="no_attestation_path"; return 1; }
   dlog="$rec.log"

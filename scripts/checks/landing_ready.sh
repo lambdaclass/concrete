@@ -47,8 +47,14 @@ standin_hook() {
 }
 standin_hook
 export LAND_PUSH_RETRY_SLEEP=0
-export LAND_NO_NIX=1 LAND_STATE_DIR="$TMP/landstate" LAND_GH="$TMP/fake-gh" LAND_REPO=test/repo
-export LAND_HOOK="$TMP/hook" LAND_REMOTE_RUNNER="$TMP/fake-runner" FAKE_GH_DIR="$TMP/gh" ORIGIN_GIT="$TMP/origin.git"
+export LAND_NO_NIX=1
+export LAND_STATE_DIR="$TMP/landstate"
+export LAND_GH="$TMP/fake-gh"
+export LAND_REPO=test/repo
+export LAND_HOOK="$TMP/hook"
+export LAND_REMOTE_RUNNER="$TMP/fake-runner"
+export FAKE_GH_DIR="$TMP/gh"
+export ORIGIN_GIT="$TMP/origin.git"
 # train.sh check never skips the review leg silently. Every member here is marked reviewed clean
 # (mark), so the leg passes on the members' provenance without calling the reviewer; a reviewer this
 # fails stands for one that is never needed.

@@ -34,7 +34,11 @@ spec_modules() {
   { echo ConcreteSpec.lean; find ConcreteSpec -name '*.lean'; } | sed -E 's#\.lean$##; s#/#.#g' | sort -u
 }
 prune_orphans() {
-  local build="${1:-.lake/build}" d f rel m
+  local build="${1:-.lake/build}"
+  local d
+  local f
+  local rel
+  local m
   # Deletion keys on this list, so a partial list must stop the prune before anything is removed:
   # the enumeration must succeed, include the root module, and name only modules whose source exists.
   spec_modules > "$TMP/prune-modules.txt" || { echo "prune_orphans: listing spec modules failed" >&2; return 1; }
@@ -65,7 +69,9 @@ MARKER='-- CONTROL DECLARATIONS (negative controls are inserted here, in a tempo
   || { echo "error: $ENUMERATOR must carry the control marker line exactly once" >&2; exit 2; }
 
 population() {
-  local mode=$1 control=${2:-} src=$ENUMERATOR
+  local mode=$1
+  local control=${2:-}
+  local src=$ENUMERATOR
   if [ -n "$control" ]; then
     src="$TMP/control-$RANDOM-$RANDOM.lean"
     awk -v m="$MARKER" -v c="$control" '{ print } $0 == m { while ((getline l < c) > 0) print l }' \

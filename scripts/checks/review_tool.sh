@@ -433,7 +433,11 @@ g notes --ref=refs/notes/concrete-review remove HEAD 2>/dev/null
 
 echo "=== verdict parsing ==="
 parse_case() { # parse_case <marker> <want-exit> <want-verdict> <label>
-  local marker="$1" want="$2" wantv="$3" label="$4" rc
+  local marker="$1"
+  local want="$2"
+  local wantv="$3"
+  local label="$4"
+  local rc
   reset_fake
   g checkout -q main && g checkout -qb "parse-$marker"
   commit_file "p/$marker.txt" "$marker" "case $marker"
