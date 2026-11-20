@@ -26,7 +26,9 @@ def registeredRules : List RuleId :=
    ⟨``Own.DropPermitted, 1⟩, ⟨``Own.LeavePermitted, 1⟩,
    ⟨``Leak.Account.WF, 1⟩, ⟨``Leak.ResetConserved, 1⟩, ⟨``Leak.SignedNetSound, 1⟩,
    ⟨``Leak.ByteBoundSound, 1⟩, ⟨``Leak.ByteBoundSoundOptional, 1⟩, ⟨``Leak.ReportSound, 1⟩,
-   ⟨``Leak.FiniteActionPermitted, 1⟩, ⟨``Leak.FiniteSequencePermitted, 1⟩] ++ SourcePath.Reason.inOrder.map SourcePath.Reason.ruleId
+   ⟨``Leak.FiniteActionPermitted, 1⟩, ⟨``Leak.FiniteSequencePermitted, 1⟩] ++ SourcePath.Reason.inOrder.map SourcePath.Reason.ruleId ++
+  [SourcePath.Project.Reason.caseCollision, .fileDirectoryConflict, .duplicate].map
+    SourcePath.Project.Reason.ruleId
 
 /-- Acceptance evidence applies the owning rule's judgment to a concrete input.
 The exporter recognizes this proposition's elaborated type, without unfolding the wrapper. -/
@@ -402,6 +404,50 @@ theorem disallowedRefused : RuleRefused FilenameCharacters disallowedRefusedInpu
 
 end SourcePath.Registry
 
+namespace SourcePath.Project.Registry
+
+def fileA : SourcePath := ⟨SourceText.ofBytes [97], by decide⟩
+def fileB : SourcePath := ⟨SourceText.ofBytes [98], by decide⟩
+def upperDirectory : SourcePath := ⟨SourceText.ofBytes [65, 47, 99, 46, 99, 111, 110], by decide⟩
+def lowerDirectory : SourcePath := ⟨SourceText.ofBytes [97, 47, 66, 46, 99, 111, 110], by decide⟩
+
+def separateFiles : SourcePath × SourcePath := (fileA, fileB)
+def directoryCollision : SourcePath × SourcePath := (lowerDirectory, upperDirectory)
+def fileDirectoryConflict : SourcePath × SourcePath := (fileA, lowerDirectory)
+def duplicateFile : SourcePath × SourcePath := (fileA, fileA)
+
+/-- Instance: two different root files have no case collision. -/
+theorem caseAccepted : RuleAccepted NoCaseCollision separateFiles := by
+  unfold RuleAccepted NoCaseCollision
+  decide
+
+/-- Instance: a/B.con and A/c.con conflict at their directory prefixes. -/
+theorem caseRefused : RuleRefused NoCaseCollision directoryCollision := by
+  unfold RuleRefused NoCaseCollision
+  decide
+
+/-- Instance: two different root files have no file/directory conflict. -/
+theorem fileDirectoryAccepted : RuleAccepted NoFileDirectoryConflict separateFiles := by
+  unfold RuleAccepted NoFileDirectoryConflict
+  decide
+
+/-- Instance: a cannot be both a file and the directory containing a/B.con. -/
+theorem fileDirectoryRefused : RuleRefused NoFileDirectoryConflict fileDirectoryConflict := by
+  unfold RuleRefused NoFileDirectoryConflict
+  decide
+
+/-- Instance: two different root files are distinct. -/
+theorem duplicateAccepted : RuleAccepted NoDuplicate separateFiles := by
+  unfold RuleAccepted NoDuplicate
+  decide
+
+/-- Instance: two occurrences of the same file are refused. -/
+theorem duplicateRefused : RuleRefused NoDuplicate duplicateFile := by
+  unfold RuleRefused NoDuplicate
+  decide
+
+end SourcePath.Project.Registry
+
 /-- Complete conformance links, populated alongside the owning rules. -/
 def registeredRuleExamples : List RuleExample :=
   [⟨``ConstsPermitted, ``ConstRegistry.accepted⟩,
@@ -465,6 +511,12 @@ def registeredRuleExamples : List RuleExample :=
    ⟨``SourcePath.PathByteCap, ``SourcePath.Registry.pathCapAccepted⟩,
    ⟨``SourcePath.PathByteCap, ``SourcePath.Registry.pathCapRefused⟩,
    ⟨``SourcePath.FilenameCharacters, ``SourcePath.Registry.disallowedAccepted⟩,
-   ⟨``SourcePath.FilenameCharacters, ``SourcePath.Registry.disallowedRefused⟩]
+   ⟨``SourcePath.FilenameCharacters, ``SourcePath.Registry.disallowedRefused⟩,
+   ⟨``SourcePath.Project.NoCaseCollision, ``SourcePath.Project.Registry.caseAccepted⟩,
+   ⟨``SourcePath.Project.NoCaseCollision, ``SourcePath.Project.Registry.caseRefused⟩,
+   ⟨``SourcePath.Project.NoFileDirectoryConflict, ``SourcePath.Project.Registry.fileDirectoryAccepted⟩,
+   ⟨``SourcePath.Project.NoFileDirectoryConflict, ``SourcePath.Project.Registry.fileDirectoryRefused⟩,
+   ⟨``SourcePath.Project.NoDuplicate, ``SourcePath.Project.Registry.duplicateAccepted⟩,
+   ⟨``SourcePath.Project.NoDuplicate, ``SourcePath.Project.Registry.duplicateRefused⟩]
 
 end ConcreteSpec.Core
