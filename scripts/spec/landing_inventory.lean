@@ -3,6 +3,12 @@ import Lean
 
 open Lean Elab Command
 
+namespace ConcreteSpec.Core.SourcePathSpan
+
+def inventoryHelper : Nat := 0
+
+end ConcreteSpec.Core.SourcePathSpan
+
 namespace SpecLanding
 
 structure Group where
@@ -1306,9 +1312,9 @@ private def origin? (env : Environment) (name : Name) : Option Name :=
   else
     none
 
-private def isLawDoc (doc : String) : Bool :=
+private def hasDocTag (tag doc : String) : Bool :=
   let doc := doc.trimAscii.toString
-  doc.startsWith "Law" && ((doc.drop 3).toString.toList.head?).all
+  doc.startsWith tag && ((doc.drop tag.length).toString.toList.head?).all
     (fun c => c.isWhitespace || ":.(".contains c)
 
 private def isAuthored (env : Environment) (name : Name) : Bool := Id.run do
@@ -1320,17 +1326,24 @@ private def isAuthored (env : Environment) (name : Name) : Bool := Id.run do
   return ranges.selectionRange.pos != ranges.range.pos ||
     ranges.selectionRange.endPos != ranges.range.endPos
 
-private def readLaws (env : Environment) (inScope : Name → Bool) :
-    CommandElabM (NameMap Name) := do
-  let mut found := {}
+structure EvidenceMetadata where
+  laws : NameMap Name := {}
+  planted : NameMap Name := {}
+
+private def readEvidence (env : Environment) (inScope : Name → Bool) :
+    CommandElabM EvidenceMetadata := do
+  let mut found : EvidenceMetadata := {}
   for (name, info) in env.constants do
     let .thmInfo _ := info | continue
-    if !isAuthored env name then continue
     let some origin := origin? env name | continue
-    if !inScope origin then continue
-    if let some doc ← findDocString? env name then
-      if isLawDoc doc then
-        found := found.insert name origin
+    if !inScope origin || !isAuthored env name then continue
+    let doc := (← findDocString? env name).getD ""
+    if hasDocTag "Law" doc then
+      found := { found with laws := found.laws.insert name origin }
+    -- Match the site's Planted doc tag and its underscore-delimited name convention.
+    let .str _ last := privateToUserName name | continue
+    if hasDocTag "Planted" doc || (last.splitOn "_").contains "planted" then
+      found := { found with planted := found.planted.insert name origin }
   return found
 
 structure Result where
@@ -1343,7 +1356,7 @@ structure Result where
 private def EvidenceNamespace.matches (ns : EvidenceNamespace) (origin name : Name) : Bool :=
   ns.origin == origin && ns.namespaceName.isPrefixOf name
 
-private def inventory (env : Environment) (observedLaws : NameMap Name)
+private def inventory (env : Environment) (observed : EvidenceMetadata)
     (plan : List Piece) (integrityErrors : Array String := #[])
     (requirements : PieceId → Completion := completion) : Result := Id.run do
   let mut result : Result := { errors := integrityErrors }
@@ -1365,6 +1378,15 @@ private def inventory (env : Environment) (observedLaws : NameMap Name)
         unless piece.groups.any (fun group =>
             (group.declarations ++ group.laws).any (ns.matches group.origin)) do
           errors := errors.push s!"{piece.id}: missing completion evidence under {ns.namespaceName} in {ns.origin}"
+      unless required.namespaces.isEmpty do
+        let citesReserved (classified : NameMap Name) (names : Group → List Name) :=
+          piece.groups.any fun group => (names group).any fun name =>
+            classified.find? name == some group.origin &&
+              required.namespaces.any (fun ns => ns.matches group.origin name)
+        unless citesReserved observed.laws (·.laws) do
+          errors := errors.push s!"{piece.id}: missing reserved Law theorem"
+        unless citesReserved observed.planted (·.declarations) do
+          errors := errors.push s!"{piece.id}: missing reserved planted control"
     for group in piece.groups do
       for name in group.declarations ++ group.laws do
         unless required.namespaces.any (fun ns => ns.matches group.origin name) do
@@ -1387,7 +1409,7 @@ private def inventory (env : Environment) (observedLaws : NameMap Name)
             errors := errors.push s!"{piece.id}: {name} is in {actual}, expected {group.origin}"
           else if !isAuthored env name then
             errors := errors.push s!"{piece.id}: {name} is not an authored declaration"
-          else if expectsLaw && !observedLaws.contains name then
+          else if expectsLaw && !observed.laws.contains name then
             errors := errors.push s!"{piece.id}: {name} is not an authored Law theorem"
     let landed := errors.isEmpty && claimsLanding
     let status :=
@@ -1406,7 +1428,7 @@ private def inventory (env : Environment) (observedLaws : NameMap Name)
       rows := (result.rows.push s!"{piece.id}: {status}{scope}") ++
         (piece.remaining.map (s!"  remaining: {·}")).toArray
     }
-  let unplanned := observedLaws.toList.filterMap fun (name, origin) =>
+  let unplanned := observed.laws.toList.filterMap fun (name, origin) =>
     if seenLaws.contains name then none else some s!"unplanned Law {name} ({origin})"
   return { result with errors := result.errors ++ unplanned.toArray.qsort (· < ·) }
 
@@ -1429,7 +1451,10 @@ namespace Control
 theorem retained : True := trivial
 
 /-- Law: inventory control. -/
-theorem newName : True := trivial
+theorem newName (n : Nat) : n + 0 = n := Nat.add_zero n
+
+/-- Planted: increment in place of adding zero. -/
+theorem wrongIncrement : 0 + 1 ≠ (0 : Nat) := by decide
 
 /-- Law: this tagged definition must be excluded. -/
 def nonTheorem : Bool := true
@@ -1443,11 +1468,12 @@ private def substituted := plan.map fun piece =>
 example : substituted.length = plan.length ∧
     ¬ occursOnce substituted .F39 ∧ ¬ occursOnce substituted .F40 := by decide
 
-def verify (env : Environment) (specLaws : NameMap Name) : CommandElabM Unit := do
+def verify (env : Environment) (specEvidence : EvidenceMetadata) : CommandElabM Unit := do
   let origin := env.header.mainModule
-  let observed ← readLaws env (· == origin)
+  let observed ← readEvidence env (· == origin)
   let claim (groups : List Group) := { present .F01 "" with groups }
-  let good := claim [laws origin [`SpecLanding.Control.newName]]
+  let good := claim [
+    laws origin [`SpecLanding.Control.newName], decls origin [`SpecLanding.Control.wrongIncrement]]
   let check (pieces : List Piece) := (inventory env observed pieces #[]
     (fun _ => { namespaces := [⟨origin, `SpecLanding.Control⟩] })).errors
   let hasError (pieces : List Piece) (message : String) : CommandElabM Unit := do
@@ -1482,7 +1508,7 @@ def verify (env : Environment) (specLaws : NameMap Name) : CommandElabM Unit := 
       if piece.id == id then
         { piece with remaining := [], groups := [decls moduleName [name]] }
       else piece
-    let checked := inventory env specLaws falseLanding
+    let checked := inventory env specEvidence falseLanding
     unless checked.errors.contains
         s!"{id}: {name} in {moduleName} is outside its completion evidence" &&
         !checked.rows.any (·.startsWith s!"{id}: landed") do
@@ -1492,6 +1518,23 @@ def verify (env : Environment) (specLaws : NameMap Name) : CommandElabM Unit := 
   rejectsBorrowedEvidence .F39 `ConcreteSpec.Spec.Authority `ConcreteSpec.Authority.ProgOk
   rejectsBorrowedEvidence .F17 `ConcreteSpec.Spec.Rules `ConcreteSpec.Core.Leak.Registry.accountA
   rejectsBorrowedEvidence .F03p `ConcreteSpec.Spec.Ident `ConcreteSpec.Core.ContractId
+  let helper := `ConcreteSpec.Core.SourcePathSpan.inventoryHelper
+  let helperOnly := plan.map fun piece =>
+    if piece.id == .F04p then
+      { piece with remaining := [], groups := [decls origin [helper]] }
+    else piece
+  -- Use F04p's actual reservation with this fixture's module as its origin.
+  let withFixtureOrigin (id : PieceId) :=
+    let required := completion id
+    if id == .F04p then
+      { required with namespaces := required.namespaces.map (fun ns => { ns with origin }) }
+    else required
+  let checked := inventory env specEvidence helperOnly #[] withFixtureOrigin
+  unless checked.errors == #["F04p: missing reserved Law theorem", "F04p: missing reserved planted control"] &&
+      !checked.rows.any (·.startsWith "F04p: landed") do
+    throwError "inventory control: helper-only F04p claim was not refused for missing Law and control"
+  hasError [claim [laws origin [`SpecLanding.Control.newName]]]
+    "F01: missing reserved planted control"
   let registryOnly := { present .F17 "" with groups := [decls origin [`SpecLanding.Control.retained]] }
   let needsSpecAndRegistry (id : PieceId) :=
     { completion id with namespaces := ⟨origin, `SpecLanding.Control⟩ :: (completion id).namespaces }
@@ -1509,7 +1552,7 @@ end Control
 
 #eval show CommandElabM Unit from do
   let env ← getEnv
-  let observed ← readLaws env (fun origin => origin.getRoot == `ConcreteSpec)
+  let observed ← readEvidence env (fun origin => origin.getRoot == `ConcreteSpec)
   let result := inventory env observed plan (← checkRoot env)
   for row in result.rows ++ result.errors do
     IO.println row
