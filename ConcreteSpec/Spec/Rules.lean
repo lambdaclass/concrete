@@ -26,7 +26,7 @@ def registeredRules : List RuleId :=
    ⟨``Own.DropPermitted, 1⟩, ⟨``Own.LeavePermitted, 1⟩,
    ⟨``Leak.Account.WF, 1⟩, ⟨``Leak.ResetConserved, 1⟩, ⟨``Leak.SignedNetSound, 1⟩,
    ⟨``Leak.ByteBoundSound, 1⟩, ⟨``Leak.ByteBoundSoundOptional, 1⟩, ⟨``Leak.ReportSound, 1⟩,
-   ⟨``Leak.FiniteActionPermitted, 1⟩, ⟨``Leak.FiniteSequencePermitted, 1⟩]
+   ⟨``Leak.FiniteActionPermitted, 1⟩, ⟨``Leak.FiniteSequencePermitted, 1⟩] ++ SourcePath.Reason.inOrder.map SourcePath.Reason.ruleId
 
 /-- Acceptance evidence applies the owning rule's judgment to a concrete input.
 The exporter recognizes this proposition's elaborated type, without unfolding the wrapper. -/
@@ -203,6 +203,205 @@ theorem signedRefused : RuleRefused SignedNetSound (-3, ⟨-2, -2, .boundEstabli
 
 end Leak.Registry
 
+namespace SourcePath.Registry
+
+/-- Mixed-case directories and internal repeated dots survive local admission. -/
+def mixedCaseInput : SourceText := SourceText.ofBytes [83, 114, 99, 47, 65, 46, 46, 98]
+
+/-- Instance: the accepted byte input for the Nonempty check. -/
+theorem emptyAccepted : RuleAccepted Nonempty mixedCaseInput := by
+  unfold RuleAccepted Nonempty
+  decide
+
+def emptyRefusedInput : SourceText := SourceText.ofBytes []
+/-- Instance: the refused byte input for the Nonempty check. -/
+theorem emptyRefused : RuleRefused Nonempty emptyRefusedInput := by
+  unfold RuleRefused Nonempty
+  decide
+
+/-- Instance: the accepted byte input for the Relative check. -/
+theorem absoluteAccepted : RuleAccepted Relative mixedCaseInput := by
+  unfold RuleAccepted Relative
+  decide
+
+def absoluteRefusedInput : SourceText := SourceText.ofBytes [47, 65]
+/-- Instance: the refused byte input for the Relative check. -/
+theorem absoluteRefused : RuleRefused Relative absoluteRefusedInput := by
+  unfold RuleRefused Relative
+  decide
+
+/-- Instance: the accepted byte input for the NoDrivePrefix check. -/
+theorem driveAccepted : RuleAccepted NoDrivePrefix mixedCaseInput := by
+  unfold RuleAccepted NoDrivePrefix
+  decide
+
+def driveRefusedInput : SourceText := SourceText.ofBytes [67, 58]
+/-- Instance: the refused byte input for the NoDrivePrefix check. -/
+theorem driveRefused : RuleRefused NoDrivePrefix driveRefusedInput := by
+  unfold RuleRefused NoDrivePrefix
+  decide
+
+/-- Instance: the accepted byte input for the NoTraversal check. -/
+theorem traversalAccepted : RuleAccepted NoTraversal mixedCaseInput := by
+  unfold RuleAccepted NoTraversal
+  decide
+
+def traversalRefusedInput : SourceText := SourceText.ofBytes [65, 47, 46, 46]
+/-- Instance: the refused byte input for the NoTraversal check. -/
+theorem traversalRefused : RuleRefused NoTraversal traversalRefusedInput := by
+  unfold RuleRefused NoTraversal
+  decide
+
+/-- Instance: the accepted byte input for the NoSingleDot check. -/
+theorem singleDotAccepted : RuleAccepted NoSingleDot mixedCaseInput := by
+  unfold RuleAccepted NoSingleDot
+  decide
+
+def singleDotRefusedInput : SourceText := SourceText.ofBytes [65, 47, 46]
+/-- Instance: the refused byte input for the NoSingleDot check. -/
+theorem singleDotRefused : RuleRefused NoSingleDot singleDotRefusedInput := by
+  unfold RuleRefused NoSingleDot
+  decide
+
+/-- Instance: the accepted byte input for the NonemptyComponents check. -/
+theorem emptyComponentAccepted : RuleAccepted NonemptyComponents mixedCaseInput := by
+  unfold RuleAccepted NonemptyComponents
+  decide
+
+def emptyComponentRefusedInput : SourceText := SourceText.ofBytes [65, 47]
+/-- Instance: the refused byte input for the NonemptyComponents check. -/
+theorem emptyComponentRefused : RuleRefused NonemptyComponents emptyComponentRefusedInput := by
+  unfold RuleRefused NonemptyComponents
+  decide
+
+/-- Instance: the accepted byte input for the Ascii check. -/
+theorem nonAsciiAccepted : RuleAccepted Ascii mixedCaseInput := by
+  unfold RuleAccepted Ascii
+  decide
+
+def nonAsciiRefusedInput : SourceText := SourceText.ofBytes [65, 128]
+/-- Instance: the refused byte input for the Ascii check. -/
+theorem nonAsciiRefused : RuleRefused Ascii nonAsciiRefusedInput := by
+  unfold RuleRefused Ascii
+  decide
+
+/-- Instance: the accepted byte input for the SlashSeparator check. -/
+theorem backslashAccepted : RuleAccepted SlashSeparator mixedCaseInput := by
+  unfold RuleAccepted SlashSeparator
+  decide
+
+def backslashRefusedInput : SourceText := SourceText.ofBytes [65, 92, 66]
+/-- Instance: the refused byte input for the SlashSeparator check. -/
+theorem backslashRefused : RuleRefused SlashSeparator backslashRefusedInput := by
+  unfold RuleRefused SlashSeparator
+  decide
+
+/-- Instance: the accepted byte input for the NoControls check. -/
+theorem controlAccepted : RuleAccepted NoControls mixedCaseInput := by
+  unfold RuleAccepted NoControls
+  decide
+
+def controlRefusedInput : SourceText := SourceText.ofBytes [65, 127]
+/-- Instance: the refused byte input for the NoControls check. -/
+theorem controlRefused : RuleRefused NoControls controlRefusedInput := by
+  unfold RuleRefused NoControls
+  decide
+
+/-- Instance: the accepted byte input for the NoSpaces check. -/
+theorem spaceAccepted : RuleAccepted NoSpaces mixedCaseInput := by
+  unfold RuleAccepted NoSpaces
+  decide
+
+def spaceRefusedInput : SourceText := SourceText.ofBytes [65, 32]
+/-- Instance: the refused byte input for the NoSpaces check. -/
+theorem spaceRefused : RuleRefused NoSpaces spaceRefusedInput := by
+  unfold RuleRefused NoSpaces
+  decide
+
+/-- Instance: the accepted byte input for the NoLeadingDot check. -/
+theorem leadingDotAccepted : RuleAccepted NoLeadingDot mixedCaseInput := by
+  unfold RuleAccepted NoLeadingDot
+  decide
+
+def leadingDotRefusedInput : SourceText := SourceText.ofBytes [46, 65]
+/-- Instance: the refused byte input for the NoLeadingDot check. -/
+theorem leadingDotRefused : RuleRefused NoLeadingDot leadingDotRefusedInput := by
+  unfold RuleRefused NoLeadingDot
+  decide
+
+/-- Instance: the accepted byte input for the NoTrailingDot check. -/
+theorem trailingDotAccepted : RuleAccepted NoTrailingDot mixedCaseInput := by
+  unfold RuleAccepted NoTrailingDot
+  decide
+
+def trailingDotRefusedInput : SourceText := SourceText.ofBytes [65, 46]
+/-- Instance: the refused byte input for the NoTrailingDot check. -/
+theorem trailingDotRefused : RuleRefused NoTrailingDot trailingDotRefusedInput := by
+  unfold RuleRefused NoTrailingDot
+  decide
+
+def reservedAcceptedInput : SourceText := SourceText.ofBytes [67, 79, 77, 48, 46, 67]
+/-- Instance: the accepted byte input for the NoReservedStem check. -/
+theorem reservedAccepted : RuleAccepted NoReservedStem reservedAcceptedInput := by
+  unfold RuleAccepted NoReservedStem
+  decide
+
+def reservedRefusedInput : SourceText := SourceText.ofBytes [99, 79, 78, 46, 67]
+/-- Instance: the refused byte input for the NoReservedStem check. -/
+theorem reservedRefused : RuleRefused NoReservedStem reservedRefusedInput := by
+  unfold RuleRefused NoReservedStem
+  decide
+
+def componentCapAcceptedInput : SourceText := SourceText.ofBytes (List.replicate 100 65)
+/-- Instance: the accepted byte input for the ComponentByteCap check. -/
+theorem componentCapAccepted : RuleAccepted ComponentByteCap componentCapAcceptedInput := by
+  unfold RuleAccepted ComponentByteCap
+  decide
+
+def componentCapRefusedInput : SourceText := SourceText.ofBytes (List.replicate 101 65)
+/-- Instance: the refused byte input for the ComponentByteCap check. -/
+theorem componentCapRefused : RuleRefused ComponentByteCap componentCapRefusedInput := by
+  unfold RuleRefused ComponentByteCap
+  decide
+
+def pathCapAcceptedInput : SourceText :=
+  ⟨List.replicate 99 65 ++ [47] ++ List.replicate 100 66, by
+    intro byte member
+    simp only [List.mem_append, List.mem_replicate, List.mem_cons, List.not_mem_nil, or_false] at member
+    omega⟩
+/-- Instance: the accepted byte input for the PathByteCap check. -/
+theorem pathCapAccepted : RuleAccepted PathByteCap pathCapAcceptedInput := by
+  unfold RuleAccepted PathByteCap
+  apply of_decide_eq_true
+  cbv
+
+def pathCapRefusedInput : SourceText :=
+  ⟨List.replicate 98 65 ++ [47] ++ List.replicate 100 66 ++ [47, 67], by
+    intro byte member
+    simp only [List.mem_append, List.mem_replicate, List.mem_cons, List.not_mem_nil, or_false] at member
+    omega⟩
+/-- Instance: the refused byte input for the PathByteCap check. -/
+theorem pathCapRefused : RuleRefused PathByteCap pathCapRefusedInput := by
+  have length : pathCapRefusedInput.bytes.length = 201 := by
+    simp only [pathCapRefusedInput, List.length_append, List.length_replicate,
+      List.length_cons, List.length_nil]
+  unfold RuleRefused PathByteCap Permitted
+  simp only [Reference.offsets, length]
+  decide
+
+/-- Instance: the accepted byte input for the FilenameCharacters check. -/
+theorem disallowedAccepted : RuleAccepted FilenameCharacters mixedCaseInput := by
+  unfold RuleAccepted FilenameCharacters
+  decide
+
+def disallowedRefusedInput : SourceText := SourceText.ofBytes [65, 47, 66, 58, 67]
+/-- Instance: the refused byte input for the FilenameCharacters check. -/
+theorem disallowedRefused : RuleRefused FilenameCharacters disallowedRefusedInput := by
+  unfold RuleRefused FilenameCharacters
+  decide
+
+end SourcePath.Registry
+
 /-- Complete conformance links, populated alongside the owning rules. -/
 def registeredRuleExamples : List RuleExample :=
   [⟨``ConstsPermitted, ``ConstRegistry.accepted⟩,
@@ -234,6 +433,38 @@ def registeredRuleExamples : List RuleExample :=
    ⟨``Leak.FiniteActionPermitted, ``Leak.Registry.actionAccepted⟩,
    ⟨``Leak.FiniteActionPermitted, ``Leak.Registry.actionRefused⟩,
    ⟨``Leak.FiniteSequencePermitted, ``Leak.Registry.sequenceAccepted⟩,
-   ⟨``Leak.FiniteSequencePermitted, ``Leak.Registry.sequenceRefused⟩]
+   ⟨``Leak.FiniteSequencePermitted, ``Leak.Registry.sequenceRefused⟩,
+   ⟨``SourcePath.Nonempty, ``SourcePath.Registry.emptyAccepted⟩,
+   ⟨``SourcePath.Nonempty, ``SourcePath.Registry.emptyRefused⟩,
+   ⟨``SourcePath.Relative, ``SourcePath.Registry.absoluteAccepted⟩,
+   ⟨``SourcePath.Relative, ``SourcePath.Registry.absoluteRefused⟩,
+   ⟨``SourcePath.NoDrivePrefix, ``SourcePath.Registry.driveAccepted⟩,
+   ⟨``SourcePath.NoDrivePrefix, ``SourcePath.Registry.driveRefused⟩,
+   ⟨``SourcePath.NoTraversal, ``SourcePath.Registry.traversalAccepted⟩,
+   ⟨``SourcePath.NoTraversal, ``SourcePath.Registry.traversalRefused⟩,
+   ⟨``SourcePath.NoSingleDot, ``SourcePath.Registry.singleDotAccepted⟩,
+   ⟨``SourcePath.NoSingleDot, ``SourcePath.Registry.singleDotRefused⟩,
+   ⟨``SourcePath.NonemptyComponents, ``SourcePath.Registry.emptyComponentAccepted⟩,
+   ⟨``SourcePath.NonemptyComponents, ``SourcePath.Registry.emptyComponentRefused⟩,
+   ⟨``SourcePath.Ascii, ``SourcePath.Registry.nonAsciiAccepted⟩,
+   ⟨``SourcePath.Ascii, ``SourcePath.Registry.nonAsciiRefused⟩,
+   ⟨``SourcePath.SlashSeparator, ``SourcePath.Registry.backslashAccepted⟩,
+   ⟨``SourcePath.SlashSeparator, ``SourcePath.Registry.backslashRefused⟩,
+   ⟨``SourcePath.NoControls, ``SourcePath.Registry.controlAccepted⟩,
+   ⟨``SourcePath.NoControls, ``SourcePath.Registry.controlRefused⟩,
+   ⟨``SourcePath.NoSpaces, ``SourcePath.Registry.spaceAccepted⟩,
+   ⟨``SourcePath.NoSpaces, ``SourcePath.Registry.spaceRefused⟩,
+   ⟨``SourcePath.NoLeadingDot, ``SourcePath.Registry.leadingDotAccepted⟩,
+   ⟨``SourcePath.NoLeadingDot, ``SourcePath.Registry.leadingDotRefused⟩,
+   ⟨``SourcePath.NoTrailingDot, ``SourcePath.Registry.trailingDotAccepted⟩,
+   ⟨``SourcePath.NoTrailingDot, ``SourcePath.Registry.trailingDotRefused⟩,
+   ⟨``SourcePath.NoReservedStem, ``SourcePath.Registry.reservedAccepted⟩,
+   ⟨``SourcePath.NoReservedStem, ``SourcePath.Registry.reservedRefused⟩,
+   ⟨``SourcePath.ComponentByteCap, ``SourcePath.Registry.componentCapAccepted⟩,
+   ⟨``SourcePath.ComponentByteCap, ``SourcePath.Registry.componentCapRefused⟩,
+   ⟨``SourcePath.PathByteCap, ``SourcePath.Registry.pathCapAccepted⟩,
+   ⟨``SourcePath.PathByteCap, ``SourcePath.Registry.pathCapRefused⟩,
+   ⟨``SourcePath.FilenameCharacters, ``SourcePath.Registry.disallowedAccepted⟩,
+   ⟨``SourcePath.FilenameCharacters, ``SourcePath.Registry.disallowedRefused⟩]
 
 end ConcreteSpec.Core
