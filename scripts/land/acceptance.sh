@@ -134,7 +134,9 @@ finish() {
   # run that failed before it had a train head, tree and base (a bad ref, a failed build) binds no
   # candidate and writes no row there (acceptance.tsv above still records it): train.sh refuses a
   # malformed row outright, so an unbound row would block every later land.
-  local reh="${ACCEPT_REHEARSALS:-$state/rehearsals.tsv}" tree="" base=""
+  local reh="${ACCEPT_REHEARSALS:-$state/rehearsals.tsv}"
+  local tree=""
+  local base=""
   if [ -n "$HEAD" ]; then
     tree="$(git -C "$C" rev-parse "$HEAD^{tree}" 2>/dev/null || true)"
     base="$(sed -n 's/^base=//p' "$(cd "$C" && cd "$(git rev-parse --git-common-dir)" && pwd)/concrete-landing/$NAME/train.env" 2>/dev/null | tail -n 1)"

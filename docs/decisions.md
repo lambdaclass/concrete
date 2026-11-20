@@ -1226,6 +1226,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
      at a time;* other workers send it their records.
   7. <a id="decided-2026-11-08-review-caps"></a>*Review rounds capped by risk:* docs and roadmap 2,
      scripts 3, compiler and spec 5 (R-0618).
+     See the [2026-11-20 rule for blocking tooling findings](#decided-2026-11-20-tooling-review-risk).
   8. <a id="decided-2026-11-08-clones"></a>*One clones folder:* every branch's clone is
      `~/projects/clones/<branch>`, removed after the branch lands (R-0619).
   9. <a id="decided-2026-11-08-no-libc"></a>*A no-libc runtime* on the proven path comes as a later
@@ -3554,6 +3555,12 @@ ok do all this
   or any other held item. Path-character policy stays open; nothing may claim
   complete path validation until it is decided.
 
+  **Answered 2026-11-16 and 2026-11-17.** The
+  [November 16 file-path decision](#decided-2026-11-16-file-paths) and the
+  [November 17 file-name decision](#decided-2026-11-17-file-names) record the
+  owner's answers. [ISS-0068](../ISSUES.tsv) tracks implementation, dependent
+  evidence, and the limit on validation claims to implemented and evidenced scope.
+
 - <a id="decided-2026-11-14-constant-types"></a>**Constant types (2026-11-14).**
   The owner approves the coordinator's revised recommendation below, not the
   earlier recommendations preserved as context.
@@ -4575,3 +4582,16 @@ against Austral and the no-duplication rule):
 - **OPEN-22** (OD22, trust on an `impl` block): decided 2026-10-29, per method only. Now TRUST-5@2 of
   [trusted.md](../legacy/docs/spec/trusted.md#TRUST-5).
 
+
+### 2026-11-20 — Risk rule for review findings
+
+<a id="decided-2026-11-20-tooling-review-risk"></a>
+
+- 2026-11-18, answering "use a risk-based stopping rule for the inventory": "ok 1 and 2 yes".
+- 2026-11-20, answering "apply the risk rule to all tooling": "ok do that".
+
+A tooling review finding blocks a merge only if our own agents could realistically hit it while
+working, or it could let a wrong spec rule or a broken proof pass as correct. Record every other
+tooling finding in [ISSUES.tsv](../ISSUES.tsv) with a structural owner and proceed with the merge.
+As of 2026-11-20 this applies to all tooling, including scripts, gates, inventories, landing
+tooling and review tooling. Every finding in the spec or proofs themselves still blocks the merge.

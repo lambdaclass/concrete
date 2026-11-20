@@ -170,6 +170,15 @@ The source registries remain the sole owners; the checked summary is only a deri
 - ISS-0072 — Wiping remains set aside for the owner/F27. No wiping rule or dependent proof is imported.
 
 These are existing issue IDs in [ISSUES.tsv](../../ISSUES.tsv), not newly allocated tasks.
+
+The two round-5 tooling findings are also tracked in [ISSUES.tsv](../../ISSUES.tsv).
+
+- ISS-0092 — The census can omit a scoped custom command nested under a second wrapper within `open … in`.
+- ISS-0093 — The census can omit a command whose syntax name ends in `quot`.
+
+Both are non-blocking under the [2026-11-20 tooling review rule](../decisions.md#decided-2026-11-20-tooling-review-risk).
+F31 owns reconciliation using parser command-category invocations under their active scope and retires the census.
+
 The engineering finding below uses coordinator-allocated identifiers; no language decision is introduced.
 No assumed-yes source or
 inherited approval is used. The order remains F30 → atomic F31 → F32, then F33/F34 before F35;
