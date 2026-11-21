@@ -249,6 +249,22 @@ review() { (cd "$W" && bash "$REVIEW" "$@"); }
 note() { g notes --ref=refs/notes/concrete-review show "${1:-HEAD}" 2>/dev/null; }
 field() { note "${2:-HEAD}" | sed -n "s/^$1: //p"; }
 
+review_without_launch() {
+  local expected="$1"
+  local reason="$2"
+  local before rc=0
+  shift 2
+  before="$(calls)"
+  (cd "$W/sub" && CODEX_HOME=. bash "$REVIEW" "$@") >"$T/no-launch.log" 2>&1 || rc=$?
+  check "$reason with checkout CODEX_HOME (exit $rc)" \
+    test "$rc" -eq "$expected" -a "$(calls)" -eq "$before"
+  check "$reason gives the intended diagnostic" grep -Fq -- "$reason" "$T/no-launch.log"
+}
+
+mkdir -p "$W/sub"
+review_without_launch 0 'Runs ONE review round' --help
+review_without_launch 4 'nothing to review: no changes' --base HEAD
+
 echo "=== review host contract ==="
 reject_args() {
   local diagnostic="$1"
@@ -511,6 +527,7 @@ for verdict in clean findings; do
   check "covering $verdict supersedes narrow ancestor shortcut" test "$rc" -eq "$expected" -a "$(calls)" -eq 0
   if [ "$verdict" = clean ]; then reason='already reviewed clean'; else reason='HEAD already reviewed in round'; fi
   check "covering $verdict shortcut gives intended reason" grep -q "$reason" "$T/recovered"
+  review_without_launch "$expected" "$reason" --base "$RANGE_BASE" --max-rounds "$cap"
   commit_file resumed.txt resumed "resumed-$verdict"
   reset_fake
   REVIEW_PUSH=0 review --base "$RANGE_BASE" >"$T/recovered" 2>&1; rc=$?
@@ -722,7 +739,7 @@ check "relative helper arguments produce caller output and events" test "$rc" = 
   -a -s "$T/relative/output" -a -s "$T/relative/events"
 mkdir -p "$W/sub"
 commit_file relative.txt relative relative
-for checkout_home in ../codex-home ../../checkout-codex-home; do
+for checkout_home in . ../codex-home ../../checkout-codex-home; do
   (cd "$W/sub" && CODEX_HOME="$checkout_home" bash "$REVIEW") >"$T/checkout-home.log" 2>&1; rc=$?
   check "checkout CODEX_HOME ($checkout_home) blocks the review before launch" \
     test "$rc" = 2 -a ! -e "$FAKE_LOG/stdin.2"
@@ -1271,6 +1288,60 @@ EOF
 check "split parts carry correct, contiguous @@ headers" \
   python3 -I "$T/hunks.py" $(ls "$FAKE_LOG"/stdin.* | sort -t. -k2 -n)
 
+echo "=== split patches preserve no-newline markers ==="
+check "standard and neutral splits apply and preserve generated file bytes" \
+  python3 -I - "$SPLIT" "$T" <<'EOF'
+from pathlib import Path
+import subprocess
+import sys
+
+splitter, scratch = sys.argv[1:]
+repo = Path(scratch) / "split-apply"
+repo.mkdir()
+
+def git(*args, **kwargs):
+    return subprocess.run(["git", "-C", repo, *args], check=True, **kwargs)
+
+git("init", "-q")
+source = repo / "sample.txt"
+patch = repo / "original.diff"
+
+def check_splits(content, limits):
+    source.write_bytes(content)
+    git("add", source.name)
+    patch.write_bytes(git("diff", "--cached", "--", source.name, capture_output=True).stdout)
+    git("rm", "-q", "-f", "--cached", source.name)
+    source.unlink()
+    git("apply", "--check", patch)
+    for limit in limits:
+        for mode in ([], ["--no-groups"]):
+            out = repo / "pieces"
+            subprocess.run(
+                [sys.executable, "-I", splitter, patch, out, str(limit), *mode],
+                check=True, stdout=subprocess.DEVNULL,
+            )
+            reconstructed = bytearray()
+            for row in (out / "manifest.tsv").read_text().splitlines():
+                piece = out / row.split("\t", 1)[0]
+                try:
+                    git("apply", "--check", piece)
+                    git("apply", piece)
+                except subprocess.CalledProcessError as exc:
+                    raise RuntimeError(
+                        f"{len(content)} bytes, limit {limit}, {mode}: {piece.name}"
+                    ) from exc
+                reconstructed.extend(source.read_bytes())
+                source.unlink()
+            if reconstructed != content:
+                raise AssertionError(f"lost bytes at size {len(content)}, limit {limit}, {mode}")
+
+check_splits(b"x" * 240, (270,))
+for count, width in ((3, 16), (7, 107), (13, 240)):
+    lines = [f"{i:02d}".encode().ljust(width, b"x") for i in range(count)]
+    for ending in (b"", b"\n"):
+        check_splits(b"\n".join(lines) + ending, (270, 384, 711))
+EOF
+
 echo "=== the round cap ==="
 reset_fake
 g checkout -q main && g checkout -qb capped
@@ -1288,6 +1359,7 @@ commit_file a.txt "fixed" "c3"
 review --max-rounds 2 >"$T/cap2" 2>&1; rc=$?
 check "no round 3: refused with exit 3 (got $rc)" test "$rc" -eq 3
 check "and no reviewer call" test "$(calls)" -eq "$before"
+review_without_launch 3 'Split the branch' --max-rounds 2
 check "no note written on the refused round" bash -c "! git -C '$W' notes --ref=refs/notes/concrete-review show HEAD >/dev/null 2>&1"
 
 echo "=== notes push: non-fast-forward is fetched, merged and retried ==="

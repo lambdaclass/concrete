@@ -40,6 +40,7 @@
 #   REVIEW_PIECE_BYTES  size limit of one piece in bytes (default: 60000)
 
 set -euo pipefail
+CALLER_DIR="$PWD"
 # Load the PATH check with builtins only, before any executable lookup.
 script=${BASH_SOURCE[0]}
 case "$script" in */*) ;; *) script="./$script" ;; esac
@@ -51,7 +52,6 @@ export GIT_NO_REPLACE_OBJECTS=1
 SCRIPT_DIR="$(CDPATH= cd -- "${script%/*}/" && pwd)"
 source "$SCRIPT_DIR/../checks/lib/has_match.sh" || exit 2  # bug 283: never a pipe into grep -q
 ROOT="$(git rev-parse --show-toplevel)"
-review_prepare_codex_home "$ROOT" || exit 2
 
 CODEX_BIN="${REVIEW_CODEX_BIN:-codex}"
 REMOTE=origin
@@ -399,6 +399,7 @@ run_one() {
   fi
 }
 
+review_prepare_codex_home "$ROOT" "$CALLER_DIR" || exit 2
 RAW_DIR="$ROOT/.review"
 mkdir -p "$RAW_DIR"
 RAW="$RAW_DIR/$HEAD_SHA-$ROUND.md"

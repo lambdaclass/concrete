@@ -9,7 +9,8 @@ Pieces are formed per file group (compiler, tests, scripts, docs), so one piece
 never mixes, say, compiler sources with documentation, and each piece stays at
 or under <limit-bytes>. A file whose diff alone exceeds the limit is split at
 hunk boundaries, and each part repeats the file header so it reads as a valid
-diff. A single hunk that is still too large is cut at line boundaries.
+diff. A single hunk that is still too large is cut at line boundaries, keeping
+each no-newline marker with its preceding line even if that exceeds the limit.
 --no-groups packs everything as one group; review.sh uses it to halve a piece
 that a reviewer refused.
 """
@@ -61,6 +62,7 @@ def parse_files(patch):
 
 
 HUNK_RE = re.compile(rb"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+NO_NEWLINE = b"\\ No newline at end of file\n"
 
 
 def split_hunk(hunk, budget):
@@ -78,7 +80,12 @@ def split_hunk(hunk, budget):
             part += line
         return parts + ([part] if part else [])
     old, new = int(m.group(1)), int(m.group(3))
-    body = lines[1:]
+    body = []
+    for line in lines[1:]:
+        if line == NO_NEWLINE and body:
+            body[-1] += line
+        else:
+            body.append(line)
     digits = len(str(max(old, new) + len(body)))
     room = max(budget - (12 + 4 * digits), 64)  # room for the synthesized header
     parts, cur = [], []

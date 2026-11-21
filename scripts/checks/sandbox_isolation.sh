@@ -18,7 +18,7 @@
 #               unfixed review_tool.sh did) must report the change, so the live leg cannot pass by
 #               not looking.
 #
-# Every run is bounded in time (120 s per attempt, bounded_run) and in aggregate: a systemd user
+# Every run is bounded in time (120 s per attempt by default, bounded_run) and in aggregate: a systemd user
 # scope with TasksMax=512 and MemoryMax=8G (fede-256gb, concrete-ci-2 logins), or, where there is
 # none (a CI runner service), the cgroup the check already runs in when it has a finite memory.max
 # (concrete-ci-2's runners: 28G per runner) plus `ulimit -u` of 512 more processes. With neither, the
@@ -133,9 +133,6 @@ fi
 
 BOUNDED_PARENT="$TMP"
 source "$ROOT_DIR/scripts/checks/lib/bounded.sh" || exit 2
-# bounded <cmd...>: at most 120 s per attempt (the portable bounded_run: its own watchdog kills the
-# whole process group; one re-run), inside an aggregate task and memory bound (above). Without one
-# the command does not run and the result is 125.
 cgroup_memory_max() { # the finite memory.max of this process's cgroup v2 or an ancestor, else fails
   local cg f
   cg="$(sed -n 's/^0:://p' /proc/self/cgroup 2>/dev/null)"; [ -n "$cg" ] || return 1
@@ -155,13 +152,17 @@ case "$BOUND" in
   cgroup) echo "bound: this cgroup's memory.max ($CGMEM bytes, aggregate) and ulimit -u (512 more processes)" ;;
   none)   echo "bound: none available (no systemd user scope, no finite cgroup memory.max; macOS has neither): the live probes will not run; run the root checks and gated pushes from a bounded Linux host (fede-256gb, concrete-ci-2) or in CI" ;;
 esac
+# bounded <seconds> <cmd...>: bounded_run kills the process group and retries once.
+# Without an aggregate task and memory bound, return 125 without running the command.
 bounded() {
+  local seconds="$1"
+  shift
   case "$BOUND" in
-    scope) bounded_run -i /dev/null -r 120 120 -- systemd-run --user --scope -q -p TasksMax=512 -p MemoryMax=8G "$@" ;;
+    scope) bounded_run -i /dev/null -r "$seconds" "$seconds" -- systemd-run --user --scope -q -p TasksMax=512 -p MemoryMax=8G "$@" ;;
     cgroup)
       local n; n="$(ps -o pid= -U "$(id -u)" 2>/dev/null | wc -l | tr -d ' ')"
       ( ulimit -u $(( ${n:-0} + 512 )) 2>/dev/null || { echo "sandbox_isolation: ulimit -u refused; not running $*"; exit 125; }
-        bounded_run -i /dev/null -r 120 120 -- "$@" ) ;;
+        bounded_run -i /dev/null -r "$seconds" "$seconds" -- "$@" ) ;;
     *) echo "sandbox_isolation: no aggregate task and memory bound here; not running $*"; return 125 ;;
   esac
 }
@@ -187,32 +188,33 @@ snap() { # dir
   git -C "$d/caller" worktree list --porcelain | grep '^worktree '
   git -C "$d/up.git" for-each-ref --format='upstream %(refname) %(objectname)'
 }
-# run_as_hook <dir> <script relative to the linked worktree>: GIT_DIR exported as a linked
+# run_as_hook <dir> <script relative to the linked worktree> <seconds>: GIT_DIR exported as a linked
 # worktree's hook sees it; prints the script's exit code.
 run_as_hook() {
   local d="$1"
   local s="$2"
   local gd
   gd="$(git -C "$d/linked" rev-parse --absolute-git-dir)"
-  ( cd "$d/linked" && GIT_DIR="$gd" && export GIT_DIR && bounded bash "$s" ) > "$d/run.log" 2>&1
+  ( cd "$d/linked" && GIT_DIR="$gd" && export GIT_DIR && bounded "$3" bash "$s" ) > "$d/run.log" 2>&1
   echo $?
 }
-probe() { # label script expect-change [completion-marker]
+probe() { # label script expect-change [completion-marker] [seconds per attempt]
   local label="$1"
   local s="$2"
   local want="$3"
   local marker="${4:-}"
+  local seconds="${5:-120}"
   local d
   local rc
   d="$(mktemp -d "$TMP/caller.XXXXXX")"
   mk_caller "$d" || { no "$label: could not build the caller"; return; }
   [ -z "$(ls "$d/nohooks")" ] || { no "$label: a hook is installed"; return; }
   snap "$d" | LC_ALL=C sort > "$d/before"
-  rc="$(run_as_hook "$d" "$s")"
+  rc="$(run_as_hook "$d" "$s" "$seconds")"
   snap "$d" | LC_ALL=C sort > "$d/after"
   if [ "$want" = 0 ]; then
     [ "$rc" = 125 ] && { no "$label: INCOMPLETE: no task and memory bound available, so it was not run"; return; }
-    bounded_is_incomplete "$rc" && { no "$label: INCOMPLETE: timed out twice (120 s each)"; tail -n 5 "$d/run.log" | sed 's/^/      /'; return; }
+    bounded_is_incomplete "$rc" && { no "$label: INCOMPLETE: timed out twice ($seconds s each)"; tail -n 5 "$d/run.log" | sed 's/^/      /'; return; }
     [ "$rc" = 0 ] || { no "$label: exit $rc (an early failure would make 'unchanged' vacuous)"; tail -n 8 "$d/run.log" | sed 's/^/      /'; }
     grep -q "$marker" "$d/run.log" || { no "$label: its final tally ('$marker') is missing: it stopped early, so 'unchanged' proves nothing"; return; }
     if cmp -s "$d/before" "$d/after"; then ok "$label: the caller's refs, notes, config and upstream are unchanged"
@@ -238,7 +240,8 @@ EOF
 probe "control (leaky script)" "$TMP/ctl/leaky.sh" 1
 
 echo "=== live: sandbox checks run from a linked worktree as its hook would run them ==="
-probe "review_tool.sh" scripts/checks/review_tool.sh 0 "^check_review_tool: PASS=[0-9]* FAIL=0$"
+# The review gate also runs the generated patch matrix and can exceed 120 seconds.
+probe "review_tool.sh" scripts/checks/review_tool.sh 0 "^check_review_tool: PASS=[0-9]* FAIL=0$" 180
 probe "legacy_frozen.sh" scripts/checks/legacy_frozen.sh 0 "^legacy_frozen: PASS=[0-9]* FAIL=0$"
 
 echo
