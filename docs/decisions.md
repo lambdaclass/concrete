@@ -17,6 +17,9 @@ The shape of Core was approved provisionally on 2026-11-05 ([stage A2a](#decided
 <a id="decided-2026-11-21-secrets-after-1-0"></a>
 ## Decided 2026-11-21: secrets after 1.0
 
+Status: decided
+Source: owner
+
 The question was whether to remove F26b from the spec and defer `Secret<T>` until after 1.0,
 with a fresh specification if it returns, or remove the feature from the language entirely
 by reversing the [2026-11-06 information-flow decision](#decided-project-infoflow-2026-11-06).
@@ -43,6 +46,9 @@ and its evidence carry the active accounting scope on main.
 <a id="decided-2026-11-21-review-sandbox-removal"></a>
 ## Decided 2026-11-21: review sandbox branch removal
 
+Status: decided
+Source: owner
+
 The question was whether to park or continue `wip/review-sandbox`, the reviewer-run
 sandboxing branch, after 15 rounds with four findings open. Owner reply, verbatim:
 
@@ -55,12 +61,15 @@ tooling on main remains in service.
 
 Two round-15 findings also apply to main at `88acab3d0`: delta reviews lack a bound
 predecessor and verdict and findings notes can be published independently. Both are
-recorded in the [issue ledger](../ISSUES.tsv) pending coordinator allocation.
+recorded in the [issue ledger](../ISSUES.tsv) as ISS-0098 and ISS-0099, respectively.
 The other two findings concern patch-digest verification and review-driver locks
 introduced on the abandoned branch.
 
 <a id="decided-2026-11-21-extra-review-rounds"></a>
 ## Decided 2026-11-21: extra review rounds
+
+Status: decided
+Source: owner
 
 Owner reply, verbatim:
 

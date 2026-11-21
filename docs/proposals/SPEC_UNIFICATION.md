@@ -1107,7 +1107,8 @@ that would change a foundation definition stops and goes to the owner.
 33. Slice 10: enums and `match`. Slice 11: generics, `CapVarId`, Mono re-admission as a statement.
     Slice 12: `Option`, `Result`, `checked_*` (D6), `try_convert`. One step per slice.
 34. Slices 13–15: references and borrow blocks, traits, `Destroy` and `defer`, arrays and range
-    views with entropy fill-bytes (D12, D13), each over the Core of steps 14 and 16; one step per slice.
+    views (D13) with entropy fill-bytes (the [randomness decision](../decisions.md#decided-2026-11-07-stack-randomness)),
+    each over the Core of steps 14 and 16; one step per slice.
 35. Slices 16–18: text and Console (with the UTF-8 failure classification, [question 11](../decisions.md#foundation-q11)),
     modules and constants (with `pub`, field privacy and the struct-invariant source feature, D26),
     Fs and Environment; one step per slice.

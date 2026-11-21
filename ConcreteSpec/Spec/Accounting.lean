@@ -9,7 +9,9 @@ docs/decisions.md#decided-project-memory-2026-11-06.
 
 This projection records per-lineage flows and historical and function-local peaks. It does not
 define execution, allocation layout or allocator footprint; the allocator supplies its own contract.
-Wiping remains held under ISS-0072. Security and release policies belong to the later C7 slice.
+The C7 scope here is byte and memory accounting. The November 21 decision
+(docs/decisions.md#decided-2026-11-21-secrets-after-1-0) defers security, leakage, release
+and wiping until after 1.0 and closes ISS-0072.
 -/
 
 namespace ConcreteSpec.Core.Leak
