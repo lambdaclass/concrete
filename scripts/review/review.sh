@@ -87,9 +87,10 @@ PYTHON="$(review_executable python3)" || die "python3 executable not found"
 "$PYTHON" -I "$SCRIPT_DIR/supervise.py" --check || exit 2
 CODEX_BIN="$(review_executable "$CODEX_BIN")" || die "reviewer executable not found: ${REVIEW_CODEX_BIN:-codex}"
 cd "$ROOT"
+HEAD_SHA="$(git rev-parse HEAD)"
 if [ -n "${WANT_HEAD:-}" ]; then
   want="$(git rev-parse -q --verify "$WANT_HEAD^{commit}")" || die "--head $WANT_HEAD is not a commit"
-  [ "$want" = "$(git rev-parse HEAD)" ] || die "--head $WANT_HEAD is ${want:0:12}, but the checkout is at $(git rev-parse --short=12 HEAD)"
+  [ "$want" = "$HEAD_SHA" ] || die "--head $WANT_HEAD is ${want:0:12}, but the checkout is at ${HEAD_SHA:0:12}"
 fi
 [[ "$PIECE_BYTES" =~ ^[1-9][0-9]*$ ]] || die "REVIEW_PIECE_BYTES must be a positive integer"
 
@@ -153,10 +154,17 @@ note_field() { # note_field <text> <key>
   printf '%s\n' "$1" | awk -v k="$2: " 'index($0, k) == 1 && !done { print substr($0, length(k) + 1); done = 1 }'
 }
 
-findings_for() { # findings_for <sha> <round>: the recorded findings of that round
+findings_for() { # findings_for <sha> <round> <note>: the recorded findings of that round
   local sha="$1"
   local round="$2"
+  local dir
   if git notes --ref="$FINDINGS_REF" show "$sha" 2>/dev/null; then return 0; fi
+  for dir in ".review/$sha-$round."*; do
+    if [ -f "$dir/findings" ] && cmp -s "$dir/note" <(printf '%s\n' "$3"); then
+      cat "$dir/findings"
+      return 0
+    fi
+  done
   if [ -f ".review/$sha-$round.md" ]; then cat ".review/$sha-$round.md"; return 0; fi
   echo "(findings text not available for $sha round $round)"
 }
@@ -171,15 +179,23 @@ cap_message() { # cap_message <rounds-done> <findings-text>
 }
 
 # ---------------------------------------------------------------- state
-sync_notes || die "notes sync failed"
-
-HEAD_SHA="$(git rev-parse HEAD)"
 if [ -z "$BASE" ]; then
   git rev-parse -q --verify "$MAIN_REF^{commit}" >/dev/null || die "no $MAIN_REF; pass --base"
-  BASE_SHA="$(git merge-base HEAD "$MAIN_REF")" || die "no merge-base with $MAIN_REF"
+  BASE_SHA="$(git merge-base "$HEAD_SHA" "$MAIN_REF")" || die "no merge-base with $MAIN_REF"
 else
   BASE_SHA="$(git rev-parse -q --verify "$BASE^{commit}")" || die "bad --base: $BASE"
 fi
+
+# Linked worktrees share round history and the notes refs. Reserve a round
+# through publication for this head, and lock shared notes only while using them.
+lock_dir="$(review_lock_dir)"
+exec 8>>"$lock_dir/$HEAD_SHA" 9>>"$lock_dir/notes"
+if ! review_lock 8 nonblocking; then
+  echo "review: waiting for the active review of $HEAD_SHA" >&2
+  review_lock 8
+fi
+review_lock 9
+sync_notes || die "notes sync failed"
 
 if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
   echo "review: warning: uncommitted changes are not reviewed; only HEAD is" >&2
@@ -219,7 +235,7 @@ while read -r c; do
   if [ "$covered" = 0 ] && [ "$vrc" -gt 1 ]; then INSUFFICIENT_RANGE=1; fi
   if [ "$covered" = 0 ] && [ "$v" != clean ]; then
     PREV_FINDINGS="$PREV_FINDINGS
-$(findings_for "$c" "$r")"
+$(findings_for "$c" "$r" "$n")"
   fi
   if [ "$vrc" -le 1 ] && { [ "$v" = clean ] || [ "$v" = findings ]; }; then
     COVERING_REVIEWS="$COVERING_REVIEWS $c"
@@ -227,7 +243,8 @@ $(findings_for "$c" "$r")"
       REVIEWED_SHA="$c" REVIEWED_ROUNDS="$r"
     fi
   fi
-done < <(git rev-list --topo-order HEAD "^$BASE_SHA")
+done < <(git rev-list --topo-order "$HEAD_SHA" "^$BASE_SHA")
+review_lock 9 unlock
 
 if [ "$INSUFFICIENT_RANGE" = 0 ] && [ "$PREV_VALID" = 1 ] && [ "$PREV_SHA" = "$HEAD_SHA" ] && [ "$PREV_VERDICT" != blocked ]; then
   if [ "$PREV_VERDICT" = clean ]; then
@@ -261,28 +278,13 @@ if [ "$INSUFFICIENT_RANGE" = 1 ] ||
   FULL_REVIEW=1
   echo "review: prior review does not cover current branch scope; reviewing full base..HEAD diff (round $ROUND)" >&2
 fi
-# Compare the original objects in a bare repository with no worktree, index,
-# attribute source, or inherited Git configuration. The empty template also
-# rules out injected info/attributes. Git's built-in binary detection keeps
-# binary payloads out of the prompt while still emitting their named changes.
-object_format="$(git rev-parse --show-object-format)"
-object_directory="$(git rev-parse --path-format=absolute --git-path objects)"
-object_alternates="${GIT_ALTERNATE_OBJECT_DIRECTORIES-}"
-(
-  source "$SCRIPT_DIR/../checks/lib/git_sandbox.sh" || exit 2
-  git_sandbox /dev/null || exit 2
-  unset GIT_ATTR_SOURCE
-  export GIT_ATTR_NOSYSTEM=1
-  git init -q --bare --template= --object-format="$object_format" "$WORK/diff.git"
-  # Keep the current directory so relative paths in the object alternates still resolve.
-  GIT_OBJECT_DIRECTORY="$object_directory" GIT_ALTERNATE_OBJECT_DIRECTORIES="$object_alternates" \
-    git --git-dir="$WORK/diff.git" -c core.attributesFile=/dev/null \
-      diff --no-color --no-ext-diff --no-textconv -M "$FROM" "$HEAD_SHA"
-) >"$WORK/full.diff"
+review_range_patch "$SCRIPT_DIR" "$WORK/diff.git" "$FROM" "$HEAD_SHA" >"$WORK/full.diff"
 if [ ! -s "$WORK/full.diff" ]; then
   echo "review: nothing to review: no changes between $FROM and HEAD" >&2
   exit 4
 fi
+
+PATCH_DIGEST="$(review_patch_digest "$PYTHON" <"$WORK/full.diff")"
 
 # ---------------------------------------------------------------- split
 TOTAL="$(wc -c <"$WORK/full.diff" | tr -d ' ')"
@@ -361,25 +363,27 @@ run_one() {
   local rc=0
   RUN_N=$((RUN_N + 1))
   LAST_FINDINGS=""
-  local out="$WORK/out.$RUN_N.txt"
-  local log="$WORK/log.$RUN_N.txt"
+  local evidence="$RUN_DIR/invocation-$RUN_N"
+  local out="$evidence.output.txt"
+  local log="$evidence.events.jsonl"
+  local prompt="$evidence.prompt.txt"
+  local digest
+  digest="$(review_patch_digest "$PYTHON" <"$piece")"
   : >"$out"
-  local prompt="$RAW_DIR/$HEAD_SHA-$ROUND-invocation-$RUN_N.prompt.txt"
-  local evidence="$RAW_DIR/$HEAD_SHA-$ROUND-invocation-$RUN_N"
   cp "$piece" "$evidence.patch.diff"
   prompt_for "$kind" "$label" "$group" "$paths" >"$prompt"
   : >"$log"
   local cancelled=0
   trap 'cancelled=1' HUP INT TERM
-  bash "$SCRIPT_DIR/invoke.sh" "$ROOT" "$HEAD_SHA" "$prompt" "$evidence.patch.diff" "$out" "$log" "$CODEX_BIN" "$PYTHON" \
-    >"$WORK/result.$RUN_N" 2>"$evidence.stderr.txt" &
+  bash "$SCRIPT_DIR/invoke.sh" "$ROOT" "$HEAD_SHA" "$prompt" "$evidence.patch.diff" "$out" "$log" "$CODEX_BIN" "$PYTHON" "$digest" \
+    >"$evidence.result.txt" 2>"$evidence.stderr.txt" 8>&- 9>&- &
   runner=$!
   trap cancel_review HUP INT TERM
   [ "$cancelled" = 0 ] || cancel_review
   wait "$runner" || rc=$?
   runner=
-  cp "$out" "$evidence.output.txt"
-  cp "$log" "$evidence.events.jsonl"
+  [ "$(review_patch_digest "$PYTHON" <"$evidence.patch.diff")" = "$digest" ] \
+    || die "invocation patch digest mismatch; see $evidence.* (no note recorded)"
   if [ -s "$evidence.stderr.txt" ]; then
     { echo; echo "### Runner stderr ($label, invocation $RUN_N)"; echo; cat "$evidence.stderr.txt"; } >>"$RAW"
   fi
@@ -393,16 +397,19 @@ run_one() {
     die "reviewer execution or repository-read evidence failed; see $evidence.* (no note recorded)"
   fi
   LAST_BODY="$(cat "$out")"
-  IFS= read -r LAST_RESULT <"$WORK/result.$RUN_N"
+  IFS= read -r LAST_RESULT <"$evidence.result.txt"
   if [ "$LAST_RESULT" = findings ]; then
-    LAST_FINDINGS="$(tail -n +2 "$WORK/result.$RUN_N")"
+    LAST_FINDINGS="$(tail -n +2 "$evidence.result.txt")"
   fi
 }
 
 review_prepare_codex_home "$ROOT" "$CALLER_DIR" || exit 2
 RAW_DIR="$ROOT/.review"
 mkdir -p "$RAW_DIR"
-RAW="$RAW_DIR/$HEAD_SHA-$ROUND.md"
+RUN_DIR="$(mktemp -d "$RAW_DIR/$HEAD_SHA-$ROUND.XXXXXXXX")"
+RAW="$RUN_DIR/report.md"
+cp "$WORK/full.diff" "$RUN_DIR/range.diff"
+echo "review: evidence directory: ${RUN_DIR#$ROOT/}" >&2
 UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 {
   echo "# review of $HEAD_SHA, round $ROUND"
@@ -473,7 +480,12 @@ fi
 # ---------------------------------------------------------------- record
 # THE NOTE FORMAT IS AN INTERFACE: scripts/review/verify.sh parses it (train.sh's review leg reads
 # it through verify.sh). Change it only together with verify.sh.
-cat >"$WORK/note" <<EOF
+expected_digest="$(review_range_digest "$SCRIPT_DIR" "$PYTHON" "$FROM" "$HEAD_SHA")"
+saved_digest="$(review_patch_digest "$PYTHON" <"$RUN_DIR/range.diff")"
+[ "$PATCH_DIGEST" = "$expected_digest" ] && [ "$PATCH_DIGEST" = "$saved_digest" ] \
+  || die "patch digest does not match the requested range (no note recorded)"
+
+cat >"$RUN_DIR/note" <<EOF
 verdict: $VERDICT
 rounds: $ROUND
 reviewer: $REVIEWER
@@ -481,9 +493,12 @@ utc: $UTC
 base: $BASE_SHA
 pieces: $K
 read-evidence: v1
-patch-coverage: v1
+patch-coverage: v2
+head: $HEAD_SHA
+patch-from: $FROM
+patch-sha256: $PATCH_DIGEST
 EOF
-git notes --ref="$NOTES_REF" add -f -F "$WORK/note" "$HEAD_SHA"
+review_lock 9
 if [ "$VERDICT" = blocked ] && [ -n "$PREV_FINDINGS" ]; then
   # A blocked round cannot resolve the findings it was given: some code went
   # unreviewed. Record them with this round's own, so a later round (even after
@@ -493,9 +508,11 @@ if [ "$VERDICT" = blocked ] && [ -n "$PREV_FINDINGS" ]; then
 $PREV_FINDINGS"
 fi
 if [ "$VERDICT" != clean ]; then
-  printf '%s\n' "${FINDINGS_TEXT#$'\n'}" >"$WORK/findings"
-  git notes --ref="$FINDINGS_REF" add -f -F "$WORK/findings" "$HEAD_SHA"
+  printf '%s\n' "${FINDINGS_TEXT#$'\n'}" >"$RUN_DIR/findings"
+  git notes --ref="$FINDINGS_REF" add -f -F "$RUN_DIR/findings" "$HEAD_SHA"
 fi
+
+git notes --ref="$NOTES_REF" add -f -F "$RUN_DIR/note" "$HEAD_SHA"
 
 echo "review: round $ROUND verdict $VERDICT ($K piece(s)); raw output: ${RAW#$ROOT/}"
 [ "$VERDICT" = clean ] || printf '%s\n' "${FINDINGS_TEXT#$'\n'}"

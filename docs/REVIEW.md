@@ -148,7 +148,7 @@ runner holds the expected digest in memory.
 Missing evidence, malformed events, startup errors and execution failures exit
 2 before recording a note. Policy refusals go through the retry below.
 The exact prompt, final output, raw JSON event stream and stderr are saved beside
-the round report in `.review/<sha>-<round>-invocation-<n>.*` for all invocations.
+the round report under `.review/<sha>-<round>.<random>/` as `invocation-<n>.*`.
 Each invocation also retains its exact stdin in the corresponding `.patch.diff` file.
 The report also includes runner stderr.
 
@@ -198,13 +198,16 @@ utc: 2026-10-22T14:03:11Z
 base: <40-hex sha>
 pieces: K
 read-evidence: v1
-patch-coverage: v1
+patch-coverage: v2
+head: <40-hex sha>
+patch-from: <40-hex sha>
+patch-sha256: <64-hex digest>
 ```
 
 **The format is an interface.** `verify.sh` parses it, and the train's review
-leg reads it through `verify.sh`, which rejects any note that lacks one of these
-eight keys, repeats a key, or carries any other key. Keys are matched by name, not
-position. Change the format only together with `verify.sh`.
+leg reads it through `verify.sh`, which requires each current key exactly once
+and rejects unknown keys. Keys may appear in any order. Change the format only
+together with `verify.sh`.
 
 - `rounds` is this round's number, which is also the number of rounds run on the
   branch so far.
@@ -214,10 +217,14 @@ position. Change the format only together with `verify.sh`.
   before accepting its verdict. A blocked note records the protocol and cannot
   establish coverage.
 
-- `patch-coverage: v1` identifies the patch-generation and splitting protocol.
+- `patch-coverage: v2` identifies the patch-generation, splitting and range-binding
+  protocol. `head` must match the annotated commit. `patch-from` names the actual
+  start of the full patch or round delta. `patch-sha256` hashes the exact Git
+  patch before splitting. The runner checks each piece's bytes before sending
+  it to Codex. The publisher and verifier recompute the range digest from Git.
   Advance this version when earlier patch inputs may have omitted or altered changes.
 
-Historical notes missing either version still count toward the round cap, including
+Historical notes with older or missing protocol versions still count toward the round cap, including
 for owner sign-off, and can carry forward open findings. Current versions of both
 fields are required for coverage and landing provenance. The next round reviews
 the full branch diff unless a newer qualifying review already covers it.
@@ -225,8 +232,14 @@ the full branch diff unless a newer qualifying review already covers it.
 When the verdict is not clean, the findings text goes in a second note under
 `refs/notes/concrete-review-findings`, which is pushed too. It is how the next
 round, possibly run by another agent, gets the previous findings. The full raw
-output of every round is written to `.review/<sha>-<round>.md`, which git
-ignores.
+output of every round is written to `report.md` in its private run directory,
+along with `range.diff` and the note payload when the round completes. The
+driver creates each run directory atomically and Git ignores it.
+
+A lock in the common Git directory serializes reviews of the same head across
+linked worktrees, from round allocation through note publication. A second
+lock protects updates to the shared notes refs while reviewers for different
+heads can work in parallel.
 
 A non-fast-forward rejection (another agent pushed notes in the meantime) is
 handled by fetching the remote notes, merging them (`git notes merge -s ours`: on

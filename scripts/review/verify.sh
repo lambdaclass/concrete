@@ -46,6 +46,10 @@ done
 [ $# -eq 1 ] || { echo "usage: verify.sh [--fetch] [--notes-ref <ref>] [--required-base <commit>] [--round-history] <commit>" >&2; exit 2; }
 
 if [ "$FETCH" = 1 ]; then
+  PYTHON="$(review_executable python3)" || exit 2
+  lock_dir="$(review_lock_dir)" || exit 2
+  exec 9>>"$lock_dir/notes"
+  review_lock 9 || exit 2
   git fetch -q "$REMOTE" "+$NOTES_REF:$NOTES_REF" \
     || { echo "verify: could not fetch $NOTES_REF from $REMOTE" >&2; exit 2; }
 fi
@@ -66,7 +70,7 @@ malformed() {
 # Plain variables F_<key>, not an associative array: macOS /bin/bash is 3.2.
 SEEN=" "
 while IFS= read -r line; do
-  [[ "$line" =~ ^([a-z-]+):\ (.*)$ ]] || malformed "not key: value: '$line'"
+  [[ "$line" =~ ^([a-z][a-z0-9-]*):\ (.*)$ ]] || malformed "not key: value: '$line'"
   k="${BASH_REMATCH[1]}" v="${BASH_REMATCH[2]}"
   case "$SEEN" in *" $k "*) malformed "repeated key $k" ;; esac
   SEEN="$SEEN$k "
@@ -76,9 +80,11 @@ while IFS= read -r line; do
     rounds)       [[ "$v" =~ ^[1-9][0-9]*$ ]] ;;
     reviewer)     [[ "$v" =~ ^[^[:space:]]+$ ]] ;;
     utc)          [[ "$v" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] ;;
-    base)         [[ "$v" =~ ^[0-9a-f]{40}$ ]] ;;
+    base)         [[ "$v" =~ ^[0-9a-f]+$ && ${#v} -eq ${#SHA} ]] ;;
     read-evidence) [[ "$v" = v1 ]] ;;
-    patch-coverage) [[ "$v" = v1 ]] ;;
+    patch-coverage) [[ "$v" =~ ^v[12]$ ]] ;;
+    head|patch-from) [[ "$v" =~ ^[0-9a-f]+$ && ${#v} -eq ${#SHA} ]] ;;
+    patch-sha256)  [[ "$v" =~ ^[0-9a-f]{64}$ ]] ;;
     pieces)       [[ "$v" =~ ^[0-9]+$ ]] ;;
     *)            false ;;
   esac || malformed "bad $k"
@@ -92,9 +98,16 @@ if [ "$ROUND_HISTORY" = 0 ] && [[ "$SEEN" != *" read-evidence "* ]]; then
   exit 2
 fi
 
-if [ "$ROUND_HISTORY" = 0 ] && [[ "$SEEN" != *" patch-coverage "* ]]; then
+if [ "$ROUND_HISTORY" = 0 ] && [ "${F_patch_coverage:-}" != v2 ]; then
   echo "$SHA unqualified: review note predates current patch coverage"
   exit 2
+fi
+
+if [ "${F_patch_coverage:-}" = v2 ]; then
+  for k in head patch-from patch-sha256; do
+    case "$SEEN" in *" $k "*) ;; *) malformed "missing $k" ;; esac
+  done
+  [ "$F_head" = "$SHA" ] || malformed "head does not match note target"
 fi
 
 field() { local n="F_${1//-/_}"; printf '%s' "${!n:-}"; }
@@ -103,6 +116,21 @@ if [ -n "$REQUIRED_BASE" ]; then
     echo "$SHA review range does not cover required base $REQUIRED_BASE: note base $(field base) is not an ancestor-or-equal"
     exit 2
   }
+fi
+if [ "$ROUND_HISTORY" = 0 ]; then
+  if [ "$F_patch_from" != "$F_base" ] &&
+    ! { git merge-base --is-ancestor "$F_base" "$F_patch_from" &&
+        git merge-base --is-ancestor "$F_patch_from" "$SHA"; }; then
+    echo "$SHA unqualified: delta start is outside the recorded branch range"
+    exit 2
+  fi
+  python="$(review_executable python3)" || exit 2
+  script_dir="$(CDPATH= cd -- "${script%/*}/" && pwd)"
+  digest="$(review_range_digest "$script_dir" "$python" "$F_patch_from" "$SHA")" || exit 2
+  if [ "$digest" != "$F_patch_sha256" ]; then
+    echo "$SHA unqualified: patch digest does not match the recorded range"
+    exit 2
+  fi
 fi
 VERDICT="$(field verdict)"
 echo "$SHA $VERDICT (round $(field rounds), reviewer $(field reviewer), $(field utc), base $(field base), $(field pieces) piece(s))"

@@ -248,6 +248,15 @@ g push -q origin main
 review() { (cd "$W" && bash "$REVIEW" "$@"); }
 note() { g notes --ref=refs/notes/concrete-review show "${1:-HEAD}" 2>/dev/null; }
 field() { note "${2:-HEAD}" | sed -n "s/^$1: //p"; }
+evidence_dir() { # log of one driver invocation
+  local path
+  path="$(sed -n 's/^review: evidence directory: //p' "$1")"
+  printf '%s/%s\n' "$W" "$path"
+}
+fixture_digest() {
+  (cd "$W" && source "$ROOT_DIR/scripts/review/runtime.sh" &&
+    review_range_digest "$ROOT_DIR/scripts/review" "$(type -P python3)" "$1" "$2")
+}
 
 review_without_launch() {
   local expected="$1"
@@ -321,14 +330,17 @@ utc: [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z
 base: [0-9a-f]{40}
 pieces: [0-9]+
 read-evidence: v1
-patch-coverage: v1$'
+patch-coverage: v2
+head: [0-9a-f]{40}
+patch-from: [0-9a-f]{40}
+patch-sha256: [0-9a-f]{64}$'
 n1="$(note "$R1")"
-if [[ "$n1" =~ $FORMAT_RE ]]; then ok "note has exactly the eight fields, in order"; else no "note format: $n1"; fi
+if [[ "$n1" =~ $FORMAT_RE ]]; then ok "note has exactly the eleven fields, in order"; else no "note format: $n1"; fi
 check "note: verdict findings" test "$(field verdict)" = findings
 check "note: rounds 1" test "$(field rounds)" = 1
 check "note: base is the merge-base" test "$(field base)" = "$BASE"
 check "note: pieces 1" test "$(field pieces)" = 1
-check "raw output at .review/<sha>-1.md" test -s "$W/.review/$R1-1.md"
+check "raw output in private run directory" test -s "$(evidence_dir "$T/out1")/report.md"
 check "findings recorded under the findings ref" \
   bash -c "git -C '$W' notes --ref=refs/notes/concrete-review-findings show $R1 | has_match 'counter is never reset'"
 check "findings note omits the parsed emphasized verdict" bash -c \
@@ -420,7 +432,10 @@ commit_file hidden.txt hidden hidden
 RANGE_MID="$(g rev-parse HEAD)"
 commit_file visible.txt visible visible
 range_note() {
-  g notes --ref=concrete-review add -f -m "$(printf 'verdict: %s\nrounds: %s\nreviewer: codex\nutc: 2026-11-11T00:00:00Z\nbase: %s\npieces: 1\nread-evidence: v1\npatch-coverage: v1' "$1" "$2" "$3")" HEAD
+  local head digest
+  head="$(g rev-parse HEAD)"
+  digest="$(fixture_digest "$3" "$head")"
+  g notes --ref=concrete-review add -f -m "$(printf 'verdict: %s\nrounds: %s\nreviewer: codex\nutc: 2026-11-11T00:00:00Z\nbase: %s\npieces: 1\nread-evidence: v1\npatch-coverage: v2\nhead: %s\npatch-from: %s\npatch-sha256: %s' "$1" "$2" "$3" "$head" "$3" "$digest")" "$head"
 }
 for verdict in clean findings blocked; do
   range_note "$verdict" 1 "$RANGE_MID"
@@ -585,12 +600,19 @@ g notes --ref=refs/notes/concrete-review add -f -m "verdict: clean" HEAD
 check "malformed note (verdict line alone): exit 2 (got $rc)" test "$rc" -eq 2
 B40="$(printf '%040d' 0 | tr 0 a)"
 # Field order does not affect verification.
-g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nbase: %s\npieces: 1\nread-evidence: v1\npatch-coverage: v1\nutc: 2026-10-22T00:00:00Z' "$B40")" HEAD
+range_note clean 2 "$(g rev-parse HEAD^)"
+ordered_note="$(note)"
+g notes --ref=concrete-review add -f -m "$(sed '/^utc: /d' <<<"$ordered_note"; grep '^utc: ' <<<"$ordered_note")" HEAD
 (cd "$W" && bash "$VERIFY" HEAD >"$T/vc" 2>&1); rc=$?
 check "a note with utc last verifies clean (exit 0, got $rc)" test "$rc" -eq 0
+g notes --ref=concrete-review add -f -m "$(sed "s/^base: .*/base: $B40/" <<<"$ordered_note")" HEAD
 (cd "$W" && bash "$VERIFY" --required-base HEAD HEAD >"$T/vr" 2>&1); rc=$?
 check "verify.sh refuses a syntactically valid but unknown note base" test "$rc" -eq 2
 check "unknown note base fails for range coverage" grep -q 'review range does not cover required base' "$T/vr"
+g notes --ref=concrete-review add -f -m "$(sed "s/^patch-sha256: .*/patch-sha256: $(printf '%064d' 0)/" <<<"$ordered_note")" HEAD
+(cd "$W" && bash "$VERIFY" HEAD >"$T/vr" 2>&1); rc=$?
+check "verify.sh rejects a mismatched patch digest" test "$rc" -eq 2
+check "digest mismatch is diagnosed" grep -q 'patch digest does not match' "$T/vr"
 # The landing bot's keys went with it: a verdict carried across a rebase, or a landing order, is no
 # longer a key a review note may hold.
 for extra in "carried-from: $B40" "order: 1"; do
@@ -624,13 +646,13 @@ echo "=== notes from before patch coverage keep their round but force a full dif
 reset_fake
 g checkout -q main && g checkout -qb old-patch-coverage
 commit_file Concrete/Earlier.lean 'def earlier := 1' 'earlier Lean change'
-g notes --ref=refs/notes/concrete-review add -m "$(printf 'verdict: clean\nrounds: 1\nreviewer: codex\nutc: 2026-10-22T00:00:00Z\nbase: %s\npieces: 1\nread-evidence: v1' "$historical_base")" HEAD
+g notes --ref=refs/notes/concrete-review add -m "$(printf 'verdict: clean\nrounds: 1\nreviewer: codex\nutc: 2026-10-22T00:00:00Z\nbase: %s\npieces: 1\nread-evidence: v1\npatch-coverage: v1' "$historical_base")" HEAD
 (cd "$W" && bash "$VERIFY" --required-base "$historical_base" HEAD) >"$T/old-patch.verify" 2>&1; rc=$?
 check "old patch coverage cannot qualify as clean" test "$rc" = 2
 check "old patch coverage diagnostic identifies the missing version" grep -q 'predates current patch coverage' "$T/old-patch.verify"
 commit_file unrelated.txt unrelated 'unrelated change after old review'
 review >"$T/old-patch.review" 2>&1; rc=$?
-check "a note with read evidence alone still counts toward the round" test "$rc" = 0 -a "$(field rounds)" = 2
+check "a v1 patch-coverage note still counts toward the round" test "$rc" = 0 -a "$(field rounds)" = 2
 check "the next review sends the earlier Lean change" grep -Fxq -- '+def earlier := 1' "$FAKE_LOG/stdin.1"
 check "the next review also sends the unrelated change" grep -Fxq -- '+unrelated' "$FAKE_LOG/stdin.2"
 
@@ -663,13 +685,13 @@ check "absolute probe fails when its target is missing despite a working shim" \
 check "the exact prompted command was used with the shim on PATH" \
   cmp "$FAKE_LOG/probe-command" <(awk '/run this repository-read probe verbatim/{getline; print}' "$FAKE_LOG/prompt.1")
 check "a forged success event with the old content hash cannot produce a note" \
-  grep -q 'missing successful repository-read command evidence' "$W/.review/$(g rev-parse HEAD)-1.md"
+  grep -q 'missing successful repository-read command evidence' "$(evidence_dir "$T/parse.log")/report.md"
 parse_case MARK_NULL_OUTPUT 0 clean "null output from another command preserves valid read evidence"
 parse_case MARK_BAD_EVENT 2 "" "non-object event fails without a note"
-check "round report includes malformed event diagnostic" grep -q 'malformed reviewer event on line 2' "$W/.review/$(g rev-parse HEAD)-1.md"
+check "round report includes malformed event diagnostic" grep -q 'malformed reviewer event on line 2' "$(evidence_dir "$T/parse.log")/report.md"
 check "review failure surfaces the runner diagnostic on stderr" grep -q 'malformed reviewer event on line 2' "$T/parse.log"
 parse_case MARK_BAD_ITEM 2 "" "non-object item fails without a note"
-check "round report includes malformed item diagnostic" grep -q 'malformed reviewer item on line 2' "$W/.review/$(g rev-parse HEAD)-1.md"
+check "round report includes malformed item diagnostic" grep -q 'malformed reviewer item on line 2' "$(evidence_dir "$T/parse.log")/report.md"
 parse_case MARK_PLAIN_REFUSE 0 clean "plain pre-read refusal reaches a successful neutral retry"
 check "plain refusal actually invoked the neutral prompt" grep -q ' neutral ' "$FAKE_LOG/calls"
 parse_case MARK_UNICODE 0 clean "literal U+2028 stays inside its JSONL record"
@@ -681,7 +703,7 @@ check "reviewer completed both writes" test -f "$FAKE_LOG/wrote"
 check "caller README unchanged" test "$(cat "$W/README.md")" = base
 check "caller has no reviewer-created file" test ! -e "$W/reviewer-created"
 check "private archive removed on exit" test ! -e "$(cat "$FAKE_LOG/directory.1")"
-check "exact prompt retained" cmp "$FAKE_LOG/prompt.1" "$W/.review/$(g rev-parse HEAD)-1-invocation-1.prompt.txt"
+check "exact prompt retained" cmp "$FAKE_LOG/prompt.1" "$(evidence_dir "$T/parse.log")/invocation-1.prompt.txt"
 
 check "reviewer environment excludes caller secret and Git config, scopes temp files" \
   cmp "$FAKE_LOG/environment.1" <(printf '%s\n' unset unset "$(dirname "$(cat "$FAKE_LOG/directory.1")")/tmp")
@@ -968,6 +990,95 @@ for source in checkout info global committed; do
   esac
 done
 
+echo "=== overlapping runs on one head keep their review ranges ==="
+g checkout -q main && g checkout -qb overlapping-ranges
+wide_base="$(g rev-parse HEAD)"
+commit_file wide.txt wider "wider contribution"
+narrow_base="$(g rev-parse HEAD)"
+commit_file narrow.txt narrower "narrower contribution"
+overlap_head="$(g rev-parse HEAD)"
+mkdir "$T/pause-archive" "$T/pause-wide"
+printf '#!/usr/bin/env bash\nset -e\nreal_tar=%q\n' "$(type -P tar)" >"$T/pause-archive/tar"
+cat >>"$T/pause-archive/tar" <<'EOF'
+# Stop after extraction, before the runner reads the supplied prompt and patch.
+"$real_tar" "$@"
+touch "$PAUSE_ARCHIVE/ready"
+for ((attempt=0; attempt<100; attempt++)); do
+  [ ! -f "$PAUSE_ARCHIVE/release" ] || exit 0
+  sleep 0.1
+done
+exit 1
+EOF
+chmod +x "$T/pause-archive/tar"
+await_log() {
+  local attempt
+  for ((attempt=0; attempt<100; attempt++)); do
+    grep -q "$2" "$1" 2>/dev/null && return 0
+    sleep 0.1
+  done
+  return 1
+}
+await_archive() {
+  local attempt
+  for ((attempt=0; attempt<100; attempt++)); do
+    [ ! -f "$1/ready" ] || return 0
+    sleep 0.1
+  done
+  return 1
+}
+reset_fake
+PAUSE_ARCHIVE="$T/pause-archive" PATH="$T/pause-archive:$PATH" \
+  review --base "$narrow_base" >"$T/narrow.log" 2>&1 &
+narrow_pid=$!
+check "narrow review paused during archive preparation" await_archive "$T/pause-archive"
+PAUSE_ARCHIVE="$T/pause-wide" PATH="$T/pause-archive:$PATH" \
+  review --base "$wide_base" >"$T/wide.log" 2>&1 &
+wide_pid=$!
+check "wider review waits for the same-head round lock" await_log "$T/wide.log" 'waiting for the active review'
+check "paused review has sent no patch and published no note" test "$(calls)/$(note)" = "0/"
+touch "$T/pause-archive/release"
+wait "$narrow_pid"; narrow_rc=$?
+narrow_dir="$(evidence_dir "$T/narrow.log")"
+check "wider review reaches archive preparation after the narrow round" await_archive "$T/pause-wide"
+check "canonical note records the narrow review before the wider review completes" cmp "$narrow_dir/note" <(note)
+touch "$T/pause-wide/release"
+wait "$wide_pid"; wide_rc=$?
+check "both ranges reviewed clean in two invocations" test "$narrow_rc/$wide_rc/$(calls)" = "0/0/2"
+wide_dir="$(evidence_dir "$T/wide.log")"
+check "overlapping runs retain distinct private evidence" test "$narrow_dir" != "$wide_dir"
+for scope in narrow wide; do
+  if [ "$scope" = narrow ]; then
+    base="$narrow_base"; dir="$narrow_dir"; round=1
+  else
+    base="$wide_base"; dir="$wide_dir"; round=2
+  fi
+  g diff --no-color --no-ext-diff --no-textconv -M "$base" "$overlap_head" >"$T/$scope.expected"
+  check "$scope reviewer receives exactly its requested patch" cmp "$T/$scope.expected" "$FAKE_LOG/stdin.$round"
+  check "$scope evidence preserves the supplied patch" cmp "$FAKE_LOG/stdin.$round" "$dir/invocation-1.patch.diff"
+  check "$scope evidence preserves the supplied prompt" cmp "$FAKE_LOG/prompt.$round" "$dir/invocation-1.prompt.txt"
+  binding="$(grep -E '^(rounds|base|head|patch-from|patch-sha256):' "$dir/note")"
+  digest="$(python3 -I -c 'import hashlib, sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())' <"$T/$scope.expected")"
+  check "$scope note binds its round, base, head and patch digest" test "$binding" = \
+    "$(printf 'rounds: %s\nbase: %s\nhead: %s\npatch-from: %s\npatch-sha256: %s' "$round" "$base" "$overlap_head" "$base" "$digest")"
+done
+check "canonical note records the wider review" cmp "$wide_dir/note" <(note)
+
+# Corrupt the retained full-range evidence while a reviewer is paused. Its
+# successful verdict cannot publish a note for an inconsistent record.
+commit_file later.txt later "publication digest control"
+reset_fake
+rm "$T/pause-archive/ready" "$T/pause-archive/release"
+PAUSE_ARCHIVE="$T/pause-archive" PATH="$T/pause-archive:$PATH" \
+  review --base "$wide_base" >"$T/mismatch.log" 2>&1 &
+mismatch_pid=$!
+check "digest control paused during archive preparation" await_archive "$T/pause-archive"
+mismatch_dir="$(evidence_dir "$T/mismatch.log")"
+if [ -f "$mismatch_dir/range.diff" ]; then printf 'wrong range\n' >"$mismatch_dir/range.diff"; fi
+touch "$T/pause-archive/release"
+wait "$mismatch_pid"; rc=$?
+check "digest mismatch prevents note publication after a successful reviewer" test "$rc/$(calls)/$(note)" = "2/1/"
+check "publication diagnoses the mismatched range" grep -q 'patch digest does not match the requested range' "$T/mismatch.log"
+
 echo "=== review patch preserves Git's record bytes ==="
 reset_fake
 g checkout -q main && g checkout -qb patch-bytes
@@ -983,7 +1094,7 @@ check "embedded diff header stays in its original file piece" test "$rc" = 0 -a 
 check "removed Lean line retains its carriage return" grep -Fxq -- $'-def lineEnding := 1\r' "$FAKE_LOG/stdin.1"
 check "reviewer stdin matches Git's patch byte for byte" cmp "$T/expected-patch.diff" "$FAKE_LOG/stdin.1"
 check "saved invocation patch matches reviewer stdin" \
-  cmp "$FAKE_LOG/stdin.1" "$W/.review/$(g rev-parse HEAD)-1-invocation-1.patch.diff"
+  cmp "$FAKE_LOG/stdin.1" "$(evidence_dir "$T/patch-bytes.review")/invocation-1.patch.diff"
 
 reset_fake
 g checkout -q main && g checkout -qb escaping-link
@@ -997,7 +1108,7 @@ g restore README.md
 review >"$T/escape.log" 2>&1; rc=$?
 check "runner rejects an escaping link before reviewer launch or note" test "$rc" = 2 -a "$(calls)" = 0 -a -z "$(note)"
 check "caller remains unchanged when review rejects the link" test "$(cat "$W/README.md")" = base
-check "round report identifies the escaping symlink" grep -q 'archive symlink has an absolute target: escape' "$W/.review/$(g rev-parse HEAD)-1.md"
+check "round report identifies the escaping symlink" grep -q 'archive symlink has an absolute target: escape' "$(evidence_dir "$T/escape.log")/report.md"
 
 rm "$W/escape"
 ln -s . "$W/jump"
@@ -1005,7 +1116,7 @@ ln -s "jump/../../../${W#/}/README.md" "$W/escape"
 g add jump escape && g commit -qm 'relative archive escape through an intermediate link'
 review >"$T/relative-escape.log" 2>&1; rc=$?
 check "relative symlink chain that escapes the tree is rejected before launch" test "$rc" = 2 -a "$(calls)" = 0 -a -z "$(note)"
-check "round report identifies the relative escape" grep -q 'archive symlink escapes the private tree: escape' "$W/.review/$(g rev-parse HEAD)-1.md"
+check "round report identifies the relative escape" grep -q 'archive symlink escapes the private tree: escape' "$(evidence_dir "$T/relative-escape.log")/report.md"
 
 verifier="$ROOT_DIR/scripts/review/read_evidence.py"
 rm "$T/exact/README.md"
@@ -1131,7 +1242,7 @@ first_bytes="$(awk 'NR==1 { sub("bytes=", "", $4); print $4 }' "$FAKE_LOG/calls"
 retry_max="$(awk 'NR>1 { sub("bytes=", "", $4); if ($4 + 0 > m) m = $4 + 0 } END { print m + 0 }' "$FAKE_LOG/calls")"
 check "retry pieces are smaller ($retry_max < $first_bytes)" test "$retry_max" -lt "$first_bytes"
 check "neutral prompt avoids the project framing" bash -c "! grep -q 'Concrete, a compiler' '$FAKE_LOG/prompt.2'"
-check "raw output records the refusal" grep -q ": refused" "$W/.review/$(g rev-parse HEAD)-1.md"
+check "raw output records the refusal" grep -q ": refused" "$(evidence_dir "$T/out3")/report.md"
 
 reset_fake
 g checkout -q main && g checkout -qb refuse-always
@@ -1143,8 +1254,9 @@ check "note: verdict blocked" test "$(field verdict)" = blocked
 check "no loop: one standard call and one retry pass ($(calls) calls)" test "$(calls)" -ge 2 -a "$(calls)" -le 3
 check "blocked piece listed in the output" grep -q "blocked" "$T/out4"
 reset_fake
-review >/dev/null 2>&1; rc=$?
-check "a blocked HEAD may be re-run; it counts as round 2" test "$(field rounds)" = 2 -a "$rc" -eq 5
+review >"$T/blocked-rerun.log" 2>&1; rc=$?
+check "a blocked HEAD may be re-run (exit $rc, round $(field rounds))" test "$(field rounds)" = 2 -a "$rc" -eq 5
+if [ "$rc" -ne 5 ] || [ "$(field rounds)" != 2 ]; then cat "$T/out4" "$T/blocked-rerun.log"; fi
 check "the re-run reviews the whole branch again (blocked does not advance the delta)" \
   grep -q "complete change of a branch" "$FAKE_LOG/prompt.1"
 

@@ -123,10 +123,17 @@ git clone -q "$TMP/origin.git" "$W"
 mk(){ ( cd "$A" && git fetch -q origin && git checkout -q -B "$1" "${5:-origin/main}" && mkdir -p "$(dirname "$3")" \
         && printf '%s\n' "$4" > "$3" && git add -A && git commit -qm "$2" && git push -q -f origin "HEAD:refs/heads/$1" ); }
 sha_of(){ git --git-dir="$TMP/origin.git" rev-parse "refs/heads/$1"; }
+put_review() ( # head verdict base [extra key=value]
+  cd "$A" || exit 2
+  source "$ROOT_DIR/scripts/review/runtime.sh" || exit 2
+  digest="$(review_range_digest "$ROOT_DIR/scripts/review" "$(type -P python3)" "$3" "$1")" || exit 2
+  bash "$NOTES" put review "$1" verdict="$2" rounds=1 reviewer=codex base="$3" pieces=1 \
+    read-evidence=v1 patch-coverage=v2 head="$1" patch-from="$3" patch-sha256="$digest" ${4:+"$4"} >/dev/null
+)
 mark(){ # branch [review-verdict] [gates] [extra review key=value]
   local s; s="$(sha_of "$1")"
   ( cd "$A" && git fetch -q origin \
-    && bash "$NOTES" put review "$s" verdict="${2:-clean}" rounds=1 reviewer=codex base="$(git -C "$W" rev-parse origin/main)" pieces=1 read-evidence=v1 patch-coverage=v1 ${4:+"$4"} >/dev/null \
+    && put_review "$s" "${2:-clean}" "$(git -C "$W" rev-parse origin/main)" "${4:-}" \
     && bash "$NOTES" put gates "$s" gates="${3:-pass}" selected=3 >/dev/null ) || no "mark $1"
 }
 land_refs(){ git --git-dir="$TMP/origin.git" for-each-ref --format='%(refname)' 'refs/heads/wip/land-*'; }
@@ -179,7 +186,7 @@ for mode in intermediate self malformed; do
   mk "wip/range-$mode" visible "src/visible-$mode" visible "$MID"
   RH="$(sha_of "wip/range-$mode")"
   nb="$MID"; [ "$mode" != self ] || nb="$RH"
-  (cd "$A" && bash "$NOTES" put review "$RH" verdict=clean rounds=1 reviewer=codex base="$nb" pieces=1 read-evidence=v1 patch-coverage=v1 >/dev/null && bash "$NOTES" put gates "$RH" gates=pass >/dev/null)
+  put_review "$RH" clean "$nb" && (cd "$A" && bash "$NOTES" put gates "$RH" gates=pass >/dev/null)
   if [ "$mode" = malformed ]; then
     (cd "$A" && bash "$NOTES" put review "$RH" verdict=clean >/dev/null)
   fi
@@ -204,7 +211,12 @@ for arg in empty missing; do
   [ "$rc" != 0 ] && has "$out" '--base needs a nonempty ref' && ok "ready rejects $arg base argument" || no "ready $arg base: $rc $out"
 done
 # Keep the published clean snapshot, but replace canonical local evidence with findings.
-(cd "$A" && git notes --ref=concrete-review add -f -m "$(printf 'verdict: findings\nrounds: 2\nreviewer: codex\nutc: 2026-11-11T00:00:00Z\nbase: %s\npieces: 1\nread-evidence: v1\npatch-coverage: v1' "$BASE")" "$EH")
+(
+  cd "$A" || exit 2
+  source "$ROOT_DIR/scripts/review/runtime.sh" || exit 2
+  digest="$(review_range_digest "$ROOT_DIR/scripts/review" "$(type -P python3)" "$BASE" "$EH")" || exit 2
+  git notes --ref=concrete-review add -f -m "$(printf 'verdict: findings\nrounds: 2\nreviewer: codex\nutc: 2026-11-11T00:00:00Z\nbase: %s\npieces: 1\nread-evidence: v1\npatch-coverage: v2\nhead: %s\npatch-from: %s\npatch-sha256: %s' "$BASE" "$EH" "$BASE" "$digest")" "$EH"
+)
 out="$(cd "$A" && REVIEW_NOTES_REF=refs/notes/remote/concrete-review bash "$ROOT_DIR/scripts/review/verify.sh" --required-base "$BASE" "$EH" 2>&1)"; rc=$?
 [ "$rc" = 1 ] && has "$out" 'findings (round 2' && ok "ambient notes ref cannot override canonical evidence" || no "ambient ref: $rc $out"
 out="$(cd "$A" && bash "$NOTES" ready "$EH" "$BASE" 2>&1)"; rc=$?

@@ -1,9 +1,9 @@
 #!/bin/bash
-# Single Codex review runner. Arguments: root sha prompt piece output log [absolute reviewer and interpreter].
+# Single Codex review runner. Arguments: root sha prompt piece output log [absolute reviewer and interpreter [patch digest]].
 # The private archive is disposable, not a security boundary for arbitrary code.
 set -euo pipefail
-if [ "$#" -ne 6 ] && [ "$#" -ne 8 ]; then
-  echo "usage: invoke.sh ROOT SHA PROMPT PIECE OUTPUT LOG [REVIEWER PYTHON]" >&2
+if [ "$#" -ne 6 ] && [ "$#" -ne 8 ] && [ "$#" -ne 9 ]; then
+  echo "usage: invoke.sh ROOT SHA PROMPT PIECE OUTPUT LOG [REVIEWER PYTHON [PATCH_SHA256]]" >&2
   exit 2
 fi
 # Load the PATH check with builtins only, before any executable lookup.
@@ -55,6 +55,16 @@ probe="$("$python" -I "$here/read_evidence.py" probe "$root" "$sha" "$private/tr
 } >"$private/prompt"
 final_prompt="$(cat "$private/prompt")"
 printf '%s' "$final_prompt" >"$prompt"
+# Bind the bytes checked here to stdin from the private invocation directory.
+# The retained evidence file is also checked by the driver before publication.
+cp "$piece" "$private/patch.diff"
+if [ "$#" -eq 9 ]; then
+  digest="$(review_patch_digest "$python" <"$private/patch.diff")"
+  if [ "$digest" != "$9" ]; then
+    echo "review runner: invocation patch digest mismatch" >&2
+    exit 2
+  fi
+fi
 # Keep optional locks disabled as defense in depth for git commands; the archive
 # has no index, so bug 209 no longer depends on this environment setting.
 rc=0
@@ -68,7 +78,7 @@ trap 'cancelled=1' HUP INT TERM
 "$python" -I "$here/supervise.py" "$private/tree" "${environment[@]}" -- "$bin" exec --sandbox danger-full-access \
   -c project_doc_max_bytes=0 --skip-git-repo-check --json --ephemeral --color never \
   -C "$private/tree" -o "$out" "$final_prompt" \
-  <"$piece" >"$log" &
+  <"$private/patch.diff" >"$log" &
 child=$!
 trap cancel HUP INT TERM
 [ "$cancelled" = 0 ] || cancel

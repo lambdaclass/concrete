@@ -106,8 +106,9 @@ esac
 GH
 chmod +x "$TMP/fake-gh"
 
-# A review note as scripts/review/review.sh writes it (scripts/review/verify.sh's eight keys), published
+# A review note as scripts/review/review.sh writes it (scripts/review/verify.sh's current format), published
 # to origin. put-review <sha> <clean|findings|blocked|historical|malformed|none>[@rounds] [base]; none removes the note.
+export REVIEW_FIXTURE_SCRIPT_DIR="$ROOT_DIR/scripts/review"
 cat > "$TMP/put-review" <<'EOF'
 #!/usr/bin/env bash
 set -e
@@ -118,13 +119,23 @@ case "$2" in
   malformed) git notes --ref=$R add -f -m "verdict: clean" "$sha" ;;
   *)
     verdict="${2%@*}"
-    evidence=$'\nread-evidence: v1\npatch-coverage: v1'
-    if [ "$verdict" = historical ]; then verdict=clean; evidence=; fi
+    base="$(git rev-parse "${3:-origin/main}")"
+    evidence=
+    if [ "$verdict" = historical ]; then
+      verdict=clean
+    elif git cat-file -e "$base^{commit}" 2>/dev/null; then
+      source "$REVIEW_FIXTURE_SCRIPT_DIR/runtime.sh"
+      digest="$(review_range_digest "$REVIEW_FIXTURE_SCRIPT_DIR" "$(type -P python3)" "$base" "$sha")"
+      evidence="$(printf '\nread-evidence: v1\npatch-coverage: v2\nhead: %s\npatch-from: %s\npatch-sha256: %s' "$sha" "$base" "$digest")"
+    else
+      # An unknown base can only be represented as historical cap evidence.
+      evidence=$'\nread-evidence: v1\npatch-coverage: v1'
+    fi
     git notes --ref=$R add -f -m "verdict: $verdict
 rounds: $(case "$2" in *@*) echo "${2#*@}" ;; *) echo 1 ;; esac)
 reviewer: codex
 utc: 2026-11-06T00:00:00Z
-base: $(git rev-parse "${3:-origin/main}")
+base: $base
 pieces: 1$evidence" "$sha" ;;
 esac
 git show-ref -q --verify $R || exit 0

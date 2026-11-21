@@ -3,8 +3,9 @@
 # commit carries BOTH notes, published on origin:
 #
 #   refs/notes/concrete-review   verdict: clean|findings|blocked   rounds: N   reviewer: codex   utc: ...
-#                                base: <sha>   pieces: N   read-evidence: v1   patch-coverage: v1   (format owned by scripts/review/review.sh and
-#                                checked by scripts/review/verify.sh)
+#                                base: <sha>   pieces: N   read-evidence: v1   patch-coverage: v2
+#                                head: <sha>   patch-from: <sha>   patch-sha256: <digest>
+#                                (format owned by scripts/review/review.sh and checked by scripts/review/verify.sh)
 #   refs/notes/concrete-gates    gates: pass|fail          selected: N                   utc: ...
 #
 # One `key: value` per line; review schema is checked by verify.sh, gates use the last value. A note is attached to a

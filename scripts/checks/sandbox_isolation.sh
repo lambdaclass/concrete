@@ -240,8 +240,7 @@ EOF
 probe "control (leaky script)" "$TMP/ctl/leaky.sh" 1
 
 echo "=== live: sandbox checks run from a linked worktree as its hook would run them ==="
-# The review gate also runs the generated patch matrix and can exceed 120 seconds.
-probe "review_tool.sh" scripts/checks/review_tool.sh 0 "^check_review_tool: PASS=[0-9]* FAIL=0$" 180
+probe "review_tool.sh" scripts/checks/review_tool.sh 0 "^check_review_tool: PASS=[0-9]* FAIL=0$"
 probe "legacy_frozen.sh" scripts/checks/legacy_frozen.sh 0 "^legacy_frozen: PASS=[0-9]* FAIL=0$"
 
 echo

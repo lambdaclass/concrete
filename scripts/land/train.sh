@@ -540,7 +540,7 @@ pure_merge() {
   done
   [ "$cur" = "$base" ] || echo "${head:0:10} is not the clean merge of its members onto ${base:0:10}: the merges start at ${cur:0:10}"
 }
-review_provenance() { # name head
+review_provenance() ( # name head
   local name="$1"
   local head="$2"
   local out
@@ -551,6 +551,10 @@ review_provenance() { # name head
   base="$(state_get_soft "$name" base)"
   [ -n "$base" ] || { echo "train has no recorded base"; return 1; }
   [ -f "$VERIFY" ] || { echo "no review verifier ($VERIFY is missing)"; return 1; }
+  local PYTHON lock_dir
+  PYTHON="$(review_executable python3)" && lock_dir="$(review_lock_dir)" &&
+    exec 9>>"$lock_dir/notes" && review_lock 9 \
+    || { echo "could not lock review notes"; return 1; }
   git fetch -q "$REMOTE" "+refs/notes/concrete-review:refs/notes/concrete-review" 2>/dev/null \
     || { echo "could not fetch refs/notes/concrete-review from $REMOTE"; return 1; }
   if out="$(bash "$VERIFY" --required-base "$base" "$head" 2>&1)"; then echo "the head ${head:0:10} carries a clean review note"; return 0; fi
@@ -575,7 +579,7 @@ review_provenance() { # name head
     return 0
   fi
   echo "the head has no review note; every member ($n) carries a clean one at its exact SHA"
-}
+)
 
 # Codex review leg. It passes without running the reviewer when the train already has review
 # provenance. Otherwise it runs the review command; a non-zero exit fails, and so does a zero exit
