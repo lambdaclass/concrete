@@ -28,8 +28,11 @@ Proofs/OwnErasure.lean. All O3 protocols and their evidence live in
 Proofs/OwnProtocols.lean, reusing the public O1 helpers.
 No inherited approval receipt is evidence.
 Held policies remain outside the imported F13 interface: ISS-0064/ISS-0065, ISS-0068
-through ISS-0073 and ISS-0076 (source policy, constant restrictions, codecs, wiping,
+through ISS-0071, ISS-0073 and ISS-0076 (source policy, constant restrictions, codecs,
 ABI and aggregate layout). No law here resolves those decisions.
+The 2026-11-21 decision
+(docs/decisions.md#decided-2026-11-21-secrets-after-1-0) defers wiping until after 1.0
+and closes ISS-0072.
 -/
 namespace ConcreteSpec.Core.Own
 

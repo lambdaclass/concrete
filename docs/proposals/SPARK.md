@@ -179,7 +179,7 @@ E (R-0495/R-0177; agy, Kimi), so the freeze is not delayed.
 - **R-0575 already has schema fields for frames (writes) and output dependencies**, reported "not
   established" until R-0524/R-0473 (E–G). The draft wrongly called this missing; all three
   reviewers caught it.
-- `Secret<T>` noninterference is *decided* (`decided-project-infoflow-2026-11-06`).
+- The [November 21 decision](../decisions.md#decided-2026-11-21-secrets-after-1-0) defers the November 6 `Secret<T>` noninterference design until after 1.0.
 - P18: a source frame clause would be a new owner decision.
 
 **Gap.** Nothing derives these facts yet:
@@ -254,8 +254,9 @@ it, the freeze changes later.
 - A read from a register with async writers or effective reads takes `&mut` of its token. `&` would
   break the referential transparency the checker relies on (agy, Codex).
 - Never callable from a `spec fn`, a contract or ghost code.
-- **Extra (agy):** the same effective-write event is what stops LLVM from eliminating the decided
-  wipe of `Secret` arrays as a dead store (R-0596).
+- **Historical suggestion (agy):** use the same effective-write event to preserve wipes of
+  `Secret` arrays through LLVM optimization. The [November 21 decision](../decisions.md#decided-2026-11-21-secrets-after-1-0)
+  defers wiping until after 1.0.
 
 **Owner?** Owner: the event kind in Core. The std API comes later.
 
@@ -273,7 +274,8 @@ under `--warnings=error`
 - Nothing covers:
   - a permission whose obligation is now established;
   - an `assume` on which nothing depends;
-  - a redundant `declassify` (agy).
+- agy also suggested detecting redundant `declassify`. That work follows the
+  [November 21 decision](../decisions.md#decided-2026-11-21-secrets-after-1-0), which defers declassification until after 1.0.
 
 **Gap.** Stale permissions accumulate. A later edit that makes the loop truly unbounded hides behind
 the stale permission.
@@ -367,7 +369,8 @@ consumers.
 
 **Recommended form.**
 - Orthogonal named properties, reported per module (agy): for example *predictable*, *flow-facts
-  established*, *named invariants proved*, *noninterference*.
+  established* and *named invariants proved*. The [November 21 decision](../decisions.md#decided-2026-11-21-secrets-after-1-0)
+  defers the proposed *noninterference* property until after 1.0.
 - Not a linear ladder, and the mandatory admission floor is not an opt-in bundle.
 - Avoid "functional/Platinum" labels: "every function has a proved contract" is met by
   `ensures(true)` (Codex). Report each property's scope and completeness instead.
@@ -458,7 +461,8 @@ All three ran non-interactively on this host, in a `git archive` copy of
 - Split callable contracts: interim refusal in A2i, full form in E.
 - Deterministic counterexample probing.
 - `&mut` for async device reads.
-- Effective writes protect secret wiping.
+- agy proposed using effective writes to preserve secret wiping. The [November 21 decision](../decisions.md#decided-2026-11-21-secrets-after-1-0)
+  defers wiping until after 1.0.
 - A lexicographic measure gives no bound.
 - No linear ladder, and the floor is not a bundle.
 - Add a derived non-return fact.
