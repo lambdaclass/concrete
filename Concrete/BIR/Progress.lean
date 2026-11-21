@@ -30,6 +30,13 @@ def Val.HasTy : Val → Ty → Prop
   | .int t x, ty => ty = .int t ∧ t.inRange x = true
   | .bool _, ty => ty = .bool
 
+/-- Representation lemma: the existing BIR typing invariant is exactly shared scalar validity
+on integer values. This prepares progress proofs without changing `HasTy` or instruction execution. -/
+theorem hasTy_int_core (t : IntTy) (n : Int) :
+    (Val.int t n).HasTy (.int t) ↔ (ScalarBridge.intValue t n).Valid := by
+  simp only [Val.HasTy, true_and]
+  exact (ScalarBridge.intValue_valid t n).symm
+
 /-- Every register typed in `scope` is bound in `env` to a value of that type.
 For example, a boolean register in the scope must have a boolean value in the environment. -/
 def Typed (scope : List (Reg × Ty)) (env : Env) : Prop :=

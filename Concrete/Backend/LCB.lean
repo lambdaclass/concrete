@@ -263,6 +263,14 @@ def enc : Val → Source.Value
   | .int _ v => word v
   | .bool b => word (if b then 1 else 0)
 
+/-- Representation lemma: the existing integer encoder consumes the shared scalar payload
+unchanged. This states no Boolean, pointer, character, unit, startup or ABI representation policy. -/
+theorem enc_int_core (t : IntTy) (n : Int) :
+    enc (.int t n) =
+      match BIR.ScalarBridge.intValue t n with
+      | .int _ payload => word payload
+      | _ => word 0 := rfl
+
 theorem ofInt_sub (x y : Int) :
     BitVec.ofInt 32 (x - y) = BitVec.ofInt 32 x - BitVec.ofInt 32 y := by
   have h : BitVec.ofInt 32 x = BitVec.ofInt 32 (x - y) + BitVec.ofInt 32 y := by
