@@ -24,7 +24,9 @@ source scripts/checks/lib/has_match.sh
 # The emit-only manifest controls exercise only manifest validation.
 if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
   bash scripts/checks/compiler/f31_census.sh
-  source scripts/checks/compiler/llvm_decimal.sh
+  build llvm-rendering "$work/llvm-rendering.log" bounded 120 \
+    lake env lean scripts/checks/compiler/llvm_rendering.lean
+  echo "ok   LLVM rendering controls"
 fi
 
 fail=0

@@ -1,4 +1,4 @@
-import Concrete.Backend.Decimal
+import Concrete.Backend.LLVMIR
 import Concrete.Backend.Runtime
 import ConcreteSpec.Proofs.Scalar
 
@@ -8,7 +8,7 @@ import ConcreteSpec.Proofs.Scalar
 PROVISIONAL (slice 0). The printer is labelled unverified: what its text means is premise
 `P_print` (`Concrete/README.md`), and LLVM itself is inside `P_toolchain[llvm]`. It prints `main`'s
 body as `define i32 @concrete_body()` returning the result word; the runtime entry
-(`Runtime.llvm`) is linked with it.
+(`Runtime.llvmItems`) is linked with it.
 
 * an integer of type `t` is an `i{bits}` holding its two's-complement bit pattern; a flag is `i1`;
 * `binOvf` is `@llvm.{s,u}{add,sub,mul}.with.overflow.i{bits}`;
@@ -24,11 +24,9 @@ open ConcreteSpec.Core (toBits ofBits)
 open ScalarBridge (toCore)
 open Concrete.Backend.Runtime (indexed)
 
-def intTy (t : IntTy) : String := integerType (toCore t).bits
-
-def ty : Ty → String
-  | .int t => intTy t
-  | .bool => integerType 1
+def ty : Ty → TypeCode
+  | .int t => .integer (toCore t)
+  | .bool => .flag
 
 /-- The bit pattern of `v` in `t`, as an unsigned decimal. -/
 def pattern (t : IntTy) (v : Int) : Nat := toBits (toCore t) v
@@ -50,20 +48,24 @@ theorem pattern_roundTrip (t : IntTy) (v : Int) (h : (toCore t).InRange v) :
     ofBits (toCore t) (pattern t v) = v :=
   ConcreteSpec.Core.ofBits_toBits _ _ h
 
-def operand : Operand → String
-  | .reg r => s!"%r{decimal r}"
-  | .imm t v => decimal (pattern t v)
+def operand : Operand → Argument
+  | .reg r => .local (.register r)
+  | .imm t v => .immediate (.scalar (toCore t) v)
+
+/-- The token carried by a scalar immediate in the renderer. -/
+def operandToken (t : IntTy) (v : Int) : String :=
+  (Immediate.scalar (toCore t) v).token
 
 /-- Law. Every emitted BIR immediate is a token in the decimal grammar.
 Authority: docs/decisions.md#od126. -/
 theorem operand_token (t : IntTy) (v : Int) :
-    DecimalToken (operand (.imm t v)) (Int.ofNat (pattern t v)) :=
+    DecimalToken (operandToken t v) (Int.ofNat (pattern t v)) :=
   decimal_token (pattern t v)
 
 /-- Law. The emitted decimal token parses to exactly the encoded bit pattern.
 Authority: docs/decisions.md#od126. -/
 theorem operand_parse (t : IntTy) (v : Int) :
-    parseDecimal (operand (.imm t v)) = some (Int.ofNat (pattern t v)) :=
+    parseDecimal (operandToken t v) = some (Int.ofNat (pattern t v)) :=
   (parseDecimal_exact _ _).2 (operand_token t v)
 
 private def decodePattern (t : IntTy) : Int → Option Int
@@ -74,31 +76,34 @@ private def decodePattern (t : IntTy) : Int → Option Int
 The interpretation of the enclosing LLVM text still uses `P_print`.
 Authority: docs/decisions.md#od126. -/
 theorem operand_roundTrip (t : IntTy) (v : Int) (h : (toCore t).InRange v) :
-    (parseDecimal (operand (.imm t v))).bind (decodePattern t) = some v := by
+    (parseDecimal (operandToken t v)).bind (decodePattern t) = some v := by
   rw [operand_parse, Option.bind_some, decodePattern]
   simp [pattern_fits t v, pattern_roundTrip t v h]
 
-def opName : BinOp → String
-  | .add => "add"
-  | .sub => "sub"
-  | .mul => "mul"
+def arithmeticOp : BinOp → Arithmetic
+  | .add => .add
+  | .sub => .sub
+  | .mul => .mul
 
-def intrinsic (op : BinOp) (t : IntTy) : String :=
-  s!"llvm.{if (toCore t).signed then "s" else "u"}{opName op}.with.overflow.{intTy t}"
-
-def inst : Inst → String
-  | .bin op t d a b => s!"  %r{decimal d} = {opName op} {intTy t} {operand a}, {operand b}\n"
+def inst : Inst → List Item
+  | .bin op t d a b =>
+    [.instruction (.bin (.register d) (arithmeticOp op) (.integer (toCore t)) (operand a) (operand b))]
   | .binOvf op t d f a b =>
-    let pair := s!"\{{intTy t}, {integerType 1}}"
-    s!"  %o{decimal d} = call {pair} @{intrinsic op t}({intTy t} {operand a}, {intTy t} {operand b})\n" ++
-    s!"  %r{decimal d} = extractvalue {pair} %o{decimal d}, {decimal 0}\n" ++
-    s!"  %r{decimal f} = extractvalue {pair} %o{decimal d}, {decimal 1}\n"
+    let t := toCore t
+    let i := TypeCode.integer t
+    let pair := TypeCode.overflowPair t
+    [.instruction (.call (some (.overflow d)) pair (.overflow (arithmeticOp op) t)
+      [(i, operand a), (i, operand b)]),
+     .instruction (.extract (.register d) pair (.overflow d) 0),
+     .instruction (.extract (.register f) pair (.overflow d) 1)]
   | .trunc fr to d a =>
     let source := toCore fr
     let target := toCore to
-    let conv := if target.bits < source.bits then "trunc" else if source.signed then "sext" else "zext"
-    if source.bits = target.bits then s!"  %r{decimal d} = add {intTy to} {operand a}, {decimal 0}\n"
-    else s!"  %r{decimal d} = {conv} {intTy fr} {operand a} to {intTy to}\n"
+    if source.bits = target.bits then
+      [.instruction (.bin (.register d) .add (.integer target) (operand a) (.immediate (.scalar target 0)))]
+    else
+      let conv := if target.bits < source.bits then .trunc else if source.signed then .sext else .zext
+      [.instruction (.convert (.register d) conv (.integer source, operand a) (.integer target))]
 
 /-- The edges into each block: (target, predecessor, arguments). -/
 def edges (p : Program) : List (Nat × Nat × List Operand) :=
@@ -108,43 +113,47 @@ def edges (p : Program) : List (Nat × Nat × List Operand) :=
     | .condbr _ t ta e ea => [(t, j, ta), (e, j, ea)]
     | _ => []
 
-def phis (p : Program) (j : Nat) (b : Block) : String :=
+def phis (p : Program) (j : Nat) (b : Block) : List Item :=
   let incoming := (edges p).filter (·.1 == j)
-  String.join ((indexed b.params).map fun (k, (r, pty)) =>
+  (indexed b.params).map fun (k, (r, pty)) =>
     let arms := incoming.map fun (_, pred, args) =>
-      s!"[ {operand (args.getD k (.imm .u8 0))}, %b{decimal pred} ]"
-    s!"  %r{decimal r} = phi {ty pty} {", ".intercalate arms}\n")
+      (operand (args.getD k (.imm .u8 0)), Label.block pred)
+    .instruction (.phi (.register r) (ty pty) arms)
 
-def term (j : Nat) : Term → String
-  | .ret a => s!"  %ret{decimal j} = zext {integerType 8} {operand a} to {integerType 32}\n  ret {integerType 32} %ret{decimal j}\n"
-  | .trap s => s!"  ret {integerType 32} {decimal (256 + s)}\n"
-  | .br t _ => s!"  br label %b{decimal t}\n"
-  | .condbr c t _ e _ => s!"  br {integerType 1} %r{decimal c}, label %b{decimal t}, label %b{decimal e}\n"
+def term (j : Nat) : Term → List Item
+  | .ret a =>
+    [.instruction (.convert (.result j) .zext (.integer .u8, operand a) (.integer .u32)),
+     .terminator (.ret (.integer .u32, .local (.result j)))]
+  | .trap s => [.terminator (.ret (.integer .u32, .immediate (.natural (256 + s))))]
+  | .br t _ => [.terminator (.branch (.block t))]
+  | .condbr c t _ e _ => [.terminator (.cond (.register c) (.block t) (.block e))]
 
 /-- The intrinsics the body uses, each declared once. -/
-def declarations (p : Program) : String :=
+def declarations (p : Program) : List Item :=
   let used := (p.blocks.flatMap (·.insts)).filterMap fun
     | .binOvf op t _ _ _ _ => some (op, t)
     | _ => none
-  let distinct := used.eraseDups
-  String.join (distinct.map fun (op, t) =>
-    s!"declare \{{intTy t}, {integerType 1}} @{intrinsic op t}({intTy t}, {intTy t})\n")
+  used.eraseDups.map fun (op, t) =>
+    let t := toCore t
+    .declare (.overflowPair t) (.overflow (arithmeticOp op) t) [.integer t, .integer t]
+
+def body (p : Program) : List Item :=
+  declarations p ++ [.blank, .define false (.integer .u32) .body []] ++
+  ((indexed p.blocks).flatMap fun (j, b) =>
+    [.label (.block j)] ++ phis p j b ++ b.insts.flatMap inst ++ term j b.term) ++
+  [.endFunction]
 
 /-- `main`'s body as LLVM text. -/
-def print (p : Program) : String :=
-  declarations p ++ s!"\ndefine {integerType 32} @concrete_body() \{\n" ++
-  String.join ((indexed p.blocks).map fun (j, b) =>
-    s!"b{decimal j}:\n" ++ phis p j b ++ String.join (b.insts.map inst) ++ term j b.term) ++
-  "}\n"
+def print (p : Program) : String := render (body p)
 
 /-- The whole LLVM module: the body and the runtime entry. -/
-def module (p : Program) : String := print p ++ "\n" ++ Runtime.llvm p.sites
+def module (p : Program) : String := render (body p ++ [.blank] ++ Runtime.llvmItems p.sites)
 
 namespace PatternEvidence
 
 /-- Instance (law `operand_token`, case `unsigned_seventeen`). -/
 theorem unsigned_seventeen_token :
-    DecimalToken (operand (.imm .u8 17)) 17 :=
+    DecimalToken (operandToken .u8 17) 17 :=
   operand_token .u8 17
 
 /-- Instance (law `pattern_fits`, case `unsigned_overflow`). -/
@@ -169,59 +178,59 @@ theorem zeroed_rejected :
     (toCore .i8).InRange (-1) ∧ ofBits (toCore .i8) (zeroed .i8 (-1)) ≠ -1 := by decide
 
 /-- Emit an oversized decimal token for one valid immediate. -/
-def oversized : Operand → String
-  | .imm .u8 17 | .imm .i8 0 => "256"
-  | a => operand a
+def oversized : IntTy → Int → String
+  | .u8, 17 | .i8, 0 => "256"
+  | t, v => operandToken t v
 
 /-- Instance (law `operand_parse`, case `unsigned_seventeen`). -/
 theorem unsigned_seventeen_parses :
-    parseDecimal (operand (.imm .u8 17)) = some (Int.ofNat (pattern .u8 17)) :=
+    parseDecimal (operandToken .u8 17) = some (Int.ofNat (pattern .u8 17)) :=
   operand_parse .u8 17
 
 /-- Instance (law `operand_roundTrip`, case `unsigned_seventeen`). -/
 theorem unsigned_seventeen_roundTrips :
-    (parseDecimal (operand (.imm .u8 17))).bind (decodePattern .u8) = some 17 :=
+    (parseDecimal (operandToken .u8 17)).bind (decodePattern .u8) = some 17 :=
   operand_roundTrip .u8 17 (by decide)
 
-/-- Planted (law `operand_parse`, case `unsigned_seventeen`, subject `operand`, mutant `oversized`). -/
+/-- Planted (law `operand_parse`, case `unsigned_seventeen`, subject `operandToken`, mutant `oversized`). -/
 theorem oversized_parse_rejected :
-    parseDecimal (oversized (.imm .u8 17)) ≠ some (Int.ofNat (pattern .u8 17)) := by decide
+    parseDecimal (oversized .u8 17) ≠ some (Int.ofNat (pattern .u8 17)) := by decide
 
-/-- Planted (law `operand_roundTrip`, case `unsigned_seventeen`, subject `operand`, mutant `oversized`). -/
+/-- Planted (law `operand_roundTrip`, case `unsigned_seventeen`, subject `operandToken`, mutant `oversized`). -/
 theorem oversized_roundTrip_rejected :
     (toCore .u8).InRange 17 ∧
-      (parseDecimal (oversized (.imm .u8 17))).bind (decodePattern .u8) ≠ some 17 := by decide
+      (parseDecimal (oversized .u8 17)).bind (decodePattern .u8) ≠ some 17 := by decide
 
 /-- Emit a digit separator for one valid immediate. -/
-def underscored : Operand → String
-  | .imm .u8 17 => "1_7"
-  | a => operand a
+def underscored : IntTy → Int → String
+  | .u8, 17 => "1_7"
+  | t, v => operandToken t v
 
-/-- Planted (law `operand_parse`, case `unsigned_seventeen`, subject `operand`, mutant `underscored`). -/
+/-- Planted (law `operand_parse`, case `unsigned_seventeen`, subject `operandToken`, mutant `underscored`). -/
 theorem underscored_parse_rejected :
-    parseDecimal (underscored (.imm .u8 17)) ≠ some (Int.ofNat (pattern .u8 17)) := by decide
+    parseDecimal (underscored .u8 17) ≠ some (Int.ofNat (pattern .u8 17)) := by decide
 
-/-- Planted (law `operand_roundTrip`, case `unsigned_seventeen`, subject `operand`, mutant `underscored`). -/
+/-- Planted (law `operand_roundTrip`, case `unsigned_seventeen`, subject `operandToken`, mutant `underscored`). -/
 theorem underscored_roundTrip_rejected :
     (toCore .u8).InRange 17 ∧
-      (parseDecimal (underscored (.imm .u8 17))).bind (decodePattern .u8) ≠ some 17 := by decide
+      (parseDecimal (underscored .u8 17)).bind (decodePattern .u8) ≠ some 17 := by decide
 
-/-- Planted (law `operand_token`, case `unsigned_seventeen`, subject `operand`, mutant `underscored`). -/
-theorem underscored_token_rejected : ¬ DecimalToken (underscored (.imm .u8 17)) 17 :=
+/-- Planted (law `operand_token`, case `unsigned_seventeen`, subject `operandToken`, mutant `underscored`). -/
+theorem underscored_token_rejected : ¬ DecimalToken (underscored .u8 17) 17 :=
   fun h => underscored_parse_rejected ((parseDecimal_exact _ _).2 h)
 
-/-- Planted (law `operand_token`, case `unsigned_seventeen`, subject `operand`, mutant `oversized`). -/
-theorem oversized_token_rejected : ¬ DecimalToken (oversized (.imm .u8 17)) 17 :=
+/-- Planted (law `operand_token`, case `unsigned_seventeen`, subject `operandToken`, mutant `oversized`). -/
+theorem oversized_token_rejected : ¬ DecimalToken (oversized .u8 17) 17 :=
   fun h => oversized_parse_rejected ((parseDecimal_exact _ _).2 h)
 
 /-- Instance (law `operand_roundTrip`, case `signed_zero`). -/
 theorem signed_zero_roundTrips :
-    (parseDecimal (operand (.imm .i8 0))).bind (decodePattern .i8) = some 0 :=
+    (parseDecimal (operandToken .i8 0)).bind (decodePattern .i8) = some 0 :=
   operand_roundTrip .i8 0 (by decide)
 
-/-- Planted (law `operand_roundTrip`, case `signed_zero`, subject `operand`, mutant `oversized`). -/
+/-- Planted (law `operand_roundTrip`, case `signed_zero`, subject `operandToken`, mutant `oversized`). -/
 theorem oversized_signed_zero_rejected :
-    (parseDecimal (oversized (.imm .i8 0))).bind (decodePattern .i8) = none := by decide
+    (parseDecimal (oversized .i8 0)).bind (decodePattern .i8) = none := by decide
 
 end PatternEvidence
 

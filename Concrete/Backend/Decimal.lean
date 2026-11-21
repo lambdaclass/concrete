@@ -85,7 +85,4 @@ theorem decimal_token (n : Nat) : DecimalToken (decimal n) (Int.ofNat n) :=
   Or.inl ⟨repr_magnitude n, by
     rw [decimal, Nat.toList_repr, Nat.ofDigitChars_ten_toDigits]⟩
 
-/-- Render an LLVM integer type at the given bit width. -/
-def integerType (bits : Nat) : String := "i" ++ decimal bits
-
 end Concrete.Backend.LLVM

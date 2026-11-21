@@ -160,6 +160,8 @@ def theorems : List Lean.Name := [
   ``Concrete.Backend.LLVM.operand_token,
   ``Concrete.Backend.LLVM.operand_parse,
   ``Concrete.Backend.LLVM.operand_roundTrip,
+  ``Concrete.Backend.LLVM.render_immediate_fields,
+  ``Concrete.Backend.LLVM.render_immediate,
   ``Concrete.BIR.decode_encode,
   ``Concrete.BIR.run_progress,
   ``Concrete.BIR.behaviour_diverges_iff,

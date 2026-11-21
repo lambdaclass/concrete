@@ -1,5 +1,5 @@
 import Concrete.BIR
-import Concrete.Backend.Decimal
+import Concrete.Backend.LLVMIR
 
 /-!
 # The runtime entry (both backends)
@@ -24,7 +24,7 @@ for the site it trapped at is premise `P_trap_site`.
 
 namespace Concrete.Backend.Runtime
 open Concrete.BIR
-open Concrete.Backend.LLVM (decimal integerType)
+open Concrete.Backend.LLVM
 open ConcreteSpec (IntTy Trap)
 
 /-- The trap's name in the trap line. -/
@@ -81,53 +81,73 @@ theorem mem_indexed {α : Type} {l : List α} {k : Nat} {x : α} (h : l[k]? = so
     (k, x) ∈ indexed l := by
   simpa [indexed] using mem_indexedFrom (n := 0) h
 
-/-- An LLVM `c"..."` string body over the UTF-8 bytes: printable ASCII except `"` and `\` verbatim,
-every other byte as `\XX`. -/
-def llvmEscape (s : String) : String :=
-  String.join (s.toUTF8.toList.map fun b =>
-    let n := b.toNat
-    if 32 ≤ n ∧ n < 127 ∧ n ≠ 34 ∧ n ≠ 92 then (Char.ofNat n).toString
-    else
-      let hex := Nat.toDigits 16 n
-      "\\" ++ String.ofList ((if hex.length < 2 then ['0'] else []) ++ hex.map Char.toUpper))
+private def siteBytes (e : SiteEntry) : ByteArray := (trapLine e ++ "\n").toUTF8
 
-def llvmByteString (s : String) : String :=
-  "c\"" ++ llvmEscape s ++ "\""
+private def invalidBytes : ByteArray := (invalidLine ++ "\n").toUTF8
 
-/-- The runtime entry as LLVM text, for the site table `tbl`. -/
-def llvm (tbl : SiteTable) : String :=
+/-- The fixed runtime entry and its byte globals as LLVM assembly items. -/
+def llvmItems (tbl : SiteTable) : List Item :=
   let sites := indexed tbl
-  let globals := sites.map fun (i, e) =>
-    let line := trapLine e ++ "\n"
-    s!"@.site{decimal i} = private constant [{decimal line.utf8ByteSize} x {integerType 8}] {llvmByteString line}\n"
-  let cases := String.join (sites.map fun (i, _) => s!" {integerType 32} {decimal i}, label %t{decimal i}")
-  let traps := sites.map fun (i, e) =>
-    s!"t{decimal i}:\n  call void @concrete_rt_write_all(ptr @.site{decimal i}, {integerType 64} {decimal ((trapLine e ++ "\n").utf8ByteSize)})\n" ++
-    s!"  call void @_exit({integerType 32} {decimal 134})\n  unreachable\n"
-  String.join globals ++
-  s!"@.bad = private constant [{decimal ((invalidLine ++ "\n").utf8ByteSize)} x {integerType 8}] {llvmByteString (invalidLine ++ "\n")}\n" ++
-  s!"declare {integerType 64} @write({integerType 32}, ptr, {integerType 64})\n" ++
-  s!"declare void @_exit({integerType 32})\n" ++
-  "declare void @abort()\n\n" ++
-  s!"define internal void @concrete_rt_write_all(ptr %p, {integerType 64} %n) \{\n" ++
-  "entry:\n  br label %loop\n" ++
-  "loop:\n  %pp = phi ptr [ %p, %entry ], [ %np, %more ]\n" ++
-  s!"  %nn = phi {integerType 64} [ %n, %entry ], [ %rest, %more ]\n" ++
-  s!"  %done = icmp eq {integerType 64} %nn, {decimal 0}\n  br {integerType 1} %done, label %out, label %wr\n" ++
-  s!"wr:\n  %k = call {integerType 64} @write({integerType 32} {decimal 2}, ptr %pp, {integerType 64} %nn)\n" ++
-  s!"  %bad = icmp sle {integerType 64} %k, {decimal 0}\n  br {integerType 1} %bad, label %out, label %more\n" ++
-  s!"more:\n  %np = getelementptr {integerType 8}, ptr %pp, {integerType 64} %k\n  %rest = sub {integerType 64} %nn, %k\n  br label %loop\n" ++
-  "out:\n  ret void\n}\n\n" ++
-  s!"define {integerType 32} @main() \{\n" ++
-  s!"entry:\n  %w = call {integerType 32} @concrete_body()\n  %ok = icmp ult {integerType 32} %w, {decimal 256}\n" ++
-  s!"  br {integerType 1} %ok, label %exit, label %trap\n" ++
-  s!"exit:\n  ret {integerType 32} %w\n" ++
-  s!"trap:\n  %i = sub {integerType 32} %w, {decimal 256}\n" ++
-  s!"  switch {integerType 32} %i, label %bad [{cases} ]\n" ++
-  String.join traps ++
-  "bad:\n" ++
-  s!"  call void @concrete_rt_write_all(ptr @.bad, {integerType 64} {decimal ((invalidLine ++ "\n").utf8ByteSize)})\n" ++
-  "  call void @abort()\n  unreachable\n}\n"
+  let i32 := TypeCode.integer .u32
+  let i64 := TypeCode.integer .u64
+  let byte := TypeCode.integer .u8
+  let count (n : Nat) : Argument := .immediate (.natural n)
+  let zero := Argument.immediate (.scalar .u64 0)
+  let threshold := Argument.immediate (.scalar .u32 256)
+  let writeAll (name : Global) (data : ByteArray) :=
+    Item.instruction (.call none .void .writeAll [(.ptr, .global name), (i64, count data.size)])
+  let abort := Item.instruction (.call none .void .abort [])
+  let trapExit := Item.instruction (.call none .void .exit [(i32, .immediate (.scalar .u32 134))])
+  let globals := sites.map fun (i, e) => Item.constant (.site i) (siteBytes e)
+  let cases := sites.map fun (i, _) => (Immediate.natural i, Label.trapSite i)
+  let traps := sites.flatMap fun (i, e) =>
+    [Item.label (.trapSite i), writeAll (.site i) (siteBytes e), trapExit, .terminator .unreachable]
+  globals ++
+  [.constant .bad invalidBytes,
+   .declare i64 .write [i32, .ptr, i64],
+   .declare .void .exit [i32],
+   .declare .void .abort [],
+   .blank,
+   .define true .void .writeAll [(.ptr, .p), (i64, .n)],
+   .label .entry,
+   .terminator (.branch .loop),
+   .label .loop,
+   .instruction (.phi .pp .ptr [(.local .p, .entry), (.local .np, .more)]),
+   .instruction (.phi .nn i64 [(.local .n, .entry), (.local .rest, .more)]),
+   .instruction (.compare .done .eq i64 (.local .nn) zero),
+   .terminator (.cond .done .out .wr),
+   .label .wr,
+   .instruction (.call (some .k) i64 .write
+     [(i32, .immediate (.scalar .u32 2)), (.ptr, .local .pp), (i64, .local .nn)]),
+   .instruction (.compare .bad .sle i64 (.local .k) zero),
+   .terminator (.cond .bad .out .more),
+   .label .more,
+   .instruction (.gep .np byte (.ptr, .local .pp) (i64, .local .k)),
+   .instruction (.bin .rest .sub i64 (.local .nn) (.local .k)),
+   .terminator (.branch .loop),
+   .label .out,
+   .terminator .retVoid,
+   .endFunction,
+   .blank,
+   .define false i32 .main [],
+   .label .entry,
+   .instruction (.call (some .w) i32 .body []),
+   .instruction (.compare .ok .ult i32 (.local .w) threshold),
+   .terminator (.cond .ok .exit .trap),
+   .label .exit,
+   .terminator (.ret (i32, .local .w)),
+   .label .trap,
+   .instruction (.bin .i .sub i32 (.local .w) threshold),
+   .terminator (.switch i32 .i .bad cases)] ++
+  traps ++
+  [.label .bad,
+   writeAll .bad invalidBytes,
+   abort,
+   .terminator .unreachable,
+   .endFunction]
+
+/-- The runtime as standalone LLVM text. -/
+def llvm (tbl : SiteTable) : String := render (llvmItems tbl)
 
 /-- QBE data bytes for a string: one `b N` per UTF-8 byte, so no character needs escaping. -/
 def qbeBytes (s : String) : String := ", ".intercalate (s.toUTF8.toList.map fun b => s!"b {b}")
