@@ -1803,19 +1803,12 @@ def verify (env : Environment) (specModules compilerModules : NameSet) (specEvid
   rejectsBorrowedEvidence .F17 `ConcreteSpec.Spec.Rules `ConcreteSpec.Core.Leak.Registry.accountA
   rejectsBorrowedEvidence .F03p `ConcreteSpec.Spec.Ident `ConcreteSpec.Core.ContractId
   let helper := `ConcreteSpec.Core.SourcePathSpan.inventoryHelper
-  let helperOnly := plan.map fun piece =>
-    if piece.id == .F04p then
-      { piece with remaining := [], groups := [decls origin [helper]] }
-    else piece
-  -- Use F04p's actual reservation with this fixture's module as its origin.
-  let withFixtureOrigin (id : PieceId) :=
-    let required := completion id
-    if id == .F04p then
-      { required with
-        requiredOnLanding := []
-        namespaces := required.namespaces.map (fun ns => { ns with origin }) }
-    else required
-  let checked := inventory env inScope specEvidence helperOnly #[] withFixtureOrigin baseline
+  let helperOnly := [{ present .F04p "" with groups := [decls origin [helper]] }]
+  -- Exercise F04p's proof reservation using only the helper fixture as evidence.
+  let withFixtureOrigin (_ : PieceId) : Completion :=
+    reservedEvidence ((completion .F04p).namespaces.map fun ns => { ns with origin })
+  let checked := inventory env inScope {} helperOnly #[] withFixtureOrigin
+    { rules := [], examples := [] }
   unless checked.errors.size == 2 &&
       checked.errors.any (·.startsWith "F04p: missing reserved Law theorem") &&
       checked.errors.any (·.startsWith "F04p: missing reserved planted control") &&
@@ -1857,62 +1850,66 @@ def verify (env : Environment) (specModules compilerModules : NameSet) (specEvid
     unless checked.errors == #[s!"F06: {name} requires a registered-rule requirement for {constRule}"] &&
         checked.originalLanded == 0 do
       throwError "inventory control: F06 accepted a rule theorem as a plain declaration: {name}"
-  let sourcePath := plan.filter (·.id == .F03p)
-  let checked := inventory env inScope {} sourcePath #[] completion baseline
+  -- Exercise the transition with fixture declarations so reserved production names
+  -- can be implemented independently of the inventory controls.
+  let partialRow := pending .F03p ["fixture completion evidence"]
+  let emptyRegistry : Registry := { rules := [], examples := [] }
+  let delivered := [decls origin [`SpecLanding.Control.retained]]
+  for (id, evidence, metadata) in [
+      (.F03p, decls origin [`SpecLanding.Control.wrongIncrement],
+        ({} : EvidenceMetadata)),
+      (.F04p, laws origin [`SpecLanding.Control.newName],
+        { laws := ({} : NameMap Name).insert `SpecLanding.Control.newName origin })] do
+    let row := { partialRow with id }
+    let missing := `SpecLanding.Control.missingCompletion
+    let missingEvidence := { evidence with
+      declarations := evidence.declarations.map (fun _ => missing)
+      laws := evidence.laws.map (fun _ => missing) }
+    let requirements (_ : PieceId) : Completion :=
+      { named := delivered, requiredOnLanding := [missingEvidence] }
+    let checked := inventory env inScope {} [row] #[] requirements emptyRegistry
+    unless checked.errors.isEmpty && checked.rows.any (·.startsWith s!"{id}: partial") do
+      throwError "inventory control: {id} demanded completion evidence for a partial row"
+    let checked := inventory env inScope {} (land id) #[] requirements emptyRegistry
+    unless checked.errors == #[s!"{id}: missing declaration {missing} in {origin}"] &&
+        checked.rows.any (·.startsWith s!"{id}: incomplete") do
+      throwError "inventory control: {id} claimed landing without completion evidence"
+    let checked := inventory env inScope metadata (land id) #[]
+      (fun _ => { named := delivered, requiredOnLanding := [evidence] }) emptyRegistry
+    unless checked.errors.isEmpty && checked.rows.any (·.startsWith s!"{id}: landed") do
+      throwError "inventory control: {id} refused complete fixture evidence: {checked.errors}"
+  -- Construct a registry with a single authored rule and explicitly selected examples.
+  -- These declarations exercise origin and theorem validation in the real registry checker.
+  let accepted := `ConcreteSpec.Core.ConstRegistry.accepted
+  let refused := `ConcreteSpec.Core.ConstRegistry.refused
+  let registry : Registry :=
+    { rules := [⟨constRule, 1⟩], examples := [⟨constRule, accepted⟩, ⟨constRule, refused⟩] }
+  let requirements (_ : PieceId) : Completion :=
+    { named := delivered, deliveredRules := [⟨constRule, `ConcreteSpec.Spec.Const⟩] }
+  let checkPartial (registry : Registry) := inventory env inScope {} [partialRow] #[] requirements registry
+  let checked := checkPartial registry
   unless checked.errors.isEmpty && checked.rows.any (·.startsWith "F03p: partial") do
-    throwError "inventory control: delivered F03p evidence was refused: {checked.errors}"
-  for (id, names, moduleName) in [
-      (.F03p, ["projectSpan", "bindSource"], "ConcreteSpec.Spec.Ident"),
-      (.F04p, ["projectSpan_correct", "bindSource_correct"], "ConcreteSpec.Proofs.Ident")] do
-    let falseLanding := plan.map fun piece =>
-      if piece.id == id then { piece with remaining := [] } else piece
-    let checked := inventory env inScope specEvidence falseLanding #[] completion baseline
-    for name in names do
-      unless checked.errors.contains
-          s!"{id}: missing declaration ConcreteSpec.Core.SourcePathSpan.{name} in {moduleName}" &&
-          checked.rows.any (·.startsWith s!"{id}: incomplete") do
-        throwError "inventory control: {id} claimed landing without {name}"
-  let projectRules := [`ConcreteSpec.Core.SourcePath.Project.NoCaseCollision,
-    `ConcreteSpec.Core.SourcePath.Project.NoFileDirectoryConflict,
-    `ConcreteSpec.Core.SourcePath.Project.NoDuplicate]
-  let localRules := (completion .F03p).deliveredRules.map (·.name) |>.filter
-    (fun name => !(`ConcreteSpec.Core.SourcePath.Project).isPrefixOf name)
-  for rule in localRules ++ projectRules do
-    let withoutRule := { baseline with rules := baseline.rules.filter (·.name != rule) }
-    let checked := inventory env inScope {} sourcePath #[] completion withoutRule
-    unless checked.errors.contains s!"F03p: missing unique registered rule {rule}" &&
+    throwError "inventory control: delivered evidence for the partial fixture was refused: {checked.errors}"
+  for (mutation, message) in [
+      ({ registry with rules := [] }, s!"missing unique registered rule {constRule}"),
+      ({ registry with examples := [⟨constRule, refused⟩] }, s!"missing registered acceptance example for {constRule}"),
+      ({ registry with examples := [⟨constRule, accepted⟩] }, s!"missing registered refusal example for {constRule}"),
+      ({ registry with rules := [⟨constRule, 0⟩] }, s!"registered rule {constRule} has revision below 1")] do
+    let checked := checkPartial mutation
+    unless checked.errors == #[s!"F03p: {message}"] &&
         checked.rows.any (·.startsWith "F03p: incomplete") do
-      throwError "inventory control: partial F03p accepted a missing registry entry for {rule}"
-    for (wrapper, verdict) in [(`ConcreteSpec.Core.RuleAccepted, "acceptance"),
-        (`ConcreteSpec.Core.RuleRefused, "refusal")] do
-      let withoutExample := { baseline with examples := baseline.examples.filter fun link =>
-        !(link.rule == rule && exampleWrapper env link == some wrapper) }
-      let checked := inventory env inScope {} sourcePath #[] completion withoutExample
-      unless checked.errors.contains s!"F03p: missing registered {verdict} example for {rule}" &&
-          checked.rows.any (·.startsWith "F03p: incomplete") do
-        throwError "inventory control: partial F03p accepted a missing registered {verdict} for {rule}"
+      throwError "inventory control: partial fixture did not report {message}"
   let misplaced := `ConcreteSpec.Core.RuleAccepted
-  let wrongModule := { baseline with rules := ⟨misplaced, 1⟩ :: baseline.rules }
+  let wrongModule := { emptyRegistry with rules := [⟨misplaced, 1⟩] }
   unless (wrongModule.errors env .F03p [⟨misplaced, `ConcreteSpec.Spec.Ident⟩]).contains
       s!"F03p: registered rule {misplaced} must be authored in ConcreteSpec.Spec.Ident" do
     throwError "inventory control: accepted a rule defined in Spec.Rules"
-  let rule := `ConcreteSpec.Core.SourcePath.Nonempty
-  let zeroRevision := { baseline with rules := baseline.rules.map fun entry =>
-    if entry.name == rule then { entry with rev := 0 } else entry }
-  let checked := inventory env inScope {} sourcePath #[] completion zeroRevision
-  unless checked.errors == #[s!"F03p: registered rule {rule} has revision below 1"] &&
+  let missingNamed := `SpecLanding.Control.missingDelivered
+  let checked := inventory env inScope {} [partialRow] #[]
+    (fun id => { requirements id with named := [decls origin [missingNamed]] }) registry
+  unless checked.errors == #[s!"F03p: missing declaration {missingNamed} in {origin}"] &&
       checked.rows.any (·.startsWith "F03p: incomplete") do
-    throwError "inventory control: partial F03p accepted revision zero"
-  let missingSpan (id : PieceId) :=
-    let required := completion id
-    { required with named := required.named.map fun group =>
-      { group with declarations := group.declarations.map fun name =>
-        if name == `ConcreteSpec.Core.Span then `ConcreteSpec.Core.missingSpan else name } }
-  let checked := inventory env inScope {} sourcePath #[] missingSpan baseline
-  unless checked.errors.contains
-      "F03p: missing declaration ConcreteSpec.Core.missingSpan in ConcreteSpec.Spec.Ident" &&
-      checked.rows.any (·.startsWith "F03p: incomplete") do
-    throwError "inventory control: partial F03p accepted a missing named spec declaration"
+    throwError "inventory control: partial fixture accepted a missing named spec declaration"
   let outputFixture (id : PieceId) :=
     let required := completion id
     { required with namespaces := required.namespaces.map fun ns => { ns with origin } }
