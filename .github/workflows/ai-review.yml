@@ -1,0 +1,62 @@
+# Example: Using all AI code reviewers
+#
+# Triggers:
+# - Automatically when a non-draft PR is opened or marked ready for review (not Dependabot)
+# - Comment commands only work once this file is on the default branch
+# - On-demand via PR comments: /review for every reviewer, or /claude, /kimi, /codex, /deepseek,
+#   /gemini, /grok for one (requires write access)
+#
+# Custom prompts:
+# - Create .github/prompts/ai-review.md in your repo to customize the review focus
+# - Or pass a custom prompt via the 'prompt' input
+#
+# Required secrets (configure in Settings > Secrets and variables > Actions):
+# - KIMI_API_KEY: For Kimi reviews (https://platform.moonshot.ai/)
+# - OPENAI_API_KEY: For Codex reviews (https://platform.openai.com/)
+# - DEEPSEEK_API_KEY: For DeepSeek reviews (https://platform.deepseek.com/)
+# - XAI_API_KEY: For Grok reviews (https://console.x.ai/)
+# - GEMINI_API_KEY: For Gemini reviews (https://aistudio.google.com/apikey)
+# - ANTHROPIC_API_KEY: For Claude reviews (https://console.anthropic.com/)
+
+name: AI Code Review
+
+on:
+  pull_request:
+    types: [opened, ready_for_review]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  kimi-review:
+    uses: lambdaclass/actions/.github/workflows/ai-review-kimi.yml@v1
+    secrets:
+      KIMI_API_KEY: ${{ secrets.KIMI_API_KEY }}
+
+  codex-review:
+    uses: lambdaclass/actions/.github/workflows/ai-review-codex.yml@v1
+    secrets:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+  deepseek-review:
+    uses: lambdaclass/actions/.github/workflows/ai-review-deepseek.yml@v1
+    secrets:
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+
+  grok-review:
+    uses: lambdaclass/actions/.github/workflows/ai-review-grok.yml@v1
+    secrets:
+      XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+
+  gemini-review:
+    uses: lambdaclass/actions/.github/workflows/ai-review-gemini.yml@v1
+    secrets:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+  claude-review:
+    uses: lambdaclass/actions/.github/workflows/ai-review-claude.yml@v1
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
