@@ -96,10 +96,11 @@ structure EvidenceNamespace where
   origin : Name
   namespaceName : Name
   isProof : Bool := false
+  ruleOrigin : Option Name := none
 
 structure RuleRequirement where
   name : Name
-  origin : Name
+  ruleOrigin : Name
 
 structure Completion where
   named : List Group := []
@@ -111,6 +112,10 @@ structure Completion where
 private def specNamespace (origin namespaceName : Name) : EvidenceNamespace :=
   { origin := `ConcreteSpec ++ origin, namespaceName := `ConcreteSpec ++ namespaceName
     isProof := (`Proofs).isPrefixOf origin }
+
+private def registryNamespace (namespaceName ruleOrigin : Name) : EvidenceNamespace :=
+  { origin := `ConcreteSpec.Spec.Rules, namespaceName := `ConcreteSpec ++ namespaceName
+    ruleOrigin := some (`ConcreteSpec ++ ruleOrigin) }
 
 private def namedEvidence (groups : List Group) : Completion :=
   { named := groups }
@@ -1132,7 +1137,7 @@ private def completion : PieceId → Completion
   | .F17 => reservedEvidence [
     specNamespace `Spec.Grant `Core.Grants,
     specNamespace `Proofs.Grant `Core.Grants,
-    specNamespace `Spec.Rules `Core.Grants.Registry]
+    registryNamespace `Core.Grants.Registry `Spec.Grant]
   | .F18 => reservedEvidence [
     specNamespace `Spec.Prim `Core.Prim,
     specNamespace `Proofs.Prim `Core.Prim]
@@ -1478,8 +1483,8 @@ private def Registry.errors (registry : Registry) (env : Environment) (piece : P
     | none =>
       errors := errors.push s!"{piece}: missing unique registered rule {rule.name}"
     | some entry =>
-      unless origin? env rule.name == some rule.origin && isAuthored env rule.name do
-        errors := errors.push s!"{piece}: registered rule {rule.name} must be authored in {rule.origin}"
+      unless origin? env rule.name == some rule.ruleOrigin && isAuthored env rule.name do
+        errors := errors.push s!"{piece}: registered rule {rule.name} must be authored in {rule.ruleOrigin}"
       unless entry.rev >= 1 do
         errors := errors.push s!"{piece}: registered rule {rule.name} has revision below 1"
     unless registry.hasExample env rule.name `ConcreteSpec.Core.RuleAccepted do
@@ -1489,12 +1494,12 @@ private def Registry.errors (registry : Registry) (env : Environment) (piece : P
   return errors
 
 private def Registry.coversReservation (registry : Registry) (env : Environment)
-    (ns : EvidenceNamespace) (groups : List Group) : Bool :=
+    (ns : EvidenceNamespace) (ruleOrigin : Name) (groups : List Group) : Bool :=
   let cited := fun name => groups.any fun group =>
     ns.matches group.origin name && (group.declarations ++ group.laws).contains name
   registry.rules.any fun rule =>
     rule.rev >= 1 && (registry.uniqueRule? rule.name).isSome &&
-      (origin? env rule.name).any (· != `ConcreteSpec.Spec.Rules) &&
+      origin? env rule.name == some ruleOrigin &&
       isAuthored env rule.name &&
       registry.hasExample env rule.name `ConcreteSpec.Core.RuleAccepted cited &&
       registry.hasExample env rule.name `ConcreteSpec.Core.RuleRefused cited
@@ -1546,14 +1551,18 @@ private def inventory (env : Environment) (observed : EvidenceMetadata)
     if claimsLanding && groups.isEmpty then
       errors := errors.push s!"{piece.id}: a landed piece needs evidence"
     errors := errors ++ registry.errors env piece.id required.localRules
+    for ns in required.namespaces do
+      if ns.origin == `ConcreteSpec.Spec.Rules && ns.ruleOrigin.isNone then
+        errors := errors.push s!"{piece.id}: missing rule-defining module for registry reservation under {ns.namespaceName}"
     if claimsLanding then
       errors := errors ++ registry.errors env piece.id required.completionRules
       for ns in required.namespaces do
         unless piece.groups.any (fun group =>
             (group.declarations ++ group.laws).any (ns.matches group.origin)) do
           errors := errors.push s!"{piece.id}: missing completion evidence under {ns.namespaceName} in {ns.origin}"
-        if ns.origin == `ConcreteSpec.Spec.Rules && !registry.coversReservation env ns piece.groups then
-          errors := errors.push s!"{piece.id}: missing registered rule with cited acceptance and refusal under {ns.namespaceName} in {ns.origin}"
+        if let some ruleOrigin := ns.ruleOrigin then
+          if ruleOrigin == ns.origin || !registry.coversReservation env ns ruleOrigin piece.groups then
+            errors := errors.push s!"{piece.id}: missing registered rule authored in {ruleOrigin} with cited acceptance and refusal under {ns.namespaceName} in {ns.origin}"
         if ns.isProof then
           let citesLaw (group : Group) (name : Name) :=
             observed.laws.find? name == some group.origin
@@ -1659,7 +1668,7 @@ def verify (env : Environment) (specEvidence : EvidenceMetadata) (baseline : Reg
   let good := claim [
     laws origin [`SpecLanding.Control.newName], decls origin [`SpecLanding.Control.wrongIncrement]]
   let check (pieces : List Piece) := (inventory env observed pieces #[]
-    (fun _ => { namespaces := [⟨origin, `SpecLanding.Control, true⟩] })).errors
+    (fun _ => { namespaces := [⟨origin, `SpecLanding.Control, true, none⟩] })).errors
   let hasError (pieces : List Piece) (message : String) : CommandElabM Unit := do
     unless (check pieces).any (·.startsWith message) do
       throwError "inventory control missed {message}"
@@ -1818,27 +1827,33 @@ def verify (env : Environment) (specEvidence : EvidenceMetadata) (baseline : Reg
     throwError "inventory control: M09 without a reserved planted control was accepted: {checked.errors}"
   let registryOnly := { present .F17 "" with groups := [decls origin [`SpecLanding.Control.retained]] }
   let needsSpecAndRegistry (id : PieceId) :=
-    { completion id with namespaces := ⟨origin, `SpecLanding.Control, false⟩ :: (completion id).namespaces }
+    { completion id with namespaces := ⟨origin, `SpecLanding.Control, false, none⟩ :: (completion id).namespaces }
   let incomplete := inventory env {} [registryOnly] #[] needsSpecAndRegistry
   unless incomplete.errors.contains
       "F17: missing completion evidence under ConcreteSpec.Core.Grants in ConcreteSpec.Spec.Grant" do
     throwError "inventory control: incomplete namespace coverage was accepted"
   -- Use live accounting examples to exercise the registry reservation without inventing grant rules.
-  let registryFixture (_ : PieceId) := reservedEvidence [
-    specNamespace `Spec.Rules `Core.Leak.Registry]
+  let registryFixture (ruleOrigin : Name) (_ : PieceId) := reservedEvidence [
+    registryNamespace `Core.Leak.Registry ruleOrigin]
   let registryGroup := evidence `ConcreteSpec.Spec.Rules `ConcreteSpec.Core.Leak.Registry
-  let checkRegistry (names : List Name) :=
-    inventory env {} (land .F17 [registryGroup names]) #[] registryFixture baseline
-  let checked := checkRegistry [`accountA, `wfAccepted, `wfRefused]
+  let checkRegistry (ruleOrigin : Name) (names : List Name) :=
+    inventory env {} (land .F17 [registryGroup names]) #[] (registryFixture ruleOrigin) baseline
+  let missingPair (ruleOrigin : Name) :=
+    s!"F17: missing registered rule authored in {ruleOrigin} with cited acceptance and refusal under ConcreteSpec.Core.Leak.Registry in ConcreteSpec.Spec.Rules"
+  let pair := [`accountA, `wfAccepted, `wfRefused]
+  let checked := checkRegistry `Spec.Accounting pair
   unless checked.errors.isEmpty && checked.originalLanded == 1 do
     throwError "inventory control: cited registry example pair was refused: {checked.errors}"
+  let checked := checkRegistry `Spec.Grant pair
+  unless checked.errors == #[missingPair `ConcreteSpec.Spec.Grant] && checked.originalLanded == 0 do
+    throwError "inventory control: accepted cited accounting examples for a grant rule: {checked.errors}"
   for names in [[`accountA], [`wfAccepted, `resetRefused], [`wfAccepted], [`wfRefused]] do
-    let checked := checkRegistry names
-    unless checked.errors == #["F17: missing registered rule with cited acceptance and refusal under ConcreteSpec.Core.Leak.Registry in ConcreteSpec.Spec.Rules"] &&
+    let checked := checkRegistry `Spec.Accounting names
+    unless checked.errors == #[missingPair `ConcreteSpec.Spec.Accounting] &&
         checked.originalLanded == 0 do
       throwError "inventory control: accepted a registry reservation without a cited example pair: {names}"
   let reservedFixture (_ : PieceId) : Completion :=
-    { namespaces := [⟨origin, `ConcreteSpec.Core.Observe.OutputEvidence, true⟩] }
+    { namespaces := [⟨origin, `ConcreteSpec.Core.Observe.OutputEvidence, true, none⟩] }
   let checked := reservationErrors env [present .F21 "", present .F22 ""] reservedFixture
   unless checked.any (·.startsWith "F22: overlapping completion reservation with F21") &&
       checked.contains "F21: uncited declaration ConcreteSpec.Core.Observe.OutputEvidence.helper in completion reservation" do

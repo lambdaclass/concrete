@@ -40,8 +40,9 @@ from each reserved module and namespace. Each proof reservation also requires a 
 and a separate planted control in its own module and namespace. M09 uses its existing named
 Law and still requires a control from its qualification reservation. F03p checks every expected
 source-path rule for its defining module, unique registration, positive revision, and linked
-acceptance and refusal theorems from Spec.Rules. Each Spec.Rules reservation requires a cited
-acceptance and refusal theorem for the same uniquely registered rule authored in its owning module. The local rules contribute partial evidence while project-wide admission
+acceptance and refusal theorems from Spec.Rules. Each registry reservation names the expected
+rule-defining module and requires cited acceptance and refusal theorems for the same uniquely
+registered rule authored in that module. The local rules contribute partial evidence while project-wide admission
 and its registry evidence are outstanding. Shared modules have piece-specific evidence. Migration namespaces
 reserve names for evidence produced by the migration. If a name or defining module changes, update the completion requirements in
 the same patch. Partial rows retain the references for their remaining work.
@@ -57,6 +58,7 @@ Built-in controls reject deleted rows, empty evidence, absent or renamed declara
 duplicate IDs and names, wrong or missing modules, generated declarations, an unassigned or mistagged Law,
 a Law-tagged definition, borrowed declarations from shared or pre-existing modules,
 an output reservation with only a helper, missing source-path registry entries and examples,
+a cited registry example pair for a rule defined in a different module,
 overlapping reservations, uncited declarations in reserved namespaces, and an orphan module
 with an empty plan.
 
