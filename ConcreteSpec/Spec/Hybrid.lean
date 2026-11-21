@@ -24,8 +24,10 @@ No historical reviewer receipt supplies authority. The proof module checks agree
 existing integer representation in Spec/Rep on its fixed little-endian profile.
 
 Held independently: ISS-0064 (U+FEFF/bare CR), ISS-0065 (queued partial items and constant
-restrictions), ISS-0068 (paths), ISS-0071 (character preconditions), ISS-0072 (wiping),
-ISS-0073 (startup/ABI). None supplies a definition here.
+restrictions), ISS-0068 (paths), ISS-0071 (character preconditions),
+ISS-0073 (startup/ABI). None supplies a definition here. The 2026-11-21 decision
+(docs/decisions.md#decided-2026-11-21-secrets-after-1-0) defers wiping until after 1.0
+and closes ISS-0072.
 
 `State` is an `Exec.Operands.Store` shape: instantiate `Store := State`, use `read`/`write` in
 operand evaluation and `rawWrite` for authorized primitive writes; turn `none` into `Res.stuck`.
