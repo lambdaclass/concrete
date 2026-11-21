@@ -4439,10 +4439,13 @@ private theorem check_accepts_iff (paths : List SourcePath) :
       · rfl
     rw [noneFound]
 
-/-- Law (subject `ConcreteSpec.Core.SourcePath.Project.check`). -/
+/-- Law (subject `ConcreteSpec.Core.SourcePath.Project.check`).
+Acceptance excludes case collisions, file/directory prefix conflicts, and exact duplicate paths. -/
 theorem check_safety : Safety check := fun paths => (check_accepts_iff paths).mp
 
-/-- Law (subject `ConcreteSpec.Core.SourcePath.Project.check`). -/
+/-- Law (subject `ConcreteSpec.Core.SourcePath.Project.check`).
+The checker accepts every project free of case collisions, file/directory prefix conflicts,
+and exact duplicate paths. -/
 theorem check_progress : Progress check := fun paths => (check_accepts_iff paths).mpr
 
 /-- Law (subject `ConcreteSpec.Core.SourcePath.Project.check`). -/
@@ -4644,7 +4647,7 @@ theorem prematureProjectCheck_violates_local_first : ¬ LocalFirst prematureProj
   injection localResult with incompatible
   cases incompatible
 
-/- Exact duplicate path refusal is pending owner decision. -/
+/-- Two occurrences of the same admitted path. -/
 def duplicateOccurrences : List SourcePath := [fileA, fileA]
 
 def ignoreDuplicate : List SourcePath → Except Refusal Unit :=

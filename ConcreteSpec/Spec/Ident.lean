@@ -1309,7 +1309,7 @@ A file path cannot also be an exact proper directory prefix of another path. -/
 def NoFileDirectoryConflict (pair : SourcePath × SourcePath) : Prop :=
   ¬ Reference.Conflict .fileDirectoryConflict pair.1 pair.2
 
-/-- R-0709, pending owner decision.
+/-- R-0709, docs/decisions.md#decided-2026-11-21-duplicate-project-path.
 A project cannot list the same path at two distinct positions. -/
 def NoDuplicate (pair : SourcePath × SourcePath) : Prop :=
   ¬ Reference.Conflict .duplicate pair.1 pair.2
