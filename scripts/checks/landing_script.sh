@@ -111,7 +111,8 @@ chmod +x "$TMP/fake-gh"
 cat > "$TMP/put-review" <<'EOF'
 #!/usr/bin/env bash
 set -e
-sha="$(git rev-parse "$1")"; R=refs/notes/concrete-review
+sha="$(git rev-parse "$1")"; R=refs/notes/concrete-review-v2
+if [ "${FIXTURE_LEGACY_REVIEW:-0}" = 1 ]; then R=refs/notes/concrete-review; fi
 git fetch -q origin "+$R:$R" 2>/dev/null || true
 case "$2" in
   none) git notes --ref=$R remove --ignore-missing "$sha" 2>/dev/null ;;
@@ -122,9 +123,9 @@ reviewer: codex
 utc: 2026-11-06T00:00:00Z
 base: $(git rev-parse "${3:-origin/main}")
 pieces: 1
-diff-start: $(git rev-parse "${3:-origin/main}")$(case "$2" in
-  findings*|blocked*) printf '\nfindings-note: %s' "$(printf 'fixture findings\n' | git hash-object --stdin)" ;;
-esac)" "$sha" ;;
+$(if [ "${FIXTURE_LEGACY_REVIEW:-0}" != 1 ]; then printf 'diff-start: %s' "$(git rev-parse "${3:-origin/main}")"; case "$2" in
+  findings*|blocked*) printf '\nfindings-note: %s\n\nfixture findings' "$(printf 'fixture findings\n' | git hash-object --stdin)" ;;
+esac; fi)" "$sha" ;;
 esac
 git show-ref -q --verify $R || exit 0
 CONCRETE_SKIP_GATES=1 git push -q origin $R
@@ -1404,9 +1405,16 @@ done
 bash "$TMP/put-signoff" "$R2" valid
 prov_leg "pure merge with a signed member and strict-ancestor notes" none clean findings@5 pass "head is their clean merge" "$MR" "$OLDER" "$OLDER"
 bash "$TMP/put-signoff" "$R2" none
+bash "$TMP/put-review" "$R2" none
+FIXTURE_LEGACY_REVIEW=1 bash "$TMP/put-signoff" "$R2" valid
+prov_leg "a published approval with legacy cap evidence" none clean none pass "head is their clean merge"
+FIXTURE_LEGACY_REVIEW=1 bash "$TMP/put-review" "$R2" findings@5 "$R2"
+prov_leg "a published approval with narrow legacy cap evidence" none clean none refuse "review range does not cover required base"
+FIXTURE_LEGACY_REVIEW=1 bash "$TMP/put-review" "$R2" none
+bash "$TMP/put-signoff" "$R2" none
 # The cap evidence is a well-formed review.sh note: a bare `rounds: 5` note does not count.
 bash "$TMP/put-signoff" "$R2" valid
-git notes --ref=refs/notes/concrete-review add -f -m "rounds: 5" "$R2"
+git notes --ref=refs/notes/concrete-review-v2 add -f -m "rounds: 5" "$R2"
 o="$(bash "$ROOT_DIR/scripts/land/signoff.sh" verify "$R2" --base "$MR" 2>&1)"; r=$?
 [ "$r" = 1 ] && has "$o" "rounds-at ${R2:0:10} carries no well-formed review.sh note" \
   && ok "verify refuses cap evidence that is not a well-formed review.sh note" || { no "malformed cap note (exit $r)"; echo "$o" | sed 's/^/      /'; }

@@ -124,7 +124,7 @@ change), never by skipping the review.
 ## The note
 
 After each round the script writes this note on `HEAD` under
-`refs/notes/concrete-review`, and pushes the ref to `origin`:
+`refs/notes/concrete-review-v2`, and pushes the ref to `origin`:
 
 ```
 verdict: clean|findings|blocked
@@ -145,24 +145,25 @@ repeated or unknown keys. Change the format only together with `verify.sh`.
 - `base` is the branch base. `diff-start` equals `base` for a full review.
 - A delta also records `predecessor-note` with the exact verdict-note blob ID
   for the commit at `diff-start`.
-- A findings or blocked verdict also records `findings-note` with the exact
-  text blob ID under `refs/notes/concrete-review-findings`. The next round
-  requires the matching text when carrying findings forward.
+- A findings or blocked verdict also records `findings-note`, the Git blob ID
+  of the findings text. A blank line separates the header from that text
+  in the same note. The verifier checks the binding before the evidence is used.
 
-The two notes refs are published in one atomic push. The full raw
-output of every round is written to `.review/<sha>-<round>.md`, which git
-ignores.
+The writer builds the whole record on a private notes ref, verifies it, and
+updates the local review ref only if its tip still matches the one used for
+intake. Before publication it validates new and changed local records and pushes
+the validated notes commit. An interrupted write leaves the previously recorded
+verdict and findings together. Raw output goes to `.review/<sha>-<round>.md`,
+which Git ignores.
 
-A non-fast-forward rejection (another agent pushed notes in the meantime) is
-handled by fetching the remote notes, merging them (`git notes merge -s ours`: on
-a conflict for the same commit the local, newer note wins), and retrying, up to
-three attempts. Any other push failure stops at once with exit 6. The script also
-fetches and merges the remote notes before each round, so it counts rounds that
-were run elsewhere.
+After a non-fast-forward rejection the writer fetches and merges the remote
+notes, with up to three push attempts. Concurrent changes to distinct notes can
+merge. Conflicting revisions to the same note require reconciliation. Any other
+push failure stops at once with exit 6. The writer also syncs before intake
+to count rounds run elsewhere.
 
-The pre-push hook (`.githooks/pre-push`) runs no gates for a push that updates
-only these two notes refs: a notes commit holds one blob per annotated commit and
-no source tree. A push that also carries a branch takes that branch's tier.
+The pre-push hook (`.githooks/pre-push`) takes the notes tier for review-only
+pushes. A push that also carries a branch takes that branch's tier.
 Until this hook reaches `main`, a hook installed from an older `main` still runs
 the gates on a note push, and the push fails outside `nix develop`.
 
@@ -193,30 +194,40 @@ commit's review provenance ([LANDING.md](LANDING.md)); it approves no other comm
 
 ```sh
 scripts/review/verify.sh [--notes-ref <ref>] --required-base <base> <commit> # exit 0 clean, 1 findings/blocked, 2 invalid
-scripts/review/verify.sh --fetch [--notes-ref <ref>] --required-base <base> <commit> # fetch origin notes first
+scripts/review/verify.sh --fetch --required-base <base> <commit> # use the published snapshot
 ```
 
 It judges the exact commit. A clean note on an ancestor says nothing about the
 commits after it, so a branch that gains a commit after its clean round needs
-another round. All consumers use this verifier for schema and range validation:
-landing supplies the recorded train base, sign-off supplies its diff base for
-`rounds-at`, readiness supplies its selected base (`notes.sh ready` defaults to
-`origin/main`), and incremental review supplies its current review base.
-With `--required-base`, the note's base must be an ancestor-or-equal
-of the required commit; an unknown or insufficient base exits 2. This applies to
-clean, findings and blocked evidence alike. Incremental review ignores malformed
-notes and retains the maximum round count across all schema-valid notes in the
-branch history, including merge parents. Uncovered insufficient-range evidence
+another round. Landing supplies the recorded train base, sign-off supplies its diff
+base for `rounds-at`, readiness supplies its selected base (`notes.sh ready`
+defaults to `origin/main`), and incremental review supplies its current review
+base. With `--required-base`, the note's base must be an ancestor-or-equal of the
+required commit. The verifier also requires the note base to be an ancestor of
+the reviewed commit or that commit itself. Incremental review retains the
+maximum round count across valid notes in the branch history, including merge
+parents. Uncovered insufficient-range evidence
 triggers a full review without resetting rounds or the cap. A covering descendant
 review supersedes earlier findings and narrow ancestor notes.
 Verification walks each delta back to a full review. Each predecessor must be a
 strict ancestor with a clean verdict, the recorded note blob, and coverage of
-its successor's base. Legacy round-one notes can serve as full reviews. Legacy
-multi-round notes still count toward the cap, but their missing diff start
-makes their coverage unverifiable. Legacy findings intake requires a findings
-note on the same commit.
-`--notes-ref <ref>` explicitly selects the notes ref (default `refs/notes/concrete-review`);
-readiness uses the fetched `refs/notes/remote/concrete-review` snapshot.
+its successor's base. `--notes-ref <ref>` selects the notes ref, which defaults
+to `refs/notes/concrete-review-v2`. With `--fetch`, the verifier reads the
+published snapshot at `refs/notes/remote/concrete-review-v2`, which readiness
+and the landing train also use.
+
+Existing notes under `refs/notes/concrete-review` are eligible for round
+accounting. `verify.sh --metadata-only --required-base <base> <commit>` validates
+their schema and scope for exact-SHA owner sign-off. It returns success for
+valid metadata with any verdict and establishes no review coverage. In a fresh
+clone, fetch the published round metadata with `verify.sh --fetch --metadata-only`
+and pass `--notes-ref refs/notes/remote/concrete-review-v2` to `signoff.sh record`.
+Unresolved
+legacy findings still require text under `refs/notes/concrete-review-findings`.
+New evidence takes precedence at each commit. Older writers can update their
+legacy refs while the new verifier uses only the new-format evidence for clean
+landing. A branch with only legacy evidence needs a full review within its
+remaining rounds or an exact-SHA owner sign-off once it reaches its cap.
 
 ## Tests
 

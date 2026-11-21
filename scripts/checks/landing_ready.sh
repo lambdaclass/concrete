@@ -123,11 +123,28 @@ git clone -q "$TMP/origin.git" "$W"
 mk(){ ( cd "$A" && git fetch -q origin && git checkout -q -B "$1" "${5:-origin/main}" && mkdir -p "$(dirname "$3")" \
         && printf '%s\n' "$4" > "$3" && git add -A && git commit -qm "$2" && git push -q -f origin "HEAD:refs/heads/$1" ); }
 sha_of(){ git --git-dir="$TMP/origin.git" rev-parse "refs/heads/$1"; }
-mark(){ # branch [review-verdict] [gates] [extra review key=value]
-  local s; s="$(sha_of "$1")"
+put_review_fixture() { # sha <note text>; deliberately permits invalid test evidence
+  local ref=refs/notes/concrete-review-v2
+  git fetch -q origin "+$ref:$ref" 2>/dev/null || true
+  git notes --ref="$ref" add -f -m "$2" "$1" && git push -q origin "$ref" &&
+    bash "$NOTES" fetch
+}
+clean_review_fixture() {
+  put_review_fixture "$1" "verdict: clean
+rounds: 1
+reviewer: codex
+utc: 2026-11-21T00:00:00Z
+base: $2
+pieces: 1
+diff-start: $2"
+}
+mark(){ # branch [gates]
+  local s base
+  s="$(sha_of "$1")"
+  base="$(git -C "$W" rev-parse origin/main)"
   ( cd "$A" && git fetch -q origin \
-    && bash "$NOTES" put review "$s" verdict="${2:-clean}" rounds=1 reviewer=codex base="$(git -C "$W" rev-parse origin/main)" pieces=1 ${4:+"$4"} >/dev/null \
-    && bash "$NOTES" put gates "$s" gates="${3:-pass}" selected=3 >/dev/null ) || no "mark $1"
+    && clean_review_fixture "$s" "$base" >/dev/null \
+    && bash "$NOTES" put gates "$s" gates="${2:-pass}" selected=3 >/dev/null ) || no "mark $1"
 }
 land_refs(){ git --git-dir="$TMP/origin.git" for-each-ref --format='%(refname)' 'refs/heads/wip/land-*'; }
 
@@ -167,7 +184,7 @@ out="$(cd "$A" && LAND_REVIEW_CMD=false bash "$ROOT_DIR/scripts/land/ready.sh" w
 g="$(cd "$A" && bash "$NOTES" get gates "$RV")"
 [ "$rc" != 0 ] && has "$g" "gates: fail" && has "$g" "reason: failed legs: review" && has "$out" "run one after another" \
   && ok "a failed review leg revokes readiness even over an older clean verdict" || { no "ready.sh review failure: exit $rc, note '$g'"; echo "$out" | sed 's/^/      /'; }
-mk wip/rv2 rv2 src/rv2.txt rv2; mark wip/rv2 clean fail
+mk wip/rv2 rv2 src/rv2.txt rv2; mark wip/rv2 fail
 out="$(cd "$A" && LAND_REVIEW_CMD=true bash "$ROOT_DIR/scripts/land/ready.sh" wip/rv2 2>&1)"; rc=$?
 [ "$rc" = 0 ] && [ "$(cd "$A" && bash "$NOTES" get gates "$(sha_of wip/rv2)" gates)" = pass ] \
   && ok "passing legs publish gates: pass and the head becomes ready" || { no "ready.sh pass: exit $rc"; echo "$out" | sed 's/^/      /'; }
@@ -179,9 +196,9 @@ for mode in intermediate self malformed; do
   mk "wip/range-$mode" visible "src/visible-$mode" visible "$MID"
   RH="$(sha_of "wip/range-$mode")"
   nb="$MID"; [ "$mode" != self ] || nb="$RH"
-  (cd "$A" && bash "$NOTES" put review "$RH" verdict=clean rounds=1 reviewer=codex base="$nb" pieces=1 >/dev/null && bash "$NOTES" put gates "$RH" gates=pass >/dev/null)
+  (cd "$A" && clean_review_fixture "$RH" "$nb" >/dev/null && bash "$NOTES" put gates "$RH" gates=pass >/dev/null)
   if [ "$mode" = malformed ]; then
-    (cd "$A" && bash "$NOTES" put review "$RH" verdict=clean >/dev/null)
+    (cd "$A" && put_review_fixture "$RH" "verdict: clean" >/dev/null)
   fi
   out="$(cd "$A" && bash "$NOTES" ready "$RH" 2>&1)"; rc=$?
   reason='review range does not cover required base'; [ "$mode" != malformed ] || reason='malformed review note'
@@ -204,8 +221,8 @@ for arg in empty missing; do
   [ "$rc" != 0 ] && has "$out" '--base needs a nonempty ref' && ok "ready rejects $arg base argument" || no "ready $arg base: $rc $out"
 done
 # Keep the published clean snapshot, but replace canonical local evidence with findings.
-(cd "$A" && git notes --ref=concrete-review add -f -m "$(printf 'verdict: findings\nrounds: 1\nreviewer: codex\nutc: 2026-11-11T00:00:00Z\nbase: %s\npieces: 1' "$BASE")" "$EH")
-out="$(cd "$A" && REVIEW_NOTES_REF=refs/notes/remote/concrete-review bash "$ROOT_DIR/scripts/review/verify.sh" --required-base "$BASE" "$EH" 2>&1)"; rc=$?
+(cd "$A" && git notes --ref=concrete-review-v2 add -f -m "$(printf 'verdict: findings\nrounds: 1\nreviewer: codex\nutc: 2026-11-11T00:00:00Z\nbase: %s\npieces: 1\ndiff-start: %s\nfindings-note: %s\n\nfixture findings' "$BASE" "$BASE" "$(printf 'fixture findings\n' | git hash-object --stdin)")" "$EH")
+out="$(cd "$A" && REVIEW_NOTES_REF=refs/notes/remote/concrete-review-v2 bash "$ROOT_DIR/scripts/review/verify.sh" --required-base "$BASE" "$EH" 2>&1)"; rc=$?
 [ "$rc" = 1 ] && has "$out" 'findings (round 1' && ok "ambient notes ref cannot override canonical evidence" || no "ambient ref: $rc $out"
 out="$(cd "$A" && bash "$NOTES" ready "$EH" "$BASE" 2>&1)"; rc=$?
 [ "$rc" = 0 ] && has "$out" 'clean (round 1' && ok "readiness explicitly selects published snapshot" || no "published ref: $rc $out"

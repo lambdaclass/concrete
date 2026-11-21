@@ -493,7 +493,7 @@ review_cmd() {
 # one at its exact recorded SHA (each member was reviewed at its own head: a train
 # built or rebuilt from reviewed branches). Each note base must be an ancestor-or-equal of the
 # recorded train base, so its range covers the whole change being landed. Every note is judged by scripts/review/verify.sh, on
-# $REMOTE's notes (fetched first, replacing the local copy, as verify.sh --fetch does): an absent,
+# $REMOTE's fetched notes snapshot: an absent,
 # malformed, blocked or findings note qualifies nothing, and a head note that is not clean is not
 # overridden by its members. Prints what qualified; on failure prints why and returns 1.
 #
@@ -506,6 +506,7 @@ review_cmd() {
 # in order, each merge's tree the conflict-free `git merge-tree --write-tree` of its two parents, and
 # nothing else (no resolved conflict, no regenerated view, no extra commit).
 VERIFY="$SELF_DIR/../review/verify.sh"
+source "$SELF_DIR/../review/refs.sh"
 SIGNOFF="$SELF_DIR/signoff.sh"
 
 # pure_merge BASE HEAD SHA... → empty when HEAD is BASE plus exactly one clean merge of each SHA, in
@@ -547,19 +548,19 @@ review_provenance() { # name head
   base="$(state_get_soft "$name" base)"
   [ -n "$base" ] || { echo "train has no recorded base"; return 1; }
   [ -f "$VERIFY" ] || { echo "no review verifier ($VERIFY is missing)"; return 1; }
-  git fetch -q "$REMOTE" "+refs/notes/concrete-review:refs/notes/concrete-review" 2>/dev/null \
-    || { echo "could not fetch refs/notes/concrete-review from $REMOTE"; return 1; }
-  if out="$(bash "$VERIFY" --required-base "$base" "$head" 2>&1)"; then echo "the head ${head:0:10} carries a clean review note"; return 0; fi
-  if git notes --ref=refs/notes/concrete-review show "$head" >/dev/null 2>&1; then
+  fetch_review_ref "$REMOTE" "$REVIEW_NOTES_REF" "$PUBLISHED_REVIEW_REF" || return 1
+  if out="$(bash "$VERIFY" --notes-ref "$PUBLISHED_REVIEW_REF" --required-base "$base" "$head" 2>&1)"; then echo "the head ${head:0:10} carries a clean review note"; return 0; fi
+  if git notes --ref="$PUBLISHED_REVIEW_REF" show "$head" >/dev/null 2>&1; then
     echo "the head's review note does not qualify: ${out//$'\n'/ }"; return 1
   fi
+  fetch_review_ref "$REMOTE" "$LEGACY_REVIEW_REF" "$PUBLISHED_LEGACY_REVIEW_REF" || return 1
   local signed=0 shas=() so impure
   git fetch -q --prune "$REMOTE" "+refs/owner-signoff/*:refs/owner-signoff/*" 2>/dev/null \
     || { echo "could not fetch refs/owner-signoff/* from $REMOTE"; return 1; }
   for m in $(state_get_soft "$name" members | tr ',' ' '); do
     n=$((n + 1)); shas+=("${m##*@}")
-    out="$(bash "$VERIFY" --required-base "$base" "${m##*@}" 2>&1)" && continue
-    if so="$(bash "$SIGNOFF" verify "${m##*@}" --base "$base" 2>&1)"; then signed=$((signed + 1)); continue; fi
+    out="$(bash "$VERIFY" --notes-ref "$PUBLISHED_REVIEW_REF" --required-base "$base" "${m##*@}" 2>&1)" && continue
+    if so="$(bash "$SIGNOFF" verify "${m##*@}" --base "$base" --notes-ref "$PUBLISHED_REVIEW_REF" 2>&1)"; then signed=$((signed + 1)); continue; fi
     bad="$bad; member ${m%@*}: ${out//$'\n'/ }; ${so//$'\n'/ }"
   done
   [ "$n" -gt 0 ] || { echo "the head ${head:0:10} has no review note and the train records no members"; return 1; }

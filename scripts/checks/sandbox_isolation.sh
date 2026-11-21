@@ -167,7 +167,7 @@ bounded() {
 }
 
 # A caller: bare upstream, a full clone of this checkout's HEAD, a linked worktree of it, with this
-# checkout's scripts/ (the version under test) copied over the worktree's. No hook is installed:
+# checkout's scripts and hooks copied over the worktree's. No hook is installed:
 # hooksPath points at an empty directory.
 mk_caller() { # dir
   local d="$1"
@@ -177,7 +177,9 @@ mk_caller() { # dir
   git -C "$d/caller" config core.hooksPath "$d/nohooks"
   git -C "$d/caller" worktree add -q -b isolation-probe "$d/linked" || return 1
   cp -R "$ROOT_DIR/scripts/." "$d/linked/scripts/" || return 1
-  git -C "$d/linked" add -A scripts && git -C "$d/linked" commit -q --allow-empty -m "scripts under test" || return 1
+  cp -R "$ROOT_DIR/.githooks/." "$d/linked/.githooks/" || return 1
+  git -C "$d/linked" add -A scripts .githooks &&
+    git -C "$d/linked" commit -q --allow-empty -m "scripts and hooks under test" || return 1
 }
 snap() { # dir
   local d="$1"

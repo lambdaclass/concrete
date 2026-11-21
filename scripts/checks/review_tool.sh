@@ -125,8 +125,8 @@ printf '.review/\n' >"$W/.gitignore"
 g add .gitignore && g commit -qm "ignore .review"
 g push -q origin main
 review() { (cd "$W" && bash "$REVIEW" "$@"); }
-note() { g notes --ref=refs/notes/concrete-review show "${1:-HEAD}" 2>/dev/null; }
-field() { note "${2:-HEAD}" | sed -n "s/^$1: //p"; }
+note() { g notes --ref=refs/notes/concrete-review-v2 show "${1:-HEAD}" 2>/dev/null; }
+field() { note "${2:-HEAD}" | sed -n "/^$/q; s/^$1: //p"; }
 
 echo "=== round 1: full diff, findings, note written and pushed ==="
 g checkout -qb feature
@@ -150,7 +150,9 @@ utc: [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z
 base: [0-9a-f]{40}
 pieces: [0-9]+
 diff-start: [0-9a-f]{40}
-findings-note: [0-9a-f]{40}$'
+findings-note: [0-9a-f]{40}
+
+'
 n1="$(note "$R1")"
 if [[ "$n1" =~ $FORMAT_RE ]]; then ok "findings note has the expected fields, in order"; else no "note format: $n1"; fi
 check "note: verdict findings" test "$(field verdict)" = findings
@@ -158,9 +160,9 @@ check "note: rounds 1" test "$(field rounds)" = 1
 check "note: base is the merge-base" test "$(field base)" = "$BASE"
 check "note: pieces 1" test "$(field pieces)" = 1
 check "raw output at .review/<sha>-1.md" test -s "$W/.review/$R1-1.md"
-check "findings recorded under the findings ref" \
-  bash -c "git -C '$W' notes --ref=refs/notes/concrete-review-findings show $R1 | has_match 'counter is never reset'"
-check "notes ref pushed to origin" test "$(git -C "$T/origin.git" rev-parse refs/notes/concrete-review)" = "$(g rev-parse refs/notes/concrete-review)"
+check "findings recorded in the verdict note" \
+  bash -c "git -C '$W' notes --ref=refs/notes/concrete-review-v2 show $R1 | has_match 'counter is never reset'"
+check "notes ref pushed to origin" test "$(git -C "$T/origin.git" rev-parse refs/notes/concrete-review-v2)" = "$(g rev-parse refs/notes/concrete-review-v2)"
 check ".review/ stays untracked" test -z "$(g status --porcelain)"
 (cd "$W" && bash "$VERIFY" HEAD >/dev/null); rc=$?
 check "verify.sh: findings is not clean (exit 1, got $rc)" test "$rc" -eq 1
@@ -211,7 +213,7 @@ echo "=== ISS-0098: clean delta requires the complete predecessor chain ==="
 g checkout -qb chain-controls
 FULL_SHA="$(g rev-parse HEAD)"
 FULL_NOTE="$(note)"
-FULL_BLOB="$(g notes --ref=concrete-review list HEAD)"
+FULL_BLOB="$(g notes --ref=concrete-review-v2 list HEAD)"
 commit_file delta.txt delta "first clean delta"
 review >"$T/delta" 2>&1; rc=$?
 check "verified clean predecessor allows a delta" test "$rc" -eq 0
@@ -226,41 +228,42 @@ verify_head() { (cd "$W" && bash "$VERIFY" --required-base "$BASE" HEAD); }
 verify_head >"$T/chain" 2>&1; rc=$?
 check "two clean deltas verify back to the full review" test "$rc" -eq 0
 
-g notes --ref=concrete-review remove "$FULL_SHA" >/dev/null 2>&1
+g notes --ref=concrete-review-v2 remove "$FULL_SHA" >/dev/null 2>&1
 verify_head >"$T/chain" 2>&1; rc=$?
 check "missing indirect predecessor fails (exit $rc)" test "$rc" -eq 2
 check "missing predecessor diagnostic identifies the missing commit" grep -q "$FULL_SHA unverified: no note" "$T/chain"
 
-g notes --ref=concrete-review add -f -m "$(printf '%s\n' "$FULL_NOTE" | sed 's/^utc: .*/utc: 2000-01-01T00:00:00Z/')" "$FULL_SHA" 2>/dev/null
+g notes --ref=concrete-review-v2 add -f -m "$(printf '%s\n' "$FULL_NOTE" | sed 's/^utc: .*/utc: 2000-01-01T00:00:00Z/')" "$FULL_SHA" 2>/dev/null
 verify_head >"$T/chain" 2>&1; rc=$?
 check "changed indirect predecessor fails (exit $rc)" test "$rc" -eq 2
 check "changed indirect predecessor fails on blob identity" grep -q "predecessor note changed" "$T/chain"
-g notes --ref=concrete-review add -f -C "$FULL_BLOB" "$FULL_SHA" 2>/dev/null
+g notes --ref=concrete-review-v2 add -f -C "$FULL_BLOB" "$FULL_SHA" 2>/dev/null
 
 # Give the head delta a matching reference to a genuine findings verdict so
 # rejection must come from the verdict, not just a mismatched blob.
-CHAIN_NOTE="$(g notes --ref=concrete-review list HEAD)"
-R1_BLOB="$(g notes --ref=concrete-review list "$R1")"
-g notes --ref=concrete-review add -f -m "$(note | sed -e "s/^diff-start: .*/diff-start: $R1/" \
+CHAIN_NOTE="$(g notes --ref=concrete-review-v2 list HEAD)"
+R1_BLOB="$(g notes --ref=concrete-review-v2 list "$R1")"
+g notes --ref=concrete-review-v2 add -f -m "$(note | sed -e "s/^diff-start: .*/diff-start: $R1/" \
   -e "s/^predecessor-note: .*/predecessor-note: $R1_BLOB/")" HEAD 2>/dev/null
 verify_head >"$T/chain" 2>&1; rc=$?
 check "intact predecessor with findings fails (exit $rc)" test "$rc" -eq 2
 check "intact predecessor with findings fails for its verdict" grep -q 'predecessor verdict is findings; expected clean' "$T/chain"
-g notes --ref=concrete-review add -f -C "$CHAIN_NOTE" HEAD 2>/dev/null
+g notes --ref=concrete-review-v2 add -f -C "$CHAIN_NOTE" HEAD 2>/dev/null
 
 echo "=== ISS-0099: findings intake requires matching text ==="
 g checkout -qb missing-findings "$R1"
 commit_file old.txt fixed "fix after missing findings"
-R1_FINDINGS="$(g notes --ref=concrete-review-findings list "$R1")"
-g notes --ref=concrete-review-findings remove "$R1" >/dev/null 2>&1
+R1_NOTE="$(note "$R1")"
+R1_HEADER="${R1_NOTE%%$'\n\n'*}"
+g notes --ref=concrete-review-v2 add -f -m "$R1_HEADER" "$R1" 2>/dev/null
 reset_fake
 REVIEW_PUSH=0 review >"$T/missing-findings" 2>&1; rc=$?
 check "findings verdict without text refuses before review (exit $rc)" test "$rc" -eq 2 -a "$(calls)" -eq 0
-check "missing findings diagnostic identifies the round" grep -q "missing or mismatched findings text for $R1 round 1" "$T/missing-findings"
-g notes --ref=concrete-review-findings add -m 'stale text from a different review' "$R1"
+check "missing findings diagnostic identifies the round" grep -q "invalid review evidence for $R1 round 1: .*missing or mismatched findings text" "$T/missing-findings"
+g notes --ref=concrete-review-v2 add -f -m "$R1_HEADER"$'\n\nstale text from a different review' "$R1" 2>/dev/null
 REVIEW_PUSH=0 review >"$T/missing-findings" 2>&1; rc=$?
 check "findings verdict with mismatched text refuses before review (exit $rc)" test "$rc" -eq 2 -a "$(calls)" -eq 0
-g notes --ref=concrete-review-findings add -f -C "$R1_FINDINGS" "$R1" 2>/dev/null
+g notes --ref=concrete-review-v2 add -f -C "$R1_BLOB" "$R1" 2>/dev/null
 g checkout -q feature
 reset_fake
 
@@ -298,6 +301,7 @@ g branch -f main origin/main
 reset_fake
 
 echo "=== ISS-0019: prior review ranges cannot hide branch changes ==="
+RANGE_NOTES_TIP="$(g rev-parse refs/notes/concrete-review-v2)"
 g checkout -q -b range-controls origin/main
 RANGE_BASE="$(g rev-parse HEAD)"
 commit_file hidden.txt hidden hidden
@@ -309,10 +313,10 @@ range_note() {
   local base="$3"
   local finding_field=""
   if [ "$verdict" != clean ]; then
-    g notes --ref=concrete-review-findings add -f -m 'ANCESTOR_OPEN_FINDING' HEAD 2>/dev/null
-    finding_field="$(printf '\nfindings-note: %s' "$(g notes --ref=concrete-review-findings list HEAD)")"
+    local findings='ANCESTOR_OPEN_FINDING'
+    finding_field="$(printf '\nfindings-note: %s\n\n%s' "$(printf '%s\n' "$findings" | g hash-object --stdin)" "$findings")"
   fi
-  g notes --ref=concrete-review add -f -m "$(printf 'verdict: %s\nrounds: %s\nreviewer: codex\nutc: 2026-11-11T00:00:00Z\nbase: %s\npieces: 1\ndiff-start: %s%s' "$verdict" "$rounds" "$base" "$base" "$finding_field")" HEAD
+  g notes --ref=concrete-review-v2 add -f -m "$(printf 'verdict: %s\nrounds: %s\nreviewer: codex\nutc: 2026-11-11T00:00:00Z\nbase: %s\npieces: 1\ndiff-start: %s%s' "$verdict" "$rounds" "$base" "$base" "$finding_field")" HEAD
 }
 for verdict in clean findings blocked; do
   range_note "$verdict" 1 "$RANGE_MID"
@@ -464,7 +468,7 @@ done
 range_note clean 1 "$RANGE_BASE"
 g clone -q --no-local --depth 1 --branch range-controls "$W" "$T/shallow"
 git -C "$T/shallow" fetch -q --depth 1 "$W" "$RANGE_BASE"
-git -C "$T/shallow" fetch -q "$W" refs/notes/concrete-review:refs/notes/concrete-review
+git -C "$T/shallow" fetch -q "$W" refs/notes/concrete-review-v2:refs/notes/concrete-review-v2
 (cd "$T/shallow" && bash "$VERIFY" --required-base HEAD HEAD >"$T/vr" 2>&1); rc=$?
 check "shallow ancestry fails closed with range reason" test "$rc" -eq 2 -a -n "$(grep 'review range does not cover required base' "$T/vr")"
 g checkout -q feature
@@ -474,17 +478,13 @@ echo "=== verify.sh: missing and malformed notes ==="
 commit_file x.txt "x" "unreviewed"
 (cd "$W" && bash "$VERIFY" HEAD >/dev/null 2>&1); rc=$?
 check "no note: exit 2 (got $rc)" test "$rc" -eq 2
-g notes --ref=refs/notes/concrete-review add -f -m "verdict: clean" HEAD
+g notes --ref=refs/notes/concrete-review-v2 add -f -m "verdict: clean" HEAD
 (cd "$W" && bash "$VERIFY" HEAD >/dev/null 2>&1); rc=$?
 check "malformed note (verdict line alone): exit 2 (got $rc)" test "$rc" -eq 2
 B40="$(printf '%040d' 0 | tr 0 a)"
-# A legacy round-1 note with utc last still verifies with a valid base.
-g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 1\nreviewer: codex\nbase: %s\npieces: 1\nutc: 2026-10-22T00:00:00Z' "$BASE")" HEAD
+g notes --ref=refs/notes/concrete-review-v2 add -f -m "$(printf 'verdict: clean\nrounds: 1\nreviewer: codex\nbase: %s\npieces: 1\ndiff-start: %s\nutc: 2026-10-22T00:00:00Z' "$BASE" "$BASE")" HEAD
 (cd "$W" && bash "$VERIFY" HEAD >"$T/vc" 2>&1); rc=$?
 check "a round-1 note with utc last verifies clean (exit $rc)" test "$rc" -eq 0
-g notes --ref=refs/notes/concrete-review add -f -m "$(note | sed 's/^rounds: 1$/rounds: 2/')" HEAD 2>/dev/null
-(cd "$W" && bash "$VERIFY" HEAD >"$T/vc" 2>&1); rc=$?
-check "ambiguous legacy multi-round evidence fails (exit $rc)" test "$rc" -eq 2
 range_note clean 1 "$B40"
 (cd "$W" && bash "$VERIFY" --required-base HEAD HEAD >"$T/vr" 2>&1); rc=$?
 check "verify.sh refuses a syntactically valid but unknown note base" test "$rc" -eq 2
@@ -492,17 +492,20 @@ check "unknown note base fails for range coverage" grep -q 'review range does no
 # The landing bot's keys went with it: a verdict carried across a rebase, or a landing order, is no
 # longer a key a review note may hold.
 for extra in "carried-from: $B40" "order: 1"; do
-  g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nbase: %s\npieces: 1\nutc: 2026-10-22T00:00:00Z\n%s' "$B40" "$extra")" HEAD
+  g notes --ref=refs/notes/concrete-review-v2 add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nbase: %s\npieces: 1\nutc: 2026-10-22T00:00:00Z\n%s' "$B40" "$extra")" HEAD
   out="$(cd "$W" && bash "$VERIFY" HEAD 2>&1)"; rc=$?
   check "a note with '${extra%%:*}' is malformed: exit 2, bad ${extra%%:*} (got $rc)" test "$rc" -eq 2 -a -n "$(printf '%s' "$out" | grep -F "malformed review note (bad ${extra%%:*})")"
 done
-g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nutc: 2026-10-22T00:00:00Z\nbase: %s\npieces: 1\nsurprise: 1' "$B40")" HEAD
+g notes --ref=refs/notes/concrete-review-v2 add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nutc: 2026-10-22T00:00:00Z\nbase: %s\npieces: 1\nsurprise: 1' "$B40")" HEAD
 (cd "$W" && bash "$VERIFY" HEAD >/dev/null 2>&1); rc=$?
 check "an unknown key is malformed: exit 2 (got $rc)" test "$rc" -eq 2
-g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: findings\nverdict: clean\nrounds: 2\nreviewer: codex\nutc: 2026-10-22T00:00:00Z\nbase: %s\npieces: 1' "$B40")" HEAD
+g notes --ref=refs/notes/concrete-review-v2 add -f -m "$(printf 'verdict: findings\nverdict: clean\nrounds: 2\nreviewer: codex\nutc: 2026-10-22T00:00:00Z\nbase: %s\npieces: 1' "$B40")" HEAD
 (cd "$W" && bash "$VERIFY" HEAD >/dev/null 2>&1); rc=$?
 check "a repeated key is malformed: exit 2 (got $rc)" test "$rc" -eq 2
-g notes --ref=refs/notes/concrete-review remove HEAD 2>/dev/null
+g notes --ref=refs/notes/concrete-review-v2 remove HEAD 2>/dev/null
+
+# The range tests plant invalid notes. Do not let those fixtures enter later publication tests.
+g update-ref refs/notes/concrete-review-v2 "$RANGE_NOTES_TIP"
 
 echo "=== verdict parsing ==="
 parse_case() { # parse_case <marker> <want-exit> <want-verdict> <label>
@@ -562,7 +565,7 @@ review >"$T/out8" 2>&1; rc=$?
 check "blocked wins over findings: verdict blocked, exit 5 (got $rc, $(field verdict))" \
   test "$rc" -eq 5 -a "$(field verdict)" = blocked
 check "the reviewed piece's findings are still recorded" \
-  bash -c "git -C '$W' notes --ref=refs/notes/concrete-review-findings show HEAD | has_match 'counter is never reset'"
+  bash -c "git -C '$W' notes --ref=refs/notes/concrete-review-v2 show HEAD | has_match 'counter is never reset'"
 commit_file b.txt "more" "more work"
 reset_fake
 review >/dev/null 2>&1
@@ -572,7 +575,7 @@ check "and carries the blocked round's findings forward" grep -q "counter is nev
 commit_file a.txt "MARK_REFUSE_ALWAYS" "rewrite a.txt"
 review >/dev/null 2>&1
 check "a blocked round with no findings of its own records the carried ones" \
-  bash -c "git -C '$W' notes --ref=refs/notes/concrete-review-findings show HEAD | has_match 'counter is never reset'"
+  bash -c "git -C '$W' notes --ref=refs/notes/concrete-review-v2 show HEAD | has_match 'counter is never reset'"
 commit_file c.txt "c" "c"
 reset_fake
 review >/dev/null 2>&1
@@ -582,9 +585,9 @@ check "after two blocked rounds in a row the finding still reaches the prompt" \
 echo "=== pre-push hook: a review-notes push runs no gates ==="
 HOOK="$ROOT_DIR/.githooks/pre-push"
 Z=0000000000000000000000000000000000000000
-NOTES_SHA="$(g rev-parse refs/notes/concrete-review)"
-hook_out="$(cd "$W" && printf 'refs/notes/concrete-review %s refs/notes/concrete-review %s\nrefs/notes/concrete-review-findings %s refs/notes/concrete-review-findings %s\n' \
-  "$NOTES_SHA" "$Z" "$(g rev-parse refs/notes/concrete-review-findings)" "$Z" | bash "$HOOK" 2>&1)"; rc=$?
+NOTES_SHA="$(g rev-parse refs/notes/concrete-review-v2)"
+hook_out="$(cd "$W" && printf 'refs/notes/concrete-review-v2 %s refs/notes/concrete-review-v2 %s\n' \
+  "$NOTES_SHA" "$Z" | bash "$HOOK" 2>&1)"; rc=$?
 check "notes-only push: hook exits 0 (got $rc)" test "$rc" -eq 0
 check "notes-only push: hook takes the review-notes tier" grep -q "review-notes push" <<<"$hook_out"
 # Owner sign-off refs: only a record (parentless, its subject's 40-hex name, exactly the seven files)
@@ -615,7 +618,7 @@ hook_out="$(so_hook "refs/owner-signoff/not-a-sha" "$SO_REC")"; rc=$?
 check "a record under a name that is no SHA takes the full tier (exit $rc)" \
   bash -c "[ $rc -eq 1 ] && grep -q 'is a linked worktree' <<<'$hook_out'"
 g worktree remove --force "$T/so-wt"
-hook_out="$(cd "$W" && printf 'refs/heads/mixed %s refs/heads/wip/x %s\nrefs/notes/concrete-review %s refs/notes/concrete-review %s\n' \
+hook_out="$(cd "$W" && printf 'refs/heads/mixed %s refs/heads/wip/x %s\nrefs/notes/concrete-review-v2 %s refs/notes/concrete-review-v2 %s\n' \
   "$(g rev-parse HEAD)" "$Z" "$NOTES_SHA" "$Z" | bash "$HOOK" 2>&1)"; rc=$?
 check "notes alongside a wip push take the wip tier (exit $rc)" \
   bash -c "[ $rc -eq 0 ] && grep -q 'wip/\* backup push' <<<'$hook_out'"
@@ -710,19 +713,20 @@ commit_file a.txt "fixed" "c3"
 review --max-rounds 2 >"$T/cap2" 2>&1; rc=$?
 check "no round 3: refused with exit 3 (got $rc)" test "$rc" -eq 3
 check "and no reviewer call" test "$(calls)" -eq "$before"
-check "no note written on the refused round" bash -c "! git -C '$W' notes --ref=refs/notes/concrete-review show HEAD >/dev/null 2>&1"
+check "no note written on the refused round" bash -c "! git -C '$W' notes --ref=refs/notes/concrete-review-v2 show HEAD >/dev/null 2>&1"
 
 echo "=== notes push: non-fast-forward is fetched, merged and retried ==="
 git clone -q "$T/origin.git" "$T/other" 2>/dev/null
-git -C "$T/other" fetch -q origin "+refs/notes/concrete-review:refs/notes/concrete-review"
+git -C "$T/other" fetch -q origin "+refs/notes/concrete-review-v2:refs/notes/concrete-review-v2"
 OTHER_SHA="$(git -C "$T/other" rev-parse HEAD)"
-git -C "$T/other" notes --ref=refs/notes/concrete-review add -f -m "verdict: clean
+git -C "$T/other" notes --ref=refs/notes/concrete-review-v2 add -f -m "verdict: clean
 rounds: 1
 reviewer: codex
 utc: 2026-10-22T00:00:00Z
 base: $OTHER_SHA
-pieces: 1" "$OTHER_SHA"
-git -C "$T/other" push -q origin refs/notes/concrete-review
+pieces: 1
+diff-start: $OTHER_SHA" "$OTHER_SHA"
+git -C "$T/other" push -q origin refs/notes/concrete-review-v2
 reset_fake
 g checkout -q main && g checkout -qb nonff
 commit_file z.txt "z" "z"
@@ -731,16 +735,22 @@ commit_file z.txt "z" "z"
 review >"$T/out6" 2>&1; rc=$?
 check "review after a concurrent notes push succeeds (exit $rc)" test "$rc" -eq 0
 check "origin keeps the other writer's note" \
-  bash -c "git -C '$T/origin.git' notes --ref=refs/notes/concrete-review show $OTHER_SHA | has_match 'verdict: clean'"
+  bash -c "git -C '$T/origin.git' notes --ref=refs/notes/concrete-review-v2 show $OTHER_SHA | has_match 'verdict: clean'"
 check "origin has our note" \
-  bash -c "git -C '$T/origin.git' notes --ref=refs/notes/concrete-review show $(g rev-parse HEAD) | has_match 'verdict: clean'"
+  bash -c "git -C '$T/origin.git' notes --ref=refs/notes/concrete-review-v2 show $(g rev-parse HEAD) | has_match 'verdict: clean'"
 # Now force the non-fast-forward at push time: another writer pushes between
 # our sync and our push (the fake reviewer does it while it "reviews").
-git -C "$T/other" fetch -q origin "+refs/notes/concrete-review:refs/notes/concrete-review"
+git -C "$T/other" fetch -q origin "+refs/notes/concrete-review-v2:refs/notes/concrete-review-v2"
 cat >"$T/bin/codex-race" <<EOF
 #!/usr/bin/env bash
-git -C "$T/other" notes --ref=refs/notes/concrete-review add -f -m "race note" "$OTHER_SHA"
-git -C "$T/other" push -q origin refs/notes/concrete-review
+git -C "$T/other" notes --ref=refs/notes/concrete-review-v2 add -f -m "verdict: clean
+rounds: 2
+reviewer: codex
+utc: 2026-10-22T00:00:00Z
+base: $OTHER_SHA
+pieces: 1
+diff-start: $OTHER_SHA" "$OTHER_SHA"
+git -C "$T/other" push -q origin refs/notes/concrete-review-v2
 exec "$T/bin/codex" "\$@"
 EOF
 chmod +x "$T/bin/codex-race"
@@ -750,9 +760,9 @@ REVIEW_CODEX_BIN="$T/bin/codex-race" review >"$T/out7" 2>&1; rc=$?
 check "push rejected once, then merged and pushed (exit $rc)" test "$rc" -eq 0
 check "the retry path ran" grep -q "rejected; fetching and merging" "$T/out7"
 check "origin holds the racing note" \
-  bash -c "git -C '$T/origin.git' notes --ref=refs/notes/concrete-review show $OTHER_SHA | has_match 'race note'"
+  bash -c "git -C '$T/origin.git' notes --ref=refs/notes/concrete-review-v2 show $OTHER_SHA | has_match 'rounds: 2'"
 check "origin holds our note" \
-  bash -c "git -C '$T/origin.git' notes --ref=refs/notes/concrete-review show $(g rev-parse HEAD) | has_match 'verdict: clean'"
+  bash -c "git -C '$T/origin.git' notes --ref=refs/notes/concrete-review-v2 show $(g rev-parse HEAD) | has_match 'verdict: clean'"
 
 echo "=== notes push: any other refusal stops at once (exit 6) ==="
 printf '#!/bin/sh\necho "remote policy says no" >&2\nexit 1\n' >"$T/origin.git/hooks/pre-receive"
@@ -764,27 +774,139 @@ rm -f "$T/origin.git/hooks/pre-receive"
 check "a refused (not non-fast-forward) push exits 6 (got $rc)" test "$rc" -eq 6
 check "and is not retried as if it were a race" bash -c "! grep -q 'rejected; fetching and merging' '$T/out9'"
 check "the note is still recorded locally" test "$(field verdict)" = clean
+before="$(calls)"
+review >"$T/out9-retry" 2>&1; rc=$?
+check "a clean HEAD retries publication without repeating the review (exit $rc)" test "$rc" -eq 0 -a "$(calls)" -eq "$before"
+check "the retry published the same note" test "$(git -C "$T/origin.git" notes --ref=concrete-review-v2 list "$(g rev-parse HEAD)")" = "$(g notes --ref=concrete-review-v2 list HEAD)"
 
-echo "=== ISS-0099: a rejection of one notes ref prevents both updates ==="
+echo "=== ISS-0099: refusing publication leaves the prior evidence intact ==="
 cat >"$T/origin.git/hooks/update" <<'EOF'
 #!/bin/sh
-if [ "$1" = refs/notes/concrete-review-findings ]; then
-  echo "remote policy rejects the findings ref" >&2
+if [ "$1" = refs/notes/concrete-review-v2 ]; then
+  echo "remote policy rejects the evidence ref" >&2
   exit 1
 fi
 EOF
 chmod +x "$T/origin.git/hooks/update"
-VERDICT_TIP="$(git -C "$T/origin.git" rev-parse refs/notes/concrete-review)"
-FINDINGS_TIP="$(git -C "$T/origin.git" rev-parse refs/notes/concrete-review-findings)"
+VERDICT_TIP="$(git -C "$T/origin.git" rev-parse refs/notes/concrete-review-v2)"
 g checkout -qb atomic-notes origin/main
 commit_file atomic.txt MARK_FINDING atomic-notes
 reset_fake
 review >"$T/atomic" 2>&1; rc=$?
 rm -f "$T/origin.git/hooks/update"
-check "partial publication is refused (exit $rc)" test "$rc" -eq 6
-check "remote hook rejected only the findings ref" grep -q 'remote policy rejects the findings ref' "$T/atomic"
-check "remote verdict ref did not advance" test "$(git -C "$T/origin.git" rev-parse refs/notes/concrete-review)" = "$VERDICT_TIP"
-check "remote findings ref did not advance" test "$(git -C "$T/origin.git" rev-parse refs/notes/concrete-review-findings)" = "$FINDINGS_TIP"
+check "publication is refused (exit $rc)" test "$rc" -eq 6
+check "remote hook rejected the evidence ref" grep -q 'remote policy rejects the evidence ref' "$T/atomic"
+check "remote evidence ref did not advance" test "$(git -C "$T/origin.git" rev-parse refs/notes/concrete-review-v2)" = "$VERDICT_TIP"
+
+echo "=== interrupted findings write cannot leak into an unrelated publication ==="
+g checkout -qb interrupted origin/main
+commit_file interrupted.txt MARK_NOVERDICT interrupted
+review >"$T/blocked-before" 2>&1; rc=$?
+check "interrupted rerun starts with a published blocked round" test "$rc" -eq 5
+INTERRUPTED_SHA="$(g rev-parse HEAD)"
+INTERRUPTED_BLOB="$(g notes --ref=concrete-review-v2 list "$INTERRUPTED_SHA")"
+mkdir -p "$T/interrupt/bin"
+export REAL_GIT="$(command -v git)"
+export INTERRUPT_MARKER="$T/interrupted-write"
+cat >"$T/interrupt/bin/git" <<'EOF'
+#!/usr/bin/env bash
+# In the old implementation this is the live findings write. In the new one
+# the findings are part of the note written to the private staging ref.
+case "$1:${2:-}:${3:-}" in
+  notes:--ref=refs/notes/concrete-review-findings:add|notes:--ref=refs/notes/review-stage-*:add)
+    "$REAL_GIT" "$@" || exit $?
+    printf 'write completed\n' >"$INTERRUPT_MARKER"
+    kill -KILL "$PPID"
+    ;;
+  *) exec "$REAL_GIT" "$@" ;;
+esac
+EOF
+chmod +x "$T/interrupt/bin/git"
+PATH="$T/interrupt/bin:$PATH" TMPDIR="$T/interrupt" review >"$T/interrupted" 2>&1; rc=$?
+check "review was killed immediately after writing findings (exit $rc)" test "$rc" -eq 137 -a -s "$INTERRUPT_MARKER"
+check "interruption left the canonical local record intact" test "$(g notes --ref=concrete-review-v2 list "$INTERRUPTED_SHA")" = "$INTERRUPTED_BLOB"
+
+g checkout -qb unrelated-after-interrupt origin/main
+commit_file unrelated.txt clean unrelated
+review >"$T/unrelated" 2>&1; rc=$?
+check "unrelated review publishes after the interruption (exit $rc)" test "$rc" -eq 0
+REMOTE_INTERRUPTED="$(git -C "$T/origin.git" notes --ref=concrete-review-v2 list "$INTERRUPTED_SHA")"
+check "remote retains the exact pre-interruption evidence" test "$REMOTE_INTERRUPTED" = "$INTERRUPTED_BLOB"
+
+# A manually corrupted pending record on that other branch must also fail closed.
+g notes --ref=concrete-review-v2 add -f -m "$(note "$INTERRUPTED_SHA" | sed '/^$/q')" "$INTERRUPTED_SHA" 2>/dev/null
+VERDICT_TIP="$(git -C "$T/origin.git" rev-parse refs/notes/concrete-review-v2)"
+commit_file unrelated.txt 'another clean change' unrelated-again
+review >"$T/corrupted" 2>&1; rc=$?
+check "unrelated publication refuses an inconsistent local record (exit $rc)" test "$rc" -eq 6
+check "the refusal identifies the unrelated corrupt record" grep -q "refusing to publish invalid local evidence for $INTERRUPTED_SHA" "$T/corrupted"
+check "invalid pending evidence leaves the remote unchanged" test "$(git -C "$T/origin.git" rev-parse refs/notes/concrete-review-v2)" = "$VERDICT_TIP"
+g notes --ref=concrete-review-v2 add -f -C "$INTERRUPTED_BLOB" "$INTERRUPTED_SHA" 2>/dev/null
+
+echo "=== legacy round accounting qualifies for exact-SHA owner sign-off ==="
+g checkout -qb legacy-signoff origin/main
+commit_file scripts/fixture.sh 'echo change' legacy-signoff
+LEGACY_SHA="$(g rev-parse HEAD)"
+legacy_note() {
+  g notes --ref=concrete-review add -f -m "verdict: $1
+rounds: 3
+reviewer: codex
+utc: 2026-11-21T00:00:00Z
+base: $2
+pieces: 1" HEAD 2>/dev/null
+}
+legacy_note findings "$BASE"
+g notes --ref=concrete-review-findings add -m 'legacy open finding' HEAD
+reset_fake
+REVIEW_PUSH=0 review --max-rounds 3 >"$T/legacy-cap" 2>&1; rc=$?
+check "legacy round 3 still caps review (exit $rc)" test "$rc" -eq 3 -a "$(calls)" -eq 0
+check "legacy open findings survive migration" grep -q 'legacy open finding' "$T/legacy-cap"
+printf 'review of %s\n' "$LEGACY_SHA" >"$T/request"
+printf 'VERDICT: ACCEPT\n' >"$T/accept"
+SIGNOFF="$ROOT_DIR/scripts/land/signoff.sh"
+record_approval() {
+  (cd "$W" && bash "$SIGNOFF" record "$LEGACY_SHA" --base "$BASE" --rounds-at "$LEGACY_SHA" \
+    --date 2026-11-21 --quote "Approve $LEGACY_SHA" \
+    --codex-request "$T/request" --codex "$T/accept" \
+    --kimi-request "$T/request" --kimi "$T/accept" --agy-request "$T/request" --agy "$T/accept")
+}
+legacy_note findings "$LEGACY_SHA"
+record_approval >"$T/legacy-narrow" 2>&1; rc=$?
+check "narrow legacy note cannot qualify an approval (exit $rc)" test "$rc" -eq 1
+check "narrow legacy note fails range validation" grep -q 'review range does not cover required base' "$T/legacy-narrow"
+legacy_note findings "$BASE"
+record_approval >"$T/legacy-approval" 2>&1; rc=$?
+check "legacy round 3 lets sign-off record owner approval (exit $rc)" test "$rc" -eq 0
+(cd "$W" && bash "$SIGNOFF" verify "$LEGACY_SHA" --base "$BASE") >"$T/legacy-approval" 2>&1; rc=$?
+check "the recorded owner approval verifies (exit $rc)" test "$rc" -eq 0
+legacy_note clean "$BASE"
+(cd "$W" && bash "$VERIFY" --required-base "$BASE" HEAD) >"$T/legacy-coverage" 2>&1; rc=$?
+check "legacy clean round 3 is ineligible as clean landing evidence (exit $rc)" test "$rc" -eq 2
+
+echo "=== mixed versions: the old reviewer cannot replace new evidence ==="
+# Run the actual pre-migration scripts from the fixed repository revision.
+PRE_MIGRATION=ff462b3180acd6ef8c03566e7e53e2be0ff489f8
+mkdir -p "$T/old/scripts/review" "$T/old/scripts/checks/lib"
+for file in scripts/review/{review.sh,verify.sh,split_diff.py} scripts/checks/lib/has_match.sh; do
+  git -C "$ROOT_DIR" show "$PRE_MIGRATION:$file" >"$T/old/$file" || exit 1
+done
+g checkout -qb mixed-version origin/main
+commit_file mixed.txt clean mixed-version
+MIXED_SHA="$(g rev-parse HEAD)"
+range_note findings 3 "$BASE"
+MIXED_BLOB="$(g notes --ref=concrete-review-v2 list "$MIXED_SHA")"
+g push -q origin refs/notes/concrete-review-v2
+reset_fake
+(cd "$W" && bash "$T/old/scripts/review/review.sh" --max-rounds 3) >"$T/old-review" 2>&1; rc=$?
+check "old reviewer writes a clean round on its legacy ref (exit $rc)" test "$rc" -eq 0 -a "$(calls)" -eq 1
+check "old reviewer actually published clean legacy evidence" bash -c   'git -C "$1" notes --ref=concrete-review show "$2" | has_match "^verdict: clean$"' _ "$T/origin.git" "$MIXED_SHA"
+(cd "$W" && bash "$VERIFY" --fetch --required-base "$BASE" HEAD) >"$T/mixed-verify" 2>&1; rc=$?
+check "new verifier still sees the round 3 findings (exit $rc)" test "$rc" -eq 1
+check "older writer left the new evidence byte-for-byte intact" test "$(g notes --ref=concrete-review-v2 list HEAD)" = "$MIXED_BLOB"
+reset_fake
+review --max-rounds 3 >"$T/mixed-cap" 2>&1; rc=$?
+check "older writer cannot reset the cap (exit $rc)" test "$rc" -eq 3 -a "$(calls)" -eq 0
+check "older writer cannot clear the new findings" grep -q ANCESTOR_OPEN_FINDING "$T/mixed-cap"
 
 echo "=== usage errors ==="
 review --pieces zero >/dev/null 2>&1; rc=$?

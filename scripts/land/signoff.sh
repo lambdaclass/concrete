@@ -2,12 +2,12 @@
 # OWNER SIGN-OFF RECORDS (ROADMAP R-0618; owner, 2026-11-08: "when a branch reaches its review-round
 # cap, the owner may approve one exact commit SHA after Codex, Kimi and agy have all reviewed it; the
 # approval is recorded"). A sign-off is review provenance for that one commit, as a clean
-# refs/notes/concrete-review note is (scripts/review/verify.sh); train.sh accepts either for a member.
+# refs/notes/concrete-review-v2 note is (scripts/review/verify.sh); train.sh accepts either for a member.
 #
-#   signoff.sh record <commit> --base BASE --rounds-at NOTED --date YYYY-MM-DD --quote TEXT
+#   signoff.sh record <commit> --base BASE --rounds-at NOTED --date YYYY-MM-DD --quote TEXT [--notes-ref REF]
 #                     --codex-request FILE --codex FILE --kimi-request FILE --kimi FILE
 #                     --agy-request FILE --agy FILE
-#   signoff.sh verify <commit> --base BASE
+#   signoff.sh verify <commit> --base BASE [--notes-ref REF]
 #
 # THE RECORD is the ref refs/owner-signoff/<full sha>, a parentless commit whose tree holds exactly
 # seven plain files: record.txt and, for each reviewer r in codex, kimi and agy, r-request.txt and
@@ -52,7 +52,6 @@
 #             2 no sign-off, or a usage error.
 set -euo pipefail
 PREFIX=refs/owner-signoff
-NOTES_REF=refs/notes/concrete-review
 REVIEWERS="codex kimi agy"
 VERIFY="$(cd "$(dirname "${BASH_SOURCE[0]}")/../review" && pwd)/verify.sh"
 
@@ -103,11 +102,13 @@ diff_class() {
 cmd_record() {
   [ $# -ge 1 ] || die "record: name the commit"
   local sha date="" quote="" base="" at="" r f q v; sha="$(git rev-parse -q --verify "$1^{commit}")" || die "record: not a commit: $1"; shift
+  local notes_ref=""
   local codex="" kimi="" agy="" codex_request="" kimi_request="" agy_request=""
   while [ $# -gt 0 ]; do
     [ $# -ge 2 ] || die "record: $1 needs a value"
     case "$1" in
       --date) date="$2" ;; --quote) quote="$2" ;; --base) base="$2" ;; --rounds-at) at="$2" ;;
+      --notes-ref) git check-ref-format "$2" || die "record: --notes-ref needs a full ref"; notes_ref="$2" ;;
       --codex) codex="$2" ;; --kimi) kimi="$2" ;; --agy) agy="$2" ;;
       --codex-request) codex_request="$2" ;; --kimi-request) kimi_request="$2" ;; --agy-request) agy_request="$2" ;;
       *) die "record: unknown option $1" ;;
@@ -143,13 +144,13 @@ verdict-$r: $r.txt $(sha256 < "$f")"
   tree="$(printf '%s100644 blob %s\trecord.txt\n' "$entries" "$v" | git mktree)"
   commit="$(git commit-tree "$tree" -m "owner sign-off of $sha ($date)")"
   local out
-  out="$( check "$sha" "$commit" "$base" )" || { printf '%s\nsignoff: not recorded (nothing written)\n' "$out" >&2; exit 1; }
+  out="$( check "$sha" "$commit" "$base" "$notes_ref" )" || { printf '%s\nsignoff: not recorded (nothing written)\n' "$out" >&2; exit 1; }
   git update-ref "$PREFIX/$sha" "$commit"
   echo "$out"
   echo "signoff: recorded $PREFIX/$sha -> ${commit:0:10}; push it to origin"
 }
 
-# check SHA RECORD BASE: judge the record commit RECORD as a sign-off of SHA (exit 1 with the reason)
+# check SHA RECORD BASE [NOTES_REF]: judge the record commit RECORD as a sign-off of SHA (exit 1 with the reason)
 check() {
   local sha="$1"
   local obj="$2"
@@ -183,11 +184,12 @@ check() {
   git merge-base --is-ancestor "$at" "$base" 2>/dev/null || arc=$?
   { [ "$arc" = 1 ] && git merge-base --is-ancestor "$at" "$sha" 2>/dev/null; } \
     || bad "rounds-at ${at:0:10} is not one of ${sha:0:10}'s own commits (an ancestor or itself, not on ${base:0:10})"
-  # verify.sh judges the note as review.sh wrote it: 0 clean, 1 findings or blocked (both well formed,
-  # and both count: the cap is rounds used); 2 is no note or a malformed one.
-  local vout vrc=0
-  vout="$(bash "$VERIFY" --required-base "$base" "$at" 2>&1)" || vrc=$?
-  [ "$vrc" = 0 ] || [ "$vrc" = 1 ] || bad "rounds-at ${at:0:10} carries no well-formed review.sh note: ${vout//$'\n'/ }"
+  # Sign-off uses the round count, including legacy notes with valid scope.
+  local vout
+  local note_args=()
+  if [ -n "${4:-}" ]; then note_args=(--notes-ref "$4"); fi
+  vout="$(bash "$VERIFY" --metadata-only ${note_args[@]+"${note_args[@]}"} --required-base "$base" "$at" 2>&1)" \
+    || bad "rounds-at ${at:0:10} carries no well-formed review.sh note: ${vout//$'\n'/ }"
   rounds="$(printf '%s\n' "$vout" | sed -n 's/.*(round \([1-9][0-9]*\), reviewer .*/\1/p' | head -1)"
   [ -n "$rounds" ] || bad "rounds-at ${at:0:10}: no round count in '$vout'"
   [ "$rounds" -ge "$cap" ] \
@@ -224,16 +226,20 @@ check() {
 }
 
 cmd_verify() {
-  local sha base=""
-  [ $# -ge 1 ] || die "usage: signoff.sh verify <commit> --base BASE"
+  local sha base="" notes_ref=""
+  [ $# -ge 1 ] || die "usage: signoff.sh verify <commit> --base BASE [--notes-ref REF]"
   sha="$(git rev-parse -q --verify "$1^{commit}")" || die "verify: not a commit: $1"; shift
   while [ $# -gt 0 ]; do
-    case "$1" in --base) [ $# -ge 2 ] || die "verify: --base needs a value"; base="$2"; shift 2 ;; *) die "verify: unknown option $1" ;; esac
+    case "$1" in
+      --base) [ $# -ge 2 ] || die "verify: --base needs a value"; base="$2"; shift 2 ;;
+      --notes-ref) [ $# -ge 2 ] && git check-ref-format "$2" || die "verify: --notes-ref needs a full ref"; notes_ref="$2"; shift 2 ;;
+      *) die "verify: unknown option $1" ;;
+    esac
   done
   [ -n "$base" ] || die "verify: --base BASE is required (the cap is the class of the diff against it)"
   base="$(git rev-parse -q --verify "$base^{commit}")" || die "verify: --base is not a commit"
   git rev-parse -q --verify "$PREFIX/$sha^{commit}" >/dev/null || { echo "$sha has no owner sign-off ($PREFIX/$sha)"; exit 2; }
-  check "$sha" "$(git rev-parse "$PREFIX/$sha^{commit}")" "$base"
+  check "$sha" "$(git rev-parse "$PREFIX/$sha^{commit}")" "$base" "$notes_ref"
 }
 
 case "${1:-}" in

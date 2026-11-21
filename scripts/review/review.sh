@@ -8,7 +8,7 @@
 # the checkout's HEAD, or nothing runs (exit 2): the review always reads HEAD's tree.
 #
 # Runs ONE review round on HEAD and records the result as a git note on HEAD
-# under refs/notes/concrete-review, which it then pushes.
+# under refs/notes/concrete-review-v2, which it then pushes.
 #
 #   round 1      reviews the full diff base..HEAD (base defaults to the merge-base
 #                with origin/main);
@@ -33,7 +33,7 @@
 # Environment (mostly for the test gate, scripts/checks/review_tool.sh):
 #   REVIEW_CODEX_BIN    reviewer binary (default: codex)
 #   REVIEW_MAIN_REF     ref the default base is computed against (default: origin/main)
-#   REVIEW_PUSH         1 to fetch/push the notes refs (default: 1)
+#   REVIEW_PUSH         1 to fetch/push the notes (default: 1)
 #   REVIEW_PIECE_BYTES  size limit of one piece in bytes (default: 60000)
 
 set -euo pipefail
@@ -48,8 +48,8 @@ REMOTE=origin
 MAIN_REF="${REVIEW_MAIN_REF:-$REMOTE/main}"
 PUSH="${REVIEW_PUSH:-1}"
 PIECE_BYTES="${REVIEW_PIECE_BYTES:-60000}"
-NOTES_REF="refs/notes/concrete-review"
-FINDINGS_REF="refs/notes/concrete-review-findings"
+source "$SCRIPT_DIR/refs.sh"
+NOTES_REF="$REVIEW_NOTES_REF"
 REVIEWER="codex"
 
 BASE=""
@@ -81,36 +81,97 @@ fi
 command -v "$CODEX_BIN" >/dev/null 2>&1 || die "reviewer binary not found: $CODEX_BIN"
 
 WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
+STAGE_REF="refs/notes/review-stage-$$-$RANDOM"
+SYNC_REF="refs/notes/review-sync-$$-$RANDOM"
+cleanup() {
+  git update-ref -d "$STAGE_REF"
+  git update-ref -d "$SYNC_REF"
+  rm -rf "$WORK"
+}
+trap cleanup EXIT
 
 # ---------------------------------------------------------------- notes sync
-# Fetch the remote notes refs and merge them into the local ones. On a conflict
-# for the same commit the local note wins (`-s ours`): it is the newer result.
-sync_notes() {
-  [ "$PUSH" = 1 ] || return 0
-  local ref tmp
-  for ref in "$NOTES_REF" "$FINDINGS_REF"; do
-    tmp="refs/notes/review-sync-${ref##*/}"
-    if git fetch -q "$REMOTE" "+$ref:$tmp" 2>/dev/null; then
-      if git show-ref -q --verify "$ref"; then
-        git notes --ref="$ref" merge -q -s ours "$tmp" >/dev/null 2>&1 \
-          || { echo "review: could not merge remote $ref" >&2; git update-ref -d "$tmp"; return 1; }
-      else
-        git update-ref "$ref" "$tmp"
-      fi
-      git update-ref -d "$tmp"
-    fi
-  done
+# Compare notes by annotated object ID, independent of changes in Git's fanout.
+note_entries() {
+  git ls-tree -r --format='%(objectname) %(path)' "$1" |
+    tr -d / | awk 'length($2) == 40 && $2 ~ /^[0-9a-f]+$/'
 }
 
-# Push both notes refs; on a non-fast-forward, fetch + merge and retry.
+sync_notes() {
+  [ "$PUSH" = 1 ] || return 0
+  fetch_review_ref "$REMOTE" "$NOTES_REF" "$SYNC_REF" || return 1
+  local remote local_tip common merged
+  remote="$(git rev-parse -q --verify "$SYNC_REF")" || return 0
+  local_tip="$(git rev-parse -q --verify "$NOTES_REF" || true)"
+  if [ -z "$local_tip" ]; then
+    git update-ref "$NOTES_REF" "$remote" ""
+    return
+  fi
+  git merge-base --is-ancestor "$remote" "$local_tip" && return 0
+  if git merge-base --is-ancestor "$local_tip" "$remote"; then
+    git update-ref "$NOTES_REF" "$remote" "$local_tip"
+    return
+  fi
+
+  git update-ref "$STAGE_REF" "$local_tip" || return 1
+  git notes --ref="$STAGE_REF" merge -q -s ours "$SYNC_REF" || return 1
+  merged="$(git rev-parse --verify "$STAGE_REF")" || return 1
+  # An automatic merge can combine unrelated notes. If both writers changed
+  # the same note differently, require a retry against reconciled evidence.
+  common="$(git merge-base "$local_tip" "$remote" || true)"
+  : >"$WORK/common-notes"
+  if [ -n "$common" ]; then note_entries "$common" >"$WORK/common-notes" || return 1; fi
+  note_entries "$remote" >"$WORK/remote-notes" || return 1
+  note_entries "$merged" >"$WORK/merged-notes" || return 1
+  awk '
+    FILENAME == ARGV[1] { base[$2] = $1; next }
+    FILENAME == ARGV[2] { remote[$2] = $1; next }
+                       { merged[$2] = $1 }
+    END {
+      for (sha in remote)
+        if (remote[sha] != base[sha] && merged[sha] != remote[sha]) exit 1
+      for (sha in base)
+        if (!(sha in remote) && (sha in merged)) exit 1
+    }
+  ' "$WORK/common-notes" "$WORK/remote-notes" "$WORK/merged-notes" \
+    || { echo "review: conflicting local and remote evidence; reconcile the notes before retrying" >&2; return 1; }
+  git update-ref "$NOTES_REF" "$merged" "$local_tip"
+}
+
+# Validate every new or changed record against the fetched tip before pushing
+# the exact staged snapshot. A malformed pending record may be on another branch.
+validate_publication() {
+  local tip="$1"
+  local previous="$2"
+  local sha rc
+  : >"$WORK/remote-notes"
+  if [ -n "$previous" ]; then note_entries "$previous" >"$WORK/remote-notes" || return 1; fi
+  note_entries "$tip" >"$WORK/local-notes" || return 1
+  awk '
+    FILENAME == ARGV[1] { remote[$2] = $1; next }
+    { if ($1 != remote[$2]) print $2; delete remote[$2] }
+    END { for (sha in remote) exit 1 }
+  ' "$WORK/remote-notes" "$WORK/local-notes" >"$WORK/changed-notes" \
+    || { echo "review: refusing to delete published review evidence" >&2; return 1; }
+  while IFS= read -r sha; do
+    rc=0
+    bash "$SCRIPT_DIR/verify.sh" --notes-ref "$STAGE_REF" "$sha" >/dev/null || rc=$?
+    [ "$rc" -le 1 ] \
+      || { echo "review: refusing to publish invalid local evidence for $sha" >&2; return 1; }
+  done <"$WORK/changed-notes"
+}
+
+# Push the captured notes commit; on a non-fast-forward, fetch + merge and retry.
 push_notes() {
   [ "$PUSH" = 1 ] || return 0
-  local attempt
-  local refs=("$NOTES_REF")
-  git show-ref -q --verify "$FINDINGS_REF" && refs+=("$FINDINGS_REF")
+  local attempt tip previous
   for attempt in 1 2 3; do
-    if git push --atomic -q "$REMOTE" "${refs[@]}" 2>"$WORK/push.err"; then
+    tip="$(git rev-parse --verify "$NOTES_REF")" || return 1
+    previous="$(git rev-parse -q --verify "$SYNC_REF" || true)"
+    [ "$tip" != "$previous" ] || return 0
+    git update-ref "$STAGE_REF" "$tip" || return 1
+    validate_publication "$tip" "$previous" || return 1
+    if git push -q "$REMOTE" "$tip:$NOTES_REF" 2>"$WORK/push.err"; then
       return 0
     fi
     # Only a non-fast-forward is cured by fetch + merge. Anything else (a hook
@@ -125,23 +186,28 @@ push_notes() {
   return 1
 }
 
+publish_or_exit() {
+  if ! push_notes; then
+    echo "review: the result is recorded locally but the review notes could not be pushed to $REMOTE." >&2
+    echo "review: resolve the publication error and rerun review.sh to retry." >&2
+    exit 6
+  fi
+}
+
 note_field() { # note_field <text> <key>
   printf '%s\n' "$1" | awk -v k="$2: " 'index($0, k) == 1 && !done { print substr($0, length(k) + 1); done = 1 }'
 }
 
-findings_for() { # findings_for <sha> <verdict> <expected-blob>
+legacy_findings() {
   local sha="$1"
   local verdict="$2"
-  local expected="$3"
-  local blob
-  if ! blob="$(git notes --ref="$FINDINGS_REF" list "$sha" 2>/dev/null)"; then
+  local ref="$3"
+  local findings
+  if ! findings="$(git notes --ref="$ref" show "$sha" 2>/dev/null)"; then
     # Legacy blocked notes may have no text. A findings verdict always needs it.
-    [ "$verdict" = blocked ] && [ -z "$expected" ]
+    [ "$verdict" = blocked ]
     return
   fi
-  [ -z "$expected" ] || [ "$blob" = "$expected" ] || return 1
-  local findings
-  findings="$(git cat-file blob "$blob")" || return 1
   [[ "$findings" =~ [^[:space:]] ]] || return 1
   printf '%s\n' "$findings"
 }
@@ -157,7 +223,12 @@ cap_message() { # cap_message <rounds-done> <findings-text>
 
 # ---------------------------------------------------------------- state
 sync_notes || die "notes sync failed"
+if [ "$PUSH" = 1 ]; then
+  fetch_review_ref "$REMOTE" "$LEGACY_REVIEW_REF" "$PUBLISHED_LEGACY_REVIEW_REF" || die "could not read legacy evidence"
+  fetch_review_ref "$REMOTE" "$LEGACY_FINDINGS_REF" "$PUBLISHED_LEGACY_FINDINGS_REF" || die "could not read legacy findings"
+fi
 
+intake_tip="$(git rev-parse -q --verify "$NOTES_REF" || true)"
 HEAD_SHA="$(git rev-parse HEAD)"
 if [ -z "$BASE" ]; then
   git rev-parse -q --verify "$MAIN_REF^{commit}" >/dev/null || die "no $MAIN_REF; pass --base"
@@ -179,18 +250,31 @@ PREV_FINDINGS=""
 COVERING_REVIEWS=""
 while read -r c; do
   [ -n "$c" ] || continue
-  # Schema first: malformed notes supply neither rounds nor review evidence.
-  blob="$(git notes --ref="$NOTES_REF" list "$c" 2>/dev/null)" || continue
-  vrc=0
-  bash "$SCRIPT_DIR/verify.sh" --metadata-only "$c" >/dev/null 2>&1 || vrc=$?
-  [ "$vrc" -le 1 ] || continue
+  # New evidence takes precedence for the same commit, even when invalid.
+  ref="$NOTES_REF"
+  if ! blob="$(git notes --ref="$ref" list "$c" 2>/dev/null)"; then
+    ref="$PUBLISHED_LEGACY_REVIEW_REF"
+    if [ "$PUSH" != 1 ] || ! blob="$(git notes --ref="$ref" list "$c" 2>/dev/null)"; then
+      ref="$LEGACY_REVIEW_REF"
+      blob="$(git notes --ref="$ref" list "$c" 2>/dev/null)" || continue
+    fi
+  fi
   n="$(git cat-file blob "$blob")"
   v="$(note_field "$n" verdict)"
   r="$(note_field "$n" rounds)"
+  if ! bash "$SCRIPT_DIR/verify.sh" --metadata-only --notes-ref "$ref" "$c" >"$WORK/intake"; then
+    if [ "$ref" = "$NOTES_REF" ] && { [ "$v" = findings ] || [ "$v" = blocked ]; }; then
+      die "invalid review evidence for $c round $r: $(head -n 1 "$WORK/intake")"
+    fi
+    continue
+  fi
   [ "$r" -le "$PREV_ROUNDS" ] || PREV_ROUNDS="$r"
-  vrc=0
-  bash "$SCRIPT_DIR/verify.sh" --required-base "$BASE_SHA" "$c" >/dev/null 2>&1 || vrc=$?
-  [ "$(git notes --ref="$NOTES_REF" list "$c" 2>/dev/null)" = "$blob" ] \
+  vrc=2
+  if [ "$ref" = "$NOTES_REF" ]; then
+    vrc=0
+    bash "$SCRIPT_DIR/verify.sh" --required-base "$BASE_SHA" "$c" >/dev/null 2>&1 || vrc=$?
+  fi
+  [ "$(git notes --ref="$ref" list "$c" 2>/dev/null)" = "$blob" ] \
     || die "review note changed during intake for $c; retry"
   if [ -z "$PREV_SHA" ]; then
     PREV_SHA="$c" PREV_VERDICT="$v"
@@ -204,12 +288,14 @@ while read -r c; do
   done
   if [ "$covered" = 0 ] && [ "$vrc" -gt 1 ]; then INSUFFICIENT_RANGE=1; fi
   if [ "$covered" = 0 ] && [ "$v" != clean ]; then
-    expected_findings="$(note_field "$n" findings-note)"
-    if [ -n "$(note_field "$n" diff-start)" ] && [ -z "$expected_findings" ]; then
-      die "missing findings-note binding for $c round $r"
+    if [ "$ref" != "$NOTES_REF" ]; then
+      findings_ref="$LEGACY_FINDINGS_REF"
+      if [ "$ref" = "$PUBLISHED_LEGACY_REVIEW_REF" ]; then findings_ref="$PUBLISHED_LEGACY_FINDINGS_REF"; fi
+      findings="$(legacy_findings "$c" "$v" "$findings_ref")" \
+        || die "missing or mismatched findings text for $c round $r"
+    else
+      findings="${n#*$'\n\n'}"
     fi
-    findings="$(findings_for "$c" "$v" "$expected_findings")" \
-      || die "missing or mismatched findings text for $c round $r"
     PREV_FINDINGS="$PREV_FINDINGS
 $findings"
     if [ "$v" = findings ]; then OPEN_FINDINGS=1; fi
@@ -223,6 +309,7 @@ $findings"
 done < <(git rev-list --topo-order HEAD "^$BASE_SHA")
 
 if [ "$INSUFFICIENT_RANGE" = 0 ] && [ "$PREV_VALID" = 1 ] && [ "$PREV_SHA" = "$HEAD_SHA" ] && [ "$PREV_VERDICT" != blocked ]; then
+  publish_or_exit
   if [ "$PREV_VERDICT" = clean ]; then
     echo "review: HEAD $HEAD_SHA already reviewed clean (round $PREV_ROUNDS)"
     exit 0
@@ -447,9 +534,9 @@ if [ "$VERDICT" = blocked ] && [ -n "$PREV_FINDINGS" ]; then
 $PREV_FINDINGS"
 fi
 if [ "$VERDICT" != clean ]; then
-  printf '%s\n' "${FINDINGS_TEXT#$'\n'}" >"$WORK/findings"
-  git notes --ref="$FINDINGS_REF" add -f -F "$WORK/findings" "$HEAD_SHA"
-  FINDINGS_NOTE="$(git notes --ref="$FINDINGS_REF" list "$HEAD_SHA")"
+  # Canonicalise once so the hash covers the exact text stored in the note.
+  printf '%s\n' "$FINDINGS_TEXT" | git stripspace >"$WORK/findings"
+  FINDINGS_NOTE="$(git hash-object -- "$WORK/findings")"
 fi
 cat >"$WORK/note" <<EOF
 verdict: $VERDICT
@@ -464,18 +551,20 @@ if [ "$FROM" != "$BASE_SHA" ]; then
   printf 'predecessor-note: %s\n' "$REVIEWED_NOTE" >>"$WORK/note"
 fi
 if [ "$VERDICT" != clean ]; then
-  printf 'findings-note: %s\n' "$FINDINGS_NOTE" >>"$WORK/note"
+  printf 'findings-note: %s\n\n' "$FINDINGS_NOTE" >>"$WORK/note"
+  cat "$WORK/findings" >>"$WORK/note"
 fi
-git notes --ref="$NOTES_REF" add -f -F "$WORK/note" "$HEAD_SHA"
+if [ -n "$intake_tip" ]; then git update-ref "$STAGE_REF" "$intake_tip"; fi
+git notes --ref="$STAGE_REF" add -f -F "$WORK/note" "$HEAD_SHA"
+vrc=0
+bash "$SCRIPT_DIR/verify.sh" --notes-ref "$STAGE_REF" --required-base "$BASE_SHA" "$HEAD_SHA" >/dev/null || vrc=$?
+[ "$vrc" -le 1 ] || die "staged review evidence did not verify"
+git update-ref "$NOTES_REF" "$STAGE_REF" "$intake_tip" || die "local review notes changed; retry"
 
 echo "review: round $ROUND verdict $VERDICT ($K piece(s)); raw output: ${RAW#$ROOT/}"
 [ "$VERDICT" = clean ] || printf '%s\n' "${FINDINGS_TEXT#$'\n'}"
 
-if ! push_notes; then
-  echo "review: the result is recorded locally but the review notes could not be pushed to $REMOTE." >&2
-  echo "review: retry publication with an atomic push of both review notes refs if present." >&2
-  exit 6
-fi
+publish_or_exit
 
 case "$VERDICT" in
   clean) exit 0 ;;
