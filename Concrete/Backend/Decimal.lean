@@ -11,7 +11,7 @@ def DecimalMagnitude (digits : List Char) : Prop :=
 /-- The grammar and value of a complete decimal integer token. -/
 def DecimalToken (token : String) (value : Int) : Prop :=
   (DecimalMagnitude token.toList ∧ value = Int.ofNat (Nat.ofDigitChars 10 token.toList 0)) ∨
-  ∃ digits, token.toList = '-' :: digits ∧ DecimalMagnitude digits ∧
+  ∃ digits, token.toList = '-' :: digits ∧ DecimalMagnitude digits ∧ digits ≠ ['0'] ∧
     value = -Int.ofNat (Nat.ofDigitChars 10 digits 0)
 
 private def parseMagnitude (digits : List Char) : Option Nat :=
@@ -22,7 +22,8 @@ private def parseMagnitude (digits : List Char) : Option Nat :=
 
 def parseDecimal (token : String) : Option Int :=
   match token.toList with
-  | '-' :: digits => (parseMagnitude digits).map fun n => -Int.ofNat n
+  | '-' :: digits =>
+    if digits = ['0'] then none else (parseMagnitude digits).map fun n => -Int.ofNat n
   | digits => (parseMagnitude digits).map Int.ofNat
 
 private theorem parseMagnitude_exact (digits : List Char) (n : Nat) :
@@ -52,7 +53,7 @@ theorem parseDecimal_exact (token : String) (value : Int) :
   | cons c digits =>
     by_cases hc : c = '-'
     · subst c
-      simp [parseDecimal, DecimalToken, h, neg, mapped]
+      by_cases hz : digits = ['0'] <;> simp [parseDecimal, DecimalToken, h, neg, mapped, hz]
     · simp [parseDecimal, DecimalToken, h, hc, mapped]
 
 private theorem positive_digits_head (n : Nat) (h : 0 < n) :

@@ -104,6 +104,15 @@ theorem Concrete.Backend.LCB.Proof.enc_int_core axioms: propext
 theorem Concrete.Backend.LLVM.pattern_agrees axioms: 
 theorem Concrete.Backend.LLVM.pattern_fits axioms: propext, Quot.sound
 theorem Concrete.Backend.LLVM.pattern_roundTrip axioms: propext, Quot.sound
+theorem Concrete.Backend.LLVM.operand_field axioms: propext
+theorem Concrete.Backend.LLVM.ret_immediate_field axioms: propext
+theorem Concrete.Backend.LLVM.bin_fields axioms: propext
+theorem Concrete.Backend.LLVM.binOvf_fields axioms: propext
+theorem Concrete.Backend.LLVM.trunc_field axioms: propext
+theorem Concrete.Backend.LLVM.phi_fields axioms: propext, Quot.sound
+theorem Concrete.Backend.LLVM.Assembly.parse_render_i32_return axioms: propext, Classical.choice, Quot.sound
+theorem Concrete.Backend.LLVM.Assembly.parse_render_i32_result axioms: propext, Classical.choice, Quot.sound
+theorem Concrete.Backend.LLVM.Assembly.parse_render_i8_add axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.Backend.LLVM.operand_token axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.Backend.LLVM.operand_parse axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.Backend.LLVM.operand_roundTrip axioms: propext, Classical.choice, Quot.sound

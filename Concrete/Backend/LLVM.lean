@@ -25,7 +25,7 @@ open ScalarBridge (toCore)
 open Concrete.Backend.Runtime (indexed)
 
 def ty : Ty → TypeCode
-  | .int t => .integer (toCore t)
+  | .int t => .integer (Width.ofCore (toCore t))
   | .bool => .flag
 
 /-- The bit pattern of `v` in `t`, as an unsigned decimal. -/
@@ -48,25 +48,49 @@ theorem pattern_roundTrip (t : IntTy) (v : Int) (h : (toCore t).InRange v) :
     ofBits (toCore t) (pattern t v) = v :=
   ConcreteSpec.Core.ofBits_toBits _ _ h
 
+/-- Encode a BIR scalar before it enters the assembly representation. -/
 def operand : Operand → Argument
   | .reg r => .local (.register r)
-  | .imm t v => .immediate (.scalar (toCore t) v)
+  | .imm t v => .immediate (.natural (toBits (toCore t) v))
 
-/-- The token carried by a scalar immediate in the renderer. -/
-def operandToken (t : IntTy) (v : Int) : String :=
-  (Immediate.scalar (toCore t) v).token
+/-- Read the immediate field of the actual LLVM argument. -/
+def Argument.immediateValue : Argument → Option Nat
+  | .immediate v => some v.value
+  | _ => none
+
+private def expectedImmediate : Operand → Option Nat
+  | .reg _ => none
+  | .imm ty value => some (toBits (toCore ty) value)
+
+private theorem operand_immediate (a : Operand) :
+    (operand a).immediateValue = expectedImmediate a := by
+  cases a <;> rfl
+
+/-- Law. The LLVM producer puts the Spec/Scalar encoding of the BIR payload
+in the immediate field consumed by the renderer. -/
+theorem operand_field (t : IntTy) (v : Int) :
+    (operand (.imm t v)).immediateValue = some (toBits (toCore t) v) :=
+  rfl
+
+/-- Read the token through the actual LLVM argument. -/
+def Argument.immediateToken : Argument → Option String
+  | .immediate v => some v.token
+  | _ => none
 
 /-- Law. Every emitted BIR immediate is a token in the decimal grammar.
 Authority: docs/decisions.md#od126. -/
 theorem operand_token (t : IntTy) (v : Int) :
-    DecimalToken (operandToken t v) (Int.ofNat (pattern t v)) :=
-  decimal_token (pattern t v)
+    ∃ token, (operand (.imm t v)).immediateToken = some token ∧
+      DecimalToken token (Int.ofNat (pattern t v)) :=
+  ⟨_, rfl, decimal_token (pattern t v)⟩
 
 /-- Law. The emitted decimal token parses to exactly the encoded bit pattern.
 Authority: docs/decisions.md#od126. -/
 theorem operand_parse (t : IntTy) (v : Int) :
-    parseDecimal (operandToken t v) = some (Int.ofNat (pattern t v)) :=
-  (parseDecimal_exact _ _).2 (operand_token t v)
+    (operand (.imm t v)).immediateToken.bind parseDecimal = some (Int.ofNat (pattern t v)) := by
+  obtain ⟨token, field, valid⟩ := operand_token t v
+  rw [field, Option.bind_some]
+  exact (parseDecimal_exact _ _).2 valid
 
 private def decodePattern (t : IntTy) : Int → Option Int
   | .ofNat n => if n < 2 ^ (toCore t).bits then some (ofBits (toCore t) n) else none
@@ -76,7 +100,7 @@ private def decodePattern (t : IntTy) : Int → Option Int
 The interpretation of the enclosing LLVM text still uses `P_print`.
 Authority: docs/decisions.md#od126. -/
 theorem operand_roundTrip (t : IntTy) (v : Int) (h : (toCore t).InRange v) :
-    (parseDecimal (operandToken t v)).bind (decodePattern t) = some v := by
+    ((operand (.imm t v)).immediateToken.bind parseDecimal).bind (decodePattern t) = some v := by
   rw [operand_parse, Option.bind_some, decodePattern]
   simp [pattern_fits t v, pattern_roundTrip t v h]
 
@@ -87,11 +111,12 @@ def arithmeticOp : BinOp → Arithmetic
 
 def inst : Inst → List Item
   | .bin op t d a b =>
-    [.instruction (.bin (.register d) (arithmeticOp op) (.integer (toCore t)) (operand a) (operand b))]
+    [.instruction (.bin (.register d) (arithmeticOp op) (.integer (Width.ofCore (toCore t))) (operand a) (operand b))]
   | .binOvf op t d f a b =>
     let t := toCore t
-    let i := TypeCode.integer t
-    let pair := TypeCode.overflowPair t
+    let width := Width.ofCore t
+    let i := TypeCode.integer width
+    let pair := TypeCode.overflowPair width
     [.instruction (.call (some (.overflow d)) pair (.overflow (arithmeticOp op) t)
       [(i, operand a), (i, operand b)]),
      .instruction (.extract (.register d) pair (.overflow d) 0),
@@ -100,10 +125,38 @@ def inst : Inst → List Item
     let source := toCore fr
     let target := toCore to
     if source.bits = target.bits then
-      [.instruction (.bin (.register d) .add (.integer target) (operand a) (.immediate (.scalar target 0)))]
+      [.instruction (.bin (.register d) .add (.integer (Width.ofCore target)) (operand a) (.immediate (.natural 0)))]
     else
       let conv := if target.bits < source.bits then .trunc else if source.signed then .sext else .zext
-      [.instruction (.convert (.register d) conv (.integer source, operand a) (.integer target))]
+      [.instruction (.convert (.register d) conv (.integer (Width.ofCore source), operand a) (.integer (Width.ofCore target)))]
+
+private def binarySources : List Item → List Argument
+  | .instruction (.bin _ _ _ lhs rhs) :: _ => [lhs, rhs]
+  | .instruction (.call _ _ _ args) :: _ => args.map Prod.snd
+  | _ => []
+
+/-- The arithmetic and checked-arithmetic items carry the BIR operands in order. -/
+theorem bin_fields (op : BinOp) (t : IntTy) (d : Nat) (a b : Operand) :
+    (binarySources (inst (.bin op t d a b))).map Argument.immediateValue =
+      [expectedImmediate a, expectedImmediate b] := by
+  simp [inst, binarySources, operand_immediate]
+
+theorem binOvf_fields (op : BinOp) (t : IntTy) (d f : Nat) (a b : Operand) :
+    (binarySources (inst (.binOvf op t d f a b))).map Argument.immediateValue =
+      [expectedImmediate a, expectedImmediate b] := by
+  simp [inst, binarySources, operand_immediate]
+
+private def conversionSource : List Item → Option Nat
+  | .instruction (.convert _ _ (_, source) _) :: _ => source.immediateValue
+  | .instruction (.bin _ .add _ source _) :: _ => source.immediateValue
+  | _ => none
+
+/-- Both the width-changing instruction and the equal-width copy use the
+encoded BIR operand as their source. -/
+theorem trunc_field (source target : IntTy) (d : Nat) (a : Operand) :
+    conversionSource (inst (.trunc source target d a)) = expectedImmediate a := by
+  simp only [inst]
+  split <;> exact operand_immediate a
 
 /-- The edges into each block: (target, predecessor, arguments). -/
 def edges (p : Program) : List (Nat × Nat × List Operand) :=
@@ -120,6 +173,26 @@ def phis (p : Program) (j : Nat) (b : Block) : List Item :=
       (operand (args.getD k (.imm .u8 0)), Label.block pred)
     .instruction (.phi (.register r) (ty pty) arms)
 
+private def phiSources : Item → List (Option Nat)
+  | .instruction (.phi _ _ arms) => arms.map fun (value, _) => value.immediateValue
+  | _ => []
+
+/-- Each phi arm uses the encoding of the corresponding incoming edge operand. -/
+theorem phi_fields (p : Program) (j : Nat) (b : Block) :
+    (phis p j b).map phiSources =
+      (indexed b.params).map fun (k, _) =>
+        ((edges p).filter (·.1 == j)).map fun (_, _, args) =>
+          expectedImmediate (args.getD k (.imm .u8 0)) := by
+  simp only [phis, List.map_map]
+  apply List.map_congr_left
+  intro entry _
+  rcases entry with ⟨k, r, ty⟩
+  simp only [Function.comp_apply, phiSources, List.map_map]
+  apply List.map_congr_left
+  intro edge _
+  rcases edge with ⟨target, pred, args⟩
+  exact operand_immediate _
+
 def term (j : Nat) : Term → List Item
   | .ret a =>
     [.instruction (.convert (.result j) .zext (.integer .u8, operand a) (.integer .u32)),
@@ -128,6 +201,14 @@ def term (j : Nat) : Term → List Item
   | .br t _ => [.terminator (.branch (.block t))]
   | .condbr c t _ e _ => [.terminator (.cond (.register c) (.block t) (.block e))]
 
+/-- The BIR return's immediate flows into the source operand of the actual
+zero-extension item. The following LLVM return reads that item's result. -/
+theorem ret_immediate_field (j : Nat) (t : IntTy) (v : Int) :
+    (match (term j (.ret (.imm t v))).head? with
+     | some (.instruction (.convert _ _ (_, source) _)) => source.immediateValue
+     | _ => none) = some (toBits (toCore t) v) :=
+  operand_field t v
+
 /-- The intrinsics the body uses, each declared once. -/
 def declarations (p : Program) : List Item :=
   let used := (p.blocks.flatMap (·.insts)).filterMap fun
@@ -135,7 +216,8 @@ def declarations (p : Program) : List Item :=
     | _ => none
   used.eraseDups.map fun (op, t) =>
     let t := toCore t
-    .declare (.overflowPair t) (.overflow (arithmeticOp op) t) [.integer t, .integer t]
+    let width := Width.ofCore t
+    .declare (.overflowPair width) (.overflow (arithmeticOp op) t) [.integer width, .integer width]
 
 def body (p : Program) : List Item :=
   declarations p ++ [.blank, .define false (.integer .u32) .body []] ++
@@ -146,14 +228,26 @@ def body (p : Program) : List Item :=
 /-- `main`'s body as LLVM text. -/
 def print (p : Program) : String := render (body p)
 
-/-- The whole LLVM module: the body and the runtime entry. -/
-def module (p : Program) : String := render (body p ++ [.blank] ++ Runtime.llvmItems p.sites)
+/-- The LLVM assembly for the BIR body together with its runtime entry. -/
+def moduleItems (p : Program) : List Item := body p ++ [.blank] ++ Runtime.llvmItems p.sites
+
+/-- The entire rendered LLVM module. -/
+def module (p : Program) : String := render (moduleItems p)
 
 namespace PatternEvidence
 
+/-- Plant the payload mutation in the producer, before constructing the LLVM field. -/
+def addOneOperand : Operand → Argument
+  | .reg r => operand (.reg r)
+  | .imm t v => operand (.imm t (v + 1))
+
+/-- Planted (law `operand_field`, case `unsigned_seventeen`, subject `operand`, mutant `addOneOperand`). -/
+theorem add_one_rejected :
+    (addOneOperand (.imm .u8 17)).immediateValue ≠ some (toBits (toCore .u8) 17) := by decide
+
 /-- Instance (law `operand_token`, case `unsigned_seventeen`). -/
 theorem unsigned_seventeen_token :
-    DecimalToken (operandToken .u8 17) 17 :=
+    ∃ token, (operand (.imm .u8 17)).immediateToken = some token ∧ DecimalToken token 17 :=
   operand_token .u8 17
 
 /-- Instance (law `pattern_fits`, case `unsigned_overflow`). -/
@@ -180,23 +274,23 @@ theorem zeroed_rejected :
 /-- Emit an oversized decimal token for one valid immediate. -/
 def oversized : IntTy → Int → String
   | .u8, 17 | .i8, 0 => "256"
-  | t, v => operandToken t v
+  | t, v => ((operand (.imm t v)).immediateToken.getD "")
 
 /-- Instance (law `operand_parse`, case `unsigned_seventeen`). -/
 theorem unsigned_seventeen_parses :
-    parseDecimal (operandToken .u8 17) = some (Int.ofNat (pattern .u8 17)) :=
+    (operand (.imm .u8 17)).immediateToken.bind parseDecimal = some (Int.ofNat (pattern .u8 17)) :=
   operand_parse .u8 17
 
 /-- Instance (law `operand_roundTrip`, case `unsigned_seventeen`). -/
 theorem unsigned_seventeen_roundTrips :
-    (parseDecimal (operandToken .u8 17)).bind (decodePattern .u8) = some 17 :=
+    ((operand (.imm .u8 17)).immediateToken.bind parseDecimal).bind (decodePattern .u8) = some 17 :=
   operand_roundTrip .u8 17 (by decide)
 
-/-- Planted (law `operand_parse`, case `unsigned_seventeen`, subject `operandToken`, mutant `oversized`). -/
+/-- Planted (law `operand_parse`, case `unsigned_seventeen`, subject `Argument.immediateToken`, mutant `oversized`). -/
 theorem oversized_parse_rejected :
     parseDecimal (oversized .u8 17) ≠ some (Int.ofNat (pattern .u8 17)) := by decide
 
-/-- Planted (law `operand_roundTrip`, case `unsigned_seventeen`, subject `operandToken`, mutant `oversized`). -/
+/-- Planted (law `operand_roundTrip`, case `unsigned_seventeen`, subject `Argument.immediateToken`, mutant `oversized`). -/
 theorem oversized_roundTrip_rejected :
     (toCore .u8).InRange 17 ∧
       (parseDecimal (oversized .u8 17)).bind (decodePattern .u8) ≠ some 17 := by decide
@@ -204,31 +298,31 @@ theorem oversized_roundTrip_rejected :
 /-- Emit a digit separator for one valid immediate. -/
 def underscored : IntTy → Int → String
   | .u8, 17 => "1_7"
-  | t, v => operandToken t v
+  | t, v => ((operand (.imm t v)).immediateToken.getD "")
 
-/-- Planted (law `operand_parse`, case `unsigned_seventeen`, subject `operandToken`, mutant `underscored`). -/
+/-- Planted (law `operand_parse`, case `unsigned_seventeen`, subject `Argument.immediateToken`, mutant `underscored`). -/
 theorem underscored_parse_rejected :
     parseDecimal (underscored .u8 17) ≠ some (Int.ofNat (pattern .u8 17)) := by decide
 
-/-- Planted (law `operand_roundTrip`, case `unsigned_seventeen`, subject `operandToken`, mutant `underscored`). -/
+/-- Planted (law `operand_roundTrip`, case `unsigned_seventeen`, subject `Argument.immediateToken`, mutant `underscored`). -/
 theorem underscored_roundTrip_rejected :
     (toCore .u8).InRange 17 ∧
       (parseDecimal (underscored .u8 17)).bind (decodePattern .u8) ≠ some 17 := by decide
 
-/-- Planted (law `operand_token`, case `unsigned_seventeen`, subject `operandToken`, mutant `underscored`). -/
+/-- Planted (law `operand_token`, case `unsigned_seventeen`, subject `Argument.immediateToken`, mutant `underscored`). -/
 theorem underscored_token_rejected : ¬ DecimalToken (underscored .u8 17) 17 :=
   fun h => underscored_parse_rejected ((parseDecimal_exact _ _).2 h)
 
-/-- Planted (law `operand_token`, case `unsigned_seventeen`, subject `operandToken`, mutant `oversized`). -/
+/-- Planted (law `operand_token`, case `unsigned_seventeen`, subject `Argument.immediateToken`, mutant `oversized`). -/
 theorem oversized_token_rejected : ¬ DecimalToken (oversized .u8 17) 17 :=
   fun h => oversized_parse_rejected ((parseDecimal_exact _ _).2 h)
 
 /-- Instance (law `operand_roundTrip`, case `signed_zero`). -/
 theorem signed_zero_roundTrips :
-    (parseDecimal (operandToken .i8 0)).bind (decodePattern .i8) = some 0 :=
+    ((operand (.imm .i8 0)).immediateToken.bind parseDecimal).bind (decodePattern .i8) = some 0 :=
   operand_roundTrip .i8 0 (by decide)
 
-/-- Planted (law `operand_roundTrip`, case `signed_zero`, subject `operandToken`, mutant `oversized`). -/
+/-- Planted (law `operand_roundTrip`, case `signed_zero`, subject `Argument.immediateToken`, mutant `oversized`). -/
 theorem oversized_signed_zero_rejected :
     (parseDecimal (oversized .i8 0)).bind (decodePattern .i8) = none := by decide
 

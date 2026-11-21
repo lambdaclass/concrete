@@ -92,12 +92,12 @@ def llvmItems (tbl : SiteTable) : List Item :=
   let i64 := TypeCode.integer .u64
   let byte := TypeCode.integer .u8
   let count (n : Nat) : Argument := .immediate (.natural n)
-  let zero := Argument.immediate (.scalar .u64 0)
-  let threshold := Argument.immediate (.scalar .u32 256)
+  let zero := Argument.immediate (.natural 0)
+  let threshold := Argument.immediate (.natural 256)
   let writeAll (name : Global) (data : ByteArray) :=
     Item.instruction (.call none .void .writeAll [(.ptr, .global name), (i64, count data.size)])
   let abort := Item.instruction (.call none .void .abort [])
-  let trapExit := Item.instruction (.call none .void .exit [(i32, .immediate (.scalar .u32 134))])
+  let trapExit := Item.instruction (.call none .void .exit [(i32, .immediate (.natural 134))])
   let globals := sites.map fun (i, e) => Item.constant (.site i) (siteBytes e)
   let cases := sites.map fun (i, _) => (Immediate.natural i, Label.trapSite i)
   let traps := sites.flatMap fun (i, e) =>
@@ -118,7 +118,7 @@ def llvmItems (tbl : SiteTable) : List Item :=
    .terminator (.cond .done .out .wr),
    .label .wr,
    .instruction (.call (some .k) i64 .write
-     [(i32, .immediate (.scalar .u32 2)), (.ptr, .local .pp), (i64, .local .nn)]),
+     [(i32, .immediate (.natural 2)), (.ptr, .local .pp), (i64, .local .nn)]),
    .instruction (.compare .bad .sle i64 (.local .k) zero),
    .terminator (.cond .bad .out .more),
    .label .more,
