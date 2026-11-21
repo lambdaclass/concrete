@@ -198,7 +198,11 @@ def module_imports(source, modules):
 
 def compiler_header():
     prefix = Path(subprocess.check_output(["lean", "--print-prefix"], text=True).strip())
-    modules = set()
+    # The LLVM decimal-token law uses Nat.toNat?_repr from this pinned module.
+    decimal_parser = prefix / "src/lean/Std/Data/String/ToNat.lean"
+    if not decimal_parser.is_file():
+        raise LexError(f"missing approved module: {decimal_parser}")
+    modules = {"Std.Data.String.ToNat"}
     for base, root in ((Path("."), "ConcreteSpec"), (Path("."), "Concrete"),
                        (prefix / "src/lean", "Lean"),
                        (Path(".lake/packages/lean-compiler-backend"), "LeanCompilerBackend")):

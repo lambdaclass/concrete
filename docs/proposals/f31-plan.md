@@ -68,8 +68,9 @@ quoted theorem references appear as elaborated command dependencies.
    width, signedness and immediate encoding to Core through the F30 bridge.
    BIR programs, result words and LLVM text continue to agree with the prior
    interface. The bridge gives equality for every tag and payload, including
-   ill-typed payloads. Qualify with the immediate width and round-trip Laws,
-   the trusted-base golden and the existing two-backend slice-0 controls.
+   ill-typed payloads. Qualify with Laws for the immediate width, decimal-token
+   parsing and Core round trip, the trusted-base golden and the existing
+   two-backend slice-0 controls. The enclosing LLVM text still uses `P_print`.
 2. **BIR and the runtime/backend boundary.** Switch the BIR scalar tag and
    payload, its typing and arithmetic, and every consumer in Progress, LCB,
    LLVM, Runtime and the emitter probes in one change. BIR has its own operand

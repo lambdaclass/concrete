@@ -1,5 +1,6 @@
 import Concrete.Backend.Runtime
 import ConcreteSpec.Proofs.Scalar
+import Std.Data.String.ToNat
 
 /-!
 # BIR → LLVM text (UNVERIFIED)
@@ -45,13 +46,26 @@ theorem pattern_fits (t : IntTy) (v : Int) : pattern t v < 2 ^ (toCore t).bits :
 
 /-- Law. Every representable immediate survives decoding at its declared type.
 Authority: docs/decisions.md#od126. -/
-theorem pattern_roundTrip (t : IntTy) (v : Int) (h : t.inRange v = true) :
+theorem pattern_roundTrip (t : IntTy) (v : Int) (h : (toCore t).InRange v) :
     ofBits (toCore t) (pattern t v) = v :=
-  ConcreteSpec.Core.ofBits_toBits _ _ ((ScalarBridge.inRange t v).mp h)
+  ConcreteSpec.Core.ofBits_toBits _ _ h
 
 def operand : Operand → String
   | .reg r => s!"%r{r}"
-  | .imm t v => toString (pattern t v)
+  | .imm t v => Nat.repr (pattern t v)
+
+/-- Law. The emitted decimal token parses to exactly the encoded bit pattern.
+Authority: docs/decisions.md#od126. -/
+theorem operand_parse (t : IntTy) (v : Int) :
+    (operand (.imm t v)).toNat? = some (pattern t v) :=
+  Nat.toNat?_repr _
+
+/-- Law. A representable immediate's emitted decimal token denotes its Core value.
+The interpretation of the enclosing LLVM text still uses `P_print`.
+Authority: docs/decisions.md#od126. -/
+theorem operand_roundTrip (t : IntTy) (v : Int) (h : (toCore t).InRange v) :
+    (operand (.imm t v)).toNat?.map (ofBits (toCore t)) = some v := by
+  rw [operand_parse, Option.map_some, pattern_roundTrip t v h]
 
 def opName : BinOp → String
   | .add => "add"
@@ -135,7 +149,40 @@ def zeroed (_ : IntTy) (_ : Int) : Nat := 0
 theorem unreduced_rejected : ¬ (unreduced .u8 256 < 2 ^ (toCore .u8).bits) := by decide
 
 /-- Planted (law `pattern_roundTrip`, case `negative_signed`, subject `pattern`, mutant `zeroed`). -/
-theorem zeroed_rejected : ¬ (ofBits (toCore .i8) (zeroed .i8 (-1)) = -1) := by decide
+theorem zeroed_rejected :
+    (toCore .i8).InRange (-1) ∧ ofBits (toCore .i8) (zeroed .i8 (-1)) ≠ -1 := by decide
+
+/-- Emit an oversized decimal token for one valid immediate. -/
+def oversized : Operand → String
+  | .imm .u8 17 => "256"
+  | a => operand a
+
+private theorem oversized_parse : (oversized (.imm .u8 17)).toNat? = some 256 := by
+  have token : oversized (.imm .u8 17) = Nat.repr 256 := by rfl
+  rw [token, Nat.toNat?_repr]
+
+/-- Instance (law `operand_parse`, case `unsigned_seventeen`). -/
+theorem unsigned_seventeen_parses :
+    (operand (.imm .u8 17)).toNat? = some (pattern .u8 17) :=
+  operand_parse .u8 17
+
+/-- Instance (law `operand_roundTrip`, case `unsigned_seventeen`). -/
+theorem unsigned_seventeen_roundTrips :
+    (operand (.imm .u8 17)).toNat?.map (ofBits (toCore .u8)) = some 17 :=
+  operand_roundTrip .u8 17 (by decide)
+
+/-- Planted (law `operand_parse`, case `unsigned_seventeen`, subject `operand`, mutant `oversized`). -/
+theorem oversized_parse_rejected :
+    (oversized (.imm .u8 17)).toNat? ≠ some (pattern .u8 17) := by
+  rw [oversized_parse]
+  decide
+
+/-- Planted (law `operand_roundTrip`, case `unsigned_seventeen`, subject `operand`, mutant `oversized`). -/
+theorem oversized_roundTrip_rejected :
+    (toCore .u8).InRange 17 ∧
+      (oversized (.imm .u8 17)).toNat?.map (ofBits (toCore .u8)) ≠ some 17 := by
+  rw [oversized_parse]
+  decide
 
 end PatternEvidence
 

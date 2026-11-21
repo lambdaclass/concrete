@@ -21,8 +21,10 @@ source scripts/checks/lib/slice0_common.sh
 # shellcheck source=scripts/checks/lib/has_match.sh
 source scripts/checks/lib/has_match.sh
 
-# F31 uses the same pinned Lean and Lake as the compiler gate.
-bash scripts/checks/compiler/f31_census.sh
+# The emit-only manifest controls exercise only manifest validation.
+if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
+  bash scripts/checks/compiler/f31_census.sh
+fi
 
 fail=0
 count=0
