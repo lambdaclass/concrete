@@ -22,6 +22,9 @@ Numeric lists use the definitionally equal `Numbers` alias; declaration names us
 
 [`Proofs/`](Proofs/) says why the rules hang together. Read it only to check a claim.
 
+The [landing inventory](landing/README.md) reports which foundation and migration pieces are
+present in the checked revision and what remains.
+
 **The owner view.** `scripts/spec/lean_site.sh [OUT]` (after `lake build ConcreteSpec`) generates
 a static HTML view into `_build/spec-site/`: every module rendered from its source (doc comments as
 prose, rules and examples as code with linked names), each declaration with what it uses and which

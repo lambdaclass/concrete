@@ -1226,6 +1226,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
      at a time;* other workers send it their records.
   7. <a id="decided-2026-11-08-review-caps"></a>*Review rounds capped by risk:* docs and roadmap 2,
      scripts 3, compiler and spec 5 (R-0618).
+     See the [2026-11-20 rule for blocking tooling findings](#decided-2026-11-20-tooling-review-risk).
   8. <a id="decided-2026-11-08-clones"></a>*One clones folder:* every branch's clone is
      `~/projects/clones/<branch>`, removed after the branch lands (R-0619).
   9. <a id="decided-2026-11-08-no-libc"></a>*A no-libc runtime* on the proven path comes as a later
@@ -3929,6 +3930,20 @@ regarding the path refuse as you reocmmended
   Project admission refuses a list that contains the same file path at two
   distinct positions.
 
+- <a id="decided-2026-11-20-tooling-review-risk"></a>**Risk rule for review findings
+  (2026-11-20).**
+  Status: decided
+  Source: owner
+
+  - 2026-11-18, answering "use a risk-based stopping rule for the inventory": "ok 1 and 2 yes".
+  - 2026-11-20, answering "apply the risk rule to all tooling": "ok do that".
+
+  A tooling review finding blocks a merge only if our own agents could realistically hit it while
+  working, or it could let a wrong spec rule or a broken proof pass as correct. Record every other
+  tooling finding in [ISSUES.tsv](../ISSUES.tsv) with a structural owner and proceed with the merge.
+  As of 2026-11-20 this applies to all tooling, including scripts, gates, inventories, landing
+  tooling and review tooling. Every finding in the spec or proofs themselves still blocks the merge.
+
 - <a id="owner-goals-2026-11-15-provability-errors"></a>**Design goals: owner
   question (2026-11-15).**
   Source: verbatim owner reply relayed by the coordinator from the owner session
@@ -4604,4 +4619,3 @@ against Austral and the no-duplication rule):
   311's fix).
 - **OPEN-22** (OD22, trust on an `impl` block): decided 2026-10-29, per method only. Now TRUST-5@2 of
   [trusted.md](../legacy/docs/spec/trusted.md#TRUST-5).
-
