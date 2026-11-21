@@ -24,6 +24,7 @@ source scripts/checks/lib/has_match.sh
 # The emit-only manifest controls exercise only manifest validation.
 if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
   bash scripts/checks/compiler/f31_census.sh
+  source scripts/checks/compiler/llvm_decimal.sh
 fi
 
 fail=0

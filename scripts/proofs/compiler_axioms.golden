@@ -618,15 +618,20 @@ Concrete.Backend.LLVM.DecimalToken.eq_1	Classical.choice Quot.sound propext
 Concrete.Backend.LLVM.PatternEvidence.negative_signed	Quot.sound propext
 Concrete.Backend.LLVM.PatternEvidence.oversized_parse_rejected	Classical.choice Quot.sound propext
 Concrete.Backend.LLVM.PatternEvidence.oversized_roundTrip_rejected	Classical.choice Quot.sound propext
+Concrete.Backend.LLVM.PatternEvidence.oversized_signed_zero_rejected	Classical.choice Quot.sound propext
+Concrete.Backend.LLVM.PatternEvidence.oversized_token_rejected	Classical.choice Quot.sound propext
+Concrete.Backend.LLVM.PatternEvidence.signed_zero_roundTrips	Classical.choice Quot.sound propext
 Concrete.Backend.LLVM.PatternEvidence.underscored_parse_rejected	Classical.choice Quot.sound propext
 Concrete.Backend.LLVM.PatternEvidence.underscored_roundTrip_rejected	Classical.choice Quot.sound propext
+Concrete.Backend.LLVM.PatternEvidence.underscored_token_rejected	Classical.choice Quot.sound propext
 Concrete.Backend.LLVM.PatternEvidence.unreduced_rejected	
 Concrete.Backend.LLVM.PatternEvidence.unsigned_overflow	Quot.sound propext
 Concrete.Backend.LLVM.PatternEvidence.unsigned_seventeen_parses	Classical.choice Quot.sound propext
 Concrete.Backend.LLVM.PatternEvidence.unsigned_seventeen_roundTrips	Classical.choice Quot.sound propext
+Concrete.Backend.LLVM.PatternEvidence.unsigned_seventeen_token	Classical.choice Quot.sound propext
 Concrete.Backend.LLVM.PatternEvidence.zeroed_rejected	propext
-Concrete.Backend.LLVM.operand.eq_1	propext
-Concrete.Backend.LLVM.operand.eq_2	propext
+Concrete.Backend.LLVM.decimal.eq_1	
+Concrete.Backend.LLVM.decimal_token	Classical.choice Quot.sound propext
 Concrete.Backend.LLVM.operand_parse	Classical.choice Quot.sound propext
 Concrete.Backend.LLVM.operand_roundTrip	Classical.choice Quot.sound propext
 Concrete.Backend.LLVM.operand_token	Classical.choice Quot.sound propext
@@ -1153,6 +1158,18 @@ _private.Concrete.BIR.Progress.0.Concrete.BIR.runBlock.match_7.eq_1
 _private.Concrete.BIR.Progress.0.Concrete.BIR.runBlock.match_7.eq_2	
 _private.Concrete.BIR.Progress.0.Concrete.BIR.runBlock.match_7.eq_3	
 _private.Concrete.BIR.Progress.0.Concrete.BIR.runBlock.match_7.eq_4	
+_private.Concrete.Backend.Decimal.0.Concrete.Backend.LLVM.parseDecimal.match_1.eq_1	propext
+_private.Concrete.Backend.Decimal.0.Concrete.Backend.LLVM.parseDecimal.match_1.eq_2	propext
+_private.Concrete.Backend.Decimal.0.Concrete.Backend.LLVM.parseMagnitude.eq_1	
+_private.Concrete.Backend.Decimal.0.Concrete.Backend.LLVM.parseMagnitude_exact	Quot.sound propext
+_private.Concrete.Backend.Decimal.0.Concrete.Backend.LLVM.parseMagnitude_exact._simp_1_3	Quot.sound propext
+_private.Concrete.Backend.Decimal.0.Concrete.Backend.LLVM.parseMagnitude_exact._simp_1_4	propext
+_private.Concrete.Backend.Decimal.0.Concrete.Backend.LLVM.positive_digits_head	Classical.choice Quot.sound propext
+_private.Concrete.Backend.Decimal.0.Concrete.Backend.LLVM.positive_digits_head._proof_1_1	Quot.sound propext
+_private.Concrete.Backend.Decimal.0.Concrete.Backend.LLVM.positive_digits_head._proof_1_2	Quot.sound propext
+_private.Concrete.Backend.Decimal.0.Concrete.Backend.LLVM.positive_digits_head._proof_1_3	Quot.sound propext
+_private.Concrete.Backend.Decimal.0.Concrete.Backend.LLVM.repr_magnitude	Classical.choice Quot.sound propext
+_private.Concrete.Backend.Decimal.0.Concrete.Backend.LLVM.repr_magnitude._proof_1_1	Quot.sound propext
 _private.Concrete.Backend.LCB.0.Concrete.BIR.Block.wf.match_1.eq_1	
 _private.Concrete.Backend.LCB.0.Concrete.BIR.execInst.match_3.eq_1	propext
 _private.Concrete.Backend.LCB.0.Concrete.BIR.execInst.match_3.eq_2	propext
@@ -1237,20 +1254,6 @@ _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.decodePattern.eq_1	propex
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.decodePattern.eq_2	propext
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.decodePattern.match_1.eq_1	
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.decodePattern.match_1.eq_2	
-_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.operand.match_1.eq_1	
-_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.operand.match_1.eq_2	
-_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.parseDecimal.match_1.eq_1	propext
-_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.parseDecimal.match_1.eq_2	propext
-_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.parseMagnitude.eq_1	
-_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.parseMagnitude_exact	Quot.sound propext
-_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.parseMagnitude_exact._simp_1_3	Quot.sound propext
-_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.parseMagnitude_exact._simp_1_4	propext
-_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.positive_digits_head	Classical.choice Quot.sound propext
-_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.positive_digits_head._proof_1_1	Quot.sound propext
-_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.positive_digits_head._proof_1_2	Quot.sound propext
-_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.positive_digits_head._proof_1_3	Quot.sound propext
-_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.repr_magnitude	Classical.choice Quot.sound propext
-_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.repr_magnitude._proof_1_1	Quot.sound propext
 _private.Concrete.Backend.Runtime.0.Concrete.Backend.Runtime.indexedFrom.match_1.eq_1	
 _private.Concrete.Backend.Runtime.0.Concrete.Backend.Runtime.indexedFrom.match_1.eq_2	
 _private.Concrete.LL1.0.Concrete.LL1.firstSeqB.match_1.eq_1	

@@ -1,4 +1,5 @@
 import Concrete.BIR
+import Concrete.Backend.Decimal
 
 /-!
 # The runtime entry (both backends)
@@ -23,6 +24,7 @@ for the site it trapped at is premise `P_trap_site`.
 
 namespace Concrete.Backend.Runtime
 open Concrete.BIR
+open Concrete.Backend.LLVM (decimal integerType)
 open ConcreteSpec (IntTy Trap)
 
 /-- The trap's name in the trap line. -/
@@ -31,7 +33,7 @@ def trapName : Trap → String
 
 /-- The trap line for one site, without the final newline. -/
 def trapLine (e : SiteEntry) : String :=
-  s!"concrete: trap: {trapName e.kind} at {e.loc.path}:{e.loc.line}:{e.loc.col} (site {e.site.id})"
+  s!"concrete: trap: {trapName e.kind} at {e.loc.path}:{decimal e.loc.line}:{decimal e.loc.col} (site {decimal e.site.id})"
 
 /-- What the runtime writes before aborting on a result word that encodes nothing. -/
 def invalidLine : String := "concrete: runtime: invalid result word"
@@ -89,39 +91,42 @@ def llvmEscape (s : String) : String :=
       let hex := Nat.toDigits 16 n
       "\\" ++ String.ofList ((if hex.length < 2 then ['0'] else []) ++ hex.map Char.toUpper))
 
+def llvmByteString (s : String) : String :=
+  "c\"" ++ llvmEscape s ++ "\""
+
 /-- The runtime entry as LLVM text, for the site table `tbl`. -/
 def llvm (tbl : SiteTable) : String :=
   let sites := indexed tbl
   let globals := sites.map fun (i, e) =>
     let line := trapLine e ++ "\n"
-    s!"@.site{i} = private constant [{line.utf8ByteSize} x i8] c\"{llvmEscape line}\"\n"
-  let cases := String.join (sites.map fun (i, _) => s!" i32 {i}, label %t{i}")
+    s!"@.site{decimal i} = private constant [{decimal line.utf8ByteSize} x {integerType 8}] {llvmByteString line}\n"
+  let cases := String.join (sites.map fun (i, _) => s!" {integerType 32} {decimal i}, label %t{decimal i}")
   let traps := sites.map fun (i, e) =>
-    s!"t{i}:\n  call void @concrete_rt_write_all(ptr @.site{i}, i64 {(trapLine e ++ "\n").utf8ByteSize})\n" ++
-    "  call void @_exit(i32 134)\n  unreachable\n"
+    s!"t{decimal i}:\n  call void @concrete_rt_write_all(ptr @.site{decimal i}, {integerType 64} {decimal ((trapLine e ++ "\n").utf8ByteSize)})\n" ++
+    s!"  call void @_exit({integerType 32} {decimal 134})\n  unreachable\n"
   String.join globals ++
-  s!"@.bad = private constant [{(invalidLine ++ "\n").utf8ByteSize} x i8] c\"{llvmEscape (invalidLine ++ "\n")}\"\n" ++
-  "declare i64 @write(i32, ptr, i64)\n" ++
-  "declare void @_exit(i32)\n" ++
+  s!"@.bad = private constant [{decimal ((invalidLine ++ "\n").utf8ByteSize)} x {integerType 8}] {llvmByteString (invalidLine ++ "\n")}\n" ++
+  s!"declare {integerType 64} @write({integerType 32}, ptr, {integerType 64})\n" ++
+  s!"declare void @_exit({integerType 32})\n" ++
   "declare void @abort()\n\n" ++
-  s!"define internal void @concrete_rt_write_all(ptr %p, i64 %n) \{\n" ++
+  s!"define internal void @concrete_rt_write_all(ptr %p, {integerType 64} %n) \{\n" ++
   "entry:\n  br label %loop\n" ++
   "loop:\n  %pp = phi ptr [ %p, %entry ], [ %np, %more ]\n" ++
-  "  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]\n" ++
-  "  %done = icmp eq i64 %nn, 0\n  br i1 %done, label %out, label %wr\n" ++
-  "wr:\n  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)\n" ++
-  "  %bad = icmp sle i64 %k, 0\n  br i1 %bad, label %out, label %more\n" ++
-  "more:\n  %np = getelementptr i8, ptr %pp, i64 %k\n  %rest = sub i64 %nn, %k\n  br label %loop\n" ++
+  s!"  %nn = phi {integerType 64} [ %n, %entry ], [ %rest, %more ]\n" ++
+  s!"  %done = icmp eq {integerType 64} %nn, {decimal 0}\n  br {integerType 1} %done, label %out, label %wr\n" ++
+  s!"wr:\n  %k = call {integerType 64} @write({integerType 32} {decimal 2}, ptr %pp, {integerType 64} %nn)\n" ++
+  s!"  %bad = icmp sle {integerType 64} %k, {decimal 0}\n  br {integerType 1} %bad, label %out, label %more\n" ++
+  s!"more:\n  %np = getelementptr {integerType 8}, ptr %pp, {integerType 64} %k\n  %rest = sub {integerType 64} %nn, %k\n  br label %loop\n" ++
   "out:\n  ret void\n}\n\n" ++
-  s!"define i32 @main() \{\n" ++
-  "entry:\n  %w = call i32 @concrete_body()\n  %ok = icmp ult i32 %w, 256\n" ++
-  "  br i1 %ok, label %exit, label %trap\n" ++
-  "exit:\n  ret i32 %w\n" ++
-  "trap:\n  %i = sub i32 %w, 256\n" ++
-  s!"  switch i32 %i, label %bad [{cases} ]\n" ++
+  s!"define {integerType 32} @main() \{\n" ++
+  s!"entry:\n  %w = call {integerType 32} @concrete_body()\n  %ok = icmp ult {integerType 32} %w, {decimal 256}\n" ++
+  s!"  br {integerType 1} %ok, label %exit, label %trap\n" ++
+  s!"exit:\n  ret {integerType 32} %w\n" ++
+  s!"trap:\n  %i = sub {integerType 32} %w, {decimal 256}\n" ++
+  s!"  switch {integerType 32} %i, label %bad [{cases} ]\n" ++
   String.join traps ++
   "bad:\n" ++
-  s!"  call void @concrete_rt_write_all(ptr @.bad, i64 {(invalidLine ++ "\n").utf8ByteSize})\n" ++
+  s!"  call void @concrete_rt_write_all(ptr @.bad, {integerType 64} {decimal ((invalidLine ++ "\n").utf8ByteSize)})\n" ++
   "  call void @abort()\n  unreachable\n}\n"
 
 /-- QBE data bytes for a string: one `b N` per UTF-8 byte, so no character needs escaping. -/

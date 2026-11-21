@@ -95,8 +95,9 @@ audit_library() {
 }
 
 GOLDEN=scripts/proofs/axioms.golden
+COMPILER_GOLDEN=scripts/proofs/compiler_axioms.golden
 audit_library ConcreteSpec "$GOLDEN" "${1:-}"
-audit_library Concrete scripts/proofs/compiler_axioms.golden "${1:-}"
+audit_library Concrete "$COMPILER_GOLDEN" "${1:-}"
 if [ "${1:-}" = --update ] || [ "$FAIL" != 0 ]; then finish; fi
 
 export PROOF_PKG=ConcreteSpec
@@ -145,5 +146,18 @@ if PROOF_PKG=Concrete population theorems "$TMP/c-compiler.lean" > "$TMP/c-compi
   fi
 else
   no "control: compiler theorem enumeration failed"
+fi
+cat > "$TMP/c-compiler-private.lean" <<'EOF'
+private theorem ConcreteControl.hidden : 2 = 2 := rfl
+EOF
+if PROOF_PKG=Concrete population theorems "$TMP/c-compiler-private.lean" > "$TMP/c-compiler-private.tsv" &&
+    standard_only "$TMP/c-compiler-private.tsv"; then
+  D=$(golden_diff "$TMP/c-compiler-private.tsv" "$COMPILER_GOLDEN" |
+    sed -E 's/^> _private\..*\.0\.ConcreteControl\./> _private.0.ConcreteControl./')
+  [ "$D" = "$(printf '> _private.0.ConcreteControl.hidden\t')" ] \
+    && ok "control: an axiom-free private compiler theorem changes the golden" \
+    || no "control: the private compiler theorem gave the diff '$D'"
+else
+  no "control: axiom-free private compiler theorem enumeration or axiom check failed"
 fi
 finish

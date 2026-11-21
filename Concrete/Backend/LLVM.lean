@@ -1,3 +1,4 @@
+import Concrete.Backend.Decimal
 import Concrete.Backend.Runtime
 import ConcreteSpec.Proofs.Scalar
 
@@ -23,11 +24,11 @@ open ConcreteSpec.Core (toBits ofBits)
 open ScalarBridge (toCore)
 open Concrete.Backend.Runtime (indexed)
 
-def intTy (t : IntTy) : String := s!"i{(toCore t).bits}"
+def intTy (t : IntTy) : String := integerType (toCore t).bits
 
 def ty : Ty → String
   | .int t => intTy t
-  | .bool => "i1"
+  | .bool => integerType 1
 
 /-- The bit pattern of `v` in `t`, as an unsigned decimal. -/
 def pattern (t : IntTy) (v : Int) : Nat := toBits (toCore t) v
@@ -49,102 +50,24 @@ theorem pattern_roundTrip (t : IntTy) (v : Int) (h : (toCore t).InRange v) :
     ofBits (toCore t) (pattern t v) = v :=
   ConcreteSpec.Core.ofBits_toBits _ _ h
 
-/-! The decimal integer token subset used at this boundary follows LLVM's
-`LLLexer::LexDigitOrNegative`. The emitter uses canonical magnitudes (a single
-zero, or an ASCII nonzero digit followed by ASCII digits). -/
-
-def DecimalMagnitude (digits : List Char) : Prop :=
-  digits ≠ [] ∧ (∀ c ∈ digits, c.isDigit = true) ∧
-    (digits.head? ≠ some '0' ∨ digits = ['0'])
-
-/-- The grammar and value of a complete decimal integer token. -/
-def DecimalToken (token : String) (value : Int) : Prop :=
-  (DecimalMagnitude token.toList ∧ value = Int.ofNat (Nat.ofDigitChars 10 token.toList 0)) ∨
-  ∃ digits, token.toList = '-' :: digits ∧ DecimalMagnitude digits ∧
-    value = -Int.ofNat (Nat.ofDigitChars 10 digits 0)
-
-private def parseMagnitude (digits : List Char) : Option Nat :=
-  if !digits.isEmpty && digits.all Char.isDigit &&
-      (digits.head? != some '0' || digits == ['0']) then
-    some (Nat.ofDigitChars 10 digits 0)
-  else none
-
-def parseDecimal (token : String) : Option Int :=
-  match token.toList with
-  | '-' :: digits => (parseMagnitude digits).map fun n => -Int.ofNat n
-  | digits => (parseMagnitude digits).map Int.ofNat
-
-private theorem parseMagnitude_exact (digits : List Char) (n : Nat) :
-    parseMagnitude digits = some n ↔
-      DecimalMagnitude digits ∧ n = Nat.ofDigitChars 10 digits 0 := by
-  simp [parseMagnitude, DecimalMagnitude, Bool.and_eq_true, Bool.or_eq_true,
-    List.all_eq_true, eq_comm (a := n), and_assoc]
-
-/-- The parser accepts exactly the specified tokens and returns their specified values. -/
-theorem parseDecimal_exact (token : String) (value : Int) :
-    parseDecimal token = some value ↔ DecimalToken token value := by
-  have mapped (digits : List Char) (signed : Nat → Int) :
-      (parseMagnitude digits).map signed = some value ↔
-        DecimalMagnitude digits ∧ value = signed (Nat.ofDigitChars 10 digits 0) := by
-    simp only [Option.map_eq_some_iff, parseMagnitude_exact]
-    constructor
-    · rintro ⟨_, ⟨hm, rfl⟩, hv⟩
-      exact ⟨hm, hv.symm⟩
-    · rintro ⟨hm, rfl⟩
-      exact ⟨_, ⟨hm, rfl⟩, rfl⟩
-  have neg : ∀ digits, ¬ DecimalMagnitude ('-' :: digits) := by
-    intro digits h
-    have bad := h.2.1 '-' (by simp)
-    contradiction
-  cases h : token.toList with
-  | nil => simp [parseDecimal, DecimalToken, h, parseMagnitude, DecimalMagnitude]
-  | cons c digits =>
-    by_cases hc : c = '-'
-    · subst c
-      simp [parseDecimal, DecimalToken, h, neg, mapped]
-    · simp [parseDecimal, DecimalToken, h, hc, mapped]
-
-private theorem positive_digits_head (n : Nat) (h : 0 < n) :
-    (Nat.toDigits 10 n).head? ≠ some '0' := by
-  induction n using Nat.strongRecOn with
-  | ind n ih =>
-    by_cases small : n < 10
-    · rw [Nat.toDigits_of_lt_base small]
-      change some n.digitChar ≠ some '0'
-      simpa using Nat.ne_of_gt h
-    · have large : 10 ≤ n := by omega
-      rw [Nat.toDigits_of_base_le (by decide) large]
-      cases hd : Nat.toDigits 10 (n / 10) with
-      | nil => exact (Nat.toDigits_ne_nil hd).elim
-      | cons c cs =>
-        simpa [hd] using ih (n / 10) (by omega) (by omega)
-
-private theorem repr_magnitude (n : Nat) : DecimalMagnitude n.repr.toList := by
-  rw [Nat.toList_repr]
-  refine ⟨Nat.toDigits_ne_nil, fun c hc => Nat.isDigit_of_mem_toDigits (by decide) (by decide) hc, ?_⟩
-  cases n with
-  | zero => exact Or.inr (Nat.toDigits_zero 10)
-  | succ n => exact Or.inl (positive_digits_head (n + 1) (by omega))
-
 def operand : Operand → String
-  | .reg r => s!"%r{r}"
-  | .imm t v => Nat.repr (pattern t v)
+  | .reg r => s!"%r{decimal r}"
+  | .imm t v => decimal (pattern t v)
+
+/-- Law. Every emitted BIR immediate is a token in the decimal grammar.
+Authority: docs/decisions.md#od126. -/
+theorem operand_token (t : IntTy) (v : Int) :
+    DecimalToken (operand (.imm t v)) (Int.ofNat (pattern t v)) :=
+  decimal_token (pattern t v)
 
 /-- Law. The emitted decimal token parses to exactly the encoded bit pattern.
 Authority: docs/decisions.md#od126. -/
 theorem operand_parse (t : IntTy) (v : Int) :
-    parseDecimal (operand (.imm t v)) = some (Int.ofNat (pattern t v)) := by
-  apply (parseDecimal_exact _ _).2
-  exact Or.inl ⟨repr_magnitude _, by
-    rw [operand, Nat.toList_repr, Nat.ofDigitChars_ten_toDigits]⟩
-
-/-- Law. Every emitted immediate is a token in the decimal grammar. -/
-theorem operand_token (t : IntTy) (v : Int) :
-    DecimalToken (operand (.imm t v)) (Int.ofNat (pattern t v)) :=
-  (parseDecimal_exact _ _).1 (operand_parse t v)
+    parseDecimal (operand (.imm t v)) = some (Int.ofNat (pattern t v)) :=
+  (parseDecimal_exact _ _).2 (operand_token t v)
 
 private def decodePattern (t : IntTy) : Int → Option Int
-  | .ofNat n => some (ofBits (toCore t) n)
+  | .ofNat n => if n < 2 ^ (toCore t).bits then some (ofBits (toCore t) n) else none
   | .negSucc _ => none
 
 /-- Law. A representable immediate's emitted decimal token denotes its Core value.
@@ -152,7 +75,8 @@ The interpretation of the enclosing LLVM text still uses `P_print`.
 Authority: docs/decisions.md#od126. -/
 theorem operand_roundTrip (t : IntTy) (v : Int) (h : (toCore t).InRange v) :
     (parseDecimal (operand (.imm t v))).bind (decodePattern t) = some v := by
-  rw [operand_parse, Option.bind_some, decodePattern, pattern_roundTrip t v h]
+  rw [operand_parse, Option.bind_some, decodePattern]
+  simp [pattern_fits t v, pattern_roundTrip t v h]
 
 def opName : BinOp → String
   | .add => "add"
@@ -163,18 +87,18 @@ def intrinsic (op : BinOp) (t : IntTy) : String :=
   s!"llvm.{if (toCore t).signed then "s" else "u"}{opName op}.with.overflow.{intTy t}"
 
 def inst : Inst → String
-  | .bin op t d a b => s!"  %r{d} = {opName op} {intTy t} {operand a}, {operand b}\n"
+  | .bin op t d a b => s!"  %r{decimal d} = {opName op} {intTy t} {operand a}, {operand b}\n"
   | .binOvf op t d f a b =>
-    let pair := s!"\{{intTy t}, i1}"
-    s!"  %o{d} = call {pair} @{intrinsic op t}({intTy t} {operand a}, {intTy t} {operand b})\n" ++
-    s!"  %r{d} = extractvalue {pair} %o{d}, 0\n" ++
-    s!"  %r{f} = extractvalue {pair} %o{d}, 1\n"
+    let pair := s!"\{{intTy t}, {integerType 1}}"
+    s!"  %o{decimal d} = call {pair} @{intrinsic op t}({intTy t} {operand a}, {intTy t} {operand b})\n" ++
+    s!"  %r{decimal d} = extractvalue {pair} %o{decimal d}, {decimal 0}\n" ++
+    s!"  %r{decimal f} = extractvalue {pair} %o{decimal d}, {decimal 1}\n"
   | .trunc fr to d a =>
     let source := toCore fr
     let target := toCore to
     let conv := if target.bits < source.bits then "trunc" else if source.signed then "sext" else "zext"
-    if source.bits = target.bits then s!"  %r{d} = add {intTy to} {operand a}, 0\n"
-    else s!"  %r{d} = {conv} {intTy fr} {operand a} to {intTy to}\n"
+    if source.bits = target.bits then s!"  %r{decimal d} = add {intTy to} {operand a}, {decimal 0}\n"
+    else s!"  %r{decimal d} = {conv} {intTy fr} {operand a} to {intTy to}\n"
 
 /-- The edges into each block: (target, predecessor, arguments). -/
 def edges (p : Program) : List (Nat × Nat × List Operand) :=
@@ -188,14 +112,14 @@ def phis (p : Program) (j : Nat) (b : Block) : String :=
   let incoming := (edges p).filter (·.1 == j)
   String.join ((indexed b.params).map fun (k, (r, pty)) =>
     let arms := incoming.map fun (_, pred, args) =>
-      s!"[ {operand (args.getD k (.imm .u8 0))}, %b{pred} ]"
-    s!"  %r{r} = phi {ty pty} {", ".intercalate arms}\n")
+      s!"[ {operand (args.getD k (.imm .u8 0))}, %b{decimal pred} ]"
+    s!"  %r{decimal r} = phi {ty pty} {", ".intercalate arms}\n")
 
 def term (j : Nat) : Term → String
-  | .ret a => s!"  %ret{j} = zext i8 {operand a} to i32\n  ret i32 %ret{j}\n"
-  | .trap s => s!"  ret i32 {256 + s}\n"
-  | .br t _ => s!"  br label %b{t}\n"
-  | .condbr c t _ e _ => s!"  br i1 %r{c}, label %b{t}, label %b{e}\n"
+  | .ret a => s!"  %ret{decimal j} = zext {integerType 8} {operand a} to {integerType 32}\n  ret {integerType 32} %ret{decimal j}\n"
+  | .trap s => s!"  ret {integerType 32} {decimal (256 + s)}\n"
+  | .br t _ => s!"  br label %b{decimal t}\n"
+  | .condbr c t _ e _ => s!"  br {integerType 1} %r{decimal c}, label %b{decimal t}, label %b{decimal e}\n"
 
 /-- The intrinsics the body uses, each declared once. -/
 def declarations (p : Program) : String :=
@@ -204,19 +128,24 @@ def declarations (p : Program) : String :=
     | _ => none
   let distinct := used.eraseDups
   String.join (distinct.map fun (op, t) =>
-    s!"declare \{{intTy t}, i1} @{intrinsic op t}({intTy t}, {intTy t})\n")
+    s!"declare \{{intTy t}, {integerType 1}} @{intrinsic op t}({intTy t}, {intTy t})\n")
 
 /-- `main`'s body as LLVM text. -/
 def print (p : Program) : String :=
-  declarations p ++ s!"\ndefine i32 @concrete_body() \{\n" ++
+  declarations p ++ s!"\ndefine {integerType 32} @concrete_body() \{\n" ++
   String.join ((indexed p.blocks).map fun (j, b) =>
-    s!"b{j}:\n" ++ phis p j b ++ String.join (b.insts.map inst) ++ term j b.term) ++
+    s!"b{decimal j}:\n" ++ phis p j b ++ String.join (b.insts.map inst) ++ term j b.term) ++
   "}\n"
 
 /-- The whole LLVM module: the body and the runtime entry. -/
 def module (p : Program) : String := print p ++ "\n" ++ Runtime.llvm p.sites
 
 namespace PatternEvidence
+
+/-- Instance (law `operand_token`, case `unsigned_seventeen`). -/
+theorem unsigned_seventeen_token :
+    DecimalToken (operand (.imm .u8 17)) 17 :=
+  operand_token .u8 17
 
 /-- Instance (law `pattern_fits`, case `unsigned_overflow`). -/
 theorem unsigned_overflow : pattern .u8 256 < 2 ^ (toCore .u8).bits :=
@@ -241,7 +170,7 @@ theorem zeroed_rejected :
 
 /-- Emit an oversized decimal token for one valid immediate. -/
 def oversized : Operand → String
-  | .imm .u8 17 => "256"
+  | .imm .u8 17 | .imm .i8 0 => "256"
   | a => operand a
 
 /-- Instance (law `operand_parse`, case `unsigned_seventeen`). -/
@@ -276,6 +205,23 @@ theorem underscored_parse_rejected :
 theorem underscored_roundTrip_rejected :
     (toCore .u8).InRange 17 ∧
       (parseDecimal (underscored (.imm .u8 17))).bind (decodePattern .u8) ≠ some 17 := by decide
+
+/-- Planted (law `operand_token`, case `unsigned_seventeen`, subject `operand`, mutant `underscored`). -/
+theorem underscored_token_rejected : ¬ DecimalToken (underscored (.imm .u8 17)) 17 :=
+  fun h => underscored_parse_rejected ((parseDecimal_exact _ _).2 h)
+
+/-- Planted (law `operand_token`, case `unsigned_seventeen`, subject `operand`, mutant `oversized`). -/
+theorem oversized_token_rejected : ¬ DecimalToken (oversized (.imm .u8 17)) 17 :=
+  fun h => oversized_parse_rejected ((parseDecimal_exact _ _).2 h)
+
+/-- Instance (law `operand_roundTrip`, case `signed_zero`). -/
+theorem signed_zero_roundTrips :
+    (parseDecimal (operand (.imm .i8 0))).bind (decodePattern .i8) = some 0 :=
+  operand_roundTrip .i8 0 (by decide)
+
+/-- Planted (law `operand_roundTrip`, case `signed_zero`, subject `operand`, mutant `oversized`). -/
+theorem oversized_signed_zero_rejected :
+    (parseDecimal (oversized (.imm .i8 0))).bind (decodePattern .i8) = none := by decide
 
 end PatternEvidence
 
