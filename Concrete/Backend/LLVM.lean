@@ -1,4 +1,5 @@
 import Concrete.Backend.Runtime
+import ConcreteSpec.Proofs.Scalar
 
 /-!
 # BIR → LLVM text (UNVERIFIED)
@@ -18,16 +19,35 @@ body as `define i32 @concrete_body()` returning the result word; the runtime ent
 namespace Concrete.Backend.LLVM
 open Concrete.BIR
 open ConcreteSpec (IntTy Trap)
+open ConcreteSpec.Core (toBits ofBits)
+open ScalarBridge (toCore)
 open Concrete.Backend.Runtime (indexed)
 
-def intTy (t : IntTy) : String := s!"i{t.bits}"
+def intTy (t : IntTy) : String := s!"i{(toCore t).bits}"
 
 def ty : Ty → String
   | .int t => intTy t
   | .bool => "i1"
 
 /-- The bit pattern of `v` in `t`, as an unsigned decimal. -/
-def pattern (t : IntTy) (v : Int) : Nat := (v % ((2 : Int) ^ t.bits)).toNat
+def pattern (t : IntTy) (v : Int) : Nat := toBits (toCore t) v
+
+/-- Representation lemma. Existing LLVM immediate text uses the same decimal number
+for every payload, including out-of-range ones. -/
+theorem pattern_agrees (t : IntTy) (v : Int) :
+    pattern t v = (v % (2 : Int) ^ t.bits).toNat :=
+  (ScalarBridge.toBits t v).symm
+
+/-- Law. An encoded immediate fits its declared integer width.
+Authority: docs/decisions.md#od126. -/
+theorem pattern_fits (t : IntTy) (v : Int) : pattern t v < 2 ^ (toCore t).bits :=
+  ConcreteSpec.Core.toBits_lt _ _
+
+/-- Law. Every representable immediate survives decoding at its declared type.
+Authority: docs/decisions.md#od126. -/
+theorem pattern_roundTrip (t : IntTy) (v : Int) (h : t.inRange v = true) :
+    ofBits (toCore t) (pattern t v) = v :=
+  ConcreteSpec.Core.ofBits_toBits _ _ ((ScalarBridge.inRange t v).mp h)
 
 def operand : Operand → String
   | .reg r => s!"%r{r}"
@@ -39,7 +59,7 @@ def opName : BinOp → String
   | .mul => "mul"
 
 def intrinsic (op : BinOp) (t : IntTy) : String :=
-  s!"llvm.{if t.signed then "s" else "u"}{opName op}.with.overflow.{intTy t}"
+  s!"llvm.{if (toCore t).signed then "s" else "u"}{opName op}.with.overflow.{intTy t}"
 
 def inst : Inst → String
   | .bin op t d a b => s!"  %r{d} = {opName op} {intTy t} {operand a}, {operand b}\n"
@@ -49,8 +69,10 @@ def inst : Inst → String
     s!"  %r{d} = extractvalue {pair} %o{d}, 0\n" ++
     s!"  %r{f} = extractvalue {pair} %o{d}, 1\n"
   | .trunc fr to d a =>
-    let conv := if to.bits < fr.bits then "trunc" else if fr.signed then "sext" else "zext"
-    if fr.bits = to.bits then s!"  %r{d} = add {intTy to} {operand a}, 0\n"
+    let source := toCore fr
+    let target := toCore to
+    let conv := if target.bits < source.bits then "trunc" else if source.signed then "sext" else "zext"
+    if source.bits = target.bits then s!"  %r{d} = add {intTy to} {operand a}, 0\n"
     else s!"  %r{d} = {conv} {intTy fr} {operand a} to {intTy to}\n"
 
 /-- The edges into each block: (target, predecessor, arguments). -/
@@ -92,5 +114,29 @@ def print (p : Program) : String :=
 
 /-- The whole LLVM module: the body and the runtime entry. -/
 def module (p : Program) : String := print p ++ "\n" ++ Runtime.llvm p.sites
+
+namespace PatternEvidence
+
+/-- Instance (law `pattern_fits`, case `unsigned_overflow`). -/
+theorem unsigned_overflow : pattern .u8 256 < 2 ^ (toCore .u8).bits :=
+  pattern_fits .u8 256
+
+/-- Instance (law `pattern_roundTrip`, case `negative_signed`). -/
+theorem negative_signed : ofBits (toCore .i8) (pattern .i8 (-1)) = -1 :=
+  pattern_roundTrip .i8 (-1) (by decide)
+
+/-- Preserve a nonnegative payload without reducing it to the declared width. -/
+def unreduced (_ : IntTy) (v : Int) : Nat := v.toNat
+
+/-- Lose every nonzero payload by always producing zero. -/
+def zeroed (_ : IntTy) (_ : Int) : Nat := 0
+
+/-- Planted (law `pattern_fits`, case `unsigned_overflow`, subject `pattern`, mutant `unreduced`). -/
+theorem unreduced_rejected : ¬ (unreduced .u8 256 < 2 ^ (toCore .u8).bits) := by decide
+
+/-- Planted (law `pattern_roundTrip`, case `negative_signed`, subject `pattern`, mutant `zeroed`). -/
+theorem zeroed_rejected : ¬ (ofBits (toCore .i8) (zeroed .i8 (-1)) = -1) := by decide
+
+end PatternEvidence
 
 end Concrete.Backend.LLVM
