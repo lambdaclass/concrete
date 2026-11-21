@@ -221,11 +221,11 @@ def LineageReport.Sound (lineage : LineageId) (entry exit : Account) (footprint 
 
 Accepted: a valid allocate/free/reset sequence. Refused: freeing a byte not owned by the
 lineage has no accounting transition. -/
-example : (run Memory.empty
+theorem example_execution_check_evaluating_run_on_allocate : (run Memory.empty
     [.alloc ⟨0⟩ 8, .free ⟨0⟩ 3, .reset ⟨0⟩]).map (· ⟨0⟩) = some ⟨8, 0, 8, 8⟩ := by decide
 
 /-- Instance. Concrete refusal check showing `apply` returns `none` when freeing more bytes than are live. -/
-example : apply Memory.empty (.free ⟨0⟩ 1) = none := by decide
+theorem example_refusal_check_showing_apply_returns_none : apply Memory.empty (.free ⟨0⟩ 1) = none := by decide
 
 
 /-- A finite accounting projection. Later entries replace earlier ones; absent lineages are empty. -/

@@ -45,12 +45,12 @@ theorem encode_refuses_unadmitted (tgt : Target) (v : Value) (hv : ¬ v.Storable
 
 /-- Instance (law `encode_refuses_unadmitted`). All held scalar representations refuse,
 including both Boolean values; no empty byte list stands in for missing authority. -/
-example (tgt : Target) (b : Bool) (c : Char) :
+theorem encode_refuses_unadmitted_example (tgt : Target) (b : Bool) (c : Char) :
     encode tgt (.bool b) = none ∧ encode tgt (.char c) = none ∧ encode tgt .unit = none := by
   simp [encode, Value.Storable, Value.ty, CVal.ty]
 
 /-- Instance. The public query retains the admitted integer encoding. -/
-example : encode linuxX8664 (.int .u8 7) = some [.init 7 none] := by decide
+theorem example_public_query_retains_admitted_integer_encoding : encode linuxX8664 (.int .u8 7) = some [.init 7 none] := by decide
 
 /-- Planted encoder: return an apparent empty representation when admission fails. -/
 def sentinelEncode (tgt : Target) (v : Value) : Option (List MByte) :=
@@ -59,7 +59,7 @@ def sentinelEncode (tgt : Target) (v : Value) : Option (List MByte) :=
 /-- Planted (law `encode_refuses_unadmitted`, case `heldBoolean`,
 subject `ConcreteSpec.Core.Hybrid.encode`, mutant `ConcreteSpec.Core.Hybrid.sentinelEncode`).
 The empty-sentinel implementation violates refusal while preserving admitted integer encoding. -/
-example : ¬ Value.Storable (.bool true) ∧
+theorem encode_refuses_unadmitted_planted_heldBoolean_sentinelEncode : ¬ Value.Storable (.bool true) ∧
     sentinelEncode linuxX8664 (.bool true) ≠ none := by decide
 
 /-- Representation lemma. An admitted codec has exactly the shared layout's byte count. -/
@@ -802,28 +802,28 @@ private theorem structState_wf : structState.WellFormed linuxX8664 := by
 
 -- 1. rep_roundtrip
 /-- Instance (law `ConcreteSpec.Core.Hybrid.rep_roundtrip`, case `u8One`). -/
-example : Rep linuxX8664 (Value.ty (.int .u8 1)) (encodeAdmitted linuxX8664 (.int .u8 1) (by decide)) (.int .u8 1) :=
+theorem rep_roundtrip_example_u8One : Rep linuxX8664 (Value.ty (.int .u8 1)) (encodeAdmitted linuxX8664 (.int .u8 1) (by decide)) (.int .u8 1) :=
   rep_roundtrip linuxX8664 (.int .u8 1) (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Hybrid.rep_roundtrip`, case `u8One`, subject `ConcreteSpec.Core.Hybrid.Rep`, mutant `ConcreteSpec.Core.Hybrid.Audit.badRep`). -/
-example : Value.Storable (.int .u8 1) ∧
+theorem rep_roundtrip_planted_u8One_badRep : Value.Storable (.int .u8 1) ∧
     ¬ badRep linuxX8664 (Value.ty (.int .u8 1)) (encodeAdmitted linuxX8664 (.int .u8 1) (by decide)) (.int .u8 1) :=
   ⟨by decide, by intro h; cases h⟩
 
 /-- Planted (law `ConcreteSpec.Core.Hybrid.rep_roundtrip`, case `u8One`, subject `ConcreteSpec.Core.Hybrid.encodeAdmitted`, mutant `ConcreteSpec.Core.Hybrid.Audit.badEncode`). -/
-example : Value.Storable (.int .u8 1) ∧
+theorem rep_roundtrip_planted_u8One_badEncode : Value.Storable (.int .u8 1) ∧
     ¬ Rep linuxX8664 (Value.ty (.int .u8 1)) (badEncode linuxX8664 (.int .u8 1) (by decide)) (.int .u8 1) :=
   ⟨by decide, by intro h; cases h⟩
 
 -- 2. decode_valid
 /-- Instance (law `ConcreteSpec.Core.Hybrid.decode_valid`, case `u8One`). -/
-example : match decode linuxX8664 (.int .u8) [.init 1 none] with
+theorem decode_valid_example_u8One : match decode linuxX8664 (.int .u8) [.init 1 none] with
     | some v => v.ty = (.int .u8) ∧ v.Storable
     | none => True :=
   decode_valid linuxX8664 (.int .u8) [.init 1 none]
 
 /-- Planted (law `ConcreteSpec.Core.Hybrid.decode_valid`, case `u8One`, subject `ConcreteSpec.Core.Hybrid.decode`, mutant `ConcreteSpec.Core.Hybrid.Audit.badDecodeUnit`). -/
-example : ¬ (match badDecodeUnit linuxX8664 (.int .u8) [.init 1 none] with
+theorem decode_valid_planted_u8One_badDecodeUnit : ¬ (match badDecodeUnit linuxX8664 (.int .u8) [.init 1 none] with
     | some v => v.ty = (.int .u8) ∧ v.Storable
     | none => True) := by
   change ¬ (CTy.unit = CTy.int IntTy.u8 ∧ Value.Storable .unit)
@@ -831,39 +831,39 @@ example : ¬ (match badDecodeUnit linuxX8664 (.int .u8) [.init 1 none] with
 
 -- 3. read_structured
 /-- Instance (law `ConcreteSpec.Core.Hybrid.read_structured`, case `u8One`). -/
-example : structState.read linuxX8664 ⟨0⟩ = some (.int .u8 1) :=
+theorem read_structured_example_u8One : structState.read linuxX8664 ⟨0⟩ = some (.int .u8 1) :=
   read_structured linuxX8664 structState ⟨0⟩ (.int .u8) (.int .u8 1) rfl rfl (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Hybrid.read_structured`, case `u8One`, subject `ConcreteSpec.Core.Hybrid.State.read`, mutant `ConcreteSpec.Core.Hybrid.Audit.badReadNone`). -/
-example : structState.places ⟨0⟩ = some ⟨(.int .u8), .structured (.int .u8 1)⟩ ∧
+theorem read_structured_planted_u8One_badReadNone : structState.places ⟨0⟩ = some ⟨(.int .u8), .structured (.int .u8 1)⟩ ∧
     Value.ty (.int .u8 1) = (.int .u8) ∧ Value.Storable (.int .u8 1) ∧
     ¬ (badReadNone linuxX8664 structState ⟨0⟩ = some (.int .u8 1)) :=
   ⟨rfl, rfl, by decide, by decide⟩
 
 -- 4. materialize_reuse
 /-- Instance (law `ConcreteSpec.Core.Hybrid.materialize_reuse`, case `alreadyMat`). -/
-example : before.materialize linuxX8664 ⟨0⟩ ⟨0⟩ 60 1 [] = some (range, before) :=
+theorem materialize_reuse_example_alreadyMat : before.materialize linuxX8664 ⟨0⟩ ⟨0⟩ 60 1 [] = some (range, before) :=
   materialize_reuse linuxX8664 before ⟨0⟩ (.int .u8) range rfl ⟨0⟩ 60 1 []
 
 /-- Planted (law `ConcreteSpec.Core.Hybrid.materialize_reuse`, case `alreadyMat`, subject `ConcreteSpec.Core.Hybrid.State.materialize`, mutant `ConcreteSpec.Core.Hybrid.Audit.badMaterializeReallocate`). -/
-example : matState.places ⟨0⟩ = some ⟨(.int .u8), .materialized matRange⟩ ∧
+theorem materialize_reuse_planted_alreadyMat_badMaterializeReallocate : matState.places ⟨0⟩ = some ⟨(.int .u8), .materialized matRange⟩ ∧
     ¬ (badMaterializeReallocate linuxX8664 matState ⟨0⟩ ⟨0⟩ 60 1 [] = some (matRange, matState)) :=
   ⟨rfl, by intro h; cases h⟩
 
 -- 5. write_read
 /-- Instance (law `ConcreteSpec.Core.Hybrid.write_read`, case `u8One`). -/
-example : after.read linuxX8664 ⟨0⟩ = some (.int .u8 1) :=
+theorem write_read_example_u8One : after.read linuxX8664 ⟨0⟩ = some (.int .u8 1) :=
   write_read linuxX8664 before after before_wf.memory ⟨0⟩ (.int .u8 1) rfl
 
 /-- Planted (law `ConcreteSpec.Core.Hybrid.write_read`, case `u8One`, subject `ConcreteSpec.Core.Hybrid.State.read`, mutant `ConcreteSpec.Core.Hybrid.Audit.badReadStructOnly`). -/
-example : before.memory.WellFormed linuxX8664 ∧
+theorem write_read_planted_u8One_badReadStructOnly : before.memory.WellFormed linuxX8664 ∧
     before.write linuxX8664 ⟨0⟩ (.int .u8 1) = some after ∧
     ¬ (badReadStructOnly linuxX8664 after ⟨0⟩ = some (.int .u8 1)) :=
   ⟨before_wf.memory, rfl, by decide⟩
 
 -- 6. typed_store_frame
 /-- Instance (law `ConcreteSpec.Core.Hybrid.typed_store_frame`, case `trailingPad`). Accepted: a real typed State.write updates the integer and preserves uninitialized trailing bytes in a well-formed state. -/
-example : match before.write linuxX8664 ⟨0⟩ (.int .u8 1) with
+theorem typed_store_frame_example_trailingPad : match before.write linuxX8664 ⟨0⟩ (.int .u8 1) with
     | some st' => (st'.memory.block ⟨0⟩).map (fun y => y.bytes[1]?) =
         some ((candidate ⟨0⟩ 40 3 1).bytes[1]?)
     | none => True :=
@@ -871,7 +871,7 @@ example : match before.write linuxX8664 ⟨0⟩ (.int .u8 1) with
     (candidate ⟨0⟩ 40 3 1) rfl 1 rfl rfl rfl (.inr (by decide))
 
 /-- Planted (law `ConcreteSpec.Core.Hybrid.typed_store_frame`, case `trailingPad`, subject `ConcreteSpec.Core.Hybrid.State.write`, mutant `ConcreteSpec.Core.Hybrid.Audit.badWriteClobber`). A typed write mutated to initialize trailing padding to zero violates the frame at byte 1 of the same well-formed state. -/
-example : before.WellFormed linuxX8664 ∧
+theorem typed_store_frame_planted_trailingPad_badWriteClobber : before.WellFormed linuxX8664 ∧
     before.places ⟨0⟩ = some ⟨(.int .u8), .materialized range⟩ ∧
     before.memory.access linuxX8664 range.ptr 1 range.align = some (some (⟨0⟩, 0)) ∧
     before.memory.block ⟨0⟩ = some (candidate ⟨0⟩ 40 3 1) ∧
@@ -884,13 +884,13 @@ example : before.WellFormed linuxX8664 ∧
 
 -- 7. materialize_projection
 /-- Instance (law `ConcreteSpec.Core.Hybrid.materialize_projection`, case `firstMat`). -/
-example : match structState.materialize linuxX8664 ⟨0⟩ ⟨0⟩ 40 1 [] with
+theorem materialize_projection_example_firstMat : match structState.materialize linuxX8664 ⟨0⟩ ⟨0⟩ 40 1 [] with
     | some (r, st') => ∃ t, st'.places ⟨0⟩ = some ⟨t, .materialized r⟩
     | none => True :=
   materialize_projection linuxX8664 structState ⟨0⟩ ⟨0⟩ 40 1 []
 
 /-- Planted (law `ConcreteSpec.Core.Hybrid.materialize_projection`, case `firstMat`, subject `ConcreteSpec.Core.Hybrid.State.materialize`, mutant `ConcreteSpec.Core.Hybrid.Audit.badMaterializeEmpty`). -/
-example : ¬ (match badMaterializeEmpty linuxX8664 structState ⟨0⟩ ⟨0⟩ 40 1 [] with
+theorem materialize_projection_planted_firstMat_badMaterializeEmpty : ¬ (match badMaterializeEmpty linuxX8664 structState ⟨0⟩ ⟨0⟩ 40 1 [] with
     | some (r, st') => ∃ t, st'.places ⟨0⟩ = some ⟨t, .materialized r⟩
     | none => True) := by
   rintro ⟨t, ht⟩
@@ -898,27 +898,27 @@ example : ¬ (match badMaterializeEmpty linuxX8664 structState ⟨0⟩ ⟨0⟩ 4
 
 -- 8. materialize_idempotent
 /-- Instance (law `ConcreteSpec.Core.Hybrid.materialize_idempotent`, case `secondCall`). -/
-example : before.materialize linuxX8664 ⟨0⟩ ⟨0⟩ 60 1 [] = some (range, before) :=
+theorem materialize_idempotent_example_secondCall : before.materialize linuxX8664 ⟨0⟩ ⟨0⟩ 60 1 [] = some (range, before) :=
   materialize_idempotent linuxX8664 before before ⟨0⟩ ⟨0⟩ ⟨0⟩ 40 1 60 1 [] [] range rfl
 
 /-- Instance (law `ConcreteSpec.Core.Hybrid.materialize_idempotent`, case `firstAllocation`). The first call allocates and initializes storage; a different second request reuses it. -/
-example : matState.materialize linuxX8664 ⟨0⟩ ⟨0⟩ 60 1 [] = some (matRange, matState) :=
+theorem materialize_idempotent_example_firstAllocation : matState.materialize linuxX8664 ⟨0⟩ ⟨0⟩ 60 1 [] = some (matRange, matState) :=
   materialize_idempotent linuxX8664 structState matState ⟨0⟩ ⟨0⟩ ⟨0⟩
     40 1 60 1 [] [] matRange rfl
 /-- Planted (law `ConcreteSpec.Core.Hybrid.materialize_idempotent`, case `firstAllocation`, subject `ConcreteSpec.Core.Hybrid.State.materialize`, mutant `ConcreteSpec.Core.Hybrid.Audit.badMaterializeReallocate`). -/
-example : badMaterializeReallocate linuxX8664 structState ⟨0⟩ ⟨0⟩ 40 1 [] = some (matRange, matState) ∧
+theorem materialize_idempotent_planted_firstAllocation_badMaterializeReallocate : badMaterializeReallocate linuxX8664 structState ⟨0⟩ ⟨0⟩ 40 1 [] = some (matRange, matState) ∧
     ¬ (badMaterializeReallocate linuxX8664 matState ⟨0⟩ ⟨0⟩ 60 1 [] = some (matRange, matState)) :=
   ⟨rfl, by intro h; cases h⟩
 
 -- 9. write_wellFormed
 /-- Instance (law `ConcreteSpec.Core.Hybrid.write_wellFormed`, case `u8One`). -/
-example : match before.write linuxX8664 ⟨0⟩ (.int .u8 1) with
+theorem write_wellFormed_example_u8One : match before.write linuxX8664 ⟨0⟩ (.int .u8 1) with
     | some st' => st'.WellFormed linuxX8664
     | none => True :=
   write_wellFormed linuxX8664 before before_wf ⟨0⟩ (.int .u8 1)
 
 /-- Planted (law `ConcreteSpec.Core.Hybrid.write_wellFormed`, case `u8One`, subject `ConcreteSpec.Core.Hybrid.State.write`, mutant `ConcreteSpec.Core.Hybrid.Audit.badWriteWf`). -/
-example : before.WellFormed linuxX8664 ∧
+theorem write_wellFormed_planted_u8One_badWriteWf : before.WellFormed linuxX8664 ∧
     ¬ (match badWriteWf linuxX8664 before ⟨0⟩ (.int .u8 1) with
       | some st' => st'.WellFormed linuxX8664
       | none => True) :=
@@ -926,13 +926,13 @@ example : before.WellFormed linuxX8664 ∧
 
 -- 10. rawWrite_wellFormed
 /-- Instance (law `ConcreteSpec.Core.Hybrid.rawWrite_wellFormed`, case `oneByte`). -/
-example : match before.rawWrite linuxX8664 range.ptr [.init 1 none] 1 with
+theorem rawWrite_wellFormed_example_oneByte : match before.rawWrite linuxX8664 range.ptr [.init 1 none] 1 with
     | some st' => st'.WellFormed linuxX8664
     | none => True :=
   rawWrite_wellFormed linuxX8664 before before_wf range.ptr [.init 1 none] 1
 
 /-- Planted (law `ConcreteSpec.Core.Hybrid.rawWrite_wellFormed`, case `oneByte`, subject `ConcreteSpec.Core.Hybrid.State.rawWrite`, mutant `ConcreteSpec.Core.Hybrid.Audit.badRawWriteWf`). -/
-example : before.WellFormed linuxX8664 ∧
+theorem rawWrite_wellFormed_planted_oneByte_badRawWriteWf : before.WellFormed linuxX8664 ∧
     ¬ (match badRawWriteWf linuxX8664 before range.ptr [.init 1 none] 1 with
       | some st' => st'.WellFormed linuxX8664
       | none => True) :=
@@ -940,13 +940,13 @@ example : before.WellFormed linuxX8664 ∧
 
 -- 11. materialize_wellFormed
 /-- Instance (law `ConcreteSpec.Core.Hybrid.materialize_wellFormed`, case `firstMat`). -/
-example : match structState.materialize linuxX8664 ⟨0⟩ ⟨0⟩ 40 1 [] with
+theorem materialize_wellFormed_example_firstMat : match structState.materialize linuxX8664 ⟨0⟩ ⟨0⟩ 40 1 [] with
     | some (_, st') => st'.WellFormed linuxX8664
     | none => True :=
   materialize_wellFormed linuxX8664 structState structState_wf ⟨0⟩ ⟨0⟩ 40 1 []
 
 /-- Planted (law `ConcreteSpec.Core.Hybrid.materialize_wellFormed`, case `firstMat`, subject `ConcreteSpec.Core.Hybrid.State.materialize`, mutant `ConcreteSpec.Core.Hybrid.Audit.badMaterializeWf`). -/
-example : structState.WellFormed linuxX8664 ∧
+theorem materialize_wellFormed_planted_firstMat_badMaterializeWf : structState.WellFormed linuxX8664 ∧
     ¬ (match badMaterializeWf linuxX8664 structState ⟨0⟩ ⟨0⟩ 40 1 [] with
       | some (_, st') => st'.WellFormed linuxX8664
       | none => True) :=
@@ -954,13 +954,13 @@ example : structState.WellFormed linuxX8664 ∧
 
 -- 12. expose_wellFormed
 /-- Instance (law `ConcreteSpec.Core.Hybrid.expose_wellFormed`, case `firstExpose`). -/
-example : match structState.expose linuxX8664 ⟨0⟩ ⟨0⟩ 40 1 [] with
+theorem expose_wellFormed_example_firstExpose : match structState.expose linuxX8664 ⟨0⟩ ⟨0⟩ 40 1 [] with
     | some (_, st') => st'.WellFormed linuxX8664
     | none => True :=
   expose_wellFormed linuxX8664 structState structState_wf ⟨0⟩ ⟨0⟩ 40 1 []
 
 /-- Planted (law `ConcreteSpec.Core.Hybrid.expose_wellFormed`, case `firstExpose`, subject `ConcreteSpec.Core.Hybrid.State.expose`, mutant `ConcreteSpec.Core.Hybrid.Audit.badExposeStateWf`). -/
-example : structState.WellFormed linuxX8664 ∧
+theorem expose_wellFormed_planted_firstExpose_badExposeStateWf : structState.WellFormed linuxX8664 ∧
     ¬ (match badExposeStateWf linuxX8664 structState ⟨0⟩ ⟨0⟩ 40 1 [] with
       | some (_, st') => st'.WellFormed linuxX8664
       | none => True) :=
@@ -1029,30 +1029,30 @@ def badReadDiff (tgt : Target) (st : State) (q : Place) : Option Value :=
 abbrev badReadEmptyDiff := badReadDiff
 
 /-- Instance (laws `write_frame`, `materialize_frame`, `expose_frame`). The observed place decodes successfully before and after each transition. -/
-example : before.read linuxX8664 ⟨1⟩ = some (.int .u8 1) ∧
+theorem example_laws_write_frame_materialize_frame_expose_frame_observed_place : before.read linuxX8664 ⟨1⟩ = some (.int .u8 1) ∧
     after.read linuxX8664 ⟨1⟩ = some (.int .u8 1) ∧
     structState.read linuxX8664 ⟨1⟩ = some (.int .u8 1) ∧
     matExposedState.read linuxX8664 ⟨1⟩ = some (.int .u8 1) := by decide
 
 -- 13. write_frame
 /-- Instance (law `ConcreteSpec.Core.Hybrid.write_frame`, case `otherPlace`). -/
-example : after.read linuxX8664 ⟨1⟩ = before.read linuxX8664 ⟨1⟩ :=
+theorem write_frame_example_otherPlace : after.read linuxX8664 ⟨1⟩ = before.read linuxX8664 ⟨1⟩ :=
   write_frame linuxX8664 before after ⟨0⟩ ⟨1⟩ (.int .u8 1) (by decide) before_sep rfl
 
 /-- Planted (law `ConcreteSpec.Core.Hybrid.write_frame`, case `otherPlace`, subject `ConcreteSpec.Core.Hybrid.State.read`, mutant `ConcreteSpec.Core.Hybrid.Audit.Frame.badReadDiff`). -/
-example : (⟨1⟩ : Place) ≠ ⟨0⟩ ∧ before.Separated ⟨0⟩ ⟨1⟩ ∧
+theorem write_frame_planted_otherPlace_badReadDiff : (⟨1⟩ : Place) ≠ ⟨0⟩ ∧ before.Separated ⟨0⟩ ⟨1⟩ ∧
     before.write linuxX8664 ⟨0⟩ (.int .u8 1) = some after ∧
     ¬ (badReadDiff linuxX8664 after ⟨1⟩ = badReadDiff linuxX8664 before ⟨1⟩) :=
   ⟨by decide, before_sep, rfl, by decide⟩
 
 -- 14. write_frame_disjoint
 /-- Instance (law `ConcreteSpec.Core.Hybrid.write_frame_disjoint`, case `otherPlace`). -/
-example : after.read linuxX8664 ⟨1⟩ = before.read linuxX8664 ⟨1⟩ :=
+theorem write_frame_disjoint_example_otherPlace : after.read linuxX8664 ⟨1⟩ = before.read linuxX8664 ⟨1⟩ :=
   write_frame_disjoint linuxX8664 before after before_wf ⟨0⟩ ⟨1⟩ (.int .u8 1)
     (by decide) before_disjoint rfl
 
 /-- Planted (law `ConcreteSpec.Core.Hybrid.write_frame_disjoint`, case `otherPlace`, subject `ConcreteSpec.Core.Hybrid.State.read`, mutant `ConcreteSpec.Core.Hybrid.Audit.Frame.badReadDiff`). -/
-example : before.WellFormed linuxX8664 ∧ (⟨1⟩ : Place) ≠ ⟨0⟩ ∧
+theorem write_frame_disjoint_planted_otherPlace_badReadDiff : before.WellFormed linuxX8664 ∧ (⟨1⟩ : Place) ≠ ⟨0⟩ ∧
     before.RangesDisjoint ⟨0⟩ ⟨1⟩ ∧
     before.write linuxX8664 ⟨0⟩ (.int .u8 1) = some after ∧
     ¬ (badReadDiff linuxX8664 after ⟨1⟩ = badReadDiff linuxX8664 before ⟨1⟩) :=
@@ -1060,12 +1060,12 @@ example : before.WellFormed linuxX8664 ∧ (⟨1⟩ : Place) ≠ ⟨0⟩ ∧
 
 -- 15. materialize_frame
 /-- Instance (law `ConcreteSpec.Core.Hybrid.materialize_frame`, case `otherPlace`). -/
-example : matState.read linuxX8664 ⟨1⟩ = structState.read linuxX8664 ⟨1⟩ :=
+theorem materialize_frame_example_otherPlace : matState.read linuxX8664 ⟨1⟩ = structState.read linuxX8664 ⟨1⟩ :=
   materialize_frame linuxX8664 structState matState structState_wf ⟨0⟩ ⟨1⟩
     (by decide) ⟨0⟩ 40 1 [] matRange rfl
 
 /-- Planted (law `ConcreteSpec.Core.Hybrid.materialize_frame`, case `otherPlace`, subject `ConcreteSpec.Core.Hybrid.State.read`, mutant `ConcreteSpec.Core.Hybrid.Audit.Frame.badReadEmptyDiff`). -/
-example : structState.WellFormed linuxX8664 ∧ (⟨1⟩ : Place) ≠ ⟨0⟩ ∧
+theorem materialize_frame_planted_otherPlace_badReadEmptyDiff : structState.WellFormed linuxX8664 ∧ (⟨1⟩ : Place) ≠ ⟨0⟩ ∧
     structState.materialize linuxX8664 ⟨0⟩ ⟨0⟩ 40 1 [] = some (matRange, matState) ∧
     ¬ (badReadEmptyDiff linuxX8664 matState ⟨1⟩ =
       badReadEmptyDiff linuxX8664 structState ⟨1⟩) :=
@@ -1073,12 +1073,12 @@ example : structState.WellFormed linuxX8664 ∧ (⟨1⟩ : Place) ≠ ⟨0⟩ �
 
 -- 16. expose_frame
 /-- Instance (law `ConcreteSpec.Core.Hybrid.expose_frame`, case `otherPlace`). -/
-example : matExposedState.read linuxX8664 ⟨1⟩ = structState.read linuxX8664 ⟨1⟩ :=
+theorem expose_frame_example_otherPlace : matExposedState.read linuxX8664 ⟨1⟩ = structState.read linuxX8664 ⟨1⟩ :=
   expose_frame linuxX8664 structState matExposedState structState_wf ⟨0⟩ ⟨1⟩
     (by decide) ⟨0⟩ 40 1 [] matRange rfl
 
 /-- Planted (law `ConcreteSpec.Core.Hybrid.expose_frame`, case `otherPlace`, subject `ConcreteSpec.Core.Hybrid.State.read`, mutant `ConcreteSpec.Core.Hybrid.Audit.Frame.badReadEmptyDiff`). -/
-example : structState.WellFormed linuxX8664 ∧ (⟨1⟩ : Place) ≠ ⟨0⟩ ∧
+theorem expose_frame_planted_otherPlace_badReadEmptyDiff : structState.WellFormed linuxX8664 ∧ (⟨1⟩ : Place) ≠ ⟨0⟩ ∧
     structState.expose linuxX8664 ⟨0⟩ ⟨0⟩ 40 1 [] = some (matRange, matExposedState) ∧
     ¬ (badReadEmptyDiff linuxX8664 matExposedState ⟨1⟩ =
       badReadEmptyDiff linuxX8664 structState ⟨1⟩) :=
@@ -1088,12 +1088,12 @@ end Frame
 
 -- 17. materialize_read
 /-- Instance (law `ConcreteSpec.Core.Hybrid.materialize_read`, case `firstMat`). -/
-example : matState.read linuxX8664 ⟨0⟩ = some (.int .u8 1) :=
+theorem materialize_read_example_firstMat : matState.read linuxX8664 ⟨0⟩ = some (.int .u8 1) :=
   materialize_read linuxX8664 structState matState structState_wf.memory ⟨0⟩ (.int .u8 1)
     ⟨0⟩ 40 1 [] matRange rfl rfl
 
 /-- Planted (law `ConcreteSpec.Core.Hybrid.materialize_read`, case `firstMat`, subject `ConcreteSpec.Core.Hybrid.State.read`, mutant `ConcreteSpec.Core.Hybrid.Audit.badReadStructOnly`). -/
-example : structState.memory.WellFormed linuxX8664 ∧
+theorem materialize_read_planted_firstMat_badReadStructOnly : structState.memory.WellFormed linuxX8664 ∧
     badReadStructOnly linuxX8664 structState ⟨0⟩ = some (.int .u8 1) ∧
     structState.materialize linuxX8664 ⟨0⟩ ⟨0⟩ 40 1 [] = some (matRange, matState) ∧
     ¬ (badReadStructOnly linuxX8664 matState ⟨0⟩ = some (.int .u8 1)) :=
@@ -1112,14 +1112,14 @@ def staleRead (tgt : Target) (st : State) (p : Place) : Option Value :=
   | _ => st.read tgt p
 
 /-- Instance (law `ConcreteSpec.Core.Hybrid.rawWrite_read`, case `overwrite`). -/
-example : rawAfter.read linuxX8664 ⟨0⟩ = decode linuxX8664 (.int .u8) [.init 2 none] :=
+theorem rawWrite_read_example_overwrite : rawAfter.read linuxX8664 ⟨0⟩ = decode linuxX8664 (.int .u8) [.init 2 none] :=
   rawWrite_read linuxX8664 matState rawAfter
     (materialize_wellFormed linuxX8664 structState structState_wf ⟨0⟩ ⟨0⟩ 40 1 []).memory
     ⟨0⟩ (.int .u8) matRange [.init 2 none] rfl rfl rfl
 
 /-- Planted (law `ConcreteSpec.Core.Hybrid.rawWrite_read`, case `overwrite`). The same
 well-formed state, projection, byte count and successful raw write reject a stale typed read. -/
-example : matState.memory.WellFormed linuxX8664 ∧
+theorem rawWrite_read_planted_overwrite : matState.memory.WellFormed linuxX8664 ∧
     matState.places ⟨0⟩ = some ⟨.int .u8, .materialized matRange⟩ ∧
     (sizeof (.int .u8) = some [MByte.init 2 none].length) ∧
     matState.rawWrite linuxX8664 matRange.ptr [.init 2 none] 1 = some rawAfter ∧

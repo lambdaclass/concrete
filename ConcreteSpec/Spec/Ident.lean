@@ -1329,23 +1329,23 @@ def loadedA : LoadedModule := ⟨⟨⟨⟨"p"⟩, ⟨⟨"1"⟩⟩⟩, [⟨"a"⟩
 /-- A second module from the same package and origin. -/
 def loadedB : LoadedModule := ⟨⟨loadedA.module.package, [⟨"b"⟩], by decide⟩, loadedA.origin⟩
 
-example : (LoadedModules.findCollision [loadedA, loadedB]).isNone = true := by decide
+theorem example_LoadedModules_findCollision_loadedA_loadedB_isNone : (LoadedModules.findCollision [loadedA, loadedB]).isNone = true := by decide
 
 /-- A collision refuses the entire load and retains both inputs for diagnostics. -/
-example : (match LoadedModules.load [loadedA, { loadedA with origin := ⟨⟨"origin-b"⟩⟩ }] with
+theorem example_collision_refuses_entire_load_and_retains : (match LoadedModules.load [loadedA, { loadedA with origin := ⟨⟨"origin-b"⟩⟩ }] with
     | .refused collision => decide (collision.first = loadedA ∧
         collision.second.origin = ⟨⟨"origin-b"⟩⟩)
     | .admitted _ => false) = true := by decide
 
 /-- OD44 refuses one top-level module name shared by distinct packages. -/
-example : (match LoadedModules.load [loadedA,
+theorem example_OD44_refuses_one_top_level_module : (match LoadedModules.load [loadedA,
       { loadedA with module := { loadedA.module with package := ⟨⟨"q"⟩, ⟨⟨"1"⟩⟩⟩ } }] with
     | .refused (.topLevel _ _ _ _) => true
     | _ => false) = true := by decide
 
 /-- Ordinals are per kind; named siblings consume none, while pinned unnamed siblings still
 consume one. The literal list checks both completeness and traversal order. -/
-example : KeyConstruct.collectKeys
+theorem example_Ordinals_are_per_kind_named_siblings : KeyConstruct.collectKeys
     [⟨.call, .unnamed none, []⟩,
      ⟨.binding, .unnamed none, []⟩,
      ⟨.call, .named ⟨"helper"⟩, []⟩,
@@ -1361,7 +1361,7 @@ example : KeyConstruct.collectKeys
 
 /-- Entering a named construct resets the scope, but entering an unnamed one inherits it.
 Both the collector and the occurrence resolver must retain the complete ancestor path. -/
-example : let body : List KeyConstruct :=
+theorem example_Entering_named_construct_resets_scope_but : let body : List KeyConstruct :=
     [⟨.call, .unnamed none, []⟩,
      ⟨.block, .named ⟨"inner"⟩, [⟨.call, .unnamed none, []⟩]⟩,
      ⟨.block, .unnamed none,
@@ -1380,13 +1380,13 @@ example : let body : List KeyConstruct :=
       some ⟨[⟨.block, .ordinal 0⟩, ⟨.call, .ordinal 1⟩, ⟨.binding, .ordinal 0⟩]⟩ := by cbv
 
 /-- Descendant assignment retains a pinned ancestor and inherited per-kind ordinals. -/
-example : KeyConstruct.descendantKey [⟨.call, .unnamed none, []⟩]
+theorem example_Descendant_assignment_retains_pinned_ancestor_and : KeyConstruct.descendantKey [⟨.call, .unnamed none, []⟩]
     ⟨.block, .unnamed (some ⟨"outer"⟩), [⟨.call, .unnamed none, []⟩]⟩ [0] =
     some ⟨[⟨.block, .pinned ⟨"outer"⟩⟩, ⟨.call, .ordinal 1⟩]⟩ := by cbv
 
 /-- Assigned tables attach every key, in preorder, to its actual owner and sequential sites
 starting at a nonzero offset. Program assignment uses the selected function's body and offset. -/
-example : let f : FnId := ⟨loadedA.module, ⟨"f"⟩⟩
+theorem example_Assigned_tables_attach_every_key_in : let f : FnId := ⟨loadedA.module, ⟨"f"⟩⟩
     let g : FnId := ⟨loadedA.module, ⟨"g"⟩⟩
     let body : List KeyConstruct :=
       [⟨.block, .named ⟨"inner"⟩, [⟨.call, .unnamed (some ⟨"invoke"⟩), []⟩]⟩]
@@ -1399,37 +1399,37 @@ example : let f : FnId := ⟨loadedA.module, ⟨"f"⟩⟩
       [(⟨20⟩, ⟨.function g, ⟨[⟨.abort, .ordinal 0⟩]⟩⟩)] := by cbv
 
 /-- Equal specialization requests at different sites share one entry, retaining both edges. -/
-example : let generic := GenericId.function ⟨loadedA.module, ⟨"f"⟩⟩
+theorem example_Equal_specialization_requests_at_different_sites : let generic := GenericId.function ⟨loadedA.module, ⟨"f"⟩⟩
     let table := SpecializationTable.canonicalize
       [SpecializationRequest.for ⟨0⟩ generic ([1] : Numbers) ([2] : Numbers),
        SpecializationRequest.for ⟨1⟩ generic [1] [2]]
     table.entries.length = 1 ∧ table.edges.map SpecializationEdge.entry = [0, 0] := by decide
 
 /-- Known premise categories round-trip; unknown tags and mismatched versions are refused. -/
-example : let scope := PremiseScope.package loadedA.module.package ⟨⟨"heap"⟩⟩
+theorem example_Known_premise_categories_round_trip_unknown : let scope := PremiseScope.package loadedA.module.package ⟨⟨"heap"⟩⟩
     (PremiseRecord.mk .heap scope specVersion).encode.read specVersion =
       some ⟨.heap, scope, specVersion⟩ ∧
     EncodedPremise.read specVersion ⟨99, scope, specVersion⟩ = none ∧
     EncodedPremise.read specVersion ⟨0, scope, ⟨9, 9⟩⟩ = none := by decide
 
 /-- Two declarations named `Pair` in different modules are different declarations. -/
-example : DeclId.mk (ModuleId.mk ⟨⟨"p"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"a"⟩] (by decide)) ⟨"Pair"⟩ ≠
+theorem example_Two_declarations_named_Pair_in_different : DeclId.mk (ModuleId.mk ⟨⟨"p"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"a"⟩] (by decide)) ⟨"Pair"⟩ ≠
     DeclId.mk (ModuleId.mk ⟨⟨"p"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"b"⟩] (by decide)) ⟨"Pair"⟩ := by decide
 
 /-- The same module path in two packages also yields different declarations. -/
-example : DeclId.mk (ModuleId.mk ⟨⟨"p1"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"a"⟩] (by decide)) ⟨"Pair"⟩ ≠
+theorem example_same_module_path_in_two_packages : DeclId.mk (ModuleId.mk ⟨⟨"p1"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"a"⟩] (by decide)) ⟨"Pair"⟩ ≠
     DeclId.mk (ModuleId.mk ⟨⟨"p2"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"a"⟩] (by decide)) ⟨"Pair"⟩ := by decide
 
 /-- A field belongs to its owner: `a` of `Pair` is not `a` of `Point`, and `value` of variant
 `E.A` is not `value` of variant `E.B`. -/
-example : FieldId.mk (.struct ⟨ModuleId.mk ⟨⟨"p"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"m"⟩] (by decide), ⟨"Pair"⟩⟩) ⟨"a"⟩ ≠
+theorem example_field_belongs_its_owner_Pair_is : FieldId.mk (.struct ⟨ModuleId.mk ⟨⟨"p"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"m"⟩] (by decide), ⟨"Pair"⟩⟩) ⟨"a"⟩ ≠
     FieldId.mk (.struct ⟨ModuleId.mk ⟨⟨"p"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"m"⟩] (by decide), ⟨"Point"⟩⟩) ⟨"a"⟩ := by decide
 
-example : FieldId.mk (.variant ⟨⟨ModuleId.mk ⟨⟨"p"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"m"⟩] (by decide), ⟨"E"⟩⟩, ⟨"A"⟩⟩) ⟨"value"⟩ ≠
+theorem example_FieldId_mk_variant_ModuleId_mk : FieldId.mk (.variant ⟨⟨ModuleId.mk ⟨⟨"p"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"m"⟩] (by decide), ⟨"E"⟩⟩, ⟨"A"⟩⟩) ⟨"value"⟩ ≠
     FieldId.mk (.variant ⟨⟨ModuleId.mk ⟨⟨"p"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"m"⟩] (by decide), ⟨"E"⟩⟩, ⟨"B"⟩⟩) ⟨"value"⟩ := by decide
 
 /-- The first and the last slice. -/
-example : (SliceId.mk 0).n.val = 0 ∧ (SliceId.mk 28).n.val = 28 := ⟨rfl, rfl⟩
+theorem example_first_and_last_slice : (SliceId.mk 0).n.val = 0 ∧ (SliceId.mk 28).n.val = 28 := ⟨rfl, rfl⟩
 
 /-- Bytes for `a`, a tab, and `b`. After the tab, the range starts at line 1, byte column 3. -/
 def tabSource : SourceText := SourceText.ofBytes [97, 9, 98]
@@ -1442,31 +1442,31 @@ def mainSourcePath : SourcePath :=
 def tabSpan : Span := ⟨mainSourcePath, 2, 3, by decide, 1, 3, by decide, by decide⟩
 
 /-- A tab advances one byte column, independently of any source-path policy. -/
-example : tabSource.lineAt 2 = 1 ∧ tabSource.columnAt 2 = 3 := by decide
+theorem example_tab_advances_one_byte_column_independently : tabSource.lineAt 2 = 1 ∧ tabSource.columnAt 2 = 3 := by decide
 
 /-- Counting the tab as zero bytes gives the wrong column. -/
-example : tabSource.columnAt 2 ≠ 2 := by decide
+theorem example_Counting_tab_as_zero_bytes_gives : tabSource.columnAt 2 ≠ 2 := by decide
 
 /-- A newline starts a new 1-based byte column; offsets count bytes, not scalars. -/
-example : (SourceText.ofBytes [97, 10, 195, 169]).lineAt 3 = 2 ∧
+theorem example_newline_starts_new_based_byte_column : (SourceText.ofBytes [97, 10, 195, 169]).lineAt 3 = 2 ∧
     (SourceText.ofBytes [97, 10, 195, 169]).columnAt 3 = 2 := by decide
 
 /-- Local identity is the numeric type from Basics, with no presentation component. -/
-example : (⟨0⟩ : ConcreteSpec.Var) ≠ ⟨1⟩ := by decide
+theorem example_Local_identity_is_numeric_type_from : (⟨0⟩ : ConcreteSpec.Var) ≠ ⟨1⟩ := by decide
 
 /-- Places, primitives and contract revisions have distinct typed identities. -/
-example : PlaceId.mk 0 ≠ PlaceId.mk 1 ∧ PrimId.mk 0 ≠ PrimId.mk 1 ∧
+theorem example_Places_primitives_and_contract_revisions_have : PlaceId.mk 0 ≠ PlaceId.mk 1 ∧ PrimId.mk 0 ≠ PrimId.mk 1 ∧
     ContractId.mk ⟨0⟩ 1 ≠ ContractId.mk ⟨0⟩ 2 := by decide
 
 /-- Two obligations at one site differ by kind; two of one kind differ by their local discriminator. -/
-example : ObligationId.mk ⟨0⟩ .safety 0 ≠ ObligationId.mk ⟨0⟩ .termination 0 ∧
+theorem example_Two_obligations_at_one_site_differ : ObligationId.mk ⟨0⟩ .safety 0 ≠ ObligationId.mk ⟨0⟩ .termination 0 ∧
     ObligationId.mk ⟨0⟩ .safety 0 ≠ ObligationId.mk ⟨0⟩ .safety 1 := by decide
 
 /-- A revised rule is a different rule identity. -/
-example : RuleId.mk `ConcreteSpec.Core.example 1 ≠ RuleId.mk `ConcreteSpec.Core.example 2 := by
+theorem example_revised_rule_is_different_rule_identity : RuleId.mk `ConcreteSpec.Core.example 1 ≠ RuleId.mk `ConcreteSpec.Core.example 2 := by
   decide
 
 /-- Before the freeze the version is `0.x`. -/
-example : specVersion.major = 0 := rfl
+theorem example_Before_freeze_version_is_x : specVersion.major = 0 := rfl
 
 end ConcreteSpec.Core
