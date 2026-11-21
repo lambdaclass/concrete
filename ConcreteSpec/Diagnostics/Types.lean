@@ -1,4 +1,5 @@
 import ConcreteSpec.Spec.Basics
+import ConcreteSpec.Spec.Ident
 
 /-! Per-program diagnostics ownership, outside the semantic specification. -/
 namespace ConcreteSpec
@@ -18,3 +19,11 @@ structure Elaborated (α : Type) where
 
 
 end ConcreteSpec
+
+namespace ConcreteSpec.Core.SourcePath
+
+/-- UTF-8 adapter for callers that already have a host string. -/
+def parseString (raw : String) : Except Refusal SourcePath :=
+  parse (SourceText.ofBytes raw.toByteArray.data.toList)
+
+end ConcreteSpec.Core.SourcePath

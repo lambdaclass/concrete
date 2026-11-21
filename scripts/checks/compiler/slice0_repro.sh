@@ -33,7 +33,8 @@ source scripts/checks/lib/bounded.sh
 # bounded SECS CMD...: CMD through bounded_run (stdin /dev/null, one re-run on a timeout; a second
 # timeout returns 124 with no output and is reported INCOMPLETE, never a pass).
 bounded() {
-  local secs=$1 rc=0
+  local secs=$1
+  local rc=0
   shift
   bounded_run -i /dev/null "$secs" -- "$@" || rc=$?
   if [ "$rc" != 0 ] && bounded_is_incomplete "$rc"; then
@@ -64,9 +65,14 @@ for side in first second; do
   done
   (
     cd "$d"
-    export TMPDIR="$work/$side/tmp" LC_ALL=C TZ=UTC SOURCE_DATE_EPOCH=1 ZERO_AR_DATE=1
+    export TMPDIR="$work/$side/tmp"
+    export LC_ALL=C
+    export TZ=UTC
+    export SOURCE_DATE_EPOCH=1
+    export ZERO_AR_DATE=1
     # No Lake artifact cache: each side compiles everything it uses.
-    export LAKE_ARTIFACT_CACHE=false LAKE_CACHE_DIR="$work/$side/lake-cache"
+    export LAKE_ARTIFACT_CACHE=false
+    export LAKE_CACHE_DIR="$work/$side/lake-cache"
     bounded 3000 lake build Concrete lean-compiler-backend/lcb >"$work/$side/build.log" 2>&1 ||
       { tail -50 "$work/$side/build.log" >&2; echo "slice0_repro: $side: build failed" >&2; exit 1; }
     lcb="$d/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
@@ -98,7 +104,10 @@ b="$work/second/checkout-with-second-path"
 
 # Negative controls: the comparator must refuse each perturbation of an identical pair.
 control() { # control LABEL EXPECTED-MESSAGE SETUP...
-  local label=$1 expect=$2 c="$work/ctl/$1" rc=0; shift 2
+  local label=$1
+  local expect=$2
+  local c="$work/ctl/$1"
+  local rc=0; shift 2
   mkdir -p "$c"
   cp -R "$a" "$c/a"; cp -R "$a" "$c/b"
   (cd "$c/b" && "$@")
