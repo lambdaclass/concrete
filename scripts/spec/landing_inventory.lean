@@ -438,7 +438,8 @@ private def completion : PieceId → Completion
       `ConcreteSpec.Core.wrap_inRange,
       `ConcreteSpec.Core.wrap_of_inRange,
       `ConcreteSpec.Core.wrapping_of_checked]]
-  | .F06 => namedEvidence [
+  | .F06 =>
+    { named := [
     evidence `ConcreteSpec.Spec.Const `ConcreteSpec.Core.ConstDemo [
       `example_accepted_rule_ConcreteSpec_Core_ConstsAdmitted_wrapping,
       `example_accepted_rule_ConcreteSpec_Core_ConstsAdmitted_plain,
@@ -478,8 +479,8 @@ private def completion : PieceId → Completion
       `example_sorting_preserves_blocked_cyclic_suffix_which,
       `example_exact_output_distinguishes_stable_ready_selection,
       `example_longer_sorted_chain_satisfies_full_dependency],
-    decls `ConcreteSpec.Spec.Const [`ConcreteSpec.Core.CExpr, `ConcreteSpec.Core.CExpr.eval, `ConcreteSpec.Core.ConstsPermitted],
-    decls `ConcreteSpec.Spec.Rules [`ConcreteSpec.Core.ConstRegistry.accepted, `ConcreteSpec.Core.ConstRegistry.refused]]
+    decls `ConcreteSpec.Spec.Const [`ConcreteSpec.Core.CExpr, `ConcreteSpec.Core.CExpr.eval]],
+      completionRules := [⟨`ConcreteSpec.Core.ConstsPermitted, `ConcreteSpec.Spec.Const⟩] }
   | .F07 => namedEvidence [
     evidence `ConcreteSpec.Proofs.Const `ConcreteSpec.Core [
       `eval_wellTyped_progress_example_div_zero, `eval_wellTyped_progress_planted_div_zero_divisionAsFuel,
@@ -853,7 +854,8 @@ private def completion : PieceId → Completion
       `ConcreteSpec.Core.Hybrid.write_frame_disjoint,
       `ConcreteSpec.Core.Hybrid.write_read,
       `ConcreteSpec.Core.Hybrid.write_wellFormed]]
-  | .F13 => namedEvidence [
+  | .F13 =>
+    { named := [
     evidence `ConcreteSpec.Spec.Own `ConcreteSpec.Core.Own.Examples [
       `example_Accepted_rule_ConcreteSpec_Core_Own_ownerAccess,
       `example_Refused_rule_ConcreteSpec_Core_Own_ownerAccess,
@@ -890,11 +892,10 @@ private def completion : PieceId → Completion
       `planted_skipped_scope_admission_reaches_function_exit,
       `example_real_scope_exit_instrumentation_refuses_live, `example_ending_just_loan_permits_scope_teardown,
       `example_downward_only_lending_rejects_issued_but],
-    decls `ConcreteSpec.Spec.Own [`ConcreteSpec.Core.Own.State, `ConcreteSpec.Core.Own.WellFormed, `ConcreteSpec.Core.Own.OwnerPermitted],
-    evidence `ConcreteSpec.Spec.Rules `ConcreteSpec.Core.Own.Registry [
-      `ownerAccepted, `ownerRefused, `loanAccepted, `loanRefused,
-      `endAccepted, `endRefused, `moveAccepted, `moveRefused,
-      `dropAccepted, `dropRefused, `leaveAccepted, `leaveRefused]]
+    decls `ConcreteSpec.Spec.Own [`ConcreteSpec.Core.Own.State, `ConcreteSpec.Core.Own.WellFormed]],
+      completionRules := [`OwnerPermitted, `LoanPermitted, `EndPermitted, `MovePermitted,
+        `DropPermitted, `LeavePermitted].map
+          (fun name => ⟨`ConcreteSpec.Core.Own ++ name, `ConcreteSpec.Spec.Own⟩) }
   | .F14 => namedEvidence [
     evidence `ConcreteSpec.Proofs.Own `ConcreteSpec.Core.Own.PrimitiveWitnesses [
       `example_Positive_preservation_progress_instances_use_live, `example_ownership_calculation,
@@ -1169,7 +1170,8 @@ private def completion : PieceId → Completion
   | .F26 => reservedEvidence [
     specNamespace `Spec.Leak `Core.Leak.Release,
     specNamespace `Proofs.Leak `Core.Leak.Noninterference]
-  | .F26a => namedEvidence [
+  | .F26a =>
+    { named := [
     evidence `ConcreteSpec.Spec.Accounting `ConcreteSpec.Core.Leak [
       `example_execution_check_evaluating_run_on_allocate, `example_refusal_check_showing_apply_returns_none],
     evidence `ConcreteSpec.Proofs.Accounting `ConcreteSpec.Core.Leak [
@@ -1211,11 +1213,6 @@ private def completion : PieceId → Completion
       `no_allocation_reports_zero_peak, `net_interval_permits_entry_release,
       `upper_only_check_accepts_excessive_release],
     decls `ConcreteSpec.Spec.Accounting [`ConcreteSpec.Core.Leak.Account, `ConcreteSpec.Core.Leak.run, `ConcreteSpec.Core.Leak.LineageReport.Sound],
-    evidence `ConcreteSpec.Spec.Rules `ConcreteSpec.Core.Leak.Registry [
-      `wfAccepted, `wfRefused, `resetAccepted, `resetRefused,
-      `boundAccepted, `boundRefused, `optionalAccepted, `optionalRefused,
-      `reportAccepted, `reportRefused, `actionAccepted, `actionRefused,
-      `sequenceAccepted, `sequenceRefused, `signedAccepted, `signedRefused],
     laws `ConcreteSpec.Proofs.Accounting [
       `ConcreteSpec.Core.Leak.Account.alloc_zero,
       `ConcreteSpec.Core.Leak.apply_alloc_zero,
@@ -1228,7 +1225,10 @@ private def completion : PieceId → Completion
       `ConcreteSpec.Core.Leak.run_historical_peak_exact,
       `ConcreteSpec.Core.Leak.run_peak_exact,
       `ConcreteSpec.Core.Leak.run_peak_monotone,
-      `ConcreteSpec.Core.Leak.run_wf]]
+      `ConcreteSpec.Core.Leak.run_wf]],
+      completionRules := [`Account.WF, `ResetConserved, `ByteBoundSound, `ByteBoundSoundOptional,
+        `ReportSound, `FiniteActionPermitted, `FiniteSequencePermitted, `SignedNetSound].map
+          (fun name => ⟨`ConcreteSpec.Core.Leak ++ name, `ConcreteSpec.Spec.Accounting⟩) }
   | .F28 => { requiredSpec := [
     evidence `ConcreteSpec.Spec.Frame `ConcreteSpec.Core.Frame [
       `C1Frames, `Machine.RegisterFrame, `callStack, `Launcher, `ProjectStartup]] }
@@ -1455,17 +1455,27 @@ private def readRegistry (env : Environment) : CommandElabM Registry := do
     return axioms.all fun name => [`propext, `Classical.choice, `Quot.sound].contains name
   return { examples }
 
+-- Inspect the theorem independently of the registry so deleting its link cannot hide its kind.
+private def exampleType? (env : Environment) (name : Name) : Option Expr := do
+  let .thmInfo info ← env.find? name | none
+  let wrapper ← info.type.getAppFn.constName?
+  if wrapper == `ConcreteSpec.Core.RuleAccepted || wrapper == `ConcreteSpec.Core.RuleRefused then
+    some info.type
+  else none
+
+private def exampleRule? (type : Expr) : Option Name := do
+  let #[_, rule, _] := type.getAppArgs | none
+  let .const name _ := rule | none
+  some name
+
 private def exampleWrapper (env : Environment) (link : ConcreteSpec.Core.RuleExample) : Option Name := do
   let name := link.declaration
   if origin? env name != some `ConcreteSpec.Spec.Rules || !isAuthored env name then none else
-    match env.find? name with
-    | some (.thmInfo info) =>
-      let args := info.type.getAppArgs
-      if args.size == 3 && args[1]!.isConstOf link.rule then info.type.getAppFn.constName? else none
-    | _ => none
+    let type ← exampleType? env name
+    if exampleRule? type == some link.rule then type.getAppFn.constName? else none
 
 private def Registry.hasExample (registry : Registry) (env : Environment)
-    (rule wrapper : Name) (cited : Name → Bool := fun _ => true) : Bool :=
+    (rule wrapper : Name) (cited : Name → Bool) : Bool :=
   registry.examples.any fun link =>
     link.rule == rule && cited link.declaration && exampleWrapper env link == some wrapper
 
@@ -1476,33 +1486,54 @@ private def Registry.uniqueRule? (registry : Registry) (name : Name) :
   | _ => none
 
 private def Registry.errors (registry : Registry) (env : Environment) (piece : PieceId)
-    (rules : List RuleRequirement) : Array String := Id.run do
+    (rules : List RuleRequirement) (cited : Name → Bool := fun _ => true) : Array String := Id.run do
   let mut errors := #[]
   for rule in rules do
     match registry.uniqueRule? rule.name with
     | none =>
       errors := errors.push s!"{piece}: missing unique registered rule {rule.name}"
     | some entry =>
-      unless origin? env rule.name == some rule.ruleOrigin && isAuthored env rule.name do
+      unless rule.ruleOrigin != `ConcreteSpec.Spec.Rules &&
+          origin? env rule.name == some rule.ruleOrigin && isAuthored env rule.name do
         errors := errors.push s!"{piece}: registered rule {rule.name} must be authored in {rule.ruleOrigin}"
       unless entry.rev >= 1 do
         errors := errors.push s!"{piece}: registered rule {rule.name} has revision below 1"
-    unless registry.hasExample env rule.name `ConcreteSpec.Core.RuleAccepted do
+    unless registry.hasExample env rule.name `ConcreteSpec.Core.RuleAccepted cited do
       errors := errors.push s!"{piece}: missing registered acceptance example for {rule.name}"
-    unless registry.hasExample env rule.name `ConcreteSpec.Core.RuleRefused do
+    unless registry.hasExample env rule.name `ConcreteSpec.Core.RuleRefused cited do
       errors := errors.push s!"{piece}: missing registered refusal example for {rule.name}"
   return errors
 
-private def Registry.coversReservation (registry : Registry) (env : Environment)
-    (ns : EvidenceNamespace) (ruleOrigin : Name) (groups : List Group) : Bool :=
-  let cited := fun name => groups.any fun group =>
+private def EvidenceNamespace.cites (ns : EvidenceNamespace) (groups : List Group) (name : Name) : Bool :=
+  groups.any fun group =>
     ns.matches group.origin name && (group.declarations ++ group.laws).contains name
-  registry.rules.any fun rule =>
-    rule.rev >= 1 && (registry.uniqueRule? rule.name).isSome &&
-      origin? env rule.name == some ruleOrigin &&
-      isAuthored env rule.name &&
-      registry.hasExample env rule.name `ConcreteSpec.Core.RuleAccepted cited &&
-      registry.hasExample env rule.name `ConcreteSpec.Core.RuleRefused cited
+
+private def Registry.coversReservation (registry : Registry) (env : Environment)
+    (piece : PieceId) (ns : EvidenceNamespace) (ruleOrigin : Name) (groups : List Group) : Bool :=
+  registry.examples.any fun link =>
+    ns.cites groups link.declaration &&
+      (registry.errors env piece [⟨link.rule, ruleOrigin⟩] (ns.cites groups)).isEmpty
+
+private def Registry.citationErrors (registry : Registry) (env : Environment)
+    (piece : PieceId) (required : Completion) (origin name : Name) : Array String := Id.run do
+  let type := exampleType? env name
+  let rule := match type with
+    | some type => exampleRule? type
+    | none =>
+      if registry.rules.any (·.name == name) || registry.examples.any (·.rule == name) then
+        some name
+      else none
+  let some rule := rule
+    | return if type.isSome then #[s!"{piece}: {name} must cite a named rule"] else #[]
+  if type.isSome && !registry.examples.any (fun link =>
+      link.declaration == name && link.rule == rule && (exampleWrapper env link).isSome) then
+    return #[s!"{piece}: {name} is missing its registered example link for {rule}"]
+  if let some requirement := (required.localRules ++ required.completionRules).find? (·.name == rule) then
+    return registry.errors env piece [requirement]
+  if let some ns := required.namespaces.find? (fun ns => ns.matches origin name && ns.ruleOrigin.isSome) then
+    if let some ruleOrigin := ns.ruleOrigin then
+      return registry.errors env piece [⟨rule, ruleOrigin⟩]
+  return #[s!"{piece}: {name} requires a registered-rule requirement for {rule}"]
 
 private def reservationErrors (env : Environment) (pieces : List Piece)
     (requirements : PieceId → Completion := completion) : Array String := Id.run do
@@ -1561,7 +1592,7 @@ private def inventory (env : Environment) (observed : EvidenceMetadata)
             (group.declarations ++ group.laws).any (ns.matches group.origin)) do
           errors := errors.push s!"{piece.id}: missing completion evidence under {ns.namespaceName} in {ns.origin}"
         if let some ruleOrigin := ns.ruleOrigin then
-          if ruleOrigin == ns.origin || !registry.coversReservation env ns ruleOrigin piece.groups then
+          if !registry.coversReservation env piece.id ns ruleOrigin piece.groups then
             errors := errors.push s!"{piece.id}: missing registered rule authored in {ruleOrigin} with cited acceptance and refusal under {ns.namespaceName} in {ns.origin}"
         if ns.isProof then
           let citesLaw (group : Group) (name : Name) :=
@@ -1599,6 +1630,8 @@ private def inventory (env : Environment) (observed : EvidenceMetadata)
             errors := errors.push s!"{piece.id}: {name} is not an authored declaration"
           else if expectsLaw && !observed.laws.contains name then
             errors := errors.push s!"{piece.id}: {name} is not an authored Law theorem"
+          else
+            errors := errors ++ registry.citationErrors env piece.id required group.origin name
     let landed := errors.isEmpty && claimsLanding
     let status :=
       if !errors.isEmpty then "incomplete"
@@ -1637,6 +1670,13 @@ private def checkRoot (env : Environment) : IO (Array String) := do
 namespace Control
 
 theorem retained : True := trivial
+
+def rulesAuthored (value : Bool) : Prop := value = true
+
+theorem rulesAuthoredAccepted : ConcreteSpec.Core.RuleAccepted rulesAuthored true := rfl
+
+theorem rulesAuthoredRefused : ConcreteSpec.Core.RuleRefused rulesAuthored false :=
+  Bool.noConfusion
 
 /-- Law: inventory control. -/
 theorem newName (n : Nat) : n + 0 = n := Nat.add_zero n
@@ -1737,6 +1777,33 @@ def verify (env : Environment) (specEvidence : EvidenceMetadata) (baseline : Reg
     "F01: missing reserved planted control"
   let land (id : PieceId) (groups : List Group := []) : List Piece :=
     [{ present id "" with groups }]
+  let constRule := `ConcreteSpec.Core.ConstsPermitted
+  let withoutConstRule := { baseline with
+    rules := baseline.rules.filter (·.name != constRule)
+    examples := baseline.examples.filter (·.rule != constRule) }
+  let checked := inventory env {} (land .F06) #[] completion withoutConstRule
+  unless checked.errors.contains s!"F06: missing unique registered rule {constRule}" &&
+      checked.errors.contains s!"F06: missing registered acceptance example for {constRule}" &&
+      checked.errors.contains s!"F06: missing registered refusal example for {constRule}" &&
+      checked.originalLanded == 0 do
+    throwError "inventory control: F06 landed after removing the rule registration and both links"
+  let plainCitation (name moduleName : Name) (_ : PieceId) :=
+    namedEvidence [decls moduleName [name]]
+  let checked := inventory env {} (land .F06) #[]
+    (plainCitation constRule `ConcreteSpec.Spec.Const) baseline
+  unless checked.errors == #[s!"F06: {constRule} requires a registered-rule requirement for {constRule}"] &&
+      checked.originalLanded == 0 do
+    throwError "inventory control: F06 accepted a rule as a plain declaration"
+  for name in [`ConcreteSpec.Core.ConstRegistry.accepted, `ConcreteSpec.Core.ConstRegistry.refused] do
+    let fixture := plainCitation name `ConcreteSpec.Spec.Rules
+    let checked := inventory env {} (land .F06) #[] fixture withoutConstRule
+    unless checked.errors == #[s!"F06: {name} is missing its registered example link for {constRule}"] &&
+        checked.originalLanded == 0 do
+      throwError "inventory control: F06 accepted an unlinked rule theorem: {name}"
+    let checked := inventory env {} (land .F06) #[] fixture baseline
+    unless checked.errors == #[s!"F06: {name} requires a registered-rule requirement for {constRule}"] &&
+        checked.originalLanded == 0 do
+      throwError "inventory control: F06 accepted a rule theorem as a plain declaration: {name}"
   let localSourcePath (id : PieceId) :=
     let required := completion id
     if id == .F03p then { required with completionRules := [] } else required
@@ -1836,8 +1903,8 @@ def verify (env : Environment) (specEvidence : EvidenceMetadata) (baseline : Reg
   let registryFixture (ruleOrigin : Name) (_ : PieceId) := reservedEvidence [
     registryNamespace `Core.Leak.Registry ruleOrigin]
   let registryGroup := evidence `ConcreteSpec.Spec.Rules `ConcreteSpec.Core.Leak.Registry
-  let checkRegistry (ruleOrigin : Name) (names : List Name) :=
-    inventory env {} (land .F17 [registryGroup names]) #[] (registryFixture ruleOrigin) baseline
+  let checkRegistry (ruleOrigin : Name) (names : List Name) (registry : Registry := baseline) :=
+    inventory env {} (land .F17 [registryGroup names]) #[] (registryFixture ruleOrigin) registry
   let missingPair (ruleOrigin : Name) :=
     s!"F17: missing registered rule authored in {ruleOrigin} with cited acceptance and refusal under ConcreteSpec.Core.Leak.Registry in ConcreteSpec.Spec.Rules"
   let pair := [`accountA, `wfAccepted, `wfRefused]
@@ -1845,13 +1912,39 @@ def verify (env : Environment) (specEvidence : EvidenceMetadata) (baseline : Reg
   unless checked.errors.isEmpty && checked.originalLanded == 1 do
     throwError "inventory control: cited registry example pair was refused: {checked.errors}"
   let checked := checkRegistry `Spec.Grant pair
-  unless checked.errors == #[missingPair `ConcreteSpec.Spec.Grant] && checked.originalLanded == 0 do
+  unless checked.errors.contains (missingPair `ConcreteSpec.Spec.Grant) && checked.originalLanded == 0 do
     throwError "inventory control: accepted cited accounting examples for a grant rule: {checked.errors}"
   for names in [[`accountA], [`wfAccepted, `resetRefused], [`wfAccepted], [`wfRefused]] do
     let checked := checkRegistry `Spec.Accounting names
-    unless checked.errors == #[missingPair `ConcreteSpec.Spec.Accounting] &&
+    unless checked.errors.contains (missingPair `ConcreteSpec.Spec.Accounting) &&
         checked.originalLanded == 0 do
       throwError "inventory control: accepted a registry reservation without a cited example pair: {names}"
+  let rule := `ConcreteSpec.Core.Leak.Account.WF
+  let zeroRevision := { baseline with rules := baseline.rules.map fun entry =>
+    if entry.name == rule then { entry with rev := 0 } else entry }
+  let duplicate := { baseline with rules := ⟨rule, 1⟩ :: baseline.rules }
+  for (label, registry) in [("revision zero", zeroRevision), ("duplicate registration", duplicate)] do
+    let checked := checkRegistry `Spec.Accounting pair registry
+    unless checked.errors.contains (missingPair `ConcreteSpec.Spec.Accounting) &&
+        checked.originalLanded == 0 do
+      throwError "inventory control: accepted a registry reservation with {label}"
+  -- Give the authored fixture and its valid example pair the Rules module as their origin.
+  let rulesModule := `ConcreteSpec.Spec.Rules
+  let rulesEnv := env.setMainModule rulesModule
+  let rule := `SpecLanding.Control.rulesAuthored
+  let accepted := `SpecLanding.Control.rulesAuthoredAccepted
+  let refused := `SpecLanding.Control.rulesAuthoredRefused
+  let registry : Registry := { rules := [⟨rule, 1⟩], examples := [⟨rule, accepted⟩, ⟨rule, refused⟩] }
+  let ns : EvidenceNamespace := ⟨rulesModule, `SpecLanding.Control, false, some rulesModule⟩
+  unless origin? rulesEnv rule == some rulesModule && isAuthored rulesEnv rule &&
+      registry.hasExample rulesEnv rule `ConcreteSpec.Core.RuleAccepted (· == accepted) &&
+      registry.hasExample rulesEnv rule `ConcreteSpec.Core.RuleRefused (· == refused) do
+    throwError "inventory control: Rules-authored reservation fixture failed to resolve"
+  let checked := inventory rulesEnv {} (land .F17 [decls rulesModule [accepted, refused]]) #[]
+    (fun _ => reservedEvidence [ns]) registry
+  unless checked.errors.any (·.startsWith "F17: missing registered rule authored in ConcreteSpec.Spec.Rules") &&
+      checked.originalLanded == 0 do
+    throwError "inventory control: accepted a registry reservation for a Rules-authored rule"
   let reservedFixture (_ : PieceId) : Completion :=
     { namespaces := [⟨origin, `ConcreteSpec.Core.Observe.OutputEvidence, true, none⟩] }
   let checked := reservationErrors env [present .F21 "", present .F22 ""] reservedFixture
