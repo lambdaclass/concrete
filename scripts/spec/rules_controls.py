@@ -25,8 +25,9 @@ base = re.sub(r'namespace Own.Registry.*?end Own.Registry\n', '', base, flags=re
 base = re.sub(r'def registeredRuleExamples : List RuleExample :=.*?(?=\nend ConcreteSpec.Core)',
               'def registeredRuleExamples : List RuleExample := []\n', base, flags=re.S)
 exporter = (root / 'scripts/spec/rules.lean').read_text().split('-- EXPORTER BODY\n')[1]
-rows = tmp / 'rows.md'
-rows.write_text('- **Q9.1** Decided.\nR-0001 is only mentioned.\n')
+rows = tmp / 'decisions.md'
+rows.write_text('- **Q9.1** Decided.\nR-0001 is only mentioned.\n'
+                '| R-0709 | Source-path admission |\n<a id="source-paths"></a>\n')
 rule = '/-- The rule (Q9.1). -/\ndef ok (n : Nat) : Prop := n = 0\ndef other (n : Nat) : Prop := n = 0\n'
 proofs = 'theorem accepts : RuleAccepted ok 0 := rfl\ntheorem refuses : RuleRefused ok 1 := by intro h; cases h\n'
 registry = '[⟨`ConcreteSpec.Core.ok, 1⟩]'
@@ -276,6 +277,19 @@ fixture('no-doc', decl=rule.replace('/-- The rule (Q9.1). -/\n', ''), reason='ha
 fixture('no-row', decl=rule.replace('Q9.1', 'plain words'), reason='cites no decision row')
 fixture('unknown-row', decl=rule.replace('Q9.1', 'Q999.999'), reason='no existing decision row')
 fixture('mention-only-row', decl=rule.replace('Q9.1', 'R-0001'), reason='no existing decision row')
+for namespace in ('SourcePath', 'SourcePathSpan'):
+    scoped_rule = rule.replace('def ok ', f'def {namespace}.ok ')
+    scoped_proofs = proofs.replace(' ok ', f' {namespace}.ok ')
+    scoped_registry = registry.replace('Core.ok', f'Core.{namespace}.ok')
+    scoped_links = links.replace('Core.ok', f'Core.{namespace}.ok')
+    for case, citations, reason in [
+        ('documented', 'R-0709, docs/decisions.md#source-paths', None),
+        ('missing-roadmap', 'Q9.1, docs/decisions.md#source-paths', 'must cite R-0709'),
+        ('missing-anchor', 'R-0709', 'must cite an existing docs/decisions.md anchor'),
+        ('unknown-anchor', 'R-0709, docs/decisions.md#unknown', 'must cite an existing docs/decisions.md anchor'),
+    ]:
+        fixture(f'{namespace}-{case}', decl=scoped_rule.replace('Q9.1', citations),
+                proof=scoped_proofs, reg=scoped_registry, evidence=scoped_links, reason=reason)
 fixture('truncated', mutate=lambda s: '\n'.join(s.splitlines()[:-1]), reason='no end record')
 for i, bad in enumerate([None, [], {}, {'kind': 'unknown'},
                         {'kind': 'rule', 'name': 'x', 'rev': True, 'exists': True, 'doc': 'Q9.1'}]):

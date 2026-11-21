@@ -1332,7 +1332,7 @@ structure Span where
 
 namespace SourcePathSpan
 
-/-- R-0709.
+/-- R-0709, docs/decisions.md#decided-2026-11-14-trap-sites-and-law-tests.
 A span end must fit the file, including the boundary at EOF.
 The projection range contract, including empty spans at EOF, is pending owner decision. -/
 def EndInSource (input : SourceText × Nat) : Prop :=
@@ -1379,12 +1379,12 @@ structure Project where
   files : List File
   admitted : SourcePath.Project.Reference.Admitted (files.map File.path)
 
-/-- R-0496, docs/decisions.md#decided-2026-11-14-trap-sites-and-law-tests.
+/-- R-0709, R-0496, docs/decisions.md#decided-2026-11-14-trap-sites-and-law-tests.
 The requested exact path must name a file in the admitted project. -/
 def FilePresent (input : Project × SourcePath) : Prop :=
   input.2 ∈ input.1.files.map File.path
 
-/-- R-0709.
+/-- R-0709, docs/decisions.md#decided-2026-11-14-trap-sites-and-law-tests.
 Half-open span offsets must be ordered, as required by `Span.range_ok`.
 The projection range contract, including empty spans at EOF, is pending owner decision. -/
 def OrderedOffsets (input : Nat × Nat) : Prop :=

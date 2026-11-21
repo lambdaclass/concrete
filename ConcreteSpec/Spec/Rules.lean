@@ -13,7 +13,8 @@ modules here. An entry records identity, not approval or a second definition of 
 
 `scripts/spec/rules.sh` reads entries and documentation from the built Lean environment. It
 requires a declared decision-row citation and separate elaborated accepted and refused proofs
-for each entry. Example links use Lean declaration names, the identities used by the site.
+for each entry. Source-path and source-path span rules cite R-0709 and an existing decision
+anchor. Example links use Lean declaration names, the identities used by the site.
 -/
 
 namespace ConcreteSpec.Core

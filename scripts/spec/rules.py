@@ -3,8 +3,13 @@
 No source text supplies rule or example facts. Decision inventories declare documentation rows.
 """
 import json, re, sys
+from pathlib import Path
 ROW = re.compile(r"\b(Q\d+(?:\.\d+)+|OD\d+|P\d+[a-z]?|R-\d{4})\b")
 DECLARED = re.compile(r"^\s*(?:- \*\*(\S+?)\*\*|\| *(\S+?) *\|)", re.M)
+
+SOURCE_PATH_RULE = ("ConcreteSpec.Core.SourcePath.", "ConcreteSpec.Core.SourcePathSpan.")
+DECISION_CITATION = re.compile(r"\bdocs/decisions\.md#([a-z0-9]+(?:-[a-z0-9]+)*)\b")
+DECISION_ANCHOR = re.compile(r'<a id="([a-z0-9]+(?:-[a-z0-9]+)*)"></a>')
 
 
 def unique_object(pairs):
@@ -47,6 +52,9 @@ def main(rules_path, row_paths):
     rules = [r for r in records if r["kind"] == "rule"]
     examples = [r for r in records if r["kind"] == "example"]
     declared = {a or b for t in inventories for a, b in DECLARED.findall(t)}
+    decision_anchors = {anchor for path, inventory in zip(row_paths, inventories)
+                        if Path(path).name == "decisions.md"
+                        for anchor in DECISION_ANCHOR.findall(inventory)}
     names = [r["name"] for r in rules]
     for n in sorted({n for n in names if names.count(n) > 1}):
         fails.append(f"rule {n} is registered more than once")
@@ -59,6 +67,11 @@ def main(rules_path, row_paths):
             if not rows: fails.append(f"rule {r['name']}'s doc comment cites no decision row")
             elif not any(x in declared for x in rows):
                 fails.append(f"rule {r['name']}'s doc comment cites no existing decision row ({', '.join(rows)})")
+            if r["name"].startswith(SOURCE_PATH_RULE):
+                if "R-0709" not in rows or "R-0709" not in declared:
+                    fails.append(f"rule {r['name']}'s doc comment must cite R-0709")
+                if not decision_anchors.intersection(DECISION_CITATION.findall(r["doc"])):
+                    fails.append(f"rule {r['name']}'s doc comment must cite an existing docs/decisions.md anchor")
     seen = {n: set() for n in names}
     identities = set()
     for e in examples:

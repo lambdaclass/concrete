@@ -111,11 +111,43 @@ structure ControlRequirement where
   subject : Name
   mutant : Name
 
+structure BridgeRequirement where
+  theoremName : Name
+  statement : Name
+
+-- Keep these statements independent of the proof declarations. The inventory
+-- compares elaborated expressions without unfolding the guards or the rules.
+namespace SpanBridge
+
+open ConcreteSpec.Core ConcreteSpec.Core.SourcePathSpan
+
+def filePresent : Prop :=
+  ∀ (project : Project) (path : SourcePath),
+    (∃ file, project.findFile path = some file) ↔ FilePresent (project, path)
+
+def orderedOffsets : Prop :=
+  ∀ (start stop : Nat), start ≤ stop ↔ OrderedOffsets (start, stop)
+
+def endInSource : Prop :=
+  ∀ (source : SourceText) (stop : Nat),
+    stop ≤ source.length ↔ EndInSource (source, stop)
+
+def lineMatches : Prop :=
+  ∀ (span : Span) (source : SourceText),
+    span.line = source.lineAt span.startOffset ↔ LineMatches (span, source)
+
+def columnMatches : Prop :=
+  ∀ (span : Span) (source : SourceText),
+    span.col = source.columnAt span.startOffset ↔ ColumnMatches (span, source)
+
+end SpanBridge
+
 structure Completion where
   named : List Group := []
   requiredOnLanding : List Group := [] -- Resolve planned declarations and Laws when the piece claims landing.
   namespaces : List EvidenceNamespace := []
   controls : List ControlRequirement := []
+  spanBridges : List BridgeRequirement := []
   deliveredRules : List RuleRequirement := []
   completionRules : List RuleRequirement := []
 
@@ -190,8 +222,7 @@ private def completion : PieceId → Completion
     { named := [
         evidence `ConcreteSpec.Spec.Ident `ConcreteSpec.Core [
           `SourcePath, `SourcePath.parse, `SourcePath.render, `Span, `Span.LocationOk,
-          `mainSourcePath, `tabSpan, `SourcePath.Project.check, `SourcePath.Project.parse]],
-      requiredOnLanding := [
+          `mainSourcePath, `tabSpan, `SourcePath.Project.check, `SourcePath.Project.parse],
         evidence `ConcreteSpec.Spec.Ident `ConcreteSpec.Core.SourcePathSpan [
           `projectSpan, `bindSource]],
       deliveredRules := ((localNames ++ projectNames).map (fun name =>
@@ -380,9 +411,13 @@ private def completion : PieceId → Completion
       `ConcreteSpec.Core.SourcePathSpan.bindSource_correct],
     evidence `ConcreteSpec.Proofs.Ident `ConcreteSpec.Core.SourcePathSpan [
       `projectSpan_safety, `projectSpan_progress, `bindSource_safety, `bindSource_progress,
-      `Project.findFile_succeeds_iff, `missingFile_refuses, `orderedOffsets_guard_iff,
-      `endInSource_guard_iff,
-      `lineMatches_guard_iff, `columnMatches_guard_iff, `location_guard_iff]],
+      `missingFile_refuses, `location_guard_iff]],
+      spanBridges := [
+        ⟨``ConcreteSpec.Core.SourcePathSpan.Project.findFile_succeeds_iff, ``SpanBridge.filePresent⟩,
+        ⟨``ConcreteSpec.Core.SourcePathSpan.orderedOffsets_guard_iff, ``SpanBridge.orderedOffsets⟩,
+        ⟨``ConcreteSpec.Core.SourcePathSpan.endInSource_guard_iff, ``SpanBridge.endInSource⟩,
+        ⟨``ConcreteSpec.Core.SourcePathSpan.lineMatches_guard_iff, ``SpanBridge.lineMatches⟩,
+        ⟨``ConcreteSpec.Core.SourcePathSpan.columnMatches_guard_iff, ``SpanBridge.columnMatches⟩]
       namespaces := [specNamespace `Proofs.Ident `Core.SourcePathSpan]
       controls := [
         control `projectSpan_correct `ProjectionCorrect `projectSpan `projectPastEnd,
@@ -1535,6 +1570,16 @@ private def ControlRequirement.hasRefutation (control : ControlRequirement)
 private def Completion.controlGroups (required : Completion) : List Group :=
   required.controls.map fun control => decls control.origin [control.theoremName]
 
+private def Completion.deliveredGroups (required : Completion) : List Group :=
+  required.named ++ (if required.spanBridges.isEmpty then [] else
+    [decls `ConcreteSpec.Proofs.Ident (required.spanBridges.map (·.theoremName))])
+
+private def BridgeRequirement.matches (bridge : BridgeRequirement)
+    (env : Environment) (type : Expr) : Bool :=
+  match env.find? bridge.statement with
+  | some (.defnInfo expected) => type == expected.value
+  | _ => false
+
 structure Result where
   originalLanded : Nat := 0
   additionLanded : Nat := 0
@@ -1652,7 +1697,7 @@ private def reservationErrors (env : Environment) (pieces : List Piece)
         if ns.namespaceName.isPrefixOf other.namespaceName ||
             other.namespaceName.isPrefixOf ns.namespaceName then
           errors := errors.push s!"{piece.id}: overlapping completion reservation with {owner} under {ns.namespaceName} in {ns.origin}"
-      let cited := (required.named ++ required.requiredOnLanding ++ required.controlGroups ++ piece.groups).flatMap fun group =>
+      let cited := (required.deliveredGroups ++ required.requiredOnLanding ++ required.controlGroups ++ piece.groups).flatMap fun group =>
         if group.origin == ns.origin then group.declarations ++ group.laws else []
       namespaces := namespaces.insert ns.origin ((piece.id, ns, cited) :: sameModule)
     for rule in required.deliveredRules ++ required.completionRules do
@@ -1683,10 +1728,16 @@ private def inventory (env : Environment) (inScope : Name → Bool) (observed : 
     let required := requirements piece.id
     let completionGroups := piece.groups ++ required.controlGroups ++
       (if claimsLanding then required.requiredOnLanding else [])
-    let groups := required.named ++ completionGroups
+    let groups := required.deliveredGroups ++ completionGroups
     if claimsLanding && groups.isEmpty then
       errors := errors.push s!"{piece.id}: a landed piece needs evidence"
     errors := errors ++ registry.errors env piece.id required.deliveredRules
+    for bridge in required.spanBridges do
+      let valid := match env.find? bridge.theoremName with
+        | some (.thmInfo proof) => bridge.matches env proof.type
+        | _ => false
+      unless valid do
+        errors := errors.push s!"{piece.id}: {bridge.theoremName} must state {bridge.statement}"
     for control in required.controls do
       unless observed.plantedTags.find? control.theoremName == some control.origin do
         errors := errors.push s!"{piece.id}: {control.theoremName} is not a Planted-tagged theorem"
@@ -1834,10 +1885,28 @@ private def substituted := plan.map fun piece =>
 example : substituted.length = plan.length ∧
     ¬ occursOnce substituted .F39 ∧ ¬ occursOnce substituted .F40 := by decide
 
+-- Keep the universal inputs and the two propositions fixed while dropping
+-- one direction. Exercise both one-way replacements for each bridge.
+private def oneWay (reverse : Bool) : Expr → Option Expr
+  | .forallE name domain body info => do
+    return .forallE name domain (← oneWay reverse body) info
+  | .app (.app (.const ``Iff _) left) right =>
+    let (premise, conclusion) := if reverse then (right, left) else (left, right)
+    some (.forallE .anonymous premise (conclusion.liftLooseBVars 0 1) .default)
+  | _ => none
+
 def verify (env : Environment) (specModules compilerModules : NameSet) (specEvidence : EvidenceMetadata) (baseline : Registry) :
     CommandElabM Unit := do
   let origin := env.header.mainModule
   let inScope (name : Name) := name == origin || evidenceInScope specModules compilerModules name
+  for bridge in (completion .F04p).spanBridges do
+    let some (.thmInfo proof) := env.find? bridge.theoremName |
+      throwError "inventory control: missing bridge theorem {bridge.theoremName}"
+    for reverse in [false, true] do
+      let some weakened := oneWay reverse proof.type |
+        throwError "inventory control: {bridge.theoremName} does not state an equivalence"
+      if bridge.matches env weakened then
+        throwError "inventory control: accepted a one-way replacement for {bridge.theoremName}"
   let allFixtures ← readEvidence env (· == origin)
   let controlLawName := `SpecLanding.Control.keepZero_law
   let placeholderLawName := `SpecLanding.Control.placeholderLaw
