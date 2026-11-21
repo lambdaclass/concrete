@@ -36,9 +36,12 @@ separate result from invalid syntax/types and from an arithmetic failure.
 Held: Boolean-to-integer conversion (ISS-0069), SPARK character preconditions (ISS-0071),
 char literals, calls in initializers, richer constant/R2 preconditions and layouts. None is
 inferred from the earlier delegated recommendations. Path policy (ISS-0068), pointer bytes
-(ISS-0070), wiping (ISS-0072), startup/ABI (ISS-0073), U+FEFF and bare CR (ISS-0064),
-and queued partial items (ISS-0065) supply no constant rule. ISS-0080 tracks char/unit admission, calls in initializers
+(ISS-0070), startup/ABI (ISS-0073), U+FEFF and bare CR (ISS-0064), and queued partial items
+(ISS-0065) supply no constant rule. ISS-0080 tracks char/unit admission, calls in initializers
 and richer constant/R2 preconditions; this slice does not choose their behavior.
+The 2026-11-21 decision
+(docs/decisions.md#decided-2026-11-21-secrets-after-1-0) defers wiping until after 1.0
+and closes ISS-0072.
 -/
 
 namespace ConcreteSpec.Core

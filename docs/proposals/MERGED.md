@@ -74,7 +74,9 @@ Paths below: `slice0/` = `_branches/slice0/`, `spec/` = `_branches/spec-root/Con
    **Internal**, except that the policy-file syntax and CLI spellings are **owner decisions** (the slice-0
    README already lists the CLI as open).
 
-6. **Give information flow and constant time a separate obligation, preserved through every stage.**
+6. **Information-flow and constant-time preservation (historical proposal).**
+   The [November 21 decision](../decisions.md#decided-2026-11-21-secrets-after-1-0) defers this work until after 1.0 and requires a fresh
+   specification if reopened.
    Raised by all three. *Problem:* the brief calls this CRUCIAL, but the ideas sweep lists it as DEFERRED
    (_IDEAS_SWEEP.md #11). Ordinary refinement does not preserve noninterference or constant time; VP
    "Proofs attach to Core" says so. decisions.md item 14 (l.895) already makes information-flow security a
@@ -150,7 +152,7 @@ Paths below: `slice0/` = `_branches/slice0/`, `spec/` = `_branches/spec-root/Con
   adds that Core acceptance alone cannot show that source meaning survived elaboration.
 - **SSA.** Kimi and agy: validate it, as VP says. Codex: direct SSA proofs are reasonable at first;
   validation wins as the algorithms evolve. The slice-0 design proves `ssa_correct` directly.
-- **Constant time in BIR.** agy wants BIR to carry `ct_select` and secret-typed values, with LLVM barriers.
+- **Constant time in BIR (deferred by the [November 21 decision](../decisions.md#decided-2026-11-21-secrets-after-1-0)).** agy proposed that BIR carry `ct_select` and secret-typed values, with LLVM barriers.
   Codex and Kimi say BIR alone cannot establish constant time: it needs a final-machine leakage model, and
   LLVM stays unverified for it.
 - **Weight on the facts surface.** agy wants to move the facts query and policy file (R-0201) into B0/B1

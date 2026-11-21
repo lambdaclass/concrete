@@ -34,7 +34,7 @@ Each old task in the disposition table is mapped to a new task in its `destinati
 | 8 | **Fixed-capacity, non-allocating std** (`examples/fixed_capacity`) | RETAINED-ONLY. The std/examples migration is *open* (RETENTION.tsv); no predictable std subset is planned. | **Roadmap:** a predictable std subset in C, fixed-capacity containers first. |
 | 9 | **I/O driver for the Lean reference evaluator** (`VERIFIED_PIPELINE.md`) | Implicit in R-0491/R-0496; no explicit task | **Roadmap:** name it inside R-0491 by B1. Independent expected outcomes for I/O programs need it. |
 | 10 | **Independent expected outcomes / golden-oracle rule** (`GOLDEN_ORACLES.md`, bug 121) | PLANNED: R-0094 → R-0491; R-0425. v1 wrongly said FORGOTTEN. | Keep. Make sure R-0491's gate refuses expectations recorded from the compiler. |
-| 11 | **Constant-time / secret flow** (`examples/constant_time_tag`; R-0136, R-0225, R-0527) | DEFERRED | **Owner:** make the first crypto port the trigger. |
+| 11 | **Constant-time / secret flow** (`examples/constant_time_tag`; R-0136, R-0225, R-0527) | DEFERRED until after 1.0 | The [November 21 decision](../decisions.md#decided-2026-11-21-secrets-after-1-0) governs reopening and requires a fresh specification. |
 | 12 | **Error conventions** (`ERROR_CONVENTIONS.md`) | PLANNED: R-0057 → R-0071 (C). Signature normalization (R-0017) is DEFERRED. | Keep. |
 | 13 | **Historical replay vs current acceptance and revocation** (`EVIDENCE_ARCHITECTURE.md`, "Replay receipt") | PLANNED: R-0430 → R-0353 (F) | Keep. Certificates must not treat "was valid" as "is accepted". |
 | 14 | **Debug info on the LLVM path** | PLANNED only for LCB (R-0517) | **Roadmap, C:** unverified, with a no-codegen-change check. Low priority. |

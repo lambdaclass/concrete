@@ -1403,8 +1403,11 @@ Their controls preserve actual raw first-arrival and endpoint premises.
 Held, without introducing their definitions or dependent evidence: U+FEFF, bare CR,
 constant restrictions and queued partial approvals (ISS-0064/ISS-0065); path policy
 (ISS-0068); Boolean encoding (ISS-0069); pointer bytes, struct layout and whole-pointer
-representation (ISS-0070); SPARK char preconditions (ISS-0071); wiping (ISS-0072);
+representation (ISS-0070); SPARK char preconditions (ISS-0071);
 startup and ABI (ISS-0073). The demo interfaces do not settle those questions.
+The 2026-11-21 decision
+(docs/decisions.md#decided-2026-11-21-secrets-after-1-0) defers wiping until after 1.0
+and closes ISS-0072.
 -/
 /-- One action of a cleanup: a call, with the locals it runs with, or leaving a scope entered with
 `dm`, from locals `L` to restored locals `L'`. -/
@@ -3808,8 +3811,10 @@ inductive law subjects and requires same-shape mutants breaking one specific rul
 substituted everywhere that rule occurs in the law. Lean checks concrete examples
 where the premises hold and the conclusion fails; errors and timeouts are not evidence.
 The November 13 `#decided-2026-11-13-proof-labels` record supplies only tag vocabulary.
-No held path,
-constant, Boolean representation, pointer, wiping or startup policy is introduced here.
+No held path, constant, Boolean representation, pointer or startup policy is introduced here.
+The 2026-11-21 decision
+(docs/decisions.md#decided-2026-11-21-secrets-after-1-0) defers wiping until after 1.0
+and closes ISS-0072.
 -/
 namespace DeterminismEvidence
 open Demo CleanupEvidence
