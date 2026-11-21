@@ -1316,7 +1316,9 @@ def NoDuplicate (pair : SourcePath × SourcePath) : Prop :=
 end SourcePath.Project
 
 /-- A source span has an ordered half-open byte range and positive coordinates at its start.
-The loader binds its checked path and coordinates to source bytes. -/
+The stored path and coordinates are used to bind source bytes.
+The projection range contract, including empty spans at EOF, is pending owner decision.
+The binding result and cross-project source identity are pending owner decision. -/
 structure Span where
   path : SourcePath
   startOffset : Nat
@@ -1330,8 +1332,9 @@ structure Span where
 
 namespace SourcePathSpan
 
-/-- R-0709, docs/decisions.md#decided-2026-11-14-trap-sites-and-law-tests.
-A span end must fit the file, including the boundary at EOF. -/
+/-- R-0709.
+A span end must fit the file, including the boundary at EOF.
+The projection range contract, including empty spans at EOF, is pending owner decision. -/
 def EndInSource (input : SourceText × Nat) : Prop :=
   input.2 ≤ input.1.length
 
@@ -1347,7 +1350,8 @@ def ColumnMatches (input : Span × SourceText) : Prop :=
 
 end SourcePathSpan
 
-/-- The range fits the source, and the stored line and column describe its exact start. -/
+/-- The range fits the source, and the stored line and column describe its exact start.
+The projection range contract, including empty spans at EOF, is pending owner decision. -/
 def Span.LocationOk (span : Span) (source : SourceText) : Prop :=
   SourcePathSpan.EndInSource (source, span.endOffset) ∧
     SourcePathSpan.LineMatches (span, source) ∧ SourcePathSpan.ColumnMatches (span, source)
@@ -1380,8 +1384,9 @@ The requested exact path must name a file in the admitted project. -/
 def FilePresent (input : Project × SourcePath) : Prop :=
   input.2 ∈ input.1.files.map File.path
 
-/-- R-0709, docs/decisions.md#decided-2026-11-14-trap-sites-and-law-tests.
-Half-open span offsets must be ordered, as required by `Span.range_ok`. -/
+/-- R-0709.
+Half-open span offsets must be ordered, as required by `Span.range_ok`.
+The projection range contract, including empty spans at EOF, is pending owner decision. -/
 def OrderedOffsets (input : Nat × Nat) : Prop :=
   input.1 ≤ input.2
 
@@ -1398,14 +1403,16 @@ def Project.findFile (project : Project) (path : SourcePath) : Option File :=
   project.files.find? fun file => decide (file.path = path)
 
 /-- Compute the starting coordinates for an ordered range. A caller checks that the
-range fits its source before publishing the span. -/
+range fits its source before publishing the span.
+The projection range contract, including empty spans at EOF, is pending owner decision. -/
 def spanAt (path : SourcePath) (source : SourceText) (start stop : Nat)
     (ordered : start ≤ stop) : Span :=
   ⟨path, start, stop, ordered, source.lineAt start, source.columnAt start,
     Nat.zero_lt_succ _, Nat.zero_lt_succ _⟩
 
 /-- Project an ordered, in-bounds byte range in the named file into a span.
-The starting line and byte column are derived from that file's bytes. -/
+The starting line and byte column are derived from that file's bytes.
+The projection range contract, including empty spans at EOF, is pending owner decision. -/
 def projectSpan (project : Project) (path : SourcePath) (start stop : Nat) : Option Span := do
   let file ← project.findFile path
   if ordered : OrderedOffsets (start, stop) then
@@ -1413,20 +1420,26 @@ def projectSpan (project : Project) (path : SourcePath) (start stop : Nat) : Opt
       some (spanAt path file.source start stop ordered)
     else none
   else none
-/-- Recover the exact loaded file for a stored span when its range, line and column
-agree with the bytes of that file. -/
+/-- Look up the span's path in the supplied project and return that file when its
+bytes validate the stored range, line and column.
+The projection range contract, including empty spans at EOF, is pending owner decision.
+The binding result and cross-project source identity are pending owner decision. -/
 def bindSource (project : Project) (span : Span) : Option File := do
   let file ← project.findFile span.path
   if span.LocationOk file.source then some file else none
 
 namespace Reference
 
-/-- An independently stated file binding uses membership, exact identity and the
-existing declarative location predicate. -/
+/-- The binding reference requires membership in the supplied project, exact path
+equality, and the declarative location predicate.
+The projection range contract, including empty spans at EOF, is pending owner decision.
+The binding result and cross-project source identity are pending owner decision. -/
 def Binds (project : Project) (span : Span) (file : File) : Prop :=
   file ∈ project.files ∧ file.path = span.path ∧ span.LocationOk file.source
 
-/-- An independently stated projection preserves the request and has a valid file binding. -/
+/-- An independently stated projection preserves the request and has a valid file binding.
+The projection range contract, including empty spans at EOF, is pending owner decision.
+The binding result and cross-project source identity are pending owner decision. -/
 def Projects (project : Project) (path : SourcePath) (start stop : Nat) (span : Span) : Prop :=
   span.path = path ∧ span.startOffset = start ∧ span.endOffset = stop ∧
     ∃ file, Binds project span file
@@ -1644,7 +1657,8 @@ def tabSource : SourceText := SourceText.ofBytes [97, 9, 98]
 def mainSourcePath : SourcePath :=
   ⟨SourceText.ofBytes [109, 97, 105, 110, 46, 99, 111, 110], by decide⟩
 
-/-- Example: the byte after the tab is at line 1, byte column 3. -/
+/-- Example: the byte after the tab is at line 1, byte column 3.
+The projection range contract, including empty spans at EOF, is pending owner decision. -/
 def tabSpan : Span := ⟨mainSourcePath, 2, 3, by decide, 1, 3, by decide, by decide⟩
 
 namespace SourcePathSpan
@@ -1653,10 +1667,12 @@ namespace SourcePathSpan
 def tabProject : Project :=
   ⟨[⟨mainSourcePath, tabSource⟩], by simp [SourcePath.Project.Reference.Admitted]⟩
 
-/-- A tab advances the starting byte column by one. -/
+/-- A tab advances the starting byte column by one.
+The projection range contract, including empty spans at EOF, is pending owner decision. -/
 theorem projectTabSpan : projectSpan tabProject mainSourcePath 2 3 = some tabSpan := by decide
 
-/-- Binding the tab span returns the original loaded file. -/
+/-- Binding the tab span in the example project returns the loaded tab file.
+The binding result and cross-project source identity are pending owner decision. -/
 theorem bindTabSpan : bindSource tabProject tabSpan = some ⟨mainSourcePath, tabSource⟩ := by decide
 
 end SourcePathSpan

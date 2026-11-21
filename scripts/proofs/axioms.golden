@@ -4176,10 +4176,13 @@ ConcreteSpec.Core.SourcePath.wholeLocation.congr_simp
 ConcreteSpec.Core.SourcePath.wholeLocation.eq_1	
 ConcreteSpec.Core.SourcePathSpan.ColumnMatches.eq_1	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.Controls.bindBeforeEof_violates_correct	Quot.sound propext
-ConcreteSpec.Core.SourcePathSpan.Controls.bindUnchecked_violates_correct	Quot.sound propext
+ConcreteSpec.Core.SourcePathSpan.Controls.bindIgnoringColumn_violates_correct	Quot.sound propext
+ConcreteSpec.Core.SourcePathSpan.Controls.bindIgnoringLine_violates_correct	Quot.sound propext
+ConcreteSpec.Core.SourcePathSpan.Controls.bindPastEnd_violates_correct	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.Controls.pastEnd._proof_1	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.Controls.projectAtStartOnly_violates_correct	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.Controls.projectPastEnd_violates_correct	Quot.sound propext
+ConcreteSpec.Core.SourcePathSpan.Controls.wrongLine._proof_1	
 ConcreteSpec.Core.SourcePathSpan.EndInSource.eq_1	
 ConcreteSpec.Core.SourcePathSpan.File.mk.inj	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.File.mk.injEq	Quot.sound propext

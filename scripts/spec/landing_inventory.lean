@@ -103,10 +103,18 @@ structure RuleRequirement where
   name : Name
   ruleOrigin : Name
 
+structure ControlRequirement where
+  origin : Name
+  theoremName : Name
+  law : Name
+  subject : Name
+  mutant : Name
+
 structure Completion where
   named : List Group := []
   requiredOnLanding : List Group := [] -- Resolve planned declarations and Laws when the piece claims landing.
   namespaces : List EvidenceNamespace := []
+  controls : List ControlRequirement := []
   deliveredRules : List RuleRequirement := []
   completionRules : List RuleRequirement := []
 
@@ -298,6 +306,12 @@ private def completion : PieceId → Completion
       `ConcreteSpec.Core.SpecializationTable.canonicalize_nodup,
       `ConcreteSpec.Core.SpecializationTable.canonicalize_share]]
   | .F04p =>
+    let origin := `ConcreteSpec.Proofs.Ident
+    let family := `ConcreteSpec.Core.SourcePathSpan
+    let control (law subject mutant : Name) : ControlRequirement :=
+      let ns := family ++ `Controls
+      ⟨origin, ns ++ Name.mkSimple (mutant.toString ++ "_violates_correct"),
+        family ++ law, family ++ subject, ns ++ mutant⟩
     { named := [
     laws `ConcreteSpec.Proofs.Ident [
       `ConcreteSpec.Core.SourcePath.byte_probe_reference,
@@ -359,16 +373,22 @@ private def completion : PieceId → Completion
       `skipProjectCheck_violates_checks_locally_parsed],
     evidence `ConcreteSpec.Proofs.Ident `ConcreteSpec.Core [
       `Span.pathOk, `Span.locationOk_iff, `tabSpan_location, `tabSpan_otherSource,
-      `tabSpan_badCoordinates, `SourcePath.LocalControls.foldedRenderingChangesIdentity]],
-      requiredOnLanding := [
-        laws `ConcreteSpec.Proofs.Ident [
-          `ConcreteSpec.Core.SourcePathSpan.projectSpan_correct,
-          `ConcreteSpec.Core.SourcePathSpan.bindSource_correct,
-          `ConcreteSpec.Core.SourcePathSpan.projectSpan_safety,
-          `ConcreteSpec.Core.SourcePathSpan.projectSpan_progress,
-          `ConcreteSpec.Core.SourcePathSpan.bindSource_safety,
-          `ConcreteSpec.Core.SourcePathSpan.bindSource_progress]],
-      namespaces := [specNamespace `Proofs.Ident `Core.SourcePathSpan] }
+      `tabSpan_badCoordinates, `SourcePath.LocalControls.foldedRenderingChangesIdentity],
+    laws `ConcreteSpec.Proofs.Ident [
+      `ConcreteSpec.Core.SourcePathSpan.projectSpan_correct,
+      `ConcreteSpec.Core.SourcePathSpan.bindSource_correct,
+      `ConcreteSpec.Core.SourcePathSpan.projectSpan_safety,
+      `ConcreteSpec.Core.SourcePathSpan.projectSpan_progress,
+      `ConcreteSpec.Core.SourcePathSpan.bindSource_safety,
+      `ConcreteSpec.Core.SourcePathSpan.bindSource_progress]],
+      namespaces := [specNamespace `Proofs.Ident `Core.SourcePathSpan]
+      controls := [
+        control `projectSpan_correct `projectSpan `projectPastEnd,
+        control `projectSpan_correct `projectSpan `projectAtStartOnly,
+        control `bindSource_correct `bindSource `bindPastEnd,
+        control `bindSource_correct `bindSource `bindIgnoringLine,
+        control `bindSource_correct `bindSource `bindIgnoringColumn,
+        control `bindSource_correct `bindSource `bindBeforeEof] }
   | .R => namedEvidence [
     decls `ConcreteSpec.Spec.Rules [`ConcreteSpec.Core.registeredRules,
       `ConcreteSpec.Core.registeredRuleExamples, `ConcreteSpec.Core.RuleAccepted,
@@ -1351,16 +1371,19 @@ private def plan : List Piece := [
     "changelog.d/2026-11-17-spec-f03b-sourcetext.md",
   disposition .«F03p-design» "design proposals never land on main and stay on WIP branches as writer briefs. The Lean spec carries the normative decisions for F03p"
     "ISSUES.tsv ISS-0068; docs/decisions.md#decided-2026-11-17-proposals-in-lean",
-  present .F03p "Source-path admission, byte-span projection, and source binding",
+  { present .F03p "Source-path admission, byte-span projection, and source binding" with
+    remaining := ["ISS-0068: projection range contract, including empty spans at EOF, pending owner decision",
+      "ISS-0068: binding result and cross-project source identity pending owner decision"] },
   present .F04 "Stable-key, namespace, obligation, contract, and byte-coordinate proofs",
   { present .F04p "Source-path admission, span projection and source binding Laws and controls" with
+    remaining := ["ISS-0068: qualify projection Laws and controls once the range contract, including empty spans at EOF, is settled (pending owner decision)",
+      "ISS-0068: qualify binding Laws and controls once the binding result and cross-project source identity are settled (pending owner decision)"]
     groups := [
       evidence `ConcreteSpec.Proofs.Ident `ConcreteSpec.Core.SourcePathSpan [
         `ProjectionCorrect, `BindingCorrect],
       evidence `ConcreteSpec.Proofs.Ident `ConcreteSpec.Core.SourcePathSpan.Controls [
-        `pastEnd, `projectPastEnd, `projectAtStartOnly, `bindUnchecked, `bindBeforeEof,
-        `projectPastEnd_violates_correct, `projectAtStartOnly_violates_correct,
-        `bindUnchecked_violates_correct, `bindBeforeEof_violates_correct]] },
+        `pastEnd, `wrongLine, `wrongColumn, `projectPastEnd, `projectAtStartOnly,
+        `bindPastEnd, `bindIgnoringLine, `bindIgnoringColumn, `bindBeforeEof]] },
   added .R "Rule registry, prerequisite of F06, F13 and F17"
     "changelog.d/2026-11-13-spec-rule-registry.md; ROADMAP.md R-0615",
   present .F05 "Fixed-width arithmetic and exact-term correspondence",
@@ -1475,6 +1498,7 @@ private def isAuthored (env : Environment) (name : Name) : Bool := Id.run do
 structure EvidenceMetadata where
   laws : NameMap Name := {}
   planted : NameMap Name := {}
+  plantedTags : NameMap Name := {}
 
 private def readEvidence (env : Environment) (inScope : Name → Bool) :
     CommandElabM EvidenceMetadata := do
@@ -1486,11 +1510,28 @@ private def readEvidence (env : Environment) (inScope : Name → Bool) :
     let doc := (← findDocString? env name).getD ""
     if hasDocTag "Law" doc then
       found := { found with laws := found.laws.insert name origin }
+    let plantedTag := hasDocTag "Planted" doc
+    if plantedTag then
+      found := { found with plantedTags := found.plantedTags.insert name origin }
     -- Match the site's Planted doc tag and its underscore-delimited name convention.
     let .str _ last := privateToUserName name | continue
-    if hasDocTag "Planted" doc || (last.splitOn "_").contains "planted" then
+    if plantedTag || (last.splitOn "_").contains "planted" then
       found := { found with planted := found.planted.insert name origin }
   return found
+
+-- The Law states a contract applied to the real implementation. Its control
+-- must negate that same application with only the implementation replaced.
+private def ControlRequirement.hasRefutation (control : ControlRequirement)
+    (env : Environment) (observed : EvidenceMetadata) : Bool := Id.run do
+  if observed.laws.find? control.law != some control.origin then return false
+  let some (.thmInfo law) := env.find? control.law | return false
+  let some (.thmInfo refutation) := env.find? control.theoremName | return false
+  let .app contract (.const subject levels) := law.type | return false
+  return subject == control.subject &&
+    refutation.type == mkApp (mkConst ``Not) (mkApp contract (.const control.mutant levels))
+
+private def Completion.controlGroups (required : Completion) : List Group :=
+  required.controls.map fun control => decls control.origin [control.theoremName]
 
 structure Result where
   originalLanded : Nat := 0
@@ -1609,7 +1650,7 @@ private def reservationErrors (env : Environment) (pieces : List Piece)
         if ns.namespaceName.isPrefixOf other.namespaceName ||
             other.namespaceName.isPrefixOf ns.namespaceName then
           errors := errors.push s!"{piece.id}: overlapping completion reservation with {owner} under {ns.namespaceName} in {ns.origin}"
-      let cited := (required.named ++ required.requiredOnLanding ++ piece.groups).flatMap fun group =>
+      let cited := (required.named ++ required.requiredOnLanding ++ required.controlGroups ++ piece.groups).flatMap fun group =>
         if group.origin == ns.origin then group.declarations ++ group.laws else []
       namespaces := namespaces.insert ns.origin ((piece.id, ns, cited) :: sameModule)
     for rule in required.deliveredRules ++ required.completionRules do
@@ -1638,12 +1679,17 @@ private def inventory (env : Environment) (inScope : Name → Bool) (observed : 
     ids := ids.insert piece.id
     let claimsLanding := piece.remaining.isEmpty && piece.disposition.isNone
     let required := requirements piece.id
-    let completionGroups := piece.groups ++
+    let completionGroups := piece.groups ++ required.controlGroups ++
       (if claimsLanding then required.requiredOnLanding else [])
     let groups := required.named ++ completionGroups
     if claimsLanding && groups.isEmpty then
       errors := errors.push s!"{piece.id}: a landed piece needs evidence"
     errors := errors ++ registry.errors env piece.id required.deliveredRules
+    for control in required.controls do
+      unless observed.plantedTags.find? control.theoremName == some control.origin do
+        errors := errors.push s!"{piece.id}: {control.theoremName} is not a Planted-tagged theorem"
+      unless control.hasRefutation env observed do
+        errors := errors.push s!"{piece.id}: {control.theoremName} must refute {control.law} for {control.mutant}"
     for ns in required.namespaces do
       if ns.origin == `ConcreteSpec.Spec.Rules && ns.ruleOrigin.isNone then
         errors := errors.push s!"{piece.id}: missing rule-defining module for registry reservation under {ns.namespaceName}"
@@ -1664,7 +1710,10 @@ private def inventory (env : Environment) (inScope : Name → Bool) (observed : 
               ns.matches group.origin name && classified.find? name == some group.origin
           let namedLaw := piece.id == .M09 &&
             required.named.any (fun group => group.laws.any (citesLaw group))
-          unless namedLaw || citesReserved (·.laws) observed.laws do
+          let controlLaw := required.controls.any fun control =>
+            ns.matches control.origin control.law &&
+              observed.laws.find? control.law == some control.origin
+          unless namedLaw || controlLaw || citesReserved (·.laws) observed.laws do
             errors := errors.push s!"{piece.id}: missing reserved Law theorem under {ns.namespaceName} in {ns.origin}"
           unless citesReserved (·.declarations) observed.planted do
             errors := errors.push s!"{piece.id}: missing reserved planted control under {ns.namespaceName} in {ns.origin}"
@@ -1754,6 +1803,23 @@ def nonTheorem : Bool := true
 /-- Planted: this tagged definition must be excluded. -/
 def nonTheoremControl : Bool := false
 
+def preservesZero (f : Nat → Nat) : Prop := f 0 = 0
+
+def keepZero (n : Nat) : Nat := n
+
+def addOne (n : Nat) : Nat := n + 1
+
+/-- Law: the implementation preserves zero. -/
+theorem keepZero_law : preservesZero keepZero := rfl
+
+/-- Planted: adding one fails to preserve zero. -/
+theorem addOne_refutation : ¬ preservesZero addOne := by unfold preservesZero addOne; decide
+
+/-- Planted: a placeholder with the expected tag. -/
+theorem placeholderRefutation : True := trivial
+
+theorem untagged_planted_refutation : ¬ preservesZero addOne := by unfold preservesZero addOne; decide
+
 -- Planted mutations fail the same coverage obligation as the production plan.
 example : ¬ occursOnce (plan.filter (·.id != .F04p)) .F04p := by decide
 
@@ -1767,8 +1833,12 @@ def verify (env : Environment) (specModules compilerModules : NameSet) (specEvid
     CommandElabM Unit := do
   let origin := env.header.mainModule
   let inScope (name : Name) := name == origin || evidenceInScope specModules compilerModules name
-  let fixtures ← readEvidence env (· == origin)
-  let observed := { fixtures with laws := (fixtures.laws.erase `ConcreteSpec.Core.Observe.EnvironmentEvidence.law).erase `ConcreteSpec.Core.Observe.OutputEvidence.law }
+  let allFixtures ← readEvidence env (· == origin)
+  let controlLawName := `SpecLanding.Control.keepZero_law
+  let fixtures := { allFixtures with laws := allFixtures.laws.erase controlLawName }
+  let fixtureLaws := fixtures.laws.erase `ConcreteSpec.Core.Observe.EnvironmentEvidence.law
+  let fixtureLaws := fixtureLaws.erase `ConcreteSpec.Core.Observe.OutputEvidence.law
+  let observed := { fixtures with laws := fixtureLaws }
   let claim (groups : List Group) := { present .F01 "" with groups }
   let good := claim [
     laws origin [`SpecLanding.Control.newName], decls origin [`SpecLanding.Control.wrongIncrement]]
@@ -1837,6 +1907,28 @@ def verify (env : Environment) (specModules compilerModules : NameSet) (specEvid
     "F01: missing reserved planted control"
   let land (id : PieceId) (groups : List Group := []) : List Piece :=
     [{ present id "" with groups }]
+  -- Qualify required controls with fixture evidence independent of live row status.
+  let law := controlLawName
+  let mutant := `SpecLanding.Control.addOne
+  let refutation := `SpecLanding.Control.addOne_refutation
+  let controlEvidence := { fixtures with laws := allFixtures.laws.filter (fun name _ => name == law) }
+  let checkRefutation (name : Name) := inventory env inScope controlEvidence (land .F04p)
+    #[] (fun _ => {
+      named := [laws origin [law]]
+      namespaces := [⟨origin, `SpecLanding.Control, true, none⟩]
+      controls := [⟨origin, name, law, `SpecLanding.Control.keepZero, mutant⟩] })
+  let checked := checkRefutation refutation
+  unless checked.errors.isEmpty && checked.rows.any (·.startsWith "F04p: landed") do
+    throwError "inventory control: valid required refutation failed: {checked.errors}"
+  let placeholder := `SpecLanding.Control.placeholderRefutation
+  let untagged := `SpecLanding.Control.untagged_planted_refutation
+  for (name, message) in [
+      (placeholder, s!"must refute {law} for {mutant}"),
+      (untagged, "is not a Planted-tagged theorem")] do
+    let checked := checkRefutation name
+    unless checked.errors == #[s!"F04p: {name} {message}"] &&
+        checked.rows.any (·.startsWith "F04p: incomplete") do
+      throwError "inventory control: invalid required refutation was not refused: {checked.errors}"
   let constRule := `ConcreteSpec.Core.ConstsPermitted
   let withoutConstRule := { baseline with
     rules := baseline.rules.filter (·.name != constRule)

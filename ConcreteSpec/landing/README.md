@@ -44,7 +44,9 @@ acceptance and refusal theorems from Spec.Rules. Each registry reservation names
 rule-defining module and requires cited acceptance and refusal theorems for the same uniquely
 registered rule authored in that module. F03p checks local and project-wide admission,
 span projection, source binding and their registered rules. F04p requires the named
-span projection and source binding Laws and planted control evidence.
+span projection and source binding Laws. Each required control must be a theorem with an
+explicit `Planted` doc tag whose statement negates its Law's contract applied to the
+corresponding mutant.
 Shared modules have piece-specific evidence. Migration namespaces
 reserve names for evidence produced by the migration. If a name or defining module changes, update the completion requirements in
 the same patch. Partial rows retain the references for their remaining work.

@@ -479,25 +479,29 @@ theorem filePresentRefused : RuleRefused FilePresent
   unfold RuleRefused FilePresent
   decide
 
-/-- Instance: Offsets in ascending order describe a half-open range. -/
+/-- Instance: Offsets in ascending order describe a half-open range.
+The projection range contract, including empty spans at EOF, is pending owner decision. -/
 theorem offsetsAccepted : RuleAccepted OrderedOffsets
     (2, 3) := by
   unfold RuleAccepted OrderedOffsets
   decide
 
-/-- Instance: Reversed offsets do not describe a range. -/
+/-- Instance: Reversed offsets do not describe a range.
+The projection range contract, including empty spans at EOF, is pending owner decision. -/
 theorem offsetsRefused : RuleRefused OrderedOffsets
     (3, 2) := by
   unfold RuleRefused OrderedOffsets
   decide
 
-/-- Instance: The end of the tab span is at EOF. -/
+/-- Instance: The end of the tab span is at EOF.
+The projection range contract, including empty spans at EOF, is pending owner decision. -/
 theorem endAccepted : RuleAccepted EndInSource
     (tabSource, 3) := by
   unfold RuleAccepted EndInSource
   decide
 
-/-- Instance: The next offset is outside the tab file. -/
+/-- Instance: The next offset is outside the tab file.
+The projection range contract, including empty spans at EOF, is pending owner decision. -/
 theorem endRefused : RuleRefused EndInSource
     (tabSource, 4) := by
   unfold RuleRefused EndInSource
