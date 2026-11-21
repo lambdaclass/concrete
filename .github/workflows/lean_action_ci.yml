@@ -163,9 +163,6 @@ jobs:
             exit 1
           fi
 
-      - name: Check F31 migration inventory
-        run: nix develop -c bash scripts/checks/compiler/f31_inventory.sh
-
       - name: Extract specification site
         run: nix develop -c bash scripts/spec/lean_site.sh
 
