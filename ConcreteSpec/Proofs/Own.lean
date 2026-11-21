@@ -26,8 +26,11 @@ Only Law counts as evidence; tags follow #decided-2026-11-13-proof-labels and co
 follow #decided-2026-11-14-trap-sites-and-law-tests. O2 execution erasure lives in Proofs/OwnErasure.lean; O3 protocols
 and history are outside this slice. No inherited approval receipt is evidence.
 Held policies remain outside the imported F13 interface: ISS-0064/ISS-0065, ISS-0068
-through ISS-0073 and ISS-0076 (source policy, constant restrictions, codecs, wiping,
+through ISS-0071, ISS-0073 and ISS-0076 (source policy, constant restrictions, codecs,
 ABI and aggregate layout). No law here resolves those decisions.
+The 2026-11-21 decision
+(docs/decisions.md#decided-2026-11-21-secrets-after-1-0) defers wiping until after 1.0
+and closes ISS-0072.
 -/
 namespace ConcreteSpec.Core.Own
 

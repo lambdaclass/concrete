@@ -64,6 +64,20 @@ MUTATIONS = (
         "[(i32, .immediate (.natural 3)), (.ptr",
         "llvmItems_inventory",
     ),
+    (
+        "switch destinations rotated",
+        RUNTIME,
+        "(Immediate.natural i, Label.trapSite i)",
+        "(Immediate.natural i, Label.trapSite (i + 1))",
+        "llvmItems_inventory",
+    ),
+    (
+        "first two switch destinations swapped",
+        RUNTIME,
+        "(Immediate.natural i, Label.trapSite i)",
+        "(Immediate.natural i, Label.trapSite (if i = 0 then 1 else if i = 1 then 0 else i))",
+        "llvmItems_inventory",
+    ),
     ("%ret prefix becomes 0", IR, '| .result => "%ret"', '| .result => "0"', "parse_render_i32_result"),
     (
         "%ret result becomes bare 0",

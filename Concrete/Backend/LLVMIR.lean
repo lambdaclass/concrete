@@ -113,7 +113,8 @@ extract indices and byte lengths have no explicit integer type. -/
 inductive IntegerRole where
   | left | right | conversionSource | callArgument (position : Nat) | extractIndex
   | phiArm (position : Nat) (predecessor : Label)
-  | comparisonLeft | comparisonRight | gepBase | gepOffset | returnValue | switchKey | byteLength
+  | comparisonLeft | comparisonRight | gepBase | gepOffset | returnValue
+  | switchKey (position : Nat) (destination : Label) | byteLength
   deriving DecidableEq, Repr
 
 abbrev IntegerField := IntegerRole × Option Nat × Nat
@@ -140,7 +141,8 @@ def Instruction.inventory : Instruction → List IntegerField
 def Item.inventory : Item → List IntegerField
   | .instruction i => i.inventory
   | .terminator (.ret (ty, a)) => a.inventory .returnValue ty
-  | .terminator (.switch w _ _ cases) => cases.map fun (v, _) => (.switchKey, some w.bits, v.value)
+  | .terminator (.switch w _ _ cases) => cases.zipIdx.map fun ((v, destination), position) =>
+      (.switchKey position destination, some w.bits, v.value)
   | .constant _ data => [(.byteLength, none, data.size)]
   | _ => []
 

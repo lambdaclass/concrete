@@ -130,7 +130,11 @@ quoted theorem references appear as elaborated command dependencies.
    the string passed to `IO.FS.writeFile` by the BIR emitter. Check that the
    file-writing path uses that string directly. Qualify the renderer
    mutations against the resulting universal text theorem and register the
-   public laws in the premise registry and audit goldens.
+   public laws in the premise registry and audit goldens. Renderer controls must
+   refute the law statement on a concrete witness, or establish that no downstream
+   law survives an upstream proof failure. An error in a helper or a tactic alone
+   is not evidence that the law is false: Lean can recover a failed helper with
+   `sorry`, and a tactic can fail on a true statement.
 
 Slice 1 and Slice 2 leave the F30 comparison available at the boundaries
 that still carry the old tags. Slice 3 is the final type substitution at

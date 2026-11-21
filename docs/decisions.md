@@ -14,6 +14,74 @@ the earlier behaviour, the answer below governs, and the code follows as its new
 
 The shape of Core was approved provisionally on 2026-11-05 ([stage A2a](#decided-2026-11-05)): it binds the design, and the owner freezes Core at stage A2c, after the four design theorems are proved against the proposed `Spec.lean` and the integration stage A2i (2026-11-06) is accepted. The project and architecture decisions are recorded here too, [below](#decided-project).
 
+<a id="decided-2026-11-21-secrets-after-1-0"></a>
+## Decided 2026-11-21: secrets after 1.0
+
+Status: decided
+Source: owner
+
+The question was whether to remove F26b from the spec and defer `Secret<T>` until after 1.0,
+with a fresh specification if it returns, or remove the feature from the language entirely
+by reversing the [2026-11-06 information-flow decision](#decided-project-infoflow-2026-11-06).
+
+Owner replies, verbatim and in order:
+
+~~~text
+why do we have security i don't care about this now, right?
+i would remove it
+yes move secret to after 1.0
+~~~
+
+The information-flow decision remains a historical record. F26b and the associated
+surface, leakage, release of secret information (declassification), constant-time,
+noninterference and wiping work move to the
+[after-1.0 roadmap](../ROADMAP.md#after-10). Reopening requires a fresh specification.
+F26a byte and memory accounting remains in the spec under C7. The crypto examples
+continue as ordinary code with functional claims.
+
+The coordinator chose removal of `wip/spec-f26b-security` and `wip/spec-f26-leak`
+and kept backups outside the repository. The older `wip/spec-f26-leak` branch combines leakage and
+release of secret information (declassification) with an accounting implementation. The separately landed F26a accounting
+and its evidence carry the active accounting scope on main.
+
+<a id="decided-2026-11-21-review-sandbox-removal"></a>
+## Decided 2026-11-21: review sandbox branch removal
+
+Status: decided
+Source: owner
+
+The question was whether to park or continue `wip/review-sandbox`, the reviewer-run
+sandboxing branch, after 15 rounds with four findings open. Owner reply, verbatim:
+
+~~~text
+regarding it tooling park it or remove it fi it's good to clean as you prefer
+~~~
+
+The coordinator chose removal, with a backup outside the repository. Current review
+tooling on main remains in service.
+
+Two round-15 findings also apply to main at `88acab3d0`: delta reviews lack a bound
+predecessor and verdict and findings notes can be published independently. Both are
+recorded in the [issue ledger](../ISSUES.tsv) as ISS-0098 and ISS-0099, respectively.
+The other two findings concern patch-digest verification and review-driver locks
+introduced on the abandoned branch.
+
+<a id="decided-2026-11-21-extra-review-rounds"></a>
+## Decided 2026-11-21: extra review rounds
+
+Status: decided
+Source: owner
+
+Owner reply, verbatim:
+
+~~~text
+yes move secret to after 1.0, 2 3 more rounds, arithmethci ok 4 more rounds,
+~~~
+
+The owner granted three more focused review rounds to the ownership spec piece
+(`wip/spec-f16-own-o3`) and four more to the arithmetic switch-over
+(`wip/spec-f31-scalar-migration`).
+
 <a id="decided-2026-11-13-lifecycle-refusal"></a>
 ## Decided 2026-11-13: lifecycle refusal
 
@@ -3905,6 +3973,30 @@ ok go ahead
   repeated dots), Q2 (exact reserved-name matcher), and Q6 (exact proper
   file/directory prefix conflicts). ISS-0068 remains open for implementation
   and dependent evidence.
+
+- <a id="decided-2026-11-21-duplicate-project-path"></a>**Duplicate project
+  paths (2026-11-21).**
+  Status: decided
+  Source: owner
+
+  Provenance: the writer brief relayed the question and the owner's reply,
+  dated 2026-11-21, under the [recording rule](#decided-project-recording).
+  The recommendation was to refuse the duplicate.
+
+  Question put to the owner, verbatim:
+
+~~~text
+A project lists the same file path twice: refuse it (compile error), or ignore the repeat?
+~~~
+
+  Owner reply, verbatim:
+
+~~~text
+regarding the path refuse as you reocmmended
+~~~
+
+  Project admission refuses a list that contains the same file path at two
+  distinct positions.
 
 - <a id="decided-2026-11-20-tooling-review-risk"></a>**Risk rule for review findings
   (2026-11-20).**

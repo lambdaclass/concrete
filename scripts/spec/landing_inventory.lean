@@ -105,9 +105,9 @@ structure RuleRequirement where
 
 structure Completion where
   named : List Group := []
-  requiredSpec : List Group := [] -- Resolve planned spec declarations when the piece claims landing.
+  requiredOnLanding : List Group := [] -- Resolve planned declarations and Laws when the piece claims landing.
   namespaces : List EvidenceNamespace := []
-  localRules : List RuleRequirement := []
+  deliveredRules : List RuleRequirement := []
   completionRules : List RuleRequirement := []
 
 private def specNamespace (origin namespaceName : Name) : EvidenceNamespace :=
@@ -172,18 +172,20 @@ private def completion : PieceId → Completion
     laws `ConcreteSpec.Proofs.Ident [
       `ConcreteSpec.Core.SourceText.columnAt_zero, `ConcreteSpec.Core.SourceText.lineAt_zero]]
   | .F03p =>
-    let rule (name : Name) : RuleRequirement := ⟨name, `ConcreteSpec.Spec.Ident⟩
-    { named := [
-    evidence `ConcreteSpec.Spec.Ident `ConcreteSpec.Core [
-      `SourcePath, `SourcePath.parse, `SourcePath.render, `Span, `Span.LocationOk,
-      `mainSourcePath, `tabSpan]],
-      localRules := [`Nonempty, `Relative, `NoDrivePrefix, `NoTraversal, `NoSingleDot,
+    let localNames := [`Nonempty, `Relative, `NoDrivePrefix, `NoTraversal, `NoSingleDot,
       `NonemptyComponents, `Ascii, `SlashSeparator, `NoControls, `NoSpaces, `NoLeadingDot,
-      `NoTrailingDot, `NoReservedStem, `ComponentByteCap, `PathByteCap, `FilenameCharacters].map
-        (fun name => rule (`ConcreteSpec.Core.SourcePath ++ name))
-      -- Planned identities for the project-wide checks in R-0709.
-      completionRules := [`ConcreteSpec.Core.SourcePath.Project.NoCaseCollision,
-      `ConcreteSpec.Core.SourcePath.Project.NoFileDirectoryPrefixConflict].map rule }
+      `NoTrailingDot, `NoReservedStem, `ComponentByteCap, `PathByteCap, `FilenameCharacters]
+    let projectNames := [`Project.NoCaseCollision, `Project.NoFileDirectoryConflict,
+      `Project.NoDuplicate]
+    { named := [
+        evidence `ConcreteSpec.Spec.Ident `ConcreteSpec.Core [
+          `SourcePath, `SourcePath.parse, `SourcePath.render, `Span, `Span.LocationOk,
+          `mainSourcePath, `tabSpan, `SourcePath.Project.check, `SourcePath.Project.parse]],
+      requiredOnLanding := [
+        evidence `ConcreteSpec.Spec.Ident `ConcreteSpec.Core.SourcePathSpan [
+          `projectSpan, `bindSource]],
+      deliveredRules := (localNames ++ projectNames).map fun name =>
+        ⟨`ConcreteSpec.Core.SourcePath ++ name, `ConcreteSpec.Spec.Ident⟩ }
   | .F04 => namedEvidence [
     evidence `ConcreteSpec.Proofs.Ident `ConcreteSpec.Core.Vacuity [
       `lookup_renumber_example_siteTable, `lookup_renumber_planted_siteTable_collapseRenumber,
@@ -338,9 +340,27 @@ private def completion : PieceId → Completion
       `ConcreteSpec.Core.SourcePath.render_injective,
       `ConcreteSpec.Core.SourcePath.parseString_render,
       `ConcreteSpec.Core.SourcePath.LocalControls.admittedBytes_iff],
+    laws `ConcreteSpec.Proofs.Ident [
+      `ConcreteSpec.Core.SourcePath.Project.check_safety,
+      `ConcreteSpec.Core.SourcePath.Project.check_progress,
+      `ConcreteSpec.Core.SourcePath.Project.check_refusal_evidence,
+      `ConcreteSpec.Core.SourcePath.Project.check_order_independent,
+      `ConcreteSpec.Core.SourcePath.Project.parse_local_first,
+      `ConcreteSpec.Core.SourcePath.Project.parse_checks_locally_parsed],
+    evidence `ConcreteSpec.Proofs.Ident `ConcreteSpec.Core.SourcePath.Project.Controls [
+      `ignoreDirectoryCase_violates_safety, `caseSensitive_violates_safety,
+      `ignoreFileDirectory_violates_safety, `rejectSharedDirectory_violates_progress,
+      `wrongSecondOccurrence_violates_refusal_evidence,
+      `onlyFileBeforeDirectory_violates_order_independence,
+      `prematureProjectCheck_violates_local_first, `ignoreDuplicate_violates_safety,
+      `skipProjectCheck_violates_checks_locally_parsed],
     evidence `ConcreteSpec.Proofs.Ident `ConcreteSpec.Core [
       `Span.pathOk, `Span.locationOk_iff, `tabSpan_location, `tabSpan_otherSource,
       `tabSpan_badCoordinates, `SourcePath.LocalControls.foldedRenderingChangesIdentity]],
+      requiredOnLanding := [
+        laws `ConcreteSpec.Proofs.Ident [
+          `ConcreteSpec.Core.SourcePathSpan.projectSpan_correct,
+          `ConcreteSpec.Core.SourcePathSpan.bindSource_correct]],
       namespaces := [specNamespace `Proofs.Ident `Core.SourcePathSpan] }
   | .R => namedEvidence [
     decls `ConcreteSpec.Spec.Rules [`ConcreteSpec.Core.registeredRules,
@@ -1143,7 +1163,7 @@ private def completion : PieceId → Completion
   | .F18 => reservedEvidence [
     specNamespace `Spec.Prim `Core.Prim,
     specNamespace `Proofs.Prim `Core.Prim]
-  | .F19 => { requiredSpec := [
+  | .F19 => { requiredOnLanding := [
     evidence `ConcreteSpec.Spec.Observe `ConcreteSpec.Core.Observe [
       `Observation, `FullObservation, `ExecAdapter, `reportObservation, `launchObservation]] }
   | .F20 => reservedEvidence [
@@ -1168,9 +1188,6 @@ private def completion : PieceId → Completion
     specNamespace `Proofs.Adequacy `Core.Exec.RunProjection]
   | .F25b => reservedEvidence [
     specNamespace `Proofs.Adequacy `Core.Exec.TerminationAndBlocking]
-  | .F26 => reservedEvidence [
-    specNamespace `Spec.Leak `Core.Leak.Release,
-    specNamespace `Proofs.Leak `Core.Leak.Noninterference]
   | .F26a =>
     { named := [
     evidence `ConcreteSpec.Spec.Accounting `ConcreteSpec.Core.Leak [
@@ -1230,7 +1247,7 @@ private def completion : PieceId → Completion
       completionRules := [`Account.WF, `ResetConserved, `ByteBoundSound, `ByteBoundSoundOptional,
         `ReportSound, `FiniteActionPermitted, `FiniteSequencePermitted, `SignedNetSound].map
           (fun name => ⟨`ConcreteSpec.Core.Leak ++ name, `ConcreteSpec.Spec.Accounting⟩) }
-  | .F28 => { requiredSpec := [
+  | .F28 => { requiredOnLanding := [
     evidence `ConcreteSpec.Spec.Frame `ConcreteSpec.Core.Frame [
       `C1Frames, `Machine.RegisterFrame, `callStack, `Launcher, `ProjectStartup]] }
   | .F29 => reservedEvidence [
@@ -1243,7 +1260,7 @@ private def completion : PieceId → Completion
       `checked, `wrap, `toBits, `ofBits, `intValue_valid],
     decls `Concrete.BIR.Progress [`Concrete.BIR.hasTy_int_core],
     decls `Concrete.Backend.LCB [`Concrete.Backend.LCB.Proof.enc_int_core]]
-  | .F31 => { requiredSpec := [
+  | .F31 => { requiredOnLanding := [
     evidence `ConcreteSpec.Spec.Slice1Syntax `ConcreteSpec.ScalarMigration [`intType],
     evidence `ConcreteSpec.Spec.Statics `ConcreteSpec.ScalarMigration [`literalType],
     evidence `ConcreteSpec.Spec.Slice1Semantics `ConcreteSpec.ScalarMigration [`checkedAdd],
@@ -1314,7 +1331,7 @@ private def completion : PieceId → Completion
     specNamespace `Proofs.Slice1 `Qualification.Slice1]
   | .M12 => reservedEvidence [
     specNamespace `Proofs.Surface0 `Qualification.Surface0]
-  | .«F03p-design» | .«F39-design» | .F27 => {}
+  | .«F03p-design» | .«F39-design» | .F26 | .F27 => {}
 
 private def plan : List Piece := [
   present .F01 "Explicit proof imports and a complete specification root",
@@ -1324,9 +1341,9 @@ private def plan : List Piece := [
     "changelog.d/2026-11-17-spec-f03b-sourcetext.md",
   disposition .«F03p-design» "design proposals never land on main and stay on WIP branches as writer briefs. The Lean spec carries the normative decisions for F03p"
     "ISSUES.tsv ISS-0068; docs/decisions.md#decided-2026-11-17-proposals-in-lean",
-  pending .F03p ["ROADMAP.md R-0709; ISSUES.tsv ISS-0068 (project-wide admission)"],
+  pending .F03p ["ROADMAP.md R-0709; ISSUES.tsv ISS-0068 (span projection and source binding)"],
   present .F04 "Stable-key, namespace, obligation, contract, and byte-coordinate proofs",
-  pending .F04p ["ROADMAP.md R-0709; ISSUES.tsv ISS-0068 (dependent project-wide proofs)"],
+  pending .F04p ["ROADMAP.md R-0709; ISSUES.tsv ISS-0068 (span projection and source binding Laws and controls)"],
   added .R "Rule registry, prerequisite of F06, F13 and F17"
     "changelog.d/2026-11-13-spec-rule-registry.md; ROADMAP.md R-0615",
   present .F05 "Fixed-width arithmetic and exact-term correspondence",
@@ -1356,11 +1373,12 @@ private def plan : List Piece := [
   pending .F24b ["ROADMAP.md R-0614"],
   pending .F25a ["ROADMAP.md R-0614"],
   pending .F25b ["ROADMAP.md R-0614"],
-  pending .F26 ["ROADMAP.md R-0613"],
+  disposition .F26 "F26b leakage and release of secret information (declassification) deferred until after 1.0"
+    "docs/decisions.md#decided-2026-11-21-secrets-after-1-0",
   added .F26a "F26 accounting slice in C7"
     "changelog.d/2026-11-15-spec-f26a-accounting.md; ROADMAP.md R-0613",
-  disposition .F27 "wiping is out of the spec and only the owner can reopen it"
-    "ISSUES.tsv ISS-0072; docs/decisions.md#decided-2026-11-16-secret-wiping",
+  disposition .F27 "wiping deferred until after 1.0"
+    "ISSUES.tsv ISS-0072; docs/decisions.md#decided-2026-11-21-secrets-after-1-0",
   pending .F28 ["ROADMAP.md R-0616", "ISSUES.tsv ISS-0073"],
   pending .F29 ["ROADMAP.md R-0616", "ISSUES.tsv ISS-0073"],
   pending .F29p ["ROADMAP.md R-0616", "ISSUES.tsv ISS-0068"],
@@ -1555,7 +1573,7 @@ private def Registry.citationErrors (registry : Registry) (env : Environment)
   if type.isSome && !registry.examples.any (fun link =>
       link.declaration == name && link.rule == rule && (exampleWrapper env link).isSome) then
     return #[s!"{piece}: {name} is missing its registered example link for {rule}"]
-  if let some requirement := (required.localRules ++ required.completionRules).find? (·.name == rule) then
+  if let some requirement := (required.deliveredRules ++ required.completionRules).find? (·.name == rule) then
     return registry.errors env piece [requirement]
   if let some ns := required.namespaces.find? (fun ns => ns.matches origin name && ns.ruleOrigin.isSome) then
     if let some ruleOrigin := ns.ruleOrigin then
@@ -1575,10 +1593,10 @@ private def reservationErrors (env : Environment) (pieces : List Piece)
         if ns.namespaceName.isPrefixOf other.namespaceName ||
             other.namespaceName.isPrefixOf ns.namespaceName then
           errors := errors.push s!"{piece.id}: overlapping completion reservation with {owner} under {ns.namespaceName} in {ns.origin}"
-      let cited := (required.named ++ required.requiredSpec ++ piece.groups).flatMap fun group =>
+      let cited := (required.named ++ required.requiredOnLanding ++ piece.groups).flatMap fun group =>
         if group.origin == ns.origin then group.declarations ++ group.laws else []
       namespaces := namespaces.insert ns.origin ((piece.id, ns, cited) :: sameModule)
-    for rule in required.localRules ++ required.completionRules do
+    for rule in required.deliveredRules ++ required.completionRules do
       if let some owner := ruleOwners.find? rule.name then
         errors := errors.push s!"{piece.id}: overlapping registry reservation for {rule.name} with {owner}"
       ruleOwners := ruleOwners.insert rule.name piece.id
@@ -1604,18 +1622,19 @@ private def inventory (env : Environment) (inScope : Name → Bool) (observed : 
     ids := ids.insert piece.id
     let claimsLanding := piece.remaining.isEmpty && piece.disposition.isNone
     let required := requirements piece.id
-    let groups := required.named ++ piece.groups ++
-      (if claimsLanding then required.requiredSpec else [])
+    let completionGroups := piece.groups ++
+      (if claimsLanding then required.requiredOnLanding else [])
+    let groups := required.named ++ completionGroups
     if claimsLanding && groups.isEmpty then
       errors := errors.push s!"{piece.id}: a landed piece needs evidence"
-    errors := errors ++ registry.errors env piece.id required.localRules
+    errors := errors ++ registry.errors env piece.id required.deliveredRules
     for ns in required.namespaces do
       if ns.origin == `ConcreteSpec.Spec.Rules && ns.ruleOrigin.isNone then
         errors := errors.push s!"{piece.id}: missing rule-defining module for registry reservation under {ns.namespaceName}"
     if claimsLanding then
       errors := errors ++ registry.errors env piece.id required.completionRules
       for ns in required.namespaces do
-        unless piece.groups.any (fun group =>
+        unless completionGroups.any (fun group =>
             (group.declarations ++ group.laws).any (ns.matches group.origin)) do
           errors := errors.push s!"{piece.id}: missing completion evidence under {ns.namespaceName} in {ns.origin}"
         if let some ruleOrigin := ns.ruleOrigin then
@@ -1625,7 +1644,7 @@ private def inventory (env : Environment) (inScope : Name → Bool) (observed : 
           let citesLaw (group : Group) (name : Name) :=
             observed.laws.find? name == some group.origin
           let citesReserved (names : Group → List Name) (classified : NameMap Name) :=
-            piece.groups.any fun group => (names group).any fun name =>
+            completionGroups.any fun group => (names group).any fun name =>
               ns.matches group.origin name && classified.find? name == some group.origin
           let namedLaw := piece.id == .M09 &&
             required.named.any (fun group => group.laws.any (citesLaw group))
@@ -1782,17 +1801,12 @@ def verify (env : Environment) (specModules compilerModules : NameSet) (specEvid
   rejectsBorrowedEvidence .F17 `ConcreteSpec.Spec.Rules `ConcreteSpec.Core.Leak.Registry.accountA
   rejectsBorrowedEvidence .F03p `ConcreteSpec.Spec.Ident `ConcreteSpec.Core.ContractId
   let helper := `ConcreteSpec.Core.SourcePathSpan.inventoryHelper
-  let helperOnly := plan.map fun piece =>
-    if piece.id == .F04p then
-      { piece with remaining := [], groups := [decls origin [helper]] }
-    else piece
-  -- Use F04p's actual reservation with this fixture's module as its origin.
-  let withFixtureOrigin (id : PieceId) :=
-    let required := completion id
-    if id == .F04p then
-      { required with namespaces := required.namespaces.map (fun ns => { ns with origin }) }
-    else required
-  let checked := inventory env inScope specEvidence helperOnly #[] withFixtureOrigin baseline
+  let helperOnly := [{ present .F04p "" with groups := [decls origin [helper]] }]
+  -- Exercise F04p's proof reservation using only the helper fixture as evidence.
+  let withFixtureOrigin (_ : PieceId) : Completion :=
+    reservedEvidence ((completion .F04p).namespaces.map fun ns => { ns with origin })
+  let checked := inventory env inScope {} helperOnly #[] withFixtureOrigin
+    { rules := [], examples := [] }
   unless checked.errors.size == 2 &&
       checked.errors.any (·.startsWith "F04p: missing reserved Law theorem") &&
       checked.errors.any (·.startsWith "F04p: missing reserved planted control") &&
@@ -1834,55 +1848,66 @@ def verify (env : Environment) (specModules compilerModules : NameSet) (specEvid
     unless checked.errors == #[s!"F06: {name} requires a registered-rule requirement for {constRule}"] &&
         checked.originalLanded == 0 do
       throwError "inventory control: F06 accepted a rule theorem as a plain declaration: {name}"
-  let localSourcePath (id : PieceId) :=
-    let required := completion id
-    if id == .F03p then { required with completionRules := [] } else required
-  let sourcePathClaim := land .F03p
-  let checked := inventory env inScope {} sourcePathClaim #[] localSourcePath baseline
-  unless checked.errors.isEmpty && checked.originalLanded == 1 do
-    throwError "inventory control: local F03p evidence was refused: {checked.errors}"
-  for requirement in (completion .F03p).localRules do
-    let rule := requirement.name
-    let withoutRule := { baseline with rules := baseline.rules.filter (·.name != rule) }
-    let checked := inventory env inScope {} sourcePathClaim #[] localSourcePath withoutRule
-    unless checked.errors.contains s!"F03p: missing unique registered rule {rule}" &&
-        checked.originalLanded == 0 do
-      throwError "inventory control: F03p landed without registry entry for {rule}"
-    for (wrapper, verdict) in [(`ConcreteSpec.Core.RuleAccepted, "acceptance"),
-        (`ConcreteSpec.Core.RuleRefused, "refusal")] do
-      let withoutExample := { baseline with examples := baseline.examples.filter fun link =>
-        !(link.rule == rule && exampleWrapper env link == some wrapper) }
-      let checked := inventory env inScope {} sourcePathClaim #[] localSourcePath withoutExample
-      unless checked.errors.contains s!"F03p: missing registered {verdict} example for {rule}" &&
-          checked.originalLanded == 0 do
-        throwError "inventory control: F03p landed without registered {verdict} for {rule}"
+  -- Exercise the transition with fixture declarations so reserved production names
+  -- can be implemented independently of the inventory controls.
+  let partialRow := pending .F03p ["fixture completion evidence"]
+  let emptyRegistry : Registry := { rules := [], examples := [] }
+  let delivered := [decls origin [`SpecLanding.Control.retained]]
+  for (id, evidence, metadata) in [
+      (.F03p, decls origin [`SpecLanding.Control.wrongIncrement],
+        ({} : EvidenceMetadata)),
+      (.F04p, laws origin [`SpecLanding.Control.newName],
+        { laws := ({} : NameMap Name).insert `SpecLanding.Control.newName origin })] do
+    let row := { partialRow with id }
+    let missing := `SpecLanding.Control.missingCompletion
+    let missingEvidence := { evidence with
+      declarations := evidence.declarations.map (fun _ => missing)
+      laws := evidence.laws.map (fun _ => missing) }
+    let requirements (_ : PieceId) : Completion :=
+      { named := delivered, requiredOnLanding := [missingEvidence] }
+    let checked := inventory env inScope {} [row] #[] requirements emptyRegistry
+    unless checked.errors.isEmpty && checked.rows.any (·.startsWith s!"{id}: partial") do
+      throwError "inventory control: {id} demanded completion evidence for a partial row"
+    let checked := inventory env inScope {} (land id) #[] requirements emptyRegistry
+    unless checked.errors == #[s!"{id}: missing declaration {missing} in {origin}"] &&
+        checked.rows.any (·.startsWith s!"{id}: incomplete") do
+      throwError "inventory control: {id} claimed landing without completion evidence"
+    let checked := inventory env inScope metadata (land id) #[]
+      (fun _ => { named := delivered, requiredOnLanding := [evidence] }) emptyRegistry
+    unless checked.errors.isEmpty && checked.rows.any (·.startsWith s!"{id}: landed") do
+      throwError "inventory control: {id} refused complete fixture evidence: {checked.errors}"
+  -- Construct a registry with a single authored rule and explicitly selected examples.
+  -- These declarations exercise origin and theorem validation in the real registry checker.
+  let accepted := `ConcreteSpec.Core.ConstRegistry.accepted
+  let refused := `ConcreteSpec.Core.ConstRegistry.refused
+  let registry : Registry :=
+    { rules := [⟨constRule, 1⟩], examples := [⟨constRule, accepted⟩, ⟨constRule, refused⟩] }
+  let requirements (_ : PieceId) : Completion :=
+    { named := delivered, deliveredRules := [⟨constRule, `ConcreteSpec.Spec.Const⟩] }
+  let checkPartial (registry : Registry) := inventory env inScope {} [partialRow] #[] requirements registry
+  let checked := checkPartial registry
+  unless checked.errors.isEmpty && checked.rows.any (·.startsWith "F03p: partial") do
+    throwError "inventory control: delivered evidence for the partial fixture was refused: {checked.errors}"
+  for (mutation, message) in [
+      ({ registry with rules := [] }, s!"missing unique registered rule {constRule}"),
+      ({ registry with examples := [⟨constRule, refused⟩] }, s!"missing registered acceptance example for {constRule}"),
+      ({ registry with examples := [⟨constRule, accepted⟩] }, s!"missing registered refusal example for {constRule}"),
+      ({ registry with rules := [⟨constRule, 0⟩] }, s!"registered rule {constRule} has revision below 1")] do
+    let checked := checkPartial mutation
+    unless checked.errors == #[s!"F03p: {message}"] &&
+        checked.rows.any (·.startsWith "F03p: incomplete") do
+      throwError "inventory control: partial fixture did not report {message}"
   let misplaced := `ConcreteSpec.Core.RuleAccepted
-  let wrongModule := { baseline with rules := ⟨misplaced, 1⟩ :: baseline.rules }
+  let wrongModule := { emptyRegistry with rules := [⟨misplaced, 1⟩] }
   unless (wrongModule.errors env .F03p [⟨misplaced, `ConcreteSpec.Spec.Ident⟩]).contains
       s!"F03p: registered rule {misplaced} must be authored in ConcreteSpec.Spec.Ident" do
     throwError "inventory control: accepted a rule defined in Spec.Rules"
-  let rule := `ConcreteSpec.Core.SourcePath.Nonempty
-  let zeroRevision := { baseline with rules := baseline.rules.map fun entry =>
-    if entry.name == rule then { entry with rev := 0 } else entry }
-  let checked := inventory env inScope {} sourcePathClaim #[] localSourcePath zeroRevision
-  unless checked.errors == #[s!"F03p: registered rule {rule} has revision below 1"] &&
-      checked.originalLanded == 0 do
-    throwError "inventory control: F03p landed with revision zero"
-  let localOnly := { baseline with rules := baseline.rules.filter (fun rule =>
-    !(completion .F03p).completionRules.any (·.name == rule.name)) }
-  let checked := inventory env inScope {} sourcePathClaim #[] completion localOnly
-  unless checked.originalLanded == 0 && checked.errors.any (·.startsWith "F03p: missing unique registered rule ConcreteSpec.Core.SourcePath.Project.") do
-    throwError "inventory control: full F03p landed with local rules alone"
-  let missingSpan (id : PieceId) :=
-    let required := localSourcePath id
-    { required with named := required.named.map fun group =>
-      { group with declarations := group.declarations.map fun name =>
-        if name == `ConcreteSpec.Core.Span then `ConcreteSpec.Core.missingSpan else name } }
-  let checked := inventory env inScope {} sourcePathClaim #[] missingSpan baseline
-  unless checked.errors.contains
-      "F03p: missing declaration ConcreteSpec.Core.missingSpan in ConcreteSpec.Spec.Ident" &&
-      checked.originalLanded == 0 do
-    throwError "inventory control: F03p landed without its named spec declarations"
+  let missingNamed := `SpecLanding.Control.missingDelivered
+  let checked := inventory env inScope {} [partialRow] #[]
+    (fun id => { requirements id with named := [decls origin [missingNamed]] }) registry
+  unless checked.errors == #[s!"F03p: missing declaration {missingNamed} in {origin}"] &&
+      checked.rows.any (·.startsWith "F03p: incomplete") do
+    throwError "inventory control: partial fixture accepted a missing named spec declaration"
   let outputFixture (id : PieceId) :=
     let required := completion id
     { required with namespaces := required.namespaces.map fun ns => { ns with origin } }

@@ -17,8 +17,11 @@ reference lookup, admission and sorting definitions are imported from Spec/Const
 Held under ISS-0080: unit/char admission, calls and richer R2 preconditions; char literals
 and SPARK construction preconditions stay outside this grammar (ISS-0071). Boolean
 encoding/conversion (ISS-0069), pointer bytes (ISS-0070), path characters (ISS-0068),
-wiping (ISS-0072), startup/ABI (ISS-0073), layout (ISS-0076), U+FEFF scope and bare CR (ISS-0064), and
-queued partial decisions (ISS-0065) supply no rules here. No assumed-yes approval is used.
+startup/ABI (ISS-0073), layout (ISS-0076), U+FEFF scope and bare CR (ISS-0064), and queued
+partial decisions (ISS-0065) supply no rules here. No assumed-yes approval is used.
+The 2026-11-21 decision
+(docs/decisions.md#decided-2026-11-21-secrets-after-1-0) defers wiping until after 1.0
+and closes ISS-0072.
 Canonical source tie-breaking is tested as an implementation property, not asserted as
 an additional owner-decided language rule.
 

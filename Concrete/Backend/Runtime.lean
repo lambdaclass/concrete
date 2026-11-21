@@ -155,7 +155,7 @@ def expectedInventory (tbl : SiteTable) : List IntegerField :=
   [(.byteLength, none, invalidSize), (.comparisonRight, some 64, 0),
    (.callArgument 0, some 32, 2), (.comparisonRight, some 64, 0),
    (.comparisonRight, some 32, 256), (.right, some 32, 256)] ++
-  ((List.range tbl.length).map fun i => (.switchKey, some 32, i)) ++
+  ((List.range tbl.length).map fun i => (.switchKey i (.trapSite i), some 32, i)) ++
   (tbl.flatMap fun e => [(.callArgument 1, some 64, size e), (.callArgument 0, some 32, 134)]) ++
   [(.callArgument 1, some 64, invalidSize)]
 
@@ -183,14 +183,23 @@ theorem llvmItems_inventory (tbl : SiteTable) :
   simp only [llvmItems, expectedInventory, List.flatMap_append, List.flatMap_map,
     List.flatMap_cons, List.flatMap_nil, List.zipIdx_cons, List.zipIdx_nil, Item.inventory, Instruction.inventory,
     Argument.inventory, TypeCode.integerWidth, Width.bits, Immediate.natural,
-    List.map_map, List.nil_append, List.append_nil, List.cons_append, List.flatMap_assoc]
+    List.nil_append, List.append_nil, List.cons_append, List.flatMap_assoc]
   simp only [← List.map_eq_flatMap, indexed]
   rw [map_indexedFrom tbl 0 (fun e => ((.byteLength, none, (siteBytes e).size) : IntegerField))]
-  have keys : ((indexedFrom 0 tbl).map fun x => (.switchKey, some 32, x.1) : List IntegerField) =
-      (List.range tbl.length).map (fun i => (.switchKey, some 32, i)) := by
+  have keys : ((indexedFrom 0 tbl).map fun x => (.switchKey x.1 (.trapSite x.1), some 32, x.1) : List IntegerField) =
+      (List.range tbl.length).map (fun i => (.switchKey i (.trapSite i), some 32, i)) := by
     rw [List.range_eq_range', ← map_indexedFrom_fst tbl 0, List.map_map]
     rfl
-  erw [keys]
+  have positions (xs : SiteTable) (n : Nat) :
+      (((indexedFrom n xs).map (fun x => ((⟨x.1⟩ : Immediate), Label.trapSite x.1))).zipIdx n).map
+        (fun x => (IntegerRole.switchKey x.2 x.1.2, some 32, x.1.1.value)) =
+      (indexedFrom n xs).map (fun x => (IntegerRole.switchKey x.1 (.trapSite x.1), some 32, x.1)) := by
+    induction xs generalizing n with
+    | nil => rfl
+    | cons x xs ih =>
+      simp only [indexedFrom, List.map_cons, List.zipIdx_cons, List.cons.injEq, true_and]
+      exact ih (n + 1)
+  rw [positions tbl 0, keys]
   have traps : ((indexedFrom 0 tbl).flatMap fun x =>
       [(.callArgument 1, some 64, (siteBytes x.2).size), (.callArgument 0, some 32, 134)] :
       List IntegerField) = tbl.flatMap (fun e =>

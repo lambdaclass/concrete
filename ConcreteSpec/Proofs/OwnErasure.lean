@@ -17,9 +17,12 @@ obligation, not a claim that a checker implementation has been proved correct.
 O1 owns ledger preservation and lifetime facts; this module owns execution erasure.
 Source commands in the extraction's trailing preservation/lifetime/finality groups
 already belong to O1 and are not copied here. O3 remains out of scope.
-Held policies remain ISS-0064/ISS-0065, ISS-0068 through ISS-0073, ISS-0076 and ISS-0080:
-source characters/paths, constant restrictions, codecs, wiping, startup/ABI and
+Held policies remain ISS-0064/ISS-0065, ISS-0068 through ISS-0071, ISS-0073, ISS-0076 and
+ISS-0080: source characters/paths, constant restrictions, codecs, startup/ABI and
 aggregate/whole-pointer layout. None is needed or encoded by these erasure laws.
+The 2026-11-21 decision
+(docs/decisions.md#decided-2026-11-21-secrets-after-1-0) defers wiping until after 1.0
+and closes ISS-0072.
 Only Law counts as evidence; Helper, Representation lemma, Instance and Planted
 follow #decided-2026-11-13-proof-labels. Mutants follow
 #decided-2026-11-14-trap-sites-and-law-tests.
