@@ -621,7 +621,7 @@ Heavy runs (native builds, differentials, certificates) run on concrete-ci-2 or 
 3. Leading-zero literals such as `007` are refused: one form per number. This is recorded in `Surface0.lean`.
 4. The trap site that the executable reports is a named premise now, `P_trap_site`, which a proof retires later.
 5. Both backends are in slice 0. This is being recorded on `wip/decisions-followup`.
-6. Information flow and constant time are decided: `Secret<T>`, `classify`/`declassify(x, "reason")`, `ct_select`/`ct_eq`, and the baseline observer (branches, addresses and variable-time operations; speculation not covered). Slice 0 carries only the fact fields.
+6. Information flow and constant time are decided: `Secret<T>`, `classify`/`declassify(x, "reason")`, `ct_select`/`ct_eq`, and the baseline observer (branches, addresses and variable-time operations; speculation not covered). Slice 0 carries only the fact fields. This decision is historical. See the [after-1.0 decision](../docs/decisions.md#decided-2026-11-21-secrets-after-1-0).
 7. OS sandboxing of the launcher is out of scope for the compiler.
 
 8. The trap line is `concrete: trap: <kind> at <path>:<line>:<col> (site <id>)`: the path relative to the project root with forward slashes, line and column 1-based (owner, 2026-11-06). The compiler implements it in `Backend/Runtime.lean` (`trapLine`), from the site table's `Loc`; `P_trap_site` covers the executable writing it.
@@ -658,7 +658,7 @@ These are internal. None blocks slice 0's correctness.
   4. `bool`/`if`/`while` and `#[variant]`;
   5. functions, calls, recursion, capabilities through calls, contracts;
   6. the trap checker;
-  7. `Secret<T>` on scalars;
+  7. Reserved. Secrets move to [after 1.0](../ROADMAP.md#after-10);
   8. enums, `match`, `Result` and `checked_*`;
   9. structs and ownership;
   10. borrows;
@@ -691,7 +691,7 @@ LCB is our own project; these are tasks for it, not premises to keep. Checked ag
 - Grants, the launcher's startup refusal (125) and events.
 - The LP0 proven path: LCB's own theorems composed with `adapter_correct`, replacing `P_toolchain[lcb]`. It comes right after the functions-and-calls slice (slice 4 in the earlier numbering, slice 5 now). In slice 0 LCB already runs, unverified, with the adapter proof first.
 - An LLVM-IR semantics. The LLVM meaning `M` stays a premise parameter until one exists, and then `P_print` becomes a theorem.
-- The information-flow and constant-time analysis. The surface and the observer are decided; slice 0 has only the fact fields.
+- Information flow and constant time are deferred to [after 1.0](../ROADMAP.md#after-10).
 
 ## Reproducible builds (owner, 2026-11-07)
 

@@ -78,8 +78,8 @@ structure SiteId where
   deriving DecidableEq, Repr
 
 /-- The kinds of proof obligation named by the Core rules. `safety` covers an operation's residual
-safety condition; the other constructors name the contract, invariant, assertion, resource-bound
-and information-flow obligations explicitly stated by the spec. -/
+safety condition; the other constructors name the contract, invariant, assertion and resource-bound
+obligations explicitly stated by the spec. -/
 inductive ObligationKind where
   | safety
   | termination
@@ -90,8 +90,6 @@ inductive ObligationKind where
   | assertion
   | stepBound
   | stackBound
-  | noninterference
-  | constantTime
   deriving DecidableEq, Repr
 
 /-- One proof obligation: its originating site, its kind, and a local discriminator that keeps two

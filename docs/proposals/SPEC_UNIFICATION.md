@@ -7,6 +7,10 @@ the coordinator (section 4), and the coordinator's answers to draft 3's question
 5.1). Drafts 1 and 2, the archive copies of the inputs and the raw review outputs are not kept in
 the repository; the exact revisions below are the inputs. I checked each kept reviewer claim against the files. **Revised 2026-11-08** for the owner's foundation decisions: the summary's build order, S1 (5.1), the module graph (2.2) and section 6 from step 3 on now write the foundation C1–C10 of [FOUNDATION.md](FOUNDATION.md) first and the slices on top of it.
 
+**Scope revision (2026-11-21):** Secrets, including the proposed leakage and release interfaces
+and wipe events, move to the [after-1.0 roadmap](../../ROADMAP.md#after-10).
+C7 keeps byte and memory accounting. See the [2026-11-21 decision](../decisions.md#decided-2026-11-21-secrets-after-1-0).
+
 **Inputs read (exact revisions):**
 
 - `origin/wip/spec-root` 6f80b9c9d0: `ConcreteSpec.lean`, `ConcreteSpec/Spec.lean`, `ConcreteSpec/Spec/*.lean`, `ConcreteSpec/Proofs/*.lean`, `ConcreteSpec/README.md`.
@@ -140,7 +144,7 @@ collisions (`dec:729`). Rule 13 requires that `#[proof]` resolve to a typed theo
 - `SiteId`, one per operation and per refusable statement.
 
 Every operation node carries a `SiteId`; elaboration (O1) maps it to a span. Diagnostics, facts,
-traps, leakage records and discharge tokens all key on it.
+traps and discharge tokens all key on it.
 
 ### 1.3 Types and linearity
 
@@ -162,7 +166,6 @@ traps, leakage records and discharge tokens all key on it.
 - `view m T`, second-class (Q3.1–Q3.3);
 - `grant g`;
 - `Result` and `Option` as ordinary enum declarations;
-- `secret T` on scalars (R-0596), from slice 7, within A2i.
 
 `Ty` is complete for every type the old fragments already use (alloc, heap, views, grants, text)
 from phase A, ahead of the slices that expose them in source: `Fragment.surface` gates the source,
@@ -299,11 +302,9 @@ primitive-local result (1.11), which the semantics maps to sited outcomes.
   blocking arrives). Only these, with the outcome, feed `Observation`. The Start/Exit trace of
   slice 6 is these kinds.
 - **The ghost log** (1.9). It records cleanup calls, loan ends, alloc and destroy (each with lineage,
-  size and call frame), release sites and leakage records. It is instrumentation, never observed.
+  size and call frame). It is instrumentation, never observed.
 
-The event kind is extensible (SPARK row). A secret wipe is a **public** event kind (R-0602), added
-at slice 7: erasure keeps it and every later preservation theorem must preserve it, which is what
-protects a wipe from being optimized away. It is not in the ghost log.
+The event kind is extensible (SPARK row; R-0602).
 
 Making alloc, free or cleanup a public observation would change what programs observably do, so
 the plan does not do it.
@@ -339,14 +340,13 @@ at the evaluator.
 
 ### 1.9 Instrumentation and erasure
 
-There are four instrumentation domains, with one erasure proved:
+There are three instrumentation domains, with one erasure proved:
 
 | Domain | Where | State |
 |---|---|---|
 | ownership ghost (`Slot.moved`; `Entry.used`, `live`, `known`, `kfields`) | `Spec/Semantics.lean:23`, `Spec/Ownership.lean:17` | erasure stated as intent only (O3) |
 | brands | `Spec/Brand.lean:196-244` | proved (`brand_erasure`) |
 | per-lineage byte accounting | none | due in A2i (R-0592) |
-| leakage | none | due in A2i (R-0592) |
 
 **Unified:** the semantic state is `State × Ghost`. `Ghost` holds the slot states, brands and
 lineages, and the ghost log (1.7). The byte quantities are not stored counters. They are functions
@@ -358,15 +358,12 @@ of the log:
 - signed net change per call frame.
 
 A single source then answers the memory decision's quantities (`../archive/crucial-2026-11-06/MEMORY.md:19-31`).
-Leakage records are branch decision, address, allocation size, loop count and variable-time
-operand, each with its `SiteId`.
 
 The mode checks of variable reads (`wrongMode`, `movedRead`) inspect `Ghost` only; in the erased run
 they cannot fire, which is what `checked_never_stuck` plus erasure guarantees.
 
 There is one `erase` and one theorem, `instrumentation_erasure`. It replaces `brand_erasure` and
-discharges O3 and the "removing it changes no run" obligations of the memory and information-flow
-decisions.
+discharges O3 and the "removing it changes no run" obligation of the memory decision.
 
 ### 1.10 Judgments and the checker
 
@@ -454,7 +451,7 @@ imports `Types` and `Values` only, so `Syntax` can name a `PrimOp` (the module o
 - its `PrimOp` identifier and signature;
 - grant type and capabilities (rule 7);
 - whether it is **pure** or **stateful**. A pure primitive (integer and bitwise operations,
-  conversions, `ct_select`) has an evaluation into a primitive-local result `ok v | fail f`. A
+  conversions) has an evaluation into a primitive-local result `ok v | fail f`. A
   stateful primitive (`alloc`, `reset`, `release`, view `get`/`set`, `byte_at` on a store, grant
   I/O) has only its contract here: the transition on the semantic state is a rule in `Semantics`,
   which reads the same failure condition;
@@ -466,7 +463,7 @@ imports `Types` and `Values` only, so `Syntax` can name a `PrimOp` (the module o
 
 **The range test.** One `validRange` and one index map serve both views and element access.
 
-Semantics, admission, authority, the facts and the leakage records all read this one table. An
+Semantics, admission, authority, and the facts all read this one table. An
 operation's evidence premise is "the facts entail the negation of its failure condition". The trap
 and the refusal are two readings of one definition.
 
@@ -604,8 +601,7 @@ slice-0 surface decision) lives in the same module or beside it in `Spec/Lexical
      fact (R-0574), may-abort, and always-aborts with path pruning after an always-aborting call
      (R-0600, slice 5);
    - unused permissions: a permission that justifies nothing (SPARK row; a `Concrete.toml` policy
-     may refuse it);
-   - `reads_secret`, `declassifies`, `ct_source`, `ct_binary`, `wipes` (from slice 7).
+     may refuse it).
 
    `Fact.Holds` gives each judgment's semantic meaning. The derivation comes with each slice, in the
    compiler, importing these definitions, with two theorems: soundness (a reported fact holds) and
@@ -645,7 +641,7 @@ Grammar → Fragments                        (Fragment.surface, Fragment.core pe
 Syntax, Outcome → Contract                 (Event, Behaviour; Safe, NoImplicitTraps, …, observe)
 Values → Store                             (the hybrid state: places, blocks, provenance; C4)
 Contract, Store, Primitives → Semantics    (State × Ghost, the step relation, run, Eval, erase; C1, C8)
-Contract, Semantics → Leakage              (leakage trace, release records, accounting; C7)
+Contract, Semantics → Accounting           (per-lineage byte accounting; C7)
 Store, Semantics → Frame                   (footprints, the frame law, ABI signatures; C10)
 Syntax → Evidence                          (octagon facts, entails, sources, tokens, evidence graph)
 Evidence → Obligations                     (generated obligation schemas; #[proof] roles; TheoremId targets)
@@ -679,7 +675,7 @@ The import rules:
 - `ConcreteSpec/Spec.lean` remains the public import (R-0560).
 
 These are 34 modules, replacing 13 (the foundation of 2026-11-08 adds `Rules`, `Target`, `Scalar`,
-`Store`, `Leakage`, `Frame` and `Brand`, and takes `Layout` out of `Values`). agy recommended about 17; the
+`Store`, `Accounting`, `Frame` and `Brand`, and takes `Layout` out of `Values`). agy recommended about 17; the
 plan keeps one module per concept the owner reads. Folded: observation into `Contract`.
 
 ---
@@ -735,7 +731,7 @@ plan keeps one module per concept the owner reads. Folded: observation into `Con
 13. **O8 and O10.** Deferred calls run in the integrated semantics, so the `ok` oracle of part 3 goes
     (O8, discharged when `Cleanup` is ported, step 14). Loop conditions are evaluated, so the `σ`
     oracle of part 5 goes (O10, discharged when `Brand` is ported, step 16).
-14. **Examples:** the leakage and accounting interfaces are kernel-checked against examples (R-0592), from phase B, before the slices that give them semantics.
+14. **Examples:** the accounting interface is kernel-checked against examples (R-0592), from phase B, before the slices that give them semantics.
 
 ### 3.2 Existing theorems restated on the integrated Core
 
@@ -786,8 +782,8 @@ step cites the row once it is on main; a step that needs a row not yet on main w
 | D8 | The attribute-prefix production, LL(1) (R-0574) | `Grammar`, `Syntax` | the production in the grammar data; `ll1_sound`; attachment by kind (OD82) | 0 (grammar), used from 4 |
 | D9 | Facts vocabulary, statuses, coverage, strength, vacuity, dependency flow (facts decision; R-0585) | `Facts` | 2.1 item 8; every kind present from phase B, `notApplicable` until its slice | B |
 | D10 | Diagnostics are typed checker results; rule ID = Lean rule name plus that rule's own revision (R-0593, R-0603); one `spec_version` per output, 0.x before the freeze and 1.0 at A2c ([runtime row](../decisions.md#decided-project-runtime-2026-11-06)) | `Ident`, `Checker` | `RuleId` and `spec_version` (step 2); `Rule`, `Subject`, `CheckResult`, the retired-ID registry and the lifecycle checks (1.10) with `incomplete`, `check_correspond`, `check_refused` | A (steps 2, 11) |
-| D11 | Byte accounting (R-0592) | `Ident`, `Values`, `Semantics`, `Leakage` | `LineageId`, the ghost-log alloc and destroy records, the derived quantities, with examples over hand-written logs at B; the semantics and `ghost_log_adequate` in phase B (step 17); source-level allocation at slice 19 | B, 19 |
-| D12 | The leakage-trace interface (R-0592): `Secret<T>`, `classify`, `declassify`, `ct_select`, `ct_eq` | `Types`, `Primitives`, `Semantics`, `Leakage` | leakage records in the ghost log and a variable-time flag per primitive at B (with examples); `Secret<T>` on scalars, `classify` (the pure classify of a value passed in, no wrapper duplicating it), the entropy capability's `Secret<T>` output from slice 7 ([decision](../decisions.md#decided-2026-11-07-stack-randomness)), `declassify(x, "reason")`, `ct_select`, the closed CT operation table and the Q2.2-revised scalar Copy rule at 7; fill-bytes from entropy at 15; grant-backed sources at 16, 18, 27 | B, 6, 7, 15 |
+| D11 | Byte accounting (R-0592) | `Ident`, `Values`, `Semantics`, `Accounting` | `LineageId`, the ghost-log alloc and destroy records, the derived quantities, with examples over hand-written logs at B; the semantics and `ghost_log_adequate` in phase B (step 17); source-level allocation at slice 19 | B, 19 |
+| D12 | Leakage and release | — | Deferred to [after 1.0](../../ROADMAP.md#after-10) | — |
 | D13 | Q4.6 and Q4.7 revised | `Primitives`, `Borrow`, `Evidence` | `byte_at` needs an in-range offset; a range without `else` needs evidence of validity | 15, 16 |
 | D14 | Closed evidence (Q9.11, OD125 qualified, CON-2); `assume` never admits safety (OD80, CON-6); vacuous preconditions (OD120) | `Evidence`, `Obligations`, `Admission` | evidence sources; `assume` excluded; vacuity refusal | 5, 8 |
 | D15 | Policies and `Concrete.toml` | not Core, except the stack budget | compiler data over `Facts`; the spec defines `Fact.Holds` and the mandatory stack-budget refusal (D32) | — |
@@ -799,7 +795,7 @@ step cites the row once it is on main; a step that needs a row not yet on main w
 | D21 | Abort is the same terminal trap (`dec:1224`); may-abort is a separate fact | `Semantics`, `Facts` | abort is a trap kind, not `implicit` (its name is the owner's, question 9); explicit `abort()` in slice 1 (slice plan owner question 6) | 1 |
 | D22 | Allocation failure is a value (Q1.8, Q1.9) | `Primitives` | `AllocFailure<T>`; `exhausted` is target-only | 19 |
 | D23 | Default struct layout (SPARK or runtime row, 2026-11-06): declaration order, natural alignment, size rounded up to the alignment, a zero-sized type has no bytes | `Values` (`Layout`) | `Layout.size`, `Layout.align`, field offsets; the empty struct of slice 1 has size 0 | 1 (ZST), 9 |
-| D24 | An extensible observable-event kind in Core ([SPARK row](../decisions.md#decided-project-spark-2026-11-06); R-0602: it also protects secret wipes) | `Semantics`, `Contract` | `Event.kind`; only these feed `observe` (1.7); wipe events made observable-protected at 7 | B |
+| D24 | An extensible observable-event kind in Core ([SPARK row](../decisions.md#decided-project-spark-2026-11-06); R-0602) | `Semantics`, `Contract` | `Event.kind`; only these feed `observe` (1.7) | B |
 | D25 | A function whose `#[requires]` is a safety precondition is refused as a function value, including through wrappers and specialization ([SPARK row](../decisions.md#decided-project-spark-2026-11-06); R-0601: the function-type-contract design, trait methods included, is a prerequisite for accepting slice 20; under that design, a function value with a matching function-type contract is accepted) | `Admission` | an admission premise on function-value formation without a matching function-type contract, re-checked after Mono | 20, after R-0601 |
 | D26 | `#[invariant(...)]` on a struct with private fields holds at every exposure ([SPARK row](../decisions.md#decided-project-spark-2026-11-06)) | `Syntax`, `Obligations`, `Admission` | the struct invariant and its obligations (established at construction, preserved by field writes inside the declaring module, assumed at every exposure outside it); defined in A2i | spec in A2i; source feature at 17 (S2) |
 | D27 | `assert(e) by thm(...)`, an extension of OD79 ([SPARK row](../decisions.md#decided-project-spark-2026-11-06)) | `Syntax`, `Obligations`, `EvidenceSem` | one fact at one point, the theorem's hypotheses fully discharged; a role kept separate from `#[proof]` (which discharges the function's obligations) | 8 |
@@ -832,7 +828,7 @@ yes then as you said right"), and the SPARK row records the revision.
 
 **S3. the slice plan's owner questions.** All six recommended answers are approved ("ok do everything",
 2026-11-06) and recorded on `wip/decisions-followup` a0e588f59: the pure `classify` is slice 7's
-secret source (D12; since 2026-11-07 the entropy output is a second source); ARITH-9 `#[overflow_checked]` is retired (D29); `Concrete.toml` has typed,
+secret source (D12, now deferred); ARITH-9 `#[overflow_checked]` is retired (D29); `Concrete.toml` has typed,
 versioned `[policy]` and `[assumptions]` tables (D30); R-0595 lands at slice 19 (D31); RocksDB and
 ethlambda are audited before acceptance (D31); `abort()` is in slice 1 (D21).
 
@@ -927,7 +923,7 @@ that writes it. Steps that edit a contract written earlier are sequential.
 | C4 byte memory and value validity | step 13 | `Store` |
 | C5 dynamic borrow, brands and authority | steps 10 (static), 16 (dynamic invariant, ports) | `Ownership`, `Borrow`, `Brand`, `Authority` (static rules); the invariant over `Store` and `Semantics` in `Proofs/` |
 | C6 observations and environment | step 12 | `Contract` |
-| C7 secret leakage and accounting | step 17 | `Leakage` |
+| C7 accounting | step 17 | `Accounting` |
 | C8 evaluator adequacy and termination | step 15 | `Semantics`, `Termination` |
 | C9 identities, primitive contracts, evidence and erasure | steps 2 (on `wip/spec-core`), 6, 10, 11, 19 | `Ident`, `Rules`, `Primitives`, `Evidence`, `Obligations`, `Checker`, `EvidenceSem`, `Facts`, `erase` in `Semantics` |
 | C10 frames and ABI | step 18 | `Frame` |
@@ -950,12 +946,10 @@ that writes it. Steps that edit a contract written earlier are sequential.
    discriminants, valid tag decoding), proved for the native, C and packed algorithms, with the
    existing `i32` enum tags and no niches ([questions 4 and 5](../decisions.md#foundation-q4)).
    `Values`: `Val`, `Val.HasTy` and `Rep`, porting `Spec/Rep.lean`: `rep_roundtrip` keeps its name
-   and statement over `Layout`, and `Rep` is deleted in this step. `Secret<T>` has `T`'s layout
-   ([question 18](../decisions.md#foundation-q18)).
+   and statement over `Layout`, and `Rep` is deleted in this step.
 6. `Primitives` (C9's contract interface): one primitive-contract interface (types, authority,
-   ownership and dependencies, pre- and postconditions, footprint, failures, events and leakage,
-   resource effects, termination), parameterized over the event and leakage records that steps 12
-   and 17 define, so no step uses a later definition and the lawful extensible registry that refuses an unknown
+   ownership and dependencies, pre- and postconditions, footprint, failures, events,
+   resource effects, termination), parameterized over the event records that step 12 defines, so no step uses a later definition and the lawful extensible registry that refuses an unknown
    operation ([question 16](../decisions.md#foundation-q16)), with the instances slices 0 and 1 and
    the old kernel need. A prerequisite of `Syntax` (2.2).
 7. `Syntax` (C1's commands): the one Core syntax, with `SiteId`s, a site table and attributes as
@@ -1025,8 +1019,7 @@ registered rule.
     trace-prefix consistency and infinite-behaviour adequacy against step 14's relation; the static
     module `Termination` with C8's termination evidence (per-function termination permissions and
     evidence dependencies, a theorem about all allowed runs under named premises), so that
-    `checked_exits` (steps 20 and 24) has its premise; the rest of `Primitives` except the leakage
-    parts of the contracts, which step 17 adds once the leakage record exists (every existing operation's contract, pure and stateful). The bridge
+    `checked_exits` (steps 20 and 24) has its premise; the rest of `Primitives` (every existing operation's contract, pure and stateful). The bridge
     `Core.run (embed p) n ≈ run p n`.
 16. C5's dynamic half: the preservation invariant over owner slots, moves, roots and projections,
     loans, brands, dependencies and grants, proved for each step and across calls. Port `Borrow`
@@ -1040,10 +1033,7 @@ registered rule.
     ([question 6](../decisions.md#foundation-q6)). Each port brings Core ahead of the slice that
     introduces its source forms, with `Fragment.surface` excluding them, so no old proof is dropped
     and no source feature arrives early.
-17. `Leakage` (C7): the leakage trace, the public-observation relation, release records and the
-    release-policy interface; the noninterference and constant-time statements as separate theorems;
-    wipe events; byte accounting per allocator lineage (D11, D12 interfaces) and
-    `ghost_log_adequate`.
+17. `Accounting` (C7): byte accounting per allocator lineage (D11) and `ghost_log_adequate`.
 18. `Frame` (C10): logical footprints and the frame law, call-frame ownership and restoration, the
     ABI signatures and the stack-accounting handoff; the frame law for every foundation operation.
 19. C9's evidence and erasure: `EvidenceSem`, and `Facts` with every kind (D9) and the R-0588
@@ -1107,8 +1097,7 @@ that would change a foundation definition stops and goes to the owner.
     ([decision](../decisions.md#decided-2026-11-07-stack-randomness)); its grant shape is decided
     here ([question 14](../decisions.md#foundation-q14)). Explicit capability arguments and
     capability-variable substitution stay outside `Fragment.surface` until slice 11.
-30. Slice 7: `Secret<T>` on scalars over step 17's leakage semantics (D12), with entropy output as
-    `Secret<T>`; scalar `Secret<T>` connected to step 17's wipe events.
+30. Slice 7 is reserved. Secrets move to [after 1.0](../../ROADMAP.md#after-10).
 31. Slice 8: `assert`, `assume`, `ghost let`, `spec fn`, `#[proof(path)]` (D7),
     `assert(e) by thm(...)` (D27), vacuity refusal and strength labels, `#[test]`; step-bound
     proofs (D33).
@@ -1173,7 +1162,7 @@ Every finding below was checked against the files.
   ghost read checks (agy): 1.1, 1.2, 1.4, 1.9.
 - Line offsets (agy): declaration names are the anchors; `RangeStep.trap`'s constructor line added.
   agy's `Brand.Stmt :71` does not match the reviewed revision (`:56`), so that one is kept.
-- The `Secret<T>` Q2.2 revision (agy): D12 at slice 7.
+- The `Secret<T>` Q2.2 revision (agy): D12, now deferred.
 - Child allocator backing dependencies (agy): step 26.
 
 **Not adopted.**
@@ -1220,7 +1209,7 @@ confirmed S1–S3 are folded in. Fixed, after checking each against the files:
   (Codex, agy, Kimi): Core ahead of surface with `Fragment.surface` excluding the forms; the
   `Borrow` two-step exception stated; `Ty.brands` from step 3.
 - Oracle correspondence (Codex): stated in the realizable direction (phase C preamble).
-- Secret wipes (Codex): a public event kind, not ghost (1.7).
+- Secret wipes (Codex): proposed as a public event kind in 1.7, now deferred.
 - Brand's `.free` (Codex): mapped to `destroy(h)` (OD59).
 - Stale or wrong text (all three): `Secret` "not in A2i"; correspondence-relation locations and
   roles (1.4); "if I3 is agreed"; "four folds"; D10, D11, D16, D19, D28 modules and phases.

@@ -16,15 +16,16 @@ and F39-design, design proposals never land on main and stay on WIP branches as 
 The Lean spec carries the normative decisions for F03p and F39.
 [Owner decision on design proposals](../../docs/decisions.md#decided-2026-11-17-proposals-in-lean)
 
-For F27, wiping is out of the spec and only the owner can reopen it. Secret, no-leak and
-constant-time stay.
-[Owner decision on wiping](../../docs/decisions.md#decided-2026-11-16-secret-wiping)
+F26 is the historical inventory ID for the remaining security piece (F26b) after F26a
+landed separately. F26b leakage and release and F27 wiping are outside active scope
+under the [after-1.0 decision](../../docs/decisions.md#decided-2026-11-21-secrets-after-1-0). The active scope decreased from
+51 to 50 pieces, with 22 landed. The historical headline retains all 54 rows.
 
 | Addition | Placement and record |
 | --- | --- |
 | R | Rule registry and rule examples, a prerequisite of later registered rules under ROADMAP R-0615. [Registry landing](../../changelog.d/2026-11-13-spec-rule-registry.md) |
 | F03b | F03 follow-on for the nominal byte carrier and round trips. The new zero-offset Laws and their controls are here; F04 owns the preceding byte-coordinate Laws. [SourceText landing](../../changelog.d/2026-11-17-spec-f03b-sourcetext.md) |
-| F26a | Independently landed C7 accounting slice of F26 under ROADMAP R-0613. F26 retains leakage and release obligations. [Accounting landing](../../changelog.d/2026-11-15-spec-f26a-accounting.md) |
+| F26a | Independently landed C7 accounting slice of F26 under ROADMAP R-0613. [Accounting landing](../../changelog.d/2026-11-15-spec-f26a-accounting.md) |
 | M01–M12 | The separate theorem-qualification table in the historical plan. The [proof-label convention](../../docs/decisions.md#decided-2026-11-13-proof-labels) and [ROADMAP](../../ROADMAP.md) R-0700 govern its completion. |
 
 Pending rows cite the repository records that own their open obligations. The foundation

@@ -1188,9 +1188,6 @@ private def completion : PieceId → Completion
     specNamespace `Proofs.Adequacy `Core.Exec.RunProjection]
   | .F25b => reservedEvidence [
     specNamespace `Proofs.Adequacy `Core.Exec.TerminationAndBlocking]
-  | .F26 => reservedEvidence [
-    specNamespace `Spec.Leak `Core.Leak.Release,
-    specNamespace `Proofs.Leak `Core.Leak.Noninterference]
   | .F26a =>
     { named := [
     evidence `ConcreteSpec.Spec.Accounting `ConcreteSpec.Core.Leak [
@@ -1334,7 +1331,7 @@ private def completion : PieceId → Completion
     specNamespace `Proofs.Slice1 `Qualification.Slice1]
   | .M12 => reservedEvidence [
     specNamespace `Proofs.Surface0 `Qualification.Surface0]
-  | .«F03p-design» | .«F39-design» | .F27 => {}
+  | .«F03p-design» | .«F39-design» | .F26 | .F27 => {}
 
 private def plan : List Piece := [
   present .F01 "Explicit proof imports and a complete specification root",
@@ -1376,11 +1373,12 @@ private def plan : List Piece := [
   pending .F24b ["ROADMAP.md R-0614"],
   pending .F25a ["ROADMAP.md R-0614"],
   pending .F25b ["ROADMAP.md R-0614"],
-  pending .F26 ["ROADMAP.md R-0613"],
+  disposition .F26 "F26b leakage and release deferred until after 1.0"
+    "docs/decisions.md#decided-2026-11-21-secrets-after-1-0",
   added .F26a "F26 accounting slice in C7"
     "changelog.d/2026-11-15-spec-f26a-accounting.md; ROADMAP.md R-0613",
-  disposition .F27 "wiping is out of the spec and only the owner can reopen it"
-    "ISSUES.tsv ISS-0072; docs/decisions.md#decided-2026-11-16-secret-wiping",
+  disposition .F27 "wiping deferred until after 1.0"
+    "ISSUES.tsv ISS-0072; docs/decisions.md#decided-2026-11-21-secrets-after-1-0",
   pending .F28 ["ROADMAP.md R-0616", "ISSUES.tsv ISS-0073"],
   pending .F29 ["ROADMAP.md R-0616", "ISSUES.tsv ISS-0073"],
   pending .F29p ["ROADMAP.md R-0616", "ISSUES.tsv ISS-0068"],
