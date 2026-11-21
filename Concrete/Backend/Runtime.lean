@@ -152,22 +152,31 @@ Each assembly item occupies one entry, including items with no integer fields. -
 def expectedInventory (tbl : SiteTable) : List (List IntegerField) :=
   let size (e : SiteEntry) := (trapLine e ++ "\n").utf8ByteSize
   let invalidSize := (invalidLine ++ "\n").utf8ByteSize
-  (tbl.map fun e => [(.byteLength, none, size e)]) ++
-  [[(.byteLength, none, invalidSize)], [], [], [], [],
-   [], -- writeAll header
+  let w (position width : Nat) : IntegerField := (.typeWidth position 0, none, width)
+  (tbl.map fun e => [(.byteLength, none, size e), w 0 8]) ++
+  [[(.byteLength, none, invalidSize), w 0 8],
+   [w 0 64, w 1 32, w 3 64], [w 1 32], [], [],
+   [w 2 64], -- writeAll header
    [], [], -- entry
-   [], [], [], [(.comparisonRight, some 64, 0)], [], -- loop
-   [], [(.callArgument 0, some 32, 2)], [(.comparisonRight, some 64, 0)], [], -- wr
-   [], [], [], [], -- more
+   [], [], [w 0 64], [(.comparisonRight, some 64, 0), w 0 64], [w 0 1], -- loop
+   [], [(.callArgument 0, some 32, 2), w 1 32, w 3 64, w 0 64],
+   [(.comparisonRight, some 64, 0), w 0 64], [w 0 1], -- wr
+   [], [w 0 8, w 2 64], [w 0 64], [], -- more
    [], [], [], [], -- out, end of writeAll, and blank line
-   [], -- main header
-   [], [], [(.comparisonRight, some 32, 256)], [], -- entry
-   [], [], -- exit
-   [], [(.right, some 32, 256)], -- trap
-   (List.range tbl.length).map fun i => (.switchKey i (.trapSite i), some 32, i)] ++
-  (tbl.flatMap fun e => [[], [(.callArgument 1, some 64, size e)],
-    [(.callArgument 0, some 32, 134)], []]) ++
-  [[], [(.callArgument 1, some 64, invalidSize)], [], [], []]
+   [w 0 32], -- main header
+   [], [w 0 32], [(.comparisonRight, some 32, 256), w 0 32], [w 0 1], -- entry
+   [], [w 0 32], -- exit
+   [], [(.right, some 32, 256), w 0 32], -- trap
+   w 0 32 :: (List.range tbl.length).flatMap (fun i =>
+     [(.switchKey i (.trapSite i), some 32, i), w (i + 1) 32])] ++
+  (tbl.flatMap fun e => [[], [(.callArgument 1, some 64, size e), w 2 64],
+    [(.callArgument 0, some 32, 134), w 1 32], []]) ++
+  [[], [(.callArgument 1, some 64, invalidSize), w 2 64], [], [], []]
+
+/-- The runtime as standalone LLVM text. -/
+def llvm (tbl : SiteTable) : String := render (llvmItems tbl)
+
+/-! ## Runtime inventory laws -/
 
 private theorem map_indexedFrom {α β : Type} (xs : List α) (n : Nat) (f : α → β) :
     (indexedFrom n xs).map (fun x => f x.2) = xs.map f := by
@@ -192,31 +201,37 @@ theorem llvmItems_inventory (tbl : SiteTable) :
     (llvmItems tbl).map Item.inventory = expectedInventory tbl := by
   simp only [llvmItems, expectedInventory, List.map_append, List.map_map, List.map_flatMap,
     List.map_cons, List.map_nil, List.flatMap_cons, List.flatMap_nil, Function.comp_def, List.zipIdx_cons, List.zipIdx_nil, Item.inventory, Instruction.inventory,
-    Argument.inventory, TypeCode.integerWidth, Width.bits, Immediate.natural,
-    List.nil_append, List.append_nil, indexed]
-  rw [map_indexedFrom tbl 0 (fun e => [((.byteLength, none, (siteBytes e).size) : IntegerField)])]
-  have keys : ((indexedFrom 0 tbl).map fun x => (.switchKey x.1 (.trapSite x.1), some 32, x.1) : List IntegerField) =
-      (List.range tbl.length).map (fun i => (.switchKey i (.trapSite i), some 32, i)) := by
-    rw [List.range_eq_range', ← map_indexedFrom_fst tbl 0, List.map_map]
-    rfl
+    Argument.inventory, TypeCode.integerWidth, TypeCode.widthFields, Global.widthFields, Width.bits, Immediate.natural,
+    List.nil_append, List.append_nil, List.cons_append, indexed]
+  rw [map_indexedFrom tbl 0 (fun e =>
+    [((.byteLength, none, (siteBytes e).size) : IntegerField), (.typeWidth 0 0, none, 8)])]
+  let fields (i : Nat) : List IntegerField :=
+    [(.switchKey i (.trapSite i), some 32, i), (.typeWidth (i + 1) 0, none, 32)]
+  have keys : ((indexedFrom 0 tbl).flatMap fun x => fields x.1) =
+      (List.range tbl.length).flatMap fields := by
+    rw [List.range_eq_range', ← map_indexedFrom_fst tbl 0, List.flatMap_map]
   have positions (xs : SiteTable) (n : Nat) :
-      (((indexedFrom n xs).map (fun x => ((⟨x.1⟩ : Immediate), Label.trapSite x.1))).zipIdx n).map
-        (fun x => (IntegerRole.switchKey x.2 x.1.2, some 32, x.1.1.value)) =
-      (indexedFrom n xs).map (fun x => (IntegerRole.switchKey x.1 (.trapSite x.1), some 32, x.1)) := by
+      (((indexedFrom n xs).map (fun x => ((⟨x.1⟩ : Immediate), Label.trapSite x.1))).zipIdx n).flatMap
+        (fun x => [(IntegerRole.switchKey x.2 x.1.2, some 32, x.1.1.value),
+          (.typeWidth (x.2 + 1) 0, none, 32)]) =
+      (indexedFrom n xs).flatMap (fun x => fields x.1) := by
     induction xs generalizing n with
     | nil => rfl
     | cons x xs ih =>
-      simp only [indexedFrom, List.map_cons, List.zipIdx_cons, List.cons.injEq, true_and]
+      simp only [indexedFrom, List.map_cons, List.zipIdx_cons, List.flatMap_cons, fields, List.cons_append,
+        List.nil_append, List.cons.injEq, true_and]
       exact ih (n + 1)
   rw [positions tbl 0, keys]
   have traps := flatMap_indexedFrom tbl 0 (fun e =>
-    [[], [(IntegerRole.callArgument 1, some 64, (siteBytes e).size)],
-      [(IntegerRole.callArgument 0, some 32, 134)], []])
+    [[], [(IntegerRole.callArgument 1, some 64, (siteBytes e).size), (.typeWidth 2 0, none, 64)],
+      [(IntegerRole.callArgument 0, some 32, 134), (.typeWidth 1 0, none, 32)], []])
   rw [traps]
-  simp [siteBytes, invalidBytes, List.append_assoc]
+  simp [siteBytes, invalidBytes, fields, List.append_assoc]
 
-/-- The runtime as standalone LLVM text. -/
-def llvm (tbl : SiteTable) : String := render (llvmItems tbl)
+/-- Law. Reading the standalone runtime text recovers its prescribed integer inventory. -/
+theorem llvm_inventory (tbl : SiteTable) :
+    Assembly.inventory (llvm tbl) = some (expectedInventory tbl) := by
+  rw [llvm, Assembly.inventory_render, llvmItems_inventory]
 
 /-- QBE data bytes for a string: one `b N` per UTF-8 byte, so no character needs escaping. -/
 def qbeBytes (s : String) : String := ", ".intercalate (s.toUTF8.toList.map fun b => s!"b {b}")

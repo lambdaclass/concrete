@@ -78,11 +78,9 @@ quoted theorem references appear as elaborated command dependencies.
    carry their case position and destination label. The inventory keeps a row
    for every assembly item, including empty rows, so moving an immediate
    between sibling instructions changes the inventory. The assembly reader
-   consumes the complete module and recovers these rows. The fixtures test
-   its connection to the producer inventory. The universal connection to
-   emitted text remains a slice-1 obligation. The three assembly parse theorems cover singleton i32
-   immediate and numbered-local returns and singleton i8 additions with two
-   immediates. The enclosing LLVM text still uses `P_print`.
+   recovers these rows from every emitted module, and the native fixtures
+   exercise the complete writer path. LLVM execution semantics still use
+   `P_print`.
 2. **BIR and the runtime/backend boundary.** Switch the BIR scalar tag and
    payload, its typing and arithmetic, and every consumer in Progress, LCB,
    LLVM, Runtime and the emitter probes in one change. BIR has its own operand
@@ -113,31 +111,32 @@ quoted theorem references appear as elaborated command dependencies.
    exports and goldens with the same change. Run a fresh census before
    retirement and account for every remaining direct edge and surface row.
 
-### Remaining slice-1 text proof
+### Slice-1 text proof and controls
 
-1. Quoted-byte consumption is proved for printable and hex-escaped bytes.
-   The finite check covers each pair of hex digits and list induction proves
-   that the parser consumes the closing quote and preserves the suffix. The
-   constant proof recovers the byte array and checks the declared length.
-2. Delimited-list consumption is proved for declaration types, definition
-   parameters and switch cases. The switch proof distinguishes the leading
-   space and each inter-case space from the space before the closing bracket.
-   Instantiate the same list lemma for call arguments and phi arms.
-3. Item dispatch is proved for declarations, definitions, constants, labels,
-   all terminators, function ends and blank lines. Prove instruction dispatch
-   for all seven instruction constructors, discharging the competing
-   alternatives at each dispatch point. Prove that every rendered item is
-   nonempty and compose with module-list consumption to recover the emitted
-   assembly tree and project its inventory.
-4. Compose the text theorem with `moduleItems_inventory` for `LLVM.module`,
-   the string passed to `IO.FS.writeFile` by the BIR emitter. Check that the
-   file-writing path uses that string directly. Qualify the renderer
-   mutations against the resulting universal text theorem and register the
-   public laws in the premise registry and audit goldens. Renderer controls must
-   refute the law statement on a concrete witness, or establish that no downstream
-   law survives an upstream proof failure. An error in a helper or a tactic alone
-   is not evidence that the law is false: Lean can recover a failed helper with
-   `sorry`, and a tactic can fail on a true statement.
+The assembly reader consumes each rendered item and preserves an arbitrary
+suffix. The list proofs cover declaration types, definition parameters, call
+arguments, phi arms and switch cases. The byte reader recovers the initializer
+and checks its declared length. Dispatch checks earlier parser alternatives
+before consuming each instruction. Nonempty item spellings give the parser
+enough fuel for the whole list.
+
+`Assembly.parse_render` recovers the assembly tree. `Assembly.inventory_render`
+projects its integer inventory, which includes explicit widths even when all
+operands are locals. `LLVM.module_inventory` composes with the BIR inventory
+law for `LLVM.module`, the exact string passed to `IO.FS.writeFile` in
+`writeBackends`. `Runtime.llvm_inventory` covers the standalone runtime text.
+The invalid-word fixture appends that runtime text to a hand-authored body
+returning an invalid result word. It exercises the runtime's rejection path
+through the native tools. The hand-authored body and concatenated fixture
+are outside the normal BIR lowering and its module inventory law.
+
+Each renderer or producer mutation control must prove a concrete inequality
+for the target law against the actual mutated definition. The witness uses
+the real definitions and the independent expectation, with a kernel-checked
+proof that does not depend on the affected law or its proof helpers.
+Elaboration errors, recovered proofs and tactic failures do not count as
+kills. A double reversal of the BIR instruction list must survive the kill
+check and have a kernel-checked equality on its witness.
 
 Slice 1 and Slice 2 leave the F30 comparison available at the boundaries
 that still carry the old tags. Slice 3 is the final type substitution at

@@ -108,13 +108,17 @@ inductive Item where
   | blank
   deriving BEq
 
-/-- Numeric positions in assembly order. Operand positions carry their LLVM type;
-extract indices and byte lengths have no explicit integer type. -/
+/-- Per-item integer fields. Immediate roles identify operand slots. Explicit
+type widths are recorded even without an immediate, with zero-based positions
+among type spellings and separate components for an overflow pair. Intrinsic
+names carry an additional width suffix. -/
 inductive IntegerRole where
   | left | right | conversionSource | callArgument (position : Nat) | extractIndex
   | phiArm (position : Nat) (predecessor : Label)
   | comparisonLeft | comparisonRight | gepBase | gepOffset | returnValue
   | switchKey (position : Nat) (destination : Label) | byteLength
+  | typeWidth (position component : Nat)
+  | intrinsicWidth
   deriving DecidableEq, Repr
 
 abbrev IntegerField := IntegerRole × Option Nat × Nat
@@ -124,26 +128,48 @@ def TypeCode.integerWidth : TypeCode → Option Nat
   | .flag => some 1
   | _ => none
 
-def Argument.inventory (role : IntegerRole) (ty : TypeCode) : Argument → List IntegerField
-  | .immediate v => [(role, ty.integerWidth, v.value)]
+def TypeCode.widthFields (position : Nat) : TypeCode → List IntegerField
+  | .integer w => [(.typeWidth position 0, none, w.bits)]
+  | .flag => [(.typeWidth position 0, none, 1)]
+  | .overflowPair w => [(.typeWidth position 0, none, w.bits), (.typeWidth position 1, none, 1)]
   | _ => []
 
+def Global.widthFields : Global → List IntegerField
+  | .overflow _ t => [(.intrinsicWidth, none, t.bits)]
+  | _ => []
+
+def Argument.inventory (role : IntegerRole) (ty : TypeCode) : Argument → List IntegerField
+  | .immediate v => [(role, ty.integerWidth, v.value)]
+  | .global name => name.widthFields
+  | .local _ => []
+
 def Instruction.inventory : Instruction → List IntegerField
-  | .bin _ _ ty a b => a.inventory .left ty ++ b.inventory .right ty
-  | .convert _ _ (ty, a) _ => a.inventory .conversionSource ty
-  | .call _ _ _ args => args.zipIdx.flatMap fun ((ty, a), index) => a.inventory (.callArgument index) ty
-  | .extract _ _ _ i => [(.extractIndex, none, i)]
-  | .phi _ ty arms => arms.zipIdx.flatMap fun ((a, pred), index) => a.inventory (.phiArm index pred) ty
-  | .compare _ _ ty a b => a.inventory .comparisonLeft ty ++ b.inventory .comparisonRight ty
-  | .gep _ _ (baseTy, base) (offsetTy, offset) =>
-    base.inventory .gepBase baseTy ++ offset.inventory .gepOffset offsetTy
+  | .bin _ _ ty a b => a.inventory .left ty ++ b.inventory .right ty ++ ty.widthFields 0
+  | .convert _ _ (ty, a) target =>
+    a.inventory .conversionSource ty ++ ty.widthFields 0 ++ target.widthFields 1
+  | .call _ result fn args => args.zipIdx.flatMap (fun ((ty, a), index) =>
+      a.inventory (.callArgument index) ty ++ ty.widthFields (index + 1)) ++
+    result.widthFields 0 ++ fn.widthFields
+  | .extract _ ty _ i => [(.extractIndex, none, i)] ++ ty.widthFields 0
+  | .phi _ ty arms => ty.widthFields 0 ++ arms.zipIdx.flatMap
+      (fun ((a, pred), index) => a.inventory (.phiArm index pred) ty)
+  | .compare _ _ ty a b => a.inventory .comparisonLeft ty ++ b.inventory .comparisonRight ty ++ ty.widthFields 0
+  | .gep _ element (baseTy, base) (offsetTy, offset) =>
+    base.inventory .gepBase baseTy ++ offset.inventory .gepOffset offsetTy ++
+      element.widthFields 0 ++ baseTy.widthFields 1 ++ offsetTy.widthFields 2
 
 def Item.inventory : Item → List IntegerField
   | .instruction i => i.inventory
-  | .terminator (.ret (ty, a)) => a.inventory .returnValue ty
-  | .terminator (.switch w _ _ cases) => cases.zipIdx.map fun ((v, destination), position) =>
-      (.switchKey position destination, some w.bits, v.value)
-  | .constant _ data => [(.byteLength, none, data.size)]
+  | .declare result fn args =>
+    result.widthFields 0 ++ fn.widthFields ++ args.zipIdx.flatMap (fun (ty, i) => ty.widthFields (i + 1))
+  | .define _ result fn args =>
+    result.widthFields 0 ++ fn.widthFields ++ args.zipIdx.flatMap (fun ((ty, _), i) => ty.widthFields (i + 1))
+  | .terminator (.ret (ty, a)) => a.inventory .returnValue ty ++ ty.widthFields 0
+  | .terminator (.cond ..) => TypeCode.flag.widthFields 0
+  | .terminator (.switch w _ _ cases) =>
+    (.typeWidth 0 0, none, w.bits) :: cases.zipIdx.flatMap (fun ((v, destination), position) =>
+      [(.switchKey position destination, some w.bits, v.value), (.typeWidth (position + 1) 0, none, w.bits)])
+  | .constant name data => [(.byteLength, none, data.size), (.typeWidth 0 0, none, 8)] ++ name.widthFields
   | _ => []
 
 private def Argument.immediates : Argument → List Immediate
@@ -305,25 +331,29 @@ private def commaSeparated {α : Type} (f : α → Doc) (xs : List α) : Doc :=
 
 private def assign (dst : Local) : Doc := localName dst ++ text " = "
 
+private def phiArmPieces (arm : Argument × Label) : Doc :=
+  text "[" ++ arg arm.1 .comma ++ text " %" ++ labelName arm.2 ++ text " ]"
+
+private def callPieces (result : TypeCode) (fn : Global) (args : List TypedArgument) : Doc :=
+  text "call " ++ typeCode result ++ text " " ++ global fn ++ text "(" ++ callArgs args ++ text "\n"
+
 private def instructionPieces : Instruction → Doc
   | .bin dst op ty lhs rhs =>
-    assign dst ++ arithmetic op ++ text " " ++ typeCode ty ++ arg lhs .comma ++ arg rhs .newline
+    assign dst ++ (arithmetic op ++ text " " ++ typeCode ty ++ arg lhs .comma ++ arg rhs .newline)
   | .convert dst op source target =>
-    assign dst ++ conversion op ++ text " " ++ typed source .space ++ text "to " ++ typeCode target ++ text "\n"
-  | .call dst result fn args =>
-    (dst.toList.flatMap assign) ++ text "call " ++ typeCode result ++ text " " ++ global fn ++
-      text "(" ++ callArgs args ++ text "\n"
+    assign dst ++ (conversion op ++ text " " ++ typed source .space ++ text "to " ++ typeCode target ++ text "\n")
+  | .call dst result fn args => dst.toList.flatMap assign ++ callPieces result fn args
   | .extract dst ty aggregate index =>
-    assign dst ++ text "extractvalue " ++ typeCode ty ++ arg (.local aggregate) .comma ++
-      imm (.natural index) .newline
+    assign dst ++ (text "extractvalue " ++ typeCode ty ++ arg (.local aggregate) .comma ++
+      imm (.natural index) .newline)
   | .phi dst ty arms =>
-    assign dst ++ text "phi " ++ typeCode ty ++ text " " ++
-      commaSeparated (fun (value, pred) =>
-        text "[" ++ arg value .comma ++ text " %" ++ labelName pred ++ text " ]") arms ++ text "\n"
+    assign dst ++ (text "phi " ++ typeCode ty ++ text " " ++
+      commaSeparated phiArmPieces arms ++ text "\n")
   | .compare dst op ty lhs rhs =>
-    assign dst ++ text "icmp " ++ comparison op ++ text " " ++ typeCode ty ++ arg lhs .comma ++ arg rhs .newline
+    assign dst ++ (text "icmp " ++ comparison op ++ text " " ++ typeCode ty ++ arg lhs .comma ++ arg rhs .newline)
   | .gep dst element base offset =>
-    assign dst ++ text "getelementptr " ++ typeCode element ++ text ", " ++ typed base .comma ++ text " " ++ typed offset .newline
+    assign dst ++ (text "getelementptr " ++ typeCode element ++ text ", " ++ typed base .comma ++
+      text " " ++ typed offset .newline)
 
 private def switchCasePieces (ty : Width) (entry : Immediate × Label) : Doc :=
   typed (.integer ty, .immediate entry.1) .comma ++ text " label %" ++ labelName entry.2
@@ -365,92 +395,6 @@ def Piece.immediate? : Piece → Option Immediate
   | .immediate v _ _ => some v
   | .fragment _ | .punctuation _ | .numbered .. | .bytes _ => none
 
-private theorem immediates_typeCode (ty : TypeCode) :
-    (typeCode ty).filterMap Piece.immediate? = [] := by
-  cases ty <;> rfl
-
-private theorem immediates_arithmetic (op : Arithmetic) :
-    (arithmetic op).filterMap Piece.immediate? = [] := by
-  cases op <;> rfl
-
-private theorem immediates_conversion (op : Conversion) :
-    (conversion op).filterMap Piece.immediate? = [] := by
-  cases op <;> rfl
-
-private theorem immediates_comparison (op : Comparison) :
-    (comparison op).filterMap Piece.immediate? = [] := by
-  cases op <;> rfl
-
-private theorem immediates_global (name : Global) :
-    (global name).filterMap Piece.immediate? = [] := by
-  cases name <;> try rfl
-  rename_i op ty
-  cases op <;> cases ty <;> rfl
-
-private theorem immediates_local (name : Local) :
-    (localName name).filterMap Piece.immediate? = [] := by
-  cases name <;> rfl
-
-private theorem immediates_label (name : Label) :
-    (labelName name).filterMap Piece.immediate? = [] := by
-  cases name <;> rfl
-
-attribute [local simp] List.filterMap_cons List.filterMap_append List.filterMap_flatMap
-attribute [local simp] text Piece.immediate? immediates_typeCode immediates_arithmetic
-  immediates_conversion immediates_comparison immediates_global immediates_local immediates_label
-
-private theorem immediates_arg (a : Argument) (sep : Separator) :
-    (arg a sep).filterMap Piece.immediate? = a.immediates := by
-  cases a <;> simp [arg, Argument.immediates, framed, imm]
-
-private theorem immediates_typed (a : TypedArgument) (sep : Separator) :
-    (typed a sep).filterMap Piece.immediate? = a.2.immediates := by
-  simp [typed, immediates_arg]
-
-private theorem immediates_callArgs (args : List TypedArgument) :
-    (callArgs args).filterMap Piece.immediate? = args.flatMap (fun a => a.2.immediates) := by
-  match args with
-  | [] => rfl
-  | [_] => simp [callArgs, immediates_typed]
-  | a :: b :: rest => simp [callArgs, immediates_typed, immediates_callArgs (b :: rest)]
-
-private theorem immediates_commaSeparated {α : Type} (args : List α) (f : α → Doc) :
-    (commaSeparated f args).filterMap Piece.immediate? =
-      args.flatMap (fun a => (f a).filterMap Piece.immediate?) := by
-  match args with
-  | [] => rfl
-  | [_] => simp [commaSeparated]
-  | a :: b :: rest =>
-    have tail := immediates_commaSeparated (b :: rest) f
-    simp only [commaSeparated, text, List.map_cons, List.flatMap_cons] at tail
-    simp [commaSeparated, List.intercalate_cons_cons, tail]
-
-attribute [local simp] immediates_arg immediates_typed immediates_callArgs immediates_commaSeparated
-
-private theorem immediates_instruction (inst : Instruction) :
-    (instructionPieces inst).filterMap Piece.immediate? = inst.immediates := by
-  cases inst <;> simp [instructionPieces, Instruction.immediates, assign, imm, Argument.immediates]
-
-private theorem immediates_terminator (term : Terminator) :
-    (terminatorPieces term).filterMap Piece.immediate? = term.immediates := by
-  cases term <;> simp [terminatorPieces, switchCasePieces, Terminator.immediates, Argument.immediates]
-  case switch ty value fallback cases =>
-    induction cases with
-    | nil => rfl
-    | cons head tail ih => simp [ih]
-
-private theorem immediates_item (item : Item) :
-    item.pieces.filterMap Piece.immediate? = item.immediates := by
-  cases item <;> simp [Item.pieces, Item.immediates, parameterPieces, immediates_instruction, immediates_terminator]
-
-/-- Law. Rendering visits every immediate field exactly once, in assembly order.
-Authority: docs/decisions.md#od126. -/
-theorem render_immediate_fields (items : List Item) :
-    (items.flatMap Item.pieces).filterMap Piece.immediate? = items.flatMap Item.immediates := by
-  induction items with
-  | nil => rfl
-  | cons item items ih => simp [immediates_item, ih]
-
 private def byteText (b : UInt8) : String :=
   let n := b.toNat
   if 32 ≤ n ∧ n < 127 ∧ n ≠ 34 ∧ n ≠ 92 then (Char.ofNat n).toString
@@ -473,46 +417,6 @@ def renderPieces (pieces : List Piece) : String := String.join (pieces.map Piece
 
 /-- The sole text renderer for the LLVM instruction and operand structure. -/
 def render (items : List Item) : String := renderPieces (items.flatMap Item.pieces)
-
-/-- Character layout of the i8 additions used by the rendering controls. -/
-theorem render_i8_add_register_chars (dst src right : Nat) :
-    (render [.instruction (.bin (.register dst) .add (.integer .u8)
-      (.local (.register src)) (.immediate (.natural right)))]).toList =
-    "  %r".toList ++ (decimal dst).toList ++ " = add i8 %r".toList ++
-      (decimal src).toList ++ ", ".toList ++ (decimal right).toList ++ ['\n'] := by
-  simp [render, Item.pieces, instructionPieces, assign, localName, arithmetic, typeCode,
-    renderPieces, Piece.render, arg, framed, imm, text, numbered, Opening.char,
-    Separator.char, NumberPrefix.text, Immediate.token, Width.bits]
-  rfl
-
-/-- Character layout of an i8 addition with two immediate operands. -/
-theorem render_i8_add_immediate_chars (dst left right : Nat) :
-    (render [.instruction (.bin (.register dst) .add (.integer .u8)
-      (.immediate (.natural left)) (.immediate (.natural right)))]).toList =
-    "  %r".toList ++ (decimal dst).toList ++ " = add i8 ".toList ++
-      (decimal left).toList ++ ", ".toList ++ (decimal right).toList ++ ['\n'] := by
-  simp [render, Item.pieces, instructionPieces, assign, localName, arithmetic, typeCode,
-    renderPieces, Piece.render, arg, imm, text, numbered, Opening.char,
-    Separator.char, NumberPrefix.text, Immediate.token, Width.bits]
-  rfl
-
-/-- Law. At every immediate position in the renderer's assembly of a module,
-the output contains one exact decimal token framed by nondigits. The prefix and
-suffix are rendered from exactly the pieces before and after that position.
-Authority: docs/decisions.md#od126. -/
-theorem render_immediate (items : List Item) (before after : List Piece)
-    (v : Immediate) (opening : Opening) (sep : Separator)
-    (position : items.flatMap Item.pieces = before ++ .immediate v opening sep :: after) :
-    ∃ token, DecimalToken token (Int.ofNat v.value) ∧
-      opening.char.isDigit = false ∧ sep.char.isDigit = false ∧
-      render items = renderPieces before ++ String.singleton opening.char ++ token ++
-        String.singleton sep.char ++ renderPieces after := by
-  refine ⟨decimal v.value, decimal_token _, ?_, ?_, ?_⟩
-  · cases opening <;> rfl
-  · cases sep <;> rfl
-  · simp only [render, position, renderPieces, List.map_append, List.map_cons,
-      String.join_append, String.join_cons, Piece.render, Immediate.token, String.append_assoc]
-
 
 /-!
 The assembly reader follows the instruction, terminator and lexical productions in
@@ -726,17 +630,19 @@ private def extract (dst : Local) : Parser Instruction := do
   literal "\n"
   pure (.extract dst ty aggregate index)
 
+private def phiArm : Parser (Argument × Label) := do
+  literal "[ "
+  let value ← argument
+  literal ", %"
+  let pred ← labelName
+  literal " ]"
+  pure (value, pred)
+
 private def phi (dst : Local) : Parser Instruction := do
   literal "phi "
   let ty ← typeCode
   literal " "
-  let arms ← series (do
-    literal "[ "
-    let value ← argument
-    literal ", %"
-    let pred ← labelName
-    literal " ]"
-    pure (value, pred)) ", " "\n"
+  let arms ← series phiArm ", " "\n"
   pure (.phi dst ty arms)
 
 private def compare (dst : Local) : Parser Instruction := do
@@ -753,13 +659,16 @@ private def gep (dst : Local) : Parser Instruction := do
   literal "\n"
   pure (.gep dst ty base offset)
 
+private def assigned (dst : Local) : Parser Instruction :=
+  alt (binary dst arithmetic Instruction.bin) <|
+  alt (convert dst) <| alt (call (some dst)) <| alt (extract dst) <|
+  alt (phi dst) <| alt (compare dst) (gep dst)
+
 private def instruction : Parser Instruction :=
   alt (call none) <| do
     let dst ← localName
     literal " = "
-    alt (binary dst arithmetic Instruction.bin) <|
-    alt (convert dst) <| alt (call (some dst)) <| alt (extract dst) <|
-    alt (phi dst) <| alt (compare dst) (gep dst)
+    assigned dst
 
 private def labelRef : Parser Label := do
   literal "label %"
@@ -897,6 +806,8 @@ def parse (input : String) : Option (List Item) :=
 /-- Read ordered integer positions from the complete input, after grammar validation. -/
 def inventory (input : String) : Option (List (List IntegerField)) :=
   (parse input).map (·.map Item.inventory)
+
+/-! ## Assembly reader laws -/
 
 private theorem consume_append (token rest : List Char) :
     consume token (token ++ rest) = some rest := by
@@ -1184,7 +1095,7 @@ theorem parse_render_i8_add (dst : Nat) (left right : Immediate) :
     change (literal " = " afterDst).bind _ = _
     rw [assignStep, Option.bind_some]
     dsimp only [suffix]
-    rw [binStep, Option.orElse_some]
+    simp only [assigned, alt, binStep, Option.orElse_some]
   have itemStep : item (' ' :: ' ' :: line) =
       some (.instruction (.bin (.register dst) .add (.integer .u8)
         (.immediate (.natural left.value)) (.immediate (.natural right.value))), []) := by
@@ -2181,6 +2092,343 @@ private theorem terminator_item_append (term : Terminator) (rest : List Char) :
   | switch width value fallback cases => exact switch_item_append width value fallback cases rest
   | unreachable => exact unreachable_item_append rest
 
+private def argToken : Argument → List Char
+  | .local name => chars (LLVM.localName name)
+  | .global name => chars (LLVM.global name)
+  | .immediate v => (decimal v.value).toList
+
+private theorem arg_chars (a : Argument) (after : Separator) :
+    chars (LLVM.arg a after) = ' ' :: (argToken a ++ [after.char]) := by
+  cases a
+  · simp only [LLVM.arg, framed, argToken, chars_append, chars_text, chars_punctuation, space_chars,
+      List.cons_append, List.nil_append]
+  · simp only [LLVM.arg, framed, argToken, chars_append, chars_text, chars_punctuation, space_chars,
+      List.cons_append, List.nil_append]
+  · simp [LLVM.arg, imm, argToken, chars, renderPieces, Piece.render, Opening.char, Immediate.token]
+
+private theorem argument_token (a : Argument) (after : Separator) (rest : List Char) :
+    argument (argToken a ++ after.char :: rest) = some (a, after.char :: rest) := by
+  simpa only [arg_chars, List.tail_cons, List.append_assoc, List.cons_append, List.nil_append] using
+    argument_append a after rest
+
+private def typedChars (a : TypedArgument) : List Char :=
+  chars (LLVM.typeCode a.1) ++ ' ' :: argToken a.2
+
+private theorem typed_chars (a : TypedArgument) (after : Separator) :
+    chars (LLVM.typed a after) = typedChars a ++ [after.char] := by
+  simp [LLVM.typed, typedChars, arg_chars, List.append_assoc]
+
+private theorem typed_token (a : TypedArgument) (after : Separator) (rest : List Char) :
+    typed (typedChars a ++ after.char :: rest) = some (a, after.char :: rest) := by
+  simpa only [typed_chars, List.append_assoc, List.cons_append, List.nil_append] using
+    typed_append a after rest
+
+private theorem callArgs_chars (args : List TypedArgument) :
+    chars (callArgs args) ++ ['\n'] = seriesChars typedChars ", " ")\n" args := by
+  have close : ")\n".toList = [')', '\n'] := rfl
+  have sep : ", ".toList = [',', ' '] := rfl
+  induction args with
+  | nil => rfl
+  | cons a as ih =>
+    cases as with
+    | nil =>
+      simp only [callArgs, typed_chars, Separator.char, List.append_assoc, seriesChars,
+        List.isEmpty_nil, ↓reduceIte, List.append_nil, close]
+      rfl
+    | cons b bs =>
+      simp only [callArgs, chars_append, typed_chars, chars_text, space_chars, Separator.char,
+        List.append_assoc, List.cons_append, List.nil_append, ih, seriesChars,
+        List.isEmpty_cons, Bool.false_eq_true, ↓reduceIte, sep]
+
+private theorem callArgs_append (args : List TypedArgument) (rest : List Char) :
+    series typed ", " ")\n" ((chars (callArgs args) ++ ['\n']) ++ rest) = some (args, rest) := by
+  rw [callArgs_chars]
+  have close : ")\n".toList = [')', '\n'] := rfl
+  have sep : ", ".toList = [',', ' '] := rfl
+  have starts (a : TypedArgument) : ∃ c cs, typedChars a = c :: cs ∧ c ≠ ')' := by
+    obtain ⟨c, cs, spell, diff⟩ := typeCode_starts a.1
+    exact ⟨c, cs ++ ' ' :: argToken a.2, by simp [typedChars, spell], diff⟩
+  apply series_append
+  · intro a
+    obtain ⟨c, cs, h, _⟩ := starts a
+    rw [h]
+    exact List.cons_ne_nil _ _
+  · intro a as
+    cases as with
+    | nil =>
+      simpa only [seriesChars, List.isEmpty_nil, ↓reduceIte, List.append_nil, List.nil_append,
+        List.append_assoc, close, List.cons_append, Separator.char] using typed_token a .closeParen ('\n' :: rest)
+    | cons b bs =>
+      simpa only [seriesChars, List.isEmpty_cons, Bool.false_eq_true, ↓reduceIte,
+        List.append_assoc, sep, List.cons_append, List.nil_append, Separator.char] using typed_token a .comma _
+  · intro a as
+    obtain ⟨c, cs, h, diff⟩ := starts a
+    simp only [seriesChars, h, List.cons_append, List.append_assoc, close, consume, Ne.symm diff, ite_false]
+  · intros
+    rfl
+
+private theorem phiArm_append (arm : Argument × Label) (rest : List Char) :
+    phiArm (chars (phiArmPieces arm) ++ rest) = some (arm, rest) := by
+  obtain ⟨value, pred⟩ := arm
+  let tail := chars (LLVM.labelName pred) ++ " ]".toList ++ rest
+  have head : "[".toList = ['['] := rfl
+  have percent : " %".toList = [' ', '%'] := rfl
+  have parseHead (input : List Char) : literal "[ " ('[' :: ' ' :: input) = some ((), input) := rfl
+  have parseSep : literal ", %" (',' :: ' ' :: '%' :: tail) = some ((), tail) := rfl
+  have close : " ]".toList = [' ', ']'] := rfl
+  have labelStep : labelName tail = some (pred, " ]".toList ++ rest) := by
+    simpa only [tail, List.append_assoc, close, List.cons_append, List.nil_append] using
+      labelName_append pred (' ' :: ']' :: rest) (boundary_cons ' ' _ (by decide))
+  have closeStep : literal " ]" (" ]".toList ++ rest) = some ((), rest) := literal_append _ _
+  have argStep := argument_token value .comma (' ' :: '%' :: tail)
+  simp only [Separator.char] at argStep
+  have spell : chars (phiArmPieces (value, pred)) ++ rest =
+      '[' :: ' ' :: (argToken value ++ ',' :: ' ' :: '%' :: tail) := by
+    simp only [phiArmPieces, chars_append, chars_text, head, arg_chars, percent, Separator.char,
+      List.append_assoc, List.cons_append, List.nil_append, tail]
+  rw [spell]
+  simp only [phiArm, bind_run, parseHead, Option.bind_some, argStep, parseSep, labelStep, closeStep, pure_run]
+
+private theorem phiArms_append (arms : List (Argument × Label)) (rest : List Char) :
+    series phiArm ", " "\n" (seriesChars (fun arm => chars (phiArmPieces arm)) ", " "\n" arms ++ rest) =
+      some (arms, rest) := by
+  have starts (arm : Argument × Label) : ∃ cs, chars (phiArmPieces arm) = '[' :: cs := by
+    simp only [phiArmPieces, chars_append, chars_text, show "[".toList = ['['] from rfl,
+      List.cons_append, List.nil_append]
+    exact ⟨_, rfl⟩
+  apply series_append
+  · intro a
+    obtain ⟨cs, h⟩ := starts a
+    rw [h]
+    exact List.cons_ne_nil _ _
+  · intro a as
+    simpa only [seriesChars, List.append_assoc] using
+      phiArm_append a ((if as.isEmpty then [] else ", ".toList) ++
+        (seriesChars (fun arm => chars (phiArmPieces arm)) ", " "\n" as ++ rest))
+  · intro a as
+    obtain ⟨cs, h⟩ := starts a
+    rw [seriesChars, h, List.cons_append, List.cons_append]
+    rfl
+  · intros
+    rfl
+
+private theorem binary_append (dst : Local) (opcode : Parser α)
+    (make : Local → α → TypeCode → Argument → Argument → Instruction) (op : α)
+    (head : List Char) (lhs : TypedArgument) (rhs : Argument) (rest : List Char)
+    (opcodeStep : ∀ tail, opcode (head ++ tail) = some (op, tail)) :
+    binary dst opcode make
+      (head ++ ' ' :: (typedChars lhs ++ ',' :: ' ' :: (argToken rhs ++ '\n' :: rest))) =
+      some (make dst op lhs.1 lhs.2 rhs, rest) := by
+  have leftStep := typed_token lhs .comma (' ' :: (argToken rhs ++ '\n' :: rest))
+  have rightStep := argument_token rhs .newline rest
+  simp only [Separator.char] at leftStep rightStep
+  have sep (tail : List Char) : literal ", " (',' :: ' ' :: tail) = some ((), tail) := rfl
+  have newline : literal "\n" ('\n' :: rest) = some ((), rest) := rfl
+  simp only [binary, bind_run, opcodeStep, Option.bind_some, space_run, leftStep, sep, rightStep,
+    newline, pure_run]
+
+private theorem local_starts (dst : Local) : ∃ cs, chars (LLVM.localName dst) = '%' :: cs := by
+  cases dst <;> simp only [LLVM.localName, chars_numbered, chars_text, NumberPrefix.text] <;> exact ⟨_, rfl⟩
+
+private theorem assigned_item_append (dst : Local) (body : Doc) (inst : Instruction) (rest : List Char)
+    (parsed : assigned dst (chars body ++ rest) = some (inst, rest)) :
+    item (chars (text "  " ++ (assign dst ++ body)) ++ rest) = some (.instruction inst, rest) := by
+  obtain ⟨cs, shape⟩ := local_starts dst
+  have indent : "  ".toList = [' ', ' '] := rfl
+  have equals : " = ".toList = [' ', '=', ' '] := rfl
+  let tail := chars body ++ rest
+  have localStep : localName ('%' :: (cs ++ ' ' :: '=' :: ' ' :: tail)) =
+      some (dst, ' ' :: '=' :: ' ' :: tail) := by
+    simpa only [shape, List.cons_append] using
+      localName_append dst (' ' :: '=' :: ' ' :: tail) (boundary_cons ' ' _ (by decide))
+  have route :
+      item (' ' :: ' ' :: '%' :: (cs ++ ' ' :: '=' :: ' ' :: tail)) =
+        (Item.instruction <$> (do
+          let dst ← localName
+          literal " = "
+          assigned dst)) ('%' :: (cs ++ ' ' :: '=' :: ' ' :: tail)) := rfl
+  have sep : literal " = " (' ' :: '=' :: ' ' :: tail) = some ((), tail) := rfl
+  simp only [chars_append, chars_text, indent, assign, shape, equals, List.cons_append,
+    List.nil_append, List.append_assoc]
+  change item (' ' :: ' ' :: '%' :: (cs ++ ' ' :: '=' :: ' ' :: tail)) = _
+  rw [route]
+  simp only [map_run, bind_run, localStep, Option.bind_some, sep, tail, parsed, Option.map_some]
+
+private theorem call_append (dst : Option Local) (result : TypeCode) (fn : Global)
+    (args : List TypedArgument) (rest : List Char) :
+    call dst ("call ".toList ++ (chars (LLVM.typeCode result) ++ ' ' ::
+      (chars (LLVM.global fn) ++ '(' :: ((chars (callArgs args) ++ ['\n']) ++ rest)))) =
+        some (.call dst result fn args, rest) := by
+  have openParen (tail : List Char) : literal "(" ('(' :: tail) = some ((), tail) := rfl
+  simp only [call, bind_run, literal_append, Option.bind_some, typeCode_append _ ' ' _ (by decide),
+    space_run, globalName_append _ ('(' :: _) (boundary_cons '(' _ (by decide)), openParen,
+    callArgs_append, pure_run]
+
+private theorem call_item_append (dst : Option Local) (result : TypeCode) (fn : Global)
+    (args : List TypedArgument) (rest : List Char) :
+    item (chars (Item.pieces (.instruction (.call dst result fn args))) ++ rest) =
+      some (.instruction (.call dst result fn args), rest) := by
+  let body := callPieces result fn args
+  let tail := chars (LLVM.typeCode result) ++ ' ' ::
+    (chars (LLVM.global fn) ++ '(' :: ((chars (callArgs args) ++ ['\n']) ++ rest))
+  have spell : chars body ++ rest = "call ".toList ++ tail := by
+    simp only [body, callPieces, tail, chars_append, chars_text, space_chars, show "(".toList = ['('] from rfl,
+      show "\n".toList = ['\n'] from rfl, List.append_assoc, List.cons_append, List.nil_append]
+  cases dst with
+  | none =>
+    change item (chars (text "  " ++ body) ++ rest) = _
+    simp only [chars_append, List.append_assoc, spell, chars_text]
+    have route : item ("  ".toList ++ ("call ".toList ++ tail)) =
+        (Item.instruction <$> instruction) ("call ".toList ++ tail) := rfl
+    rw [route]
+    simp only [map_run, instruction, alt, call_append, Option.orElse_some, Option.map_some, tail]
+  | some dst =>
+    simp only [Item.pieces, instructionPieces, Option.toList_some, List.flatMap_cons, List.flatMap_nil,
+      List.append_nil]
+    change item (chars (text "  " ++ (assign dst ++ body)) ++ rest) = _
+    apply assigned_item_append
+    rw [spell]
+    have route : assigned dst ("call ".toList ++ tail) =
+        alt (call (some dst)) (alt (extract dst) (alt (phi dst) (alt (compare dst) (gep dst))))
+          ("call ".toList ++ tail) := rfl
+    rw [route]
+    simp only [alt, tail, call_append, Option.orElse_some]
+
+private theorem instruction_item_append (inst : Instruction) (rest : List Char) :
+    item (chars (Item.pieces (.instruction inst)) ++ rest) = some (.instruction inst, rest) := by
+  cases inst with
+  | call dst result fn args => exact call_item_append dst result fn args rest
+  | bin dst op ty lhs rhs =>
+    change item (chars (text "  " ++ (assign dst ++ (LLVM.arithmetic op ++ text " " ++
+      LLVM.typeCode ty ++ LLVM.arg lhs .comma ++ LLVM.arg rhs .newline))) ++ rest) = _
+    apply assigned_item_append
+    have parsed := binary_append dst arithmetic Instruction.bin op (chars (LLVM.arithmetic op))
+      (ty, lhs) rhs rest (arithmetic_append op)
+    unfold assigned alt
+    simp only [chars_append, chars_text, space_chars, arg_chars, List.append_assoc, List.cons_append,
+      List.nil_append, Separator.char]
+    simp only [typedChars, List.append_assoc, List.cons_append] at parsed
+    simp only [parsed, Option.orElse_some]
+  | convert dst op source target =>
+    change item (chars (text "  " ++ (assign dst ++ (LLVM.conversion op ++ text " " ++
+      LLVM.typed source .space ++ text "to " ++ LLVM.typeCode target ++ text "\n"))) ++ rest) = _
+    apply assigned_item_append
+    let tail := chars (LLVM.typeCode target) ++ '\n' :: rest
+    have toStep : literal " to " (' ' :: ("to ".toList ++ tail)) = some ((), tail) := by
+      exact literal_append " to " tail
+    have newline : literal "\n" ('\n' :: rest) = some ((), rest) := rfl
+    have parsed : convert dst (chars (LLVM.conversion op) ++ ' ' ::
+        (typedChars source ++ ' ' :: ("to ".toList ++ tail))) = some (.convert dst op source target, rest) := by
+      have sourceStep := typed_token source .space ("to ".toList ++ tail)
+      simp only [Separator.char] at sourceStep
+      simp only [convert, bind_run, conversion_append, Option.bind_some, space_run, sourceStep,
+        toStep, tail, typeCode_append _ '\n' _ (by decide), newline, pure_run]
+    have route (input : List Char) (miss : arithmetic input = none)
+        (hit : convert dst input = some (.convert dst op source target, rest)) :
+        assigned dst input = some (.convert dst op source target, rest) := by
+      have first : binary dst arithmetic Instruction.bin input = none := by
+        simp only [binary, bind_run, miss]
+        rfl
+      simp only [assigned, alt, first, Option.orElse_none, hit, Option.orElse_some]
+    simp only [chars_append, chars_text, space_chars, typed_chars, List.append_assoc, List.cons_append,
+      List.nil_append, Separator.char, show "\n".toList = ['\n'] from rfl]
+    exact route _ (arithmetic_rejects_conversion op _) parsed
+  | extract dst ty aggregate index =>
+    change item (chars (text "  " ++ (assign dst ++ (text "extractvalue " ++
+      LLVM.typeCode ty ++ LLVM.arg (.local aggregate) .comma ++ imm (.natural index) .newline))) ++ rest) = _
+    apply assigned_item_append
+    let tail := chars (LLVM.typeCode ty) ++ ' ' :: (chars (LLVM.localName aggregate) ++ ',' :: ' ' ::
+      ((decimal index).toList ++ '\n' :: rest))
+    have parseSep (xs : List Char) : literal ", " (',' :: ' ' :: xs) = some ((), xs) := rfl
+    have newline : literal "\n" ('\n' :: rest) = some ((), rest) := rfl
+    have parsed : extract dst ("extractvalue ".toList ++ tail) = some (.extract dst ty aggregate index, rest) := by
+      simp only [extract, bind_run, literal_append, Option.bind_some, tail,
+        typeCode_append _ ' ' _ (by decide), space_run,
+        localName_append _ (',' :: _) (boundary_cons ',' _ (by decide)), parseSep,
+        unsigned_append index _ (boundary_cons '\n' _ (by decide)), newline, pure_run]
+    have route : assigned dst ("extractvalue ".toList ++ tail) =
+        (extract dst ("extractvalue ".toList ++ tail)).orElse _ := rfl
+    have spell : chars (imm (.natural index) .newline) = ' ' :: ((decimal index).toList ++ ['\n']) := by
+      exact arg_chars (.immediate (.natural index)) .newline
+    simp only [chars_append, chars_text, arg_chars, argToken, spell, Separator.char,
+      List.append_assoc, List.cons_append, List.nil_append]
+    change assigned dst ("extractvalue ".toList ++ tail) = _
+    rw [route, parsed]
+    rfl
+  | phi dst ty arms =>
+    change item (chars (text "  " ++ (assign dst ++ (text "phi " ++
+      LLVM.typeCode ty ++ text " " ++ commaSeparated phiArmPieces arms ++ text "\n"))) ++ rest) = _
+    apply assigned_item_append
+    let tail := chars (LLVM.typeCode ty) ++ ' ' ::
+      (seriesChars (fun arm => chars (phiArmPieces arm)) ", " "\n" arms ++ rest)
+    have parsed : phi dst ("phi ".toList ++ tail) = some (.phi dst ty arms, rest) := by
+      simp only [phi, bind_run, literal_append, Option.bind_some, tail,
+        typeCode_append _ ' ' _ (by decide), space_run, phiArms_append, pure_run]
+    have route : assigned dst ("phi ".toList ++ tail) = (phi dst ("phi ".toList ++ tail)).orElse _ := rfl
+    simp only [chars_append, chars_text, space_chars, List.append_assoc, List.cons_append, List.nil_append]
+    rw [← List.append_assoc (chars (commaSeparated phiArmPieces arms)), commaSeparated_chars]
+    change assigned dst ("phi ".toList ++ tail) = _
+    rw [route, parsed]
+    rfl
+  | compare dst op ty lhs rhs =>
+    change item (chars (text "  " ++ (assign dst ++ (text "icmp " ++ LLVM.comparison op ++
+      text " " ++ LLVM.typeCode ty ++ LLVM.arg lhs .comma ++ LLVM.arg rhs .newline))) ++ rest) = _
+    apply assigned_item_append
+    let tail := chars (LLVM.comparison op) ++ ' ' :: (typedChars (ty, lhs) ++ ',' :: ' ' ::
+        (argToken rhs ++ '\n' :: rest))
+    have parsed : compare dst ("icmp ".toList ++ tail) = some (.compare dst op ty lhs rhs, rest) := by
+      simp only [compare, bind_run, literal_append, Option.bind_some]
+      exact binary_append dst comparison Instruction.compare op _ (ty, lhs) rhs rest (comparison_append op)
+    have route : assigned dst ("icmp ".toList ++ tail) =
+        (compare dst ("icmp ".toList ++ tail)).orElse _ := rfl
+    simp only [chars_append, chars_text, space_chars, arg_chars, Separator.char,
+      List.append_assoc, List.cons_append, List.nil_append]
+    have spell :
+        chars (LLVM.comparison op) ++ ' ' :: (chars (LLVM.typeCode ty) ++ ' ' ::
+          (argToken lhs ++ ',' :: ' ' :: (argToken rhs ++ '\n' :: rest))) = tail := by
+      simp only [tail, typedChars, List.append_assoc, List.cons_append]
+    rw [spell, route, parsed]
+    rfl
+  | gep dst element base offset =>
+    change item (chars (text "  " ++ (assign dst ++ (text "getelementptr " ++
+      LLVM.typeCode element ++ text ", " ++ LLVM.typed base .comma ++ text " " ++
+      LLVM.typed offset .newline))) ++ rest) = _
+    apply assigned_item_append
+    let tail := chars (LLVM.typeCode element) ++ ',' :: ' ' ::
+      (typedChars base ++ ',' :: ' ' :: (typedChars offset ++ '\n' :: rest))
+    have parseSep (xs : List Char) : literal ", " (',' :: ' ' :: xs) = some ((), xs) := rfl
+    have newline : literal "\n" ('\n' :: rest) = some ((), rest) := rfl
+    have baseStep := typed_token base .comma (' ' :: (typedChars offset ++ '\n' :: rest))
+    have offsetStep := typed_token offset .newline rest
+    simp only [Separator.char] at baseStep offsetStep
+    have parsed : gep dst ("getelementptr ".toList ++ tail) = some (.gep dst element base offset, rest) := by
+      simp only [gep, bind_run, literal_append, Option.bind_some, tail, typeCode_append _ ',' _ (by decide),
+        parseSep, baseStep, offsetStep, newline, pure_run]
+    have route : assigned dst ("getelementptr ".toList ++ tail) = gep dst ("getelementptr ".toList ++ tail) := rfl
+    simp only [chars_append, chars_text, typed_chars, show ", ".toList = [',', ' '] from rfl, space_chars,
+      Separator.char, List.append_assoc, List.cons_append, List.nil_append]
+    change assigned dst ("getelementptr ".toList ++ tail) = _
+    rw [route, parsed]
+
+private theorem item_append (i : Item) (rest : List Char) :
+    item (chars i.pieces ++ rest) = some (i, rest) := by
+  cases i with
+  | declare result fn args => exact declare_item_append result fn args rest
+  | define internal result fn args => exact define_item_append internal result fn args rest
+  | constant name data => exact constant_item_append name data rest
+  | label name => exact label_item_dispatch name rest
+  | instruction inst => exact instruction_item_append inst rest
+  | terminator term => exact terminator_item_append term rest
+  | endFunction => exact end_item_append rest
+  | blank => exact blank_item_append rest
+
+private theorem item_nonempty (i : Item) : chars i.pieces ≠ [] := by
+  intro empty
+  have consumed := item_append i []
+  rw [empty] at consumed
+  change none = some (i, []) at consumed
+  contradiction
+
 private theorem chars_items (items : List Item) :
     (render items).toList = items.flatMap (fun i => chars i.pieces) := by
   induction items with
@@ -2225,15 +2473,16 @@ private theorem item_count_le_chars (items : List Item)
     simp only [List.length_cons, List.flatMap_cons, List.length_append]
     omega
 
-/-- List composition for the assembly reader. The item consumption hypotheses
-are obligations for its callers. -/
-private theorem inventory_of_item_consumption (items : List Item)
-    (consumeItem : ∀ i ∈ items, ∀ rest, item (chars i.pieces ++ rest) = some (i, rest))
-    (nonempty : ∀ i ∈ items, chars i.pieces ≠ []) :
+/-- The assembly reader reconstructs every item from the actual renderer. -/
+theorem parse_render (items : List Item) : parse (render items) = some items := by
+  unfold parse
+  rw [chars_items, moduleItems_append items _ (fun i _ => item_append i)
+    (fun i _ => item_nonempty i) (item_count_le_chars items (fun i _ => item_nonempty i))]
+
+/-- Law. Reading the rendered assembly preserves every item's integer inventory. -/
+theorem inventory_render (items : List Item) :
     inventory (render items) = some (items.map Item.inventory) := by
-  unfold inventory parse
-  rw [chars_items, moduleItems_append items _ consumeItem nonempty (item_count_le_chars items nonempty)]
-  rfl
+  simp only [inventory, parse_render, Option.map_some]
 
 private theorem invalid_first (c : Char) (rest : List Char)
     (bad : item (c :: rest) = none) :
@@ -2263,5 +2512,109 @@ theorem inventory_malformed_additions :
   constructor <;> apply malformed_inventory _ ' ' _ rfl <;> rfl
 
 end Assembly
+
+private theorem immediates_typeCode (ty : TypeCode) :
+    (typeCode ty).filterMap Piece.immediate? = [] := by
+  cases ty <;> rfl
+
+private theorem immediates_arithmetic (op : Arithmetic) :
+    (arithmetic op).filterMap Piece.immediate? = [] := by
+  cases op <;> rfl
+
+private theorem immediates_conversion (op : Conversion) :
+    (conversion op).filterMap Piece.immediate? = [] := by
+  cases op <;> rfl
+
+private theorem immediates_comparison (op : Comparison) :
+    (comparison op).filterMap Piece.immediate? = [] := by
+  cases op <;> rfl
+
+private theorem immediates_global (name : Global) :
+    (global name).filterMap Piece.immediate? = [] := by
+  cases name <;> try rfl
+  rename_i op ty
+  cases op <;> cases ty <;> rfl
+
+private theorem immediates_local (name : Local) :
+    (localName name).filterMap Piece.immediate? = [] := by
+  cases name <;> rfl
+
+private theorem immediates_label (name : Label) :
+    (labelName name).filterMap Piece.immediate? = [] := by
+  cases name <;> rfl
+
+attribute [local simp] List.filterMap_cons List.filterMap_append List.filterMap_flatMap
+attribute [local simp] text Piece.immediate? immediates_typeCode immediates_arithmetic
+  immediates_conversion immediates_comparison immediates_global immediates_local immediates_label
+
+private theorem immediates_arg (a : Argument) (sep : Separator) :
+    (arg a sep).filterMap Piece.immediate? = a.immediates := by
+  cases a <;> simp [arg, Argument.immediates, framed, imm]
+
+private theorem immediates_typed (a : TypedArgument) (sep : Separator) :
+    (typed a sep).filterMap Piece.immediate? = a.2.immediates := by
+  simp [typed, immediates_arg]
+
+private theorem immediates_callArgs (args : List TypedArgument) :
+    (callArgs args).filterMap Piece.immediate? = args.flatMap (fun a => a.2.immediates) := by
+  match args with
+  | [] => rfl
+  | [_] => simp [callArgs, immediates_typed]
+  | a :: b :: rest => simp [callArgs, immediates_typed, immediates_callArgs (b :: rest)]
+
+private theorem immediates_commaSeparated {α : Type} (args : List α) (f : α → Doc) :
+    (commaSeparated f args).filterMap Piece.immediate? =
+      args.flatMap (fun a => (f a).filterMap Piece.immediate?) := by
+  match args with
+  | [] => rfl
+  | [_] => simp [commaSeparated]
+  | a :: b :: rest =>
+    have tail := immediates_commaSeparated (b :: rest) f
+    simp only [commaSeparated, text, List.map_cons, List.flatMap_cons] at tail
+    simp [commaSeparated, List.intercalate_cons_cons, tail]
+
+attribute [local simp] immediates_arg immediates_typed immediates_callArgs immediates_commaSeparated
+
+private theorem immediates_instruction (inst : Instruction) :
+    (instructionPieces inst).filterMap Piece.immediate? = inst.immediates := by
+  cases inst <;> simp [instructionPieces, callPieces, phiArmPieces, Instruction.immediates, assign, imm, Argument.immediates]
+
+private theorem immediates_terminator (term : Terminator) :
+    (terminatorPieces term).filterMap Piece.immediate? = term.immediates := by
+  cases term <;> simp [terminatorPieces, switchCasePieces, Terminator.immediates, Argument.immediates]
+  case switch ty value fallback cases =>
+    induction cases with
+    | nil => rfl
+    | cons head tail ih => simp [ih]
+
+private theorem immediates_item (item : Item) :
+    item.pieces.filterMap Piece.immediate? = item.immediates := by
+  cases item <;> simp [Item.pieces, Item.immediates, parameterPieces, immediates_instruction, immediates_terminator]
+
+/-- Law. Rendering visits every immediate field exactly once, in assembly order.
+Authority: docs/decisions.md#od126. -/
+theorem render_immediate_fields (items : List Item) :
+    (items.flatMap Item.pieces).filterMap Piece.immediate? = items.flatMap Item.immediates := by
+  induction items with
+  | nil => rfl
+  | cons item items ih => simp [immediates_item, ih]
+
+/-- Law. At every immediate position in the renderer's assembly of a module,
+the output contains one exact decimal token framed by nondigits. The prefix and
+suffix are rendered from exactly the pieces before and after that position.
+Authority: docs/decisions.md#od126. -/
+theorem render_immediate (items : List Item) (before after : List Piece)
+    (v : Immediate) (opening : Opening) (sep : Separator)
+    (position : items.flatMap Item.pieces = before ++ .immediate v opening sep :: after) :
+    ∃ token, DecimalToken token (Int.ofNat v.value) ∧
+      opening.char.isDigit = false ∧ sep.char.isDigit = false ∧
+      render items = renderPieces before ++ String.singleton opening.char ++ token ++
+        String.singleton sep.char ++ renderPieces after := by
+  refine ⟨decimal v.value, decimal_token _, ?_, ?_, ?_⟩
+  · cases opening <;> rfl
+  · cases sep <;> rfl
+  · simp only [render, position, renderPieces, List.map_append, List.map_cons,
+      String.join_append, String.join_cons, Piece.render, Immediate.token, String.append_assoc]
+
 
 end Concrete.Backend.LLVM

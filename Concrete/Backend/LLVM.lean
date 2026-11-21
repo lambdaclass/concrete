@@ -31,23 +31,6 @@ def ty : Ty → TypeCode
 /-- The bit pattern of `v` in `t`, as an unsigned decimal. -/
 def pattern (t : IntTy) (v : Int) : Nat := toBits (toCore t) v
 
-/-- Representation lemma. Existing LLVM immediate text uses the same decimal number
-for every payload, including out-of-range ones. -/
-theorem pattern_agrees (t : IntTy) (v : Int) :
-    pattern t v = (v % (2 : Int) ^ t.bits).toNat :=
-  (ScalarBridge.toBits t v).symm
-
-/-- Law. An encoded immediate fits its declared integer width.
-Authority: docs/decisions.md#od126. -/
-theorem pattern_fits (t : IntTy) (v : Int) : pattern t v < 2 ^ (toCore t).bits :=
-  ConcreteSpec.Core.toBits_lt _ _
-
-/-- Law. Every representable immediate survives decoding at its declared type.
-Authority: docs/decisions.md#od126. -/
-theorem pattern_roundTrip (t : IntTy) (v : Int) (h : (toCore t).InRange v) :
-    ofBits (toCore t) (pattern t v) = v :=
-  ConcreteSpec.Core.ofBits_toBits _ _ h
-
 /-- Encode a BIR scalar before it enters the assembly representation. -/
 def operand : Operand → Argument
   | .reg r => .local (.register r)
@@ -62,47 +45,14 @@ private def expectedImmediate : Operand → Option Nat
   | .reg _ => none
   | .imm ty value => some (toBits (toCore ty) value)
 
-private theorem operand_immediate (a : Operand) :
-    (operand a).immediateValue = expectedImmediate a := by
-  cases a <;> rfl
-
-/-- Law. The LLVM producer puts the Spec/Scalar encoding of the BIR payload
-in the immediate field consumed by the renderer. -/
-theorem operand_field (t : IntTy) (v : Int) :
-    (operand (.imm t v)).immediateValue = some (toBits (toCore t) v) :=
-  rfl
-
 /-- Read the token through the actual LLVM argument. -/
 def Argument.immediateToken : Argument → Option String
   | .immediate v => some v.token
   | _ => none
 
-/-- Law. Every emitted BIR immediate is a token in the decimal grammar.
-Authority: docs/decisions.md#od126. -/
-theorem operand_token (t : IntTy) (v : Int) :
-    ∃ token, (operand (.imm t v)).immediateToken = some token ∧
-      DecimalToken token (Int.ofNat (pattern t v)) :=
-  ⟨_, rfl, decimal_token (pattern t v)⟩
-
-/-- Law. The emitted decimal token parses to exactly the encoded bit pattern.
-Authority: docs/decisions.md#od126. -/
-theorem operand_parse (t : IntTy) (v : Int) :
-    (operand (.imm t v)).immediateToken.bind parseDecimal = some (Int.ofNat (pattern t v)) := by
-  obtain ⟨token, field, valid⟩ := operand_token t v
-  rw [field, Option.bind_some]
-  exact (parseDecimal_exact _ _).2 valid
-
 private def decodePattern (t : IntTy) : Int → Option Int
   | .ofNat n => if n < 2 ^ (toCore t).bits then some (ofBits (toCore t) n) else none
   | .negSucc _ => none
-
-/-- Law. A representable immediate's emitted decimal token denotes its Core value.
-The interpretation of the enclosing LLVM text still uses `P_print`.
-Authority: docs/decisions.md#od126. -/
-theorem operand_roundTrip (t : IntTy) (v : Int) (h : (toCore t).InRange v) :
-    ((operand (.imm t v)).immediateToken.bind parseDecimal).bind (decodePattern t) = some v := by
-  rw [operand_parse, Option.bind_some, decodePattern]
-  simp [pattern_fits t v, pattern_roundTrip t v h]
 
 def arithmeticOp : BinOp → Arithmetic
   | .add => .add
@@ -135,28 +85,10 @@ private def binarySources : List Item → List Argument
   | .instruction (.call _ _ _ args) :: _ => args.map Prod.snd
   | _ => []
 
-/-- The arithmetic and checked-arithmetic items carry the BIR operands in order. -/
-theorem bin_fields (op : BinOp) (t : IntTy) (d : Nat) (a b : Operand) :
-    (binarySources (inst (.bin op t d a b))).map Argument.immediateValue =
-      [expectedImmediate a, expectedImmediate b] := by
-  simp [inst, binarySources, operand_immediate]
-
-theorem binOvf_fields (op : BinOp) (t : IntTy) (d f : Nat) (a b : Operand) :
-    (binarySources (inst (.binOvf op t d f a b))).map Argument.immediateValue =
-      [expectedImmediate a, expectedImmediate b] := by
-  simp [inst, binarySources, operand_immediate]
-
 private def conversionSource : List Item → Option Nat
   | .instruction (.convert _ _ (_, source) _) :: _ => source.immediateValue
   | .instruction (.bin _ .add _ source _) :: _ => source.immediateValue
   | _ => none
-
-/-- Both the width-changing instruction and the equal-width copy use the
-encoded BIR operand as their source. -/
-theorem trunc_field (source target : IntTy) (d : Nat) (a : Operand) :
-    conversionSource (inst (.trunc source target d a)) = expectedImmediate a := by
-  simp only [inst]
-  split <;> exact operand_immediate a
 
 /-- The edges into each block: (target, predecessor, arguments). -/
 def edges (p : Program) : List (Nat × Nat × List Operand) :=
@@ -177,22 +109,6 @@ private def phiSources : Item → List (Option Nat)
   | .instruction (.phi _ _ arms) => arms.map fun (value, _) => value.immediateValue
   | _ => []
 
-/-- Each phi arm uses the encoding of the corresponding incoming edge operand. -/
-theorem phi_fields (p : Program) (j : Nat) (b : Block) :
-    (phis p j b).map phiSources =
-      (indexed b.params).map fun (k, _) =>
-        ((edges p).filter (·.1 == j)).map fun (_, _, args) =>
-          expectedImmediate (args.getD k (.imm .u8 0)) := by
-  simp only [phis, List.map_map]
-  apply List.map_congr_left
-  intro entry _
-  rcases entry with ⟨k, r, ty⟩
-  simp only [Function.comp_apply, phiSources, List.map_map]
-  apply List.map_congr_left
-  intro edge _
-  rcases edge with ⟨target, pred, args⟩
-  exact operand_immediate _
-
 def term (j : Nat) : Term → List Item
   | .ret a =>
     [.instruction (.convert (.result j) .zext (.integer .u8, operand a) (.integer .u32)),
@@ -200,14 +116,6 @@ def term (j : Nat) : Term → List Item
   | .trap s => [.terminator (.ret (.integer .u32, .immediate (.natural (256 + s))))]
   | .br t _ => [.terminator (.branch (.block t))]
   | .condbr c t _ e _ => [.terminator (.cond (.register c) (.block t) (.block e))]
-
-/-- The BIR return's immediate flows into the source operand of the actual
-zero-extension item. The following LLVM return reads that item's result. -/
-theorem ret_immediate_field (j : Nat) (t : IntTy) (v : Int) :
-    (match (term j (.ret (.imm t v))).head? with
-     | some (.instruction (.convert _ _ (_, source) _)) => source.immediateValue
-     | _ => none) = some (toBits (toCore t) v) :=
-  operand_field t v
 
 /-- The intrinsics the body uses, each declared once. -/
 private def usedIntrinsics (p : Program) : List (BinOp × IntTy) :=
@@ -238,22 +146,33 @@ private def expectedOperand (role : IntegerRole) (width : Nat) : Operand → Lis
   | .reg _ => []
   | .imm t v => [(role, some width, toBits (toCore t) v)]
 
+private def widthField (position width : Nat) : IntegerField := (.typeWidth position 0, none, width)
+
+private def pairFields (width : Nat) : List IntegerField :=
+  [widthField 0 width, (.typeWidth 0 1, none, 1)]
+
 private def expectedInst : Inst → List (List IntegerField)
   | .bin _ t _ a b =>
-    [expectedOperand .left (toCore t).bits a ++ expectedOperand .right (toCore t).bits b]
+    let width := (toCore t).bits
+    [expectedOperand .left width a ++ expectedOperand .right width b ++ [widthField 0 width]]
   | .binOvf _ t _ _ a b =>
-    [expectedOperand (.callArgument 0) (toCore t).bits a ++
-      expectedOperand (.callArgument 1) (toCore t).bits b,
-      [(.extractIndex, none, 0)], [(.extractIndex, none, 1)]]
+    let width := (toCore t).bits
+    [expectedOperand (.callArgument 0) width a ++ [widthField 1 width] ++
+      expectedOperand (.callArgument 1) width b ++ [widthField 2 width] ++
+      pairFields width ++ [(.intrinsicWidth, none, width)],
+      [(.extractIndex, none, 0)] ++ pairFields width, [(.extractIndex, none, 1)] ++ pairFields width]
   | .trunc source target _ a =>
-    if (toCore source).bits = (toCore target).bits then
-      [expectedOperand .left (toCore target).bits a ++ [(.right, some (toCore target).bits, 0)]]
-    else [expectedOperand .conversionSource (toCore source).bits a]
+    let src := (toCore source).bits
+    let dst := (toCore target).bits
+    if src = dst then
+      [expectedOperand .left dst a ++ [(.right, some dst, 0), widthField 0 dst]]
+    else [expectedOperand .conversionSource src a ++ [widthField 0 src, widthField 1 dst]]
 
 private def expectedTerm : Term → List (List IntegerField)
-  | .ret a => [expectedOperand .conversionSource 8 a, []]
-  | .trap s => [[(.returnValue, some 32, 256 + s)]]
-  | .br .. | .condbr .. => [[]]
+  | .ret a => [expectedOperand .conversionSource 8 a ++ [widthField 0 8, widthField 1 32], [widthField 0 32]]
+  | .trap s => [[(.returnValue, some 32, 256 + s), widthField 0 32]]
+  | .br .. => [[]]
+  | .condbr .. => [[widthField 0 1]]
 
 private def expectedPhiSource (j k pred : Nat) (b : Block) : List (Operand × Nat) :=
   let incoming (target : Nat) (args : List Operand) :=
@@ -266,16 +185,119 @@ private def expectedPhiSource (j k pred : Nat) (b : Block) : List (Operand × Na
 private def expectedPhi (p : Program) (j k : Nat) (t : Ty) : List IntegerField :=
   let width := match t with | .int t => (toCore t).bits | .bool => 1
   let sources := p.blocks.zipIdx.flatMap fun (b, pred) => expectedPhiSource j k pred b
-  sources.zipIdx.flatMap fun ((a, pred), index) =>
+  [widthField 0 width] ++ sources.zipIdx.flatMap fun ((a, pred), index) =>
     expectedOperand (.phiArm index (.block pred)) width a
 
 /-- The integer inventory specified by BIR lowering and the runtime contract. -/
 def expectedInventory (p : Program) : List (List IntegerField) :=
-  (usedIntrinsics p).map (fun _ => []) ++ [[], []] ++
+  let checkedTypes := (p.blocks.flatMap fun b => b.insts.filterMap fun
+    | .binOvf op t _ _ _ _ => some (op, t)
+    | _ => none).eraseDups
+  checkedTypes.map (fun (_, t) =>
+    let width := (toCore t).bits
+    pairFields width ++ [(.intrinsicWidth, none, width), widthField 1 width, widthField 2 width]) ++
+  [[], [widthField 0 32]] ++
   (p.blocks.zipIdx.flatMap fun (b, j) =>
     [[]] ++ (b.params.zipIdx.map fun ((_, t), k) => expectedPhi p j k t) ++
       b.insts.flatMap expectedInst ++ expectedTerm b.term) ++ [[], []] ++
   Runtime.expectedInventory p.sites
+
+/-- The entire rendered LLVM module. -/
+def module (p : Program) : String := render (moduleItems p)
+
+/-! ## Producer and text laws -/
+
+/-- Representation lemma. Existing LLVM immediate text uses the same decimal number
+for every payload, including out-of-range ones. -/
+theorem pattern_agrees (t : IntTy) (v : Int) :
+    pattern t v = (v % (2 : Int) ^ t.bits).toNat :=
+  (ScalarBridge.toBits t v).symm
+
+/-- Law. An encoded immediate fits its declared integer width.
+Authority: docs/decisions.md#od126. -/
+theorem pattern_fits (t : IntTy) (v : Int) : pattern t v < 2 ^ (toCore t).bits :=
+  ConcreteSpec.Core.toBits_lt _ _
+
+/-- Law. Every representable immediate survives decoding at its declared type.
+Authority: docs/decisions.md#od126. -/
+theorem pattern_roundTrip (t : IntTy) (v : Int) (h : (toCore t).InRange v) :
+    ofBits (toCore t) (pattern t v) = v :=
+  ConcreteSpec.Core.ofBits_toBits _ _ h
+
+private theorem operand_immediate (a : Operand) :
+    (operand a).immediateValue = expectedImmediate a := by
+  cases a <;> rfl
+
+/-- Law. The LLVM producer puts the Spec/Scalar encoding of the BIR payload
+in the immediate field consumed by the renderer. -/
+theorem operand_field (t : IntTy) (v : Int) :
+    (operand (.imm t v)).immediateValue = some (toBits (toCore t) v) :=
+  rfl
+
+/-- Law. Every emitted BIR immediate is a token in the decimal grammar.
+Authority: docs/decisions.md#od126. -/
+theorem operand_token (t : IntTy) (v : Int) :
+    ∃ token, (operand (.imm t v)).immediateToken = some token ∧
+      DecimalToken token (Int.ofNat (pattern t v)) :=
+  ⟨_, rfl, decimal_token (pattern t v)⟩
+
+/-- Law. The emitted decimal token parses to exactly the encoded bit pattern.
+Authority: docs/decisions.md#od126. -/
+theorem operand_parse (t : IntTy) (v : Int) :
+    (operand (.imm t v)).immediateToken.bind parseDecimal = some (Int.ofNat (pattern t v)) := by
+  obtain ⟨token, field, valid⟩ := operand_token t v
+  rw [field, Option.bind_some]
+  exact (parseDecimal_exact _ _).2 valid
+
+/-- Law. A representable immediate's emitted decimal token denotes its Core value.
+The interpretation of the enclosing LLVM text still uses `P_print`.
+Authority: docs/decisions.md#od126. -/
+theorem operand_roundTrip (t : IntTy) (v : Int) (h : (toCore t).InRange v) :
+    ((operand (.imm t v)).immediateToken.bind parseDecimal).bind (decodePattern t) = some v := by
+  rw [operand_parse, Option.bind_some, decodePattern]
+  simp [pattern_fits t v, pattern_roundTrip t v h]
+
+/-- The arithmetic and checked-arithmetic items carry the BIR operands in order. -/
+theorem bin_fields (op : BinOp) (t : IntTy) (d : Nat) (a b : Operand) :
+    (binarySources (inst (.bin op t d a b))).map Argument.immediateValue =
+      [expectedImmediate a, expectedImmediate b] := by
+  simp [inst, binarySources, operand_immediate]
+
+theorem binOvf_fields (op : BinOp) (t : IntTy) (d f : Nat) (a b : Operand) :
+    (binarySources (inst (.binOvf op t d f a b))).map Argument.immediateValue =
+      [expectedImmediate a, expectedImmediate b] := by
+  simp [inst, binarySources, operand_immediate]
+
+/-- Both the width-changing instruction and the equal-width copy use the
+encoded BIR operand as their source. -/
+theorem trunc_field (source target : IntTy) (d : Nat) (a : Operand) :
+    conversionSource (inst (.trunc source target d a)) = expectedImmediate a := by
+  simp only [inst]
+  split <;> exact operand_immediate a
+
+/-- Each phi arm uses the encoding of the corresponding incoming edge operand. -/
+theorem phi_fields (p : Program) (j : Nat) (b : Block) :
+    (phis p j b).map phiSources =
+      (indexed b.params).map fun (k, _) =>
+        ((edges p).filter (·.1 == j)).map fun (_, _, args) =>
+          expectedImmediate (args.getD k (.imm .u8 0)) := by
+  simp only [phis, List.map_map]
+  apply List.map_congr_left
+  intro entry _
+  rcases entry with ⟨k, r, ty⟩
+  simp only [Function.comp_apply, phiSources, List.map_map]
+  apply List.map_congr_left
+  intro edge _
+  rcases edge with ⟨target, pred, args⟩
+  exact operand_immediate _
+
+/-- The BIR return's immediate flows into the source operand of the actual
+zero-extension item. The following LLVM return reads that item's result. -/
+theorem ret_immediate_field (j : Nat) (t : IntTy) (v : Int) :
+    (match (term j (.ret (.imm t v))).head? with
+     | some (.instruction (.convert _ _ (_, source) _)) => source.immediateValue
+     | _ => none) = some (toBits (toCore t) v) :=
+  operand_field t v
 
 private theorem width_bits (t : ConcreteSpec.Core.IntTy) :
     (Width.ofCore t).bits = t.bits := by cases t <;> rfl
@@ -287,12 +309,12 @@ private theorem operand_inventory (a : Operand) (role : IntegerRole) (width : Wi
 private theorem inst_inventory (i : Inst) :
     (inst i).map Item.inventory = expectedInst i := by
   cases i <;> simp only [inst, expectedInst]
-  case bin => simp [Item.inventory, Instruction.inventory, operand_inventory, width_bits]
+  case bin => simp [Item.inventory, Instruction.inventory, TypeCode.widthFields, widthField, operand_inventory, width_bits]
   case binOvf =>
-    simp [Item.inventory, Instruction.inventory, List.zipIdx_cons, operand_inventory, width_bits]
+    simp [Item.inventory, Instruction.inventory, TypeCode.widthFields, Global.widthFields, widthField, pairFields, List.zipIdx_cons, operand_inventory, width_bits, List.append_assoc]
   case trunc fr target d a =>
     split <;> cases a <;> simp [Item.inventory, Instruction.inventory, operand, expectedOperand,
-      width_bits, Argument.inventory, TypeCode.integerWidth, Immediate.natural]
+      width_bits, widthField, TypeCode.widthFields, Argument.inventory, TypeCode.integerWidth, Immediate.natural]
 
 private theorem term_inventory (j : Nat) (t : Term) :
     (term j t).map Item.inventory = expectedTerm t := by
@@ -340,6 +362,11 @@ private theorem phi_inventory (p : Program) (j : Nat) (b : Block) :
     rfl
   simp only [Function.comp_apply, Item.inventory, Instruction.inventory, arms, expectedPhi, List.zipIdx_map,
     List.flatMap_map]
+  have width : (ty t).widthFields 0 =
+      [widthField 0 (match t with | .int t => (toCore t).bits | .bool => 1)] := by
+    cases t <;> simp [ty, TypeCode.widthFields, widthField, width_bits]
+  rw [width]
+  congr 1
   apply congrArg (fun f => ((p.blocks.zipIdx.flatMap fun (b, pred) =>
     expectedPhiSource j k pred b).zipIdx).flatMap f)
   funext entry
@@ -371,10 +398,14 @@ theorem moduleItems_inventory (p : Program) :
     simp [Item.inventory, phi_inventory, term_inventory, List.map_flatMap, inst_inventory,
       Runtime.indexed, indexed_eq_zipIdx, List.map_map, Function.comp_def]
   rw [blocks]
-  simp [List.append_assoc]
+  simp [TypeCode.widthFields, Global.widthFields, widthField, pairFields, width_bits, usedIntrinsics,
+    List.filterMap_flatMap, List.zipIdx_cons, List.append_assoc, show Width.bits .u32 = 32 from rfl]
 
-/-- The entire rendered LLVM module. -/
-def module (p : Program) : String := render (moduleItems p)
+/-- Law. The exact LLVM string written by the normal BIR emitter carries the
+integer inventory prescribed by the BIR and runtime contracts. -/
+theorem module_inventory (p : Program) :
+    Assembly.inventory (module p) = some (expectedInventory p) := by
+  rw [module, Assembly.inventory_render, moduleItems_inventory]
 
 namespace PatternEvidence
 
