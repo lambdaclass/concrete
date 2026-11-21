@@ -1,6 +1,7 @@
 import ConcreteSpec.Diagnostics.Types
 import ConcreteSpec.Spec.Basics
 import ConcreteSpec.Spec.Ident
+import ConcreteSpec.Spec.Outcome
 import ConcreteSpec.Spec.Rules
 
 /-!
@@ -47,8 +48,9 @@ already live in `Proofs/LocalIdentity`; no spelling-bearing local identity is re
 
 The local SourcePath laws replace the held path group under ISS-0068 and R-0709.
 They cover the admitted ASCII identity, local checks and exact refusal locations.
-Project-wide path admission and source binding are separate obligations. U+FEFF scope
-and bare-CR comment termination remain outside the byte-coordinate interface.
+The project-wide admission laws and controls also live here. Span projection and source
+binding remain separate obligations. U+FEFF scope and bare-CR comment termination
+remain outside the byte-coordinate interface.
 -/
 
 namespace ConcreteSpec.Core
@@ -4289,3 +4291,423 @@ end LocalControls
 end SourcePath
 
 end ConcreteSpec.Core
+
+namespace ConcreteSpec.Core.SourcePath.Project
+
+private theorem caseCollision_nil_left (right : List ConcreteSpec.Numbers) :
+    ¬ Reference.CaseCollision [] right := by
+  rintro ⟨n, bound, _, unequal, _⟩
+  have : n = 0 := by simpa using bound
+  subst n
+  exact unequal rfl
+
+private theorem caseCollision_symm {left right : List ConcreteSpec.Numbers}
+    (h : Reference.CaseCollision left right) : Reference.CaseCollision right left := by
+  obtain ⟨n, hl, hr, distinct, folded⟩ := h
+  exact ⟨n, hr, hl, Ne.symm distinct, folded.symm⟩
+
+private theorem caseCollision_cons (left right : ConcreteSpec.Numbers)
+    (ls rs : List ConcreteSpec.Numbers) :
+    Reference.CaseCollision (left :: ls) (right :: rs) ↔
+      (left ≠ right ∧ left.map SourcePath.Reference.lower = right.map SourcePath.Reference.lower) ∨
+        (left = right ∧ Reference.CaseCollision ls rs) := by
+  constructor
+  · rintro ⟨n, hl, hr, different, folded⟩
+    cases n with
+    | zero => exact (different rfl).elim
+    | succ n =>
+      simp only [List.take_succ_cons, List.map_cons, List.cons.injEq] at different folded
+      by_cases h : left = right
+      · exact Or.inr ⟨h, n, by simpa using hl, by simpa using hr,
+          fun eq => different (by simp [h, eq]), folded.2⟩
+      · exact Or.inl ⟨h, folded.1⟩
+  · rintro (⟨different, folded⟩ | ⟨rfl, n, hl, hr, different, folded⟩)
+    · exact ⟨1, by simp, by simp, by simpa, by simpa⟩
+    · exact ⟨n + 1, by simpa using hl, by simpa using hr, by simpa, by simpa only [List.take_succ_cons, List.map_cons, List.cons.injEq,
+        true_and] using folded⟩
+
+private theorem classifyComponents_correct (left right : List ConcreteSpec.Numbers)
+    (reason : Reason) :
+    classifyComponents left right = some reason ↔
+      match reason with
+      | .caseCollision => Reference.CaseCollision left right
+      | .fileDirectoryConflict => left ≠ right ∧ (left <+: right ∨ right <+: left)
+      | .duplicate => left = right := by
+  induction left generalizing right with
+  | nil =>
+    cases right <;> cases reason <;>
+      simp [classifyComponents, caseCollision_nil_left]
+  | cons left ls ih =>
+    cases right with
+    | nil =>
+      have noCase : ¬ Reference.CaseCollision (left :: ls) [] :=
+        fun h => caseCollision_nil_left _ (caseCollision_symm h)
+      cases reason <;> simp [classifyComponents, noCase]
+    | cons right rs =>
+      by_cases same : left = right
+      · subst right
+        cases reason <;> simpa [classifyComponents, caseCollision_cons] using ih rs
+      · have foldEqual : foldAscii = SourcePath.Reference.lower := rfl
+        have opposite := Ne.symm same
+        by_cases folded : left.map foldAscii = right.map foldAscii <;>
+          cases reason <;> simp_all [classifyComponents, caseCollision_cons, ← foldEqual]
+
+private theorem component_bytes (path : SourcePath) :
+    (components path.raw).map Component.bytes = Reference.parts path := by
+  change (scan (length := path.raw.bytes.length) 0 [] path.raw.bytes _).map Component.bytes = _
+  rw [ConcreteSpec.Core.SourcePath.scan_split]
+  rfl
+
+private theorem parts_eq {left right : SourcePath} :
+    Reference.parts left = Reference.parts right ↔ left.raw = right.raw := by
+  constructor
+  · intro h
+    have bytes := congrArg ([47].intercalate) h
+    simp only [Reference.parts, List.intercalate_splitOn] at bytes
+    cases hl : left.raw with
+    | mk ls lhs =>
+      cases hr : right.raw with
+      | mk rs rhs =>
+        rw [hl, hr] at bytes
+        exact SourceText.mk.injEq .. |>.mpr bytes
+  · intro h
+    simp [Reference.parts, h]
+
+private theorem classify_correct (left right : SourcePath) (reason : Reason) :
+    classify left right = some reason ↔ Reference.Conflict reason left right := by
+  unfold classify
+  rw [component_bytes, component_bytes, classifyComponents_correct]
+  cases reason <;> simp [Reference.Conflict, parts_eq]
+
+private theorem conflict_symm {reason : Reason} {left right : SourcePath}
+    (h : Reference.Conflict reason left right) : Reference.Conflict reason right left := by
+  cases reason with
+  | caseCollision => exact caseCollision_symm h
+  | fileDirectoryConflict => exact ⟨Ne.symm h.1, h.2.symm⟩
+  | duplicate => exact h.symm
+
+/-- A checker accepts only pairwise-admitted projects. -/
+def Safety (checker : List SourcePath → Except Refusal Unit) : Prop :=
+  ∀ paths, checker paths = .ok () → Reference.Admitted paths
+
+/-- A checker accepts every pairwise-admitted project. -/
+def Progress (checker : List SourcePath → Except Refusal Unit) : Prop :=
+  ∀ paths, Reference.Admitted paths → checker paths = .ok ()
+
+/-- Both reported positions are in bounds and distinct, with the reported conflict. -/
+def RefusalEvidence (checker : List SourcePath → Except Refusal Unit) : Prop :=
+  ∀ paths refusal, checker paths = .error refusal →
+    ∃ (first : refusal.first < paths.length) (second : refusal.second < paths.length),
+      refusal.first ≠ refusal.second ∧
+        Reference.Conflict refusal.reason paths[refusal.first] paths[refusal.second]
+
+/-- A permutation preserves whether the checker accepts. -/
+def OrderIndependent (checker : List SourcePath → Except Refusal Unit) : Prop :=
+  ∀ left right, left.Perm right → (checker left = .ok () ↔ checker right = .ok ())
+
+private theorem check_accepts_iff (paths : List SourcePath) :
+    check paths = .ok () ↔ Reference.Admitted paths := by
+  unfold check checkWith Reference.Admitted
+  simp only [List.getElem_toArray]
+  rw [List.pairwise_iff_getElem]
+  simp only [← classify_correct]
+  constructor
+  · intro accepted i j hi hj before reason conflict
+    split at accepted
+    next noneFound =>
+      have outer := (List.findSome?_eq_none_iff.mp noneFound) (⟨i, hi⟩ : Fin paths.length) (by simp)
+      have inner := (List.findSome?_eq_none_iff.mp outer) (⟨j, hj⟩ : Fin paths.length) (by simp)
+      simp [before, conflict] at inner
+    next => contradiction
+  · intro clear
+    have noneFound : (List.finRange paths.length).findSome? (fun first =>
+        (List.finRange paths.length).findSome? (fun second =>
+          if first.val < second.val then
+            (classify paths[first.val] paths[second.val]).map fun reason =>
+              { reason, first := first.val, second := second.val : Refusal }
+          else none)) = none := by
+      apply List.findSome?_eq_none_iff.mpr
+      intro first _
+      apply List.findSome?_eq_none_iff.mpr
+      intro second _
+      split
+      · next before =>
+        cases found : classify paths[first.val] paths[second.val] with
+        | none => rfl
+        | some reason => exact (clear first.val second.val first.isLt second.isLt
+            before reason found).elim
+      · rfl
+    rw [noneFound]
+
+/-- Law (subject `ConcreteSpec.Core.SourcePath.Project.check`).
+Acceptance excludes case collisions, file/directory prefix conflicts, and exact duplicate paths. -/
+theorem check_safety : Safety check := fun paths => (check_accepts_iff paths).mp
+
+/-- Law (subject `ConcreteSpec.Core.SourcePath.Project.check`).
+The checker accepts every project free of case collisions, file/directory prefix conflicts,
+and exact duplicate paths. -/
+theorem check_progress : Progress check := fun paths => (check_accepts_iff paths).mpr
+
+/-- Law (subject `ConcreteSpec.Core.SourcePath.Project.check`). -/
+theorem check_refusal_evidence : RefusalEvidence check := by
+  intro paths refusal reported
+  unfold check checkWith at reported
+  simp only [List.getElem_toArray] at reported
+  split at reported
+  · contradiction
+  · next conflict found =>
+    cases reported
+    obtain ⟨first, _, found⟩ := List.exists_of_findSome?_eq_some found
+    obtain ⟨second, _, found⟩ := List.exists_of_findSome?_eq_some found
+    split at found
+    · next before =>
+      change (classify paths[first.val] paths[second.val]).map _ = some refusal at found
+      cases why : classify paths[first.val] paths[second.val] with
+      | none => rw [why] at found; contradiction
+      | some reason =>
+        simp only [why, Option.map_some, Option.some.injEq] at found
+        subst refusal
+        exact ⟨first.isLt, second.isLt, Nat.ne_of_lt before,
+          (classify_correct _ _ _).mp why⟩
+    · contradiction
+
+/-- Law (subject `ConcreteSpec.Core.SourcePath.Project.check`). -/
+theorem check_order_independent : OrderIndependent check := by
+  intro left right perm
+  rw [check_accepts_iff, check_accepts_iff]
+  have symmetric : Std.Symm (fun left right => ∀ reason, ¬ Reference.Conflict reason left right) :=
+    ⟨fun _ _ clear reason conflict => clear reason (conflict_symm conflict)⟩
+  exact ⟨fun h => h.perm perm (symmetric.symm _ _), fun h => h.perm perm.symm (symmetric.symm _ _)⟩
+
+/-- A local refusal wins over project conflicts, even conflicts in earlier inputs. -/
+def LocalFirst (parser : List SourceText →
+    Except (SourcePath.Refusal ⊕ Refusal) (List SourcePath)) : Prop :=
+  ∀ (before after : List SourceText) (raw : SourceText) (refusal : SourcePath.Refusal),
+    (∀ input ∈ before, ∃ path, SourcePath.parse input = .ok path) →
+    SourcePath.parse raw = .error refusal →
+    parser (before ++ raw :: after) = .error (.inl refusal)
+
+/-- Law (subject `ConcreteSpec.Core.SourcePath.Project.parse`). -/
+theorem parse_local_first : LocalFirst parse := by
+  intro before suffix raw refusal earlier refused
+  have localRefusal : parseLocal (before ++ raw :: suffix) = .error refusal := by
+    induction before with
+    | nil => simp [parseLocal, refused, bind, Except.bind]
+    | cons input rest ih =>
+      obtain ⟨path, accepted⟩ := earlier input (by simp)
+      have tail := ih (fun item member => earlier item (by simp [member]))
+      simp [parseLocal, accepted, tail, bind, Except.bind]
+  simp [parse, localRefusal, Except.mapError, bind, Except.bind]
+
+/-- Once the local parser succeeds on every input, raw admission preserves the entire parsed
+list on declarative admission and forwards the checker’s refusal unchanged otherwise. -/
+def ChecksLocallyParsed (parser : List SourceText →
+    Except (SourcePath.Refusal ⊕ Refusal) (List SourcePath)) : Prop :=
+  ∀ inputs paths, inputs.mapM SourcePath.parse = .ok paths →
+    (Reference.Admitted paths → parser inputs = .ok paths) ∧
+    (∀ refusal, check paths = .error refusal → parser inputs = .error (.inr refusal))
+
+/-- Law (subject `ConcreteSpec.Core.SourcePath.Project.parse`).
+Together with checker safety and progress, this specifies the exact result for all locally
+accepted inputs. -/
+theorem parse_checks_locally_parsed : ChecksLocallyParsed parse := by
+  intro inputs paths locallyParsed
+  have local_agrees : parseLocal inputs = inputs.mapM SourcePath.parse := by
+    clear locallyParsed
+    induction inputs with
+    | nil => rfl
+    | cons raw rest ih => simp [parseLocal, List.mapM_cons, ih, bind, Except.bind, pure, Except.pure]
+  have localResult := local_agrees.trans locallyParsed
+  constructor
+  · intro admitted
+    simp [parse, localResult, check_progress _ admitted, Except.mapError, bind, Except.bind,
+      pure, Except.pure]
+  · intro refusal refused
+    simp [parse, localResult, refused, Except.mapError, bind, Except.bind]
+
+namespace Controls
+
+open ConcreteSpec.Core.SourcePath.Project.Registry (fileA fileB lowerDirectory upperDirectory)
+
+def sameDirectory : SourcePath := ⟨SourceText.ofBytes [97, 47, 99, 46, 99, 111, 110], by decide⟩
+def lowerFile : SourcePath := ⟨SourceText.ofBytes [97, 47, 98, 46, 99, 111, 110], by decide⟩
+
+def directoryCase : List SourcePath := [lowerDirectory, upperDirectory]
+def filenameCase : List SourcePath := [lowerDirectory, lowerFile]
+def exactPrefix : List SourcePath := [fileA, lowerDirectory]
+def sharedDirectory : List SourcePath := [lowerDirectory, sameDirectory]
+def evidenceInput : List SourcePath := [fileA, lowerDirectory, fileB]
+
+def ignoreDirectoryCase : List SourcePath → Except Refusal Unit :=
+  checkWith fun left right =>
+    match classify left right with
+    | some .caseCollision =>
+      if left.raw.bytes.map foldAscii = right.raw.bytes.map foldAscii then some .caseCollision
+      else none
+    | other => other
+
+def caseSensitive : List SourcePath → Except Refusal Unit :=
+  checkWith fun left right =>
+    match classify left right with
+    | some .caseCollision => none
+    | other => other
+
+def ignoreFileDirectory : List SourcePath → Except Refusal Unit :=
+  checkWith fun left right =>
+    match classify left right with
+    | some .fileDirectoryConflict => none
+    | other => other
+
+def rejectSharedDirectory : List SourcePath → Except Refusal Unit :=
+  checkWith fun left right =>
+    match classify left right, (components left.raw).map Component.bytes,
+        (components right.raw).map Component.bytes with
+    | none, first :: _ :: _, second :: _ :: _ =>
+      if first = second then some .caseCollision else none
+    | other, _, _ => other
+
+def wrongSecondOccurrence (paths : List SourcePath) : Except Refusal Unit :=
+  (check paths).mapError fun refusal => { refusal with second := refusal.second + 1 }
+
+def onlyFileBeforeDirectory : List SourcePath → Except Refusal Unit :=
+  checkWith fun left right =>
+    match classify left right with
+    | some .fileDirectoryConflict =>
+      if left.raw.length < right.raw.length then some .fileDirectoryConflict else none
+    | other => other
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.Project.check_safety`,
+case `ConcreteSpec.Core.SourcePath.Project.Controls.directoryCase`, subject `ConcreteSpec.Core.SourcePath.Project.check`,
+mutant `ConcreteSpec.Core.SourcePath.Project.Controls.ignoreDirectoryCase`). -/
+theorem ignoreDirectoryCase_violates_safety : ¬ Safety ignoreDirectoryCase := by
+  intro law
+  have admitted := law directoryCase (by decide)
+  rw [Reference.Admitted, directoryCase, List.pairwise_cons] at admitted
+  exact admitted.1 upperDirectory (by simp)
+    .caseCollision ⟨1, by decide, by decide, by decide, by decide⟩
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.Project.check_safety`,
+case `ConcreteSpec.Core.SourcePath.Project.Controls.filenameCase`, subject `ConcreteSpec.Core.SourcePath.Project.check`,
+mutant `ConcreteSpec.Core.SourcePath.Project.Controls.caseSensitive`). -/
+theorem caseSensitive_violates_safety : ¬ Safety caseSensitive := by
+  intro law
+  have admitted := law filenameCase (by decide)
+  rw [Reference.Admitted, filenameCase, List.pairwise_cons] at admitted
+  exact admitted.1 lowerFile (by simp)
+    .caseCollision ⟨2, by decide, by decide, by decide, by decide⟩
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.Project.check_safety`,
+case `ConcreteSpec.Core.SourcePath.Project.Controls.exactPrefix`, subject `ConcreteSpec.Core.SourcePath.Project.check`,
+mutant `ConcreteSpec.Core.SourcePath.Project.Controls.ignoreFileDirectory`). -/
+theorem ignoreFileDirectory_violates_safety : ¬ Safety ignoreFileDirectory := by
+  intro law
+  have admitted := law exactPrefix (by decide)
+  rw [Reference.Admitted, exactPrefix, List.pairwise_cons] at admitted
+  exact admitted.1 lowerDirectory (by simp) .fileDirectoryConflict
+    ⟨by decide, Or.inl ⟨[[66, 46, 99, 111, 110]], rfl⟩⟩
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.Project.check_progress`,
+case `ConcreteSpec.Core.SourcePath.Project.Controls.sharedDirectory`, subject `ConcreteSpec.Core.SourcePath.Project.check`,
+mutant `ConcreteSpec.Core.SourcePath.Project.Controls.rejectSharedDirectory`). -/
+theorem rejectSharedDirectory_violates_progress : ¬ Progress rejectSharedDirectory := by
+  intro law
+  have admitted : Reference.Admitted sharedDirectory := by
+    unfold Reference.Admitted sharedDirectory
+    simp only [List.pairwise_cons, List.mem_singleton, List.not_mem_nil, false_implies,
+      implies_true, List.Pairwise.nil, and_true]
+    intro path eq reason conflict
+    subst path
+    have found := (classify_correct _ _ _).mpr conflict
+    change none = some reason at found
+    contradiction
+  exact (by decide : rejectSharedDirectory sharedDirectory ≠ .ok ()) (law _ admitted)
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.Project.check_refusal_evidence`,
+case `ConcreteSpec.Core.SourcePath.Project.Controls.evidenceInput`, subject `ConcreteSpec.Core.SourcePath.Project.check`,
+mutant `ConcreteSpec.Core.SourcePath.Project.Controls.wrongSecondOccurrence`). -/
+theorem wrongSecondOccurrence_violates_refusal_evidence : ¬ RefusalEvidence wrongSecondOccurrence := by
+  intro law
+  obtain ⟨_, _, _, conflict⟩ := law evidenceInput ⟨.fileDirectoryConflict, 0, 2⟩ (by decide)
+  have found := (classify_correct _ _ _).mpr conflict
+  change none = some Reason.fileDirectoryConflict at found
+  contradiction
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.Project.check_order_independent`,
+case `ConcreteSpec.Core.SourcePath.Project.Controls.exactPrefix`, subject `ConcreteSpec.Core.SourcePath.Project.check`,
+mutant `ConcreteSpec.Core.SourcePath.Project.Controls.onlyFileBeforeDirectory`). -/
+theorem onlyFileBeforeDirectory_violates_order_independence :
+    ¬ OrderIndependent onlyFileBeforeDirectory := by
+  intro law
+  have perm : exactPrefix.Perm [lowerDirectory, fileA] := List.Perm.swap ..
+  exact (by decide : onlyFileBeforeDirectory exactPrefix ≠ .ok ()) ((law _ _ perm).mpr (by decide))
+
+
+def beforeLocalRefusal : List SourceText := [lowerDirectory.raw, upperDirectory.raw]
+
+def prematureProjectCheck (inputs : List SourceText) :
+    Except (SourcePath.Refusal ⊕ Refusal) (List SourcePath) :=
+  let admitted := inputs.filterMap fun raw => (SourcePath.parse raw).toOption
+  match check admitted with
+  | .error refusal => .error (.inr refusal)
+  | .ok () => parse inputs
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.Project.parse_local_first`,
+case `ConcreteSpec.Core.SourcePath.Project.Controls.beforeLocalRefusal`, subject `ConcreteSpec.Core.SourcePath.Project.parse`,
+mutant `ConcreteSpec.Core.SourcePath.Project.Controls.prematureProjectCheck`). -/
+theorem prematureProjectCheck_violates_local_first : ¬ LocalFirst prematureProjectCheck := by
+  intro law
+  let raw := SourceText.ofBytes []
+  let refusal : SourcePath.Refusal := ⟨raw, ⟨.empty, wholeLocation raw 0 (by decide)⟩⟩
+  have refused : SourcePath.parse raw = .error refusal := rfl
+  have earlier : ∀ input ∈ beforeLocalRefusal, ∃ path, SourcePath.parse input = .ok path := by
+    intro input member
+    simp only [beforeLocalRefusal, List.mem_cons, List.not_mem_nil, or_false] at member
+    rcases member with rfl | rfl
+    · exact ⟨lowerDirectory, rfl⟩
+    · exact ⟨upperDirectory, rfl⟩
+  have project : prematureProjectCheck (beforeLocalRefusal ++ [raw]) =
+      .error (.inr ⟨.caseCollision, 0, 1⟩) := rfl
+  have localResult := law beforeLocalRefusal [] raw refusal earlier refused
+  rw [project] at localResult
+  injection localResult with incompatible
+  cases incompatible
+
+/-- Two occurrences of the same admitted path. -/
+def duplicateOccurrences : List SourcePath := [fileA, fileA]
+
+def ignoreDuplicate : List SourcePath → Except Refusal Unit :=
+  checkWith fun left right =>
+    match classify left right with
+    | some .duplicate => none
+    | other => other
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.Project.check_safety`,
+case `ConcreteSpec.Core.SourcePath.Project.Controls.duplicateOccurrences`, subject `ConcreteSpec.Core.SourcePath.Project.check`,
+mutant `ConcreteSpec.Core.SourcePath.Project.Controls.ignoreDuplicate`). -/
+theorem ignoreDuplicate_violates_safety : ¬ Safety ignoreDuplicate := by
+  intro law
+  have admitted := law duplicateOccurrences (by decide)
+  rw [Reference.Admitted, duplicateOccurrences, List.pairwise_cons] at admitted
+  exact admitted.1 fileA (by simp) .duplicate rfl
+
+/-- The raw inputs corresponding to the two repeated occurrences. -/
+def duplicateInputs : List SourceText := duplicateOccurrences.map SourcePath.raw
+
+def skipProjectCheck (inputs : List SourceText) :
+    Except (SourcePath.Refusal ⊕ Refusal) (List SourcePath) :=
+  (parseLocal inputs).mapError Sum.inl
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.Project.parse_checks_locally_parsed`,
+case `ConcreteSpec.Core.SourcePath.Project.Controls.duplicateInputs`, subject `ConcreteSpec.Core.SourcePath.Project.parse`,
+mutant `ConcreteSpec.Core.SourcePath.Project.Controls.skipProjectCheck`). -/
+theorem skipProjectCheck_violates_checks_locally_parsed :
+    ¬ ChecksLocallyParsed skipProjectCheck := by
+  intro law
+  have forwarded := (law duplicateInputs duplicateOccurrences rfl).2 ⟨.duplicate, 0, 1⟩ rfl
+  have bypassed : skipProjectCheck duplicateInputs = .ok duplicateOccurrences := rfl
+  rw [bypassed] at forwarded
+  contradiction
+
+end Controls
+
+end ConcreteSpec.Core.SourcePath.Project

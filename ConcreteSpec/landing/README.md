@@ -42,8 +42,10 @@ Law and still requires a control from its qualification reservation. F03p checks
 source-path rule for its defining module, unique registration, positive revision, and linked
 acceptance and refusal theorems from Spec.Rules. Each registry reservation names the expected
 rule-defining module and requires cited acceptance and refusal theorems for the same uniquely
-registered rule authored in that module. The local rules contribute partial evidence while project-wide admission
-and its registry evidence are outstanding. Shared modules have piece-specific evidence. Migration namespaces
+registered rule authored in that module. F03p's partial row checks local and project-wide admission and their registered rules.
+Span projection and source binding remain. F03p requires named spec declarations for both
+before landing, and F04p requires the corresponding named Laws and planted control evidence.
+Shared modules have piece-specific evidence. Migration namespaces
 reserve names for evidence produced by the migration. If a name or defining module changes, update the completion requirements in
 the same patch. Partial rows retain the references for their remaining work.
 

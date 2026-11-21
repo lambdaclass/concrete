@@ -47,8 +47,8 @@ keeping nominal identity distinct from local diagnostic spellings. Numeric route
 use Basics.Numbers; neither wrapper adds source-path or normalization policy.
 
 The key-assignment helpers implement the settled structured-key interface, not a source parser.
-Local path admission is defined below. Project-wide path admission and source binding
-belong to the dependent slices.
+Local and project-wide path admission are defined below. Span projection and source binding
+remain separate obligations.
 -/
 
 namespace ConcreteSpec.Core
@@ -1208,6 +1208,114 @@ def render (path : SourcePath) : ConcreteSpec.Name :=
 
 end SourcePath
 
+namespace SourcePath.Project
+
+/-- The three project-wide refusal reasons. -/
+inductive Reason where
+  | caseCollision
+  | fileDirectoryConflict
+  | duplicate
+  deriving DecidableEq, Repr
+
+/-- Compare exact components, using the ASCII fold only at the first spelling difference. -/
+def classifyComponents : List ConcreteSpec.Numbers → List ConcreteSpec.Numbers → Option Reason
+  | [], [] => some .duplicate
+  | [], _ :: _ | _ :: _, [] => some .fileDirectoryConflict
+  | left :: ls, right :: rs =>
+    if left = right then classifyComponents ls rs
+    else if left.map foldAscii = right.map foldAscii then some .caseCollision
+    else none
+
+/-- Identify a conflict without changing either path. -/
+def classify (left right : SourcePath) : Option Reason :=
+  classifyComponents ((components left.raw).map Component.bytes)
+    ((components right.raw).map Component.bytes)
+
+/-- A conflict identifies two zero-based positions in the original input. -/
+structure Refusal where
+  reason : Reason
+  first : Nat
+  second : Nat
+  deriving DecidableEq, Repr
+
+/-- Search distinct positions for a conflicting pair. -/
+def checkWith (compare : SourcePath → SourcePath → Option Reason) (paths : List SourcePath) :
+    Except Refusal Unit :=
+  let entries := paths.toArray
+  let positions := List.finRange paths.length
+  match positions.findSome? (fun first =>
+    positions.findSome? (fun second =>
+      if first.val < second.val then
+        let left := entries[first.val]'(by simp [entries])
+        let right := entries[second.val]'(by simp [entries])
+        (compare left right).map fun reason =>
+          { reason, first := first.val, second := second.val }
+      else none)) with
+  | none => .ok ()
+  | some refusal => .error refusal
+
+/-- Check project-wide admission of locally admitted paths. -/
+def check := checkWith classify
+
+/-- The preliminary local parse preserves the first LOCAL refusal. -/
+def parseLocal : List SourceText → Except SourcePath.Refusal (List SourcePath)
+  | [] => .ok []
+  | raw :: rest => do
+    let path ← SourcePath.parse raw
+    let paths ← parseLocal rest
+    return path :: paths
+
+/-- The admission boundary for raw project inputs. -/
+def parse (inputs : List SourceText) :
+    Except (SourcePath.Refusal ⊕ Refusal) (List SourcePath) := do
+  let paths ← (parseLocal inputs).mapError Sum.inl
+  (check paths).mapError Sum.inr
+  return paths
+
+namespace Reference
+
+/-- Slash-delimited byte strings, independently of the executable scanner. -/
+def parts (path : SourcePath) : List ConcreteSpec.Numbers :=
+  path.raw.bytes.splitOn 47
+
+/-- Raw inequality and ASCII-folded equality at an aligned component prefix. -/
+def CaseCollision (left right : List ConcreteSpec.Numbers) : Prop :=
+  ∃ n, n ≤ left.length ∧ n ≤ right.length ∧ left.take n ≠ right.take n ∧
+    (left.take n).map (List.map SourcePath.Reference.lower) =
+      (right.take n).map (List.map SourcePath.Reference.lower)
+
+/-- A reason holds exactly when its corresponding pair conflict holds. -/
+def Conflict (reason : Reason) (left right : SourcePath) : Prop :=
+  let ls := parts left
+  let rs := parts right
+  match reason with
+  | .caseCollision => CaseCollision ls rs
+  | .fileDirectoryConflict => ls ≠ rs ∧ (ls <+: rs ∨ rs <+: ls)
+  | .duplicate => left.raw = right.raw
+
+/-- Every pair of occurrences must satisfy all project rules. -/
+def Admitted (paths : List SourcePath) : Prop :=
+  paths.Pairwise fun left right => ∀ reason, ¬ Conflict reason left right
+
+end Reference
+
+/-- R-0709, docs/decisions.md#decided-2026-11-16-file-paths.
+Matching ASCII-folded component prefixes must have identical spelling. -/
+def NoCaseCollision (pair : SourcePath × SourcePath) : Prop :=
+  ¬ Reference.Conflict .caseCollision pair.1 pair.2
+
+/-- R-0709, docs/decisions.md#decided-2026-11-17-file-names.
+A file path cannot also be an exact proper directory prefix of another path. -/
+def NoFileDirectoryConflict (pair : SourcePath × SourcePath) : Prop :=
+  ¬ Reference.Conflict .fileDirectoryConflict pair.1 pair.2
+
+/-- R-0709, docs/decisions.md#decided-2026-11-21-duplicate-project-path.
+A project cannot list the same path at two distinct positions. -/
+def NoDuplicate (pair : SourcePath × SourcePath) : Prop :=
+  ¬ Reference.Conflict .duplicate pair.1 pair.2
+
+end SourcePath.Project
+
 /-- A source span has an ordered half-open byte range and positive coordinates at its start.
 The loader binds its checked path and coordinates to source bytes. -/
 structure Span where
@@ -1266,6 +1374,12 @@ def SourcePath.Reason.ruleId : SourcePath.Reason → RuleId
   | .componentCap => ⟨``SourcePath.ComponentByteCap, 1⟩
   | .pathCap => ⟨``SourcePath.PathByteCap, 1⟩
   | .disallowed => ⟨``SourcePath.FilenameCharacters, 1⟩
+
+/-- The diagnostic citation of a project-wide refusal. -/
+def SourcePath.Project.Reason.ruleId : SourcePath.Project.Reason → RuleId
+  | .caseCollision => ⟨``SourcePath.Project.NoCaseCollision, 1⟩
+  | .fileDirectoryConflict => ⟨``SourcePath.Project.NoFileDirectoryConflict, 1⟩
+  | .duplicate => ⟨``SourcePath.Project.NoDuplicate, 1⟩
 
 /-- A version of this specification: `0.x` before the freeze, `1.0` at the freeze (A2c), bumped
 by every normative change (R-0603). -/

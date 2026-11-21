@@ -3906,6 +3906,30 @@ ok go ahead
   file/directory prefix conflicts). ISS-0068 remains open for implementation
   and dependent evidence.
 
+- <a id="decided-2026-11-21-duplicate-project-path"></a>**Duplicate project
+  paths (2026-11-21).**
+  Status: decided
+  Source: owner
+
+  Provenance: the writer brief relayed the question and the owner's reply,
+  dated 2026-11-21, under the [recording rule](#decided-project-recording).
+  The recommendation was to refuse the duplicate.
+
+  Question put to the owner, verbatim:
+
+~~~text
+A project lists the same file path twice: refuse it (compile error), or ignore the repeat?
+~~~
+
+  Owner reply, verbatim:
+
+~~~text
+regarding the path refuse as you reocmmended
+~~~
+
+  Project admission refuses a list that contains the same file path at two
+  distinct positions.
+
 - <a id="decided-2026-11-20-tooling-review-risk"></a>**Risk rule for review findings
   (2026-11-20).**
   Status: decided
