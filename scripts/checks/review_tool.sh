@@ -9,8 +9,7 @@
 # `origin`, so the notes push, including the non-fast-forward path, runs for real.
 #
 # Legs: verdict parsing, note writing and its exact format, notes push and the
-# non-fast-forward merge, delta selection (round 2 sees only the delta and the
-# previous findings), splitting (file groups, size limit, hunk split, --pieces N),
+# non-fast-forward merge, cumulative clean coverage, findings carryover, splitting (file groups, size limit, hunk split, --pieces N),
 # the content-filter refusal retry (once, neutral, smaller, then `blocked`), the
 # round cap (distinct exit code, no extra round), verify.sh, and the pre-push
 # hook's review-notes tier (a notes-only push runs no gates).
@@ -149,9 +148,11 @@ rounds: [0-9]+
 reviewer: codex
 utc: [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z
 base: [0-9a-f]{40}
-pieces: [0-9]+$'
+pieces: [0-9]+
+diff-start: [0-9a-f]{40}
+findings-note: [0-9a-f]{40}$'
 n1="$(note "$R1")"
-if [[ "$n1" =~ $FORMAT_RE ]]; then ok "note has exactly the six fields, in order"; else no "note format: $n1"; fi
+if [[ "$n1" =~ $FORMAT_RE ]]; then ok "findings note has the expected fields, in order"; else no "note format: $n1"; fi
 check "note: verdict findings" test "$(field verdict)" = findings
 check "note: rounds 1" test "$(field rounds)" = 1
 check "note: base is the merge-base" test "$(field base)" = "$BASE"
@@ -181,14 +182,14 @@ review --head "" >/dev/null 2>&1; rc=$?
 check "an empty --head refuses (exit 2, got $rc)" test "$rc" -eq 2
 check "and calls no reviewer" test "$(calls)" -eq 1
 
-echo "=== round 2: only the delta, with the previous findings ==="
+echo "=== round 2: full review with the previous findings ==="
 commit_file old.txt "fixed" "fix the counter"
 commit_file new.txt "a second change" "second change"
 review >"$T/out2" 2>&1; rc=$?
 check "clean exit 0 (got $rc)" test "$rc" -eq 0
-check "round 2 diff holds only the delta (new.txt, old.txt fix)" grep -q "^2 standard .*files=new.txt,old.txt,$" "$FAKE_LOG/calls"
+check "round 2 includes the full branch changes" grep -q "^2 standard .*files=new.txt,old.txt,$" "$FAKE_LOG/calls"
 check "round 2 diff does not resend the round-1 hunk" bash -c "! grep -q '^+MARK_FINDING' '$FAKE_LOG/stdin.2'"
-check "round 2 prompt names the delta start" grep -q "change since commit $R1" "$FAKE_LOG/prompt.2"
+check "round 2 prompt describes full scope" grep -q "complete change of a branch" "$FAKE_LOG/prompt.2"
 check "round 2 prompt carries the previous findings" grep -q "counter is never reset" "$FAKE_LOG/prompt.2"
 check "note: rounds 2, verdict clean" test "$(field rounds)/$(field verdict)" = "2/clean"
 (cd "$W" && bash "$VERIFY" HEAD >"$T/v" 2>&1); rc=$?
@@ -205,6 +206,63 @@ check "unknown required base has its own diagnostic" grep -q 'required base is n
 check "verify.sh judges the exact commit, not the branch (R1 still 1)" test "$rc" -eq 1
 review >/dev/null 2>&1; rc=$?
 check "an already-clean HEAD reports clean without a call (exit 0)" test "$rc" -eq 0 -a "$(calls)" -eq 2
+
+echo "=== ISS-0098: clean delta requires the complete predecessor chain ==="
+g checkout -qb chain-controls
+FULL_SHA="$(g rev-parse HEAD)"
+FULL_NOTE="$(note)"
+FULL_BLOB="$(g notes --ref=concrete-review list HEAD)"
+commit_file delta.txt delta "first clean delta"
+review >"$T/delta" 2>&1; rc=$?
+check "verified clean predecessor allows a delta" test "$rc" -eq 0
+check "delta prompt identifies the clean start" grep -q "change since commit $FULL_SHA" "$FAKE_LOG/prompt.3"
+check "delta contains only the new change" grep -q 'files=delta.txt,$' "$FAKE_LOG/calls"
+check "delta note records the exact predecessor commit and blob" \
+  test "$(field diff-start)/$(field predecessor-note)" = "$FULL_SHA/$FULL_BLOB"
+commit_file delta2.txt delta2 "second clean delta"
+review >"$T/delta" 2>&1; rc=$?
+check "second clean delta is published" test "$rc" -eq 0
+verify_head() { (cd "$W" && bash "$VERIFY" --required-base "$BASE" HEAD); }
+verify_head >"$T/chain" 2>&1; rc=$?
+check "two clean deltas verify back to the full review" test "$rc" -eq 0
+
+g notes --ref=concrete-review remove "$FULL_SHA" >/dev/null 2>&1
+verify_head >"$T/chain" 2>&1; rc=$?
+check "missing indirect predecessor fails (exit $rc)" test "$rc" -eq 2
+check "missing predecessor diagnostic identifies the missing commit" grep -q "$FULL_SHA unverified: no note" "$T/chain"
+
+g notes --ref=concrete-review add -f -m "$(printf '%s\n' "$FULL_NOTE" | sed 's/^utc: .*/utc: 2000-01-01T00:00:00Z/')" "$FULL_SHA" 2>/dev/null
+verify_head >"$T/chain" 2>&1; rc=$?
+check "changed indirect predecessor fails (exit $rc)" test "$rc" -eq 2
+check "changed indirect predecessor fails on blob identity" grep -q "predecessor note changed" "$T/chain"
+g notes --ref=concrete-review add -f -C "$FULL_BLOB" "$FULL_SHA" 2>/dev/null
+
+# Give the head delta a matching reference to a genuine findings verdict so
+# rejection must come from the verdict, not just a mismatched blob.
+CHAIN_NOTE="$(g notes --ref=concrete-review list HEAD)"
+R1_BLOB="$(g notes --ref=concrete-review list "$R1")"
+g notes --ref=concrete-review add -f -m "$(note | sed -e "s/^diff-start: .*/diff-start: $R1/" \
+  -e "s/^predecessor-note: .*/predecessor-note: $R1_BLOB/")" HEAD 2>/dev/null
+verify_head >"$T/chain" 2>&1; rc=$?
+check "intact predecessor with findings fails (exit $rc)" test "$rc" -eq 2
+check "intact predecessor with findings fails for its verdict" grep -q 'predecessor verdict is findings; expected clean' "$T/chain"
+g notes --ref=concrete-review add -f -C "$CHAIN_NOTE" HEAD 2>/dev/null
+
+echo "=== ISS-0099: findings intake requires matching text ==="
+g checkout -qb missing-findings "$R1"
+commit_file old.txt fixed "fix after missing findings"
+R1_FINDINGS="$(g notes --ref=concrete-review-findings list "$R1")"
+g notes --ref=concrete-review-findings remove "$R1" >/dev/null 2>&1
+reset_fake
+REVIEW_PUSH=0 review >"$T/missing-findings" 2>&1; rc=$?
+check "findings verdict without text refuses before review (exit $rc)" test "$rc" -eq 2 -a "$(calls)" -eq 0
+check "missing findings diagnostic identifies the round" grep -q "missing or mismatched findings text for $R1 round 1" "$T/missing-findings"
+g notes --ref=concrete-review-findings add -m 'stale text from a different review' "$R1"
+REVIEW_PUSH=0 review >"$T/missing-findings" 2>&1; rc=$?
+check "findings verdict with mismatched text refuses before review (exit $rc)" test "$rc" -eq 2 -a "$(calls)" -eq 0
+g notes --ref=concrete-review-findings add -f -C "$R1_FINDINGS" "$R1" 2>/dev/null
+g checkout -q feature
+reset_fake
 
 echo "=== advanced base: full branch fallback preserves rounds and excludes main ==="
 g checkout -qb advanced-base main
@@ -246,7 +304,15 @@ commit_file hidden.txt hidden hidden
 RANGE_MID="$(g rev-parse HEAD)"
 commit_file visible.txt visible visible
 range_note() {
-  g notes --ref=concrete-review add -f -m "$(printf 'verdict: %s\nrounds: %s\nreviewer: codex\nutc: 2026-11-11T00:00:00Z\nbase: %s\npieces: 1' "$1" "$2" "$3")" HEAD
+  local verdict="$1"
+  local rounds="$2"
+  local base="$3"
+  local finding_field=""
+  if [ "$verdict" != clean ]; then
+    g notes --ref=concrete-review-findings add -f -m 'ANCESTOR_OPEN_FINDING' HEAD 2>/dev/null
+    finding_field="$(printf '\nfindings-note: %s' "$(g notes --ref=concrete-review-findings list HEAD)")"
+  fi
+  g notes --ref=concrete-review add -f -m "$(printf 'verdict: %s\nrounds: %s\nreviewer: codex\nutc: 2026-11-11T00:00:00Z\nbase: %s\npieces: 1\ndiff-start: %s%s' "$verdict" "$rounds" "$base" "$base" "$finding_field")" HEAD
 }
 for verdict in clean findings blocked; do
   range_note "$verdict" 1 "$RANGE_MID"
@@ -281,7 +347,6 @@ for mode in capped malformed uncapped merge; do
   STACK_B="$(g rev-parse HEAD)"
   rounds=5; [ "$mode" != uncapped ] || rounds=2
   range_note findings "$rounds" "$RANGE_BASE"
-  g notes --ref=concrete-review-findings add -f -m 'ANCESTOR_OPEN_FINDING' HEAD
   commit_file child.txt child "child-$mode"
   rounds=1; [ "$mode" != malformed ] || rounds=0
   range_note clean "$rounds" "$STACK_B"
@@ -358,8 +423,12 @@ for verdict in clean findings; do
   REVIEW_PUSH=0 review --base "$RANGE_BASE" >"$T/recovered" 2>&1; rc=$?
   check "covering $verdict descendant calls reviewer once" test "$rc" -eq 0 -a "$(calls)" -eq 1
   check "covering $verdict descendant logs diff" test -f "$FAKE_LOG/stdin.1"
-  check "covering $verdict descendant reviews new delta" grep -q '^+resumed$' "$FAKE_LOG/stdin.1"
-  check "covering $verdict descendant excludes superseded scope" bash -c '[ -f "$1" ] && ! grep -q "^+old-scope$" "$1"' _ "$FAKE_LOG/stdin.1"
+  check "covering $verdict descendant reviews new change" grep -q '^+resumed$' "$FAKE_LOG/stdin.1"
+  if [ "$verdict" = clean ]; then
+    check "covering clean descendant excludes superseded scope" bash -c '[ -f "$1" ] && ! grep -q "^+old-scope$" "$1"' _ "$FAKE_LOG/stdin.1"
+  else
+    check "findings descendant reviews full scope" grep -q '^+old-scope$' "$FAKE_LOG/stdin.1"
+  fi
 done
 # Coverage on one merge parent must not hide a narrow note on the other.
 g checkout -q -B uncovered-side "$RANGE_BASE"
@@ -409,10 +478,14 @@ g notes --ref=refs/notes/concrete-review add -f -m "verdict: clean" HEAD
 (cd "$W" && bash "$VERIFY" HEAD >/dev/null 2>&1); rc=$?
 check "malformed note (verdict line alone): exit 2 (got $rc)" test "$rc" -eq 2
 B40="$(printf '%040d' 0 | tr 0 a)"
-# A note notes.sh put wrote (keys in its own order, utc last) is well formed.
-g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nbase: %s\npieces: 1\nutc: 2026-10-22T00:00:00Z' "$B40")" HEAD
+# A legacy round-1 note with utc last still verifies with a valid base.
+g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 1\nreviewer: codex\nbase: %s\npieces: 1\nutc: 2026-10-22T00:00:00Z' "$BASE")" HEAD
 (cd "$W" && bash "$VERIFY" HEAD >"$T/vc" 2>&1); rc=$?
-check "a note with utc last verifies clean (exit 0, got $rc)" test "$rc" -eq 0
+check "a round-1 note with utc last verifies clean (exit $rc)" test "$rc" -eq 0
+g notes --ref=refs/notes/concrete-review add -f -m "$(note | sed 's/^rounds: 1$/rounds: 2/')" HEAD 2>/dev/null
+(cd "$W" && bash "$VERIFY" HEAD >"$T/vc" 2>&1); rc=$?
+check "ambiguous legacy multi-round evidence fails (exit $rc)" test "$rc" -eq 2
+range_note clean 1 "$B40"
 (cd "$W" && bash "$VERIFY" --required-base HEAD HEAD >"$T/vr" 2>&1); rc=$?
 check "verify.sh refuses a syntactically valid but unknown note base" test "$rc" -eq 2
 check "unknown note base fails for range coverage" grep -q 'review range does not cover required base' "$T/vr"
@@ -691,6 +764,27 @@ rm -f "$T/origin.git/hooks/pre-receive"
 check "a refused (not non-fast-forward) push exits 6 (got $rc)" test "$rc" -eq 6
 check "and is not retried as if it were a race" bash -c "! grep -q 'rejected; fetching and merging' '$T/out9'"
 check "the note is still recorded locally" test "$(field verdict)" = clean
+
+echo "=== ISS-0099: a rejection of one notes ref prevents both updates ==="
+cat >"$T/origin.git/hooks/update" <<'EOF'
+#!/bin/sh
+if [ "$1" = refs/notes/concrete-review-findings ]; then
+  echo "remote policy rejects the findings ref" >&2
+  exit 1
+fi
+EOF
+chmod +x "$T/origin.git/hooks/update"
+VERDICT_TIP="$(git -C "$T/origin.git" rev-parse refs/notes/concrete-review)"
+FINDINGS_TIP="$(git -C "$T/origin.git" rev-parse refs/notes/concrete-review-findings)"
+g checkout -qb atomic-notes origin/main
+commit_file atomic.txt MARK_FINDING atomic-notes
+reset_fake
+review >"$T/atomic" 2>&1; rc=$?
+rm -f "$T/origin.git/hooks/update"
+check "partial publication is refused (exit $rc)" test "$rc" -eq 6
+check "remote hook rejected only the findings ref" grep -q 'remote policy rejects the findings ref' "$T/atomic"
+check "remote verdict ref did not advance" test "$(git -C "$T/origin.git" rev-parse refs/notes/concrete-review)" = "$VERDICT_TIP"
+check "remote findings ref did not advance" test "$(git -C "$T/origin.git" rev-parse refs/notes/concrete-review-findings)" = "$FINDINGS_TIP"
 
 echo "=== usage errors ==="
 review --pieces zero >/dev/null 2>&1; rc=$?

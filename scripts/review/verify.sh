@@ -20,8 +20,10 @@ NOTES_REF="refs/notes/concrete-review"
 REMOTE=origin
 FETCH=0
 REQUIRED_BASE=""
+METADATA_ONLY=0
 while [ $# -gt 0 ]; do
   case "$1" in
+    --metadata-only) METADATA_ONLY=1; shift ;; # round accounting only, never coverage
     --fetch) FETCH=1; shift ;;
     --notes-ref)
       [ $# -ge 2 ] && git check-ref-format "$2" || { echo "verify: --notes-ref needs a full ref" >&2; exit 2; }
@@ -42,49 +44,90 @@ if [ "$FETCH" = 1 ]; then
 fi
 
 SHA="$(git rev-parse -q --verify "$1^{commit}")" || { echo "verify: not a commit: $1" >&2; exit 2; }
-NOTE="$(git notes --ref="$NOTES_REF" show "$SHA" 2>/dev/null)" || {
-  echo "$SHA unreviewed: no note under $NOTES_REF"
-  exit 2
-}
-
-# The note must carry each of the six fields review.sh writes exactly once, each well formed. Any
-# other key, a repeated key, or a line that is not `key: value` makes the note malformed. Keys are
-# matched by name, not position, because notes.sh `put` appends `utc` last.
+invalid() { echo "$SHA unverified: $*"; exit 2; }
+# Note fields are unordered. Read the exact blob whose identity was checked,
+# rather than looking up the annotation again to read its contents.
 malformed() {
   echo "$SHA malformed review note${1:+ ($1)}:"
   printf '%s\n' "$NOTE" | sed 's/^/  /'
   exit 2
 }
 # Plain variables F_<key>, not an associative array: macOS /bin/bash is 3.2.
-SEEN=" "
-while IFS= read -r line; do
-  [[ "$line" =~ ^([a-z-]+):\ (.*)$ ]] || malformed "not key: value: '$line'"
-  k="${BASH_REMATCH[1]}" v="${BASH_REMATCH[2]}"
-  case "$SEEN" in *" $k "*) malformed "repeated key $k" ;; esac
-  SEEN="$SEEN$k "
-  printf -v "F_${k//-/_}" '%s' "$v"
-  case "$k" in
-    verdict)      [[ "$v" =~ ^(clean|findings|blocked)$ ]] ;;
-    rounds)       [[ "$v" =~ ^[1-9][0-9]*$ ]] ;;
-    reviewer)     [[ "$v" =~ ^[^[:space:]]+$ ]] ;;
-    utc)          [[ "$v" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] ;;
-    base)         [[ "$v" =~ ^[0-9a-f]{40}$ ]] ;;
-    pieces)       [[ "$v" =~ ^[0-9]+$ ]] ;;
-    *)            false ;;
-  esac || malformed "bad $k"
-done <<< "$NOTE"
-for k in verdict rounds reviewer utc base pieces; do
-  case "$SEEN" in *" $k "*) ;; *) malformed "missing $k" ;; esac
-done
+read_note() {
+  local expected="$1"
+  local blob
+  blob="$(git notes --ref="$NOTES_REF" list "$SHA" 2>/dev/null)" \
+    || invalid "no note under $NOTES_REF"
+  [ -z "$expected" ] || [ "$blob" = "$expected" ] \
+    || invalid "predecessor note changed (expected $expected, found $blob)"
+  NOTE="$(git cat-file blob "$blob")" || invalid "could not read note blob $blob"
+  local SEEN=" " line k v
+  F_diff_start="" F_predecessor_note="" F_findings_note=""
+  while IFS= read -r line; do
+    [[ "$line" =~ ^([a-z-]+):\ (.*)$ ]] || malformed "not key: value: '$line'"
+    k="${BASH_REMATCH[1]}" v="${BASH_REMATCH[2]}"
+    case "$SEEN" in *" $k "*) malformed "repeated key $k" ;; esac
+    SEEN="$SEEN$k "
+    printf -v "F_${k//-/_}" '%s' "$v"
+    case "$k" in
+      verdict)      [[ "$v" =~ ^(clean|findings|blocked)$ ]] ;;
+      rounds)       [[ "$v" =~ ^[1-9][0-9]*$ ]] ;;
+      reviewer)     [[ "$v" =~ ^[^[:space:]]+$ ]] ;;
+      utc)          [[ "$v" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] ;;
+      base|diff-start|predecessor-note|findings-note) [[ "$v" =~ ^[0-9a-f]{40}$ ]] ;;
+      pieces)       [[ "$v" =~ ^[0-9]+$ ]] ;;
+      *)            false ;;
+    esac || malformed "bad $k"
+  done <<< "$NOTE"
+  for k in verdict rounds reviewer utc base pieces; do
+    case "$SEEN" in *" $k "*) ;; *) malformed "missing $k" ;; esac
+  done
+  if [ -n "$F_diff_start" ]; then
+    if [ "$F_diff_start" = "$F_base" ]; then
+      [ -z "$F_predecessor_note" ] || malformed "full review has a predecessor"
+    else
+      [ -n "$F_predecessor_note" ] || malformed "missing predecessor-note"
+    fi
+    if [ "$F_verdict" = clean ]; then
+      [ -z "$F_findings_note" ] || malformed "clean note has findings-note"
+    fi
+  else
+    [ -z "$F_predecessor_note$F_findings_note" ] || malformed "missing diff-start"
+  fi
+}
 
-field() { local n="F_${1//-/_}"; printf '%s' "${!n:-}"; }
-if [ -n "$REQUIRED_BASE" ]; then
-  git merge-base --is-ancestor "$(field base)" "$REQUIRED_BASE" 2>/dev/null || {
-    echo "$SHA review range does not cover required base $REQUIRED_BASE: note base $(field base) is not an ancestor-or-equal"
-    exit 2
-  }
+check_range() {
+  if [ -n "$REQUIRED_BASE" ]; then
+    git merge-base --is-ancestor "$F_base" "$REQUIRED_BASE" 2>/dev/null \
+      || invalid "review range does not cover required base $REQUIRED_BASE: note base $F_base is not an ancestor-or-equal"
+  fi
+  git merge-base --is-ancestor "$F_base" "$SHA" 2>/dev/null \
+    || invalid "note base $F_base is not an ancestor-or-equal of the reviewed commit"
+  if [ -z "$F_diff_start" ] && [ "$F_rounds" != 1 ]; then
+    invalid "legacy multi-round note cannot establish full or delta coverage"
+  fi
+}
+
+read_note ""
+VERDICT="$F_verdict"
+summary="$SHA $VERDICT (round $F_rounds, reviewer $F_reviewer, $F_utc, base $F_base, $F_pieces piece(s))"
+if [ "$METADATA_ONLY" = 0 ]; then
+  if [ -n "$F_diff_start" ] && [ "$VERDICT" != clean ] && [ -z "$F_findings_note" ]; then
+    malformed "missing findings-note"
+  fi
+  check_range
+  while [ -n "$F_predecessor_note" ]; do
+    [ "$F_diff_start" != "$SHA" ] && \
+      git merge-base --is-ancestor "$F_diff_start" "$SHA" 2>/dev/null && \
+      git merge-base --is-ancestor "$F_base" "$F_diff_start" 2>/dev/null \
+      || invalid "delta start $F_diff_start must be between base and head"
+    REQUIRED_BASE="$F_base"
+    SHA="$F_diff_start"
+    read_note "$F_predecessor_note"
+    [ "$F_verdict" = clean ] || invalid "predecessor verdict is $F_verdict; expected clean"
+    check_range
+  done
 fi
-VERDICT="$(field verdict)"
-echo "$SHA $VERDICT (round $(field rounds), reviewer $(field reviewer), $(field utc), base $(field base), $(field pieces) piece(s))"
+echo "$summary"
 [ "$VERDICT" = clean ] && exit 0
 exit 1

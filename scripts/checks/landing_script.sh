@@ -106,7 +106,7 @@ esac
 GH
 chmod +x "$TMP/fake-gh"
 
-# A review note as scripts/review/review.sh writes it (scripts/review/verify.sh's six keys), published
+# A review note as scripts/review/review.sh writes it (scripts/review/verify.sh's full-review schema), published
 # to origin. put-review <sha> <clean|findings|blocked|malformed|none>[@rounds] [base]; none removes the note.
 cat > "$TMP/put-review" <<'EOF'
 #!/usr/bin/env bash
@@ -121,7 +121,10 @@ rounds: $(case "$2" in *@*) echo "${2#*@}" ;; *) echo 1 ;; esac)
 reviewer: codex
 utc: 2026-11-06T00:00:00Z
 base: $(git rev-parse "${3:-origin/main}")
-pieces: 1" "$sha" ;;
+pieces: 1
+diff-start: $(git rev-parse "${3:-origin/main}")$(case "$2" in
+  findings*|blocked*) printf '\nfindings-note: %s' "$(printf 'fixture findings\n' | git hash-object --stdin)" ;;
+esac)" "$sha" ;;
 esac
 git show-ref -q --verify $R || exit 0
 CONCRETE_SKIP_GATES=1 git push -q origin $R

@@ -49,28 +49,20 @@ uncommitted tree is never reviewed, and the script warns when it is dirty.
 | 3 | round cap reached; split the branch or escalate (open findings are printed) |
 | 4 | nothing to review: `HEAD` was already reviewed with findings, or the diff is empty |
 | 5 | blocked: a piece could not be reviewed, even after the retry |
-| 6 | recorded locally, but the notes ref could not be pushed |
+| 6 | recorded locally, but the notes could not be published |
 
 ## What each round reviews
 
 - **Round 1** reviews the full diff from the base to `HEAD`.
-- **Round N > 1** reviews only the delta since the last reviewed commit. The
-  script finds that commit by walking the branch (`base..HEAD`) for the newest
-  note under `refs/notes/concrete-review`. The prompt includes the previous
-  round's findings and asks the reviewer to list each one that is still open.
-  Only notes satisfying the [range contract](#verifysh) can advance the delta
-  start or skip an already-clean HEAD. Otherwise the round reviews the full
-  `base..HEAD` diff. If the last reviewed commit does not descend from the current base (for
-  example, after merging newer main changes), the round reviews the full
-  `base..HEAD` diff instead. This excludes changes imported from the base and
-  includes merge resolutions. It preserves the round count and cap; the prompt
-  identifies the patch as the complete branch change.
-- A `blocked` round does not count as having reviewed its diff, so the next
-  round starts from the last `clean` or `findings` round, or from the base.
-  Running again on a blocked `HEAD` is allowed and counts as a round. A round
-  with both findings and a blocked piece is `blocked` for this reason; its
-  findings are still recorded and carried into the next prompt, together with
-  those of the last fully reviewed round.
+- **Round N > 1** can review just the delta from a clean review whose evidence
+  covers the current base. The script finds it by walking the branch
+  (`base..HEAD`) and [verifying](#verifysh) the notes it finds. Open findings,
+  insufficient coverage, or a new base beyond the previous clean commit
+  require the full `base..HEAD` diff. The prompt includes unresolved findings
+  and asks the reviewer to list each one that is still open.
+- A `blocked` round leaves the last qualifying clean review as the possible
+  delta start. Running on a blocked `HEAD` again counts as another round. The
+  next prompt includes its findings and any earlier unresolved findings.
 - A `HEAD` that is already `clean` exits 0 without calling the reviewer.
 
 Rounds are counted from the notes, so the cap holds across invocations,
@@ -141,21 +133,23 @@ reviewer: codex
 utc: 2026-10-22T14:03:11Z
 base: <40-hex sha>
 pieces: K
+diff-start: <40-hex sha>
 ```
 
 **The format is an interface.** `verify.sh` parses it, and the train's review
-leg reads it through `verify.sh`, which rejects any note that lacks one of these
-six keys, repeats a key, or carries any other key. Keys are matched by name, not
-position. Change the format only together with `verify.sh`.
+leg reads it through `verify.sh`. It validates the required fields and rejects
+repeated or unknown keys. Change the format only together with `verify.sh`.
 
-- `rounds` is this round's number, which is also the number of rounds run on the
-  branch so far.
-- `base` is the branch base (the merge-base), not the start of the delta.
-- `pieces` counts the pieces before any refusal retry.
+- `rounds` counts the rounds run on the branch, and `pieces` counts the pieces
+  before any refusal retry.
+- `base` is the branch base. `diff-start` equals `base` for a full review.
+- A delta also records `predecessor-note` with the exact verdict-note blob ID
+  for the commit at `diff-start`.
+- A findings or blocked verdict also records `findings-note` with the exact
+  text blob ID under `refs/notes/concrete-review-findings`. The next round
+  requires the matching text when carrying findings forward.
 
-When the verdict is not clean, the findings text goes in a second note under
-`refs/notes/concrete-review-findings`, which is pushed too. It is how the next
-round, possibly run by another agent, gets the previous findings. The full raw
+The two notes refs are published in one atomic push. The full raw
 output of every round is written to `.review/<sha>-<round>.md`, which git
 ignores.
 
@@ -215,7 +209,12 @@ notes and retains the maximum round count across all schema-valid notes in the
 branch history, including merge parents. Uncovered insufficient-range evidence
 triggers a full review without resetting rounds or the cap. A covering descendant
 review supersedes earlier findings and narrow ancestor notes.
-Without this option, verification judges the note without a required range.
+Verification walks each delta back to a full review. Each predecessor must be a
+strict ancestor with a clean verdict, the recorded note blob, and coverage of
+its successor's base. Legacy round-one notes can serve as full reviews. Legacy
+multi-round notes still count toward the cap, but their missing diff start
+makes their coverage unverifiable. Legacy findings intake requires a findings
+note on the same commit.
 `--notes-ref <ref>` explicitly selects the notes ref (default `refs/notes/concrete-review`);
 readiness uses the fetched `refs/notes/remote/concrete-review` snapshot.
 

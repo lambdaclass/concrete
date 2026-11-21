@@ -12,12 +12,9 @@
 #
 #   round 1      reviews the full diff base..HEAD (base defaults to the merge-base
 #                with origin/main);
-#   round N > 1  reviews only the delta since the last reviewed commit (found from
-#                the notes on earlier commits of the branch) and passes the previous
-#                round's findings to the reviewer. If that commit does not descend
-#                from the current base, review the full base..HEAD diff instead:
-#                never include changes imported from base. This fallback preserves
-#                the branch's round count and cap (it is not a new round 1).
+#   round N > 1  uses a delta only from verified clean coverage of the current
+#                base. Otherwise it reviews the full base..HEAD diff. Unresolved
+#                findings reach the prompt either way, and the round cap carries over.
 #
 # A large diff is split into pieces by file group and size. A piece the reviewer
 # refuses is retried once, halved and with a more neutral prompt; after that it is
@@ -31,7 +28,7 @@
 #   3  round cap reached: split the branch or escalate (open findings are printed)
 #   4  nothing to review (HEAD already reviewed, or empty diff)
 #   5  verdict blocked (a piece could not be reviewed; see .review/)
-#   6  result recorded locally but the notes ref could not be pushed
+#   6  result recorded locally but the notes could not be published
 #
 # Environment (mostly for the test gate, scripts/checks/review_tool.sh):
 #   REVIEW_CODEX_BIN    reviewer binary (default: codex)
@@ -113,7 +110,7 @@ push_notes() {
   local refs=("$NOTES_REF")
   git show-ref -q --verify "$FINDINGS_REF" && refs+=("$FINDINGS_REF")
   for attempt in 1 2 3; do
-    if git push -q "$REMOTE" "${refs[@]}" 2>"$WORK/push.err"; then
+    if git push --atomic -q "$REMOTE" "${refs[@]}" 2>"$WORK/push.err"; then
       return 0
     fi
     # Only a non-fast-forward is cured by fetch + merge. Anything else (a hook
@@ -122,7 +119,7 @@ push_notes() {
       break
     fi
     echo "review: notes push attempt $attempt rejected; fetching and merging" >&2
-    sync_notes || true
+    sync_notes || return 1
   done
   cat "$WORK/push.err" >&2
   return 1
@@ -132,12 +129,21 @@ note_field() { # note_field <text> <key>
   printf '%s\n' "$1" | awk -v k="$2: " 'index($0, k) == 1 && !done { print substr($0, length(k) + 1); done = 1 }'
 }
 
-findings_for() { # findings_for <sha> <round>: the recorded findings of that round
+findings_for() { # findings_for <sha> <verdict> <expected-blob>
   local sha="$1"
-  local round="$2"
-  if git notes --ref="$FINDINGS_REF" show "$sha" 2>/dev/null; then return 0; fi
-  if [ -f ".review/$sha-$round.md" ]; then cat ".review/$sha-$round.md"; return 0; fi
-  echo "(findings text not available for $sha round $round)"
+  local verdict="$2"
+  local expected="$3"
+  local blob
+  if ! blob="$(git notes --ref="$FINDINGS_REF" list "$sha" 2>/dev/null)"; then
+    # Legacy blocked notes may have no text. A findings verdict always needs it.
+    [ "$verdict" = blocked ] && [ -z "$expected" ]
+    return
+  fi
+  [ -z "$expected" ] || [ "$blob" = "$expected" ] || return 1
+  local findings
+  findings="$(git cat-file blob "$blob")" || return 1
+  [[ "$findings" =~ [^[:space:]] ]] || return 1
+  printf '%s\n' "$findings"
 }
 
 cap_message() { # cap_message <rounds-done> <findings-text>
@@ -164,26 +170,28 @@ if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
   echo "review: warning: uncommitted changes are not reviewed; only HEAD is" >&2
 fi
 
-# Latest note on the branch (round count), and the latest note whose round
-# actually reviewed its diff (delta start). A `blocked` round reviewed only part
-# of its diff, so it does not advance the delta start.
+# Track round counts separately from the latest verified clean delta start.
 PREV_VALID=0
-PREV_SHA="" PREV_ROUNDS=0 PREV_VERDICT="" REVIEWED_SHA="" REVIEWED_ROUNDS=0
+PREV_SHA="" PREV_ROUNDS=0 PREV_VERDICT="" REVIEWED_SHA="" REVIEWED_ROUNDS=0 REVIEWED_NOTE=""
 INSUFFICIENT_RANGE=0
+OPEN_FINDINGS=0
 PREV_FINDINGS=""
 COVERING_REVIEWS=""
 while read -r c; do
   [ -n "$c" ] || continue
   # Schema first: malformed notes supply neither rounds nor review evidence.
+  blob="$(git notes --ref="$NOTES_REF" list "$c" 2>/dev/null)" || continue
   vrc=0
-  bash "$SCRIPT_DIR/verify.sh" "$c" >/dev/null 2>&1 || vrc=$?
+  bash "$SCRIPT_DIR/verify.sh" --metadata-only "$c" >/dev/null 2>&1 || vrc=$?
   [ "$vrc" -le 1 ] || continue
-  n="$(git notes --ref="$NOTES_REF" show "$c")"
+  n="$(git cat-file blob "$blob")"
   v="$(note_field "$n" verdict)"
   r="$(note_field "$n" rounds)"
   [ "$r" -le "$PREV_ROUNDS" ] || PREV_ROUNDS="$r"
   vrc=0
   bash "$SCRIPT_DIR/verify.sh" --required-base "$BASE_SHA" "$c" >/dev/null 2>&1 || vrc=$?
+  [ "$(git notes --ref="$NOTES_REF" list "$c" 2>/dev/null)" = "$blob" ] \
+    || die "review note changed during intake for $c; retry"
   if [ -z "$PREV_SHA" ]; then
     PREV_SHA="$c" PREV_VERDICT="$v"
     if [ "$vrc" -le 1 ]; then PREV_VALID=1; fi
@@ -196,13 +204,20 @@ while read -r c; do
   done
   if [ "$covered" = 0 ] && [ "$vrc" -gt 1 ]; then INSUFFICIENT_RANGE=1; fi
   if [ "$covered" = 0 ] && [ "$v" != clean ]; then
+    expected_findings="$(note_field "$n" findings-note)"
+    if [ -n "$(note_field "$n" diff-start)" ] && [ -z "$expected_findings" ]; then
+      die "missing findings-note binding for $c round $r"
+    fi
+    findings="$(findings_for "$c" "$v" "$expected_findings")" \
+      || die "missing or mismatched findings text for $c round $r"
     PREV_FINDINGS="$PREV_FINDINGS
-$(findings_for "$c" "$r")"
+$findings"
+    if [ "$v" = findings ]; then OPEN_FINDINGS=1; fi
   fi
   if [ "$vrc" -le 1 ] && { [ "$v" = clean ] || [ "$v" = findings ]; }; then
     COVERING_REVIEWS="$COVERING_REVIEWS $c"
-    if [ -z "$REVIEWED_SHA" ]; then
-      REVIEWED_SHA="$c" REVIEWED_ROUNDS="$r"
+    if [ "$v" = clean ] && [ -z "$REVIEWED_SHA" ]; then
+      REVIEWED_SHA="$c" REVIEWED_ROUNDS="$r" REVIEWED_NOTE="$blob"
     fi
   fi
 done < <(git rev-list --topo-order HEAD "^$BASE_SHA")
@@ -229,7 +244,7 @@ fi
 
 FROM="${REVIEWED_SHA:-$BASE_SHA}"
 FULL_REVIEW=0
-if [ "$INSUFFICIENT_RANGE" = 1 ] ||
+if [ "$INSUFFICIENT_RANGE" = 1 ] || [ "$OPEN_FINDINGS" = 1 ] ||
    { [ -n "$REVIEWED_SHA" ] && ! git merge-base --is-ancestor "$BASE_SHA" "$REVIEWED_SHA"; }; then
   # Missing range coverage or an old review predating changes imported from base
   # requires full review. Comparing an old commit directly
@@ -237,7 +252,7 @@ if [ "$INSUFFICIENT_RANGE" = 1 ] ||
   # current contribution, including merge resolutions, without resetting rounds.
   FROM="$BASE_SHA"
   FULL_REVIEW=1
-  echo "review: prior review does not cover current branch scope; reviewing full base..HEAD diff (round $ROUND)" >&2
+  echo "review: prior review does not cover current branch scope cleanly; reviewing full base..HEAD diff (round $ROUND)" >&2
 fi
 git diff --no-color --no-ext-diff -M "$FROM" "$HEAD_SHA" >"$WORK/full.diff"
 if [ ! -s "$WORK/full.diff" ]; then
@@ -412,8 +427,7 @@ $stripped"
 done <"$WORK/pieces/manifest.tsv"
 
 # `blocked` wins over `findings`: a round with a blocked piece did not review all
-# of its diff, and only a `blocked` verdict keeps the next round's delta from
-# starting after it. The findings of the pieces that were reviewed are still
+# of its diff. The findings of the pieces that were reviewed are still
 # recorded and carried forward.
 if [ "$N_BLOCKED" -gt 0 ]; then VERDICT=blocked
 elif [ "$N_FINDINGS" -gt 0 ]; then VERDICT=findings
@@ -424,15 +438,6 @@ fi
 # ---------------------------------------------------------------- record
 # THE NOTE FORMAT IS AN INTERFACE: scripts/review/verify.sh parses it (train.sh's review leg reads
 # it through verify.sh). Change it only together with verify.sh.
-cat >"$WORK/note" <<EOF
-verdict: $VERDICT
-rounds: $ROUND
-reviewer: $REVIEWER
-utc: $UTC
-base: $BASE_SHA
-pieces: $K
-EOF
-git notes --ref="$NOTES_REF" add -f -F "$WORK/note" "$HEAD_SHA"
 if [ "$VERDICT" = blocked ] && [ -n "$PREV_FINDINGS" ]; then
   # A blocked round cannot resolve the findings it was given: some code went
   # unreviewed. Record them with this round's own, so a later round (even after
@@ -444,14 +449,31 @@ fi
 if [ "$VERDICT" != clean ]; then
   printf '%s\n' "${FINDINGS_TEXT#$'\n'}" >"$WORK/findings"
   git notes --ref="$FINDINGS_REF" add -f -F "$WORK/findings" "$HEAD_SHA"
+  FINDINGS_NOTE="$(git notes --ref="$FINDINGS_REF" list "$HEAD_SHA")"
 fi
+cat >"$WORK/note" <<EOF
+verdict: $VERDICT
+rounds: $ROUND
+reviewer: $REVIEWER
+utc: $UTC
+base: $BASE_SHA
+pieces: $K
+diff-start: $FROM
+EOF
+if [ "$FROM" != "$BASE_SHA" ]; then
+  printf 'predecessor-note: %s\n' "$REVIEWED_NOTE" >>"$WORK/note"
+fi
+if [ "$VERDICT" != clean ]; then
+  printf 'findings-note: %s\n' "$FINDINGS_NOTE" >>"$WORK/note"
+fi
+git notes --ref="$NOTES_REF" add -f -F "$WORK/note" "$HEAD_SHA"
 
 echo "review: round $ROUND verdict $VERDICT ($K piece(s)); raw output: ${RAW#$ROOT/}"
 [ "$VERDICT" = clean ] || printf '%s\n' "${FINDINGS_TEXT#$'\n'}"
 
 if ! push_notes; then
-  echo "review: the result is recorded locally but $NOTES_REF could not be pushed to $REMOTE." >&2
-  echo "review: push it by hand: git push $REMOTE $NOTES_REF" >&2
+  echo "review: the result is recorded locally but the review notes could not be pushed to $REMOTE." >&2
+  echo "review: retry publication with an atomic push of both review notes refs if present." >&2
   exit 6
 fi
 
