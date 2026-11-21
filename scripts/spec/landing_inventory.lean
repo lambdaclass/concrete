@@ -1,4 +1,6 @@
 import ConcreteSpec
+import Concrete.BIR.Progress
+import Concrete.Backend.LCB
 import Lean
 
 open Lean Elab Command
@@ -1236,8 +1238,12 @@ private def completion : PieceId → Completion
     specNamespace `Proofs.Frame `Core.Frame.BoundaryEvidence]
   | .F29p => reservedEvidence [
     specNamespace `Proofs.Frame `Core.Frame.SourcePolicy]
-  | .F30 => reservedEvidence [
-    specNamespace `Proofs.Scalar `Core.ScalarBridge]
+  | .F30 => namedEvidence [
+    evidence `Concrete.BIR `Concrete.BIR.ScalarBridge [
+      `fromCore_toCore, `toCore_fromCore, `bits, `signed, `min, `max, `inRange,
+      `checked, `wrap, `toBits, `ofBits, `intValue_valid],
+    decls `Concrete.BIR.Progress [`Concrete.BIR.hasTy_int_core],
+    decls `Concrete.Backend.LCB [`Concrete.Backend.LCB.Proof.enc_int_core]]
   | .F31 => { requiredSpec := [
     evidence `ConcreteSpec.Spec.Slice1Syntax `ConcreteSpec.ScalarMigration [`intType],
     evidence `ConcreteSpec.Spec.Statics `ConcreteSpec.ScalarMigration [`literalType],
@@ -1359,7 +1365,7 @@ private def plan : List Piece := [
   pending .F28 ["ROADMAP.md R-0616", "ISSUES.tsv ISS-0073"],
   pending .F29 ["ROADMAP.md R-0616", "ISSUES.tsv ISS-0073"],
   pending .F29p ["ROADMAP.md R-0616", "ISSUES.tsv ISS-0068"],
-  pending .F30 ["ROADMAP.md R-0608 and R-0571"],
+  present .F30 "scalar bridge representation proofs (changelog.d/2026-11-16-spec-f30-scalar-bridge.md)",
   pending .F31 ["ROADMAP.md R-0608 and R-0571", "ISSUES.tsv ISS-0069"],
   pending .F32 ["ROADMAP.md R-0574 and R-0571"],
   pending .F33 ["ROADMAP.md R-0571 and R-0609", "ISSUES.tsv ISS-0069, ISS-0070 and ISS-0076"],
