@@ -112,7 +112,8 @@ git init -q --bare "$TMP/origin.git"
 A="$TMP/agent"; W="$TMP/lander"
 git init -q "$A"; cd "$A" || exit 2
 git remote add origin "$TMP/origin.git"
-mkdir -p src
+mkdir -p src scripts/review
+cp "$ROOT_DIR/scripts/review/refs.sh" scripts/review/refs.sh
 printf 'Build\n' > required-checks.txt  # train.sh refuses a landing with no required-checks.txt
 git add -A && git commit -qm base
 git push -q origin main

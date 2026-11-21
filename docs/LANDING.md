@@ -311,8 +311,10 @@ directory is what R-0547's generated median, next to the candidate table, will r
 The landing coordinator owns the cutover. GitHub cannot enforce the paired
 update on notes refs. A pre-migration reviewer that already read the notes can
 overwrite a v2 denial with its old hook, and an old train can accept the result
-([ISS-0101](../ISSUES.tsv)). Complete the steps below before the first v2
-publication to origin, including any review of the cutover candidate itself.
+([ISS-0101](../ISSUES.tsv)). The cutover is complete when the coordinator
+confirms that the cutover train has landed on `origin/main`. Keep ordinary
+review and landing jobs paused until then, and defer all v2 publication
+until that confirmation.
 
 1. Pause review and landing launches and retries. Inventory every host and
    account that can use Concrete publication credentials. Include developer
@@ -327,7 +329,7 @@ publication to origin, including any review of the cutover candidate itself.
 
    ```sh
    ps -axww -o pid=,ppid=,pgid=,user=,command= |
-     awk '/[r]eview[.]sh|[t]rain[.]sh/'
+     awk '/[r]eview[.]sh|[t]rain[.]sh|[r]eady[.]sh/'
    ```
 
    For each matching job, use the process IDs and parent IDs to identify its
@@ -338,11 +340,11 @@ publication to origin, including any review of the cutover candidate itself.
    any remaining Git or hook children. Check survivors with
    `ps -p "$pid" -o pid=,ppid=,command=`, verify the checkout again before
    using `kill -KILL "$pid"` on a confirmed survivor, and repeat the inventory.
-   Record that no pre-cutover review or train job or publishing child remains.
-3. The coordinator distributes the full cutover commit SHA. Update each
-   publishing clone to carry its review and landing scripts and hook. In each
-   clone, set `cutover_sha` to that SHA, then run the following from its root.
-   Every command in the chain must succeed.
+   Record that no pre-cutover review, train, readiness job, or publishing
+   child remains.
+3. The coordinator checks out the final cutover commit in a dedicated full
+   clone and sets `cutover_sha` to its full SHA. Run the following from that
+   clone's root before each train invocation. Every command must succeed.
 
    ```sh
    git cat-file -e "$cutover_sha^{commit}" &&
@@ -355,12 +357,25 @@ publication to origin, including any review of the cutover candidate itself.
      test "$("$hook" --concrete-identify </dev/null)" = "concrete-pre-push $(pwd -P)/.githooks/pre-push"
    ```
 
-   Record the hostname, account, clone path and verified SHA for each clone.
-   Apply the same checks before admitting another clone to publication.
-4. After the process and clone checks are complete, the coordinator authorizes
-   the first v2 publication and resumes jobs through the verified clones.
-   Run landings only through the updated train. The first v2 findings or
-   blocked publication writes its legacy denial in the same Git transaction.
+4. The coordinator alone runs the train with the cutover commit as its
+   sole member. Use its exact-SHA [owner sign-off](REVIEW.md#the-cap)
+   with qualifying legacy round evidence and the three reviews for that SHA.
+   Use `train.sh check --no-review` for this train to keep v2 publication
+   paused. Complete CI and land through the usual train commands. If the
+   sign-off, clean merge, tooling checks, or any gate fails, keep jobs paused.
+   Confirm the remote main ref is at the landed train SHA and contains
+   `cutover_sha` before authorizing any v2 publication.
+
+5. Update each publishing clone from post-cutover `origin/main` and verify
+   the tooling and effective hook with the step 3 command chain, using the
+   confirmed post-cutover main SHA as the comparison commit. Record the
+   hostname, account, clone path and verified SHA, including for any clone
+   admitted later. The coordinator can then authorize the first v2 publication
+   and resume ordinary jobs from verified clones. Bring every member branch
+   up to date with post-cutover `origin/main` before review or readiness, and
+   build every train from that base. Once the v2 notes ref exists on origin,
+   the updated train checks the v2 marker in the base and candidate trees,
+   and the reviewer requires the committed marker in its publishing checkout.
 
 ## Readiness
 

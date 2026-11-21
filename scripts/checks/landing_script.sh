@@ -149,7 +149,8 @@ cd "$W" || exit 2
 git remote add origin "$TMP/origin.git"
 
 # --- the toy repository: a ledger, a corpus map, a generated block, a generated file ---------------
-mkdir -p scripts/gen scripts/tests docs/project src Concrete
+mkdir -p scripts/gen scripts/tests scripts/review docs/project src Concrete
+cp "$ROOT_DIR/scripts/review/refs.sh" scripts/review/refs.sh
 BEGIN='<!-- BEGIN GENERATED: candidate record (scripts/gen/candidate_table.py; edit docs/project/candidates.tsv) -->'
 END='<!-- END GENERATED: candidate record -->'
 printf '# Changelog\n\n- base entry\n' > CHANGELOG.md
@@ -1553,5 +1554,64 @@ standin_hook
 [ ! -e "$TMP/state/tnh" ] && ok "no refused run left train state behind" || no "a refused run left state"
 
 echo
+echo "=== review evidence cutover: v2 publication retires stale train trees ==="
+CUT="$TMP/cutover"
+git init -q --bare "$TMP/cutover-origin.git" && git init -q "$CUT" || exit 2
+cd "$CUT" || exit 2
+git remote add origin "$TMP/cutover-origin.git"
+printf 'Build\n' > required-checks.txt
+git add required-checks.txt && git commit -qm "pre-cutover main" && git push -q origin main || exit 2
+old_base="$(git rev-parse HEAD)"
+git checkout -qb old-member
+git commit -q --allow-empty -m "pre-cutover member" || exit 2
+out="$(bash "$TRAIN" build stale old-member 2>&1)"; rc=$?
+[ "$rc" = 0 ] && ok "pre-v2 build permits a pre-cutover base" || no "pre-v2 build failed: $out"
+git checkout -qb cutover main
+mkdir -p scripts/review
+cp "$ROOT_DIR/scripts/review/refs.sh" scripts/review/refs.sh
+git add scripts/review/refs.sh && git commit -qm "install v2 tooling" || exit 2
+out="$(bash "$TRAIN" build bootstrap cutover 2>&1)"; rc=$?
+[ "$rc" = 0 ] && ok "cutover alone builds from pre-cutover main before publication" || no "cutover build failed: $out"
+# Exercise the real sign-off verifier and train without bootstrap v2 notes.
+FIXTURE_LEGACY_REVIEW=1 bash "$TMP/put-signoff" cutover valid || exit 2
+start="$(git rev-parse HEAD)"
+out="$(bash "$TRAIN" check bootstrap --no-review --no-remote 2>&1)"; rc=$?
+[ "$rc" = 0 ] && ok "cutover check runs with v2 publication paused" || no "cutover check: $out"
+printf '[{"databaseId": 5959, "headSha": "%s", "createdAt": "9999-01-01T00:00:00Z"}]' "$start" > "$FAKE_GH_DIR/list.json"
+bash "$TRAIN" ci bootstrap >/dev/null 2>&1 || no "cutover CI dispatch"
+runjson "$start" success success
+out="$(bash "$TRAIN" land bootstrap 2>&1)"; rc=$?
+[ "$rc" = 0 ] && has "$out" "owner sign-off (1)" \
+  && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$start" ] \
+  && [ -z "$(git ls-remote origin refs/notes/concrete-review-v2)" ] \
+  && ok "cutover lands with legacy round evidence before any v2 publication" || no "cutover land: $out"
+git checkout -qb stripped-member origin/main
+git rm -q scripts/review/refs.sh && git commit -qm "strip tooling from member" || exit 2
+bash "$TRAIN" build stripped stripped-member >/dev/null 2>&1 || no "build pre-activation train with a stripped head"
+bash "$TMP/put-review" "$start" clean "$old_base" || exit 2
+out="$(bash "$TRAIN" check stripped 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "train/stripped head lacks v2 review tooling" \
+  && ok "a current base cannot qualify an existing train whose head dropped v2 tooling" || no "stripped head: $out"
+git checkout -q train/bootstrap || exit 2
+git update-ref refs/remotes/origin/main "$old_base"
+out="$(bash "$TRAIN" build rejected --no-fetch old-member 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "build base lacks v2 review tooling" \
+  && [ "$(git rev-parse HEAD)" = "$start" ] && [ ! -e "$TMP/state/rejected" ] \
+  && ok "origin v2 notes refuse a pre-cutover build before changing the checkout" || no "stale base: $out"
+git checkout -q train/stale || exit 2
+for sub in check ci land; do
+  out="$(bash "$TRAIN" "$sub" stale 2>&1)"; rc=$?
+  [ "$rc" = 1 ] && has "$out" "train/stale base lacks v2 review tooling" \
+    && ok "$sub refuses an existing train on a pre-cutover base" || no "$sub on stale train: $out"
+done
+git fetch -q origin || exit 2
+git checkout -qb new-member origin/main
+git commit -q --allow-empty -m "post-cutover member" || exit 2
+out="$(bash "$TRAIN" build stale-member old-member 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "member old-member lacks v2 review tooling" \
+  && ok "post-cutover main still requires a current member tree" || no "stale member: $out"
+out="$(bash "$TRAIN" build current new-member 2>&1)"; rc=$?
+[ "$rc" = 0 ] && ok "post-cutover train builds with v2 active" || no "post-cutover build failed: $out"
+
 echo "check_landing_script: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

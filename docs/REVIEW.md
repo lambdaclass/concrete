@@ -244,7 +244,8 @@ with v2 findings or a blocked note. If v2 evidence is missing, it checks the rea
 notes history for a denial on the exact SHA before allowing legacy round
 accounting. The train refuses member or sign-off fallback on inconsistent
 evidence. Follow the [landing cutover procedure](LANDING.md#review-evidence-cutover)
-before the first v2 publication.
+to land the tooling on `origin/main` before the first v2 publication and
+before resuming ordinary review and landing jobs.
 
 ## Tests
 

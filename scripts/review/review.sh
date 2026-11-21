@@ -198,6 +198,11 @@ push_notes() {
     tip="$(git rev-parse --verify "$NOTES_REF")" || return 1
     previous="$(git rev-parse -q --verify "$SYNC_REF" || true)"
     [ "$tip" != "$previous" ] || return 0
+    if ! has_v2_review_tooling HEAD ||
+       ! git diff --quiet HEAD -- scripts/review/refs.sh; then
+      echo "review: checkout lacks the committed v2 review tooling; update it from origin/main before publishing" >&2
+      return 1
+    fi
     git update-ref "$STAGE_REF" "$tip" || return 1
     validate_publication "$tip" "$previous" || return 1
     push_args=(-q)

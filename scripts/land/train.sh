@@ -239,6 +239,27 @@ require_train_checkout() { # name
     || die "HEAD $(git rev-parse --short HEAD) is not the built train ${head:0:10}; rebuild (build --force) rather than editing a train"
   assert_clean
   assert_no_op "state check"
+  if review_v2_active; then
+    require_v2_tree "$(state_get "$name" base)" "train/$name base"
+    require_v2_tree "$head" "train/$name head"
+  fi
+}
+
+# The remote notes ref activates the cutover guard. An unreadable remote
+# cannot establish that the pre-cutover bootstrap is still available.
+review_v2_active() {
+  local rc=0
+  git ls-remote --exit-code "$REMOTE" "$REVIEW_NOTES_REF" >/dev/null || rc=$?
+  case "$rc" in
+    0) return 0 ;;
+    2) return 1 ;;
+    *) die "cannot determine whether v2 review evidence is active on $REMOTE" ;;
+  esac
+}
+
+require_v2_tree() {
+  has_v2_review_tooling "$1" ||
+    die "$2 lacks v2 review tooling; rebuild from post-cutover $REMOTE/main"
 }
 
 # --- build ---------------------------------------------------------------------------------------
@@ -300,6 +321,12 @@ cmd_build() {
   if [ "$fetch" = 1 ]; then git fetch -q "$REMOTE"; assert_no_op "fetch"; fi
   local base; base="$(git rev-parse --verify "$REMOTE/main^{commit}")"
 
+  local v2_active=0
+  if review_v2_active; then
+    v2_active=1
+    require_v2_tree "$base" "build base"
+  fi
+
   local r sha members="" shas=()
   for r in "${refs[@]}"; do
     sha="$(git rev-parse --verify -q "$r^{commit}")" || die "build: '$r' does not name a commit"
@@ -307,6 +334,7 @@ cmd_build() {
       note "skip $r (${sha:0:10}): already contained in $REMOTE/main"
       continue
     fi
+    if [ "$v2_active" = 1 ]; then require_v2_tree "$sha" "member $r"; fi
     shas+=("$r@$sha"); members="${members:+$members,}$r@$sha"
   done
   [ "${#shas[@]}" -ge 1 ] || die "build: every ref is already in $REMOTE/main; nothing to land"
@@ -321,6 +349,7 @@ cmd_build() {
     [ "$force" = 1 ] || die "build: train/$name exists; pass --force to rebuild it from $REMOTE/main"
   fi
   local prev; prev="$(git symbolic-ref -q --short HEAD || git rev-parse HEAD)"
+  local prev_sha; prev_sha="$(git rev-parse HEAD)"
   git checkout -q -B "train/$name" "$base"
   assert_no_op "checkout"
   rm -f "$(state_file "$name")"
@@ -358,6 +387,11 @@ cmd_build() {
       git commit -q --no-edit
     fi
     assert_no_op "merge of $ref"
+    if [ "$v2_active" = 1 ] && ! has_v2_review_tooling HEAD; then
+      git checkout -q --detach "$prev_sha"
+      assert_no_op "return from rejected train"
+      die "merge of $ref removed the v2 review tooling; restored the starting commit"
+    fi
     if [ -f scripts/tests/audit_bug_corpus.sh ]; then
       python3 -I "$RESOLVER" corpus-keys scripts/tests/audit_bug_corpus.sh \
         || { log_row "$name" build refused "duplicate corpus key after $ref"; \

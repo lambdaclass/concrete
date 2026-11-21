@@ -6,6 +6,13 @@ PUBLISHED_REVIEW_REF="refs/notes/remote/${REVIEW_NOTES_REF##*/}"
 PUBLISHED_LEGACY_REVIEW_REF="refs/notes/remote/${LEGACY_REVIEW_REF##*/}"
 PUBLISHED_LEGACY_FINDINGS_REF="refs/notes/remote/${LEGACY_FINDINGS_REF##*/}"
 
+# Check the committed tooling marker without sourcing code from a candidate.
+has_v2_review_tooling() {
+  local refs
+  refs="$(git cat-file blob "$1:scripts/review/refs.sh" 2>/dev/null)" || return 1
+  grep -Fxq "REVIEW_NOTES_REF=$REVIEW_NOTES_REF" <<<"$refs"
+}
+
 # Fetch an optional notes ref without mistaking a transport error for absence.
 fetch_review_ref() {
   local remote="$1"

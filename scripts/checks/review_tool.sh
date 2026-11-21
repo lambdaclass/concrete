@@ -122,7 +122,9 @@ commit_file() { # commit_file <path> <content> <message>
 }
 commit_file README.md "base" "base"
 printf '.review/\n' >"$W/.gitignore"
-g add .gitignore && g commit -qm "ignore .review"
+mkdir -p "$W/scripts/review"
+cp "$ROOT_DIR/scripts/review/refs.sh" "$W/scripts/review/refs.sh"
+g add .gitignore scripts/review/refs.sh && g commit -qm "install review tooling marker and ignore .review"
 g push -q origin main
 review() { (cd "$W" && bash "$REVIEW" "$@"); }
 note() { g notes --ref=refs/notes/concrete-review-v2 show "${1:-HEAD}" 2>/dev/null; }
@@ -1086,6 +1088,19 @@ rc=0
 current_provenance "$MIXED_SHA" "$(g rev-parse HEAD)" >"$T/check-member" 2>&1 || rc=$?
 check "train refuses member fallback on a historical denial (exit $rc)" test "$rc" -eq 1
 check "member fallback reports the historical denial" grep -Fq 'historical legacy denial requires its missing v2 evidence' "$T/check-member"
+
+echo "=== publication requires a checkout carrying v2 tooling ==="
+g rm -q scripts/review/refs.sh
+g commit -qm "remove review tooling"
+STALE_TIP="$(git -C "$T/origin.git" rev-parse refs/notes/concrete-review-v2)"
+# An externally invoked v2 reviewer can write local evidence for a stale tree.
+# Neither the initial publication nor a retry may send it to origin.
+review --base HEAD~1 >"$T/stale-checkout" 2>&1; rc=$?
+check "stale publishing checkout is refused (exit $rc)" test "$rc" -eq 6
+check "publication refusal names the missing tooling" grep -Fq 'checkout lacks the committed v2 review tooling' "$T/stale-checkout"
+review --base HEAD~1 >"$T/stale-retry" 2>&1; rc=$?
+check "pending evidence from a stale checkout still cannot publish (exit $rc)" test "$rc" -eq 6
+check "stale checkout left published evidence unchanged" test "$(git -C "$T/origin.git" rev-parse refs/notes/concrete-review-v2)" = "$STALE_TIP"
 
 echo "=== usage errors ==="
 review --pieces zero >/dev/null 2>&1; rc=$?
