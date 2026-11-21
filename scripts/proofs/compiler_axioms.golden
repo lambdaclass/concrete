@@ -911,10 +911,18 @@ Concrete.Backend.LLVM.Width.u64.sizeOf_spec
 Concrete.Backend.LLVM.Width.u8.sizeOf_spec	
 Concrete.Backend.LLVM.binOvf_fields	propext
 Concrete.Backend.LLVM.bin_fields	propext
+Concrete.Backend.LLVM.binarySources._sparseCasesOn_1.else_eq	propext
+Concrete.Backend.LLVM.binarySources._sparseCasesOn_2.else_eq	propext
+Concrete.Backend.LLVM.binarySources._sparseCasesOn_3.else_eq	propext
+Concrete.Backend.LLVM.binarySources.eq_1	propext
+Concrete.Backend.LLVM.binarySources.eq_2	propext
+Concrete.Backend.LLVM.binarySources.eq_3	propext
 Concrete.Backend.LLVM.body.eq_1	propext
 Concrete.Backend.LLVM.decimal.eq_1	
 Concrete.Backend.LLVM.decimal_token	Classical.choice Quot.sound propext
 Concrete.Backend.LLVM.declarations.eq_1	propext
+Concrete.Backend.LLVM.decodePattern.eq_1	propext
+Concrete.Backend.LLVM.decodePattern.eq_2	propext
 Concrete.Backend.LLVM.edges._sparseCasesOn_1.else_eq	propext
 Concrete.Backend.LLVM.expectedInventory.eq_1	propext
 Concrete.Backend.LLVM.inst.eq_1	propext
@@ -946,8 +954,6 @@ Concrete.Backend.LLVM.module.eq_1	Classical.choice Quot.sound propext
 Concrete.Backend.LLVM.moduleItems.eq_1	propext
 Concrete.Backend.LLVM.moduleItems_inventory	Quot.sound propext
 Concrete.Backend.LLVM.module_inventory	Classical.choice Quot.sound propext
-Concrete.Backend.LLVM.operand.eq_1	
-Concrete.Backend.LLVM.operand.eq_2	
 Concrete.Backend.LLVM.operand_field	propext
 Concrete.Backend.LLVM.operand_parse	Classical.choice Quot.sound propext
 Concrete.Backend.LLVM.operand_roundTrip	Classical.choice Quot.sound propext
@@ -960,6 +966,9 @@ Concrete.Backend.LLVM.parseDecimal_exact._simp_1_2	Quot.sound propext
 Concrete.Backend.LLVM.pattern_agrees	
 Concrete.Backend.LLVM.pattern_fits	Quot.sound propext
 Concrete.Backend.LLVM.pattern_roundTrip	Quot.sound propext
+Concrete.Backend.LLVM.phiSources._sparseCasesOn_3.else_eq	propext
+Concrete.Backend.LLVM.phiSources.eq_1	propext
+Concrete.Backend.LLVM.phiSources.eq_2	propext
 Concrete.Backend.LLVM.phi_fields	Quot.sound propext
 Concrete.Backend.LLVM.phis.eq_1	propext
 Concrete.Backend.LLVM.render.eq_1	Classical.choice Quot.sound propext
@@ -1586,17 +1595,10 @@ _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.TypeCode.widthFields.matc
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.TypeCode.widthFields.match_1.eq_2	propext
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.TypeCode.widthFields.match_1.eq_3	propext
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.TypeCode.widthFields.match_1.eq_4	propext
-_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.binarySources._sparseCasesOn_1.else_eq	propext
-_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.binarySources._sparseCasesOn_2.else_eq	propext
-_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.binarySources._sparseCasesOn_3.else_eq	propext
-_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.binarySources.eq_1	propext
-_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.binarySources.eq_2	propext
-_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.binarySources.eq_3	propext
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.binarySources.match_1.eq_1	propext
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.binarySources.match_1.eq_2	propext
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.binarySources.match_1.eq_3	propext
-_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.decodePattern.eq_1	propext
-_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.decodePattern.eq_2	propext
+_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.core_operand_inventory	propext
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.decodePattern.match_1.eq_1	
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.decodePattern.match_1.eq_2	
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.edges.match_1.eq_1	propext
@@ -1615,14 +1617,13 @@ _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.inst.match_1.eq_1
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.inst.match_1.eq_2	
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.inst.match_1.eq_3	
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.inst_inventory	propext
-_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.operand.match_1.eq_1	
-_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.operand.match_1.eq_2	
+_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.operandAt.eq_1	
+_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.operandAt.eq_2	
+_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.operandAt.match_1.eq_1	
+_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.operandAt.match_1.eq_2	
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.operand_immediate	propext
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.operand_inventory	propext
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.pairFields.eq_1	
-_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.phiSources._sparseCasesOn_3.else_eq	propext
-_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.phiSources.eq_1	propext
-_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.phiSources.eq_2	propext
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.phiSources.match_3.eq_1	propext
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.phiSources.match_3.eq_2	propext
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.phiSources_scan	Quot.sound propext

@@ -20,7 +20,7 @@ PROOF_SECTION = {
     RUNTIME: "/-! ## Runtime inventory laws -/",
 }
 
-RETURN_LOCAL = "(.integer .u8, operand a) (.integer .u32)"
+RETURN_LOCAL = "(.integer .u8, operandAt 8 a) (.integer .u32)"
 SIBLINGS = """⟨[⟨[], [
   .bin .add .u8 0 (.imm .u8 2) (.imm .u8 56),
   .bin .add .u8 1 (.reg 0) (.reg 0)], .ret (.reg 1)⟩], []⟩"""
@@ -31,20 +31,36 @@ MUTATIONS = (
     (
         "equal-width copy zero",
         LLVM,
-        "(operand a) (.immediate (.natural 0))",
-        "(operand a) (.immediate (.natural 1))",
+        "(operandAt (Width.ofCore target).bits a) (.immediate (.natural 0))",
+        "(operandAt (Width.ofCore target).bits a) (.immediate (.natural 1))",
         "inst_inventory",
         ".trunc .u8 .i8 0 (.reg 1)",
     ),
     (
         "checked call immediate moved to the local slot",
         LLVM,
-        "[(i, operand a), (i, operand b)]",
+        "[(i, operandAt width.bits a), (i, operandAt width.bits b)]",
         "(match a, b with\n"
-        "       | .imm .., .reg _ => [(i, operand b), (i, operand a)]\n"
-        "       | _, _ => [(i, operand a), (i, operand b)])",
+        "       | .imm .., .reg _ => [(i, operandAt width.bits b), (i, operandAt width.bits a)]\n"
+        "       | _, _ => [(i, operandAt width.bits a), (i, operandAt width.bits b)])",
         "inst_inventory",
         ".binOvf .add .u8 0 1 (.imm .u8 17) (.reg 2)",
+    ),
+    (
+        "arithmetic encoded at the immediate tag width",
+        LLVM,
+        "(operandAt width.bits a) (operandAt width.bits b)",
+        "(operand a) (operand b)",
+        "inst_inventory",
+        ".bin .add .u8 0 (.imm .u16 256) (.imm .u8 1)",
+    ),
+    (
+        "trap result word left wider than i32",
+        LLVM,
+        "(.natural (toBits .u32 (Int.ofNat (256 + s))))",
+        "(.natural (256 + s))",
+        "term_inventory",
+        ".trap 4294967040",
     ),
     (
         "right immediate moved between sibling additions",
@@ -64,8 +80,8 @@ MUTATIONS = (
     (
         "phi predecessor plus one",
         LLVM,
-        "(operand (args.getD k (.imm .u8 0)), Label.block pred)\n    .instruction",
-        "(operand (args.getD k (.imm .u8 0)), Label.block (pred + 1))\n    .instruction",
+        "(operandAt ((ty pty).integerWidth.getD 1) (args.getD k (.imm .u8 0)), Label.block pred)\n    .instruction",
+        "(operandAt ((ty pty).integerWidth.getD 1) (args.getD k (.imm .u8 0)), Label.block (pred + 1))\n    .instruction",
         "phi_inventory",
         "phiProgram 1 phiBlock",
     ),
@@ -80,8 +96,8 @@ MUTATIONS = (
     (
         "trap result word off by one",
         LLVM,
-        "(.natural (256 + s))",
-        "(.natural (257 + s))",
+        "(.natural (toBits .u32 (Int.ofNat (256 + s))))",
+        "(.natural (toBits .u32 (Int.ofNat (257 + s))))",
         "term_inventory",
         ".trap 17",
     ),
@@ -89,15 +105,15 @@ MUTATIONS = (
         "return zero-extension target changed from i32 to i64",
         LLVM,
         RETURN_LOCAL,
-        "(.integer .u8, operand a) (.integer .u64)",
+        "(.integer .u8, operandAt 8 a) (.integer .u64)",
         "moduleItems_inventory",
         SIBLINGS,
     ),
     (
         "operand encoding plus one",
         LLVM,
-        ".immediate (.natural (toBits (toCore t) v))",
-        ".immediate (.natural (toBits (toCore t) v + 1))",
+        ".immediate (.natural ((v % (2 : Int) ^ width).toNat))",
+        ".immediate (.natural ((v % (2 : Int) ^ width).toNat + 1))",
         "operand_field",
         ".u8 17",
     ),
@@ -112,18 +128,26 @@ MUTATIONS = (
     (
         "switch destinations rotated",
         RUNTIME,
-        "(Immediate.natural i, Label.trapSite i)",
-        "(Immediate.natural i, Label.trapSite (i + 1))",
+        "(Immediate.natural (toBits .u32 (Int.ofNat i)), Label.trapSite i)",
+        "(Immediate.natural (toBits .u32 (Int.ofNat i)), Label.trapSite (i + 1))",
         "llvmItems_inventory",
         "twoSites",
     ),
     (
         "first two switch destinations swapped",
         RUNTIME,
-        "(Immediate.natural i, Label.trapSite i)",
-        "(Immediate.natural i, Label.trapSite (if i = 0 then 1 else if i = 1 then 0 else i))",
+        "(Immediate.natural (toBits .u32 (Int.ofNat i)), Label.trapSite i)",
+        "(Immediate.natural (toBits .u32 (Int.ofNat i)), Label.trapSite (if i = 0 then 1 else if i = 1 then 0 else i))",
         "llvmItems_inventory",
         "twoSites",
+    ),
+    (
+        "render i32 as i64",
+        IR,
+        "  | .integer ty => numbered .integer ty.bits",
+        "  | .integer .u32 => numbered .integer 64\n  | .integer ty => numbered .integer ty.bits",
+        "inventory_render",
+        "returnLocal 2",
     ),
     ("%ret prefix becomes 0", IR, '| .result => "%ret"', '| .result => "0"', "inventory_render", "returnLocal 2"),
     (
@@ -216,6 +240,7 @@ private def addition (a : Argument) (b : Nat) : List Item :=
 # the mutated renderer. Split rendering, parsing and comparison so the kernel
 # only reduces one small step at a time.
 RENDERED = {
+    "render i32 as i64": ("  ret i64 %ret2\n", "some (.terminator (.ret (.integer .u64, .local (.result 2))), [])"),
     "%ret prefix becomes 0": ("  ret i32 02\n", "none"),
     "%ret result becomes bare 0": ("  ret i32 0\n", "some (.terminator (.ret (.integer .u32, .immediate (.natural 0))), [])"),
     "render immediate 0 as zeroinitializer": ("  ret i32 zeroinitializer\n", "none"),

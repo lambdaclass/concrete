@@ -26,6 +26,7 @@ namespace Concrete.Backend.Runtime
 open Concrete.BIR
 open Concrete.Backend.LLVM
 open ConcreteSpec (IntTy Trap)
+open ConcreteSpec.Core (toBits)
 
 /-- The trap's name in the trap line. -/
 def trapName : Trap → String
@@ -91,7 +92,7 @@ def llvmItems (tbl : SiteTable) : List Item :=
   let i32 := TypeCode.integer .u32
   let i64 := TypeCode.integer .u64
   let byte := TypeCode.integer .u8
-  let count (n : Nat) : Argument := .immediate (.natural n)
+  let count (n : Nat) : Argument := .immediate (.natural (toBits .u64 (Int.ofNat n)))
   let zero := Argument.immediate (.natural 0)
   let threshold := Argument.immediate (.natural 256)
   let writeAll (name : Global) (data : ByteArray) :=
@@ -99,7 +100,7 @@ def llvmItems (tbl : SiteTable) : List Item :=
   let abort := Item.instruction (.call none .void .abort [])
   let trapExit := Item.instruction (.call none .void .exit [(i32, .immediate (.natural 134))])
   let globals := sites.map fun (i, e) => Item.constant (.site i) (siteBytes e)
-  let cases := sites.map fun (i, _) => (Immediate.natural i, Label.trapSite i)
+  let cases := sites.map fun (i, _) => (Immediate.natural (toBits .u32 (Int.ofNat i)), Label.trapSite i)
   let traps := sites.flatMap fun (i, e) =>
     [Item.label (.trapSite i), writeAll (.site i) (siteBytes e), trapExit, .terminator .unreachable]
   globals ++
@@ -147,7 +148,7 @@ def llvmItems (tbl : SiteTable) : List Item :=
    .endFunction]
 
 /-- Numeric part of the runtime contract: lengths are UTF-8 byte counts, switch
-keys are consecutive site indices, and the trap path writes to stderr and exits 134.
+keys encode consecutive site indices at i32, and the trap path writes to stderr and exits 134.
 Each assembly item occupies one entry, including items with no integer fields. -/
 def expectedInventory (tbl : SiteTable) : List (List IntegerField) :=
   let size (e : SiteEntry) := (trapLine e ++ "\n").utf8ByteSize
@@ -168,10 +169,10 @@ def expectedInventory (tbl : SiteTable) : List (List IntegerField) :=
    [], [w 0 32], -- exit
    [], [(.right, some 32, 256), w 0 32], -- trap
    w 0 32 :: (List.range tbl.length).flatMap (fun i =>
-     [(.switchKey i (.trapSite i), some 32, i), w (i + 1) 32])] ++
-  (tbl.flatMap fun e => [[], [(.callArgument 1, some 64, size e), w 2 64],
+     [(.switchKey i (.trapSite i), some 32, toBits .u32 (Int.ofNat i)), w (i + 1) 32])] ++
+  (tbl.flatMap fun e => [[], [(.callArgument 1, some 64, toBits .u64 (Int.ofNat (size e))), w 2 64],
     [(.callArgument 0, some 32, 134), w 1 32], []]) ++
-  [[], [(.callArgument 1, some 64, invalidSize), w 2 64], [], [], []]
+  [[], [(.callArgument 1, some 64, toBits .u64 (Int.ofNat invalidSize)), w 2 64], [], [], []]
 
 /-- The runtime as standalone LLVM text. -/
 def llvm (tbl : SiteTable) : String := render (llvmItems tbl)
@@ -206,12 +207,12 @@ theorem llvmItems_inventory (tbl : SiteTable) :
   rw [map_indexedFrom tbl 0 (fun e =>
     [((.byteLength, none, (siteBytes e).size) : IntegerField), (.typeWidth 0 0, none, 8)])]
   let fields (i : Nat) : List IntegerField :=
-    [(.switchKey i (.trapSite i), some 32, i), (.typeWidth (i + 1) 0, none, 32)]
+    [(.switchKey i (.trapSite i), some 32, toBits .u32 (Int.ofNat i)), (.typeWidth (i + 1) 0, none, 32)]
   have keys : ((indexedFrom 0 tbl).flatMap fun x => fields x.1) =
       (List.range tbl.length).flatMap fields := by
     rw [List.range_eq_range', ← map_indexedFrom_fst tbl 0, List.flatMap_map]
   have positions (xs : SiteTable) (n : Nat) :
-      (((indexedFrom n xs).map (fun x => ((⟨x.1⟩ : Immediate), Label.trapSite x.1))).zipIdx n).flatMap
+      (((indexedFrom n xs).map (fun x => ((⟨toBits .u32 (Int.ofNat x.1)⟩ : Immediate), Label.trapSite x.1))).zipIdx n).flatMap
         (fun x => [(IntegerRole.switchKey x.2 x.1.2, some 32, x.1.1.value),
           (.typeWidth (x.2 + 1) 0, none, 32)]) =
       (indexedFrom n xs).flatMap (fun x => fields x.1) := by
@@ -223,7 +224,7 @@ theorem llvmItems_inventory (tbl : SiteTable) :
       exact ih (n + 1)
   rw [positions tbl 0, keys]
   have traps := flatMap_indexedFrom tbl 0 (fun e =>
-    [[], [(IntegerRole.callArgument 1, some 64, (siteBytes e).size), (.typeWidth 2 0, none, 64)],
+    [[], [(IntegerRole.callArgument 1, some 64, toBits .u64 (Int.ofNat (siteBytes e).size)), (.typeWidth 2 0, none, 64)],
       [(IntegerRole.callArgument 0, some 32, 134), (.typeWidth 1 0, none, 32)], []])
   rw [traps]
   simp [siteBytes, invalidBytes, fields, List.append_assoc]

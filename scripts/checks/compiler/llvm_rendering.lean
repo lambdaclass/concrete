@@ -35,6 +35,22 @@ example (p : Concrete.BIR.Program) :
     Assembly.inventory (Runtime.llvm p.sites) = some (Runtime.expectedInventory p.sites) :=
   Runtime.llvm_inventory p.sites
 
+-- Raw BIR with a wider immediate tag still encodes at the instruction's i8.
+example :
+    Assembly.inventory (render (inst (.bin .add .u8 0 (.imm .u16 256) (.imm .u8 1)))) =
+      some [[(.left, some 8, ConcreteSpec.Core.toBits .u8 256),
+        (.right, some 8, 1), (.typeWidth 0 0, none, 8)]] := by
+  rw [Assembly.inventory_render]
+  rfl
+
+-- The trap result word can exceed i32 in raw BIR and wraps at the emitted width.
+example :
+    Assembly.inventory (render (term 0 (.trap 4294967040))) =
+      some [[(.returnValue, some 32, ConcreteSpec.Core.toBits .u32 4294967296),
+        (.typeWidth 0 0, none, 32)]] := by
+  rw [Assembly.inventory_render]
+  rfl
+
 example : (PatternEvidence.addOneOperand (.imm .u8 17)).immediateValue ≠
     some (ConcreteSpec.Core.toBits .u8 17) :=
   PatternEvidence.add_one_rejected

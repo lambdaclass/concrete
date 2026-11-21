@@ -122,7 +122,10 @@ enough fuel for the whole list.
 
 `Assembly.parse_render` recovers the assembly tree. `Assembly.inventory_render`
 projects its integer inventory, which includes explicit widths even when all
-operands are locals. `LLVM.module_inventory` composes with the BIR inventory
+operands are locals. For every raw BIR program, immediate payloads use Core's
+bit encoding at the width of the emitted operand slot. Trap result words and
+runtime switch keys use the same encoding at i32, and write lengths at i64.
+`LLVM.module_inventory` composes with the BIR inventory
 law for `LLVM.module`, the exact string passed to `IO.FS.writeFile` in
 `writeBackends`. `Runtime.llvm_inventory` covers the standalone runtime text.
 The invalid-word fixture appends that runtime text to a hand-authored body
