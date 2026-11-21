@@ -307,8 +307,8 @@ def enterDown (s : State) (args : List (Var × LoanId)) : Option State := do
   args.foldlM (fun s (x, i) => do
     let a ← loan s i
     let f ← s.frames.head?
-    let s ← reborrowTo s i [] a.mode f.id
-    some { s with frames := { f with views := (x, ⟨s.nextLoan - 1⟩) :: f.views } :: s.frames.tail }) s
+    let u ← reborrowTo s i [] a.mode f.id
+    some { u with frames := { f with views := (x, ⟨s.nextLoan⟩) :: f.views } :: s.frames.tail }) s
 
 /-- The Exec lifecycle callback: optional admission at every site, including the final
 function boundary (`docs/decisions.md#decided-2026-11-13-lifecycle-refusal`). -/
@@ -360,10 +360,13 @@ be supplied twice; unfinished argument evaluation cannot cross another lifecycle
 def passDown (s : CallState) (source : LoanId) (parameter : Var) : Option CallState := do
   if parameter ∈ s.pending.map Prod.fst then none else do
   let l ← loan s.own source
-  let own ← reborrow s.own source [] l.mode
-  let own := { own with loans := own.loans.map fun l =>
-    if l.id.id = s.own.nextLoan then { l with pendingArgument := true } else l }
-  pure ⟨own, s.pending ++ [(parameter, ⟨s.own.nextLoan⟩)]⟩
+  let f ← s.own.frames.head?
+  if loanAccess s.own source l.mode && decide (f.id < s.own.nextActivation) then
+    let child : Loan := ⟨⟨s.own.nextLoan⟩, l.root, l.path, l.mode, some source,
+      source :: l.ancestors, f.id, true, false⟩
+    pure ⟨{ s.own with nextLoan := s.own.nextLoan + 1, loans := child :: s.own.loans },
+      s.pending ++ [(parameter, child.id)]⟩
+  else none
 
 /-- Direct owner argument (owner Q2, 2026-11-08): open a fresh root loan during
 argument evaluation. It has no caller parent. Entry adopts it and return ends it with the

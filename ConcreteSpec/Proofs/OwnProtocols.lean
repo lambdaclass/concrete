@@ -1318,22 +1318,13 @@ private theorem callee_effect_retains (types : Var → Option Descriptor) (s t :
       · cases h; exact List.mem_cons_of_mem _ hl
       · contradiction
   | viewArgument h =>
-    have bound := (hs.2.2.2.1 held hl).1
-    have different : held.id.id ≠ _ := Nat.ne_of_lt bound
     unfold passDown at h
     split at h
     · contradiction
     · obtain ⟨a, _, h⟩ := Option.bind_eq_some_iff.mp h
-      obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
-      cases h
-      unfold reborrow at hu
-      obtain ⟨f, _, hu⟩ := Option.bind_eq_some_iff.mp hu
-      unfold reborrowTo at hu
-      obtain ⟨b, _, hu⟩ := Option.bind_eq_some_iff.mp hu
-      split at hu
-      · cases hu
-        apply List.mem_map.mpr
-        exact ⟨held, List.mem_cons_of_mem _ hl, by simp [different]⟩
+      obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
+      split at h
+      · cases h; exact List.mem_cons_of_mem _ hl
       · contradiction
   | compose first wf second ih₁ ih₂ => exact ih₂ wf (ih₁ hs hl)
   | life h notReturn nestedEntry =>
@@ -2293,7 +2284,8 @@ private theorem callLife_retired_loan (types : Var → Option Descriptor) (s : C
 /-- The lifecycle adapter cannot rewind an issued identity or revive absent storage/loans. -/
 def LifecycleNonrevival (lifecycle : Exec.Life → CallState → Option CallState)
     (s : CallState) (e : Exec.Life) (p : Hybrid.Place) (i : LoanId) : Prop :=
-  ResultSatisfies (fun t => RetiredPlace t.own p ∧ RetiredLoan t.own i) (lifecycle e s)
+  (RetiredPlace s.own p → ResultSatisfies (fun t => RetiredPlace t.own p) (lifecycle e s)) ∧
+  (RetiredLoan s.own i → ResultSatisfies (fun t => RetiredLoan t.own i) (lifecycle e s))
 
 /-- Helper (inversion). Call lifecycle independently preserves retired places. -/
 theorem callLife_retired_place (types : Var → Option Descriptor) (s : CallState)
@@ -2353,16 +2345,9 @@ theorem callLife_retired_place (types : Var → Option Descriptor) (s : CallStat
 including identities originally issued to calls, cannot revive through any lifecycle event.
 Entry/adoption can change loan destinations but cannot issue a retired identity. -/
 theorem lifecycle_nonrevival (types : Var → Option Descriptor) (s : CallState) (e : Exec.Life)
-    (p : Hybrid.Place) (i : LoanId) (hp : RetiredPlace s.own p) (hi : RetiredLoan s.own i) :
-    LifecycleNonrevival (callLife types) s e p i := by
-  have places := callLife_retired_place types s e p hp
-  have loans := callLife_retired_loan types s e i hi
-  unfold LifecycleNonrevival
-  cases h : callLife types e s with
-  | none => trivial
-  | some t =>
-    rw [h] at places loans
-    exact ⟨places, loans⟩
+    (p : Hybrid.Place) (i : LoanId) :
+    LifecycleNonrevival (callLife types) s e p i :=
+  ⟨callLife_retired_place types s e p, callLife_retired_loan types s e i⟩
 
 /-- The existing loan-issuing operations, including both call-boundary interfaces.
 This is a history alphabet over the specification operations, not a second execution relation. -/
@@ -2373,9 +2358,20 @@ inductive IssuanceAction where
   | entry (args : List (Var × LoanId))
   | lifecycle (event : Exec.Life)
 
+/-- Ordinary issuance leaves the pending-call buffer intact. Its end event can
+therefore remove only a loan outside that buffer. -/
+def OrdinaryIssuanceAllowed (s : CallState) : LoanAction → Prop
+  | .borrow .. | .reborrow .. => True
+  | .endLoan i => i ∉ s.pending.map Prod.snd
+
+instance (s : CallState) (op : LoanAction) : Decidable (OrdinaryIssuanceAllowed s op) := by
+  cases op <;> unfold OrdinaryIssuanceAllowed <;> infer_instance
+
 /-- Dispatch each history event through its actual specification operation. -/
 def issuanceStep (types : Var → Option Descriptor) (s : CallState) : IssuanceAction → Option CallState
-  | .ordinary op => (loanAction s.own op).map fun own => { s with own := own }
+  | .ordinary op => if OrdinaryIssuanceAllowed s op then
+      (loanAction s.own op).map fun own => { s with own := own }
+    else none
   | .owner p path m x => passOwner s p path m x
   | .view i x => passDown s i x
   | .entry args => (enterDown s.own args).map fun own => { s with own := own }
@@ -2393,17 +2389,18 @@ private theorem passDown_retired (s : CallState) (source i : LoanId) (x : Var)
     split at h
     · contradiction
     · obtain ⟨a, _, h⟩ := Option.bind_eq_some_iff.mp h
-      obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
-      cases h
-      unfold reborrow at hu
-      obtain ⟨f, _, hu⟩ := Option.bind_eq_some_iff.mp hu
-      have keep := loanAction_retains_retirement s.own (.reborrow source [] a.mode f.id) i hr
-      change ResultSatisfies _ (reborrowTo s.own source [] a.mode f.id) at keep
-      rw [hu] at keep
-      refine ⟨keep.1, ?_⟩
-      intro b hb
-      obtain ⟨c, hc, rfl⟩ := List.mem_map.mp hb
-      split <;> exact keep.2 c hc
+      obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
+      split at h
+      · cases h
+        refine ⟨by have := hr.1; dsimp; omega, ?_⟩
+        intro b hb
+        rcases List.mem_cons.mp hb with rfl | hb
+        · intro bad
+          have eq : s.own.nextLoan = i.id := congrArg LoanId.id bad
+          have := hr.1
+          omega
+        · exact hr.2 b hb
+      · contradiction
 
 /-- Helper (fold induction). Standalone downward entry uses the same fresh supply for
 each parameter, so an arbitrary argument list preserves retired identities. -/
@@ -2452,7 +2449,8 @@ theorem issuance_history_nonrevival (types : Var → Option Descriptor) :
     cases op with
     | ordinary op =>
       have keep := loanAction_retains_retirement s.own op i hr
-      cases h : loanAction s.own op <;> simp_all [issuanceStep, ResultSatisfies]
+      by_cases allowed : OrdinaryIssuanceAllowed s op <;>
+        cases h : loanAction s.own op <;> simp_all [issuanceStep, ResultSatisfies]
     | owner p path m x => exact passOwner_retains_retirement s p path m x i hr
     | view source x => exact passDown_retired s source i x hr
     | entry args =>
@@ -2489,13 +2487,18 @@ def rewindLoan : Exec.Life → CallState → Option CallState
 /-- Instance (law `ConcreteSpec.Core.Own.lifecycle_nonrevival`, case
 `ConcreteSpec.Core.Own.LifecycleHistoryEvidence.source`). Ordinary entry preserves both histories. -/
 example : LifecycleNonrevival (callLife types) source (.enter []) ⟨3⟩ ⟨1⟩ :=
-  lifecycle_nonrevival types source (.enter []) ⟨3⟩ ⟨1⟩ (by decide) (by decide)
-/-- Planted (law `ConcreteSpec.Core.Own.lifecycle_nonrevival`, case
-`ConcreteSpec.Core.Own.LifecycleHistoryEvidence.source`, subject `ConcreteSpec.Core.Own.callLife`,
-mutant `ConcreteSpec.Core.Own.LifecycleHistoryEvidence.rewindPlace`). -/
-example : ¬ LifecycleNonrevival rewindPlace source (.drop []) ⟨3⟩ ⟨1⟩ := by
+  lifecycle_nonrevival types source (.enter []) ⟨3⟩ ⟨1⟩
+/-- A retired place with no issued loans, so the loan premise is false. -/
+def retiredPlaceOnly : CallState := ⟨RetirementEvidence.retired, []⟩
+/-- Instance (law `ConcreteSpec.Core.Own.lifecycle_nonrevival`, case `retiredPlaceOnly`). -/
+example : ¬ RetiredLoan retiredPlaceOnly.own ⟨0⟩ ∧
+    ResultSatisfies (fun t => RetiredPlace t.own ⟨0⟩) (callLife types (.drop []) retiredPlaceOnly) :=
+  ⟨by decide, (lifecycle_nonrevival types retiredPlaceOnly (.drop []) ⟨0⟩ ⟨0⟩).1 (by decide)⟩
+/-- Planted (law `ConcreteSpec.Core.Own.lifecycle_nonrevival`, case `retiredPlaceOnly`,
+subject `ConcreteSpec.Core.Own.callLife`, mutant `ConcreteSpec.Core.Own.LifecycleHistoryEvidence.rewindPlace`). -/
+example : ¬ LifecycleNonrevival rewindPlace retiredPlaceOnly (.drop []) ⟨0⟩ ⟨0⟩ := by
   intro h
-  have bad := h.1.1
+  have bad := (h.1 (by decide)).1
   revert bad
   decide
 /-- Planted (law `ConcreteSpec.Core.Own.lifecycle_nonrevival`, case
@@ -2503,7 +2506,7 @@ example : ¬ LifecycleNonrevival rewindPlace source (.drop []) ⟨3⟩ ⟨1⟩ :
 mutant `ConcreteSpec.Core.Own.LifecycleHistoryEvidence.rewindLoan`). -/
 example : ¬ LifecycleNonrevival rewindLoan source (.drop []) ⟨3⟩ ⟨1⟩ := by
   intro h
-  have bad := h.2.1
+  have bad := (h.2 (by decide)).1
   revert bad
   decide
 end LifecycleHistoryEvidence
@@ -2545,14 +2548,6 @@ theorem passDown_protocol (s : CallState) (i : LoanId) (x : Var) (f : Activation
     change s.own.nextLoan < a.id.id at older
     have := (hs.2.2.2.1 a am).1
     omega
-  have pendingOld : (s.own.loans.map fun l => if l.id.id = s.own.nextLoan then
-      { l with pendingArgument := true } else l) = s.own.loans := by
-    calc
-      _ = s.own.loans.map id := by
-        apply List.map_congr_left
-        intro b hb
-        simp [fresh b hb]
-      _ = s.own.loans := List.map_id _
   have raw : s.own.loans.find? (·.id == i) = some a := found
   let child : Loan :=
     ⟨⟨s.own.nextLoan⟩, a.root, a.path, a.mode, some i, i :: a.ancestors, f.id, true, false⟩
@@ -2560,7 +2555,7 @@ theorem passDown_protocol (s : CallState) (i : LoanId) (x : Var) (f : Activation
     ⟨{ s.own with nextLoan := s.own.nextLoan + 1, loans := child :: s.own.loans },
       s.pending ++ [(x, child.id)]⟩
   refine ⟨waiting, ?_, ?_, ?_, rfl, a, child, found, ?_, rfl, rfl, rfl, rfl, rfl, rfl⟩
-  · simp [waiting, child, passDown, free, reborrow, reborrowTo, found, allowed, hf, issued, pendingOld]
+  · simp [waiting, child, passDown, free, found, allowed, hf, issued]
   · simp [waiting, child, loanAccess, loan, Ne.symm ine, raw, newNotAncestor]
   · intro hm
     simp [waiting, child, loanAccess, loan, Ne.symm ine, raw, newNotAncestor, hm]
@@ -2637,24 +2632,11 @@ theorem plain_lending_roundtrip (s : State) (i : LoanId) (x : Var)
     rintro ⟨l, hl, he⟩
     exact noChild l hl he
   have raw : s.loans.find? (·.id == i) = some a := found
-  have pendingOld : (s.loans.map fun l => if l.id.id = s.nextLoan then
-      { l with pendingArgument := true } else l) = s.loans := by
-    calc
-      _ = s.loans.map id := by
-        apply List.map_congr_left
-        intro l hl
-        have ne : l.id.id ≠ s.nextLoan := by
-          intro h
-          apply fresh l hl
-          have eq : l.id = ⟨l.id.id⟩ := by cases l.id; rfl
-          rw [eq, h]
-        simp [ne]
-      _ = s.loans := List.map_id _
   have ine : i ≠ LoanId.mk s.nextLoan := by
     have ai : a.id = i := by simpa using List.find?_some found
     simpa [ai] using fresh a (List.mem_of_find?_eq_some found)
-  simp [passDown, reborrow, reborrowTo, raw, hf, issued, allowed, callLife, enter, adoptDown, life, leave,
-    endLocals, endLoan, drop, loan, AList.lookup, pendingOld, mapOld, filterAct, noChildExists,
+  simp [passDown, raw, hf, issued, allowed, callLife, enter, adoptDown, life, leave,
+    endLocals, endLoan, drop, loan, AList.lookup, mapOld, filterAct, noChildExists,
     filterId, ine]
 
 
@@ -3622,9 +3604,8 @@ theorem passDown_dispatch (s : CallState) (i : LoanId) (x : Var) :
       (passDown s i x) := by
   constructor
   · rintro ⟨free, a, f, found, frame, issued, access⟩
-    obtain ⟨t, ht⟩ := reborrowTo_progress s.own i [] a.mode f.id a found issued
-      (by simp [frame]) ((LegalStep.loanAccess_iff ..).mpr access)
-    exact ⟨_, by simp [passDown, free, found, reborrow, frame, ht] <;> rfl⟩
+    exact ⟨_, by simp [passDown, free, found, frame, issued,
+      (LegalStep.loanAccess_iff ..).mpr access] <;> rfl⟩
   · cases h : passDown s i x with
     | none => trivial
     | some t =>
@@ -3639,7 +3620,7 @@ theorem passDown_dispatch (s : CallState) (i : LoanId) (x : Var) :
 /-- Exhaustive admission for the mixed issuance history alphabet. -/
 def AdmittedIssuance (types : Var → Option Descriptor) (s : CallState) :
     IssuanceAction → Prop
-  | .ordinary op => AdmittedLoanAction s.own op
+  | .ordinary op => OrdinaryIssuanceAllowed s op ∧ AdmittedLoanAction s.own op
   | .owner p _ m x => AdmittedOwnerArgument s p m x
   | .view i x => AdmittedViewArgument s i x
   | .entry args => AdmittedDownwardEntry s.own args
@@ -3659,8 +3640,8 @@ theorem issuanceStep_dispatch (types : Var → Option Descriptor) (s : CallState
   · intro h
     cases e with
     | ordinary op =>
-      obtain ⟨t, ht⟩ := (loanSequence_retired_step s.own op).2.1 h
-      exact ⟨_, by simp [issuanceStep, ht] <;> rfl⟩
+      obtain ⟨t, ht⟩ := (loanSequence_retired_step s.own op).2.1 h.2
+      exact ⟨_, by simp [issuanceStep, h.1, ht] <;> rfl⟩
     | owner p path m x =>
       obtain ⟨t, ht, _⟩ := call_birth_retired s p path m x h
       exact ⟨t, ht⟩
@@ -3682,8 +3663,10 @@ theorem issuanceStep_dispatch (types : Var → Option Descriptor) (s : CallState
             | reborrow i path m a => exact reborrowTo_preserves s.own i path m a hs
             | endLoan i => exact endLoan_preserves s.own i hs
           simp only [issuanceStep] at h
-          obtain ⟨u, hu, rfl⟩ := Option.map_eq_some_iff.mp h
-          rwa [hu] at safe
+          split at h
+          · obtain ⟨u, hu, rfl⟩ := Option.map_eq_some_iff.mp h
+            rwa [hu] at safe
+          · contradiction
         | owner p path m x =>
           have safe := passOwner_preserves s p path m x hs
           change passOwner s p path m x = some t at h
@@ -3726,7 +3709,7 @@ theorem admission_cases (types : Var → Option Descriptor) (s : CallState) :
           LegalStep.LoanPermission s.own i m
       | .endLoan i => ∃ a, loan s.own i = some a ∧ ∀ b ∈ s.own.loans, b.parent ≠ some i) ∧
     (∀ e, AdmittedIssuance types s e ↔ match e with
-      | .ordinary op => AdmittedLoanAction s.own op
+      | .ordinary op => OrdinaryIssuanceAllowed s op ∧ AdmittedLoanAction s.own op
       | .owner p _ m x => AdmittedOwnerArgument s p m x
       | .view i x => AdmittedViewArgument s i x
       | .entry args => AdmittedDownwardEntry s.own args
@@ -3781,7 +3764,7 @@ open Examples DirectArgumentWitnesses
 /-- The fixture lends a mutable view into a fresh standalone activation. -/
 def singletonEntry : List (Var × LoanId) := [(y, ⟨0⟩)]
 
-/-- Instance (admission for `enterDown_dispatch` and `issuanceStep_dispatch`). -/
+/-- Regression (admission for `enterDown_dispatch` and `issuanceStep_dispatch`). -/
 private theorem singletonAdmitted : AdmittedDownwardEntry exclusive singletonEntry := by
   apply AdmittedTrace.cons
   · apply DownwardParameter.lend rfl (a := exclusive.loans.head (by decide)) rfl
@@ -3857,12 +3840,12 @@ private theorem refuses {α : Type} {admitted : Prop} {result : Option α}
   rw [hr] at ht
   cases ht
 
-/-- Instance (law `enterDown_dispatch`, case `singletonEntry`). -/
+/-- Regression (for `enterDown_dispatch`, case `singletonEntry`). -/
 example : Advances (AdmittedDownwardEntry exclusive singletonEntry)
     (enterDown exclusive singletonEntry) :=
   (enterDown_dispatch _ _).1
 
-/-- Planted (law `enterDown_dispatch`, mutant `refuseStandaloneEntry`). -/
+/-- Regression (for `enterDown_dispatch`, mutant `refuseStandaloneEntry`). -/
 example : ¬ Advances (AdmittedDownwardEntry exclusive singletonEntry)
     (refuseStandaloneEntry exclusive singletonEntry) :=
   refuses singletonAdmitted rfl
@@ -3875,11 +3858,11 @@ private theorem emptyEntry (s : CallState) (h : s.pending = []) :
     AdmittedCallEntry types s [] := by
   simp [AdmittedCallEntry, h]
 
-/-- Instance (law `callLife_dispatch`, case `nestedCaller`). -/
+/-- Regression (for `callLife_dispatch`, case `nestedCaller`). -/
 example : Advances (AdmittedCallLife types nestedCaller (.enter []))
     (callLife types (.enter []) nestedCaller) := (callLife_dispatch _ _ _).1
 
-/-- Planted (law `callLife_dispatch`, mutant `refuseEmptyCallEntry`).
+/-- Regression (for `callLife_dispatch`, mutant `refuseEmptyCallEntry`).
 Actual machine entry stalls when the adapter refuses the nested call. -/
 example : ¬ Advances (AdmittedCallLife types nestedCaller (.enter []))
       (refuseEmptyCallEntry (.enter []) nestedCaller) ∧
@@ -3915,7 +3898,7 @@ private theorem mixedEntry : AdmittedCallEntry types Round5Evidence.twoWaiting [
   simp only [List.mem_cons, List.not_mem_nil, or_false] at he
   rcases he with rfl | rfl <;> decide
 
-/-- Planted (law `callLife_dispatch`, mutants `refuseCallBinding`, `refuseMixedCallEntry`, `refuseNonemptyCallReturn`). -/
+/-- Regression (for `callLife_dispatch`, mutants `refuseCallBinding`, `refuseMixedCallEntry`, `refuseNonemptyCallReturn`). -/
 example :
     ¬ Advances (AdmittedCallLife types caller (.bind z))
       (refuseCallBinding (.bind z) caller) ∧
@@ -3928,51 +3911,51 @@ example :
   ⟨refuses ⟨rfl, freshBind⟩ rfl, refuses mixedEntry rfl,
     refuses localReturnAdmitted rfl, refuses descendantReturnAdmitted rfl⟩
 
-/-- Instance (law `life_dispatch`, case `caller`). -/
+/-- Regression (for `life_dispatch`, case `caller`). -/
 example : Advances (AdmittedLife types caller.own (.bind z)) (life types (.bind z) caller.own) :=
   (life_dispatch _ _ _).1
 
-/-- Planted (law `life_dispatch`, mutants `refuseLifeBind` and `refuseLifeEnter`). -/
+/-- Regression (for `life_dispatch`, mutants `refuseLifeBind` and `refuseLifeEnter`). -/
 example : ¬ Advances (AdmittedLife types caller.own (.bind z))
       (refuseLifeBind (.bind z) caller.own) ∧
     ¬ Advances (AdmittedLife types caller.own (.enter []))
       (refuseLifeEnter (.enter []) caller.own) :=
   ⟨refuses freshBind rfl, refuses ⟨by decide, by simp⟩ rfl⟩
 
-/-- Instance (law `adoptDown_dispatch`, case `Round5Evidence.twoBefore`). -/
+/-- Regression (for `adoptDown_dispatch`, case `Round5Evidence.twoBefore`). -/
 example : Advances (AdmittedAdoption Round5Evidence.twoBefore Round5Evidence.twoWaiting.pending)
     (adoptDown Round5Evidence.twoBefore Round5Evidence.twoWaiting.pending) :=
   (adoptDown_dispatch _ _).1
 
-/-- Planted (law `adoptDown_dispatch`, mutant `refuseMultiAdopt`). -/
+/-- Regression (for `adoptDown_dispatch`, mutant `refuseMultiAdopt`). -/
 example : ¬ Advances (AdmittedAdoption Round5Evidence.twoBefore Round5Evidence.twoWaiting.pending)
     (refuseMultiAdopt Round5Evidence.twoBefore Round5Evidence.twoWaiting.pending) :=
   refuses ⟨⟨1, [], []⟩, rfl, by decide, by decide, by decide, by decide, by decide⟩ rfl
 
-/-- Instance (law `move_dispatch`, case `MoveLifecycleEvidence.source`). -/
+/-- Regression (for `move_dispatch`, case `MoveLifecycleEvidence.source`). -/
 example : Advances (AdmittedMove MoveLifecycleEvidence.source ⟨1⟩)
     (move MoveLifecycleEvidence.source ⟨1⟩) := (move_dispatch _ _).1
 
-/-- Planted (law `move_dispatch`, mutant `refuseNonzeroMove`). -/
+/-- Regression (for `move_dispatch`, mutant `refuseNonzeroMove`). -/
 example : ¬ Advances (AdmittedMove MoveLifecycleEvidence.source ⟨1⟩)
     (refuseNonzeroMove MoveLifecycleEvidence.source ⟨1⟩) :=
   refuses ⟨MoveLifecycleEvidence.selected, rfl, rfl, rfl, by decide⟩ rfl
 
-/-- Instance (law `issuanceStep_dispatch`, case `PendingEvidence.down`). -/
+/-- Regression (for `issuanceStep_dispatch`, case `PendingEvidence.down`). -/
 example : Advances (AdmittedIssuance types PendingEvidence.down (.view ⟨0⟩ y))
     (issuanceStep types PendingEvidence.down (.view ⟨0⟩ y)) := (issuanceStep_dispatch _ _ _).1
 
-/-- Instance (law `passDown_dispatch`, case `PendingEvidence.down`). -/
+/-- Regression (for `passDown_dispatch`, case `PendingEvidence.down`). -/
 example : Advances (AdmittedViewArgument PendingEvidence.down ⟨0⟩ y)
     (passDown PendingEvidence.down ⟨0⟩ y) := (passDown_dispatch _ _ _).1
 
-/-- Planted (law `passDown_dispatch`, mutant `refuseSecondPendingView`). -/
+/-- Regression (for `passDown_dispatch`, mutant `refuseSecondPendingView`). -/
 example : ¬ Advances (AdmittedViewArgument PendingEvidence.down ⟨0⟩ y)
     (refuseSecondPendingView PendingEvidence.down ⟨0⟩ y) :=
   refuses ⟨by decide, shared.loans.head (by decide), ⟨0, [(x, ⟨0⟩)], []⟩,
     rfl, rfl, by decide, by decide⟩ rfl
 
-/-- Instance (law `runLoanSequence_dispatch`, a live parent is ended before a fresh loan issues). -/
+/-- Regression (for `runLoanSequence_dispatch`, a live parent is ended before a fresh loan issues). -/
 example :
     AdmittedTrace LoanLedger exclusive [.endLoan ⟨0⟩, .borrow ⟨0⟩ [] .mutable] ∧
     Advances (AdmittedTrace LoanLedger exclusive [.endLoan ⟨0⟩, .borrow ⟨0⟩ [] .mutable])
@@ -3991,15 +3974,15 @@ def refuseIssuanceStep (s : CallState) (e : IssuanceAction) : Option CallState :
   | .entry _ => none
   | _ => issuanceStep types s e
 
-/-- Instance (law `runLoanSequence_dispatch`, empty trace). -/
+/-- Regression (for `runLoanSequence_dispatch`, empty trace). -/
 example : Advances (AdmittedTrace LoanLedger initial []) (runLoanSequence initial []) :=
   (runLoanSequence_dispatch _ _).1
 
-/-- Planted (law `runLoanSequence_dispatch`, mutant `refuseRunLoanSequence`). -/
+/-- Regression (for `runLoanSequence_dispatch`, mutant `refuseRunLoanSequence`). -/
 example : ¬ Advances (AdmittedTrace LoanLedger initial []) (refuseRunLoanSequence initial []) :=
   refuses (.nil _) rfl
 
-/-- Planted (law `issuanceStep_dispatch`, mutant `refuseIssuanceStep`). -/
+/-- Regression (for `issuanceStep_dispatch`, mutant `refuseIssuanceStep`). -/
 example : ¬ Advances (AdmittedIssuance types ⟨exclusive, []⟩ (.entry singletonEntry))
     (refuseIssuanceStep ⟨exclusive, []⟩ (.entry singletonEntry)) :=
   refuses singletonAdmitted rfl
@@ -4118,9 +4101,9 @@ def acceptFrozenView (s : CallState) (i : LoanId) (v : Var) : Option CallState :
   let parent ← loan s.own i
   let f ← s.own.frames.head?
   let own ← reborrowIgnoringConflict s.own i [] parent.mode f.id
-  let own := { own with loans := own.loans.map fun l =>
-    if l.id.id = s.own.nextLoan then { l with pendingArgument := true } else l }
-  pure ⟨own, s.pending ++ [(v, ⟨s.own.nextLoan⟩)]⟩
+  let child ← own.loans.head?
+  let own := { own with loans := { child with pendingArgument := true } :: s.own.loans }
+  pure ⟨own, s.pending ++ [(v, child.id)]⟩
 
 /-- Mutant: use the conflict-blind reborrow for standalone downward parameters. -/
 def acceptFrozenDownward (s : State) (args : List (Var × LoanId)) : Option State := do
@@ -4129,7 +4112,7 @@ def acceptFrozenDownward (s : State) (args : List (Var × LoanId)) : Option Stat
     let parent ← loan v i
     let f ← v.frames.head?
     let w ← reborrowIgnoringConflict v i [] parent.mode f.id
-    some { w with frames := { f with views := (x, ⟨w.nextLoan - 1⟩) :: f.views } :: w.frames.tail }) u
+    some { w with frames := { f with views := (x, ⟨v.nextLoan⟩) :: f.views } :: v.frames.tail }) u
 
 /-- Helper (inversion). Project the ownership invariant from issuance safety. -/
 private theorem unsafeIssuance (s : CallState) (result : Option CallState)
@@ -4139,7 +4122,7 @@ private theorem unsafeIssuance (s : CallState) (result : Option CallState)
   | none => simp [ResultSatisfies, h] at bad
   | some t => exact fun safe => bad (by rw [h]; exact safe.1 hs)
 
-/-- Planted (law `passOwner_dispatch`, mutant `acceptFrozenOwner`). -/
+/-- Regression (for owner admission, mutant `acceptFrozenOwner`). -/
 example : ¬ ResultSatisfies (IssuanceSafe ⟨exclusive, []⟩)
     (acceptFrozenOwner ⟨exclusive, []⟩ ⟨0⟩ [] .mutable y) :=
   unsafeIssuance _ _ (by decide) (by decide)
@@ -4152,7 +4135,7 @@ def refuseReinitBind (e : Exec.Life) (s : State) : Option State :=
     else life types e s
   | _ => life types e s
 
-/-- Planted (law `life_dispatch`, mutant `refuseReinitBind`). -/
+/-- Regression (for `life_dispatch`, mutant `refuseReinitBind`). -/
 example : ¬ Advances (AdmittedLife types localReturn.own (.bind DirectArgumentWitnesses.z))
     (refuseReinitBind (.bind DirectArgumentWitnesses.z) localReturn.own) :=
   refuses ⟨⟨1, [(DirectArgumentWitnesses.z, ⟨1⟩)], []⟩, rfl,
@@ -4166,17 +4149,17 @@ def acceptBorrowedMove (s : State) (p : Hybrid.Place) : Option State :=
       some { s with slots := s.slots.map fun a =>
         if a.place = p then { a with status := .moved } else a }
 
-/-- Planted (law `move_dispatch`, mutant `acceptBorrowedMove`). -/
+/-- Regression (for `move_dispatch`, mutant `acceptBorrowedMove`). -/
 example : ¬ ResultSatisfies (fun t => WellFormed exclusive → WellFormed t)
     (acceptBorrowedMove exclusive ⟨0⟩) := unsafeSuccess (by decide) (by decide)
 
-/-- Planted (law `adoptDown_dispatch`, mutant `PreservationEvidence.adoptDownUnissuedActivation`).
+/-- Regression (for `adoptDown_dispatch`, mutant `PreservationEvidence.adoptDownUnissuedActivation`).
 An argument cannot be transferred into an activation beyond the current supply. -/
 example : ¬ ResultSatisfies (fun t => WellFormed Round5Evidence.twoBefore → WellFormed t)
     (PreservationEvidence.adoptDownUnissuedActivation Round5Evidence.twoBefore
       Round5Evidence.twoWaiting.pending) := unsafeSuccess (by decide) (by decide)
 
-/-- Planted (law `callLife_dispatch`, mutant `PreservationEvidence.callLifeKeepPending`).
+/-- Regression (for `callLife_dispatch`, mutant `PreservationEvidence.callLifeKeepPending`).
 Successful adoption must retire the pending entries in the call buffer. -/
 example : ¬ ResultSatisfies (CallLifeSafe Round5Evidence.twoWaiting)
     (PreservationEvidence.callLifeKeepPending types (.enter [y, DirectArgumentWitnesses.z])
@@ -4186,7 +4169,7 @@ example : ¬ ResultSatisfies (CallLifeSafe Round5Evidence.twoWaiting)
   revert bad
   decide
 
-/-- Instance (law `callLifeStore_dispatch`, case `nestedCaller`). -/
+/-- Regression (for `callLifeStore_dispatch`, case `nestedCaller`). -/
 example : Advances (AdmittedCallLife types nestedCaller (.enter []))
     (callLifeStore types (.enter []) (7, nestedCaller)) :=
   (callLifeStore_dispatch types (7, nestedCaller) (.enter [])).1
@@ -4195,14 +4178,14 @@ example : Advances (AdmittedCallLife types nestedCaller (.enter []))
 def resetStore (e : Exec.Life) (s : Nat × CallState) : Option (Nat × CallState) :=
   (callLife types e s.2).map fun t => (0, t)
 
-/-- Planted (law `callLifeStore_dispatch`, mutant `resetStore`). -/
+/-- Regression (for `callLifeStore_dispatch`, mutant `resetStore`). -/
 example : ¬ ResultSatisfies
     (fun t : Nat × CallState => t.1 = 7 ∧ CallLifeSafe nestedCaller t.2)
     (resetStore (.enter []) (7, nestedCaller)) := by
   intro safe
   exact (by decide : ¬ (0 : Nat) = 7) safe.1
 
-/-- Planted (law `passDown_dispatch`, mutant `acceptFrozenView`). -/
+/-- Regression (for `passDown_dispatch`, mutant `acceptFrozenView`). -/
 example :
     passDown ⟨child, []⟩ ⟨0⟩ y = none ∧
     ¬ ResultSatisfies (fun t => (WellFormed child → WellFormed t.own) ∧
@@ -4214,7 +4197,7 @@ example :
   revert owned
   decide
 
-/-- Planted (law `runLoanSequence_dispatch`, mutant `LoanHistoryEvidence.recycle`). -/
+/-- Regression (for `runLoanSequence_dispatch`, mutant `LoanHistoryEvidence.recycle`). -/
 example :
     ¬ ResultSatisfies (fun t => ∀ i, RetiredLoan LoanHistoryEvidence.endedChild i → RetiredLoan t i)
       (LoanHistoryEvidence.recycle LoanHistoryEvidence.endedChild LoanHistoryEvidence.actions) := by

@@ -797,7 +797,7 @@ theorem leave_preserves (s : State) (hs : WellFormed s) : StateResult (leave s) 
       exact hw.2.2.2.2.2.2.2.2 g (List.mem_of_mem_tail hg) p hp
 
 /-- Helper (congruence). Updating only the view-binding lookup table of the current frame preserves `WellFormed`. -/
-private theorem set_views_preserves (s : State) (f : Activation) (views : AList Var LoanId)
+theorem set_views_preserves (s : State) (f : Activation) (views : AList Var LoanId)
     (hs : WellFormed s) (hf : s.frames.head? = some f) :
     WellFormed { s with frames := { f with views := views } :: s.frames.tail } := by
   cases hframes : s.frames with
@@ -850,7 +850,8 @@ theorem enterDown_preserves (s : State) (args : List (Var × LoanId)) (hs : Well
       · cases hv; rfl
       · contradiction
     rw [← hv_frames] at hf
-    exact set_views_preserves v f ((arg.1, ⟨v.nextLoan - 1⟩) :: f.views) hw hf
+    simpa only [hv_frames] using
+      set_views_preserves v f ((arg.1, ⟨s.nextLoan⟩) :: f.views) hw hf
 
 /-- Law (authority: docs/decisions.md#foundation-q1 (C5); #od69; #decided-2026-11-08-recovered-d3 (C5: existing loans never ended implicitly); #decided-2026-11-13-lifecycle-refusal). (subject `ConcreteSpec.Core.Own.life`). Every successful result preserves
 ownership; refusal does not fabricate a result. -/
@@ -1108,19 +1109,14 @@ theorem passDown_preserves (s : CallState) (i : LoanId) (parameter : Var)
     split at h
     · contradiction
     · obtain ⟨a, ha, h⟩ := Option.bind_eq_some_iff.mp h
-      obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
-      cases h
-      have hw : WellFormed u := by
-        have h' := reborrow_preserves s.own i [] a.mode hs
-        rwa [hu] at h'
-      have shape := hu
-      unfold reborrow at shape
-      obtain ⟨f, _, shape⟩ := Option.bind_eq_some_iff.mp shape
-      unfold reborrowTo at shape
-      rw [ha] at shape
-      dsimp at shape
-      split at shape
-      · cases shape
+      obtain ⟨f, hf, h⟩ := Option.bind_eq_some_iff.mp h
+      split at h
+      · rename_i allowed
+        have hw := reborrowTo_preserves s.own i [] a.mode f.id hs
+        have guard : loanAccess s.own i a.mode = true ∧ f.id < s.own.nextActivation := by
+          simpa using allowed
+        simp [reborrowTo, ha, hf, guard.1, guard.2] at hw
+        cases h
         have hh := map_metadata_preserves _ hw (fun l => l.activation)
           (fun l => if l.id.id = s.own.nextLoan then true else l.pendingArgument)
           (fun l hl => (hw.2.2.2.1 l hl).2.1)
@@ -1139,9 +1135,18 @@ theorem passDown_preserves (s : CallState) (i : LoanId) (parameter : Var)
               pendingArgument := if l.id.id = s.own.nextLoan then true else l.pendingArgument }) := by
           funext l
           split <;> rfl
-        dsimp only
-        rw [eq]
-        exact hh
+        have unchanged : (s.own.loans.map fun l =>
+            if l.id.id = s.own.nextLoan then { l with pendingArgument := true } else l) =
+            s.own.loans := by
+          calc
+            _ = s.own.loans.map id := by
+              apply List.map_congr_left
+              intro l hl
+              have older := (hs.2.2.2.1 l hl).1
+              simp [show l.id.id ≠ s.own.nextLoan by omega]
+            _ = s.own.loans := List.map_id _
+        rw [← eq] at hh
+        simpa [CallOwnResult, ResultSatisfies, List.map_cons, unchanged] using hh
       · contradiction
 
 /-- Law (authority: docs/decisions.md#foundation-q1 (C5); #decided-2026-11-05-core (Q3.1–Q3.4); #od15; #od23; #decided-2026-11-08-recovered-d3 (C5 downward destinations and call duration)). (subject `ConcreteSpec.Core.Own.passDown`). Every successful result preserves
@@ -1159,16 +1164,10 @@ theorem passDown_call_preserves (s : CallState) (i : LoanId) (parameter : Var)
     split at h
     · contradiction
     · rename_i unique
-      obtain ⟨a, ha, hh⟩ := Option.bind_eq_some_iff.mp h
-      obtain ⟨u, hu, hh⟩ := Option.bind_eq_some_iff.mp hh
-      cases hh
-      unfold reborrow at hu
-      obtain ⟨f, hf, hu⟩ := Option.bind_eq_some_iff.mp hu
-      unfold reborrowTo at hu
-      rw [ha] at hu
-      dsimp at hu
-      split at hu
-      · cases hu
+      obtain ⟨a, _, hh⟩ := Option.bind_eq_some_iff.mp h
+      obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp hh
+      split at h
+      · cases h
         have fresh : ∀ l ∈ s.own.loans, l.id.id ≠ s.own.nextLoan := by
           intro l hl he
           have := (hs.1.2.2.2.1 l hl).1
@@ -1196,20 +1195,16 @@ theorem passDown_call_preserves (s : CallState) (i : LoanId) (parameter : Var)
         · intro e he
           rcases List.mem_append.mp he with he | he
           · obtain ⟨l, hl, hid⟩ := hs.2.2.2.1 e he
-            refine ⟨l, ?_, hid⟩
-            apply List.mem_map.mpr
-            exact ⟨l, List.mem_cons_of_mem _ hl, by simp [fresh l hl]⟩
+            exact ⟨l, List.mem_cons_of_mem _ hl, hid⟩
           · simp only [List.mem_singleton] at he
             subst e
-            refine ⟨_, List.mem_map.mpr ⟨_, List.mem_cons_self, rfl⟩, ?_⟩
-            simp
+            exact ⟨_, List.mem_cons_self, rfl⟩
         · intro l hl
-          obtain ⟨b, hb, rfl⟩ := List.mem_map.mp hl
-          rcases List.mem_cons.mp hb with rfl | hb
+          rcases List.mem_cons.mp hl with rfl | hl
           · simp
-          · simpa [fresh b hb, List.map_append, pendingFresh,
-              (show b.id ≠ LoanId.mk s.own.nextLoan from fun he => fresh b hb (congrArg LoanId.id he))]
-              using hs.2.2.2.2 b hb
+          · simpa [List.map_append,
+              (show l.id ≠ LoanId.mk s.own.nextLoan from fun he => fresh l hl (congrArg LoanId.id he))]
+              using hs.2.2.2.2 l hl
       · contradiction
 
 /-- Law (authority: docs/decisions.md#foundation-q1 (C5); #decided-2026-11-05-core (Q3.1–Q3.4); #od15; #od23; #decided-2026-11-08-recovered-d3 (C5 downward destinations and call duration); #od69; #decided-2026-11-13-lifecycle-refusal). (subject `ConcreteSpec.Core.Own.callLife`). Every successful result preserves

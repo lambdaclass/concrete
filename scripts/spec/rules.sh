@@ -11,4 +11,5 @@ bounded_run -i /dev/null 600 -- lake env lean scripts/spec/rules.lean > "$TMP/ru
 bash scripts/spec/rules_validate.sh "$TMP/rules.jsonl" docs/decisions.md ROADMAP.md
 bounded_run -i /dev/null 600 -- python3 -I scripts/spec/rules_controls.py "$TMP"
 bounded_run -i /dev/null 600 -- python3 -I scripts/spec/own_controls.py
+bash scripts/spec/landing_inventory.sh
 bounded_summary
