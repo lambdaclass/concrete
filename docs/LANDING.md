@@ -306,6 +306,21 @@ To publish the record, `report.sh --export docs/project/landing_log/` copies the
 into the tree for a documentation-only commit. Per-train files never conflict on rebase. That
 directory is what R-0547's generated median, next to the candidate table, will read.
 
+### Review evidence cutover
+
+Update the landing scripts and the installed pre-push hook in every publishing
+clone, and stop any review or landing process started with pre-cutover tooling
+before resuming publication. The v2 verifier reads published v2 evidence for
+clean landing. A v2 findings or blocked publication writes a legacy denial in
+the same Git transaction so an older train fetching the legacy ref refuses that
+SHA, even if it previously carried a legacy clean note. The current hook also
+rejects standalone legacy writes. Without the current hook, an already-running
+or stale writer can still overwrite that denial on a remote with unrestricted
+notes writes. The cutover requires control of publishing clients unless the
+remote itself enforces the legacy ref restriction. See
+[legacy round accounting and verification](REVIEW.md#verifysh).
+
+
 ## Readiness
 
 A branch is **ready** when all of the following hold:

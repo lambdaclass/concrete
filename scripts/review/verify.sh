@@ -12,6 +12,7 @@
 #   --required-base  require the note base to be an ancestor-or-equal of this commit.
 #   --metadata-only  validate schema and base for round accounting, with legacy fallback.
 #                    Returns 0 for valid metadata regardless of verdict.
+#   --legacy-accounting  internal migration mode for schema-only legacy accounting.
 #
 # Exit codes: 0 clean; 1 reviewed, not clean (findings or blocked);
 #             2 no note, a malformed or insufficient-range note, or a usage error.
@@ -24,10 +25,12 @@ REMOTE=origin
 FETCH=0
 REQUIRED_BASE=""
 METADATA_ONLY=0
+LEGACY_ACCOUNTING=0
 LEGACY=0
 LEGACY_FALLBACK="$LEGACY_REVIEW_REF"
 while [ $# -gt 0 ]; do
   case "$1" in
+    --legacy-accounting) LEGACY_ACCOUNTING=1; METADATA_ONLY=1; shift ;;
     --metadata-only) METADATA_ONLY=1; shift ;; # round accounting only, never coverage
     --fetch) FETCH=1; shift ;;
     --notes-ref)
@@ -113,6 +116,7 @@ read_note() {
   done
   if [ "$LEGACY" = 1 ]; then
     [ "$METADATA_ONLY" = 1 ] || invalid "legacy note is only eligible for round accounting"
+    case "$F_reviewer" in v2-denial-*) invalid "legacy denial requires its v2 evidence" ;; esac
     [ -z "$F_diff_start$F_predecessor_note$F_findings_note$findings" ] \
       || malformed "unexpected fields in legacy note"
     return
@@ -148,7 +152,13 @@ check_range() {
 }
 
 read_note ""
-check_range
+# Historical writers accepted a base off the reviewed branch. Only migration
+# accounting may use that metadata without checking its range.
+if [ "$LEGACY_ACCOUNTING" = 1 ]; then
+  [ "$LEGACY" = 1 ] && [ -z "$REQUIRED_BASE" ] || invalid "legacy accounting requires a legacy ref without a required base"
+else
+  check_range
+fi
 VERDICT="$F_verdict"
 summary="$SHA $VERDICT (round $F_rounds, reviewer $F_reviewer, $F_utc, base $F_base, $F_pieces piece(s))"
 if [ "$METADATA_ONLY" = 1 ]; then

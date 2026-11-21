@@ -9,7 +9,7 @@
 # Tiers decided from git's ref lines on stdin (`<local ref> <local sha> <remote ref> <remote sha>`):
 #   - only refs/heads/wip/* updates or deletions: a backup of unfinished work, which can never become
 #     main. Conflict markers are refused; nothing else runs.
-#   - only the review-note refs (refs/notes/concrete-review-v2, legacy review refs,
+#   - only the review-note refs (refs/notes/concrete-review-v2, legacy denial markers,
 #     written by scripts/review/review.sh) and owner sign-off records (refs/owner-signoff/<sha>,
 #     written by scripts/land/signoff.sh): no source tree, nothing to check.
 #   - anything else, including a by-hand run with no stdin: the full root set, and only from a full
@@ -38,6 +38,7 @@ fi
 wip_refs=0; wip_dels=0; note_refs=0; other_refs=0; wip_shas=""; full_shas=""
 # Kept whole so the hook can hand the same lines to itself when it re-enters the gate shell (below).
 HOOK_STDIN="$(cat)"
+legacy_denial=0; review_v2_update=0
 while read -r _localref localsha remoteref _remotesha; do
   [ -z "${localsha:-}" ] && continue
   case "${remoteref:-}" in
@@ -59,15 +60,27 @@ while read -r _localref localsha remoteref _remotesha; do
         other_refs=$((other_refs+1))
         case "$localsha" in *[!0]*) full_shas="$full_shas $localsha" ;; esac
       fi ;;
-    refs/notes/concrete-review-v2|refs/notes/concrete-review|refs/notes/concrete-review-findings)
+    refs/notes/concrete-review-findings)
+      echo "pre-push: legacy findings are frozen; update the review tooling" >&2
+      exit 1 ;;
+    refs/notes/concrete-review)
       case "$localsha" in
-        *[!0]*) note_refs=$((note_refs+1)) ;;
+        *[!0]*) legacy_denial=1; note_refs=$((note_refs+1)) ;;
+        *) echo "pre-push: refusing deletion of legacy review evidence" >&2; exit 1 ;;
+      esac ;;
+    refs/notes/concrete-review-v2)
+      case "$localsha" in
+        *[!0]*) review_v2_update=1; note_refs=$((note_refs+1)) ;;
         *) other_refs=$((other_refs+1)) ;;   # deleting a review note takes the full tier
       esac ;;
     *) other_refs=$((other_refs+1))
        case "$localsha" in *[!0]*) full_shas="$full_shas $localsha" ;; esac ;;
   esac
 done <<< "$HOOK_STDIN"
+if [ "$legacy_denial" = 1 ] && [ "$review_v2_update" = 0 ]; then
+  echo "pre-push: standalone legacy review updates are disabled; update the review tooling" >&2
+  exit 1
+fi
 
 if [ "$other_refs" -eq 0 ] && [ $((wip_refs + wip_dels)) -gt 0 ]; then
   bad=""

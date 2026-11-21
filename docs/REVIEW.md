@@ -152,15 +152,21 @@ repeated or unknown keys. Change the format only together with `verify.sh`.
 The writer builds the whole record on a private notes ref, verifies it, and
 updates the local review ref only if its tip still matches the one used for
 intake. Before publication it validates new and changed local records and pushes
-the validated notes commit. An interrupted write leaves the previously recorded
+the validated notes commit. For findings and blocked verdicts it atomically
+publishes a denial in the legacy verdict ref alongside the v2 update. The
+denial names the authoritative v2 note blob and uses the legacy findings
+verdict so the old verifier rejects the exact SHA and a synced old reviewer
+refuses another review of that HEAD. The v2 record stores the actual verdict
+and findings. An interrupted write leaves the previously recorded
 verdict and findings together. Raw output goes to `.review/<sha>-<round>.md`,
 which Git ignores.
 
 After a non-fast-forward rejection the writer fetches and merges the remote
 notes, with up to three push attempts. Concurrent changes to distinct notes can
 merge. Conflicting revisions to the same note require reconciliation. Any other
-push failure stops at once with exit 6. The writer also syncs before intake
-to count rounds run elsewhere.
+push failure stops at once with exit 6. Rerunning at the cap retries
+publication of pending evidence before returning the cap verdict. The writer
+also syncs before intake to count rounds run elsewhere.
 
 The pre-push hook (`.githooks/pre-push`) takes the notes tier for review-only
 pushes. A push that also carries a branch takes that branch's tier.
@@ -216,18 +222,28 @@ to `refs/notes/concrete-review-v2`. With `--fetch`, the verifier reads the
 published snapshot at `refs/notes/remote/concrete-review-v2`, which readiness
 and the landing train also use.
 
-Existing notes under `refs/notes/concrete-review` are eligible for round
-accounting. `verify.sh --metadata-only --required-base <base> <commit>` validates
-their schema and scope for exact-SHA owner sign-off. It returns success for
-valid metadata with any verdict and establishes no review coverage. In a fresh
-clone, fetch the published round metadata with `verify.sh --fetch --metadata-only`
-and pass `--notes-ref refs/notes/remote/concrete-review-v2` to `signoff.sh record`.
-Unresolved
-legacy findings still require text under `refs/notes/concrete-review-findings`.
-New evidence takes precedence at each commit. Older writers can update their
-legacy refs while the new verifier uses only the new-format evidence for clean
-landing. A branch with only legacy evidence needs a full review within its
-remaining rounds or an exact-SHA owner sign-off once it reaches its cap.
+Existing notes under `refs/notes/concrete-review` preserve the round count
+even when the historical base is off the branch. That metadata supplies no v2
+coverage. Unresolved legacy findings require text under
+`refs/notes/concrete-review-findings`. A later legacy clean round with a
+base covering the current branch base retires earlier legacy findings on its
+ancestry, even if the earlier text was never published. The clean round still
+counts toward the cap and a migration review uses the full branch diff.
+
+For exact-SHA owner sign-off, `verify.sh --metadata-only --required-base <base>
+<commit>` also checks the note's range. Fetch published metadata with
+`verify.sh --fetch --metadata-only` and pass `--notes-ref
+refs/notes/remote/concrete-review-v2` to `signoff.sh record`. A capped branch
+whose only legacy note fails the range check must be split or escalated to the
+owner. New evidence takes precedence at each commit.
+
+Install the current pre-push hook in every publishing clone before using the
+v2 workflow, and stop old review and landing processes already running.
+The hook freezes the legacy findings ref and refuses standalone writes to the
+legacy verdict ref. A stale writer running without the updated hook can still
+overwrite a legacy denial on a remote that allows unrestricted notes pushes.
+Keep such writers out of the publishing path. See the
+[landing cutover procedure](LANDING.md#review-evidence-cutover).
 
 ## Tests
 

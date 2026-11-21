@@ -1,4 +1,4 @@
-# Review evidence refs. Legacy refs are read-only inputs to the new tooling.
+# Review evidence refs. The legacy verdict ref also carries v2 denial markers.
 REVIEW_NOTES_REF=refs/notes/concrete-review-v2
 LEGACY_REVIEW_REF=refs/notes/concrete-review
 LEGACY_FINDINGS_REF=refs/notes/concrete-review-findings

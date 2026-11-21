@@ -83,9 +83,11 @@ command -v "$CODEX_BIN" >/dev/null 2>&1 || die "reviewer binary not found: $CODE
 WORK="$(mktemp -d)"
 STAGE_REF="refs/notes/review-stage-$$-$RANDOM"
 SYNC_REF="refs/notes/review-sync-$$-$RANDOM"
+LEGACY_STAGE_REF="refs/notes/review-legacy-stage-$$-$RANDOM"
 cleanup() {
   git update-ref -d "$STAGE_REF"
   git update-ref -d "$SYNC_REF"
+  git update-ref -d "$LEGACY_STAGE_REF"
   rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -161,17 +163,56 @@ validate_publication() {
   done <"$WORK/changed-notes"
 }
 
+# Deny legacy landing on the exact SHA of each changed non-clean record.
+# The marker is a valid legacy findings verdict so an old reviewer syncing
+# normally also refuses to replace it on the same HEAD. The v2 blob owns the
+# actual verdict and findings text.
+stage_legacy_denials() {
+  local sha note blob
+  legacy_previous=""
+  while IFS= read -r sha; do
+    note="$(git notes --ref="$STAGE_REF" show "$sha")" || return 1
+    [ "$(note_field "$note" verdict)" != clean ] || continue
+    if [ -z "$legacy_previous" ]; then
+      fetch_review_ref "$REMOTE" "$LEGACY_REVIEW_REF" "$LEGACY_STAGE_REF" || return 1
+      legacy_previous="$(git rev-parse -q --verify "$LEGACY_STAGE_REF" || echo absent)"
+    fi
+    blob="$(git notes --ref="$STAGE_REF" list "$sha")" || return 1
+    printf 'verdict: findings\nrounds: %s\nreviewer: v2-denial-%s\nutc: %s\nbase: %s\npieces: %s\n' \
+      "$(note_field "$note" rounds)" "$blob" \
+      "$(note_field "$note" utc)" "$(note_field "$note" base)" \
+      "$(note_field "$note" pieces)" >"$WORK/legacy-denial"
+    if [ "$(git notes --ref="$LEGACY_STAGE_REF" list "$sha" 2>/dev/null)" = "$(git hash-object "$WORK/legacy-denial")" ]; then
+      continue
+    fi
+    git notes --ref="$LEGACY_STAGE_REF" add -f -F "$WORK/legacy-denial" "$sha" || return 1
+  done <"$WORK/changed-notes"
+}
+
 # Push the captured notes commit; on a non-fast-forward, fetch + merge and retry.
 push_notes() {
   [ "$PUSH" = 1 ] || return 0
-  local attempt tip previous
+  local attempt tip previous legacy_tip legacy_previous
+  local -a push_args refspecs
   for attempt in 1 2 3; do
     tip="$(git rev-parse --verify "$NOTES_REF")" || return 1
     previous="$(git rev-parse -q --verify "$SYNC_REF" || true)"
     [ "$tip" != "$previous" ] || return 0
     git update-ref "$STAGE_REF" "$tip" || return 1
     validate_publication "$tip" "$previous" || return 1
-    if git push -q "$REMOTE" "$tip:$NOTES_REF" 2>"$WORK/push.err"; then
+    push_args=(-q)
+    refspecs=("$tip:$NOTES_REF")
+    # Read and stage legacy only when publishing a denial. Clean-only pushes
+    # cannot change what a legacy reader sees.
+    stage_legacy_denials || return 1
+    if [ -n "$legacy_previous" ]; then
+      legacy_tip="$(git rev-parse --verify "$LEGACY_STAGE_REF")" || return 1
+      if [ "$legacy_tip" != "$legacy_previous" ]; then
+        refspecs+=("$legacy_tip:$LEGACY_REVIEW_REF")
+        push_args+=(--atomic)
+      fi
+    fi
+    if git push "${push_args[@]}" "$REMOTE" "${refspecs[@]}" 2>"$WORK/push.err"; then
       return 0
     fi
     # Only a non-fast-forward is cured by fetch + merge. Anything else (a hook
@@ -248,6 +289,7 @@ INSUFFICIENT_RANGE=0
 OPEN_FINDINGS=0
 PREV_FINDINGS=""
 COVERING_REVIEWS=""
+LEGACY_CLEAN_REVIEWS=""
 while read -r c; do
   [ -n "$c" ] || continue
   # New evidence takes precedence for the same commit, even when invalid.
@@ -262,7 +304,13 @@ while read -r c; do
   n="$(git cat-file blob "$blob")"
   v="$(note_field "$n" verdict)"
   r="$(note_field "$n" rounds)"
-  if ! bash "$SCRIPT_DIR/verify.sh" --metadata-only --notes-ref "$ref" "$c" >"$WORK/intake"; then
+  intake_mode=--legacy-accounting
+  if [ "$ref" = "$NOTES_REF" ]; then
+    intake_mode=--metadata-only
+  elif [[ "$(note_field "$n" reviewer)" == v2-denial-* ]]; then
+    die "legacy denial for $c has no matching v2 snapshot; fetch the current review refs and retry"
+  fi
+  if ! bash "$SCRIPT_DIR/verify.sh" "$intake_mode" --notes-ref "$ref" "$c" >"$WORK/intake"; then
     if [ "$ref" = "$NOTES_REF" ] && { [ "$v" = findings ] || [ "$v" = blocked ]; }; then
       die "invalid review evidence for $c round $r: $(head -n 1 "$WORK/intake")"
     fi
@@ -287,6 +335,19 @@ while read -r c; do
     if git merge-base --is-ancestor "$c" "$descendant"; then covered=1; break; fi
   done
   if [ "$covered" = 0 ] && [ "$vrc" -gt 1 ]; then INSUFFICIENT_RANGE=1; fi
+  if [ "$ref" != "$NOTES_REF" ]; then
+    # A later legacy clean round can retire older legacy findings under the
+    # historical range rule. It cannot supply v2 coverage or retire v2 findings.
+    for entry in $LEGACY_CLEAN_REVIEWS; do
+      if [ "${entry#*:}" -gt "$r" ] && git merge-base --is-ancestor "$c" "${entry%:*}"; then
+        covered=1
+        break
+      fi
+    done
+    if [ "$v" = clean ] && git merge-base --is-ancestor "$(note_field "$n" base)" "$BASE_SHA"; then
+      LEGACY_CLEAN_REVIEWS="$LEGACY_CLEAN_REVIEWS $c:$r"
+    fi
+  fi
   if [ "$covered" = 0 ] && [ "$v" != clean ]; then
     if [ "$ref" != "$NOTES_REF" ]; then
       findings_ref="$LEGACY_FINDINGS_REF"
@@ -325,6 +386,7 @@ fi
 
 ROUND=$((PREV_ROUNDS + 1))
 if [ "$ROUND" -gt "$MAX_ROUNDS" ]; then
+  if [ -n "$intake_tip" ]; then publish_or_exit; fi
   cap_message "$PREV_ROUNDS" "$PREV_FINDINGS"
   exit 3
 fi

@@ -779,11 +779,11 @@ review >"$T/out9-retry" 2>&1; rc=$?
 check "a clean HEAD retries publication without repeating the review (exit $rc)" test "$rc" -eq 0 -a "$(calls)" -eq "$before"
 check "the retry published the same note" test "$(git -C "$T/origin.git" notes --ref=concrete-review-v2 list "$(g rev-parse HEAD)")" = "$(g notes --ref=concrete-review-v2 list HEAD)"
 
-echo "=== ISS-0099: refusing publication leaves the prior evidence intact ==="
+echo "=== ISS-0099: rejecting the legacy denial leaves v2 evidence intact ==="
 cat >"$T/origin.git/hooks/update" <<'EOF'
 #!/bin/sh
-if [ "$1" = refs/notes/concrete-review-v2 ]; then
-  echo "remote policy rejects the evidence ref" >&2
+if [ "$1" = refs/notes/concrete-review ]; then
+  echo "remote policy rejects the legacy denial" >&2
   exit 1
 fi
 EOF
@@ -795,7 +795,7 @@ reset_fake
 review >"$T/atomic" 2>&1; rc=$?
 rm -f "$T/origin.git/hooks/update"
 check "publication is refused (exit $rc)" test "$rc" -eq 6
-check "remote hook rejected the evidence ref" grep -q 'remote policy rejects the evidence ref' "$T/atomic"
+check "remote hook rejected the legacy denial" grep -q 'remote policy rejects the legacy denial' "$T/atomic"
 check "remote evidence ref did not advance" test "$(git -C "$T/origin.git" rev-parse refs/notes/concrete-review-v2)" = "$VERDICT_TIP"
 
 echo "=== interrupted findings write cannot leak into an unrelated publication ==="
@@ -883,30 +883,136 @@ legacy_note clean "$BASE"
 (cd "$W" && bash "$VERIFY" --required-base "$BASE" HEAD) >"$T/legacy-coverage" 2>&1; rc=$?
 check "legacy clean round 3 is ineligible as clean landing evidence (exit $rc)" test "$rc" -eq 2
 
-echo "=== mixed versions: the old reviewer cannot replace new evidence ==="
-# Run the actual pre-migration scripts from the fixed repository revision.
+echo "=== legacy accounting with an advanced review base ==="
+g checkout -qb legacy-advanced-base origin/main || exit 1
+commit_file advanced-main.txt clean advanced-main
+ADVANCED_BASE="$(g rev-parse HEAD)"
+g checkout -qb legacy-advanced origin/main
+for legacy_round in 1 2 3; do
+  commit_file legacy-advanced.txt "legacy change $legacy_round" "legacy round $legacy_round"
+  g notes --ref=concrete-review add -m "verdict: findings
+rounds: $legacy_round
+reviewer: codex
+utc: 2026-11-21T00:00:00Z
+base: $ADVANCED_BASE
+pieces: 1" HEAD
+  g notes --ref=concrete-review-findings add -m "advanced base finding $legacy_round" HEAD
+done
+reset_fake
+REVIEW_PUSH=0 review --max-rounds 3 >"$T/legacy-advanced" 2>&1; rc=$?
+check "advanced legacy base does not reset the cap (exit $rc)" test "$rc" -eq 3 -a "$(calls)" -eq 0
+for legacy_round in 1 2 3; do
+  check "advanced base finding $legacy_round survives" grep -q "advanced base finding $legacy_round" "$T/legacy-advanced"
+done
+
+echo "=== partial legacy publication after a later clean round ==="
+g checkout -qb legacy-partial origin/main
+commit_file partial-a.txt clean partial-findings
+legacy_note findings "$BASE"
+PARTIAL_SHA="$(g rev-parse HEAD)"
+reset_fake
+REVIEW_PUSH=0 review --max-rounds 5 >"$T/legacy-missing" 2>&1; rc=$?
+check "unresolved missing legacy findings still fail closed (exit $rc)" test "$rc" -eq 2 -a "$(calls)" -eq 0
+check "missing text identifies the affected SHA" grep -q "missing or mismatched findings text for $PARTIAL_SHA" "$T/legacy-missing"
+commit_file partial-b.txt clean partial-clean
+legacy_note clean "$BASE"
+# Legacy helper writes round 3. Make the earlier findings round 2.
+g notes --ref=concrete-review show "$PARTIAL_SHA" | sed 's/^rounds: 3$/rounds: 2/' >"$T/partial-note"
+g notes --ref=concrete-review add -f -F "$T/partial-note" "$PARTIAL_SHA" 2>/dev/null
+REVIEW_PUSH=0 review --max-rounds 3 >"$T/legacy-partial-cap" 2>&1; rc=$?
+check "superseded missing findings do not bypass the cap (exit $rc)" test "$rc" -eq 3 -a "$(calls)" -eq 0
+REVIEW_PUSH=0 review --max-rounds 5 >"$T/legacy-partial" 2>&1; rc=$?
+check "migration recovers in round 4 (exit $rc)" test "$rc" -eq 0 -a "$(field rounds)" = 4
+check "migration reviews both legacy commits in full" grep -q 'files=partial-a.txt,partial-b.txt,' "$FAKE_LOG/calls"
+check "migration records full v2 coverage" test "$(field diff-start)" = "$BASE"
+
+echo "=== capped blocked round retries publication without another review ==="
+g checkout -qb capped-blocked-retry origin/main
+commit_file capped-blocked.txt MARK_NOVERDICT capped-blocked-retry
+printf '#!/bin/sh\ntest "$1" != refs/notes/concrete-review-v2\n' >"$T/origin.git/hooks/update"
+chmod +x "$T/origin.git/hooks/update"
+review --max-rounds 1 >"$T/blocked-cap-failure" 2>&1; rc=$?
+rm -f "$T/origin.git/hooks/update"
+check "blocked cap publication reports the refusal (exit $rc)" test "$rc" -eq 6
+BLOCKED_SHA="$(g rev-parse HEAD)"
+if git -C "$T/origin.git" notes --ref=concrete-review-v2 list "$BLOCKED_SHA" >/dev/null 2>&1; then
+  no "blocked evidence remains unpublished"
+else
+  ok "blocked evidence remains unpublished"
+fi
+reset_fake
+review --max-rounds 1 >"$T/blocked-cap-retry" 2>&1; rc=$?
+check "blocked cap retry publishes without another review (exit $rc)" test "$rc" -eq 3 -a "$(calls)" -eq 0
+check "blocked cap retry published the exact record" test "$(git -C "$T/origin.git" notes --ref=concrete-review-v2 list "$BLOCKED_SHA")" = "$(g notes --ref=concrete-review-v2 list HEAD)"
+
+echo "=== mixed versions: legacy landing refuses after v2 findings ==="
 PRE_MIGRATION=ff462b3180acd6ef8c03566e7e53e2be0ff489f8
-mkdir -p "$T/old/scripts/review" "$T/old/scripts/checks/lib"
-for file in scripts/review/{review.sh,verify.sh,split_diff.py} scripts/checks/lib/has_match.sh; do
+mkdir -p "$T/old/scripts/"{review,checks/lib,land}
+for file in scripts/review/{review.sh,verify.sh,split_diff.py} scripts/checks/lib/has_match.sh scripts/land/train.sh; do
   git -C "$ROOT_DIR" show "$PRE_MIGRATION:$file" >"$T/old/$file" || exit 1
 done
+sed -n '/^review_provenance() {/,/^}/p' "$T/old/scripts/land/train.sh" >"$T/old/provenance.sh"
+old_review() { (cd "$W" && bash "$T/old/scripts/review/review.sh" --max-rounds 3); }
+old_verify() { (cd "$W" && bash "$T/old/scripts/review/verify.sh" --fetch --required-base "$BASE" HEAD); }
+old_provenance() (
+  cd "$W" || exit 1
+  VERIFY="$T/old/scripts/review/verify.sh"
+  REMOTE=origin
+  state_get_soft() { [ "$2" = base ] && printf '%s\n' "$BASE"; }
+  source "$T/old/provenance.sh"
+  review_provenance mixed "$MIXED_SHA"
+)
 g checkout -qb mixed-version origin/main
-commit_file mixed.txt clean mixed-version
+commit_file mixed.txt MARK_FINDING mixed-version
 MIXED_SHA="$(g rev-parse HEAD)"
-range_note findings 3 "$BASE"
+reset_fake
+# Have the old writer publish a clean verdict for this exact object.
+cat >"$T/bin/always-clean" <<'EOF'
+#!/usr/bin/env bash
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = -o ]; then output="$2"; shift; fi
+  shift
+done
+cat >/dev/null
+printf 'VERDICT: clean\n' >"$output"
+EOF
+chmod +x "$T/bin/always-clean"
+REVIEW_CODEX_BIN="$T/bin/always-clean" old_review >"$T/old-review" 2>&1; rc=$?
+check "old reviewer published a clean verdict before cutover (exit $rc)" test "$rc" -eq 0
+check "old verifier accepts the initial legacy clean note" old_verify
+check "old train accepts the initial legacy clean note" old_provenance
+mkdir -p "$T/cutover-hooks"
+cp "$HOOK" "$T/cutover-hooks/pre-push"
+g config core.hooksPath "$T/cutover-hooks"
+review --max-rounds 3 >"$T/mixed-new" 2>&1; rc=$?
+g config --unset core.hooksPath
+check "new full review publishes findings in round 2 (exit $rc)" test "$rc" -eq 1 -a "$(field rounds)" = 2
 MIXED_BLOB="$(g notes --ref=concrete-review-v2 list "$MIXED_SHA")"
-g push -q origin refs/notes/concrete-review-v2
 reset_fake
-(cd "$W" && bash "$T/old/scripts/review/review.sh" --max-rounds 3) >"$T/old-review" 2>&1; rc=$?
-check "old reviewer writes a clean round on its legacy ref (exit $rc)" test "$rc" -eq 0 -a "$(calls)" -eq 1
-check "old reviewer actually published clean legacy evidence" bash -c   'git -C "$1" notes --ref=concrete-review show "$2" | has_match "^verdict: clean$"' _ "$T/origin.git" "$MIXED_SHA"
+REVIEW_CODEX_BIN="$T/bin/always-clean" old_review >"$T/old-rerun" 2>&1; rc=$?
+check "old reviewer refuses to publish another clean verdict (exit $rc)" test "$rc" -eq 4
+old_verify >"$T/old-verify" 2>&1; rc=$?
+check "old verifier refuses landing (exit $rc)" test "$rc" -eq 1
+old_provenance >"$T/old-train" 2>&1; rc=$?
+check "old train refuses landing (exit $rc)" test "$rc" -eq 1
 (cd "$W" && bash "$VERIFY" --fetch --required-base "$BASE" HEAD) >"$T/mixed-verify" 2>&1; rc=$?
-check "new verifier still sees the round 3 findings (exit $rc)" test "$rc" -eq 1
+check "new verifier still sees findings (exit $rc)" test "$rc" -eq 1
 check "older writer left the new evidence byte-for-byte intact" test "$(g notes --ref=concrete-review-v2 list HEAD)" = "$MIXED_BLOB"
-reset_fake
-review --max-rounds 3 >"$T/mixed-cap" 2>&1; rc=$?
-check "older writer cannot reset the cap (exit $rc)" test "$rc" -eq 3 -a "$(calls)" -eq 0
-check "older writer cannot clear the new findings" grep -q ANCESTOR_OPEN_FINDING "$T/mixed-cap"
+# Simulate an already-running old writer with a clean notes commit based on
+# the latest legacy tip. A fast-forward on its own would overwrite the denial.
+g update-ref refs/notes/cached-old-writer "$(g rev-parse refs/notes/concrete-review)"
+g notes --ref=cached-old-writer add -f -m "verdict: clean
+rounds: 3
+reviewer: codex
+utc: 2026-11-21T00:00:00Z
+base: $BASE
+pieces: 1" HEAD 2>/dev/null
+g -c core.hooksPath="$T/cutover-hooks" push origin refs/notes/cached-old-writer:refs/notes/concrete-review >"$T/stale-write" 2>&1; rc=$?
+check "installed hook refuses a stale legacy-only fast-forward (exit $rc)" test "$rc" -ne 0
+check "hook identifies the legacy-only update" grep -q 'standalone legacy review updates are disabled' "$T/stale-write"
+old_provenance >"$T/old-train-after-stale-write" 2>&1; rc=$?
+check "old train still refuses after the stale clean write attempt (exit $rc)" test "$rc" -eq 1
+
 
 echo "=== usage errors ==="
 review --pieces zero >/dev/null 2>&1; rc=$?
