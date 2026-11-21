@@ -5,6 +5,8 @@ The Spec build job runs the same gate. It builds the checkout and loads its elab
 `ConcreteSpec` environment. On main the report describes main. On a candidate it describes
 what that candidate would land.
 
+The inventory checks the structure of landing evidence, and two independent reviewers judge whether it covers the piece’s required behavior.
+
 The [Lean plan](../../scripts/spec/landing_inventory.lean) owns the piece list and its evidence.
 Its original scope reconciles the 51 IDs in the `F01`–`F40` foundation and migration tables of
 `origin/wip/spec-inventory:ConcreteSpec/landing/plan.md`, including the split IDs and CAP.
@@ -37,8 +39,9 @@ declarations when they claim landing. Other reservations require listed, authore
 from each reserved module and namespace. Each proof reservation also requires a cited Law theorem
 and a separate planted control in its own module and namespace. M09 uses its existing named
 Law and still requires a control from its qualification reservation. F03p checks every expected
-source-path rule against the live registry and requires linked acceptance and refusal theorems
-from Spec.Rules. The local rules contribute partial evidence while project-wide admission
+source-path rule for its defining module, unique registration, positive revision, and linked
+acceptance and refusal theorems from Spec.Rules. Each Spec.Rules reservation requires a cited
+acceptance and refusal theorem for the same uniquely registered rule authored in its owning module. The local rules contribute partial evidence while project-wide admission
 and its registry evidence are outstanding. Shared modules have piece-specific evidence. Migration namespaces
 reserve names for evidence produced by the migration. If a name or defining module changes, update the completion requirements in
 the same patch. Partial rows retain the references for their remaining work.
