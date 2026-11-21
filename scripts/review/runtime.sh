@@ -32,7 +32,7 @@ review_executable() {
 }
 
 # Anchor CODEX_HOME in the caller's directory and exclude the live checkout.
-# Run at every standalone entry point, before changing the working directory.
+# Pass the original caller directory when preparing the environment after cd.
 review_prepare_codex_home() {
   [ "${CODEX_HOME+x}" = x ] || return 0
   if [ -z "$CODEX_HOME" ]; then
@@ -45,14 +45,15 @@ from pathlib import Path
 import sys
 
 try:
-    root, home = (Path(value).resolve() for value in sys.argv[1:])
+    root = Path(sys.argv[1]).resolve()
+    home = (Path(sys.argv[3]) / sys.argv[2]).resolve()
 except (OSError, RuntimeError) as exc:
     sys.exit(f"review: cannot resolve CODEX_HOME or repository root: {exc}")
 if home == root or root in home.parents:
     sys.exit(f"review: CODEX_HOME must be outside the repository root ({root}): {home}")
 # A final slash preserves any trailing newlines through shell command substitution.
 print(home, end="/")
-' "$1" "$CODEX_HOME")" || return 1
+' "$1" "$CODEX_HOME" "${2:-$PWD}")" || return 1
   export CODEX_HOME="${resolved%/}"
 }
 

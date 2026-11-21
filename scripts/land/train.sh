@@ -67,7 +67,7 @@ note() { echo "train: $*"; }
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || die "not inside a git work tree"
 # shellcheck source=scripts/review/runtime.sh
 . "$SELF_DIR/../review/runtime.sh"
-review_prepare_codex_home "$ROOT" || exit 1
+CALLER_DIR="$PWD"
 cd "$ROOT"
 COMMON="$(cd "$(git rev-parse --git-common-dir)" && pwd)"
 
@@ -583,6 +583,7 @@ review_provenance() { # name head
 review_leg() { # name base head
   local why
   if why="$(review_provenance "$1" "$3")"; then echo "review: $why; not reviewed again"; return 0; fi
+  review_prepare_codex_home "$ROOT" "$CALLER_DIR" || return 1
   echo "review: $why; running the reviewer"
   bash -c "$(review_cmd) --base $2 --head $3" || return $?
   why="$(review_provenance "$1" "$3")" || { echo "review: the reviewer exited 0, but $why"; return 1; }

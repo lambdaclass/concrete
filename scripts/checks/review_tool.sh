@@ -804,6 +804,19 @@ EOF
       g push -q origin "$branch" || exit 1
       args=(--no-remote "$branch")
     fi
+    if [ "$entry" = train ]; then
+      (cd "$W/sub" && CODEX_HOME=. bash "$ROOT_DIR/scripts/land/train.sh" status codex-home) || exit 1
+    fi
+    if (cd "$W/sub" && CODEX_HOME=. bash "$ROOT_DIR/scripts/land/$entry.sh" "${args[@]}") \
+        >"$T/$entry-checkout-home.log" 2>&1; then
+      echo "$entry.sh accepted an in-checkout CODEX_HOME for a review" >&2
+      exit 1
+    fi
+    grep -Fq 'CODEX_HOME must be outside the repository root' "$T/$entry-checkout-home.log" || {
+      cat "$T/$entry-checkout-home.log" >&2
+      exit 1
+    }
+    test ! -e "$FAKE_LOG/CODEX_HOME.1" || exit 1
     (cd "$W/sub" && CODEX_HOME=../../relative/codex-home \
       bash "$ROOT_DIR/scripts/land/$entry.sh" "${args[@]}") >"$T/$entry-codex-home.log" 2>&1 || {
         cat "$T/$entry-codex-home.log" >&2
@@ -811,9 +824,14 @@ EOF
       }
     grep -Fxq -- "$T/codex-home" "$FAKE_LOG/CODEX_HOME.1" || exit 1
     echo "  ok   $entry.sh resolves external CODEX_HOME from the caller subdirectory"
+    if [ "$entry" = ready ]; then
+      reset_fake
+      (cd "$W/sub" && CODEX_HOME=. bash "$ROOT_DIR/scripts/land/ready.sh" --no-review "${args[@]}") || exit 1
+      test ! -e "$FAKE_LOG/CODEX_HOME.1" || exit 1
+    fi
   done
-) && ok "both landing entry points pass the caller-relative CODEX_HOME to Codex" \
-  || no "both landing entry points pass the caller-relative CODEX_HOME to Codex"
+) && ok "landing entry points validate caller-relative CODEX_HOME only for reviewer launches" \
+  || no "landing entry points validate caller-relative CODEX_HOME only for reviewer launches"
 reset_fake
 printf '#!/bin/sh\ntouch "%s"\n' "$FAKE_LOG/builtin-ran" >"$W/sub/:"
 chmod +x "$W/sub/:"

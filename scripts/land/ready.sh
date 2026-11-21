@@ -32,7 +32,7 @@ done
 ROOT="$(git rev-parse --show-toplevel)" || die "not inside a git work tree"
 # shellcheck source=scripts/review/runtime.sh
 . "$SELF_DIR/../review/runtime.sh"
-review_prepare_codex_home "$ROOT" || exit 1
+CALLER_DIR="$PWD"
 cd "$ROOT"
 REMOTE=origin
 [ -z "$(git status --porcelain --untracked-files=no)" ] || die "the work tree has uncommitted changes"
@@ -57,6 +57,10 @@ if [ "$DRY" = 1 ]; then
   [ "$review" = 1 ] && echo "    review: $rcmd --base $base --head $head"
   echo "    then: notes.sh put gates $head gates=<pass|fail> selected=<n>"
   exit 0
+fi
+
+if [ "$review" = 1 ]; then
+  review_prepare_codex_home "$ROOT" "$CALLER_DIR" || exit 1
 fi
 
 COMMON="$(cd "$(git rev-parse --git-common-dir)" && pwd)"
