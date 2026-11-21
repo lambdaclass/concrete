@@ -48,8 +48,9 @@ already live in `Proofs/LocalIdentity`; no spelling-bearing local identity is re
 
 The local SourcePath laws replace the held path group under ISS-0068 and R-0709.
 They cover the admitted ASCII identity, local checks and exact refusal locations.
-Project-wide path admission and source binding are separate obligations. U+FEFF scope
-and bare-CR comment termination remain outside the byte-coordinate interface.
+The project-wide admission laws and controls also live here. Span projection and source
+binding remain separate obligations. U+FEFF scope and bare-CR comment termination
+remain outside the byte-coordinate interface.
 -/
 
 namespace ConcreteSpec.Core
@@ -4613,7 +4614,7 @@ theorem onlyFileBeforeDirectory_violates_order_independence :
   exact (by decide : onlyFileBeforeDirectory exactPrefix ≠ .ok ()) ((law _ _ perm).mpr (by decide))
 
 
-def beforeLocalRefusal : List SourceText := [fileA.raw, fileA.raw]
+def beforeLocalRefusal : List SourceText := [lowerDirectory.raw, upperDirectory.raw]
 
 def prematureProjectCheck (inputs : List SourceText) :
     Except (SourcePath.Refusal ⊕ Refusal) (List SourcePath) :=
@@ -4632,15 +4633,34 @@ theorem prematureProjectCheck_violates_local_first : ¬ LocalFirst prematureProj
   have refused : SourcePath.parse raw = .error refusal := rfl
   have earlier : ∀ input ∈ beforeLocalRefusal, ∃ path, SourcePath.parse input = .ok path := by
     intro input member
-    have eq : input = fileA.raw := by simpa [beforeLocalRefusal] using member
-    subst input
-    exact ⟨fileA, rfl⟩
+    simp only [beforeLocalRefusal, List.mem_cons, List.not_mem_nil, or_false] at member
+    rcases member with rfl | rfl
+    · exact ⟨lowerDirectory, rfl⟩
+    · exact ⟨upperDirectory, rfl⟩
   have project : prematureProjectCheck (beforeLocalRefusal ++ [raw]) =
-      .error (.inr ⟨.duplicate, 0, 1⟩) := rfl
+      .error (.inr ⟨.caseCollision, 0, 1⟩) := rfl
   have localResult := law beforeLocalRefusal [] raw refusal earlier refused
   rw [project] at localResult
   injection localResult with incompatible
   cases incompatible
+
+/- Exact duplicate path refusal is pending owner decision. -/
+def duplicateOccurrences : List SourcePath := [fileA, fileA]
+
+def ignoreDuplicate : List SourcePath → Except Refusal Unit :=
+  checkWith fun left right =>
+    match classify left right with
+    | some .duplicate => none
+    | other => other
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.Project.check_safety`,
+case `ConcreteSpec.Core.SourcePath.Project.Controls.duplicateOccurrences`, subject `ConcreteSpec.Core.SourcePath.Project.check`,
+mutant `ConcreteSpec.Core.SourcePath.Project.Controls.ignoreDuplicate`). -/
+theorem ignoreDuplicate_violates_safety : ¬ Safety ignoreDuplicate := by
+  intro law
+  have admitted := law duplicateOccurrences (by decide)
+  rw [Reference.Admitted, duplicateOccurrences, List.pairwise_cons] at admitted
+  exact admitted.1 fileA (by simp) .duplicate rfl
 
 end Controls
 

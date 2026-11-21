@@ -3060,9 +3060,11 @@ ConcreteSpec.Core.SourcePath.ProbePolicy.traversal.eq_1
 ConcreteSpec.Core.SourcePath.Project.Controls.beforeLocalRefusal.eq_1	Quot.sound propext
 ConcreteSpec.Core.SourcePath.Project.Controls.caseSensitive_violates_safety	Quot.sound propext
 ConcreteSpec.Core.SourcePath.Project.Controls.directoryCase.eq_1	Quot.sound propext
+ConcreteSpec.Core.SourcePath.Project.Controls.duplicateOccurrences.eq_1	Quot.sound propext
 ConcreteSpec.Core.SourcePath.Project.Controls.exactPrefix.eq_1	Quot.sound propext
 ConcreteSpec.Core.SourcePath.Project.Controls.filenameCase.eq_1	Quot.sound propext
 ConcreteSpec.Core.SourcePath.Project.Controls.ignoreDirectoryCase_violates_safety	Quot.sound propext
+ConcreteSpec.Core.SourcePath.Project.Controls.ignoreDuplicate_violates_safety	Quot.sound propext
 ConcreteSpec.Core.SourcePath.Project.Controls.ignoreFileDirectory_violates_safety	Quot.sound propext
 ConcreteSpec.Core.SourcePath.Project.Controls.lowerFile._proof_1	Quot.sound propext
 ConcreteSpec.Core.SourcePath.Project.Controls.onlyFileBeforeDirectory_violates_order_independence	Quot.sound propext
@@ -3086,6 +3088,7 @@ ConcreteSpec.Core.SourcePath.Project.Refusal.mk.inj
 ConcreteSpec.Core.SourcePath.Project.Refusal.mk.injEq	propext
 ConcreteSpec.Core.SourcePath.Project.Refusal.mk.sizeOf_spec	
 ConcreteSpec.Core.SourcePath.Project.Registry.caseAccepted	Quot.sound propext
+ConcreteSpec.Core.SourcePath.Project.Registry.caseAccepted._proof_1_3	Quot.sound propext
 ConcreteSpec.Core.SourcePath.Project.Registry.caseRefused	Quot.sound propext
 ConcreteSpec.Core.SourcePath.Project.Registry.duplicateAccepted	Quot.sound propext
 ConcreteSpec.Core.SourcePath.Project.Registry.duplicateRefused	Quot.sound propext

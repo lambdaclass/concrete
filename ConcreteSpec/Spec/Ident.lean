@@ -47,8 +47,8 @@ keeping nominal identity distinct from local diagnostic spellings. Numeric route
 use Basics.Numbers; neither wrapper adds source-path or normalization policy.
 
 The key-assignment helpers implement the settled structured-key interface, not a source parser.
-Local path admission is defined below. Project-wide path admission and source binding
-belong to the dependent slices.
+Local and project-wide path admission are defined below. Span projection and source binding
+remain separate obligations.
 -/
 
 namespace ConcreteSpec.Core
@@ -1231,21 +1231,6 @@ def classify (left right : SourcePath) : Option Reason :=
   classifyComponents ((components left.raw).map Component.bytes)
     ((components right.raw).map Component.bytes)
 
-/-- R-0709, docs/decisions.md#decided-2026-11-16-file-paths.
-Matching ASCII-folded component prefixes must have identical spelling. -/
-def NoCaseCollision (pair : SourcePath × SourcePath) : Prop :=
-  classify pair.1 pair.2 ≠ some .caseCollision
-
-/-- R-0709, docs/decisions.md#decided-2026-11-17-file-names.
-A file path cannot also be an exact proper directory prefix of another path. -/
-def NoFileDirectoryConflict (pair : SourcePath × SourcePath) : Prop :=
-  classify pair.1 pair.2 ≠ some .fileDirectoryConflict
-
-/-- R-0709, docs/decisions.md#decided-2026-11-14-trap-sites-and-law-tests.
-A project cannot list the same path at two distinct positions. -/
-def NoDuplicate (pair : SourcePath × SourcePath) : Prop :=
-  classify pair.1 pair.2 ≠ some .duplicate
-
 /-- A conflict identifies two zero-based positions in the original input. -/
 structure Refusal where
   reason : Reason
@@ -1313,6 +1298,22 @@ def Admitted (paths : List SourcePath) : Prop :=
   paths.Pairwise fun left right => ∀ reason, ¬ Conflict reason left right
 
 end Reference
+
+/-- R-0709, docs/decisions.md#decided-2026-11-16-file-paths.
+Matching ASCII-folded component prefixes must have identical spelling. -/
+def NoCaseCollision (pair : SourcePath × SourcePath) : Prop :=
+  ¬ Reference.Conflict .caseCollision pair.1 pair.2
+
+/-- R-0709, docs/decisions.md#decided-2026-11-17-file-names.
+A file path cannot also be an exact proper directory prefix of another path. -/
+def NoFileDirectoryConflict (pair : SourcePath × SourcePath) : Prop :=
+  ¬ Reference.Conflict .fileDirectoryConflict pair.1 pair.2
+
+/-- R-0709, pending owner decision.
+A project cannot list the same path at two distinct positions. -/
+def NoDuplicate (pair : SourcePath × SourcePath) : Prop :=
+  ¬ Reference.Conflict .duplicate pair.1 pair.2
+
 end SourcePath.Project
 
 /-- A source span has an ordered half-open byte range and positive coordinates at its start.

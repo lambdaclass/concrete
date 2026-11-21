@@ -414,37 +414,48 @@ def lowerDirectory : SourcePath := ⟨SourceText.ofBytes [97, 47, 66, 46, 99, 11
 def separateFiles : SourcePath × SourcePath := (fileA, fileB)
 def directoryCollision : SourcePath × SourcePath := (lowerDirectory, upperDirectory)
 def fileDirectoryConflict : SourcePath × SourcePath := (fileA, lowerDirectory)
-def duplicateFile : SourcePath × SourcePath := (fileA, fileA)
 
 /-- Instance: two different root files have no case collision. -/
 theorem caseAccepted : RuleAccepted NoCaseCollision separateFiles := by
-  unfold RuleAccepted NoCaseCollision
-  decide
+  intro ⟨n, leftBound, _, different, folded⟩
+  change n ≤ 1 at leftBound
+  have lengthCases : n = 0 ∨ n = 1 := by omega
+  rcases lengthCases with rfl | rfl
+  · exact different rfl
+  · exact (by decide : [[97]] ≠ [[98]]) folded
 
 /-- Instance: a/B.con and A/c.con conflict at their directory prefixes. -/
 theorem caseRefused : RuleRefused NoCaseCollision directoryCollision := by
-  unfold RuleRefused NoCaseCollision
-  decide
+  intro permitted
+  exact permitted ⟨1, by decide, by decide, by decide, by decide⟩
 
 /-- Instance: two different root files have no file/directory conflict. -/
 theorem fileDirectoryAccepted : RuleAccepted NoFileDirectoryConflict separateFiles := by
-  unfold RuleAccepted NoFileDirectoryConflict
-  decide
+  intro ⟨_, eitherPrefix⟩
+  rcases eitherPrefix with isPrefix | isPrefix
+  · obtain ⟨suffix, eq⟩ := isPrefix
+    change [[97]] ++ suffix = [[98]] at eq
+    simp at eq
+  · obtain ⟨suffix, eq⟩ := isPrefix
+    change [[98]] ++ suffix = [[97]] at eq
+    simp at eq
 
 /-- Instance: a cannot be both a file and the directory containing a/B.con. -/
 theorem fileDirectoryRefused : RuleRefused NoFileDirectoryConflict fileDirectoryConflict := by
-  unfold RuleRefused NoFileDirectoryConflict
-  decide
+  intro permitted
+  exact permitted ⟨by decide, Or.inl ⟨[[66, 46, 99, 111, 110]], rfl⟩⟩
+
+def duplicateFile : SourcePath × SourcePath := (fileA, fileA)
 
 /-- Instance: two different root files are distinct. -/
 theorem duplicateAccepted : RuleAccepted NoDuplicate separateFiles := by
-  unfold RuleAccepted NoDuplicate
+  change fileA.raw ≠ fileB.raw
   decide
 
 /-- Instance: two occurrences of the same file are refused. -/
 theorem duplicateRefused : RuleRefused NoDuplicate duplicateFile := by
-  unfold RuleRefused NoDuplicate
-  decide
+  intro permitted
+  exact permitted rfl
 
 end SourcePath.Project.Registry
 
