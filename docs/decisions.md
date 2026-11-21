@@ -33,14 +33,15 @@ yes move secret to after 1.0
 ~~~
 
 The information-flow decision remains a historical record. F26b and the associated
-surface, leakage, release, constant-time, noninterference and wiping work move to the
+surface, leakage, release of secret information (declassification), constant-time,
+noninterference and wiping work move to the
 [after-1.0 roadmap](../ROADMAP.md#after-10). Reopening requires a fresh specification.
 F26a byte and memory accounting remains in the spec under C7. The crypto examples
 continue as ordinary code with functional claims.
 
 The coordinator chose removal of `wip/spec-f26b-security` and `wip/spec-f26-leak`
 and kept backups outside the repository. The older `wip/spec-f26-leak` branch combines leakage and
-release work with an accounting implementation. The separately landed F26a accounting
+release of secret information (declassification) with an accounting implementation. The separately landed F26a accounting
 and its evidence carry the active accounting scope on main.
 
 <a id="decided-2026-11-21-review-sandbox-removal"></a>

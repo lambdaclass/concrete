@@ -7,8 +7,8 @@ the coordinator (section 4), and the coordinator's answers to draft 3's question
 5.1). Drafts 1 and 2, the archive copies of the inputs and the raw review outputs are not kept in
 the repository; the exact revisions below are the inputs. I checked each kept reviewer claim against the files. **Revised 2026-11-08** for the owner's foundation decisions: the summary's build order, S1 (5.1), the module graph (2.2) and section 6 from step 3 on now write the foundation C1–C10 of [FOUNDATION.md](FOUNDATION.md) first and the slices on top of it.
 
-**Scope revision (2026-11-21):** Secrets, including the proposed leakage and release interfaces
-and wipe events, move to the [after-1.0 roadmap](../../ROADMAP.md#after-10).
+**Scope revision (2026-11-21):** Secrets, including the proposed interfaces for leakage and
+release of secret information (declassification) and the proposed wipe events, move to the [after-1.0 roadmap](../../ROADMAP.md#after-10).
 C7 keeps byte and memory accounting. See the [2026-11-21 decision](../decisions.md#decided-2026-11-21-secrets-after-1-0).
 
 **Inputs read (exact revisions):**
@@ -783,7 +783,7 @@ step cites the row once it is on main; a step that needs a row not yet on main w
 | D9 | Facts vocabulary, statuses, coverage, strength, vacuity, dependency flow (facts decision; R-0585) | `Facts` | 2.1 item 8; every kind present from phase B, `notApplicable` until its slice | B |
 | D10 | Diagnostics are typed checker results; rule ID = Lean rule name plus that rule's own revision (R-0593, R-0603); one `spec_version` per output, 0.x before the freeze and 1.0 at A2c ([runtime row](../decisions.md#decided-project-runtime-2026-11-06)) | `Ident`, `Checker` | `RuleId` and `spec_version` (step 2); `Rule`, `Subject`, `CheckResult`, the retired-ID registry and the lifecycle checks (1.10) with `incomplete`, `check_correspond`, `check_refused` | A (steps 2, 11) |
 | D11 | Byte accounting (R-0592) | `Ident`, `Values`, `Semantics`, `Accounting` | `LineageId`, the ghost-log alloc and destroy records, the derived quantities, with examples over hand-written logs at B; the semantics and `ghost_log_adequate` in phase B (step 17); source-level allocation at slice 19 | B, 19 |
-| D12 | Leakage and release | — | Deferred to [after 1.0](../../ROADMAP.md#after-10) | — |
+| D12 | Leakage and release of secret information (declassification) | — | Deferred to [after 1.0](../../ROADMAP.md#after-10) | — |
 | D13 | Q4.6 and Q4.7 revised | `Primitives`, `Borrow`, `Evidence` | `byte_at` needs an in-range offset; a range without `else` needs evidence of validity | 15, 16 |
 | D14 | Closed evidence (Q9.11, OD125 qualified, CON-2); `assume` never admits safety (OD80, CON-6); vacuous preconditions (OD120) | `Evidence`, `Obligations`, `Admission` | evidence sources; `assume` excluded; vacuity refusal | 5, 8 |
 | D15 | Policies and `Concrete.toml` | not Core, except the stack budget | compiler data over `Facts`; the spec defines `Fact.Holds` and the mandatory stack-budget refusal (D32) | — |

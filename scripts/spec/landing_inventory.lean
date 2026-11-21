@@ -1373,7 +1373,7 @@ private def plan : List Piece := [
   pending .F24b ["ROADMAP.md R-0614"],
   pending .F25a ["ROADMAP.md R-0614"],
   pending .F25b ["ROADMAP.md R-0614"],
-  disposition .F26 "F26b leakage and release deferred until after 1.0"
+  disposition .F26 "F26b leakage and release of secret information (declassification) deferred until after 1.0"
     "docs/decisions.md#decided-2026-11-21-secrets-after-1-0",
   added .F26a "F26 accounting slice in C7"
     "changelog.d/2026-11-15-spec-f26a-accounting.md; ROADMAP.md R-0613",

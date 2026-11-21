@@ -720,6 +720,7 @@ The following rules apply to every candidate:
   scope includes scalar, array and heap `Secret<T>`, its layout (Foundation Q18) and ownership,
   `classify`, `declassify`, `ct_select`, `ct_eq`, secret comparisons and admission restrictions,
   secret entropy output and grant-backed secret sources from console, files and network.
-  It also includes C7 leakage and release traces and policies, facts and debugging treatment,
+  It also includes C7 leakage, traces and policies for release of secret information
+  (declassification), facts and debugging treatment,
   noninterference, source and binary constant time, wiping, and the corresponding crypto example
   guarantees and backend evidence. F26a accounting remains under R-0613.

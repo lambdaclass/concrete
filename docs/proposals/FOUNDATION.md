@@ -102,12 +102,12 @@ Concurrency is deferred to slice 28. Sequential theorems assume a single thread 
 
 **Rule:** Per allocator lineage report requested bytes, net change and peak logical bytes,
 plus allocator-defined footprint, each a sound bound with status or “not established”.
-Release and reset conserve accounting, and zero-size ownership adds no invented bytes.
+Allocator release and reset conserve accounting, and zero-size ownership adds no invented bytes.
 Bounds use polynomials with max over counts, lengths and depths. Stack remains separate.
 This is the A2i instrumentation of R-0592.
 
 **Authority:** [memory/accounting](../decisions.md#decided-project-memory-2026-11-06)
-and Core Q9.10. Leakage, release and wiping move to the
+and Core Q9.10. Leakage, release of secret information (declassification) and wiping move to the
 [after-1.0 roadmap](../../ROADMAP.md#after-10) under the
 [2026-11-21 decision](../decisions.md#decided-2026-11-21-secrets-after-1-0).
 

@@ -17,7 +17,8 @@ The Lean spec carries the normative decisions for F03p and F39.
 [Owner decision on design proposals](../../docs/decisions.md#decided-2026-11-17-proposals-in-lean)
 
 F26 is the historical inventory ID for the remaining security piece (F26b) after F26a
-landed separately. F26b leakage and release and F27 wiping are outside active scope
+landed separately. F26b covers leakage and release of secret information (declassification).
+F26b and F27 wiping are outside active scope
 under the [after-1.0 decision](../../docs/decisions.md#decided-2026-11-21-secrets-after-1-0). The active scope decreased from
 51 to 50 pieces, with 22 landed. The historical headline retains all 54 rows.
 
