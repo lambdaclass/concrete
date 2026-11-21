@@ -1,6 +1,5 @@
 import ConcreteSpec
-import Concrete.BIR.Progress
-import Concrete.Backend.LCB
+import Concrete
 import Lean
 
 open Lean Elab Command
@@ -128,7 +127,7 @@ private def reservedEvidence (namespaces : List EvidenceNamespace) : Completion 
 -- These requirements belong to the piece, independently of its status.
 -- Future namespaces reserve names for the new evidence, including in existing
 -- modules. Quote planned identities even when they do not yet resolve.
--- Compiler consumer changes have their own gates; the inventory loads the spec root.
+-- F30 also cites compiler evidence, whose origin must be reachable from Concrete.
 private def completion : PieceId → Completion
   | .F01 => namedEvidence [
     decls `ConcreteSpec.Proofs.Basics [`ConcreteSpec.Core.AList.lookup_cons]]
@@ -1397,6 +1396,26 @@ private abbrev occursOnce (pieces : List Piece) (id : PieceId) : Prop :=
 private theorem planCoversEveryId (id : PieceId) : occursOnce plan id := by
   cases id <;> decide
 
+-- Follow each root's own import edges in the shared environment.
+private def importClosure (env : Environment) (root : Name) : NameSet := Id.run do
+  let mut visited : NameSet := {}
+  let mut pending := #[root]
+  while !pending.isEmpty do
+    let name := pending.back!
+    pending := pending.pop
+    if visited.contains name then continue
+    let some idx := env.getModuleIdx? name | continue
+    visited := visited.insert name
+    for dependency in env.header.moduleData[idx.toNat]!.imports do
+      pending := pending.push dependency.module
+  return visited
+
+private def evidenceInScope (specModules compilerModules : NameSet) (origin : Name) : Bool :=
+  match origin.getRoot with
+  | `ConcreteSpec => specModules.contains origin
+  | `Concrete => compilerModules.contains origin
+  | _ => false
+
 private def origin? (env : Environment) (name : Name) : Option Name :=
   if let some i := env.getModuleIdxFor? name then
     env.header.moduleNames[i.toNat]?
@@ -1453,13 +1472,15 @@ structure Registry where
   rules : List ConcreteSpec.Core.RuleId := ConcreteSpec.Core.registeredRules
   examples : List ConcreteSpec.Core.RuleExample := ConcreteSpec.Core.registeredRuleExamples
 
-private def readRegistry (env : Environment) : CommandElabM Registry := do
+private def readRegistry (env : Environment) (specModules : NameSet) : CommandElabM Registry := do
   -- The rule gate also checks that the linked input reduces to closed concrete data.
+  let inScope (name : Name) := (origin? env name).any specModules.contains
+  let rules := ConcreteSpec.Core.registeredRules.filter (fun rule => inScope rule.name)
   let examples ← ConcreteSpec.Core.registeredRuleExamples.filterM fun link => do
-    if !env.contains link.declaration then return false
+    if !inScope link.declaration then return false
     let axioms ← collectAxioms link.declaration
     return axioms.all fun name => [`propext, `Classical.choice, `Quot.sound].contains name
-  return { examples }
+  return { rules, examples }
 
 -- Inspect the theorem independently of the registry so deleting its link cannot hide its kind.
 private def exampleType? (env : Environment) (name : Name) : Option Expr := do
@@ -1569,7 +1590,7 @@ private def reservationErrors (env : Environment) (pieces : List Piece)
         errors := errors.push s!"{owner}: uncited declaration {name} in completion reservation"
   return errors.qsort (· < ·)
 
-private def inventory (env : Environment) (observed : EvidenceMetadata)
+private def inventory (env : Environment) (inScope : Name → Bool) (observed : EvidenceMetadata)
     (plan : List Piece) (integrityErrors : Array String := #[])
     (requirements : PieceId → Completion := completion) (registry : Registry := {}) : Result := Id.run do
   let mut result : Result := { errors := integrityErrors }
@@ -1621,6 +1642,8 @@ private def inventory (env : Environment) (observed : EvidenceMetadata)
         errors := errors.push s!"{piece.id}: empty evidence group"
       if (env.getModuleIdx? group.origin).isNone && group.origin != env.header.mainModule then
         errors := errors.push s!"{piece.id}: missing module {group.origin}"
+      else if !inScope group.origin then
+        errors := errors.push s!"{piece.id}: evidence module outside its root import closure: {group.origin}"
       for name in group.declarations ++ group.laws do
         if seen.contains name then
           errors := errors.push s!"{piece.id}: duplicate planned declaration {name}"
@@ -1659,19 +1682,19 @@ private def inventory (env : Environment) (observed : EvidenceMetadata)
     if seenLaws.contains name then none else some s!"unplanned Law {name} ({origin})"
   return { result with errors := result.errors ++ unplanned.toArray.qsort (· < ·) }
 
-private def rootErrors (env : Environment) (modules : Array Name) : Array String :=
+private def rootErrors (specModules : NameSet) (modules : Array Name) : Array String :=
   (modules.filterMap fun name =>
-    if (env.getModuleIdx? name).isNone then
+    if !specModules.contains name then
       some s!"spec module outside the root import closure: {name}"
     else none).qsort (· < ·)
 
-private def checkRoot (env : Environment) : IO (Array String) := do
+private def checkRoot (specModules : NameSet) : IO (Array String) := do
   let files ← (System.FilePath.mk "ConcreteSpec").walkDir
   let modules := files.filterMap fun file =>
     if file.extension == some "lean" then
       some ((file.withExtension "").components.foldl Name.str .anonymous)
     else none
-  return rootErrors env modules
+  return rootErrors specModules modules
 
 namespace Control
 
@@ -1705,15 +1728,16 @@ private def substituted := plan.map fun piece =>
 example : substituted.length = plan.length ∧
     ¬ occursOnce substituted .F39 ∧ ¬ occursOnce substituted .F40 := by decide
 
-def verify (env : Environment) (specEvidence : EvidenceMetadata) (baseline : Registry) :
+def verify (env : Environment) (specModules compilerModules : NameSet) (specEvidence : EvidenceMetadata) (baseline : Registry) :
     CommandElabM Unit := do
   let origin := env.header.mainModule
+  let inScope (name : Name) := name == origin || evidenceInScope specModules compilerModules name
   let fixtures ← readEvidence env (· == origin)
   let observed := { fixtures with laws := (fixtures.laws.erase `ConcreteSpec.Core.Observe.EnvironmentEvidence.law).erase `ConcreteSpec.Core.Observe.OutputEvidence.law }
   let claim (groups : List Group) := { present .F01 "" with groups }
   let good := claim [
     laws origin [`SpecLanding.Control.newName], decls origin [`SpecLanding.Control.wrongIncrement]]
-  let check (pieces : List Piece) := (inventory env observed pieces #[]
+  let check (pieces : List Piece) := (inventory env inScope observed pieces #[]
     (fun _ => { namespaces := [⟨origin, `SpecLanding.Control, true, none⟩] })).errors
   let hasError (pieces : List Piece) (message : String) : CommandElabM Unit := do
     unless (check pieces).any (·.startsWith message) do
@@ -1747,7 +1771,7 @@ def verify (env : Environment) (specEvidence : EvidenceMetadata) (baseline : Reg
       if piece.id == id then
         { piece with remaining := [], groups := [decls moduleName [name]] }
       else piece
-    let checked := inventory env specEvidence falseLanding #[] completion baseline
+    let checked := inventory env inScope specEvidence falseLanding #[] completion baseline
     unless checked.errors.contains
         s!"{id}: {name} in {moduleName} is outside its completion evidence" &&
         !checked.rows.any (·.startsWith s!"{id}: landed") do
@@ -1768,7 +1792,7 @@ def verify (env : Environment) (specEvidence : EvidenceMetadata) (baseline : Reg
     if id == .F04p then
       { required with namespaces := required.namespaces.map (fun ns => { ns with origin }) }
     else required
-  let checked := inventory env specEvidence helperOnly #[] withFixtureOrigin baseline
+  let checked := inventory env inScope specEvidence helperOnly #[] withFixtureOrigin baseline
   unless checked.errors.size == 2 &&
       checked.errors.any (·.startsWith "F04p: missing reserved Law theorem") &&
       checked.errors.any (·.startsWith "F04p: missing reserved planted control") &&
@@ -1787,7 +1811,7 @@ def verify (env : Environment) (specEvidence : EvidenceMetadata) (baseline : Reg
   let withoutConstRule := { baseline with
     rules := baseline.rules.filter (·.name != constRule)
     examples := baseline.examples.filter (·.rule != constRule) }
-  let checked := inventory env {} (land .F06) #[] completion withoutConstRule
+  let checked := inventory env inScope {} (land .F06) #[] completion withoutConstRule
   unless checked.errors.contains s!"F06: missing unique registered rule {constRule}" &&
       checked.errors.contains s!"F06: missing registered acceptance example for {constRule}" &&
       checked.errors.contains s!"F06: missing registered refusal example for {constRule}" &&
@@ -1795,18 +1819,18 @@ def verify (env : Environment) (specEvidence : EvidenceMetadata) (baseline : Reg
     throwError "inventory control: F06 landed after removing the rule registration and both links"
   let plainCitation (name moduleName : Name) (_ : PieceId) :=
     namedEvidence [decls moduleName [name]]
-  let checked := inventory env {} (land .F06) #[]
+  let checked := inventory env inScope {} (land .F06) #[]
     (plainCitation constRule `ConcreteSpec.Spec.Const) baseline
   unless checked.errors == #[s!"F06: {constRule} requires a registered-rule requirement for {constRule}"] &&
       checked.originalLanded == 0 do
     throwError "inventory control: F06 accepted a rule as a plain declaration"
   for name in [`ConcreteSpec.Core.ConstRegistry.accepted, `ConcreteSpec.Core.ConstRegistry.refused] do
     let fixture := plainCitation name `ConcreteSpec.Spec.Rules
-    let checked := inventory env {} (land .F06) #[] fixture withoutConstRule
+    let checked := inventory env inScope {} (land .F06) #[] fixture withoutConstRule
     unless checked.errors == #[s!"F06: {name} is missing its registered example link for {constRule}"] &&
         checked.originalLanded == 0 do
       throwError "inventory control: F06 accepted an unlinked rule theorem: {name}"
-    let checked := inventory env {} (land .F06) #[] fixture baseline
+    let checked := inventory env inScope {} (land .F06) #[] fixture baseline
     unless checked.errors == #[s!"F06: {name} requires a registered-rule requirement for {constRule}"] &&
         checked.originalLanded == 0 do
       throwError "inventory control: F06 accepted a rule theorem as a plain declaration: {name}"
@@ -1814,13 +1838,13 @@ def verify (env : Environment) (specEvidence : EvidenceMetadata) (baseline : Reg
     let required := completion id
     if id == .F03p then { required with completionRules := [] } else required
   let sourcePathClaim := land .F03p
-  let checked := inventory env {} sourcePathClaim #[] localSourcePath baseline
+  let checked := inventory env inScope {} sourcePathClaim #[] localSourcePath baseline
   unless checked.errors.isEmpty && checked.originalLanded == 1 do
     throwError "inventory control: local F03p evidence was refused: {checked.errors}"
   for requirement in (completion .F03p).localRules do
     let rule := requirement.name
     let withoutRule := { baseline with rules := baseline.rules.filter (·.name != rule) }
-    let checked := inventory env {} sourcePathClaim #[] localSourcePath withoutRule
+    let checked := inventory env inScope {} sourcePathClaim #[] localSourcePath withoutRule
     unless checked.errors.contains s!"F03p: missing unique registered rule {rule}" &&
         checked.originalLanded == 0 do
       throwError "inventory control: F03p landed without registry entry for {rule}"
@@ -1828,7 +1852,7 @@ def verify (env : Environment) (specEvidence : EvidenceMetadata) (baseline : Reg
         (`ConcreteSpec.Core.RuleRefused, "refusal")] do
       let withoutExample := { baseline with examples := baseline.examples.filter fun link =>
         !(link.rule == rule && exampleWrapper env link == some wrapper) }
-      let checked := inventory env {} sourcePathClaim #[] localSourcePath withoutExample
+      let checked := inventory env inScope {} sourcePathClaim #[] localSourcePath withoutExample
       unless checked.errors.contains s!"F03p: missing registered {verdict} example for {rule}" &&
           checked.originalLanded == 0 do
         throwError "inventory control: F03p landed without registered {verdict} for {rule}"
@@ -1840,13 +1864,13 @@ def verify (env : Environment) (specEvidence : EvidenceMetadata) (baseline : Reg
   let rule := `ConcreteSpec.Core.SourcePath.Nonempty
   let zeroRevision := { baseline with rules := baseline.rules.map fun entry =>
     if entry.name == rule then { entry with rev := 0 } else entry }
-  let checked := inventory env {} sourcePathClaim #[] localSourcePath zeroRevision
+  let checked := inventory env inScope {} sourcePathClaim #[] localSourcePath zeroRevision
   unless checked.errors == #[s!"F03p: registered rule {rule} has revision below 1"] &&
       checked.originalLanded == 0 do
     throwError "inventory control: F03p landed with revision zero"
   let localOnly := { baseline with rules := baseline.rules.filter (fun rule =>
     !(completion .F03p).completionRules.any (·.name == rule.name)) }
-  let checked := inventory env {} sourcePathClaim #[] completion localOnly
+  let checked := inventory env inScope {} sourcePathClaim #[] completion localOnly
   unless checked.originalLanded == 0 && checked.errors.any (·.startsWith "F03p: missing unique registered rule ConcreteSpec.Core.SourcePath.Project.") do
     throwError "inventory control: full F03p landed with local rules alone"
   let missingSpan (id : PieceId) :=
@@ -1854,7 +1878,7 @@ def verify (env : Environment) (specEvidence : EvidenceMetadata) (baseline : Reg
     { required with named := required.named.map fun group =>
       { group with declarations := group.declarations.map fun name =>
         if name == `ConcreteSpec.Core.Span then `ConcreteSpec.Core.missingSpan else name } }
-  let checked := inventory env {} sourcePathClaim #[] missingSpan baseline
+  let checked := inventory env inScope {} sourcePathClaim #[] missingSpan baseline
   unless checked.errors.contains
       "F03p: missing declaration ConcreteSpec.Core.missingSpan in ConcreteSpec.Spec.Ident" &&
       checked.originalLanded == 0 do
@@ -1870,10 +1894,10 @@ def verify (env : Environment) (specEvidence : EvidenceMetadata) (baseline : Reg
     laws origin [`ConcreteSpec.Core.Observe.OutputEvidence.law],
     decls origin [`ConcreteSpec.Core.Observe.OutputEvidence.planted]]
   let outputEvidence := { fixtures with laws := fixtures.laws.erase `SpecLanding.Control.newName }
-  let checked := inventory env outputEvidence (land .F21 (environment ++ output)) #[] outputFixture
+  let checked := inventory env inScope outputEvidence (land .F21 (environment ++ output)) #[] outputFixture
   unless checked.errors.isEmpty && checked.originalLanded == 1 do
     throwError "inventory control: complete F21 proof reservations were refused: {checked.errors}"
-  let checked := inventory env outputEvidence (land .F21 (environment ++ [outputHelper])) #[] outputFixture
+  let checked := inventory env inScope outputEvidence (land .F21 (environment ++ [outputHelper])) #[] outputFixture
   unless checked.originalLanded == 0 &&
       checked.errors.any (·.startsWith "F21: missing reserved Law theorem under ConcreteSpec.Core.Observe.OutputEvidence") &&
       checked.errors.any (·.startsWith "F21: missing reserved planted control under ConcreteSpec.Core.Observe.OutputEvidence") do
@@ -1888,11 +1912,11 @@ def verify (env : Environment) (specEvidence : EvidenceMetadata) (baseline : Reg
   let some repOrigin := specEvidence.laws.find? repLaw
     | throwError "inventory control: M09's named Law is missing"
   let qualifiedEvidence := { observed with laws := ({} : NameMap Name).insert repLaw repOrigin }
-  let checked := inventory env qualifiedEvidence
+  let checked := inventory env inScope qualifiedEvidence
     (land .M09 [decls origin [`SpecLanding.Control.wrongIncrement]]) #[] qualificationFixture
   unless checked.errors.isEmpty && checked.qualificationLanded == 1 do
     throwError "inventory control: M09 with an existing Law and reserved control did not land: {checked.errors}"
-  let checked := inventory env qualifiedEvidence
+  let checked := inventory env inScope qualifiedEvidence
     (land .M09 [decls origin [`SpecLanding.Control.retained]]) #[] qualificationFixture
   unless checked.errors.size == 1 &&
       checked.errors.any (·.startsWith "M09: missing reserved planted control") &&
@@ -1901,7 +1925,7 @@ def verify (env : Environment) (specEvidence : EvidenceMetadata) (baseline : Reg
   let registryOnly := { present .F17 "" with groups := [decls origin [`SpecLanding.Control.retained]] }
   let needsSpecAndRegistry (id : PieceId) :=
     { completion id with namespaces := ⟨origin, `SpecLanding.Control, false, none⟩ :: (completion id).namespaces }
-  let incomplete := inventory env {} [registryOnly] #[] needsSpecAndRegistry
+  let incomplete := inventory env inScope {} [registryOnly] #[] needsSpecAndRegistry
   unless incomplete.errors.contains
       "F17: missing completion evidence under ConcreteSpec.Core.Grants in ConcreteSpec.Spec.Grant" do
     throwError "inventory control: incomplete namespace coverage was accepted"
@@ -1910,7 +1934,7 @@ def verify (env : Environment) (specEvidence : EvidenceMetadata) (baseline : Reg
     registryNamespace `Core.Leak.Registry ruleOrigin]
   let registryGroup := evidence `ConcreteSpec.Spec.Rules `ConcreteSpec.Core.Leak.Registry
   let checkRegistry (ruleOrigin : Name) (names : List Name) (registry : Registry := baseline) :=
-    inventory env {} (land .F17 [registryGroup names]) #[] (registryFixture ruleOrigin) registry
+    inventory env inScope {} (land .F17 [registryGroup names]) #[] (registryFixture ruleOrigin) registry
   let missingPair (ruleOrigin : Name) :=
     s!"F17: missing registered rule authored in {ruleOrigin} with cited acceptance and refusal under ConcreteSpec.Core.Leak.Registry in ConcreteSpec.Spec.Rules"
   let pair := [`accountA, `wfAccepted, `wfRefused]
@@ -1946,7 +1970,7 @@ def verify (env : Environment) (specEvidence : EvidenceMetadata) (baseline : Reg
       registry.hasExample rulesEnv rule `ConcreteSpec.Core.RuleAccepted (· == accepted) &&
       registry.hasExample rulesEnv rule `ConcreteSpec.Core.RuleRefused (· == refused) do
     throwError "inventory control: Rules-authored reservation fixture failed to resolve"
-  let checked := inventory rulesEnv {} (land .F17 [decls rulesModule [accepted, refused]]) #[]
+  let checked := inventory rulesEnv inScope {} (land .F17 [decls rulesModule [accepted, refused]]) #[]
     (fun _ => reservedEvidence [ns]) registry
   unless checked.errors.any (·.startsWith "F17: missing registered rule authored in ConcreteSpec.Spec.Rules") &&
       checked.originalLanded == 0 do
@@ -1957,24 +1981,40 @@ def verify (env : Environment) (specEvidence : EvidenceMetadata) (baseline : Reg
   unless checked.any (·.startsWith "F22: overlapping completion reservation with F21") &&
       checked.contains "F21: uncited declaration ConcreteSpec.Core.Observe.OutputEvidence.helper in completion reservation" do
     throwError "inventory control: overlapping reservation or pre-existing helper was accepted"
-  let orphan := rootErrors env #[`ConcreteSpec.Spec.Basics, `ConcreteSpec.PlantedOrphan]
-  let checked := inventory env {} [] orphan
+  let orphan := rootErrors specModules #[`ConcreteSpec.Spec.Basics, `ConcreteSpec.PlantedOrphan]
+  let checked := inventory env inScope {} [] orphan
   unless checked.errors == #["spec module outside the root import closure: ConcreteSpec.PlantedOrphan"] do
     throwError "inventory control: root integrity depends on the plan rows"
+  -- A reduced spec root leaves Scalar reachable through the compiler alone.
+  let reducedSpec := importClosure env `ConcreteSpec.Spec.Basics
+  let compilerOnly := `ConcreteSpec.Spec.Scalar
+  unless compilerModules.contains compilerOnly &&
+      rootErrors reducedSpec #[compilerOnly] ==
+        #[s!"spec module outside the root import closure: {compilerOnly}"] do
+    throwError "inventory control: compiler imports masked a spec module outside the spec root"
+  let checked := inventory env (evidenceInScope reducedSpec compilerModules) {} (land .F06) #[]
+    (plainCitation `ConcreteSpec.Core.IntTy compilerOnly)
+  unless checked.errors == #[s!"F06: evidence module outside its root import closure: {compilerOnly}"] &&
+      checked.originalLanded == 0 do
+    throwError "inventory control: accepted spec evidence reachable only through the compiler"
   IO.println "inventory controls passed"
 
 end Control
 
 #eval show CommandElabM Unit from do
   let env ← getEnv
-  let observed ← readEvidence env (fun origin => origin.getRoot == `ConcreteSpec)
-  let registry ← readRegistry env
-  let result := inventory env observed plan ((← checkRoot env) ++ reservationErrors env plan)
+  let specModules := importClosure env `ConcreteSpec
+  let compilerModules := importClosure env `Concrete
+  let inSpec (origin : Name) := origin.getRoot == `ConcreteSpec && specModules.contains origin
+  let observed ← readEvidence env inSpec
+  let registry ← readRegistry env specModules
+  let result := inventory env (evidenceInScope specModules compilerModules) observed plan
+    ((← checkRoot specModules) ++ reservationErrors env plan)
     completion registry
   for row in result.rows ++ result.errors do
     IO.println row
   if !result.errors.isEmpty then throwError "spec landing inventory failed"
-  Control.verify env observed registry
+  Control.verify env specModules compilerModules observed registry
   let (qualifications, spec) := plan.partition (fun piece => scopeKind piece.id == .qualification)
   let (original, additions) := spec.partition (fun piece => scopeKind piece.id == .original)
   let dispositionCount := (spec.filter (·.disposition.isSome)).length

@@ -2,7 +2,7 @@
 
 Run from the repository root with `nix develop -c bash scripts/spec/landing_inventory.sh`.
 The Spec build job runs the same gate. It builds the checkout and loads its elaborated
-`ConcreteSpec` environment. On main the report describes main. On a candidate it describes
+`ConcreteSpec` and `Concrete` roots. Compiler evidence is used for F30. On main the report describes main. On a candidate it describes
 what that candidate would land.
 
 The inventory checks the structure of landing evidence, and two independent reviewers judge whether it covers the piece’s required behavior.
@@ -47,7 +47,7 @@ and its registry evidence are outstanding. Shared modules have piece-specific ev
 reserve names for evidence produced by the migration. If a name or defining module changes, update the completion requirements in
 the same patch. Partial rows retain the references for their remaining work.
 
-Lean selects authored theorems with a `Law` doc tag from the environment, including `Law:`
+Lean selects authored theorems with a `Law` doc tag from the spec root’s import closure, including `Law:`
 and tags followed by whitespace. A missing or unassigned Law fails the gate. Instances,
 Planted controls, Helpers, and Representation lemmas can supply named evidence without
 counting as Laws. Existing build and proof checks still qualify proof validity and coverage.
@@ -60,7 +60,8 @@ a Law-tagged definition, borrowed declarations from shared or pre-existing modul
 an output reservation with only a helper, missing source-path registry entries and examples,
 a cited registry example pair for a rule defined in a different module,
 overlapping reservations, uncited declarations in reserved namespaces, and an orphan module
-with an empty plan.
+with an empty plan. A reduced spec root also checks that compiler imports cannot make a spec
+module or its evidence eligible.
 
 | Old feature | Disposition and reason |
 | --- | --- |
