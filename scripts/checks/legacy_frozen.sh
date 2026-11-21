@@ -22,7 +22,9 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 # judge FROZEN_TREE CURRENT_TREE RETENTION_FILE (in the current repository): prints one problem per line.
 judge() {
-  local frozen="$1" cur="$2" ret="$3"
+  local frozen="$1"
+  local cur="$2"
+  local ret="$3"
   [ "$frozen" = "$cur" ] && return 0
   git diff-tree -r --no-renames --name-status "$frozen" "$cur" | python3 -I -c '
 import sys

@@ -13,6 +13,7 @@ source "${script%/*}/runtime.sh" || exit 2
 review_require_absolute_path "${PATH-}" || exit 2
 review_resolve_paths || exit 2
 root="$1" sha="$2" prompt="$3" piece="$4" out="$5" log="$6"
+review_prepare_codex_home "$root" || exit 2
 here="$(CDPATH= cd -- "${script%/*}/" && pwd)"
 if [ "$#" -eq 6 ]; then
   python="$(review_executable python3)" || { echo "review runner: python3 executable not found" >&2; exit 2; }

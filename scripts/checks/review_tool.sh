@@ -223,7 +223,8 @@ fi
 EOF
 } >"$T/bin/codex"
 chmod +x "$T/bin/codex"
-export REVIEW_CODEX_BIN="$T/bin/codex" REVIEW_PUSH=0
+export REVIEW_CODEX_BIN="$T/bin/codex"
+export REVIEW_PUSH=0
 
 calls() { [ -f "$FAKE_LOG/calls" ] && wc -l <"$FAKE_LOG/calls" | tr -d ' ' || echo 0; }
 reset_fake() { rm -f "$FAKE_LOG"/*; }
@@ -232,6 +233,8 @@ reset_fake() { rm -f "$FAKE_LOG"/*; }
 git init -q --bare "$T/origin.git"
 git clone -q "$T/origin.git" "$T/w" 2>/dev/null
 W="$T/w"
+# Keep fixture launches independent of the gate caller's Codex configuration.
+unset CODEX_HOME
 g() { git -C "$W" "$@"; }
 commit_file() { # commit_file <path> <content> <message>
   mkdir -p "$(dirname "$W/$1")"
@@ -248,7 +251,8 @@ field() { note "${2:-HEAD}" | sed -n "s/^$1: //p"; }
 
 echo "=== review host contract ==="
 reject_args() {
-  local diagnostic="$1" rc=0
+  local diagnostic="$1"
+  local rc=0
   shift
   "$@" >"$T/bad-arguments" 2>&1 || rc=$?
   check "$diagnostic (exit $rc)" test "$rc" -eq 2
@@ -615,7 +619,11 @@ check "the next review also sends the unrelated change" grep -Fxq -- '+unrelated
 
 echo "=== verdict parsing ==="
 parse_case() { # parse_case <marker> <want-exit> <want-verdict> <label>
-  local marker="$1" want="$2" wantv="$3" label="$4" rc
+  local marker="$1"
+  local want="$2"
+  local wantv="$3"
+  local label="$4"
+  local rc
   reset_fake
   g checkout -q main && g checkout -qb "parse-$marker"
   commit_file "p/$marker.txt" "$marker" "case $marker"
@@ -701,6 +709,9 @@ g restore AGENTS.md README.md
 rm "$W/untracked"
 # Resolve relative inputs and the executable in the invoking directory.
 mkdir "$T/relative"
+mkdir "$T/codex-home" "$W/codex-home"
+ln -s "$T/codex-home" "$T/relative/codex-home"
+ln -s "$W/codex-home" "$T/checkout-codex-home"
 printf 'review\n' >"$T/relative/prompt"
 printf 'diff\n' >"$T/relative/piece"
 reset_fake
@@ -711,7 +722,20 @@ check "relative helper arguments produce caller output and events" test "$rc" = 
   -a -s "$T/relative/output" -a -s "$T/relative/events"
 mkdir -p "$W/sub"
 commit_file relative.txt relative relative
-(cd "$W/sub" && HOME=../review-home CODEX_HOME=codex-home SSL_CERT_FILE=cert.pem \
+for checkout_home in ../codex-home ../../checkout-codex-home; do
+  (cd "$W/sub" && CODEX_HOME="$checkout_home" bash "$REVIEW") >"$T/checkout-home.log" 2>&1; rc=$?
+  check "checkout CODEX_HOME ($checkout_home) blocks the review before launch" \
+    test "$rc" = 2 -a ! -e "$FAKE_LOG/stdin.2"
+  check "checkout CODEX_HOME ($checkout_home) gives the outside-root diagnostic" \
+    grep -Fq 'CODEX_HOME must be outside the repository root' "$T/checkout-home.log"
+done
+(cd "$T/relative" && CODEX_HOME="$T/checkout-codex-home" bash "$ROOT_DIR/scripts/review/invoke.sh" \
+  ../w "$(g rev-parse HEAD)" prompt piece denied denied-events) >"$T/checkout-invoke.log" 2>&1; rc=$?
+check "standalone invoke rejects a symlink into the checkout before launch" \
+  test "$rc" = 2 -a ! -e "$FAKE_LOG/stdin.2"
+check "standalone invoke gives the outside-root diagnostic" \
+  grep -Fq 'CODEX_HOME must be outside the repository root' "$T/checkout-invoke.log"
+(cd "$W/sub" && HOME=../review-home CODEX_HOME="$T/relative/codex-home" SSL_CERT_FILE=cert.pem \
   SSL_CERT_DIR="certs:$T/absolute-certs:../more-certs" REVIEW_CODEX_BIN=../../bin/codex bash "$REVIEW") >"$T/relative-review.log" 2>&1; rc=$?
 check "relative reviewer executable works from caller subdirectory" test "$rc" = 0
 # Check values observed by the fake and reject malformed settings at direct launch.
@@ -722,7 +746,7 @@ for setting in HOME CODEX_HOME SSL_CERT_FILE SSL_CERT_DIR TMPDIR GIT_CEILING_DIR
     archive="$(cat "$FAKE_LOG/directory.$call")"
     case "$setting" in
       HOME) expected="$caller/../review-home" ;;
-      CODEX_HOME) expected="$caller/codex-home" ;;
+      CODEX_HOME) expected="$T/codex-home" ;;
       SSL_CERT_FILE) expected="$caller/cert.pem" ;;
       SSL_CERT_DIR) expected="$caller/certs:$T/absolute-certs:$caller/../more-certs" ;;
       TMPDIR) expected="${archive%/*}/tmp" ;;
@@ -741,6 +765,55 @@ for setting in HOME CODEX_HOME SSL_CERT_FILE SSL_CERT_DIR TMPDIR GIT_CEILING_DIR
     check "$setting: supervisor identifies invalid setting" grep -Fq "$setting entries must be absolute" "$T/invalid-setting.log"
   done
 done
+
+# Run both landing entry points through the real review driver with the fake
+# reviewer. Only impact and remote gates are replaced in this fixture.
+(
+  export LAND_NO_NIX=1 LAND_REMOTE_RUNNER= REVIEW_PUSH=1
+  export LAND_HOOK="$T/landing-hook"
+  printf -v LAND_REVIEW_CMD 'bash %q' "$REVIEW"
+  export LAND_REVIEW_CMD
+  cat >"$LAND_HOOK" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = --concrete-identify ]; then
+  printf 'concrete-pre-push %s/.githooks/pre-push\n' "$(pwd -P)"
+  exit 0
+fi
+cat >/dev/null
+EOF
+  chmod +x "$LAND_HOOK"
+  mkdir "$T/landing-hooks"
+  ln -s "$LAND_HOOK" "$T/landing-hooks/pre-push"
+  export GIT_CONFIG_COUNT=1
+  export GIT_CONFIG_KEY_0=core.hooksPath
+  export GIT_CONFIG_VALUE_0="$T/landing-hooks"
+  base="$(g rev-parse main)"
+  for entry in train ready; do
+    reset_fake
+    branch=train/codex-home
+    [ "$entry" = train ] || branch=wip/codex-home
+    g checkout -qb "$branch" main || exit 1
+    commit_file "$entry.txt" "$entry" "$entry CODEX_HOME control" || exit 1
+    mkdir -p "$W/sub"
+    if [ "$entry" = train ]; then
+      state="$(g rev-parse --absolute-git-dir)/concrete-landing/codex-home"
+      mkdir -p "$state"
+      printf 'base=%s\nhead=%s\n' "$base" "$(g rev-parse HEAD)" >"$state/train.env"
+      args=(check codex-home --no-remote --local-gates)
+    else
+      g push -q origin "$branch" || exit 1
+      args=(--no-remote "$branch")
+    fi
+    (cd "$W/sub" && CODEX_HOME=../../relative/codex-home \
+      bash "$ROOT_DIR/scripts/land/$entry.sh" "${args[@]}") >"$T/$entry-codex-home.log" 2>&1 || {
+        cat "$T/$entry-codex-home.log" >&2
+        exit 1
+      }
+    grep -Fxq -- "$T/codex-home" "$FAKE_LOG/CODEX_HOME.1" || exit 1
+    echo "  ok   $entry.sh resolves external CODEX_HOME from the caller subdirectory"
+  done
+) && ok "both landing entry points pass the caller-relative CODEX_HOME to Codex" \
+  || no "both landing entry points pass the caller-relative CODEX_HOME to Codex"
 reset_fake
 printf '#!/bin/sh\ntouch "%s"\n' "$FAKE_LOG/builtin-ran" >"$W/sub/:"
 chmod +x "$W/sub/:"

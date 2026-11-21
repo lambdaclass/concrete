@@ -48,7 +48,8 @@ get_note() { # kind sha [key]
 }
 
 put_note() { # kind sha key=value...
-  local kind="$1" sha="$2"; shift 2
+  local kind="$1"
+  local sha="$2"; shift 2
   sha="$(git rev-parse --verify "$sha^{commit}")" || die "put: '$2' is not a commit"
   local msg="" kv
   for kv in "$@"; do
@@ -58,7 +59,10 @@ put_note() { # kind sha key=value...
   msg="${msg}utc: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   # Each write is built on its OWN temporary ref, so writers sharing this clone (or its linked
   # worktrees) never rewrite each other's local state; what is pushed is the captured commit.
-  local try tip tmp="refs/notes/tmp/concrete-$kind-$$-$RANDOM" new
+  local try
+  local tip
+  local tmp="refs/notes/tmp/concrete-$kind-$$-$RANDOM"
+  local new
   trap 'git update-ref -d "'"$tmp"'" 2>/dev/null || true' RETURN
   for try in 1 2 3 4 5; do
     fetch_kind "$kind"

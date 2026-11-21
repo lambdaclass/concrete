@@ -424,6 +424,9 @@ script against a throwaway repository with bare-repo remotes and a fake `gh`. It
   reuses an attestation only for this exact push and refuses each of the following: another SHA,
   changed files, selection or environment, a dirty tree, a tampered or re-digested log, a tampered
   or truncated attestation, and a log that is not a pass;
+- the pre-push WIP tier accepts a clean off-HEAD commit and rejects a conflict in the
+  second advertised ref with both the checkout and its upstream clean. The full tier accepts a
+  matching advertised SHA and refuses an off-HEAD SHA before starting validation;
 - bisection;
 - the report.
 

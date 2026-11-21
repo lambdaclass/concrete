@@ -1,6 +1,7 @@
 # Require one absolute directory per colon-delimited PATH entry.
 review_require_absolute_path() {
-  local rest="$1" entry
+  local rest="$1"
+  local entry
   while :; do
     entry=${rest%%:*}
     case "$entry" in
@@ -30,11 +31,36 @@ review_executable() {
   printf '%s\n' "$executable"
 }
 
+# Anchor CODEX_HOME in the caller's directory and exclude the live checkout.
+# Run at every standalone entry point, before changing the working directory.
+review_prepare_codex_home() {
+  [ "${CODEX_HOME+x}" = x ] || return 0
+  if [ -z "$CODEX_HOME" ]; then
+    echo "review: CODEX_HOME requires a nonempty path" >&2
+    return 1
+  fi
+  local resolved
+  resolved="$(python3 -I -c '
+from pathlib import Path
+import sys
+
+try:
+    root, home = (Path(value).resolve() for value in sys.argv[1:])
+except (OSError, RuntimeError) as exc:
+    sys.exit(f"review: cannot resolve CODEX_HOME or repository root: {exc}")
+if home == root or root in home.parents:
+    sys.exit(f"review: CODEX_HOME must be outside the repository root ({root}): {home}")
+# A final slash preserves any trailing newlines through shell command substitution.
+print(home, end="/")
+' "$1" "$CODEX_HOME")" || return 1
+  export CODEX_HOME="${resolved%/}"
+}
+
 # Anchor caller-supplied paths before the driver enters the repository or the
 # runner enters the archive. Keep ".." intact for paths that cross symlinks.
 review_resolve_paths() {
   local variable rest entry resolved
-  for variable in HOME CODEX_HOME TMPDIR SSL_CERT_FILE SSL_CERT_DIR; do
+  for variable in HOME TMPDIR SSL_CERT_FILE SSL_CERT_DIR; do
     [ "${!variable+x}" = x ] || continue
     rest=${!variable}
     resolved=

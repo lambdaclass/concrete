@@ -29,7 +29,11 @@ while [ $# -gt 0 ]; do
   esac; shift
 done
 [ -n "$branch" ] || die "name the pushed branch (e.g. wip/my-fix)"
-cd "$(git rev-parse --show-toplevel)"
+ROOT="$(git rev-parse --show-toplevel)" || die "not inside a git work tree"
+# shellcheck source=scripts/review/runtime.sh
+. "$SELF_DIR/../review/runtime.sh"
+review_prepare_codex_home "$ROOT" || exit 1
+cd "$ROOT"
 REMOTE=origin
 [ -z "$(git status --porcelain --untracked-files=no)" ] || die "the work tree has uncommitted changes"
 land_assert_no_op start

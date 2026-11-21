@@ -26,7 +26,9 @@ count=0
 examples=0
 # check NAME DIR SECS RETRY: build both backends in DIR, run them and judge them.
 check() {
-  local name=$1 d=$2 backend
+  local name=$1
+  local d=$2
+  local backend
   build "$name" "$d/build.log" bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" "$d" "$lcb"
   for backend in llvm lcb; do
     observe "$d/$backend.exe" "$d/$backend" "$3" "$4"
@@ -56,7 +58,12 @@ unsupported_source_program() {
   mv "$1.new" "$1"
 }
 manifest_control() { # manifest_control LABEL EXPECTED-MESSAGE MUTATION-FUNCTION
-  local label=$1 expected=$2 mutation=$3 dir="$work/ctl/$1" copy rc=0
+  local label=$1
+  local expected=$2
+  local mutation=$3
+  local dir="$work/ctl/$1"
+  local copy
+  local rc=0
   mkdir -p "$dir"
   cp -R "$(dirname "$test_manifest")" "$dir/tests"
   copy="$dir/tests/$(basename "$test_manifest")"

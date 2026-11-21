@@ -27,7 +27,8 @@ land_in_nix() {
 }
 
 land_assert_no_op() {
-  local what="$1" p
+  local what="$1"
+  local p
   for p in MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD rebase-merge rebase-apply; do
     if [ -e "$(git rev-parse --git-path "$p")" ]; then
       echo "land: after $what: a git operation is still in progress ($p exists); stopping" >&2
@@ -38,7 +39,8 @@ land_assert_no_op() {
 
 LEG_NAMES=(); LEG_PIDS=(); LEG_LOGS=()
 legs_start() { # name log cmd...
-  local n="$1" log="$2"; shift 2
+  local n="$1"
+  local log="$2"; shift 2
   rm -f "$log.rc"
   (
     s="$(date +%s)"; rc=0

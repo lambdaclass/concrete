@@ -81,7 +81,10 @@ standin_hook() {
   chmod +x "$TMP/nohooks/pre-push"
 }
 standin_hook
-export LAND_NO_NIX=1 LAND_STATE_DIR="$TMP/state" LAND_GH="$TMP/fake-gh" LAND_REPO=test/repo
+export LAND_NO_NIX=1
+export LAND_STATE_DIR="$TMP/state"
+export LAND_GH="$TMP/fake-gh"
+export LAND_REPO=test/repo
 export LAND_PUSH_RETRY_SLEEP=0
 unset LAND_GATES_HOST LAND_GATES_TRANSPORT CONCRETE_PREPUSH_NO_REUSE
 export FAKE_GH_DIR="$TMP/gh"; mkdir -p "$FAKE_GH_DIR"
@@ -449,7 +452,8 @@ R1="$(git -C "$R" rev-parse HEAD~1)" R2="$(git -C "$R" rev-parse HEAD)"
 printf 'bash scripts/g.sh\n' > "$TMP/plan"; printf 'scripts/g2.sh\n' > "$TMP/changed"
 lib(){ ( unset CONCRETE_TEST_FWD; cd "$R" && source "$ROOT_DIR/scripts/checks/lib/prepush_record.sh" && "$@" ); }
 mklog(){ # sha exit-rc extra-record-lines... -> $TMP/rlog: a run-at-ref log carrying a record of this push
-  local sha="$1" erc="$2"; shift 2
+  local sha="$1"
+  local erc="$2"; shift 2
   lib ppr_remote_components "$R" "$sha" "$TMP/changed" "$TMP/plan" "$TMP/rcomp" || return 1
   { echo "[concrete-remote] ref=refs/land-remote/x sha=$sha clone=/runs/x host=gatehost"
     echo "gate output"
@@ -569,7 +573,10 @@ python3 -I -c 'import sys; sys.exit(0 if ("CONCRETE_INJ=" + sys.argv[2]).encode(
 ! grep -qz '^CONCRETE_SKIP_GATES=' "$TMP/remote.env" && ok "the host's own CONCRETE_SKIP_GATES is cleared before the hook" || no "host-side bypass reached the hook"
 [ -z "$(ls -A "$HH" | grep -v '^concrete2$\|^runs$')" ] && ok "the host keeps no bundle or script after the run" || no "host leftovers: $(ls -A "$HH")"
 printf 'scripts/g2.sh\n' > "$TMP/ri.changed"; printf 'bash scripts/g.sh\n' > "$TMP/ri.plan"
-dec="$( cd "$RI" && export CONCRETE_TEST_OUT="$TMP" CONCRETE_TEST_LIB="$ROOT_DIR/scripts/checks/lib/prepush_record.sh" CONCRETE_INJ="$INJ" \
+dec="$( cd "$RI" \
+  && export CONCRETE_TEST_OUT="$TMP" \
+  && export CONCRETE_TEST_LIB="$ROOT_DIR/scripts/checks/lib/prepush_record.sh" \
+  && export CONCRETE_INJ="$INJ" \
   && source "$ROOT_DIR/scripts/checks/lib/prepush_record.sh" && ppr_remote_components "$RI" "$RIH" "$TMP/ri.changed" "$TMP/ri.plan" "$TMP/ri.comp" \
   && ppr_remote_check "$RI" "$TMP/ri.comp" && echo REUSE || echo "refused:$PPR_REASON" )"
 [ "$dec" = REUSE ] && ok "the push's hook reuses the record the host's run produced" || no "e2e reuse: $dec"
@@ -825,7 +832,10 @@ rjobs(){ # id sha jobs-json
 GREEN='[{"name":"Build","conclusion":"success","databaseId":31},{"name":"Other","conclusion":"success","databaseId":32},{"name":"Campaign: gate mutation shard 1","conclusion":"skipped","databaseId":33}]'
 rec(){ bash "$TRAIN" record "$@" 2>&1; }
 rec_refuses(){ # label expected-text args...
-  local label="$1" want="$2" o r; shift 2
+  local label="$1"
+  local want="$2"
+  local o
+  local r; shift 2
   o="$(rec "$@")"; r=$?
   [ "$r" != 0 ] && has "$o" "$want" && ! has "$o" "qualifying_run=" && ok "record refuses $label" \
     || { no "record accepted $label (exit $r)"; echo "$o" | sed 's/^/      /'; }
@@ -1327,7 +1337,13 @@ o="$(bash "$ROOT_DIR/scripts/land/signoff.sh" verify "$R2" --base "$MR" 2>&1)"; 
 # validating. Verify forged records with matching hashes as well as record's refusal
 # to create a ref. Both canonical outcomes remain legitimate owner sign-offs.
 verdict_case(){ # label output expected-status expected-verdict
-  local label="$1" output="$2" expected="$3" value="$4" mode o r
+  local label="$1"
+  local output="$2"
+  local expected="$3"
+  local value="$4"
+  local mode
+  local o
+  local r
   for mode in recordverdict verdict; do
     o="$(SO_OUTPUT="$output" bash "$TMP/put-signoff" "$R2" "$mode" 2>&1)"; r=$?
     if [ "$mode" = verdict ] || [ "$expected" = pass ]; then
@@ -1439,6 +1455,77 @@ out="$(cd "$TMP/linked-wt" && printf 'refs/heads/main %s refs/heads/ci/twt %s\n'
   && ok "the pre-push hook refuses a gated push from a linked worktree (before any check runs)" || { no "hook in a linked worktree: exit $rc"; echo "$out" | sed 's/^/      /'; }
 out="$(cd "$TMP/linked-wt" && printf 'refs/heads/x %s refs/heads/wip/twt %s\n' "$mh" "$Z" | bash "$hook" origin "$TMP/origin.git" 2>&1)"; rc=$?
 [ "$rc" = 0 ] && has "$out" "wip/* backup push" && ok "a wip/* backup push from a linked worktree still passes (it runs nothing)" || { no "wip push from a worktree: exit $rc"; echo "$out" | sed 's/^/      /'; }
+
+echo "=== pre-push checks the refs Git advertises on stdin ==="
+# Keep HEAD and its upstream clean while advertising commits from a different branch.
+# Invoke the hook directly in the sandbox with its real wire format. No hook is installed
+# for this probe, and the linked-worktree guard keeps it from re-entering the root suite.
+(
+  set -e
+  cd "$TMP/linked-wt"
+  git switch -qc stdin-source
+  printf 'ordinary content\n' > stdin-control.txt
+  git add -- stdin-control.txt
+  git commit -qm "clean push input"
+  git branch stdin-clean
+  git rev-parse HEAD > "$TMP/stdin-clean"
+  printf '%s\n' '<<<<<<< planted' > stdin-control.txt
+  git add -- stdin-control.txt
+  git commit -qm "conflicted push input"
+  git rev-parse HEAD > "$TMP/stdin-conflicted"
+  git switch -qc stdin-checkout --track main
+) || exit 2
+clean="$(cat "$TMP/stdin-clean")"
+conflicted="$(cat "$TMP/stdin-conflicted")"
+stdin_hook() {
+  (cd "$TMP/linked-wt" && CONCRETE_SKIP_GATES=0 bash "$hook" origin "$TMP/origin.git")
+}
+printf 'refs/heads/stdin-clean %s refs/heads/wip/clean %s\n' "$clean" "$Z" > "$TMP/push-clean"
+cp "$TMP/push-clean" "$TMP/push-conflicted"
+printf 'refs/heads/stdin-source %s refs/heads/wip/conflicted %s\n' "$conflicted" "$Z" >> "$TMP/push-conflicted"
+out="$(stdin_hook < "$TMP/push-clean" 2>&1)"; rc=$?
+[ "$rc" = 0 ] && has "$out" "wip/* backup push (1 update(s)" \
+  && ok "a clean advertised commit away from HEAD passes" || no "clean stdin push: exit $rc, $out"
+out="$(stdin_hook < "$TMP/push-conflicted" 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "conflict markers in $conflicted" \
+  && ok "a conflict in the second advertised ref is refused despite a clean HEAD and upstream" || no "conflicted stdin push: exit $rc, $out"
+
+# Use a full clone so the real hook reaches its checkout guard. The build and root
+# runner are local stand-ins, and this clone never installs the real hook.
+gated_repo="$TMP/gated-push"
+git clone -q --no-local --branch stdin-clean "$TMP/linked-wt" "$gated_repo" || exit 2
+mkdir -p "$gated_repo/scripts/checks" "$TMP/gated-bin" "$TMP/gated-logs" || exit 2
+cat > "$TMP/gated-bin/lake" <<'EOF'
+#!/usr/bin/env bash
+[ "$#" = 1 ] && [ "$1" = build ] || exit 2
+printf 'build\n' >> "$GATED_CALLS"
+EOF
+printf '#!/usr/bin/env bash\nprintf "checks\\n" >> "$GATED_CALLS"\n' > "$gated_repo/scripts/checks/run.sh"
+chmod +x "$TMP/gated-bin/lake" || exit 2
+git -C "$gated_repo" add -f -- scripts/checks/run.sh || exit 2
+git -C "$gated_repo" commit -qm "install fixture check runner" || exit 2
+gated_head="$(git -C "$gated_repo" rev-parse HEAD)" || exit 2
+BOUNDED_PARENT="$TMP" source "$ROOT_DIR/scripts/checks/lib/bounded.sh" || exit 2
+gated_hook() {
+  (
+    cd "$gated_repo" || exit 2
+    PATH="$TMP/gated-bin:$PATH" TMPDIR="$TMP/gated-logs" GATED_CALLS="$TMP/gated-calls" \
+      CONCRETE_GATES_SHELL=1 CONCRETE_SKIP_GATES=0 bounded_run -i "$1" 15 -- \
+      bash "$hook" origin "$TMP/origin.git"
+  )
+}
+printf 'refs/heads/stdin-clean %s refs/heads/ci/matching %s\n' "$gated_head" "$Z" > "$TMP/push-gated"
+out="$(gated_hook "$TMP/push-gated" 2>&1)"; rc=$?
+[ "$rc" = 0 ] && [ "$(cat "$TMP/gated-calls" 2>/dev/null)" = "$(printf 'build\nchecks')" ] \
+  && ok "the full tier validates a matching advertised SHA" || no "matching gated push: exit $rc, $out"
+rm -f "$TMP/gated-calls"
+git -C "$gated_repo" branch stdin-off-head "$clean" || exit 2
+printf 'refs/heads/stdin-off-head %s refs/heads/ci/off-head %s\n' "$clean" "$Z" >> "$TMP/push-gated"
+out="$(gated_hook "$TMP/push-gated" 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "pushing ${clean:0:10}, but the checkout is at ${gated_head:0:10}" \
+  && [ ! -e "$TMP/gated-calls" ] \
+  && ok "the full tier refuses a second advertised SHA away from HEAD before validation" || no "off-HEAD gated push: exit $rc, $out"
+
 git worktree remove --force "$TMP/linked-wt"
 # hook off: not executable, missing, or some other hook that does not run the repository's.
 chmod -x "$TMP/nohooks/pre-push"

@@ -123,7 +123,8 @@ cmd_record() {
 commit: $sha
 date: $date
 quote: $quote
-rounds-at: $at" entries=""
+rounds-at: $at"
+  local entries=""
   for r in $REVIEWERS; do
     q="${r}_request"; q="${!q}"; [ -f "$q" ] || die "record: --$r-request FILE is required (the verbatim review request)"
     f="${!r}"; [ -f "$f" ] || die "record: --$r FILE is required (the reviewer's verdict output)"
@@ -151,7 +152,9 @@ verdict-$r: $r.txt $(sha256 < "$f")"
 
 # check SHA RECORD BASE: judge the record commit RECORD as a sign-off of SHA (exit 1 with the reason)
 check() {
-  local sha="$1" obj="$2" base="$3"
+  local sha="$1"
+  local obj="$2"
+  local base="$3"
   bad() { echo "$sha owner sign-off does not qualify: $*"; exit 1; }
   [ "$(git cat-file -t "$obj:record.txt" 2>/dev/null)" = blob ] || bad "the record holds no record.txt"
   local rec line k v seen=" " F_signoff="" F_commit="" F_date="" F_quote="" F_rounds_at=""

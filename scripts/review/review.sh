@@ -51,6 +51,7 @@ export GIT_NO_REPLACE_OBJECTS=1
 SCRIPT_DIR="$(CDPATH= cd -- "${script%/*}/" && pwd)"
 source "$SCRIPT_DIR/../checks/lib/has_match.sh" || exit 2  # bug 283: never a pipe into grep -q
 ROOT="$(git rev-parse --show-toplevel)"
+review_prepare_codex_home "$ROOT" || exit 2
 
 CODEX_BIN="${REVIEW_CODEX_BIN:-codex}"
 REMOTE=origin
@@ -129,7 +130,8 @@ sync_notes() {
 # Push both notes refs; on a non-fast-forward, fetch + merge and retry.
 push_notes() {
   [ "$PUSH" = 1 ] || return 0
-  local attempt refs=("$NOTES_REF")
+  local attempt
+  local refs=("$NOTES_REF")
   git show-ref -q --verify "$FINDINGS_REF" && refs+=("$FINDINGS_REF")
   for attempt in 1 2 3; do
     if git push -q "$REMOTE" "${refs[@]}" 2>"$WORK/push.err"; then
@@ -152,7 +154,8 @@ note_field() { # note_field <text> <key>
 }
 
 findings_for() { # findings_for <sha> <round>: the recorded findings of that round
-  local sha="$1" round="$2"
+  local sha="$1"
+  local round="$2"
   if git notes --ref="$FINDINGS_REF" show "$sha" 2>/dev/null; then return 0; fi
   if [ -f ".review/$sha-$round.md" ]; then cat ".review/$sha-$round.md"; return 0; fi
   echo "(findings text not available for $sha round $round)"
@@ -350,10 +353,16 @@ RUN_N=0
 # clean|findings|refused|noverdict, LAST_BODY to the full reply and LAST_FINDINGS
 # to the findings text without the final verdict.
 run_one() {
-  local kind="$1" piece="$2" label="$3" group="$4" paths="$5" rc=0
+  local kind="$1"
+  local piece="$2"
+  local label="$3"
+  local group="$4"
+  local paths="$5"
+  local rc=0
   RUN_N=$((RUN_N + 1))
   LAST_FINDINGS=""
-  local out="$WORK/out.$RUN_N.txt" log="$WORK/log.$RUN_N.txt"
+  local out="$WORK/out.$RUN_N.txt"
+  local log="$WORK/log.$RUN_N.txt"
   : >"$out"
   local prompt="$RAW_DIR/$HEAD_SHA-$ROUND-invocation-$RUN_N.prompt.txt"
   local evidence="$RAW_DIR/$HEAD_SHA-$ROUND-invocation-$RUN_N"

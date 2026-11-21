@@ -30,7 +30,9 @@ case "$LEAN_NUM_THREADS" in 1|2|3|4) ;; *) LEAN_NUM_THREADS=4 ;; esac
 export LEAN_NUM_THREADS
 
 gate_limits() {
-  local mem_kb=$(($1 * 1024 * 1024)) nproc=$2 cur
+  local mem_kb=$(($1 * 1024 * 1024))
+  local nproc=$2
+  local cur
   if [ "$(uname -s)" = Linux ] && [ "$mem_kb" -gt 0 ]; then
     cur=$(ulimit -v)
     if [ "$cur" = unlimited ] || [ "$cur" -gt "$mem_kb" ]; then ulimit -v "$mem_kb"; fi
