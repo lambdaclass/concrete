@@ -336,63 +336,63 @@ def CTerm.toExact : CTerm → CTerm
 
 /-! ### Examples -/
 
-example : IntTy.all.map IntTy.bits = [8, 16, 32, 64, 8, 16, 32, 64] := rfl
+theorem example_IntTy_all_map_IntTy_bits : IntTy.all.map IntTy.bits = [8, 16, 32, 64, 8, 16, 32, 64] := rfl
 
-example : IntTy.i8.min = -128 ∧ IntTy.i8.max = 127 ∧ IntTy.u8.max = 255 := by decide
+theorem example_IntTy_i8_min_IntTy_i8 : IntTy.i8.min = -128 ∧ IntTy.i8.max = 127 ∧ IntTy.u8.max = 255 := by decide
 
 /-- `-2 : i16` is the bit pattern `0xfffe`, and back. -/
-example : toBits .i16 (-2) = 65534 ∧ ofBits .i16 65534 = -2 := by decide
+theorem example_i16_is_bit_pattern_xfffe_and : toBits .i16 (-2) = 65534 ∧ ofBits .i16 65534 = -2 := by decide
 
 /-- Overflow is an error value of a checked operation; the plain operation traps with kind
 `overflow`. -/
-example : checked .u8 .add 200 56 = .error .overflow := by decide
+theorem example_Overflow_is_error_value_checked_operation : checked .u8 .add 200 56 = .error .overflow := by decide
 
-example : plain .u8 .add 200 56 = .trap .overflow := by decide
+theorem example_plain_u8_add_trap_overflow : plain .u8 .add 200 56 = .trap .overflow := by decide
 
-example : checked .u8 .add 200 55 = .ok 255 := by decide
+theorem example_checked_u8_add_ok : checked .u8 .add 200 55 = .ok 255 := by decide
 
 /-- Division truncates toward zero; the remainder takes the dividend's sign (OD114). -/
-example : checked .i32 .div (-7) 2 = .ok (-3) ∧ checked .i32 .rem (-7) 2 = .ok (-1) ∧
+theorem example_Division_truncates_toward_zero_remainder_takes : checked .i32 .div (-7) 2 = .ok (-3) ∧ checked .i32 .rem (-7) 2 = .ok (-1) ∧
     checked .i32 .rem 7 (-2) = .ok 1 := by decide
 
 /-- A zero divisor, and signed `MIN / -1` and `MIN % -1`. -/
-example : checked .i8 .div 5 0 = .error .divisionByZero := by decide
+theorem example_zero_divisor_and_signed_MIN_and : checked .i8 .div 5 0 = .error .divisionByZero := by decide
 
-example : checked .i8 .div (-128) (-1) = .error .overflow ∧
+theorem example_checked_i8_div_error_overflow : checked .i8 .div (-128) (-1) = .error .overflow ∧
     checked .i8 .rem (-128) (-1) = .error .overflow := by decide
 
 /-- Shifts: the count must be below the width; a valid left shift discards outgoing bits; a right
 shift sign-fills a signed value and zero-fills an unsigned one. -/
-example : checked .u8 .shl 1 8 = .error .invalidShift ∧ checked .u8 .shl 1 (-1) = .error .invalidShift
+theorem example_Shifts_count_must_be_below_width : checked .u8 .shl 1 8 = .error .invalidShift ∧ checked .u8 .shl 1 (-1) = .error .invalidShift
     := by decide
 
-example : checked .u8 .shl 0x81 1 = .ok 2 ∧ checked .i8 .shl 64 1 = .ok (-128) := by decide
+theorem example_checked_u8_shl_x81_ok : checked .u8 .shl 0x81 1 = .ok 2 ∧ checked .i8 .shl 64 1 = .ok (-128) := by decide
 
-example : checked .i8 .shr (-128) 7 = .ok (-1) ∧ checked .u8 .shr 128 7 = .ok 1 := by decide
+theorem example_checked_i8_shr_ok_checked : checked .i8 .shr (-128) 7 = .ok (-1) ∧ checked .u8 .shr 128 7 = .ok 1 := by decide
 
 /-- Wrapping and saturating forms never fail. -/
-example : wrapping .u8 .add 200 56 = 0 ∧ saturating .u8 .add 200 56 = 255 ∧
+theorem example_Wrapping_and_saturating_forms_never_fail : wrapping .u8 .add 200 56 = 0 ∧ saturating .u8 .add 200 56 = 255 ∧
     wrapping .i8 .mul 16 8 = -128 ∧ saturating .i8 .sub (-100) 100 = -128 := by decide
 
 /-- Bitwise operations act on bit patterns. -/
-example : bitwise .i8 .and (-1) 0x0f = 15 ∧ bitNot .u8 0 = 255 ∧ bitNot .i8 0 = -1 := by decide
+theorem example_Bitwise_operations_act_on_bit_patterns : bitwise .i8 .and (-1) 0x0f = 15 ∧ bitNot .u8 0 = 255 ∧ bitNot .i8 0 = -1 := by decide
 
 /-- The lossless conversion is allowed only when the whole source range fits: `u8` to `i16` yes,
 `i8` to `u8` no (`-1` has no `u8` value), `u32` to `i32` no. -/
-example : Lossless .u8 .i16 ∧ ¬ Lossless .i8 .u8 ∧ ¬ Lossless .u32 .i32 := by decide
+theorem example_lossless_conversion_is_allowed_only_when : Lossless .u8 .i16 ∧ ¬ Lossless .i8 .u8 ∧ ¬ Lossless .u32 .i32 := by decide
 
 /-- `try_convert` reports `OutOfRange`, a value, not a trap. -/
-example : tryConvert .u8 300 = .error .outOfRange ∧ tryConvert .u8 255 = .ok 255 := by decide
+theorem example_try_convert_reports_OutOfRange_value_not_trap : tryConvert .u8 300 = .error .outOfRange ∧ tryConvert .u8 255 = .ok 255 := by decide
 
 /-- In a contract, machine `u8` addition of 255 and 1 is undefined; exact addition is 256. -/
-example : (CTerm.machine .u8 (.plain .add) (.lit 255) (.lit 1)).eval (fun _ => none) = none ∧
+theorem example_In_contract_machine_u8_addition_and : (CTerm.machine .u8 (.plain .add) (.lit 255) (.lit 1)).eval (fun _ => none) = none ∧
     (CTerm.exact .add (.lit 255) (.lit 1)).eval (fun _ => none) = some 256 ∧
     (CTerm.machine .u8 (.wrapping .add) (.lit 255) (.lit 1)).eval (fun _ => none) = some 0 := by
   decide
 
 /-- A machine term is not defined on an operand outside its width: `300` is no `u8`, so even the
 wrapping sum is undefined. A shift count need not be a value of the type, only a valid count. -/
-example : (CTerm.machine .u8 (.wrapping .add) (.lit 300) (.lit 1)).eval (fun _ => none) = none ∧
+theorem example_machine_term_is_not_defined_on : (CTerm.machine .u8 (.wrapping .add) (.lit 300) (.lit 1)).eval (fun _ => none) = none ∧
     (CTerm.machine .u8 (.plain .shl) (.lit 1) (.lit 7)).eval (fun _ => none) = some 128 := by
   decide
 
@@ -400,7 +400,7 @@ example : (CTerm.machine .u8 (.wrapping .add) (.lit 300) (.lit 1)).eval (fun _ =
 /-- Negation: `-(-128)` overflows `i8` (there is no wrapping negation: ARITH-4 has wrapping add,
 subtract and multiply only). A lossy conversion keeps the low bits: `300` to `u8` is `44`, `255`
 to `i8` is `-1`. -/
-example : plainNeg .i8 (-128) = .trap .overflow ∧ plainNeg .i8 5 = .ok (-5) ∧
+theorem example_Negation_overflows_i8_there_is_no : plainNeg .i8 (-128) = .trap .overflow ∧ plainNeg .i8 5 = .ok (-5) ∧
     lossyConvert .u8 300 = 44 ∧ lossyConvert .i8 255 = -1 := by decide
 
 /-! ## Characters
@@ -431,17 +431,17 @@ def charFromAscii (b : UInt8) : Option ScalarChar :=
   if b.toNat ≤ 127 then charFromCodePoint b.toUInt32 else none
 
 /-- The largest scalar is accepted. -/
-example : (charFromCodePoint 0x10ffff).map charCodePoint = some 0x10ffff := by decide
+theorem example_largest_scalar_is_accepted : (charFromCodePoint 0x10ffff).map charCodePoint = some 0x10ffff := by decide
 
 /-- Surrogates are refused independently of the upper-bound check. -/
-example : charFromCodePoint 0xd800 = none := by decide
+theorem example_Surrogates_are_refused_independently_upper_bound : charFromCodePoint 0xd800 = none := by decide
 
 /-- A non-surrogate above Unicode's range is refused. -/
-example : charFromCodePoint 0x110000 = none := by decide
+theorem example_non_surrogate_above_Unicode_s_range : charFromCodePoint 0x110000 = none := by decide
 
 /-- ASCII's upper endpoint is accepted; the immediately following byte is refused. -/
-example : (charFromAscii 127).map charCodePoint = some 127 := by decide
-example : charFromAscii 128 = none := by decide
+theorem example_ASCII_s_upper_endpoint_is_accepted : (charFromAscii 127).map charCodePoint = some 127 := by decide
+theorem example_charFromAscii : charFromAscii 128 = none := by decide
 
 /-- Shared scalar types, used by constants and typed storage. This is a value/type vocabulary, not a decision about which constant expressions are admitted. -/
 inductive CTy where

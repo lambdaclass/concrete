@@ -26,7 +26,9 @@ def registeredRules : List RuleId :=
    ⟨``Own.DropPermitted, 1⟩, ⟨``Own.LeavePermitted, 1⟩,
    ⟨``Leak.Account.WF, 1⟩, ⟨``Leak.ResetConserved, 1⟩, ⟨``Leak.SignedNetSound, 1⟩,
    ⟨``Leak.ByteBoundSound, 1⟩, ⟨``Leak.ByteBoundSoundOptional, 1⟩, ⟨``Leak.ReportSound, 1⟩,
-   ⟨``Leak.FiniteActionPermitted, 1⟩, ⟨``Leak.FiniteSequencePermitted, 1⟩] ++ SourcePath.Reason.inOrder.map SourcePath.Reason.ruleId
+   ⟨``Leak.FiniteActionPermitted, 1⟩, ⟨``Leak.FiniteSequencePermitted, 1⟩] ++ SourcePath.Reason.inOrder.map SourcePath.Reason.ruleId ++
+  [SourcePath.Project.Reason.caseCollision, .fileDirectoryConflict, .duplicate].map
+    SourcePath.Project.Reason.ruleId
 
 /-- Acceptance evidence applies the owning rule's judgment to a concrete input.
 The exporter recognizes this proposition's elaborated type, without unfolding the wrapper. -/
@@ -402,6 +404,61 @@ theorem disallowedRefused : RuleRefused FilenameCharacters disallowedRefusedInpu
 
 end SourcePath.Registry
 
+namespace SourcePath.Project.Registry
+
+def fileA : SourcePath := ⟨SourceText.ofBytes [97], by decide⟩
+def fileB : SourcePath := ⟨SourceText.ofBytes [98], by decide⟩
+def upperDirectory : SourcePath := ⟨SourceText.ofBytes [65, 47, 99, 46, 99, 111, 110], by decide⟩
+def lowerDirectory : SourcePath := ⟨SourceText.ofBytes [97, 47, 66, 46, 99, 111, 110], by decide⟩
+
+def separateFiles : SourcePath × SourcePath := (fileA, fileB)
+def directoryCollision : SourcePath × SourcePath := (lowerDirectory, upperDirectory)
+def fileDirectoryConflict : SourcePath × SourcePath := (fileA, lowerDirectory)
+
+/-- Instance: two different root files have no case collision. -/
+theorem caseAccepted : RuleAccepted NoCaseCollision separateFiles := by
+  intro ⟨n, leftBound, _, different, folded⟩
+  change n ≤ 1 at leftBound
+  have lengthCases : n = 0 ∨ n = 1 := by omega
+  rcases lengthCases with rfl | rfl
+  · exact different rfl
+  · exact (by decide : [[97]] ≠ [[98]]) folded
+
+/-- Instance: a/B.con and A/c.con conflict at their directory prefixes. -/
+theorem caseRefused : RuleRefused NoCaseCollision directoryCollision := by
+  intro permitted
+  exact permitted ⟨1, by decide, by decide, by decide, by decide⟩
+
+/-- Instance: two different root files have no file/directory conflict. -/
+theorem fileDirectoryAccepted : RuleAccepted NoFileDirectoryConflict separateFiles := by
+  intro ⟨_, eitherPrefix⟩
+  rcases eitherPrefix with isPrefix | isPrefix
+  · obtain ⟨suffix, eq⟩ := isPrefix
+    change [[97]] ++ suffix = [[98]] at eq
+    simp at eq
+  · obtain ⟨suffix, eq⟩ := isPrefix
+    change [[98]] ++ suffix = [[97]] at eq
+    simp at eq
+
+/-- Instance: a cannot be both a file and the directory containing a/B.con. -/
+theorem fileDirectoryRefused : RuleRefused NoFileDirectoryConflict fileDirectoryConflict := by
+  intro permitted
+  exact permitted ⟨by decide, Or.inl ⟨[[66, 46, 99, 111, 110]], rfl⟩⟩
+
+def duplicateFile : SourcePath × SourcePath := (fileA, fileA)
+
+/-- Instance: two different root files are distinct. -/
+theorem duplicateAccepted : RuleAccepted NoDuplicate separateFiles := by
+  change fileA.raw ≠ fileB.raw
+  decide
+
+/-- Instance: two occurrences of the same file are refused. -/
+theorem duplicateRefused : RuleRefused NoDuplicate duplicateFile := by
+  intro permitted
+  exact permitted rfl
+
+end SourcePath.Project.Registry
+
 /-- Complete conformance links, populated alongside the owning rules. -/
 def registeredRuleExamples : List RuleExample :=
   [⟨``ConstsPermitted, ``ConstRegistry.accepted⟩,
@@ -465,6 +522,12 @@ def registeredRuleExamples : List RuleExample :=
    ⟨``SourcePath.PathByteCap, ``SourcePath.Registry.pathCapAccepted⟩,
    ⟨``SourcePath.PathByteCap, ``SourcePath.Registry.pathCapRefused⟩,
    ⟨``SourcePath.FilenameCharacters, ``SourcePath.Registry.disallowedAccepted⟩,
-   ⟨``SourcePath.FilenameCharacters, ``SourcePath.Registry.disallowedRefused⟩]
+   ⟨``SourcePath.FilenameCharacters, ``SourcePath.Registry.disallowedRefused⟩,
+   ⟨``SourcePath.Project.NoCaseCollision, ``SourcePath.Project.Registry.caseAccepted⟩,
+   ⟨``SourcePath.Project.NoCaseCollision, ``SourcePath.Project.Registry.caseRefused⟩,
+   ⟨``SourcePath.Project.NoFileDirectoryConflict, ``SourcePath.Project.Registry.fileDirectoryAccepted⟩,
+   ⟨``SourcePath.Project.NoFileDirectoryConflict, ``SourcePath.Project.Registry.fileDirectoryRefused⟩,
+   ⟨``SourcePath.Project.NoDuplicate, ``SourcePath.Project.Registry.duplicateAccepted⟩,
+   ⟨``SourcePath.Project.NoDuplicate, ``SourcePath.Project.Registry.duplicateRefused⟩]
 
 end ConcreteSpec.Core

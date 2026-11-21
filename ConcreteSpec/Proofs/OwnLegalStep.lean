@@ -168,14 +168,14 @@ def Enter (types : Var → Option Descriptor) (s : State) (xs : List Var) (t : S
   Trace (Bind types) (pushFrame s) xs t
 
 def EndLocals (s : State) (activation : Nat) (t : State) : Prop :=
-  Trace (fun s l => EndLoan s l.id) s
+  Trace (fun s l => EndLeafAtBoundary s l.id) s
     (s.loans.filter fun l => decide (l.activation = activation)) t
 
 /-- Law (authority: docs/decisions.md#od23). Local ending processes loans newest first. -/
 theorem endLocals_iff (s : State) (activation : Nat) (t : State) :
     endLocals activation s = some t ↔ EndLocals s activation t := by
   simpa [EndLocals, endLocals, Bool.beq_eq_decide_eq] using
-    fold_iff (fun s (l : Loan) => endLoan s l.id) (fun s l t => endLoan_iff s l.id t)
+    fold_iff (fun s (l : Loan) => endLeafAtBoundary s l.id) (fun s l t => endLeafAtBoundary_iff s l.id t)
       s (s.loans.filter (·.activation == activation)) t
 
 def Leave (s t : State) : Prop :=
@@ -292,7 +292,7 @@ theorem callLifeStore_iff {σ : Type} (types : Var → Option Descriptor) (s : �
 
 def DownwardParameter (s : State) (e : Var × LoanId) (t : State) : Prop :=
   ∃ a f u, loan s e.2 = some a ∧ s.frames.head? = some f ∧
-    ReborrowTo s e.2 [] a.mode f.id u ∧
+    ParameterAvailable f.views e.1 ∧ ReborrowTo s e.2 [] a.mode f.id u ∧
     t = { u with frames := { f with views := (e.1, ⟨s.nextLoan⟩) :: f.views } :: s.frames.tail }
 
 def EnterDown (s : State) (args : List (Var × LoanId)) (t : State) : Prop :=
@@ -301,28 +301,30 @@ def EnterDown (s : State) (args : List (Var × LoanId)) (t : State) : Prop :=
 /-- Law (authority: docs/decisions.md#od23). Each downward grant sees the ledger of earlier grants. -/
 theorem enterDown_iff (s : State) (args : List (Var × LoanId)) (t : State) :
     enterDown s args = some t ↔ EnterDown s args t := by
-  change args.foldlM _ (pushFrame s) = some t ↔ _
+  change args.foldlM enterDownParameter (pushFrame s) = some t ↔ _
   apply fold_iff
   intro v e u
-  simp [DownwardParameter, Option.bind_eq_some_iff, reborrowTo_iff, eq_comm (a := u),
-    exists_and_left]
+  cases e with
+  | mk x i =>
+    cases ha : loan v i <;> cases hf : v.frames.head? <;>
+      simp [DownwardParameter, enterDownParameter, ha, hf, reborrowTo_iff,
+        Option.bind_eq_some_iff, eq_comm (a := u), exists_and_left]
 
 def PassDown (s : CallState) (i : LoanId) (x : Var) (t : CallState) : Prop :=
-  x ∉ s.pending.map Prod.fst ∧ ∃ a f,
+  ParameterAvailable s.pending x ∧ ∃ a f,
     loan s.own i = some a ∧ LoanPermission s.own i a.mode ∧
     s.own.frames.head? = some f ∧ f.id < s.own.nextActivation ∧
-    t = ⟨{ s.own with
-      nextLoan := s.own.nextLoan + 1
-      loans := ⟨⟨s.own.nextLoan⟩, a.root, a.path, a.mode, some i, i :: a.ancestors,
-        f.id, true, false⟩ :: s.own.loans },
-      s.pending ++ [(x, ⟨s.own.nextLoan⟩)]⟩
+    ChildGrant s.own t.own a i [] a.mode f.id true ∧
+    t.pending = s.pending ++ [(x, ⟨s.own.nextLoan⟩)]
 
 /-- Law (authority: docs/decisions.md#od23). A view argument grants a fresh pending child. -/
 theorem passDown_iff (s : CallState) (i : LoanId) (x : Var) (t : CallState) :
     passDown s i x = some t ↔ PassDown s i x t := by
-  cases h : s.own.frames.head? <;> cases ha : loan s.own i <;>
-    simp [passDown, PassDown, h, ha, Bool.and_eq_true, loanAccess_iff,
-      eq_comm (a := t), and_assoc]
+  cases t with
+  | mk own pending =>
+    cases h : s.own.frames.head? <;> cases ha : loan s.own i <;>
+      simp [passDown, PassDown, ParameterAvailable, ChildGrant, h, ha, Bool.and_eq_true,
+        loanAccess_iff, and_assoc, eq_comm (a := own), eq_comm (a := pending)]
 
 def PassOwner (s : CallState) (p : Hybrid.Place) (path : List Projection) (m : Mode)
     (x : Var) (t : CallState) : Prop :=
@@ -345,7 +347,7 @@ def Issuance (types : Var → Option Descriptor) (s : CallState) (e : IssuanceAc
   | .ordinary op => OrdinaryIssuanceAllowed s op ∧ ∃ u, LoanStep s.own op u ∧ t = { s with own := u }
   | .owner p path m x => PassOwner s p path m x t
   | .view i x => PassDown s i x t
-  | .entry args => ∃ u, EnterDown s.own args u ∧ t = { s with own := u }
+  | .entry args => s.pending = [] ∧ ∃ u, EnterDown s.own args u ∧ t = { s with own := u }
   | .lifecycle e => CallLife types s e t
 
 /-- Law (authority: docs/decisions.md#od15; #od23). Issuance realizes each ledger rule. -/
@@ -355,9 +357,11 @@ theorem issuanceStep_iff (types : Var → Option Descriptor) (s : CallState)
   | ordinary op =>
     by_cases h : OrdinaryIssuanceAllowed s op <;>
       simp [issuanceStep, Issuance, h, Option.map_eq_some_iff, loanAction_iff, eq_comm (a := t)]
-  | owner | view | entry | lifecycle =>
-    simp [issuanceStep, Issuance, passOwner_iff, passDown_iff, callLife_iff, Option.map_eq_some_iff,
-      enterDown_iff, eq_comm (a := t)]
+  | entry args =>
+    by_cases h : s.pending = [] <;>
+      simp [issuanceStep, Issuance, h, Option.map_eq_some_iff, enterDown_iff, eq_comm (a := t)]
+  | owner | view | lifecycle =>
+    simp [issuanceStep, Issuance, passOwner_iff, passDown_iff, callLife_iff]
 
 /-- Law (authority: docs/decisions.md#od15; #od23). Issuance traces compose legal steps. -/
 theorem issuanceTrace_iff (types : Var → Option Descriptor) (s : CallState)
@@ -365,7 +369,7 @@ theorem issuanceTrace_iff (types : Var → Option Descriptor) (s : CallState)
     es.foldlM (issuanceStep types) s = some t ↔ Trace (Issuance types) s es t :=
   fold_iff (issuanceStep types) (issuanceStep_iff types) s es t
 
-private def UniqueStep {α β : Type} (rule : α → β → α → Prop) : Prop :=
+def UniqueStep {α β : Type} (rule : α → β → α → Prop) : Prop :=
   ∀ ⦃s e u v⦄, rule s e u → rule s e v → u = v
 
 private theorem trace_unique {α β : Type} {rule : α → β → α → Prop}
@@ -384,7 +388,7 @@ private theorem trace_unique {α β : Type} {rule : α → β → α → Prop}
 private theorem reborrowTo_unique {s : State} {i : LoanId} {path : List Projection}
     {m : Mode} {a : Nat} {u v : State}
     (hu : ReborrowTo s i path m a u) (hv : ReborrowTo s i path m a v) : u = v := by
-  unfold ReborrowTo at hu hv
+  unfold ReborrowTo ChildGrant at hu hv
   grind
 
 private theorem loanStep_unique : UniqueStep LoanStep := by
@@ -392,7 +396,7 @@ private theorem loanStep_unique : UniqueStep LoanStep := by
   cases e with
   | reborrow => exact reborrowTo_unique hu hv
   | borrow => unfold LoanStep Borrow at hu hv; grind
-  | endLoan => unfold LoanStep EndLoan at hu hv; grind
+  | endLoan => unfold LoanStep EndLoan EndLeafAtBoundary at hu hv; grind
 
 private theorem bind_unique (types : Var → Option Descriptor) : UniqueStep (Bind types) := by
   intro s x u v hu hv
@@ -420,9 +424,9 @@ private theorem life_unique (types : Var → Option Descriptor) : UniqueStep (Li
     obtain ⟨g, c, d, hg, hc, hd, rfl⟩ := hv
     have same := Option.some.inj (hf.symm.trans hg)
     subst g
-    have endUnique : UniqueStep (fun s (l : Loan) t => EndLoan s l.id t) := by
+    have endUnique : UniqueStep (fun s (l : Loan) t => EndLeafAtBoundary s l.id t) := by
       intro s l u v hu hv
-      exact loanStep_unique (e := .endLoan l.id) hu hv
+      exact hu.2.2.trans hv.2.2.symm
     have same := trace_unique endUnique ha hc
     subst c
     rw [drop_unique hb hd]
@@ -444,8 +448,8 @@ private theorem callLife_unique (types : Var → Option Descriptor) : UniqueStep
 
 private theorem downwardParameter_unique : UniqueStep DownwardParameter := by
   intro s e u v hu hv
-  obtain ⟨a, f, b, ha, hf, hb, rfl⟩ := hu
-  obtain ⟨c, g, d, hc, hg, hd, rfl⟩ := hv
+  obtain ⟨a, f, b, ha, hf, _, hb, rfl⟩ := hu
+  obtain ⟨c, g, d, hc, hg, _, hd, rfl⟩ := hv
   have same := Option.some.inj (ha.symm.trans hc)
   subst c
   have same := Option.some.inj (hf.symm.trans hg)
@@ -462,10 +466,13 @@ theorem issuance_deterministic (types : Var → Option Descriptor) {s u v : Call
     obtain ⟨_, b, hb, rfl⟩ := hv
     rw [loanStep_unique ha hb]
   | owner => unfold Issuance PassOwner at hu hv; grind
-  | view => unfold Issuance PassDown at hu hv; grind
+  | view =>
+    cases u; cases v
+    unfold Issuance PassDown ChildGrant at hu hv
+    grind
   | entry =>
-    obtain ⟨a, ha, rfl⟩ := hu
-    obtain ⟨b, hb, rfl⟩ := hv
+    obtain ⟨_, a, ha, rfl⟩ := hu
+    obtain ⟨_, b, hb, rfl⟩ := hv
     rw [trace_unique downwardParameter_unique ha hb]
   | lifecycle => exact callLife_unique types hu hv
 
@@ -489,8 +496,8 @@ theorem loanLedger_complete (s : State) (e : LoanAction) (t : State)
     obtain ⟨allowed, issued, current, parent, found, rfl⟩ := h
     exact .reborrow ⟨parent, found, issued, current, allowed⟩ found
   | endLoan i =>
-    obtain ⟨⟨a, ha⟩, clear, rfl⟩ := h
-    exact .endLoan ⟨a, ha, clear⟩
+    obtain ⟨allowed, ⟨a, ha⟩, clear, rfl⟩ := h
+    exact .endLoan ⟨a, ha, allowed, clear⟩
 
 /-- Helper (constructor enumeration). Every event names exactly its relational rule. -/
 theorem admission_cases (types : Var → Option Descriptor) (s : CallState) :
@@ -514,7 +521,7 @@ theorem admission_cases (types : Var → Option Descriptor) (s : CallState) :
       | .ordinary op => OrdinaryIssuanceAllowed s op ∧ Admitted LoanStep s.own op
       | .owner p path m x => ∃ t, PassOwner s p path m x t
       | .view i x => ∃ t, PassDown s i x t
-      | .entry args => Admitted EnterDown s.own args
+      | .entry args => s.pending = [] ∧ Admitted EnterDown s.own args
       | .lifecycle e => Admitted (CallLife types) s e) ∧
     (∀ e t, LoanStep s.own e t → LoanLedger s.own e t) := by
   refine ⟨?_, ?_, ?_, ?_, loanLedger_complete s.own⟩
@@ -542,10 +549,10 @@ theorem admission_cases (types : Var → Option Descriptor) (s : CallState) :
         exact ⟨{ s with own := u }, allowed, u, hu, rfl⟩
     | entry =>
       constructor
-      · rintro ⟨_, u, hu, _⟩
-        exact ⟨u, hu⟩
-      · rintro ⟨u, hu⟩
-        exact ⟨{ s with own := u }, u, hu, rfl⟩
+      · rintro ⟨_, empty, u, hu, _⟩
+        exact ⟨empty, u, hu⟩
+      · rintro ⟨empty, u, hu⟩
+        exact ⟨{ s with own := u }, empty, u, hu, rfl⟩
 
 /-- Helper (preservation). Legal lifecycle transitions preserve well-formed ownership. -/
 theorem life_wellFormed {types : Var → Option Descriptor} {s t : State} {e : Exec.Life}
@@ -590,7 +597,7 @@ private theorem nextLoan_not_pending {pending : List (Var × LoanId)} {s : State
 private theorem ordinary_pending {s : CallState} {e : LoanAction} {t : State}
     (allowed : OrdinaryIssuanceAllowed s e) (step : LoanStep s.own e t)
     (wf : s.WellFormed) : PendingConsistent s.pending t := by
-  have consistent : PendingConsistent s.pending s.own := wf.2.2.2
+  have consistent : PendingConsistent s.pending s.own := ⟨wf.2.2.2.1, wf.2.2.2.2.1⟩
   have fresh := nextLoan_not_pending consistent wf.1
   cases e with
   | borrow =>
@@ -601,7 +608,7 @@ private theorem ordinary_pending {s : CallState} {e : LoanAction} {t : State}
     exact pending_cons consistent rfl rfl fresh
   | endLoan i =>
     change i ∉ s.pending.map Prod.snd at allowed
-    obtain ⟨_, _, rfl⟩ := step
+    obtain ⟨_, _, _, rfl⟩ := step
     constructor
     · intro e he
       obtain ⟨l, hl, eq⟩ := consistent.1 e he
@@ -612,22 +619,55 @@ private theorem ordinary_pending {s : CallState} {e : LoanAction} {t : State}
     · intro l hl
       exact consistent.2 l (List.mem_filter.mp hl).1
 
-private theorem downwardTrace_pending {pending : List (Var × LoanId)} {s t : State}
+private theorem loanStep_liveViews {s t : State} {e : LoanAction}
+    (step : LoanStep s e t) (live : LiveViews s) : LiveViews t := by
+  cases e with
+  | borrow =>
+    obtain ⟨_, _, _, _, rfl⟩ := step
+    exact live.retain rfl (fun l hl => List.mem_cons_of_mem _ hl)
+  | reborrow =>
+    obtain ⟨_, _, _, _, _, rfl⟩ := step
+    exact live.retain rfl (fun l hl => List.mem_cons_of_mem _ hl)
+  | endLoan i =>
+    obtain ⟨allowed, _, _, rfl⟩ := step
+    intro frame hf binding hb
+    obtain ⟨l, hl, id, rest⟩ := live frame hf binding hb
+    obtain ⟨f, hm, rfl⟩ := List.mem_map.mp hf
+    refine ⟨l, List.mem_filter.mpr ⟨hl, ?_⟩, id, rest⟩
+    simp only [bne_iff_ne]
+    intro eq
+    exact allowed.2 f hm (List.mem_map.mpr ⟨binding, hb, id.symm.trans eq⟩)
+
+private theorem downwardTrace_preserves {pending : List (Var × LoanId)} {s t : State}
     {args : List (Var × LoanId)} (step : Trace DownwardParameter s args t)
-    (initial : WellFormed s) (keep : PendingConsistent pending s) :
-    PendingConsistent pending t := by
+    (initial : WellFormed s) (keep : PendingConsistent pending s) (live : LiveViews s) :
+    PendingConsistent pending t ∧ LiveViews t := by
   induction step with
-  | nil => exact keep
+  | nil => exact ⟨keep, live⟩
   | @cons s u₀ t e es grant _ ih =>
-    obtain ⟨a, f, u, _, frame, reborrow, rfl⟩ := grant
+    obtain ⟨a, f, u, _, frame, _, reborrow, rfl⟩ := grant
     have preserve := loanStep_wellFormed (e := .reborrow _ [] a.mode f.id) reborrow initial
     have frames : u.frames = s.frames := by
       obtain ⟨_, _, _, _, _, rfl⟩ := reborrow
       rfl
-    have next := set_views_preserves u f ((e.1, ⟨s.nextLoan⟩) :: f.views) preserve (by simpa [frames] using frame)
+    have next := set_views_preserves u f ((e.1, ⟨s.nextLoan⟩) :: f.views) preserve
+      (by simpa [frames] using frame)
     have fresh := nextLoan_not_pending keep initial
     obtain ⟨_, _, _, _, _, rfl⟩ := reborrow
-    exact ih next (pending_cons keep rfl rfl fresh)
+    apply ih next (pending_cons keep rfl rfl fresh)
+    intro g hg binding hb
+    change g ∈ (f.id, (e.1, ⟨s.nextLoan⟩) :: f.views) ::
+      s.frames.tail.map (fun g => (g.id, g.views)) at hg
+    rcases List.mem_cons.mp hg with rfl | old
+    · rcases List.mem_cons.mp hb with rfl | old
+      · exact ⟨_, List.mem_cons_self, rfl, rfl, rfl⟩
+      · obtain ⟨l, hl, id, rest⟩ := live (f.id, f.views)
+          (List.mem_map.mpr ⟨f, List.mem_of_head? frame, rfl⟩) binding old
+        exact ⟨l, List.mem_cons_of_mem _ hl, id, rest⟩
+    · obtain ⟨g, gTail, rfl⟩ := List.mem_map.mp old
+      obtain ⟨l, hl, id, rest⟩ := live (g.id, g.views)
+        (List.mem_map.mpr ⟨g, List.mem_of_mem_tail gTail, rfl⟩) binding hb
+      exact ⟨l, List.mem_cons_of_mem _ hl, id, rest⟩
 
 /-- Law (authority: docs/decisions.md#od15; #od23). Each legal issuance step preserves the
 ownership ledger and its pending call buffer together. -/
@@ -636,13 +676,22 @@ theorem issuance_wellFormed (types : Var → Option Descriptor) {s t : CallState
   cases e with
   | ordinary op =>
     obtain ⟨allowed, u, hu, rfl⟩ := step
-    exact ⟨loanStep_wellFormed hu wf.1, wf.2.1, wf.2.2.1, ordinary_pending (s := s) allowed hu wf⟩
+    have pending := ordinary_pending (s := s) allowed hu wf
+    exact ⟨loanStep_wellFormed hu wf.1, wf.2.1, wf.2.2.1, pending.1, pending.2,
+      loanStep_liveViews hu wf.2.2.2.2.2⟩
   | entry args =>
-    obtain ⟨u, hu, rfl⟩ := step
+    obtain ⟨_, u, hu, rfl⟩ := step
     have safe := enterDown_preserves s.own args wf.1
     rw [(enterDown_iff ..).mpr hu] at safe
     have initial : WellFormed (pushFrame s.own) := enter_preserves (fun _ => none) s.own [] wf.1
-    exact ⟨safe, wf.2.1, wf.2.2.1, downwardTrace_pending hu initial wf.2.2.2⟩
+    have views : LiveViews (pushFrame s.own) := by
+      intro f hf binding hb
+      change f ∈ (s.own.nextActivation, []) :: ViewIndex s.own at hf
+      rcases List.mem_cons.mp hf with rfl | old
+      · simp at hb
+      · exact wf.2.2.2.2.2 f old binding hb
+    have keep := downwardTrace_preserves hu initial ⟨wf.2.2.2.1, wf.2.2.2.2.1⟩ views
+    exact ⟨safe, wf.2.1, wf.2.2.1, keep.1.1, keep.1.2, keep.2⟩
   | owner p path m x =>
     have safe := passOwner_call_preserves s p path m x wf
     rwa [(passOwner_iff ..).mpr step] at safe
@@ -650,6 +699,51 @@ theorem issuance_wellFormed (types : Var → Option Descriptor) {s t : CallState
     have safe := passDown_call_preserves s i x wf
     rwa [(passDown_iff ..).mpr step] at safe
   | lifecycle => exact callLife_wellFormed step wf
+
+/-- Events that can occur while evaluating a call or executing its body. -/
+inductive LedgerEvent where
+  | issue (event : IssuanceAction)
+  | move (place : Hybrid.Place)
+  | accessOwner (place : Hybrid.Place) (mode : Mode)
+  | accessLoan (loan : LoanId) (mode : Mode)
+
+def LedgerStep (types : Var → Option Descriptor) (s : CallState)
+    (event : LedgerEvent) (t : CallState) : Prop :=
+  match event with
+  | .issue e => Issuance types s e t
+  | .move p => Move s.own p t.own ∧ t.pending = s.pending
+  | .accessOwner p m => AccessOwner s.own p m t.own ∧ t.pending = s.pending
+  | .accessLoan i m => AccessLoan s.own i m t.own ∧ t.pending = s.pending
+
+/-- Helper (preservation). Every ledger event preserves the call metadata. -/
+theorem ledgerStep_wellFormed (types : Var → Option Descriptor) {s t : CallState}
+    {e : LedgerEvent} (step : LedgerStep types s e t) (wf : s.WellFormed) : t.WellFormed := by
+  cases s with
+  | mk own pending =>
+    cases t with
+    | mk next nextPending =>
+      cases e with
+      | issue e => exact issuance_wellFormed types step wf
+      | move p =>
+        obtain ⟨legal, pendingEq⟩ := step
+        change nextPending = pending at pendingEq
+        subst nextPending
+        have safe := move_preserves own p wf.1
+        rw [(move_iff own p next).mpr legal] at safe
+        obtain ⟨_, rfl⟩ := legal
+        exact ⟨safe, wf.2⟩
+      | accessOwner p m | accessLoan i m =>
+        obtain ⟨⟨_, rfl⟩, rfl⟩ := step
+        exact wf
+
+/-- Law (authority: docs/decisions.md#od15; #od23). Legal ledger histories preserve
+ownership and call metadata through access, move and issuance. -/
+theorem ledgerTrace_wellFormed (types : Var → Option Descriptor) {s t : CallState}
+    {events : List LedgerEvent} (trace : Trace (LedgerStep types) s events t)
+    (wf : s.WellFormed) : t.WellFormed := by
+  induction trace with
+  | nil => exact wf
+  | cons step _ ih => exact ih (ledgerStep_wellFormed types step wf)
 
 /-- Helper (preservation). The place and loan retirement corollaries have independent premises. -/
 theorem callLife_retirement {types : Var → Option Descriptor} {s t : CallState} {e : Exec.Life}
@@ -683,11 +777,11 @@ def keepOnSequenceRefusal (s : State) (es : List LoanAction) : Option State :=
   (runLoanSequence s es).or (some s)
 
 /-- Planted (law `life_iff`, mutant `keepOnLifeRefusal`). A live linear owner blocks exit. -/
-example : ¬ (∀ t, keepOnLifeRefusal .leave initial = some t ↔ Life types initial .leave t) :=
+theorem life_iff_planted_1 : ¬ (∀ t, keepOnLifeRefusal .leave initial = some t ↔ Life types initial .leave t) :=
   rejects (life_iff types initial .leave) (by decide)
 
 /-- Planted (law `runLoanSequence_iff`, mutant `keepOnSequenceRefusal`). A live child blocks end. -/
-example : ¬ (∀ t, keepOnSequenceRefusal child [.endLoan ⟨0⟩] = some t ↔
+theorem runLoanSequence_iff_planted_1 : ¬ (∀ t, keepOnSequenceRefusal child [.endLoan ⟨0⟩] = some t ↔
     LoanSequence child [.endLoan ⟨0⟩] t) :=
   rejects (runLoanSequence_iff child [.endLoan ⟨0⟩]) (by decide)
 
@@ -697,7 +791,7 @@ def lifeWithoutDropDischarge (e : Exec.Life) (s : State) : Option State :=
   | .bind _ | .enter _ | .leave => life types e s
 
 /-- Planted (law `life_iff`, mutant `lifeWithoutDropDischarge`). An unborrowed owner is still linear. -/
-example : ¬ (∀ t, lifeWithoutDropDischarge (.drop [x]) initial = some t ↔
+theorem life_iff_planted_2 : ¬ (∀ t, lifeWithoutDropDischarge (.drop [x]) initial = some t ↔
     Life types initial (.drop [x]) t) :=
   rejects (life_iff types initial (.drop [x])) (by decide)
 
@@ -717,12 +811,12 @@ def lifeWithDefaultEntry (e : Exec.Life) (s : State) : Option State :=
   | .bind _ | .leave | .drop _ => life untyped e s
 
 /-- Planted (law `life_iff`, mutant `lifeWithDefaultBinding`). Allocation still advances the supply. -/
-example : ¬ (∀ t, lifeWithDefaultBinding (.bind y) initial = some t ↔
+theorem life_iff_planted_3 : ¬ (∀ t, lifeWithDefaultBinding (.bind y) initial = some t ↔
     Life untyped initial (.bind y) t) :=
   rejects (life_iff untyped initial (.bind y)) (by decide)
 
 /-- Planted (law `life_iff`, mutant `lifeWithDefaultEntry`). Entry still allocates its activation. -/
-example : ¬ (∀ t, lifeWithDefaultEntry (.enter [y]) initial = some t ↔
+theorem life_iff_planted_4 : ¬ (∀ t, lifeWithDefaultEntry (.enter [y]) initial = some t ↔
     Life untyped initial (.enter [y]) t) :=
   rejects (life_iff untyped initial (.enter [y])) (by decide)
 
@@ -734,7 +828,7 @@ def rewindPlace (e : Exec.Life) (s : CallState) : Option CallState :=
   | .drop (_ :: _) | .enter _ | .leave | .bind _ => callLife types e s
 
 /-- Planted (law `callLife_iff`, mutant `rewindPlace`). Only the place supply changes. -/
-example : RetiredPlace placeOnlyRetired.own ⟨0⟩ ∧ placeOnlyRetired.own.nextLoan = 0 ∧
+theorem callLife_iff_planted_1 : RetiredPlace placeOnlyRetired.own ⟨0⟩ ∧ placeOnlyRetired.own.nextLoan = 0 ∧
     ¬ (∀ t, rewindPlace (.drop []) placeOnlyRetired = some t ↔
       CallLife types placeOnlyRetired (.drop []) t) :=
   ⟨by decide, rfl, rejects (callLife_iff types placeOnlyRetired (.drop [])) (by decide)⟩
@@ -744,17 +838,17 @@ def refuseProjected (s : State) (i : LoanId) (path : List Projection) (m : Mode)
   if path.isEmpty then reborrowTo s i path m a else none
 
 /-- Planted (law `reborrowTo_iff`, mutant `refuseProjected`). Refusal is at the lending primitive. -/
-example : ¬ (∀ t, refuseProjected LifecycleWitnesses.called ⟨1⟩ [.index 2] .mutable 1 = some t ↔
+theorem reborrowTo_iff_planted_1 : ¬ (∀ t, refuseProjected LifecycleWitnesses.called ⟨1⟩ [.index 2] .mutable 1 = some t ↔
     ReborrowTo LifecycleWitnesses.called ⟨1⟩ [.index 2] .mutable 1 t) :=
   rejects (reborrowTo_iff LifecycleWitnesses.called ⟨1⟩ [.index 2] .mutable 1) (by decide)
 
 /-- Planted (law `runLoanSequence_iff`, mutant `DispatchEvidence.refuseRunLoanSequence`). -/
-example : ¬ (∀ t, DispatchEvidence.refuseRunLoanSequence initial [] = some t ↔
+theorem runLoanSequence_iff_planted_2 : ¬ (∀ t, DispatchEvidence.refuseRunLoanSequence initial [] = some t ↔
     LoanSequence initial [] t) :=
   rejects (runLoanSequence_iff initial []) (by decide)
 
 /-- Planted (law `issuanceStep_iff`, mutant `DispatchEvidence.refuseIssuanceStep`). -/
-example : ¬ (∀ t, DispatchEvidence.refuseIssuanceStep ⟨initial, []⟩ (.entry []) = some t ↔
+theorem issuanceStep_iff_planted_1 : ¬ (∀ t, DispatchEvidence.refuseIssuanceStep ⟨initial, []⟩ (.entry []) = some t ↔
     Issuance types ⟨initial, []⟩ (.entry []) t) :=
   rejects (issuanceStep_iff types ⟨initial, []⟩ (.entry [])) (by decide)
 
@@ -764,18 +858,18 @@ def ignorePendingOnDrop (e : Exec.Life) (s : CallState) : Option CallState :=
   | .enter _ | .leave | .bind _ => callLife types e s
 
 /-- Planted (law `callLife_iff`, mutant `ignorePendingOnDrop`). Pending arguments block teardown. -/
-example : ¬ (∀ t, ignorePendingOnDrop (.drop []) PendingEvidence.down = some t ↔
+theorem callLife_iff_planted_2 : ¬ (∀ t, ignorePendingOnDrop (.drop []) PendingEvidence.down = some t ↔
     CallLife types PendingEvidence.down (.drop []) t) :=
   rejects (callLife_iff types PendingEvidence.down (.drop [])) (by decide)
 
 open DispatchEvidence
 
 /-- Planted (law `life_iff`, mutant `acceptLiveReturn`). Exit must discharge each local. -/
-example : ¬ (∀ t, acceptLiveReturn .leave initial = some t ↔ Life types initial .leave t) :=
+theorem life_iff_planted_5 : ¬ (∀ t, acceptLiveReturn .leave initial = some t ↔ Life types initial .leave t) :=
   rejects (life_iff types initial .leave) (by decide)
 
 /-- Planted (law `life_iff`, mutant `acceptBorrowedDrop`). Copy storage still requires loan exclusion. -/
-example : ¬ (∀ t, acceptBorrowedDrop (.drop [x]) borrowedCopy = some t ↔
+theorem life_iff_planted_6 : ¬ (∀ t, acceptBorrowedDrop (.drop [x]) borrowedCopy = some t ↔
     Life types borrowedCopy (.drop [x]) t) :=
   rejects (life_iff types borrowedCopy (.drop [x])) (by decide)
 
@@ -819,39 +913,39 @@ example :
    rejects (fun t => issuanceStep_iff _ _ _ t) (by decide)⟩
 
 /-- Planted (law `passOwner_iff`, mutant `acceptFrozenOwner`). Owner arguments require exclusion. -/
-example : ¬ (∀ t, acceptFrozenOwner ⟨exclusive, []⟩ ⟨0⟩ [] .mutable y = some t ↔
+theorem passOwner_iff_planted_1 : ¬ (∀ t, acceptFrozenOwner ⟨exclusive, []⟩ ⟨0⟩ [] .mutable y = some t ↔
     PassOwner ⟨exclusive, []⟩ ⟨0⟩ [] .mutable y t) :=
   rejects (fun t => passOwner_iff _ _ _ _ _ t) (by decide)
 
 /-- Planted (law `passDown_iff`, mutant `acceptFrozenView`). An existing child can block lending. -/
-example : ¬ (∀ t, acceptFrozenView ⟨child, []⟩ ⟨0⟩ y = some t ↔ PassDown ⟨child, []⟩ ⟨0⟩ y t) :=
+theorem passDown_iff_planted_1 : ¬ (∀ t, acceptFrozenView ⟨child, []⟩ ⟨0⟩ y = some t ↔ PassDown ⟨child, []⟩ ⟨0⟩ y t) :=
   rejects (fun t => passDown_iff _ _ _ t) (by decide)
 
 /-- Planted (law `enterDown_iff`, mutant `acceptFrozenDownward`). The first grant freezes the source. -/
-example : ¬ (∀ t, acceptFrozenDownward exclusive [(x, ⟨0⟩), (y, ⟨0⟩)] = some t ↔
+theorem enterDown_iff_planted_1 : ¬ (∀ t, acceptFrozenDownward exclusive [(x, ⟨0⟩), (y, ⟨0⟩)] = some t ↔
     EnterDown exclusive [(x, ⟨0⟩), (y, ⟨0⟩)] t) :=
   rejects (fun t => enterDown_iff _ _ t) (by decide)
 
 /-- Planted (law `callLife_iff`, mutant `refuseCallBinding`). -/
-example : ¬ (∀ t, refuseCallBinding (.bind DirectArgumentWitnesses.z) DirectArgumentWitnesses.caller = some t ↔
+theorem callLife_iff_planted_3 : ¬ (∀ t, refuseCallBinding (.bind DirectArgumentWitnesses.z) DirectArgumentWitnesses.caller = some t ↔
     CallLife types DirectArgumentWitnesses.caller (.bind DirectArgumentWitnesses.z) t) :=
   rejects (fun t => callLife_iff _ _ _ t) (by decide)
 
 /-- Planted (law `callLife_iff`, mutant `refuseMixedCallEntry`). -/
-example : ¬ (∀ t, refuseMixedCallEntry (.enter [x, y, DirectArgumentWitnesses.z])
+theorem callLife_iff_planted_4 : ¬ (∀ t, refuseMixedCallEntry (.enter [x, y, DirectArgumentWitnesses.z])
       Round5Evidence.twoWaiting = some t ↔
     CallLife types Round5Evidence.twoWaiting (.enter [x, y, DirectArgumentWitnesses.z]) t) :=
   rejects (fun t => callLife_iff _ _ _ t) (by decide)
 
 /-- Planted (law `callLife_iff`, mutant `refuseNonemptyCallReturn`). Each admissible return succeeds. -/
-example :
+theorem callLife_iff_planted_5 :
     (¬ (∀ t, refuseNonemptyCallReturn .leave localReturn = some t ↔ CallLife types localReturn .leave t)) ∧
     (¬ (∀ t, refuseMultipleLoanReturn .leave ⟨Round4Evidence.localChild, []⟩ = some t ↔
       CallLife types ⟨Round4Evidence.localChild, []⟩ .leave t)) :=
   ⟨rejects (fun t => callLife_iff _ _ _ t) (by decide), rejects (fun t => callLife_iff _ _ _ t) (by decide)⟩
 
 /-- Planted (law `life_iff`, mutants `refuseLifeBind` and `refuseLifeEnter`). -/
-example :
+theorem life_iff_planted_7 :
     (¬ (∀ t, refuseLifeBind (.bind y) initial = some t ↔ Life types initial (.bind y) t)) ∧
     (¬ (∀ t, refuseLifeEnter (.enter []) initial = some t ↔ Life types initial (.enter []) t)) :=
   ⟨rejects (fun t => life_iff _ _ _ t) (by decide), rejects (fun t => life_iff _ _ _ t) (by decide)⟩
@@ -862,63 +956,63 @@ def refuseStoreDrop (e : Exec.Life) (s : Store Nat) : Option (Store Nat) :=
   | .drop (_ :: _) | .enter _ | .leave | .bind _ => lifeStore types e s
 
 /-- Planted (law `lifeStore_iff`, mutant `refuseStoreDrop`). Concrete payload cannot veto teardown. -/
-example : ¬ (∀ t, refuseStoreDrop (.drop []) ⟨7, initial⟩ = some t ↔
+theorem lifeStore_iff_planted_1 : ¬ (∀ t, refuseStoreDrop (.drop []) ⟨7, initial⟩ = some t ↔
     LifeStore types (⟨7, initial⟩ : Store Nat) (.drop []) t) :=
   rejects (lifeStore_iff types ⟨7, initial⟩ (.drop [])) (by decide)
 
 /-- Planted (law `callLifeStore_iff`, mutant `resetStore`). Concrete payload must survive entry. -/
-example : ¬ (∀ t, resetStore (.enter []) (7, nestedCaller) = some t ↔
+theorem callLifeStore_iff_planted_1 : ¬ (∀ t, resetStore (.enter []) (7, nestedCaller) = some t ↔
     CallLifeStore types (7, nestedCaller) (.enter []) t) :=
   rejects (callLifeStore_iff types (7, nestedCaller) (.enter [])) (by decide)
 
 /-- Planted (law `enterDown_iff`, mutant `refuseStandaloneEntry`). -/
-example : ¬ (∀ t, refuseStandaloneEntry exclusive singletonEntry = some t ↔
+theorem enterDown_iff_planted_2 : ¬ (∀ t, refuseStandaloneEntry exclusive singletonEntry = some t ↔
     EnterDown exclusive singletonEntry t) :=
   rejects (enterDown_iff exclusive singletonEntry) (by decide)
 
 /-- Planted (law `adoptDown_iff`, mutant `refuseMultiAdopt`). -/
-example : ¬ (∀ t, refuseMultiAdopt Round5Evidence.twoBefore Round5Evidence.twoWaiting.pending = some t ↔
+theorem adoptDown_iff_planted_1 : ¬ (∀ t, refuseMultiAdopt Round5Evidence.twoBefore Round5Evidence.twoWaiting.pending = some t ↔
     AdoptDown Round5Evidence.twoBefore Round5Evidence.twoWaiting.pending t) :=
   rejects (adoptDown_iff Round5Evidence.twoBefore Round5Evidence.twoWaiting.pending) (by decide)
 
 /-- Planted (law `move_iff`, mutant `refuseNonzeroMove`). -/
-example : ¬ (∀ t, refuseNonzeroMove MoveLifecycleEvidence.source ⟨1⟩ = some t ↔
+theorem move_iff_planted_1 : ¬ (∀ t, refuseNonzeroMove MoveLifecycleEvidence.source ⟨1⟩ = some t ↔
     Move MoveLifecycleEvidence.source ⟨1⟩ t) :=
   rejects (move_iff MoveLifecycleEvidence.source ⟨1⟩) (by decide)
 
 /-- Planted (law `passDown_iff`, mutant `refuseSecondPendingView`). -/
-example : ¬ (∀ t, refuseSecondPendingView PendingEvidence.down ⟨0⟩ y = some t ↔
+theorem passDown_iff_planted_2 : ¬ (∀ t, refuseSecondPendingView PendingEvidence.down ⟨0⟩ y = some t ↔
     PassDown PendingEvidence.down ⟨0⟩ y t) :=
   rejects (passDown_iff PendingEvidence.down ⟨0⟩ y) (by decide)
 
 /-- Planted (law `callLife_iff`, mutant `refuseEmptyCallEntry`). -/
-example : ¬ (∀ t, refuseEmptyCallEntry (.enter []) nestedCaller = some t ↔
+theorem callLife_iff_planted_6 : ¬ (∀ t, refuseEmptyCallEntry (.enter []) nestedCaller = some t ↔
     CallLife types nestedCaller (.enter []) t) :=
   rejects (callLife_iff types nestedCaller (.enter [])) (by decide)
 
 /-- Planted (law `move_iff`, mutant `acceptBorrowedMove`). -/
-example : ¬ (∀ t, acceptBorrowedMove exclusive ⟨0⟩ = some t ↔ Move exclusive ⟨0⟩ t) :=
+theorem move_iff_planted_2 : ¬ (∀ t, acceptBorrowedMove exclusive ⟨0⟩ = some t ↔ Move exclusive ⟨0⟩ t) :=
   rejects (move_iff exclusive ⟨0⟩) (by decide)
 
 /-- Planted (law `adoptDown_iff`, mutant `PreservationEvidence.adoptDownUnissuedActivation`). -/
-example : ¬ (∀ t, PreservationEvidence.adoptDownUnissuedActivation Round5Evidence.twoBefore
+theorem adoptDown_iff_planted_2 : ¬ (∀ t, PreservationEvidence.adoptDownUnissuedActivation Round5Evidence.twoBefore
     Round5Evidence.twoWaiting.pending = some t ↔
     AdoptDown Round5Evidence.twoBefore Round5Evidence.twoWaiting.pending t) :=
   rejects (adoptDown_iff Round5Evidence.twoBefore Round5Evidence.twoWaiting.pending) (by decide)
 
 /-- Planted (law `callLife_iff`, mutant `PreservationEvidence.callLifeKeepPending`). -/
-example : ¬ (∀ t, PreservationEvidence.callLifeKeepPending types (.enter [y, DirectArgumentWitnesses.z])
+theorem callLife_iff_planted_7 : ¬ (∀ t, PreservationEvidence.callLifeKeepPending types (.enter [y, DirectArgumentWitnesses.z])
       Round5Evidence.twoWaiting = some t ↔
     CallLife types Round5Evidence.twoWaiting (.enter [y, DirectArgumentWitnesses.z]) t) :=
   rejects (callLife_iff types Round5Evidence.twoWaiting (.enter [y, DirectArgumentWitnesses.z])) (by decide)
 
 /-- Planted (law `life_iff`, mutant `refuseReinitBind`). -/
-example : ¬ (∀ t, refuseReinitBind (.bind DirectArgumentWitnesses.z) localReturn.own = some t ↔
+theorem life_iff_planted_8 : ¬ (∀ t, refuseReinitBind (.bind DirectArgumentWitnesses.z) localReturn.own = some t ↔
     Life types localReturn.own (.bind DirectArgumentWitnesses.z) t) :=
   rejects (life_iff types localReturn.own (.bind DirectArgumentWitnesses.z)) (by decide)
 
 /-- Planted (law `runLoanSequence_iff`, mutant `LoanHistoryEvidence.recycle`). -/
-example : ¬ (∀ t, LoanHistoryEvidence.recycle LoanHistoryEvidence.endedChild LoanHistoryEvidence.actions =
+theorem runLoanSequence_iff_planted_3 : ¬ (∀ t, LoanHistoryEvidence.recycle LoanHistoryEvidence.endedChild LoanHistoryEvidence.actions =
       some t ↔ LoanSequence LoanHistoryEvidence.endedChild LoanHistoryEvidence.actions t) :=
   rejects (runLoanSequence_iff LoanHistoryEvidence.endedChild LoanHistoryEvidence.actions) (by decide)
 
@@ -974,13 +1068,21 @@ def adoptAbsent (s : State) (args : List (Var × LoanId)) : Option State := do
       frames := { f with views := args ++ f.views } :: s.frames.tail }
   else none
 
-def pendingEnd : IssuanceAction := .ordinary (.endLoan ⟨1⟩)
+def adoptedEnd : IssuanceAction := .ordinary (.endLoan ⟨1⟩)
 
-/-- Mutant omitting only the protection of buffered arguments on an ordinary end. -/
-def endPending (s : CallState) : IssuanceAction → Option CallState
-  | .ordinary (.endLoan i) => (endLoan s.own i).map fun own => { s with own := own }
+/-- Retain the pending-loan check, but omit protection for an adopted parameter binding. -/
+def endWithoutBindingGuard (s : State) (i : LoanId) : Option State :=
+  if ∀ a ∈ s.loans, a.id = i → a.pendingArgument = false then
+    endLeafAtBoundary s i
+  else none
+
+/-- Substitute the mutant through the actual ordinary issuance branch. -/
+def endAdopted (s : CallState) : IssuanceAction → Option CallState
+  | .ordinary (.endLoan i) =>
+    if OrdinaryIssuanceAllowed s (.endLoan i) then
+      (endWithoutBindingGuard s.own i).map fun own => { s with own := own }
+    else none
   | e => issuanceStep types s e
-
 
 /-- Mutant dropping only the whole-root exclusion test. -/
 def ownerWithoutExclusion (s : State) (p : Hybrid.Place) (m : Mode) : Bool :=
@@ -1079,444 +1181,522 @@ private theorem rejectsRefusal {α : Type} {rule : α → Prop} {actual mutant :
   simp [← same, refused] at accepted
 
 /-- Instance (law `ownerAccess_iff`, case `initial access`). -/
-example : ownerAccess initial ⟨0⟩ .mutable = true ∧ OwnerPermission initial ⟨0⟩ .mutable := ⟨rfl, (ownerAccess_iff _ _ _).mp (show ownerAccess initial ⟨0⟩ .mutable = true from rfl)⟩
+theorem ownerAccess_iff_instance_1 : ownerAccess initial ⟨0⟩ .mutable = true ∧ OwnerPermission initial ⟨0⟩ .mutable := ⟨rfl, (ownerAccess_iff _ _ _).mp (show ownerAccess initial ⟨0⟩ .mutable = true from rfl)⟩
 
 /-- Planted (law `ownerAccess_iff`, direction over-accepting). Omit exclusion. -/
-example : ¬ (ownerWithoutExclusion exclusive ⟨0⟩ .mutable = true ↔ OwnerPermission exclusive ⟨0⟩ .mutable) :=
+theorem ownerAccess_iff_planted_1 : ¬ (ownerWithoutExclusion exclusive ⟨0⟩ .mutable = true ↔ OwnerPermission exclusive ⟨0⟩ .mutable) :=
   rejectsPermission (actual := (ownerAccess exclusive ⟨0⟩ .mutable)) (ownerAccess_iff _ _ _) (by decide)
 
 /-- Planted (law `ownerAccess_iff`, direction over-refusing). Deny permitted access. -/
-example : ¬ (refuseMutableOwner initial ⟨0⟩ .mutable = true ↔ OwnerPermission initial ⟨0⟩ .mutable) :=
+theorem ownerAccess_iff_planted_2 : ¬ (refuseMutableOwner initial ⟨0⟩ .mutable = true ↔ OwnerPermission initial ⟨0⟩ .mutable) :=
   rejectsPermission (actual := (ownerAccess initial ⟨0⟩ .mutable)) (ownerAccess_iff _ _ _) (by decide)
 
 /-- Instance (law `loanAccess_iff`, case `initial access`). -/
-example : loanAccess exclusive ⟨0⟩ .mutable = true ∧ LoanPermission exclusive ⟨0⟩ .mutable := ⟨rfl, (loanAccess_iff _ _ _).mp (show loanAccess exclusive ⟨0⟩ .mutable = true from rfl)⟩
+theorem loanAccess_iff_instance_1 : loanAccess exclusive ⟨0⟩ .mutable = true ∧ LoanPermission exclusive ⟨0⟩ .mutable := ⟨rfl, (loanAccess_iff _ _ _).mp (show loanAccess exclusive ⟨0⟩ .mutable = true from rfl)⟩
 
 /-- Planted (law `loanAccess_iff`, direction over-accepting). Omit exclusion. -/
-example : ¬ (loanWithoutExclusion child ⟨0⟩ .mutable = true ↔ LoanPermission child ⟨0⟩ .mutable) :=
+theorem loanAccess_iff_planted_1 : ¬ (loanWithoutExclusion child ⟨0⟩ .mutable = true ↔ LoanPermission child ⟨0⟩ .mutable) :=
   rejectsPermission (actual := (loanAccess child ⟨0⟩ .mutable)) (loanAccess_iff _ _ _) (by decide)
 
 /-- Planted (law `loanAccess_iff`, direction over-refusing). Deny permitted access. -/
-example : ¬ (refuseMutableLoan exclusive ⟨0⟩ .mutable = true ↔ LoanPermission exclusive ⟨0⟩ .mutable) :=
+theorem loanAccess_iff_planted_2 : ¬ (refuseMutableLoan exclusive ⟨0⟩ .mutable = true ↔ LoanPermission exclusive ⟨0⟩ .mutable) :=
   rejectsPermission (actual := (loanAccess exclusive ⟨0⟩ .mutable)) (loanAccess_iff _ _ _) (by decide)
 
 /-- Instance (law `accessOwner_iff`, case `admitted operation`). -/
-example : ∃ t, accessOwner initial ⟨0⟩ .mutable = some t ∧ AccessOwner initial ⟨0⟩ .mutable t :=
+theorem accessOwner_iff_instance_1 : ∃ t, accessOwner initial ⟨0⟩ .mutable = some t ∧ AccessOwner initial ⟨0⟩ .mutable t :=
   admits (fun t => accessOwner_iff _ _ _ t) (by decide)
 
 /-- Planted (law `accessOwner_iff`, direction over-accepting). -/
-example : ¬ (∀ t, accessWith (ownerWithoutExclusion exclusive ⟨0⟩ .mutable) exclusive = some t ↔
+theorem accessOwner_iff_planted_1 : ¬ (∀ t, accessWith (ownerWithoutExclusion exclusive ⟨0⟩ .mutable) exclusive = some t ↔
     AccessOwner exclusive ⟨0⟩ .mutable t) :=
   rejectsAcceptance (actual := (accessOwner exclusive ⟨0⟩ .mutable))
     (fun t => accessOwner_iff _ _ _ t) (by decide) (by decide)
 
 /-- Planted (law `accessOwner_iff`, direction over-refusing). -/
-example : ¬ (∀ t, accessWith (refuseMutableOwner initial ⟨0⟩ .mutable) initial = some t ↔
+theorem accessOwner_iff_planted_2 : ¬ (∀ t, accessWith (refuseMutableOwner initial ⟨0⟩ .mutable) initial = some t ↔
     AccessOwner initial ⟨0⟩ .mutable t) :=
   rejectsRefusal (actual := (accessOwner initial ⟨0⟩ .mutable))
     (fun t => accessOwner_iff _ _ _ t) (by decide) (by decide)
 
 /-- Instance (law `accessLoan_iff`, case `admitted operation`). -/
-example : ∃ t, accessLoan exclusive ⟨0⟩ .mutable = some t ∧ AccessLoan exclusive ⟨0⟩ .mutable t :=
+theorem accessLoan_iff_instance_1 : ∃ t, accessLoan exclusive ⟨0⟩ .mutable = some t ∧ AccessLoan exclusive ⟨0⟩ .mutable t :=
   admits (fun t => accessLoan_iff _ _ _ t) (by decide)
 
 /-- Planted (law `accessLoan_iff`, direction over-accepting). -/
-example : ¬ (∀ t, accessWith (loanWithoutExclusion child ⟨0⟩ .mutable) child = some t ↔
+theorem accessLoan_iff_planted_1 : ¬ (∀ t, accessWith (loanWithoutExclusion child ⟨0⟩ .mutable) child = some t ↔
     AccessLoan child ⟨0⟩ .mutable t) :=
   rejectsAcceptance (actual := (accessLoan child ⟨0⟩ .mutable))
     (fun t => accessLoan_iff _ _ _ t) (by decide) (by decide)
 
 /-- Planted (law `accessLoan_iff`, direction over-refusing). -/
-example : ¬ (∀ t, accessWith (refuseMutableLoan exclusive ⟨0⟩ .mutable) exclusive = some t ↔
+theorem accessLoan_iff_planted_2 : ¬ (∀ t, accessWith (refuseMutableLoan exclusive ⟨0⟩ .mutable) exclusive = some t ↔
     AccessLoan exclusive ⟨0⟩ .mutable t) :=
   rejectsRefusal (actual := (accessLoan exclusive ⟨0⟩ .mutable))
     (fun t => accessLoan_iff _ _ _ t) (by decide) (by decide)
 
 /-- Instance (law `reinitialize_iff`, case `admitted operation`). -/
-example : ∃ t, reinitialize LifecycleWitnesses.moved ⟨0⟩ = some t ∧
+theorem reinitialize_iff_instance_1 : ∃ t, reinitialize LifecycleWitnesses.moved ⟨0⟩ = some t ∧
     Reinitialize LifecycleWitnesses.moved ⟨0⟩ t :=
   admits (fun t => reinitialize_iff _ _ t) (by decide)
 
 /-- Planted (law `reinitialize_iff`, direction over-accepting). -/
-example : ¬ (∀ t, overwriteLinear initial ⟨0⟩ = some t ↔ Reinitialize initial ⟨0⟩ t) :=
+theorem reinitialize_iff_planted_1 : ¬ (∀ t, overwriteLinear initial ⟨0⟩ = some t ↔ Reinitialize initial ⟨0⟩ t) :=
   rejectsAcceptance (actual := (reinitialize initial ⟨0⟩))
     (fun t => reinitialize_iff _ _ t) (by decide) (by decide)
 
 /-- Planted (law `reinitialize_iff`, direction over-refusing). -/
-example : ¬ (∀ t, refuseMovedSlot LifecycleWitnesses.moved ⟨0⟩ = some t ↔
+theorem reinitialize_iff_planted_2 : ¬ (∀ t, refuseMovedSlot LifecycleWitnesses.moved ⟨0⟩ = some t ↔
     Reinitialize LifecycleWitnesses.moved ⟨0⟩ t) :=
   rejectsRefusal (actual := (reinitialize LifecycleWitnesses.moved ⟨0⟩))
     (fun t => reinitialize_iff _ _ t) (by decide) (by decide)
 
 /-- Instance (law `bind_iff`, case `admitted operation`). -/
-example : ∃ t, bind types y initial = some t ∧ Bind types initial y t :=
+theorem bind_iff_instance_1 : ∃ t, bind types y initial = some t ∧ Bind types initial y t :=
   admits (fun t => bind_iff _ _ _ t) (by decide)
 
 /-- Planted (law `bind_iff`, direction over-accepting). -/
-example : ¬ (∀ t, bind (defaultDescriptor untyped) y initial = some t ↔ Bind untyped initial y t) :=
+theorem bind_iff_planted_1 : ¬ (∀ t, bind (defaultDescriptor untyped) y initial = some t ↔ Bind untyped initial y t) :=
   rejectsAcceptance (actual := (bind untyped y initial)) (fun t => bind_iff _ _ _ t) (by decide) (by decide)
 
 /-- Planted (law `bind_iff`, direction over-refusing). -/
-example : ¬ (∀ t, refuseFreshSlot types y initial = some t ↔ Bind types initial y t) :=
+theorem bind_iff_planted_2 : ¬ (∀ t, refuseFreshSlot types y initial = some t ↔ Bind types initial y t) :=
   rejectsRefusal (actual := (bind types y initial)) (fun t => bind_iff _ _ _ t) (by decide) (by decide)
 
 /-- Instance (law `drop_iff`, case `admitted operation`). -/
-example : ∃ t, drop [x] LifecycleWitnesses.moved = some t ∧ Drop LifecycleWitnesses.moved [x] t :=
+theorem drop_iff_instance_1 : ∃ t, drop [x] LifecycleWitnesses.moved = some t ∧ Drop LifecycleWitnesses.moved [x] t :=
   admits (fun t => drop_iff _ _ t) (by decide)
 
 /-- Planted (law `drop_iff`, direction over-accepting). -/
-example : ¬ (∀ t, dropWithoutDischarge initial [x] = some t ↔ Drop initial [x] t) :=
+theorem drop_iff_planted_1 : ¬ (∀ t, dropWithoutDischarge initial [x] = some t ↔ Drop initial [x] t) :=
   rejectsAcceptance (actual := (drop [x] initial)) (fun t => drop_iff _ _ t) (by decide) (by decide)
 
 /-- Planted (law `drop_iff`, direction over-refusing). -/
-example : ¬ (∀ t, refuseNonemptyDrop [x] LifecycleWitnesses.moved = some t ↔
+theorem drop_iff_planted_2 : ¬ (∀ t, refuseNonemptyDrop [x] LifecycleWitnesses.moved = some t ↔
     Drop LifecycleWitnesses.moved [x] t) :=
   rejectsRefusal (actual := (drop [x] LifecycleWitnesses.moved))
     (fun t => drop_iff _ _ t) (by decide) (by decide)
 
 /-- Instance (law `move_iff`, case `admitted operation`). -/
-example : ∃ t, move MoveLifecycleEvidence.source ⟨1⟩ = some t ∧ Move MoveLifecycleEvidence.source ⟨1⟩ t :=
+theorem move_iff_instance_1 : ∃ t, move MoveLifecycleEvidence.source ⟨1⟩ = some t ∧ Move MoveLifecycleEvidence.source ⟨1⟩ t :=
   admits (fun t => move_iff _ _ t) (by decide)
 
 /-- Planted (law `move_iff`, direction over-accepting). -/
-example : ¬ (∀ t, acceptBorrowedMove exclusive ⟨0⟩ = some t ↔ Move exclusive ⟨0⟩ t) :=
+theorem move_iff_planted_3 : ¬ (∀ t, acceptBorrowedMove exclusive ⟨0⟩ = some t ↔ Move exclusive ⟨0⟩ t) :=
   rejectsAcceptance (actual := (move exclusive ⟨0⟩)) (fun t => move_iff _ _ t) (by decide) (by decide)
 
 /-- Planted (law `move_iff`, direction over-refusing). -/
-example : ¬ (∀ t, refuseNonzeroMove MoveLifecycleEvidence.source ⟨1⟩ = some t ↔
+theorem move_iff_planted_4 : ¬ (∀ t, refuseNonzeroMove MoveLifecycleEvidence.source ⟨1⟩ = some t ↔
     Move MoveLifecycleEvidence.source ⟨1⟩ t) :=
   rejectsRefusal (actual := (move MoveLifecycleEvidence.source ⟨1⟩))
     (fun t => move_iff _ _ t) (by decide) (by decide)
 
 /-- Instance (law `borrow_iff`, case `admitted operation`). -/
-example : ∃ t, borrow initial ⟨0⟩ [] .mutable = some t ∧ Borrow initial ⟨0⟩ [] .mutable t :=
+theorem borrow_iff_instance_1 : ∃ t, borrow initial ⟨0⟩ [] .mutable = some t ∧ Borrow initial ⟨0⟩ [] .mutable t :=
   admits (fun t => borrow_iff _ _ _ _ t) (by decide)
 
 /-- Planted (law `borrow_iff`, direction over-accepting). -/
-example : ¬ (∀ t, acceptMissingRoot initial (.borrow ⟨9⟩ [] .shared) = some t ↔
+theorem borrow_iff_planted_1 : ¬ (∀ t, acceptMissingRoot initial (.borrow ⟨9⟩ [] .shared) = some t ↔
     Borrow initial ⟨9⟩ [] .shared t) :=
   rejectsAcceptance (actual := (borrow initial ⟨9⟩ [] .shared))
     (fun t => borrow_iff _ _ _ _ t) (by decide) (by decide)
 
 /-- Planted (law `borrow_iff`, direction over-refusing). -/
-example : ¬ (∀ t, refuseMutableBorrow initial ⟨0⟩ [] .mutable = some t ↔ Borrow initial ⟨0⟩ [] .mutable t) :=
+theorem borrow_iff_planted_2 : ¬ (∀ t, refuseMutableBorrow initial ⟨0⟩ [] .mutable = some t ↔ Borrow initial ⟨0⟩ [] .mutable t) :=
   rejectsRefusal (actual := (borrow initial ⟨0⟩ [] .mutable))
     (fun t => borrow_iff _ _ _ _ t) (by decide) (by decide)
 
 /-- Instance (law `reborrowTo_iff`, case `admitted operation`). -/
-example : ∃ t, reborrowTo LifecycleWitnesses.called ⟨1⟩ [.index 2] .mutable 1 = some t ∧
+theorem reborrowTo_iff_instance_1 : ∃ t, reborrowTo LifecycleWitnesses.called ⟨1⟩ [.index 2] .mutable 1 = some t ∧
     ReborrowTo LifecycleWitnesses.called ⟨1⟩ [.index 2] .mutable 1 t :=
   admits (fun t => reborrowTo_iff _ _ _ _ _ t) (by decide)
 
 /-- Planted (law `reborrowTo_iff`, direction over-accepting). -/
-example : ¬ (∀ t, reborrowIgnoringConflict child ⟨0⟩ [] .mutable 0 = some t ↔
+theorem reborrowTo_iff_planted_2 : ¬ (∀ t, reborrowIgnoringConflict child ⟨0⟩ [] .mutable 0 = some t ↔
     ReborrowTo child ⟨0⟩ [] .mutable 0 t) :=
   rejectsAcceptance (actual := (reborrowTo child ⟨0⟩ [] .mutable 0))
     (fun t => reborrowTo_iff _ _ _ _ _ t) (by decide) (by decide)
 
 /-- Planted (law `reborrowTo_iff`, direction over-refusing). -/
-example : ¬ (∀ t, refuseProjected LifecycleWitnesses.called ⟨1⟩ [.index 2] .mutable 1 = some t ↔
+theorem reborrowTo_iff_planted_3 : ¬ (∀ t, refuseProjected LifecycleWitnesses.called ⟨1⟩ [.index 2] .mutable 1 = some t ↔
     ReborrowTo LifecycleWitnesses.called ⟨1⟩ [.index 2] .mutable 1 t) :=
   rejectsRefusal (actual := (reborrowTo LifecycleWitnesses.called ⟨1⟩ [.index 2] .mutable 1))
     (fun t => reborrowTo_iff _ _ _ _ _ t) (by decide) (by decide)
 
 /-- Instance (law `reborrow_iff`, case `admitted operation`). -/
-example : ∃ t, reborrow exclusive ⟨0⟩ [] .mutable = some t ∧ Reborrow exclusive ⟨0⟩ [] .mutable t :=
+theorem reborrow_iff_instance_1 : ∃ t, reborrow exclusive ⟨0⟩ [] .mutable = some t ∧ Reborrow exclusive ⟨0⟩ [] .mutable t :=
   admits (fun t => reborrow_iff _ _ _ _ t) (by decide)
 
+/-- Keep the current-frame destination when isolating the conflict check. -/
+def reborrowCurrentIgnoringConflict (s : State) (i : LoanId)
+    (path : List Projection) (mode : Mode) : Option State := do
+  let frame ← s.frames.head?
+  reborrowIgnoringConflict s i path mode frame.id
+
 /-- Planted (law `reborrow_iff`, direction over-accepting). -/
-example : ¬ (∀ t, reborrowIgnoringConflict child ⟨0⟩ [] .mutable 0 = some t ↔
+theorem reborrow_iff_planted_1 : ¬ (∀ t, reborrowCurrentIgnoringConflict child ⟨0⟩ [] .mutable = some t ↔
     Reborrow child ⟨0⟩ [] .mutable t) :=
   rejectsAcceptance (actual := (reborrow child ⟨0⟩ [] .mutable))
     (fun t => reborrow_iff _ _ _ _ t) (by decide) (by decide)
 
 /-- Planted (law `reborrow_iff`, direction over-refusing). -/
-example : ¬ (∀ t, refuseMutableReborrow exclusive ⟨0⟩ [] .mutable = some t ↔
+theorem reborrow_iff_planted_2 : ¬ (∀ t, refuseMutableReborrow exclusive ⟨0⟩ [] .mutable = some t ↔
     Reborrow exclusive ⟨0⟩ [] .mutable t) :=
   rejectsRefusal (actual := (reborrow exclusive ⟨0⟩ [] .mutable))
     (fun t => reborrow_iff _ _ _ _ t) (by decide) (by decide)
 
 /-- Instance (law `endLoan_iff`, case `admitted operation`). -/
-example : ∃ t, endLoan child ⟨1⟩ = some t ∧ EndLoan child ⟨1⟩ t :=
+theorem endLoan_iff_instance_1 : ∃ t, endLoan child ⟨1⟩ = some t ∧ EndLoan child ⟨1⟩ t :=
   admits (fun t => endLoan_iff _ _ t) (by decide)
 
 /-- Planted (law `endLoan_iff`, direction over-accepting). -/
-example : ¬ (∀ t, PreservationEvidence.endLoanAllowChildren child ⟨0⟩ = some t ↔ EndLoan child ⟨0⟩ t) :=
+theorem endLoan_iff_planted_1 : ¬ (∀ t, PreservationEvidence.endLoanAllowChildren child ⟨0⟩ = some t ↔ EndLoan child ⟨0⟩ t) :=
   rejectsAcceptance (actual := (endLoan child ⟨0⟩)) (fun t => endLoan_iff _ _ t) (by decide) (by decide)
 
 /-- Planted (law `endLoan_iff`, direction over-refusing). -/
-example : ¬ (∀ t, refuseLeafEnd child ⟨1⟩ = some t ↔ EndLoan child ⟨1⟩ t) :=
+theorem endLoan_iff_planted_2 : ¬ (∀ t, refuseLeafEnd child ⟨1⟩ = some t ↔ EndLoan child ⟨1⟩ t) :=
   rejectsRefusal (actual := (endLoan child ⟨1⟩)) (fun t => endLoan_iff _ _ t) (by decide) (by decide)
 
 /-- Instance (law `loanAction_iff`, case `admitted operation`). -/
-example : ∃ t, loanAction child (.endLoan ⟨1⟩) = some t ∧ LoanStep child (.endLoan ⟨1⟩) t :=
+theorem loanAction_iff_instance_1 : ∃ t, loanAction child (.endLoan ⟨1⟩) = some t ∧ LoanStep child (.endLoan ⟨1⟩) t :=
   admits (fun t => loanAction_iff _ _ t) (by decide)
 
 /-- Planted (law `loanAction_iff`, direction over-accepting). -/
-example : ¬ (∀ t, acceptParentEnd child (.endLoan ⟨0⟩) = some t ↔ LoanStep child (.endLoan ⟨0⟩) t) :=
+theorem loanAction_iff_planted_1 : ¬ (∀ t, acceptParentEnd child (.endLoan ⟨0⟩) = some t ↔ LoanStep child (.endLoan ⟨0⟩) t) :=
   rejectsAcceptance (actual := (loanAction child (.endLoan ⟨0⟩)))
     (fun t => loanAction_iff _ _ t) (by decide) (by decide)
 
 /-- Planted (law `loanAction_iff`, direction over-refusing). -/
-example : ¬ (∀ t, refuseChildEnd child (.endLoan ⟨1⟩) = some t ↔ LoanStep child (.endLoan ⟨1⟩) t) :=
+theorem loanAction_iff_planted_2 : ¬ (∀ t, refuseChildEnd child (.endLoan ⟨1⟩) = some t ↔ LoanStep child (.endLoan ⟨1⟩) t) :=
   rejectsRefusal (actual := (loanAction child (.endLoan ⟨1⟩)))
     (fun t => loanAction_iff _ _ t) (by decide) (by decide)
 
 /-- Instance (law `runLoanSequence_iff`, case `admitted operation`). -/
-example : ∃ t, runLoanSequence child [] = some t ∧ LoanSequence child [] t :=
+theorem runLoanSequence_iff_instance_1 : ∃ t, runLoanSequence child [] = some t ∧ LoanSequence child [] t :=
   admits (fun t => runLoanSequence_iff _ _ t) (by decide)
 
 /-- Planted (law `runLoanSequence_iff`, direction over-accepting). -/
-example : ¬ (∀ t, keepOnSequenceRefusal child [.endLoan ⟨0⟩] = some t ↔
+theorem runLoanSequence_iff_planted_4 : ¬ (∀ t, keepOnSequenceRefusal child [.endLoan ⟨0⟩] = some t ↔
     LoanSequence child [.endLoan ⟨0⟩] t) :=
   rejectsAcceptance (actual := (runLoanSequence child [.endLoan ⟨0⟩]))
     (fun t => runLoanSequence_iff _ _ t) (by decide) (by decide)
 
 /-- Planted (law `runLoanSequence_iff`, direction over-refusing). -/
-example : ¬ (∀ t, refuseRunLoanSequence child [] = some t ↔ LoanSequence child [] t) :=
+theorem runLoanSequence_iff_planted_5 : ¬ (∀ t, refuseRunLoanSequence child [] = some t ↔ LoanSequence child [] t) :=
   rejectsRefusal (actual := (runLoanSequence child []))
     (fun t => runLoanSequence_iff _ _ t) (by decide) (by decide)
 
 /-- Instance (law `endLocals_iff`, case `admitted operation`). -/
-example : ∃ t, endLocals 0 child = some t ∧ EndLocals child 0 t :=
+theorem endLocals_iff_instance_1 : ∃ t, endLocals 0 child = some t ∧ EndLocals child 0 t :=
   admits (fun t => endLocals_iff _ _ t) (by decide)
 
 /-- Planted (law `endLocals_iff`, direction over-accepting). -/
-example : ¬ (∀ t, PreservationEvidence.endLocalsAllowChildren 0 splitActivation = some t ↔
+theorem endLocals_iff_planted_1 : ¬ (∀ t, PreservationEvidence.endLocalsAllowChildren 0 splitActivation = some t ↔
     EndLocals splitActivation 0 t) :=
   rejectsAcceptance (actual := (endLocals 0 splitActivation))
     (fun t => endLocals_iff _ _ t) (by decide) (by decide)
 
 /-- Planted (law `endLocals_iff`, direction over-refusing). -/
-example : ¬ (∀ t, refusePopulatedEnding 0 child = some t ↔ EndLocals child 0 t) :=
+theorem endLocals_iff_planted_2 : ¬ (∀ t, refusePopulatedEnding 0 child = some t ↔ EndLocals child 0 t) :=
   rejectsRefusal (actual := (endLocals 0 child)) (fun t => endLocals_iff _ _ t) (by decide) (by decide)
 
 /-- Instance (law `enter_iff`, case `admitted operation`). -/
-example : ∃ t, enter types [y] initial = some t ∧ Enter types initial [y] t :=
+theorem enter_iff_instance_1 : ∃ t, enter types [y] initial = some t ∧ Enter types initial [y] t :=
   admits (fun t => enter_iff _ _ _ t) (by decide)
 
 /-- Planted (law `enter_iff`, direction over-accepting). -/
-example : ¬ (∀ t, enter (defaultDescriptor untyped) [y] initial = some t ↔ Enter untyped initial [y] t) :=
+theorem enter_iff_planted_1 : ¬ (∀ t, enter (defaultDescriptor untyped) [y] initial = some t ↔ Enter untyped initial [y] t) :=
   rejectsAcceptance (actual := (enter untyped [y] initial))
     (fun t => enter_iff _ _ _ t) (by decide) (by decide)
 
 /-- Planted (law `enter_iff`, direction over-refusing). -/
-example : ¬ (∀ t, refuseTypedEntry types [y] initial = some t ↔ Enter types initial [y] t) :=
+theorem enter_iff_planted_2 : ¬ (∀ t, refuseTypedEntry types [y] initial = some t ↔ Enter types initial [y] t) :=
   rejectsRefusal (actual := (enter types [y] initial)) (fun t => enter_iff _ _ _ t) (by decide) (by decide)
 
 /-- Instance (law `leave_iff`, case `admitted operation`). -/
-example : ∃ t, leave LifecycleWitnesses.moved = some t ∧ Leave LifecycleWitnesses.moved t :=
+theorem leave_iff_instance_1 : ∃ t, leave LifecycleWitnesses.moved = some t ∧ Leave LifecycleWitnesses.moved t :=
   admits (fun t => leave_iff _ t) (by decide)
 
 /-- Planted (law `leave_iff`, direction over-accepting). -/
-example : ¬ (∀ t, acceptLiveReturn .leave initial = some t ↔ Leave initial t) :=
+theorem leave_iff_planted_1 : ¬ (∀ t, acceptLiveReturn .leave initial = some t ↔ Leave initial t) :=
   rejectsAcceptance (actual := (leave initial)) (fun t => leave_iff _ t) (by decide) (by decide)
 
 /-- Planted (law `leave_iff`, direction over-refusing). -/
-example : ¬ (∀ t, refusePopulatedExit LifecycleWitnesses.moved = some t ↔ Leave LifecycleWitnesses.moved t) :=
+theorem leave_iff_planted_2 : ¬ (∀ t, refusePopulatedExit LifecycleWitnesses.moved = some t ↔ Leave LifecycleWitnesses.moved t) :=
   rejectsRefusal (actual := (leave LifecycleWitnesses.moved)) (fun t => leave_iff _ t) (by decide) (by decide)
 
 /-- Instance (law `life_iff`, case `admitted operation`). -/
-example : ∃ t, life types (.bind y) initial = some t ∧ Life types initial (.bind y) t :=
+theorem life_iff_instance_1 : ∃ t, life types (.bind y) initial = some t ∧ Life types initial (.bind y) t :=
   admits (fun t => life_iff _ _ _ t) (by decide)
 
 /-- Planted (law `life_iff`, direction over-accepting). -/
-example : ¬ (∀ t, lifeWithoutDropDischarge (.drop [x]) initial = some t ↔ Life types initial (.drop [x]) t) :=
+theorem life_iff_planted_9 : ¬ (∀ t, lifeWithoutDropDischarge (.drop [x]) initial = some t ↔ Life types initial (.drop [x]) t) :=
   rejectsAcceptance (actual := (life types (.drop [x]) initial))
     (fun t => life_iff _ _ _ t) (by decide) (by decide)
 
 /-- Planted (law `life_iff`, direction over-refusing). -/
-example : ¬ (∀ t, refuseLifeBind (.bind y) initial = some t ↔ Life types initial (.bind y) t) :=
+theorem life_iff_planted_10 : ¬ (∀ t, refuseLifeBind (.bind y) initial = some t ↔ Life types initial (.bind y) t) :=
   rejectsRefusal (actual := (life types (.bind y) initial))
     (fun t => life_iff _ _ _ t) (by decide) (by decide)
 
 /-- Instance (law `lifeStore_iff`, case `admitted operation`). -/
-example : ∃ t, lifeStore types (.drop []) baseStore = some t ∧ LifeStore types baseStore (.drop []) t :=
+theorem lifeStore_iff_instance_1 : ∃ t, lifeStore types (.drop []) baseStore = some t ∧ LifeStore types baseStore (.drop []) t :=
   admits (fun t => lifeStore_iff _ _ _ t) (by decide)
 
 /-- Planted (law `lifeStore_iff`, direction over-accepting). -/
-example : ¬ (∀ t, (dropWithoutDischarge initial [x]).map (fun own => { baseStore with own := own }) = some t ↔
+theorem lifeStore_iff_planted_2 : ¬ (∀ t, (dropWithoutDischarge initial [x]).map (fun own => { baseStore with own := own }) = some t ↔
     LifeStore types baseStore (.drop [x]) t) :=
   rejectsAcceptance (actual := (lifeStore types (.drop [x]) baseStore))
     (fun t => lifeStore_iff _ _ _ t) (by decide) (by decide)
 
 /-- Planted (law `lifeStore_iff`, direction over-refusing). -/
-example : ¬ (∀ t, refuseStoreDrop (.drop []) baseStore = some t ↔ LifeStore types baseStore (.drop []) t) :=
+theorem lifeStore_iff_planted_3 : ¬ (∀ t, refuseStoreDrop (.drop []) baseStore = some t ↔ LifeStore types baseStore (.drop []) t) :=
   rejectsRefusal (actual := (lifeStore types (.drop []) baseStore))
     (fun t => lifeStore_iff _ _ _ t) (by decide) (by decide)
 
 /-- Instance (law `instrumentLife_iff`, case `admitted operation`). -/
-example : ∃ t, instrumentLife controlOperands types (.drop []) baseStore = some t ∧
+theorem instrumentLife_iff_instance_1 : ∃ t, instrumentLife controlOperands types (.drop []) baseStore = some t ∧
     InstrumentLife concreteIdentity types baseStore (.drop []) t :=
   admits (fun t => instrumentLife_iff controlOperands concreteIdentity concreteIdentity_iff _ _ _ t) (by decide)
 
 /-- Planted (law `instrumentLife_iff`, direction over-accepting). -/
-example : ¬ (∀ t, instrumentWithPermissiveDrop (.drop [x]) baseStore = some t ↔
+theorem instrumentLife_iff_planted_1 : ¬ (∀ t, instrumentWithPermissiveDrop (.drop [x]) baseStore = some t ↔
     InstrumentLife concreteIdentity types baseStore (.drop [x]) t) :=
   rejectsAcceptance (actual := (instrumentLife controlOperands types (.drop [x]) baseStore))
     (fun t => instrumentLife_iff controlOperands concreteIdentity concreteIdentity_iff _ _ _ t) (by decide) (by decide)
 
 /-- Planted (law `instrumentLife_iff`, direction over-refusing). -/
-example : ¬ (∀ t, instrumentRefusingEmptyDrop (.drop []) baseStore = some t ↔
+theorem instrumentLife_iff_planted_2 : ¬ (∀ t, instrumentRefusingEmptyDrop (.drop []) baseStore = some t ↔
     InstrumentLife concreteIdentity types baseStore (.drop []) t) :=
   rejectsRefusal (actual := (instrumentLife controlOperands types (.drop []) baseStore))
     (fun t => instrumentLife_iff controlOperands concreteIdentity concreteIdentity_iff _ _ _ t) (by decide) (by decide)
 
 /-- Instance (law `adoptDown_iff`, case `admitted operation`). -/
-example : ∃ t, adoptDown Round5Evidence.twoBefore Round5Evidence.twoWaiting.pending = some t ∧
+theorem adoptDown_iff_instance_1 : ∃ t, adoptDown Round5Evidence.twoBefore Round5Evidence.twoWaiting.pending = some t ∧
     AdoptDown Round5Evidence.twoBefore Round5Evidence.twoWaiting.pending t :=
   admits (fun t => adoptDown_iff _ _ t) (by decide)
 
 /-- Planted (law `adoptDown_iff`, direction over-accepting). -/
-example : ¬ (∀ t, adoptAbsent initial [(y, ⟨9⟩)] = some t ↔ AdoptDown initial [(y, ⟨9⟩)] t) :=
+theorem adoptDown_iff_planted_3 : ¬ (∀ t, adoptAbsent initial [(y, ⟨9⟩)] = some t ↔ AdoptDown initial [(y, ⟨9⟩)] t) :=
   rejectsAcceptance (actual := (adoptDown initial [(y, ⟨9⟩)]))
     (fun t => adoptDown_iff _ _ t) (by decide) (by decide)
 
 /-- Planted (law `adoptDown_iff`, direction over-refusing). -/
-example : ¬ (∀ t, refuseMultiAdopt Round5Evidence.twoBefore Round5Evidence.twoWaiting.pending = some t ↔
+theorem adoptDown_iff_planted_4 : ¬ (∀ t, refuseMultiAdopt Round5Evidence.twoBefore Round5Evidence.twoWaiting.pending = some t ↔
     AdoptDown Round5Evidence.twoBefore Round5Evidence.twoWaiting.pending t) :=
   rejectsRefusal (actual := (adoptDown Round5Evidence.twoBefore Round5Evidence.twoWaiting.pending))
     (fun t => adoptDown_iff _ _ t) (by decide) (by decide)
 
 /-- Instance (law `callLife_iff`, case `admitted operation`). -/
-example : ∃ t, callLife types (.enter []) nestedCaller = some t ∧ CallLife types nestedCaller (.enter []) t :=
+theorem callLife_iff_instance_1 : ∃ t, callLife types (.enter []) nestedCaller = some t ∧ CallLife types nestedCaller (.enter []) t :=
   admits (fun t => callLife_iff _ _ _ t) (by decide)
 
 /-- Planted (law `callLife_iff`, direction over-accepting). -/
-example : ¬ (∀ t, ignorePendingOnDrop (.drop []) PendingEvidence.down = some t ↔
+theorem callLife_iff_planted_8 : ¬ (∀ t, ignorePendingOnDrop (.drop []) PendingEvidence.down = some t ↔
     CallLife types PendingEvidence.down (.drop []) t) :=
   rejectsAcceptance (actual := (callLife types (.drop []) PendingEvidence.down))
     (fun t => callLife_iff _ _ _ t) (by decide) (by decide)
 
 /-- Planted (law `callLife_iff`, direction over-refusing). -/
-example : ¬ (∀ t, refuseEmptyCallEntry (.enter []) nestedCaller = some t ↔
+theorem callLife_iff_planted_9 : ¬ (∀ t, refuseEmptyCallEntry (.enter []) nestedCaller = some t ↔
     CallLife types nestedCaller (.enter []) t) :=
   rejectsRefusal (actual := (callLife types (.enter []) nestedCaller))
     (fun t => callLife_iff _ _ _ t) (by decide) (by decide)
 
 /-- Instance (law `callLifeStore_iff`, case `admitted operation`). -/
-example : ∃ t, callLifeStore types (.enter []) ((7, nestedCaller) : Nat × CallState) = some t ∧
+theorem callLifeStore_iff_instance_1 : ∃ t, callLifeStore types (.enter []) ((7, nestedCaller) : Nat × CallState) = some t ∧
     CallLifeStore types ((7, nestedCaller) : Nat × CallState) (.enter []) t :=
   admits (fun t => callLifeStore_iff _ _ _ t) (by decide)
 
 /-- Planted (law `callLifeStore_iff`, direction over-accepting). -/
-example : ¬ (∀ t, (ignorePendingOnDrop (.drop []) PendingEvidence.down).map (fun u => (7, u)) = some t ↔
+theorem callLifeStore_iff_planted_2 : ¬ (∀ t, (ignorePendingOnDrop (.drop []) PendingEvidence.down).map (fun u => (7, u)) = some t ↔
     CallLifeStore types ((7, PendingEvidence.down) : Nat × CallState) (.drop []) t) :=
   rejectsAcceptance (actual := (callLifeStore types (.drop []) ((7, PendingEvidence.down) : Nat × CallState)))
     (fun t => callLifeStore_iff _ _ _ t) (by decide) (by decide)
 
 /-- Planted (law `callLifeStore_iff`, direction over-refusing). -/
-example : ¬ (∀ t, (refuseEmptyCallEntry (.enter []) nestedCaller).map (fun u => (7, u)) = some t ↔
+theorem callLifeStore_iff_planted_3 : ¬ (∀ t, (refuseEmptyCallEntry (.enter []) nestedCaller).map (fun u => (7, u)) = some t ↔
     CallLifeStore types ((7, nestedCaller) : Nat × CallState) (.enter []) t) :=
   rejectsRefusal (actual := (callLifeStore types (.enter []) ((7, nestedCaller) : Nat × CallState)))
     (fun t => callLifeStore_iff _ _ _ t) (by decide) (by decide)
 
 /-- Instance (law `enterDown_iff`, case `admitted operation`). -/
-example : ∃ t, enterDown exclusive singletonEntry = some t ∧ EnterDown exclusive singletonEntry t :=
+theorem enterDown_iff_instance_1 : ∃ t, enterDown exclusive singletonEntry = some t ∧ EnterDown exclusive singletonEntry t :=
   admits (fun t => enterDown_iff _ _ t) (by decide)
 
 /-- Planted (law `enterDown_iff`, direction over-accepting). -/
-example : ¬ (∀ t, acceptFrozenDownward exclusive [(x, ⟨0⟩), (y, ⟨0⟩)] = some t ↔
+theorem enterDown_iff_planted_3 : ¬ (∀ t, acceptFrozenDownward exclusive [(x, ⟨0⟩), (y, ⟨0⟩)] = some t ↔
     EnterDown exclusive [(x, ⟨0⟩), (y, ⟨0⟩)] t) :=
   rejectsAcceptance (actual := (enterDown exclusive [(x, ⟨0⟩), (y, ⟨0⟩)]))
     (fun t => enterDown_iff _ _ t) (by decide) (by decide)
 
+/-- Substitute only the binding step's omitted parameter-identity check. -/
+def enterDownAllowDuplicate (s : State) (args : List (Var × LoanId)) : Option State := do
+  let s ← enter (fun _ => none) [] s
+  args.foldlM (fun s (x, i) => do
+    let a ← loan s i
+    let f ← s.frames.head?
+    let u ← reborrowTo s i [] a.mode f.id
+    some { u with frames := { f with views := (x, ⟨s.nextLoan⟩) :: f.views } :: s.frames.tail }) s
+
+/-- Planted (law `enterDown_iff`, direction over-accepting).
+Two shared grants may name the same source, but may not supply the same parameter. -/
+theorem enterDown_rejectsDuplicateParameter :
+    ¬ (∀ t, enterDownAllowDuplicate shared [(y, ⟨0⟩), (y, ⟨0⟩)] = some t ↔
+      EnterDown shared [(y, ⟨0⟩), (y, ⟨0⟩)] t) :=
+  rejectsAcceptance (actual := enterDown shared [(y, ⟨0⟩), (y, ⟨0⟩)])
+    (fun t => enterDown_iff _ _ t) (by decide) (by decide)
+
 /-- Planted (law `enterDown_iff`, direction over-refusing). -/
-example : ¬ (∀ t, refuseStandaloneEntry exclusive singletonEntry = some t ↔
+theorem enterDown_iff_planted_4 : ¬ (∀ t, refuseStandaloneEntry exclusive singletonEntry = some t ↔
     EnterDown exclusive singletonEntry t) :=
   rejectsRefusal (actual := (enterDown exclusive singletonEntry))
     (fun t => enterDown_iff _ _ t) (by decide) (by decide)
 
 /-- Instance (law `passDown_iff`, case `admitted operation`). -/
-example : ∃ t, passDown PendingEvidence.down ⟨0⟩ y = some t ∧ PassDown PendingEvidence.down ⟨0⟩ y t :=
+theorem passDown_iff_instance_1 : ∃ t, passDown PendingEvidence.down ⟨0⟩ y = some t ∧ PassDown PendingEvidence.down ⟨0⟩ y t :=
   admits (fun t => passDown_iff _ _ _ t) (by decide)
 
 /-- Planted (law `passDown_iff`, direction over-accepting). -/
-example : ¬ (∀ t, acceptFrozenView ⟨child, []⟩ ⟨0⟩ y = some t ↔ PassDown ⟨child, []⟩ ⟨0⟩ y t) :=
+theorem passDown_iff_planted_3 : ¬ (∀ t, acceptFrozenView ⟨child, []⟩ ⟨0⟩ y = some t ↔ PassDown ⟨child, []⟩ ⟨0⟩ y t) :=
   rejectsAcceptance (actual := (passDown ⟨child, []⟩ ⟨0⟩ y))
     (fun t => passDown_iff _ _ _ t) (by decide) (by decide)
 
 /-- Planted (law `passDown_iff`, direction over-refusing). -/
-example : ¬ (∀ t, refuseSecondPendingView PendingEvidence.down ⟨0⟩ y = some t ↔
+theorem passDown_iff_planted_4 : ¬ (∀ t, refuseSecondPendingView PendingEvidence.down ⟨0⟩ y = some t ↔
     PassDown PendingEvidence.down ⟨0⟩ y t) :=
   rejectsRefusal (actual := (passDown PendingEvidence.down ⟨0⟩ y))
     (fun t => passDown_iff _ _ _ t) (by decide) (by decide)
 
 /-- Instance (law `passOwner_iff`, case `admitted operation`). -/
-example : ∃ t, passOwner baseCall ⟨0⟩ [] .mutable y = some t ∧ PassOwner baseCall ⟨0⟩ [] .mutable y t :=
+theorem passOwner_iff_instance_1 : ∃ t, passOwner baseCall ⟨0⟩ [] .mutable y = some t ∧ PassOwner baseCall ⟨0⟩ [] .mutable y t :=
   admits (fun t => passOwner_iff _ _ _ _ _ t) (by decide)
 
 /-- Planted (law `passOwner_iff`, direction over-accepting). -/
-example : ¬ (∀ t, acceptFrozenOwner ⟨exclusive, []⟩ ⟨0⟩ [] .mutable y = some t ↔
+theorem passOwner_iff_planted_2 : ¬ (∀ t, acceptFrozenOwner ⟨exclusive, []⟩ ⟨0⟩ [] .mutable y = some t ↔
     PassOwner ⟨exclusive, []⟩ ⟨0⟩ [] .mutable y t) :=
   rejectsAcceptance (actual := (passOwner ⟨exclusive, []⟩ ⟨0⟩ [] .mutable y))
     (fun t => passOwner_iff _ _ _ _ _ t) (by decide) (by decide)
 
 /-- Planted (law `passOwner_iff`, direction over-refusing). -/
-example : ¬ (∀ t, refuseMutableArgument baseCall ⟨0⟩ [] .mutable y = some t ↔
+theorem passOwner_iff_planted_3 : ¬ (∀ t, refuseMutableArgument baseCall ⟨0⟩ [] .mutable y = some t ↔
     PassOwner baseCall ⟨0⟩ [] .mutable y t) :=
   rejectsRefusal (actual := (passOwner baseCall ⟨0⟩ [] .mutable y))
     (fun t => passOwner_iff _ _ _ _ _ t) (by decide) (by decide)
 
 /-- Instance (law `issuanceStep_iff`, case `admitted operation`). -/
-example : ∃ t, issuanceStep types baseCall (.entry []) = some t ∧ Issuance types baseCall (.entry []) t :=
+theorem issuanceStep_iff_instance_1 : ∃ t, issuanceStep types baseCall (.entry []) = some t ∧ Issuance types baseCall (.entry []) t :=
   admits (fun t => issuanceStep_iff _ _ _ t) (by decide)
 
 /-- Planted (law `issuanceStep_iff`, direction over-accepting). -/
-example : ¬ (∀ t, endPending PendingEvidence.down pendingEnd = some t ↔
-    Issuance types PendingEvidence.down pendingEnd t) :=
-  rejectsAcceptance (actual := (issuanceStep types PendingEvidence.down pendingEnd))
+theorem issuanceStep_iff_planted_2 : ¬ (∀ t, endAdopted DirectArgumentWitnesses.called adoptedEnd = some t ↔
+    Issuance types DirectArgumentWitnesses.called adoptedEnd t) :=
+  rejectsAcceptance (actual := (issuanceStep types DirectArgumentWitnesses.called adoptedEnd))
+    (fun t => issuanceStep_iff _ _ _ t) (by decide) (by decide)
+
+/-- Keep standalone entry intact, except for allowing a buffered call to cross it. -/
+def crossPendingEntry (s : CallState) (e : IssuanceAction) : Option CallState :=
+  match e with
+  | .entry args => (enterDown s.own args).map fun own => { s with own := own }
+  | _ => issuanceStep types s e
+
+/-- Planted (law `issuanceStep_iff`, direction over-accepting). -/
+theorem issuanceStep_iff_planted_3 : ¬ (∀ t, crossPendingEntry PendingEvidence.down (.entry []) = some t ↔
+    Issuance types PendingEvidence.down (.entry []) t) :=
+  rejectsAcceptance (actual := (issuanceStep types PendingEvidence.down (.entry [])))
     (fun t => issuanceStep_iff _ _ _ t) (by decide) (by decide)
 
 /-- Planted (law `issuanceStep_iff`, direction over-refusing). -/
-example : ¬ (∀ t, refuseIssuanceStep baseCall (.entry []) = some t ↔ Issuance types baseCall (.entry []) t) :=
+theorem issuanceStep_iff_planted_4 : ¬ (∀ t, refuseIssuanceStep baseCall (.entry []) = some t ↔ Issuance types baseCall (.entry []) t) :=
   rejectsRefusal (actual := (issuanceStep types baseCall (.entry [])))
     (fun t => issuanceStep_iff _ _ _ t) (by decide) (by decide)
 
 /-- Instance (law `issuanceTrace_iff`, case `admitted operation`). -/
-example : ∃ t, [IssuanceAction.entry []].foldlM (issuanceStep types) baseCall = some t ∧
+theorem issuanceTrace_iff_instance_1 : ∃ t, [IssuanceAction.entry []].foldlM (issuanceStep types) baseCall = some t ∧
     Trace (Issuance types) baseCall [.entry []] t :=
   admits (fun t => issuanceTrace_iff _ _ _ t) (by decide)
 
 /-- Planted (law `issuanceTrace_iff`, direction over-accepting). -/
-example : ¬ (∀ t, [pendingEnd].foldlM endPending PendingEvidence.down = some t ↔
-    Trace (Issuance types) PendingEvidence.down [pendingEnd] t) :=
-  rejectsAcceptance (actual := ([pendingEnd].foldlM (issuanceStep types) PendingEvidence.down))
+theorem issuanceTrace_iff_planted_1 : ¬ (∀ t, [adoptedEnd].foldlM endAdopted DirectArgumentWitnesses.called = some t ↔
+    Trace (Issuance types) DirectArgumentWitnesses.called [adoptedEnd] t) :=
+  rejectsAcceptance (actual := ([adoptedEnd].foldlM (issuanceStep types) DirectArgumentWitnesses.called))
     (fun t => issuanceTrace_iff _ _ _ t) (by decide) (by decide)
 
 /-- Planted (law `issuanceTrace_iff`, direction over-refusing). -/
-example : ¬ (∀ t, [IssuanceAction.entry []].foldlM refuseIssuanceStep baseCall = some t ↔
+theorem issuanceTrace_iff_planted_2 : ¬ (∀ t, [IssuanceAction.entry []].foldlM refuseIssuanceStep baseCall = some t ↔
     Trace (Issuance types) baseCall [.entry []] t) :=
   rejectsRefusal (actual := ([IssuanceAction.entry []].foldlM (issuanceStep types) baseCall))
     (fun t => issuanceTrace_iff _ _ _ t) (by decide) (by decide)
 
 /-- Instance (law `issuance_wellFormed`, case `PendingEvidence.down`). -/
-example : ∃ t, Issuance types PendingEvidence.down (.view ⟨0⟩ y) t ∧ t.WellFormed := by
+theorem issuance_wellFormed_instance_1 : ∃ t, Issuance types PendingEvidence.down (.view ⟨0⟩ y) t ∧ t.WellFormed := by
   obtain ⟨t, _, legal⟩ :=
     admits (issuanceStep_iff types PendingEvidence.down (.view ⟨0⟩ y)) (by decide)
   exact ⟨t, legal, issuance_wellFormed types legal (by decide)⟩
 
-/-- The same omitted guard in the declarative relation, with every other clause retained. -/
-def issuanceWithoutPendingGuard (s : CallState) (e : IssuanceAction) (t : CallState) : Prop :=
+/-- The declarative mutant omits only the protection of the frame's bound loan. -/
+def issuanceWithoutBindingGuard (s : CallState) (e : IssuanceAction) (t : CallState) : Prop :=
   match e with
-  | .ordinary (.endLoan i) => ∃ u, EndLoan s.own i u ∧ t = { s with own := u }
+  | .ordinary (.endLoan i) =>
+    OrdinaryIssuanceAllowed s (.endLoan i) ∧
+    (∀ a ∈ s.own.loans, a.id = i → a.pendingArgument = false) ∧
+    ∃ u, EndLeafAtBoundary s.own i u ∧ t = { s with own := u }
   | _ => Issuance types s e t
 
-/-- Planted (law `issuance_wellFormed`, mutant `issuanceWithoutPendingGuard`).
-An ordinary end of the buffered child leaves a dead ID in the pending buffer. -/
-example : ¬ (∀ t, issuanceWithoutPendingGuard PendingEvidence.down pendingEnd t →
-    PendingEvidence.down.WellFormed → t.WellFormed) := by
-  let t := (endPending PendingEvidence.down pendingEnd).getD PendingEvidence.down
-  have legal : issuanceWithoutPendingGuard PendingEvidence.down pendingEnd t := by
-    exact ⟨t.own, (endLoan_iff ..).mp (by decide), rfl⟩
+/-- Planted (law `issuance_wellFormed`, mutant `issuanceWithoutBindingGuard`).
+Ending a direct argument before return leaves a dead loan in the callee's view index. -/
+theorem issuance_wellFormed_planted_1 :
+    ¬ (∀ t, issuanceWithoutBindingGuard DirectArgumentWitnesses.called adoptedEnd t →
+      DirectArgumentWitnesses.called.WellFormed → t.WellFormed) := by
+  let t := (endAdopted DirectArgumentWitnesses.called adoptedEnd).getD DirectArgumentWitnesses.called
+  have legal : issuanceWithoutBindingGuard DirectArgumentWitnesses.called adoptedEnd t :=
+    ⟨by decide, by decide, t.own, (endLeafAtBoundary_iff ..).mp (by decide), rfl⟩
   have bad : ¬ t.WellFormed := by decide
   exact fun preserve => bad (preserve t legal (by decide))
+
+/-- Planted (law `endLoan_iff`, direction over-accepting).
+An adopted call loan is protected by ordinary ending itself. -/
+theorem endLoan_rejectsAdoptedArgument :
+    ¬ (∀ t, endWithoutBindingGuard DirectArgumentWitnesses.called.own ⟨1⟩ = some t ↔
+      EndLoan DirectArgumentWitnesses.called.own ⟨1⟩ t) :=
+  rejectsAcceptance (actual := endLoan DirectArgumentWitnesses.called.own ⟨1⟩)
+    (fun t => endLoan_iff _ _ t) (by decide) (by decide)
+
+/-- The direct argument stays frozen before return, which still retires the loan. -/
+example : endLoan DirectArgumentWitnesses.called.own ⟨1⟩ = none ∧
+    ownerAccess DirectArgumentWitnesses.called.own ⟨1⟩ .mutable = false ∧
+    callLife types .leave DirectArgumentWitnesses.called = some DirectArgumentWitnesses.returned ∧
+    ownerAccess DirectArgumentWitnesses.returned.own ⟨1⟩ .mutable = true := by decide
 
 /-- The mixed dispatcher can still end a live ordinary leaf when it has no pending obligation. -/
 example : ∃ t, Issuance types ⟨child, []⟩ (.ordinary (.endLoan ⟨1⟩)) t ∧ t.WellFormed := by
   obtain ⟨t, _, legal⟩ :=
     admits (issuanceStep_iff types ⟨child, []⟩ (.ordinary (.endLoan ⟨1⟩))) (by decide)
   exact ⟨t, legal, issuance_wellFormed types legal (by decide)⟩
+
+/-- Instance (law `ledgerTrace_wellFormed`, case `owner access followed by move`). -/
+theorem ledgerTrace_accessThenMove :
+    ∃ t, Trace (LedgerStep types) baseCall [.accessOwner ⟨0⟩ .mutable, .move ⟨0⟩] t ∧
+      t.WellFormed := by
+  obtain ⟨u, moved⟩ := Option.isSome_iff_exists.mp
+    (show (move initial ⟨0⟩).isSome = true from by decide)
+  have access : LedgerStep types baseCall (.accessOwner ⟨0⟩ .mutable) baseCall :=
+    ⟨(accessOwner_iff ..).mp (by decide), rfl⟩
+  have moveStep : LedgerStep types baseCall (.move ⟨0⟩) ⟨u, []⟩ :=
+    ⟨(move_iff ..).mp moved, rfl⟩
+  have trace := Trace.cons access (Trace.cons moveStep (.nil _))
+  exact ⟨_, trace, ledgerTrace_wellFormed types trace (by decide)⟩
+
+/-- Planted (law `ledgerTrace_wellFormed`, direction over-accepting).
+An owner access that fabricates a pending binding corrupts the ledger. -/
+theorem ledgerTrace_rejectsFabricatedPending :
+    let broken : CallState := ⟨initial, [(y, ⟨0⟩)]⟩
+    let mutant := fun s e t => LedgerStep types s e t ∨
+      (s = baseCall ∧ e = LedgerEvent.accessOwner ⟨0⟩ .mutable ∧ t = broken)
+    ¬ (∀ s events t, Trace mutant s events t → s.WellFormed → t.WellFormed) := by
+  intro broken mutant preserve
+  have bad : Trace mutant baseCall [.accessOwner ⟨0⟩ .mutable] broken :=
+    .cons (Or.inr ⟨rfl, rfl, rfl⟩) (.nil _)
+  exact (show ¬ broken.WellFormed from by decide) (preserve _ _ _ bad (by decide))
 
 /-- Re-lending changes only the new pending child even if a malformed input reuses the supply. -/
 example :
@@ -1529,34 +1709,34 @@ def entryMayReuse (s : CallState) (e : IssuanceAction) (t : CallState) : Prop :=
   Issuance types s e t ∨ (e = .entry [] ∧ t = s)
 
 /-- Instance (law `issuance_deterministic`, case `empty standalone entry`). -/
-example : Issuance types baseCall (.entry []) { baseCall with own := pushFrame initial } ∧
+theorem issuance_deterministic_instance_1 : Issuance types baseCall (.entry []) { baseCall with own := pushFrame initial } ∧
     (∀ t, Issuance types baseCall (.entry []) t → t = { baseCall with own := pushFrame initial }) := by
   have step : Issuance types baseCall (.entry []) { baseCall with own := pushFrame initial } :=
-    ⟨pushFrame initial, .nil _, rfl⟩
+    ⟨rfl, pushFrame initial, .nil _, rfl⟩
   exact ⟨step, fun _ other => issuance_deterministic types other step⟩
 
 /-- Planted (law `issuance_deterministic`, mutant `entryMayReuse`). -/
-example : ¬ UniqueStep entryMayReuse := by
+theorem issuance_deterministic_planted_1 : ¬ UniqueStep entryMayReuse := by
   intro unique
   have original : entryMayReuse baseCall (.entry []) { baseCall with own := pushFrame initial } :=
-    Or.inl ⟨pushFrame initial, .nil _, rfl⟩
+    Or.inl ⟨rfl, pushFrame initial, .nil _, rfl⟩
   have alternative : entryMayReuse baseCall (.entry []) baseCall := Or.inr ⟨rfl, rfl⟩
   exact (by decide : { baseCall with own := pushFrame initial } ≠ baseCall)
     (unique original alternative)
 
 /-- Instance (law `issuanceTrace_deterministic`, case `standalone entry trace`). -/
-example : Trace (Issuance types) baseCall [.entry []] { baseCall with own := pushFrame initial } ∧
+theorem issuanceTrace_deterministic_instance_1 : Trace (Issuance types) baseCall [.entry []] { baseCall with own := pushFrame initial } ∧
     (∀ t, Trace (Issuance types) baseCall [.entry []] t →
       t = { baseCall with own := pushFrame initial }) := by
   have trace : Trace (Issuance types) baseCall [.entry []] { baseCall with own := pushFrame initial } :=
-    .cons ⟨pushFrame initial, .nil _, rfl⟩ (.nil _)
+    .cons ⟨rfl, pushFrame initial, .nil _, rfl⟩ (.nil _)
   exact ⟨trace, fun _ other => issuanceTrace_deterministic types other trace⟩
 
 /-- Planted (law `issuanceTrace_deterministic`, mutant `entryMayReuse`). -/
-example : ¬ UniqueStep (Trace entryMayReuse) := by
+theorem issuanceTrace_deterministic_planted_1 : ¬ UniqueStep (Trace entryMayReuse) := by
   intro unique
   have original : Trace entryMayReuse baseCall [.entry []] { baseCall with own := pushFrame initial } :=
-    .cons (Or.inl ⟨pushFrame initial, .nil _, rfl⟩) (.nil _)
+    .cons (Or.inl ⟨rfl, pushFrame initial, .nil _, rfl⟩) (.nil _)
   have alternative : Trace entryMayReuse baseCall [.entry []] baseCall :=
     .cons (Or.inr ⟨rfl, rfl⟩) (.nil _)
   exact (by decide : { baseCall with own := pushFrame initial } ≠ baseCall)

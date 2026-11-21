@@ -463,11 +463,11 @@ private theorem empty_width_env : WidthEnv (fun _ => none) (fun _ => none) := by
   cases hx
 
 /-- Instance (law `ConcreteSpec.Core.typed_eval_range`, case `literal`). -/
-example : ∀ r, (CTerm.lit 7).eval (fun _ => none) = some r → IntTy.i8.InRange r :=
+theorem typed_eval_range_example_literal : ∀ r, (CTerm.lit 7).eval (fun _ => none) = some r → IntTy.i8.InRange r :=
   typed_eval_range (fun _ => none) (fun _ => none) (.lit 7) .i8 (.lit (by decide)) empty_width_env
 
 /-- Planted (law `ConcreteSpec.Core.typed_eval_range`, case `literal`, subject `ConcreteSpec.Core.CTerm.eval`, mutant `ConcreteSpec.Core.ScalarEvidence.wideEval`). -/
-example : (CTerm.lit 7).HasWidth (fun _ => none) .i8 ∧
+theorem typed_eval_range_planted_literal_wideEval : (CTerm.lit 7).HasWidth (fun _ => none) .i8 ∧
     WidthEnv (fun _ => none) (fun _ => none) ∧
     ¬ (∀ r, wideEval (fun _ => none) (.lit 7) = some r → IntTy.i8.InRange r) := by
   refine ⟨.lit (by decide), empty_width_env, fun h => ?_⟩
@@ -476,14 +476,14 @@ example : (CTerm.lit 7).HasWidth (fun _ => none) .i8 ∧
   decide
 
 /-- Instance (law `ConcreteSpec.Core.machine_operands`, case `typed_pair`). -/
-example : ∀ x y, (CTerm.lit 7).eval (fun _ => none) = some x →
+theorem machine_operands_example_typed_pair : ∀ x y, (CTerm.lit 7).eval (fun _ => none) = some x →
     (CTerm.lit 8).eval (fun _ => none) = some y →
     IntTy.i8.InRange x ∧ ((MachineOp.plain .add).countOperand = true ∨ IntTy.i8.InRange y) :=
   machine_operands (fun _ => none) (fun _ => none) .i8 .i8 (.plain .add) (.lit 7) (.lit 8)
     (.lit (by decide)) (.lit (by decide)) (.inr rfl) empty_width_env
 
 /-- Planted (law `ConcreteSpec.Core.machine_operands`, case `typed_pair`, subject `ConcreteSpec.Core.CTerm.eval`, mutant `ConcreteSpec.Core.ScalarEvidence.wideEval`). -/
-example : (CTerm.lit 7).HasWidth (fun _ => none) .i8 ∧ (CTerm.lit 8).HasWidth (fun _ => none) .i8 ∧
+theorem machine_operands_planted_typed_pair_wideEval : (CTerm.lit 7).HasWidth (fun _ => none) .i8 ∧ (CTerm.lit 8).HasWidth (fun _ => none) .i8 ∧
     ((MachineOp.plain .add).countOperand = true ∨ IntTy.i8 = .i8) ∧
     WidthEnv (fun _ => none) (fun _ => none) ∧
     ¬ (∀ x y, wideEval (fun _ => none) (.lit 7) = some x → wideEval (fun _ => none) (.lit 8) = some y →
@@ -493,13 +493,13 @@ example : (CTerm.lit 7).HasWidth (fun _ => none) .i8 ∧ (CTerm.lit 8).HasWidth 
   revert hh
   decide
 /-- Instance (law `ConcreteSpec.Core.machine_inRange`, case `typed_machine`). -/
-example : ∀ r, (CTerm.machine .i8 (.plain .add) (.lit 7) (.lit 8)).eval (fun _ => none) = some r →
+theorem machine_inRange_example_typed_machine : ∀ r, (CTerm.machine .i8 (.plain .add) (.lit 7) (.lit 8)).eval (fun _ => none) = some r →
     IntTy.i8.InRange r :=
   machine_inRange (fun _ => none) (fun _ => none) .i8 .i8 (.plain .add) (.lit 7) (.lit 8)
     (.lit (by decide)) (.lit (by decide)) (.inr rfl) empty_width_env
 
 /-- Planted (law `ConcreteSpec.Core.machine_inRange`, case `typed_machine`, subject `ConcreteSpec.Core.CTerm.eval`, mutant `ConcreteSpec.Core.ScalarEvidence.wideEval`). -/
-example : (CTerm.lit 7).HasWidth (fun _ => none) .i8 ∧ (CTerm.lit 8).HasWidth (fun _ => none) .i8 ∧
+theorem machine_inRange_planted_typed_machine_wideEval : (CTerm.lit 7).HasWidth (fun _ => none) .i8 ∧ (CTerm.lit 8).HasWidth (fun _ => none) .i8 ∧
     ((MachineOp.plain .add).countOperand = true ∨ IntTy.i8 = .i8) ∧
     WidthEnv (fun _ => none) (fun _ => none) ∧
     ¬ (∀ r, wideEval (fun _ => none) (.machine .i8 (.plain .add) (.lit 7) (.lit 8)) = some r →
@@ -587,23 +587,23 @@ def identityNeg (_t : IntTy) (a : Int) : Except ArithmeticError Int := .ok a
 def uncheckedNeg (_t : IntTy) (a : Int) : Except ArithmeticError Int := .ok (-a)
 
 /-- Instance (law `ConcreteSpec.Core.checkedNeg_ok_arithmetic`, case `signed`). -/
-example : checkedNeg .i8 5 = .ok (-5) ↔ (-5 : Int) = -5 ∧
+theorem checkedNeg_ok_arithmetic_example_signed : checkedNeg .i8 5 = .ok (-5) ↔ (-5 : Int) = -5 ∧
     (if IntTy.i8.signed = true then (5 : Int) ≠ IntTy.i8.min else (5 : Int) = 0) :=
   checkedNeg_ok_arithmetic .i8 5 (-5) (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.checkedNeg_ok_arithmetic`, case `signed`,
 subject `ConcreteSpec.Core.checkedNeg`, mutant `ConcreteSpec.Core.identityNeg`). -/
-example : IntTy.i8.InRange 5 ∧ ¬(identityNeg .i8 5 = .ok (-5) ↔ (-5 : Int) = -5 ∧
+theorem checkedNeg_ok_arithmetic_planted_signed_identityNeg : IntTy.i8.InRange 5 ∧ ¬(identityNeg .i8 5 = .ok (-5) ↔ (-5 : Int) = -5 ∧
     (if IntTy.i8.signed = true then (5 : Int) ≠ IntTy.i8.min else (5 : Int) = 0)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.checkedNeg_error_iff`, case `minimum`). -/
-example : checkedNeg .i8 (-128) = .error .overflow ↔ ArithmeticError.overflow = .overflow ∧
+theorem checkedNeg_error_iff_example_minimum : checkedNeg .i8 (-128) = .error .overflow ↔ ArithmeticError.overflow = .overflow ∧
     ¬(if IntTy.i8.signed = true then (-128 : Int) ≠ IntTy.i8.min else (-128 : Int) = 0) :=
   checkedNeg_error_iff .i8 (-128) .overflow (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.checkedNeg_error_iff`, case `minimum`,
 subject `ConcreteSpec.Core.checkedNeg`, mutant `ConcreteSpec.Core.uncheckedNeg`). -/
-example : IntTy.i8.InRange (-128) ∧ ¬(uncheckedNeg .i8 (-128) = .error .overflow ↔
+theorem checkedNeg_error_iff_planted_minimum_uncheckedNeg : IntTy.i8.InRange (-128) ∧ ¬(uncheckedNeg .i8 (-128) = .error .overflow ↔
     ArithmeticError.overflow = .overflow ∧
       ¬(if IntTy.i8.signed = true then (-128 : Int) ≠ IntTy.i8.min else (-128 : Int) = 0)) := by decide
 
@@ -698,10 +698,10 @@ def carriedChecked (t : IntTy) (op : ArithOp) (a b : Int) : Except ArithmeticErr
   (checked t op a b).map fun r => r + (2 : Int) ^ t.bits
 
 /-- Instance (law `ConcreteSpec.Core.checked_inRange`, case `addition`). -/
-example : IntTy.i8.InRange 15 := checked_inRange .i8 .add 7 8 15 (by decide) rfl
+theorem checked_inRange_example_addition : IntTy.i8.InRange 15 := checked_inRange .i8 .add 7 8 15 (by decide) rfl
 /-- Planted (law `ConcreteSpec.Core.checked_inRange`, case `addition`,
 subject `ConcreteSpec.Core.checked`, mutant `ConcreteSpec.Core.ScalarLawEvidence.carriedChecked`). -/
-example : IntTy.i8.InRange 7 ∧ carriedChecked .i8 .add 7 8 = .ok 271 ∧
+theorem checked_inRange_planted_addition_carriedChecked : IntTy.i8.InRange 7 ∧ carriedChecked .i8 .add 7 8 = .ok 271 ∧
     ¬ IntTy.i8.InRange 271 := by decide
 /-- Mutant encoders collapse distinct failures. -/
 def sameName (_ : TrapKind) : String := "same"
@@ -731,106 +731,106 @@ def unboundedBits (_ : IntTy) (n : Int) : Nat := n.toNat
 def offsetBits (t : IntTy) (n : Int) : Nat := toBits t n + 1
 
 /-- Instance (law `ConcreteSpec.Core.TrapKind.name_injective`, case `concrete`). -/
-example : ∀ (a b : TrapKind), a.name = b.name → a = b :=
+theorem name_injective_example_concrete : ∀ (a b : TrapKind), a.name = b.name → a = b :=
   TrapKind.name_injective
 
 /-- Planted (law `ConcreteSpec.Core.TrapKind.name_injective`, case `concrete`, subject `ConcreteSpec.Core.TrapKind.name`, mutant `ConcreteSpec.Core.ScalarLawEvidence.sameName`). -/
-example : ¬ (∀ (a b : TrapKind), sameName a = sameName b → a = b) := by
+theorem name_injective_planted_concrete_sameName : ¬ (∀ (a b : TrapKind), sameName a = sameName b → a = b) := by
   intro h
   have hh := h .overflow .abort rfl
   cases hh
 
 /-- Instance (law `ConcreteSpec.Core.ArithmeticError.trapKind_injective`, case `concrete`). -/
-example : ∀ (a b : ArithmeticError), a.trapKind = b.trapKind → a = b :=
+theorem trapKind_injective_example_concrete : ∀ (a b : ArithmeticError), a.trapKind = b.trapKind → a = b :=
   ArithmeticError.trapKind_injective
 
 /-- Planted (law `ConcreteSpec.Core.ArithmeticError.trapKind_injective`, case `concrete`, subject `ConcreteSpec.Core.ArithmeticError.trapKind`, mutant `ConcreteSpec.Core.ScalarLawEvidence.sameTrap`). -/
-example : ¬ (∀ (a b : ArithmeticError), sameTrap a = sameTrap b → a = b) := by
+theorem trapKind_injective_planted_concrete_sameTrap : ¬ (∀ (a b : ArithmeticError), sameTrap a = sameTrap b → a = b) := by
   intro h
   have hh := h .overflow .divisionByZero rfl
   cases hh
 
 /-- Instance (law `ConcreteSpec.Core.toBits_lt`, case `concrete`). -/
-example : toBits .i8 7 < 2 ^ IntTy.i8.bits :=
+theorem toBits_lt_example_concrete : toBits .i8 7 < 2 ^ IntTy.i8.bits :=
   toBits_lt .i8 7
 
 /-- Planted (law `ConcreteSpec.Core.toBits_lt`, case `concrete`, subject `ConcreteSpec.Core.toBits`, mutant `ConcreteSpec.Core.ScalarLawEvidence.unreducedBits`). -/
-example : ¬ (unreducedBits .i8 7 < 2 ^ IntTy.i8.bits) := by decide
+theorem toBits_lt_planted_concrete_unreducedBits : ¬ (unreducedBits .i8 7 < 2 ^ IntTy.i8.bits) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.ofBits_inRange`, case `concrete`). -/
-example : IntTy.i8.InRange (ofBits .i8 7) :=
+theorem ofBits_inRange_example_concrete : IntTy.i8.InRange (ofBits .i8 7) :=
   ofBits_inRange .i8 7 (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.ofBits_inRange`, case `concrete`, subject `ConcreteSpec.Core.ofBits`, mutant `ConcreteSpec.Core.ScalarLawEvidence.offsetOfBits`). -/
-example : 7 < 2 ^ IntTy.i8.bits ∧
+theorem ofBits_inRange_planted_concrete_offsetOfBits : 7 < 2 ^ IntTy.i8.bits ∧
     ¬ (IntTy.i8.InRange (offsetOfBits .i8 7)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.ofBits_toBits`, case `concrete`). -/
-example : ofBits .i8 (toBits .i8 7) = 7 :=
+theorem ofBits_toBits_example_concrete : ofBits .i8 (toBits .i8 7) = 7 :=
   ofBits_toBits .i8 7 (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.ofBits_toBits`, case `concrete`, subject `ConcreteSpec.Core.ofBits`, mutant `ConcreteSpec.Core.ScalarLawEvidence.offByOneOfBits`). -/
-example : IntTy.i8.InRange 7 ∧
+theorem ofBits_toBits_planted_concrete_offByOneOfBits : IntTy.i8.InRange 7 ∧
     ¬ (offByOneOfBits .i8 (toBits .i8 7) = 7) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.wrap_inRange`, case `concrete`). -/
-example : IntTy.i8.InRange (wrap .i8 300) :=
+theorem wrap_inRange_example_concrete : IntTy.i8.InRange (wrap .i8 300) :=
   wrap_inRange .i8 300
 
 /-- Planted (law `ConcreteSpec.Core.wrap_inRange`, case `concrete`, subject `ConcreteSpec.Core.wrap`, mutant `ConcreteSpec.Core.ScalarLawEvidence.unreducedUnary`). -/
-example : ¬ (IntTy.i8.InRange (unreducedUnary .i8 300)) := by decide
+theorem wrap_inRange_planted_concrete_unreducedUnary : ¬ (IntTy.i8.InRange (unreducedUnary .i8 300)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.wrap_of_inRange`, case `concrete`). -/
-example : wrap .i8 7 = 7 :=
+theorem wrap_of_inRange_example_concrete : wrap .i8 7 = 7 :=
   wrap_of_inRange .i8 7 (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.wrap_of_inRange`, case `concrete`, subject `ConcreteSpec.Core.wrap`, mutant `ConcreteSpec.Core.ScalarLawEvidence.incrementWrap`). -/
-example : IntTy.i8.InRange 7 ∧
+theorem wrap_of_inRange_planted_concrete_incrementWrap : IntTy.i8.InRange 7 ∧
     ¬ (incrementWrap .i8 7 = 7) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.saturate_inRange`, case `concrete`). -/
-example : IntTy.i8.InRange (saturate .i8 300) :=
+theorem saturate_inRange_example_concrete : IntTy.i8.InRange (saturate .i8 300) :=
   saturate_inRange .i8 300
 
 /-- Planted (law `ConcreteSpec.Core.saturate_inRange`, case `concrete`, subject `ConcreteSpec.Core.saturate`, mutant `ConcreteSpec.Core.ScalarLawEvidence.unreducedUnary`). -/
-example : ¬ (IntTy.i8.InRange (unreducedUnary .i8 300)) := by decide
+theorem saturate_inRange_planted_concrete_unreducedUnary : ¬ (IntTy.i8.InRange (unreducedUnary .i8 300)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.saturate_of_inRange`, case `concrete`). -/
-example : saturate .i8 7 = 7 :=
+theorem saturate_of_inRange_example_concrete : saturate .i8 7 = 7 :=
   saturate_of_inRange .i8 7 (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.saturate_of_inRange`, case `concrete`, subject `ConcreteSpec.Core.saturate`, mutant `ConcreteSpec.Core.ScalarLawEvidence.incrementWrap`). -/
-example : IntTy.i8.InRange 7 ∧
+theorem saturate_of_inRange_planted_concrete_incrementWrap : IntTy.i8.InRange 7 ∧
     ¬ (incrementWrap .i8 7 = 7) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.bitwise_inRange`, case `concrete`). -/
-example : IntTy.i8.InRange (bitwise .i8 .and 7 3) :=
+theorem bitwise_inRange_example_concrete : IntTy.i8.InRange (bitwise .i8 .and 7 3) :=
   bitwise_inRange .i8 .and 7 3
 
 /-- Planted (law `ConcreteSpec.Core.bitwise_inRange`, case `concrete`, subject `ConcreteSpec.Core.bitwise`, mutant `ConcreteSpec.Core.ScalarLawEvidence.unreducedBitwise`). -/
-example : ¬ (IntTy.i8.InRange (unreducedBitwise .i8 .and 7 3)) := by decide
+theorem bitwise_inRange_planted_concrete_unreducedBitwise : ¬ (IntTy.i8.InRange (unreducedBitwise .i8 .and 7 3)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.bitNot_inRange`, case `concrete`). -/
-example : IntTy.i8.InRange (bitNot .i8 7) :=
+theorem bitNot_inRange_example_concrete : IntTy.i8.InRange (bitNot .i8 7) :=
   bitNot_inRange .i8 7
 
 /-- Planted (law `ConcreteSpec.Core.bitNot_inRange`, case `concrete`, subject `ConcreteSpec.Core.bitNot`, mutant `ConcreteSpec.Core.ScalarLawEvidence.unreducedUnary`). -/
-example : ¬ (IntTy.i8.InRange (unreducedUnary .i8 7)) := by decide
+theorem bitNot_inRange_planted_concrete_unreducedUnary : ¬ (IntTy.i8.InRange (unreducedUnary .i8 7)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.wrapping_of_checked`, case `concrete`). -/
-example : wrapping .i8 .add 7 8 = 15 :=
+theorem wrapping_of_checked_example_concrete : wrapping .i8 .add 7 8 = 15 :=
   wrapping_of_checked .i8 .add 7 8 15 rfl
 
 /-- Planted (law `ConcreteSpec.Core.wrapping_of_checked`, case `concrete`, subject `ConcreteSpec.Core.wrapping`, mutant `ConcreteSpec.Core.ScalarLawEvidence.subtractForAll`). -/
-example : checked .i8 WrapOp.add.arith 7 8 = .ok 15 ∧
+theorem wrapping_of_checked_planted_concrete_subtractForAll : checked .i8 WrapOp.add.arith 7 8 = .ok 15 ∧
     ¬ (subtractForAll .i8 .add 7 8 = 15) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.saturating_of_checked`, case `concrete`). -/
-example : saturating .i8 .add 7 8 = 15 :=
+theorem saturating_of_checked_example_concrete : saturating .i8 .add 7 8 = 15 :=
   saturating_of_checked .i8 .add 7 8 15 rfl
 
 /-- Planted (law `ConcreteSpec.Core.saturating_of_checked`, case `concrete`, subject `ConcreteSpec.Core.saturating`, mutant `ConcreteSpec.Core.ScalarLawEvidence.subtractForAll`). -/
-example : checked .i8 WrapOp.add.arith 7 8 = .ok 15 ∧
+theorem saturating_of_checked_planted_concrete_subtractForAll : checked .i8 WrapOp.add.arith 7 8 = .ok 15 ∧
     ¬ (subtractForAll .i8 .add 7 8 = 15) := by decide
 
 
@@ -838,98 +838,98 @@ example : checked .i8 WrapOp.add.arith 7 8 = .ok 15 ∧
 
 
 /-- Instance (law `ConcreteSpec.Core.toBits_ofBits`, case `concrete`). -/
-example : toBits .i8 (ofBits .i8 7) = 7 :=
+theorem toBits_ofBits_example_concrete : toBits .i8 (ofBits .i8 7) = 7 :=
   toBits_ofBits .i8 7 (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.toBits_ofBits`, case `concrete`, subject `ConcreteSpec.Core.ofBits`, mutant `ConcreteSpec.Core.ScalarLawEvidence.offByOneOfBits`). -/
-example : 7 < 2 ^ IntTy.i8.bits ∧
+theorem toBits_ofBits_planted_concrete_offByOneOfBits : 7 < 2 ^ IntTy.i8.bits ∧
     ¬ (toBits .i8 (offByOneOfBits .i8 7) = 7) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.toBits_wrap`, case `concrete`). -/
-example : toBits .i8 (wrap .i8 7) = toBits .i8 7 :=
+theorem toBits_wrap_example_concrete : toBits .i8 (wrap .i8 7) = toBits .i8 7 :=
   toBits_wrap .i8 7
 
 /-- Planted (law `ConcreteSpec.Core.toBits_wrap`, case `concrete`, subject `ConcreteSpec.Core.wrap`, mutant `ConcreteSpec.Core.ScalarLawEvidence.increment`). -/
-example : ¬ (toBits .i8 (increment .i8 7) = toBits .i8 7) := by decide
+theorem toBits_wrap_planted_concrete_increment : ¬ (toBits .i8 (increment .i8 7) = toBits .i8 7) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.toBits_wrapping`, case `concrete`). -/
-example : toBits .i8 (wrapping .i8 .add 7 8) = toBits .i8 (WrapOp.add.exact 7 8) :=
+theorem toBits_wrapping_example_concrete : toBits .i8 (wrapping .i8 .add 7 8) = toBits .i8 (WrapOp.add.exact 7 8) :=
   toBits_wrapping .i8 .add 7 8
 
 /-- Planted (law `ConcreteSpec.Core.toBits_wrapping`, case `concrete`, subject `ConcreteSpec.Core.wrapping`, mutant `ConcreteSpec.Core.ScalarLawEvidence.subtractForAll`). -/
-example : ¬ (toBits .i8 (subtractForAll .i8 .add 7 8) = toBits .i8 (WrapOp.add.exact 7 8)) := by decide
+theorem toBits_wrapping_planted_concrete_subtractForAll : ¬ (toBits .i8 (subtractForAll .i8 .add 7 8) = toBits .i8 (WrapOp.add.exact 7 8)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.toBits_shl`, case `concrete`). -/
-example : toBits .i8 (-56) = toBits .i8 (100 * (2 : Int) ^ (1 : Int).toNat) :=
+theorem toBits_shl_example_concrete : toBits .i8 (-56) = toBits .i8 (100 * (2 : Int) ^ (1 : Int).toNat) :=
   toBits_shl .i8 100 1 (-56) rfl
 
 /-- Planted (law `ConcreteSpec.Core.toBits_shl`, case `concrete`, subject `ConcreteSpec.Core.toBits`, mutant `ConcreteSpec.Core.ScalarLawEvidence.unboundedBits`). -/
-example :
+theorem toBits_shl_planted_concrete_unboundedBits :
     (if validShift .i8 1 then .ok (ofBits .i8 (unboundedBits .i8 (100 * (2 : Int) ^ (1 : Int).toNat)))
       else (.error .invalidShift : Except ArithmeticError Int)) = .ok (-56) ∧
     ¬ (unboundedBits .i8 (-56) = unboundedBits .i8 (100 * (2 : Int) ^ (1 : Int).toNat)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.toBits_shr_unsigned`, case `concrete`). -/
-example : toBits .u8 4 = toBits .u8 8 >>> (1 : Int).toNat :=
+theorem toBits_shr_unsigned_example_concrete : toBits .u8 4 = toBits .u8 8 >>> (1 : Int).toNat :=
   toBits_shr_unsigned .u8 rfl 8 1 4 (by decide) rfl
 
 /-- Planted (law `ConcreteSpec.Core.toBits_shr_unsigned`, case `concrete`, subject `ConcreteSpec.Core.toBits`, mutant `ConcreteSpec.Core.ScalarLawEvidence.offsetBits`). -/
-example : IntTy.u8.signed = false ∧ IntTy.u8.InRange 8 ∧ checked .u8 .shr 8 1 = .ok 4 ∧
+theorem toBits_shr_unsigned_planted_concrete_offsetBits : IntTy.u8.signed = false ∧ IntTy.u8.InRange 8 ∧ checked .u8 .shr 8 1 = .ok 4 ∧
     ¬ (offsetBits .u8 4 = offsetBits .u8 8 >>> (1 : Int).toNat) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.toBits_bitwise`, case `concrete`). -/
-example : toBits .i8 (bitwise .i8 .and 7 3) = (match BitOp.and with | .and => toBits .i8 7 &&& toBits .i8 3 | .or => toBits .i8 7 ||| toBits .i8 3 | .xor => toBits .i8 7 ^^^ toBits .i8 3) :=
+theorem toBits_bitwise_example_concrete : toBits .i8 (bitwise .i8 .and 7 3) = (match BitOp.and with | .and => toBits .i8 7 &&& toBits .i8 3 | .or => toBits .i8 7 ||| toBits .i8 3 | .xor => toBits .i8 7 ^^^ toBits .i8 3) :=
   toBits_bitwise .i8 .and 7 3
 
 /-- Planted (law `ConcreteSpec.Core.toBits_bitwise`, case `concrete`, subject `ConcreteSpec.Core.bitwise`, mutant `ConcreteSpec.Core.ScalarLawEvidence.xorForAll`). -/
-example : ¬ (toBits .i8 (xorForAll .i8 .and 7 3) = (match BitOp.and with | .and => toBits .i8 7 &&& toBits .i8 3 | .or => toBits .i8 7 ||| toBits .i8 3 | .xor => toBits .i8 7 ^^^ toBits .i8 3)) := by decide
+theorem toBits_bitwise_planted_concrete_xorForAll : ¬ (toBits .i8 (xorForAll .i8 .and 7 3) = (match BitOp.and with | .and => toBits .i8 7 &&& toBits .i8 3 | .or => toBits .i8 7 ||| toBits .i8 3 | .xor => toBits .i8 7 ^^^ toBits .i8 3)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.toBits_bitNot`, case `concrete`). -/
-example : toBits .i8 (bitNot .i8 7) = 2 ^ IntTy.i8.bits - 1 - toBits .i8 7 :=
+theorem toBits_bitNot_example_concrete : toBits .i8 (bitNot .i8 7) = 2 ^ IntTy.i8.bits - 1 - toBits .i8 7 :=
   toBits_bitNot .i8 7
 
 /-- Planted (law `ConcreteSpec.Core.toBits_bitNot`, case `concrete`, subject `ConcreteSpec.Core.bitNot`, mutant `ConcreteSpec.Core.ScalarLawEvidence.incrementWrap`). -/
-example : ¬ (toBits .i8 (incrementWrap .i8 7) = 2 ^ IntTy.i8.bits - 1 - toBits .i8 7) := by decide
+theorem toBits_bitNot_planted_concrete_incrementWrap : ¬ (toBits .i8 (incrementWrap .i8 7) = 2 ^ IntTy.i8.bits - 1 - toBits .i8 7) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.saturate_below`, case `concrete`). -/
-example : saturate .i8 (-300) = IntTy.i8.min :=
+theorem saturate_below_example_concrete : saturate .i8 (-300) = IntTy.i8.min :=
   saturate_below .i8 (-300) (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.saturate_below`, case `concrete`, subject `ConcreteSpec.Core.saturate`, mutant `ConcreteSpec.Core.ScalarLawEvidence.incrementWrap`). -/
-example : (-300 : Int) < IntTy.i8.min ∧
+theorem saturate_below_planted_concrete_incrementWrap : (-300 : Int) < IntTy.i8.min ∧
     ¬ (incrementWrap .i8 (-300) = IntTy.i8.min) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.saturate_above`, case `concrete`). -/
-example : saturate .i8 300 = IntTy.i8.max :=
+theorem saturate_above_example_concrete : saturate .i8 300 = IntTy.i8.max :=
   saturate_above .i8 300 (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.saturate_above`, case `concrete`, subject `ConcreteSpec.Core.saturate`, mutant `ConcreteSpec.Core.ScalarLawEvidence.incrementWrap`). -/
-example : IntTy.i8.max < 300 ∧
+theorem saturate_above_planted_concrete_incrementWrap : IntTy.i8.max < 300 ∧
     ¬ (incrementWrap .i8 300 = IntTy.i8.max) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.machine_plain_eq_exact`, case `concrete`). -/
-example : (CTerm.exact .add (.lit 7) (.lit 8)).eval (fun _ => none) = some 15 :=
+theorem machine_plain_eq_exact_example_concrete : (CTerm.exact .add (.lit 7) (.lit 8)).eval (fun _ => none) = some 15 :=
   machine_plain_eq_exact (fun _ => none) .i8 .add (.lit 7) (.lit 8) 15 rfl
 
 /-- Planted (law `ConcreteSpec.Core.machine_plain_eq_exact`, case `concrete`, subject `ConcreteSpec.Core.CTerm.eval`, mutant `ConcreteSpec.Core.ScalarLawEvidence.corruptExact`). -/
-example : corruptExact (fun _ => none) (.machine .i8 (.plain WrapOp.add.arith) (.lit 7) (.lit 8)) = some 15 ∧
+theorem machine_plain_eq_exact_planted_concrete_corruptExact : corruptExact (fun _ => none) (.machine .i8 (.plain WrapOp.add.arith) (.lit 7) (.lit 8)) = some 15 ∧
     ¬ (corruptExact (fun _ => none) (.exact .add (.lit 7) (.lit 8)) = some 15) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.eval_toExact`, case `concrete`). -/
-example : (CTerm.machine .i8 (.plain .add) (.lit 7) (.lit 8)).toExact.eval (fun _ => none) = some 15 :=
+theorem eval_toExact_example_concrete : (CTerm.machine .i8 (.plain .add) (.lit 7) (.lit 8)).toExact.eval (fun _ => none) = some 15 :=
   eval_toExact (fun _ => none) (.machine .i8 (.plain .add) (.lit 7) (.lit 8)) 15 rfl
 
 /-- Planted (law `ConcreteSpec.Core.eval_toExact`, case `concrete`, subject `ConcreteSpec.Core.CTerm.toExact`, mutant `ConcreteSpec.Core.ScalarLawEvidence.eraseExact`). -/
-example : (CTerm.machine .i8 (.plain .add) (.lit 7) (.lit 8)).eval (fun _ => none) = some 15 ∧
+theorem eval_toExact_planted_concrete_eraseExact : (CTerm.machine .i8 (.plain .add) (.lit 7) (.lit 8)).eval (fun _ => none) = some 15 ∧
     ¬ ((eraseExact (.machine .i8 (.plain .add) (.lit 7) (.lit 8))).eval (fun _ => none) = some 15) := by decide
 
 /-- Wrong strict interval inclusion refuses a valid conversion at equal endpoints. -/
 def strictLossless (s t : IntTy) : Prop := t.min < s.min ∧ s.max < t.max
 /-- Instance (law `ConcreteSpec.Core.lossless_iff`, case `same_width`). -/
-example : Lossless .i8 .i8 ↔ ∀ n, IntTy.i8.InRange n → IntTy.i8.InRange n :=
+theorem lossless_iff_example_same_width : Lossless .i8 .i8 ↔ ∀ n, IntTy.i8.InRange n → IntTy.i8.InRange n :=
   lossless_iff .i8 .i8
 /-- Planted (law `ConcreteSpec.Core.lossless_iff`, case `same_width`, subject `ConcreteSpec.Core.Lossless`, mutant `ConcreteSpec.Core.ScalarLawEvidence.strictLossless`). -/
-example : ¬ (strictLossless .i8 .i8 ↔ ∀ n, IntTy.i8.InRange n → IntTy.i8.InRange n) := by
+theorem lossless_iff_planted_same_width_strictLossless : ¬ (strictLossless .i8 .i8 ↔ ∀ n, IntTy.i8.InRange n → IntTy.i8.InRange n) := by
   intro h
   have bad := h.mpr (fun _ hn => hn)
   exact (Int.lt_irrefl _) bad.1
@@ -947,15 +947,15 @@ namespace ScalarVariableEvidence
 def values : AList Var Int := [(⟨7⟩, 12), (⟨8⟩, 19)]
 
 /-- Reading a numeric variable does not merge it with another number. -/
-example : (CTerm.var ⟨7⟩).eval (AList.lookup values) = some 12 ∧
+theorem example_Reading_numeric_variable_does_not_merge : (CTerm.var ⟨7⟩).eval (AList.lookup values) = some 12 ∧
     (CTerm.var ⟨8⟩).eval (AList.lookup values) = some 19 := by decide
 
 /-- Assignment uses the shared map; the other number retains its value. -/
-example : (CTerm.var ⟨7⟩).eval (AList.lookup (AList.update values ⟨7⟩ (fun _ => 42))) = some 42 ∧
+theorem example_Assignment_uses_shared_map_other_number : (CTerm.var ⟨7⟩).eval (AList.lookup (AList.update values ⟨7⟩ (fun _ => 42))) = some 42 ∧
     (CTerm.var ⟨8⟩).eval (AList.lookup (AList.update values ⟨7⟩ (fun _ => 42))) = some 19 := by decide
 
 /-- Scope removal erases only the chosen number. -/
-example : (CTerm.var ⟨7⟩).eval (AList.lookup (AList.erase values ⟨7⟩)) = none ∧
+theorem example_Scope_removal_erases_only_chosen_number : (CTerm.var ⟨7⟩).eval (AList.lookup (AList.erase values ⟨7⟩)) = none ∧
     (CTerm.var ⟨8⟩).eval (AList.lookup (AList.erase values ⟨7⟩)) = some 19 := by decide
 end ScalarVariableEvidence
 
@@ -998,23 +998,23 @@ def replacementConstructor (n : UInt32) : Option Char := some (Char.ofNat n.toNa
 def latin1Constructor (b : UInt8) : Option Char := charFromCodePoint b.toUInt32
 
 /-- Instance (law `ConcreteSpec.Core.charFromCodePoint_map`, case `surrogate`). -/
-example : (charFromCodePoint 0xd800).map charCodePoint = none := charFromCodePoint_map 0xd800
+theorem charFromCodePoint_map_example_surrogate : (charFromCodePoint 0xd800).map charCodePoint = none := charFromCodePoint_map 0xd800
 /-- Planted (law `ConcreteSpec.Core.charFromCodePoint_map`, case `surrogate`,
 subject `ConcreteSpec.Core.charFromCodePoint`, mutant `ConcreteSpec.Core.CharEvidence.replacementConstructor`). -/
-example : ¬ ((replacementConstructor 0xd800).map charCodePoint = none) := by decide
+theorem charFromCodePoint_map_planted_surrogate_replacementConstructor : ¬ ((replacementConstructor 0xd800).map charCodePoint = none) := by decide
 /-- Instance (law `ConcreteSpec.Core.charFromCodePoint_roundtrip`, case `ascii`). -/
-example : charFromCodePoint (charCodePoint (Char.ofNat 65)) = some (Char.ofNat 65) :=
+theorem charFromCodePoint_roundtrip_example_ascii : charFromCodePoint (charCodePoint (Char.ofNat 65)) = some (Char.ofNat 65) :=
   charFromCodePoint_roundtrip (Char.ofNat 65)
 /-- Wrong construction increments the code point before checking. -/
 def nextConstructor (n : UInt32) : Option Char := charFromCodePoint (n + 1)
 /-- Planted (law `ConcreteSpec.Core.charFromCodePoint_roundtrip`, case `ascii`,
 subject `ConcreteSpec.Core.charFromCodePoint`, mutant `ConcreteSpec.Core.CharEvidence.nextConstructor`). -/
-example : nextConstructor (charCodePoint (Char.ofNat 65)) ≠ some (Char.ofNat 65) := by decide
+theorem charFromCodePoint_roundtrip_planted_ascii_nextConstructor : nextConstructor (charCodePoint (Char.ofNat 65)) ≠ some (Char.ofNat 65) := by decide
 /-- Instance (law `ConcreteSpec.Core.charFromAscii_map`, case `high_byte`). -/
-example : (charFromAscii 128).map charCodePoint = none := charFromAscii_map 128
+theorem charFromAscii_map_example_high_byte : (charFromAscii 128).map charCodePoint = none := charFromAscii_map 128
 /-- Planted (law `ConcreteSpec.Core.charFromAscii_map`, case `high_byte`,
 subject `ConcreteSpec.Core.charFromAscii`, mutant `ConcreteSpec.Core.CharEvidence.latin1Constructor`). -/
-example : ¬ ((latin1Constructor 128).map charCodePoint = none) := by decide
+theorem charFromAscii_map_planted_high_byte_latin1Constructor : ¬ ((latin1Constructor 128).map charCodePoint = none) := by decide
 end CharEvidence
 
 end ConcreteSpec.Core

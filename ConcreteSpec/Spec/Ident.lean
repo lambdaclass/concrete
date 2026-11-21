@@ -47,8 +47,8 @@ keeping nominal identity distinct from local diagnostic spellings. Numeric route
 use Basics.Numbers; neither wrapper adds source-path or normalization policy.
 
 The key-assignment helpers implement the settled structured-key interface, not a source parser.
-Local path admission is defined below. Project-wide path admission and source binding
-belong to the dependent slices.
+Local and project-wide path admission are defined below. Span projection and source binding
+remain separate obligations.
 -/
 
 namespace ConcreteSpec.Core
@@ -1208,6 +1208,114 @@ def render (path : SourcePath) : ConcreteSpec.Name :=
 
 end SourcePath
 
+namespace SourcePath.Project
+
+/-- The three project-wide refusal reasons. -/
+inductive Reason where
+  | caseCollision
+  | fileDirectoryConflict
+  | duplicate
+  deriving DecidableEq, Repr
+
+/-- Compare exact components, using the ASCII fold only at the first spelling difference. -/
+def classifyComponents : List ConcreteSpec.Numbers → List ConcreteSpec.Numbers → Option Reason
+  | [], [] => some .duplicate
+  | [], _ :: _ | _ :: _, [] => some .fileDirectoryConflict
+  | left :: ls, right :: rs =>
+    if left = right then classifyComponents ls rs
+    else if left.map foldAscii = right.map foldAscii then some .caseCollision
+    else none
+
+/-- Identify a conflict without changing either path. -/
+def classify (left right : SourcePath) : Option Reason :=
+  classifyComponents ((components left.raw).map Component.bytes)
+    ((components right.raw).map Component.bytes)
+
+/-- A conflict identifies two zero-based positions in the original input. -/
+structure Refusal where
+  reason : Reason
+  first : Nat
+  second : Nat
+  deriving DecidableEq, Repr
+
+/-- Search distinct positions for a conflicting pair. -/
+def checkWith (compare : SourcePath → SourcePath → Option Reason) (paths : List SourcePath) :
+    Except Refusal Unit :=
+  let entries := paths.toArray
+  let positions := List.finRange paths.length
+  match positions.findSome? (fun first =>
+    positions.findSome? (fun second =>
+      if first.val < second.val then
+        let left := entries[first.val]'(by simp [entries])
+        let right := entries[second.val]'(by simp [entries])
+        (compare left right).map fun reason =>
+          { reason, first := first.val, second := second.val }
+      else none)) with
+  | none => .ok ()
+  | some refusal => .error refusal
+
+/-- Check project-wide admission of locally admitted paths. -/
+def check := checkWith classify
+
+/-- The preliminary local parse preserves the first LOCAL refusal. -/
+def parseLocal : List SourceText → Except SourcePath.Refusal (List SourcePath)
+  | [] => .ok []
+  | raw :: rest => do
+    let path ← SourcePath.parse raw
+    let paths ← parseLocal rest
+    return path :: paths
+
+/-- The admission boundary for raw project inputs. -/
+def parse (inputs : List SourceText) :
+    Except (SourcePath.Refusal ⊕ Refusal) (List SourcePath) := do
+  let paths ← (parseLocal inputs).mapError Sum.inl
+  (check paths).mapError Sum.inr
+  return paths
+
+namespace Reference
+
+/-- Slash-delimited byte strings, independently of the executable scanner. -/
+def parts (path : SourcePath) : List ConcreteSpec.Numbers :=
+  path.raw.bytes.splitOn 47
+
+/-- Raw inequality and ASCII-folded equality at an aligned component prefix. -/
+def CaseCollision (left right : List ConcreteSpec.Numbers) : Prop :=
+  ∃ n, n ≤ left.length ∧ n ≤ right.length ∧ left.take n ≠ right.take n ∧
+    (left.take n).map (List.map SourcePath.Reference.lower) =
+      (right.take n).map (List.map SourcePath.Reference.lower)
+
+/-- A reason holds exactly when its corresponding pair conflict holds. -/
+def Conflict (reason : Reason) (left right : SourcePath) : Prop :=
+  let ls := parts left
+  let rs := parts right
+  match reason with
+  | .caseCollision => CaseCollision ls rs
+  | .fileDirectoryConflict => ls ≠ rs ∧ (ls <+: rs ∨ rs <+: ls)
+  | .duplicate => left.raw = right.raw
+
+/-- Every pair of occurrences must satisfy all project rules. -/
+def Admitted (paths : List SourcePath) : Prop :=
+  paths.Pairwise fun left right => ∀ reason, ¬ Conflict reason left right
+
+end Reference
+
+/-- R-0709, docs/decisions.md#decided-2026-11-16-file-paths.
+Matching ASCII-folded component prefixes must have identical spelling. -/
+def NoCaseCollision (pair : SourcePath × SourcePath) : Prop :=
+  ¬ Reference.Conflict .caseCollision pair.1 pair.2
+
+/-- R-0709, docs/decisions.md#decided-2026-11-17-file-names.
+A file path cannot also be an exact proper directory prefix of another path. -/
+def NoFileDirectoryConflict (pair : SourcePath × SourcePath) : Prop :=
+  ¬ Reference.Conflict .fileDirectoryConflict pair.1 pair.2
+
+/-- R-0709, docs/decisions.md#decided-2026-11-21-duplicate-project-path.
+A project cannot list the same path at two distinct positions. -/
+def NoDuplicate (pair : SourcePath × SourcePath) : Prop :=
+  ¬ Reference.Conflict .duplicate pair.1 pair.2
+
+end SourcePath.Project
+
 /-- A source span has an ordered half-open byte range and positive coordinates at its start.
 The loader binds its checked path and coordinates to source bytes. -/
 structure Span where
@@ -1266,6 +1374,12 @@ def SourcePath.Reason.ruleId : SourcePath.Reason → RuleId
   | .componentCap => ⟨``SourcePath.ComponentByteCap, 1⟩
   | .pathCap => ⟨``SourcePath.PathByteCap, 1⟩
   | .disallowed => ⟨``SourcePath.FilenameCharacters, 1⟩
+
+/-- The diagnostic citation of a project-wide refusal. -/
+def SourcePath.Project.Reason.ruleId : SourcePath.Project.Reason → RuleId
+  | .caseCollision => ⟨``SourcePath.Project.NoCaseCollision, 1⟩
+  | .fileDirectoryConflict => ⟨``SourcePath.Project.NoFileDirectoryConflict, 1⟩
+  | .duplicate => ⟨``SourcePath.Project.NoDuplicate, 1⟩
 
 /-- A version of this specification: `0.x` before the freeze, `1.0` at the freeze (A2c), bumped
 by every normative change (R-0603). -/
@@ -1329,23 +1443,23 @@ def loadedA : LoadedModule := ⟨⟨⟨⟨"p"⟩, ⟨⟨"1"⟩⟩⟩, [⟨"a"⟩
 /-- A second module from the same package and origin. -/
 def loadedB : LoadedModule := ⟨⟨loadedA.module.package, [⟨"b"⟩], by decide⟩, loadedA.origin⟩
 
-example : (LoadedModules.findCollision [loadedA, loadedB]).isNone = true := by decide
+theorem example_LoadedModules_findCollision_loadedA_loadedB_isNone : (LoadedModules.findCollision [loadedA, loadedB]).isNone = true := by decide
 
 /-- A collision refuses the entire load and retains both inputs for diagnostics. -/
-example : (match LoadedModules.load [loadedA, { loadedA with origin := ⟨⟨"origin-b"⟩⟩ }] with
+theorem example_collision_refuses_entire_load_and_retains : (match LoadedModules.load [loadedA, { loadedA with origin := ⟨⟨"origin-b"⟩⟩ }] with
     | .refused collision => decide (collision.first = loadedA ∧
         collision.second.origin = ⟨⟨"origin-b"⟩⟩)
     | .admitted _ => false) = true := by decide
 
 /-- OD44 refuses one top-level module name shared by distinct packages. -/
-example : (match LoadedModules.load [loadedA,
+theorem example_OD44_refuses_one_top_level_module : (match LoadedModules.load [loadedA,
       { loadedA with module := { loadedA.module with package := ⟨⟨"q"⟩, ⟨⟨"1"⟩⟩⟩ } }] with
     | .refused (.topLevel _ _ _ _) => true
     | _ => false) = true := by decide
 
 /-- Ordinals are per kind; named siblings consume none, while pinned unnamed siblings still
 consume one. The literal list checks both completeness and traversal order. -/
-example : KeyConstruct.collectKeys
+theorem example_Ordinals_are_per_kind_named_siblings : KeyConstruct.collectKeys
     [⟨.call, .unnamed none, []⟩,
      ⟨.binding, .unnamed none, []⟩,
      ⟨.call, .named ⟨"helper"⟩, []⟩,
@@ -1361,7 +1475,7 @@ example : KeyConstruct.collectKeys
 
 /-- Entering a named construct resets the scope, but entering an unnamed one inherits it.
 Both the collector and the occurrence resolver must retain the complete ancestor path. -/
-example : let body : List KeyConstruct :=
+theorem example_Entering_named_construct_resets_scope_but : let body : List KeyConstruct :=
     [⟨.call, .unnamed none, []⟩,
      ⟨.block, .named ⟨"inner"⟩, [⟨.call, .unnamed none, []⟩]⟩,
      ⟨.block, .unnamed none,
@@ -1380,13 +1494,13 @@ example : let body : List KeyConstruct :=
       some ⟨[⟨.block, .ordinal 0⟩, ⟨.call, .ordinal 1⟩, ⟨.binding, .ordinal 0⟩]⟩ := by cbv
 
 /-- Descendant assignment retains a pinned ancestor and inherited per-kind ordinals. -/
-example : KeyConstruct.descendantKey [⟨.call, .unnamed none, []⟩]
+theorem example_Descendant_assignment_retains_pinned_ancestor_and : KeyConstruct.descendantKey [⟨.call, .unnamed none, []⟩]
     ⟨.block, .unnamed (some ⟨"outer"⟩), [⟨.call, .unnamed none, []⟩]⟩ [0] =
     some ⟨[⟨.block, .pinned ⟨"outer"⟩⟩, ⟨.call, .ordinal 1⟩]⟩ := by cbv
 
 /-- Assigned tables attach every key, in preorder, to its actual owner and sequential sites
 starting at a nonzero offset. Program assignment uses the selected function's body and offset. -/
-example : let f : FnId := ⟨loadedA.module, ⟨"f"⟩⟩
+theorem example_Assigned_tables_attach_every_key_in : let f : FnId := ⟨loadedA.module, ⟨"f"⟩⟩
     let g : FnId := ⟨loadedA.module, ⟨"g"⟩⟩
     let body : List KeyConstruct :=
       [⟨.block, .named ⟨"inner"⟩, [⟨.call, .unnamed (some ⟨"invoke"⟩), []⟩]⟩]
@@ -1399,37 +1513,37 @@ example : let f : FnId := ⟨loadedA.module, ⟨"f"⟩⟩
       [(⟨20⟩, ⟨.function g, ⟨[⟨.abort, .ordinal 0⟩]⟩⟩)] := by cbv
 
 /-- Equal specialization requests at different sites share one entry, retaining both edges. -/
-example : let generic := GenericId.function ⟨loadedA.module, ⟨"f"⟩⟩
+theorem example_Equal_specialization_requests_at_different_sites : let generic := GenericId.function ⟨loadedA.module, ⟨"f"⟩⟩
     let table := SpecializationTable.canonicalize
       [SpecializationRequest.for ⟨0⟩ generic ([1] : Numbers) ([2] : Numbers),
        SpecializationRequest.for ⟨1⟩ generic [1] [2]]
     table.entries.length = 1 ∧ table.edges.map SpecializationEdge.entry = [0, 0] := by decide
 
 /-- Known premise categories round-trip; unknown tags and mismatched versions are refused. -/
-example : let scope := PremiseScope.package loadedA.module.package ⟨⟨"heap"⟩⟩
+theorem example_Known_premise_categories_round_trip_unknown : let scope := PremiseScope.package loadedA.module.package ⟨⟨"heap"⟩⟩
     (PremiseRecord.mk .heap scope specVersion).encode.read specVersion =
       some ⟨.heap, scope, specVersion⟩ ∧
     EncodedPremise.read specVersion ⟨99, scope, specVersion⟩ = none ∧
     EncodedPremise.read specVersion ⟨0, scope, ⟨9, 9⟩⟩ = none := by decide
 
 /-- Two declarations named `Pair` in different modules are different declarations. -/
-example : DeclId.mk (ModuleId.mk ⟨⟨"p"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"a"⟩] (by decide)) ⟨"Pair"⟩ ≠
+theorem example_Two_declarations_named_Pair_in_different : DeclId.mk (ModuleId.mk ⟨⟨"p"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"a"⟩] (by decide)) ⟨"Pair"⟩ ≠
     DeclId.mk (ModuleId.mk ⟨⟨"p"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"b"⟩] (by decide)) ⟨"Pair"⟩ := by decide
 
 /-- The same module path in two packages also yields different declarations. -/
-example : DeclId.mk (ModuleId.mk ⟨⟨"p1"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"a"⟩] (by decide)) ⟨"Pair"⟩ ≠
+theorem example_same_module_path_in_two_packages : DeclId.mk (ModuleId.mk ⟨⟨"p1"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"a"⟩] (by decide)) ⟨"Pair"⟩ ≠
     DeclId.mk (ModuleId.mk ⟨⟨"p2"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"a"⟩] (by decide)) ⟨"Pair"⟩ := by decide
 
 /-- A field belongs to its owner: `a` of `Pair` is not `a` of `Point`, and `value` of variant
 `E.A` is not `value` of variant `E.B`. -/
-example : FieldId.mk (.struct ⟨ModuleId.mk ⟨⟨"p"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"m"⟩] (by decide), ⟨"Pair"⟩⟩) ⟨"a"⟩ ≠
+theorem example_field_belongs_its_owner_Pair_is : FieldId.mk (.struct ⟨ModuleId.mk ⟨⟨"p"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"m"⟩] (by decide), ⟨"Pair"⟩⟩) ⟨"a"⟩ ≠
     FieldId.mk (.struct ⟨ModuleId.mk ⟨⟨"p"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"m"⟩] (by decide), ⟨"Point"⟩⟩) ⟨"a"⟩ := by decide
 
-example : FieldId.mk (.variant ⟨⟨ModuleId.mk ⟨⟨"p"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"m"⟩] (by decide), ⟨"E"⟩⟩, ⟨"A"⟩⟩) ⟨"value"⟩ ≠
+theorem example_FieldId_mk_variant_ModuleId_mk : FieldId.mk (.variant ⟨⟨ModuleId.mk ⟨⟨"p"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"m"⟩] (by decide), ⟨"E"⟩⟩, ⟨"A"⟩⟩) ⟨"value"⟩ ≠
     FieldId.mk (.variant ⟨⟨ModuleId.mk ⟨⟨"p"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"m"⟩] (by decide), ⟨"E"⟩⟩, ⟨"B"⟩⟩) ⟨"value"⟩ := by decide
 
 /-- The first and the last slice. -/
-example : (SliceId.mk 0).n.val = 0 ∧ (SliceId.mk 28).n.val = 28 := ⟨rfl, rfl⟩
+theorem example_first_and_last_slice : (SliceId.mk 0).n.val = 0 ∧ (SliceId.mk 28).n.val = 28 := ⟨rfl, rfl⟩
 
 /-- Bytes for `a`, a tab, and `b`. After the tab, the range starts at line 1, byte column 3. -/
 def tabSource : SourceText := SourceText.ofBytes [97, 9, 98]
@@ -1442,31 +1556,31 @@ def mainSourcePath : SourcePath :=
 def tabSpan : Span := ⟨mainSourcePath, 2, 3, by decide, 1, 3, by decide, by decide⟩
 
 /-- A tab advances one byte column, independently of any source-path policy. -/
-example : tabSource.lineAt 2 = 1 ∧ tabSource.columnAt 2 = 3 := by decide
+theorem example_tab_advances_one_byte_column_independently : tabSource.lineAt 2 = 1 ∧ tabSource.columnAt 2 = 3 := by decide
 
 /-- Counting the tab as zero bytes gives the wrong column. -/
-example : tabSource.columnAt 2 ≠ 2 := by decide
+theorem example_Counting_tab_as_zero_bytes_gives : tabSource.columnAt 2 ≠ 2 := by decide
 
 /-- A newline starts a new 1-based byte column; offsets count bytes, not scalars. -/
-example : (SourceText.ofBytes [97, 10, 195, 169]).lineAt 3 = 2 ∧
+theorem example_newline_starts_new_based_byte_column : (SourceText.ofBytes [97, 10, 195, 169]).lineAt 3 = 2 ∧
     (SourceText.ofBytes [97, 10, 195, 169]).columnAt 3 = 2 := by decide
 
 /-- Local identity is the numeric type from Basics, with no presentation component. -/
-example : (⟨0⟩ : ConcreteSpec.Var) ≠ ⟨1⟩ := by decide
+theorem example_Local_identity_is_numeric_type_from : (⟨0⟩ : ConcreteSpec.Var) ≠ ⟨1⟩ := by decide
 
 /-- Places, primitives and contract revisions have distinct typed identities. -/
-example : PlaceId.mk 0 ≠ PlaceId.mk 1 ∧ PrimId.mk 0 ≠ PrimId.mk 1 ∧
+theorem example_Places_primitives_and_contract_revisions_have : PlaceId.mk 0 ≠ PlaceId.mk 1 ∧ PrimId.mk 0 ≠ PrimId.mk 1 ∧
     ContractId.mk ⟨0⟩ 1 ≠ ContractId.mk ⟨0⟩ 2 := by decide
 
 /-- Two obligations at one site differ by kind; two of one kind differ by their local discriminator. -/
-example : ObligationId.mk ⟨0⟩ .safety 0 ≠ ObligationId.mk ⟨0⟩ .termination 0 ∧
+theorem example_Two_obligations_at_one_site_differ : ObligationId.mk ⟨0⟩ .safety 0 ≠ ObligationId.mk ⟨0⟩ .termination 0 ∧
     ObligationId.mk ⟨0⟩ .safety 0 ≠ ObligationId.mk ⟨0⟩ .safety 1 := by decide
 
 /-- A revised rule is a different rule identity. -/
-example : RuleId.mk `ConcreteSpec.Core.example 1 ≠ RuleId.mk `ConcreteSpec.Core.example 2 := by
+theorem example_revised_rule_is_different_rule_identity : RuleId.mk `ConcreteSpec.Core.example 1 ≠ RuleId.mk `ConcreteSpec.Core.example 2 := by
   decide
 
 /-- Before the freeze the version is `0.x`. -/
-example : specVersion.major = 0 := rfl
+theorem example_Before_freeze_version_is_x : specVersion.major = 0 := rfl
 
 end ConcreteSpec.Core

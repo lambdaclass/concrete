@@ -2606,14 +2606,14 @@ private theorem performed : Performed prog actions live initial [1, 2] [] middle
 
 /-- Helper (application of `ConcreteSpec.Core.Exec.cleanup_runs_exact_plan`). Two registered calls,
 both local restorations and the lifecycle update are performed before the saved suffix. -/
-example : BoundaryRun prog (Step prog) (.ret 7) suffix [inner, outer]
+theorem example_Helper_application_ConcreteSpec_Core_Exec_cleanup_runs_exact_plan : BoundaryRun prog (Step prog) (.ret 7) suffix [inner, outer]
     live initial actions [1, 2] [] middle :=
   (cleanup_runs_exact_plan prog (.ret 7) suffix [inner, outer] live [] initial middle
     actions [1, 2]).mpr ⟨nested_passes, rfl, rfl, performed⟩
 
 /-- Helper (application of `ConcreteSpec.Core.Exec.planWith_calls`). Projection retains call order,
 while removing only storage actions. -/
-example : (planWith [inner, outer] live).filterMap CleanAct.call? = plan [inner, outer] :=
+theorem example_Helper_application_ConcreteSpec_Core_Exec_planWith_calls : (planWith [inner, outer] live).filterMap CleanAct.call? = plan [inner, outer] :=
   planWith_calls [inner, outer] live
 
 /-- Planted. Reverse the action plan, preserving every action. -/
@@ -2621,10 +2621,10 @@ def reversePlanWith (pre : List (Frame O)) (L : AList Var O.Val) := (planWith pr
 /-- Planted. Omit calls from the call-only projection. -/
 def emptyPlan (_ : List (Frame O)) : List (Deferred O) := []
 /-- Planted (certificate `ConcreteSpec.Core.Exec.planWith_calls`). Reversal changes the two calls. -/
-example : (reversePlanWith [inner, outer] live).filterMap CleanAct.call? ≠ plan [inner, outer] := by
+theorem planted_certificate_ConcreteSpec_Core_Exec_planWith_calls_Reversal : (reversePlanWith [inner, outer] live).filterMap CleanAct.call? ≠ plan [inner, outer] := by
   intro h; cases h
 /-- Planted (certificate `ConcreteSpec.Core.Exec.planWith_calls`). Omitting calls changes projection. -/
-example : (planWith [inner, outer] live).filterMap CleanAct.call? ≠ emptyPlan [inner, outer] := by
+theorem planted_certificate_ConcreteSpec_Core_Exec_planWith_calls_Omitting : (planWith [inner, outer] live).filterMap CleanAct.call? ≠ emptyPlan [inner, outer] := by
   intro h; cases h
 
 /-- Planted. Omit only dispatch of a pending call; retain every other production transition. -/
@@ -2645,7 +2645,7 @@ private theorem no_dispatch : ¬ BoundaryRun prog (NoDispatchStep prog) (.ret 7)
 
 /-- Planted (certificate `ConcreteSpec.Core.Exec.cleanup_runs_exact_plan`). All independent actions
 succeed, but omission of the first dispatch falsifies the equivalence at those same arguments. -/
-example : ¬ (BoundaryRun prog (NoDispatchStep prog) (.ret 7) suffix [inner, outer]
+theorem planted_certificate_ConcreteSpec_Core_Exec_cleanup_runs_exact_plan_All : ¬ (BoundaryRun prog (NoDispatchStep prog) (.ret 7) suffix [inner, outer]
       live initial actions [1, 2] [] middle ↔
     (∀ f ∈ [inner, outer], Passes (O := ops) (.ret 7) f) ∧
       actions = planWith [inner, outer] live ∧ [] = unwindLocals [inner, outer] live ∧
@@ -2665,14 +2665,14 @@ inductive MissingRestrictStep (P : Program O) : Config O → Label O → Config 
 
 /-- Helper (application of `ConcreteSpec.Core.Exec.cleanup_runs_exact_plan`). The storage drop removes
 `x` from the current activation while preserving `p`, the caller activation and counter. -/
-example : BoundaryRun prog (Step prog) (.ret 7) suffix [emptyScope] live initial
+theorem example_Helper_application_ConcreteSpec_Core_Exec_cleanup_runs_exact_plan_2 : BoundaryRun prog (Step prog) (.ret 7) suffix [emptyScope] live initial
     [.drop [y] live [(y, 8)]] [] [(y, 8)] middle :=
   (cleanup_runs_exact_plan prog (.ret 7) suffix [emptyScope] live [(y, 8)] initial middle
     [.drop [y] live [(y, 8)]] []).mpr ⟨empty_passes, rfl, rfl, .drop rfl .nil⟩
 
 /-- Planted (certificate `ConcreteSpec.Core.Exec.cleanup_runs_exact_plan`). Missing storage teardown
 has a real observed run with correct locals but cannot satisfy independent action execution. -/
-example : BoundaryRun prog (MissingDropStep prog) (.ret 7) suffix [emptyScope] live initial
+theorem planted_certificate_ConcreteSpec_Core_Exec_cleanup_runs_exact_plan_Missing : BoundaryRun prog (MissingDropStep prog) (.ret 7) suffix [emptyScope] live initial
       [.drop [y] live [(y, 8)]] [] [(y, 8)] initial ∧
     ¬ Performed prog [.drop [y] live [(y, 8)]] live initial [] [(y, 8)] initial := by
   refine ⟨?_, ?_⟩
@@ -2688,7 +2688,7 @@ example : BoundaryRun prog (MissingDropStep prog) (.ret 7) suffix [emptyScope] l
 
 /-- Planted (certificate `ConcreteSpec.Core.Exec.cleanup_runs_exact_plan`). Missing local restoration
 has correct lifecycle state but its observed post-locals disagree with the planned action. -/
-example : BoundaryRun prog (MissingRestrictStep prog) (.ret 7) suffix [emptyScope] live initial
+theorem planted_certificate_ConcreteSpec_Core_Exec_cleanup_runs_exact_plan_Missing_2 : BoundaryRun prog (MissingRestrictStep prog) (.ret 7) suffix [emptyScope] live initial
       [.drop [y] live live] [] live middle ∧
     [.drop [y] live live] ≠ planWith [emptyScope] live := by
   refine ⟨?_, ?_⟩
@@ -2705,7 +2705,7 @@ inductive ExtraStep (P : Program O) : Config O → Label O → Config O → Prop
 
 /-- Planted (certificate `ConcreteSpec.Core.Exec.cleanup_runs_exact_plan`). The injected call actually
 emits 9; the sole added call is absent from the independent plan. -/
-example : BoundaryRun prog (ExtraStep prog) (.ret 7) suffix [emptyScope] live initial
+theorem planted_certificate_ConcreteSpec_Core_Exec_cleanup_runs_exact_plan_injected : BoundaryRun prog (ExtraStep prog) (.ret 7) suffix [emptyScope] live initial
       [.call live (d 9), .drop [y] live [(y, 8)]] [9] [(y, 8)] middle ∧
     [.call live (d 9), .drop [y] live [(y, 8)]] ≠ planWith [emptyScope] live := by
   refine ⟨?_, ?_⟩
@@ -2723,7 +2723,7 @@ private theorem drop_performed : Performed prog (planWith [emptyScope] live)
 
 /-- Helper (application of `ConcreteSpec.Core.Exec.boundary_of_performed`). Independent storage and
 local restoration reconstruct the actual first-boundary execution. -/
-example : BoundaryRun prog (Step prog) (.ret 7) suffix [emptyScope] live initial
+theorem example_Helper_application_ConcreteSpec_Core_Exec_boundary_of_performed : BoundaryRun prog (Step prog) (.ret 7) suffix [emptyScope] live initial
     (planWith [emptyScope] live) [] [(y, 8)] middle :=
   boundary_of_performed [emptyScope] empty_passes drop_performed
 
@@ -2735,7 +2735,7 @@ inductive NoDropStep (P : Program O) : Config O → Label O → Config O → Pro
 
 /-- Planted (certificate `ConcreteSpec.Core.Exec.boundary_of_performed`). The independent populated
 drop still succeeds, but the sole missing transition prevents reconstruction. -/
-example : Performed prog (planWith [emptyScope] live) live initial [] [(y, 8)] middle ∧
+theorem planted_certificate_ConcreteSpec_Core_Exec_boundary_of_performed_independent : Performed prog (planWith [emptyScope] live) live initial [] [(y, 8)] middle ∧
     ¬ BoundaryRun prog (NoDropStep prog) (.ret 7) suffix [emptyScope] live initial
       (planWith [emptyScope] live) [] [(y, 8)] middle := by
   refine ⟨drop_performed, fun h => ?_⟩
@@ -2759,13 +2759,13 @@ private theorem base_execution : ∀ st tr,
 
 /-- Helper (application of `ConcreteSpec.Core.Exec.boundary_scope_calls`). The final populated scope
 drop is strictly after its call; the outer scope's call remains in the continuation. -/
-example : BoundaryRun prog (Step prog) (.ret 7) suffix [inner, outer] live initial
+theorem example_Helper_application_ConcreteSpec_Core_Exec_boundary_scope_calls : BoundaryRun prog (Step prog) (.ret 7) suffix [inner, outer] live initial
     actions [1, 2] [] middle :=
   boundary_scope_calls ⟨1⟩ [y] [outer] [d 1] performed base_execution
 
 /-- Planted (certificate `ConcreteSpec.Core.Exec.boundary_scope_calls`). Dispatch omission alone
 prevents the witnessed call-then-drop execution. Independent actions remain satisfiable. -/
-example : Performed prog actions live initial [1, 2] [] middle ∧
+theorem planted_certificate_ConcreteSpec_Core_Exec_boundary_scope_calls_Dispatch : Performed prog actions live initial [1, 2] [] middle ∧
     ¬ BoundaryRun prog (NoDispatchStep prog) (.ret 7) suffix [inner, outer]
       live initial actions [1, 2] [] middle := ⟨performed, no_dispatch⟩
 
@@ -2801,7 +2801,7 @@ private theorem call_raw : FirstStepsN (Step prog) (fun c => c.frames.length ≤
 
 /-- Instance (law `ConcreteSpec.Core.Exec.FirstStepsN.split_return`). The saved caller is
 restored after a real event and activation leave, before the pending exit resumes. -/
-example : ∃ n₁ n₂ tr₁ st₁ tr₂, 6 = n₁ + n₂ ∧ [1] = tr₁ ++ tr₂ ∧
+theorem split_return_example : ∃ n₁ n₂ tr₁ st₁ tr₂, 6 = n₁ + n₂ ∧ [1] = tr₁ ++ tr₂ ∧
     FirstStepsN (Step prog) (fun c => c.ctrl = .done ∧ c.frames = returnQ)
       c1 tr₁ ⟨.done, live, st₁, returnQ⟩ n₁ ∧
     FirstStepsN (Step prog) (fun c => c.frames.length ≤ suffix.length)
@@ -2810,7 +2810,7 @@ example : ∃ n₁ n₂ tr₁ st₁ tr₂, 6 = n₁ + n₂ ∧ [1] = tr₁ ++ tr
 
 /-- Instance (law `ConcreteSpec.Core.Exec.FirstStepsN.call_return`). A deferred call crosses
 its saved continuation only after restoring populated caller locals and the prior activation. -/
-example : ∃ n₁ n₂ tr₁ st₁ tr₂, 7 = n₁ + n₂ ∧ [1] = tr₁ ++ tr₂ ∧
+theorem call_return_example : ∃ n₁ n₂ tr₁ st₁ tr₂, 7 = n₁ + n₂ ∧ [1] = tr₁ ++ tr₂ ∧
     FirstStepsN (Step prog) (fun c => c.ctrl = .done ∧ c.frames = returnQ)
       c0 tr₁ ⟨.done, live, st₁, returnQ⟩ n₁ ∧
     FirstStepsN (Step prog) (fun c => c.frames.length ≤ suffix.length)
@@ -2874,7 +2874,7 @@ private theorem wrong_raw : FirstStepsN WrongReturn (fun c => c.frames.length �
 
 /-- Planted (law `ConcreteSpec.Core.Exec.FirstStepsN.call_return`). Raw execution, boundary
 height and the emitted event survive; restoring the caller before crossing does not. -/
-example : FirstStepsN WrongReturn (fun c => c.frames.length ≤ suffix.length) c0 [1] bad7 7 ∧
+theorem call_return_planted : FirstStepsN WrongReturn (fun c => c.frames.length ≤ suffix.length) c0 [1] bad7 7 ∧
     ¬ (∃ n₁ n₂ tr₁ st₁ tr₂, 7 = n₁ + n₂ ∧ [1] = tr₁ ++ tr₂ ∧
       FirstStepsN WrongReturn (fun c => c.ctrl = .done ∧ c.frames = returnQ)
         c0 tr₁ ⟨.done, live, st₁, returnQ⟩ n₁ ∧
@@ -2886,7 +2886,7 @@ example : FirstStepsN WrongReturn (fun c => c.frames.length ≤ suffix.length) c
 
 /-- Planted (law `ConcreteSpec.Core.Exec.FirstStepsN.split_return`). Starting inside the
 same callee retains its protected saved frame and raw endpoint but loses caller restoration. -/
-example : Protected (O := ops) live returnQ c1 ∧
+theorem split_return_planted : Protected (O := ops) live returnQ c1 ∧
     FirstStepsN WrongReturn (fun c => c.frames.length ≤ suffix.length) c1 [1] bad7 6 ∧
     ¬ (∃ n₁ n₂ tr₁ st₁ tr₂, 6 = n₁ + n₂ ∧ [1] = tr₁ ++ tr₂ ∧
       FirstStepsN WrongReturn (fun c => c.ctrl = .done ∧ c.frames = returnQ)
@@ -2900,10 +2900,10 @@ example : Protected (O := ops) live returnQ c1 ∧
 
 /-- Instance (law `ConcreteSpec.Core.Exec.protected_step`). Return restores the populated
 caller while preserving the current lifecycle store and saved suffix. -/
-example : PreservesCaller (Step prog) live returnQ c4 := protected_step ⟨[], rfl⟩
+theorem protected_step_example : PreservesCaller (Step prog) live returnQ c4 := protected_step ⟨[], rfl⟩
 /-- Planted (law `ConcreteSpec.Core.Exec.protected_step`). Keeping callee locals violates
 only the return-restoration operation at the actual saved boundary. -/
-example : Protected (O := ops) live returnQ c4 ∧ ¬ PreservesCaller WrongReturn live returnQ c4 := by
+theorem protected_step_planted : Protected (O := ops) live returnQ c4 ∧ ¬ PreservesCaller WrongReturn live returnQ c4 := by
   refine ⟨⟨[], rfl⟩, fun h => ?_⟩
   cases h .silent bad5 .forget with
   | inl hp =>
@@ -2915,7 +2915,7 @@ example : Protected (O := ops) live returnQ c4 ∧ ¬ PreservesCaller WrongRetur
 
 /-- Instance (law `ConcreteSpec.Core.Exec.call_protects`). Entering the actual deferred log
 installs a protected saved caller beneath scope and function-end frames. -/
-example : SavesCaller (Step prog) live initial returnQ (d 1) := call_protects
+theorem call_protects_example : SavesCaller (Step prog) live initial returnQ (d 1) := call_protects
 
 /-- Planted. Entry is identical except that it omits the saved caller frame. -/
 inductive MissingCaller : Config ops → Label ops → Config ops → Prop where
@@ -2924,7 +2924,7 @@ inductive MissingCaller : Config ops → Label ops → Config ops → Prop where
 
 /-- Planted (law `ConcreteSpec.Core.Exec.call_protects`). Omitting the saved caller frame
 cannot protect this populated caller; the callee, event opportunity and lifecycle entry stay. -/
-example : ¬ SavesCaller MissingCaller live initial returnQ (d 1) := by
+theorem call_protects_planted : ¬ SavesCaller MissingCaller live initial returnQ (d 1) := by
   intro h
   cases h .silent _ .enter with
   | inl ht => obtain ⟨_, _, ht, _⟩ := ht; cases ht
@@ -2952,12 +2952,12 @@ private theorem inner_passes : ∀ f ∈ [inner], Passes (O := ops) (.ret 7) f :
 
 /-- Instance (law `ConcreteSpec.Core.Exec.boundary_complete`). A real first-arrival execution
 with event, populated locals and activation state admits dispatch segmentation. -/
-example : ∃ acts, BoundaryRun prog (Step prog) (.ret 7) suffix [inner]
+theorem boundary_complete_example : ∃ acts, BoundaryRun prog (Step prog) (.ret 7) suffix [inner]
     live initial acts [1] [(y, 8)] middle := boundary_complete raw_scope rfl inner_passes
 
 /-- Instance (law `ConcreteSpec.Core.Exec.raw_cleanup_runs_plan`). The actual first-arrival
 path gives exactly the independent plan, restored locals and performed actions. -/
-example : ∃ acts, BoundaryRun prog (Step prog) (.ret 7) suffix [inner]
+theorem raw_cleanup_runs_plan_example : ∃ acts, BoundaryRun prog (Step prog) (.ret 7) suffix [inner]
       live initial acts [1] [(y, 8)] middle ∧
     acts = planWith [inner] live ∧ [(y, 8)] = unwindLocals [inner] live ∧
     Performed prog acts live initial [1] [(y, 8)] middle :=
@@ -3000,7 +3000,7 @@ private theorem skip_no_boundary : ¬ ∃ acts, BoundaryRun prog SkipCall (.ret 
 
 /-- Planted (law `ConcreteSpec.Core.Exec.boundary_complete`). All raw-path and endpoint
 premises survive omission of dispatch; no first-boundary segmentation exists. -/
-example : FirstStepsN SkipCall (fun c => c.frames.length ≤ suffix.length)
+theorem boundary_complete_planted : FirstStepsN SkipCall (fun c => c.frames.length ≤ suffix.length)
       ⟨.exiting (.ret 7), live, initial, inner :: suffix⟩ [] c7 4 ∧
     (∀ f ∈ [inner], Passes (O := ops) (.ret 7) f) ∧
     ¬ ∃ acts, BoundaryRun prog SkipCall (.ret 7) suffix [inner]
@@ -3008,7 +3008,7 @@ example : FirstStepsN SkipCall (fun c => c.frames.length ≤ suffix.length)
 
 /-- Planted (law `ConcreteSpec.Core.Exec.raw_cleanup_runs_plan`). This raw first arrival
 preserves passability and storage teardown but omits the planned call, so the law fails. -/
-example : FirstSteps SkipCall (fun c => c.frames.length ≤ suffix.length)
+theorem raw_cleanup_runs_plan_planted : FirstSteps SkipCall (fun c => c.frames.length ≤ suffix.length)
       ⟨.exiting (.ret 7), live, initial, inner :: suffix⟩ [] c7 ∧
     ¬ (∃ acts, BoundaryRun prog SkipCall (.ret 7) suffix [inner]
         live initial acts [] [(y, 8)] middle ∧
@@ -3021,7 +3021,7 @@ example : FirstSteps SkipCall (fun c => c.frames.length ≤ suffix.length)
 
 /-- Instance (law `ConcreteSpec.Core.Exec.register_protected`). Registration traverses a
 sequence frame and preserves populated scope, saved caller and nonempty continuation. -/
-example : register (d 2) ([.seq .skip, inner] ++ .ret none live :: returnQ) =
+theorem register_protected_example : register (d 2) ([.seq .skip, inner] ++ .ret none live :: returnQ) =
       some ([.seq .skip, .scope ⟨1⟩ [y] [d 2, d 1]] ++ .ret none live :: returnQ) ∧
     RegistrationPreservesCaller register (d 2) live returnQ := ⟨rfl, register_protected _ _ _⟩
 
@@ -3031,7 +3031,7 @@ def forgetRegister (d : Deferred O) (frames : List (Frame O)) : Option (List (Fr
 
 /-- Planted (law `ConcreteSpec.Core.Exec.register_protected`). A successful populated
 registration loses its saved boundary when only that frame is erased. -/
-example : ¬ RegistrationPreservesCaller forgetRegister (d 2) live returnQ := by
+theorem register_protected_planted : ¬ RegistrationPreservesCaller forgetRegister (d 2) live returnQ := by
   intro h
   obtain ⟨pre, he⟩ := h [.seq .skip, inner] _ rfl
   change [.seq .skip, .scope ⟨1⟩ [y] [d 2, d 1]] ++ returnQ = _ at he
@@ -3042,7 +3042,7 @@ example : ¬ RegistrationPreservesCaller forgetRegister (d 2) live returnQ := by
 
 /-- Instance (law `ConcreteSpec.Core.Exec.exit_label`). Dispatch is silent; the event belongs
 to the call body, as witnessed by `raw_scope`. -/
-example : ExitSilent (Step prog) (.ret 7) live initial (inner :: suffix) := exit_label
+theorem exit_label_example : ExitSilent (Step prog) (.ret 7) live initial (inner :: suffix) := exit_label
 
 /-- Planted. Change only the label on the real scope dispatch. -/
 inductive NoisyExit : Config ops → Label ops → Config ops → Prop where
@@ -3050,7 +3050,7 @@ inductive NoisyExit : Config ops → Label ops → Config ops → Prop where
 
 /-- Planted (law `ConcreteSpec.Core.Exec.exit_label`). A spurious dispatcher event is visible
 with the same source and target as the production silent transition. -/
-example : Step prog ⟨.exiting (.ret 7), live, initial, inner :: suffix⟩ .silent c0 ∧
+theorem exit_label_planted : Step prog ⟨.exiting (.ret 7), live, initial, inner :: suffix⟩ .silent c0 ∧
     ¬ ExitSilent NoisyExit (.ret 7) live initial (inner :: suffix) := by
   refine ⟨.silent rfl, fun h => ?_⟩
   cases h (.emit 9) c0 NoisyExit.dispatch
@@ -3061,14 +3061,14 @@ def trapped : Config ops := ⟨.trapped .abort s, live, initial,
 
 /-- Instance (law `ConcreteSpec.Core.Exec.step_trapped`). The pending cleanup and caller do
 not prevent final recognition or allow another transition. -/
-example : (trapped.final? = some (.trapped .abort s) ↔ trapped.ctrl = .trapped .abort s) ∧
+theorem step_trapped_example : (trapped.final? = some (.trapped .abort s) ↔ trapped.ctrl = .trapped .abort s) ∧
     Blocked (Step prog) trapped := step_trapped prog _ _ _ _ _ _
 
 /-- Planted. Omit only trapped-state final recognition. -/
 def noTrapFinal? (c : Config O) : Option (Final O.Val) :=
   match c.ctrl with | .trapped .. => none | _ => c.final?
 /-- Planted (law `ConcreteSpec.Core.Exec.step_trapped`). The real trap is no longer final. -/
-example : ¬ (noTrapFinal? trapped = some (.trapped .abort s) ↔
+theorem step_trapped_planted : ¬ (noTrapFinal? trapped = some (.trapped .abort s) ↔
     trapped.ctrl = .trapped .abort s) := by
   intro h; cases h.mpr rfl
 
@@ -3077,20 +3077,20 @@ inductive RecoverTrap : Config ops → Label ops → Config ops → Prop where
   | recover : RecoverTrap trapped .silent { trapped with ctrl := .done }
 /-- Planted (law `ConcreteSpec.Core.Exec.step_trapped`). Recovery violates terminality while
 preserving final recognition, populated locals, lifecycle state and pending calls. -/
-example : trapped.final? = some (.trapped .abort s) ∧ ¬ Blocked RecoverTrap trapped := by
+theorem step_trapped_planted_2 : trapped.final? = some (.trapped .abort s) ∧ ¬ Blocked RecoverTrap trapped := by
   refine ⟨rfl, fun h => ?_⟩
   exact h .silent _ RecoverTrap.recover
 
 /-- Instance (law `ConcreteSpec.Core.Exec.steps_from_trapped`). Recovery cannot change even
 just the control field of the populated trapped endpoint. -/
-example : ¬ Steps prog trapped [] { trapped with ctrl := .done } := by
+theorem steps_from_trapped_example : ¬ Steps prog trapped [] { trapped with ctrl := .done } := by
   intro h
   have bad := ((steps_from_trapped prog .abort s live initial _ [] _).mp h).2
   cases bad
 
 /-- Instance (law `ConcreteSpec.Core.Exec.steps_from_trapped`). No event can be emitted even
 when the endpoint remains exactly the trapped configuration. -/
-example : ¬ Steps prog trapped [9] trapped := by
+theorem steps_from_trapped_example_2 : ¬ Steps prog trapped [9] trapped := by
   intro h
   have bad := ((steps_from_trapped prog .abort s live initial _ [9] trapped).mp h).1
   cases bad
@@ -3100,7 +3100,7 @@ inductive RecoverTrapSteps : Config ops → List Int → Config ops → Prop whe
   | recover : RecoverTrapSteps trapped [] { trapped with ctrl := .done }
 /-- Planted (law `ConcreteSpec.Core.Exec.steps_from_trapped`). The changed-endpoint exclusion
 fails with just the forbidden silent recovery. -/
-example : ¬ (¬ RecoverTrapSteps trapped [] { trapped with ctrl := .done }) :=
+theorem steps_from_trapped_planted : ¬ (¬ RecoverTrapSteps trapped [] { trapped with ctrl := .done }) :=
   fun h => h .recover
 
 /-- Planted. Add only an event at the identical trapped endpoint. -/
@@ -3108,11 +3108,11 @@ inductive NoisyTrapSteps : Config ops → List Int → Config ops → Prop where
   | emit : NoisyTrapSteps trapped [9] trapped
 /-- Planted (law `ConcreteSpec.Core.Exec.steps_from_trapped`). The nonempty-trace exclusion
 fails with just the forbidden event, without changing the endpoint. -/
-example : ¬ (¬ NoisyTrapSteps trapped [9] trapped) := fun h => h .emit
+theorem steps_from_trapped_planted_2 : ¬ (¬ NoisyTrapSteps trapped [9] trapped) := fun h => h .emit
 
 /-- Instance (law `ConcreteSpec.Core.Exec.abort_runs_no_cleanup`). Abort reaches its trap
 without touching registered calls, locals, activation markers or the caller frame. -/
-example : Steps prog { trapped with ctrl := .exec (.abort s) } [] trapped :=
+theorem abort_runs_no_cleanup_example : Steps prog { trapped with ctrl := .exec (.abort s) } [] trapped :=
   (abort_runs_no_cleanup prog s live initial _ [] trapped).mpr ⟨rfl, .inr rfl⟩
 
 /-- Planted. Replace abort's terminal transition by unwinding; all later transitions are real. -/
@@ -3121,7 +3121,7 @@ inductive AbortCleanupSteps : Config ops → List Int → Config ops → Prop wh
       AbortCleanupSteps ⟨.exec (.abort s), live, initial, inner :: suffix⟩ tr c
 /-- Planted (law `ConcreteSpec.Core.Exec.abort_runs_no_cleanup`). Wrongly starting cleanup
 emits the registered call's real event, violating abort's empty-trace conclusion. -/
-example : AbortCleanupSteps ⟨.exec (.abort s), live, initial, inner :: suffix⟩ [1] c7 ∧
+theorem abort_runs_no_cleanup_planted : AbortCleanupSteps ⟨.exec (.abort s), live, initial, inner :: suffix⟩ [1] c7 ∧
     ¬ ([1] = ([] : List Int) ∧
       (c7 = ⟨.exec (.abort s), live, initial, inner :: suffix⟩ ∨
        c7 = ⟨.trapped .abort s, live, initial, inner :: suffix⟩)) :=
@@ -3129,7 +3129,7 @@ example : AbortCleanupSteps ⟨.exec (.abort s), live, initial, inner :: suffix�
 
 /-- Instance (law `ConcreteSpec.Core.Exec.steps_from_trapped`). A deferred trap stops the
 program before either later registered log or activation leave, as OD68 requires. -/
-example : runFrom prog env 30 [13]
+theorem steps_from_trapped_example_3 : runFrom prog env 30 [13]
     ⟨.exiting (.ret 7), live, initial,
       [.scope ⟨1⟩ [] [⟨boomF, [], s⟩, d 2], outer, .functionEnd]⟩ =
     ⟨[13], .final (.trapped .abort ⟨9⟩),
@@ -3146,7 +3146,7 @@ abbrev trapOps : Operands := { ops with eval := fun L st e => match e with
 
 /-- Instance (law `ConcreteSpec.Core.Exec.evalArgs_first_trap`). Only the prefix's move makes
 this operand trap; evaluating the suffix would instead report division by zero. -/
-example : evalArgs trapOps [(y, 8)] initial
+theorem evalArgs_first_trap_example : evalArgs trapOps [(y, 8)] initial
     ([.move y] ++ .var y :: [.fail .divisionByZero]) = .trap .overflow :=
   evalArgs_first_trap (O := trapOps) [(y, 8)] (.var y) .overflow
     [.fail .divisionByZero] [.move y] initial ⟨4, [[y, x, p], [t]]⟩ [8] rfl rfl
@@ -3159,7 +3159,7 @@ def lostStateArgs (O : Operands) (L : AList Var O.Val) :
       (lostStateArgs O L st es).map fun (vs, st₂) => (v :: vs, st₂)
 /-- Planted (law `ConcreteSpec.Core.Exec.evalArgs_first_trap`). Losing the prefix state
 prevents the state-dependent overflow, exposing the later division-by-zero trap. -/
-example : lostStateArgs trapOps [(y, 8)] initial
+theorem evalArgs_first_trap_planted : lostStateArgs trapOps [(y, 8)] initial
     [.move y, .var y, .fail .divisionByZero] = .trap .divisionByZero ∧
     lostStateArgs trapOps [(y, 8)] initial
       [.move y, .var y, .fail .divisionByZero] ≠ .trap .overflow := by decide
@@ -3175,7 +3175,7 @@ def pastTrapArgs (O : Operands) (L : AList Var O.Val) :
     | .stuck => .stuck
 /-- Planted (law `ConcreteSpec.Core.Exec.evalArgs_first_trap`). Continuing replaces the
 state-dependent first trap by the suffix's distinct trap. -/
-example : pastTrapArgs trapOps [(y, 8)] initial
+theorem evalArgs_first_trap_planted_2 : pastTrapArgs trapOps [(y, 8)] initial
     [.move y, .var y, .fail .divisionByZero] = .trap .divisionByZero ∧
     pastTrapArgs trapOps [(y, 8)] initial
       [.move y, .var y, .fail .divisionByZero] ≠ .trap .overflow := by decide
@@ -3190,7 +3190,7 @@ def swallowTrapEvalArgs (O : Operands) (L : AList Var O.Val) :
     | .stuck => .stuck
 /-- Planted (law `ConcreteSpec.Core.Exec.evalArgs_first_trap`). Swallowing the same first
 trap returns the moved prefix and its updated state rather than propagating overflow. -/
-example : swallowTrapEvalArgs trapOps [(y, 8)] initial
+theorem evalArgs_first_trap_planted_3 : swallowTrapEvalArgs trapOps [(y, 8)] initial
     [.move y, .var y, .fail .divisionByZero] = .ok ([8], ⟨4, [[y, x, p], [t]]⟩) ∧
     swallowTrapEvalArgs trapOps [(y, 8)] initial
       [.move y, .var y, .fail .divisionByZero] ≠ .trap .overflow := by decide
@@ -3224,7 +3224,7 @@ private theorem mutant_base_execution : ∀ st tr,
 
 /-- Planted. The call-then-drop reconstruction's higher-order premise is checked against the
 mutant itself. Omitting only the inner dispatch cannot be hidden by a broken base premise. -/
-example : (∀ st tr,
+theorem planted_call_then_drop_reconstruction_s_higher : (∀ st tr,
     Performed prog [.drop [y] live [(y, 8)], .call [(y, 8)] (d 2), .drop [] [(y, 8)] []]
       live st tr [] middle →
     BoundaryRun prog (NoDispatchStep prog) (.ret 7) suffix [.scope ⟨1⟩ [y] [], outer] live st
@@ -3241,12 +3241,12 @@ def orderFrames (reverse : Bool) : List (Frame ops) :=
   [.scope ⟨1⟩ [y] (if reverse then [⟨logF, [.counter], s⟩, ⟨bumpF, [], s⟩]
       else [⟨bumpF, [], s⟩, ⟨logF, [.counter], s⟩])] ++ suffix
 /-- Helper. Positive state-dependent call-order witness accompanying the raw cleanup law. -/
-example : (runFrom prog env 40 [13] ⟨.exiting (.ret 7), live, initial, orderFrames false⟩).events = [13, 5] ∧
+theorem example_Helper_Positive_state_dependent_call_order : (runFrom prog env 40 [13] ⟨.exiting (.ret 7), live, initial, orderFrames false⟩).events = [13, 5] ∧
     (runFrom prog env 40 [13] ⟨.exiting (.ret 7), live, initial, orderFrames false⟩).residual.store =
       ⟨5, [[p], [t]]⟩ := ⟨rfl, rfl⟩
 /-- Planted. Reverse just the registered calls. The counter read now observes the earlier
 state, despite identical final counter, locals and lifecycle state. -/
-example : (runFrom prog env 40 [13] ⟨.exiting (.ret 7), live, initial, orderFrames true⟩).events = [13, 4] ∧
+theorem planted_Reverse_just_registered_calls_counter_read : (runFrom prog env 40 [13] ⟨.exiting (.ret 7), live, initial, orderFrames true⟩).events = [13, 4] ∧
     (runFrom prog env 40 [13] ⟨.exiting (.ret 7), live, initial, orderFrames true⟩).residual.store =
       ⟨5, [[p], [t]]⟩ ∧
     (runFrom prog env 40 [13] ⟨.exiting (.ret 7), live, initial, orderFrames true⟩).residual.locals = [(y, 8)] :=
