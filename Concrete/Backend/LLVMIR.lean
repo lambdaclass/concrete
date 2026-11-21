@@ -91,7 +91,7 @@ inductive Terminator where
   | retVoid
   | branch (target : Label)
   | cond (flag : Local) (yes no : Label)
-  | switch (ty : TypeCode) (value : Local) (fallback : Label) (cases : List (Immediate × Label))
+  | switch (ty : Width) (value : Local) (fallback : Label) (cases : List (Immediate × Label))
   | unreachable
   deriving BEq
 
@@ -107,6 +107,41 @@ inductive Item where
   | endFunction
   | blank
   deriving BEq
+
+/-- Numeric positions in assembly order. Operand positions carry their LLVM type;
+extract indices and byte lengths have no explicit integer type. -/
+inductive IntegerRole where
+  | left | right | conversionSource | callArgument | extractIndex | phiArm
+  | comparisonLeft | comparisonRight | gepBase | gepOffset | returnValue | switchKey | byteLength
+  deriving DecidableEq, Repr
+
+abbrev IntegerField := IntegerRole × Option Nat × Nat
+
+def TypeCode.integerWidth : TypeCode → Option Nat
+  | .integer w => some w.bits
+  | .flag => some 1
+  | _ => none
+
+def Argument.inventory (role : IntegerRole) (ty : TypeCode) : Argument → List IntegerField
+  | .immediate v => [(role, ty.integerWidth, v.value)]
+  | _ => []
+
+def Instruction.inventory : Instruction → List IntegerField
+  | .bin _ _ ty a b => a.inventory .left ty ++ b.inventory .right ty
+  | .convert _ _ (ty, a) _ => a.inventory .conversionSource ty
+  | .call _ _ _ args => args.flatMap fun (ty, a) => a.inventory .callArgument ty
+  | .extract _ _ _ i => [(.extractIndex, none, i)]
+  | .phi _ ty arms => arms.flatMap fun (a, _) => a.inventory .phiArm ty
+  | .compare _ _ ty a b => a.inventory .comparisonLeft ty ++ b.inventory .comparisonRight ty
+  | .gep _ _ (baseTy, base) (offsetTy, offset) =>
+    base.inventory .gepBase baseTy ++ offset.inventory .gepOffset offsetTy
+
+def Item.inventory : Item → List IntegerField
+  | .instruction i => i.inventory
+  | .terminator (.ret (ty, a)) => a.inventory .returnValue ty
+  | .terminator (.switch w _ _ cases) => cases.map fun (v, _) => (.switchKey, some w.bits, v.value)
+  | .constant _ data => [(.byteLength, none, data.size)]
+  | _ => []
 
 private def Argument.immediates : Argument → List Immediate
   | .immediate v => [v]
@@ -295,8 +330,8 @@ private def terminatorPieces : Terminator → Doc
     text "br " ++ typeCode .flag ++ arg (.local flag) .comma ++ text " label %" ++ labelName yes ++
       text ", label %" ++ labelName no ++ text "\n"
   | .switch ty value fallback cases =>
-    text "switch " ++ typeCode ty ++ arg (.local value) .comma ++ text " label %" ++ labelName fallback ++ text " [" ++
-      (cases.flatMap fun (v, dst) => text " " ++ typed (ty, .immediate v) .comma ++ text " label %" ++ labelName dst) ++ text " ]\n"
+    text "switch " ++ typeCode (.integer ty) ++ arg (.local value) .comma ++ text " label %" ++ labelName fallback ++ text " [" ++
+      (cases.flatMap fun (v, dst) => text " " ++ typed (.integer ty, .immediate v) .comma ++ text " label %" ++ labelName dst) ++ text " ]\n"
   | .unreachable => text "unreachable\n"
 
 def Item.pieces : Item → Doc
@@ -426,6 +461,28 @@ def renderPieces (pieces : List Piece) : String := String.join (pieces.map Piece
 /-- The sole text renderer for the LLVM instruction and operand structure. -/
 def render (items : List Item) : String := renderPieces (items.flatMap Item.pieces)
 
+/-- Character layout of the i8 additions used by the rendering controls. -/
+theorem render_i8_add_register_chars (dst src right : Nat) :
+    (render [.instruction (.bin (.register dst) .add (.integer .u8)
+      (.local (.register src)) (.immediate (.natural right)))]).toList =
+    "  %r".toList ++ (decimal dst).toList ++ " = add i8 %r".toList ++
+      (decimal src).toList ++ ", ".toList ++ (decimal right).toList ++ ['\n'] := by
+  simp [render, Item.pieces, instructionPieces, assign, localName, arithmetic, typeCode,
+    renderPieces, Piece.render, arg, framed, imm, text, numbered, Opening.char,
+    Separator.char, NumberPrefix.text, Immediate.token, Width.bits]
+  rfl
+
+/-- Character layout of an i8 addition with two immediate operands. -/
+theorem render_i8_add_immediate_chars (dst left right : Nat) :
+    (render [.instruction (.bin (.register dst) .add (.integer .u8)
+      (.immediate (.natural left)) (.immediate (.natural right)))]).toList =
+    "  %r".toList ++ (decimal dst).toList ++ " = add i8 ".toList ++
+      (decimal left).toList ++ ", ".toList ++ (decimal right).toList ++ ['\n'] := by
+  simp [render, Item.pieces, instructionPieces, assign, localName, arithmetic, typeCode,
+    renderPieces, Piece.render, arg, imm, text, numbered, Opening.char,
+    Separator.char, NumberPrefix.text, Immediate.token, Width.bits]
+  rfl
+
 /-- Law. At every immediate position in the renderer's assembly of a module,
 the output contains one exact decimal token framed by nondigits. The prefix and
 suffix are rendered from exactly the pieces before and after that position.
@@ -444,11 +501,6 @@ theorem render_immediate (items : List Item) (before after : List Piece)
       String.join_append, String.join_cons, Piece.render, Immediate.token, String.append_assoc]
 
 
-/-! The assembly grammar below follows the LLVM LangRef productions for the
-instructions and module items emitted here. It accepts the emitter's layout
-and name vocabulary. Integer operands use canonical unsigned decimal for the
-bit pattern. LLVM integer types record width, so their parsed representatives
-are unsigned. Intrinsic names separately encode signedness. -/
 /-!
 The assembly reader follows the instruction, terminator and lexical productions in
 the [LLVM Language Reference](https://llvm.org/docs/LangRef.html), restricted to
@@ -712,26 +764,25 @@ private def branch : Parser Terminator := do
     literal "\n"
     pure (.cond flag yes no)
 
-private def switchCase (ty : TypeCode) : Parser (Immediate × Label) := do
+private def switchCase (ty : Width) : Parser (Immediate × Label) := do
   let (caseTy, value) ← typed
   -- The emitted switch uses only scalar integer widths.
   let .immediate value ← pure value | fun _ => none
   let .integer caseTy ← pure caseTy | fun _ => none
-  let .integer ty ← pure ty | fun _ => none
   if caseTy != ty then fun _ => none else
     literal ", " *> ((fun dest => (value, dest)) <$> labelRef)
 
 private def switch : Parser Terminator := do
   literal "switch "
-  let ty ← typeCode
+  let ty ← width
   literal " "
   let value ← localName
   literal ", "
   let fallback ← labelRef
   literal " ["
-  let cases ← alt (series (switchCase ty) " " " ]\n") (do
+  let cases ← alt (keyword " ]\n" []) (do
     literal " "
-    series (switchCase ty) " " " ]\n")
+    fun input => itemsUntil (switchCase ty) " " " ]\n" (input.length + 1) input)
   pure (.switch ty value fallback cases)
 
 private def returnValue : Parser Terminator := do
@@ -822,6 +873,10 @@ private def moduleItems : Nat → List Char → Option (List Item)
 /-- Parse the entire assembly string. Any unconsumed or malformed item fails. -/
 def parse (input : String) : Option (List Item) :=
   moduleItems input.toList.length input.toList
+
+/-- Read ordered integer positions from the complete input, after grammar validation. -/
+def inventory (input : String) : Option (List IntegerField) :=
+  (parse input).map (·.flatMap Item.inventory)
 
 private theorem consume_append (token rest : List Char) :
     consume token (token ++ rest) = some rest := by
@@ -977,7 +1032,7 @@ private theorem argument_result (n : Nat) (rest : List Char)
   dsimp only [digits] at nameStep
   simp only [argument, alt, map_run, nameStep, Option.map_some, Option.orElse_some]
 
-/-- The entire emitted immediate return parses as the original assembly item. -/
+/-- Singleton instance for an i32 return with an arbitrary immediate. -/
 theorem parse_render_i32_return (v : Immediate) :
     parse (render [.terminator (.ret (.integer .u32, .immediate v))]) =
       some [.terminator (.ret (.integer .u32, .immediate v))] := by
@@ -993,7 +1048,7 @@ theorem parse_render_i32_return (v : Immediate) :
   cases v
   exact full
 
-/-- The entire emitted return retains its numbered result local. -/
+/-- Singleton instance for an i32 return with an arbitrary numbered result local. -/
 theorem parse_render_i32_result (block : Nat) :
     parse (render [.terminator (.ret (.integer .u32, .local (.result block)))]) =
       some [.terminator (.ret (.integer .u32, .local (.result block)))] := by
@@ -1083,7 +1138,7 @@ private theorem binary_add (dst : Local) (left right : Nat) :
   change (argument ((decimal right).toList ++ ['\n'])).bind _ = _
   rw [rightStep]
   rfl
-/-- Both immediate positions in an emitted i8 addition survive the complete parse. -/
+/-- Singleton instance for an i8 addition with two arbitrary immediates. -/
 theorem parse_render_i8_add (dst : Nat) (left right : Immediate) :
     parse (render [.instruction (.bin (.register dst) .add (.integer .u8)
       (.immediate left) (.immediate right))]) =
@@ -1130,6 +1185,131 @@ theorem parse_render_i8_add (dst : Nat) (left right : Immediate) :
   cases left
   cases right
   exact parsed
+
+private def chars (doc : Doc) : List Char := (renderPieces doc).toList
+
+@[local simp] private theorem chars_append (a b : Doc) :
+    chars (a ++ b) = chars a ++ chars b := by
+  simp [chars, renderPieces, String.join_append]
+
+private theorem typeCode_append (ty : TypeCode) (c : Char) (rest : List Char)
+    (boundary : symbolChar c = false) :
+    typeCode (chars (LLVM.typeCode ty) ++ c :: rest) = some (ty, c :: rest) := by
+  have endWord : ∀ d, (c :: rest).head? = some d → symbolChar d = false := by
+    intro d hd
+    simpa only [List.head?_cons, Option.some.injEq] using
+      (show c = d → symbolChar d = false from fun h => h ▸ boundary) (Option.some.inj hd)
+  cases ty with
+  | integer w =>
+    cases w
+    · exact word_append atomicType ['i','8'] _ (by simp [symbolChar]) endWord
+    · exact word_append atomicType ['i','1','6'] _ (by simp [symbolChar]) endWord
+    · exact word_append atomicType ['i','3','2'] _ (by simp [symbolChar]) endWord
+    · exact word_append atomicType ['i','6','4'] _ (by simp [symbolChar]) endWord
+  | flag => exact word_append atomicType ['i','1'] _ (by simp [symbolChar]) endWord
+  | ptr => exact word_append atomicType ['p','t','r'] _ (by simp [symbolChar]) endWord
+  | void => exact word_append atomicType ['v','o','i','d'] _ (by simp [symbolChar]) endWord
+  | overflowPair w =>
+    have go (w : Width) (digits : List Char)
+        (hw : decodeWidth digits = some w) (valid : ∀ d ∈ digits, symbolChar d = true)
+        (shape : chars (LLVM.typeCode (.overflowPair w)) = '{' :: digits ++ ", i1}".toList) :
+        typeCode (chars (LLVM.typeCode (.overflowPair w)) ++ c :: rest) =
+          some (.overflowPair w, c :: rest) := by
+      rw [shape]
+      have step := word_append decodeWidth digits (", i1}".toList ++ c :: rest) valid
+        (by simp [symbolChar])
+      rw [hw] at step
+      simp only [List.cons_append, List.append_assoc, typeCode, pairType, bind_run]
+      rw [show literal r"{" ('{' :: (digits ++ (", i1}".toList ++ c :: rest))) =
+        some ((), digits ++ (", i1}".toList ++ c :: rest)) from rfl, Option.bind_some]
+      rw [show width (digits ++ (", i1}".toList ++ c :: rest)) = _ from step]
+      rfl
+    cases w
+    · exact go _ ['i','8'] rfl (by simp [symbolChar]) rfl
+    · exact go _ ['i','1','6'] rfl (by simp [symbolChar]) rfl
+    · exact go _ ['i','3','2'] rfl (by simp [symbolChar]) rfl
+    · exact go _ ['i','6','4'] rfl (by simp [symbolChar]) rfl
+
+private theorem chars_items (items : List Item) :
+    (render items).toList = items.flatMap (fun i => chars i.pieces) := by
+  induction items with
+  | nil => rfl
+  | cons i items ih =>
+    change chars (i.pieces ++ items.flatMap Item.pieces) = _
+    rw [chars_append]
+    exact congrArg (chars i.pieces ++ ·) ih
+
+private theorem moduleItems_append (items : List Item) (fuel : Nat)
+    (consumeItem : ∀ i ∈ items, ∀ rest, item (chars i.pieces ++ rest) = some (i, rest))
+    (nonempty : ∀ i ∈ items, chars i.pieces ≠ [])
+    (enough : items.length ≤ fuel) :
+    moduleItems fuel (items.flatMap (fun i => chars i.pieces)) = some items := by
+  induction items generalizing fuel with
+  | nil => simp [moduleItems]
+  | cons i items ih =>
+    cases fuel with
+    | zero => simp at enough
+    | succ fuel =>
+      have first := consumeItem i (by simp) (items.flatMap fun i => chars i.pieces)
+      have tail := ih fuel (fun j hj => consumeItem j (by simp [hj]))
+        (fun j hj => nonempty j (by simp [hj])) (by simpa using enough)
+      have headNonempty := nonempty i (by simp)
+      cases hc : chars i.pieces with
+      | nil => exact (headNonempty hc).elim
+      | cons c cs =>
+        simp only [List.flatMap_cons, hc, List.cons_append] at first ⊢
+        rw [moduleItems.eq_3, first]
+        change (moduleItems fuel (items.flatMap fun i => chars i.pieces)).bind _ = _
+        rw [tail]
+        rfl
+
+private theorem item_count_le_chars (items : List Item)
+    (nonempty : ∀ i ∈ items, chars i.pieces ≠ []) :
+    items.length ≤ (items.flatMap (fun i => chars i.pieces)).length := by
+  induction items with
+  | nil => simp
+  | cons i items ih =>
+    have positive := List.length_pos_iff.mpr (nonempty i (by simp))
+    have tail := ih (fun j hj => nonempty j (by simp [hj]))
+    simp only [List.length_cons, List.flatMap_cons, List.length_append]
+    omega
+
+/-- List composition for the assembly reader. The item consumption hypotheses
+are obligations for its callers. -/
+private theorem inventory_of_item_consumption (items : List Item)
+    (consumeItem : ∀ i ∈ items, ∀ rest, item (chars i.pieces ++ rest) = some (i, rest))
+    (nonempty : ∀ i ∈ items, chars i.pieces ≠ []) :
+    inventory (render items) = some (items.flatMap Item.inventory) := by
+  unfold inventory parse
+  rw [chars_items, moduleItems_append items _ consumeItem nonempty (item_count_le_chars items nonempty)]
+  rfl
+
+private theorem invalid_first (c : Char) (rest : List Char)
+    (bad : item (c :: rest) = none) :
+    inventory (String.ofList (c :: rest)) = none := by
+  unfold inventory parse
+  rw [String.toList_ofList, List.length_cons, moduleItems.eq_3]
+  change ((item (c :: rest)).bind _).map _ = _
+  rw [bad]
+  rfl
+
+private theorem malformed_inventory (input : String) (c : Char) (rest : List Char)
+    (spell : input = String.ofList (c :: rest)) (bad : item (c :: rest) = none) :
+    inventory input = none := spell ▸ invalid_first c rest bad
+
+theorem inventory_malformed_returns :
+    inventory "  ret i32 02\n" = none ∧
+    inventory "  ret i32 zeroinitializer\n" = none ∧
+    inventory "  ret i32 -0\n" = none ∧
+    inventory "  ret i32 1_7\n" = none := by
+  repeat' apply And.intro
+  all_goals apply malformed_inventory _ ' ' _ rfl
+  all_goals rfl
+
+theorem inventory_malformed_additions :
+    inventory "  %r0 = add i8 %r1,-17\n" = none ∧
+    inventory "  %r0 = add i8 2_ 56\n" = none := by
+  constructor <;> apply malformed_inventory _ ' ' _ rfl <;> rfl
 
 end Assembly
 

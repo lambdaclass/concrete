@@ -71,7 +71,14 @@ quoted theorem references appear as elaborated command dependencies.
    interface. The bridge gives equality for every tag and payload, including
    ill-typed payloads. Qualify with Laws for the immediate width, decimal-token
    parsing and Core round trip, the trusted-base golden and the existing
-   two-backend slice-0 controls. The enclosing LLVM text still uses `P_print`.
+   two-backend slice-0 controls. The producer inventory theorem covers all
+   BIR programs and the runtime items, before text rendering. The assembly
+   reader consumes the complete module and recovers numeric roles, widths
+   and values. Its connection to the producer inventory is tested on the
+   fixtures. The universal connection to emitted text remains a slice-1
+   obligation. The three assembly parse theorems cover singleton i32
+   immediate and numbered-local returns and singleton i8 additions with two
+   immediates. The enclosing LLVM text still uses `P_print`.
 2. **BIR and the runtime/backend boundary.** Switch the BIR scalar tag and
    payload, its typing and arithmetic, and every consumer in Progress, LCB,
    LLVM, Runtime and the emitter probes in one change. BIR has its own operand
@@ -80,7 +87,10 @@ quoted theorem references appear as elaborated command dependencies.
    bijection can still relate slice-1 tags to the new BIR tags. Preserve the
    F30 range and operation comparisons as witnesses across the two models
    while both exist. Qualify the typing invariant, overflow flag, result word
-   and both backends together with positive and negative controls. Reconcile
+   and both backends together with positive and negative controls. Prove
+   universal assembly-tree recovery from rendered instructions, terminators
+   and module items, including the runtime, with the backend's assembly
+   domain stated explicitly. Reconcile
    premise and headline references in the same change as their subjects.
 3. **Slice syntax, statics, execution and storage, then retirement.** Switch
    Slice1Syntax, Statics, Slice1Semantics, Slice1Ownership, Slice1Checker,

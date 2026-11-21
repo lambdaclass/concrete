@@ -231,6 +231,127 @@ def print (p : Program) : String := render (body p)
 /-- The LLVM assembly for the BIR body together with its runtime entry. -/
 def moduleItems (p : Program) : List Item := body p ++ [.blank] ++ Runtime.llvmItems p.sites
 
+private def expectedOperand (role : IntegerRole) (width : Nat) : Operand → List IntegerField
+  | .reg _ => []
+  | .imm t v => [(role, some width, toBits (toCore t) v)]
+
+private def expectedInst : Inst → List IntegerField
+  | .bin _ t _ a b =>
+    expectedOperand .left (toCore t).bits a ++ expectedOperand .right (toCore t).bits b
+  | .binOvf _ t _ _ a b =>
+    expectedOperand .callArgument (toCore t).bits a ++ expectedOperand .callArgument (toCore t).bits b ++
+      [(.extractIndex, none, 0), (.extractIndex, none, 1)]
+  | .trunc source target _ a =>
+    if (toCore source).bits = (toCore target).bits then
+      expectedOperand .left (toCore target).bits a ++ [(.right, some (toCore target).bits, 0)]
+    else expectedOperand .conversionSource (toCore source).bits a
+
+private def expectedTerm : Term → List IntegerField
+  | .ret a => expectedOperand .conversionSource 8 a
+  | .trap s => [(.returnValue, some 32, 256 + s)]
+  | .br .. | .condbr .. => []
+
+private def expectedPhiSource (j k width : Nat) (b : Block) : List IntegerField :=
+  let incoming (target : Nat) (args : List Operand) :=
+    if target == j then expectedOperand .phiArm width (args.getD k (.imm .u8 0)) else []
+  match b.term with
+  | .br target args => incoming target args
+  | .condbr _ yes yesArgs no noArgs => incoming yes yesArgs ++ incoming no noArgs
+  | .ret _ | .trap _ => []
+
+private def expectedPhi (p : Program) (j k : Nat) (t : Ty) : List IntegerField :=
+  let width := match t with | .int t => (toCore t).bits | .bool => 1
+  p.blocks.flatMap (expectedPhiSource j k width)
+
+/-- The integer inventory specified by BIR lowering and the runtime contract. -/
+def expectedInventory (p : Program) : List IntegerField :=
+  ((indexed p.blocks).flatMap fun (j, b) =>
+    ((indexed b.params).flatMap fun (k, _, t) => expectedPhi p j k t) ++
+      b.insts.flatMap expectedInst ++ expectedTerm b.term) ++ Runtime.expectedInventory p.sites
+
+private theorem width_bits (t : ConcreteSpec.Core.IntTy) :
+    (Width.ofCore t).bits = t.bits := by cases t <;> rfl
+
+private theorem operand_inventory (a : Operand) (role : IntegerRole) (width : Width) :
+    (operand a).inventory role (.integer width) = expectedOperand role width.bits a := by
+  cases a <;> rfl
+
+private theorem inst_inventory (i : Inst) :
+    (inst i).flatMap Item.inventory = expectedInst i := by
+  cases i <;> simp only [inst, expectedInst]
+  case bin => simp [Item.inventory, Instruction.inventory, operand_inventory, width_bits]
+  case binOvf =>
+    simp [Item.inventory, Instruction.inventory, operand_inventory, width_bits, List.append_assoc]
+  case trunc fr target d a =>
+    split <;> cases a <;> simp [Item.inventory, Instruction.inventory, operand, expectedOperand,
+      width_bits, Argument.inventory, TypeCode.integerWidth, Immediate.natural]
+
+private theorem term_inventory (j : Nat) (t : Term) :
+    (term j t).flatMap Item.inventory = expectedTerm t := by
+  cases t
+  case ret a => cases a <;> rfl
+  all_goals rfl
+
+private theorem phiArgs_inventory (p : Program) (j k : Nat) (t : Ty) :
+    (((edges p).filter (·.1 == j)).flatMap fun (_, _, args) =>
+      (operand (args.getD k (.imm .u8 0))).inventory .phiArm (ty t)) =
+      expectedPhi p j k t := by
+  let width := match t with | .int t => (toCore t).bits | .bool => 1
+  have arg (a : Operand) :
+      (operand a).inventory .phiArm (ty t) = expectedOperand .phiArm width a := by
+    cases t
+    case bool => cases a <;> rfl
+    case int => simp [ty, operand_inventory, width_bits, width]
+  simp only [edges, expectedPhi, List.filter_flatMap, List.flatMap_assoc, arg, indexed]
+  have scan (n : Nat) (blocks : List Block) :
+      ((Runtime.indexedFrom n blocks).flatMap fun (pred, b) =>
+        (((match b.term with
+          | .br target args => [(target, pred, args)]
+          | .condbr _ yes yesArgs no noArgs => [(yes, pred, yesArgs), (no, pred, noArgs)]
+          | _ => [] : List (Nat × Nat × List Operand)).filter (fun e => e.1 == j)).flatMap fun (_, _, args) =>
+            expectedOperand .phiArm width (args.getD k (.imm .u8 0)))) =
+      blocks.flatMap (expectedPhiSource j k width) := by
+    induction blocks generalizing n with
+    | nil => rfl
+    | cons b blocks ih =>
+      simp only [Runtime.indexedFrom, List.flatMap_cons, ih]
+      congr 1
+      cases h : b.term with
+      | br target args =>
+        by_cases eq : (target == j) = true <;> simp [expectedPhiSource, h, eq]
+      | condbr _ yes _ no _ =>
+        by_cases hy : (yes == j) = true <;> by_cases hn : (no == j) = true <;>
+          simp [expectedPhiSource, h, hy, hn]
+      | ret | trap => simp [expectedPhiSource, h]
+  exact scan 0 p.blocks
+
+private theorem phi_inventory (p : Program) (j : Nat) (b : Block) :
+    (phis p j b).flatMap Item.inventory =
+      (indexed b.params).flatMap (fun (k, _, t) => expectedPhi p j k t) := by
+  simp only [phis, List.flatMap_map]
+  apply congrArg (fun f => (indexed b.params).flatMap f)
+  funext param
+  rcases param with ⟨k, r, t⟩
+  simp only [Item.inventory, Instruction.inventory, List.flatMap_map]
+  exact phiArgs_inventory p j k t
+
+/-- Producer-side inventory law for the actual module items, before rendering. -/
+theorem moduleItems_inventory (p : Program) :
+    (moduleItems p).flatMap Item.inventory = expectedInventory p := by
+  have declarations_empty : (declarations p).flatMap Item.inventory = [] := by
+    simp only [declarations, List.flatMap_map, Item.inventory]
+    simp
+  simp only [moduleItems, body, expectedInventory, List.flatMap_append, List.flatMap_cons,
+    List.flatMap_nil, List.nil_append, List.append_nil, Item.inventory, declarations_empty,
+    Runtime.llvmItems_inventory]
+  rw [List.flatMap_assoc]
+  congr 1
+  apply congrArg (fun f => (indexed p.blocks).flatMap f)
+  funext entry
+  rcases entry with ⟨j, b⟩
+  simp [Item.inventory, phi_inventory, term_inventory, List.flatMap_assoc, inst_inventory,
+    List.append_assoc]
+
 /-- The entire rendered LLVM module. -/
 def module (p : Program) : String := render (moduleItems p)
 
