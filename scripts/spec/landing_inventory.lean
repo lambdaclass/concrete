@@ -181,9 +181,10 @@ private def completion : PieceId → Completion
       `NonemptyComponents, `Ascii, `SlashSeparator, `NoControls, `NoSpaces, `NoLeadingDot,
       `NoTrailingDot, `NoReservedStem, `ComponentByteCap, `PathByteCap, `FilenameCharacters].map
         (fun name => rule (`ConcreteSpec.Core.SourcePath ++ name))
-      -- Planned identities for the project-wide checks in R-0709.
+      -- Registered project-wide refusals under R-0709.
       completionRules := [`ConcreteSpec.Core.SourcePath.Project.NoCaseCollision,
-      `ConcreteSpec.Core.SourcePath.Project.NoFileDirectoryPrefixConflict].map rule }
+      `ConcreteSpec.Core.SourcePath.Project.NoFileDirectoryConflict,
+      `ConcreteSpec.Core.SourcePath.Project.NoDuplicate].map rule }
   | .F04 => namedEvidence [
     evidence `ConcreteSpec.Proofs.Ident `ConcreteSpec.Core.Vacuity [
       `lookup_renumber_example_siteTable, `lookup_renumber_planted_siteTable_collapseRenumber,
@@ -338,6 +339,20 @@ private def completion : PieceId → Completion
       `ConcreteSpec.Core.SourcePath.render_injective,
       `ConcreteSpec.Core.SourcePath.parseString_render,
       `ConcreteSpec.Core.SourcePath.LocalControls.admittedBytes_iff],
+    laws `ConcreteSpec.Proofs.Ident [
+      `ConcreteSpec.Core.SourcePath.Project.check_safety,
+      `ConcreteSpec.Core.SourcePath.Project.check_progress,
+      `ConcreteSpec.Core.SourcePath.Project.check_refusal_evidence,
+      `ConcreteSpec.Core.SourcePath.Project.check_order_independent,
+      `ConcreteSpec.Core.SourcePath.Project.parse_local_first,
+      `ConcreteSpec.Core.SourcePath.Project.parse_checks_locally_parsed],
+    evidence `ConcreteSpec.Proofs.Ident `ConcreteSpec.Core.SourcePath.Project.Controls [
+      `ignoreDirectoryCase_violates_safety, `caseSensitive_violates_safety,
+      `ignoreFileDirectory_violates_safety, `rejectSharedDirectory_violates_progress,
+      `wrongSecondOccurrence_violates_refusal_evidence,
+      `onlyFileBeforeDirectory_violates_order_independence,
+      `prematureProjectCheck_violates_local_first, `ignoreDuplicate_violates_safety,
+      `skipProjectCheck_violates_checks_locally_parsed],
     evidence `ConcreteSpec.Proofs.Ident `ConcreteSpec.Core [
       `Span.pathOk, `Span.locationOk_iff, `tabSpan_location, `tabSpan_otherSource,
       `tabSpan_badCoordinates, `SourcePath.LocalControls.foldedRenderingChangesIdentity]],
@@ -1324,9 +1339,9 @@ private def plan : List Piece := [
     "changelog.d/2026-11-17-spec-f03b-sourcetext.md",
   disposition .«F03p-design» "design proposals never land on main and stay on WIP branches as writer briefs. The Lean spec carries the normative decisions for F03p"
     "ISSUES.tsv ISS-0068; docs/decisions.md#decided-2026-11-17-proposals-in-lean",
-  pending .F03p ["ROADMAP.md R-0709; ISSUES.tsv ISS-0068 (project-wide admission)"],
+  pending .F03p ["ROADMAP.md R-0709; ISSUES.tsv ISS-0068 (span projection and source binding)"],
   present .F04 "Stable-key, namespace, obligation, contract, and byte-coordinate proofs",
-  pending .F04p ["ROADMAP.md R-0709; ISSUES.tsv ISS-0068 (dependent project-wide proofs)"],
+  pending .F04p ["ROADMAP.md R-0709; ISSUES.tsv ISS-0068 (span projection and source binding Laws and controls)"],
   added .R "Rule registry, prerequisite of F06, F13 and F17"
     "changelog.d/2026-11-13-spec-rule-registry.md; ROADMAP.md R-0615",
   present .F05 "Fixed-width arithmetic and exact-term correspondence",
