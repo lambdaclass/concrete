@@ -199,11 +199,13 @@ commit's review provenance ([LANDING.md](LANDING.md)); it approves no other comm
 ## verify.sh
 
 ```sh
-scripts/review/verify.sh [--notes-ref <ref>] --required-base <base> <commit> # exit 0 clean, 1 findings/blocked, 2 invalid
+scripts/review/verify.sh [--notes-ref <ref>] --required-base <base> <commit>
 scripts/review/verify.sh --fetch --required-base <base> <commit> # use the published snapshot
 ```
 
-It judges the exact commit. A clean note on an ancestor says nothing about the
+It judges the exact commit. Exit 0 indicates clean coverage, 1 findings or
+blocked, 2 missing or invalid evidence, and 3 inconsistent evidence or
+unreadable legacy denial history. A clean note on an ancestor says nothing about the
 commits after it, so a branch that gains a commit after its clean round needs
 another round. Landing supplies the recorded train base, sign-off supplies its diff
 base for `rounds-at`, readiness supplies its selected base (`notes.sh ready`
@@ -237,13 +239,12 @@ refs/notes/remote/concrete-review-v2` to `signoff.sh record`. A capped branch
 whose only legacy note fails the range check must be split or escalated to the
 owner. New evidence takes precedence at each commit.
 
-Install the current pre-push hook in every publishing clone before using the
-v2 workflow, and stop old review and landing processes already running.
-The hook freezes the legacy findings ref and refuses standalone writes to the
-legacy verdict ref. A stale writer running without the updated hook can still
-overwrite a legacy denial on a remote that allows unrestricted notes pushes.
-Keep such writers out of the publishing path. See the
-[landing cutover procedure](LANDING.md#review-evidence-cutover).
+For landing coverage, the verifier refuses a legacy clean verdict paired
+with v2 findings or a blocked note. If v2 evidence is missing, it checks the reachable legacy
+notes history for a denial on the exact SHA before allowing legacy round
+accounting. The train refuses member or sign-off fallback on inconsistent
+evidence. Follow the [landing cutover procedure](LANDING.md#review-evidence-cutover)
+before the first v2 publication.
 
 ## Tests
 

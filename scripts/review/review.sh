@@ -310,8 +310,10 @@ while read -r c; do
   elif [[ "$(note_field "$n" reviewer)" == v2-denial-* ]]; then
     die "legacy denial for $c has no matching v2 snapshot; fetch the current review refs and retry"
   fi
-  if ! bash "$SCRIPT_DIR/verify.sh" "$intake_mode" --notes-ref "$ref" "$c" >"$WORK/intake"; then
-    if [ "$ref" = "$NOTES_REF" ] && { [ "$v" = findings ] || [ "$v" = blocked ]; }; then
+  intake_rc=0
+  bash "$SCRIPT_DIR/verify.sh" "$intake_mode" --notes-ref "$ref" "$c" >"$WORK/intake" || intake_rc=$?
+  if [ "$intake_rc" -ne 0 ]; then
+    if [ "$intake_rc" -eq 3 ] || { [ "$ref" = "$NOTES_REF" ] && { [ "$v" = findings ] || [ "$v" = blocked ]; }; }; then
       die "invalid review evidence for $c round $r: $(head -n 1 "$WORK/intake")"
     fi
     continue
@@ -344,7 +346,7 @@ while read -r c; do
         break
       fi
     done
-    if [ "$v" = clean ] && git merge-base --is-ancestor "$(note_field "$n" base)" "$BASE_SHA"; then
+    if [ "$v" = clean ] && git merge-base --is-ancestor "$(note_field "$n" base)" "$BASE_SHA" 2>/dev/null; then
       LEGACY_CLEAN_REVIEWS="$LEGACY_CLEAN_REVIEWS $c:$r"
     fi
   fi

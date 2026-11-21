@@ -15,7 +15,8 @@
 #   --legacy-accounting  internal migration mode for schema-only legacy accounting.
 #
 # Exit codes: 0 clean; 1 reviewed, not clean (findings or blocked);
-#             2 no note, a malformed or insufficient-range note, or a usage error.
+#             2 no note, a malformed or insufficient-range note, or a usage error;
+#             3 inconsistent evidence or unreadable legacy denial history.
 
 set -euo pipefail
 
@@ -51,9 +52,7 @@ if [ "$FETCH" = 1 ]; then
     "$REVIEW_NOTES_REF"|"$PUBLISHED_REVIEW_REF")
       NOTES_REF="$PUBLISHED_REVIEW_REF"
       fetch_review_ref "$REMOTE" "$REVIEW_NOTES_REF" "$NOTES_REF" || exit 2
-      if [ "$METADATA_ONLY" = 1 ]; then
-        fetch_review_ref "$REMOTE" "$LEGACY_REVIEW_REF" "$PUBLISHED_LEGACY_REVIEW_REF" || exit 2
-      fi ;;
+      fetch_review_ref "$REMOTE" "$LEGACY_REVIEW_REF" "$PUBLISHED_LEGACY_REVIEW_REF" || exit 3 ;;
     "$LEGACY_REVIEW_REF"|"$PUBLISHED_LEGACY_REVIEW_REF")
       NOTES_REF="$PUBLISHED_LEGACY_REVIEW_REF"
       fetch_review_ref "$REMOTE" "$LEGACY_REVIEW_REF" "$NOTES_REF" || exit 2 ;;
@@ -66,6 +65,35 @@ fi
 
 SHA="$(git rev-parse -q --verify "$1^{commit}")" || { echo "verify: not a commit: $1" >&2; exit 2; }
 invalid() { echo "$SHA unverified: $*"; exit 2; }
+inconsistent() { echo "$SHA unverified: $*"; exit 3; }
+
+# Normal stale pushes retain the denial in a parent of the legacy notes tip.
+# Search all merge parents and every Git notes fanout layout for this object.
+check_missing_v2() {
+  local ref="$1"
+  local suffix="$SHA"
+  local prefix="" match rc=0
+  local paths=("$SHA")
+  [ -n "$ref" ] || return 0
+  git show-ref --verify --quiet "$ref" || rc=$?
+  [ "$rc" != 1 ] || return 0
+  [ "$rc" = 0 ] || inconsistent "could not resolve legacy notes ref"
+  while [ "${#suffix}" -gt 2 ]; do
+    prefix="$prefix${suffix:0:2}/"
+    suffix="${suffix:2}"
+    paths+=("$prefix$suffix")
+  done
+  match="$(git log --full-history -m --format=%H -1 -a --no-ext-diff --no-textconv \
+    -G '^reviewer: v2-denial-[0-9a-f]{40}$' "$ref" -- "${paths[@]}")" \
+    || inconsistent "could not read legacy denial history"
+  [ -z "$match" ] || inconsistent "historical legacy denial requires its missing v2 evidence"
+}
+
+DENIAL_REF=""
+case "$NOTES_REF" in
+  "$REVIEW_NOTES_REF"|"$LEGACY_REVIEW_REF") DENIAL_REF="$LEGACY_REVIEW_REF" ;;
+  "$PUBLISHED_REVIEW_REF"|"$PUBLISHED_LEGACY_REVIEW_REF") DENIAL_REF="$PUBLISHED_LEGACY_REVIEW_REF" ;;
+esac
 if [ "$METADATA_ONLY" = 1 ] && [ -n "$LEGACY_FALLBACK" ] &&
    ! git notes --ref="$NOTES_REF" list "$SHA" >/dev/null 2>&1; then
   NOTES_REF="$LEGACY_FALLBACK"
@@ -151,7 +179,16 @@ check_range() {
   fi
 }
 
+if [ "$LEGACY" = 1 ] || ! git notes --ref="$NOTES_REF" list "$SHA" >/dev/null 2>&1; then
+  check_missing_v2 "$DENIAL_REF"
+fi
 read_note ""
+if [ "$METADATA_ONLY" = 0 ] && [ "$LEGACY" = 0 ] && [ "$F_verdict" != clean ] && [ -n "$DENIAL_REF" ]; then
+  legacy_note="$(git notes --ref="$DENIAL_REF" show "$SHA" 2>/dev/null || true)"
+  if [[ $'\n'"$legacy_note"$'\n' == *$'\nverdict: clean\n'* ]]; then
+    inconsistent "legacy clean verdict conflicts with v2 $F_verdict"
+  fi
+fi
 # Historical writers accepted a base off the reviewed branch. Only migration
 # accounting may use that metadata without checking its range.
 if [ "$LEGACY_ACCOUNTING" = 1 ]; then

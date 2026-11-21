@@ -545,22 +545,25 @@ review_provenance() { # name head
   local n=0
   local bad=""
   local base
+  local verify_rc=0
   base="$(state_get_soft "$name" base)"
   [ -n "$base" ] || { echo "train has no recorded base"; return 1; }
   [ -f "$VERIFY" ] || { echo "no review verifier ($VERIFY is missing)"; return 1; }
   fetch_review_ref "$REMOTE" "$REVIEW_NOTES_REF" "$PUBLISHED_REVIEW_REF" || return 1
-  if out="$(bash "$VERIFY" --notes-ref "$PUBLISHED_REVIEW_REF" --required-base "$base" "$head" 2>&1)"; then echo "the head ${head:0:10} carries a clean review note"; return 0; fi
-  if git notes --ref="$PUBLISHED_REVIEW_REF" show "$head" >/dev/null 2>&1; then
+  fetch_review_ref "$REMOTE" "$LEGACY_REVIEW_REF" "$PUBLISHED_LEGACY_REVIEW_REF" || return 1
+  if out="$(bash "$VERIFY" --notes-ref "$PUBLISHED_REVIEW_REF" --required-base "$base" "$head" 2>&1)"; then echo "the head ${head:0:10} carries a clean review note"; return 0; else verify_rc=$?; fi
+  if [ "$verify_rc" = 3 ] || git notes --ref="$PUBLISHED_REVIEW_REF" list "$head" >/dev/null 2>&1; then
     echo "the head's review note does not qualify: ${out//$'\n'/ }"; return 1
   fi
-  fetch_review_ref "$REMOTE" "$LEGACY_REVIEW_REF" "$PUBLISHED_LEGACY_REVIEW_REF" || return 1
   local signed=0 shas=() so impure
   git fetch -q --prune "$REMOTE" "+refs/owner-signoff/*:refs/owner-signoff/*" 2>/dev/null \
     || { echo "could not fetch refs/owner-signoff/* from $REMOTE"; return 1; }
   for m in $(state_get_soft "$name" members | tr ',' ' '); do
     n=$((n + 1)); shas+=("${m##*@}")
     out="$(bash "$VERIFY" --notes-ref "$PUBLISHED_REVIEW_REF" --required-base "$base" "${m##*@}" 2>&1)" && continue
-    if so="$(bash "$SIGNOFF" verify "${m##*@}" --base "$base" --notes-ref "$PUBLISHED_REVIEW_REF" 2>&1)"; then signed=$((signed + 1)); continue; fi
+    verify_rc=$?
+    so=""
+    if [ "$verify_rc" != 3 ] && so="$(bash "$SIGNOFF" verify "${m##*@}" --base "$base" --notes-ref "$PUBLISHED_REVIEW_REF" 2>&1)"; then signed=$((signed + 1)); continue; fi
     bad="$bad; member ${m%@*}: ${out//$'\n'/ }; ${so//$'\n'/ }"
   done
   [ "$n" -gt 0 ] || { echo "the head ${head:0:10} has no review note and the train records no members"; return 1; }

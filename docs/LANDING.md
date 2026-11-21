@@ -308,18 +308,59 @@ directory is what R-0547's generated median, next to the candidate table, will r
 
 ### Review evidence cutover
 
-Update the landing scripts and the installed pre-push hook in every publishing
-clone, and stop any review or landing process started with pre-cutover tooling
-before resuming publication. The v2 verifier reads published v2 evidence for
-clean landing. A v2 findings or blocked publication writes a legacy denial in
-the same Git transaction so an older train fetching the legacy ref refuses that
-SHA, even if it previously carried a legacy clean note. The current hook also
-rejects standalone legacy writes. Without the current hook, an already-running
-or stale writer can still overwrite that denial on a remote with unrestricted
-notes writes. The cutover requires control of publishing clients unless the
-remote itself enforces the legacy ref restriction. See
-[legacy round accounting and verification](REVIEW.md#verifysh).
+The landing coordinator owns the cutover. GitHub cannot enforce the paired
+update on notes refs. A pre-migration reviewer that already read the notes can
+overwrite a v2 denial with its old hook, and an old train can accept the result
+([ISS-0101](../ISSUES.tsv)). Complete the steps below before the first v2
+publication to origin, including any review of the cutover candidate itself.
 
+1. Pause review and landing launches and retries. Inventory every host and
+   account that can use Concrete publication credentials. Include developer
+   laptops, coordinator and worker hosts, `concrete-ci-2`, and any other
+   runner that runs review or landing jobs. For hosted jobs, inspect active
+   and queued runs in the workflow system and cancel publishing jobs there.
+   Suspend publishing credentials for unreachable or unverified hosts and
+   accounts until they pass these checks. If the coordinator cannot confirm
+   that an unverified client has lost access, keep publication paused.
+2. On each host, inspect processes across the publishing accounts. Run the
+   following from an operator shell with visibility into those accounts.
+
+   ```sh
+   ps -axww -o pid=,ppid=,pgid=,user=,command= |
+     awk '/[r]eview[.]sh|[t]rain[.]sh/'
+   ```
+
+   For each matching job, use the process IDs and parent IDs to identify its
+   launcher and descendants in `ps -axww -o pid=,ppid=,pgid=,user=,command=`.
+   Check each process's checkout with `lsof -a -p "$pid" -d cwd`. Cancel the
+   owning job through its launcher first so it cannot restart. If processes
+   remain, run `kill -TERM "$pid"` for each confirmed job process, including
+   any remaining Git or hook children. Check survivors with
+   `ps -p "$pid" -o pid=,ppid=,command=`, verify the checkout again before
+   using `kill -KILL "$pid"` on a confirmed survivor, and repeat the inventory.
+   Record that no pre-cutover review or train job or publishing child remains.
+3. The coordinator distributes the full cutover commit SHA. Update each
+   publishing clone to carry its review and landing scripts and hook. In each
+   clone, set `cutover_sha` to that SHA, then run the following from its root.
+   Every command in the chain must succeed.
+
+   ```sh
+   git cat-file -e "$cutover_sha^{commit}" &&
+     git diff --quiet "$cutover_sha" -- scripts/review scripts/land .githooks/pre-push &&
+     test -z "$(git status --porcelain --untracked-files=all -- scripts/review scripts/land .githooks/pre-push)" &&
+     git config --local core.hooksPath .githooks &&
+     hook="$(git rev-parse --git-path hooks/pre-push)" &&
+     test -x "$hook" &&
+     cmp -s "$hook" .githooks/pre-push &&
+     test "$("$hook" --concrete-identify </dev/null)" = "concrete-pre-push $(pwd -P)/.githooks/pre-push"
+   ```
+
+   Record the hostname, account, clone path and verified SHA for each clone.
+   Apply the same checks before admitting another clone to publication.
+4. After the process and clone checks are complete, the coordinator authorizes
+   the first v2 publication and resumes jobs through the verified clones.
+   Run landings only through the updated train. The first v2 findings or
+   blocked publication writes its legacy denial in the same Git transaction.
 
 ## Readiness
 

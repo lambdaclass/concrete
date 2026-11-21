@@ -1013,6 +1013,79 @@ check "hook identifies the legacy-only update" grep -q 'standalone legacy review
 old_provenance >"$T/old-train-after-stale-write" 2>&1; rc=$?
 check "old train still refuses after the stale clean write attempt (exit $rc)" test "$rc" -eq 1
 
+echo "=== mixed versions: old writer already reviewing at cutover ==="
+g checkout -qb stale-writer origin/main
+commit_file stale.txt MARK_FINDING stale-writer
+MIXED_SHA="$(g rev-parse HEAD)"
+g clone -q --no-local "$W" "$T/stale-clone"
+git -C "$T/stale-clone" remote set-url origin "$T/origin.git"
+git -C "$T/stale-clone" fetch -q origin main:refs/remotes/origin/main
+git -C "$ROOT_DIR" show "$PRE_MIGRATION:.githooks/pre-push" >"$T/stale-clone/.git/hooks/pre-push" || exit 1
+chmod +x "$T/stale-clone/.git/hooks/pre-push"
+# The fake reviewer publishes v2 findings from the other clone before
+# returning the old writer's verdict. The old script handles the real push.
+cat >"$T/bin/cutover-during-review" <<'EOF'
+#!/usr/bin/env bash
+set -uo pipefail
+args=("$@")
+cat >"$CUTOVER_DIR/stale-review-input"
+(
+  cd "$CUTOVER_UPDATED" || exit 2
+  REVIEW_CODEX_BIN="$CUTOVER_DIR/bin/codex" bash "$CUTOVER_REVIEW" --max-rounds 3
+) >"$CUTOVER_DIR/new-during-old" 2>&1
+[ "$?" -eq 1 ] || { cat "$CUTOVER_DIR/new-during-old" >&2; exit 2; }
+exec "$CUTOVER_DIR/bin/always-clean" "${args[@]}" </dev/null
+EOF
+chmod +x "$T/bin/cutover-during-review"
+g config core.hooksPath "$T/cutover-hooks"
+reset_fake
+(
+  cd "$T/stale-clone" || exit 1
+  CUTOVER_DIR="$T" CUTOVER_UPDATED="$W" CUTOVER_REVIEW="$REVIEW" \
+    REVIEW_CODEX_BIN="$T/bin/cutover-during-review" bash "$T/old/scripts/review/review.sh" --max-rounds 3
+) >"$T/stale-real" 2>&1; rc=$?
+g config --unset core.hooksPath
+check "real old writer overwrites denial with its old hook (exit $rc)" test "$rc" -eq 0
+[ "$rc" -eq 0 ] || cat "$T/stale-real" "$T/new-during-old" >&2
+check "old verifier accepts the overwritten denial" old_verify
+check "old train accepts the overwritten denial" old_provenance
+sed -n '/^review_provenance() {/,/^}/p' "$ROOT_DIR/scripts/land/train.sh" >"$T/current-provenance.sh"
+current_provenance() (
+  cd "$W" || exit 1
+  REMOTE=origin
+  state_get_soft() {
+    case "$2" in base) printf '%s\n' "$BASE" ;; members) printf 'test@%s\n' "$1" ;; esac
+  }
+  source "$ROOT_DIR/scripts/review/refs.sh"
+  source "$T/current-provenance.sh"
+  review_provenance "$1" "$2"
+)
+check_inconsistent() {
+  local diagnostic="$1"
+  local rc=0
+  (cd "$W" && bash "$VERIFY" --fetch --required-base "$BASE" "$MIXED_SHA") >"$T/check-verify" 2>&1 || rc=$?
+  [ "$rc" -eq 3 ] && grep -Fq "$diagnostic" "$T/check-verify" || { cat "$T/check-verify"; return 1; }
+  rc=0
+  current_provenance "$MIXED_SHA" "$MIXED_SHA" >"$T/check-train" 2>&1 || rc=$?
+  [ "$rc" -eq 1 ] && grep -Fq "$diagnostic" "$T/check-train" || { cat "$T/check-train"; return 1; }
+}
+check "updated verifier and train reject legacy clean with v2 findings" check_inconsistent 'legacy clean verdict conflicts with v2 findings'
+# The same conflict also applies to a well-formed blocked record.
+g notes --ref=concrete-review-v2 show "$MIXED_SHA" | sed 's/^verdict: findings$/verdict: blocked/' >"$T/blocked-conflict"
+g notes --ref=concrete-review-v2 add -f -F "$T/blocked-conflict" "$MIXED_SHA" 2>/dev/null
+g push -q origin refs/notes/concrete-review-v2
+check "updated verifier and train reject legacy clean with v2 blocked" check_inconsistent 'legacy clean verdict conflicts with v2 blocked'
+g notes --ref=concrete-review-v2 remove "$MIXED_SHA" 2>/dev/null
+g push -q origin refs/notes/concrete-review-v2
+check "updated verifier and train reject missing v2 evidence after overwrite" check_inconsistent 'historical legacy denial requires its missing v2 evidence'
+reset_fake
+review >"$T/missing-after-overwrite" 2>&1; rc=$?
+check "review intake refuses missing v2 evidence before another call (exit $rc)" test "$rc" -eq 2 -a "$(calls)" -eq 0
+commit_file stale-child.txt clean stale-child
+rc=0
+current_provenance "$MIXED_SHA" "$(g rev-parse HEAD)" >"$T/check-member" 2>&1 || rc=$?
+check "train refuses member fallback on a historical denial (exit $rc)" test "$rc" -eq 1
+check "member fallback reports the historical denial" grep -Fq 'historical legacy denial requires its missing v2 evidence' "$T/check-member"
 
 echo "=== usage errors ==="
 review --pieces zero >/dev/null 2>&1; rc=$?
