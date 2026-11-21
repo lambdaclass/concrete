@@ -266,6 +266,7 @@ an assignment to an existing binding must discharge/reinitialize its previous ob
 New slots require an activation issued by `enter` (Q3.2's activation/lifetime boundary). -/
 def bind (types : Var → Option Descriptor) (x : Var) (s : State) : Option State := do
   let f ← s.frames.head?
+  if x ∈ List.map Prod.fst f.views then none else
   match AList.lookup f.locals x with
   | some p => reinitialize s p
   | none =>
@@ -290,6 +291,7 @@ def drop (xs : List Var) (s : State) : Option State := do
 
 /-- Enter owns a new activation. Downward loans use `enterDown` below; ordinary values use bind. -/
 def enter (types : Var → Option Descriptor) (params : List Var) (s : State) : Option State := do
+  if ¬ params.Nodup then none else
   let s := { s with
     nextActivation := s.nextActivation + 1
     frames := ⟨s.nextActivation, [], []⟩ :: s.frames }
@@ -324,18 +326,30 @@ def enterDownParameter (s : State) (arg : Var × LoanId) : Option State := do
   let (x, i) := arg
   let a ← loan s i
   let f ← s.frames.head?
-  if ParameterAvailable f.views x then
+  if AList.lookup f.locals x = none ∧ ParameterAvailable f.views x then
     let u ← reborrowTo s i [] a.mode f.id
     some { u with frames := { f with views := (x, ⟨s.nextLoan⟩) :: f.views } :: s.frames.tail }
   else none
+
+/-- Each source must exist in the caller and predate any loan issued by the call.
+The supply bound keeps a newly granted loan from replacing the caller's source identity. -/
+def CallerSources (s : State) (args : List (Var × LoanId)) : Prop :=
+  ∀ e ∈ args, e.2.id < s.nextLoan ∧ (loan s e.2).isSome = true
+
+instance (s : State) (args : List (Var × LoanId)) : Decidable (CallerSources s args) := by
+  unfold CallerSources
+  infer_instance
 
 /-- Downward-only lending: each parameter gets a new child loan. Views never become owner slots,
 so cannot be returned/stored/moved by the owner operations. This standalone call-boundary transition supports the preservation laws. C1 uses `callLife`
 below to adopt loans that were opened earlier, during typed argument evaluation.
 No reference-valued concrete storage is introduced. -/
 def enterDown (s : State) (args : List (Var × LoanId)) : Option State := do
-  let s ← enter (fun _ => none) [] s
-  args.foldlM enterDownParameter s
+  -- Check source availability in the caller and permissions in the evolving ledger.
+  if CallerSources s args then
+    let s ← enter (fun _ => none) [] s
+    args.foldlM enterDownParameter s
+  else none
 
 /-- The Exec lifecycle callback: optional admission at every site, including the final
 function boundary (`docs/decisions.md#decided-2026-11-13-lifecycle-refusal`). -/
@@ -353,7 +367,7 @@ def adoptDown (s : State) (args : List (Var × LoanId)) : Option State := do
   let f ← s.frames.head?
   if f.id < s.nextActivation ∧ (args.map Prod.fst).Nodup ∧ (args.map Prod.snd).Nodup ∧
       (∀ e ∈ args, ∃ l ∈ s.loans, l.id = e.2 ∧ l.pendingArgument = true) ∧
-      (∀ e ∈ args, AList.lookup f.locals e.1 = none) then
+      (∀ e ∈ args, AList.lookup f.locals e.1 = none ∧ ParameterAvailable f.views e.1) then
     some { s with
       loans := s.loans.map fun l =>
         if l.id ∈ args.map Prod.snd then { l with activation := f.id, pendingArgument := false } else l
@@ -379,6 +393,21 @@ instance (s : State) : Decidable (LiveViews s) := by
   unfold LiveViews
   infer_instance
 
+/-- SCOPE-1 (OD67): the two frame tables share one binder identity space. -/
+def Activation.UniqueBindings (f : Activation) : Prop :=
+  (List.map Prod.fst f.locals ++ List.map Prod.fst f.views).Nodup
+
+instance (f : Activation) : Decidable f.UniqueBindings := by
+  unfold Activation.UniqueBindings
+  infer_instance
+
+def UniqueFrameBindings (s : State) : Prop :=
+  ∀ f ∈ s.frames, f.UniqueBindings
+
+instance (s : State) : Decidable (UniqueFrameBindings s) := by
+  unfold UniqueFrameBindings
+  infer_instance
+
 /-- Call argument bookkeeping: names/identities are unique, every pending identity exists,
 and precisely the listed loans carry the pending flag. This is instrumentation metadata,
 not reference-valued Concrete storage (Q3.1–Q3.3, OD23). -/
@@ -387,7 +416,7 @@ def CallState.WellFormed (s : CallState) : Prop :=
   (s.pending.map Prod.fst).Nodup ∧ (s.pending.map Prod.snd).Nodup ∧
   (∀ e ∈ s.pending, ∃ l ∈ s.own.loans, l.id = e.2) ∧
   (∀ l ∈ s.own.loans, l.pendingArgument = true ↔ l.id ∈ s.pending.map Prod.snd) ∧
-  LiveViews s.own
+  LiveViews s.own ∧ LiveDestinations s.own ∧ UniqueFrameBindings s.own
 instance (s : CallState) : Decidable (CallState.WellFormed s) := by
   unfold CallState.WellFormed
   infer_instance
@@ -429,7 +458,7 @@ view parameters adopt the loans opened during left-to-right argument evaluation.
 loan-valued result-binding case. Every other lifecycle event uses the same ownership rules. -/
 def callLife (types : Var → Option Descriptor) : Exec.Life → CallState → Option CallState
   | .enter params, s => do
-    if s.pending.all (fun e => decide (e.1 ∈ params)) then
+    if params.Nodup ∧ (∀ e ∈ s.pending, e.1 ∈ params) then
       let own ← enter types (params.filter fun x => decide (x ∉ s.pending.map Prod.fst)) s.own
       let own ← adoptDown own s.pending
       pure ⟨own, []⟩

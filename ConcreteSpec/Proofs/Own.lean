@@ -44,9 +44,9 @@ abbrev CallOwnResult := ResultSatisfies (fun s : CallState => WellFormed s.own)
 abbrev CallResult := ResultSatisfies CallState.WellFormed
 
 /-- Helper (congruence). Lifts a supplied one-step preservation proof through a monadic list fold. -/
-private theorem fold_preserves {α : Type} (f : State → α → Option State)
-    (hf : ∀ s a t, WellFormed s → f s a = some t → WellFormed t) (xs : List α)
-    (s t : State) (hs : WellFormed s) (h : xs.foldlM f s = some t) : WellFormed t := by
+private theorem fold_preserves {α : Type} {P : State → Prop} (f : State → α → Option State)
+    (hf : ∀ s a t, P s → f s a = some t → P t) (xs : List α)
+    (s t : State) (hs : P s) (h : xs.foldlM f s = some t) : P t := by
   induction xs generalizing s with
   | nil => simp at h; subst t; exact hs
   | cons a xs ih =>
@@ -454,6 +454,7 @@ theorem bind_preserves (types : Var → Option Descriptor) (s : State) (x : Var)
   | some t =>
     unfold bind at h
     obtain ⟨f, hf, h⟩ := Option.bind_eq_some_iff.mp h
+    split at h <;> try contradiction
     split at h
     · rename_i p _
       have hw := reinitialize_preserves s p hs
@@ -645,6 +646,8 @@ theorem enter_preserves (types : Var → Option Descriptor) (s : State) (xs : Li
           rcases List.mem_cons.mp hg with rfl | hg
           · simp at hp
           · exact hs.2.2.2.2.2.2.2.2 g hg p hp
+    unfold enter at h
+    split at h <;> try contradiction
     exact fold_preserves _ (fun s x t hs h => by
       have h' := bind_preserves types s x hs
       rwa [h] at h') xs _ t hw h
@@ -840,6 +843,7 @@ theorem enterDown_preserves (s : State) (args : List (Var × LoanId)) (hs : Well
   | none => trivial
   | some t =>
     unfold enterDown at h
+    split at h <;> try contradiction
     obtain ⟨u, hu, hh⟩ := Option.bind_eq_some_iff.mp h
     have hu_wf : WellFormed u := by
       have h' := enter_preserves (fun _ => none) s [] hs
@@ -907,36 +911,37 @@ theorem endLoan_progress (s : State) (i : LoanId) (a : Loan)
 theorem bind_fresh_progress (types : Var → Option Descriptor) (s : State) (x : Var)
     (f : Activation) (d : Descriptor) (frame : s.frames.head? = some f)
     (issued : f.id < s.nextActivation) (fresh : AList.lookup f.locals x = none)
-    (descriptor : types x = some d) : ∃ t, bind types x s = some t := by
-  simp [bind, frame, issued, fresh, descriptor]
+    (available : ParameterAvailable f.views x) (descriptor : types x = some d) : ∃ t, bind types x s = some t := by
+  have free : x ∉ List.map Prod.fst f.views := available
+  simp [bind, frame, issued, fresh, descriptor, free]
 
 /-- Law (authority: docs/decisions.md#foundation-q1 (C5); #decided-2026-11-05-core (Q3.8, Q9.1, Q9.10); #decided-2026-11-13-lifecycle-refusal). (subject `ConcreteSpec.Core.Own.enter`). Fresh, distinct, typed parameters always enter in a new activation. -/
 theorem enter_progress (types : Var → Option Descriptor) (s : State) (params : List Var)
     (unique : params.Nodup) (typed : ∀ x ∈ params, ∃ d, types x = some d) :
     ∃ t, enter types params s = some t := by
   suffices ∀ (xs : List Var) (s : State) (f : Activation),
-      s.frames.head? = some f → f.id < s.nextActivation → xs.Nodup →
+      s.frames.head? = some f → f.id < s.nextActivation → f.views = [] → xs.Nodup →
       (∀ x ∈ xs, AList.lookup f.locals x = none) →
       (∀ x ∈ xs, ∃ d, types x = some d) →
       ∃ t, xs.foldlM (fun s x => bind types x s) s = some t by
-    exact this params
+    simpa [enter, unique] using this params
       { s with nextActivation := s.nextActivation + 1
                frames := ⟨s.nextActivation, [], []⟩ :: s.frames }
-      ⟨s.nextActivation, [], []⟩ rfl (Nat.lt_succ_self _) unique
+      ⟨s.nextActivation, [], []⟩ rfl (Nat.lt_succ_self _) rfl unique
       (fun _ _ => rfl) typed
   intro xs
   induction xs with
-  | nil => intro s _ _ _ _ _ _; exact ⟨s, rfl⟩
+  | nil => intro s _ _ _ _ _ _ _; exact ⟨s, rfl⟩
   | cons x xs ih =>
-    intro s f frame issued unique fresh typed
+    intro s f frame issued empty unique fresh typed
     obtain ⟨d, hd⟩ := typed x List.mem_cons_self
     let u : State := { s with
       nextPlace := s.nextPlace + 1
       slots := ⟨⟨s.nextPlace⟩, f.id, d, .owned⟩ :: s.slots
       frames := { f with locals := (x, ⟨s.nextPlace⟩) :: f.locals } :: s.frames.tail }
     have hb : bind types x s = some u := by
-      simp [bind, frame, fresh x List.mem_cons_self, hd, issued, u]
-    obtain ⟨t, ht⟩ := ih u { f with locals := (x, ⟨s.nextPlace⟩) :: f.locals } rfl issued
+      simp [bind, frame, fresh x List.mem_cons_self, hd, issued, empty, u]
+    obtain ⟨t, ht⟩ := ih u { f with locals := (x, ⟨s.nextPlace⟩) :: f.locals } rfl issued empty
       (List.nodup_cons.mp unique).2
       (by
         intro y hy
@@ -1184,7 +1189,7 @@ theorem passDown_call_preserves (s : CallState) (i : LoanId) (parameter : Var)
     · contradiction
     · rename_i unique
       obtain ⟨a, _, hh⟩ := Option.bind_eq_some_iff.mp h
-      obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp hh
+      obtain ⟨f, frame, h⟩ := Option.bind_eq_some_iff.mp hh
       split at h
       · cases h
         have fresh : ∀ l ∈ s.own.loans, l.id.id ≠ s.own.nextLoan := by
@@ -1196,7 +1201,7 @@ theorem passDown_call_preserves (s : CallState) (i : LoanId) (parameter : Var)
           obtain ⟨e, he, hid⟩ := List.mem_map.mp hm
           obtain ⟨l, hl, hh⟩ := hs.2.2.2.1 e he
           exact fresh l hl (congrArg LoanId.id (hh.trans hid))
-        refine ⟨hw, ?_, ?_, ?_, ?_, ?_⟩
+        refine ⟨hw, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
         · simp only [List.map_append, List.map_cons, List.map_nil, List.nodup_append]
           refine ⟨hs.2.1, by simp, ?_⟩
           intro a ha b hb
@@ -1224,7 +1229,12 @@ theorem passDown_call_preserves (s : CallState) (i : LoanId) (parameter : Var)
           · simpa [List.map_append,
               (show l.id ≠ LoanId.mk s.own.nextLoan from fun he => fresh l hl (congrArg LoanId.id he))]
               using hs.2.2.2.2.1 l hl
-        · exact hs.2.2.2.2.2.retain rfl (fun l hl => List.mem_cons_of_mem _ hl)
+        · exact hs.2.2.2.2.2.1.retain rfl (fun l hl => List.mem_cons_of_mem _ hl)
+        · intro l hl
+          rcases List.mem_cons.mp hl with rfl | old
+          · exact ⟨f, List.mem_of_head? frame, rfl⟩
+          · exact hs.2.2.2.2.2.2.1 l old
+        · exact hs.2.2.2.2.2.2.2
       · contradiction
 
 /-- Law (authority: docs/decisions.md#foundation-q1 (C5); #decided-2026-11-05-core (Q3.1–Q3.4); #od15; #od23; #decided-2026-11-08-recovered-d3 (C5 downward destinations and call duration); #od69; #decided-2026-11-13-lifecycle-refusal). (subject `ConcreteSpec.Core.Own.callLife`). Every successful result preserves
@@ -1288,6 +1298,7 @@ private theorem bind_loans (types : Var → Option Descriptor) (s t : State) (x 
     (h : bind types x s = some t) : t.loans = s.loans := by
   unfold bind at h
   obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
+  split at h <;> try contradiction
   split at h
   · exact reinitialize_loans _ _ _ h
   · obtain ⟨d, _, h⟩ := Option.bind_eq_some_iff.mp h
@@ -1311,6 +1322,7 @@ private theorem fold_loans {α : Type} (f : State → α → Option State)
 theorem enter_loans (types : Var → Option Descriptor) (s t : State) (xs : List Var)
     (h : enter types xs s = some t) : t.loans = s.loans := by
   unfold enter at h
+  split at h <;> try contradiction
   dsimp at h
   exact fold_projection State.loans _ (fun s x t h => bind_loans types s t x h) xs
     { s with nextActivation := s.nextActivation + 1, frames := ⟨s.nextActivation, [], []⟩ :: s.frames } t h
@@ -1387,6 +1399,7 @@ private theorem bind_viewIndex (types : Var → Option Descriptor) (s t : State)
     (step : bind types x s = some t) : ViewIndex t = ViewIndex s := by
   unfold bind at step
   obtain ⟨f, frame, step⟩ := Option.bind_eq_some_iff.mp step
+  split at step <;> try contradiction
   split at step
   · unfold reinitialize at step
     obtain ⟨slot, _, step⟩ := Option.bind_eq_some_iff.mp step
@@ -1403,8 +1416,10 @@ private theorem bind_viewIndex (types : Var → Option Descriptor) (s t : State)
 
 private theorem enter_viewIndex (types : Var → Option Descriptor) (s t : State)
     (xs : List Var) (step : enter types xs s = some t) :
-    ViewIndex t = (s.nextActivation, []) :: ViewIndex s :=
-  fold_projection ViewIndex _ (fun s x t h => bind_viewIndex types s t x h) xs _ t step
+    ViewIndex t = (s.nextActivation, []) :: ViewIndex s := by
+  unfold enter at step
+  split at step <;> try contradiction
+  exact fold_projection ViewIndex _ (fun s x t h => bind_viewIndex types s t x h) xs _ t step
 
 private theorem drop_viewIndex (s t : State) (xs : List Var)
     (step : drop xs s = some t) : ViewIndex t = ViewIndex s := by
@@ -1471,89 +1486,6 @@ private theorem life_nonentry_liveViews (types : Var → Option Descriptor) (e :
     exact live.retain (drop_viewIndex s t xs step)
       (fun l h => drop_loans s t xs step ▸ h)
   | leave => exact leave_liveViews s t valid live step
-
-/-- Law (authority: docs/decisions.md#foundation-q1 (C5); #decided-2026-11-05-core (Q3.1–Q3.4); #od15; #od23; #decided-2026-11-08-recovered-d3 (C5 downward destinations and call duration); #od69; #decided-2026-11-13-lifecycle-refusal). (subject `ConcreteSpec.Core.Own.callLife`). Every successful result preserves
-ownership; refusal does not fabricate a result. Entry consumes the pending metadata exactly
-once; other lifecycle events require an empty argument buffer, so they cannot leave dangling
-argument identities. -/
-theorem callLife_call_preserves (types : Var → Option Descriptor) (e : Exec.Life)
-    (s : CallState) (hs : CallState.WellFormed s) : CallResult (callLife types e s) := by
-  cases h : callLife types e s with
-  | none => trivial
-  | some t =>
-    have hw : WellFormed t.own := by
-      have h' := callLife_preserves types e s hs.1
-      rwa [h] at h'
-    cases e with
-    | enter params =>
-      simp only [callLife] at h
-      split at h
-      · obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
-        obtain ⟨v, hv, h⟩ := Option.bind_eq_some_iff.mp h
-        cases h
-        have he := enter_loans types s.own u _ hu
-        unfold adoptDown at hv
-        obtain ⟨f, frame, hv⟩ := Option.bind_eq_some_iff.mp hv
-        split at hv
-        · cases hv
-          refine ⟨hw, by simp, by simp, by simp, ?_, ?_⟩
-          · intro l hl
-            obtain ⟨b, hb, rfl⟩ := List.mem_map.mp hl
-            rw [he] at hb
-            have flag := hs.2.2.2.2.1 b hb
-            by_cases hm : b.id ∈ s.pending.map Prod.snd
-            · simp [hm]
-            · have hf : b.pendingArgument ≠ true := fun h => hm (flag.mp h)
-              simp [hm, hf]
-          · have index := enter_viewIndex types s.own u _ hu
-            have indexHead : (ViewIndex u).head? = some (f.id, f.views) := by
-              unfold ViewIndex
-              rw [List.head?_map, frame]
-              rfl
-            rw [index] at indexHead
-            have same : (f.id, f.views) = (s.own.nextActivation, []) :=
-              (Option.some.inj indexHead).symm
-            have empty : f.views = [] := congrArg Prod.snd same
-            have indexTail : ViewIndex { u with frames := u.frames.tail } = ViewIndex s.own := by
-              change u.frames.tail.map _ = _
-              rw [List.map_tail]
-              exact congrArg List.tail index
-            intro g hg e hm
-            change g ∈ (f.id, s.pending ++ f.views) :: ViewIndex { u with frames := u.frames.tail } at hg
-            rw [empty, List.append_nil, indexTail] at hg
-            rcases List.mem_cons.mp hg with rfl | old
-            · obtain ⟨l, hl, eq⟩ := hs.2.2.2.1 e hm
-              have hl := he.symm ▸ hl
-              have chosen : l.id ∈ s.pending.map Prod.snd := List.mem_map.mpr ⟨e, hm, eq.symm⟩
-              exact ⟨{ l with activation := f.id, pendingArgument := false },
-                List.mem_map.mpr ⟨l, hl, by simp [chosen]⟩, eq, rfl, rfl⟩
-            · obtain ⟨l, hl, id, activation, adopted⟩ := hs.2.2.2.2.2 g old e hm
-              have unchosen : l.id ∉ s.pending.map Prod.snd := by
-                intro present
-                have flag := (hs.2.2.2.2.1 l hl).mpr present
-                simp [adopted] at flag
-              exact ⟨l, List.mem_map.mpr ⟨l, he.symm ▸ hl, by simp [unchosen]⟩,
-                id, activation, adopted⟩
-        · contradiction
-      · contradiction
-    | bind x | leave | drop x =>
-      all_goals
-        simp only [callLife] at h
-        split at h
-        · rename_i hempty
-          obtain ⟨own, ho, hh⟩ := Option.map_eq_some_iff.mp h
-          subst t
-          refine ⟨hw, ?_, ?_, ?_, ?_, ?_⟩
-          · simp [hempty]
-          · simp [hempty]
-          · simp [hempty]
-          · intro l hl
-            have hmem := life_subset types _ s.own own ho l hl
-            have hf := hs.2.2.2.2.1 l hmem
-            simpa [hempty] using hf
-          · exact life_nonentry_liveViews types _ s.own own hs.1 hs.2.2.2.2.2
-              (by intro xs h; contradiction) ho
-        · contradiction
 
 namespace CallWitnesses
 open ConcreteSpec.Core.Own.Examples
@@ -1815,7 +1747,7 @@ theorem passOwner_call_preserves (s : CallState) (p : Hybrid.Place)
     split at h
     · contradiction
     · rename_i unique
-      obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
+      obtain ⟨f, frame, h⟩ := Option.bind_eq_some_iff.mp h
       split at h
       · cases h
         have fresh : ∀ l ∈ s.own.loans, l.id ≠ LoanId.mk s.own.nextLoan := by
@@ -1828,7 +1760,7 @@ theorem passOwner_call_preserves (s : CallState) (p : Hybrid.Place)
           obtain ⟨e, he, hid⟩ := List.mem_map.mp hm
           obtain ⟨l, hl, hh⟩ := hs.2.2.2.1 e he
           exact fresh l hl (hh.trans hid)
-        refine ⟨hw, ?_, ?_, ?_, ?_, ?_⟩
+        refine ⟨hw, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
         · simp only [List.map_append, List.map_cons, List.map_nil, List.nodup_append]
           refine ⟨hs.2.1, by simp, ?_⟩
           intro a ha b hb
@@ -1854,7 +1786,12 @@ theorem passOwner_call_preserves (s : CallState) (p : Hybrid.Place)
           rcases List.mem_cons.mp hl with rfl | hl
           · simp
           · simpa [List.map_append, fresh l hl] using hs.2.2.2.2.1 l hl
-        · exact hs.2.2.2.2.2.retain rfl (fun l hl => List.mem_cons_of_mem _ hl)
+        · exact hs.2.2.2.2.2.1.retain rfl (fun l hl => List.mem_cons_of_mem _ hl)
+        · intro l hl
+          rcases List.mem_cons.mp hl with rfl | old
+          · exact ⟨f, List.mem_of_head? frame, rfl⟩
+          · exact hs.2.2.2.2.2.2.1 l old
+        · exact hs.2.2.2.2.2.2.2
       · contradiction
 
 /-- Law (authority: docs/decisions.md#foundation-q1 (C5); #decided-2026-11-05-core (Q3.1–Q3.4); #od15; #od23; #decided-2026-11-08-recovered-d3 (C5 downward destinations and call duration)). (subject `ConcreteSpec.Core.Own.passOwner`). The semantic postcondition holds
@@ -2100,7 +2037,7 @@ theorem directOwner_roundtrip (s : State) (p : Hybrid.Place) (path : List Projec
     rintro ⟨l, hl, he⟩
     exact noChild l hl he
   simp [passOwner, hf, issued, allowed, callLife, enter, adoptDown, life, leave,
-    endLocals, endLeafAtBoundary, drop, loan, AList.lookup, mapOld, filterAct, noChildExists,
+    endLocals, endLeafAtBoundary, drop, loan, ParameterAvailable, AList.lookup, mapOld, filterAct, noChildExists,
     filterId]
 
 namespace DirectArgumentWitnesses
@@ -2255,6 +2192,229 @@ theorem leave_live (s : State) (f : Activation) (hs : LiveDestinations s)
       rcases List.mem_cons.mp hg with rfl | hg
       · exact False.elim (other he.symm)
       · exact ⟨g, hg, he⟩
+
+/-- Absence from the owner lookup is equivalent to absence from the owner identity table. -/
+theorem localIdentityAbsent {α : Type} (locals : AList Var α) (x : Var)
+    (absent : AList.lookup locals x = none) : x ∉ List.map Prod.fst locals := by
+  induction locals with
+  | nil => simp
+  | cons binding rest ih =>
+    obtain ⟨y, value⟩ := binding
+    by_cases same : y = x
+    · simp [AList.lookup, same] at absent
+    · have tail : AList.lookup rest x = none := by simpa [AList.lookup, same] using absent
+      simp [Ne.symm same, ih tail]
+
+theorem uniqueFrameBindings_replaceHead {s : State} {f g : Activation}
+    (unique : UniqueFrameBindings s) (_head : s.frames.head? = some f)
+    (replacement : g.UniqueBindings) :
+    UniqueFrameBindings { s with frames := g :: s.frames.tail } := by
+  intro a ha
+  rcases List.mem_cons.mp ha with rfl | tail
+  · exact replacement
+  · exact unique a (List.mem_of_mem_tail tail)
+
+private theorem bind_uniqueFrameBindings (types : Var → Option Descriptor) (x : Var)
+    {s t : State} (unique : UniqueFrameBindings s) (step : bind types x s = some t) :
+    UniqueFrameBindings t := by
+  unfold bind at step
+  obtain ⟨f, head, step⟩ := Option.bind_eq_some_iff.mp step
+  split at step <;> try contradiction
+  rename_i viewFree
+  split at step
+  · unfold reinitialize at step
+    obtain ⟨a, _, step⟩ := Option.bind_eq_some_iff.mp step
+    split at step <;> cases step
+    exact unique
+  · rename_i ownerFree
+    obtain ⟨d, _, step⟩ := Option.bind_eq_some_iff.mp step
+    split at step <;> cases step
+    apply uniqueFrameBindings_replaceHead unique head
+    change (x :: (List.map Prod.fst f.locals ++ List.map Prod.fst f.views)).Nodup
+    exact List.nodup_cons.mpr
+      ⟨by simp [localIdentityAbsent _ _ ownerFree, viewFree], unique f (List.mem_of_head? head)⟩
+
+private theorem drop_uniqueFrameBindings (xs : List Var) {s t : State}
+    (unique : UniqueFrameBindings s) (step : drop xs s = some t) : UniqueFrameBindings t := by
+  unfold drop at step
+  obtain ⟨f, head, step⟩ := Option.bind_eq_some_iff.mp step
+  dsimp at step
+  split at step <;> cases step
+  apply uniqueFrameBindings_replaceHead unique head
+  exact ((List.filter_sublist.map Prod.fst).append (List.Sublist.refl _)).nodup
+    (unique f (List.mem_of_head? head))
+
+private theorem life_uniqueFrameBindings (types : Var → Option Descriptor) (e : Exec.Life)
+    {s t : State} (unique : UniqueFrameBindings s) (step : life types e s = some t) :
+    UniqueFrameBindings t := by
+  cases e with
+  | bind x => exact bind_uniqueFrameBindings types x unique step
+  | drop xs => exact drop_uniqueFrameBindings xs unique step
+  | enter xs =>
+    change enter types xs s = some t at step
+    unfold enter at step
+    split at step <;> try contradiction
+    apply fold_preserves _ (fun _ x _ h e => bind_uniqueFrameBindings types x h e) xs _ t ?_ step
+    intro f hf
+    rcases List.mem_cons.mp hf with rfl | old
+    · exact List.nodup_nil
+    · exact unique f old
+  | leave =>
+    change leave s = some t at step
+    cases frame : s.frames.head? with
+    | none => simp [leave, frame] at step
+    | some f =>
+      obtain ⟨u, v, hu, hv, rfl⟩ := leave_parts s t f frame step
+      have frames := fold_frames _ (fun s l t h => endLeafAtBoundary_frames s t l.id h) _ s u hu
+      exact fun g hg => drop_uniqueFrameBindings _ (show UniqueFrameBindings u by
+        simpa only [UniqueFrameBindings, frames] using unique) hv g (List.mem_of_mem_tail hg)
+
+private theorem adoptDown_uniqueFrameBindings (args : List (Var × LoanId)) {s t : State}
+    (unique : UniqueFrameBindings s) (step : adoptDown s args = some t) : UniqueFrameBindings t := by
+  unfold adoptDown at step
+  obtain ⟨f, head, step⟩ := Option.bind_eq_some_iff.mp step
+  split at step <;> try contradiction
+  rename_i admitted
+  cases step
+  have old := List.nodup_append.mp (unique f (List.mem_of_head? head))
+  have names := admitted.2.1
+  have free := admitted.2.2.2.2
+  apply uniqueFrameBindings_replaceHead unique head
+  simp only [Activation.UniqueBindings, List.map_append, List.nodup_append]
+  refine ⟨old.1, ⟨names, old.2.1, ?_⟩, ?_⟩
+  · intro a ha b hb eq
+    obtain ⟨e, he, rfl⟩ := List.mem_map.mp ha
+    exact (free e he).2 (eq ▸ hb)
+  · intro a ha b hb eq
+    rcases List.mem_append.mp hb with hb | hb
+    · obtain ⟨e, he, rfl⟩ := List.mem_map.mp hb
+      exact localIdentityAbsent _ _ (free e he).1 (eq ▸ ha)
+    · exact old.2.2 a ha b hb eq
+
+/-- A transition that retains frame identities and only removes loans preserves destinations. -/
+private theorem liveDestinations_of_viewIndex {s t : State} (live : LiveDestinations s)
+    (frames : ∀ g ∈ ViewIndex s, g ∈ ViewIndex t)
+    (loans : ∀ l ∈ t.loans, l ∈ s.loans) : LiveDestinations t := by
+  intro l hl
+  obtain ⟨f, hf, id⟩ := live l (loans l hl)
+  obtain ⟨g, hg, eq⟩ := List.mem_map.mp (frames (f.id, f.views) (List.mem_map_of_mem hf))
+  exact ⟨g, hg, (congrArg Prod.fst eq).trans id⟩
+
+private theorem life_nonentry_liveDestinations (types : Var → Option Descriptor) (e : Exec.Life)
+    (s t : State) (live : LiveDestinations s) (notEntry : ∀ xs, e ≠ .enter xs)
+    (step : life types e s = some t) : LiveDestinations t := by
+  cases e with
+  | enter xs => exact False.elim (notEntry xs rfl)
+  | bind x =>
+    exact liveDestinations_of_viewIndex live
+      (fun g hg => (bind_viewIndex types s t x step).symm ▸ hg)
+      (life_subset types (.bind x) s t step)
+  | drop xs =>
+    exact liveDestinations_of_viewIndex live
+      (fun g hg => (drop_viewIndex s t xs step).symm ▸ hg)
+      (life_subset types (.drop xs) s t step)
+  | leave =>
+    cases frame : s.frames.head? with
+    | none => simp [life, leave, frame] at step
+    | some f =>
+      have safe := leave_live s f live frame
+      change leave s = some t at step
+      rwa [step] at safe
+
+/-- Law (authority: docs/decisions.md#foundation-q1 (C5); #decided-2026-11-05-core (Q3.1–Q3.4); #od15; #od23; #decided-2026-11-08-recovered-d3 (C5 downward destinations and call duration); #od69; #decided-2026-11-13-lifecycle-refusal). (subject `ConcreteSpec.Core.Own.callLife`). Every successful result preserves
+ownership; refusal does not fabricate a result. Entry consumes the pending metadata exactly
+once; other lifecycle events require an empty argument buffer, so they cannot leave dangling
+argument identities. -/
+theorem callLife_call_preserves (types : Var → Option Descriptor) (e : Exec.Life)
+    (s : CallState) (hs : CallState.WellFormed s) : CallResult (callLife types e s) := by
+  cases h : callLife types e s with
+  | none => trivial
+  | some t =>
+    have hw : WellFormed t.own := by
+      have h' := callLife_preserves types e s hs.1
+      rwa [h] at h'
+    cases e with
+    | enter params =>
+      simp only [callLife] at h
+      split at h
+      · obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
+        obtain ⟨v, hv, h⟩ := Option.bind_eq_some_iff.mp h
+        cases h
+        have he := enter_loans types s.own u _ hu
+        have liveEntry : LiveDestinations u :=
+          liveDestinations_of_viewIndex hs.2.2.2.2.2.2.1
+            (fun g hg => by rw [enter_viewIndex types s.own u _ hu]; exact List.mem_cons_of_mem _ hg)
+            (fun l hl => he ▸ hl)
+        have liveAdopt := adoptDown_live u s.pending liveEntry
+        rw [hv] at liveAdopt
+        have uniqueAdopt := adoptDown_uniqueFrameBindings _ (life_uniqueFrameBindings types (.enter _) hs.2.2.2.2.2.2.2 hu) hv
+        unfold adoptDown at hv
+        obtain ⟨f, frame, hv⟩ := Option.bind_eq_some_iff.mp hv
+        split at hv
+        · cases hv
+          refine ⟨hw, by simp, by simp, by simp, ?_, ?_, ?_, ?_⟩
+          · intro l hl
+            obtain ⟨b, hb, rfl⟩ := List.mem_map.mp hl
+            rw [he] at hb
+            have flag := hs.2.2.2.2.1 b hb
+            by_cases hm : b.id ∈ s.pending.map Prod.snd
+            · simp [hm]
+            · have hf : b.pendingArgument ≠ true := fun h => hm (flag.mp h)
+              simp [hm, hf]
+          · have index := enter_viewIndex types s.own u _ hu
+            have indexHead : (ViewIndex u).head? = some (f.id, f.views) := by
+              unfold ViewIndex
+              rw [List.head?_map, frame]
+              rfl
+            rw [index] at indexHead
+            have same : (f.id, f.views) = (s.own.nextActivation, []) :=
+              (Option.some.inj indexHead).symm
+            have empty : f.views = [] := congrArg Prod.snd same
+            have indexTail : ViewIndex { u with frames := u.frames.tail } = ViewIndex s.own := by
+              change u.frames.tail.map _ = _
+              rw [List.map_tail]
+              exact congrArg List.tail index
+            intro g hg e hm
+            change g ∈ (f.id, s.pending ++ f.views) :: ViewIndex { u with frames := u.frames.tail } at hg
+            rw [empty, List.append_nil, indexTail] at hg
+            rcases List.mem_cons.mp hg with rfl | old
+            · obtain ⟨l, hl, eq⟩ := hs.2.2.2.1 e hm
+              have hl := he.symm ▸ hl
+              have chosen : l.id ∈ s.pending.map Prod.snd := List.mem_map.mpr ⟨e, hm, eq.symm⟩
+              exact ⟨{ l with activation := f.id, pendingArgument := false },
+                List.mem_map.mpr ⟨l, hl, by simp [chosen]⟩, eq, rfl, rfl⟩
+            · obtain ⟨l, hl, id, activation, adopted⟩ := hs.2.2.2.2.2.1 g old e hm
+              have unchosen : l.id ∉ s.pending.map Prod.snd := by
+                intro present
+                have flag := (hs.2.2.2.2.1 l hl).mpr present
+                simp [adopted] at flag
+              exact ⟨l, List.mem_map.mpr ⟨l, he.symm ▸ hl, by simp [unchosen]⟩,
+                id, activation, adopted⟩
+          · exact liveAdopt
+          · exact uniqueAdopt
+        · contradiction
+      · contradiction
+    | bind x | leave | drop x =>
+      all_goals
+        simp only [callLife] at h
+        split at h
+        · rename_i hempty
+          obtain ⟨own, ho, hh⟩ := Option.map_eq_some_iff.mp h
+          subst t
+          refine ⟨hw, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+          · simp [hempty]
+          · simp [hempty]
+          · simp [hempty]
+          · intro l hl
+            have hmem := life_subset types _ s.own own ho l hl
+            have hf := hs.2.2.2.2.1 l hmem
+            simpa [hempty] using hf
+          · exact life_nonentry_liveViews types _ s.own own hs.1 hs.2.2.2.2.2.1
+              (by intro xs h; contradiction) ho
+          · exact life_nonentry_liveDestinations types _ s.own own hs.2.2.2.2.2.2.1
+              (by intro xs h; contradiction) ho
+          · exact life_uniqueFrameBindings types _ hs.2.2.2.2.2.2.2 ho
+        · contradiction
 
 namespace LiveDestinationWitnesses
 open ConcreteSpec.Core.Own.Examples

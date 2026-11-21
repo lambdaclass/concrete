@@ -880,6 +880,7 @@ private theorem bind_retains_retirement (types : Var → Option Descriptor) (s :
   | some t =>
     unfold bind at h
     obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
+    split at h <;> try contradiction
     split at h
     · unfold reinitialize at h
       obtain ⟨a, _, h⟩ := Option.bind_eq_some_iff.mp h
@@ -907,7 +908,7 @@ private theorem bind_retains_retirement (types : Var → Option Descriptor) (s :
 Existing locals need an available slot with no live loans into it. -/
 def AdmittedBinding (types : Var → Option Descriptor) (s : State) (x : Var)
     (f : Activation) : Prop :=
-  s.frames.head? = some f ∧
+  s.frames.head? = some f ∧ ParameterAvailable f.views x ∧
     match AList.lookup f.locals x with
     | none => f.id < s.nextActivation ∧ ∃ d, types x = some d
     | some p => ∃ a, slot s p = some a ∧
@@ -924,17 +925,18 @@ An admitted binding succeeds and preserves every retired place through allocatio
 theorem bind_retired_place (types : Var → Option Descriptor) (s : State) (x : Var)
     (f : Activation) (admitted : AdmittedBinding types s x f) :
     FreshBinding (bind types) s x := by
-  obtain ⟨frame, admissibleSlot⟩ := admitted
+  obtain ⟨frame, freeView, admissibleSlot⟩ := admitted
   have progress : ∃ t, bind types x s = some t := by
     cases found : AList.lookup f.locals x with
     | none =>
       rw [found] at admissibleSlot
       obtain ⟨issued, d, typed⟩ := admissibleSlot
-      exact bind_fresh_progress types s x f d frame issued found typed
+      exact bind_fresh_progress types s x f d frame issued found freeView typed
     | some q =>
       rw [found] at admissibleSlot
       obtain ⟨a, current, available, clear⟩ := admissibleSlot
-      simpa [bind, frame, found] using reinitialize_progress s q a current available clear
+      have free : x ∉ List.map Prod.fst f.views := freeView
+      simpa [bind, frame, found, free] using reinitialize_progress s q a current available clear
   obtain ⟨t, step⟩ := progress
   refine ⟨t, step, fun p hr => ?_⟩
   have keep := bind_retains_retirement types s x p hr
@@ -1084,7 +1086,7 @@ def recyclePass (s : CallState) (root : Hybrid.Place) (path : List Projection)
 /-- Instance (admission for the corresponding retirement fixture). -/
 private theorem retiredBindingAdmitted :
     AdmittedBinding types retired x (retired.frames.headD ⟨0, [], []⟩) :=
-  ⟨rfl, by exact ⟨by decide, _, rfl⟩⟩
+  ⟨rfl, by decide, by exact ⟨by decide, _, rfl⟩⟩
 
 /-- Instance (law `ConcreteSpec.Core.Own.bind_retired_place`, case `retired`). -/
 theorem bind_retired_place_instance_1 : FreshBinding (bind types) retired x :=
@@ -1270,6 +1272,7 @@ private theorem callee_life_retains (types : Var → Option Descriptor) (s t : C
       change bind types x s.own = some u at hu
       unfold bind at hu
       obtain ⟨f, _, hu⟩ := Option.bind_eq_some_iff.mp hu
+      split at hu <;> try contradiction
       split at hu
       · unfold reinitialize at hu
         obtain ⟨a, _, hu⟩ := Option.bind_eq_some_iff.mp hu
@@ -1694,7 +1697,7 @@ theorem adopted_view_usable (s : State) (f : Activation) (args : List (Var × Lo
     (hf : s.frames.head? = some f) (issued : f.id < s.nextActivation)
     (names : (args.map Prod.fst).Nodup) (ids : (args.map Prod.snd).Nodup)
     (pending : ∀ e ∈ args, ∃ l ∈ s.loans, l.id = e.2 ∧ l.pendingArgument = true)
-    (free : ∀ e ∈ args, AList.lookup f.locals e.1 = none) :
+    (free : ∀ e ∈ args, AList.lookup f.locals e.1 = none ∧ ParameterAvailable f.views e.1) :
     AdoptedView adoptDown s f args := by
   let transfer (b : Loan) : Loan :=
     if b.id ∈ args.map Prod.snd then { b with activation := f.id, pendingArgument := false } else b
@@ -2177,6 +2180,7 @@ private theorem bind_loan_supply (types : Var → Option Descriptor) (s t : Stat
     (h : bind types x s = some t) : t.nextLoan = s.nextLoan := by
   unfold bind at h
   obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
+  split at h <;> try contradiction
   split at h
   · unfold reinitialize at h
     obtain ⟨a, _, h⟩ := Option.bind_eq_some_iff.mp h
@@ -2205,6 +2209,9 @@ private theorem life_loan_supply (types : Var → Option Descriptor) (s t : Stat
   | bind x => exact bind_loan_supply types s t x h
   | drop xs => exact (drop_supplies s t xs h).2
   | enter ps =>
+    change enter types ps s = some t at h
+    unfold enter at h
+    split at h <;> try contradiction
     change ps.foldlM (fun s x => bind types x s) _ = some t at h
     exact fold_projection State.nextLoan _ (fun s x t h => bind_loan_supply types s t x h) ps
       { s with nextActivation := s.nextActivation + 1, frames := ⟨s.nextActivation, [], []⟩ :: s.frames } t h
@@ -2230,6 +2237,8 @@ private theorem life_place_history (types : Var → Option Descriptor) (s : Stat
     cases h : enter types ps s with
     | none => trivial
     | some t =>
+      unfold enter at h
+      split at h <;> try contradiction
       change ps.foldlM (fun s x => bind types x s) _ = some t at h
       have fold (xs : List Var) (a b : State) (ha : RetiredPlace a p)
           (h : xs.foldlM (fun s x => bind types x s) a = some b) : RetiredPlace b p := by
@@ -2436,13 +2445,14 @@ private theorem enterDown_retired (s : State) (args : List (Var × LoanId)) (i :
   | none => trivial
   | some t =>
     unfold enterDown at h
+    split at h <;> try contradiction
     obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
     have initial : RetiredLoan u i := by
       have loans := enter_loans (fun _ => none) s u [] hu
       have supply := life_loan_supply (fun _ => none) s u (.enter []) hu
       exact ⟨by simpa [supply] using hr.1, by simpa [loans] using hr.2⟩
-    rename_i original
-    clear original hu hr s
+    rename_i available original
+    clear original hu hr available s
     induction args generalizing u with
     | nil => simp at h; subst t; exact initial
     | cons arg args ih =>
@@ -2665,7 +2675,7 @@ theorem plain_lending_roundtrip (s : State) (i : LoanId) (x : Var)
     have ai : a.id = i := by simpa using List.find?_some found
     simpa [ai] using fresh a (List.mem_of_find?_eq_some found)
   simp [passDown, raw, hf, issued, allowed, callLife, enter, adoptDown, life, leave,
-    endLocals, endLeafAtBoundary, drop, loan, AList.lookup, mapOld, filterAct, noChildExists,
+    endLocals, endLeafAtBoundary, drop, loan, ParameterAvailable, AList.lookup, mapOld, filterAct, noChildExists,
     filterId, ine]
 
 
@@ -3394,31 +3404,33 @@ private theorem entry_frame (types : Var → Option Descriptor) (xs : List Var)
     (issued : f.id < s.nextActivation)
     (h : xs.foldlM (fun s x => bind types x s) s = some t) :
     ∃ g, t.frames.head? = some g ∧ g.id < t.nextActivation ∧
+      g.views = f.views ∧
       ∀ x, x ∉ xs → AList.lookup f.locals x = none → AList.lookup g.locals x = none := by
   induction xs generalizing s f with
   | nil =>
     simp at h
     subst t
-    exact ⟨f, hf, issued, fun _ _ free => free⟩
+    exact ⟨f, hf, issued, rfl, fun _ _ free => free⟩
   | cons x xs ih =>
     simp only [List.foldlM_cons] at h
     obtain ⟨u, hu, ht⟩ := Option.bind_eq_some_iff.mp h
     unfold bind at hu
     rw [hf] at hu
     dsimp at hu
+    split at hu <;> try contradiction
     split at hu
     · unfold reinitialize at hu
       obtain ⟨a, _, hu⟩ := Option.bind_eq_some_iff.mp hu
       split at hu
       · cases hu
-        obtain ⟨g, hg, hi, free⟩ := ih _ f (by exact hf) (by exact issued) ht
-        exact ⟨g, hg, hi, fun y hy => free y (fun hm => hy (List.mem_cons_of_mem _ hm))⟩
+        obtain ⟨g, hg, hi, views, free⟩ := ih _ f (by exact hf) (by exact issued) ht
+        exact ⟨g, hg, hi, views, fun y hy => free y (fun hm => hy (List.mem_cons_of_mem _ hm))⟩
       · contradiction
     · obtain ⟨d, _, hu⟩ := Option.bind_eq_some_iff.mp hu
-      simp [issued] at hu
+      simp at hu
       subst u
-      obtain ⟨g, hg, hi, free⟩ := ih _ { f with locals := (x, ⟨s.nextPlace⟩) :: f.locals } (by rfl) (by exact issued) ht
-      refine ⟨g, hg, hi, fun y hy old => free y (fun hm => hy (List.mem_cons_of_mem _ hm)) ?_⟩
+      obtain ⟨g, hg, hi, views, free⟩ := ih _ { f with locals := (x, ⟨s.nextPlace⟩) :: f.locals } (by rfl) (by exact issued) ht
+      refine ⟨g, hg, hi, views, fun y hy old => free y (fun hm => hy (List.mem_cons_of_mem _ hm)) ?_⟩
       have ne : x ≠ y := fun eq => hy (eq ▸ List.mem_cons_self)
       simp [AList.lookup, ne, old]
 
@@ -3454,18 +3466,23 @@ theorem callLife_dispatch (types : Var → Option Descriptor) (s : CallState) (e
         exact typed x hm.1 (of_decide_eq_true hm.2))
       have loans := enter_loans types s.own u owned hu
       have fold := hu
+      unfold enter at fold
+      split at fold <;> try contradiction
       change owned.foldlM (fun s x => bind types x s)
         { s.own with nextActivation := s.own.nextActivation + 1
                      frames := ⟨s.own.nextActivation, [], []⟩ :: s.own.frames } = some u at fold
-      obtain ⟨f, frame, issued, free⟩ := entry_frame types owned _ u
+      obtain ⟨f, frame, issued, views, free⟩ := entry_frame types owned _ u
         ⟨s.own.nextActivation, [], []⟩ rfl (Nat.lt_succ_self _) fold
       obtain ⟨v, hv, _⟩ := adopted_view_usable u f s.pending frame issued names ids
         (fun e he => by rw [loans]; exact (pending e he).2)
-        (fun e he => free e.1 (by simp [owned, List.mem_map_of_mem he]) rfl)
-      have supplied : s.pending.all (fun e => decide (e.1 ∈ params)) = true :=
-        List.all_eq_true.mpr fun e he => decide_eq_true ((pending e he).1)
+        (fun e he => ⟨free e.1 (by simp [owned, List.mem_map_of_mem he]) rfl,
+          by simp [ParameterAvailable, views]⟩)
+      have supplied : params.Nodup ∧ ∀ e ∈ s.pending, e.1 ∈ params :=
+        ⟨unique, fun e he => (pending e he).1⟩
       refine ⟨⟨v, []⟩, ?_⟩
-      simp only [callLife, supplied, ite_true]
+      simp only [callLife]
+      split
+      all_goals first | exact False.elim (‹¬ _› supplied) | skip
       change (enter types owned s.own >>= fun own =>
         adoptDown own s.pending >>= fun own => some (CallState.mk own [])) = some (CallState.mk v [])
       simp [hu, hv]
@@ -3579,14 +3596,14 @@ inductive DownwardParameter : State → Var × LoanId → State → Prop
   | lend {s x i a f u}
       (frame : s.frames.head? = some f)
       (source : loan s i = some a)
-      (available : ParameterAvailable f.views x)
+      (available : AList.lookup f.locals x = none ∧ ParameterAvailable f.views x)
       (grant : LoanLedger s (.reborrow i [] a.mode f.id) u) :
       DownwardParameter s (x, i)
         { u with frames := { f with views := (x, ⟨s.nextLoan⟩) :: f.views } :: s.frames.tail }
 
 /-- Standalone entry introduces a fresh activation followed by its downward grants. -/
 def AdmittedDownwardEntry (s : State) (args : List (Var × LoanId)) : Prop :=
-  AdmittedTrace DownwardParameter
+  CallerSources s args ∧ AdmittedTrace DownwardParameter
     { s with nextActivation := s.nextActivation + 1
              frames := ⟨s.nextActivation, [], []⟩ :: s.frames } args
 
@@ -3599,9 +3616,11 @@ theorem enterDown_dispatch (s : State) (args : List (Var × LoanId)) :
   constructor
   · intro h
     unfold enterDown
-    simp only [enter, List.foldlM_nil]
+    split
+    all_goals first | exact False.elim (‹¬ _› h.1) | skip
+    simp only [enter, List.nodup_nil, not_true_eq_false, ite_false, List.foldlM_nil]
     dsimp
-    apply admitted_fold _ _ h
+    apply admitted_fold _ _ h.2
     intro v e t rule
     cases rule with
     | lend frame source available grant =>
@@ -3754,7 +3773,7 @@ def AdmittedAdoption (s : State) (args : List (Var × LoanId)) : Prop :=
   ∃ f, s.frames.head? = some f ∧ f.id < s.nextActivation ∧
     (args.map Prod.fst).Nodup ∧ (args.map Prod.snd).Nodup ∧
     (∀ e ∈ args, ∃ l ∈ s.loans, l.id = e.2 ∧ l.pendingArgument = true) ∧
-    (∀ e ∈ args, AList.lookup f.locals e.1 = none)
+    (∀ e ∈ args, AList.lookup f.locals e.1 = none ∧ ParameterAvailable f.views e.1)
 
 /-- Helper (authority: docs/decisions.md#od23; #decided-2026-11-13-lifecycle-refusal).
 Every admitted adoption completes and preserves ownership. -/
@@ -3799,6 +3818,7 @@ def singletonEntry : List (Var × LoanId) := [(y, ⟨0⟩)]
 
 /-- Regression (admission for `enterDown_dispatch` and `issuanceStep_dispatch`). -/
 private theorem singletonAdmitted : AdmittedDownwardEntry exclusive singletonEntry := by
+  refine ⟨by decide, ?_⟩
   apply AdmittedTrace.cons
   · apply DownwardParameter.lend rfl (a := exclusive.loans.head (by decide)) rfl (by decide)
     exact LoanLedger.reborrow ⟨_, rfl, by decide, rfl, ⟨_, rfl, rfl, Or.inr rfl, by decide⟩⟩ rfl
@@ -3907,7 +3927,7 @@ example : ¬ Advances (AdmittedCallLife types nestedCaller (.enter []))
 
 /-- Instance (admission for binding a fresh local). -/
 private theorem freshBind : AdmittedLife types caller.own (.bind z) :=
-  ⟨caller.own.frames.head (by decide), rfl, by decide, _, rfl⟩
+  ⟨caller.own.frames.head (by decide), rfl, by decide, by decide, _, rfl⟩
 
 /-- A callee with a moved linear local still has storage to tear down. -/
 def localReturn : CallState :=
@@ -4173,7 +4193,7 @@ def refuseReinitBind (e : Exec.Life) (s : State) : Option State :=
 /-- Regression (for `life_dispatch`, mutant `refuseReinitBind`). -/
 example : ¬ Advances (AdmittedLife types localReturn.own (.bind DirectArgumentWitnesses.z))
     (refuseReinitBind (.bind DirectArgumentWitnesses.z) localReturn.own) :=
-  refuses ⟨⟨1, [(DirectArgumentWitnesses.z, ⟨1⟩)], []⟩, rfl,
+  refuses ⟨⟨1, [(DirectArgumentWitnesses.z, ⟨1⟩)], []⟩, rfl, by decide,
     localReturn.own.slots.head (by decide), rfl, Or.inl rfl, by decide⟩ rfl
 
 /-- Mutant: move a linear owner even though an active loan points to it. -/

@@ -64,3 +64,26 @@ with tempfile.TemporaryDirectory(prefix="own-mutants-") as temporary:
             if not errors.intersection(range(first, last + 1)):
                 raise RuntimeError(f"{name}: {declaration} did not fail\n{diagnostics}")
         print(f"{name}: rejected at every required conformance observation", flush=True)
+
+# Disable just the declarative ledger arm. The pinned positive witness must fail on
+# its own, even if the corresponding preservation proof can be closed vacuously.
+ledger = Path("ConcreteSpec/Proofs/OwnLegalStep.lean").read_text()
+loan_access_arm = (
+    "  | .accessLoan i m => LiveDestinations s.own ∧ AccessLoan s.own i m t.own"
+    " ∧ t.pending = s.pending"
+)
+if ledger.count(loan_access_arm) != 1:
+    raise RuntimeError("ledger loan access: mutation anchor must occur exactly once")
+witness = "theorem ledgerAccessLoan_live "
+witness_start = next(
+    number for number, line in enumerate(ledger.splitlines(), 1) if line.startswith(witness)
+)
+with tempfile.TemporaryDirectory(prefix="ledger-mutant-") as temporary:
+    path = Path(temporary) / "OwnLegalStep.lean"
+    path.write_text(ledger.replace(loan_access_arm, "  | .accessLoan _ _ => False"))
+    result = subprocess.run(["lake", "env", "lean", str(path)], capture_output=True, text=True)
+    diagnostics = result.stdout + result.stderr
+    errors = {int(line) for line in re.findall(r":(\d+):\d+: error:", diagnostics)}
+    if result.returncode == 0 or not errors.intersection(range(witness_start, witness_start + 3)):
+        raise RuntimeError(f"disabled ledger loan access did not kill its pinned witness\n{diagnostics}")
+    print("disabled ledger loan access: rejected at its pinned positive witness", flush=True)

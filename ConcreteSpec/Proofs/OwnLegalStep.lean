@@ -26,7 +26,7 @@ def Reinitialize (s : State) (p : Hybrid.Place) (t : State) : Prop :=
       if x.place = p then { x with status := .owned } else x }
 
 def Bind (types : Var → Option Descriptor) (s : State) (x : Var) (t : State) : Prop :=
-  ∃ f, s.frames.head? = some f ∧
+  ∃ f, s.frames.head? = some f ∧ ParameterAvailable f.views x ∧
     match AList.lookup f.locals x with
     | some p => Reinitialize s p t
     | none =>
@@ -70,16 +70,20 @@ theorem reinitialize_iff (s : State) (p : Hybrid.Place) (t : State) :
     simp [reinitialize, Reinitialize, h, Bool.or_eq_true, Bool.and_eq_true,
       List.all_eq_true, bne_iff_ne, eq_comm (a := t), and_assoc]
 
-/-- Law (authority: docs/decisions.md#od69). Binding uses checked descriptors and fresh places. -/
+/-- Law (authority: docs/decisions.md#od67; #od69). Binding uses checked descriptors and fresh places. -/
 theorem bind_iff (types : Var → Option Descriptor) (s : State) (x : Var) (t : State) :
     bind types x s = some t ↔ Bind types s x t := by
   cases hf : s.frames.head? with
   | none => simp [bind, Bind, hf]
   | some f =>
+    by_cases available : x ∈ List.map Prod.fst f.views
+    · have blocked : ¬ ParameterAvailable f.views x := fun h => h available
+      simp [bind, Bind, hf, available, blocked]
+    have free : ParameterAvailable f.views x := available
     cases hp : AList.lookup f.locals x with
-    | some p => simpa [bind, Bind, hf, hp] using reinitialize_iff s p t
+    | some p => simpa [bind, Bind, hf, hp, free, available] using reinitialize_iff s p t
     | none =>
-      cases hd : types x <;> simp [bind, Bind, hf, hp, hd, eq_comm (a := t)]
+      cases hd : types x <;> simp [bind, Bind, hf, hp, hd, free, available, eq_comm (a := t)]
 
 /-- Law (authority: docs/decisions.md#od69). Drop removes precisely the discharged storage. -/
 theorem drop_iff (s : State) (xs : List Var) (t : State) :
@@ -165,7 +169,7 @@ def pushFrame (s : State) : State :=
            frames := ⟨s.nextActivation, [], []⟩ :: s.frames }
 
 def Enter (types : Var → Option Descriptor) (s : State) (xs : List Var) (t : State) : Prop :=
-  Trace (Bind types) (pushFrame s) xs t
+  xs.Nodup ∧ Trace (Bind types) (pushFrame s) xs t
 
 def EndLocals (s : State) (activation : Nat) (t : State) : Prop :=
   Trace (fun s l => EndLeafAtBoundary s l.id) s
@@ -189,10 +193,11 @@ def Life (types : Var → Option Descriptor) (s : State) (e : Exec.Life) (t : St
   | .leave => Leave s t
   | .drop xs => Drop s xs t
 
-/-- Law (authority: docs/decisions.md#decided-2026-11-13-lifecycle-refusal). Entry types each binding. -/
+/-- Law (authority: docs/decisions.md#od67; #decided-2026-11-13-lifecycle-refusal). Entry types each distinct binding. -/
 theorem enter_iff (types : Var → Option Descriptor) (s : State) (xs : List Var) (t : State) :
-    enter types xs s = some t ↔ Enter types s xs t :=
-  fold_iff (fun s x => bind types x s) (bind_iff types) (pushFrame s) xs t
+    enter types xs s = some t ↔ Enter types s xs t := by
+  by_cases h : xs.Nodup <;> simp [enter, Enter, h, pushFrame]
+  exact fold_iff (fun s x => bind types x s) (bind_iff types) (pushFrame s) xs t
 
 /-- Law (authority: docs/decisions.md#od69). Exit ends local loans and discharges local storage. -/
 theorem leave_iff (s t : State) : leave s = some t ↔ Leave s t := by
@@ -239,13 +244,13 @@ def AdoptDown (s : State) (args : List (Var × LoanId)) (t : State) : Prop :=
   ∃ f, s.frames.head? = some f ∧ f.id < s.nextActivation ∧
     (args.map Prod.fst).Nodup ∧ (args.map Prod.snd).Nodup ∧
     (∀ e ∈ args, ∃ l ∈ s.loans, l.id = e.2 ∧ l.pendingArgument = true) ∧
-    (∀ e ∈ args, AList.lookup f.locals e.1 = none) ∧
+    (∀ e ∈ args, AList.lookup f.locals e.1 = none ∧ ParameterAvailable f.views e.1) ∧
     t = { s with
       loans := s.loans.map fun l =>
         if l.id ∈ args.map Prod.snd then { l with activation := f.id, pendingArgument := false } else l
       frames := { f with views := args ++ f.views } :: s.frames.tail }
 
-/-- Law (authority: docs/decisions.md#od23). Adoption transfers exactly the pending grants. -/
+/-- Law (authority: docs/decisions.md#od23; #od67). Adoption transfers exactly the pending grants to free identities. -/
 theorem adoptDown_iff (s : State) (args : List (Var × LoanId)) (t : State) :
     adoptDown s args = some t ↔ AdoptDown s args t := by
   cases h : s.frames.head? <;>
@@ -259,19 +264,19 @@ def CallLife (types : Var → Option Descriptor) (s : CallState) (e : Exec.Life)
     (t : CallState) : Prop :=
   match e with
   | .enter xs =>
-    (∀ e ∈ s.pending, e.1 ∈ xs) ∧ ∃ u v,
+    (xs.Nodup ∧ ∀ e ∈ s.pending, e.1 ∈ xs) ∧ ∃ u v,
       Enter types s.own (xs.filter fun x => decide (x ∉ s.pending.map Prod.fst)) u ∧
       AdoptDown u s.pending v ∧ t = ⟨v, []⟩
   | .bind x => adaptLife types s (.bind x) t
   | .drop xs => adaptLife types s (.drop xs) t
   | .leave => adaptLife types s .leave t
 
-/-- Law (authority: docs/decisions.md#od23). Pending arguments cross only matching entry. -/
+/-- Law (authority: docs/decisions.md#od23; #od67). Pending arguments cross only matching entry. -/
 theorem callLife_iff (types : Var → Option Descriptor) (s : CallState) (e : Exec.Life)
     (t : CallState) : callLife types e s = some t ↔ CallLife types s e t := by
   cases e with
   | enter xs =>
-    simp [callLife, CallLife, List.all_eq_true, Option.bind_eq_some_iff, enter_iff, adoptDown_iff,
+    simp [callLife, CallLife, Option.bind_eq_some_iff, enter_iff, adoptDown_iff,
       eq_comm (a := t)]
   | bind x =>
     simp [callLife, CallLife, adaptLife, Option.map_eq_some_iff, life_iff, eq_comm (a := t)]
@@ -292,15 +297,17 @@ theorem callLifeStore_iff {σ : Type} (types : Var → Option Descriptor) (s : �
 
 def DownwardParameter (s : State) (e : Var × LoanId) (t : State) : Prop :=
   ∃ a f u, loan s e.2 = some a ∧ s.frames.head? = some f ∧
-    ParameterAvailable f.views e.1 ∧ ReborrowTo s e.2 [] a.mode f.id u ∧
+    (AList.lookup f.locals e.1 = none ∧ ParameterAvailable f.views e.1) ∧ ReborrowTo s e.2 [] a.mode f.id u ∧
     t = { u with frames := { f with views := (e.1, ⟨s.nextLoan⟩) :: f.views } :: s.frames.tail }
 
 def EnterDown (s : State) (args : List (Var × LoanId)) (t : State) : Prop :=
-  Trace DownwardParameter (pushFrame s) args t
+  CallerSources s args ∧ Trace DownwardParameter (pushFrame s) args t
 
 /-- Law (authority: docs/decisions.md#od23). Each downward grant sees the ledger of earlier grants. -/
 theorem enterDown_iff (s : State) (args : List (Var × LoanId)) (t : State) :
     enterDown s args = some t ↔ EnterDown s args t := by
+  simp [enterDown, EnterDown, enter, pushFrame]
+  intro _
   change args.foldlM enterDownParameter (pushFrame s) = some t ↔ _
   apply fold_iff
   intro v e u
@@ -418,7 +425,7 @@ private theorem life_unique (types : Var → Option Descriptor) : UniqueStep (Li
   cases e with
   | bind => exact bind_unique types hu hv
   | drop => exact drop_unique hu hv
-  | enter => exact trace_unique (bind_unique types) hu hv
+  | enter => exact trace_unique (bind_unique types) hu.2 hv.2
   | leave =>
     obtain ⟨f, a, b, hf, ha, hb, rfl⟩ := hu
     obtain ⟨g, c, d, hg, hc, hd, rfl⟩ := hv
@@ -437,7 +444,7 @@ private theorem callLife_unique (types : Var → Option Descriptor) : UniqueStep
   | enter =>
     obtain ⟨_, a, b, ha, hb, rfl⟩ := hu
     obtain ⟨_, c, d, hc, hd, rfl⟩ := hv
-    have same := trace_unique (bind_unique types) ha hc
+    have same := trace_unique (bind_unique types) ha.2 hc.2
     subst c
     unfold AdoptDown at hb hd
     grind
@@ -473,7 +480,7 @@ theorem issuance_deterministic (types : Var → Option Descriptor) {s u v : Call
   | entry =>
     obtain ⟨_, a, ha, rfl⟩ := hu
     obtain ⟨_, b, hb, rfl⟩ := hv
-    rw [trace_unique downwardParameter_unique ha hb]
+    rw [trace_unique downwardParameter_unique ha.2 hb.2]
   | lifecycle => exact callLife_unique types hu hv
 
 /-- Law (authority: docs/decisions.md#od15; #od23). A legal issuance trace has at most one successor. -/
@@ -508,7 +515,7 @@ theorem admission_cases (types : Var → Option Descriptor) (s : CallState) :
       | .drop xs => ∃ t, Drop s.own xs t) ∧
     (∀ e, Admitted (CallLife types) s e ↔ match e with
       | .bind x => ∃ t, adaptLife types s (.bind x) t
-      | .enter xs => (∀ e ∈ s.pending, e.1 ∈ xs) ∧ ∃ u v,
+      | .enter xs => (xs.Nodup ∧ ∀ e ∈ s.pending, e.1 ∈ xs) ∧ ∃ u v,
           Enter types s.own (xs.filter fun x => decide (x ∉ s.pending.map Prod.fst)) u ∧
           AdoptDown u s.pending v
       | .leave => ∃ t, adaptLife types s .leave t
@@ -638,14 +645,38 @@ private theorem loanStep_liveViews {s t : State} {e : LoanAction}
     intro eq
     exact allowed.2 f hm (List.mem_map.mpr ⟨binding, hb, id.symm.trans eq⟩)
 
+private theorem loanStep_liveDestinations {s t : State} {e : LoanAction}
+    (step : LoanStep s e t) (live : LiveDestinations s) : LiveDestinations t := by
+  cases e with
+  | borrow =>
+    obtain ⟨_, f, frame, _, rfl⟩ := step
+    intro l hl
+    rcases List.mem_cons.mp hl with rfl | old
+    · exact ⟨f, List.mem_of_head? frame, rfl⟩
+    · exact live l old
+  | reborrow i path m a =>
+    have safe := reborrowTo_live s i path m a live
+    rwa [(reborrowTo_iff ..).mpr step] at safe
+  | endLoan =>
+    obtain ⟨_, _, _, rfl⟩ := step
+    exact fun l hl => live l (List.mem_filter.mp hl).1
+
+private theorem loanStep_frames {s t : State} {e : LoanAction}
+    (step : LoanStep s e t) : t.frames = s.frames := by
+  cases e with
+  | borrow => obtain ⟨_, _, _, _, rfl⟩ := step; rfl
+  | reborrow => obtain ⟨_, _, _, _, _, rfl⟩ := step; rfl
+  | endLoan => obtain ⟨_, _, _, rfl⟩ := step; rfl
+
 private theorem downwardTrace_preserves {pending : List (Var × LoanId)} {s t : State}
     {args : List (Var × LoanId)} (step : Trace DownwardParameter s args t)
-    (initial : WellFormed s) (keep : PendingConsistent pending s) (live : LiveViews s) :
-    PendingConsistent pending t ∧ LiveViews t := by
+    (initial : WellFormed s) (keep : PendingConsistent pending s) (live : LiveViews s)
+    (destinations : LiveDestinations s) (unique : UniqueFrameBindings s) :
+    PendingConsistent pending t ∧ LiveViews t ∧ LiveDestinations t ∧ UniqueFrameBindings t := by
   induction step with
-  | nil => exact ⟨keep, live⟩
+  | nil => exact ⟨keep, live, destinations, unique⟩
   | @cons s u₀ t e es grant _ ih =>
-    obtain ⟨a, f, u, _, frame, _, reborrow, rfl⟩ := grant
+    obtain ⟨a, f, u, _, frame, available, reborrow, rfl⟩ := grant
     have preserve := loanStep_wellFormed (e := .reborrow _ [] a.mode f.id) reborrow initial
     have frames : u.frames = s.frames := by
       obtain ⟨_, _, _, _, _, rfl⟩ := reborrow
@@ -653,8 +684,34 @@ private theorem downwardTrace_preserves {pending : List (Var × LoanId)} {s t : 
     have next := set_views_preserves u f ((e.1, ⟨s.nextLoan⟩) :: f.views) preserve
       (by simpa [frames] using frame)
     have fresh := nextLoan_not_pending keep initial
+    have liveGrant := loanStep_liveDestinations (e := .reborrow _ [] a.mode f.id)
+      reborrow destinations
+    have liveNext : LiveDestinations
+        { u with frames := { f with views := (e.1, ⟨s.nextLoan⟩) :: f.views } :: s.frames.tail } := by
+      intro l hl
+      obtain ⟨g, hg, id⟩ := liveGrant l hl
+      rw [frames] at hg
+      cases stack : s.frames with
+      | nil => simp [stack] at frame
+      | cons head tail =>
+        simp [stack] at frame
+        subst head
+        rw [stack] at hg
+        rcases List.mem_cons.mp hg with rfl | old
+        · exact ⟨_, List.mem_cons_self, id⟩
+        · exact ⟨g, List.mem_cons_of_mem _ old, id⟩
+    have uniqueNext : UniqueFrameBindings
+        { u with frames := { f with views := (e.1, ⟨s.nextLoan⟩) :: f.views } :: s.frames.tail } := by
+      apply uniqueFrameBindings_replaceHead unique frame
+      have old := List.nodup_append.mp (unique f (List.mem_of_head? frame))
+      simp only [Activation.UniqueBindings, List.map_cons, List.nodup_append, List.nodup_cons]
+      refine ⟨old.1, ⟨available.2, old.2.1⟩, ?_⟩
+      intro x hx y hy eq
+      rcases List.mem_cons.mp hy with rfl | earlier
+      · exact localIdentityAbsent _ _ available.1 (eq ▸ hx)
+      · exact old.2.2 x hx y earlier eq
     obtain ⟨_, _, _, _, _, rfl⟩ := reborrow
-    apply ih next (pending_cons keep rfl rfl fresh)
+    refine ih next (pending_cons keep rfl rfl fresh) ?_ liveNext uniqueNext
     intro g hg binding hb
     change g ∈ (f.id, (e.1, ⟨s.nextLoan⟩) :: f.views) ::
       s.frames.tail.map (fun g => (g.id, g.views)) at hg
@@ -678,7 +735,8 @@ theorem issuance_wellFormed (types : Var → Option Descriptor) {s t : CallState
     obtain ⟨allowed, u, hu, rfl⟩ := step
     have pending := ordinary_pending (s := s) allowed hu wf
     exact ⟨loanStep_wellFormed hu wf.1, wf.2.1, wf.2.2.1, pending.1, pending.2,
-      loanStep_liveViews hu wf.2.2.2.2.2⟩
+      loanStep_liveViews hu wf.2.2.2.2.2.1, loanStep_liveDestinations hu wf.2.2.2.2.2.2.1,
+      by simpa only [UniqueFrameBindings, loanStep_frames hu] using wf.2.2.2.2.2.2.2⟩
   | entry args =>
     obtain ⟨_, u, hu, rfl⟩ := step
     have safe := enterDown_preserves s.own args wf.1
@@ -689,8 +747,18 @@ theorem issuance_wellFormed (types : Var → Option Descriptor) {s t : CallState
       change f ∈ (s.own.nextActivation, []) :: ViewIndex s.own at hf
       rcases List.mem_cons.mp hf with rfl | old
       · simp at hb
-      · exact wf.2.2.2.2.2 f old binding hb
-    have keep := downwardTrace_preserves hu initial ⟨wf.2.2.2.1, wf.2.2.2.2.1⟩ views
+      · exact wf.2.2.2.2.2.1 f old binding hb
+    have destinations : LiveDestinations (pushFrame s.own) := by
+      intro l hl
+      obtain ⟨f, hf, id⟩ := wf.2.2.2.2.2.2.1 l hl
+      exact ⟨f, List.mem_cons_of_mem _ hf, id⟩
+    have unique : UniqueFrameBindings (pushFrame s.own) := by
+      intro f hf
+      rcases List.mem_cons.mp hf with rfl | old
+      · exact List.nodup_nil
+      · exact wf.2.2.2.2.2.2.2 f old
+    have keep := downwardTrace_preserves hu.2 initial
+      ⟨wf.2.2.2.1, wf.2.2.2.2.1⟩ views destinations unique
     exact ⟨safe, wf.2.1, wf.2.2.1, keep.1.1, keep.1.2, keep.2⟩
   | owner p path m x =>
     have safe := passOwner_call_preserves s p path m x wf
@@ -713,7 +781,15 @@ def LedgerStep (types : Var → Option Descriptor) (s : CallState)
   | .issue e => Issuance types s e t
   | .move p => Move s.own p t.own ∧ t.pending = s.pending
   | .accessOwner p m => AccessOwner s.own p m t.own ∧ t.pending = s.pending
-  | .accessLoan i m => AccessLoan s.own i m t.own ∧ t.pending = s.pending
+  | .accessLoan i m => LiveDestinations s.own ∧ AccessLoan s.own i m t.own ∧ t.pending = s.pending
+
+/-- Law (authority: docs/decisions.md#decided-2026-11-08-recovered-d3).
+Loan access requires live destinations as well as ordinary loan permission. -/
+theorem ledgerAccessLoan_iff (types : Var → Option Descriptor) (s t : CallState)
+    (i : LoanId) (m : Mode) :
+    LedgerStep types s (.accessLoan i m) t ↔
+      LiveDestinations s.own ∧ accessLoan s.own i m = some t.own ∧ t.pending = s.pending := by
+  simp only [LedgerStep, accessLoan_iff]
 
 /-- Helper (preservation). Every ledger event preserves the call metadata. -/
 theorem ledgerStep_wellFormed (types : Var → Option Descriptor) {s t : CallState}
@@ -732,8 +808,11 @@ theorem ledgerStep_wellFormed (types : Var → Option Descriptor) {s t : CallSta
         rw [(move_iff own p next).mpr legal] at safe
         obtain ⟨_, rfl⟩ := legal
         exact ⟨safe, wf.2⟩
-      | accessOwner p m | accessLoan i m =>
+      | accessOwner p m =>
         obtain ⟨⟨_, rfl⟩, rfl⟩ := step
+        exact wf
+      | accessLoan i m =>
+        obtain ⟨_, ⟨_, rfl⟩, rfl⟩ := step
         exact wf
 
 /-- Law (authority: docs/decisions.md#od15; #od23). Legal ledger histories preserve
@@ -1531,6 +1610,7 @@ theorem enterDown_iff_planted_3 : ¬ (∀ t, acceptFrozenDownward exclusive [(x,
 
 /-- Substitute only the binding step's omitted parameter-identity check. -/
 def enterDownAllowDuplicate (s : State) (args : List (Var × LoanId)) : Option State := do
+  if ¬ CallerSources s args then none else
   let s ← enter (fun _ => none) [] s
   args.foldlM (fun s (x, i) => do
     let a ← loan s i
@@ -1673,6 +1753,144 @@ example : ∃ t, Issuance types ⟨child, []⟩ (.ordinary (.endLoan ⟨1⟩)) t
     admits (issuanceStep_iff types ⟨child, []⟩ (.ordinary (.endLoan ⟨1⟩))) (by decide)
   exact ⟨t, legal, issuance_wellFormed types legal (by decide)⟩
 
+def copyParameter (_ : Var) : Option Descriptor := some ⟨.int .i32, true, true⟩
+
+/-- Substitute only the omitted duplicate check for owned parameters. -/
+def ownerEntryWithoutSignatureCheck (params : List Var) (s : State) : Option State :=
+  params.foldlM (fun own x => bind copyParameter x own) (pushFrame s)
+
+/-- Planted (law `enter_iff`, mutant `ownerEntryWithoutSignatureCheck`).
+A duplicate Copy parameter would otherwise be accepted as a reinitialization. -/
+theorem enter_rejectsDuplicateOwnerParameter :
+    ¬ (∀ t, ownerEntryWithoutSignatureCheck [y, y] initial = some t ↔
+      Enter copyParameter initial [y, y] t) :=
+  rejectsAcceptance (actual := enter copyParameter [y, y] initial)
+    (fun t => enter_iff _ _ _ t) (by decide) (by decide)
+
+def adoptionWithExistingView : CallState :=
+  (passDown ⟨(enterDown shared [(y, ⟨0⟩)]).getD shared, []⟩ ⟨0⟩ y).getD ⟨shared, []⟩
+
+/-- Substitute only the omitted check against already adopted views. -/
+def adoptWithoutViewCheck (s : State) (args : List (Var × LoanId)) : Option State := do
+  let f ← s.frames.head?
+  if f.id < s.nextActivation ∧ (args.map Prod.fst).Nodup ∧ (args.map Prod.snd).Nodup ∧
+      (∀ e ∈ args, ∃ l ∈ s.loans, l.id = e.2 ∧ l.pendingArgument = true) ∧
+      (∀ e ∈ args, AList.lookup f.locals e.1 = none) then
+    some { s with
+      loans := s.loans.map fun l =>
+        if l.id ∈ args.map Prod.snd then { l with activation := f.id, pendingArgument := false } else l
+      frames := { f with views := args ++ f.views } :: s.frames.tail }
+  else none
+
+/-- Planted (law `adoptDown_iff`, mutant `adoptWithoutViewCheck`). -/
+theorem adoptDown_rejectsExistingView :
+    let s := adoptionWithExistingView
+    ¬ (∀ t, adoptWithoutViewCheck s.own s.pending = some t ↔ AdoptDown s.own s.pending t) :=
+  rejectsAcceptance (actual := adoptDown adoptionWithExistingView.own adoptionWithExistingView.pending)
+    (fun t => adoptDown_iff _ _ t) (by decide) (by decide)
+
+/-- Substitute only the omitted complete-signature check. -/
+def callEntryWithoutSignatureCheck (params : List Var) (s : CallState) : Option CallState := do
+  if ∀ e ∈ s.pending, e.1 ∈ params then
+    let own ← enter types (params.filter fun x => decide (x ∉ s.pending.map Prod.fst)) s.own
+    let own ← adoptDown own s.pending
+    pure ⟨own, []⟩
+  else none
+
+/-- Planted (law `callLife_iff`, mutant `callEntryWithoutSignatureCheck`). -/
+theorem callLife_rejectsDuplicateViewParameter :
+    ¬ (∀ t, callEntryWithoutSignatureCheck [y, y] CallWitnesses.waiting = some t ↔
+      CallLife types CallWitnesses.waiting (.enter [y, y]) t) :=
+  rejectsAcceptance (actual := callLife types (.enter [y, y]) CallWitnesses.waiting)
+    (fun t => callLife_iff _ _ _ t) (by decide) (by decide)
+
+/-- Substitute only the omitted check for a view with the same identity. -/
+def bindWithoutViewCheck (x : Var) (s : State) : Option State := do
+  let f ← s.frames.head?
+  match AList.lookup f.locals x with
+  | some p => reinitialize s p
+  | none =>
+    let d ← types x
+    if f.id < s.nextActivation then some { s with
+      nextPlace := s.nextPlace + 1
+      slots := ⟨⟨s.nextPlace⟩, f.id, d, .owned⟩ :: s.slots
+      frames := { f with locals := (x, ⟨s.nextPlace⟩) :: f.locals } :: s.frames.tail }
+    else none
+
+def viewParameterFrame : State :=
+  (enterDown shared [(y, ⟨0⟩)]).getD shared
+
+/-- Planted (law `bind_iff`, mutant `bindWithoutViewCheck`). -/
+theorem bind_rejectsViewIdentity :
+    ¬ (∀ t, bindWithoutViewCheck y viewParameterFrame = some t ↔ Bind types viewParameterFrame y t) :=
+  rejectsAcceptance (actual := bind types y viewParameterFrame)
+    (fun t => bind_iff _ _ _ t) (by decide) (by decide)
+
+/-- Substitute only the omitted caller-side source check. -/
+def enterDownWithoutCallerSources (s : State) (args : List (Var × LoanId)) : Option State := do
+  let s ← enter (fun _ => none) [] s
+  args.foldlM enterDownParameter s
+
+def siblingArguments : List (Var × LoanId) := [(x, ⟨0⟩), (y, ⟨1⟩)]
+
+/-- Planted (law `enterDown_iff`, mutant `enterDownWithoutCallerSources`).
+Buffered evaluation also refuses the freshly issued pending child as a source. -/
+theorem entry_rejectsSiblingSource :
+    (passDown ⟨shared, []⟩ ⟨0⟩ x >>= fun waiting => passDown waiting ⟨1⟩ y) = none ∧
+    ¬ (∀ t, enterDownWithoutCallerSources shared siblingArguments = some t ↔
+      EnterDown shared siblingArguments t) :=
+  ⟨by decide, rejectsAcceptance (actual := enterDown shared siblingArguments)
+    (fun t => enterDown_iff _ _ t) (by decide) (by decide)⟩
+
+def sharedCaller : CallState := ⟨shared, []⟩
+
+def departedLoan : CallState := ⟨{ shared with
+  nextActivation := 2
+  loans := shared.loans.map fun l => { l with activation := 1 } }, []⟩
+
+/-- Instance (law `ledgerAccessLoan_iff`, case `shared loan in its live caller frame`). -/
+theorem ledgerAccessLoan_live :
+    LedgerStep types sharedCaller (.accessLoan ⟨0⟩ .shared) sharedCaller :=
+  ⟨by decide, (accessLoan_iff ..).mp (by decide), rfl⟩
+
+/-- Planted (law `ledgerAccessLoan_iff`, direction over-accepting).
+The raw permission succeeds after omitting destination liveness at admission. -/
+theorem ledgerAccessLoan_rejectsDeparted :
+    WellFormed departedLoan.own ∧ ¬ departedLoan.WellFormed ∧
+    (AccessLoan departedLoan.own ⟨0⟩ .shared departedLoan.own ∧
+      departedLoan.pending = departedLoan.pending) ∧
+    ¬ LedgerStep types departedLoan (.accessLoan ⟨0⟩ .shared) departedLoan := by
+  refine ⟨by decide, by decide, ⟨(accessLoan_iff ..).mp (by decide), rfl⟩, ?_⟩
+  exact fun step => (by decide : ¬ LiveDestinations departedLoan.own)
+    ((ledgerAccessLoan_iff ..).mp step).1
+
+/-- Instance (law `ledgerTrace_wellFormed`, case `issuance`). -/
+theorem ledgerTrace_issue :
+    ∃ t, Trace (LedgerStep types) baseCall [.issue (.entry [])] t ∧ t.WellFormed := by
+  obtain ⟨t, _, step⟩ := admits (issuanceStep_iff types baseCall (.entry [])) (by decide)
+  have trace : Trace (LedgerStep types) baseCall [.issue (.entry [])] t :=
+    .cons step (.nil _)
+  exact ⟨t, trace, ledgerTrace_wellFormed types trace (by decide)⟩
+
+/-- Instance (law `ledgerTrace_wellFormed`, case `loan access`). -/
+theorem ledgerTrace_loanAccess :
+    Trace (LedgerStep types) sharedCaller [.accessLoan ⟨0⟩ .shared] sharedCaller ∧
+      sharedCaller.WellFormed := by
+  have trace := Trace.cons ledgerAccessLoan_live (.nil sharedCaller)
+  exact ⟨trace, ledgerTrace_wellFormed types trace (by decide)⟩
+
+/-- Instance (law `ledgerTrace_wellFormed`, case `owner access`). -/
+theorem ledgerStep_ownerAccess :
+    LedgerStep types baseCall (.accessOwner ⟨0⟩ .mutable) baseCall :=
+  ⟨(accessOwner_iff ..).mp (by decide), rfl⟩
+
+/-- Instance (law `ledgerTrace_wellFormed`, case `owner move`). -/
+theorem ledgerStep_move :
+    ∃ t, LedgerStep types baseCall (.move ⟨0⟩) t := by
+  obtain ⟨u, moved⟩ := Option.isSome_iff_exists.mp
+    (show (move initial ⟨0⟩).isSome = true from by decide)
+  exact ⟨⟨u, []⟩, (move_iff ..).mp moved, rfl⟩
+
 /-- Instance (law `ledgerTrace_wellFormed`, case `owner access followed by move`). -/
 theorem ledgerTrace_accessThenMove :
     ∃ t, Trace (LedgerStep types) baseCall [.accessOwner ⟨0⟩ .mutable, .move ⟨0⟩] t ∧
@@ -1712,14 +1930,14 @@ def entryMayReuse (s : CallState) (e : IssuanceAction) (t : CallState) : Prop :=
 theorem issuance_deterministic_instance_1 : Issuance types baseCall (.entry []) { baseCall with own := pushFrame initial } ∧
     (∀ t, Issuance types baseCall (.entry []) t → t = { baseCall with own := pushFrame initial }) := by
   have step : Issuance types baseCall (.entry []) { baseCall with own := pushFrame initial } :=
-    ⟨rfl, pushFrame initial, .nil _, rfl⟩
+    ⟨rfl, pushFrame initial, ⟨by decide, .nil _⟩, rfl⟩
   exact ⟨step, fun _ other => issuance_deterministic types other step⟩
 
 /-- Planted (law `issuance_deterministic`, mutant `entryMayReuse`). -/
 theorem issuance_deterministic_planted_1 : ¬ UniqueStep entryMayReuse := by
   intro unique
   have original : entryMayReuse baseCall (.entry []) { baseCall with own := pushFrame initial } :=
-    Or.inl ⟨rfl, pushFrame initial, .nil _, rfl⟩
+    Or.inl ⟨rfl, pushFrame initial, ⟨by decide, .nil _⟩, rfl⟩
   have alternative : entryMayReuse baseCall (.entry []) baseCall := Or.inr ⟨rfl, rfl⟩
   exact (by decide : { baseCall with own := pushFrame initial } ≠ baseCall)
     (unique original alternative)
@@ -1729,14 +1947,14 @@ theorem issuanceTrace_deterministic_instance_1 : Trace (Issuance types) baseCall
     (∀ t, Trace (Issuance types) baseCall [.entry []] t →
       t = { baseCall with own := pushFrame initial }) := by
   have trace : Trace (Issuance types) baseCall [.entry []] { baseCall with own := pushFrame initial } :=
-    .cons ⟨rfl, pushFrame initial, .nil _, rfl⟩ (.nil _)
+    .cons ⟨rfl, pushFrame initial, ⟨by decide, .nil _⟩, rfl⟩ (.nil _)
   exact ⟨trace, fun _ other => issuanceTrace_deterministic types other trace⟩
 
 /-- Planted (law `issuanceTrace_deterministic`, mutant `entryMayReuse`). -/
 theorem issuanceTrace_deterministic_planted_1 : ¬ UniqueStep (Trace entryMayReuse) := by
   intro unique
   have original : Trace entryMayReuse baseCall [.entry []] { baseCall with own := pushFrame initial } :=
-    .cons (Or.inl ⟨rfl, pushFrame initial, .nil _, rfl⟩) (.nil _)
+    .cons (Or.inl ⟨rfl, pushFrame initial, ⟨by decide, .nil _⟩, rfl⟩) (.nil _)
   have alternative : Trace entryMayReuse baseCall [.entry []] baseCall :=
     .cons (Or.inr ⟨rfl, rfl⟩) (.nil _)
   exact (by decide : { baseCall with own := pushFrame initial } ≠ baseCall)
