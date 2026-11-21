@@ -48,8 +48,7 @@ already live in `Proofs/LocalIdentity`; no spelling-bearing local identity is re
 
 The local SourcePath laws replace the held path group under ISS-0068 and R-0709.
 They cover the admitted ASCII identity, local checks and exact refusal locations.
-The project-wide admission laws and controls also live here. Span projection and source
-binding remain separate obligations. U+FEFF scope and bare-CR comment termination
+The project-wide admission, span projection and source binding laws and controls also live here. U+FEFF scope and bare-CR comment termination
 remain outside the byte-coordinate interface.
 -/
 
@@ -3224,7 +3223,8 @@ theorem Span.locationOk_iff (span : Span) (source : SourceText) :
     span.LocationOk source ↔
       span.startOffset ≤ span.endOffset ∧ span.endOffset ≤ source.length ∧
       span.line = source.lineAt span.startOffset ∧ span.col = source.columnAt span.startOffset := by
-  simp [Span.LocationOk, span.range_ok]
+  simp [Span.LocationOk, SourcePathSpan.EndInSource, SourcePathSpan.LineMatches,
+    SourcePathSpan.ColumnMatches, span.range_ok]
 
 /-- Instance (law `ConcreteSpec.Core.Span.locationOk_iff`, case `ConcreteSpec.Core.tabSpan`).
 the span after a tab matches the original source's byte coordinates. -/
@@ -4711,3 +4711,193 @@ theorem skipProjectCheck_violates_checks_locally_parsed :
 end Controls
 
 end ConcreteSpec.Core.SourcePath.Project
+
+namespace ConcreteSpec.Core.SourcePathSpan
+
+private theorem samePath_of_mem (files : List File)
+    (admitted : SourcePath.Project.Reference.Admitted (files.map File.path))
+    {first second : File} (firstMem : first ∈ files) (secondMem : second ∈ files)
+    (same : first.path = second.path) : first = second := by
+  induction files with
+  | nil => simp at firstMem
+  | cons head tail ih =>
+    simp only [List.mem_cons] at firstMem secondMem
+    have parts := List.pairwise_cons.mp admitted
+    have noDuplicate (file : File) (member : file ∈ tail) : head.path ≠ file.path := by
+      intro eq
+      exact parts.1 file.path (List.mem_map_of_mem member) .duplicate (congrArg SourcePath.raw eq)
+    rcases firstMem with rfl | firstMem
+    · rcases secondMem with rfl | secondMem
+      · rfl
+      · exact (noDuplicate _ secondMem same).elim
+    · rcases secondMem with rfl | secondMem
+      · exact (noDuplicate _ firstMem same.symm).elim
+      · exact ih parts.2 firstMem secondMem
+
+private theorem findFile_iff (project : Project) (path : SourcePath) (file : File) :
+    project.findFile path = some file ↔ file ∈ project.files ∧ file.path = path := by
+  constructor
+  · intro found
+    exact ⟨List.mem_of_find?_eq_some found, of_decide_eq_true (List.find?_some (p := fun entry : File => decide (entry.path = path)) found)⟩
+  · rintro ⟨member, rfl⟩
+    cases found : project.findFile file.path with
+    | none =>
+      have miss := List.find?_eq_none.mp found file member
+      simp at miss
+    | some other =>
+      obtain ⟨otherMem, eq⟩ := (show other ∈ project.files ∧ other.path = file.path from
+        ⟨List.mem_of_find?_eq_some found, of_decide_eq_true (List.find?_some (p := fun entry : File => decide (entry.path = file.path)) found)⟩)
+      rw [samePath_of_mem _ project.admitted otherMem member eq]
+
+/-- The universal agreement contract for projection, in both directions. -/
+def ProjectionCorrect (projector : Project → SourcePath → Nat → Nat → Option Span) : Prop :=
+  ∀ project path start stop span,
+    projector project path start stop = some span ↔ Reference.Projects project path start stop span
+
+/-- The universal agreement contract for source binding, in both directions. -/
+def BindingCorrect (binder : Project → Span → Option File) : Prop :=
+  ∀ project span file, binder project span = some file ↔ Reference.Binds project span file
+
+/-- Law (subject `ConcreteSpec.Core.SourcePathSpan.projectSpan`).
+Safety preserves the exact path and range and validates the projected coordinates.
+Progress returns every span described by the reference relation. -/
+theorem projectSpan_correct : ProjectionCorrect projectSpan := by
+  intro project path start stop span
+  constructor
+  · intro result
+    cases found : project.findFile path with
+    | none => simp [projectSpan, found, bind, Option.bind] at result
+    | some file =>
+      obtain ⟨member, exactPath⟩ := (findFile_iff _ _ _).mp found
+      simp only [projectSpan, found, bind, Option.bind] at result
+      split at result
+      · rename_i ordered
+        split at result
+        · rename_i within
+          cases result
+          exact ⟨rfl, rfl, rfl, file, member, exactPath, within, rfl, rfl⟩
+        · contradiction
+      · contradiction
+  · rintro ⟨pathEq, startEq, stopEq, file, member, exactPath, within, line, col⟩
+    subst path start stop
+    have found := (findFile_iff _ _ _).mpr ⟨member, exactPath⟩
+    have ordered : OrderedOffsets (span.startOffset, span.endOffset) := span.range_ok
+    have inBounds : EndInSource (file.source, span.endOffset) := within
+    simp only [projectSpan, found, bind, Option.bind, dite_eq_left ordered, ite_eq_left inBounds,
+      Option.some.injEq]
+    cases span
+    simp_all [spanAt, LineMatches, ColumnMatches]
+
+/-- Law (subject `ConcreteSpec.Core.SourcePathSpan.bindSource`).
+Safety returns the exact admitted file with a valid stored location.
+Progress returns that file for every binding in the reference relation. -/
+theorem bindSource_correct : BindingCorrect bindSource := by
+  intro project span file
+  constructor
+  · intro result
+    cases found : project.findFile span.path with
+    | none => simp [bindSource, found, bind, Option.bind] at result
+    | some loaded =>
+      simp only [bindSource, found, bind, Option.bind] at result
+      split at result
+      · rename_i valid
+        cases result
+        exact ⟨(findFile_iff _ _ _).mp found |>.1, (findFile_iff _ _ _).mp found |>.2, valid⟩
+      · contradiction
+  · rintro ⟨member, exactPath, valid⟩
+    have found := (findFile_iff _ _ _).mpr ⟨member, exactPath⟩
+    simp [bindSource, found, bind, Option.bind, valid]
+
+/-- Law (subject `ConcreteSpec.Core.SourcePathSpan.projectSpan`).
+Each returned span preserves the requested path and range and locates an admitted file. -/
+theorem projectSpan_safety (project : Project) (path : SourcePath) (start stop : Nat)
+    (span : Span) (result : projectSpan project path start stop = some span) :
+    Reference.Projects project path start stop span :=
+  (projectSpan_correct project path start stop span).mp result
+
+/-- Law (subject `ConcreteSpec.Core.SourcePathSpan.projectSpan`).
+Each ordered range fitting an admitted file has a projection, including at EOF. -/
+theorem projectSpan_progress (project : Project) (path : SourcePath) (start stop : Nat)
+    (file : File) (member : file ∈ project.files) (exactPath : file.path = path)
+    (ordered : start ≤ stop) (within : stop ≤ file.source.length) :
+    ∃ span, projectSpan project path start stop = some span ∧
+      Reference.Projects project path start stop span := by
+  let span := spanAt path file.source start stop ordered
+  have reference : Reference.Projects project path start stop span :=
+    ⟨rfl, rfl, rfl, file, member, exactPath, within, rfl, rfl⟩
+  exact ⟨span, (projectSpan_correct project path start stop span).mpr reference, reference⟩
+
+/-- Law (subject `ConcreteSpec.Core.SourcePathSpan.bindSource`).
+The returned file has the span's exact path and the bytes validate its stored location. -/
+theorem bindSource_safety (project : Project) (span : Span) (file : File)
+    (result : bindSource project span = some file) : Reference.Binds project span file :=
+  (bindSource_correct project span file).mp result
+
+/-- Law (subject `ConcreteSpec.Core.SourcePathSpan.bindSource`).
+Every valid reference binding returns the corresponding loaded file. -/
+theorem bindSource_progress (project : Project) (span : Span) (file : File)
+    (reference : Reference.Binds project span file) : bindSource project span = some file :=
+  (bindSource_correct project span file).mpr reference
+
+namespace Controls
+
+/-- The original tab range with an end beyond the loaded file. -/
+def pastEnd : Span := { tabSpan with endOffset := 4, range_ok := by decide }
+
+/-- Mutant that projects ordered ranges without checking the end bound. -/
+def projectPastEnd (project : Project) (path : SourcePath) (start stop : Nat) : Option Span := do
+  let file ← project.findFile path
+  if ordered : start ≤ stop then some (spanAt path file.source start stop ordered) else none
+
+/-- Mutant that rejects ranges beginning after the first byte. -/
+def projectAtStartOnly (project : Project) (path : SourcePath) (start stop : Nat) : Option Span :=
+  if start = 0 then projectSpan project path start stop else none
+
+/-- Mutant that trusts stored coordinates without validating them. -/
+def bindUnchecked (project : Project) (span : Span) : Option File :=
+  project.findFile span.path
+
+/-- Mutant that rejects ranges ending exactly at EOF. -/
+def bindBeforeEof (project : Project) (span : Span) : Option File := do
+  let file ← bindSource project span
+  if span.endOffset < file.source.length then some file else none
+
+/-- Planted (law `ConcreteSpec.Core.SourcePathSpan.projectSpan_correct`,
+case `ConcreteSpec.Core.SourcePathSpan.Controls.pastEnd`, subject `ConcreteSpec.Core.SourcePathSpan.projectSpan`,
+mutant `ConcreteSpec.Core.SourcePathSpan.Controls.projectPastEnd`). -/
+theorem projectPastEnd_violates_correct : ¬ ProjectionCorrect projectPastEnd := by
+  intro law
+  obtain ⟨_, _, _, file, member, _, bounds, _, _⟩ :=
+    (law tabProject mainSourcePath 2 4 pastEnd).mp (by decide)
+  have eq : file = ⟨mainSourcePath, tabSource⟩ := List.mem_singleton.mp member
+  subst file
+  exact (by decide : ¬ pastEnd.endOffset ≤ tabSource.length) bounds
+
+/-- Planted (law `ConcreteSpec.Core.SourcePathSpan.projectSpan_correct`,
+case `ConcreteSpec.Core.tabSpan`, subject `ConcreteSpec.Core.SourcePathSpan.projectSpan`,
+mutant `ConcreteSpec.Core.SourcePathSpan.Controls.projectAtStartOnly`). -/
+theorem projectAtStartOnly_violates_correct : ¬ ProjectionCorrect projectAtStartOnly := by
+  intro law
+  have reference := (projectSpan_correct tabProject mainSourcePath 2 3 tabSpan).mp projectTabSpan
+  have result := (law tabProject mainSourcePath 2 3 tabSpan).mpr reference
+  contradiction
+
+/-- Planted (law `ConcreteSpec.Core.SourcePathSpan.bindSource_correct`,
+case `ConcreteSpec.Core.SourcePathSpan.Controls.pastEnd`, subject `ConcreteSpec.Core.SourcePathSpan.bindSource`,
+mutant `ConcreteSpec.Core.SourcePathSpan.Controls.bindUnchecked`). -/
+theorem bindUnchecked_violates_correct : ¬ BindingCorrect bindUnchecked := by
+  intro law
+  have reference := (law tabProject pastEnd ⟨mainSourcePath, tabSource⟩).mp (by decide)
+  exact (by decide : ¬ pastEnd.LocationOk tabSource) reference.2.2
+
+/-- Planted (law `ConcreteSpec.Core.SourcePathSpan.bindSource_correct`,
+case `ConcreteSpec.Core.tabSpan`, subject `ConcreteSpec.Core.SourcePathSpan.bindSource`,
+mutant `ConcreteSpec.Core.SourcePathSpan.Controls.bindBeforeEof`). -/
+theorem bindBeforeEof_violates_correct : ¬ BindingCorrect bindBeforeEof := by
+  intro law
+  have reference := (bindSource_correct tabProject tabSpan _).mp bindTabSpan
+  exact (by decide : bindBeforeEof tabProject tabSpan ≠ some ⟨mainSourcePath, tabSource⟩)
+    ((law tabProject tabSpan _).mpr reference)
+
+end Controls
+end ConcreteSpec.Core.SourcePathSpan

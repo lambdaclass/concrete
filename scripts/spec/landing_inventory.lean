@@ -177,6 +177,7 @@ private def completion : PieceId → Completion
       `NoTrailingDot, `NoReservedStem, `ComponentByteCap, `PathByteCap, `FilenameCharacters]
     let projectNames := [`Project.NoCaseCollision, `Project.NoFileDirectoryConflict,
       `Project.NoDuplicate]
+    let spanNames := [`FilePresent, `OrderedOffsets, `EndInSource, `LineMatches, `ColumnMatches]
     { named := [
         evidence `ConcreteSpec.Spec.Ident `ConcreteSpec.Core [
           `SourcePath, `SourcePath.parse, `SourcePath.render, `Span, `Span.LocationOk,
@@ -184,8 +185,10 @@ private def completion : PieceId → Completion
       requiredOnLanding := [
         evidence `ConcreteSpec.Spec.Ident `ConcreteSpec.Core.SourcePathSpan [
           `projectSpan, `bindSource]],
-      deliveredRules := (localNames ++ projectNames).map fun name =>
-        ⟨`ConcreteSpec.Core.SourcePath ++ name, `ConcreteSpec.Spec.Ident⟩ }
+      deliveredRules := ((localNames ++ projectNames).map (fun name =>
+        `ConcreteSpec.Core.SourcePath ++ name) ++ spanNames.map (fun name =>
+        `ConcreteSpec.Core.SourcePathSpan ++ name)).map fun name =>
+          ⟨name, `ConcreteSpec.Spec.Ident⟩ }
   | .F04 => namedEvidence [
     evidence `ConcreteSpec.Proofs.Ident `ConcreteSpec.Core.Vacuity [
       `lookup_renumber_example_siteTable, `lookup_renumber_planted_siteTable_collapseRenumber,
@@ -360,7 +363,11 @@ private def completion : PieceId → Completion
       requiredOnLanding := [
         laws `ConcreteSpec.Proofs.Ident [
           `ConcreteSpec.Core.SourcePathSpan.projectSpan_correct,
-          `ConcreteSpec.Core.SourcePathSpan.bindSource_correct]],
+          `ConcreteSpec.Core.SourcePathSpan.bindSource_correct,
+          `ConcreteSpec.Core.SourcePathSpan.projectSpan_safety,
+          `ConcreteSpec.Core.SourcePathSpan.projectSpan_progress,
+          `ConcreteSpec.Core.SourcePathSpan.bindSource_safety,
+          `ConcreteSpec.Core.SourcePathSpan.bindSource_progress]],
       namespaces := [specNamespace `Proofs.Ident `Core.SourcePathSpan] }
   | .R => namedEvidence [
     decls `ConcreteSpec.Spec.Rules [`ConcreteSpec.Core.registeredRules,
@@ -1344,9 +1351,16 @@ private def plan : List Piece := [
     "changelog.d/2026-11-17-spec-f03b-sourcetext.md",
   disposition .«F03p-design» "design proposals never land on main and stay on WIP branches as writer briefs. The Lean spec carries the normative decisions for F03p"
     "ISSUES.tsv ISS-0068; docs/decisions.md#decided-2026-11-17-proposals-in-lean",
-  pending .F03p ["ROADMAP.md R-0709; ISSUES.tsv ISS-0068 (span projection and source binding)"],
+  present .F03p "Source-path admission, byte-span projection, and source binding",
   present .F04 "Stable-key, namespace, obligation, contract, and byte-coordinate proofs",
-  pending .F04p ["ROADMAP.md R-0709; ISSUES.tsv ISS-0068 (span projection and source binding Laws and controls)"],
+  { present .F04p "Source-path admission, span projection and source binding Laws and controls" with
+    groups := [
+      evidence `ConcreteSpec.Proofs.Ident `ConcreteSpec.Core.SourcePathSpan [
+        `ProjectionCorrect, `BindingCorrect],
+      evidence `ConcreteSpec.Proofs.Ident `ConcreteSpec.Core.SourcePathSpan.Controls [
+        `pastEnd, `projectPastEnd, `projectAtStartOnly, `bindUnchecked, `bindBeforeEof,
+        `projectPastEnd_violates_correct, `projectAtStartOnly_violates_correct,
+        `bindUnchecked_violates_correct, `bindBeforeEof_violates_correct]] },
   added .R "Rule registry, prerequisite of F06, F13 and F17"
     "changelog.d/2026-11-13-spec-rule-registry.md; ROADMAP.md R-0615",
   present .F05 "Fixed-width arithmetic and exact-term correspondence",
