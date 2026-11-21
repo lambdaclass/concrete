@@ -153,11 +153,11 @@ def expectedInventory (tbl : SiteTable) : List IntegerField :=
   let invalidSize := (invalidLine ++ "\n").utf8ByteSize
   (tbl.map fun e => (.byteLength, none, size e)) ++
   [(.byteLength, none, invalidSize), (.comparisonRight, some 64, 0),
-   (.callArgument, some 32, 2), (.comparisonRight, some 64, 0),
+   (.callArgument 0, some 32, 2), (.comparisonRight, some 64, 0),
    (.comparisonRight, some 32, 256), (.right, some 32, 256)] ++
   ((List.range tbl.length).map fun i => (.switchKey, some 32, i)) ++
-  (tbl.flatMap fun e => [(.callArgument, some 64, size e), (.callArgument, some 32, 134)]) ++
-  [(.callArgument, some 64, invalidSize)]
+  (tbl.flatMap fun e => [(.callArgument 1, some 64, size e), (.callArgument 0, some 32, 134)]) ++
+  [(.callArgument 1, some 64, invalidSize)]
 
 private theorem map_indexedFrom {α β : Type} (xs : List α) (n : Nat) (f : α → β) :
     (indexedFrom n xs).map (fun x => f x.2) = xs.map f := by
@@ -181,7 +181,7 @@ private theorem flatMap_indexedFrom {α β : Type} (xs : List α) (n : Nat) (f :
 theorem llvmItems_inventory (tbl : SiteTable) :
     (llvmItems tbl).flatMap Item.inventory = expectedInventory tbl := by
   simp only [llvmItems, expectedInventory, List.flatMap_append, List.flatMap_map,
-    List.flatMap_cons, List.flatMap_nil, Item.inventory, Instruction.inventory,
+    List.flatMap_cons, List.flatMap_nil, List.zipIdx_cons, List.zipIdx_nil, Item.inventory, Instruction.inventory,
     Argument.inventory, TypeCode.integerWidth, Width.bits, Immediate.natural,
     List.map_map, List.nil_append, List.append_nil, List.cons_append, List.flatMap_assoc]
   simp only [← List.map_eq_flatMap, indexed]
@@ -192,11 +192,11 @@ theorem llvmItems_inventory (tbl : SiteTable) :
     rfl
   erw [keys]
   have traps : ((indexedFrom 0 tbl).flatMap fun x =>
-      [(.callArgument, some 64, (siteBytes x.2).size), (.callArgument, some 32, 134)] :
+      [(.callArgument 1, some 64, (siteBytes x.2).size), (.callArgument 0, some 32, 134)] :
       List IntegerField) = tbl.flatMap (fun e =>
-      [(.callArgument, some 64, (siteBytes e).size), (.callArgument, some 32, 134)]) :=
+      [(.callArgument 1, some 64, (siteBytes e).size), (.callArgument 0, some 32, 134)]) :=
     flatMap_indexedFrom tbl 0 (fun e =>
-      [(IntegerRole.callArgument, some 64, (siteBytes e).size), (IntegerRole.callArgument, some 32, 134)])
+      [(IntegerRole.callArgument 1, some 64, (siteBytes e).size), (IntegerRole.callArgument 0, some 32, 134)])
   rw [traps]
   simp [siteBytes, invalidBytes, List.append_assoc]
 

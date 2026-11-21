@@ -72,7 +72,9 @@ quoted theorem references appear as elaborated command dependencies.
    ill-typed payloads. Qualify with Laws for the immediate width, decimal-token
    parsing and Core round trip, the trusted-base golden and the existing
    two-backend slice-0 controls. The producer inventory theorem covers all
-   BIR programs and the runtime items, before text rendering. The assembly
+   BIR programs and the runtime items, before text rendering. Call roles carry
+   their zero-based argument slot. Phi roles carry their incoming slot and
+   predecessor label, including when two edges share a predecessor. The assembly
    reader consumes the complete module and recovers numeric roles, widths
    and values. Its connection to the producer inventory is tested on the
    fixtures. The universal connection to emitted text remains a slice-1
@@ -87,10 +89,7 @@ quoted theorem references appear as elaborated command dependencies.
    bijection can still relate slice-1 tags to the new BIR tags. Preserve the
    F30 range and operation comparisons as witnesses across the two models
    while both exist. Qualify the typing invariant, overflow flag, result word
-   and both backends together with positive and negative controls. Prove
-   universal assembly-tree recovery from rendered instructions, terminators
-   and module items, including the runtime, with the backend's assembly
-   domain stated explicitly. Reconcile
+   and both backends together with positive and negative controls. Reconcile
    premise and headline references in the same change as their subjects.
 3. **Slice syntax, statics, execution and storage, then retirement.** Switch
    Slice1Syntax, Statics, Slice1Semantics, Slice1Ownership, Slice1Checker,
@@ -111,6 +110,27 @@ quoted theorem references appear as elaborated command dependencies.
    entries when the last users move. Reconcile the remaining probes, root
    exports and goldens with the same change. Run a fresh census before
    retirement and account for every remaining direct edge and surface row.
+
+### Remaining slice-1 text proof
+
+1. Prove quoted-byte consumption through the closing quote for printable
+   and hex-escaped bytes, using per-byte arithmetic and induction on the
+   bytes. Show that the reconstructed byte array has the declared length.
+2. Instantiate delimited-list consumption for declaration types, definition
+   parameters, call arguments, phi arms and switch cases. Relate each
+   renderer's pieces to the delimited character list and prove that the
+   closing token cannot preempt a rendered entry or separator.
+3. Prove suffix consumption at item dispatch for declarations, definitions,
+   constants, labels, all instruction and terminator forms, function ends
+   and blank lines. Discharge competing alternatives at each dispatch
+   point and prove that every rendered item is nonempty. Compose these
+   results with module-list consumption to recover the emitted assembly
+   tree and project its inventory.
+4. Compose the text theorem with `moduleItems_inventory` for `LLVM.module`,
+   the string passed to `IO.FS.writeFile` by the BIR emitter. Check that the
+   file-writing path uses that string directly. Qualify the renderer
+   mutations against the resulting universal text theorem and register the
+   public laws in the premise registry and audit goldens.
 
 Slice 1 and Slice 2 leave the F30 comparison available at the boundaries
 that still carry the old tags. Slice 3 is the final type substitution at

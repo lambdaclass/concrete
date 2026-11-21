@@ -116,6 +116,8 @@ theorem Concrete.Backend.LLVM.Assembly.parse_render_i8_add axioms: propext, Clas
 theorem Concrete.Backend.LLVM.operand_token axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.Backend.LLVM.operand_parse axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.Backend.LLVM.operand_roundTrip axioms: propext, Classical.choice, Quot.sound
+theorem Concrete.Backend.LLVM.moduleItems_inventory axioms: propext, Quot.sound
+theorem Concrete.Backend.Runtime.llvmItems_inventory axioms: propext, Quot.sound
 theorem Concrete.Backend.LLVM.render_immediate_fields axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.Backend.LLVM.render_immediate axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.BIR.decode_encode axioms: propext, Quot.sound

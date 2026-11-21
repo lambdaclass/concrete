@@ -59,7 +59,7 @@ inductive Label where
   | block (index : Nat)
   | trapSite (index : Nat)
   | entry | loop | out | wr | more | exit | trap | bad
-  deriving BEq
+  deriving BEq, DecidableEq, Repr
 
 inductive Local where
   | register (index : Nat)
@@ -111,7 +111,8 @@ inductive Item where
 /-- Numeric positions in assembly order. Operand positions carry their LLVM type;
 extract indices and byte lengths have no explicit integer type. -/
 inductive IntegerRole where
-  | left | right | conversionSource | callArgument | extractIndex | phiArm
+  | left | right | conversionSource | callArgument (position : Nat) | extractIndex
+  | phiArm (position : Nat) (predecessor : Label)
   | comparisonLeft | comparisonRight | gepBase | gepOffset | returnValue | switchKey | byteLength
   deriving DecidableEq, Repr
 
@@ -129,9 +130,9 @@ def Argument.inventory (role : IntegerRole) (ty : TypeCode) : Argument → List 
 def Instruction.inventory : Instruction → List IntegerField
   | .bin _ _ ty a b => a.inventory .left ty ++ b.inventory .right ty
   | .convert _ _ (ty, a) _ => a.inventory .conversionSource ty
-  | .call _ _ _ args => args.flatMap fun (ty, a) => a.inventory .callArgument ty
+  | .call _ _ _ args => args.zipIdx.flatMap fun ((ty, a), index) => a.inventory (.callArgument index) ty
   | .extract _ _ _ i => [(.extractIndex, none, i)]
-  | .phi _ ty arms => arms.flatMap fun (a, _) => a.inventory .phiArm ty
+  | .phi _ ty arms => arms.zipIdx.flatMap fun ((a, pred), index) => a.inventory (.phiArm index pred) ty
   | .compare _ _ ty a b => a.inventory .comparisonLeft ty ++ b.inventory .comparisonRight ty
   | .gep _ _ (baseTy, base) (offsetTy, offset) =>
     base.inventory .gepBase baseTy ++ offset.inventory .gepOffset offsetTy
@@ -626,11 +627,14 @@ private def intrinsic : Parser Global := do
   let ty ← width
   pure (.overflow op (intrinsicType ty signed))
 
-private def globalName : Parser Global := do
-  literal "@"
-  alt intrinsic <| named [("concrete_body", .body), ("main", .main),
+private def globalPlain : Parser Global :=
+  named [("concrete_body", .body), ("main", .main),
     ("concrete_rt_write_all", .writeAll), ("write", .write), ("_exit", .exit),
     ("abort", .abort), (".bad", .bad)] [(".site", .site)]
+
+private def globalName : Parser Global := do
+  literal "@"
+  alt intrinsic globalPlain
 
 private def pairType : Parser TypeCode := do
   literal r"{"
@@ -1229,6 +1233,409 @@ private theorem typeCode_append (ty : TypeCode) (c : Char) (rest : List Char)
     · exact go _ ['i','1','6'] rfl (by simp [symbolChar]) rfl
     · exact go _ ['i','3','2'] rfl (by simp [symbolChar]) rfl
     · exact go _ ['i','6','4'] rfl (by simp [symbolChar]) rfl
+
+private def WordBoundary (rest : List Char) : Prop :=
+  ∀ c, rest.head? = some c → symbolChar c = false
+
+private theorem decodeUnsigned_decimal (n : Nat) :
+    decodeUnsigned (decimal n).toList = some n := by
+  simp [decodeUnsigned, (parseDecimal_exact _ _).2 (decimal_token n)]
+
+private theorem word_exact (decode : List Char → Option α) (token rest : List Char) (a : α)
+    (valid : ∀ c ∈ token, symbolChar c = true) (finish : WordBoundary rest)
+    (decoded : decode token = some a) :
+    word decode (token ++ rest) = some (a, rest) := by
+  rw [word_append _ _ _ valid finish, decoded]
+  rfl
+
+private theorem word_numbered (decode : List Char → Option α) (stemChars rest : List Char)
+    (n : Nat) (a : α) (valid : ∀ c ∈ stemChars, symbolChar c = true) (finish : WordBoundary rest)
+    (decoded : decode (stemChars ++ (decimal n).toList) = some a) :
+    word decode (stemChars ++ ((decimal n).toList ++ rest)) = some (a, rest) := by
+  rw [← List.append_assoc]
+  apply word_exact _ _ _ _ _ finish decoded
+  intro c hc
+  exact (List.mem_append.mp hc).elim (valid c) (decimal_chars n c)
+
+private theorem width_append (w : Width) (rest : List Char) (finish : WordBoundary rest) :
+    width (chars (LLVM.typeCode (.integer w)) ++ rest) = some (w, rest) := by
+  cases w
+  · exact word_exact _ ['i','8'] _ _ (by simp [symbolChar]) finish rfl
+  · exact word_exact _ ['i','1','6'] _ _ (by simp [symbolChar]) finish rfl
+  · exact word_exact _ ['i','3','2'] _ _ (by simp [symbolChar]) finish rfl
+  · exact word_exact _ ['i','6','4'] _ _ (by simp [symbolChar]) finish rfl
+
+private theorem arithmetic_append (op : Arithmetic) (rest : List Char) :
+    arithmetic (chars (LLVM.arithmetic op) ++ rest) = some (op, rest) := by
+  cases op <;> rfl
+
+private theorem conversion_append (op : Conversion) (rest : List Char) :
+    conversion (chars (LLVM.conversion op) ++ rest) = some (op, rest) := by
+  cases op <;> rfl
+
+private theorem comparison_append (op : Comparison) (rest : List Char) :
+    comparison (chars (LLVM.comparison op) ++ rest) = some (op, rest) := by
+  cases op <;> rfl
+
+@[local simp] private theorem chars_text (s : String) (valid) :
+    chars (text s valid) = s.toList := by
+  simp [chars, renderPieces, text, Piece.render]
+
+@[local simp] private theorem chars_numbered (kind : NumberPrefix) (n : Nat) :
+    chars (numbered kind n) = kind.text.toList ++ (decimal n).toList := by
+  simp [chars, renderPieces, numbered, Piece.render]
+
+private theorem arithmetic_rejects_conversion (op : Conversion) (rest : List Char) :
+    arithmetic (chars (LLVM.conversion op) ++ rest) = none := by
+  cases op <;> rfl
+
+private theorem conversion_rejects_arithmetic (op : Arithmetic) (rest : List Char) :
+    conversion (chars (LLVM.arithmetic op) ++ rest) = none := by
+  cases op <;> rfl
+
+private theorem decimal_head (n : Nat) :
+    ∃ c cs, (decimal n).toList = c :: cs ∧ c.isDigit = true := by
+  have valid (c : Char) (hc : c ∈ (decimal n).toList) : c.isDigit = true := by
+    rw [decimal, Nat.toList_repr] at hc
+    exact Nat.isDigit_of_mem_toDigits (by decide) (by decide) hc
+  cases h : (decimal n).toList with
+  | nil => simp [decimal, Nat.toList_repr, Nat.toDigits_ne_nil] at h
+  | cons c cs => exact ⟨c, cs, rfl, valid c (by simp [h])⟩
+
+private theorem localName_append (name : Local) (rest : List Char) (finish : WordBoundary rest) :
+    localName (chars (LLVM.localName name) ++ rest) = some (name, rest) := by
+  have run (token : List Char) :
+      localName (('%' :: token) ++ rest) = word localWord (token ++ rest) := rfl
+  cases name <;> simp only [LLVM.localName, chars_numbered, chars_text, NumberPrefix.text]
+  case register n =>
+    rw [show "%r".toList = ['%', 'r'] from rfl, List.append_assoc]
+    exact local_register n rest finish
+  case overflow n =>
+    rw [show "%o".toList = '%' :: ['o'] from rfl, List.cons_append, run, List.append_assoc]
+    apply word_numbered _ _ _ _ _ (by simp [symbolChar]) finish
+    obtain ⟨c, cs, digits, digit⟩ := decimal_head n
+    have ne : c ≠ 'k' := by rintro rfl; contradiction
+    have decoded := decodeUnsigned_decimal n
+    rw [digits] at decoded ⊢
+    simp [localWord, ne, decoded]
+  case result n =>
+    rw [show "%ret".toList = '%' :: ['r','e','t'] from rfl, List.cons_append, run, List.append_assoc]
+    apply word_numbered _ _ _ _ _ (by simp [symbolChar]) finish
+    change (decodeUnsigned (decimal n).toList).map Local.result = _
+    rw [decodeUnsigned_decimal]
+    rfl
+  case p =>
+    rw [show "%p".toList = '%' :: ['p'] from rfl, run]
+    exact word_exact _ _ _ _ (by simp [symbolChar]) finish rfl
+  case n =>
+    rw [show "%n".toList = '%' :: ['n'] from rfl, run]
+    exact word_exact _ _ _ _ (by simp [symbolChar]) finish rfl
+  case pp =>
+    rw [show "%pp".toList = '%' :: ['p','p'] from rfl, run]
+    exact word_exact _ _ _ _ (by simp [symbolChar]) finish rfl
+  case np =>
+    rw [show "%np".toList = '%' :: ['n','p'] from rfl, run]
+    exact word_exact _ _ _ _ (by simp [symbolChar]) finish rfl
+  case nn =>
+    rw [show "%nn".toList = '%' :: ['n','n'] from rfl, run]
+    exact word_exact _ _ _ _ (by simp [symbolChar]) finish rfl
+  case rest =>
+    rw [show "%rest".toList = '%' :: ['r','e','s','t'] from rfl, run]
+    exact word_exact _ _ _ _ (by simp [symbolChar]) finish rfl
+  case done =>
+    rw [show "%done".toList = '%' :: ['d','o','n','e'] from rfl, run]
+    exact word_exact _ _ _ _ (by simp [symbolChar]) finish rfl
+  case k =>
+    rw [show "%k".toList = '%' :: ['k'] from rfl, run]
+    exact word_exact _ _ _ _ (by simp [symbolChar]) finish rfl
+  case bad =>
+    rw [show "%bad".toList = '%' :: ['b','a','d'] from rfl, run]
+    exact word_exact _ _ _ _ (by simp [symbolChar]) finish rfl
+  case w =>
+    rw [show "%w".toList = '%' :: ['w'] from rfl, run]
+    exact word_exact _ _ _ _ (by simp [symbolChar]) finish rfl
+  case ok =>
+    rw [show "%ok".toList = '%' :: ['o','k'] from rfl, run]
+    exact word_exact _ _ _ _ (by simp [symbolChar]) finish rfl
+  case i =>
+    rw [show "%i".toList = '%' :: ['i'] from rfl, run]
+    exact word_exact _ _ _ _ (by simp [symbolChar]) finish rfl
+
+private theorem numberedName_append (stem : String) (make : Nat → α) (n : Nat) :
+    numberedName stem make (stem.toList ++ (decimal n).toList) = some (make n) := by
+  have step := unsigned_append n [] (by simp)
+  simp only [List.append_nil] at step
+  simp [numberedName, consume_append, step]
+
+private theorem labelName_append (name : Label) (rest : List Char) (finish : WordBoundary rest) :
+    labelName (chars (LLVM.labelName name) ++ rest) = some (name, rest) := by
+  simp only [labelName, named]
+  cases name <;> simp only [LLVM.labelName, chars_numbered, chars_text, NumberPrefix.text,
+    List.append_assoc]
+  case block n =>
+    rw [show "b".toList = ['b'] from rfl]
+    apply word_numbered _ _ _ _ _ (by simp [symbolChar]) finish
+    have value := numberedName_append "b" Label.block n
+    obtain ⟨c, cs, digits, digit⟩ := decimal_head n
+    have ne : 'a' ≠ c := by rintro rfl; contradiction
+    rw [digits] at value ⊢
+    have miss : ('a' == c) = false := by simpa using ne
+    simp [namedWord, List.find?, List.findSome?, miss]
+    rw [show numberedName "b" Label.block ('b' :: c :: cs) = some (.block n) from value]
+  case trapSite n =>
+    rw [show "t".toList = ['t'] from rfl]
+    apply word_numbered _ _ _ _ _ (by simp [symbolChar]) finish
+    have value := numberedName_append "t" Label.trapSite n
+    obtain ⟨c, cs, digits, digit⟩ := decimal_head n
+    have ne : 'r' ≠ c := by rintro rfl; contradiction
+    rw [digits] at value ⊢
+    have miss : ('r' == c) = false := by simpa using ne
+    simp [namedWord, List.find?, List.findSome?, miss]
+    rw [show numberedName "b" Label.block ('t' :: c :: cs) = none from rfl,
+      show numberedName "t" Label.trapSite ('t' :: c :: cs) = some (.trapSite n) from value]
+  case entry =>
+    rw [show "entry".toList = ['e','n','t','r','y'] from rfl]
+    exact word_exact _ _ _ _ (by simp [symbolChar]) finish rfl
+  case loop =>
+    rw [show "loop".toList = ['l','o','o','p'] from rfl]
+    exact word_exact _ _ _ _ (by simp [symbolChar]) finish rfl
+  case out =>
+    rw [show "out".toList = ['o','u','t'] from rfl]
+    exact word_exact _ _ _ _ (by simp [symbolChar]) finish rfl
+  case wr =>
+    rw [show "wr".toList = ['w','r'] from rfl]
+    exact word_exact _ _ _ _ (by simp [symbolChar]) finish rfl
+  case more =>
+    rw [show "more".toList = ['m','o','r','e'] from rfl]
+    exact word_exact _ _ _ _ (by simp [symbolChar]) finish rfl
+  case exit =>
+    rw [show "exit".toList = ['e','x','i','t'] from rfl]
+    exact word_exact _ _ _ _ (by simp [symbolChar]) finish rfl
+  case trap =>
+    rw [show "trap".toList = ['t','r','a','p'] from rfl]
+    exact word_exact _ _ _ _ (by simp [symbolChar]) finish rfl
+  case bad =>
+    rw [show "bad".toList = ['b','a','d'] from rfl]
+    exact word_exact _ _ _ _ (by simp [symbolChar]) finish rfl
+
+private theorem intrinsic_append (op : Arithmetic) (ty : IntTy) (rest : List Char)
+    (finish : WordBoundary rest) :
+    globalName (chars (LLVM.global (.overflow op ty)) ++ rest) =
+      some (.overflow op ty, rest) := by
+  let tail := chars (LLVM.typeCode (.integer (Width.ofCore ty))) ++ rest
+  have step : width tail = some (Width.ofCore ty, rest) := width_append _ _ finish
+  have route (signed : Bool) (op : Arithmetic) (input : List Char) :
+      intrinsic ("llvm.".toList ++ ((if signed then "s" else "u").toList ++
+        (chars (LLVM.arithmetic op) ++ (".with.overflow.".toList ++ input)))) =
+      (width input).bind (fun (w, rest) => some (Global.overflow op (intrinsicType w signed), rest)) := by
+    cases signed <;> cases op <;>
+      simp only [LLVM.arithmetic, chars_text, Bool.false_eq_true, ite_false, ite_true] <;> rfl
+  have shape :
+      chars (LLVM.global (.overflow op ty)) ++ rest =
+        "@llvm.".toList ++ ((if ty.signed then "s" else "u").toList ++
+          (chars (LLVM.arithmetic op) ++ (".with.overflow.".toList ++ tail))) := by
+    simp only [LLVM.global, chars_append, chars_text, List.append_assoc, tail]
+    cases ty <;> rfl
+  rw [shape]
+  change (intrinsic ("llvm.".toList ++ _)).orElse _ = _
+  rw [route, step]
+  cases ty <;> rfl
+
+private theorem globalName_append (name : Global) (rest : List Char) (finish : WordBoundary rest) :
+    globalName (chars (LLVM.global name) ++ rest) = some (name, rest) := by
+  have run (token : List Char) (miss : consume "llvm.".toList (token ++ rest) = none) :
+      globalName (('@' :: token) ++ rest) = globalPlain (token ++ rest) := by
+    change (intrinsic (token ++ rest)).orElse _ = _
+    simp only [intrinsic, bind_run, literal, miss, Option.map_none, Option.bind_none,
+      Option.orElse_none]
+    rfl
+  cases name
+  case overflow op ty => exact intrinsic_append op ty rest finish
+  case site n =>
+    simp only [LLVM.global, chars_numbered, NumberPrefix.text]
+    rw [show "@.site".toList = '@' :: ['.','s','i','t','e'] from rfl, List.cons_append,
+      run (['.','s','i','t','e'] ++ (decimal n).toList) rfl, List.append_assoc]
+    simp only [globalPlain, named]
+    apply word_numbered _ _ _ _ _ (by simp [symbolChar]) finish
+    have decoded := numberedName_append ".site" Global.site n
+    generalize (decimal n).toList = digits at decoded ⊢
+    change numberedName ".site" Global.site ('.' :: 's' :: 'i' :: 't' :: 'e' :: digits) =
+      some (.site n) at decoded
+    simp [namedWord, List.find?, List.findSome?, decoded]
+  case body =>
+    simp only [LLVM.global, chars_text]
+    rw [show "@concrete_body".toList = '@' :: ['c','o','n','c','r','e','t','e','_','b','o','d','y'] from rfl, run ['c','o','n','c','r','e','t','e','_','b','o','d','y'] rfl]
+    simp only [globalPlain, named]
+    exact word_exact _ _ _ _ (by simp [symbolChar]) finish rfl
+  case main =>
+    simp only [LLVM.global, chars_text]
+    rw [show "@main".toList = '@' :: ['m','a','i','n'] from rfl, run ['m','a','i','n'] rfl]
+    simp only [globalPlain, named]
+    exact word_exact _ _ _ _ (by simp [symbolChar]) finish rfl
+  case writeAll =>
+    simp only [LLVM.global, chars_text]
+    rw [show "@concrete_rt_write_all".toList = '@' :: ['c','o','n','c','r','e','t','e','_','r','t','_','w','r','i','t','e','_','a','l','l'] from rfl, run ['c','o','n','c','r','e','t','e','_','r','t','_','w','r','i','t','e','_','a','l','l'] rfl]
+    simp only [globalPlain, named]
+    exact word_exact _ _ _ _ (by simp [symbolChar]) finish rfl
+  case write =>
+    simp only [LLVM.global, chars_text]
+    rw [show "@write".toList = '@' :: ['w','r','i','t','e'] from rfl, run ['w','r','i','t','e'] rfl]
+    simp only [globalPlain, named]
+    exact word_exact _ _ _ _ (by simp [symbolChar]) finish rfl
+  case exit =>
+    simp only [LLVM.global, chars_text]
+    rw [show "@_exit".toList = '@' :: ['_','e','x','i','t'] from rfl, run ['_','e','x','i','t'] rfl]
+    simp only [globalPlain, named]
+    exact word_exact _ _ _ _ (by simp [symbolChar]) finish rfl
+  case abort =>
+    simp only [LLVM.global, chars_text]
+    rw [show "@abort".toList = '@' :: ['a','b','o','r','t'] from rfl, run ['a','b','o','r','t'] rfl]
+    simp only [globalPlain, named]
+    exact word_exact _ _ _ _ (by simp [symbolChar]) finish rfl
+  case bad =>
+    simp only [LLVM.global, chars_text]
+    rw [show "@.bad".toList = '@' :: ['.','b','a','d'] from rfl, run ['.','b','a','d'] rfl]
+    simp only [globalPlain, named]
+    exact word_exact _ _ _ _ (by simp [symbolChar]) finish rfl
+
+private theorem global_starts (name : Global) : ∃ token, chars (LLVM.global name) = '@' :: token := by
+  cases name <;> simp only [LLVM.global, chars_append, chars_text, chars_numbered] <;>
+    exact ⟨_, rfl⟩
+
+private theorem argument_local_append (name : Local) (rest : List Char)
+    (finish : WordBoundary rest) :
+    argument (chars (LLVM.localName name) ++ rest) = some (.local name, rest) := by
+  simp only [argument, alt, map_run, localName_append name rest finish, Option.map_some,
+    Option.orElse_some]
+
+private theorem argument_global_append (name : Global) (rest : List Char)
+    (finish : WordBoundary rest) :
+    argument (chars (LLVM.global name) ++ rest) = some (.global name, rest) := by
+  obtain ⟨token, shape⟩ := global_starts name
+  have miss : localName (chars (LLVM.global name) ++ rest) = none := by
+    rw [shape]
+    rfl
+  simp only [argument, alt, map_run, miss, Option.map_none, Option.orElse_none,
+    globalName_append name rest finish, Option.map_some, Option.orElse_some]
+
+@[local simp] private theorem chars_punctuation (after : Separator) :
+    chars [.punctuation after] = [after.char] := by
+  simp [chars, renderPieces, Piece.render]
+
+private theorem space_chars : " ".toList = [' '] := rfl
+
+private theorem argument_append (a : Argument) (after : Separator) (rest : List Char) :
+    argument ((chars (LLVM.arg a after)).tail ++ rest) = some (a, after.char :: rest) := by
+  have finish : WordBoundary (after.char :: rest) := by
+    cases after <;> simp [WordBoundary, Separator.char, symbolChar]
+  cases a with
+  | «local» name =>
+    simpa only [LLVM.arg, framed, chars_append, chars_text, chars_punctuation, space_chars, List.append_assoc,
+      List.cons_append, List.nil_append, List.tail_cons] using argument_local_append name _ finish
+  | global name =>
+    simpa only [LLVM.arg, framed, chars_append, chars_text, chars_punctuation, space_chars, List.append_assoc,
+      List.cons_append, List.nil_append, List.tail_cons] using argument_global_append name _ finish
+  | immediate value =>
+    cases value with
+    | mk n =>
+      simpa [LLVM.arg, imm, chars, renderPieces, Piece.render, Opening.char, Immediate.token,
+        Immediate.natural, List.append_assoc] using argument_unsigned n _ finish
+
+private theorem typed_append (a : TypedArgument) (after : Separator) (rest : List Char) :
+    typed (chars (LLVM.typed a after) ++ rest) = some (a, after.char :: rest) := by
+  obtain ⟨ty, value⟩ := a
+  have starts : ∃ token, chars (LLVM.arg value after) = ' ' :: token := by
+    cases value with
+    | «local» _ | global _ =>
+      simp only [LLVM.arg, framed, chars_append, chars_text, space_chars, List.cons_append,
+        List.nil_append]
+      exact ⟨_, rfl⟩
+    | immediate v =>
+      simp [LLVM.arg, imm, chars, renderPieces, Piece.render, Opening.char, Immediate.token]
+  obtain ⟨token, shape⟩ := starts
+  have step := argument_append value after rest
+  rw [shape, List.tail_cons] at step
+  simp only [LLVM.typed, chars_append, List.append_assoc, shape, List.cons_append]
+  have tyStep := typeCode_append ty ' ' (token ++ rest) (by decide)
+  simp only [typed, bind_run, tyStep, Option.bind_some, space_run, step, pure_run]
+
+private theorem keyword_append (s : String) (a : α) (rest : List Char) :
+    keyword s a (s.toList ++ rest) = some (a, rest) := by
+  simp [keyword, bind_run, literal_append, pure_run]
+
+private theorem keyword_fail (s : String) (a : α) (input : List Char)
+    (miss : consume s.toList input = none) : keyword s a input = none := by
+  simp [keyword, bind_run, literal, miss]
+
+private theorem labelRef_append (name : Label) (rest : List Char) (finish : WordBoundary rest) :
+    labelRef ("label %".toList ++ (chars (LLVM.labelName name) ++ rest)) =
+      some (name, rest) := by
+  simp only [labelRef, bind_run, literal_append, Option.bind_some, labelName_append name rest finish]
+
+/-- Entry spellings joined by separators and followed by the closing token. -/
+private def seriesChars (entry : α → List Char) (sep ending : String) :
+    List α → List Char
+  | [] => ending.toList
+  | a :: as => entry a ++ (if as.isEmpty then [] else sep.toList) ++ seriesChars entry sep ending as
+
+private theorem seriesChars_length (entry : α → List Char) (sep ending : String)
+    (nonempty : ∀ a, entry a ≠ []) (xs : List α) :
+    xs.length ≤ (seriesChars entry sep ending xs).length := by
+  induction xs with
+  | nil => simp
+  | cons a as ih =>
+    have positive : 0 < (entry a).length := List.length_pos_iff.mpr (nonempty a)
+    simp only [seriesChars, List.length_cons, List.length_append]
+    omega
+
+private theorem itemsUntil_append (entry : Parser α) (charsOf : α → List Char)
+    (sep ending : String) (rest : List Char)
+    (step : ∀ a as, entry (seriesChars charsOf sep ending (a :: as) ++ rest) =
+      some (a, (if as.isEmpty then [] else sep.toList) ++
+        (seriesChars charsOf sep ending as ++ rest)))
+    (missAfterSep : ∀ a as, consume ending.toList
+      (sep.toList ++ (seriesChars charsOf sep ending (a :: as) ++ rest)) = none)
+    (a : α) (as : List α) (fuel : Nat) (enough : as.length + 1 ≤ fuel) :
+    itemsUntil entry sep ending fuel (seriesChars charsOf sep ending (a :: as) ++ rest) =
+      some (a :: as, rest) := by
+  induction as generalizing a fuel with
+  | nil =>
+    cases fuel with
+    | zero => omega
+    | succ fuel =>
+      rw [itemsUntil, bind_run, step, Option.bind_some]
+      simp [seriesChars, alt, keyword_append]
+  | cons b bs ih =>
+    cases fuel with
+    | zero => omega
+    | succ fuel =>
+      have bound : bs.length + 1 ≤ fuel := by simp only [List.length_cons] at enough; omega
+      simp [itemsUntil, bind_run, step, alt, keyword_fail _ _ _ (missAfterSep b bs),
+        literal_append, pure_run, ih b fuel bound]
+
+/-- The closing token wins at the start and after each entry. The two failure
+conditions ensure it wins exactly at the end of the rendered list. -/
+private theorem series_append (entry : Parser α) (charsOf : α → List Char)
+    (sep ending : String) (rest : List Char)
+    (nonempty : ∀ a, charsOf a ≠ [])
+    (step : ∀ a as, entry (seriesChars charsOf sep ending (a :: as) ++ rest) =
+      some (a, (if as.isEmpty then [] else sep.toList) ++
+        (seriesChars charsOf sep ending as ++ rest)))
+    (start : ∀ a as, consume ending.toList
+      (seriesChars charsOf sep ending (a :: as) ++ rest) = none)
+    (missAfterSep : ∀ a as, consume ending.toList
+      (sep.toList ++ (seriesChars charsOf sep ending (a :: as) ++ rest)) = none)
+    (xs : List α) :
+    series entry sep ending (seriesChars charsOf sep ending xs ++ rest) = some (xs, rest) := by
+  cases xs with
+  | nil => simp [series, seriesChars, alt, keyword_append]
+  | cons a as =>
+    have enough := seriesChars_length charsOf sep ending nonempty (a :: as)
+    simp only [List.length_cons] at enough
+    simp only [series, alt, keyword_fail _ _ _ (start a as), Option.orElse_none]
+    apply itemsUntil_append entry charsOf sep ending rest step missAfterSep
+    simp only [List.length_append]
+    omega
 
 private theorem chars_items (items : List Item) :
     (render items).toList = items.flatMap (fun i => chars i.pieces) := by

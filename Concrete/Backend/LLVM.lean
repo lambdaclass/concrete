@@ -239,7 +239,8 @@ private def expectedInst : Inst → List IntegerField
   | .bin _ t _ a b =>
     expectedOperand .left (toCore t).bits a ++ expectedOperand .right (toCore t).bits b
   | .binOvf _ t _ _ a b =>
-    expectedOperand .callArgument (toCore t).bits a ++ expectedOperand .callArgument (toCore t).bits b ++
+    expectedOperand (.callArgument 0) (toCore t).bits a ++
+      expectedOperand (.callArgument 1) (toCore t).bits b ++
       [(.extractIndex, none, 0), (.extractIndex, none, 1)]
   | .trunc source target _ a =>
     if (toCore source).bits = (toCore target).bits then
@@ -251,9 +252,9 @@ private def expectedTerm : Term → List IntegerField
   | .trap s => [(.returnValue, some 32, 256 + s)]
   | .br .. | .condbr .. => []
 
-private def expectedPhiSource (j k width : Nat) (b : Block) : List IntegerField :=
+private def expectedPhiSource (j k pred : Nat) (b : Block) : List (Operand × Nat) :=
   let incoming (target : Nat) (args : List Operand) :=
-    if target == j then expectedOperand .phiArm width (args.getD k (.imm .u8 0)) else []
+    if target == j then [(args.getD k (.imm .u8 0), pred)] else []
   match b.term with
   | .br target args => incoming target args
   | .condbr _ yes yesArgs no noArgs => incoming yes yesArgs ++ incoming no noArgs
@@ -261,7 +262,9 @@ private def expectedPhiSource (j k width : Nat) (b : Block) : List IntegerField 
 
 private def expectedPhi (p : Program) (j k : Nat) (t : Ty) : List IntegerField :=
   let width := match t with | .int t => (toCore t).bits | .bool => 1
-  p.blocks.flatMap (expectedPhiSource j k width)
+  let sources := p.blocks.zipIdx.flatMap fun (b, pred) => expectedPhiSource j k pred b
+  sources.zipIdx.flatMap fun ((a, pred), index) =>
+    expectedOperand (.phiArm index (.block pred)) width a
 
 /-- The integer inventory specified by BIR lowering and the runtime contract. -/
 def expectedInventory (p : Program) : List IntegerField :=
@@ -281,7 +284,7 @@ private theorem inst_inventory (i : Inst) :
   cases i <;> simp only [inst, expectedInst]
   case bin => simp [Item.inventory, Instruction.inventory, operand_inventory, width_bits]
   case binOvf =>
-    simp [Item.inventory, Instruction.inventory, operand_inventory, width_bits, List.append_assoc]
+    simp [Item.inventory, Instruction.inventory, List.zipIdx_cons, operand_inventory, width_bits, List.append_assoc]
   case trunc fr target d a =>
     split <;> cases a <;> simp [Item.inventory, Instruction.inventory, operand, expectedOperand,
       width_bits, Argument.inventory, TypeCode.integerWidth, Immediate.natural]
@@ -292,38 +295,27 @@ private theorem term_inventory (j : Nat) (t : Term) :
   case ret a => cases a <;> rfl
   all_goals rfl
 
-private theorem phiArgs_inventory (p : Program) (j k : Nat) (t : Ty) :
-    (((edges p).filter (·.1 == j)).flatMap fun (_, _, args) =>
-      (operand (args.getD k (.imm .u8 0))).inventory .phiArm (ty t)) =
-      expectedPhi p j k t := by
-  let width := match t with | .int t => (toCore t).bits | .bool => 1
-  have arg (a : Operand) :
-      (operand a).inventory .phiArm (ty t) = expectedOperand .phiArm width a := by
-    cases t
-    case bool => cases a <;> rfl
-    case int => simp [ty, operand_inventory, width_bits, width]
-  simp only [edges, expectedPhi, List.filter_flatMap, List.flatMap_assoc, arg, indexed]
-  have scan (n : Nat) (blocks : List Block) :
-      ((Runtime.indexedFrom n blocks).flatMap fun (pred, b) =>
-        (((match b.term with
-          | .br target args => [(target, pred, args)]
-          | .condbr _ yes yesArgs no noArgs => [(yes, pred, yesArgs), (no, pred, noArgs)]
-          | _ => [] : List (Nat × Nat × List Operand)).filter (fun e => e.1 == j)).flatMap fun (_, _, args) =>
-            expectedOperand .phiArm width (args.getD k (.imm .u8 0)))) =
-      blocks.flatMap (expectedPhiSource j k width) := by
-    induction blocks generalizing n with
-    | nil => rfl
-    | cons b blocks ih =>
-      simp only [Runtime.indexedFrom, List.flatMap_cons, ih]
-      congr 1
-      cases h : b.term with
-      | br target args =>
-        by_cases eq : (target == j) = true <;> simp [expectedPhiSource, h, eq]
-      | condbr _ yes _ no _ =>
-        by_cases hy : (yes == j) = true <;> by_cases hn : (no == j) = true <;>
-          simp [expectedPhiSource, h, hy, hn]
-      | ret | trap => simp [expectedPhiSource, h]
-  exact scan 0 p.blocks
+private theorem phiSources_scan (j k n : Nat) (blocks : List Block) :
+    (((Runtime.indexedFrom n blocks).flatMap fun (pred, b) =>
+      (match b.term with
+        | .br target args => [(target, pred, args)]
+        | .condbr _ yes yesArgs no noArgs => [(yes, pred, yesArgs), (no, pred, noArgs)]
+        | _ => [] : List (Nat × Nat × List Operand))).filter (·.1 == j)).map
+          (fun (_, pred, args) => (args.getD k (.imm .u8 0), pred)) =
+      (blocks.zipIdx n).flatMap (fun (b, pred) => expectedPhiSource j k pred b) := by
+  induction blocks generalizing n with
+  | nil => rfl
+  | cons b blocks ih =>
+    simp only [Runtime.indexedFrom, List.zipIdx_cons, List.flatMap_cons, List.filter_append,
+      List.map_append, ih]
+    congr 1
+    cases h : b.term with
+    | br target args =>
+      by_cases eq : (target == j) = true <;> simp [expectedPhiSource, h, eq]
+    | condbr _ yes _ no _ =>
+      by_cases hy : (yes == j) = true <;> by_cases hn : (no == j) = true <;>
+        simp [expectedPhiSource, h, hy, hn]
+    | ret | trap => simp [expectedPhiSource, h]
 
 private theorem phi_inventory (p : Program) (j : Nat) (b : Block) :
     (phis p j b).flatMap Item.inventory =
@@ -332,8 +324,24 @@ private theorem phi_inventory (p : Program) (j : Nat) (b : Block) :
   apply congrArg (fun f => (indexed b.params).flatMap f)
   funext param
   rcases param with ⟨k, r, t⟩
-  simp only [Item.inventory, Instruction.inventory, List.flatMap_map]
-  exact phiArgs_inventory p j k t
+  have sources := phiSources_scan j k 0 p.blocks
+  change (((edges p).filter (·.1 == j)).map _) = _ at sources
+  have arms :
+      (((edges p).filter (·.1 == j)).map fun (_, pred, args) =>
+        (operand (args.getD k (.imm .u8 0)), Label.block pred)) =
+      ((p.blocks.zipIdx.flatMap fun (b, pred) => expectedPhiSource j k pred b).map
+        fun (a, pred) => (operand a, Label.block pred)) := by
+    rw [← sources, List.map_map]
+    rfl
+  simp only [Item.inventory, Instruction.inventory, arms, expectedPhi, List.zipIdx_map,
+    List.flatMap_map]
+  apply congrArg (fun f => ((p.blocks.zipIdx.flatMap fun (b, pred) =>
+    expectedPhiSource j k pred b).zipIdx).flatMap f)
+  funext entry
+  rcases entry with ⟨⟨a, pred⟩, index⟩
+  cases t
+  case bool => cases a <;> rfl
+  case int => simp [ty, operand_inventory, width_bits]
 
 /-- Producer-side inventory law for the actual module items, before rendering. -/
 theorem moduleItems_inventory (p : Program) :

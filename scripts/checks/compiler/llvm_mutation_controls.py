@@ -1,6 +1,7 @@
 """Re-elaborate the real producer or renderer with one planted change per private copy."""
 
 from pathlib import Path
+import os
 import subprocess
 import tempfile
 import time
@@ -18,6 +19,22 @@ MUTATIONS = (
         "(operand a) (.immediate (.natural 0))",
         "(operand a) (.immediate (.natural 1))",
         "inst_inventory",
+    ),
+    (
+        "checked call immediate moved to the local slot",
+        LLVM,
+        "[(i, operand a), (i, operand b)]",
+        "(match a, b with\n"
+        "       | .imm .., .reg _ => [(i, operand b), (i, operand a)]\n"
+        "       | _, _ => [(i, operand a), (i, operand b)])",
+        "inst_inventory",
+    ),
+    (
+        "phi predecessor plus one",
+        LLVM,
+        "(operand (args.getD k (.imm .u8 0)), Label.block pred)\n    .instruction",
+        "(operand (args.getD k (.imm .u8 0)), Label.block (pred + 1))\n    .instruction",
+        "phi_inventory",
     ),
     (
         "extract indices swapped",
@@ -97,15 +114,21 @@ def check_mutation(directory, description, path, before, after, theorem):
     if source.count(before) != 1:
         raise SystemExit(f"{description}: mutation must match exactly one source site")
     source = source.replace(before, after)
-    mutant = directory / path.name
-    mutant.write_text(source, encoding="utf-8")
     lines = source.splitlines()
     first = next(number for number, line in enumerate(lines, 1) if f"theorem {theorem} " in line)
     last = next((number for number, line in enumerate(lines, 1) if number > first and not line), len(lines))
+    # Later parser proofs can repeat the same failure or spend their heartbeat
+    # budget on the changed render. Check the actual producer through the law
+    # under test, keeping its preceding definitions and proof dependencies.
+    mutant = directory / path.name
+    mutant.write_text("\n".join(lines[:last]) + "\n", encoding="utf-8")
 
     start = time.monotonic()
     result = subprocess.run(
-        ["lake", "env", "lean", "-M", "2048", str(mutant)], capture_output=True, text=True, check=False
+        ["lake", "env", "lean", "-j", os.environ.get("LEAN_NUM_THREADS", "2"), "-M", "2048", str(mutant)],
+        capture_output=True,
+        text=True,
+        check=False,
     )
     output = result.stdout + result.stderr
     failure = any(
@@ -116,7 +139,7 @@ def check_mutation(directory, description, path, before, after, theorem):
     )
     if result.returncode != 1 or not failure:
         raise SystemExit(f"{description}: expected a proof error in {theorem}\n{output}")
-    print(f"ok   {description} rejected by {theorem} ({time.monotonic() - start:.2f}s)")
+    print(f"ok   {description} rejected by {theorem} ({time.monotonic() - start:.2f}s)", flush=True)
 
 
 if __name__ == "__main__":

@@ -36,6 +36,7 @@ private def returnImmediate (n : Nat) : List Item :=
 private def addition (a : Argument) (b : Nat) : List Item :=
   [.instruction (.bin (.register 0) .add (.integer .u8) a (.immediate (.natural b)))]
 
+-- Target-law controls pending the universal emitted-text theorem.
 private def preservesInventory (emit : List Item → String) : Prop :=
   ∀ items, Assembly.inventory (emit items) = some (items.flatMap Item.inventory)
 

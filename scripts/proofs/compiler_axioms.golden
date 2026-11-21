@@ -688,6 +688,8 @@ Concrete.Backend.LLVM.Instruction.phi.inj
 Concrete.Backend.LLVM.Instruction.phi.injEq	propext
 Concrete.Backend.LLVM.Instruction.phi.sizeOf_spec	
 Concrete.Backend.LLVM.IntegerRole.byteLength.sizeOf_spec	
+Concrete.Backend.LLVM.IntegerRole.callArgument.inj	
+Concrete.Backend.LLVM.IntegerRole.callArgument.injEq	propext
 Concrete.Backend.LLVM.IntegerRole.callArgument.sizeOf_spec	
 Concrete.Backend.LLVM.IntegerRole.comparisonLeft.sizeOf_spec	
 Concrete.Backend.LLVM.IntegerRole.comparisonRight.sizeOf_spec	
@@ -696,7 +698,8 @@ Concrete.Backend.LLVM.IntegerRole.extractIndex.sizeOf_spec
 Concrete.Backend.LLVM.IntegerRole.gepBase.sizeOf_spec	
 Concrete.Backend.LLVM.IntegerRole.gepOffset.sizeOf_spec	
 Concrete.Backend.LLVM.IntegerRole.left.sizeOf_spec	
-Concrete.Backend.LLVM.IntegerRole.ofNat_ctorIdx	
+Concrete.Backend.LLVM.IntegerRole.phiArm.inj	
+Concrete.Backend.LLVM.IntegerRole.phiArm.injEq	propext
 Concrete.Backend.LLVM.IntegerRole.phiArm.sizeOf_spec	
 Concrete.Backend.LLVM.IntegerRole.returnValue.sizeOf_spec	
 Concrete.Backend.LLVM.IntegerRole.right.sizeOf_spec	
@@ -894,14 +897,22 @@ Concrete.Backend.LLVM.decimal_token	Classical.choice Quot.sound propext
 Concrete.Backend.LLVM.declarations._sparseCasesOn_1.else_eq	propext
 Concrete.Backend.LLVM.declarations.eq_1	propext
 Concrete.Backend.LLVM.edges._sparseCasesOn_1.else_eq	propext
-Concrete.Backend.LLVM.edges.eq_1	propext
 Concrete.Backend.LLVM.expectedInventory.eq_1	propext
 Concrete.Backend.LLVM.inst.eq_1	propext
 Concrete.Backend.LLVM.inst.eq_2	propext
 Concrete.Backend.LLVM.inst.eq_3	propext
 Concrete.Backend.LLVM.instBEqArgument.beq._sparseCasesOn_3.else_eq	propext
-Concrete.Backend.LLVM.instDecidableEqIntegerRole._proof_1	
-Concrete.Backend.LLVM.instDecidableEqIntegerRole._proof_2	
+Concrete.Backend.LLVM.instDecidableEqIntegerRole.decEq._proof_1	
+Concrete.Backend.LLVM.instDecidableEqIntegerRole.decEq._proof_2	
+Concrete.Backend.LLVM.instDecidableEqIntegerRole.decEq._proof_3	
+Concrete.Backend.LLVM.instDecidableEqIntegerRole.decEq._proof_4	
+Concrete.Backend.LLVM.instDecidableEqIntegerRole.decEq._proof_5	
+Concrete.Backend.LLVM.instDecidableEqIntegerRole.decEq._proof_6	
+Concrete.Backend.LLVM.instDecidableEqLabel.decEq._proof_1	
+Concrete.Backend.LLVM.instDecidableEqLabel.decEq._proof_2	
+Concrete.Backend.LLVM.instDecidableEqLabel.decEq._proof_3	
+Concrete.Backend.LLVM.instDecidableEqLabel.decEq._proof_4	
+Concrete.Backend.LLVM.instDecidableEqLabel.decEq._proof_5	
 Concrete.Backend.LLVM.instDecidableEqWidth._proof_1	
 Concrete.Backend.LLVM.instDecidableEqWidth._proof_2	
 Concrete.Backend.LLVM.moduleItems.eq_1	propext
@@ -942,7 +953,7 @@ Concrete.Backend.Runtime.indexedFrom.eq_2
 Concrete.Backend.Runtime.indexedFrom.eq_def	
 Concrete.Backend.Runtime.llvmItems.eq_1	propext
 Concrete.Backend.Runtime.llvmItems_inventory	Quot.sound propext
-Concrete.Backend.Runtime.llvmItems_inventory._simp_1_26	propext
+Concrete.Backend.Runtime.llvmItems_inventory._simp_1_25	propext
 Concrete.Backend.Runtime.mem_indexed	Quot.sound propext
 Concrete.Backend.Runtime.mem_indexedFrom	Quot.sound propext
 Concrete.Backend.Runtime.mem_indexedFrom._proof_1_5	Quot.sound propext
@@ -1577,12 +1588,12 @@ _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.operand.match_1.eq_1
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.operand.match_1.eq_2	
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.operand_immediate	propext
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.operand_inventory	propext
-_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.phiArgs_inventory	Quot.sound propext
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.phiSources._sparseCasesOn_3.else_eq	propext
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.phiSources.eq_1	propext
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.phiSources.eq_2	propext
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.phiSources.match_3.eq_1	propext
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.phiSources.match_3.eq_2	propext
+_private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.phiSources_scan	Quot.sound propext
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.phi_inventory	Quot.sound propext
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.term_inventory	propext
 _private.Concrete.Backend.LLVM.0.Concrete.Backend.LLVM.ty.match_1.eq_1	
@@ -1594,15 +1605,25 @@ _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Argument.immediates.eq_
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Argument.immediates.match_1.eq_1	
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Argument.immediates.match_1.eq_2	
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Argument.immediates.match_1.eq_3	
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.WordBoundary.eq_1	
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.alt.eq_1	
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.argument.eq_1	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.argument_append	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.argument_global_append	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.argument_local_append	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.argument_result	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.argument_unsigned	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.arithmetic_append	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.arithmetic_rejects_conversion	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.binary_add	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.bind_run	
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.chars.eq_1	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.chars_append	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.chars_items	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.chars_numbered	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.chars_punctuation	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.chars_text	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.comparison_append	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.consume.eq_1	
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.consume.eq_2	
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.consume.eq_3	
@@ -1611,17 +1632,44 @@ _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.consume.match_
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.consume.match_1.eq_2	
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.consume.match_1.eq_3	
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.consume_append	propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.conversion_append	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.conversion_rejects_arithmetic	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.decimal_chars	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.decimal_head	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.decimal_head._simp_1_1	propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.decodeUnsigned.eq_1	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.decodeUnsigned_decimal	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.globalName_append	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.globalPlain.eq_1	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.global_starts	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.instruction.eq_1	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.intrinsic.eq_1	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.intrinsic_append	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.invalid_first	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.inventory_of_item_consumption	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.item_count_le_chars	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.item_count_le_chars._proof_1_1	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.item_ret_i32	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.itemsUntil.eq_1	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.itemsUntil.eq_2	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.itemsUntil.eq_def	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.itemsUntil.match_1.eq_1	
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.itemsUntil.match_1.eq_2	
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.itemsUntil_append	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.itemsUntil_append._proof_1_1	Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.itemsUntil_append._proof_1_10	Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.itemsUntil_append._proof_1_9	Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.keyword.eq_1	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.keyword_append	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.keyword_fail	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.labelName.eq_1	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.labelName_append	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.labelRef.eq_1	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.labelRef_append	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.literal.eq_1	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.literal_append	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.localName.eq_1	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.localName_append	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.localWord._sparseCasesOn_1.else_eq	propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.localWord.eq_1	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.localWord.eq_10	Classical.choice Quot.sound propext
@@ -1669,13 +1717,30 @@ _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.moduleItems.ma
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.moduleItems.match_3.eq_2	
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.moduleItems.match_3.eq_3	
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.moduleItems_append	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.named.eq_1	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.namedWord.eq_1	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.numberedName._sparseCasesOn_1.else_eq	propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.numberedName.eq_1	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.numberedName.match_1.eq_1	propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.numberedName.match_1.eq_2	propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.numberedName_append	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.pairType.eq_1	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.parse_ret_i32	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.parse_single	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.pure_run	
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.returnValue.eq_1	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.returnValue_i32	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.series.eq_1	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.seriesChars.eq_1	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.seriesChars.eq_2	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.seriesChars.eq_def	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.seriesChars.match_1.eq_1	
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.seriesChars.match_1.eq_2	
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.seriesChars_length	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.seriesChars_length._proof_1_4	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.series_append	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.series_append._proof_1_6	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.space_chars	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.space_run	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.symbolChar.eq_1	
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.typeCode.eq_1	Classical.choice Quot.sound propext
@@ -1686,10 +1751,14 @@ _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.typeCode_appen
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.type_u32	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.type_u8	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.typed.eq_1	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.typed_append	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.unsigned.eq_1	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.unsigned_append	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.width_append	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.word.eq_1	
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.word_append	Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.word_exact	Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Assembly.word_numbered	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Instruction.immediates.eq_1	
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Instruction.immediates.eq_2	
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.Instruction.immediates.eq_3	
@@ -1811,6 +1880,24 @@ _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.global._proof_6	Classic
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.global._proof_7	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.global._proof_8	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.global._proof_9	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.global.eq_1	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.global.eq_2	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.global.eq_3	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.global.eq_4	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.global.eq_5	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.global.eq_6	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.global.eq_7	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.global.eq_8	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.global.eq_9	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.global.match_1.eq_1	
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.global.match_1.eq_2	
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.global.match_1.eq_3	
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.global.match_1.eq_4	
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.global.match_1.eq_5	
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.global.match_1.eq_6	
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.global.match_1.eq_7	
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.global.match_1.eq_8	
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.global.match_1.eq_9	
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.imm.eq_1	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.immediates_arg	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.immediates_arithmetic	Classical.choice Quot.sound propext
@@ -1826,6 +1913,16 @@ _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.immediates_local	Classi
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.immediates_terminator	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.immediates_typeCode	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.immediates_typed	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.instReprLabel.repr.match_1.eq_1	
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.instReprLabel.repr.match_1.eq_10	
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.instReprLabel.repr.match_1.eq_2	
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.instReprLabel.repr.match_1.eq_3	
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.instReprLabel.repr.match_1.eq_4	
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.instReprLabel.repr.match_1.eq_5	
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.instReprLabel.repr.match_1.eq_6	
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.instReprLabel.repr.match_1.eq_7	
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.instReprLabel.repr.match_1.eq_8	
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.instReprLabel.repr.match_1.eq_9	
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.instructionPieces._proof_1	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.instructionPieces._proof_10	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.instructionPieces._proof_11	Classical.choice Quot.sound propext
@@ -1844,13 +1941,13 @@ _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.instructionPieces.eq_4	
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.instructionPieces.eq_5	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.instructionPieces.eq_6	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.instructionPieces.eq_7	Classical.choice Quot.sound propext
-_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.instructionPieces.match_1.eq_1	
-_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.instructionPieces.match_1.eq_2	
-_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.instructionPieces.match_1.eq_3	
-_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.instructionPieces.match_1.eq_4	
-_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.instructionPieces.match_1.eq_5	
-_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.instructionPieces.match_1.eq_6	
-_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.instructionPieces.match_1.eq_7	
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.instructionPieces.match_3.eq_1	
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.instructionPieces.match_3.eq_2	
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.instructionPieces.match_3.eq_3	
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.instructionPieces.match_3.eq_4	
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.instructionPieces.match_3.eq_5	
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.instructionPieces.match_3.eq_6	
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.instructionPieces.match_3.eq_7	
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.labelName._proof_1	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.labelName._proof_2	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.labelName._proof_3	Classical.choice Quot.sound propext
@@ -1859,6 +1956,16 @@ _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.labelName._proof_5	Clas
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.labelName._proof_6	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.labelName._proof_7	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.labelName._proof_8	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.labelName.eq_1	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.labelName.eq_10	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.labelName.eq_2	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.labelName.eq_3	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.labelName.eq_4	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.labelName.eq_5	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.labelName.eq_6	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.labelName.eq_7	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.labelName.eq_8	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.labelName.eq_9	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.localName._proof_1	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.localName._proof_10	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.localName._proof_11	Classical.choice Quot.sound propext
@@ -1942,6 +2049,8 @@ _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.typeCode.match_1.eq_3
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.typeCode.match_1.eq_4	
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.typeCode.match_1.eq_5	
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.typed.eq_1	Classical.choice Quot.sound propext
+_private.Concrete.Backend.LLVMIR.0.List.findSome?.match_1.eq_1	
+_private.Concrete.Backend.LLVMIR.0.List.findSome?.match_1.eq_2	
 _private.Concrete.Backend.Runtime.0.Concrete.Backend.LLVM.Argument.inventory.match_1.eq_1	propext
 _private.Concrete.Backend.Runtime.0.Concrete.Backend.LLVM.Argument.inventory.match_1.eq_2	propext
 _private.Concrete.Backend.Runtime.0.Concrete.Backend.LLVM.Instruction.inventory.match_5.eq_1	
