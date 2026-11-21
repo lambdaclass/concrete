@@ -74,11 +74,13 @@ quoted theorem references appear as elaborated command dependencies.
    two-backend slice-0 controls. The producer inventory theorem covers all
    BIR programs and the runtime items, before text rendering. Call roles carry
    their zero-based argument slot. Phi roles carry their incoming slot and
-   predecessor label, including when two edges share a predecessor. The assembly
-   reader consumes the complete module and recovers numeric roles, widths
-   and values. Its connection to the producer inventory is tested on the
-   fixtures. The universal connection to emitted text remains a slice-1
-   obligation. The three assembly parse theorems cover singleton i32
+   predecessor label, including when two edges share a predecessor. Switch keys
+   carry their case position and destination label. The inventory keeps a row
+   for every assembly item, including empty rows, so moving an immediate
+   between sibling instructions changes the inventory. The assembly reader
+   consumes the complete module and recovers these rows. The fixtures test
+   its connection to the producer inventory. The universal connection to
+   emitted text remains a slice-1 obligation. The three assembly parse theorems cover singleton i32
    immediate and numbered-local returns and singleton i8 additions with two
    immediates. The enclosing LLVM text still uses `P_print`.
 2. **BIR and the runtime/backend boundary.** Switch the BIR scalar tag and
@@ -113,19 +115,20 @@ quoted theorem references appear as elaborated command dependencies.
 
 ### Remaining slice-1 text proof
 
-1. Prove quoted-byte consumption through the closing quote for printable
-   and hex-escaped bytes, using per-byte arithmetic and induction on the
-   bytes. Show that the reconstructed byte array has the declared length.
-2. Instantiate delimited-list consumption for declaration types, definition
-   parameters, call arguments, phi arms and switch cases. Relate each
-   renderer's pieces to the delimited character list and prove that the
-   closing token cannot preempt a rendered entry or separator.
-3. Prove suffix consumption at item dispatch for declarations, definitions,
-   constants, labels, all instruction and terminator forms, function ends
-   and blank lines. Discharge competing alternatives at each dispatch
-   point and prove that every rendered item is nonempty. Compose these
-   results with module-list consumption to recover the emitted assembly
-   tree and project its inventory.
+1. Quoted-byte consumption is proved for printable and hex-escaped bytes.
+   The finite check covers each pair of hex digits and list induction proves
+   that the parser consumes the closing quote and preserves the suffix. The
+   constant proof recovers the byte array and checks the declared length.
+2. Delimited-list consumption is proved for declaration types, definition
+   parameters and switch cases. The switch proof distinguishes the leading
+   space and each inter-case space from the space before the closing bracket.
+   Instantiate the same list lemma for call arguments and phi arms.
+3. Item dispatch is proved for declarations, definitions, constants, labels,
+   all terminators, function ends and blank lines. Prove instruction dispatch
+   for all seven instruction constructors, discharging the competing
+   alternatives at each dispatch point. Prove that every rendered item is
+   nonempty and compose with module-list consumption to recover the emitted
+   assembly tree and project its inventory.
 4. Compose the text theorem with `moduleItems_inventory` for `LLVM.module`,
    the string passed to `IO.FS.writeFile` by the BIR emitter. Check that the
    file-writing path uses that string directly. Qualify the renderer

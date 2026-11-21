@@ -38,7 +38,7 @@ private def addition (a : Argument) (b : Nat) : List Item :=
 
 -- Target-law controls pending the universal emitted-text theorem.
 private def preservesInventory (emit : List Item → String) : Prop :=
-  ∀ items, Assembly.inventory (emit items) = some (items.flatMap Item.inventory)
+  ∀ items, Assembly.inventory (emit items) = some (items.map Item.inventory)
 
 -- Plant text changes at the actual renderer output. Witnesses are kept to
 -- singleton items so the kernel never has to evaluate a large module.
@@ -123,8 +123,8 @@ theorem duplicated_operand_rejected : ¬ preservesInventory (editRendered 15 5 "
   unfold Assembly.inventory at invalid
   rw [show Assembly.parse (render duplicate) = some duplicate from
     Assembly.parse_render_i8_add 0 (.natural 2) (.natural 2)] at invalid
-  change some ([(.left, some 8, 2), (.right, some 8, 2)] : List IntegerField) =
-    some [(.left, some 8, 2), (.right, some 8, 56)] at invalid
+  change some ([[(.left, some 8, 2), (.right, some 8, 2)]] : List (List IntegerField)) =
+    some [[(.left, some 8, 2), (.right, some 8, 56)]] at invalid
   cases invalid
 
 example : (PatternEvidence.addOneOperand (.imm .u8 17)).immediateValue ≠

@@ -30,6 +30,20 @@ MUTATIONS = (
         "inst_inventory",
     ),
     (
+        "right immediate moved between sibling additions",
+        LLVM,
+        "phis p j b ++ b.insts.flatMap inst ++ term j b.term) ++\n  [.endFunction]",
+        "phis p j b ++ (match b.insts.flatMap inst with\n"
+        "      | .instruction (.bin d .add ty lhs (.immediate value)) ::\n"
+        "        .instruction (.bin e .add ty' lhs' (.local source)) :: rest =>\n"
+        "        if ty == ty' then\n"
+        "          .instruction (.bin d .add ty lhs (.local source)) ::\n"
+        "          .instruction (.bin e .add ty' lhs' (.immediate value)) :: rest\n"
+        "        else b.insts.flatMap inst\n"
+        "      | items => items) ++ term j b.term) ++\n  [.endFunction]",
+        "moduleItems_inventory",
+    ),
+    (
         "phi predecessor plus one",
         LLVM,
         "(operand (args.getD k (.imm .u8 0)), Label.block pred)\n    .instruction",

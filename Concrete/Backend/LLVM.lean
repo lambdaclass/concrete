@@ -210,11 +210,14 @@ theorem ret_immediate_field (j : Nat) (t : IntTy) (v : Int) :
   operand_field t v
 
 /-- The intrinsics the body uses, each declared once. -/
-def declarations (p : Program) : List Item :=
-  let used := (p.blocks.flatMap (·.insts)).filterMap fun
+private def usedIntrinsics (p : Program) : List (BinOp × IntTy) :=
+  ((p.blocks.flatMap (·.insts)).filterMap fun
     | .binOvf op t _ _ _ _ => some (op, t)
     | _ => none
-  used.eraseDups.map fun (op, t) =>
+  ).eraseDups
+
+def declarations (p : Program) : List Item :=
+  (usedIntrinsics p).map fun (op, t) =>
     let t := toCore t
     let width := Width.ofCore t
     .declare (.overflowPair width) (.overflow (arithmeticOp op) t) [.integer width, .integer width]
@@ -235,22 +238,22 @@ private def expectedOperand (role : IntegerRole) (width : Nat) : Operand → Lis
   | .reg _ => []
   | .imm t v => [(role, some width, toBits (toCore t) v)]
 
-private def expectedInst : Inst → List IntegerField
+private def expectedInst : Inst → List (List IntegerField)
   | .bin _ t _ a b =>
-    expectedOperand .left (toCore t).bits a ++ expectedOperand .right (toCore t).bits b
+    [expectedOperand .left (toCore t).bits a ++ expectedOperand .right (toCore t).bits b]
   | .binOvf _ t _ _ a b =>
-    expectedOperand (.callArgument 0) (toCore t).bits a ++
-      expectedOperand (.callArgument 1) (toCore t).bits b ++
-      [(.extractIndex, none, 0), (.extractIndex, none, 1)]
+    [expectedOperand (.callArgument 0) (toCore t).bits a ++
+      expectedOperand (.callArgument 1) (toCore t).bits b,
+      [(.extractIndex, none, 0)], [(.extractIndex, none, 1)]]
   | .trunc source target _ a =>
     if (toCore source).bits = (toCore target).bits then
-      expectedOperand .left (toCore target).bits a ++ [(.right, some (toCore target).bits, 0)]
-    else expectedOperand .conversionSource (toCore source).bits a
+      [expectedOperand .left (toCore target).bits a ++ [(.right, some (toCore target).bits, 0)]]
+    else [expectedOperand .conversionSource (toCore source).bits a]
 
-private def expectedTerm : Term → List IntegerField
-  | .ret a => expectedOperand .conversionSource 8 a
-  | .trap s => [(.returnValue, some 32, 256 + s)]
-  | .br .. | .condbr .. => []
+private def expectedTerm : Term → List (List IntegerField)
+  | .ret a => [expectedOperand .conversionSource 8 a, []]
+  | .trap s => [[(.returnValue, some 32, 256 + s)]]
+  | .br .. | .condbr .. => [[]]
 
 private def expectedPhiSource (j k pred : Nat) (b : Block) : List (Operand × Nat) :=
   let incoming (target : Nat) (args : List Operand) :=
@@ -267,10 +270,12 @@ private def expectedPhi (p : Program) (j k : Nat) (t : Ty) : List IntegerField :
     expectedOperand (.phiArm index (.block pred)) width a
 
 /-- The integer inventory specified by BIR lowering and the runtime contract. -/
-def expectedInventory (p : Program) : List IntegerField :=
-  ((indexed p.blocks).flatMap fun (j, b) =>
-    ((indexed b.params).flatMap fun (k, _, t) => expectedPhi p j k t) ++
-      b.insts.flatMap expectedInst ++ expectedTerm b.term) ++ Runtime.expectedInventory p.sites
+def expectedInventory (p : Program) : List (List IntegerField) :=
+  (usedIntrinsics p).map (fun _ => []) ++ [[], []] ++
+  (p.blocks.zipIdx.flatMap fun (b, j) =>
+    [[]] ++ (b.params.zipIdx.map fun ((_, t), k) => expectedPhi p j k t) ++
+      b.insts.flatMap expectedInst ++ expectedTerm b.term) ++ [[], []] ++
+  Runtime.expectedInventory p.sites
 
 private theorem width_bits (t : ConcreteSpec.Core.IntTy) :
     (Width.ofCore t).bits = t.bits := by cases t <;> rfl
@@ -280,17 +285,17 @@ private theorem operand_inventory (a : Operand) (role : IntegerRole) (width : Wi
   cases a <;> rfl
 
 private theorem inst_inventory (i : Inst) :
-    (inst i).flatMap Item.inventory = expectedInst i := by
+    (inst i).map Item.inventory = expectedInst i := by
   cases i <;> simp only [inst, expectedInst]
   case bin => simp [Item.inventory, Instruction.inventory, operand_inventory, width_bits]
   case binOvf =>
-    simp [Item.inventory, Instruction.inventory, List.zipIdx_cons, operand_inventory, width_bits, List.append_assoc]
+    simp [Item.inventory, Instruction.inventory, List.zipIdx_cons, operand_inventory, width_bits]
   case trunc fr target d a =>
     split <;> cases a <;> simp [Item.inventory, Instruction.inventory, operand, expectedOperand,
       width_bits, Argument.inventory, TypeCode.integerWidth, Immediate.natural]
 
 private theorem term_inventory (j : Nat) (t : Term) :
-    (term j t).flatMap Item.inventory = expectedTerm t := by
+    (term j t).map Item.inventory = expectedTerm t := by
   cases t
   case ret a => cases a <;> rfl
   all_goals rfl
@@ -318,10 +323,10 @@ private theorem phiSources_scan (j k n : Nat) (blocks : List Block) :
     | ret | trap => simp [expectedPhiSource, h]
 
 private theorem phi_inventory (p : Program) (j : Nat) (b : Block) :
-    (phis p j b).flatMap Item.inventory =
-      (indexed b.params).flatMap (fun (k, _, t) => expectedPhi p j k t) := by
-  simp only [phis, List.flatMap_map]
-  apply congrArg (fun f => (indexed b.params).flatMap f)
+    (phis p j b).map Item.inventory =
+      (indexed b.params).map (fun (k, _, t) => expectedPhi p j k t) := by
+  simp only [phis, List.map_map]
+  apply congrArg (fun f => (indexed b.params).map f)
   funext param
   rcases param with ⟨k, r, t⟩
   have sources := phiSources_scan j k 0 p.blocks
@@ -333,7 +338,7 @@ private theorem phi_inventory (p : Program) (j : Nat) (b : Block) :
         fun (a, pred) => (operand a, Label.block pred)) := by
     rw [← sources, List.map_map]
     rfl
-  simp only [Item.inventory, Instruction.inventory, arms, expectedPhi, List.zipIdx_map,
+  simp only [Function.comp_apply, Item.inventory, Instruction.inventory, arms, expectedPhi, List.zipIdx_map,
     List.flatMap_map]
   apply congrArg (fun f => ((p.blocks.zipIdx.flatMap fun (b, pred) =>
     expectedPhiSource j k pred b).zipIdx).flatMap f)
@@ -343,22 +348,30 @@ private theorem phi_inventory (p : Program) (j : Nat) (b : Block) :
   case bool => cases a <;> rfl
   case int => simp [ty, operand_inventory, width_bits]
 
+private theorem indexed_eq_zipIdx {α : Type} (xs : List α) (n : Nat) :
+    Runtime.indexedFrom n xs = (xs.zipIdx n).map Prod.swap := by
+  induction xs generalizing n with
+  | nil => rfl
+  | cons x xs ih => simp [Runtime.indexedFrom, ih, List.zipIdx_cons]
+
 /-- Producer-side inventory law for the actual module items, before rendering. -/
 theorem moduleItems_inventory (p : Program) :
-    (moduleItems p).flatMap Item.inventory = expectedInventory p := by
-  have declarations_empty : (declarations p).flatMap Item.inventory = [] := by
-    simp only [declarations, List.flatMap_map, Item.inventory]
-    simp
-  simp only [moduleItems, body, expectedInventory, List.flatMap_append, List.flatMap_cons,
-    List.flatMap_nil, List.nil_append, List.append_nil, Item.inventory, declarations_empty,
-    Runtime.llvmItems_inventory]
-  rw [List.flatMap_assoc]
-  congr 1
-  apply congrArg (fun f => (indexed p.blocks).flatMap f)
-  funext entry
-  rcases entry with ⟨j, b⟩
-  simp [Item.inventory, phi_inventory, term_inventory, List.flatMap_assoc, inst_inventory,
-    List.append_assoc]
+    (moduleItems p).map Item.inventory = expectedInventory p := by
+  simp only [moduleItems, body, expectedInventory, List.map_append, List.map_cons,
+    List.map_nil, Item.inventory, Runtime.llvmItems_inventory, declarations, List.map_map, Function.comp_def]
+  have blocks : ((indexed p.blocks).flatMap fun (j, b) =>
+      [.label (.block j)] ++ phis p j b ++ b.insts.flatMap inst ++ term j b.term).map
+      Item.inventory = p.blocks.zipIdx.flatMap (fun (b, j) =>
+        [[]] ++ (b.params.zipIdx.map fun ((_, t), k) => expectedPhi p j k t) ++
+          b.insts.flatMap expectedInst ++ expectedTerm b.term) := by
+    simp only [List.map_flatMap, Runtime.indexed, indexed_eq_zipIdx, List.flatMap_map]
+    apply congrArg (fun f => p.blocks.zipIdx.flatMap f)
+    funext entry
+    rcases entry with ⟨b, j⟩
+    simp [Item.inventory, phi_inventory, term_inventory, List.map_flatMap, inst_inventory,
+      Runtime.indexed, indexed_eq_zipIdx, List.map_map, Function.comp_def]
+  rw [blocks]
+  simp [List.append_assoc]
 
 /-- The entire rendered LLVM module. -/
 def module (p : Program) : String := render (moduleItems p)

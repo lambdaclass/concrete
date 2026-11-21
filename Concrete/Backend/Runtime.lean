@@ -147,17 +147,27 @@ def llvmItems (tbl : SiteTable) : List Item :=
    .endFunction]
 
 /-- Numeric part of the runtime contract: lengths are UTF-8 byte counts, switch
-keys are consecutive site indices, and the trap path writes to stderr and exits 134. -/
-def expectedInventory (tbl : SiteTable) : List IntegerField :=
+keys are consecutive site indices, and the trap path writes to stderr and exits 134.
+Each assembly item occupies one entry, including items with no integer fields. -/
+def expectedInventory (tbl : SiteTable) : List (List IntegerField) :=
   let size (e : SiteEntry) := (trapLine e ++ "\n").utf8ByteSize
   let invalidSize := (invalidLine ++ "\n").utf8ByteSize
-  (tbl.map fun e => (.byteLength, none, size e)) ++
-  [(.byteLength, none, invalidSize), (.comparisonRight, some 64, 0),
-   (.callArgument 0, some 32, 2), (.comparisonRight, some 64, 0),
-   (.comparisonRight, some 32, 256), (.right, some 32, 256)] ++
-  ((List.range tbl.length).map fun i => (.switchKey i (.trapSite i), some 32, i)) ++
-  (tbl.flatMap fun e => [(.callArgument 1, some 64, size e), (.callArgument 0, some 32, 134)]) ++
-  [(.callArgument 1, some 64, invalidSize)]
+  (tbl.map fun e => [(.byteLength, none, size e)]) ++
+  [[(.byteLength, none, invalidSize)], [], [], [], [],
+   [], -- writeAll header
+   [], [], -- entry
+   [], [], [], [(.comparisonRight, some 64, 0)], [], -- loop
+   [], [(.callArgument 0, some 32, 2)], [(.comparisonRight, some 64, 0)], [], -- wr
+   [], [], [], [], -- more
+   [], [], [], [], -- out, end of writeAll, and blank line
+   [], -- main header
+   [], [], [(.comparisonRight, some 32, 256)], [], -- entry
+   [], [], -- exit
+   [], [(.right, some 32, 256)], -- trap
+   (List.range tbl.length).map fun i => (.switchKey i (.trapSite i), some 32, i)] ++
+  (tbl.flatMap fun e => [[], [(.callArgument 1, some 64, size e)],
+    [(.callArgument 0, some 32, 134)], []]) ++
+  [[], [(.callArgument 1, some 64, invalidSize)], [], [], []]
 
 private theorem map_indexedFrom {α β : Type} (xs : List α) (n : Nat) (f : α → β) :
     (indexedFrom n xs).map (fun x => f x.2) = xs.map f := by
@@ -179,13 +189,12 @@ private theorem flatMap_indexedFrom {α β : Type} (xs : List α) (n : Nat) (f :
 
 /-- Every runtime assembly item contributes exactly the integers in the runtime contract. -/
 theorem llvmItems_inventory (tbl : SiteTable) :
-    (llvmItems tbl).flatMap Item.inventory = expectedInventory tbl := by
-  simp only [llvmItems, expectedInventory, List.flatMap_append, List.flatMap_map,
-    List.flatMap_cons, List.flatMap_nil, List.zipIdx_cons, List.zipIdx_nil, Item.inventory, Instruction.inventory,
+    (llvmItems tbl).map Item.inventory = expectedInventory tbl := by
+  simp only [llvmItems, expectedInventory, List.map_append, List.map_map, List.map_flatMap,
+    List.map_cons, List.map_nil, List.flatMap_cons, List.flatMap_nil, Function.comp_def, List.zipIdx_cons, List.zipIdx_nil, Item.inventory, Instruction.inventory,
     Argument.inventory, TypeCode.integerWidth, Width.bits, Immediate.natural,
-    List.nil_append, List.append_nil, List.cons_append, List.flatMap_assoc]
-  simp only [← List.map_eq_flatMap, indexed]
-  rw [map_indexedFrom tbl 0 (fun e => ((.byteLength, none, (siteBytes e).size) : IntegerField))]
+    List.nil_append, List.append_nil, indexed]
+  rw [map_indexedFrom tbl 0 (fun e => [((.byteLength, none, (siteBytes e).size) : IntegerField)])]
   have keys : ((indexedFrom 0 tbl).map fun x => (.switchKey x.1 (.trapSite x.1), some 32, x.1) : List IntegerField) =
       (List.range tbl.length).map (fun i => (.switchKey i (.trapSite i), some 32, i)) := by
     rw [List.range_eq_range', ← map_indexedFrom_fst tbl 0, List.map_map]
@@ -200,12 +209,9 @@ theorem llvmItems_inventory (tbl : SiteTable) :
       simp only [indexedFrom, List.map_cons, List.zipIdx_cons, List.cons.injEq, true_and]
       exact ih (n + 1)
   rw [positions tbl 0, keys]
-  have traps : ((indexedFrom 0 tbl).flatMap fun x =>
-      [(.callArgument 1, some 64, (siteBytes x.2).size), (.callArgument 0, some 32, 134)] :
-      List IntegerField) = tbl.flatMap (fun e =>
-      [(.callArgument 1, some 64, (siteBytes e).size), (.callArgument 0, some 32, 134)]) :=
-    flatMap_indexedFrom tbl 0 (fun e =>
-      [(IntegerRole.callArgument 1, some 64, (siteBytes e).size), (IntegerRole.callArgument 0, some 32, 134)])
+  have traps := flatMap_indexedFrom tbl 0 (fun e =>
+    [[], [(IntegerRole.callArgument 1, some 64, (siteBytes e).size)],
+      [(IntegerRole.callArgument 0, some 32, 134)], []])
   rw [traps]
   simp [siteBytes, invalidBytes, List.append_assoc]
 
