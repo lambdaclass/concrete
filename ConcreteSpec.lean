@@ -23,3 +23,4 @@ import ConcreteSpec.Proofs.Accounting
 import ConcreteSpec.Proofs.OwnErasure
 import ConcreteSpec.Proofs.OwnErasureEvidence
 import ConcreteSpec.Proofs.OwnProtocols
+import ConcreteSpec.Proofs.OwnLegalStep
