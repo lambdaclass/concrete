@@ -1390,14 +1390,6 @@ The projection range contract, including empty spans at EOF, is pending owner de
 def OrderedOffsets (input : Nat × Nat) : Prop :=
   input.1 ≤ input.2
 
-private instance orderedOffsetsDecidable (input : Nat × Nat) :
-    Decidable (OrderedOffsets input) :=
-  inferInstanceAs (Decidable (input.1 ≤ input.2))
-
-private instance endInSourceDecidable (input : SourceText × Nat) :
-    Decidable (EndInSource input) :=
-  inferInstanceAs (Decidable (input.2 ≤ input.1.length))
-
 /-- Look up the exact path among admitted files, preserving the supplied bytes. -/
 def Project.findFile (project : Project) (path : SourcePath) : Option File :=
   project.files.find? fun file => decide (file.path = path)
@@ -1415,8 +1407,8 @@ The starting line and byte column are derived from that file's bytes.
 The projection range contract, including empty spans at EOF, is pending owner decision. -/
 def projectSpan (project : Project) (path : SourcePath) (start stop : Nat) : Option Span := do
   let file ← project.findFile path
-  if ordered : OrderedOffsets (start, stop) then
-    if EndInSource (file.source, stop) then
+  if ordered : start ≤ stop then
+    if stop ≤ file.source.length then
       some (spanAt path file.source start stop ordered)
     else none
   else none
@@ -1426,7 +1418,9 @@ The projection range contract, including empty spans at EOF, is pending owner de
 The binding result and cross-project source identity are pending owner decision. -/
 def bindSource (project : Project) (span : Span) : Option File := do
   let file ← project.findFile span.path
-  if span.LocationOk file.source then some file else none
+  if span.endOffset ≤ file.source.length ∧
+      span.line = file.source.lineAt span.startOffset ∧
+      span.col = file.source.columnAt span.startOffset then some file else none
 
 namespace Reference
 
@@ -1442,7 +1436,7 @@ The projection range contract, including empty spans at EOF, is pending owner de
 The binding result and cross-project source identity are pending owner decision. -/
 def Projects (project : Project) (path : SourcePath) (start stop : Nat) (span : Span) : Prop :=
   span.path = path ∧ span.startOffset = start ∧ span.endOffset = stop ∧
-    ∃ file, Binds project span file
+    OrderedOffsets (start, stop) ∧ ∃ file, Binds project span file
 
 end Reference
 end SourcePathSpan

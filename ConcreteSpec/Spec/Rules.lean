@@ -464,8 +464,9 @@ end SourcePath.Project.Registry
 
 namespace SourcePathSpan.Registry
 
-/-- The admitted empty project supplies no file for a span. -/
-def emptyProject : Project := ⟨[], List.Pairwise.nil⟩
+/-- The admitted path `other.con` is absent from the singleton tab project. -/
+def missingPath : SourcePath :=
+  ⟨SourceText.ofBytes [111, 116, 104, 101, 114, 46, 99, 111, 110], by decide⟩
 
 /-- Instance: The tab file is present at its exact path. -/
 theorem filePresentAccepted : RuleAccepted FilePresent
@@ -473,9 +474,9 @@ theorem filePresentAccepted : RuleAccepted FilePresent
   unfold RuleAccepted FilePresent
   decide
 
-/-- Instance: The same path is absent from an empty project. -/
+/-- Instance: The requested path is absent even though the admitted project contains a file. -/
 theorem filePresentRefused : RuleRefused FilePresent
-    (emptyProject, mainSourcePath) := by
+    (tabProject, missingPath) := by
   unfold RuleRefused FilePresent
   decide
 

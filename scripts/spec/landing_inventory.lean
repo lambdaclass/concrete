@@ -107,6 +107,7 @@ structure ControlRequirement where
   origin : Name
   theoremName : Name
   law : Name
+  contract : Name
   subject : Name
   mutant : Name
 
@@ -308,10 +309,10 @@ private def completion : PieceId → Completion
   | .F04p =>
     let origin := `ConcreteSpec.Proofs.Ident
     let family := `ConcreteSpec.Core.SourcePathSpan
-    let control (law subject mutant : Name) : ControlRequirement :=
+    let control (law contract subject mutant : Name) : ControlRequirement :=
       let ns := family ++ `Controls
       ⟨origin, ns ++ Name.mkSimple (mutant.toString ++ "_violates_correct"),
-        family ++ law, family ++ subject, ns ++ mutant⟩
+        family ++ law, family ++ contract, family ++ subject, ns ++ mutant⟩
     { named := [
     laws `ConcreteSpec.Proofs.Ident [
       `ConcreteSpec.Core.SourcePath.byte_probe_reference,
@@ -376,19 +377,20 @@ private def completion : PieceId → Completion
       `tabSpan_badCoordinates, `SourcePath.LocalControls.foldedRenderingChangesIdentity],
     laws `ConcreteSpec.Proofs.Ident [
       `ConcreteSpec.Core.SourcePathSpan.projectSpan_correct,
-      `ConcreteSpec.Core.SourcePathSpan.bindSource_correct,
-      `ConcreteSpec.Core.SourcePathSpan.projectSpan_safety,
-      `ConcreteSpec.Core.SourcePathSpan.projectSpan_progress,
-      `ConcreteSpec.Core.SourcePathSpan.bindSource_safety,
-      `ConcreteSpec.Core.SourcePathSpan.bindSource_progress]],
+      `ConcreteSpec.Core.SourcePathSpan.bindSource_correct],
+    evidence `ConcreteSpec.Proofs.Ident `ConcreteSpec.Core.SourcePathSpan [
+      `projectSpan_safety, `projectSpan_progress, `bindSource_safety, `bindSource_progress,
+      `Project.findFile_succeeds_iff, `missingFile_refuses, `orderedOffsets_guard_iff,
+      `endInSource_guard_iff,
+      `lineMatches_guard_iff, `columnMatches_guard_iff, `location_guard_iff]],
       namespaces := [specNamespace `Proofs.Ident `Core.SourcePathSpan]
       controls := [
-        control `projectSpan_correct `projectSpan `projectPastEnd,
-        control `projectSpan_correct `projectSpan `projectAtStartOnly,
-        control `bindSource_correct `bindSource `bindPastEnd,
-        control `bindSource_correct `bindSource `bindIgnoringLine,
-        control `bindSource_correct `bindSource `bindIgnoringColumn,
-        control `bindSource_correct `bindSource `bindBeforeEof] }
+        control `projectSpan_correct `ProjectionCorrect `projectSpan `projectPastEnd,
+        control `projectSpan_correct `ProjectionCorrect `projectSpan `projectAtStartOnly,
+        control `bindSource_correct `BindingCorrect `bindSource `bindPastEnd,
+        control `bindSource_correct `BindingCorrect `bindSource `bindIgnoringLine,
+        control `bindSource_correct `BindingCorrect `bindSource `bindIgnoringColumn,
+        control `bindSource_correct `BindingCorrect `bindSource `bindBeforeEof] }
   | .R => namedEvidence [
     decls `ConcreteSpec.Spec.Rules [`ConcreteSpec.Core.registeredRules,
       `ConcreteSpec.Core.registeredRuleExamples, `ConcreteSpec.Core.RuleAccepted,
@@ -1526,9 +1528,9 @@ private def ControlRequirement.hasRefutation (control : ControlRequirement)
   if observed.laws.find? control.law != some control.origin then return false
   let some (.thmInfo law) := env.find? control.law | return false
   let some (.thmInfo refutation) := env.find? control.theoremName | return false
-  let .app contract (.const subject levels) := law.type | return false
-  return subject == control.subject &&
-    refutation.type == mkApp (mkConst ``Not) (mkApp contract (.const control.mutant levels))
+  let .app (.const contract contractLevels) (.const subject levels) := law.type | return false
+  return contract == control.contract && subject == control.subject &&
+    refutation.type == mkApp (mkConst ``Not) (mkApp (.const contract contractLevels) (.const control.mutant levels))
 
 private def Completion.controlGroups (required : Completion) : List Group :=
   required.controls.map fun control => decls control.origin [control.theoremName]
@@ -1812,6 +1814,9 @@ def addOne (n : Nat) : Nat := n + 1
 /-- Law: the implementation preserves zero. -/
 theorem keepZero_law : preservesZero keepZero := rfl
 
+/-- Law: a placeholder with the expected tag. -/
+theorem placeholderLaw : True := trivial
+
 /-- Planted: adding one fails to preserve zero. -/
 theorem addOne_refutation : ¬ preservesZero addOne := by unfold preservesZero addOne; decide
 
@@ -1835,7 +1840,9 @@ def verify (env : Environment) (specModules compilerModules : NameSet) (specEvid
   let inScope (name : Name) := name == origin || evidenceInScope specModules compilerModules name
   let allFixtures ← readEvidence env (· == origin)
   let controlLawName := `SpecLanding.Control.keepZero_law
-  let fixtures := { allFixtures with laws := allFixtures.laws.erase controlLawName }
+  let placeholderLawName := `SpecLanding.Control.placeholderLaw
+  let fixtures := { allFixtures with laws :=
+    (allFixtures.laws.erase controlLawName).erase placeholderLawName }
   let fixtureLaws := fixtures.laws.erase `ConcreteSpec.Core.Observe.EnvironmentEvidence.law
   let fixtureLaws := fixtureLaws.erase `ConcreteSpec.Core.Observe.OutputEvidence.law
   let observed := { fixtures with laws := fixtureLaws }
@@ -1911,21 +1918,23 @@ def verify (env : Environment) (specModules compilerModules : NameSet) (specEvid
   let law := controlLawName
   let mutant := `SpecLanding.Control.addOne
   let refutation := `SpecLanding.Control.addOne_refutation
-  let controlEvidence := { fixtures with laws := allFixtures.laws.filter (fun name _ => name == law) }
-  let checkRefutation (name : Name) := inventory env inScope controlEvidence (land .F04p)
-    #[] (fun _ => {
+  let checkRefutation (law name : Name) :=
+    let controlEvidence := { fixtures with laws := allFixtures.laws.filter (fun name _ => name == law) }
+    inventory env inScope controlEvidence (land .F04p) #[] (fun _ => {
       named := [laws origin [law]]
       namespaces := [⟨origin, `SpecLanding.Control, true, none⟩]
-      controls := [⟨origin, name, law, `SpecLanding.Control.keepZero, mutant⟩] })
-  let checked := checkRefutation refutation
+      controls := [⟨origin, name, law, `SpecLanding.Control.preservesZero,
+        `SpecLanding.Control.keepZero, mutant⟩] })
+  let checked := checkRefutation law refutation
   unless checked.errors.isEmpty && checked.rows.any (·.startsWith "F04p: landed") do
     throwError "inventory control: valid required refutation failed: {checked.errors}"
   let placeholder := `SpecLanding.Control.placeholderRefutation
   let untagged := `SpecLanding.Control.untagged_planted_refutation
-  for (name, message) in [
-      (placeholder, s!"must refute {law} for {mutant}"),
-      (untagged, "is not a Planted-tagged theorem")] do
-    let checked := checkRefutation name
+  for (law, name, message) in [
+      (placeholderLawName, refutation, s!"must refute {placeholderLawName} for {mutant}"),
+      (law, placeholder, s!"must refute {law} for {mutant}"),
+      (law, untagged, "is not a Planted-tagged theorem")] do
+    let checked := checkRefutation law name
     unless checked.errors == #[s!"F04p: {name} {message}"] &&
         checked.rows.any (·.startsWith "F04p: incomplete") do
       throwError "inventory control: invalid required refutation was not refused: {checked.errors}"
