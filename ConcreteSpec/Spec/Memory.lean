@@ -306,38 +306,38 @@ abbrev tgt : Target := linuxX8664
 private def tinyTarget : Target :=
   { tgt with addrBits := 8, ptrSize := 1, ptrAlign := 1, maxObject := 255 }
 
-example : tinyTarget.WellFormed := by decide
+theorem example_tinyTarget_WellFormed : tinyTarget.WellFormed := by decide
 
 /-- Refused: a zero-byte access still needs a representable address. -/
-example : Memory.empty.access tinyTarget ⟨⟨0⟩, 256, none⟩ 0 1 = none := by decide
+theorem example_Refused_zero_byte_access_still_needs : Memory.empty.access tinyTarget ⟨⟨0⟩, 256, none⟩ 0 1 = none := by decide
 
 /-- Refused: an aligned, representable address in an unknown space. -/
-example : Memory.empty.access tgt ⟨⟨99⟩, 8, none⟩ 0 1 = none := by decide
+theorem example_Refused_aligned_representable_address_in_unknown : Memory.empty.access tgt ⟨⟨99⟩, 8, none⟩ 0 1 = none := by decide
 
 /-- Refused: allocation in an unknown space, with otherwise valid geometry. -/
-example : (Memory.empty.alloc tgt ⟨99⟩ 4096 1 1).toOption = none := by decide
+theorem example_Refused_allocation_in_unknown_space_otherwise : (Memory.empty.alloc tgt ⟨99⟩ 4096 1 1).toOption = none := by decide
 
 /-- A `u16` `0x1234` is stored little-endian on the x86-64 profile, and reads back. -/
-example : encodeInt tgt .u16 0x1234 = [.init 0x34 none, .init 0x12 none] := by decide
+theorem example_u16_x1234_is_stored_little_endian : encodeInt tgt .u16 0x1234 = [.init 0x34 none, .init 0x12 none] := by decide
 
-example : decodeInt tgt .i16 (encodeInt tgt .i16 (-2)) = some (-2) := by decide
+theorem example_decodeInt_tgt_i16_encodeInt_tgt : decodeInt tgt .i16 (encodeInt tgt .i16 (-2)) = some (-2) := by decide
 
 /-- On a big-endian profile the same value is stored the other way round. -/
-example : encodeInt { tgt with byteOrder := .big } .u16 0x1234 = [.init 0x12 none, .init 0x34 none] :=
+theorem example_On_big_endian_profile_same_value : encodeInt { tgt with byteOrder := .big } .u16 0x1234 = [.init 0x12 none, .init 0x34 none] :=
   by decide
 
 /-- An uninitialized byte has no integer value (Q3.7). -/
-example : decodeInt tgt .u8 [.uninit] = none := by decide
+theorem example_uninitialized_byte_has_no_integer_value : decodeInt tgt .u8 [.uninit] = none := by decide
 
 /-- A fresh block is uninitialized: reading it gives bytes, but no integer. -/
-example : (do
+theorem example_fresh_block_is_uninitialized_reading_it : (do
     let (b, m) ← (Memory.empty.alloc tgt ⟨0⟩ 4096 4 4).toOption
     let bs ← m.load tgt ⟨⟨0⟩, 4096, some b⟩ 4 4
     pure (decodeInt tgt .u32 bs)) = some none := by decide
 
 /-- A write then a read through the same pointer gives the value back; a read past the block, or
 through a pointer without provenance, is not a valid access. -/
-example : (do
+theorem example_write_then_read_through_same_pointer : (do
     let (b, m) ← (Memory.empty.alloc tgt ⟨0⟩ 4096 4 4).toOption
     let p : Ptr := ⟨⟨0⟩, 4096, some b⟩
     let m ← m.store tgt p (encodeInt tgt .u32 7) 4
@@ -347,7 +347,7 @@ example : (do
 
 /-- After release, the old pointer reaches nothing, and the next block has a new identity even at
 the same address. A zero-byte access needs a target-valid, aligned non-null address. -/
-example : (do
+theorem example_After_release_old_pointer_reaches_nothing : (do
     let (b, m) ← (Memory.empty.alloc tgt ⟨0⟩ 4096 4 4).toOption
     let m ← m.free b
     let (c, m) ← (m.alloc tgt ⟨0⟩ 4096 4 4).toOption
@@ -355,13 +355,13 @@ example : (do
     = some (false, none, some []) := by decide
 
 /-- Allocation that would overlap a live block fails, as an ordinary result. -/
-example : (do
+theorem example_Allocation_would_overlap_live_block_fails : (do
     let (_, m) ← (Memory.empty.alloc tgt ⟨0⟩ 4096 16 8).toOption
     pure (m.alloc tgt ⟨0⟩ 4100 4 4 |>.toOption.isNone)) = some true := by decide
 
 /-- `from_exposed`: an address inside an exposed block gets its provenance; one past it, too, when
 no exposed block contains it; an address of an unexposed block gets none. -/
-example : (do
+theorem example_from_exposed_address_inside_exposed_block_gets : (do
     let (b, m) ← (Memory.empty.alloc tgt ⟨0⟩ 4096 16 8).toOption
     let (_, m) ← (m.alloc tgt ⟨0⟩ 8192 16 8).toOption
     let m ← m.expose ⟨⟨0⟩, 4096, some b⟩

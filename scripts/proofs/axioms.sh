@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# AXIOM INVENTORY: every theorem of the specification depends, transitively, on no axiom beyond
+# AXIOM INVENTORY: every theorem of the specification and compiler depends, transitively, on no axiom beyond
 # propext, Quot.sound and Classical.choice (Q9.17), and the per-theorem inventory equals the golden
-# list scripts/proofs/axioms.golden.
+# lists scripts/proofs/axioms.golden and scripts/proofs/compiler_axioms.golden.
 #
-#   P  population: every module the ConcreteSpec sources declare is in the root's import closure (a
+#   P  population: every source module in each library is in the root's import closure (a
 #      module outside it is neither built by default nor read here), and every module whose file
 #      declares a theorem contributes one, so the population cannot shrink unnoticed;
 #   A  every theorem's transitive axioms (Lean.collectAxioms) are among the standard three;
-#   G  the inventory (`<theorem>\t<axioms>`) equals axioms.golden byte for byte. A theorem added,
+#   G  the inventory (`<theorem>\t<axioms>`) equals its golden byte for byte. A theorem added,
 #      removed or renamed, or one that starts or stops using an axiom, changes the golden in the same
 #      commit, where review sees it. `--update` rewrites it from the build.
 #
@@ -17,7 +17,7 @@
 # persisted with declarations in oleans, never names or manual review. Compiler provenance is
 # decided; toolchain implementation and task allocation remain prerequisites. Until validated
 # persistent provenance and its consumer exist, the full-theorem G above is an interim safeguard.
-# No baseline-SHA removal exception is the end state. Executable behavior here is unchanged.
+# No baseline-SHA removal exception is the end state.
 #
 # NEGATIVE CONTROLS run the same code on bad inputs and require the failure: an axiom declared and
 # used by a control theorem fails A naming it; new theorems, a private one included, differ from the
@@ -29,50 +29,77 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 CHECK_NAME=PROOF-AXIOMS
 source scripts/proofs/lib.sh
-GOLDEN=scripts/proofs/axioms.golden
-
-population theorems > "$TMP/inv.tsv" 2> "$TMP/inv.err" \
-  || { cat "$TMP/inv.err" >&2; echo "error: the enumerator failed" >&2; exit 2; }
-if [ "${1:-}" = --update ]; then
-  { echo "# Per-theorem transitive axioms of ConcreteSpec (scripts/proofs/axioms.sh). Regenerate with"
-    echo "# bash scripts/proofs/axioms.sh --update; review every changed line."
-    cat "$TMP/inv.tsv"; } > "$GOLDEN"
-  echo "wrote $GOLDEN ($(grep -c . "$TMP/inv.tsv") theorems)"; exit 0
-fi
-
 # nonstandard FILE → the theorems of an inventory with an axiom outside the standard three
 nonstandard() {
   awk -F'\t' -v std=" $STANDARD_AXIOMS " '{ n = split($2, a, " ")
     for (i = 1; i <= n; i++) if (index(std, " " a[i] " ") == 0) { print $1 " (" a[i] ")"; break } }' "$1"
 }
+standard_only() {
+  local bad
+  bad=$(nonstandard "$1") || return 2
+  if [ -n "$bad" ]; then
+    printf '%s\n' "$bad"
+    return 1
+  fi
+}
 # golden_diff INVENTORY GOLDEN → the differing lines, empty when equal
 golden_diff() { diff <(grep -v '^#' "$2") "$1" | grep '^[<>]'; }
 
-echo "=== P: population ==="
-population imported > "$TMP/imported.txt" || { no "PROOF_MODE=imported failed"; finish; }
-GAP=$(closure_gap "$TMP/imported.txt")
-[ -z "$GAP" ] && ok "all $(spec_modules | grep -c .) ConcreteSpec source modules are in the root's import closure" \
-  || no "source modules outside the import closure of ConcreteSpec: $(echo $GAP)"
-population modules > "$TMP/env-modules.txt" || { no "PROOF_MODE=modules failed"; finish; }
-grep -rlE '^\s*(@\[[^]]*\]\s*)?(private |protected )*theorem ' ConcreteSpec ConcreteSpec.lean --include='*.lean' \
-  | sed -E 's#\.lean$##; s#/#.#g' | sort -u > "$TMP/src-modules.txt"
-UNSEEN=$(comm -13 <(sort -u "$TMP/env-modules.txt") "$TMP/src-modules.txt")
-NTHM=$(grep -c . "$TMP/inv.tsv")
-[ -s "$TMP/src-modules.txt" ] && [ -z "$UNSEEN" ] && [ "$NTHM" -ge 100 ] \
-  && ok "$NTHM theorems from all $(grep -c . "$TMP/src-modules.txt") source modules that declare one" \
-  || no "population: $NTHM theorems; modules declaring theorems but absent: $(echo $UNSEEN)"
+audit_library() {
+  local pkg=$1
+  local golden=$2
+  local inventory="$TMP/$pkg.tsv"
+  local gap unseen count delta bad
+  export PROOF_PKG="$pkg"
 
-echo "=== A: standard axioms only ==="
-BAD=$(nonstandard "$TMP/inv.tsv")
-[ -z "$BAD" ] && ok "every theorem's transitive axioms are among $STANDARD_AXIOMS ($(cut -f2 "$TMP/inv.tsv" | tr ' ' '\n' | grep . | sort | uniq -c | awk '{printf "%s%s %s", s, $2, $1; s=", "}'))" \
-  || no "theorems using a non-standard axiom: $(echo $BAD | cut -c1-400)"
+  echo "=== $pkg: theorem population and axioms ==="
+  population theorems > "$inventory" || { cat "$inventory" >&2; no "$pkg theorem enumeration failed"; return; }
+  population imported > "$TMP/imported.txt" || { no "$pkg import enumeration failed"; return; }
+  source_modules "$pkg" > "$TMP/source-modules.txt" || { no "$pkg source inventory failed"; return; }
+  gap=$(comm -23 "$TMP/source-modules.txt" <(sort -u "$TMP/imported.txt"))
+  [ -z "$gap" ] && ok "all $pkg source modules are in the root's import closure" \
+    || no "$pkg modules outside the import closure: $gap"
 
-echo "=== G: golden list ==="
-[ -f "$GOLDEN" ] || { no "$GOLDEN is missing (bash scripts/proofs/axioms.sh --update)"; finish; }
-D=$(golden_diff "$TMP/inv.tsv" "$GOLDEN")
-[ -z "$D" ] && ok "the inventory equals $GOLDEN ($NTHM theorems)" \
-  || no "the inventory differs from $GOLDEN (< golden, > build; regenerate with --update and review): $(printf '%s\n' "$D" | head -10 | tr '\t\n' ' |')"
+  population modules > "$TMP/env-modules.txt" || { no "$pkg theorem module enumeration failed"; return; }
+  grep -rlE '^\s*(@\[[^]]*\]\s*)?(private |protected )*theorem ' "$pkg" "$pkg.lean" --include='*.lean' \
+    | sed -E 's#\.lean$##; s#/#.#g' | sort -u > "$TMP/src-theorem-modules.txt"
+  unseen=$(comm -23 "$TMP/src-theorem-modules.txt" <(sort -u "$TMP/env-modules.txt"))
+  count=$(grep -c . "$inventory")
+  [ -s "$TMP/src-theorem-modules.txt" ] && [ -z "$unseen" ] && [ "$count" -gt 0 ] \
+    && ok "$count $pkg theorems from all source modules that declare one" \
+    || no "$pkg population: $count theorems; modules declaring theorems but absent: $unseen"
 
+  if ! bad=$(standard_only "$inventory"); then
+    no "$pkg theorems using a non-standard axiom: $bad"
+    return
+  fi
+  ok "every $pkg theorem's transitive axioms are among $STANDARD_AXIOMS"
+
+  if [ "${3:-}" = --update ]; then
+    {
+      echo "# Per-theorem transitive axioms of $pkg (scripts/proofs/axioms.sh). Regenerate with"
+      echo "# bash scripts/proofs/axioms.sh --update; review every changed line."
+      cat "$inventory"
+    } > "$golden" || { no "could not write $golden"; return; }
+    ok "wrote $golden ($count theorems)"
+    return
+  fi
+  [ -r "$golden" ] || { no "$golden is missing or unreadable (bash scripts/proofs/axioms.sh --update)"; return; }
+  sed '/^#/d' "$golden" > "$TMP/golden.tsv" || { no "could not read $golden"; return; }
+  if cmp -s "$inventory" "$TMP/golden.tsv"; then
+    ok "the inventory equals $golden ($count theorems)"
+  else
+    delta=$(golden_diff "$inventory" "$golden")
+    no "the inventory differs from $golden (< golden, > build; regenerate with --update and review): $(printf '%s\n' "$delta" | head -10 | tr '\t\n' ' |')"
+  fi
+}
+
+GOLDEN=scripts/proofs/axioms.golden
+audit_library ConcreteSpec "$GOLDEN" "${1:-}"
+audit_library Concrete scripts/proofs/compiler_axioms.golden "${1:-}"
+if [ "${1:-}" = --update ] || [ "$FAIL" != 0 ]; then finish; fi
+
+export PROOF_PKG=ConcreteSpec
 echo "=== negative controls ==="
 cat > "$TMP/c-axiom.lean" <<'EOF'
 axiom ConcreteSpecControl.extra : 1 = 2
@@ -94,14 +121,29 @@ D=$(golden_diff "$TMP/c-clean.tsv" "$GOLDEN" | sed -E 's/^> _private\..*\.0\.Con
 [ "$D" = "$(printf '> ConcreteSpecControl.clean\t\n> _private.0.ConcreteSpecControl.hidden\t')" ] \
   && ok "control: a new theorem, even axiom-free and even private, is a golden difference" \
   || no "control: new public and private theorems gave the diff '$D'"
-FIRST=$(head -1 "$TMP/inv.tsv" | cut -f1)
-grep -vF -- "$FIRST	" "$GOLDEN" > "$TMP/g-missing"
-[ -n "$(golden_diff "$TMP/inv.tsv" "$TMP/g-missing")" ] \
+FIRST=$(head -1 "$TMP/ConcreteSpec.tsv" | cut -f1)
+awk -F'\t' -v first="$FIRST" '$1 != first' "$GOLDEN" > "$TMP/g-missing"
+[ -n "$(golden_diff "$TMP/ConcreteSpec.tsv" "$TMP/g-missing")" ] \
   && ok "control: a golden missing a theorem ($FIRST) differs" || no "control: a golden missing $FIRST compared equal"
 awk -F'\t' 'BEGIN{OFS="\t"} !/^#/ && !done && $2 == "" { $2 = "propext"; done = 1 } { print }' "$GOLDEN" > "$TMP/g-axiom"
-! cmp -s "$GOLDEN" "$TMP/g-axiom" && [ -n "$(golden_diff "$TMP/inv.tsv" "$TMP/g-axiom")" ] \
+! cmp -s "$GOLDEN" "$TMP/g-axiom" && [ -n "$(golden_diff "$TMP/ConcreteSpec.tsv" "$TMP/g-axiom")" ] \
   && ok "control: a golden recording other axioms for a theorem differs" || no "control: a changed axiom set compared equal"
 printf '%s\n' ConcreteSpec ConcreteSpec.Spec > "$TMP/imp-short.txt"
 [ -n "$(closure_gap "$TMP/imp-short.txt")" ] \
   && ok "control: source modules outside a (truncated) import closure are reported" || no "control: a truncated closure reported no gap"
+cat > "$TMP/c-compiler.lean" <<'EOF'
+axiom ConcreteControl.extra : 1 = 2
+theorem ConcreteControl.usesExtra : 2 = 1 := ConcreteControl.extra.symm
+EOF
+if PROOF_PKG=Concrete population theorems "$TMP/c-compiler.lean" > "$TMP/c-compiler.tsv"; then
+  if CB=$(standard_only "$TMP/c-compiler.tsv"); then
+    no "control: a compiler theorem using a declared axiom passed"
+  elif [ "$CB" = "ConcreteControl.usesExtra (ConcreteControl.extra)" ]; then
+    ok "control: the compiler theorem using a declared axiom is refused ($CB)"
+  else
+    no "control: the compiler axiom check returned '$CB'"
+  fi
+else
+  no "control: compiler theorem enumeration failed"
+fi
 finish

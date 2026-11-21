@@ -42,8 +42,9 @@ arithmetic success, overflow and trap-site observations on both backends via
 the [BIR gate](../../scripts/checks/compiler/tests.sh). The
 [trusted-base golden](../../tests/golden/slice0_trusted_base.txt) names the
 F30 bridge through the [premise registry](../../Concrete/Premises.lean).
-The [axiom golden](../../scripts/proofs/axioms.golden) covers the spec theorem
-population. Reconcile those files with the corresponding migration step and
+The [spec](../../scripts/proofs/axioms.golden) and
+[compiler](../../scripts/proofs/compiler_axioms.golden) axiom goldens cover
+both theorem populations. Reconcile those files with the corresponding migration step and
 the resulting theorem names.
 
 ### Round 1 result

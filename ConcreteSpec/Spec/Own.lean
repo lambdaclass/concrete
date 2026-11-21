@@ -821,58 +821,58 @@ def exclusive : State := (borrow initial ⟨0⟩ [.index 0] .mutable).getD initi
 def child : State := (reborrow exclusive ⟨0⟩ [.index 1] .mutable).getD initial
 
 /-- Instance: Accepted (rule `ConcreteSpec.Core.Own.ownerAccess`): shared loans allow owner reads. -/
-example : ownerAccess shared ⟨0⟩ .shared = true := by decide
+theorem example_Accepted_rule_ConcreteSpec_Core_Own_ownerAccess : ownerAccess shared ⟨0⟩ .shared = true := by decide
 /-- Instance: Refused (rule `ConcreteSpec.Core.Own.ownerAccess`): shared loans freeze owner writes. -/
-example : ownerAccess shared ⟨0⟩ .mutable = false := by decide
+theorem example_Refused_rule_ConcreteSpec_Core_Own_ownerAccess : ownerAccess shared ⟨0⟩ .mutable = false := by decide
 /-- Instance: Refused: shared loans also prevent moving the owner. -/
-example : move shared ⟨0⟩ = none := by decide
+theorem example_Refused_shared_loans_also_prevent_moving : move shared ⟨0⟩ = none := by decide
 /-- Instance: Accepted: shared loans of disjoint or overlapping projections coexist. -/
-example : (borrow shared ⟨0⟩ [.index 1] .shared).isSome = true := by decide
+theorem example_Accepted_shared_loans_disjoint_or_overlapping : (borrow shared ⟨0⟩ [.index 1] .shared).isSome = true := by decide
 /-- Instance: Refused: disjoint indices do not bypass mutable whole-root conflicts. -/
-example : borrow exclusive ⟨0⟩ [.index 999] .shared = none := by decide
+theorem example_Refused_disjoint_indices_do_not_bypass : borrow exclusive ⟨0⟩ [.index 999] .shared = none := by decide
 /-- Instance: Refused: an exclusive loan blocks even owner reads. -/
-example : ownerAccess exclusive ⟨0⟩ .shared = false := by decide
+theorem example_Refused_exclusive_loan_blocks_even_owner : ownerAccess exclusive ⟨0⟩ .shared = false := by decide
 /-- Instance: Accepted (rule `ConcreteSpec.Core.Own.loanAccess`): the mutable child accesses its root. -/
-example : loanAccess child ⟨1⟩ .mutable = true := by decide
+theorem example_Accepted_rule_ConcreteSpec_Core_Own_loanAccess : loanAccess child ⟨1⟩ .mutable = true := by decide
 /-- Instance: Refused (rule `ConcreteSpec.Core.Own.loanAccess`): a mutable child suspends its parent. -/
-example : loanAccess child ⟨0⟩ .shared = false := by decide
+theorem example_Refused_rule_ConcreteSpec_Core_Own_loanAccess : loanAccess child ⟨0⟩ .shared = false := by decide
 /-- Instance: Refused: shared lending cannot upgrade to mutable access. -/
-example : reborrow shared ⟨0⟩ [] .mutable = none := by decide
+theorem example_Refused_shared_lending_cannot_upgrade_mutable : reborrow shared ⟨0⟩ [] .mutable = none := by decide
 /-- Instance: Refused: a shared child freezes writes through its mutable parent, but permits reads. -/
-example : (do
+theorem example_Refused_shared_child_freezes_writes_through : (do
     let s ← reborrow exclusive ⟨0⟩ [] .shared
     pure (loanAccess s ⟨0⟩ .shared, loanAccess s ⟨0⟩ .mutable)) = some (true, false) := by decide
 /-- Instance: Accepted (rule `ConcreteSpec.Core.Own.endLoan`): end the child, then use the parent. -/
-example : ((endLoan child ⟨1⟩).map fun s => loanAccess s ⟨0⟩ .mutable) = some true := by decide
+theorem example_Accepted_rule_ConcreteSpec_Core_Own_endLoan : ((endLoan child ⟨1⟩).map fun s => loanAccess s ⟨0⟩ .mutable) = some true := by decide
 /-- Instance: Refused (rule `ConcreteSpec.Core.Own.endLoan`): parents cannot end before their children. -/
-example : endLoan child ⟨0⟩ = none := by decide
+theorem example_Refused_rule_ConcreteSpec_Core_Own_endLoan : endLoan child ⟨0⟩ = none := by decide
 /-- Instance: Refused: moving twice or reading a moved slot; reinitializing makes it usable again. -/
-example : (do
+theorem example_Refused_moving_twice_or_reading_moved : (do
     let s ← move initial ⟨0⟩
     pure ((move s ⟨0⟩).isNone, ownerAccess s ⟨0⟩ .shared,
       (reinitialize s ⟨0⟩).isSome)) = some (true, false, true) := by decide
 /-- Instance: Refused: leaving a live linear owner would silently discard its obligation. -/
-example : leave initial = none := by decide
+theorem example_Refused_leaving_live_linear_owner_would : leave initial = none := by decide
 /-- Instance: Accepted: downward lending preserves the root; leaving restores the caller's parent access. -/
-example : (do
+theorem example_Accepted_downward_lending_preserves_root_leaving : (do
     let s ← enterDown exclusive [(y, ⟨0⟩)]
     let frozen := loanAccess s ⟨0⟩ .shared
     let s ← leave s
     pure (frozen, loanAccess s ⟨0⟩ .mutable, s.nextLoan)) = some (false, true, 2) := by decide
 /-- Instance: Refused: a root with a loan cannot leave scope. -/
-example : drop [x] { shared with slots := shared.slots.map fun x =>
+theorem example_Refused_root_loan_cannot_leave_scope : drop [x] { shared with slots := shared.slots.map fun x =>
     { x with desc := { x.desc with copy := true } } } = none := by decide
 /-- Instance: Accepted: identities are not reused even after the prior loan ends. -/
-example : (do
+theorem example_Accepted_identities_are_not_reused_even : (do
     let s ← endLoan shared ⟨0⟩
     let s ← borrow s ⟨0⟩ [] .shared
     pure (s.loans.map Loan.id)) = some [⟨1⟩] := by decide
 
 /-- Instance: Refused: a logical token has a linear obligation independently of representation
 (Q3.8). No C4 representation-size sentinel is used as evidence. -/
-example : drop [x] { initial with slots := [⟨⟨0⟩, 0, ⟨.unit, false, true⟩, .owned⟩] } = none := by decide
+theorem example_Refused_logical_token_has_linear_obligation : drop [x] { initial with slots := [⟨⟨0⟩, 0, ⟨.unit, false, true⟩, .owned⟩] } = none := by decide
 /-- Instance: Accepted: explicitly consuming the logical unit obligation, without selecting its byte layout permits its slot to end. -/
-example : (do
+theorem example_Accepted_explicitly_consuming_logical_unit_obligation : (do
     let s ← move { initial with slots := [⟨⟨0⟩, 0, ⟨.unit, false, true⟩, .owned⟩] } ⟨0⟩
     drop [x] s).isSome = true := by decide
 
@@ -935,7 +935,7 @@ def stuck (r : Exec.Report ops) : Bool := match r.ending with
   | _ => false
 
 /-- Instance: Refused: an actual C1 run gets stuck when its next operand reads a moved owner. -/
-example : stuck (runBody (.seq (.bind y (.move x) ⟨0⟩) (.ret (.read x) ⟨1⟩))) = true := by decide
+theorem example_Refused_actual_C1_run_gets_stuck : stuck (runBody (.seq (.bind y (.move x) ⟨0⟩) (.ret (.read x) ⟨1⟩))) = true := by decide
 
 /-- Ownership permission transition for `E`, coupled to `erasedOps` through
 `instrumentOperands`. -/
@@ -1009,13 +1009,13 @@ def erasedMoveRun : Exec.Report erasedOps :=
 /-- Instance: an unsafe execution refutes unconditional equality of final classifications:
 the instrumented run is stuck, but the erased concrete run returns 7. A checker-safety
 premise or a one-way successful-execution theorem is necessary for C1 erasure. -/
-example : stuck (runBody (.seq (.bind y (.move x) ⟨0⟩) (.ret (.read x) ⟨1⟩))) = true ∧
+theorem example_unsafe_execution_refutes_unconditional_equality_final : stuck (runBody (.seq (.bind y (.move x) ⟨0⟩) (.ret (.read x) ⟨1⟩))) = true ∧
     Ending.IsStuck instrumentedMoveRun.ending = true ∧
     (match erasedMoveRun.ending with
       | .final (.returned n) => n == 7
       | _ => false) = true := by decide
 /-- Instance: erased execution does not refuse the use after move. -/
-example : ¬ (match erasedMoveRun.ending with
+theorem example_erased_execution_does_not_refuse_use : ¬ (match erasedMoveRun.ending with
     | .stuck => true
     | _ => false) = true := by decide
 
@@ -1038,19 +1038,19 @@ def refusalCases : List (Nat × E × State) :=
    (2, .lend ⟨0⟩ .shared, exclusive), (3, .reborrow ⟨0⟩, shared),
    (4, .endLoan ⟨0⟩, child), (5, .use ⟨0⟩, child)]
 
-example : refusalCases.all (fun (_, e, own) =>
+theorem example_refusalCases_all_e_own : refusalCases.all (fun (_, e, own) =>
     match instrumentEval erasedOps permitE [(x, 7)] ⟨0, own⟩ e with
     | .stuck => true | _ => false) = true := by decide
 
 /-- Planted: six separate omission mutants all accept the corresponding refused
 operand. No concrete failure or another ownership check masks any omission. -/
-example : refusalCases.all (fun (kind, e, own) =>
+theorem planted_six_separate_omission_mutants_all_accept : refusalCases.all (fun (kind, e, own) =>
     match instrumentEval erasedOps (omitPermission kind) [(x, 7)] ⟨0, own⟩ e with
     | .ok _ => true | _ => false) = true := by decide
 
 /-- Instance: Accepted: a C1 run lends, reborrows, ends the child, then uses its parent and ends it.
 Conditions evaluate these instrumentation-only operands without creating ordinary bindings. -/
-example : (match (runBody
+theorem example_Accepted_C1_run_lends_reborrows_ends : (match (runBody
     (.cond (.lend ⟨0⟩ .mutable) .skip
       (.cond (.reborrow ⟨0⟩) .skip
         (.cond (.endLoan ⟨1⟩) .skip
@@ -1061,15 +1061,15 @@ example : (match (runBody
 
 /-- Instance: Refused: an existing owner loan or reborrow is not a pending argument child and cannot
 be adopted into a callee, even when all supplied loan identities exist. -/
-example : (do
+theorem example_Refused_existing_owner_loan_or_reborrow : (do
     let s ← enter types [] exclusive
     adoptDown s [(y, ⟨0⟩)]) = none := by decide
 /-- Instance: an existing child is not a pending argument. -/
-example : (do
+theorem example_existing_child_is_not_pending_argument : (do
     let s ← enter types [] child
     adoptDown s [(y, ⟨1⟩)]) = none := by decide
 /-- Instance: Refused: an incomplete locals table that omits an active frame's slot violates `WellFormed`. -/
-example : ¬ WellFormed { initial with frames := [⟨0, [], []⟩] } := by decide
+theorem example_Refused_incomplete_locals_table_omits_active : ¬ WellFormed { initial with frames := [⟨0, [], []⟩] } := by decide
 
 /-- The following C1 instance exercises actual calls with downward view parameters. -/
 inductive CE where
@@ -1116,7 +1116,7 @@ def callRun (body : Exec.Stmt callOps) : Exec.Report callOps :=
 
 /-- Instance: Accepted: a real C1 call lends the mutable parent to its parameter; return ends the child,
 then the caller can use its original parent again. No reference is a returned/stored value. -/
-example : (match (callRun (.seq (.call none callee [.argument ⟨0⟩ y] ⟨0⟩)
+theorem example_Accepted_real_C1_call_lends_mutable : (match (callRun (.seq (.call none callee [.argument ⟨0⟩ y] ⟨0⟩)
     (.seq (.cond (.value (.use ⟨0⟩)) .skip .skip ⟨0⟩)
       (.seq (.cond (.value (.endLoan ⟨0⟩)) .skip .skip ⟨0⟩)
         (.ret (.value (.move x)) ⟨1⟩))))).ending with
@@ -1130,9 +1130,9 @@ def freezeProgram : Exec.Program callOps :=
 def freezeArgs : List CE := [.argument ⟨0⟩ y, .value (.use ⟨0⟩)]
 
 /-- Instance: OD23 refuses the second operand itself, before lookup, arity or entry. -/
-example : Exec.evalArgs callOps [(x, 7)] ⟨exclusive, []⟩ freezeArgs = .stuck := by decide
+theorem example_OD23_refuses_second_operand_itself_before : Exec.evalArgs callOps [(x, 7)] ⟨exclusive, []⟩ freezeArgs = .stuck := by decide
 /-- Instance: the correctly shaped actual call stops at that same operand boundary. -/
-example : (Exec.run freezeProgram (fun _ p => nomatch p) 20
+theorem example_correctly_shaped_actual_call_stops_at : (Exec.run freezeProgram (fun _ p => nomatch p) 20
     ⟨.exec (.call none callee freezeArgs ⟨0⟩), [(x, 7)], ⟨exclusive, []⟩,
       [.functionEnd]⟩).fuel = 20 := by rfl
 
@@ -1144,7 +1144,7 @@ abbrev omitArgumentAccess : Exec.Operands := { callOps with
     | _ => callEval locals s e }
 
 /-- Planted: bypassing the second operand access check defeats argument refusal. -/
-example : (match Exec.evalArgs omitArgumentAccess [(x, 7)] ⟨exclusive, []⟩ freezeArgs with
+theorem planted_bypassing_second_operand_access_check_defeats : (match Exec.evalArgs omitArgumentAccess [(x, 7)] ⟨exclusive, []⟩ freezeArgs with
     | .ok _ => true | _ => false) =
     true := by decide
 
@@ -1159,7 +1159,7 @@ def ownerCaller : State :=
 
 /-- Instance: direct-owner lending cannot bypass a populated conflicting loan.
 The root and current activation exist; only whole-root exclusion refuses it. -/
-example : passOwner ⟨exclusive, []⟩ ⟨0⟩ [] .shared y = none := by decide
+theorem example_direct_owner_lending_cannot_bypass_populated : passOwner ⟨exclusive, []⟩ ⟨0⟩ [] .shared y = none := by decide
 
 /-- Observe the loan during the callee, including whole-owner exclusion and the
 unchanged unrelated caller loan. This operand has no permission side effects. -/
@@ -1184,14 +1184,14 @@ def ownerRun (deferred : Bool) : Exec.Report ownerOps :=
 
 /-- Instance: immediate direct-owner lending is live during the callee and ends on
 return. The unrelated populated loan survives unchanged; owner reads are restored. -/
-example : (match (ownerRun false).ending with | .final .normal => true | _ => false) = true ∧
+theorem example_immediate_direct_owner_lending_is_live : (match (ownerRun false).ending with | .final .normal => true | _ => false) = true ∧
     (ownerRun false).residual.store.own.loans = ownerCaller.loans ∧
     ownerAccess (ownerRun false).residual.store.own ⟨0⟩ .mutable = true := by decide
 
 /-- Instance: deferred registration leaves owner reads available until cleanup.
 The callee observes the same exclusion as an immediate call; return restores access
 without ending the pre-existing loan. -/
-example : (match (ownerRun true).ending with | .final .normal => true | _ => false) = true ∧
+theorem example_deferred_registration_leaves_owner_reads_available : (match (ownerRun true).ending with | .final .normal => true | _ => false) = true ∧
     (ownerRun true).residual.store.own.loans = ownerCaller.loans ∧
     ownerAccess (ownerRun true).residual.store.own ⟨0⟩ .mutable = true := by decide
 
@@ -1202,7 +1202,7 @@ abbrev omitOwner : Exec.Operands := { ownerOps with eval := fun locals s e => ma
   | _ => ownerOps.eval locals s e }
 
 /-- Planted: refusing all owner arguments fails the required accepting call path. -/
-example : Exec.evalArgs omitOwner [(x, 7)] ⟨ownerCaller, []⟩
+theorem planted_refusing_all_owner_arguments_fails_required : Exec.evalArgs omitOwner [(x, 7)] ⟨ownerCaller, []⟩
     [.ownerArgument ⟨0⟩ .mutable y] = .stuck := by decide
 
 /-- The source can present this occurrence under the second spelling; identity remains 0. -/
@@ -1210,13 +1210,13 @@ def renamedX : Var := ⟨0⟩
 
 /-- Instance: assignment after consumption uses the same numeric local, then its fresh
 obligation is explicitly consumed before the shared function-end boundary. -/
-example : (runBody (.seq (.cond (.move x) .skip .skip ⟨0⟩)
+theorem example_assignment_after_consumption_uses_same_numeric : (runBody (.seq (.cond (.move x) .skip .skip ⟨0⟩)
     (.seq (.assign renamedX (.lit 9) ⟨1⟩) (.ret (.move x) ⟨2⟩)))).ending =
     .final (.returned 9) := by rfl
 
 /-- Instance: numeric identity removes a renamed local's storage; the other number stays.
 This populated two-owner state distinguishes removal of one identity from removal of all. -/
-example : (do
+theorem example_numeric_identity_removes_renamed_local_s : (do
     let s ← bind types y initial
     let s ← move s ⟨0⟩
     let s ← drop [renamedX] s
@@ -1225,7 +1225,7 @@ example : (do
 
 /-- Instance: moving twice refuses even with no loan present; reinitialization restores the
 obligation but does not create a second slot for the renamed occurrence. -/
-example : (do
+theorem example_moving_twice_refuses_even_no_loan : (do
     let s ← move initial ⟨0⟩
     let refused := (move s ⟨0⟩).isNone
     let s ← bind types renamedX s
@@ -1233,10 +1233,10 @@ example : (do
     some (true, 1, 1, true) := by decide
 
 /-- Instance: the final function boundary refuses a still-live linear owner. -/
-example : (runBody .skip).ending = .stuck := by rfl
+theorem example_final_function_boundary_refuses_still_live : (runBody .skip).ending = .stuck := by rfl
 
 /-- Instance: explicit consumption permits that same final boundary. -/
-example : (runBody (.ret (.move renamedX) ⟨0⟩)).ending = .final (.returned 7) := by rfl
+theorem example_explicit_consumption_permits_same_final_boundary : (runBody (.ret (.move renamedX) ⟨0⟩)).ending = .final (.returned 7) := by rfl
 
 /-- Instance: a final block cannot silently discard a newly created linear obligation. -/
 def finalBlock : Exec.Stmt ops :=
@@ -1244,7 +1244,7 @@ def finalBlock : Exec.Stmt ops :=
 
 /-- Instance: the outer obligation is consumed. Refusal retains the inner scope and
 its live local, before the independent function-end check can run. -/
-example : (runBody finalBlock).residual.frames.length = 2 ∧
+theorem example_outer_obligation_is_consumed_Refusal_retains : (runBody finalBlock).residual.frames.length = 2 ∧
     Ending.IsStuck (runBody finalBlock).ending = true := by decide
 
 /-- Planted: omit only lifecycle drop instrumentation. Function exit still refuses,
@@ -1254,7 +1254,7 @@ abbrev omitDrop : Exec.Operands := { ops with life := fun e s => match e with
   | _ => Own.life types e s }
 
 /-- Planted: skipped scope admission reaches function exit with only one frame. -/
-example : (Exec.run (O := omitDrop) ⟨[]⟩ (fun _ p => nomatch p) 100
+theorem planted_skipped_scope_admission_reaches_function_exit : (Exec.run (O := omitDrop) ⟨[]⟩ (fun _ p => nomatch p) 100
     ⟨.exec (.seq (.cond (.move x) .skip .skip ⟨0⟩)
       (.block ⟨1⟩ (.bind y (.lit 3) ⟨0⟩))), [(x, 7)], initial, [.functionEnd]⟩).residual.frames.length = 1 := by decide
 
@@ -1263,17 +1263,17 @@ def copyShared : State :=
   { shared with slots := shared.slots.map fun x => { x with desc := { x.desc with copy := true } } }
 
 /-- Instance: real scope-exit instrumentation refuses a live loan even for a Copy root. -/
-example : (Exec.run (O := ops) ⟨[]⟩ (fun _ p => nomatch p) 20
+theorem example_real_scope_exit_instrumentation_refuses_live : (Exec.run (O := ops) ⟨[]⟩ (fun _ p => nomatch p) 20
     ⟨.done, [(renamedX, 7)], copyShared, [.scope ⟨1⟩ [] [], .functionEnd]⟩).ending = .stuck := by rfl
 
 /-- Instance: ending just that loan permits scope teardown and then final function teardown. -/
-example : (Exec.run (O := ops) ⟨[]⟩ (fun _ p => nomatch p) 20
+theorem example_ending_just_loan_permits_scope_teardown : (Exec.run (O := ops) ⟨[]⟩ (fun _ p => nomatch p) 20
     ⟨.done, [(renamedX, 7)], (endLoan copyShared ⟨0⟩).getD copyShared,
       [.scope ⟨1⟩ [] [], .functionEnd]⟩).ending = .final .normal := by rfl
 
 /-- Instance: downward-only lending rejects an issued but noncurrent activation, with the
 same live parent that successfully lends into the current frame. -/
-example : (do
+theorem example_downward_only_lending_rejects_issued_but : (do
     let s ← enter types [] exclusive
     pure ((reborrowTo s ⟨0⟩ [] .mutable 0).isNone,
       (reborrowTo s ⟨0⟩ [] .mutable 1).isSome)) = some (true, true) := by decide

@@ -14,6 +14,7 @@ import Lean.PrettyPrinter
 import Lean.Util.CollectAxioms
 import Concrete.BIR.Progress
 import Concrete.Backend.LCB
+import Concrete.Backend.LLVM
 import Concrete.Lex
 
 namespace Concrete.Premises
@@ -152,6 +153,13 @@ def theorems : List Lean.Name := [
   ``Concrete.BIR.ScalarBridge.intValue_valid,
   ``Concrete.BIR.hasTy_int_core,
   ``Concrete.Backend.LCB.Proof.enc_int_core,
+  -- F31 scalar immediate encoding and decimal tokens.
+  ``Concrete.Backend.LLVM.pattern_agrees,
+  ``Concrete.Backend.LLVM.pattern_fits,
+  ``Concrete.Backend.LLVM.pattern_roundTrip,
+  ``Concrete.Backend.LLVM.operand_token,
+  ``Concrete.Backend.LLVM.operand_parse,
+  ``Concrete.Backend.LLVM.operand_roundTrip,
   ``Concrete.BIR.decode_encode,
   ``Concrete.BIR.run_progress,
   ``Concrete.BIR.behaviour_diverges_iff,
