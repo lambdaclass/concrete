@@ -14,6 +14,40 @@ the earlier behaviour, the answer below governs, and the code follows as its new
 
 The shape of Core was approved provisionally on 2026-11-05 ([stage A2a](#decided-2026-11-05)): it binds the design, and the owner freezes Core at stage A2c, after the four design theorems are proved against the proposed `Spec.lean` and the integration stage A2i (2026-11-06) is accepted (freeze timing revised to 0.1 on [2026-11-22](#decided-2026-11-22-roadmap-reordering)). The project and architecture decisions are recorded here too, [below](#decided-project).
 
+<a id="decided-2026-11-22-explicit-policy-clauses"></a>
+## Decided 2026-11-22: explicit composable `[policy]` clauses (no opaque `"strict"` mode)
+
+Status: decided
+Source: owner
+
+Provenance: owner session `c3e1f8a9-7be6-4542-83c1-3bc288de18e3` (2026-11-22). The owner asked, verbatim:
+
+~~~text
+and we could have some type of name like strict policy? what do you think
+~~~
+
+The assistant presented two options reasoned from [PHILOSOPHY.md](PHILOSOPHY.md) (Rules 2, 3, 4, 12)
+and `R-0606` (no opaque ladder of levels), recommending Option 1:
+- **Option 1 (recommended):** Keep `[policy]` in `Concrete.toml` as explicit, composable typed
+  clauses mapping 1-to-1 to `concrete facts` fields (such as `no_alloc`, `no_blocking`, `no_ffi`,
+  `no_trusted`, `no_assume`, `no_may_not_terminate`, `no_unused_permissions`, `max_stack_bytes`,
+  `require_step_bounds` and per-function step/complexity budgets), keeping `predictable` only where
+  already decided in `R-0576`, and using `concrete init --strict` solely as a generator that writes
+  those explicit lines into `Concrete.toml` rather than an opaque `"strict"` mode word.
+- **Option 2:** Two orthogonal named presets (`predictable` and `strict`), always expanded in
+  `concrete facts` and never weakenable.
+
+Owner reply, verbatim:
+
+~~~text
+ok do 1
+~~~
+
+Scope and boundaries: `[policy]` in `Concrete.toml` (`R-0576`, `R-0589`) uses explicit composable
+clauses with no opaque `"strict"` policy word; `concrete init --strict` may emit explicit `[policy]`
+lines as a starting template, and modules may tighten individual clauses without weakening them.
+Exact TOML field spellings remain subject to `R-0589`/`R-0576` schema review.
+
 <a id="decided-2026-11-22-llm-inference-showcase-and-float-order"></a>
 ## Decided 2026-11-22: local LLM inference showcase, Slice 18/19 float swap, and spec-first per slice
 

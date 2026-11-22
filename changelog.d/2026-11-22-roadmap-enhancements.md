@@ -23,6 +23,8 @@ proof-producing e-graphs (`R-0583`, `R-0299`), proof-guided refusal diagnostics 
 evaluator (`R-0586`), two-level declaration Merkle hashing (`R-0556`, `R-0149`), proof-surface
 pure-functional Lean extraction (`R-0495`), direct LCB machine code and in-Lean binary stack-bound
 validation (`R-0517`, `R-0505`), and earlier `concrete diff` assurance diffing, `Concrete.toml`
+explicit composable `[policy]` clauses (no opaque `"strict"` mode; `concrete init --strict` emits
+explicit lines, [decision](docs/decisions.md#decided-2026-11-22-explicit-policy-clauses)) with
 per-function step/complexity budgets and ratchets (no source cost syntax; `R-0576`, `R-0201`), plus
 the one-command `concrete build --audit` user audit dossier (`R-0201`, `R-0353`).
 Add proposed tasks `R-0711`–`R-0727` for verified optimizer hints, deterministic bitmask/modulo/shift
