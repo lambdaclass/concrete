@@ -1,0 +1,11 @@
+verdict: findings
+rounds: 1
+reviewer: codex
+utc: 2026-11-22T15:33:11Z
+base: ff462b3180acd6ef8c03566e7e53e2be0ff489f8
+pieces: 4
+diff-start: ff462b3180acd6ef8c03566e7e53e2be0ff489f8
+findings-note: 97d5cf190ec013c9c8b61f9fd5e2e04d60fb5809
+
+[piece 3 of 4: scripts]
+- scripts/land/train.sh:244: Publishing the first v2 review activates this guard while `origin/main` still lacks v2 tooling. Consequently, the train introducing that tooling cannot land: its recorded base fails `require_v2_tree`, even if it was built before publication. New builds also reject that base. The cutover needs a bootstrap path that permits landing the tooling after its review is published.
