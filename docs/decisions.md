@@ -19,13 +19,14 @@ The shape of Core was approved provisionally on 2026-11-05 ([stage A2a](#decided
 
 Status: decided
 
-Source: owner reply supplied verbatim in the writer brief.
+Source: owner
 
 An outside review estimated that since November 11 about nine commits touched `Concrete/`
 and about 190 touched spec, scripts or docs. Slice 0 still lacked a complete source-to-native
 pipeline. Review rounds went to planted mutant construction, and mechanical defaults waited for
 the owner. The coordinator asked about sequencing, review proportionality and tooling, delegated
-defaults, and when to bring the reviewer's language ideas to the owner.
+defaults, and when to bring the reviewer's language ideas to the owner. The reply below is
+quoted verbatim from the writer brief.
 
 > Yes to 1, 2, 3, and 4, with a few clarifications:
 >
@@ -45,7 +46,10 @@ ordering in the [foundation-first decision](#decided-2026-11-07-foundation-first
 [A2c freeze ordering in Q9.14 and Q9.19](#decided-2026-11-05-core). A2i integration
 and the owner freeze remain milestones for their respective scopes. The 54-piece
 [inventory](../ConcreteSpec/landing/README.md) records landed work and does not gate new
-slices. ISS-0100 and ISS-0101 track the LLVM and lexer changes.
+slices. This supersedes the timing in the [November 8 written-grammar decision](#decided-2026-11-08-written-grammar)
+and its whole-grammar prerequisite for the slice-0 parser in [R-0622](../ROADMAP.md#r-0622).
+Slice 0 needs only its own independent Lean grammar judgment, using already-decided spellings.
+The full grammar review sheet is built up per slice. ISS-0102 and ISS-0103 track the LLVM and lexer changes.
 
 The proportion rule supersedes the [November 20 review risk rule](#decided-2026-11-20-tooling-review-risk)
 where the earlier rule would admit additional blockers. It applies in `Proofs/`.
@@ -54,6 +58,7 @@ The new meta-tooling freeze allows the three proof simplifications tracked in
 
 Finish arithmetic without further mutant-style rounds, superseding the affected further rounds
 in the [November 21 review allowance](#decided-2026-11-21-extra-review-rounds).
+That allowance's three extra ownership review rounds are also superseded.
 `wip/spec-f16-own-o3` is parked until borrows are needed. Land minimal source
 locations with empty spans allowed and 1-based line and column. On file lookup, the coordinator's
 delegated recommendation is to bind to exact file contents, with the file name alone insufficient.
@@ -71,14 +76,21 @@ field-disjoint borrows, O(1) arena reset and the other language ideas as options
 Agents may settle mechanical and representation defaults such as sizes, encodings, edge
 whitespace and diagnostic formatting. List each default here for owner veto. Core semantics
 such as ownership, borrows, authority, traps, allocation and syntax removals remain owner decisions.
+This delegation supersedes the [project recording rule](#decided-project-recording) and row P1 of
+the [November 5 project decision](#decided-2026-11-05-project) only for mechanical and
+representation defaults recorded on this veto list.
 
 | Default | Disposition |
 | --- | --- |
 | `bool` | One byte. False is 0, true is 1, other bytes are invalid. Boolean-to-integer conversion remains open under ISS-0069. |
 | `Unit` | Zero bytes, alignment 1. |
 | `char` | Four bytes as a `u32` Unicode scalar value, alignment 4. |
-| Source line endings | LF or CRLF. Keep the existing bare-CR comment rule in `Surface0.lean` through slice 0. |
-| Raw U+FEFF | Refused everywhere, including at file start, as in `Surface0.lean`. No byte-order mark. |
+| Source line endings | Owner-confirmed LF or CRLF. |
+| Raw U+FEFF | Owner-confirmed refusal everywhere, including at file start, as in `Surface0.lean`. |
+| Bare CR in line comments | Agent default for owner veto. Retain the existing `Surface0.lean` comment termination rule through slice 0. |
+
+These dispositions supersede the U+FEFF and bare-CR holds in the
+[November 8 recovery queue](#decided-2026-11-08-recovery-queue) for slice 0.
 
 The next branch touching each affected file reconciles its stale held-authority text:
 `Spec/Surface0.lean`, `Spec/Const.lean`, `Spec/Scalar.lean`, `Spec/Exec.lean`,

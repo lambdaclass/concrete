@@ -282,10 +282,12 @@ structure Backend where
   emit : BIR.Program → Except String Text
   Means : Text → BodyResult → Prop
 
+/-- `LLVM.print` emits body text and spells integer types by bit width, so signed and
+    unsigned types of equal width have the same type spelling. The body printer omits the site
+    table. `LLVM.module` adds it through `Runtime.llvm` in the whole module.
+    `P_print` remains a premise about the meaning of the body text. -/
 def llvm (M : String → BodyResult → Prop) : Backend := ⟨String, fun b => .ok (LLVM.print b), M⟩
-/-- The emitted LCB text is the adapted body PAIRED with its site table, so the table that
-    decodes the result is part of the emitted artifact. (The LLVM text already contains its
-    table, and printer injectivity covers it.) -/
+/-- LCB emits the adapted body paired with its site table for decoding the result. -/
 def lcb : Backend := ⟨LCB.Source.Function × SiteTable, LCB.emit,
   fun (f, _) r => LCB.bodyResult f r⟩
 /-- From LCB's own source semantics (`LeanCompilerBackend.Verified.Source`, imported, never
@@ -412,20 +414,11 @@ theorem answer_correct (F : FrontendPremises) (P : NativePremises B N T₀)
 
 **Non-vacuity, one witness per layer:**
 1. **Acceptance:** `answer_accepts`, by kernel `decide`.
-2. **Native model consistency, per backend.** The proposed LLVM reference model for
-   `NativePremises (llvm refMeans) refNative T₀` is:
-   - `Image := BIR.Program`;
-   - `Built T ll b := b.WF ∧ b.frameSlots ≤ T.maxSlots ∧ LLVM.print b = ll`;
-   - `BodyRuns T b r := r = BIR.bodyResult b`, where `bodyResult` returns `encode (behaviour b)` or diverges;
-   - `Runs T b β := β = BIR.behaviour b`;
-   - `refMeans ll r := ∃ b, b.WF ∧ LLVM.print b = ll ∧ r = BIR.bodyResult b`.
-
-   The `rt` field in this example follows from `decode_encode`. The `emit` field
-   is conditional on `P_print`. `Concrete/Backend/LLVM.lean` implements the printer.
-   Drop the planned inverse `LLVM.unprint (LLVM.print b) = some b` for every WF `b`.
-   It is false because the printer omits the site table and spells `i8` and `u8` identically.
-   The certificate plan binds the specific BIR and its sites to the emitted bytes. See
-   [ISS-0100](../ISSUES.tsv) and the [November 22 decision](../docs/decisions.md#decided-2026-11-22-direction).
+2. **Native model consistency.** LLVM's semantic preservation premise `P_print` remains
+   open. The body text alone cannot recover the original BIR or its site table, so there is
+   no LLVM native-premise model witness here. The certificate plan binds the specific BIR
+   and its sites to the exact emitted bytes. See [ISS-0102](../ISSUES.tsv) and the
+   [November 22 decision](../docs/decisions.md#decided-2026-11-22-direction).
 
    For LCB, `Means` is fixed by LCB's semantics. The witness `NativePremises lcb refNativeLCB T₀` uses:
    - `Image := LCB.Source.Function × SiteTable`, which is the emitted text itself;
@@ -433,7 +426,7 @@ theorem answer_correct (F : FrontendPremises) (P : NativePremises B N T₀)
    - `BodyRuns T (g, _) := LCB.bodyResult g`;
    - `Runs T (g, tbl) β := ∃ r, LCB.bodyResult g r ∧ β = r.behaviour tbl`.
 
-   Because a successful `emit b` is `(f, b.sites)` (`Proof.emit_ok`), a built image carries exactly `b.sites`, so `rt` holds by definition and no adapter injectivity is needed. `emit` is `emit_correct`.
+   Because a successful `emit b` is `(f, b.sites)` (`Proof.emit_ok`), a built image carries exactly `b.sites`, so `rt` follows from decoding with the paired table. `emit` is `emit_correct`.
 
    `live` holds because LCB's step relation is deterministic, so a run returns, faults or diverges. The witness follows from `emit_correct`.
 3. **Frontend premises:** these are claims about fixed code, not something a model can satisfy, so no model witness applies. They are discharged per compilation (next section), and universally once `lex_correct` and `parse_correct` land.

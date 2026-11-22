@@ -53,10 +53,7 @@ uncommitted tree is never reviewed, and the script warns when it is dirty.
 
 ## What blocks a review
 
-The [review proportion rule](../AGENTS.md#review-proportion) defines the blocking verdict:
-a soundness bug, wrong language semantics, false theorem or broken build. Record disputes
-over mutant, fixture or test construction, helper factoring and out-of-slice edge cases as
-non-blocking notes, including in `Proofs/`.
+Apply the [review proportion rule](../AGENTS.md#review-proportion).
 
 ## What each round reviews
 

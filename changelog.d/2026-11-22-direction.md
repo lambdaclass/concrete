@@ -1,4 +1,4 @@
-# Compile slice 0 first
+### Compile slice 0 first
 
 Record the November 22 owner decision. Prioritize real slice-0 `.con` programs on LLVM
 and LCB, with the required Lean rules written per slice. Apply the review proportion rule
