@@ -3,9 +3,11 @@
 Record the [2026-11-22 roadmap reordering](docs/decisions.md#decided-2026-11-22-roadmap-reordering)
 and [local LLM inference showcase / float-order](docs/decisions.md#decided-2026-11-22-llm-inference-showcase-and-float-order)
 decisions and update [ROADMAP.md](ROADMAP.md) accordingly: keep strict spec-first-per-slice
-discipline while unblocking Slices 0–5 on an unfrozen Core with just-in-time `C1–C10` contracts
-and moving the `A2c` Core freeze to 0.1 (Slice 11); split `B0` into `B0a` (working spine) and
-`B0b` (LCB/ASan/fuzzer in parallel with Slices 2–4); move `LP0` (`R-0572`) after Slice 5; defer
+discipline while unblocking Slices 0–5 on an unfrozen Core with incremental `C1–C10` foundation
+integration (completing all `C1–C10` contracts and interaction proofs in `ConcreteSpec` before the
+`A2c` Core freeze at 0.1 / Slice 11, separate from later Slice-12/16 compiler/surface increments);
+split `B0` into `B0a` (working spine) and `B0b` (LCB/ASan/fuzzer after `B0a` in parallel with early
+slices through Slices 2–4, under an explicit early-slice staging rule); move `LP0` (`R-0572`) after Slice 5; defer
 heavy meta-gates (`R-0702`, `R-0699`, `R-0577`) and JSON schema freeze (`R-0178`) from Slice-0
 per-PR blockers to nightly / 0.1; reorder Phase C (Slices 6–11) so structs,
 enums/`Result`/`checked_*`, borrows, arrays, modules/`const`, generics and traits precede the proof
