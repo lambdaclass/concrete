@@ -12,7 +12,67 @@ The chapters state these decided rules now (owner revision, 2026-11-03), before 
 ([ROADMAP.md](../ROADMAP.md#phases), phases B–D); until then, where a chapter still describes
 the earlier behaviour, the answer below governs, and the code follows as its new-compiler slice lands.
 
-The shape of Core was approved provisionally on 2026-11-05 ([stage A2a](#decided-2026-11-05)): it binds the design, and the owner freezes Core at stage A2c, after the four design theorems are proved against the proposed `Spec.lean` and the integration stage A2i (2026-11-06) is accepted. The project and architecture decisions are recorded here too, [below](#decided-project).
+The shape of Core was approved provisionally on 2026-11-05 ([stage A2a](#decided-2026-11-05)): it binds the design, and the owner freezes Core at stage A2c, after the four design theorems are proved against the proposed `Spec.lean` and the integration stage A2i (2026-11-06) is accepted (freeze timing revised to 0.1 on [2026-11-22](#decided-2026-11-22-roadmap-reordering)). The project and architecture decisions are recorded here too, [below](#decided-project).
+
+<a id="decided-2026-11-22-roadmap-reordering"></a>
+## Decided 2026-11-22: roadmap reordering and just-in-time foundation
+
+Status: decided
+Source: owner
+
+Provenance: owner session `3ae15b85-7ff7-4f07-b363-ab6fedc3326a` (2026-11-22). After reviewing
+[LANGUAGE_AND_COMPILER_ENHANCEMENTS.md](proposals/LANGUAGE_AND_COMPILER_ENHANCEMENTS.md) and the
+scheduled task rows in [ROADMAP.md](../ROADMAP.md), the owner asked, verbatim:
+
+~~~text
+also would you change the order of anything in the roadmap?
+~~~
+
+The assistant recommended five roadmap ordering changes:
+
+1. **Unblock Slice 0 from the full `A2i → A2c` Core freeze:** build Slices 0–5 on an unfrozen Core,
+   pulling `C1–C10` foundation contracts in just-in-time at the slice that exercises them, and
+   freeze Core (`A2c`) at **0.1** (after `file-copy` and `grep`) once real programs test the
+   interactions.
+2. **Split `B0` and move `LP0` after Slice 5:** split `B0` into `B0a` (working spine: lex/parse →
+   elaborate → Core → MIR → BIR → LLVM + Lean oracle match + per-lowering proofs + unfrozen `0-dev`
+   `concrete facts`) and `B0b` (in parallel with Slices 2–4: unverified LCB, `R-0579` adapter proof,
+   ASan, fuzzer); move `LP0` (`R-0572`) from after Slice 1 to after Slice 5 so LCB native codegen is
+   proved once on branches, loops, calls, stack frames and the multi-frame trap ABI; defer
+   `con-leche`/`nanoda` double-replay (`R-0702`), spec mutation (`R-0699`), two-machine
+   reproducible-build diffing (`R-0577`) and freezing the JSON schema (`R-0178`) from per-PR Slice-0
+   blockers to nightly / 0.1.
+3. **Reorder Phase C (Slices 6–11, formerly 6–18):** keep Slices 0–5, then land structs + enums/`match`
+   + `Option`/`Result`/`checked_*` (Slice 6), borrows + arrays + `R-0712` bitmask/modulo/shift rules
+   (Slice 7), minimal modules & `const` (Slice 8), generics + traits/`Destroy`/`defer` (Slice 9),
+   the proof surface + `R-0495` safe-subset `concrete extract-lean` (once subset approved) + `R-0201`
+   `concrete diff` (Slice 10), and authority + console/UTF-8 + files (`Fs`) + `R-0717` `concrete sim`
+   (`Fs`/Time/Entropy leg) ending at **0.1 (`file-copy`, `grep`, Core freeze `A2c`, frozen JSON
+   schema)** (Slice 11). DWARF (`R-0587`) and the formatter move after 0.1.
+4. **Reorder Phase D (Slices 12–21, formerly 19–28):** put allocation (Slice 12), `HeapArray`
+   (Slice 13), `Vec`/`String` (Slice 14), `OrderedMap`/`HashMap` (Slice 15), raw pointers/`trusted`
+   (Slice 16) and FFI/RocksDB (Slice 17, earliest `LD` / `legacy/` deletion) ahead of function
+   values + `R-0601` contracts (Slice 18), followed by floats (Slice 19), clock/network/web server
+   (Slice 20) and concurrency (Slice 21).
+5. **Pull high-leverage capabilities forward and pause new Phase T meta-tooling:** pull `R-0712`
+   (Slice 7), `R-0495` safe subset (Slice 10), `R-0201` `concrete diff` (Slice 10) and `R-0717`
+   `concrete sim` `Fs` leg (Slice 11 / 0.1) forward; pause new `Phase T` meta-tooling (`R-0692`,
+   `R-0693`, remaining `R-0710` items) unless a real bug hits `main`.
+
+Owner reply, verbatim:
+
+~~~text
+yes draft and change it directly and we will merge it
+~~~
+
+Scope and boundaries: this decision revises the project's phase gating, slice sequence, gate timing
+and Phase T prioritization in [ROADMAP.md](../ROADMAP.md), superseding the earlier pre-Slice-0
+freeze/LP0-at-1/Phase-C-and-D ordering records (which remain below as history). It decides **no**
+language syntax or semantic rule: every owner-gated language row (`R-0713`–`R-0716`, `R-0718`,
+`R-0495` functional-model subset, `R-0399` concurrency, and all open ODs) remains explicitly
+owner-gated. It waives no soundness guarantee; it changes when heavy qualification gates run
+(nightly / 0.1 rather than per-PR Slice-0 blockers) while keeping Lean kernel checking active on
+every slice.
 
 <a id="decided-2026-11-22-scaling-and-diagnostic-fixes"></a>
 ## Decided 2026-11-22: compiler scaling and diagnostic fixes

@@ -1,10 +1,20 @@
-**PROPOSED (2026-11-22); awaiting Codex and second-reviewer review and owner decision. Schedules roadmap scope and design proposals only; decides no language rule.**
+**PROPOSED (2026-11-22; roadmap reordering decided by the owner on 2026-11-22, [decision](../decisions.md#decided-2026-11-22-roadmap-reordering)); awaiting Codex and second-reviewer review and owner decisions on language rows. Decides no language rule.**
 
-# Language and Compiler Enhancements Proposal (2026-11-22)
+# Language and Compiler Enhancements and Roadmap Reordering (2026-11-22)
 
-**Scope.** This document collects high-leverage language, specification, compiler and tooling enhancements designed specifically around Concrete's existing architectural invariants—strict linearity, second-class references, dual-key authority (`with(...)` plus linear resource grants), executable Lean Core semantics, one `Layout` authority, proved ghost erasure, and mandatory termination variants—and maps each item to its exact home in [ROADMAP.md](../../ROADMAP.md).
+**Scope.** This document records the [2026-11-22 roadmap reordering](#roadmap-reordering) approved by the owner and collects high-leverage language, specification, compiler and tooling enhancements designed specifically around Concrete's existing architectural invariants—strict linearity, second-class references, dual-key authority (`with(...)` plus linear resource grants), executable Lean Core semantics, one `Layout` authority, proved ghost erasure, and mandatory termination variants—mapping each item to its exact home in [ROADMAP.md](../../ROADMAP.md).
 
-Every item is evaluated against [docs/PHILOSOPHY.md](../PHILOSOPHY.md#the-rules) and the [admission test](../PHILOSOPHY.md#admission-test). Nothing in this document decides any open language question or reopens any decided rule on its own: every language proposal (`R-0713`–`R-0716`, `R-0718`, plus the early-audit options in the [appendix](#appendix-early-audit-options)) requires an explicit owner decision recorded in [docs/decisions.md](../decisions.md) before any syntax or semantic rule enters `ConcreteSpec`.
+Every item is evaluated against [docs/PHILOSOPHY.md](../PHILOSOPHY.md#the-rules) and the [admission test](../PHILOSOPHY.md#admission-test). Nothing in this document decides any open language question or reopens any decided language rule on its own: every language proposal (`R-0713`–`R-0716`, `R-0718`, plus the early-audit options in the [appendix](#appendix-early-audit-options)) requires an explicit owner decision recorded in [docs/decisions.md](../decisions.md) before any syntax or semantic rule enters `ConcreteSpec`.
+
+## <a id="roadmap-reordering"></a>Roadmap reordering (decided 2026-11-22)
+
+Under [decided-2026-11-22-roadmap-reordering](../decisions.md#decided-2026-11-22-roadmap-reordering), [ROADMAP.md](../../ROADMAP.md) adopts five structural ordering changes:
+
+1. **Unblock Slices 0–5 from the full `A2i → A2c` freeze:** build Slices 0–5 on an unfrozen Core, pulling `C1–C10` foundation contracts in just-in-time at the slice that exercises them, and freeze Core (`A2c`) at **0.1 (Slice 11)** once `file-copy` and `grep` validate real interactions.
+2. **Split `B0` and move `LP0` after Slice 5:** `B0a` delivers the working Slice-0 spine (lex/parse → elaborate → Core → MIR → BIR → LLVM + Lean oracle match + per-lowering proofs + unfrozen `0-dev` `concrete facts`); `B0b` adds unverified LCB (`R-0578`), the BIR→LCB adapter proof (`R-0579`), ASan (`R-0301`) and fuzzing (`R-0272`) in parallel with Slices 2–4; `LP0` (`R-0572`) moves after Slice 5 to prove branches, loops, calls, stack frames and the multi-frame trap ABI once; `R-0702`, `R-0699`, `R-0577` and freezing the JSON schema (`R-0178`) move from per-PR Slice-0 blockers to nightly / 0.1.
+3. **Reorder Phase C (Slices 6–11):** land structs + enums/`match` + `Option`/`Result`/`checked_*` (Slice 6), borrows + arrays + `R-0712` bitmask/modulo/shift rules (Slice 7), minimal modules & `const` (Slice 8), generics + traits/`Destroy`/`defer` (Slice 9), the proof surface + `R-0495` safe-subset `concrete extract-lean` + `R-0201` `concrete diff` (Slice 10), and authority + console/UTF-8 + files (`Fs`) + `R-0717` `concrete sim` (`Fs`/Time/Entropy leg) ending at **0.1** (Slice 11). DWARF (`R-0587`) and the formatter move after 0.1 (Slice 12).
+4. **Reorder Phase D (Slices 12–21):** land allocation (Slice 12), `HeapArray` (Slice 13), `Vec`/`String` (Slice 14), `OrderedMap`/`HashMap` (Slice 15), raw pointers/`trusted` (Slice 16) and FFI/RocksDB (Slice 17, earliest `LD` / `legacy/` deletion) ahead of function values + `R-0601` contracts (Slice 18), followed by floats (Slice 19), clock/network/web server (Slice 20) and concurrency (Slice 21).
+5. **Pull forward high-leverage checks and pause new Phase T meta-tooling:** pull `R-0712` (Slice 7), `R-0495` safe subset (Slice 10), `R-0201` `concrete diff` (Slice 10) and `R-0717` `concrete sim` `Fs` leg (Slice 11 / 0.1) earlier; pause new `Phase T` meta-tooling (`R-0692`, `R-0693`, remaining `R-0710` items) unless a real bug hits `main`.
 
 ## Roadmap mapping at a glance
 
@@ -12,29 +22,29 @@ To keep [every fact once](../PHILOSOPHY.md#the-rules) (rule 5), ideas that refin
 
 ### New roadmap tasks (`R-0711`–`R-0718`)
 
-| Task | Phase | Kind | Summary | Owner-gated? |
+| Task | Phase / Slice | Kind | Summary | Owner-gated? |
 |---|---|---|---|---|
-| [R-0711](../../ROADMAP.md#r-0711) | C | Compiler | [Verified optimizer hints from `CheckedCore` and `Facts`](#comp-verified-hints) | No |
-| [R-0712](../../ROADMAP.md#r-0712) | C | Spec / checker | [Deterministic bitmask, modulo and shift transfer rules](#comp-bitmask-rules) | No |
-| [R-0713](../../ROADMAP.md#r-0713) | C | Language | [`&out T` write-only second-class references](#lang-out-ref) | **Yes** |
-| [R-0714](../../ROADMAP.md#r-0714) | C | Language / layout | [Zero-`unsafe` binary wire formats (`ByteSafe` + explicit-endian scalars)](#lang-wire-formats) | **Yes** |
-| [R-0715](../../ROADMAP.md#r-0715) | C | Language / std | [Zero-sized erased proof witnesses (`Witness<P>`) and linear typestate](#lang-typestate-witness) | **Yes** |
-| [R-0716](../../ROADMAP.md#r-0716) | C | Language / const | [Const-generic capacity parameters (`<const N: u64>`) + pure compile-time data eval](#lang-const-generics-eval) | **Yes** |
-| [R-0717](../../ROADMAP.md#r-0717) | D | Tooling | [Deterministic Simulation Testing (`concrete sim`) over `main`'s grants](#lang-dst) | No |
-| [R-0718](../../ROADMAP.md#r-0718) | D | Language / alloc | [Scoped scratch sub-arenas, argument-inferred brands and O(1) arena reset](#lang-scratch-brands) | **Yes** |
+| [R-0711](../../ROADMAP.md#r-0711) | C (Slice 3+) | Compiler | [Verified optimizer hints from `CheckedCore` and `Facts`](#comp-verified-hints) | No |
+| [R-0712](../../ROADMAP.md#r-0712) | C (Slice 7) | Spec / checker | [Deterministic bitmask, modulo and shift transfer rules](#comp-bitmask-rules) | No |
+| [R-0713](../../ROADMAP.md#r-0713) | C (Slice 7) | Language | [`&out T` write-only second-class references](#lang-out-ref) | **Yes** |
+| [R-0714](../../ROADMAP.md#r-0714) | C (Slice 7) | Language / layout | [Zero-`unsafe` binary wire formats (`ByteSafe` + explicit-endian scalars)](#lang-wire-formats) | **Yes** |
+| [R-0715](../../ROADMAP.md#r-0715) | C (Slice 10) | Language / std | [Zero-sized erased proof witnesses (`Witness<P>`) and linear typestate](#lang-typestate-witness) | **Yes** |
+| [R-0716](../../ROADMAP.md#r-0716) | C (Slice 9) | Language / const | [Const-generic capacity parameters (`<const N: u64>`) + pure compile-time data eval](#lang-const-generics-eval) | **Yes** |
+| [R-0717](../../ROADMAP.md#r-0717) | C (Slice 11 / 0.1) & D (Slice 20) | Tooling | [Deterministic Simulation Testing (`concrete sim`) over `main`'s grants](#lang-dst) | No |
+| [R-0718](../../ROADMAP.md#r-0718) | D (Slice 12) | Language / alloc | [Scoped scratch sub-arenas, argument-inferred brands and O(1) arena reset](#lang-scratch-brands) | **Yes** |
 
 ### Existing roadmap tasks extended or pulled forward
 
-| Existing task(s) | Phase | Enhancement |
+| Existing task(s) | Phase / Slice | Enhancement |
 |---|---|---|
-| Step bounds + `R-0574` | A / B | [Automatic worst-case complexity / gas / WCET bounds from `#[variant]`](#lang-step-bounds) |
+| Step bounds + `R-0574` | A / B / C (Slices 4, 5, 10) | [Automatic worst-case complexity / gas / WCET bounds from `#[variant]`](#lang-step-bounds) |
 | `R-0583`, `R-0299` | B / E | [Certified SSA dominator & register-allocation validators + proof-producing e-graphs](#comp-validators-egraphs) |
-| `R-0593`, `R-0599`, `R-0177` | B / E | [Proof-guided structured LLM repair diagnostics and `Obligation_*.lean` stubs](#comp-repair-trace) |
-| `R-0586` | B | [`concrete trace` Miri-grade reference debugger over hybrid Core state](#comp-repair-trace) |
-| `R-0556`, `R-0149` | C / G | [Two-level declaration Merkle hashing (`interface_hash` vs `body_hash`)](#comp-merkle-incremental) |
-| `R-0495`, `R-0177` | E (pulled to Slice 8) | [`concrete extract-lean` pure-functional model + auto-proved refinement](#comp-extract-lean) |
+| `R-0593`, `R-0599`, `R-0177` | B / C (Slices 3, 10) / E | [Proof-guided structured LLM repair diagnostics and `Obligation_*.lean` stubs](#comp-repair-trace) |
+| `R-0586` | B / C (Slice 11) | [`concrete trace` Miri-grade reference debugger over hybrid Core state](#comp-repair-trace) |
+| `R-0556`, `R-0149` | C (Slice 8) / G | [Two-level declaration Merkle hashing (`interface_hash` vs `body_hash`)](#comp-merkle-incremental) |
+| `R-0495`, `R-0177` | E (pulled to Slice 10) | [`concrete extract-lean` pure-functional model + auto-proved refinement](#comp-extract-lean) |
 | `R-0517`, `R-0505` | E | [Direct LCB machine code + proved Mach-O/ELF binary validator with in-Lean stack bounds](#comp-binary-validator) |
-| `R-0201` | F (diff pulled earlier) | [`concrete diff` semantic assurance diffing and `Concrete.toml` ratchets](#comp-assurance-diff) |
+| `R-0201` | F (diff pulled to Slice 10) | [`concrete diff` semantic assurance diffing and `Concrete.toml` ratchets](#comp-assurance-diff) |
 
 ---
 
@@ -54,7 +64,7 @@ To keep [every fact once](../PHILOSOPHY.md#the-rules) (rule 5), ideas that refin
 
 **Philosophy alignment.** Passes [admission test](../PHILOSOPHY.md#admission-test): one form for uninitialized output placement (AT 1), explicit in every signature and call site (AT 2, AT 4), local lexical invariant without lifetimes (AT 4, AT 5), eliminates hidden zero-init overhead and `unsafe` placement casts (AT 7, AT 14).
 
-**Roadmap home.** [R-0713](../../ROADMAP.md#r-0713) (Phase C, after Slice 13 borrows).
+**Roadmap home.** [R-0713](../../ROADMAP.md#r-0713) (Phase C, Slice 7 borrows/arrays).
 
 **Owner questions required.**
 1. Syntax spelling (`&out T`, `out &mut T`, or another form) and call-site marker.
@@ -76,7 +86,7 @@ To keep [every fact once](../PHILOSOPHY.md#the-rules) (rule 5), ideas that refin
 
 **Philosophy alignment.** Directly satisfies rule 1 (removes an entire class of alignment/endian/padding defects), rule 5 (single `Layout` authority), rule 15 (no macros/derives), and [AT 14](../PHILOSOPHY.md#admission-test) (audited codecs without `unsafe`).
 
-**Roadmap home.** [R-0714](../../ROADMAP.md#r-0714) (Phase C, Slice 15/25 boundary, coordinated with `R-0609` and `R-0071`).
+**Roadmap home.** [R-0714](../../ROADMAP.md#r-0714) (Phase C, Slice 7 borrows/arrays, coordinated with `R-0609` and `R-0071`).
 
 **Owner questions required.**
 1. Exact scalar set and naming (`le_u16`..`be_u64`, signed variants, `u128`/`i128`).
@@ -96,17 +106,17 @@ To keep [every fact once](../PHILOSOPHY.md#the-rules) (rule 5), ideas that refin
 
 **Philosophy alignment.** Zero new runtime machinery (rule 8), strict linearity already present (rule 9), proved erasure (rule 12 / C9), makes protocol completion and validation provenance visible in signatures (rule 3, AT 10).
 
-**Roadmap home.** [R-0715](../../ROADMAP.md#r-0715) (Phase C, Slice 8 / 18, coordinated with `R-0615`, `R-0694`, `R-0071`).
+**Roadmap home.** [R-0715](../../ROADMAP.md#r-0715) (Phase C, Slice 10 proof surface / Slice 11 `0.1`, coordinated with `R-0615`, `R-0694`, `R-0071`).
 
 **Owner questions required.**
-1. Whether `Witness<P>` is a dedicated ghost/proof type constructor in `ConcreteSpec` or a std pattern over zero-sized private-constructor structs with `#[invariant(...)]` (Slice 17).
+1. Whether `Witness<P>` is a dedicated ghost/proof type constructor in `ConcreteSpec` or a std pattern over zero-sized private-constructor structs with `#[invariant(...)]` (Slice 8).
 2. Interaction between a witness token and mutation of the referenced data (ensuring lexical borrow-freezing or versioned/linear binding prevents stale witnesses after mutation).
 
 ---
 
 ### <a id="lang-const-generics-eval"></a>4. Const-generic capacity parameters (`<const N: u64>`) and pure compile-time data evaluation (`R-0716`)
 
-**Motivation.** Concrete currently has two major friction points for zero-heap and predictable-policy systems code (Slices 0–18, embedded/realtime, crypto/codec showcases):
+**Motivation.** Concrete currently has two major friction points for zero-heap and predictable-policy systems code (Slices 0–11, embedded/realtime, crypto/codec showcases):
 
 1. **No `<const N: u64>` generics:** Without const-generic capacity parameters, std cannot provide generic fixed-capacity containers (`FixedVec<T, N>`, `RingBuf<T, N>`, `FixedStr<N>`) or generic array algorithms (`fn crc32<const N: u64>(buf: &[u8; N]) -> u32`). Note that [IDEAS.md](IDEAS.md) already flagged fixed-capacity non-allocating std (`#8`) as `RETAINED-ONLY`.
 2. **Separate `CExpr` mini-language for constants:** Today `ConcreteSpec/Spec/Const.lean` maintains a tiny separate expression language restricted to scalar integer/boolean expressions ([constants decision](../decisions.md#decided-2026-11-08-constants)). Generating verified static lookup tables (CRC32, AES S-boxes, ChaCha constants, UTF-8/HTTP DFA tables, EVM opcode tables) therefore requires either hand-pasted magic hex arrays or external build generators.
@@ -119,7 +129,7 @@ To keep [every fact once](../PHILOSOPHY.md#the-rules) (rule 5), ideas that refin
 
 **Philosophy alignment.** Eliminates duplicate constant-expression semantics (rule 5), keeps macros permanently refused ([What Concrete refuses](../PHILOSOPHY.md#what-concrete-refuses)), and stays strictly within the narrow "constants-only" reopening rule for general compile-time evaluation in [docs/PHILOSOPHY.md](../PHILOSOPHY.md#what-concrete-refuses) (row `P17b`).
 
-**Roadmap home.** [R-0716](../../ROADMAP.md#r-0716) (Phase C, Slices 11–15 / 17, coordinated with `R-0510`, `R-0574`, `R-0614`).
+**Roadmap home.** [R-0716](../../ROADMAP.md#r-0716) (Phase C, Slice 9 generics/const, coordinated with `R-0510`, `R-0574`, `R-0614`).
 
 **Owner questions required.**
 1. Reopening of narrow constants-only compile-time function evaluation under [PHILOSOPHY.md](../PHILOSOPHY.md#what-concrete-refuses) and [decided-2026-11-08-constants](../decisions.md#decided-2026-11-08-constants) (including fuel/size caps and determinism requirements).
@@ -143,7 +153,7 @@ To keep [every fact once](../PHILOSOPHY.md#the-rules) (rule 5), ideas that refin
 
 **Philosophy alignment.** Keeps brands generative and sound (rule 1, rule 10), keeps capabilities 100% explicit (rule 11), keeps closures permanently refused ([What Concrete refuses](../PHILOSOPHY.md#what-concrete-refuses)), and makes O(1) arena reclamation practical for real servers and parsers (rule 17).
 
-**Roadmap home.** [R-0718](../../ROADMAP.md#r-0718) (Phase D, Slice 19, coordinated with `R-0611`, `R-0595`, `R-0624`).
+**Roadmap home.** [R-0718](../../ROADMAP.md#r-0718) (Phase D, Slice 12 allocation, coordinated with `R-0611`, `R-0595`, `R-0624`).
 
 **Owner questions required.**
 1. Lexical block syntax for scoped scratch sub-arenas (closure-free block form).
@@ -164,7 +174,7 @@ To keep [every fact once](../PHILOSOPHY.md#the-rules) (rule 5), ideas that refin
 
 **Philosophy alignment.** Extracts maximal assurance from annotations the programmer already writes (rule 5, rule 14, rule 16), directly serving the `grep` linear-time regex, EVM gas-bounded interpreter, and WebAssembly fuel-bounded sandbox [showcases](EXAMPLES.md#showcases).
 
-**Roadmap home.** Extends [Step bounds](../../ROADMAP.md#vertical-slices) and `R-0574` (Slices 4, 5, 8). No new owner decision required beyond existing `decided-2026-11-07-step-bounds`.
+**Roadmap home.** Extends [Step bounds](../../ROADMAP.md#vertical-slices) and `R-0574` (Slices 4, 5, 10). No new owner decision required beyond existing `decided-2026-11-07-step-bounds`.
 
 ---
 
@@ -182,11 +192,11 @@ Concrete's architecture provides DST by construction:
 - Run any unmodified Concrete binary (or Core program) under virtualized deterministic grants (`concrete sim --seed 42 --oom-rate 0.01 --short-writes --packet-drop 0.05`).
 - Systematically fault `AllocFailure`, short reads/writes, `EINTR`, non-monotonic or jumped clocks, directory permission errors, and dropped/reordered packets while verifying linear handle conservation and post-failure invariants.
 - Shrink failing event traces deterministically and replay the minimized trace directly against the Lean Core reference evaluator (`R-0586`) to separate compiler bugs from program bugs.
-- Directly accelerates acceptance testing for file-copy (Slice 18), RocksDB (Slice 25), the web server (Slice 27), and ethlambda (Slice 28).
+- Directly accelerates acceptance testing for `file-copy` (Slice 11 / 0.1), RocksDB (Slice 17), the web server (Slice 20), and ethlambda (Slice 21).
 
 **Philosophy alignment.** Pure tooling win exploiting existing language constraints (rule 11, rule 14, rule 17); adds zero language complexity and zero hidden runtime to production binaries (rule 8).
 
-**Roadmap home.** [R-0717](../../ROADMAP.md#r-0717) (Phase D, coordinated with `R-0586`, `R-0557`, `R-0595`). No language-rule owner decision required.
+**Roadmap home.** [R-0717](../../ROADMAP.md#r-0717) (Phase C Slice 11 / 0.1 for `Fs`/Time/Entropy faulting; Phase D Slice 20 for full network/clock faulting; coordinated with `R-0586`, `R-0557`, `R-0595`). No language-rule owner decision required.
 
 ---
 
@@ -227,21 +237,21 @@ Each transfer rule is a single Lean theorem proved once against `Scalar` (`R-060
 
 **Philosophy alignment.** Preserves [no hidden traps](../decisions.md#decided-project-no-hidden-traps) and zero-SMT admission (rule 18), directly reduces proof noise in real systems workloads (rule 17), and keeps every rule small and kernel-checked (rule 6, rule 15).
 
-**Roadmap home.** [R-0712](../../ROADMAP.md#r-0712) (Phase C, Slice 3+, extends `R-0574`).
+**Roadmap home.** [R-0712](../../ROADMAP.md#r-0712) (Phase C, Slice 7 arrays/borrows, extends `R-0574`).
 
 ---
 
-### <a id="comp-extract-lean"></a>3. Pure-functional Lean extraction (`concrete extract-lean`) pulled to Slice 8 (extends `R-0495`, `R-0177`)
+### <a id="comp-extract-lean"></a>3. Pure-functional Lean extraction (`concrete extract-lean`) pulled to Slice 10 (extends `R-0495`, `R-0177`)
 
 **Motivation.** Proving functional correctness directly over a big-step/small-step operational machine configuration (`Core.eval` with heap, frame stack, fuel, and event trace) is painful for ordinary users and LLMs alike. Because Concrete enforces a clean separable core (pure functions, linear ownership, no hidden globals, second-class references), pure functions behave mathematically like ordinary Lean functions (the Aeneas insight—already noted in `README.md`—achieved natively because Concrete already compiles inside Lean 4).
 
-**Proposed design.** Pull proof-order item 4's pure/separable-core slice forward from Phase E to **Slice 8** (once the owner approves the supported subset, representation, and residual assumptions as required by `R-0495` and `R-0574`):
+**Proposed design.** Pull proof-order item 4's pure/separable-core slice forward from Phase E to **Slice 10** (the proof surface, once the owner approves the supported subset, representation, and residual assumptions as required by `R-0495` and `R-0574`):
 
 - Add `concrete extract-lean`, emitting a clean, idiomatic pure-functional Lean model `f_model` for every eligible pure/separable-core Concrete function (starting with pure arithmetic, structs, enums, arrays and counted/variant loops).
 - Automatically generate and kernel-check the refinement bridge theorem `f_refines : Core.eval f = f_model` so users and LLMs write high-level functional correctness proofs (`simp`, `omega`, `grind`, induction) over `f_model` while the compiler composes them automatically into Core-level theorems.
 - Keep stateful/open-module/raw-memory functional models in Phase E (`R-0495`, `R-0705`).
 
-**Philosophy alignment.** Directly serves rule 7 (proofs attach to real Concrete code through the semantics, not a parallel hand-written reimplementation) and unlocks practical verification on Slices 8–18 showcases (`grep`, base64, ChaCha20, EVM opcodes, QOI/PNG).
+**Philosophy alignment.** Directly serves rule 7 (proofs attach to real Concrete code through the semantics, not a parallel hand-written reimplementation) and unlocks practical verification on 0.1+ showcases (`grep`, base64, ChaCha20, EVM opcodes, QOI/PNG).
 
 **Roadmap home.** Extends `R-0495`, `R-0574`, and `R-0177` (owner-approved subset/assumptions required before implementation).
 
@@ -290,7 +300,7 @@ Downstream modules, callers, and external proofs that depend only on `interface_
 
 **Philosophy alignment.** Directly implements [AT 5](../PHILOSOPHY.md#admission-test) (declaration-level dependence) and [AT 12](../PHILOSOPHY.md#admission-test) (separate identities for independently changing surfaces).
 
-**Roadmap home.** Extends `R-0556` (Slice 17 semantic interfaces) and `R-0149` (Phase G incremental builds).
+**Roadmap home.** Extends `R-0556` (Slice 8 semantic interfaces) and `R-0149` (Phase G incremental builds).
 
 ---
 
@@ -298,14 +308,14 @@ Downstream modules, callers, and external proofs that depend only on `interface_
 
 **Motivation.** For teams and automated reviewers auditing PRs—especially AI-written PRs—a textual `git diff` buries the five questions an auditor actually cares about: Did a function gain a capability? Start allocating? Add `trusted`/`unsafe`/FFI? Increase its stack or heap bound? Drop a proved theorem to unproved?
 
-**Proposed design.** Pull `concrete diff <base> <head>` forward from Phase F once Slice 6/8 facts are live (keeping full package-scale audit bundles in Phase F):
+**Proposed design.** Pull `concrete diff <base> <head>` forward from Phase F to **Slice 10** (the proof surface, keeping full package-scale audit bundles in Phase F):
 
 - Compare the versioned `concrete facts` JSON outputs (`R-0575`, `R-0593`) of two commits by typed declaration identity (`R-0492`), producing a concise semantic diff of capability changes, allocation changes, trusted/foreign boundary changes, termination/may-abort changes, stack/heap/step bound regressions, and proof-status changes.
 - Support declarative ratchets in `Concrete.toml` (`R-0589`, `R-0576`) so CI automatically refuses unapproved capability expansion, new `trusted` surfaces, or regressed bounds without blocking unrelated refactoring.
 
 **Philosophy alignment.** Turns [artifact-first auditability](../PHILOSOPHY.md#the-rules) (rule 14) into an everyday code-review superpower.
 
-**Roadmap home.** Extends `R-0201` (diffing & ratchet increment pulled earlier after Slice 6/8; full package audit bundle stays in Phase F).
+**Roadmap home.** Extends `R-0201` (diffing & ratchet increment pulled to Slice 10; full package audit bundle stays in Phase F).
 
 ---
 
