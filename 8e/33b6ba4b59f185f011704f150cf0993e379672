@@ -1,0 +1,11 @@
+[piece 1 of 8: docs]
+Repository reads failed because the sandbox could not start, so I could not verify the cited owner approvals in `docs/decisions.md`.
+
+- ROADMAP.md:204: A2i schedules `Brand`/`Accounting` at slice 12 and `Hybrid` at slice 16, but requires all foundation parts and their interaction proofs before freezing C1–C10 at slice 11. This makes the freeze prerequisites incompatible with the delivery schedule.
+- ROADMAP.md:207: B0b defers the second backend until parallel work with slices 2–4, while the retained slice shape requires both backends and observation comparisons before each slice completes, and the sequencing rule requires completion before the next slice starts. The stated rules therefore block the parallel schedule this change introduces; an explicit incremental acceptance exception is needed.
+[piece 5 of 8: docs]
+- ROADMAP.md:548: R-0071 now requires an approved public boundary plan before slice 7 but still depends on R-0052, explicitly delivered at slice 11. R-0556 also depends on R-0071 while now delivering module interfaces at slice 8. Split the early planning/interface prerequisites from the file-copy-dependent std work so the dependency graph permits the specified order.
+
+Repository reads failed because the sandbox could not start; owner-decision provenance could not be verified.
+[piece 7 of 8: docs]
+- docs/proposals/LANGUAGE_AND_COMPILER_ENHANCEMENTS.md:93: `ByteSafe` does not establish the promised absence of host-endianness bugs. A native `u32` satisfies the proposed validity and padding conditions, but its raw representation differs across endian targets. Require explicit-endian fields for wire-format eligibility, or specify canonical endian conversion in the codecs; `ByteSafe` alone is insufficient.
