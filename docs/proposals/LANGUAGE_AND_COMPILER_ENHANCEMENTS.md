@@ -4,23 +4,23 @@
 
 **Scope.** This document records the [2026-11-22 roadmap reordering](#roadmap-reordering) approved by the owner and collects high-leverage language, specification, compiler, proof-velocity and tooling enhancements designed specifically around Concrete's existing architectural invariants—strict linearity, second-class references, dual-key authority (`with(...)` plus linear resource grants), executable Lean Core semantics, one `Layout` authority, proved ghost erasure, and mandatory termination variants—mapping each item to its exact home in [ROADMAP.md](../../ROADMAP.md).
 
-Every item is evaluated against [docs/PHILOSOPHY.md](../PHILOSOPHY.md#the-rules) and the [admission test](../PHILOSOPHY.md#admission-test). Nothing in this document decides any open language question or reopens any decided language rule or governance policy on its own: every language proposal (`R-0713`–`R-0716`, `R-0718`–`R-0722`) and every policy-relaxing velocity item in `R-0724` requires an explicit owner decision recorded in [docs/decisions.md](../decisions.md) before entering `ConcreteSpec` or enforced checks.
+Every item is evaluated against [docs/PHILOSOPHY.md](../PHILOSOPHY.md#the-rules) and the [admission test](../PHILOSOPHY.md#admission-test). Nothing in this document decides any open language question or reopens any decided language rule or governance policy on its own: every language/grant proposal (`R-0713`–`R-0716`, `R-0718`–`R-0722`, `R-0725`–`R-0726`) and every policy-relaxing velocity item in `R-0724` requires an explicit owner decision recorded in [docs/decisions.md](../decisions.md) before entering `ConcreteSpec` or enforced checks.
 
 ## <a id="roadmap-reordering"></a>Roadmap reordering (decided 2026-11-22)
 
-Under [decided-2026-11-22-roadmap-reordering](../decisions.md#decided-2026-11-22-roadmap-reordering), [ROADMAP.md](../../ROADMAP.md) adopts five structural ordering changes:
+Under [decided-2026-11-22-roadmap-reordering](../decisions.md#decided-2026-11-22-roadmap-reordering) and [decided-2026-11-22-llm-inference-showcase-and-float-order](../decisions.md#decided-2026-11-22-llm-inference-showcase-and-float-order), [ROADMAP.md](../../ROADMAP.md) adopts five structural ordering changes plus the Slice 18/19 float swap and `concrete-llm` showcase:
 
-1. **Unblock Slices 0–5 from the full `A2i → A2c` freeze:** build Slices 0–5 on an unfrozen Core, pulling `C1–C10` foundation contracts in just-in-time at the slice that exercises them, and freeze Core (`A2c`) at **0.1 (Slice 11)** once `file-copy` and `grep` validate real interactions.
+1. **Unblock Slices 0–5 from the full `A2i → A2c` freeze (strictly spec-first per vertical slice):** never build a compiler slice ahead of *that slice's own* Lean rules in `ConcreteSpec`; build Slices 0–5 on an unfrozen Core, pulling `C1–C10` foundation contracts in just-in-time at the slice that exercises them, and freeze Core (`A2c`) at **0.1 (Slice 11)** once `file-copy` and `grep` validate real interactions.
 2. **Split `B0` and move `LP0` after Slice 5:** `B0a` delivers the working Slice-0 spine (lex/parse → elaborate → Core → MIR → BIR → LLVM + Lean oracle match + per-lowering proofs + unfrozen `0-dev` `concrete facts`); `B0b` adds unverified LCB (`R-0578`), the BIR→LCB adapter proof (`R-0579`), ASan (`R-0301`) and fuzzing (`R-0272`) in parallel with Slices 2–4; `LP0` (`R-0572`) moves after Slice 5 to prove branches, loops, calls, stack frames and the multi-frame trap ABI once; `R-0702`, `R-0699`, `R-0577` and freezing the JSON schema (`R-0178`) move from per-PR Slice-0 blockers to nightly / 0.1.
 3. **Reorder Phase C (Slices 6–11):** land structs + enums/`match` + `Option`/`Result`/`checked_*` (Slice 6), borrows + arrays + `R-0712` bitmask/modulo/shift rules (Slice 7), minimal modules & `const` (Slice 8), generics + traits/`Destroy`/`defer` (Slice 9), the proof surface + `R-0495` safe-subset `concrete extract-lean` + `R-0201` `concrete diff` (Slice 10), and authority + console/UTF-8 + files (`Fs`) + `R-0717` `concrete sim` (`Fs`/Time/Entropy leg) ending at **0.1** (Slice 11). DWARF (`R-0587`) and the formatter move after 0.1 (Slice 12).
-4. **Reorder Phase D (Slices 12–21):** land allocation (Slice 12), `HeapArray` (Slice 13), `Vec`/`String` (Slice 14), `OrderedMap`/`HashMap` (Slice 15), raw pointers/`trusted` (Slice 16) and FFI/RocksDB (Slice 17, earliest `LD` / `legacy/` deletion) ahead of function values + `R-0601` contracts (Slice 18), followed by floats (Slice 19), clock/network/web server (Slice 20) and concurrency (Slice 21).
-5. **Pull forward high-leverage checks and pause new Phase T meta-tooling:** pull `R-0712` (Slice 7), `R-0495` safe subset (Slice 10), `R-0201` `concrete diff` (Slice 10) and `R-0717` `concrete sim` `Fs` leg (Slice 11 / 0.1) earlier; pause new `Phase T` meta-tooling (`R-0692`, `R-0693`, remaining `R-0710` items) unless a real bug hits `main`.
+4. **Reorder Phase D (Slices 12–21):** land allocation (Slice 12), `HeapArray` (Slice 13), `Vec`/`String` (Slice 14), `OrderedMap`/`HashMap` (Slice 15), raw pointers/`trusted` (Slice 16), FFI/RocksDB (Slice 17, earliest `LD` / `legacy/` deletion) and floats (`f32`/`f64`, plus `concrete-llm` CPU & Concrete+Metal local inference showcase at Slice 18) ahead of function values + `R-0601` contracts (Slice 19), followed by clock/network/web server (Slice 20) and concurrency (Slice 21).
+5. **Pull forward high-leverage checks and pause new Phase T meta-tooling:** pull `R-0712` (Slice 7), `R-0495` safe subset (Slice 10), `R-0201` `concrete diff` (Slice 10) and `R-0717` `concrete sim` `Fs` leg (Slice 11 / 0.1) earlier; pause new `Phase T` governance meta-tooling (`R-0692`, `R-0693`, remaining `R-0710` items) unless a real bug hits `main` while running `R-0724` to cut existing proof/CI drag.
 
 ## Roadmap mapping at a glance
 
-To keep [every fact once](../PHILOSOPHY.md#the-rules) (rule 5), ideas that refine or pull forward existing roadmap obligations extend their current rows; genuinely new capabilities and audit-identified workstreams receive proposed rows `R-0711`–`R-0724` (subject to rebase if other IDs land first).
+To keep [every fact once](../PHILOSOPHY.md#the-rules) (rule 5), ideas that refine or pull forward existing roadmap obligations extend their current rows; genuinely new capabilities and audit-identified workstreams receive proposed rows `R-0711`–`R-0727` (subject to rebase if other IDs land first).
 
-### New roadmap tasks (`R-0711`–`R-0724`)
+### New roadmap tasks (`R-0711`–`R-0727`)
 
 | Task | Phase / Slice | Kind | Summary | Owner-gated? |
 |---|---|---|---|---|
@@ -38,6 +38,9 @@ To keep [every fact once](../PHILOSOPHY.md#the-rules) (rule 5), ideas that refin
 | [R-0722](../../ROADMAP.md#r-0722) | C (Slices 2, 7, 8, 11) | Language / std | [Surface literal escapes/ergonomics, `const` arrays, systems/crypto scalars + `volatile_zero` and zero-heap `args`](#lang-surface-scalars-const) | **Yes** |
 | [R-0723](../../ROADMAP.md#r-0723) | B (`B0a`/`B0b`, pre-Slice-3) & A2i | Compiler / spec | [Pre-Slice-0 and pre-Slice-3 compiler & spec correctness and scaling fixes (`LLVM`, `Lex`, `LL1`, `BIR`, `LCB`, `Runtime`, `Hybrid`/`Ident`/`Exec`)](#impl-compiler-spec-fixes) | No (spec-rule changes owner-gated) |
 | [R-0724](../../ROADMAP.md#r-0724) | T (active velocity) | Proof / CI / process | [Proof and CI velocity overhaul (`ConcreteSpecEvidence` split, zero-TCB proof tactics, `axioms.golden`/`landing_inventory` cleanup, CI build-once & attestation reuse, proportion rule)](#impl-proof-ci-velocity) | Policy items **Yes** |
+| [R-0725](../../ROADMAP.md#r-0725) | D (Slices 17–18) | Grant / layout / tooling | [Read-only `MappedFile` (`mmap`) linear grant + layout-verified C/Metal shader struct headers](#lang-mmap-gpu-layout) | **Yes** |
+| [R-0726](../../ROADMAP.md#r-0726) | D (Slice 18) | Language / backend | [`f16`/`bf16` storage & conversions + explicit fixed-width SIMD vectors (`Simd<T, N>`)](#lang-f16-simd) | **Yes** |
+| [R-0727](../../ROADMAP.md#r-0727) | E | Tooling / superopt | [Verified MAP-Elites kernel and LCB schedule search gated by Lean proofs & `concrete facts`](#comp-verified-map-elites) | No |
 
 ### Existing roadmap tasks extended or pulled forward
 
@@ -294,6 +297,42 @@ Concrete's architecture provides DST by construction:
 
 ---
 
+### <a id="lang-mmap-gpu-layout"></a>12. Read-only `MappedFile` (`mmap`) linear grant and layout-verified C/Metal shader struct headers (`R-0725`)
+
+**Motivation.** Real zero-copy data-intensive workloads—specifically the adopted **`concrete-llm` local LLM inference engine** (mapping 20–80 GB GGUF/Safetensors weight files) and **RocksDB SSTables**—cannot copy multi-gigabyte immutable files into heap `Vec`s. Meanwhile, GPU-accelerated engines written in a host systems language + Metal/CUDA shaders suffer from silent host/device ABI struct drift (size, alignment, or offset mismatches across languages) and manual GPU buffer lifecycle bugs.
+
+**Proposed design.**
+1. **Read-only `MappedFile` linear grant under `Fs`:** Narrowed to a granted directory (`with(Fs)`), producing an immutable byte view (`&[u8]`) backed by read-only `mmap` with explicit consuming `unmap` (zero mutable shared mappings initially, avoiding shared-memory aliasing/data-race UB; external file truncation / `SIGBUS` stays an explicit named target premise). Combined with `R-0714` (`ByteSafe`) and `R-0715` (linear typestate `GpuBuf<Idle>`/`GpuBuf<InFlight>` + `CmdBuf<Recording>` over Slice-17 `Kept<H>` Metal FFI), a Concrete+Metal inference engine proves zero-alloc decode, leak-free/race-free GPU scheduling, zero-`unsafe` GGUF parsing, and `Network: NONE` local privacy.
+2. **Layout-verified C/Metal shader struct headers:** Emit C / Metal Shading Language struct definitions (with `static_assert` size/offset checks) directly from Concrete's single `C3` `Layout` + `ByteSafe` authority (`R-0609`, `R-0714`) so host and GPU shader buffer contracts cannot silently diverge.
+
+**Philosophy alignment.** Single layout authority (rule 5), explicit linear authority and cleanup (rule 9, rule 11), zero hidden copies (rule 8), driven by real high-impact systems workloads (rule 17).
+
+**Roadmap home.** [R-0725](../../ROADMAP.md#r-0725) (Phase D, Slices 17–18, enabling `concrete-llm` and RocksDB).
+
+**Owner questions required.**
+1. Exact `MappedFile` read-only grant operations, consuming `unmap` contract, and named OS premise for concurrent external file truncation (`SIGBUS` / size pinning).
+2. CLI/build interface and supported target dialects (C / MSL / WGSL) for generated layout-verified struct headers.
+
+---
+
+### <a id="lang-f16-simd"></a>13. `f16`/`bf16` storage & conversions and explicit fixed-width SIMD vectors (`R-0726`)
+
+**Motivation.** Moving `f32`/`f64` to Slice 18 unblocks basic float workloads and Metal GPU inference, but modern local LLM inference (GGUF/Safetensors weights, dequantization, RoPE, softmax), image codecs, and crypto also rely on 2-byte half-precision weights (`f16`/`bf16`) and explicit SIMD vectorization (matching Zig's `@Vector` and `f16` on NEON/AVX without gambling on fragile LLVM auto-vectorization).
+
+**Proposed design.**
+- **`f16` and `bf16` storage/conversion types:** 2-byte `ByteSafe` scalar types with explicit, lossless/documented conversion to and from `f32` (extending `R-0608`'s float observation contract), usable immediately for weight storage and dequantization.
+- **Explicit fixed-width SIMD vectors (`Simd<T, N>`):** Portable, deterministic lane-wise operations with explicit width `N` and explicit horizontal reductions (no implicit target-dependent vector width, no hidden fast-math reassociation), lowered cleanly to LLVM vector IR and LCB SIMD instructions.
+
+**Philosophy alignment.** Explicit predictable execution (rule 16, AT 7), bit-exact semantics matching `R-0608` (rule 12), and competitive CPU kernel performance without `unsafe` intrinsics soup (rule 17).
+
+**Roadmap home.** [R-0726](../../ROADMAP.md#r-0726) (Phase D, Slice 18 alongside `f32`/`f64` and `concrete-llm`).
+
+**Owner questions required.**
+1. `f16`/`bf16` representation, NaN/subnormal handling and rounding rules (extending `R-0608`'s reopened float proposal).
+2. Fixed-width SIMD type spelling, admitted `(T, N)` pairs, and deterministic reduction/mask semantics.
+
+---
+
 ## Part 2: Compiler, Prover and Tooling Enhancements
 
 ### <a id="comp-verified-hints"></a>1. Verified optimizer hints from `CheckedCore` and `Facts` (`R-0711`)
@@ -428,6 +467,21 @@ Downstream modules, callers, and external proofs that depend only on `interface_
 **Philosophy alignment.** Consumes existing spec machinery (`R-0586`, `R-0593`, `R-0599`, `R-0614`) with zero second semantics (rule 5, rule 6, rule 14).
 
 **Roadmap home.** Extends `R-0593`, `R-0599`, `R-0177`, and `R-0586`.
+
+---
+
+### <a id="comp-verified-map-elites"></a>9. Verified MAP-Elites kernel and schedule superoptimization (`R-0727`)
+
+**Motivation.** Quality-Diversity local search (MAP-Elites + hill climbing, as used to optimize `nanoattention`'s Metal inference kernels) discovers high-performing schedules and kernel implementations across trade-off frontiers—but in unverified languages, a single subtle mutant bug silently corrupts outputs on edge shapes or inputs. Concrete uniquely provides both the **soundness filter** and the **exact behavioral descriptors** needed to make automated kernel/schedule search 100% trustworthy.
+
+**Proposed design.** Build an offline Verified MAP-Elites search driver realizing [ROADMAP.md's "replace an implementation" experiment](../../ROADMAP.md#proposed-acceptance-experiment-replace-an-implementation) for hot kernels (crypto, codecs, `concrete-llm` dequant/routing) and LCB instruction/e-graph schedules (`R-0299`):
+- **Hard admission filter:** every candidate variant must pass Concrete's checker plus either a Lean equivalence/refinement proof against the reference specification (`R-0495`) or a proved translation-validation / e-graph replay witness (`R-0299`, `R-0583`). Any unverified or non-equivalent candidate is rejected outright.
+- **Diversity grid axes (derived automatically from `concrete facts`):** stack bytes (`R-0575`), peak arena footprint (`R-0595`), step bounds (`R-0574`), and register-spill / binary-size metrics (`R-0550`).
+- **Fitness axis:** measured target throughput/latency (`R-0424`), enabling Pareto-optimal verified elites across latency, stack, and memory budgets.
+
+**Philosophy alignment.** Exploits Concrete's artifact-first facts and kernel-checked equivalence (rule 7, rule 12, rule 14) with zero additions to the compiler's trusted computing base.
+
+**Roadmap home.** [R-0727](../../ROADMAP.md#r-0727) (Phase E, extending `R-0299`, `R-0495`, `R-0575`, `R-0424`). No language-rule owner decision required.
 
 ---
 

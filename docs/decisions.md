@@ -14,6 +14,49 @@ the earlier behaviour, the answer below governs, and the code follows as its new
 
 The shape of Core was approved provisionally on 2026-11-05 ([stage A2a](#decided-2026-11-05)): it binds the design, and the owner freezes Core at stage A2c, after the four design theorems are proved against the proposed `Spec.lean` and the integration stage A2i (2026-11-06) is accepted (freeze timing revised to 0.1 on [2026-11-22](#decided-2026-11-22-roadmap-reordering)). The project and architecture decisions are recorded here too, [below](#decided-project).
 
+<a id="decided-2026-11-22-llm-inference-showcase-and-float-order"></a>
+## Decided 2026-11-22: local LLM inference showcase, Slice 18/19 float swap, and spec-first per slice
+
+Status: decided
+Source: owner
+
+Provenance: owner session `c3e1f8a9-7be6-4542-83c1-3bc288de18e3` (2026-11-22). After discussing
+Zig + Metal local LLM inference engines (`nanoattention`), MAP-Elites kernel search, and whether
+working on slices before the whole-language freeze is safe, the owner asked what to add to the
+roadmap and whether an LLM inference engine should be one of the first things built.
+
+The assistant recommended:
+1. Keep Slices 0–11 (0.1) untouched and maintain strict **spec-first per vertical slice** (never
+   build Slice N in the compiler ahead of Slice N's own Lean rules in `ConcreteSpec`, while not
+   blocking Slice 0 on later slices' foundation specs).
+2. **Swap Slice 18 and Slice 19 in Phase D:** move `f32`/`f64` from Slice 19 to **Slice 18** and
+   move function values + `R-0601` contracts from Slice 18 to **Slice 19**, leaving Slices 0–17
+   (0.1, `Vec`, `HashMap`, RocksDB and earliest `LD`) unchanged.
+3. **Adopt a new Phase-D showcase — local LLM inference engine (`concrete-llm`) at Slice 18:**
+   Stage 1 pure-Concrete CPU minimal model (`ByteSafe` GGUF/Safetensors parser, `HeapArray` KV
+   cache, proved zero-alloc decode loop under `[policy] predictable`, `Network: NONE`); Stage 2
+   Concrete + Metal Apple Silicon runtime (`MappedFile` zero-copy weights, Metal FFI via
+   `Kept<H>`, linear GPU buffer/command-buffer typestate, layout-verified host/shader struct
+   headers, and `concrete facts` proving `Network: NONE`, narrowed read-only `Fs` weights, and 0
+   heap allocations per token).
+4. **Add three Phase-D/E roadmap tasks:** `R-0725` (read-only `MappedFile` `mmap` grant +
+   layout-verified C/Metal shader struct headers, owner-gated), `R-0726` (`f16`/`bf16` storage &
+   conversions + explicit fixed-width SIMD vectors, owner-gated), and `R-0727` (Phase-E Verified
+   MAP-Elites kernel and LCB schedule superoptimization gated by Lean equivalence / `R-0299`
+   translation validation with `concrete facts` as diversity axes).
+
+Owner reply, verbatim:
+
+~~~text
+ok add everthing to the roadmap based on what we takd
+~~~
+
+Scope and boundaries: this decision swaps Slice 18 (`f32`/`f64`) ahead of Slice 19 (function values
++ `R-0601`), adopts `concrete-llm` as a Phase-D showcase, confirms spec-first-per-slice discipline,
+and schedules `R-0725`–`R-0727` in [ROADMAP.md](../ROADMAP.md). It decides **no** language syntax,
+float/SIMD semantics, or grant rules: `R-0725`, `R-0726`, and `R-0608`'s float observation contract
+all remain explicitly owner-gated before entering `ConcreteSpec`.
+
 <a id="decided-2026-11-22-roadmap-reordering"></a>
 ## Decided 2026-11-22: roadmap reordering and just-in-time foundation
 
