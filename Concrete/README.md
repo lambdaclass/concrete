@@ -2,6 +2,23 @@
 
 PROVISIONAL. This is a design sketch, revision 8, written after eight Codex and agy review rounds. It folds in the Codex/agy/Kimi pipeline review and the owner's answers (2026-11-06). Build step 1 (BIR as the shared backend contract) is implemented: `Concrete/BIR.lean` and `Concrete/Backend/`, gate `scripts/checks/compiler/tests.sh`. Slice 0 is the first compiler slice. It is built before the owner freezes Core (A2c) and makes no normative claim before that freeze ([decision](../docs/decisions.md#decided-project-proof-infrastructure)). Branch `wip/slice0` depends on `wip/spec-root`, which puts `ConcreteSpec` on the new root, and is rebased onto main (under a new branch name) once that lands.
 
+## Running the current slice
+
+From the repository root, enter `nix develop` and run:
+
+```sh
+LEAN_NUM_THREADS=2 lake build concrete
+.lake/build/bin/concrete build tests/slice0/answer.con -o "$output"
+```
+
+Set `output` to a build directory. The default writes `llvm.exe` and `lcb.exe` there.
+Use `--backend llvm` or `--backend lcb` for a single executable. The driver uses the pinned
+native build helper and the LCB executable built by Lake.
+
+`scripts/checks/compiler/tests.sh` also compiles the `con:` manifest rows. For trap rows it
+first checks that admission refuses, then runs the same lowering stages without discharged
+evidence and compares both native observations.
+
 ## Scope
 
 This document describes **the compiler**: its stages, IRs, proof strategy, premises and gates. Language rules are not restated here. They live in `ConcreteSpec`, and this document links to them:
@@ -345,6 +362,9 @@ There are two target profiles: `x86_64-linux` and `aarch64-macos` (LCB's first n
 |---|---|---|
 | P_lex | implementation | `lex_correct` |
 | P_parse | implementation | the generic table-parser theorem |
+| P_elab | implementation | ANF and resolution preservation |
+| P_lower | implementation | checked-evidence validity and MIR preservation |
+| P_ssa | implementation | SSA semantic preservation |
 | P_print | implementation | an LLVM-IR semantics; not planned for slice 0 |
 | P_toolchain[llvm] | toolchain | not planned |
 | P_toolchain[lcb] | toolchain | LCB's own proofs (C01–C03 and beyond) |

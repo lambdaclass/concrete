@@ -49,10 +49,7 @@ def writeLcb (dir : System.FilePath) (target : LCB.Target)
   let (f, sites) := emitted
   IO.FS.createDirAll dir
   IO.FS.writeFile (dir / "lcb_source.txt") (reprStr f ++ "\n")
-  let job : LeanCompilerBackend.Verified.FunctionJob :=
-    { code := { symbol := LCB.bodySymbol, body := f,
-                abi := LeanCompilerBackend.Verified.planAbi f,
-                layout := LeanCompilerBackend.Verified.planFrame f } }
+  let job := LCB.job f
   IO.FS.writeFile (dir / "lcb_job.txt") (reprStr job ++ "\n")
   -- On every host, LCB's verified first path (the `aarch64-macos` target) must admit the body.
   if let .error msg := LCB.assemble .aarch64Macos f then
@@ -65,17 +62,16 @@ def writeLcb (dir : System.FilePath) (target : LCB.Target)
     IO.FS.writeFile (dir / "lcb_body.ssa") (LCB.render f)
     return true
 
-def writeBackends (dir : System.FilePath) (target : LCB.Target) (p : Program)
+def writeBackends (dir : System.FilePath) (target : LCB.Target) (p : Program) (llvm : String)
     (emitted : LeanCompilerBackend.Verified.Source.Function × SiteTable) : IO Bool := do
   IO.FS.createDirAll dir
   IO.FS.writeFile (dir / "bir.txt") (reprStr p ++ "\n")
-  IO.FS.writeFile (dir / "llvm.ll") (LLVM.module p)
+  IO.FS.writeFile (dir / "llvm.ll") llvm
   writeLcb dir target emitted
 
-def emit (name : String) (dir : System.FilePath) (expectation : List String)
-    (target : LCB.Target) : IO UInt32 := do
-  let some (_, p) := Examples.all.find? (·.1 == name)
-    | IO.eprintln s!"unknown example {name}"; return 2
+def emitArtifact (name : String) (p : Program) (llvm : String)
+    (emitted : LeanCompilerBackend.Verified.Source.Function × SiteTable) (dir : System.FilePath)
+    (expectation : List String) (target : LCB.Target) : IO UInt32 := do
   let some expected := parseExpectation expectation
     | IO.eprintln s!"{name}: invalid BIR expectation; use exit N or trap KIND site N"; return 2
   unless wf p do IO.eprintln s!"{name}: not well formed"; return 1
@@ -83,25 +79,74 @@ def emit (name : String) (dir : System.FilePath) (expectation : List String)
   unless got == expected.outcome do
     IO.eprintln s!"{name}: expectation mismatch: BIR run gives {repr got}, expected {repr expected.outcome}"; return 1
   let some word := encode expected.outcome | IO.eprintln s!"{name}: no result word"; return 1
+  let (f, tbl) := emitted
+  match LCB.evalBody f 100000 with
+  | some w =>
+    unless w == word do
+      IO.eprintln s!"{name}: LCB's evaluator returns {w}, BIR's result word is {word}"; return 1
+  | none => IO.eprintln s!"{name}: LCB's evaluator does not return"; return 1
+  unless ← writeBackends dir target p llvm (f, tbl) do return 1
+  match expected.outcome with
+  | .exited c => writeExpected dir (toString c) ""
+  | .trapped s => match tbl[s]? with
+    | some e =>
+      unless expected.trapKind == some e.kind do
+        IO.eprintln s!"{name}: expectation mismatch: trap site {s} has kind {repr e.kind}, expected {expected.trapKindName}"; return 1
+      writeExpected dir "134" (Runtime.trapLine e ++ "\n")
+    | none => IO.eprintln s!"{name}: no site {s}"; return 1
+  | _ => IO.eprintln s!"{name}: no observation"; return 1
+  return 0
+
+def emitProgram (name : String) (p : Program) (dir : System.FilePath)
+    (expectation : List String) (target : LCB.Target) : IO UInt32 := do
   match LCB.emit p with
   | .error msg => IO.eprintln s!"{name}: adapter: {msg}"; return 1
-  | .ok (f, tbl) =>
-    match LCB.evalBody f 100000 with
-    | some w =>
-      unless w == word do
-        IO.eprintln s!"{name}: LCB's evaluator returns {w}, BIR's result word is {word}"; return 1
-    | none => IO.eprintln s!"{name}: LCB's evaluator does not return"; return 1
-    unless ← writeBackends dir target p (f, tbl) do return 1
-    match expected.outcome with
-    | .exited c => writeExpected dir (toString c) ""
-    | .trapped s => match tbl[s]? with
-      | some e =>
-        unless expected.trapKind == some e.kind do
-          IO.eprintln s!"{name}: expectation mismatch: trap site {s} has kind {repr e.kind}, expected {expected.trapKindName}"; return 1
-        writeExpected dir "134" (Runtime.trapLine e ++ "\n")
-      | none => IO.eprintln s!"{name}: no site {s}"; return 1
-    | _ => IO.eprintln s!"{name}: no observation"; return 1
-    return 0
+  | .ok emitted => emitArtifact name p (LLVM.module p) emitted dir expectation target
+
+def emit (name : String) (dir : System.FilePath) (expectation : List String)
+    (target : LCB.Target) : IO UInt32 := do
+  let some (_, p) := Examples.all.find? (·.1 == name)
+    | IO.eprintln s!"unknown example {name}"; return 2
+  emitProgram name p dir expectation target
+
+def emitSource (path actual : String) (dir : System.FilePath) (expectation : List String)
+    (target : LCB.Target) : IO UInt32 := do
+  let input : Concrete.Stages.Input := ⟨path, ← IO.FS.readBinFile actual⟩
+  match expectation, Concrete.Stages.compile input with
+  | ["refuse", rule], .error e =>
+    if e.code == rule then
+      IO.println s!"ok   {path}: {e.code}: {e.message}"
+      return 0
+    IO.eprintln s!"{path}: expected refusal {rule}, got {e.code}: {e.message}"
+    return 1
+  | ["refuse", rule], .ok _ =>
+    IO.eprintln s!"{path}: expected refusal {rule}, but compilation succeeded"
+    return 1
+  | "trap" :: _, .error (.checker _) =>
+    let .ok tokens := Concrete.Lex.lex input.source | IO.eprintln "lex failed"; return 1
+    let .ok ast := Concrete.Parse.parse tokens | IO.eprintln "parse failed"; return 1
+    let .ok core := Concrete.Elab.elaborate ast | IO.eprintln "elaboration failed"; return 1
+    let p := Concrete.Core.toCore core.program
+    unless Concrete.Core.run p (p.body.length + 1) == .trap .arithmeticOverflow do
+      IO.eprintln s!"{path}: Core evaluator did not trap on overflow"; return 1
+    match Concrete.Stages.unchecked input with
+    | .ok bir => emitProgram path bir dir expectation target
+    | .error e => IO.eprintln s!"{path}: unchecked lowering: {e.message}"; return 1
+  | "exit" :: _, .ok out =>
+    let p := Concrete.Core.toCore out.core.program
+    let some expected := parseExpectation expectation | IO.eprintln "invalid source expectation"; return 2
+    let .exited n := expected.outcome | IO.eprintln "expected source exit"; return 2
+    unless Concrete.Core.run p (p.body.length + 1) == .exit n do
+      IO.eprintln s!"{path}: Core evaluator did not exit with {n}"; return 1
+    unless Concrete.Elab.eval out.ast == .exit n && Concrete.Memory.run out.memory == .exit n do
+      IO.eprintln s!"{path}: AST or memory evaluator did not exit with {n}"; return 1
+    unless out.bir.sites.isEmpty do
+      IO.eprintln s!"{path}: admitted slice-0 additions retained trap sites"; return 1
+    emitArtifact path out.bir out.llvm (out.lcb, out.bir.sites) dir expectation target
+  | _, .error e =>
+    IO.eprintln s!"{path}: unexpected refusal {e.code}: {e.message}"; return 1
+  | _, .ok _ =>
+    IO.eprintln s!"{path}: invalid expectation or trapping source passed admission"; return 1
 
 /-- A body that branches back to itself forever. -/
 def loopBody : Program :=
@@ -115,7 +160,7 @@ def emitLoop (dir : System.FilePath) (target : LCB.Target) : IO UInt32 := do
   | .error msg => IO.eprintln s!"loop: adapter: {msg}"; return 1
   | .ok (f, tbl) =>
     if (LCB.evalBody f 10000).isSome then IO.eprintln "loop: LCB's evaluator returns"; return 1
-    unless ← writeBackends dir target loopBody (f, tbl) do return 1
+    unless ← writeBackends dir target loopBody (LLVM.module loopBody) (f, tbl) do return 1
     writeExpected dir "incomplete" ""
     return 0
 
@@ -143,6 +188,8 @@ def main (args : List String) : IO UInt32 := do
     for (n, _) in Examples.all do IO.println n
     return 0
   | "emit" :: name :: dir :: t :: expectation => withTarget t (emit name dir expectation)
+  | "source" :: path :: actual :: dir :: t :: expectation =>
+    withTarget t (emitSource path actual dir expectation)
   | ["loop", dir, t] => withTarget t (emitLoop dir)
   | ["invalid", dir, t] => withTarget t (emitInvalid dir)
-  | _ => IO.eprintln "usage: slice0_bir.lean list | emit NAME DIR TARGET EXPECT... | (loop | invalid) DIR TARGET"; return 2
+  | _ => IO.eprintln "usage: slice0_bir.lean list | emit NAME DIR TARGET EXPECT... | source PATH FILE DIR TARGET EXPECT... | (loop | invalid) DIR TARGET"; return 2

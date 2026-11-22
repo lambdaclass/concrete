@@ -1,3 +1,4 @@
+import Concrete.Refusal
 import ConcreteSpec.Proofs.Surface0
 
 /-!
@@ -9,9 +10,9 @@ U+2028/U+2029 and bidi controls with internal errors; comments alone permit raw 
 have printable-ASCII raw scalars and exactly the six decided escapes; labels are quote plus an
 identifier. Longest match uses an arbitrary table. Integers implement decimal and the lowercase
 `0x`/`0b`/`0o` bases, lowercase hexadecimal digits and eight suffixes. Malformed adjacent text is
-one refused token, and decimal leading-zero refusal is retained. No keyword, reserved-word,
-builtin, concrete operator or punctuation set, float literal, shebang handling or block comment is
-introduced; no other Unicode whitespace is included. Error constructors are internal data, not
+one refused token, and decimal leading-zero refusal is retained. The slice-0 entry point
+combines these components using the word and punctuation classifications in Surface0.
+Error constructors are internal data, not
 diagnostic wording. Offsets are zero-based byte offsets;
 truncation points at EOF. Error offsets satisfy the declarative first-failure judgments
 in Surface0; source NUL/BOM offsets point to the start of the refused scalar.
@@ -1796,5 +1797,55 @@ example : decodeUtf8 [0xF0,0x90,0x80,65] = .error ⟨3, .invalidContinuation⟩ 
 example : decodeUtf8 [65,0x80] = .error ⟨1, .unexpectedContinuation⟩ := by decide
 example : decodeUtf8 [0xC2] = .error ⟨1, .truncated⟩ := by decide
 example : decodeUtf8 [0xE0,0x80] = .error ⟨1, .overlong⟩ := by decide
+
+end Concrete.Lex
+
+namespace Concrete.Lex
+open ConcreteSpec.Surface0
+
+private def punct (input : List Nat) : Option (TokenValue × List Nat × List Nat) := do
+  let (lexeme, rest) ← longestMatch punctuationScalars input
+  let (_, kind) ← punctuation.find? fun (s, _) => s == scalarText lexeme
+  return (.fixed kind, lexeme, rest)
+
+private def nextToken (input : List Nat) (pos : Position) :
+    Except Refusal (TokenValue × List Nat × List Nat) := do
+  if let some (name, rest) := identifier input then
+    return (wordValue (scalarText name), name, rest)
+  match integerLiteral input with
+  | .ok (some i) => return (.integer i.value (splitRadix input).1 i.suffix, i.lexeme, i.rest)
+  | .error _ => throw (.syntaxError s!"malformed integer at byte {pos.byte}")
+  | .ok none =>
+    if let some p := punct input then return p
+    if let 34 :: cs := input then
+      match stringBody cs with
+      | .ok _ => throw (.unsupported s!"string literal at byte {pos.byte}")
+      | .error _ => throw (.syntaxError s!"malformed string at byte {pos.byte}")
+    match byteLiteral input with
+    | .error _ => throw (.syntaxError s!"malformed byte literal at byte {pos.byte}")
+    | .ok (some _) => throw (.unsupported s!"byte literal at byte {pos.byte}")
+    | .ok none =>
+      if (label input).isSome then throw (.unsupported s!"label at byte {pos.byte}")
+      else throw (.syntaxError s!"unexpected character at byte {pos.byte}")
+
+private def tokens : Nat → List Nat → Position → Bool → List Token → Except Refusal (List Token)
+  | _, [], _, _, acc => .ok acc.reverse
+  | 0, _, _, _, _ => .error (.internal "lexer exhausted its progress bound")
+  | fuel + 1, input@(c :: cs), pos, comment, acc => do
+    if comment && c != 10 && c != 13 then
+      if decide (CommentRaw c) then tokens fuel cs (pos.advance c) true acc
+      else throw (.syntaxError s!"forbidden comment character at byte {pos.byte}")
+    else if whitespace? c then tokens fuel cs (pos.advance c) false acc
+    else if let 47 :: 47 :: rest := input then
+      tokens fuel rest ((pos.advance 47).advance 47) true acc
+    else
+      let (value, lexeme, rest) ← nextToken input pos
+      let stop := lexeme.foldl Position.advance pos
+      tokens fuel rest stop false (⟨value, pos.span stop⟩ :: acc)
+
+def lex (src : ByteArray) : Except Refusal (List Token) := do
+  match checkSource src.data.toList with
+  | .error e => throw (.syntaxError s!"invalid source at byte {e.offset}: {repr e.reason}")
+  | .ok cs => tokens cs.length cs {} false []
 
 end Concrete.Lex

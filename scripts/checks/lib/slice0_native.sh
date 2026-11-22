@@ -15,10 +15,10 @@ if [ "${1:-}" = target ]; then echo "$target"; exit; fi
 control=0
 if [ "${1:-}" = control ] && [ "$#" = 2 ]; then control=1; set -- "$2" -; fi
 # `sanitize` builds only llvm.san.exe: the LLVM example with ASan (README gate 10; no UBSan, see there).
-[ "$#" = 2 ] || { [ "$#" = 3 ] && [ "$3" = sanitize ]; } ||
-  { echo 'usage: slice0_native.sh DIRECTORY LCB [sanitize] | control DIRECTORY | target' >&2; exit 2; }
+[ "$#" = 2 ] || { [ "$#" = 3 ] && [[ "$3" = llvm || "$3" = lcb || "$3" = sanitize ]]; } ||
+  { echo 'usage: slice0_native.sh DIRECTORY LCB [llvm|lcb|sanitize] | control DIRECTORY | target' >&2; exit 2; }
 lcb=$2
-cd "$1"
+cd -- "$1"
 # Fixed epoch rather than wall clock or caller environment. No debug data is requested, and
 # prefix maps also cover future debug additions. Separate objects avoid random linker temp names.
 clean=(env -i "PATH=$PATH" "HOME=$HOME" "TMPDIR=${TMPDIR:-/tmp}"
@@ -44,9 +44,13 @@ if [ "$control" = 1 ]; then
   "${cc[@]}" "${link[@]}" control.o -o control.exe
   exit
 fi
-"${cc[@]}" -c llvm.ll -o llvm.o
-"${cc[@]}" -c lcb_body.s -o lcb_body.o
-"${clean[@]}" "$lcb" -t "$target" lcb_rt.ssa -o lcb_rt.s
-"${cc[@]}" -c lcb_rt.s -o lcb_rt.o
-"${cc[@]}" "${link[@]}" llvm.o -o llvm.exe
-"${cc[@]}" "${link[@]}" lcb_body.o lcb_rt.o -o lcb.exe
+if [ "${3:-}" != lcb ]; then
+  "${cc[@]}" -c llvm.ll -o llvm.o
+  "${cc[@]}" "${link[@]}" llvm.o -o llvm.exe
+fi
+if [ "${3:-}" != llvm ]; then
+  "${cc[@]}" -c lcb_body.s -o lcb_body.o
+  "${clean[@]}" "$lcb" -t "$target" lcb_rt.ssa -o lcb_rt.s
+  "${cc[@]}" -c lcb_rt.s -o lcb_rt.o
+  "${cc[@]}" "${link[@]}" lcb_body.o lcb_rt.o -o lcb.exe
+fi

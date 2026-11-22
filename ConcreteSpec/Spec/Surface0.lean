@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.LL1
 import ConcreteSpec.Spec.Borrow
 import ConcreteSpec.Spec.Slice1Syntax
 
@@ -25,10 +26,11 @@ Byte literals admit only printable-ASCII raw scalars and exactly six escapes; la
 followed by an identifier. Longest match is parametric in an arbitrary table. Integers have the
 lowercase `0x`/`0b`/`0o` basePrefixes, lowercase hexadecimal digits and eight optional integer-type
 suffixes. Decimal leading zeroes are refused, and malformed adjacent identifier-continuation text
-is one refused token rather than an integer followed by an identifier. Keywords, reserved words,
-builtins, concrete punctuation and operators, float literals, grammar, diagnostics and CLI
-spellings are not defined. There is no shebang or block-comment rule; no other Unicode whitespace
-is included.
+is one refused token rather than an integer followed by an identifier. Below, grammar0 and word
+define the slice-0 productions, the word terminals they use and the explicit reservations
+already recorded. The complete token inventory, builtins and float spellings remain outside
+this slice.
+There is no shebang or block-comment rule; no other Unicode whitespace is included.
 -/
 
 namespace ConcreteSpec.Surface0
@@ -407,5 +409,204 @@ example : LineComment [47, 47, 32,120] [] :=
     (.cons (by decide) (by decide) (by decide) .eof))
 example (out : List Nat) : ¬ LineComment [47, 42, 32,120,32,42,47] out := by
   intro h; cases h
+
+end ConcreteSpec.Surface0
+
+namespace ConcreteSpec.Surface0
+open Concrete.LL1
+
+inductive Terminal where
+  | fn | let_ | return_ | ident | integer | reserved | u8
+  | lparen | rparen | lbrace | rbrace | arrow | colon | equal | semi | plus
+  deriving DecidableEq, Repr
+
+/-- The word terminals used below, the six item-40 reservations
+(decisions.md#decided-2026-11-08-removed-words), the explicit reservations OD50, OD73,
+OD81 and OD90, and the capability-name reservations in #decided-2026-11-02-authority,
+item 13. `main`, `self` and `as` are identifiers. -/
+def word (name : String) : Terminal :=
+  match name with
+  | "fn" => .fn
+  | "let" => .let_
+  | "return" => .return_
+  | "u8" => .u8
+  | "spec" | "by" | "kept" | "Self" | "while" | "Entropy" => .reserved
+  | "from" | "until" | "cap" | "type" | "ghost" | "Copy" => .reserved
+  | "Fs" | "Network" | "Env" | "Time" | "Alloc" | "Device" | "Console"
+  | "Process" | "Unsafe" => .reserved
+  | _ => .ident
+
+def punctuation : List (String × Terminal) :=
+  [("(", .lparen), (")", .rparen), (r#"{"#, .lbrace), (r#"}"#, .rbrace), ("->", .arrow),
+   (":", .colon), ("=", .equal), (";", .semi), ("+", .plus)]
+
+inductive Nonterminal where
+  | program | body | expr | more | atom
+  deriving DecidableEq, Repr
+
+/-- decisions.md#decided-project-proof-infrastructure (Slice 0), #od38 and
+#decided-2026-11-02-authority (entry point), TYPE-19 (`u8`), SYN-2 (associativity),
+STMT-1 (termination), and ARITH-3 (checked addition). Decimal tokens use the literal decisions
+at #decided-2026-11-08-language-literals. The factored expression tail represents successive
+checked sums. Core elaboration evaluates those sums from left to right. -/
+def grammar0 : Grammar Terminal Nonterminal :=
+  { start := .program
+    prods := [
+      (.program, [.t .fn, .t .ident, .t .lparen, .t .rparen, .t .arrow, .t .u8,
+                   .t .lbrace, .n .body, .t .rbrace]),
+      (.body, [.t .let_, .t .ident, .t .colon, .t .u8, .t .equal, .n .expr, .t .semi, .n .body]),
+      (.body, [.t .return_, .n .expr, .t .semi]),
+      (.expr, [.n .atom, .n .more]),
+      (.more, [.t .plus, .n .atom, .n .more]),
+      (.more, []),
+      (.atom, [.t .integer]),
+      (.atom, [.t .ident]),
+      (.atom, [.t .lparen, .n .expr, .t .rparen])] }
+
+theorem grammar0_ll1 : ll1 grammar0 = true := by decide
+
+structure Span where
+  start : Nat
+  stop : Nat
+  line : Nat
+  column : Nat
+  deriving DecidableEq, Repr
+
+inductive TokenValue where
+  | fixed (kind : Terminal)
+  | name (text : String)
+  | integer (value : Nat) (radix : Radix) (suffix : Option ConcreteSpec.IntTy)
+  deriving DecidableEq, Repr
+
+def TokenValue.kind : TokenValue → Terminal
+  | .fixed kind => kind
+  | .name _ => .ident
+  | .integer .. => .integer
+
+structure Token where
+  value : TokenValue
+  span : Span
+  deriving DecidableEq, Repr
+
+inductive Expr where
+  | integer (value : Nat) (suffix : Option ConcreteSpec.IntTy) (span : Span)
+  | local (name : String) (span : Span)
+  | add (lhs rhs : Expr) (operator : Span)
+  deriving Repr
+
+structure Binding where
+  name : String
+  span : Span
+  rhs : Expr
+  deriving Repr
+
+structure Program where
+  name : String
+  nameSpan : Span
+  bindings : List Binding
+  result : Expr
+  deriving Repr
+
+end ConcreteSpec.Surface0
+
+namespace ConcreteSpec.Surface0
+
+/-- Byte offsets are zero-based, while lines and byte columns are one-based
+(decisions.md#foundation-q10). CRLF advances one line. -/
+structure Position where
+  byte : Nat := 0
+  line : Nat := 1
+  column : Nat := 1
+  afterCR : Bool := false
+
+def Position.advance (pos : Position) (c : Nat) : Position :=
+  let width := if c < 0x80 then 1 else if c < 0x800 then 2 else if c < 0x10000 then 3 else 4
+  if c == 13 then ⟨pos.byte + width, pos.line + 1, 1, true⟩
+  else if c == 10 then ⟨pos.byte + width, if pos.afterCR then pos.line else pos.line + 1, 1, false⟩
+  else ⟨pos.byte + width, pos.line, pos.column + width, false⟩
+
+def Position.span (start stop : Position) : Span :=
+  ⟨start.byte, stop.byte, start.line, start.column⟩
+
+def scalarText (cs : List Nat) : String := String.ofList (cs.map Char.ofNat)
+
+def wordValue (name : String) : TokenValue :=
+  let kind := word name
+  if kind == .ident then .name name else .fixed kind
+
+def punctuationScalars : List (List Nat) :=
+  punctuation.map fun (s, _) => s.toList.map Char.toNat
+
+/-- Successful tokens are witnessed by the existing maximal-run judgments. -/
+inductive Tokenizes : List Nat → List Nat → List Nat → TokenValue → Prop
+  | word {input name rest : List Nat} :
+      Identifier input (name, rest) → Tokenizes input name rest (wordValue (scalarText name))
+  | integer {radix : Radix} {digitInput digits suffixInput suffix rest : List Nat}
+      {ty : Option ConcreteSpec.IntTy} :
+      DigitRun radix digitInput digits suffixInput → DigitsAccepted radix digits →
+      IdentBody suffixInput suffix rest → SuffixAccepted suffix ty →
+      Tokenizes (radix.basePrefix ++ digitInput) (radix.basePrefix ++ digits ++ suffix) rest
+        (.integer (positionalValue radix digits) radix ty)
+  | punct {input spelling rest : List Nat} {kind : Terminal} :
+      LongestMatch punctuationScalars input (some (spelling, rest)) →
+      (scalarText spelling, kind) ∈ punctuation → Tokenizes input spelling rest (.fixed kind)
+
+inductive TokenStream : Position → List Nat → List Token → Prop
+  | eof {pos : Position} {input : List Nat} : Trivia input [] → TokenStream pos input []
+  | cons {pos : Position} {trivia remaining lexeme rest : List Nat} {value : TokenValue}
+      {tokens : List Token} :
+      Trivia (trivia ++ remaining) remaining →
+      Tokenizes remaining lexeme rest value →
+      TokenStream (lexeme.foldl Position.advance (trivia.foldl Position.advance pos)) rest tokens →
+      TokenStream pos (trivia ++ remaining)
+        (⟨value, (trivia.foldl Position.advance pos).span
+          (lexeme.foldl Position.advance (trivia.foldl Position.advance pos))⟩ :: tokens)
+
+def Lexes (source : ByteArray) (tokens : List Token) : Prop :=
+  ∃ scalars, Utf8.Decodes source.data.toList scalars ∧
+    (∀ c ∈ scalars, c ≠ 0 ∧ c ≠ 0xFEFF) ∧ TokenStream {} scalars tokens
+
+private def fixed (kind : Terminal) (span : Span) : Token := ⟨.fixed kind, span⟩
+private def named (name : String) (span : Span) : Token := ⟨.name name, span⟩
+
+mutual
+  inductive ExprDerives : List Token → Expr → Prop
+    | expr {head tail : List Token} {initial result : Expr} :
+        AtomDerives head initial → TailDerives initial tail result →
+        ExprDerives (head ++ tail) result
+
+  inductive TailDerives : Expr → List Token → Expr → Prop
+    | nil (lhs : Expr) : TailDerives lhs [] lhs
+    | more {lhs rhs result : Expr} {op : Span} {head tail : List Token} :
+        AtomDerives head rhs → TailDerives (.add lhs rhs op) tail result →
+        TailDerives lhs (fixed .plus op :: (head ++ tail)) result
+
+  inductive AtomDerives : List Token → Expr → Prop
+    | integer (n : Nat) (ty : Option ConcreteSpec.IntTy) (span : Span) :
+        AtomDerives [⟨.integer n .decimal ty, span⟩] (.integer n ty span)
+    | local (name : String) (span : Span) : AtomDerives [named name span] (.local name span)
+    | group {inner : List Token} {e : Expr} (left right : Span) :
+        ExprDerives inner e → AtomDerives (fixed .lparen left :: (inner ++ [fixed .rparen right])) e
+end
+
+inductive BodyDerives : List Token → List Binding → Expr → Prop
+  | ret {src : List Token} {e : Expr} (keyword semi : Span) :
+      ExprDerives src e → BodyDerives (fixed .return_ keyword :: (src ++ [fixed .semi semi])) [] e
+  | bind {head tail : List Token} {rhs result : Expr} {bindings : List Binding}
+      {name : String} (keyword binder colon ty eq semi : Span) :
+      ExprDerives head rhs → BodyDerives tail bindings result →
+      BodyDerives ([fixed .let_ keyword, named name binder, fixed .colon colon, fixed .u8 ty,
+                    fixed .equal eq] ++ head ++ [fixed .semi semi] ++ tail)
+        (⟨name, binder, rhs⟩ :: bindings) result
+
+/-- The payload-level derivation of the slice AST. Grouping affects the tree without adding a
+Core node, and the tail binds each plus to its concrete operator position. -/
+inductive Derives : List Token → Program → Prop
+  | main {body : List Token} {bindings : List Binding} {name : String} {result : Expr}
+      (keyword binder lp rp arrow ty lb rb : Span) :
+      BodyDerives body bindings result →
+      Derives ([fixed .fn keyword, named name binder, fixed .lparen lp, fixed .rparen rp,
+                fixed .arrow arrow, fixed .u8 ty, fixed .lbrace lb] ++ body ++ [fixed .rbrace rb])
+        ⟨name, binder, bindings, result⟩
 
 end ConcreteSpec.Surface0

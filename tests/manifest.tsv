@@ -35,3 +35,14 @@ widen_s	bir:widen_s	exit 90	slice0
 site1	bir:site1	trap arithmeticOverflow site 1	slice0
 site0	bir:site0	trap arithmeticOverflow site 0	slice0
 two_sites_ok	bir:two_sites_ok	exit 42	slice0
+source_answer	con:tests/slice0/answer.con	exit 42	slice0
+source_overflow	con:tests/slice0/overflow.con	refuse CORE-CHECK	slice0
+source_trap	con:tests/slice0/trap.con	trap arithmeticOverflow site 1	slice0
+source_zero	con:tests/slice0/zero.con	exit 0	slice0
+source_syntax	con:tests/slice0/syntax_error.con	refuse SYNTAX	slice0
+source_unsupported	con:tests/slice0/unsupported.con	refuse SLICE-0	slice0
+source_bindings	con:tests/slice0/bindings.con	exit 42	slice0
+source_unannotated	con:tests/slice0/unannotated.con	refuse SYNTAX	slice0
+source_suffix	con:tests/slice0/suffix.con	refuse CORE-CHECK	slice0
+source_boundary	con:tests/slice0/boundary.con	exit 255	slice0
+source_reserved	con:tests/slice0/reserved.con	refuse SYNTAX	slice0

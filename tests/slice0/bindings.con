@@ -1,0 +1,5 @@
+fn main() -> u8 {
+    let self: u8 = 20;
+    let as: u8 = 1;
+    return (self + as) + (self + as);
+}

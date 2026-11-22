@@ -123,7 +123,7 @@ GAP=$(comm -23 "$TMP/compiler-modules.txt" <(sort -u "$TMP/compiler-imported.txt
 # lake_options LAKEFILE → empty when the specification library builds from ConcreteSpec.lean and
 # ConcreteSpec/ (Lake's defaults: no srcDir, roots or globs) with warningAsError, and nothing can turn
 # it off. The package holds exactly two libraries, ConcreteSpec and the compiler, Concrete (ROADMAP B0),
-# under the same key allow-list. A dependency is a `require` of a git URL pinned to a full commit,
+# under the same key allow-list, plus the fixed native CLI entry point. A dependency is a `require` of a git URL pinned to a full commit,
 # which lake-manifest.json (beside the lakefile) records at the same URL and commit: the spec may
 # import nothing outside itself (S), so a dependency reaches only the compiler. This ban's scope is
 # both libraries; the compiler's imports additionally include Lean and its pinned backend.
@@ -142,7 +142,7 @@ if cfg.get("leanOptions", {}).get("warningAsError") is not True:
     bad.append("[leanOptions] warningAsError is not true")
 # Allow-lists, not deny-lists: a key not named here (srcDir, roots, globs, moreLeanArgs, …) could
 # point the build at other sources or pass options, so it is refused.
-extra = set(cfg) - {"name", "version", "defaultTargets", "leanOptions", "lean_lib", "require"}
+extra = set(cfg) - {"name", "version", "defaultTargets", "leanOptions", "lean_lib", "lean_exe", "require"}
 if extra: bad.append(f"the package sets {sorted(extra)}")
 if set(cfg.get("leanOptions", {})) != {"warningAsError"}:
     bad.append(f"[leanOptions] sets {sorted(set(cfg.get('leanOptions', {})) - {'warningAsError'})}")
@@ -170,6 +170,15 @@ for l in libs:
     if extra: bad.append(f"the library sets {sorted(extra)}")
     opts = set(l.get("leanOptions", {})) - {"autoImplicit"}
     if opts: bad.append(f"the library sets options {sorted(opts)}")
+exe = cfg.get("lean_exe", [])
+expected_exe = {
+    "name": "concrete",
+    "root": "Main",
+    "needs": ["lean-compiler-backend/lcb"],
+    "leanOptions": {"autoImplicit": False},
+}
+if exe != [expected_exe]:
+    bad.append("the executable configuration differs from the fixed concrete CLI")
 print("; ".join(bad))
 EOF
 }
@@ -334,7 +343,8 @@ lake_variant branch 'import re; p="lakefile.toml"; s=open(p).read(); open(p,"w")
 lake_variant drift 'import json; p="lake-manifest.json"; m=json.load(open(p)); m["packages"][0]["rev"]="0"*40; json.dump(m, open(p,"w"))'
 lake_variant subdir 'p="lakefile.toml"; s=open(p).read(); open(p,"w").write(s.replace("[[require]]\n", "[[require]]\nsubDir = \"x\"\n", 1))'
 lake_variant thirdlib 'p="lakefile.toml"; s=open(p).read(); open(p,"w").write(s + "\n[[lean_lib]]\nname = \"Other\"\n")'
-for v in short:"not pinned to a full commit" branch:"not pinned to a full commit" drift:"does not record the require" subdir:"sets ['subDir']" thirdlib:"libraries ['ConcreteSpec', 'Concrete', 'Other']"; do
+lake_variant extraexe 'p="lakefile.toml"; s=open(p).read(); open(p,"w").write(s + "\n[[lean_exe]]\nname = \"Other\"\n")'
+for v in short:"not pinned to a full commit" branch:"not pinned to a full commit" drift:"does not record the require" subdir:"sets ['subDir']" thirdlib:"libraries ['ConcreteSpec', 'Concrete', 'Other']" extraexe:"the executable configuration differs"; do
   L=$(lake_options "$TMP/lk/${v%%:*}/lakefile.toml")
   case "$L" in *"${v#*:}"*) ok "control: a lakefile whose dependency or library set is changed (${v%%:*}) is refused ($L)" ;;
     *) no "control: the ${v%%:*} lakefile was not refused for '${v#*:}': '$L'" ;; esac

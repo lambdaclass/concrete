@@ -23,3 +23,9 @@ leanOptions = { autoImplicit = false }
 [[lean_lib]]
 name = "Concrete"
 leanOptions = { autoImplicit = false }
+
+[[lean_exe]]
+name = "concrete"
+root = "Main"
+needs = ["lean-compiler-backend/lcb"]
+leanOptions = { autoImplicit = false }

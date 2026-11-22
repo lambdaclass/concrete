@@ -3,9 +3,8 @@ The slice-0 trusted base (PROVISIONAL): the open premises and the headline theor
 closure the trusted-base golden records (Concrete/README.md gate 9).
 
 This is the premise REGISTRY, the one list of the open premises: each entry has its trust class,
-what retires it, and its statement. The statements are text until the structures that state them
-as Lean propositions (`FrontendPremises`, `NativePremises`, whose design is in Concrete/README.md)
-land with the front end; each entry then names its field instead. `scripts/checks/compiler/slice0_trusted_base.sh` prints
+what retires it, and its statement. The frontend and lowering contracts below are Lean
+propositions, as are the native contracts. See Concrete/README.md for their design. `scripts/checks/compiler/slice0_trusted_base.sh` prints
 this registry and the axioms of `theorems` and compares them with `tests/golden/slice0_trusted_base.txt`,
 so a premise added, removed or reworded fails until the golden is updated with it.
 -/
@@ -14,7 +13,112 @@ import Lean.PrettyPrinter
 import Lean.Util.CollectAxioms
 import Concrete.BIR.Progress
 import Concrete.Backend.LCB
-import Concrete.Lex
+import Concrete.Stages
+
+namespace Concrete
+
+open ConcreteSpec.Surface0 in
+structure FrontendPremises where
+  lex : ∀ src toks, Lex.lex src = .ok toks → Lexes src toks
+  parse : ∀ toks ast, Parse.parse toks = .ok ast → Derives toks ast
+  elaborate : ∀ ast out, Elab.elaborate ast = .ok out →
+    let p := Core.toCore out.program
+    Elab.eval ast = Core.run p (p.body.length + 1)
+
+/-- Open implementation contracts for the lowering stages. The production path gets
+its evidence from admission. The conformance path carries an empty evidence list. -/
+structure LoweringPremises where
+  lower :
+    (∀ source admitted mir, Admission.check source = .ok admitted → MIR.lower admitted = .ok mir →
+      let p := Core.toCore source.program
+      MIR.run mir = Core.run p (p.body.length + 1)) ∧
+    (∀ source mir, MIR.lowerUnchecked source = .ok mir →
+      let p := Core.toCore source.program
+      MIR.run mir = Core.run p (p.body.length + 1))
+  ssa : ∀ path mem bir, SSA.lower path mem = .ok bir →
+    match BIR.run bir (bir.blocks.length + 1) with
+    | .exited n => Memory.run mem = .exit n
+    | .trapped site => ∃ entry, bir.sites[site]? = some entry ∧ Memory.run mem = .trap entry.kind
+    | _ => False
+
+namespace Native
+open BIR Backend
+
+structure BackendModel where
+  Artifact : Type
+  emit : BIR.Program → Except String Artifact
+  means : Artifact → BodyResult → Prop
+
+def llvm (meaning : String → BodyResult → Prop) : BackendModel :=
+  ⟨String, fun p => .ok (LLVM.module p), meaning⟩
+
+def lcb : BackendModel :=
+  ⟨LeanCompilerBackend.Verified.Source.Function × SiteTable, LCB.emit,
+    fun (f, _) result => LCB.bodyResult f result⟩
+
+def EmitCorrect (backend : BackendModel) : Prop :=
+  ∀ p artifact result, BIR.WF p → backend.emit p = .ok artifact → backend.means artifact result →
+    result.behaviour p.sites = BIR.behaviour p
+
+theorem lcb_emit_correct : EmitCorrect lcb := by
+  intro p artifact result hwf hem hr
+  obtain ⟨f, sites⟩ := artifact
+  have he : LCB.emit p = .ok (f, sites) := hem
+  obtain ⟨_, rfl⟩ := LCB.Proof.emit_ok he
+  exact LCB.Proof.emit_correct hwf he result hr
+
+/-- The LLVM premise is about the exact text emitted, including the runtime and its site table. -/
+structure LLVMPremises (meaning : String → BodyResult → Prop) : Prop where
+  print : EmitCorrect (llvm meaning)
+
+/-- One pinned build and execution environment. Its launch identity ties body execution to the
+observation and the bytes on descriptor 2 from that same launch. -/
+structure World (backend : BackendModel) where
+  Image : Type
+  Launch : Type
+  built : backend.Artifact → Image → Prop
+  launches : Image → Launch → Prop
+  admitted : Launch → Prop
+  bodyRuns : Launch → BodyResult → Prop
+  observes : Launch → Behaviour → String → Prop
+
+structure Premises (backend : BackendModel) (world : World backend) (maxSlots : Nat) : Prop where
+  toolchain : ∀ p artifact image launch result, BIR.WF p → backend.emit p = .ok artifact →
+    world.built artifact image → world.launches image launch → world.bodyRuns launch result →
+    backend.means artifact result
+  runtime : ∀ p artifact image launch output stderr, BIR.WF p → backend.emit p = .ok artifact →
+    world.built artifact image → world.launches image launch → world.observes launch output stderr →
+    output ≠ .killed → ∃ result, world.bodyRuns launch result ∧ output = result.behaviour p.sites
+  trapSite : ∀ p artifact image launch output stderr i entry, BIR.WF p →
+    backend.emit p = .ok artifact → world.built artifact image → world.launches image launch →
+    world.admitted launch → world.observes launch output stderr →
+    world.bodyRuns launch (.returns (BitVec.ofNat 32 (256 + i))) → p.sites[i]? = some entry →
+    stderr = Runtime.trapLine entry ++ "\n"
+  launch : ∀ p artifact image launch output stderr, BIR.WF p → p.frameSlots ≤ maxSlots →
+    backend.emit p = .ok artifact → world.built artifact image → world.launches image launch →
+    world.admitted launch → world.observes launch output stderr → output ≠ .killed
+  live : ∀ p artifact image, BIR.WF p → p.frameSlots ≤ maxSlots → backend.emit p = .ok artifact →
+    world.built artifact image →
+    ∃ launch output stderr, world.launches image launch ∧ world.admitted launch ∧
+      world.observes launch output stderr
+
+theorem observed_behaviour {backend : BackendModel} {world : World backend} {maxSlots : Nat}
+    (premises : Premises backend world maxSlots) (emitCorrect : EmitCorrect backend)
+    {p : BIR.Program} {artifact : backend.Artifact} {image : world.Image} {launch : world.Launch}
+    {output : Behaviour} {stderr : String} (hwf : BIR.WF p) (hframe : p.frameSlots ≤ maxSlots)
+    (hemit : backend.emit p = .ok artifact) (hbuilt : world.built artifact image)
+    (hlaunch : world.launches image launch) (hadmitted : world.admitted launch)
+    (hobs : world.observes launch output stderr) : output = BIR.behaviour p := by
+  have alive := premises.launch p artifact image launch output stderr hwf hframe hemit hbuilt
+    hlaunch hadmitted hobs
+  obtain ⟨result, hbody, rfl⟩ :=
+    premises.runtime p artifact image launch output stderr hwf hemit hbuilt hlaunch hobs alive
+  exact emitCorrect p artifact result hwf hemit
+    (premises.toolchain p artifact image launch result hwf hemit hbuilt hlaunch hbody)
+
+end Native
+
+end Concrete
 
 namespace Concrete.Premises
 
@@ -39,6 +143,12 @@ def all : List Premise := [
     "every token list the lexer returns for a source is one the source lexes to"⟩,
   ⟨"P_parse", .implementation, "the generic table-parser theorem",
     "every tree the parser returns for a token list is one the grammar derives from it"⟩,
+  ⟨"P_elab", .implementation, "ANF and resolution preservation",
+    "successful elaboration preserves the source AST evaluator's outcome in Core"⟩,
+  ⟨"P_lower", .implementation, "checked-evidence validity and MIR preservation",
+    "MIR preserves Core outcomes for unchecked lowering and for evidence produced by admission"⟩,
+  ⟨"P_ssa", .implementation, "SSA semantic preservation",
+    "successful SSA lowering preserves Memory CFG outcomes, including the trap kind"⟩,
   ⟨"P_print", .implementation, "an LLVM-IR semantics; not planned for slice 0",
     "the printed LLVM text of a WF BIR means at most the BIR behaviour, encoded"⟩,
   ⟨"P_toolchain[llvm]", .toolchain, "not planned",
@@ -57,6 +167,16 @@ def all : List Premise := [
 
 /-- The headline theorems, whose axioms the golden records. -/
 def theorems : List Lean.Name := [
+  ``ConcreteSpec.Surface0.grammar0_ll1,
+  ``Concrete.Parse.table0_checked,
+  ``Concrete.Admission.admit_checked,
+  ``Concrete.Admission.check_evidence,
+  ``Concrete.Admission.admit_never_traps,
+  ``Concrete.Memory.lower_correct,
+  ``Concrete.SSA.lower_wf,
+  ``Concrete.Stages.compile_of_edges,
+  ``Concrete.Native.lcb_emit_correct,
+  ``Concrete.Native.observed_behaviour,
   ``Concrete.Lex.checkSource_ok_iff,
   ``Concrete.Lex.checkSource_error_offset_iff,
   ``Concrete.Lex.checkSource_error_complete,
@@ -176,7 +296,8 @@ def report (thms : List Name) : CoreM (List String) := do
   let mut seen : Array Name := #[]
   for n in thms do
     let axs := (← collectAxioms n).qsort Name.lt
-    lines := lines ++ [s!"theorem {n} axioms: {", ".intercalate (axs.map toString).toList}"]
+    let names := if axs.isEmpty then "" else " " ++ ", ".intercalate (axs.map toString).toList
+    lines := lines ++ [s!"theorem {n} axioms:{names}"]
     for a in axs do
       unless seen.contains a do seen := seen.push a
   for a in seen.qsort Name.lt do
