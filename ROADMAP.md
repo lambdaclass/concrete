@@ -218,10 +218,12 @@ Tasks shared by B0a/B0b and later rows deliver their slice-0 increment in B0a/B0
 ### Vertical slices
 
 The language grows in thin vertical slices, each fully proven end to end before the next starts ([decision](docs/decisions.md#decided-project-vertical-slices-2026-11-06)).
-**Spec-first per slice** ([2026-11-22](docs/decisions.md#decided-2026-11-22-llm-inference-showcase-and-float-order)):
-never implement a compiler slice ahead of *that slice's own* Lean rules in `ConcreteSpec`;
-unfrozen Core means earlier slices do not block on later slices' foundation specs, while Lean's
-kernel forces affected proofs to update cleanly as later slices widen `Core` before the 0.1 freeze.
+**Spec-first per slice (hard rule, [2026-11-22](docs/decisions.md#decided-2026-11-22-llm-inference-showcase-and-float-order)):**
+never implement compiler code for any construct or slice that does not yet have its own Lean spec in
+`ConcreteSpec`. We do **not** wait for the full specification of the entire language before building
+and trying real slices: each slice specs its own constructs in Lean first, compiles and runs real
+programs end to end so real workloads test the shape, and Lean's kernel forces affected proofs to
+update cleanly as later slices widen `Core` before the 0.1 freeze.
 
 **The slice shape** (the same `done when` for every slice): the slice's rules are Lean judgments
 with accepted, refused and trapping conformance examples; its programs run from source through

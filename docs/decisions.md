@@ -51,11 +51,21 @@ Owner reply, verbatim:
 ok add everthing to the roadmap based on what we takd
 ~~~
 
+Follow-up owner clarification on the spec-first-per-slice rule, verbatim:
+
+~~~text
+add this, we need to make sure we don't work on things that don't have a spec
+we don't need to do the full spec of the whole language first but we do need to try thigns
+and can we add the inference thing
+~~~
+
 Scope and boundaries: this decision swaps Slice 18 (`f32`/`f64`) ahead of Slice 19 (function values
-+ `R-0601`), adopts `concrete-llm` as a Phase-D showcase, confirms spec-first-per-slice discipline,
-and schedules `R-0725`–`R-0727` in [ROADMAP.md](../ROADMAP.md). It decides **no** language syntax,
-float/SIMD semantics, or grant rules: `R-0725`, `R-0726`, and `R-0608`'s float observation contract
-all remain explicitly owner-gated before entering `ConcreteSpec`.
++ `R-0601`), adopts `concrete-llm` as a Phase-D showcase, establishes the hard **spec-first per
+vertical slice** rule (no compiler implementation for constructs lacking their slice's Lean spec,
+without waiting for the full-language spec before trying real slices), and schedules `R-0725`–`R-0727`
+in [ROADMAP.md](../ROADMAP.md). It decides **no** language syntax, float/SIMD semantics, or grant
+rules: `R-0725`, `R-0726`, and `R-0608`'s float observation contract all remain explicitly
+owner-gated before entering `ConcreteSpec`.
 
 <a id="decided-2026-11-22-roadmap-reordering"></a>
 ## Decided 2026-11-22: roadmap reordering and just-in-time foundation
