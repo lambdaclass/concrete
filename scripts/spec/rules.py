@@ -9,7 +9,7 @@ ROW = re.compile(r"\b(?:Q|OD|P|R-)\d+[\w-]*(?:\.+[\w-]+)*")
 DECLARED = re.compile(r"^\s*(?:- \*\*(\S+?)\*\*|\| *(\S+?) *\|)", re.M)
 
 SOURCE_PATH_RULE = ("ConcreteSpec.Core.SourcePath.", "ConcreteSpec.Core.SourcePathSpan.")
-# ISS-XXXX tracks parsing Markdown code spans.
+# ISS-0100 tracks parsing Markdown code spans.
 # Markdown destinations and code spans delimit fragments explicitly. Bare prose
 # citations can also end with sentence punctuation.
 DECISION_CITATION = re.compile(

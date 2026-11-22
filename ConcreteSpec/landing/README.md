@@ -20,7 +20,8 @@ F26 is the historical inventory ID for the remaining security piece (F26b) after
 landed separately. F26b covers leakage and release of secret information (declassification).
 F26b and F27 wiping are outside active scope
 under the [after-1.0 decision](../../docs/decisions.md#decided-2026-11-21-secrets-after-1-0). The active scope decreased from
-51 to 50 pieces, with 22 landed. The historical headline retains all 54 rows.
+51 to 50 pieces. With F03p and F04p landed, 24 active pieces are landed.
+The historical headline retains all 54 rows.
 
 | Addition | Placement and record |
 | --- | --- |

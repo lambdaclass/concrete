@@ -4784,7 +4784,8 @@ theorem lineMatches_guard_iff (span : Span) (source : SourceText) :
 theorem columnMatches_guard_iff (span : Span) (source : SourceText) :
     span.col = source.columnAt span.startOffset ↔ ColumnMatches (span, source) := Iff.rfl
 
-/-- Helper: the binding guard is the conjunction of the three registered location checks. -/
+/-- Helper: the location part of the binding guard implements the three registered
+location checks. Binding also checks exact source bytes. -/
 theorem location_guard_iff (span : Span) (source : SourceText) :
     (span.endOffset ≤ source.length ∧ span.line = source.lineAt span.startOffset ∧
       span.col = source.columnAt span.startOffset) ↔ span.LocationOk source := by
