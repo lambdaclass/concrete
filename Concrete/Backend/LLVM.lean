@@ -20,7 +20,7 @@ body as `define i32 @concrete_body()` returning the result word; the runtime ent
 namespace Concrete.Backend.LLVM
 open Concrete.BIR
 open ConcreteSpec (IntTy Trap)
-open ConcreteSpec.Core (toBits ofBits)
+open ConcreteSpec.Core (toBits toBitsAtWidth ofBits)
 open ScalarBridge (toCore)
 open Concrete.Backend.Runtime (indexed)
 
@@ -32,10 +32,11 @@ def ty : Ty → TypeCode
 def pattern (t : IntTy) (v : Int) : Nat := toBits (toCore t) v
 
 /-- Encode the payload at the width of its LLVM operand slot. Raw BIR can
-carry a different immediate tag, so the slot determines the bit pattern. -/
+carry a different immediate tag, so the slot determines the bit pattern.
+BIR well-formedness excludes integer immediates in Boolean slots. -/
 private def operandAt (width : Nat) : Operand → Argument
   | .reg r => .local (.register r)
-  | .imm _ v => .immediate (.natural ((v % (2 : Int) ^ width).toNat))
+  | .imm _ v => .immediate (.natural (toBitsAtWidth width v))
 
 /-- Encode a standalone BIR scalar at the width of its own tag. -/
 def operand : Operand → Argument
@@ -51,7 +52,7 @@ def Argument.immediateValue : Argument → Option Nat
 A register contributes no immediate. -/
 def expectedImmediate (width : Nat) : Operand → Option Nat
   | .reg _ => none
-  | .imm _ value => some ((value % (2 : Int) ^ width).toNat)
+  | .imm _ value => some (toBitsAtWidth width value)
 
 /-- Read the token through the actual LLVM argument. -/
 def Argument.immediateToken : Argument → Option String
@@ -158,7 +159,7 @@ def moduleItems (p : Program) : List Item := body p ++ [.blank] ++ Runtime.llvmI
 
 private def expectedOperand (role : IntegerRole) (width : Nat) : Operand → List IntegerField
   | .reg _ => []
-  | .imm _ v => [(role, some width, (v % (2 : Int) ^ width).toNat)]
+  | .imm _ v => [(role, some width, toBitsAtWidth width v)]
 
 private def widthField (position width : Nat) : IntegerField := (.typeWidth position 0, none, width)
 

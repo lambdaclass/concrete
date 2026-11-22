@@ -120,9 +120,12 @@ end IntTy
 
 /-! ## Bits -/
 
-/-- The bit pattern of `n` in `t`: `n` modulo `2^bits`, a number below `2^bits` (two's
-complement for a negative `n`). -/
-def toBits (t : IntTy) (n : Int) : Nat := (n % (2 : Int) ^ t.bits).toNat
+/-- The bit pattern of the integer payload `n` at `width` bits, given by
+`n` modulo `2^width` (two's complement for a negative `n`). -/
+def toBitsAtWidth (width : Nat) (n : Int) : Nat := (n % (2 : Int) ^ width).toNat
+
+/-- The bit pattern of `n` at the width of its integer type `t`. -/
+def toBits (t : IntTy) (n : Int) : Nat := toBitsAtWidth t.bits n
 
 /-- The value a bit pattern `m` denotes in `t`: `m`, or `m - 2^bits` for a signed type whose top
 bit is set. -/

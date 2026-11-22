@@ -112,8 +112,8 @@ MUTATIONS = (
     (
         "operand encoding plus one",
         LLVM,
-        ".immediate (.natural ((v % (2 : Int) ^ width).toNat))",
-        ".immediate (.natural ((v % (2 : Int) ^ width).toNat + 1))",
+        ".immediate (.natural (toBitsAtWidth width v))",
+        ".immediate (.natural (toBitsAtWidth width v + 1))",
         "operand_field",
         ".u8 17",
     ),

@@ -5008,7 +5008,6 @@ ConcreteSpec.Core.ofBits_inRange._proof_1_29	Quot.sound propext
 ConcreteSpec.Core.ofBits_inRange._proof_1_30	Quot.sound propext
 ConcreteSpec.Core.ofBits_inRange._proof_1_31	Quot.sound propext
 ConcreteSpec.Core.ofBits_toBits	Quot.sound propext
-ConcreteSpec.Core.ofBits_toBits._proof_1_21	Quot.sound propext
 ConcreteSpec.Core.ofBits_toBits._proof_1_22	Quot.sound propext
 ConcreteSpec.Core.ofBits_toBits._proof_1_23	Quot.sound propext
 ConcreteSpec.Core.ofBits_toBits._proof_1_24	Quot.sound propext
@@ -5020,6 +5019,7 @@ ConcreteSpec.Core.ofBits_toBits._proof_1_29	Quot.sound propext
 ConcreteSpec.Core.ofBits_toBits._proof_1_30	Quot.sound propext
 ConcreteSpec.Core.ofBits_toBits._proof_1_31	Quot.sound propext
 ConcreteSpec.Core.ofBits_toBits._proof_1_32	Quot.sound propext
+ConcreteSpec.Core.ofBits_toBits._proof_1_33	Quot.sound propext
 ConcreteSpec.Core.plainNeg_not_stuck	propext
 ConcreteSpec.Core.plainNeg_ok_iff	propext
 ConcreteSpec.Core.plainNeg_trap_iff	Quot.sound propext
@@ -5086,16 +5086,16 @@ ConcreteSpec.Core.tmod_inRange._proof_1_3	Quot.sound propext
 ConcreteSpec.Core.tmod_inRange._proof_1_4	Quot.sound propext
 ConcreteSpec.Core.tmod_inRange._proof_1_5	Quot.sound propext
 ConcreteSpec.Core.toBits.eq_1	
+ConcreteSpec.Core.toBitsAtWidth.eq_1	
 ConcreteSpec.Core.toBits_bitNot	Quot.sound propext
 ConcreteSpec.Core.toBits_bitNot._proof_1_1	Quot.sound propext
 ConcreteSpec.Core.toBits_bitwise	Quot.sound propext
 ConcreteSpec.Core.toBits_lt	Quot.sound propext
-ConcreteSpec.Core.toBits_lt._proof_1_11	Quot.sound propext
 ConcreteSpec.Core.toBits_lt._proof_1_12	Quot.sound propext
 ConcreteSpec.Core.toBits_lt._proof_1_13	Quot.sound propext
 ConcreteSpec.Core.toBits_lt._proof_1_14	Quot.sound propext
+ConcreteSpec.Core.toBits_lt._proof_1_15	Quot.sound propext
 ConcreteSpec.Core.toBits_ofBits	Quot.sound propext
-ConcreteSpec.Core.toBits_ofBits._proof_1_18	Quot.sound propext
 ConcreteSpec.Core.toBits_ofBits._proof_1_19	Quot.sound propext
 ConcreteSpec.Core.toBits_ofBits._proof_1_20	Quot.sound propext
 ConcreteSpec.Core.toBits_ofBits._proof_1_21	Quot.sound propext
@@ -5107,6 +5107,7 @@ ConcreteSpec.Core.toBits_ofBits._proof_1_26	Quot.sound propext
 ConcreteSpec.Core.toBits_ofBits._proof_1_27	Quot.sound propext
 ConcreteSpec.Core.toBits_ofBits._proof_1_28	Quot.sound propext
 ConcreteSpec.Core.toBits_ofBits._proof_1_29	Quot.sound propext
+ConcreteSpec.Core.toBits_ofBits._proof_1_30	Quot.sound propext
 ConcreteSpec.Core.toBits_shl	Quot.sound propext
 ConcreteSpec.Core.toBits_shr_unsigned	Quot.sound propext
 ConcreteSpec.Core.toBits_shr_unsigned._proof_1_11	Quot.sound propext
