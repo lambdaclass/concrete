@@ -59,13 +59,23 @@ we don't need to do the full spec of the whole language first but we do need to 
 and can we add the inference thing
 ~~~
 
+Follow-up owner reply on enforcing per-function step/complexity budgets in `Concrete.toml` `[policy]`
+and `concrete diff` ratchets (keeping cost limits strictly out of Concrete source syntax per the
+[scaling and diagnostic-fixes decision](#decided-2026-11-22-scaling-and-diagnostic-fixes)), verbatim:
+
+~~~text
+ok concrete.toml should also have the the step thing
+~~~
+
 Scope and boundaries: this decision swaps Slice 18 (`f32`/`f64`) ahead of Slice 19 (function values
 + `R-0601`), adopts `concrete-llm` as a Phase-D showcase, establishes the hard **spec-first per
 vertical slice** rule (no compiler implementation for constructs lacking their slice's Lean spec,
-without waiting for the full-language spec before trying real slices), and schedules `R-0725`–`R-0727`
-in [ROADMAP.md](../ROADMAP.md). It decides **no** language syntax, float/SIMD semantics, or grant
-rules: `R-0725`, `R-0726`, and `R-0608`'s float observation contract all remain explicitly
-owner-gated before entering `ConcreteSpec`.
+without waiting for the full-language spec before trying real slices), permits `Concrete.toml`
+`[policy]` and `concrete diff` ratchets (`R-0576`, `R-0201`) to enforce per-function step/complexity
+budgets from Slice 10 (with no cost annotations in Concrete source syntax), and schedules
+`R-0725`–`R-0727` in [ROADMAP.md](../ROADMAP.md). It decides **no** language syntax, float/SIMD
+semantics, or grant rules: `R-0725`, `R-0726`, and `R-0608`'s float observation contract all remain
+explicitly owner-gated before entering `ConcreteSpec`.
 
 <a id="decided-2026-11-22-roadmap-reordering"></a>
 ## Decided 2026-11-22: roadmap reordering and just-in-time foundation
