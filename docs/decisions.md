@@ -14,6 +14,80 @@ the earlier behaviour, the answer below governs, and the code follows as its new
 
 The shape of Core was approved provisionally on 2026-11-05 ([stage A2a](#decided-2026-11-05)): it binds the design, and the owner freezes Core at stage A2c, after the four design theorems are proved against the proposed `Spec.lean` and the integration stage A2i (2026-11-06) is accepted. The project and architecture decisions are recorded here too, [below](#decided-project).
 
+<a id="decided-2026-11-22-direction"></a>
+## Decided 2026-11-22: compile slice 0 first
+
+Status: decided
+
+Source: owner reply supplied verbatim in the writer brief.
+
+An outside review estimated that since November 11 about nine commits touched `Concrete/`
+and about 190 touched spec, scripts or docs. Slice 0 still lacked a complete source-to-native
+pipeline. Review rounds went to planted mutant construction, and mechanical defaults waited for
+the owner. The coordinator asked about sequencing, review proportionality and tooling, delegated
+defaults, and when to bring the reviewer's language ideas to the owner.
+
+> Yes to 1, 2, 3, and 4, with a few clarifications:
+>
+> 1. Slice 0 first: Go straight to compiling real .con files end-to-end (spec just-in-time per slice, not the 50-piece foundation checklist). Also note for Slice 0: drop the LLVM.unprint injectivity plan (it's false for i8/u8 and missing sites), and fix Lex.decodeLoop (termination_by → fuel) so by decide works.
+> 2. Proportion rule: Blocking = soundness bug, wrong language semantics, false theorem, or broken build. Arguments over mutant/fixture/test construction, helper factoring, or out-of-slice edge cases are non-blocking notes even inside Proofs/. No new meta-tooling, except I do want to simplify/cut existing proof drag (split Evidence/mutants out of ConcreteSpec, stop pinning internal _proof_N/_simp_N in axioms.golden, allow zero-TCB tactics in ConcreteSpec/Tactics/).
+> 3. Boring defaults: Yes for mechanical/representation details (never core semantics), with a veto list. For the 5 starter defaults: yes on bool (1B, 0/1), Unit (0B), char (4B u32), and LF/CRLF line endings—fix the BOM one: do not
+> allow BOM at file start; keep refusing BOM (keeping Surface0.lean's existing refusal of raw U+FEFF is fine so we don't churn code).
+> 4. Language ideas: Yes, bring them once Slice 0 compiles—except bring the literal rules before Slice 2 locks the lexer, and plan concrete extract-lean for Slice 8 rather than Phase E.
+> 5. Open items: Finish arithmetic (no more mutant-style rounds), park F16 ownership until borrows, land minimal source locations (empty spans ok, 1-based line/col), and land review tooling as-is only if already green (zero more
+> rounds).
+
+B0 is active. Compile real `.con` files end-to-end on LLVM and LCB, writing each slice's
+Lean spec before implementing the rules that slice needs. This supersedes the implementation
+ordering in the [foundation-first decision](#decided-2026-11-07-foundation-first), the
+[foundation scope decision](#decided-2026-11-08-foundation), the
+[A2i integration ordering](#decided-project-long-term-2026-11-06), and the
+[A2c freeze ordering in Q9.14 and Q9.19](#decided-2026-11-05-core). A2i integration
+and the owner freeze remain milestones for their respective scopes. The 54-piece
+[inventory](../ConcreteSpec/landing/README.md) records landed work and does not gate new
+slices. ISS-0100 and ISS-0101 track the LLVM and lexer changes.
+
+The proportion rule supersedes the [November 20 review risk rule](#decided-2026-11-20-tooling-review-risk)
+where the earlier rule would admit additional blockers. It applies in `Proofs/`.
+The new meta-tooling freeze allows the three proof simplifications tracked in
+[ROADMAP](../ROADMAP.md#proof-and-review-work-under-the-november-22-direction).
+
+Finish arithmetic without further mutant-style rounds, superseding the affected further rounds
+in the [November 21 review allowance](#decided-2026-11-21-extra-review-rounds).
+`wip/spec-f16-own-o3` is parked until borrows are needed. Land minimal source
+locations with empty spans allowed and 1-based line and column. On file lookup, the coordinator's
+delegated recommendation is to bind to exact file contents, with the file name alone insufficient.
+`wip/review-evidence-fix` was not green. The landing train's review leg found that the first v2
+review would block landing the tooling itself (`require_v2_tree` in
+`scripts/land/train.sh`, around line 244 on that branch). The branch is parked with zero
+further rounds. The review tooling on main stays in use.
+
+Bring literal rules to the owner before slice 2 locks the lexer. Plan
+`concrete extract-lean` for slice 8, moving it forward from Phase E. Bring
+field-disjoint borrows, O(1) arena reset and the other language ideas as options after slice 0 compiles.
+
+### Mechanical defaults and owner veto list
+
+Agents may settle mechanical and representation defaults such as sizes, encodings, edge
+whitespace and diagnostic formatting. List each default here for owner veto. Core semantics
+such as ownership, borrows, authority, traps, allocation and syntax removals remain owner decisions.
+
+| Default | Disposition |
+| --- | --- |
+| `bool` | One byte. False is 0, true is 1, other bytes are invalid. Boolean-to-integer conversion remains open under ISS-0069. |
+| `Unit` | Zero bytes, alignment 1. |
+| `char` | Four bytes as a `u32` Unicode scalar value, alignment 4. |
+| Source line endings | LF or CRLF. Keep the existing bare-CR comment rule in `Surface0.lean` through slice 0. |
+| Raw U+FEFF | Refused everywhere, including at file start, as in `Surface0.lean`. No byte-order mark. |
+
+The next branch touching each affected file reconciles its stale held-authority text:
+`Spec/Surface0.lean`, `Spec/Const.lean`, `Spec/Scalar.lean`, `Spec/Exec.lean`,
+`Spec/Hybrid.lean`, `Spec/Memory.lean`, `Proofs/Const.lean`, `Proofs/Exec.lean`,
+`Proofs/Hybrid.lean`, `Proofs/Own.lean` and `Proofs/OwnErasure.lean`, all under
+`ConcreteSpec/`. Keep unrelated holds in place. ISS-0064 tracks the source disposition,
+ISS-0069 tracks the remaining conversion decision and representation reconciliation, and ISS-0076
+tracks implementation and evidence for the approved layouts.
+
 <a id="decided-2026-11-21-secrets-after-1-0"></a>
 ## Decided 2026-11-21: secrets after 1.0
 
@@ -153,13 +227,16 @@ confirmed the defect and agreed with the recommendation, both with changes
 
 Links only; each item's text lives where it is linked.
 
-1. The spec read and the Core freeze, A2c ([queue](../ROADMAP.md#the-queue)).
+1. The spec read and the Core freeze, A2c ([revised queue](../ROADMAP.md#the-queue)).
 2. The [spelling round](#decided-2026-11-08-spelling-round).
 3. The remaining [SPARK review](proposals/SPARK.md) dispositions.
 4. Recover or re-confirm the [unrecorded 2026-11-08 approvals](../ISSUES.tsv) (ISS-0065;
    [language record](#decided-2026-11-08-language)).
-5. Closed 2026-11-12: the `char` literal form and OD42’s example are resolved by the
-   [char decision](#decided-2026-11-12-char).
+5. [Literal rule options before slice 2 and language ideas after slice 0](../ROADMAP.md#vertical-slices).
+6. [Boolean-to-integer conversion](../ISSUES.tsv) (ISS-0069).
+
+The [mechanical defaults and owner veto list](#mechanical-defaults-and-owner-veto-list) records
+the settled storage, layout and source defaults.
 
 A decided proposal moves to `docs/archive/<topic>-<date>/`.
 

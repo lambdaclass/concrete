@@ -23,7 +23,10 @@ Numeric lists use the definitionally equal `Numbers` alias; declaration names us
 [`Proofs/`](Proofs/) says why the rules hang together. Read it only to check a claim.
 
 The [landing inventory](landing/README.md) reports which foundation and migration pieces are
-present in the checked revision and what remains.
+present in the checked revision and what remains. Its 54 rows record the foundation and
+migration work. Build slice 0 first and write the Lean rules each slice needs before implementing
+those rules. The inventory is a record of evidence, independent of the order in which slices
+are built. See the [November 22 direction](../docs/decisions.md#decided-2026-11-22-direction).
 
 **The owner view.** `scripts/spec/lean_site.sh [OUT]` (after `lake build ConcreteSpec`) generates
 a static HTML view into `_build/spec-site/`: every module rendered from its source (doc comments as

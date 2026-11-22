@@ -39,7 +39,9 @@ rule changes in one place.
 ## Rules
 
 **Design questions** are decided by [PHILOSOPHY.md](docs/PHILOSOPHY.md). Any important design decision is
-put to the owner by Claude or Codex, with a recommendation reasoned from docs/PHILOSOPHY.md.
+put to the owner by Claude or Codex, with a recommendation reasoned from docs/PHILOSOPHY.md. Agents may settle mechanical and representation defaults and
+record them in the [owner veto list](docs/decisions.md#mechanical-defaults-and-owner-veto-list).
+Core semantics remain owner decisions.
 
 **Owner decisions: never decide one.** The language decisions OD1 – OD157
 ([decisions.md](docs/decisions.md#owner-decisions)) are decided only by the project owner. No
@@ -140,6 +142,15 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
   after reserving a number, rerun the `--number NNN` command it prints rather than filing by hand.
 - Have Codex confirm each bug is real (a reproducer and a verdict line in the record) before
   filing it.
+
+<a id="review-proportion"></a>
+**Review proportion.** A soundness bug, wrong language semantics, false theorem or broken
+build blocks. Disputes over mutant, fixture or test construction, helper factoring or
+out-of-slice edge cases are non-blocking notes, including in `Proofs/`.
+The [November 22 direction](docs/decisions.md#decided-2026-11-22-direction) governs wherever
+the earlier risk rule would block additional findings. New meta-tooling is frozen. The three
+approved simplifications to existing proof work are tracked in the
+[roadmap](ROADMAP.md#proof-and-review-work-under-the-november-22-direction).
 
 **Review.** Codex reviews everything before it is published or brought to the owner, and Kimi and
 agy (Gemini) review every branch too; a reviewer's absence is recorded, never assumed

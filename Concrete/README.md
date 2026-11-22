@@ -412,14 +412,20 @@ theorem answer_correct (F : FrontendPremises) (P : NativePremises B N T₀)
 
 **Non-vacuity, one witness per layer:**
 1. **Acceptance:** `answer_accepts`, by kernel `decide`.
-2. **Native model consistency, per backend.** For LLVM, `NativePremises (llvm refMeans) refNative T₀` is proved for a reference model:
+2. **Native model consistency, per backend.** The proposed LLVM reference model for
+   `NativePremises (llvm refMeans) refNative T₀` is:
    - `Image := BIR.Program`;
    - `Built T ll b := b.WF ∧ b.frameSlots ≤ T.maxSlots ∧ LLVM.print b = ll`;
    - `BodyRuns T b r := r = BIR.bodyResult b`, where `bodyResult` returns `encode (behaviour b)` or diverges;
    - `Runs T b β := β = BIR.behaviour b`;
    - `refMeans ll r := ∃ b, b.WF ∧ LLVM.print b = ll ∧ r = BIR.bodyResult b`.
 
-   The `rt` field follows from `decode_encode`. The `emit` field needs **printer injectivity**, which is proved: `LLVM.unprint (LLVM.print b) = some b` for every WF `b`. That also makes the `.ll` text determine its BIR, which the certificate uses.
+   The `rt` field in this example follows from `decode_encode`. The `emit` field
+   is conditional on `P_print`. `Concrete/Backend/LLVM.lean` implements the printer.
+   Drop the planned inverse `LLVM.unprint (LLVM.print b) = some b` for every WF `b`.
+   It is false because the printer omits the site table and spells `i8` and `u8` identically.
+   The certificate plan binds the specific BIR and its sites to the emitted bytes. See
+   [ISS-0100](../ISSUES.tsv) and the [November 22 decision](../docs/decisions.md#decided-2026-11-22-direction).
 
    For LCB, `Means` is fixed by LCB's semantics. The witness `NativePremises lcb refNativeLCB T₀` uses:
    - `Image := LCB.Source.Function × SiteTable`, which is the emitted text itself;

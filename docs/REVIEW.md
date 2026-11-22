@@ -51,6 +51,13 @@ uncommitted tree is never reviewed, and the script warns when it is dirty.
 | 5 | blocked: a piece could not be reviewed, even after the retry |
 | 6 | recorded locally, but the notes ref could not be pushed |
 
+## What blocks a review
+
+The [review proportion rule](../AGENTS.md#review-proportion) defines the blocking verdict:
+a soundness bug, wrong language semantics, false theorem or broken build. Record disputes
+over mutant, fixture or test construction, helper factoring and out-of-slice edge cases as
+non-blocking notes, including in `Proofs/`.
+
 ## What each round reviews
 
 - **Round 1** reviews the full diff from the base to `HEAD`.
