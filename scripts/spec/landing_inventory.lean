@@ -1252,9 +1252,6 @@ private def completion : PieceId → Completion
     specNamespace `Proofs.Adequacy `Core.Exec.RunProjection]
   | .F25b => reservedEvidence [
     specNamespace `Proofs.Adequacy `Core.Exec.TerminationAndBlocking]
-  | .F26 => reservedEvidence [
-    specNamespace `Spec.Leak `Core.Leak.Release,
-    specNamespace `Proofs.Leak `Core.Leak.Noninterference]
   | .F26a =>
     { named := [
     evidence `ConcreteSpec.Spec.Accounting `ConcreteSpec.Core.Leak [
@@ -1398,7 +1395,7 @@ private def completion : PieceId → Completion
     specNamespace `Proofs.Slice1 `Qualification.Slice1]
   | .M12 => reservedEvidence [
     specNamespace `Proofs.Surface0 `Qualification.Surface0]
-  | .«F03p-design» | .«F39-design» | .F27 => {}
+  | .«F03p-design» | .«F39-design» | .F26 | .F27 => {}
 
 private def plan : List Piece := [
   present .F01 "Explicit proof imports and a complete specification root",
@@ -1408,13 +1405,9 @@ private def plan : List Piece := [
     "changelog.d/2026-11-17-spec-f03b-sourcetext.md",
   disposition .«F03p-design» "design proposals never land on main and stay on WIP branches as writer briefs. The Lean spec carries the normative decisions for F03p"
     "ISSUES.tsv ISS-0068; docs/decisions.md#decided-2026-11-17-proposals-in-lean",
-  { present .F03p "Source-path admission, byte-span projection, and source binding" with
-    remaining := ["ISS-0068: projection range contract, including empty spans at EOF, pending owner decision",
-      "ISS-0068: binding result and cross-project source identity pending owner decision"] },
+  present .F03p "Source-path admission, byte-span projection, and source binding",
   present .F04 "Stable-key, namespace, obligation, contract, and byte-coordinate proofs",
   { present .F04p "Source-path admission, span projection and source binding Laws and controls" with
-    remaining := ["ISS-0068: qualify projection Laws and controls once the range contract, including empty spans at EOF, is settled (pending owner decision)",
-      "ISS-0068: qualify binding Laws and controls once the binding result and cross-project source identity are settled (pending owner decision)"]
     groups := [
       evidence `ConcreteSpec.Proofs.Ident `ConcreteSpec.Core.SourcePathSpan [
         `ProjectionCorrect, `BindingCorrect],
@@ -1450,11 +1443,12 @@ private def plan : List Piece := [
   pending .F24b ["ROADMAP.md R-0614"],
   pending .F25a ["ROADMAP.md R-0614"],
   pending .F25b ["ROADMAP.md R-0614"],
-  pending .F26 ["ROADMAP.md R-0613"],
+  disposition .F26 "F26b leakage and release of secret information (declassification) deferred until after 1.0"
+    "docs/decisions.md#decided-2026-11-21-secrets-after-1-0",
   added .F26a "F26 accounting slice in C7"
     "changelog.d/2026-11-15-spec-f26a-accounting.md; ROADMAP.md R-0613",
-  disposition .F27 "wiping is out of the spec and only the owner can reopen it"
-    "ISSUES.tsv ISS-0072; docs/decisions.md#decided-2026-11-16-secret-wiping",
+  disposition .F27 "wiping deferred until after 1.0"
+    "ISSUES.tsv ISS-0072; docs/decisions.md#decided-2026-11-21-secrets-after-1-0",
   pending .F28 ["ROADMAP.md R-0616", "ISSUES.tsv ISS-0073"],
   pending .F29 ["ROADMAP.md R-0616", "ISSUES.tsv ISS-0073"],
   pending .F29p ["ROADMAP.md R-0616", "ISSUES.tsv ISS-0068"],

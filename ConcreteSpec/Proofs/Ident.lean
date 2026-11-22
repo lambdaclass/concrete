@@ -3218,8 +3218,7 @@ end SourcePath
 theorem Span.pathOk (span : Span) : span.PathOk := span.path.valid
 
 /-- Representation lemma (subject `ConcreteSpec.Core.Span.LocationOk`).
-A valid span starts within the source and stores the exact line and byte column at that start.
-The projection range contract, including empty spans at EOF, is pending owner decision. -/
+A valid span starts within the source and stores the exact line and byte column at that start. -/
 theorem Span.locationOk_iff (span : Span) (source : SourceText) :
     span.LocationOk source ↔
       span.startOffset ≤ span.endOffset ∧ span.endOffset ≤ source.length ∧
@@ -3228,8 +3227,7 @@ theorem Span.locationOk_iff (span : Span) (source : SourceText) :
     SourcePathSpan.ColumnMatches, span.range_ok]
 
 /-- Instance (law `ConcreteSpec.Core.Span.locationOk_iff`, case `ConcreteSpec.Core.tabSpan`).
-the span after a tab matches the original source's byte coordinates.
-The projection range contract, including empty spans at EOF, is pending owner decision. -/
+the span after a tab matches the original source's byte coordinates. -/
 theorem tabSpan_location : tabSpan.LocationOk tabSource :=
   (Span.locationOk_iff _ _).2 (by decide)
 
@@ -3240,8 +3238,7 @@ theorem tabSpan_otherSource : ¬tabSpan.LocationOk Vacuity.otherTabSource := by
   decide
 
 /-- Instance (law `ConcreteSpec.Core.Span.locationOk_iff`, case `ConcreteSpec.Core.tabSpan`).
-an incorrect column or an out-of-bounds end invalidates the span.
-The projection range contract, including empty spans at EOF, is pending owner decision. -/
+an incorrect column or an out-of-bounds end invalidates the span. -/
 theorem tabSpan_badCoordinates :
     ¬({ tabSpan with col := 2, col_pos := by decide }).LocationOk tabSource ∧
     ¬({ tabSpan with endOffset := 4, range_ok := by decide }).LocationOk tabSource := by
@@ -4763,9 +4760,7 @@ theorem Project.findFile_succeeds_iff (project : Project) (path : SourcePath) :
     obtain ⟨file, member, exactPath⟩ := List.mem_map.mp present
     exact ⟨file, (findFile_iff project path file).mpr ⟨member, exactPath⟩⟩
 
-/-- Helper: both operations refuse an absent path according to the registered file rule.
-The projection range contract, including empty spans at EOF, is pending owner decision.
-The binding result and cross-project source identity are pending owner decision. -/
+/-- Helper: both operations refuse an absent path according to the registered file rule. -/
 theorem missingFile_refuses (project : Project) (span : Span) (start stop : Nat)
     (absent : ¬ FilePresent (project, span.path)) :
     projectSpan project span.path start stop = none ∧ bindSource project span = none := by
@@ -4773,13 +4768,11 @@ theorem missingFile_refuses (project : Project) (span : Span) (start stop : Nat)
   | none => simp [projectSpan, bindSource, found, bind, Option.bind]
   | some file => exact (absent ((project.findFile_succeeds_iff _).mp ⟨file, found⟩)).elim
 
-/-- Helper: the projection ordering guard implements the registered offset rule.
-The projection range contract, including empty spans at EOF, is pending owner decision. -/
+/-- Helper: the projection ordering guard implements the registered offset rule. -/
 theorem orderedOffsets_guard_iff (start stop : Nat) :
     start ≤ stop ↔ OrderedOffsets (start, stop) := Iff.rfl
 
-/-- Helper: the projection and binding end guards implement the registered end rule.
-The projection range contract, including empty spans at EOF, is pending owner decision. -/
+/-- Helper: the projection and binding end guards implement the registered end rule. -/
 theorem endInSource_guard_iff (source : SourceText) (stop : Nat) :
     stop ≤ source.length ↔ EndInSource (source, stop) := Iff.rfl
 
@@ -4791,29 +4784,25 @@ theorem lineMatches_guard_iff (span : Span) (source : SourceText) :
 theorem columnMatches_guard_iff (span : Span) (source : SourceText) :
     span.col = source.columnAt span.startOffset ↔ ColumnMatches (span, source) := Iff.rfl
 
-/-- Helper: the binding guard is the conjunction of the three registered location checks.
-The projection range contract, including empty spans at EOF, is pending owner decision. -/
+/-- Helper: the binding guard is the conjunction of the three registered location checks. -/
 theorem location_guard_iff (span : Span) (source : SourceText) :
     (span.endOffset ≤ source.length ∧ span.line = source.lineAt span.startOffset ∧
       span.col = source.columnAt span.startOffset) ↔ span.LocationOk source := by
   rw [Span.LocationOk, ← endInSource_guard_iff, ← lineMatches_guard_iff,
     ← columnMatches_guard_iff]
 
-/-- The universal agreement contract for projection, in both directions.
-The projection range contract, including empty spans at EOF, is pending owner decision. -/
+/-- The universal agreement contract for projection, in both directions. -/
 def ProjectionCorrect (projector : Project → SourcePath → Nat → Nat → Option Span) : Prop :=
   ∀ project path start stop span,
     projector project path start stop = some span ↔ Reference.Projects project path start stop span
 
-/-- The universal agreement contract for source binding, in both directions.
-The binding result and cross-project source identity are pending owner decision. -/
+/-- The universal agreement contract for source binding, in both directions. -/
 def BindingCorrect (binder : Project → Span → Option File) : Prop :=
   ∀ project span file, binder project span = some file ↔ Reference.Binds project span file
 
 /-- Law (subject `ConcreteSpec.Core.SourcePathSpan.projectSpan`).
 Safety preserves the exact path and range and validates the projected coordinates.
-Progress returns every span described by the reference relation.
-The projection range contract, including empty spans at EOF, is pending owner decision. -/
+Progress returns every span described by the reference relation. -/
 theorem projectSpan_correct : ProjectionCorrect projectSpan := by
   intro project path start stop span
   constructor
@@ -4829,10 +4818,10 @@ theorem projectSpan_correct : ProjectionCorrect projectSpan := by
         · rename_i within
           cases result
           exact ⟨rfl, rfl, rfl, (orderedOffsets_guard_iff _ _).mp ordered,
-            file, member, exactPath, (endInSource_guard_iff _ _).mp within, rfl, rfl⟩
+            file, member, exactPath, ⟨(endInSource_guard_iff _ _).mp within, rfl, rfl⟩, rfl⟩
         · contradiction
       · contradiction
-  · rintro ⟨pathEq, startEq, stopEq, ordered, file, member, exactPath, within, line, col⟩
+  · rintro ⟨pathEq, startEq, stopEq, ordered, file, member, exactPath, ⟨within, line, col⟩, sourceEq⟩
     subst path start stop
     have found := (findFile_iff _ _ _).mpr ⟨member, exactPath⟩
     have orderedGuard := (orderedOffsets_guard_iff _ _).mpr ordered
@@ -4844,8 +4833,7 @@ theorem projectSpan_correct : ProjectionCorrect projectSpan := by
 
 /-- Law (subject `ConcreteSpec.Core.SourcePathSpan.bindSource`).
 Safety returns the exact admitted file with a valid stored location.
-Progress returns that file for every binding in the reference relation.
-The binding result and cross-project source identity are pending owner decision. -/
+Progress returns that file for every binding in the reference relation. -/
 theorem bindSource_correct : BindingCorrect bindSource := by
   intro project span file
   constructor
@@ -4858,23 +4846,21 @@ theorem bindSource_correct : BindingCorrect bindSource := by
       · rename_i valid
         cases result
         obtain ⟨member, exactPath⟩ := (findFile_iff _ _ _).mp found
-        exact ⟨member, exactPath, (location_guard_iff _ _).mp valid⟩
+        exact ⟨member, exactPath, valid⟩
       · contradiction
   · rintro ⟨member, exactPath, valid⟩
     have found := (findFile_iff _ _ _).mpr ⟨member, exactPath⟩
-    simp [bindSource, found, bind, Option.bind, (location_guard_iff _ _).mpr valid]
+    simp [bindSource, found, bind, Option.bind, valid]
 
 /-- Helper: corollary of `projectSpan_correct`.
-Each returned span preserves the requested path and range and locates an admitted file.
-The projection range contract, including empty spans at EOF, is pending owner decision. -/
+Each returned span preserves the requested path and range and locates an admitted file. -/
 theorem projectSpan_safety (project : Project) (path : SourcePath) (start stop : Nat)
     (span : Span) (result : projectSpan project path start stop = some span) :
     Reference.Projects project path start stop span :=
   (projectSpan_correct project path start stop span).mp result
 
 /-- Helper: corollary of `projectSpan_correct`.
-Each ordered range fitting an admitted file has a projection, including at EOF.
-The projection range contract, including empty spans at EOF, is pending owner decision. -/
+Each ordered range fitting an admitted file has a projection, including at EOF. -/
 theorem projectSpan_progress (project : Project) (path : SourcePath) (start stop : Nat)
     (file : File) (member : file ∈ project.files) (exactPath : file.path = path)
     (ordered : start ≤ stop) (within : stop ≤ file.source.length) :
@@ -4883,37 +4869,32 @@ theorem projectSpan_progress (project : Project) (path : SourcePath) (start stop
   let span := spanAt path file.source start stop ordered
   have reference : Reference.Projects project path start stop span :=
     ⟨rfl, rfl, rfl, (orderedOffsets_guard_iff _ _).mp ordered,
-      file, member, exactPath, (endInSource_guard_iff _ _).mp within, rfl, rfl⟩
+      file, member, exactPath, ⟨(endInSource_guard_iff _ _).mp within, rfl, rfl⟩, rfl⟩
   exact ⟨span, (projectSpan_correct project path start stop span).mpr reference, reference⟩
 
 /-- Helper: corollary of `bindSource_correct`.
-The returned file has the span's exact path and the bytes validate its stored location.
-The binding result and cross-project source identity are pending owner decision. -/
+The returned file matches the stored path and bytes and validates the stored location. -/
 theorem bindSource_safety (project : Project) (span : Span) (file : File)
     (result : bindSource project span = some file) : Reference.Binds project span file :=
   (bindSource_correct project span file).mp result
 
 /-- Helper: corollary of `bindSource_correct`.
-Every valid reference binding returns the corresponding loaded file.
-The binding result and cross-project source identity are pending owner decision. -/
+Every valid reference binding returns the corresponding loaded file. -/
 theorem bindSource_progress (project : Project) (span : Span) (file : File)
     (reference : Reference.Binds project span file) : bindSource project span = some file :=
   (bindSource_correct project span file).mpr reference
 
 namespace Controls
 
-/-- The original tab range with an end beyond the loaded file.
-The projection range contract, including empty spans at EOF, is pending owner decision. -/
+/-- The original tab range with an end beyond the loaded file. -/
 def pastEnd : Span := { tabSpan with endOffset := 4, range_ok := by decide }
 
-/-- Mutant that projects ordered ranges without checking the end bound.
-The projection range contract, including empty spans at EOF, is pending owner decision. -/
+/-- Mutant that projects ordered ranges without checking the end bound. -/
 def projectPastEnd (project : Project) (path : SourcePath) (start stop : Nat) : Option Span := do
   let file ← project.findFile path
   if ordered : start ≤ stop then some (spanAt path file.source start stop ordered) else none
 
-/-- Mutant that rejects ranges beginning after the first byte.
-The projection range contract, including empty spans at EOF, is pending owner decision. -/
+/-- Mutant that rejects ranges beginning after the first byte. -/
 def projectAtStartOnly (project : Project) (path : SourcePath) (start stop : Nat) : Option Span :=
   if start = 0 then projectSpan project path start stop else none
 
@@ -4923,42 +4904,35 @@ def wrongLine : Span := { tabSpan with line := 2, line_pos := by decide }
 /-- The tab span with only its stored column changed. -/
 def wrongColumn : Span := { tabSpan with col := 2, col_pos := by decide }
 
-/-- Mutant that skips only the end bound.
-The projection range contract, including empty spans at EOF, is pending owner decision.
-The binding result and cross-project source identity are pending owner decision. -/
+/-- Mutant that skips only the end bound. -/
 def bindPastEnd (project : Project) (span : Span) : Option File := do
   let file ← project.findFile span.path
   if span.line = file.source.lineAt span.startOffset ∧
-      span.col = file.source.columnAt span.startOffset then some file else none
+      span.col = file.source.columnAt span.startOffset ∧ span.source = file.source then some file else none
 
-/-- Mutant that skips only the line match.
-The binding result and cross-project source identity are pending owner decision. -/
+/-- Mutant that skips only the line match. -/
 def bindIgnoringLine (project : Project) (span : Span) : Option File := do
   let file ← project.findFile span.path
   if span.endOffset ≤ file.source.length ∧
-      span.col = file.source.columnAt span.startOffset then some file else none
+      span.col = file.source.columnAt span.startOffset ∧ span.source = file.source then some file else none
 
-/-- Mutant that skips only the column match.
-The binding result and cross-project source identity are pending owner decision. -/
+/-- Mutant that skips only the column match. -/
 def bindIgnoringColumn (project : Project) (span : Span) : Option File := do
   let file ← project.findFile span.path
   if span.endOffset ≤ file.source.length ∧
-      span.line = file.source.lineAt span.startOffset then some file else none
+      span.line = file.source.lineAt span.startOffset ∧ span.source = file.source then some file else none
 
-/-- Mutant that rejects ranges ending exactly at EOF.
-The projection range contract, including empty spans at EOF, is pending owner decision.
-The binding result and cross-project source identity are pending owner decision. -/
+/-- Mutant that rejects ranges ending exactly at EOF. -/
 def bindBeforeEof (project : Project) (span : Span) : Option File := do
   let file ← bindSource project span
   if span.endOffset < file.source.length then some file else none
 
 /-- Planted (law `ConcreteSpec.Core.SourcePathSpan.projectSpan_correct`,
 case `ConcreteSpec.Core.SourcePathSpan.Controls.pastEnd`, subject `ConcreteSpec.Core.SourcePathSpan.projectSpan`,
-mutant `ConcreteSpec.Core.SourcePathSpan.Controls.projectPastEnd`).
-The projection range contract, including empty spans at EOF, is pending owner decision. -/
+mutant `ConcreteSpec.Core.SourcePathSpan.Controls.projectPastEnd`). -/
 theorem projectPastEnd_violates_correct : ¬ ProjectionCorrect projectPastEnd := by
   intro law
-  obtain ⟨_, _, _, _, file, member, _, bounds, _, _⟩ :=
+  obtain ⟨_, _, _, _, file, member, _, ⟨bounds, _, _⟩, _⟩ :=
     (law tabProject mainSourcePath 2 4 pastEnd).mp (by decide)
   have eq : file = ⟨mainSourcePath, tabSource⟩ := List.mem_singleton.mp member
   subst file
@@ -4966,8 +4940,7 @@ theorem projectPastEnd_violates_correct : ¬ ProjectionCorrect projectPastEnd :=
 
 /-- Planted (law `ConcreteSpec.Core.SourcePathSpan.projectSpan_correct`,
 case `ConcreteSpec.Core.tabSpan`, subject `ConcreteSpec.Core.SourcePathSpan.projectSpan`,
-mutant `ConcreteSpec.Core.SourcePathSpan.Controls.projectAtStartOnly`).
-The projection range contract, including empty spans at EOF, is pending owner decision. -/
+mutant `ConcreteSpec.Core.SourcePathSpan.Controls.projectAtStartOnly`). -/
 theorem projectAtStartOnly_violates_correct : ¬ ProjectionCorrect projectAtStartOnly := by
   intro law
   have reference := (projectSpan_correct tabProject mainSourcePath 2 3 tabSpan).mp projectTabSpan
@@ -4976,37 +4949,31 @@ theorem projectAtStartOnly_violates_correct : ¬ ProjectionCorrect projectAtStar
 
 /-- Planted (law `ConcreteSpec.Core.SourcePathSpan.bindSource_correct`,
 case `ConcreteSpec.Core.SourcePathSpan.Controls.pastEnd`, subject `ConcreteSpec.Core.SourcePathSpan.bindSource`,
-mutant `ConcreteSpec.Core.SourcePathSpan.Controls.bindPastEnd`).
-The projection range contract, including empty spans at EOF, is pending owner decision.
-The binding result and cross-project source identity are pending owner decision. -/
+mutant `ConcreteSpec.Core.SourcePathSpan.Controls.bindPastEnd`). -/
 theorem bindPastEnd_violates_correct : ¬ BindingCorrect bindPastEnd := by
   intro law
   have reference := (law tabProject pastEnd ⟨mainSourcePath, tabSource⟩).mp (by decide)
-  exact (by unfold EndInSource; decide : ¬ EndInSource (tabSource, pastEnd.endOffset)) reference.2.2.1
+  exact (by unfold EndInSource; decide : ¬ EndInSource (tabSource, pastEnd.endOffset)) reference.2.2.1.1
 
 /-- Planted (law `ConcreteSpec.Core.SourcePathSpan.bindSource_correct`,
 case `ConcreteSpec.Core.SourcePathSpan.Controls.wrongLine`, subject `ConcreteSpec.Core.SourcePathSpan.bindSource`,
-mutant `ConcreteSpec.Core.SourcePathSpan.Controls.bindIgnoringLine`).
-The binding result and cross-project source identity are pending owner decision. -/
+mutant `ConcreteSpec.Core.SourcePathSpan.Controls.bindIgnoringLine`). -/
 theorem bindIgnoringLine_violates_correct : ¬ BindingCorrect bindIgnoringLine := by
   intro law
   have reference := (law tabProject wrongLine ⟨mainSourcePath, tabSource⟩).mp (by decide)
-  exact (by unfold LineMatches; decide : ¬ LineMatches (wrongLine, tabSource)) reference.2.2.2.1
+  exact (by unfold LineMatches; decide : ¬ LineMatches (wrongLine, tabSource)) reference.2.2.1.2.1
 
 /-- Planted (law `ConcreteSpec.Core.SourcePathSpan.bindSource_correct`,
 case `ConcreteSpec.Core.SourcePathSpan.Controls.wrongColumn`, subject `ConcreteSpec.Core.SourcePathSpan.bindSource`,
-mutant `ConcreteSpec.Core.SourcePathSpan.Controls.bindIgnoringColumn`).
-The binding result and cross-project source identity are pending owner decision. -/
+mutant `ConcreteSpec.Core.SourcePathSpan.Controls.bindIgnoringColumn`). -/
 theorem bindIgnoringColumn_violates_correct : ¬ BindingCorrect bindIgnoringColumn := by
   intro law
   have reference := (law tabProject wrongColumn ⟨mainSourcePath, tabSource⟩).mp (by decide)
-  exact (by unfold ColumnMatches; decide : ¬ ColumnMatches (wrongColumn, tabSource)) reference.2.2.2.2
+  exact (by unfold ColumnMatches; decide : ¬ ColumnMatches (wrongColumn, tabSource)) reference.2.2.1.2.2
 
 /-- Planted (law `ConcreteSpec.Core.SourcePathSpan.bindSource_correct`,
 case `ConcreteSpec.Core.tabSpan`, subject `ConcreteSpec.Core.SourcePathSpan.bindSource`,
-mutant `ConcreteSpec.Core.SourcePathSpan.Controls.bindBeforeEof`).
-The projection range contract, including empty spans at EOF, is pending owner decision.
-The binding result and cross-project source identity are pending owner decision. -/
+mutant `ConcreteSpec.Core.SourcePathSpan.Controls.bindBeforeEof`). -/
 theorem bindBeforeEof_violates_correct : ¬ BindingCorrect bindBeforeEof := by
   intro law
   have reference := (bindSource_correct tabProject tabSpan _).mp bindTabSpan

@@ -2841,10 +2841,8 @@ ConcreteSpec.Core.ObligationId.mk.inj
 ConcreteSpec.Core.ObligationId.mk.injEq	propext
 ConcreteSpec.Core.ObligationId.mk.sizeOf_spec	
 ConcreteSpec.Core.ObligationKind.assertion.sizeOf_spec	
-ConcreteSpec.Core.ObligationKind.constantTime.sizeOf_spec	
 ConcreteSpec.Core.ObligationKind.ensures.sizeOf_spec	
 ConcreteSpec.Core.ObligationKind.loopInvariant.sizeOf_spec	
-ConcreteSpec.Core.ObligationKind.noninterference.sizeOf_spec	
 ConcreteSpec.Core.ObligationKind.ofNat_ctorIdx	
 ConcreteSpec.Core.ObligationKind.requires.sizeOf_spec	
 ConcreteSpec.Core.ObligationKind.safety.sizeOf_spec	
@@ -4976,6 +4974,7 @@ ConcreteSpec.Core.instDecidableEqSpan.decEq._proof_4	Quot.sound propext
 ConcreteSpec.Core.instDecidableEqSpan.decEq._proof_5	Quot.sound propext
 ConcreteSpec.Core.instDecidableEqSpan.decEq._proof_6	Quot.sound propext
 ConcreteSpec.Core.instDecidableEqSpan.decEq._proof_7	Quot.sound propext
+ConcreteSpec.Core.instDecidableEqSpan.decEq._proof_8	Quot.sound propext
 ConcreteSpec.Core.instDecidableEqSpecVersion.decEq._proof_1	
 ConcreteSpec.Core.instDecidableEqSpecVersion.decEq._proof_2	
 ConcreteSpec.Core.instDecidableEqSpecVersion.decEq._proof_3	

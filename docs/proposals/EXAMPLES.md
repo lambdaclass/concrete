@@ -25,8 +25,12 @@ The claim columns below are proposed wording; the showcases and their slices are
 | EVM interpreter | 15: u256 arithmetic and the opcode set | 21 → 23: growable memory, gas, Keccak | each opcode against the EVM spec; no trap on any bytecode | gas-bounded | none | as for `grep` |
 | Embedded key-value store | 23: in-memory index plus an append-only log | 23, with RocksDB at 25 for comparison | correct contents | bounded memory | one Fs grant for its log | as for `grep`; durability "not established" (crash model not planned) |
 | WebAssembly sandbox | 21: interpreter with fuel and linear memory | 23 → 26: host imports, capability-limited host calls | memory safety | fuel-bounded termination | host calls limited by capabilities | as for `grep` |
-| Encrypted tunnel (Noise + ChaCha20-Poly1305) | 7 → 15: ChaCha20, Poly1305, X25519 as the `Secret<T>` flagship; 18: file encryptor | after 28: the tunnel, after the randomness/nonce audit | crypto correct; secrets never reach output | constant time at the source level | one network grant | as for `grep`, plus the backend constant-time premise |
+| Encrypted tunnel (Noise + ChaCha20-Poly1305) | 15: ChaCha20, Poly1305, X25519 as ordinary array code; 18: file encryptor | after 28: the tunnel, after the randomness/nonce audit | crypto correct | — | one network grant | as for `grep` |
 | Static web server serving the Concrete website | 27: one connection at a time, reading `./site` | after 28: concurrent version | no crash on any input | per-request memory bound | reads only `./site`; one network grant | as for `grep` |
+
+The crypto examples use ordinary code and retain their functional claims. Their secret-handling
+guarantees move to the [after-1.0 roadmap](../../ROADMAP.md#after-10) under the
+[2026-11-21 decision](../decisions.md#decided-2026-11-21-secrets-after-1-0).
 
 Proposed growing flagships (not among the seven adopted showcases): sha256sum (2 to 19) and a calc
 tokenizer, parser and stack VM (3 to 19).
@@ -49,7 +53,6 @@ Each proposed example runs on the Lean evaluator, LLVM and LCB.
 | 4 loops + termination | **F:** sum 1..n with a bound, iterative gcd with `#[variant]`, integer square root, iterative Fibonacci with an overflow guard. **R:** a loop with no variant (refused, or marked `#[may_not_terminate("...")]`); a Collatz loop as the marked example. |
 | 5 functions + recursion | **F:** recursive factorial with a variant and an overflow `#[requires]`; recursive gcd; mutual recursion (even/odd). **R:** Ackermann without a lexicographic measure (refused or marked); a call violating `#[requires]`. **Facts:** stack bound from the artifact. |
 | 6 capabilities | **F:** `main` receives a grant and passes it to a helper with `with(...)`; `give_up` ends it. **R:** calling a `with(X)` function without X; leaking a grant. **Facts:** transitive authority. |
-| 7 `Secret<T>` scalars | **F:** constant-time select and min/max of secrets; equality returning `Secret<bool>`; a traced `declassify`. **R:** branching on a secret, indexing with a secret, plain `+` on a secret, an untraced release. |
 | 8 proof surface | **F:** a ghost `spec fn` for n(n+1)/2 with `#[proof(path::to::theorem)]` naming the theorem that links the loop sum to it; `assert(e) by thm(...)`. **R:** a vacuous proof (an impossible precondition); an unmatched `#[proof(path::to::theorem)]`. |
 | 9 structs | **F:** Point/Rect area with a proven formula; a struct owning a linear field. **R:** a field moved twice; a partial move used afterwards. |
 | 10 enums/match | **F:** a traffic-light state machine with a proven invariant; a byte classifier. **R:** a non-exhaustive match. |
@@ -57,7 +60,7 @@ Each proposed example runs on the Lean evaluator, LLVM and LCB.
 | 12 Option/Result/checked_* | **F:** parse a decimal digit giving `Result`; a `checked_*` chain with typed `ArithmeticError`; `try_convert`. **R:** an ignored `Result`. |
 | 13 borrows | **F:** increment through `&mut`; read-only borrows. **R:** two `&mut`; using the root while it is frozen; returning a reference. |
 | 14 traits/Destroy/defer | **F:** a resource with `Destroy`; `defer` cleanup on every returning path, including an early return. **Control:** `abort()` runs no cleanup. **R:** a missing cleanup; using a value after `defer` consumed it. |
-| 15 arrays | **F:** array sum, binary search, insertion sort proven sorted and a permutation; `ct_eq` on keys. **R:** a possibly-out-of-bounds index; a secret index. |
+| 15 arrays | **F:** array sum, binary search, insertion sort proven sorted and a permutation. **R:** a possibly-out-of-bounds index. |
 | 16 text/console | **F:** hello world, echo, ASCII uppercase, UTF-8 validation proven. **R:** writing without the Console grant. |
 | 17 modules | **F:** base64 encode/decode split into modules, roundtrip proven (legacy workload 1). **R:** a private item used outside its module. |
 | 18 files → file-copy, 0.1 | **F:** file-copy, cat, wc; every error path closes its handles (proven). **R:** opening outside the granted directory; a leaked handle. |
