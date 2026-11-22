@@ -2,9 +2,9 @@
 
 # Language and Compiler Enhancements and Roadmap Reordering (2026-11-22)
 
-**Scope.** This document records the [2026-11-22 roadmap reordering](#roadmap-reordering) approved by the owner and collects high-leverage language, specification, compiler and tooling enhancements designed specifically around Concrete's existing architectural invariants—strict linearity, second-class references, dual-key authority (`with(...)` plus linear resource grants), executable Lean Core semantics, one `Layout` authority, proved ghost erasure, and mandatory termination variants—mapping each item to its exact home in [ROADMAP.md](../../ROADMAP.md).
+**Scope.** This document records the [2026-11-22 roadmap reordering](#roadmap-reordering) approved by the owner and collects high-leverage language, specification, compiler, proof-velocity and tooling enhancements designed specifically around Concrete's existing architectural invariants—strict linearity, second-class references, dual-key authority (`with(...)` plus linear resource grants), executable Lean Core semantics, one `Layout` authority, proved ghost erasure, and mandatory termination variants—mapping each item to its exact home in [ROADMAP.md](../../ROADMAP.md).
 
-Every item is evaluated against [docs/PHILOSOPHY.md](../PHILOSOPHY.md#the-rules) and the [admission test](../PHILOSOPHY.md#admission-test). Nothing in this document decides any open language question or reopens any decided language rule on its own: every language proposal (`R-0713`–`R-0716`, `R-0718`, plus the early-audit options in the [appendix](#appendix-early-audit-options)) requires an explicit owner decision recorded in [docs/decisions.md](../decisions.md) before any syntax or semantic rule enters `ConcreteSpec`.
+Every item is evaluated against [docs/PHILOSOPHY.md](../PHILOSOPHY.md#the-rules) and the [admission test](../PHILOSOPHY.md#admission-test). Nothing in this document decides any open language question or reopens any decided language rule or governance policy on its own: every language proposal (`R-0713`–`R-0716`, `R-0718`–`R-0722`) and every policy-relaxing velocity item in `R-0724` requires an explicit owner decision recorded in [docs/decisions.md](../decisions.md) before entering `ConcreteSpec` or enforced checks.
 
 ## <a id="roadmap-reordering"></a>Roadmap reordering (decided 2026-11-22)
 
@@ -18,9 +18,9 @@ Under [decided-2026-11-22-roadmap-reordering](../decisions.md#decided-2026-11-22
 
 ## Roadmap mapping at a glance
 
-To keep [every fact once](../PHILOSOPHY.md#the-rules) (rule 5), ideas that refine or pull forward existing roadmap obligations extend their current rows; genuinely new capabilities receive proposed rows `R-0711`–`R-0718` (subject to rebase if other IDs land first).
+To keep [every fact once](../PHILOSOPHY.md#the-rules) (rule 5), ideas that refine or pull forward existing roadmap obligations extend their current rows; genuinely new capabilities and audit-identified workstreams receive proposed rows `R-0711`–`R-0724` (subject to rebase if other IDs land first).
 
-### New roadmap tasks (`R-0711`–`R-0718`)
+### New roadmap tasks (`R-0711`–`R-0724`)
 
 | Task | Phase / Slice | Kind | Summary | Owner-gated? |
 |---|---|---|---|---|
@@ -31,7 +31,13 @@ To keep [every fact once](../PHILOSOPHY.md#the-rules) (rule 5), ideas that refin
 | [R-0715](../../ROADMAP.md#r-0715) | C (Slice 10) | Language / std | [Zero-sized erased proof witnesses (`Witness<P>`) and linear typestate](#lang-typestate-witness) | **Yes** |
 | [R-0716](../../ROADMAP.md#r-0716) | C (Slice 9) | Language / const | [Const-generic capacity parameters (`<const N: u64>`) + pure compile-time data eval](#lang-const-generics-eval) | **Yes** |
 | [R-0717](../../ROADMAP.md#r-0717) | C (Slice 11 / 0.1) & D (Slice 20) | Tooling | [Deterministic Simulation Testing (`concrete sim`) over `main`'s grants](#lang-dst) | No |
-| [R-0718](../../ROADMAP.md#r-0718) | D (Slice 12) | Language / alloc | [Scoped scratch sub-arenas, argument-inferred brands and O(1) arena reset](#lang-scratch-brands) | **Yes** |
+| [R-0718](../../ROADMAP.md#r-0718) | D (Slice 12) | Language / alloc | [Scoped scratch sub-arenas, argument-inferred brands, O(1) arena reset and brand-preserving loops](#lang-scratch-brands) | **Yes** |
+| [R-0719](../../ROADMAP.md#r-0719) | C (Slice 7) | Language / borrow | [Field-disjoint borrows and scoped slice split (`borrow mut xs split at mid`)](#lang-disjoint-borrows) | **Yes** |
+| [R-0720](../../ROADMAP.md#r-0720) | C (Slice 7) | Language / borrow | [Hylo-style scoped projection functions (single-source view return without lifetimes)](#lang-scoped-projections) | **Yes** |
+| [R-0721](../../ROADMAP.md#r-0721) | C (Slice 9) | Language / cleanup | [Disarmable `defer` / `errdefer` and cleanup/destroy alignment](#lang-disarmable-defer) | **Yes** |
+| [R-0722](../../ROADMAP.md#r-0722) | C (Slices 2, 7, 8, 11) | Language / std | [Surface literal escapes/ergonomics, `const` arrays, systems/crypto scalars + `volatile_zero` and zero-heap `args`](#lang-surface-scalars-const) | **Yes** |
+| [R-0723](../../ROADMAP.md#r-0723) | B (`B0a`/`B0b`, pre-Slice-3) & A2i | Compiler / spec | [Pre-Slice-0 and pre-Slice-3 compiler & spec correctness and scaling fixes (`LLVM`, `Lex`, `LL1`, `BIR`, `LCB`, `Runtime`, `Hybrid`/`Ident`/`Exec`)](#impl-compiler-spec-fixes) | No (spec-rule changes owner-gated) |
+| [R-0724](../../ROADMAP.md#r-0724) | T (active velocity) | Proof / CI / process | [Proof and CI velocity overhaul (`ConcreteSpecEvidence` split, zero-TCB proof tactics, `axioms.golden`/`landing_inventory` cleanup, CI build-once & attestation reuse, proportion rule)](#impl-proof-ci-velocity) | Policy items **Yes** |
 
 ### Existing roadmap tasks extended or pulled forward
 
@@ -44,7 +50,7 @@ To keep [every fact once](../PHILOSOPHY.md#the-rules) (rule 5), ideas that refin
 | `R-0556`, `R-0149` | C (Slice 8) / G | [Two-level declaration Merkle hashing (`interface_hash` vs `body_hash`)](#comp-merkle-incremental) |
 | `R-0495`, `R-0177` | E (pulled to Slice 10) | [`concrete extract-lean` pure-functional model + auto-proved refinement](#comp-extract-lean) |
 | `R-0517`, `R-0505` | E | [Direct LCB machine code + proved Mach-O/ELF binary validator with in-Lean stack bounds](#comp-binary-validator) |
-| `R-0201` | F (diff pulled to Slice 10) | [`concrete diff` semantic assurance diffing and `Concrete.toml` ratchets](#comp-assurance-diff) |
+| `R-0201`, `R-0353` | F (diff & audit dossier pulled to Slice 10/11) | [`concrete diff` semantic assurance diffing, `Concrete.toml` ratchets and `concrete build --audit` one-command audit dossier](#comp-assurance-diff) |
 
 ---
 
@@ -137,28 +143,31 @@ To keep [every fact once](../PHILOSOPHY.md#the-rules) (rule 5), ideas that refin
 
 ---
 
-### <a id="lang-scratch-brands"></a>5. Scoped scratch sub-arenas, argument-inferred brands and O(1) bulk arena reset (`R-0718`)
+### <a id="lang-scratch-brands"></a>5. Scoped scratch sub-arenas, argument-inferred brands, O(1) bulk arena reset and brand-preserving loops (`R-0718`)
 
-**Motivation.** Concrete's branded allocator model (`Q1.1`–`Q1.13`, [allocation decision](../decisions.md#decided-2026-11-02-allocation)) gives memory-safe arena lifetimes without a borrow-checker lifetime language, but three friction points show up immediately in parsers, HTTP servers, compilers, and packet processors:
+**Motivation.** Concrete's branded allocator model (`Q1.1`–`Q1.13`, [allocation decision](../decisions.md#decided-2026-11-02-allocation)) gives memory-safe arena lifetimes without a borrow-checker lifetime language, but four friction points show up immediately in parsers, HTTP servers, compilers, and packet processors:
 
 1. Reclaiming temporary per-iteration allocations via consuming `reset(a)` requires existential `exists`/`pack`/`unpack` brand plumbing across loop edges.
 2. Writing explicit brand type arguments `<A>` at every container call (`Vec::push::<A>(&mut alloc, &mut v, x)`) repeats a brand already visibly present in `&mut alloc`'s checked type.
-3. Under strict linear ownership (`Q1.4`), an arena containing only pure memory values (`Heap<T, A>` with no external OS handles) still requires walking and individually destroying values before resetting unless an O(1) bulk-invalidation form exists.
+3. Under strict linear ownership (`Q1.4` and `Brand.Ok.reset` requiring `NoHeap Γ β`), an arena containing only pure memory values (`Heap<T, A>` with no external OS handles) still requires walking and individually freeing every object before calling `reset` unless an O(1) bulk-invalidation form exists.
+4. `Brand.lean`'s current loop rule requires brand reset across loop edges and forbids allocations from surviving a loop, blocking ordinary loops that build a list, AST, or map incrementally into a long-lived arena.
 
-**Proposed design.** Three surgical additions that preserve 100% of brand soundness ([C5](FOUNDATION.md#c5-dynamic-borrow-brands-and-authority)):
+**Proposed design.** Four surgical additions that preserve 100% of brand soundness ([C5](FOUNDATION.md#c5-dynamic-borrow-brands-and-authority)):
 
 1. **Scoped scratch sub-arenas:** Allow lexically borrowing `&mut Allocator<A>` to open a child bump-arena with a fresh generative local brand `B` that rewinds to its saved mark on block exit (`borrow_scratch` / `with_scratch` form—never using closures, preserving Concrete's permanent no-closures rule via a dedicated block construct like `borrow`). Because `B` cannot escape the lexical block, temporary parser/request/codec allocations reclaim in O(1) at block exit with zero existential brand syntax.
 2. **Argument-inferred brand parameters (matching [OD46](../decisions.md#od46)):** Infer brand parameters solely from checked argument types at the call site, refusing mismatches and refusing uninferable brands. Capabilities remain strictly explicit at every capability-polymorphic call site (preserving the 2026-11-05 capability-argument rule).
-3. **O(1) bulk invalidation for pure-memory arena values:** For a type marker / arena-owned wrapper whose contained types hold no external linear resources (only pure memory, checked structurally by the compiler), permit O(1) arena reset to reclaim the whole region without an O(n) destructor walk, while still refusing to bulk-discard any arena holding files, sockets, grants, or custom `Destroy` resources.
+3. **O(1) bulk invalidation for pure-memory arena values:** Separate pure-memory arena values (`Arena<T, β>` holding no external linear resources such as `File`, `Socket`, grants, or custom `Destroy` types, checked structurally by the compiler) from resource-carrying `Heap<T, β>` values (which still require `NoLinearHeap Γ β`), permitting O(1) `reset` to reclaim pure-memory regions without an O(n) destructor walk while strictly forbidding bulk disposal of external resources.
+4. **Brand-preserving loops alongside brand-resetting loops:** Allow loops that keep an outer allocator's brand fixed without resetting it, so loop bodies can allocate into an outer arena and retain those values after the loop exits (still bounded by C7 heap accounting).
 
-**Philosophy alignment.** Keeps brands generative and sound (rule 1, rule 10), keeps capabilities 100% explicit (rule 11), keeps closures permanently refused ([What Concrete refuses](../PHILOSOPHY.md#what-concrete-refuses)), and makes O(1) arena reclamation practical for real servers and parsers (rule 17).
+**Philosophy alignment.** Keeps brands generative and sound (rule 1, rule 10), keeps capabilities 100% explicit (rule 11), keeps closures permanently refused ([What Concrete refuses](../PHILOSOPHY.md#what-concrete-refuses)), and makes O(1) arena reclamation and arena-building loops practical for real servers and parsers (rule 17).
 
 **Roadmap home.** [R-0718](../../ROADMAP.md#r-0718) (Phase D, Slice 12 allocation, coordinated with `R-0611`, `R-0595`, `R-0624`).
 
 **Owner questions required.**
 1. Lexical block syntax for scoped scratch sub-arenas (closure-free block form).
 2. Extending [OD46](../decisions.md#od46) argument-type inference to allocator brand parameters.
-3. Revising `Q1.4` to allow O(1) bulk reset for pure-memory-only arena values while strictly forbidding bulk disposal of external resources.
+3. Revising `Q1.4` / `Brand.Ok.reset` to allow O(1) bulk reset for pure-memory-only arena values while strictly forbidding bulk disposal of external resources.
+4. Admitting brand-preserving loops alongside brand-resetting loops in `Brand.lean` (C5).
 
 ---
 
@@ -197,6 +206,91 @@ Concrete's architecture provides DST by construction:
 **Philosophy alignment.** Pure tooling win exploiting existing language constraints (rule 11, rule 14, rule 17); adds zero language complexity and zero hidden runtime to production binaries (rule 8).
 
 **Roadmap home.** [R-0717](../../ROADMAP.md#r-0717) (Phase C Slice 11 / 0.1 for `Fs`/Time/Entropy faulting; Phase D Slice 20 for full network/clock faulting; coordinated with `R-0586`, `R-0557`, `R-0595`). No language-rule owner decision required.
+
+---
+
+### <a id="lang-disjoint-borrows"></a>8. Field-disjoint borrows and scoped slice split (`borrow mut xs split at mid`) (`R-0719`)
+
+**Motivation.** `ConcreteSpec/Spec/Own.lean` already records `path : List Projection` on every `Loan`, yet `Own.Compatible` ignores `path` completely and locks the whole root. As a result, routine safe systems code—`f(&mut db.wal, &db.options)`, `f(&mut vm.stack, &mut vm.mem)`, `add(&mut r, r.step)`, or borrowing `row[cur]` alongside `row[prev]` in a PNG scanline decoder—is refused and forces artificial struct splitting or temporary copies.
+
+**Proposed design.**
+- Upgrade `Own.Compatible` in C5 (`R-0611`) so same-root loans are compatible whenever their projection paths diverge at distinct struct fields (`.field f₁ ≠ .field f₂`), while keeping whole-array exclusion on `.index` so no dynamic aliasing proof is needed.
+- Add one closure-free scoped split form for mutable arrays and slices (`borrow mut xs split at mid ... (lo, hi) { ... } [else { ... }]`), granting two disjoint mutable range views over `[0, mid)` and `[mid, len)` within the lexical block with zero lifetimes and purely local proof obligations.
+
+**Philosophy alignment.** Exploits projection information already present in `Own.Loan` (rule 5), keeps references strictly second-class with zero lifetimes (rule 10, AT 4), and directly unblocks the RocksDB, EVM, and PNG showcases (rule 17).
+
+**Roadmap home.** [R-0719](../../ROADMAP.md#r-0719) (Phase C, Slice 7 borrows/arrays, coordinated with `R-0611`).
+
+**Owner questions required.**
+1. Revising whole-root `Own.Compatible` to permit sibling distinct-field projections while keeping `.index` whole-array exclusive.
+2. Exact syntax and out-of-bounds / empty-half contract for `borrow mut xs split at mid`.
+
+---
+
+### <a id="lang-scoped-projections"></a>9. Hylo-style scoped projection functions (single-source view return without lifetimes) (`R-0720`)
+
+**Motivation.** With strictly downward views (`Borrow.lean`), functions cannot return a borrowed view derived from an input view—so std and user code cannot write `Map::get(&m, k) -> Option<&V>` or zero-copy header/chunk extractors, forcing raw `(handle, start, end)` integer offsets everywhere.
+
+**Proposed design.** Allow a scoped projection function whose returned second-class view (or `Option`/`Result` directly wrapping one) is bound lexically to **one designated input view** at the call site inside a `borrow` block:
+- Zero lifetime names, zero lifetime inference/algebra, zero stored references, and zero multi-source lifetime ambiguity.
+- The caller's loan on the designated input view stays active for the exact lexical scope of the returned view and releases cleanly on block exit, preserving C5 loan-tree soundness.
+
+**Philosophy alignment.** Delivers Hylo's mutable-value-semantics ergonomics while strictly preserving Concrete's no-lifetimes, second-class-reference rule ([What Concrete refuses](../PHILOSOPHY.md#what-concrete-refuses), rule 10, AT 4).
+
+**Roadmap home.** [R-0720](../../ROADMAP.md#r-0720) (Phase C, Slice 7 borrows/arrays, feeding Slice 15 maps and zero-copy codecs).
+
+**Owner questions required.**
+1. Signature and call-site syntax for designated single-source projection functions.
+2. Whether `Option<&V>` / `Result<&V, E>` (and `&mut V` equivalents) are admitted directly as lexical projection outcomes.
+3. Interaction with `Borrow.lean` / `Own.lean` loan-tree rules and `R-0611`.
+
+---
+
+### <a id="lang-disarmable-defer"></a>10. Disarmable `defer` / `errdefer` and cleanup-destroy alignment (`R-0721`)
+
+**Motivation.** Three concrete cleanup issues surface immediately in real linear code and the current spec:
+1. With strict linearity, no `?`, and unconditional `defer` ([OD69](../decisions.md#od69), [OD140](../decisions.md#od140)), the ubiquitous fallible-constructor pattern (*allocate A, allocate B, on error clean up A, on success return `(A, B)`*) cannot use `defer` cleanly because moving `A` into `return Ok(...)` conflicts with deferred `destroy(A)`.
+2. `Cleanup.lean` marks `defer` targets consumed *at registration*, whereas `Exec.lean` and `Own.lean` model *late reads at exit*—a live spec contradiction that must be resolved before Slice 9.
+3. `Exec.lean`'s arity-1 `DestroyProtocol` does not match `Brand.lean`'s arity-2 branded release `free(h, a)`, and `Exec.lean`'s `mapDestroyOrder` hardcodes ascending key order, which does not fit `HashMap` (Slice 15).
+
+**Proposed design.**
+- Add an explicit linear `DeferGuard` with `disarm(g)` (or explicit `errdefer`) so rollback cleanup cancels visibly on the success path without `Option<Handle>` boilerplate or hidden control flow.
+- Reconcile `Cleanup.lean` vs `Exec.lean`/`Own.lean` registration/exit semantics into one C1/C5 contract, align `DestroyProtocol` with branded allocator release (`R-0624`), and decouple `HashMap` destruction order from `OrderedMap`'s ascending key order.
+
+**Philosophy alignment.** Keeps cleanup 100% explicit and linear (rule 3, rule 9, AT 1), removes spec contradictions (rule 5), and eliminates nested cleanup pyramids in fallible constructors (rule 17).
+
+**Roadmap home.** [R-0721](../../ROADMAP.md#r-0721) (Phase C, Slice 9 traits/`Destroy`/`defer`, coordinated with `R-0607`, `R-0611`, `R-0624`).
+
+**Owner questions required.**
+1. Explicit linear `DeferGuard` + `disarm(g)` versus `errdefer` spelling and move-out rules.
+2. Resolving `Cleanup.lean` (registration consumption) vs `Exec.lean`/`Own.lean` (late exit read).
+3. `DestroyProtocol` arity / branded-allocator release alignment and `HashMap` destruction contract.
+
+---
+
+### <a id="lang-surface-scalars-const"></a>11. Surface literals, constant arrays, systems/crypto scalars and zero-heap std gaps (`R-0722`)
+
+**Motivation.** Auditing `ConcreteSpec/Spec/Surface0.lean`, `Scalar.lean`, `Const.lean`, and the [Std per slice](../../ROADMAP.md#std-per-slice) table against the adopted showcases reveals four concrete cliffs:
+1. **Unexpressible and audit-hostile literals (`Surface0.lean`):** Raw control/bidi characters are banned AND only 6 escapes (`\n\t\r\\\"\0`) exist—no `\xHH` or `\u{...}`—making ANSI escapes (`"\x1b[31m"` for `grep`) and PNG magic bytes (`"\x89PNG\r\n\x1a\n"`) literally unexpressible. Banning `_` digit separators (`1_000_000_000_000_000_000`), uppercase hex (`0xDEADBEEF`), and redundant matching suffixes (`let x: u8 = 200u8;`) hurts both human auditability and LLM code generation.
+2. **Scalar-only `const` + shift-count mismatch (`Const.lean` vs `Scalar.lean`):** Restricting `const` to `IntTy`/`bool` blocks static lookup tables (SHA-256 `K[64]`, AES S-boxes, Keccak `RC[24]`, CRC32, EVM gas tables, UTF-8 DFAs). Meanwhile `Scalar.lean` allows mixed-type shift counts (`i8 << u8`), whereas `Const.lean` enforces `sameInt`, creating an accidental semantic mismatch.
+3. **Missing systems/crypto scalar primitives (`Scalar.lean`):** EVM `u256`, X25519, Poly1305, and bit-twiddling codecs need `wrapping_neg`, `rotl`/`rotr`, `clz`/`ctz`/`popcnt`, `widening_mul`, and `carrying_add`/`borrowing_sub`. Even with full `Secret<T>` (`R-0596`) deferred post-1.0, retaining one `volatile_zero` primitive in C4/C6 ensures key wipes survive backend dead-store elimination.
+4. **Zero-heap `args` / fixed-buffer `bytes` / wide-int std gaps:** `grep PATTERN FILE` at Slice 11 (0.1, zero heap) needs a non-allocating `args` contract, and EVM/crypto stages at Slices 7–11 need fixed-buffer `bytes` and wide-integer arithmetic contracts.
+
+**Proposed design.** Resolve all four cleanly before Slice 2 locks the lexer and before Slices 7–11 reach the showcases:
+- Extend `Surface0` escapes with `\xHH` and `\u{...}` (keeping raw control/bidi chars and raw `U+FEFF` BOM refused), admit `_` digit separators, uppercase hex, and matching redundant suffixes (and evaluate contextual literal typing without weakening overflow explicitness).
+- Fix the `Const.lean` vs `Scalar.lean` shift-count mismatch and extend `const` to fixed arrays/tables (coordinating with `R-0716`).
+- Add the missing systems/crypto scalar operations and one `volatile_zero` primitive to C2/C4/C6.
+- Specify zero-heap `args`, fixed-buffer `bytes`, and wide-integer std contracts under `R-0071`.
+
+**Philosophy alignment.** Directly improves human and LLM auditability (rule 3, AT 2), removes spec drift between `Const` and `Scalar` (rule 5), and unblocks every adopted zero-heap showcase (rule 17).
+
+**Roadmap home.** [R-0722](../../ROADMAP.md#r-0722) (Phase C: literals before Slice 2; scalars/bytes at Slice 7; `const` arrays at Slice 8; zero-heap `args` at Slice 11; coordinated with `R-0608`, `R-0620`, `R-0071`).
+
+**Owner questions required.**
+1. Literal revisions to [decided-2026-11-08-language-literals](../decisions.md#decided-2026-11-08-language-literals) (`\xHH`, `\u{...}`, `_` separators, uppercase hex, redundant matching suffixes, contextual typing).
+2. Constant arrays/tables under [decided-2026-11-08-constants](../decisions.md#decided-2026-11-08-constants) and shift-count alignment.
+3. Exact systems/crypto scalar intrinsic set and `volatile_zero` observable semantics.
+4. Non-allocating `args` and wide-integer std module contracts.
 
 ---
 
@@ -304,18 +398,18 @@ Downstream modules, callers, and external proofs that depend only on `interface_
 
 ---
 
-### <a id="comp-assurance-diff"></a>7. Semantic assurance diffing (`concrete diff`) and `Concrete.toml` ratchets (extends `R-0201`)
+### <a id="comp-assurance-diff"></a>7. Semantic assurance diffing (`concrete diff`), `Concrete.toml` ratchets and one-command audit dossier (`concrete build --audit`) (extends `R-0201`, `R-0353`)
 
-**Motivation.** For teams and automated reviewers auditing PRs—especially AI-written PRs—a textual `git diff` buries the five questions an auditor actually cares about: Did a function gain a capability? Start allocating? Add `trusted`/`unsafe`/FFI? Increase its stack or heap bound? Drop a proved theorem to unproved?
+**Motivation.** For teams and automated reviewers auditing PRs and releases—especially AI-written code—a textual `git diff` buries the questions an auditor actually cares about: Did a function gain a capability? Start allocating? Add `trusted`/`unsafe`/FFI? Increase its stack or heap bound? Drop a proved theorem to unproved? Meanwhile, Concrete already built world-class assurance machinery for itself (`Premises.lean`, `lean_site.py`, `external.sh` with declaration-fidelity DAG hashing + `con-leche` + `nanoda`) that should be exposed directly to Concrete users as a one-command deliverable.
 
-**Proposed design.** Pull `concrete diff <base> <head>` forward from Phase F to **Slice 10** (the proof surface, keeping full package-scale audit bundles in Phase F):
+**Proposed design.** Pull `concrete diff <base> <head>` and an initial `concrete build --audit` dossier forward from Phase F to **Slice 10/11** (keeping full package-scale release bundles and offline verification in Phase F under `R-0201`/`R-0353`):
 
-- Compare the versioned `concrete facts` JSON outputs (`R-0575`, `R-0593`) of two commits by typed declaration identity (`R-0492`), producing a concise semantic diff of capability changes, allocation changes, trusted/foreign boundary changes, termination/may-abort changes, stack/heap/step bound regressions, and proof-status changes.
-- Support declarative ratchets in `Concrete.toml` (`R-0589`, `R-0576`) so CI automatically refuses unapproved capability expansion, new `trusted` surfaces, or regressed bounds without blocking unrelated refactoring.
+- **Semantic diff & ratchets (`concrete diff`):** Compare the versioned `concrete facts` JSON outputs (`R-0575`, `R-0593`) of two commits by typed declaration identity (`R-0492`), producing a concise semantic diff of capability changes, allocation changes, trusted/foreign boundary changes, termination/may-abort changes, stack/heap/step bound regressions, and proof-status changes. Support declarative ratchets in `Concrete.toml` (`R-0589`, `R-0576`) so CI automatically refuses unapproved capability expansion, new `trusted` surfaces, or regressed bounds without blocking unrelated refactoring.
+- **One-command user audit dossier (`concrete build --audit`):** Reuse `lean_site`, `Premises` and `external.sh` to emit a self-contained HTML/JSON audit bundle per compiled program: capability call graph, per-site trap-freedom and termination status, final-binary stack & heap bounds, trusted/FFI boundary inventory, linked user Lean theorems, exact trust-premise ledger, and a 1-command `nanoda`/`con-leche` independent replay script.
 
-**Philosophy alignment.** Turns [artifact-first auditability](../PHILOSOPHY.md#the-rules) (rule 14) into an everyday code-review superpower.
+**Philosophy alignment.** Turns [artifact-first auditability](../PHILOSOPHY.md#the-rules) (rule 14) into both an everyday code-review superpower and a one-command user product.
 
-**Roadmap home.** Extends `R-0201` (diffing & ratchet increment pulled to Slice 10; full package audit bundle stays in Phase F).
+**Roadmap home.** Extends `R-0201` (diffing, ratchets and initial single-program audit dossier pulled to Slices 10–11; full package audit bundle stays in Phase F) and `R-0353` (offline release-evidence bundle verification).
 
 ---
 
@@ -337,12 +431,49 @@ Downstream modules, callers, and external proofs that depend only on `interface_
 
 ---
 
-## <a id="appendix-early-audit-options"></a>Appendix: Earlier Audit Follow-Up Options (Deferred to Post-Slice-0 Owner Review)
+## Part 3: Compiler/Spec Correctness & Scaling Fixes and Proof/CI Velocity Overhaul
 
-Separate from `R-0711`–`R-0718`, three small surface-language options identified during the codebase audit are recorded here as future owner questions once Slice 0 compiles end-to-end and real programs measure their cost (rule 17):
+### <a id="impl-compiler-spec-fixes"></a>1. Pre-Slice-0 and pre-Slice-3 compiler and spec correctness and scaling fixes (`R-0723`)
 
-1. **Disjoint struct-field borrows and slice split-borrow (`borrow mut xs split at mid`):** Today's whole-root borrow rule (`C5`) freezes the entire root struct or array on any `&mut` borrow, preventing passing `&mut s.a` and `&mut s.b` together or splitting a mutable slice into two disjoint halves without `unsafe`. A clean, lifetime-free extension would allow sibling field borrows on distinct fields of one struct and a primitive `split_at_mut` borrow block for arrays/slices, keeping references strictly second-class.
-2. **Disarmable `defer` (ownership-transfer cancellation):** Under [OD69](../decisions.md#od69) and [OD140](../decisions.md#od140), `defer` registers cleanup on every returning path, which complicates constructor functions that allocate a resource, register rollback cleanup for early-error paths, and then return the resource on the success path. An explicit disarmable guard or move-out cancellation pattern avoids awkward `Option<Handle>` wrappers while keeping cleanup 100% explicit.
-3. **`Surface0` integer-literal ergonomics:** Evaluating whether small literal defaults or contextual literal typing ([literal decision](../decisions.md#decided-2026-11-08-language-literals)) reduce noise in early slices without weakening explicitness at overflow boundaries.
+**Motivation.** Auditing the existing non-legacy Lean code in `Concrete/` and `ConcreteSpec/` surfaced concrete bugs, a mathematically false planned theorem, and algorithmic scaling cliffs that will block Slice 0 certificates or blow up once Slices 2–6 land unless fixed up front:
 
-None of these three items schedules work yet; each waits for real-program pain after Slice 0 compiles and explicit owner disposition.
+1. **Provably false `LLVM.unprint` injectivity plan & `LLVM.emit` defects (`Concrete/Backend/LLVM.lean`, `Concrete/README.md`, `B0a`):** `Concrete/README.md` plans `LLVM.unprint (LLVM.print b) = some b`, which is mathematically false against `LLVM.lean` (`LLVM.print` omits `p.sites` and prints `.add .i8` and `.add .u8` identically). Drop syntactic injectivity in favor of semantic/structured equivalence, make `LLVM.emit : Program → Except String (String × SiteTable)` check `WF` and emit `target triple`/`target datalayout`, and remove silent `args.getD k (.imm .u8 0)` fabrication.
+2. **Front-end `decide` & $O(P^2 \cdot |T|^2)$ traps (`Concrete/Lex.lean`, `Concrete/LL1.lean`, `Concrete/Premises.lean`, `lakefile.toml`, `B0a`):**
+   - Switch `Lex.decodeLoop` from `termination_by` (well-founded recursion, which breaks kernel `by decide` for Slice-0 certificates) to structural fuel like `skipTriviaAux`; make `scanIdentBody`/`stringBody`/`scanDigits` tail-recursive and preserve UTF-8 byte offsets for spans.
+   - Replace `LL1.lean`'s $O(P^2 \cdot |T|^2)$ list-based `conflictFree` (which times out kernel `decide` on real grammars and misses unproductive `A → A` cycles) with a precomputed parse-table verification in $O(P \cdot |T|)$ that also directly supplies `Parse.lean`'s $O(1)$ parse table.
+   - Register `Concrete.LL1.ll1_sound` in `Concrete/Premises.lean` and include `"Concrete"` in `lakefile.toml`'s `defaultTargets`.
+3. **Two `Concrete/BIR.lean` scaling cliffs (`B0a` / before Slice 3):**
+   - Drop `++ env` in `BIR.enter` (currently retains unreachable dead bindings, causing $O(T^2)$ loop runtime in Lean; `Block.wf` already enforces block-local scope).
+   - Before Slice 3, upgrade `BIR.wf` to validate a certificate-style immediate-dominator table (`idom`, matching `R-0583`), eliminating $O(V \times B)$ phi-parameter explosion against LCB's 488-value / 64-block verified cap.
+4. **`Concrete/Backend/LCB.lean`, `Runtime.lean` and shared `Concrete.CFG` (`B0b` / before Slice 2):**
+   - Always lower `div`/`rem`/`shl`/`shr` safety guards in `MIR → BIR`, never inside `LCB.lean`, preserving LCB's 1-to-1 block simulation.
+   - Replace manual `set4`/`bin_steps` proofs with a generic straight-line `seq_sim` macro-op lemma, skip no-op `sub 0`/`add 0` on unsigned types, precompute `regMap`/`incomingMap` ($O(N^3) \to O(N)$), and fail closed on Linux `mulHigh*` until `Verified.reify` supports it.
+   - Replace `Runtime.qbe`'s $O(S)$ linear branch chain with an $O(1)$ indexed `(ptr, len)` site table, and extract a shared `Concrete.CFG` module before writing `MIR.lean` and `Memory.lean` so evaluator/progress/behaviour proofs are not duplicated 3×.
+5. **`ConcreteSpec/Spec/` unification traps (`A2i` / before consuming slices):**
+   - `Hybrid.lean`: fix `Cell.Projected` and `State.Separated` (currently assuming 1 cell = 1 entire `Mem.Block` with distinct `prov`, which breaks struct fields and array elements), fix unbounded `State.set` list consing, and enable `.structured` reads of `bool`/`Unit` once `ISS-0069`/`ISS-0076` owner dispositions land.
+   - `Ident.lean`: fix `KeyConstruct.childScope` inheriting `localPreceding` across unnamed blocks/ifs/loops so inserting one call early in a function does not shift downstream `StableKey`s (with owner sign-off if a registered rule changes).
+   - `Exec.lean`: distinguish fresh `bind` from `assign` (currently both emit `Life.bind`), enforce `Fn.params` `Nodup`, merge unused `Ident.PlaceId` with `Hybrid.Place`, and extend `CallState` with borrow frames/view calls so `OwnErasure` covers calls.
+   - Clear pre-freeze decision conflicts (`OD111`/`OD147` vs `recovered-59-23` packed structs, `HashMap` `Q2.2`/`recovered-59-19` vs Slice 15, `OD39` vs `recovered-59-22` interfaces, and `ISS-0069`/`0070`/`0073`/`0076` holds) with the owner before Core freeze (`R-0567`).
+
+**Roadmap home.** [R-0723](../../ROADMAP.md#r-0723) (Phase B, `B0a`/`B0b` and pre-Slice-3 / `A2i`).
+
+---
+
+### <a id="impl-proof-ci-velocity"></a>2. Proof and CI velocity overhaul without soundness reduction (`R-0724`)
+
+**Motivation.** Measured on `main` (2026-11-22), `ConcreteSpec/Proofs/` is already ~28k LOC (3.6×–4.9× Proof:Spec), nearly half of which (~12k LOC) consists of hand-written `Instance`/`Planted`/`Audit` mutants compiled inside `ConcreteSpec`, `axioms.golden` pins 7,209 lines including internal `_proof_N`/`_simp_N` compiler-generated names, `landing_inventory.lean` is a 2,052-line hand-maintained shadow manifest, and CI/local landings run 5× redundant `lake build`s and 3× pre-push root suites. While *new* governance meta-tooling (`R-0692`, `R-0693`, remaining `R-0710` items) is paused, **simplifying and cutting existing proof/CI drag** is urgent to keep Slices 0–21 fast without sacrificing a single kernel check:
+
+1. **Split `ConcreteSpecEvidence` out of `ConcreteSpec`:** Move all `Instance`/`Planted`/`Audit` fixtures and hand-copied mutant functions out of `ConcreteSpec` into a separate Lake library (never imported by `ConcreteSpec`), and replace hand-copied mutant functions with `R-0699`'s automated mutation harness—cutting exported proof LOC and `con-leche` replay time in half.
+2. **Zero-TCB proof tactics in `ConcreteSpec/Tactics/` + `Own.WellFormed` structure refactor (policy change owner-gated):** Keep `ConcreteSpec/Spec/` 100% plain readable Lean, and—subject to owner approval of narrowing `scripts/proofs/trust_ban.sh`'s lexical extension ban strictly to `Spec/` while Lean's kernel, `con-leche` and `nanoda` still check every elaborated proof term—permit a curated `ConcreteSpec/Tactics/` module (`invert_step`, `crush_option`, `StateTransitionPreservesWF`), and refactor `Own.WellFormed` from an unlabeled 7-tuple `∧` into a named `structure`.
+3. **Stop pinning internal helper names in `axioms.golden` & auto-derive `landing_inventory`:** Retain full-population standard-axiom enforcement in `scripts/proofs/axioms.sh`, but pin only written public theorem statements in `axioms.golden` (coordinated with `R-0703`), and derive the landing inventory directly from Lean environment metadata instead of hand-editing 2,052 lines.
+4. **Build once in CI, shard `con-leche`, and reuse SHA-bound pre-push attestations (hook reuse owner-gated):** Share `.lake/build` across proof CI jobs instead of rebuilding 5×, shard/modularize `con-leche` exports as the tree grows, and—subject to owner approval—let `train.sh check` emit a SHA-bound attestation so `train.sh ci` and `train.sh land` avoid repeating the full root suite 3× on the exact same tree while preserving Rule 8 exact-SHA validation.
+5. **Proportion rule & tier-2 mechanical defaults (policy change owner-gated):** Clarify blocking review findings strictly as soundness bugs, wrong language semantics, false theorem statements, or broken builds/gates (treating mutant/fixture construction style and helper factoring as non-blocking notes even inside `Proofs/`), and separate tier-1 language decisions (always owner-decided) from tier-2 mechanical defaults with an owner veto list (resolving `ISS-0069`/`0070`/`0073`/`0076`/`0064` cleanly, keeping raw `U+FEFF` BOM refused).
+
+**Philosophy alignment.** Eliminates accidental proof/CI friction (rule 15, rule 17) while preserving 100% of Lean kernel checking, external replay (`con-leche`/`nanoda`) and exact-SHA validation (rule 8, rule 12).
+
+**Roadmap home.** [R-0724](../../ROADMAP.md#r-0724) (Phase T, active velocity track alongside `B0a`/`B0b`).
+
+**Owner questions required (for policy items only).**
+1. Narrowing `trust_ban.sh`'s lexical `macro`/`elab` ban to `ConcreteSpec/Spec/` while permitting zero-TCB proof tactics in `ConcreteSpec/Tactics/` (kernel + external replay unchanged).
+2. Permitting SHA-bound local attestation reuse across `train.sh check` → `ci` → `land` (revising the current no-reuse hook rule in `AGENTS.md`).
+3. Adopting the review proportion rule (blocking vs non-blocking notes in `Proofs/`) and tier-2 mechanical-defaults veto workflow (including the five held pre-freeze defaults with BOM kept refused).
