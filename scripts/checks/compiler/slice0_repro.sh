@@ -77,7 +77,7 @@ for side in first second; do
       { tail -50 "$work/$side/build.log" >&2; echo "slice0_repro: $side: build failed" >&2; exit 1; }
     lcb="$d/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
     bounded 30 python3 -I scripts/checks/lib/test_manifest.py rows tests/manifest.tsv > test-rows
-    awk -F '\t' '$3 !~ /^refuse / {print $1}' test-rows > names
+    awk -F '\t' '$3 !~ /^(refuse|llvm) / {print $1}' test-rows > names
     awk -F '\t' '$2 ~ /^bir:/ {sub(/^bir:/, "", $2); print $2}' test-rows | LC_ALL=C sort > manifest-programs
     [ -s names ] || { echo 'slice0_repro: no examples' >&2; exit 1; }
     bounded 120 lake env lean --run scripts/checks/compiler/slice0_bir.lean list | LC_ALL=C sort > emitter-programs
@@ -86,6 +86,7 @@ for side in first second; do
     fi
     emitter=(bounded 120 lake env lean --run scripts/checks/compiler/slice0_bir.lean)
     while IFS=$'\t' read -r name program expect; do
+      if [[ "$expect" == "llvm "* ]]; then continue; fi
       emit_slice0_row tests/manifest.tsv "$program" "$d/out/$name" "$target" "$expect"
       if [[ "$expect" == "refuse "* ]]; then continue; fi
       bounded 120 bash scripts/checks/lib/slice0_native.sh "$d/out/$name" "$lcb"

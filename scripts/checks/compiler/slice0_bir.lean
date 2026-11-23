@@ -142,7 +142,9 @@ def emitSource (path actual : String) (dir : System.FilePath) (expectation : Lis
       IO.eprintln s!"{path}: AST or memory evaluator did not exit with {n}"; return 1
     unless out.bir.sites.isEmpty do
       IO.eprintln s!"{path}: admitted slice-0 additions retained trap sites"; return 1
-    emitArtifact path out.bir out.llvm (out.lcb, out.bir.sites) dir expectation target
+    match Concrete.Stages.prepareLCB out.bir with
+    | .ok lcb => emitArtifact path out.bir (LLVM.module out.bir) (lcb, out.bir.sites) dir expectation target
+    | .error e => IO.eprintln s!"{path}: {e.code}: {e.message}"; return 1
   | _, .error e =>
     IO.eprintln s!"{path}: unexpected refusal {e.code}: {e.message}"; return 1
   | _, .ok _ =>

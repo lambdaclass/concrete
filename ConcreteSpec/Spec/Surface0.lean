@@ -459,7 +459,8 @@ def grammar0 : Grammar Terminal Nonterminal :=
       (.program, [.t .fn, .t .ident, .t .lparen, .t .rparen, .t .arrow, .t .u8,
                    .t .lbrace, .n .body, .t .rbrace]),
       (.body, [.t .let_, .t .ident, .t .colon, .t .u8, .t .equal, .n .expr, .t .semi, .n .body]),
-      (.body, [.t .return_, .n .expr, .t .semi]),
+      (.body, [.t .return_, .n .expr, .t .semi, .n .body]),
+      (.body, []),
       (.expr, [.n .atom, .n .more]),
       (.more, [.t .plus, .n .atom, .n .more]),
       (.more, []),
@@ -471,7 +472,7 @@ theorem grammar0_ll1 : ll1 grammar0 = true := by decide
 
 /-- Productions recognized for the slice refusal, with a flag marking forms outside slice 0
 (decisions.md#decided-slice0-surface-2026-11-06). The unmarked productions also recognize
-bodies that need a control-flow diagnostic. Contextual markers can still be identifiers. -/
+the slice grammar. Contextual markers can still be identifiers. -/
 def refusalProductions : List ((Nonterminal × List (Sym Terminal Nonterminal)) × Bool) :=
   [
     ((.program, [.t .fn, .n .identifier, .t .lparen, .t .rparen, .t .arrow, .n .ty,
@@ -547,12 +548,49 @@ structure Binding where
   rhs : Expr
   deriving Repr
 
+inductive Statement where
+  | bind (binding : Binding) (span : Span)
+  | ret (value : Expr) (span : Span)
+  deriving Repr
+
+def Statement.span : Statement → Span
+  | .bind _ span | .ret _ span => span
+
 structure Program where
   name : String
   nameSpan : Span
-  bindings : List Binding
-  result : Expr
+  body : List Statement
   deriving Repr
+
+inductive BodyError where
+  | fallthrough
+  | unreachable (span : Span)
+
+/-- STMT-9: a slice-0 body must return. STMT-14: the first statement after an
+unconditional return is unreachable and must be refused
+(decided-2026-11-23-slice0-and-roadmap-answers, answer 1a).
+A successful check gives elaboration the bindings and the single final result. -/
+def checkBody (body : List Statement) : Except BodyError (List Binding × Expr) :=
+  go [] body
+where
+  go (bindings : List Binding) : List Statement → Except BodyError (List Binding × Expr)
+    | [] => .error .fallthrough
+    | .bind binding _ :: rest => go (binding :: bindings) rest
+    | [.ret value _] => .ok (bindings.reverse, value)
+    | .ret _ _ :: next :: _ => .error (.unreachable next.span)
+
+section
+private def sampleSpan : Span := ⟨0, 9, 1, 1⟩
+private def deadSpan : Span := ⟨10, 19, 1, 11⟩
+private def sampleReturn : Statement := .ret (.integer 1 none sampleSpan) sampleSpan
+
+example : checkBody [] = .error .fallthrough := rfl
+example : checkBody [sampleReturn] = .ok ([], .integer 1 none sampleSpan) := rfl
+example : checkBody [sampleReturn, .ret (.integer 2 none deadSpan) deadSpan, sampleReturn] =
+    .error (.unreachable deadSpan) := rfl
+example : checkBody [sampleReturn, .bind ⟨"x", deadSpan, .integer 2 none deadSpan⟩ deadSpan] =
+    .error (.unreachable deadSpan) := rfl
+end
 
 end ConcreteSpec.Surface0
 
@@ -645,24 +683,30 @@ mutual
         ExprDerives inner e → AtomDerives (fixed .lparen left :: (inner ++ [fixed .rparen right])) e
 end
 
-inductive BodyDerives : List Token → List Binding → Expr → Prop
-  | ret {src : List Token} {e : Expr} (keyword semi : Span) :
-      ExprDerives src e → BodyDerives (fixed .return_ keyword :: (src ++ [fixed .semi semi])) [] e
-  | bind {head tail : List Token} {rhs result : Expr} {bindings : List Binding}
+/-- A statement extends from its keyword through its terminating semicolon. -/
+def statementSpan (keyword semi : Span) : Span := { keyword with stop := semi.stop }
+
+inductive BodyDerives : List Token → List Statement → Prop
+  | nil : BodyDerives [] []
+  | ret {head tail : List Token} {e : Expr} {rest : List Statement} (keyword semi : Span) :
+      ExprDerives head e → BodyDerives tail rest →
+      BodyDerives (fixed .return_ keyword :: (head ++ fixed .semi semi :: tail))
+        (.ret e (statementSpan keyword semi) :: rest)
+  | bind {head tail : List Token} {rhs : Expr} {rest : List Statement}
       {name : String} (keyword binder colon ty eq semi : Span) :
-      ExprDerives head rhs → BodyDerives tail bindings result →
+      ExprDerives head rhs → BodyDerives tail rest →
       BodyDerives ([fixed .let_ keyword, named name binder, fixed .colon colon, fixed .u8 ty,
                     fixed .equal eq] ++ head ++ [fixed .semi semi] ++ tail)
-        (⟨name, binder, rhs⟩ :: bindings) result
+        (.bind ⟨name, binder, rhs⟩ (statementSpan keyword semi) :: rest)
 
 /-- The payload-level derivation of the slice AST. Grouping affects the tree without adding a
 Core node, and the tail binds each plus to its concrete operator position. -/
 inductive Derives : List Token → Program → Prop
-  | main {body : List Token} {bindings : List Binding} {name : String} {result : Expr}
+  | main {body : List Token} {statements : List Statement} {name : String}
       (keyword binder lp rp arrow ty lb rb : Span) :
-      BodyDerives body bindings result →
+      BodyDerives body statements →
       Derives ([fixed .fn keyword, named name binder, fixed .lparen lp, fixed .rparen rp,
                 fixed .arrow arrow, fixed .u8 ty, fixed .lbrace lb] ++ body ++ [fixed .rbrace rb])
-        ⟨name, binder, bindings, result⟩
+        ⟨name, binder, statements⟩
 
 end ConcreteSpec.Surface0

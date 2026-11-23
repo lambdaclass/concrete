@@ -59,7 +59,11 @@ def validate_expect(path, line, expect):
         return
     if len(parts) == 2 and parts[0] == "refuse" and RULE_RE.fullmatch(parts[1]):
         return
-    fail(path, line, f"invalid expect {expect!r}; use exit N, trap KIND site N, or refuse RULE-ID")
+    if (len(parts) == 6 and parts[0] == "llvm" and parts[3:5] == ["lcb", "refuse"]
+            and parts[1] == "exit" and RULE_RE.fullmatch(parts[5])):
+        validate_expect(path, line, " ".join(parts[1:3]))
+        return
+    fail(path, line, f"invalid expect {expect!r}; use exit N, trap KIND site N, refuse RULE-ID, or llvm exit N lcb refuse RULE-ID")
 
 
 def validate_source(path, line, program, seen_sources):
@@ -133,6 +137,8 @@ def parse(path, text):
         validate_expect(path, line_number, expect)
         if program.startswith("bir:") and expect.startswith("refuse "):
             fail(path, line_number, f"bir: row {ident!r} cannot use refuse; expected exit or trap")
+        if program.startswith("bir:") and expect.startswith("llvm "):
+            fail(path, line_number, "backend-specific CLI expectations require a con: source")
         if not SLICE_RE.fullmatch(slice_name):
             fail(path, line_number, f"invalid slice {slice_name!r}; expected [a-z0-9_]+")
         rows.append(Row(ident, program, expect, slice_name))
@@ -165,7 +171,11 @@ def self_test():
                  "a\tbir:answer\texit 42\tslice0\n"
                  "b\tcon:tests/slice0/ok.con\trefuse SYN-5@1\tslice0\n")
         assert len(parse(tests / "manifest.tsv", valid)) == 2
+        split = valid.replace("refuse SYN-5@1", "llvm exit 42 lcb refuse INTERNAL")
+        assert len(parse(tests / "manifest.tsv", split)) == 2
         bad = [
+            split.replace("exit 42 lcb", "exit 256 lcb"),
+            valid + "c\tbir:other\tllvm exit 42 lcb refuse INTERNAL\tslice0\n",
             valid + "a\tbir:other\texit 0\tslice0\n",
             valid + "c\tbir:other\texit 256\tslice0\n",
             valid + "c\tbir:other\ttrap foo\tslice0\n",

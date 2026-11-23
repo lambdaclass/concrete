@@ -20,25 +20,32 @@ private def build (source dir : System.FilePath) (backend : Option String) : IO 
   let root ← IO.FS.realPath "."
   unless path == root / source do
     return ← report (.syntaxError "source path must be canonical and project-relative")
-  match Stages.compile ⟨source.toString, ← IO.FS.readBinFile path⟩ with
+  let bytes ← IO.FS.readBinFile path
+  let compiled : Except Refusal (Stages.Output × Option LeanCompilerBackend.Verified.Source.Function) := do
+    let out ← Stages.compile ⟨source.toString, bytes⟩
+    let lcb ← if backend == some "llvm" then pure none else some <$> Stages.prepareLCB out.bir
+    return (out, lcb)
+  match compiled with
   | .error e => report e
-  | .ok out =>
+  | .ok (out, lcbInput) =>
     let helper := "scripts/checks/lib/slice0_native.sh"
-    let lcb ← IO.FS.realPath ".lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
-    let asm ← if backend == some "llvm" then pure none else do
-      let host ← IO.Process.run { cmd := "bash", args := #[helper, "target"] }
-      let some target := LCB.Target.ofName host.trimAscii.toString
-        | throw (IO.userError s!"unsupported target: {host}")
-      match LCB.assemble target out.lcb with
-      | .error e => throw (IO.userError e)
-      | .ok text => pure (some text)
+    let (lcb, asm) ← match lcbInput with
+      | none => pure ("-", none)
+      | some f => do
+        let lcb ← IO.FS.realPath ".lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
+        let host ← IO.Process.run { cmd := "bash", args := #[helper, "target"] }
+        let some target := LCB.Target.ofName host.trimAscii.toString
+          | throw (IO.userError s!"unsupported target: {host}")
+        match LCB.assemble target f with
+        | .error e => throw (IO.userError e)
+        | .ok text => pure (lcb.toString, some text)
     IO.FS.createDirAll dir
     if backend != some "lcb" then
-      IO.FS.writeFile (dir / "llvm.ll") out.llvm
+      IO.FS.writeFile (dir / "llvm.ll") (LLVM.module out.bir)
     if let some text := asm then
       IO.FS.writeFile (dir / "lcb_body.s") text
       IO.FS.writeFile (dir / "lcb_rt.ssa") (Runtime.qbe out.bir.sites)
-    let args := #[helper, dir.toString, lcb.toString] ++ backend.toArray
+    let args := #[helper, dir.toString, lcb] ++ backend.toArray
     let child ← IO.Process.output { cmd := "bash", args }
     if !child.stdout.isEmpty then IO.print child.stdout
     if !child.stderr.isEmpty then IO.eprint child.stderr

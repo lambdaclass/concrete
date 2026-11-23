@@ -5519,6 +5519,10 @@ ConcreteSpec.Surface0.Binding.mk.inj
 ConcreteSpec.Surface0.Binding.mk.injEq	propext
 ConcreteSpec.Surface0.Binding.mk.sizeOf_spec	
 ConcreteSpec.Surface0.BodyDerives.brecOn	
+ConcreteSpec.Surface0.BodyError.fallthrough.sizeOf_spec	
+ConcreteSpec.Surface0.BodyError.unreachable.inj	
+ConcreteSpec.Surface0.BodyError.unreachable.injEq	propext
+ConcreteSpec.Surface0.BodyError.unreachable.sizeOf_spec	
 ConcreteSpec.Surface0.CommentBody.brecOn	
 ConcreteSpec.Surface0.DigitRun.brecOn	
 ConcreteSpec.Surface0.Expr.add.inj	
@@ -5565,6 +5569,12 @@ ConcreteSpec.Surface0.SourceFailure.brecOn	propext
 ConcreteSpec.Surface0.Span.mk.inj	
 ConcreteSpec.Surface0.Span.mk.injEq	propext
 ConcreteSpec.Surface0.Span.mk.sizeOf_spec	
+ConcreteSpec.Surface0.Statement.bind.inj	
+ConcreteSpec.Surface0.Statement.bind.injEq	propext
+ConcreteSpec.Surface0.Statement.bind.sizeOf_spec	
+ConcreteSpec.Surface0.Statement.ret.inj	
+ConcreteSpec.Surface0.Statement.ret.injEq	propext
+ConcreteSpec.Surface0.Statement.ret.sizeOf_spec	
 ConcreteSpec.Surface0.StringBody.brecOn	
 ConcreteSpec.Surface0.TailDerives.brecOn	
 ConcreteSpec.Surface0.Terminal.arrow.sizeOf_spec	

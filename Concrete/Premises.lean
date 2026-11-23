@@ -175,6 +175,7 @@ def theorems : List Lean.Name := [
   ``Concrete.Memory.lower_correct,
   ``Concrete.SSA.lower_wf,
   ``Concrete.Stages.compile_of_edges,
+  ``Concrete.Stages.prepareLCB_of_edges,
   ``Concrete.Native.lcb_emit_correct,
   ``Concrete.Native.observed_behaviour,
   ``Concrete.Lex.checkSource_ok_iff,

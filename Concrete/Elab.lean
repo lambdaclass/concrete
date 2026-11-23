@@ -60,7 +60,10 @@ private def expr (scope : Scope) : Expr → State → Except Refusal (Rhs × Sta
 /-- The closed name-resolution table under OD67, OD153 and decisions.md#recovered-59-32.
 The builtin catalog (legacy/docs/spec/types.md#builtin-functions) includes `get_args` under
 revised OD156. OD10 (ARITH-4), decisions.md#decided-project-no-hidden-traps, and OD99 name the
-arithmetic and conversion builtins. The lexer classifies these spellings as identifiers. -/
+arithmetic and conversion builtins. The lexer classifies these spellings as identifiers.
+Legacy builtins whose spelling has not been decided, including `alloc_array`, `free_array`,
+`vec_pop`, `byte_at` and `string_length`, remain ordinary identifiers
+(decided-2026-11-23-slice0-and-roadmap-answers, answer 2a). -/
 private def intrinsicNames : List String :=
   ["abort", "alloc", "destroy", "discard", "sizeof", "alignof", "read_owned", "get_args",
    "wrapping_add", "wrapping_sub", "wrapping_mul",
@@ -81,8 +84,12 @@ private def binding (acc : Scope × State) (b : Binding) : Except Refusal (Scope
 def elaborate (ast : Program) : Except Refusal Output := do
   unless ast.name == "main" do
     throw (.unsupported s!"expected the entry point 'main' at byte {ast.nameSpan.start}")
-  let (scope, s) ← ast.bindings.foldlM binding ([], {})
-  let (rhs, s) ← expr scope ast.result s
+  let (bindings, result) ← (checkBody ast.body).mapError fun
+    | .fallthrough => .checker "reachable end of a u8 function (STMT-9)"
+    | .unreachable span =>
+      .checker s!"unreachable code (STMT-14) at {span.line}:{span.column}, bytes {span.start}..{span.stop}"
+  let (scope, s) ← bindings.foldlM binding ([], {})
+  let (rhs, s) ← expr scope result s
   let (ret, s) := rhs.asAtom s
   return ⟨⟨s.bindings.reverse, ret⟩, s.sites.reverse⟩
 
@@ -113,10 +120,11 @@ private def evalExpr (env : List (String × Int)) : Expr → Except ConcreteSpec
 /-- The AST evaluator reads source names directly and evaluates operands left to right. -/
 def eval (ast : Program) : ConcreteSpec.Outcome :=
   let result : Except ConcreteSpec.Outcome Int := do
-    let env ← ast.bindings.foldlM (fun env b => do
+    let (bindings, value) ← (checkBody ast.body).mapError (fun _ => .stuck .typeError)
+    let env ← bindings.foldlM (fun env b => do
       let value ← evalExpr env b.rhs
       return (b.name, value) :: env) []
-    evalExpr env ast.result
+    evalExpr env value
   match result with
   | .ok n => .exit n.toNat
   | .error e => e

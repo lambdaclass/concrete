@@ -17,7 +17,8 @@ def table0 : Table Terminal Nonterminal :=
   [((.program, some .fn), [t .fn, t .ident, t .lparen, t .rparen, t .arrow, t .u8,
                           t .lbrace, n .body, t .rbrace]),
    ((.body, some .let_), [t .let_, t .ident, t .colon, t .u8, t .equal, n .expr, t .semi, n .body]),
-   ((.body, some .return_), [t .return_, n .expr, t .semi])] ++
+   ((.body, some .return_), [t .return_, n .expr, t .semi, n .body]),
+   ((.body, some .rbrace), [])] ++
   (atoms.map fun look => ((.expr, some look), [n .atom, n .more])) ++
   [((.more, some .plus), [t .plus, n .atom, n .more]),
    ((.more, some .semi), []), ((.more, some .rparen), []),
@@ -64,15 +65,17 @@ private inductive Value where
   | tok (token : Token)
   | expr (expr : Expr)
   | more (tail : List (Span × Expr))
-  | body (bindings : List Binding) (result : Expr)
+  | body (statements : List Statement)
   | program (ast : Program)
 
 private def reduce : Nonterminal → List Value → Except Refusal Value
-  | .program, [_, .tok ⟨.name name, span⟩, _, _, _, _, _, .body bindings result, _] =>
-    .ok (.program ⟨name, span, bindings, result⟩)
-  | .body, [_, .tok ⟨.name name, span⟩, _, _, _, .expr rhs, _, .body bindings result] =>
-    .ok (.body (⟨name, span, rhs⟩ :: bindings) result)
-  | .body, [_, .expr result, _] => .ok (.body [] result)
+  | .program, [_, .tok ⟨.name name, span⟩, _, _, _, _, _, .body statements, _] =>
+    .ok (.program ⟨name, span, statements⟩)
+  | .body, [.tok keyword, .tok ⟨.name name, span⟩, _, _, _, .expr rhs, .tok semi, .body rest] =>
+    .ok (.body (.bind ⟨name, span, rhs⟩ (statementSpan keyword.span semi.span) :: rest))
+  | .body, [.tok keyword, .expr result, .tok semi, .body rest] =>
+    .ok (.body (.ret result (statementSpan keyword.span semi.span) :: rest))
+  | .body, [] => .ok (.body [])
   | .expr, [.expr head, .more tail] =>
     .ok (.expr (tail.foldl (fun lhs (span, rhs) => .add lhs rhs span) head))
   | .more, [.tok op, .expr rhs, .more tail] => .ok (.more ((op.span, rhs) :: tail))
@@ -105,34 +108,19 @@ where
 
 private def refusalTable := makeTable refusalGrammar
 
-private inductive BodyEnding where
-  | empty | fallthrough | returns | afterReturn
-  deriving DecidableEq
-
-private structure Recognition where
-  outsideSlice : Bool := false
-  ending : BodyEnding := .empty
-
 private def nonDecimal (tok : Token) : Bool :=
   match tok.value with
   | .integer _ radix _ => radix != .decimal
   | _ => false
 
 private def recognizeProduction (lhs : Nonterminal) (rhs : List (Sym Terminal Nonterminal))
-    (children : List Recognition) : Except Refusal Recognition := do
+    (children : List Bool) : Except Refusal Bool := do
   let some outside := refusalProductions.lookup (lhs, rhs)
     | throw (.internal "unclassified refusal production")
-  let ending := match lhs, rhs, children.reverse with
-    | .program, _, _ :: body :: _ => body.ending
-    | .body, .t .return_ :: _, tail :: _ =>
-      if tail.ending == .empty then .returns else .afterReturn
-    | .body, _ :: _, tail :: _ =>
-      if tail.ending == .empty then .fallthrough else tail.ending
-    | _, _, _ => .empty
-  return ⟨outside || children.any (·.outsideSlice), ending⟩
+  return outside || children.any id
 
-private def recognizeDecided (input : List Token) : Except Refusal Recognition :=
-  run refusalTable (·.value.kind) (fun tok => .ok { outsideSlice := nonDecimal tok })
+private def recognizeDecided (input : List Token) : Except Refusal Bool :=
+  run refusalTable (·.value.kind) (fun tok => .ok (nonDecimal tok))
     recognizeProduction (fun _ tokens _ => syntaxError tokens)
     (32 * (input.length + 1)) [.read (.n refusalGrammar.start)] (refusalTokens input) []
 
@@ -148,14 +136,9 @@ def parse (input : List Token) : Except Refusal Program := do
     return ast
   | .ok _ => throw (.internal "parser did not produce a program")
   | .error (.syntaxError _) =>
-    let recognized ← recognizeDecided input
-    if recognized.outsideSlice then
+    if ← recognizeDecided input then
       throw (.unsupported "program uses a form outside the slice-0 fragment")
-    match recognized.ending with
-    | .empty | .fallthrough => throw (.checker "reachable end of a u8 function (STMT-9)")
-    -- Pending an owner ruling on the slice-0 classification of statements after return.
-    | .afterReturn => throw (.unsupported "program uses a form outside the slice-0 fragment")
-    | .returns => throw (.internal "in-slice returning body rejected by the slice parser")
+    throw (.internal "in-slice body rejected by the slice parser")
   | .error e => throw e
 
 end Concrete.Parse

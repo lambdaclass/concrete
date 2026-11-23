@@ -170,6 +170,8 @@ rows=$(manifest_rows)
 mkdir -p "$work/ctl"
 first_name= first_program= first_expect=
 while IFS=$'\t' read -r name program expect; do
+  # Backend-specific CLI cases belong to tests.sh; this gate compares paired artifacts.
+  if [[ "$expect" == "llvm "* ]]; then continue; fi
   d="$work/ex/$name"
   t0=$(now_ms)
   emit_slice0_row "${CONCRETE_TEST_MANIFEST:-tests/manifest.tsv}" "$program" "$d" "$target" "$expect"

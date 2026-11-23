@@ -1,6 +1,6 @@
 # One row per test: id, program, expected outcome, owning slice (tab-separated).
 # id: [a-z0-9_]+. program: bir:NAME (Concrete.BIR.Examples) or con:tests/PATH.con.
-# expect: exit N (0..255), trap KIND site N, or refuse RULE-ID. No other outcome forms.
+# expect: exit N (0..255), trap KIND site N, refuse RULE-ID, or llvm exit N lcb refuse RULE-ID.
 # slice: [a-z0-9_]+. A con: path is relative to the repository root and must exist.
 id	program	expect	slice
 answer	bir:answer	exit 42	slice0
@@ -63,8 +63,9 @@ source_shadow_get_args	con:tests/slice0/shadow_get_args.con	refuse CORE-CHECK	sl
 source_removed_builtin_names	con:tests/slice0/removed_builtin_names.con	exit 42	slice0
 source_empty_body	con:tests/slice0/empty_body.con	refuse CORE-CHECK	slice0
 source_fallthrough	con:tests/slice0/fallthrough.con	refuse CORE-CHECK	slice0
-source_after_return	con:tests/slice0/after_return.con	refuse SLICE-0	slice0
+source_after_return	con:tests/slice0/after_return.con	refuse CORE-CHECK	slice0
 source_shadow_wrapping_add	con:tests/slice0/shadow_wrapping_add.con	refuse CORE-CHECK	slice0
 source_shadow_saturating_add	con:tests/slice0/shadow_saturating_add.con	refuse CORE-CHECK	slice0
 source_shadow_checked_add	con:tests/slice0/shadow_checked_add.con	refuse CORE-CHECK	slice0
 source_shadow_try_convert	con:tests/slice0/shadow_try_convert.con	refuse CORE-CHECK	slice0
+source_lcb_value_limit	con:tests/slice0/lcb_value_limit.con	llvm exit 42 lcb refuse INTERNAL	slice0

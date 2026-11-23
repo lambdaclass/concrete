@@ -43,6 +43,52 @@ check() {
   done
 }
 
+# The backend-specific expectation exercises the public driver and its native build policy.
+check_backend_limit() {
+  local path=${1#con:}
+  local d=$2
+  local expect=$3
+  local status rule
+  local project
+  local -a cli
+  project=$(cd "$(dirname "$test_manifest")/.." && pwd)
+  if [ "$project" != "$root" ]; then
+    mkdir -p "$d/project/$(dirname "$path")"
+    cp -- "$project/$path" "$d/project/$path"
+    ln -s "$root/scripts" "$d/project/scripts"
+    ln -s "$root/.lake" "$d/project/.lake"
+    project="$d/project"
+  fi
+  cli=(bash -c 'cd "$1" && shift && exec "$@"' _ "$project" "$root/.lake/build/bin/concrete")
+  read -r _ _ status _ _ rule <<<"$expect"
+  mkdir -p "$d/expected"
+  printf '%s\n' "$status" >"$d/expected/status"
+  : >"$d/expected/stderr"
+  build "$path [llvm]" "$d/llvm-build.log" bounded "$native_secs" "${cli[@]}" \
+    build "$path" -o "$d/llvm" --backend llvm
+  observe "$d/llvm/llvm.exe" "$d/llvm-run" 10 20
+  count=$((count + 1))
+  if judge "$d/expected" "$d/llvm-run"; then
+    echo "ok   $path [llvm]: status $status"
+  else
+    echo "FAIL $path [llvm]: expected status $status and empty streams"
+    fail=1
+  fi
+
+  local rc=0
+  bounded "$native_secs" "${cli[@]}" \
+    build "$path" -o "$d/lcb" --backend lcb \
+    >"$d/lcb.stdout" 2>"$d/lcb.stderr" || rc=$?
+  if [ "$rc" = 1 ] && [ ! -s "$d/lcb.stdout" ] && [ ! -e "$d/lcb" ] &&
+      has_match -E "^$rule: LCB backend resource refusal: [^:]+: [0-9]+ exceeds limit [0-9]+$" <"$d/lcb.stderr"; then
+    echo "ok   $path [lcb]: $(cat "$d/lcb.stderr")"
+  else
+    echo "FAIL $path [lcb]: expected a $rule backend resource refusal, got status $rc"
+    cat "$d/lcb.stderr"
+    fail=1
+  fi
+}
+
 rows=$(manifest_rows)
 
 wrong_expectation() { awk -F '\t' -v OFS='\t' '$1 == "answer" {$3 = "exit 41"} {print}' "$1" >"$1.new"; mv "$1.new" "$1"; }
@@ -90,8 +136,18 @@ if [ "${CONCRETE_TEST_MANIFEST_SKIP_CONTROLS:-0}" != 1 ]; then
   manifest_control wrong-source-refusal "expected refusal CORE-CHECK, got SYNTAX" wrong_source_refusal
 fi
 
+if [[ "$rows" == *$'\t'"llvm exit "* ]] && [ "${CONCRETE_TEST_EMIT_ONLY:-0}" != 1 ]; then
+  build "concrete driver" "$work/cli-build.log" bounded 1800 lake build concrete
+fi
 while IFS=$'\t' read -r name program expect; do
   d="$work/ex/$name"
+  if [[ "$expect" == "llvm "* ]]; then
+    if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" != 1 ]; then
+      check_backend_limit "$program" "$d" "$expect"
+      examples=$((examples + 1))
+    fi
+    continue
+  fi
   emit_slice0_row "$test_manifest" "$program" "$d" "$target" "$expect"
   # Emit-only controls visit every row without a native build.
   if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" = 1 ] || [[ "$expect" == "refuse "* ]]; then continue; fi
