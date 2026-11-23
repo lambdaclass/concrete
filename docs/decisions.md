@@ -352,7 +352,11 @@ A decided proposal moves to `docs/archive/<topic>-<date>/`.
 ## Recent decisions
 
 Each row records a decision and its reason. A language rule itself is its Lean definition in
-[ConcreteSpec/](../ConcreteSpec/), which governs once it lands.
+[ConcreteSpec/](../ConcreteSpec/), which governs once it lands. Older slice numbers, pre-Slice-0
+Core-freeze timing, `B0`/`LP0` staging and upfront JSON schema-freeze notes in the pre-2026-11-22
+bullets below are historical; current scheduling is governed by the
+[2026-11-22 reordering](#decided-2026-11-22-roadmap-reordering) and
+[LLM inference / float-order](#decided-2026-11-22-llm-inference-showcase-and-float-order) records.
 
 - The core statement ([row](#decided-project-core-statement)).
 - Proof infrastructure from the first commit ([row](#decided-project-proof-infrastructure)).
@@ -394,6 +398,11 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 - The November 12 `char` decision ([row](#decided-2026-11-12-char)).
 - The source-backed language answers and limits of the surviving evidence ([row](#decided-2026-11-08-language)).
 - Eleven plan and process decisions: UBSan dropped, a complete adapter theorem, smaller landing scripts, Claude's quota on the critical path, the front end now, one decisions writer, risk-capped reviews, one clones folder, a later no-libc runtime, a compile-speed budget and the termination wording ([row](#decided-2026-11-08-eleven)).
+- Secrets, wiping and F26b deferred after 1.0 ([row](#decided-2026-11-21-secrets-after-1-0)).
+- Compiler stage scaling gate (`R-0550`) and checker-validated fix suggestions (`R-0479`) ([row](#decided-2026-11-22-scaling-and-diagnostic-fixes)).
+- Roadmap reordering (`B0a`/`B0b` split, `LP0` after Slice 5, incremental `A2i` with `A2c` Core freeze and `R-0178` JSON schema freeze at 0.1 / Slice 11, reordered Phases C & D, nightly heavy meta-gates, paused new Phase T meta-tooling) ([row](#decided-2026-11-22-roadmap-reordering)).
+- Local LLM inference showcase (`concrete-llm`), Slice 18/19 float swap, hard spec-first-per-slice rule, and `Concrete.toml` per-function step/complexity budgets ([row](#decided-2026-11-22-llm-inference-showcase-and-float-order)).
+- Explicit composable `[policy]` clauses in `Concrete.toml` with no opaque `"strict"` mode word (`concrete init --strict` emits explicit lines as a template) ([row](#decided-2026-11-22-explicit-policy-clauses)).
 
 <a id="rules-a-decision-changed"></a>
 ## Rules a decision has changed
