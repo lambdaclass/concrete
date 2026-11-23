@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Slice-0 reproducibility gate (Concrete/README.md, gate 8). Two independent builds of the compiler
-# and of LCB, from two source copies with different paths and TMPDIRs, emit every bir: row in the
-# test manifest and build it natively; every stage is compared byte for byte, with no normalization.
+# and of LCB, from two source copies with different paths and TMPDIRs, check every row in the
+# test manifest and build executable rows natively; every stage is compared byte for byte, with no normalization.
 # The two sides share only the pinned Lean toolchain and the dependency SOURCES (each side compiles
 # them itself, with no Lake artifact cache). The comparator is checked by negative controls: a flipped byte, a missing artifact
 # and a differing inventory must each be refused.
@@ -77,24 +77,18 @@ for side in first second; do
       { tail -50 "$work/$side/build.log" >&2; echo "slice0_repro: $side: build failed" >&2; exit 1; }
     lcb="$d/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
     bounded 30 python3 -I scripts/checks/lib/test_manifest.py rows tests/manifest.tsv > test-rows
-    awk -F '\t' '{print $1}' test-rows > names
+    awk -F '\t' '$3 !~ /^refuse / {print $1}' test-rows > names
     awk -F '\t' '$2 ~ /^bir:/ {sub(/^bir:/, "", $2); print $2}' test-rows | LC_ALL=C sort > manifest-programs
     [ -s names ] || { echo 'slice0_repro: no examples' >&2; exit 1; }
     bounded 120 lake env lean --run scripts/checks/compiler/slice0_bir.lean list | LC_ALL=C sort > emitter-programs
     if ! cmp -s manifest-programs emitter-programs; then
       echo 'slice0_repro: test manifest inventory differs from emitter' >&2; exit 1
     fi
+    emitter=(bounded 120 lake env lean --run scripts/checks/compiler/slice0_bir.lean)
     while IFS=$'\t' read -r name program expect; do
-      case "$program" in
-        bir:*)
-          read -r -a expectation <<<"$expect"
-          bounded 120 lake env lean --run scripts/checks/compiler/slice0_bir.lean emit "${program#bir:}" "$d/out/$name" "$target" "${expectation[@]}"
-          bounded 120 bash scripts/checks/lib/slice0_native.sh "$d/out/$name" "$lcb"
-          ;;
-        *)
-          echo "slice0_repro: $name: unsupported program $program" >&2; exit 1
-          ;;
-      esac
+      emit_slice0_row tests/manifest.tsv "$program" "$d/out/$name" "$target" "$expect"
+      if [[ "$expect" == "refuse "* ]]; then continue; fi
+      bounded 120 bash scripts/checks/lib/slice0_native.sh "$d/out/$name" "$lcb"
     done < test-rows
   )
 done

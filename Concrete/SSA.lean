@@ -48,7 +48,8 @@ private def riskyAdd (path : String) (s : State) (x : ConcreteSpec.Var) (a b : O
   let trap : Block := ⟨[], [], .trap site⟩
   let entry : SiteEntry :=
     ⟨.arithmeticOverflow, ⟨site⟩, ⟨span.start, span.stop⟩, ⟨path, span.line, span.column⟩⟩
-  return ⟨next, env, params.reverse, [], (s.blocks.push guard).push trap, s.sites.push entry⟩
+  -- Lookup, like argument-to-parameter pairing, follows the original newest-first order.
+  return ⟨next, env.reverse, params.reverse, [], (s.blocks.push guard).push trap, s.sites.push entry⟩
 
 private def assign (path : String) (s : State) (stmt : Memory.Store) :
     Except Refusal State := do

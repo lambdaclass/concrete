@@ -113,7 +113,9 @@ def llvm (tbl : SiteTable) : String :=
   "  %bad = icmp sle i64 %k, 0\n  br i1 %bad, label %out, label %more\n" ++
   "more:\n  %np = getelementptr i8, ptr %pp, i64 %k\n  %rest = sub i64 %nn, %k\n  br label %loop\n" ++
   "out:\n  ret void\n}\n\n" ++
-  s!"define i32 @main() \{\n" ++
+  -- The artifact gate derives a stack bound from direct control flow. A dense site table
+  -- must not turn this dispatch into an indirect jump on either LLVM target.
+  r#"define i32 @main() "no-jump-tables"="true" {"# ++ "\n" ++
   "entry:\n  %w = call i32 @concrete_body()\n  %ok = icmp ult i32 %w, 256\n" ++
   "  br i1 %ok, label %exit, label %trap\n" ++
   "exit:\n  ret i32 %w\n" ++

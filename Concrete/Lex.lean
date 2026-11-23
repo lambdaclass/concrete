@@ -1819,13 +1819,13 @@ private def nextToken (input : List Nat) (pos : Position) :
     if let some p := punct input then return p
     if let 34 :: cs := input then
       match stringBody cs with
-      | .ok _ => throw (.unsupported s!"string literal at byte {pos.byte}")
+      | .ok (_, rest) => return (.fixed .stringLiteral, input.take (input.length - rest.length), rest)
       | .error _ => throw (.syntaxError s!"malformed string at byte {pos.byte}")
     match byteLiteral input with
     | .error _ => throw (.syntaxError s!"malformed byte literal at byte {pos.byte}")
-    | .ok (some _) => throw (.unsupported s!"byte literal at byte {pos.byte}")
+    | .ok (some (lexeme, _, rest)) => return (.fixed .byteLiteral, lexeme, rest)
     | .ok none =>
-      if (label input).isSome then throw (.unsupported s!"label at byte {pos.byte}")
+      if let some (lexeme, rest) := label input then return (.fixed .label, lexeme, rest)
       else throw (.syntaxError s!"unexpected character at byte {pos.byte}")
 
 private def tokens : Nat → List Nat → Position → Bool → List Token → Except Refusal (List Token)

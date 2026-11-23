@@ -19,6 +19,8 @@
 #     into a variable goes through it, so no producer can grow the gate's shell (which may run
 #     with no address-space cap, see SLICE0_GATE_MEM_GB) without bound.
 root=$(pwd)
+# shellcheck source=scripts/checks/lib/slice0_sources.sh
+source "$root/scripts/checks/lib/slice0_sources.sh"
 work=$(mktemp -d)
 # On every exit, the bounded-run summary (recovered and INCOMPLETE runs, whatever a caller did
 # with a command's stderr) goes to the gate's stdout before the scratch directory is removed, and a

@@ -67,13 +67,6 @@ private inductive Value where
   | body (bindings : List Binding) (result : Expr)
   | program (ast : Program)
 
-private def leaf (tok : Token) : Except Refusal Value :=
-  match tok.value with
-  | .integer _ radix _ =>
-    if radix == .decimal then .ok (.tok tok)
-    else .error (.unsupported s!"non-decimal integer at byte {tok.span.start}")
-  | _ => .ok (.tok tok)
-
 private def reduce : Nonterminal → List Value → Except Refusal Value
   | .program, [_, .tok ⟨.name name, span⟩, _, _, _, _, _, .body bindings result, _] =>
     .ok (.program ⟨name, span, bindings, result⟩)
@@ -89,22 +82,49 @@ private def reduce : Nonterminal → List Value → Except Refusal Value
   | .atom, [_, .expr expr, _] => .ok (.expr expr)
   | _, _ => .error (.internal "grammar and semantic actions disagree")
 
-private def mismatch (expected : Sym Terminal Nonterminal) (input : List Token)
-    (values : List Value) : Refusal :=
-  match expected, input, values with
-  | .t .colon, ⟨.name _, _⟩ :: _, .tok ⟨.name "mut", span⟩ :: _ =>
-    .unsupported s!"mutable binding at byte {span.start}"
-  | .n .body, ⟨.name "if", span⟩ :: _, _ =>
-    .unsupported s!"conditional at byte {span.start}"
-  | _, tok :: _, _ => .syntaxError s!"unexpected token at byte {tok.span.start}"
-  | _, [], _ => .syntaxError "unexpected end of file"
+private def syntaxError (input : List Token) : Refusal :=
+  match input with
+  | tok :: _ => .syntaxError s!"unexpected token at byte {tok.span.start}"
+  | [] => .syntaxError "unexpected end of file"
+
+-- Contextual markers only for refusal recognition. The slice parser still sees the original
+-- identifier tokens. In particular, `let mut: u8` is a binding named `mut`.
+private def refusalTokens : List Token → List Token
+  | keyword :: marker :: binder :: rest =>
+    if keyword.value.kind == .let_ && marker.value == .name "mut" &&
+        binder.value.kind == .ident then
+      keyword :: { marker with value := .fixed .mut_ } :: refusalTokens (binder :: rest)
+    else contextual keyword :: refusalTokens (marker :: binder :: rest)
+  | tail => tail.map contextual
+where
+  contextual (tok : Token) : Token :=
+    match tok.value with
+    | .name "if" => { tok with value := .fixed .if_ }
+    | .name "else" => { tok with value := .fixed .else_ }
+    | _ => tok
+
+private def refusalTable := makeTable refusalGrammar
+
+private def recognizeDecided (input : List Token) : Except Refusal Unit :=
+  run refusalTable (·.value.kind) (fun _ => .ok ()) (fun _ _ => .ok ())
+    (fun _ tokens _ => syntaxError tokens)
+    (32 * (input.length + 1)) [.read (.n refusalGrammar.start)] (refusalTokens input) []
 
 def parse (input : List Token) : Except Refusal Program := do
-  -- Every expansion or reduction of grammar0 can be charged to a nearby consumed token.
-  let value ← run table0 (·.value.kind) leaf reduce mismatch
-    (16 * (input.length + 1)) [.read (.n grammar0.start)] input []
-  match value with
-  | .program ast => return ast
-  | _ => throw (.internal "parser did not produce a program")
+  -- Classify a form as unsupported only after consuming its entire syntax.
+  match run table0 (·.value.kind) (fun tok => .ok (.tok tok)) reduce
+      (fun _ tokens _ => syntaxError tokens)
+      (16 * (input.length + 1)) [.read (.n grammar0.start)] input [] with
+  | .ok (.program ast) =>
+    for tok in input do
+      if let .integer _ radix _ := tok.value then
+        if radix != .decimal then
+          throw (.unsupported s!"non-decimal integer at byte {tok.span.start}")
+    return ast
+  | .ok _ => throw (.internal "parser did not produce a program")
+  | .error (.syntaxError _) =>
+    recognizeDecided input
+    throw (.unsupported "program uses a form outside the slice-0 fragment")
+  | .error e => throw e
 
 end Concrete.Parse

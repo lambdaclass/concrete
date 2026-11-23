@@ -193,3 +193,17 @@ def main (args : List String) : IO UInt32 := do
   | ["loop", dir, t] => withTarget t (emitLoop dir)
   | ["invalid", dir, t] => withTarget t (emitInvalid dir)
   | _ => IO.eprintln "usage: slice0_bir.lean list | emit NAME DIR TARGET EXPECT... | source PATH FILE DIR TARGET EXPECT... | (loop | invalid) DIR TARGET"; return 2
+
+-- A checked-add continuation must carry the newest write to a reused slot.
+private def overwrittenSlot : Concrete.Memory.Program :=
+  ⟨[⟨⟨⟨0⟩, Concrete.Memory.u8Layout⟩, .copy (.lit 1)⟩,
+    ⟨⟨⟨0⟩, Concrete.Memory.u8Layout⟩, .copy (.lit 2)⟩,
+    ⟨⟨⟨1⟩, Concrete.Memory.u8Layout⟩, .add (.lit 1) (.lit 1) ⟨⟨1⟩, ⟨0, 1, 1, 1⟩⟩ none⟩],
+    .var ⟨0⟩⟩
+
+example : Concrete.Memory.run overwrittenSlot = .exit 2 := by rfl
+
+example :
+    (match Concrete.SSA.lower "a.con" overwrittenSlot with
+     | .ok p => Concrete.BIR.run p (p.blocks.length + 1)
+     | .error _ => .stuck) = .exited 2 := by rfl

@@ -91,32 +91,12 @@ if [ "${CONCRETE_TEST_MANIFEST_SKIP_CONTROLS:-0}" != 1 ]; then
 fi
 
 while IFS=$'\t' read -r name program expect; do
-  case "$program" in
-    bir:*)
-      d="$work/ex/$name"
-      read -r -a expectation <<<"$expect"
-      "${emitter[@]}" emit "${program#bir:}" "$d" "$target" "${expectation[@]}"
-      # Emit-only controls cover every row and never reach a native build, even if a planted defect is
-      # accidentally accepted: the control then fails because the child returns zero after the loop.
-      if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" = 1 ]; then continue; fi
-      check "$name" "$d" 10 20
-      examples=$((examples + 1))
-      ;;
-    con:*)
-      d="$work/ex/$name"
-      path=${program#con:}
-      actual="$(dirname "$test_manifest")/${path#tests/}"
-      read -r -a expectation <<<"$expect"
-      "${emitter[@]}" source "$path" "$actual" "$d" "$target" "${expectation[@]}"
-      if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" = 1 ] || [ "${expectation[0]}" = refuse ]; then continue; fi
-      check "$name" "$d" 10 20
-      examples=$((examples + 1))
-      ;;
-    *)
-      echo "tests: $name: unsupported program $program" >&2
-      exit 1
-      ;;
-  esac
+  d="$work/ex/$name"
+  emit_slice0_row "$test_manifest" "$program" "$d" "$target" "$expect"
+  # Emit-only controls visit every row without a native build.
+  if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" = 1 ] || [[ "$expect" == "refuse "* ]]; then continue; fi
+  check "$name" "$d" 10 20
+  examples=$((examples + 1))
 done <<<"$rows"
 if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" = 1 ]; then exit "$fail"; fi
 "${emitter[@]}" loop "$work/ctl/loop" "$target"

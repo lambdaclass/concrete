@@ -418,6 +418,8 @@ open Concrete.LL1
 inductive Terminal where
   | fn | let_ | return_ | ident | integer | reserved | u8
   | lparen | rparen | lbrace | rbrace | arrow | colon | equal | semi | plus
+  | minus | star | slash | percent | stringLiteral | byteLiteral | label
+  | mut_ | if_ | else_
   deriving DecidableEq, Repr
 
 /-- The word terminals used below, the six item-40 reservations
@@ -438,10 +440,12 @@ def word (name : String) : Terminal :=
 
 def punctuation : List (String × Terminal) :=
   [("(", .lparen), (")", .rparen), (r#"{"#, .lbrace), (r#"}"#, .rbrace), ("->", .arrow),
-   (":", .colon), ("=", .equal), (";", .semi), ("+", .plus)]
+   (":", .colon), ("=", .equal), (";", .semi), ("+", .plus),
+   ("-", .minus), ("*", .star), ("/", .slash), ("%", .percent)]
 
 inductive Nonterminal where
   | program | body | expr | more | atom
+  | ty | binder | product | factors | conditional | alternative | elseBody | identifier
   deriving DecidableEq, Repr
 
 /-- decisions.md#decided-project-proof-infrastructure (Slice 0), #od38 and
@@ -464,6 +468,44 @@ def grammar0 : Grammar Terminal Nonterminal :=
       (.atom, [.t .lparen, .n .expr, .t .rparen])] }
 
 theorem grammar0_ll1 : ll1 grammar0 = true := by decide
+
+/-- Syntax recognized for the slice refusal (decisions.md#decided-slice0-surface-2026-11-06).
+The entry-point header is shared with slice 0, except that a type name is allowed where slice 0
+requires `u8`. The productions cover typed mutable bindings and ordinary statement conditionals
+(STMT-1, SYN-9), lexical literals, and checked integer arithmetic (OD10, OD114). They recognize
+whole programs. As later slices implement more productions, those productions belong here too. -/
+def refusalGrammar : Grammar Terminal Nonterminal :=
+  { start := .program
+    prods := [
+      (.program, [.t .fn, .n .identifier, .t .lparen, .t .rparen, .t .arrow, .n .ty,
+                   .t .lbrace, .n .body, .t .rbrace]),
+      (.ty, [.t .u8]), (.ty, [.n .identifier]),
+      (.body, [.t .let_, .n .binder, .t .colon, .n .ty, .t .equal, .n .expr, .t .semi, .n .body]),
+      (.body, [.t .return_, .n .expr, .t .semi, .n .body]),
+      (.body, [.n .conditional, .n .body]),
+      (.body, []),
+      (.binder, [.n .identifier]), (.binder, [.t .mut_, .n .identifier]),
+      -- The slice lexer still treats these contextual markers as names.
+      (.identifier, [.t .ident]), (.identifier, [.t .if_]), (.identifier, [.t .else_]),
+      (.conditional, [.t .if_, .n .expr, .t .lbrace, .n .body, .t .rbrace, .n .alternative]),
+      (.alternative, [.t .else_, .n .elseBody]),
+      (.elseBody, [.t .lbrace, .n .body, .t .rbrace]),
+      (.elseBody, [.n .conditional]),
+      (.alternative, []),
+      (.expr, [.n .product, .n .more]),
+      (.more, [.t .plus, .n .product, .n .more]),
+      (.more, [.t .minus, .n .product, .n .more]),
+      (.more, []),
+      (.product, [.n .atom, .n .factors]),
+      (.factors, [.t .star, .n .atom, .n .factors]),
+      (.factors, [.t .slash, .n .atom, .n .factors]),
+      (.factors, [.t .percent, .n .atom, .n .factors]),
+      (.factors, []),
+      (.atom, [.t .integer]), (.atom, [.n .identifier]),
+      (.atom, [.t .stringLiteral]), (.atom, [.t .byteLiteral]),
+      (.atom, [.t .lparen, .n .expr, .t .rparen])] }
+
+theorem refusalGrammar_ll1 : ll1 refusalGrammar = true := by decide
 
 structure Span where
   start : Nat
@@ -547,6 +589,15 @@ inductive Tokenizes : List Nat → List Nat → List Nat → TokenValue → Prop
       IdentBody suffixInput suffix rest → SuffixAccepted suffix ty →
       Tokenizes (radix.basePrefix ++ digitInput) (radix.basePrefix ++ digits ++ suffix) rest
         (.integer (positionalValue radix digits) radix ty)
+  | string {body spelling decoded rest : List Nat} :
+      StringBody body (decoded, rest) → 34 :: body = spelling ++ rest →
+      Tokenizes (34 :: body) spelling rest (.fixed .stringLiteral)
+  | byte {input spelling rest : List Nat} {decoded : Nat} :
+      ByteLiteral input (spelling, decoded, rest) →
+      Tokenizes input spelling rest (.fixed .byteLiteral)
+  | label {input spelling rest : List Nat} :
+      Label input (spelling, rest) → (∀ bytes value tail, ¬ ByteLiteral input (bytes, value, tail)) →
+      Tokenizes input spelling rest (.fixed .label)
   | punct {input spelling rest : List Nat} {kind : Terminal} :
       LongestMatch punctuationScalars input (some (spelling, rest)) →
       (scalarText spelling, kind) ∈ punctuation → Tokenizes input spelling rest (.fixed kind)

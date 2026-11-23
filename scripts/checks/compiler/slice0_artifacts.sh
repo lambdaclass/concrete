@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Slice-0 artifact gates (PROVISIONAL, Concrete/README.md gates 10, 11 and 12), over every bir:
+# Slice-0 artifact gates (PROVISIONAL, Concrete/README.md gates 10, 11 and 12), over every executable
 # row in tests/manifest.tsv, on the executables slice0_native.sh links:
 #
 # 10. Sanitizers: the LLVM example also built with ASan (slice0_native.sh sanitize: ASan
@@ -170,15 +170,11 @@ rows=$(manifest_rows)
 mkdir -p "$work/ctl"
 first_name= first_program= first_expect=
 while IFS=$'\t' read -r name program expect; do
-  case "$program" in
-    bir:*) ;;
-    *) echo "slice0_artifacts: $name: unsupported program $program" >&2; exit 1 ;;
-  esac
-  if [ -z "$first_name" ]; then first_name=$name first_program=$program first_expect=$expect; fi
   d="$work/ex/$name"
   t0=$(now_ms)
-  read -r -a expectation <<<"$expect"
-  "${emitter[@]}" emit "${program#bir:}" "$d" "$target" "${expectation[@]}"
+  emit_slice0_row "${CONCRETE_TEST_MANIFEST:-tests/manifest.tsv}" "$program" "$d" "$target" "$expect"
+  if [[ "$expect" == "refuse "* ]]; then continue; fi
+  if [ -z "$first_name" ]; then first_name=$name first_program=$program first_expect=$expect; fi
   t1=$(now_ms)
   build "$name" "$d/build.log" bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" "$d" "$lcb"
   t2=$(now_ms)
@@ -202,8 +198,7 @@ done <<<"$rows"
 
 # Control (gate 10): an out-of-bounds load in the body must be reported by ASan.
 c="$work/ctl/asan"
-read -r -a first_expectation <<<"$first_expect"
-"${emitter[@]}" emit "${first_program#bir:}" "$c" "$target" "${first_expectation[@]}"
+emit_slice0_row "${CONCRETE_TEST_MANIFEST:-tests/manifest.tsv}" "$first_program" "$c" "$target" "$first_expect"
 sed -i.orig 's/^define i32 @concrete_body() {$/define i32 @concrete_body_orig() {/' "$c/llvm.ll"
 cat >>"$c/llvm.ll" <<'LL'
 

@@ -1,0 +1,1 @@
+fn main() -> u8 { let abort: u8 = 42; return abort; }

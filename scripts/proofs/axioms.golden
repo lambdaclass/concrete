@@ -5481,12 +5481,20 @@ ConcreteSpec.Surface0.IdentBody.brecOn
 ConcreteSpec.Surface0.IntegerToken.mk.inj	
 ConcreteSpec.Surface0.IntegerToken.mk.injEq	propext
 ConcreteSpec.Surface0.IntegerToken.mk.sizeOf_spec	
+ConcreteSpec.Surface0.Nonterminal.alternative.sizeOf_spec	
 ConcreteSpec.Surface0.Nonterminal.atom.sizeOf_spec	
+ConcreteSpec.Surface0.Nonterminal.binder.sizeOf_spec	
 ConcreteSpec.Surface0.Nonterminal.body.sizeOf_spec	
+ConcreteSpec.Surface0.Nonterminal.conditional.sizeOf_spec	
+ConcreteSpec.Surface0.Nonterminal.elseBody.sizeOf_spec	
 ConcreteSpec.Surface0.Nonterminal.expr.sizeOf_spec	
+ConcreteSpec.Surface0.Nonterminal.factors.sizeOf_spec	
+ConcreteSpec.Surface0.Nonterminal.identifier.sizeOf_spec	
 ConcreteSpec.Surface0.Nonterminal.more.sizeOf_spec	
 ConcreteSpec.Surface0.Nonterminal.ofNat_ctorIdx	
+ConcreteSpec.Surface0.Nonterminal.product.sizeOf_spec	
 ConcreteSpec.Surface0.Nonterminal.program.sizeOf_spec	
+ConcreteSpec.Surface0.Nonterminal.ty.sizeOf_spec	
 ConcreteSpec.Surface0.Position.mk.inj	
 ConcreteSpec.Surface0.Position.mk.injEq	propext
 ConcreteSpec.Surface0.Position.mk.sizeOf_spec	
@@ -5505,21 +5513,31 @@ ConcreteSpec.Surface0.Span.mk.sizeOf_spec
 ConcreteSpec.Surface0.StringBody.brecOn	
 ConcreteSpec.Surface0.TailDerives.brecOn	
 ConcreteSpec.Surface0.Terminal.arrow.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.byteLiteral.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.colon.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.else_.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.equal.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.fn.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.ident.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.if_.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.integer.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.label.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.lbrace.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.let_.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.lparen.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.minus.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.mut_.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.ofNat_ctorIdx	
+ConcreteSpec.Surface0.Terminal.percent.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.plus.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.rbrace.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.reserved.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.return_.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.rparen.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.semi.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.slash.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.star.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.stringLiteral.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.u8.sizeOf_spec	
 ConcreteSpec.Surface0.Token.mk.inj	
 ConcreteSpec.Surface0.Token.mk.injEq	propext
@@ -5660,6 +5678,7 @@ ConcreteSpec.Surface0.instDecidableStringEscape._proof_1
 ConcreteSpec.Surface0.instDecidableStringRaw._proof_1	
 ConcreteSpec.Surface0.instDecidableWhitespace._proof_1	
 ConcreteSpec.Surface0.lineComment_unique	propext
+ConcreteSpec.Surface0.refusalGrammar_ll1	propext
 ConcreteSpec.Surface0.scalarFailure_byte	propext
 ConcreteSpec.Surface0.scalarFailure_eof	Quot.sound propext
 ConcreteSpec.Surface0.scalarFailure_nil	Quot.sound propext

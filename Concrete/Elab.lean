@@ -57,10 +57,13 @@ private def expr (scope : Scope) : Expr → State → Except Refusal (Rhs × Sta
     let (b, s) := right.asAtom s
     return (.add a b site, s)
 
+-- OD67 applies to resolved names. OD153 reserves the intrinsic `abort`.
+private def isIntrinsic (name : String) : Bool := name == "abort"
+
 private def binding (acc : Scope × State) (b : Binding) : Except Refusal (Scope × State) := do
   let (scope, s) := acc
   if b.name == "_" then throw (.unsupported s!"wildcard binding at byte {b.span.start}")
-  if b.name == "main" || (scope.lookup b.name).isSome then
+  if b.name == "main" || isIntrinsic b.name || (scope.lookup b.name).isSome then
     throw (.checker s!"binding shadows '{b.name}' at byte {b.span.start}")
   let (rhs, s) ← expr scope b.rhs s
   let (x, s) := rhs.bind s

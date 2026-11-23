@@ -46,3 +46,10 @@ source_unannotated	con:tests/slice0/unannotated.con	refuse SYNTAX	slice0
 source_suffix	con:tests/slice0/suffix.con	refuse CORE-CHECK	slice0
 source_boundary	con:tests/slice0/boundary.con	exit 255	slice0
 source_reserved	con:tests/slice0/reserved.con	refuse SYNTAX	slice0
+source_intrinsic_shadow	con:tests/slice0/intrinsic_shadow.con	refuse CORE-CHECK	slice0
+source_radix_missing_semi	con:tests/slice0/radix_missing_semi.con	refuse SYNTAX	slice0
+source_malformed_if	con:tests/slice0/malformed_if.con	refuse SYNTAX	slice0
+source_multiply	con:tests/slice0/multiply.con	refuse SLICE-0	slice0
+source_conditional	con:tests/slice0/conditional.con	refuse SLICE-0	slice0
+source_mutable	con:tests/slice0/mutable.con	refuse SLICE-0	slice0
+source_contextual_multiply	con:tests/slice0/contextual_multiply.con	refuse SLICE-0	slice0

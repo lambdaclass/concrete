@@ -31,7 +31,7 @@ cc=("${clean[@]}" "$CONCRETE_SLICE0_CLANG" --no-default-config
 if [ "${3:-}" = sanitize ]; then
   # ASan instruments only functions carrying `sanitize_address`, which clang's C front end adds and
   # the printed IR does not; the sanitizer build adds it to every definition (llvm.san.ll).
-  sed -E 's/^(define .*\)) \{$/\1 sanitize_address {/' llvm.ll >llvm.san.ll
+  sed -E 's/^(define .*) \{$/\1 sanitize_address {/' llvm.ll >llvm.san.ll
   [ "$(grep -c '^define ' llvm.san.ll)" = "$(grep -c '^define .* sanitize_address {$' llvm.san.ll)" ] ||
     { echo 'slice0_native: a definition lacks sanitize_address' >&2; exit 1; }
   san=(-fsanitize=address -fno-sanitize-recover=all)
