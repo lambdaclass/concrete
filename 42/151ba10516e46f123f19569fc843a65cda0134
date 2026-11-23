@@ -1,0 +1,3 @@
+[piece 2 of 3: docs]
+- ROADMAP.md:553: R-0593 requires an “exact missing inequality” for every refused checker obligation, but refusals can concern obligations such as termination or unsupported reasoning that have no single missing inequality. The diagnostic requirement needs a way to represent those cases.
+- ROADMAP.md:658: R-0505 requires exact per-function stack bounds from decoded instructions without allowing an unknown or unbounded result. A finite exact bound cannot always be established, for example for unbounded recursion; the requirement conflicts with R-0575’s provision for reporting why no bound is established.
