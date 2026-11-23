@@ -3,8 +3,20 @@
 No source text supplies rule or example facts. Decision inventories declare documentation rows.
 """
 import json, re, sys
-ROW = re.compile(r"\b(Q\d+(?:\.\d+)+|OD\d+|P\d+[a-z]?|R-\d{4})\b")
+from pathlib import Path
+# Scan the whole row token, including malformed suffixes, up to prose punctuation.
+ROW = re.compile(r"\b(?:Q|OD|P|R-)\d+[\w-]*(?:\.+[\w-]+)*")
 DECLARED = re.compile(r"^\s*(?:- \*\*(\S+?)\*\*|\| *(\S+?) *\|)", re.M)
+
+SOURCE_PATH_RULE = ("ConcreteSpec.Core.SourcePath.", "ConcreteSpec.Core.SourcePathSpan.")
+# ISS-0100 tracks parsing Markdown code spans.
+# Markdown destinations and code spans delimit fragments explicitly. Bare prose
+# citations can also end with sentence punctuation.
+DECISION_CITATION = re.compile(
+    r"""(?:`docs/decisions\.md#([^`\n]*)`|\]\(docs/decisions\.md#([^\s)]*)|"""
+    r"""<docs/decisions\.md#([^\s>]*)|\bdocs/decisions\.md#([^\s`"'<>()[\],;]*))"""
+)
+DECISION_ANCHOR = re.compile(r'<a id="([a-z0-9]+(?:-[a-z0-9]+)*)"></a>')
 
 
 def unique_object(pairs):
@@ -47,6 +59,9 @@ def main(rules_path, row_paths):
     rules = [r for r in records if r["kind"] == "rule"]
     examples = [r for r in records if r["kind"] == "example"]
     declared = {a or b for t in inventories for a, b in DECLARED.findall(t)}
+    decision_anchors = {anchor for path, inventory in zip(row_paths, inventories)
+                        if Path(path).name == "decisions.md"
+                        for anchor in DECISION_ANCHOR.findall(inventory)}
     names = [r["name"] for r in rules]
     for n in sorted({n for n in names if names.count(n) > 1}):
         fails.append(f"rule {n} is registered more than once")
@@ -55,10 +70,22 @@ def main(rules_path, row_paths):
         if r["rev"] < 1: fails.append(f"rule {r['name']} has revision {r['rev']} (revisions start at 1)")
         if not r["doc"].strip(): fails.append(f"rule {r['name']} has no doc comment")
         else:
-            rows = [m.group(1) for m in ROW.finditer(r["doc"])]
+            anchors = {code or link or autolink or prose.removesuffix(".")
+                       for code, link, autolink, prose in DECISION_CITATION.findall(r["doc"])}
+            missing_anchors = sorted(anchors - decision_anchors)
+            if missing_anchors:
+                fails.append(f"rule {r['name']}'s doc comment cites unknown docs/decisions.md anchors: "
+                             + ", ".join(repr(anchor) for anchor in missing_anchors))
+            rows = set(ROW.findall(DECISION_CITATION.sub("", r["doc"])))
             if not rows: fails.append(f"rule {r['name']}'s doc comment cites no decision row")
-            elif not any(x in declared for x in rows):
-                fails.append(f"rule {r['name']}'s doc comment cites no existing decision row ({', '.join(rows)})")
+            missing_rows = sorted(rows - declared)
+            if missing_rows:
+                fails.append(f"rule {r['name']}'s doc comment cites unknown decision rows: {', '.join(missing_rows)}")
+            if r["name"].startswith(SOURCE_PATH_RULE):
+                if "R-0709" not in rows or "R-0709" not in declared:
+                    fails.append(f"rule {r['name']}'s doc comment must cite R-0709")
+                if not anchors:
+                    fails.append(f"rule {r['name']}'s doc comment must cite an existing docs/decisions.md anchor")
     seen = {n: set() for n in names}
     identities = set()
     for e in examples:
