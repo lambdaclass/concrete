@@ -32,8 +32,23 @@ def surface_role(path):
     return None
 
 
+def subprocess_env(command):
+    env = os.environ.copy()
+    # Git can list these variable names without opening a repository.
+    local = subprocess.check_output(["git", "rev-parse", "--local-env-vars"],
+                                    env={"PATH": env.get("PATH", os.defpath)},
+                                    text=True)
+    for name in local.splitlines():
+        env.pop(name, None)
+    if command == "lake":
+        for name in ("LEAN_PATH", "LEAN_SRC_PATH"):
+            env.pop(name, None)
+    return env
+
+
 def snapshot(root, source):
-    names = subprocess.check_output(["git", "ls-files", "--cached", "-z"], cwd=root)
+    names = subprocess.check_output(["git", "ls-files", "--cached", "-z"], cwd=root,
+                                    env=subprocess_env("git"))
     rows = []
     for raw in sorted(set(names.split(b"\0")) - {b""}):
         path = os.fsdecode(raw)
@@ -119,12 +134,8 @@ def classify(records):
 def run(args, source):
     # Source commands can print arbitrary diagnostics. The exporter writes its
     # machine-readable records to a separate private file.
-    env = os.environ.copy()
-    if args[0] == "lake":
-        local = subprocess.check_output(["git", "rev-parse", "--local-env-vars"], text=True)
-        for name in [*local.splitlines(), "LEAN_PATH", "LEAN_SRC_PATH"]:
-            env.pop(name, None)
-    result = subprocess.run(args, cwd=source, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    result = subprocess.run(args, cwd=source, env=subprocess_env(args[0]),
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     if result.returncode:
         raise RuntimeError(f"{' '.join(map(str, args))} failed:\n{os.fsdecode(result.stdout)}")
 

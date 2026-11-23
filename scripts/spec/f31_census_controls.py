@@ -2,10 +2,12 @@
 from concurrent.futures import ThreadPoolExecutor
 from hashlib import sha256
 import json
+import os
 from pathlib import Path
 import shutil
 import tempfile
 from threading import Barrier
+from unittest.mock import patch
 
 from f31_census import generate, publish, run, snapshot, write_jsonl
 
@@ -128,9 +130,37 @@ def publication_control(work):
     print("ISS-0096: one competing run publishes every payload and its digest")
 
 
+def git_environment_control(work):
+    caller = work / "caller"
+    caller.mkdir()
+    run(["git", "init", "-q"], caller)
+    (caller / "Concrete.lean").write_text("-- caller\n", encoding="utf-8")
+    run(["git", "add", "--", "Concrete.lean"], caller)
+    git_dir = caller / ".git"
+    alternate_index = work / "caller-index"
+    shutil.copyfile(git_dir / "index", alternate_index)
+    caller_files = {path: path.read_bytes() for path in git_dir.rglob("*") if path.is_file()}
+    index_contents = alternate_index.read_bytes()
+
+    repo = work / "isolated"
+    repo.mkdir()
+    with patch.dict(os.environ, {"GIT_DIR": str(git_dir), "GIT_INDEX_FILE": str(alternate_index)}):
+        run(["git", "init", "-q"], repo)
+        assert (repo / ".git" / "HEAD").is_file()
+        (repo / "ConcreteSpec.lean").write_text("-- isolated\n", encoding="utf-8")
+        run(["git", "add", "--", "ConcreteSpec.lean"], repo)
+        rows = snapshot(repo, work / "isolated-snapshot")
+        assert [row["file"] for row in rows] == ["ConcreteSpec.lean"], rows
+
+    assert {path: path.read_bytes() for path in git_dir.rglob("*") if path.is_file()} == caller_files
+    assert alternate_index.read_bytes() == index_contents
+    print("Inherited Git paths leave the caller repository and index untouched")
+
+
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory(prefix="f31-controls-") as scratch:
         work = Path(scratch)
         command_control(Path(__file__).resolve().parents[2], work)
         tracked_control(work)
+        git_environment_control(work)
         publication_control(work)
