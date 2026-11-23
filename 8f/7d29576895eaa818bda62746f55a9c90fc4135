@@ -1,0 +1,4 @@
+[piece 10 of 11: scripts]
+- scripts/spec/f31_census.py:125: Git-local environment variables are cleared only for `lake` commands. With an inherited absolute `GIT_DIR` or `GIT_INDEX_FILE`, the controls’ `git init`/`git add` calls can target the caller’s repository or index despite `cwd=repo`. Likewise, `snapshot()` can inventory the wrong index. Sanitize Git-local variables for these Git subprocesses too.
+
+I could not verify owner-decision provenance because the sandbox prevented reading repository files.
