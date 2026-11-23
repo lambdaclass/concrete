@@ -14,6 +14,29 @@ the earlier behaviour, the answer below governs, and the code follows as its new
 
 The shape of Core was approved provisionally on 2026-11-05 ([stage A2a](#decided-2026-11-05)): it binds the design, and the owner freezes Core at stage A2c, after the four design theorems are proved against the proposed `Spec.lean` and the integration stage A2i (2026-11-06) is accepted. The project and architecture decisions are recorded here too, [below](#decided-project).
 
+<a id="decided-2026-11-22-scaling-and-diagnostic-fixes"></a>
+## Decided 2026-11-22: compiler scaling and diagnostic fixes
+
+The coordinator reviewed the Zed language repository's README, STATUS and COMPLEXITY
+documents and proposed (1) a same-run scaling gate for each compiler stage, to catch
+regressions like legacy bug 027's quadratic SSA emission, and (2) refusals that name
+their rule and show a concrete correction after the checker accepts the corrected program.
+
+The owner asked, “what were the ideas from zed that we should add”. The coordinator asked,
+“should I file items 1 and 2 as roadmap tasks (recommended)”, then refined the recommendation
+to “file 1 as a roadmap task, fold the detail from 2 into the diagnostics plan, and drop 3–5”.
+The owner answered, “ok 1 and 2”.
+
+[R-0550](../ROADMAP.md#r-0550) owns the pass/fail scaling gate from the slice where each stage
+first exists. This decision leaves the [2026-11-07 speed-tracking decision](#decided-2026-11-07-performance)
+and its [2026-11-08 update](#decided-2026-11-08-speed-target) in force. Absolute wall time stays
+report-only under that policy. [R-0479](../ROADMAP.md#r-0479) owns the corrected-source
+suggestions and their acceptance controls, refining the
+[2026-11-06 diagnostics decision](#decided-project-diagnostics-2026-11-06).
+
+The proposals to refuse instead of trapping, put cost limits in source, and add units or taint
+labels were recommended against and are not adopted.
+
 <a id="decided-2026-11-21-secrets-after-1-0"></a>
 ## Decided 2026-11-21: secrets after 1.0
 
