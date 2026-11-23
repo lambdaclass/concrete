@@ -1,0 +1,1 @@
+fn main() -> u8 { let get_args: u8 = 42; return get_args; }

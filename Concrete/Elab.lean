@@ -57,13 +57,22 @@ private def expr (scope : Scope) : Expr → State → Except Refusal (Rhs × Sta
     let (b, s) := right.asAtom s
     return (.add a b site, s)
 
--- OD67 applies to resolved names. OD153 reserves the intrinsic `abort`.
-private def isIntrinsic (name : String) : Bool := name == "abort"
+/-- The closed name-resolution table under OD67, OD153 and decisions.md#recovered-59-32.
+The builtin catalog (legacy/docs/spec/types.md#builtin-functions) includes `get_args` under
+revised OD156. OD10 (ARITH-4), decisions.md#decided-project-no-hidden-traps, and OD99 name the
+arithmetic and conversion builtins. The lexer classifies these spellings as identifiers. -/
+private def intrinsicNames : List String :=
+  ["abort", "alloc", "destroy", "discard", "sizeof", "alignof", "read_owned", "get_args",
+   "wrapping_add", "wrapping_sub", "wrapping_mul",
+   "saturating_add", "saturating_sub", "saturating_mul",
+   "checked_add", "checked_sub", "checked_mul", "checked_div", "checked_rem", "checked_shl",
+   "checked_shr", "checked_neg",
+   "try_convert", "truncate", "reinterpret", "trunc", "round", "floor", "ceil"]
 
 private def binding (acc : Scope × State) (b : Binding) : Except Refusal (Scope × State) := do
   let (scope, s) := acc
   if b.name == "_" then throw (.unsupported s!"wildcard binding at byte {b.span.start}")
-  if b.name == "main" || isIntrinsic b.name || (scope.lookup b.name).isSome then
+  if b.name == "main" || intrinsicNames.contains b.name || (scope.lookup b.name).isSome then
     throw (.checker s!"binding shadows '{b.name}' at byte {b.span.start}")
   let (rhs, s) ← expr scope b.rhs s
   let (x, s) := rhs.bind s

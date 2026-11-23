@@ -1,0 +1,1 @@
+fn main() -> u8 { let checked_add: u8 = 42; return checked_add; }

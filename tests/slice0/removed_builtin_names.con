@@ -1,0 +1,1 @@
+fn main() -> u8 { let free: u8 = 2; let unwrap: u8 = free; let print: u8 = unwrap; let println: u8 = print; let append: u8 = println + 40; return append; }

@@ -469,41 +469,46 @@ def grammar0 : Grammar Terminal Nonterminal :=
 
 theorem grammar0_ll1 : ll1 grammar0 = true := by decide
 
-/-- Syntax recognized for the slice refusal (decisions.md#decided-slice0-surface-2026-11-06).
-The entry-point header is shared with slice 0, except that a type name is allowed where slice 0
-requires `u8`. The productions cover typed mutable bindings and ordinary statement conditionals
-(STMT-1, SYN-9), lexical literals, and checked integer arithmetic (OD10, OD114). They recognize
-whole programs. As later slices implement more productions, those productions belong here too. -/
+/-- Productions recognized for the slice refusal, with a flag marking forms outside slice 0
+(decisions.md#decided-slice0-surface-2026-11-06). The unmarked productions also recognize
+bodies that need a control-flow diagnostic. Contextual markers can still be identifiers. -/
+def refusalProductions : List ((Nonterminal × List (Sym Terminal Nonterminal)) × Bool) :=
+  [
+    ((.program, [.t .fn, .n .identifier, .t .lparen, .t .rparen, .t .arrow, .n .ty,
+                 .t .lbrace, .n .body, .t .rbrace]), false),
+    ((.ty, [.t .u8]), false),
+    ((.ty, [.n .identifier]), true),
+    ((.body, [.t .let_, .n .binder, .t .colon, .n .ty, .t .equal, .n .expr, .t .semi, .n .body]), false),
+    ((.body, [.t .return_, .n .expr, .t .semi, .n .body]), false),
+    ((.body, [.n .conditional, .n .body]), false),
+    ((.body, []), false),
+    ((.binder, [.n .identifier]), false),
+    ((.binder, [.t .mut_, .n .identifier]), true),
+    ((.identifier, [.t .ident]), false),
+    ((.identifier, [.t .if_]), false),
+    ((.identifier, [.t .else_]), false),
+    ((.conditional, [.t .if_, .n .expr, .t .lbrace, .n .body, .t .rbrace, .n .alternative]), true),
+    ((.alternative, [.t .else_, .n .elseBody]), false),
+    ((.elseBody, [.t .lbrace, .n .body, .t .rbrace]), false),
+    ((.elseBody, [.n .conditional]), false),
+    ((.alternative, []), false),
+    ((.expr, [.n .product, .n .more]), false),
+    ((.more, [.t .plus, .n .product, .n .more]), false),
+    ((.more, [.t .minus, .n .product, .n .more]), true),
+    ((.more, []), false),
+    ((.product, [.n .atom, .n .factors]), false),
+    ((.factors, [.t .star, .n .atom, .n .factors]), true),
+    ((.factors, [.t .slash, .n .atom, .n .factors]), true),
+    ((.factors, [.t .percent, .n .atom, .n .factors]), true),
+    ((.factors, []), false),
+    ((.atom, [.t .integer]), false),
+    ((.atom, [.n .identifier]), false),
+    ((.atom, [.t .stringLiteral]), true),
+    ((.atom, [.t .byteLiteral]), true),
+    ((.atom, [.t .lparen, .n .expr, .t .rparen]), false)]
+
 def refusalGrammar : Grammar Terminal Nonterminal :=
-  { start := .program
-    prods := [
-      (.program, [.t .fn, .n .identifier, .t .lparen, .t .rparen, .t .arrow, .n .ty,
-                   .t .lbrace, .n .body, .t .rbrace]),
-      (.ty, [.t .u8]), (.ty, [.n .identifier]),
-      (.body, [.t .let_, .n .binder, .t .colon, .n .ty, .t .equal, .n .expr, .t .semi, .n .body]),
-      (.body, [.t .return_, .n .expr, .t .semi, .n .body]),
-      (.body, [.n .conditional, .n .body]),
-      (.body, []),
-      (.binder, [.n .identifier]), (.binder, [.t .mut_, .n .identifier]),
-      -- The slice lexer still treats these contextual markers as names.
-      (.identifier, [.t .ident]), (.identifier, [.t .if_]), (.identifier, [.t .else_]),
-      (.conditional, [.t .if_, .n .expr, .t .lbrace, .n .body, .t .rbrace, .n .alternative]),
-      (.alternative, [.t .else_, .n .elseBody]),
-      (.elseBody, [.t .lbrace, .n .body, .t .rbrace]),
-      (.elseBody, [.n .conditional]),
-      (.alternative, []),
-      (.expr, [.n .product, .n .more]),
-      (.more, [.t .plus, .n .product, .n .more]),
-      (.more, [.t .minus, .n .product, .n .more]),
-      (.more, []),
-      (.product, [.n .atom, .n .factors]),
-      (.factors, [.t .star, .n .atom, .n .factors]),
-      (.factors, [.t .slash, .n .atom, .n .factors]),
-      (.factors, [.t .percent, .n .atom, .n .factors]),
-      (.factors, []),
-      (.atom, [.t .integer]), (.atom, [.n .identifier]),
-      (.atom, [.t .stringLiteral]), (.atom, [.t .byteLiteral]),
-      (.atom, [.t .lparen, .n .expr, .t .rparen])] }
+  { start := .program, prods := refusalProductions.map Prod.fst }
 
 theorem refusalGrammar_ll1 : ll1 refusalGrammar = true := by decide
 

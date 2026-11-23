@@ -1,0 +1,1 @@
+fn main() -> u8 { let sizeof: u8 = 42; return sizeof; }

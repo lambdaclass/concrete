@@ -1,0 +1,1 @@
+fn main() -> u8 { let saturating_add: u8 = 42; return saturating_add; }
