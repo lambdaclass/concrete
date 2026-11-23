@@ -1,0 +1,2 @@
+[piece 2 of 2: docs]
+- docs/proposals/LANGUAGE_AND_COMPILER_ENHANCEMENTS.md:186: Reporting every path reaching a `#[may_not_terminate]` callee as unbounded incorrectly treats permission as evidence of divergence. The owner’s no-hidden-traps decision explicitly says otherwise, and permits unused permissions, so an annotated callee can still have a proved finite bound. Preserve established bounds and report missing evidence as “not established.” This revises the decided reporting semantics without owner approval.
