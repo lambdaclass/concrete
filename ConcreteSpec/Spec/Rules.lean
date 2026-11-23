@@ -13,7 +13,8 @@ modules here. An entry records identity, not approval or a second definition of 
 
 `scripts/spec/rules.sh` reads entries and documentation from the built Lean environment. It
 requires a declared decision-row citation and separate elaborated accepted and refused proofs
-for each entry. Example links use Lean declaration names, the identities used by the site.
+for each entry. Source-path and source-path span rules cite R-0709 and an existing decision
+anchor. Example links use Lean declaration names, the identities used by the site.
 -/
 
 namespace ConcreteSpec.Core
@@ -28,7 +29,10 @@ def registeredRules : List RuleId :=
    ⟨``Leak.ByteBoundSound, 1⟩, ⟨``Leak.ByteBoundSoundOptional, 1⟩, ⟨``Leak.ReportSound, 1⟩,
    ⟨``Leak.FiniteActionPermitted, 1⟩, ⟨``Leak.FiniteSequencePermitted, 1⟩] ++ SourcePath.Reason.inOrder.map SourcePath.Reason.ruleId ++
   [SourcePath.Project.Reason.caseCollision, .fileDirectoryConflict, .duplicate].map
-    SourcePath.Project.Reason.ruleId
+    SourcePath.Project.Reason.ruleId ++
+  [⟨``SourcePathSpan.FilePresent, 1⟩, ⟨``SourcePathSpan.OrderedOffsets, 1⟩,
+   ⟨``SourcePathSpan.EndInSource, 1⟩, ⟨``SourcePathSpan.LineMatches, 1⟩,
+   ⟨``SourcePathSpan.ColumnMatches, 1⟩]
 
 /-- Acceptance evidence applies the owning rule's judgment to a concrete input.
 The exporter recognizes this proposition's elaborated type, without unfolding the wrapper. -/
@@ -459,6 +463,74 @@ theorem duplicateRefused : RuleRefused NoDuplicate duplicateFile := by
 
 end SourcePath.Project.Registry
 
+namespace SourcePathSpan.Registry
+
+/-- The admitted path `other.con` is absent from the singleton tab project. -/
+def missingPath : SourcePath :=
+  ⟨SourceText.ofBytes [111, 116, 104, 101, 114, 46, 99, 111, 110], by decide⟩
+
+/-- Instance: The tab file is present at its exact path. -/
+theorem filePresentAccepted : RuleAccepted FilePresent
+    (tabProject, mainSourcePath) := by
+  unfold RuleAccepted FilePresent
+  decide
+
+/-- Instance: The requested path is absent even though the admitted project contains a file. -/
+theorem filePresentRefused : RuleRefused FilePresent
+    (tabProject, missingPath) := by
+  unfold RuleRefused FilePresent
+  decide
+
+/-- Instance: Offsets in ascending order describe a half-open range. -/
+theorem offsetsAccepted : RuleAccepted OrderedOffsets
+    (2, 3) := by
+  unfold RuleAccepted OrderedOffsets
+  decide
+
+/-- Instance: Reversed offsets do not describe a range. -/
+theorem offsetsRefused : RuleRefused OrderedOffsets
+    (3, 2) := by
+  unfold RuleRefused OrderedOffsets
+  decide
+
+/-- Instance: The end of the tab span is at EOF. -/
+theorem endAccepted : RuleAccepted EndInSource
+    (tabSource, 3) := by
+  unfold RuleAccepted EndInSource
+  decide
+
+/-- Instance: The next offset is outside the tab file. -/
+theorem endRefused : RuleRefused EndInSource
+    (tabSource, 4) := by
+  unfold RuleRefused EndInSource
+  decide
+
+/-- Instance: The tab span starts on line one. -/
+theorem lineAccepted : RuleAccepted LineMatches
+    (tabSpan, tabSource) := by
+  unfold RuleAccepted LineMatches
+  decide
+
+/-- Instance: Line two cannot name the start of the tab span. -/
+theorem lineRefused : RuleRefused LineMatches
+    ({ tabSpan with line := 2, line_pos := by decide }, tabSource) := by
+  unfold RuleRefused LineMatches
+  decide
+
+/-- Instance: The column counts the preceding tab as one byte. -/
+theorem columnAccepted : RuleAccepted ColumnMatches
+    (tabSpan, tabSource) := by
+  unfold RuleAccepted ColumnMatches
+  decide
+
+/-- Instance: Column two fails to count the preceding tab. -/
+theorem columnRefused : RuleRefused ColumnMatches
+    ({ tabSpan with col := 2, col_pos := by decide }, tabSource) := by
+  unfold RuleRefused ColumnMatches
+  decide
+
+end SourcePathSpan.Registry
+
 /-- Complete conformance links, populated alongside the owning rules. -/
 def registeredRuleExamples : List RuleExample :=
   [⟨``ConstsPermitted, ``ConstRegistry.accepted⟩,
@@ -528,6 +600,16 @@ def registeredRuleExamples : List RuleExample :=
    ⟨``SourcePath.Project.NoFileDirectoryConflict, ``SourcePath.Project.Registry.fileDirectoryAccepted⟩,
    ⟨``SourcePath.Project.NoFileDirectoryConflict, ``SourcePath.Project.Registry.fileDirectoryRefused⟩,
    ⟨``SourcePath.Project.NoDuplicate, ``SourcePath.Project.Registry.duplicateAccepted⟩,
-   ⟨``SourcePath.Project.NoDuplicate, ``SourcePath.Project.Registry.duplicateRefused⟩]
+   ⟨``SourcePath.Project.NoDuplicate, ``SourcePath.Project.Registry.duplicateRefused⟩,
+   ⟨``SourcePathSpan.FilePresent, ``SourcePathSpan.Registry.filePresentAccepted⟩,
+   ⟨``SourcePathSpan.FilePresent, ``SourcePathSpan.Registry.filePresentRefused⟩,
+   ⟨``SourcePathSpan.OrderedOffsets, ``SourcePathSpan.Registry.offsetsAccepted⟩,
+   ⟨``SourcePathSpan.OrderedOffsets, ``SourcePathSpan.Registry.offsetsRefused⟩,
+   ⟨``SourcePathSpan.EndInSource, ``SourcePathSpan.Registry.endAccepted⟩,
+   ⟨``SourcePathSpan.EndInSource, ``SourcePathSpan.Registry.endRefused⟩,
+   ⟨``SourcePathSpan.LineMatches, ``SourcePathSpan.Registry.lineAccepted⟩,
+   ⟨``SourcePathSpan.LineMatches, ``SourcePathSpan.Registry.lineRefused⟩,
+   ⟨``SourcePathSpan.ColumnMatches, ``SourcePathSpan.Registry.columnAccepted⟩,
+   ⟨``SourcePathSpan.ColumnMatches, ``SourcePathSpan.Registry.columnRefused⟩]
 
 end ConcreteSpec.Core

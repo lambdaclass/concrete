@@ -20,7 +20,8 @@ F26 is the historical inventory ID for the remaining security piece (F26b) after
 landed separately. F26b covers leakage and release of secret information (declassification).
 F26b and F27 wiping are outside active scope
 under the [after-1.0 decision](../../docs/decisions.md#decided-2026-11-21-secrets-after-1-0). The active scope decreased from
-51 to 50 pieces, with 22 landed. The historical headline retains all 54 rows.
+51 to 50 pieces. With F03p and F04p landed, 24 active pieces are landed.
+The historical headline retains all 54 rows.
 
 | Addition | Placement and record |
 | --- | --- |
@@ -44,9 +45,15 @@ Law and still requires a control from its qualification reservation. F03p checks
 source-path rule for its defining module, unique registration, positive revision, and linked
 acceptance and refusal theorems from Spec.Rules. Each registry reservation names the expected
 rule-defining module and requires cited acceptance and refusal theorems for the same uniquely
-registered rule authored in that module. F03p's partial row checks local and project-wide admission and their registered rules.
-Span projection and source binding remain. F03p requires named spec declarations for both
-before landing, and F04p requires the corresponding named Laws and planted control evidence.
+registered rule authored in that module. F03p checks local and project-wide admission,
+span projection, source binding and their registered rules. F04p requires the named
+span projection and source binding agreement Laws. Each agreement Law covers safety
+and progress together. The directional corollaries are helpers derived from the same
+contract, so they share its witnesses and planted controls. The inventory requires
+each agreement Law to apply its named contract to the real implementation. Each
+required control must be a theorem with an explicit `Planted` doc tag whose statement
+negates that contract applied to the corresponding mutant. Named equivalence proofs
+connect lookup and each implementation guard to the five registered span predicates.
 Shared modules have piece-specific evidence. Migration namespaces
 reserve names for evidence produced by the migration. If a name or defining module changes, update the completion requirements in
 the same patch. Partial rows retain the references for their remaining work.
