@@ -12,7 +12,169 @@ The chapters state these decided rules now (owner revision, 2026-11-03), before 
 ([ROADMAP.md](../ROADMAP.md#phases), phases B–D); until then, where a chapter still describes
 the earlier behaviour, the answer below governs, and the code follows as its new-compiler slice lands.
 
-The shape of Core was approved provisionally on 2026-11-05 ([stage A2a](#decided-2026-11-05)): it binds the design, and the owner freezes Core at stage A2c, after the four design theorems are proved against the proposed `Spec.lean` and the integration stage A2i (2026-11-06) is accepted. The project and architecture decisions are recorded here too, [below](#decided-project).
+The shape of Core was approved provisionally on 2026-11-05 ([stage A2a](#decided-2026-11-05)): it binds the design, and the owner freezes Core at stage A2c, after the four design theorems are proved against the proposed `Spec.lean` and the integration stage A2i (2026-11-06) is accepted (freeze timing revised to 0.1 on [2026-11-22](#decided-2026-11-22-roadmap-reordering)). The project and architecture decisions are recorded here too, [below](#decided-project).
+
+<a id="decided-2026-11-22-explicit-policy-clauses"></a>
+## Decided 2026-11-22: explicit composable `[policy]` clauses (no opaque `"strict"` mode)
+
+Status: decided
+Source: owner
+
+Provenance: owner session `c3e1f8a9-7be6-4542-83c1-3bc288de18e3` (2026-11-22). The owner asked, verbatim:
+
+~~~text
+and we could have some type of name like strict policy? what do you think
+~~~
+
+The assistant presented two options reasoned from [PHILOSOPHY.md](PHILOSOPHY.md) (Rules 2, 3, 4, 12)
+and `R-0606` (no opaque ladder of levels), recommending Option 1:
+- **Option 1 (recommended):** Keep `[policy]` in `Concrete.toml` as explicit, composable typed
+  clauses mapping 1-to-1 to `concrete facts` fields (such as `no_alloc`, `no_blocking`, `no_ffi`,
+  `no_trusted`, `no_assume`, `no_may_not_terminate`, `no_unused_permissions`, `max_stack_bytes`,
+  `require_step_bounds` and per-function step/complexity budgets), keeping `predictable` only where
+  already decided in `R-0576`, and using `concrete init --strict` solely as a generator that writes
+  those explicit lines into `Concrete.toml` rather than an opaque `"strict"` mode word.
+- **Option 2:** Two orthogonal named presets (`predictable` and `strict`), always expanded in
+  `concrete facts` and never weakenable.
+
+Owner reply, verbatim:
+
+~~~text
+ok do 1
+~~~
+
+Scope and boundaries: `[policy]` in `Concrete.toml` (`R-0576`, `R-0589`) uses explicit composable
+clauses with no opaque `"strict"` policy word; `concrete init --strict` may emit explicit `[policy]`
+lines as a starting template, and modules may tighten individual clauses without weakening them.
+Exact TOML field spellings remain subject to `R-0589`/`R-0576` schema review.
+
+<a id="decided-2026-11-22-llm-inference-showcase-and-float-order"></a>
+## Decided 2026-11-22: local LLM inference showcase, Slice 18/19 float swap, and spec-first per slice
+
+Status: decided
+Source: owner
+
+Provenance: owner session `c3e1f8a9-7be6-4542-83c1-3bc288de18e3` (2026-11-22). After discussing
+Zig + Metal local LLM inference engines (`nanoattention`), MAP-Elites kernel search, and whether
+working on slices before the whole-language freeze is safe, the owner asked what to add to the
+roadmap and whether an LLM inference engine should be one of the first things built.
+
+The assistant recommended:
+1. Keep Slices 0–11 (0.1) untouched and maintain strict **spec-first per vertical slice** (never
+   build Slice N in the compiler ahead of Slice N's own Lean rules in `ConcreteSpec`, while not
+   blocking Slice 0 on later slices' foundation specs).
+2. **Swap Slice 18 and Slice 19 in Phase D:** move `f32`/`f64` from Slice 19 to **Slice 18** and
+   move function values + `R-0601` contracts from Slice 18 to **Slice 19**, leaving Slices 0–17
+   (0.1, `Vec`, `HashMap`, RocksDB and earliest `LD`) unchanged.
+3. **Adopt a new Phase-D showcase — local LLM inference engine (`concrete-llm`) at Slice 18:**
+   Stage 1 pure-Concrete CPU minimal model (`ByteSafe` GGUF/Safetensors parser, `HeapArray` KV
+   cache, proved zero-alloc decode loop under `[policy] predictable`, `Network: NONE`); Stage 2
+   Concrete + Metal Apple Silicon runtime (`MappedFile` zero-copy weights, Metal FFI via
+   `Kept<H>`, linear GPU buffer/command-buffer typestate, layout-verified host/shader struct
+   headers, and `concrete facts` proving `Network: NONE`, narrowed read-only `Fs` weights, and 0
+   heap allocations per token).
+4. **Add three Phase-D/E roadmap tasks:** `R-0725` (read-only `MappedFile` `mmap` grant +
+   layout-verified C/Metal shader struct headers, owner-gated), `R-0726` (`f16`/`bf16` storage &
+   conversions + explicit fixed-width SIMD vectors, owner-gated), and `R-0727` (Phase-E Verified
+   MAP-Elites kernel and LCB schedule superoptimization gated by Lean equivalence / `R-0299`
+   translation validation with `concrete facts` as diversity axes).
+
+Owner reply, verbatim:
+
+~~~text
+ok add everthing to the roadmap based on what we takd
+~~~
+
+Follow-up owner clarification on the spec-first-per-slice rule, verbatim:
+
+~~~text
+add this, we need to make sure we don't work on things that don't have a spec
+we don't need to do the full spec of the whole language first but we do need to try thigns
+and can we add the inference thing
+~~~
+
+Follow-up owner reply on enforcing per-function step/complexity budgets in `Concrete.toml` `[policy]`
+and `concrete diff` ratchets (keeping cost limits strictly out of Concrete source syntax per the
+[scaling and diagnostic-fixes decision](#decided-2026-11-22-scaling-and-diagnostic-fixes)), verbatim:
+
+~~~text
+ok concrete.toml should also have the the step thing
+~~~
+
+Scope and boundaries: this decision swaps Slice 18 (`f32`/`f64`) ahead of Slice 19 (function values
++ `R-0601`), adopts `concrete-llm` as a Phase-D showcase, establishes the hard **spec-first per
+vertical slice** rule (no compiler implementation for constructs lacking their slice's Lean spec,
+without waiting for the full-language spec before trying real slices), permits `Concrete.toml`
+`[policy]` and `concrete diff` ratchets (`R-0576`, `R-0201`) to enforce per-function step/complexity
+budgets from Slice 10 (with no cost annotations in Concrete source syntax), and authorizes
+scheduling `R-0725`–`R-0727` in [ROADMAP.md](../ROADMAP.md) (added with the follow-up enhancements
+proposal). It decides **no** language syntax, float/SIMD semantics, or grant rules: `R-0725`,
+`R-0726`, and `R-0608`'s float observation contract all remain explicitly owner-gated before
+entering `ConcreteSpec`.
+
+<a id="decided-2026-11-22-roadmap-reordering"></a>
+## Decided 2026-11-22: roadmap reordering and just-in-time foundation
+
+Status: decided
+Source: owner
+
+Provenance: owner session `3ae15b85-7ff7-4f07-b363-ab6fedc3326a` (2026-11-22). After reviewing the
+draft `docs/proposals/LANGUAGE_AND_COMPILER_ENHANCEMENTS.md` proposal and the scheduled task rows in
+[ROADMAP.md](../ROADMAP.md), the owner asked, verbatim:
+
+~~~text
+also would you change the order of anything in the roadmap?
+~~~
+
+The assistant recommended five roadmap ordering changes:
+
+1. **Unblock Slice 0 from the full `A2i → A2c` Core freeze:** build Slices 0–5 on an unfrozen Core,
+   pulling `C1–C10` foundation contracts in just-in-time at the slice that exercises them, and
+   freeze Core (`A2c`) at **0.1** (after `file-copy` and `grep`) once real programs test the
+   interactions.
+2. **Split `B0` and move `LP0` after Slice 5:** split `B0` into `B0a` (working spine: lex/parse →
+   elaborate → Core → MIR → BIR → LLVM + Lean oracle match + per-lowering proofs + unfrozen `0-dev`
+   `concrete facts`) and `B0b` (in parallel with Slices 2–4: unverified LCB, `R-0579` adapter proof,
+   ASan, fuzzer); move `LP0` (`R-0572`) from after Slice 1 to after Slice 5 so LCB native codegen is
+   proved once on branches, loops, calls, stack frames and the multi-frame trap ABI; defer
+   `con-leche`/`nanoda` double-replay (`R-0702`), spec mutation (`R-0699`), two-machine
+   reproducible-build diffing (`R-0577`) and freezing the JSON schema (`R-0178`) from per-PR Slice-0
+   blockers to nightly / 0.1.
+3. **Reorder Phase C (Slices 6–11, formerly 6–18):** keep Slices 0–5, then land structs + enums/`match`
+   + `Option`/`Result`/`checked_*` (Slice 6), borrows + arrays + `R-0712` bitmask/modulo/shift rules
+   (Slice 7), minimal modules & `const` (Slice 8), generics + traits/`Destroy`/`defer` (Slice 9),
+   the proof surface + `R-0495` safe-subset `concrete extract-lean` (once subset approved) + `R-0201`
+   `concrete diff` (Slice 10), and authority + console/UTF-8 + files (`Fs`) + `R-0717` `concrete sim`
+   (`Fs`/Time/Entropy leg) ending at **0.1 (`file-copy`, `grep`, Core freeze `A2c`, frozen JSON
+   schema)** (Slice 11). DWARF (`R-0587`) and the formatter move after 0.1.
+4. **Reorder Phase D (Slices 12–21, formerly 19–28):** put allocation (Slice 12), `HeapArray`
+   (Slice 13), `Vec`/`String` (Slice 14), `OrderedMap`/`HashMap` (Slice 15), raw pointers/`trusted`
+   (Slice 16) and FFI/RocksDB (Slice 17, earliest `LD` / `legacy/` deletion) ahead of function
+   values + `R-0601` contracts (Slice 18), followed by floats (Slice 19), clock/network/web server
+   (Slice 20) and concurrency (Slice 21).
+5. **Pull high-leverage capabilities forward and pause new Phase T meta-tooling:** pull `R-0712`
+   (Slice 7), `R-0495` safe subset (Slice 10), `R-0201` `concrete diff` (Slice 10) and `R-0717`
+   `concrete sim` `Fs` leg (Slice 11 / 0.1) forward; pause new `Phase T` meta-tooling (`R-0692`,
+   `R-0693`, remaining `R-0710` items) unless a real bug hits `main`.
+
+Owner reply, verbatim:
+
+~~~text
+yes draft and change it directly and we will merge it
+~~~
+
+Scope and boundaries: this decision revises the project's phase gating, slice sequence, gate timing
+and Phase T prioritization in [ROADMAP.md](../ROADMAP.md), superseding the earlier pre-Slice-0
+freeze/LP0-at-1/Phase-C-and-D ordering records (which remain below as history). All `C1–C10`
+foundation contracts and interaction proofs complete in `ConcreteSpec` before Core freezes (`A2c`)
+at Slice 11 (separate from later Slice-12/16 compiler and surface increments); Time/clock simulation
+belongs to Slice 20 where clock/time lands, so Slice 11 covers `Fs`/Entropy simulation; and the
+accompanying enhancements proposal (`R-0711`–`R-0727`) lands in its own follow-up branch. This
+decision decides **no** language syntax or semantic rule: every owner-gated language row (`R-0713`–`R-0716`,
+`R-0718`, `R-0495` functional-model subset, `R-0399` concurrency, and all open ODs) remains
+explicitly owner-gated. It waives no soundness guarantee; it changes when heavy qualification gates
+run (nightly / 0.1 rather than per-PR Slice-0 blockers) while keeping Lean kernel checking active on
+every slice.
 
 <a id="decided-2026-11-22-scaling-and-diagnostic-fixes"></a>
 ## Decided 2026-11-22: compiler scaling and diagnostic fixes
