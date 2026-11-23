@@ -1,0 +1,4 @@
+[piece 2 of 5: docs]
+- ROADMAP.md:591: Body-only edits do not generally permit downstream codegen reuse: callers may contain inlined code or specialized generic bodies. Changing a callee’s implementation while preserving its interface hash must invalidate those artifacts, or rebuilding can retain the old behavior. Require reuse to respect implementation dependencies, including `body_hash`.
+
+The previous memory-effects finding is addressed in R-0711. Repository reads failed because the sandbox could not start, so I could not verify the proposal’s corresponding edit or independently check owner-decision provenance.
