@@ -200,7 +200,7 @@ and owned by the task that removes its structural class.
 
 ## The queue
 
-**Active:** `B0a` (compiling real Slice-0 `.con` files through LLVM and LCB with per-lowering proofs and Lean oracle matching on an unfrozen Core) and the incremental `A2i` spec pieces needed by Slices 0–5 ([2026-11-22 reordering](docs/decisions.md#decided-2026-11-22-roadmap-reordering)). What waits for the owner is [listed in the decisions](docs/decisions.md#waiting-for-the-owner). **Next:** `B0b` (LCB/ASan/fuzzer in parallel) and Slices 1–5 → `LP0`, then Slices 6–11 ending in `A2c` Core freeze and **0.1**. The legacy move (T0–T2) has landed; A1 and A2b feed A2i. A2a (provisional approval of the Core shape, decision row Q9.19) is done: the owner approved every Core row on 2026-11-05 ([record](docs/decisions.md#decided-2026-11-05)); the approval binds the design without freezing it.
+**Active:** `B0a` (compiling real Slice-0 `.con` files through unverified LLVM and LCB builds with per-lowering proofs and Lean oracle matching on an unfrozen Core) and the incremental `A2i` spec pieces needed by Slices 0–5 ([2026-11-22 reordering](docs/decisions.md#decided-2026-11-22-roadmap-reordering)). What waits for the owner is [listed in the decisions](docs/decisions.md#waiting-for-the-owner). **Next:** `B0b` (cross-backend comparison, `R-0579` BIR → LCB-IR adapter proof, ASan and the front-end differential fuzzer, in parallel with early slices) and Slices 1–5 → `LP0`, then Slices 6–11 ending in `A2c` Core freeze and **0.1**. The legacy move (T0–T2) has landed; A1 and A2b feed A2i. A2a (provisional approval of the Core shape, decision row Q9.19) is done: the owner approved every Core row on 2026-11-05 ([record](docs/decisions.md#decided-2026-11-05)); the approval binds the design without freezing it.
 
 | row | goal | tasks | done when |
 |---|---|---|---|
@@ -600,7 +600,7 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
 
 | task | objective | done when | depends on |
 |---|---|---|---|
-| R-0495 | Claims on Core: exact claims, coverage, solver errors and external-proof interfaces | wrong propositions and substitutions are rejected through independent replay; before building proof-order item 4, obtain owner approval of its supported subset, representation and residual assumptions; R-0574 owns Slice-10 obligation stability and the remaining safe-subset approval question | D |
+| R-0495 | Claims on Core: exact claims, coverage, solver errors and external-proof interfaces | wrong propositions and substitutions are rejected through independent replay; before building proof-order item 4, obtain owner approval of its supported subset, representation and residual assumptions; R-0574 owns Slice-10 obligation stability and the remaining safe-subset approval question | **Slice 10 safe-subset `concrete extract-lean`:** [Slice 10 proof surface](#vertical-slices) and owner approval of the subset, representation and residual assumptions. **Full R-0495 scope:** Phase D (Slice 12+). |
 | R-0460 | Obligation sufficiency, with hypothesis provenance | each admitted obligation is proved to suffice | R-0495 |
 | R-0473 | One typed contract record with capture-safe substitution | all consumers read the one record | R-0495 |
 | R-0482 | Separate identities for model, implementation, proposition and contract | the relation and the substitution matrix are checked | R-0473 |

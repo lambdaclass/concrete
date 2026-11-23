@@ -49,6 +49,22 @@ Owner reply, verbatim:
    [November 22 roadmap reordering](#decided-2026-11-22-roadmap-reordering).
    The `R-0579` adapter proof, ASan and the differential fuzzer stay in `B0b`.
 
+<a id="pending-phase-t-real-bug-exception"></a>
+**Phase T tooling, awaiting owner clarification.** Item 2 of the
+[November 22 direction](#decided-2026-11-22-direction) freezes new meta-tooling and permits
+only the three named simplifications to existing proof tooling. Item 5 of the
+[November 22 roadmap reordering](#decided-2026-11-22-roadmap-reordering) pauses new Phase T
+meta-tooling “unless a real bug hits `main`”. The owner still needs to confirm whether that
+exception applies.
+
+<a id="pending-slice-0-parser-prerequisite"></a>
+**Slice 0 parser prerequisite, awaiting owner clarification.** Item 1 of the
+[November 22 direction](#decided-2026-11-22-direction) calls for spec work just in time per
+slice. The [written grammar decision](#decided-2026-11-08-written-grammar) and
+[R-0622](../ROADMAP.md#r-0622) require owner approval and Lean encoding of the full surface
+grammar before building the Slice 0 parser. The owner still needs to decide whether the
+full grammar remains a prerequisite or grammar approval and encoding can proceed per slice.
+
 <a id="decided-2026-11-22-direction"></a>
 ## Decided 2026-11-22: compile slice 0 first
 
@@ -461,6 +477,8 @@ Links only; each item's text lives where it is linked.
 5. [Literal rule options before Slice 2 and language ideas after Slice 0](../ROADMAP.md#vertical-slices).
 6. [Boolean-to-integer conversion](../ISSUES.tsv) (ISS-0069).
 7. [Lean extraction subset, representation and assumptions](../ROADMAP.md#the-queue) (R-0495 / R-0574).
+8. [Phase T tooling freeze and the real-bug exception](#pending-phase-t-real-bug-exception).
+9. [Full surface grammar or per-slice grammar for the Slice 0 parser](#pending-slice-0-parser-prerequisite).
 
 A decided proposal moves to `docs/archive/<topic>-<date>/`.
 
