@@ -1,0 +1,2 @@
+[piece 3 of 3: docs]
+- docs/proposals/LANGUAGE_AND_COMPILER_ENHANCEMENTS.md:343: `memory(none)` also requires proof of zero observable writes. An empty-`with()` function can take an owned `Heap<T>` by value, overwrite its payload without reading it, and return it. The listed input/read conditions do not exclude this observable store, so emitting `memory(none)` would misrepresent its effects and permit incorrect optimization. Require evidence excluding both observable reads and writes. ([LLVM reference](https://llvm.org/docs/LangRef.html#function-attributes))
