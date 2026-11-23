@@ -5,6 +5,10 @@ The Spec build job runs the same gate. It builds the checkout and loads its elab
 `ConcreteSpec` and `Concrete` roots. Compiler evidence is used for F30. On main the report describes main. On a candidate it describes
 what that candidate would land.
 
+The 54-piece inventory records existing evidence and outstanding work. The
+[roadmap reordering](../../docs/decisions.md#decided-2026-11-22-roadmap-reordering) governs slice
+scheduling. The inventory validates the evidence for rows that claim landing.
+
 The inventory checks the structure of landing evidence, and two independent reviewers judge whether it covers the piece’s required behavior.
 
 The [Lean plan](../../scripts/spec/landing_inventory.lean) owns the piece list and its evidence.

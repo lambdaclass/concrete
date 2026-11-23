@@ -51,6 +51,10 @@ uncommitted tree is never reviewed, and the script warns when it is dirty.
 | 5 | blocked: a piece could not be reviewed, even after the retry |
 | 6 | recorded locally, but the notes ref could not be pushed |
 
+## What blocks a review
+
+Apply the [review proportion rule](../AGENTS.md#review-proportion).
+
 ## What each round reviews
 
 - **Round 1** reviews the full diff from the base to `HEAD`.
