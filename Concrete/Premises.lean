@@ -14,6 +14,7 @@ import Lean.PrettyPrinter
 import Lean.Util.CollectAxioms
 import Concrete.BIR.Progress
 import Concrete.Backend.LCB
+import Concrete.Backend.LLVM
 import Concrete.Lex
 
 namespace Concrete.Premises
@@ -152,6 +153,30 @@ def theorems : List Lean.Name := [
   ``Concrete.BIR.ScalarBridge.intValue_valid,
   ``Concrete.BIR.hasTy_int_core,
   ``Concrete.Backend.LCB.Proof.enc_int_core,
+  -- F31 scalar immediate encoding and decimal tokens.
+  ``Concrete.Backend.LLVM.pattern_agrees,
+  ``Concrete.Backend.LLVM.pattern_fits,
+  ``Concrete.Backend.LLVM.pattern_roundTrip,
+  ``Concrete.Backend.LLVM.operand_field,
+  ``Concrete.Backend.LLVM.ret_immediate_field,
+  ``Concrete.Backend.LLVM.bin_fields,
+  ``Concrete.Backend.LLVM.binOvf_fields,
+  ``Concrete.Backend.LLVM.trunc_field,
+  ``Concrete.Backend.LLVM.phi_fields,
+  ``Concrete.Backend.LLVM.Assembly.parse_render_i32_return,
+  ``Concrete.Backend.LLVM.Assembly.parse_render_i32_result,
+  ``Concrete.Backend.LLVM.Assembly.parse_render_i8_add,
+  ``Concrete.Backend.LLVM.operand_token,
+  ``Concrete.Backend.LLVM.operand_parse,
+  ``Concrete.Backend.LLVM.operand_roundTrip,
+  ``Concrete.Backend.LLVM.moduleItems_inventory,
+  ``Concrete.Backend.Runtime.llvmItems_inventory,
+  ``Concrete.Backend.LLVM.Assembly.parse_render,
+  ``Concrete.Backend.LLVM.Assembly.inventory_render,
+  ``Concrete.Backend.LLVM.module_inventory,
+  ``Concrete.Backend.Runtime.llvm_inventory,
+  ``Concrete.Backend.LLVM.render_immediate_fields,
+  ``Concrete.Backend.LLVM.render_immediate,
   ``Concrete.BIR.decode_encode,
   ``Concrete.BIR.run_progress,
   ``Concrete.BIR.behaviour_diverges_iff,

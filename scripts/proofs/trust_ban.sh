@@ -4,7 +4,7 @@
 #
 #   I  every proof module, recursively enumerated, imports exactly the modules defining its
 #      directly referenced constants (including anonymous examples); see scripts/proofs/IMPORTS.md.
-#   E  no constant of ANY kind the ConcreteSpec library declares (definitions, instances and
+#   E  no constant of ANY kind either library declares (definitions, instances and
 #      generated helpers included, not only theorems) depends transitively on sorryAx, on
 #      Lean.ofReduceBool or Lean.ofReduceNat (what native_decide and `decide +native` reduce through),
 #      on Lean.trustCompiler, or on a generated `._native.` axiom;
@@ -126,7 +126,7 @@ GAP=$(comm -23 "$TMP/compiler-modules.txt" <(sort -u "$TMP/compiler-imported.txt
 # under the same key allow-list. A dependency is a `require` of a git URL pinned to a full commit,
 # which lake-manifest.json (beside the lakefile) records at the same URL and commit: the spec may
 # import nothing outside itself (S), so a dependency reaches only the compiler. This ban's scope is
-# both libraries; the compiler's imports additionally include Lean and its pinned backend.
+# both libraries; the compiler may import from both libraries, Lean, and the pinned backend.
 lake_options() {
   python3 - "$1" <<'EOF'
 import sys, tomllib

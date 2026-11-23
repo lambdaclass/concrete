@@ -30,9 +30,11 @@ export LC_ALL=C
 command -v lake >/dev/null || { echo "error: $CHECK_NAME needs Lean's lake on PATH (elan)" >&2; exit 2; }
 LAKE="$(command -v lake)"
 
-spec_modules() {
-  { echo ConcreteSpec.lean; find ConcreteSpec -name '*.lean'; } | sed -E 's#\.lean$##; s#/#.#g' | sort -u
+source_modules() {
+  { echo "$1.lean"; find "$1" -name '*.lean'; } | sed -E 's#\.lean$##; s#/#.#g' | sort -u
 }
+spec_modules() { source_modules ConcreteSpec; }
+
 prune_orphans() {
   local build="${1:-.lake/build}"
   local d
@@ -43,7 +45,7 @@ prune_orphans() {
   # the enumeration must succeed, include the root module, and name only modules whose source exists.
   spec_modules > "$TMP/prune-modules.txt" || { echo "prune_orphans: listing spec modules failed" >&2; return 1; }
   [ -f Concrete.lean ] && [ -d Concrete ] || return 1
-  { echo Concrete.lean; find Concrete -name '*.lean'; } | sed -E 's#\.lean$##; s#/#.#g' | sort -u >> "$TMP/prune-modules.txt" \
+  source_modules Concrete >> "$TMP/prune-modules.txt" \
     || { echo "prune_orphans: listing compiler modules failed" >&2; return 1; }
   grep -qxF ConcreteSpec "$TMP/prune-modules.txt" || { echo "prune_orphans: the source list lacks ConcreteSpec" >&2; return 1; }
   grep -qxF Concrete "$TMP/prune-modules.txt" || return 1
