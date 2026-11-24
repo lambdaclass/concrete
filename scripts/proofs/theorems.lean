@@ -40,8 +40,8 @@ annotations and the let `nondep` flag (lean4export shares one index among expres
 `Expr` BEq, which ignores exactly those, so the export legitimately carries whichever spelling it
 met first).
 
-NEGATIVE CONTROLS. A declaration made in this file itself under the namespace `ConcreteSpecControl`
-is part of the population too. The checks insert their deliberately bad declarations (a `sorry`, a
+NEGATIVE CONTROLS. Declarations in this file under `ConcreteSpecControl` or `ConcreteControl`
+belong to the corresponding package population. The checks insert their deliberately bad declarations (a `sorry`, a
 `native_decide`, an extra axiom) at the marker line below, in a temporary copy, and require the run to
 fail; nothing else is ever declared under that namespace.
 -/
@@ -54,7 +54,7 @@ open Lean
 def inPopulation (env : Environment) (n : Name) (pkg : Name := `ConcreteSpec) : Bool :=
   match env.getModuleIdxFor? n with
   | some i => (env.header.moduleNames[i.toNat]?.map (·.getRoot)) == some pkg
-  | none => (`ConcreteSpecControl).isPrefixOf (privateToUserName n)
+  | none => (Name.mkSimple (toString pkg ++ "Control")).isPrefixOf (privateToUserName n)
 
 def nm : Name → String
   | .anonymous => ""

@@ -1009,7 +1009,7 @@ theorem encodeInt_rep (t : IntTy) (n : Int) :
     (encodeInt linuxX8664 t n).map sliceByte =
       ConcreteSpec.Rep.encodeScalar (.int (sliceIntTy t) n) := by
   cases t <;>
-    simp [encodeInt, ordered, linuxX8664, intBytes, toBits, IntTy.bits, sliceIntTy,
+    simp [encodeInt, ordered, linuxX8664, intBytes, toBits, toBitsAtWidth, IntTy.bits, sliceIntTy,
       ConcreteSpec.Rep.encodeScalar, ConcreteSpec.IntTy.bits, List.map_map, sliceByte,
       Function.comp_def, leBytes_rep]
 

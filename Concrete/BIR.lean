@@ -234,14 +234,15 @@ theorem wrap (t : IntTy) (n : Int) :
     Concrete.BIR.wrap t n = ConcreteSpec.Core.wrap (toCore t) n := by
   cases t <;>
     dsimp only [Concrete.BIR.wrap, ConcreteSpec.Core.wrap, ConcreteSpec.Core.ofBits,
-      ConcreteSpec.Core.toBits, toCore, IntTy.min, IntTy.bits, IntTy.signed,
+      ConcreteSpec.Core.toBits, ConcreteSpec.Core.toBitsAtWidth, toCore,
+      IntTy.min, IntTy.bits, IntTy.signed,
       ConcreteSpec.Core.IntTy.bits, ConcreteSpec.Core.IntTy.signed] <;>
     simp <;> (try split) <;> omega
 
 /-- Representation lemma: the existing unsigned bit-pattern formula is Core's encoding. -/
 theorem toBits (t : IntTy) (n : Int) :
     (n % (2 : Int) ^ t.bits).toNat = ConcreteSpec.Core.toBits (toCore t) n := by
-  rw [ConcreteSpec.Core.toBits, bits]
+  rw [ConcreteSpec.Core.toBits, bits, ConcreteSpec.Core.toBitsAtWidth]
 
 /-- Representation lemma: the existing signed bit-pattern formula is Core's decoding. -/
 theorem ofBits (t : IntTy) (m : Nat) :

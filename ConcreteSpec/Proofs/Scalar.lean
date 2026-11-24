@@ -55,7 +55,7 @@ theorem ArithmeticError.trapKind_injective :
 
 /-- Law (subject `ConcreteSpec.Core.toBits`). -/
 theorem toBits_lt (t : IntTy) (n : Int) : toBits t n < 2 ^ t.bits := by
-  cases t <;> simp only [toBits, IntTy.bits] <;> omega
+  cases t <;> simp only [toBits, toBitsAtWidth, IntTy.bits] <;> omega
 
 /-- Law (subject `ConcreteSpec.Core.ofBits`). -/
 theorem ofBits_inRange (t : IntTy) (m : Nat) (h : m < 2 ^ t.bits) : t.InRange (ofBits t m) := by
@@ -66,7 +66,7 @@ theorem ofBits_inRange (t : IntTy) (m : Nat) (h : m < 2 ^ t.bits) : t.InRange (o
 /-- Law (subject `ConcreteSpec.Core.ofBits`). -/
 theorem ofBits_toBits (t : IntTy) (n : Int) (h : t.InRange n) : ofBits t (toBits t n) = n := by
   cases t <;> simp [IntTy.InRange, IntTy.min, IntTy.max, IntTy.signed, IntTy.bits] at h <;>
-    simp [ofBits, toBits, IntTy.signed, IntTy.bits] <;> (try split) <;> omega
+    simp [ofBits, toBits, toBitsAtWidth, IntTy.signed, IntTy.bits] <;> (try split) <;> omega
 
 /-- Law (subject `ConcreteSpec.Core.wrap`). -/
 theorem wrap_inRange (t : IntTy) (n : Int) : t.InRange (wrap t n) :=
@@ -621,7 +621,7 @@ theorem lossyConvert_of_inRange (t : IntTy) (n : Int) (h : t.InRange n) : lossyC
 /-- Law (subject `ConcreteSpec.Core.ofBits`). -/
 theorem toBits_ofBits (t : IntTy) (m : Nat) (h : m < 2 ^ t.bits) : toBits t (ofBits t m) = m := by
   cases t <;> simp only [IntTy.bits] at h <;>
-    simp [toBits, ofBits, IntTy.signed, IntTy.bits] <;> (try split) <;> omega
+    simp [toBits, toBitsAtWidth, ofBits, IntTy.signed, IntTy.bits] <;> (try split) <;> omega
 
 /-- Law (subject `ConcreteSpec.Core.wrap`). Wrapping keeps the bit pattern: `wrap` only reads the low `IntTy.bits` bits. -/
 theorem toBits_wrap (t : IntTy) (n : Int) : toBits t (wrap t n) = toBits t n :=
