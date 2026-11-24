@@ -418,7 +418,7 @@ Each transfer rule is a single Lean theorem proved once against `Scalar` (`R-060
 
 **Proposed design.**
 - **Direct LCB machine code & relocation emission (`R-0517`):** Emit AArch64 (and later x86-64) instruction words and relocation tables directly from LCB's ISA model, removing text assembly and external `as` from the verified native path.
-- **Proved Mach-O / ELF binary validator with in-Lean stack bounds (`R-0505`):** Decode the final linked executable's `.text` section directly inside Lean against LCB's ISA model, verify instruction-byte and relocation correspondence, and compute exact per-function frame sizes and call-graph maximum stack bounds inside Lean itself—retiring external Python stack-analysis scripts on the proven path and feeding `R-0575` / `R-0704` directly from the proved binary validator.
+- **Proved Mach-O / ELF binary validator with in-Lean stack bounds (`R-0505`):** Decode the final linked executable's `.text` section directly inside Lean against LCB's ISA model, verify instruction-byte and relocation correspondence, and compute per-function frame sizes and call-graph maximum stack bounds inside Lean itself (reporting exact bounds where established and why no finite bound is established—for example unbounded recursion or indirect calls—consistent with `R-0575`), retiring external Python stack-analysis scripts on the proven path and feeding `R-0575` / `R-0704` directly from the proved binary validator.
 
 **Philosophy alignment.** Shrinks the trusted base honestly (rule 12, `R-0509`) and gives stack-budget enforcement (`R-0575`, `R-0704`) one kernel-checked owner (rule 5).
 
