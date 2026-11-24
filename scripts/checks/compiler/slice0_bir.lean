@@ -113,13 +113,14 @@ def emitSource (path actual : String) (dir : System.FilePath) (expectation : Lis
     (target : LCB.Target) : IO UInt32 := do
   let input : Concrete.Stages.Input := ⟨path, ← IO.FS.readBinFile actual⟩
   match expectation, Concrete.Stages.compile input with
-  | ["refuse", rule], .error e =>
-    if e.code == rule then
+  | "refuse" :: rule :: detail, .error e =>
+    let message := String.intercalate " " detail
+    if e.code == rule && (detail.isEmpty || e.message == message) then
       IO.println s!"ok   {path}: {e.code}: {e.message}"
       return 0
-    IO.eprintln s!"{path}: expected refusal {rule}, got {e.code}: {e.message}"
+    IO.eprintln s!"{path}: expected refusal {rule}{if detail.isEmpty then "" else ": " ++ message}, got {e.code}: {e.message}"
     return 1
-  | ["refuse", rule], .ok _ =>
+  | "refuse" :: rule :: _, .ok _ =>
     IO.eprintln s!"{path}: expected refusal {rule}, but compilation succeeded"
     return 1
   | "trap" :: _, .error (.checker _) =>

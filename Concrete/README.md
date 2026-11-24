@@ -270,8 +270,7 @@ structure FrontendPremises : Prop where
 /-- The target profile: the pinned triple, the toolchain store paths, the stack budget, and
     `maxSlots`, the largest BIR frame the profile vouches for under that budget. `compile` refuses
     a program whose frame exceeds `maxSlots` ("unsupported: exceeds the profile's frame bound").
-    `compile` also refuses a body that LCB's admission profile would reject (at most 64 blocks, 480
-    definitions and a 4080-byte frame), so every accepted program has an admitted LCB form. -/
+    An LCB artifact also requires `Stages.prepareLCB` to pass the LCB admission profile. -/
 structure TargetProfile where
   triple : String; toolchain : String; stackBytes : Nat; maxSlots : Nat
 
@@ -393,7 +392,7 @@ The **execution-trust inventory** is in the same file, as documented non-Prop en
 structure Output where
   toks : List Token; ast : Surface.Program
   p : Core.Program; sites : SiteMap; tokens : Tokens; mir : MIR.Program; mem : Mem.Program
-  bir : BIR.Program; ll : String; lcb : LCB.Source.Function
+  bir : BIR.Program
 
 /-- One theorem for both backends: `B` is `llvm _` or `lcb`. -/
 theorem compile_correct (F : FrontendPremises) {B N T} (P : NativePremises B N T)
@@ -408,8 +407,11 @@ theorem compile_correct (F : FrontendPremises) {B N T} (P : NativePremises B N T
 1. `compile_spec`: `compile T src = .ok out` implies:
    - `Lex.lex`, `Parse.parse` and `Elab.elab` succeed and produce `out.p`;
    - `Fragment.core s0 out.p` and `check out.p = true`;
-   - `out.tokens = admit out.p`, `out.mir = lower out.p out.tokens`, `out.mem = memory out.mir`, `out.bir = ssa out.mem`, `out.ll = LLVM.print out.bir` and `LCB.emit out.bir = .ok (out.lcb, out.bir.sites)`;
+   - `out.tokens = admit out.p`, `out.mir = lower out.p out.tokens`, `out.mem = memory out.mir` and `out.bir = ssa out.mem`;
    - `out.bir.frameSlots ≤ T.maxSlots`.
+
+   LLVM renders the shared BIR with `LLVM.print`. An LCB artifact additionally requires
+   `Stages.prepareLCB out.bir = .ok f` for the function `f` passed to the backend.
 2. `F.lex`, `F.parse` and `elab_sound` give `Denotes src out.p`. `check_iff` gives `Checked`.
 3. `slice0_exits` gives `run … = .exit c` with `c < 256`; `run_exit_behaviour` then gives `Core.behaviour = .exited c`.
 4. `checked_wellScoped : Checked p → WellScoped p`. `WellScoped` includes in-range literals, because Core's `run` does not range-check literals.
@@ -421,7 +423,7 @@ theorem compile_correct (F : FrontendPremises) {B N T} (P : NativePremises B N T
 **Supporting theorems:**
 - `addOvf_correct`: for arbitrary `u8` operands, the result is `(a+b) % 256` and the flag is `a+b ≥ 256`.
 - `adapter_correct : b.WF → LCB.adapt b = .ok f → LCB.bodyResult f r → r.behaviour b.sites = BIR.behaviour b` (proved, `Backend/LCB.lean`), over all WF BIR the adapter accepts, overflow included, against LCB's **raw** `Source.Function` semantics (`LeanCompilerBackend/Verified/Source.lean`, imported, never restated). `emit_correct` lifts it to `LCB.emit` and fills `NativePremises lcb`'s `emit` field.
-- `adapt_admitted : compile T src = .ok out → LCB.admit (LCB.adapt out.bir) = .ok _`. It is separate from semantic preservation and uses LCB's own admission function, so it covers every profile check: SSA and dominance validation, reachability of all blocks, exact widths, supported operations only, at most 64 blocks, 480 definitions and the frame bound. It is proved, or, until then, checked for each compilation by `decide` in the certificate.
+- `Stages.prepareLCB_of_edges` gives `Stages.prepareLCB bir = .ok f` from successful LCB emission of `(f, bir.sites)` and `validateJob (Backend.LCB.job f) = .ok ()`. The LCB artifact requires both checks. The certificate checks them individually and composes them with this theorem.
 - `lower_emits_check`: every MIR add without a valid discharged-evidence token is followed by a branch on its flag to a trap site of kind `arithmeticOverflow`, with that add's origin.
 - `denotes_behaviour_det`: two denotations of the same `src` have the same `Core.behaviour`. This is stated over behaviour, not at a fixed fuel.
 
@@ -465,7 +467,8 @@ theorem e_parse : Parse.parse expected.toks = .ok expected.ast := by decide
 -- … e_elab, e_admit, e_lower, e_memory, e_ssa
 theorem cert_compile : Stages.compile input = .ok expected :=
   Stages.compile_of_edges input … e_lex e_parse e_elab e_admit e_lower e_memory e_ssa
--- For an LCB artifact, compose the adapter and LCB profile checks separately.
+-- An LCB artifact requires successful shared compilation and successful LCB preparation.
+-- Compose the adapter and LCB profile checks to certify preparation.
 theorem cert_lcb : Stages.prepareLCB expected.bir = .ok expectedLCB :=
   Stages.prepareLCB_of_edges expected.bir expectedLCB e_adapter e_profile
 theorem cert_denotes : Surface0.lexesB srcBytes expected.toks && Surface0.derivesB expected.toks expected.ast &&

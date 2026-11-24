@@ -57,13 +57,14 @@ def validate_expect(path, line, expect):
             and TRAP_KIND_RE.fullmatch(parts[1]) and re.fullmatch(r"[0-9]+", parts[3])):
         natural(path, line, parts[3])
         return
-    if len(parts) == 2 and parts[0] == "refuse" and RULE_RE.fullmatch(parts[1]):
+    if (len(parts) >= 2 and parts[0] == "refuse" and RULE_RE.fullmatch(parts[1])
+            and all(parts[2:])):
         return
     if (len(parts) == 6 and parts[0] == "llvm" and parts[3:5] == ["lcb", "refuse"]
             and parts[1] == "exit" and RULE_RE.fullmatch(parts[5])):
         validate_expect(path, line, " ".join(parts[1:3]))
         return
-    fail(path, line, f"invalid expect {expect!r}; use exit N, trap KIND site N, refuse RULE-ID, or llvm exit N lcb refuse RULE-ID")
+    fail(path, line, f"invalid expect {expect!r}; use exit N, trap KIND site N, refuse CLASS [MESSAGE], or llvm exit N lcb refuse RULE-ID")
 
 
 def validate_source(path, line, program, seen_sources):
