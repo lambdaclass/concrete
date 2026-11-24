@@ -60,6 +60,8 @@ source_shadow_sizeof	con:tests/slice0/shadow_sizeof.con	refuse CORE-CHECK	slice0
 source_shadow_alignof	con:tests/slice0/shadow_alignof.con	refuse CORE-CHECK	slice0
 source_shadow_read_owned	con:tests/slice0/shadow_read_owned.con	refuse CORE-CHECK	slice0
 source_shadow_get_args	con:tests/slice0/shadow_get_args.con	refuse CORE-CHECK	slice0
+source_shadow_byte_at	con:tests/slice0/shadow_byte_at.con	refuse CORE-CHECK	slice0
+source_local_vec_pop	con:tests/slice0/local_vec_pop.con	exit 42	slice0
 source_removed_builtin_names	con:tests/slice0/removed_builtin_names.con	exit 42	slice0
 source_empty_body	con:tests/slice0/empty_body.con	refuse CORE-CHECK	slice0
 source_fallthrough	con:tests/slice0/fallthrough.con	refuse CORE-CHECK	slice0
