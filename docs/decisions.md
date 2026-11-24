@@ -14,6 +14,157 @@ the earlier behaviour, the answer below governs, and the code follows as its new
 
 The shape of Core was approved provisionally on 2026-11-05 ([stage A2a](#decided-2026-11-05)): it binds the design, and the owner freezes Core at stage A2c, after the four design theorems are proved against the proposed `Spec.lean` and the integration stage A2i (2026-11-06) is accepted (freeze timing revised to 0.1 on [2026-11-22](#decided-2026-11-22-roadmap-reordering)). The project and architecture decisions are recorded here too, [below](#decided-project).
 
+<a id="decided-2026-11-23-slice0-and-roadmap-answers"></a>
+## Decided 2026-11-23: Slice 0 and roadmap answers
+
+Status: decided
+Source: owner
+
+~~~text
+Questions as the coordinator asked them on 2026-11-23 (owner chat), in order:
+1. Code after a `return` (`fn main() -> u8 { return 1; return 2; }`; the second line can never run; decisions say all written code is checked but not whether never-running code is an error; it currently gets SLICE-0): (a, recommended) refuse it with a checker error ("unreachable code"); (b) allow and check it but it never runs.
+2. Old built-in names nobody re-decided (`alloc_array`, `free_array`, `vec_pop`, `byte_at`, `string_length`, ...): (a, recommended) leave them ordinary names for now, each reserved only when a later slice decides its spelling; (b) reserve them all now.
+3. Slice 0 used its 5 review rounds with two small findings left (LCB's size limit refuses valid programs even when building with LLVM only; code after return gets SLICE-0): (a, recommended) one extra round to fix both, then the landing train; (b) owner sign-off as is, findings tracked as issues.
+4. The enhancements branch (proposal + R-0711..R-0727) is not on main, yet main's decision records cite nine of those IDs: (a, recommended) fix the one `memory(none)` sentence (must also rule out writes), merge main, review, land; (b) remove the dangling references from main.
+5. When `concrete extract-lean` comes: the owner's 2026-11-22 direction said Slice 8, the reordered roadmap says Slice 10 (new Slice 8 = modules/const); recommendation Slice 10, with the proof surface.
+6. Confirm keeping both backends (LLVM and LCB) in slice 0, since the slice-0 branch already builds both, although the reordered roadmap moved LCB to B0b.
+Owner reply, verbatim:
+1a 2a 3a 4a 5:10 6 ok
+~~~
+
+1. **Language decision.** Slice 0 refuses statements after an unconditional return. The checker
+   reports unreachable code.
+2. **Language decision.** Every builtin name in the current decisions stays reserved under
+   [OD153](#od153) option (a), decided 2026-11-01, including `byte_at` under
+   [Q4.6](#decided-2026-11-05-core). Answer 2a applies only to names that exist solely in the
+   legacy compiler and appear as builtins in no current decision, including `alloc_array`,
+   `free_array`, `realloc_array`, `vec_pop` and the `string_length` variants. These remain
+   ordinary identifiers until a later slice re-decides them. See the
+   [November 24 clarification](#decided-2026-11-24-builtin-names).
+3. **Process exception.** `wip/slice0-pipeline` receives one extra review round (round 6) to
+   address the two findings in question 3. The general review cap still applies.
+4. Land the enhancements branch after correcting its `memory(none)` sentence to rule out writes
+   as well as reads, then merging main and reviewing it on that branch.
+5. Plan the `R-0495` safe subset of `concrete extract-lean` at Slice 10 with the proof surface.
+   This supersedes the Slice 8 timing in item 4 of the
+   [November 22 direction](#decided-2026-11-22-direction). Approval of the safe subset,
+   its representation and residual assumptions remains open.
+6. The unverified BIR → LCB build already present on the slice-0 branch stays in Slice 0 beside
+   LLVM. This revises the LCB build timing in the
+   [November 22 roadmap reordering](#decided-2026-11-22-roadmap-reordering).
+   The `R-0579` adapter proof, ASan and the differential fuzzer stay in `B0b`.
+
+<a id="decided-2026-11-24-builtin-names"></a>
+### Clarified 2026-11-24: builtin names in answer 2a
+
+The coordinator asked the following question in owner chat after review flagged
+[OD153](#od153) and [Q4.6](#decided-2026-11-05-core). The question, reply and follow-up
+are quoted verbatim.
+
+~~~text
+"It's about which names a program isn't allowed to use for its own variables or functions. ... on 2026-11-01 you decided: a program may not use a built-in's name for its own things. ... a. (Recommended) `byte_at` stays reserved because it's still a built-in, and the truly dead names (`alloc_array`, `free_array`, `vec_pop`, `string_length`) become ordinary names. This is what you'd have answered if I'd asked correctly. b. All of them, `byte_at` included, become ordinary names for now. Then a program could define its own `byte_at`, which goes against your 2026-11-01 rule. In practice: with (a), `let byte_at: u8 = 1;` is refused, and `let vec_pop: u8 = 1;` is allowed."
+Owner reply, verbatim:
+ok so obviouisly a
+Owner follow-up, verbatim (same conversation, right after):
+i mean reserved words should be what we already have
+~~~
+
+<a id="pending-phase-t-real-bug-exception"></a>
+**Phase T tooling, awaiting owner clarification.** Item 2 of the
+[November 22 direction](#decided-2026-11-22-direction) freezes new meta-tooling and permits
+only the three named simplifications to existing proof tooling. Item 5 of the
+[November 22 roadmap reordering](#decided-2026-11-22-roadmap-reordering) pauses new Phase T
+meta-tooling “unless a real bug hits `main`”. The owner still needs to confirm whether that
+exception applies.
+
+<a id="pending-slice-0-parser-prerequisite"></a>
+**Slice 0 parser prerequisite, awaiting owner clarification.** Item 1 of the
+[November 22 direction](#decided-2026-11-22-direction) calls for spec work just in time per
+slice. The [written grammar decision](#decided-2026-11-08-written-grammar) and
+[R-0622](../ROADMAP.md#r-0622) require owner approval and Lean encoding of the full surface
+grammar before building the Slice 0 parser. The owner still needs to decide whether the
+full grammar remains a prerequisite or grammar approval and encoding can proceed per slice.
+
+<a id="decided-2026-11-22-direction"></a>
+## Decided 2026-11-22: compile slice 0 first
+
+Status: decided
+
+Source: owner
+
+An outside review estimated that since November 11 about nine commits touched `Concrete/`
+and about 190 touched spec, scripts or docs. Slice 0 still lacked a complete source-to-native
+pipeline. Review rounds went to planted mutant construction, and mechanical defaults waited for
+the owner. The coordinator asked about sequencing, review proportionality and tooling, delegated
+defaults, and when to bring the reviewer's language ideas to the owner. The reply below is
+quoted verbatim from the writer brief.
+
+> Yes to 1, 2, 3, and 4, with a few clarifications:
+>
+> 1. Slice 0 first: Go straight to compiling real .con files end-to-end (spec just-in-time per slice, not the 50-piece foundation checklist). Also note for Slice 0: drop the LLVM.unprint injectivity plan (it's false for i8/u8 and missing sites), and fix Lex.decodeLoop (termination_by → fuel) so by decide works.
+> 2. Proportion rule: Blocking = soundness bug, wrong language semantics, false theorem, or broken build. Arguments over mutant/fixture/test construction, helper factoring, or out-of-slice edge cases are non-blocking notes even inside Proofs/. No new meta-tooling, except I do want to simplify/cut existing proof drag (split Evidence/mutants out of ConcreteSpec, stop pinning internal _proof_N/_simp_N in axioms.golden, allow zero-TCB tactics in ConcreteSpec/Tactics/).
+> 3. Boring defaults: Yes for mechanical/representation details (never core semantics), with a veto list. For the 5 starter defaults: yes on bool (1B, 0/1), Unit (0B), char (4B u32), and LF/CRLF line endings—fix the BOM one: do not
+> allow BOM at file start; keep refusing BOM (keeping Surface0.lean's existing refusal of raw U+FEFF is fine so we don't churn code).
+> 4. Language ideas: Yes, bring them once Slice 0 compiles—except bring the literal rules before Slice 2 locks the lexer, and plan concrete extract-lean for Slice 8 rather than Phase E.
+> 5. Open items: Finish arithmetic (no more mutant-style rounds), park F16 ownership until borrows, land minimal source locations (empty spans ok, 1-based line/col), and land review tooling as-is only if already green (zero more
+> rounds).
+
+The [roadmap reordering](#decided-2026-11-22-roadmap-reordering) records the foundation
+and Core freeze schedule. The [spec-first clarification](#decided-2026-11-22-llm-inference-showcase-and-float-order)
+governs the order of specification and implementation within a slice. The
+[inventory](../ConcreteSpec/landing/README.md) records landing evidence. ISS-0102 and ISS-0103
+track the LLVM and lexer changes. The [November 23 answers](#decided-2026-11-23-slice0-and-roadmap-answers)
+settle the backend staging and Lean extraction timing.
+
+The proportion rule supersedes the [November 20 review risk rule](#decided-2026-11-20-tooling-review-risk)
+where the earlier rule would admit additional blockers. It applies in `Proofs/`.
+The [roadmap reordering](#decided-2026-11-22-roadmap-reordering) records the Phase T pause.
+All three proof simplifications are covered by `R-0724` on the enhancements branch,
+`wip/roadmap-enhancements-2026-11-22`.
+
+Finish arithmetic without further mutant-style rounds, superseding the affected further rounds
+in the [November 21 review allowance](#decided-2026-11-21-extra-review-rounds).
+That allowance's three extra ownership review rounds are also superseded.
+`wip/spec-f16-own-o3` is parked until borrows are needed. Land minimal source
+locations with empty spans allowed and 1-based line and column. On file lookup, the coordinator's
+delegated recommendation is to bind to exact file contents, with the file name alone insufficient.
+`wip/review-evidence-fix` was not green. The landing train's review leg found that the first v2
+review would block landing the tooling itself (`require_v2_tree` in
+`scripts/land/train.sh`, around line 244 on that branch). The branch is parked with zero
+further rounds. The review tooling on main stays in use.
+
+Bring literal rules to the owner before slice 2 locks the lexer. Bring
+field-disjoint borrows, O(1) arena reset and the other language ideas as options after slice 0 compiles.
+
+### Mechanical defaults and owner veto list
+
+Agents may settle mechanical and representation defaults such as sizes, encodings, edge
+whitespace and diagnostic formatting. List each default here for owner veto. Core semantics
+such as ownership, borrows, authority, traps, allocation and syntax removals remain owner decisions.
+This delegation supersedes the [project recording rule](#decided-project-recording) and row P1 of
+the [November 5 project decision](#decided-2026-11-05-project) only for mechanical and
+representation defaults recorded on this veto list.
+
+| Default | Disposition |
+| --- | --- |
+| `bool` | One byte. False is 0, true is 1, other bytes are invalid. Boolean-to-integer conversion remains open under ISS-0069. |
+| `Unit` | Zero bytes, alignment 1. |
+| `char` | Four bytes as a `u32` Unicode scalar value, alignment 4. |
+| Source line endings | Owner-confirmed LF or CRLF. |
+| Raw U+FEFF | Owner-confirmed refusal everywhere, including at file start, as in `Surface0.lean`. |
+| Bare CR in line comments | Agent default for owner veto. Retain the existing `Surface0.lean` comment termination rule through slice 0. |
+
+These dispositions supersede the U+FEFF and bare-CR holds in the
+[November 8 recovery queue](#decided-2026-11-08-recovery-queue) for slice 0.
+
+The next branch touching each affected file reconciles its stale held-authority text:
+`Spec/Surface0.lean`, `Spec/Const.lean`, `Spec/Scalar.lean`, `Spec/Exec.lean`,
+`Spec/Hybrid.lean`, `Spec/Memory.lean`, `Proofs/Const.lean`, `Proofs/Exec.lean`,
+`Proofs/Hybrid.lean`, `Proofs/Own.lean` and `Proofs/OwnErasure.lean`, all under
+`ConcreteSpec/`. Keep unrelated holds in place. ISS-0064 tracks the source disposition,
+ISS-0069 tracks the remaining conversion decision and representation reconciliation, and ISS-0076
+tracks implementation and evidence for the approved layouts.
+
 <a id="decided-2026-11-22-explicit-policy-clauses"></a>
 ## Decided 2026-11-22: explicit composable `[policy]` clauses (no opaque `"strict"` mode)
 
@@ -336,13 +487,16 @@ confirmed the defect and agreed with the recommendation, both with changes
 
 Links only; each item's text lives where it is linked.
 
-1. The spec read and the Core freeze, A2c ([queue](../ROADMAP.md#the-queue)).
+1. The [remaining Core freeze obligations at Slice 11](../ROADMAP.md#the-queue).
 2. The [spelling round](#decided-2026-11-08-spelling-round).
 3. The remaining [SPARK review](proposals/SPARK.md) dispositions.
 4. Recover or re-confirm the [unrecorded 2026-11-08 approvals](../ISSUES.tsv) (ISS-0065;
    [language record](#decided-2026-11-08-language)).
-5. Closed 2026-11-12: the `char` literal form and OD42’s example are resolved by the
-   [char decision](#decided-2026-11-12-char).
+5. [Literal rule options before Slice 2 and language ideas after Slice 0](../ROADMAP.md#vertical-slices).
+6. [Boolean-to-integer conversion](../ISSUES.tsv) (ISS-0069).
+7. [Lean extraction subset, representation and assumptions](../ROADMAP.md#the-queue) (R-0495 / R-0574).
+8. [Phase T tooling freeze and the real-bug exception](#pending-phase-t-real-bug-exception).
+9. [Full surface grammar or per-slice grammar for the Slice 0 parser](#pending-slice-0-parser-prerequisite).
 
 A decided proposal moves to `docs/archive/<topic>-<date>/`.
 
