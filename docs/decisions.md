@@ -34,8 +34,13 @@ Owner reply, verbatim:
 
 1. **Language decision.** Slice 0 refuses statements after an unconditional return. The checker
    reports unreachable code.
-2. **Language decision.** Legacy builtin names whose spellings have yet to be re-decided remain
-   ordinary identifiers. A name becomes reserved only when a later slice decides its spelling.
+2. **Language decision.** Every builtin name in the current decisions stays reserved under
+   [OD153](#od153) option (a), decided 2026-11-01, including `byte_at` under
+   [Q4.6](#decided-2026-11-05-core). Answer 2a applies only to names that exist solely in the
+   legacy compiler and appear as builtins in no current decision, including `alloc_array`,
+   `free_array`, `realloc_array`, `vec_pop` and the `string_length` variants. These remain
+   ordinary identifiers until a later slice re-decides them. See the
+   [November 24 clarification](#decided-2026-11-24-builtin-names).
 3. **Process exception.** `wip/slice0-pipeline` receives one extra review round (round 6) to
    address the two findings in question 3. The general review cap still applies.
 4. Land the enhancements branch after correcting its `memory(none)` sentence to rule out writes
@@ -48,6 +53,21 @@ Owner reply, verbatim:
    LLVM. This revises the LCB build timing in the
    [November 22 roadmap reordering](#decided-2026-11-22-roadmap-reordering).
    The `R-0579` adapter proof, ASan and the differential fuzzer stay in `B0b`.
+
+<a id="decided-2026-11-24-builtin-names"></a>
+### Clarified 2026-11-24: builtin names in answer 2a
+
+The coordinator asked the following question in owner chat after review flagged
+[OD153](#od153) and [Q4.6](#decided-2026-11-05-core). The question, reply and follow-up
+are quoted verbatim.
+
+~~~text
+"It's about which names a program isn't allowed to use for its own variables or functions. ... on 2026-11-01 you decided: a program may not use a built-in's name for its own things. ... a. (Recommended) `byte_at` stays reserved because it's still a built-in, and the truly dead names (`alloc_array`, `free_array`, `vec_pop`, `string_length`) become ordinary names. This is what you'd have answered if I'd asked correctly. b. All of them, `byte_at` included, become ordinary names for now. Then a program could define its own `byte_at`, which goes against your 2026-11-01 rule. In practice: with (a), `let byte_at: u8 = 1;` is refused, and `let vec_pop: u8 = 1;` is allowed."
+Owner reply, verbatim:
+ok so obviouisly a
+Owner follow-up, verbatim (same conversation, right after):
+i mean reserved words should be what we already have
+~~~
 
 <a id="pending-phase-t-real-bug-exception"></a>
 **Phase T tooling, awaiting owner clarification.** Item 2 of the
