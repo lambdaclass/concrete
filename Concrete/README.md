@@ -651,8 +651,9 @@ Heavy runs (native builds, differentials, certificates) run on concrete-ci-2 or 
    statement list and spans. The surface body check runs in elaboration before conversion to Core
    and gives `CORE-CHECK` with the span from the statement keyword through its semicolon.
    Legacy builtin names whose spelling has yet to be decided, such as `alloc_array`,
-   `free_array`, `vec_pop`, `byte_at` and `string_length`, remain ordinary identifiers
+   `free_array`, `vec_pop` and `string_length`, remain ordinary identifiers
    (decided-2026-11-23-slice0-and-roadmap-answers, answers 1a and 2a).
+   `byte_at` remains reserved under [Q4.6](../docs/decisions.md#decided-2026-11-05-core) and the [November 24 clarification](../docs/decisions.md#decided-2026-11-24-builtin-names).
 10. Rule IDs are the Lean rule name plus a per-rule revision; each output header carries one `spec_version` (owner, 2026-11-06). The facts query and refusal output use them.
 
 ## Follow-ups (recorded after the final review round, round 8)
