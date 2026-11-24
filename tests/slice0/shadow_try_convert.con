@@ -1,0 +1,1 @@
+fn main() -> u8 { let try_convert: u8 = 42; return try_convert; }

@@ -1,6 +1,6 @@
 # One row per test: id, program, expected outcome, owning slice (tab-separated).
 # id: [a-z0-9_]+. program: bir:NAME (Concrete.BIR.Examples) or con:tests/PATH.con.
-# expect: exit N (0..255), trap KIND site N, or refuse RULE-ID. No other outcome forms.
+# expect: exit N (0..255), trap KIND site N, refuse CLASS [MESSAGE], or llvm exit N lcb refuse RULE-ID.
 # slice: [a-z0-9_]+. A con: path is relative to the repository root and must exist.
 id	program	expect	slice
 answer	bir:answer	exit 42	slice0
@@ -35,3 +35,39 @@ widen_s	bir:widen_s	exit 90	slice0
 site1	bir:site1	trap arithmeticOverflow site 1	slice0
 site0	bir:site0	trap arithmeticOverflow site 0	slice0
 two_sites_ok	bir:two_sites_ok	exit 42	slice0
+source_answer	con:tests/slice0/answer.con	exit 42	slice0
+source_overflow	con:tests/slice0/overflow.con	refuse CORE-CHECK	slice0
+source_trap	con:tests/slice0/trap.con	trap arithmeticOverflow site 1	slice0
+source_zero	con:tests/slice0/zero.con	exit 0	slice0
+source_syntax	con:tests/slice0/syntax_error.con	refuse SYNTAX	slice0
+source_unsupported	con:tests/slice0/unsupported.con	refuse SLICE-0	slice0
+source_bindings	con:tests/slice0/bindings.con	exit 42	slice0
+source_unannotated	con:tests/slice0/unannotated.con	refuse SYNTAX	slice0
+source_suffix	con:tests/slice0/suffix.con	refuse CORE-CHECK	slice0
+source_boundary	con:tests/slice0/boundary.con	exit 255	slice0
+source_reserved	con:tests/slice0/reserved.con	refuse SYNTAX	slice0
+source_intrinsic_shadow	con:tests/slice0/intrinsic_shadow.con	refuse CORE-CHECK	slice0
+source_radix_missing_semi	con:tests/slice0/radix_missing_semi.con	refuse SYNTAX	slice0
+source_malformed_if	con:tests/slice0/malformed_if.con	refuse SYNTAX	slice0
+source_multiply	con:tests/slice0/multiply.con	refuse SLICE-0	slice0
+source_conditional	con:tests/slice0/conditional.con	refuse SLICE-0	slice0
+source_mutable	con:tests/slice0/mutable.con	refuse SLICE-0	slice0
+source_contextual_multiply	con:tests/slice0/contextual_multiply.con	refuse SLICE-0	slice0
+source_shadow_destroy	con:tests/slice0/shadow_destroy.con	refuse CORE-CHECK	slice0
+source_shadow_discard	con:tests/slice0/shadow_discard.con	refuse CORE-CHECK	slice0
+source_shadow_alloc	con:tests/slice0/shadow_alloc.con	refuse CORE-CHECK	slice0
+source_shadow_sizeof	con:tests/slice0/shadow_sizeof.con	refuse CORE-CHECK	slice0
+source_shadow_alignof	con:tests/slice0/shadow_alignof.con	refuse CORE-CHECK	slice0
+source_shadow_read_owned	con:tests/slice0/shadow_read_owned.con	refuse CORE-CHECK	slice0
+source_shadow_get_args	con:tests/slice0/shadow_get_args.con	refuse CORE-CHECK	slice0
+source_shadow_byte_at	con:tests/slice0/shadow_byte_at.con	refuse CORE-CHECK	slice0
+source_local_vec_pop	con:tests/slice0/local_vec_pop.con	exit 42	slice0
+source_removed_builtin_names	con:tests/slice0/removed_builtin_names.con	exit 42	slice0
+source_empty_body	con:tests/slice0/empty_body.con	refuse CORE-CHECK	slice0
+source_fallthrough	con:tests/slice0/fallthrough.con	refuse CORE-CHECK	slice0
+source_after_return	con:tests/slice0/after_return.con	refuse CORE-CHECK checker refusal: unreachable code (STMT-14) at 1:29, bytes 28..37	slice0
+source_shadow_wrapping_add	con:tests/slice0/shadow_wrapping_add.con	refuse CORE-CHECK	slice0
+source_shadow_saturating_add	con:tests/slice0/shadow_saturating_add.con	refuse CORE-CHECK	slice0
+source_shadow_checked_add	con:tests/slice0/shadow_checked_add.con	refuse CORE-CHECK	slice0
+source_shadow_try_convert	con:tests/slice0/shadow_try_convert.con	refuse CORE-CHECK	slice0
+source_lcb_value_limit	con:tests/slice0/lcb_value_limit.con	llvm exit 42 lcb refuse INTERNAL	slice0

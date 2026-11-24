@@ -17,6 +17,7 @@ ConcreteSpec
 ConcreteSpec.lean
 ISSUES.tsv
 LICENSE
+Main.lean
 README.md
 RETENTION.tsv
 ROADMAP.md

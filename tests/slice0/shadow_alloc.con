@@ -1,0 +1,1 @@
+fn main() -> u8 { let alloc: u8 = 42; return alloc; }

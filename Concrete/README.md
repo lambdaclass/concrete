@@ -2,6 +2,23 @@
 
 PROVISIONAL. This is a design sketch, revision 8, written after eight Codex and agy review rounds. It folds in the Codex/agy/Kimi pipeline review and the owner's answers (2026-11-06). Build step 1 (BIR as the shared backend contract) is implemented: `Concrete/BIR.lean` and `Concrete/Backend/`, gate `scripts/checks/compiler/tests.sh`. Slice 0 is the first compiler slice. It is built before the owner freezes Core (A2c) and makes no normative claim before that freeze ([decision](../docs/decisions.md#decided-project-proof-infrastructure)). Branch `wip/slice0` depends on `wip/spec-root`, which puts `ConcreteSpec` on the new root, and is rebased onto main (under a new branch name) once that lands.
 
+## Running the current slice
+
+From the repository root, enter `nix develop` and run:
+
+```sh
+LEAN_NUM_THREADS=2 lake build concrete
+.lake/build/bin/concrete build tests/slice0/answer.con -o "$output"
+```
+
+Set `output` to a build directory. The default writes `llvm.exe` and `lcb.exe` there.
+Use `--backend llvm` or `--backend lcb` for a single executable. The driver uses the pinned
+native build helper and the LCB executable built by Lake.
+
+`scripts/checks/compiler/tests.sh` also compiles the `con:` manifest rows. For trap rows it
+first checks that admission refuses, then runs the same lowering stages without discharged
+evidence and compares both native observations.
+
 ## Scope
 
 This document describes **the compiler**: its stages, IRs, proof strategy, premises and gates. Language rules are not restated here. They live in `ConcreteSpec`, and this document links to them:
@@ -253,8 +270,7 @@ structure FrontendPremises : Prop where
 /-- The target profile: the pinned triple, the toolchain store paths, the stack budget, and
     `maxSlots`, the largest BIR frame the profile vouches for under that budget. `compile` refuses
     a program whose frame exceeds `maxSlots` ("unsupported: exceeds the profile's frame bound").
-    `compile` also refuses a body that LCB's admission profile would reject (at most 64 blocks, 480
-    definitions and a 4080-byte frame), so every accepted program has an admitted LCB form. -/
+    An LCB artifact also requires `Stages.prepareLCB` to pass the LCB admission profile. -/
 structure TargetProfile where
   triple : String; toolchain : String; stackBytes : Nat; maxSlots : Nat
 
@@ -347,6 +363,9 @@ There are two target profiles: `x86_64-linux` and `aarch64-macos` (LCB's first n
 |---|---|---|
 | P_lex | implementation | `lex_correct` |
 | P_parse | implementation | the generic table-parser theorem |
+| P_elab | implementation | ANF and resolution preservation |
+| P_lower | implementation | checked-evidence validity and MIR preservation |
+| P_ssa | implementation | SSA semantic preservation |
 | P_print | implementation | an LLVM-IR semantics; not planned for slice 0 |
 | P_toolchain[llvm] | toolchain | not planned |
 | P_toolchain[lcb] | toolchain | LCB's own proofs (C01–C03 and beyond) |
@@ -373,7 +392,7 @@ The **execution-trust inventory** is in the same file, as documented non-Prop en
 structure Output where
   toks : List Token; ast : Surface.Program
   p : Core.Program; sites : SiteMap; tokens : Tokens; mir : MIR.Program; mem : Mem.Program
-  bir : BIR.Program; ll : String; lcb : LCB.Source.Function
+  bir : BIR.Program
 
 /-- One theorem for both backends: `B` is `llvm _` or `lcb`. -/
 theorem compile_correct (F : FrontendPremises) {B N T} (P : NativePremises B N T)
@@ -388,8 +407,11 @@ theorem compile_correct (F : FrontendPremises) {B N T} (P : NativePremises B N T
 1. `compile_spec`: `compile T src = .ok out` implies:
    - `Lex.lex`, `Parse.parse` and `Elab.elab` succeed and produce `out.p`;
    - `Fragment.core s0 out.p` and `check out.p = true`;
-   - `out.tokens = admit out.p`, `out.mir = lower out.p out.tokens`, `out.mem = memory out.mir`, `out.bir = ssa out.mem`, `out.ll = LLVM.print out.bir` and `LCB.emit out.bir = .ok (out.lcb, out.bir.sites)`;
+   - `out.tokens = admit out.p`, `out.mir = lower out.p out.tokens`, `out.mem = memory out.mir` and `out.bir = ssa out.mem`;
    - `out.bir.frameSlots ≤ T.maxSlots`.
+
+   LLVM renders the shared BIR with `LLVM.print`. An LCB artifact additionally requires
+   `Stages.prepareLCB out.bir = .ok f` for the function `f` passed to the backend.
 2. `F.lex`, `F.parse` and `elab_sound` give `Denotes src out.p`. `check_iff` gives `Checked`.
 3. `slice0_exits` gives `run … = .exit c` with `c < 256`; `run_exit_behaviour` then gives `Core.behaviour = .exited c`.
 4. `checked_wellScoped : Checked p → WellScoped p`. `WellScoped` includes in-range literals, because Core's `run` does not range-check literals.
@@ -401,7 +423,7 @@ theorem compile_correct (F : FrontendPremises) {B N T} (P : NativePremises B N T
 **Supporting theorems:**
 - `addOvf_correct`: for arbitrary `u8` operands, the result is `(a+b) % 256` and the flag is `a+b ≥ 256`.
 - `adapter_correct : b.WF → LCB.adapt b = .ok f → LCB.bodyResult f r → r.behaviour b.sites = BIR.behaviour b` (proved, `Backend/LCB.lean`), over all WF BIR the adapter accepts, overflow included, against LCB's **raw** `Source.Function` semantics (`LeanCompilerBackend/Verified/Source.lean`, imported, never restated). `emit_correct` lifts it to `LCB.emit` and fills `NativePremises lcb`'s `emit` field.
-- `adapt_admitted : compile T src = .ok out → LCB.admit (LCB.adapt out.bir) = .ok _`. It is separate from semantic preservation and uses LCB's own admission function, so it covers every profile check: SSA and dominance validation, reachability of all blocks, exact widths, supported operations only, at most 64 blocks, 480 definitions and the frame bound. It is proved, or, until then, checked for each compilation by `decide` in the certificate.
+- `Stages.prepareLCB_of_edges` gives `Stages.prepareLCB bir = .ok f` from successful LCB emission of `(f, bir.sites)` and `validateJob (Backend.LCB.job f) = .ok ()`. The LCB artifact requires both checks. The certificate checks them individually and composes them with this theorem.
 - `lower_emits_check`: every MIR add without a valid discharged-evidence token is followed by a branch on its flag to a trap site of kind `arithmeticOverflow`, with that add's origin.
 - `denotes_behaviour_det`: two denotations of the same `src` have the same `Core.behaviour`. This is stated over behaviour, not at a fixed fuel.
 
@@ -438,28 +460,28 @@ The driver emits `Cert_<digest>.lean`, which the kernel checks (`lake env lean`,
 
 ```lean
 def srcBytes : ByteArray := ...      -- the exact input
-def expected : Output := ...         -- the exact toks, ast, q, sites, tokens, mir, mem, bir, ll, lcb
+def expected : Stages.Output := ...  -- the exact tokens, AST, Core, evidence, MIR, Memory and BIR
 -- one entry per edge, each checked by `decide` on that ONE stage function:
 theorem e_lex   : Lex.lex srcBytes = .ok expected.toks := by decide
 theorem e_parse : Parse.parse expected.toks = .ok expected.ast := by decide
--- … e_elab, e_admit, e_lower, e_memory, e_ssa, e_llvm, e_lcb
-theorem cert_compile : compile T₀ srcBytes = .ok expected :=
-  compile_of_edges e_lex e_parse e_elab e_admit e_lower e_memory e_ssa e_llvm e_lcb
-    g_frame g_lcbAdmit
--- the guards compile also checks, as explicit witnesses:
---   g_frame    : expected.bir.frameSlots ≤ T₀.maxSlots := by decide
---   g_lcbAdmit : LCB.admit expected.lcb = .ok _ := by decide
+-- … e_elab, e_admit, e_lower, e_memory, e_ssa
+theorem cert_compile : Stages.compile input = .ok expected :=
+  Stages.compile_of_edges input … e_lex e_parse e_elab e_admit e_lower e_memory e_ssa
+-- An LCB artifact requires successful shared compilation and successful LCB preparation.
+-- Compose the adapter and LCB profile checks to certify preparation.
+theorem cert_lcb : Stages.prepareLCB expected.bir = .ok expectedLCB :=
+  Stages.prepareLCB_of_edges expected.bir expectedLCB e_adapter e_profile
 theorem cert_denotes : Surface0.lexesB srcBytes expected.toks && Surface0.derivesB expected.toks expected.ast &&
     Surface0.elabB expected.ast expected.p = true := by decide
 ```
 
 `Lexes`, `Derives` and `Elab` each have a Boolean checker over explicit witnesses, with a one-way soundness lemma (`lexesB_sound` and so on, giving `Denotes src p`). So `cert_denotes` discharges the frontend premises **for this compilation**, and `compile_correct_cert` needs only `NativePremises`.
 
-A **refusal certificate** proves `compile T₀ src = .error r` for each refused example.
+A **refusal certificate** proves the relevant stage returned `.error r` for each refused example.
 
 **What is proved and what is attested:**
-- The kernel proves the proposition: the exact source maps to the exact output, including both backend inputs (the `.ll` text and the LCB `Source.Function` value).
-- The driver **compares the bytes** of the `.ll` file it handed to clang with the rendering of `expected`, and hands LCB the value `expected.lcb` itself (compared by `DecidableEq`, no text). This is a literal comparison, not a digest comparison. The driver also records the toolchain store paths that were used, and the image digest.
+- The kernel proves the exact source maps to the exact shared output and checks the requested backend inputs (the `.ll` text or the LCB `Source.Function` value).
+- The driver **compares the bytes** of the `.ll` file it handed to clang with the rendering of `expected`, and hands LCB the value `expectedLCB` itself (compared by `DecidableEq`, no text). This is a literal comparison, not a digest comparison. The driver also records the toolchain store paths that were used, and the image digest.
 - The association between the source, the text, the toolchain and the image, and therefore `Built`, is **attested** by the driver plus the nix store, and listed in the trust inventory. A digest is identity, not correspondence.
 
 **Budget, and the per-pass design.** The time and size of each certificate are measured and gated. The LL(1) table is a precomputed constant.
@@ -578,6 +600,9 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
 
    Accepted examples `return 125;` and `return 134;` are in the corpus and must classify as exits. Slice 0 can't produce a real startup refusal, because it has no grants. The refusal and trap classifications are also exercised by comparator self-tests: stub images, and the trap via gate 6.
 
+   The `llvm exit N lcb refuse CLASS` row runs the public build command in each backend mode
+   and checks the native LLVM exit and the LCB resource refusal.
+
    **Refused examples have their own leg.** The Lean `check` result, the compiler's refusal (with its rule) and the refusal certificate must agree with the row's `refuse RULE-ID` expectation. No executable exists for a refused example. A separate supported-subset coverage report lists every grammar production and Core form that the corpus exercises. A reject-all compiler fails, because every accepted example must exit with its status.
 5. **Differential at the source:** generated accepted programs, with replayable seeds; native exit = Lean `run`.
 6. **Differential through the token-free lowering, both backends.** This covers overflow. Generated **well-scoped, unchecked** slice-0 programs over **arbitrary** `u8` operands, including `200 + 56`, take `lower q ∅ → memory → ssa`, so they have no tokens and no checker. Their Core `run` is compared with the LLVM path and the LCB path. Overflow must give exit 134 and the right site's trap line on fd 2, for both backends. This exercises token-aware lowering, Memory CFG and SSA, not only the backends.
@@ -619,12 +644,20 @@ Heavy runs (native builds, differentials, certificates) run on concrete-ci-2 or 
 2. A decided form outside slice 0 (`0x2A`, `let mut`, `if`) gets a distinct "not supported in slice 0" refusal, separate from a syntax error.
 3. Leading-zero literals such as `007` are refused: one form per number. This is recorded in `Surface0.lean`.
 4. The trap site that the executable reports is a named premise now, `P_trap_site`, which a proof retires later.
-5. Both backends are in slice 0. This is being recorded on `wip/decisions-followup`.
+5. Both backends are in slice 0. The default build requests both. A build checks the LCB profile
+   only when it requests LCB (decided-2026-11-23-slice0-and-roadmap-answers, answer 6).
 6. The [November 21 decision](../docs/decisions.md#decided-2026-11-21-secrets-after-1-0) defers the November 6 information-flow and constant-time design, including its proposed slice 0 security fact fields, until after 1.0.
 7. OS sandboxing of the launcher is out of scope for the compiler.
 
 8. The trap line is `concrete: trap: <kind> at <path>:<line>:<col> (site <id>)`: the path relative to the project root with forward slashes, line and column 1-based (owner, 2026-11-06). The compiler implements it in `Backend/Runtime.lean` (`trapLine`), from the site table's `Loc`; `P_trap_site` covers the executable writing it.
-9. Rule IDs are the Lean rule name plus a per-rule revision; each output header carries one `spec_version` (owner, 2026-11-06). The facts query and refusal output use them.
+9. STMT-14 refuses the first statement after an unconditional return. The parser preserves the
+   statement list and spans. The surface body check runs in elaboration before conversion to Core
+   and gives `CORE-CHECK` with the span from the statement keyword through its semicolon.
+   Legacy builtin names whose spelling has yet to be decided, such as `alloc_array`,
+   `free_array`, `vec_pop` and `string_length`, remain ordinary identifiers
+   (decided-2026-11-23-slice0-and-roadmap-answers, answers 1a and 2a).
+   `byte_at` remains reserved under [Q4.6](../docs/decisions.md#decided-2026-11-05-core) and the [November 24 clarification](../docs/decisions.md#decided-2026-11-24-builtin-names).
+10. Rule IDs are the Lean rule name plus a per-rule revision; each output header carries one `spec_version` (owner, 2026-11-06). The facts query and refusal output use them.
 
 ## Follow-ups (recorded after the final review round, round 8)
 
@@ -677,7 +710,8 @@ LCB is our own project; these are tasks for it, not premises to keep. Checked ag
 **For the trusted base (now):**
 1. A public entry `compileSource : Target → Symbol → Source.Function → Except Error Artifact`. Today the compiler builds LCB's `FunctionJob` itself (`Concrete/Backend/LCB.lean`, `assemble`).
 2. The verified first path for `x86_64-linux`. It exists only for `aarch64-apple-darwin` leaf functions; x86-64 goes through the compatibility backend, a larger unverified base.
-3. Larger resource limits on the first path: 64 blocks, 488 values and 480 definitions per function (`Verified/Canonical.lean`). Slice programs will exceed them.
+3. Larger resource limits on the first path: 64 blocks, 488 values and 480 definitions per function (`Verified/Canonical.lean`). Slice programs will exceed them. LCB profile limits yield a backend resource refusal
+   under the existing `INTERNAL` class, with the resource, measured amount and limit.
 4. Object emission (LCB V04), so assembly text and the system assembler leave the path.
 
 **For slice 2, integers complete (all widths u8–u64, i8–i64): provided on LCB's verified path (Apple AArch64).** LCB's verified profile now has `word` (32-bit) and `long` (64-bit) values, `add sub mul and or xor`, the shifts `shiftLeft logicalRight arithmeticRight` (count modulo the width), `mulHighUnsigned mulHighSigned` (accepted only at `long`), division and remainder (`unsignedDiv unsignedRem signedDiv signedRem`; a zero divisor or signed minimum by −1 is stuck, so the adapter must branch to a trap before them), and the comparisons `eq unsignedLT unsignedLE signedLT signedLE` (word result). The adapter will carry every integer as a `long`: exact for types up to 32 bits; 64-bit overflow uses the high multiply and, for add/sub, `xor`/`and`/compare. Still absent and optional while every integer is a `long`: width conversion (`word`↔`long` extension and truncation).

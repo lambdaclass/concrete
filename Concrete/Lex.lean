@@ -1,3 +1,4 @@
+import Concrete.Refusal
 import ConcreteSpec.Proofs.Surface0
 
 /-!
@@ -9,9 +10,9 @@ U+2028/U+2029 and bidi controls with internal errors; comments alone permit raw 
 have printable-ASCII raw scalars and exactly the six decided escapes; labels are quote plus an
 identifier. Longest match uses an arbitrary table. Integers implement decimal and the lowercase
 `0x`/`0b`/`0o` bases, lowercase hexadecimal digits and eight suffixes. Malformed adjacent text is
-one refused token, and decimal leading-zero refusal is retained. No keyword, reserved-word,
-builtin, concrete operator or punctuation set, float literal, shebang handling or block comment is
-introduced; no other Unicode whitespace is included. Error constructors are internal data, not
+one refused token, and decimal leading-zero refusal is retained. The slice-0 entry point
+combines these components using the word and punctuation classifications in Surface0.
+Error constructors are internal data, not
 diagnostic wording. Offsets are zero-based byte offsets;
 truncation points at EOF. Error offsets satisfy the declarative first-failure judgments
 in Surface0; source NUL/BOM offsets point to the start of the refused scalar.
@@ -291,7 +292,7 @@ theorem decodeStep_error_first {off : Nat} {input : List UInt8} {e : DecodeError
 
 /-- Common decoder/source driver. The accumulator makes recursion tail recursive;
 source refusals happen before the recursive call, as do scalar-step errors. -/
-def decodeLoop (source : Bool) (off : Nat) (input : List UInt8) (acc : List Nat) :
+private def decodeLoopSpec (source : Bool) (off : Nat) (input : List UInt8) (acc : List Nat) :
     Except DecodeError (List Nat) :=
   match _hinput : input with
   | [] => .ok acc.reverse
@@ -301,9 +302,57 @@ def decodeLoop (source : Bool) (off : Nat) (input : List UInt8) (acc : List Nat)
     | .ok s =>
       if source && s.value == 0 then .error ⟨off, .nul⟩
       else if source && s.value == 0xFEFF then .error ⟨off, .bom⟩
-      else decodeLoop source (off + s.chunk.length) s.rest (s.value :: acc)
+      else decodeLoopSpec source (off + s.chunk.length) s.rest (s.value :: acc)
 termination_by input.length
 decreasing_by simpa only [_hinput] using s.shorter
+
+/-- Each successful scalar consumes at least one byte, so one unit of fuel per byte suffices. -/
+private def decodeFuel (source : Bool) :
+    Nat → Nat → List UInt8 → List Nat → Except DecodeError (List Nat)
+  | _, _, [], acc => .ok acc.reverse
+  | 0, off, _ :: _, _ => .error ⟨off, .truncated⟩
+  | fuel + 1, off, a :: bs, acc =>
+    match decodeStep off (a :: bs) with
+    | .error e => .error e
+    | .ok s =>
+      if source && s.value == 0 then .error ⟨off, .nul⟩
+      else if source && s.value == 0xFEFF then .error ⟨off, .bom⟩
+      else decodeFuel source fuel (off + s.chunk.length) s.rest (s.value :: acc)
+
+/-- Decode by structural recursion so concrete source checks reduce in the kernel. -/
+def decodeLoop (source : Bool) (off : Nat) (input : List UInt8) (acc : List Nat) :
+    Except DecodeError (List Nat) :=
+  decodeFuel source input.length off input acc
+
+private theorem decodeFuel_suffices (source : Bool) (fuel off : Nat)
+    (input : List UInt8) (acc : List Nat) (bound : input.length ≤ fuel) :
+    decodeFuel source fuel off input acc = decodeLoopSpec source off input acc := by
+  induction fuel generalizing off input acc with
+  | zero =>
+    have h : input = [] := List.length_eq_zero_iff.mp (by omega)
+    subst input
+    rw [decodeLoopSpec.eq_def]
+    rfl
+  | succ fuel ih =>
+    rw [decodeLoopSpec.eq_def]
+    cases input with
+    | nil => rfl
+    | cons a bs =>
+      cases h : decodeStep off (a :: bs) with
+      | error e => simp [decodeFuel, h]
+      | ok step =>
+        simp only [decodeFuel, h]
+        split
+        · rfl
+        · split
+          · rfl
+          · apply ih
+            have := step.shorter
+            omega
+
+private theorem decodeLoop_eq_spec (source : Bool) (off : Nat) (input : List UInt8)
+    (acc : List Nat) : decodeLoop source off input acc = decodeLoopSpec source off input acc :=
+  decodeFuel_suffices source input.length off input acc (Nat.le_refl _)
 
 /-- Decode UTF-8 from a byte offset. -/
 def decodeAt (off : Nat) (bs : List UInt8) : Except DecodeError (List Nat) :=
@@ -325,24 +374,25 @@ def Allowed (source : Bool) (cs : List Nat) : Prop :=
 theorem decodeLoop_sound (source : Bool) (off : Nat) (input : List UInt8)
     (acc out : List Nat) (h : decodeLoop source off input acc = .ok out) :
     ∃ cs, Utf8.Decodes input cs ∧ Allowed source cs ∧ out = acc.reverse ++ cs := by
-  induction off, input, acc using decodeLoop.induct source generalizing out with
+  rw [decodeLoop_eq_spec] at h
+  induction off, input, acc using decodeLoopSpec.induct source generalizing out with
   | case1 off acc =>
-    rw [decodeLoop.eq_def] at h
+    rw [decodeLoopSpec.eq_def] at h
     exact ⟨[], .nil, by simp [Allowed], by simpa using (Except.ok.inj h).symm⟩
   | case2 off acc a bs e he =>
-    rw [decodeLoop.eq_def] at h
+    rw [decodeLoopSpec.eq_def] at h
     simp only [he] at h
     cases h
   | case3 off acc a bs s hs hn =>
-    rw [decodeLoop.eq_def] at h
+    rw [decodeLoopSpec.eq_def] at h
     simp only [hs, hn, ↓reduceIte] at h
     cases h
   | case4 off acc a bs s hs hn hb =>
-    rw [decodeLoop.eq_def] at h
+    rw [decodeLoopSpec.eq_def] at h
     simp only [hs, hn, hb, Bool.false_eq_true, ↓reduceIte] at h
     cases h
   | case5 off acc a bs s hs hn hb ih =>
-    rw [decodeLoop.eq_def] at h
+    rw [decodeLoopSpec.eq_def] at h
     simp only [hs, hn, hb, Bool.false_eq_true, ↓reduceIte] at h
     obtain ⟨cs, hd, good, hout⟩ := ih out h
     refine ⟨s.value :: cs, ?_, ?_, ?_⟩
@@ -361,8 +411,9 @@ theorem decodeLoop_complete {input : List UInt8} {cs : List Nat}
     (h : Utf8.Decodes input cs) (source : Bool) (good : Allowed source cs)
     (off : Nat) (acc : List Nat) :
     decodeLoop source off input acc = .ok (acc.reverse ++ cs) := by
+  rw [decodeLoop_eq_spec]
   induction h generalizing off acc with
-  | nil => simp only [decodeLoop, List.append_nil]
+  | nil => simp only [decodeLoopSpec, List.append_nil]
   | @cons c chunk bs cs enc tail ih =>
     obtain ⟨s, hs, hv, hr⟩ := decodeStep_complete (bs := bs) enc off
     have hn : chunk ++ bs ≠ [] := by
@@ -370,7 +421,7 @@ theorem decodeLoop_complete {input : List UInt8} {cs : List Nat}
       exact encodes_nonempty enc (List.append_eq_nil_iff.mp he).1
     have gn := good c (by simp)
     have gt : Allowed source cs := fun x hx => good x (by simp [hx])
-    rw [decodeLoop.eq_def]
+    rw [decodeLoopSpec.eq_def]
     split
     · contradiction
     · rw [hs]
@@ -450,10 +501,11 @@ theorem decode_error_not_decodes {bs : List UInt8} {e : DecodeError}
 theorem decodeLoop_error_first (off : Nat) (input : List UInt8) (acc : List Nat)
     {e : DecodeError} (h : decodeLoop false off input acc = .error e) :
     ∃ k, FirstError input k ∧ e.offset = off + k := by
-  induction off, input, acc using decodeLoop.induct false with
-  | case1 off acc => rw [decodeLoop.eq_def] at h; cases h
+  rw [decodeLoop_eq_spec] at h
+  induction off, input, acc using decodeLoopSpec.induct false with
+  | case1 off acc => rw [decodeLoopSpec.eq_def] at h; cases h
   | case2 off acc a bs e' he =>
-    rw [decodeLoop.eq_def] at h
+    rw [decodeLoopSpec.eq_def] at h
     simp only [he] at h
     cases h
     obtain ⟨k, hf, hk⟩ := decodeStep_error_first he
@@ -461,7 +513,7 @@ theorem decodeLoop_error_first (off : Nat) (input : List UInt8) (acc : List Nat)
   | case3 off acc a bs s hs hn => simp at hn
   | case4 off acc a bs s hs hn hb => simp at hb
   | case5 off acc a bs s hs hn hb ih =>
-    rw [decodeLoop.eq_def] at h
+    rw [decodeLoopSpec.eq_def] at h
     simp only [hs, Bool.false_and, Bool.false_eq_true, ↓reduceIte] at h
     obtain ⟨k, hf, hk⟩ := ih h
     refine ⟨s.chunk.length + k, ?_, by omega⟩
@@ -503,16 +555,17 @@ theorem decode_error_iff {bs : List UInt8} {k : Nat} :
 theorem sourceLoop_error_first (off : Nat) (input : List UInt8) (acc : List Nat)
     {e : DecodeError} (h : decodeLoop true off input acc = .error e) :
     ∃ k, SourceFailure input k ∧ e.offset = off + k := by
-  induction off, input, acc using decodeLoop.induct true with
-  | case1 off acc => rw [decodeLoop.eq_def] at h; cases h
+  rw [decodeLoop_eq_spec] at h
+  induction off, input, acc using decodeLoopSpec.induct true with
+  | case1 off acc => rw [decodeLoopSpec.eq_def] at h; cases h
   | case2 off acc a bs e' he =>
-    rw [decodeLoop.eq_def] at h
+    rw [decodeLoopSpec.eq_def] at h
     simp only [he] at h
     cases h
     obtain ⟨k, hf, hk⟩ := decodeStep_error_first he
     exact ⟨k, .utf8 (by simp) hf, hk⟩
   | case3 off acc a bs s hs hn =>
-    rw [decodeLoop.eq_def] at h
+    rw [decodeLoopSpec.eq_def] at h
     simp only [hs, hn, ↓reduceIte] at h
     cases h
     have hv : s.value = 0 := by simpa using hn
@@ -520,7 +573,7 @@ theorem sourceLoop_error_first (off : Nat) (input : List UInt8) (acc : List Nat)
     exact Eq.mpr (congrArg (fun bytes => SourceFailure bytes 0) s.split)
       (.nul (hv ▸ s.encodes))
   | case4 off acc a bs s hs hn hb =>
-    rw [decodeLoop.eq_def] at h
+    rw [decodeLoopSpec.eq_def] at h
     simp only [hs, hn, hb, Bool.false_eq_true, ↓reduceIte] at h
     cases h
     have hv : s.value = 0xFEFF := by simpa using hb
@@ -528,7 +581,7 @@ theorem sourceLoop_error_first (off : Nat) (input : List UInt8) (acc : List Nat)
     exact Eq.mpr (congrArg (fun bytes => SourceFailure bytes 0) s.split)
       (.bom (hv ▸ s.encodes))
   | case5 off acc a bs s hs hn hb ih =>
-    rw [decodeLoop.eq_def] at h
+    rw [decodeLoopSpec.eq_def] at h
     simp only [hs, hn, hb, Bool.false_eq_true, ↓reduceIte] at h
     obtain ⟨k, hf, hk⟩ := ih h
     have h0 : s.value ≠ 0 := by simpa using hn
@@ -1542,38 +1595,22 @@ local instance {error ok : Type} [DecidableEq error] [DecidableEq ok] :
     | error _ => exact isFalse (by intro h; cases h)
     | ok ds => exact decidable_of_iff (cs = ds) ⟨congrArg Except.ok, Except.ok.inj⟩
 
-example : decodeUtf8 [65, 95, 57] = .ok [65, 95, 57] := by
-  simp [decodeUtf8, decodeAt, decodeLoop, decodeStep, Utf8.One, Borrow.isScalar]
-example : decodeUtf8 [0xC2, 0xA2] = .ok [0xA2] := by
-  simp [decodeUtf8, decodeAt, decodeLoop, decodeStep, Utf8.One, Utf8.Two, Borrow.isScalar, Borrow.cont]
-example : decodeUtf8 [0xE2, 0x82, 0xAC] = .ok [0x20AC] := by
-  simp [decodeUtf8, decodeAt, decodeLoop, decodeStep, secondOk, Utf8.One, Utf8.Two, Utf8.Three, Borrow.isScalar, Borrow.cont]
-example : decodeUtf8 [0xF0, 0x9F, 0x98, 0x80] = .ok [0x1F600] := by
-  simp [decodeUtf8, decodeAt, decodeLoop, decodeStep, secondOk, Utf8.One, Utf8.Two, Utf8.Three, Utf8.Four, Borrow.isScalar, Borrow.cont]
-example : decodeUtf8 [0xC0, 0x80] = .error ⟨0, .overlong⟩ := by
-  simp [decodeUtf8, decodeAt, decodeLoop, decodeStep, leadReason, Utf8.One, Borrow.isScalar]
-example : decodeUtf8 [0xED, 0xA0, 0x80] = .error ⟨1, .surrogate⟩ := by
-  simp [decodeUtf8, decodeAt, decodeLoop, decodeStep, secondReason, secondOk, Utf8.One, Utf8.Two, Borrow.isScalar, Borrow.cont]
-example : decodeUtf8 [0xF4, 0x90, 0x80, 0x80] = .error ⟨1, .tooLarge⟩ := by
-  simp [decodeUtf8, decodeAt, decodeLoop, decodeStep, secondReason, secondOk, Utf8.One, Utf8.Two, Borrow.isScalar, Borrow.cont]
-example : decodeUtf8 [0xE2, 0x82] = .error ⟨2, .truncated⟩ := by
-  simp [decodeUtf8, decodeAt, decodeLoop, decodeStep, secondOk, Utf8.One, Utf8.Two, Borrow.isScalar, Borrow.cont]
-example : decodeUtf8 [0x80] = .error ⟨0, .unexpectedContinuation⟩ := by
-  simp [decodeUtf8, decodeAt, decodeLoop, decodeStep, leadReason, Utf8.One, Borrow.isScalar]
-example : checkSource [0] = .error ⟨0, .nul⟩ := by
-  simp [checkSource, sourceAt, decodeLoop, decodeStep, Utf8.One, Borrow.isScalar]
-example : checkSource [0xEF, 0xBB, 0xBF] = .error ⟨0, .bom⟩ := by
-  simp [checkSource, sourceAt, decodeLoop, decodeStep, secondOk, Utf8.One, Utf8.Two, Utf8.Three, Borrow.isScalar, Borrow.cont]
-example : checkSource [65, 0] = .error ⟨1, .nul⟩ := by
-  simp [checkSource, sourceAt, decodeLoop, decodeStep, Utf8.One, Borrow.isScalar]
-example : checkSource [65, 0xEF, 0xBB, 0xBF] = .error ⟨1, .bom⟩ := by
-  simp [checkSource, sourceAt, decodeLoop, decodeStep, secondOk, Utf8.One, Utf8.Two, Utf8.Three, Borrow.isScalar, Borrow.cont]
-example : checkSource [0, 0x80] = .error ⟨0, .nul⟩ := by
-  simp [checkSource, sourceAt, decodeLoop, decodeStep, Utf8.One, Borrow.isScalar]
-example : checkSource [0xC2, 0xA2, 0] = .error ⟨2, .nul⟩ := by
-  simp [checkSource, sourceAt, decodeLoop, decodeStep, Utf8.One, Utf8.Two, Borrow.isScalar, Borrow.cont]
-example : checkSource [65] = .ok [65] := by
-  simp [checkSource, sourceAt, decodeLoop, decodeStep, Utf8.One, Borrow.isScalar]
+example : decodeUtf8 [65, 95, 57] = .ok [65, 95, 57] := by decide
+example : decodeUtf8 [0xC2, 0xA2] = .ok [0xA2] := by decide
+example : decodeUtf8 [0xE2, 0x82, 0xAC] = .ok [0x20AC] := by decide
+example : decodeUtf8 [0xF0, 0x9F, 0x98, 0x80] = .ok [0x1F600] := by decide
+example : decodeUtf8 [0xC0, 0x80] = .error ⟨0, .overlong⟩ := by decide
+example : decodeUtf8 [0xED, 0xA0, 0x80] = .error ⟨1, .surrogate⟩ := by decide
+example : decodeUtf8 [0xF4, 0x90, 0x80, 0x80] = .error ⟨1, .tooLarge⟩ := by decide
+example : decodeUtf8 [0xE2, 0x82] = .error ⟨2, .truncated⟩ := by decide
+example : decodeUtf8 [0x80] = .error ⟨0, .unexpectedContinuation⟩ := by decide
+example : checkSource [0] = .error ⟨0, .nul⟩ := by decide
+example : checkSource [0xEF, 0xBB, 0xBF] = .error ⟨0, .bom⟩ := by decide
+example : checkSource [65, 0] = .error ⟨1, .nul⟩ := by decide
+example : checkSource [65, 0xEF, 0xBB, 0xBF] = .error ⟨1, .bom⟩ := by decide
+example : checkSource [0, 0x80] = .error ⟨0, .nul⟩ := by decide
+example : checkSource [0xC2, 0xA2, 0] = .error ⟨2, .nul⟩ := by decide
+example : checkSource [65] = .ok [65] := by decide
 example : identStart? 0xE9 = false ∧ identContinue? 0xE9 = false := by decide
 
 example : lineComment [47,47,32,120,10,114,101,115,116] =
@@ -1754,17 +1791,61 @@ example :
     integerLiteral [48,111,55,56] = .error (.invalidSuffix [56]) ∧
     integerLiteral [48,120,49,103] = .error (.invalidSuffix [103]) := by decide
 
-example : decodeUtf8 [0xC2,65] = .error ⟨1, .invalidContinuation⟩ := by
-  simp [decodeUtf8, decodeAt, decodeLoop, decodeStep, secondReason, secondOk, Utf8.One, Utf8.Two, Borrow.isScalar, Borrow.cont]
-example : decodeUtf8 [0xE2,0x82,65] = .error ⟨2, .invalidContinuation⟩ := by
-  simp [decodeUtf8, decodeAt, decodeLoop, decodeStep, secondOk, Utf8.One, Utf8.Two, Utf8.Three, Borrow.isScalar, Borrow.cont]
-example : decodeUtf8 [0xF0,0x90,0x80,65] = .error ⟨3, .invalidContinuation⟩ := by
-  simp [decodeUtf8, decodeAt, decodeLoop, decodeStep, secondOk, Utf8.One, Utf8.Two, Utf8.Three, Utf8.Four, Borrow.isScalar, Borrow.cont]
-example : decodeUtf8 [65,0x80] = .error ⟨1, .unexpectedContinuation⟩ := by
-  simp [decodeUtf8, decodeAt, decodeLoop, decodeStep, leadReason, Utf8.One, Borrow.isScalar]
-example : decodeUtf8 [0xC2] = .error ⟨1, .truncated⟩ := by
-  simp [decodeUtf8, decodeAt, decodeLoop, decodeStep, Utf8.One, Borrow.isScalar]
-example : decodeUtf8 [0xE0,0x80] = .error ⟨1, .overlong⟩ := by
-  simp [decodeUtf8, decodeAt, decodeLoop, decodeStep, secondReason, secondOk, Utf8.One, Utf8.Two, Borrow.isScalar, Borrow.cont]
+example : decodeUtf8 [0xC2,65] = .error ⟨1, .invalidContinuation⟩ := by decide
+example : decodeUtf8 [0xE2,0x82,65] = .error ⟨2, .invalidContinuation⟩ := by decide
+example : decodeUtf8 [0xF0,0x90,0x80,65] = .error ⟨3, .invalidContinuation⟩ := by decide
+example : decodeUtf8 [65,0x80] = .error ⟨1, .unexpectedContinuation⟩ := by decide
+example : decodeUtf8 [0xC2] = .error ⟨1, .truncated⟩ := by decide
+example : decodeUtf8 [0xE0,0x80] = .error ⟨1, .overlong⟩ := by decide
+
+end Concrete.Lex
+
+namespace Concrete.Lex
+open ConcreteSpec.Surface0
+
+private def punct (input : List Nat) : Option (TokenValue × List Nat × List Nat) := do
+  let (lexeme, rest) ← longestMatch punctuationScalars input
+  let (_, kind) ← punctuation.find? fun (s, _) => s == scalarText lexeme
+  return (.fixed kind, lexeme, rest)
+
+private def nextToken (input : List Nat) (pos : Position) :
+    Except Refusal (TokenValue × List Nat × List Nat) := do
+  if let some (name, rest) := identifier input then
+    return (wordValue (scalarText name), name, rest)
+  match integerLiteral input with
+  | .ok (some i) => return (.integer i.value (splitRadix input).1 i.suffix, i.lexeme, i.rest)
+  | .error _ => throw (.syntaxError s!"malformed integer at byte {pos.byte}")
+  | .ok none =>
+    if let some p := punct input then return p
+    if let 34 :: cs := input then
+      match stringBody cs with
+      | .ok (_, rest) => return (.fixed .stringLiteral, input.take (input.length - rest.length), rest)
+      | .error _ => throw (.syntaxError s!"malformed string at byte {pos.byte}")
+    match byteLiteral input with
+    | .error _ => throw (.syntaxError s!"malformed byte literal at byte {pos.byte}")
+    | .ok (some (lexeme, _, rest)) => return (.fixed .byteLiteral, lexeme, rest)
+    | .ok none =>
+      if let some (lexeme, rest) := label input then return (.fixed .label, lexeme, rest)
+      else throw (.syntaxError s!"unexpected character at byte {pos.byte}")
+
+private def tokens : Nat → List Nat → Position → Bool → List Token → Except Refusal (List Token)
+  | _, [], _, _, acc => .ok acc.reverse
+  | 0, _, _, _, _ => .error (.internal "lexer exhausted its progress bound")
+  | fuel + 1, input@(c :: cs), pos, comment, acc => do
+    if comment && c != 10 && c != 13 then
+      if decide (CommentRaw c) then tokens fuel cs (pos.advance c) true acc
+      else throw (.syntaxError s!"forbidden comment character at byte {pos.byte}")
+    else if whitespace? c then tokens fuel cs (pos.advance c) false acc
+    else if let 47 :: 47 :: rest := input then
+      tokens fuel rest ((pos.advance 47).advance 47) true acc
+    else
+      let (value, lexeme, rest) ← nextToken input pos
+      let stop := lexeme.foldl Position.advance pos
+      tokens fuel rest stop false (⟨value, pos.span stop⟩ :: acc)
+
+def lex (src : ByteArray) : Except Refusal (List Token) := do
+  match checkSource src.data.toList with
+  | .error e => throw (.syntaxError s!"invalid source at byte {e.offset}: {repr e.reason}")
+  | .ok cs => tokens cs.length cs {} false []
 
 end Concrete.Lex

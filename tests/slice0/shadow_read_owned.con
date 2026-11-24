@@ -1,0 +1,1 @@
+fn main() -> u8 { let read_owned: u8 = 42; return read_owned; }

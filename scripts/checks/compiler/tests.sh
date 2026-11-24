@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Manifest-driven test gate (PROVISIONAL, Concrete/README.md gates 4 and 6, hand-written BIR leg):
-# every bir: row in tests/manifest.tsv goes through the LLVM path (clang) and the LCB path: the
+# Manifest-driven slice-0 test gate (Concrete/README.md gates 4 and 6).
+# Hand-written BIR and accepted or unchecked source go through the LLVM path (clang) and the LCB path: the
 # adapted body assembled by LCB in process (no text on the proved path), linked with the runtime
 # entry, which LCB's command line assembles from QBE text. The manifest's bir: inventory must equal
 # the emitter's list in both directions. CONCRETE_TEST_MANIFEST selects another manifest (controls).
@@ -9,9 +9,8 @@
 # manifest expectation checked by the emitter (which writes the expected status and stderr bytes).
 #
 # Controls: wrong exit and trap expectations (both site and kind) must fail in the emitter; a
-# missing row and a nonexistent program must fail opposite inventory directions; a con: row must
-# fail runner dispatch with an unsupported-program diagnostic (these child runs are emit-only,
-# never native). A body that never returns must
+# missing row and a nonexistent program must fail opposite inventory directions; a wrong source
+# refusal must fail in the source runner. Child controls are emit-only. A body that never returns must
 # be observed as incomplete on both backends; a body returning a word that encodes nothing must reach
 # the runtime's refusal; and the comparison itself must reject a missing or extra newline, a wrong
 # status with the right stderr, and stray stdout. Run inside the nix devshell, from the repo root.
@@ -55,6 +54,52 @@ check() {
   done
 }
 
+# The backend-specific expectation exercises the public driver and its native build policy.
+check_backend_limit() {
+  local path=${1#con:}
+  local d=$2
+  local expect=$3
+  local status rule
+  local project
+  local -a cli
+  project=$(cd "$(dirname "$test_manifest")/.." && pwd)
+  if [ "$project" != "$root" ]; then
+    mkdir -p "$d/project/$(dirname "$path")"
+    cp -- "$project/$path" "$d/project/$path"
+    ln -s "$root/scripts" "$d/project/scripts"
+    ln -s "$root/.lake" "$d/project/.lake"
+    project="$d/project"
+  fi
+  cli=(bash -c 'cd "$1" && shift && exec "$@"' _ "$project" "$root/.lake/build/bin/concrete")
+  read -r _ _ status _ _ rule <<<"$expect"
+  mkdir -p "$d/expected"
+  printf '%s\n' "$status" >"$d/expected/status"
+  : >"$d/expected/stderr"
+  build "$path [llvm]" "$d/llvm-build.log" bounded "$native_secs" "${cli[@]}" \
+    build "$path" -o "$d/llvm" --backend llvm
+  observe "$d/llvm/llvm.exe" "$d/llvm-run" 10 20
+  count=$((count + 1))
+  if judge "$d/expected" "$d/llvm-run"; then
+    echo "ok   $path [llvm]: status $status"
+  else
+    echo "FAIL $path [llvm]: expected status $status and empty streams"
+    fail=1
+  fi
+
+  local rc=0
+  bounded "$native_secs" "${cli[@]}" \
+    build "$path" -o "$d/lcb" --backend lcb \
+    >"$d/lcb.stdout" 2>"$d/lcb.stderr" || rc=$?
+  if [ "$rc" = 1 ] && [ ! -s "$d/lcb.stdout" ] && [ ! -e "$d/lcb" ] &&
+      has_match -E "^$rule: LCB backend resource refusal: [^:]+: [0-9]+ exceeds limit [0-9]+$" <"$d/lcb.stderr"; then
+    echo "ok   $path [lcb]: $(cat "$d/lcb.stderr")"
+  else
+    echo "FAIL $path [lcb]: expected a $rule backend resource refusal, got status $rc"
+    cat "$d/lcb.stderr"
+    fail=1
+  fi
+}
+
 rows=$(manifest_rows)
 
 wrong_expectation() { awk -F '\t' -v OFS='\t' '$1 == "answer" {$3 = "exit 41"} {print}' "$1" >"$1.new"; mv "$1.new" "$1"; }
@@ -62,10 +107,10 @@ wrong_trap_expectation() { awk -F '\t' -v OFS='\t' '$1 == "overflow" {$3 = "trap
 wrong_trap_kind() { awk -F '\t' -v OFS='\t' '$1 == "overflow" {$3 = "trap divisionByZero site 0"} {print}' "$1" >"$1.new"; mv "$1.new" "$1"; }
 missing_row() { awk -F '\t' '$1 != "answer"' "$1" >"$1.new"; mv "$1.new" "$1"; }
 nonexistent_program() { printf 'no_such_program\tbir:no_such_program\texit 0\tslice0\n' >>"$1"; }
-unsupported_source_program() {
+wrong_source_refusal() {
   mkdir -p "$(dirname "$1")/slice0"
-  printf 'return 0;\n' >"$(dirname "$1")/slice0/unrun.con"
-  awk -F '\t' '{print} $1 == "answer" {print "unrun_source\tcon:tests/slice0/unrun.con\texit 0\tslice0"}' "$1" >"$1.new"
+  printf 'fn main() -> u8 { return 42 }\n' >"$(dirname "$1")/slice0/wrong_refusal.con"
+  awk -F '\t' '{print} $1 == "answer" {print "wrong_source_refusal\tcon:tests/slice0/wrong_refusal.con\trefuse CORE-CHECK\tslice0"}' "$1" >"$1.new"
   mv "$1.new" "$1"
 }
 manifest_control() { # manifest_control LABEL EXPECTED-MESSAGE MUTATION-FUNCTION
@@ -99,30 +144,26 @@ if [ "${CONCRETE_TEST_MANIFEST_SKIP_CONTROLS:-0}" != 1 ]; then
   manifest_control wrong-trap-kind "overflow: expectation mismatch: trap site 0 has kind ConcreteSpec.Trap.arithmeticOverflow, expected divisionByZero" wrong_trap_kind
   manifest_control missing-row "program without a manifest row: answer" missing_row
   manifest_control nonexistent-program "manifest row names no program: no_such_program" nonexistent_program
-  manifest_control unsupported-source "tests: unrun_source: unsupported program con:tests/slice0/unrun.con (source runner not implemented)" unsupported_source_program
+  manifest_control wrong-source-refusal "expected refusal CORE-CHECK, got SYNTAX" wrong_source_refusal
 fi
 
+if [[ "$rows" == *$'\t'"llvm exit "* ]] && [ "${CONCRETE_TEST_EMIT_ONLY:-0}" != 1 ]; then
+  build "concrete driver" "$work/cli-build.log" bounded 1800 lake build concrete
+fi
 while IFS=$'\t' read -r name program expect; do
-  case "$program" in
-    bir:*)
-      d="$work/ex/$name"
-      read -r -a expectation <<<"$expect"
-      "${emitter[@]}" emit "${program#bir:}" "$d" "$target" "${expectation[@]}"
-      # Emit-only controls cover every row and never reach a native build, even if a planted defect is
-      # accidentally accepted: the control then fails because the child returns zero after the loop.
-      if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" = 1 ]; then continue; fi
-      check "$name" "$d" 10 20
+  d="$work/ex/$name"
+  if [[ "$expect" == "llvm "* ]]; then
+    if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" != 1 ]; then
+      check_backend_limit "$program" "$d" "$expect"
       examples=$((examples + 1))
-      ;;
-    con:*)
-      echo "tests: $name: unsupported program $program (source runner not implemented)" >&2
-      exit 1
-      ;;
-    *)
-      echo "tests: $name: unsupported program $program" >&2
-      exit 1
-      ;;
-  esac
+    fi
+    continue
+  fi
+  emit_slice0_row "$test_manifest" "$program" "$d" "$target" "$expect"
+  # Emit-only controls visit every row without a native build.
+  if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" = 1 ] || [[ "$expect" == "refuse "* ]]; then continue; fi
+  check "$name" "$d" 10 20
+  examples=$((examples + 1))
 done <<<"$rows"
 if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" = 1 ]; then exit "$fail"; fi
 "${emitter[@]}" loop "$work/ctl/loop" "$target"

@@ -1,0 +1,1 @@
+fn main() -> u8 { let discard: u8 = 42; return discard; }

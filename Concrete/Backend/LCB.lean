@@ -217,14 +217,17 @@ def Target.ofName : String → Option Target
 /-- The body's symbol: the runtime entry calls `concrete_body`. -/
 def bodySymbol : LeanCompilerBackend.Verified.Symbol := { namespaceName := "concrete", name := "concrete_body", exported := true }
 
+/-- The adapter's body with the canonical ABI and frame plans. -/
+def job (f : Source.Function) : LeanCompilerBackend.Verified.FunctionJob :=
+  { code := { symbol := bodySymbol, body := f, abi := LeanCompilerBackend.Verified.planAbi f,
+              layout := LeanCompilerBackend.Verified.planFrame f } }
+
 /-- The adapted body as assembly text for `target`, computed in process from the value. -/
 def assemble (target : Target) (f : Source.Function) : Except String String :=
   match target with
   | .aarch64Macos => do
-    let job : LeanCompilerBackend.Verified.FunctionJob :=
-      { code := { symbol := bodySymbol, body := f, abi := LeanCompilerBackend.Verified.planAbi f,
-                  layout := LeanCompilerBackend.Verified.planFrame f } }
-    let artifact ← (LeanCompilerBackend.Verified.compileFunction job).mapError (fun e => s!"LCB first path: {repr e}")
+    let artifact ← (LeanCompilerBackend.Verified.compileFunction (job f)).mapError
+      (fun e => s!"LCB first path: {repr e}")
     return ".text\n" ++ artifact.code.fragment ++ ".subsections_via_symbols\n"
   | .x86_64Linux | .aarch64Linux => do
     let m : LeanCompilerBackend.Module :=

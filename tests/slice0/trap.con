@@ -1,0 +1,5 @@
+fn main() -> u8 {
+    let a: u8 = 100 + 50;
+    let b: u8 = 106;
+    return a + b + (a + b);
+}

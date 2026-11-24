@@ -235,6 +235,7 @@ inductive Piece where
   | punctuation (after : Separator)
   | numbered (kind : NumberPrefix) (value : Nat)
   | bytes (value : ByteArray)
+  | functionEnd (fn : Global)
   | immediate (value : Immediate) (before : Opening) (after : Separator)
 
 abbrev Doc := List Piece
@@ -370,7 +371,12 @@ private def terminatorPieces : Terminator → Doc
       (cases.flatMap fun entry => text " " ++ switchCasePieces ty entry) ++ text " ]\n"
   | .unreachable => text "unreachable\n"
 
-private def defineEnd : String := r") {" ++ "\n"
+-- The stack bound is derived from direct control flow, including dense trap dispatch.
+private def defineEndTail : Global → String
+  | .main => r#" "no-jump-tables"="true" {"# ++ "\n"
+  | _ => r" {" ++ "\n"
+
+private def defineEnd (fn : Global) : String := ")" ++ defineEndTail fn
 
 private def parameterPieces (a : TypeCode × Local) : Doc :=
   typeCode a.1 ++ text " " ++ localName a.2
@@ -381,7 +387,7 @@ def Item.pieces : Item → Doc
       commaSeparated typeCode args ++ text ")\n"
   | .define internal result fn args =>
     text "define " ++ (if internal then text "internal " else []) ++ typeCode result ++ text " " ++ global fn ++ text "(" ++
-      commaSeparated parameterPieces args ++ text defineEnd
+      commaSeparated parameterPieces args ++ [.functionEnd fn]
   | .constant name bytes =>
     global name ++ text " = private constant " ++ [.immediate (.natural bytes.size) .bracket .space] ++
       text "x " ++ typeCode (.integer .u8) ++ text "] " ++ [.bytes bytes] ++ text "\n"
@@ -393,7 +399,7 @@ def Item.pieces : Item → Doc
 
 def Piece.immediate? : Piece → Option Immediate
   | .immediate v _ _ => some v
-  | .fragment _ | .punctuation _ | .numbered .. | .bytes _ => none
+  | .fragment _ | .punctuation _ | .numbered .. | .bytes _ | .functionEnd _ => none
 
 private def byteText (b : UInt8) : String :=
   let n := b.toNat
@@ -411,6 +417,7 @@ def Piece.render : Piece → String
   | .punctuation after => String.singleton after.char
   | .numbered p n => p.text ++ decimal n
   | .bytes data => byteString data
+  | .functionEnd fn => defineEnd fn
   | .immediate v before after => String.singleton before.char ++ v.token ++ String.singleton after.char
 
 def renderPieces (pieces : List Piece) : String := String.join (pieces.map Piece.render)
@@ -772,7 +779,7 @@ private def define : Parser Item := do
   literal " "
   let fn ← globalName
   literal "("
-  let args ← series parameter ", " defineEnd
+  let args ← series parameter ", " (defineEnd fn)
   pure (.define internal result fn args)
 
 private def indented : Parser Item
@@ -1883,10 +1890,11 @@ private theorem parameter_append (a : TypeCode × Local) (c : Char) (rest : List
     List.cons_append, List.nil_append, parameter, bind_run, typeStep, Option.bind_some, space_run,
     localStep, pure_run]
 
-private theorem parameters_append (args : List (TypeCode × Local)) (rest : List Char) :
-    series parameter ", " defineEnd (seriesChars parameterChars ", " defineEnd args ++ rest) =
+private theorem parameters_append (fn : Global) (args : List (TypeCode × Local)) (rest : List Char) :
+    series parameter ", " (defineEnd fn) (seriesChars parameterChars ", " (defineEnd fn) args ++ rest) =
       some (args, rest) := by
-  have ending : defineEnd.toList = [')', ' ', '{', '\n'] := rfl
+  have ending : (defineEnd fn).toList = ')' :: (defineEndTail fn).toList := by
+    simp [defineEnd]
   have separator : ", ".toList = [',', ' '] := rfl
   have starts (a : TypeCode × Local) :
       ∃ c cs, parameterChars a = c :: cs ∧ c ≠ ')' := by
@@ -1903,7 +1911,7 @@ private theorem parameters_append (args : List (TypeCode × Local)) (rest : List
     | nil =>
       simpa only [seriesChars, List.isEmpty_nil, ↓reduceIte, List.append_nil, List.nil_append,
         List.append_assoc, ending, List.cons_append] using
-        parameter_append a ')' (' ' :: '{' :: '\n' :: rest) (by decide)
+        parameter_append a ')' ((defineEndTail fn).toList ++ rest) (by decide)
     | cons b bs =>
       simpa only [seriesChars, List.isEmpty_cons, Bool.false_eq_true, ↓reduceIte,
         List.append_assoc, separator, List.cons_append, List.nil_append] using
@@ -1913,20 +1921,21 @@ private theorem parameters_append (args : List (TypeCode × Local)) (rest : List
     simp only [seriesChars, spell, List.cons_append, List.append_assoc, ending, consume,
       Ne.symm different, ite_false]
   · intros
+    rw [ending]
     rfl
 
 private theorem define_item_append (internal : Bool) (result : TypeCode) (fn : Global)
     (args : List (TypeCode × Local)) (rest : List Char) :
     item (chars (Item.pieces (.define internal result fn args)) ++ rest) =
       some (.define internal result fn args, rest) := by
-  let tail := seriesChars parameterChars ", " defineEnd args ++ rest
+  let tail := seriesChars parameterChars ", " (defineEnd fn) args ++ rest
   let afterName := "(".toList ++ tail
   let afterType := chars (LLVM.global fn) ++ afterName
   let afterInternal := chars (LLVM.typeCode result) ++ ' ' :: afterType
   let internalText := if internal then "internal ".toList else []
   have typeStep := typeCode_append result ' ' afterType (by decide)
   have globalStep := globalName_append fn afterName (boundary_cons '(' _ (by decide))
-  have argsStep := parameters_append args rest
+  have argsStep := parameters_append fn args rest
   have internalStep : (alt (keyword "internal " true) (pure false)) (internalText ++ afterInternal) =
       some (internal, afterInternal) := by
     cases internal with
@@ -1943,10 +1952,12 @@ private theorem define_item_append (internal : Bool) (result : TypeCode) (fn : G
       simp only [internalText, Bool.false_eq_true, ↓reduceIte, List.nil_append, alt,
         keyword_fail _ _ _ miss, Option.orElse_none, pure_run]
   let input := "define ".toList ++ (internalText ++ afterInternal)
+  have endChars : chars [.functionEnd fn] = (defineEnd fn).toList := by
+    simp [chars, renderPieces, Piece.render]
   have rendered : chars (Item.pieces (.define internal result fn args)) ++ rest = input := by
     have flagChars : chars (if internal then text "internal " else []) = internalText := by
       cases internal <;> rfl
-    simp only [Item.pieces, chars_append, chars_text, flagChars, List.append_assoc, space_chars,
+    simp only [Item.pieces, chars_append, chars_text, flagChars, List.append_assoc, space_chars, endChars,
       List.cons_append, List.nil_append, input, afterInternal, afterType, afterName, tail]
     rw [← List.append_assoc (chars (commaSeparated parameterPieces args)), commaSeparated_chars]
     rfl
