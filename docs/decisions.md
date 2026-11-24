@@ -106,11 +106,10 @@ Scope and boundaries: this decision swaps Slice 18 (`f32`/`f64`) ahead of Slice 
 vertical slice** rule (no compiler implementation for constructs lacking their slice's Lean spec,
 without waiting for the full-language spec before trying real slices), permits `Concrete.toml`
 `[policy]` and `concrete diff` ratchets (`R-0576`, `R-0201`) to enforce per-function step/complexity
-budgets from Slice 10 (with no cost annotations in Concrete source syntax), and authorizes
-scheduling `R-0725`–`R-0727` in [ROADMAP.md](../ROADMAP.md) (added with the follow-up enhancements
-proposal). It decides **no** language syntax, float/SIMD semantics, or grant rules: `R-0725`,
-`R-0726`, and `R-0608`'s float observation contract all remain explicitly owner-gated before
-entering `ConcreteSpec`.
+budgets from Slice 10 (with no cost annotations in Concrete source syntax), and schedules
+`R-0725`–`R-0727` in [ROADMAP.md](../ROADMAP.md). It decides **no** language syntax, float/SIMD
+semantics, or grant rules: `R-0725`, `R-0726`, and `R-0608`'s float observation contract all remain
+explicitly owner-gated before entering `ConcreteSpec`.
 
 <a id="decided-2026-11-22-roadmap-reordering"></a>
 ## Decided 2026-11-22: roadmap reordering and just-in-time foundation
@@ -118,9 +117,9 @@ entering `ConcreteSpec`.
 Status: decided
 Source: owner
 
-Provenance: owner session `3ae15b85-7ff7-4f07-b363-ab6fedc3326a` (2026-11-22). After reviewing the
-draft `docs/proposals/LANGUAGE_AND_COMPILER_ENHANCEMENTS.md` proposal and the scheduled task rows in
-[ROADMAP.md](../ROADMAP.md), the owner asked, verbatim:
+Provenance: owner session `3ae15b85-7ff7-4f07-b363-ab6fedc3326a` (2026-11-22). After reviewing
+[LANGUAGE_AND_COMPILER_ENHANCEMENTS.md](proposals/LANGUAGE_AND_COMPILER_ENHANCEMENTS.md) and the
+scheduled task rows in [ROADMAP.md](../ROADMAP.md), the owner asked, verbatim:
 
 ~~~text
 also would you change the order of anything in the roadmap?
@@ -168,8 +167,7 @@ and Phase T prioritization in [ROADMAP.md](../ROADMAP.md), superseding the earli
 freeze/LP0-at-1/Phase-C-and-D ordering records (which remain below as history). All `C1–C10`
 foundation contracts and interaction proofs complete in `ConcreteSpec` before Core freezes (`A2c`)
 at Slice 11 (separate from later Slice-12/16 compiler and surface increments); Time/clock simulation
-belongs to Slice 20 where clock/time lands, so Slice 11 covers `Fs`/Entropy simulation; and the
-accompanying enhancements proposal (`R-0711`–`R-0727`) lands in its own follow-up branch. This
+belongs to Slice 20 where clock/time lands, so Slice 11 covers `Fs`/Entropy simulation. This
 decision decides **no** language syntax or semantic rule: every owner-gated language row (`R-0713`–`R-0716`,
 `R-0718`, `R-0495` functional-model subset, `R-0399` concurrency, and all open ODs) remains
 explicitly owner-gated. It waives no soundness guarantee; it changes when heavy qualification gates
