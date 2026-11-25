@@ -26,14 +26,6 @@ structure FrontendPremises where
     let p := Core.toCore out.program
     Elab.eval ast = Core.run p (p.body.length + 1)
 
-/-- Open implementation contracts for the lowering stages. -/
-structure LoweringPremises where
-  ssa : ∀ path mem bir, SSA.lower path mem = .ok bir →
-    match BIR.run bir (bir.blocks.length + 1) with
-    | .exited n => Memory.run mem = .exit n
-    | .trapped site => ∃ entry, bir.sites[site]? = some entry ∧ Memory.run mem = .trap entry.kind
-    | _ => False
-
 namespace Native
 open BIR Backend
 
@@ -136,8 +128,6 @@ def all : List Premise := [
     "every tree the parser returns for a token list is one the grammar derives from it"⟩,
   ⟨"P_elab", .implementation, "ANF and resolution preservation",
     "successful elaboration preserves the source AST evaluator's outcome in Core"⟩,
-  ⟨"P_ssa", .implementation, "SSA semantic preservation",
-    "successful SSA lowering preserves Memory CFG outcomes, including the trap kind"⟩,
   ⟨"P_print", .implementation, "an LLVM-IR semantics; not planned for slice 0",
     "the printed LLVM text of a WF BIR means at most the BIR behaviour, encoded"⟩,
   ⟨"P_toolchain[llvm]", .toolchain, "not planned",
@@ -158,11 +148,21 @@ def all : List Premise := [
 def theorems : List Lean.Name := [
   ``ConcreteSpec.Surface0.grammar0_ll1,
   ``Concrete.Parse.table0_checked,
+  ``Concrete.Lex.lex_correct,
+  ``Concrete.Stages.compile_lexes,
   ``Concrete.Admission.admit_checked,
   ``Concrete.Admission.check_evidence,
   ``Concrete.Admission.admit_never_traps,
+  ``Concrete.MIR.lower_correct,
+  ``Concrete.MIR.lowerUnchecked_correct,
   ``Concrete.Memory.lower_correct,
+  ``Concrete.Memory.lower_admitted_correct,
+  ``Concrete.Memory.lower_unchecked_correct,
+  ``Concrete.Stages.compile_core_correct,
   ``Concrete.SSA.lower_wf,
+  ``Concrete.SSA.validate_correct,
+  ``Concrete.SSA.lower_correct,
+  ``Concrete.Stages.compile_ssa_correct,
   ``Concrete.Stages.compile_of_edges,
   ``Concrete.Stages.prepareLCB_of_edges,
   ``Concrete.Native.lcb_emit_correct,

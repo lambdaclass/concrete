@@ -51,13 +51,13 @@ Core program + site map  (the spec's Core value, `out.p`, `out.sites`)
 CheckedCore
   │ (mono: absent in slice 0; when it exists, admission re-runs after it, row Q6.3)
   │ lower               MIR.lean      Place MIR: expands RESIDUAL checks only, never admits;
-  ▼                                   proved over ALL well-scoped programs with valid tokens
+  ▼                                   proved for successful admitted and unchecked lowering
 Place MIR  (`out.mir`)
   │ memory              Memory.lean   Memory CFG: the one Layout authority (sizes, alignment,
   ▼                                   offsets, loads/stores over block-offset memory); identity-shaped
-                                      in slice 0 (u8 slots), proved: memory_correct
+                                      in slice 0 (u8 slots), proved: Memory.lower_correct
 Memory CFG  (`out.mem`)
-  │ ssa                 BIR.lean      BIR; slice 0: direct proof (constraint below)
+  │ ssa                 SSA.lean      BIR; slice 0: proved structural validation
   ▼
 BIR  (`out.bir`)  ── designed for both backends from the start
   ├───────────────────────────────────────────┐
@@ -95,7 +95,7 @@ There's no Mono Core, since slice 0 has no generics. When Mono exists, the admis
 | Resolve | direct proof; HIR is only the resolved surface tree, no second checker |
 | Elab | direct proof |
 | Lower, Memory CFG | direct proofs |
-| SSA | long-term, a proved validator. Slice 0 proves `ssa_correct` directly, on one condition: BIR's shape may not depend on that proof, so the validator can replace it without changing the IR. |
+| SSA | Slice 0 walks the Memory stores and emitted BIR together. A separate slot witness ties each success-edge argument to its continuation parameter. The proof applies to arbitrary related stores and register environments. |
 | BIR → LCB-IR adapter | direct proof |
 | Mono, optimizations, register allocation, linking (later) | proved validators |
 
@@ -196,7 +196,8 @@ Concrete/
   Elab.lean            resolve + elaborate to the spec's Core (one stage edge), and its theorems
   MIR.lean             Place MIR: syntax, semantics, lowering, lower_correct, lowerUnchecked_correct
   Memory.lean          Memory CFG: the Layout authority, block-offset memory, memory_correct
-  BIR.lean             BIR: syntax, semantics, behaviour, WF, ssa, ssa_correct, addOvf_correct
+  BIR.lean             BIR: syntax, semantics, behaviour, WF, addOvf_correct
+  SSA.lean             Memory to BIR lowering, validator, and preservation theorems
   Backend/             the backend stage: everything after BIR, one file per backend
     LLVM.lean          BIR → LLVM text printer (unverified; P_print)
     LCB.lean           BIR → LCB `Source.Function` adapter + adapter_correct; in-process assembly
@@ -373,7 +374,6 @@ There are two target profiles: `x86_64-linux` and `aarch64-macos` (LCB's first n
 |---|---|---|
 | P_parse | implementation | the generic table-parser theorem |
 | P_elab | implementation | ANF and resolution preservation |
-| P_ssa | implementation | SSA semantic preservation |
 | P_print | implementation | an LLVM-IR semantics; not planned for slice 0 |
 | P_toolchain[llvm] | toolchain | not planned |
 | P_toolchain[lcb] | toolchain | LCB's own proofs (C01–C03 and beyond) |
@@ -430,6 +430,11 @@ obligations. A single acyclic evidence graph identifies dependencies for revocat
 is inserted after linking, with decoded-image and execution preservation checked at the
 receipt boundary. An image-validation witness applies to the final bytes. Canonical encoding,
 hash implementation, evidence emission and bounded offline replay remain step 5 work.
+
+The structural SSA validator checks operands, fresh definitions, ordered continuation
+arguments, the complete trap-site entry, and the return. `SSA.lower_wf` establishes BIR
+well-formedness, and `Stages.compile_ssa_correct` applies `SSA.lower_correct` to the recorded
+Memory and BIR programs. Forward edges give the validator's block-count fuel bound.
 
 **Supporting theorems:**
 - `addOvf_correct`: for arbitrary `u8` operands, the result is `(a+b) % 256` and the flag is `a+b ≥ 256`.
@@ -676,12 +681,14 @@ Heavy runs (native builds, differentials, certificates) run on concrete-ci-2 or 
 These are internal. None blocks slice 0's correctness.
 
 - **Retire premises:**
-  - the generic table-parser theorem (P_parse);
-  - `adapter_correct` and `emit_correct` (P_adapter, retired 2026-11-08);
+  - parser soundness (P_parse), using the enforced `CheckedGrammar` and `CheckedTable`;
+  - ANF and resolution preservation (P_elab);
   - a proof of the decoding entry against a libc model (P_rt).
 - **P_toolchain[lcb]** is retired by LCB's own C01–C03 work. LCB's verified profile names Apple AArch64 as its intended target. The `x86_64-linux` executable goes through LCB's compatibility pipeline, inside P_toolchain[lcb], until LCB certifies that target.
 - **Encoded result.** It works while LCB's verified profile has no calls, memory or traps. When it gains them, revisit the encoding: an external trap call, or a multi-function encoding.
-- **SSA:** replace the direct `ssa_correct` with a proved validator. BIR's shape must not depend on the direct proof.
+- **SSA:** extend the slot-to-register relation and edge witnesses to joins, back edges, and
+  call/return states as those constructs arrive. The slice-0 proof uses forward edges to bound
+  termination. Later proofs will need to account for potentially unbounded execution.
 - **Certificates:** move from per-edge `decide` to per-edge witnesses checked by proved validators (R-0552/R-0521), with con-leche/nanoda replay.
 - **Artifact facts:**
   - a link-map and symbol inventory, for trusted/FFI/opaque code;
