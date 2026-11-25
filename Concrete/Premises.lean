@@ -21,22 +21,10 @@ namespace Concrete
 
 open ConcreteSpec.Surface0 in
 structure FrontendPremises where
-  lex : ∀ src toks, Lex.lex src = .ok toks → Lexes src toks
   parse : ∀ toks ast, Parse.parse toks = .ok ast → Derives toks ast
   elaborate : ∀ ast out, Elab.elaborate ast = .ok out →
     let p := Core.toCore out.program
     Elab.eval ast = Core.run p (p.body.length + 1)
-
-/-- Open implementation contracts for the lowering stages. The production path gets
-its evidence from admission. The conformance path carries an empty evidence list. -/
-structure LoweringPremises where
-  lower :
-    (∀ source admitted mir, Admission.check source = .ok admitted → MIR.lower admitted = .ok mir →
-      let p := Core.toCore source.program
-      MIR.run mir = Core.run p (p.body.length + 1)) ∧
-    (∀ source mir, MIR.lowerUnchecked source = .ok mir →
-      let p := Core.toCore source.program
-      MIR.run mir = Core.run p (p.body.length + 1))
 
 namespace Native
 open BIR Backend
@@ -136,14 +124,10 @@ structure Premise where
 
 /-- The open premises for slice 0, in the README's order. -/
 def all : List Premise := [
-  ⟨"P_lex", .implementation, "`lex_correct`",
-    "every token list the lexer returns for a source is one the source lexes to"⟩,
   ⟨"P_parse", .implementation, "the generic table-parser theorem",
     "every tree the parser returns for a token list is one the grammar derives from it"⟩,
   ⟨"P_elab", .implementation, "ANF and resolution preservation",
     "successful elaboration preserves the source AST evaluator's outcome in Core"⟩,
-  ⟨"P_lower", .implementation, "checked-evidence validity and MIR preservation",
-    "MIR preserves Core outcomes for unchecked lowering and for evidence produced by admission"⟩,
   ⟨"P_print", .implementation, "an LLVM-IR semantics; not planned for slice 0",
     "the printed LLVM text of a WF BIR means at most the BIR behaviour, encoded"⟩,
   ⟨"P_toolchain[llvm]", .toolchain, "not planned",
@@ -164,10 +148,17 @@ def all : List Premise := [
 def theorems : List Lean.Name := [
   ``ConcreteSpec.Surface0.grammar0_ll1,
   ``Concrete.Parse.table0_checked,
+  ``Concrete.Lex.lex_correct,
+  ``Concrete.Stages.compile_lexes,
   ``Concrete.Admission.admit_checked,
   ``Concrete.Admission.check_evidence,
   ``Concrete.Admission.admit_never_traps,
+  ``Concrete.MIR.lower_correct,
+  ``Concrete.MIR.lowerUnchecked_correct,
   ``Concrete.Memory.lower_correct,
+  ``Concrete.Memory.lower_admitted_correct,
+  ``Concrete.Memory.lower_unchecked_correct,
+  ``Concrete.Stages.compile_core_correct,
   ``Concrete.SSA.lower_wf,
   ``Concrete.SSA.validate_correct,
   ``Concrete.SSA.lower_correct,

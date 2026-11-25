@@ -60,6 +60,24 @@ def compile (input : Input) : Except Refusal Output := do
   let ((((((( _, tokens), ast), core), admitted), mir), mem), bir) ← (stages input.path).run input
   return ⟨tokens, ast, core, admitted.tokens, mir, mem, bir⟩
 
+/-- The token list recorded by successful compilation satisfies the surface lexical relation. -/
+theorem compile_lexes {input : Input} {out : Output} (h : compile input = .ok out) :
+    ConcreteSpec.Surface0.Lexes input.source out.tokens := by
+  simp only [compile, stages, Pipeline.run, lex, memory, bind, Except.bind, pure, Except.pure] at h
+  cases hl : Lex.lex input.source <;> simp only [hl, reduceCtorEq] at h
+  rename_i toks
+  cases hp : Parse.parse toks <;> simp only [hp, reduceCtorEq] at h
+  rename_i ast
+  cases he : Elab.elaborate ast <;> simp only [he, reduceCtorEq] at h
+  rename_i core
+  cases ha : Admission.check core <;> simp only [ha, reduceCtorEq] at h
+  rename_i admitted
+  cases hm : MIR.lower admitted <;> simp only [hm, reduceCtorEq] at h
+  rename_i mir
+  cases hs : SSA.lower input.path (Memory.lower mir) <;> simp only [hs, reduceCtorEq] at h
+  cases Except.ok.inj h
+  exact Lex.lex_correct hl
+
 /-- Equalities for individual passes compose into a certificate about the production fold. -/
 theorem compile_of_edges (input : Input) (tokens : List ConcreteSpec.Surface0.Token)
     (ast : ConcreteSpec.Surface0.Program) (core : Elab.Output) (admitted : Admission.Output)
@@ -74,6 +92,34 @@ theorem compile_of_edges (input : Input) (tokens : List ConcreteSpec.Surface0.To
     compile input = .ok ⟨tokens, ast, core, admitted.tokens, mir, mem, bir⟩ := by
   simp [compile, stages, Pipeline.run, lex, memory, bind, Except.bind,
     hLex, hParse, hElab, hAdmit, hLower, hMem, hSSA] <;> rfl
+
+/-- Successful production compilation preserves the Core outcome through Memory. -/
+theorem compile_core_correct {input : Input} {out : Output}
+    (h : compile input = .ok out) :
+    let p := Core.toCore out.core.program
+    Memory.run out.memory = Core.run p (p.body.length + 1) := by
+  simp only [compile, stages, Pipeline.run, bind, Except.bind, memory] at h
+  cases hLex : lex input with
+  | error => simp [hLex] at h
+  | ok tokens =>
+    cases hParse : Parse.parse tokens with
+    | error => simp [hLex, hParse] at h
+    | ok ast =>
+      cases hElab : Elab.elaborate ast with
+      | error => simp [hLex, hParse, hElab] at h
+      | ok core =>
+        cases hAdmit : Admission.check core with
+        | error => simp [hLex, hParse, hElab, hAdmit] at h
+        | ok admitted =>
+          cases hLower : MIR.lower admitted with
+          | error => simp [hLex, hParse, hElab, hAdmit, hLower] at h
+          | ok mir =>
+            cases hSSA : SSA.lower input.path (Memory.lower mir) with
+            | error => simp [hLex, hParse, hElab, hAdmit, hLower, hSSA] at h
+            | ok bir =>
+              simp [hLex, hParse, hElab, hAdmit, hLower, hSSA, pure, Except.pure] at h
+              subst out
+              exact Memory.lower_admitted_correct hAdmit hLower
 
 /-- Every accepted production pipeline result satisfies the SSA contract on its
 recorded Memory and BIR programs. -/

@@ -10,9 +10,15 @@ def makeTable {T N : Type} [DecidableEq T] [DecidableEq N] (g : Grammar T N) : T
   let (nu, fi, fo) := compute g
   g.prods.flatMap fun (lhs, rhs) => (predictB nu fi fo lhs rhs).map fun look => ((lhs, look), rhs)
 
+/-- The parser can only use the prediction table of a checked grammar. -/
+structure CheckedTable (T N : Type) [DecidableEq T] [DecidableEq N] where
+  grammar : CheckedGrammar T N
+  entries : Table T N
+  entries_eq : entries = makeTable grammar.grammar
+
 open Sym in
 -- The checked constant avoids recomputing FIRST/FOLLOW in the compiler or its certificates.
-def table0 : Table Terminal Nonterminal :=
+private def table0Entries : Table Terminal Nonterminal :=
   let atoms := [Terminal.integer, .ident, .lparen]
   [((.program, some .fn), [t .fn, t .ident, t .lparen, t .rparen, t .arrow, t .u8,
                           t .lbrace, n .body, t .rbrace]),
@@ -26,16 +32,17 @@ def table0 : Table Terminal Nonterminal :=
    ((.atom, some .lparen), [t .lparen, n .expr, t .rparen])]
 
 theorem table0_checked :
-    (table0.all (makeTable grammar0).contains &&
-     (makeTable grammar0).all table0.contains) = true := by decide
+    table0Entries = makeTable grammar0 := by decide
 
-inductive Task (T N : Type) where
+def table0 : CheckedTable Terminal Nonterminal :=
+  ⟨checkedGrammar0, table0Entries, table0_checked⟩
+
+private inductive Task (T N : Type) where
   | read (symbol : Sym T N)
   | reduce (lhs : N) (rhs : List (Sym T N))
 
-/-- The parser machine is independent of the grammar and the semantic values on its stack. -/
-def run {T N V : Type} [DecidableEq T] [DecidableEq N]
-    (table : Table T N) (kind : Token → T) (leaf : Token → Except Refusal V)
+private def runTasks {T N V : Type} [DecidableEq T] [DecidableEq N]
+    (table : CheckedTable T N) (kind : Token → T) (leaf : Token → Except Refusal V)
     (reduce : N → List (Sym T N) → List V → Except Refusal V)
     (mismatch : Sym T N → List Token → List V → Refusal) :
     Nat → List (Task T N) → List Token → List V → Except Refusal V
@@ -44,22 +51,30 @@ def run {T N V : Type} [DecidableEq T] [DecidableEq N]
   | 0, _, _, _ => .error (.internal "parser exhausted its progress bound")
   | fuel + 1, .read (.n lhs) :: pending, input, values => do
     let look := input.head?.map kind
-    let some (_, rhs) := table.find? (fun row => row.1 == (lhs, look))
+    let some (_, rhs) := table.entries.find? (fun row => row.1 == (lhs, look))
       | throw (mismatch (.n lhs) input values)
-    run table kind leaf reduce mismatch fuel
+    runTasks table kind leaf reduce mismatch fuel
       (rhs.map Task.read ++ .reduce lhs rhs :: pending) input values
   | fuel + 1, .read (.t expected) :: pending, input, values => do
     match input with
     | tok :: rest =>
       if kind tok == expected then
         let value ← leaf tok
-        run table kind leaf reduce mismatch fuel pending rest (value :: values)
+        runTasks table kind leaf reduce mismatch fuel pending rest (value :: values)
       else throw (mismatch (.t expected) input values)
     | [] => throw (mismatch (.t expected) [] values)
   | fuel + 1, .reduce lhs rhs :: pending, input, values => do
     let value ← reduce lhs rhs (values.take rhs.length).reverse
-    run table kind leaf reduce mismatch fuel pending input (value :: values.drop rhs.length)
+    runTasks table kind leaf reduce mismatch fuel pending input (value :: values.drop rhs.length)
   | _, [], [], _ => .error (.internal "invalid parser result stack")
+
+/-- Parse from the checked grammar's start symbol with the caller's semantic actions. -/
+def run {T N V : Type} [DecidableEq T] [DecidableEq N]
+    (table : CheckedTable T N) (kind : Token → T) (leaf : Token → Except Refusal V)
+    (reduce : N → List (Sym T N) → List V → Except Refusal V)
+    (mismatch : Sym T N → List Token → List V → Refusal)
+    (fuel : Nat) (input : List Token) : Except Refusal V :=
+  runTasks table kind leaf reduce mismatch fuel [.read (.n table.grammar.grammar.start)] input []
 
 private inductive Value where
   | tok (token : Token)
@@ -106,7 +121,8 @@ where
     | .name "else" => { tok with value := .fixed .else_ }
     | _ => tok
 
-private def refusalTable := makeTable refusalGrammar
+private def refusalTable : CheckedTable Terminal Nonterminal :=
+  ⟨checkedRefusalGrammar, makeTable checkedRefusalGrammar.grammar, rfl⟩
 
 private def nonDecimal (tok : Token) : Bool :=
   match tok.value with
@@ -122,13 +138,13 @@ private def recognizeProduction (lhs : Nonterminal) (rhs : List (Sym Terminal No
 private def recognizeDecided (input : List Token) : Except Refusal Bool :=
   run refusalTable (·.value.kind) (fun tok => .ok (nonDecimal tok))
     recognizeProduction (fun _ tokens _ => syntaxError tokens)
-    (32 * (input.length + 1)) [.read (.n refusalGrammar.start)] (refusalTokens input) []
+    (32 * (input.length + 1)) (refusalTokens input)
 
 def parse (input : List Token) : Except Refusal Program := do
   -- Classify a form as unsupported only after consuming its entire syntax.
   match run table0 (·.value.kind) (fun tok => .ok (.tok tok)) (fun lhs _ => reduce lhs)
       (fun _ tokens _ => syntaxError tokens)
-      (16 * (input.length + 1)) [.read (.n grammar0.start)] input [] with
+      (16 * (input.length + 1)) input with
   | .ok (.program ast) =>
     for tok in input do
       if nonDecimal tok then
