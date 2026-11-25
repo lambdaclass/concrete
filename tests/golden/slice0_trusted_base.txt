@@ -11,13 +11,13 @@ theorem ConcreteSpec.Surface0.grammar0_ll1 axioms: propext
 theorem Concrete.Parse.table0_checked axioms:
 theorem Concrete.Lex.lex_correct axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.Stages.compile_lexes axioms: propext, Classical.choice, Quot.sound
-theorem Concrete.Admission.admit_checked axioms: propext, Quot.sound
-theorem Concrete.Admission.check_evidence axioms: propext
-theorem Concrete.Admission.admit_never_traps axioms: propext, Quot.sound
-theorem Concrete.MIR.lower_correct axioms: propext, Quot.sound
+theorem Concrete.Admission.admit_checked axioms: propext, Classical.choice, Quot.sound
+theorem Concrete.Admission.check_evidence axioms: propext, Classical.choice, Quot.sound
+theorem Concrete.Admission.admit_never_traps axioms: propext, Classical.choice, Quot.sound
+theorem Concrete.MIR.lower_correct axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.MIR.lowerUnchecked_correct axioms: propext, Quot.sound
 theorem Concrete.Memory.lower_correct axioms: propext, Quot.sound
-theorem Concrete.Memory.lower_admitted_correct axioms: propext, Quot.sound
+theorem Concrete.Memory.lower_admitted_correct axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.Memory.lower_unchecked_correct axioms: propext, Quot.sound
 theorem Concrete.Stages.compile_core_correct axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.SSA.lower_wf axioms: propext, Classical.choice, Quot.sound

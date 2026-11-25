@@ -1,3 +1,4 @@
+import Concrete.Index
 import ConcreteSpec.Spec.Slice1Semantics
 import ConcreteSpec.Spec.Scalar
 
@@ -602,6 +603,155 @@ def wf (p : Program) : Bool :=
   (List.range p.blocks.length).all
     (fun j => j == 0 || p.blocks.any (fun b => b.term.targets.contains j)) &&
   p.blocks.all (Block.wf p)
+
+private abbrev Scope := Std.HashMap Nat Ty
+
+private def ScopeAgrees (index : Scope) (scope : List (Reg × Ty)) : Prop :=
+  ∀ r, index[r]? = AList.lookup scope r
+
+private theorem scope_empty : ScopeAgrees ∅ [] := by
+  intro r
+  simp [AList.lookup]
+
+private theorem scope_push (index : Scope) (scope : List (Reg × Ty))
+    (defs : List (Reg × Ty)) (h : ScopeAgrees index scope) :
+    ScopeAgrees (defs.foldl (fun m d => m.insert d.1 d.2) index) (defs.reverse ++ scope) := by
+  induction defs generalizing index scope with
+  | nil => exact h
+  | cons d ds ih =>
+    simp only [List.foldl_cons, List.reverse_cons, List.append_assoc, List.singleton_append]
+    apply ih
+    intro r
+    by_cases eq : d.1 = r <;> simp [Std.HashMap.getElem?_insert, AList.lookup, eq, h r]
+
+private def operandHasIndexed (scope : Scope) (ty : Ty) : Operand → Bool
+  | .reg r => scope[r]? == some ty
+  | .imm t v => ty == .int t && t.inRange v
+
+private theorem operandHasIndexed_eq {index : Scope} {scope : List (Reg × Ty)}
+    (h : ScopeAgrees index scope) (ty : Ty) (a : Operand) :
+    operandHasIndexed index ty a = operandHas scope ty a := by
+  unfold ScopeAgrees at h
+  cases a <;> simp [operandHasIndexed, operandHas, h]
+
+private def Inst.wfIndexed (scope : Scope) : Inst → Bool
+  | .bin _ t _ a b => operandHasIndexed scope (.int t) a && operandHasIndexed scope (.int t) b
+  | .binOvf _ t _ _ a b => operandHasIndexed scope (.int t) a && operandHasIndexed scope (.int t) b
+  | .trunc fr _ _ a => operandHasIndexed scope (.int fr) a
+
+private theorem inst_wfIndexed_eq {index : Scope} {scope : List (Reg × Ty)}
+    (h : ScopeAgrees index scope) (i : Inst) :
+    i.wfIndexed index = i.wf scope := by
+  cases i <;> simp [Inst.wfIndexed, Inst.wf, operandHasIndexed_eq h]
+
+private def edgeWfIndexed (blocks : Array Block) (scope : Scope) (target : Nat)
+    (args : List Operand) : Bool :=
+  target != 0 &&
+  match blocks[target]? with
+  | none => false
+  | some blk => blk.params.length == args.length &&
+      (blk.params.zip args).all (fun (pr, a) => operandHasIndexed scope pr.2 a)
+
+private theorem edgeWfIndexed_eq (p : Program) {index : Scope} {scope : List (Reg × Ty)}
+    (h : ScopeAgrees index scope) (target : Nat) (args : List Operand) :
+    edgeWfIndexed p.blocks.toArray index target args = edgeWf p scope target args := by
+  simp only [edgeWfIndexed, edgeWf, List.getElem?_toArray]
+  split <;> simp [operandHasIndexed_eq h]
+
+private def Term.wfIndexed (blocks : Array Block) (siteCount : Nat) (scope : Scope) : Term → Bool
+  | .ret a => operandHasIndexed scope (.int .u8) a
+  | .br t args => edgeWfIndexed blocks scope t args
+  | .condbr c t ta e ea =>
+    scope[c]? == some .bool && t != e && edgeWfIndexed blocks scope t ta &&
+      edgeWfIndexed blocks scope e ea
+  | .trap s => s < siteCount
+
+private theorem term_wfIndexed_eq (p : Program) {index : Scope} {scope : List (Reg × Ty)}
+    (h : ScopeAgrees index scope) (t : Term) :
+    t.wfIndexed p.blocks.toArray p.sites.length index = t.wf p scope := by
+  unfold ScopeAgrees at h
+  cases t <;>
+    simp [Term.wfIndexed, Term.wf, h, operandHasIndexed_eq h, edgeWfIndexed_eq p h]
+
+private def checkInstsIndexed (insts : List Inst) (ok : Bool) (scope : Scope) : Bool × Scope :=
+  insts.foldl
+    (fun (acc : Bool × Scope) i =>
+      (acc.1 && i.wfIndexed acc.2, i.defs.foldl (fun m d => m.insert d.1 d.2) acc.2))
+    (ok, scope)
+
+private theorem checkInstsIndexed_agrees (insts : List Inst) (ok : Bool)
+    (index : Scope) (scope : List (Reg × Ty)) (h : ScopeAgrees index scope) :
+    let fast := checkInstsIndexed insts ok index
+    let spec := insts.foldl
+      (fun (acc : Bool × List (Reg × Ty)) i =>
+        (acc.1 && i.wf acc.2, i.defs.reverse ++ acc.2)) (ok, scope)
+    fast.1 = spec.1 ∧ ScopeAgrees fast.2 spec.2 := by
+  induction insts generalizing ok index scope with
+  | nil => exact ⟨rfl, h⟩
+  | cons i is ih =>
+    simp only [checkInstsIndexed, List.foldl_cons, inst_wfIndexed_eq h]
+    exact ih _ _ _ (scope_push index scope i.defs h)
+
+private def Block.wfIndexed (blocks : Array Block) (siteCount : Nat) (b : Block) : Bool :=
+  let (ok, scope) := checkInstsIndexed b.insts true
+    (b.params.foldl (fun m d => m.insert d.1 d.2) ∅)
+  ok && b.term.wfIndexed blocks siteCount scope
+
+private theorem block_wfIndexed_eq (p : Program) (b : Block) :
+    b.wfIndexed p.blocks.toArray p.sites.length = b.wf p := by
+  have h := checkInstsIndexed_agrees b.insts true _ _
+    (by simpa using scope_push ∅ [] b.params scope_empty)
+  simp only [Block.wfIndexed, Block.wf, h.1, term_wfIndexed_eq p h.2]
+
+-- Track the same accumulator as eraseDups, with a membership index for it.
+private def eraseDupsIndexed (seen : Std.HashMap Nat Nat) (acc : List Nat) :
+    List Nat → List Nat
+  | [] => acc.reverse
+  | r :: rs =>
+    if seen.contains r then eraseDupsIndexed seen acc rs
+    else eraseDupsIndexed (seen.insert r r) (r :: acc) rs
+
+private theorem eraseDupsIndexed_eq (rs acc : List Nat) (seen : Std.HashMap Nat Nat)
+    (h : ∀ r, seen.contains r = acc.contains r) :
+    eraseDupsIndexed seen acc rs = List.eraseDupsBy.loop (· == ·) rs acc := by
+  induction rs generalizing seen acc with
+  | nil => rfl
+  | cons r rs ih =>
+    have htest : acc.any (r == ·) = acc.contains r := by
+      apply Bool.eq_iff_iff.mpr
+      simp only [List.any_eq_true, List.contains_eq_mem, decide_eq_true_eq, beq_iff_eq]
+      exact ⟨fun ⟨a, ha, he⟩ => he ▸ ha, fun hr => ⟨r, hr, rfl⟩⟩
+    simp only [eraseDupsIndexed, List.eraseDupsBy.loop, htest, ← h r]
+    cases hs : seen.contains r with
+    | true => exact ih acc seen h
+    | false =>
+      apply ih
+      intro k
+      by_cases he : r = k <;> simp [Std.HashMap.contains_insert, h, he, Ne.symm]
+
+private def wfIndexed (p : Program) : Bool :=
+  let regs := p.defs.map Prod.fst
+  let blocks := p.blocks.toArray
+  let siteCount := p.sites.length
+  let targets := Index.first id (p.blocks.flatMap (·.term.targets))
+  (match blocks[0]? with | some b => b.params.isEmpty | none => false) &&
+  (eraseDupsIndexed ∅ [] regs).length == regs.length &&
+  siteCount ≤ maxSites && p.sites.all (·.loc.wf) &&
+  (List.range blocks.size).all (fun j => j == 0 || targets.contains j) &&
+  p.blocks.all (Block.wfIndexed blocks siteCount)
+
+private theorem targets_contains (blocks : List Block) (j : Nat) :
+    (Index.first id (blocks.flatMap (·.term.targets))).contains j =
+      blocks.any (fun b => b.term.targets.contains j) := by
+  rw [Index.first_contains, List.map_id_fun]
+  apply Bool.eq_iff_iff.mpr
+  simp only [List.contains_eq_mem, List.mem_flatMap, id_eq, List.any_eq_true, decide_eq_true_eq]
+
+@[csimp] private theorem wf_eq_wfIndexed : wf = wfIndexed := by
+  funext p
+  have h := funext (block_wfIndexed_eq p)
+  simp only [wf, wfIndexed, List.getElem?_toArray, List.size_toArray,
+    eraseDupsIndexed_eq _ [] ∅ (by simp), targets_contains, h, List.eraseDups, List.eraseDupsBy]
 
 /-- A well-formed BIR program. -/
 def WF (p : Program) : Prop := wf p = true

@@ -1,6 +1,7 @@
 import ConcreteSpec.Proofs.Scalar
 import ConcreteSpec.Spec.Scalar
 import Concrete.Admission
+import Concrete.Index
 
 namespace Concrete.MIR
 
@@ -31,6 +32,40 @@ private def lowerStmt (sites : List Elab.SourceSite) (tokens : List Admission.To
 private def lowerWith (core : Elab.Output) (tokens : List Admission.Token) : Except Refusal Program := do
   let body ← core.program.body.mapM (lowerStmt core.sites tokens)
   return ⟨body, core.program.ret⟩
+
+private def lowerStmtIndexed (sites : Std.HashMap Nat Elab.SourceSite)
+    (tokens : Std.HashMap Nat Admission.Token) (stmt : Core.Stmt) : Except Refusal Assignment := do
+  match stmt.e with
+  | .atom a => return ⟨stmt.x, .copy a⟩
+  | .add a b =>
+    let some site := sites[stmt.x.id]?
+      | throw (.internal "missing source site for addition")
+    return ⟨stmt.x, .add a b site (tokens[stmt.x.id]?.map (·.value))⟩
+
+private def lowerWithIndexed (core : Elab.Output) (tokens : List Admission.Token) :
+    Except Refusal Program := do
+  let sites := Index.first (·.binding.id) core.sites
+  let evidence := Index.first (·.binding.id) tokens
+  let body ← core.program.body.mapM (lowerStmtIndexed sites evidence)
+  return ⟨body, core.program.ret⟩
+
+private theorem binding_id_beq (x y : ConcreteSpec.Var) : (x.id == y.id) = (x == y) := by
+  cases x
+  cases y
+  change (_ == _) = decide (_ = _)
+  apply Bool.eq_iff_iff.mpr
+  simp
+
+private theorem lowerStmtIndexed_eq (sites : List Elab.SourceSite) (tokens : List Admission.Token)
+    (stmt : Core.Stmt) :
+    lowerStmtIndexed (Index.first (·.binding.id) sites) (Index.first (·.binding.id) tokens) stmt =
+      lowerStmt sites tokens stmt := by
+  cases h : stmt.e <;> simp [lowerStmtIndexed, lowerStmt, h, Index.first_get, binding_id_beq]
+
+@[csimp] private theorem lowerWith_eq_lowerWithIndexed : lowerWith = lowerWithIndexed := by
+  funext core tokens
+  have h := funext (lowerStmtIndexed_eq core.sites tokens)
+  simp only [lowerWith, lowerWithIndexed, h]
 
 def lower (out : Admission.Output) : Except Refusal Program :=
   lowerWith out.core out.tokens
