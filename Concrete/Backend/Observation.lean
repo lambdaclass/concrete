@@ -64,6 +64,10 @@ def lcbSemantics : Semantics LCBInput where
   safe i q := (∃ q', ∃ s t, q = some s ∧ q' = some t ∧ Source.Step i.1 s t) ∨
     (lcbTerminal i q).isSome = true
   trace i q := ((lcbTerminal i q).map Observation.events).getD []
+  permitted _ := runtimePermitted
+  resultTrace i q o h := by
+    simp only [h, Option.map_some, Option.getD_some]
+    exact o.stderr_events
   traceGrows i q q' := by
     rintro ⟨s, t, rfl, rfl, hstep⟩
     refine ⟨((lcbTerminal i (some t)).map Observation.events).getD [], ?_⟩

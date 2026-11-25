@@ -603,6 +603,9 @@ Concrete.Backend.LCB.Target.aarch64Linux.sizeOf_spec
 Concrete.Backend.LCB.Target.aarch64Macos.sizeOf_spec	
 Concrete.Backend.LCB.Target.ofNat_ctorIdx	
 Concrete.Backend.LCB.Target.x86_64Linux.sizeOf_spec	
+Concrete.Backend.LCB.assemble.eq_1	Classical.choice Quot.sound propext
+Concrete.Backend.LCB.assemble.eq_2	Classical.choice Quot.sound propext
+Concrete.Backend.LCB.assemble.eq_3	Classical.choice Quot.sound propext
 Concrete.Backend.LCB.edgesTo._sparseCasesOn_1.else_eq	propext
 Concrete.Backend.LCB.edgesTo.eq_1	propext
 Concrete.Backend.LCB.edgesTo.eq_2	propext
@@ -1019,6 +1022,7 @@ Concrete.Backend.Runtime.mem_indexedFrom._simp_1_4	propext
 Concrete.Backend.lcbSemantics._proof_1	Quot.sound propext
 Concrete.Backend.lcbSemantics._proof_2	Quot.sound propext
 Concrete.Backend.lcbSemantics._proof_3	Quot.sound propext
+Concrete.Backend.lcbSemantics._proof_4	Quot.sound propext
 Concrete.Backend.lcbSemantics.eq_1	Quot.sound propext
 Concrete.Backend.lcbTerminal._sparseCasesOn_1.else_eq	propext
 Concrete.Backend.lcbTerminal._sparseCasesOn_2.else_eq	propext
@@ -1026,6 +1030,7 @@ Concrete.Backend.lcbTerminal.eq_1	Quot.sound propext
 Concrete.Certificate.Backend.lcb.sizeOf_spec	
 Concrete.Certificate.Backend.llvm.sizeOf_spec	
 Concrete.Certificate.Backend.ofNat_ctorIdx	
+Concrete.Certificate.BackendEvidence.lcbRuntime	Classical.choice Quot.sound propext
 Concrete.Certificate.BackendInputs.lcb.inj	
 Concrete.Certificate.BackendInputs.lcb.injEq	propext
 Concrete.Certificate.BackendInputs.lcb.sizeOf_spec	
@@ -1083,11 +1088,19 @@ Concrete.Certificate.ExecutableNote.mk.sizeOf_spec
 Concrete.Certificate.Fact.mk.inj	
 Concrete.Certificate.Fact.mk.injEq	propext
 Concrete.Certificate.Fact.mk.sizeOf_spec	
+Concrete.Certificate.FactJudgment.birCorrespondence.sizeOf_spec	
+Concrete.Certificate.FactJudgment.buildHandoffs.sizeOf_spec	
+Concrete.Certificate.FactJudgment.imageCorrespondence.sizeOf_spec	
+Concrete.Certificate.FactJudgment.lcbAdapterCorrespondence.sizeOf_spec	
+Concrete.Certificate.FactJudgment.lcbProfileValidation.sizeOf_spec	
+Concrete.Certificate.FactJudgment.llvmModuleCorrespondence.sizeOf_spec	
+Concrete.Certificate.FactJudgment.sourceCorrespondence.sizeOf_spec	
 Concrete.Certificate.FactStatus.conditional.sizeOf_spec	
 Concrete.Certificate.FactStatus.established.sizeOf_spec	
 Concrete.Certificate.FactStatus.notApplicable.sizeOf_spec	
 Concrete.Certificate.FactStatus.notEstablished.sizeOf_spec	
 Concrete.Certificate.FactStatus.refuted.sizeOf_spec	
+Concrete.Certificate.HasDependencies.eq_1	
 Concrete.Certificate.ImageBinding.driverAttested.sizeOf_spec	
 Concrete.Certificate.ImageBinding.imageValidated.inj	
 Concrete.Certificate.ImageBinding.imageValidated.injEq	propext
@@ -1112,6 +1125,7 @@ Concrete.Certificate.Obligation.lcbProfile.sizeOf_spec
 Concrete.Certificate.Obligation.llvmPrint.sizeOf_spec	
 Concrete.Certificate.Obligation.refusal.sizeOf_spec	
 Concrete.Certificate.Obligation.toolHandoffs.sizeOf_spec	
+Concrete.Certificate.OrderedGraph.eq_1	
 Concrete.Certificate.PinnedInvocation.mk.inj	
 Concrete.Certificate.PinnedInvocation.mk.injEq	propext
 Concrete.Certificate.PinnedInvocation.mk.sizeOf_spec	
@@ -1124,6 +1138,13 @@ Concrete.Certificate.Receipt.mk.sizeOf_spec
 Concrete.Certificate.RefusalCertificate.mk.inj	
 Concrete.Certificate.RefusalCertificate.mk.injEq	propext
 Concrete.Certificate.RefusalCertificate.mk.sizeOf_spec	
+Concrete.Certificate.RefusalStage.birSlotLimit.inj	
+Concrete.Certificate.RefusalStage.birSlotLimit.injEq	propext
+Concrete.Certificate.RefusalStage.birSlotLimit.sizeOf_spec	
+Concrete.Certificate.RefusalStage.lcbPreparation.inj	
+Concrete.Certificate.RefusalStage.lcbPreparation.injEq	propext
+Concrete.Certificate.RefusalStage.lcbPreparation.sizeOf_spec	
+Concrete.Certificate.RefusalStage.shared.sizeOf_spec	
 Concrete.Certificate.ReplayCommand.mk.inj	
 Concrete.Certificate.ReplayCommand.mk.injEq	propext
 Concrete.Certificate.ReplayCommand.mk.sizeOf_spec	
@@ -1217,14 +1238,14 @@ Concrete.Contracts.DiagnosticSite.mk.sizeOf_spec
 Concrete.Contracts.EdgeContract.mk.inj	
 Concrete.Contracts.EdgeContract.mk.injEq	propext
 Concrete.Contracts.EdgeContract.mk.sizeOf_spec	
+Concrete.Contracts.Evaluation.events._sparseCasesOn_1.else_eq	propext
+Concrete.Contracts.Evaluation.events.eq_1	propext
+Concrete.Contracts.Evaluation.events.eq_2	propext
 Concrete.Contracts.Evaluation.finished.inj	
 Concrete.Contracts.Evaluation.finished.injEq	propext
 Concrete.Contracts.Evaluation.finished.sizeOf_spec	
 Concrete.Contracts.Evaluation.running.sizeOf_spec	
 Concrete.Contracts.Evaluation.stuck.sizeOf_spec	
-Concrete.Contracts.Event.stderr.inj	
-Concrete.Contracts.Event.stderr.injEq	propext
-Concrete.Contracts.Event.stderr.sizeOf_spec	
 Concrete.Contracts.EvidenceKind.directProof.sizeOf_spec	
 Concrete.Contracts.EvidenceKind.namedPremise.inj	
 Concrete.Contracts.EvidenceKind.namedPremise.injEq	propext
@@ -1239,9 +1260,16 @@ Concrete.Contracts.Observation.returned.sizeOf_spec
 Concrete.Contracts.Observation.startupRefused.inj	
 Concrete.Contracts.Observation.startupRefused.injEq	propext
 Concrete.Contracts.Observation.startupRefused.sizeOf_spec	
+Concrete.Contracts.Observation.stderr_events	Quot.sound propext
 Concrete.Contracts.Observation.trapped.inj	
 Concrete.Contracts.Observation.trapped.injEq	propext
 Concrete.Contracts.Observation.trapped.sizeOf_spec	
+Concrete.Contracts.ProcessEvent.effect.inj	
+Concrete.Contracts.ProcessEvent.effect.injEq	propext
+Concrete.Contracts.ProcessEvent.effect.sizeOf_spec	
+Concrete.Contracts.ProcessEvent.stderr.inj	
+Concrete.Contracts.ProcessEvent.stderr.injEq	propext
+Concrete.Contracts.ProcessEvent.stderr.sizeOf_spec	
 Concrete.Contracts.Semantics.initialized	
 Concrete.Contracts.Semantics.mk.inj	
 Concrete.Contracts.Semantics.mk.injEq	propext
@@ -1249,6 +1277,8 @@ Concrete.Contracts.Semantics.mk.sizeOf_spec
 Concrete.Contracts.Semantics.onInput._proof_1	
 Concrete.Contracts.Semantics.onInput._proof_2	
 Concrete.Contracts.Semantics.onInput._proof_3	
+Concrete.Contracts.Semantics.onInput._proof_4	
+Concrete.Contracts.Semantics.resultTrace	
 Concrete.Contracts.Semantics.terminal	
 Concrete.Contracts.Semantics.traceGrows	
 Concrete.Contracts.Simulates.divergentTrace	
@@ -1258,20 +1288,33 @@ Concrete.Contracts.Simulates.mk.injEq	propext
 Concrete.Contracts.Simulates.mk.sizeOf_spec	
 Concrete.Contracts.Simulates.prefixMatch	
 Concrete.Contracts.Simulates.progress	
+Concrete.Contracts.Simulates.refines	
 Concrete.Contracts.Simulates.resultMatch	
 Concrete.Contracts.Steps.brecOn	
 Concrete.Contracts.StutteringSimulation.mk.inj	
 Concrete.Contracts.StutteringSimulation.mk.injEq	propext
 Concrete.Contracts.StutteringSimulation.mk.sizeOf_spec	
 Concrete.Contracts.StutteringSimulation.progress	
+Concrete.Contracts.evaluatorAdequacy	Quot.sound propext
+Concrete.Contracts.evaluatorDiverges	Quot.sound propext
 Concrete.Contracts.evaluatorSemantics._proof_1	
 Concrete.Contracts.evaluatorSemantics._proof_2	
-Concrete.Contracts.evaluatorSemantics._proof_3	propext
+Concrete.Contracts.evaluatorSemantics._proof_3	Quot.sound propext
+Concrete.Contracts.evaluatorSemantics._proof_4	propext
+Concrete.Contracts.evaluatorSimulation._proof_1	Quot.sound propext
+Concrete.Contracts.evaluatorSimulation._proof_2	Quot.sound propext
+Concrete.Contracts.evaluatorSimulation._proof_3	Quot.sound propext
+Concrete.Contracts.evaluatorSimulation._proof_4	Quot.sound propext
+Concrete.Contracts.evaluatorSimulation._proof_5	Quot.sound propext
+Concrete.Contracts.evaluatorSimulation._proof_6	Quot.sound propext
+Concrete.Contracts.evaluatorSimulation._proof_7	Quot.sound propext
+Concrete.Contracts.evaluatorSimulation._proof_8	Quot.sound propext
+Concrete.Contracts.evaluatorSimulation._proof_9	Quot.sound propext
 Concrete.Contracts.instDecidableEqDiagnosticSite.decEq._proof_1	
 Concrete.Contracts.instDecidableEqDiagnosticSite.decEq._proof_2	
 Concrete.Contracts.instDecidableEqDiagnosticSite.decEq._proof_3	
-Concrete.Contracts.instDecidableEqEvent.decEq._proof_1	
-Concrete.Contracts.instDecidableEqEvent.decEq._proof_2	
+Concrete.Contracts.runtimePermitted_all	
+Concrete.Contracts.stderrBytes.eq_1	
 Concrete.Elab.Output.mk.inj	
 Concrete.Elab.Output.mk.injEq	propext
 Concrete.Elab.Output.mk.sizeOf_spec	
@@ -1280,8 +1323,12 @@ Concrete.Elab.SourceSite.mk.injEq	propext
 Concrete.Elab.SourceSite.mk.sizeOf_spec	
 Concrete.FrontendPremises.elaborate	propext
 Concrete.FrontendPremises.parse	propext
+Concrete.ImageTheorem.Elaborates.originWellFormed	propext
 Concrete.ImageTheorem.ElaboratesBindings.brecOn	
 Concrete.ImageTheorem.ElaboratesExpr.brecOn	
+Concrete.ImageTheorem.ExecutionPolicy.mk.inj	
+Concrete.ImageTheorem.ExecutionPolicy.mk.injEq	propext
+Concrete.ImageTheorem.ExecutionPolicy.mk.sizeOf_spec	
 Concrete.ImageTheorem.ExternalPremise.assembler.sizeOf_spec	
 Concrete.ImageTheorem.ExternalPremise.decoder.sizeOf_spec	
 Concrete.ImageTheorem.ExternalPremise.imageStack.sizeOf_spec	
@@ -1340,19 +1387,49 @@ Concrete.ImageTheorem.Platform.mk.sizeOf_spec
 Concrete.ImageTheorem.Profile.mk.inj	
 Concrete.ImageTheorem.Profile.mk.injEq	propext
 Concrete.ImageTheorem.Profile.mk.sizeOf_spec	
+Concrete.ImageTheorem.Sanity.answerCompiles	Classical.choice Quot.sound propext
+Concrete.ImageTheorem.Sanity.answerFrontend	Classical.choice Quot.sound propext
+Concrete.ImageTheorem.Sanity.answerHandoffs	Classical.choice Quot.sound propext
+Concrete.ImageTheorem.Sanity.answerImageRefines	Classical.choice Quot.sound propext
+Concrete.ImageTheorem.Sanity.answerOrigins	Classical.choice Quot.sound propext
+Concrete.ImageTheorem.Sanity.answerTerminates	Classical.choice Quot.sound propext
+Concrete.ImageTheorem.Sanity.instant._proof_1	
+Concrete.ImageTheorem.Sanity.instant._proof_2	Quot.sound propext
+Concrete.ImageTheorem.Sanity.instant._proof_3	
+Concrete.ImageTheorem.Sanity.instant.eq_1	Quot.sound propext
+Concrete.ImageTheorem.Sanity.instantObserves	Quot.sound propext
+Concrete.ImageTheorem.Sanity.instantRefines	Quot.sound propext
+Concrete.ImageTheorem.Sanity.pinnedRevision	
+Concrete.ImageTheorem.Sanity.refinementsToInstant	Quot.sound propext
+Concrete.ImageTheorem.Sanity.returnAtTwo	Quot.sound propext
+Concrete.ImageTheorem.Sanity.testAnchor	Quot.sound propext
+Concrete.ImageTheorem.Sanity.testLLVMHandoffs	Classical.choice Quot.sound propext
 Concrete.ImageTheorem.SharedModels.mk.inj	
 Concrete.ImageTheorem.SharedModels.mk.injEq	propext
 Concrete.ImageTheorem.SharedModels.mk.sizeOf_spec	
 Concrete.ImageTheorem.SharedSound.admission	Classical.choice Quot.sound propext
+Concrete.ImageTheorem.SharedSound.admitMIR	Classical.choice Quot.sound propext
 Concrete.ImageTheorem.SharedSound.admittedMIR	Classical.choice Quot.sound propext
+Concrete.ImageTheorem.SharedSound.admittedMemory	Classical.choice Quot.sound propext
+Concrete.ImageTheorem.SharedSound.admittedOrigins	Classical.choice Quot.sound propext
+Concrete.ImageTheorem.SharedSound.birAdequacy	Classical.choice Quot.sound propext
+Concrete.ImageTheorem.SharedSound.elabAdmit	Classical.choice Quot.sound propext
+Concrete.ImageTheorem.SharedSound.elabUnchecked	Classical.choice Quot.sound propext
 Concrete.ImageTheorem.SharedSound.elaboration	Classical.choice Quot.sound propext
+Concrete.ImageTheorem.SharedSound.lexParse	Classical.choice Quot.sound propext
 Concrete.ImageTheorem.SharedSound.lexer	Classical.choice Quot.sound propext
 Concrete.ImageTheorem.SharedSound.memory	Classical.choice Quot.sound propext
 Concrete.ImageTheorem.SharedSound.memoryAdequacy	Classical.choice Quot.sound propext
+Concrete.ImageTheorem.SharedSound.memoryOrigins	Classical.choice Quot.sound propext
+Concrete.ImageTheorem.SharedSound.memorySSA	Classical.choice Quot.sound propext
 Concrete.ImageTheorem.SharedSound.mirAdequacy	Classical.choice Quot.sound propext
+Concrete.ImageTheorem.SharedSound.parseElab	Classical.choice Quot.sound propext
 Concrete.ImageTheorem.SharedSound.parser	Classical.choice Quot.sound propext
 Concrete.ImageTheorem.SharedSound.ssa	Classical.choice Quot.sound propext
+Concrete.ImageTheorem.SharedSound.ssaOrigins	Classical.choice Quot.sound propext
 Concrete.ImageTheorem.SharedSound.uncheckedMIR	Classical.choice Quot.sound propext
+Concrete.ImageTheorem.SharedSound.uncheckedMemory	Classical.choice Quot.sound propext
+Concrete.ImageTheorem.SharedSound.uncheckedOrigins	Classical.choice Quot.sound propext
 Concrete.ImageTheorem.ToolInvocation.mk.inj	
 Concrete.ImageTheorem.ToolInvocation.mk.injEq	propext
 Concrete.ImageTheorem.ToolInvocation.mk.sizeOf_spec	
@@ -1832,6 +1909,8 @@ LeanCompilerBackend.Verified.Source.read.eq_1	propext
 LeanCompilerBackend.Verified.Source.read.eq_2	propext
 LeanCompilerBackend.Verified.Source.step.eq_1	Quot.sound propext
 LeanCompilerBackend.Verified.Source.write.eq_1	propext
+LeanCompilerBackend.Verified.TypedA64.render.eq_1	Classical.choice Quot.sound propext
+LeanCompilerBackend.Verified.compileFunction.eq_1	Classical.choice Quot.sound propext
 List.lookup.eq_1	
 List.lookup.eq_2	
 List.lookup.eq_def	
@@ -2664,6 +2743,15 @@ _private.Concrete.Backend.Runtime.0.Concrete.Backend.Runtime.invalidBytes.eq_1	p
 _private.Concrete.Backend.Runtime.0.Concrete.Backend.Runtime.map_indexedFrom	propext
 _private.Concrete.Backend.Runtime.0.Concrete.Backend.Runtime.map_indexedFrom_fst	propext
 _private.Concrete.Backend.Runtime.0.Concrete.Backend.Runtime.siteBytes.eq_1	propext
+_private.Concrete.Certificate.0.Concrete.Certificate.acceptedNode	
+_private.Concrete.Certificate.0.Concrete.Certificate.testBuild.eq_1	Classical.choice Quot.sound propext
+_private.Concrete.Certificate.0.Concrete.Certificate.testPreLink.eq_1	Classical.choice Quot.sound propext
+_private.Concrete.Certificate.0.Concrete.Certificate.testPreLinkValid	Classical.choice Quot.sound propext
+_private.Concrete.Contracts.0.Concrete.Contracts.Evaluation.events.match_1.eq_1	propext
+_private.Concrete.Contracts.0.Concrete.Contracts.Evaluation.events.match_1.eq_2	propext
+_private.Concrete.Contracts.0.Concrete.Contracts.Steps.append	
+_private.Concrete.Contracts.0.Concrete.Contracts.stderrBytes.match_1.eq_1	
+_private.Concrete.Contracts.0.Concrete.Contracts.stderrBytes.match_1.eq_2	
 _private.Concrete.Elab.0.Concrete.Elab.Rhs.add.inj	
 _private.Concrete.Elab.0.Concrete.Elab.Rhs.add.injEq	propext
 _private.Concrete.Elab.0.Concrete.Elab.Rhs.add.sizeOf_spec	
@@ -3016,18 +3104,31 @@ _private.Concrete.Stages.0.Concrete.Stages.memory.eq_1
 _private.Concrete.Stages.0.Concrete.Stages.stages.eq_1	Classical.choice Quot.sound propext
 _private.Concrete.Stages.0.Except.map.match_1.eq_1	
 _private.Concrete.Stages.0.Except.map.match_1.eq_2	
+_private.Concrete.Theorem.0.Concrete.Backend.LCB.assemble.match_4.eq_1	
+_private.Concrete.Theorem.0.Concrete.Backend.LCB.assemble.match_4.eq_2	
+_private.Concrete.Theorem.0.Concrete.Backend.LCB.assemble.match_4.eq_3	
 _private.Concrete.Theorem.0.Concrete.Backend.lcbTerminal.match_1.eq_1	propext
 _private.Concrete.Theorem.0.Concrete.Backend.lcbTerminal.match_1.eq_2	propext
-_private.Concrete.Theorem.0.Concrete.ImageTheorem.instant._proof_1	
-_private.Concrete.Theorem.0.Concrete.ImageTheorem.instant._proof_2	
-_private.Concrete.Theorem.0.Concrete.ImageTheorem.instant.eq_1	
-_private.Concrete.Theorem.0.Concrete.ImageTheorem.instantObserves	
-_private.Concrete.Theorem.0.Concrete.ImageTheorem.instantRefines	propext
-_private.Concrete.Theorem.0.Concrete.ImageTheorem.lcbSteps	Quot.sound propext
-_private.Concrete.Theorem.0.Concrete.ImageTheorem.lcbToInstant	Quot.sound propext
-_private.Concrete.Theorem.0.Concrete.ImageTheorem.refinementsToInstant	propext
-_private.Concrete.Theorem.0.Concrete.ImageTheorem.returnAtOne	propext
-_private.Concrete.Theorem.0.Concrete.ImageTheorem.returnAtTwo	propext
-_private.Concrete.Theorem.0.Concrete.ImageTheorem.testImagePremises	propext
-_private.Concrete.Theorem.0.Concrete.ImageTheorem.testLCBPremises	Classical.choice Quot.sound propext
-_private.Concrete.Theorem.0.Concrete.ImageTheorem.testLLVMPremises	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.answerBIRAssembly	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.answerBIRJob	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.assembleMacOS	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.coreTerminates	Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.effectModel._proof_1	
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.effectModel._proof_2	
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.effectModel._proof_3	
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.lcbSteps	Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.lcbToInstant	Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.returnAtOne	Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.testImagePremises	Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.testLCBHandoffs	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.testLCBPremises	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.testLLVMPremises	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapBIRAssembly	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapBIRJob	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapStatic	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapTerminates	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.additionBinders_append	propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.elaboratesBindings_origins	propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.elaboratesExpr_origins	propext
+_private.Concrete.Theorem.0.Except.map.match_1.eq_1	
+_private.Concrete.Theorem.0.Except.map.match_1.eq_2	

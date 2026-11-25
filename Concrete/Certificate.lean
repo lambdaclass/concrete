@@ -98,9 +98,15 @@ structure PreLinkCertificate where
 
 /-- A refused compilation's evidence binds the exact source and typed refusal. It has no
 successful BIR or image attachment. -/
+inductive RefusalStage where
+  | shared
+  | lcbPreparation (profile : Profile)
+  | birSlotLimit (profile : Profile) (backend : Backend)
+
 structure RefusalCertificate where
   schemaVersion : Nat
   identity : BuildIdentity
+  stage : RefusalStage
   refusal : Refusal
   evidenceGraph : List EvidenceNode
 
@@ -127,9 +133,14 @@ acceptance when a checker or assumption is revoked. -/
 inductive FactStatus where
   | established | conditional | refuted | notEstablished | notApplicable
 
+inductive FactJudgment where
+  | sourceCorrespondence | birCorrespondence | llvmModuleCorrespondence
+  | lcbAdapterCorrespondence | lcbProfileValidation | buildHandoffs
+  | imageCorrespondence
+
 /-- A fact with its production status and its direct dependencies in the evidence graph. -/
 structure Fact where
-  judgment : String
+  judgment : FactJudgment
   productionStatus : FactStatus
   dependencies : List Nat
 
@@ -256,7 +267,14 @@ def BackendEvidence (codec : Codec) (bir : Concrete.BIR.Program) (c : PreLinkCer
     Checked codec i.checkedAdapter (Concrete.Backend.LCB.emit bir = .ok (b.source, b.sites)) ∧
     HasEvidence c.evidenceGraph .lcbProfile (.kernelChecked i.checkedProfile) ∧
     Checked codec i.checkedProfile
-      (LeanCompilerBackend.Verified.validateJob (Concrete.Backend.LCB.job b.source) = .ok ())
+      (LeanCompilerBackend.Verified.validateJob (Concrete.Backend.LCB.job b.source) = .ok () ∧
+        b.runtimeInput = (Concrete.Backend.Runtime.qbe b.sites).toUTF8)
+
+theorem BackendEvidence.lcbRuntime {codec : Codec} {bir : Concrete.BIR.Program}
+    {c : PreLinkCertificate} {b : LCBBuild} (h : BackendEvidence codec bir c (.lcb b)) :
+    b.runtimeInput = (Concrete.Backend.Runtime.qbe b.sites).toUTF8 := by
+  obtain ⟨_, _, _, _, _, ⟨⟨_, exactRuntime⟩, _⟩⟩ := h
+  exact exactRuntime
 
 def PreLinkValid (codec : Codec) (ctx : ReplayContext) (tools : NativeTools)
     (input : Stages.Input) (out : Stages.Output) (build : ExactBuild)
@@ -286,12 +304,23 @@ def PreLinkValid (codec : Codec) (ctx : ReplayContext) (tools : NativeTools)
     [.frontend, .bir, .toolHandoffs] ++
       (match build with | .llvm _ => [.llvmPrint] | .lcb _ => [.lcbAdapter, .lcbProfile]))
 
-/-- A refusal requires replay of the exact failed production invocation. -/
+/-- The slot-limit branch states the check required before either backend emits an artifact. -/
+def RefusalAt (input : Stages.Input) (stage : RefusalStage) (refusal : Refusal) : Prop :=
+  match stage with
+  | .shared => Stages.compile input = .error refusal
+  | .lcbPreparation profile => ∃ out, Stages.compile input = .ok out ∧
+    BIRSlotsFit profile out.bir ∧ Stages.prepareLCB out.bir = .error refusal
+  | .birSlotLimit profile backend => ∃ out, Stages.compile input = .ok out ∧
+    ¬ BIRSlotsFit profile out.bir ∧
+    refusal = .backendResource (match backend with | .llvm => "LLVM" | .lcb => "LCB")
+      "BIR slots" out.bir.frameSlots profile.maxBIRSlots
+
+/-- A refusal requires replay of the exact failed invocation or rejected resource check. -/
 def RefusalValid (codec : Codec) (ctx : ReplayContext)
     (input : Stages.Input) (c : RefusalCertificate) : Prop :=
   c.schemaVersion = codec.version ∧ IdentityMatches codec ctx input c.identity ∧
   OrderedGraph c.evidenceGraph ∧
-  Replays codec c.evidenceGraph .refusal (Stages.compile input = .error c.refusal) ∧
+  Replays codec c.evidenceGraph .refusal (RefusalAt input c.stage c.refusal) ∧
   ∀ node ∈ c.evidenceGraph, node.obligation = .refusal
 
 def ExpectedNote (codec : Codec) (c : PreLinkCertificate) (build : ExactBuild) : ExecutableNote :=
@@ -327,13 +356,44 @@ def Fact.currentlyAccepted (fact : Fact) (revoked : Obligation → Prop)
   (fact.productionStatus = .established ∨ fact.productionStatus = .conditional) ∧
   ∀ id ∈ fact.dependencies, StillAccepted revoked graph id
 
-/-- The caller obtains the fact catalog from the evidence graph. Validation checks the
-catalog, replay, all bound payloads and the final-image proposition over the final bytes. -/
-def ReceiptValid {Env : Type} (codec : Codec) (ctx : ReplayContext) (format : NoteFormat)
+/-- The catalog is the projection of the validated obligations. Each fact depends on
+its own node, so revocation also follows that node's transitive dependencies. -/
+def factsFromEvidence (graph : List EvidenceNode) : List Fact :=
+  graph.filterMap fun node =>
+    let fact judgment status := some ⟨judgment, status, [node.id]⟩
+    match node.obligation with
+    | .frontend => fact .sourceCorrespondence .established
+    | .bir => fact .birCorrespondence .established
+    | .llvmPrint => fact .llvmModuleCorrespondence .established
+    | .lcbAdapter => fact .lcbAdapterCorrespondence .established
+    | .lcbProfile => fact .lcbProfileValidation .established
+    | .toolHandoffs => fact .buildHandoffs .conditional
+    | .finalImage => fact .imageCorrespondence .conditional
+    | .external _ | .refusal => none
+
+def environmentPremises : List ExternalPremise := [.launch, .osLiveness, .stderrProgress]
+
+def OpenPremisesValid (path : LoweringPath) (binding : ImageBinding)
+    (openPremises : List ExternalPremise) : Prop :=
+  match binding with
+  | .driverAttested => openPremises = path.premises
+  | .imageValidated _ => openPremises.Sublist path.premises ∧
+    ∀ p ∈ environmentPremises, p ∈ openPremises
+
+def ImageDependencies (binding : ImageBinding) (openPremises : List ExternalPremise) :
+    List Obligation :=
+  (match binding with
+   | .driverAttested => [.toolHandoffs]
+   | .imageValidated _ => [.frontend]) ++ openPremises.map Obligation.external
+
+/-- The exact-byte validation path may discharge build-time correspondence. It remains
+conditional on the verifier's selected reference and the continuing environment assumptions. -/
+def ReceiptValid {Env : Type} (policy : ExecutionPolicy Env)
+    (codec : Codec) (ctx : ReplayContext) (format : NoteFormat)
     (tools : NativeTools) (input : Stages.Input) (out : Stages.Output) (build : ExactBuild)
-    (exe : ByteArray) (r : Receipt) {platform : Platform Env r.certificate.profile.target}
-    (n : NativeModels Env r.certificate.profile platform)
-    (facts : List EvidenceNode → List Fact) : Prop :=
+    (exe : ByteArray) (r : Receipt) {execution : Contracts.Semantics (ByteArray × Env)}
+    {platform : Platform Env r.certificate.profile.target execution}
+    (n : NativeModels Env r.certificate.profile platform) : Prop :=
   r.schemaVersion = codec.version ∧ PreLinkValid codec ctx tools input out build r.certificate ∧
   r.executable = codec.hash .executable exe ∧
   r.certificateDigest = codec.hash .preLinkCertificate (codec.certificate r.certificate) ∧
@@ -347,21 +407,23 @@ def ReceiptValid {Env : Type} (codec : Codec) (ctx : ReplayContext) (format : No
       ∃ o, n.process.observes (exe, env) o)) ∧
   OrderedGraph (r.certificate.evidenceGraph ++ r.evidenceGraph) ∧
   r.replay = ctx.commands ∧ r.executionTrust = ctx.executionTrust ∧
-  r.facts = facts (r.certificate.evidenceGraph ++ r.evidenceGraph) ∧
-  (∀ f ∈ r.facts, f.dependencies.Nodup ∧ ∀ id ∈ f.dependencies,
-    ∃ node ∈ r.certificate.evidenceGraph ++ r.evidenceGraph, node.id = id) ∧
-  r.openPremises = r.certificate.loweringPath.premises ∧
+  r.facts = factsFromEvidence (r.certificate.evidenceGraph ++ r.evidenceGraph) ∧
+  OpenPremisesValid r.certificate.loweringPath r.binding r.openPremises ∧
   (∀ p, p ∈ r.openPremises ↔ HasEvidence r.evidenceGraph (.external p) (.openPremise p.name)) ∧
   (∀ node ∈ r.evidenceGraph, node.obligation = .finalImage ∨
     ∃ p ∈ r.openPremises, node.obligation = .external p) ∧
+  (∀ p, HasDependencies (r.certificate.evidenceGraph ++ r.evidenceGraph) (.external p) []) ∧
   HasDependencies (r.certificate.evidenceGraph ++ r.evidenceGraph) .finalImage
-    (.toolHandoffs :: r.openPremises.map Obligation.external) ∧
+    (ImageDependencies r.binding r.openPremises) ∧
   match r.binding with
   | .driverAttested => HasEvidence r.evidenceGraph .finalImage .driverAttested
   | .imageValidated d =>
+    policy.Anchors n ∧
     HasEvidence r.evidenceGraph .finalImage (.kernelChecked d) ∧
     Checked codec d ((∃ decoded, platform.decode exe = some decoded) ∧
-      (∃ env, RunReady n exe env) ∧ ImageCorrect n input.path out.core exe)
+      (∃ env, RunReady n exe env) ∧ ImageCorrect n admittedCoreSemantics input.path out.core exe ∧
+      (.imageStack ∉ r.openPremises → ∀ env, n.launchAdmitted exe env →
+        n.stackAdequate exe env r.certificate.profile.maxImageStackBytes))
 
 
 example : OrderedGraph [⟨0, .frontend, .driverAttested, []⟩,
@@ -387,5 +449,175 @@ example (codec : Codec) (ctx : ReplayContext) (input : Stages.Input) (c : Refusa
   rintro ⟨_, _, _, ⟨_, ⟨node, member, _, _⟩, _⟩, _⟩
   rw [empty] at member
   exact List.not_mem_nil member
+
+section Sanity
+
+private def revocationGraph : List EvidenceNode :=
+  [⟨0, .frontend, .kernelChecked ⟨ByteArray.empty⟩, []⟩,
+   ⟨1, .external .linker, .openPremise "linker", []⟩,
+   ⟨2, .finalImage, .driverAttested, [1]⟩]
+
+private def linkerRevoked (goal : Obligation) : Prop := goal = .external .linker
+
+example : factsFromEvidence revocationGraph =
+    [⟨.sourceCorrespondence, .established, [0]⟩,
+     ⟨.imageCorrespondence, .conditional, [2]⟩] := rfl
+
+example : StillAccepted linkerRevoked revocationGraph 0 := by
+  apply StillAccepted.node (n := ⟨0, .frontend, .kernelChecked ⟨ByteArray.empty⟩, []⟩)
+  · exact List.Mem.head _
+  · intro h
+    cases h
+  · intro _ h
+    cases h
+
+private theorem acceptedNode {revoked graph id} (h : StillAccepted revoked graph id) :
+    ∃ node ∈ graph, node.id = id ∧ ¬ revoked node.obligation ∧
+      ∀ dep ∈ node.dependencies, StillAccepted revoked graph dep := by
+  cases h with
+  | node member ok deps => exact ⟨_, member, rfl, ok, deps⟩
+
+example : ¬ StillAccepted linkerRevoked revocationGraph 2 := by
+  intro h
+  obtain ⟨node, member, id, _, deps⟩ := acceptedNode h
+  simp only [revocationGraph, List.mem_cons, List.not_mem_nil, or_false] at member
+  rcases member with rfl | rfl | rfl
+  · cases id
+  · cases id
+  · obtain ⟨node, member, id, ok, _⟩ := acceptedNode (deps 1 (List.Mem.head _))
+    simp only [revocationGraph, List.mem_cons, List.not_mem_nil, or_false] at member
+    rcases member with rfl | rfl | rfl
+    · cases id
+    · exact ok rfl
+    · cases id
+
+example (graph : List EvidenceNode) (fact : Fact) (h : fact ∈ factsFromEvidence graph) :
+    fact.dependencies ≠ [] := by
+  unfold factsFromEvidence at h
+  obtain ⟨node, _, found⟩ := List.mem_filterMap.mp h
+  dsimp at found
+  split at found <;> cases found <;> simp
+
+example : OpenPremisesValid .llvm (.imageValidated ⟨ByteArray.empty⟩) environmentPremises := by
+  exact ⟨by decide, fun _ h => h⟩
+
+example : ¬ OpenPremisesValid .llvm .driverAttested environmentPremises := by
+  change environmentPremises ≠ LoweringPath.premises .llvm
+  decide
+
+example : .toolHandoffs ∉ ImageDependencies (.imageValidated ⟨ByteArray.empty⟩)
+    environmentPremises := by decide
+
+example : RefusalAt ImageTheorem.Sanity.answerInput
+    (.birSlotLimit { ImageTheorem.Sanity.sampleProfile with maxBIRSlots := 0 } .llvm)
+    (.backendResource "LLVM" "BIR slots" ImageTheorem.Sanity.answerOutput.bir.frameSlots 0) := by
+  refine ⟨_, ImageTheorem.Sanity.answerCompiles, ?_, rfl⟩
+  with_unfolding_all
+    change ¬ 1 ≤ 0
+    decide
+
+open ImageTheorem.Sanity
+
+example {codec : Codec} {bir : Concrete.BIR.Program} {c : PreLinkCertificate}
+    {b : LCBBuild} (substitution : b.runtimeInput ≠ (Concrete.Backend.Runtime.qbe b.sites).toUTF8) :
+    ¬ BackendEvidence codec bir c (.lcb b) :=
+  fun evidence => substitution evidence.lcbRuntime
+
+private def testEvidence : Digest .evidence := ⟨ByteArray.empty⟩
+
+private def testCodec : Codec where
+  version := 1
+  hash _ bytes := ⟨bytes⟩
+  bir p := (reprStr p).toUTF8
+  lcbFunction _ := ByteArray.empty
+  lcbJob _ := ByteArray.empty
+  sites _ := ByteArray.empty
+  certificate _ := ByteArray.empty
+  note _ := "test note".toUTF8
+  refusal _ := ByteArray.empty
+  evidence _ _ := True
+
+private def testContext : ReplayContext :=
+  ⟨"test compiler".toUTF8, "test spec".toUTF8, fun pin => some pin.tool.toUTF8, [], []⟩
+
+private def testBuild : ExactBuild := .llvm (testLLVMBuild answerOutput.bir answerImage)
+
+private def testPreLink : PreLinkCertificate :=
+  let b := testLLVMBuild answerOutput.bir answerImage
+  ⟨1, ⟨⟨answerInput.source⟩, ⟨testContext.compiler⟩, ⟨testContext.spec⟩, answerInput.path⟩,
+    sampleProfile, .llvm, ⟨testCodec.bir answerOutput.bir⟩,
+    .llvm ⟨⟨b.moduleBytes⟩, testEvidence, ⟨b.objectBytes⟩⟩,
+    b.linkInputs.map (testCodec.hash .linkInput),
+    sampleProfile.tools.map (fun pin => ⟨pin, ⟨pin.tool.toUTF8⟩⟩),
+    [⟨0, .frontend, .kernelChecked testEvidence, []⟩,
+     ⟨1, .bir, .kernelChecked testEvidence, [0]⟩,
+     ⟨2, .llvmPrint, .kernelChecked testEvidence, [1]⟩,
+     ⟨3, .toolHandoffs, .driverAttested, [2]⟩]⟩
+
+private theorem testPreLinkValid : PreLinkValid testCodec testContext (testTools answerImage)
+    answerInput answerOutput testBuild testPreLink := by
+  with_unfolding_all
+    refine ⟨rfl, ⟨rfl, rfl, rfl, rfl⟩, rfl, ⟨rfl, rfl⟩, rfl, ⟨rfl, ?_⟩, rfl,
+      ?_, ⟨testEvidence, ⟨_, List.Mem.head _, rfl, rfl⟩, answerFrontend, trivial⟩,
+      ⟨testEvidence, ⟨_, List.Mem.tail _ (List.Mem.head _), rfl, rfl⟩,
+        ⟨answerHandoffs, ?_, SSA.lower_wf answerHandoffs.2.2.2.2.2, answerOrigins⟩, trivial⟩,
+      ⟨_, rfl, ⟨_, List.Mem.tail _ (List.Mem.tail _ (List.Mem.head _)), rfl, rfl⟩, rfl, trivial⟩,
+      ⟨_, List.Mem.tail _ (List.Mem.tail _ (List.Mem.tail _ (List.Mem.head _))), rfl, rfl⟩,
+      ?_, ?_, ?_, ?_, ?_, ?_, testLLVMHandoffs _ _, ?_⟩
+    · intro pin member
+      obtain ⟨invocation, _, rfl⟩ := List.mem_map.mp member
+      exact ⟨invocation.tool.toUTF8, rfl, rfl⟩
+    · simp [OrderedGraph, testPreLink]
+    · change 1 ≤ 64
+      decide
+    all_goals simp [HasDependencies, testPreLink, testBuild]
+
+private def testNoteFormat : NoteFormat where
+  read exe note := exe = answerImage ++ note.getD ByteArray.empty
+  insertNonLoaded linked note exe := exe = linked ++ note
+
+example : NoteMatches testCodec testNoteFormat testPreLink testBuild
+    (answerImage ++ "test note".toUTF8) (some ⟨"test note".toUTF8⟩) :=
+  ⟨rfl, rfl, rfl⟩
+
+example : ¬ NoteMatches testCodec testNoteFormat testPreLink testBuild
+    (answerImage ++ "test note".toUTF8) (some ⟨"substituted note".toUTF8⟩) := by
+  intro h
+  have bytes := congrArg Digest.bytes h.1
+  exact (by decide : "substituted note".toUTF8 ≠ "test note".toUTF8) bytes
+
+private def testImageGraph : List EvidenceNode :=
+  [⟨4, .external .launch, .openPremise ExternalPremise.launch.name, []⟩,
+   ⟨5, .external .osLiveness, .openPremise ExternalPremise.osLiveness.name, []⟩,
+   ⟨6, .external .stderrProgress, .openPremise ExternalPremise.stderrProgress.name, []⟩,
+   ⟨7, .finalImage, .kernelChecked testEvidence, [0, 4, 5, 6]⟩]
+
+private def testReceipt : Receipt :=
+  ⟨1, ⟨answerImage⟩, none, testPreLink, ⟨testCodec.certificate testPreLink⟩,
+    .imageValidated testEvidence, testImageGraph, factsFromEvidence (testPreLink.evidenceGraph ++ testImageGraph),
+    environmentPremises, [], []⟩
+
+example : ReceiptValid (testExecutionPolicy bytecodeObservation) testCodec testContext testNoteFormat (testTools answerImage)
+    answerInput answerOutput testBuild answerImage testReceipt
+    (testNative sampleProfile bytecodeObservation answerImage) := by
+  with_unfolding_all
+    refine ⟨rfl, testPreLinkValid, rfl, rfl, ⟨rfl, rfl⟩, rfl, ?_, ?_, ?_, rfl, rfl, rfl,
+      ⟨by decide, fun _ h => h⟩, ?_, ?_, ?_, ?_, ?_⟩
+    · intro env ready
+      exact ⟨ready, (instantRefines _ _ (answerImage, env) (answerImage, env) rfl).1⟩
+    · intro env ready
+      exact ⟨ready, (instantRefines _ _ (answerImage, env) (answerImage, env) rfl).2, id⟩
+    · simp [OrderedGraph, testReceipt, testImageGraph, testPreLink]
+    · intro p
+      cases p <;> simp [testReceipt, testImageGraph, environmentPremises, HasEvidence]
+    · simp [testReceipt, testImageGraph, environmentPremises]
+    · simp [testReceipt, testImageGraph, testPreLink, HasDependencies]
+    · simp [testReceipt, testImageGraph, testPreLink, HasDependencies, ImageDependencies, environmentPremises]
+    · refine ⟨testAnchor _ _, ?_, ⟨⟨_, rfl⟩, ⟨(), ⟨trivial, trivial⟩, trivial, trivial⟩,
+        ⟨fun _ _ => answerImageRefines.1, fun _ _ => answerImageRefines.2,
+          fun _ env _ => ⟨exit42, instantObserves _ (answerImage, env)⟩⟩, fun _ _ _ => trivial⟩, trivial⟩
+      exact ⟨_, List.Mem.tail _ (List.Mem.tail _ (List.Mem.tail _ (List.Mem.head _))), rfl, rfl⟩
+
+end Sanity
 
 end Concrete.Certificate
