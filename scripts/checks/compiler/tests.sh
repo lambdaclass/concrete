@@ -140,7 +140,7 @@ check_cli_case() {
       local helper="$project/scripts/checks/lib/slice0_native.sh"
       mkdir -p "$project/tests/slice0" "$(dirname "$helper")"
       cp "$root/$source" "$project/$source"
-      cp "$root/scripts/checks/lib/slice0_write.py" "$(dirname "$helper")/"
+      cp "$root/scripts/checks/lib/slice0_write.py" "$root/scripts/checks/lib/slice0_publish.py" "$(dirname "$helper")/"
       ln -s "$root/.lake" "$project/.lake"
       cli=(bash -c 'cd "$1" && shift && exec "$@"' _ "$project" "$cli_bin")
       if [ "$program" = cli:unknown-target ]; then
@@ -344,10 +344,98 @@ check_cli_output_failure cli-usage-stderr 2 "$cli_bin" invalid-command
 helper_project="$work/ctl/output-project"
 mkdir -p "$helper_project/tests/slice0" "$helper_project/scripts/checks/lib"
 cp "$root/tests/slice0/answer.con" "$helper_project/tests/slice0/"
-cp "$root/scripts/checks/lib/slice0_write.py" "$helper_project/scripts/checks/lib/"
+cp "$root/scripts/checks/lib/slice0_write.py" "$root/scripts/checks/lib/slice0_publish.py" "$helper_project/scripts/checks/lib/"
 printf '%s\n' 'head -c 65536 /dev/zero | tr "\000" x' >"$helper_project/scripts/checks/lib/slice0_native.sh"
 check_cli_output_failure cli-helper-stdout 1 bash -c 'cd "$1" && shift && exec "$@"' \
   _ "$helper_project" "$cli_bin" build tests/slice0/answer.con -o "$helper_project/out" --backend llvm
+
+# Rebuild over a known generation. Faults are injected only in this private
+# project's copy of the publication helper, through the production CLI.
+publish_lib="$helper_project/scripts/checks/lib"
+publish_out="$helper_project/out"
+publish_cli=(bash -c 'cd "$1" && shift && exec "$@"' _ "$helper_project" "$cli_bin")
+publish_build=(build tests/slice0/answer.con -o "$publish_out" --backend llvm)
+printf '%s\n' 'printf new-object >"$1/llvm.o"' 'printf new-executable >"$1/llvm.exe"' \
+  >"$publish_lib/slice0_native.sh"
+mkdir -p "$work/ctl/previous" "$publish_out"
+for artifact in llvm.ll llvm.o llvm.exe lcb.exe; do
+  printf 'old %s\n' "$artifact" >"$work/ctl/previous/$artifact"
+done
+cp "$work/ctl/previous/"* "$publish_out/"
+
+mv "$publish_lib/slice0_publish.py" "$publish_lib/publisher.py"
+cat >"$publish_lib/slice0_publish.py" <<'PYTHON'
+import errno
+import os
+from pathlib import Path
+import sys
+
+import publisher
+
+fault = os.environ.get("PUBLICATION_CONTROL")
+if fault == "second-move":
+    rename = Path.rename
+
+    def block_second_move(source, destination):
+        if source.name == "llvm.o":
+            assert (destination.parent / "llvm.ll").is_file()
+            destination.mkdir()
+        return rename(source, destination)
+
+    Path.rename = block_second_move
+elif fault == "exchange":
+    def fail_exchange(parent_fd, candidate, output):
+        fd = os.open(candidate, os.O_RDONLY | os.O_DIRECTORY, dir_fd=parent_fd)
+        try:
+            assert set(os.listdir(fd)) == {"llvm.ll", "llvm.o", "llvm.exe", "lcb.exe"}
+        finally:
+            os.close(fd)
+        raise OSError(errno.EIO, "injected directory exchange failure")
+
+    publisher.exchange = fail_exchange
+
+try:
+    publisher.main(sys.argv[1:])
+except OSError as error:
+    sys.exit(str(error))
+PYTHON
+for fault in second-move exchange; do
+  log="$work/ctl/publication-$fault"
+  check_cli_diagnostic "CLI publication failure ($fault)" "$log" "refuse 2 TOOL-FAILURE" \
+    env PUBLICATION_CONTROL="$fault" "${publish_cli[@]}" "${publish_build[@]}"
+  if ! diff -r "$work/ctl/previous" "$publish_out" ||
+      ! has_match -E '^TOOL-FAILURE: incomplete \(publish build outputs: ' <"$log.stderr" ||
+      { [ "$fault" = exchange ] && ! has_match -F 'injected directory exchange failure' <"$log.stderr"; } ||
+      { [ "$fault" = second-move ] && ! has_match -F 'candidate/llvm.o' <"$log.stderr"; }; then
+    echo "FAIL $fault: publication failure did not preserve the previous generation"
+    fail=1
+  fi
+done
+
+mv "$publish_lib/publisher.py" "$publish_lib/slice0_publish.py"
+build "CLI atomic rebuild" "$work/ctl/publication-success.log" bounded "$native_secs" \
+  "${publish_cli[@]}" "${publish_build[@]}"
+if cmp -s "$work/ctl/previous/llvm.ll" "$publish_out/llvm.ll" ||
+    [ "$(cat "$publish_out/llvm.o")" != new-object ] ||
+    [ "$(cat "$publish_out/llvm.exe")" != new-executable ] ||
+    ! cmp -s "$work/ctl/previous/lcb.exe" "$publish_out/lcb.exe" ||
+    [ -n "$(find "$helper_project" -maxdepth 1 -name '.concrete-build.*' -print)" ]; then
+  echo "FAIL CLI atomic rebuild: expected the new LLVM set and the previous LCB executable"
+  fail=1
+else
+  echo "ok   CLI atomic rebuild preserves the unselected backend"
+fi
+
+cp -R "$work/ctl/previous" "$work/ctl/symlink-target-before"
+ln -s "$work/ctl/previous" "$helper_project/linked-out"
+check_cli_diagnostic "CLI symlink output directory" "$work/ctl/linked-out" "refuse 2 TOOL-FAILURE" \
+  "${publish_cli[@]}" build tests/slice0/answer.con -o "$helper_project/linked-out/." --backend llvm
+if [ ! -L "$helper_project/linked-out" ] ||
+    ! diff -r "$work/ctl/previous" "$work/ctl/symlink-target-before" ||
+    ! has_match -F 'build output directory must be a real directory:' <"$work/ctl/linked-out.stderr"; then
+  echo "FAIL CLI symlink output directory: expected rejection before staging"
+  fail=1
+fi
 
 "${emitter[@]}" backend-profile
 "${emitter[@]}" loop "$work/ctl/loop" "$target"

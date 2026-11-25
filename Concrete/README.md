@@ -15,6 +15,25 @@ Set `output` to a build directory. The default writes `llvm.exe` and `lcb.exe` t
 Use `--backend llvm` or `--backend lcb` for a single executable. The driver uses the pinned
 native build helper and the LCB executable built by Lake.
 
+Use a dedicated output directory. The CLI normalizes the `-o` path, then rejects a symlink at
+the final component, including one spelled with a trailing slash or `/.`. Ancestor components
+are resolved normally after normalization. The output directory cannot contain the working
+project, and its parent must be writable so the CLI can create a private sibling directory.
+
+A build writes and validates all selected artifacts in private staging. The publisher carries
+forward unrelated entries and artifacts of an unselected backend, then commits the complete
+directory with one atomic exchange (Linux `renameat2(RENAME_EXCHANGE)` or macOS
+`renameatx_np(RENAME_SWAP)`). The filesystem must support the exchange. A pre-commit failure
+returns `TOOL-FAILURE` with exit 2 and leaves existing outputs in place. A first failed build
+may leave an empty output directory. The parent-directory lock serializes commits by
+cooperating CLI builds, including builds selecting different backends.
+
+The exchange is atomic for the directory name. A reader opening several files across the
+exchange may see different generations. The output directory inode changes, and carrying forward
+regular files requires hard-link support. Use an output tree without mount points or concurrent
+edits by other tools. This is a visibility guarantee during normal execution. It provides no
+crash durability, and interruption or cleanup failure can leave private staging behind.
+
 `scripts/checks/compiler/tests.sh` also compiles the `con:` manifest rows. For trap rows it
 first checks that admission refuses, then runs the same lowering stages without discharged
 evidence and compares both native observations.

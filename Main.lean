@@ -27,27 +27,21 @@ private def writeBuildInput (path : System.FilePath) (text : String) : ExceptT R
     if result.exitCode != 0 then
       throw (IO.userError s!"checked writer exited with status {result.exitCode}: {result.stderr.trimAscii}")
 
-private def checkBuildDestination (path : System.FilePath) : IO Unit := do
-  let metadata ← try
-    some <$> path.symlinkMetadata
-  catch
-    | .noFileOrDirectory .. => pure none
-    | e => throw e
-  if let some info := metadata then
-    unless info.type == .file do
-      throw (IO.userError s!"build output is not a regular file: {path}")
+private def outputTransaction (operation : String) (args : Array String) :
+    ExceptT Refusal IO String :=
+  toolIO operation do
+    let result ← IO.Process.output {
+      cmd := "python3", args := #["-B", "scripts/checks/lib/slice0_publish.py"] ++ args }
+    if result.exitCode != 0 then
+      throw (IO.userError result.stderr.trimAscii.toString)
+    return result.stdout
 
 private def buildNative (dir : System.FilePath) (backend : Option String)
     (helper lcb : String) (inputs : Array (String × String)) (artifacts : Array String) :
     ExceptT Refusal IO Unit := do
   let names := inputs.map Prod.fst ++ artifacts
-  let staging ← toolIO "prepare build outputs" do
-    IO.FS.createDirAll dir
-    for name in names do
-      checkBuildDestination (dir / name)
-    let path ← IO.Process.run {
-      cmd := "mktemp", args := #["-d", "--", (dir / ".concrete-build.XXXXXXXX").toString] }
-    pure (System.FilePath.mk (path.dropEnd 1 |>.toString))
+  let path ← outputTransaction "prepare build outputs" (#["prepare", dir.toString] ++ names)
+  let staging := System.FilePath.mk (path.dropEnd 1 |>.toString)
   try
     for (name, text) in inputs do
       writeBuildInput (staging / name) text
@@ -58,16 +52,12 @@ private def buildNative (dir : System.FilePath) (backend : Option String)
       throw (.toolFailure s!"native build helper exited with status {child.exitCode}{if detail.isEmpty then "" else s!": {detail}"}")
     if !child.stdout.isEmpty then writeOutput "stdout" IO.getStdout child.stdout
     if !child.stderr.isEmpty then writeOutput "stderr" IO.getStderr child.stderr
-    toolIO "publish build outputs" do
-      -- Check the entire set before exposing any files from the private build.
-      for name in names do
-        unless (← (staging / name).symlinkMetadata).type == .file do
-          throw (IO.userError s!"expected a regular build output: {name}")
-        checkBuildDestination (dir / name)
-      for name in names do
-        IO.FS.rename (staging / name) (dir / name)
+    discard <| outputTransaction "publish build outputs"
+      (#["publish", dir.toString, staging.toString] ++ names)
   finally
-    toolIO "remove build staging directory" (IO.FS.removeDirAll staging)
+    -- After the exchange, staging contains the retired output directory. A
+    -- cleanup failure cannot turn an already committed build into a failure.
+    try IO.FS.removeDirAll staging catch _ => pure ()
 
 private def report (refusal : Refusal) : IO UInt32 := do
   let message := match refusal with
