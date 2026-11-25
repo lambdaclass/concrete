@@ -1290,7 +1290,6 @@ Concrete.Lex.stringPrepend_ok	propext
 Concrete.Lex.trivia_unique	Quot.sound propext
 Concrete.Lex.whitespace?.eq_1	
 Concrete.Lex.whitespace?_iff	propext
-Concrete.LoweringPremises.lower	propext
 Concrete.LoweringPremises.ssa	Classical.choice Quot.sound propext
 Concrete.MIR.Assignment.mk.inj	
 Concrete.MIR.Assignment.mk.injEq	propext
@@ -1304,6 +1303,8 @@ Concrete.MIR.Op.copy.sizeOf_spec
 Concrete.MIR.Program.mk.inj	
 Concrete.MIR.Program.mk.injEq	propext
 Concrete.MIR.Program.mk.sizeOf_spec	
+Concrete.MIR.lowerUnchecked_correct	Quot.sound propext
+Concrete.MIR.lower_correct	Quot.sound propext
 Concrete.Memory.Layout.mk.inj	
 Concrete.Memory.Layout.mk.injEq	propext
 Concrete.Memory.Layout.mk.sizeOf_spec	
@@ -1321,7 +1322,9 @@ Concrete.Memory.instDecidableEqLayout.decEq._proof_1
 Concrete.Memory.instDecidableEqLayout.decEq._proof_2	
 Concrete.Memory.instDecidableEqLayout.decEq._proof_3	
 Concrete.Memory.lower.eq_1	
+Concrete.Memory.lower_admitted_correct	Quot.sound propext
 Concrete.Memory.lower_correct	Quot.sound propext
+Concrete.Memory.lower_unchecked_correct	Quot.sound propext
 Concrete.Memory.run.eq_1	propext
 Concrete.Native.BackendModel.mk.inj	
 Concrete.Native.BackendModel.mk.injEq	propext
@@ -1375,6 +1378,7 @@ Concrete.Stages.Output.mk.inj
 Concrete.Stages.Output.mk.injEq	propext
 Concrete.Stages.Output.mk.sizeOf_spec	
 Concrete.Stages.compile.eq_1	Classical.choice Quot.sound propext
+Concrete.Stages.compile_core_correct	Classical.choice Quot.sound propext
 Concrete.Stages.compile_lexes	Classical.choice Quot.sound propext
 Concrete.Stages.compile_of_edges	Classical.choice Quot.sound propext
 Concrete.Stages.prepareLCB.eq_1	Classical.choice Quot.sound propext
@@ -1464,6 +1468,9 @@ LeanCompilerBackend.Verified.Source.read.eq_1	propext
 LeanCompilerBackend.Verified.Source.read.eq_2	propext
 LeanCompilerBackend.Verified.Source.step.eq_1	Quot.sound propext
 LeanCompilerBackend.Verified.Source.write.eq_1	propext
+List.lookup.eq_1	
+List.lookup.eq_2	
+List.lookup.eq_def	
 Std.Legacy.Range.mk.congr_simp	
 _private.Concrete.Admission.0.Concrete.Admission.Output.mk.inj	
 _private.Concrete.Admission.0.Concrete.Admission.Output.mk.injEq	propext
@@ -2435,6 +2442,70 @@ _private.Concrete.Lex.0.ConcreteSpec.Surface0.intTySpelling.match_1.eq_6
 _private.Concrete.Lex.0.ConcreteSpec.Surface0.intTySpelling.match_1.eq_7	
 _private.Concrete.Lex.0.ConcreteSpec.Surface0.intTySpelling.match_1.eq_8	
 _private.Concrete.Lex.0.PSigma.casesOn._arg_pusher	
+_private.Concrete.MIR.0.Concrete.MIR.evalAtom_coreEnv	propext
+_private.Concrete.MIR.0.Concrete.MIR.evalExpr_add	propext
+_private.Concrete.MIR.0.Concrete.MIR.evalExpr_add._sparseCasesOn_1.else_eq	propext
+_private.Concrete.MIR.0.Concrete.MIR.evalExpr_add.match_1.eq_1	propext
+_private.Concrete.MIR.0.Concrete.MIR.evalExpr_add.match_1.eq_2	propext
+_private.Concrete.MIR.0.Concrete.MIR.evalExpr_atom	propext
+_private.Concrete.MIR.0.Concrete.MIR.evalExpr_shape	Quot.sound propext
+_private.Concrete.MIR.0.Concrete.MIR.evalOp._sparseCasesOn_2.else_eq	propext
+_private.Concrete.MIR.0.Concrete.MIR.evalOp._sparseCasesOn_3.else_eq	propext
+_private.Concrete.MIR.0.Concrete.MIR.evalOp._sparseCasesOn_4.else_eq	propext
+_private.Concrete.MIR.0.Concrete.MIR.lookup_coreEnv	propext
+_private.Concrete.MIR.0.Concrete.MIR.lowerBody_correct	Quot.sound propext
+_private.Concrete.MIR.0.Concrete.MIR.lowerStmt.eq_1	propext
+_private.Concrete.MIR.0.Concrete.MIR.lowerStmt_eval	Quot.sound propext
+_private.Concrete.MIR.0.Concrete.MIR.lowerWith.eq_1	propext
+_private.Concrete.MIR.0.Concrete.MIR.lowerWith_correct	Quot.sound propext
+_private.Concrete.MIR.0.Concrete.MIR.runFrom.eq_1	propext
+_private.Concrete.MIR.0.Concrete.MIR.runFrom.match_1.eq_1	
+_private.Concrete.MIR.0.Concrete.MIR.runFrom.match_1.eq_2	
+_private.Concrete.MIR.0.Concrete.MIR.stepValue.eq_1	propext
+_private.Concrete.MIR.0.Concrete.MIR.stepValue.eq_2	propext
+_private.Concrete.MIR.0.Concrete.MIR.stepValue.eq_3	propext
+_private.Concrete.MIR.0.Concrete.MIR.stepValue.eq_4	propext
+_private.Concrete.MIR.0.Concrete.MIR.stepValue.match_1.eq_1	propext
+_private.Concrete.MIR.0.Concrete.MIR.stepValue.match_1.eq_2	propext
+_private.Concrete.MIR.0.Concrete.MIR.stepValue.match_1.eq_3	propext
+_private.Concrete.MIR.0.Concrete.MIR.stepValue.match_1.eq_4	propext
+_private.Concrete.MIR.0.Concrete.MIR.value.eq_1	
+_private.Concrete.MIR.0.Concrete.MIR.value.eq_2	
+_private.Concrete.MIR.0.Concrete.MIR.value.match_1.eq_1	
+_private.Concrete.MIR.0.Concrete.MIR.value.match_1.eq_2	
+_private.Concrete.MIR.0.Concrete.MIR.value.match_3.eq_1	
+_private.Concrete.MIR.0.Concrete.MIR.value.match_3.eq_2	
+_private.Concrete.MIR.0.Concrete.MIR.value_error	
+_private.Concrete.MIR.0.ConcreteSpec.evalAtom.match_1.eq_1	propext
+_private.Concrete.MIR.0.ConcreteSpec.evalAtom.match_1.eq_2	propext
+_private.Concrete.MIR.0.ConcreteSpec.evalAtom.match_1.eq_3	propext
+_private.Concrete.MIR.0.ConcreteSpec.evalAtom.match_1.eq_4	propext
+_private.Concrete.MIR.0.ConcreteSpec.evalExpr.match_1.eq_1	
+_private.Concrete.MIR.0.ConcreteSpec.evalExpr.match_1.eq_2	
+_private.Concrete.MIR.0.ConcreteSpec.evalExpr.match_1.eq_3	
+_private.Concrete.MIR.0.ConcreteSpec.evalExpr.match_3.eq_1	propext
+_private.Concrete.MIR.0.ConcreteSpec.evalExpr.match_3.eq_2	propext
+_private.Concrete.MIR.0.ConcreteSpec.evalExpr.match_3.eq_3	propext
+_private.Concrete.MIR.0.ConcreteSpec.evalExpr.match_3.eq_4	propext
+_private.Concrete.MIR.0.ConcreteSpec.execStmt.match_1.eq_1	
+_private.Concrete.MIR.0.ConcreteSpec.execStmt.match_1.eq_2	
+_private.Concrete.MIR.0.ConcreteSpec.execStmt.match_1.eq_3	
+_private.Concrete.MIR.0.ConcreteSpec.readVar.match_1.eq_1	
+_private.Concrete.MIR.0.ConcreteSpec.readVar.match_1.eq_2	
+_private.Concrete.MIR.0.ConcreteSpec.readVar.match_1.eq_3	
+_private.Concrete.MIR.0.ConcreteSpec.retOutcome.match_1.eq_1	propext
+_private.Concrete.MIR.0.ConcreteSpec.retOutcome.match_1.eq_2	propext
+_private.Concrete.MIR.0.ConcreteSpec.retOutcome.match_1.eq_3	propext
+_private.Concrete.MIR.0.ConcreteSpec.retOutcome.match_1.eq_4	propext
+_private.Concrete.MIR.0.ConcreteSpec.runBody.match_1.eq_1	
+_private.Concrete.MIR.0.ConcreteSpec.runBody.match_1.eq_2	
+_private.Concrete.MIR.0.ConcreteSpec.runBody.match_1.eq_3	
+_private.Concrete.MIR.0.Except.map.match_1.eq_1	
+_private.Concrete.MIR.0.Except.map.match_1.eq_2	
+_private.Concrete.MIR.0.List.filter.match_1.eq_1	
+_private.Concrete.MIR.0.List.filter.match_1.eq_2	
+_private.Concrete.MIR.0.List.lookup.match_1.eq_1	
+_private.Concrete.MIR.0.List.lookup.match_1.eq_2	
 _private.Concrete.Memory.0.Concrete.Memory.toMIR.eq_1	
 _private.Concrete.Parse.0.Concrete.Parse.Task.read.inj	
 _private.Concrete.Parse.0.Concrete.Parse.Task.read.injEq	propext

@@ -26,16 +26,8 @@ structure FrontendPremises where
     let p := Core.toCore out.program
     Elab.eval ast = Core.run p (p.body.length + 1)
 
-/-- Open implementation contracts for the lowering stages. The production path gets
-its evidence from admission. The conformance path carries an empty evidence list. -/
+/-- Open implementation contracts for the lowering stages. -/
 structure LoweringPremises where
-  lower :
-    (∀ source admitted mir, Admission.check source = .ok admitted → MIR.lower admitted = .ok mir →
-      let p := Core.toCore source.program
-      MIR.run mir = Core.run p (p.body.length + 1)) ∧
-    (∀ source mir, MIR.lowerUnchecked source = .ok mir →
-      let p := Core.toCore source.program
-      MIR.run mir = Core.run p (p.body.length + 1))
   ssa : ∀ path mem bir, SSA.lower path mem = .ok bir →
     match BIR.run bir (bir.blocks.length + 1) with
     | .exited n => Memory.run mem = .exit n
@@ -144,8 +136,6 @@ def all : List Premise := [
     "every tree the parser returns for a token list is one the grammar derives from it"⟩,
   ⟨"P_elab", .implementation, "ANF and resolution preservation",
     "successful elaboration preserves the source AST evaluator's outcome in Core"⟩,
-  ⟨"P_lower", .implementation, "checked-evidence validity and MIR preservation",
-    "MIR preserves Core outcomes for unchecked lowering and for evidence produced by admission"⟩,
   ⟨"P_ssa", .implementation, "SSA semantic preservation",
     "successful SSA lowering preserves Memory CFG outcomes, including the trap kind"⟩,
   ⟨"P_print", .implementation, "an LLVM-IR semantics; not planned for slice 0",
