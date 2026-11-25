@@ -85,6 +85,110 @@ slice. The [written grammar decision](#decided-2026-11-08-written-grammar) and
 grammar before building the Slice 0 parser. The owner still needs to decide whether the
 full grammar remains a prerequisite or grammar approval and encoding can proceed per slice.
 
+<a id="decided-2026-11-25-slice1-delegated"></a>
+## Decided 2026-11-25: Owner delegation and Slice 1
+
+Status: decided
+Source: owner delegation and unanimous agreement of Claude, Codex and agy (Gemini 4 Neon)
+
+The owner replied to the coordinator's Slice 1 recommendations on 2026-11-25, verbatim.
+
+~~~text
+yeah move ahead if the other LLMS tell you yes to everything
+you odn't need me, jsut speak with them
+~~~
+
+A decision the owner would otherwise be asked is decided when Claude (the coordinator),
+Codex and agy (Gemini 4 Neon) each answer YES to the exact stated recommendation. On any NO,
+the coordinator revises the recommendation and asks again. The coordinator asks the owner only
+when the three cannot agree. Each delegated decision is recorded with its verdicts and reported
+briefly to the owner afterwards. This also applies to answer 2a in
+`decided-2026-11-25-freeze-and-grammar`, the earlier November 25 record, which requires approval
+of each slice's grammar before its parser.
+
+### Seven approved decisions
+
+#### 1. Slice 1 grammar
+
+This approves the Slice 1 projection of the one shared grammar under 2a. The per-slice
+approval requirement supersedes the full-grammar prerequisite in the [November 8 written grammar decision](#decided-2026-11-08-written-grammar).
+
+~~~text
+  program  := decls fn NAME ( ) -> u8 { body }
+  decls    := struct NAME { } decls | (nothing)
+  body     := let NAME letTail = expr ; body | return expr ; body | NAME ( ) ; body | (nothing)
+  letTail  := : TYPE | { }
+  TYPE     := u8 | NAME   (must resolve to a declared struct)
+  expr     := atom more
+  more     := + atom more | (nothing)
+  atom     := INTEGER | NAME nameTail | ( expr ) | move NAME
+  nameTail := { } | (nothing)
+~~~
+
+`struct` and `move` are keyword terminals. `abort` remains a reserved builtin identifier
+that lexes as `NAME`. Shadowing it remains a `CORE-CHECK` refusal under [OD153](#od153)
+and the [November 24 builtin clarification](#decided-2026-11-24-builtin-names). In Slice 1 the
+`NAME ( ) ;` branch admits only a name resolving to intrinsic `abort`. The branch
+generalizes to later statement calls. The decided treatment of `_` follows
+[Q8.2](#decided-2026-11-05-core) and [OD62](#od62). The combined grammar keeps
+`headExpr` without bare struct literals under [OD16](#od16) and [OD34](#od34) and
+gets its own LL(1) check.
+
+#### 2. Reads of named linear locals
+
+Write a read of a named linear local as `move t`,
+as in `let u: S = move t;` or `let S {} = move t;`. This reserves `move`.
+Destructuring itself consumes its scrutinee, so a fresh value can be destructured directly
+with `let S {} = S {};`. Field reads, rvalues and generic cases get their own review when
+their slices introduce them. This resolves the [November 9 reopening](#decided-2026-11-09-older-proposals)
+of [29-list item 7](#recovered-29-7).
+
+#### 3. Abort statement
+
+Write `abort();` as a standalone statement. This resolves the
+[November 9 reopening](#decided-2026-11-09-older-proposals) of [29-list item 8](#recovered-29-8)
+and supersedes its earlier `return abort();` spelling.
+
+#### 4. Language-rules version
+
+A project must pin its language-rules version in `Concrete.toml`.
+Refuse a missing or unsupported pin. A single-file build without a project file uses and
+reports the only supported version. Review the exact TOML keys and schema before implementation.
+This extends the [project manifest decision](#decided-project-concrete-toml) and complements
+the [runtime and `spec_version` decision](#decided-project-runtime-2026-11-06).
+
+#### 5. Always-aborts fact
+
+Move R-0600 from Slice 1 to Slice 5, functions and calls. This
+resolves the [November 9 reopening](#decided-2026-11-09-older-proposals) of
+[29-list item 10](#recovered-29-10).
+
+#### 6. Console output
+
+Console output stays in Slice 11 under the
+[November 22 roadmap reordering](#decided-2026-11-22-roadmap-reordering).
+Any future change to the slice order requires an explicit revision.
+
+#### 7. Execution observation
+
+Drop the proposed runner or launcher display. The trap line
+and exit status are the observation under the [runtime decision](#decided-project-runtime-2026-11-06)
+and the [CLI decision without a `run` command](#decided-2026-11-08-help).
+
+### Verdicts
+
+In round 1, Codex answered NO on items 1, 2 and 6 and YES on the rest. agy answered NO on
+items 1, 6 and 7 and YES on the rest. Both required `abort` to remain a reserved builtin
+identifier. Codex required explicit `move` only for reads of named linear locals because
+destructuring consumes its scrutinee. The proposed console schedule conflicted with the
+November 22 slice order and depended on features from Slices 8 and 9. agy found that the
+runner display conflicted with the decision against a `run` command.
+
+The coordinator revised items 1, 2, 6 and 7 to preserve the lexical class of `abort`, limit
+the `move` rule to named linear local reads, keep console output in Slice 11 and drop the
+runner display. In round 2, Claude recommended all seven resulting items (YES on each),
+and Codex and agy each returned `ALL-YES` on the same seven items.
+
 <a id="decided-2026-11-22-direction"></a>
 ## Decided 2026-11-22: compile slice 0 first
 
