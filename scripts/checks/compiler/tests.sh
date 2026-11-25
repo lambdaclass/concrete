@@ -54,15 +54,45 @@ check() {
   done
 }
 
+# Check a diagnostic through the public CLI, including its process status.
+check_cli_diagnostic() {
+  local label=$1
+  local output=$2
+  local expectation=$3
+  shift 3
+  local status code message
+  local rc=0
+  read -r _ status code message <<<"$expectation"
+  bounded "$native_secs" "$@" >"$output.stdout" 2>"$output.stderr" || rc=$?
+  count=$((count + 1))
+  local -a expected=(has_match -E "^$code: .+$")
+  if [ -n "$message" ]; then
+    expected=(cmp -s "$output.expected" -)
+    printf '%s: %s\n' "$code" "$message" >"$output.expected"
+  fi
+  if [ "$rc" = "$status" ] && [ ! -s "$output.stdout" ] &&
+      "${expected[@]}" <"$output.stderr"; then
+    echo "ok   $label: status $rc ($code)"
+  else
+    echo "FAIL $label: expected status $status and $code, got status $rc"
+    cat "$output.stderr"
+    fail=1
+  fi
+}
+
+cli_bin="$root/.lake/build/bin/concrete"
+cli_project=$(cd "$(dirname "$test_manifest")/.." && pwd)
+project_cli=(bash -c 'cd "$1" && shift && exec "$@"' _ "$cli_project" "$cli_bin")
+
 # The backend-specific expectation exercises the public driver and its native build policy.
 check_backend_limit() {
   local path=${1#con:}
   local d=$2
   local expect=$3
-  local status rule
+  local status diagnostic
   local project
   local -a cli
-  project=$(cd "$(dirname "$test_manifest")/.." && pwd)
+  project=$cli_project
   if [ "$project" != "$root" ]; then
     mkdir -p "$d/project/$(dirname "$path")"
     cp -- "$project/$path" "$d/project/$path"
@@ -70,8 +100,8 @@ check_backend_limit() {
     ln -s "$root/.lake" "$d/project/.lake"
     project="$d/project"
   fi
-  cli=(bash -c 'cd "$1" && shift && exec "$@"' _ "$project" "$root/.lake/build/bin/concrete")
-  read -r _ _ status _ _ rule <<<"$expect"
+  cli=(bash -c 'cd "$1" && shift && exec "$@"' _ "$project" "$cli_bin")
+  read -r _ _ status _ diagnostic <<<"$expect"
   mkdir -p "$d/expected"
   printf '%s\n' "$status" >"$d/expected/status"
   : >"$d/expected/stderr"
@@ -86,16 +116,10 @@ check_backend_limit() {
     fail=1
   fi
 
-  local rc=0
-  bounded "$native_secs" "${cli[@]}" \
-    build "$path" -o "$d/lcb" --backend lcb \
-    >"$d/lcb.stdout" 2>"$d/lcb.stderr" || rc=$?
-  if [ "$rc" = 1 ] && [ ! -s "$d/lcb.stdout" ] && [ ! -e "$d/lcb" ] &&
-      has_match -E "^$rule: LCB backend resource refusal: [^:]+: [0-9]+ exceeds limit [0-9]+$" <"$d/lcb.stderr"; then
-    echo "ok   $path [lcb]: $(cat "$d/lcb.stderr")"
-  else
-    echo "FAIL $path [lcb]: expected a $rule backend resource refusal, got status $rc"
-    cat "$d/lcb.stderr"
+  check_cli_diagnostic "$path [lcb]" "$d/lcb" "$diagnostic" "${cli[@]}" \
+    build "$path" -o "$d/lcb" --backend lcb
+  if [ -e "$d/lcb" ]; then
+    echo "FAIL $path [lcb]: incomplete build created an output directory"
     fail=1
   fi
 }
@@ -110,7 +134,7 @@ nonexistent_program() { printf 'no_such_program\tbir:no_such_program\texit 0\tsl
 wrong_source_refusal() {
   mkdir -p "$(dirname "$1")/slice0"
   printf 'fn main() -> u8 { return 42 }\n' >"$(dirname "$1")/slice0/wrong_refusal.con"
-  awk -F '\t' '{print} $1 == "answer" {print "wrong_source_refusal\tcon:tests/slice0/wrong_refusal.con\trefuse CORE-CHECK\tslice0"}' "$1" >"$1.new"
+  awk -F '\t' '{print} $1 == "answer" {print "wrong_source_refusal\tcon:tests/slice0/wrong_refusal.con\trefuse 1 CORE-CHECK\tslice0"}' "$1" >"$1.new"
   mv "$1.new" "$1"
 }
 manifest_control() { # manifest_control LABEL EXPECTED-MESSAGE MUTATION-FUNCTION
@@ -147,11 +171,20 @@ if [ "${CONCRETE_TEST_MANIFEST_SKIP_CONTROLS:-0}" != 1 ]; then
   manifest_control wrong-source-refusal "expected refusal CORE-CHECK, got SYNTAX" wrong_source_refusal
 fi
 
-if [[ "$rows" == *$'\t'"llvm exit "* ]] && [ "${CONCRETE_TEST_EMIT_ONLY:-0}" != 1 ]; then
+if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" != 1 ]; then
   build "concrete driver" "$work/cli-build.log" bounded 1800 lake build concrete
 fi
 while IFS=$'\t' read -r name program expect; do
   d="$work/ex/$name"
+  if [[ "$program" == cli:* ]]; then
+    if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" != 1 ]; then
+      mkdir -p "$d"
+      check_cli_diagnostic "$name" "$d/cli" "$expect" "$cli_bin" \
+        build tests/slice0/answer.con -o "$d/out" --backend invalid
+      examples=$((examples + 1))
+    fi
+    continue
+  fi
   if [[ "$expect" == "llvm "* ]]; then
     if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" != 1 ]; then
       check_backend_limit "$program" "$d" "$expect"
@@ -161,8 +194,20 @@ while IFS=$'\t' read -r name program expect; do
   fi
   emit_slice0_row "$test_manifest" "$program" "$d" "$target" "$expect"
   # Emit-only controls visit every row without a native build.
-  if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" = 1 ] || [[ "$expect" == "refuse "* ]]; then continue; fi
-  check "$name" "$d" 10 20
+  if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" = 1 ]; then continue; fi
+  if [[ "$expect" == "refuse "* ]]; then
+    mkdir -p "$d"
+    # The emitter checks optional exact stage messages, including syntax message formatting.
+    read -r _ status code _ <<<"$expect"
+    check_cli_diagnostic "$name" "$d/cli" "refuse $status $code" "${project_cli[@]}" \
+      build "${program#con:}" -o "$d/out"
+    if [ -e "$d/out" ]; then
+      echo "FAIL $name: refused build created an output directory"
+      fail=1
+    fi
+  else
+    check "$name" "$d" 10 20
+  fi
   examples=$((examples + 1))
 done <<<"$rows"
 if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" = 1 ]; then exit "$fail"; fi

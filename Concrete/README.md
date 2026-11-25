@@ -600,10 +600,17 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
 
    Accepted examples `return 125;` and `return 134;` are in the corpus and must classify as exits. Slice 0 can't produce a real startup refusal, because it has no grants. The refusal and trap classifications are also exercised by comparator self-tests: stub images, and the trap via gate 6.
 
-   The `llvm exit N lcb refuse CLASS` row runs the public build command in each backend mode
-   and checks the native LLVM exit and the LCB resource refusal.
+   The `llvm exit N lcb diagnostic STATUS CODE [MESSAGE]` row runs the public build command in
+   each backend mode and checks the native LLVM exit and the LCB diagnostic. The invalid-backend
+   CLI row checks the usage diagnostic and its exit status.
 
-   **Refused examples have their own leg.** The Lean `check` result, the compiler's refusal (with its rule) and the refusal certificate must agree with the row's `refuse RULE-ID` expectation. No executable exists for a refused example. A separate supported-subset coverage report lists every grammar production and Core form that the corpus exercises. A reject-all compiler fails, because every accepted example must exit with its status.
+   The compiler CLI exits 0 for a successful build or help, 1 for a source refusal
+   (`SYNTAX`, `SLICE-0`, `CORE-CHECK`), 2 for an incomplete build, 3 for `USAGE`, and
+   4 for `INTERNAL`. Incomplete diagnostics use `incomplete (reason)`. This includes
+   operational failures (`TOOL-FAILURE`) such as an unavailable native tool or failed link.
+   Compiler invariant failures use `INTERNAL`.
+
+   **Refused examples have their own leg.** The Lean `check` result, the compiler's refusal (with its rule) and the refusal certificate must agree with the row's `refuse 1 CODE [MESSAGE]` expectation. No executable exists for a refused example. A separate supported-subset coverage report lists every grammar production and Core form that the corpus exercises. A reject-all compiler fails, because every accepted example must exit with its status.
 5. **Differential at the source:** generated accepted programs, with replayable seeds; native exit = Lean `run`.
 6. **Differential through the token-free lowering, both backends.** This covers overflow. Generated **well-scoped, unchecked** slice-0 programs over **arbitrary** `u8` operands, including `200 + 56`, take `lower q ∅ → memory → ssa`, so they have no tokens and no checker. Their Core `run` is compared with the LLVM path and the LCB path. Overflow must give exit 134 and the right site's trap line on fd 2, for both backends. This exercises token-aware lowering, Memory CFG and SSA, not only the backends.
    A second leg compares generated BIR directly with both backends, to cover BIR shapes that lowering does not produce.
@@ -710,8 +717,10 @@ LCB is our own project; these are tasks for it, not premises to keep. Checked ag
 **For the trusted base (now):**
 1. A public entry `compileSource : Target → Symbol → Source.Function → Except Error Artifact`. Today the compiler builds LCB's `FunctionJob` itself (`Concrete/Backend/LCB.lean`, `assemble`).
 2. The verified first path for `x86_64-linux`. It exists only for `aarch64-apple-darwin` leaf functions; x86-64 goes through the compatibility backend, a larger unverified base.
-3. Larger resource limits on the first path: 64 blocks, 488 values and 480 definitions per function (`Verified/Canonical.lean`). Slice programs will exceed them. LCB profile limits yield a backend resource refusal
-   under the existing `INTERNAL` class, with the resource, measured amount and limit.
+3. Larger resource limits on the first path: 64 blocks, 488 values and 480 definitions per function (`Verified/Canonical.lean`). Slice programs can exceed them. `BACKEND-LIMIT` reports
+   `incomplete (LCB backend: RESOURCE: MEASURED exceeds limit LIMIT)` and exits 2. LLVM is
+   available independently through `--backend llvm`. Unsupported adapter widths use
+   `BACKEND-PROFILE` and also exit 2.
 4. Object emission (LCB V04), so assembly text and the system assembler leave the path.
 
 **For slice 2, integers complete (all widths u8–u64, i8–i64): provided on LCB's verified path (Apple AArch64).** LCB's verified profile now has `word` (32-bit) and `long` (64-bit) values, `add sub mul and or xor`, the shifts `shiftLeft logicalRight arithmeticRight` (count modulo the width), `mulHighUnsigned mulHighSigned` (accepted only at `long`), division and remainder (`unsignedDiv unsignedRem signedDiv signedRem`; a zero divisor or signed minimum by −1 is stuck, so the adapter must branch to a trap before them), and the comparisons `eq unsignedLT unsignedLE signedLT signedLE` (word result). The adapter will carry every integer as a `long`: exact for types up to 32 bits; 64-bit overflow uses the high multiply and, for add/sub, `xor`/`and`/compare. Still absent and optional while every integer is a `long`: width conversion (`word`↔`long` extension and truncation).

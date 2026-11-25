@@ -53,9 +53,9 @@ def writeLcb (dir : System.FilePath) (target : LCB.Target)
   IO.FS.writeFile (dir / "lcb_job.txt") (reprStr job ++ "\n")
   -- On every host, LCB's verified first path (the `aarch64-macos` target) must admit the body.
   if let .error msg := LCB.assemble .aarch64Macos f then
-    IO.eprintln s!"{dir}: LCB first path: {msg}"; return false
+    IO.eprintln s!"{dir}: LCB first path: {msg.message}"; return false
   match LCB.assemble target f with
-  | .error msg => IO.eprintln s!"{dir}: LCB: {msg}"; return false
+  | .error msg => IO.eprintln s!"{dir}: LCB: {msg.message}"; return false
   | .ok asm =>
     IO.FS.writeFile (dir / "lcb_body.s") asm
     IO.FS.writeFile (dir / "lcb_rt.ssa") (Runtime.qbe sites)
@@ -100,7 +100,7 @@ def emitArtifact (name : String) (p : Program) (llvm : String)
 def emitProgram (name : String) (p : Program) (dir : System.FilePath)
     (expectation : List String) (target : LCB.Target) : IO UInt32 := do
   match LCB.emit p with
-  | .error msg => IO.eprintln s!"{name}: adapter: {msg}"; return 1
+  | .error msg => IO.eprintln s!"{name}: adapter: {msg.message}"; return 1
   | .ok emitted => emitArtifact name p (LLVM.module p) emitted dir expectation target
 
 def emit (name : String) (dir : System.FilePath) (expectation : List String)
@@ -113,14 +113,14 @@ def emitSource (path actual : String) (dir : System.FilePath) (expectation : Lis
     (target : LCB.Target) : IO UInt32 := do
   let input : Concrete.Stages.Input := ⟨path, ← IO.FS.readBinFile actual⟩
   match expectation, Concrete.Stages.compile input with
-  | "refuse" :: rule :: detail, .error e =>
+  | "refuse" :: status :: rule :: detail, .error e =>
     let message := String.intercalate " " detail
-    if e.code == rule && (detail.isEmpty || e.message == message) then
+    if toString e.exitCode == status && e.code == rule && (detail.isEmpty || e.message == message) then
       IO.println s!"ok   {path}: {e.code}: {e.message}"
       return 0
     IO.eprintln s!"{path}: expected refusal {rule}{if detail.isEmpty then "" else ": " ++ message}, got {e.code}: {e.message}"
     return 1
-  | "refuse" :: rule :: _, .ok _ =>
+  | "refuse" :: _ :: rule :: _, .ok _ =>
     IO.eprintln s!"{path}: expected refusal {rule}, but compilation succeeded"
     return 1
   | "trap" :: _, .error (.checker _) =>
@@ -160,7 +160,7 @@ def emitLoop (dir : System.FilePath) (target : LCB.Target) : IO UInt32 := do
   unless wf loopBody && run loopBody 1000 == .outOfFuel do
     IO.eprintln "loop: not a well-formed diverging body"; return 1
   match LCB.emit loopBody with
-  | .error msg => IO.eprintln s!"loop: adapter: {msg}"; return 1
+  | .error msg => IO.eprintln s!"loop: adapter: {msg.message}"; return 1
   | .ok (f, tbl) =>
     if (LCB.evalBody f 10000).isSome then IO.eprintln "loop: LCB's evaluator returns"; return 1
     unless ← writeBackends dir target loopBody (LLVM.module loopBody) (f, tbl) do return 1

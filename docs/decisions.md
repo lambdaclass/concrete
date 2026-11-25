@@ -147,6 +147,7 @@ representation defaults recorded on this veto list.
 
 | Default | Disposition |
 | --- | --- |
+| Compiler CLI diagnostic codes | `BACKEND-LIMIT` reports the backend, resource, measured amount and limit. `BACKEND-PROFILE` reports unsupported backend features. `TOOL-FAILURE` reports operational failures. All three use `incomplete (reason)` and exit 2. `USAGE` reports invalid command arguments and exits 3. See the [exit-code decision](#recovered-29-13) and the [diagnostics decision](#decided-project-diagnostics-2026-11-06). |
 | `bool` | One byte. False is 0, true is 1, other bytes are invalid. Boolean-to-integer conversion remains open under ISS-0069. |
 | `Unit` | Zero bytes, alignment 1. |
 | `char` | Four bytes as a `u32` Unicode scalar value, alignment 4. |
