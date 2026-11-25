@@ -72,13 +72,12 @@ can we also make sure the binary produces has the proofs so that anybody can che
 The coordinator presented two options: embed the full proof or embed the facts and a hash with the full proof shipped alongside.
 Owner, verbatim:
 i think the hash is better? what do yhou think
-After Codex and agy design reviews, the coordinator agreed to embed the facts and bind the separate proof bundle by digest in the shared release-evidence format.
 ~~~
 
 1. The Phase T freeze remains in effect for R-0692, R-0693 and the remaining R-0710 items.
    A recorded bug that reached `main` may justify restarting a paused item when the bug
-   shows the item is needed. The coordinator makes that call and reports it to the owner.
-   Agents scope the restart to that bug and cite its issue record in the restarting branch. Bug fixes with regression tests inside existing checks and the approved R-0724
+   shows the item is needed. Agents may restart the item within the scope of that bug and
+   cite its issue record in the restarting branch. Bug fixes with regression tests inside existing checks and the approved R-0724
    proof and CI drag cleanup remain allowed regardless. This supersedes the blanket freeze
    in item 2 of the [November 22 direction](#decided-2026-11-22-direction) and specifies the
    exception in item 5 of the [November 22 roadmap reordering](#decided-2026-11-22-roadmap-reordering).
@@ -103,24 +102,14 @@ After Codex and agy design reviews, the coordinator agreed to embed the facts an
    describes the `B0a`/`B0b` staging.
 4. As a standing rule, at most two roadmap slices may be in progress at any time. The owner's
    “stages” means slices in the roadmap. The active slices are Slice 0's `B0a` remainder and
-   Slice 1. Work for a later slice is limited to proposals for the owner until an active slice
-   closes.
-5. The owner extended the [standing project review rule](#decided-project-review).
-   Codex and agy review owner-facing questions, plans, grammars and branches before
-   publication or delivery to the owner. Use Gemini Neon for agy when available.
+   Slice 1.
+5. The owner required Codex and agy review of the grammar, with Gemini Neon for agy
+   when available. The [standing project review rule](#decided-project-review) also applies.
    [AGENTS.md](../AGENTS.md#review) records the workflow.
-6. To let anyone inspect the facts and check the evidence, executables carry a compact
-   descriptor with the facts, build identity and typed digests of the source, BIR,
-   backend input, proof bundle and canonical executable image. The descriptor states
-   the binding kind explicitly: attested digest, reproducible rebuild or proved backend.
-   A digest identifies the artifact. A correspondence claim requires the evidence
-   appropriate to its binding kind.
-   The full proof bundle travels separately, bound by its digest, in the same evidence
-   format used by the R-0353 release verifier and the R-0201 audit dossier. Under R-0552,
-   the B0a certificate and artifact-binding work designs the Slice 0 certificate and facts
-   formats to be deterministic and embeddable. [R-0729](../ROADMAP.md#r-0729) adds
-   executable section injection and a verifier command later. The command spelling is
-   an owner decision.
+6. Bind each executable by digest to its separately kept proof evidence so anyone can
+   check the evidence and inspect the facts. The exact format remains open. The compiler
+   architecture plan is in review and will settle the format before implementation. A later
+   decision entry will record it. [R-0729](../ROADMAP.md#r-0729) tracks the work.
 
 The coordinator withdrew the backend size-limit diagnostics question. The
 [recovered item 13](#recovered-29-13) and the

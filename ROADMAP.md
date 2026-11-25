@@ -163,9 +163,8 @@ verbosity that buys clarity) get one home in `PHILOSOPHY.md` when the `wip/philo
    infrastructure is reviewed by Codex before it is published or brought to the owner. A second,
    independent reviewer (Kimi, Grok or agy/Gemini) reviews as well when one is available; when none
    is, its absence is recorded with the review, never assumed
-   ([record](docs/decisions.md#decided-project-review)). Codex and agy review owner-facing questions,
-   plans, grammars and branches before publication or delivery to the owner, with Gemini Neon
-   for agy when available ([November 25 extension](docs/decisions.md#decided-2026-11-25-freeze-and-grammar)).
+   ([record](docs/decisions.md#decided-project-review)). Codex and agy review the grammar,
+   with Gemini Neon for agy when available ([November 25 extension](docs/decisions.md#decided-2026-11-25-freeze-and-grammar)).
 
 ### Scheduling rule
 
@@ -183,9 +182,8 @@ constructs.
 <a id="phase-t-restart-rule"></a>
 ### Phase T restart rule
 
-R-0692, R-0693 and the remaining R-0710 items stay paused. The coordinator may authorize
-agents to restart a paused item only when a bug on `main` recorded in [ISSUES.tsv](ISSUES.tsv)
-shows the item is needed. The coordinator reports the decision to the owner. The restarting
+R-0692, R-0693 and the remaining R-0710 items stay paused. Agents may restart a paused item only when
+a bug on `main` recorded in [ISSUES.tsv](ISSUES.tsv) shows the item is needed. The restarting
 branch cites the issue and scopes the work to that bug. Bug fixes with regression tests inside existing checks and the
 approved proof and CI drag cleanup ([R-0724](#r-0724)) remain allowed regardless.
 [November 25 decision](docs/decisions.md#decided-2026-11-25-freeze-and-grammar).
@@ -272,7 +270,7 @@ every slice from slice 5 onward requires both backends at landing.
 [November 6 vertical-slices decision](docs/decisions.md#decided-project-vertical-slices-2026-11-06).
 Only the start order changes. Each slice must still be fully proven end to end before it closes,
 following the slice shape and early-slice staging above. At most two slices are in progress at a
-time. While two are active, work for a later slice is limited to proposals for the owner.
+time.
 
 **The order** (originally approved 2026-11-06, revised 2026-11-07, and reordered by the owner on
 [2026-11-22](docs/decisions.md#decided-2026-11-22-roadmap-reordering) and
@@ -565,7 +563,7 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
 | R-0504 | Validators with explicit soundness propositions | substitutions and wrong artifacts are rejected without inflating native assurance; slice-0 increment at B0a, extended at B1 | R-0497 |
 | R-0507 | Type and ownership soundness over the executable semantics | proved for slice 1; first applicable increment at B0a; the approved slice-1 obligations remain due at B1 | R-0496, R-0499 |
 | R-0521 | Minimal provenance and one canonical verification task for the first authoritative claims | a claim names its compiler, source, theorem and executable digest; minimal provenance and kernel-checked per-compilation evidence accompany the first authoritative slice-0 claim; the evidence connects the exact input to the exact emitted BIR without trusting native evaluation, the backend input is bound to that BIR, and the Lean compiler, runtime and toolchain are listed as execution assumptions wherever the evidence does not close the gap (2026-11-06) | R-0509 |
-| R-0552 | Per-compilation certificates (owner-approved 2026-10-25) | design the B0a certificate and facts formats to be deterministic and embeddable ([November 25 decision](docs/decisions.md#decided-2026-11-25-freeze-and-grammar)); a build emits a certificate per output, and the kernel checks it; minimal provenance and kernel-checked per-compilation evidence accompany the first authoritative slice-0 claim; each certificate connects the exact input to the exact emitted BIR through proved judgments or validators, checked by the kernel without trusting native evaluation; the backend input is bound to that BIR (a digest is identity, not correspondence); residual Lean compiler, runtime and toolchain trust is listed as explicit execution assumptions; LCB verification of compiled programs is not counted as verification of the compiler's execution (2026-11-06) | R-0504 |
+| R-0552 | Per-compilation certificates (owner-approved 2026-10-25) | a build emits a certificate per output, and the kernel checks it; minimal provenance and kernel-checked per-compilation evidence accompany the first authoritative slice-0 claim; each certificate connects the exact input to the exact emitted BIR through proved judgments or validators, checked by the kernel without trusting native evaluation; the backend input is bound to that BIR (a digest is identity, not correspondence); residual Lean compiler, runtime and toolchain trust is listed as explicit execution assumptions; LCB verification of compiled programs is not counted as verification of the compiler's execution (2026-11-06) | R-0504 |
 | R-0582 | Per-pass certificates in place of the whole-compiler `decide` certificate | after slice 0, a per-compilation certificate composes universal per-pass theorems with small per-edge witnesses, linear in program size, instead of making the kernel re-run the whole compiler by reduction; slice 0 may keep `decide`; a planted wrong witness at any edge is rejected; define the per-module certificate/pass composition boundary at slices 8/9 with R-0556; substituted module witnesses fail; measure per-module kernel/replay cost and representative edit invalidation with R-0560/R-0509 | R-0552, R-0583 |
 | R-0528 | Resource limits on input size, memory, time and import closure | each input class has a limit and a hostile fixture | R-0503 |
 | R-0573 | Small adversarial interaction workloads from the first slices on, alongside file-copy (decided 2026-11-06) | each slice adds programs that combine its features with earlier ones in difficult ways (for example borrows across cleanup, authority in cleanup, nested views), each with its expected outcome and Lean/native differential check; slices 2–11 retain cumulative interaction workloads rather than isolated feature examples; owner question: any additional named stressor program; pre-freeze sketches belong to R-0567, not this post-B0a acceptance | R-0425, R-0503 |
@@ -699,7 +697,7 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
 | R-0219 | Proof status: vacuity, spec adequacy, evidence mutation, toolchain migration | the validation project passes | R-0178 |
 | R-0201 | Audit commands over the slice-0 facts query (R-0575): `audit`, `explain`, `why`, `diff`, trust-diff gates and `concrete build --audit` user dossier | `concrete diff <base> <head>` semantic assurance diffing, `Concrete.toml` ratchet checks (capabilities, allocation, trusted/FFI surfaces, stack/heap/step-complexity budgets with no source cost syntax per [2026-11-22](docs/decisions.md#decided-2026-11-22-llm-inference-showcase-and-float-order), and proof coverage) and an initial one-command `concrete build --audit` self-contained HTML/JSON audit dossier (reusing `lean_site`, `Premises` and `external.sh` to package the capability call graph, per-site trap/termination status, stack & heap bounds, trusted/FFI boundary inventory, linked user Lean theorems, trust-premise ledger and a 1-command `nanoda`/`con-leche` replay script; [proposal](docs/proposals/LANGUAGE_AND_COMPILER_ENHANCEMENTS.md#comp-assurance-diff)) land at slices 10–11; the full package-scale audit bundle passes in Phase F (coordinated with R-0353); the per-function query itself is R-0575 (B0a/B1), not this task | Slice 10–11 increment: R-0575, R-0593, R-0576; Phase-F package bundle: R-0178 |
 | R-0353 | The release-evidence graph and an offline independent bundle verifier | a hostile bundle is rejected; receipt v1 frozen; the transferred R-0145 receipt exception cannot bypass kernel checking under R-0697; a receipt distinguishes "was valid when produced" from current acceptance and revocation (the obligations of legacy R-0430), over the per-compilation certificates of R-0552 | R-0201, R-0697 |
-| <a id="r-0729"></a>R-0729 | Embed the evidence descriptor and verify it independently ([November 25 decision](docs/decisions.md#decided-2026-11-25-freeze-and-grammar)) | inject the descriptor into an executable section and provide a verifier command with owner-approved spelling. Gate: inspect the embedded facts and use the shared evidence verifier to check the matching executable and bundle; reject substituted images and bundles and report the declared binding kind with its checked evidence | R-0552, R-0353 |
+| <a id="r-0729"></a>R-0729 | Design and implement digest binding of each executable to its separately kept proof evidence ([November 25 decision](docs/decisions.md#decided-2026-11-25-freeze-and-grammar)) | settle the format in the compiler architecture plan before implementation. Gate: independently check the binding for a matching executable and proof evidence, and reject substitutions of either | R-0552 |
 | R-0606 | Named assurance properties per module (owner, 2026-11-06) | each property is separate, named and versioned, with its scope, evidence and coverage; there is no ladder of levels | R-0575 |
 
 ### G. Release and ecosystem
