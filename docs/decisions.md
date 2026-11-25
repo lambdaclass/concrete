@@ -15,7 +15,7 @@ the earlier behaviour, the answer below governs, and the code follows as its new
 The shape of Core was approved provisionally on 2026-11-05 ([stage A2a](#decided-2026-11-05)): it binds the design, and the owner freezes Core at stage A2c, after the four design theorems are proved against the proposed `Spec.lean` and the integration stage A2i (2026-11-06) is accepted (freeze timing revised to 0.1 on [2026-11-22](#decided-2026-11-22-roadmap-reordering)). The project and architecture decisions are recorded here too, [below](#decided-project).
 
 <a id="decided-2026-11-25-freeze-and-grammar"></a>
-## Decided 2026-11-25: Phase T freeze and grammar approval
+## Decided 2026-11-25: Phase T freeze, grammar approval and slice scheduling
 
 Status: decided
 Source: owner
@@ -34,6 +34,38 @@ Questions asked by the coordinator on 2026-11-25 (after Codex and agy/Gemini-4-N
 
 Owner's answer, verbatim:
 1. b 2. a
+
+--- Later on 2026-11-25. Coordinator's message (excerpt, verbatim):
+Your approval of slice 0's grammar. Under your answer 2a, this is the only step that needs you. Here is the whole grammar:
+
+program := fn NAME ( ) -> u8 { body }
+body    := let NAME : u8 = expr ; body
+         | return expr ; body
+         | (nothing)
+expr    := atom more
+more    := + atom more | (nothing)
+atom    := INTEGER | NAME | ( expr )
+
+Rules the checker enforces on top of the grammar:
+- the function must be `main`;
+- a statement after `return` is refused;
+- overflow that is known before the program runs is refused.
+
+Forms decided for later slices, like `0x2A`, `let mut` and `if`, get "not supported in slice 0" instead of a syntax error.
+
+If you approve the slice 0 grammar above, say "grammar ok", and I'll record it and start on slice 1.
+
+Owner: "ok go ahead"
+Coordinator: did "ok go ahead" also approve the slice 0 grammar I showed? ... Reply "grammar ok" if yes.
+Owner, verbatim:
+grammar okay yes but review it too always with agy and codex using agy neon if you can
+
+--- Later on 2026-11-25. Coordinator (excerpt): the B0a audit found about three large, six medium and five small pieces left; "Your roadmap starts slice 1 only after all of slice 0 is finished ... My leaning: finish the pieces later slices build on first (the end-to-end theorem shape, certificates, the memory model). Start slice 1's spec and grammar in parallel. Leave `facts`, diagnostics and the like to fill in alongside."
+Owner, verbatim:
+start slice 1 in parallel
+Owner, verbatim (immediately after):
+but never do more than two stages in parallel
+remember this
 ~~~
 
 1. The Phase T freeze remains in effect for R-0692, R-0693 and the remaining R-0710 items.
@@ -44,10 +76,12 @@ Owner's answer, verbatim:
    proof and CI drag cleanup remain allowed regardless. This supersedes the blanket freeze
    in item 2 of the [November 22 direction](#decided-2026-11-22-direction) and specifies the
    exception in item 5 of the [November 22 roadmap reordering](#decided-2026-11-22-roadmap-reordering).
-2. The owner approves Slice 0's grammar as its own step, covering `grammar0` in
-   [`ConcreteSpec/Spec/Surface0.lean`](../ConcreteSpec/Spec/Surface0.lean) and
-   `refusalGrammar` for forms decided for later slices. This clears the grammar-approval
-   prerequisite for [R-0620](../ROADMAP.md#r-0620). For each later slice, the owner approves
+2. The owner approved the Slice 0 productions shown above, which match `grammar0` in
+   [`ConcreteSpec/Spec/Surface0.lean`](../ConcreteSpec/Spec/Surface0.lean), subject to review
+   by Codex and agy (Gemini Neon when available). The grammar review is in progress.
+   The coordinator gave one incorrect example. Under the [literal decision](#decided-2026-11-08-language-literals),
+   hexadecimal digits are lowercase only. `0x2A` is a lexical error and `0x2a` receives the
+   `SLICE-0` refusal. The approval covers the productions shown. For each later slice, the owner approves
    its new productions and spellings before its parser is written. Each slice extends one
    shared Lean grammar. This supersedes the whole-grammar-before-any-parser requirement in
    the [November 8 written grammar decision](#decided-2026-11-08-written-grammar) and the
@@ -56,6 +90,13 @@ Owner's answer, verbatim:
    grammar, flags open spellings, checks it with `ll1` and brings it to the owner before
    Slice 3's parser is written. Slice 1 proceeds on its own approval. The combined surface
    freezes at 0.1 alongside the Core freeze in Slice 11. Later slices extend it.
+3. Slice 1 (`B1`) starts while the rest of Slice 0's `B0a` is being finished. This supersedes
+   the previous Slice 1 start order under the [November 22 roadmap reordering](#decided-2026-11-22-roadmap-reordering).
+4. As a standing rule, at most two roadmap slices may be in progress at any time. The owner's
+   “stages” means slices in the roadmap. The active slices are Slice 0's `B0a` remainder and
+   Slice 1. Work for a later slice is limited to proposals for the owner until an active slice
+   closes.
+5. The standing review requirement is recorded in [AGENTS.md](../AGENTS.md#review).
 
 The coordinator withdrew the backend size-limit diagnostics question. The
 [recovered item 13](#recovered-29-13) and the
@@ -536,6 +577,7 @@ Links only; each item's text lives where it is linked.
 5. [Literal rule options before Slice 2 and language ideas after Slice 0](../ROADMAP.md#vertical-slices).
 6. [Boolean-to-integer conversion](../ISSUES.tsv) (ISS-0069).
 7. [Lean extraction subset, representation and assumptions](../ROADMAP.md#the-queue) (R-0495 / R-0574).
+
 Resolved by the [November 25 decision](#decided-2026-11-25-freeze-and-grammar)
 
 - [Phase T tooling freeze and the real-bug exception](#pending-phase-t-real-bug-exception).

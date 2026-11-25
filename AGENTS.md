@@ -152,8 +152,12 @@ the earlier risk rule would block additional findings. See the [roadmap reorderi
 Phase T pause. The [Phase T restart rule](ROADMAP.md#phase-t-restart-rule) governs
 restarts under the [November 25 decision](docs/decisions.md#decided-2026-11-25-freeze-and-grammar).
 
-**Review.** Codex reviews everything before it is published or brought to the owner, and Kimi and
-agy (Gemini) review every branch too; a reviewer's absence is recorded, never assumed
+<a id="review"></a>
+**Review.** Codex and agy review owner-facing questions, plans, grammars and branches
+before they are published or brought to the owner. Use the Gemini Neon model for agy when
+available ([November 25 decision](docs/decisions.md#decided-2026-11-25-freeze-and-grammar)).
+Codex reviews everything before publication or owner delivery, and Kimi also reviews every
+branch. Record any reviewer's absence
 ([decision](docs/decisions.md#decided-project-review)). agy cannot read files: run it as
 `bounded_run 1500 -- agy -p "<prompt>"` with the diff and the context it needs in the prompt, ending with a
 required verdict line. Every slice gets a Codex review before it lands, through `scripts/review/review.sh`:
