@@ -39,4 +39,17 @@ def run (p : Program) : ConcreteSpec.Outcome := MIR.run (toMIR p)
 theorem lower_correct (p : MIR.Program) : run (lower p) = MIR.run p := by
   rw [run, code_lower]
 
+/-- The admitted lowering stages preserve the Core outcome through Memory. -/
+theorem lower_admitted_correct {source admitted mir} (ha : Admission.check source = .ok admitted)
+    (hl : MIR.lower admitted = .ok mir) :
+    let p := Core.toCore source.program
+    run (lower mir) = Core.run p (p.body.length + 1) :=
+  (lower_correct mir).trans (MIR.lower_correct ha hl)
+
+/-- The unchecked lowering stages preserve the Core outcome through Memory. -/
+theorem lower_unchecked_correct {source mir} (hl : MIR.lowerUnchecked source = .ok mir) :
+    let p := Core.toCore source.program
+    run (lower mir) = Core.run p (p.body.length + 1) :=
+  (lower_correct mir).trans (MIR.lowerUnchecked_correct hl)
+
 end Concrete.Memory
