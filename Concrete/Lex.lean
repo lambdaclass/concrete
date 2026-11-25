@@ -1449,10 +1449,13 @@ theorem splitRadix_spec (cs : List Nat) :
 def integerLiteral (cs : List Nat) : Except IntegerError (Option IntegerToken) :=
   integerDigits (splitRadix cs).1 (splitRadix cs).2
 
-/-- Successful based-digit scanning satisfies the independent integer judgment. -/
-theorem integerDigits_sound {radix : Radix} {input : List Nat} {out : IntegerToken}
+private theorem integerDigits_witness {radix : Radix} {input : List Nat} {out : IntegerToken}
     (h : integerDigits radix input = .ok (some out)) :
-    IntegerLiteral (radix.basePrefix ++ input) out := by
+    ∃ digits suffixInput suffix,
+      DigitRun radix input digits suffixInput ∧ DigitsAccepted radix digits ∧
+      IdentBody suffixInput suffix out.rest ∧ SuffixAccepted suffix out.suffix ∧
+      out.lexeme = radix.basePrefix ++ digits ++ suffix ∧
+      out.value = positionalValue radix digits := by
   unfold integerDigits at h
   generalize hd : scanDigits radix input = digitOut at h
   cases digitOut with
@@ -1482,8 +1485,18 @@ theorem integerDigits_sound {radix : Radix} {input : List Nat} {out : IntegerTok
           | some typeSuffix =>
             simp only [hs] at h
             cases Except.ok.inj h
-            exact .intro rfl hrun hacc hident (decodeSuffix_sound hs)
+            exact ⟨_, _, _, hrun, hacc, hident, decodeSuffix_sound hs, rfl, rfl⟩
         · simp [hacc] at h
+
+/-- Successful based-digit scanning satisfies the independent integer judgment. -/
+theorem integerDigits_sound {radix : Radix} {input : List Nat} {out : IntegerToken}
+    (h : integerDigits radix input = .ok (some out)) :
+    IntegerLiteral (radix.basePrefix ++ input) out := by
+  obtain ⟨digits, suffixInput, suffix, hrun, hacc, hident, hsuffix, hlexeme, hvalue⟩ :=
+    integerDigits_witness h
+  cases out
+  subst_vars
+  exact .intro rfl hrun hacc hident hsuffix
 
 /-- Every declarative based-digit decomposition is recognized by its radix scanner. -/
 theorem integerDigits_complete {radix : Radix} {input digits suffixInput suffix rest : List Nat}
@@ -1847,5 +1860,199 @@ def lex (src : ByteArray) : Except Refusal (List Token) := do
   match checkSource src.data.toList with
   | .error e => throw (.syntaxError s!"invalid source at byte {e.offset}: {repr e.reason}")
   | .ok cs => tokens cs.length cs {} false []
+
+private theorem punct_sound {input lexeme rest : List Nat} {value : TokenValue}
+    (h : punct input = some (value, lexeme, rest)) :
+    Tokenizes input lexeme rest value := by
+  cases hm : longestMatch punctuationScalars input with
+  | none => simp [punct, hm] at h
+  | some pair =>
+    obtain ⟨spelling, tail⟩ := pair
+    cases hf : punctuation.find? (fun (s, _) => s == scalarText spelling) with
+    | none => simp [punct, hm, hf] at h
+    | some entry =>
+      obtain ⟨s, kind⟩ := entry
+      have hmemb := List.mem_of_find?_eq_some hf
+      have heq := List.find?_some hf
+      simp at heq
+      subst s
+      simp [punct, hm, hf] at h
+      obtain ⟨rfl, rfl, rfl⟩ := h
+      exact .punct (hm ▸ longestMatch_sound punctuationScalars input) hmemb
+
+private theorem stringBody_suffix {input : List Nat} {out : List Nat × List Nat}
+    (h : StringBody input out) : ∃ taken, input = taken ++ out.2 := by
+  induction h with
+  | close rest => exact ⟨[34], rfl⟩
+  | raw _ _ ih =>
+    obtain ⟨taken, rfl⟩ := ih
+    exact ⟨_ :: taken, rfl⟩
+  | escape _ _ ih =>
+    obtain ⟨taken, rfl⟩ := ih
+    exact ⟨92 :: _ :: taken, rfl⟩
+
+private theorem nextToken_sound {input lexeme rest : List Nat} {pos : Position}
+    {value : TokenValue} (h : nextToken input pos = .ok (value, lexeme, rest)) :
+    Tokenizes input lexeme rest value := by
+  unfold nextToken at h
+  split at h
+  · rename_i name tail hi
+    cases Except.ok.inj h
+    exact .word (identifier_sound hi)
+  · split at h
+    · rename_i i hi
+      cases Except.ok.inj h
+      obtain ⟨digits, suffixInput, suffix, hrun, hacc, hident, hsuffix, he, hv⟩ :=
+        integerDigits_witness hi
+      rw [he, hv]
+      exact Eq.mpr (congrArg (fun src => Tokenizes src _ _ _) (splitRadix_spec input))
+        (.integer hrun hacc hident hsuffix)
+    · contradiction
+    · split at h
+      · rename_i p hp
+        cases Except.ok.inj h
+        exact punct_sound hp
+      · dsimp only at h
+        split at h
+        · rename_i body _ _ _
+          cases hs : stringBody body with
+          | error _ =>
+            rw [hs] at h
+            contradiction
+          | ok pair =>
+            obtain ⟨decoded, tail⟩ := pair
+            simp [hs, pure, Except.pure] at h
+            obtain ⟨rfl, rfl, rfl⟩ := h
+            have hbody := stringBody_sound hs
+            obtain ⟨spelling, hspell⟩ := stringBody_suffix hbody
+            have he : 34 :: body = (34 :: spelling) ++ tail := by rw [hspell]; rfl
+            have htake : (34 :: body).take ((34 :: body).length - tail.length) =
+                34 :: spelling := by rw [he, List.length_append, Nat.add_sub_cancel, List.take_left]
+            rw [List.length_cons] at htake
+            exact .string hbody (by rw [htake]; exact he)
+        ·
+          split at h
+          · contradiction
+          · rename_i spelling decoded tail hb
+            cases Except.ok.inj h
+            exact .byte (byteLiteral_sound hb)
+          · rename_i hb
+            split at h
+            · rename_i spelling tail hl
+              cases Except.ok.inj h
+              refine .label (label_sound hl) ?_
+              intro bytes decoded tail hbyte
+              rw [byteLiteral_complete hbyte] at hb
+              simp at hb
+            · contradiction
+
+private theorem prependTrivia {pos : Position} {taken input : List Nat} {out : List Token}
+    (prepend : ∀ {rest}, Trivia input rest → Trivia (taken ++ input) rest)
+    (h : TokenStream (taken.foldl Position.advance pos) input out) :
+    TokenStream pos (taken ++ input) out := by
+  cases h with
+  | eof h => exact .eof (prepend h)
+  | @cons _ trivia remaining lexeme rest value out ht htkn hs =>
+    have ht' : Trivia ((taken ++ trivia) ++ remaining) remaining := by
+      rw [List.append_assoc]
+      exact prepend ht
+    rw [← List.append_assoc]
+    simpa only [List.foldl_append] using TokenStream.cons
+      (pos := pos) (trivia := taken ++ trivia) ht' htkn
+      (by simpa only [List.foldl_append] using hs)
+
+-- Inside a comment, expose the consumed body separately so its opener can turn it
+-- into trivia. The position of the remaining stream includes every consumed scalar.
+private theorem tokens_sound (fuel : Nat) (input : List Nat) (pos : Position)
+    (comment : Bool) (acc out : List Token) (h : tokens fuel input pos comment acc = .ok out) :
+    ∃ suffix, out = acc.reverse ++ suffix ∧
+      if comment then ∃ body rest, input = body ++ rest ∧ CommentBody input rest ∧
+        TokenStream (body.foldl Position.advance pos) rest suffix
+      else TokenStream pos input suffix := by
+  induction fuel generalizing input pos comment acc out with
+  | zero =>
+    cases input with
+    | nil =>
+      cases Except.ok.inj h
+      have eof : TokenStream pos [] [] := .eof (.stop [] (by simp) (by simp))
+      refine ⟨[], by simp, ?_⟩
+      cases comment
+      · exact eof
+      · exact ⟨[], [], rfl, .eof, eof⟩
+    | cons c cs => contradiction
+  | succ fuel ih =>
+    cases input with
+    | nil =>
+      cases Except.ok.inj h
+      have eof : TokenStream pos [] [] := .eof (.stop [] (by simp) (by simp))
+      refine ⟨[], by simp, ?_⟩
+      cases comment
+      · exact eof
+      · exact ⟨[], [], rfl, .eof, eof⟩
+    | cons c cs =>
+      cases comment
+      · simp only [tokens, Bool.false_and, Bool.false_eq_true, ↓reduceIte] at h
+        split at h
+        · rename_i hw
+          obtain ⟨suffix, he, hs⟩ := ih cs (pos.advance c) false acc out h
+          exact ⟨suffix, he, prependTrivia (taken := [c])
+            (Trivia.whitespace ((whitespace?_iff c).mp hw)) hs⟩
+        · rename_i hw
+          split at h
+          · rename_i tail heq
+            cases heq
+            obtain ⟨suffix, he, body, rest, hb, hc, hs⟩ :=
+              ih tail ((pos.advance 47).advance 47) true acc out h
+            have hs' : TokenStream pos ((47 :: 47 :: body) ++ rest) suffix :=
+              prependTrivia (fun ht => by
+                simp only [List.cons_append, ← hb]
+                exact .comment (.intro hc) ht) hs
+            exact ⟨suffix, he, by simpa only [Bool.false_eq_true, ↓reduceIte, List.cons_append, ← hb] using hs'⟩
+          · rename_i hn
+            cases ht : nextToken (c :: cs) pos with
+            | error e => simp [ht, bind, Except.bind] at h
+            | ok triple =>
+              obtain ⟨value, lexeme, tail⟩ := triple
+              let stop := lexeme.foldl Position.advance pos
+              let tok : Token := ⟨value, pos.span stop⟩
+              simp only [ht, bind, Except.bind] at h
+              obtain ⟨suffix, he, hs⟩ := ih tail stop false (tok :: acc) out h
+              refine ⟨tok :: suffix, by simpa [List.reverse_cons, List.append_assoc] using he, ?_⟩
+              exact TokenStream.cons (trivia := [])
+                (.stop _ (by intro d ds heq; cases heq; simpa [whitespace?_iff] using hw) hn)
+                (nextToken_sound ht) hs
+      · simp only [tokens, Bool.true_and] at h
+        by_cases hc : c ≠ 10 ∧ c ≠ 13
+        · have hcontinue : (c != 10 && c != 13) = true := by simpa using hc
+          simp only [hcontinue, ↓reduceIte] at h
+          split at h
+          · rename_i hraw
+            obtain ⟨suffix, he, body, rest, hb, hbody, hs⟩ :=
+              ih cs (pos.advance c) true acc out h
+            exact ⟨suffix, he, c :: body, rest, congrArg (c :: ·) hb,
+              .cons hc.1 hc.2 (of_decide_eq_true hraw) hbody, hs⟩
+          · contradiction
+        · have hstop : c = 10 ∨ c = 13 := by omega
+          have hcontinue : (c != 10 && c != 13) = false := by
+            rcases hstop with rfl | rfl <;> decide
+          have hw : Whitespace c := by rcases hstop with rfl | rfl <;> decide
+          simp only [hcontinue, Bool.false_eq_true, ↓reduceIte, (whitespace?_iff c).mpr hw] at h
+          obtain ⟨suffix, he, hs⟩ := ih cs (pos.advance c) false acc out h
+          refine ⟨suffix, he, [], c :: cs, rfl, ?_, prependTrivia (taken := [c])
+            (Trivia.whitespace hw) hs⟩
+          rcases hstop with rfl | rfl
+          · exact .lf cs
+          · exact .cr cs
+
+/-- Every successful compiler lexing result satisfies the surface lexical relation. -/
+theorem lex_correct {src : ByteArray} {toks : List Token} (h : lex src = .ok toks) :
+    Lexes src toks := by
+  cases hs : checkSource src.data.toList with
+  | error e => simp [lex, hs] at h
+  | ok cs =>
+    have ht : tokens cs.length cs {} false [] = .ok toks := by simpa [lex, hs] using h
+    obtain ⟨_, rfl, stream⟩ := tokens_sound cs.length cs {} false [] toks ht
+    obtain ⟨decodes, allowed, _⟩ := checkSource_sound hs
+    exact ⟨cs, decodes, allowed, stream⟩
 
 end Concrete.Lex

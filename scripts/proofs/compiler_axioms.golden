@@ -1014,9 +1014,8 @@ Concrete.Elab.Output.mk.sizeOf_spec
 Concrete.Elab.SourceSite.mk.inj	
 Concrete.Elab.SourceSite.mk.injEq	propext
 Concrete.Elab.SourceSite.mk.sizeOf_spec	
-Concrete.FrontendPremises.elaborate	Classical.choice Quot.sound propext
-Concrete.FrontendPremises.lex	Classical.choice Quot.sound propext
-Concrete.FrontendPremises.parse	Classical.choice Quot.sound propext
+Concrete.FrontendPremises.elaborate	propext
+Concrete.FrontendPremises.parse	propext
 Concrete.Lex.Allowed.eq_1	
 Concrete.Lex.ByteError.invalidEscape.inj	
 Concrete.Lex.ByteError.invalidEscape.injEq	propext
@@ -1210,6 +1209,8 @@ Concrete.Lex.label.eq_2	propext
 Concrete.Lex.label_complete	propext
 Concrete.Lex.label_sound	propext
 Concrete.Lex.label_unique	propext
+Concrete.Lex.lex.eq_1	Classical.choice Quot.sound propext
+Concrete.Lex.lex_correct	Classical.choice Quot.sound propext
 Concrete.Lex.lineComment._sparseCasesOn_3.else_eq	propext
 Concrete.Lex.lineComment.eq_1	propext
 Concrete.Lex.lineComment.eq_2	propext
@@ -1376,6 +1377,7 @@ Concrete.Stages.Output.mk.inj
 Concrete.Stages.Output.mk.injEq	propext
 Concrete.Stages.Output.mk.sizeOf_spec	
 Concrete.Stages.compile.eq_1	Classical.choice Quot.sound propext
+Concrete.Stages.compile_lexes	Classical.choice Quot.sound propext
 Concrete.Stages.compile_of_edges	Classical.choice Quot.sound propext
 Concrete.Stages.prepareLCB.eq_1	Classical.choice Quot.sound propext
 Concrete.Stages.prepareLCB_of_edges	Classical.choice Quot.sound propext
@@ -2351,6 +2353,7 @@ _private.Concrete.Lex.0.Concrete.Lex.integerDigits.match_1.eq_1
 _private.Concrete.Lex.0.Concrete.Lex.integerDigits.match_1.eq_2	
 _private.Concrete.Lex.0.Concrete.Lex.integerDigits.match_3.eq_1	propext
 _private.Concrete.Lex.0.Concrete.Lex.integerDigits.match_3.eq_2	propext
+_private.Concrete.Lex.0.Concrete.Lex.integerDigits_witness	Quot.sound propext
 _private.Concrete.Lex.0.Concrete.Lex.label.match_1.eq_1	
 _private.Concrete.Lex.0.Concrete.Lex.label.match_1.eq_2	
 _private.Concrete.Lex.0.Concrete.Lex.label.match_3.eq_1	propext
@@ -2363,9 +2366,26 @@ _private.Concrete.Lex.0.Concrete.Lex.longestMatchAux.match_3.eq_1
 _private.Concrete.Lex.0.Concrete.Lex.longestMatchAux.match_3.eq_2	
 _private.Concrete.Lex.0.Concrete.Lex.longestMatchAux.match_5.eq_1	
 _private.Concrete.Lex.0.Concrete.Lex.longestMatchAux.match_5.eq_2	
+_private.Concrete.Lex.0.Concrete.Lex.nextToken._sparseCasesOn_1.else_eq	propext
+_private.Concrete.Lex.0.Concrete.Lex.nextToken.match_1.eq_1	propext
+_private.Concrete.Lex.0.Concrete.Lex.nextToken.match_1.eq_2	propext
+_private.Concrete.Lex.0.Concrete.Lex.nextToken.match_10.eq_1	
+_private.Concrete.Lex.0.Concrete.Lex.nextToken.match_10.eq_2	
+_private.Concrete.Lex.0.Concrete.Lex.nextToken.match_10.eq_3	
+_private.Concrete.Lex.0.Concrete.Lex.nextToken.match_12.eq_1	
+_private.Concrete.Lex.0.Concrete.Lex.nextToken.match_12.eq_2	
+_private.Concrete.Lex.0.Concrete.Lex.nextToken.match_12.eq_3	
+_private.Concrete.Lex.0.Concrete.Lex.nextToken.match_4.eq_1	propext
+_private.Concrete.Lex.0.Concrete.Lex.nextToken.match_4.eq_2	propext
+_private.Concrete.Lex.0.Concrete.Lex.nextToken.match_8.eq_1	propext
+_private.Concrete.Lex.0.Concrete.Lex.nextToken.match_8.eq_2	propext
+_private.Concrete.Lex.0.Concrete.Lex.nextToken_sound	Classical.choice Quot.sound propext
 _private.Concrete.Lex.0.Concrete.Lex.prefixRest.match_1.eq_1	
 _private.Concrete.Lex.0.Concrete.Lex.prefixRest.match_1.eq_2	
 _private.Concrete.Lex.0.Concrete.Lex.prefixRest.match_1.eq_3	
+_private.Concrete.Lex.0.Concrete.Lex.prependTrivia	Classical.choice Quot.sound propext
+_private.Concrete.Lex.0.Concrete.Lex.punct.eq_1	Classical.choice Quot.sound propext
+_private.Concrete.Lex.0.Concrete.Lex.punct_sound	Classical.choice Quot.sound propext
 _private.Concrete.Lex.0.Concrete.Lex.scanIdentBody.match_1.eq_1	
 _private.Concrete.Lex.0.Concrete.Lex.scanLine.match_1.eq_1	
 _private.Concrete.Lex.0.Concrete.Lex.scanLine.match_1.eq_2	
@@ -2386,8 +2406,20 @@ _private.Concrete.Lex.0.Concrete.Lex.stringBody.match_3.eq_2
 _private.Concrete.Lex.0.Concrete.Lex.stringBody.match_3.eq_3	
 _private.Concrete.Lex.0.Concrete.Lex.stringBody.match_3.eq_4	
 _private.Concrete.Lex.0.Concrete.Lex.stringBody.match_3.eq_5	
+_private.Concrete.Lex.0.Concrete.Lex.stringBody_suffix	
 _private.Concrete.Lex.0.Concrete.Lex.stringPrepend.match_1.eq_1	
 _private.Concrete.Lex.0.Concrete.Lex.stringPrepend.match_1.eq_2	
+_private.Concrete.Lex.0.Concrete.Lex.tokens.eq_1	Classical.choice Quot.sound propext
+_private.Concrete.Lex.0.Concrete.Lex.tokens.eq_2	Classical.choice Quot.sound propext
+_private.Concrete.Lex.0.Concrete.Lex.tokens.eq_3	Classical.choice Quot.sound propext
+_private.Concrete.Lex.0.Concrete.Lex.tokens.eq_def	Classical.choice Quot.sound propext
+_private.Concrete.Lex.0.Concrete.Lex.tokens.match_1.eq_1	
+_private.Concrete.Lex.0.Concrete.Lex.tokens.match_3.eq_1	
+_private.Concrete.Lex.0.Concrete.Lex.tokens.match_3.eq_2	
+_private.Concrete.Lex.0.Concrete.Lex.tokens.match_3.eq_3	
+_private.Concrete.Lex.0.Concrete.Lex.tokens_sound	Classical.choice Quot.sound propext
+_private.Concrete.Lex.0.Concrete.Lex.tokens_sound._proof_1_6	Classical.choice Quot.sound propext
+_private.Concrete.Lex.0.Concrete.Lex.tokens_sound._simp_1_5	propext
 _private.Concrete.Lex.0.ConcreteSpec.Surface0.DigitsAccepted.match_1.eq_1	propext
 _private.Concrete.Lex.0.ConcreteSpec.Surface0.DigitsAccepted.match_1.eq_2	propext
 _private.Concrete.Lex.0.ConcreteSpec.Surface0.DigitsAccepted.match_1.eq_3	propext
@@ -2437,3 +2469,5 @@ _private.Concrete.Stages.0.Concrete.Stages.Pipeline.run.match_1.eq_2
 _private.Concrete.Stages.0.Concrete.Stages.lex.eq_1	Classical.choice Quot.sound propext
 _private.Concrete.Stages.0.Concrete.Stages.memory.eq_1	
 _private.Concrete.Stages.0.Concrete.Stages.stages.eq_1	Classical.choice Quot.sound propext
+_private.Concrete.Stages.0.Except.map.match_1.eq_1	
+_private.Concrete.Stages.0.Except.map.match_1.eq_2	
