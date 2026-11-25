@@ -48,25 +48,25 @@ def check_destinations(output, fd, names):
     return existing
 
 
-def replaced_entries(fd, candidate, existing):
+def replaced_entries(fd, existing):
     """Find the directory entries addressed by the selected artifact names."""
     entries = set(os.listdir(fd))
     replaced = entries.intersection(existing)
-    for name in existing.keys() - replaced:
-        aliases = [
-            entry for entry in entries
-            if os.path.samestat(existing[name], os.stat(entry, dir_fd=fd, follow_symlinks=False))
-        ]
-        if len(aliases) > 1:
-            # An inode can have several hard links. Resolve their names in the
-            # private candidate, which currently contains only the new artifacts.
-            staged = (candidate / name).stat()
-            aliases = [
-                entry for entry in aliases
-                if (candidate / entry).exists()
-                and os.path.samestat(staged, (candidate / entry).stat())
-            ]
-        if len(aliases) != 1:
+    unresolved = existing.keys() - replaced
+    if not unresolved:
+        return replaced
+
+    # The output lookup supplies the inode. A directory listing supplies
+    # its stored spelling. Several hard links can share the lookup result.
+    by_inode = {}
+    for entry in entries:
+        info = os.stat(entry, dir_fd=fd, follow_symlinks=False)
+        by_inode.setdefault((info.st_dev, info.st_ino), []).append(entry)
+
+    for name in unresolved:
+        info = existing[name]
+        aliases = by_inode.get((info.st_dev, info.st_ino), ())
+        if len(aliases) != 1 or aliases[0] in replaced:
             raise ValueError(f"cannot identify the build output entry: {name}")
         replaced.add(aliases[0])
     return replaced
@@ -107,6 +107,7 @@ def publish(output, staging, names):
         fcntl.flock(parent_fd, fcntl.LOCK_EX)
         with output_directory(output) as output_fd:
             existing = check_destinations(output, output_fd, names)
+            replaced = replaced_entries(output_fd, existing)
             candidate = staging / "candidate"
             candidate.mkdir()
             for name in names:
@@ -114,8 +115,6 @@ def publish(output, staging, names):
                 if not stat.S_ISREG(source.lstat().st_mode):
                     raise ValueError(f"expected a regular build output: {name}")
                 source.rename(candidate / name)
-
-            replaced = replaced_entries(output_fd, candidate, existing)
 
             # Anchor the snapshot to the directory opened with O_NOFOLLOW.
             # Release the snapshot directory before attempting the exchange.

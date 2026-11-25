@@ -383,6 +383,17 @@ if fault == "second-move":
         return rename(source, destination)
 
     Path.rename = block_second_move
+elif fault == "ambiguous-alias":
+    original_stat = os.stat
+    output = Path(sys.argv[2])
+    identity = output.stat()
+
+    def stat_output(path, *, dir_fd=None, follow_symlinks=True):
+        if dir_fd is not None and path == "llvm.o" and os.path.samestat(os.fstat(dir_fd), identity):
+            path = "LLVM.old"
+        return original_stat(path, dir_fd=dir_fd, follow_symlinks=follow_symlinks)
+
+    os.stat = stat_output
 elif fault == "exchange":
     def fail_exchange(parent_fd, candidate, output):
         fd = os.open(candidate, os.O_RDONLY | os.O_DIRECTORY, dir_fd=parent_fd)
@@ -396,7 +407,7 @@ elif fault == "exchange":
 
 try:
     publisher.main(sys.argv[1:])
-except OSError as error:
+except (OSError, ValueError) as error:
     sys.exit(str(error))
 PYTHON
 for fault in second-move exchange; do
@@ -411,6 +422,24 @@ for fault in second-move exchange; do
     fail=1
   fi
 done
+
+mv "$publish_out/llvm.o" "$publish_out/LLVM.old"
+ln "$publish_out/LLVM.old" "$publish_out/keep"
+log="$work/ctl/publication-ambiguous-alias"
+check_cli_diagnostic "CLI publication failure (ambiguous alias)" "$log" "refuse 2 TOOL-FAILURE" \
+  env PUBLICATION_CONTROL=ambiguous-alias "${publish_cli[@]}" "${publish_build[@]}"
+if ! cmp -s "$work/ctl/previous/llvm.o" "$publish_out/keep" ||
+    ! [ "$publish_out/LLVM.old" -ef "$publish_out/keep" ] ||
+    ! has_match -F 'cannot identify the build output entry: llvm.o' <"$log.stderr"; then
+  echo "FAIL ambiguous alias: expected an unchanged hard link and an identification failure"
+  fail=1
+fi
+rm "$publish_out/keep"
+mv "$publish_out/LLVM.old" "$publish_out/llvm.o"
+if ! diff -r "$work/ctl/previous" "$publish_out"; then
+  echo "FAIL ambiguous alias: publication failure did not preserve the previous generation"
+  fail=1
+fi
 
 mv "$publish_lib/publisher.py" "$publish_lib/slice0_publish.py"
 build "CLI atomic rebuild" "$work/ctl/publication-success.log" bounded "$native_secs" \

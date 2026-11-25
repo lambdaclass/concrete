@@ -3,6 +3,8 @@
 from contextlib import nullcontext
 import os
 from pathlib import Path
+import shutil
+import subprocess
 import sys
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -11,36 +13,63 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 import slice0_publish as publisher
 
 
-def check_publication(root):
+def check_publication(root, *, mixed=False, ambiguous=False):
+    root.mkdir()
     output = root / "out"
     output.mkdir()
+    chattr = shutil.which("chattr")
+    if mixed and sys.platform == "linux" and chattr:
+        # ext4 can enable casefold on this empty directory alone.
+        subprocess.run([chattr, "+F", output], capture_output=True, timeout=5)
+
     old = output / "LLVM.O"
     old.write_text("old")
-    os.link(old, output / "keep")
+    if ambiguous:
+        os.link(old, output / "keep")
     (output / "lcb.exe").write_text("lcb")
+    os.link(output / "lcb.exe", output / "keep-lcb")
+    names = ["llvm.o", "lcb.exe"]
     case_insensitive = (output / "llvm.o").exists()
+    staging_probe = root / "Stage"
+    staging_probe.touch()
+    staging_insensitive = (root / "stage").exists()
+    real = case_insensitive and (not mixed or not staging_insensitive)
     original_stat = os.stat
+    output_identity = output.stat()
 
     def resolve_artifact(path, *, dir_fd=None, follow_symlinks=True):
-        # Supply the lookup a case-insensitive volume would return. Listing,
-        # staging, hard-linking and exchange still use the real filesystem.
-        if dir_fd is not None and path == "llvm.o":
+        if (dir_fd is not None and path == "llvm.o"
+                and os.path.samestat(os.fstat(dir_fd), output_identity)):
             path = "LLVM.O"
-        path = Path(path)
-        if path.name == "LLVM.O" and path.parent.name == "candidate":
-            path = path.with_name("llvm.o")
+        if dir_fd is None and Path(path).parent.name == "candidate":
+            raise AssertionError("replacement lookup used the candidate directory")
         return original_stat(path, dir_fd=dir_fd, follow_symlinks=follow_symlinks)
 
-    lookup = nullcontext() if case_insensitive else patch.object(os, "stat", resolve_artifact)
+    lookup = nullcontext() if real else patch.object(os, "stat", resolve_artifact)
     with lookup:
-        staging = Path(publisher.prepare(output, ["llvm.o"]))
-        (staging / "llvm.o").write_text("new")
-        publisher.publish(output, staging, ["llvm.o"])
-    assert set(os.listdir(output)) == {"llvm.o", "keep", "lcb.exe"}
-    assert (output / "llvm.o").read_text() == "new"
-    assert (output / "keep").read_text() == "old"
-    assert (output / "lcb.exe").read_text() == "lcb"
-    return case_insensitive
+        staging = Path(publisher.prepare(output, names))
+        for name in names:
+            (staging / name).write_text("new")
+        if ambiguous:
+            try:
+                publisher.publish(output, staging, names)
+            except ValueError as error:
+                assert str(error) == "cannot identify the build output entry: llvm.o"
+            else:
+                raise AssertionError("accepted an ambiguous artifact alias")
+        else:
+            publisher.publish(output, staging, names)
+
+    if ambiguous:
+        assert set(os.listdir(output)) == {"LLVM.O", "keep", "lcb.exe", "keep-lcb"}
+        assert (output / "LLVM.O").read_text() == (output / "keep").read_text() == "old"
+        assert (output / "lcb.exe").read_text() == "lcb"
+        assert (staging / "llvm.o").read_text() == "new"
+    else:
+        assert set(os.listdir(output)) == {"llvm.o", "lcb.exe", "keep-lcb"}
+        assert (output / "llvm.o").read_text() == (output / "lcb.exe").read_text() == "new"
+    assert (output / "keep-lcb").read_text() == "lcb"
+    return real
 
 
 def check_project_guard(root, case_insensitive):
@@ -71,9 +100,14 @@ if __name__ == "__main__":
     with TemporaryDirectory() as directory:
         root = Path(directory).resolve()
         try:
-            real = check_publication(root)
+            real = check_publication(root / "ordinary")
             check_project_guard(root, real)
+            mixed = check_publication(root / "mixed", mixed=True)
+            ambiguous = check_publication(root / "ambiguous", mixed=True, ambiguous=True)
         finally:
             os.chdir(original_cwd)
-    mode = "real case-insensitive filesystem" if real else "simulated case-insensitive lookups"
+    mode = "real" if real else "simulated"
+    mixed_mode = "real" if mixed else "simulated"
+    ambiguous_mode = "real" if ambiguous else "simulated"
     print(f"ok   publication and project-directory aliases ({sys.platform}, {mode})")
+    print(f"ok   mixed directory lookup rules ({mixed_mode}), ambiguous alias refusal ({ambiguous_mode})")
