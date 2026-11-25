@@ -14,9 +14,12 @@ if [ "${1:-}" = target ]; then echo "$target"; exit; fi
 # checks' controls (slice0_artifacts.sh) are hand-written assembly built exactly like the examples.
 control=0
 if [ "${1:-}" = control ] && [ "$#" = 2 ]; then control=1; set -- "$2" -; fi
+# `component DIRECTORY` links the separate LLVM component and launcher in a staging directory.
+component=0
+if [ "${1:-}" = component ] && [ "$#" = 2 ]; then component=1; set -- "$2" -; fi
 # `sanitize` builds only llvm.san.exe: the LLVM example with ASan (README gate 10; no UBSan, see there).
 [ "$#" = 2 ] || { [ "$#" = 3 ] && [[ "$3" = llvm || "$3" = lcb || "$3" = sanitize ]]; } ||
-  { echo 'usage: slice0_native.sh DIRECTORY LCB [llvm|lcb|sanitize] | control DIRECTORY | target' >&2; exit 2; }
+  { echo 'usage: slice0_native.sh DIRECTORY LCB [llvm|lcb|sanitize] | control DIRECTORY | component DIRECTORY | target' >&2; exit 2; }
 lcb=$2
 cd -- "$1"
 # Fixed epoch rather than wall clock or caller environment. No debug data is requested, and
@@ -37,6 +40,12 @@ if [ "${3:-}" = sanitize ]; then
   san=(-fsanitize=address -fno-sanitize-recover=all)
   "${cc[@]}" "${san[@]}" -c llvm.san.ll -o llvm.san.o
   "${cc[@]}" "${san[@]}" "${link[@]}" llvm.san.o -o llvm.san.exe
+  exit
+fi
+if [ "$component" = 1 ]; then
+  "${cc[@]}" -c component.ll -o component.o
+  "${cc[@]}" -c launcher.ll -o launcher.o
+  "${cc[@]}" "${link[@]}" component.o launcher.o -o llvm.exe
   exit
 fi
 if [ "$control" = 1 ]; then

@@ -23,6 +23,26 @@ source scripts/checks/lib/has_match.sh
 # The emit-only manifest controls exercise only manifest validation.
 if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
   bash scripts/checks/compiler/f31_census.sh
+  build slice1-driver "$work/slice1-driver-build.log" bounded 120 \
+    lake build ConcreteSpec.Spec.Rules ConcreteSpec.Spec.Examples
+  build slice1-driver-controls "$work/slice1-driver-controls.log" bounded 120 \
+    lake env lean --run scripts/checks/compiler/slice1_driver.lean "$work/slice1-link"
+  for case_name in answer trap; do
+    case_dir="$work/slice1-link/$case_name"
+    build "split LLVM $case_name" "$case_dir/build.log" bounded "$native_secs" \
+      bash "$root/scripts/checks/lib/slice0_native.sh" component "$case_dir"
+    observe "$case_dir/llvm.exe" "$case_dir/native" 10 20
+    test ! -s "$case_dir/native.stdout"
+    if [ "$case_name" = answer ]; then
+      test "$(cat "$case_dir/native.status")" = 42
+      test ! -s "$case_dir/native.stderr"
+    else
+      test "$(cat "$case_dir/native.status")" = 134
+      printf '%s\n' 'concrete: trap: overflow at tests/slice0/sum.con:3:12 (site 0)' |
+        cmp -s - "$case_dir/native.stderr"
+    fi
+  done
+  echo "ok   slice 1 driver controls"
   build llvm-rendering "$work/llvm-rendering.log" bounded 120 \
     lake env lean scripts/checks/compiler/llvm_rendering.lean
   echo "ok   LLVM rendering controls"
@@ -147,8 +167,22 @@ if [ "${CONCRETE_TEST_MANIFEST_SKIP_CONTROLS:-0}" != 1 ]; then
   manifest_control wrong-source-refusal "expected refusal CORE-CHECK, got SYNTAX" wrong_source_refusal
 fi
 
-if [[ "$rows" == *$'\t'"llvm exit "* ]] && [ "${CONCRETE_TEST_EMIT_ONLY:-0}" != 1 ]; then
+if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" != 1 ]; then
   build "concrete driver" "$work/cli-build.log" bounded 1800 lake build concrete
+  project_dir="$work/project-control"
+  mkdir -p "$project_dir"
+  printf 'fn main() -> u8 { return 42; }\n' >"$project_dir/answer.con"
+  printf '[policy]\n[assumptions]\n' >"$project_dir/Concrete.toml"
+  rc=0
+  bounded "$native_secs" bash -c 'cd "$1" && exec "$2" build answer.con -o output --backend llvm' \
+    _ "$project_dir" "$root/.lake/build/bin/concrete" \
+    >"$project_dir/stdout" 2>"$project_dir/stderr" || rc=$?
+  test "$rc" = 1
+  test ! -e "$project_dir/output"
+  test ! -s "$project_dir/stdout"
+  has_match -F 'Concrete.Driver.Project.Refusal.schemaPending@1: Concrete.toml requires an approved manifest schema' \
+    <"$project_dir/stderr"
+  echo "ok   pending project schema refuses before native output"
 fi
 while IFS=$'\t' read -r name program expect; do
   d="$work/ex/$name"

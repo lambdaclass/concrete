@@ -1,4 +1,6 @@
+import Lake.Toml.Load
 import Concrete.Stages
+import Concrete.Driver.Project
 
 open Concrete Concrete.Backend
 
@@ -12,6 +14,9 @@ private def report (refusal : Refusal) : IO UInt32 := do
   IO.eprintln s!"{refusal.code}: {message}"
   return 1
 
+private def parseToml (text : String) : IO (Option Lake.Toml.Table) := do
+  return (← (Lake.Toml.loadToml (Lean.Parser.mkInputContext text "Concrete.toml")).toBaseIO).toOption
+
 private def build (source dir : System.FilePath) (backend : Option String) : IO UInt32 := do
   let loc : BIR.Loc := ⟨source.toString, 1, 1⟩
   unless loc.wf && source.extension == some "con" do
@@ -20,6 +25,10 @@ private def build (source dir : System.FilePath) (backend : Option String) : IO 
   let root ← IO.FS.realPath "."
   unless path == root / source do
     return ← report (.syntaxError "source path must be canonical and project-relative")
+  if let .error refusal ← Driver.Project.checkInvocation parseToml (root / "Concrete.toml") then
+    let rule := refusal.ruleId
+    IO.eprintln s!"{rule.name}@{rule.rev}: {refusal.message}"
+    return 1
   let bytes ← IO.FS.readBinFile path
   let compiled : Except Refusal (Stages.Output × Option LeanCompilerBackend.Verified.Source.Function) := do
     let out ← Stages.compile ⟨source.toString, bytes⟩

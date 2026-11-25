@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.ProjectPolicy
 import ConcreteSpec.Spec.Accounting
 import ConcreteSpec.Spec.Const
 import ConcreteSpec.Spec.Ident
@@ -32,7 +33,8 @@ def registeredRules : List RuleId :=
     SourcePath.Project.Reason.ruleId ++
   [⟨``SourcePathSpan.FilePresent, 1⟩, ⟨``SourcePathSpan.OrderedOffsets, 1⟩,
    ⟨``SourcePathSpan.EndInSource, 1⟩, ⟨``SourcePathSpan.LineMatches, 1⟩,
-   ⟨``SourcePathSpan.ColumnMatches, 1⟩]
+   ⟨``SourcePathSpan.ColumnMatches, 1⟩, Project.languagePinRule, Project.clauseRule,
+   Project.tableVersionRule]
 
 /-- Acceptance evidence applies the owning rule's judgment to a concrete input.
 The exporter recognizes this proposition's elaborated type, without unfolding the wrapper. -/
@@ -531,6 +533,64 @@ theorem columnRefused : RuleRefused ColumnMatches
 
 end SourcePathSpan.Registry
 
+namespace ProjectRegistry
+open ConcreteSpec.Project
+
+-- Fixture-only language-rules identities. The manifest schema assigns their real spelling.
+def supported : LanguageRulesVersion := ⟨1, 2⟩
+
+theorem standaloneAccepted : RuleAccepted LanguagePinAccepted (supported, .standalone) := by
+  unfold RuleAccepted
+  decide
+
+theorem pinAccepted : RuleAccepted LanguagePinAccepted (supported, .project (some supported)) := by
+  unfold RuleAccepted
+  decide
+
+theorem missingPinRefused : RuleRefused LanguagePinAccepted (supported, .project none) := by
+  unfold RuleRefused
+  decide
+
+theorem unsupportedPinRefused :
+    RuleRefused LanguagePinAccepted (supported, .project (some ⟨2, 0⟩)) := by
+  unfold RuleRefused
+  decide
+
+def facts : FunctionFacts :=
+  ⟨"main", .established false [] "allocation analysis", .established false [] "blocking analysis",
+    .established false [] "call analysis", .established true [] "termination analysis",
+    .established 32 [] "frame analysis"⟩
+
+theorem clauseAccepted : RuleAccepted ClauseAccepted (⟨.noAlloc, []⟩, facts) := by
+  unfold RuleAccepted
+  decide
+
+theorem allocationRefused : RuleRefused ClauseAccepted
+    (⟨.noAlloc, []⟩, { facts with allocates := .established true [] "allocation analysis" }) := by
+  unfold RuleRefused
+  decide
+
+theorem unknownRefused : RuleRefused ClauseAccepted
+    (⟨.noAlloc, []⟩, { facts with allocates := .unknown "allocation analysis" }) := by
+  unfold RuleRefused
+  decide
+
+def tables : Tables := ⟨some ⟨1, []⟩, some ⟨2, []⟩⟩
+
+theorem versionsAccepted : RuleAccepted TableVersionsAccepted (tables, 1, 2) := by
+  unfold RuleAccepted
+  decide
+
+theorem policyVersionRefused : RuleRefused TableVersionsAccepted (tables, 2, 2) := by
+  unfold RuleRefused
+  decide
+
+theorem assumptionsVersionRefused : RuleRefused TableVersionsAccepted (tables, 1, 1) := by
+  unfold RuleRefused
+  decide
+
+end ProjectRegistry
+
 /-- Complete conformance links, populated alongside the owning rules. -/
 def registeredRuleExamples : List RuleExample :=
   [⟨``ConstsPermitted, ``ConstRegistry.accepted⟩,
@@ -610,6 +670,16 @@ def registeredRuleExamples : List RuleExample :=
    ⟨``SourcePathSpan.LineMatches, ``SourcePathSpan.Registry.lineAccepted⟩,
    ⟨``SourcePathSpan.LineMatches, ``SourcePathSpan.Registry.lineRefused⟩,
    ⟨``SourcePathSpan.ColumnMatches, ``SourcePathSpan.Registry.columnAccepted⟩,
-   ⟨``SourcePathSpan.ColumnMatches, ``SourcePathSpan.Registry.columnRefused⟩]
+   ⟨``SourcePathSpan.ColumnMatches, ``SourcePathSpan.Registry.columnRefused⟩,
+   ⟨``Project.LanguagePinAccepted, ``ProjectRegistry.standaloneAccepted⟩,
+   ⟨``Project.LanguagePinAccepted, ``ProjectRegistry.pinAccepted⟩,
+   ⟨``Project.LanguagePinAccepted, ``ProjectRegistry.missingPinRefused⟩,
+   ⟨``Project.LanguagePinAccepted, ``ProjectRegistry.unsupportedPinRefused⟩,
+   ⟨``Project.ClauseAccepted, ``ProjectRegistry.clauseAccepted⟩,
+   ⟨``Project.ClauseAccepted, ``ProjectRegistry.allocationRefused⟩,
+   ⟨``Project.ClauseAccepted, ``ProjectRegistry.unknownRefused⟩,
+   ⟨``Project.TableVersionsAccepted, ``ProjectRegistry.versionsAccepted⟩,
+   ⟨``Project.TableVersionsAccepted, ``ProjectRegistry.policyVersionRefused⟩,
+   ⟨``Project.TableVersionsAccepted, ``ProjectRegistry.assumptionsVersionRefused⟩]
 
 end ConcreteSpec.Core

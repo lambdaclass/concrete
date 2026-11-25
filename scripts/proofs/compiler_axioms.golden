@@ -1016,6 +1016,74 @@ Concrete.Backend.Runtime.mem_indexed	Quot.sound propext
 Concrete.Backend.Runtime.mem_indexedFrom	Quot.sound propext
 Concrete.Backend.Runtime.mem_indexedFrom._proof_1_5	Quot.sound propext
 Concrete.Backend.Runtime.mem_indexedFrom._simp_1_4	propext
+Concrete.Driver.Project.Refusal.depth.sizeOf_spec	
+Concrete.Driver.Project.Refusal.encoding.sizeOf_spec	
+Concrete.Driver.Project.Refusal.malformed.sizeOf_spec	
+Concrete.Driver.Project.Refusal.read.inj	
+Concrete.Driver.Project.Refusal.read.injEq	propext
+Concrete.Driver.Project.Refusal.read.sizeOf_spec	
+Concrete.Driver.Project.Refusal.schemaPending.sizeOf_spec	
+Concrete.Driver.Project.Refusal.size.sizeOf_spec	
+Concrete.Driver.Project.Scope._sizeOf_2_eq	
+Concrete.Driver.Project.Scope.brecOn.eq	
+Concrete.Driver.Project.Scope.brecOn_1.eq	
+Concrete.Driver.Project.Scope.resolved.inj	
+Concrete.Driver.Project.Scope.resolved.injEq	propext
+Concrete.Driver.Project.Scope.resolved.sizeOf_spec	
+Concrete.Driver.Project.Scope.unresolved.inj	
+Concrete.Driver.Project.Scope.unresolved.injEq	propext
+Concrete.Driver.Project.Scope.unresolved.sizeOf_spec	
+Concrete.Driver.Project.ScopeRefusal.policy.inj	
+Concrete.Driver.Project.ScopeRefusal.policy.injEq	propext
+Concrete.Driver.Project.ScopeRefusal.policy.sizeOf_spec	
+Concrete.Driver.Project.ScopeRefusal.unresolved.inj	
+Concrete.Driver.Project.ScopeRefusal.unresolved.injEq	propext
+Concrete.Driver.Project.ScopeRefusal.unresolved.sizeOf_spec	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_1	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_10	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_11	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_12	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_13	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_14	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_15	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_16	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_17	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_18	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_19	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_2	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_20	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_21	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_22	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_23	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_24	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_25	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_26	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_27	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_28	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_29	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_3	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_30	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_31	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_32	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_4	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_5	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_6	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_7	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_8	
+Concrete.Driver.Project.instDecidableEqRefusal.decEq._proof_9	
+Concrete.Driver.Reference.Component.admitted	propext
+Concrete.Driver.Reference.Component.mk.inj	propext
+Concrete.Driver.Reference.Component.mk.injEq	propext
+Concrete.Driver.Reference.Component.mk.sizeOf_spec	propext
+Concrete.Driver.Reference.Launcher.mk.inj	propext
+Concrete.Driver.Reference.Launcher.mk.injEq	propext
+Concrete.Driver.Reference.Launcher.mk.sizeOf_spec	propext
+Concrete.Driver.Reference.Run.mk.inj	
+Concrete.Driver.Reference.Run.mk.injEq	propext
+Concrete.Driver.Reference.Run.mk.sizeOf_spec	
+Concrete.Driver.Reference.instDecidableEqRun.decEq._proof_1	
+Concrete.Driver.Reference.instDecidableEqRun.decEq._proof_2	
+Concrete.Driver.Reference.instDecidableEqRun.decEq._proof_3	
 Concrete.Elab.Output.mk.inj	
 Concrete.Elab.Output.mk.injEq	propext
 Concrete.Elab.Output.mk.sizeOf_spec	
@@ -2315,6 +2383,14 @@ _private.Concrete.Backend.Runtime.0.Concrete.Backend.Runtime.invalidBytes.eq_1	p
 _private.Concrete.Backend.Runtime.0.Concrete.Backend.Runtime.map_indexedFrom	propext
 _private.Concrete.Backend.Runtime.0.Concrete.Backend.Runtime.map_indexedFrom_fst	propext
 _private.Concrete.Backend.Runtime.0.Concrete.Backend.Runtime.siteBytes.eq_1	propext
+_private.Concrete.Driver.Launcher.0.Concrete.Driver.Launcher.LLVMInputs.mk.inj	
+_private.Concrete.Driver.Launcher.0.Concrete.Driver.Launcher.LLVMInputs.mk.injEq	propext
+_private.Concrete.Driver.Launcher.0.Concrete.Driver.Launcher.LLVMInputs.mk.sizeOf_spec	
+_private.Concrete.Driver.Project.0.Concrete.Driver.Project.Scan.code.sizeOf_spec	
+_private.Concrete.Driver.Project.0.Concrete.Driver.Project.Scan.comment.sizeOf_spec	
+_private.Concrete.Driver.Project.0.Concrete.Driver.Project.Scan.quoted.inj	
+_private.Concrete.Driver.Project.0.Concrete.Driver.Project.Scan.quoted.injEq	propext
+_private.Concrete.Driver.Project.0.Concrete.Driver.Project.Scan.quoted.sizeOf_spec	
 _private.Concrete.Elab.0.Concrete.Elab.Rhs.add.inj	
 _private.Concrete.Elab.0.Concrete.Elab.Rhs.add.injEq	propext
 _private.Concrete.Elab.0.Concrete.Elab.Rhs.add.sizeOf_spec	
