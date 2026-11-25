@@ -1336,12 +1336,10 @@ Concrete.Native.World.mk.injEq	propext
 Concrete.Native.World.mk.sizeOf_spec	
 Concrete.Native.lcb_emit_correct	Classical.choice Quot.sound propext
 Concrete.Native.observed_behaviour	Classical.choice Quot.sound propext
-Concrete.Parse.Task.read.inj	
-Concrete.Parse.Task.read.injEq	propext
-Concrete.Parse.Task.read.sizeOf_spec	
-Concrete.Parse.Task.reduce.inj	
-Concrete.Parse.Task.reduce.injEq	propext
-Concrete.Parse.Task.reduce.sizeOf_spec	
+Concrete.Parse.CheckedTable.entries_eq	propext
+Concrete.Parse.CheckedTable.mk.inj	propext
+Concrete.Parse.CheckedTable.mk.injEq	propext
+Concrete.Parse.CheckedTable.mk.sizeOf_spec	propext
 Concrete.Parse.table0_checked	
 Concrete.Premises.Premise.mk.inj	
 Concrete.Premises.Premise.mk.injEq	propext
@@ -2406,6 +2404,12 @@ _private.Concrete.Lex.0.ConcreteSpec.Surface0.intTySpelling.match_1.eq_7
 _private.Concrete.Lex.0.ConcreteSpec.Surface0.intTySpelling.match_1.eq_8	
 _private.Concrete.Lex.0.PSigma.casesOn._arg_pusher	
 _private.Concrete.Memory.0.Concrete.Memory.toMIR.eq_1	
+_private.Concrete.Parse.0.Concrete.Parse.Task.read.inj	
+_private.Concrete.Parse.0.Concrete.Parse.Task.read.injEq	propext
+_private.Concrete.Parse.0.Concrete.Parse.Task.read.sizeOf_spec	
+_private.Concrete.Parse.0.Concrete.Parse.Task.reduce.inj	
+_private.Concrete.Parse.0.Concrete.Parse.Task.reduce.injEq	propext
+_private.Concrete.Parse.0.Concrete.Parse.Task.reduce.sizeOf_spec	
 _private.Concrete.Parse.0.Concrete.Parse.Value.body.inj	
 _private.Concrete.Parse.0.Concrete.Parse.Value.body.injEq	propext
 _private.Concrete.Parse.0.Concrete.Parse.Value.body.sizeOf_spec	
@@ -2421,6 +2425,7 @@ _private.Concrete.Parse.0.Concrete.Parse.Value.program.sizeOf_spec
 _private.Concrete.Parse.0.Concrete.Parse.Value.tok.inj	
 _private.Concrete.Parse.0.Concrete.Parse.Value.tok.injEq	propext
 _private.Concrete.Parse.0.Concrete.Parse.Value.tok.sizeOf_spec	
+_private.Concrete.Parse.0.Concrete.Parse.refusalTable._proof_1	propext
 _private.Concrete.SSA.0.Concrete.SSA.State.mk.inj	
 _private.Concrete.SSA.0.Concrete.SSA.State.mk.injEq	propext
 _private.Concrete.SSA.0.Concrete.SSA.State.mk.sizeOf_spec	

@@ -227,7 +227,15 @@ The root inventory (`scripts/checks/root_inventory.txt`) lists each new root ent
 This file is spec work (open item O1, slice 0 only). It is a new file, and no existing spec file changes. The language content lives in the Lean file, not here: the token rules (SYN-5/SYN-6, plus the owner's decision that leading-zero literals are refused), the grammar and the elaboration relation. What the compiler needs from it:
 
 - **`Lexes : Bytes → List Token → Prop`**, an independent byte-level judgment. The lexer is proved sound and complete against it, which rules out splitting a token.
-- **The grammar as data**, which must be LL(1), plus **`ll1 : Grammar → Bool`**, which computes nullable, FIRST and FOLLOW sets. It comes with `ll1_sound : ll1 g = true → ∀ n t, at most one production of n is predicted on t`, where "predicted" is defined declaratively (inductive nullable, FIRST and FOLLOW relations). Both are built, generically, in `Concrete/LL1.lean`: the check verifies that the computed sets are closed under the rules (so they contain the declarative relations) and that each nonterminal's prediction sets are disjoint; the fixed-point iteration needs no proof. The fact `ll1 grammar0 = true` is proved by `decide`. The generic table parser is proved against `Derives`.
+- **The grammar as data.** Every grammar the parser uses is a `CheckedGrammar` with a proof
+  that `ll1` returns `true`. The check in `ConcreteSpec/Spec/LL1.lean` verifies closure of the
+  computed nullable, FIRST and FOLLOW sets and disjointness of the prediction sets.
+  `ll1_sound` shows that at most one production of a nonterminal is predicted for any lookahead.
+  Both the slice-0 grammar and the refusal grammar discharge the check by `decide`.
+  The parser starts at the grammar's start symbol and accepts only a `CheckedTable`, whose
+  entries must equal `makeTable` of that grammar. The slice-0 table is precomputed, so parsing
+  and checking successful slice-0 parse certificates use the constant entries directly.
+  Later slices extend the shared surface grammar and must pass the same LL(1) check.
 - **`Derives : List Token → Surface.Program → Prop`**, which binds token payloads, not only token kinds.
 - **`Elab : Surface.Program → Core.Program → Prop`**, with the compiler's theorems `elab_fresh` (temporaries never collide with user names) and `elab_rename_invariant` (renaming temporaries changes neither acceptance nor outcome).
 - **Refusal classes**, as the spec defines them:
