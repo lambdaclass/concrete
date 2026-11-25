@@ -67,11 +67,13 @@ Owner, verbatim (immediately after):
 but never do more than two stages in parallel
 remember this
 
---- Later on 2026-11-25. Owner, verbatim:
-can we also make sure the binary produces has the proofs so that anybody can check it and see the facts? do you think this makes sense?
-The coordinator presented two options: embed the full proof or embed the facts and a hash with the full proof shipped alongside.
-Owner, verbatim:
-i think the hash is better? what do yhou think
+--- Later on 2026-11-25. Owner, verbatim: "can we also make sure the binary produces has the proofs so that anybody can check it and see the facts? do you think this makes sense?"
+Coordinator: yes in principle; options: embed the full proof (self-contained) vs embed facts + a hash with the full proof shipped alongside; leaned self-contained pending measurement; Codex+agy review to follow.
+Owner, verbatim: "i think the hash is better? what do yhou think"
+Coordinator: agrees (size; the facts stay embedded; the proof file is bound by hash; reproducible builds regenerate it; one evidence format shared with R-0353); pending the Codex+agy design review.
+--- Later on 2026-11-25, after the coordinator presented the slice-1 grammar, three slice-1 questions and the early-print options. Owner, verbatim: "yeah move ahead if the other LLMS tell you yes to everything"
+Owner, verbatim (next message): "you odn't need me, jsut speak with them"
+Owner 2026-11-25, answering whether "you odn't need me, jsut speak with them" covered all future decisions or only the slice 1 questions: "for anything in slice 0 and 1"
 ~~~
 
 1. The Phase T freeze remains in effect for R-0692, R-0693 and the remaining R-0710 items.
@@ -86,15 +88,16 @@ i think the hash is better? what do yhou think
    by Codex and agy (Gemini Neon when available). The grammar review is in progress.
    The coordinator gave one incorrect example. Under the [literal decision](#decided-2026-11-08-language-literals),
    hexadecimal digits are lowercase only. `0x2A` is a lexical error and `0x2a` receives the
-   `SLICE-0` refusal. The approval covers the productions shown. For each later slice, the owner approves
-   its new productions and spellings before its parser is written. Each slice extends one
+   `SLICE-0` refusal. The approval covers the productions shown. Each slice’s new productions and spellings
+   require approval before its parser is written. For Slices 0 and 1, approval may be given
+   under the delegation in item 7. From Slice 2 onward, the owner approves. Each slice extends one
    shared Lean grammar. This supersedes the whole-grammar-before-any-parser requirement in
    the [November 8 written grammar decision](#decided-2026-11-08-written-grammar) and the
    corresponding front-end prerequisite in the [November 8 front-end decision](#decided-2026-11-08-front-end).
    Under [R-0728](../ROADMAP.md#r-0728), the coordinator drafts the combined Slices 0–11
    grammar, flags open spellings and checks it with `ll1` so cross-feature clashes surface
-   “before slice 3,” as specified in answer 2a. The coordinator plans to bring it to the
-   owner before Slice 3's parser is written. Slice 1 proceeds on its own approval. The combined surface
+   “before slice 3,” as specified in answer 2a. Slice 1 proceeds on its own
+   per-slice approval. The combined surface
    freezes at 0.1 alongside the Core freeze in Slice 11. Later slices extend it.
 3. The owner's “start slice 1 in parallel” authorizes Slice 1 (`B1`) to start while Slice 0's
    remaining `B0a` work continues. The [November 6 sequential start requirement](#decided-project-vertical-slices-2026-11-06)
@@ -106,10 +109,14 @@ i think the hash is better? what do yhou think
 5. The owner required Codex and agy review of the grammar, with Gemini Neon for agy
    when available. The [standing project review rule](#decided-project-review) also applies.
    [AGENTS.md](../AGENTS.md#review) records the workflow.
-6. Bind each executable by digest to its separately kept proof evidence so anyone can
-   check the evidence and inspect the facts. The exact format remains open. The compiler
-   architecture plan is in review and will settle the format before implementation. A later
-   decision entry will record it. [R-0729](../ROADMAP.md#r-0729) tracks the work.
+6. The owner stated a preference for hash binding after the coordinator offered embedding
+   the full proof or embedding facts and a hash with the full proof shipped alongside.
+   The coordinator agreed, pending Codex and agy design review. The implementation design
+   remains open. [R-0729](../ROADMAP.md#r-0729) tracks this Slice 0 matter, which will be
+   settled under item 7 and recorded in a later decision entry before implementation.
+7. For Slices 0 and 1, a matter that would otherwise require the owner's approval is decided
+   when Claude, Codex and agy all agree. Record the decision with all three verdicts and
+   report it to the owner. This delegation applies only to Slices 0 and 1.
 
 The coordinator withdrew the backend size-limit diagnostics question. The
 [recovered item 13](#recovered-29-13) and the

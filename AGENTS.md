@@ -43,7 +43,10 @@ put to the owner by Claude or Codex, with a recommendation reasoned from docs/PH
 record them in the [owner veto list](docs/decisions.md#mechanical-defaults-and-owner-veto-list).
 Core semantics remain owner decisions.
 
-**Owner decisions: never decide one.** The language decisions OD1 – OD157
+**Owner decisions.** Under the [November 25 delegation](docs/decisions.md#decided-2026-11-25-freeze-and-grammar),
+for Slices 0 and 1 a matter that would otherwise require the owner’s approval is decided when
+Claude, Codex and agy all agree. Record the decision with their verdicts and report it to the owner.
+For matters outside that delegation, the language decisions OD1 – OD157
 ([decisions.md](docs/decisions.md#owner-decisions)) are decided only by the project owner. No
 agent, orchestrator or reviewer chooses, encodes, implements or provisionally ships any side of any
 of them, inside a bug fix or anywhere else. Agents present options and a recommendation to the owner
@@ -51,8 +54,8 @@ and wait for an explicit answer. Behaviour already on main that took a side stay
 as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
 - The Codex review of every fix (`scripts/review/review.sh` asks it) also answers: "does this fix
   pick a side on any OD in docs/decisions.md?" If yes, or if the fix cannot be made without picking
-  one, stop and report to the owner; do not land it. Recording an answer the owner explicitly gave
-  is not picking a side; what the review checks then is in
+  one, stop and report to the owner; do not land it. The review checks the provenance of an explicit owner answer or a decision recorded under
+  the November 25 delegation. The procedure for recording an owner answer is in
   [REVIEW.md](docs/REVIEW.md#owner-decisions-choosing-versus-recording).
 
 **Bugs.**
@@ -153,7 +156,7 @@ Phase T pause. The [Phase T restart rule](ROADMAP.md#phase-t-restart-rule) gover
 restarts under the [November 25 decision](docs/decisions.md#decided-2026-11-25-freeze-and-grammar).
 
 <a id="review"></a>
-**Review.** Codex and agy review the grammar. Use the Gemini Neon model for agy when available ([November 25 decision](docs/decisions.md#decided-2026-11-25-freeze-and-grammar)).
+**Review.** Codex and agy review the grammar, with Gemini Neon for agy when available ([November 25 decision](docs/decisions.md#decided-2026-11-25-freeze-and-grammar)).
 Codex reviews everything before publication or owner delivery, and Kimi and agy (Gemini) also
 review every branch. Record any reviewer's absence
 ([decision](docs/decisions.md#decided-project-review)). agy cannot read files: run it as
