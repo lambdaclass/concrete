@@ -1,5 +1,6 @@
 """Prepare and atomically publish the slice-0 CLI's native build outputs."""
 
+from array import array
 from contextlib import contextmanager, suppress
 import ctypes
 import errno
@@ -72,6 +73,94 @@ def replaced_entries(fd, existing):
     return replaced
 
 
+def linux_lookup_rules(fd, mount_types):
+    with open(f"/proc/self/fdinfo/{fd}") as info:
+        mount = next((line.split()[1] for line in info if line.startswith("mnt_id:")), None)
+    filesystem = mount_types.get(mount)
+    if filesystem not in {"ext2", "ext3", "ext4", "f2fs", "tmpfs"}:
+        raise ValueError(f"unsupported filesystem {filesystem or 'unknown'}")
+
+    # FS_IOC_GETFLAGS is _IOR('f', 1, long), but returns an int.
+    # These are the Linux architectures supported by the native build.
+    if os.uname().machine not in {"x86_64", "aarch64"}:
+        raise ValueError("unsupported FS_IOC_GETFLAGS ABI")
+    flags = array("i", [0])
+    request = 0x80006601 | (ctypes.sizeof(ctypes.c_long) << 16)
+    fcntl.ioctl(fd, request, flags)
+    if flags[0] & 0x00000800:  # FS_ENCRYPT_FL
+        raise ValueError("encrypted directory")
+    # On these filesystems newly created directories inherit the casefold
+    # flag. The mount also fixes the encoding and normalization tables.
+    return mount, bool(flags[0] & 0x40000000)  # FS_CASEFOLD_FL
+
+
+def macos_lookup_rules(fd):
+    class AttrList(ctypes.Structure):
+        _fields_ = [("count", ctypes.c_uint16), ("reserved", ctypes.c_uint16),
+                    ("common", ctypes.c_uint32), ("volume", ctypes.c_uint32),
+                    ("directory", ctypes.c_uint32), ("file", ctypes.c_uint32),
+                    ("fork", ctypes.c_uint32)]
+
+    volume_info = 0x80000000
+    volume_capabilities = 0x00020000
+    case_sensitive = 0x00000100
+    attrs = AttrList(5, 0, 0, volume_info | volume_capabilities)
+    # Returned length, four capability words, and their four validity masks.
+    result = (ctypes.c_uint32 * 9)()
+    getattrlist = ctypes.CDLL(None, use_errno=True).fgetattrlist
+    getattrlist.argtypes = [ctypes.c_int, ctypes.POINTER(AttrList), ctypes.c_void_p,
+                            ctypes.c_size_t, ctypes.c_ulong]
+    getattrlist.restype = ctypes.c_int
+    if getattrlist(fd, ctypes.byref(attrs), result, ctypes.sizeof(result), 0):
+        error = ctypes.get_errno()
+        raise OSError(error, os.strerror(error))
+    if result[0] != ctypes.sizeof(result) or not result[5] & case_sensitive:
+        raise ValueError("volume does not report case sensitivity")
+    return os.fstat(fd).st_dev, not bool(result[1] & case_sensitive)
+
+
+def check_lookup_rules(output_fd, output, staging):
+    """Verify inheritance can reproduce the entire output tree before copying."""
+    if sys.platform == "linux":
+        with open("/proc/self/mountinfo") as info:
+            mount_types = {
+                line.split()[0]: line.split(" - ", 1)[1].split()[0] for line in info
+            }
+
+        def probe(fd):
+            return linux_lookup_rules(fd, mount_types)
+    elif sys.platform == "darwin":
+        probe = macos_lookup_rules
+    else:
+        raise ValueError("cannot determine build output name-lookup rules on this platform")
+
+    def rules(fd, path):
+        try:
+            return probe(fd)
+        except (OSError, ValueError, AttributeError) as error:
+            raise ValueError(f"cannot determine name-lookup rules for {path}: {error}") from error
+
+    def check_tree(fd, path):
+        if rules(fd, path) != expected:
+            raise ValueError(f"name-lookup rules differ between staging and build output: {path}")
+        with os.scandir(fd) as entries:
+            for entry in entries:
+                if entry.is_dir(follow_symlinks=False):
+                    child = os.open(entry.name, directory_flags, dir_fd=fd)
+                    try:
+                        check_tree(child, path / entry.name)
+                    finally:
+                        os.close(child)
+
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    staging_fd = os.open(staging, directory_flags)
+    try:
+        expected = rules(staging_fd, staging)
+    finally:
+        os.close(staging_fd)
+    check_tree(output_fd, output)
+
+
 def exchange(parent_fd, candidate, output):
     """Exchange two directories with one filesystem operation."""
     libc = ctypes.CDLL(None, use_errno=True)
@@ -125,6 +214,7 @@ def publish(output, staging, names):
         fcntl.flock(parent_fd, fcntl.LOCK_EX)
         with output_directory(output) as output_fd:
             existing = check_destinations(output, output_fd, names)
+            check_lookup_rules(output_fd, output, staging)
             replaced = replaced_entries(output_fd, existing)
             candidate = staging / "candidate"
             candidate.mkdir()

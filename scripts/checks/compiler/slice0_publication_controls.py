@@ -1,6 +1,6 @@
 """Exercise publication with actual or simulated case-insensitive lookups."""
 
-from contextlib import nullcontext
+from contextlib import ExitStack, nullcontext
 import os
 import errno
 from pathlib import Path
@@ -14,27 +14,30 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 import slice0_publish as publisher
 
 
-def check_publication(root, *, mixed=False, ambiguous=False):
+def lookup_probe():
+    return "linux_lookup_rules" if sys.platform == "linux" else "macos_lookup_rules"
+
+
+def check_publication(root, *, insensitive, ambiguous=False):
     root.mkdir()
+    if insensitive and sys.platform == "linux" and shutil.which("chattr"):
+        # If the temp filesystem supports casefold, exercise the real
+        # inheritance rule by enabling it before creating any children.
+        subprocess.run(["chattr", "+F", root], capture_output=True, timeout=5)
     output = root / "out"
     output.mkdir()
-    chattr = shutil.which("chattr")
-    if mixed and sys.platform == "linux" and chattr:
-        # ext4 can enable casefold on this empty directory alone.
-        subprocess.run([chattr, "+F", output], capture_output=True, timeout=5)
-
-    old = output / "LLVM.O"
+    nested = output / "Nested"
+    nested.mkdir()
+    (nested / "Keep").write_text("nested")
+    (nested / "alias").symlink_to("keep")
+    old = output / ("LLVM.O" if insensitive else "llvm.o")
     old.write_text("old")
     if ambiguous:
         os.link(old, output / "keep")
     (output / "lcb.exe").write_text("lcb")
     os.link(output / "lcb.exe", output / "keep-lcb")
     names = ["llvm.o", "lcb.exe"]
-    case_insensitive = (output / "llvm.o").exists()
-    staging_probe = root / "Stage"
-    staging_probe.touch()
-    staging_insensitive = (root / "stage").exists()
-    real = case_insensitive and (not mixed or not staging_insensitive)
+    real = (nested / "keep").exists() == insensitive
     original_stat = os.stat
     output_identity = output.stat()
 
@@ -46,8 +49,18 @@ def check_publication(root, *, mixed=False, ambiguous=False):
             raise AssertionError("replacement lookup used the candidate directory")
         return original_stat(path, dir_fd=dir_fd, follow_symlinks=follow_symlinks)
 
-    lookup = nullcontext() if real else patch.object(os, "stat", resolve_artifact)
-    with lookup:
+    with ExitStack() as mocks:
+        if not real:
+            mocks.enter_context(patch.object(
+                publisher, lookup_probe(), return_value=("simulated", insensitive)
+            ))
+            if insensitive:
+                mocks.enter_context(patch.object(os, "stat", resolve_artifact))
+                # shutil.copystat checks the callable's identity before
+                # passing follow_symlinks=False.
+                mocks.enter_context(patch.object(
+                    os, "supports_follow_symlinks", os.supports_follow_symlinks | {resolve_artifact}
+                ))
         staging = Path(publisher.prepare(output, names))
         for name in names:
             (staging / name).write_text("new")
@@ -62,15 +75,22 @@ def check_publication(root, *, mixed=False, ambiguous=False):
             publisher.publish(output, staging, names)
 
     if ambiguous:
-        assert set(os.listdir(output)) == {"LLVM.O", "keep", "lcb.exe", "keep-lcb"}
+        assert set(os.listdir(output)) == {"LLVM.O", "keep", "lcb.exe", "keep-lcb", "Nested"}
         assert (output / "LLVM.O").read_text() == (output / "keep").read_text() == "old"
         assert (output / "lcb.exe").read_text() == "lcb"
         assert (staging / "llvm.o").read_text() == "new"
     else:
-        assert set(os.listdir(output)) == {"llvm.o", "lcb.exe", "keep-lcb"}
+        assert set(os.listdir(output)) == {"llvm.o", "lcb.exe", "keep-lcb", "Nested"}
         assert (output / "llvm.o").read_text() == (output / "lcb.exe").read_text() == "new"
     assert (output / "keep-lcb").read_text() == "lcb"
-    return real
+    assert (output / "Nested" / "Keep").read_text() == "nested"
+    assert os.readlink(output / "Nested" / "alias") == "keep"
+    if real:
+        alias = output / "Nested" / "alias"
+        assert alias.exists() == insensitive
+        if insensitive:
+            assert alias.read_text() == "nested"
+    return "real" if real else "simulated"
 
 
 def check_project_guard(root, case_insensitive):
@@ -96,12 +116,59 @@ def check_project_guard(root, case_insensitive):
             os.chdir(root)
 
 
+def check_lookup_refusal(root, *, fault, location, staging_insensitive):
+    output = root / "out"
+    nested = output / "nested"
+    nested.mkdir(parents=True)
+    (nested / "Keep").write_text("keep")
+    (nested / "alias").symlink_to("keep")
+    (output / "llvm.o").write_text("old")
+    names = ["llvm.o", "lcb.exe"]
+    staging = Path(publisher.prepare(output, names))
+    for name in names:
+        (staging / name).write_text("new")
+    target = {"staging": staging, "output": output, "nested": nested}[location]
+    identity = target.stat()
+
+    def probe(fd, *_):
+        if os.path.samestat(os.fstat(fd), identity):
+            if fault == "unknown":
+                raise OSError(errno.EIO, "injected probe failure")
+            return "simulated", not staging_insensitive
+        return "simulated", staging_insensitive
+
+    expected = "cannot determine name-lookup rules" if fault == "unknown" else "name-lookup rules differ"
+    try:
+        with patch.object(publisher, lookup_probe(), side_effect=probe), \
+                patch.object(Path, "mkdir", side_effect=AssertionError("created candidate")), \
+                patch.object(publisher, "carry_forward", side_effect=AssertionError("copied output")), \
+                patch.object(Path, "rename", side_effect=AssertionError("moved an artifact")), \
+                patch.object(publisher, "exchange", side_effect=AssertionError("exchanged output")):
+            publisher.publish(output, staging, names)
+    except ValueError as error:
+        assert str(error).startswith(expected)
+        assert str(target) in str(error)
+    else:
+        raise AssertionError(f"accepted {fault} lookup rules for {target}")
+
+    assert set(os.listdir(output)) == {"llvm.o", "nested"}
+    assert (nested / "Keep").read_text() == "keep"
+    assert os.readlink(nested / "alias") == "keep"
+    assert (output / "llvm.o").read_text() == "old"
+    assert set(os.listdir(staging)) == set(names)
+    for name in names:
+        assert (staging / name).read_text() == "new"
+
+
 def check_staging_collision(root, *, nested):
     output = root / "out"
     output.mkdir(parents=True)
     source = output / "nested" if nested else output
     source.mkdir(exist_ok=True)
     (source / "Keep").mkdir()
+    if (source / "keep").exists():
+        print(f"SKIP unsupported host: {root.name} requires distinct Keep and keep entries")
+        return
     (source / "Keep" / "first").write_text("first")
     (source / "keep").mkdir()
     (source / "keep" / "second").write_text("second")
@@ -122,6 +189,8 @@ def check_staging_collision(root, *, nested):
         return original_mkdir(path, mode, dir_fd=dir_fd)
 
     try:
+        # Inject a collision after a successful preflight to exercise the
+        # exclusive-creation defense independently of the lookup gate.
         with patch.object(os, "mkdir", casefold_mkdir), \
                 patch.object(Path, "rename", side_effect=AssertionError("moved an artifact")), \
                 patch.object(publisher, "exchange", side_effect=AssertionError("exchanged output")):
@@ -142,6 +211,7 @@ def check_staging_collision(root, *, nested):
     assert not (output / "lcb.exe").exists()
     for name in names:
         assert (staging / name).read_text() == "new"
+    print(f"ok   exclusive creation refuses {root.name} before moves")
 
 
 if __name__ == "__main__":
@@ -149,19 +219,23 @@ if __name__ == "__main__":
     with TemporaryDirectory() as directory:
         root = Path(directory).resolve()
         try:
-            real = check_publication(root / "ordinary")
-            check_project_guard(root, real)
-            mixed = check_publication(root / "mixed", mixed=True)
-            ambiguous = check_publication(root / "ambiguous", mixed=True, ambiguous=True)
-            if sys.platform == "linux":
-                check_staging_collision(root / "collision-root", nested=False)
-                check_staging_collision(root / "collision-nested", nested=True)
+            sensitive = check_publication(root / "sensitive", insensitive=False)
+            insensitive = check_publication(root / "insensitive", insensitive=True)
+            ambiguous = check_publication(root / "ambiguous", insensitive=True, ambiguous=True)
+            check_project_guard(root, (root / "SENSITIVE").exists())
+            for insensitive_staging in (False, True):
+                for location in ("output", "nested"):
+                    check_lookup_refusal(
+                        root / f"mismatch-{insensitive_staging}-{location}", fault="mismatch",
+                        location=location, staging_insensitive=insensitive_staging,
+                    )
+            for location in ("staging", "output", "nested"):
+                check_lookup_refusal(root / f"unknown-{location}", fault="unknown",
+                                     location=location, staging_insensitive=False)
+            check_staging_collision(root / "root collision", nested=False)
+            check_staging_collision(root / "nested collision", nested=True)
         finally:
             os.chdir(original_cwd)
-    mode = "real" if real else "simulated"
-    mixed_mode = "real" if mixed else "simulated"
-    ambiguous_mode = "real" if ambiguous else "simulated"
-    print(f"ok   publication and project-directory aliases ({sys.platform}, {mode})")
-    print(f"ok   mixed directory lookup rules ({mixed_mode}), ambiguous alias refusal ({ambiguous_mode})")
-    if sys.platform == "linux":
-        print("ok   casefold staging refuses top-level and nested directory collisions before moves")
+    print(f"ok   equal sensitive ({sensitive}) and equal insensitive ({insensitive}) publication")
+    print(f"ok   project-directory aliases and ambiguous artifact alias refusal ({ambiguous})")
+    print("ok   mismatched and unknown lookup rules refused before changes")

@@ -378,8 +378,16 @@ if fault == "second-move":
 
     def block_second_move(source, destination):
         if source.name == "llvm.o":
-            assert (destination.parent / "llvm.ll").is_file()
+            first = destination.parent / "llvm.ll"
+            assert first.stat().st_size > 0
+            assert not (source.parent / first.name).exists()
+            destination.unlink()
             destination.mkdir()
+            try:
+                return rename(source, destination)
+            except OSError as error:
+                assert error.errno in (errno.EISDIR, errno.ENOTDIR)
+                raise OSError(error.errno, "second artifact rename rejected directory target", destination) from error
         return rename(source, destination)
 
     Path.rename = block_second_move
@@ -394,6 +402,18 @@ elif fault == "ambiguous-alias":
         return original_stat(path, dir_fd=dir_fd, follow_symlinks=follow_symlinks)
 
     os.stat = stat_output
+elif fault in ("lookup-mismatch", "lookup-unknown") and sys.argv[1] == "publish":
+    output = Path(sys.argv[2])
+    identity = output.stat()
+
+    def lookup_rules(fd, *_):
+        is_output = os.path.samestat(os.fstat(fd), identity)
+        if is_output and fault == "lookup-unknown":
+            raise OSError(errno.EIO, "injected lookup probe failure")
+        return "simulated", is_output
+
+    publisher.linux_lookup_rules = lookup_rules
+    publisher.macos_lookup_rules = lookup_rules
 elif fault == "exchange":
     def fail_exchange(parent_fd, candidate, output):
         fd = os.open(candidate, os.O_RDONLY | os.O_DIRECTORY, dir_fd=parent_fd)
@@ -410,14 +430,19 @@ try:
 except (OSError, ValueError) as error:
     sys.exit(str(error))
 PYTHON
-for fault in second-move exchange; do
+for fault in second-move exchange lookup-mismatch lookup-unknown; do
+  case "$fault" in
+    second-move) detail='second artifact rename rejected directory target' ;;
+    exchange) detail='injected directory exchange failure' ;;
+    lookup-mismatch) detail='name-lookup rules differ' ;;
+    lookup-unknown) detail='injected lookup probe failure' ;;
+  esac
   log="$work/ctl/publication-$fault"
   check_cli_diagnostic "CLI publication failure ($fault)" "$log" "refuse 2 TOOL-FAILURE" \
     env PUBLICATION_CONTROL="$fault" "${publish_cli[@]}" "${publish_build[@]}"
   if ! diff -r "$work/ctl/previous" "$publish_out" ||
       ! has_match -E '^TOOL-FAILURE: incomplete \(publish build outputs: ' <"$log.stderr" ||
-      { [ "$fault" = exchange ] && ! has_match -F 'injected directory exchange failure' <"$log.stderr"; } ||
-      { [ "$fault" = second-move ] && ! has_match -F 'candidate/llvm.o' <"$log.stderr"; }; then
+      ! has_match -F "$detail" <"$log.stderr"; then
     echo "FAIL $fault: publication failure did not preserve the previous generation"
     fail=1
   fi
