@@ -1,3 +1,5 @@
+import ConcreteSpec.Spec.Basics
+import ConcreteSpec.Spec.Slice1Syntax
 import ConcreteSpec.Spec.Slice1Semantics
 import ConcreteSpec.Spec.Scalar
 

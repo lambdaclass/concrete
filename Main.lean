@@ -1,3 +1,4 @@
+import Concrete.Backend.LLVM
 import Concrete.Stages
 
 open Concrete Concrete.Backend

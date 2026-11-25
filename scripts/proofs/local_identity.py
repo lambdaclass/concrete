@@ -70,6 +70,32 @@ def main():
                         '-R', tmp, '-o', str(file.with_suffix('.olean')), str(file)], env=env)
 
         scans = [('ConcreteSpec', 'semantic environment scan', None)]
+        scans.append(('Concrete', 'post-elaboration compiler identity scan', None))
+        module = 'Concrete.Memory.IdentityControl'
+        # Stage the compiler package so the planted child and its real imports
+        # are resolved from the same search root.
+        shutil.copytree(ROOT / '.lake/build/lib/lean/Concrete', stage / 'Concrete')
+        for artifact in (ROOT / '.lake/build/lib/lean').glob('Concrete.*'):
+            if artifact.is_file():
+                shutil.copy2(artifact, stage / artifact.name)
+        require(compile_file(module, 'import Concrete.Memory\n'
+                             'def compilerIdentityLeak : ConcreteSpec.Var × String := (⟨0⟩, "x")\n'),
+                'compiler identity control builds')
+        scans.append((module, 'compiler spelling leak',
+                      'semantic diagnostics dependency: compilerIdentityLeak'))
+        module = 'Concrete.Memory.RenderControl'
+        require(compile_file(module, 'import Concrete.Memory\n'
+                             'def compilerRenderLeak (r : Concrete.Refusal) : String := r.message\n'),
+                'compiler rendering control builds')
+        scans.append((module, 'diagnostic rendering in a semantic stage',
+                      'semantic diagnostics dependency: compilerRenderLeak'))
+        require(compile_file('RefusalControl', 'import ConcreteSpec.Diagnostics.Types\n'
+                             'inductive Concrete.Refusal where\n'
+                             '  | leak : ConcreteSpec.Var → String → Concrete.Refusal\n'),
+                'refusal shape control builds')
+        result = run(['lean', '--run', 'scripts/proofs/local_identity.lean', 'RefusalControl'], env=env)
+        reject(result, 'compiler refusal shape control', 'compiler Refusal has a non-diagnostic field')
+        print('control: compiler diagnostic channel cannot carry local identity')
         serial = 0
 
         def semantic_file(source, *, namespace=None):

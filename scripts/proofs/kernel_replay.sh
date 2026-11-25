@@ -31,6 +31,9 @@
 # both modes. ORPHAN CONTROL: that forged module planted as an orphan under ConcreteSpec/ in a copy of
 # the build directory fails an unfiltered replay of the copy, and the staged replay of the same copy
 # ignores it and passes; a stage missing a source module is refused.
+# Compiler replay also checks every Concrete module and independently replays a
+# representative theorem from its exact closure, with a missing-claim control.
+#
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/../checks/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -75,7 +78,7 @@ staged_path() {
 }
 # replay_problems EXPECTED REPLAYED-OUTPUT: the module sets differ, as one line per difference.
 replay_problems() {
-  sed -n 's/^replaying \(ConcreteSpec[^ ]*\).*/\1/p' "$2" | sort -u > "$2.set"
+  sed -n 's/^replaying \(Concrete[^ ]*\).*/\1/p' "$2" | sort -u > "$2.set"
   comm -23 "$1" "$2.set" | sed 's/^/not replayed: /'
   comm -13 "$1" "$2.set" | sed 's/^/replayed but not a source module: /'
 }
@@ -97,6 +100,36 @@ NREP=$(grep -c . "$TMP/m.out.set")
 [ "$rc" = 0 ] && [ -z "$diff_m" ] \
   && ok "leanchecker ConcreteSpec: exactly the $NREP source modules replayed on their imports ($((SECONDS-t0))s)" \
   || no "leanchecker ConcreteSpec: rc=$rc, $NREP modules replayed; $(echo $diff_m) $(grep -v '^replaying' "$TMP/m.out" | tail -5 | tr '\n' ' ')"
+
+echo "=== compiler and imported correspondence replay ==="
+population compiler-kernel > "$TMP/compiler-kernel.out" 2>&1; rc=$?
+[ "$rc" = 0 ] && has_match -F 'kernel replayed Concrete.Backend.LLVM.pattern_roundTrip' < "$TMP/compiler-kernel.out" \
+  && ok "kernel replayed the representative compiler theorem from its exact declaration closure" \
+  || no "compiler theorem kernel replay (rc=$rc): $(tail -6 "$TMP/compiler-kernel.out")"
+population compiler-kernel-control > "$TMP/compiler-kernel-control.out" 2>&1; rc=$?
+[ "$rc" = 1 ] && has_match -F 'unknown constant' < "$TMP/compiler-kernel-control.out" &&
+  has_match -F 'ConcreteSpec.Core.ofBits_toBits' < "$TMP/compiler-kernel-control.out" \
+  && ok "control: kernel rejected the theorem's closure without its imported correspondence" \
+  || no "missing imported correspondence control (rc=$rc): $(tail -6 "$TMP/compiler-kernel-control.out")"
+source_modules Concrete > "$TMP/compiler-modules.txt"
+PROOF_PKG=Concrete population imported > "$TMP/compiler-imported.txt" \
+  || { no "compiler module enumeration failed"; finish; }
+GAP=$(comm -23 "$TMP/compiler-modules.txt" "$TMP/compiler-imported.txt")
+[ -z "$GAP" ] || no "compiler modules outside the replay closure: $GAP"
+out="$(stage_lib "$PKG_LIB" "$STAGE" < "$TMP/compiler-modules.txt")"
+[ -z "$out" ] || { no "staging compiler modules: $out"; finish; }
+t0=$SECONDS
+leancheck "$SPATH" --fresh Concrete > "$TMP/compiler-fresh.out" 2>&1; rc=$?
+[ "$rc" = 0 ] && ok "fresh compiler replay including imported correspondence ($((SECONDS-t0))s)" \
+  || no "fresh compiler replay (rc=$rc): $(tail -5 "$TMP/compiler-fresh.out")"
+leancheck "$SPATH" --verbose Concrete > "$TMP/compiler-replay.out" 2>&1; rc=$?
+diff_m="$(replay_problems "$TMP/compiler-modules.txt" "$TMP/compiler-replay.out")"
+[ "$rc" = 0 ] && [ -z "$diff_m" ] && ok "replayed every staged compiler source module on its imports" \
+  || no "compiler replay (rc=$rc): $diff_m $(tail -5 "$TMP/compiler-replay.out")"
+sed -E '/^replaying Concrete\.Backend\.LLVM( |$)/d' "$TMP/compiler-replay.out" > "$TMP/compiler-short.out"
+has_match -Fx "not replayed: Concrete.Backend.LLVM" <<< "$(replay_problems "$TMP/compiler-modules.txt" "$TMP/compiler-short.out")" \
+  && ok "control: replay inventory rejects an omitted compiler proof module" \
+  || no "control: replay inventory accepted omitted compiler proof module"
 
 echo "=== negative control: a declaration added without kernel checking ==="
 C="$TMP/control"; mkdir -p "$C"

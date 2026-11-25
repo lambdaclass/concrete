@@ -199,14 +199,25 @@ def module_imports(source, modules):
 def compiler_header():
     prefix = Path(subprocess.check_output(["lean", "--print-prefix"], text=True).strip())
     modules = set()
-    for base, root in ((Path("."), "ConcreteSpec"), (Path("."), "Concrete"),
-                       (prefix / "src/lean", "Lean"),
-                       (Path(".lake/packages/lean-compiler-backend"), "LeanCompilerBackend")):
-        if not (base / (root + ".lean")).is_file() or not (base / root).is_dir():
-            raise LexError(f"missing approved module graph: {base / root}")
+    for root in ("ConcreteSpec", "Concrete"):
+        if not Path(root + ".lean").is_file() or not Path(root).is_dir():
+            raise LexError(f"missing approved module graph: {root}")
         modules.add(root)
-        modules.update(".".join(p.relative_to(base).with_suffix("").parts)
-                       for p in (base / root).rglob("*.lean"))
+        modules.update(".".join(p.with_suffix("").parts) for p in Path(root).rglob("*.lean"))
+    # The verified adapter uses this surface of the pinned backend. Its
+    # executable and test modules may contain IO and reflection.
+    backend = Path(".lake/packages/lean-compiler-backend")
+    backend_surface = (
+        "AArch64", "AMD64", "IR", "Validate", "Verified.Admission",
+        "Verified.BuildIdentity", "Verified.Canonical", "Verified.Job",
+        "Verified.Plans", "Verified.Source",
+    )
+    for component in backend_surface:
+        module = "LeanCompilerBackend." + component
+        source = backend / (module.replace(".", "/") + ".lean")
+        if not source.is_file():
+            raise LexError(f"missing approved module: {source}")
+        modules.add(module)
     # SSA's indexed slot correspondence uses this proof-bearing container from
     # the pinned toolchain. Permit this module in compiler sources only.
     hash_map_lemmas = "Std.Data.HashMap.Lemmas"
@@ -220,11 +231,11 @@ def compiler_header():
 FIRST_COMMAND = re.compile(r"(namespace|open|section|def|theorem|structure|inductive|abbrev)\b")
 
 
-def scan(pattern, paths, header=HEADER):
+def scan(pattern, paths, header=HEADER, *, literals=True):
     word, rc = re.compile(pattern, re.M), 0
     for path in paths:
         try:
-            text = lex(Path(path).read_text(encoding="utf-8"))
+            text = lex(Path(path).read_text(encoding="utf-8"), literals=literals)
         except (OSError, UnicodeDecodeError, LexError) as e:
             print(f"error: {path}: {e}", file=sys.stderr); rc = 3; continue
         lines = text.split("\n")
@@ -283,6 +294,8 @@ def examples(src_dir, dst_dir, paths):
 
 if __name__ == "__main__":
     try:
+        if sys.argv[1] == "scan-totality":
+            sys.exit(scan(sys.argv[2], sys.argv[3:], compiler_header(), literals=False))
         if sys.argv[1] == "scan-compiler":
             sys.exit(scan(sys.argv[2], sys.argv[3:], compiler_header()))
         if sys.argv[1] == "scan":

@@ -1,3 +1,6 @@
+import Concrete.Backend.Decimal
+import ConcreteSpec.Spec.Scalar
+import ConcreteSpec.Spec.Slice1Semantics
 import Concrete.BIR
 import Concrete.Backend.LLVMIR
 

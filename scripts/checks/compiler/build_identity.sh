@@ -17,13 +17,8 @@ if [ -z "$(git status --porcelain --untracked-files=no -- "${slice0_sources[@]}"
 else
   echo 'source_tree=dirty'
 fi
-git ls-files -z -- "${slice0_sources[@]}" | python3 -c '
-import hashlib,sys
-paths=sorted(p for p in sys.stdin.buffer.read().split(b"\0") if p)
-h=hashlib.sha256()
-for p in paths:
-    h.update(hashlib.sha256(open(p,"rb").read()).hexdigest().encode()+b"  "+p+b"\n")
-print("source_sha256="+h.hexdigest())'
+source_sha256=$(git ls-files -z -- "${slice0_sources[@]}" | slice0_source_digest)
+printf 'source_sha256=%s\n' "$source_sha256"
 printf 'target=%s\n' "$(bash scripts/checks/lib/slice0_native.sh target)"
 printf 'lean_pin=%s\n' "$(cat lean-toolchain)"
 printf 'lean_version=%s\n' "$(lean --version)"

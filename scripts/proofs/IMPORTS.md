@@ -8,7 +8,12 @@ favor of transitive visibility. Both import gates share the lexer header parser;
 `imports.py --write` preserves comments while updating import commands. Each
 build and elaboration uses the bounded runner and forwards failure diagnostics.
 
-Proof modules are enumerated recursively, with an empty population rejected.
+The gate recursively enumerates `ConcreteSpec/Proofs/` and the proof-bearing
+modules in `Concrete/`, including mixed definition and proof files. Both
+populations must be present. Header-only compatibility modules retain their
+re-exports. For compiler proofs, the gate also re-elaborates candidate headers
+to identify imports needed for aliases and quoted declaration names, which can
+disappear from the elaborated term.
 The inspector runs separately from source namespaces. Write mode keeps
 surviving import commands and their comments in place, preserves line endings,
 and is idempotent. The controls exercise these properties.

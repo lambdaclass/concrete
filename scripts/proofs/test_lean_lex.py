@@ -110,6 +110,9 @@ end Witness{index}
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'ConcreteSpec/Proofs/Bad.lean'
             path.parent.mkdir(parents=True)
+            compiler = Path(tmp) / 'Concrete/Proof.lean'
+            compiler.parent.mkdir()
+            compiler.write_text('theorem witness : True := trivial\n')
             for body, message in (
                     ('open ConcreteSpec\n example : True := by trivial\n', '3: an `example`'),
                     ('/- unterminated', 'unterminated comment')):
@@ -120,7 +123,7 @@ end Witness{index}
                         f'sys.path.insert(0, {str(Path(__file__).parent)!r}); '
                         'import imports; '
                         f'imports.ROOT = Path({tmp!r}); '
-                        'imports.run = lambda command: ""; '
+                        'imports.run = lambda command, **kwargs: ""; '
                         'imports.controls = lambda temp: None; '
                         'sys.exit(imports.main())')
                     result = subprocess.run(['python3', '-c', code], text=True, capture_output=True)
@@ -138,8 +141,11 @@ end Witness{index}
 
     def test_compiler_import_graph_and_banned_words(self):
         header = lexer.compiler_header()
-        for module, allowed in (("Concrete.Lex", True), ("Lean.Meta.Basic", True),
+        for module, allowed in (("Concrete.Lex", True), ("Lean.Meta.Basic", False),
                                 ("LeanCompilerBackend.AMD64", True),
+                                ("LeanCompilerBackend.Verified.Tests", False),
+                                ("LeanCompilerBackend.Liveness.Report", False),
+                                ("Init.System.IO", False),
                                 ("Std.Data.HashMap.Lemmas", True),
                                 ("Std.Data.HashMap", False),
                                 ("Std.Data.String.ToNat", False),

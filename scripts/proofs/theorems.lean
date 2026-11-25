@@ -46,6 +46,7 @@ belong to the corresponding package population. The checks insert their delibera
 fail; nothing else is ever declared under that namespace.
 -/
 import Lean
+import Lean.Replay
 import ConcreteSpec
 import Concrete
 
@@ -173,16 +174,45 @@ def rowSafe : Name → Bool
   | .str p s => rowSafe p && ctrlFree s
   | .num p _ => rowSafe p
 
+-- Reachability starts from Lean's theorem, independent of the export stream.
+-- Include whole kernel declaration blocks for inductives and Quot.
+def replayClosure (env : Environment) (root : Name) : IO (Std.HashSet Name) := do
+  let mut recursors : Std.HashMap Name (Array Name) := {}
+  for (n, ci) in env.constants.toList do
+    let .recInfo r := ci | continue
+    for ind in r.all do
+      recursors := recursors.insert ind ((recursors[ind]?.getD #[]).push n)
+  let mut pending := #[root]
+  let mut seen : Std.HashSet Name := {}
+  let mut idx := 0
+  while idx < pending.size do
+    let n := pending[idx]!
+    idx := idx + 1
+    if seen.contains n then continue
+    seen := seen.insert n
+    let some ci := env.find? n | throw (IO.userError s!"missing closure declaration {n}")
+    for dep in ci.getUsedConstantsAsSet do pending := pending.push dep
+    match ci with
+    | .inductInfo v =>
+      pending := pending ++ v.all.toArray ++ recursors[n]?.getD #[]
+    | .recInfo v =>
+      for rule in v.rules do
+        pending := pending.push rule.ctor ++ rule.rhs.getUsedConstants
+    | .quotInfo _ =>
+      pending := pending ++ #[`Eq, `Quot, `Quot.mk, `Quot.lift, `Quot.ind]
+    | _ => pure ()
+  return seen
+
 -- CONTROL DECLARATIONS (negative controls are inserted here, in a temporary copy only)
 
 #eval show CoreM Unit from do
   let env ← getEnv
   let pkgString := (← IO.getEnv "PROOF_PKG").getD "ConcreteSpec"
-  unless ["ConcreteSpec", "Concrete"].contains pkgString do
+  unless ["ConcreteSpec", "Concrete", "Main"].contains pkgString do
     throwError s!"unknown PROOF_PKG '{pkgString}'"
   let pkg := Name.mkSimple pkgString
   let mode := (← IO.getEnv "PROOF_MODE").getD "theorems"
-  unless ["theorems", "encoded", "constants", "modules", "imported", "decls", "heads", "examples"].contains mode do
+  unless ["theorems", "encoded", "constants", "modules", "imported", "decls", "heads", "examples", "compiler-closure", "compiler-kernel", "compiler-kernel-control"].contains mode do
     throwError s!"unknown PROOF_MODE '{mode}'"
   -- Fail closed, once, before any mode writes a row: every constant and module name of the
   -- environment (the population, the axioms its constants depend on, the inductive heads of
@@ -193,6 +223,28 @@ def rowSafe : Name → Bool
   for m in env.header.moduleNames do
     unless rowSafe m do
       throwError s!"theorems.lean: a module name holds a control character: {repr (toString m)}"
+  if mode.startsWith "compiler-" then
+    let root := `Concrete.Backend.LLVM.pattern_roundTrip
+    let correspondence := `ConcreteSpec.Core.ofBits_toBits
+    unless (env.find? root).any (· matches .thmInfo _) &&
+        (env.find? correspondence).any (· matches .thmInfo _) do
+      throwError "compiler replay roots must be theorems"
+    let closure ← replayClosure env root
+    unless closure.contains correspondence do
+      throwError "{root} no longer depends on imported correspondence {correspondence}"
+    if mode != "compiler-closure" then
+      let mut declarations : Std.HashMap Name ConstantInfo := {}
+      for n in closure.toArray do
+        if mode == "compiler-kernel-control" && n == correspondence then continue
+        let some ci := env.find? n | throwError "missing replay declaration {n}"
+        declarations := declarations.insert n ci
+      discard <| (← mkEmptyEnvironment).toKernelEnv.replay declarations
+      IO.println s!"kernel replayed {root} with {closure.size} declarations"
+      return
+    IO.println s!"{root}\t{enc root}"
+    for name in (closure.toArray.map enc).qsort (· < ·) do
+      IO.println name
+    return
   if mode == "decls" then
     let some path ← IO.getEnv "PROOF_NAMES" | throwError "PROOF_MODE=decls needs PROOF_NAMES"
     let some out ← IO.getEnv "PROOF_OUT" | throwError "PROOF_MODE=decls needs PROOF_OUT"

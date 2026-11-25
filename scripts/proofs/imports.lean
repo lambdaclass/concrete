@@ -40,9 +40,12 @@ def main (args : List String) : IO Unit := do
     for c in ci.getUsedConstantsAsSet do
       let some j := env.getModuleIdxFor? (owner env c) | continue
       let m := env.header.moduleNames[j.toNat]!
-      if m.getRoot == `ConcreteSpec && m != target.toName then
+      if [`ConcreteSpec, `Concrete, `LeanCompilerBackend].contains m.getRoot ||
+          m == `Std.Data.HashMap.Lemmas then
+        if m == target.toName then continue
         all := all.insert m
         if !exampleDecl then named := named.insert m
+  IO.println s!"MODULE {target}"
   for m in all.toList.mergeSort (fun a b => a.toString < b.toString) do
     IO.println s!"IMPORT {m}"
   for m in named.toList.mergeSort (fun a b => a.toString < b.toString) do

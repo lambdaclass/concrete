@@ -7,10 +7,11 @@ check and its elaborated negative controls; the root owns population reachabilit
 """
 import argparse
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
-from lean_lex import LexError, module_imports, rename_examples
+from lean_lex import LexError, compiler_header, lex, module_imports, rename_examples
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULES = {'ConcreteSpec'} | {
@@ -18,11 +19,16 @@ MODULES = {'ConcreteSpec'} | {
     for p in (ROOT / 'ConcreteSpec').rglob('*.lean')}
 
 
-def run(command):
+def run(command, *, failed_source=None):
     result = subprocess.run(
         ['bash', str(ROOT / 'scripts/checks/lib/bounded.sh'), '300', *command],
         cwd=ROOT, text=True, capture_output=True)
     if result.returncode:
+        # An expected failed elaboration is evidence of a context import.
+        # Launch failures, crashes and watchdog failures are gate failures.
+        if result.returncode == 1 and failed_source and re.search(
+                rf'^{re.escape(str(failed_source))}:\d+:\d+: error', result.stdout, re.MULTILINE):
+            return None
         print(result.stdout, end='', file=sys.stderr)
         print(result.stderr, end='', file=sys.stderr)
         raise SystemExit(result.returncode)
@@ -30,18 +36,26 @@ def run(command):
 
 
 def inspect(module, temp):
-    return run(["lake", "env", "env",
-                "LEAN_PATH=" + str(temp.parent) + ":" +
-                run(["lake", "env", "printenv", "LEAN_PATH"]).strip(),
-                "lean", "--run", str(ROOT / "scripts/proofs/imports.lean"), module])
+    output = run(["lake", "env", "env",
+                  "LEAN_PATH=" + str(temp.parent) + ":" +
+                  run(["lake", "env", "printenv", "LEAN_PATH"]).strip(),
+                  "lean", "--run", str(ROOT / "scripts/proofs/imports.lean"), module])
+    if output.splitlines().count(f"MODULE {module}") != 1:
+        raise SystemExit(f'imports: inspection did not report module {module}')
+    return output
+
+
+def elaborate(source, temp, *, allow_source_error=False):
+    temp.write_text(rename_examples(source, lambda line: f'⟪import-example⟫{line}'))
+    search = str(temp.parent) + ':' + run(['lake', 'env', 'printenv', 'LEAN_PATH']).strip()
+    return run(['lake', 'env', 'env', 'LEAN_PATH=' + search, 'lean', '-DwarningAsError=true',
+                '-DautoImplicit=false', '-R', str(temp.parent), '-o', str(temp.with_suffix('.olean')),
+                str(temp)], failed_source=temp if allow_source_error else None)
 
 
 def dependencies(source, temp, built_module=None, *, dropped=None):
     module_imports(source, MODULES)
-    temp.write_text(rename_examples(source, lambda line: f'⟪import-example⟫{line}'))
-    search = str(temp.parent) + ':' + run(['lake', 'env', 'printenv', 'LEAN_PATH']).strip()
-    run(['lake', 'env', 'env', 'LEAN_PATH=' + search, 'lean', '-DwarningAsError=true',
-         '-DautoImplicit=false', '-R', str(temp.parent), '-o', str(temp.with_suffix('.olean')), str(temp)])
+    elaborate(source, temp)
     output = inspect(temp.stem, temp)
     if dropped is not None:
         dropped.extend(line.removeprefix('FOREIGN ') for line in output.splitlines()
@@ -55,7 +69,7 @@ def dependencies(source, temp, built_module=None, *, dropped=None):
                              f'probe: {named(output)}\nbuilt: {named(built)}')
     deps = sorted(line.removeprefix('IMPORT ') for line in output.splitlines()
                   if line.startswith('IMPORT '))
-    if not deps:
+    if not deps and (built_module is None or built_module.startswith('ConcreteSpec.')):
         raise SystemExit('imports: empty dependency population')
     return deps
 
@@ -90,6 +104,31 @@ def rewrite(source, deps):
     for start, end, replacement in sorted(edits, reverse=True):
         source = source[:start] + replacement + source[end:]
     return source
+
+
+def compiler_dependencies(source, temp, module):
+    required = set(dependencies(source, temp, module))
+    actual, _, _ = module_imports(source, MODULES)
+    extras = set(actual) - required
+    for candidate in sorted(extras):
+        remaining = required | (extras - {candidate})
+        if elaborate(rewrite(source, sorted(remaining)), temp, allow_source_error=True) is not None:
+            extras.remove(candidate)
+    return sorted(required | extras)
+
+
+def compiler_proof_paths(root):
+    # Compatibility modules may intentionally only re-export context. Exact
+    # imports concern proof sources, including mixed code and proof modules.
+    paths = sorted((root / 'Concrete').rglob('*.lean'))
+    proof_paths = []
+    for p in paths:
+        source = p.read_text(encoding='utf-8')
+        if re.search(r'\b(theorem|lemma|example)\b', lex(source, literals=False)):
+            proof_paths.append(p)
+    if not proof_paths:
+        raise SystemExit('imports: empty compiler proof-module population')
+    return proof_paths
 
 
 def proof_paths(root):
@@ -211,6 +250,22 @@ def controls(temp):
     # Removing just the command retains its trailing comment and legal header.
     if matches(missing, dependencies(missing, temp)):
         raise SystemExit('missing-direct-import control accepted')
+    compiler = ('import Concrete.Memory\nimport Concrete.MIR\n'
+                'import ConcreteSpec.Spec.Slice1Semantics\n'
+                'theorem compilerImportProbe (p : Concrete.MIR.Program) : '
+                'Concrete.Memory.run (Concrete.Memory.lower p) = Concrete.MIR.run p := '
+                'Concrete.Memory.lower_correct p\n')
+    compiler_deps = dependencies(compiler, temp)
+    unused = 'import Concrete.Admission\n' + compiler
+    elaborate(unused, temp)
+    if not matches(compiler, compiler_deps) or matches(
+            unused, compiler_dependencies(unused, temp, temp.stem)):
+        raise SystemExit('compiler proof import control accepted an unused import')
+    alias_source = ('import Concrete.Core\nimport ConcreteSpec.Spec.Slice0\n'
+                    'theorem compilerAliasProbe (p : Concrete.Core.Program) : p = p := rfl\n')
+    elaborate(alias_source, temp)
+    if not matches(alias_source, compiler_dependencies(alias_source, temp, temp.stem)):
+        raise SystemExit('compiler import control dropped an alias needed at elaboration')
     print('imports: extra, transitive-only, commented-header and rewrite controls pass')
 
 
@@ -218,15 +273,20 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--write', action='store_true')
     args = parser.parse_args()
-    run(['lake', 'build', 'ConcreteSpec'])
+    run(['lake', 'build', 'ConcreteSpec', 'Concrete'])
+    MODULES.update(compiler_header().modules)
     failed = False
     with tempfile.TemporaryDirectory(prefix='spec-imports-') as tmp:
         temp = Path(tmp) / 'Probe.lean'
         controls(temp)
-        for path in proof_paths(ROOT):
+        for path in proof_paths(ROOT) + compiler_proof_paths(ROOT):
             source = path.read_bytes().decode('utf-8')
+            module = '.'.join(path.relative_to(ROOT).with_suffix('').parts)
             try:
-                deps = dependencies(source, temp, '.'.join(path.relative_to(ROOT).with_suffix('').parts))
+                if module.startswith('Concrete.'):
+                    deps = compiler_dependencies(source, temp, module)
+                else:
+                    deps = dependencies(source, temp, module)
             except LexError as e:
                 raise SystemExit(f'imports: {path.relative_to(ROOT)}:{e}') from None
             print(f'{path.relative_to(ROOT)}: {", ".join(deps)}', flush=True)

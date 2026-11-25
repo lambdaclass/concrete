@@ -60,13 +60,39 @@ for i in range(100):
 with open(sys.argv[1], 'w') as f:
     for r in rows: f.write(json.dumps(r)+'\n')
 CONTROL
+python3 - "$TMP/compiler.ndjson" <<'CONTROL'
+import json
+import sys
+rows = [
+    {"in": 1, "str": {"pre": 0, "str": "ConcreteSpec"}},
+    {"in": 2, "str": {"pre": 1, "str": "correspondence"}},
+    {"in": 3, "str": {"pre": 0, "str": "Concrete"}},
+    {"in": 4, "str": {"pre": 3, "str": "representative"}},
+    {"ie": 1, "sort": 0},
+    {"ie": 2, "natVal": 0},
+    {"ie": 3, "const": {"name": 2, "us": []}},
+    {"thm": {"name": 2, "levelParams": [], "type": 1, "value": 2, "all": []}},
+    {"thm": {"name": 4, "levelParams": [], "type": 1, "value": 3, "all": []}},
+]
+with open(sys.argv[1], "w") as stream:
+    for row in rows:
+        print(json.dumps(row), file=stream)
+CONTROL
 cat > "$TMP/artifact" <<'CONTROL'
 #!/usr/bin/env bash
 set -eu
 [ "$ELAN_HOME" = "$CALLER_ELAN_HOME" ] || { echo 'CONTROL: artifact home changed' >&2; exit 98; }
 flock -n "$FIXTURE_TOOLS/.lock" true || { echo 'CONTROL: artifact lock held' >&2; exit 99; }
 case "$0" in
-  */lean4export) echo exporter >> "$PHASE_LOG"; cat "$FIXTURE_STREAM"; exit 0 ;;
+  */lean4export)
+    if [ "$1" = Concrete ]; then
+      echo compiler-exporter >> "$PHASE_LOG"
+      cat "$FIXTURE_COMPILER"
+    else
+      echo exporter >> "$PHASE_LOG"
+      cat "$FIXTURE_STREAM"
+    fi
+    exit 0 ;;
   */con-leche) file=$3; kind=conleche ;;
   */nanoda_bin) file=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["export_file_path"])' "$1"); kind=nanoda ;;
 esac
@@ -135,7 +161,13 @@ case "$*" in
         else
           for i in $(seq 0 99); do printf 'ConcreteSpec.theorem%03d\ts12:ConcreteSpecs10:theorem%03d\n' "$i" "$i"; done
         fi ;;
-      decls) python3 scripts/proofs/export_inventory.py decls "$FIXTURE_STREAM" > "$PROOF_OUT" ;;
+      compiler-closure)
+        printf 'Concrete.representative\ts8:Concretes14:representative\n'
+        python3 scripts/proofs/export_inventory.py names "$FIXTURE_COMPILER" ;;
+      decls)
+        stream=$FIXTURE_STREAM
+        [[ "$PROOF_NAMES" != */compiler-wanted ]] || stream=$FIXTURE_COMPILER
+        python3 scripts/proofs/export_inventory.py decls "$stream" > "$PROOF_OUT" ;;
       heads)
         if [[ "$3" == */control-* ]]; then echo 'control character' >&2; exit 1; fi
         printf 's12:ConcreteSpecs10:theorem000\tA\ns12:ConcreteSpecs10:theorem001\tB\n' ;;
@@ -193,6 +225,7 @@ mkdir "$TMP/proxies"
 for tool in lake lean leanchecker; do ln -s "$TMP/bin/elan" "$TMP/proxies/$tool"; done
 export CALLER_BIN="$TMP/bin"
 export FIXTURE_STREAM="$TMP/stream.ndjson"
+export FIXTURE_COMPILER="$TMP/compiler.ndjson"
 export FIXTURE_ARTIFACT="$TMP/artifact"
 if PATH="$TMP/proxies:$TMP/bin:$PATH" bash "$TMP/check-path" > "$TMP/negative" 2>&1; then
   echo 'FAIL: proxy-leak negative control accepted'; exit 1
@@ -279,7 +312,7 @@ rm -rf "$CONCRETE_EXT_TOOLS"
 # and Cargo must see a registry symlink that resolves to an existing directory.
 CONCRETE_EXT_TOOLS=../tools CONCRETE_EXT_ELAN=../bin/elan run_driver 'PROOF-EXTERNAL:' 0
 # Check obligations by phase, without relying on the placement of source lines.
-for phase in project population-theorems population-encoded exporter population-decls population-heads conleche-spec.ndjson nanoda-spec.ndjson; do
+for phase in project population-theorems population-encoded exporter population-decls population-heads conleche-spec.ndjson nanoda-spec.ndjson population-compiler-closure compiler-exporter conleche-compiler.ndjson nanoda-compiler.ndjson; do
   grep -qxF "$phase" "$PHASE_LOG"
 done
 printf 'lean4export\ncon-leche\nnanoda\n' > "$TMP/expected"

@@ -1,3 +1,13 @@
+import Concrete.Elab
+import Concrete.MIR
+import Concrete.Refusal
+import ConcreteSpec.Spec.Basics
+import ConcreteSpec.Spec.Outcome
+import ConcreteSpec.Spec.Scalar
+import ConcreteSpec.Spec.Slice0
+import ConcreteSpec.Spec.Slice1Semantics
+import ConcreteSpec.Spec.Slice1Syntax
+import ConcreteSpec.Spec.Surface0
 import Concrete.Memory
 import Concrete.BIR
 import Std.Data.HashMap.Lemmas

@@ -1,3 +1,6 @@
+import ConcreteSpec.Spec.Borrow
+import ConcreteSpec.Spec.Slice1Syntax
+import ConcreteSpec.Spec.Surface0
 import Concrete.Refusal
 import ConcreteSpec.Proofs.Surface0
 

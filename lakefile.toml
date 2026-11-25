@@ -1,6 +1,6 @@
 name = "concrete"
 version = "0.2.0"
-defaultTargets = ["ConcreteSpec"]
+defaultTargets = ["ConcreteSpec", "Concrete"]
 
 # The Lean Compiler Backend (LCB), pinned: slice 0's second backend. Its verified source semantics
 # (LeanCompilerBackend.Verified.Source) is imported, never restated; core Lean only, no Mathlib.
@@ -22,6 +22,12 @@ leanOptions = { autoImplicit = false }
 # design in Concrete/README.md.
 [[lean_lib]]
 name = "Concrete"
+leanOptions = { autoImplicit = false }
+
+# Reflection for trusted-base reporting, outside the verified compiler.
+[[lean_lib]]
+name = "ConcreteTooling"
+srcDir = "scripts/checks/compiler"
 leanOptions = { autoImplicit = false }
 
 [[lean_exe]]

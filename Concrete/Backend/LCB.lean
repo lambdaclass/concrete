@@ -1,3 +1,13 @@
+import Concrete.BIR
+import ConcreteSpec.Spec.Basics
+import ConcreteSpec.Spec.Scalar
+import ConcreteSpec.Spec.Slice1Syntax
+import LeanCompilerBackend.IR
+import LeanCompilerBackend.Validate
+import LeanCompilerBackend.Verified.BuildIdentity
+import LeanCompilerBackend.Verified.Canonical
+import LeanCompilerBackend.Verified.Plans
+import LeanCompilerBackend.Verified.Source
 import ConcreteSpec.Proofs.Basics
 import Concrete.Backend.Runtime
 import Concrete.BIR.Progress

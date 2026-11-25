@@ -1,3 +1,6 @@
+import ConcreteSpec.Spec.Basics
+import ConcreteSpec.Spec.Scalar
+import ConcreteSpec.Spec.Slice1Syntax
 import ConcreteSpec.Proofs.Basics
 import Concrete.BIR
 
