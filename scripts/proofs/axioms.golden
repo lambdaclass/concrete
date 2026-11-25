@@ -6,6 +6,10 @@ Applicative.toPure.eq_1
 BEq.beq.eq_1	
 Bind.bind.eq_1	
 Char.ofNatAux.congr_simp	
+Concrete.LL1.CheckedGrammar.isLL1	propext
+Concrete.LL1.CheckedGrammar.mk.inj	propext
+Concrete.LL1.CheckedGrammar.mk.injEq	propext
+Concrete.LL1.CheckedGrammar.mk.sizeOf_spec	propext
 Concrete.LL1.Examples.Nt.atom.sizeOf_spec	
 Concrete.LL1.Examples.Nt.expr.sizeOf_spec	
 Concrete.LL1.Examples.Nt.ofNat_ctorIdx	
@@ -15,10 +19,12 @@ Concrete.LL1.Examples.Tm.num.sizeOf_spec
 Concrete.LL1.Examples.Tm.ofNat_ctorIdx	
 Concrete.LL1.Examples.Tm.plus.sizeOf_spec	
 Concrete.LL1.Examples.Tm.rparen.sizeOf_spec	
+Concrete.LL1.Examples.followConflict_rejected	propext
 Concrete.LL1.Examples.instDecidableEqNt._proof_1	
 Concrete.LL1.Examples.instDecidableEqNt._proof_2	
 Concrete.LL1.Examples.instDecidableEqTm._proof_1	
 Concrete.LL1.Examples.instDecidableEqTm._proof_2	
+Concrete.LL1.Examples.unfactored_rejected	propext
 Concrete.LL1.First.brecOn	
 Concrete.LL1.Follow.brecOn	
 Concrete.LL1.Grammar.mk.inj	

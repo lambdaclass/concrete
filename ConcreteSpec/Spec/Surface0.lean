@@ -524,6 +524,9 @@ theorem grammar1_predicts_unique {i j : Nat} {lhs : Nonterminal} {look : Option 
     (pi : Predicts grammar1 i look) (pj : Predicts grammar1 j look) : i = j :=
   ll1_sound grammar1_ll1 hi hj pi pj
 
+def checkedGrammar0 : CheckedGrammar Terminal Nonterminal :=
+  ⟨grammar0, grammar0_ll1⟩
+
 /-- Productions recognized for the slice refusal, with a flag marking forms outside slice 0
 (decisions.md#decided-slice0-surface-2026-11-06). The unmarked productions also recognize
 the slice grammar. Contextual markers can still be identifiers. -/
@@ -566,6 +569,9 @@ def refusalGrammar : Grammar Terminal Nonterminal :=
   { start := .program, prods := refusalProductions.map Prod.fst }
 
 theorem refusalGrammar_ll1 : ll1 refusalGrammar = true := by decide
+
+def checkedRefusalGrammar : CheckedGrammar Terminal Nonterminal :=
+  ⟨refusalGrammar, refusalGrammar_ll1⟩
 
 structure Span where
   start : Nat
