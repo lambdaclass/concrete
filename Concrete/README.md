@@ -194,7 +194,7 @@ Concrete/
   Core.lean            thin interface to the spec's Core and the slice fragment predicates (until
                        the integrated Core lands; defines no Core of its own)
   Elab.lean            resolve + elaborate to the spec's Core (one stage edge), and its theorems
-  MIR.lean             Place MIR: syntax, semantics, WF, lowering (residual checks only), lower_correct
+  MIR.lean             Place MIR: syntax, semantics, lowering, lower_correct, lowerUnchecked_correct
   Memory.lean          Memory CFG: the Layout authority, block-offset memory, memory_correct
   BIR.lean             BIR: syntax, semantics, behaviour, WF, ssa, ssa_correct, addOvf_correct
   Backend/             the backend stage: everything after BIR, one file per backend
@@ -364,7 +364,6 @@ There are two target profiles: `x86_64-linux` and `aarch64-macos` (LCB's first n
 | P_lex | implementation | `lex_correct` |
 | P_parse | implementation | the generic table-parser theorem |
 | P_elab | implementation | ANF and resolution preservation |
-| P_lower | implementation | checked-evidence validity and MIR preservation |
 | P_ssa | implementation | SSA semantic preservation |
 | P_print | implementation | an LLVM-IR semantics; not planned for slice 0 |
 | P_toolchain[llvm] | toolchain | not planned |
@@ -414,10 +413,15 @@ theorem compile_correct (F : FrontendPremises) {B N T} (P : NativePremises B N T
    `Stages.prepareLCB out.bir = .ok f` for the function `f` passed to the backend.
 2. `F.lex`, `F.parse` and `elab_sound` give `Denotes src out.p`. `check_iff` gives `Checked`.
 3. `slice0_exits` gives `run … = .exit c` with `c < 256`; `run_exit_behaviour` then gives `Core.behaviour = .exited c`.
-4. `checked_wellScoped : Checked p → WellScoped p`. `WellScoped` includes in-range literals, because Core's `run` does not range-check literals.
-5. `admit_tokens_valid : Checked p → TokensValid p (admit p)`. The empty token set is valid for any well-scoped program.
-6. `lower_wf`, and `lower_correct : WellScoped p → TokensValid p t → MIR.behaviour (lower p t) = Core.behaviour p`. This holds for every well-scoped program with valid tokens, checked or not, so `200 + 56` with no tokens preserves `trapped .arithmeticOverflow`. The trap path is real.
-7. `memory_wf` and `memory_correct : m.WF → Mem.behaviour (memory m) = MIR.behaviour m`. Then `ssa_wf` and `ssa_correct : g.WF → BIR.behaviour (ssa g) = Mem.behaviour g`.
+4. `Admission.admit_never_traps` applies the spec's `slice0_never_traps` to the checked Core program.
+5. `MIR.lower_correct` preserves the Core outcome for successful admitted lowering. The
+   no-trap theorem justifies using wrapping addition when admission supplies a discharge token.
+6. `MIR.lowerUnchecked_correct` preserves the Core outcome for successful unchecked lowering,
+   including the `arithmeticOverflow` trap for `200 + 56`.
+7. `Memory.lower_correct` preserves the MIR outcome. `Memory.lower_admitted_correct` and
+   `Memory.lower_unchecked_correct` compose it with the MIR theorems to reach Memory directly from
+   Core. `Stages.compile_core_correct` applies the admitted result to any successful production
+   compilation. `P_ssa` still supplies the semantic preservation from Memory to BIR.
 8. `P.launch` excludes `killed`. `P.rt` gives a body result `r` with `β = r.behaviour`. `P.toolchain` gives `B.Means t r`, and `P.emit` gives `r.behaviour = BIR.behaviour out.bir = .exited c`. `P.live` gives existence.
 
 **Supporting theorems:**
@@ -667,6 +671,7 @@ These are internal. None blocks slice 0's correctness.
   - `lex_correct` (P_lex);
   - the generic table-parser theorem (P_parse);
   - `adapter_correct` and `emit_correct` (P_adapter, retired 2026-11-08);
+  - `MIR.lower_correct` and `MIR.lowerUnchecked_correct` (P_lower, retired);
   - a proof of the decoding entry against a libc model (P_rt).
 - **P_toolchain[lcb]** is retired by LCB's own C01–C03 work. LCB's verified profile names Apple AArch64 as its intended target. The `x86_64-linux` executable goes through LCB's compatibility pipeline, inside P_toolchain[lcb], until LCB certifies that target.
 - **Encoded result.** It works while LCB's verified profile has no calls, memory or traps. When it gains them, revisit the encoding: an external trap call, or a multi-function encoding.

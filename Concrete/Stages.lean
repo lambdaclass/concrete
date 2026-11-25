@@ -75,6 +75,34 @@ theorem compile_of_edges (input : Input) (tokens : List ConcreteSpec.Surface0.To
   simp [compile, stages, Pipeline.run, lex, memory, bind, Except.bind,
     hLex, hParse, hElab, hAdmit, hLower, hMem, hSSA] <;> rfl
 
+/-- Successful production compilation preserves the Core outcome through Memory. -/
+theorem compile_core_correct {input : Input} {out : Output}
+    (h : compile input = .ok out) :
+    let p := Core.toCore out.core.program
+    Memory.run out.memory = Core.run p (p.body.length + 1) := by
+  simp only [compile, stages, Pipeline.run, bind, Except.bind, memory] at h
+  cases hLex : lex input with
+  | error => simp [hLex] at h
+  | ok tokens =>
+    cases hParse : Parse.parse tokens with
+    | error => simp [hLex, hParse] at h
+    | ok ast =>
+      cases hElab : Elab.elaborate ast with
+      | error => simp [hLex, hParse, hElab] at h
+      | ok core =>
+        cases hAdmit : Admission.check core with
+        | error => simp [hLex, hParse, hElab, hAdmit] at h
+        | ok admitted =>
+          cases hLower : MIR.lower admitted with
+          | error => simp [hLex, hParse, hElab, hAdmit, hLower] at h
+          | ok mir =>
+            cases hSSA : SSA.lower input.path (Memory.lower mir) with
+            | error => simp [hLex, hParse, hElab, hAdmit, hLower, hSSA] at h
+            | ok bir =>
+              simp [hLex, hParse, hElab, hAdmit, hLower, hSSA, pure, Except.pure] at h
+              subst out
+              exact Memory.lower_admitted_correct hAdmit hLower
+
 /-- The LCB adapter and profile checks compose independently of the shared stages. -/
 theorem prepareLCB_of_edges (bir : BIR.Program)
     (f : LeanCompilerBackend.Verified.Source.Function)
