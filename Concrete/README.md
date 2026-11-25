@@ -601,13 +601,15 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
    Accepted examples `return 125;` and `return 134;` are in the corpus and must classify as exits. Slice 0 can't produce a real startup refusal, because it has no grants. The refusal and trap classifications are also exercised by comparator self-tests: stub images, and the trap via gate 6.
 
    The `llvm exit N lcb diagnostic STATUS CODE [MESSAGE]` row runs the public build command in
-   each backend mode and checks the native LLVM exit and the LCB diagnostic. The invalid-backend
-   CLI row checks the usage diagnostic and its exit status.
+   each backend mode and checks the native LLVM exit and the LCB diagnostic. The four CLI
+   diagnostic rows check the diagnostic and exit status for an invalid backend, a non-canonical
+   source path, an unknown target reported by the native helper, and a failed native helper.
 
    The compiler CLI exits 0 for a successful build or help, 1 for a source refusal
    (`SYNTAX`, `SLICE-0`, `CORE-CHECK`), 2 for an incomplete build, 3 for `USAGE`, and
    4 for `INTERNAL`. Incomplete diagnostics use `incomplete (reason)`. This includes
-   operational failures (`TOOL-FAILURE`) such as an unavailable native tool or failed link.
+   operational failures (`TOOL-FAILURE`) such as an unavailable native tool, a failed link,
+   or a failed CLI output write. If stderr cannot carry a diagnostic, the CLI still exits 2.
    Compiler invariant failures use `INTERNAL`.
 
    **Refused examples have their own leg.** The Lean `check` result, the compiler's refusal (with its rule) and the refusal certificate must agree with the row's `refuse 1 CODE [MESSAGE]` expectation. No executable exists for a refused example. A separate supported-subset coverage report lists every grammar production and Core form that the corpus exercises. A reject-all compiler fails, because every accepted example must exit with its status.

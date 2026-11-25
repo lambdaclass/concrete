@@ -148,7 +148,7 @@ def emitSource (path actual : String) (dir : System.FilePath) (expectation : Lis
     if toString e.exitCode == status && e.code == rule && (detail.isEmpty || e.message == message) then
       IO.println s!"ok   {path}: {e.code}: {e.message}"
       return 0
-    IO.eprintln s!"{path}: expected refusal {rule}{if detail.isEmpty then "" else ": " ++ message}, got {e.code}: {e.message}"
+    IO.eprintln s!"{path}: expected refusal {rule} (status {status}){if detail.isEmpty then "" else ": " ++ message}, got {e.code} (status {e.exitCode}): {e.message}"
     return 1
   | "refuse" :: _ :: rule :: _, .ok _ =>
     IO.eprintln s!"{path}: expected refusal {rule}, but compilation succeeded"

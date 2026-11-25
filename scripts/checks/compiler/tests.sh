@@ -80,6 +80,43 @@ check_cli_diagnostic() {
   fi
 }
 
+# Redirect inside the watchdog so the failing descriptor belongs to the CLI.
+check_cli_output_failure() {
+  local label=$1
+  local fd=$2
+  shift 2
+  local rc=0
+  local diagnostic="$work/ctl/$label.stderr"
+  bounded "$native_secs" bash -c '
+    fd=$1
+    shift
+    if [ -c /dev/full ]; then
+      exec 3>/dev/full
+    else
+      exec 3</dev/null
+    fi
+    if [ "$fd" = 1 ]; then
+      exec "$@" 1>&3 3>&-
+    else
+      exec "$@" 2>&3 3>&-
+    fi
+  ' _ "$fd" "$@" >"$work/ctl/$label.stdout" 2>"$diagnostic" || rc=$?
+  count=$((count + 1))
+  if [ "$rc" = 2 ] && {
+    if [ "$fd" = 1 ]; then
+      has_match -E '^TOOL-FAILURE: incomplete \(write stdout: .+\)$' <"$diagnostic"
+    else
+      [ ! -s "$diagnostic" ]
+    fi
+  }; then
+    echo "ok   $label: status $rc"
+  else
+    echo "FAIL $label: expected output failure on fd $fd with status 2, got status $rc"
+    cat "$diagnostic"
+    fail=1
+  fi
+}
+
 cli_bin="$root/.lake/build/bin/concrete"
 cli_project=$(cd "$(dirname "$test_manifest")/.." && pwd)
 project_cli=(bash -c 'cd "$1" && shift && exec "$@"' _ "$cli_project" "$cli_bin")
@@ -106,7 +143,7 @@ check_cli_case() {
       ln -s "$root/.lake" "$project/.lake"
       cli=(bash -c 'cd "$1" && shift && exec "$@"' _ "$project" "$cli_bin")
       if [ "$program" = cli:unknown-target ]; then
-        printf '%s\n' '[ "$1" = target ] || exit 99' 'printf invalid-target' >"$helper"
+        printf '%s\n' '[ "$1" = target ] || exit 99' 'echo invalid-target' >"$helper"
       else
         printf '%s\n' "if [ \"\$1\" = target ]; then echo '$target'; exit; fi" \
           'echo "native helper control" >&2' 'exit 17' >"$helper"
@@ -202,7 +239,7 @@ if [ "${CONCRETE_TEST_MANIFEST_SKIP_CONTROLS:-0}" != 1 ]; then
   manifest_control wrong-trap-kind "overflow: expectation mismatch: trap site 0 has kind ConcreteSpec.Trap.arithmeticOverflow, expected divisionByZero" wrong_trap_kind
   manifest_control missing-row "program without a manifest row: answer" missing_row
   manifest_control nonexistent-program "manifest row names no program: no_such_program" nonexistent_program
-  manifest_control wrong-source-refusal "expected refusal CORE-CHECK, got SYNTAX" wrong_source_refusal
+  manifest_control wrong-source-refusal "expected refusal CORE-CHECK (status 1), got SYNTAX (status 1)" wrong_source_refusal
 fi
 
 if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" != 1 ]; then
@@ -255,6 +292,17 @@ else
   echo "FAIL CLI help: expected status 0, usage on stdout, and empty stderr" >&2
   fail=1
 fi
+check_cli_output_failure cli-help-stdout 1 "$cli_bin" help
+check_cli_output_failure cli-usage-stderr 2 "$cli_bin" invalid-command
+
+# A successful helper emits enough stdout to fail during the write even when buffered.
+helper_project="$work/ctl/output-project"
+mkdir -p "$helper_project/tests/slice0" "$helper_project/scripts/checks/lib"
+cp "$root/tests/slice0/answer.con" "$helper_project/tests/slice0/"
+printf '%s\n' 'head -c 65536 /dev/zero | tr "\000" x' >"$helper_project/scripts/checks/lib/slice0_native.sh"
+check_cli_output_failure cli-helper-stdout 1 bash -c 'cd "$1" && shift && exec "$@"' \
+  _ "$helper_project" "$cli_bin" build tests/slice0/answer.con -o "$helper_project/out" --backend llvm
+
 "${emitter[@]}" backend-profile
 "${emitter[@]}" loop "$work/ctl/loop" "$target"
 expected_timeout check control-loop "$work/ctl/loop" 1 1
