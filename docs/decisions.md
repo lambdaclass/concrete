@@ -15,7 +15,7 @@ the earlier behaviour, the answer below governs, and the code follows as its new
 The shape of Core was approved provisionally on 2026-11-05 ([stage A2a](#decided-2026-11-05)): it binds the design, and the owner freezes Core at stage A2c, after the four design theorems are proved against the proposed `Spec.lean` and the integration stage A2i (2026-11-06) is accepted (freeze timing revised to 0.1 on [2026-11-22](#decided-2026-11-22-roadmap-reordering)). The project and architecture decisions are recorded here too, [below](#decided-project).
 
 <a id="decided-2026-11-25-freeze-and-grammar"></a>
-## Decided 2026-11-25: Phase T freeze, grammar approval and slice scheduling
+## Decided 2026-11-25: Phase T freeze, grammar approval, slice scheduling and executable evidence
 
 Status: decided
 Source: owner
@@ -66,13 +66,19 @@ start slice 1 in parallel
 Owner, verbatim (immediately after):
 but never do more than two stages in parallel
 remember this
+
+--- Later on 2026-11-25. Owner, verbatim:
+can we also make sure the binary produces has the proofs so that anybody can check it and see the facts? do you think this makes sense?
+The coordinator presented two options: embed the full proof or embed the facts and a hash with the full proof shipped alongside.
+Owner, verbatim:
+i think the hash is better? what do yhou think
+After Codex and agy design reviews, the coordinator agreed to embed the facts and bind the separate proof bundle by digest in the shared release-evidence format.
 ~~~
 
 1. The Phase T freeze remains in effect for R-0692, R-0693 and the remaining R-0710 items.
-   A recorded defect that actually reached `main` can justify restarting one of those
-   items. The coordinator makes that call and reports it to the owner. Agents scope the
-   restart to the work required by the defect and cite its issue record in the restarting
-   branch. Bug fixes with regression tests inside existing checks and the approved R-0724
+   A recorded bug that reached `main` may justify restarting a paused item when the bug
+   shows the item is needed. The coordinator makes that call and reports it to the owner.
+   Agents scope the restart to that bug and cite its issue record in the restarting branch. Bug fixes with regression tests inside existing checks and the approved R-0724
    proof and CI drag cleanup remain allowed regardless. This supersedes the blanket freeze
    in item 2 of the [November 22 direction](#decided-2026-11-22-direction) and specifies the
    exception in item 5 of the [November 22 roadmap reordering](#decided-2026-11-22-roadmap-reordering).
@@ -91,12 +97,30 @@ remember this
    Slice 3's parser is written. Slice 1 proceeds on its own approval. The combined surface
    freezes at 0.1 alongside the Core freeze in Slice 11. Later slices extend it.
 3. Slice 1 (`B1`) starts while the rest of Slice 0's `B0a` is being finished. This supersedes
-   the previous Slice 1 start order under the [November 22 roadmap reordering](#decided-2026-11-22-roadmap-reordering).
+   the sequential start requirement in the [November 6 vertical-slices decision](#decided-project-vertical-slices-2026-11-06),
+   which the coordinator described above. Only the start order changes. Each slice must
+   still be fully proven end to end before it closes. The [November 22 roadmap reordering](#decided-2026-11-22-roadmap-reordering)
+   describes the `B0a`/`B0b` staging.
 4. As a standing rule, at most two roadmap slices may be in progress at any time. The owner's
    “stages” means slices in the roadmap. The active slices are Slice 0's `B0a` remainder and
    Slice 1. Work for a later slice is limited to proposals for the owner until an active slice
    closes.
-5. The standing review requirement is recorded in [AGENTS.md](../AGENTS.md#review).
+5. The owner extended the [standing project review rule](#decided-project-review).
+   Codex and agy review owner-facing questions, plans, grammars and branches before
+   publication or delivery to the owner. Use Gemini Neon for agy when available.
+   [AGENTS.md](../AGENTS.md#review) records the workflow.
+6. To let anyone inspect the facts and check the evidence, executables carry a compact
+   descriptor with the facts, build identity and typed digests of the source, BIR,
+   backend input, proof bundle and canonical executable image. The descriptor states
+   the binding kind explicitly: attested digest, reproducible rebuild or proved backend.
+   A digest identifies the artifact. A correspondence claim requires the evidence
+   appropriate to its binding kind.
+   The full proof bundle travels separately, bound by its digest, in the same evidence
+   format used by the R-0353 release verifier and the R-0201 audit dossier. Under R-0552,
+   the B0a certificate and artifact-binding work designs the Slice 0 certificate and facts
+   formats to be deterministic and embeddable. [R-0729](../ROADMAP.md#r-0729) adds
+   executable section injection and a verifier command later. The command spelling is
+   an owner decision.
 
 The coordinator withdrew the backend size-limit diagnostics question. The
 [recovered item 13](#recovered-29-13) and the
@@ -1493,7 +1517,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   the full slices thought and ranked in order by you, codex, kimi and agy, they should decide it
   together"; the agreed order was approved with "ok do everything"). The language grows in thin vertical slices, each fully proven end to end
   (source, every stage, BIR, both backends, facts and diagnostics, conformance examples) before
-  the next starts, so every construct is proven on the whole path as soon as it lands and no stage
+  the next starts under the original schedule, so every construct is proven on the whole path as soon as it lands and no stage
   runs ahead of its proofs. "Fully proven" means proven under the named premises the
   [backend order](#decided-project-proof-infrastructure) permits: the source-to-BIR stages are
   proved; the LLVM build stays unverified and qualified by tests; the LCB path carries named premises
@@ -1509,7 +1533,9 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   audited, and a real need for concurrency or foreign function values goes to the owner (R-0604).
   Revised 2026-11-07 by the [final-slice decision](#decided-2026-11-07-final-slices): the approved
   order gains slice 28 for concurrency, with ethlambda and the encrypted tunnel after it. Slice 27
-  keeps httpget, tcpserve and the sequential web server.
+  keeps httpget, tcpserve and the sequential web server. The [November 25 decision](#decided-2026-11-25-freeze-and-grammar)
+  supersedes the sequential start requirement and retains the end-to-end proof requirement
+  at closure.
 - <a id="decided-2026-11-07-step-bounds"></a>**Step and time bounds** (owner, 2026-11-07: "ok go
   ahead all yes then as you said right", approving the recorded recommendation). This answers when
   quantitative bounds arrive and what they mean. The step-counting cost model is built with loops at
@@ -4523,7 +4549,7 @@ the design is done so that a) everything can be proven b) we can find get errors
   "have everything reviewed by the other llms"): every branch gets an agy review beside the
   Codex and Kimi reviews. agy cannot read files, so its prompt carries the diff and the context it
   needs and ends with a required verdict line. (The coordinator's relay added that agy can also act
-  as a writer.)
+  as a writer.) Extended by the [November 25 review decision](#decided-2026-11-25-freeze-and-grammar).
 - <a id="decided-project-throughput"></a>**Development throughput** (2026-10-22). The development
   feedback loop (landing, review, CI) is a priority track beside the main sequence
   ([record](archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-10-22--development-throughput-priority)).

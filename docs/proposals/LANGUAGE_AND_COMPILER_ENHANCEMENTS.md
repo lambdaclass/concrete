@@ -10,8 +10,9 @@ Every item is evaluated against [docs/PHILOSOPHY.md](../PHILOSOPHY.md#the-rules)
 
 Under [decided-2026-11-22-roadmap-reordering](../decisions.md#decided-2026-11-22-roadmap-reordering) and [decided-2026-11-22-llm-inference-showcase-and-float-order](../decisions.md#decided-2026-11-22-llm-inference-showcase-and-float-order), [ROADMAP.md](../../ROADMAP.md) adopts five structural ordering changes plus the Slice 18/19 float swap and `concrete-llm` showcase:
 
-This section records the November 22 reordering. For subsequent changes, see the
-[November 25 decision](../decisions.md#decided-2026-11-25-freeze-and-grammar) and the
+The list below records the 2026-11-22 plan. For subsequent changes, see the
+[November 23 answers](../decisions.md#decided-2026-11-23-slice0-and-roadmap-answers),
+the [November 25 decision](../decisions.md#decided-2026-11-25-freeze-and-grammar) and the
 roadmap's [slice ordering](../../ROADMAP.md#slice-ordering) and
 [Phase T restart rule](../../ROADMAP.md#phase-t-restart-rule).
 
@@ -19,7 +20,7 @@ roadmap's [slice ordering](../../ROADMAP.md#slice-ordering) and
 2. **Split `B0` and move `LP0` after Slice 5:** `B0a` delivers the working Slice-0 spine (lex/parse → elaborate → Core → MIR → BIR → LLVM + Lean oracle match + per-lowering proofs + unfrozen `0-dev` `concrete facts`); `B0b` adds unverified LCB (`R-0578`), the BIR→LCB adapter proof (`R-0579`), ASan (`R-0301`) and fuzzing (`R-0272`) after `B0a` in parallel with early slices (`B1` and Slices 2–4, under the early-slice staging rule where Slices 0–4 qualify first on LLVM + Lean oracle and close full dual-backend parity across Slices 0–5 before `LP0`); `LP0` (`R-0572`) moves after Slice 5 to prove branches, loops, calls, stack frames and the multi-frame trap ABI once; `R-0702`, `R-0699`, `R-0577` and freezing the JSON schema (`R-0178`) move from per-PR Slice-0 blockers to nightly / 0.1.
 3. **Reorder Phase C (Slices 6–11):** land structs + enums/`match` + `Option`/`Result`/`checked_*` (Slice 6), borrows + arrays + `R-0712` bitmask/modulo/shift rules (Slice 7), minimal modules & `const` (Slice 8), generics + traits/`Destroy`/`defer` (Slice 9), the proof surface + `R-0495` safe-subset `concrete extract-lean` + `R-0201` `concrete diff` (Slice 10), and authority + console/UTF-8 + files (`Fs`) + `R-0717` `concrete sim` (`Fs`/Entropy leg) ending at **0.1** (Slice 11). DWARF (`R-0587`) and the formatter move after 0.1 (Slice 12).
 4. **Reorder Phase D (Slices 12–21):** land allocation (Slice 12), `HeapArray` (Slice 13), `Vec`/`String` (Slice 14), `OrderedMap`/`HashMap` (Slice 15), raw pointers/`trusted` (Slice 16), FFI/RocksDB (Slice 17, earliest `LD` / `legacy/` deletion) and floats (`f32`/`f64`, plus `concrete-llm` CPU & Concrete+Metal local inference showcase at Slice 18) ahead of function values + `R-0601` contracts (Slice 19), followed by clock/network/web server + `concrete sim` Time/Network faulting (Slice 20) and concurrency (Slice 21).
-5. **Pull forward high-leverage checks and pause new Phase T meta-tooling:** pull `R-0712` (Slice 7), `R-0495` safe subset (Slice 10), `R-0201` `concrete diff` (Slice 10) and `R-0717` `concrete sim` `Fs`/Entropy leg (Slice 11 / 0.1) earlier; pause new `Phase T` governance meta-tooling (`R-0692`, `R-0693`, remaining `R-0710` items) under the [Phase T restart rule](../../ROADMAP.md#phase-t-restart-rule) while running `R-0724` to cut existing proof/CI drag.
+5. **Pull forward high-leverage checks and pause new Phase T meta-tooling:** pull `R-0712` (Slice 7), `R-0495` safe subset (Slice 10), `R-0201` `concrete diff` (Slice 10) and `R-0717` `concrete sim` `Fs`/Entropy leg (Slice 11 / 0.1) earlier; pause new `Phase T` governance meta-tooling (`R-0692`, `R-0693`, remaining `R-0710` items) unless a real bug reaches main, while running `R-0724` to cut existing proof/CI drag.
 
 ## Roadmap mapping at a glance
 
