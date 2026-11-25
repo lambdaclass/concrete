@@ -76,3 +76,4 @@ cli_invalid_backend	cli:invalid-backend	diagnostic 3 USAGE usage: concrete build
 cli_invalid_path	cli:invalid-path	diagnostic 3 USAGE expected a project-relative .con path	slice0
 cli_unknown_target	cli:unknown-target	diagnostic 4 INTERNAL compiler failure: native helper returned an unknown target: invalid-target	slice0
 cli_native_helper_failure	cli:native-helper-failure	diagnostic 2 TOOL-FAILURE incomplete (native build helper exited with status 17: native helper control)	slice0
+cli_build_input_write_failure	cli:build-input-write-failure	diagnostic 2 TOOL-FAILURE	slice0

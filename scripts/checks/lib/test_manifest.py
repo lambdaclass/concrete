@@ -23,6 +23,7 @@ CLI_CASES = {
     "cli:invalid-path",
     "cli:unknown-target",
     "cli:native-helper-failure",
+    "cli:build-input-write-failure",
 }
 SLICE_RE = re.compile(r"[a-z0-9_]+")
 RULE_RE = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*(?:@[0-9]+)?")

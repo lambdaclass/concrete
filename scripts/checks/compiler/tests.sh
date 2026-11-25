@@ -133,26 +133,71 @@ check_cli_case() {
   case "$program" in
     cli:invalid-backend) backend=invalid ;;
     cli:invalid-path) source="./$source" ;;
-    cli:unknown-target|cli:native-helper-failure)
+    cli:unknown-target|cli:native-helper-failure|cli:build-input-write-failure)
       # Substitute the native helper only in a private project. The CLI still runs
       # its production frontend, LCB admission, and helper invocation.
       local project="$d/project"
       local helper="$project/scripts/checks/lib/slice0_native.sh"
       mkdir -p "$project/tests/slice0" "$(dirname "$helper")"
       cp "$root/$source" "$project/$source"
+      cp "$root/scripts/checks/lib/slice0_write.py" "$(dirname "$helper")/"
       ln -s "$root/.lake" "$project/.lake"
       cli=(bash -c 'cd "$1" && shift && exec "$@"' _ "$project" "$cli_bin")
       if [ "$program" = cli:unknown-target ]; then
         printf '%s\n' '[ "$1" = target ] || exit 99' 'echo invalid-target' >"$helper"
+      elif [ "$program" = cli:build-input-write-failure ]; then
+        backend=llvm
+        mkdir -p "$d/out"
+        local device=/dev/full
+        if [ ! -c "$device" ]; then device=/dev/null; fi
+        ln -s "$device" "$d/out/llvm.ll"
+        printf '%s\n' ': > helper-invoked' >"$helper"
       else
         printf '%s\n' "if [ \"\$1\" = target ]; then echo '$target'; exit; fi" \
-          'echo "native helper control" >&2' 'exit 17' >"$helper"
+          'printf partial >"$1/lcb.exe"' 'echo "native helper control" >&2' 'exit 17' >"$helper"
       fi
       ;;
     *) echo "FAIL $name: unknown CLI case $program" >&2; fail=1; return ;;
   esac
   check_cli_diagnostic "$name" "$d/cli" "$expect" "${cli[@]}" \
     build "$source" -o "$d/out" --backend "$backend"
+  if [ "$program" = cli:native-helper-failure ] && [ -n "$(find "$d/out" -mindepth 1 -print)" ]; then
+    echo "FAIL $name: failed native build left files in the output directory"
+    fail=1
+  fi
+  if [ "$program" = cli:build-input-write-failure ]; then
+    if [ ! -L "$d/out/llvm.ll" ] || [ "$(readlink "$d/out/llvm.ll")" != "$device" ]; then
+      echo "FAIL $name: build changed the destination symlink"
+      fail=1
+    fi
+
+    # Force an actual staged file write to fail. Capture the CLI's streams in
+    # pipes so the file-size limit applies to build files and not the diagnostic.
+    check_cli_diagnostic "$name (staged write)" "$d/staged" "$expect" python3 -c '
+import resource
+import signal
+import subprocess
+import sys
+
+def limit_file_size():
+    signal.signal(signal.SIGXFSZ, signal.SIG_IGN)
+    resource.setrlimit(resource.RLIMIT_FSIZE, (0, 0))
+
+result = subprocess.run(sys.argv[1:], preexec_fn=limit_file_size, capture_output=True)
+sys.stdout.buffer.write(result.stdout)
+sys.stderr.buffer.write(result.stderr)
+sys.exit(result.returncode)
+' "${cli[@]}" build "$source" -o "$d/staged-out" --backend "$backend"
+    if [ -e "$d/project/helper-invoked" ]; then
+      echo "FAIL $name: native build helper ran after a build output failure"
+      fail=1
+    fi
+    if ! has_match -E '^TOOL-FAILURE: incomplete \(write .*/llvm\.ll: checked writer exited' <"$d/staged.stderr" ||
+        [ ! -d "$d/staged-out" ] || [ -n "$(find "$d/staged-out" -mindepth 1 -print)" ]; then
+      echo "FAIL $name: staged write failure did not identify the failed input and clean up"
+      fail=1
+    fi
+  fi
 }
 
 # The backend-specific expectation exercises the public driver and its native build policy.
@@ -299,6 +344,7 @@ check_cli_output_failure cli-usage-stderr 2 "$cli_bin" invalid-command
 helper_project="$work/ctl/output-project"
 mkdir -p "$helper_project/tests/slice0" "$helper_project/scripts/checks/lib"
 cp "$root/tests/slice0/answer.con" "$helper_project/tests/slice0/"
+cp "$root/scripts/checks/lib/slice0_write.py" "$helper_project/scripts/checks/lib/"
 printf '%s\n' 'head -c 65536 /dev/zero | tr "\000" x' >"$helper_project/scripts/checks/lib/slice0_native.sh"
 check_cli_output_failure cli-helper-stdout 1 bash -c 'cd "$1" && shift && exec "$@"' \
   _ "$helper_project" "$cli_bin" build tests/slice0/answer.con -o "$helper_project/out" --backend llvm

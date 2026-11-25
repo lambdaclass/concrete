@@ -19,6 +19,56 @@ private def writeOutput (name : String) (getStream : BaseIO IO.FS.Stream) (text 
     stream.putStr text
     stream.flush
 
+private def checkedWriter : String := "scripts/checks/lib/slice0_write.py"
+
+private def writeBuildInput (path : System.FilePath) (text : String) : ExceptT Refusal IO Unit :=
+  toolIO s!"write {path}" do
+    let result ← IO.Process.output { cmd := "python3", args := #[checkedWriter, path.toString] } (some text)
+    if result.exitCode != 0 then
+      throw (IO.userError s!"checked writer exited with status {result.exitCode}: {result.stderr.trimAscii}")
+
+private def checkBuildDestination (path : System.FilePath) : IO Unit := do
+  let metadata ← try
+    some <$> path.symlinkMetadata
+  catch
+    | .noFileOrDirectory .. => pure none
+    | e => throw e
+  if let some info := metadata then
+    unless info.type == .file do
+      throw (IO.userError s!"build output is not a regular file: {path}")
+
+private def buildNative (dir : System.FilePath) (backend : Option String)
+    (helper lcb : String) (inputs : Array (String × String)) (artifacts : Array String) :
+    ExceptT Refusal IO Unit := do
+  let names := inputs.map Prod.fst ++ artifacts
+  let staging ← toolIO "prepare build outputs" do
+    IO.FS.createDirAll dir
+    for name in names do
+      checkBuildDestination (dir / name)
+    let path ← IO.Process.run {
+      cmd := "mktemp", args := #["-d", "--", (dir / ".concrete-build.XXXXXXXX").toString] }
+    pure (System.FilePath.mk (path.dropEnd 1 |>.toString))
+  try
+    for (name, text) in inputs do
+      writeBuildInput (staging / name) text
+    let args := #[helper, staging.toString, lcb] ++ backend.toArray
+    let child ← toolIO "run native build helper" (IO.Process.output { cmd := "bash", args })
+    if child.exitCode != 0 then
+      let detail := child.stderr.trimAscii.toString
+      throw (.toolFailure s!"native build helper exited with status {child.exitCode}{if detail.isEmpty then "" else s!": {detail}"}")
+    if !child.stdout.isEmpty then writeOutput "stdout" IO.getStdout child.stdout
+    if !child.stderr.isEmpty then writeOutput "stderr" IO.getStderr child.stderr
+    toolIO "publish build outputs" do
+      -- Check the entire set before exposing any files from the private build.
+      for name in names do
+        unless (← (staging / name).symlinkMetadata).type == .file do
+          throw (IO.userError s!"expected a regular build output: {name}")
+        checkBuildDestination (dir / name)
+      for name in names do
+        IO.FS.rename (staging / name) (dir / name)
+  finally
+    toolIO "remove build staging directory" (IO.FS.removeDirAll staging)
+
 private def report (refusal : Refusal) : IO UInt32 := do
   let message := match refusal with
     | .syntaxError detail => "syntax error: " ++ detail
@@ -49,20 +99,15 @@ private def build (source dir : System.FilePath) (backend : Option String) :
       | throw (.internal s!"native helper returned an unknown target: {host}")
     let text ← liftExcept (LCB.assemble target f)
     pure (lcb.toString, some text)
-  toolIO "write build inputs" do
-    IO.FS.createDirAll dir
-    if backend != some "lcb" then
-      IO.FS.writeFile (dir / "llvm.ll") (LLVM.module out.bir)
-    if let some text := asm then
-      IO.FS.writeFile (dir / "lcb_body.s") text
-      IO.FS.writeFile (dir / "lcb_rt.ssa") (Runtime.qbe out.bir.sites)
-  let args := #[helper, dir.toString, lcb] ++ backend.toArray
-  let child ← toolIO "run native build helper" (IO.Process.output { cmd := "bash", args })
-  if child.exitCode != 0 then
-    let detail := child.stderr.trimAscii.toString
-    throw (.toolFailure s!"native build helper exited with status {child.exitCode}{if detail.isEmpty then "" else s!": {detail}"}")
-  if !child.stdout.isEmpty then writeOutput "stdout" IO.getStdout child.stdout
-  if !child.stderr.isEmpty then writeOutput "stderr" IO.getStderr child.stderr
+  let mut inputs := #[]
+  let mut artifacts := #[]
+  if backend != some "lcb" then
+    inputs := inputs.push ("llvm.ll", LLVM.module out.bir)
+    artifacts := artifacts ++ #["llvm.o", "llvm.exe"]
+  if let some text := asm then
+    inputs := inputs ++ #[("lcb_body.s", text), ("lcb_rt.ssa", Runtime.qbe out.bir.sites)]
+    artifacts := artifacts ++ #["lcb_body.o", "lcb_rt.s", "lcb_rt.o", "lcb.exe"]
+  buildNative dir backend helper lcb inputs artifacts
 
 def main (args : List String) : IO UInt32 := do
   let result ← try
