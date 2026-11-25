@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.Ident
 import ConcreteSpec.Proofs.Basics
 import ConcreteSpec.Spec.Basics
 import ConcreteSpec.Spec.Slice1Checker
@@ -264,8 +265,11 @@ theorem stmtOut_iff {Δ : Decls} {Γ Γ' : Ctx} {s : Stmt} :
       simp [stmtOut, tyOf_iff.mpr ht, hk, hd, patOkB_iff.mpr hp, uses_iff.mpr hu, hf]
 
 theorem bodyOkB_iff {Δ : Decls} :
-    ∀ {Γ : Ctx} {ss : List Stmt} {r : Atom}, bodyOkB Δ Γ ss r = true ↔ BodyOk Δ Γ ss r
-  | Γ, [], r => by
+    ∀ {Γ : Ctx} {ss : List Stmt} {r : Terminator}, bodyOkB Δ Γ ss r = true ↔ BodyOk Δ Γ ss r
+  | Γ, [], .abort site => by
+    simp only [bodyOkB, List.all_eq_true]
+    exact ⟨BodyOk.abort, fun h => by cases h with | abort h => exact h⟩
+  | Γ, [], .ret r => by
     simp only [bodyOkB, Bool.and_eq_true, beq_iff_eq]
     constructor
     · rintro ⟨ht, hu⟩

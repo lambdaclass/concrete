@@ -1,4 +1,5 @@
 import ConcreteSpec.Spec.Basics
+import ConcreteSpec.Spec.Ident
 
 /-!
 # Types and slice-1 syntax
@@ -6,22 +7,12 @@ import ConcreteSpec.Spec.Basics
 PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). Part of `ConcreteSpec.Spec`;
 see `ConcreteSpec/README.md`.
 
-## Slice 1
+## Slice 1 and the wider Core
 
-What slice 1 contains:
-
-* the scalar types: the eight integer types (TYPE-19) and `bool`;
-* `let` with a type, a struct literal, and a struct-destructuring `let` (PAT-5);
-* struct declarations, `Copy` or not (TYPE-14), with scalar fields; the slice's central case is
-  an empty struct without `Copy`, moved and then consumed by a destructuring `let`;
-* the use-after-move refusal (OWN-1), consumption before exit (OWN-2) and used bindings (OWN-5);
-* one checked operation, integer `+` (ARITH-3), which traps on overflow;
-* evidence-required admission (no hidden traps, decision of 2026-11-06, Q1): `+` is accepted only
-  when the facts the checker keeps (known values, Q6.2, and type bounds) prove the sum fits; every
-  other `+` is refused, so an accepted program never traps (`checked_no_implicit_traps`). This
-  subsumes the refusal of proven violations (Q6.1, Q6.4; ARITH-13, OD118);
-* one function, `main`, with no parameters, whose body is a list of `let` statements followed by
-  `return a` with `a : u8` (STMT-7, STMT-9).
+Surface1 admits the slice-1 subset of this Core: u8, checked addition, and nominal empty
+non-Copy structs. It maps typed lets, explicit moves, consuming destructuring and the final
+return or abort to the definitions below. The wider Core also models other scalar types and
+structs with fields for the foundation proofs.
 
 Core's binding form (Q9.1):
 
@@ -36,21 +27,10 @@ Core's binding form (Q9.1):
   per type (owner-confirmed 2026-11-05): `copy` is allowed only on a Copy type and `move` only on a
   linear one; `move` of a Copy value and `copy` of a linear value are both refused.
 
-What slice 1 is not:
-
-* It is not a parser or an elaborator. Programs are given as Core abstract syntax. How surface
-  literals receive a type (ARITH-2, TYPE-4), how an unannotated `let` gets its type, how names
-  become identities and how nested expressions become A-normal form are elaboration rules for a
-  later file, which must be proved to produce this syntax.
-* Nothing outside slice 1 is modelled in this part: no calls, no branches, no loops, no
-  references, no heap, no capabilities, no `defer`. Struct fields are scalars only. Parts 3–7
-  model the pieces of those that their theorems need.
-
-The judgments (`HasType`, `UseAtom`, `Uses`, `StmtOk`, `BodyOk`, `Checked`) are inductive
-relations, independent of the executable checker (`check`); `check_iff` proves the two agree. The
-semantics is a total, fuel-indexed evaluator (`run`) whose outcome separates exit, trap, stuck and
-running out of fuel (STMT-1). `Exec` is the fuel-free form of the same statement-level evaluator:
-adequacy and determinism are about fuel, not an independent cross-check of expression evaluation.
+The declarative judgments are independent of the executable checker (`check`).
+`check_iff` proves agreement. The fuel-indexed evaluator (`run`) separates return, written
+abort, implicit trap, stuckness and fuel exhaustion. `Exec` states the same execution without
+a fuel index.
 
 Statically known values (Q6.2, as amended by the owner on 2026-11-05). The checker tracks an
 abstract value for each binding: unknown, a known scalar, or a struct whose fields each carry
@@ -64,17 +44,13 @@ source. So `let Pair { a: x, b: y } = Pair { a: 200, b: 100 }; x + y` is refused
 nothing is tracked through mutable state (slice 1 has none), along branches or paths, through
 user-function calls, or through calls the table does not name. Slice 1 judges Core, where every
 `let` is immutable and a binding's origin is not recorded, so a temporary the elaborator introduces
-gets the same fact as a source binding of the same expression. The remaining exclusion, that
-acceptance of a source program does not depend on how the elaborator names its subexpressions, is
-an obligation on the source-to-Core elaboration relation, which slice 1 does not define; it is not
-proved here. In slice 1 struct fields are scalars, so the
-rule's recursive form (a struct field holding a struct, nested patterns, tuples) has only its
-one-level instance here. An input is not known, only bounded by its type: `add100` and
+gets the same fact as a source binding of the same expression. The wider Core has scalar fields,
+so these field facts have one level. An input is bounded by its type: `add100` and
 `partialUnknownRefused` trap for some input values and are refused (no hidden traps, decision of
 2026-11-06), and `add0`, whose sum fits for every input, is accepted. The table has more entries (module constants, the
 six named wrapping/saturating operations, lossless `as`) that slice 1 has no syntax for. The
-refusal applies to all written code, including trusted and unreachable code (Q6.4); slice 1 has
-neither, so its examples show only reachable positions and a discarded one (`overflowDropped`).
+surface rejects statements after a terminal action. The wider Core examples also cover discarded
+results (`overflowDropped`).
 -/
 
 namespace ConcreteSpec
@@ -192,13 +168,17 @@ inductive Stmt where
   | letStruct (s : Name) (pat : List (Name × Binder)) (e : Expr)
   deriving DecidableEq
 
-/-- A slice-1 program: struct declarations and `fn main() -> u8 { body; return ret; }` (STMT-7:
-`main` returns `u8` and may declare no grants; STMT-9: the body ends in `return`). In A-normal form
-`return` takes an atom. -/
+/-- A straight-line body's final action. Abort takes its written site and performs no reads. -/
+inductive Terminator where
+  | ret (value : Atom)
+  | abort (site : Core.SiteId)
+  deriving DecidableEq
+
+/-- Core for one straight-line main. The body contains bindings and ends in return or abort. -/
 structure Program where
   decls : Decls
   body : List Stmt
-  ret : Atom
+  ending : Terminator
 
 
 

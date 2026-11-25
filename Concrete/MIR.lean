@@ -241,16 +241,17 @@ private theorem lowerBody_correct {sites tokens} {ss : List Core.Stmt} {body : L
     (env : List (ConcreteSpec.Var × Int)) (ret : Core.Atom)
     (safe : tokens = [] ∨
       ConcreteSpec.runBody [] (ss.length + 1) (coreEnv env) (ss.map ConcreteSpec.Slice0.Stmt.toCore)
-        ret.toCore ≠ .trap .arithmeticOverflow) :
+        (.ret ret.toCore) ≠ .trap .arithmeticOverflow) :
     runFrom env body ret =
       ConcreteSpec.runBody [] (ss.length + 1) (coreEnv env) (ss.map ConcreteSpec.Slice0.Stmt.toCore)
-        ret.toCore := by
+        (.ret ret.toCore) := by
   induction ss generalizing body env with
   | nil =>
     change Except.ok [] = Except.ok body at h
     cases h
     simp only [runFrom, List.foldlM_nil, pure, Except.pure, bind, Except.bind,
-      List.length_nil, List.map_nil, ConcreteSpec.runBody, ConcreteSpec.retOutcome, evalAtom_coreEnv]
+      List.length_nil, List.map_nil, ConcreteSpec.runBody, ConcreteSpec.finish,
+      ConcreteSpec.retOutcome, evalAtom_coreEnv]
     cases ret with
     | lit => rfl
     | var x => simp only [value]; cases env.lookup x <;> rfl
