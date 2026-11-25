@@ -1,6 +1,7 @@
 import Concrete.Backend.LLVMIR
 import Concrete.Backend.Runtime
 import ConcreteSpec.Proofs.Scalar
+import Std.Data.HashMap.Lemmas
 
 /-!
 # BIR → LLVM text (UNVERIFIED)
@@ -150,6 +151,48 @@ def body (p : Program) : List Item :=
   ((indexed p.blocks).flatMap fun (j, b) =>
     [.label (.block j)] ++ phis p j b ++ b.insts.flatMap inst ++ term j b.term) ++
   [.endFunction]
+
+private abbrev Incoming := Std.HashMap Nat (List (Nat × Array Operand))
+
+private def insertIncoming (edge : Nat × Nat × List Operand) (index : Incoming) : Incoming :=
+  let (target, pred, args) := edge
+  index.insert target ((pred, args.toArray) :: index[target]?.getD [])
+
+private def phisIndexed (incoming : List (Nat × Array Operand)) (b : Block) : List Item :=
+  (indexed b.params).map fun (k, (r, pty)) =>
+    let arms := incoming.map fun (pred, args) =>
+      (operandAt ((ty pty).integerWidth.getD 1) (args[k]?.getD (.imm .u8 0)), Label.block pred)
+    .instruction (.phi (.register r) (ty pty) arms)
+
+private def bodyIndexed (p : Program) : List Item :=
+  let incoming := (edges p).foldr insertIncoming ∅
+  declarations p ++ [.blank, .define false (.integer .u32) .body []] ++
+  ((indexed p.blocks).flatMap fun (j, b) =>
+    [.label (.block j)] ++ phisIndexed (incoming[j]?.getD []) b ++ b.insts.flatMap inst ++ term j b.term) ++
+  [.endFunction]
+
+/-! ## LLVM compiled replacement proof -/
+
+private theorem incoming_eq (es : List (Nat × Nat × List Operand)) (j : Nat) :
+    (es.foldr insertIncoming ∅)[j]?.getD [] =
+      (es.filter (·.1 == j)).map (fun (_, pred, args) => (pred, args.toArray)) := by
+  induction es with
+  | nil => simp
+  | cons e es ih =>
+    rcases e with ⟨target, pred, args⟩
+    by_cases h : target = j <;>
+      simp [insertIncoming, Std.HashMap.getElem?_insert, ih, h, beq_eq_false_iff_ne.mpr]
+
+private theorem phisIndexed_eq (p : Program) (j : Nat) (b : Block) :
+    phisIndexed (((edges p).foldr insertIncoming ∅)[j]?.getD []) b = phis p j b := by
+  rw [incoming_eq]
+  simp [phisIndexed, phis, List.map_map, Function.comp_def, List.getD_eq_getElem?_getD]
+
+@[csimp] private theorem body_eq_bodyIndexed : @body = @bodyIndexed := by
+  funext p
+  simp only [body, bodyIndexed, phisIndexed_eq]
+
+/-! ## LLVM public renderers -/
 
 /-- `main`'s body as LLVM text. -/
 def print (p : Program) : String := render (body p)

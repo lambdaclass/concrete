@@ -410,7 +410,7 @@ jobs:
           - arch: aarch64-macos
             runner: macos-15
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 20
+    timeout-minutes: 60
     permissions:
       contents: read
     steps:

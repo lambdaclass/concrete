@@ -340,6 +340,18 @@ def elaborate(mutant, prefix, theorem, expression, row=None, equal=False, render
 def check_mutation(directory, description, path, before, after, theorem, witness, *, benign=False):
     source = path.read_text(encoding="utf-8")
     prefix, boundary, _ = source.partition(PROOF_SECTION[path])
+    if path == LLVM:
+        # The compiler needs the csimp proof before compiling the renderers.
+        # The witness deliberately elaborates just the definitions it refutes.
+        proof_start = "/-! ## LLVM compiled replacement proof -/"
+        proof_end = "/-! ## LLVM public renderers -/"
+        if prefix.count(proof_start) != 1 or prefix.count(proof_end) != 1:
+            raise SystemExit("LLVM compiled replacement proof boundaries must occur once")
+        definitions, _, proof_and_renderers = prefix.partition(proof_start)
+        _, end, renderers = proof_and_renderers.partition(proof_end)
+        if not end:
+            raise SystemExit("LLVM compiled replacement proof boundaries are out of order")
+        prefix = definitions + renderers
     if not boundary or prefix.count(before) != 1 or source.count(before) != 1:
         raise SystemExit(f"{description}: mutation must match exactly one definition site")
     prefix = prefix.replace(before, after)

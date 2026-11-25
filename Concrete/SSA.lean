@@ -6,6 +6,7 @@ namespace Concrete.SSA
 open BIR
 
 private abbrev Names := Std.HashMap Nat Operand
+private abbrev LastUse := Std.HashMap Nat Nat
 
 /-- One ordered list of slots per checked-add success edge, in block order. -/
 abbrev Witness := List (List ConcreteSpec.Var)
@@ -18,6 +19,7 @@ private structure State where
   nextReg : Nat := 0
   env : Names := {}
   slots : List ConcreteSpec.Var := []
+  expires : LastUse := {}
   params : List (Reg × Ty) := []
   insts : List Inst := []
   blocks : Array Block := #[]
@@ -33,11 +35,31 @@ private def operand (names : Names) : Core.Atom → Except Refusal Operand
     | some value => .ok value
     | none => .error (.internal "unbound operand reached SSA")
 
-private def State.bindSlot (s : State) (x : ConcreteSpec.Var) (op : Operand) : State :=
+private def State.bindSlot (s : State) (x : ConcreteSpec.Var) (op : Operand)
+    (expires : Nat) : State :=
   let slots := if s.env.contains x.id then s.slots else x :: s.slots
-  { s with env := s.env.insert x.id op, slots }
+  { s with env := s.env.insert x.id op, slots, expires := s.expires.insert x.id expires }
 
-private def riskyAdd (path : String) (s : State) (x : ConcreteSpec.Var) (a b : Operand)
+private def recordUse (uses : LastUse) (position : Nat) : Core.Atom → LastUse
+  | .lit _ => uses
+  | .var x => if uses.contains x.id then uses else uses.insert x.id position
+
+-- Walk backwards to find the last read of each stored value, including when
+-- a store rebinds a slot. Operands read the old value before the store writes.
+private def expirationPositions (p : Memory.Program) : List Nat :=
+  let count := p.stores.length
+  let (_, _, positions) := p.stores.foldr (fun stmt (uses, next, positions) =>
+    let position := next - 1
+    let id := stmt.dest.id.id
+    let expires := uses[id]?.getD 0
+    let uses := uses.erase id
+    let uses := match stmt.value with
+      | .copy a => recordUse uses position a
+      | .add a b .. => recordUse (recordUse uses position a) position b
+    (uses, position, expires :: positions)) (recordUse {} count p.result, count, [])
+  positions
+
+private def riskyAdd (path : String) (position expires : Nat) (s : State) (x : ConcreteSpec.Var) (a b : Operand)
     (origin : Elab.SourceSite) : Except Refusal State := do
   let site := s.sites.size
   let trapBlock := s.blocks.size + 1
@@ -45,10 +67,16 @@ private def riskyAdd (path : String) (s : State) (x : ConcreteSpec.Var) (a b : O
   let flag := dest + 1
   let mut next := flag + 1
   let mut args := []
-  let mut params := []
-  let s := s.bindSlot x (.reg dest)
+  let mut params : List (Reg × Ty) := []
+  let s := s.bindSlot x (.reg dest) expires
+  let mut live := []
   let mut env : Names := {}
+  let mut liveExpires : LastUse := {}
   for name in s.slots do
+    let expires := s.expires[name.id]?.getD 0
+    if expires ≤ position then continue
+    live := name :: live
+    liveExpires := liveExpires.insert name.id expires
     let some op := s.env[name.id]? | throw (.internal "missing SSA slot at continuation")
     match op with
     | .imm .. => env := env.insert name.id op
@@ -62,12 +90,13 @@ private def riskyAdd (path : String) (s : State) (x : ConcreteSpec.Var) (a b : O
       .condbr flag trapBlock [] (trapBlock + 1) args.reverse⟩
   let trap : Block := ⟨[], [], .trap site⟩
   let entry := overflowSite path site origin
+  live := live.reverse
   return { s with
     nextReg := next, env := env, params := params.reverse, insts := [],
     blocks := (s.blocks.push guard).push trap, sites := s.sites.push entry,
-    edges := s.slots :: s.edges }
+    slots := live, expires := liveExpires, edges := live :: s.edges }
 
-private def assign (path : String) (s : State) (stmt : Memory.Store) :
+private def assign (path : String) (position expires : Nat) (s : State) (stmt : Memory.Store) :
     Except Refusal State := do
   unless stmt.dest.layout == Memory.u8Layout do
     throw (.internal "unexpected slot layout in slice-0 SSA")
@@ -75,17 +104,17 @@ private def assign (path : String) (s : State) (stmt : Memory.Store) :
   match stmt.value with
   | .copy a =>
     let value ← operand s.env a
-    return s.bindSlot slot value
+    return s.bindSlot slot value expires
   | .add a b origin discharged =>
     let lhs ← operand s.env a
     let rhs ← operand s.env b
     if discharged.isSome then
       let dest := s.nextReg
-      let s := s.bindSlot slot (.reg dest)
+      let s := s.bindSlot slot (.reg dest) expires
       return { s with
         nextReg := dest + 1,
         insts := .bin .add .u8 dest lhs rhs :: s.insts }
-    else riskyAdd path s slot lhs rhs origin
+    else riskyAdd path position expires s slot lhs rhs origin
 
 private def RelatedOutcome (p : BIR.Program) (source : ConcreteSpec.Outcome) : BIR.Outcome → Prop
   | .exited n => source = .exit n
@@ -704,8 +733,16 @@ theorem validate_correct {path : String} {mem : Memory.Program} {candidate bir :
       cases h
       exact ⟨by simpa [BIR.WF] using hwf, check_correct (by simpa using hc)⟩
 
+private def buildState (path : String) (p : Memory.Program) : Except Refusal State := do
+  let mut state := {}
+  let mut position := 0
+  for (stmt, expires) in p.stores.zip (expirationPositions p) do
+    state ← assign path position expires state stmt
+    position := position + 1
+  return state
+
 def lower (path : String) (p : Memory.Program) : Except Refusal BIR.Program := do
-  let s ← p.stores.foldlM (assign path) {}
+  let s ← buildState path p
   let result ← operand s.env p.result
   let bir : BIR.Program :=
     ⟨(s.blocks.push ⟨s.params, s.insts.reverse, .ret result⟩).toList, s.sites.toList⟩
@@ -713,7 +750,7 @@ def lower (path : String) (p : Memory.Program) : Except Refusal BIR.Program := d
 
 private theorem lower_validated {path : String} {p : Memory.Program} {bir : BIR.Program}
     (h : lower path p = .ok bir) : BIR.WF bir ∧ Preserves p bir := by
-  cases hs : p.stores.foldlM (assign path) {} with
+  cases hs : buildState path p with
   | error e => simp [lower, hs, bind, Except.bind] at h
   | ok s =>
     cases hr : operand s.env p.result with

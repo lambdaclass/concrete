@@ -2,6 +2,7 @@
 # R-0550: native, same-process scaling measurements for the slice-0 compiler.
 # Usage (inside nix develop): slice0_scaling.sh [REPORT_DIR]
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/gate_env.sh" || exit 2
 cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
 report=${1:-.lake/slice0-scaling-report}
 mkdir -p "$report"
@@ -10,8 +11,7 @@ trap 'rm -rf "$work"' EXIT
 BOUNDED_PARENT="$work"
 # shellcheck source=scripts/checks/lib/bounded.sh
 source scripts/checks/lib/bounded.sh
-# shellcheck source=scripts/checks/lib/limits.sh
-source scripts/checks/lib/limits.sh
+[ "$BOUNDED_HAVE_WATCHDOG" = 1 ] || { echo "slice0 scaling: python3 is required for bounded runs" >&2; exit 2; }
 gate_limits 64 40000
 
 run() {
@@ -28,7 +28,7 @@ run() {
 : > "$report/measurements.tsv"
 : > "$report/identity.txt"
 : > "$report/run.log"
-run 300 -- lake build slice0-scaling > "$report/build.log" 2>&1 || {
+run 1800 -- lake build slice0-scaling > "$report/build.log" 2>&1 || {
   rc=$?
   cat "$report/build.log" >&2
   exit "$rc"

@@ -244,17 +244,23 @@ private theorem fastIntermediates_eq (p : Program) :
   simp [fastIntermediates, intermediates, positioned_eq, blockBase, instBase, List.flatMap_map, Nat.add_assoc]
 
 /-- Index the first occurrence of each key and test uniqueness in the same pass. -/
-private def indexDistinct {α : Type} (key : α → Nat) : List α → Bool × Std.HashMap Nat α
-  | [] => (true, ∅)
-  | x :: xs =>
-    let (distinct, index) := indexDistinct key xs
-    (distinct && !index.contains (key x), index.insert (key x) x)
+private def insertDistinct {α : Type} (key : α → Nat) (x : α)
+    (indexed : Bool × Std.HashMap Nat α) : Bool × Std.HashMap Nat α :=
+  let (distinct, index) := indexed
+  (distinct && !index.contains (key x), index.insert (key x) x)
+
+private def indexDistinct {α : Type} (key : α → Nat) (xs : List α) :
+    Bool × Std.HashMap Nat α :=
+  xs.foldr (insertDistinct key) (true, ∅)
+
+private theorem indexDistinct_cons {α : Type} (key : α → Nat) (x : α) (xs : List α) :
+    indexDistinct key (x :: xs) = insertDistinct key x (indexDistinct key xs) := rfl
 
 private theorem indexDistinct_lookup {α : Type} (key : α → Nat) (xs : List α) (k : Nat) :
     (indexDistinct key xs).2[k]? = xs.find? (fun x => key x == k) := by
   induction xs with
   | nil => simp [indexDistinct]
-  | cons x xs ih => by_cases h : key x = k <;> simp [indexDistinct, Std.HashMap.getElem?_insert, ih, List.find?, h, beq_eq_false_iff_ne.mpr]
+  | cons x xs ih => by_cases h : key x = k <;> simp [indexDistinct_cons, insertDistinct, Std.HashMap.getElem?_insert, ih, List.find?, h, beq_eq_false_iff_ne.mpr]
 
 private theorem indexDistinct_contains {α : Type} (key : α → Nat) (xs : List α) (k : Nat) :
     (indexDistinct key xs).2.contains k = (xs.map key).contains k := by
@@ -272,7 +278,7 @@ private theorem indexDistinct_ok {α : Type} (key : α → Nat) (xs : List α) :
   induction xs with
   | nil => rfl
   | cons x xs ih =>
-    simp only [indexDistinct, ih, indexDistinct_contains, List.map_cons, List.nodup_cons,
+    simp only [indexDistinct_cons, insertDistinct, ih, indexDistinct_contains, List.map_cons, List.nodup_cons,
       Bool.decide_and, List.contains_eq_mem, decide_not, Bool.and_comm]
 
 private theorem indexDistinct_regId (defs : List (Reg × Nat)) (r : Reg) :
@@ -288,14 +294,18 @@ private abbrev EdgeIndex := Std.HashMap Nat (List Edge)
 private def addEdge (index : EdgeIndex) (dest : Nat) (edge : Edge) : EdgeIndex :=
   index.insert dest (edge :: index[dest]?.getD [])
 
-private def indexEdges : List (Nat × Block) → EdgeIndex
-  | [] => ∅
-  | (pred, b) :: rest =>
-    let index := indexEdges rest
-    match b.term with
-    | .br dest args => addEdge index dest (pred, args)
-    | .condbr _ t ta e ea => addEdge (addEdge index e (pred, ea)) t (pred, ta)
-    | _ => index
+private def insertBlockEdges (block : Nat × Block) (index : EdgeIndex) : EdgeIndex :=
+  let (pred, b) := block
+  match b.term with
+  | .br dest args => addEdge index dest (pred, args)
+  | .condbr _ t ta e ea => addEdge (addEdge index e (pred, ea)) t (pred, ta)
+  | _ => index
+
+private def indexEdges (blocks : List (Nat × Block)) : EdgeIndex :=
+  blocks.foldr insertBlockEdges ∅
+
+private theorem indexEdges_cons (x : Nat × Block) (xs : List (Nat × Block)) :
+    indexEdges (x :: xs) = insertBlockEdges x (indexEdges xs) := rfl
 
 private theorem addEdge_lookup (index : EdgeIndex) (dest j : Nat) (edge : Edge) :
     (addEdge index dest edge)[j]?.getD [] =
@@ -308,7 +318,7 @@ private theorem indexEdges_lookup (blocks : List (Nat × Block)) (j : Nat) :
   | nil => simp [indexEdges]
   | cons x xs ih =>
     rcases x with ⟨k, b⟩
-    cases hb : b.term <;> simp [indexEdges, hb, edgesTo, addEdge_lookup, ih, List.append_assoc]
+    cases hb : b.term <;> simp [indexEdges_cons, insertBlockEdges, hb, edgesTo, addEdge_lookup, ih, List.append_assoc]
 
 private def adaptBlockWith (find : Reg → Option Nat) (edges : List Edge) (j base : Nat)
     (b : Block) : Except String Source.Block := do

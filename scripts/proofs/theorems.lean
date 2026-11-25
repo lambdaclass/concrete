@@ -176,7 +176,6 @@ def rowSafe : Name → Bool
 -- CONTROL DECLARATIONS (negative controls are inserted here, in a temporary copy only)
 
 #eval show CoreM Unit from do
-  let env ← getEnv
   let pkgString := (← IO.getEnv "PROOF_PKG").getD "ConcreteSpec"
   unless ["ConcreteSpec", "Concrete"].contains pkgString do
     throwError s!"unknown PROOF_PKG '{pkgString}'"
@@ -184,6 +183,9 @@ def rowSafe : Name → Bool
   let mode := (← IO.getEnv "PROOF_MODE").getD "theorems"
   unless ["theorems", "encoded", "constants", "modules", "imported", "decls", "heads", "examples"].contains mode do
     throwError s!"unknown PROOF_MODE '{mode}'"
+  -- Match the exporter's import graph. A downstream module can re-realize a lazy equation
+  -- theorem with the same public name but a splitter private to that module.
+  let env ← if mode == "decls" then liftM (importModules #[{ module := pkg }] {}) else getEnv
   -- Fail closed, once, before any mode writes a row: every constant and module name of the
   -- environment (the population, the axioms its constants depend on, the inductive heads of
   -- `heads`, the modules) must be writable. One check covers every mode.
@@ -204,6 +206,9 @@ def rowSafe : Name → Bool
       if wanted.contains s then
         if found.contains s then throwError s!"two constants encode as {s}"
         found := found.insert s (n, ci)
+    for name in wanted do
+      unless found.contains name do
+        throwError s!"export declares {name}, which is missing from the selected import graph"
     let order := (found.toArray.map (·.1)).qsort (· < ·)
     let run : DagM Unit := do
       for s in order do

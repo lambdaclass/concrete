@@ -27,6 +27,27 @@ structure Program where
 def lower (p : MIR.Program) : Program :=
   ⟨p.body.map (fun stmt => ⟨⟨stmt.dest, u8Layout⟩, stmt.op⟩), p.result⟩
 
+-- The pipeline retains MIR for its artifacts. Borrow its input spine while constructing
+-- the output so traversing a shared list does not retain and release each suffix.
+private def lowerStores (body : @& List MIR.Assignment) (out : List Store) : List Store :=
+  match body with
+  | [] => out.reverse
+  | stmt :: rest => lowerStores rest (⟨⟨stmt.dest, u8Layout⟩, stmt.op⟩ :: out)
+
+private theorem lowerStores_eq (xs : List MIR.Assignment) (out : List Store) :
+    lowerStores xs out =
+      out.reverse ++ xs.map (fun stmt => ⟨⟨stmt.dest, u8Layout⟩, stmt.op⟩) := by
+  induction xs generalizing out with
+  | nil => simp [lowerStores]
+  | cons x xs ih => simp [lowerStores, ih, List.append_assoc]
+
+private def lowerBorrowed (p : @& MIR.Program) : Program :=
+  ⟨lowerStores p.body [], p.result⟩
+
+@[csimp] private theorem lower_eq_lowerBorrowed : @lower = @lowerBorrowed := by
+  funext p
+  simp [lower, lowerBorrowed, lowerStores_eq]
+
 private def toMIR (p : Program) : MIR.Program :=
   ⟨p.stores.map (fun store => ⟨store.dest.id, store.value⟩), p.result⟩
 
