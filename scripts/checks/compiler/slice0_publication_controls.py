@@ -2,6 +2,7 @@
 
 from contextlib import nullcontext
 import os
+import errno
 from pathlib import Path
 import shutil
 import subprocess
@@ -95,6 +96,54 @@ def check_project_guard(root, case_insensitive):
             os.chdir(root)
 
 
+def check_staging_collision(root, *, nested):
+    output = root / "out"
+    output.mkdir(parents=True)
+    source = output / "nested" if nested else output
+    source.mkdir(exist_ok=True)
+    (source / "Keep").mkdir()
+    (source / "Keep" / "first").write_text("first")
+    (source / "keep").mkdir()
+    (source / "keep" / "second").write_text("second")
+    (output / "llvm.o").write_text("old")
+    names = ["llvm.o", "lcb.exe"]
+    staging = Path(publisher.prepare(output, names))
+    for name in names:
+        (staging / name).write_text("new")
+    candidate = staging / "candidate"
+    original_mkdir = os.mkdir
+
+    def casefold_mkdir(path, mode=0o777, *, dir_fd=None):
+        path = Path(path)
+        if candidate in path.parents and any(
+            entry.casefold() == path.name.casefold() for entry in os.listdir(path.parent)
+        ):
+            raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), path)
+        return original_mkdir(path, mode, dir_fd=dir_fd)
+
+    try:
+        with patch.object(os, "mkdir", casefold_mkdir), \
+                patch.object(Path, "rename", side_effect=AssertionError("moved an artifact")), \
+                patch.object(publisher, "exchange", side_effect=AssertionError("exchanged output")):
+            publisher.publish(output, staging, names)
+    except FileExistsError as error:
+        target_parent = candidate / "nested" if nested else candidate
+        assert Path(error.filename).parent == target_parent
+        assert Path(error.filename).name.casefold() == "keep"
+    else:
+        raise AssertionError("accepted colliding staging directory names")
+
+    assert set(os.listdir(source)) == ({"Keep", "keep"} if nested else {"Keep", "keep", "llvm.o"})
+    assert set(os.listdir(source / "Keep")) == {"first"}
+    assert set(os.listdir(source / "keep")) == {"second"}
+    assert (source / "Keep" / "first").read_text() == "first"
+    assert (source / "keep" / "second").read_text() == "second"
+    assert (output / "llvm.o").read_text() == "old"
+    assert not (output / "lcb.exe").exists()
+    for name in names:
+        assert (staging / name).read_text() == "new"
+
+
 if __name__ == "__main__":
     original_cwd = Path.cwd()
     with TemporaryDirectory() as directory:
@@ -104,6 +153,9 @@ if __name__ == "__main__":
             check_project_guard(root, real)
             mixed = check_publication(root / "mixed", mixed=True)
             ambiguous = check_publication(root / "ambiguous", mixed=True, ambiguous=True)
+            if sys.platform == "linux":
+                check_staging_collision(root / "collision-root", nested=False)
+                check_staging_collision(root / "collision-nested", nested=True)
         finally:
             os.chdir(original_cwd)
     mode = "real" if real else "simulated"
@@ -111,3 +163,5 @@ if __name__ == "__main__":
     ambiguous_mode = "real" if ambiguous else "simulated"
     print(f"ok   publication and project-directory aliases ({sys.platform}, {mode})")
     print(f"ok   mixed directory lookup rules ({mixed_mode}), ambiguous alias refusal ({ambiguous_mode})")
+    if sys.platform == "linux":
+        print("ok   casefold staging refuses top-level and nested directory collisions before moves")

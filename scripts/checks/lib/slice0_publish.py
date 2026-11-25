@@ -99,6 +99,24 @@ def prepare(output, names):
     return tempfile.mkdtemp(prefix=".concrete-build.", dir=output.parent)
 
 
+def carry_forward(source, destination, *, replaced=()):
+    """Populate a private directory using only exclusive entry creation."""
+    with os.scandir(source) as entries:
+        for entry in entries:
+            if entry.name in replaced:
+                continue
+            target = destination / entry.name
+            if entry.is_symlink():
+                target.symlink_to(os.readlink(entry.path))
+                shutil.copystat(entry.path, target, follow_symlinks=False)
+            elif entry.is_dir(follow_symlinks=False):
+                target.mkdir()
+                carry_forward(entry.path, target)
+                shutil.copystat(entry.path, target)
+            else:
+                os.link(entry.path, target)
+
+
 def publish(output, staging, names):
     # Lock the parent inode, which stays in place across exchanges. Concurrent
     # builds take their snapshot from the latest committed output directory.
@@ -114,16 +132,17 @@ def publish(output, staging, names):
                 source = staging / name
                 if not stat.S_ISREG(source.lstat().st_mode):
                     raise ValueError(f"expected a regular build output: {name}")
-                source.rename(candidate / name)
+                # Reserve every artifact name under the candidate's lookup
+                # rules before copying any old entry or moving an artifact.
+                os.close(os.open(candidate / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
 
             # Anchor the snapshot to the directory opened with O_NOFOLLOW.
             # Release the snapshot directory before attempting the exchange.
             os.fchdir(output_fd)
-            shutil.copytree(
-                ".", candidate, symlinks=True, copy_function=os.link,
-                ignore=lambda directory, _: replaced if directory == "." else (),
-                dirs_exist_ok=True,
-            )
+            carry_forward(".", candidate, replaced=replaced)
+            for name in names:
+                (staging / name).rename(candidate / name)
+            shutil.copystat(".", candidate)
             os.fchdir(parent_fd)
             current = os.stat(output.name, dir_fd=parent_fd, follow_symlinks=False)
             if not os.path.samestat(current, os.fstat(output_fd)):

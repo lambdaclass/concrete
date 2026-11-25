@@ -23,7 +23,9 @@ project, and its parent must be writable so the CLI can create a private sibling
 A build writes and validates all selected artifacts in private staging. The publisher carries
 forward unrelated entries and artifacts of an unselected backend, then commits the complete
 directory with one atomic exchange (Linux `renameat2(RENAME_EXCHANGE)` or macOS
-`renameatx_np(RENAME_SWAP)`). The filesystem must support the exchange. A pre-commit failure
+`renameatx_np(RENAME_SWAP)`). The filesystem must support the exchange. If distinct entries
+would share a name under staging's filesystem lookup rules, publication fails before any
+artifact moves. A pre-commit failure
 returns `TOOL-FAILURE` with exit 2 and leaves existing outputs in place. A first failed build
 may leave an empty output directory. The parent-directory lock serializes commits by
 cooperating CLI builds, including builds selecting different backends.
