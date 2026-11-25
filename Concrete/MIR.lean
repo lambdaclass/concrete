@@ -41,14 +41,16 @@ end Concrete.MIR
 
 namespace Concrete.MIR
 
-private def value (env : List (ConcreteSpec.Var × Int)) :
+/-- Read an atom in the current store, using the newest binding. -/
+def value (env : List (ConcreteSpec.Var × Int)) :
     Core.Atom → Except ConcreteSpec.Outcome Int
   | .lit n => .ok n
   | .var x => match env.lookup x with
     | some n => .ok n
     | none => .error (.stuck .unbound)
 
-private def evalOp (env : List (ConcreteSpec.Var × Int)) :
+/-- Evaluate the right-hand side of one assignment. -/
+def evalOp (env : List (ConcreteSpec.Var × Int)) :
     Op → Except ConcreteSpec.Outcome Int
   | .copy a => value env a
   | .add lhs rhs _ discharged => do

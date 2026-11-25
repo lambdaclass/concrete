@@ -91,6 +91,14 @@ Concrete.BIR.ScalarBridge.min	propext
 Concrete.BIR.ScalarBridge.ofBits	propext
 Concrete.BIR.ScalarBridge.signed	propext
 Concrete.BIR.ScalarBridge.toBits	
+Concrete.BIR.ScalarBridge.toCore.eq_1	
+Concrete.BIR.ScalarBridge.toCore.eq_2	
+Concrete.BIR.ScalarBridge.toCore.eq_3	
+Concrete.BIR.ScalarBridge.toCore.eq_4	
+Concrete.BIR.ScalarBridge.toCore.eq_5	
+Concrete.BIR.ScalarBridge.toCore.eq_6	
+Concrete.BIR.ScalarBridge.toCore.eq_7	
+Concrete.BIR.ScalarBridge.toCore.eq_8	
 Concrete.BIR.ScalarBridge.toCore_fromCore	
 Concrete.BIR.ScalarBridge.wrap	Quot.sound propext
 Concrete.BIR.ScalarBridge.wrap._proof_1_1	Quot.sound propext
@@ -1303,6 +1311,10 @@ Concrete.MIR.Op.copy.sizeOf_spec
 Concrete.MIR.Program.mk.inj	
 Concrete.MIR.Program.mk.injEq	propext
 Concrete.MIR.Program.mk.sizeOf_spec	
+Concrete.MIR.evalOp.eq_1	propext
+Concrete.MIR.evalOp.eq_2	propext
+Concrete.MIR.value.eq_1	
+Concrete.MIR.value.eq_2	
 Concrete.Memory.Layout.mk.inj	
 Concrete.Memory.Layout.mk.injEq	propext
 Concrete.Memory.Layout.mk.sizeOf_spec	
@@ -1464,6 +1476,9 @@ LeanCompilerBackend.Verified.Source.read.eq_1	propext
 LeanCompilerBackend.Verified.Source.read.eq_2	propext
 LeanCompilerBackend.Verified.Source.step.eq_1	Quot.sound propext
 LeanCompilerBackend.Verified.Source.write.eq_1	propext
+List.lookup.eq_1	
+List.lookup.eq_2	
+List.lookup.eq_def	
 Std.Legacy.Range.mk.congr_simp	
 _private.Concrete.Admission.0.Concrete.Admission.Output.mk.inj	
 _private.Concrete.Admission.0.Concrete.Admission.Output.mk.injEq	propext
@@ -2421,9 +2436,59 @@ _private.Concrete.Parse.0.Concrete.Parse.Value.program.sizeOf_spec
 _private.Concrete.Parse.0.Concrete.Parse.Value.tok.inj	
 _private.Concrete.Parse.0.Concrete.Parse.Value.tok.injEq	propext
 _private.Concrete.Parse.0.Concrete.Parse.Value.tok.sizeOf_spec	
+_private.Concrete.SSA.0.Concrete.BIR.ScalarBridge.toCore.match_1.eq_1	
+_private.Concrete.SSA.0.Concrete.BIR.ScalarBridge.toCore.match_1.eq_2	
+_private.Concrete.SSA.0.Concrete.BIR.ScalarBridge.toCore.match_1.eq_3	
+_private.Concrete.SSA.0.Concrete.BIR.ScalarBridge.toCore.match_1.eq_4	
+_private.Concrete.SSA.0.Concrete.BIR.ScalarBridge.toCore.match_1.eq_5	
+_private.Concrete.SSA.0.Concrete.BIR.ScalarBridge.toCore.match_1.eq_6	
+_private.Concrete.SSA.0.Concrete.BIR.ScalarBridge.toCore.match_1.eq_7	
+_private.Concrete.SSA.0.Concrete.BIR.ScalarBridge.toCore.match_1.eq_8	
+_private.Concrete.SSA.0.Concrete.BIR.execInsts.match_1.eq_1	
+_private.Concrete.SSA.0.Concrete.BIR.execInsts.match_1.eq_2	
+_private.Concrete.SSA.0.Concrete.BIR.execInsts.match_3.eq_1	
+_private.Concrete.SSA.0.Concrete.BIR.execInsts.match_3.eq_2	
+_private.Concrete.SSA.0.Concrete.BIR.instReprOperand.repr.match_1.eq_1	
+_private.Concrete.SSA.0.Concrete.BIR.instReprOperand.repr.match_1.eq_2	
+_private.Concrete.SSA.0.Concrete.MIR.evalOp.match_7.eq_1	
+_private.Concrete.SSA.0.Concrete.MIR.evalOp.match_7.eq_2	
+_private.Concrete.SSA.0.Concrete.MIR.value.match_3.eq_1	
+_private.Concrete.SSA.0.Concrete.MIR.value.match_3.eq_2	
 _private.Concrete.SSA.0.Concrete.SSA.State.mk.inj	
 _private.Concrete.SSA.0.Concrete.SSA.State.mk.injEq	propext
 _private.Concrete.SSA.0.Concrete.SSA.State.mk.sizeOf_spec	
+_private.Concrete.SSA.0.Concrete.SSA.assign.eq_1	propext
+_private.Concrete.SSA.0.Concrete.SSA.assign_checked_correct	Quot.sound propext
+_private.Concrete.SSA.0.Concrete.SSA.assign_checked_correct._simp_1_2	propext
+_private.Concrete.SSA.0.Concrete.SSA.assign_copy_correct	Quot.sound propext
+_private.Concrete.SSA.0.Concrete.SSA.assign_copy_correct._simp_1_2	propext
+_private.Concrete.SSA.0.Concrete.SSA.assign_discharged_correct	Quot.sound propext
+_private.Concrete.SSA.0.Concrete.SSA.assign_discharged_correct._simp_1_2	propext
+_private.Concrete.SSA.0.Concrete.SSA.checked_add_correct	Quot.sound propext
+_private.Concrete.SSA.0.Concrete.SSA.discharged_add_correct	Quot.sound propext
+_private.Concrete.SSA.0.Concrete.SSA.execInsts_snoc	propext
+_private.Concrete.SSA.0.Concrete.SSA.operand.eq_1	
+_private.Concrete.SSA.0.Concrete.SSA.operand.eq_2	
+_private.Concrete.SSA.0.Concrete.SSA.operand.match_3.eq_1	
+_private.Concrete.SSA.0.Concrete.SSA.operand.match_3.eq_2	
+_private.Concrete.SSA.0.Concrete.SSA.operand_correct	Quot.sound propext
+_private.Concrete.SSA.0.Concrete.SSA.operand_correct._proof_1_4	Quot.sound propext
+_private.Concrete.SSA.0.Concrete.SSA.rename_loop_order	Quot.sound propext
+_private.Concrete.SSA.0.Concrete.SSA.represents_cons	propext
+_private.Concrete.SSA.0.Concrete.SSA.represents_fresh_reg	propext
+_private.Concrete.SSA.0.Concrete.SSA.riskyAdd.match_1.eq_1	
+_private.Concrete.SSA.0.Concrete.SSA.riskyAdd.match_1.eq_2	
+_private.Concrete.SSA.0.Concrete.SSA.riskyAdd_guard	Quot.sound propext
+_private.Concrete.SSA.0.Concrete.SSA.riskyAdd_name_order	Quot.sound propext
+_private.Concrete.SSA.0.Concrete.SSA.run_checked_trap	Quot.sound propext
+_private.Concrete.SSA.0.Except.map.match_1.eq_1	
+_private.Concrete.SSA.0.Except.map.match_1.eq_2	
+_private.Concrete.SSA.0.List.filter.match_1.eq_1	
+_private.Concrete.SSA.0.List.filter.match_1.eq_2	
+_private.Concrete.SSA.0.List.forIn'_cons.match_1.eq_1	
+_private.Concrete.SSA.0.List.forIn'_cons.match_1.eq_2	
+_private.Concrete.SSA.0.List.lookup.match_1.eq_1	
+_private.Concrete.SSA.0.List.lookup.match_1.eq_2	
 _private.Concrete.Stages.0.Concrete.Stages.Pipeline.brecOn.eq	
 _private.Concrete.Stages.0.Concrete.Stages.Pipeline.done.sizeOf_spec	
 _private.Concrete.Stages.0.Concrete.Stages.Pipeline.next.inj	
