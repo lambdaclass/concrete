@@ -95,7 +95,7 @@ There's no Mono Core, since slice 0 has no generics. When Mono exists, the admis
 | Resolve | direct proof; HIR is only the resolved surface tree, no second checker |
 | Elab | direct proof |
 | Lower, Memory CFG | direct proofs |
-| SSA | long-term, a proved validator. Slice 0 proves `ssa_correct` directly, on one condition: BIR's shape may not depend on that proof, so the validator can replace it without changing the IR. |
+| SSA | Slice 0 validates the outcomes of the closed Memory and BIR programs with a proved check. A structural validator is the long-term design for programs with inputs or potentially unbounded execution. |
 | BIR → LCB-IR adapter | direct proof |
 | Mono, optimizations, register allocation, linking (later) | proved validators |
 
@@ -196,7 +196,8 @@ Concrete/
   Elab.lean            resolve + elaborate to the spec's Core (one stage edge), and its theorems
   MIR.lean             Place MIR: syntax, semantics, WF, lowering (residual checks only), lower_correct
   Memory.lean          Memory CFG: the Layout authority, block-offset memory, memory_correct
-  BIR.lean             BIR: syntax, semantics, behaviour, WF, ssa, ssa_correct, addOvf_correct
+  BIR.lean             BIR: syntax, semantics, behaviour, WF, addOvf_correct
+  SSA.lean             Memory to BIR lowering, validator, and preservation theorems
   Backend/             the backend stage: everything after BIR, one file per backend
     LLVM.lean          BIR → LLVM text printer (unverified; P_print)
     LCB.lean           BIR → LCB `Source.Function` adapter + adapter_correct; in-process assembly
@@ -365,7 +366,6 @@ There are two target profiles: `x86_64-linux` and `aarch64-macos` (LCB's first n
 | P_parse | implementation | the generic table-parser theorem |
 | P_elab | implementation | ANF and resolution preservation |
 | P_lower | implementation | checked-evidence validity and MIR preservation |
-| P_ssa | implementation | SSA semantic preservation |
 | P_print | implementation | an LLVM-IR semantics; not planned for slice 0 |
 | P_toolchain[llvm] | toolchain | not planned |
 | P_toolchain[lcb] | toolchain | LCB's own proofs (C01–C03 and beyond) |
@@ -417,7 +417,11 @@ theorem compile_correct (F : FrontendPremises) {B N T} (P : NativePremises B N T
 4. `checked_wellScoped : Checked p → WellScoped p`. `WellScoped` includes in-range literals, because Core's `run` does not range-check literals.
 5. `admit_tokens_valid : Checked p → TokensValid p (admit p)`. The empty token set is valid for any well-scoped program.
 6. `lower_wf`, and `lower_correct : WellScoped p → TokensValid p t → MIR.behaviour (lower p t) = Core.behaviour p`. This holds for every well-scoped program with valid tokens, checked or not, so `200 + 56` with no tokens preserves `trapped .arithmeticOverflow`. The trap path is real.
-7. `memory_wf` and `memory_correct : m.WF → Mem.behaviour (memory m) = MIR.behaviour m`. Then `ssa_wf` and `ssa_correct : g.WF → BIR.behaviour (ssa g) = Mem.behaviour g`.
+7. `Memory.lower_correct` preserves the MIR outcome. `SSA.lower_wf` and `SSA.lower_correct`
+   give well-formedness and preservation for every successful SSA result. The validator compares
+   exits by value and traps by the kind recorded at the taken site. Any mismatch or incomplete
+   BIR execution is an internal compiler error. `Stages.compile_ssa_correct` applies the SSA
+   theorem to the Memory and BIR recorded in every accepted production output.
 8. `P.launch` excludes `killed`. `P.rt` gives a body result `r` with `β = r.behaviour`. `P.toolchain` gives `B.Means t r`, and `P.emit` gives `r.behaviour = BIR.behaviour out.bir = .exited c`. `P.live` gives existence.
 
 **Supporting theorems:**
@@ -670,7 +674,9 @@ These are internal. None blocks slice 0's correctness.
   - a proof of the decoding entry against a libc model (P_rt).
 - **P_toolchain[lcb]** is retired by LCB's own C01–C03 work. LCB's verified profile names Apple AArch64 as its intended target. The `x86_64-linux` executable goes through LCB's compatibility pipeline, inside P_toolchain[lcb], until LCB certifies that target.
 - **Encoded result.** It works while LCB's verified profile has no calls, memory or traps. When it gains them, revisit the encoding: an external trap call, or a multi-function encoding.
-- **SSA:** replace the direct `ssa_correct` with a proved validator. BIR's shape must not depend on the direct proof.
+- **SSA:** replace the slice-0 outcome check with a proved structural validator as the language
+  gains inputs or potentially unbounded execution. Keep the BIR representation independent of
+  the validator and carry the preservation guarantee through the accepted pipeline.
 - **Certificates:** move from per-edge `decide` to per-edge witnesses checked by proved validators (R-0552/R-0521), with con-leche/nanoda replay.
 - **Artifact facts:**
   - a link-map and symbol inventory, for trusted/FFI/opaque code;

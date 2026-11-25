@@ -1298,7 +1298,6 @@ Concrete.Lex.trivia_unique	Quot.sound propext
 Concrete.Lex.whitespace?.eq_1	
 Concrete.Lex.whitespace?_iff	propext
 Concrete.LoweringPremises.lower	propext
-Concrete.LoweringPremises.ssa	Classical.choice Quot.sound propext
 Concrete.MIR.Assignment.mk.inj	
 Concrete.MIR.Assignment.mk.injEq	propext
 Concrete.MIR.Assignment.mk.sizeOf_spec	
@@ -1380,7 +1379,9 @@ Concrete.Refusal.unsupported.inj
 Concrete.Refusal.unsupported.injEq	propext
 Concrete.Refusal.unsupported.sizeOf_spec	
 Concrete.SSA.lower.eq_1	Classical.choice Quot.sound propext
+Concrete.SSA.lower_correct	Classical.choice Quot.sound propext
 Concrete.SSA.lower_wf	Classical.choice Quot.sound propext
+Concrete.SSA.validate_correct	Classical.choice Quot.sound propext
 Concrete.Stages.Input.mk.inj	
 Concrete.Stages.Input.mk.injEq	propext
 Concrete.Stages.Input.mk.sizeOf_spec	
@@ -1389,6 +1390,7 @@ Concrete.Stages.Output.mk.injEq	propext
 Concrete.Stages.Output.mk.sizeOf_spec	
 Concrete.Stages.compile.eq_1	Classical.choice Quot.sound propext
 Concrete.Stages.compile_of_edges	Classical.choice Quot.sound propext
+Concrete.Stages.compile_ssa_correct	Classical.choice Quot.sound propext
 Concrete.Stages.prepareLCB.eq_1	Classical.choice Quot.sound propext
 Concrete.Stages.prepareLCB_of_edges	Classical.choice Quot.sound propext
 Concrete.instDecidableEqRefusal.decEq._proof_1	
@@ -2467,6 +2469,7 @@ _private.Concrete.SSA.0.Concrete.SSA.assign_discharged_correct._simp_1_2	propext
 _private.Concrete.SSA.0.Concrete.SSA.checked_add_correct	Quot.sound propext
 _private.Concrete.SSA.0.Concrete.SSA.discharged_add_correct	Quot.sound propext
 _private.Concrete.SSA.0.Concrete.SSA.execInsts_snoc	propext
+_private.Concrete.SSA.0.Concrete.SSA.lower_validated	Classical.choice Quot.sound propext
 _private.Concrete.SSA.0.Concrete.SSA.operand.eq_1	
 _private.Concrete.SSA.0.Concrete.SSA.operand.eq_2	
 _private.Concrete.SSA.0.Concrete.SSA.operand.match_3.eq_1	

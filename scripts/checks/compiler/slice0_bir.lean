@@ -21,6 +21,10 @@ word that encodes nothing, which the runtime must refuse (`Runtime.invalidLine`,
 open Concrete.BIR Concrete.Backend
 open ConcreteSpec (Trap)
 
+-- A well-formed BIR with a wrong exit value must fail the semantic check.
+example : Concrete.SSA.validate ⟨[], .lit 41⟩ Examples.answer =
+    .error (.internal "SSA changed the Memory outcome") := by decide
+
 structure Expectation where
   outcome : Outcome
   trapKind : Option Trap

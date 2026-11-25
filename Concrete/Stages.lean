@@ -75,6 +75,39 @@ theorem compile_of_edges (input : Input) (tokens : List ConcreteSpec.Surface0.To
   simp [compile, stages, Pipeline.run, lex, memory, bind, Except.bind,
     hLex, hParse, hElab, hAdmit, hLower, hMem, hSSA] <;> rfl
 
+/-- Every accepted production pipeline result satisfies the SSA contract on its
+recorded Memory and BIR programs. -/
+theorem compile_ssa_correct {input : Input} {out : Output}
+    (h : compile input = .ok out) : SSA.Preserves out.memory out.bir := by
+  cases hLex : lex input with
+  | error e => simp [compile, stages, Pipeline.run, bind, Except.bind, hLex] at h
+  | ok tokens =>
+    cases hParse : Parse.parse tokens with
+    | error e => simp [compile, stages, Pipeline.run, bind, Except.bind, hLex, hParse] at h
+    | ok ast =>
+      cases hElab : Elab.elaborate ast with
+      | error e => simp [compile, stages, Pipeline.run, bind, Except.bind, hLex, hParse, hElab] at h
+      | ok core =>
+        cases hAdmit : Admission.check core with
+        | error e =>
+          simp [compile, stages, Pipeline.run, bind, Except.bind, hLex, hParse, hElab, hAdmit] at h
+        | ok admitted =>
+          cases hLower : MIR.lower admitted with
+          | error e =>
+            simp [compile, stages, Pipeline.run, bind, Except.bind,
+              hLex, hParse, hElab, hAdmit, hLower] at h
+          | ok mir =>
+            cases hSSA : SSA.lower input.path (Memory.lower mir) with
+            | error e =>
+              simp [compile, stages, Pipeline.run, memory, bind, Except.bind,
+                hLex, hParse, hElab, hAdmit, hLower, hSSA] at h
+            | ok bir =>
+              have he := compile_of_edges input tokens ast core admitted mir (Memory.lower mir) bir
+                hLex hParse hElab hAdmit hLower rfl hSSA
+              rw [he] at h
+              cases h
+              exact SSA.lower_correct hSSA
+
 /-- The LCB adapter and profile checks compose independently of the shared stages. -/
 theorem prepareLCB_of_edges (bir : BIR.Program)
     (f : LeanCompilerBackend.Verified.Source.Function)

@@ -37,11 +37,6 @@ structure LoweringPremises where
     (∀ source mir, MIR.lowerUnchecked source = .ok mir →
       let p := Core.toCore source.program
       MIR.run mir = Core.run p (p.body.length + 1))
-  ssa : ∀ path mem bir, SSA.lower path mem = .ok bir →
-    match BIR.run bir (bir.blocks.length + 1) with
-    | .exited n => Memory.run mem = .exit n
-    | .trapped site => ∃ entry, bir.sites[site]? = some entry ∧ Memory.run mem = .trap entry.kind
-    | _ => False
 
 namespace Native
 open BIR Backend
@@ -149,8 +144,6 @@ def all : List Premise := [
     "successful elaboration preserves the source AST evaluator's outcome in Core"⟩,
   ⟨"P_lower", .implementation, "checked-evidence validity and MIR preservation",
     "MIR preserves Core outcomes for unchecked lowering and for evidence produced by admission"⟩,
-  ⟨"P_ssa", .implementation, "SSA semantic preservation",
-    "successful SSA lowering preserves Memory CFG outcomes, including the trap kind"⟩,
   ⟨"P_print", .implementation, "an LLVM-IR semantics; not planned for slice 0",
     "the printed LLVM text of a WF BIR means at most the BIR behaviour, encoded"⟩,
   ⟨"P_toolchain[llvm]", .toolchain, "not planned",
@@ -176,6 +169,9 @@ def theorems : List Lean.Name := [
   ``Concrete.Admission.admit_never_traps,
   ``Concrete.Memory.lower_correct,
   ``Concrete.SSA.lower_wf,
+  ``Concrete.SSA.validate_correct,
+  ``Concrete.SSA.lower_correct,
+  ``Concrete.Stages.compile_ssa_correct,
   ``Concrete.Stages.compile_of_edges,
   ``Concrete.Stages.prepareLCB_of_edges,
   ``Concrete.Native.lcb_emit_correct,

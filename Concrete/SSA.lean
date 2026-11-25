@@ -69,19 +69,60 @@ private def assign (path : String) (s : State) (stmt : Memory.Store) :
                       insts := .bin .add .u8 dest lhs rhs :: s.insts }
     else return riskyAdd path s slot lhs rhs origin
 
-private def validate (bir : BIR.Program) : Except Refusal BIR.Program :=
-  if BIR.wf bir then .ok bir
-  else .error (.internal "SSA produced ill-formed BIR")
+/-- The SSA contract observes the return value or the kind recorded at the taken trap site. -/
+def Preserves (mem : Memory.Program) (bir : BIR.Program) : Prop :=
+  match BIR.run bir (bir.blocks.length + 1) with
+  | .exited n => Memory.run mem = .exit n
+  | .trapped site => ∃ entry, bir.sites[site]? = some entry ∧ Memory.run mem = .trap entry.kind
+  | _ => False
+
+/-- Project a completed BIR run into the source outcome space. A missing trap entry,
+a stuck run, and fuel exhaustion have no corresponding outcome. -/
+private def observedOutcome (bir : BIR.Program) : Option ConcreteSpec.Outcome :=
+  match BIR.run bir (bir.blocks.length + 1) with
+  | .exited n => some (.exit n)
+  | .trapped site => bir.sites[site]?.map (fun entry => .trap entry.kind)
+  | _ => none
+
+/-- Slice 0 has closed, bounded executions, so the validator compares the observations
+using the stage semantics on the original Memory program and the actual emitted BIR. -/
+def validate (mem : Memory.Program) (bir : BIR.Program) : Except Refusal BIR.Program :=
+  if !BIR.wf bir then .error (.internal "SSA produced ill-formed BIR")
+  else if observedOutcome bir = some (Memory.run mem) then .ok bir
+  else .error (.internal "SSA changed the Memory outcome")
+
+theorem validate_correct {mem : Memory.Program} {candidate bir : BIR.Program}
+    (h : validate mem candidate = .ok bir) : BIR.WF bir ∧ Preserves mem bir := by
+  unfold validate at h
+  split at h
+  · contradiction
+  · rename_i hwf
+    split at h
+    · rename_i hout
+      cases h
+      refine ⟨by simpa [BIR.WF] using hwf, ?_⟩
+      unfold observedOutcome at hout
+      unfold Preserves
+      cases hrun : BIR.run candidate (candidate.blocks.length + 1) <;> rw [hrun] at hout
+      · exact (Option.some.inj hout).symm
+      · rename_i site
+        cases hsite : candidate.sites[site]? with
+        | none => simp [hsite] at hout
+        | some entry =>
+          exact ⟨entry, hsite, (Option.some.inj (by simpa [hsite] using hout)).symm⟩
+      · contradiction
+      · contradiction
+    · contradiction
 
 def lower (path : String) (p : Memory.Program) : Except Refusal BIR.Program := do
   let s ← p.stores.foldlM (assign path) {}
   let result ← operand s.env p.result
   let bir : BIR.Program :=
     ⟨(s.blocks.push ⟨s.params, s.insts.reverse, .ret result⟩).toList, s.sites.toList⟩
-  validate bir
+  validate p bir
 
-theorem lower_wf {path : String} {p : Memory.Program} {bir : BIR.Program}
-    (h : lower path p = .ok bir) : BIR.WF bir := by
+private theorem lower_validated {path : String} {p : Memory.Program} {bir : BIR.Program}
+    (h : lower path p = .ok bir) : BIR.WF bir ∧ Preserves p bir := by
   cases hs : p.stores.foldlM (assign path) {} with
   | error e => simp [lower, hs, bind, Except.bind] at h
   | ok s =>
@@ -89,11 +130,16 @@ theorem lower_wf {path : String} {p : Memory.Program} {bir : BIR.Program}
     | error e => simp [lower, hs, hr, bind, Except.bind] at h
     | ok result =>
       simp only [lower, hs, hr, bind, Except.bind] at h
-      unfold validate at h
-      split at h
-      · cases h
-        assumption
-      · contradiction
+      exact validate_correct h
+
+theorem lower_wf {path : String} {p : Memory.Program} {bir : BIR.Program}
+    (h : lower path p = .ok bir) : BIR.WF bir :=
+  (lower_validated h).1
+
+/-- Every successful lowering preserves the Memory observation, including the taken trap's kind. -/
+theorem lower_correct {path : String} {p : Memory.Program} {bir : BIR.Program}
+    (h : lower path p = .ok bir) : Preserves p bir :=
+  (lower_validated h).2
 
 /-! ## Local simulation
 
