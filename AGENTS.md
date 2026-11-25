@@ -52,11 +52,13 @@ agent, orchestrator or reviewer chooses, encodes, implements or provisionally sh
 of them, inside a bug fix or anywhere else. Agents present options and a recommendation to the owner
 and wait for an explicit answer. Behaviour already on main that took a side stays as it is, recorded
 as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
-- The Codex review of every fix (`scripts/review/review.sh` asks it) also answers: "does this fix
-  pick a side on any OD in docs/decisions.md?" If yes, or if the fix cannot be made without picking
-  one, stop and report to the owner; do not land it. The review checks the provenance of an explicit owner answer or a decision recorded under
-  the November 25 delegation. The procedure for recording an owner answer is in
-  [REVIEW.md](docs/REVIEW.md#owner-decisions-choosing-versus-recording).
+- The Codex review of every fix (`scripts/review/review.sh` asks it) checks whether the fix
+  chooses, revises, encodes, implements, extends or reverts an owner decision without approval
+  covering the change. Accept an explicit owner answer or, for a matter within Slices 0 and 1,
+  a decision recorded under the November 25 delegation with all three agreeing verdicts.
+  If the fix needs a decision that lacks either form of approval, stop, report it to the owner,
+  and do not land it. See [REVIEW.md](docs/REVIEW.md#owner-decisions-choosing-versus-recording)
+  for the provenance checks.
 
 **Bugs.**
 - Every bug gets a structural cause and a structural owner: the design fact that let it exist, and
@@ -246,7 +248,7 @@ remaining work are explicit. Historical commands and machine procedures are omit
 | Keep machine provisioning outside the public repository | Fleet layout and provisioning belong to external operations. Identifying sensitive information in arbitrary prose requires context. |
 | Recheck missed worker exit notifications | Monitoring external jobs and notifications is a coordinator responsibility. |
 | Distinguish mutation kills from toolchain failure and restore pristine binaries | The lesson's harness is frozen. Its checks would matter when an active mutation driver returns. |
-| Negotiate language decisions before implementation | Only the owner can give an explicit disposition. Determining whether an implementation picks a side requires review. |
+| Negotiate language decisions before implementation | Approval comes from the owner or from a recorded decision under the November 25 delegation within Slices 0 and 1. Review checks that the approval covers the implementation. |
 | Prefer one transparent form and keep semantic authority in the Lean spec | Deciding if two forms or descriptions express the same rule requires semantic judgment. |
 | Discuss decisions in text without a popup | This is an interaction preference for tools outside the repository. |
 | Let the owner review every change to language design, syntax or grammar | Identifying a semantic change and its approval scope requires owner process and review. |
