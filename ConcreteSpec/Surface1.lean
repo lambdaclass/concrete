@@ -193,7 +193,7 @@ private def lowerBody (decls : List String) (scope : Scope) :
       let (rhs, state) ← lowerExpr scope rhs ty state
       if name = "_" then
         lowerBody decls scope rest { state with reverseBody := .let_ .wild ty rhs :: state.reverseBody }
-      else if userName name && !(AList.lookup scope name).isSome then
+      else if userName name && !decls.contains name && !(AList.lookup scope name).isSome then
         let (var, state) := state.bind ty rhs
         lowerBody decls ((name, (var, ty)) :: scope) rest state
       else none
@@ -226,6 +226,11 @@ the compiler. Checked tests ownership, nominal types and evidence using declarat
 def Admitted (bytes : ByteArray) (out : Elaborated) : Prop :=
   (∃ tokens ast, Lexes bytes tokens ∧ Derives tokens ast ∧ elaborate ast = some out) ∧
     Checked out.core
+
+/-- The final call in a derivation of these bytes supplies the reported abort span. -/
+def WrittenAbort (bytes : ByteArray) (out : Elaborated) (span : Span) : Prop :=
+  ∃ tokens ast, Lexes bytes tokens ∧ Derives tokens ast ∧ elaborate ast = some out ∧
+    ast.body.getLast? = some (.call "abort" span)
 
 /-- The host observation has the process status and byte streams. The path is the admitted
 project-relative source path supplied at the observation boundary. -/

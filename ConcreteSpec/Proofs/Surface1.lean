@@ -32,22 +32,22 @@ theorem sourcePermitted_iff {src : SourceProgram} {out : Elaborated}
   simpa [SourcePermitted, h] using check_iff out.core
 
 /-- R-0588 at the source-to-Core boundary. The source's checked elaboration terminates
-within its straight-line fuel budget, preserves the written abort site and admits no
-implicit trap. Each conclusion holds with every larger budget. -/
+within its straight-line fuel budget, preserves the final written abort site. Each conclusion holds with every larger budget. -/
 theorem admitted_behaviour {bytes : ByteArray} {out : Elaborated} (h : Admitted bytes out) :
     ∀ fuel ≥ out.core.body.length + 1,
       (∃ code, code < 256 ∧ run out.core fuel = .exit code) ∨
       ∃ site span, out.core.ending = .abort site ∧
-        out.sites.getLast? = some (site, span) ∧ run out.core fuel = .aborted site := by
+        WrittenAbort bytes out span ∧ out.sites.getLast? = some (site, span) ∧
+        run out.core fuel = .aborted site := by
   intro fuel enough
   obtain ⟨o, hexec, hresult⟩ := checked_finishes h.2
   have runAtFuel : run out.core fuel = o :=
     runBody_mono (exec_complete hexec) (exec_ne_outOfFuel hexec) fuel enough
   rcases hresult with ⟨code, rfl⟩ | ⟨site, hs, rfl⟩
   · exact .inl ⟨code, runBody_exit_u8 h.2.2 .nil fuel code runAtFuel, runAtFuel⟩
-  · obtain ⟨_, _, _, _, helab⟩ := h.1
-    obtain ⟨span, _, hspan⟩ := elaborate_abort helab hs
-    exact .inr ⟨site, span, hs, hspan, runAtFuel⟩
+  · obtain ⟨tokens, ast, hlex, hderive, helab⟩ := h.1
+    obtain ⟨span, hwritten, hspan⟩ := elaborate_abort helab hs
+    exact .inr ⟨site, span, hs, ⟨tokens, ast, hlex, hderive, helab, hwritten⟩, hspan, runAtFuel⟩
 
 /-- At the admitted boundary, the specified abort is reached with any sufficient fuel.
 The converse recovers the Core terminator from the outcome. -/
@@ -65,12 +65,13 @@ theorem admitted_process_result {bytes : ByteArray} {out : Elaborated} (h : Admi
     (path : SourcePath) {fuel : Nat} (enough : out.core.body.length + 1 ≤ fuel) :
     (∃ code, code < 256 ∧ run out.core fuel = .exit code ∧
       processResult path out (run out.core fuel) = some ⟨code, ByteArray.empty, ByteArray.empty⟩) ∨
-    ∃ site span, out.sites.getLast? = some (site, span) ∧ run out.core fuel = .aborted site ∧
+    ∃ site span, WrittenAbort bytes out span ∧ out.sites.getLast? = some (site, span) ∧
+      run out.core fuel = .aborted site ∧
       processResult path out (run out.core fuel) =
         some ⟨134, ByteArray.empty, (abortLine path span site).toUTF8⟩ := by
-  rcases admitted_behaviour h fuel enough with ⟨code, hrange, hrun⟩ | ⟨site, span, _, hs, hrun⟩
+  rcases admitted_behaviour h fuel enough with ⟨code, hrange, hrun⟩ | ⟨site, span, _, hwritten, hs, hrun⟩
   · exact .inl ⟨code, hrange, hrun, by simp [hrun, processResult]⟩
-  · exact .inr ⟨site, span, hs, hrun, by simp [hrun, hs, processResult]⟩
+  · exact .inr ⟨site, span, hwritten, hs, hrun, by simp [hrun, hs, processResult]⟩
 
 /-- Each empty struct has zero payload bytes. Its declared type remains the key for decoding
 those bytes, recovering the nominal value. -/
@@ -462,7 +463,10 @@ theorem useAfterMove : ¬ SourcePermitted ⟨["S"], "main", [bindingAst, takeS, 
 theorem otherCall : ¬ SourcePermitted ⟨[], "main", [.call "other" span]⟩ := by decide
 
 theorem reservedAbort : ¬ SourcePermitted
-    ⟨[], "main", [.bind "abort" (.typed u8) (.integer 1 none), callAbort]⟩ := by decide
+    ⟨[], "main", [.bind "abort" (.typed u8) (.integer 1 none), .ret (.local "abort")]⟩ := by decide
+
+theorem localCannotShadowStruct : ¬ SourcePermitted
+    ⟨["S"], "main", [.bind "S" (.typed u8) (.integer 1 none), .ret (.local "S")]⟩ := by decide
 
 theorem nominalMismatch : ¬ SourcePermitted
     ⟨["S", "T"], "main", [.bind "T" .destructure (.construct "S"), ret]⟩ := by decide

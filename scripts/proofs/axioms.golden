@@ -5899,6 +5899,7 @@ ConcreteSpec.Surface1.Witness.live_slot_abort_terminal	propext
 ConcreteSpec.Surface1.Witness.live_unused_abort_refused	Quot.sound propext
 ConcreteSpec.Surface1.Witness.live_used_abort	Quot.sound propext
 ConcreteSpec.Surface1.Witness.live_used_return_refused	Quot.sound propext
+ConcreteSpec.Surface1.Witness.localCannotShadowStruct	propext
 ConcreteSpec.Surface1.Witness.moveCopy	propext
 ConcreteSpec.Surface1.Witness.nominalMismatch	propext
 ConcreteSpec.Surface1.Witness.nonSliceType	propext
