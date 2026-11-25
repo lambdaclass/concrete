@@ -200,10 +200,13 @@ Concrete/
   Backend/             the backend stage: everything after BIR, one file per backend
     LLVM.lean          BIR → LLVM text printer (unverified; P_print)
     LCB.lean           BIR → LCB `Source.Function` adapter + adapter_correct; in-process assembly
+    Observation.lean   slice-0 runtime projection and BIR/LCB semantic adequacy
     Runtime.lean       the fixed entry that decodes the result word into exit status / trap line, per backend
   Stages.lean          typed stage contracts; `compile` is the fold of the stage list
   Premises.lean        THE one file of premises, plus the execution-trust inventory
-  Theorem.lean         compile_correct, the non-vacuity witnesses, answer_correct
+  Contracts.lean       observations, uniform edge contracts, refinement and evaluator adequacy
+  Theorem.lean         production registry, compile_correct, per-backend non-vacuity obligations
+  Certificate.lean     pre-link certificate, optional executable note and external receipt
   Facts.lean           per-function facts: judgments, derive, derive_sound, rendering (text/JSON)
   Cert.lean            per-compilation certificate emitter
   Main.lean            CLI driver (IO, toolchain invocation); placeholder spellings
@@ -214,7 +217,8 @@ tests/
 ```
 
 **Rules:**
-- `Concrete/` has one subfolder, `Backend/`, because the backend stage has three files. No other subfolder exists until another stage outgrows one file, and a split never creates a one-file folder.
+- Stage-specific helper modules live with their stage. The backend implementations and the
+  slice-0 observation bridge live in `Backend/`.
 - Each stage's definitions and theorems live in the same file, so each fact has one home.
 - `Resolve` merges into `Elab`, because it is one stage edge with one contract.
 - Every entry has exactly one home: tests are in `tests/`, gates in `scripts/checks/` (the compiler's in `scripts/checks/compiler/`), the spec in `ConcreteSpec/`. Conformance has one home, `tests/`.
@@ -391,45 +395,44 @@ The **execution-trust inventory** is in the same file, as documented non-Prop en
 
 ## The end-to-end theorem (`Concrete/Theorem.lean`)
 
-```lean
-/-- What `compile` returns: pure data, every intermediate recorded. -/
-structure Output where
-  toks : List Token; ast : Surface.Program
-  p : Core.Program; sites : SiteMap; tokens : Tokens; mir : MIR.Program; mem : Mem.Program
-  bir : BIR.Program
+[`Concrete/Theorem.lean`](Theorem.lean) states `ImageTheorem.compile_correct` as a proposition.
+It relates the exact input bytes to declarative lexing, parsing and elaboration, the admitted Core
+payload and the BIR returned by `Stages.compile`. For each backend it relates that BIR to the actual
+tool inputs and the final executable bytes. LLVM uses `LLVM.module`, including its runtime. LCB uses
+`LCB.emit`, job validation, `Stages.prepareLCB`, the selected `LCB.assemble` path and the exact site
+table and runtime input. The linker, loader, runtime and trap-rendering obligations remain visible
+for each backend. The LCB adapter remains a direct proof obligation.
 
-/-- One theorem for both backends: `B` is `llvm _` or `lcb`. -/
-theorem compile_correct (F : FrontendPremises) {B N T} (P : NativePremises B N T)
-    {src : ByteArray} {out : Output} {img : N.Image}
-    (hc : compile T src = .ok out) (he : B.emit out.bir = .ok t) (hb : N.Built T t img) :
-    Surface0.Denotes src out.p ∧ Fragment.core s0 out.p ∧ Checked out.p ∧
-    ∃ c, c < 256 ∧ run out.p (Core.fuel out.p) = .exit c ∧
-      (∃ β, N.Runs T img β) ∧ ∀ β, N.Runs T img β → β = .exited c
-```
+[`Concrete/Contracts.lean`](Contracts.lean) defines the common edge interface, invariant
+compatibility, stuttering simulation and evaluator adequacy. Its observation projection captures
+exit status, trap kind, lexical site and exact stderr bytes. Finite-prefix safety is independent
+of maximal refinement, which separately covers termination and divergence. The slice-0 result-word
+interpretation is confined to the backend observation bridge, which relates the projection to LCB's
+imported source semantics and the BIR evaluator. [`Backend/Observation.lean`](Backend/Observation.lean)
 
-**Composition, each step a stated theorem:**
-1. `compile_spec`: `compile T src = .ok out` implies:
-   - `Lex.lex`, `Parse.parse` and `Elab.elab` succeed and produce `out.p`;
-   - `Fragment.core s0 out.p` and `check out.p = true`;
-   - `out.tokens = admit out.p`, `out.mir = lower out.p out.tokens`, `out.mem = memory out.mir` and `out.bir = ssa out.mem`;
-   - `out.bir.frameSlots ≤ T.maxSlots`.
+The BIR slot limit applies to the BIR before emission. Final-image stack adequacy and launch admission
+govern finite-prefix safety. The maximal execution claim also requires OS liveness and progress
+through stderr writes and exit. Admission supplies the slice-0 source termination obligation.
+`UncheckedCorrect` covers the residual-check path and preserves whole trap observations, including
+kind and lexical site. `LLVMNonvacuous` and `LCBNonvacuous` require each backend's hypotheses to hold
+together on an actual build with a matching observation.
 
-   LLVM renders the shared BIR with `LLVM.print`. An LCB artifact additionally requires
-   `Stages.prepareLCB out.bir = .ok f` for the function `f` passed to the backend.
-2. `Stages.compile_lexes` applies `Lex.lex_correct` to the token list of a successful compilation.
-   The lexical judgment combines with `F.parse` and `elab_sound` to give `Denotes src out.p`.
-   `check_iff` gives `Checked`.
-3. `slice0_exits` gives `run … = .exit c` with `c < 256`; `run_exit_behaviour` then gives `Core.behaviour = .exited c`.
-4. `Admission.admit_never_traps` applies the spec's `slice0_never_traps` to the checked Core program.
-5. `MIR.lower_correct` preserves the Core outcome for successful admitted lowering. The
-   no-trap theorem justifies using wrapping addition when admission supplies a discharge token.
-6. `MIR.lowerUnchecked_correct` preserves the Core outcome for successful unchecked lowering,
-   including the `arithmeticOverflow` trap for `200 + 56`.
-7. `Memory.lower_correct` preserves the MIR outcome. `Memory.lower_admitted_correct` and
-   `Memory.lower_unchecked_correct` compose it with the MIR theorems to reach Memory directly from
-   Core. `Stages.compile_core_correct` applies the admitted result to any successful production
-   compilation. `P_ssa` still supplies the semantic preservation from Memory to BIR.
-8. `P.launch` excludes `killed`. `P.rt` gives a body result `r` with `β = r.behaviour`. `P.toolchain` gives `B.Means t r`, and `P.emit` gives `r.behaviour = BIR.behaviour out.bir = .exited c`. `P.live` gives existence.
+The new propositions are proof obligations for subsequent work. The current fixed-budget
+`FrontendPremises.elaborate` and `LoweringPremises.ssa` in [`Concrete/Premises.lean`](Premises.lean)
+use the Core body length plus one and the BIR block count plus one, respectively. The declarative
+elaboration and fuel-independent lowering contracts are their planned replacements. The current
+`Native.EmitCorrect` and `Native.observed_behaviour` use the slice-0 BIR behavior interface. The
+new native contracts put maximal behaviors and exact image observations at the theorem boundary.
+
+[`Concrete/Certificate.lean`](Certificate.lean) defines the pre-link certificate, the optional
+non-loaded executable note and the external receipt. Domain-tagged digests identify exact
+payloads. Evidence identifies which correspondences the kernel checks and which handoffs the
+driver attests. LLVM certificate checking binds the complete printer output to the artifact.
+The printer's semantic premise remains open. The note binds immutable upstream identity and routing
+fields. Final-image
+binding, facts, open premises, execution trust and replay commands live in the receipt. Fact
+dependencies support separate reporting of production validity and acceptance after revocation.
+Canonical encoding, hashing, emission and bounded offline verification remain implementation work.
 
 **Supporting theorems:**
 - `addOvf_correct`: for arbitrary `u8` operands, the result is `(a+b) % 256` and the flag is `a+b ≥ 256`.
@@ -445,7 +448,7 @@ theorem answer_correct (F : FrontendPremises) (P : NativePremises B N T₀)
     (he : B.emit answerOut.bir = .ok t) (hb : N.Built T₀ t img) : (∃ β, N.Runs T₀ img β) ∧ ∀ β, N.Runs T₀ img β → β = .exited 42
 ```
 
-**Non-vacuity, one witness per layer:**
+**Earlier slice-0 consistency sketch:**
 1. **Acceptance:** `answer_accepts`, by kernel `decide`.
 2. **Native model consistency.** LLVM's semantic preservation premise `P_print` remains
    open. The body text alone cannot recover the original BIR or its site table, so there is
@@ -465,7 +468,7 @@ theorem answer_correct (F : FrontendPremises) (P : NativePremises B N T₀)
 3. **Frontend premises.** These are claims about fixed code. The certificate plan checks the remaining frontend premises per compilation (next section).
 4. **Native-build existence:** this is attested, not proved. The conformance job records toolchain provenance and the image digest for each example.
 
-## Per-compilation certificate (`Concrete/Cert.lean`), R-0552 first increment
+## Per-compilation certificate emission (planned `Concrete/Cert.lean`), R-0552 first increment
 
 The driver emits `Cert_<digest>.lean`, which the kernel checks (`lake env lean`, no `native_decide`):
 
