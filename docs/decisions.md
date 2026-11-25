@@ -92,17 +92,17 @@ i think the hash is better? what do yhou think
    the [November 8 written grammar decision](#decided-2026-11-08-written-grammar) and the
    corresponding front-end prerequisite in the [November 8 front-end decision](#decided-2026-11-08-front-end).
    Under [R-0728](../ROADMAP.md#r-0728), the coordinator drafts the combined Slices 0–11
-   grammar, flags open spellings, checks it with `ll1` and brings it to the owner before
-   Slice 3's parser is written. Slice 1 proceeds on its own approval. The combined surface
+   grammar, flags open spellings and checks it with `ll1` so cross-feature clashes surface
+   “before slice 3,” as specified in answer 2a. The coordinator plans to bring it to the
+   owner before Slice 3's parser is written. Slice 1 proceeds on its own approval. The combined surface
    freezes at 0.1 alongside the Core freeze in Slice 11. Later slices extend it.
-3. Slice 1 (`B1`) starts while the rest of Slice 0's `B0a` is being finished. This supersedes
-   the sequential start requirement in the [November 6 vertical-slices decision](#decided-project-vertical-slices-2026-11-06),
-   which the coordinator described above. Only the start order changes. Each slice must
-   still be fully proven end to end before it closes. The [November 22 roadmap reordering](#decided-2026-11-22-roadmap-reordering)
+3. The owner's “start slice 1 in parallel” authorizes Slice 1 (`B1`) to start while Slice 0's
+   remaining `B0a` work continues. The [November 6 sequential start requirement](#decided-project-vertical-slices-2026-11-06)
+   continues to govern later starts. Each slice must still be fully proven end to end before
+   it closes. The [November 22 roadmap reordering](#decided-2026-11-22-roadmap-reordering)
    describes the `B0a`/`B0b` staging.
-4. As a standing rule, at most two roadmap slices may be in progress at any time. The owner's
-   “stages” means slices in the roadmap. The active slices are Slice 0's `B0a` remainder and
-   Slice 1.
+4. The owner's standing cap is “but never do more than two stages in parallel,” followed by
+   “remember this.” How the cap applies to later slices is not decided by this entry.
 5. The owner required Codex and agy review of the grammar, with Gemini Neon for agy
    when available. The [standing project review rule](#decided-project-review) also applies.
    [AGENTS.md](../AGENTS.md#review) records the workflow.
@@ -1523,8 +1523,8 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   Revised 2026-11-07 by the [final-slice decision](#decided-2026-11-07-final-slices): the approved
   order gains slice 28 for concurrency, with ethlambda and the encrypted tunnel after it. Slice 27
   keeps httpget, tcpserve and the sequential web server. The [November 25 decision](#decided-2026-11-25-freeze-and-grammar)
-  supersedes the sequential start requirement and retains the end-to-end proof requirement
-  at closure.
+  authorizes Slice 1 to start alongside Slice 0. The sequential start requirement continues
+  to govern later starts, and the end-to-end proof requirement applies at closure.
 - <a id="decided-2026-11-07-step-bounds"></a>**Step and time bounds** (owner, 2026-11-07: "ok go
   ahead all yes then as you said right", approving the recorded recommendation). This answers when
   quantitative bounds arrive and what they mean. The step-counting cost model is built with loops at
