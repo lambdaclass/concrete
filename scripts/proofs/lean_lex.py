@@ -207,6 +207,11 @@ def compiler_header():
         modules.add(root)
         modules.update(".".join(p.relative_to(base).with_suffix("").parts)
                        for p in (base / root).rglob("*.lean"))
+    # The compiler's indexes use this proved data structure from the pinned toolchain.
+    hashmap = "Std.Data.HashMap.Lemmas"
+    if not (prefix / "src/lean/Std/Data/HashMap/Lemmas.lean").is_file():
+        raise LexError(f"missing approved toolchain module: {hashmap}")
+    modules.add(hashmap)
     return ModuleHeader(modules)
 
 

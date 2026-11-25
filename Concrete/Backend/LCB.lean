@@ -1,3 +1,4 @@
+import Std.Data.HashMap.Lemmas
 import ConcreteSpec.Proofs.Basics
 import Concrete.Backend.Runtime
 import Concrete.BIR.Progress
@@ -106,14 +107,18 @@ definitions, so this is a function of the register.
 For example, a register at offset 2 in a block with base 5 is looked up as `some 7`. -/
 def regId (p : Program) (r : Reg) : Option Nat := AList.lookup (ids p) r
 
-def idOf (p : Program) (r : Reg) : Except String Nat :=
-  match regId p r with
+private def idOfWith (find : Reg → Option Nat) (r : Reg) : Except String Nat :=
+  match find r with
   | some n => .ok n
   | none => .error s!"register %r{r} has no definition"
 
-def operand (p : Program) : Operand → Except String Source.Operand
-  | .reg r => return .local (← idOf p r)
+abbrev idOf (p : Program) := idOfWith (regId p)
+
+private def operandWith (find : Reg → Option Nat) : Operand → Except String Source.Operand
+  | .reg r => return .local (← idOfWith find r)
   | .imm _ v => return .literal (word v)
+
+abbrev operand (p : Program) := operandWith (regId p)
 
 def opBinary : BinOp → Source.Binary
   | .add => .add
@@ -124,19 +129,19 @@ def ins (d : Nat) (op : Source.Operation) : Source.Instruction :=
   { destination := d, width := .word, operation := op }
 
 /-- An instruction's LCB instructions, its first value numbered `n`. -/
-def inst (p : Program) (n : Nat) : Inst → Except String (List Source.Instruction)
+private def instWith (resolve : Operand → Except String Source.Operand) (n : Nat) : Inst → Except String (List Source.Instruction)
   | .bin op t _ a b => do
     unless inProfile t do throw s!"{repr t} is outside LCB's slice-0 profile"
-    let a ← operand p a
-    let b ← operand p b
+    let a ← resolve a
+    let b ← resolve b
     return [ins n (.binary (opBinary op) a b),
       ins (n + 1) (.binary .sub (.local n) (.literal (word t.min))),
       ins (n + 2) (.binary .andBits (.local (n + 1)) (.literal (word (2 ^ t.bits - 1)))),
       ins (n + 3) (.binary .add (.local (n + 2)) (.literal (word t.min)))]
   | .binOvf op t _ _ a b => do
     unless inProfile t do throw s!"{repr t} is outside LCB's slice-0 profile"
-    let a ← operand p a
-    let b ← operand p b
+    let a ← resolve a
+    let b ← resolve b
     return [ins n (.binary (opBinary op) a b),
       ins (n + 1) (.binary .sub (.local n) (.literal (word t.min))),
       ins (n + 2) (.binary .andBits (.local (n + 1)) (.literal (word (2 ^ t.bits - 1)))),
@@ -145,10 +150,12 @@ def inst (p : Program) (n : Nat) : Inst → Except String (List Source.Instructi
       ins (n + 5) (.compare .eq .word (.local (n + 4)) (.literal (word 0)))]
   | .trunc fr to _ a => do
     unless inProfile fr && inProfile to do throw s!"{repr fr} → {repr to} is outside LCB's slice-0 profile"
-    let a ← operand p a
+    let a ← resolve a
     return [ins n (.binary .sub a (.literal (word to.min))),
       ins (n + 1) (.binary .andBits (.local n) (.literal (word (2 ^ to.bits - 1)))),
       ins (n + 2) (.binary .add (.local (n + 1)) (.literal (word to.min)))]
+
+abbrev inst (p : Program) := instWith (operand p)
 
 /-- The edges into block `j` from block `k`, whose terminator is `term`: (k, arguments). -/
 def edgesTo (j k : Nat) : Term → List (Nat × List Operand)
@@ -160,11 +167,13 @@ def edgesTo (j k : Nat) : Term → List (Nat × List Operand)
 def incoming (p : Program) (j : Nat) : List (Nat × List Operand) :=
   (indexed p.blocks).flatMap fun (k, b) => edgesTo j k b.term
 
-def term (p : Program) : Term → Except String Source.Terminator
-  | .ret a => return .ret (← operand p a)
+private def termWith (resolve : Operand → Except String Source.Operand) (resolveId : Reg → Except String Nat) : Term → Except String Source.Terminator
+  | .ret a => return .ret (← resolve a)
   | .trap s => return .ret (.literal (word (256 + s)))
   | .br t _ => return .jump t
-  | .condbr c t _ e _ => return .branch (.local (← idOf p c)) t e
+  | .condbr c t _ e _ => return .branch (.local (← resolveId c)) t e
+
+abbrev term (p : Program) := termWith (operand p) (idOf p)
 
 /-- Block `j`'s phi for its parameter `k`: one arm per incoming edge, by predecessor. -/
 def adaptPhi (p : Program) (j k : Nat) : Except String Source.Phi := do
@@ -187,11 +196,191 @@ def adaptBlock (p : Program) : Nat × Block → Except String Source.Block
     pure { phis := phis.toArray, instructions := insts.flatten.toArray, terminator := ← term p b.term }
 
 /-- `main`'s body as a function of LCB's verified source profile. -/
-def adapt (p : Program) : Except String Source.Function := do
+private def adaptList (p : Program) : Except String Source.Function := do
   unless numberingOk p do throw "the numbering is not injective (a register defined twice?)"
   let blocks ← (indexed p.blocks).mapM (adaptBlock p)
   return { resultWidth := .word, parameters := #[],
            valueWidths := Array.replicate (valueCount p) .word, blocks := blocks.toArray }
+
+/-- Assign an offset to each item in one pass, carrying the sum of preceding widths. -/
+private def positioned {α : Type} (width : α → Nat) (base : Nat) : List α → List (Nat × α)
+  | [] => []
+  | x :: xs => (base, x) :: positioned width (base + width x) xs
+
+private theorem positioned_get {α : Type} (width : α → Nat) (base : Nat) (xs : List α) (i : Nat) :
+    (positioned width base xs)[i]? = xs[i]?.map (fun x =>
+      (base + ((xs.take i).map width).sum, x)) := by
+  induction xs generalizing base i with
+  | nil => simp [positioned]
+  | cons x xs ih =>
+    cases i with
+    | zero => simp [positioned]
+    | succ i => simp [positioned, ih, Nat.add_assoc]
+
+private theorem positioned_eq {α : Type} (width : α → Nat) (base : Nat) (xs : List α) :
+    positioned width base xs = (indexed xs).map (fun (i, x) =>
+      (base + ((xs.take i).map width).sum, x)) := by
+  apply List.ext_getElem?
+  intro i
+  rw [positioned_get, List.getElem?_map, indexed, Runtime.getElem?_indexedFrom]
+  cases xs[i]? <;> simp
+
+private def fastIds (blocks : List (Nat × Block)) : List (Reg × Nat) :=
+  blocks.flatMap fun (base, b) =>
+    (indexed b.params).map (fun (k, (r, _)) => (r, base + k)) ++
+    (positioned Inst.width (base + b.params.length) b.insts).flatMap fun (pos, ins) =>
+      (instDefs ins).map fun (r, off) => (r, pos + off)
+
+private theorem fastIds_eq (p : Program) : fastIds (positioned blockSize 0 p.blocks) = ids p := by
+  simp [fastIds, ids, positioned_eq, blockBase, instBase, List.flatMap_map, Nat.add_assoc]
+
+private def fastIntermediates (blocks : List (Nat × Block)) : List Nat :=
+  blocks.flatMap fun (base, b) =>
+    (positioned Inst.width (base + b.params.length) b.insts).flatMap fun (pos, ins) =>
+      (interOffsets ins).map (pos + ·)
+
+private theorem fastIntermediates_eq (p : Program) :
+    fastIntermediates (positioned blockSize 0 p.blocks) = intermediates p := by
+  simp [fastIntermediates, intermediates, positioned_eq, blockBase, instBase, List.flatMap_map, Nat.add_assoc]
+
+/-- Index the first occurrence of each key and test uniqueness in the same pass. -/
+private def indexDistinct {α : Type} (key : α → Nat) : List α → Bool × Std.HashMap Nat α
+  | [] => (true, ∅)
+  | x :: xs =>
+    let (distinct, index) := indexDistinct key xs
+    (distinct && !index.contains (key x), index.insert (key x) x)
+
+private theorem indexDistinct_lookup {α : Type} (key : α → Nat) (xs : List α) (k : Nat) :
+    (indexDistinct key xs).2[k]? = xs.find? (fun x => key x == k) := by
+  induction xs with
+  | nil => simp [indexDistinct]
+  | cons x xs ih => by_cases h : key x = k <;> simp [indexDistinct, Std.HashMap.getElem?_insert, ih, List.find?, h, beq_eq_false_iff_ne.mpr]
+
+private theorem indexDistinct_contains {α : Type} (key : α → Nat) (xs : List α) (k : Nat) :
+    (indexDistinct key xs).2.contains k = (xs.map key).contains k := by
+  rw [Std.HashMap.contains_eq_isSome_getElem?, indexDistinct_lookup]
+  induction xs with
+  | nil => rfl
+  | cons x xs ih =>
+    by_cases h : key x = k
+    · simp [List.find?, h]
+    · rw [List.find?, beq_eq_false_iff_ne.mpr h, ih, List.map_cons]
+      simp [Ne.symm h]
+
+private theorem indexDistinct_ok {α : Type} (key : α → Nat) (xs : List α) :
+    (indexDistinct key xs).1 = decide (xs.map key).Nodup := by
+  induction xs with
+  | nil => rfl
+  | cons x xs ih =>
+    simp only [indexDistinct, ih, indexDistinct_contains, List.map_cons, List.nodup_cons,
+      Bool.decide_and, List.contains_eq_mem, decide_not, Bool.and_comm]
+
+private theorem indexDistinct_regId (defs : List (Reg × Nat)) (r : Reg) :
+    ((indexDistinct Prod.fst defs).2[r]?).map Prod.snd = AList.lookup defs r := by
+  rw [indexDistinct_lookup]
+  induction defs with
+  | nil => rfl
+  | cons x xs ih => rcases x with ⟨k, n⟩; by_cases h : k = r <;> simp [List.find?, AList.lookup, h, ih, beq_eq_false_iff_ne.mpr]
+
+private abbrev Edge := Nat × List Operand
+private abbrev EdgeIndex := Std.HashMap Nat (List Edge)
+
+private def addEdge (index : EdgeIndex) (dest : Nat) (edge : Edge) : EdgeIndex :=
+  index.insert dest (edge :: index[dest]?.getD [])
+
+private def indexEdges : List (Nat × Block) → EdgeIndex
+  | [] => ∅
+  | (pred, b) :: rest =>
+    let index := indexEdges rest
+    match b.term with
+    | .br dest args => addEdge index dest (pred, args)
+    | .condbr _ t ta e ea => addEdge (addEdge index e (pred, ea)) t (pred, ta)
+    | _ => index
+
+private theorem addEdge_lookup (index : EdgeIndex) (dest j : Nat) (edge : Edge) :
+    (addEdge index dest edge)[j]?.getD [] =
+      (if dest = j then [edge] else []) ++ index[j]?.getD [] := by
+  by_cases h : dest = j <;> simp [addEdge, Std.HashMap.getElem?_insert, h]
+
+private theorem indexEdges_lookup (blocks : List (Nat × Block)) (j : Nat) :
+    (indexEdges blocks)[j]?.getD [] = blocks.flatMap (fun (k, b) => edgesTo j k b.term) := by
+  induction blocks with
+  | nil => simp [indexEdges]
+  | cons x xs ih =>
+    rcases x with ⟨k, b⟩
+    cases hb : b.term <;> simp [indexEdges, hb, edgesTo, addEdge_lookup, ih, List.append_assoc]
+
+private def adaptBlockWith (find : Reg → Option Nat) (edges : List Edge) (j base : Nat)
+    (b : Block) : Except String Source.Block := do
+  let edges := edges.map fun (pred, args) => (pred, args.toArray)
+  let phis ← (indexed b.params).mapM fun (k, _) => do
+    let arms ← edges.mapM fun (pred, args) => do
+      let a ← match args[k]? with
+        | some a => operandWith find a
+        | none => throw s!"block {pred} passes too few arguments to block {j}"
+      pure (pred, a)
+    pure { destination := base + k, width := .word, incoming := arms.toArray }
+  let insts ← (positioned Inst.width (base + b.params.length) b.insts).mapM fun (pos, ins) =>
+    instWith (operandWith find) pos ins
+  return { phis := phis.toArray, instructions := insts.flatten.toArray,
+           terminator := ← termWith (operandWith find) (idOfWith find) b.term }
+
+private theorem adaptBlockWith_eq (p : Program) (j : Nat) (b : Block) :
+    adaptBlockWith (regId p) (incoming p j) j (blockBase p j) b = adaptBlock p (j, b) := by
+  simp [adaptBlockWith, adaptBlock, adaptPhi, positioned_eq, List.mapM_map, Function.comp_def]
+  congr 1
+  funext phis
+  congr 1
+  apply congrArg (fun f => (indexed b.insts).mapM f)
+  funext pair
+  rcases pair with ⟨i, ins⟩
+  simp [adaptInst, instBase, Nat.add_assoc]
+
+/-- Build the numbering and predecessor indexes once and share them across all blocks. -/
+def adapt (p : Program) : Except String Source.Function := do
+  let positionedBlocks := positioned blockSize 0 p.blocks
+  let defs := fastIds positionedBlocks
+  let (uniqueRegs, regs) := indexDistinct Prod.fst defs
+  let (uniqueSlots, slots) := indexDistinct id (defs.map Prod.snd)
+  let count := valueCount p
+  let inter := fastIntermediates positionedBlocks
+  unless uniqueRegs && uniqueSlots && (defs.map Prod.snd).all (· < count) &&
+      inter.all (· < count) && inter.all (fun m => !slots.contains m) do
+    throw "the numbering is not injective (a register defined twice?)"
+  let edges := indexEdges (indexed p.blocks)
+  let find := fun r => (regs[r]?).map Prod.snd
+  let blocks ← (indexed positionedBlocks).mapM fun (j, base, b) =>
+    adaptBlockWith find (edges[j]?.getD []) j base b
+  return { resultWidth := .word, parameters := #[],
+           valueWidths := Array.replicate count .word, blocks := blocks.toArray }
+
+private theorem indexed_positionedBlocks (p : Program) :
+    indexed (positioned blockSize 0 p.blocks) =
+      (indexed p.blocks).map (fun (j, b) => (j, blockBase p j, b)) := by
+  apply List.ext_getElem?
+  intro i
+  simp only [indexed, Runtime.getElem?_indexedFrom, positioned_get, List.getElem?_map,
+    Nat.zero_add, blockBase, Option.map_map]
+  rfl
+
+private theorem adapt_eq_list (p : Program) : adapt p = adaptList p := by
+  have lookup : (fun r => ((indexDistinct Prod.fst (ids p)).2[r]?).map Prod.snd) = regId p := by
+    funext r
+    exact indexDistinct_regId (ids p) r
+  unfold adapt
+  dsimp only
+  rw [fastIds_eq, fastIntermediates_eq]
+  have edge (j : Nat) : (indexEdges (indexed p.blocks))[j]?.getD [] = incoming p j :=
+    indexEdges_lookup _ _
+  simp only [adaptList, numberingOk, indexDistinct_ok, indexDistinct_contains, List.map_id_fun,
+    lookup, edge, indexed_positionedBlocks, List.mapM_map, Function.comp_def]
+  have blocks : (fun (j, b) => adaptBlockWith (regId p) (incoming p j) j (blockBase p j) b) =
+      adaptBlock p := by
+    funext pair
+    rcases pair with ⟨j, b⟩
+    exact adaptBlockWith_eq p j b
+  rw [blocks]
+  rfl
 
 /-- The LCB backend's emit: the adapted body paired with the program's site table (the table that
 decodes the body's result is part of the emitted artifact), or the adapter's refusal, in which case
@@ -377,15 +566,15 @@ theorem inst_length {p : Program} {n : Nat} {ins : Inst} {xs : List Source.Instr
     (h : inst p n ins = .ok xs) : xs.length = Inst.width ins := by
   cases ins with
   | bin op t d a b =>
-    unfold inst at h
+    unfold inst instWith at h
     cases hp : inProfile t <;> cases ha : operand p a <;> cases hb : operand p b <;>
       simp_all [Inst.width, bind, Except.bind, pure, Except.pure] <;> (subst h; rfl)
   | binOvf op t d f a b =>
-    unfold inst at h
+    unfold inst instWith at h
     cases hp : inProfile t <;> cases ha : operand p a <;> cases hb : operand p b <;>
       simp_all [Inst.width, bind, Except.bind, pure, Except.pure] <;> (subst h; rfl)
   | trunc fr to d a =>
-    unfold inst at h
+    unfold inst instWith at h
     cases hp : inProfile fr <;> cases hq : inProfile to <;> cases ha : operand p a <;>
       simp_all [Inst.width, bind, Except.bind, pure, Except.pure] <;> (subst h; rfl)
 
@@ -446,11 +635,11 @@ theorem read_operand {p : Program} {benv : Env} {lenv : Source.Environment}
   cases a with
   | reg r =>
     obtain ⟨n, hn, hl⟩ := hag r v hv
-    simp [operand, idOf, hn, bind, Except.bind, pure, Except.pure] at ha
+    simp [operand, operandWith, idOfWith, hn, bind, Except.bind, pure, Except.pure] at ha
     subst ha
     simp [Source.read, hl, enc_width, word_bne, bind, Except.bind, pure, Except.pure]
   | imm t x =>
-    simp only [operand, pure, Except.pure] at ha
+    simp only [operand, operandWith, pure, Except.pure] at ha
     cases ha
     simp only [evalOp] at hv
     split at hv
@@ -521,7 +710,7 @@ theorem inst_bin {p : Program} {n : Nat} {op : BinOp} {t : IntTy} {d : Reg} {a b
         ins (n + 1) (.binary .sub (.local n) (.literal (word t.min))),
         ins (n + 2) (.binary .andBits (.local (n + 1)) (.literal (word (2 ^ t.bits - 1)))),
         ins (n + 3) (.binary .add (.local (n + 2)) (.literal (word t.min)))] := by
-  unfold inst at h
+  unfold inst instWith at h
   cases hp : inProfile t <;> cases ha : operand p a <;> cases hb : operand p b <;>
     simp_all [bind, Except.bind, pure, Except.pure]
 
@@ -535,7 +724,7 @@ theorem inst_binOvf {p : Program} {n : Nat} {op : BinOp} {t : IntTy} {d fl : Reg
         ins (n + 3) (.binary .add (.local (n + 2)) (.literal (word t.min))),
         ins (n + 4) (.compare .unsignedLT .word (.local (n + 1)) (.literal (word (2 ^ t.bits)))),
         ins (n + 5) (.compare .eq .word (.local (n + 4)) (.literal (word 0)))] := by
-  unfold inst at h
+  unfold inst instWith at h
   cases hp : inProfile t <;> cases ha : operand p a <;> cases hb : operand p b <;>
     simp_all [bind, Except.bind, pure, Except.pure]
 
@@ -546,7 +735,7 @@ theorem inst_trunc {p : Program} {n : Nat} {fr to : IntTy} {d : Reg} {a : Operan
       xs = [ins n (.binary .sub a' (.literal (word to.min))),
         ins (n + 1) (.binary .andBits (.local n) (.literal (word (2 ^ to.bits - 1)))),
         ins (n + 2) (.binary .add (.local (n + 1)) (.literal (word to.min)))] := by
-  unfold inst at h
+  unfold inst instWith at h
   cases hp : inProfile fr <;> cases hq : inProfile to <;> cases ha : operand p a <;>
     simp_all [bind, Except.bind, pure, Except.pure]
 
@@ -1044,7 +1233,8 @@ theorem adapt_ok {p : Program} {f : Source.Function} (h : adapt p = .ok f) :
     numberingOk p = true ∧ ∃ bs, (indexed p.blocks).mapM (adaptBlock p) = .ok bs ∧
       f = { resultWidth := .word, parameters := #[],
             valueWidths := Array.replicate (valueCount p) .word, blocks := bs.toArray } := by
-  unfold adapt at h
+  rw [adapt_eq_list] at h
+  unfold adaptList at h
   cases hn : numberingOk p <;> cases hb : (indexed p.blocks).mapM (adaptBlock p) <;>
     simp_all [bind, Except.bind, pure, Except.pure]
 
@@ -1201,7 +1391,7 @@ theorem ret_sim {p : Program} {f : Source.Function} (hf : adapt p = .ok f) {j : 
     Source.step f ⟨j, (b.insts.map Inst.width).sum, env⟩ = .ok (.returned (enc v)) := by
   have hterm := block_term hlb
   rw [ht] at hterm
-  simp only [term, bind, Except.bind, pure, Except.pure] at hterm
+  simp only [term, termWith, bind, Except.bind, pure, Except.pure] at hterm
   cases ha : operand p a with
   | error e => simp [ha] at hterm
   | ok a' =>
@@ -1217,7 +1407,7 @@ theorem trap_sim {p : Program} {f : Source.Function} (hf : adapt p = .ok f) {j :
     Source.step f ⟨j, (b.insts.map Inst.width).sum, env⟩ = .ok (.returned (word (256 + st))) := by
   have hterm := block_term hlb
   rw [ht] at hterm
-  simp only [term, pure, Except.pure] at hterm
+  simp only [term, termWith, pure, Except.pure] at hterm
   injection hterm with hterm
   exact step_ret hfb (block_size hlb).symm hterm.symm
     (by rw [adapt_result hf]; exact read_literal _ _)
@@ -1726,13 +1916,13 @@ theorem runBlock_sim {p : Program} (hwf : WF p) (hok : numberingOk p = true) {f 
       obtain ⟨env₂, htr, hsz₂, hag₂, hr₂⟩ := edge_sim hok hf hbj hedge hen hsz₁ hag₁ hr₁
       have hterm := block_term hlb
       rw [htm] at hterm
-      simp only [term, pure, Except.pure, Except.ok.injEq] at hterm
+      simp only [term, termWith, pure, Except.pure, Except.ok.injEq] at hterm
       exact cont t benv₂ env₂ (pre (step_jump hfb (block_size hlb).symm hterm.symm htr)) hsz₂ hag₂ hr₂
     | condbr c t ta e ea =>
       have hne := condbr_ne hwf hbj htm
       have hterm := block_term hlb
       rw [htm] at hterm
-      simp only [term, bind, Except.bind] at hterm
+      simp only [term, termWith, bind, Except.bind] at hterm
       cases hid : idOf p c with
       | error e => simp [hid] at hterm
       | ok nc =>
@@ -1743,7 +1933,7 @@ theorem runBlock_sim {p : Program} (hwf : WF p) (hok : numberingOk p = true) {f 
       rcases v with ⟨ty, x⟩ | bb
       · simp only [hl]
       have hread : Source.read env₁ .word (.local nc) = .ok (enc (.bool bb)) :=
-        read_operand (a := .reg c) hag₁ (by simp [operand, hid, bind, Except.bind, pure, Except.pure])
+        read_operand (a := .reg c) hag₁ (by simp [operand, operandWith, hid, bind, Except.bind, pure, Except.pure])
           (by simpa [evalOp] using hl)
       cases bb with
       | true =>

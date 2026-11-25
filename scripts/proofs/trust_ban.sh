@@ -96,7 +96,8 @@ W=$(scan "${SRC[@]}"); RC=$?
   || no "the source scan (rc=$RC) of ${#SRC[@]} files: $(printf '%s\n' "$W" | head -5 | tr '\n' '|')"
 
 # Compiler sources obey the same trust-word/option/extension ban. Compiler imports
-# include Lean's premise-reporting API and the pinned backend, so scan their header
+# include Lean's premise-reporting API, the pinned backend and the hash map lemmas
+# from the pinned toolchain, so scan their header
 # grammar separately; no compiler file is exempt from the ban.
 mapfile -t COMPILER_SRC < <({ echo Concrete.lean; find Concrete -name '*.lean'; } | sort)
 W=$(python3 "$PROOFS_DIR/lean_lex.py" scan-compiler "$BANNED_WORD_RE|$EXTENSION_RE" "${COMPILER_SRC[@]}"); RC=$?
@@ -123,10 +124,12 @@ GAP=$(comm -23 "$TMP/compiler-modules.txt" <(sort -u "$TMP/compiler-imported.txt
 # lake_options LAKEFILE → empty when the specification library builds from ConcreteSpec.lean and
 # ConcreteSpec/ (Lake's defaults: no srcDir, roots or globs) with warningAsError, and nothing can turn
 # it off. The package holds exactly two libraries, ConcreteSpec and the compiler, Concrete (ROADMAP B0),
-# under the same key allow-list, plus the fixed native CLI entry point. A dependency is a `require` of a git URL pinned to a full commit,
+# under the same key allow-list, plus the fixed native CLI and scaling benchmark targets. A
+# dependency is a `require` of a git URL pinned to a full commit,
 # which lake-manifest.json (beside the lakefile) records at the same URL and commit: the spec may
 # import nothing outside itself (S), so a dependency reaches only the compiler. This ban's scope is
-# both libraries; the compiler may import from both libraries, Lean, and the pinned backend.
+# both libraries; the compiler may import from both libraries, Lean, the pinned backend, and
+# the explicitly approved hash map lemmas module from the pinned toolchain.
 lake_options() {
   python3 - "$1" <<'EOF'
 import sys, tomllib
@@ -171,14 +174,20 @@ for l in libs:
     opts = set(l.get("leanOptions", {})) - {"autoImplicit"}
     if opts: bad.append(f"the library sets options {sorted(opts)}")
 exe = cfg.get("lean_exe", [])
-expected_exe = {
+expected_cli = {
     "name": "concrete",
     "root": "Main",
     "needs": ["lean-compiler-backend/lcb"],
     "leanOptions": {"autoImplicit": False},
 }
-if exe != [expected_exe]:
-    bad.append("the executable configuration differs from the fixed concrete CLI")
+expected_scaling = {
+    "name": "slice0-scaling",
+    "srcDir": "scripts/checks/compiler",
+    "root": "slice0_scaling",
+    "leanOptions": {"autoImplicit": False},
+}
+if exe != [expected_cli, expected_scaling]:
+    bad.append("the executable configuration differs from the fixed CLI and scaling targets")
 print("; ".join(bad))
 EOF
 }
@@ -344,9 +353,10 @@ lake_variant drift 'import json; p="lake-manifest.json"; m=json.load(open(p)); m
 lake_variant subdir 'p="lakefile.toml"; s=open(p).read(); open(p,"w").write(s.replace("[[require]]\n", "[[require]]\nsubDir = \"x\"\n", 1))'
 lake_variant thirdlib 'p="lakefile.toml"; s=open(p).read(); open(p,"w").write(s + "\n[[lean_lib]]\nname = \"Other\"\n")'
 lake_variant extraexe 'p="lakefile.toml"; s=open(p).read(); open(p,"w").write(s + "\n[[lean_exe]]\nname = \"Other\"\n")'
-for v in short:"not pinned to a full commit" branch:"not pinned to a full commit" drift:"does not record the require" subdir:"sets ['subDir']" thirdlib:"libraries ['ConcreteSpec', 'Concrete', 'Other']" extraexe:"the executable configuration differs"; do
+lake_variant scalingdir 'p="lakefile.toml"; s=open(p).read(); open(p,"w").write(s.replace("scripts/checks/compiler", "shadow"))'
+for v in short:"not pinned to a full commit" branch:"not pinned to a full commit" drift:"does not record the require" subdir:"sets ['subDir']" thirdlib:"libraries ['ConcreteSpec', 'Concrete', 'Other']" extraexe:"the executable configuration differs" scalingdir:"the executable configuration differs"; do
   L=$(lake_options "$TMP/lk/${v%%:*}/lakefile.toml")
-  case "$L" in *"${v#*:}"*) ok "control: a lakefile whose dependency or library set is changed (${v%%:*}) is refused ($L)" ;;
+  case "$L" in *"${v#*:}"*) ok "control: a lakefile with changed build configuration (${v%%:*}) is refused ($L)" ;;
     *) no "control: the ${v%%:*} lakefile was not refused for '${v#*:}': '$L'" ;; esac
 done
 for f in missing Open Quote Brace; do

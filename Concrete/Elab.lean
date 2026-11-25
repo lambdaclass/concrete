@@ -1,3 +1,4 @@
+import Std.Data.HashMap.Lemmas
 import Concrete.Core
 import ConcreteSpec.Spec.Surface0
 import Concrete.Refusal
@@ -26,6 +27,20 @@ private def State.bind (s : State) (rhs : Core.Expr) (site : Option Span) :
 
 abbrev Scope := List (String × ConcreteSpec.Var)
 
+private abbrev ScopeIndex := Std.HashMap String ConcreteSpec.Var
+
+/-- Starting from empty, inserting each new binding implements newest-first scope lookup. -/
+private theorem scope_lookup_eq (scope : Scope) (name : String) :
+    (scope.foldr (fun (key, value) (index : ScopeIndex) => index.insert key value) ∅)[name]? =
+      scope.lookup name := by
+  induction scope with
+  | nil => simp [List.lookup]
+  | cons pair tail ih =>
+    rcases pair with ⟨key, value⟩
+    by_cases h : name = key
+    · subst key; simp [List.lookup]
+    · simp [List.lookup, Std.HashMap.getElem?_insert, ih, Ne.symm h, beq_eq_false_iff_ne.mpr h]
+
 private inductive Rhs where
   | atom (value : Core.Atom)
   | add (lhs rhs : Core.Atom) (site : Span)
@@ -42,12 +57,12 @@ private def Rhs.asAtom (rhs : Rhs) (s : State) : Core.Atom × State :=
     let (x, s) := rhs.bind s
     (.var x, s)
 
-private def expr (scope : Scope) : Expr → State → Except Refusal (Rhs × State)
+private def expr (scope : ScopeIndex) : Expr → State → Except Refusal (Rhs × State)
   | .integer n suffix span, s =>
     if suffix.isSome then .error (.checker s!"integer suffix in an expected-type position at byte {span.start}")
     else .ok (.atom (.lit n), s)
   | .local name span, s =>
-    match scope.lookup name with
+    match scope[name]? with
     | some x => .ok (.atom (.var x), s)
     | none => .error (.checker s!"unknown local '{name}' at byte {span.start}")
   | .add lhs rhs site, s => do
@@ -89,14 +104,14 @@ private def intrinsicNames : List String :=
    "checked_shr", "checked_neg",
    "try_convert", "truncate", "reinterpret", "trunc", "round", "floor", "ceil"]
 
-private def binding (acc : Scope × State) (b : Binding) : Except Refusal (Scope × State) := do
+private def binding (acc : ScopeIndex × State) (b : Binding) : Except Refusal (ScopeIndex × State) := do
   let (scope, s) := acc
   if b.name == "_" then throw (.unsupported s!"wildcard binding at byte {b.span.start}")
-  if b.name == "main" || intrinsicNames.contains b.name || (scope.lookup b.name).isSome then
+  if b.name == "main" || intrinsicNames.contains b.name || scope.contains b.name then
     throw (.checker s!"binding shadows '{b.name}' at byte {b.span.start}")
   let (rhs, s) ← expr scope b.rhs s
   let (x, s) := rhs.bind s
-  return ((b.name, x) :: scope, s)
+  return (scope.insert b.name x, s)
 
 def elaborate (ast : Program) : Except Refusal Output := do
   unless ast.name == "main" do
@@ -105,7 +120,7 @@ def elaborate (ast : Program) : Except Refusal Output := do
     | .fallthrough => .checker "reachable end of a u8 function (STMT-9)"
     | .unreachable span =>
       .checker s!"unreachable code (STMT-14) at {span.line}:{span.column}, bytes {span.start}..{span.stop}"
-  let (scope, s) ← bindings.foldlM binding ([], {})
+  let (scope, s) ← bindings.foldlM binding (∅, {})
   let (rhs, s) ← expr scope result s
   let (ret, s) := rhs.asAtom s
   return ⟨⟨s.bindings.reverse, ret⟩, s.sites.reverse⟩
