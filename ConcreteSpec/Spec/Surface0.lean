@@ -419,7 +419,7 @@ inductive Terminal where
   | fn | let_ | return_ | ident | integer | reserved | u8
   | lparen | rparen | lbrace | rbrace | arrow | colon | equal | semi | plus
   | minus | star | slash | percent | stringLiteral | byteLiteral | label
-  | mut_ | if_ | else_
+  | mut_ | if_ | else_ | struct_ | move_
   deriving DecidableEq, Repr
 
 /-- The word terminals used below, the six item-40 reservations
@@ -432,6 +432,8 @@ def word (name : String) : Terminal :=
   | "let" => .let_
   | "return" => .return_
   | "u8" => .u8
+  | "struct" => .struct_
+  | "move" => .move_
   | "spec" | "by" | "kept" | "Self" | "while" | "Entropy" => .reserved
   | "from" | "until" | "cap" | "type" | "ghost" | "Copy" => .reserved
   | "Fs" | "Network" | "Env" | "Time" | "Alloc" | "Device" | "Console"
@@ -445,30 +447,82 @@ def punctuation : List (String × Terminal) :=
 
 inductive Nonterminal where
   | program | body | expr | more | atom
+  | decls | letHead | letTail | localTy | nameTail | headExpr | headMore | headAtom
   | ty | binder | product | factors | conditional | alternative | elseBody | identifier
   deriving DecidableEq, Repr
 
-/-- decisions.md#decided-project-proof-infrastructure (Slice 0), #od38 and
-#decided-2026-11-02-authority (entry point), TYPE-19 (`u8`), SYN-2 (associativity),
-STMT-1 (termination), and ARITH-3 (checked addition). Decimal tokens use the literal decisions
-at #decided-2026-11-08-language-literals. The factored expression tail represents successive
-checked sums. Core elaboration evaluates those sums from left to right. -/
-def grammar0 : Grammar Terminal Nonterminal :=
+/-- Table projections retain slice 0's production shapes for its parser proof.
+The shared view includes the existing conditional form with a separate head expression. -/
+inductive GrammarView where
+  | slice0 | slice1 | shared
+  deriving DecidableEq
+
+private abbrev Production := Nonterminal × List (Sym Terminal Nonterminal)
+
+def surfaceProductions : List (Production × List GrammarView) :=
+  let all := [.slice0, .slice1, .shared]
+  let from1 := [.slice1, .shared]
+  [
+    ((.program, [.t .fn, .t .ident, .t .lparen, .t .rparen, .t .arrow, .t .u8,
+                 .t .lbrace, .n .body, .t .rbrace]), [.slice0]),
+    ((.program, [.n .decls, .t .fn, .t .ident, .t .lparen, .t .rparen, .t .arrow,
+                 .t .u8, .t .lbrace, .n .body, .t .rbrace]), from1),
+    ((.decls, [.t .struct_, .t .ident, .t .lbrace, .t .rbrace, .n .decls]), from1),
+    ((.decls, []), from1),
+    ((.body, [.t .let_, .t .ident, .t .colon, .t .u8, .t .equal, .n .expr, .t .semi, .n .body]), [.slice0]),
+    ((.body, [.t .let_, .t .ident, .n .letTail, .t .equal, .n .expr, .t .semi, .n .body]), [.slice1]),
+    ((.body, [.t .let_, .n .letHead, .t .equal, .n .expr, .t .semi, .n .body]), [.shared]),
+    ((.letHead, [.t .ident, .n .letTail]), [.shared]),
+    ((.letHead, [.t .mut_, .t .ident, .t .colon, .n .localTy]), [.shared]),
+    ((.body, [.t .return_, .n .expr, .t .semi, .n .body]), all),
+    ((.body, [.t .ident, .t .lparen, .t .rparen, .t .semi, .n .body]), from1),
+    ((.body, []), all),
+    ((.letTail, [.t .colon, .n .localTy]), from1),
+    ((.letTail, [.t .lbrace, .t .rbrace]), from1),
+    ((.localTy, [.t .u8]), from1),
+    ((.localTy, [.t .ident]), from1),
+    ((.expr, [.n .atom, .n .more]), all),
+    ((.more, [.t .plus, .n .atom, .n .more]), all),
+    ((.more, []), all),
+    ((.atom, [.t .integer]), all),
+    ((.atom, [.t .ident]), [.slice0]),
+    ((.atom, [.t .ident, .n .nameTail]), from1),
+    ((.atom, [.t .lparen, .n .expr, .t .rparen]), all),
+    ((.atom, [.t .move_, .t .ident]), from1),
+    ((.nameTail, [.t .lbrace, .t .rbrace]), from1),
+    ((.nameTail, []), from1),
+    ((.body, [.n .conditional, .n .body]), [.shared]),
+    ((.conditional, [.t .if_, .n .headExpr, .t .lbrace, .n .body, .t .rbrace, .n .alternative]), [.shared]),
+    ((.alternative, [.t .else_, .n .elseBody]), [.shared]),
+    ((.alternative, []), [.shared]),
+    ((.elseBody, [.t .lbrace, .n .body, .t .rbrace]), [.shared]),
+    ((.elseBody, [.n .conditional]), [.shared]),
+    ((.headExpr, [.n .headAtom, .n .headMore]), [.shared]),
+    ((.headMore, [.t .plus, .n .headAtom, .n .headMore]), [.shared]),
+    ((.headMore, []), [.shared]),
+    ((.headAtom, [.t .integer]), [.shared]),
+    ((.headAtom, [.t .ident]), [.shared]),
+    ((.headAtom, [.t .lparen, .n .expr, .t .rparen]), [.shared]),
+    ((.headAtom, [.t .move_, .t .ident]), [.shared])]
+
+def projectGrammar (view : GrammarView) : Grammar Terminal Nonterminal :=
   { start := .program
-    prods := [
-      (.program, [.t .fn, .t .ident, .t .lparen, .t .rparen, .t .arrow, .t .u8,
-                   .t .lbrace, .n .body, .t .rbrace]),
-      (.body, [.t .let_, .t .ident, .t .colon, .t .u8, .t .equal, .n .expr, .t .semi, .n .body]),
-      (.body, [.t .return_, .n .expr, .t .semi, .n .body]),
-      (.body, []),
-      (.expr, [.n .atom, .n .more]),
-      (.more, [.t .plus, .n .atom, .n .more]),
-      (.more, []),
-      (.atom, [.t .integer]),
-      (.atom, [.t .ident]),
-      (.atom, [.t .lparen, .n .expr, .t .rparen])] }
+    prods := (surfaceProductions.filter fun p => p.2.contains view).map Prod.fst }
+
+def grammar0 := projectGrammar .slice0
+def grammar1 := projectGrammar .slice1
+def sharedGrammar := projectGrammar .shared
 
 theorem grammar0_ll1 : ll1 grammar0 = true := by decide
+theorem grammar1_ll1 : ll1 grammar1 = true := by decide
+theorem sharedGrammar_ll1 : ll1 sharedGrammar = true := by decide
+
+/-- Declarative prediction is single-valued in the slice-1 projection. -/
+theorem grammar1_predicts_unique {i j : Nat} {lhs : Nonterminal} {look : Option Terminal}
+    (hi : (grammar1.prods[i]?.map Prod.fst) = some lhs)
+    (hj : (grammar1.prods[j]?.map Prod.fst) = some lhs)
+    (pi : Predicts grammar1 i look) (pj : Predicts grammar1 j look) : i = j :=
+  ll1_sound grammar1_ll1 hi hj pi pj
 
 /-- Productions recognized for the slice refusal, with a flag marking forms outside slice 0
 (decisions.md#decided-slice0-surface-2026-11-06). The unmarked productions also recognize

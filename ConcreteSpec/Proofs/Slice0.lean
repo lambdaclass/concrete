@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.Ident
 import ConcreteSpec.Proofs.Basics
 import ConcreteSpec.Proofs.Observe
 import ConcreteSpec.Proofs.Slice1
@@ -50,7 +51,7 @@ theorem toCore_injective {q q' : Program} (h : toCore q = toCore q') : q = q' :=
   simp only [toCore, ConcreteSpec.Program.mk.injEq, true_and] at h
   obtain ⟨hb, hr⟩ := h
   have hb' : body = body' := map_toCore_injective hb
-  rw [hb', Atom.toCore_injective hr]
+  rw [hb', Atom.toCore_injective (Terminator.ret.inj hr)]
 
 /-- Every binding of the context is a `u8` with a known value. -/
 def Known (Γ : Ctx) : Prop :=
@@ -118,15 +119,15 @@ theorem knownExpr_u8 {Δ : Decls} {Γ Γ' : Ctx} {e : Expr} (hk : Known Γ)
 /-- A checked slice-0 body exits: from a described environment whose bindings all have known
 `u8` values, it reaches `return` without a trap. -/
 theorem body_exits {Δ : Decls} {r : Atom} :
-    ∀ {ss : List Stmt} {Γ : Ctx} {env : Env}, BodyOk Δ Γ (ss.map Stmt.toCore) r.toCore →
-      Corr Δ Γ env → Known Γ → ∃ c, runBody Δ (ss.length + 1) env (ss.map Stmt.toCore) r.toCore = .exit c
+    ∀ {ss : List Stmt} {Γ : Ctx} {env : Env}, BodyOk Δ Γ (ss.map Stmt.toCore) (.ret r.toCore) →
+      Corr Δ Γ env → Known Γ → ∃ c, runBody Δ (ss.length + 1) env (ss.map Stmt.toCore) (.ret r.toCore) = .exit c
   | [], Γ, env, hb, hc, hk => by
     cases hb with
     | ret _ hu _ =>
       cases hu with
       | atom hu =>
         obtain ⟨n, hn, _⟩ := knownAtom_u8 hk hu
-        exact ⟨n.toNat, by simp [runBody, retOutcome, knownAtom_sound hc hn]⟩
+        exact ⟨n.toNat, by simp [runBody, finish, retOutcome, knownAtom_sound hc hn]⟩
   | s :: ss, Γ, env, hb, hc, hk => by
     cases hb with
     | cons hs hb =>
