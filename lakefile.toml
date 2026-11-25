@@ -29,3 +29,9 @@ name = "concrete"
 root = "Main"
 needs = ["lean-compiler-backend/lcb"]
 leanOptions = { autoImplicit = false }
+
+[[lean_exe]]
+name = "slice0-scaling"
+srcDir = "scripts/checks/compiler"
+root = "slice0_scaling"
+leanOptions = { autoImplicit = false }

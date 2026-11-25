@@ -1,6 +1,6 @@
 name: CI
 
-# The root's CI after the legacy/ move. Eighteen jobs, all required (required-checks.txt):
+# The root's CI after the legacy/ move. Twenty jobs, all required (required-checks.txt):
 #   Landing record  main's push run names the run that qualified its exact SHA (R-0570), kept from
 #                the base unchanged; when it finds one, the jobs below are skipped on main.
 #   Root checks  every check of scripts/checks/run.sh: legacy/ frozen, the day-one root inventory,
@@ -8,7 +8,7 @@ name: CI
 #   Spec build   lake build of the specification, warnings refused.
 #   Proof axioms, Proof trust ban (sorry, native_decide), Kernel replay (leanchecker), External
 #                re-check (con-leche, nanoda)  the proof-integrity checks of scripts/proofs.
-#   Tests, Slice 0 artifacts, trusted base, reproducibility (x86-64 Linux and AArch64 macOS)
+#   Tests, Slice 0 artifacts, trusted base, scaling, reproducibility (x86-64 Linux and AArch64 macOS)
 #                the compiler's gates (scripts/checks/compiler), each in the compiler's devshell.
 #   Oracle (GitHub-hosted fetch + smoke)  the published oracle fetched, verified and run on a
 #                GitHub-hosted runner (ISS-0005, P13; R-0564), kept from the base unchanged.
@@ -358,7 +358,7 @@ jobs:
       - name: "Fetch the published oracle, verify it, run smoke.con through it (exit 42)"
         run: bash scripts/oracle/ci_check.sh
 
-  # THE COMPILER'S GATES (Concrete/README.md gates 4, 6, 6a, 8, 9, 10, 11 and 12; slice 0, provisional),
+  # THE COMPILER'S GATES (Concrete/README.md gates 4, 6, 6a, 8, 9, 10, 11, 12 and 13; slice 0, provisional),
   # scripts/checks/compiler/: not root checks (run.sh runs only scripts/checks/*.sh), because they need
   # the compiler's devshell, a native macOS runner and minutes each. Every bir: row in the test manifest
   # through the LLVM path and the LCB path, each executable's observation compared with the manifest
@@ -393,6 +393,38 @@ jobs:
         uses: cachix/install-nix-action@v31
       - name: Manifest tests (LLVM and LCB, native)
         run: nix develop --command bash scripts/checks/compiler/tests.sh
+
+  scaling:
+    name: Slice 0 scaling (${{ matrix.arch }})
+    needs: landing-record
+    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86-64
+            runner: ubuntu-latest
+          - arch: aarch64-macos
+            runner: macos-15
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+      - name: Compare per-stage scaling (R-0550)
+        run: nix develop -c bash scripts/checks/compiler/slice0_scaling.sh "$RUNNER_TEMP/slice0-scaling"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scaling-${{ matrix.arch }}
+          path: ${{ runner.temp }}/slice0-scaling
+          if-no-files-found: error
 
   artifacts:
     name: Slice 0 artifacts (${{ matrix.arch }})
