@@ -1,0 +1,4 @@
+[piece 2 of 2: docs]
+Local file access failed, so this review is limited to the supplied diff.
+
+- docs/decisions.md:113: Item 6 records a specific executable-evidence schema and three binding modes as decided, but the quoted owner answer only expresses a preference for a hash over an embedded proof. The subsequent coordinator agreement is not owner approval. Recording these additional architectural choices as decided exceeds the quoted answer’s scope; retain them as proposals or supply explicit owner approval or an applicable quoted delegation rule.
