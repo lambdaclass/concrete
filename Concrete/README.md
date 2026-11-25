@@ -54,8 +54,8 @@ Each arrow is a total Lean function of the compiler. **Proved** means a kernel-c
 
 ```
 source bytes (ByteArray)
-  │ decode + lex        Lex.lean      proved against Surface0.Lexes (independent byte-level spec);
-  ▼                                   until done: premise P_lex (implementation)
+  │ decode + lex        Lex.lean      `Lex.lex_correct` proves soundness against Surface0.Lexes
+  ▼
 tokens (kind + payload + span)
   │ parse (LL(1))       Parse.lean    generic table-driven parser over Surface0.grammar;
   ▼                                   premise P_parse (implementation) until the generic theorem lands
@@ -70,13 +70,13 @@ Core program + site map  (the spec's Core value, `out.p`, `out.sites`)
 CheckedCore
   │ (mono: absent in slice 0; when it exists, admission re-runs after it, row Q6.3)
   │ lower               MIR.lean      Place MIR: expands RESIDUAL checks only, never admits;
-  ▼                                   proved over ALL well-scoped programs with valid tokens
+  ▼                                   proved for successful admitted and unchecked lowering
 Place MIR  (`out.mir`)
   │ memory              Memory.lean   Memory CFG: the one Layout authority (sizes, alignment,
   ▼                                   offsets, loads/stores over block-offset memory); identity-shaped
-                                      in slice 0 (u8 slots), proved: memory_correct
+                                      in slice 0 (u8 slots), proved: Memory.lower_correct
 Memory CFG  (`out.mem`)
-  │ ssa                 BIR.lean      BIR; slice 0: direct proof (constraint below)
+  │ ssa                 SSA.lean      BIR; slice 0: proved structural validation
   ▼
 BIR  (`out.bir`)  ── designed for both backends from the start
   ├───────────────────────────────────────────┐
@@ -114,7 +114,7 @@ There's no Mono Core, since slice 0 has no generics. When Mono exists, the admis
 | Resolve | direct proof; HIR is only the resolved surface tree, no second checker |
 | Elab | direct proof |
 | Lower, Memory CFG | direct proofs |
-| SSA | long-term, a proved validator. Slice 0 proves `ssa_correct` directly, on one condition: BIR's shape may not depend on that proof, so the validator can replace it without changing the IR. |
+| SSA | Slice 0 walks the Memory stores and emitted BIR together. A separate slot witness ties each success-edge argument to its continuation parameter. The proof applies to arbitrary related stores and register environments. |
 | BIR → LCB-IR adapter | direct proof |
 | Mono, optimizations, register allocation, linking (later) | proved validators |
 
@@ -213,9 +213,10 @@ Concrete/
   Core.lean            thin interface to the spec's Core and the slice fragment predicates (until
                        the integrated Core lands; defines no Core of its own)
   Elab.lean            resolve + elaborate to the spec's Core (one stage edge), and its theorems
-  MIR.lean             Place MIR: syntax, semantics, WF, lowering (residual checks only), lower_correct
+  MIR.lean             Place MIR: syntax, semantics, lowering, lower_correct, lowerUnchecked_correct
   Memory.lean          Memory CFG: the Layout authority, block-offset memory, memory_correct
-  BIR.lean             BIR: syntax, semantics, behaviour, WF, ssa, ssa_correct, addOvf_correct
+  BIR.lean             BIR: syntax, semantics, behaviour, WF, addOvf_correct
+  SSA.lean             Memory to BIR lowering, validator, and preservation theorems
   Backend/             the backend stage: everything after BIR, one file per backend
     LLVM.lean          BIR → LLVM text printer (unverified; P_print)
     LCB.lean           BIR → LCB `Source.Function` adapter + adapter_correct; in-process assembly
@@ -246,7 +247,15 @@ The root inventory (`scripts/checks/root_inventory.txt`) lists each new root ent
 This file is spec work (open item O1, slice 0 only). It is a new file, and no existing spec file changes. The language content lives in the Lean file, not here: the token rules (SYN-5/SYN-6, plus the owner's decision that leading-zero literals are refused), the grammar and the elaboration relation. What the compiler needs from it:
 
 - **`Lexes : Bytes → List Token → Prop`**, an independent byte-level judgment. The lexer is proved sound and complete against it, which rules out splitting a token.
-- **The grammar as data**, which must be LL(1), plus **`ll1 : Grammar → Bool`**, which computes nullable, FIRST and FOLLOW sets. It comes with `ll1_sound : ll1 g = true → ∀ n t, at most one production of n is predicted on t`, where "predicted" is defined declaratively (inductive nullable, FIRST and FOLLOW relations). Both are built, generically, in `Concrete/LL1.lean`: the check verifies that the computed sets are closed under the rules (so they contain the declarative relations) and that each nonterminal's prediction sets are disjoint; the fixed-point iteration needs no proof. The fact `ll1 grammar0 = true` is proved by `decide`. The generic table parser is proved against `Derives`.
+- **The grammar as data.** Every grammar the parser uses is a `CheckedGrammar` with a proof
+  that `ll1` returns `true`. The check in `ConcreteSpec/Spec/LL1.lean` verifies closure of the
+  computed nullable, FIRST and FOLLOW sets and disjointness of the prediction sets.
+  `ll1_sound` shows that at most one production of a nonterminal is predicted for any lookahead.
+  Both the slice-0 grammar and the refusal grammar discharge the check by `decide`.
+  The parser starts at the grammar's start symbol and accepts only a `CheckedTable`, whose
+  entries must equal `makeTable` of that grammar. The slice-0 table is precomputed, so parsing
+  and checking successful slice-0 parse certificates use the constant entries directly.
+  Later slices extend the shared surface grammar and must pass the same LL(1) check.
 - **`Derives : List Token → Surface.Program → Prop`**, which binds token payloads, not only token kinds.
 - **`Elab : Surface.Program → Core.Program → Prop`**, with the compiler's theorems `elab_fresh` (temporaries never collide with user names) and `elab_rename_invariant` (renaming temporaries changes neither acceptance nor outcome).
 - **Refusal classes**, as the spec defines them:
@@ -279,10 +288,8 @@ The premises fall into two separate structures, because they are different kinds
 
 ```lean
 /-- Claims about fixed frontend implementations, used only by the universal theorem.
-    Per compilation, the certificate discharges both by kernel `decide` (below). -/
+    The certificate checks parsing and elaboration for each compilation (below). -/
 structure FrontendPremises : Prop where
-  /-- P_lex (implementation), until `lex_correct` lands. -/
-  lex   : ∀ src toks, Lex.lex src = .ok toks → Surface0.Lexes src toks
   /-- P_parse (implementation), until the generic table-parser theorem lands. -/
   parse : ∀ toks ast, Parse.parse toks = .ok ast → Surface0.Derives toks ast
 
@@ -380,11 +387,8 @@ There are two target profiles: `x86_64-linux` and `aarch64-macos` (LCB's first n
 
 | Premise | Trust class | Retired by |
 |---|---|---|
-| P_lex | implementation | `lex_correct` |
 | P_parse | implementation | the generic table-parser theorem |
 | P_elab | implementation | ANF and resolution preservation |
-| P_lower | implementation | checked-evidence validity and MIR preservation |
-| P_ssa | implementation | SSA semantic preservation |
 | P_print | implementation | an LLVM-IR semantics; not planned for slice 0 |
 | P_toolchain[llvm] | toolchain | not planned |
 | P_toolchain[lcb] | toolchain | LCB's own proofs (C01–C03 and beyond) |
@@ -397,7 +401,7 @@ The fd-2 condition is part of the admitted launch, so it is inside P_launch (env
 
 **The trap site the executable reports is covered by premise `P_trap_site`** (owner, 2026-11-06). `trap_site_correct` proves the site at IR level. The executable's report is assumed: `Native` gains `ReportsSite : TargetProfile → Image → SiteId → Prop`, and a field states that a launch whose body returns `256 + i` writes exactly `Runtime.trapLine tbl[i]` and a newline on fd 2 (the kind, the `Loc` and the site id of entry `i`). Gates 4 and 6 test it. A proof of the runtime entry retires it, together with `P_rt`.
 
-P_lex and P_parse are also discharged for each compilation by the certificate.
+The certificate plan checks P_parse for each compilation.
 
 The **execution-trust inventory** is in the same file, as documented non-Prop entries:
 - the Lean compiler and runtime executing `compile`. The certificate closes this for each output.
@@ -431,12 +435,23 @@ theorem compile_correct (F : FrontendPremises) {B N T} (P : NativePremises B N T
 
    LLVM renders the shared BIR with `LLVM.print`. An LCB artifact additionally requires
    `Stages.prepareLCB out.bir = .ok f` for the function `f` passed to the backend.
-2. `F.lex`, `F.parse` and `elab_sound` give `Denotes src out.p`. `check_iff` gives `Checked`.
+2. `Stages.compile_lexes` applies `Lex.lex_correct` to the token list of a successful compilation.
+   The lexical judgment combines with `F.parse` and `elab_sound` to give `Denotes src out.p`.
+   `check_iff` gives `Checked`.
 3. `slice0_exits` gives `run … = .exit c` with `c < 256`; `run_exit_behaviour` then gives `Core.behaviour = .exited c`.
-4. `checked_wellScoped : Checked p → WellScoped p`. `WellScoped` includes in-range literals, because Core's `run` does not range-check literals.
-5. `admit_tokens_valid : Checked p → TokensValid p (admit p)`. The empty token set is valid for any well-scoped program.
-6. `lower_wf`, and `lower_correct : WellScoped p → TokensValid p t → MIR.behaviour (lower p t) = Core.behaviour p`. This holds for every well-scoped program with valid tokens, checked or not, so `200 + 56` with no tokens preserves `trapped .arithmeticOverflow`. The trap path is real.
-7. `memory_wf` and `memory_correct : m.WF → Mem.behaviour (memory m) = MIR.behaviour m`. Then `ssa_wf` and `ssa_correct : g.WF → BIR.behaviour (ssa g) = Mem.behaviour g`.
+4. `Admission.admit_never_traps` applies the spec's `slice0_never_traps` to the checked Core program.
+5. `MIR.lower_correct` preserves the Core outcome for successful admitted lowering. The
+   no-trap theorem justifies using wrapping addition when admission supplies a discharge token.
+6. `MIR.lowerUnchecked_correct` preserves the Core outcome for successful unchecked lowering,
+   including the `arithmeticOverflow` trap for `200 + 56`.
+7. `Memory.lower_correct` preserves the MIR outcome. `Memory.lower_admitted_correct` and
+   `Memory.lower_unchecked_correct` compose it with the MIR theorems to reach Memory directly from
+   Core. `Stages.compile_core_correct` applies the admitted result to any successful production
+   compilation. `Stages.compile_ssa_correct` applies `SSA.lower_correct` to the same output's
+   recorded Memory and BIR programs, carrying the Core outcome through to BIR, including trap
+   kind. The proved structural validator checks operands, fresh definitions, ordered continuation
+   arguments, the complete trap-site entry, and the return. `SSA.lower_wf` gives well-formedness
+   for every successful result. Forward edges give the proof's block-count fuel bound.
 8. `P.launch` excludes `killed`. `P.rt` gives a body result `r` with `β = r.behaviour`. `P.toolchain` gives `B.Means t r`, and `P.emit` gives `r.behaviour = BIR.behaviour out.bir = .exited c`. `P.live` gives existence.
 
 **Supporting theorems:**
@@ -470,7 +485,7 @@ theorem answer_correct (F : FrontendPremises) (P : NativePremises B N T₀)
    Because a successful `emit b` is `(f, b.sites)` (`Proof.emit_ok`), a built image carries exactly `b.sites`, so `rt` follows from decoding with the paired table. `emit` is `emit_correct`.
 
    `live` holds because LCB's step relation is deterministic, so a run returns, faults or diverges. The witness follows from `emit_correct`.
-3. **Frontend premises:** these are claims about fixed code, not something a model can satisfy, so no model witness applies. They are discharged per compilation (next section), and universally once `lex_correct` and `parse_correct` land.
+3. **Frontend premises.** These are claims about fixed code. The certificate plan checks the remaining frontend premises per compilation (next section).
 4. **Native-build existence:** this is attested, not proved. The conformance job records toolchain provenance and the image digest for each example.
 
 ## Per-compilation certificate (`Concrete/Cert.lean`), R-0552 first increment
@@ -490,11 +505,12 @@ theorem cert_compile : Stages.compile input = .ok expected :=
 -- Compose the adapter and LCB profile checks to certify preparation.
 theorem cert_lcb : Stages.prepareLCB expected.bir = .ok expectedLCB :=
   Stages.prepareLCB_of_edges expected.bir expectedLCB e_adapter e_profile
-theorem cert_denotes : Surface0.lexesB srcBytes expected.toks && Surface0.derivesB expected.toks expected.ast &&
+theorem cert_lexes : Surface0.Lexes srcBytes expected.toks := Lex.lex_correct e_lex
+theorem cert_parse_elab : Surface0.derivesB expected.toks expected.ast &&
     Surface0.elabB expected.ast expected.p = true := by decide
 ```
 
-`Lexes`, `Derives` and `Elab` each have a Boolean checker over explicit witnesses, with a one-way soundness lemma (`lexesB_sound` and so on, giving `Denotes src p`). So `cert_denotes` discharges the frontend premises **for this compilation**, and `compile_correct_cert` needs only `NativePremises`.
+The certificate keeps `e_lex` to establish the exact lexer output and derives `cert_lexes` from the universal theorem. The certificate design uses Boolean checkers with soundness lemmas for `Derives` and `Elab`. Together with `cert_lexes`, their judgments give `Denotes src p` for this compilation, so `compile_correct_cert` needs only `NativePremises`.
 
 A **refusal certificate** proves the relevant stage returned `.error r` for each refused example.
 
@@ -521,7 +537,7 @@ def lowerContract (f : Core.Program × Tokens → Except Refusal MIR.Program) : 
 
 inductive Evidence (C : Prop) where
   | proof (h : C)
-  | frontend (h : FrontendPremises → C)                      -- P_lex, P_parse
+  | frontend (h : FrontendPremises → C)                      -- P_parse, P_elab
   | native {ι} (B : ι → Backend) (C' : ι → Prop) (hC : C = ∀ i, C' i)
       (h : ∀ i N T, NativePremises (B i) N T → C' i)  -- the stage's OWN backend family
 
@@ -692,13 +708,14 @@ Heavy runs (native builds, differentials, certificates) run on concrete-ci-2 or 
 These are internal. None blocks slice 0's correctness.
 
 - **Retire premises:**
-  - `lex_correct` (P_lex);
-  - the generic table-parser theorem (P_parse);
-  - `adapter_correct` and `emit_correct` (P_adapter, retired 2026-11-08);
+  - parser soundness (P_parse), using the enforced `CheckedGrammar` and `CheckedTable`;
+  - ANF and resolution preservation (P_elab);
   - a proof of the decoding entry against a libc model (P_rt).
 - **P_toolchain[lcb]** is retired by LCB's own C01–C03 work. LCB's verified profile names Apple AArch64 as its intended target. The `x86_64-linux` executable goes through LCB's compatibility pipeline, inside P_toolchain[lcb], until LCB certifies that target.
 - **Encoded result.** It works while LCB's verified profile has no calls, memory or traps. When it gains them, revisit the encoding: an external trap call, or a multi-function encoding.
-- **SSA:** replace the direct `ssa_correct` with a proved validator. BIR's shape must not depend on the direct proof.
+- **SSA:** extend the slot-to-register relation and edge witnesses to joins, back edges, and
+  call/return states as those constructs arrive. The slice-0 proof uses forward edges to bound
+  termination. Later proofs will need to account for potentially unbounded execution.
 - **Certificates:** move from per-edge `decide` to per-edge witnesses checked by proved validators (R-0552/R-0521), with con-leche/nanoda replay.
 - **Artifact facts:**
   - a link-map and symbol inventory, for trusted/FFI/opaque code;

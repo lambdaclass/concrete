@@ -21,6 +21,64 @@ word that encodes nothing, which the runtime must refuse (`Runtime.invalidLine`,
 open Concrete.BIR Concrete.Backend
 open ConcreteSpec (Trap)
 
+-- The source and candidate agree on the complete checked-add site entry.
+private def sumSource (a b : Nat) : Concrete.Memory.Program :=
+  ⟨[⟨⟨⟨0⟩, Concrete.Memory.u8Layout⟩,
+    .add (.lit a) (.lit b) ⟨⟨0⟩, ⟨59, 64, 3, 12⟩⟩ none⟩], .var ⟨0⟩⟩
+
+private def sumPath := "tests/slice0/sum.con"
+private def sumWitness : Concrete.SSA.Witness := [[⟨0⟩]]
+private def correspondenceError : Except Concrete.Refusal Program :=
+  .error (.internal "SSA correspondence check failed")
+
+example : Concrete.SSA.validate sumPath (sumSource 20 22) Examples.answer sumWitness =
+    .ok Examples.answer := by cbv
+
+-- A different return value and a site with the right kind but wrong provenance are refused.
+example : Concrete.SSA.validate sumPath { sumSource 20 22 with result := .lit 41 }
+    Examples.answer sumWitness = correspondenceError := by cbv
+
+example : Concrete.SSA.validate "other.con" (sumSource 20 22) Examples.answer sumWitness =
+    correspondenceError := by cbv
+
+-- Every parameter/argument pair needs its witness slot, and every emitted block is consumed.
+example : Concrete.SSA.validate sumPath (sumSource 20 22) Examples.answer [[]] =
+    correspondenceError := by cbv
+
+example : Concrete.SSA.validate sumPath (sumSource 20 22)
+    { Examples.answer with blocks := Examples.answer.blocks ++ [⟨[], [], .ret (.imm .u8 42)⟩] }
+    sumWitness = correspondenceError := by cbv
+
+example : Concrete.SSA.validate sumPath (sumSource 20 22)
+    { Examples.answer with sites := [] } sumWitness = correspondenceError := by cbv
+
+-- Even a continuation the closed input cannot reach must return the checked operand.
+private def brokenContinuation : Program :=
+  let candidate := Examples.checkedSum 200 56
+  { candidate with blocks := candidate.blocks.take 2 ++ [⟨[(2, .int .u8)], [], .ret (.imm .u8 0)⟩] }
+
+example : run brokenContinuation 4 = .trapped 0 := by cbv
+
+example : Concrete.SSA.validate sumPath (sumSource 200 56)
+    brokenContinuation sumWitness = correspondenceError := by cbv
+
+private def twoSlots : Concrete.Memory.Program :=
+  let sum := sumSource 20 22
+  { sum with stores := sum.stores ++ [⟨⟨⟨1⟩, Concrete.Memory.u8Layout⟩,
+      .add (.lit 2) (.lit 3) ⟨⟨1⟩, ⟨65, 70, 4, 3⟩⟩ none⟩] }
+
+example :
+    (match Concrete.SSA.lower sumPath twoSlots with
+     | .ok bir => run bir (bir.blocks.length + 1)
+     | .error _ => .stuck) = .exited 42 := by cbv
+
+-- The second success edge carries the new result before the earlier slot.
+example :
+    (do
+      let bir ← Concrete.SSA.lower sumPath twoSlots
+      Concrete.SSA.validate sumPath twoSlots bir [[⟨0⟩], [⟨0⟩, ⟨1⟩]]) =
+    correspondenceError := by cbv
+
 structure Expectation where
   outcome : Outcome
   trapKind : Option Trap
@@ -240,4 +298,4 @@ example : Concrete.Memory.run overwrittenSlot = .exit 2 := by rfl
 example :
     (match Concrete.SSA.lower "a.con" overwrittenSlot with
      | .ok p => Concrete.BIR.run p (p.blocks.length + 1)
-     | .error _ => .stuck) = .exited 2 := by rfl
+     | .error _ => .stuck) = .exited 2 := by cbv
