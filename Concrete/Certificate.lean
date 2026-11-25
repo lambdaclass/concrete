@@ -9,13 +9,14 @@ semantic correspondence is established by evidence at the appropriate edge. -/
 inductive DigestDomain where
   | source | compiler | spec | bir | llvmModule | lcbFunction | lcbJob | siteTable
   | runtimeInput | assembly | objectFile | linkInput | tool | executable | executableNote
-  | preLinkCertificate | evidence | receipt
+  | preLinkCertificate | refusalCertificate | evidence | receipt
   deriving DecidableEq
 
 /-- The digest of exact bytes in a specific domain. The canonical encoding and digest
 verification are obligations of the future bounded reader. -/
 structure Digest (_domain : DigestDomain) where
   bytes : ByteArray
+  deriving DecidableEq
 
 /-- Both backends use the same artifact envelope and canonical encoding. -/
 inductive Backend where
@@ -34,6 +35,13 @@ structure PinnedInvocation where
   invocation : ToolInvocation
   binary : Digest .tool
 
+/-- Evidence names fixed obligations instead of supplying its own proposition. -/
+inductive Obligation where
+  | frontend | bir | llvmPrint | lcbAdapter | lcbProfile
+  | toolHandoffs | finalImage | refusal
+  | external (premise : ExternalPremise)
+  deriving DecidableEq
+
 /-- An evidence reference for one obligation in the artifact's dependency graph. -/
 inductive EdgeEvidence where
   | kernelChecked (evidence : Digest .evidence)
@@ -44,7 +52,7 @@ inductive EdgeEvidence where
 nodes on which the obligation depends. Canonical readers will validate the graph and its IDs. -/
 structure EvidenceNode where
   id : Nat
-  obligation : String
+  obligation : Obligation
   evidence : EdgeEvidence
   dependencies : List Nat
 
@@ -58,6 +66,7 @@ structure LLVMInputs where
 runtime, site table, assembly and object inputs used by downstream tools. -/
 structure LCBInputs where
   revision : String
+  compilerIdentity : String
   function : Digest .lcbFunction
   job : Digest .lcbJob
   siteTable : Digest .siteTable
@@ -141,8 +150,242 @@ structure Receipt where
   binding : ImageBinding
   evidenceGraph : List EvidenceNode
   facts : List Fact
-  openPremises : List String
+  openPremises : List ExternalPremise
   executionTrust : List String
   replay : List ReplayCommand
+
+/-- The canonical codec and evidence reader implement this interface in step 5.
+The replay relation refers to evidence bytes for a particular kernel proposition. -/
+structure Codec where
+  version : Nat
+  hash : (domain : DigestDomain) → ByteArray → Digest domain
+  bir : Concrete.BIR.Program → ByteArray
+  lcbFunction : LeanCompilerBackend.Verified.Source.Function → ByteArray
+  lcbJob : LeanCompilerBackend.Verified.FunctionJob → ByteArray
+  sites : Concrete.BIR.SiteTable → ByteArray
+  certificate : PreLinkCertificate → ByteArray
+  note : ExecutableNote → ByteArray
+  refusal : RefusalCertificate → ByteArray
+  evidence : Digest .evidence → Prop → Prop
+
+/-- Build identity and binary resolution are supplied by the replay environment, which
+must verify the exact compiler, spec and external tool binaries. -/
+structure ReplayContext where
+  compiler : ByteArray
+  spec : ByteArray
+  resolve : ToolInvocation → Option ByteArray
+  commands : List ReplayCommand
+  executionTrust : List String
+
+inductive ExactBuild where
+  | llvm (build : LLVMBuild)
+  | lcb (build : LCBBuild)
+
+def ExactBuild.backend : ExactBuild → Backend
+  | .llvm _ => .llvm
+  | .lcb _ => .lcb
+
+def ExactBuild.path (target : Concrete.Backend.LCB.Target) : ExactBuild → LoweringPath
+  | .llvm _ => .llvm
+  | .lcb _ => lcbPath target
+
+def ExactBuild.linkInputs : ExactBuild → List ByteArray
+  | .llvm b => b.linkInputs
+  | .lcb b => b.linkInputs
+
+def ExactBuild.linkedImage : ExactBuild → ByteArray
+  | .llvm b => b.image
+  | .lcb b => b.image
+
+def IdentityMatches (codec : Codec) (ctx : ReplayContext)
+    (input : Stages.Input) (identity : BuildIdentity) : Prop :=
+  identity.source = codec.hash .source input.source ∧ identity.sourcePath = input.path ∧
+  identity.compiler = codec.hash .compiler ctx.compiler ∧ identity.spec = codec.hash .spec ctx.spec
+
+def ToolPinsMatch (codec : Codec) (ctx : ReplayContext) (c : PreLinkCertificate) : Prop :=
+  c.tools.map (·.invocation) = c.profile.tools ∧
+  ∀ pin ∈ c.tools, ∃ bytes, ctx.resolve pin.invocation = some bytes ∧
+    pin.binary = codec.hash .tool bytes
+
+def InputsMatch (codec : Codec) : BackendInputs → ExactBuild → Prop
+  | .llvm input, .llvm b =>
+    input.llvmModule = codec.hash .llvmModule b.moduleBytes ∧
+    input.objectFile = codec.hash .objectFile b.objectBytes
+  | .lcb input, .lcb b =>
+    input.revision = b.revision ∧ input.compilerIdentity = b.compilerIdentity ∧
+    input.function = codec.hash .lcbFunction (codec.lcbFunction b.source) ∧
+    input.job = codec.hash .lcbJob (codec.lcbJob (Concrete.Backend.LCB.job b.source)) ∧
+    input.siteTable = codec.hash .siteTable (codec.sites b.sites) ∧
+    input.runtimeInput = codec.hash .runtimeInput b.runtimeInput ∧
+    input.bodyAssembly = codec.hash .assembly b.bodyAssembly ∧
+    input.runtimeAssembly = codec.hash .assembly b.runtimeAssembly ∧
+    input.bodyObject = codec.hash .objectFile b.bodyObject ∧
+    input.runtimeObject = codec.hash .objectFile b.runtimeObject
+  | _, _ => False
+
+/-- IDs are global. Strictly backward references within the combined graph prove
+acyclicity; upstream evidence can reference only other upstream nodes. -/
+def OrderedGraph (graph : List EvidenceNode) : Prop :=
+  (graph.map (·.id)).Nodup ∧ (graph.map (·.obligation)).Nodup ∧
+  ∀ node ∈ graph, node.dependencies.Nodup ∧
+    ∀ id ∈ node.dependencies, id < node.id ∧ ∃ previous ∈ graph, previous.id = id
+
+/-- Resolve dependency names to the unique graph IDs. The exact prerequisite set is
+part of the obligation, so a receipt cannot omit a dependency to survive revocation. -/
+def HasDependencies (graph : List EvidenceNode) (goal : Obligation)
+    (required : List Obligation) : Prop :=
+  ∀ node ∈ graph, node.obligation = goal →
+    ∀ prior ∈ graph, prior.id ∈ node.dependencies ↔ prior.obligation ∈ required
+
+def Checked (codec : Codec) (d : Digest .evidence) (p : Prop) : Prop :=
+  p ∧ codec.evidence d p
+
+def HasEvidence (graph : List EvidenceNode) (goal : Obligation) (evidence : EdgeEvidence) : Prop :=
+  ∃ node ∈ graph, node.obligation = goal ∧ node.evidence = evidence
+
+def Replays (codec : Codec) (graph : List EvidenceNode) (goal : Obligation) (p : Prop) : Prop :=
+  ∃ d, HasEvidence graph goal (.kernelChecked d) ∧ Checked codec d p
+
+def BackendEvidence (codec : Codec) (bir : Concrete.BIR.Program) (c : PreLinkCertificate) :
+    ExactBuild → Prop
+  | .llvm b => ∃ i, c.inputs = .llvm i ∧
+    HasEvidence c.evidenceGraph .llvmPrint (.kernelChecked i.checkedCorrespondence) ∧
+    Checked codec i.checkedCorrespondence (b.moduleBytes = (Concrete.Backend.LLVM.module bir).toUTF8)
+  | .lcb b => ∃ i, c.inputs = .lcb i ∧
+    HasEvidence c.evidenceGraph .lcbAdapter (.kernelChecked i.checkedAdapter) ∧
+    Checked codec i.checkedAdapter (Concrete.Backend.LCB.emit bir = .ok (b.source, b.sites)) ∧
+    HasEvidence c.evidenceGraph .lcbProfile (.kernelChecked i.checkedProfile) ∧
+    Checked codec i.checkedProfile
+      (LeanCompilerBackend.Verified.validateJob (Concrete.Backend.LCB.job b.source) = .ok ())
+
+def PreLinkValid (codec : Codec) (ctx : ReplayContext) (tools : NativeTools)
+    (input : Stages.Input) (out : Stages.Output) (build : ExactBuild)
+    (c : PreLinkCertificate) : Prop :=
+  c.schemaVersion = codec.version ∧ IdentityMatches codec ctx input c.identity ∧
+  c.bir = codec.hash .bir (codec.bir out.bir) ∧ InputsMatch codec c.inputs build ∧
+  c.loweringPath = build.path c.profile.target ∧ ToolPinsMatch codec ctx c ∧
+  c.orderedLinkInputs = build.linkInputs.map (codec.hash .linkInput) ∧
+  OrderedGraph c.evidenceGraph ∧
+  Replays codec c.evidenceGraph .frontend (Frontend input out) ∧
+  Replays codec c.evidenceGraph .bir
+    (SharedHandoffs input out ∧ BIRSlotsFit c.profile out.bir ∧ Concrete.BIR.WF out.bir ∧
+      SiteOrigins input.path out.core out.memory out.bir) ∧
+  BackendEvidence codec out.bir c build ∧
+  HasEvidence c.evidenceGraph .toolHandoffs .driverAttested ∧
+  HasDependencies c.evidenceGraph .frontend [] ∧
+  HasDependencies c.evidenceGraph .bir [.frontend] ∧
+  HasDependencies c.evidenceGraph .llvmPrint [.bir] ∧
+  HasDependencies c.evidenceGraph .lcbAdapter [.bir] ∧
+  HasDependencies c.evidenceGraph .lcbProfile [.lcbAdapter] ∧
+  HasDependencies c.evidenceGraph .toolHandoffs
+    (match build with | .llvm _ => [.llvmPrint] | .lcb _ => [.lcbAdapter, .lcbProfile]) ∧
+  (match build with
+    | .llvm b => LLVMHandoffs c.profile tools out.bir b
+    | .lcb b => LCBHandoffs c.profile tools out.bir b) ∧
+  (∀ node ∈ c.evidenceGraph, node.obligation ∈
+    [.frontend, .bir, .toolHandoffs] ++
+      (match build with | .llvm _ => [.llvmPrint] | .lcb _ => [.lcbAdapter, .lcbProfile]))
+
+/-- A refusal requires replay of the exact failed production invocation. -/
+def RefusalValid (codec : Codec) (ctx : ReplayContext)
+    (input : Stages.Input) (c : RefusalCertificate) : Prop :=
+  c.schemaVersion = codec.version ∧ IdentityMatches codec ctx input c.identity ∧
+  OrderedGraph c.evidenceGraph ∧
+  Replays codec c.evidenceGraph .refusal (Stages.compile input = .error c.refusal) ∧
+  ∀ node ∈ c.evidenceGraph, node.obligation = .refusal
+
+def ExpectedNote (codec : Codec) (c : PreLinkCertificate) (build : ExactBuild) : ExecutableNote :=
+  ⟨codec.version, codec.hash .preLinkCertificate (codec.certificate c),
+   c.identity.source, c.identity.compiler, c.identity.spec, c.bir,
+   build.backend, c.profile.target, c.loweringPath⟩
+
+/-- Parse the actual note and validate insertion after link. Insertion must leave the
+loaded image unchanged, including entry state and relocations. The link inputs and
+pre-link digest precede insertion, so the note cannot depend on itself. -/
+structure NoteFormat where
+  read : ByteArray → Option ByteArray → Prop
+  insertNonLoaded : ByteArray → ByteArray → ByteArray → Prop
+
+def NoteMatches (codec : Codec) (format : NoteFormat) (c : PreLinkCertificate)
+    (build : ExactBuild) (exe : ByteArray) (digest : Option (Digest .executableNote)) : Prop :=
+  match digest with
+  | none => exe = build.linkedImage ∧ format.read exe none
+  | some d =>
+    let bytes := codec.note (ExpectedNote codec c build)
+    d = codec.hash .executableNote bytes ∧ format.read exe (some bytes) ∧
+    format.insertNonLoaded build.linkedImage bytes exe
+
+/-- Revocation is recursive in the graph, independently of the production status. -/
+inductive StillAccepted (revoked : Obligation → Prop) (graph : List EvidenceNode) :
+    Nat → Prop where
+  | node {n : EvidenceNode} :
+      n ∈ graph → ¬ revoked n.obligation →
+      (∀ id ∈ n.dependencies, StillAccepted revoked graph id) → StillAccepted revoked graph n.id
+
+def Fact.currentlyAccepted (fact : Fact) (revoked : Obligation → Prop)
+    (graph : List EvidenceNode) : Prop :=
+  (fact.productionStatus = .established ∨ fact.productionStatus = .conditional) ∧
+  ∀ id ∈ fact.dependencies, StillAccepted revoked graph id
+
+/-- The caller obtains the fact catalog from the evidence graph. Validation checks the
+catalog, replay, all bound payloads and the final-image proposition over the final bytes. -/
+def ReceiptValid {Env : Type} (codec : Codec) (ctx : ReplayContext) (format : NoteFormat)
+    (tools : NativeTools) (input : Stages.Input) (out : Stages.Output) (build : ExactBuild)
+    (exe : ByteArray) (r : Receipt) {platform : Platform Env r.certificate.profile.target}
+    (n : NativeModels Env r.certificate.profile platform)
+    (facts : List EvidenceNode → List Fact) : Prop :=
+  r.schemaVersion = codec.version ∧ PreLinkValid codec ctx tools input out build r.certificate ∧
+  r.executable = codec.hash .executable exe ∧
+  r.certificateDigest = codec.hash .preLinkCertificate (codec.certificate r.certificate) ∧
+  NoteMatches codec format r.certificate build exe r.note ∧
+  platform.decode exe = platform.decode build.linkedImage ∧
+  (∀ env, LaunchReady n exe env → LaunchReady n build.linkedImage env ∧
+    Contracts.PrefixSafety n.process n.process (build.linkedImage, env) (exe, env)) ∧
+  (∀ env, RunReady n exe env → RunReady n build.linkedImage env ∧
+    Contracts.MaximalRefinement n.process n.process (build.linkedImage, env) (exe, env) ∧
+    ((∃ o, n.process.observes (build.linkedImage, env) o) →
+      ∃ o, n.process.observes (exe, env) o)) ∧
+  OrderedGraph (r.certificate.evidenceGraph ++ r.evidenceGraph) ∧
+  r.replay = ctx.commands ∧ r.executionTrust = ctx.executionTrust ∧
+  r.facts = facts (r.certificate.evidenceGraph ++ r.evidenceGraph) ∧
+  (∀ f ∈ r.facts, f.dependencies.Nodup ∧ ∀ id ∈ f.dependencies,
+    ∃ node ∈ r.certificate.evidenceGraph ++ r.evidenceGraph, node.id = id) ∧
+  r.openPremises = r.certificate.loweringPath.premises ∧
+  (∀ p, p ∈ r.openPremises ↔ HasEvidence r.evidenceGraph (.external p) (.openPremise p.name)) ∧
+  (∀ node ∈ r.evidenceGraph, node.obligation = .finalImage ∨
+    ∃ p ∈ r.openPremises, node.obligation = .external p) ∧
+  HasDependencies (r.certificate.evidenceGraph ++ r.evidenceGraph) .finalImage
+    (.toolHandoffs :: r.openPremises.map Obligation.external) ∧
+  match r.binding with
+  | .driverAttested => HasEvidence r.evidenceGraph .finalImage .driverAttested
+  | .imageValidated d =>
+    HasEvidence r.evidenceGraph .finalImage (.kernelChecked d) ∧
+    Checked codec d ((∃ decoded, platform.decode exe = some decoded) ∧
+      (∃ env, RunReady n exe env) ∧ ImageCorrect n input.path out.core exe)
+
+
+example : OrderedGraph [⟨0, .frontend, .driverAttested, []⟩,
+    ⟨1, .bir, .driverAttested, [0]⟩] := by
+  refine ⟨by decide, by decide, ?_⟩
+  intro node membership
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at membership
+  rcases membership with rfl | rfl
+  · exact ⟨List.nodup_nil, fun _ h => by cases h⟩
+  · refine ⟨by decide, ?_⟩
+    intro id member
+    have h : id = 0 := List.mem_singleton.mp member
+    subst id
+    exact ⟨by decide, _, List.Mem.head _, rfl⟩
+
+example : ¬ OrderedGraph [⟨0, .frontend, .driverAttested, [0]⟩] := by
+  intro h
+  have cycle := (h.2.2 _ (List.Mem.head _)).2 0 (List.Mem.head _)
+  exact Nat.lt_irrefl _ cycle.1
+
+example (codec : Codec) (ctx : ReplayContext) (input : Stages.Input) (c : RefusalCertificate)
+    (empty : c.evidenceGraph = []) : ¬ RefusalValid codec ctx input c := by
+  rintro ⟨_, _, _, ⟨_, ⟨node, member, _, _⟩, _⟩, _⟩
+  rw [empty] at member
+  exact List.not_mem_nil member
 
 end Concrete.Certificate

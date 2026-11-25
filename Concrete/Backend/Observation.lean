@@ -1,36 +1,74 @@
 import Concrete.Contracts
 import Concrete.Backend.LCB
+import ConcreteSpec.Spec.Observation
 
 namespace Concrete.Backend
 
 open Contracts
 open LeanCompilerBackend.Verified
 
-/-- The slice-0 runtime observation of a completed BIR body. The table index selects the
-lexical origin, while the rendered bytes use the entry's diagnostic site identity. -/
+/-- Source byte offsets are erased at this boundary. The runtime prints the diagnostic ID,
+path, line and column. -/
+def trapObservation (entry : BIR.SiteEntry) : Observation :=
+  let kind := match entry.kind with | .arithmeticOverflow => ConcreteSpec.Core.TrapKind.overflow
+  let status := ConcreteSpec.Observe.Observation.status (.trapped entry.kind)
+  let loc := entry.loc
+  let line := s!"concrete: trap: {kind.name} at {loc.path}:{loc.line}:{loc.col} (site {entry.site.id})\n"
+  .trapped (UInt8.ofNat status) kind ⟨entry.site, loc⟩ line.toUTF8
+
 def birObservation (sites : BIR.SiteTable) : BIR.Outcome → Option Observation
   | .exited status =>
     if status < 256 then some (.returned (UInt8.ofNat status) ByteArray.empty) else none
-  | .trapped index => do
-    let entry ← sites[index]?
-    let kind := match entry.kind with | .arithmeticOverflow => ConcreteSpec.Core.TrapKind.overflow
-    let site := ⟨⟨entry.span.start, entry.span.stop, entry.loc.line, entry.loc.col⟩, entry.loc⟩
-    return .trapped 134 kind site ((Runtime.trapLine entry ++ "\n").toUTF8)
+  | .trapped index => sites[index]?.map trapObservation
   | .stuck | .outOfFuel => none
 
-/-- Adequacy of the BIR evaluator, stated using the same projection as the native adapter. -/
-def BIREvaluatorAdequacy (semantics : Semantics BIR.Program) : Prop :=
-  EvaluatorAdequacy semantics (fun p budget => birObservation p.sites (BIR.run p budget))
+def birEvaluation (p : BIR.Program) (fuel : Nat) : Evaluation :=
+  match BIR.run p fuel with
+  | .outOfFuel => .running
+  | outcome => match birObservation p.sites outcome with
+    | some o => .finished o
+    | none => .stuck
 
-/-- The LCB source boundary is interpreted using the pinned package's own behavior relation.
-The slice-0 ABI encoding is used here to relate a body return to the runtime projection. -/
-def LCBSourceAdequacy
-    (semantics : Semantics (Source.Function × BIR.SiteTable × ByteArray)) : Prop :=
-  ∀ f sites, let input := (f, sites, (Runtime.qbe sites).toUTF8)
-    (∀ o, semantics.observes input o ↔
-      ∃ outcome word, BIR.Outcome.Encodable sites outcome ∧ BIR.encode outcome = some word ∧
-        Source.HasBehavior f #[] (.returned (.word (BitVec.ofNat 32 word))) ∧
-        birObservation sites outcome = some o) ∧
-    ((∃ run, semantics.diverges input run) ↔ Source.HasBehavior f #[] .diverges)
+/-- BIR has no external effects while the body runs. These are its exact block-budget
+prefixes, with the terminal result projected by the slice-0 runtime shim. -/
+def birSemantics : Semantics BIR.Program :=
+  evaluatorSemantics birEvaluation
+
+abbrev LCBInput := Source.Function × BIR.SiteTable × ByteArray
+
+/-- The ABI projection of the returned word, including the diagnostic looked up by its index. -/
+def lcbResult (sites : BIR.SiteTable) : Source.Value → Option Observation
+  | .word word =>
+    if word.toNat < 256 then birObservation sites (.exited word.toNat)
+    else birObservation sites (.trapped (word.toNat - 256))
+  | _ => none
+
+def lcbTerminal (i : LCBInput) (q : Option Source.State) : Option Observation := do
+  let state ← q
+  match Source.step i.1 state with
+  | .ok (.returned value) => lcbResult i.2.1 value
+  | _ => none
+
+/-- Imported initial states and small steps determine prefixes, returns, faults and divergence.
+The body is silent and the runtime projection supplies the terminal diagnostic. -/
+def lcbSemantics : Semantics LCBInput where
+  State := Option Source.State
+  initial i q := q = (Source.initial i.1 #[]).toOption
+  initialized _ := ⟨_, rfl⟩
+  step i q q' := ∃ s t, q = some s ∧ q' = some t ∧ Source.Step i.1 s t
+  result i q o := lcbTerminal i q = some o
+  terminal _ _ _ := by
+    rintro h q' ⟨s, t, rfl, _, hstep⟩
+    unfold Source.Step at hstep
+    simp [lcbTerminal, hstep] at h
+  safe i q := (∃ q', ∃ s t, q = some s ∧ q' = some t ∧ Source.Step i.1 s t) ∨
+    (lcbTerminal i q).isSome = true
+  trace i q := ((lcbTerminal i q).map Observation.events).getD []
+  traceGrows i q q' := by
+    rintro ⟨s, t, rfl, rfl, hstep⟩
+    refine ⟨((lcbTerminal i (some t)).map Observation.events).getD [], ?_⟩
+    unfold Source.Step at hstep
+    rw [show lcbTerminal i (some s) = none by simp [lcbTerminal, hstep]]
+    rfl
 
 end Concrete.Backend

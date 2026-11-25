@@ -396,43 +396,40 @@ The **execution-trust inventory** is in the same file, as documented non-Prop en
 ## The end-to-end theorem (`Concrete/Theorem.lean`)
 
 [`Concrete/Theorem.lean`](Theorem.lean) states `ImageTheorem.compile_correct` as a proposition.
-It relates the exact input bytes to declarative lexing, parsing and elaboration, the admitted Core
-payload and the BIR returned by `Stages.compile`. For each backend it relates that BIR to the actual
-tool inputs and the final executable bytes. LLVM uses `LLVM.module`, including its runtime. LCB uses
-`LCB.emit`, job validation, `Stages.prepareLCB`, the selected `LCB.assemble` path and the exact site
-table and runtime input. The linker, loader, runtime and trap-rendering obligations remain visible
-for each backend. The LCB adapter remains a direct proof obligation.
+It binds the exact input bytes to declarative lexing, parsing and name-parametric elaboration.
+The conclusion includes the shared stage obligations and the directly proved LCB adapter
+obligation. Each backend claim quantifies over the actual production handoffs and its own
+open native premises. LLVM uses the complete `LLVM.module`, including its runtime. LCB uses
+`LCB.emit`, job validation, `Stages.prepareLCB`, the selected `LCB.assemble` path, the
+runtime input and the site table. The handoffs bind the selected tool invocations, their
+revisions and effective arguments. The LCB edge also binds the imported compiler identity.
 
-[`Concrete/Contracts.lean`](Contracts.lean) defines the common edge interface, invariant
-compatibility, stuttering simulation and evaluator adequacy. Its observation projection captures
-exit status, trap kind, lexical site and exact stderr bytes. Finite-prefix safety is independent
-of maximal refinement, which separately covers termination and divergence. The slice-0 result-word
-interpretation is confined to the backend observation bridge, which relates the projection to LCB's
-imported source semantics and the BIR evaluator. [`Backend/Observation.lean`](Backend/Observation.lean)
+[`Concrete/Contracts.lean`](Contracts.lean) derives reachable prefixes, terminal and stuck
+states, and infinite runs from initialized transition systems. The lowering simulations
+use those same transitions and account for steps that make no source progress. Maximal
+refinement compares divergent traces as well as terminal observations. The path-indexed Core
+model uses the spec evaluator. The BIR evaluator and imported LCB steps are interpreted in
+[`Backend/Observation.lean`](Backend/Observation.lean), which contains the result-word
+projection. Process observations include exit status, trap kind, diagnostic site and exact
+stderr bytes. The separate origin relation binds the table entries to source byte ranges.
 
-The BIR slot limit applies to the BIR before emission. Final-image stack adequacy and launch admission
-govern finite-prefix safety. The maximal execution claim also requires OS liveness and progress
-through stderr writes and exit. Admission supplies the slice-0 source termination obligation.
-`UncheckedCorrect` covers the residual-check path and preserves whole trap observations, including
-kind and lexical site. `LLVMNonvacuous` and `LCBNonvacuous` require each backend's hypotheses to hold
-together on an actual build with a matching observation.
+The BIR slot limit applies before emission. Final-image stack adequacy and launch admission
+govern finite-prefix safety. Maximal behavior also needs OS liveness and progress through
+short stderr writes and exit. The statement takes an independently specified platform
+execution judgment. Its decoded-image interface is related to raw-byte execution by explicit
+premises pending LP0 and exact-image validation. The per-path premise list records
+dispositions for the remaining obligations. The unchecked path requires static typing and
+scope, and uses empty discharge evidence. Its conclusion requires the exact trap observation
+under the run premises. Each backend has joint witness obligations for both production and
+trapping conformance builds.
 
-The new propositions are proof obligations for subsequent work. The current fixed-budget
-`FrontendPremises.elaborate` and `LoweringPremises.ssa` in [`Concrete/Premises.lean`](Premises.lean)
-use the Core body length plus one and the BIR block count plus one, respectively. The declarative
-elaboration and fuel-independent lowering contracts are their planned replacements. The current
-`Native.EmitCorrect` and `Native.observed_behaviour` use the slice-0 BIR behavior interface. The
-new native contracts put maximal behaviors and exact image observations at the theorem boundary.
-
-[`Concrete/Certificate.lean`](Certificate.lean) defines the pre-link certificate, the optional
-non-loaded executable note and the external receipt. Domain-tagged digests identify exact
-payloads. Evidence identifies which correspondences the kernel checks and which handoffs the
-driver attests. LLVM certificate checking binds the complete printer output to the artifact.
-The printer's semantic premise remains open. The note binds immutable upstream identity and routing
-fields. Final-image
-binding, facts, open premises, execution trust and replay commands live in the receipt. Fact
-dependencies support separate reporting of production validity and acceptance after revocation.
-Canonical encoding, hashing, emission and bounded offline verification remain implementation work.
+[`Concrete/Certificate.lean`](Certificate.lean) defines validation for the pre-link
+certificate, optional non-loaded note, external receipt and refusal certificate. The
+validation propositions bind exact payload digests, resolved pins, and evidence to fixed
+obligations. A single acyclic evidence graph identifies dependencies for revocation. The note
+is inserted after linking, with decoded-image and execution preservation checked at the
+receipt boundary. An image-validation witness applies to the final bytes. Canonical encoding,
+hash implementation, evidence emission and bounded offline replay remain step 5 work.
 
 **Supporting theorems:**
 - `addOvf_correct`: for arbitrary `u8` operands, the result is `(a+b) % 256` and the flag is `a+b ≥ 256`.
