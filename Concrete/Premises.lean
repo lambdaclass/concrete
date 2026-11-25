@@ -21,7 +21,6 @@ namespace Concrete
 
 open ConcreteSpec.Surface0 in
 structure FrontendPremises where
-  lex : ∀ src toks, Lex.lex src = .ok toks → Lexes src toks
   parse : ∀ toks ast, Parse.parse toks = .ok ast → Derives toks ast
   elaborate : ∀ ast out, Elab.elaborate ast = .ok out →
     let p := Core.toCore out.program
@@ -133,8 +132,6 @@ structure Premise where
 
 /-- The open premises for slice 0, in the README's order. -/
 def all : List Premise := [
-  ⟨"P_lex", .implementation, "`lex_correct`",
-    "every token list the lexer returns for a source is one the source lexes to"⟩,
   ⟨"P_parse", .implementation, "the generic table-parser theorem",
     "every tree the parser returns for a token list is one the grammar derives from it"⟩,
   ⟨"P_elab", .implementation, "ANF and resolution preservation",

@@ -35,8 +35,8 @@ Each arrow is a total Lean function of the compiler. **Proved** means a kernel-c
 
 ```
 source bytes (ByteArray)
-  │ decode + lex        Lex.lean      proved against Surface0.Lexes (independent byte-level spec);
-  ▼                                   until done: premise P_lex (implementation)
+  │ decode + lex        Lex.lean      `Lex.lex_correct` proves soundness against Surface0.Lexes
+  ▼
 tokens (kind + payload + span)
   │ parse (LL(1))       Parse.lean    generic table-driven parser over Surface0.grammar;
   ▼                                   premise P_parse (implementation) until the generic theorem lands
@@ -260,10 +260,8 @@ The premises fall into two separate structures, because they are different kinds
 
 ```lean
 /-- Claims about fixed frontend implementations, used only by the universal theorem.
-    Per compilation, the certificate discharges both by kernel `decide` (below). -/
+    The certificate checks parsing and elaboration for each compilation (below). -/
 structure FrontendPremises : Prop where
-  /-- P_lex (implementation), until `lex_correct` lands. -/
-  lex   : ∀ src toks, Lex.lex src = .ok toks → Surface0.Lexes src toks
   /-- P_parse (implementation), until the generic table-parser theorem lands. -/
   parse : ∀ toks ast, Parse.parse toks = .ok ast → Surface0.Derives toks ast
 
@@ -361,7 +359,6 @@ There are two target profiles: `x86_64-linux` and `aarch64-macos` (LCB's first n
 
 | Premise | Trust class | Retired by |
 |---|---|---|
-| P_lex | implementation | `lex_correct` |
 | P_parse | implementation | the generic table-parser theorem |
 | P_elab | implementation | ANF and resolution preservation |
 | P_ssa | implementation | SSA semantic preservation |
@@ -377,7 +374,7 @@ The fd-2 condition is part of the admitted launch, so it is inside P_launch (env
 
 **The trap site the executable reports is covered by premise `P_trap_site`** (owner, 2026-11-06). `trap_site_correct` proves the site at IR level. The executable's report is assumed: `Native` gains `ReportsSite : TargetProfile → Image → SiteId → Prop`, and a field states that a launch whose body returns `256 + i` writes exactly `Runtime.trapLine tbl[i]` and a newline on fd 2 (the kind, the `Loc` and the site id of entry `i`). Gates 4 and 6 test it. A proof of the runtime entry retires it, together with `P_rt`.
 
-P_lex and P_parse are also discharged for each compilation by the certificate.
+The certificate plan checks P_parse for each compilation.
 
 The **execution-trust inventory** is in the same file, as documented non-Prop entries:
 - the Lean compiler and runtime executing `compile`. The certificate closes this for each output.
@@ -411,7 +408,9 @@ theorem compile_correct (F : FrontendPremises) {B N T} (P : NativePremises B N T
 
    LLVM renders the shared BIR with `LLVM.print`. An LCB artifact additionally requires
    `Stages.prepareLCB out.bir = .ok f` for the function `f` passed to the backend.
-2. `F.lex`, `F.parse` and `elab_sound` give `Denotes src out.p`. `check_iff` gives `Checked`.
+2. `Stages.compile_lexes` applies `Lex.lex_correct` to the token list of a successful compilation.
+   The lexical judgment combines with `F.parse` and `elab_sound` to give `Denotes src out.p`.
+   `check_iff` gives `Checked`.
 3. `slice0_exits` gives `run … = .exit c` with `c < 256`; `run_exit_behaviour` then gives `Core.behaviour = .exited c`.
 4. `Admission.admit_never_traps` applies the spec's `slice0_never_traps` to the checked Core program.
 5. `MIR.lower_correct` preserves the Core outcome for successful admitted lowering. The
@@ -455,7 +454,7 @@ theorem answer_correct (F : FrontendPremises) (P : NativePremises B N T₀)
    Because a successful `emit b` is `(f, b.sites)` (`Proof.emit_ok`), a built image carries exactly `b.sites`, so `rt` follows from decoding with the paired table. `emit` is `emit_correct`.
 
    `live` holds because LCB's step relation is deterministic, so a run returns, faults or diverges. The witness follows from `emit_correct`.
-3. **Frontend premises:** these are claims about fixed code, not something a model can satisfy, so no model witness applies. They are discharged per compilation (next section), and universally once `lex_correct` and `parse_correct` land.
+3. **Frontend premises.** These are claims about fixed code. The certificate plan checks the remaining frontend premises per compilation (next section).
 4. **Native-build existence:** this is attested, not proved. The conformance job records toolchain provenance and the image digest for each example.
 
 ## Per-compilation certificate (`Concrete/Cert.lean`), R-0552 first increment
@@ -475,11 +474,12 @@ theorem cert_compile : Stages.compile input = .ok expected :=
 -- Compose the adapter and LCB profile checks to certify preparation.
 theorem cert_lcb : Stages.prepareLCB expected.bir = .ok expectedLCB :=
   Stages.prepareLCB_of_edges expected.bir expectedLCB e_adapter e_profile
-theorem cert_denotes : Surface0.lexesB srcBytes expected.toks && Surface0.derivesB expected.toks expected.ast &&
+theorem cert_lexes : Surface0.Lexes srcBytes expected.toks := Lex.lex_correct e_lex
+theorem cert_parse_elab : Surface0.derivesB expected.toks expected.ast &&
     Surface0.elabB expected.ast expected.p = true := by decide
 ```
 
-`Lexes`, `Derives` and `Elab` each have a Boolean checker over explicit witnesses, with a one-way soundness lemma (`lexesB_sound` and so on, giving `Denotes src p`). So `cert_denotes` discharges the frontend premises **for this compilation**, and `compile_correct_cert` needs only `NativePremises`.
+The certificate keeps `e_lex` to establish the exact lexer output and derives `cert_lexes` from the universal theorem. The certificate design uses Boolean checkers with soundness lemmas for `Derives` and `Elab`. Together with `cert_lexes`, their judgments give `Denotes src p` for this compilation, so `compile_correct_cert` needs only `NativePremises`.
 
 A **refusal certificate** proves the relevant stage returned `.error r` for each refused example.
 
@@ -506,7 +506,7 @@ def lowerContract (f : Core.Program × Tokens → Except Refusal MIR.Program) : 
 
 inductive Evidence (C : Prop) where
   | proof (h : C)
-  | frontend (h : FrontendPremises → C)                      -- P_lex, P_parse
+  | frontend (h : FrontendPremises → C)                      -- P_parse, P_elab
   | native {ι} (B : ι → Backend) (C' : ι → Prop) (hC : C = ∀ i, C' i)
       (h : ∀ i N T, NativePremises (B i) N T → C' i)  -- the stage's OWN backend family
 
@@ -668,10 +668,8 @@ Heavy runs (native builds, differentials, certificates) run on concrete-ci-2 or 
 These are internal. None blocks slice 0's correctness.
 
 - **Retire premises:**
-  - `lex_correct` (P_lex);
   - the generic table-parser theorem (P_parse);
   - `adapter_correct` and `emit_correct` (P_adapter, retired 2026-11-08);
-  - `MIR.lower_correct` and `MIR.lowerUnchecked_correct` (P_lower, retired);
   - a proof of the decoding entry against a libc model (P_rt).
 - **P_toolchain[lcb]** is retired by LCB's own C01–C03 work. LCB's verified profile names Apple AArch64 as its intended target. The `x86_64-linux` executable goes through LCB's compatibility pipeline, inside P_toolchain[lcb], until LCB certifies that target.
 - **Encoded result.** It works while LCB's verified profile has no calls, memory or traps. When it gains them, revisit the encoding: an external trap call, or a multi-function encoding.
