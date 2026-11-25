@@ -141,11 +141,13 @@ end Witness{index}
         for module, allowed in (("Concrete.Lex", True), ("Lean.Meta.Basic", True),
                                 ("LeanCompilerBackend.AMD64", True),
                                 ("Std.Data.HashMap.Lemmas", True),
-                                ("Std.Data.HashMap", False), ("Std.Data.String.ToNat", False),
+                                ("Std.Data.HashMap", False),
+                                ("Std.Data.String.ToNat", False),
                                 ("Std.Data.String.ToInt", False), ("Std", False),
                                 ("Init", False), ("Lean.DoesNotExist", False),
                                 ("Concrete.DoesNotExist", False)):
             self.assertEqual(bool(header.match("import " + module)), allowed, module)
+        self.assertIsNone(lexer.HEADER.match("import Std.Data.HashMap.Lemmas"))
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "C.lean"
             for command in ("import Std", "set_option maxRecDepth 100000", "def bad := sorry"):

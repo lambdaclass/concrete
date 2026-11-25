@@ -6,6 +6,10 @@ procedure `ll1 : Grammar → Bool` and proves it sound against DECLARATIVE defin
 FIRST, FOLLOW and prediction (`ll1_sound`): when `ll1 g = true`, no lookahead predicts two
 different productions of one nonterminal, so a table-driven parser never has a choice to make.
 
+Every grammar a parser uses is a `CheckedGrammar`, which carries a proof that `ll1` returns
+`true`. The parser takes a checked table tied to that grammar. Later slices extend the shared
+surface grammar and discharge the same check.
+
 The check is certificate-style: `compute` iterates to a fixed point, and `check` verifies that the
 sets are CLOSED under the rules and that the prediction sets are disjoint. Soundness needs only
 closure (a closed set contains the least one, which is the declarative relation), so the iteration
@@ -161,6 +165,11 @@ def compute (g : Grammar T N) : List N × List (N × T) × List (N × Option T) 
 def ll1 (g : Grammar T N) : Bool :=
   let (nu, fi, fo) := compute g
   check g nu fi fo
+
+/-- Grammar data with the conflict-freedom check required by the parser. -/
+structure CheckedGrammar (T N : Type) [DecidableEq T] [DecidableEq N] where
+  grammar : Grammar T N
+  isLL1 : ll1 grammar = true
 
 /-! ## Soundness -/
 
@@ -321,48 +330,5 @@ theorem ll1_sound (h : ll1 g = true) {i j : Nat} {x : N} {b : Option T}
   check_sound h hi hj pi pj
 
 end Sound
-
-/-! ## Examples -/
-
-namespace Examples
-
-inductive Tm where
-  | num | plus | lparen | rparen
-  deriving DecidableEq, Repr
-
-inductive Nt where
-  | expr | rest | atom
-  deriving DecidableEq, Repr
-
-open Sym in
-/-- `expr → atom rest`, `rest → + atom rest | ε`, `atom → num | ( expr )`: LL(1). -/
-def sums : Grammar Tm Nt :=
-  { start := .expr,
-    prods := [(.expr, [n .atom, n .rest]),
-              (.rest, [t .plus, n .atom, n .rest]), (.rest, []),
-              (.atom, [t .num]), (.atom, [t .lparen, n .expr, t .rparen])] }
-
-example : ll1 sums = true := by decide
-
-open Sym in
-/-- `expr → atom + expr | atom`: both alternatives start with `atom`, so not LL(1). -/
-def unfactored : Grammar Tm Nt :=
-  { start := .expr,
-    prods := [(.expr, [n .atom, t .plus, n .expr]), (.expr, [n .atom]),
-              (.atom, [t .num]), (.atom, [t .lparen, n .expr, t .rparen])] }
-
-example : ll1 unfactored = false := by decide
-
-open Sym in
-/-- A FIRST/FOLLOW conflict: `rest → + atom | ε` where `+` can also follow `rest`. -/
-def followConflict : Grammar Tm Nt :=
-  { start := .expr,
-    prods := [(.expr, [n .rest, t .plus, n .atom]),
-              (.rest, [t .plus, n .atom]), (.rest, []),
-              (.atom, [t .num])] }
-
-example : ll1 followConflict = false := by decide
-
-end Examples
 
 end Concrete.LL1

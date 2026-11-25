@@ -1,8 +1,5 @@
-premise P_lex [implementation] retired-by: `lex_correct` :: every token list the lexer returns for a source is one the source lexes to
 premise P_parse [implementation] retired-by: the generic table-parser theorem :: every tree the parser returns for a token list is one the grammar derives from it
 premise P_elab [implementation] retired-by: ANF and resolution preservation :: successful elaboration preserves the source AST evaluator's outcome in Core
-premise P_lower [implementation] retired-by: checked-evidence validity and MIR preservation :: MIR preserves Core outcomes for unchecked lowering and for evidence produced by admission
-premise P_ssa [implementation] retired-by: SSA semantic preservation :: successful SSA lowering preserves Memory CFG outcomes, including the trap kind
 premise P_print [implementation] retired-by: an LLVM-IR semantics; not planned for slice 0 :: the printed LLVM text of a WF BIR means at most the BIR behaviour, encoded
 premise P_toolchain[llvm] [toolchain] retired-by: not planned :: every result the linked LLVM body produces is one its text means
 premise P_toolchain[lcb] [toolchain] retired-by: LCB's own proofs (C01–C03 and beyond) :: every result the linked LCB body produces is one its function means (LCB's named trust boundaries)
@@ -12,11 +9,21 @@ premise P_launch [environment] retired-by: not planned :: an admitted launch of 
 premise P_live [environment] retired-by: not planned :: an admitted launch happens and has a behaviour
 theorem ConcreteSpec.Surface0.grammar0_ll1 axioms: propext
 theorem Concrete.Parse.table0_checked axioms:
-theorem Concrete.Admission.admit_checked axioms: propext, Classical.choice, Quot.sound
-theorem Concrete.Admission.check_evidence axioms: propext, Classical.choice, Quot.sound
-theorem Concrete.Admission.admit_never_traps axioms: propext, Classical.choice, Quot.sound
+theorem Concrete.Lex.lex_correct axioms: propext, Classical.choice, Quot.sound
+theorem Concrete.Stages.compile_lexes axioms: propext, Classical.choice, Quot.sound
+theorem Concrete.Admission.admit_checked axioms: propext, Quot.sound
+theorem Concrete.Admission.check_evidence axioms: propext
+theorem Concrete.Admission.admit_never_traps axioms: propext, Quot.sound
+theorem Concrete.MIR.lower_correct axioms: propext, Quot.sound
+theorem Concrete.MIR.lowerUnchecked_correct axioms: propext, Quot.sound
 theorem Concrete.Memory.lower_correct axioms: propext, Quot.sound
+theorem Concrete.Memory.lower_admitted_correct axioms: propext, Quot.sound
+theorem Concrete.Memory.lower_unchecked_correct axioms: propext, Quot.sound
+theorem Concrete.Stages.compile_core_correct axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.SSA.lower_wf axioms: propext, Classical.choice, Quot.sound
+theorem Concrete.SSA.validate_correct axioms: propext, Classical.choice, Quot.sound
+theorem Concrete.SSA.lower_correct axioms: propext, Classical.choice, Quot.sound
+theorem Concrete.Stages.compile_ssa_correct axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.Stages.compile_of_edges axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.Stages.prepareLCB_of_edges axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.Native.lcb_emit_correct axioms: propext, Classical.choice, Quot.sound

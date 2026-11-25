@@ -207,11 +207,13 @@ def compiler_header():
         modules.add(root)
         modules.update(".".join(p.relative_to(base).with_suffix("").parts)
                        for p in (base / root).rglob("*.lean"))
-    # The compiler's indexes use this proved data structure from the pinned toolchain.
-    hashmap = "Std.Data.HashMap.Lemmas"
-    if not (prefix / "src/lean/Std/Data/HashMap/Lemmas.lean").is_file():
-        raise LexError(f"missing approved toolchain module: {hashmap}")
-    modules.add(hashmap)
+    # SSA's indexed slot correspondence uses this proof-bearing container from
+    # the pinned toolchain. Permit this module in compiler sources only.
+    hash_map_lemmas = "Std.Data.HashMap.Lemmas"
+    source = prefix / "src/lean" / (hash_map_lemmas.replace(".", "/") + ".lean")
+    if not source.is_file():
+        raise LexError(f"missing approved module: {source}")
+    modules.add(hash_map_lemmas)
     return ModuleHeader(modules)
 
 
