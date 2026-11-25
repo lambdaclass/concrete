@@ -1,59 +1,8 @@
 import Concrete.Backend.LLVM
 
-/-! Controls for the LLVM producer/renderer boundary. Each attempt must fail
-with a type mismatch. The positive controls also pin numeric and quoted byte
-positions in the actual renderer. -/
+/-! Exact-output fixtures and type controls for the LLVM printer. -/
 
 namespace Concrete.Backend.LLVM.RenderingControls
-
-example : render [.terminator (.ret (.integer .u32, .immediate (.natural 273)))] =
-    "  ret i32 273\n" := by decide
-
-#guard render [.constant .bad ⟨#[97, 34, 92, 10, 48, 50]⟩] =
-    "@.bad = private constant [6 x i8] c\"a\\22\\5C\\0A02\"\n"
-
--- Exercise every byte spelling, including escapes and adjacent decimal-looking bytes.
-def byteConstants : List Item :=
-  [.constant .bad ⟨#[]⟩,
-   .constant (.site 17) ⟨(List.range 256).toArray.map UInt8.ofNat⟩]
-
-#guard Assembly.parse (render byteConstants) == some byteConstants
-
--- Compare the complete parsed trees, including the runtime, for every BIR fixture.
-#guard Concrete.BIR.Examples.all.all fun (_, program) =>
-  Assembly.parse (module program) == some (moduleItems program)
-
--- Check the independent BIR/runtime expectation on complete emitted modules.
-#guard Concrete.BIR.Examples.all.all fun (_, program) =>
-  Assembly.inventory (module program) == some (expectedInventory program)
-
--- The normal writer and standalone runtime use the public text laws directly.
-example (p : Concrete.BIR.Program) :
-    Assembly.inventory (module p) = some (expectedInventory p) := module_inventory p
-
-example (p : Concrete.BIR.Program) :
-    Assembly.inventory (Runtime.llvm p.sites) = some (Runtime.expectedInventory p.sites) :=
-  Runtime.llvm_inventory p.sites
-
--- Raw BIR with a wider immediate tag still encodes at the instruction's i8.
-example :
-    Assembly.inventory (render (inst (.bin .add .u8 0 (.imm .u16 256) (.imm .u8 1)))) =
-      some [[(.left, some 8, ConcreteSpec.Core.toBits .u8 256),
-        (.right, some 8, 1), (.typeWidth 0 0, none, 8)]] := by
-  rw [Assembly.inventory_render]
-  rfl
-
--- The trap result word can exceed i32 in raw BIR and wraps at the emitted width.
-example :
-    Assembly.inventory (render (term 0 (.trap 4294967040))) =
-      some [[(.returnValue, some 32, ConcreteSpec.Core.toBits .u32 4294967296),
-        (.typeWidth 0 0, none, 32)]] := by
-  rw [Assembly.inventory_render]
-  rfl
-
-example : (PatternEvidence.addOneOperand (.imm .u8 17)).immediateValue ≠
-    some (ConcreteSpec.Core.toBits .u8 17) :=
-  PatternEvidence.add_one_rejected
 
 -- Earlier trap-return controls: a complete literal or interpolated line cannot
 -- take the place of a typed terminator.
@@ -135,3 +84,58 @@ in the application
 example : Argument := Argument.immediate (recursiveText 1)
 
 end Concrete.Backend.LLVM.RenderingControls
+
+open Concrete.BIR
+open Concrete.Backend.LLVM
+
+-- These raw BIR fixtures pin spelling at the printer boundary, including
+-- widths before well-formedness is enforced. Native tests use well-formed BIR.
+private def siblings : Program :=
+  ⟨[⟨[], [.bin .add .u8 0 (.imm .u8 2) (.imm .u8 56),
+         .bin .add .u8 1 (.reg 0) (.reg 0)], .ret (.reg 1)⟩], []⟩
+
+private def twoSites : Program :=
+  ⟨[⟨[], [], .trap 1⟩],
+   [⟨.arithmeticOverflow, ⟨0⟩, ⟨0, 1⟩, ⟨"src/ñandú \"x\".con", 1, 1⟩⟩,
+    ⟨.arithmeticOverflow, ⟨1⟩, ⟨1, 2⟩, ⟨"b.con", 1, 2⟩⟩]⟩
+
+private def rawWidths : Program :=
+  ⟨[⟨[], [.bin .add .u8 0 (.imm .u16 256) (.imm .u8 1),
+         .trunc .u8 .i8 1 (.reg 0),
+         .binOvf .add .u8 2 3 (.imm .u8 17) (.reg 1)],
+      .trap 4294967040⟩], []⟩
+
+private def oracleCase : Program := ⟨[⟨[], [], .ret (.imm .u8 17)⟩], []⟩
+
+example : WF twoSites := by decide
+example : run twoSites 1 = .trapped 1 := by decide
+example : WF oracleCase := by decide
+example : run oracleCase 1 = .exited 17 := by decide
+
+private def fixtures : List (String × Program) :=
+  Examples.all ++ [("siblings", siblings), ("two_sites", twoSites),
+    ("raw_widths", rawWidths), ("oracle", oracleCase)]
+
+private def printObservation (program : Program) : IO Unit :=
+  match run program 1 with
+  | .exited status => IO.println status
+  | .trapped site =>
+    match program.sites[site]? with
+    | some entry => IO.print ("134\n" ++ Concrete.Backend.Runtime.trapLine entry ++ "\n")
+    | none => throw (IO.userError "BIR trap has no corresponding site entry")
+  | _ => throw (IO.userError "expected a final BIR observation")
+
+def main : List String → IO Unit
+  | [] => do
+    for (name, program) in fixtures do
+      IO.print ("; fixture " ++ name ++ "\n" ++ module program)
+    -- Pin the spelling of every byte, including empty and adjacent digits.
+    IO.print ("; return literal\n" ++ render [.terminator (.ret (.integer .u32, .immediate (.natural 273)))])
+    IO.print ("; byte constants\n" ++ render
+      [.constant .bad ⟨#[97, 34, 92, 10, 48, 50]⟩, .constant .bad ⟨#[]⟩,
+       .constant (.site 17) ⟨(List.range 256).toArray.map UInt8.ofNat⟩])
+  | ["return-module"] => IO.print (module oracleCase)
+  | ["trap-module"] => IO.print (module twoSites)
+  | ["return-observation"] => printObservation oracleCase
+  | ["trap-observation"] => printObservation twoSites
+  | _ => throw (IO.userError "unknown LLVM fixture mode")

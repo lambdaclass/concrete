@@ -305,11 +305,10 @@ structure Backend where
   emit : BIR.Program → Except String Text
   Means : Text → BodyResult → Prop
 
-/-- `LLVM.print` emits body text and spells integer types by bit width, so signed and
-    unsigned types of equal width have the same type spelling. The body printer omits the site
-    table. `LLVM.module` adds it through `Runtime.llvm` in the whole module.
-    `P_print` remains a premise about the meaning of the body text. -/
-def llvm (M : String → BodyResult → Prop) : Backend := ⟨String, fun b => .ok (LLVM.print b), M⟩
+/-- `LLVM.module` emits the complete module, including runtime and site table.
+    Signed and unsigned types of equal width share a type spelling.
+    `P_print` is the premise about the meaning of the exact emitted text. -/
+def llvm (M : String → BodyResult → Prop) : Backend := ⟨String, fun b => .ok (LLVM.module b), M⟩
 /-- LCB emits the adapted body paired with its site table for decoding the result. -/
 def lcb : Backend := ⟨LCB.Source.Function × SiteTable, LCB.emit,
   fun (f, _) r => LCB.bodyResult f r⟩
@@ -414,7 +413,7 @@ theorem compile_correct (F : FrontendPremises) {B N T} (P : NativePremises B N T
    - `out.tokens = admit out.p`, `out.mir = lower out.p out.tokens`, `out.mem = memory out.mir` and `out.bir = ssa out.mem`;
    - `out.bir.frameSlots ≤ T.maxSlots`.
 
-   LLVM renders the shared BIR with `LLVM.print`. An LCB artifact additionally requires
+   LLVM renders the shared BIR with `LLVM.module`. An LCB artifact additionally requires
    `Stages.prepareLCB out.bir = .ok f` for the function `f` passed to the backend.
 2. `Stages.compile_lexes` applies `Lex.lex_correct` to the token list of a successful compilation.
    The lexical judgment combines with `F.parse` and `elab_sound` to give `Denotes src out.p`.
@@ -607,6 +606,22 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
    - the LCB-native executable.
 
    All three must give the same observation, and each must match the row's `expect`. Future `con:` rows use the same manifest and runner.
+
+   The [LLVM rendering fixtures](../scripts/checks/compiler/llvm_rendering.lean) compare
+   full modules byte for byte against the [golden](../tests/golden/slice0_llvm.txt).
+   The corpus includes raw BIR width boundaries and runtime byte escapes.
+   The mutation controls rebuild the modified printer and check the same golden.
+   Native controls must disagree with the Lean BIR oracle on the changed exit
+   value and on the exact trap line when the runtime routes to the wrong site.
+   To regenerate the literal output after reviewing an intended printer change, run
+
+   ```sh
+   nix develop -c lake build Concrete
+   nix develop -c lake env lean --run scripts/checks/compiler/llvm_rendering.lean > /tmp/slice0_llvm.txt
+   diff -u tests/golden/slice0_llvm.txt /tmp/slice0_llvm.txt
+   ```
+
+   Install the reviewed output as the golden.
 
    **Classification uses the status and the runtime evidence, never the status alone.** `Observation.status` is many-to-one.
    - Status 134 **with** the runtime's trap line on fd 2 is `trapped k`.

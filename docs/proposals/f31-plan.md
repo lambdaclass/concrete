@@ -69,17 +69,9 @@ quoted theorem references appear as elaborated command dependencies.
    width, signedness and immediate encoding to Core through the F30 bridge.
    BIR programs, result words and LLVM text continue to agree with the prior
    interface. The bridge gives equality for every tag and payload, including
-   ill-typed payloads. Qualify with Laws for the immediate width, decimal-token
-   parsing and Core round trip, the trusted-base golden and the existing
-   two-backend slice-0 controls. The producer inventory theorem covers all
-   BIR programs and the runtime items, before text rendering. Call roles carry
-   their zero-based argument slot. Phi roles carry their incoming slot and
-   predecessor label, including when two edges share a predecessor. Switch keys
-   carry their case position and destination label. The inventory keeps a row
-   for every assembly item, including empty rows, so moving an immediate
-   between sibling instructions changes the inventory. The assembly reader
-   recovers these rows from every emitted module, and the native fixtures
-   exercise the complete writer path. LLVM execution semantics still use
+   ill-typed payloads. The scalar encoding laws and trusted-base golden
+   record that correspondence. Full-module exact-output fixtures and the
+   native controls qualify the printer. LLVM execution semantics still use
    `P_print`.
 2. **BIR and the runtime/backend boundary.** Switch the BIR scalar tag and
    payload, its typing and arithmetic, and every consumer in Progress, LCB,
@@ -111,35 +103,23 @@ quoted theorem references appear as elaborated command dependencies.
    exports and goldens with the same change. Run a fresh census before
    retirement and account for every remaining direct edge and surface row.
 
-### Slice-1 text proof and controls
+### LLVM printer qualification
 
-The assembly reader consumes each rendered item and preserves an arbitrary
-suffix. The list proofs cover declaration types, definition parameters, call
-arguments, phi arms and switch cases. The byte reader recovers the initializer
-and checks its declared length. Dispatch checks earlier parser alternatives
-before consuming each instruction. Nonempty item spellings give the parser
-enough fuel for the whole list.
+A11/D1 retires the LLVM assembly reader and syntactic inventory before B0a
+changes the emitted module. The scalar encoding laws cover width fit and
+round trip for representable values. Exact-output fixtures check
+`LLVM.module`, the entire text passed to the native handoff, including
+the runtime and site table. The invalid-word native fixture separately
+exercises the standalone runtime's rejection path. The native gates compare
+observations with the Lean oracle and run LLVM under ASan. LCB parity retains
+its scheduled B0b milestones.
 
-`Assembly.parse_render` recovers the assembly tree. `Assembly.inventory_render`
-projects its integer inventory, which includes explicit widths even when all
-operands are locals. For every raw BIR program, immediate payloads use Core's
-bit encoding at the width of the emitted operand slot. Trap result words and
-runtime switch keys use the same encoding at i32, and write lengths at i64.
-`LLVM.module_inventory` composes with the BIR inventory
-law for `LLVM.module`, the exact string passed to `IO.FS.writeFile` in
-`writeBackends`. `Runtime.llvm_inventory` covers the standalone runtime text.
-The invalid-word fixture appends that runtime text to a hand-authored body
-returning an invalid result word. It exercises the runtime's rejection path
-through the native tools. The hand-authored body and concatenated fixture
-are outside the normal BIR lowering and its module inventory law.
-
-Each renderer or producer mutation control must prove a concrete inequality
-for the target law against the actual mutated definition. The witness uses
-the real definitions and the independent expectation, with a kernel-checked
-proof that does not depend on the affected law or its proof helpers.
-Elaboration errors, recovered proofs and tactic failures do not count as
-kills. A double reversal of the BIR instruction list must survive the kill
-check and have a kernel-checked equality on its witness.
+The mutation gate recompiles changed backend definitions in a temporary
+module search path and runs the same exact-output comparison. A compiled
+operand-encoding mutation changes the exit value, and swapping two runtime
+switch destinations changes the trap line. Both native observations are
+compared with the BIR oracle. A double reversal of the BIR instruction list
+must preserve every byte. Build or tool failures fail the control.
 
 Slice 1 and Slice 2 leave the F30 comparison available at the boundaries
 that still carry the old tags. Slice 3 is the final type substitution at
