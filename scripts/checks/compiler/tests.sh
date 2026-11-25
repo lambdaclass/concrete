@@ -426,6 +426,10 @@ else
   echo "ok   CLI atomic rebuild preserves the unselected backend"
 fi
 
+build "publication case aliases" "$work/ctl/publication-case.log" bounded 30 \
+  python3 -B scripts/checks/compiler/slice0_publication_controls.py
+cat "$work/ctl/publication-case.log"
+
 cp -R "$work/ctl/previous" "$work/ctl/symlink-target-before"
 ln -s "$work/ctl/previous" "$helper_project/linked-out"
 check_cli_diagnostic "CLI symlink output directory" "$work/ctl/linked-out" "refuse 2 TOOL-FAILURE" \

@@ -21,19 +21,55 @@ def output_directory(output):
             raise ValueError(f"build output directory must be a real directory: {output}") from error
         raise
     try:
+        check_project_directory(output, fd)
         yield fd
     finally:
         os.close(fd)
 
 
+def check_project_directory(output, fd):
+    destination = os.fstat(fd)
+    cwd = Path.cwd()
+    for ancestor in (cwd, *cwd.parents):
+        if os.path.samestat(destination, ancestor.stat()):
+            raise ValueError(f"build output directory must not contain the current project: {output}")
+
+
 def check_destinations(output, fd, names):
+    existing = {}
     for name in names:
         try:
-            mode = os.stat(name, dir_fd=fd, follow_symlinks=False).st_mode
+            entry = os.stat(name, dir_fd=fd, follow_symlinks=False)
         except FileNotFoundError:
             continue
-        if not stat.S_ISREG(mode):
+        if not stat.S_ISREG(entry.st_mode):
             raise ValueError(f"build output is not a regular file: {output / name}")
+        existing[name] = entry
+    return existing
+
+
+def replaced_entries(fd, candidate, existing):
+    """Find the directory entries addressed by the selected artifact names."""
+    entries = set(os.listdir(fd))
+    replaced = entries.intersection(existing)
+    for name in existing.keys() - replaced:
+        aliases = [
+            entry for entry in entries
+            if os.path.samestat(existing[name], os.stat(entry, dir_fd=fd, follow_symlinks=False))
+        ]
+        if len(aliases) > 1:
+            # An inode can have several hard links. Resolve their names in the
+            # private candidate, which currently contains only the new artifacts.
+            staged = (candidate / name).stat()
+            aliases = [
+                entry for entry in aliases
+                if (candidate / entry).exists()
+                and os.path.samestat(staged, (candidate / entry).stat())
+            ]
+        if len(aliases) != 1:
+            raise ValueError(f"cannot identify the build output entry: {name}")
+        replaced.add(aliases[0])
+    return replaced
 
 
 def exchange(parent_fd, candidate, output):
@@ -70,7 +106,7 @@ def publish(output, staging, names):
     try:
         fcntl.flock(parent_fd, fcntl.LOCK_EX)
         with output_directory(output) as output_fd:
-            check_destinations(output, output_fd, names)
+            existing = check_destinations(output, output_fd, names)
             candidate = staging / "candidate"
             candidate.mkdir()
             for name in names:
@@ -79,12 +115,14 @@ def publish(output, staging, names):
                     raise ValueError(f"expected a regular build output: {name}")
                 source.rename(candidate / name)
 
+            replaced = replaced_entries(output_fd, candidate, existing)
+
             # Anchor the snapshot to the directory opened with O_NOFOLLOW.
             # Release the snapshot directory before attempting the exchange.
             os.fchdir(output_fd)
             shutil.copytree(
                 ".", candidate, symlinks=True, copy_function=os.link,
-                ignore=lambda directory, _: names if directory == "." else (),
+                ignore=lambda directory, _: replaced if directory == "." else (),
                 dirs_exist_ok=True,
             )
             os.fchdir(parent_fd)
@@ -104,8 +142,6 @@ def main(args):
     output = Path(os.path.abspath(directory))
     parent = output.parent.resolve()
     output = parent / output.name
-    if output in (*Path.cwd().parents, Path.cwd()):
-        raise ValueError(f"build output directory must not contain the current project: {output}")
     if operation == "prepare":
         print(prepare(output, names))
     elif operation == "publish":
