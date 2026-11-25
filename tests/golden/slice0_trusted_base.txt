@@ -1,4 +1,3 @@
-premise P_lex [implementation] retired-by: `lex_correct` :: every token list the lexer returns for a source is one the source lexes to
 premise P_parse [implementation] retired-by: the generic table-parser theorem :: every tree the parser returns for a token list is one the grammar derives from it
 premise P_elab [implementation] retired-by: ANF and resolution preservation :: successful elaboration preserves the source AST evaluator's outcome in Core
 premise P_lower [implementation] retired-by: checked-evidence validity and MIR preservation :: MIR preserves Core outcomes for unchecked lowering and for evidence produced by admission
