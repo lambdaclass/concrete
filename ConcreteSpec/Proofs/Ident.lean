@@ -1054,42 +1054,55 @@ theorem SourceText.lineAt_zero (source : SourceText) : source.lineAt 0 = 1 := rf
 The column at byte offset zero is one. -/
 theorem SourceText.columnAt_zero (source : SourceText) : source.columnAt 0 = 1 := rfl
 
-/-- Law (subject `ConcreteSpec.Core.SourceText.lineAt`).
-Appending a byte updates the source line count by its actual newline step. -/
-theorem SourceText.lineAt_append (source : SourceText) (byte : UInt8) :
-    (source.push byte).lineAt (source.length + 1) = source.lineAt source.length + if byte = 10 then 1 else 0 := by
+private theorem SourceText.positionAt_append (source : SourceText) (byte : UInt8) :
+    (source.push byte).positionAt (source.length + 1) =
+      (source.positionAt source.length).advanceByte byte.toNat := by
   have whole : (source.bytes ++ [byte.toNat]).take (source.bytes.length + 1) =
-      source.bytes ++ [byte.toNat] :=
-    List.take_of_length_le (by simp)
-  have newline_iff : byte.toNat = 10 ↔ byte = 10 := by
-    simpa using (UInt8.toNat_inj (a := byte) (b := 10))
-  simp only [SourceText.lineAt, SourceText.push, whole, SourceText.length, List.take_length]
-  by_cases newline : byte = 10 <;> simp [newline_iff, newline]
+      source.bytes ++ [byte.toNat] := List.take_of_length_le (by simp)
+  simp [SourceText.positionAt, SourceText.length, SourceText.push, whole, List.foldl_append]
 
 /-- Law (subject `ConcreteSpec.Core.SourceText.lineAt`).
-A newline starts a new line. -/
-theorem SourceText.lineAt_append_newline (source : SourceText) :
+CR starts a line, and LF starts a line unless it completes CRLF. -/
+theorem SourceText.lineAt_append (source : SourceText) (byte : UInt8) :
+    (source.push byte).lineAt (source.length + 1) = source.lineAt source.length +
+      (if byte = 13 ∨ (byte = 10 ∧ !(source.positionAt source.length).afterCR) then 1 else 0) := by
+  have cr : byte.toNat = 13 ↔ byte = 13 := by
+    simpa using (UInt8.toNat_inj (a := byte) (b := 13))
+  have lf : byte.toNat = 10 ↔ byte = 10 := by
+    simpa using (UInt8.toNat_inj (a := byte) (b := 10))
+  unfold SourceText.lineAt
+  rw [SourceText.positionAt_append]
+  cases h : (source.positionAt source.length).afterCR <;>
+    by_cases hc : byte = 13 <;> by_cases hl : byte = 10 <;>
+    simp_all [Position.advanceByte, Position.step]
+
+/-- Law (subject `ConcreteSpec.Core.SourceText.lineAt`).
+A LF outside CRLF starts a new line. -/
+theorem SourceText.lineAt_append_newline (source : SourceText)
+    (notCR : (source.positionAt source.length).afterCR = false) :
     (source.push 10).lineAt (source.length + 1) = source.lineAt source.length + 1 := by
-  simpa using SourceText.lineAt_append source 10
+  simp [SourceText.lineAt_append, notCR]
 
 /-- Law (subject `ConcreteSpec.Core.SourceText.lineAt`).
 A non-newline byte leaves the line unchanged. -/
-theorem SourceText.lineAt_append_other (source : SourceText) (byte : UInt8) (other : byte ≠ 10) :
+theorem SourceText.lineAt_append_other (source : SourceText) (byte : UInt8)
+    (notLF : byte ≠ 10) (notCR : byte ≠ 13) :
     (source.push byte).lineAt (source.length + 1) = source.lineAt source.length := by
-  simpa [other] using SourceText.lineAt_append source byte
+  simp [SourceText.lineAt_append, notLF, notCR]
 
 /-- Law (subject `ConcreteSpec.Core.SourceText.columnAt`).
-Appending a byte updates the byte column: newline resets to one, every other byte adds one. -/
+CR and LF reset the column, and every other byte adds one. -/
 theorem SourceText.columnAt_append (source : SourceText) (byte : UInt8) :
     (source.push byte).columnAt (source.length + 1) =
-      if byte = 10 then 1 else source.columnAt source.length + 1 := by
-  have whole : (source.bytes ++ [byte.toNat]).take (source.bytes.length + 1) =
-      source.bytes ++ [byte.toNat] :=
-    List.take_of_length_le (by simp)
-  have newline_iff : byte.toNat = 10 ↔ byte = 10 := by
+      if byte = 13 ∨ byte = 10 then 1 else source.columnAt source.length + 1 := by
+  have cr : byte.toNat = 13 ↔ byte = 13 := by
+    simpa using (UInt8.toNat_inj (a := byte) (b := 13))
+  have lf : byte.toNat = 10 ↔ byte = 10 := by
     simpa using (UInt8.toNat_inj (a := byte) (b := 10))
-  simp only [SourceText.columnAt, SourceText.push, whole, SourceText.length, List.take_length]
-  by_cases newline : byte = 10 <;> simp [newline_iff, newline]
+  unfold SourceText.columnAt
+  rw [SourceText.positionAt_append]
+  by_cases hc : byte = 13 <;> by_cases hl : byte = 10 <;>
+    simp_all [Position.advanceByte, Position.step]
 
 /-- Law (subject `ConcreteSpec.Core.SourceText.columnAt`).
 A tab is one byte and therefore advances exactly one column. -/
@@ -2097,7 +2110,7 @@ def offsetLine (_source : SourceText) (offset : Nat) : Nat := offset + 1
 
 /-- Instance (law `ConcreteSpec.Core.SourceText.lineAt_append_newline`, case `ConcreteSpec.Core.Vacuity.aSource`). -/
 theorem lineAt_append_newline_example_aSource : (aSource.push 10).lineAt (aSource.length + 1) = aSource.lineAt aSource.length + 1 :=
-  SourceText.lineAt_append_newline aSource
+  SourceText.lineAt_append_newline aSource (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.SourceText.lineAt_append_newline`, case `ConcreteSpec.Core.Vacuity.aSource`, subject `ConcreteSpec.Core.SourceText.lineAt`, mutant `ConcreteSpec.Core.Vacuity.constantLine`). -/
 theorem lineAt_append_newline_planted_aSource_constantLine : ¬ (constantLine (aSource.push 10) (aSource.length + 1) =
@@ -2105,7 +2118,7 @@ theorem lineAt_append_newline_planted_aSource_constantLine : ¬ (constantLine (a
 
 /-- Instance (law `ConcreteSpec.Core.SourceText.lineAt_append_other`, case `ConcreteSpec.Core.Vacuity.aSource`). -/
 theorem lineAt_append_other_example_aSource : (aSource.push 9).lineAt (aSource.length + 1) = aSource.lineAt aSource.length :=
-  SourceText.lineAt_append_other aSource 9 (by decide)
+  SourceText.lineAt_append_other aSource 9 (by decide) (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.SourceText.lineAt_append_other`, case `ConcreteSpec.Core.Vacuity.aSource`, subject `ConcreteSpec.Core.SourceText.lineAt`, mutant `ConcreteSpec.Core.Vacuity.offsetLine`). -/
 theorem lineAt_append_other_planted_aSource_offsetLine : (9 : UInt8) ≠ 10 ∧
@@ -3214,8 +3227,11 @@ theorem parseString_render (path : SourcePath) : parseString path.render.text = 
 
 end SourcePath
 
-/-- Helper: a source span carries the checked path invariant. -/
-theorem Span.pathOk (span : Span) : span.PathOk := span.path.valid
+/-- Helper: the path resolved from a scoped span is an admitted source path. -/
+theorem Span.pathOk (origin target : SourcePathSpan.Project)
+    (span : SourcePathSpan.ScopedSpan origin) (file : SourcePathSpan.File)
+    (_ : SourcePathSpan.bindSource origin target span = some file) :
+    SourcePath.RawOk file.path.renderBytes := file.path.valid
 
 /-- Representation lemma (subject `ConcreteSpec.Core.Span.LocationOk`).
 A valid span starts within the source and stores the exact line and byte column at that start. -/
@@ -4760,13 +4776,49 @@ theorem Project.findFile_succeeds_iff (project : Project) (path : SourcePath) :
     obtain ⟨file, member, exactPath⟩ := List.mem_map.mp present
     exact ⟨file, (findFile_iff project path file).mpr ⟨member, exactPath⟩⟩
 
-/-- Helper: both operations refuse an absent path according to the registered file rule. -/
-theorem missingFile_refuses (project : Project) (span : Span) (start stop : Nat)
-    (absent : ¬ FilePresent (project, span.path)) :
-    projectSpan project span.path start stop = none ∧ bindSource project span = none := by
-  cases found : project.findFile span.path with
-  | none => simp [projectSpan, bindSource, found, bind, Option.bind]
-  | some file => exact (absent ((project.findFile_succeeds_iff _).mp ⟨file, found⟩)).elim
+private theorem Project.paths_nodup (project : Project) :
+    (project.files.map File.path).Nodup := by
+  apply project.admitted.imp
+  intro a b apart same
+  exact apart .duplicate (congrArg SourcePath.raw same)
+
+private theorem findId_iff (project : Project) (path : SourcePath) (id : FileId) :
+    project.findId path = some id ↔
+      ∃ file, project.fileAt id = some file ∧ file.path = path := by
+  cases id with
+  | mk index =>
+    unfold Project.findId Project.fileAt
+    rw [Option.map_eq_some_iff]
+    simp only [FileId.mk.injEq, exists_eq_right, List.findIdx?_eq_some_iff_getElem,
+      decide_eq_true_eq]
+    constructor
+    · rintro ⟨within, eq, _⟩
+      exact ⟨project.files[index], List.getElem?_eq_getElem within, eq⟩
+    · rintro ⟨file, lookup, rfl⟩
+      obtain ⟨within, rfl⟩ := List.getElem?_eq_some_iff.mp lookup
+      have mapped : index < (project.files.map File.path).length := by simpa using within
+      refine ⟨within, rfl, ?_⟩
+      intro j earlier same
+      exact (Nat.ne_of_lt earlier) (project.paths_nodup.eq_of_getElem_eq
+        (Nat.lt_trans earlier mapped) mapped (by simpa using same))
+
+/-- Helper: projection and rebinding refuse an absent path. -/
+theorem missingFile_refuses (origin target : Project) (span : ScopedSpan origin) (file : File)
+    (original : origin.fileAt span.fileId = some file) (start stop : Nat)
+    (absent : ¬ FilePresent (target, file.path)) :
+    projectSpan target file.path start stop = none ∧ bindSource origin target span = none := by
+  have missing : target.findFile file.path = none := by
+    cases found : target.findFile file.path with
+    | none => rfl
+    | some loaded => exact (absent ((target.findFile_succeeds_iff _).mp ⟨loaded, found⟩)).elim
+  have noId : target.findId file.path = none := by
+    cases found : target.findId file.path with
+    | none => rfl
+    | some id =>
+      obtain ⟨entry, lookup, path⟩ := (findId_iff target file.path id).mp found
+      have member : entry ∈ target.files := List.mem_of_getElem? lookup
+      exact (absent (List.mem_map.mpr ⟨entry, member, path⟩)).elim
+  simp [projectSpan, bindSource, original, missing, noId, bind, Option.bind]
 
 /-- Helper: the projection ordering guard implements the registered offset rule. -/
 theorem orderedOffsets_guard_iff (start stop : Nat) :
@@ -4793,13 +4845,13 @@ theorem location_guard_iff (span : Span) (source : SourceText) :
     ← columnMatches_guard_iff]
 
 /-- The universal agreement contract for projection, in both directions. -/
-def ProjectionCorrect (projector : Project → SourcePath → Nat → Nat → Option Span) : Prop :=
+def ProjectionCorrect (projector : (project : Project) → SourcePath → Nat → Nat → Option (ScopedSpan project)) : Prop :=
   ∀ project path start stop span,
     projector project path start stop = some span ↔ Reference.Projects project path start stop span
 
 /-- The universal agreement contract for source binding, in both directions. -/
-def BindingCorrect (binder : Project → Span → Option File) : Prop :=
-  ∀ project span file, binder project span = some file ↔ Reference.Binds project span file
+def BindingCorrect (binder : (origin : Project) → Project → ScopedSpan origin → Option File) : Prop :=
+  ∀ origin target span file, binder origin target span = some file ↔ Reference.Binds origin target span file
 
 /-- Law (subject `ConcreteSpec.Core.SourcePathSpan.projectSpan`).
 Safety preserves the exact path and range and validates the projected coordinates.
@@ -4808,55 +4860,61 @@ theorem projectSpan_correct : ProjectionCorrect projectSpan := by
   intro project path start stop span
   constructor
   · intro result
-    cases found : project.findFile path with
+    cases found : project.findId path with
     | none => simp [projectSpan, found, bind, Option.bind] at result
-    | some file =>
-      obtain ⟨member, exactPath⟩ := (findFile_iff _ _ _).mp found
-      simp only [projectSpan, found, bind, Option.bind] at result
+    | some id =>
+      obtain ⟨file, lookup, exactPath⟩ := (findId_iff project path id).mp found
+      simp only [projectSpan, found, lookup, bind, Option.bind] at result
       split at result
       · rename_i ordered
         split at result
         · rename_i within
           cases result
-          exact ⟨rfl, rfl, rfl, (orderedOffsets_guard_iff _ _).mp ordered,
-            file, member, exactPath, ⟨(endInSource_guard_iff _ _).mp within, rfl, rfl⟩, rfl⟩
+          refine ⟨rfl, rfl, ordered, file, lookup, exactPath, ?_⟩
+          rw [Span.locationOk_iff]
+          simp [fileSpan, file.positionAt_eq start (Nat.le_trans ordered within),
+            SourceText.lineAt, SourceText.columnAt, ordered, ← File.length_eq, within]
         · contradiction
       · contradiction
-  · rintro ⟨pathEq, startEq, stopEq, ordered, file, member, exactPath, ⟨within, line, col⟩, sourceEq⟩
-    subst path start stop
-    have found := (findFile_iff _ _ _).mpr ⟨member, exactPath⟩
-    have orderedGuard := (orderedOffsets_guard_iff _ _).mpr ordered
-    have inBounds := (endInSource_guard_iff _ _).mpr within
-    simp only [projectSpan, found, bind, Option.bind, dite_eq_left orderedGuard, ite_eq_left inBounds,
-      Option.some.injEq]
-    cases span
-    simp_all [spanAt, LineMatches, ColumnMatches]
+  · rintro ⟨startEq, stopEq, ordered, file, lookup, exactPath, valid⟩
+    subst start stop path
+    obtain ⟨_, within, line, col⟩ := (Span.locationOk_iff _ _).mp valid
+    have inBounds : span.endOffset ≤ file.length := by simpa [File.length_eq] using within
+    have orderedGuard : span.startOffset ≤ span.endOffset := ordered
+    have found := (findId_iff project file.path span.fileId).mpr ⟨file, lookup, rfl⟩
+    simp only [projectSpan, found, lookup, bind, Option.bind, dite_eq_left orderedGuard,
+      dite_eq_left inBounds, Option.some.injEq]
+    have pos := file.positionAt_eq span.startOffset (Nat.le_trans orderedGuard inBounds)
+    rcases span with ⟨⟨⟩⟩
+    simp_all [fileSpan, SourceText.lineAt, SourceText.columnAt]
 
 /-- Law (subject `ConcreteSpec.Core.SourcePathSpan.bindSource`).
-Safety returns the exact admitted file with a valid stored location.
-Progress returns that file for every binding in the reference relation. -/
+Safety and progress preserve the admitted path, exact bytes, and stored location. -/
 theorem bindSource_correct : BindingCorrect bindSource := by
-  intro project span file
+  intro origin target span file
   constructor
   · intro result
-    cases found : project.findFile span.path with
-    | none => simp [bindSource, found, bind, Option.bind] at result
-    | some loaded =>
-      simp only [bindSource, found, bind, Option.bind] at result
-      split at result
-      · rename_i valid
-        cases result
-        obtain ⟨member, exactPath⟩ := (findFile_iff _ _ _).mp found
-        exact ⟨member, exactPath, valid⟩
-      · contradiction
-  · rintro ⟨member, exactPath, valid⟩
+    cases original : origin.fileAt span.fileId with
+    | none => simp [bindSource, original, bind, Option.bind] at result
+    | some entry =>
+      cases found : target.findFile entry.path with
+      | none => simp [bindSource, original, found, bind, Option.bind] at result
+      | some loaded =>
+        simp only [bindSource, original, found, bind, Option.bind, File.matchesLocation_iff] at result
+        split at result
+        · rename_i valid
+          cases result
+          obtain ⟨member, exactPath⟩ := (findFile_iff _ _ _).mp found
+          exact ⟨entry, original, member, exactPath, valid⟩
+        · contradiction
+  · rintro ⟨entry, original, member, exactPath, valid⟩
     have found := (findFile_iff _ _ _).mpr ⟨member, exactPath⟩
-    simp [bindSource, found, bind, Option.bind, valid]
+    simp [bindSource, original, found, bind, Option.bind, File.matchesLocation_iff, valid]
 
 /-- Helper: corollary of `projectSpan_correct`.
 Each returned span preserves the requested path and range and locates an admitted file. -/
 theorem projectSpan_safety (project : Project) (path : SourcePath) (start stop : Nat)
-    (span : Span) (result : projectSpan project path start stop = some span) :
+    (span : ScopedSpan project) (result : projectSpan project path start stop = some span) :
     Reference.Projects project path start stop span :=
   (projectSpan_correct project path start stop span).mp result
 
@@ -4867,23 +4925,26 @@ theorem projectSpan_progress (project : Project) (path : SourcePath) (start stop
     (ordered : start ≤ stop) (within : stop ≤ file.source.length) :
     ∃ span, projectSpan project path start stop = some span ∧
       Reference.Projects project path start stop span := by
-  let span := spanAt path file.source start stop ordered
-  have reference : Reference.Projects project path start stop span :=
-    ⟨rfl, rfl, rfl, (orderedOffsets_guard_iff _ _).mp ordered,
-      file, member, exactPath, ⟨(endInSource_guard_iff _ _).mp within, rfl, rfl⟩, rfl⟩
-  exact ⟨span, (projectSpan_correct project path start stop span).mpr reference, reference⟩
+  obtain ⟨index, lookup⟩ := List.mem_iff_getElem?.mp member
+  let id : FileId := ⟨index⟩
+  have inBounds : stop ≤ file.length := by simpa [File.length_eq] using within
+  let span : ScopedSpan project := ⟨fileSpan id file start stop ordered (Nat.le_trans ordered inBounds)⟩
+  have found := (findId_iff project path id).mpr ⟨file, lookup, exactPath⟩
+  have result : projectSpan project path start stop = some span := by
+    have atId : project.fileAt id = some file := lookup
+    simp [projectSpan, found, atId, bind, Option.bind, ordered, inBounds, span]
+  exact ⟨span, result, projectSpan_safety _ _ _ _ _ result⟩
 
-/-- Helper: corollary of `bindSource_correct`.
-The returned file matches the stored path and bytes and validates the stored location. -/
-theorem bindSource_safety (project : Project) (span : Span) (file : File)
-    (result : bindSource project span = some file) : Reference.Binds project span file :=
-  (bindSource_correct project span file).mp result
+/-- Helper: corollary of `bindSource_correct`. -/
+theorem bindSource_safety (origin target : Project) (span : ScopedSpan origin) (file : File)
+    (result : bindSource origin target span = some file) : Reference.Binds origin target span file :=
+  (bindSource_correct origin target span file).mp result
 
-/-- Helper: corollary of `bindSource_correct`.
-Every valid reference binding returns the corresponding loaded file. -/
-theorem bindSource_progress (project : Project) (span : Span) (file : File)
-    (reference : Reference.Binds project span file) : bindSource project span = some file :=
-  (bindSource_correct project span file).mpr reference
+/-- Helper: corollary of `bindSource_correct`. -/
+theorem bindSource_progress (origin target : Project) (span : ScopedSpan origin) (file : File)
+    (reference : Reference.Binds origin target span file) :
+    bindSource origin target span = some file :=
+  (bindSource_correct origin target span file).mpr reference
 
 namespace Controls
 
@@ -4891,12 +4952,16 @@ namespace Controls
 def pastEnd : Span := { tabSpan with endOffset := 4, range_ok := by decide }
 
 /-- Mutant that projects ordered ranges without checking the end bound. -/
-def projectPastEnd (project : Project) (path : SourcePath) (start stop : Nat) : Option Span := do
-  let file ← project.findFile path
-  if ordered : start ≤ stop then some (spanAt path file.source start stop ordered) else none
+def projectPastEnd (project : Project) (path : SourcePath) (start stop : Nat) : Option (ScopedSpan project) := do
+  let id ← project.findId path
+  let file ← project.fileAt id
+  if ordered : start ≤ stop then
+    if bounded : start ≤ file.length then some ⟨fileSpan id file start stop ordered bounded⟩
+    else none
+  else none
 
 /-- Mutant that rejects ranges beginning after the first byte. -/
-def projectAtStartOnly (project : Project) (path : SourcePath) (start stop : Nat) : Option Span :=
+def projectAtStartOnly (project : Project) (path : SourcePath) (start stop : Nat) : Option (ScopedSpan project) :=
   if start = 0 then projectSpan project path start stop else none
 
 /-- The tab span with only its stored line changed. -/
@@ -4906,26 +4971,29 @@ def wrongLine : Span := { tabSpan with line := 2, line_pos := by decide }
 def wrongColumn : Span := { tabSpan with col := 2, col_pos := by decide }
 
 /-- Mutant that skips only the end bound. -/
-def bindPastEnd (project : Project) (span : Span) : Option File := do
-  let file ← project.findFile span.path
+def bindPastEnd (origin project : Project) (span : ScopedSpan origin) : Option File := do
+  let original ← origin.fileAt span.fileId
+  let file ← project.findFile original.path
   if span.line = file.source.lineAt span.startOffset ∧
-      span.col = file.source.columnAt span.startOffset ∧ span.source = file.source then some file else none
+      span.col = file.source.columnAt span.startOffset ∧ original.source = file.source then some file else none
 
 /-- Mutant that skips only the line match. -/
-def bindIgnoringLine (project : Project) (span : Span) : Option File := do
-  let file ← project.findFile span.path
+def bindIgnoringLine (origin project : Project) (span : ScopedSpan origin) : Option File := do
+  let original ← origin.fileAt span.fileId
+  let file ← project.findFile original.path
   if span.endOffset ≤ file.source.length ∧
-      span.col = file.source.columnAt span.startOffset ∧ span.source = file.source then some file else none
+      span.col = file.source.columnAt span.startOffset ∧ original.source = file.source then some file else none
 
 /-- Mutant that skips only the column match. -/
-def bindIgnoringColumn (project : Project) (span : Span) : Option File := do
-  let file ← project.findFile span.path
+def bindIgnoringColumn (origin project : Project) (span : ScopedSpan origin) : Option File := do
+  let original ← origin.fileAt span.fileId
+  let file ← project.findFile original.path
   if span.endOffset ≤ file.source.length ∧
-      span.line = file.source.lineAt span.startOffset ∧ span.source = file.source then some file else none
+      span.line = file.source.lineAt span.startOffset ∧ original.source = file.source then some file else none
 
 /-- Mutant that rejects ranges ending exactly at EOF. -/
-def bindBeforeEof (project : Project) (span : Span) : Option File := do
-  let file ← bindSource project span
+def bindBeforeEof (origin project : Project) (span : ScopedSpan origin) : Option File := do
+  let file ← bindSource origin project span
   if span.endOffset < file.source.length then some file else none
 
 /-- Planted (law `ConcreteSpec.Core.SourcePathSpan.projectSpan_correct`,
@@ -4933,9 +5001,9 @@ case `ConcreteSpec.Core.SourcePathSpan.Controls.pastEnd`, subject `ConcreteSpec.
 mutant `ConcreteSpec.Core.SourcePathSpan.Controls.projectPastEnd`). -/
 theorem projectPastEnd_violates_correct : ¬ ProjectionCorrect projectPastEnd := by
   intro law
-  obtain ⟨_, _, _, _, file, member, _, ⟨bounds, _, _⟩, _⟩ :=
-    (law tabProject mainSourcePath 2 4 pastEnd).mp (by decide)
-  have eq : file = ⟨mainSourcePath, tabSource⟩ := List.mem_singleton.mp member
+  obtain ⟨_, _, _, file, member, _, ⟨bounds, _, _⟩⟩ :=
+    (law tabProject mainSourcePath 2 4 ⟨pastEnd⟩).mp (by decide)
+  have eq : file = File.load mainSourcePath tabSource := Option.some.inj member.symm
   subst file
   exact (by decide : ¬ pastEnd.endOffset ≤ tabSource.length) bounds
 
@@ -4944,8 +5012,8 @@ case `ConcreteSpec.Core.tabSpan`, subject `ConcreteSpec.Core.SourcePathSpan.proj
 mutant `ConcreteSpec.Core.SourcePathSpan.Controls.projectAtStartOnly`). -/
 theorem projectAtStartOnly_violates_correct : ¬ ProjectionCorrect projectAtStartOnly := by
   intro law
-  have reference := (projectSpan_correct tabProject mainSourcePath 2 3 tabSpan).mp projectTabSpan
-  have result := (law tabProject mainSourcePath 2 3 tabSpan).mpr reference
+  have reference := (projectSpan_correct tabProject mainSourcePath 2 3 scopedTabSpan).mp projectTabSpan
+  have result := (law tabProject mainSourcePath 2 3 scopedTabSpan).mpr reference
   contradiction
 
 /-- Planted (law `ConcreteSpec.Core.SourcePathSpan.bindSource_correct`,
@@ -4953,33 +5021,33 @@ case `ConcreteSpec.Core.SourcePathSpan.Controls.pastEnd`, subject `ConcreteSpec.
 mutant `ConcreteSpec.Core.SourcePathSpan.Controls.bindPastEnd`). -/
 theorem bindPastEnd_violates_correct : ¬ BindingCorrect bindPastEnd := by
   intro law
-  have reference := (law tabProject pastEnd ⟨mainSourcePath, tabSource⟩).mp (by decide)
-  exact (by unfold EndInSource; decide : ¬ EndInSource (tabSource, pastEnd.endOffset)) reference.2.2.1.1
+  have reference := (law tabProject tabProject ⟨pastEnd⟩ (File.load mainSourcePath tabSource)).mp (by decide)
+  exact (by unfold EndInSource; decide : ¬ EndInSource (tabSource, pastEnd.endOffset)) reference.choose_spec.2.2.2.1.1
 
 /-- Planted (law `ConcreteSpec.Core.SourcePathSpan.bindSource_correct`,
 case `ConcreteSpec.Core.SourcePathSpan.Controls.wrongLine`, subject `ConcreteSpec.Core.SourcePathSpan.bindSource`,
 mutant `ConcreteSpec.Core.SourcePathSpan.Controls.bindIgnoringLine`). -/
 theorem bindIgnoringLine_violates_correct : ¬ BindingCorrect bindIgnoringLine := by
   intro law
-  have reference := (law tabProject wrongLine ⟨mainSourcePath, tabSource⟩).mp (by decide)
-  exact (by unfold LineMatches; decide : ¬ LineMatches (wrongLine, tabSource)) reference.2.2.1.2.1
+  have reference := (law tabProject tabProject ⟨wrongLine⟩ (File.load mainSourcePath tabSource)).mp (by decide)
+  exact (by unfold LineMatches; decide : ¬ LineMatches (wrongLine, tabSource)) reference.choose_spec.2.2.2.1.2.1
 
 /-- Planted (law `ConcreteSpec.Core.SourcePathSpan.bindSource_correct`,
 case `ConcreteSpec.Core.SourcePathSpan.Controls.wrongColumn`, subject `ConcreteSpec.Core.SourcePathSpan.bindSource`,
 mutant `ConcreteSpec.Core.SourcePathSpan.Controls.bindIgnoringColumn`). -/
 theorem bindIgnoringColumn_violates_correct : ¬ BindingCorrect bindIgnoringColumn := by
   intro law
-  have reference := (law tabProject wrongColumn ⟨mainSourcePath, tabSource⟩).mp (by decide)
-  exact (by unfold ColumnMatches; decide : ¬ ColumnMatches (wrongColumn, tabSource)) reference.2.2.1.2.2
+  have reference := (law tabProject tabProject ⟨wrongColumn⟩ (File.load mainSourcePath tabSource)).mp (by decide)
+  exact (by unfold ColumnMatches; decide : ¬ ColumnMatches (wrongColumn, tabSource)) reference.choose_spec.2.2.2.1.2.2
 
 /-- Planted (law `ConcreteSpec.Core.SourcePathSpan.bindSource_correct`,
 case `ConcreteSpec.Core.tabSpan`, subject `ConcreteSpec.Core.SourcePathSpan.bindSource`,
 mutant `ConcreteSpec.Core.SourcePathSpan.Controls.bindBeforeEof`). -/
 theorem bindBeforeEof_violates_correct : ¬ BindingCorrect bindBeforeEof := by
   intro law
-  have reference := (bindSource_correct tabProject tabSpan _).mp bindTabSpan
-  exact (by decide : bindBeforeEof tabProject tabSpan ≠ some ⟨mainSourcePath, tabSource⟩)
-    ((law tabProject tabSpan _).mpr reference)
+  have reference := (bindSource_correct tabProject tabProject scopedTabSpan _).mp bindTabSpan
+  exact (by decide : bindBeforeEof tabProject tabProject scopedTabSpan ≠ some (File.load mainSourcePath tabSource))
+    ((law tabProject tabProject scopedTabSpan _).mpr reference)
 
 end Controls
 end ConcreteSpec.Core.SourcePathSpan

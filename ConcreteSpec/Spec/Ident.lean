@@ -14,7 +14,7 @@ so a declaration, field, variant, function or constant carries that complete ide
 table. Equality of identities is what the rules use (the facts decision: no bare-name collisions).
 
 A *site* (`SiteId`) is one per operation and per refusable statement. Diagnostics, facts, traps
-and discharge tokens are keyed by site. Source spans carry checked local path identities.
+and discharge tokens are keyed by site. Source spans carry file indices scoped to a project table.
 Lexical site and trait-instance numbers are distinct from persistent `StableKey`s. Specialization request edges retain their sites
 separately from identities keyed by generic arguments. Obligations carry site, kind and a same-site
 discriminator; conditional facts carry typed premise identities.
@@ -731,15 +731,36 @@ def SourceText.push (source : SourceText) (byte : UInt8) : SourceText where
     · rw [List.mem_singleton.mp last]
       exact byte.toNat_lt_size
 
-/-- The 1-based line at a byte offset: one plus the number of newline bytes before it. -/
-def SourceText.lineAt (source : SourceText) (offset : Nat) : Nat :=
-  (source.bytes.take offset).count 10 + 1
+/-- A byte cursor. CR advances the line immediately and the LF in CRLF
+completes the same line ending. This preserves the surface cursor's existing rule. -/
+structure Position where
+  byte : Nat := 0
+  line : Nat := 1
+  column : Nat := 1
+  afterCR : Bool := false
+  deriving DecidableEq, Repr, Inhabited
 
-/-- The 1-based byte column at an offset: one plus the number of bytes since the last newline.
-Every non-newline byte advances one column, including tab (`9`) and each byte of a multibyte sequence
-(docs/decisions.md#foundation-q10). -/
+/-- Advance by an encoded scalar of the given byte width. A raw byte has width one. -/
+def Position.step (pos : Position) (value width : Nat) : Position :=
+  if value == 13 then ⟨pos.byte + width, pos.line + 1, 1, true⟩
+  else if value == 10 then
+    ⟨pos.byte + width, if pos.afterCR then pos.line else pos.line + 1, 1, false⟩
+  else ⟨pos.byte + width, pos.line, pos.column + width, false⟩
+
+def Position.advanceByte (pos : Position) (byte : Nat) : Position :=
+  pos.step byte 1
+
+/-- Coordinates after the prefix of the given byte length. -/
+def SourceText.positionAt (source : SourceText) (offset : Nat) : Position :=
+  (source.bytes.take offset).foldl Position.advanceByte {}
+
+def SourceText.lineAt (source : SourceText) (offset : Nat) : Nat :=
+  (source.positionAt offset).line
+
+/-- One-based byte column. Tabs and individual bytes of multibyte scalars each
+occupy one column (docs/decisions.md#foundation-q10). -/
 def SourceText.columnAt (source : SourceText) (offset : Nat) : Nat :=
-  ((source.bytes.take offset).reverse.takeWhile (fun byte => byte != 10)).length + 1
+  (source.positionAt offset).column
 
 namespace SourcePath
 
@@ -1313,12 +1334,15 @@ def NoDuplicate (pair : SourcePath × SourcePath) : Prop :=
 
 end SourcePath.Project
 
-/-- A source span records its path and the exact source bytes used for its location.
-Its half-open byte range can be empty, including at EOF. The starting line and byte
-column are 1-based. -/
+/-- A file-table index, scoped to the immutable table that issued it. -/
+structure FileId where
+  index : Nat
+  deriving DecidableEq, Repr
+
+/-- A half-open byte range in a file table. Empty ranges are allowed, including
+at EOF. The starting line and byte column are one-based. -/
 structure Span where
-  path : SourcePath
-  source : SourceText
+  fileId : FileId
   startOffset : Nat
   endOffset : Nat
   range_ok : startOffset ≤ endOffset
@@ -1357,23 +1381,70 @@ instance (span : Span) (source : SourceText) : Decidable (span.LocationOk source
     SourcePathSpan.ColumnMatches
   infer_instance
 
-/-- Compatibility view of the admitted path carried by a span. -/
-def Span.PathOk (span : Span) : Prop :=
-  SourcePath.RawOk span.path.renderBytes
-
 namespace SourcePathSpan
 
-/-- The exact bytes supplied for one checked project-relative file path. -/
+/-- The exact bytes supplied for one checked project-relative file path, with a
+coordinate index built in a single pass at load time. -/
 structure File where
   path : SourcePath
   source : SourceText
+  private positions : Array Position
+  private positions_eq : positions = (source.bytes.scanl Position.advanceByte {}).toArray
   deriving DecidableEq
+
+def File.load (path : SourcePath) (source : SourceText) : File :=
+  ⟨path, source, (source.bytes.scanl Position.advanceByte {}).toArray, rfl⟩
+
+def File.length (file : File) : Nat := file.positions.size - 1
+
+theorem File.length_eq (file : File) : file.length = file.source.length := by
+  simp [File.length, file.positions_eq, SourceText.length, List.length_scanl]
+
+private theorem File.offset_lt_size (file : File) (offset : Nat) (bounded : offset ≤ file.length) :
+    offset < file.positions.size := by
+  rw [file.positions_eq]
+  simp [List.length_scanl]
+  simpa [File.length_eq, SourceText.length, Nat.lt_succ_iff] using bounded
+
+def File.positionAt (file : File) (offset : Nat) (bounded : offset ≤ file.length) : Position :=
+  file.positions[offset]'(file.offset_lt_size offset bounded)
+
+theorem File.positionAt_eq (file : File) (offset : Nat) (bounded : offset ≤ file.length) :
+    file.positionAt offset bounded = file.source.positionAt offset := by
+  simp [File.positionAt, file.positions_eq, List.getElem_scanl, SourceText.positionAt]
+
+private theorem Position.step_positive (pos : Position) (value width : Nat)
+    (line : 0 < pos.line) (col : 0 < pos.column) :
+    0 < (pos.step value width).line ∧ 0 < (pos.step value width).column := by
+  unfold Position.step
+  split <;> (try split) <;> simp_all [Nat.lt_of_lt_of_le col (Nat.le_add_right ..)]
+  split <;> simp_all
+
+theorem SourceText.positionAt_positive (source : SourceText) (offset : Nat) :
+    0 < (source.positionAt offset).line ∧ 0 < (source.positionAt offset).column := by
+  unfold SourceText.positionAt
+  generalize source.bytes.take offset = bytes
+  suffices ∀ pos : Position, 0 < pos.line → 0 < pos.column →
+      0 < (bytes.foldl Position.advanceByte pos).line ∧
+        0 < (bytes.foldl Position.advanceByte pos).column by
+    exact this {} (by decide) (by decide)
+  induction bytes with
+  | nil => exact fun _ line col => ⟨line, col⟩
+  | cons byte bytes ih =>
+    intro pos line col
+    exact ih _ (Position.step_positive pos byte 1 line col).1
+      (Position.step_positive pos byte 1 line col).2
 
 /-- Loaded files with the project admission invariant. The November 16, November 17
 and November 21 path decisions govern this invariant (R-0709). -/
 structure Project where
   files : List File
   admitted : SourcePath.Project.Reference.Admitted (files.map File.path)
+
+/-- A span whose file ID belongs to the issuing project. The type index is
+erased at runtime, so the project and its sources can be shared by all spans. -/
+structure ScopedSpan (origin : Project) extends Span
+  deriving DecidableEq, Repr
 
 /-- R-0709, R-0496, docs/decisions.md#decided-2026-11-14-trap-sites-and-law-tests.
 The requested exact path must name a file in the admitted project. -/
@@ -1389,39 +1460,69 @@ def OrderedOffsets (input : Nat × Nat) : Prop :=
 def Project.findFile (project : Project) (path : SourcePath) : Option File :=
   project.files.find? fun file => decide (file.path = path)
 
-/-- Compute the starting coordinates for an ordered range. A caller checks that the
-range fits its source before publishing the span. -/
-def spanAt (path : SourcePath) (source : SourceText) (start stop : Nat)
-    (ordered : start ≤ stop) : Span :=
-  ⟨path, source, start, stop, ordered, source.lineAt start, source.columnAt start,
-    Nat.zero_lt_succ _, Nat.zero_lt_succ _⟩
+/-- Resolve a table-local file ID. The issuing table supplies the exact bytes. -/
+def Project.fileAt (project : Project) (id : FileId) : Option File :=
+  project.files[id.index]?
 
-/-- Project an ordered, in-bounds byte range in the named file into a span.
-The starting line and byte column are derived from that file's bytes. -/
-def projectSpan (project : Project) (path : SourcePath) (start stop : Nat) : Option Span := do
-  let file ← project.findFile path
+def Project.findId (project : Project) (path : SourcePath) : Option FileId :=
+  (project.files.findIdx? (fun file => decide (file.path = path))).map FileId.mk
+
+/-- Project an ordered, in-bounds byte range through the file's coordinate index. -/
+def fileSpan (id : FileId) (file : File) (start stop : Nat)
+    (ordered : start ≤ stop) (bounded : start ≤ file.length) : Span :=
+  let pos := file.positionAt start bounded
+  have positive : 0 < pos.line ∧ 0 < pos.column := by
+    dsimp [pos]
+    rw [file.positionAt_eq start bounded]
+    exact SourceText.positionAt_positive _ _
+  ⟨id, start, stop, ordered, pos.line, pos.column, positive.1, positive.2⟩
+
+def projectSpan (project : Project) (path : SourcePath) (start stop : Nat) : Option (ScopedSpan project) := do
+  let id ← project.findId path
+  let file ← project.fileAt id
   if ordered : start ≤ stop then
-    if stop ≤ file.source.length then
-      some (spanAt path file.source start stop ordered)
+    if within : stop ≤ file.length then
+      some ⟨fileSpan id file start stop ordered (Nat.le_trans ordered within)⟩
     else none
   else none
 
-/-- Resolve the span against the admitted project, checking the exact file bytes and
-validating the stored range, line and column. -/
-def bindSource (project : Project) (span : Span) : Option File := do
-  let file ← project.findFile span.path
-  if span.LocationOk file.source ∧ span.source = file.source then some file else none
+/-- Check a stored location using the loaded file's coordinate index. -/
+def File.matchesLocation (file : File) (span : Span) : Bool :=
+  if fits : span.endOffset ≤ file.length then
+    let pos := file.positionAt span.startOffset (Nat.le_trans span.range_ok fits)
+    decide (span.line = pos.line ∧ span.col = pos.column)
+  else false
+
+theorem File.matchesLocation_iff (file : File) (span : Span) :
+    file.matchesLocation span = true ↔ span.LocationOk file.source := by
+  unfold File.matchesLocation Span.LocationOk SourcePathSpan.EndInSource
+    SourcePathSpan.LineMatches SourcePathSpan.ColumnMatches
+  rw [← File.length_eq]
+  by_cases fits : span.endOffset ≤ file.length
+  · simp [fits, file.positionAt_eq _ (Nat.le_trans span.range_ok fits),
+      SourceText.lineAt, SourceText.columnAt]
+  · simp [fits]
+
+/-- Validate a span from its issuing table against a target project. A file-table
+index alone is meaningful only in its issuing table. Rebinding compares the
+exact path and bytes, including when the target uses a different file order. -/
+def bindSource (origin target : Project) (span : ScopedSpan origin) : Option File := do
+  let original ← origin.fileAt span.fileId
+  let file ← target.findFile original.path
+  if file.matchesLocation span.toSpan ∧ original.source = file.source then some file else none
 
 namespace Reference
 
-/-- A binding requires project membership, exact path and byte equality, and a valid location. -/
-def Binds (project : Project) (span : Span) (file : File) : Prop :=
-  file ∈ project.files ∧ file.path = span.path ∧ span.LocationOk file.source ∧ span.source = file.source
+/-- An exact target binding preserves the originating path and bytes. -/
+def Binds (origin target : Project) (span : ScopedSpan origin) (file : File) : Prop :=
+  ∃ original, origin.fileAt span.fileId = some original ∧
+    file ∈ target.files ∧ file.path = original.path ∧
+    span.toSpan.LocationOk file.source ∧ original.source = file.source
 
-/-- An independently stated projection preserves the request and has a valid file binding. -/
-def Projects (project : Project) (path : SourcePath) (start stop : Nat) (span : Span) : Prop :=
-  span.path = path ∧ span.startOffset = start ∧ span.endOffset = stop ∧
-    OrderedOffsets (start, stop) ∧ ∃ file, Binds project span file
+/-- An independently stated projection preserves the requested path and valid range. -/
+def Projects (project : Project) (path : SourcePath) (start stop : Nat) (span : ScopedSpan project) : Prop :=
+  span.startOffset = start ∧ span.endOffset = stop ∧ OrderedOffsets (start, stop) ∧
+    ∃ file, project.fileAt span.fileId = some file ∧ file.path = path ∧ span.toSpan.LocationOk file.source
 
 end Reference
 end SourcePathSpan
@@ -1637,30 +1738,33 @@ def mainSourcePath : SourcePath :=
   ⟨SourceText.ofBytes [109, 97, 105, 110, 46, 99, 111, 110], by decide⟩
 
 /-- Example: the byte after the tab is at line 1, byte column 3. -/
-def tabSpan : Span := ⟨mainSourcePath, tabSource, 2, 3, by decide, 1, 3, by decide, by decide⟩
+def tabSpan : Span := ⟨⟨0⟩, 2, 3, by decide, 1, 3, by decide, by decide⟩
 
 namespace SourcePathSpan
 
 /-- A single-file admitted project containing the tab example. -/
 def tabProject : Project :=
-  ⟨[⟨mainSourcePath, tabSource⟩], by simp [SourcePath.Project.Reference.Admitted]⟩
+  ⟨[File.load mainSourcePath tabSource], by simp [SourcePath.Project.Reference.Admitted]⟩
+
+/-- The tab example scoped to the table that issued its file ID. -/
+def scopedTabSpan : ScopedSpan tabProject := ⟨tabSpan⟩
 
 /-- A tab advances the starting byte column by one. -/
-theorem projectTabSpan : projectSpan tabProject mainSourcePath 2 3 = some tabSpan := by decide
+theorem projectTabSpan : projectSpan tabProject mainSourcePath 2 3 = some scopedTabSpan := by decide
 
 /-- Binding the tab span in the example project returns the loaded tab file. -/
-theorem bindTabSpan : bindSource tabProject tabSpan = some ⟨mainSourcePath, tabSource⟩ := by decide
+theorem bindTabSpan : bindSource tabProject tabProject scopedTabSpan = some (File.load mainSourcePath tabSource) := by decide
 
 example : projectSpan tabProject mainSourcePath 3 3 =
-    some ⟨mainSourcePath, tabSource, 3, 3, by decide, 1, 4, by decide, by decide⟩ := by
+    some ⟨⟨⟨0⟩, 3, 3, by decide, 1, 4, by decide, by decide⟩⟩ := by
   decide
 
 -- The replacement preserves the length and coordinates but changes the spanned byte.
-example :
+theorem bindEditedSpan_refused :
     let edited := SourceText.ofBytes [97, 9, 99]
     let project : Project :=
-      ⟨[⟨mainSourcePath, edited⟩], by simp [SourcePath.Project.Reference.Admitted]⟩
-    tabSpan.LocationOk edited ∧ bindSource project tabSpan = none := by
+      ⟨[File.load mainSourcePath edited], by simp [SourcePath.Project.Reference.Admitted]⟩
+    tabSpan.LocationOk edited ∧ bindSource tabProject project scopedTabSpan = none := by
   decide
 
 end SourcePathSpan

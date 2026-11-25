@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.Ident
 import ConcreteSpec.Spec.LL1
 import ConcreteSpec.Spec.Borrow
 import ConcreteSpec.Spec.Slice1Syntax
@@ -602,19 +603,10 @@ end ConcreteSpec.Surface0
 
 namespace ConcreteSpec.Surface0
 
-/-- Byte offsets are zero-based, while lines and byte columns are one-based
-(decisions.md#foundation-q10). CRLF advances one line. -/
-structure Position where
-  byte : Nat := 0
-  line : Nat := 1
-  column : Nat := 1
-  afterCR : Bool := false
+abbrev Position := ConcreteSpec.Core.Position
 
 def Position.advance (pos : Position) (c : Nat) : Position :=
-  let width := if c < 0x80 then 1 else if c < 0x800 then 2 else if c < 0x10000 then 3 else 4
-  if c == 13 then ⟨pos.byte + width, pos.line + 1, 1, true⟩
-  else if c == 10 then ⟨pos.byte + width, if pos.afterCR then pos.line else pos.line + 1, 1, false⟩
-  else ⟨pos.byte + width, pos.line, pos.column + width, false⟩
+  pos.step c (if c < 0x80 then 1 else if c < 0x800 then 2 else if c < 0x10000 then 3 else 4)
 
 def Position.span (start stop : Position) : Span :=
   ⟨start.byte, stop.byte, start.line, start.column⟩
