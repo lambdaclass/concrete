@@ -149,7 +149,8 @@ build blocks. Disputes over mutant, fixture or test construction, helper factori
 out-of-slice edge cases are non-blocking notes, including in `Proofs/`.
 The [November 22 direction](docs/decisions.md#decided-2026-11-22-direction) governs wherever
 the earlier risk rule would block additional findings. See the [roadmap reordering](docs/decisions.md#decided-2026-11-22-roadmap-reordering) for the
-Phase T pause.
+Phase T pause. The [Phase T restart rule](ROADMAP.md#phase-t-restart-rule) governs
+restarts under the [November 25 decision](docs/decisions.md#decided-2026-11-25-freeze-and-grammar).
 
 **Review.** Codex reviews everything before it is published or brought to the owner, and Kimi and
 agy (Gemini) review every branch too; a reviewer's absence is recorded, never assumed
