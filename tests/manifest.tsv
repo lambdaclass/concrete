@@ -73,3 +73,6 @@ source_shadow_checked_add	con:tests/slice0/shadow_checked_add.con	refuse 1 CORE-
 source_shadow_try_convert	con:tests/slice0/shadow_try_convert.con	refuse 1 CORE-CHECK	slice0
 source_lcb_value_limit	con:tests/slice0/lcb_value_limit.con	llvm exit 42 lcb diagnostic 2 BACKEND-LIMIT incomplete (LCB backend: values: 1924 exceeds limit 488)	slice0
 cli_invalid_backend	cli:invalid-backend	diagnostic 3 USAGE usage: concrete build SOURCE.con -o OUTPUT-DIRECTORY [--backend llvm|lcb] | concrete help	slice0
+cli_invalid_path	cli:invalid-path	diagnostic 3 USAGE expected a project-relative .con path	slice0
+cli_unknown_target	cli:unknown-target	diagnostic 4 INTERNAL compiler failure: native helper returned an unknown target: invalid-target	slice0
+cli_native_helper_failure	cli:native-helper-failure	diagnostic 2 TOOL-FAILURE incomplete (native build helper exited with status 17: native helper control)	slice0

@@ -224,10 +224,11 @@ def job (f : Source.Function) : LeanCompilerBackend.Verified.FunctionJob :=
               layout := LeanCompilerBackend.Verified.planFrame f } }
 
 /-- The compiler constructs the job and its plans. A failed structural check signals
-an invariant violation, while a resource limit can be reached by valid input. -/
+an invariant violation. Valid input can exceed the admission profile or its resource limits. -/
 def jobRefusal : LeanCompilerBackend.Verified.CompileError → Refusal
   | .admission (.resourceLimit resource measured limit) =>
     .backendResource "LCB" resource measured limit
+  | .admission (.unsupported feature) => .backendProfile "LCB" feature
   | e => .internal s!"LCB job: {repr e}"
 
 /-- The adapted body as assembly text for `target`, computed in process from the value. -/
@@ -238,6 +239,7 @@ def assemble (target : Target) (f : Source.Function) : Except Refusal String :=
       jobRefusal
     return ".text\n" ++ artifact.code.fragment ++ ".subsections_via_symbols\n"
   | .x86_64Linux | .aarch64Linux => do
+    (LeanCompilerBackend.Verified.validateJob (job f)).mapError jobRefusal
     let m : LeanCompilerBackend.Module :=
       { functions := #[LeanCompilerBackend.Verified.reify f bodySymbol.name bodySymbol.exported] }
     (LeanCompilerBackend.validateModule m).mapError
@@ -245,7 +247,8 @@ def assemble (target : Target) (f : Source.Function) : Except Refusal String :=
     let emitted := match target with
       | .x86_64Linux => LeanCompilerBackend.AMD64.emitModuleValidated m false false
       | _ => LeanCompilerBackend.AArch64.emitModuleValidated m false false
-    emitted.mapError (fun e => .toolFailure s!"LCB compatibility emitter: {e}")
+    -- Admission bounds the frame and excludes calls before compatibility emission.
+    emitted.mapError (fun e => .internal s!"LCB compatibility emitter: {e}")
 
 /-- The LCB body artifact for `target`: the assembly of a successful `emit`, or its refusal. -/
 def artifact (target : Target) (p : Program) : Except Refusal String := do

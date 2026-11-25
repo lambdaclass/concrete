@@ -84,6 +84,40 @@ cli_bin="$root/.lake/build/bin/concrete"
 cli_project=$(cd "$(dirname "$test_manifest")/.." && pwd)
 project_cli=(bash -c 'cd "$1" && shift && exec "$@"' _ "$cli_project" "$cli_bin")
 
+check_cli_case() {
+  local name=$1
+  local program=$2
+  local d=$3
+  local expect=$4
+  local source=tests/slice0/answer.con
+  local backend=lcb
+  local -a cli=("${project_cli[@]}")
+  mkdir -p "$d"
+  case "$program" in
+    cli:invalid-backend) backend=invalid ;;
+    cli:invalid-path) source="./$source" ;;
+    cli:unknown-target|cli:native-helper-failure)
+      # Substitute the native helper only in a private project. The CLI still runs
+      # its production frontend, LCB admission, and helper invocation.
+      local project="$d/project"
+      local helper="$project/scripts/checks/lib/slice0_native.sh"
+      mkdir -p "$project/tests/slice0" "$(dirname "$helper")"
+      cp "$root/$source" "$project/$source"
+      ln -s "$root/.lake" "$project/.lake"
+      cli=(bash -c 'cd "$1" && shift && exec "$@"' _ "$project" "$cli_bin")
+      if [ "$program" = cli:unknown-target ]; then
+        printf '%s\n' '[ "$1" = target ] || exit 99' 'printf invalid-target' >"$helper"
+      else
+        printf '%s\n' "if [ \"\$1\" = target ]; then echo '$target'; exit; fi" \
+          'echo "native helper control" >&2' 'exit 17' >"$helper"
+      fi
+      ;;
+    *) echo "FAIL $name: unknown CLI case $program" >&2; fail=1; return ;;
+  esac
+  check_cli_diagnostic "$name" "$d/cli" "$expect" "${cli[@]}" \
+    build "$source" -o "$d/out" --backend "$backend"
+}
+
 # The backend-specific expectation exercises the public driver and its native build policy.
 check_backend_limit() {
   local path=${1#con:}
@@ -178,9 +212,7 @@ while IFS=$'\t' read -r name program expect; do
   d="$work/ex/$name"
   if [[ "$program" == cli:* ]]; then
     if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" != 1 ]; then
-      mkdir -p "$d"
-      check_cli_diagnostic "$name" "$d/cli" "$expect" "$cli_bin" \
-        build tests/slice0/answer.con -o "$d/out" --backend invalid
+      check_cli_case "$name" "$program" "$d" "$expect"
       examples=$((examples + 1))
     fi
     continue
@@ -211,6 +243,19 @@ while IFS=$'\t' read -r name program expect; do
   examples=$((examples + 1))
 done <<<"$rows"
 if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" = 1 ]; then exit "$fail"; fi
+help_rc=0
+bounded "$native_secs" "$cli_bin" help >"$work/ctl/help.stdout" 2>"$work/ctl/help.stderr" || help_rc=$?
+count=$((count + 1))
+printf '%s\n' 'usage: concrete build SOURCE.con -o OUTPUT-DIRECTORY [--backend llvm|lcb] | concrete help' \
+  >"$work/ctl/help.expected"
+if [ "$help_rc" = 0 ] && [ ! -s "$work/ctl/help.stderr" ] &&
+    cmp -s "$work/ctl/help.expected" "$work/ctl/help.stdout"; then
+  echo "ok   CLI help: status 0"
+else
+  echo "FAIL CLI help: expected status 0, usage on stdout, and empty stderr" >&2
+  fail=1
+fi
+"${emitter[@]}" backend-profile
 "${emitter[@]}" loop "$work/ctl/loop" "$target"
 expected_timeout check control-loop "$work/ctl/loop" 1 1
 "${emitter[@]}" invalid "$work/ctl/invalid" "$target"

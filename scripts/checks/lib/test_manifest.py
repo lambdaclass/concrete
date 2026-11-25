@@ -18,6 +18,12 @@ from typing import NamedTuple
 
 HEADER = ["id", "program", "expect", "slice"]
 ID_RE = re.compile(r"[a-z0-9_]+")
+CLI_CASES = {
+    "cli:invalid-backend",
+    "cli:invalid-path",
+    "cli:unknown-target",
+    "cli:native-helper-failure",
+}
 SLICE_RE = re.compile(r"[a-z0-9_]+")
 RULE_RE = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*(?:@[0-9]+)?")
 TRAP_KIND_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
@@ -137,8 +143,8 @@ def parse(path, text):
             seen_bir[name] = line_number
         elif program.startswith("con:"):
             validate_source(path, line_number, program, seen_sources)
-        elif program != "cli:invalid-backend":
-            fail(path, line_number, f"invalid program {program!r}; expected bir:, con: or cli:invalid-backend")
+        elif program not in CLI_CASES:
+            fail(path, line_number, f"invalid program {program!r}; expected bir:, con: or a known cli: case")
         validate_expect(path, line_number, expect)
         if program.startswith("bir:") and expect.startswith("refuse "):
             fail(path, line_number, f"bir: row {ident!r} cannot use refuse; expected exit or trap")
