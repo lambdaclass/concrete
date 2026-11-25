@@ -80,5 +80,5 @@ _has_match_fail() {
   exit 2
 }
 
-# Exported, so a check run as `bash -c "..."` (check_review_tool.sh's `check`) can call it too.
+# Exported so a check run in a child Bash can call it too.
 export -f has_match _has_match_fail

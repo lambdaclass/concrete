@@ -1,37 +1,18 @@
 name: CI
 
-# The root's CI after the legacy/ move. Eighteen jobs, all required (required-checks.txt):
-#   Landing record  main's push run names the run that qualified its exact SHA (R-0570), kept from
-#                the base unchanged; when it finds one, the jobs below are skipped on main.
-#   Root checks  every check of scripts/checks/run.sh: legacy/ frozen, the day-one root inventory,
-#                workflow YAML, Markdown links, the landing script and readiness, the review tool.
-#   Spec build   lake build of the specification, warnings refused.
-#   Proof axioms, Proof trust ban (sorry, native_decide), Kernel replay (leanchecker), External
-#                re-check (con-leche, nanoda)  the proof-integrity checks of scripts/proofs.
-#   Tests, Slice 0 artifacts, trusted base, reproducibility (x86-64 Linux and AArch64 macOS)
-#                the compiler's gates (scripts/checks/compiler), each in the compiler's devshell.
-#   Oracle (GitHub-hosted fetch + smoke)  the published oracle fetched, verified and run on a
-#                GitHub-hosted runner (ISS-0005, P13; R-0564), kept from the base unchanged.
-# legacy/ is never built or run here: its gates were qualified at tag legacy-compiler-final. The old
-# workflows are archived, unrun, under legacy/.github/workflows.
-# A train's dispatch names its base: the run's title then says which base it was built on, and
-# main's Landing record accepts a run only for the base main had before the push (R-0570).
-run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.base != '' && format('{0} at base {1}', github.ref_name, inputs.base) || '' }}
-
+# All 17 check runs in required-checks.txt run on the merge group's candidate.
+# The checkout defaults to the SHA supplied by GitHub for each event.
+# legacy/ is frozen and its workflows never run.
 on:
   push:
     branches: [main]
   pull_request:
+  merge_group:
+    types: [checks_requested]
   workflow_dispatch:
-    inputs:
-      base:
-        # THE BASE OF A TRAIN'S CANDIDATE, passed by train.sh ci (-f base=<sha>). The root has no
-        # base-sensitive check yet; the title records the base so main's Landing record can require
-        # that the run it accepts was built on the base main had before the landing.
-        description: "Base SHA of a train's candidate (recorded in the run title)"
-        type: string
-        required: false
-        default: ""
+
+permissions:
+  contents: read
 
 concurrency:
   group: ci-${{ github.ref }}-${{ github.event_name }}
@@ -45,65 +26,10 @@ defaults:
     shell: "nix develop .#gates --command bash --noprofile --norc -eo pipefail {0}"
 
 jobs:
-  # MAIN'S RUN NAMES THE RUN THAT QUALIFIED ITS EXACT SHA (R-0570), as in the base's workflow. On a
-  # push to main this job looks up, with train.sh record, a completed dispatch of this workflow at
-  # exactly this SHA and at the base main had before the push, with every required job succeeded.
-  # Found: every other job is skipped and the run links it. Not found, or any other event: every job
-  # runs. Each job below needs it and carries the gate; check_landing_script.sh holds both.
-  landing-record:
-    name: Landing record
-    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
-    timeout-minutes: 15
-    permissions:
-      actions: read
-      contents: read
-    outputs:
-      recorded: ${{ steps.record.outputs.recorded }}
-    steps:
-      - uses: actions/checkout@v4
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-
-      - name: Install Nix (GitHub-hosted only)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && runner.environment != 'self-hosted'
-        uses: cachix/install-nix-action@v31
-        with:
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-
-      - name: "Look up the run that qualified this exact SHA (none found: every job runs here)"
-        id: record
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BEFORE: ${{ github.event.before }}
-          HEAD_SHA: ${{ github.sha }}
-          LAND_REPO: lambdaclass/concrete
-          LAND_NO_NIX: "1"
-        run: |
-          recorded=false run=""
-          if out="$(git fetch -q --depth=1 origin "$BEFORE" 2>&1 \
-                    && bash scripts/land/train.sh record "$HEAD_SHA" --base "$BEFORE" --exclude-run "$GITHUB_RUN_ID" 2>&1)"; then
-            run="$(printf '%s\n' "$out" | sed -n 's/^qualifying_run=\([0-9][0-9]*\)$/\1/p' | tail -1)"
-          fi
-          printf '%s\n' "$out"
-          if [ -n "$run" ]; then
-            recorded=true
-            { echo "### Landing record"
-              echo "Run [$run](https://github.com/$LAND_REPO/actions/runs/$run) passed every landing-tier and required job at exactly \`$HEAD_SHA\`."
-              echo "This run skips those jobs: that run is the result for this SHA."; } >> "$GITHUB_STEP_SUMMARY"
-          else
-            { echo "### No landing record"
-              echo "No run qualifies \`$HEAD_SHA\`, so every job runs here:"
-              printf '\n```\n%s\n```\n' "$out"; } >> "$GITHUB_STEP_SUMMARY"
-          fi
-          echo "recorded=$recorded" >> "$GITHUB_OUTPUT"
-
   root-checks:
     name: Root checks
-    needs: landing-record
-    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
-    # Self-hosted runners never take pull_request events (forks could run code on them).
-    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    # PRs and their merge groups use GitHub-hosted runners.
+    runs-on: ${{ ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     steps:
       # Full history: legacy_frozen.sh reads the move commit named in scripts/checks/legacy.lock.
       - uses: actions/checkout@v4
@@ -122,9 +48,7 @@ jobs:
 
   spec:
     name: Spec build
-    needs: landing-record
-    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
-    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    runs-on: ${{ ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -178,9 +102,7 @@ jobs:
   # is built in each (lean-action); a failed build fails the job before the check runs.
   proof-axioms:
     name: Proof axioms
-    needs: landing-record
-    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
-    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    runs-on: ${{ ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -214,9 +136,7 @@ jobs:
 
   proof-trust-ban:
     name: Proof trust ban (sorry, native_decide)
-    needs: landing-record
-    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
-    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    runs-on: ${{ ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -250,9 +170,7 @@ jobs:
 
   kernel-replay:
     name: Kernel replay (leanchecker)
-    needs: landing-record
-    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
-    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    runs-on: ${{ ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -292,9 +210,7 @@ jobs:
   # See scripts/proofs/external.sh's isolation contract (caller wrappers/overrides are ignored).
   external-recheck:
     name: External re-check (con-leche, nanoda)
-    needs: landing-record
-    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
-    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    runs-on: ${{ ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
@@ -339,8 +255,6 @@ jobs:
   # It is a GitHub-hosted job, so a pull_request may run it (no self-hosted runner is involved).
   oracle-hosted:
     name: Oracle (GitHub-hosted fetch + smoke)
-    needs: landing-record
-    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -368,8 +282,6 @@ jobs:
   # matrix leg is a required job of its own name.
   tests:
     name: Tests (${{ matrix.arch }})
-    needs: landing-record
-    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
     # The compiler's devshell (flake.nix default: Lean, clang, LLVM, gdb/lldb), entered per step;
     # the gates shell has no Lean.
     defaults:
@@ -396,8 +308,6 @@ jobs:
 
   artifacts:
     name: Slice 0 artifacts (${{ matrix.arch }})
-    needs: landing-record
-    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
     # The compiler's devshell (flake.nix default: Lean, clang, LLVM, gdb/lldb), entered per step;
     # the gates shell has no Lean.
     defaults:
@@ -430,8 +340,6 @@ jobs:
 
   trusted-base:
     name: Slice 0 trusted base (gate 9, ${{ matrix.arch }})
-    needs: landing-record
-    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
     # The compiler's devshell (flake.nix default: Lean, clang, LLVM, gdb/lldb), entered per step;
     # the gates shell has no Lean.
     defaults:
@@ -458,8 +366,6 @@ jobs:
 
   reproducibility:
     name: Reproducibility (${{ matrix.id }})
-    needs: landing-record
-    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
     # The compiler's devshell (flake.nix default: Lean, clang, LLVM, gdb/lldb), entered per step;
     # the gates shell has no Lean.
     defaults:
@@ -493,7 +399,7 @@ jobs:
   compare-linux:
     name: Cross-machine reproducibility (x86-64 Linux)
     needs: reproducibility
-    # Runs only when every reproducibility job ran (landing-record gate inherited); no Nix here.
+    # Compares the manifests after all reproducibility jobs succeed.
     defaults:
       run:
         shell: bash
