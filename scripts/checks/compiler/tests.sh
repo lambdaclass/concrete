@@ -23,11 +23,12 @@ source scripts/checks/lib/has_match.sh
 # The emit-only manifest controls exercise only manifest validation.
 if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
   bash scripts/checks/compiler/f31_census.sh
+  # The scaling fixture uses the project admission proof, outside Concrete's build closure.
+  build span-proof-deps "$work/span-proof-deps.log" bounded 1800 lake build ConcreteSpec.Proofs.Ident
+  bounded 120 lake env lean --run scripts/checks/compiler/span_scaling.lean
   build lexer-digit-limit "$work/lexer-digit-limit.log" bounded 120 \
     lake env lean --run scripts/checks/compiler/lexer_digit_limit.lean
   echo "ok   lexer digit limit controls"
-  build lexer-stream-deps "$work/lexer-stream-deps.log" bounded 120 \
-    lake build +ConcreteSpec.Proofs.Ident
   build lexer-stream "$work/lexer-stream.log" bounded 120 \
     lake env lean --run scripts/checks/compiler/lexer_stream.lean
   echo "ok   lexer stream controls"

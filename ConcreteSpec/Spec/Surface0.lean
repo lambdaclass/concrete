@@ -13,12 +13,9 @@ Authority: docs/decisions.md#recovered-59-30 (OPEN-1; primary recommendation
 and queued owner approval recorded with transcript lines and UTC times),
 SYN-5@3 and SYN-6@3, and the literal decisions recorded on 2026-11-08.
 Core Q4.2 permits embedded NUL in static text VALUES (e.g. through the `\0`
-escape), not in raw source bytes. Item 30 says "no byte-order mark"; it does not
-settle whether U+FEFF is excluded everywhere, including comments and literals.
-The landed definitions below exclude it everywhere and end comments at bare CR.
-These authority gaps remain open in docs/decisions.md#decided-2026-11-08-recovery-queue
-(ISS-0064 / ISS-0065); the claimed separate 15:31 CR approval was not verified.
-No current owner approval of either disputed scope is inferred here.
+escape), not in raw source bytes. The owner confirmed raw U+FEFF refusal everywhere.
+Bare CR continues to end line comments through slice 0 under the recorded default.
+See docs/decisions.md#mechanical-defaults-and-owner-veto-list (ISS-0064 / ISS-0065).
 
 UTF-8 source validity, NUL/BOM refusal, ASCII identifiers, the four settled whitespace scalars,
 line comments and maximal trivia runs are specified here. Strings and comments refuse raw Cc,
@@ -99,7 +96,7 @@ def FirstError (bytes : List UInt8) (offset : Nat) : Prop :=
 
 /-- Decision: docs/decisions.md#recovered-59-30 (OPEN-1), SYN-5@3. The first raw-source failure:
 an invalid scalar, NUL, or U+FEFF, following only permitted complete scalars.
-The everywhere-U+FEFF scope is pending owner confirmation; see the header (ISS-0064).
+The owner confirmed U+FEFF refusal at every source position (ISS-0064).
 NUL/BOM offsets name the start of the refused scalar. -/
 inductive SourceFailure : List UInt8 → Nat → Prop
   | utf8 {bytes : List UInt8} {k : Nat} : bytes ≠ [] → ScalarFailure bytes k → SourceFailure bytes k

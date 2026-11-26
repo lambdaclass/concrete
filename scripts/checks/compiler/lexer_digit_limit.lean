@@ -23,7 +23,9 @@ def main : IO Unit := do
   for (radixPrefix, digit) in [("", '7'), ("0b", '1'), ("0o", '7'), ("0x", 'f')] do
     let source := ("// note\r\n" ++ radixPrefix ++ String.ofList (List.replicate (limit + 1) digit)).toUTF8
     let expected := Refusal.lexerDigitLimit 9 limit
-    match Lex.lexLossless source, Stages.compile ⟨"digit-limit.con", source⟩ with
+    let .ok input := Stages.Input.load "digit-limit.con" source
+      | throw (IO.userError "failed to load the digit-limit fixture")
+    match Lex.lexLossless source, Stages.compile input with
     | .error lexer, .error compiler =>
       unless lexer == expected && compiler == expected && compiler.code == "RESOURCE" &&
           compiler.exitCode == 2 &&

@@ -199,7 +199,8 @@ def emit (name : String) (dir : System.FilePath) (expectation : List String)
 
 def emitSource (path actual : String) (dir : System.FilePath) (expectation : List String)
     (target : LCB.Target) : IO UInt32 := do
-  let input : Concrete.Stages.Input := ⟨path, ← IO.FS.readBinFile actual⟩
+  let .ok input := Concrete.Stages.Input.load path (← IO.FS.readBinFile actual)
+    | IO.eprintln s!"invalid project path: {path}"; return 1
   match expectation, Concrete.Stages.compile input with
   | "refuse" :: status :: rule :: detail, .error e =>
     let message := String.intercalate " " detail
@@ -212,7 +213,7 @@ def emitSource (path actual : String) (dir : System.FilePath) (expectation : Lis
     IO.eprintln s!"{path}: expected refusal {rule}, but compilation succeeded"
     return 1
   | "trap" :: _, .error (.checker _) =>
-    let .ok tokens := Concrete.Lex.lex input.source | IO.eprintln "lex failed"; return 1
+    let .ok tokens := Concrete.Lex.lex input.source input.fileId | IO.eprintln "lex failed"; return 1
     let .ok ast := Concrete.Parse.parse tokens | IO.eprintln "parse failed"; return 1
     let .ok core := Concrete.Elab.elaborate ast | IO.eprintln "elaboration failed"; return 1
     let p := Concrete.Core.toCore core.program
