@@ -1417,9 +1417,8 @@ inductive IntegerError where
   | missingDigits (radix : Radix) | leadingZero | invalidSuffix (suffix : List Nat)
   deriving DecidableEq, Repr
 
-/-- Scan digits and the complete adjacent suffix candidate after a selected radix. -/
-def integerDigits (radix : Radix) (input : List Nat) : Except IntegerError (Option IntegerToken) :=
-  let digitOut := scanDigits radix input
+private def finishIntegerDigits (radix : Radix) (digitOut : List Nat × List Nat) :
+    Except IntegerError (Option IntegerToken) :=
   let suffixOut := scanIdentBody digitOut.2
   match digitOut.1 with
   | [] => if radix = .decimal then .ok none else .error (.missingDigits radix)
@@ -1431,6 +1430,10 @@ def integerDigits (radix : Radix) (input : List Nat) : Except IntegerError (Opti
           positionalValue radix digits, typeSuffix, suffixOut.2⟩)
       | none => .error (.invalidSuffix suffixOut.1)
     else .error .leadingZero
+
+/-- Unbounded reference scanner for the literal correspondence proofs. -/
+def integerDigits (radix : Radix) (input : List Nat) : Except IntegerError (Option IntegerToken) :=
+  finishIntegerDigits radix (scanDigits radix input)
 
 /-- Select exactly a lowercase non-decimal prefix, or decimal with no consumed prefix. -/
 def splitRadix : List Nat → Radix × List Nat
@@ -1456,7 +1459,7 @@ private theorem integerDigits_witness {radix : Radix} {input : List Nat} {out : 
       IdentBody suffixInput suffix out.rest ∧ SuffixAccepted suffix out.suffix ∧
       out.lexeme = radix.basePrefix ++ digits ++ suffix ∧
       out.value = positionalValue radix digits := by
-  unfold integerDigits at h
+  unfold integerDigits finishIntegerDigits at h
   generalize hd : scanDigits radix input = digitOut at h
   cases digitOut with
   | mk digits suffixInput =>
@@ -1471,7 +1474,6 @@ private theorem integerDigits_witness {radix : Radix} {input : List Nat} {out : 
         have hs := scanIdentBody_sound suffixInput
         rw [hi] at hs
         exact hs
-      simp only [hi] at h
       cases digits with
       | nil =>
         by_cases hr : radix = .decimal
@@ -1505,7 +1507,7 @@ theorem integerDigits_complete {radix : Radix} {input digits suffixInput suffix 
     (hident : IdentBody suffixInput suffix rest) (hsuffix : SuffixAccepted suffix typeSuffix) :
     integerDigits radix input = .ok (some ⟨radix.basePrefix ++ digits ++ suffix,
       positionalValue radix digits, typeSuffix, rest⟩) := by
-  simp only [integerDigits, scanDigits_complete hrun, scanIdentBody_complete hident]
+  simp only [integerDigits, finishIntegerDigits, scanDigits_complete hrun, scanIdentBody_complete hident]
   cases digits with
   | nil => simp [DigitsAccepted] at hacc
   | cons d ds => simp only [hacc, ↓reduceIte, decodeSuffix_complete hsuffix]
@@ -1816,54 +1818,225 @@ end Concrete.Lex
 namespace Concrete.Lex
 open ConcreteSpec.Surface0
 
-private def punct (input : List Nat) : Option (TokenValue × List Nat × List Nat) := do
+/-- R-0528, lexer-policy revision 1: maximum digits per integer token, excluding
+the radix prefix and type suffix. The first excess valid digit takes precedence over
+a leading-zero or malformed-suffix error. Whole-source decoding still runs first. -/
+def integerDigitLimit : Nat := 1024
+
+/-- Stop at the first excess valid digit. No magnitude or suffix is computed here. -/
+private def boundedDigits (radix : Radix) : Nat → List Nat → Option (List Nat × List Nat)
+  | _, [] => some ([], [])
+  | budget, c :: cs =>
+    if BaseDigit radix c then
+      match budget with
+      | 0 => none
+      | budget + 1 => (boundedDigits radix budget cs).map fun (digits, rest) => (c :: digits, rest)
+    else some ([], c :: cs)
+
+private theorem boundedDigits_eq {radix : Radix} {budget : Nat} {input : List Nat}
+    {result : List Nat × List Nat} (h : boundedDigits radix budget input = some result) :
+    scanDigits radix input = result := by
+  induction input generalizing budget result with
+  | nil => simpa [boundedDigits, scanDigits] using h
+  | cons c cs ih =>
+    by_cases hc : BaseDigit radix c
+    · cases budget with
+      | zero => simp [boundedDigits, hc] at h
+      | succ budget =>
+        cases hd : boundedDigits radix budget cs with
+        | none => simp [boundedDigits, hc, hd] at h
+        | some pair =>
+          obtain ⟨digits, rest⟩ := pair
+          simp [boundedDigits, hc, hd] at h
+          simpa [scanDigits, hc, ih hd] using h
+    · cases budget <;> simpa [boundedDigits, scanDigits, hc] using h
+
+/-- Decoded literals whose parser-facing terminals currently carry no payload. -/
+inductive LosslessValue where
+  | parsed (value : TokenValue)
+  | stringLiteral (text : String)
+  | byteLiteral (byte : UInt8)
+  | label (name : String)
+  deriving DecidableEq, Repr
+
+def LosslessValue.parserValue : LosslessValue → TokenValue
+  | .parsed value => value
+  | .stringLiteral _ => .fixed .stringLiteral
+  | .byteLiteral _ => .fixed .byteLiteral
+  | .label _ => .fixed .label
+
+/-- Source-order pieces. Each trivia run between tokens is trailing trivia of the
+previous token and leading trivia of the next, with a single stored range. -/
+inductive Piece where
+  | token (value : LosslessValue) (span : Span)
+  | whitespace (span : Span)
+  | lineComment (span : Span)
+  deriving DecidableEq, Repr
+
+def Piece.span : Piece → Span
+  | .token _ span | .whitespace span | .lineComment span => span
+
+def Piece.parserToken : Piece → Option Token
+  | .token value span => some ⟨value.parserValue, span⟩
+  | _ => none
+
+private def covers (limit : Nat) : Nat → List Piece → Bool
+  | cursor, [] => cursor == limit
+  | cursor, piece :: rest =>
+    let span := piece.span
+    cursor == span.start && cursor < span.stop && span.stop <= limit &&
+      covers limit span.stop rest
+
+/-- One copy of the exact bytes, scoped to all ranges in this stream. -/
+structure LosslessStream where
+  private mk ::
+  source : ByteArray
+  pieces : List Piece
+  partition : covers source.size 0 pieces = true
+
+def LosslessStream.parserView (stream : LosslessStream) : List Token :=
+  stream.pieces.filterMap Piece.parserToken
+
+private def recordSpace (start stop : Position) : List Piece → List Piece
+  | .whitespace span :: rest => .whitespace { span with stop := stop.byte } :: rest
+  | pieces => .whitespace (start.span stop) :: pieces
+
+private def extendComment (start stop : Position) : List Piece → List Piece
+  | .lineComment span :: rest => .lineComment { span with stop := stop.byte } :: rest
+  | pieces => .lineComment (start.span stop) :: pieces
+
+private theorem recordSpace_view (start stop : Position) (pieces : List Piece) :
+    (recordSpace start stop pieces).reverse.filterMap Piece.parserToken =
+      pieces.reverse.filterMap Piece.parserToken := by
+  cases pieces with
+  | nil => rfl
+  | cons piece rest => cases piece <;> simp [recordSpace, List.filterMap_cons, Piece.parserToken]
+
+private theorem extendComment_view (start stop : Position) (pieces : List Piece) :
+    (extendComment start stop pieces).reverse.filterMap Piece.parserToken =
+      pieces.reverse.filterMap Piece.parserToken := by
+  cases pieces with
+  | nil => rfl
+  | cons piece rest => cases piece <;> simp [extendComment, List.filterMap_cons, Piece.parserToken]
+
+private def punct (input : List Nat) : Option (LosslessValue × List Nat × List Nat) := do
   let (lexeme, rest) ← longestMatch punctuationScalars input
   let (_, kind) ← punctuation.find? fun (s, _) => s == scalarText lexeme
-  return (.fixed kind, lexeme, rest)
+  return (.parsed (.fixed kind), lexeme, rest)
 
 private def nextToken (input : List Nat) (pos : Position) :
-    Except Refusal (TokenValue × List Nat × List Nat) := do
+    Except Refusal (LosslessValue × List Nat × List Nat) := do
   if let some (name, rest) := identifier input then
-    return (wordValue (scalarText name), name, rest)
-  match integerLiteral input with
-  | .ok (some i) => return (.integer i.value (splitRadix input).1 i.suffix, i.lexeme, i.rest)
+    return (.parsed (wordValue (scalarText name)), name, rest)
+  let (radix, digitInput) := splitRadix input
+  let some digits := boundedDigits radix integerDigitLimit digitInput
+    | throw (.lexerDigitLimit pos.byte integerDigitLimit)
+  match finishIntegerDigits radix digits with
+  | .ok (some i) => return (.parsed (.integer i.value radix i.suffix), i.lexeme, i.rest)
   | .error _ => throw (.syntaxError s!"malformed integer at byte {pos.byte}")
   | .ok none =>
     if let some p := punct input then return p
     if let 34 :: cs := input then
       match stringBody cs with
-      | .ok (_, rest) => return (.fixed .stringLiteral, input.take (input.length - rest.length), rest)
+      | .ok (decoded, rest) =>
+        return (.stringLiteral (scalarText decoded), input.take (input.length - rest.length), rest)
       | .error _ => throw (.syntaxError s!"malformed string at byte {pos.byte}")
     match byteLiteral input with
     | .error _ => throw (.syntaxError s!"malformed byte literal at byte {pos.byte}")
-    | .ok (some (lexeme, _, rest)) => return (.fixed .byteLiteral, lexeme, rest)
+    | .ok (some (lexeme, decoded, rest)) => return (.byteLiteral (UInt8.ofNat decoded), lexeme, rest)
     | .ok none =>
-      if let some (lexeme, rest) := label input then return (.fixed .label, lexeme, rest)
+      if let some (lexeme, rest) := label input then return (.label (scalarText lexeme.tail), lexeme, rest)
       else throw (.syntaxError s!"unexpected character at byte {pos.byte}")
 
-private def tokens : Nat → List Nat → Position → Bool → List Token → Except Refusal (List Token)
+private def tokens : Nat → List Nat → Position → Bool → List Piece → Except Refusal (List Piece)
   | _, [], _, _, acc => .ok acc.reverse
   | 0, _, _, _, _ => .error (.internal "lexer exhausted its progress bound")
   | fuel + 1, input@(c :: cs), pos, comment, acc => do
     if comment && c != 10 && c != 13 then
-      if decide (CommentRaw c) then tokens fuel cs (pos.advance c) true acc
+      if decide (CommentRaw c) then
+        let stop := pos.advance c
+        tokens fuel cs stop true (extendComment pos stop acc)
       else throw (.syntaxError s!"forbidden comment character at byte {pos.byte}")
-    else if whitespace? c then tokens fuel cs (pos.advance c) false acc
+    else if whitespace? c then
+      let stop := pos.advance c
+      tokens fuel cs stop false (recordSpace pos stop acc)
     else if let 47 :: 47 :: rest := input then
-      tokens fuel rest ((pos.advance 47).advance 47) true acc
+      let stop := (pos.advance 47).advance 47
+      tokens fuel rest stop true (.lineComment (pos.span stop) :: acc)
     else
       let (value, lexeme, rest) ← nextToken input pos
       let stop := lexeme.foldl Position.advance pos
-      tokens fuel rest stop false (⟨value, pos.span stop⟩ :: acc)
+      tokens fuel rest stop false (.token value (pos.span stop) :: acc)
 
-def lex (src : ByteArray) : Except Refusal (List Token) := do
+/-- Reassemble contiguous ranges in a single traversal of the original bytes. -/
+private def replay : List Piece → List UInt8 → List UInt8 → List UInt8
+  | [], _, acc => acc.reverse
+  | piece :: rest, bytes, acc =>
+    let width := piece.span.stop - piece.span.start
+    let (raw, tail) := bytes.splitAt width
+    replay rest tail (raw.reverseAux acc)
+
+def LosslessStream.reconstruct (stream : LosslessStream) : List UInt8 :=
+  replay stream.pieces stream.source.data.toList []
+
+def lexLossless (src : ByteArray) : Except Refusal LosslessStream := do
   match checkSource src.data.toList with
   | .error e => throw (.syntaxError s!"invalid source at byte {e.offset}: {repr e.reason}")
-  | .ok cs => tokens cs.length cs {} false []
+  | .ok cs =>
+    let pieces ← tokens cs.length cs {} false []
+    if partition : covers src.size 0 pieces then return ⟨src, pieces, partition⟩
+    else throw (.internal "lexer ranges do not partition the source")
 
-private theorem punct_sound {input lexeme rest : List Nat} {value : TokenValue}
+def lex (src : ByteArray) : Except Refusal (List Token) :=
+  (lexLossless src).map LosslessStream.parserView
+
+private theorem replay_covers {bytes : List UInt8} {pieces : List Piece} {cursor limit : Nat}
+    (h : covers limit cursor pieces = true) (hlen : bytes.length = limit - cursor)
+    (acc : List UInt8) :
+    replay pieces bytes acc = acc.reverse ++ bytes := by
+  induction pieces generalizing cursor bytes acc with
+  | nil =>
+    simp [covers] at h
+    simp [h] at hlen
+    simp [replay, hlen]
+  | cons piece rest ih =>
+    have ⟨heq, hlt, hle, ht⟩ :
+        cursor = piece.span.start ∧ cursor < piece.span.stop ∧ piece.span.stop ≤ limit ∧
+          covers limit piece.span.stop rest = true := by
+      simpa [covers, Bool.and_eq_true, and_assoc] using h
+    have htail : (bytes.drop (piece.span.stop - piece.span.start)).length =
+        limit - piece.span.stop := by
+      rw [List.length_drop, hlen]
+      omega
+    simp only [replay, List.splitAt_eq]
+    rw [ih ht htail, List.reverseAux_eq, List.reverse_append, List.reverse_reverse,
+      List.append_assoc, List.take_append_drop]
+
+/-- The ranges form an ordered, gap-free partition of the retained bytes. -/
+theorem LosslessStream.reconstruct_eq (stream : LosslessStream) :
+    stream.reconstruct = stream.source.data.toList :=
+  by simpa only [LosslessStream.reconstruct, List.reverse_nil, List.nil_append] using
+    replay_covers stream.partition (by rw [Array.length_toList, Nat.sub_zero]; rfl) []
+
+/-- A successful stream reconstructs the exact source bytes from its stored ranges. -/
+theorem lexLossless_roundTrip {src : ByteArray} {stream : LosslessStream}
+    (h : lexLossless src = .ok stream) : stream.reconstruct = src.data.toList := by
+  unfold lexLossless at h
+  split at h
+  · contradiction
+  · rename_i cs _
+    cases ht : tokens cs.length cs {} false [] with
+    | error e => simp [ht, bind, Except.bind] at h
+    | ok pieces =>
+      simp only [ht, bind, Except.bind] at h
+      split at h
+      · cases Except.ok.inj h
+        exact LosslessStream.reconstruct_eq _
+      · contradiction
+
+private theorem punct_sound {input lexeme rest : List Nat} {value : LosslessValue}
     (h : punct input = some (value, lexeme, rest)) :
-    Tokenizes input lexeme rest value := by
+    Tokenizes input lexeme rest value.parserValue := by
   cases hm : longestMatch punctuationScalars input with
   | none => simp [punct, hm] at h
   | some pair =>
@@ -1892,59 +2065,64 @@ private theorem stringBody_suffix {input : List Nat} {out : List Nat × List Nat
     exact ⟨92 :: _ :: taken, rfl⟩
 
 private theorem nextToken_sound {input lexeme rest : List Nat} {pos : Position}
-    {value : TokenValue} (h : nextToken input pos = .ok (value, lexeme, rest)) :
-    Tokenizes input lexeme rest value := by
+    {value : LosslessValue} (h : nextToken input pos = .ok (value, lexeme, rest)) :
+    Tokenizes input lexeme rest value.parserValue := by
   unfold nextToken at h
   split at h
   · rename_i name tail hi
     cases Except.ok.inj h
     exact .word (identifier_sound hi)
-  · split at h
-    · rename_i i hi
-      cases Except.ok.inj h
-      obtain ⟨digits, suffixInput, suffix, hrun, hacc, hident, hsuffix, he, hv⟩ :=
-        integerDigits_witness hi
-      rw [he, hv]
-      exact Eq.mpr (congrArg (fun src => Tokenizes src _ _ _) (splitRadix_spec input))
-        (.integer hrun hacc hident hsuffix)
-    · contradiction
-    · split at h
-      · rename_i p hp
+  · cases hb : boundedDigits (splitRadix input).1 integerDigitLimit (splitRadix input).2 with
+    | none => simp [hb] at h
+    | some digitOut =>
+      simp only [hb] at h
+      split at h
+      · rename_i i hi
         cases Except.ok.inj h
-        exact punct_sound hp
-      · dsimp only at h
-        split at h
-        · rename_i body _ _ _
-          cases hs : stringBody body with
-          | error _ =>
-            rw [hs] at h
-            contradiction
-          | ok pair =>
-            obtain ⟨decoded, tail⟩ := pair
-            simp [hs, pure, Except.pure] at h
-            obtain ⟨rfl, rfl, rfl⟩ := h
-            have hbody := stringBody_sound hs
-            obtain ⟨spelling, hspell⟩ := stringBody_suffix hbody
-            have he : 34 :: body = (34 :: spelling) ++ tail := by rw [hspell]; rfl
-            have htake : (34 :: body).take ((34 :: body).length - tail.length) =
-                34 :: spelling := by rw [he, List.length_append, Nat.add_sub_cancel, List.take_left]
-            rw [List.length_cons] at htake
-            exact .string hbody (by rw [htake]; exact he)
-        ·
-          split at h
-          · contradiction
-          · rename_i spelling decoded tail hb
-            cases Except.ok.inj h
-            exact .byte (byteLiteral_sound hb)
-          · rename_i hb
+        have hi' : integerDigits (splitRadix input).1 (splitRadix input).2 = .ok (some i) := by
+          simpa only [integerDigits, boundedDigits_eq hb] using hi
+        obtain ⟨digits, suffixInput, suffix, hrun, hacc, hident, hsuffix, he, hv⟩ :=
+          integerDigits_witness hi'
+        rw [he, hv]
+        exact Eq.mpr (congrArg (fun src => Tokenizes src _ _ _) (splitRadix_spec input))
+          (.integer hrun hacc hident hsuffix)
+      · contradiction
+      · split at h
+        · rename_i p hp
+          cases Except.ok.inj h
+          exact punct_sound hp
+        · split at h
+          · rename_i body _ _ _
+            cases hs : stringBody body with
+            | error _ =>
+              rw [hs] at h
+              contradiction
+            | ok pair =>
+              obtain ⟨decoded, tail⟩ := pair
+              simp [hs, pure, Except.pure] at h
+              obtain ⟨rfl, rfl, rfl⟩ := h
+              have hbody := stringBody_sound hs
+              obtain ⟨spelling, hspell⟩ := stringBody_suffix hbody
+              have he : 34 :: body = (34 :: spelling) ++ tail := by rw [hspell]; rfl
+              have htake : (34 :: body).take ((34 :: body).length - tail.length) =
+                  34 :: spelling := by rw [he, List.length_append, Nat.add_sub_cancel, List.take_left]
+              rw [List.length_cons] at htake
+              exact .string hbody (by rw [htake]; exact he)
+          ·
             split at h
-            · rename_i spelling tail hl
-              cases Except.ok.inj h
-              refine .label (label_sound hl) ?_
-              intro bytes decoded tail hbyte
-              rw [byteLiteral_complete hbyte] at hb
-              simp at hb
             · contradiction
+            · rename_i spelling decoded tail hb
+              cases Except.ok.inj h
+              exact .byte (byteLiteral_sound hb)
+            · rename_i hb
+              split at h
+              · rename_i spelling tail hl
+                cases Except.ok.inj h
+                refine .label (label_sound hl) ?_
+                intro bytes decoded tail hbyte
+                rw [byteLiteral_complete hbyte] at hb
+                simp at hb
+              · contradiction
 
 private theorem prependTrivia {pos : Position} {taken input : List Nat} {out : List Token}
     (prepend : ∀ {rest}, Trivia input rest → Trivia (taken ++ input) rest)
@@ -1964,8 +2142,8 @@ private theorem prependTrivia {pos : Position} {taken input : List Nat} {out : L
 -- Inside a comment, expose the consumed body separately so its opener can turn it
 -- into trivia. The position of the remaining stream includes every consumed scalar.
 private theorem tokens_sound (fuel : Nat) (input : List Nat) (pos : Position)
-    (comment : Bool) (acc out : List Token) (h : tokens fuel input pos comment acc = .ok out) :
-    ∃ suffix, out = acc.reverse ++ suffix ∧
+    (comment : Bool) (acc out : List Piece) (h : tokens fuel input pos comment acc = .ok out) :
+    ∃ suffix, out.filterMap Piece.parserToken = acc.reverse.filterMap Piece.parserToken ++ suffix ∧
       if comment then ∃ body rest, input = body ++ rest ∧ CommentBody input rest ∧
         TokenStream (body.foldl Position.advance pos) rest suffix
       else TokenStream pos input suffix := by
@@ -1994,30 +2172,33 @@ private theorem tokens_sound (fuel : Nat) (input : List Nat) (pos : Position)
       · simp only [tokens, Bool.false_and, Bool.false_eq_true, ↓reduceIte] at h
         split at h
         · rename_i hw
-          obtain ⟨suffix, he, hs⟩ := ih cs (pos.advance c) false acc out h
-          exact ⟨suffix, he, prependTrivia (taken := [c])
+          obtain ⟨suffix, he, hs⟩ := ih cs (pos.advance c) false (recordSpace pos (pos.advance c) acc) out h
+          exact ⟨suffix, by simpa only [recordSpace_view] using he, prependTrivia (taken := [c])
             (Trivia.whitespace ((whitespace?_iff c).mp hw)) hs⟩
         · rename_i hw
           split at h
           · rename_i tail heq
             cases heq
             obtain ⟨suffix, he, body, rest, hb, hc, hs⟩ :=
-              ih tail ((pos.advance 47).advance 47) true acc out h
+              ih tail ((pos.advance 47).advance 47) true
+                (.lineComment (pos.span ((pos.advance 47).advance 47)) :: acc) out h
+            simp [List.filterMap_cons, Piece.parserToken] at he
             have hs' : TokenStream pos ((47 :: 47 :: body) ++ rest) suffix :=
               prependTrivia (fun ht => by
                 simp only [List.cons_append, ← hb]
                 exact .comment (.intro hc) ht) hs
-            exact ⟨suffix, he, by simpa only [Bool.false_eq_true, ↓reduceIte, List.cons_append, ← hb] using hs'⟩
+            exact ⟨suffix, by simpa only [List.filterMap_reverse] using he, by simpa only [Bool.false_eq_true, ↓reduceIte, List.cons_append, ← hb] using hs'⟩
           · rename_i hn
             cases ht : nextToken (c :: cs) pos with
             | error e => simp [ht, bind, Except.bind] at h
             | ok triple =>
               obtain ⟨value, lexeme, tail⟩ := triple
               let stop := lexeme.foldl Position.advance pos
-              let tok : Token := ⟨value, pos.span stop⟩
+              let piece := Piece.token value (pos.span stop)
+              let tok : Token := ⟨value.parserValue, pos.span stop⟩
               simp only [ht, bind, Except.bind] at h
-              obtain ⟨suffix, he, hs⟩ := ih tail stop false (tok :: acc) out h
-              refine ⟨tok :: suffix, by simpa [List.reverse_cons, List.append_assoc] using he, ?_⟩
+              obtain ⟨suffix, he, hs⟩ := ih tail stop false (piece :: acc) out h
+              refine ⟨tok :: suffix, by simpa [piece, tok, Piece.parserToken, List.append_assoc] using he, ?_⟩
               exact TokenStream.cons (trivia := [])
                 (.stop _ (by intro d ds heq; cases heq; simpa [whitespace?_iff] using hw) hn)
                 (nextToken_sound ht) hs
@@ -2028,8 +2209,8 @@ private theorem tokens_sound (fuel : Nat) (input : List Nat) (pos : Position)
           split at h
           · rename_i hraw
             obtain ⟨suffix, he, body, rest, hb, hbody, hs⟩ :=
-              ih cs (pos.advance c) true acc out h
-            exact ⟨suffix, he, c :: body, rest, congrArg (c :: ·) hb,
+              ih cs (pos.advance c) true (extendComment pos (pos.advance c) acc) out h
+            exact ⟨suffix, by simpa only [extendComment_view] using he, c :: body, rest, congrArg (c :: ·) hb,
               .cons hc.1 hc.2 (of_decide_eq_true hraw) hbody, hs⟩
           · contradiction
         · have hstop : c = 10 ∨ c = 13 := by omega
@@ -2037,22 +2218,70 @@ private theorem tokens_sound (fuel : Nat) (input : List Nat) (pos : Position)
             rcases hstop with rfl | rfl <;> decide
           have hw : Whitespace c := by rcases hstop with rfl | rfl <;> decide
           simp only [hcontinue, Bool.false_eq_true, ↓reduceIte, (whitespace?_iff c).mpr hw] at h
-          obtain ⟨suffix, he, hs⟩ := ih cs (pos.advance c) false acc out h
-          refine ⟨suffix, he, [], c :: cs, rfl, ?_, prependTrivia (taken := [c])
+          obtain ⟨suffix, he, hs⟩ := ih cs (pos.advance c) false (recordSpace pos (pos.advance c) acc) out h
+          refine ⟨suffix, by simpa only [recordSpace_view] using he, [], c :: cs, rfl, ?_, prependTrivia (taken := [c])
             (Trivia.whitespace hw) hs⟩
           rcases hstop with rfl | rfl
           · exact .lf cs
           · exact .cr cs
 
+/-- The lossless scanner projects to the independent parser-facing lexical relation. -/
+theorem lexLossless_correct {src : ByteArray} {result : LosslessStream}
+    (h : lexLossless src = .ok result) : Lexes src result.parserView := by
+  unfold lexLossless at h
+  split at h
+  · contradiction
+  · rename_i cs hs
+    cases ht : tokens cs.length cs {} false [] with
+    | error e => simp [ht, bind, Except.bind] at h
+    | ok pieces =>
+      simp only [ht, bind, Except.bind] at h
+      split at h
+      · cases Except.ok.inj h
+        obtain ⟨suffix, he, stream⟩ := tokens_sound cs.length cs {} false [] pieces ht
+        obtain ⟨decodes, allowed, _⟩ := checkSource_sound hs
+        exact ⟨cs, decodes, allowed, by simpa [LosslessStream.parserView, he] using stream⟩
+      · contradiction
+
 /-- Every successful compiler lexing result satisfies the surface lexical relation. -/
 theorem lex_correct {src : ByteArray} {toks : List Token} (h : lex src = .ok toks) :
     Lexes src toks := by
-  cases hs : checkSource src.data.toList with
-  | error e => simp [lex, hs] at h
-  | ok cs =>
-    have ht : tokens cs.length cs {} false [] = .ok toks := by simpa [lex, hs] using h
-    obtain ⟨_, rfl, stream⟩ := tokens_sound cs.length cs {} false [] toks ht
-    obtain ⟨decodes, allowed, _⟩ := checkSource_sound hs
-    exact ⟨cs, decodes, allowed, stream⟩
+  cases hs : lexLossless src with
+  | error e => simp [lex, hs, Except.map] at h
+  | ok result =>
+    simp [lex, hs, Except.map] at h
+    subst toks
+    exact lexLossless_correct hs
+
+/-! These controls reduce the production entry points in the kernel. -/
+
+private def payloadSource : ByteArray := " //é\r\n\"a\\n\" '\\t' 'loop //tail".toUTF8
+
+example : (lexLossless payloadSource).map LosslessStream.pieces = .ok [
+    .whitespace ⟨0, 1, 1, 1⟩, .lineComment ⟨1, 5, 1, 2⟩, .whitespace ⟨5, 7, 1, 6⟩,
+    .token (.stringLiteral "a\n") ⟨7, 12, 2, 1⟩, .whitespace ⟨12, 13, 2, 6⟩,
+    .token (.byteLiteral 9) ⟨13, 17, 2, 7⟩, .whitespace ⟨17, 18, 2, 11⟩,
+    .token (.label "loop") ⟨18, 23, 2, 12⟩, .whitespace ⟨23, 24, 2, 17⟩,
+    .lineComment ⟨24, 30, 2, 18⟩] := rfl
+
+example : (lexLossless payloadSource).map LosslessStream.reconstruct =
+    .ok payloadSource.data.toList := rfl
+
+example : lex payloadSource = .ok [
+    ⟨.fixed .stringLiteral, ⟨7, 12, 2, 1⟩⟩, ⟨.fixed .byteLiteral, ⟨13, 17, 2, 7⟩⟩,
+    ⟨.fixed .label, ⟨18, 23, 2, 12⟩⟩] := rfl
+
+example : lex ("// lead\n" ++ r#"fn main()->u8{ return 255; } // tail"#).toUTF8 = .ok [
+    ⟨.fixed .fn, ⟨8, 10, 2, 1⟩⟩, ⟨.name "main", ⟨11, 15, 2, 4⟩⟩,
+    ⟨.fixed .lparen, ⟨15, 16, 2, 8⟩⟩, ⟨.fixed .rparen, ⟨16, 17, 2, 9⟩⟩,
+    ⟨.fixed .arrow, ⟨17, 19, 2, 10⟩⟩, ⟨.fixed .u8, ⟨19, 21, 2, 12⟩⟩,
+    ⟨.fixed .lbrace, ⟨21, 22, 2, 14⟩⟩, ⟨.fixed .return_, ⟨23, 29, 2, 16⟩⟩,
+    ⟨.integer 255 .decimal none, ⟨30, 33, 2, 23⟩⟩,
+    ⟨.fixed .semi, ⟨33, 34, 2, 26⟩⟩, ⟨.fixed .rbrace, ⟨35, 36, 2, 28⟩⟩] := rfl
+
+example : lex "01bad".toUTF8 = .error (.syntaxError "malformed integer at byte 0") := rfl
+
+example : boundedDigits .hexadecimal 2 [97, 102, 117, 56] = some ([97, 102], [117, 56]) := rfl
+example : boundedDigits .hexadecimal 2 [97, 102, 48, 117, 56] = none := rfl
 
 end Concrete.Lex
