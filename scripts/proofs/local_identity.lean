@@ -104,7 +104,7 @@ partial def carrierCore (e : Expr) (seen : List Name := []) : ScanM (Bool × Boo
     return (false, false)
   -- These validated nominal boundaries intentionally hide their representation.
   if e.isConstOf `ConcreteSpec.Var then return (true, false)
-  if e.isConstOf `ConcreteSpec.Name || e.isConstOf `Concrete.Refusal then
+  if e.isConstOf `ConcreteSpec.Name then
     return (false, false)
   -- These atomic spelling carriers have no type-expression children. Their
   -- implementation fields add no information to the spelling classification.
@@ -302,8 +302,8 @@ def main (args : List String) : IO Unit := do
       | .defnInfo d => d.value == mkConst `Char
       | _ => false) do
       throw (IO.userError "ScalarChar must be exactly Char")
-  -- Refusal is the declared diagnostic channel. It may be returned beside a
-  -- semantic value, but its own fields must never carry local identities.
+  -- Refusal is the presentation-layer diagnostic type. Its payloads must
+  -- themselves remain free of local identities.
   if let some ci := env.find? `Concrete.Refusal then
     let .inductInfo info := ci
       | throw (IO.userError "compiler Refusal must be a nominal diagnostic type")
@@ -347,8 +347,16 @@ def main (args : List String) : IO Unit := do
       for dependency in ci.getUsedConstantsAsSet do
         users := users.insert dependency ((users[dependency]?.getD #[]).push n)
   let mut tainted : Std.HashSet Name := {}
-  let mut queue := #[`ConcreteSpec.LocalNames, `ConcreteSpec.Elaborated,
-    `Concrete.Refusal.code, `Concrete.Refusal.message]
+  let mut queue := #[`ConcreteSpec.LocalNames, `ConcreteSpec.Elaborated]
+  if let some (.inductInfo refusal) := env.find? `Concrete.Refusal then
+    for n in reachable.toArray do
+      let some i := env.getModuleIdxFor? n | continue
+      -- Seed the diagnostic implementation, including generated eliminators
+      -- and instances. The carrier scan checks the type and constructor fields
+      -- directly. Semantic stages use structured errors and render at the boundary.
+      if env.header.moduleNames[i.toNat]! == `Concrete.Refusal &&
+          n != refusal.name && !refusal.ctors.contains n then
+        queue := queue.push n
   -- Inspect every declaration's instantiated telescope, including inductive indices
   -- and Prop-valued judgments. The same analysis handles fields and function values.
   if profile then IO.eprintln s!"profile: graph_ms={(← IO.monoMsNow) - graphStart} reachable={reachable.size}"

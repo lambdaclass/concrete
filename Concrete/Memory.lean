@@ -1,6 +1,6 @@
+import Concrete.Core
 import Concrete.Admission
 import Concrete.Elab
-import Concrete.Refusal
 import ConcreteSpec.Spec.Basics
 import ConcreteSpec.Spec.Slice0
 import ConcreteSpec.Spec.Slice1Semantics

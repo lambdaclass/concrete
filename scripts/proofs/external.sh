@@ -289,6 +289,15 @@ COMPILER_EXPORT="$TMP/compiler.ndjson"
 "$LAKE" env "$EXPORTER" Concrete -- "$COMPILER_THEOREM" > "$COMPILER_EXPORT" 2> "$TMP/compiler.err"; rc=$?
 [ "$rc" = 0 ] && [ ! -s "$TMP/compiler.err" ] \
   || { no "compiler export (rc=$rc): $(head -3 "$TMP/compiler.err")"; finish; }
+read -r EXP_LEAN EXP_TOOL EXP_FORMAT < <($INV meta "$COMPILER_EXPORT")
+[ "leanprover/lean4:v$EXP_LEAN" = "$TOOLCHAIN" ] && [ "$EXP_FORMAT" = "$EXPECT_FORMAT" ] \
+  && ok "compiler export metadata matches the pinned Lean and export format" \
+  || no "compiler export metadata: Lean $EXP_LEAN format $EXP_FORMAT"
+$INV axioms "$COMPILER_EXPORT" > "$TMP/compiler-axioms" \
+  || { no "cannot read compiler export axioms"; finish; }
+EXTRA=$(comm -23 "$TMP/compiler-axioms" <(printf '%s\n' $STANDARD_AXIOMS))
+[ -z "$EXTRA" ] && ok "compiler export declares only standard axioms" \
+  || no "compiler export declares non-standard axioms: $EXTRA"
 $INV names "$COMPILER_EXPORT" > "$TMP/compiler-names" \
   || { no "cannot read compiler export names"; finish; }
 if ! cmp -s "$TMP/compiler-wanted" "$TMP/compiler-names"; then
@@ -332,4 +341,12 @@ $INV decls "$TMP/compiler-forged.ndjson" > "$TMP/compiler-forged" \
 [ "$(fidelity "$TMP/compiler-lean" "$TMP/compiler-forged")" = "$COMPILER_ENCODED" ] \
   && ok "control: fidelity rejects the compiler theorem with a changed proof" \
   || no "control: compiler theorem proof drift went undetected"
+conleche "$TMP/compiler-forged.ndjson" > "$TMP/compiler-forged-c.out" 2>&1; rc=$?
+[ "$rc" = 1 ] && has_match -Ei 'type mismatch|theorem.*(type|proof)' < "$TMP/compiler-forged-c.out" \
+  && ok "control: con-leche rejects the forged compiler proof" \
+  || no "forged compiler con-leche (rc=$rc): $(tail -3 "$TMP/compiler-forged-c.out")"
+nanoda "$TMP/compiler-forged.ndjson" > "$TMP/compiler-forged-k.out" 2>&1; rc=$?
+[ "$rc" != 0 ] && has_match -Ei 'type mismatch|theorem.*(type|proof)|assertion' < "$TMP/compiler-forged-k.out" \
+  && ok "control: nanoda rejects the forged compiler proof" \
+  || no "forged compiler nanoda (rc=$rc): $(tail -5 "$TMP/compiler-forged-k.out")"
 finish

@@ -1,4 +1,4 @@
-import Concrete.Refusal
+import Concrete.Core
 import ConcreteSpec.Proofs.Checker
 import ConcreteSpec.Proofs.Slice0
 import ConcreteSpec.Spec.Basics
@@ -33,9 +33,12 @@ private def record (acc : ConcreteSpec.Ctx × List Token) (stmt : Core.Stmt) :
 
 def evidence (p : Core.Program) : List Token := (p.body.foldl record ([], [])).2.reverse
 
-def check (out : Elab.Output) : Except Refusal Output :=
+inductive Failure where
+  | rejected
+
+def check (out : Elab.Output) : Except Failure Output :=
   if Core.check (Core.toCore out.program) then .ok ⟨out, evidence out.program⟩
-  else .error (.checker "Core check rejected the program")
+  else .error .rejected
 
 theorem admit_checked {src : Elab.Output} {out : Output} (h : check src = .ok out) :
     Core.Checked (Core.toCore out.core.program) := by

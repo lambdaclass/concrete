@@ -35,21 +35,6 @@ cd "$ROOT_DIR"
 CHECK_NAME=PROOF-TRUST-BAN
 source scripts/proofs/lib.sh
 
-# Exact direct imports are part of this required Lean-enabled gate.
-if python3 scripts/proofs/imports.py; then
-  ok "direct proof imports and controls"
-else
-  no "direct proof imports or controls failed"
-fi
-
-# Identity and diagnostics are structural trust properties; the environment scan is load-bearing.
-# Compiling negative controls cover spelling-carrier forms and the numeric/lookup invariants.
-if python3 scripts/proofs/local_identity.py; then
-  ok "numeric local identity, structural diagnostics separation and negative controls"
-else
-  no "local identity or a negative control failed"
-fi
-
 BANNED_AXIOM_RE='^(sorryAx|Lean[.]ofReduceBool|Lean[.]ofReduceNat|Lean[.]trustCompiler)$|[.]_native[.]'
 BANNED_WORD_RE='\b(sorry|sorryAx|admit|native_decide|ofReduceBool|ofReduceNat|trustCompiler|skipKernelTC)\b|\+native\b|\bnative»?\s*:=|\bdecide\s*\(\s*config\b|\bdecide\s*[+-]|\bDecide[.]Config\b'
 # `decide` takes no options at all (`decide +native`, `decide (config := ⟨…⟩)` with a positional
@@ -61,7 +46,8 @@ BANNED_WORD_RE='\b(sorry|sorryAx|admit|native_decide|ofReduceBool|ofReduceNat|tr
 # warningAsError (checked below in lakefile.toml), so a `sorry` that elaborates anywhere, whatever
 # tactic produced it (`stop` is `repeat sorry`), fails the build; `set_option warningAsError false`
 # would undo that. Nor do they run meta code (run_cmd, run_tac, #eval and the like).
-TOTALITY_RE='\b(partial|unsafe|opaque|implemented_by|extern|_unsafe_rec)\b'
+NATIVE_ATTR_RE='(?:@\[|\battribute\s+\[)[^]]*\b(?:csimp|implemented_by|extern|init|builtin_init|export|tagged_return|unbox)\b'
+TOTALITY_RE="\b(partial|unsafe|opaque|implemented_by|extern|_unsafe_rec|csimp|builtin_init)\b|$NATIVE_ATTR_RE"
 EXTENSION_RE='#eval\b|\b(run_cmd|run_tac|run_elab|run_meta|set_option|macro|macro_rules|syntax|notation|infix|infixl|infixr|prefix|postfix|elab|elab_rules|declare_syntax_cat|initialize|builtin_initialize)\b'
 
 # banned FILE → `<constant> (<axiom>)` for every constant of a PROOF_MODE=constants listing with a banned axiom
@@ -74,21 +60,6 @@ declared() { awk -F'\t' '$2 == "axiom" { print $1 }' "$1"; }
 # scan FILE... → `file:line: text` for every banned word, syntax extension, option, meta command or
 # outside import outside comments; exit 3 when a source cannot be lexed (lean_lex.py)
 scan() { python3 "$PROOFS_DIR/lean_lex.py" scan "$BANNED_WORD_RE|$EXTENSION_RE" "$@"; }
-
-echo "=== E/D: the environment ==="
-population imported > "$TMP/imported.txt" 2> "$TMP/imported.err" || { no "PROOF_MODE=imported failed"; finish; }
-GAP=$(closure_gap "$TMP/imported.txt")
-[ -z "$GAP" ] && ok "all $(spec_modules | grep -c .) ConcreteSpec source modules are in the environment E and D read" \
-  || no "source modules outside the root's import closure, unseen by E and D: $(echo $GAP)"
-population constants > "$TMP/consts.tsv" 2> "$TMP/consts.err" \
-  || { cat "$TMP/consts.err" >&2; echo "error: the enumerator failed" >&2; exit 2; }
-NC=$(grep -c . "$TMP/consts.tsv")
-B=$(banned "$TMP/consts.tsv")
-[ "$NC" -ge 1000 ] && [ -z "$B" ] \
-  && ok "none of the $NC ConcreteSpec constants depends on sorryAx, ofReduceBool/Nat, trustCompiler or a native axiom" \
-  || no "$NC constants; banned dependencies: $(echo $B | cut -c1-400)"
-A=$(declared "$TMP/consts.tsv")
-[ -z "$A" ] && ok "ConcreteSpec declares no axiom" || no "ConcreteSpec declares axioms: $(echo $A)"
 
 echo "=== S: the sources ==="
 mapfile -t SRC < <({ echo ConcreteSpec.lean; find ConcreteSpec -name '*.lean'; } | sort)
@@ -109,22 +80,71 @@ W=$(python3 "$PROOFS_DIR/lean_lex.py" scan-totality "$TOTALITY_RE|$EXTENSION_RE"
 [ "$RC" = 0 ] && [ -z "$W" ] && ok "compiler and driver have no totality overrides or meta commands" \
   || no "totality source scan (rc=$RC): $W"
 
-"$LAKE" build +Main > "$TMP/driver-build.log" 2>&1 \
+# Lake lists dependency libraries first. This package and the pinned backend
+# both build a Main module, so bind every driver audit to this build's artifact.
+driver_lean() {
+  local search
+  local source_search
+  search=$("$LAKE" env printenv LEAN_PATH) || return
+  source_search=$("$LAKE" env printenv LEAN_SRC_PATH) || return
+  "$LAKE" env env LEAN_SRC_PATH="$PWD:$source_search" LEAN_PATH="${DRIVER_ARTIFACTS:-$PWD/.lake/build/lib/lean}:$PWD/.lake/build/lib/lean:$search" lean "$@"
+}
+
+[ "$FAIL" = 0 ] || finish
+"$LAKE" build +Main ConcreteSpec Concrete > "$TMP/driver-build.log" 2>&1 \
   || { cat "$TMP/driver-build.log" >&2; no "driver elaboration failed"; finish; }
-if "$LAKE" env lean --run "$PROOFS_DIR/totality.lean" Main Concrete; then
+if PROOF_TOTALITY_SOURCES="$TMP/native-sources" driver_lean --run "$PROOFS_DIR/totality.lean" Main Concrete; then
   ok "compiler and driver execution closure passes totality and stage isolation"
 else
   no "execution closure violates totality or stage isolation"
 fi
 
+# A local rewrite can be inlined away in IR. Scan the source of the
+# entire non-runtime import closure for substitutions, including Lake dependencies.
+if [ -s "$TMP/native-sources" ]; then
+  mapfile -t NATIVE_SRC < "$TMP/native-sources"
+  W=$(python3 "$PROOFS_DIR/lean_lex.py" scan-code "$NATIVE_ATTR_RE" "${NATIVE_SRC[@]}"); RC=$?
+  [ "$RC" = 0 ] && [ -z "$W" ] && ok "non-runtime closure sources contain no native substitution attributes" \
+    || no "native closure source scan (rc=$RC): $W"
+fi
+[ "$FAIL" = 0 ] || finish
+
+echo "=== E/D: the environment ==="
+population imported > "$TMP/imported.txt" 2> "$TMP/imported.err" || { no "PROOF_MODE=imported failed"; finish; }
+GAP=$(closure_gap "$TMP/imported.txt")
+[ -z "$GAP" ] && ok "all $(spec_modules | grep -c .) ConcreteSpec source modules are in the environment E and D read" \
+  || no "source modules outside the root's import closure, unseen by E and D: $(echo $GAP)"
+population constants > "$TMP/consts.tsv" 2> "$TMP/consts.err" \
+  || { cat "$TMP/consts.err" >&2; echo "error: the enumerator failed" >&2; exit 2; }
+NC=$(grep -c . "$TMP/consts.tsv")
+B=$(banned "$TMP/consts.tsv")
+[ "$NC" -ge 1000 ] && [ -z "$B" ] \
+  && ok "none of the $NC ConcreteSpec constants depends on sorryAx, ofReduceBool/Nat, trustCompiler or a native axiom" \
+  || no "$NC constants; banned dependencies: $(echo $B | cut -c1-400)"
+A=$(declared "$TMP/consts.tsv")
+[ -z "$A" ] && ok "ConcreteSpec declares no axiom" || no "ConcreteSpec declares axioms: $(echo $A)"
+
+# Exact direct imports are part of this required Lean-enabled gate.
+if python3 scripts/proofs/imports.py; then
+  ok "direct proof imports and controls"
+else
+  no "direct proof imports or controls failed"
+fi
+
+# Identity and diagnostics are structural trust properties; the environment scan is load-bearing.
+# Compiling negative controls cover spelling-carrier forms and the numeric/lookup invariants.
+if python3 scripts/proofs/local_identity.py; then
+  ok "numeric local identity, structural diagnostics separation and negative controls"
+else
+  no "local identity or a negative control failed"
+fi
+
 # Read every compiler constant as well, including declarations not reachable from
 # the headline theorem registry. The compiler root must import every source module.
-"$LAKE" build Concrete > "$TMP/compiler-build.log" 2>&1 \
-  || { cat "$TMP/compiler-build.log" >&2; no "compiler build failed"; finish; }
 PROOF_PKG=Concrete PROOF_MODE=constants "$LAKE" env lean "$ENUMERATOR" > "$TMP/compiler-consts.tsv" \
   || { no "compiler constant enumeration failed"; finish; }
 sed '/^import Concrete$/a import Main' "$ENUMERATOR" > "$TMP/driver-enumerator.lean"
-PROOF_PKG=Main PROOF_MODE=constants "$LAKE" env lean "$TMP/driver-enumerator.lean" > "$TMP/driver-consts.tsv" \
+PROOF_PKG=Main PROOF_MODE=constants driver_lean "$TMP/driver-enumerator.lean" > "$TMP/driver-consts.tsv" \
   || { no "driver constant enumeration failed"; finish; }
 B=$(banned "$TMP/driver-consts.tsv"); A=$(declared "$TMP/driver-consts.tsv")
 [ -s "$TMP/driver-consts.tsv" ] && [ -z "$B$A" ] \
@@ -232,7 +252,7 @@ NEX=$(python3 "$PROOFS_DIR/lean_lex.py" examples . "$EX" "${SRC[@]}" "${COMPILER
   || { no "the library with its examples as declarations does not build: $(grep -m3 error "$TMP/ex-build.log" | tr '\n' ' ')"; finish; }
 (cd "$EX" && "$LAKE" env lean -DautoImplicit=false -R . -o .lake/build/lib/lean/Main.olean Main.lean) > "$TMP/ex-driver.log" 2>&1 \
   || { no "example copy of driver does not elaborate: $(tail -5 "$TMP/ex-driver.log")"; finish; }
-(cd "$EX" && PROOF_MODE=examples "$LAKE" env lean "$TMP/examples-enumerator.lean") > "$TMP/examples.out" 2> "$TMP/examples.err" \
+(cd "$EX" && PROOF_MODE=examples driver_lean "$TMP/examples-enumerator.lean") > "$TMP/examples.out" 2> "$TMP/examples.err" \
   || { no "PROOF_MODE=examples failed: $(head -2 "$TMP/examples.err" | tr '\n' ' ')"; finish; }
 grep -P '\t' "$TMP/examples.out" > "$TMP/examples.tsv"
 # nonstandard FILE → `<name> (<axiom>)` for every row whose axioms are not among the standard three
@@ -250,9 +270,9 @@ python3 "$PROOFS_DIR/test_lean_lex.py" > "$TMP/lexer-tests.log" 2>&1; RC=$?
 [ "$RC" = 0 ] && ok "control: literal boundaries, interpolation spoofing and compiler module graph regressions" \
   || { cat "$TMP/lexer-tests.log" >&2; no "lexer regression controls (rc=$RC)"; }
 # Exercise the compiler CLI itself: these must be reported, even with an otherwise valid header.
-for body in 'import Lean.Meta.Basic' 'import Init.System.IO' 'import LeanCompilerBackend.Verified.Tests' 'import ConcreteTooling' 'import Std' 'import Lean.DoesNotExist' 'def bad : Nat := sorry' 'set_option maxRecDepth 100000'; do
+for body in 'import Lean.Meta.Basic' 'import Init.System.IO' 'import LeanCompilerBackend.Verified.Tests' 'import ConcreteTooling' 'import Std' 'import Lean.DoesNotExist' 'def bad : Nat := sorry'; do
   printf 'import Concrete.Lex\n%s\n' "$body" > "$TMP/Main.lean"
-  W=$(python3 "$PROOFS_DIR/lean_lex.py" scan-compiler "$BANNED_WORD_RE|$EXTENSION_RE" "$TMP/Main.lean"); RC=$?
+  W=$(python3 "$PROOFS_DIR/lean_lex.py" scan-compiler "$BANNED_WORD_RE" "$TMP/Main.lean"); RC=$?
   [ "$RC" = 0 ] && [[ "$W" == *"$body"* ]] \
     && ok "control: compiler scan reports $body" || no "compiler scan missed $body (rc=$RC): $W"
 done
@@ -260,40 +280,108 @@ done
 # the source scan cannot account for the closure rejection.
 mkdir -p "$TMP/totality"
 cat > "$TMP/totality/Foreign.lean" <<'EOF'
-import Lean.Meta.Basic
-
 partial def hiddenLoop (n : Nat) : Nat := hiddenLoop (n + 1)
+opaque importedField : Type := Nat
+def ordinary (a b : Nat) : Nat := a + b
+@[extern "lean_nat_mul"] def alternate (a b : Nat) : Nat := a + b
+@[csimp] theorem replaceOrdinary : ordinary = alternate := rfl
+def ordinaryLocal (a b : Nat) : Nat := a + b
+@[extern "lean_nat_mul"] def alternateLocal (a b : Nat) : Nat := a + b
+theorem replaceLocal : ordinaryLocal = alternateLocal := rfl
+unsafe def unsafeImpl (n : Nat) : Nat := n
+@[implemented_by unsafeImpl] def replaced (n : Nat) := n
+def initializer : IO Nat := do
+  if let some marker ← IO.getEnv "PROOF_AUDIT_INIT_MARKER" then
+    IO.FS.writeFile marker "ran"
+  return 1
+@[init initializer] opaque initialValue : Nat
+@[builtin_init initializer] opaque builtinValue : Nat
 EOF
 cat > "$TMP/totality/Stage.lean" <<'EOF'
 import Foreign
+import Concrete.BIR
+
+inductive PlantedData where
+  | mk : importedField → PlantedData
 
 def plantedStage (n : Nat) : Nat := hiddenLoop n
 def plantedIO : IO Unit := IO.println "IO belongs in the driver"
+def plantedTrace (n : Nat) : Nat := dbgTrace "stage" fun _ => n
+def plantedTask (n : Nat) : Task Nat := Task.spawn fun _ => n
+def plantedRewrite (a b : Nat) : Nat := ordinary a b
+example : plantedRewrite 2 3 = 5 := rfl
+section
+attribute [local csimp] replaceLocal
+def plantedLocalRewrite (a b : Nat) : Nat := ordinaryLocal a b
+end
+def plantedImpl (n : Nat) : Nat := replaced n
+def plantedInit : Nat := initialValue + builtinValue
 noncomputable def plantedChoice : Nat := Classical.choice ⟨1⟩
+noncomputable def plantedBehaviour (p : Concrete.BIR.Program) := Concrete.BIR.behaviour p
+axiom plantedAxiom : Nat
 EOF
-TOTALITY_PATH="$TMP/totality:$("$LAKE" env printenv LEAN_PATH)"
-if ("$LAKE" env env LEAN_PATH="$TOTALITY_PATH" lean -R "$TMP/totality" -o "$TMP/totality/Foreign.olean" "$TMP/totality/Foreign.lean" &&
-    "$LAKE" env env LEAN_PATH="$TOTALITY_PATH" lean -R "$TMP/totality" -o "$TMP/totality/Stage.olean" "$TMP/totality/Stage.lean") \
-    > "$TMP/totality-build.log" 2>&1; then
-  "$LAKE" env env LEAN_PATH="$TOTALITY_PATH" lean --run "$PROOFS_DIR/totality.lean" Main Stage \
-    > "$TMP/totality-control.log" 2>&1; RC=$?
-  [ "$RC" = 1 ] && has_match -E 'plantedStage reaches (partial|opaque) declaration hiddenLoop' < "$TMP/totality-control.log" &&
-    has_match -F 'reaches IO declaration' < "$TMP/totality-control.log" &&
-    has_match -Fx 'compiler imports forbidden module Lean.Meta.Basic' < "$TMP/totality-control.log" &&
-    has_match -F 'plantedChoice reaches noncomputable declaration plantedChoice' < "$TMP/totality-control.log" \
-    && ok "control: stage rejects transitive Lean.Meta and partial definitions, IO and noncomputable execution" \
-    || no "totality control (rc=$RC): $(cat "$TMP/totality-control.log")"
+cat > "$TMP/totality/ConcreteTooling.lean" <<'EOF'
+def plantedTooling := 1
+EOF
+cat > "$TMP/totality/DriverDependency.lean" <<'EOF'
+import Lean.Meta.Basic
+import ConcreteTooling
+partial def driverLoop (n : Nat) : Nat := driverLoop (n + 1)
+EOF
+cat > "$TMP/totality/Driver.lean" <<'EOF'
+import DriverDependency
+def driverEntry (n : Nat) : Nat := driverLoop n
+EOF
+TOTALITY_PATH="$TMP/totality:$ROOT_DIR/.lake/build/lib/lean:$("$LAKE" env printenv LEAN_PATH)"
+totality_lean() {
+  "$LAKE" env env LEAN_PATH="$TOTALITY_PATH" lean "$@"
+}
+if (
+  for module in Foreign Stage ConcreteTooling DriverDependency Driver; do
+    totality_lean -R "$TMP/totality" -o "$TMP/totality/$module.olean" "$TMP/totality/$module.lean" || exit
+  done
+) > "$TMP/totality-build.log" 2>&1; then
+  PROOF_AUDIT_INIT_MARKER="$TMP/audit-executed-init" \
+    totality_lean --run "$PROOFS_DIR/totality.lean" Driver Stage > "$TMP/totality-control.log" 2>&1; RC=$?
+  [ "$RC" = 1 ] && [ ! -e "$TMP/audit-executed-init" ] \
+    && ok "control: totality rejects the planted environment without running its initializer" \
+    || no "totality control failed or ran an initializer (rc=$RC): $(cat "$TMP/totality-control.log")"
+  for reason in \
+    'plantedStage reaches (partial|opaque) declaration hiddenLoop' \
+    'PlantedData[.][^ ]+ reaches opaque declaration importedField' \
+    'reaches IO or task declaration .*dbgTrace' \
+    'reaches IO or task declaration .*Task' \
+    'ordinary has csimp replacement alternate' \
+    'reaches extern declaration alternate$' \
+    'plantedLocalRewrite reaches native extern alternateLocal' \
+    'plantedImpl reaches implemented_by declaration replaced' \
+    'replaced reaches unsafe declaration unsafeImpl' \
+    'Foreign registers init for initialValue' \
+    'Foreign registers builtin_init for builtinValue' \
+    'plantedChoice reaches noncomputable declaration plantedChoice' \
+    'plantedAxiom reaches axiom declaration plantedAxiom' \
+    'compiler imports forbidden module Lean.Meta.Basic' \
+    'compiler imports forbidden module ConcreteTooling' \
+    'plantedBehaviour reaches noncomputable declaration Concrete.BIR.behaviour' \
+    'reaches (partial|opaque) declaration driverLoop'; do
+    has_match -E "$reason" < "$TMP/totality-control.log" \
+      && ok "control: $reason" || no "totality control missed $reason: $(head -25 "$TMP/totality-control.log")"
+  done
 else
   no "totality control did not elaborate: $(cat "$TMP/totality-build.log")"
 fi
-for word in partial unsafe opaque implemented_by extern; do
+W=$(python3 "$PROOFS_DIR/lean_lex.py" scan-code "$NATIVE_ATTR_RE" "$TMP/totality/Stage.lean"); RC=$?
+[ "$RC" = 0 ] && [[ "$W" == *"attribute [local csimp] replaceLocal"* ]] \
+  && ok "control: closure source scan detects a local compiler rewrite" \
+  || no "closure source scan missed the local compiler rewrite"
+for word in partial unsafe opaque implemented_by extern csimp builtin_init '@[«implemented_by» impl]' '@[init impl]' 'set_option maxRecDepth 100000'; do
   printf 'def ready := 0\n%s\n' "$word" > "$TMP/Main.lean"
-  W=$(python3 "$PROOFS_DIR/lean_lex.py" scan-totality "$TOTALITY_RE" "$TMP/Main.lean"); RC=$?
+  W=$(python3 "$PROOFS_DIR/lean_lex.py" scan-totality "$TOTALITY_RE|$EXTENSION_RE" "$TMP/Main.lean"); RC=$?
   [ "$RC" = 0 ] && [[ "$W" == *":2: $word" ]] \
     && ok "control: driver totality scan rejects $word" || no "driver totality scan missed $word"
 done
 printf 'def targetText := "partial unsafe opaque implemented_by extern"\n' > "$TMP/Main.lean"
-W=$(python3 "$PROOFS_DIR/lean_lex.py" scan-totality "$TOTALITY_RE" "$TMP/Main.lean"); RC=$?
+W=$(python3 "$PROOFS_DIR/lean_lex.py" scan-totality "$TOTALITY_RE|$EXTENSION_RE" "$TMP/Main.lean"); RC=$?
 [ "$RC" = 0 ] && [ -z "$W" ] \
   && ok "control: totality keywords in target text are allowed" || no "totality scan rejected target text: $W"
 # A private synthetic build tests deletion and preservation for both library roots and IR.
@@ -431,6 +519,29 @@ done
 head -n 3 "$TMP/imported.txt" > "$TMP/imp-short.txt"
 [ -n "$(closure_gap "$TMP/imp-short.txt")" ] \
   && ok "control: source modules outside a (truncated) import closure are reported" || no "control: a truncated closure reported no gap"
+# Exercise Main ownership through the same enumerator and search-path binding.
+DRIVER_CONTROL="$TMP/driver-control"
+mkdir -p "$DRIVER_CONTROL/.lake/build/lib/lean"
+cat > "$DRIVER_CONTROL/Main.lean" <<'EOF'
+import Concrete.Stages
+axiom auditDriverAxiom : Nat
+def auditDriverSorry : Nat := sorry
+example : False := by stop skip
+EOF
+N=$(python3 "$PROOFS_DIR/lean_lex.py" examples "$DRIVER_CONTROL" "$DRIVER_CONTROL/rewritten" Main.lean)
+if DRIVER_ARTIFACTS="$DRIVER_CONTROL/.lake/build/lib/lean" driver_lean -R "$DRIVER_CONTROL/rewritten" -o "$DRIVER_CONTROL/.lake/build/lib/lean/Main.olean" \
+    "$DRIVER_CONTROL/rewritten/Main.lean" > "$TMP/driver-control-build.log" 2>&1 &&
+    DRIVER_ARTIFACTS="$DRIVER_CONTROL/.lake/build/lib/lean" PROOF_PKG=Main PROOF_MODE=constants driver_lean "$TMP/driver-enumerator.lean" > "$TMP/driver-control.tsv" &&
+    DRIVER_ARTIFACTS="$DRIVER_CONTROL/.lake/build/lib/lean" PROOF_MODE=examples driver_lean "$TMP/examples-enumerator.lean" > "$TMP/driver-example-control.tsv"; then
+  [ "$N" = 1 ] && has_match -Fx 'auditDriverAxiom' <<<"$(declared "$TMP/driver-control.tsv")" &&
+    has_match -Fx 'auditDriverSorry (sorryAx)' <<<"$(banned "$TMP/driver-control.tsv")" &&
+    has_match -F 'Main.lean:4» (sorryAx)' <<<"$(nonstandard "$TMP/driver-example-control.tsv")" \
+    && ok "control: the driver environment exposes a declared axiom, a sorry and a rewritten example" \
+    || no "driver ownership or rewritten-example control failed"
+else
+  no "driver ownership control did not elaborate: $(tail -5 "$TMP/driver-control-build.log")"
+fi
+
 # The example leg's own controls: examples rewritten as that leg rewrites them, then enumerated.
 mkdir -p "$TMP/exc-src" "$TMP/exc"
 printf 'example : 2 + 2 = 4 := by decide +native\nexample : 1 = 2 := by stop skip\nexample : 1 = 1 := rfl\ndef w : String := "example"\n' > "$TMP/exc-src/C.lean"

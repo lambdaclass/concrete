@@ -1,3 +1,4 @@
+import Concrete.Core
 import Concrete.Admission
 import Concrete.BIR
 import Concrete.Elab
@@ -35,6 +36,12 @@ private def lex (input : Input) := Lex.lex input.source
 
 private def memory (p : MIR.Program) : Except Refusal Memory.Program := .ok (Memory.lower p)
 
+private def admissionRefusal : Admission.Failure → Refusal
+  | .rejected => .checker "Core check rejected the program"
+
+private def loweringRefusal : MIR.LoweringFailure → Refusal
+  | .missingAdditionSite => .internal "missing source site for addition"
+
 /-- Prepare the requested LCB branch of the slice-0 pipeline. Both backends are part of slice 0
 (decided-2026-11-23-slice0-and-roadmap-answers, answer 6). -/
 def prepareLCB (p : BIR.Program) :
@@ -63,8 +70,8 @@ private def stages (path : String) :=
   Pipeline.next lex <|
   .next (fun v => Parse.parse v.2) <|
   .next (fun v => Elab.elaborate v.2) <|
-  .next (fun v => Admission.check v.2) <|
-  .next (fun v => MIR.lower v.2) <|
+  .next (fun v => (Admission.check v.2).mapError admissionRefusal) <|
+  .next (fun v => (MIR.lower v.2).mapError loweringRefusal) <|
   .next (fun v => memory v.2) <|
   .next (fun v => SSA.lower path v.2) .done
 
@@ -82,7 +89,7 @@ theorem compile_lexes {input : Input} {out : Output} (h : compile input = .ok ou
   rename_i ast
   cases he : Elab.elaborate ast <;> simp only [he, reduceCtorEq] at h
   rename_i core
-  cases ha : Admission.check core <;> simp only [ha, reduceCtorEq] at h
+  cases ha : Admission.check core <;> simp only [ha, Except.mapError, reduceCtorEq] at h
   rename_i admitted
   cases hm : MIR.lower admitted <;> simp only [hm, reduceCtorEq] at h
   rename_i mir
@@ -103,7 +110,7 @@ theorem compile_of_edges (input : Input) (tokens : List ConcreteSpec.Surface0.To
     (hSSA : SSA.lower input.path mem = .ok bir) :
     compile input = .ok ⟨tokens, ast, core, admitted.tokens, mir, mem, bir⟩ := by
   simp [compile, stages, Pipeline.run, lex, memory, bind, Except.bind,
-    hLex, hParse, hElab, hAdmit, hLower, hMem, hSSA] <;> rfl
+    Except.mapError, hLex, hParse, hElab, hAdmit, hLower, hMem, hSSA] <;> rfl
 
 /-- Successful production compilation preserves the Core outcome through Memory. -/
 theorem compile_core_correct {input : Input} {out : Output}
@@ -121,15 +128,15 @@ theorem compile_core_correct {input : Input} {out : Output}
       | error => simp [hLex, hParse, hElab] at h
       | ok core =>
         cases hAdmit : Admission.check core with
-        | error => simp [hLex, hParse, hElab, hAdmit] at h
+        | error => simp [Except.mapError, hLex, hParse, hElab, hAdmit] at h
         | ok admitted =>
           cases hLower : MIR.lower admitted with
-          | error => simp [hLex, hParse, hElab, hAdmit, hLower] at h
+          | error => simp [Except.mapError, hLex, hParse, hElab, hAdmit, hLower] at h
           | ok mir =>
             cases hSSA : SSA.lower input.path (Memory.lower mir) with
-            | error => simp [hLex, hParse, hElab, hAdmit, hLower, hSSA] at h
+            | error => simp [Except.mapError, hLex, hParse, hElab, hAdmit, hLower, hSSA] at h
             | ok bir =>
-              simp [hLex, hParse, hElab, hAdmit, hLower, hSSA, pure, Except.pure] at h
+              simp [Except.mapError, hLex, hParse, hElab, hAdmit, hLower, hSSA, pure, Except.pure] at h
               subst out
               exact Memory.lower_admitted_correct hAdmit hLower
 
@@ -148,17 +155,17 @@ theorem compile_ssa_correct {input : Input} {out : Output}
       | ok core =>
         cases hAdmit : Admission.check core with
         | error e =>
-          simp [compile, stages, Pipeline.run, bind, Except.bind, hLex, hParse, hElab, hAdmit] at h
+          simp [compile, stages, Pipeline.run, bind, Except.bind, Except.mapError, hLex, hParse, hElab, hAdmit] at h
         | ok admitted =>
           cases hLower : MIR.lower admitted with
           | error e =>
             simp [compile, stages, Pipeline.run, bind, Except.bind,
-              hLex, hParse, hElab, hAdmit, hLower] at h
+              Except.mapError, hLex, hParse, hElab, hAdmit, hLower] at h
           | ok mir =>
             cases hSSA : SSA.lower input.path (Memory.lower mir) with
             | error e =>
               simp [compile, stages, Pipeline.run, memory, bind, Except.bind,
-                hLex, hParse, hElab, hAdmit, hLower, hSSA] at h
+                Except.mapError, hLex, hParse, hElab, hAdmit, hLower, hSSA] at h
             | ok bir =>
               have he := compile_of_edges input tokens ast core admitted mir (Memory.lower mir) bir
                 hLex hParse hElab hAdmit hLower rfl hSSA
@@ -180,7 +187,7 @@ def unchecked (input : Input) : Except Refusal BIR.Program := do
   let tokens ← lex input
   let ast ← Parse.parse tokens
   let core ← Elab.elaborate ast
-  let mir ← MIR.lowerUnchecked core
+  let mir ← (MIR.lowerUnchecked core).mapError loweringRefusal
   let mem ← memory mir
   SSA.lower input.path mem
 

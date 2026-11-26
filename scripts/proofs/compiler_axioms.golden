@@ -1,6 +1,7 @@
 # Per-theorem transitive axioms of Concrete (scripts/proofs/axioms.sh). Regenerate with
 # bash scripts/proofs/axioms.sh --update; review every changed line.
 Char.isAlphanum.eq_1	
+Concrete.Admission.Failure.rejected.sizeOf_spec	
 Concrete.Admission.Token.mk.inj	
 Concrete.Admission.Token.mk.injEq	propext
 Concrete.Admission.Token.mk.sizeOf_spec	
@@ -1301,6 +1302,7 @@ Concrete.Lex.whitespace?_iff	propext
 Concrete.MIR.Assignment.mk.inj	
 Concrete.MIR.Assignment.mk.injEq	propext
 Concrete.MIR.Assignment.mk.sizeOf_spec	
+Concrete.MIR.LoweringFailure.missingAdditionSite.sizeOf_spec	
 Concrete.MIR.Op.add.inj	
 Concrete.MIR.Op.add.injEq	propext
 Concrete.MIR.Op.add.sizeOf_spec	

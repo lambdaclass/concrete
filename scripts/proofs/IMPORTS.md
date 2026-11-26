@@ -11,9 +11,10 @@ build and elaboration uses the bounded runner and forwards failure diagnostics.
 The gate recursively enumerates `ConcreteSpec/Proofs/` and the proof-bearing
 modules in `Concrete/`, including mixed definition and proof files. Both
 populations must be present. Header-only compatibility modules retain their
-re-exports. For compiler proofs, the gate also re-elaborates candidate headers
-to identify imports needed for aliases and quoted declaration names, which can
-disappear from the elaborated term.
+re-exports. For compiler proofs, the gate uses Lean's elaboration info to identify alias
+references and the modules that registered the aliases. It reads Lean's recorded
+extra module uses for resolved declaration quotations. Both dependencies can
+disappear from the kernel term.
 The inspector runs separately from source namespaces. Write mode keeps
 surviving import commands and their comments in place, preserves line endings,
 and is idempotent. The controls exercise these properties.

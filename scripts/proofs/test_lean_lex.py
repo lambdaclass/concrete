@@ -124,7 +124,7 @@ end Witness{index}
                         'import imports; '
                         f'imports.ROOT = Path({tmp!r}); '
                         'imports.run = lambda command, **kwargs: ""; '
-                        'imports.controls = lambda temp: None; '
+                        'imports.controls = lambda temp, compiler_modules: None; '
                         'sys.exit(imports.main())')
                     result = subprocess.run(['python3', '-c', code], text=True, capture_output=True)
                     self.assertNotEqual(result.returncode, 0)

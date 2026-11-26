@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.Ident
 import ConcreteSpec.Proofs.Basics
 import ConcreteSpec.Spec.Basics
 import ConcreteSpec.Spec.Slice1Ownership
@@ -6,7 +7,7 @@ import ConcreteSpec.Spec.Slice1Syntax
 import ConcreteSpec.Spec.Statics
 
 /-!
-# Slice-1 proofs: fuel properties of the evaluator, and safety (`checked_never_stuck`, `checked_no_implicit_traps`, `checked_exits`).
+# Slice-1 proofs: fuel properties of the evaluator, and safety (`checked_never_stuck`, `checked_no_implicit_traps`, `checked_finishes`).
 
 PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `ConcreteSpec/README.md`.
 -/
@@ -17,7 +18,7 @@ open Core (AList)
 /-! ### Properties of the semantics -/
 
 /-- Fuel monotonicity: a run that finishes with some fuel finishes the same way with more. -/
-theorem runBody_mono {Δ : Decls} {r : Atom} :
+theorem runBody_mono {Δ : Decls} {r : Terminator} :
     ∀ {n : Nat} {env : Env} {ss : List Stmt} {o : Outcome}, runBody Δ n env ss r = o →
       o ≠ .outOfFuel → ∀ m, n ≤ m → runBody Δ m env ss r = o := by
   intro n
@@ -35,15 +36,17 @@ theorem runBody_mono {Δ : Decls} {r : Atom} :
       · exact h
       · exact h
 
-/-- The `return` step never runs out of fuel. -/
-theorem retOutcome_ne_outOfFuel (Δ : Decls) (env : Env) (r : Atom) :
-    retOutcome Δ env r ≠ .outOfFuel := by
-  unfold retOutcome; split <;> simp
+/-- The final action completes in one step. -/
+theorem finish_ne_outOfFuel (Δ : Decls) (env : Env) (r : Terminator) :
+    finish Δ env r ≠ .outOfFuel := by
+  cases r with
+  | abort => simp [finish]
+  | ret => simp only [finish, retOutcome]; split <;> simp
 
 /-- A body of `k` statements finishes with `k + 1` units of fuel. -/
-theorem runBody_enough {Δ : Decls} {r : Atom} :
+theorem runBody_enough {Δ : Decls} {r : Terminator} :
     ∀ (ss : List Stmt) (env : Env), runBody Δ (ss.length + 1) env ss r ≠ .outOfFuel
-  | [], env => by simpa [runBody] using retOutcome_ne_outOfFuel Δ env r
+  | [], env => by simpa [runBody] using finish_ne_outOfFuel Δ env r
   | s :: ss, env => by
     simp only [List.length_cons, runBody]
     split
@@ -52,7 +55,7 @@ theorem runBody_enough {Δ : Decls} {r : Atom} :
     · simp
 
 /-- The evaluator is sound for `Exec`: an outcome reached with some fuel is an `Exec` outcome. -/
-theorem runBody_sound {Δ : Decls} {r : Atom} :
+theorem runBody_sound {Δ : Decls} {r : Terminator} :
     ∀ {n : Nat} {env : Env} {ss : List Stmt} {o : Outcome}, runBody Δ n env ss r = o →
       o ≠ .outOfFuel → Exec Δ env ss r o := by
   intro n
@@ -61,7 +64,7 @@ theorem runBody_sound {Δ : Decls} {r : Atom} :
   | succ n ih =>
     intro env ss o h hne
     cases ss with
-    | nil => simp only [runBody] at h; subst h; exact .ret
+    | nil => simp only [runBody] at h; subst h; exact .finish
     | cons s ss =>
       simp only [runBody] at h
       split at h
@@ -70,30 +73,30 @@ theorem runBody_sound {Δ : Decls} {r : Atom} :
       · rename_i w he; subst h; exact .stuck he
 
 /-- The evaluator is complete for `Exec`: every `Exec` outcome is reached with enough fuel. -/
-theorem exec_complete {Δ : Decls} {r : Atom} {env : Env} {ss : List Stmt} {o : Outcome}
+theorem exec_complete {Δ : Decls} {r : Terminator} {env : Env} {ss : List Stmt} {o : Outcome}
     (h : Exec Δ env ss r o) : runBody Δ (ss.length + 1) env ss r = o := by
   induction h with
-  | ret => simp [runBody]
+  | finish => simp [runBody]
   | step he _ ih => simp only [List.length_cons, runBody, he]; exact ih
   | trap he => simp [runBody, he]
   | stuck he => simp [runBody, he]
 
 /-- `Exec` never ends in `outOfFuel`. -/
-theorem exec_ne_outOfFuel {Δ : Decls} {r : Atom} {env : Env} {ss : List Stmt} {o : Outcome}
+theorem exec_ne_outOfFuel {Δ : Decls} {r : Terminator} {env : Env} {ss : List Stmt} {o : Outcome}
     (h : Exec Δ env ss r o) : o ≠ .outOfFuel := by
   induction h with
-  | ret => exact retOutcome_ne_outOfFuel _ _ _
+  | finish => exact finish_ne_outOfFuel _ _ _
   | step _ _ ih => exact ih
   | trap => simp
   | stuck => simp
 
 /-- Determinism: a body has at most one outcome. -/
-theorem exec_deterministic {Δ : Decls} {r : Atom} {env : Env} {ss : List Stmt} {o₁ o₂ : Outcome}
+theorem exec_deterministic {Δ : Decls} {r : Terminator} {env : Env} {ss : List Stmt} {o₁ o₂ : Outcome}
     (h₁ : Exec Δ env ss r o₁) (h₂ : Exec Δ env ss r o₂) : o₁ = o₂ := by
   rw [← exec_complete h₁, ← exec_complete h₂]
 
 /-- Totality: every body has exactly one outcome (slice 1 has no loops or calls). -/
-theorem exec_total (Δ : Decls) (env : Env) (ss : List Stmt) (r : Atom) :
+theorem exec_total (Δ : Decls) (env : Env) (ss : List Stmt) (r : Terminator) :
     ∃ o, Exec Δ env ss r o :=
   ⟨_, runBody_sound rfl (runBody_enough ss env)⟩
 
@@ -655,7 +658,7 @@ theorem hasType_atom_scalar {Δ : Decls} {Γ : TyCtx} {a : Atom} {st : STy}
   | move h => exact .move h
 
 /-- Body safety: from a described environment, a checked body never gets stuck, for any fuel. -/
-theorem runBody_safe {Δ : Decls} {Γ : Ctx} {ss : List Stmt} {r : Atom} (hb : BodyOk Δ Γ ss r) :
+theorem runBody_safe {Δ : Decls} {Γ : Ctx} {ss : List Stmt} {r : Terminator} (hb : BodyOk Δ Γ ss r) :
     ∀ {env : Env}, Corr Δ Γ env → ∀ n w, runBody Δ n env ss r ≠ .stuck w := by
   induction hb with
   | ret ht hu _ =>
@@ -663,11 +666,12 @@ theorem runBody_safe {Δ : Decls} {Γ : Ctx} {ss : List Stmt} {r : Atom} (hb : B
     cases n with
     | zero => simp [runBody]
     | succ n =>
-      simp only [runBody, retOutcome]
+      simp only [runBody, finish, retOutcome]
       cases hu with
       | atom hu =>
         obtain ⟨v, env', he, hv, _⟩ := evalAtom_safe hc (hasType_atom_scalar ht) hu
         cases hv with | int _ => simp [he]
+  | abort => intro env _ n _; cases n <;> simp [runBody, finish]
   | cons hs _ ih =>
     intro env hc n w
     cases n with
@@ -689,9 +693,8 @@ theorem checked_no_use_after_move {p : Program} (h : Checked p) (n : Nat) :
     run p n ≠ .stuck .movedRead :=
   checked_never_stuck h n _
 
-/-- Body trap-freedom: from a described environment, a checked body never ends in a trap, for any
-fuel. -/
-theorem runBody_ne_trap {Δ : Decls} {Γ : Ctx} {ss : List Stmt} {r : Atom} (hb : BodyOk Δ Γ ss r) :
+/-- A checked body cannot hit an implicit trap from a described environment, for any fuel. -/
+theorem runBody_ne_trap {Δ : Decls} {Γ : Ctx} {ss : List Stmt} {r : Terminator} (hb : BodyOk Δ Γ ss r) :
     ∀ {env : Env}, Corr Δ Γ env → ∀ n k, runBody Δ n env ss r ≠ .trap k := by
   induction hb with
   | ret =>
@@ -701,8 +704,9 @@ theorem runBody_ne_trap {Δ : Decls} {Γ : Ctx} {ss : List Stmt} {r : Atom} (hb 
     | zero => simp [runBody]
     | succ n =>
       have := evalAtom_ne_trap Δ env r k
-      simp only [runBody, retOutcome]
+      simp only [runBody, finish, retOutcome]
       split <;> simp_all
+  | abort => intro env _ n _; cases n <;> simp [runBody, finish]
   | cons hs _ ih =>
     intro env hc n k
     cases n with
@@ -715,19 +719,57 @@ theorem runBody_ne_trap {Δ : Decls} {Γ : Ctx} {ss : List Stmt} {r : Atom} (hb 
       · simp only [he]; exact ih hc' n k
 
 /-- **No hidden traps** (decision of 2026-11-06, Q1). An accepted program's run never ends in an
-implicit trap, with any amount of fuel. Every trap of slice 1 is implicit: the only one is the
-overflow of checked `+` (ARITH-3), and slice 1 has no explicit `abort()`. The Core semantics keeps
-the trap outcome (`runBody` of an unchecked body can trap, `Examples.add100`); admission rules it
-out. -/
+implicit trap, with any amount of fuel. The `aborted` outcome records explicit abort separately. -/
 theorem checked_no_implicit_traps {p : Program} (h : Checked p) : ∀ n k, run p n ≠ .trap k :=
   runBody_ne_trap h.2 .nil
 
-/-- **Slice-1 behaviour.** An accepted program has exactly one outcome, and it is an exit
-(STMT-1): it never gets stuck (`checked_never_stuck`) and never traps
-(`checked_no_implicit_traps`). -/
-theorem checked_exits {p : Program} (h : Checked p) :
-    ∃ o, Exec p.decls [] p.body p.ret o ∧ ∃ c, o = .exit c := by
-  obtain ⟨o, ho⟩ := exec_total p.decls [] p.body p.ret
+/-- With sufficient fuel, a checked prefix reaches its terminal action in a corresponding
+environment. Each statement succeeds and preserves the checked ownership context. -/
+theorem runBody_reaches_finish {Δ : Decls} {Γ : Ctx} {ss : List Stmt} {ending : Terminator}
+    (hb : BodyOk Δ Γ ss ending) {env : Env} (hc : Corr Δ Γ env)
+    (fuel : Nat) (enough : ss.length + 1 ≤ fuel) :
+    ∃ finalCtx finalEnv, BodyOk Δ finalCtx [] ending ∧ Corr Δ finalCtx finalEnv ∧
+      runBody Δ fuel env ss ending = finish Δ finalEnv ending := by
+  induction hb generalizing env fuel with
+  | ret ht hu hd =>
+    cases fuel with
+    | zero => simp at enough
+    | succ => exact ⟨_, env, .ret ht hu hd, hc, rfl⟩
+  | abort hu =>
+    cases fuel with
+    | zero => simp at enough
+    | succ => exact ⟨_, env, .abort hu, hc, rfl⟩
+  | cons hs _ ih =>
+    cases fuel with
+    | zero => simp at enough
+    | succ fuel =>
+      rcases execStmt_safe hc hs with ⟨k, hk⟩ | ⟨next, hnext, hcorr⟩
+      · exact absurd hk (execStmt_ne_trap hc hs k)
+      · obtain ⟨finalCtx, finalEnv, hfinish, hcorr', hfinal⟩ := ih hcorr fuel (by simpa using enough)
+        exact ⟨finalCtx, finalEnv, hfinish, hcorr', by simpa only [runBody, hnext] using hfinal⟩
+
+theorem runBody_abort_site {Δ : Decls} {fuel : Nat} {env : Env} {ss : List Stmt}
+    {ending : Terminator} {site : Core.SiteId}
+    (h : runBody Δ fuel env ss ending = .aborted site) : ending = .abort site := by
+  induction fuel generalizing env ss with
+  | zero => simp [runBody] at h
+  | succ fuel ih =>
+    cases ss with
+    | nil =>
+      cases ending with
+      | abort => simpa [runBody, finish] using h
+      | ret => simp only [runBody, finish, retOutcome] at h; split at h <;> contradiction
+    | cons s ss =>
+      simp only [runBody] at h
+      split at h
+      · exact ih h
+      · contradiction
+      · contradiction
+
+/-- **Slice-1 behaviour.** An accepted program returns or reaches its written abort. -/
+theorem checked_finishes {p : Program} (h : Checked p) :
+    ∃ o, Exec p.decls [] p.body p.ending o ∧ ((∃ c, o = .exit c) ∨ ∃ site, p.ending = .abort site ∧ o = .aborted site) := by
+  obtain ⟨o, ho⟩ := exec_total p.decls [] p.body p.ending
   refine ⟨o, ho, ?_⟩
   have hfuel := exec_complete ho
   have hns := checked_never_stuck h (p.body.length + 1)
@@ -736,7 +778,8 @@ theorem checked_exits {p : Program} (h : Checked p) :
   unfold run at hns hnt
   rw [hfuel] at hns hnt
   cases o with
-  | exit c => exact ⟨c, rfl⟩
+  | exit c => exact .inl ⟨c, rfl⟩
+  | aborted site => exact .inr ⟨site, runBody_abort_site hfuel, rfl⟩
   | trap k => exact absurd rfl (hnt k)
   | stuck w => exact absurd rfl (hns w)
   | outOfFuel => exact absurd rfl hnf

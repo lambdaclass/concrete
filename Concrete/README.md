@@ -595,11 +595,12 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
 
    The trust ban (`scripts/proofs/trust_ban.sh`) checks both `ConcreteSpec` and `Concrete`:
    sources, every constant, import-closure coverage and examples retained as named declarations.
-   Compiler imports must name an existing module under `ConcreteSpec`, `Concrete`, `Lean` or the
-   pinned `LeanCompilerBackend`; the allow-list comes from those roots' source-module inventories.
+   Compiler imports are restricted to existing specification and compiler modules and an explicit
+   surface of the pinned backend and standard library. The audit checks the compiler and driver
+   import closures for Lean metaprogramming and compiler tooling modules.
    The trusted-base golden (gate 9) also fixes each headline theorem's axioms (a `sorryAx` fails it).
-   The compiler totality audit and compiler external-checker replay remain with R-0553;
-   `scripts/proofs/external.sh` currently replays the specification.
+   `scripts/proofs/external.sh` also replays a representative compiler theorem and checks
+   the exact declaration closure, including its imported correspondence theorem.
 3. **Premise registry and stage coverage:** the checks described in the stage registry section above.
 4. **Conformance, both backends:** each `bir:` row in `tests/manifest.tsv` runs through:
    - the Lean `run`;

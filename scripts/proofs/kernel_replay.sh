@@ -115,7 +115,7 @@ source_modules Concrete > "$TMP/compiler-modules.txt"
 PROOF_PKG=Concrete population imported > "$TMP/compiler-imported.txt" \
   || { no "compiler module enumeration failed"; finish; }
 GAP=$(comm -23 "$TMP/compiler-modules.txt" "$TMP/compiler-imported.txt")
-[ -z "$GAP" ] || no "compiler modules outside the replay closure: $GAP"
+[ -z "$GAP" ] && ok "all compiler source modules are in the replay closure" || no "compiler modules outside the replay closure: $GAP"
 out="$(stage_lib "$PKG_LIB" "$STAGE" < "$TMP/compiler-modules.txt")"
 [ -z "$out" ] || { no "staging compiler modules: $out"; finish; }
 t0=$SECONDS

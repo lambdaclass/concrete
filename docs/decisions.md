@@ -14,6 +14,116 @@ the earlier behaviour, the answer below governs, and the code follows as its new
 
 The shape of Core was approved provisionally on 2026-11-05 ([stage A2a](#decided-2026-11-05)): it binds the design, and the owner freezes Core at stage A2c, after the four design theorems are proved against the proposed `Spec.lean` and the integration stage A2i (2026-11-06) is accepted (freeze timing revised to 0.1 on [2026-11-22](#decided-2026-11-22-roadmap-reordering)). The project and architecture decisions are recorded here too, [below](#decided-project).
 
+<a id="decided-2026-11-25-freeze-and-grammar"></a>
+## Decided 2026-11-25: Phase T freeze, grammar approval, slice scheduling and executable evidence
+
+Status: decided
+Source: owner
+
+~~~text
+Questions asked by the coordinator on 2026-11-25 (after Codex and agy/Gemini-4-Neon reviewed the first draft; the third question, on backend size-limit diagnostics, was withdrawn because recovered-29-13 and decided-project-diagnostics-2026-11-06 already answer it and diagnostic formatting is delegated under decided-2026-11-22-direction):
+
+1. Meta-tooling freeze. Some meta-tooling is paused "unless a real bug hits main": the review-tool launcher (R-0692), its command permissions (R-0693) and the remaining automated workflow checks (R-0710). Who restarts one? In every option, fixing a bug with its regression test inside existing checks stays allowed, and the approved proof/CI drag cleanup (R-0724) continues.
+   a. (Recommended) It stays paused until the owner approves restarting that specific item.
+   b. Agents may restart one when a bug on main shows it is needed, scoped to that bug.
+   c. Strict freeze until a later decision.
+
+2. Grammar approval. R-0622 says the full written grammar must be approved before any parser; slice 0 went ahead with its own small grammar under the 2026-11-22 direction, and that conflict was never resolved.
+   a. (Recommended) Approve slice 0's grammar now (closes the gap); for each later slice, approve its new grammar and spellings before its parser is written, all in one shared grammar; and, without blocking slice 1, the coordinator prepares the combined slices 0–11 grammar so cross-feature LL(1) clashes (generics <T> vs <, struct literals in if heads) show up early, before slice 3, frozen at 0.1; later slices extend it.
+   b. Approve the full 0.1 grammar now; slice 1 waits for it.
+
+Owner's answer, verbatim:
+1. b 2. a
+
+--- Later on 2026-11-25. Coordinator's message (excerpt, verbatim):
+Your approval of slice 0's grammar. Under your answer 2a, this is the only step that needs you. Here is the whole grammar:
+
+program := fn NAME ( ) -> u8 { body }
+body    := let NAME : u8 = expr ; body
+         | return expr ; body
+         | (nothing)
+expr    := atom more
+more    := + atom more | (nothing)
+atom    := INTEGER | NAME | ( expr )
+
+Rules the checker enforces on top of the grammar:
+- the function must be `main`;
+- a statement after `return` is refused;
+- overflow that is known before the program runs is refused.
+
+Forms decided for later slices, like `0x2A`, `let mut` and `if`, get "not supported in slice 0" instead of a syntax error.
+
+If you approve the slice 0 grammar above, say "grammar ok", and I'll record it and start on slice 1.
+
+Owner: "ok go ahead"
+Coordinator: did "ok go ahead" also approve the slice 0 grammar I showed? ... Reply "grammar ok" if yes.
+Owner, verbatim:
+grammar okay yes but review it too always with agy and codex using agy neon if you can
+
+--- Later on 2026-11-25. Coordinator (excerpt): the B0a audit found about three large, six medium and five small pieces left; "Your roadmap starts slice 1 only after all of slice 0 is finished ... My leaning: finish the pieces later slices build on first (the end-to-end theorem shape, certificates, the memory model). Start slice 1's spec and grammar in parallel. Leave `facts`, diagnostics and the like to fill in alongside."
+Owner, verbatim:
+start slice 1 in parallel
+Owner, verbatim (immediately after):
+but never do more than two stages in parallel
+remember this
+
+--- Later on 2026-11-25. Owner, verbatim: "can we also make sure the binary produces has the proofs so that anybody can check it and see the facts? do you think this makes sense?"
+Coordinator: yes in principle; options: embed the full proof (self-contained) vs embed facts + a hash with the full proof shipped alongside; leaned self-contained pending measurement; Codex+agy review to follow.
+Owner, verbatim: "i think the hash is better? what do yhou think"
+Coordinator: agrees (size; the facts stay embedded; the proof file is bound by hash; reproducible builds regenerate it; one evidence format shared with R-0353); pending the Codex+agy design review.
+--- Later on 2026-11-25, after the coordinator presented the slice-1 grammar, three slice-1 questions and the early-print options. Owner, verbatim: "yeah move ahead if the other LLMS tell you yes to everything"
+Owner, verbatim (next message): "you odn't need me, jsut speak with them"
+Owner 2026-11-25, answering whether "you odn't need me, jsut speak with them" covered all future decisions or only the slice 1 questions: "for anything in slice 0 and 1"
+~~~
+
+1. The Phase T freeze remains in effect for R-0692, R-0693 and the remaining R-0710 items.
+   A recorded bug that reached `main` may justify restarting a paused item when the bug
+   shows the item is needed. Agents may restart the item within the scope of that bug and
+   cite its issue record in the restarting branch. Bug fixes with regression tests inside existing checks and the approved R-0724
+   proof and CI drag cleanup remain allowed regardless. This supersedes the blanket freeze
+   in item 2 of the [November 22 direction](#decided-2026-11-22-direction) and specifies the
+   exception in item 5 of the [November 22 roadmap reordering](#decided-2026-11-22-roadmap-reordering).
+2. The owner approved the Slice 0 productions shown above, which match `grammar0` in
+   [`ConcreteSpec/Spec/Surface0.lean`](../ConcreteSpec/Spec/Surface0.lean), subject to review
+   by Codex and agy (Gemini Neon when available). The grammar review is in progress.
+   The coordinator gave one incorrect example. Under the [literal decision](#decided-2026-11-08-language-literals),
+   hexadecimal digits are lowercase only. `0x2A` is a lexical error and `0x2a` receives the
+   `SLICE-0` refusal. The approval covers the productions shown. Each slice’s new productions and spellings
+   require approval before its parser is written. For Slices 0 and 1, approval may be given
+   under the delegation in item 7. From Slice 2 onward, the owner approves. Each slice extends one
+   shared Lean grammar. This supersedes the whole-grammar-before-any-parser requirement in
+   the [November 8 written grammar decision](#decided-2026-11-08-written-grammar) and the
+   corresponding front-end prerequisite in the [November 8 front-end decision](#decided-2026-11-08-front-end).
+   Under [R-0728](../ROADMAP.md#r-0728), the coordinator drafts the combined Slices 0–11
+   grammar, flags open spellings and checks it with `ll1` so cross-feature clashes surface
+   “before slice 3,” as specified in answer 2a. Slice 1 proceeds on its own
+   per-slice approval. The combined surface
+   freezes at 0.1 alongside the Core freeze in Slice 11. Later slices extend it.
+3. The owner's “start slice 1 in parallel” authorizes Slice 1 (`B1`) to start while Slice 0's
+   remaining `B0a` work continues. The [November 6 sequential start requirement](#decided-project-vertical-slices-2026-11-06)
+   continues to govern later starts. Each slice must still be fully proven end to end before
+   it closes. The [November 22 roadmap reordering](#decided-2026-11-22-roadmap-reordering)
+   describes the `B0a`/`B0b` staging.
+4. The owner's standing cap is “but never do more than two stages in parallel,” followed by
+   “remember this.” How the cap applies to later slices is not decided by this entry.
+5. The owner required Codex and agy review of the grammar, with Gemini Neon for agy
+   when available. The [standing project review rule](#decided-project-review) also applies.
+   [AGENTS.md](../AGENTS.md#review) records the workflow.
+6. The owner stated a preference for hash binding after the coordinator offered embedding
+   the full proof or embedding facts and a hash with the full proof shipped alongside.
+   The coordinator agreed, pending Codex and agy design review. The implementation design
+   remains open. [R-0729](../ROADMAP.md#r-0729) tracks this Slice 0 matter, which will be
+   settled under item 7 and recorded in a later decision entry before implementation.
+7. For Slices 0 and 1, a matter that would otherwise require the owner's approval is decided
+   when Claude, Codex and agy all agree. Record the decision with all three verdicts and
+   report it to the owner. This delegation applies only to Slices 0 and 1.
+
+The coordinator withdrew the backend size-limit diagnostics question. The
+[recovered item 13](#recovered-29-13) and the
+[November 6 diagnostics decision](#decided-project-diagnostics-2026-11-06) already answer it.
+The [November 22 direction](#decided-2026-11-22-direction) delegates diagnostic formatting.
+Implementation is tracked separately on `wip/slice0-exit-codes`.
+
 <a id="decided-2026-11-23-slice0-and-roadmap-answers"></a>
 ## Decided 2026-11-23: Slice 0 and roadmap answers
 
@@ -70,20 +180,12 @@ i mean reserved words should be what we already have
 ~~~
 
 <a id="pending-phase-t-real-bug-exception"></a>
-**Phase T tooling, awaiting owner clarification.** Item 2 of the
-[November 22 direction](#decided-2026-11-22-direction) freezes new meta-tooling and permits
-only the three named simplifications to existing proof tooling. Item 5 of the
-[November 22 roadmap reordering](#decided-2026-11-22-roadmap-reordering) pauses new Phase T
-meta-tooling “unless a real bug hits `main`”. The owner still needs to confirm whether that
-exception applies.
+**Phase T tooling and the real-bug exception.** Resolved by the
+[November 25 decision](#decided-2026-11-25-freeze-and-grammar), answer 1b.
 
 <a id="pending-slice-0-parser-prerequisite"></a>
-**Slice 0 parser prerequisite, awaiting owner clarification.** Item 1 of the
-[November 22 direction](#decided-2026-11-22-direction) calls for spec work just in time per
-slice. The [written grammar decision](#decided-2026-11-08-written-grammar) and
-[R-0622](../ROADMAP.md#r-0622) require owner approval and Lean encoding of the full surface
-grammar before building the Slice 0 parser. The owner still needs to decide whether the
-full grammar remains a prerequisite or grammar approval and encoding can proceed per slice.
+**Slice 0 parser prerequisite.** Resolved by the
+[November 25 decision](#decided-2026-11-25-freeze-and-grammar), answer 2a.
 
 <a id="decided-2026-11-22-direction"></a>
 ## Decided 2026-11-22: compile slice 0 first
@@ -495,8 +597,11 @@ Links only; each item's text lives where it is linked.
 5. [Literal rule options before Slice 2 and language ideas after Slice 0](../ROADMAP.md#vertical-slices).
 6. [Boolean-to-integer conversion](../ISSUES.tsv) (ISS-0069).
 7. [Lean extraction subset, representation and assumptions](../ROADMAP.md#the-queue) (R-0495 / R-0574).
-8. [Phase T tooling freeze and the real-bug exception](#pending-phase-t-real-bug-exception).
-9. [Full surface grammar or per-slice grammar for the Slice 0 parser](#pending-slice-0-parser-prerequisite).
+
+Resolved by the [November 25 decision](#decided-2026-11-25-freeze-and-grammar)
+
+- [Phase T tooling freeze and the real-bug exception](#pending-phase-t-real-bug-exception).
+- [Full surface grammar or per-slice grammar for the Slice 0 parser](#pending-slice-0-parser-prerequisite).
 
 A decided proposal moves to `docs/archive/<topic>-<date>/`.
 
@@ -1408,7 +1513,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   the full slices thought and ranked in order by you, codex, kimi and agy, they should decide it
   together"; the agreed order was approved with "ok do everything"). The language grows in thin vertical slices, each fully proven end to end
   (source, every stage, BIR, both backends, facts and diagnostics, conformance examples) before
-  the next starts, so every construct is proven on the whole path as soon as it lands and no stage
+  the next starts under the original schedule, so every construct is proven on the whole path as soon as it lands and no stage
   runs ahead of its proofs. "Fully proven" means proven under the named premises the
   [backend order](#decided-project-proof-infrastructure) permits: the source-to-BIR stages are
   proved; the LLVM build stays unverified and qualified by tests; the LCB path carries named premises
@@ -1424,7 +1529,9 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   audited, and a real need for concurrency or foreign function values goes to the owner (R-0604).
   Revised 2026-11-07 by the [final-slice decision](#decided-2026-11-07-final-slices): the approved
   order gains slice 28 for concurrency, with ethlambda and the encrypted tunnel after it. Slice 27
-  keeps httpget, tcpserve and the sequential web server.
+  keeps httpget, tcpserve and the sequential web server. The [November 25 decision](#decided-2026-11-25-freeze-and-grammar)
+  authorizes Slice 1 to start alongside Slice 0. The sequential start requirement continues
+  to govern later starts, and the end-to-end proof requirement applies at closure.
 - <a id="decided-2026-11-07-step-bounds"></a>**Step and time bounds** (owner, 2026-11-07: "ok go
   ahead all yes then as you said right", approving the recorded recommendation). This answers when
   quantitative bounds arrive and what they mean. The step-counting cost model is built with loops at
@@ -4438,7 +4545,7 @@ the design is done so that a) everything can be proven b) we can find get errors
   "have everything reviewed by the other llms"): every branch gets an agy review beside the
   Codex and Kimi reviews. agy cannot read files, so its prompt carries the diff and the context it
   needs and ends with a required verdict line. (The coordinator's relay added that agy can also act
-  as a writer.)
+  as a writer.) Extended by the [November 25 review decision](#decided-2026-11-25-freeze-and-grammar).
 - <a id="decided-project-throughput"></a>**Development throughput** (2026-10-22). The development
   feedback loop (landing, review, CI) is a priority track beside the main sequence
   ([record](archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-10-22--development-throughput-priority)).

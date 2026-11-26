@@ -64,6 +64,8 @@ python3 - "$TMP/compiler.ndjson" <<'CONTROL'
 import json
 import sys
 rows = [
+    {"meta": {key: {"version": version} for key, version in
+              [("lean", "4.35.0"), ("exporter", "fixture"), ("format", "3.1.0")]}},
     {"in": 1, "str": {"pre": 0, "str": "ConcreteSpec"}},
     {"in": 2, "str": {"pre": 1, "str": "correspondence"}},
     {"in": 3, "str": {"pre": 0, "str": "Concrete"}},
@@ -101,6 +103,26 @@ case "$file" in
   */swapped.ndjson)
     if [ "$kind" = conleche ]; then echo 'type mismatch in theorem ConcreteSpec.theorem001 '; else echo 'assertion failed: self.def_eq'; fi
     exit 1 ;;
+  */compiler-forged.ndjson)
+    # The fixture's proof is a reference to correspondence. Reject only when
+    # the production mutation replaces it with the theorem's type expression.
+    if python3 - "$file" <<'PYTHON'
+import json
+import sys
+
+with open(sys.argv[1]) as stream:
+    rows = [json.loads(line) for line in stream]
+representative = next(row["thm"] for row in rows if row.get("thm", {}).get("name") == 4)
+sys.exit(representative["value"] != representative["type"])
+PYTHON
+    then
+      if [ "$kind" = conleche ]; then
+        echo 'type mismatch in theorem Concrete.representative'
+      else
+        echo 'assertion failed: self.def_eq'
+      fi
+      exit 1
+    fi ;;
   */cut.ndjson|*/dropped.ndjson) echo 'fixture checker refuses corruption'; exit 1 ;;
 esac
 if [ "$kind" = conleche ]; then echo 'con-leche: accepted 101 declarations (--verified)'; else echo 'Checked 101 declarations with no errors'; fi
@@ -312,7 +334,7 @@ rm -rf "$CONCRETE_EXT_TOOLS"
 # and Cargo must see a registry symlink that resolves to an existing directory.
 CONCRETE_EXT_TOOLS=../tools CONCRETE_EXT_ELAN=../bin/elan run_driver 'PROOF-EXTERNAL:' 0
 # Check obligations by phase, without relying on the placement of source lines.
-for phase in project population-theorems population-encoded exporter population-decls population-heads conleche-spec.ndjson nanoda-spec.ndjson population-compiler-closure compiler-exporter conleche-compiler.ndjson nanoda-compiler.ndjson; do
+for phase in project population-theorems population-encoded exporter population-decls population-heads conleche-spec.ndjson nanoda-spec.ndjson population-compiler-closure compiler-exporter conleche-compiler.ndjson nanoda-compiler.ndjson conleche-compiler-forged.ndjson nanoda-compiler-forged.ndjson; do
   grep -qxF "$phase" "$PHASE_LOG"
 done
 printf 'lean4export\ncon-leche\nnanoda\n' > "$TMP/expected"

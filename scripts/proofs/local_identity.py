@@ -84,11 +84,30 @@ def main():
         scans.append((module, 'compiler spelling leak',
                       'semantic diagnostics dependency: compilerIdentityLeak'))
         module = 'Concrete.Memory.RenderControl'
-        require(compile_file(module, 'import Concrete.Memory\n'
+        require(compile_file(module, 'import Concrete.Memory\nimport Concrete.Refusal\n'
                              'def compilerRenderLeak (r : Concrete.Refusal) : String := r.message\n'),
                 'compiler rendering control builds')
         scans.append((module, 'diagnostic rendering in a semantic stage',
                       'semantic diagnostics dependency: compilerRenderLeak'))
+        for label, body in (
+            ('Pair', ' : List (ConcreteSpec.Var × Concrete.Refusal) := []'),
+            ('Compare', ' (a b : Concrete.Refusal) : Bool := decide (a = b)'),
+            ('Match', ' (r : Concrete.Refusal) : String := match r with\n'
+                      '  | .internal message => message\n  | _ => ""'),
+        ):
+            module = f'Concrete.Memory.Refusal{label}Control'
+            name = f'compilerRefusal{label}Leak'
+            require(compile_file(module, f'import Concrete.Memory\nimport Concrete.Refusal\ndef {name}{body}\n'),
+                    f'compiler refusal {label} control builds')
+            scans.append((module, f'diagnostic {label.lower()} in a semantic stage',
+                          f'semantic diagnostics dependency: {name}'))
+        module = 'Concrete.Memory.RefusalPropagationControl'
+        require(compile_file(module, 'import Concrete.Memory\n'
+                             'def propagateRefusal : Except Concrete.MIR.LoweringFailure ConcreteSpec.Var → '
+                             'Except Concrete.MIR.LoweringFailure ConcreteSpec.Var\n'
+                             '  | .error error => .error error\n  | .ok value => .ok value\n'),
+                'compiler refusal propagation control builds')
+        scans.append((module, 'propagating a structured error beside a successful value', None))
         require(compile_file('RefusalControl', 'import ConcreteSpec.Diagnostics.Types\n'
                              'inductive Concrete.Refusal where\n'
                              '  | leak : ConcreteSpec.Var → String → Concrete.Refusal\n'),

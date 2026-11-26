@@ -20,7 +20,7 @@ set -euo pipefail
 # shellcheck source=scripts/checks/lib/slice0_common.sh
 source scripts/checks/lib/slice0_common.sh
 golden=tests/golden/slice0_trusted_base.txt
-bounded_run -i /dev/null 600 -- lake build ConcreteTooling
+bounded 600 lake build ConcreteTooling
 
 # print_lean FILE OUT: elaborate FILE (bounded, capped) and write its stdout to OUT; fails (with
 # the bounded diagnostics) when Lean fails, times out, or prints more than 1 MiB.

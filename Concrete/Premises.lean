@@ -8,6 +8,14 @@ propositions, as are the native contracts. See Concrete/README.md for their desi
 this registry and the axioms of `theorems` and compares them with `tests/golden/slice0_trusted_base.txt`,
 so a premise added, removed or reworded fails until the golden is updated with it.
 -/
+import Concrete.Admission
+import Concrete.BIR.Progress
+import Concrete.Backend.LLVMIR
+import Concrete.Core
+import Concrete.Lex
+import Concrete.MIR
+import Concrete.Memory
+import Concrete.SSA
 import Concrete.Stages
 import Concrete.BIR
 import Concrete.Backend.Runtime

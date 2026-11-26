@@ -191,6 +191,7 @@ def replayClosure (env : Environment) (root : Name) : IO (Std.HashSet Name) := d
     if seen.contains n then continue
     seen := seen.insert n
     let some ci := env.find? n | throw (IO.userError s!"missing closure declaration {n}")
+    -- ConstantInfo includes an inductive's constructors in its used constants.
     for dep in ci.getUsedConstantsAsSet do pending := pending.push dep
     match ci with
     | .inductInfo v =>
