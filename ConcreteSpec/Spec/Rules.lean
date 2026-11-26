@@ -2,6 +2,7 @@ import ConcreteSpec.Spec.Accounting
 import ConcreteSpec.Spec.Const
 import ConcreteSpec.Spec.Ident
 import ConcreteSpec.Spec.Own
+import ConcreteSpec.Spec.Slice1Checker
 
 /-!
 # Diagnostic rule registry
@@ -27,6 +28,7 @@ def registeredRules : List RuleId :=
    ⟨``Own.DropPermitted, 1⟩, ⟨``Own.LeavePermitted, 1⟩,
    ⟨``Leak.Account.WF, 1⟩, ⟨``Leak.ResetConserved, 1⟩, ⟨``Leak.SignedNetSound, 1⟩,
    ⟨``Leak.ByteBoundSound, 1⟩, ⟨``Leak.ByteBoundSoundOptional, 1⟩, ⟨``Leak.ReportSound, 1⟩,
+   ⟨``AbortReady, 1⟩, ⟨``ProgramPermitted, 1⟩,
    ⟨``Leak.FiniteActionPermitted, 1⟩, ⟨``Leak.FiniteSequencePermitted, 1⟩] ++ SourcePath.Reason.inOrder.map SourcePath.Reason.ruleId ++
   [SourcePath.Project.Reason.caseCollision, .fileDirectoryConflict, .duplicate].map
     SourcePath.Project.Reason.ruleId ++
@@ -531,10 +533,60 @@ theorem columnRefused : RuleRefused ColumnMatches
 
 end SourcePathSpan.Registry
 
+namespace Slice1Registry
+
+private def sName : Name := ⟨"S"⟩
+private def sTy : Ty := .struct sName
+private def decls : Decls := [⟨sName, false, []⟩]
+private def bindS : Stmt := .let_ (.name ⟨0⟩) sTy (.mk sName [])
+private def takeS : Stmt := .letStruct sName [] (.atom (.move ⟨0⟩))
+private def ret : Terminator := .ret (.int .u8 0)
+
+private def live (used : Bool) : Ctx :=
+  [(⟨0⟩, { ty := sTy, live := true, used, known := none })]
+
+theorem usedAbort : RuleAccepted AbortReady (live true) := by
+  unfold RuleAccepted AbortReady
+  decide
+
+theorem unusedAbort : RuleRefused AbortReady (live false) := by
+  unfold RuleRefused AbortReady
+  decide
+
+theorem consumeThenAbort : RuleAccepted ProgramPermitted ⟨decls, [bindS, takeS], .abort ⟨0⟩⟩ := by
+  unfold RuleAccepted ProgramPermitted
+  decide
+
+theorem consumeThenReturn : RuleAccepted ProgramPermitted ⟨decls, [bindS, takeS], ret⟩ := by
+  unfold RuleAccepted ProgramPermitted
+  decide
+
+theorem liveLinearAtReturn : RuleRefused ProgramPermitted ⟨decls, [bindS], ret⟩ := by
+  unfold RuleRefused ProgramPermitted
+  decide
+
+theorem useAfterMove : RuleRefused ProgramPermitted ⟨decls, [bindS, takeS, takeS], ret⟩ := by
+  unfold RuleRefused ProgramPermitted
+  decide
+
+theorem overflow : RuleRefused ProgramPermitted
+    ⟨[], [.let_ .wild (.scalar (.int .u8)) (.add (.int .u8 200) (.int .u8 56))], ret⟩ := by
+  unfold RuleRefused ProgramPermitted
+  decide
+
+end Slice1Registry
+
 /-- Complete conformance links, populated alongside the owning rules. -/
 def registeredRuleExamples : List RuleExample :=
   [⟨``ConstsPermitted, ``ConstRegistry.accepted⟩,
    ⟨``ConstsPermitted, ``ConstRegistry.refused⟩,
+   ⟨``AbortReady, ``Slice1Registry.usedAbort⟩,
+   ⟨``AbortReady, ``Slice1Registry.unusedAbort⟩,
+   ⟨``ProgramPermitted, ``Slice1Registry.consumeThenAbort⟩,
+   ⟨``ProgramPermitted, ``Slice1Registry.consumeThenReturn⟩,
+   ⟨``ProgramPermitted, ``Slice1Registry.liveLinearAtReturn⟩,
+   ⟨``ProgramPermitted, ``Slice1Registry.useAfterMove⟩,
+   ⟨``ProgramPermitted, ``Slice1Registry.overflow⟩,
    ⟨``Own.OwnerPermitted, ``Own.Registry.ownerAccepted⟩,
    ⟨``Own.OwnerPermitted, ``Own.Registry.ownerRefused⟩,
    ⟨``Own.LoanPermitted, ``Own.Registry.loanAccepted⟩,

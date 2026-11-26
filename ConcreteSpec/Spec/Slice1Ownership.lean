@@ -211,12 +211,16 @@ inductive StmtOk (Δ : Decls) : Ctx → Stmt → Ctx → Prop where
 def Discharged (Δ : Decls) (Γ : Ctx) : Prop :=
   ∀ b ∈ Γ, (b.2.ty.isCopy Δ = true ∨ b.2.live = false) ∧ b.2.used = true
 
-/-- A body is accepted: each statement in order, then `return a` with `a : u8` (STMT-7), after
-which nothing linear is left and every binding was used. An atom contains no operation, so the
-`return` has no operation to admit. -/
-inductive BodyOk (Δ : Decls) : Ctx → List Stmt → Atom → Prop where
+/-- OD62. Every local is used before a straight-line body reaches abort. A used linear
+binding may still hold its value. -/
+def AbortReady (Γ : Ctx) : Prop := ∀ b ∈ Γ, b.2.used = true
+
+/-- A body checks each statement in order. Return checks a u8 atom and discharges the
+remaining context. Abort checks that all bindings were used and leaves live values in place. -/
+inductive BodyOk (Δ : Decls) : Ctx → List Stmt → Terminator → Prop where
   | ret {Γ Γ₁ r} : HasType Δ Γ.tys (.atom r) (.scalar (.int .u8)) → Uses Δ Γ (.atom r) Γ₁ →
-      Discharged Δ Γ₁ → BodyOk Δ Γ [] r
+      Discharged Δ Γ₁ → BodyOk Δ Γ [] (.ret r)
+  | abort {Γ site} : AbortReady Γ → BodyOk Δ Γ [] (.abort site)
   | cons {Γ Γ₁ s ss r} : StmtOk Δ Γ s Γ₁ → BodyOk Δ Γ₁ ss r → BodyOk Δ Γ (s :: ss) r
 
 /-- Struct declarations are well formed: struct names are distinct, none is `main`, and each
@@ -227,6 +231,6 @@ def DeclsOk (Δ : Decls) : Prop :=
 /-- A slice-1 program is accepted: its declarations are well formed and its body is accepted,
 including the mandatory static refusal of every operation without evidence (no hidden traps, which
 subsumes the refusal of known violations of Q6.1–Q6.6). -/
-def Checked (p : Program) : Prop := DeclsOk p.decls ∧ BodyOk p.decls [] p.body p.ret
+def Checked (p : Program) : Prop := DeclsOk p.decls ∧ BodyOk p.decls [] p.body p.ending
 
 end ConcreteSpec

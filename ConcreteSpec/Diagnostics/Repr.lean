@@ -14,6 +14,7 @@ deriving instance Repr for ConcreteSpec.Atom
 deriving instance Repr for ConcreteSpec.Expr
 deriving instance Repr for ConcreteSpec.Binder
 deriving instance Repr for ConcreteSpec.Stmt
+deriving instance Repr for ConcreteSpec.Terminator
 deriving instance Repr for ConcreteSpec.Program
 deriving instance Repr for ConcreteSpec.Slice0.Atom
 deriving instance Repr for ConcreteSpec.Slice0.Expr
