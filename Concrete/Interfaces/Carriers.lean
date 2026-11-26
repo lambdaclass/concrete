@@ -59,6 +59,7 @@ inductive LexRefusal where
   | digitLimit (offset limit : Nat)
 
 inductive ElabRefusal where
+  | unsupportedSlice (slice : Slice)
   | slice0 (reason : Concrete.Elab.Failure)
   | diagnostic (rule : RuleId) (primary : FileSpan) (related : List (ConcreteSpec.Name × FileSpan))
 
@@ -67,6 +68,7 @@ inductive StageFailure where
   | unsupportedProfile (rule : RuleId)
   | invalidInput (rule : RuleId)
   | lcbLinkingUnavailable
+  | invalidLCBJob (reason : LeanCompilerBackend.Verified.CompileError)
 
 /-- Local value types and field projections use the integrated spec type family. -/
 structure Place (Ty : Type) (_ty : Ty) where

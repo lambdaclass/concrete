@@ -121,30 +121,6 @@ def LexRefuses (source : Source) (failure : LexRefusal) : Prop :=
 
 /-- Each slice contributes a repository rule over that member of the AST and Core
 families. Slice 0 uses the canonical injections of the shared carriers. -/
-def Elaboration (Extra : Slice → Type) (Core : Slice → CoreLanguage)
-    (slice : Slice) (ast : SurfaceAST Extra slice)
-    (result : Except ElabRefusal (Payload (Core slice))) : Prop :=
-  if h : slice = slice0 then
-    match (h ▸ ast : SurfaceAST Extra slice0) with
-    | .inl tree => ∃ program, Concrete.Elab.surfaceProgram tree = some program ∧
-      ∃ early : EarlyCore (Core slice0),
-        ((Concrete.Elab.elaborateLocated program).map (earlyPayload early)).mapError
-          ElabRefusal.slice0 = (h ▸ result)
-    | .inr _ => False
-  else False
-
-def Elaborates {Ast Extra : Type} {language : CoreLanguage}
-    (surface : Ast = SurfaceAST (fun _ => Extra) slice0)
-    (ast : Parsed Ast) (core : CoreInput language) : Prop :=
-  core.project = ast.source.project ∧ core.slice = ast.source.slice ∧ core.WF ∧
-    Elaboration (fun _ => Extra) (fun _ => language) ast.source.slice (surface ▸ ast.tree) (.ok core.payload)
-
-def ElaborationRefuses {Ast Extra : Type} (language : CoreLanguage)
-    (surface : Ast = SurfaceAST (fun _ => Extra) slice0)
-    (ast : Parsed Ast) (failure : ElabRefusal) : Prop :=
-  Elaboration (fun _ => Extra) (fun _ => language) ast.source.slice (surface ▸ ast.tree) (.error failure)
-
-/-- The registered judgment uses the canonical embedding at the selected slice. -/
 def SliceElaboration (slice : Slice) (ast : SurfaceAST ConcreteSpec.StageGrammar.sliceASTExtra slice)
     (result : Except ElabRefusal (Payload (sliceLanguage slice))) : Prop :=
   if slice = slice0 then
@@ -153,7 +129,7 @@ def SliceElaboration (slice : Slice) (ast : SurfaceAST ConcreteSpec.StageGrammar
         ((Concrete.Elab.elaborateLocated program).map (earlyPayload (sliceEarlyCore slice))).mapError
           ElabRefusal.slice0 = result
     | .inr _ => False
-  else False
+  else result = .error (.unsupportedSlice slice)
 
 /-- Origin maps enumerate emitted copies as well as discharged and residual operations. -/
 def PreservesOrigins (source target : List Origin) : Prop :=
@@ -281,6 +257,7 @@ def Memory.SignatureMatches {Ty : Type} {lang : LoweringLanguage Ty} {profile : 
     ∀ block ∈ graph.blocks.toList,
       (match block.ending with
       | .ret operand => operand.map Sigma.fst = signature.result
+      | .invalid => False
       | _ => True) ∧
       ∀ op ∈ block.body, match op.instruction with
         | .call callee destination args _ =>
@@ -391,9 +368,10 @@ def initializedAt (state : MemoryRegisters language profile) (root : PlaceId)
   state.initialized.contains root &&
     !(state.movedFields.any fun (owner, moved) => owner == root && pathsOverlap path moved)
 
-private def hasLoan (state : MemoryRegisters language profile) (root : PlaceId) : Bool :=
+private def hasLoan (state : MemoryRegisters language profile) (root : PlaceId)
+    (conflicts : Own.Mode → Bool := fun _ => true) : Bool :=
   (AList.lookup state.addressIds root).any fun id =>
-    state.ownership.loans.any fun loan => loan.root == id
+    state.ownership.loans.any fun loan => loan.root == id && conflicts loan.mode
 
 private def loadBacking (memory : Memory lang profile)
     (state : MemoryRegisters language profile) {ty : language.operands.Ty}
@@ -487,11 +465,11 @@ def writeValue (memory : Memory lang profile)
     (place : MemoryPlace _ ty) (value : language.operands.Val) :
     Option (MemoryRegisters language profile) := do
   let root := place.logical.root
-  if !state.live.contains root then none else
+  if !state.live.contains root || hasLoan state root then none else
   let path := place.logical.path
   if !path.isEmpty && !state.initialized.contains root then none else
   if state.initialized.contains root && !initializedAt state root path &&
-      (hasLoan state root || !memory.mayInitialize state place) then none else
+      !memory.mayInitialize state place then none else
   let state := {state with
     initialized := if state.initialized.contains root then state.initialized else root :: state.initialized
     movedFields := state.movedFields.filter (fun (owner, moved) =>
@@ -531,7 +509,7 @@ def readValue (memory : Memory lang profile)
       | _ => language.literal ty value.encoding
     return (decoded, state)
   | .copy place =>
-    if language.operands.isCopy ty then
+    if language.operands.isCopy ty && !hasLoan state place.logical.root (· == .mutable) then
       return (← memory.loadValue state place, state)
     else none
   | .move place => do
@@ -1414,11 +1392,8 @@ def BIR.requiresLCBLinking (bir : BIR lang profile) : Bool :=
   | none => false
   | some (_, graph) => reachableCall graph (2 * graph.blocks.size + 1) [graph.entry] []
 
-def EmitsLCB (language : CoreLanguage) {lang : LoweringLanguage language.operands.Ty}
+def LCBEncoding (language : CoreLanguage) {lang : LoweringLanguage language.operands.Ty}
     {profile : Profile} (bir : BIR lang profile) (output : LCBInput profile) : Prop :=
-  profile.backend = .lcb ∧
-  LeanCompilerBackend.Verified.validateJob (Backend.LCB.job output.body) = .ok () ∧
-  (∀ pair ∈ output.additionalJobs, LeanCompilerBackend.Verified.validateJob pair.2 = .ok ()) ∧
   ((Backend.LCB.job output.body :: List.map Prod.snd output.additionalJobs).map
     (fun job => job.code.symbol.name)).Nodup ∧
   output.sites = bir.sites ∧ output.RuntimeMatches bir.project ∧
@@ -1429,5 +1404,12 @@ def EmitsLCB (language : CoreLanguage) {lang : LoweringLanguage language.operand
   (∀ fn, fn ∈ List.map Prod.fst bir.functions ↔ fn ∈ bir.entry :: List.map Prod.fst output.additionalJobs) ∧
   bir.requiresLCBLinking = false ∧
   bir.TrapSlotsWF
+
+def EmitsLCB (language : CoreLanguage) {lang : LoweringLanguage language.operands.Ty}
+    {profile : Profile} (bir : BIR lang profile) (output : LCBInput profile) : Prop :=
+  profile.backend = .lcb ∧
+  LeanCompilerBackend.Verified.validateJob (Backend.LCB.job output.body) = .ok () ∧
+  (∀ pair ∈ output.additionalJobs, LeanCompilerBackend.Verified.validateJob pair.2 = .ok ()) ∧
+  LCBEncoding language bir output
 
 end Concrete.Interfaces

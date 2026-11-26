@@ -10,9 +10,14 @@ private def modelTypes : List Name :=
     ``TableVerifier, ``VerificationInputs, ``ParserEngine, ``Parser, ``CheckedTable,
     ``Concrete.Contracts.Semantics, ``Stage, ``Pipeline, ``Registry]
 
-private partial def modelBinder (env : Environment) (type : Expr) (functionType := false) : Bool :=
+private def dropBinders : Nat → Expr → Expr
+  | n + 1, .forallE _ _ body _ => dropBinders n body
+  | _, type => type
+
+private partial def modelBinder (env : Environment) (type : Expr) (functionType := false)
+    (seen : Std.HashSet Name := {}) : Bool :=
   match type with
-  | .forallE _ _ body _ => modelBinder env body true
+  | .forallE _ _ body _ => modelBinder env body true seen
   | .sort _ => true
   | _ =>
     match type.getAppFn.constName? with
@@ -21,10 +26,50 @@ private partial def modelBinder (env : Environment) (type : Expr) (functionType 
       modelTypes.contains name ||
         (functionType && [``Bool, ``Nat, ``UInt8, ``ByteArray, ``List, ``Option, ``Except,
           ``ConcreteSpec.Core.Res].contains name) ||
-        match env.find? name with
-        | some (.defnInfo info) =>
-          modelBinder env ((mkAppN info.value type.getAppArgs).headBeta) functionType
-        | _ => false
+        if seen.contains name then false else
+          let seen := seen.insert name
+          match env.find? name with
+          | some (.defnInfo info) =>
+            modelBinder env ((mkAppN info.value type.getAppArgs).headBeta) functionType seen
+          | some (.inductInfo info) =>
+            -- PassFunctions has a separately checked executable schema.
+            -- Behavior carries observations, including trace data indexed by time.
+            ![``PassFunctions, ``Behavior].contains name && !(dropBinders info.numParams info.type).isForall &&
+              (match dropBinders info.numParams info.type with | .sort (.succ _) => true | _ => false) &&
+              info.ctors.any fun ctor =>
+                match env.find? ctor with
+                | some (.ctorInfo ctor) => fieldsCarryModel env (dropBinders ctor.numParams ctor.type) seen
+                | _ => false
+          | _ => false
+where
+  fieldsCarryModel (env : Environment) (type : Expr) (seen : Std.HashSet Name) : Bool :=
+    match type with
+    | .forallE _ field body _ => modelBinder env field false seen || fieldsCarryModel env body seen
+    | _ => false
+
+private partial def passTypeCarriesModel (env : Environment) (type : Expr) : Bool :=
+  match type with
+  | .forallE _ domain body _ =>
+    modelBinder env domain || passTypeCarriesModel env body
+  | type => modelBinder env type || type.getAppArgs.any (passTypeCarriesModel env)
+
+private def badPassField (env : Environment) (record : Name) : Option Name := do
+  let structureInfo ← getStructureInfo? env record
+  let some (.inductInfo recordInfo) := env.find? record | none
+  structureInfo.fieldNames.find? fun field =>
+    match env.find? (record ++ field) with
+    | some (.defnInfo projection) =>
+      passTypeCarriesModel env (dropBinders (recordInfo.numParams + 1) projection.type)
+    | _ => true
+
+private partial def resultIsProp : Expr → Bool
+  | .forallE _ _ body _ => resultIsProp body
+  | .sort .zero => true
+  | _ => false
+
+private def usedInConstructorResult : Expr → Nat → Bool
+  | .forallE _ _ body _, index => usedInConstructorResult body (index + 1)
+  | result, index => result.hasLooseBVar index
 
 private def hasNamePart (accepts : String → Bool) : Name → Bool
   | .anonymous => false
@@ -58,8 +103,26 @@ private partial def inspect (env : Environment) (origin : Name) (expr : Expr) :
     modify (·.insert name)
     match env.find? name with
     | some (.defnInfo info) => inspect env root info.value
+    | some (.inductInfo info) =>
+      if resultIsProp info.type then
+        for ctor in info.ctors do
+          if let some (.ctorInfo ctorInfo) := env.find? ctor then
+            if let some hit ← inspectConstructor env root (dropBinders ctorInfo.numParams ctorInfo.type) then
+              return some hit
+      return none
     | _ => return none
   | _ => return none
+where
+  inspectConstructor (env : Environment) (origin : Name) (type : Expr) :
+      StateM (Std.HashSet Name) (Option (Name × Name)) := do
+    match type with
+    | .forallE name domain body _ =>
+      -- The primitive continuation is fixed by the dispatch equality in Step.prim.
+      let dispatchContinuation := origin == ``ConcreteSpec.Core.Exec.Step && name == `k
+      if !dispatchContinuation && !usedInConstructorResult body 0 && modelBinder env domain then
+        return some (origin, name)
+      return (← inspect env origin domain) <|> (← inspectConstructor env origin body)
+    | _ => return none
 
 private def check (env : Environment) (type : Expr) : Option (Name × Name) :=
   ((inspect env `endToEnd type).run {}).1
@@ -84,6 +147,20 @@ private def plantedCodec (profile : Profile) (passes : Passes slice0 profile) : 
     trust := fun _ _ => ∀ decode : ByteArray → Option UInt8, decode ByteArray.empty = none}
   (Pipeline.next lexer .done).Trusted
 
+private structure WrappedModel where
+  decode : ByteArray → Option UInt8
+
+private def plantedWrapped : Prop := ∀ wrapped : WrappedModel, wrapped = wrapped
+
+private inductive PlantedInductive : Prop where
+  | intro (evidence : ∀ decode : ByteArray → Option UInt8, decode ByteArray.empty = none)
+
+private inductive PlantedConstructor : Prop where
+  | intro (decode : ByteArray → Option UInt8)
+
+private structure PlantedPassBundle where
+  run : Source → Except LexRefusal WrappedModel
+
 -- The explicit schema also catches unstructured relation parameters at the
 -- boundary, even if their types are never declared as semantic model records.
 example {slice : Slice} {profile : Profile} (passes : Passes slice profile) (unchecked : Bool)
@@ -98,14 +175,17 @@ example {slice : Slice} {profile : Profile} (passes : Passes slice profile) (unc
 run_cmd do
   let env ← getEnv
   -- A model packaged inside the pass argument would still be caller-selected.
-  let fields := #[`lex, `elaborate, `checkCore, `lowerCore, `lowerUnchecked, `lowerMemory,
+  let fields := #[`lex, `elaborate, `typeCore, `checkCore, `lowerCore, `lowerUnchecked, `lowerMemory,
     `buildSSA, `buildBIR, `emitLLVM, `emitLCB]
   unless (getStructureInfo? env ``PassFunctions).map (·.fieldNames) == some fields do
     throwError "The pass argument must contain only the registered executable functions"
-  let some theoremInfo := env.find? ``Pipeline.endToEnd
-    | throwError "Missing registered end-to-end theorem"
-  if let some (origin, binder) := check env theoremInfo.type then
-    throwError "End-to-end statement has an open semantic binder {binder} in {origin}"
+  if let some field := badPassField env ``PassFunctions then
+    throwError "The registered pass field {field} contains an open semantic model"
+  for name in [``Pipeline.endToEnd, ``registeredLCBEndToEnd] do
+    let some theoremInfo := env.find? name
+      | throwError "Missing registered end-to-end theorem {name}"
+    if let some (origin, binder) := check env theoremInfo.type then
+      throwError "End-to-end statement has an open semantic binder {binder} in {origin}"
   let some soundInfo := env.find? ``Stage.Sound
     | throwError "Missing registered stage soundness"
   if let some (origin, binder) := check env soundInfo.type <|> check env (.const ``Stage.Sound []) then
@@ -116,5 +196,13 @@ run_cmd do
     throwError "End-to-end audit accepted a planted relation parameter"
   unless (check env (.const ``plantedCodec []) == some (`EndToEndAudit.plantedCodec, `decode)) do
     throwError "End-to-end audit accepted a planted codec parameter"
+  unless (check env (.const ``plantedWrapped []) == some (`EndToEndAudit.plantedWrapped, `wrapped)) do
+    throwError "End-to-end audit accepted a planted wrapped decoder"
+  unless (check env (.const ``PlantedInductive []) == some (`EndToEndAudit.PlantedInductive, `decode)) do
+    throwError "End-to-end audit accepted a planted decoder under an inductive constructor"
+  unless (check env (.const ``PlantedConstructor []) == some (`EndToEndAudit.PlantedConstructor, `decode)) do
+    throwError "End-to-end audit accepted a planted decoder as an inductive constructor field"
+  unless badPassField env ``PlantedPassBundle == some `run do
+    throwError "End-to-end audit accepted a planted decoder in the executable pass bundle"
 
 end EndToEndAudit

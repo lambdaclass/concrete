@@ -15,6 +15,7 @@ structure PassFunctions {count : Nat} (grammar : SharedGrammar count) (language 
     (lang : LoweringLanguage language.operands.Ty) (profile : Profile) where
   lex : Source → Except LexRefusal TokenStream
   elaborate : Parsed (grammar.value grammar.start) → Except ElabRefusal (CoreInput language)
+  typeCore : CoreInput language → Except StageFailure Unit
   checkCore : CoreInput language → Except CheckerRefusal (Discharges language)
   lowerCore : Admitted language → Except StageFailure (MIR lang profile)
   lowerUnchecked : CoreInput language → Except StageFailure (MIR lang profile)
@@ -49,19 +50,25 @@ def parserEntry (parser : ParserEngine grammar) :
     Refuses grammar stream.parserView failure ∧
     (parser.run stream.parserView).1 ≤ parser.stepsPerToken * (stream.parserView.tokens.size + 1)
 
-def elaborationEntry {Ast Extra : Type}
-    (surface : Ast = SurfaceAST (fun _ => Extra) slice0)
-    (run : Parsed Ast → Except ElabRefusal (CoreInput language)) : Stage (Parsed Ast) ElabRefusal (CoreInput language) where
-  run := run
-  kind := .directProof
-  inputInvariant ast := Source.WF ast.source
-  outputInvariant input := input.WF ∧ input.InFragment
-  success := Elaborates surface
-  refusal := ElaborationRefuses language surface
+/-- The fixed grammar supplies a surface tree. Any successful canonical
+elaboration must retain locations valid in the issuing project. -/
+def Parsed.ElaborationDomain (slice : Slice)
+    (ast : Parsed ((sliceGrammar slice).value (sliceGrammar slice).start)) : Prop :=
+  Source.WF ast.source ∧ ast.source.slice = slice ∧
+  (∃ stream : ParserView, stream.WF ∧ ((sliceParser slice).run stream).2 = some (.ok ast)) ∧
+  (∃ result, SliceElaboration slice (cast (sliceGrammarStartShape slice) ast.tree) result) ∧
+  ∀ payload, SliceElaboration slice (cast (sliceGrammarStartShape slice) ast.tree) (.ok payload) →
+    (CoreInput.mk ast.source.project slice payload).WF
 
-def PassFunctions.elaborator (passes : PassFunctions grammar language lang profile) :
-    Stage (Parsed (grammar.value grammar.start)) ElabRefusal (CoreInput language) :=
-  elaborationEntry grammar.startShape passes.elaborate
+def PassFunctions.typingEntry (passes : PassFunctions grammar language lang profile) :
+    Stage (CoreInput language) StageFailure (CoreInput language) where
+  run input := (passes.typeCore input).map fun _ => input
+  kind := .directProof
+  inputInvariant input := input.WF ∧ input.InFragment
+  outputInvariant input := input.WF ∧ input.StaticallyTyped
+  success input output := input = output
+  refusal input failure :=
+    failure = .invalidInput ⟨``CoreInput.StaticallyTyped, 1⟩ ∧ ¬ input.StaticallyTyped
 
 def PassFunctions.admissionEntry (passes : PassFunctions grammar language lang profile) :
     Stage (CoreInput language) CheckerRefusal (Admitted language) where
@@ -72,11 +79,18 @@ def PassFunctions.admissionEntry (passes : PassFunctions grammar language lang p
   success := Admits
   refusal := CoreInput.CheckerRefuses
 
-private def SSA.WF (ssa : SSA lang profile) : Prop :=
-  (ssa.memoryView (language := language)).TablesWF
+def Memory.HandoffWF {Ty : Type} {lowering : LoweringLanguage Ty}
+    (memory : Memory lowering profile) : Prop :=
+  memory.TablesWF ∧ memory.entry ∈ List.map Prod.fst memory.functions ∧
+  ∀ origin ∈ memory.origins, ∃ span, origin.lexical.Binds memory.project span
 
-private def BIR.WF (bir : BIR lang profile) : Prop :=
-  bir.TrapSlotsWF ∧ bir.frameSlots ≤ profile.maxBIRSlots
+def SSA.WF (ssa : SSA lang profile) : Prop :=
+  (ssa.memoryView (language := language)).HandoffWF
+
+def BIR.WF {Ty : Type} {lowering : LoweringLanguage Ty} (bir : BIR lowering profile) : Prop :=
+  bir.TrapSlotsWF ∧ bir.frameSlots ≤ profile.maxBIRSlots ∧
+  (List.map Prod.fst bir.functions).Nodup ∧ bir.entry ∈ List.map Prod.fst bir.functions ∧
+  ∀ site ∈ bir.sites.toList, ∃ span, site.origin.lexical.Binds bir.project span
 
 private def Profile.Refuses (profile : Profile) (backend : BackendKind) : StageFailure → Prop
   | .unsupportedProfile rule =>
@@ -108,16 +122,24 @@ def P_print (bir : BIR lang profile) (output : LLVMInput profile) : Prop :=
           Concrete.Contracts.SameInfiniteTrace (fun i => source.trace bir (run i)) trace
       | .wrong => False
 
-/-- Check for calls before invoking the single-job backend. -/
+private def LCBInput.validateJobs (output : LCBInput profile) :
+    Except LeanCompilerBackend.Verified.CompileError Unit := do
+  LeanCompilerBackend.Verified.validateJob (Backend.LCB.job output.body)
+  output.additionalJobs.forM fun pair => LeanCompilerBackend.Verified.validateJob pair.2
+
+/-- Check for linked execution and validate the exact jobs prepared by the emitter. -/
 def PassFunctions.emitSingleLCB (passes : PassFunctions grammar language lang profile)
-    (bir : BIR lang profile) : Except StageFailure (LCBInput profile) :=
-  if bir.requiresLCBLinking then .error .lcbLinkingUnavailable else passes.emitLCB bir
+    (bir : BIR lang profile) : Except StageFailure (LCBInput profile) := do
+  if bir.requiresLCBLinking then throw .lcbLinkingUnavailable
+  let output ← passes.emitLCB bir
+  output.validateJobs.mapError StageFailure.invalidLCBJob
+  return output
 
 def PassFunctions.lowerUncheckedEntry (passes : PassFunctions grammar language lang profile) :
     Stage (CoreInput language) StageFailure (MIR lang profile) :=
   ⟨passes.lowerUnchecked, .directProof,
     fun input => input.WF ∧ input.StaticallyTyped,
-    fun mir => mir.logicalView.TablesWF, LowersUnchecked (language := language), fun _ _ => False, fun _ _ => True⟩
+    fun mir => mir.logicalView.HandoffWF, LowersUnchecked (language := language), fun _ _ => False, fun _ _ => True⟩
 
 def PassFunctions.emitLLVMEntry (passes : PassFunctions grammar language lang profile) :
     Stage (BIR lang profile) StageFailure (LLVMInput profile) :=
@@ -131,6 +153,9 @@ def PassFunctions.emitLCBEntry (passes : PassFunctions grammar language lang pro
     fun output => ∃ bir : BIR lang profile, EmitsLCB language bir output, EmitsLCB language, fun bir failure =>
       match failure with
       | .lcbLinkingUnavailable => bir.requiresLCBLinking = true
+      | .invalidLCBJob reason =>
+        profile.backend = .lcb ∧ ∃ output, passes.emitLCB bir = .ok output ∧
+          LCBEncoding language bir output ∧ output.validateJobs = .error reason
       | _ => profile.Refuses .lcb failure,
       fun _ _ => True⟩
 
@@ -146,6 +171,7 @@ structure Registry (slice : Slice) (profile : Profile) where
   lexer : Stage Source LexRefusal TokenStream
   parser : Stage TokenStream ParseRefusal (Parsed ((sliceGrammar slice).value (sliceGrammar slice).start))
   elaborator : Stage (Parsed ((sliceGrammar slice).value (sliceGrammar slice).start)) ElabRefusal (CoreInput (sliceLanguage slice))
+  typing : Stage (CoreInput (sliceLanguage slice)) StageFailure (CoreInput (sliceLanguage slice))
   admission : Stage (CoreInput (sliceLanguage slice)) CheckerRefusal (Admitted (sliceLanguage slice))
   lowerCore : Stage (Admitted (sliceLanguage slice)) StageFailure (MIR (sliceLoweringLanguage slice) profile)
   lowerUnchecked : Stage (CoreInput (sliceLanguage slice)) StageFailure (MIR (sliceLoweringLanguage slice) profile)
@@ -161,24 +187,25 @@ def registry {slice : Slice} (passes : Passes slice profile) : Registry slice pr
     outputInvariant := fun stream => stream.parserView.WF ∧ stream.source.slice = slice }
   parser := { parserEntry (sliceParser slice) with
     inputInvariant := fun stream => stream.parserView.WF ∧ stream.source.slice = slice
-    outputInvariant := fun ast => Source.WF ast.source ∧ ast.source.slice = slice }
+    outputInvariant := Parsed.ElaborationDomain slice }
   elaborator :=
     { run := passes.elaborate
       kind := .directProof
-      inputInvariant := fun ast => Source.WF ast.source ∧ ast.source.slice = slice
+      inputInvariant := Parsed.ElaborationDomain slice
       outputInvariant := fun input => input.WF ∧ input.InFragment
       success := fun ast core =>
         core.project = ast.source.project ∧ core.slice = ast.source.slice ∧ core.WF ∧
           SliceElaboration slice (cast (sliceGrammarStartShape slice) ast.tree) (.ok core.payload)
       refusal := fun ast failure =>
         SliceElaboration slice (cast (sliceGrammarStartShape slice) ast.tree) (.error failure) }
+  typing := passes.typingEntry
   admission := passes.admissionEntry
   lowerCore := ⟨passes.lowerCore, .directProof, Admitted.Valid,
-    fun mir => mir.logicalView.TablesWF, LowersCore (language := sliceLanguage slice), fun _ _ => False, fun _ _ => True⟩
+    fun mir => mir.logicalView.HandoffWF, LowersCore (language := sliceLanguage slice), fun _ _ => False, fun _ _ => True⟩
   lowerUnchecked := passes.lowerUncheckedEntry
-  lowerMemory := ⟨passes.lowerMemory, .directProof, fun mir => mir.logicalView.TablesWF,
-    Memory.TablesWF, LowersMemory (language := sliceLanguage slice), fun _ _ => False, fun _ _ => True⟩
-  buildSSA := ⟨passes.buildSSA, .provedValidator, Memory.TablesWF,
+  lowerMemory := ⟨passes.lowerMemory, .directProof, fun mir => mir.logicalView.HandoffWF,
+    Memory.HandoffWF, LowersMemory (language := sliceLanguage slice), fun _ _ => False, fun _ _ => True⟩
+  buildSSA := ⟨passes.buildSSA, .provedValidator, Memory.HandoffWF,
     SSA.WF (language := sliceLanguage slice), BuildsSSA (language := sliceLanguage slice), fun _ _ => False, fun _ _ => True⟩
   buildBIR := ⟨passes.buildBIR, .provedValidator, SSA.WF (language := sliceLanguage slice),
     BIR.WF, BuildsBIR (language := sliceLanguage slice), fun ssa failure =>
@@ -192,7 +219,7 @@ def registry {slice : Slice} (passes : Passes slice profile) : Registry slice pr
   emitLCB := passes.emitLCBEntry
 
 inductive Edge where
-  | lexer | parser | elaborator | admission | lowerCore | lowerUnchecked
+  | lexer | parser | elaborator | typing | admission | lowerCore | lowerUnchecked
   | lowerMemory | buildSSA | buildBIR | emitLLVM | emitLCB
 
 /-- Soundness refers to the selected repository contract for the executable edge. -/
@@ -200,6 +227,7 @@ def Stage.Sound {slice : Slice} (passes : Passes slice profile) : Edge → Prop
   | .lexer => (registry passes).lexer.Checks
   | .parser => (registry passes).parser.Checks
   | .elaborator => (registry passes).elaborator.Checks
+  | .typing => (registry passes).typing.Checks
   | .admission => (registry passes).admission.Checks
   | .lowerCore => (registry passes).lowerCore.Checks
   | .lowerUnchecked => (registry passes).lowerUnchecked.Checks
@@ -214,7 +242,7 @@ private def Registry.chain {slice : Slice} {Output : Type} (r : Registry slice p
     Pipeline Source Output :=
   let lowering := Pipeline.next r.lowerMemory <| .next r.buildSSA <| .next r.buildBIR <|
     .next backend .done
-  let core := if unchecked then Pipeline.next r.lowerUnchecked lowering
+  let core := if unchecked then Pipeline.next r.typing (.next r.lowerUnchecked lowering)
     else .next r.admission (.next r.lowerCore lowering)
   .next r.lexer (.next r.parser (.next r.elaborator core))
 

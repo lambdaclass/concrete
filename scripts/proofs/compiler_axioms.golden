@@ -1448,12 +1448,16 @@ Concrete.Interfaces.Edge.lowerCore.sizeOf_spec
 Concrete.Interfaces.Edge.lowerMemory.sizeOf_spec	
 Concrete.Interfaces.Edge.lowerUnchecked.sizeOf_spec	
 Concrete.Interfaces.Edge.parser.sizeOf_spec	
+Concrete.Interfaces.Edge.typing.sizeOf_spec	
 Concrete.Interfaces.ElabRefusal.diagnostic.inj	
 Concrete.Interfaces.ElabRefusal.diagnostic.injEq	propext
 Concrete.Interfaces.ElabRefusal.diagnostic.sizeOf_spec	
 Concrete.Interfaces.ElabRefusal.slice0.inj	
 Concrete.Interfaces.ElabRefusal.slice0.injEq	propext
 Concrete.Interfaces.ElabRefusal.slice0.sizeOf_spec	
+Concrete.Interfaces.ElabRefusal.unsupportedSlice.inj	
+Concrete.Interfaces.ElabRefusal.unsupportedSlice.injEq	propext
+Concrete.Interfaces.ElabRefusal.unsupportedSlice.sizeOf_spec	
 Concrete.Interfaces.FunctionSignature.mk.inj	
 Concrete.Interfaces.FunctionSignature.mk.injEq	propext
 Concrete.Interfaces.FunctionSignature.mk.sizeOf_spec	
@@ -1641,6 +1645,9 @@ Concrete.Interfaces.Stage.mk.sizeOf_spec
 Concrete.Interfaces.StageFailure.invalidInput.inj	
 Concrete.Interfaces.StageFailure.invalidInput.injEq	propext
 Concrete.Interfaces.StageFailure.invalidInput.sizeOf_spec	
+Concrete.Interfaces.StageFailure.invalidLCBJob.inj	
+Concrete.Interfaces.StageFailure.invalidLCBJob.injEq	propext
+Concrete.Interfaces.StageFailure.invalidLCBJob.sizeOf_spec	
 Concrete.Interfaces.StageFailure.lcbLinkingUnavailable.sizeOf_spec	
 Concrete.Interfaces.StageFailure.resource.inj	
 Concrete.Interfaces.StageFailure.resource.injEq	propext

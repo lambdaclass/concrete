@@ -331,6 +331,7 @@ private def testPasses {profile : Profile} (checks : List OperationCheck) :
     PassFunctions grammar testLanguage testLowering profile where
   lex _ := .error (.malformed "control")
   elaborate _ := .error (.diagnostic rule span [])
+  typeCore _ := .ok ()
   checkCore _ := .ok unsafeDischarges
   lowerCore input := .ok (testMIR input.core.project checks)
   lowerUnchecked input := .ok (testMIR input.project checks)
@@ -470,11 +471,14 @@ example (m : LoweringModels testLanguage testLowering testProfile) :
     ⟨(tokenStream .decimal).source, .inr true⟩ rfl rfl
   exact (show ¬ 5 ≤ 4 from by decide) h.2.2.2
 
-private def elaborationSourceText := "fn main() -> u8 { return 42; }"
+private def literalSourceText (n : Nat) := "fn main() -> u8 { return " ++ toString n ++ "; }"
 
-private def elaborationSource : Source :=
-  ⟨Project.singleton mainSourcePath (SourceText.ofBytes elaborationSourceText.toUTF8.data.toList),
+private def literalSource (n : Nat) : Source :=
+  ⟨Project.singleton mainSourcePath (SourceText.ofBytes (literalSourceText n).toUTF8.data.toList),
     ⟨0⟩, early⟩
+
+private def elaborationSourceText := literalSourceText 42
+private def elaborationSource := literalSource 42
 
 private def entryNameSpan : Surface0.Span := ⟨3, 7, 1, 4, ⟨0⟩⟩
 private def resultSpan : Surface0.Span := ⟨25, 27, 1, 26, ⟨0⟩⟩
@@ -508,10 +512,6 @@ private def fixtureElaborate (ast : Parsed (SyntaxTree ⊕ Bool)) :
     ((Concrete.Elab.elaborateLocated program).map fun out =>
       ⟨ast.source.project, ast.source.slice, earlyPayload fixtureEarly out⟩).mapError ElabRefusal.slice0
   | none => .error (.diagnostic rule span [])
-
-private abbrev returnEdge
-    (run : Parsed (SyntaxTree ⊕ Bool) → Except ElabRefusal (CoreInput earlyFixtureLanguage)) :=
-  elaborationEntry rfl run
 
 set_option maxRecDepth 2048 in
 private theorem returnedCoreWF (n : Nat) : (elaboratedReturn n).WF := by
@@ -580,63 +580,31 @@ private theorem returnedCoreWF (n : Nat) : (elaboratedReturn n).WF := by
     cases List.mem_singleton.mp member
     trivial
 
--- Reach a slice-0 member of families that have different AST and Core types
--- at other indices. The embedded Core has both extra syntax and declarations.
-private def fixtureASTExtra (slice : Slice) : Type :=
-  if slice = slice0 then Bool else Nat
-
-private def fixtureCoreFamily (slice : Slice) : CoreLanguage :=
-  if slice = slice0 then earlyFixtureLanguage else testLanguage
-
 example :
-    ((Concrete.Lex.lex elaborationSourceText.toUTF8).bind Concrete.Parse.parse) = .ok returnProgram ∧
-    Elaboration fixtureASTExtra fixtureCoreFamily slice0 (.inl (returnSyntax 42)) (.ok (returnPayload 42)) :=
-  ⟨rfl, returnProgram, rfl, fixtureEarly, rfl⟩
+    ((Concrete.Lex.lex elaborationSourceText.toUTF8).bind Concrete.Parse.parse) = .ok returnProgram :=
+  rfl
 
-set_option maxRecDepth 2048 in
-example :
-    (returnEdge fixtureElaborate).run parsedReturn = .ok (elaboratedReturn 42) ∧
-    (returnEdge fixtureElaborate).success parsedReturn (elaboratedReturn 42) ∧
-    (returnEdge (fun _ => .ok (elaboratedReturn 43))).outputInvariant (elaboratedReturn 43) ∧
-    ¬ (returnEdge (fun _ => .ok (elaboratedReturn 43))).Validated ∧
-    ¬ (returnEdge (fun _ => .error (.diagnostic rule span []))).Validated := by
-  refine ⟨rfl, ⟨rfl, rfl, returnedCoreWF 42, returnProgram, rfl, fixtureEarly, rfl⟩,
-    ⟨returnedCoreWF 43, ⟨_, rfl, fixtureEarly, rfl⟩⟩, ?_, ?_⟩
-  · intro validated
-    have matching := (validated.1 parsedReturn _ rfl rfl).2.2.2.2
-    change Elaboration (fun _ => Bool) (fun _ => earlyFixtureLanguage) slice0
-      (.inl (returnSyntax 42)) (.ok (returnPayload 43)) at matching
-    obtain ⟨program, decoded, _, matching⟩ := matching
-    obtain rfl := Option.some.inj (show some returnProgram = some program from decoded)
-    have ops := congrArg (fun result => result.toOption.map Payload.operations) matching
-    cases ops
-  · intro validated
-    have refused := validated.2 parsedReturn _ rfl rfl
-    change Elaboration (fun _ => Bool) (fun _ => earlyFixtureLanguage) slice0
-      (.inl (returnSyntax 42)) (.error (.diagnostic rule span [])) at refused
-    obtain ⟨program, decoded, _, refused⟩ := refused
-    obtain rfl := Option.some.inj (show some returnProgram = some program from decoded)
-    cases refused
-
-private def returnView : ParserView :=
+private def returnView (n : Nat := 42) : ParserView :=
+  let stop := 25 + (toString n).length
   let tok := fun start stop value => (⟨⟨⟨0⟩, start, stop, 1, start + 1⟩, value⟩ : SurfaceToken)
-  ⟨elaborationSource, #[
+  ⟨literalSource n, #[
     tok 0 2 (.fixed .fn rfl), tok 3 7 (.name "main"), tok 7 8 (.fixed .lparen rfl),
     tok 8 9 (.fixed .rparen rfl), tok 10 12 (.fixed .arrow rfl), tok 13 15 (.fixed .u8 rfl),
-    tok 16 17 (.fixed .lbrace rfl), tok 18 24 (.fixed .return_ rfl), tok 25 27 (.integer 42 .decimal none),
-    tok 27 28 (.fixed .semi rfl), tok 29 30 (.fixed .rbrace rfl)]⟩
+    tok 16 17 (.fixed .lbrace rfl), tok 18 24 (.fixed .return_ rfl), tok 25 stop (.integer n .decimal none),
+    tok stop (stop + 1) (.fixed .semi rfl), tok (stop + 2) (stop + 3) (.fixed .rbrace rfl)]⟩
 
-private def returnStream : TokenStream :=
-  let bytes := elaborationSourceText.toUTF8
-  let tokens := returnView.tokens.map fun decoded =>
+private def returnStream (n : Nat := 42) : TokenStream :=
+  let view := returnView n
+  let bytes := (literalSourceText n).toUTF8
+  let tokens := view.tokens.map fun decoded =>
     (⟨decoded, bytes.extract decoded.span.startOffset decoded.span.endOffset⟩ : RetainedToken)
-  let ends := #[0, 2, 7, 8, 9, 12, 15, 17, 24, 27, 28]
-  let trivia := returnView.tokens.toList.zipIdx.map fun (token, i) =>
+  let trivia := view.tokens.toList.zipIdx.map fun (token, i) =>
     let stop := token.span.startOffset
-    let start := ends[i]!
+    let start := if i = 0 then 0 else
+      ((view.tokens[i - 1]?).map (fun previous => previous.span.endOffset)).getD 0
     if start = stop then #[] else
       #[⟨⟨⟨0⟩, start, stop, 1, start + 1⟩, bytes.extract start stop⟩]
-  ⟨elaborationSource, tokens, trivia.toArray.push #[]⟩
+  ⟨view.source, tokens, trivia.toArray.push #[]⟩
 
 -- The verifier accepts the fixed proposal and rejects a changed prediction row.
 set_option maxRecDepth 4096 in
@@ -652,6 +620,7 @@ private def returnPasses (elaborate : Parsed (SyntaxTree ⊕ Bool) → Except El
     Passes slice0 testProfile where
   lex _ := .ok returnStream
   elaborate := elaborate
+  typeCore _ := .ok ()
   checkCore _ := .error ⟨rule, span, [], none⟩
   lowerCore _ := .error (.invalidInput rule)
   lowerUnchecked _ := .error (.invalidInput rule)
@@ -660,6 +629,147 @@ private def returnPasses (elaborate : Parsed (SyntaxTree ⊕ Bool) → Except El
   buildBIR _ := .error (.invalidInput rule)
   emitLLVM _ := .error (.invalidInput rule)
   emitLCB _ := .error (.invalidInput rule)
+
+set_option maxRecDepth 4096 in
+private theorem parsedReturnDomain : Parsed.ElaborationDomain slice0 parsedReturn := by
+  refine ⟨rfl, rfl, ⟨returnView, by with_unfolding_all rfl, by with_unfolding_all rfl⟩,
+    ⟨.ok (returnPayload 42), returnProgram, rfl, rfl⟩, ?_⟩
+  intro payload matching
+  obtain ⟨program, decoded, matching⟩ := matching
+  have same : returnProgram = program := Option.some.inj (show some returnProgram = some program from decoded)
+  subst program
+  have eq : returnPayload 42 = payload := Except.ok.inj matching
+  subst payload
+  exact returnedCoreWF 42
+
+set_option maxRecDepth 4096 in
+example :
+    let registered := registry (returnPasses fixtureElaborate)
+    registered.parser.Compatible registered.elaborator ∧
+    ¬ registered.elaborator.inputInvariant {parsedReturn with tree := .inl (.node .body [])} ∧
+    registered.elaborator.Compatible registered.typing ∧
+    registered.typing.Compatible registered.lowerUnchecked := by
+  refine ⟨fun _ h => h, ?_, fun _ h => h, fun _ h => h⟩
+  rintro ⟨_, _, _, ⟨result, matching⟩, _⟩
+  obtain ⟨_, impossible, _⟩ := matching
+  cases impossible
+
+set_option maxRecDepth 4096 in
+example :
+    let registered := registry (returnPasses fixtureElaborate)
+    registered.typing.outputInvariant (elaboratedReturn 42) := by
+  exact ⟨returnedCoreWF 42, ⟨⟨[], .lit 42, resultSpan⟩, ⟨rfl, fixtureEarly, rfl⟩, .int rfl⟩⟩
+
+set_option maxRecDepth 4096 in
+private theorem return256IllTyped : ¬ (elaboratedReturn 256).StaticallyTyped := by
+  rintro ⟨⟨bindings, ret, location⟩, ⟨_, embedding, eq⟩, typed⟩
+  have noBindings : bindings = [] := List.map_eq_nil_iff.mp (congrArg Payload.ownership eq).symm
+  subst bindings
+  have ops := congrArg Payload.operations eq
+  cases ret with
+  | var x => cases ops
+  | lit n =>
+    have same : 256 = n := by
+      with_unfolding_all
+        change [(SiteId.mk 0, CoreOperation.expression (O := earlyFixtureLanguage.operands)
+          (.inl (.read (.literal (.int .u8 256)))))] =
+          [(SiteId.mk 0, CoreOperation.expression (O := earlyFixtureLanguage.operands)
+            (.inl (.read (.literal (.int .u8 n)))))] at ops
+      cases ops
+      rfl
+    subst n
+    cases typed with
+    | int fits => cases fits
+
+set_option maxRecDepth 4096 in
+example :
+    let failure : StageFailure := .invalidInput ⟨``CoreInput.StaticallyTyped, 1⟩
+    let passes := {returnPasses fixtureElaborate with typeCore := fun _ => .error failure}
+    let edge := (registry passes).typing
+    edge.inputInvariant (elaboratedReturn 256) ∧
+    edge.run (elaboratedReturn 256) = .error failure ∧
+    edge.refusal (elaboratedReturn 256) failure ∧
+    ¬ edge.refusal (elaboratedReturn 42) failure := by
+  refine ⟨⟨returnedCoreWF 256, ⟨⟨[], .lit 256, resultSpan⟩, rfl, fixtureEarly, rfl⟩⟩,
+    rfl, ⟨rfl, return256IllTyped⟩, ?_⟩
+  exact fun refused => refused.2 ⟨⟨[], .lit 42, resultSpan⟩, ⟨rfl, fixtureEarly, rfl⟩, .int rfl⟩
+
+-- Exercise the exact registered parse and elaboration calls before the unchecked
+-- typing refusal. A literal-only checker suffices for this fixture.
+set_option maxRecDepth 4096 in
+example :
+    let failure : StageFailure := .invalidInput ⟨``CoreInput.StaticallyTyped, 1⟩
+    let typeLiteral (core : CoreInput earlyFixtureLanguage) :=
+      match core.payload.operations with
+      | [(_, .expression (.inl (.read (.literal (.int .u8 value)))))] =>
+        if ConcreteSpec.IntTy.u8.inRange value then .ok () else .error failure
+      | _ => .error failure
+    let passes := {returnPasses fixtureElaborate with
+      lex := fun _ => .ok (returnStream 256), typeCore := typeLiteral}
+    ((registry passes).lcbPipeline true).run (literalSource 256) = .error ⟨StageFailure, failure⟩ := by
+  with_unfolding_all rfl
+
+-- The unchecked type judgment permits a defined arithmetic trap.
+set_option maxRecDepth 4096 in
+example :
+    let program : EarlyProgram :=
+      ⟨[(⟨⟨0⟩, .add (.lit 255) (.lit 1)⟩, resultSpan)], .var ⟨0⟩, resultSpan⟩
+    let core : CoreInput earlyFixtureLanguage :=
+      ⟨elaborationSource.project, slice0, earlyPayload fixtureEarly program⟩
+    let typing := (registry (returnPasses fixtureElaborate)).typing
+    typing.run core = .ok core ∧
+    ConcreteSpec.run program.checkedSyntax 3 = .trap .arithmeticOverflow ∧
+    ∀ failure, ¬ typing.refusal core failure := by
+  refine ⟨rfl, rfl, fun _ refusal => refusal.2 ?_⟩
+  exact ⟨_, ⟨rfl, fixtureEarly, rfl⟩, .add (.int rfl) (.int rfl), .copy rfl⟩
+
+set_option maxRecDepth 4096 in
+private theorem fixtureElaboratorValidated : (registry (returnPasses fixtureElaborate)).elaborator.Validated := by
+  have decode (ast : Parsed (SyntaxTree ⊕ Bool)) (domain : Parsed.ElaborationDomain slice0 ast) :
+      ∃ tree program, ast.tree = .inl tree ∧ Concrete.Elab.surfaceProgram tree = some program := by
+    obtain ⟨result, matching⟩ := domain.2.2.2.1
+    cases treeEq : ast.tree with
+    | inr extra =>
+      rw [show cast (sliceGrammarStartShape slice0) ast.tree = .inr extra from treeEq] at matching
+      exact False.elim matching
+    | inl tree =>
+      rw [show cast (sliceGrammarStartShape slice0) ast.tree = .inl tree from treeEq] at matching
+      obtain ⟨program, decoded, _⟩ := matching
+      exact ⟨tree, program, rfl, decoded⟩
+  constructor
+  · intro ast core domain ran
+    obtain ⟨tree, program, treeEq, decoded⟩ := decode ast domain
+    change fixtureElaborate ast = .ok core at ran
+    simp only [fixtureElaborate, treeEq, decoded] at ran
+    cases computed : Concrete.Elab.elaborateLocated program with
+    | error failure => rw [computed] at ran; cases ran
+    | ok programCore =>
+      rw [computed] at ran
+      have output := Except.ok.inj ran
+      subst core
+      have matching : SliceElaboration slice0 (cast (sliceGrammarStartShape slice0) ast.tree)
+          (.ok (earlyPayload fixtureEarly programCore)) := by
+        rw [show cast (sliceGrammarStartShape slice0) ast.tree = .inl tree from treeEq]
+        exact ⟨program, decoded, by rw [computed]; rfl⟩
+      have wf := domain.2.2.2.2 _ matching
+      have sliceEq := domain.2.1
+      have inputWF : (CoreInput.mk ast.source.project ast.source.slice
+          (earlyPayload fixtureEarly programCore)).WF := by rw [sliceEq]; exact wf
+      exact ⟨⟨inputWF, ⟨programCore, sliceEq, fixtureEarly, rfl⟩⟩, rfl, rfl, inputWF, matching⟩
+  · intro ast failure domain ran
+    obtain ⟨tree, program, treeEq, decoded⟩ := decode ast domain
+    change fixtureElaborate ast = .error failure at ran
+    simp only [fixtureElaborate, treeEq, decoded] at ran
+    change SliceElaboration slice0 (cast (sliceGrammarStartShape slice0) ast.tree) (.error failure)
+    rw [show cast (sliceGrammarStartShape slice0) ast.tree = .inl tree from treeEq]
+    refine ⟨program, decoded, ?_⟩
+    cases computed : Concrete.Elab.elaborateLocated program with
+    | ok programCore => rw [computed] at ran; cases ran
+    | error reason =>
+      rw [computed] at ran
+      have same : ElabRefusal.slice0 reason = failure := Except.error.inj ran
+      change (Except.error (.slice0 reason) : Except ElabRefusal (Payload earlyFixtureLanguage)) = .error failure
+      rw [same]
 
 -- Read the literal and locations from the grammar's token leaves. The registered
 -- elaborator consumes the AST returned by the same checked parser.
@@ -679,14 +789,14 @@ example :
   · refine ⟨rfl, by with_unfolding_all rfl, _, rfl, elaborationSourceText.toUTF8, ?_, rfl, _, rfl, ?_⟩
     all_goals with_unfolding_all rfl
   · intro validated
-    have matching := (validated.1 parsedReturn _ ⟨rfl, rfl⟩ rfl).2.2.2.2
+    have matching := (validated.1 parsedReturn _ parsedReturnDomain rfl).2.2.2.2
     change SliceElaboration slice0 (.inl (returnSyntax 42)) (.ok (returnPayload 43)) at matching
     obtain ⟨program, decoded, matching⟩ := matching
     obtain rfl := Option.some.inj (show some returnProgram = some program from decoded)
     have ops := congrArg (fun result => result.toOption.map Payload.operations) matching
     cases ops
   · intro validated
-    have matching := validated.2 parsedReturn _ ⟨rfl, rfl⟩ rfl
+    have matching := validated.2 parsedReturn _ parsedReturnDomain rfl
     change SliceElaboration slice0 (.inl (returnSyntax 42)) (.error (.diagnostic rule span [])) at matching
     obtain ⟨program, decoded, matching⟩ := matching
     obtain rfl := Option.some.inj (show some returnProgram = some program from decoded)
@@ -1489,18 +1599,12 @@ example (project : Project) (m : LoweringModels testLanguage testLowering testPr
     ¬ (r m parser).emitLCB.inputInvariant bir := by
   dsimp
   intro eligible
-  exact (show ¬ 4 ≤ 3 from by decide) eligible.2
+  exact (show ¬ 4 ≤ 3 from by decide) eligible.2.1
 
--- The emitter actually returns this body, but its exact job fails validation.
-example (project : Project) (m : LoweringModels testLanguage testLowering testProfile)
-    (valid : (r m parser).emitLCB.inputInvariant (testBIR project)) : ¬ (r m parser).emitLCB.Checks := by
-  intro sound
-  have validated := (sound.1.1 (testBIR project) testOutput valid rfl).2.2.1
-  have rejected : validateJob (Backend.LCB.job badBody) ≠ .ok () := by
-    intro h
-    have result := congrArg Except.isOk h
-    with_unfolding_all contradiction
-  exact rejected validated
+-- Validate the exact output of the candidate emitter before publishing its job.
+example (project : Project) (m : LoweringModels testLanguage testLowering testProfile) :
+    ∃ reason, (r m parser).emitLCB.run (testBIR project) = .error (.invalidLCBJob reason) :=
+  ⟨_, by with_unfolding_all rfl⟩
 
 end
 
@@ -2375,7 +2479,8 @@ example (parser : Parser grammar) (project : Project) :
     with_unfolding_all exact ⟨start, ⟨start, rfl, .nil _⟩, rfl, rfl⟩
   intro observed sound
   have eligible : (stages 42).emitLLVM.inputInvariant input := by
-    refine ⟨?_, (by decide : 0 ≤ 2)⟩
+    refine ⟨?_, (by decide : 0 ≤ 2), by simp [input, original, birReturn, testBIR],
+      by simp [input, original, birReturn, testBIR], nofun⟩
     intro fn member block included slot trap
     cases List.mem_singleton.mp member
     cases List.mem_singleton.mp included
@@ -2627,6 +2732,33 @@ example (parser : Parser grammar) :
 example (m : LoweringModels testLanguage testLowering testProfile) (parser : Parser grammar) :
     (r m parser).emitLCB.Trusted := fun _ _ _ _ => trivial
 
+-- Missing and duplicate entries cannot enter the backend stage.
+example :
+    let input := birReturn tabProject false
+    (¬ BIR.WF ({input with functions := []} : BIR testLowering testProfile)) ∧
+    (¬ BIR.WF ({input with functions := input.functions ++ input.functions} : BIR testLowering testProfile)) := by
+  refine ⟨fun h => ?_, fun h => ?_⟩
+  · exact List.not_mem_nil h.2.2.2.1
+  · simpa [birReturn] using h.2.2.1
+
+example :
+    let input := birReturn tabProject false
+    let unbound := {testOrigin with lexical := {testOrigin.lexical with file := ⟨99⟩}}
+    ¬ BIR.WF ({input with sites := #[⟨.abort, unbound⟩]} : BIR testLowering testProfile) := by
+  dsimp only
+  intro invalid
+  obtain ⟨_, _, found, _⟩ := invalid.2.2.2.2 _ (List.mem_singleton_self _)
+  cases found
+
+private theorem noInvalidEnding {memory : Memory testLowering testProfile} (wellFormed : memory.TablesWF)
+    {fn locals graph} (present : (fn, locals, graph) ∈ memory.functions)
+    {block} (inGraph : block ∈ graph.blocks.toList) : block.ending ≠ .invalid := by
+  intro invalid
+  obtain ⟨_, _, _, signatureMatches⟩ := (wellFormed.2.2.2.2.2.2 fn locals graph present).2.2
+  have result := (signatureMatches block inGraph).1
+  rw [invalid] at result
+  exact result
+
 -- A spurious typed linking refusal cannot validate on the registered edge.
 example (parser : Parser grammar) :
     let stages := fixtureEntries parser
@@ -2635,7 +2767,7 @@ example (parser : Parser grammar) :
   intro stages valid
   let input := birReturn tabProject false
   have eligible : stages.emitLCB.inputInvariant input := by
-    refine ⟨?_, (by decide : 0 ≤ 3)⟩
+    refine ⟨?_, (by decide : 0 ≤ 3), by simp [input, birReturn, testBIR], by simp [input, birReturn, testBIR], nofun⟩
     intro fn member block included slot trap
     cases List.mem_singleton.mp member
     cases List.mem_singleton.mp included
@@ -2796,6 +2928,7 @@ private abbrev loanFieldLanguage : CoreLanguage :=
       if field = splitField then some (.inr false)
       else if field = secondSplitField then some (.inl (.scalar (.int .u8))) else none
     activeFields := fun _ _ => some [splitField, secondSplitField]
+    replaceField := fun _ path value => if path = [secondSplitField] then some value else none
     field := fun _ path =>
       if path = [splitField] then some (.scalar (.int .u8 17))
       else if path = [secondSplitField] then some (.scalar (.int .u8 25)) else none}
@@ -2827,14 +2960,14 @@ private def moveBeforeBorrow : MemoryRegisters loanFieldLanguage testProfile :=
       nextPlace := 1
       nextActivation := 1 } }
 
-private def liveFieldLoan :
+private def liveFieldLoan (mode : Own.Mode := .shared) :
     Option (MemoryRegisters loanFieldLanguage testProfile × MemoryRegisters loanFieldLanguage testProfile) := do
   let (_, moved) ← loanMemory.readValue moveBeforeBorrow
     (.move (ty := .inr false) ⟨⟨storeRoot, [splitField]⟩, .virtual⟩)
   let address ← loanMemory.resolveAddress moved true
     ⟨.inl (.scalar (.int .u8)), ⟨⟨storeRoot, [secondSplitField]⟩, .virtual⟩⟩
   let borrowed ← Own.borrow moved.ownership address.provenance
-    (address.fields.map Own.Projection.field) .shared
+    (address.fields.map Own.Projection.field) mode
   let released ← Own.endLoan borrowed ⟨0⟩
   return ({moved with ownership := borrowed}, {moved with ownership := released})
 
@@ -2850,6 +2983,20 @@ example : ∃ borrowed released, liveFieldLoan = some (borrowed, released) ∧
     change false = true at h
     contradiction
   · exact ⟨_, ⟨List.mem_cons_self .., rfl⟩, Or.inl ⟨rfl, rfl⟩⟩
+
+-- Both modes exclude owner writes. Only a mutable loan excludes owner copies.
+private def ownerFieldAccess (mode : Own.Mode) : Option (Bool × Bool × Bool × Bool) := do
+  let (borrowed, released) ← liveFieldLoan mode
+  let place : MemoryPlace loanFieldLanguage.operands.Ty (.inl (.scalar (.int .u8))) :=
+    ⟨⟨storeRoot, [secondSplitField]⟩, .virtual⟩
+  let write state := (loanMemory.writeValue state place (.scalar (.int .u8 25))).isSome
+  let copy state := (loanMemory.readValue state (.copy place)).isSome
+  return (write borrowed, copy borrowed, write released, copy released)
+
+set_option maxRecDepth 4096 in
+example : ownerFieldAccess .shared = some (false, true, true, true) ∧
+    ownerFieldAccess .mutable = some (false, false, true, true) :=
+  ⟨by with_unfolding_all rfl, by with_unfolding_all rfl⟩
 
 -- All moved descendants are cleared on replacement. A surviving linear
 -- sibling still prevents an overwrite.
@@ -3637,52 +3784,15 @@ private theorem unsafeEntryStuck : mirExecution.stuck unsafeMIR storeInitial := 
     have impossible : none = some o := by with_unfolding_all exact returned
     cases impossible
 
--- Static table obligations still apply to this unchecked graph. Its stuck
--- source entry makes both safe-source behavioral obligations conditional.
-example : LowersMemory (language := testLanguage) unsafeMIR (returningMemory tabProject) := by
-  refine ⟨rfl, rfl, ⟨nofun, nofun⟩, ⟨?_, nofun⟩, rfl, ⟨?_, nofun⟩, ?_, ?_, ?_, ?_⟩
-  · intro _ _ _ member _ _ localMember
-    cases List.mem_singleton.mp member
-    exact (List.not_mem_nil localMember).elim
-  · intro _ _ _ member _ _ localMember
-    cases List.mem_singleton.mp member
-    exact (List.not_mem_nil localMember).elim
-  · refine ⟨(by change [_].Nodup; simp), (by change [_].Nodup; simp), ?_, List.nodup_nil, nofun, nofun, ?_⟩
-    · exact List.nodup_nil
-    · intro _ _ _ member
-      cases List.mem_singleton.mp member
-      let block : MemoryBlock testLowering :=
-        ⟨⟨0⟩, [], [], .ret (some ⟨(), .literal ⟨[0]⟩⟩), []⟩
-      refine ⟨by simp, ⟨by simp, ⟨block, List.mem_singleton_self block, rfl⟩, ?_⟩, ?_⟩
-      · intro _ member' _ edge
-        cases List.mem_singleton.mp member'
-        exact (List.not_mem_nil edge).elim
-      · refine ⟨_, rfl, ⟨_, List.mem_singleton_self _, rfl, rfl⟩, ?_⟩
-        intro _ member'
-        cases List.mem_singleton.mp member'
-        exact ⟨rfl, nofun⟩
-  · refine ⟨(by change [_].Nodup; simp), (by change [_].Nodup; simp), ?_, List.nodup_nil, ?_, nofun, ?_⟩
-    · change [_].Nodup
-      simp
-    · intro _ _ included
-      cases List.mem_singleton.mp included
-      exact List.nodup_nil
-    · intro _ _ _ member
-      cases List.mem_singleton.mp member
-      let block : MemoryBlock testLowering := ⟨⟨0⟩, [], [], .invalid, []⟩
-      refine ⟨by simp, ⟨by simp, ⟨block, ?_, rfl⟩, ?_⟩, ?_⟩
-      · with_unfolding_all exact List.mem_singleton_self block
-      · intro _ member' _ edge
-        with_unfolding_all change _ ∈ [block] at member'
-        cases List.mem_singleton.mp member'
-        exact (List.not_mem_nil edge).elim
-      · refine ⟨_, rfl, ⟨block, by with_unfolding_all exact List.mem_singleton_self block, rfl, rfl⟩, ?_⟩
-        intro _ member'
-        with_unfolding_all change _ ∈ [block] at member'
-        cases List.mem_singleton.mp member'
-        exact ⟨trivial, nofun⟩
-  · exact fun safe => (safe storeInitial unsafeEntryStuck).elim
-  · exact fun safe => (safe storeInitial unsafeEntryStuck).elim
+-- An invalid terminator remains executable only as a malformed input to the
+-- semantics. It is excluded from the registered lowering handoff.
+example : ¬ LowersMemory (language := testLanguage) unsafeMIR (returningMemory tabProject) := by
+  rintro ⟨_, _, _, _, _, _, _, tables, _, _⟩
+  let block : MemoryBlock testLowering := ⟨⟨0⟩, [], [], .invalid, []⟩
+  have present : (Exec.Demo.mainF, [], ⟨⟨0⟩, #[block]⟩) ∈
+      (unsafeMIR.logicalView (language := testLanguage)).functions :=
+    by with_unfolding_all exact List.mem_singleton_self _
+  exact noInvalidEnding tables present (List.mem_singleton_self block) rfl
 
 -- Requiring an unconditional checkpoint simulation would reject the same
 -- program after its confirmed startup fault.
@@ -3849,7 +3959,7 @@ private theorem aggregateWrite (project : Project) (space : AddrSpace) (base : N
       Memory.layoutAt, materializedBinding, immediateReturn, zeroMemory, storePlace,
       backingBefore, backingAfter, backingRange, storeBefore, storeInitial, storeRoot,
       Mem.Memory.store, Mem.Memory.access, Mem.Memory.block, Mem.Memory.modify,
-      AList.lookup, AList.update, Mem.candidate, Nat.mod_one, erasureLanguage]
+      AList.lookup, AList.update, Mem.candidate, Nat.mod_one, erasureLanguage] <;> rfl
   · with_unfolding_all
       change (do
         let bytes ← (backingAfter space base).bytes.load testProfile.memoryTarget
@@ -4328,7 +4438,7 @@ private theorem AddressAllocation.storeScalar (allocation : AddressAllocation) (
       addressMemory, storingMemory, storePlace, AddressAllocation.before, AddressAllocation.bound,
       backingBefore, backingAfter, backingRange, storeBefore, storeInitial, storeRoot,
       Mem.Memory.store, Mem.Memory.access, Mem.Memory.block, Mem.Memory.modify,
-      AList.lookup, AList.update, Mem.candidate, Nat.mod_one, addressLanguage, storeValue, encoded]
+      AList.lookup, AList.update, Mem.candidate, Nat.mod_one, addressLanguage, storeValue, encoded] <;> rfl
   · change (do
       let bytes ← allocation.bound.bytes.load testProfile.memoryTarget allocation.range.ptr 1 1
       let value ← Hybrid.decode testProfile.memoryTarget (.int .u8) bytes
