@@ -2253,6 +2253,7 @@ Concrete.instDecidableEqRefusal.decEq._proof_7
 Concrete.instDecidableEqRefusal.decEq._proof_8	
 Concrete.instDecidableEqRefusal.decEq._proof_9	
 ConcreteSpec.Core.SourcePathSpan.Project.fileAt.eq_1	Quot.sound propext
+ConcreteSpec.Core.SourcePathSpan.SlotResolves.eq_1	Quot.sound propext
 ConcreteSpec.Core.inRangeOr.eq_1	propext
 ConcreteSpec.Surface0.ByteEscape.eq_1	
 ConcreteSpec.Surface0.DigitsAccepted.eq_1	propext

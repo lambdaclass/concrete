@@ -1646,6 +1646,11 @@ def Project.files (project : Project) : List File := project.entries.toList
 def Project.fileAt (project : Project) (id : FileId) : Option File :=
   project.entries[id.index]?
 
+/-- R-0709, docs/decisions.md#decided-2026-11-14-trap-sites-and-law-tests.
+A table-local file slot must resolve in the project that issued it. -/
+def SlotResolves (input : Project × FileId) : Prop :=
+  input.1.fileAt input.2 ≠ none
+
 /-- A span whose issuing slot resolves to a file validating its entire location.
 The table parameter and issuance proof are erased at runtime. -/
 structure ScopedSpan (origin : Project) extends Span where
@@ -1725,7 +1730,7 @@ inductive LocationRefusal where
 its project slot. The coordinate equations also apply to unchecked zero values. -/
 def LocationRefusal.Violates (project : Project) (id : FileId) (start stop : Nat)
     (coordinates : Option (Nat × Nat)) : LocationRefusal → Prop
-  | .unknownFile => project.fileAt id = none
+  | .unknownFile => ¬ SlotResolves (project, id)
   | .reversedRange => ¬ OrderedOffsets (start, stop)
   | .pastEnd length => ∃ file, project.fileAt id = some file ∧
       length = file.source.length ∧ ¬ EndInSource (file.source, stop)
@@ -1778,7 +1783,8 @@ a certified prefix traversal at the same coordinate access site. -/
     else
       return .error ⟨.reversedRange, ordered⟩
   else
-    return .error ⟨.unknownFile, by exact Array.getElem?_eq_none (Nat.le_of_not_gt slot)⟩
+    have missing : project.fileAt id = none := Array.getElem?_eq_none (Nat.le_of_not_gt slot)
+    return .error ⟨.unknownFile, fun resolves => resolves missing⟩
 
 @[inline] def projectSpanAtM [Monad m] [MonadTick m] (project : Project)
     (id : FileId) (start stop : Nat)
@@ -1880,9 +1886,10 @@ structure RuleId where
   rev : Nat
   deriving DecidableEq, Repr
 
-/-- The R-0709 clause cited by the project-slot location refusal. -/
+/-- The clause cited by the project-slot location refusal. Slot resolution uses
+`Project.fileAt`. The registered `FilePresent` clause covers exact-path lookup. -/
 def SourcePathSpan.LocationRefusal.ruleId : SourcePathSpan.LocationRefusal → RuleId
-  | .unknownFile => ⟨``SourcePathSpan.FilePresent, 2⟩
+  | .unknownFile => ⟨``SourcePathSpan.SlotResolves, 1⟩
   | .reversedRange => ⟨``SourcePathSpan.OrderedOffsets, 2⟩
   | .pastEnd _ => ⟨``SourcePathSpan.EndInSource, 2⟩
   | .wrongLine _ => ⟨``SourcePathSpan.LineMatches, 2⟩

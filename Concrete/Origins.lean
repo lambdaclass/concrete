@@ -50,10 +50,7 @@ theorem validateLocation_complete {project : Project} {supplied : FileSpan} {spa
     have violated := validateLocation_refusal_sound result
     exfalso
     cases refusal with
-    | unknownFile =>
-      change project.fileAt supplied.file = none at violated
-      rw [resolved] at violated
-      contradiction
+    | unknownFile => exact violated (by simp [SlotResolves, resolved])
     | reversedRange => exact violated ordered
     | pastEnd length =>
       obtain ⟨actual, lookup, _, outside⟩ := violated
@@ -140,9 +137,17 @@ private def atEOF : FileSpan := ⟨⟨0⟩, 3, 3, 1, 4⟩
 example : (validateLocation tabProject atEOF).toOption.map Subtype.val =
     some ⟨⟨0⟩, 3, 3, by decide, 1, 4, by decide, by decide⟩ := by decide
 
-example : (match validateLocation tabProject { atEOF with file := ⟨1⟩ } with
-    | .error (.unknownFile) => true
-    | _ => false) = true := by decide
+-- The exact path exists even though slot 1 in this one-file project does not.
+example : FilePresent (tabProject, mainSourcePath) ∧ ¬ SlotResolves (tabProject, ⟨1⟩) ∧
+    (match validateLocation tabProject { atEOF with file := ⟨1⟩ } with
+    | .error (reason@(.unknownFile)) =>
+      decide (reason.ruleId = ⟨``SourcePathSpan.SlotResolves, 1⟩)
+    | _ => false) = true := by
+  refine ⟨?_, ?_, ?_⟩
+  · simp [FilePresent, tabProject, Project.singleton, Project.files, Project.load, File.load]
+  · intro resolves
+    exact resolves rfl
+  · decide
 
 example : (match validateLocation tabProject { atEOF with startOffset := 4 } with
     | .error (.reversedRange) => true
