@@ -792,7 +792,11 @@ These are internal. None blocks slice 0's correctness.
 
 ## What LCB must provide
 
-LCB is our own project; these are tasks for it, not premises to keep. Checked against the pinned rev `4bea4b3` (LCB main after PR #1: wire packets at header v2 with semantics `ssa-int-v2` / `a64-leaf-v2`; packets with the old header or old semantics identifiers are refused; `CodeInput.version` stays 1).
+LCB is our own project. The items below track work for LCB. Concrete pins LCB at
+`4623fba6fec8439974b7e4ceb9a577b3e6918a22`, which includes indexed validation,
+linear assembly emission, and LCB's deterministic scaling gate. Wire packets use
+header v2 with semantics `ssa-int-v2` / `a64-leaf-v2`. LCB refuses packets with
+the old header or semantics identifiers. `CodeInput.version` stays 1.
 
 **For the trusted base (now):**
 1. A public entry `compileSource : Target → Symbol → Source.Function → Except Error Artifact`. Today the compiler builds LCB's `FunctionJob` itself (`Concrete/Backend/LCB.lean`, `assemble`).
