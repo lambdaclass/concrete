@@ -13,7 +13,7 @@ Project version selection is a separate judgment. The exact TOML keys and schema
 -/
 
 namespace ConcreteSpec.Surface1
-open Surface0 (Terminal Token Span Lexes)
+open Surface0 (Terminal Token Span Lexes intrinsicNames)
 open Core (AList SiteId SourcePath)
 
 inductive Expr where
@@ -103,6 +103,9 @@ inductive Derives : List Token → SourceProgram → Prop
       Derives (declTokens ++ [fixed .fn keyword, named name nameSpan, fixed .lparen lp,
         fixed .rparen rp, fixed .arrow arrow, fixed .u8 ty, fixed .lbrace lb] ++
         body ++ [fixed .rbrace rb]) ⟨decls, name, statements⟩
+
+/-- The builtin type spellings reserved by the shared lexical specification. -/
+abbrev builtinTypeNames : List String := Surface0.builtinTypeNames
 
 private def userName (name : String) : Bool :=
   decide (Surface0.BinderLegal [] name)
