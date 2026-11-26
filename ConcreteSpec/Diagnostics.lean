@@ -2,6 +2,7 @@ import ConcreteSpec.Diagnostics.OwnExamples
 import ConcreteSpec.Diagnostics.ExecExamples
 import ConcreteSpec.Diagnostics.Types
 import ConcreteSpec.Diagnostics.Repr
+import ConcreteSpec.Diagnostics.FailedObligationControls
 
 /-!
 # Diagnostics ownership
