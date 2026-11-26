@@ -31,7 +31,7 @@ open BIR Backend
 
 structure BackendModel where
   Artifact : Type
-  emit : BIR.Program → Except String Artifact
+  emit : BIR.Program → Except Refusal Artifact
   means : Artifact → BodyResult → Prop
 
 def llvm (meaning : String → BodyResult → Prop) : BackendModel :=

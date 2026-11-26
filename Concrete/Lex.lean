@@ -1841,6 +1841,7 @@ private def nextToken (input : List Nat) (pos : Position) :
       if let some (lexeme, rest) := label input then return (.fixed .label, lexeme, rest)
       else throw (.syntaxError s!"unexpected character at byte {pos.byte}")
 
+-- The budget is one step per input scalar. Every successful step consumes at least one.
 private def tokens : Nat → List Nat → Position → Bool → List Token → Except Refusal (List Token)
   | _, [], _, _, acc => .ok acc.reverse
   | 0, _, _, _, _ => .error (.internal "lexer exhausted its progress bound")
