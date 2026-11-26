@@ -41,15 +41,15 @@ source scripts/proofs/lib.sh
 echo "=== P: population ==="
 for pkg in ConcreteSpec ConcreteSpecEvidence; do
   PROOF_PKG="$pkg" population imported > "$TMP/imported.txt" || { no "$pkg import enumeration failed"; finish; }
-  GAP=$(closure_gap "$TMP/imported.txt" "$pkg")
+  GAP=$(closure_gap "$TMP/imported.txt" "$pkg") || { no "$pkg source module comparison failed"; finish; }
   [ -z "$GAP" ] && ok "all $pkg source modules are in the closure the replay reads" \
     || no "$pkg modules outside the import closure: $GAP"
 done
 
-{ spec_modules && evidence_modules; } | sort -u > "$TMP/modules.txt" || { no "source module enumeration failed"; finish; }
 PROOF_PKG=SpecAndEvidence population imported > "$TMP/combined-imports.txt" \
   || { no "combined import enumeration failed"; finish; }
-GAP=$(comm -23 "$TMP/modules.txt" <(sort -u "$TMP/combined-imports.txt"))
+GAP=$(closure_gap "$TMP/combined-imports.txt" SpecAndEvidence "$TMP/modules.txt") \
+  || { no "combined source module comparison failed"; finish; }
 [ -z "$GAP" ] || { no "source modules outside the fresh replay root: $GAP"; finish; }
 
 echo "=== F/M: replay ==="

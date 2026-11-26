@@ -225,7 +225,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--write', action='store_true')
     args = parser.parse_args()
-    run(['lake', 'build', 'ConcreteSpecEvidence'])
+    run(['lake', 'build', 'ConcreteSpec', 'ConcreteSpecEvidence'])
     failed = False
     with tempfile.TemporaryDirectory(prefix='spec-imports-') as tmp:
         temp = Path(tmp) / 'Probe.lean'

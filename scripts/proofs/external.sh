@@ -113,9 +113,19 @@ echo "=== I: population ==="
 export PROOF_PKG=SpecAndEvidence
 for pkg in ConcreteSpec ConcreteSpecEvidence; do
   PROOF_PKG="$pkg" population imported > "$TMP/imported.txt" || { no "$pkg import enumeration failed"; finish; }
-  GAP=$(closure_gap "$TMP/imported.txt" "$pkg")
-  [ -z "$GAP" ] || { no "$pkg modules outside the export root: $GAP"; finish; }
+  GAP=$(closure_gap "$TMP/imported.txt" "$pkg") || { no "$pkg source module comparison failed"; finish; }
+  [ -z "$GAP" ] || { no "$pkg modules outside their library root: $GAP"; finish; }
 done
+PROOF_PKG=SpecAndEvidence population imported > "$TMP/combined-imports.txt" \
+  || { no "combined import enumeration failed"; finish; }
+GAP=$(closure_gap "$TMP/combined-imports.txt" SpecAndEvidence) \
+  || { no "combined source module comparison failed"; finish; }
+[ -z "$GAP" ] || { no "source modules outside the export root: $GAP"; finish; }
+population environment > "$TMP/export-environment.txt" \
+  || { no "export environment module enumeration failed"; finish; }
+GAP=$(closure_gap "$TMP/export-environment.txt" SpecAndEvidence) \
+  || { no "export environment module comparison failed"; finish; }
+[ -z "$GAP" ] || { no "source modules outside the export theorem environment: $GAP"; finish; }
 population theorems > "$TMP/inv.tsv" 2> "$TMP/inv.err" \
   || { no "the enumerator failed: $(head -3 "$TMP/inv.err" | tr '\n' ' ')"; finish; }
 NALL=$(grep -c . "$TMP/inv.tsv")

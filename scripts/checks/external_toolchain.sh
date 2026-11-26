@@ -17,6 +17,7 @@ printf '%s\n' leanprover/lean4:v4.35.0 > "$TMP/project/lean-toolchain"
 # lib.sh's project build and orphan-pruning prerequisites remain real code.
 touch "$TMP/project/ConcreteSpecEvidence.lean" "$TMP/project/ConcreteSpec.lean" "$TMP/project/Concrete.lean"
 mkdir "$TMP/project/ConcreteSpecEvidence" "$TMP/project/ConcreteSpec" "$TMP/project/Concrete"
+touch "$TMP/project/ConcreteSpec/SpecificationOnly.lean"
 git -C "$TMP/source" init -q
 cp "$TMP/project/lean-toolchain" "$TMP/source/lean-toolchain"
 mkdir "$TMP/source/src"
@@ -128,7 +129,23 @@ case "$*" in
   'env lean '*)
     echo "population-$PROOF_MODE" >> "$PHASE_LOG"
     case "$PROOF_MODE" in
-      imported) printf '%s\n' ConcreteSpec ConcreteSpecEvidence ;;
+      imported)
+        case "$PROOF_PKG" in
+          ConcreteSpec) printf '%s\n' ConcreteSpec ConcreteSpec.SpecificationOnly ;;
+          ConcreteSpecEvidence) printf '%s\n' ConcreteSpecEvidence ;;
+          SpecAndEvidence)
+            printf '%s\n' ConcreteSpec ConcreteSpecEvidence
+            if [ "${FIXTURE_INCOMPLETE_EXPORT:-0}" = 0 ]; then
+              printf '%s\n' ConcreteSpec.SpecificationOnly
+            fi ;;
+          *) exit 91 ;;
+        esac ;;
+      environment)
+        [ "$PROOF_PKG" = SpecAndEvidence ] || exit 91
+        printf '%s\n' ConcreteSpec ConcreteSpecEvidence
+        if [ "${FIXTURE_INCOMPLETE_ENUMERATOR:-0}" = 0 ]; then
+          printf '%s\n' ConcreteSpec.SpecificationOnly
+        fi ;;
       theorems) for i in $(seq -w 0 99); do printf 'ConcreteSpec.theorem%03d\t\n' "$((10#$i))"; done ;;
       encoded)
         if [[ "$3" == */control-* ]]; then
@@ -285,6 +302,14 @@ for phase in project population-theorems population-encoded exporter population-
 done
 printf 'lean4export\ncon-leche\nnanoda\n' > "$TMP/expected"
 cmp "$TMP/expected" "$DISPATCH_LOG"
+# Each library root is complete, but the actual export root misses one spec module.
+: > "$PHASE_LOG"
+FIXTURE_INCOMPLETE_EXPORT=1 run_driver 'source modules outside the export root: ConcreteSpec.SpecificationOnly'
+! grep -qxF exporter "$PHASE_LOG"
+# Complete roots also cannot mask a theorem query running in a smaller environment.
+: > "$PHASE_LOG"
+FIXTURE_INCOMPLETE_ENUMERATOR=1 run_driver 'source modules outside the export theorem environment: ConcreteSpec.SpecificationOnly'
+! grep -qxF exporter "$PHASE_LOG"
 # Cache hits must succeed even when the nanoda upstream is unavailable.
 mv "$TMP/source" "$TMP/source-offline"
 run_driver 'PROOF-EXTERNAL:' 0

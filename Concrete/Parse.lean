@@ -135,6 +135,9 @@ private def recognizeProduction (lhs : Nonterminal) (rhs : List (Sym Terminal No
     | throw (.internal "unclassified refusal production")
   return outside || children.any id
 
+-- These budgets scale with the input. Each grammar has bounded work between
+-- terminal reads and at most a constant number of reductions per consumed token.
+-- Exhaustion of either budget indicates broken parser progress.
 private def recognizeDecided (input : List Token) : Except Refusal Bool :=
   run refusalTable (·.value.kind) (fun tok => .ok (nonDecimal tok))
     recognizeProduction (fun _ tokens _ => syntaxError tokens)

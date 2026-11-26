@@ -23,6 +23,8 @@ source): every constant in the selected library. The proof-integrity checks
       the modules that declare at least one theorem of the population, one per line.
   PROOF_MODE=imported …
       the selected source modules in the actual import closure of the selected root.
+  PROOF_MODE=environment …
+      the selected source modules in the environment used for constant and theorem queries.
   PROOF_MODE=decls PROOF_NAMES=<file> PROOF_OUT=<out> …
       writes to <out> every constant whose name is listed in <file> (one per line; the declarations
       of a lean4export stream), rendered in the canonical declaration form `export_inventory.py decls` renders from
@@ -41,12 +43,13 @@ annotations and the let `nondep` flag (lean4export shares one index among expres
 `Expr` BEq, which ignores exactly those, so the export legitimately carries whichever spelling it
 met first).
 
-NEGATIVE CONTROLS. Declarations in this file under `ConcreteSpecControl` or `ConcreteControl`
+NEGATIVE CONTROLS. Declarations in this file under `ConcreteSpecControl`, `ConcreteSpecEvidenceControl` or `ConcreteControl`
 belong to the corresponding package population. The checks insert their deliberately bad declarations (a `sorry`, a
 `native_decide`, an extra axiom) at the marker line below, in a temporary copy, and require the run to
 fail; nothing else is ever declared under that namespace.
 -/
 import Lean
+import ConcreteSpec
 import ConcreteSpecEvidence
 import Concrete
 
@@ -189,7 +192,7 @@ def rowSafe : Name → Bool
     throwError s!"unknown PROOF_PKG '{pkgString}'"
   let pkg := Name.mkSimple pkgString
   let mode := (← IO.getEnv "PROOF_MODE").getD "theorems"
-  unless ["theorems", "encoded", "constants", "modules", "imported", "decls", "heads", "examples"].contains mode do
+  unless ["theorems", "encoded", "constants", "modules", "imported", "environment", "decls", "heads", "examples"].contains mode do
     throwError s!"unknown PROOF_MODE '{mode}'"
   -- Fail closed, once, before any mode writes a row: every constant and module name of the
   -- environment (the population, the axioms its constants depend on, the inductive heads of
@@ -229,9 +232,9 @@ def rowSafe : Name → Bool
       if let .str _ s := n then
         if s.startsWith "⟪example⟫" then
           rows := rows.push s!"{n}\t{" ".intercalate (((← collectAxioms n).map toString).qsort (· < ·)).toList}"
-  else if mode == "imported" then
+  else if mode == "imported" || mode == "environment" then
     let root := if pkg == `SpecAndEvidence then `ConcreteSpecEvidence else pkg
-    let closure ← importModules #[{ module := root }] {}
+    let closure ← if mode == "imported" then importModules #[{ module := root }] {} else pure env
     for m in closure.header.moduleNames do
       if m.getRoot == pkg || (pkg == `SpecAndEvidence &&
           (m.getRoot == `ConcreteSpec || m.getRoot == `ConcreteSpecEvidence)) then

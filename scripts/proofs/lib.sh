@@ -85,12 +85,15 @@ population() {
   PROOF_MODE=$mode "$LAKE" env lean "$src"
 }
 
-# closure_gap IMPORTED → the source modules missing from an import closure (PROOF_MODE=imported):
-# a module the root does not import is invisible to every environment check
+# closure_gap IMPORTED PACKAGE [SOURCES_OUT]: source modules absent from the environment or root.
 closure_gap() {
-  if [ "${2:-ConcreteSpec}" = ConcreteSpec ]; then
-    spec_modules
+  local pkg=$2
+  local sources_out=${3:-"$TMP/closure-sources.txt"}
+  if [ "$pkg" = SpecAndEvidence ]; then
+    { spec_modules && evidence_modules; } | sort -u
   else
-    source_modules "$2"
-  fi | comm -23 - <(sort -u "$1")
+    source_modules "$pkg"
+  fi > "$sources_out" || return 1
+  sort -u "$1" > "$TMP/closure-imports.txt" || return 1
+  comm -23 "$sources_out" "$TMP/closure-imports.txt"
 }
