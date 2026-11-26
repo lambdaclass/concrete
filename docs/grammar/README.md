@@ -14,6 +14,11 @@ consumers and open options.
 
 ## Production provenance and remaining approvals
 
+The comments next to the slice 0 and 1 productions identify the recorded Lean
+rules and the draft-only wildcard branch. For slices 2–11, the table below
+identifies authority for the constructs. Each written production and generated
+expansion in those deltas is proposed for that slice's grammar approval.
+
 | Slice | Production groups | Recorded authority and holes |
 |---|---|---|
 | 0 | Program, body, immutable typed binding, return, addition and atoms | Owner said “grammar okay yes” to the displayed productions on November 25, subject to Codex and agy review. The same decision records answer “2. a” for the per-slice approval procedure. [November 25 record](../decisions.md#decided-2026-11-25-freeze-and-grammar) · [`grammar0`](../../ConcreteSpec/Spec/Surface0.lean) |
@@ -54,8 +59,12 @@ replays recognition controls from each construct’s first slice through slice 1
 borrow and import alternatives each bijectively rename a distinct terminal to
 a fresh spelling. Such a rename preserves prediction-set intersections, so
 the checker exercises their joint rename alongside an alternate grammar shape
-in each applicable slice. Lexical changes that preserve a literal token category, or reserve words with no
-productions, use the same prediction table.
+in each applicable slice. Both trust-word reservation policies run the same
+source controls against each prediction table. The adapter reserves the main
+keywords even in projections that have no production for them. The literal
+extensions share terminal kinds and have source-level admission and refusal
+controls. E4's expected-type and resolved-name choices need later semantic
+qualification.
 
 The controls exercise slice 1 lets, head braces and shielded literals, block
 statements and trailing values, assignment places, patterns and nonempty enum
@@ -67,12 +76,18 @@ brace. It can end there as a statement, or a binary-only operator such as
 `+` can continue it as a trailing value through the enclosing block's
 closing brace. Both a bare match followed by a semicolon and an
 operator-continued match followed by a semicolon are refused. The draft
-reserves `-`, `*`, and `&` for the next body item from slice 6. At slice 6, `*` and `&` therefore cannot follow a body-leading match. Slice 7 admits the new dereference and reference forms as a following item. That boundary needs slice approval. Grouping the match or using it in an explicit value context
+reserves `-` for the next body item in slice 6. In that slice, `*` and `&`
+can continue the match as a trailing value. Slice 7 admits dereference and
+reference forms and gives those shared tokens to the next body item. The
+checker inspects the parsed boundary in both slices. That boundary needs
+slice approval. Grouping the match or using it in an explicit value context
 such as a return or initializer permits the ordinary expression ladder.
 Slice 6 shares the optional return payload between braced and unbraced
 arms. The draft checks the bare form in a `Unit` function and the explicit
 `return ();` form. The optional payload follows the recorded legacy grammar
-and is part of the proposed slice delta. [Return production](../../legacy/grammar/concrete.ebnf) ·
+and is part of the proposed slice delta. At slice approval, settle whether
+the bare form begins in slice 5 with `Unit` functions or in slice 6 with
+match arms, and whether to retain both forms. [Return production](../../legacy/grammar/concrete.ebnf) ·
 [OD157](../decisions.md#od157) · [SYN-8](../../legacy/docs/spec/syntax.md#SYN-8)
 
 The draft applies the semicolon-free statement boundary to body-leading
@@ -85,23 +100,27 @@ for an `if` without an `else`. [SYN-9](../../legacy/docs/spec/syntax.md#SYN-9)
 One shared attribute prefix precedes the body dispatch to a loop or a
 postfix operand. The expression ladder consumes binary operators after
 that operand, so in `#[may_not_terminate("reason")] fp(x) + g()` the
-permission attaches to `fp(x)`. The semantic checker classifies eligible targets
-and checks that the reason is nonempty.
+permission attaches to `fp(x)`. The draft inspects that operand in the
+parse tree, checks the attachment by attribute kind and requires a nonempty
+reason. Resolution still has to establish an indirect call or verify which
+function can carry permission for a recursive component.
 [Termination permission](../decisions.md#decided-project-no-hidden-traps)
 
 For assignment, the shared prefix begins at a bare binding or, from slice 7,
 the dereference of a named reference. Fields and indices use the same
-projection productions as the expression ladder. The place suffix can consume
-`=`. Call, literal, qualified-name and operator continuations lead to an
-expression ending. [OD77](../decisions.md#od77) · [OD121](../decisions.md#od121)
+projection productions as the expression ladder. Prefix dereference consumes
+a bare name, so `*r = 1` works directly and `(*r).field = 1` or
+`(*r)[0] = 1` use a grouped place. Call, literal, qualified-name and operator
+continuations lead to an expression ending. [OD77](../decisions.md#od77) · [OD121](../decisions.md#od121)
 
 Planted productions exercise conflicts in the alternate slice 4 attribute
 envelope, unshielded slice 6 head literals, the slice 7 statement/operand
 boundary, and unmarked slice 9 expression generics. Both attribute envelopes
 predict on an ordinary identifier. A draft check on the parsed attribute
-validates the listed name, envelope and argument shape. The E4 target-type
-candidate predicts on the reserved `type` marker in call arguments. A draft
-check on the parsed call validates the unqualified callee spelling. The
+validates the listed name, envelope, argument shape and attachment. The E4
+target-type candidate predicts on the reserved `type` marker in call arguments.
+A check on the parsed call validates the bare callee spelling and counts its
+value arguments at that call level. The
 lossless conversion name, builtin catalog and final argument rules remain
 with E4. [Token ballot](TOKEN-BALLOT.md)
 
@@ -118,13 +137,18 @@ place. [OD121](../decisions.md#od121)
 
 Slice 4 is the first consumer of the explicit exact-arithmetic boundary,
 through loop contracts. Slice 5 reuses it in function contracts. The draft
-tests `math { … }` with a reserved `math` token and admits the marker in
-listed contract arguments. The owner still has the spelling round.
+checks both a reserved `math` and an ordinary identifier. The ordinary
+identifier candidate shares a braced suffix with struct literals and
+distinguishes a field initializer from an arithmetic operand after the first
+identifier. It requires shielding in a condition head, where an unshielded
+braced suffix conflicts with the block opener. Slice 10 reuses exact
+arithmetic in spec function bodies, assertions, theorem arguments and
+assumptions. The spelling remains open.
 [Exact arithmetic](../decisions.md#recovered-59-10)
 
-Production qualification still needs attribute placement checks and
-confirmation of the trailing-comma policy for fixed-arity numeric and
-constant calls. The resolved target of a constant call and classification
+Production qualification still needs resolution of attribute targets and
+confirmation of the trailing-comma policy for fixed-arity numeric and constant
+calls. The resolved target of a constant call and classification
 of bare capability names require name resolution. Lexing, AST actions and
 independent derivations remain production obligations under R-0620, R-0622
 and plan v4 step 4(f).

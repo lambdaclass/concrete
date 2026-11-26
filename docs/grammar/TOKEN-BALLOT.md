@@ -59,6 +59,7 @@ Slice placement comes from the [vertical slices](../../ROADMAP.md#vertical-slice
   within a revision. Under A, an identifier with either spelling is refused
   lexically. Under B, it can still be an identifier before the relevant
   revision. Neither creates a distinct prediction set through slice 11.
+  The checker exercises each reservation timing using real function names.
   [Design philosophy](../PHILOSOPHY.md) · [Vertical slices](../../ROADMAP.md#vertical-slices)
 
 ### Q3. Builtin names and first consumers
@@ -91,8 +92,8 @@ before its slice. Rows marked later have no consumer in this draft.
   B. Add a type argument at a builtin-only position. For compatibility testing
   the draft uses `widen(type: u32, x)` and
   `wrapping_add(type: u32, x, y)` as concrete candidate shapes.
-  The draft parses the reserved marker and checks eligibility by the ordinary
-  identifier spelling. E4 still owns the exact eligible builtin catalog. The type marker, colon and comma use existing tokens.
+  The draft parses the reserved marker and checks the bare identifier and
+  the value-argument count. E4 still owns the exact eligible builtin catalog. The type marker, colon and comma use existing tokens.
   C. Use per-target builtin identifiers such as `to_u32(x)`, which have the
   ordinary call shape. The exact builtin catalog and the form in B are open.
   The draft checks B as a separate option alongside ordinary calls from slice 2.
@@ -124,10 +125,10 @@ The current [`builtinTypeNames`](../../ConcreteSpec/Surface1.lean) also reserves
 | 2 | `,`, `&`, `\|`, `^`, `<<`, `>>` | Comma first separates the two arguments of numeric builtins. Remaining tokens are bitwise/shift operators. |
 | 2 | `~` or `!` for bitwise NOT | A. `~x` (recommended, keeps `!` boolean-only). B. `!x` distinguished by the operand type from slice 3. This is one prefix grammar alternative under B. |
 | 3 | `==`, `!=`, `<`, `<=`, `>`, `>=`, `&&`, `\|\|`, `!` | Decided comparisons and boolean operators (OD42, Q6.5). Trailing expressions have no semicolon. |
-| 3, 6–7 | Block statement boundary | SYN-8 gives a statement-position `match` its own boundary and permits a match in a trailing value. For slice approval, the draft admits `match x { _ => 40, } + 2` as a trailing value. A token shared with the next body item (`-`, `*`, and `&`) is reserved for that item from slice 6. Slice 7 adds the dereference and reference forms that start with `*` and `&`. Use `(match x { _ => 40, }) - 2` for subtraction in that position. Reserving shared tokens for binary continuation would require a separate boundary for following unary items. The draft also applies the semicolon-free statement boundary to body-leading `if` and scoped borrow for slice approval. |
+| 3, 6–7 | Block statement boundary | SYN-8 gives a statement-position `match` its own boundary and permits a match in a trailing value. For slice approval, the draft admits `match x { _ => 40, } + 2` as a trailing value. A shared token goes to the next body item. This applies to `-` in slice 6 and also to `*` and `&` once slice 7 adds dereference and reference forms. At slice 6, `*` and `&` continue a trailing match expression. Use `(match x { _ => 40, }) - 2` for subtraction in that position. Reserving shared tokens for binary continuation would require a separate boundary for following unary items. The draft also applies the semicolon-free statement boundary to body-leading `if` and scoped borrow for slice approval. |
 | 4 | `LABEL :` and `break LABEL;` / `continue LABEL;` | The loop declaration uses a colon. The transfer uses the label alone. |
-| 4–5 | `#[name]`, `#[name(args)]` | Listed forms for `invariant`, `variant`, `may_not_terminate`, `requires`, `ensures` are decided. General attribute syntax is open. A. Keep the same `#[...]` envelope. B. Use `@[...]` for general attributes, preserving the listed `#[...]` forms. Attribute names stay identifiers. Both envelopes use the same IDENT argument grammar. A draft check validates the listed name, envelope and argument shape after recognition. |
-| 4 | `math { expr }` | The owner requires an explicit exact-arithmetic boundary. A. Reserve `math` for this candidate, checked in loop and later function contracts. B. Keep `math` as an ordinary identifier with the same braces. B is infeasible in this grammar because `IDENT {` already starts a struct literal. Exact spelling remains open. [Recovered item 10](../decisions.md#recovered-59-10) |
+| 4–5 | `#[name]`, `#[name(args)]` | Listed forms for `invariant`, `variant`, `may_not_terminate`, `requires`, `ensures` are decided. General attribute syntax is open. A. Keep the same `#[...]` envelope. B. Use `@[...]` for general attributes, preserving the listed `#[...]` forms. Attribute names stay identifiers. Both envelopes use the same IDENT argument grammar. A draft check validates the listed name, envelope, argument shape and parsed attachment. |
+| 4 | `math { expr }` | The owner requires an explicit exact-arithmetic boundary. A. Reserve `math` for this candidate, checked in loop and later function contracts. B. Keep `math` as an ordinary identifier with the same braces. Factor the braced suffix with struct literals and recognize exact arithmetic by the identifier spelling and suffix shape. In a condition head this candidate requires shielding, for example `if (math { x + 1 } > x) { … }` where exact arithmetic is permitted. The checker exercises the factored candidate and plants the conflict from admitting the opening brace freely in a head. Exact spelling remains open. [Recovered item 10](../decisions.md#recovered-59-10) |
 | 4 | `#[may_not_terminate("reason")]` | Decided. One shared statement prefix branches into a loop or an expression statement under either envelope option. In `#[may_not_terminate("reason")] fp(x) + g()` the permission attaches to `fp(x)`, the immediately following postfix expression. The semantic checker requires an indirect call as the expression target and a nonempty reason. [Termination permission](../decisions.md#decided-project-no-hidden-traps) |
 | 1 | `_` | OD62 spelling decided. A. Punctuation token. B. A reserved identifier token distinct from ordinary identifiers. Both candidates include Slice 1 typed wildcard lets and reuse the classification for later bindings and patterns. Main currently resolves the Slice 1 spelling through an identifier token. |
 | 6 | `.`, `::`, `=>`, `\|` | Field selection, qualified paths, pattern/body arrow, and pattern alternatives. OD128 decides `=>`; PAT-7 supplies `\|` in match patterns. |
@@ -161,6 +162,8 @@ the existing lexer rule or approve the listed extension.
 - String escapes `\x00`–`\x7F`.
 - Byte-literal escapes `\x00`–`\xFF`.
 
-Each choice changes a token payload or admission rule. The predictive grammar
-uses the same literal token categories for these options. Raw-byte literal
+The predictive grammar uses the same literal token categories for these
+options. The draft adapter distinguishes the digit and escape extensions.
+The redundant suffix probe exercises both policies with a supplied expected
+type. Inference of that type remains with E4. Raw-byte literal
 syntax has a separate future disposition.

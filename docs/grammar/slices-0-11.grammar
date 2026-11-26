@@ -4,8 +4,11 @@
 # and the ExprContinuation and MatchEnd operator branches from shared precedence rules.
 # See README.md for provenance, alternatives and the checker command.
 [0]
+# Recorded November 25 approval: ../decisions.md#decided-2026-11-25-freeze-and-grammar.
+# Program and Block factor the single Surface0 grammar0 program rule.
 Program = fn IDENT ( ) -> u8 @Block
 Block = { @Body }
+# Body, Expr, AddTail and Atom transcribe Surface0 grammar0 body, expr, more and atom.
 Body = let IDENT : u8 = @Expr ; @Body
 Body = return @Expr ; @Body
 Body =
@@ -16,12 +19,17 @@ Atom = INTEGER
 Atom = IDENT
 Atom = ( @Expr )
 [1]
+# Surface0 grammar1 program and decls, with the same Block factoring as slice 0.
 Program = @Structs fn IDENT ( ) -> u8 @Block
 Structs = struct IDENT { } @Structs
 Structs =
+# Surface0 grammar1 let, letTail and localTy, with the leading identifier factored.
 Body = let @LetHead = @Expr ; @Body
 LetHead = IDENT @LetTail
+# Draft-only OD62 token alternatives. Surface0 grammar1 uses its identifier path.
 LetHead = WILDCARD : @Type
+# Surface0 grammar1 return and empty body. The standalone call resolves only to abort
+# under the delegated slice 1 agreement reported in plan v4. See README for the evidence gap.
 Body = return @Expr ; @Body
 Body = IDENT ( ) ; @Body
 Body =
@@ -29,6 +37,8 @@ LetTail = : @Type
 LetTail = { }
 Type = u8
 Type = IDENT
+# Surface0 grammar1 atom and literal tail. The named move uses the reported
+# delegated agreement. Exact presented productions and raw verdicts are pending E8.
 Atom = INTEGER
 Atom = IDENT @LiteralTail
 Atom = ( @Expr )
@@ -36,6 +46,8 @@ Atom = move IDENT
 LiteralTail = { }
 LiteralTail =
 [2]
+# This and subsequent sections are written grammar proposals. README links the
+# construct decisions and the outstanding production approvals per slice.
 Expr = @BitOr
 BitOr = @BitXor @OrBits
 OrBits = | @BitXor @OrBits
@@ -337,9 +349,12 @@ MutOpt =
 Unary = - @Unary
 Unary = ! @Unary
 Unary = BIT_NOT @Unary
-Unary = * IDENT @Postfix
+Unary = * IDENT
 NamedBody = IDENT @BodyNameTail
-NamedBody = * IDENT @PlaceTail
+NamedBody = * IDENT @DerefTail
+DerefTail = = @Expr ; @Body
+DerefTail = @ExprContinuation @ExprEnd
+GroupedBody = ( @Group ) @PlaceTail
 NamedBody = @PrimitivePath @NameCall @ExprContinuation @ExprEnd
 Unary = & @MutOpt @Unary
 Unary = @AttributePrefix @Atom
@@ -455,7 +470,9 @@ Type = IDENT @TypeNameTail
 Type = Self
 Type = & @MutOpt @Type
 Type = [ @Type ; @Expr ]
-TypePath = IDENT @TypeNameTail
+TypePath = IDENT @TraitPathTail
+TraitPathTail = :: IDENT @TraitPathTail
+TraitPathTail =
 TypeNameTail = :: IDENT @TypeNameTail
 TypeNameTail = @TypeArgsOpt
 TypeArgsOpt = @TypeArgs
@@ -520,7 +537,7 @@ Body = defer @Path ( @Args ) ; @Body
 Body =
 [10]
 Decl = @Function
-Decl = spec fn IDENT @Generics ( @Params ) -> @Type = @Expr ;
+Decl = spec fn IDENT @Generics ( @Params ) -> @Type = @ProofExpr ;
 Decl = struct @CopyOpt IDENT @Generics { @Fields }
 Decl = enum @CopyOpt IDENT @Generics { @Variants }
 Decl = type IDENT @Generics = @Type ;
@@ -540,10 +557,12 @@ Body = @AttributePrefix @AttributedBody
 Body = break @LabelOpt ; @Body
 Body = continue @LabelOpt ; @Body
 Body = defer @Path ( @Args ) ; @Body
-Body = ghost let IDENT @LetTail = @Expr ; @Body
-Body = assert ( @Expr ) @By ; @Body
-Body = assume @Expr ; @Body
-By = by @Path ( @Args )
+Body = ghost let IDENT : @Type = @Expr ; @Body
+Body = assert ( @ProofExpr ) @By ; @Body
+Body = assume @ProofExpr ; @Body
+ProofExpr = @Expr
+By = by @Path ( @ProofArgs )
+ProofArgs = @Args
 By =
 Body =
 [11]

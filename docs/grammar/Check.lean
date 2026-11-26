@@ -65,18 +65,22 @@ def addExpressionLadders (slice : Nat) (rules : List Rule) : List Rule := Id.run
     "CompareTail", "EqualityTail", "LogicAndTail", "LogicOrTail"]
   let continuation := ("ExprContinuation", tails.map ("@" ++ ·))
   let bodyRules := rules.filter fun (lhs, rhs) =>
-    lhs != "Unary" || !["*", "@AttributePrefix"].contains (rhs.headD "")
+    (lhs != "Unary" || !["*", "@AttributePrefix"].contains (rhs.headD "")) &&
+    (slice < 7 || (lhs, rhs) != ("CommonAtom", ["@GroupAtom"]))
   -- A match can continue as a trailing value on a binary-only token. A
   -- token that also begins a body item takes the statement boundary.
-  -- Reserve the cumulative body boundary from the first match slice.
-  let itemStarters := ["-", "*", "&"]
+  let itemStarters := if slice >= 7 then ["-", "*", "&"] else ["-"]
   let matchContinuations := tails.zipIdx.flatMap fun (tail, i) =>
     rules.filterMap fun (lhs, rhs) => do
       let token ← rhs.head?
       if lhs == tail && !itemStarters.contains token then
         some ("MatchEnd", rhs ++ ((tails.drop (i + 1)).map ("@" ++ ·)))
       else none
-  let body := withLeadingOperand "Body" bodyRules ++ [("BodyAtom", ["@CommonAtom"])]
+  let bodyAtoms := if slice >= 7 then
+      bodyRules.filterMap fun (lhs, rhs) => if lhs == "CommonAtom" then some ("BodyAtom", rhs) else none
+    else [("BodyAtom", ["@CommonAtom"])]
+  let body := withLeadingOperand "Body" bodyRules ++ bodyAtoms
+  let body := if slice >= 7 then body ++ [("Body", ["@GroupedBody"])] else body
   let expanded := withExpressionLadder "Head" rules ++ body ++ [continuation] ++
     (if slice >= 6 then matchContinuations else [])
   if slice < 8 then return expanded
@@ -95,12 +99,37 @@ structure Options where
   importWord : String
   prefixBorrowBinder : Bool
   builtinTargetType : Bool
+  earlyTrustWords : Bool
+  mathKeyword : Bool
   deriving Inhabited, Repr
 
 def representative : Options :=
-  ⟨"~", true, true, false, "borrow", ("from", "until"), "->", "import", false, false⟩
+  ⟨"~", true, true, false, "borrow", ("from", "until"), "->", "import", false, false, false, true⟩
+
+-- Share the braces with ordinary named literals. After an identifier
+-- inside the braces, a colon starts an initializer and the ordinary
+-- expression tails continue an exact-arithmetic operand.
+def withIdentifierMath (rules : List Rule) : List Rule :=
+  let hasFields := rules.contains ("NameLiteral", ["{", "@Initializers", "}"])
+  let namedTails := rules.filterMap fun (lhs, rhs) =>
+    match lhs, rhs with
+    | "Atom", "IDENT" :: tail => some ("MathValue", tail ++ ["@ExprContinuation"])
+    | _, _ => none
+  let otherAtoms := rules.filterMap fun (lhs, rhs) =>
+    if lhs == "Atom" && rhs.head? != some "IDENT" then some ("MathOtherAtom", rhs) else none
+  rules.filter (fun (lhs, rhs) => lhs != "NameLiteral" && rhs != ["@ExactArithmetic"]) ++
+    withLeadingOperand "MathOther" rules ++ otherAtoms ++ namedTails ++ [
+      ("NameLiteral", ["{", "@BraceContents", "}"]),
+      ("BraceContents", ["IDENT", "@BraceAfterName"]),
+      ("BraceContents", ["@MathOtherValue"]),
+      ("BraceContents", []),
+      ("BraceAfterName", ["@MathValue"]),
+      ("MathOtherValue", ["@MathOtherExpr"])] ++
+    (if hasFields then [("BraceAfterName", [":", "@Expr", "@InitializerTail"])] else [])
 
 def instantiate (options : Options) (rules : List Rule) : DraftGrammar :=
+  let rules := if !options.mathKeyword && rules.any (·.1 == "ExactArithmetic")
+    then withIdentifierMath rules else rules
   let replace (sym : String) :=
     match sym with
     | "BIT_NOT" => options.bitNot
@@ -179,11 +208,101 @@ structure Token where
   spelling : String
   deriving Inhabited
 
-def draftTokens (slice : Nat) (options : Options) (g : DraftGrammar) (source : String) :
-    List Token := Id.run do
-  let fixed := terminals g ++ ["kept", "Self", "type", "Entropy", "while", "from", "until",
-    "Copy", "spec", "by", "ghost", "cap"]
-  let primitives := ["i8", "i16", "i32", "i64", "u16", "u32", "u64"] ++
+-- Reserved source words are independent of grammar reachability. This
+-- includes every non-identifier spelling of Surface0.word on main.
+def mainReservedWords : List String :=
+  ["fn", "let", "return", "u8", "struct", "move", "spec", "by", "kept", "Self",
+   "while", "Entropy", "from", "until", "cap", "type", "ghost", "Copy",
+   "Fs", "Network", "Env", "Time", "Alloc", "Device", "Console", "Process", "Unsafe"]
+
+def draftReservedWords (slice : Nat) (options : Options) : List String :=
+  mainReservedWords ++ ["for", "break", "continue"] ++
+    (if slice >= 3 then ["if", "else", "mut", "true", "false"] else []) ++
+    (if slice >= 4 && options.mathKeyword then ["math"] else []) ++
+    (if slice >= 6 then ["enum", "match"] else []) ++
+    (if slice >= 7 then [options.borrowWord] else []) ++
+    (if slice >= 8 then ["pub", "const", "mod", options.importWord] else []) ++
+    (if slice >= 9 then ["trait", "impl", "defer"] else []) ++
+    (if slice >= 10 then ["assert", "assume"] else []) ++
+    (if slice >= 11 then ["with"] else []) ++
+    (if options.earlyTrustWords then ["trusted", "extern"] else [])
+
+structure LiteralOptions where
+  digitSeparators : Bool := false
+  separatorAfterPrefix : Bool := false
+  upperHex : Bool := false
+  unicodeEscape : Bool := false
+  stringHexEscape : Bool := false
+  byteHexEscape : Bool := false
+
+def hexDigit (upper : Bool) (c : Char) : Option Nat :=
+  if c.isDigit then some (c.toNat - '0'.toNat)
+  else if 'a' ≤ c && c ≤ 'f' then some (c.toNat - 'a'.toNat + 10)
+  else if upper && 'A' ≤ c && c ≤ 'F' then some (c.toNat - 'A'.toNat + 10)
+  else none
+
+def integerSuffix (policy : LiteralOptions) (word : List Char) : Option (List Char) := do
+  let (base, digits) := match word with
+    | '0' :: 'x' :: rest => (16, rest)
+    | '0' :: 'o' :: rest => (8, rest)
+    | '0' :: 'b' :: rest => (2, rest)
+    | _ => (10, word)
+  let isDigit := fun c => (hexDigit policy.upperHex c).any (· < base)
+  let first := if base != 10 && policy.digitSeparators && policy.separatorAfterPrefix &&
+      digits.head? == some '_' then digits.drop 1 else digits
+  let rec consume : List Char → List Char
+    | c :: next :: rest =>
+      if isDigit c then
+        if next == '_' && policy.digitSeparators && (rest.head?).any isDigit then consume rest
+        else consume (next :: rest)
+      else c :: next :: rest
+    | [c] => if isDigit c then [] else [c]
+    | [] => []
+  guard ((first.head?).any isDigit)
+  let suffix := consume first
+  guard (suffix.isEmpty ||
+    ["i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64"].contains (String.ofList suffix))
+  guard (base != 10 || first.head? != some '0' || first == '0' :: suffix)
+  return suffix
+
+def hexValue (digits : List Char) : Option Nat :=
+  digits.foldlM (fun acc digit => (hexDigit true digit).map (acc * 16 + ·)) 0
+
+def escapeTail (policy : LiteralOptions) (quote : Char) (input : List Char) : Option (List Char) := do
+  match input with
+  | 'x' :: a :: b :: rest =>
+    let value ← hexValue [a, b]
+    guard (if quote == '"' then policy.stringHexEscape && value ≤ 127 else policy.byteHexEscape)
+    return rest
+  | 'u' :: '{' :: rest =>
+    guard (quote == '"' && policy.unicodeEscape)
+    let digits := rest.takeWhile (hexDigit true · |>.isSome)
+    let '}' :: tail := rest.drop digits.length | none
+    let value ← hexValue digits
+    guard (!digits.isEmpty && value < 0x110000 && !(0xd800 ≤ value && value < 0xe000))
+    return tail
+  | escaped :: rest =>
+    guard (['n', 't', 'r', '0', '\\', quote].contains escaped)
+    return rest
+  | [] => none
+
+partial def quotedBody (policy : LiteralOptions) (quote : Char) (input acc : List Char) :
+    Option (List Char × List Char) :=
+  match input with
+  | [] => none
+  | '\\' :: rest => do
+    let tail ← escapeTail policy quote rest
+    let escape := '\\' :: rest.take (rest.length - tail.length)
+    quotedBody policy quote tail (escape.reverse ++ acc)
+  | next :: rest =>
+    if next == quote then some (acc.reverse, rest)
+    else if next.toNat < 32 then none
+    else quotedBody policy quote rest (next :: acc)
+
+def draftTokens (slice : Nat) (options : Options) (source : String)
+    (literals : LiteralOptions := {}) : List Token := Id.run do
+  let fixed := draftReservedWords slice options
+  let primitives := (if slice >= 2 then ["i8", "i16", "i32", "i64", "u16", "u32", "u64"] else []) ++
     (if slice >= 3 then ["bool", "Unit"] else []) ++ (if slice >= 11 then ["char"] else [])
   let wordChar (c : Char) := c.isAlphanum || c == '_'
   let punct := [">>", "<<", "::", "=>", "->", "<=", ">=", "==", "!=", "&&", "||",
@@ -204,16 +323,29 @@ def draftTokens (slice : Nat) (options : Options) (g : DraftGrammar) (source : S
               if options.wildcardToken then "_" else "RESERVED_UNDERSCORE"
             else if fixed.contains w then w
             else if options.primitiveKeyword && primitives.contains w then "PRIMITIVE"
-            else if c.isDigit then "INTEGER"
-            else w
-          let k := if wordChar c && !c.isDigit && k == w && !fixed.contains w then "IDENT" else k
-          let k := if ["IDENT", "INTEGER", "BYTE", "STRING", "LABEL", "PRIMITIVE"].contains w then w else k
+            else if c.isDigit then if (integerSuffix literals word).isSome then "INTEGER" else "INVALID"
+            else "IDENT"
           (w, k, remaining.drop word.length)
         else if c == '\'' || c == '"' then
-          let content := tail.takeWhile (· != c)
-          let quoted := tail.drop content.length
-          let kind := if quoted.isEmpty then "INVALID" else if c == '"' then "STRING" else "BYTE"
-          (String.ofList content, kind, quoted.drop 1)
+          if c == '"' then
+            match quotedBody literals c tail [] with
+            | some (content, rest) => (String.ofList content, "STRING", rest)
+            | none => ("", "INVALID", [])
+          else
+            match tail with
+            | '\\' :: escaped =>
+              match escapeTail literals c escaped with
+              | some ('\'' :: rest) =>
+                (String.ofList (tail.take (tail.length - rest.length - 1)), "BYTE", rest)
+              | _ => ("", "INVALID", [])
+            | value :: '\'' :: rest =>
+              (String.singleton value, if 32 ≤ value.toNat && value.toNat ≤ 126 then "BYTE" else "INVALID", rest)
+            | first :: _ =>
+              if first.isAlpha || first == '_' then
+                let label := tail.takeWhile wordChar
+                (String.ofList label, "LABEL", tail.drop label.length)
+              else ("", "INVALID", tail)
+            | [] => ("", "INVALID", [])
         else
           let w := (punct.find? (fun w => w.toList.isPrefixOf remaining)).getD (String.singleton c)
           (w, w, remaining.drop w.length)
@@ -271,9 +403,8 @@ partial def traceableGroupBase : Tree → Bool
     | [.leaf openParen, inner, .leaf closeParen, suffixTree] =>
       name == "GroupAtom" && openParen.kind == "(" && closeParen.kind == ")" &&
         suffixTree.isNode "Postfix" && traceableGroupBase inner
-    | .leaf first :: .leaf binding :: tail =>
-      name == "Unary" && first.kind == "*" && binding.kind == "IDENT" &&
-        tail.all (·.isNode "Postfix")
+    | [.leaf first, .leaf binding] =>
+      name == "Unary" && first.kind == "*" && binding.kind == "IDENT"
     | [.leaf ident, suffixTree] =>
       name == "Atom" && ident.kind == "IDENT" &&
         (match suffixTree with
@@ -309,7 +440,12 @@ def attributeValid (slice : Nat) (options : Options) (opener name : String) (arg
     | _ => none
   let listedShape :=
     if contractAttribute slice name then some oneExpr.isSome
-    else if name == "may_not_terminate" then some (kinds == ["(", "STRING", ")"])
+    else if name == "may_not_terminate" then
+      some (match args.tokens with
+        | [openParen, reason, closeParen] =>
+          openParen.kind == "(" && reason.kind == "STRING" && !reason.spelling.isEmpty &&
+            closeParen.kind == ")"
+        | _ => false)
     else if slice >= 10 && name == "test" then some kinds.isEmpty
     else if slice >= 10 && name == "proof" then some (oneExpr.any isProofPath)
     else none
@@ -317,37 +453,168 @@ def attributeValid (slice : Nat) (options : Options) (opener name : String) (arg
   | some valid => opener == "#[" && valid
   | none => !options.alternateAttribute || opener == "@["
 
-partial def draftRestrictions (slice : Nat) (options : Options) (inContract : Bool) :
-    Tree → Bool
-  | .leaf _ => true
-  | .node "Attribute" [.leaf opener, .leaf name, args, _] =>
-    attributeValid slice options opener.kind name.spelling args &&
-      draftRestrictions slice options (contractAttribute slice name.spelling) args
-  | .node "GroupAtom" [_, group, _, suffixTree] =>
-    (!suffixTree.hasTokens || traceableGroupBase group) &&
-      draftRestrictions slice options inContract group &&
-      draftRestrictions slice options inContract suffixTree
-  | .node name children =>
-    (name != "ExactArithmetic" || inContract) &&
-      children.all (draftRestrictions slice options inContract)
+inductive Attachment where
+  | loop (form : String)
+  | operand (tree : Tree)
+  | function
+  | declaration
+  | invalid
 
--- Target type has a unique reserved marker. Callee eligibility is a check on
--- the unqualified identifier spelling, independent of LL(1) prediction.
-def targetCalleesValid : List Token → Bool
-  | before :: callee :: openParen :: marker :: colon :: rest =>
-    let eligible := ["wrapping_add", "wrapping_sub", "wrapping_mul",
-      "saturating_add", "saturating_sub", "saturating_mul"]
-    (marker.kind != "type" || colon.kind != ":" || openParen.kind != "(" ||
-      (before.kind != "::" && eligible.contains callee.spelling)) &&
-      targetCalleesValid (callee :: openParen :: marker :: colon :: rest)
-  | _ => true
+-- The call must be on the operand's postfix spine. A call inside a group,
+-- argument, index, literal or branching expression cannot qualify the operand.
+partial def isPostfixCall : Tree → Bool
+  | .node "NameCall" _ => true
+  | .node name children =>
+    if ["Atom", "NumericNameTail"].contains name then children.any isPostfixCall else false
+  | .leaf _ => false
+
+def attachmentValid (slice : Nat) (name : String) (target : Attachment) : Bool :=
+  match target with
+  | .loop form =>
+    if name == "may_not_terminate" then form == "while"
+    else !["requires", "ensures", "proof", "test"].contains name
+  | .operand operand => name == "may_not_terminate" && isPostfixCall operand
+  | .function => name != "invariant"
+  | .declaration =>
+    name != "may_not_terminate" && !contractAttribute slice name &&
+      !(slice >= 10 && ["proof", "test"].contains name)
+  | .invalid => false
+
+def attributeAttachment (owner : String) (following : List Tree) : Attachment :=
+  match owner, following with
+  | "Body", .node "AttributedBody" (.node "Loop" [_, form] :: _) :: _ =>
+    .loop ((form.tokens.head?).map (·.kind) |>.getD "")
+  | "Body", .node "AttributedBody" (operand :: _) :: _ => .operand operand
+  | name, operand :: _ =>
+    if ["Unary", "HeadUnary"].contains name then .operand operand
+    else if name == "Functions" || name == "ImplMembers" then .function
+    else if name == "TraitMembers" then .declaration
+    else if name == "Item" then
+      if following.any (fun
+        | .node "Decl" (.leaf first :: _) => first.kind == "fn"
+        | .node "Decl" [child] => child.isNode "Function"
+        | _ => false)
+      then .function else .declaration
+    else .invalid
+  | _, [] => .invalid
+
+def placeTailProjectsOrAssigns : Tree → Bool
+  | .node "PlaceTail" (.node "Projection" _ :: _) => true
+  | .node "PlaceTail" (.leaf token :: _) => token.kind == "="
+  | _ => false
+
+mutual
+  partial def draftRestrictions (slice : Nat) (options : Options) (inContract : Bool) :
+      Tree → Bool
+    | .leaf _ => true
+    | .node "GroupAtom" [_, group, _, suffixTree] =>
+      (!suffixTree.hasTokens || traceableGroupBase group) &&
+        draftRestrictions slice options inContract group &&
+        draftRestrictions slice options inContract suffixTree
+    | .node "GroupedBody" [_, group, _, suffixTree] =>
+      (!placeTailProjectsOrAssigns suffixTree || traceableGroupBase group) &&
+        draftRestrictions slice options inContract group &&
+        draftRestrictions slice options inContract suffixTree
+    | .node name (leading :: following) =>
+      let inProof := inContract || ["ProofExpr", "ProofArgs"].contains name
+      (!["ExactArithmetic", "MathValue", "MathOtherValue"].contains name || inProof) &&
+        (if leading.isNode "Attrs" || leading.isNode "AttributePrefix" then
+          attributesValid slice options (attributeAttachment name following) leading
+        else draftRestrictions slice options inProof leading) &&
+        following.all (draftRestrictions slice options inProof)
+    | .node _ [] => true
+
+  partial def attributesValid (slice : Nat) (options : Options) (target : Attachment) :
+      Tree → Bool
+    | .node "Attribute" [.leaf opener, .leaf name, args, _] =>
+      attributeValid slice options opener.kind name.spelling args &&
+        attachmentValid slice name.spelling target &&
+        draftRestrictions slice options (contractAttribute slice name.spelling) args
+    | .node name children =>
+      ["Attrs", "AttributePrefix"].contains name &&
+        children.all (attributesValid slice options target)
+    | _ => false
+end
+
+-- Count only arguments at this call level. Nested calls and commas inside
+-- expressions or types never contribute to the enclosing call's arity.
+partial def extraArguments : Tree → Nat
+  | .node "ArgTail" [_, .node "Args" [expr, tail]] =>
+    (if expr.hasTokens then 1 else 0) + extraArguments tail
+  | .node name [_, _] => if ["SecondArg", "ConstSecondArg"].contains name then 1 else 0
+  | _ => 0
+
+def targetArity (args : Tree) : Option Nat :=
+  match args with
+  | .node _ [target, _, tail] =>
+    if target.isNode "TargetType" then some (1 + extraArguments tail) else none
+  | _ => none
+
+def expectedTargetArity (callee : String) : Nat :=
+  if ["widen", "truncate", "reinterpret"].contains callee then 1
+  else if ["wrapping_add", "wrapping_sub", "wrapping_mul",
+    "saturating_add", "saturating_sub", "saturating_mul"].contains callee then 2
+  else 0
+
+def braceUsesMath : Tree → Bool
+  | .node "BraceContents" [.node "MathOtherValue" _] => true
+  | .node "BraceContents" [_, .node "BraceAfterName" [.node "MathValue" _]] => true
+  | _ => false
+
+-- At a named suffix the two preceding tokens distinguish a bare
+-- identifier from a path segment. Validation follows the parsed suffix.
+partial def validateNamedSuffixes (previous : Token × Token) (tree : Tree) :
+    Option (Token × Token) := do
+  match tree with
+  | .leaf token => some (previous.2, token)
+  | .node name children =>
+    let bareName := previous.1.kind != "::" && previous.2.kind == "IDENT"
+    match name, children with
+    | "NameCall", [_, args, _]
+    | "ConstNameTail", [_, args, _] =>
+      if let some arity := targetArity args then
+        guard (bareName && expectedTargetArity previous.2.spelling == arity)
+    | "NameLiteral", [_, contents, _] =>
+      if braceUsesMath contents then
+        guard (bareName && previous.2.spelling == "math")
+    | _, _ => pure ()
+    children.foldlM validateNamedSuffixes previous
+
+def parseSource (slice : Nat) (options : Options) (g : DraftGrammar) (table : PredictionTable)
+    (source : String) : Option Tree := do
+  let input := draftTokens slice options source
+  let some ([tree], []) :=
+    parseSymbols table (slice >= 9) false ((input.length + 1) * (g.prods.length + 1)) [.n g.start] input
+    | none
+  return tree
+
+def parseDraft (slice : Nat) (options : Options) (g : DraftGrammar) (table : PredictionTable)
+    (source : String) : Option Tree := do
+  let tree ← parseSource slice options g table source
+  guard (draftRestrictions slice options false tree &&
+    (validateNamedSuffixes (default, default) tree).isSome)
+  return tree
 
 def recognizes (slice : Nat) (options : Options) (g : DraftGrammar) (table : PredictionTable)
     (source : String) : Bool :=
-  let input := draftTokens slice options g source
-  match parseSymbols table (slice >= 9) false ((input.length + 1) * (g.prods.length + 1)) [.n g.start] input with
-  | some ([tree], []) => draftRestrictions slice options false tree && targetCalleesValid (⟨"", ""⟩ :: input)
-  | _ => false
+  (parseDraft slice options g table source).isSome
+
+partial def permissionOperands : Tree → List (List String)
+  | .node name (leading :: following) =>
+    let nested := (leading :: following).flatMap permissionOperands
+    if (leading.isNode "AttributePrefix") && leading.tokens.any (·.spelling == "may_not_terminate") then
+      match attributeAttachment name following with
+      | .operand operand => (operand.tokens.map (·.spelling)) :: nested
+      | _ => nested
+    else nested
+  | _ => []
+
+partial def matchEnds : Tree → List String
+  | .node "MatchEnd" (.leaf token :: _) => [token.kind]
+  | .node "MatchEnd" (.node "Body" (body :: _) :: _) =>
+    [(body.tokens.head?).map (·.kind) |>.getD "" |>.append " body"]
+  | .node _ children => children.flatMap matchEnds
+  | .leaf _ => []
 
 structure Example where
   label : String
@@ -355,98 +622,145 @@ structure Example where
   expected : Bool := true
 
 def fnBody (body : String) : String :=
-  "fn IDENT ( ) -> u8 { " ++ body ++ " }"
+  "fn x ( ) -> u8 { " ++ body ++ " }"
 
 def examples (slice currentSlice : Nat) (options : Options) : List Example :=
-  let targetBuiltin := "wrapping_add"
   let wildcard := "_"
   let attr := if options.alternateAttribute then "@[" else "#["
   let arm (pattern body : String) := s!"{pattern} => {body} ,"
   let borrow := options.borrowWord
-  let binding := if options.prefixBorrowBinder then s!"{borrow} IDENT = IDENT"
-    else s!"{borrow} IDENT {options.binderMark} IDENT"
+  let binding := if options.prefixBorrowBinder then s!"{borrow} x = x"
+    else s!"{borrow} x {options.binderMark} x"
   match slice with
-  | 0 => [⟨"typed binding and addition", fnBody "let x : u8 = 1; return x + 2;", true⟩]
+  | 0 =>
+    [⟨"typed binding and addition", fnBody "let x : u8 = 1; return x + 2;", true⟩,
+     ⟨"main capability reserved before its first use", "fn Fs() -> u8 { return 1; }", false⟩,
+     ⟨"main struct keyword reserved before its first use", "fn struct() -> u8 { return 1; }", false⟩] ++
+    (mainReservedWords ++ ["for", "break", "continue"]).map (fun name =>
+      ⟨s!"reserved binder {name}", s!"fn {name}() -> u8 \{ return 1; }", false⟩) ++
+    ["main", "self", "as", "in", "newtype", "union", "total"].map (fun name =>
+      ⟨s!"identifier binder {name}", s!"fn {name}() -> u8 \{ return 1; }", true⟩) ++
+    [(options.borrowWord, decide (currentSlice < 7)), (options.importWord, decide (currentSlice < 8)),
+      (if options.borrowWord == "borrow" then "loan" else "borrow", true),
+      (if options.importWord == "import" then "use" else "import", true)].map (fun (name, allowed) =>
+      ⟨s!"draft reservation for {name}", s!"fn {name}() -> u8 \{ return 1; }", allowed⟩) ++
+    ["trusted", "extern"].map (fun name =>
+      ⟨s!"trust reservation for {name}", s!"fn {name}() -> u8 \{ return 1; }",
+        !options.earlyTrustWords⟩)
   | 1 => [
     ⟨"typed and destructuring lets share a prefix",
-      "struct IDENT { } " ++ fnBody "let IDENT : IDENT = IDENT { } ; let IDENT { } = move IDENT ; return INTEGER ;", true⟩,
+      "struct x { } " ++ fnBody "let x : x = x { } ; let x { } = move x ; return 1 ;", true⟩,
     ⟨"typed wildcard let", fnBody "let _ : u8 = 1; return 2;", true⟩,
-    ⟨"incomplete let", fnBody "let IDENT = INTEGER ;", false⟩]
+    ⟨"wildcard token cannot bind a function name", "fn _() -> u8 { return 1; }", false⟩,
+    ⟨"incomplete let", fnBody "let x = 1 ;", false⟩]
   | 2 => [
-    ⟨"builtin-only target-type candidate",
-      fnBody s!"return {targetBuiltin} ( type : u8 , INTEGER ) ;", options.builtinTargetType⟩,
-    ⟨"ordinary call to an eligible builtin",
-      fnBody s!"return {targetBuiltin} ( INTEGER ) ;", true⟩,
+    ⟨"target-type conversion", fnBody "return widen(type: u32, x);", options.builtinTargetType⟩,
+    ⟨"target-type binary arithmetic", fnBody "return wrapping_add(type: u32, x, y);", options.builtinTargetType⟩,
+    ⟨"target-type conversion rejects two operands", fnBody "return widen(type: u32, x, y);", false⟩,
+    ⟨"target-type binary arithmetic rejects one operand", fnBody "return wrapping_add(type: u32, x);", false⟩,
+    ⟨"ordinary per-target conversion", fnBody "return to_u32(x);", true⟩,
+    ⟨"ordinary expected-type conversion", fnBody "return widen(x);", true⟩,
+    ⟨"ordinary binary arithmetic", fnBody "return wrapping_add(x, y);", true⟩,
     ⟨"eligible builtin name stays an identifier in a value position",
       fnBody "return wrapping_add;", true⟩,
     ⟨"ordinary call cannot take a target type",
-      fnBody "return IDENT ( type : u8 , INTEGER ) ;", false⟩,
-    ⟨"bitwise NOT in a return at first use", fnBody s!"return {options.bitNot} INTEGER ;", true⟩,
+      fnBody "return x ( type : u8 , 1 ) ;", false⟩,
+    ⟨"bitwise NOT in a return at first use", fnBody s!"return {options.bitNot} 1 ;", true⟩,
+    ⟨"unselected bitwise NOT spelling",
+      fnBody (if options.bitNot == "!" then "return ~1;" else "return !1;"),
+      options.bitNot == "~" && currentSlice >= 3⟩,
     ⟨"primitive keyword classification",
-      "struct IDENT { } fn IDENT ( ) -> u8 { let IDENT : PRIMITIVE = INTEGER ; }", options.primitiveKeyword⟩,
-    ⟨"primitive identifier classification", fnBody "let IDENT : IDENT = INTEGER ;", true⟩]
+      "fn u32() -> u8 { return 1; }", !options.primitiveKeyword⟩,
+    ⟨"primitive identifier classification", fnBody "let x : x = 1 ;", true⟩]
   | 3 => [
-    ⟨"semicolon-free if statement", fnBody "if true { return INTEGER ; } return INTEGER ;", true⟩,
+    ⟨"semicolon-free if statement", fnBody "if true { return 1 ; } return 1 ;", true⟩,
     ⟨"value if with an operator continuation",
-      fnBody "return if true { INTEGER } else { INTEGER } + INTEGER ;", true⟩,
+      fnBody "return if true { 1 } else { 1 } + 1 ;", true⟩,
     ⟨"statement if followed by a trailing unary minus",
-      fnBody "if true { IDENT ( ) ; } - INTEGER", true⟩,
+      fnBody "if true { x ( ) ; } - 1", true⟩,
     ⟨"statement if followed by a unary-minus statement",
-      fnBody "if true { IDENT ( ) ; } - INTEGER ; return INTEGER ;", true⟩,
+      fnBody "if true { x ( ) ; } - 1 ; return 1 ;", true⟩,
     ⟨"statement if followed by a trailing bitwise not",
-      fnBody s!"if true \{ IDENT ( ) ; } {options.bitNot} INTEGER", true⟩,
+      fnBody s!"if true \{ x ( ) ; } {options.bitNot} 1", true⟩,
     ⟨"else-less if has no value",
-      fnBody "let IDENT : u8 = if true { INTEGER } ; INTEGER", false⟩,
+      fnBody "let x : u8 = if true { 1 } ; 1", false⟩,
     ⟨"statement if does not continue with binary plus",
-      fnBody "if true { INTEGER } else { INTEGER } + INTEGER", false⟩,
+      fnBody "if true { 1 } else { 1 } + 1", false⟩,
     ⟨"ordering binds more tightly than equality",
-      fnBody "if IDENT < IDENT == true { INTEGER } else { INTEGER }", true⟩,
-    ⟨"assignment to local", fnBody "IDENT = INTEGER ;", true⟩,
-    ⟨"assignment to arithmetic result", fnBody "INTEGER + INTEGER = INTEGER ;", false⟩,
-    ⟨"assignment to call result", fnBody "IDENT ( ) = INTEGER ;", false⟩,
-    ⟨"expression statements and a final expression", fnBody "IDENT ( ) ; IDENT = INTEGER ; IDENT", true⟩,
-    ⟨"final expression requires closing brace", fnBody "IDENT return INTEGER ;", false⟩]
+      fnBody "if x < x == true { 1 } else { 1 }", true⟩,
+    ⟨"assignment to local", fnBody "x = 1 ;", true⟩,
+    ⟨"assignment to arithmetic result", fnBody "1 + 1 = 1 ;", false⟩,
+    ⟨"assignment to call result", fnBody "x ( ) = 1 ;", false⟩,
+    ⟨"expression statements and a final expression", fnBody "x ( ) ; x = 1 ; x", true⟩,
+    ⟨"final expression requires closing brace", fnBody "x return 1 ;", false⟩]
   | 4 => [
     ⟨"explicit exact arithmetic in a loop contract",
       fnBody "#[invariant(math { x + 1 } > x)] while true {}", true⟩,
     ⟨"exact arithmetic marker outside a contract", fnBody "return math { x + 1 };", false⟩,
     ⟨"listed names are identifiers in ordinary code", fnBody "let invariant : u8 = 1; return invariant;", true⟩,
     ⟨"termination permission before a loop",
-      fnBody "#[ may_not_terminate ( STRING ) ] while true { }", true⟩,
+      fnBody "#[ may_not_terminate ( \"reason\" ) ] while true { }", true⟩,
     ⟨"termination permission before an expression statement",
-      fnBody "#[ may_not_terminate ( STRING ) ] IDENT ( IDENT ) + IDENT ( ) ;", true⟩,
+      fnBody "#[ may_not_terminate ( \"reason\" ) ] x ( x ) + x ( ) ;", true⟩,
     ⟨"termination permission on the right operand of addition",
-      fnBody "return INTEGER + #[ may_not_terminate ( STRING ) ] IDENT ( ) ;", true⟩,
+      fnBody "return 1 + #[ may_not_terminate ( \"reason\" ) ] x ( ) ;", true⟩,
     ⟨"termination permission consumes a postfix operand at its own precedence",
-      fnBody "return #[ may_not_terminate ( STRING ) ] - INTEGER ;", false⟩,
+      fnBody "return #[ may_not_terminate ( \"reason\" ) ] - 1 ;", false⟩,
     ⟨"termination permission needs an operand after the prefix",
-      fnBody "#[ may_not_terminate ( STRING ) ] + IDENT ( ) ;", false⟩,
+      fnBody "#[ may_not_terminate ( \"reason\" ) ] + x ( ) ;", false⟩,
+    ⟨"shielded exact arithmetic in a condition head",
+      fnBody "#[invariant(if (math { x + 1 } > x) { true } else { false })] while true { }", true⟩,
+    ⟨"unshielded exact arithmetic in a condition head",
+      fnBody "#[invariant(if math { x + 1 } > x { true } else { false })] while true { }",
+      options.mathKeyword⟩,
+    ⟨"exact arithmetic with a literal-leading operand",
+      fnBody "#[invariant(math { 1 + x } > x)] while true { }", true⟩,
+    ⟨"other identifiers cannot introduce exact arithmetic",
+      fnBody "#[invariant(other { x + 1 } > x)] while true { }", false⟩,
+    ⟨"exact arithmetic outside a proof context",
+      fnBody "return math { x + 1 };", false⟩,
+    ⟨"loop invariant refuses a call attachment",
+      fnBody "#[invariant(true)] f();", false⟩,
+    ⟨"termination permission refuses an empty reason",
+      fnBody "#[may_not_terminate(\"\")] f();", false⟩,
+    ⟨"termination permission requires a call operand",
+      fnBody "#[may_not_terminate(\"reason\")] 1;", false⟩,
+    ⟨"termination permission refuses a counted loop",
+      fnBody "#[may_not_terminate(\"reason\")] for i from 0 until 1 { }", false⟩,
+    ⟨"termination permission refuses a call nested inside its operand",
+      fnBody "#[may_not_terminate(\"reason\")] (1 + f());", false⟩,
     ⟨"listed and general attributes at first use",
-      fnBody s!"#[ invariant ( true ) ] {attr} IDENT ( STRING ) ] for {wildcard} from INTEGER until INTEGER \{ } INTEGER", true⟩,
+      fnBody s!"#[ invariant ( true ) ] {attr} x ( \"reason\" ) ] for {wildcard} from 1 until 1 \{ } 1", true⟩,
     ⟨"listed attribute uses the listed envelope",
       fnBody "@[ invariant ( true ) ] while true { }", false⟩,
     ⟨"general attribute uses its selected envelope",
-      fnBody "#[ IDENT ] while true { }", !options.alternateAttribute⟩,
+      fnBody "#[ x ] while true { }", !options.alternateAttribute⟩,
     ⟨"labelled loop and labelled transfer",
-      fnBody "LABEL : while true { break LABEL ; } INTEGER", true⟩,
-    ⟨"colonless loop label", fnBody "LABEL while true { }", false⟩,
-    ⟨"wildcard let", fnBody s!"let {wildcard} : u8 = INTEGER ; INTEGER", true⟩]
+      fnBody "'outer: while true { break 'outer; } 1", true⟩,
+    ⟨"colonless loop label", fnBody "'outer while true { }", false⟩,
+    ⟨"wildcard let", fnBody s!"let {wildcard} : u8 = 1 ; 1", true⟩]
   | 5 => [
     ⟨"exact arithmetic in a function contract",
       "#[ensures(math { result + 1 } > result)] fn f() -> u8 { 1 }", true⟩,
     ⟨"optional trailing commas in parameters and calls",
-      "fn IDENT ( IDENT : u8 , ) -> u8 { IDENT ( INTEGER , ) }", true⟩,
+      "fn x ( x : u8 , ) -> u8 { x ( 1 , ) }", true⟩,
+    ⟨"invariant refuses a function attachment",
+      "#[invariant(true)] fn f() -> u8 { 1 }", false⟩,
+    ⟨"requires refuses a loop attachment",
+      fnBody "#[requires(true)] while true { }", false⟩,
     ⟨"function attribute and wildcard parameter",
-      s!"{attr} IDENT ( STRING ) ] fn IDENT ( {wildcard} : u8 ) -> u8 \{ INTEGER }", true⟩]
+      s!"{attr} x ( \"reason\" ) ] fn x ( {wildcard} : u8 ) -> u8 \{ 1 }", true⟩]
   | 6 => [
     ⟨"grouped named place projection", fnBody "return (x).field;", true⟩,
     ⟨"grouped conditional projection", fnBody "return (if true { a } else { b }).field;", false⟩,
     ⟨"grouped match projection",
       fnBody s!"return (match x \{ {arm wildcard "a"} }).field;", false⟩,
     ⟨"binary multiply after body-leading match",
-      fnBody s!"match x \{ {arm wildcard "1"} } * 2", false⟩,
-    ⟨"binary and after body-leading match",
-      fnBody s!"match x \{ {arm wildcard "1"} } & 2", currentSlice >= 7⟩,
+      fnBody s!"match x \{ {arm wildcard "1"} } * 2", currentSlice == 6⟩,
+    ⟨"match followed by a unary borrow statement",
+      fnBody s!"match x \{ {arm wildcard "1"} } & x;", currentSlice >= 7⟩,
+    ⟨"match followed by a unary dereference statement",
+      fnBody s!"match x \{ {arm wildcard "1"} } * x;", currentSlice >= 7⟩,
     ⟨"grouped match permits both binary operators",
       fnBody s!"(match x \{ {arm wildcard "1"} }) * 2 & 3", true⟩,
     ⟨"bare return in an unbraced arm", "fn f() -> Unit { match x { _ => return, } }", true⟩,
@@ -454,62 +768,70 @@ def examples (slice currentSlice : Nat) (options : Options) : List Example :=
     ⟨"explicit Unit return in a body", "fn f() -> Unit { return (); }", true⟩,
     ⟨"semicolon arm terminator conflicts with the recorded comma rule",
       fnBody "match x { _ => 1; }", false⟩,
-    ⟨"nonempty enum", "enum IDENT { IDENT , } " ++ fnBody "INTEGER", true⟩,
-    ⟨"empty enum", "enum IDENT { } " ++ fnBody "INTEGER", false⟩,
+    ⟨"nonempty enum", "enum x { x , } " ++ fnBody "1", true⟩,
+    ⟨"empty enum", "enum x { } " ++ fnBody "1", false⟩,
     ⟨"negative integer pattern",
-      fnBody s!"match IDENT \{ {arm "- INTEGER" "INTEGER"} }", true⟩,
+      fnBody s!"match x \{ {arm "- 1" "1"} }", true⟩,
     ⟨"alternative patterns",
-      fnBody s!"match IDENT \{ {arm "INTEGER | INTEGER" "INTEGER"} }", true⟩,
-    ⟨"assignment to named field", fnBody "IDENT . IDENT = INTEGER ;", true⟩,
+      fnBody s!"match x \{ {arm "1 | 1" "1"} }", true⟩,
+    ⟨"assignment to named field", fnBody "x . x = 1 ;", true⟩,
     ⟨"field projection of a call result", fnBody "return f().field;", false⟩,
-    ⟨"assignment to field of call result", fnBody "IDENT ( ) . IDENT = INTEGER ;", false⟩,
-    ⟨"head brace opens the block", fnBody "if IDENT { INTEGER } else { INTEGER }", true⟩,
-    ⟨"grouped struct literal in a head", fnBody "if ( IDENT { } ) { INTEGER }", true⟩,
-    ⟨"call argument shields struct literal", fnBody "if IDENT ( IDENT { } ) { INTEGER }", true⟩,
-    ⟨"unshielded struct literal in a head", fnBody "if IDENT { } { INTEGER }", false⟩,
+    ⟨"assignment to field of call result", fnBody "x ( ) . x = 1 ;", false⟩,
+    ⟨"head brace opens the block", fnBody "if x { 1 } else { 1 }", true⟩,
+    ⟨"field initializer survives the shared braced suffix",
+      fnBody "let value: S = S { field: x + 1 }; return 1;", true⟩,
+    ⟨"grouped struct literal in a head", fnBody "if ( x { } ) { 1 }", true⟩,
+    ⟨"call argument shields struct literal", fnBody "if x ( x { } ) { 1 }", true⟩,
+    ⟨"unshielded struct literal in a head", fnBody "if x { } { 1 }", false⟩,
     ⟨"named variant declaration and pattern",
-      "enum IDENT { IDENT { IDENT : u8 , IDENT : u8 } } " ++
-        fnBody ("match IDENT { " ++ arm s!"IDENT :: IDENT \{ IDENT : IDENT , IDENT : {wildcard} }" "INTEGER" ++ " }"), true⟩,
-    ⟨"tuple variant is excluded", "enum IDENT { IDENT ( u8 ) }", false⟩,
+      "enum x { x { x : u8 , x : u8 } } " ++
+        fnBody ("match x { " ++ arm s!"x :: x \{ x : x , x : {wildcard} }" "1" ++ " }"), true⟩,
+    ⟨"tuple variant is excluded", "enum x { x ( u8 ) }", false⟩,
     ⟨"tuple pattern is excluded",
-      fnBody ("match IDENT { " ++ arm s!"IDENT :: IDENT ( {wildcard} )" "INTEGER" ++ " }"), false⟩,
-    ⟨"ignored payload", fnBody ("match IDENT { " ++ arm "IDENT :: IDENT { .. }" "INTEGER" ++ " }"), true⟩,
+      fnBody ("match x { " ++ arm s!"x :: x ( {wildcard} )" "1" ++ " }"), false⟩,
+    ⟨"ignored payload", fnBody ("match x { " ++ arm "x :: x { .. }" "1" ++ " }"), true⟩,
     ⟨"braced match arm",
-      fnBody ("match IDENT { " ++ arm wildcard "{ return INTEGER ; }" ++ " }"), true⟩,
+      fnBody ("match x { " ++ arm wildcard "{ return 1 ; }" ++ " }"), true⟩,
     ⟨"unbraced return arm",
-      fnBody ("match IDENT { " ++ arm wildcard "return INTEGER" ++ " }"), true⟩,
+      fnBody ("match x { " ++ arm wildcard "return 1" ++ " }"), true⟩,
     ⟨"match with addition as a trailing value",
-      fnBody s!"match IDENT \{ {arm wildcard "INTEGER"} } + INTEGER", true⟩,
+      fnBody s!"match x \{ {arm wildcard "1"} } + 1", true⟩,
     ⟨"match with addition cannot become an expression statement",
-      fnBody s!"match IDENT \{ {arm wildcard "INTEGER"} } + INTEGER ;", false⟩,
+      fnBody s!"match x \{ {arm wildcard "1"} } + 1 ;", false⟩,
     ⟨"unary minus can start the next statement after a match",
-      fnBody s!"match IDENT \{ {arm wildcard "INTEGER"} } - INTEGER ;", true⟩,
+      fnBody s!"match x \{ {arm wildcard "1"} } - 1 ;", true⟩,
     ⟨"bare match statement refuses a semicolon",
-      fnBody s!"match IDENT \{ {arm wildcard "INTEGER"} } ;", false⟩,
+      fnBody s!"match x \{ {arm wildcard "1"} } ;", false⟩,
     ⟨"semicolon-free match statement",
-      fnBody ("match IDENT { " ++ arm wildcard "INTEGER" ++ " } return INTEGER ;"), true⟩,
-    ⟨"bare struct match pattern", fnBody ("match IDENT { " ++ arm "IDENT { IDENT }" "INTEGER" ++ " }"), false⟩,
-    ⟨"qualified field shorthand", fnBody ("match IDENT { " ++ arm "IDENT :: IDENT { IDENT }" "INTEGER" ++ " }"), false⟩,
-    ⟨"reserved kept refused as a match pattern", fnBody ("match IDENT { " ++ arm "kept IDENT" "INTEGER" ++ " }"), false⟩,
+      fnBody ("match x { " ++ arm wildcard "1" ++ " } return 1 ;"), true⟩,
+    ⟨"bare struct match pattern", fnBody ("match x { " ++ arm "x { x }" "1" ++ " }"), false⟩,
+    ⟨"qualified field shorthand", fnBody ("match x { " ++ arm "x :: x { x }" "1" ++ " }"), false⟩,
+    ⟨"reserved kept refused as a match pattern", fnBody ("match x { " ++ arm "kept x" "1" ++ " }"), false⟩,
     ⟨"explicit struct field binding",
-      fnBody s!"let IDENT \{ IDENT : IDENT , IDENT : {wildcard} } = IDENT ; INTEGER", true⟩,
-    ⟨"struct let rejects field shorthand", fnBody "let IDENT { IDENT } = IDENT ; INTEGER", false⟩,
-    ⟨"qualified destructuring let", fnBody s!"let IDENT :: IDENT \{ IDENT : IDENT , IDENT : {wildcard} } = IDENT ; INTEGER", true⟩]
+      fnBody s!"let x \{ x : x , x : {wildcard} } = x ; 1", true⟩,
+    ⟨"struct let rejects field shorthand", fnBody "let x { x } = x ; 1", false⟩,
+    ⟨"qualified destructuring let", fnBody s!"let x :: x \{ x : x , x : {wildcard} } = x ; 1", true⟩]
   | 7 => (
-    ["if true { IDENT ( ) ; }", "if true { IDENT ( ) ; } else { IDENT ( ) ; }",
-     s!"match IDENT \{ {arm wildcard "{ IDENT ( ) ; }"} }", s!"{binding} \{ IDENT ( ) ; }"].flatMap fun block => [
-      ⟨"dereference assignment after block", fnBody (block ++ " * IDENT = INTEGER ;"), true⟩,
-      ⟨"trailing unary minus after block", fnBody (block ++ " - INTEGER"), true⟩]) ++ [
+    ["if true { x ( ) ; }", "if true { x ( ) ; } else { x ( ) ; }",
+     s!"match x \{ {arm wildcard "{ x ( ) ; }"} }", s!"{binding} \{ x ( ) ; }"].flatMap fun block => [
+      ⟨"dereference assignment after block", fnBody (block ++ " * x = 1 ;"), true⟩,
+      ⟨"trailing unary minus after block", fnBody (block ++ " - 1"), true⟩]) ++ [
     ⟨"grouped projection can root in a named dereference",
       fnBody "return (*pointer).field[0];", true⟩,
     ⟨"index of grouped conditional", fnBody "return (if true { a } else { b })[0];", false⟩,
-    ⟨"assignment through indexed dereference", fnBody "* IDENT [ INTEGER ] . IDENT = INTEGER ;", true⟩,
-    ⟨"assignment to index of grouped value", fnBody "( IDENT ) [ INTEGER ] = INTEGER ;", false⟩,
-    ⟨"index brackets shield struct literal", fnBody "if IDENT [ IDENT { } ] { INTEGER }", true⟩,
-    ⟨"scoped borrow and block else", fnBody s!"{binding} \{ IDENT } else \{ INTEGER }", true⟩,
-    ⟨"semicolon-free borrow statement", fnBody s!"{binding} \{ IDENT } return INTEGER ;", true⟩,
-    ⟨"borrow else accepts only a block", fnBody s!"{binding} \{ IDENT } else if true \{ INTEGER }", false⟩,
-    ⟨"array repetition", fnBody "[ INTEGER ; INTEGER ]", true⟩,
+    ⟨"assignment through direct dereference", fnBody "*r = 1;", true⟩,
+    ⟨"assignment through grouped dereference field", fnBody "(*r).f = 1;", true⟩,
+    ⟨"assignment through grouped dereference index", fnBody "(*r)[0] = 1;", true⟩,
+    ⟨"assignment through grouped binding index", fnBody "(r)[0] = 1;", true⟩,
+    ⟨"assignment to index of grouped value", fnBody "(1 + 2)[0] = 1;", false⟩,
+    ⟨"dereference of field is refused", fnBody "return *w.r;", false⟩,
+    ⟨"grouping does not authorize dereference of a field", fnBody "return (*w.r).f;", false⟩,
+    ⟨"bare dereference cannot take a projection before assignment", fnBody "*r[0].f = 1;", false⟩,
+    ⟨"index brackets shield struct literal", fnBody "if x [ x { } ] { 1 }", true⟩,
+    ⟨"scoped borrow and block else", fnBody s!"{binding} \{ x } else \{ 1 }", true⟩,
+    ⟨"semicolon-free borrow statement", fnBody s!"{binding} \{ x } return 1 ;", true⟩,
+    ⟨"borrow else accepts only a block", fnBody s!"{binding} \{ x } else if true \{ 1 }", false⟩,
+    ⟨"array repetition", fnBody "[ 1 ; 1 ]", true⟩,
     ⟨"empty array literal", fnBody "[ ]", false⟩] ++
     [⟨"borrow range and binder",
       let place := s!"x {options.range.1} 1 {options.range.2} 2"
@@ -517,82 +839,99 @@ def examples (slice currentSlice : Nat) (options : Options) : List Example :=
         else s!"{place} {options.binderMark} view"
       fnBody s!"{borrow} mut {head} \{ view }", true⟩]
   | 8 => [
-    ⟨"import requires an item list", s!"{options.importWord} IDENT ;", false⟩,
-    ⟨"qualified import requires an item list", s!"{options.importWord} IDENT :: IDENT ;", false⟩,
-    ⟨"empty import list", s!"{options.importWord} IDENT :: IDENT :: \{ } ;", false⟩,
+    ⟨"import requires an item list", s!"{options.importWord} x ;", false⟩,
+    ⟨"qualified import requires an item list", s!"{options.importWord} x :: x ;", false⟩,
+    ⟨"empty import list", s!"{options.importWord} x :: x :: \{ } ;", false⟩,
     ⟨"qualified function call in constant initializer",
-      "const IDENT : u8 = IDENT :: IDENT ( INTEGER ) ;", false⟩,
+      "const x : u8 = x :: x ( 1 ) ;", false⟩,
     ⟨"nonempty import with trailing comma",
-      s!"{options.importWord} IDENT :: \{ IDENT , } ;", true⟩,
-    ⟨"constant builtin target-type candidate",
-      s!"const IDENT : u8 = {targetBuiltin} ( type : u8 , INTEGER ) ;", options.builtinTargetType⟩,
-    ⟨"public struct field", "struct IDENT { pub IDENT : u8 }", true⟩,
-    ⟨"import at first use", s!"{options.importWord} IDENT :: IDENT :: \{ IDENT , IDENT } ;", true⟩,
-    ⟨"constant arithmetic and reference", "const IDENT : u8 = IDENT :: IDENT + INTEGER ;", true⟩,
-    ⟨"byte literal is a scalar constant", "const IDENT : u8 = BYTE ;", true⟩,
-    ⟨"named binary primitive shape", "const IDENT : u8 = IDENT ( INTEGER , INTEGER ) ;", true⟩,
-    ⟨"named unary primitive shape", "const IDENT : u8 = IDENT ( INTEGER ) ;", true⟩,
-    ⟨"constant initializer excludes empty calls", "const IDENT : u8 = IDENT ( ) ;", false⟩,
-    ⟨"constant initializer excludes exclusive borrow", "const IDENT : u8 = & mut INTEGER ;", false⟩,
-    ⟨"constant initializer excludes dereference", "const IDENT : u8 = * INTEGER ;", false⟩]
+      s!"{options.importWord} x :: \{ x , } ;", true⟩,
+    ⟨"constant target-type conversion",
+      "const X : u32 = widen(type: u32, 1);", options.builtinTargetType⟩,
+    ⟨"constant target-type binary arithmetic",
+      "const X : u32 = wrapping_add(type: u32, 1, 2);", options.builtinTargetType⟩,
+    ⟨"constant target-type binary arithmetic rejects one operand",
+      "const X : u32 = wrapping_add(type: u32, 1);", false⟩,
+    ⟨"public struct field", "struct x { pub x : u8 }", true⟩,
+    ⟨"import at first use", s!"{options.importWord} x :: x :: \{ x , x } ;", true⟩,
+    ⟨"constant arithmetic and reference", "const x : u8 = x :: x + 1 ;", true⟩,
+    ⟨"byte literal is a scalar constant", "const x : u8 = 'a' ;", true⟩,
+    ⟨"named binary primitive shape", "const x : u8 = x ( 1 , 1 ) ;", true⟩,
+    ⟨"named unary primitive shape", "const x : u8 = x ( 1 ) ;", true⟩,
+    ⟨"constant initializer excludes empty calls", "const x : u8 = x ( ) ;", false⟩,
+    ⟨"constant initializer excludes exclusive borrow", "const x : u8 = & mut 1 ;", false⟩,
+    ⟨"constant initializer excludes dereference", "const x : u8 = * 1 ;", false⟩]
   | 9 => [
     ⟨"inherent impl with capability after type parameter",
-      "impl < IDENT , cap IDENT > IDENT { }", true⟩,
-    ⟨"trait impl with only type parameters", "impl < IDENT > IDENT for IDENT { }", true⟩,
-    ⟨"trait impl with capability parameter", "impl < cap IDENT > IDENT for IDENT { }", false⟩,
+      "impl < x , cap x > x { }", true⟩,
+    ⟨"trait impl with only type parameters", "impl < x > x for x { }", true⟩,
+    ⟨"trait impl with capability parameter", "impl < cap x > x for x { }", false⟩,
     ⟨"trait impl with capability after type parameter",
-      "impl < IDENT , cap IDENT > IDENT for IDENT { }", false⟩,
+      "impl < x , cap x > x for x { }", false⟩,
     ⟨"qualified generic call, field selection and comparison",
-      fnBody "IDENT :: IDENT :: < IDENT < u8 > , Fs + Console , { } > ( INTEGER ) < INTEGER", true⟩,
+      fnBody "x :: x :: < x < u8 > , Fs + Console , { } > ( 1 ) < 1", true⟩,
     ⟨"generic type with capability arguments",
-      "type IDENT = IDENT :: IDENT < u8 , IDENT + Console , { } > ;", true⟩,
-    ⟨"plain angle call collides with comparison", fnBody "IDENT < u8 > ( INTEGER )", false⟩,
+      "type x = x :: x < u8 , x + Console , { } > ;", true⟩,
+    ⟨"plain angle call collides with comparison", fnBody "x < u8 > ( 1 )", false⟩,
     ⟨"nested generic closers from source", "fn f(x: Outer<Inner<u8>>) -> u8 { 1 }", true⟩,
     ⟨"shift retains maximal-munch token", fnBody "x >> y", true⟩,
     ⟨"consecutive turbofish lists", fnBody "f::<u8>::<u8>()", false⟩,
     ⟨"consecutive turbofish lists in defer", fnBody "defer f::<u8>::<u8>();", false⟩,
     ⟨"another application follows a named segment", fnBody "Option::<u8>::Some::<u8>(1)", true⟩,
     ⟨"named segment follows a type application", fnBody "Option::<u8>::Some(1)", true⟩,
-    ⟨"multiple trait bounds", "fn IDENT < IDENT : IDENT + Copy > ( ) -> u8 { INTEGER }", true⟩,
+    ⟨"qualified trait bound", "fn f<T: m::Tr>() -> u8 { 1 }", true⟩,
+    ⟨"generic trait bound", "fn f<T: m::Tr<u8>>() -> u8 { 1 }", false⟩,
+    ⟨"generic unqualified trait bound", "fn f<T: Tr<u8>>() -> u8 { 1 }", false⟩,
+    ⟨"single generic type argument list", "type T = S<u8>;", true⟩,
+    ⟨"multiple trait bounds", "fn x < x : x + Copy > ( ) -> u8 { 1 }", true⟩,
     ⟨"unbounded capability parameters follow type parameters",
-      "fn IDENT < IDENT , cap IDENT , cap IDENT > ( ) -> u8 { INTEGER }", true⟩,
+      "fn x < x , cap x , cap x > ( ) -> u8 { 1 }", true⟩,
     ⟨"type parameter after a capability parameter",
-      "fn IDENT < cap IDENT , IDENT > ( ) -> u8 { INTEGER }", false⟩,
-    ⟨"capability bound", "fn IDENT < cap IDENT : Fs > ( ) -> u8 { INTEGER }", false⟩,
-    ⟨"call-site cap marker", fnBody "IDENT :: < cap Fs > ( )", false⟩,
+      "fn x < cap x , x > ( ) -> u8 { 1 }", false⟩,
+    ⟨"capability bound", "fn x < cap x : Fs > ( ) -> u8 { 1 }", false⟩,
+    ⟨"call-site cap marker", fnBody "x :: < cap Fs > ( )", false⟩,
     ⟨"qualified call cannot use the unqualified builtin target marker",
       fnBody "module::wrapping_add(type: u8, x, y)", false⟩,
-    ⟨"type argument after a capability argument", "type IDENT = IDENT < Fs , u8 > ;", false⟩,
-    ⟨"generic trait declaration", "trait IDENT < IDENT > { }", false⟩,
-    ⟨"generic trait method", "trait IDENT { fn IDENT < IDENT > ( ) -> u8 ; }", false⟩,
+    ⟨"type argument after a capability argument", "type x = x < Fs , u8 > ;", false⟩,
+    ⟨"generic trait declaration", "trait x < x > { }", false⟩,
+    ⟨"generic trait method", "trait x { fn x < x > ( ) -> u8 ; }", false⟩,
     ⟨"trailing comma in generic parameter and type arguments",
-      "fn IDENT < IDENT , cap IDENT , > ( IDENT : IDENT < u8 , > ) -> u8 { INTEGER }", true⟩,
-    ⟨"impl functions", "impl IDENT { " ++ fnBody "INTEGER" ++ " }", true⟩,
-    ⟨"impl rejects module declaration", "impl IDENT { mod IDENT ; }", false⟩,
-    ⟨"duplicate generic type argument lists", "type IDENT = IDENT :: < u8 > < u8 > ;", false⟩]
+      "fn x < x , cap x , > ( x : x < u8 , > ) -> u8 { 1 }", true⟩,
+    ⟨"impl functions", "impl x { " ++ fnBody "1" ++ " }", true⟩,
+    ⟨"impl rejects module declaration", "impl x { mod x ; }", false⟩,
+    ⟨"duplicate generic type argument lists", "type T = S<u8><u8>;", false⟩]
   | 10 => [
     ⟨"listed proof attribute retains its qualified path", "#[proof(module::lemma::<u8>)] " ++ fnBody "1", true⟩,
     ⟨"listed proof attribute rejects a call", "#[proof(lemma())] " ++ fnBody "1", false⟩,
     ⟨"parenthesized assertion and unparenthesized assumption",
-      fnBody "assert ( IDENT == INTEGER ) ; assume IDENT == INTEGER ; INTEGER", true⟩,
+      fnBody "assert ( x == 1 ) ; assume x == 1 ; 1", true⟩,
+    ⟨"exact arithmetic in specification function", "spec fn f() -> u8 = math { 1 + 2 };", true⟩,
+    ⟨"exact arithmetic in assertions and assumptions",
+      fnBody "assert(math { x + 1 } > x); assume math { x + 1 } > x; return 1;", true⟩,
+    ⟨"exact arithmetic in theorem argument",
+      fnBody "assert(true) by lemma(math { x + 1 }); return 1;", true⟩,
+    ⟨"proof context does not extend to the following runtime statement",
+      fnBody "assert(true); return math { 1 + 2 };", false⟩,
+    ⟨"typed ghost binding", fnBody "ghost let x: u8 = 1; return 1;", true⟩,
+    ⟨"ghost destructuring is refused", fnBody "ghost let S { a: x } = s; return 1;", false⟩,
     ⟨"assertion requires parentheses",
-      fnBody "assert IDENT == INTEGER ; INTEGER", false⟩,
+      fnBody "assert x == 1 ; 1", false⟩,
     ⟨"theorem-backed assertion",
-      fnBody "assert ( IDENT == INTEGER ) by IDENT :: IDENT ( IDENT ) ; INTEGER", true⟩,
+      fnBody "assert ( x == 1 ) by x :: x ( x ) ; 1", true⟩,
     ⟨"unparenthesized theorem-backed assertion",
-      fnBody "assert IDENT == INTEGER by IDENT ( IDENT ) ; INTEGER", false⟩,
-    ⟨"expression-bodied specification function", "spec fn IDENT ( ) -> u8 = INTEGER ;", true⟩,
-    ⟨"specification function rejects a block body", "spec " ++ fnBody "INTEGER", false⟩]
+      fnBody "assert x == 1 by x ( x ) ; 1", false⟩,
+    ⟨"expression-bodied specification function", "spec fn x ( ) -> u8 = 1 ;", true⟩,
+    ⟨"specification function rejects a block body", "spec " ++ fnBody "1", false⟩]
   | 11 => [
     ⟨"char methods with both primitive classifications",
       "fn f(c: char) -> u8 { char::from_ascii('a'); char::from_code_point(65); return char::code_point(c); }", true⟩,
     ⟨"qualified u8 call", fnBody "u8::example(1)", true⟩,
     ⟨"module, import and grant clause",
-      s!"mod IDENT ; {options.importWord} IDENT :: IDENT :: \{ IDENT , IDENT } ; pub fn IDENT ( ) with ( Fs , Console ) -> u8 \{ INTEGER }", true⟩,
+      s!"mod x ; {options.importWord} x :: x :: \{ x , x } ; pub fn x ( ) with ( Fs , Console ) -> u8 \{ 1 }", true⟩,
     ⟨"optional trailing grant comma",
-      "fn IDENT ( ) with ( Fs , ) -> u8 { INTEGER }", true⟩,
+      "fn x ( ) with ( Fs , ) -> u8 { 1 }", true⟩,
     ⟨"attribute string as an expression at slice 11",
-      s!"{attr} IDENT ( STRING ) ] " ++ fnBody "INTEGER", true⟩]
+      s!"{attr} x ( \"reason\" ) ] " ++ fnBody "1", true⟩]
   | _ => []
 
 -- Only branch on choices with a consumer in this projection. Three choices
@@ -608,15 +947,17 @@ def optionsAt (slice : Nat) : List Options := Id.run do
      (false, ("from", ".."), "->"), (false, ("from", ".."), ":"),
      (true, ("from", "until"), "->"), (true, ("from", ".."), "->")]
     else [(false, ("from", "until"), "->")]
+  let mathWords := if slice >= 4 then [true, false] else [true]
   let mut cases := []
   for bitNot in bitNots do
     for primitiveKeyword in primitives do
       for alternateAttribute in attributes do
         for (prefixBorrowBinder, range, binderMark) in borrowBindings do
           for builtinTargetType in builtinTargets do
-            cases := { representative with
-                bitNot, primitiveKeyword, alternateAttribute,
-                prefixBorrowBinder, range, binderMark, builtinTargetType } :: cases
+            for mathKeyword in mathWords do
+              cases := { representative with
+                  bitNot, primitiveKeyword, alternateAttribute,
+                  prefixBorrowBinder, range, binderMark, builtinTargetType, mathKeyword } :: cases
   cases := cases.reverse
   if slice < 1 then return cases
   return cases ++ [{ representative with
@@ -628,7 +969,8 @@ def optionsAt (slice : Nat) : List Options := Id.run do
     range := if slice >= 7 then ("from", "..") else representative.range
     binderMark := if slice >= 7 then ":" else "->"
     borrowWord := if slice >= 7 then "loan" else "borrow"
-    importWord := if slice >= 8 then "use" else "import" }]
+    importWord := if slice >= 8 then "use" else "import"
+    mathKeyword := slice < 4 }]
 
 def project (options : Options) (rules : List Rule) : DraftGrammar :=
   reachableProjection (instantiate options rules)
@@ -639,17 +981,86 @@ def checkOptions (slice : Nat) (rules : List Rule) : IO Unit := do
     let label := s!"slice {slice}, {reprStr options}"
     let g := project options rules
     let table ← requireLL1 label g
-    for fixture in (List.range (slice + 1)).flatMap (fun introduced => examples introduced slice options) do
-      unless recognizes slice options g table fixture.input == fixture.expected do
-        throw (IO.userError s!"{label}, {fixture.label}: expected {fixture.expected}: {fixture.input}")
-  IO.println s!"pass: slice {slice}, {cases.length} option cases"
+    if slice >= 1 then
+      let wildcardKind := if options.wildcardToken then "_" else "RESERVED_UNDERSCORE"
+      unless (draftTokens slice options "_").map (·.kind) == [wildcardKind] do
+        throw (IO.userError s!"{label}: wildcard token classification")
+    for earlyTrustWords in [false, true] do
+      let options := { options with earlyTrustWords }
+      for fixture in (List.range (slice + 1)).flatMap (fun introduced => examples introduced slice options) do
+        unless recognizes slice options g table fixture.input == fixture.expected do
+          throw (IO.userError s!"{label}, early trust reservation {earlyTrustWords}, {fixture.label}: expected {fixture.expected}: {fixture.input}")
+    if options.builtinTargetType then
+      for malformed in ["wrapping_add(type: u32, x)", "widen(type: u32, x, y)",
+        "ordinary(type: u32, x, y)"] do
+        unless (parseSource slice options g table (fnBody ("return " ++ malformed ++ ";"))).any
+            (fun tree => (validateNamedSuffixes (default, default) tree).isNone) do
+          throw (IO.userError s!"{label}: target argument control must reach the parsed call: {malformed}")
+    if slice >= 4 then
+      for misplaced in ["#[invariant(true)] f();", "#[may_not_terminate(\"\")] f();",
+        "#[may_not_terminate(\"reason\")] 1;"] do
+        unless (parseSource slice options g table (fnBody misplaced)).any
+            (fun tree => !draftRestrictions slice options false tree) do
+          throw (IO.userError s!"{label}: attribute control must reach the parsed attachment: {misplaced}")
+      let mathBinder := "fn math() -> u8 { return 1; }"
+      unless recognizes slice options g table mathBinder == !options.mathKeyword do
+        throw (IO.userError s!"{label}: math binder classification")
+      let source := fnBody "#[may_not_terminate(\"reason\")] fp(x) + g();"
+      unless (parseDraft slice options g table source).any
+          (fun tree => permissionOperands tree == [["fp", "(", "x", ")"]]) do
+        throw (IO.userError s!"{label}: termination permission must attach to fp(x)")
+    if slice >= 6 then
+      let operand := if slice == 6 then "2" else "x"
+      for operator in ["*", "&"] do
+        let source := fnBody s!"match x \{ _ => 1, } {operator} {operand}"
+        let expected := if slice == 6 then operator else operator ++ " body"
+        unless (parseDraft slice options g table source).any (fun tree => matchEnds tree == [expected]) do
+          throw (IO.userError s!"{label}: incorrect match boundary for {operator}")
+  IO.println s!"pass: slice {slice}, {cases.length} prediction cases, both trust reservations"
   (← IO.getStdout).flush
 
 def requireConflict (label : String) (g : DraftGrammar) : IO Unit := do
   if ll1 g then throw (IO.userError s!"missing planted conflict: {label}")
   IO.println s!"pass: planted conflict for {label}"
 
+-- These extensions share terminal kinds. Exercise the existing and proposed
+-- tokenizers on the same source and retain domain-boundary refusals.
+-- An expected type is supplied by the downstream typing context. This
+-- probe exercises the two admission policies without inferring that context.
+def literalSuffixAllowed (allowRedundant : Bool) (expected : Option String) (source : String) : Bool :=
+  match integerSuffix {} source.toList, expected with
+  | some [], some _ => true
+  | some (_ :: _), none => true
+  | some (first :: rest), some ty => allowRedundant && String.ofList (first :: rest) == ty
+  | _, _ => false
+
+def checkLiteralOptions : IO Unit := do
+  let kind (policy : LiteralOptions) (source : String) :=
+    (draftTokens 2 representative source policy).map (·.kind)
+  let base : LiteralOptions := {}
+  for (policy, token, accepted, refused) in [
+      ({ base with digitSeparators := true }, "INTEGER", "1_000", "0x_ff"),
+      ({ base with digitSeparators := true, separatorAfterPrefix := true },
+        "INTEGER", "0x_ff", "0x__ff"),
+      ({ base with upperHex := true }, "INTEGER", "0xFF", "0XFF"),
+      ({ base with unicodeEscape := true }, "STRING", "\"\\u{10ffff}\"", "\"\\u{d800}\""),
+      ({ base with stringHexEscape := true }, "STRING", "\"\\x7F\"", "\"\\x80\""),
+      ({ base with byteHexEscape := true }, "BYTE", "'\\xFF'", "'\\x100'")] do
+    unless kind base accepted == ["INVALID"] && kind policy accepted == [token] &&
+        kind policy refused == ["INVALID"] do
+      throw (IO.userError s!"literal option does not distinguish {accepted} from {refused}")
+  unless kind base "255u8" == ["INTEGER"] && kind base "255u9" == ["INVALID"] do
+    throw (IO.userError "integer suffixes must retain their existing lexical classification")
+  for redundant in [false, true] do
+    unless literalSuffixAllowed redundant (some "u8") "255u8" == redundant &&
+        literalSuffixAllowed redundant none "255u8" &&
+        literalSuffixAllowed redundant (some "u8") "255" &&
+        !literalSuffixAllowed redundant (some "i16") "255u8" do
+      throw (IO.userError "redundant suffix policy does not distinguish matching and mismatched types")
+  IO.println "pass: literal extensions, boundaries and direct expected-type suffix controls"
+
 def main : IO Unit := do
+  checkLiteralOptions
   let sections ← readSections (← IO.FS.readFile "docs/grammar/slices-0-11.grammar")
   let mut cumulative := []
   for (delta, slice) in sections.toList.zipIdx do
@@ -668,6 +1079,11 @@ def main : IO Unit := do
           ll1 (project alternate rules) do
         throw (IO.userError "missing slice 4 alternate attribute conflict")
       IO.println "pass: planted slice 4 alternate attribute conflict"
+      let ordinaryMath := { representative with mathKeyword := false }
+      -- Even after factoring named braced suffixes, opting into them in
+      -- an unshielded head makes the opening brace compete with the block.
+      requireConflict "ordinary math suffix in an unshielded head"
+        (project ordinaryMath (rules ++ [("HeadNameTail", ["@NameLiteral"])]))
     if slice == 7 then
       -- Reintroducing binary continuations at the block boundary collides
       -- with the same spellings at the beginning of the next body item.
@@ -688,8 +1104,8 @@ def main : IO Unit := do
       let g := project representative rules
       requireConflict "unmarked generics" { g with prods := g.prods ++ [("PathTail", [.n "TypeArgs"])] }
       let table ← requireLL1 "slice 9 lexer adapter" g
-      let nested := draftTokens slice representative g "fn f(x: Outer<Inner<u8>>) -> u8 { 1 }"
-      let shift := draftTokens slice representative g (fnBody "x>>y")
+      let nested := draftTokens slice representative "fn f(x: Outer<Inner<u8>>) -> u8 { 1 }"
+      let shift := draftTokens slice representative (fnBody "x>>y")
       let parse input split := parseSymbols table split false 2000 [.n g.start] input
       unless nested.any (·.kind == ">>") && (parse nested false).isNone &&
           (parse shift false).any (fun (_, rest) => rest.isEmpty) do
