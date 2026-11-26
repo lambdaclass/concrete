@@ -352,13 +352,13 @@ carry propositions or unsupported proof fields. Pairwise conclusions are
 incomplete until the checker can certify that the witness exercises the
 relation. Double negation retains the inner obligation.
 
-A disjunction must establish each substantive arm and its applicability
-at the same inputs. A conditional must establish the applicability of its
-guard and select the sole substantive arm. Structurally constant arms,
-including quantified trivial fallbacks, earn no credit. A conditional with
-competing substantive arms is incomplete. Independent conjunction cases
-over data can use different inputs when they have no shared premise.
-Unsupported shapes fail closed.
+A disjunction needs proofs and applicability evidence for both arms at
+the same inputs. Conjunctions also retain their common inputs. For a
+conditional, kernel reduction selects the arm at the witness's inputs.
+The witness supplies the selected guard where applicable, the arm's
+conclusion and premises, and an independent counterexample to the arm with
+its selector removed. A tautological fallback cannot have such a
+counterexample. Unsupported or unresolved obligations fail closed.
 
 The exact closed empty-list store, wildcard, combined, and trap counterfeits
 from `fixtures/N2-Typed-Contracts.lean` at archived revision

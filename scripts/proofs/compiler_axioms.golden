@@ -1211,16 +1211,16 @@ Concrete.SSA.lower.eq_1	Classical.choice Quot.sound propext
 Concrete.SSA.lower_correct	Classical.choice Quot.sound propext
 Concrete.SSA.lower_wf	Classical.choice Quot.sound propext
 Concrete.SSA.validate_correct	Classical.choice Quot.sound propext
-Concrete.Stages.Input.mk.inj	
-Concrete.Stages.Input.mk.injEq	propext
-Concrete.Stages.Input.mk.sizeOf_spec	
-Concrete.Stages.Output.mk.inj	
-Concrete.Stages.Output.mk.injEq	propext
-Concrete.Stages.Output.mk.sizeOf_spec	
-Concrete.Stages.compile.eq_1	Classical.choice Quot.sound propext
+Concrete.Stages.Input.loaded	Quot.sound propext
+Concrete.Stages.Input.mk.inj	Quot.sound propext
+Concrete.Stages.Input.mk.injEq	Quot.sound propext
+Concrete.Stages.Input.mk.sizeOf_spec	Quot.sound propext
+Concrete.Stages.Output.provenance	Classical.choice Quot.sound propext
+Concrete.Stages.compile._proof_1	Classical.choice Quot.sound propext
 Concrete.Stages.compile_core_correct	Classical.choice Quot.sound propext
 Concrete.Stages.compile_lexes	Classical.choice Quot.sound propext
 Concrete.Stages.compile_of_edges	Classical.choice Quot.sound propext
+Concrete.Stages.compile_project	Classical.choice Quot.sound propext
 Concrete.Stages.compile_ssa_correct	Classical.choice Quot.sound propext
 Concrete.Stages.prepareLCB.eq_1	Classical.choice Quot.sound propext
 Concrete.Stages.prepareLCB_of_edges	Classical.choice Quot.sound propext
@@ -1931,6 +1931,10 @@ _private.Concrete.SSA.0.Concrete.SSA.transfer_correct._proof_1_8	Quot.sound prop
 _private.Concrete.SSA.0.Concrete.SSA.transfer_correct._proof_1_9	Quot.sound propext
 _private.Concrete.SSA.0.Except.map.match_1.eq_1	
 _private.Concrete.SSA.0.Except.map.match_1.eq_2	
+_private.Concrete.Stages.0.Concrete.Stages.Output.mk.congr_simp	Classical.choice Quot.sound propext
+_private.Concrete.Stages.0.Concrete.Stages.Output.mk.inj	Classical.choice Quot.sound propext
+_private.Concrete.Stages.0.Concrete.Stages.Output.mk.injEq	Classical.choice Quot.sound propext
+_private.Concrete.Stages.0.Concrete.Stages.Output.mk.sizeOf_spec	Classical.choice Quot.sound propext
 _private.Concrete.Stages.0.Concrete.Stages.Pipeline.brecOn.eq	
 _private.Concrete.Stages.0.Concrete.Stages.Pipeline.done.sizeOf_spec	
 _private.Concrete.Stages.0.Concrete.Stages.Pipeline.next.inj	
@@ -1941,6 +1945,9 @@ _private.Concrete.Stages.0.Concrete.Stages.Pipeline.run.eq_2
 _private.Concrete.Stages.0.Concrete.Stages.Pipeline.run.eq_def	
 _private.Concrete.Stages.0.Concrete.Stages.Pipeline.run.match_1.eq_1	
 _private.Concrete.Stages.0.Concrete.Stages.Pipeline.run.match_1.eq_2	
+_private.Concrete.Stages.0.Concrete.Stages.compile.match_3.eq_1	Quot.sound propext
+_private.Concrete.Stages.0.Concrete.Stages.compile.match_3.eq_2	Quot.sound propext
+_private.Concrete.Stages.0.Concrete.Stages.edges_of_run	Classical.choice Quot.sound propext
 _private.Concrete.Stages.0.Concrete.Stages.lex.eq_1	Classical.choice Quot.sound propext
 _private.Concrete.Stages.0.Concrete.Stages.memory.eq_1	
 _private.Concrete.Stages.0.Concrete.Stages.stages.eq_1	Classical.choice Quot.sound propext
