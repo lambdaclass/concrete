@@ -910,7 +910,7 @@ theorem drop_progress (s : State) (xs : List Var) (f : Activation)
     apply List.all_eq_true.mpr
     intro l hl
     simp [clear l hl]
-  unfold drop
+  unfold drop canDropPlaces
   rw [frame]
   dsimp
   rw [hd, hc]
@@ -1775,7 +1775,7 @@ theorem directOwner_roundtrip (s : State) (p : Hybrid.Place) (path : List Projec
     rintro ⟨l, hl, he⟩
     exact noChild l hl he
   simp [passOwner, hf, issued, allowed, callLife, enter, adoptDown, life, leave,
-    endLocals, endLoan, drop, loan, AList.lookup, mapOld, filterAct, noChildExists,
+    endLocals, endLoan, drop, canDropPlaces, loan, AList.lookup, mapOld, filterAct, noChildExists,
     filterId]
 
 

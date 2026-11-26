@@ -1,6 +1,7 @@
 import ConcreteSpec.Spec.LL1
 import ConcreteSpec.Spec.Outcome
 import ConcreteSpec.Spec.Slice0
+import ConcreteSpec.Spec.Slice0Syntax
 import ConcreteSpec.Spec.Slice0Rules
 import ConcreteSpec.Spec.Statics
 import ConcreteSpec.Spec.Surface0

@@ -1,6 +1,6 @@
 name = "concrete"
 version = "0.2.0"
-defaultTargets = ["ConcreteSpec"]
+defaultTargets = ["ConcreteSpec", "Concrete"]
 
 # The Lean Compiler Backend (LCB), pinned: slice 0's second backend. Its verified source semantics
 # (LeanCompilerBackend.Verified.Source) is imported, never restated; core Lean only, no Mathlib.

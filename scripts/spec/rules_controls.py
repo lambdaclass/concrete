@@ -51,7 +51,7 @@ def fixture(name, *, decl=rule, proof=proofs, reg=registry, evidence=links,
                       'def registeredRuleExamples : List RuleExample := ' + evidence)
     path = tmp / (name + '.lean')
     path.write_text(src.replace('/-- Complete conformance links', proof + '\n/-- Complete conformance links') + '\nopen Lean Elab Command\n' + exporter)
-    lean = subprocess.run(['lake', 'env', 'lean', str(path)], capture_output=True, text=True)
+    lean = subprocess.run(['lake', 'lean', str(path)], capture_output=True, text=True)
     if lean_error:
         if lean.returncode == 0 or reason not in lean.stdout + lean.stderr:
             raise SystemExit(f'{name}: expected elaboration failure {reason}: {lean.stdout}{lean.stderr}')
@@ -132,7 +132,7 @@ for rule_name, proof_name in [('Lexed', 'lexRefused'), ('LocalsUsed', 'localsUse
         exporter.split('-- EXPORTER ENTRY\n', 1)[0] +
         '#eval exportRules (registeredRuleExamples.filter\n'
         f'  (fun e => e.declaration != ``Slice0Rules.{proof_name}))\n')
-    check = subprocess.run(['lake', 'env', 'lean', str(coverage)], capture_output=True, text=True)
+    check = subprocess.run(['lake', 'lean', str(coverage)], capture_output=True, text=True)
     assert check.returncode != 0 and (
         f'slice 0 lacks validated conformance for [ConcreteSpec.Core.Slice0Rules.{rule_name}]'
         in check.stdout + check.stderr), check
