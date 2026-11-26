@@ -47,6 +47,8 @@ source_unannotated	con:tests/slice0/unannotated.con	refuse 1 SYNTAX	slice0
 source_suffix	con:tests/slice0/suffix.con	refuse 1 CORE-CHECK	slice0
 source_boundary	con:tests/slice0/boundary.con	exit 255	slice0
 source_reserved	con:tests/slice0/reserved.con	refuse 1 SYNTAX	slice0
+source_reserved_move	con:tests/slice0/reserved_move.con	refuse 1 SYNTAX	slice0
+source_reserved_struct	con:tests/slice0/reserved_struct.con	refuse 1 SYNTAX	slice0
 source_intrinsic_shadow	con:tests/slice0/intrinsic_shadow.con	refuse 1 CORE-CHECK	slice0
 source_radix_missing_semi	con:tests/slice0/radix_missing_semi.con	refuse 1 SYNTAX	slice0
 source_malformed_if	con:tests/slice0/malformed_if.con	refuse 1 SYNTAX	slice0

@@ -119,8 +119,9 @@ def stmtOut (Δ : Decls) (Γ : Ctx) : Stmt → Option Ctx
     else none
 
 /-- The executable form of `BodyOk`. -/
-def bodyOkB (Δ : Decls) (Γ : Ctx) : List Stmt → Atom → Bool
-  | [], r => tyOf Δ Γ.tys (.atom r) == some (.scalar (.int .u8)) &&
+def bodyOkB (Δ : Decls) (Γ : Ctx) : List Stmt → Terminator → Bool
+  | [], .abort _ => Γ.all (·.2.used)
+  | [], .ret r => tyOf Δ Γ.tys (.atom r) == some (.scalar (.int .u8)) &&
       match uses Δ Γ (.atom r) with
       | some Γ₁ => decide (Discharged Δ Γ₁)
       | none => false
@@ -129,6 +130,10 @@ def bodyOkB (Δ : Decls) (Γ : Ctx) : List Stmt → Atom → Bool
     | none => false
 
 /-- The executable checker. -/
-def check (p : Program) : Bool := decide (DeclsOk p.decls) && bodyOkB p.decls [] p.body p.ret
+def check (p : Program) : Bool := decide (DeclsOk p.decls) && bodyOkB p.decls [] p.body p.ending
+
+/-- Q8.2, OD62, OD84 and OD138. Core admission checks nominal types, ownership,
+binding use, arithmetic evidence and the body's terminator. -/
+def ProgramPermitted (p : Program) : Prop := check p = true
 
 end ConcreteSpec
