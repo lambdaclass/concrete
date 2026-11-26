@@ -13,7 +13,7 @@ Project version selection is a separate judgment. The exact TOML keys and schema
 -/
 
 namespace ConcreteSpec.Surface1
-open Surface0 (Terminal Token Span Lexes)
+open Surface0 (Terminal Token Span Lexes intrinsicNames)
 open Core (AList SiteId SourcePath)
 
 inductive Expr where
@@ -103,18 +103,6 @@ inductive Derives : List Token → SourceProgram → Prop
       Derives (declTokens ++ [fixed .fn keyword, named name nameSpan, fixed .lparen lp,
         fixed .rparen rp, fixed .arrow arrow, fixed .u8 ty, fixed .lbrace lb] ++
         body ++ [fixed .rbrace rb]) ⟨decls, name, statements⟩
-
-/-- The reserved intrinsic spellings in the 2026-11-24 clarification and its referenced
-decisions. Tokens retain their identifier payload for resolution. -/
-def intrinsicNames : List String :=
-  ["abort", "alloc", "destroy", "discard", "sizeof", "alignof", "read_owned", "get_args", "byte_at",
-   "string_concat", "string_slice", "string_substr", "string_trim", "int_to_string",
-   "bool_to_string", "float_to_string", "string_push_char", "string_append", "string_append_int",
-   "string_append_bool", "string_reserve",
-   "wrapping_add", "wrapping_sub", "wrapping_mul", "saturating_add", "saturating_sub",
-   "saturating_mul", "checked_add", "checked_sub", "checked_mul", "checked_div", "checked_rem",
-   "checked_shl", "checked_shr", "checked_neg", "try_convert", "truncate", "reinterpret",
-   "trunc", "round", "floor", "ceil"]
 
 /-- Already decided builtin type spellings, reserved under OD43. The complete later-slice
 reservation catalog belongs to the shared lexical audit. -/

@@ -1145,8 +1145,8 @@ private theorem lcbToInstant {i : LCBInput} {value : Source.Value}
       cases e with
       | stderr => trivial
       | effect impossible => cases impossible
-    · exact ⟨some q, ⟨some s, by simp [lcbSemantics, lcbSemanticsFor, init, Except.toOption], lcbSteps steps⟩,
-      Or.inr (by rw [result]; rfl), result, by simp [lcbSemantics, lcbSemanticsFor, result, Observation.events]⟩
+    · exact ⟨some q, ⟨some s, by simp [lcbSemantics, lcbSemanticsFor, lcbInvocationSemantics, init, Except.toOption], lcbSteps steps⟩,
+      Or.inr (by rw [result]; rfl), result, by simp [lcbSemantics, lcbSemanticsFor, lcbInvocationSemantics, result, Observation.events]⟩
 
 def answerOutput : Stages.Output :=
   (Stages.compile answerInput).toOption.get (by with_unfolding_all rfl)

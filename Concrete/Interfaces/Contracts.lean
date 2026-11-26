@@ -5,7 +5,7 @@ import Concrete.Backend.Observation
 namespace Concrete.Interfaces
 
 open ConcreteSpec.Core ConcreteSpec.Core.SourcePathSpan ConcreteSpec.StageInterface
-open Concrete.Contracts (ProcessEvent Semantics EvaluatorAdequacy EvidenceKind Graph StutteringSimulation)
+open Concrete.Contracts (ProcessEvent Semantics EvaluatorAdequacy EvidenceKind Graph)
 
 inductive Observation where
   | returned (status : UInt8) (stderr : ByteArray)
@@ -37,25 +37,69 @@ structure Model (A E : Type) where
   runtimeExact : ∀ a observed legacy, projects a observed legacy →
     observed.SameRuntimeResult legacy
 
-def Model.MatchesResult {A B E : Type} (source : Model A E) (target : Model B E)
-    {a : A} {b : B} (sim : Concrete.Contracts.Simulates source.execution target.execution a b) : Prop :=
-  ∀ p q observed, source.execution.finite a p → target.execution.finite b q →
-    sim.simulation.stateRel p q → target.result b q observed →
-    ∃ p', Concrete.Contracts.Steps (source.execution.step a) p p' ∧
-      source.result a p' observed ∧ source.execution.trace a p' = target.execution.trace b q
+open Concrete.Contracts (Steps SameInfiniteTrace)
 
-def Model.Simulates {A B E : Type} (source : Model A E) (target : Model B E)
+/-- Every source step visits a related checkpoint. Forward stuttering consumes
+rank. In the reverse direction each concrete target step and terminal result
+is matched from the checkpoint reached on that target execution. This keeps
+representation obligations on the very path used to match the result. -/
+structure CheckpointSimulation {A B E O : Type} (s : Semantics A E) (t : Semantics B E)
+    (sourceResult : A → s.State → O → Prop) (targetResult : B → t.State → O → Prop)
+    (a : A) (b : B) where
+  related : s.State → t.State → Prop
+  rank : s.State → t.State → Nat
+  initial : ∀ p, s.initial a p → ∃ q, t.initial b q ∧ related p q
+  advance : ∀ p q p', s.finite a p → t.finite b q → related p q → s.step a p p' →
+    (∃ first q', t.step b q first ∧ Steps (t.step b) first q' ∧ related p' q') ∨
+    (related p' q ∧ rank p' q < rank p q)
+  finish : ∀ p q o, s.finite a p → t.finite b q → related p q → sourceResult a p o →
+    ∃ q', Steps (t.step b) q q' ∧ targetResult b q' o ∧ s.trace a p = t.trace b q'
+  targetInitial : ∀ q, t.initial b q → ∃ p, s.initial a p ∧ related p q
+  targetAdvance : ∀ p q q', s.finite a p → t.finite b q → related p q → t.step b q q' →
+    ∃ before after p',
+      Steps (fun x y => s.step a x y ∧ related y q) p before ∧
+      (before = after ∨ s.step a before after) ∧ related after q' ∧
+      Steps (fun x y => s.step a x y ∧ related y q') after p'
+  targetFinish : ∀ p q o, s.finite a p → t.finite b q → related p q → targetResult b q o →
+    ∃ p', Steps (fun x y => s.step a x y ∧ related y q) p p' ∧
+      sourceResult a p' o ∧ s.trace a p' = t.trace b q
+
+/-- Complete behaviors include termination, infinite traces and faults.
+The safety clause retains the existing authority and no-target-fault obligations.
+A reachable source fault cannot be turned into a successful target execution. -/
+def BehaviorRefinement {A B E O : Type} (s : Semantics A E) (t : Semantics B E)
+    (sourceResult : A → s.State → O → Prop) (targetResult : B → t.State → O → Prop)
     (a : A) (b : B) : Prop :=
-  ∃ sim : Concrete.Contracts.Simulates source.execution target.execution a b,
-    source.MatchesResult target sim
+  Concrete.Contracts.Refines s t a b ∧
+  (∀ q o, t.finite b q → targetResult b q o →
+    ∃ p, s.finite a p ∧ sourceResult a p o ∧ s.trace a p = t.trace b q) ∧
+  (∀ p o, s.finite a p → sourceResult a p o →
+    ∃ q, t.finite b q ∧ targetResult b q o ∧ s.trace a p = t.trace b q) ∧
+  (∀ run, s.diverges a run → ∃ target, t.diverges b target ∧
+    SameInfiniteTrace (fun i => s.trace a (run i)) (fun i => t.trace b (target i))) ∧
+  (∀ p, ¬ s.stuck a p)
 
-/-- An external edge can state refinement directly, with the same exact terminal projection. -/
+theorem BehaviorRefinement.rejectsEarlyReturn {A B E O : Type}
+    {s : Semantics A E} {t : Semantics B E}
+    {sr : A → s.State → O → Prop} {tr : B → t.State → O → Prop}
+    {a : A} {b : B} (diverges : ∃ run, s.diverges a run)
+    (terminates : ¬ ∃ run, t.diverges b run) : ¬ BehaviorRefinement s t sr tr a b :=
+  fun h => terminates (let ⟨run, infinite⟩ := diverges
+    let ⟨target, path, _⟩ := h.2.2.2.1 run infinite
+    ⟨target, path⟩)
+
+theorem BehaviorRefinement.rejectsIntroducedDivergence {A B E O : Type}
+    {s : Semantics A E} {t : Semantics B E}
+    {sr : A → s.State → O → Prop} {tr : B → t.State → O → Prop}
+    {a : A} {b : B} (terminates : ¬ ∃ run, s.diverges a run)
+    (diverges : ∃ run, t.diverges b run) : ¬ BehaviorRefinement s t sr tr a b :=
+  fun h => terminates (let ⟨run, infinite⟩ := diverges
+    let ⟨source, path, _⟩ := h.1.2.2.1 run infinite
+    ⟨source, path⟩)
+
 def Model.Refines {A B E : Type} (source : Model A E) (target : Model B E)
     (a : A) (b : B) : Prop :=
-  Concrete.Contracts.Refines source.execution target.execution a b ∧
-  ∀ state observed, target.execution.finite b state → target.result b state observed →
-    ∃ before, source.execution.finite a before ∧ source.result a before observed ∧
-      source.execution.trace a before = target.execution.trace b state
+  BehaviorRefinement source.execution target.execution source.result target.result a b
 
 /-- Evaluator adequacy stays separate from the fuel-free lowering proposition. -/
 abbrev EvaluatorContract {A : Type} (model : Model A Empty)
@@ -746,7 +790,7 @@ def ControlStep (memory : Memory lang profile)
       language.operands.test value = some flag ∧
       memory.Transfer (if flag then yes else no) afterRead next
   | .ret value => memory.Return value state next
-  | .trap .. => False
+  | .trap .. | .invalid => False
 
 def Step (memory : Memory lang profile)
     (state next : MemoryRegisters language profile) : Prop :=
@@ -846,6 +890,7 @@ private def logicalTerminator : Terminator (Sigma (Read _ lang.literal)) (Read _
     MemoryTerm lang
   | .ret value => .ret (value.map logicalOperand)
   | .trap kind origin => .trap kind origin
+  | .invalid => .invalid
   | .jump edge => .jump ⟨edge.target, edge.arguments.map logicalOperand⟩
   | .branch test yes no => .branch (logicalRead test)
       ⟨yes.target, yes.arguments.map logicalOperand⟩ ⟨no.target, no.arguments.map logicalOperand⟩
@@ -956,13 +1001,13 @@ def LowersCore (m : LoweringModels language lang profile)
     (input : Admitted language) (mir : MIR lang profile) : Prop :=
   mir.project = input.core.project ∧ mir.entry = input.core.payload.entry ∧
   PreservesOrigins (List.map Prod.snd input.core.payload.origins) mir.origins ∧
-  ConsumesEvidence input.core input.discharges mir ∧ m.core.model.Simulates m.mir input.core mir
+  ConsumesEvidence input.core input.discharges mir ∧ m.core.model.Refines m.mir input.core mir
 
 def LowersUnchecked (m : LoweringModels language lang profile)
     (input : CoreInput language) (mir : MIR lang profile) : Prop :=
   mir.project = input.project ∧ mir.entry = input.payload.entry ∧
   PreservesOrigins (List.map Prod.snd input.payload.origins) mir.origins ∧
-  ConsumesEvidence input [] mir ∧ m.core.model.Simulates m.mir input mir
+  ConsumesEvidence input [] mir ∧ m.core.model.Refines m.mir input mir
 
 private def executionTrace (state : MemoryRegisters language profile)
     (observation : Option Observation) : List (ProcessEvent language.operands.Event) :=
@@ -1013,26 +1058,19 @@ private def addressIdsMatch (memory : Memory lang profile)
     place ∈ source.live ∧
     (memory.zeroRoot target.frame place = true ∨ (AList.lookup target.materialized place).isSome)
 
-/-- The target simulates source behavior. At related prefixes with a source successor,
-there is a compatible source successor with a represented target checkpoint.
-This preserves materialization while allowing the target to commit to permitted choices early. -/
+/-- In addition to the common behavior contract, every source step has a
+physical representation checkpoint, including steps on a terminating branch
+of a program that can also diverge. -/
 def LowersMemory (m : LoweringModels language lang profile)
     (mir : MIR lang profile) (memory : Memory lang profile) : Prop :=
   memory.project = mir.project ∧ memory.entry = mir.entry ∧
   PreservesOrigins mir.origins memory.origins ∧ LayoutsMatch language.layout memory ∧
   memory.signatures = mir.signatures ∧ PromotionSound (language := language) mir memory ∧
   memory.ExecutionExact m ∧ mir.ExecutionExact m ∧ memory.TablesWF ∧ mir.logicalView.TablesWF ∧
-  ∃ sim : Concrete.Contracts.Simulates m.mir.execution m.memory.execution mir memory,
-    m.mir.MatchesResult m.memory sim ∧
-    (∀ p, m.mir.execution.initial mir p → ∃ q, m.memory.execution.initial memory q ∧
-      sim.simulation.stateRel p q) ∧
-    (∀ p q, m.mir.execution.finite mir p → m.memory.execution.finite memory q →
-      sim.simulation.stateRel p q → (∃ p', m.mir.execution.step mir p p') →
-      ∃ p' q', m.mir.execution.step mir p p' ∧
-        Concrete.Contracts.Steps (m.memory.execution.step memory) q q' ∧
-        sim.simulation.stateRel p' q') ∧
+  m.mir.Refines m.memory mir memory ∧
+  ∃ sim : CheckpointSimulation m.mir.execution m.memory.execution m.mir.result m.memory.result mir memory,
     ∀ p q, m.mir.execution.finite mir p → m.memory.execution.finite memory q →
-      sim.simulation.stateRel p q →
+      sim.related p q →
       let source := m.mirState p
       let target := m.memoryState q
       let ranges := target.toMemoryFrame.backingRanges ++
@@ -1046,11 +1084,6 @@ def LowersMemory (m : LoweringModels language lang profile)
         (List.map Prod.fst ranges).Nodup ∧ source.nextAddressId = target.nextAddressId ∧
         source.ownership = target.ownership
 
-def BuildsSSA (m : LoweringModels language lang profile)
-    (memory : Memory lang profile) (ssa : SSA lang profile) : Prop :=
-  ssa.project = memory.project ∧ ssa.entry = memory.entry ∧ ssa.layouts = memory.layouts ∧
-  ssa.signatures = memory.signatures ∧ PreservesOrigins memory.origins ssa.origins ∧ m.memory.Simulates m.ssa memory ssa
-
 def BIR.TrapsMatch {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
     (ssa : SSA lang profile) (bir : BIR lang profile) : Prop :=
   ∀ fn ∈ ssa.functions, ∀ block ∈ fn.2.2.blocks.toList, ∀ kind origin,
@@ -1059,11 +1092,6 @@ def BIR.TrapsMatch {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
       ∃ next ∈ after.2.2.blocks.toList, next.id = block.id ∧
         ∃ slot, next.ending = .trap slot ∧
           ∃ entry, bir.sites[slot.index]? = some entry ∧ entry.kind = kind ∧ entry.origin = origin
-
-def EmitsLLVM (m : LoweringModels language lang profile)
-    (bir : BIR lang profile) (output : LLVMInput profile) : Prop :=
-  profile.backend = .llvm ∧ output.triple = profile.llvmTriple ∧
-  output.dataLayout = profile.llvmDataLayout ∧ output.sites = bir.sites ∧ m.llvmHandoff bir output ∧ m.bir.Refines m.llvm bir output
 
 private def TrapEntry.runtimeFile (entry : TrapEntry) (project : Project) : Option File :=
   project.files[entry.origin.lexical.file.index]?
@@ -1095,121 +1123,161 @@ def LCBInput.Execution (E : Type) (project : Project) : Semantics (LCBInput prof
 
 namespace BIR
 
-private def register {ty : language.operands.Ty} (value : SSAValue _ ty) : MemoryPlace _ ty :=
-  ⟨⟨⟨2 * value.id + 1⟩, []⟩, .virtual⟩
+private def register (base : Nat) {ty : language.operands.Ty}
+    (value : SSAValue _ ty) : MemoryPlace _ ty :=
+  ⟨⟨⟨base + value.id⟩, []⟩, .virtual⟩
 
 private def materialized {ty : language.operands.Ty} (place : Place _ ty) : MemoryPlace _ ty :=
-  ⟨{place with root := ⟨2 * place.root.id⟩}, .materialized⟩
+  ⟨place, .materialized⟩
 
-private def registerRead {ty : language.operands.Ty} :
+private def registerRead (base : Nat) {ty : language.operands.Ty} :
     SSARead _ lang.literal ty → MemoryRead _ lang.literal ty
   | .literal literal => .literal literal
-  | .value value => if language.operands.isCopy ty then .copy (register value) else .move (register value)
+  | .value value =>
+    if language.operands.isCopy ty then .copy (register base value) else .move (register base value)
 
-private def operand (arg : Sigma (SSARead _ lang.literal)) :
+private def operand (base : Nat) (arg : Sigma (SSARead _ lang.literal)) :
     Sigma (MemoryRead language.operands.Ty lang.literal) :=
-  ⟨arg.1, registerRead arg.2⟩
+  ⟨arg.1, registerRead base arg.2⟩
 
-private def arguments : {types : List language.operands.Ty} →
+private def arguments (base : Nat) : {types : List language.operands.Ty} →
     Args (SSARead _ lang.literal) types → Args (MemoryRead _ lang.literal) types
   | _, .nil => .nil
-  | _, .cons arg rest => .cons (registerRead arg) (arguments rest)
+  | _, .cons arg rest => .cons (registerRead base arg) (arguments base rest)
 
-private def instruction : SSAInst lang → MemoryInst lang
+private def instruction (base : Nat) : SSAInst lang → MemoryInst lang
   | .op dst op args addresses =>
-    .op (register dst) op (arguments args) [] (addresses.map fun p => ⟨p.1, materialized p.2⟩)
+    .op (register base dst) op (arguments base args) [] (addresses.map fun p => ⟨p.1, materialized p.2⟩)
   | .load (ty := ty) dst src =>
-    .bind (register dst) (if language.operands.isCopy ty then .copy (materialized src)
+    .bind (register base dst) (if language.operands.isCopy ty then .copy (materialized src)
       else .move (materialized src))
-  | .store dst src => .assign (materialized dst) (registerRead src)
-  | .beginLifetime place => .beginLifetime ⟨2 * place.id⟩
-  | .endLifetime place => .endLifetime ⟨2 * place.id⟩
-  | .call fn dst args => .call fn (dst.map fun p => ⟨p.1, register p.2⟩) (args.map operand) []
+  | .destructure src bindings =>
+    .destructure (match src with
+      | .register src => register base src
+      | .materialized src => materialized src)
+      (bindings.map fun (field, dst) => (field, ⟨dst.1, register base dst.2⟩))
+  | .store dst src => .assign (materialized dst) (registerRead base src)
+  | .beginLifetime place => .beginLifetime place
+  | .endLifetime place => .endLifetime place
+  | .call fn dst args => .call fn (dst.map fun p => ⟨p.1, register base p.2⟩)
+      (args.map (operand base)) []
 
-private def registerDeclarations : SSAInst lang → LocalTypes language.operands.Ty
-  | .op (ty := ty) dst .. | .load (ty := ty) dst .. => [((register dst).logical.root, ty)]
-  | .call _ (some ⟨ty, dst⟩) _ => [((register dst).logical.root, ty)]
+private def registerDeclarations (base : Nat) : SSAInst lang → LocalTypes language.operands.Ty
+  | .op (ty := ty) dst .. | .load (ty := ty) dst .. => [((register base dst).logical.root, ty)]
+  | .destructure _ bindings =>
+    bindings.map fun (_, dst) => ((register base dst.2).logical.root, dst.1)
+  | .call _ (some ⟨ty, dst⟩) _ => [((register base dst).logical.root, ty)]
   | _ => []
 
-private def terminator (bir : BIR lang profile) :
+private def terminator (bir : BIR lang profile) (base : Nat) :
     BIRTerm (Sigma (SSARead _ lang.literal)) (SSARead _ lang.literal lang.bool) → MemoryTerm lang
-  | .ret value => .ret (value.map operand)
-  | .jump edge => .jump ⟨edge.target, edge.arguments.map operand⟩
-  | .branch test yes no => .branch (registerRead test)
-      ⟨yes.target, yes.arguments.map operand⟩ ⟨no.target, no.arguments.map operand⟩
+  | .ret value => .ret (value.map (operand base))
+  | .jump edge => .jump ⟨edge.target, edge.arguments.map (operand base)⟩
+  | .branch test yes no => .branch (registerRead base test)
+      ⟨yes.target, yes.arguments.map (operand base)⟩ ⟨no.target, no.arguments.map (operand base)⟩
   | .trap slot => match bir.sites[slot.index]? with
     | some entry => .trap entry.kind entry.origin
-    | none => .ret none
+    | none => .invalid
 
 /-- Interpret the exact BIR graph with the shared CFG rules. Register IDs and
 byte-backed roots occupy disjoint namespaces. Trap slots resolve in this graph's table. -/
-def memoryView (bir : BIR lang profile) : Memory lang profile :=
+private def registerView {T : Type} (project : Project) (entry : FnId)
+    (signatures : AList FnId (FunctionSignature language.operands.Ty))
+    (functions : AList FnId (LocalTypes language.operands.Ty ×
+      CFG (Sigma (SSAValue language.operands.Ty)) (LocatedOp (SSAInst lang)) T))
+    (layouts : AList FnId (AList PlaceId Layout)) (lowerTerm : Nat → T → MemoryTerm lang) :
+    Memory lang profile :=
   let functions := List.map (fun (fn, locals, graph) =>
+    let declaredLimit := List.foldl (fun limit (root, _) => max limit (root.id + 1)) 0 locals
+    -- Even an undeclared physical lifetime operand must not alias a virtual register.
+    let base := graph.blocks.foldl (fun limit block =>
+      block.body.foldl (fun limit op =>
+        match op.instruction with
+        | .beginLifetime root | .endLifetime root => max limit (root.id + 1)
+        | _ => limit) limit) declaredLimit
     let registers := graph.blocks.toList.flatMap fun block =>
-      (block.params.map fun p => ((register p.2).logical.root, p.1)) ++
-      (block.body.flatMap fun op => registerDeclarations op.instruction)
-    let roots : LocalTypes language.operands.Ty :=
-      List.map (fun (place, ty) => (⟨2 * place.id⟩, ty)) locals
+      (block.params.map fun p => ((register base p.2).logical.root, p.1)) ++
+      (block.body.flatMap fun op => registerDeclarations base op.instruction)
     let body : MemoryGraph lang := ⟨graph.entry, graph.blocks.map fun block =>
-      ⟨block.id, block.params.map (fun p => ⟨p.1, register p.2⟩),
-        block.body.map (fun op => ⟨op.origin, instruction op.instruction⟩),
-        terminator bir block.ending, block.boundaryOrigins⟩⟩
-    ((fn, roots ++ registers, body),
-      (fn, List.map (fun p => (p.1, StorageClass.materialized)) roots ++
-        List.map (fun p => (p.1, StorageClass.virtual)) registers))) bir.functions
-  ⟨bir.project, bir.entry, bir.signatures, functions.map Prod.fst,
-    List.map (fun (fn, slots) => (fn, List.map (fun (place, layout) => (PlaceId.mk (2 * place.id), layout)) slots)) bir.layouts,
-    functions.map Prod.snd⟩
+      ⟨block.id, block.params.map (fun p => ⟨p.1, register base p.2⟩),
+        block.body.map (fun op => ⟨op.origin, instruction base op.instruction⟩),
+        lowerTerm base block.ending, block.boundaryOrigins⟩⟩
+    ((fn, locals ++ registers, body),
+      (fn, List.map (fun p => (p.1, StorageClass.materialized)) locals ++
+        List.map (fun p => (p.1, StorageClass.virtual)) registers))) functions
+  ⟨project, entry, signatures, functions.map Prod.fst, layouts, functions.map Prod.snd⟩
+
+
+def memoryView (bir : BIR lang profile) : Memory lang profile :=
+  registerView bir.project bir.entry bir.signatures bir.functions bir.layouts (terminator bir)
+
+private def entryStateFor (memory : Memory lang profile) (arity : Nat := 0) :
+    MemoryRegisters language profile :=
+  let graph := memory.graphAt memory.entry
+  let id := (graph.map CFG.entry).getD ⟨0⟩
+  let block := graph.bind (·.blocks.find? (·.id == id))
+  let pc := (block.map fun block =>
+    if block.params.length = arity then 0 else block.body.length + 1).getD 0
+  ⟨⟨memory.entry, id, pc, [], [], [], [], [], []⟩, Mem.Memory.empty, [], [], {}, 0⟩
 
 def entryState (bir : BIR lang profile) : MemoryRegisters language profile :=
-  let block := ((bir.memoryView (language := language)).graphAt bir.entry).map CFG.entry
-  ⟨⟨bir.entry, block.getD ⟨0⟩, 0, [], [], [], [], [], []⟩, Mem.Memory.empty, [], [], {}, 0⟩
+  entryStateFor (bir.memoryView (language := language))
 
-def step (bir : BIR lang profile) (state next : MemoryRegisters language profile) : Prop :=
-  let memory := bir.memoryView (language := language)
+private def stepFor (memory : Memory lang profile) (state next : MemoryRegisters language profile) : Prop :=
   ∃ block, memory.blockAt state = some block ∧
     match block.body[state.instruction]? with
     | some op => memory.InstructionStepWith state next false true op.instruction
     | none => state.instruction = block.body.length ∧ memory.ControlStep state next block.ending
 
-def hostedResult (bir : BIR lang profile) (state : MemoryRegisters language profile) :
+def step (bir : BIR lang profile) (state next : MemoryRegisters language profile) : Prop :=
+  stepFor (bir.memoryView (language := language)) state next
+
+private def hostedResultFor (memory : Memory lang profile) (state : MemoryRegisters language profile) :
     Option Concrete.Contracts.Observation := do
-  match ← (bir.memoryView (language := language)).terminalObservation state with
+  match ← memory.terminalObservation state with
   | .returned status bytes => return .returned status bytes
   | .trapped status kind span bytes =>
-    let block ← (bir.memoryView (language := language)).blockAt state
+    let block ← memory.blockAt state
     let .trap _ origin := block.ending | none
-    let file ← bir.project.files[span.file.index]?
+    let file ← memory.project.files[span.file.index]?
     return .trapped status kind ⟨⟨origin.operation.id⟩, ⟨file.path.render.text, span.line, span.col⟩⟩ bytes
   | .startupRefused status bytes => return .startupRefused status bytes
 
-private def trace (bir : BIR lang profile) (state : MemoryRegisters language profile) :
+def hostedResult (bir : BIR lang profile) (state : MemoryRegisters language profile) :
+    Option Concrete.Contracts.Observation :=
+  hostedResultFor (bir.memoryView (language := language)) state
+
+private def traceFor {A : Type}
+    (result : A → MemoryRegisters language profile → Option Concrete.Contracts.Observation)
+    (a : A) (state : MemoryRegisters language profile) :
     List (ProcessEvent language.operands.Event) :=
   state.effects.map .effect ++
-    ((hostedResult bir state).map fun o => o.stderr.data.toList.map .stderr).getD []
+    ((result a state).map fun o => o.stderr.data.toList.map .stderr).getD []
 
-/-- Source semantics for backend refinement. Fetch, reads, operations and terminal
-observations are determined by the supplied BIR graph. -/
-def Execution : Semantics (BIR lang profile) language.operands.Event where
+/-- Interpret an invocation of the supplied graph from the selected activation. -/
+def executionFor {A : Type} (graph : A → Memory lang profile)
+    (start : A → MemoryRegisters language profile)
+    (observe : A → MemoryRegisters language profile → Option Concrete.Contracts.Observation) :
+    Semantics A language.operands.Event where
   State := MemoryRegisters language profile
-  initial bir state := state = entryState bir
+  initial a state := state = start a
   initialized _ := ⟨_, rfl⟩
-  step bir state next :=
-    hostedResult bir state = none ∧ bir.step state next ∧
-      Concrete.Contracts.TracePrefix (trace bir state) (trace bir next)
-  result bir state result := hostedResult bir state = some result
+  step a state next :=
+    observe a state = none ∧ stepFor (graph a) state next ∧
+      Concrete.Contracts.TracePrefix (traceFor observe a state) (traceFor observe a next)
+  result a state result := observe a state = some result
   terminal _ _ _ h _ tick := by
     have impossible := h.symm.trans tick.1
     contradiction
-  safe bir state :=
-    (hostedResult bir state).isSome = true ∨
-    ∃ next, hostedResult bir state = none ∧ bir.step state next ∧
-      Concrete.Contracts.TracePrefix (trace bir state) (trace bir next)
-  trace := trace
+  safe a state :=
+    (observe a state).isSome = true ∨
+    ∃ next, observe a state = none ∧ stepFor (graph a) state next ∧
+      Concrete.Contracts.TracePrefix (traceFor observe a state) (traceFor observe a next)
+  trace := traceFor observe
   permitted _ _ := True
   resultTrace := by
     intro bir state result h
-    unfold trace
+    unfold traceFor
     rw [h]
     simp only [Option.map_some, Option.getD_some]
     have stderrExact : ∀ effects : List language.operands.Event, ∀ bytes : List UInt8,
@@ -1223,24 +1291,149 @@ def Execution : Semantics (BIR lang profile) language.operands.Event where
     exact stderrExact _ _
   traceGrows _ _ _ tick := tick.2.2
 
+def Execution : Semantics (BIR lang profile) language.operands.Event :=
+  executionFor (memoryView (language := language)) entryState hostedResult
+
+/-- An auxiliary invocation ends at the selected function's outermost return.
+Nested calls still execute the linked BIR program through the normal frame rules. -/
+def leafReturn (bir : BIR lang profile) (state : MemoryRegisters language profile) :
+    Option language.operands.Val := do
+  let memory := bir.memoryView (language := language)
+  let block ← memory.blockAt state
+  if !state.callers.isEmpty || state.frame != bir.entry ||
+      state.instruction != block.body.length then none else
+  let .ret (some ⟨_, operand⟩) := block.ending | none
+  let (value, afterRead) ← memory.readValue state operand
+  if afterRead.live.all (memory.canEnd afterRead) then some value else none
+
+def leafEntry (bir : BIR lang profile) (values : List language.operands.Val) :
+    MemoryRegisters language profile :=
+  let state := entryStateFor (bir.memoryView (language := language)) values.length
+  let params := (((bir.memoryView (language := language)).blockAt state).map Block.params).getD []
+  let bindings := (params.zip values).map (fun (param, value) => (param.2.logical.root, value))
+  {state with
+    virtualValues := bindings
+    live := List.map Prod.fst bindings
+    initialized := List.map Prod.fst bindings}
+
 end BIR
+
+def EmitsLLVM (m : LoweringModels language lang profile)
+    (bir : BIR lang profile) (output : LLVMInput profile) : Prop :=
+  profile.backend = .llvm ∧ output.triple = profile.llvmTriple ∧
+  output.dataLayout = profile.llvmDataLayout ∧ output.sites = bir.sites ∧ m.llvmHandoff bir output ∧
+  m.bir.execution = BIR.Execution (language := language) ∧ m.bir.Refines m.llvm bir output
+
+def SSA.memoryView (ssa : SSA lang profile) : Memory lang profile :=
+  BIR.registerView ssa.project ssa.entry ssa.signatures ssa.functions ssa.layouts fun base ending =>
+    match ending with
+    | .ret value => .ret (value.map (BIR.operand base))
+    | .jump edge => .jump ⟨edge.target, edge.arguments.map (BIR.operand base)⟩
+    | .branch test yes no => .branch (BIR.registerRead base test)
+        ⟨yes.target, yes.arguments.map (BIR.operand base)⟩
+        ⟨no.target, no.arguments.map (BIR.operand base)⟩
+    | .trap kind origin => .trap kind origin
+    | .invalid => .invalid
+
+def SSA.Execution : Semantics (SSA lang profile) language.operands.Event :=
+  BIR.executionFor (SSA.memoryView (language := language))
+    (fun ssa => BIR.entryStateFor (ssa.memoryView (language := language)))
+    (fun ssa => BIR.hostedResultFor (ssa.memoryView (language := language)))
+
+def BuildsSSA (m : LoweringModels language lang profile)
+    (memory : Memory lang profile) (ssa : SSA lang profile) : Prop :=
+  ssa.project = memory.project ∧ ssa.entry = memory.entry ∧ ssa.layouts = memory.layouts ∧
+  ssa.signatures = memory.signatures ∧ PreservesOrigins memory.origins ssa.origins ∧
+  memory.ExecutionExact m ∧ m.ssa.execution = SSA.Execution (language := language) ∧
+  m.memory.Refines m.ssa memory ssa
 
 def BuildsBIR (m : LoweringModels language lang profile)
     (ssa : SSA lang profile) (bir : BIR lang profile) : Prop :=
   bir.project = ssa.project ∧ bir.entry = ssa.entry ∧ bir.layouts = ssa.layouts ∧
   bir.signatures = ssa.signatures ∧ bir.TrapSlotsWF ∧ bir.TrapsMatch ssa ∧ PreservesOrigins ssa.origins bir.origins ∧
   bir.frameSlots ≤ profile.maxBIRSlots ∧
-  m.bir.execution = BIR.Execution (language := language) ∧ m.ssa.Simulates m.bir ssa bir
+  m.ssa.execution = SSA.Execution (language := language) ∧
+  m.bir.execution = BIR.Execution (language := language) ∧ m.ssa.Refines m.bir ssa bir
+
+open LeanCompilerBackend.Verified (FunctionJob)
+
+/-- Function identities select exact jobs from the emitted bundle. -/
+def LCBInput.jobAt (output : LCBInput profile) (entry fn : FnId) : Option FunctionJob :=
+  AList.lookup ((entry, Backend.LCB.job output.body) :: output.additionalJobs) fn
+
+private def leafIntWidth (ty : IntTy) : LeanCompilerBackend.Width :=
+  if ty.bits ≤ 32 then .word else .long
+
+private def decodeLeafInt (ty : IntTy) (v : LeanCompilerBackend.Verified.Source.Value) :
+    Option CVal :=
+  if v.width == leafIntWidth ty then some (.int ty (ofBits ty (v.toNat % 2 ^ ty.bits))) else none
+
+private def encodeLeafInt (ty : IntTy) (v : CoreValue language.OtherValue) :
+    Option LeanCompilerBackend.Verified.Source.Value :=
+  match v with
+  | .scalar (.int actual n) =>
+    if actual = ty ∧ ty.InRange n then some (.constant (leafIntWidth ty) (Int.ofNat (toBits ty n))) else none
+  | _ => none
+
+/-- Public invocation semantics for the pinned leaf-job profile. The source
+executes in the full BIR function environment. The target invokes the exact
+selected job using imported source steps and the job's validated ABI.
+Calls within LCB jobs require a backend profile that supports imports. -/
+def LCBLeafRefines (bir : BIR lang profile) (output : LCBInput profile) (fn : FnId) : Prop :=
+  ∃ job signature paramTypes resultTy graph block,
+    output.jobAt bir.entry fn = some job ∧
+    AList.lookup bir.signatures fn = some signature ∧
+    (∃ locals, AList.lookup bir.functions fn = some (locals, graph)) ∧
+    graph.blocks.find? (·.id == graph.entry) = some block ∧
+    block.params.map Sigma.fst = signature.parameters ∧
+    (block.params.map (fun p => p.2.id)).Nodup ∧
+    signature.parameters.mapM (fun ty => do
+      let .int intTy ← language.scalarType ty | none
+      pure intTy) = some paramTypes ∧
+    (signature.result.bind language.scalarType) = some (.int resultTy) ∧
+    job.code.body.parameters = (paramTypes.map leafIntWidth).toArray ∧
+    job.code.body.resultWidth = leafIntWidth resultTy ∧
+    ∀ args : List LeanCompilerBackend.Verified.Source.Value, ∀ scalars,
+      args.length = paramTypes.length →
+      (paramTypes.zip args).mapM (fun (ty, value) => decodeLeafInt ty value) = some scalars →
+      let source : BIR lang profile := {bir with entry := fn}
+      let start := BIR.leafEntry source (scalars.map
+        (fun scalar => language.valueShape.symm ▸ CoreValue.scalar scalar))
+      let sourceReturn := fun state =>
+        (BIR.leafReturn source state).bind (fun value =>
+          encodeLeafInt (language := language) resultTy (language.valueShape ▸ value))
+      let observe := fun state =>
+        if (sourceReturn state).isSome then some (Concrete.Contracts.Observation.returned 0 ByteArray.empty)
+        else match BIR.hostedResult source state with
+          | some (.trapped status kind site stderr) => some (.trapped status kind site stderr)
+          | _ => none
+      let sourceExec := BIR.executionFor (fun (_ : Unit) => source.memoryView (language := language))
+        (fun _ => start) (fun _ => observe)
+      let body := fun (_ : Unit) => job.code.body
+      let targetExec := Backend.lcbInvocationSemantics (E := language.operands.Event)
+        body (fun _ => args.toArray) (fun _ _ => some (.returned 0 ByteArray.empty))
+      BehaviorRefinement sourceExec targetExec
+        (fun _ state observed =>
+          ((sourceReturn state).map Sum.inl <|> (observe state).map Sum.inr) = some observed)
+        (fun input state observed => ∃ q value, state = some q ∧
+          LeanCompilerBackend.Verified.Source.step (body input) q = .ok (.returned value) ∧
+          observed = Sum.inl value)
+        () ()
 
 def EmitsLCB (language : CoreLanguage) {lang : LoweringLanguage language.operands.Ty}
     {profile : Profile} (bir : BIR lang profile) (output : LCBInput profile) : Prop :=
   profile.backend = .lcb ∧
   LeanCompilerBackend.Verified.validateJob (Backend.LCB.job output.body) = .ok () ∧
-  (∀ job ∈ output.additionalJobs, LeanCompilerBackend.Verified.validateJob job = .ok ()) ∧
-  ((Backend.LCB.job output.body :: output.additionalJobs).map
+  (∀ pair ∈ output.additionalJobs, LeanCompilerBackend.Verified.validateJob pair.2 = .ok ()) ∧
+  ((Backend.LCB.job output.body :: List.map Prod.snd output.additionalJobs).map
     (fun job => job.code.symbol.name)).Nodup ∧
   output.sites = bir.sites ∧ output.RuntimeMatches bir.project ∧
-  Concrete.Contracts.Refines (BIR.Execution (language := language))
-    (LCBInput.Execution _ bir.project) bir output
+  BehaviorRefinement (BIR.Execution (language := language)) (LCBInput.Execution _ bir.project)
+    (BIR.Execution (language := language)).result (LCBInput.Execution _ bir.project).result bir output ∧
+  (List.map Prod.fst bir.functions).Nodup ∧
+  (bir.entry :: List.map Prod.fst output.additionalJobs).Nodup ∧
+  (∀ fn, fn ∈ List.map Prod.fst bir.functions ↔ fn ∈ bir.entry :: List.map Prod.fst output.additionalJobs) ∧
+  (∀ pair ∈ output.additionalJobs, LCBLeafRefines (language := language) bir output pair.1) ∧
+  bir.TrapSlotsWF
 
 end Concrete.Interfaces

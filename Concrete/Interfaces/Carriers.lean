@@ -85,6 +85,8 @@ inductive Terminator (Arg Cond : Type) where
   | branch (test : Cond) (yes no : CFGEdge Arg)
   | ret (value : Option Arg)
   | trap (kind : TrapKind) (origin : Origin)
+  /-- An unresolved backend control reference has no successor or result. -/
+  | invalid
 
 structure Block (Param Inst Term : Type) where
   id : BlockId
@@ -103,7 +105,7 @@ def Terminator.successors {Arg Cond : Type} :
     Terminator Arg Cond → List (CFGEdge Arg)
   | .jump edge => [edge]
   | .branch _ yes no => [yes, no]
-  | .ret _ | .trap _ _ => []
+  | .ret _ | .trap _ _ | .invalid => []
 
 /-- Shared well-formedness for control-flow edges, including typed parallel arguments. -/
 def CFG.WF {P I T A Ty : Type} (graph : CFG P I T) (successors : T → List (CFGEdge A))
@@ -262,12 +264,19 @@ inductive SSARead (Ty : Type) (Literal : Ty → Type) : Ty → Type where
   | value {ty : Ty} (value : SSAValue Ty ty) : SSARead Ty Literal ty
   | literal {ty : Ty} (value : Literal ty) : SSARead Ty Literal ty
 
+/-- A destructure consumes an entire aggregate, whether promoted or byte-backed. -/
+inductive SSAAggregate (Ty : Type) : Ty → Type where
+  | register {ty : Ty} (src : SSAValue Ty ty) : SSAAggregate Ty ty
+  | materialized {ty : Ty} (src : Place Ty ty) : SSAAggregate Ty ty
+
 /-- SSA only renames virtual values. Materialized locations retain their addressable identity. -/
 inductive SSAInst {Ty : Type} (lang : LoweringLanguage Ty) where
   | op {opcode : Operator} {types : List Ty} {ty : Ty} (dst : SSAValue Ty ty) (op : lang.operation opcode types ty)
       (args : Args (SSARead Ty lang.literal) types)
       (addresses : List (Sigma (Place Ty)) := [])
   | load {ty : Ty} (dst : SSAValue Ty ty) (src : Place Ty ty)
+  | destructure {ty : Ty} (src : SSAAggregate Ty ty)
+      (bindings : List (FieldId × Sigma (SSAValue Ty)))
   | store {ty : Ty} (dst : Place Ty ty) (src : SSARead Ty lang.literal ty)
   | beginLifetime (place : PlaceId)
   | endLifetime (place : PlaceId)
@@ -321,6 +330,7 @@ def BIR.frameSlots {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
     max largest (function.2.2.blocks.foldl (fun slots block =>
       block.body.foldl (fun count inst => match inst.instruction with
         | .op .. | .load .. => count + 1
+        | .destructure _ bindings => count + bindings.length
         | .call _ (some _) _ => count + 1
         | _ => count) (slots + block.params.length)) 0)) 0
 
@@ -350,7 +360,7 @@ def LLVMInput.moduleBytes {profile : Profile} (input : LLVMInput profile) : Byte
 
 structure LCBInput (_profile : Profile) where
   body : LeanCompilerBackend.Verified.Source.Function
-  additionalJobs : List LeanCompilerBackend.Verified.FunctionJob
+  additionalJobs : AList FnId LeanCompilerBackend.Verified.FunctionJob
   sites : TrapTable
   runtimeInput : ByteArray
 

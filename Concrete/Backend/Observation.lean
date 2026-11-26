@@ -57,10 +57,11 @@ def lcbTerminal (i : LCBInput) (q : Option Source.State) : Option Observation :=
 
 /-- Imported initial states and small steps determine prefixes, returns, faults and divergence.
 The body is silent and the runtime projection supplies the terminal diagnostic. -/
-def lcbSemanticsFor {A E : Type} (body : A → Source.Function)
+def lcbInvocationSemantics {A E : Type} (body : A → Source.Function)
+    (arguments : A → Array Source.Value)
     (project : A → Source.Value → Option Observation) : Semantics A E where
   State := Option Source.State
-  initial i q := q = (Source.initial (body i) #[]).toOption
+  initial i q := q = (Source.initial (body i) (arguments i)).toOption
   initialized _ := ⟨_, rfl⟩
   step i q q' := ∃ s t, q = some s ∧ q' = some t ∧ Source.Step (body i) s t
   result i q o := lcbTerminalFor body project i q = some o
@@ -88,6 +89,10 @@ def lcbSemanticsFor {A E : Type} (body : A → Source.Function)
     unfold Source.Step at hstep
     rw [show lcbTerminalFor body project i (some s) = none by simp [lcbTerminalFor, hstep]]
     rfl
+
+def lcbSemanticsFor {A E : Type} (body : A → Source.Function)
+    (project : A → Source.Value → Option Observation) : Semantics A E :=
+  lcbInvocationSemantics body (fun _ => #[]) project
 
 def lcbSemantics : Semantics LCBInput :=
   lcbSemanticsFor Prod.fst fun i => lcbResult i.2.1

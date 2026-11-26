@@ -44,10 +44,12 @@ effects and the fetched trap’s diagnostic bytes.
 The logical MIR evaluator holds roots as logical values. Both IRs retain residual operation
 and call checks and evaluate them before performing the instruction. The simulation
 relates reachable activations, including suspended callers, to virtual values or live
-backing ranges and initialized bytes. When a related source state can step, a compatible
-source successor must have a represented target checkpoint. This allows Memory to commit
-to an allocation before resolving a logical reference. A target that returns early cannot erase a source materialization
-by retaining its declaration and origin metadata.
+backing ranges and initialized bytes. Each source step on every branch requires a
+represented target checkpoint. A source step without a target step consumes rank.
+Target steps and terminal matches extend the same related execution, checking
+representation at each intermediate source state. Memory can commit to an allocation
+before resolving a logical reference. A silent loop and a terminating branch must
+both be preserved.
 
 Address operands name typed places explicitly. Physical execution resolves a live,
 initialized materialized place through its recorded range and passes that range, byte
@@ -65,11 +67,20 @@ and `Memory.run` proof path.
 
 ## Memory → SSA
 
-Fix (b) supplies the addressable/virtual partition and Fix (a) registers the validated SSA lowering. `SSA` has typed value IDs and parallel block arguments. Addressable places and layout remain explicit. SSA promotion records the eliminated virtual binding origins at control boundaries. `BuildsSSA` requires preservation of origins, layouts and observations. Split the SSA construction currently inside `SSA.lower` from its BIR output.
+Fix (b) supplies the addressable/virtual partition and Fix (a) registers the validated SSA lowering. `SSA` has typed value IDs and parallel block arguments. Addressable places and layout remain explicit. SSA promotion records the eliminated virtual binding origins at control boundaries. `BuildsSSA` requires preservation of origins, layouts and observations against the
+exact Memory and SSA semantics. A destructure consumes a whole materialized or
+promoted root. It simultaneously defines the typed field registers and requires
+each active linear field to have a distinct binding. Split the SSA construction
+currently inside `SSA.lower` from its BIR output.
 
 ## SSA → BIR
 
-Fix (a) owns the validated handoff and profile slot check. Fix (d) owns the trap table and its origin proof. `BIR` indexes traps through `TrapIndex`; `BuildsBIR` requires valid lookup, origin preservation, simulation against the graph’s execution rules and the resolved profile's BIR slot ceiling. The count is the largest function's number of BIR definitions, including block parameters and call destinations. The resolved platform supplies the ISA, byte order and spec memory layout for either backend. Dominance-scoped validation can strengthen the invariant on the same graph before slice 3. Retire SSA's positional site creation and BIR's duplicate diagnostic identity and scalar vocabulary at cutover.
+Fix (a) owns the validated handoff and profile slot check. Fix (d) owns the trap table and its origin proof. `BIR` indexes traps through `TrapIndex`; `BuildsBIR` requires valid lookup, origin preservation, simulation against the graph’s execution rules and the resolved profile's BIR slot ceiling. The count is the largest function's number of BIR definitions, including block parameters,
+destructure bindings and call destinations. The shared SSA/BIR interpreter reserves
+register storage above the physical place IDs declared or named by lifetime instructions in each
+function, preserving the
+identity passed to spec address operations. An unresolved trap slot has neither a
+successor nor a terminal result, including inside a callee. The resolved platform supplies the ISA, byte order and spec memory layout for either backend. Dominance-scoped validation can strengthen the invariant on the same graph before slice 3. Retire SSA's positional site creation and BIR's duplicate diagnostic identity and scalar vocabulary at cutover.
 
 ## BIR → LLVM
 
@@ -77,14 +88,27 @@ Fix (a) registers the exact emitter and the named LLVM premise. `LLVMInput` carr
 
 ## BIR → LCB
 
-Fix (a) registers the exact adapter and profile preparation. `LCBInput` carries the actual source function, additional exact jobs for the later call profile, runtime input bytes and the same trap table. `EmitsLCB` requires validation of the exact canonical body job and every additional job, unique emitted symbols and the exact handoff. Its refinement obligation runs the supplied
-body in imported LCB source semantics and compares it with the execution of the supplied
-BIR graph, including its indexed traps. The runtime bytes must render the same ordered
-diagnostics used by the return-word projection. The proved source adapter and native lowering premises remain separate. The result-word encoding belongs in the backend/runtime projection.
+Fix (a) registers the exact adapter and profile preparation. `LCBInput` carries
+the hosted body, auxiliary jobs keyed by BIR function identity, runtime bytes and
+the exact trap table. `EmitsLCB` requires one job for each BIR function, validates
+each exact job and requires unique emitted symbols. The hosted body runs through
+the runtime ABI with the emitted diagnostic table. Each auxiliary invocation resolves the exact job by function ID and runs it
+with every argument tuple in its validated integer ABI and compared with the
+corresponding BIR function running in the full BIR function environment. The
+auxiliary return comparison uses the full ABI value. The pinned LCB verified
+profile admits leaf jobs. [LP0](../../ROADMAP.md#vertical-slices) tracks
+imported call steps, real frames and the multi-frame trap ABI for a profile
+that emits inter-job calls. The proved source adapter and native lowering
+premises remain separate.
 
 ## Common proof boundary
 
-Executable registry entries own the function and the proof graph uses that function's result. `Pipeline.Sound` requires edge soundness and adjacent invariant implication for the registered fold. The production and unchecked folds differ at admission. Semantic edges use fuel-free simulation over the theorem's transition system, with a nonempty source path or a decreasing stutter rank, finite-prefix safety, progress and divergence trace matching. The precise terminal projection distinguishes return, trap and startup refusal, including exact stderr and file-scoped lexical sites. The Core trace starts empty and each step appends exactly the events of its Exec label. The Core process projection uses the shared scalar carrier and the spec's hosted status rule. It takes the returned `u8` value as the status and sets a trap's status to 134 with the canonical diagnostic from its lexical origin. Evaluator fuel appears separately in adequacy. Existence of an admitted observation and native-image assumptions remain theorem-level obligations.
+Executable registry entries own the function and the proof graph uses that function's result. `Pipeline.Sound` requires edge soundness and adjacent invariant implication for the registered fold. The production and unchecked folds differ at admission. Semantic edges use one fuel-free complete-behavior contract over the theorem's
+transition system. It requires matching terminal results and infinite traces in
+both directions, finite-prefix safety and authority, and absence of stuck
+executions on each side. Backend compilation and startup refusals retain their
+typed outcomes. The Memory edge additionally checks live representations along
+the matched execution. The precise terminal projection distinguishes return, trap and startup refusal, including exact stderr and file-scoped lexical sites. The Core trace starts empty and each step appends exactly the events of its Exec label. The Core process projection uses the shared scalar carrier and the spec's hosted status rule. It takes the returned `u8` value as the status and sets a trap's status to 134 with the canonical diagnostic from its lexical origin. Evaluator fuel appears separately in adequacy. Existence of an admitted observation and native-image assumptions remain theorem-level obligations.
 
 ## Writer ownership
 
