@@ -191,7 +191,7 @@ theorem boundary.
 
 ## Writer ownership
 
-Use separate implementation modules so parallel proof and implementation work can proceed against the frozen signatures. These paths reserve ownership, including their eventual in-place retirements. Each fix adds root imports for its new modules and regenerates the affected inventories through their generators. Fix (a) integrates the existing cross-cutting gates at cutover.
+Use separate implementation modules so parallel proof and implementation work can proceed against the frozen signatures. These paths reserve ownership, including their eventual in-place retirements. Existing cross-cutting gates and root imports are integrated by (a) after the implementation branches are ready.
 
 | Fix | Owned implementation paths and retirements |
 | --- | --- |
@@ -201,28 +201,6 @@ Use separate implementation modules so parallel proof and implementation work ca
 | (b) | `Concrete/CFG.lean`, `Concrete/MIR.lean`, `Concrete/Memory.lean`, `Concrete/SSA.lean`, `ConcreteSpec/Layout.lean`, `ConcreteSpec/Spec/Memory.lean`, `ConcreteSpec/Spec/Hybrid.lean`, `ConcreteSpec/Proofs/Memory.lean`, `ConcreteSpec/Proofs/Hybrid.lean` |
 | (a) | `Concrete/BIR.lean`, `Concrete/BIR/`, `Concrete/Stages.lean`, `Concrete/Contracts.lean`, `Concrete/Theorem.lean`, `Concrete/Certificate.lean`, `Concrete/Premises.lean`, `Main.lean`, `Concrete/Backend/` except `Observation.lean` and `Runtime.lean`, root imports, proof inventories and cross-stage checks and fixtures |
 | (f) | `Concrete/Lex.lean`, `Concrete/Parse.lean`, `Concrete/LL1.lean`, `ConcreteSpec/Spec/LL1.lean`, `ConcreteSpec/Spec/Surface0.lean`, `ConcreteSpec/Surface1.lean`, `ConcreteSpec/Proofs/Surface0.lean`, `ConcreteSpec/Proofs/Surface1.lean`, `ConcreteSpec/Proofs/LL1.lean` |
-
-### Fix (d) origin handoffs
-
-ISS-XXXX tracks the production adoption of [the origin helpers](../../Concrete/Origins.lean)
-and the remaining retirements.
-
-- **(e)** Issue each original Core occurrence's origin during elaboration using the
-  spec operation ID and persistent evidence key. Validate its lexical span against
-  the issuing project with `validateLocation` and establish Core location validity.
-- **(c)** Preserve the complete origin through the admitted and empty-evidence
-  Core-to-MIR routes. Keep it on unchecked operations after discharge, on explicit
-  residual checks and traps, and in boundary metadata for operations that emit
-  no instruction. Match discharges by the spec evidence key and exact admitted
-  operation and operands.
-- **(b)** Carry the original origin through Memory and SSA, including copies
-  and operations removed by promotion. Retire SSA's derivation of site IDs
-  from the trap-table size. SSA trap terminators carry a kind and origin.
-- **(a)** Allocate backend trap slots at BIR formation with `appendTrap`, and
-  prove that the emitted slots resolve to the original kind and lexical origin
-  using `emittedTrap_binds`. Retire the legacy diagnostic site carrier at
-  cutover. Preserve typed R-0709 location refusals at source admission and wire
-  the production origin checks into the permanent compiler gate.
 
 Fix (a)'s production cutover owns the update to the provisional trusted-base
 registry and the removal of test-local model scaffolding after its remaining

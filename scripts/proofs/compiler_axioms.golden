@@ -2123,18 +2123,6 @@ Concrete.Native.World.mk.injEq	propext
 Concrete.Native.World.mk.sizeOf_spec	
 Concrete.Native.lcb_emit_correct	Classical.choice Quot.sound propext
 Concrete.Native.observed_behaviour	Classical.choice Quot.sound propext
-Concrete.Origins.LocationRefusal.pastEnd.inj	
-Concrete.Origins.LocationRefusal.pastEnd.injEq	propext
-Concrete.Origins.LocationRefusal.pastEnd.sizeOf_spec	
-Concrete.Origins.LocationRefusal.reversedRange.inj	
-Concrete.Origins.LocationRefusal.reversedRange.injEq	propext
-Concrete.Origins.LocationRefusal.reversedRange.sizeOf_spec	
-Concrete.Origins.LocationRefusal.unknownFile.inj	
-Concrete.Origins.LocationRefusal.unknownFile.injEq	propext
-Concrete.Origins.LocationRefusal.unknownFile.sizeOf_spec	
-Concrete.Origins.LocationRefusal.wrongCoordinates.inj	
-Concrete.Origins.LocationRefusal.wrongCoordinates.injEq	propext
-Concrete.Origins.LocationRefusal.wrongCoordinates.sizeOf_spec	
 Concrete.Origins.appendTrap.eq_1	
 Concrete.Origins.appendTrap_binds	Quot.sound propext
 Concrete.Origins.appendTrap_preserves_lookup	Classical.choice Quot.sound propext
@@ -2142,31 +2130,9 @@ Concrete.Origins.appendTrap_resolves	propext
 Concrete.Origins.binds_of_preservesOrigins	Quot.sound propext
 Concrete.Origins.coreOrigins_bind	Quot.sound propext
 Concrete.Origins.emittedTrap_binds	Quot.sound propext
-Concrete.Origins.instDecidableEqLocationRefusal.decEq._proof_1	
-Concrete.Origins.instDecidableEqLocationRefusal.decEq._proof_10	
-Concrete.Origins.instDecidableEqLocationRefusal.decEq._proof_11	
-Concrete.Origins.instDecidableEqLocationRefusal.decEq._proof_12	
-Concrete.Origins.instDecidableEqLocationRefusal.decEq._proof_13	
-Concrete.Origins.instDecidableEqLocationRefusal.decEq._proof_14	
-Concrete.Origins.instDecidableEqLocationRefusal.decEq._proof_15	
-Concrete.Origins.instDecidableEqLocationRefusal.decEq._proof_16	
-Concrete.Origins.instDecidableEqLocationRefusal.decEq._proof_17	
-Concrete.Origins.instDecidableEqLocationRefusal.decEq._proof_18	
-Concrete.Origins.instDecidableEqLocationRefusal.decEq._proof_19	
-Concrete.Origins.instDecidableEqLocationRefusal.decEq._proof_2	
-Concrete.Origins.instDecidableEqLocationRefusal.decEq._proof_20	
-Concrete.Origins.instDecidableEqLocationRefusal.decEq._proof_21	
-Concrete.Origins.instDecidableEqLocationRefusal.decEq._proof_22	
-Concrete.Origins.instDecidableEqLocationRefusal.decEq._proof_3	
-Concrete.Origins.instDecidableEqLocationRefusal.decEq._proof_4	
-Concrete.Origins.instDecidableEqLocationRefusal.decEq._proof_5	
-Concrete.Origins.instDecidableEqLocationRefusal.decEq._proof_6	
-Concrete.Origins.instDecidableEqLocationRefusal.decEq._proof_7	
-Concrete.Origins.instDecidableEqLocationRefusal.decEq._proof_8	
-Concrete.Origins.instDecidableEqLocationRefusal.decEq._proof_9	
 Concrete.Origins.validateLocation._proof_1	Quot.sound propext
-Concrete.Origins.validateLocation._proof_2	Quot.sound propext
 Concrete.Origins.validateLocation_complete	Quot.sound propext
+Concrete.Origins.validateLocation_refusal_sound	Quot.sound propext
 Concrete.Parse.CheckedTable.entries_eq	propext
 Concrete.Parse.CheckedTable.mk.inj	propext
 Concrete.Parse.CheckedTable.mk.injEq	propext
@@ -2995,8 +2961,6 @@ _private.Concrete.MIR.0.List.lookup.match_1.eq_2
 _private.Concrete.Memory.0.Concrete.Memory.toMIR.eq_1	
 _private.Concrete.Origins.0.Concrete.Origins.validateLocation.match_1.eq_1	Quot.sound propext
 _private.Concrete.Origins.0.Concrete.Origins.validateLocation.match_1.eq_2	Quot.sound propext
-_private.Concrete.Origins.0.Except.toBool.match_1.eq_1	
-_private.Concrete.Origins.0.Except.toBool.match_1.eq_2	
 _private.Concrete.Parse.0.Concrete.Parse.Task.read.inj	
 _private.Concrete.Parse.0.Concrete.Parse.Task.read.injEq	propext
 _private.Concrete.Parse.0.Concrete.Parse.Task.read.sizeOf_spec	

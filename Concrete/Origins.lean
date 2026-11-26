@@ -7,34 +7,30 @@ namespace Concrete.Origins
 open Concrete.Interfaces
 open ConcreteSpec.Core ConcreteSpec.Core.SourcePathSpan ConcreteSpec.StageInterface
 
-/-- A rejected location retains the supplied coordinates and, when available,
-the exact expected coordinates or the length of the issuing file. -/
-inductive LocationRefusal where
-  | unknownFile (supplied : FileSpan)
-  | reversedRange (supplied : FileSpan)
-  | pastEnd (supplied : FileSpan) (fileLength : Nat)
-  | wrongCoordinates (supplied : FileSpan) (expected : Span)
-  deriving DecidableEq, Repr
-
-/-- Resolve a location against the exact admitted file. Use the spec's indexed
-position lookup and canonical span constructor. Empty ranges are valid. -/
+/-- Validate supplied coordinates through the spec's span issuer. -/
 def validateLocation (project : Project) (supplied : FileSpan) :
     Except LocationRefusal {span : Span // supplied.Binds project span} :=
-  match resolved : project.fileAt supplied.file with
-  | none => .error (.unknownFile supplied)
-  | some file => do
-      if ordered : supplied.startOffset ≤ supplied.endOffset then
-        if fits : supplied.endOffset ≤ file.length then
-          let expected := fileSpan supplied.file file supplied.startOffset supplied.endOffset
-            ordered (Nat.le_trans ordered fits)
-          if line : supplied.line = expected.line then
-            if col : supplied.col = expected.col then
-              return ⟨expected, file, by simpa [Project.fileAt, Project.files] using resolved,
-                rfl, fileSpan_location _ _ _ _ ordered fits, rfl, rfl, line, col⟩
-            else throw (.wrongCoordinates supplied expected)
-          else throw (.wrongCoordinates supplied expected)
-        else throw (.pastEnd supplied file.length)
-      else throw (.reversedRange supplied)
+  match issueSpanAtM (m := Id) project supplied.file supplied.startOffset supplied.endOffset
+      (some (supplied.line, supplied.col)) with
+  | .error refusal => .error refusal.val
+  | .ok ⟨span, sameFile, start, stop, coordinates⟩ =>
+    .ok ⟨span.toSpan, by
+      obtain ⟨file, location, found⟩ := span.issued
+      have same := Option.some.inj (coordinates.resolve_left (by simp))
+      exact ⟨file, by simpa [Project.fileAt, Project.files, sameFile] using found,
+        sameFile.symm, location, start.symm, stop.symm, congrArg Prod.fst same,
+        congrArg Prod.snd same⟩⟩
+
+theorem validateLocation_refusal_sound {project : Project} {supplied : FileSpan}
+    {refusal : LocationRefusal} (result : validateLocation project supplied = .error refusal) :
+    refusal.Violates project supplied.file supplied.startOffset supplied.endOffset
+      (some (supplied.line, supplied.col)) := by
+  unfold validateLocation at result
+  split at result
+  · rename_i certified _
+    cases result
+    exact certified.property
+  · contradiction
 
 /-- Every location satisfying the frozen binding judgment passes validation. -/
 theorem validateLocation_complete {project : Project} {supplied : FileSpan} {span : Span}
@@ -44,28 +40,35 @@ theorem validateLocation_complete {project : Project} {supplied : FileSpan} {spa
   have resolved : project.fileAt supplied.file = some file := by
     simpa [Project.fileAt, Project.files] using found
   have ordered : supplied.startOffset ≤ supplied.endOffset := start ▸ stop ▸ span.range_ok
-  have fits : supplied.endOffset ≤ file.length := by
-    rw [stop, File.length_eq]
-    exact location.1
-  have canonical := fileSpan_location supplied.file file supplied.startOffset supplied.endOffset
-    ordered fits
-  have canonicalLine := canonical.2.1
-  have canonicalCol := canonical.2.2
-  change _ = file.source.lineAt supplied.startOffset at canonicalLine
-  change _ = file.source.columnAt supplied.startOffset at canonicalCol
-  have sameLine := line.trans (location.2.1.trans ((congrArg file.source.lineAt start).symm.trans
-    canonicalLine.symm))
-  have sameCol := col.trans (location.2.2.trans ((congrArg file.source.columnAt start).symm.trans
-    canonicalCol.symm))
-  unfold validateLocation
-  split
-  · rename_i absent
-    rw [resolved] at absent
-    contradiction
-  · rename_i actual foundActual
-    have identical := Option.some.inj (resolved.symm.trans foundActual)
-    subst actual
-    simp [ordered, fits, sameLine, sameCol, pure, Except.pure, Except.isOk, Except.toBool]
+  have sameLine : supplied.line = file.source.lineAt supplied.startOffset :=
+    line.trans (location.2.1.trans (congrArg file.source.lineAt start).symm)
+  have sameCol : supplied.col = file.source.columnAt supplied.startOffset :=
+    col.trans (location.2.2.trans (congrArg file.source.columnAt start).symm)
+  cases result : validateLocation project supplied with
+  | ok certified => rfl
+  | error refusal =>
+    have violated := validateLocation_refusal_sound result
+    exfalso
+    cases refusal with
+    | unknownFile =>
+      change project.fileAt supplied.file = none at violated
+      rw [resolved] at violated
+      contradiction
+    | reversedRange => exact violated ordered
+    | pastEnd length =>
+      obtain ⟨actual, lookup, _, outside⟩ := violated
+      cases Option.some.inj (lookup.symm.trans resolved)
+      exact outside (stop ▸ location.1)
+    | wrongLine expected =>
+      obtain ⟨actual, rawLine, rawCol, lookup, coordinates, wanted, mismatch⟩ := violated
+      cases Option.some.inj (lookup.symm.trans resolved)
+      exact mismatch ((congrArg Prod.fst (Option.some.inj coordinates)).symm.trans
+        (sameLine.trans wanted.symm))
+    | wrongColumn expected =>
+      obtain ⟨actual, rawLine, rawCol, lookup, coordinates, wanted, mismatch⟩ := violated
+      cases Option.some.inj (lookup.symm.trans resolved)
+      exact mismatch ((congrArg Prod.snd (Option.some.inj coordinates)).symm.trans
+        (sameCol.trans wanted.symm))
 
 /-- A backend slot resolves to an entry carrying the complete original operation
 origin. Append only at BIR formation, where the table and its terminators are built. -/
@@ -138,21 +141,25 @@ example : (validateLocation tabProject atEOF).toOption.map Subtype.val =
     some ⟨⟨0⟩, 3, 3, by decide, 1, 4, by decide, by decide⟩ := by decide
 
 example : (match validateLocation tabProject { atEOF with file := ⟨1⟩ } with
-    | .error (.unknownFile _) => true
+    | .error (.unknownFile) => true
     | _ => false) = true := by decide
 
 example : (match validateLocation tabProject { atEOF with startOffset := 4 } with
-    | .error (.reversedRange _) => true
+    | .error (.reversedRange) => true
     | _ => false) = true := by decide
 
 example : (match validateLocation tabProject { atEOF with endOffset := 4 } with
-    | .error (.pastEnd _ 3) => true
+    | .error (.pastEnd 3) => true
     | _ => false) = true := by decide
 
 -- The offsets still fit, but a newline in the issuing file changes both coordinates.
 example : (match validateLocation
     (Project.singleton mainSourcePath (SourceText.ofBytes [97, 10, 98])) atEOF with
-    | .error (.wrongCoordinates _ expected) => expected.line == 2 && expected.col == 2
+    | .error (reason@(.wrongLine 2)) => decide (reason.ruleId = ⟨``SourcePathSpan.LineMatches, 2⟩)
+    | _ => false) = true := by decide
+
+example : (match validateLocation tabProject { atEOF with col := 0 } with
+    | .error (reason@(.wrongColumn 4)) => decide (reason.ruleId = ⟨``SourcePathSpan.ColumnMatches, 2⟩)
     | _ => false) = true := by decide
 
 private def originatingOp : Origin :=
@@ -168,15 +175,38 @@ example :
       (second.2[second.1.index]?.map TrapEntry.origin) = some originatingOp := by
   decide
 
--- A discharged operation can survive solely as boundary metadata. A copied
--- residual operation can occur both in the body and at its trap terminator.
+private def dischargedOp : Origin :=
+  { originatingOp with
+    operation := ⟨48⟩
+    evidenceKey := { originatingOp.evidenceKey with relative := ⟨[⟨.primitive, .ordinal 1⟩]⟩ } }
+
+private def loweredOrigins (copy : Origin) (boundary : List Origin) : List Origin :=
+  let graph : CFG Unit (LocatedOp Unit) (Terminator Unit Unit) :=
+    ⟨⟨0⟩, #[⟨⟨0⟩, [], [⟨copy, ()⟩], .trap .overflow originatingOp, boundary⟩]⟩
+  graph.origins Terminator.origins
+
+-- A discharged operation survives in boundary metadata, and a residual operation
+-- can have copies in the body and terminator.
+example : PreservesOrigins [originatingOp, dischargedOp]
+    (loweredOrigins originatingOp [dischargedOp]) := by
+  simp [PreservesOrigins, loweredOrigins, CFG.origins, Terminator.origins]
+
+example : ¬ PreservesOrigins [originatingOp, dischargedOp]
+    (loweredOrigins originatingOp []) := by
+  intro preserves
+  have retained := preserves.2 dischargedOp (by simp)
+  change dischargedOp ∈ [originatingOp, originatingOp] at retained
+  exact (by decide : dischargedOp ∉ [originatingOp, originatingOp]) retained
+
 example :
-    let discharged := { originatingOp with
-      operation := ⟨48⟩
-      evidenceKey := { originatingOp.evidenceKey with relative := ⟨[⟨.primitive, .ordinal 1⟩]⟩ } }
-    let graph : CFG Unit (LocatedOp Unit) (Terminator Unit Unit) :=
-      ⟨⟨0⟩, #[⟨⟨0⟩, [], [⟨originatingOp, ()⟩], .trap .overflow originatingOp, [discharged]⟩]⟩
-    graph.origins Terminator.origins = [originatingOp, discharged, originatingOp] := by rfl
+    let altered := { originatingOp with evidenceKey := dischargedOp.evidenceKey }
+    ¬ PreservesOrigins [originatingOp, dischargedOp]
+      (loweredOrigins altered [dischargedOp]) := by
+  intro altered preserves
+  have original := preserves.1 altered (by
+    change altered ∈ [altered, dischargedOp, originatingOp]
+    simp)
+  exact (by decide : altered ∉ [originatingOp, dischargedOp]) original
 
 end Controls
 
