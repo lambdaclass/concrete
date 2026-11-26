@@ -20,6 +20,23 @@ private theorem bind_ok_iff {ε α β : Type} {r : Except ε α} {f : α → Exc
     (r >>= f) = .ok b ↔ ∃ a, r = .ok a ∧ f a = .ok b := by
   cases r <;> simp [Bind.bind, Except.bind]
 
+private theorem bind_unit_ok_iff {ε α : Type} {r : Except ε Unit} {s : Except ε α} {a : α} :
+    (r >>= fun _ => s) = .ok a ↔ r = .ok () ∧ s = .ok a := by
+  cases r with
+  | error e => simp [Bind.bind, Except.bind]
+  | ok u => cases u; simp [Bind.bind, Except.bind]
+
+private theorem firstRepeated_eq_none {α : Type} [DecidableEq α] (xs : List α) :
+    firstRepeated? xs = none ↔ xs.Nodup := by
+  induction xs with
+  | nil => simp [firstRepeated?]
+  | cons x rest ih =>
+    by_cases h : x ∈ rest <;> simp [firstRepeated?, h, List.nodup_cons, ih]
+
+private theorem rejectFound_ok_iff {α ε : Type} (found : Option α) (reason : α → ε) :
+    rejectFound found reason = .ok () ↔ found = none := by
+  cases found <;> simp [rejectFound]
+
 theorem inferAtomType_iff {Δ : Decls} {Γ : TyCtx} {a : Atom} {ty : Ty} :
     inferAtomType Γ a = .ok ty ↔ HasType Δ Γ (.atom a) ty := by
   constructor
@@ -96,23 +113,17 @@ private theorem checkFieldTypes_iff {Γ : TyCtx} {d : StructDecl} {fs : List (Na
           simp [checkFieldTypes, hf, ha, ht, Except.mapError, Bind.bind, Except.bind,
             ← atomTy_iff, ih]
 
+private theorem findMissing_eq_none {α β : Type} {l : List (Name × α)} {m : List (Name × β)} :
+    l.find? (fun q => (AList.lookup m q.1).isNone) = none ↔
+      (∀ f a, AList.lookup l f = some a → ∃ b, AList.lookup m f = some b) := by
+  rw [covers_iff, List.all_eq_true, List.find?_eq_none]
+  simp [Option.isSome_iff_ne_none]
+
 private theorem checkFields_iff {Γ : TyCtx} {d : StructDecl} {fs : List (Name × Atom)} :
     checkFields Γ d fs = .ok () ↔ FieldsTy Γ d fs := by
-  have covers : (d.fields.find? (fun q => (AList.lookup fs q.1).isNone) = none) ↔
-      (∀ f st, AList.lookup d.fields f = some st → ∃ a, AList.lookup fs f = some a) := by
-    rw [covers_iff, List.all_eq_true, List.find?_eq_none]
-    simp [Option.isSome_iff_ne_none]
-  constructor
-  · intro h
-    unfold checkFields at h
-    split at h
-    · obtain ⟨⟨⟩, ht, hc⟩ := bind_ok_iff.mp h
-      cases hfind : d.fields.find? (fun q => (AList.lookup fs q.1).isNone) with
-      | none => exact ⟨by assumption, checkFieldTypes_iff.mp ht, covers.mp hfind⟩
-      | some p => cases p; simp [hfind] at hc
-    · cases h
-  · rintro ⟨hn, ht, hc⟩
-    simp [checkFields, hn, checkFieldTypes_iff.mpr ht, covers.mpr hc, Bind.bind, Except.bind]
+  simp only [checkFields, bind_unit_ok_iff, rejectFound_ok_iff,
+    firstRepeated_eq_none, checkFieldTypes_iff, findMissing_eq_none]
+  exact ⟨fun ⟨hn, ht, hc⟩ => ⟨hn, ht, hc⟩, fun h => ⟨h.nodup, h.typed, h.covers⟩⟩
 
 theorem inferExprType_iff {Δ : Decls} {Γ : TyCtx} {e : Expr} {ty : Ty} :
     inferExprType Δ Γ e = .ok ty ↔ HasType Δ Γ e ty := by
@@ -236,19 +247,21 @@ theorem reads_iff {Δ : Decls} {Γ Γ' : Ctx} {e : Expr} :
     | add hl hr => exact .cons hl (.cons hr .nil)
     | mk hf => exact hf
 
-theorem patOkB_iff {d : StructDecl} {pat : List (Name × Binder)} : patOkB d pat = true ↔ PatOk d pat := by
-  simp only [patOkB, Bool.and_eq_true, decide_eq_true_eq]
-  constructor
-  · rintro ⟨⟨hn, hd⟩, hc⟩
-    refine ⟨hn, ?_, covers_iff.mpr hc⟩
-    intro p hp
-    have := (List.all_eq_true.mp hd) p hp
-    simpa [Option.isSome_iff_exists] using this
-  · rintro ⟨hn, hd, hc⟩
-    refine ⟨⟨hn, List.all_eq_true.mpr ?_⟩, covers_iff.mp hc⟩
-    intro p hp
-    obtain ⟨st, hst⟩ := hd p hp
-    simp [hst]
+theorem checkPattern_iff {d : StructDecl} {pat : List (Name × Binder)} :
+    checkPattern d pat = .ok () ↔ PatOk d pat := by
+  have declared : pat.find? (fun p => (AList.lookup d.fields p.1).isNone) = none ↔
+      (∀ p ∈ pat, ∃ st, AList.lookup d.fields p.1 = some st) := by
+    rw [List.find?_eq_none]
+    simp only [Option.isNone_iff_eq_none, Option.ne_none_iff_exists]
+    constructor <;> intro h p hp <;> obtain ⟨v, hv⟩ := h p hp <;> exact ⟨v, hv.symm⟩
+  simp only [checkPattern, bind_unit_ok_iff, rejectFound_ok_iff,
+    firstRepeated_eq_none, declared, findMissing_eq_none]
+  exact ⟨fun ⟨hn, hd, hc⟩ => ⟨hn, hd, hc⟩, fun h => ⟨h.nodup, h.declared, h.covers⟩⟩
+
+theorem checkPatternBinders_iff {Γ : Ctx} {pat : List (Name × Binder)} :
+    checkPatternBinders Γ pat = .ok () ↔ PatFresh Γ pat := by
+  simp [checkPatternBinders, bind_unit_ok_iff, rejectFound_ok_iff, firstRepeated_eq_none,
+    List.find?_eq_none, PatFresh, Fresh]
 
 private theorem checkStmtExpr_iff {Δ : Decls} {Γ Γ' : Ctx} {t : Ty} {e : Expr} :
     checkStmtExpr Δ Γ t e = .ok Γ' ↔
@@ -290,13 +303,10 @@ theorem checkStmt_iff {Δ : Decls} {Γ Γ' : Ctx} {s : Stmt} :
       obtain ⟨ht, hu, ha⟩ := checkStmtExpr_iff.mp he
       split at h
       · rename_i d hd
-        split at h
-        · rename_i hp
-          split at h
-          · cases h
-            exact .letStruct ht ha hd (patOkB_iff.mp hp) hu (by assumption)
-          · cases h
-        · cases h
+        obtain ⟨⟨⟩, hp, h⟩ := bind_ok_iff.mp h
+        obtain ⟨⟨⟩, hf, h⟩ := bind_ok_iff.mp h
+        cases h
+        exact .letStruct ht ha hd (checkPattern_iff.mp hp) hu (checkPatternBinders_iff.mp hf)
       · cases h
   · intro h
     cases h with
@@ -305,7 +315,8 @@ theorem checkStmt_iff {Δ : Decls} {Γ Γ' : Ctx} {s : Stmt} :
     | letWild ht hk hcopy hu =>
       simp [checkStmt, checkStmtExpr_iff.mpr ⟨ht, hu, hk⟩, hcopy, Bind.bind, Except.bind]
     | letStruct ht hk hd hp hu hf =>
-      simp [checkStmt, checkStmtExpr_iff.mpr ⟨ht, hu, hk⟩, hd, patOkB_iff.mpr hp, hf,
+      simp [checkStmt, checkStmtExpr_iff.mpr ⟨ht, hu, hk⟩, hd, checkPattern_iff.mpr hp,
+        checkPatternBinders_iff.mpr hf,
         Bind.bind, Except.bind]
 
 theorem finishChecks_iff (Δ : Decls) (atReturn : Bool) (Γ : Ctx) :
@@ -372,12 +383,12 @@ private theorem checkDeclFields_iff (Δ : Decls) :
   induction Δ with
   | nil => simp [checkDeclFields]
   | cons d rest ih =>
-    by_cases hn : d.name = ⟨"main"⟩ <;> by_cases hf : (d.fields.map Prod.fst).Nodup <;>
-      simp [checkDeclFields, hn, hf, ih]
+    by_cases hn : d.name = ⟨"main"⟩ <;>
+      simp [checkDeclFields, hn, ih, bind_unit_ok_iff, rejectFound_ok_iff, firstRepeated_eq_none]
 
 theorem checkDecls_iff (Δ : Decls) : checkDecls Δ = .ok () ↔ DeclsOk Δ := by
-  by_cases h : (Δ.map StructDecl.name).Nodup <;>
-    simp [checkDecls, DeclsOk, h, checkDeclFields_iff]
+  simp [checkDecls, DeclsOk, bind_unit_ok_iff, rejectFound_ok_iff, firstRepeated_eq_none,
+    checkDeclFields_iff]
 
 theorem checkProgram_iff (p : Program) :
     (∃ ds, checkProgram p = .ok ds) ↔ Checked p := by

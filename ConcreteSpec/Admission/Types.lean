@@ -27,11 +27,14 @@ inductive Reason where
   | structFieldType (structName field : Name) (operand : Atom) (expected : STy) (cause : OperandTypeFailure)
   | unknownStructField (structName field : Name)
   | missingStructField (structName field : Name)
-  | duplicateStructInitializers (structName : Name) (fields : List Name)
   | unknownStruct (name : Name)
   | discardLinear (type : Ty)
-  | invalidPattern (structName : Name) (fields : List Name)
-  | conflictingPatternBindings (bindings : List Var)
+  | duplicatePatternField (structName field : Name)
+  | unknownPatternField (structName field : Name)
+  | missingPatternField (structName field : Name)
+  | repeatedPatternBinder (binding : Var)
+  | patternBinderAlreadyBound (binding : Var)
+  | duplicateStructInitializer (structName field : Name)
   | duplicateBinding (binding : Var)
   | unusedBinding (binding : Var)
   | liveLinearBinding (binding : Var)
@@ -40,9 +43,9 @@ inductive Reason where
 /-- A body position identifies one operation in the straight-line Core payload.
 The terminator occupies the position immediately after the last statement. -/
 inductive Refusal where
-  | duplicateStructNames (names : List Name)
+  | duplicateStructName (name : Name)
+  | duplicateDeclaredField (structName field : Name)
   | reservedStructName (name : Name)
-  | duplicateFieldNames (structName : Name) (fields : List Name)
   | atPosition (position : Nat) (reason : Reason)
   deriving DecidableEq
 

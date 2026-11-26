@@ -21,14 +21,22 @@ decided by running `check`. -/
 instance (Γ : Ctx) (x : Var) : Decidable (Fresh Γ x) := by
   unfold Fresh; infer_instance
 
-instance (Γ : Ctx) (pat : List (Name × Binder)) : Decidable (PatFresh Γ pat) := by
-  unfold PatFresh; infer_instance
-
 instance (Δ : Decls) (Γ : Ctx) : Decidable (Discharged Δ Γ) := by
   unfold Discharged; infer_instance
 
 instance (Δ : Decls) : Decidable (DeclsOk Δ) := by
   unfold DeclsOk; infer_instance
+
+/-- The first entry in source order that also appears later in the list. -/
+def firstRepeated? {α : Type} [DecidableEq α] : List α → Option α
+  | [] => none
+  | x :: rest => if x ∈ rest then some x else firstRepeated? rest
+
+/-- Convert a detected violation to a refusal with the offending item. -/
+def rejectFound {α ε : Type} (found : Option α) (reason : α → ε) : Except ε Unit :=
+  match found with
+  | none => .ok ()
+  | some item => .error (reason item)
 
 /-- Infer an atom's type without erasing the reason it could not be typed. -/
 def inferAtomType (Γ : TyCtx) : Atom → Except AtomTypeFailure Ty
@@ -53,13 +61,11 @@ def checkFieldTypes (Γ : TyCtx) (d : StructDecl) : List (Name × Atom) → Exce
     else .error (.structFieldType d.name field atom expected (.wrongType actual))
 
 /-- The executable form of `FieldsTy`, with the rejected initializer or shape rule. -/
-def checkFields (Γ : TyCtx) (d : StructDecl) (fs : List (Name × Atom)) : Except Reason Unit :=
-  if (fs.map Prod.fst).Nodup then do
-    checkFieldTypes Γ d fs
-    match d.fields.find? (fun q => (AList.lookup fs q.1).isNone) with
-    | some (field, _) => .error (.missingStructField d.name field)
-    | none => .ok ()
-  else .error (.duplicateStructInitializers d.name (fs.map Prod.fst))
+def checkFields (Γ : TyCtx) (d : StructDecl) (fs : List (Name × Atom)) : Except Reason Unit := do
+  rejectFound (firstRepeated? (fs.map Prod.fst)) (.duplicateStructInitializer d.name)
+  checkFieldTypes Γ d fs
+  rejectFound (d.fields.find? (fun q => (AList.lookup fs q.1).isNone))
+    (fun q => .missingStructField d.name q.1)
 
 def inferExprType (Δ : Decls) (Γ : TyCtx) : Expr → Except Reason Ty
   | .atom a => (inferAtomType Γ a).mapError fun
@@ -94,11 +100,19 @@ def useAtom (Δ : Decls) (Γ : Ctx) : Atom → Except Reason Ctx
       else .error (.movedBinding x)
     | none => .error (.unknownBinding x)
 
-/-- The executable form of `PatOk`. -/
-def patOkB (d : StructDecl) (pat : List (Name × Binder)) : Bool :=
-  decide ((pat.map Prod.fst).Nodup) &&
-  pat.all (fun p => (AList.lookup d.fields p.1).isSome) &&
-  d.fields.all (fun q => (AList.lookup pat q.1).isSome)
+/-- Check each of the three field obligations of `PatOk` in order. -/
+def checkPattern (d : StructDecl) (pat : List (Name × Binder)) : Except Reason Unit := do
+  rejectFound (firstRepeated? (pat.map Prod.fst)) (.duplicatePatternField d.name)
+  rejectFound (pat.find? (fun p => (AList.lookup d.fields p.1).isNone))
+    (fun p => .unknownPatternField d.name p.1)
+  rejectFound (d.fields.find? (fun q => (AList.lookup pat q.1).isNone))
+    (fun q => .missingPatternField d.name q.1)
+
+/-- Check uniqueness within the pattern, then freshness against the existing context. -/
+def checkPatternBinders (Γ : Ctx) (pat : List (Name × Binder)) : Except Reason Unit := do
+  let names := patNames pat
+  rejectFound (firstRepeated? names) .repeatedPatternBinder
+  rejectFound (names.find? (fun x => (AList.lookup Γ x).isSome)) .patternBinderAlreadyBound
 
 def Expr.atoms : Expr → List Atom
   | .atom a => [a]
@@ -133,10 +147,9 @@ def checkStmt (Δ : Decls) (Γ : Ctx) : Stmt → Except Reason Ctx
   | .letStruct s pat e => do
     let next ← checkStmtExpr Δ Γ (.struct s) e
     let some d := findDecl Δ s | .error (.unknownStruct s)
-    if patOkB d pat then
-      if PatFresh next pat then .ok (bindPat d (knownFields Γ e) pat next)
-      else .error (.conflictingPatternBindings (patNames pat))
-    else .error (.invalidPattern s (pat.map Prod.fst))
+    checkPattern d pat
+    checkPatternBinders next pat
+    .ok (bindPat d (knownFields Γ e) pat next)
 
 /-- Check the obligations that remain at a return or abort. -/
 def finishChecks (Δ : Decls) (atReturn : Bool) : Ctx → Except Reason Unit
@@ -177,12 +190,13 @@ def checkDeclFields : Decls → Except Refusal Unit
   | [] => .ok ()
   | d :: rest =>
     if d.name = ⟨"main"⟩ then .error (.reservedStructName d.name)
-    else if (d.fields.map Prod.fst).Nodup then checkDeclFields rest
-    else .error (.duplicateFieldNames d.name (d.fields.map Prod.fst))
+    else do
+      rejectFound (firstRepeated? (d.fields.map Prod.fst)) (.duplicateDeclaredField d.name)
+      checkDeclFields rest
 
-def checkDecls (Δ : Decls) : Except Refusal Unit :=
-  if (Δ.map StructDecl.name).Nodup then checkDeclFields Δ
-  else .error (.duplicateStructNames (Δ.map StructDecl.name))
+def checkDecls (Δ : Decls) : Except Refusal Unit := do
+  rejectFound (firstRepeated? (Δ.map StructDecl.name)) .duplicateStructName
+  checkDeclFields Δ
 
 /-- The sole executable Core checker for the straight-line fragment. -/
 def checkProgram (p : Program) : Except Refusal (List Discharge) :=

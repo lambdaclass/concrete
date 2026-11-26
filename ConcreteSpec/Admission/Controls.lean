@@ -72,6 +72,52 @@ theorem initializer_wrong_type :
     checkProgram ⟨[itemDecl], [itemWithFlag (.int .u8 1)], ret42⟩ =
       .error (.atPosition 0 (.structFieldType item flag (.int .u8 1) .bool (.wrongType u8))) := rfl
 
+private def itemValue : Expr := .mk item [(count, .int .u8 41), (flag, .bool true)]
+
+private def destructure (pat : List (Name × Binder)) (preceding : List Stmt := []) : Program :=
+  ⟨[itemDecl], preceding ++ [.letStruct item pat itemValue], ret42⟩
+
+theorem pattern_duplicate_field :
+    checkProgram (destructure [(count, .wild), (flag, .wild), (flag, .wild)]) =
+      .error (.atPosition 0 (.duplicatePatternField item flag)) := rfl
+
+theorem pattern_unknown_field :
+    checkProgram (destructure [(count, .wild), (flag, .wild), (⟨"extra"⟩, .wild)]) =
+      .error (.atPosition 0 (.unknownPatternField item ⟨"extra"⟩)) := rfl
+
+theorem pattern_missing_field :
+    checkProgram (destructure [(flag, .wild)]) =
+      .error (.atPosition 0 (.missingPatternField item count)) := rfl
+
+theorem pattern_repeated_binder :
+    checkProgram (destructure [(count, .name y), (flag, .name y)]) =
+      .error (.atPosition 0 (.repeatedPatternBinder y)) := rfl
+
+private def namedPattern : List (Name × Binder) := [(count, .name x), (flag, .name y)]
+
+private def bindScalar (v : Var) : Stmt := .let_ (.name v) u8 (.atom (.int .u8 1))
+
+theorem pattern_first_binder_already_bound :
+    checkProgram (destructure namedPattern [bindScalar x]) =
+      .error (.atPosition 1 (.patternBinderAlreadyBound x)) := rfl
+
+theorem pattern_second_binder_already_bound :
+    checkProgram (destructure namedPattern [bindScalar y]) =
+      .error (.atPosition 1 (.patternBinderAlreadyBound y)) := rfl
+
+theorem initializer_duplicate_field :
+    checkProgram ⟨[itemDecl], [.let_ .wild (.struct item)
+      (.mk item [(count, .int .u8 1), (flag, .bool true), (flag, .bool false)])], ret42⟩ =
+      .error (.atPosition 0 (.duplicateStructInitializer item flag)) := rfl
+
+theorem declaration_duplicate_struct :
+    checkProgram ⟨[tokenDecl, itemDecl, itemDecl], [], ret42⟩ =
+      .error (.duplicateStructName item) := rfl
+
+theorem declaration_duplicate_field :
+    checkProgram ⟨[{ itemDecl with fields := itemDecl.fields ++ [(flag, .bool)] }], [], ret42⟩ =
+      .error (.duplicateDeclaredField item flag) := rfl
+
 theorem addition_move_of_copy :
     checkProgram ⟨[], [.let_ (.name x) u8 (.atom (.int .u8 41)),
       .let_ .wild u8 (.add (.move x) (.int .u8 1))], ret42⟩ =
