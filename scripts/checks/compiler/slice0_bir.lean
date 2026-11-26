@@ -23,7 +23,7 @@ open Concrete.BIR Concrete.Backend
 -- The source and candidate agree on the complete checked-add site entry.
 private def sumSource (a b : Nat) : Concrete.Memory.Program :=
   ⟨[⟨⟨⟨0⟩, Concrete.Memory.u8Layout⟩,
-    .add (.lit a) (.lit b) ⟨⟨0⟩, ⟨59, 64, 3, 12⟩⟩ none⟩], .var ⟨0⟩⟩
+    .add (.lit a) (.lit b) ⟨⟨0⟩, ⟨59, 64, 3, 12, ⟨0⟩⟩⟩ none⟩], .var ⟨0⟩⟩
 
 private def sumPath := "tests/slice0/sum.con"
 private def sumWitness : Concrete.SSA.Witness := [[⟨0⟩]]
@@ -64,7 +64,7 @@ example : Concrete.SSA.validate sumPath (sumSource 200 56)
 private def twoSlots : Concrete.Memory.Program :=
   let sum := sumSource 20 22
   { sum with stores := sum.stores ++ [⟨⟨⟨1⟩, Concrete.Memory.u8Layout⟩,
-      .add (.lit 2) (.lit 3) ⟨⟨1⟩, ⟨65, 70, 4, 3⟩⟩ none⟩] }
+      .add (.lit 2) (.lit 3) ⟨⟨1⟩, ⟨65, 70, 4, 3, ⟨0⟩⟩⟩ none⟩] }
 
 example :
     (match Concrete.SSA.lower sumPath twoSlots with
@@ -253,25 +253,25 @@ structure RefusalExpectation where
   primary : SourceSpan
   related : List (String × SourceSpan)
 
-def parseOrigin (text : String) : Option SourceSpan := do
+def parseOrigin (fileId : ConcreteSpec.Core.FileId) (text : String) : Option SourceSpan := do
   let [start, stop, line, column] := text.splitOn ":" | none
-  let span : SourceSpan := ⟨← start.toNat?, ← stop.toNat?, ← line.toNat?, ← column.toNat?⟩
+  let span : SourceSpan := ⟨← start.toNat?, ← stop.toNat?, ← line.toNat?, ← column.toNat?, fileId⟩
   if span.start ≤ span.stop && span.line > 0 && span.column > 0 then some span else none
 
-def parseRefusal (kind rule primary related : String) : Option RefusalExpectation := do
+def parseRefusal (fileId : ConcreteSpec.Core.FileId) (kind rule primary related : String) : Option RefusalExpectation := do
   let [name, revision] := rule.splitOn "@" | none
   let origins ← if related == "-" then some [] else
     (related.splitOn ",").mapM fun item => do
       let [label, location] := item.splitOn "=" | none
-      return (label, ← parseOrigin location)
+      return (label, ← parseOrigin fileId location)
   let rev ← revision.toNat?
   if rev == 0 || (origins.map Prod.fst).eraseDups.length != origins.length then none
-  else return ⟨kind, name, rev, ← parseOrigin primary, origins⟩
+  else return ⟨kind, name, rev, ← parseOrigin fileId primary, origins⟩
 
 def checkBodyRefusal (input : Concrete.Stages.Input) (expected : RefusalExpectation)
     (actual : Concrete.Refusal) :
     IO UInt32 := do
-  let .ok tokens := Concrete.Lex.lex input.source | return 13
+  let .ok tokens := Concrete.Lex.lex input.source input.fileId | return 13
   let .ok ast := Concrete.Parse.parse tokens | return 13
   let .error (.unreachable span) := ConcreteSpec.Surface0.checkBody ast.body | return 13
   if expected.kind != "unreachable_statement" || expected.rule != "STMT-14" ||
@@ -289,7 +289,8 @@ def checkBodyRefusal (input : Concrete.Stages.Input) (expected : RefusalExpectat
 
 def emitSource (path actual : String) (dir : System.FilePath) (expectation : List String)
     (target : LCB.Target) : IO UInt32 := do
-  let input : Concrete.Stages.Input := ⟨path, ← IO.FS.readBinFile actual⟩
+  let .ok input := Concrete.Stages.Input.load path (← IO.FS.readBinFile actual)
+    | IO.eprintln s!"invalid project path: {path}"; return 1
   match expectation, Concrete.Stages.compile input with
   | ["pending-refusal", status, kind], .error refusal =>
     if toString refusal.exitCode == status && pendingRefusalMatches kind refusal then
@@ -298,7 +299,7 @@ def emitSource (path actual : String) (dir : System.FilePath) (expectation : Lis
     return 13
   | ["refuse", status, kind, rule, primary, related], .error (actual@(.checker _)) =>
     unless toString actual.exitCode == status do return 13
-    let some expected := parseRefusal kind rule primary related | return 2
+    let some expected := parseRefusal input.fileId kind rule primary related | return 2
     checkBodyRefusal input expected actual
   | "refuse" :: _, _ | "pending-refusal" :: _, _ => return 13
   | ["llvm", "exit", status, "lcb", "resource", resource, bound, measurement], .ok out =>
@@ -314,7 +315,7 @@ def emitSource (path actual : String) (dir : System.FilePath) (expectation : Lis
     | .error (.backendProfile ..) => return 17
     | _ => return 15
   | ["trap", kind, _, _], .error (.checker _) =>
-    let .ok tokens := Concrete.Lex.lex input.source | IO.eprintln "lex failed"; return 1
+    let .ok tokens := Concrete.Lex.lex input.source input.fileId | IO.eprintln "lex failed"; return 1
     let .ok ast := Concrete.Parse.parse tokens | IO.eprintln "parse failed"; return 1
     let .ok core := Concrete.Elab.elaborate ast | IO.eprintln "elaboration failed"; return 1
     let p := Concrete.Core.toCore core.program
@@ -410,8 +411,10 @@ def main (args : List String) : IO UInt32 := do
       unless p.sites.length == 2 do return 2
       emitProgram name (reorderTrapTable p) dir expectation target
   | ["control-wrong-compiler-origin", path, actual] => do
-    let input : Concrete.Stages.Input := ⟨path, ← IO.FS.readBinFile actual⟩
-    let some expected := parseRefusal "unreachable_statement" "STMT-14@1" "28:37:1:29" "-" | return 2
+    let .ok input := Concrete.Stages.Input.load path (← IO.FS.readBinFile actual)
+      | IO.eprintln s!"invalid project path: {path}"; return 1
+    let some expected := parseRefusal input.fileId "unreachable_statement" "STMT-14@1" "28:37:1:29" "-"
+      | return 2
     checkBodyRefusal input expected (.checker "unreachable code (STMT-14) at 1:19, bytes 18..27")
   | ["loop", dir, t] => withTarget t (emitLoop dir)
   | ["invalid", dir, t] => withTarget t (emitInvalid dir)
@@ -421,7 +424,7 @@ def main (args : List String) : IO UInt32 := do
 private def overwrittenSlot : Concrete.Memory.Program :=
   ⟨[⟨⟨⟨0⟩, Concrete.Memory.u8Layout⟩, .copy (.lit 1)⟩,
     ⟨⟨⟨0⟩, Concrete.Memory.u8Layout⟩, .copy (.lit 2)⟩,
-    ⟨⟨⟨1⟩, Concrete.Memory.u8Layout⟩, .add (.lit 1) (.lit 1) ⟨⟨1⟩, ⟨0, 1, 1, 1⟩⟩ none⟩],
+    ⟨⟨⟨1⟩, Concrete.Memory.u8Layout⟩, .add (.lit 1) (.lit 1) ⟨⟨1⟩, ⟨0, 1, 1, 1, ⟨0⟩⟩⟩ none⟩],
     .var ⟨0⟩⟩
 
 example : Concrete.Memory.run overwrittenSlot = .exit 2 := by rfl

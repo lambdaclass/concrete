@@ -19,6 +19,9 @@ source scripts/checks/lib/has_match.sh
 # Emit-only runs validate fixture expectations without building native executables.
 if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
   bash scripts/checks/compiler/f31_census.sh
+  # The scaling fixture uses the project admission proof, outside Concrete's build closure.
+  build span-proof-deps "$work/span-proof-deps.log" bounded 1800 lake build ConcreteSpec.Proofs.Ident
+  bounded 120 lake env lean --run scripts/checks/compiler/span_scaling.lean
   build llvm-mutation-controls "$work/llvm-mutation-controls.log" bounded 120 \
     lake env python3 -B scripts/checks/compiler/llvm_mutation_controls.py
   cat "$work/llvm-mutation-controls.log"
