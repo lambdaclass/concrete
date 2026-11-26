@@ -337,8 +337,9 @@ above; the harness owns its commit. Measured source SHA-256 values:
 ## R-0700 Law applicability recovery
 
 Run `scripts/proofs/nonvacuity.sh` inside `nix develop` for the B0b audit
-or pass `--controls` for the control suite. The census compares the source tree
-with the imported specification modules. It reads labels on every declaration
+or pass `--controls` for the control suite. Witnesses and controls reuse fixtures
+from `ConcreteSpecEvidence`. The census compares the source tree with the
+imported `ConcreteSpec` modules. It reads labels on every declaration
 in those modules, including private and underscore names. Every declaration
 carrying a `Law` label must be a theorem with valid coverage, including
 generated declarations that carry the label.

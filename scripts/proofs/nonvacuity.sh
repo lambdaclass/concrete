@@ -16,5 +16,5 @@ case ${1:-} in
   --controls) export NONVACUITY_MODE=controls ;;
   *) echo "usage: $0 [--controls]" >&2; exit 2 ;;
 esac
-bash scripts/checks/lib/bounded.sh 600 lake build ConcreteSpec
+bash scripts/checks/lib/bounded.sh 600 lake build ConcreteSpec ConcreteSpecEvidence
 bash scripts/checks/lib/bounded.sh 180 lake env lean scripts/proofs/nonvacuity.lean

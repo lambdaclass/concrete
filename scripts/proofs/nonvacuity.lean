@@ -1,5 +1,6 @@
 import Lean
 import ConcreteSpec
+import ConcreteSpecEvidence
 
 /-!
 A Law is non-vacuous iff its explicit premises are jointly satisfiable.
@@ -1049,7 +1050,6 @@ namespace Historical
 theorem «⟪example⟫spoof» : True := trivial
 
 open ConcreteSpec.Core ConcreteSpec.Core.Own ConcreteSpec.Core.Own.Examples
-open ConcreteSpec.Core.Own.ExecErasureWitnesses
 
 -- These four closed matches are from the archived N2-Typed-Contracts fixture.
 -- Reclassify them as Laws here to test the applicability check itself.
