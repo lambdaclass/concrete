@@ -43,11 +43,8 @@ if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
     fi
   done
   echo "ok   slice 1 driver controls"
-  build llvm-rendering "$work/llvm-rendering.log" bounded 120 \
-    lake env lean scripts/checks/compiler/llvm_rendering.lean
-  echo "ok   LLVM rendering controls"
   build llvm-mutation-controls "$work/llvm-mutation-controls.log" bounded 120 \
-    python3 -B scripts/checks/compiler/llvm_mutation_controls.py
+    lake env python3 -B scripts/checks/compiler/llvm_mutation_controls.py
   cat "$work/llvm-mutation-controls.log"
 fi
 
@@ -80,6 +77,11 @@ check_cli_diagnostic() {
   local output=$2
   local expectation=$3
   shift 3
+  local version_report=
+  if [ "$1" = --reports-version ]; then
+    version_report=$'language-rules version 0.1\n'
+    shift
+  fi
   local status code message
   local rc=0
   read -r _ status code message <<<"$expectation"
@@ -90,7 +92,7 @@ check_cli_diagnostic() {
     expected=(cmp -s "$output.expected" -)
     printf '%s: %s\n' "$code" "$message" >"$output.expected"
   fi
-  if [ "$rc" = "$status" ] && [ ! -s "$output.stdout" ] &&
+  if [ "$rc" = "$status" ] && printf '%s' "$version_report" | cmp -s - "$output.stdout" &&
       "${expected[@]}" <"$output.stderr"; then
     echo "ok   $label: status $rc ($code)"
   else
@@ -524,6 +526,15 @@ check_cli_output_failure cli-helper-stdout 1 "${publish_cli[@]}" \
   build tests/slice0/answer.con -o "$helper_project/out" --backend llvm
 cp "$root/scripts/checks/lib/slice0_native.sh" "$publish_lib/"
 
+# The real helper and pinned replay are quiet. Fail the CLI's own version write.
+first_out="$helper_project/first-output"
+check_cli_output_failure cli-version-stdout-first 1 "${publish_cli[@]}" \
+  build tests/slice0/answer.con -o "$first_out" --backend llvm
+if [ -e "$first_out" ]; then
+  echo "FAIL CLI version write: failed first build installed a generation"
+  fail=1
+fi
+
 # Rebuild over a known generation. Inject publication faults through a private installation.
 publish_out="$helper_project/out"
 publish_build=(build tests/slice0/answer.con -o "$publish_out" --backend llvm)
@@ -532,6 +543,12 @@ for artifact in component.ll component.o launcher.ll launcher.o llvm.link.sha256
   printf 'old %s\n' "$artifact" >"$work/ctl/previous/$artifact"
 done
 cp "$work/ctl/previous/"* "$publish_out/"
+
+check_cli_output_failure cli-version-stdout-rebuild 1 "${publish_cli[@]}" "${publish_build[@]}"
+if ! diff -r "$work/ctl/previous" "$publish_out"; then
+  echo "FAIL CLI version write: failed rebuild replaced the previous generation"
+  fail=1
+fi
 
 mv "$publish_lib/slice0_publish.py" "$publish_lib/publisher.py"
 cat >"$publish_lib/slice0_publish.py" <<'PYTHON'
@@ -611,7 +628,7 @@ for fault in second-move exchange lookup-mismatch lookup-unknown; do
     lookup-unknown) detail='injected lookup probe failure' ;;
   esac
   log="$work/ctl/publication-$fault"
-  check_cli_diagnostic "CLI publication failure ($fault)" "$log" "refuse 2 TOOL-FAILURE" \
+  check_cli_diagnostic "CLI publication failure ($fault)" "$log" "refuse 2 TOOL-FAILURE" --reports-version \
     env PUBLICATION_CONTROL="$fault" "${publish_cli[@]}" "${publish_build[@]}"
   if ! diff -r "$work/ctl/previous" "$publish_out" ||
       ! has_match -E '^TOOL-FAILURE: incomplete \(publish build outputs: ' <"$log.stderr" ||
@@ -624,7 +641,7 @@ done
 mv "$publish_out/component.o" "$publish_out/LLVM.old"
 ln "$publish_out/LLVM.old" "$publish_out/keep"
 log="$work/ctl/publication-ambiguous-alias"
-check_cli_diagnostic "CLI publication failure (ambiguous alias)" "$log" "refuse 2 TOOL-FAILURE" \
+check_cli_diagnostic "CLI publication failure (ambiguous alias)" "$log" "refuse 2 TOOL-FAILURE" --reports-version \
   env PUBLICATION_CONTROL=ambiguous-alias "${publish_cli[@]}" "${publish_build[@]}"
 if ! cmp -s "$work/ctl/previous/component.o" "$publish_out/keep" ||
     ! [ "$publish_out/LLVM.old" -ef "$publish_out/keep" ] ||

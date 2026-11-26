@@ -17,7 +17,9 @@ native build helper and the LCB executable built by Lake. It compiles and links 
 directory beside the destination, checks that the retained link inputs match the generated inputs,
 and replays the retained native build with the pinned reference clang before publishing by
 atomically installing or exchanging the directory. The Lake-built CLI locates its build
-helpers and LCB relative to its own installation. The build prints the selected standalone language-rules version upon success.
+helpers and LCB relative to its own installation. After verification, the CLI writes and
+flushes the selected standalone language-rules version before attempting publication.
+Use exit status 0 to confirm publication.
 Each backend retains a SHA-256 inventory of its inputs, objects and image. The build receipt
 `runtime-premises.txt` identifies the runtime loader and system libraries as unbound environment
 premises.
@@ -30,8 +32,9 @@ premises.
   diff. After the delegated Slice 1 decision record lands, point the language-pin rule at its
   live decision anchor. The current recognizer bounds bytes and decoded nesting in the TOML syntax used by the
   fixtures. R-0589 owns full TOML conformance, including arrays of tables, indexed key and table
-  lookups, and the admission
-  judgment. Until then, a present manifest produces a structured driver refusal. The Lean policy checker
+  lookups, the admission judgment, and correspondence theorems for the driver checks.
+  R-0589 also tracks distinguishing valid TOML outside the supported subset from malformed input
+  in CLI diagnostics. Until then, a present manifest produces a structured driver refusal. The Lean policy checker
   can exercise typed requirements against slice 0 MIR and returns per-function coverage. It reports
   missing stack evidence explicitly. Inherited policy conjunction has a regression control.
   Independent compiler fact derivations and their soundness belong to R-0575.
@@ -59,14 +62,14 @@ project, and its parent must be writable so the CLI can create a private sibling
 
 A build writes and validates all selected artifacts in private staging. The publisher carries
 forward unrelated entries and artifacts of an unselected backend, then commits the complete
-directory with one atomic exchange (Linux `renameat2(RENAME_EXCHANGE)` or macOS
-`renameatx_np(RENAME_SWAP)`). The filesystem must support the exchange. Before copying,
+directory by exclusive rename on first publication or atomic exchange on rebuild
+(Linux `renameat2` or macOS `renameatx_np`). The filesystem must support the operation. Before copying,
 the publisher checks that staging and every output directory have the same name-lookup
 rules. On Linux it checks the mount and the directory's casefold flag on ext2, ext3, ext4,
 F2FS and tmpfs. On macOS it checks the volume and its reported case sensitivity. A
 mismatch or unavailable lookup information stops publication. A pre-commit failure
-returns `TOOL-FAILURE` with exit 2 and leaves existing outputs in place. A first failed build
-may leave an empty output directory. The parent-directory lock serializes commits by
+returns `TOOL-FAILURE` with exit 2 and leaves existing outputs in place or the destination
+absent on first build. The parent-directory lock serializes commits by
 cooperating CLI builds, including builds selecting different backends.
 
 The exchange is atomic for the directory name. A reader opening several files across the
@@ -365,11 +368,10 @@ structure Backend where
   emit : BIR.Program → Except Refusal Text
   Means : Text → BodyResult → Prop
 
-/-- `LLVM.print` emits body text and spells integer types by bit width, so signed and
-    unsigned types of equal width have the same type spelling. The body printer omits the site
-    table. `LLVM.module` adds it through `Runtime.llvm` in the whole module.
-    `P_print` remains a premise about the meaning of the body text. -/
-def llvm (M : String → BodyResult → Prop) : Backend := ⟨String, fun b => .ok (LLVM.print b), M⟩
+/-- `LLVM.module` emits the complete module, including runtime and site table.
+    Signed and unsigned types of equal width share a type spelling.
+    `P_print` is the premise about the meaning of the exact emitted text. -/
+def llvm (M : String → BodyResult → Prop) : Backend := ⟨String, fun b => .ok (LLVM.module b), M⟩
 /-- LCB emits the adapted body paired with its site table for decoding the result. -/
 def lcb : Backend := ⟨LCB.Source.Function × SiteTable, LCB.emit,
   fun (f, _) r => LCB.bodyResult f r⟩
@@ -474,7 +476,7 @@ theorem compile_correct (F : FrontendPremises) {B N T} (P : NativePremises B N T
    - `out.tokens = admit out.p`, `out.mir = lower out.p out.tokens`, `out.mem = memory out.mir` and `out.bir = ssa out.mem`;
    - `out.bir.frameSlots ≤ T.maxSlots`.
 
-   LLVM renders the shared BIR with `LLVM.print`. An LCB artifact additionally requires
+   LLVM renders the shared BIR with `LLVM.module`. An LCB artifact additionally requires
    `Stages.prepareLCB out.bir = .ok f` for the function `f` passed to the backend.
 2. `Stages.compile_lexes` applies `Lex.lex_correct` to the token list of a successful compilation.
    The lexical judgment combines with `F.parse` and `elab_sound` to give `Denotes src out.p`.
@@ -668,6 +670,26 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
 
    All three must give the same observation, and each must match the row's `expect`. Future `con:` rows use the same manifest and runner.
 
+   The [LLVM rendering fixtures](../scripts/checks/compiler/llvm_rendering.lean) compare
+   full modules byte for byte against the [golden](../tests/golden/slice0_llvm.txt).
+   The corpus includes every signed and unsigned integer tag, 64-bit narrowing
+   with high bits set, raw BIR width boundaries and runtime byte escapes.
+   The trusted-base audit records the theorem that LLVM's width mapping agrees
+   with Core for every integer tag. The well-formed width fixture also runs
+   natively and its observation must match the Lean BIR oracle.
+   The mutation controls rebuild the modified printer and check the same golden.
+   Native controls must disagree with the Lean BIR oracle on the changed exit
+   value and on the exact trap line when the runtime routes to the wrong site.
+   To regenerate the literal output after reviewing an intended printer change, run
+
+   ```sh
+   nix develop -c lake build Concrete
+   nix develop -c lake env lean --run scripts/checks/compiler/llvm_rendering.lean > /tmp/slice0_llvm.txt
+   diff -u tests/golden/slice0_llvm.txt /tmp/slice0_llvm.txt
+   ```
+
+   Install the reviewed output as the golden.
+
    **Classification uses the status and the runtime evidence, never the status alone.** `Observation.status` is many-to-one.
    - Status 134 **with** the runtime's trap line on fd 2 is `trapped k`.
    - Status 134 **without** it is `exited 134`.
@@ -682,7 +704,7 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
    source path, an unknown target reported by the native helper, a failed native helper, and a failed build-input write.
 
    The compiler CLI exits 0 for a successful build or help, 1 for a source refusal
-   (`SYNTAX`, `SLICE-0`, `CORE-CHECK`), 2 for an incomplete build, 3 for `USAGE`, and
+   (`SYNTAX`, `SLICE-0`, `CORE-CHECK`, or a `MANIFEST-*` refusal), 2 for an incomplete build, 3 for `USAGE`, and
    4 for `INTERNAL`. Incomplete diagnostics use `incomplete (reason)`. This includes
    operational failures (`TOOL-FAILURE`) such as an unavailable native tool, a failed link,
    or a failed CLI output write. If stderr cannot carry a diagnostic, the CLI still exits 2.

@@ -62,9 +62,10 @@ private def buildNative (lib dir : System.FilePath) (backend : Option String)
     if verified.exitCode != 0 then
       let detail := (verified.stdout ++ verified.stderr).trimAscii.toString
       throw (.toolFailure s!"native replay exited with status {verified.exitCode}: {detail}")
+    -- Finish fallible reporting before committing the verified generation.
+    writeOutput "stdout" IO.getStdout s!"language-rules version {version.major}.{version.minor}\n"
     discard <| outputTransaction lib "publish build outputs"
       (#["publish", dir.toString, staging.toString] ++ names)
-    writeOutput "stdout" IO.getStdout s!"language-rules version {version.major}.{version.minor}\n"
   finally
     -- A first publication moves staging away; an exchange leaves retired files in it.
     let cleanup : IO Unit := do
