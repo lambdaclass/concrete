@@ -6,6 +6,6 @@ cd "$(dirname "$0")/../.."
 OUT=${1:-_build/spec-site}
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 lake build ConcreteSpecEvidence
-lake env lean scripts/spec/lean_site.lean > "$TMP/decls.jsonl"
+lake lean scripts/spec/lean_site.lean > "$TMP/decls.jsonl"
 rm -rf "$OUT"; mkdir -p "$OUT"
 python3 scripts/spec/lean_site.py "$TMP/decls.jsonl" "$OUT"

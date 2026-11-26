@@ -16,14 +16,15 @@ source scripts/checks/lib/slice0_common.sh
 # shellcheck source=scripts/checks/lib/has_match.sh
 source scripts/checks/lib/has_match.sh
 
+# Lake builds each control's imports from its header. For executable controls,
+# Lean also needs the file as the argument to --run.
 # Emit-only runs validate fixture expectations without building native executables.
 if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
-  build rule-layout-dependency "$work/rule-layout-dependency.log" bounded 1800 \
-    lake build ConcreteSpec.Spec.Slice0Layout
-  build rule-registry "$work/rule-registry.log" bounded 120 \
-    lake env lean scripts/checks/compiler/rule_registry.lean
+  build rule-registry "$work/rule-registry.log" bounded 1800 \
+    lake lean scripts/checks/compiler/rule_registry.lean
   echo "ok   slice-0 rule references and layout controls"
   # Exercise one golden in independent process environments, with distinct cwd and TMPDIR.
+  encoding_control="$root/scripts/checks/compiler/artifact_encoding.lean"
   for encoding_env in utc pacific; do
     encoding_dir="$work/artifact-$encoding_env"
     mkdir -p "$encoding_dir/tmp"
@@ -33,27 +34,34 @@ if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
       encoding_tz=PST8
     fi
     build "artifact encoding ($encoding_env)" "$encoding_dir/vectors" bounded 120 \
-      lake env env "TMPDIR=$encoding_dir/tmp" "TZ=$encoding_tz" bash -c \
-      'cd "$1" && exec lean --run "$2"' _ "$encoding_dir" \
-      "$root/scripts/checks/compiler/artifact_encoding.lean"
+      env "TMPDIR=$encoding_dir/tmp" "TZ=$encoding_tz" bash -c \
+      'cd "$1" && exec lake -d "$2" lean "$3" -- --run "$3"' _ \
+      "$encoding_dir" "$root" "$encoding_control"
   done
   test -s "$work/artifact-utc/vectors"
   cmp "$work/artifact-utc/vectors" "$work/artifact-pacific/vectors"
   echo "ok   canonical artifact bytes and SHA-256 goldens in two environments, payload substitutions"
   bash scripts/checks/compiler/f31_census.sh
-  build stage-interfaces "$work/stage-interfaces.log" bounded 120 \
-    lake build Concrete.Interfaces.Pipeline ConcreteSpecEvidence.ExecExamples
   # The kernel checks the full cross-stage controls in this compilation unit.
   # At two Lean threads this can exceed the standard build budget.
   build stage-interface-controls "$work/stage-interface-controls.log" bounded 360 \
-    lake env lean -DwarningAsError=true -DautoImplicit=false scripts/checks/compiler/stage_interfaces.lean
+    lake lean scripts/checks/compiler/stage_interfaces.lean -- -DwarningAsError=true -DautoImplicit=false
   build stage-end-to-end-audit "$work/stage-end-to-end-audit.log" bounded 60 \
-    lake env lean -DwarningAsError=true -DautoImplicit=false scripts/checks/compiler/stage_end_to_end_audit.lean
+    lake lean scripts/checks/compiler/stage_end_to_end_audit.lean -- -DwarningAsError=true -DautoImplicit=false
+  missing_import="$work/missing_import.lean"
+  printf '%s\n' 'import ConcreteSpec.NoSuchControlModule' >"$missing_import"
+  missing_rc=0
+  bounded 60 lake lean "$missing_import" >"$work/missing_import.log" 2>&1 || missing_rc=$?
+  if [[ $missing_rc != 1 ]] ||
+      ! has_match -F "bad import 'ConcreteSpec.NoSuchControlModule'" <"$work/missing_import.log"; then
+    cat "$work/missing_import.log" >&2
+    echo "FAIL stage interface controls: expected a missing import diagnostic" >&2
+    exit 1
+  fi
+  echo "ok   Lean control rejects a nonexistent import"
   echo "ok   stage interface controls and end-to-end semantic parameter audit"
-  build slice1-driver "$work/slice1-driver-build.log" bounded 120 \
-    lake build ConcreteSpecEvidence.ExecExamples ConcreteSpecEvidence.Rules ConcreteSpec.Spec.Examples
   build slice1-driver-controls "$work/slice1-driver-controls.log" bounded 120 \
-    lake env lean --run scripts/checks/compiler/slice1_driver.lean "$work/slice1-link"
+    lake lean scripts/checks/compiler/slice1_driver.lean -- --run scripts/checks/compiler/slice1_driver.lean "$work/slice1-link"
   for case_name in answer trap; do
     case_dir="$work/slice1-link/$case_name"
     build "split LLVM $case_name" "$case_dir/build.log" bounded "$native_secs" \
@@ -70,14 +78,12 @@ if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
     fi
   done
   echo "ok   slice 1 driver controls"
-  # The scaling fixture uses the span controls, outside Concrete's build closure.
-  build span-proof-deps "$work/span-proof-deps.log" bounded 1800 lake build ConcreteSpecEvidence.Ident
-  bounded 120 lake env lean --run scripts/checks/compiler/span_scaling.lean
+  bounded 1800 lake lean scripts/checks/compiler/span_scaling.lean -- --run scripts/checks/compiler/span_scaling.lean
   build lexer-digit-limit "$work/lexer-digit-limit.log" bounded 120 \
-    lake env lean --run scripts/checks/compiler/lexer_digit_limit.lean
+    lake lean scripts/checks/compiler/lexer_digit_limit.lean -- --run scripts/checks/compiler/lexer_digit_limit.lean
   echo "ok   lexer digit limit controls"
   build lexer-stream "$work/lexer-stream.log" bounded 120 \
-    lake env lean --run scripts/checks/compiler/lexer_stream.lean
+    lake lean scripts/checks/compiler/lexer_stream.lean -- --run scripts/checks/compiler/lexer_stream.lean
   echo "ok   lexer stream controls"
   build llvm-mutation-controls "$work/llvm-mutation-controls.log" bounded 120 \
     lake env python3 -B scripts/checks/compiler/llvm_mutation_controls.py

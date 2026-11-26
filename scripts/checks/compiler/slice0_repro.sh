@@ -80,11 +80,11 @@ for side in first second; do
     awk -F '\t' '$3 !~ /^(refuse|pending-refusal|llvm|diagnostic) / {print $1}' test-rows > names
     awk -F '\t' '$2 ~ /^bir:/ {sub(/^bir:/, "", $2); print $2}' test-rows | LC_ALL=C sort > manifest-programs
     [ -s names ] || { echo 'slice0_repro: no examples' >&2; exit 1; }
-    bounded 120 lake env lean --run scripts/checks/compiler/slice0_bir.lean list | LC_ALL=C sort > emitter-programs
+    bounded 120 lake lean scripts/checks/compiler/slice0_bir.lean -- --run scripts/checks/compiler/slice0_bir.lean list | LC_ALL=C sort > emitter-programs
     if ! cmp -s manifest-programs emitter-programs; then
       echo 'slice0_repro: test manifest inventory differs from emitter' >&2; exit 1
     fi
-    emitter=(bounded 120 lake env lean --run scripts/checks/compiler/slice0_bir.lean)
+    emitter=(bounded 120 lake lean scripts/checks/compiler/slice0_bir.lean -- --run scripts/checks/compiler/slice0_bir.lean)
     while IFS=$'\t' read -r name program expect; do
       if [[ "$expect" == "llvm "* || "$program" == cli:* ]]; then continue; fi
       emit_slice0_row tests/manifest.tsv "$program" "$d/out/$name" "$target" "$expect"

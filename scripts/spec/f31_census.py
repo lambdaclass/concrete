@@ -145,13 +145,14 @@ def generate(root, source, result):
     surface = snapshot(root, source)
     run(["lake", "build", "Concrete", "ConcreteSpec", "ConcreteSpecEvidence"], source)
     records = []
+    exporter = str(source / "scripts/spec/f31_census.lean")
     for row in surface:
         if row["role"] not in ("module", "lean-probe"):
             continue
         path = row["file"]
         module = path.removesuffix(".lean").replace("/", ".")
         export = source / "frontend.jsonl"
-        run(["lake", "env", "lean", "--run", str(source / "scripts/spec/f31_census.lean"),
+        run(["lake", "lean", exporter, "--", "--run", exporter,
              path, module, str(export)], source)
         records.extend(json.loads(line) for line in export.read_text(encoding="utf-8").splitlines())
     classify(records)
