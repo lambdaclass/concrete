@@ -1489,7 +1489,7 @@ ConcreteSpec.Core.SourcePathSpan.Controls.bindBeforeEof_violates_correct	Quot.so
 ConcreteSpec.Core.SourcePathSpan.Controls.bindIgnoringColumn_violates_correct	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.Controls.bindIgnoringLine_violates_correct	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.Controls.bindPastEnd_violates_correct	Quot.sound propext
-ConcreteSpec.Core.SourcePathSpan.Controls.pastEnd._proof_1	Quot.sound propext
+ConcreteSpec.Core.SourcePathSpan.Controls.pastEnd._proof_1	
 ConcreteSpec.Core.SourcePathSpan.Controls.projectAtStartOnly_violates_correct	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.Controls.projectPastEnd_violates_correct	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.Controls.wrongLine._proof_1	
@@ -1706,7 +1706,7 @@ ConcreteSpec.Core.semantic_failure_refuses_planted_unused_after_prefix_skipUnuse
 ConcreteSpec.Core.semantic_failure_refuses_planted_unused_overflow_skipUnusedEvalConsts	Classical.choice Quot.sound propext
 ConcreteSpec.Core.sortConsts.eq_1	
 ConcreteSpec.Core.tabSpan_badCoordinates	Quot.sound propext
-ConcreteSpec.Core.tabSpan_badCoordinates._simp_1_1	Quot.sound propext
+ConcreteSpec.Core.tabSpan_badCoordinates._simp_1_1	propext
 ConcreteSpec.Core.tabSpan_location	Quot.sound propext
 ConcreteSpec.Core.tabSpan_otherSource	Quot.sound propext
 ConcreteSpec.Core.typeConsts_refuses_nonCopy_example_mixed_declarations	propext

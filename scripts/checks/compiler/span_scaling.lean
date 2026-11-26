@@ -1,5 +1,5 @@
 import Concrete.Stages
-import ConcreteSpec.Proofs.Ident
+import ConcreteSpecEvidence.Ident
 import Lean.Elab.Command
 import Lean.Util.CollectAxioms
 

@@ -1,8 +1,6 @@
 import ConcreteSpec.Diagnostics.Types
 import ConcreteSpec.Spec.Basics
 import ConcreteSpec.Spec.Ident
-import ConcreteSpec.Spec.Outcome
-import ConcreteSpec.Spec.Rules
 
 /-!
 # Laws of typed and persistent identities
@@ -1248,7 +1246,7 @@ private theorem candidate_iff (raw : SourceText) (violation : Violation raw.leng
   | mk reason location =>
     simp [candidates, candidatesWith, check, List.mem_flatMap, List.mem_map, reason_inOrder]
 
-private theorem noViolation_iff (raw : SourceText) : firstViolation raw = none ↔ RawOk raw := by
+theorem noViolation_iff (raw : SourceText) : firstViolation raw = none ↔ RawOk raw := by
   refine ⟨rawOk_of_noViolation raw, ?_⟩
   intro valid
   cases selected : firstViolation raw with
@@ -1264,7 +1262,7 @@ private theorem parse_of_clear (raw : SourceText) (clear : firstViolation raw = 
   unfold parse
   split <;> simp_all
 
-private theorem parse_of_hit (raw : SourceText) (hit : Violation raw.length)
+theorem parse_of_hit (raw : SourceText) (hit : Violation raw.length)
     (found : firstViolation raw = some hit) : parse raw = .error ⟨raw, hit⟩ := by
   unfold parse
   split <;> simp_all
@@ -1495,7 +1493,7 @@ theorem permitted_reference_iff (reason : Reason) (raw : SourceText) :
     exact clear hit present,
     fun clear hit present => clear _ (sound hit present)⟩
 
-private theorem reference_reason (reason : Reason) : reason ∈ Reference.priority := by
+theorem reference_reason (reason : Reason) : reason ∈ Reference.priority := by
   cases reason <;> decide
 
 /-- The search certificate is equivalent to the conjunction of the independent byte rules. -/
@@ -2208,26 +2206,6 @@ theorem Span.locationOk_iff (span : Span) (source : SourceText) :
   simp [Span.LocationOk, SourcePathSpan.EndInSource, SourcePathSpan.LineMatches,
     SourcePathSpan.ColumnMatches, span.range_ok]
 
-/-- Instance (law `ConcreteSpec.Core.Span.locationOk_iff`, case `ConcreteSpec.Core.tabSpan`).
-the span after a tab matches the original source's byte coordinates. -/
-theorem tabSpan_location : tabSpan.LocationOk tabSource :=
-  (Span.locationOk_iff _ _).2 (by decide)
-
-/-- Instance (law `ConcreteSpec.Core.Span.locationOk_iff`, case `ConcreteSpec.Core.Vacuity.otherTabSource`).
-the unchanged span fails for the source with a different line structure. -/
-theorem tabSpan_otherSource : ¬tabSpan.LocationOk Vacuity.otherTabSource := by
-  rw [Span.locationOk_iff]
-  decide
-
-/-- Instance (law `ConcreteSpec.Core.Span.locationOk_iff`, case `ConcreteSpec.Core.tabSpan`).
-an incorrect column or an out-of-bounds end invalidates the span. -/
-theorem tabSpan_badCoordinates :
-    ¬({ tabSpan with col := 2, col_pos := by decide }).LocationOk tabSource ∧
-    ¬({ tabSpan with endOffset := 4, range_ok := by decide }).LocationOk tabSource := by
-  simp only [Span.locationOk_iff]
-  decide
-
-
 end ConcreteSpec.Core
 
 namespace ConcreteSpec.Core.SourcePath.Project
@@ -2311,7 +2289,7 @@ private theorem parts_eq {left right : SourcePath} :
   · intro h
     simp [Reference.parts, h]
 
-private theorem classify_correct (left right : SourcePath) (reason : Reason) :
+theorem classify_correct (left right : SourcePath) (reason : Reason) :
     classify left right = some reason ↔ Reference.Conflict reason left right := by
   unfold classify
   rw [component_bytes, component_bytes, classifyComponents_correct]
