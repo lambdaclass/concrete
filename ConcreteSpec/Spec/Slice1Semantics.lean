@@ -55,6 +55,7 @@ evaluator's fuel ran out. Running out of fuel is inconclusive; it is not diverge
 inductive Outcome where
   | exit (code : Nat)
   | trap (k : Trap)
+  | aborted (site : Core.SiteId)
   | stuck (w : Stuck)
   | outOfFuel
   deriving DecidableEq, Repr
@@ -164,21 +165,26 @@ def retOutcome (Δ : Decls) (env : Env) (r : Atom) : Outcome :=
   | .trap k => .trap k
   | .stuck w => .stuck w
 
-/-- The fuel-indexed evaluator: each statement and the final `return` costs one unit of fuel. -/
-def runBody (Δ : Decls) : Nat → Env → List Stmt → Atom → Outcome
+/-- Abort bypasses return evaluation and any cleanup. -/
+def finish (Δ : Decls) (env : Env) : Terminator → Outcome
+  | .ret r => retOutcome Δ env r
+  | .abort site => .aborted site
+
+/-- The fuel-indexed evaluator: each statement and the final action costs one unit of fuel. -/
+def runBody (Δ : Decls) : Nat → Env → List Stmt → Terminator → Outcome
   | 0, _, _, _ => .outOfFuel
-  | _ + 1, env, [], r => retOutcome Δ env r
+  | _ + 1, env, [], r => finish Δ env r
   | n + 1, env, s :: ss, r => match execStmt Δ env s with
     | .ok env' => runBody Δ n env' ss r
     | .trap k => .trap k
     | .stuck w => .stuck w
 
 /-- Run a program with the given fuel, from an empty environment. -/
-def run (p : Program) (fuel : Nat) : Outcome := runBody p.decls fuel [] p.body p.ret
+def run (p : Program) (fuel : Nat) : Outcome := runBody p.decls fuel [] p.body p.ending
 
 /-- The fuel-free semantics: the outcome a body reaches. -/
-inductive Exec (Δ : Decls) : Env → List Stmt → Atom → Outcome → Prop where
-  | ret {env r} : Exec Δ env [] r (retOutcome Δ env r)
+inductive Exec (Δ : Decls) : Env → List Stmt → Terminator → Outcome → Prop where
+  | finish {env r} : Exec Δ env [] r (finish Δ env r)
   | step {env env' s ss r o} : execStmt Δ env s = .ok env' → Exec Δ env' ss r o →
       Exec Δ env (s :: ss) r o
   | trap {env s ss r k} : execStmt Δ env s = .trap k → Exec Δ env (s :: ss) r (.trap k)
@@ -187,7 +193,7 @@ inductive Exec (Δ : Decls) : Env → List Stmt → Atom → Outcome → Prop wh
 /-! ### Value typing
 
 What it means for a run-time value to have a type. The safety theorems (`checked_never_stuck`,
-`checked_exits`, in `Proofs/Slice1.lean`) are stated with it. -/
+`checked_finishes`, in `Proofs/Slice1.lean`) are stated with it. -/
 
 /-- A scalar value has a scalar type: an integer of its type and in its range, or a `bool`. -/
 inductive SVTy : Scalar → STy → Prop where
