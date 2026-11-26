@@ -24,7 +24,7 @@ open ConcreteSpec (Trap)
 -- The source and candidate agree on the complete checked-add site entry.
 private def sumSource (a b : Nat) : Concrete.Memory.Program :=
   ⟨[⟨⟨⟨0⟩, Concrete.Memory.u8Layout⟩,
-    .add (.lit a) (.lit b) ⟨⟨0⟩, ⟨59, 64, 3, 12⟩⟩ none⟩], .var ⟨0⟩⟩
+    .add (.lit a) (.lit b) ⟨⟨0⟩, ⟨59, 64, 3, 12, ⟨0⟩⟩⟩ none⟩], .var ⟨0⟩⟩
 
 private def sumPath := "tests/slice0/sum.con"
 private def sumWitness : Concrete.SSA.Witness := [[⟨0⟩]]
@@ -65,7 +65,7 @@ example : Concrete.SSA.validate sumPath (sumSource 200 56)
 private def twoSlots : Concrete.Memory.Program :=
   let sum := sumSource 20 22
   { sum with stores := sum.stores ++ [⟨⟨⟨1⟩, Concrete.Memory.u8Layout⟩,
-      .add (.lit 2) (.lit 3) ⟨⟨1⟩, ⟨65, 70, 4, 3⟩⟩ none⟩] }
+      .add (.lit 2) (.lit 3) ⟨⟨1⟩, ⟨65, 70, 4, 3, ⟨0⟩⟩⟩ none⟩] }
 
 example :
     (match Concrete.SSA.lower sumPath twoSlots with
@@ -199,7 +199,8 @@ def emit (name : String) (dir : System.FilePath) (expectation : List String)
 
 def emitSource (path actual : String) (dir : System.FilePath) (expectation : List String)
     (target : LCB.Target) : IO UInt32 := do
-  let input : Concrete.Stages.Input := ⟨path, ← IO.FS.readBinFile actual⟩
+  let .ok input := Concrete.Stages.Input.load path (← IO.FS.readBinFile actual)
+    | IO.eprintln s!"invalid project path: {path}"; return 1
   match expectation, Concrete.Stages.compile input with
   | "refuse" :: status :: rule :: detail, .error e =>
     let message := String.intercalate " " detail
@@ -212,7 +213,7 @@ def emitSource (path actual : String) (dir : System.FilePath) (expectation : Lis
     IO.eprintln s!"{path}: expected refusal {rule}, but compilation succeeded"
     return 1
   | "trap" :: _, .error (.checker _) =>
-    let .ok tokens := Concrete.Lex.lex input.source | IO.eprintln "lex failed"; return 1
+    let .ok tokens := Concrete.Lex.lex input.source input.fileId | IO.eprintln "lex failed"; return 1
     let .ok ast := Concrete.Parse.parse tokens | IO.eprintln "parse failed"; return 1
     let .ok core := Concrete.Elab.elaborate ast | IO.eprintln "elaboration failed"; return 1
     let p := Concrete.Core.toCore core.program
@@ -290,7 +291,7 @@ def main (args : List String) : IO UInt32 := do
 private def overwrittenSlot : Concrete.Memory.Program :=
   ⟨[⟨⟨⟨0⟩, Concrete.Memory.u8Layout⟩, .copy (.lit 1)⟩,
     ⟨⟨⟨0⟩, Concrete.Memory.u8Layout⟩, .copy (.lit 2)⟩,
-    ⟨⟨⟨1⟩, Concrete.Memory.u8Layout⟩, .add (.lit 1) (.lit 1) ⟨⟨1⟩, ⟨0, 1, 1, 1⟩⟩ none⟩],
+    ⟨⟨⟨1⟩, Concrete.Memory.u8Layout⟩, .add (.lit 1) (.lit 1) ⟨⟨1⟩, ⟨0, 1, 1, 1, ⟨0⟩⟩⟩ none⟩],
     .var ⟨0⟩⟩
 
 example : Concrete.Memory.run overwrittenSlot = .exit 2 := by rfl

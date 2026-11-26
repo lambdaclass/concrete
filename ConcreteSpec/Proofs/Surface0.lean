@@ -1,5 +1,6 @@
 import ConcreteSpec.Spec.Basics
 import ConcreteSpec.Spec.Borrow
+import ConcreteSpec.Spec.Ident
 import ConcreteSpec.Spec.Surface0
 
 /-! Proofs of the source rules, owner-approved item 30 (OPEN-1). -/
@@ -478,5 +479,95 @@ theorem sourceFailure_not_sourceOk {bytes : List UInt8} {k : Nat}
     rintro ⟨cs, hd, good⟩
     obtain ⟨ds, rfl, ht⟩ := decodes_head_inv enc hd
     exact ih ⟨ds, ht, fun c hc => good c (by simp [hc])⟩
+
+end ConcreteSpec.Surface0
+
+namespace ConcreteSpec.Surface0
+
+private theorem fold_nonAscii (bytes : List Nat) (pos : Position)
+    (nonAscii : ∀ b ∈ bytes, 128 ≤ b) (nonempty : bytes ≠ []) :
+    bytes.foldl Core.Position.advanceByte pos =
+      ⟨pos.byte + bytes.length, pos.line, pos.column + bytes.length, false⟩ := by
+  induction bytes generalizing pos with
+  | nil => contradiction
+  | cons b tail ih =>
+    have high := nonAscii b (by simp)
+    have step : pos.advanceByte b = ⟨pos.byte + 1, pos.line, pos.column + 1, false⟩ := by
+      simp [Core.Position.advanceByte, Core.Position.step, show b ≠ 13 by omega,
+        show b ≠ 10 by omega]
+    cases tail with
+    | nil => simpa using step
+    | cons c rest =>
+      rw [List.foldl_cons, ih _ (fun x member => nonAscii x (by simp [member])) (by simp), step]
+      simp [Nat.add_comm, Nat.add_left_comm]
+
+private theorem advance_encoding {scalar : Nat} {bytes : List UInt8}
+    (encoded : Utf8.Encodes scalar bytes) (pos : Position) :
+    pos.advance scalar = (bytes.map UInt8.toNat).foldl Core.Position.advanceByte pos := by
+  match bytes with
+  | [a] =>
+    obtain ⟨ascii, rfl⟩ := encoded
+    have width : a.toNat < 0x80 := Nat.lt_succ_of_le ((Utf8.one_iff a).mp ascii)
+    simp [Position.advance, Core.Position.advanceByte, width]
+  | [a, b] =>
+    obtain ⟨valid, value⟩ := encoded
+    have bounds := (Utf8.two_iff a b).mp valid
+    rw [fold_nonAscii _ _ (by simp; omega) (by simp)]
+    simp [Position.advance, Core.Position.step, show ¬scalar < 128 by omega, show scalar < 2048 by omega,
+      show scalar ≠ 13 by omega, show scalar ≠ 10 by omega]
+  | [a, b, c] =>
+    obtain ⟨valid, value⟩ := encoded
+    have bounds := (Utf8.three_iff a b c).mp valid
+    rw [fold_nonAscii _ _ (by simp; omega) (by simp)]
+    simp [Position.advance, Core.Position.step, show ¬scalar < 128 by omega, show ¬scalar < 2048 by omega,
+      show scalar < 65536 by omega, show scalar ≠ 13 by omega, show scalar ≠ 10 by omega]
+  | [a, b, c, d] =>
+    obtain ⟨valid, value⟩ := encoded
+    have bounds := (Utf8.four_iff a b c d).mp valid
+    rw [fold_nonAscii _ _ (by simp; omega) (by simp)]
+    simp [Position.advance, Core.Position.step, show ¬scalar < 128 by omega, show ¬scalar < 2048 by omega,
+      show ¬scalar < 65536 by omega, show scalar ≠ 13 by omega, show scalar ≠ 10 by omega]
+  | [] | _ :: _ :: _ :: _ :: _ :: _ => contradiction
+
+private theorem advance_decoding {bytes : List UInt8} {scalars : List Nat}
+    (decoded : Utf8.Decodes bytes scalars) (pos : Position) :
+    scalars.foldl Position.advance pos =
+      (bytes.map UInt8.toNat).foldl Core.Position.advanceByte pos := by
+  induction decoded generalizing pos with
+  | nil => rfl
+  | cons encoded _ ih =>
+    simp only [List.foldl_cons, List.map_append, List.foldl_append]
+    rw [ih, advance_encoding encoded]
+
+/-- The incremental surface cursor agrees with the byte coordinates at every
+decoded prefix. The remaining bytes may include part of a later CRLF pair. -/
+theorem Position.advance_agrees {consumed suffix : List UInt8} {scalars : List Nat}
+    (decoded : Utf8.Decodes consumed scalars) :
+    let cursor := scalars.foldl Position.advance {}
+    let source := Core.SourceText.ofBytes (consumed ++ suffix)
+    cursor.byte = consumed.length ∧ cursor.line = source.lineAt consumed.length ∧
+      cursor.column = source.columnAt consumed.length := by
+  have byte_count (bytes : List Nat) (pos : Position) :
+      (bytes.foldl Core.Position.advanceByte pos).byte = pos.byte + bytes.length := by
+    induction bytes generalizing pos with
+    | nil => simp
+    | cons byte rest ih =>
+      rw [List.foldl_cons, ih]
+      have step : (pos.advanceByte byte).byte = pos.byte + 1 := by
+        simp only [Core.Position.advanceByte, Core.Position.step]
+        split <;> (try split) <;> rfl
+      simp only [step, List.length_cons]
+      omega
+  dsimp
+  rw [advance_decoding decoded]
+  simp [Core.SourceText.lineAt, Core.SourceText.columnAt, Core.SourceText.positionAt,
+    Core.SourceText.ofBytes, List.map_append, byte_count]
+
+/-- Coordinates include the boundary inside CRLF, a bare CR, and a bare LF. -/
+example :
+    let bytes := Core.SourceText.ofBytes [97, 13, 10, 98, 13, 99, 10]
+    (List.range 8).map (fun n => (bytes.lineAt n, bytes.columnAt n)) =
+      [(1, 1), (1, 2), (2, 1), (2, 1), (2, 2), (3, 1), (3, 2), (4, 1)] := by
+  decide
 
 end ConcreteSpec.Surface0

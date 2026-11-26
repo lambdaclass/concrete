@@ -179,7 +179,7 @@ private def Valid : List Piece → Prop
       Tokenizes (p.lexeme ++ scalars ps) p.lexeme (scalars ps) p.value ∧ Valid ps
 
 private theorem tokenStream {pieces : List Piece} (h : Valid pieces) (pos : Position) :
-    TokenStream pos (scalars pieces) (tokens pos pieces) := by
+    TokenStream ⟨0⟩ pos (scalars pieces) (tokens pos pieces) := by
   induction pieces generalizing pos with
   | nil => exact .eof (.stop [] (by simp) (by simp))
   | cons p ps ih =>
@@ -329,7 +329,7 @@ private theorem validPieces (f : Fixture) : Valid (pieces f) := by
     | (apply punctuationFrom <;> decide)
 
 private def location (f : Fixture) (i : Nat) : Span :=
-  ((tokens {} (pieces f))[i]?.map Token.span).getD ⟨0, 0, 1, 1⟩
+  ((tokens {} (pieces f))[i]?.map Token.span).getD ⟨0, 0, 1, 1, ⟨0⟩⟩
 
 private def bindingAst : Statement := .bind "t" (.typed sTy) (.construct "S")
 private def consumeAst (name : String) : Statement := .bind "S" .destructure (.move name)
@@ -438,7 +438,7 @@ theorem nonempty_payload_outside_slice (a b c d e f g : Span) (names : List Stri
   intro h
   cases h
 
-private def span : Span := ⟨0, 5, 1, 1⟩
+private def span : Span := ⟨0, 5, 1, 1, ⟨0⟩⟩
 private def takeS : Statement := consumeAst "t"
 private def ret : Statement := .ret (.integer 0 none)
 private def callAbort : Statement := .call "abort" span
