@@ -7,7 +7,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 export LC_ALL=C
 manifest=scripts/checks/lib/stage_interfaces.sha256
 digest() {
-  sha256sum ConcreteSpec/StageInterface.lean ConcreteSpec/StageGrammar.lean Concrete/Interfaces/*.lean
+  sha256sum ConcreteSpec/StageInterface.lean ConcreteSpec/StageGrammar.lean Concrete/Backend/Observation.lean Concrete/Interfaces/*.lean
 }
 expected=$(cat "$manifest")
 actual=$(digest)

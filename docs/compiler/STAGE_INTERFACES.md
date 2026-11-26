@@ -3,8 +3,9 @@
 The frozen declarations are [spec carriers](../../ConcreteSpec/StageInterface.lean),
 [compiler carriers](../../Concrete/Interfaces/Carriers.lean),
 [grammar](../../ConcreteSpec/StageGrammar.lean),
-[behavior refinement](../../Concrete/Interfaces/Behavior.lean), [edge propositions](../../Concrete/Interfaces/Contracts.lean) and
-[executable signatures and registry](../../Concrete/Interfaces/Pipeline.lean).
+[behavior refinement](../../Concrete/Interfaces/Behavior.lean), [edge propositions](../../Concrete/Interfaces/Contracts.lean),
+[executable signatures and registry](../../Concrete/Interfaces/Pipeline.lean), and the
+[backend observation adapter](../../Concrete/Backend/Observation.lean).
 The root check compares their exact SHA-256 digests with the [recorded manifest](../../scripts/checks/lib/stage_interfaces.sha256). Changing a frozen declaration takes a new interface round. The data modules can be imported by both a pass and its caller without importing the pass implementation.
 
 ## Source → Tokens
@@ -25,7 +26,7 @@ Fix (c) supplies the single ConcreteSpec traversal. `Admitted` carries the exact
 
 ## Admitted Core → MIR
 
-Fix (c) owns evidence validation and consumption and the empty-evidence entry. Fix (b) owns the typed MIR instruction semantics. Fix (d) owns operation origin transport. `MIR` carries typed places, copy/move reads and explicit lifetime and control transfers. `LowersCore` ties removed checks to exact validated discharges and checks every emitted occurrence against the source condition inventory, indexed operator or exact callee, and ordered typed operand identities. Core calls and primitives take atomic typed reads that cannot trap on operand evaluation. A checked argument computation runs in its own Core operation before the call, with its own origin and result local. MIR checks its discharge at that operation and the call reads the result local. A residual condition is part of the same MIR instruction as the operation it guards and traps at its origin on failure. CFG edges enter blocks, so they cannot enter an instruction after its checks. Each supplied discharge matches exactly one emitted occurrence. An unconditional abort cannot supply a discharge condition. `LowersUnchecked` uses the same carrier and checks with no admission discharges. Both preserve origins and terminal observations. Block control boundaries carry origins for returns and other operations that emit no instruction. The boundary metadata cannot satisfy a required MIR check or replace a trap terminator. Replace the linear `MIR.Program` and its token-bearing operators.
+Fix (c) owns evidence validation and consumption and the empty-evidence entry. Fix (b) owns the typed MIR instruction semantics. Fix (d) owns operation origin transport. `MIR` carries typed places, copy/move reads and explicit lifetime and control transfers. `LowersCore` ties removed checks to exact validated discharges and checks every emitted occurrence against the source condition inventory, indexed operator or exact callee, and ordered typed operand identities. Core calls and primitives take atomic typed reads that cannot trap on operand evaluation. A checked argument computation runs in its own Core operation before the call, with its own origin and result local. MIR checks its discharge at that operation and the call reads the result local. A residual condition is part of the same MIR instruction as the operation it guards and traps at its origin on failure. CFG edges enter blocks, so they cannot enter an instruction after its checks. Each supplied discharge matches exactly one emitted occurrence. An unconditional abort cannot supply a discharge condition. `LowersUnchecked` uses the same carrier and checks with no admission discharges. Both preserve origins and compare the fixed Core and MIR executions on the exact input and emitted graph. Block control boundaries carry origins for returns and other operations that emit no instruction. The boundary metadata cannot satisfy a required MIR check or replace a trap terminator. Replace the linear `MIR.Program` and its token-bearing operators.
 
 ## MIR → Memory
 
@@ -42,7 +43,7 @@ use the fetched return operand or trap kind and origin. The trace records spec o
 effects and the fetched trap’s diagnostic bytes.
 
 The logical MIR evaluator holds roots as logical values. Both IRs retain residual operation
-and call checks and evaluate them before performing the instruction. The simulation
+and call checks and evaluate them before performing the instruction. For a safe MIR input, the simulation
 relates reachable activations, including suspended callers, to virtual values or live
 backing ranges and initialized bytes. Target steps and terminal matches extend a related source execution, checking
 representation at each intermediate source state. The source path can follow the
@@ -74,7 +75,7 @@ currently inside `SSA.lower` from its BIR output.
 
 ## SSA → BIR
 
-Fix (a) owns the validated handoff and profile slot check. BIR formation preserves the decoded linked program, including helpers unreachable from the hosted entry. Both stages run the same interpreter on that program, so the decoded-program check implies backward refinement. Fix (d) owns the trap table and its origin proof. `BIR` indexes traps through `TrapIndex`; `BuildsBIR` requires valid lookup, origin preservation, simulation against the graph’s execution rules and the resolved profile's BIR slot ceiling. The count is the largest function's number of BIR definitions, including block parameters,
+Fix (a) owns the validated handoff and profile slot check. BIR formation preserves the decoded entry graph and refines the linked execution from that entry. Both stages run the same interpreter on their decoded graphs. Unreachable helper bodies can differ. Fix (d) owns the trap table and its origin proof. `BIR` indexes traps through `TrapIndex`; `BuildsBIR` requires valid lookup, origin preservation, behavior refinement against the graph’s execution rules and the resolved profile's BIR slot ceiling. The count is the largest function's number of BIR definitions, including block parameters,
 destructure bindings and call destinations. The shared SSA/BIR interpreter reserves
 register storage above the physical place IDs declared or named by lifetime instructions in each
 function, preserving the
@@ -88,20 +89,16 @@ Fix (a) registers the exact emitter and the named LLVM premise. `LLVMInput` carr
 
 ## BIR → LCB
 
-Fix (a) registers the exact adapter and profile preparation. `LCBInput` carries
-the hosted body, auxiliary jobs keyed by BIR function identity, runtime bytes and
-the exact trap table. `EmitsLCB` requires one job for each BIR function, validates
-each exact job and requires unique emitted symbols. The hosted body runs through
-the runtime ABI with the emitted diagnostic table. Each auxiliary invocation resolves the exact job by function ID and runs it
-with every argument tuple in its validated integer ABI and compared with the
-corresponding BIR function running in the full BIR function environment. The
-auxiliary return comparison uses the full ABI value. The pinned LCB verified
-profile admits leaf jobs. The dependency also ships a separate module evaluator
-that resolves calls, with fixed execution budgets. That evaluator consumes a
-different IR from the verified job format. [LP0](../../ROADMAP.md#vertical-slices)
-tracks imported call steps, frames, canonical ABI value encoding and the
-multi-frame trap ABI for a profile that emits inter-job calls. The proved source adapter and native lowering
-premises remain separate.
+Fix (a) registers the guarded adapter and profile preparation. `LCBInput`
+carries the hosted body, auxiliary jobs keyed by BIR function identity, runtime
+bytes and the exact trap table. The verified handoff validates the emitted
+jobs, checks symbol uniqueness, and runs the entry job in the pinned LCB
+semantics. The runtime projection uses the emitted diagnostic table to
+distinguish returning from trapping. The guard rejects calls in the entry
+graph before invoking the emitter. It examines all entry blocks, including
+blocks whose reachability might require analysis. Multi-job execution requires
+a pinned linked semantics and a proof of behavior preservation. The
+[issue ledger](../../ISSUES.tsv) tracks that work under ISS-XXXX.
 
 ## Correctness notion
 
@@ -128,18 +125,31 @@ internal steps. Refinement is stated on the behaviors directly, so it requires
 neither an evaluator fuel bound nor a forward-to-backward simulation theorem.
 Evaluator fuel remains an adequacy obligation.
 
+Correctness is whole-program observable behavior from the designated entry.
 The CFG interpreters resolve calls through the full function environment.
-Hosted behaviors start at the entry and therefore cannot distinguish changes
-to an unreachable definition. The SSA to BIR handoff checks all decoded graphs
-in addition to hosted behaviors. The current LCB pin supplies individual
-function semantics, so linked inter-job execution remains a dependency of the
-full-program LCB contract.
+Changing a helper that is unreachable from the entry is unobservable.
+Changing a reachable helper can change the program's behavior and must be
+rejected at the edge that introduced the change.
 
-The registry binds each proposition to the function it actually executes.
-`Pipeline.Sound` checks the registered success and refusal obligations and
-adjacent invariants. LLVM has a structural handoff check and a named trusted
-assumption, `P_print`. Native-image and launch assumptions remain at the theorem
-boundary.
+Core, MIR, Memory, SSA, BIR and the verified LCB job use repository-defined
+execution on the exact carriers. Core → MIR runs the emitted graph against
+the integrated Core execution. The pinned LCB semantics executes individual
+jobs, including hosted traps through the runtime projection. Programs that
+need calls across the job boundary receive a typed refusal before emission.
+
+The registry binds each proposition to the function it executes.
+`Pipeline.endToEnd` takes the validated pipeline and its trusted obligations as separate hypotheses.
+`Stage.Sound` includes the named behavior-preservation obligations on the
+exact successful invocations, separately from structural checks and refusals.
+The trusted base for the frozen interfaces contains the following obligations.
+
+| Premise | Scope |
+| --- | --- |
+| `P_print` | External observations of the exact rendered LLVM module bytes refine the originating BIR program. |
+| `P_lcb_link` | External observations of the exact linked LCB bundle would refine the originating BIR program. The guarded registry refuses the inputs that would need this premise. |
+
+The external execution references occur only at these two trust boundaries.
+Native-image and launch assumptions remain at the production theorem boundary.
 
 ## Writer ownership
 
@@ -148,7 +158,7 @@ Use separate implementation modules so parallel proof and implementation work ca
 | Fix | Owned implementation paths and retirements |
 | --- | --- |
 | (e) | `Concrete/IntegratedCore.lean`, `Concrete/Core.lean`, `Concrete/Elab.lean`, `ConcreteSpec/IntegratedCore.lean`, `ConcreteSpec/Spec/Slice0.lean`, `ConcreteSpec/Spec/Slice1Syntax.lean`, `ConcreteSpec/Spec/Slice1Semantics.lean`, `ConcreteSpec/Spec/Scalar.lean`, `ConcreteSpec/Proofs/Slice0.lean`, `ConcreteSpec/Proofs/Slice1.lean`, `ConcreteSpec/Proofs/Scalar.lean`, `scripts/checks/compiler/f31_census.sh` |
-| (d) | `Concrete/Origins.lean`, `ConcreteSpec/Spec/Ident.lean`, `ConcreteSpec/Proofs/Ident.lean`, `Concrete/Backend/Observation.lean` |
+| (d) | `Concrete/Origins.lean`, `ConcreteSpec/Spec/Ident.lean`, `ConcreteSpec/Proofs/Ident.lean` |
 | (c) | `ConcreteSpec/Admission.lean`, `Concrete/Admission.lean`, `Concrete/LowerAdmitted.lean`, `ConcreteSpec/Spec/Slice1Checker.lean`, `ConcreteSpec/Spec/Slice1Ownership.lean`, `ConcreteSpec/Proofs/Checker.lean` |
 | (b) | `Concrete/CFG.lean`, `Concrete/MIR.lean`, `Concrete/Memory.lean`, `Concrete/SSA.lean`, `ConcreteSpec/Layout.lean`, `ConcreteSpec/Spec/Memory.lean`, `ConcreteSpec/Spec/Hybrid.lean`, `ConcreteSpec/Proofs/Memory.lean`, `ConcreteSpec/Proofs/Hybrid.lean` |
 | (a) | `Concrete/BIR.lean`, `Concrete/BIR/`, `Concrete/Stages.lean`, `Concrete/Contracts.lean`, `Concrete/Theorem.lean`, `Concrete/Certificate.lean`, `Concrete/Premises.lean`, `Main.lean`, `Concrete/Backend/` except `Observation.lean`, root imports, proof inventories and cross-stage checks and fixtures |

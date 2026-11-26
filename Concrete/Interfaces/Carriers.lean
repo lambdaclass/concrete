@@ -65,6 +65,7 @@ inductive StageFailure where
   | resource (failure : ResourceRefusal)
   | unsupportedProfile (rule : RuleId)
   | invalidInput (rule : RuleId)
+  | lcbLinkingUnavailable
 
 /-- Local value types and field projections use the integrated spec type family. -/
 structure Place (Ty : Type) (_ty : Ty) where
