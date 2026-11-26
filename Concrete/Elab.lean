@@ -59,9 +59,9 @@ private def expr (scope : Scope) : Expr → State → Except Refusal (Rhs × Sta
 
 private def binding (acc : Scope × State) (b : Binding) : Except Refusal (Scope × State) := do
   let (scope, s) := acc
-  if b.name == "_" then throw (.unsupported s!"wildcard binding at byte {b.span.start}")
-  if ¬ BinderLegal (scope.map Prod.fst) b.name then
-    throw (.checker s!"binding shadows '{b.name}' at byte {b.span.start}")
+  unless BinderLegal (scope.map Prod.fst) b.name do
+    throw (if b.name == "_" then .unsupported s!"wildcard binding at byte {b.span.start}"
+      else .checker s!"binding shadows '{b.name}' at byte {b.span.start}")
   let (rhs, s) ← expr scope b.rhs s
   let (x, s) := rhs.bind s
   return ((b.name, x) :: scope, s)

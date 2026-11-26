@@ -801,11 +801,18 @@ def intrinsicNames : List String :=
    "checked_shr", "checked_neg",
    "try_convert", "truncate", "reinterpret", "trunc", "round", "floor", "ceil"]
 
-/-- Local binders cannot shadow the entry point, an intrinsic, or an earlier local. -/
+/-- Already decided builtin type spellings, reserved under OD43. The complete later-slice
+reservation catalog belongs to the shared lexical audit. -/
+def builtinTypeNames : List String :=
+  ["i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "bool", "f32", "f64",
+   "char", "String", "Unit", "Option", "Result", "Heap", "HeapArray", "Vec"]
+
+/-- Slice 0 supports named bindings that do not shadow the entry point, an intrinsic,
+or an earlier local. -/
 def BinderLegal (locals : List String) (name : String) : Prop :=
-  name ≠ "main" ∧ name ∉ intrinsicNames ∧ name ∉ locals
+  name ≠ "_" ∧ name ≠ "main" ∧ name ∉ intrinsicNames ∧ name ∉ builtinTypeNames ∧ name ∉ locals
 
 instance (locals : List String) (name : String) : Decidable (BinderLegal locals name) :=
-  inferInstanceAs (Decidable (name ≠ "main" ∧ name ∉ intrinsicNames ∧ name ∉ locals))
+  inferInstanceAs (Decidable (name ≠ "_" ∧ name ≠ "main" ∧ name ∉ intrinsicNames ∧ name ∉ builtinTypeNames ∧ name ∉ locals))
 
 end ConcreteSpec.Surface0

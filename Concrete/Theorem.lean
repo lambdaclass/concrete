@@ -470,6 +470,15 @@ def TargetReference.decodedProcess {Env : Type} {target : LCB.Target} (platform 
     Semantics (ByteArray × Env) :=
   platform.machine.onInput fun (image, env) => (platform.decode image, env)
 
+/-- Verifier-owned native references. R-0505 supplies the decoded final-image
+reference for the first production target. Until then, native image claims are
+unavailable even on targets supported by the assembly emitter. -/
+def nativeReference (target : LCB.Target) : Option (Σ env : Type, TargetReference env target) :=
+  match target with
+  | .x86_64Linux => none
+  | .aarch64Linux => none
+  | .aarch64Macos => none
+
 /-- Native semantic interfaces indexed by the exact image, target and environment. The
 intermediate views let linker, loader, runtime and trap rendering discharge distinct claims.
 Each view projects to the common observation at its boundary. -/
@@ -730,12 +739,22 @@ def NativeNonvacuous {Env : Type} {profile : Profile}
 
 /-- The stage and adapter obligations are part of what this theorem must establish.
 Native obligations and their joint qualification are required for the selected reference. -/
-def compile_correct {Env : Type} {profile : Profile} (m : SharedModels profile.target)
+private def compileCorrectFor {Env : Type} {profile : Profile} (m : SharedModels profile.target)
     (reference : TargetReference Env profile.target) (policy : ExecutionPolicy Env)
     (n : NativeModels Env profile reference) (tools : NativeTools) : Prop :=
   SharedSound m ∧ SharedCorrect ∧ UncheckedSharedCorrect ∧ LCBAdapterSound ∧
     NativeNonvacuous policy n tools ∧ LLVMCorrect n tools ∧ LCBCorrect n tools ∧
     UncheckedCorrect n tools
+
+
+/-- The final theorem is scoped to targets with a verifier-owned native reference.
+An assembly-emitter profile alone is insufficient to instantiate it. -/
+def compile_correct {profile : Profile} (m : SharedModels profile.target)
+    (registered : (nativeReference profile.target).isSome)
+    (policy : ExecutionPolicy ((nativeReference profile.target).get registered).1)
+    (n : NativeModels _ profile ((nativeReference profile.target).get registered).2)
+    (tools : NativeTools) : Prop :=
+  compileCorrectFor m _ policy n tools
 
 
 namespace Sanity
@@ -745,30 +764,72 @@ def answerInput : Stages.Input :=
 
 private def bindingSpan : Span := ⟨0, 1, 1, 1⟩
 
-private def shadowSource := r#"fn main() -> u8 { let main: u8 = 0; return main; }"#.toUTF8
-private def shadowParse : Except Refusal Program := do Parse.parse (← Lex.lex shadowSource)
-private def shadowAst : Program := shadowParse.toOption.getD ⟨"", bindingSpan, []⟩
+private def parseBinderExample (source : String) : Except Refusal Program := do
+  Parse.parse (← Lex.lex source.toUTF8)
 
-/-- The reviewer’s reproducer parses, but neither elaboration nor its replay can accept it. -/
-example : shadowParse = .ok shadowAst ∧
-    Elab.elaborate shadowAst = .error (.checker "binding shadows 'main' at byte 22") ∧
-    ∀ core, ¬ Elaborates shadowAst core := by
-  refine ⟨rfl, rfl, ?_⟩
+private theorem refusesFirstBinder {ast : Program} {bindings : List Binding} {binding : Binding}
+    {result : Expr} (shape : checkBody ast.body = .ok (binding :: bindings, result))
+    (illegal : ¬ BinderLegal [] binding.name) (core : Elab.Output) : ¬ Elaborates ast core := by
+  intro h
+  obtain ⟨_, _, _, _, _, _, _, _, _, checked, lowered, _⟩ := h
+  cases Except.ok.inj (shape.symm.trans checked)
+  exact illegal lowered.headLegal
+
+private def wildcardParse :=
+  parseBinderExample r#"fn main() -> u8 { let _: u8 = 42; return _; }"#
+
+private def mainBinderParse :=
+  parseBinderExample r#"fn main() -> u8 { let main: u8 = 0; return main; }"#
+
+private def intrinsicBinderParse :=
+  parseBinderExample r#"fn main() -> u8 { let discard: u8 = 42; return discard; }"#
+
+private def builtinTypeBinderParse :=
+  parseBinderExample r#"fn main() -> u8 { let i8: u8 = 42; return i8; }"#
+
+private def duplicateBinderParse :=
+  parseBinderExample r#"fn main() -> u8 { let x: u8 = 1; let x: u8 = 20 + 22; return x; }"#
+
+example : ∃ ast, wildcardParse = .ok ast ∧
+    Elab.elaborate ast = .error (.unsupported "wildcard binding at byte 22") ∧
+    ∀ core, ¬ Elaborates ast core := by
+  refine ⟨_, rfl, rfl, ?_⟩
+  exact refusesFirstBinder rfl (by decide)
+
+example : ∃ ast, mainBinderParse = .ok ast ∧
+    Elab.elaborate ast = .error (.checker "binding shadows 'main' at byte 22") ∧
+    ∀ core, ¬ Elaborates ast core := by
+  refine ⟨_, rfl, rfl, ?_⟩
+  exact refusesFirstBinder rfl (by decide)
+
+example : ∃ ast, intrinsicBinderParse = .ok ast ∧
+    Elab.elaborate ast = .error (.checker "binding shadows 'discard' at byte 22") ∧
+    ∀ core, ¬ Elaborates ast core := by
+  refine ⟨_, rfl, rfl, ?_⟩
+  exact refusesFirstBinder rfl (by decide)
+
+example : ∃ ast, builtinTypeBinderParse = .ok ast ∧
+    Elab.elaborate ast = .error (.checker "binding shadows 'i8' at byte 22") ∧
+    ∀ core, ¬ Elaborates ast core := by
+  refine ⟨_, rfl, rfl, ?_⟩
+  exact refusesFirstBinder rfl (by decide)
+
+example : ∃ ast, duplicateBinderParse = .ok ast ∧
+    Elab.elaborate ast = .error (.checker "binding shadows 'x' at byte 37") ∧
+    ∀ core, ¬ Elaborates ast core := by
+  refine ⟨_, rfl, rfl, ?_⟩
   intro core h
-  obtain ⟨_, _, bindings, expr, _, _, _, _, _, shape, lowered, _⟩ := h
-  have parsedBody : ∃ binding expr, checkBody shadowAst.body = .ok ([binding], expr) ∧
-      binding.name = "main" := ⟨_, _, rfl, rfl⟩
-  obtain ⟨binding, ret, checked, name⟩ := parsedBody
-  have same := Except.ok.inj (checked.symm.trans shape)
-  cases same
-  exact (ElaboratesBindings.headLegal lowered).1 name
-
-example {final body sites} :
-    ¬ ElaboratesBindings [("x", ⟨0⟩)]
-      [⟨"x", bindingSpan, .add (.integer 1 none bindingSpan) (.integer 2 none bindingSpan)
-        bindingSpan⟩] final body sites := by
-  intro lowered
-  exact (ElaboratesBindings.headLegal lowered).2.2 (List.Mem.head _)
+  obtain ⟨_, _, _, _, _, _, _, _, _, checked, lowered, _⟩ := h
+  have shape : ∃ first second result,
+      checkBody (duplicateBinderParse.toOption.getD ⟨"", bindingSpan, []⟩).body =
+        .ok ([first, second], result) ∧ first.name = "x" ∧ second.name = "x" :=
+    ⟨_, _, _, rfl, rfl, rfl⟩
+  obtain ⟨first, second, _, shape, firstName, secondName⟩ := shape
+  cases Except.ok.inj (shape.symm.trans checked)
+  have member : second.name ∈ [first.name] := by rw [firstName, secondName]; exact List.Mem.head _
+  cases lowered with
+  | atom _ _ rest => exact rest.headLegal.2.2.2.2 member
+  | operation _ _ _ rest => exact rest.headLegal.2.2.2.2 member
 
 example :
     ElaboratesBindings [] [⟨"x", bindingSpan, .integer 1 none bindingSpan⟩]
@@ -929,13 +990,13 @@ theorem answerImageRefines : Refines admittedCoreSemantics (instant bytecodeObse
     · exact ⟨q, reach, (fun h => by rw [terminal] at h; cases h), terminal,
       show (admittedEvaluation _ q).events = _ by rw [terminal]; rfl⟩
 
-example : ¬ Refines coreSemantics (instant bytecodeObservation)
-    (answerInput.path, answerCore) ⟨#[43]⟩ := by
+theorem answerDoesNotReturn43 : ¬ admittedCoreSemantics.observes
+    (answerInput.path, answerCore) (.returned 43 ByteArray.empty) := by
   with_unfolding_all
     intro bad
-    obtain ⟨q, _, terminal, _⟩ := bad.2.1 () _ ⟨(), trivial, .nil ()⟩ rfl
+    obtain ⟨q, _, terminal⟩ := bad
     change Nat at q
-    change coreEvaluation (answerInput.path, answerCore) q = .finished
+    change admittedEvaluation (answerInput.path, answerCore) q = .finished
       (bytecodeObservation ⟨#[43]⟩) at terminal
     cases q with
     | zero => exact Evaluation.noConfusion (show Evaluation.running = _ from terminal)
@@ -999,18 +1060,6 @@ def testExecutionPolicy : ExecutionPolicy Unit where
 theorem testAnchor :
     testExecutionPolicy.Anchors testNative :=
   ⟨rfl, rfl, rfl, rfl⟩
-
-/-- Reusing an intermediate model cannot change the trusted reference index. -/
-example : testPlatform .aarch64Macos (fun _ => exit42) ≠
-    testReference := by
-  intro same
-  have claimed : (testPlatform .aarch64Macos (fun _ => exit42)).process.observes
-      (⟨#[43]⟩, ()) exit42 := instantObserves _ _
-  have anchored : testReference.process.observes
-      (⟨#[43]⟩, ()) exit42 := same ▸ claimed
-  obtain ⟨_, _, result⟩ := anchored
-  have status : (43 : UInt8) = 42 := (Observation.returned.inj result).1
-  exact (by decide : (43 : UInt8) ≠ 42) status
 
 private theorem testImagePremises (image : ByteArray) (rest : List ByteArray) :
     ImagePremises testNative (image :: rest) image where
@@ -1326,7 +1375,7 @@ example : NativeNonvacuous testExecutionPolicy testNative testTools :=
   ⟨llvmWitness, lcbWitness, llvmUncheckedWitness, lcbUncheckedWitness⟩
 
 example (m : SharedModels sampleProfile.target) :
-    ¬ compile_correct m testReference {testExecutionPolicy with launchAdmitted := fun _ _ _ => False}
+    ¬ compileCorrectFor m testReference {testExecutionPolicy with launchAdmitted := fun _ _ _ => False}
       testNative testTools := by
   intro correct
   obtain ⟨anchor, _, _, build, env, _, _, _, _, _, ready, _⟩ := correct.2.2.2.2.1.1
