@@ -16,7 +16,8 @@
 #   S  defence in depth, lexical: the library builds with warningAsError and nothing in lakefile.toml
 #      can change that or point the build at other sources; the sources, comments stripped and
 #      string literals kept, never spell sorry, sorryAx, admit, native_decide, +native, an
-#      option on `decide`, ofReduceBool, ofReduceNat, trustCompiler or skipKernelTC, and define no
+#      option on `decide` (the compiler may use a single `+kernel`), ofReduceBool, ofReduceNat,
+#      trustCompiler or skipKernelTC, and define no
 #      syntax extension, run no meta code, set no option and import nothing outside the library
 #      (the lexer reads what Lean reads only for syntax it knows).
 #
@@ -51,9 +52,12 @@ else
 fi
 
 BANNED_AXIOM_RE='^(sorryAx|Lean[.]ofReduceBool|Lean[.]ofReduceNat|Lean[.]trustCompiler)$|[.]_native[.]'
-BANNED_WORD_RE='\b(sorry|sorryAx|admit|native_decide|ofReduceBool|ofReduceNat|trustCompiler|skipKernelTC)\b|\+native\b|\bnative»?\s*:=|\bdecide\s*\(\s*config\b|\bdecide\s*[+-]|\bDecide[.]Config\b'
-# `decide` takes no options at all (`decide +native`, `decide (config := ⟨…⟩)` with a positional
-# native flag): a term `decide (p)` is unaffected.
+TRUST_WORD_RE='\b(sorry|sorryAx|admit|native_decide|ofReduceBool|ofReduceNat|trustCompiler|skipKernelTC)\b|\+native\b|\bnative»?\s*:=|\bDecide[.]Config\b'
+BANNED_WORD_RE="$TRUST_WORD_RE"'|\bdecide\s*(?:\(\s*config\b|[+-])'
+# A single +kernel moves closed reduction into Lean's kernel. Keep all other compiler
+# configurations barred, including additional options on subsequent lines.
+DECIDE_CONFIG_ITEM_RE='[+-]|\(\s*(?:«[^»]*»|[^\s():]+)\s*:='
+COMPILER_WORD_RE="$TRUST_WORD_RE|\bdecide\s*(?:(?!\+kernel\b)(?:$DECIDE_CONFIG_ITEM_RE)|\+kernel\b\s*(?:$DECIDE_CONFIG_ITEM_RE))"
 # The source scan is lexical, so it holds only for the syntax it lexes: Lean core's. A syntax
 # extension could make Lean read a literal differently from the scan (a macro taking `s!` before a
 # plain string), so the sources may define none and import nothing outside the library (only Init,
@@ -129,13 +133,37 @@ for command in 'import Lean' 'import Std' 'import Concrete' 'def bad := sorry' '
   fi
 done
 
-# Compiler sources obey the same trust-word/option/extension ban. Compiler imports
+# Compiler sources obey the trust-word, configuration and extension ban. Compiler imports
 # include Lean's premise-reporting API and the pinned backend, so scan their header
 # grammar separately; no compiler file is exempt from the ban.
 mapfile -t COMPILER_SRC < <({ printf "%s\n" Concrete.lean Main.lean; find Concrete -name '*.lean'; } | sort)
-W=$(python3 "$PROOFS_DIR/lean_lex.py" scan-compiler "$BANNED_WORD_RE|$EXTENSION_RE" "${COMPILER_SRC[@]}"); RC=$?
+scan_compiler() { python3 "$PROOFS_DIR/lean_lex.py" scan-compiler "$COMPILER_WORD_RE|$EXTENSION_RE" "$@"; }
+W=$(scan_compiler "${COMPILER_SRC[@]}"); RC=$?
 [ "$RC" = 0 ] && [ -z "$W" ] && ok "all compiler sources obey the trust ban" \
   || no "compiler source scan (rc=$RC): $(printf '%s\n' "$W" | head -5 | tr '\n' '|')"
+
+cat > "$TMP/kernel-decide.lean" <<'EOF'
+namespace KernelDecideControl
+example : 2 + 2 = 4 := by decide +kernel
+example : 2 + 2 = 4 := by decide +native
+example : 2 + 2 = 4 := by decide +kernel +native
+example : 2 + 2 = 4 := by decide +kernel -kernel
+example : 2 + 2 = 4 := by
+  decide +kernel
+    («config» := ⟨false, true, true, false⟩)
+example : 2 + 2 = 4 := by decide (config := ⟨false, true, true, false⟩)
+end KernelDecideControl
+EOF
+W=$(scan_compiler "$TMP/kernel-decide.lean"); RC=$?
+B="$TMP/kernel-decide.lean"
+EXPECT="$B:3: example : 2 + 2 = 4 := by decide +native
+$B:4: example : 2 + 2 = 4 := by decide +kernel +native
+$B:5: example : 2 + 2 = 4 := by decide +kernel -kernel
+$B:7: decide +kernel
+$B:9: example : 2 + 2 = 4 := by decide (config := ⟨false, true, true, false⟩)"
+[ "$RC" = 0 ] && [ "$W" = "$EXPECT" ] \
+  && ok "control: the compiler scan permits a single +kernel and rejects native and other configurations" \
+  || no "control: compiler decide scan (rc=$RC) reported '$W'"
 
 # Read every compiler constant as well, including declarations not reachable from
 # the headline theorem registry. The compiler root must import every source module.

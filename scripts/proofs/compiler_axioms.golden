@@ -1,33 +1,5 @@
 # Per-theorem transitive axioms of Concrete (scripts/proofs/axioms.sh). Regenerate with
 # bash scripts/proofs/axioms.sh --update; review every changed line.
-Add.add.eq_1	
-Applicative.toFunctor.eq_1	
-Array.all.eq_1	propext
-Array.allM.eq_1	propext
-Array.any.eq_1	propext
-Array.append.eq_1	
-Array.filterMap.eq_1	
-Array.foldrM.fold.eq_1	
-Array.foldrM.fold.eq_2	
-Array.getInternal.eq_1	
-Array.instAppend.eq_1	
-Array.instDecidableEq.eq_1	Quot.sound propext
-Array.instDecidableEq.eq_2	Quot.sound propext
-Array.instDecidableEq.eq_3	Quot.sound propext
-Array.instDecidableEq.eq_4	Quot.sound propext
-Array.instDecidableEqImpl.eq_1	Quot.sound propext
-Array.instForIn'InferInstanceMembershipOfMonad.eq_1	propext
-Array.instGetElem?NatLtSize.eq_1	
-Array.instGetElemNatLtSize.eq_1	
-Array.instInhabited.eq_1	
-Array.mapIdx.eq_1	
-Array.mapIdxM.eq_1	
-Array.range.eq_1	propext
-Bool.beq.eq_1	
-Bool.beq.eq_2	
-Bool.decEq.eq_1	
-ByteArray.get.congr_simp	
-ByteArray.get.eq_1	
 Concrete.Admission.Token.mk.inj	
 Concrete.Admission.Token.mk.injEq	propext
 Concrete.Admission.Token.mk.sizeOf_spec	
@@ -99,12 +71,9 @@ Concrete.BIR.BinOp.exact.eq_3
 Concrete.BIR.BinOp.mul.sizeOf_spec	
 Concrete.BIR.BinOp.ofNat_ctorIdx	
 Concrete.BIR.BinOp.sub.sizeOf_spec	
-Concrete.BIR.Block.insts.eq_1	
 Concrete.BIR.Block.mk.inj	
 Concrete.BIR.Block.mk.injEq	propext
 Concrete.BIR.Block.mk.sizeOf_spec	
-Concrete.BIR.Block.params.eq_1	
-Concrete.BIR.Block.term.eq_1	
 Concrete.BIR.BodyResult.diverges.sizeOf_spec	
 Concrete.BIR.BodyResult.returns.inj	
 Concrete.BIR.BodyResult.returns.injEq	propext
@@ -150,7 +119,6 @@ Concrete.BIR.Outcome.toBehaviour.eq_4	propext
 Concrete.BIR.Outcome.trapped.inj	
 Concrete.BIR.Outcome.trapped.injEq	propext
 Concrete.BIR.Outcome.trapped.sizeOf_spec	
-Concrete.BIR.Program.blocks.eq_1	
 Concrete.BIR.Program.mk.inj	
 Concrete.BIR.Program.mk.injEq	propext
 Concrete.BIR.Program.mk.sizeOf_spec	
@@ -679,29 +647,17 @@ Concrete.Backend.LCB.Target.aarch64Linux.sizeOf_spec
 Concrete.Backend.LCB.Target.aarch64Macos.sizeOf_spec	
 Concrete.Backend.LCB.Target.ofNat_ctorIdx	
 Concrete.Backend.LCB.Target.x86_64Linux.sizeOf_spec	
-Concrete.Backend.LCB.adapt.eq_1	propext
-Concrete.Backend.LCB.adaptBlock.eq_1	propext
-Concrete.Backend.LCB.adaptInst.eq_1	propext
-Concrete.Backend.LCB.adaptPhi.eq_1	propext
 Concrete.Backend.LCB.assemble.eq_1	Classical.choice Quot.sound propext
 Concrete.Backend.LCB.assemble.eq_2	Classical.choice Quot.sound propext
 Concrete.Backend.LCB.assemble.eq_3	Classical.choice Quot.sound propext
-Concrete.Backend.LCB.blockBase.eq_1	
-Concrete.Backend.LCB.blockSize.eq_1	
 Concrete.Backend.LCB.edgesTo._sparseCasesOn_1.else_eq	propext
 Concrete.Backend.LCB.edgesTo.eq_1	propext
 Concrete.Backend.LCB.edgesTo.eq_2	propext
 Concrete.Backend.LCB.edgesTo.eq_3	propext
-Concrete.Backend.LCB.edgesTo.eq_def	propext
 Concrete.Backend.LCB.idOf.eq_1	propext
 Concrete.Backend.LCB.ids.eq_1	
 Concrete.Backend.LCB.inProfile.eq_1	
-Concrete.Backend.LCB.incoming.eq_1	propext
 Concrete.Backend.LCB.ins.eq_1	
-Concrete.Backend.LCB.inst.eq_1	propext
-Concrete.Backend.LCB.inst.eq_2	propext
-Concrete.Backend.LCB.inst.eq_3	propext
-Concrete.Backend.LCB.instBase.eq_1	
 Concrete.Backend.LCB.instDecidableEqTarget._proof_1	
 Concrete.Backend.LCB.instDecidableEqTarget._proof_2	
 Concrete.Backend.LCB.instDefs.eq_1	
@@ -711,19 +667,16 @@ Concrete.Backend.LCB.interOffsets.eq_1
 Concrete.Backend.LCB.interOffsets.eq_2	
 Concrete.Backend.LCB.interOffsets.eq_3	
 Concrete.Backend.LCB.intermediates.eq_1	
-Concrete.Backend.LCB.job.eq_1	propext
 Concrete.Backend.LCB.numberingOk.eq_1	
 Concrete.Backend.LCB.opBinary.eq_1	
 Concrete.Backend.LCB.opBinary.eq_2	
 Concrete.Backend.LCB.opBinary.eq_3	
 Concrete.Backend.LCB.operand.eq_1	propext
 Concrete.Backend.LCB.operand.eq_2	propext
-Concrete.Backend.LCB.regId.eq_1	
 Concrete.Backend.LCB.term.eq_1	propext
 Concrete.Backend.LCB.term.eq_2	propext
 Concrete.Backend.LCB.term.eq_3	propext
 Concrete.Backend.LCB.term.eq_4	propext
-Concrete.Backend.LCB.valueCount.eq_1	
 Concrete.Backend.LCB.word.eq_1	propext
 Concrete.Backend.LLVM.Argument.global.inj	
 Concrete.Backend.LLVM.Argument.global.injEq	propext
@@ -2310,126 +2263,6 @@ ConcreteSpec.Surface0.intTySpelling.eq_5
 ConcreteSpec.Surface0.intTySpelling.eq_6	
 ConcreteSpec.Surface0.intTySpelling.eq_7	
 ConcreteSpec.Surface0.intTySpelling.eq_8	
-EmptyCollection.emptyCollection.eq_1	
-ForIn'.forIn'.eq_1	
-ForIn.forIn.eq_1	
-Functor.map.eq_1	
-GetElem?.getElem!.eq_1	
-HAdd.hAdd.eq_1	
-HMod.hMod.eq_1	
-Inhabited.default.eq_1	
-Int.add.eq_1	
-Int.add.eq_2	
-Int.add.eq_3	
-Int.add.eq_4	
-Int.add.eq_def	
-LT.lt.eq_1	
-LeanCompilerBackend.Binary.rhsWidth.eq_1	
-LeanCompilerBackend.Binary.rhsWidth.eq_2	
-LeanCompilerBackend.Binary.rhsWidth.eq_3	
-LeanCompilerBackend.Binary.rhsWidth.eq_4	
-LeanCompilerBackend.Binary.rhsWidth.eq_5	
-LeanCompilerBackend.Binary.rhsWidth.eq_6	
-LeanCompilerBackend.Binary.rhsWidth.eq_7	
-LeanCompilerBackend.Binary.rhsWidth.eq_8	
-LeanCompilerBackend.Binary.rhsWidth.eq_9	
-LeanCompilerBackend.Block.debugLocations.eq_1	
-LeanCompilerBackend.Block.instructions.eq_1	
-LeanCompilerBackend.Block.label.eq_1	
-LeanCompilerBackend.Block.phis.eq_1	
-LeanCompilerBackend.Block.terminator.eq_1	
-LeanCompilerBackend.BoundedDominance.oracleWithWork.eq_1	Classical.choice Quot.sound propext
-LeanCompilerBackend.Function.blocks.eq_1	
-LeanCompilerBackend.Function.customSection.eq_1	
-LeanCompilerBackend.Function.debugFile.eq_1	
-LeanCompilerBackend.Function.locals.eq_1	propext
-LeanCompilerBackend.Function.name.eq_1	
-LeanCompilerBackend.Function.parameters.eq_1	
-LeanCompilerBackend.Function.resultAggregate.eq_1	
-LeanCompilerBackend.Function.resultFloating.eq_1	
-LeanCompilerBackend.Function.resultSubword.eq_1	
-LeanCompilerBackend.Function.resultWidth.eq_1	
-LeanCompilerBackend.Function.variadic.eq_1	
-LeanCompilerBackend.Instruction.callAggregate.eq_1	
-LeanCompilerBackend.Instruction.callSubword.eq_1	
-LeanCompilerBackend.Instruction.destination.eq_1	
-LeanCompilerBackend.Instruction.floating.eq_1	
-LeanCompilerBackend.Instruction.operation.eq_1	
-LeanCompilerBackend.Instruction.width.eq_1	
-LeanCompilerBackend.NameIndex.Lookup.get.eq_1	
-LeanCompilerBackend.NameIndex.Membership.contains.eq_1	
-LeanCompilerBackend.NameIndex.dedup.eq_1	Classical.choice Quot.sound propext
-LeanCompilerBackend.NameIndex.first.eq_1	Classical.choice Quot.sound propext
-LeanCompilerBackend.NameIndex.members.eq_1	Classical.choice Quot.sound propext
-LeanCompilerBackend.NameIndex.position.eq_1	Classical.choice Quot.sound propext
-LeanCompilerBackend.Phi.destination.eq_1	
-LeanCompilerBackend.Phi.floating.eq_1	
-LeanCompilerBackend.Phi.incoming.eq_1	
-LeanCompilerBackend.Phi.width.eq_1	
-LeanCompilerBackend.PredecessorLookup.get.eq_1	
-LeanCompilerBackend.Section.checkAny.eq_1	Classical.choice Quot.sound propext
-LeanCompilerBackend.Section.checkAny.eq_2	Classical.choice Quot.sound propext
-LeanCompilerBackend.Section.checkAny.eq_def	Classical.choice Quot.sound propext
-LeanCompilerBackend.Section.checkELF._sparseCasesOn_1.else_eq	propext
-LeanCompilerBackend.Statement.definition.eq_1	
-LeanCompilerBackend.Statement.definition.eq_2	
-LeanCompilerBackend.Statement.definition.eq_3	
-LeanCompilerBackend.Statement.definition.eq_4	
-LeanCompilerBackend.Statement.definition.eq_5	
-LeanCompilerBackend.Statement.definition.eq_6	
-LeanCompilerBackend.Terminator.successors.eq_def	propext
-LeanCompilerBackend.Verified.CodeArtifact.fragment.eq_1	
-LeanCompilerBackend.Verified.CodeInput.abi.eq_1	
-LeanCompilerBackend.Verified.CodeInput.body.eq_1	
-LeanCompilerBackend.Verified.CodeInput.compilerBuild.eq_1	
-LeanCompilerBackend.Verified.CodeInput.compilerRevision.eq_1	
-LeanCompilerBackend.Verified.CodeInput.consumedFacts.eq_1	
-LeanCompilerBackend.Verified.CodeInput.imports.eq_1	
-LeanCompilerBackend.Verified.CodeInput.layout.eq_1	
-LeanCompilerBackend.Verified.CodeInput.pipeline.eq_1	
-LeanCompilerBackend.Verified.CodeInput.sourceSemantics.eq_1	
-LeanCompilerBackend.Verified.CodeInput.symbol.eq_1	
-LeanCompilerBackend.Verified.CodeInput.target.eq_1	
-LeanCompilerBackend.Verified.CodeInput.targetSemantics.eq_1	
-LeanCompilerBackend.Verified.CodeInput.version.eq_1	
-LeanCompilerBackend.Verified.DebugInput.origins.eq_1	
-LeanCompilerBackend.Verified.DebugInput.sources.eq_1	
-LeanCompilerBackend.Verified.FrameLayout.frameBytes.eq_1	
-LeanCompilerBackend.Verified.FrameLayout.stageOffsets.eq_1	
-LeanCompilerBackend.Verified.FrameLayout.valueOffsets.eq_1	
-LeanCompilerBackend.Verified.FrameLayout.version.eq_1	
-LeanCompilerBackend.Verified.FunctionArtifact.code.eq_1	
-LeanCompilerBackend.Verified.FunctionJob.code.eq_1	
-LeanCompilerBackend.Verified.FunctionJob.debug.eq_1	
-LeanCompilerBackend.Verified.FunctionJob.proof.eq_1	
-LeanCompilerBackend.Verified.FunctionJob.requested.eq_1	
-LeanCompilerBackend.Verified.Reachability.count.eq_1	Classical.choice Quot.sound propext
-LeanCompilerBackend.Verified.Source.Binary.isHighMultiply.eq_1	
-LeanCompilerBackend.Verified.Source.Binary.isHighMultiply.eq_10	
-LeanCompilerBackend.Verified.Source.Binary.isHighMultiply.eq_11	
-LeanCompilerBackend.Verified.Source.Binary.isHighMultiply.eq_2	
-LeanCompilerBackend.Verified.Source.Binary.isHighMultiply.eq_3	
-LeanCompilerBackend.Verified.Source.Binary.isHighMultiply.eq_4	
-LeanCompilerBackend.Verified.Source.Binary.isHighMultiply.eq_5	
-LeanCompilerBackend.Verified.Source.Binary.isHighMultiply.eq_6	
-LeanCompilerBackend.Verified.Source.Binary.isHighMultiply.eq_7	
-LeanCompilerBackend.Verified.Source.Binary.isHighMultiply.eq_8	
-LeanCompilerBackend.Verified.Source.Binary.isHighMultiply.eq_9	
-LeanCompilerBackend.Verified.Source.Block.instructions.eq_1	
-LeanCompilerBackend.Verified.Source.Block.phis.eq_1	
-LeanCompilerBackend.Verified.Source.Block.terminator.eq_1	
-LeanCompilerBackend.Verified.Source.Function.blocks.eq_1	
-LeanCompilerBackend.Verified.Source.Function.parameters.eq_1	
-LeanCompilerBackend.Verified.Source.Function.resultWidth.eq_1	
-LeanCompilerBackend.Verified.Source.Function.valueWidths.eq_1	
-LeanCompilerBackend.Verified.Source.Instruction.destination.eq_1	
-LeanCompilerBackend.Verified.Source.Instruction.operation.eq_1	
-LeanCompilerBackend.Verified.Source.Instruction.width.eq_1	
-LeanCompilerBackend.Verified.Source.Phi.destination.eq_1	
-LeanCompilerBackend.Verified.Source.Phi.incoming.eq_1	
-LeanCompilerBackend.Verified.Source.Phi.width.eq_1	
-LeanCompilerBackend.Verified.Source.Value.constant.eq_1	propext
-LeanCompilerBackend.Verified.Source.Value.constant.eq_2	propext
 LeanCompilerBackend.Verified.Source.Value.toNat.eq_1	
 LeanCompilerBackend.Verified.Source.Value.toNat.eq_2	
 LeanCompilerBackend.Verified.Source.Value.width.eq_1	
@@ -2457,185 +2290,15 @@ LeanCompilerBackend.Verified.Source.evaluateComparison.eq_3
 LeanCompilerBackend.Verified.Source.evaluateComparison.eq_4	
 LeanCompilerBackend.Verified.Source.evaluateComparison.eq_5	
 LeanCompilerBackend.Verified.Source.initial.eq_1	Quot.sound propext
-LeanCompilerBackend.Verified.Source.instDecidableEqFunction.decEq.eq_1	Quot.sound propext
-LeanCompilerBackend.Verified.Source.instDecidableEqFunction.eq_1	Quot.sound propext
 LeanCompilerBackend.Verified.Source.read._sparseCasesOn_1.else_eq	propext
 LeanCompilerBackend.Verified.Source.read.eq_1	propext
 LeanCompilerBackend.Verified.Source.read.eq_2	propext
 LeanCompilerBackend.Verified.Source.step.eq_1	Quot.sound propext
 LeanCompilerBackend.Verified.Source.write.eq_1	propext
-LeanCompilerBackend.Verified.StackMIR.Block.instructions.eq_1	
-LeanCompilerBackend.Verified.StackMIR.Block.label.eq_1	
-LeanCompilerBackend.Verified.StackMIR.Block.terminator.eq_1	
-LeanCompilerBackend.Verified.StackMIR.Function.blocks.eq_1	
-LeanCompilerBackend.Verified.StackMIR.Function.layout.eq_1	
-LeanCompilerBackend.Verified.StackMIR.Function.parameters.eq_1	
-LeanCompilerBackend.Verified.StackMIR.Function.resultWidth.eq_1	
-LeanCompilerBackend.Verified.StackMIR.Function.valueWidths.eq_1	
-LeanCompilerBackend.Verified.StackMIR.Register.index.eq_1	
-LeanCompilerBackend.Verified.StackMIR.Register.index.eq_2	
-LeanCompilerBackend.Verified.StackMIR.Register.index.eq_3	
-LeanCompilerBackend.Verified.StackMIR.commitPhis.eq_1	
-LeanCompilerBackend.Verified.StackMIR.commitPhis.eq_2	
-LeanCompilerBackend.Verified.StackMIR.commitPhis.eq_def	
-LeanCompilerBackend.Verified.StackMIR.instDecidableEqLabel.decEq.eq_1	
-LeanCompilerBackend.Verified.StackMIR.instDecidableEqLabel.decEq.eq_2	
-LeanCompilerBackend.Verified.StackMIR.instDecidableEqLabel.decEq.eq_3	
-LeanCompilerBackend.Verified.StackMIR.instDecidableEqLabel.decEq.eq_4	
-LeanCompilerBackend.Verified.StackMIR.instDecidableEqLabel.decEq.eq_5	
-LeanCompilerBackend.Verified.StackMIR.instDecidableEqLabel.decEq.eq_6	
-LeanCompilerBackend.Verified.StackMIR.instDecidableEqLabel.decEq.eq_7	
-LeanCompilerBackend.Verified.StackMIR.instDecidableEqLabel.decEq.eq_8	
-LeanCompilerBackend.Verified.StackMIR.instDecidableEqLabel.decEq.eq_9	
-LeanCompilerBackend.Verified.StackMIR.instDecidableEqLabel.eq_1	
-LeanCompilerBackend.Verified.StackMIR.labelSet.eq_1	Classical.choice Quot.sound propext
-LeanCompilerBackend.Verified.StackMIR.loadOperand.eq_1	
-LeanCompilerBackend.Verified.StackMIR.loadOperand.eq_2	
-LeanCompilerBackend.Verified.StackMIR.lower.eq_1	Classical.choice Quot.sound propext
-LeanCompilerBackend.Verified.StackMIR.lowerInstruction.eq_1	
-LeanCompilerBackend.Verified.StackMIR.offset.eq_1	
-LeanCompilerBackend.Verified.StackMIR.offset.eq_2	
-LeanCompilerBackend.Verified.StackMIR.validate._sparseCasesOn_1.else_eq	propext
-LeanCompilerBackend.Verified.StackMIR.validate._sparseCasesOn_11.else_eq	propext
-LeanCompilerBackend.Verified.StackMIR.validate._sparseCasesOn_6.else_eq	propext
-LeanCompilerBackend.Verified.StackMIR.validate.eq_1	Classical.choice Quot.sound propext
-LeanCompilerBackend.Verified.Symbol.exported.eq_1	
-LeanCompilerBackend.Verified.Symbol.name.eq_1	
-LeanCompilerBackend.Verified.Symbol.namespaceName.eq_1	
-LeanCompilerBackend.Verified.TypedA64.Block.instructions.eq_1	
-LeanCompilerBackend.Verified.TypedA64.Block.label.eq_1	
-LeanCompilerBackend.Verified.TypedA64.Condition.spelling.eq_1	
-LeanCompilerBackend.Verified.TypedA64.Condition.spelling.eq_2	
-LeanCompilerBackend.Verified.TypedA64.Condition.spelling.eq_3	
-LeanCompilerBackend.Verified.TypedA64.Condition.spelling.eq_4	
-LeanCompilerBackend.Verified.TypedA64.Condition.spelling.eq_5	
-LeanCompilerBackend.Verified.TypedA64.Function.blocks.eq_1	
-LeanCompilerBackend.Verified.TypedA64.Function.frameBytes.eq_1	
-LeanCompilerBackend.Verified.TypedA64.Function.parameters.eq_1	
-LeanCompilerBackend.Verified.TypedA64.Instruction.checkedALU.eq_1	
-LeanCompilerBackend.Verified.TypedA64.labelName.eq_1	Classical.choice Quot.sound propext
-LeanCompilerBackend.Verified.TypedA64.labelName.eq_2	Classical.choice Quot.sound propext
-LeanCompilerBackend.Verified.TypedA64.labelName.eq_3	Classical.choice Quot.sound propext
 LeanCompilerBackend.Verified.TypedA64.renderWithWork.eq_1	Classical.choice Quot.sound propext
-LeanCompilerBackend.Verified.TypedA64.select.eq_1	Classical.choice Quot.sound propext
-LeanCompilerBackend.Verified.TypedA64.selectInstruction.eq_1	Quot.sound propext
-LeanCompilerBackend.Verified.TypedA64.selectInstruction.eq_10	Quot.sound propext
-LeanCompilerBackend.Verified.TypedA64.selectInstruction.eq_11	Quot.sound propext
-LeanCompilerBackend.Verified.TypedA64.selectInstruction.eq_12	Quot.sound propext
-LeanCompilerBackend.Verified.TypedA64.selectInstruction.eq_13	Quot.sound propext
-LeanCompilerBackend.Verified.TypedA64.selectInstruction.eq_14	Quot.sound propext
-LeanCompilerBackend.Verified.TypedA64.selectInstruction.eq_15	Quot.sound propext
-LeanCompilerBackend.Verified.TypedA64.selectInstruction.eq_16	Quot.sound propext
-LeanCompilerBackend.Verified.TypedA64.selectInstruction.eq_2	Quot.sound propext
-LeanCompilerBackend.Verified.TypedA64.selectInstruction.eq_3	Quot.sound propext
-LeanCompilerBackend.Verified.TypedA64.selectInstruction.eq_4	Quot.sound propext
-LeanCompilerBackend.Verified.TypedA64.selectInstruction.eq_5	Quot.sound propext
-LeanCompilerBackend.Verified.TypedA64.selectInstruction.eq_6	Quot.sound propext
-LeanCompilerBackend.Verified.TypedA64.selectInstruction.eq_7	Quot.sound propext
-LeanCompilerBackend.Verified.TypedA64.selectInstruction.eq_8	Quot.sound propext
-LeanCompilerBackend.Verified.TypedA64.selectInstruction.eq_9	Quot.sound propext
-LeanCompilerBackend.Verified.TypedA64.validate._sparseCasesOn_1.else_eq	propext
-LeanCompilerBackend.Verified.TypedA64.validate._sparseCasesOn_2.else_eq	propext
-LeanCompilerBackend.Verified.TypedA64.validate._sparseCasesOn_5.else_eq	propext
-LeanCompilerBackend.Verified.TypedA64.validate.eq_1	Classical.choice Quot.sound propext
-LeanCompilerBackend.Verified.admitWithWork.eq_1	Classical.choice Quot.sound propext
 LeanCompilerBackend.Verified.compileFunction.eq_1	Classical.choice Quot.sound propext
 LeanCompilerBackend.Verified.compileFunctionWithWork.eq_1	Classical.choice Quot.sound propext
-LeanCompilerBackend.Verified.planAbi.eq_1	
-LeanCompilerBackend.Verified.planFrame.eq_1	propext
-LeanCompilerBackend.Verified.reify.eq_1	propext
-LeanCompilerBackend.Verified.validateJob.eq_1	Classical.choice Quot.sound propext
-LeanCompilerBackend.Verified.validateJobWithWork.eq_1	Classical.choice Quot.sound propext
-LeanCompilerBackend.Verified.validateSource.eq_1	Classical.choice Quot.sound propext
-LeanCompilerBackend.Verified.validateSourceWithWork.eq_1	Classical.choice Quot.sound propext
-LeanCompilerBackend.Width.bits.eq_1	
-LeanCompilerBackend.Width.bits.eq_2	
-LeanCompilerBackend.Width.bytes.eq_1	
-LeanCompilerBackend.Width.ctorIdx.eq_1	
-LeanCompilerBackend.instBEqWidth.beq.eq_1	
-LeanCompilerBackend.instDecidableEqWidth.eq_1	
-LeanCompilerBackend.predecessorLookup.eq_1	Classical.choice Quot.sound propext
-LeanCompilerBackend.validGlobalName.eq_1	Classical.choice Quot.sound propext
-LeanCompilerBackend.validIdentifier.eq_1	Classical.choice Quot.sound propext
-LeanCompilerBackend.validateFunctionWithWork.eq_1	Classical.choice Quot.sound propext
-List.foldrTR.eq_1	
-List.head!.eq_1	
-List.head!.eq_2	
-List.instForIn'InferInstanceMembershipOfMonad.eq_1	propext
-List.instOrd.eq_1	propext
-Max.max.eq_1	
-Min.min.eq_1	
-Mod.mod.eq_1	
-Nat.digitChar.eq_1	
-Nat.repr.eq_1	
-Nat.toDigits.eq_1	
-Nat.toDigitsCore.eq_1	
-Nat.toDigitsCore.eq_2	
-Nat.toDigitsCore.eq_def	
-NatCast.natCast.eq_1	
-Option.isNone.eq_1	
-Option.isNone.eq_2	
-Ord.compare.eq_1	
-Std.DTreeMap.Const.get?.eq_1	Classical.choice Quot.sound propext
-Std.DTreeMap.Internal.Impl.SizedBalancedTree.impl.eq_1	
-Std.DTreeMap.Internal.Impl.balanceL.eq_1	Quot.sound propext
-Std.DTreeMap.Internal.Impl.balanceL.eq_2	Quot.sound propext
-Std.DTreeMap.Internal.Impl.balanceL.eq_3	Quot.sound propext
-Std.DTreeMap.Internal.Impl.balanceL.eq_4	Quot.sound propext
-Std.DTreeMap.Internal.Impl.balanceL.eq_5	Quot.sound propext
-Std.DTreeMap.Internal.Impl.balanceL.eq_6	Quot.sound propext
-Std.DTreeMap.Internal.Impl.balanceL.eq_7	Quot.sound propext
-Std.DTreeMap.Internal.Impl.balanceLErase.eq_1	Quot.sound propext
-Std.DTreeMap.Internal.Impl.balanceLErase.eq_2	Quot.sound propext
-Std.DTreeMap.Internal.Impl.balanceLErase.eq_3	Quot.sound propext
-Std.DTreeMap.Internal.Impl.balanceLErase.eq_4	Quot.sound propext
-Std.DTreeMap.Internal.Impl.balanceLErase.eq_5	Quot.sound propext
-Std.DTreeMap.Internal.Impl.balanceLErase.eq_6	Quot.sound propext
-Std.DTreeMap.Internal.Impl.balanceLErase.eq_7	Quot.sound propext
-Std.DTreeMap.Internal.Impl.balanceR.eq_1	Quot.sound propext
-Std.DTreeMap.Internal.Impl.balanceR.eq_2	Quot.sound propext
-Std.DTreeMap.Internal.Impl.balanceR.eq_3	Quot.sound propext
-Std.DTreeMap.Internal.Impl.balanceR.eq_4	Quot.sound propext
-Std.DTreeMap.Internal.Impl.balanceR.eq_5	Quot.sound propext
-Std.DTreeMap.Internal.Impl.balanceR.eq_6	Quot.sound propext
-Std.DTreeMap.Internal.Impl.balanceR.eq_7	Quot.sound propext
-Std.DTreeMap.empty.eq_1	Classical.choice Quot.sound propext
-Std.DTreeMap.erase.eq_1	Classical.choice Quot.sound propext
-Std.DTreeMap.inner.eq_1	Classical.choice Quot.sound propext
-Std.DTreeMap.insert.eq_1	Classical.choice Quot.sound propext
-Std.DTreeMap.insertIfNew.eq_1	Classical.choice Quot.sound propext
-Std.DTreeMap.size.eq_1	Classical.choice Quot.sound propext
-Std.Legacy.Range.forIn'.eq_1	Quot.sound propext
-Std.Legacy.Range.instForIn'NatInferInstanceMembershipOfMonad.eq_1	Quot.sound propext
 Std.Legacy.Range.mk.congr_simp	
-Std.Legacy.Range.start.eq_1	
-Std.Legacy.Range.step.eq_1	
-Std.Legacy.Range.stop.eq_1	
-Std.TreeMap.contains.eq_1	Classical.choice Quot.sound propext
-Std.TreeMap.empty.eq_1	Classical.choice Quot.sound propext
-Std.TreeMap.erase.eq_1	Classical.choice Quot.sound propext
-Std.TreeMap.get?.eq_1	Classical.choice Quot.sound propext
-Std.TreeMap.inner.eq_1	Classical.choice Quot.sound propext
-Std.TreeMap.insert.eq_1	Classical.choice Quot.sound propext
-Std.TreeMap.insertIfNew.eq_1	Classical.choice Quot.sound propext
-Std.TreeMap.instEmptyCollection.eq_1	Classical.choice Quot.sound propext
-Std.TreeMap.instGetElem?Mem.eq_1	Classical.choice Quot.sound propext
-Std.TreeMap.size.eq_1	Classical.choice Quot.sound propext
-Std.TreeSet.contains.eq_1	Classical.choice Quot.sound propext
-Std.TreeSet.empty.eq_1	Classical.choice Quot.sound propext
-Std.TreeSet.inner.eq_1	Classical.choice Quot.sound propext
-Std.TreeSet.insert.eq_1	Classical.choice Quot.sound propext
-Std.TreeSet.instEmptyCollection.eq_1	Classical.choice Quot.sound propext
-Std.TreeSet.size.eq_1	Classical.choice Quot.sound propext
-String.Pos.Raw.byteIdx.eq_1	
-String.intercalate.eq_1	propext
-String.intercalate.eq_2	propext
-String.isEmpty.eq_1	
-String.length.eq_1	Classical.choice Quot.sound propext
-Subtype.val.eq_1	
-ToString.toString.eq_1	
-UInt8.lt.eq_1	
-UInt8.toBitVec.eq_1	
 _private.Concrete.Admission.0.Concrete.Admission.Output.mk.inj	
 _private.Concrete.Admission.0.Concrete.Admission.Output.mk.injEq	propext
 _private.Concrete.Admission.0.Concrete.Admission.Output.mk.sizeOf_spec	
@@ -3447,45 +3110,19 @@ _private.Concrete.Stages.0.Concrete.Stages.memory.eq_1
 _private.Concrete.Stages.0.Concrete.Stages.stages.eq_1	Classical.choice Quot.sound propext
 _private.Concrete.Stages.0.Except.map.match_1.eq_1	
 _private.Concrete.Stages.0.Except.map.match_1.eq_2	
-_private.Concrete.Theorem.0.Array.filterMapM.match_1.eq_1	
-_private.Concrete.Theorem.0.Array.filterMapM.match_1.eq_2	
-_private.Concrete.Theorem.0.Array.foldlM.loop.match_1.eq_1	
-_private.Concrete.Theorem.0.Array.foldlM.loop.match_1.eq_2	
-_private.Concrete.Theorem.0.Array.forIn'.loop.match_1.eq_1	
-_private.Concrete.Theorem.0.Array.forIn'.loop.match_1.eq_2	
-_private.Concrete.Theorem.0.Array.instDecidableEq.match_1.eq_1	
-_private.Concrete.Theorem.0.Array.instDecidableEq.match_1.eq_2	
-_private.Concrete.Theorem.0.Array.instDecidableEqImpl.match_1.eq_1	
-_private.Concrete.Theorem.0.Array.instDecidableEqImpl.match_1.eq_2	
-_private.Concrete.Theorem.0.Array.isEqvAux.match_1.eq_1	
-_private.Concrete.Theorem.0.Array.isEqvAux.match_1.eq_2	
-_private.Concrete.Theorem.0.Bool.Internal.and.match_1.eq_1	
-_private.Concrete.Theorem.0.Bool.Internal.and.match_1.eq_2	
-_private.Concrete.Theorem.0.ByteArray.get.match_1.eq_1	
-_private.Concrete.Theorem.0.Concrete.Backend.LCB.Inst.width.match_1.eq_1	
-_private.Concrete.Theorem.0.Concrete.Backend.LCB.Inst.width.match_1.eq_2	
-_private.Concrete.Theorem.0.Concrete.Backend.LCB.Inst.width.match_1.eq_3	
-_private.Concrete.Theorem.0.Concrete.Backend.LCB.adaptBlock.match_1.eq_1	
-_private.Concrete.Theorem.0.Concrete.Backend.LCB.adaptPhi.match_1.eq_1	
-_private.Concrete.Theorem.0.Concrete.Backend.LCB.adaptPhi.match_1.eq_2	
-_private.Concrete.Theorem.0.Concrete.Backend.LCB.adaptPhi.match_3.eq_1	
 _private.Concrete.Theorem.0.Concrete.Backend.LCB.assemble.match_1.eq_1	
 _private.Concrete.Theorem.0.Concrete.Backend.LCB.assemble.match_3.eq_1	
 _private.Concrete.Theorem.0.Concrete.Backend.LCB.assemble.match_3.eq_2	
 _private.Concrete.Theorem.0.Concrete.Backend.LCB.assemble.match_3.eq_3	
-_private.Concrete.Theorem.0.Concrete.Backend.LCB.edgesTo.match_1.eq_1	propext
-_private.Concrete.Theorem.0.Concrete.Backend.LCB.edgesTo.match_1.eq_2	propext
-_private.Concrete.Theorem.0.Concrete.Backend.LCB.edgesTo.match_1.eq_3	propext
-_private.Concrete.Theorem.0.Concrete.Backend.LCB.idOf.match_1.eq_1	
-_private.Concrete.Theorem.0.Concrete.Backend.LCB.idOf.match_1.eq_2	
-_private.Concrete.Theorem.0.Concrete.Backend.LCB.ids.match_1.eq_1	
-_private.Concrete.Theorem.0.Concrete.Backend.LCB.ids.match_3.eq_1	
-_private.Concrete.Theorem.0.Concrete.Backend.LCB.ids.match_5.eq_1	
-_private.Concrete.Theorem.0.Concrete.Backend.LCB.ids.match_7.eq_1	
 _private.Concrete.Theorem.0.Concrete.Backend.lcbTerminal.match_1.eq_1	propext
 _private.Concrete.Theorem.0.Concrete.Backend.lcbTerminal.match_1.eq_2	propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.answerBIRAssembly	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.answerBIRAssembly._proof_1_1	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.answerBIRAssembly._proof_1_2	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.answerBIRAssembly._proof_1_3	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.answerBIRAssembly._proof_1_4	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.answerBIRJob	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.answerBIRJob._proof_1_1	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.assembleMacOS	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.coreTerminates	Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.effectModel._proof_1	
@@ -3510,625 +3147,17 @@ _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.testLLVMAnswerMarker	Cl
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.testLLVMPremises	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.testLLVMTrapMarker	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapBIRAssembly	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapBIRAssembly._proof_1_1	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapBIRAssembly._proof_1_2	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapBIRAssembly._proof_1_3	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapBIRAssembly._proof_1_4	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapBIRJob	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapBIRJob._proof_1_1	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapCore._proof_1	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapStatic	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapTerminates	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.additionBinders_append	propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.elaboratesBindings_origins	propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.elaboratesExpr_origins	propext
-_private.Concrete.Theorem.0.Except.toBool.match_1.eq_1	
-_private.Concrete.Theorem.0.Except.toBool.match_1.eq_2	
-_private.Concrete.Theorem.0.Int.add.match_1.eq_1	
-_private.Concrete.Theorem.0.Int.add.match_1.eq_2	
-_private.Concrete.Theorem.0.Int.add.match_1.eq_3	
-_private.Concrete.Theorem.0.Int.add.match_1.eq_4	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Binary.rhsWidth.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Binary.rhsWidth.match_1.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Binary.rhsWidth.match_1.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Binary.rhsWidth.match_1.eq_4	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Binary.rhsWidth.match_1.eq_5	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Binary.rhsWidth.match_1.eq_6	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Binary.rhsWidth.match_1.eq_7	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Binary.rhsWidth.match_1.eq_8	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Binary.rhsWidth.match_1.eq_9	
-_private.Concrete.Theorem.0.LeanCompilerBackend.BoundedDominance.maskIndex.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.BoundedDominance.nextVisit.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.BoundedDominance.nextVisit.match_1.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.BoundedDominance.nextVisit.match_3.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.BoundedDominance.nextVisit.match_3.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.BoundedDominance.nextVisit.match_3.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.BoundedDominance.packedSolveWithWork.match_1.eq_1	Classical.choice Quot.sound propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.BoundedDominance.packedSolveWithWork.match_1.eq_2	Classical.choice Quot.sound propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.BoundedDominance.packedSolveWithWork.match_4.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.BoundedDominance.packedSolveWithWork.match_6.eq_1	Classical.choice Quot.sound propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.BoundedDominance.packedStep.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.BoundedDominance.sweepRows.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.BoundedDominance.sweepRows.match_1.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.BoundedDominance.visit.match_1.eq_1	Classical.choice Quot.sound propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.BoundedDominance.visit.match_1.eq_2	Classical.choice Quot.sound propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.BoundedDominance.visit.match_3.eq_1	Classical.choice Quot.sound propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.BoundedDominance.visit.match_3.eq_2	Classical.choice Quot.sound propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.BoundedDominance.visit.match_5.eq_1	Classical.choice Quot.sound propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.NameIndex.compareBytes.match_1.eq_1	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.NameIndex.compareBytes.match_1.eq_2	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Section.checkAny.match_1.eq_1	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Section.checkAny.match_1.eq_2	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Statement.definition.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Statement.definition.match_1.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Statement.definition.match_1.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Statement.definition.match_1.eq_4	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Statement.definition.match_1.eq_5	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Statement.definition.match_1.eq_6	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Terminator.successors.match_1.eq_1	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Terminator.successors.match_1.eq_2	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Terminator.successors.match_1.eq_3	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.Reachability.round.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.Source.Binary.isHighMultiply.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.Source.Binary.isHighMultiply.match_1.eq_10	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.Source.Binary.isHighMultiply.match_1.eq_11	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.Source.Binary.isHighMultiply.match_1.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.Source.Binary.isHighMultiply.match_1.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.Source.Binary.isHighMultiply.match_1.eq_4	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.Source.Binary.isHighMultiply.match_1.eq_5	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.Source.Binary.isHighMultiply.match_1.eq_6	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.Source.Binary.isHighMultiply.match_1.eq_7	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.Source.Binary.isHighMultiply.match_1.eq_8	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.Source.Binary.isHighMultiply.match_1.eq_9	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.Source.Value.constant.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.Source.Value.constant.match_1.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.Source.instDecidableEqFunction.decEq.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.checkAccess.match_1.eq_1	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.checkAccess.match_1.eq_2	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.instDecidableEqLabel.decEq.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.instDecidableEqLabel.decEq.match_1.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.instDecidableEqLabel.decEq.match_1.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.instDecidableEqLabel.decEq.match_1.eq_4	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.instDecidableEqLabel.decEq.match_1.eq_5	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.instDecidableEqLabel.decEq.match_1.eq_6	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.instDecidableEqLabel.decEq.match_1.eq_7	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.instDecidableEqLabel.decEq.match_1.eq_8	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.instDecidableEqLabel.decEq.match_1.eq_9	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.instReprRegister.repr.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.instReprRegister.repr.match_1.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.instReprRegister.repr.match_1.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.instReprSlot.repr.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.instReprSlot.repr.match_1.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.instReprTerminator.repr.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.instReprTerminator.repr.match_1.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.instReprTerminator.repr.match_1.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.loadOperand.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.loadOperand.match_1.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.lower.match_3.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.lower.match_3.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.lower.match_3.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.lower.match_5.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.lowerEdge.match_1.eq_1	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.lowerEdge.match_1.eq_2	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.lowerInstruction.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.lowerInstruction.match_1.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.lowerInstruction.match_1.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.lowerInstruction.match_1.eq_4	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.lowerPreparedTarget.match_1.eq_1	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.lowerPreparedTarget.match_1.eq_2	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.offset.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.offset.match_1.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.stageIndexedPhis.match_1.eq_1	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.stageIndexedPhis.match_1.eq_2	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.stagePhis.match_4.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.stagePhis.match_4.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.stageReadsUsing.match_1.eq_1	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.stageReadsUsing.match_1.eq_2	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.stageReadsUsing.match_1.eq_3	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.stageReadsUsing.match_5.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.validate.match_1.eq_1	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.validate.match_1.eq_2	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.validate.match_11.eq_1	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.validate.match_11.eq_2	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.validate.match_4.eq_1	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.validate.match_4.eq_2	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.validate.match_6.eq_1	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.validate.match_6.eq_2	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.validate.match_6.eq_3	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.validate.match_6.eq_4	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.validate.match_6.eq_5	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.validate.match_6.eq_6	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.validate.match_9.eq_1	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.StackMIR.validate.match_9.eq_2	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.instReprCondition.repr.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.instReprCondition.repr.match_1.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.instReprCondition.repr.match_1.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.instReprCondition.repr.match_1.eq_4	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.instReprCondition.repr.match_1.eq_5	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.instReprInstruction.repr.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.instReprInstruction.repr.match_1.eq_10	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.instReprInstruction.repr.match_1.eq_11	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.instReprInstruction.repr.match_1.eq_12	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.instReprInstruction.repr.match_1.eq_13	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.instReprInstruction.repr.match_1.eq_14	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.instReprInstruction.repr.match_1.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.instReprInstruction.repr.match_1.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.instReprInstruction.repr.match_1.eq_4	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.instReprInstruction.repr.match_1.eq_5	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.instReprInstruction.repr.match_1.eq_6	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.instReprInstruction.repr.match_1.eq_7	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.instReprInstruction.repr.match_1.eq_8	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.instReprInstruction.repr.match_1.eq_9	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.labelName.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.labelName.match_1.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.labelName.match_1.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.permitsWord.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.permitsWord.match_1.eq_10	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.permitsWord.match_1.eq_11	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.permitsWord.match_1.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.permitsWord.match_1.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.permitsWord.match_1.eq_4	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.permitsWord.match_1.eq_5	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.permitsWord.match_1.eq_6	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.permitsWord.match_1.eq_7	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.permitsWord.match_1.eq_8	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.permitsWord.match_1.eq_9	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.selectBlock.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.selectBlock.match_1.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.selectBlock.match_1.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.selectInstruction.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.selectInstruction.match_1.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.selectInstruction.match_1.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.selectInstruction.match_1.eq_4	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.selectInstruction.match_1.eq_5	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.selectInstruction.match_3.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.selectInstruction.match_3.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.selectInstruction.match_3.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.selectInstruction.match_3.eq_4	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.selectInstruction.match_5.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.selectInstruction.match_5.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.selectInstruction.match_5.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.selectInstruction.match_5.eq_4	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.selectInstruction.match_5.eq_5	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.selectInstruction.match_5.eq_6	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.selectInstruction.match_5.eq_7	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.selectInstruction.match_5.eq_8	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.selectInstruction.match_5.eq_9	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.validate.match_1.eq_1	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.validate.match_1.eq_2	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.validate.match_5.eq_1	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.validate.match_5.eq_2	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.validate.match_5.eq_3	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.validate.match_8.eq_1	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.TypedA64.validate.match_8.eq_2	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.admitUsing.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.admitUsing.match_1.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.admitUsing.match_1.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.admitUsing.match_1.eq_4	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.admitUsing.match_1.eq_5	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.admitUsing.match_1.eq_6	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.admitUsing.match_3.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.admitUsing.match_3.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.admitUsing.match_3.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.admitUsing.match_3.eq_4	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.admitUsing.match_3.eq_5	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.admitUsing.match_5.eq_1	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.admitUsing.match_5.eq_2	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.binary.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.binary.match_1.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.binary.match_1.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.binary.match_1.eq_4	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.binary.match_1.eq_5	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.binary.match_1.eq_6	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.binary.match_1.eq_7	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.binary.match_1.eq_8	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.binary.match_1.eq_9	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.comparison.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.comparison.match_1.eq_10	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.comparison.match_1.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.comparison.match_1.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.comparison.match_1.eq_4	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.comparison.match_1.eq_5	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.comparison.match_1.eq_6	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.comparison.match_1.eq_7	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.comparison.match_1.eq_8	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.comparison.match_1.eq_9	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.compileFunctionWithWork.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.instruction.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.instruction.match_1.eq_10	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.instruction.match_1.eq_11	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.instruction.match_1.eq_12	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.instruction.match_1.eq_13	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.instruction.match_1.eq_14	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.instruction.match_1.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.instruction.match_1.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.instruction.match_1.eq_4	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.instruction.match_1.eq_5	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.instruction.match_1.eq_6	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.instruction.match_1.eq_7	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.instruction.match_1.eq_8	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.instruction.match_1.eq_9	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.lowerIncoming.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.operand.match_1.eq_1	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.operand.match_1.eq_2	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.operand.match_3.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.operand.match_3.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.operand.match_3.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.operand.match_3.eq_4	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.reify.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.reify.match_3.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.reify.match_3.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.reify.match_3.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.reifyBinary.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.reifyBinary.match_1.eq_10	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.reifyBinary.match_1.eq_11	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.reifyBinary.match_1.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.reifyBinary.match_1.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.reifyBinary.match_1.eq_4	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.reifyBinary.match_1.eq_5	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.reifyBinary.match_1.eq_6	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.reifyBinary.match_1.eq_7	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.reifyBinary.match_1.eq_8	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.reifyBinary.match_1.eq_9	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.reifyOperand.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.reifyOperand.match_1.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.reifyOperation.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.reifyOperation.match_1.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.reifyOperation.match_1.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.reifyOperation.match_1.eq_4	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.reifyOperation.match_1.eq_5	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.reifyOperation.match_3.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.reifyOperation.match_3.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.reifyOperation.match_3.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.reifyOperation.match_3.eq_4	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.reifyOperation.match_5.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.reifyOperation.match_5.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.reifyOperation.match_5.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.reifyOperation.match_5.eq_4	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.selectIn.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.shape.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.shape.match_1.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.shape.match_1.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.shape.match_1.eq_4	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.validateSourceWithWork.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.valueId.match_1.eq_1	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.Verified.valueId.match_1.eq_2	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.addPredecessors.match_1.eq_1	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.addPredecessors.match_1.eq_2	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.addPredecessors.match_1.eq_3	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.checkOperand.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.checkOperand.match_1.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.checkOperand.match_3.eq_1	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.checkOperand.match_3.eq_2	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.checkOperand.match_6.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.checkOperand.match_6.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.checkOperand.match_6.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.checkOperand.match_6.eq_4	
-_private.Concrete.Theorem.0.LeanCompilerBackend.instHashableWidth.hash.match_1.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.instHashableWidth.hash.match_1.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.statementDefinition.match_1.eq_1	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.statementDefinition.match_1.eq_2	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.statementDefinition.match_4.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.statementDefinition.match_6.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_1.eq_1	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_1.eq_2	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_14.eq_1	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_14.eq_2	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_14.eq_3	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_14.eq_4	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_14.eq_5	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_14.eq_6	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_14.eq_7	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_14.eq_8	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_14.eq_9	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_20.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_20.eq_10	
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_20.eq_11	
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_20.eq_12	
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_20.eq_13	
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_20.eq_14	
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_20.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_20.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_20.eq_4	
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_20.eq_5	
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_20.eq_6	
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_20.eq_7	
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_20.eq_8	
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_20.eq_9	
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_22.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_22.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_22.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_22.eq_4	
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_22.eq_5	
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_22.eq_6	
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_24.eq_1	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_24.eq_2	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_24.eq_3	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_24.eq_4	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_27.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_27.eq_2	
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_27.eq_3	
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_27.eq_4	
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_29.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_5.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_7.eq_1	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_7.eq_2	propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.match_9.eq_1	
-_private.Concrete.Theorem.0.LeanCompilerBackend.validationBlockLookup.match_1.eq_1	Classical.choice Quot.sound propext
-_private.Concrete.Theorem.0.LeanCompilerBackend.validationBlockLookup.match_1.eq_2	Classical.choice Quot.sound propext
-_private.Concrete.Theorem.0.List.any.match_1.eq_1	
-_private.Concrete.Theorem.0.List.any.match_1.eq_2	
-_private.Concrete.Theorem.0.List.filter.match_1.eq_1	
-_private.Concrete.Theorem.0.List.filter.match_1.eq_2	
-_private.Concrete.Theorem.0.List.filterMap.match_1.eq_1	
-_private.Concrete.Theorem.0.List.filterMap.match_1.eq_2	
-_private.Concrete.Theorem.0.List.forIn'.loop.match_3.eq_1	
-_private.Concrete.Theorem.0.List.forIn'.loop.match_3.eq_2	
-_private.Concrete.Theorem.0.List.get.match_1.eq_1	
-_private.Concrete.Theorem.0.List.get.match_1.eq_2	
-_private.Concrete.Theorem.0.List.getLast!.match_1.eq_1	
-_private.Concrete.Theorem.0.List.getLast!.match_1.eq_2	
-_private.Concrete.Theorem.0.Nat.toDigitsCore.match_1.eq_1	
-_private.Concrete.Theorem.0.Nat.toDigitsCore.match_1.eq_2	
-_private.Concrete.Theorem.0.Option.instBEq.beq.match_1.eq_1	
-_private.Concrete.Theorem.0.Option.instBEq.beq.match_1.eq_2	
-_private.Concrete.Theorem.0.Option.instBEq.beq.match_1.eq_3	
-_private.Concrete.Theorem.0.Option.isSome.match_1.eq_1	
-_private.Concrete.Theorem.0.Option.isSome.match_1.eq_2	
-_private.Concrete.Theorem.0.Ordering.swap.match_1.eq_1	
-_private.Concrete.Theorem.0.Ordering.swap.match_1.eq_2	
-_private.Concrete.Theorem.0.Ordering.swap.match_1.eq_3	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.balanceL.match_1.eq_1	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.balanceL.match_1.eq_2	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.balanceL.match_1.eq_3	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.balanceL.match_1.eq_4	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.balanceL.match_1.eq_5	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.balanceL.match_3.eq_1	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.balanceL.match_3.eq_2	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.balanceL.match_3.eq_3	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.balanceL.match_5.eq_1	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.balanceL.match_5.eq_2	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.balanceL.match_7.eq_1	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.balanceL.match_7.eq_2	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.balanceLErase.match_1.eq_1	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.balanceLErase.match_1.eq_2	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.balanceLErase.match_1.eq_3	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.balanceLErase.match_1.eq_4	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.balanceLErase.match_1.eq_5	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.balanceLErase.match_5.eq_1	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.balanceLErase.match_5.eq_2	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.balanceLErase.match_7.eq_1	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.balanceLErase.match_7.eq_2	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.balanceR.match_1.eq_1	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.balanceR.match_1.eq_2	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.balanceR.match_1.eq_3	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.balanceR.match_1.eq_4	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.balanceR.match_1.eq_5	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.contains.match_1.eq_1	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.contains.match_1.eq_2	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.contains.match_1.eq_3	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.erase.match_1.eq_1	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.insert.match_1.eq_1	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.insert.match_3.eq_1	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.insert.match_3.eq_2	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.insert.match_3.eq_3	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.insertMin.match_3.eq_1	
-_private.Concrete.Theorem.0.Std.DTreeMap.Internal.Impl.insertMin.match_3.eq_2	
-_private.Concrete.Theorem.0.Std.Legacy.Range.forIn'.loop.match_1.eq_1	
-_private.Concrete.Theorem.0.Std.Legacy.Range.forIn'.loop.match_1.eq_2	
-_private.Concrete.Theorem.0.String.intercalate.go.match_1.eq_1	
-_private.Concrete.Theorem.0.String.intercalate.go.match_1.eq_2	
-_private.Concrete.Theorem.0.String.intercalate.match_1.eq_1	
-_private.Concrete.Theorem.0.String.intercalate.match_1.eq_2	
-_private.Concrete.Theorem.0.instDecidableEqProd.match_3.eq_1	
-_private.Init.Data.Range.Basic.0.Std.Legacy.Range.forIn'.loop.eq_1	Quot.sound propext
-_private.Init.Data.String.Defs.0.String.intercalate.go.eq_1	propext
-_private.Init.Data.String.Defs.0.String.intercalate.go.eq_2	propext
-_private.Init.Data.String.Defs.0.String.intercalate.go.eq_def	propext
-_private.LeanCompilerBackend.BoundedDominance.0.LeanCompilerBackend.BoundedDominance.Rows.belowCheck.eq_1	propext
-_private.LeanCompilerBackend.BoundedDominance.0.LeanCompilerBackend.BoundedDominance.VisitStep.expand.congr_simp	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.BoundedDominance.0.LeanCompilerBackend.BoundedDominance.WorkResult.changes.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.BoundedDominance.0.LeanCompilerBackend.BoundedDominance.WorkResult.values.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.BoundedDominance.0.LeanCompilerBackend.BoundedDominance.WorkResult.visits.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.BoundedDominance.0.LeanCompilerBackend.BoundedDominance.buildEquations.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.BoundedDominance.0.LeanCompilerBackend.BoundedDominance.dependents.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.BoundedDominance.0.LeanCompilerBackend.BoundedDominance.indexedRows.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.BoundedDominance.0.LeanCompilerBackend.BoundedDominance.indexedRowsFast.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.BoundedDominance.0.LeanCompilerBackend.BoundedDominance.intersect.eq_1	propext
-_private.LeanCompilerBackend.BoundedDominance.0.LeanCompilerBackend.BoundedDominance.nextVisit.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.BoundedDominance.0.LeanCompilerBackend.BoundedDominance.nextVisit.eq_2	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.BoundedDominance.0.LeanCompilerBackend.BoundedDominance.nextVisit.eq_3	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.BoundedDominance.0.LeanCompilerBackend.BoundedDominance.nextVisit.eq_def	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.BoundedDominance.0.LeanCompilerBackend.BoundedDominance.oracleCountedPacked.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.BoundedDominance.0.LeanCompilerBackend.BoundedDominance.packedBlocks.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.BoundedDominance.0.LeanCompilerBackend.BoundedDominance.packedInitial.eq_1	
-_private.LeanCompilerBackend.BoundedDominance.0.LeanCompilerBackend.BoundedDominance.packedSolveWithWork.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.BoundedDominance.0.LeanCompilerBackend.BoundedDominance.readPacked.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.BoundedDominance.0.LeanCompilerBackend.BoundedDominance.readWith.eq_1	propext
-_private.LeanCompilerBackend.BoundedDominance.0.LeanCompilerBackend.BoundedDominance.reversePostorder.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.BoundedDominance.0.LeanCompilerBackend.BoundedDominance.tableValues.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.BoundedDominance.0.LeanCompilerBackend.BoundedDominance.visit.congr_simp	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.BoundedDominance.0.LeanCompilerBackend.BoundedDominance.visit.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.BoundedDominance.0.LeanCompilerBackend.BoundedDominance.visit.eq_def	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.NameIndex.0.LeanCompilerBackend.NameIndex.dedupIndexed.congr_simp	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.NameIndex.0.LeanCompilerBackend.NameIndex.dedupIndexed.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.NameIndex.0.LeanCompilerBackend.NameIndex.firstIndexed.congr_simp	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.NameIndex.0.LeanCompilerBackend.NameIndex.firstIndexed.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.NameIndex.0.LeanCompilerBackend.NameIndex.membersIndexed.congr_simp	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.NameIndex.0.LeanCompilerBackend.NameIndex.membersIndexed.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.NameIndex.0.LeanCompilerBackend.NameIndex.positionIndexed.congr_simp	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.NameIndex.0.LeanCompilerBackend.NameIndex.positionIndexed.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Validate.0.LeanCompilerBackend.Definition.block.eq_1	
-_private.LeanCompilerBackend.Validate.0.LeanCompilerBackend.Definition.floating.eq_1	
-_private.LeanCompilerBackend.Validate.0.LeanCompilerBackend.Definition.name.eq_1	
-_private.LeanCompilerBackend.Validate.0.LeanCompilerBackend.Definition.position.eq_1	
-_private.LeanCompilerBackend.Validate.0.LeanCompilerBackend.Definition.width.eq_1	
-_private.LeanCompilerBackend.Validate.0.LeanCompilerBackend.addPredecessors._sparseCasesOn_1.else_eq	propext
-_private.LeanCompilerBackend.Validate.0.LeanCompilerBackend.checkAggregate.eq_1	
-_private.LeanCompilerBackend.Validate.0.LeanCompilerBackend.checkOperand._sparseCasesOn_3.else_eq	propext
-_private.LeanCompilerBackend.Validate.0.LeanCompilerBackend.checkOperand.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Validate.0.LeanCompilerBackend.checkOperand.eq_2	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Validate.0.LeanCompilerBackend.checkOperand.eq_3	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Validate.0.LeanCompilerBackend.checkOperand.eq_4	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Validate.0.LeanCompilerBackend.checkSection.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Validate.0.LeanCompilerBackend.checkSubword.eq_1	
-_private.LeanCompilerBackend.Validate.0.LeanCompilerBackend.collectIndexed.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Validate.0.LeanCompilerBackend.collectReference.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Validate.0.LeanCompilerBackend.indexDefinition.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Validate.0.LeanCompilerBackend.insertDefinition.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Validate.0.LeanCompilerBackend.phiDefinition.eq_1	
-_private.LeanCompilerBackend.Validate.0.LeanCompilerBackend.predecessorLookupIndexed.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Validate.0.LeanCompilerBackend.statementDefinition._sparseCasesOn_1.else_eq	propext
-_private.LeanCompilerBackend.Validate.0.LeanCompilerBackend.statementDefinition.eq_1	propext
-_private.LeanCompilerBackend.Validate.0.LeanCompilerBackend.statementDefinition.eq_2	Quot.sound propext
-_private.LeanCompilerBackend.Validate.0.LeanCompilerBackend.validName.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Validate.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing._sparseCasesOn_14.else_eq	propext
-_private.LeanCompilerBackend.Validate.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing._sparseCasesOn_15.else_eq	propext
-_private.LeanCompilerBackend.Validate.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing._sparseCasesOn_24.else_eq	propext
-_private.LeanCompilerBackend.Validate.0.LeanCompilerBackend.validateFunctionGraphWithWorkUsing.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Validate.0.LeanCompilerBackend.validationBlockLookup.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Validate.0.LeanCompilerBackend.validationBlockLookup.eq_2	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.IncomingOrder.select.eq_1	
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.IncomingOrders.forTarget.eq_1	
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.IncomingReader.read.eq_1	
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.IncomingReaders.forTarget.eq_1	
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.admitUsing.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.admitWithWorkIndexed.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.binary.eq_1	
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.binary.eq_2	
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.binary.eq_3	
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.binary.eq_4	
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.binary.eq_5	
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.binary.eq_6	
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.binary.eq_7	
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.binary.eq_8	
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.binary.eq_9	
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.blockId.eq_1	propext
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.comparison.eq_1	
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.comparison.eq_10	
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.comparison.eq_2	
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.comparison.eq_3	
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.comparison.eq_4	
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.comparison.eq_5	
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.comparison.eq_6	
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.comparison.eq_7	
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.comparison.eq_8	
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.comparison.eq_9	
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.incomingOrdersIndexed.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.instruction.eq_1	propext
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.limit.eq_1	
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.lowerIncoming.eq_1	propext
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.operand.eq_1	propext
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.operand.eq_2	propext
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.operand.eq_3	propext
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.operand.eq_4	propext
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.prepareOrders.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.reachableCount.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.readIncomingUsing.eq_1	propext
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.readerUsing.eq_1	propext
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.readersUsing.eq_1	propext
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.selectKnown.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.valueId._sparseCasesOn_1.else_eq	propext
-_private.LeanCompilerBackend.Verified.Admission.0.LeanCompilerBackend.Verified.valueId.eq_1	propext
-_private.LeanCompilerBackend.Verified.Canonical.0.LeanCompilerBackend.Verified.blockName.eq_1	propext
-_private.LeanCompilerBackend.Verified.Canonical.0.LeanCompilerBackend.Verified.reifyBinary.eq_1	
-_private.LeanCompilerBackend.Verified.Canonical.0.LeanCompilerBackend.Verified.reifyBinary.eq_10	
-_private.LeanCompilerBackend.Verified.Canonical.0.LeanCompilerBackend.Verified.reifyBinary.eq_11	
-_private.LeanCompilerBackend.Verified.Canonical.0.LeanCompilerBackend.Verified.reifyBinary.eq_2	
-_private.LeanCompilerBackend.Verified.Canonical.0.LeanCompilerBackend.Verified.reifyBinary.eq_3	
-_private.LeanCompilerBackend.Verified.Canonical.0.LeanCompilerBackend.Verified.reifyBinary.eq_4	
-_private.LeanCompilerBackend.Verified.Canonical.0.LeanCompilerBackend.Verified.reifyBinary.eq_5	
-_private.LeanCompilerBackend.Verified.Canonical.0.LeanCompilerBackend.Verified.reifyBinary.eq_6	
-_private.LeanCompilerBackend.Verified.Canonical.0.LeanCompilerBackend.Verified.reifyBinary.eq_7	
-_private.LeanCompilerBackend.Verified.Canonical.0.LeanCompilerBackend.Verified.reifyBinary.eq_8	
-_private.LeanCompilerBackend.Verified.Canonical.0.LeanCompilerBackend.Verified.reifyBinary.eq_9	
-_private.LeanCompilerBackend.Verified.Canonical.0.LeanCompilerBackend.Verified.reifyOperand.eq_1	propext
-_private.LeanCompilerBackend.Verified.Canonical.0.LeanCompilerBackend.Verified.reifyOperand.eq_2	propext
-_private.LeanCompilerBackend.Verified.Canonical.0.LeanCompilerBackend.Verified.reifyOperation.eq_1	propext
-_private.LeanCompilerBackend.Verified.Canonical.0.LeanCompilerBackend.Verified.reifyOperation.eq_10	propext
-_private.LeanCompilerBackend.Verified.Canonical.0.LeanCompilerBackend.Verified.reifyOperation.eq_11	propext
-_private.LeanCompilerBackend.Verified.Canonical.0.LeanCompilerBackend.Verified.reifyOperation.eq_2	propext
-_private.LeanCompilerBackend.Verified.Canonical.0.LeanCompilerBackend.Verified.reifyOperation.eq_3	propext
-_private.LeanCompilerBackend.Verified.Canonical.0.LeanCompilerBackend.Verified.reifyOperation.eq_4	propext
-_private.LeanCompilerBackend.Verified.Canonical.0.LeanCompilerBackend.Verified.reifyOperation.eq_5	propext
-_private.LeanCompilerBackend.Verified.Canonical.0.LeanCompilerBackend.Verified.reifyOperation.eq_6	propext
-_private.LeanCompilerBackend.Verified.Canonical.0.LeanCompilerBackend.Verified.reifyOperation.eq_7	propext
-_private.LeanCompilerBackend.Verified.Canonical.0.LeanCompilerBackend.Verified.reifyOperation.eq_8	propext
-_private.LeanCompilerBackend.Verified.Canonical.0.LeanCompilerBackend.Verified.reifyOperation.eq_9	propext
-_private.LeanCompilerBackend.Verified.Canonical.0.LeanCompilerBackend.Verified.shape.eq_1	propext
-_private.LeanCompilerBackend.Verified.Canonical.0.LeanCompilerBackend.Verified.valueName.eq_1	propext
-_private.LeanCompilerBackend.Verified.Job.0.LeanCompilerBackend.Verified.validSymbol.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.Job.0.LeanCompilerBackend.Verified.validateDebug.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.Reachability.0.LeanCompilerBackend.Verified.Reachability.Frontier.pending.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.Reachability.0.LeanCompilerBackend.Verified.Reachability.Frontier.seen.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.Reachability.0.LeanCompilerBackend.Verified.Reachability.discover.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.Reachability.0.LeanCompilerBackend.Verified.Reachability.expand.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.StackMIR.0.LeanCompilerBackend.Verified.StackMIR.EdgeLowerer.lower.eq_1	
-_private.LeanCompilerBackend.Verified.StackMIR.0.LeanCompilerBackend.Verified.StackMIR.IndexedPhi.incoming.eq_1	
-_private.LeanCompilerBackend.Verified.StackMIR.0.LeanCompilerBackend.Verified.StackMIR.IndexedPhi.phi.eq_1	
-_private.LeanCompilerBackend.Verified.StackMIR.0.LeanCompilerBackend.Verified.StackMIR.TargetPhis.commits.eq_1	
-_private.LeanCompilerBackend.Verified.StackMIR.0.LeanCompilerBackend.Verified.StackMIR.TargetPhis.indexed.eq_1	
-_private.LeanCompilerBackend.Verified.StackMIR.0.LeanCompilerBackend.Verified.StackMIR.checkAccess._sparseCasesOn_1.else_eq	propext
-_private.LeanCompilerBackend.Verified.StackMIR.0.LeanCompilerBackend.Verified.StackMIR.checkAccess.eq_1	propext
-_private.LeanCompilerBackend.Verified.StackMIR.0.LeanCompilerBackend.Verified.StackMIR.checkAccess.eq_2	Quot.sound propext
-_private.LeanCompilerBackend.Verified.StackMIR.0.LeanCompilerBackend.Verified.StackMIR.checkAccess.eq_def	propext
-_private.LeanCompilerBackend.Verified.StackMIR.0.LeanCompilerBackend.Verified.StackMIR.edgeLowerers.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.StackMIR.0.LeanCompilerBackend.Verified.StackMIR.edgeLowerersIndexed.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.StackMIR.0.LeanCompilerBackend.Verified.StackMIR.keyedLabels.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.StackMIR.0.LeanCompilerBackend.Verified.StackMIR.labelSetIndexed.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.StackMIR.0.LeanCompilerBackend.Verified.StackMIR.labelSetUsing.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.StackMIR.0.LeanCompilerBackend.Verified.StackMIR.lowerPreparedTarget.eq_1	propext
-_private.LeanCompilerBackend.Verified.StackMIR.0.LeanCompilerBackend.Verified.StackMIR.stageReads.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.StackMIR.0.LeanCompilerBackend.Verified.StackMIR.stageReadsIndexed.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.StackMIR.0.LeanCompilerBackend.Verified.StackMIR.stageReadsUsing._sparseCasesOn_1.else_eq	propext
-_private.LeanCompilerBackend.Verified.StackMIR.0.LeanCompilerBackend.Verified.StackMIR.stageReadsUsing._sparseCasesOn_2.else_eq	propext
-_private.LeanCompilerBackend.Verified.StackMIR.0.LeanCompilerBackend.Verified.StackMIR.stageReadsUsing.eq_1	propext
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.checkAccess.eq_1	
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.header.eq_1	propext
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.immediate.eq_1	Quot.sound propext
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.mnemonic.eq_1	
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.mnemonic.eq_10	
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.mnemonic.eq_11	
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.mnemonic.eq_2	
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.mnemonic.eq_3	
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.mnemonic.eq_4	
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.mnemonic.eq_5	
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.mnemonic.eq_6	
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.mnemonic.eq_7	
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.mnemonic.eq_8	
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.mnemonic.eq_9	
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.permitsWord.eq_1	
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.permitsWord.eq_10	
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.permitsWord.eq_11	
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.permitsWord.eq_2	
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.permitsWord.eq_3	
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.permitsWord.eq_4	
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.permitsWord.eq_5	
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.permitsWord.eq_6	
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.permitsWord.eq_7	
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.permitsWord.eq_8	
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.permitsWord.eq_9	
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.readable.eq_1	
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.register.eq_1	propext
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.renderInstruction.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.renderInstruction.eq_10	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.renderInstruction.eq_11	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.renderInstruction.eq_12	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.renderInstruction.eq_13	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.renderInstruction.eq_14	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.renderInstruction.eq_2	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.renderInstruction.eq_3	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.renderInstruction.eq_4	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.renderInstruction.eq_5	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.renderInstruction.eq_6	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.renderInstruction.eq_7	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.renderInstruction.eq_8	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.renderInstruction.eq_9	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.renderLines.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.selectBlock.eq_1	Quot.sound propext
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.validName.eq_1	Classical.choice Quot.sound propext
-_private.LeanCompilerBackend.Verified.TypedA64.0.LeanCompilerBackend.Verified.TypedA64.writable.eq_1	
-compareOfLessAndEq.congr_simp	Quot.sound
-instBEqProd.eq_1	
-instDecidableEqBool.eq_1	
-instForInOfForIn'.eq_1	
-instHAdd.eq_1	
-instHMod.eq_1	
-instInhabitedOption.eq_1	
-maxOfLe.eq_1	
-minOfLe.eq_1	
+_private.Concrete.Theorem.0.Except.map.match_1.eq_1	
+_private.Concrete.Theorem.0.Except.map.match_1.eq_2	

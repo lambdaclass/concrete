@@ -1214,12 +1214,35 @@ theorem testLLVMHandoffs (bir : BIR.Program) (image : ByteArray) :
     LLVMHandoffs sampleProfile testTools testResolve bir (testLLVMBuild bir image) :=
   ⟨rfl, ⟨samplePin, _, rfl, rfl, rfl, rfl⟩, ⟨linkerPin, _, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩
 
-private theorem assembleMacOS {f : Source.Function}
-    (ok : (LCB.assemble .aarch64Macos f).isOk = true) :
+private theorem assembleMacOS {f : Source.Function} {stack : StackMIR.Function}
+    {asm : TypedA64.Function} (jobOK : validateJob (LCB.job f) = .ok ())
+    (lower : StackMIR.lower f (planFrame f) = .ok stack)
+    (stackOK : StackMIR.validate stack = .ok ())
+    (select : TypedA64.select stack = .ok asm)
+    (asmOK : TypedA64.validate asm = .ok ()) :
     ∃ text, LCB.assemble .aarch64Macos f = .ok text := by
-  cases assembled : LCB.assemble .aarch64Macos f with
-  | ok text => exact ⟨text, rfl⟩
-  | error error => simp [assembled, Except.toBool] at ok
+  have render : ∃ text lines, TypedA64.renderWithWork asm LCB.bodySymbol = .ok (text, lines) := by
+    simp only [TypedA64.renderWithWork, asmOK, bind, Except.bind]
+    exact ⟨_, _, rfl⟩
+  obtain ⟨text, lines, render⟩ := render
+  have checked : ∃ work, validateJobWithWork (LCB.job f) = .ok work := by
+    rw [← validateJobWithWork_result] at jobOK
+    cases h : validateJobWithWork (LCB.job f) with
+    | ok work => exact ⟨work, rfl⟩
+    | error err =>
+      rw [h] at jobOK
+      cases jobOK
+  obtain ⟨work, checked⟩ := checked
+  refine ⟨".text\n" ++ text ++ ".subsections_via_symbols\n", ?_⟩
+  have requested : ((LCB.job f).requested != EvidenceRequest.none) = false := rfl
+  have body : (LCB.job f).code.body = f := rfl
+  have layout : (LCB.job f).code.layout = planFrame f := rfl
+  have symbol : (LCB.job f).code.symbol = LCB.bodySymbol := rfl
+  simp only [LCB.assemble, compileFunction, compileFunctionWithWork, checked, bind, Except.bind,
+    Except.mapError, requested, Bool.false_eq_true, ite_false, body, layout, lower, stackOK,
+    select, asmOK, symbol, render]
+  rfl
+
 
 private theorem testLCBHandoffs (bir : BIR.Program) (image : ByteArray) (assembly : String)
     (emit : LCB.emit bir = .ok ((testLCBBuild bir image assembly).source, bir.sites))
@@ -1266,29 +1289,42 @@ private theorem trapStatic : ConformanceStatic trapCore := by
 private theorem trapTerminates : SourceTerminates trapInput.path trapCore :=
   coreTerminates _ _ (overflowObservation trapInput.path) 1 rfl (returnAtOne rfl rfl)
 
--- Normalize the numbered source before evaluating the backend's indexed
--- checks, so their proofs do not repeatedly unfold the fixture adapter.
+-- Check each closed stage in the kernel, then compose its result with
+-- assembleMacOS. This avoids elaborator reduction through the indexed checks
+-- and keeps their equation lemmas out of this module's environment.
 private theorem answerBIRJob : validateJob (LCB.job (testLCBBuild answerBIR answerImage "").source) = .ok () := by
-  change validateJob (LCB.job ((LCB.adapt answerBIR).toOption.getD ⟨.word, #[], #[], #[]⟩)) = _
-  conv => lhs; arg 1; arg 1; cbv
-  cbv
+  decide +kernel
 
 private theorem answerBIRAssembly : ∃ text, LCB.assemble .aarch64Macos (testLCBBuild answerBIR answerImage "").source = .ok text := by
-  apply assembleMacOS
-  change (LCB.assemble .aarch64Macos ((LCB.adapt answerBIR).toOption.getD ⟨.word, #[], #[], #[]⟩)).isOk = _
-  conv => lhs; arg 1; arg 2; cbv
-  cbv
+  let f := (testLCBBuild answerBIR answerImage "").source
+  let stack := (StackMIR.lower f (planFrame f)).toOption.getD ⟨#[], .word, #[], planFrame f, #[]⟩
+  let asm := (TypedA64.select stack).toOption.getD ⟨#[], .word, 0, #[]⟩
+  apply assembleMacOS answerBIRJob (stack := stack) (asm := asm)
+  · dsimp only [f, stack]
+    decide +kernel
+  · dsimp only [f, stack]
+    decide +kernel
+  · dsimp only [f, stack, asm]
+    decide +kernel
+  · dsimp only [f, stack, asm]
+    decide +kernel
 
 private theorem trapBIRJob : validateJob (LCB.job (testLCBBuild trapBIR trapImage "").source) = .ok () := by
-  change validateJob (LCB.job ((LCB.adapt trapBIR).toOption.getD ⟨.word, #[], #[], #[]⟩)) = _
-  conv => lhs; arg 1; arg 1; cbv
-  cbv
+  decide +kernel
 
 private theorem trapBIRAssembly : ∃ text, LCB.assemble .aarch64Macos (testLCBBuild trapBIR trapImage "").source = .ok text := by
-  apply assembleMacOS
-  change (LCB.assemble .aarch64Macos ((LCB.adapt trapBIR).toOption.getD ⟨.word, #[], #[], #[]⟩)).isOk = _
-  conv => lhs; arg 1; arg 2; cbv
-  cbv
+  let f := (testLCBBuild trapBIR trapImage "").source
+  let stack := (StackMIR.lower f (planFrame f)).toOption.getD ⟨#[], .word, #[], planFrame f, #[]⟩
+  let asm := (TypedA64.select stack).toOption.getD ⟨#[], .word, 0, #[]⟩
+  apply assembleMacOS trapBIRJob (stack := stack) (asm := asm)
+  · dsimp only [f, stack]
+    decide +kernel
+  · dsimp only [f, stack]
+    decide +kernel
+  · dsimp only [f, stack, asm]
+    decide +kernel
+  · dsimp only [f, stack, asm]
+    decide +kernel
 
 private theorem firstLLVMByte (bir : BIR.Program) (first : String) (rest : List String)
     (pieces : ((LLVM.moduleItems bir).flatMap LLVM.Item.pieces).map LLVM.Piece.render = first :: rest)
