@@ -329,71 +329,38 @@ above; the harness owns its commit. Measured source SHA-256 values:
 
 ## R-0700 Law applicability recovery
 
-Run `scripts/proofs/nonvacuity.sh` inside `nix develop` for the B0b audit or
-pass `--controls` for the control suite. The audit compares the source tree
-with the imported specification modules, counts authored `Law` theorems, and
-kernel-compares each registered proof with the derived joint applicability
-proposition. A registered closed application supplies its actual arguments.
-The checker constructs and kernel-checks the existential from those
-arguments, without taking evidence from the application's result. The
-source declaration does not enter the Law census. The audit reports missing
-registrations and refuses shapes with no supported applicability
-interpretation. The audit remains a standalone command while coverage is
-incomplete. It is outside the required CI checks and remains a B0b closure
-obligation in [ISS-0104](../../ISSUES.tsv).
+Run `scripts/proofs/nonvacuity.sh` inside `nix develop` for the B0b audit
+or pass `--controls` for the control suite. The census compares the source tree
+with the imported specification modules and counts authored `Law` theorems.
+Every explicit binder contributes to the witness proposition. For example, a
+Law with binders `(n : Nat) (h : n = 0)` requires a registered theorem of type
+`∃ n : Nat, n = 0 ∧ True`. Dependent proof binders remain existential so
+later domains can refer to the proof. The kernel compares the complete witness
+type by definitional equality. The transitive witness axiom check permits
+`propext` under the existing proof policy.
 
-An existential conclusion retains its original body and any nested
-applicability obligation at the same witness. Proposition-valued domains
-are inspected for nested telescopes. Data domains are inspected through
-their instantiated constructor fields and unsupported proof carriers are
-refused. Equality of propositions is checked like a biconditional.
-Predicate and container equalities are refused when their operand types
-carry propositions or unsupported proof fields. Pairwise conclusions are
-incomplete until the checker can certify that the witness exercises the
-relation. Double negation retains the inner obligation.
+The final conclusion contributes zero evidence. A residual implication,
+conditional, match or iff is refused with a request to restate the Law using
+explicit premises. Definitions in the conclusion stay folded. Zero explicit
+premises give the obligation `True`. A Law with satisfiable explicit premises
+can therefore receive credit even when its conclusion or a premise contains
+an internally vacuous proposition. This is a check of joint premise
+satisfiability.
 
-A disjunction needs proofs and applicability evidence for both arms at
-the same inputs. Conjunctions also retain their common inputs. For a
-conditional, kernel reduction selects the arm at the witness's inputs.
-The witness supplies the selected guard where applicable, the arm's
-conclusion and premises, and an independent counterexample to the arm with
-its selector removed. A tautological fallback cannot have such a
-counterexample. Unsupported or unresolved obligations fail closed.
+The four archived empty-list counterfeits and their projected variant are
+refused as match conclusions. The recovered projection, matcher and induction
+proof bodies are exercised with two registrations. The conclusion proof
+itself fails the type comparison, and an independent proof of the shared
+satisfiable telescope passes. Forged subject metadata leaves the obligation
+unchanged. Census and registration controls reject synthetic example
+spellings, omitted Laws and registrations outside the Law inventory.
+R-0219 owns proof-body, subject and mutant provenance.
 
-The exact closed empty-list store, wildcard, combined, and trap counterfeits
-from `fixtures/N2-Typed-Contracts.lean` at archived revision
-`8563ea20158be606aad867dac3f798b5dd1ef1b3` are runnable controls.
-The checker requires selection of a substantive arm and reduces projection
-wrappers without evaluating the discriminant operation. For `Exec.evalArgs`
-the selected arm must also have a nonempty operand list, since the empty
-list succeeds without running an operand. The controls kernel-check that the
-derived obligations are uninhabited for the empty-list counterfeits,
-including the projected variant.
-The success and trap Laws have registered witnesses that run operands in
-the instrumented interpreter. The counterfeit types can no longer receive
-credit from `True`.
+The N8a let and helper-chain controls and the reachable joint-helper
+counterfeit supply exact witness types. Their transitive user axioms cause
+refusal. A closed application proof has to supply a separate theorem of the
+required witness type to earn audit credit.
 
-The old subtype, packed conjunction, product and sigma projection, Boolean
-and natural cases, matcher, nested matcher, cast and let, nested existential
-field, and recursive induction fixtures have a shared satisfiable telescope
-`∀ n, (n < n + 1 ∧ True) → n < n + 1`. An explicit witness at `n = 2`
-passes applicability. Whether the Law's proof actually routes evidence through
-the tested premise remains an R-0219 proof-body provenance obligation, as do
-the original fieldless subject, erased application, and missing rooted subject
-probes. The metadata control checks that forged subject metadata leaves the
-derived applicability proposition unchanged. The census and registration
-controls reject reserved synthetic examples as sources of coverage.
-
-The N8a let and helper-chain controls, and the reachable joint-helper
-counterfeit, supply exact witness types. Their proofs reach user axioms and
-are refused. The named standard axiom `propext` is admitted for an explicit
-applicability witness under the authoritative proof policy. Other primitive
-dependencies remain visible as incomplete, including when they are reachable
-from the statement. The stopped solver's primitive-transfer policy,
-supplied-contradiction policy, and proof-body analysis budget remain open
-under R-0219.
-
-[ISS-0104](../../ISSUES.tsv) tracks remaining registrations, unsupported
-contract shapes, independently checking more than two disjoint conjunction
-cases beneath a data binder, B0b gate wiring, and sharing orphan cleanup. The audit
-continues to fail when any Law is missing coverage.
+The audit stays outside required CI while coverage is incomplete. Missing,
+mismatched, unsupported or untrusted entries keep the full audit red.
+[ISS-0104](../../ISSUES.tsv) tracks the remaining registrations and B0b wiring.

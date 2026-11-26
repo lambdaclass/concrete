@@ -2,16 +2,14 @@ import Lean
 import ConcreteSpec
 
 /-!
-A Law earns non-vacuity credit when a closed, kernel-checked witness supplies
-concrete values for every universal variable and proofs of every hypothesis
-instantiated at those same values, including hypotheses introduced by
-proposition values and proof-valued arguments. The original conditional
-selector must reduce at those values. The witness supplies the selected
-arm's guard where applicable, its premises and conclusion, and a
-counterexample to the arm with the selector removed. This rules out
-tautological fallbacks. Missing, unsupported or untrusted evidence receives
-no credit. The elaborated specification defines the Law inventory
-independently of the witness registry.
+A Law is non-vacuous iff its explicit premises are jointly satisfiable.
+The audit telescopes every binder and generates an existential over the
+whole telescope ending in True, using conjunction for proof premises
+when the rest of the telescope does not depend on the proof. A registered
+kernel-checked theorem must have exactly that type up to definitional
+equality and satisfy the witness axiom policy. The conclusion contributes
+no evidence. A residual implication, conditional, match or iff requires
+restating the Law with explicit premises.
 -/
 
 open Lean Meta
@@ -27,321 +25,32 @@ private def hasTag (tag doc : String) : Bool :=
 private def category (doc : String) : Option String :=
   ["Law", "Helper", "Representation", "Instance", "Planted"].find? (hasTag · doc)
 
-private def combinePremises (left right : Expr) : Expr :=
-  if left.isConstOf ``True then right
-  else if right.isConstOf ``True then left
-  else mkApp2 (mkConst ``And) left right
+private partial def exposeConclusion (expr : Expr) : MetaM Expr := withIncRecDepth do
+  let expr := expr.consumeMData
+  let reduced := expr.getAppFn.betaRev expr.getAppRevArgs (useZeta := true)
+  if reduced != expr then return ← exposeConclusion reduced
+  match expr with
+  | .letE _ _ value body _ => exposeConclusion (body.instantiate1 value)
+  | other => pure other
 
-private def closePremises (args : Array Expr) (body : Expr) : MetaM Expr :=
-  args.foldrM (fun arg result => do mkAppM ``Exists #[← mkLambdaFVars #[arg] result]) body
-
--- Only unfold a definition at the head. Never reduce its discriminant.
-private def unfoldContractAlias (type : Expr) : MetaM (Option Expr) := do
-  let .const head levels := type.getAppFn | return none
-  let env ← getEnv
-  if isMatcherLikeCore env head || [``ite, ``dite].contains head then return none
-  let some (.defnInfo info) := env.find? head | return none
-  return some (mkAppN (info.value.instantiateLevelParams info.levelParams levels) type.getAppArgs)
-
--- Reduce only the projection shell. In particular, keep a conditional or
--- operation in the selected field intact for applicability analysis.
-private partial def reduceProjection? (expr : Expr) : MetaM (Option Expr) := withIncRecDepth do
-  let head := expr.getAppFn
-  let args := expr.getAppArgs
-  let (subject, field, remaining) ← match head with
-    | .proj _ field subject => pure (subject, field, args)
-    | .const name _ => do
-      let some info := (← getEnv).getProjectionFnInfo? name | return none
-      let some subject := args[info.numParams]? | return none
-      pure (subject, info.i, args.extract (info.numParams + 1) args.size)
-    | _ => return none
-  let some value ← fieldValue? subject field | return none
-  return some (mkAppN value remaining)
-where
-  fieldValue? (subject : Expr) (field : Nat) : MetaM (Option Expr) := withIncRecDepth do
-    let subject := subject.consumeMData.headBeta
-    if let .letE _ _ value body _ := subject then
-      return ← fieldValue? (body.instantiate1 value) field
-    if let some value ← projectCore? subject field then return some value
-    if let some reduced ← reduceProjection? subject then return ← fieldValue? reduced field
-    if let some unfolded ← unfoldContractAlias subject then return ← fieldValue? unfolded field
-    return none
-
-/-- Refute the arm with the selector removed. Quantifying its local context
-makes the counterexample independent of the applicability inputs, while
-retaining dependency between the counterexample's own inputs. -/
-private def armCounterexample (body : Expr) : MetaM Expr := do
-  let mut required := mkApp (mkConst ``Not) body
-  for id in (← getLCtx).getFVarIds.reverse do
-    if required.containsFVar id then
-      required ← mkAppM ``Exists #[← mkLambdaFVars #[mkFVar id] required]
-  return required
-
--- An inductive hypothesis can hide a function proposition in a constructor
--- field. Inspect every constructor with its actual parameters. Indexed
--- constructors are checked generically, so a recursive occurrence with the
--- same parameters has already been covered for every index.
-private partial def checkAtomicDomain (domain : Expr)
-    (seen : Array (Name × Array Expr) := #[]) : MetaM Unit := withIncRecDepth do
-  let raw := domain.consumeMData.headBeta
-  if raw.isAppOfArity ``Not 1 then
-    return ← checkAtomicDomain raw.getAppArgs[0]! seen
-  if raw.isAppOfArity ``Ne 3 then return
-  let domain ← withTransparency .all (whnf raw)
-  let .const name levels := domain.getAppFn
-    | throwError "unsupported hypothesis field: {domain}"
-  let some (.inductInfo info) := (← getEnv).find? name
-    | throwError "unsupported hypothesis field: {domain}"
-  let params := domain.getAppArgs.extract 0 info.numParams
-  if let some (_, previous) := seen.find? (fun entry => entry.1 == name) then
-    unless params == previous do
-      throwError "unsupported changing parameters in hypothesis field: {domain}"
-    return
-  for ctor in info.ctors do
-    let ctorInfo ← getConstInfoCtor ctor
-    let ctorType := ctorInfo.type.instantiateLevelParams ctorInfo.levelParams levels
-    let fields ← instantiateForall ctorType params
-    forallTelescope fields fun args _ => do
-      for arg in args do
-        let field ← inferType arg
-        if ← isProp field then
-          checkAtomicDomain field (seen.push (name, params))
-
--- A carrier computed by a type-level match is unsupported. Unfold wrappers
--- without reducing that match to one of its potentially trivial branches.
-private partial def normalizeCarrierHead (type : Expr) : MetaM Expr := withIncRecDepth do
-  let type := type.consumeMData.headBeta
-  if let .letE _ _ value body _ := type then
-    return ← normalizeCarrierHead (body.instantiate1 value)
-  if let some reduced ← reduceProjection? type then
-    return ← normalizeCarrierHead reduced
-  if let some unfolded ← unfoldContractAlias type then
-    return ← normalizeCarrierHead unfolded
-  return type
-
--- Inspect instantiated constructor fields, including fields in Type. An
--- unknown or higher-order carrier is refused unless its shape is inspectable.
-private partial def checkDataCarrier (type : Expr) (allowAbstract : Bool)
-    (seen : Array Expr := #[]) : MetaM Unit := withIncRecDepth do
-  let type ← normalizeCarrierHead type
-  if seen.contains type then return
-  if allowAbstract && [``Nat.le, ``Nat.lt, ``Int.le, ``Int.lt].contains type.getAppFn.constName then
-    return
-  if type.isSort || (← isProp type) then
-    throwError "unsupported proof or proposition carrier: {type}"
-  let seen := seen.push type
-  if type.isForall then
-    return ← forallTelescope type fun fields result => do
-      for field in fields do
-        checkDataCarrier (← inferType field) allowAbstract seen
-      checkDataCarrier result allowAbstract seen
-  let head := type.getAppFn
-  if allowAbstract then
-    if type.isFVar then return
-    if let .proj _ _ subject := type then
-      if subject.isFVar then return
-  let .const name levels := head
-    | throwError "unsupported data carrier: {type}"
-  let env ← getEnv
-  let some (.inductInfo info) := env.find? name
-    | throwError "unsupported data carrier: {type}"
-  unless info.numIndices == 0 && type.getAppNumArgs == info.numParams do
-    throwError "unsupported indexed data carrier: {type}"
-  for ctor in info.ctors do
-    let ctorInfo ← getConstInfoCtor ctor
-    let ctorType := ctorInfo.type.instantiateLevelParams ctorInfo.levelParams levels
-    let fields ← instantiateForall ctorType type.getAppArgs
-    forallTelescope fields fun args _ => do
-      for arg in args do
-        checkDataCarrier (← inferType arg) allowAbstract seen
-
-private partial def argumentList? (expr : Expr) : MetaM (Option Expr) := withIncRecDepth do
-  let expr := expr.consumeMData.headBeta
-  if expr.isAppOfArity ``ConcreteSpec.Core.Exec.evalArgs 4 then
-    return expr.getAppArgs.back?
-  if let .letE _ _ value body _ := expr then
-    return ← argumentList? (body.instantiate1 value)
-  if let some reduced ← reduceProjection? expr then
-    return ← argumentList? reduced
-  if expr.getAppFn.isProj then
-    throwError "unsupported projection in conditional discriminator: {expr}"
-  if let some unfolded ← unfoldContractAlias expr then
-    return ← argumentList? unfolded
-  if (expr.find? (·.isConstOf ``ConcreteSpec.Core.Exec.evalArgs)).isSome then
-    throwError "unsupported argument evaluation discriminator: {expr}"
-  return none
-
-/- Inspect the contract without reducing a match on its actual discriminant.
-For a Law conclusion that chooses a witness, require the original body and
-the nested applicability obligation at the very same witness. -/
-mutual
-private partial def jointPremises (type : Expr) (negative : Bool := false) : MetaM Expr := withIncRecDepth do
-  let type := type.consumeMData.headBeta
-  if type.isForall then
-    if negative then throwError "unsupported negated telescope: {type}"
-    return ← forallTelescope type fun args conclusion => do
-      let mut hypotheses := mkConst ``True
-      for arg in args do
-        let domain ← inferType arg
-        if ← isProp domain then
-          hypotheses := combinePremises hypotheses (← proofDomainPremises domain)
-        else if (← whnf domain) == .sort .zero then
-          hypotheses := combinePremises hypotheses arg
-      closePremises args (combinePremises hypotheses (← jointPremises conclusion))
-  if let .letE _ _ value body _ := type then
-    return ← jointPremises (body.instantiate1 value) negative
-  if let .proj ``Membership 0 instanceValue := type.getAppFn then
-    let projection ← whnf type.getAppFn
-    if projection != type.getAppFn then
-      return ← jointPremises (mkAppN projection type.getAppArgs) negative
-    throwError "unsupported membership instance: {instanceValue}"
-  let .const head _ := type.getAppFn | do
-    if let some reduced ← reduceProjection? type then
-      return ← jointPremises reduced negative
-    throwError "unsupported conclusion head: {type}"
-  let args := type.getAppArgs
-  if head == ``Not && args.size == 1 then
-    return ← jointPremises args[0]! (!negative)
-  if head == ``Ne && args.size == 3 then
-    if (← normalizeCarrierHead args[0]!) != .sort .zero then
-      checkDataCarrier args[0]! true
-      return mkConst ``True
-  if head == ``And && args.size == 2 then
-    let left ← jointPremises args[0]! negative
-    let right ← jointPremises args[1]! negative
-    unless !negative || (left.isConstOf ``True && right.isConstOf ``True) do
-      throwError "unsupported negated conjunction: {type}"
-    return combinePremises left right
-  if head == ``Or && args.size == 2 then
-    if negative then throwError "unsupported negated disjunction: {type}"
-    let left := args[0]!
-    let right := args[1]!
-    return combinePremises (combinePremises left right)
-      (combinePremises (← jointPremises left) (← jointPremises right))
-  if head == ``Exists && args.size == 2 then
-    if negative then throwError "unsupported negated existential: {type}"
-    return ← withLocalDeclD `witness args[0]! fun witness => do
-      let original := (mkApp args[1]! witness).headBeta
-      let premises ← jointPremises original
-      -- A proposition-valued binder itself carries a proof. Inspect its
-      -- domain as well so the proof cannot hide a vacuous contract.
-      let domain ← if ← isProp args[0]! then proofDomainPremises args[0]!
-        else do
-          checkDataCarrier args[0]! false
-          pure (mkConst ``True)
-      return combinePremises domain (← closePremises #[witness] (combinePremises original premises))
-  let propositionEq ← if head == ``Eq && args.size == 3 then
-    pure ((← normalizeCarrierHead args[0]!) == .sort .zero) else pure false
-  if (head == ``Iff && args.size == 2) || propositionEq then
-    if negative then throwError "unsupported negated propositional equivalence: {type}"
-    let left := args[args.size - 2]!
-    let right := args.back!
-    let premises ← combinePremises <$> jointPremises left <*> jointPremises right
-    return combinePremises (mkApp2 (mkConst ``And) left right) premises
-  if head == ``Eq && args.size == 3 then
-    checkDataCarrier args[0]! true
-    return mkConst ``True
-  if head == ``HEq && args.size == 4 then
-    checkDataCarrier args[0]! true
-    checkDataCarrier args[2]! true
-    return mkConst ``True
-  if [``True, ``False, ``Nat.le, ``Nat.lt, ``Int.le, ``Int.lt,
-      ``List.Mem, ``List.Perm].contains head then
-    return mkConst ``True
-  if [``LE.le, ``LT.lt].contains head && args.size == 4 &&
-      (args[0]!.isConstOf ``Nat || args[0]!.isConstOf ``Int) then
-    let standard := if args[0]!.isConstOf ``Nat then
-      if head == ``LE.le then ``instLENat else ``instLTNat
-    else
-      if head == ``LE.le then ``Int.instLEInt else ``Int.instLTInt
-    if ← isDefEq args[1]! (mkConst standard) then return mkConst ``True
-  if head == ``List.Pairwise then
-    throwError "unsupported pairwise conclusion: no evidence that the relation is exercised"
-  let env ← getEnv
-  let conditional := if let some info := getMatcherInfoCore? env head then
-      if args.size == info.arity then
-        some (info.getAltRange.toArray, info.getDiscrRange.toArray)
-      else none
-    else if let some (.recInfo info) := env.find? head then
-      if args.size == info.getMajorIdx + 1 && info.numMotives == 1 &&
-          info.numIndices == 0 && info.rules.length == info.numMinors then
-        some ((List.range info.numMinors).toArray.map (info.getFirstMinorIdx + ·),
-          #[info.getMajorIdx])
-      else none
-    else if head == ``ite && args.size == 5 then some (#[3, 4], #[1])
-    else if head == ``dite && args.size == 5 then some (#[3, 4], #[1])
-    else none
-  if let some (arms, discriminants) := conditional then
-    if negative then throwError "unsupported negated conditional: {type}"
-    let mut guarded := args
-    for i in arms do
-      let arm ← forallTelescopeReducing (← inferType args[i]!) fun fields _ => do
-        let body := (mkAppN args[i]! fields).headBeta
-        unless ← isProp body do
-          throwError "unsupported conditional arm: {body}"
-        if let some (.recInfo info) := env.find? head then
-          if fields.size != info.rules[i - info.getFirstMinorIdx]!.nfields then
-            throwError "unsupported recursive conditional conclusion: {head}"
-        let premises ← jointPremises body
-        let mut required := combinePremises (← armCounterexample body)
-          (combinePremises body premises)
-        if head == ``ite || head == ``dite then
-          let guard := if i == 3 then args[1]! else mkApp (mkConst ``Not) args[1]!
-          required := combinePremises guard required
-        mkLambdaFVars fields required
-      guarded := guarded.set! i arm
-    let mut result := mkAppN type.getAppFn guarded
-    check result
-    unless ← isProp result do throwError "unsupported conditional motive: {head}"
-    if head == ``ite || head == ``dite then
-      return combinePremises (← proofDomainPremises args[1]!) result
-    for i in discriminants do
-      if let some operands ← argumentList? args[i]! then
-        -- A nil argument list executes neither operand semantics nor
-        -- instrumentation, even when the success arm is selected.
-        let .app (.const ``List _) element ← whnf (← inferType operands)
-          | throwError "expected a list of operands: {operands}"
-        let nil ← mkAppOptM ``List.nil #[some element]
-        result := combinePremises (← mkAppM ``Ne #[operands, nil]) result
-    return result
-  if ((env.find? head).any fun info => match info with
-      | .recInfo _ => true
-      | _ => false) || isMatcherLikeCore env head || [``ite, ``dite].contains head then
-    throwError "unsupported conditional conclusion: {head}"
-  if let some reduced ← reduceProjection? type then
-    return ← jointPremises reduced negative
-  if let some unfolded ← unfoldContractAlias type then
-    return ← jointPremises unfolded negative
-  throwError "unsupported conclusion head: {head}"
-
-/-- A proof of a function proposition is also evidence for a contract.
-Require applicability of its telescope on independent, concrete arguments.
-A negation supplies negative evidence and has no positive input to supply. -/
-private partial def proofDomainPremises (domain : Expr) : MetaM Expr := withIncRecDepth do
-  let domain := domain.consumeMData.headBeta
-  if domain.isAppOfArity ``Not 1 then
-    return ← proofDomainPremises domain.getAppArgs[0]!
-  if domain.isAppOfArity ``Ne 3 then return mkConst ``True
-  if domain.isAppOfArity ``Eq 3 then
-    if (← whnf domain.getAppArgs[0]!) == .sort .zero then
-      return ← jointPremises domain
-  if domain.isForall || domain.isAppOfArity ``Exists 2 ||
-      domain.isAppOfArity ``Or 2 || domain.isAppOfArity ``Iff 2 then
-    return ← jointPremises domain
-  if domain.isAppOfArity ``And 2 then
-    let args := domain.getAppArgs
-    return combinePremises (← proofDomainPremises args[0]!) (← proofDomainPremises args[1]!)
-  if let .letE _ _ value body _ := domain then
-    return ← proofDomainPremises (body.instantiate1 value)
-  if let some reduced ← reduceProjection? domain then return ← proofDomainPremises reduced
-  if let some unfolded ← unfoldContractAlias domain then return ← proofDomainPremises unfolded
-  let reduced ← withTransparency .all (whnf domain)
-  if reduced != domain then return ← proofDomainPremises reduced
-  -- A proposition variable gets checked again once its concrete value is
-  -- unpacked. Other unknown carriers cannot establish applicability.
-  unless domain.isFVar do checkAtomicDomain domain
-  return mkConst ``True
-end
+private def jointPremises (type : Expr) : MetaM Expr :=
+  forallTelescope type.consumeMData fun args conclusion => do
+    -- Expose local syntax without unfolding constants or reducing matches.
+    let conclusion ← exposeConclusion conclusion
+    let env ← getEnv
+    let needsRestatement := match conclusion.getAppFn with
+      | .const name _ =>
+        [``ite, ``dite, ``Iff, ``Decidable.casesOn].contains name ||
+          isMatcherLikeCore env name || isMatcherCore env name ||
+          isCasesOnRecursor env name
+      | _ => false
+    if conclusion.isForall || needsRestatement then
+      throwError "restate with explicit premises"
+    args.foldrM (init := mkConst ``True) fun arg rest => do
+      let domain ← inferType arg
+      if (← isProp domain) && !rest.containsFVar arg.fvarId! then
+        return mkApp2 (mkConst ``And) domain rest
+      mkAppM ``Exists #[← mkLambdaFVars #[arg] rest]
 
 /-- Bind the census to the source population. An unimported module would
 otherwise remove its Laws from the denominator. -/
@@ -356,59 +65,6 @@ private def checkModuleCoverage (env : Environment) (root : System.FilePath) : M
   unless missing.isEmpty && stale.isEmpty do
     throwError "non-vacuity source/import mismatch: omitted modules {missing}; stale modules {stale}"
 
-/-- Materialize the supplied certificate. Proof declarations are opaque to
-kernel reduction, but their checked bodies are available to the audit. -/
-private partial def whnfEvidence (proof : Expr) : MetaM Expr := withIncRecDepth do
-  let proof ← withTransparency .all (whnf proof)
-  let .const name levels := proof.getAppFn | return proof
-  let some (.thmInfo info) := (← getEnv).find? name | return proof
-  whnfEvidence (mkAppN (info.value.instantiateLevelParams info.levelParams levels) proof.getAppArgs)
-
-private partial def checkConcrete (value : Expr) : MetaM Unit := withIncRecDepth do
-  unless !value.hasFVar && !value.hasMVar && !value.hasLooseBVars do
-    throwError "witness input is not closed: {value}"
-  let valueType ← whnf (← inferType value)
-  if ← isProp valueType then return
-  let value ← withTransparency .all (whnf value)
-  if value.isLambda || value.isLit || value.isSort then return
-  let some declaration := (← getEnv).find? value.getAppFn.constName
-    | throwError "witness input does not reduce to a concrete value: {value}"
-  match declaration with
-  | .ctorInfo info =>
-    for field in value.getAppArgs[info.numParams:] do
-      checkConcrete field
-  | .inductInfo _ =>
-    unless valueType.isSort do
-      throwError "witness input does not reduce to a concrete value: {value}"
-  | _ => throwError "witness input does not reduce to a concrete value: {value}"
-
-/-- Check the actual inputs carried by a packed proof, including those in
-nested obligations. The kernel has already checked their dependent types. -/
-private partial def checkPackedInputs (type proof : Expr) : MetaM Unit := withIncRecDepth do
-  let type ← whnf type
-  let args := type.getAppArgs
-  if type.isAppOfArity ``Exists 2 then
-    let proof ← whnfEvidence proof
-    unless proof.isAppOfArity ``Exists.intro 4 do
-      throwError "witness does not expose a concrete existential input"
-    let value := proof.getAppArgs[2]!
-    checkConcrete value
-    if (← whnf args[0]!) == .sort .zero then
-      unless (← proofDomainPremises value).isConstOf ``True do
-        throwError "unsupported higher-order proposition argument: {value}"
-    checkPackedInputs (mkApp args[1]! value) proof.getAppArgs[3]!
-  else if type.isAppOfArity ``And 2 then
-    let proof ← whnfEvidence proof
-    unless proof.isAppOfArity ``And.intro 4 do
-      throwError "witness does not expose both parts of its joint premises"
-    checkPackedInputs args[0]! proof.getAppArgs[2]!
-    checkPackedInputs args[1]! proof.getAppArgs[3]!
-  else if let .const head _ := type.getAppFn then
-    let env ← getEnv
-    if isMatcherLikeCore env head || [``ite, ``dite].contains head ||
-        (env.find? head).any (fun decl => match decl with | .recInfo _ => true | _ => false) then
-      throwError "witness selector did not reduce at its concrete inputs: {type}"
-
 private def checkWitness (law : TheoremVal) (expected : Expr) (witness : Name) :
     MetaM (Option String) := do
   let some (.thmInfo proof) := (← getEnv).find? witness
@@ -416,88 +72,27 @@ private def checkWitness (law : TheoremVal) (expected : Expr) (witness : Name) :
   unless proof.levelParams.length == law.levelParams.length do
     return some "unsupported witness universe parameters"
   let actual := proof.type.instantiateLevelParams proof.levelParams (law.levelParams.map Level.param)
+  match Kernel.isDefEq (← getEnv) {} actual expected with
+  | .error _ => throwError "kernel could not compare the witness type with the joint premises"
+  | .ok false => return some "witness does not establish the joint premises"
+  | .ok true => pure ()
   -- The existing authoritative proof policy permits propositional
   -- extensionality. The old proof-body transfer policy concerns a different
   -- audit: an explicit witness receives no credit for user axioms or choice.
   let axioms ← collectAxioms witness
   unless (axioms.filter (· != ``propext)).isEmpty do
-    let mut typeAxioms : NameSet := {}
-    for constant in actual.getUsedConstants do
-      for axiomName in (← collectAxioms constant) do
-        typeAxioms := typeAxioms.insert axiomName
-    let additional := axioms.filter (!typeAxioms.contains ·)
-    return some (s!"unsupported witness axioms {axioms}; " ++
-      s!"type dependencies {typeAxioms.toArray.qsort Name.lt}; additional dependencies {additional}")
-  match Kernel.isDefEq (← getEnv) {} actual expected with
-  | .error _ => throwError "kernel could not compare the witness type with the joint premises"
-  | .ok false => return some "witness does not establish the joint premises"
-  | .ok true => pure ()
-  checkPackedInputs expected (mkConst witness (law.levelParams.map Level.param))
+    return some s!"unsupported witness axioms {axioms}"
   return none
 
-private inductive Evidence where
-  | theoremProof (name : Name)
-  | closedApplication (name : Name)
-
-/-- Build the existential using only the actual call arguments. The application
-result and the enclosing example proof supply no applicability evidence. -/
-private partial def packApplication (expected : Expr) (inputs : List Expr) :
-    MetaM (Option Expr) := withIncRecDepth do
-  let expected ← whnf expected
-  match inputs with
-  | [] => return if expected.isConstOf ``True then some (mkConst ``True.intro) else none
-  | input :: remaining =>
-    let .const ``Exists levels := expected.getAppFn | return none
-    let args := expected.getAppArgs
-    let some body ← packApplication (mkApp args[1]! input) remaining | return none
-    return some (mkAppN (mkConst ``Exists.intro levels) (args ++ #[input, body]))
-
-private def checkApplication (law : TheoremVal) (expected : Expr) (name : Name) :
-    MetaM (Option String) := do
-  let env ← getEnv
-  if (privateToUserName name).isInternal then return some "generated application source theorem"
-  let some (.thmInfo source) := env.find? name | return some "missing application source theorem"
-  unless source.levelParams.length == law.levelParams.length do
-    return some "unsupported witness universe parameters"
-  let levels := law.levelParams.map Level.param
-  let proof := source.value.instantiateLevelParams source.levelParams levels
-  let arity ← forallTelescope law.type fun args _ => pure args.size
-  let some call := proof.find? fun e =>
-    e.getAppFn == mkConst law.name levels && e.getAppNumArgs == arity && !e.hasLooseBVars
-    | return some "application source has no closed call of the Law"
-  for input in call.getAppArgs do
-    checkConcrete input
-  let mut axioms : NameSet := {}
-  for input in call.getAppArgs do
-    for constant in input.getUsedConstants do
-      for axiomName in ← collectAxioms constant do
-        axioms := axioms.insert axiomName
-  let unsupported := axioms.toArray.filter (· != ``propext)
-  unless unsupported.isEmpty do
-    return some s!"unsupported application witness axioms {unsupported.qsort Name.lt}"
-  let some witness ← packApplication expected call.getAppArgs.toList
-    | return some "application does not establish the joint premises"
-  let .ok actual := Kernel.check env {} witness
-    | throwError "kernel could not check the constructed witness"
-  match Kernel.isDefEq env {} actual expected with
-  | .error _ => throwError "kernel could not compare the constructed witness with the joint premises"
-  | .ok false => return some "application does not establish the joint premises"
-  | .ok true => pure ()
-  checkPackedInputs expected witness
-  return none
-
-private def audit (inScope : Name → Bool) (witnesses : List (Name × Name))
-    (applications : List (Name × Name) := []) :
+private def audit (inScope : Name → Bool) (witnesses : List (Name × Name)) :
     MetaM (Array String × Array String × Nat × Nat) := do
   let env ← getEnv
-  let mut registrations : NameMap Evidence := {}
+  let mut registrations : NameMap Name := {}
   let mut errors := #[]
   let mut excluded := #[]
   let mut laws := 0
   let mut covered := 0
-  let evidence := (witnesses.map fun (law, name) => (law, Evidence.theoremProof name)) ++
-    (applications.map fun (law, name) => (law, Evidence.closedApplication name))
-  for (law, witness) in evidence do
+  for (law, witness) in witnesses do
     if registrations.contains law then
       errors := errors.push s!"duplicate witness registration: {law}"
     registrations := registrations.insert law witness
@@ -519,8 +114,7 @@ private def audit (inScope : Name → Bool) (witnesses : List (Name × Name))
       let problem ← withoutModifyingState do
         let expected ← jointPremises law.type
         match witness with
-        | some (.theoremProof proof) => checkWitness law expected proof
-        | some (.closedApplication source) => checkApplication law expected source
+        | some proof => checkWitness law expected proof
         | none => pure none
       if let some message := problem then
         errors := errors.push s!"{name}: {message}"
@@ -977,101 +571,13 @@ private def specWitnesses : List (Name × Name) :=
    (``ConcreteSpec.Core.ConstOrderIndependent, ``SpecWitness.constantOrder),
    (``ConcreteSpec.Core.cycle_excludes_dependencyOrder, ``SpecWitness.dependencyCycle)]
 
--- These source theorems supply concrete arguments to a named Law. They
--- are never counted in the Law inventory.
-private def applicationWitnesses : List (Name × Name) :=
-  [(``ConcreteSpec.Core.Exec.entry_refusal_report,
-    ``ConcreteSpec.Core.Exec.LifecycleEvidence.entry_report_instance),
-   (``ConcreteSpec.Core.Exec.evalArgs_first_trap,
-    ``ConcreteSpec.Core.Exec.CleanupEvidence.evalArgs_first_trap_example),
-   (``ConcreteSpec.Core.Exec.lookup_restrict,
-    ``ConcreteSpec.Core.Exec.CoreEvidence.lookup_restrict_instance),
-   (``ConcreteSpec.Core.Exec.mapDestroyOrder_entry,
-    ``ConcreteSpec.Core.Exec.DestructionEvidence.map_entry_instance),
-   (``ConcreteSpec.Core.Exec.mapDestroyOrder_storage,
-    ``ConcreteSpec.Core.Exec.DestructionEvidence.map_storage_instance),
-   (``ConcreteSpec.Core.Exec.refused_stops,
-    ``ConcreteSpec.Core.Exec.LifecycleEvidence.refused_stop_instance),
-   (``ConcreteSpec.Core.Exec.restrict_dom_drops,
-    ``ConcreteSpec.Core.Exec.CoreEvidence.restrict_dom_drops_instance),
-   (``ConcreteSpec.Core.Exec.seqDestroyOrder_elem,
-    ``ConcreteSpec.Core.Exec.DestructionEvidence.sequence_element_instance),
-   (``ConcreteSpec.Core.Exec.seqDestroyOrder_storage,
-    ``ConcreteSpec.Core.Exec.DestructionEvidence.sequence_storage_instance),
-   (``ConcreteSpec.Core.Exec.step_return_caller,
-    ``ConcreteSpec.Core.Exec.CoreEvidence.step_return_caller_instance),
-   (``ConcreteSpec.Core.Hybrid.materialize_idempotent,
-    ``ConcreteSpec.Core.Hybrid.Audit.materialize_idempotent_example_secondCall),
-   (``ConcreteSpec.Core.Hybrid.write_frame,
-    ``ConcreteSpec.Core.Hybrid.Audit.Frame.write_frame_example_otherPlace),
-   (``ConcreteSpec.Core.KeyConstruct.assignFunctionTable_named_scope,
-    ``ConcreteSpec.Core.Vacuity.assignFunctionTable_named_scope_example_namedNested),
-   (``ConcreteSpec.Core.KeyConstruct.assignFunctionTable_pin,
-    ``ConcreteSpec.Core.Vacuity.assignFunctionTable_pin_example_nestedBody),
-   (``ConcreteSpec.Core.KeyConstruct.assignFunctionTable_rename_named,
-    ``ConcreteSpec.Core.Vacuity.assignFunctionTable_rename_named_example_namedCall),
-   (``ConcreteSpec.Core.KeyConstruct.collectKeysIn_complete,
-    ``ConcreteSpec.Core.Vacuity.collectKeysIn_sound_example_nestedBody),
-   (``ConcreteSpec.Core.KeyConstruct.descendant_insert_differentKind,
-    ``ConcreteSpec.Core.Vacuity.descendant_insert_differentKind_example_nestedBody),
-   (``ConcreteSpec.Core.KeyConstruct.descendant_insert_named,
-    ``ConcreteSpec.Core.Vacuity.descendant_insert_named_example_nestedBody),
-   (``ConcreteSpec.Core.KeyConstruct.descendant_pin_other,
-    ``ConcreteSpec.Core.Vacuity.descendant_pin_other_example_nestedBody),
-   (``ConcreteSpec.Core.KeyConstruct.descendant_rename_other,
-    ``ConcreteSpec.Core.Vacuity.descendant_rename_other_example_nestedBody),
-   (``ConcreteSpec.Core.KeyConstruct.key_insert_differentKind,
-    ``ConcreteSpec.Core.Vacuity.key_insert_differentKind_example_unnamedBinding),
-   (``ConcreteSpec.Core.KeyConstruct.key_insert_named,
-    ``ConcreteSpec.Core.Vacuity.key_insert_named_example_unnamedBinding),
-   (``ConcreteSpec.Core.KeyConstruct.key_pin_other,
-    ``ConcreteSpec.Core.Vacuity.key_pin_other_example_unnamedBinding),
-   (``ConcreteSpec.Core.KeyConstruct.key_rename_other,
-    ``ConcreteSpec.Core.Vacuity.key_rename_other_example_namedBinding),
-   (``ConcreteSpec.Core.KeyConstruct.pathAt_insert_after,
-    ``ConcreteSpec.Core.Vacuity.pathAt_insert_after_example_nestedBody),
-   (``ConcreteSpec.Core.KeyConstruct.pathAt_insert_differentKind,
-    ``ConcreteSpec.Core.Vacuity.pathAt_insert_differentKind_example_nestedBody),
-   (``ConcreteSpec.Core.KeyConstruct.pathAt_insert_named,
-    ``ConcreteSpec.Core.Vacuity.pathAt_insert_named_example_nestedBody),
-   (``ConcreteSpec.Core.LoadedModules.load_refusal_sound,
-    ``ConcreteSpec.Core.Vacuity.load_refusal_sound_example_collidingTop),
-   (``ConcreteSpec.Core.Mem.access_after_free,
-    ``ConcreteSpec.Core.Mem.Audit.access_after_free_example_freed),
-   (``ConcreteSpec.Core.Mem.access_no_provenance,
-    ``ConcreteSpec.Core.Mem.Audit.access_no_provenance_example_nonzero),
-   (``ConcreteSpec.Core.Mem.access_success,
-    ``ConcreteSpec.Core.Mem.Audit.access_success_example_interior),
-   (``ConcreteSpec.Core.Mem.alloc_block,
-    ``ConcreteSpec.Core.Mem.Audit.alloc_block_example_first),
-   (``ConcreteSpec.Core.Mem.alloc_failure,
-    ``ConcreteSpec.Core.Mem.Audit.alloc_failure_example_align),
-   (``ConcreteSpec.Core.Mem.decodeInt_encodeInt,
-    ``ConcreteSpec.Core.Mem.Audit.decodeInt_encodeInt_example_i8),
-   (``ConcreteSpec.Core.Mem.decodeInt_inRange,
-    ``ConcreteSpec.Core.Mem.Audit.decodeInt_inRange_example_i8),
-   (``ConcreteSpec.Core.Mem.expose_load,
-    ``ConcreteSpec.Core.Mem.Audit.expose_load_example_samePtr),
-   (``ConcreteSpec.Core.Mem.expose_success,
-    ``ConcreteSpec.Core.Mem.Audit.expose_success_example_live),
-   (``ConcreteSpec.Core.Mem.load_prefix,
-    ``ConcreteSpec.Core.Mem.Audit.load_prefix_example_twoToOne),
-   (``ConcreteSpec.Core.Mem.store_load_other,
-    ``ConcreteSpec.Core.Mem.Audit.store_load_other_example_disjointProv),
-   (``ConcreteSpec.Core.Mem.store_other_block,
-    ``ConcreteSpec.Core.Mem.Audit.store_other_block_example_otherBlock),
-   (``ConcreteSpec.Core.SpecializationTable.canonicalize_edge_sound,
-    ``ConcreteSpec.Core.Vacuity.canonicalize_edge_sound_example_edgeZero),
-   (``ConcreteSpec.Core.SpecializationTable.canonicalize_nodup,
-    ``ConcreteSpec.Core.Vacuity.canonicalize_nodup_example_requestZero)]
-
 private def auditSpecification (root : System.FilePath) :
     MetaM (Array String × Array String × Nat × Nat) := do
   let env ← getEnv
   checkModuleCoverage env root
   audit (fun n =>
     (env.getModuleIdxFor? n).any (fun i =>
-      env.header.moduleNames[i.toNat]?.any (fun m => m.getRoot == `ConcreteSpec))) specWitnesses applicationWitnesses
+      env.header.moduleNames[i.toNat]?.any (fun m => m.getRoot == `ConcreteSpec))) specWitnesses
 
 namespace Control
 
@@ -1079,7 +585,7 @@ namespace Control
 theorem realizable (n : Nat) (i : Fin (n + 1)) (h : i.val = n) : i.val ≤ n :=
   Nat.le_of_eq h
 
-theorem together : ∃ (n : Nat) (i : Fin (n + 1)) (_ : i.val = n), True :=
+theorem together : ∃ (n : Nat) (i : Fin (n + 1)), i.val = n ∧ True :=
   ⟨0, ⟨0, by decide⟩, rfl, trivial⟩
 
 theorem dataWithoutPremise : ∃ (n : Nat) (_ : Fin (n + 1)), True :=
@@ -1094,9 +600,9 @@ theorem unconditional : True := trivial
 theorem split : (∃ n : Nat, n = 0) ∧ (∃ n : Nat, n = 1) :=
   ⟨⟨0, rfl⟩, ⟨1, rfl⟩⟩
 
-axiom falseWitness : ∃ (n : Nat) (_ : n = 0) (_ : n = 1), True
+axiom falseWitness : ∃ n : Nat, n = 0 ∧ n = 1 ∧ True
 
-theorem unsound : ∃ (n : Nat) (_ : n = 0) (_ : n = 1), True := falseWitness
+theorem unsound : ∃ n : Nat, n = 0 ∧ n = 1 ∧ True := falseWitness
 
 def HiddenContract : Prop := ∀ (_ : False), True
 
@@ -1220,7 +726,7 @@ theorem trivialDisjunct : True ∨ (∀ n : Nat, n = 0 → n = 1 → False) := .
 
 theorem trivialDisjunctWitness :
     True ∨ ((∀ n : Nat, n = 0 → n = 1 → False) ∧
-      (∃ (n : Nat) (_ : n = 0) (_ : n = 1), True)) :=
+      (∃ n : Nat, n = 0 ∧ n = 1 ∧ True)) :=
   .inl trivial
 
 /-- Law: a competing disjunct does not supply a nested premise. -/
@@ -1376,6 +882,91 @@ theorem conditionalProofArgument (_ : selectedProofDomain) : True := trivial
 theorem conditionalProofWitness : ∃ _ : selectedProofDomain, True :=
   ⟨(fun _ => trivial), trivial⟩
 
+namespace RoundSix
+
+-- Universal data, proof and proposition-valued binders are all included.
+/-- Law: a universal data carrier. -/
+theorem lifted (_ : PLift (False → True)) : True := trivial
+
+theorem liftedPremises : ∃ _ : PLift (False → True), True :=
+  ⟨⟨fun _ => trivial⟩, trivial⟩
+
+inductive Packed : Prop where
+  | intro : PLift (False → True) → Packed
+
+/-- Law: a proof premise with a data field. -/
+theorem packed (_ : Packed) : True := trivial
+
+theorem packedPremises : Packed ∧ True := ⟨.intro ⟨fun _ => trivial⟩, trivial⟩
+
+/-- Law: disequality as an explicit premise. -/
+theorem unequal (_ : (none : Option Prop) ≠ some (False → True)) : True := trivial
+
+theorem unequalPremises : ((none : Option Prop) ≠ some (False → True)) ∧ True :=
+  ⟨carrierInequality, trivial⟩
+
+-- The former audit accepted these existential encodings of proof premises.
+theorem packedPrevious : ∃ _ : Packed, True := ⟨.intro ⟨fun _ => trivial⟩, trivial⟩
+
+theorem unequalPrevious : ∃ _ : (none : Option Prop) ≠ some (False → True), True :=
+  ⟨carrierInequality, trivial⟩
+
+/-- Law: a conditional proof premise. -/
+theorem conditionalPremise (_ : if (False → True) then True else False) : True := trivial
+
+theorem conditionalPremises : (if (False → True) then True else False) ∧ True :=
+  ⟨trivial, trivial⟩
+
+theorem conditionalPrevious : ∃ _ : (if (False → True) then True else False), True :=
+  ⟨trivial, trivial⟩
+
+/-- Law: a contingent fallback still hides the branch applicability. -/
+theorem fallback (n : Nat) (h : n = 0) : if (0 : Nat) = 1 then False else n = 0 := h
+
+theorem fallbackPremises : ∃ n : Nat, n = 0 ∧ True := ⟨0, rfl, trivial⟩
+
+theorem fallbackPrevious :
+    ∃ (n : Nat) (_ : n = 0),
+      if (0 : Nat) = 1 then 0 = 1 ∧ ¬ False ∧ False
+      else ¬ ((0 : Nat) = 1) ∧ (∃ m : Nat, m ≠ 0) ∧ n = 0 :=
+  ⟨0, rfl, by decide, ⟨1, by decide⟩, rfl⟩
+
+/-- Law: a Decidable eliminator still hides the branch applicability. -/
+theorem decidableMatch (n : Nat) (h : n = 0) :
+    Decidable.casesOn (inferInstance : Decidable (False → True))
+      (fun b _ => if b then n = 0 else False) := h
+
+/-- Law: a Boolean match also hides applicability. -/
+theorem decideMatch (n : Nat) (h : n = 0) :
+    (match decide (False → True) with | true => n = 0 | false => False) := h
+
+theorem decideMatchPrevious :
+    ∃ (n : Nat) (_ : n = 0),
+      (match decide (False → True) with
+       | true => (∃ m : Nat, m ≠ 0) ∧ n = 0
+       | false => ¬ False ∧ False) :=
+  ⟨0, rfl, ⟨1, by decide⟩, rfl⟩
+
+/-- Law: membership with a proposition carrier in the conclusion. -/
+theorem membership : (False → True) ∈ [False → True] := .head _
+
+/-- Law: equality over an empty function domain in the conclusion. -/
+theorem abstractDomain : (fun _ : Nat.lt 1 0 => 0) = (fun _ : Nat.lt 1 0 => 1) :=
+  funext fun h => (Nat.not_succ_le_zero _ h).elim
+
+/-- Law: type, instance and proof-dependent binders. -/
+theorem dependent {α : Type} [Inhabited α] (h : True) (_ : h = True.intro) :
+    (default : α) = default := rfl
+
+theorem dependentPremises :
+    ∃ (α : Type) (_ : Inhabited α) (h : True), h = True.intro ∧ True :=
+  ⟨Unit, inferInstance, trivial, rfl, trivial⟩
+
+/-- Law: an implication underneath local syntax must be made explicit. -/
+theorem localImplication : let p := False; p → True := fun _ => trivial
+
+end RoundSix
+
 namespace Historical
 
 theorem «⟪example⟫spoof» : True := trivial
@@ -1421,8 +1012,97 @@ theorem projectedEmptyOk : (match
 /-- Law: telescope shared by the recovered projection fixtures. -/
 theorem growth (n : Nat) (h : n < n + 1 ∧ True) : n < n + 1 := h.1
 
-theorem growthPremises : ∃ (n : Nat) (_ : n < n + 1 ∧ True), True :=
+theorem growthPremises : ∃ n : Nat, (n < n + 1 ∧ True) ∧ True :=
   ⟨2, ⟨by decide, trivial⟩, trivial⟩
+
+-- Archived R-0219 proof-body probes, with their original shared telescope.
+-- A proof of the conclusion alone cannot register as applicability evidence.
+namespace Projection
+
+/-- Law: archived subtype-proj probe. -/
+theorem subtype_proj (n : Nat) (h : n < n+1 ∧ True) : n < n+1 :=
+  (⟨0, h.1⟩ : {_k : Nat // n < n+1}).2
+
+/-- Law: archived packed-and-refl probe. -/
+theorem packed_and_refl (n : Nat) (h : n < n+1 ∧ True) : n < n+1 :=
+  (⟨h.1, Nat.le.refl⟩ : n < n+1 ∧ n ≤ n).1
+
+/-- Law: archived pprod-proj probe. -/
+theorem pprod_proj (n : Nat) (h : n < n+1 ∧ True) : n < n+1 :=
+  (⟨0, h.1⟩ : PProd Nat (n < n+1)).2
+
+/-- Law: archived psigma-proj probe. -/
+theorem psigma_proj (n : Nat) (h : n < n+1 ∧ True) : n < n+1 :=
+  (⟨0, h.1⟩ : PSigma (fun _ : Nat => n < n+1)).2
+
+/-- Law: archived cases-bool probe. -/
+theorem cases_bool (n : Nat) (h : n < n+1 ∧ True) : n < n+1 :=
+  Bool.casesOn true h.1 h.1
+
+/-- Law: archived cases-nat probe. -/
+theorem cases_nat (n : Nat) (h : n < n+1 ∧ True) : n < n+1 :=
+  Nat.casesOn (motive := fun _ => n < n+1) n h.1 (fun _ => h.1)
+
+/-- Law: archived matcher probe. -/
+theorem matcher (n : Nat) (h : n < n+1 ∧ True) : n < n+1 :=
+  match n == 0 with | true => h.1 | false => h.1
+
+/-- Law: archived nested-matcher probe. -/
+theorem nested_matcher (n : Nat) (h : n < n+1 ∧ True) : n < n+1 :=
+  match n == 0 with | true => h.1 | false => match n == 1 with | true => h.1 | false => h.1
+
+/-- Law: archived mixed-minors probe. -/
+theorem mixed_minors (n : Nat) (h : n < n+1 ∧ True) : n < n+1 :=
+  Bool.casesOn (n == 0) (Nat.lt_succ_self n) h.1
+
+/-- Law: archived recursor-function probe. -/
+theorem recursor_function (n : Nat) (h : n < n+1 ∧ True) : n < n+1 :=
+  (Bool.casesOn (motive := fun _ => (n < n+1) → n < n+1) (n == 0) (fun hp => hp) (fun hp => hp)) h.1
+
+/-- Law: archived match-carrier probe. -/
+theorem match_carrier (n : Nat) (h : n < n+1 ∧ True) : n < n+1 :=
+  (match n == 0 with | true => (⟨0, h.1⟩ : {_k : Nat // n < n+1}) | false => ⟨0, h.1⟩).2
+
+/-- Law: archived psum-carrier probe. -/
+theorem psum_carrier (n : Nat) (h : n < n+1 ∧ True) : n < n+1 :=
+  PSum.casesOn (motive := fun _ : PSum Nat (n < n+1) => n < n+1) (if n == 0 then PSum.inl n else PSum.inr h.1) (fun _ => Nat.lt_succ_self n) (fun hp => hp)
+
+/-- Law: archived nested-exists-field probe. -/
+theorem nested_exists_field (n : Nat) (h : n < n+1 ∧ True) : n < n+1 :=
+  Exists.elim (if n == 0 then (⟨0, ⟨h.1, Nat.lt_succ_self n⟩⟩ : ∃ _ : Nat, n < n+1 ∧ n < n+1) else ⟨0, ⟨h.1, Nat.lt_succ_self n⟩⟩) (fun _ hp => hp.1)
+
+/-- Law: archived minor-function-application probe. -/
+theorem minor_function_application (n : Nat) (h : n < n+1 ∧ True) : n < n+1 :=
+  Exists.elim (if n == 0 then (⟨0, fun hp => hp⟩ : ∃ _ : Nat, (n < n+1) → n < n+1) else ⟨0, fun hp => hp⟩) (fun _ f => f h.1)
+
+/-- Law: archived recursive-ih-transfer probe. -/
+theorem recursive_ih_transfer (n : Nat) (h : n < n+1 ∧ True) : n < n+1 :=
+  Nat.rec (motive := fun _ => (n < n+1) → n < n+1) (fun hp => hp) (fun _ ih _ => ih h.1) n (Nat.lt_succ_self n)
+
+/-- Law: archived cast-let probe. -/
+theorem cast_let (n : Nat) (h : n < n+1 ∧ True) : n < n+1 :=
+  let carrier : {_k : Nat // n < n+1} := ⟨0, h.1⟩; Eq.mp rfl carrier.2
+
+/-- Law: archived iff-field probe. -/
+theorem iff_field (n : Nat) (h : n < n+1 ∧ True) : n < n+1 :=
+  ((Iff.intro (fun _ : True => h.1) (fun _ => True.intro)).mp True.intro)
+
+/-- Law: archived exists-carrier probe. -/
+theorem exists_carrier (n : Nat) (h : n < n+1 ∧ True) : n < n+1 :=
+  Exists.elim (⟨0, h.1⟩ : ∃ _ : Nat, n < n+1) (fun _ hp => hp)
+
+/-- Law: archived sigma-carrier probe. -/
+theorem sigma_carrier (n : Nat) (h : n < n+1 ∧ True) : n < n+1 :=
+  (⟨0, (⟨h.1⟩ : PLift (n < n+1))⟩ : Sigma (fun _ : Nat => PLift (n < n+1))).2.down
+
+end Projection
+
+structure Fieldless where
+
+/-- Law: a fieldless subject is still a telescope binder. -/
+theorem fieldless (_ : Fieldless) : True := trivial
+
+theorem fieldlessPremises : ∃ _ : Fieldless, True := ⟨⟨⟩, trivial⟩
 
 -- N8a's impossible suppliers are refused even when cast into the exact
 -- existential type, through the same let and helper-chain proof bodies.
@@ -1456,13 +1136,13 @@ theorem branchDischarge (_k : Nat) (bad : Bool) (p : Prop) (positive : p)
 theorem helperGrowth (n : Nat) (h : ∀ _k : Nat, n = 2) : n < n + 1 :=
   (h 0).symm ▸ Nat.lt_succ_self 2
 
-theorem throughReachableHelper : ∃ (n : Nat) (_ : ∀ _k : Nat, n = 2), True :=
+theorem throughReachableHelper : ∃ n : Nat, (∀ _k : Nat, n = 2) ∧ True :=
   ⟨2, fun k => Eq.trans (branchDischarge k false opaqueP hp hn)
     (branchDischarge k true opaqueP hp hn), trivial⟩
 
 theorem independentHelperWitness :
-    ∃ (n : Nat) (_ : ∀ _k : Nat, n = 2), ∃ _k : Nat, True :=
-  ⟨2, (fun _ => rfl), 0, trivial⟩
+    ∃ n : Nat, (∀ _k : Nat, n = 2) ∧ True :=
+  ⟨2, (fun _ => rfl), trivial⟩
 
 theorem directHelperApplication : 2 < (2 : Nat) + 1 :=
   helperGrowth 2 (fun _ => rfl)
@@ -1543,7 +1223,6 @@ private def controls : MetaM Unit := do
       (``Control.falseElimArgument, ``Control.falseElimWitness),
       (``Control.wrappedArgument, ``Control.wrappedArgumentWitness),
       (``Control.conditionalProofArgument, ``Control.conditionalProofWitness),
-      (``Control.propositionArgument, ``Control.unprovedProposition),
       (``Control.realizable, ``Control.dataWithoutPremise),
       (``Control.realizable, ``Control.unconditional),
       (``Control.disjoint, ``Control.disjointWitness),
@@ -1555,15 +1234,10 @@ private def controls : MetaM Unit := do
       (``Control.vacuousDependentGuard, ``Control.unconditional),
       (``Control.trivialDisjunct, ``Control.trivialDisjunctWitness),
       (``Control.competingDisjunct, ``Control.zeroDisjunctWitness),
-      (``Control.predicateEquality, ``Control.unconditional),
-      (``Control.containerEquality, ``Control.unconditional),
       (``Control.subtypeDomain, ``Control.subtypeDomain),
       (``Control.liftedDomain, ``Control.liftedDomain),
       (``Control.structureDomain, ``Control.structureDomain),
       (``Control.conditionalDomain, ``Control.unitFallbackWitness),
-      (``Control.carrierInequality, ``Control.unconditional),
-      (``Control.heterogeneousCarrierEquality, ``Control.unconditional),
-      (``Control.emptyPairwise, ``Control.unconditional),
       (``Control.contradictoryPairwise, ``Control.emptyPairwiseWitness),
       (``Control.Historical.projectedEmptyOk, ``Control.unconditional)] do
     let (errors, _, covered, laws) ← audit (· == law) [(law, witness)]
@@ -1571,87 +1245,91 @@ private def controls : MetaM Unit := do
       falsePasses := falsePasses.push law
   unless falsePasses.isEmpty do
     throwError "planted false passes accepted: {falsePasses}"
-  for law in [``Control.Historical.counterfeitEmptyOk, ``Control.Historical.counterfeitEmptyStore,
-      ``Control.Historical.counterfeitEmptyWildcard, ``Control.Historical.counterfeitTrapBranchEmpty,
-      ``Control.Historical.projectedEmptyOk] do
-    let expected ← jointPremises (← inferType (mkConst law))
-    let goal ← mkFreshExprMVar (mkApp (mkConst ``Not) expected)
-    let (h, contradiction) ← goal.mvarId!.intro1
-    contradiction.withContext do
-      let nonempty ← mkAppM ``And.left #[mkFVar h]
-      let premise ← whnf (← inferType nonempty)
-      forallTelescope premise fun args _ => do
-        let equality ← inferType args[0]!
-        let reflexivity ← mkEqRefl equality.getAppArgs.back!
-        contradiction.assign (mkApp nonempty reflexivity)
-    let proof ← instantiateMVars goal
-    unless (Kernel.check env {} proof).isOk do
-      throwError "empty-list applicability obligation is not refuted: {law}"
+  -- Regression pairs with an exact witness under the telescope rule.
+  for (law, proof) in [
+      (``Control.propositionArgument, ``Control.unprovedProposition),
+      (``Control.predicateEquality, ``Control.unconditional),
+      (``Control.containerEquality, ``Control.unconditional),
+      (``Control.carrierInequality, ``Control.unconditional),
+      (``Control.heterogeneousCarrierEquality, ``Control.unconditional),
+      (``Control.emptyPairwise, ``Control.unconditional),
+      (``Control.proofDomain, ``Control.unconditional),
+      (``Control.doubleNegated, ``Control.unconditional),
+      (``Control.propositionEqualityTrue, ``Control.unconditional),
+      (``Control.propositionEquality, ``Control.unconditional),
+      (``Control.nestedAnd, ``Control.unconditional),
+      (``Control.nestedOr, ``Control.someNat),
+      (``Control.nestedStructure, ``Control.unconditional),
+      (``Control.nestedExists, ``Control.unconditional),
+      (``Control.hidden, ``Control.unconditional),
+      (``Control.opaqueContract, ``Control.unconditional),
+      (``Control.RoundSix.lifted, ``Control.RoundSix.liftedPremises),
+      (``Control.RoundSix.packed, ``Control.RoundSix.packedPremises),
+      (``Control.RoundSix.unequal, ``Control.RoundSix.unequalPremises),
+      (``Control.RoundSix.conditionalPremise, ``Control.RoundSix.conditionalPremises),
+      (``Control.RoundSix.membership, ``Control.unconditional),
+      (``Control.RoundSix.abstractDomain, ``Control.unconditional),
+      (``Control.RoundSix.dependent, ``Control.RoundSix.dependentPremises),
+      (``Control.Historical.fieldless, ``Control.Historical.fieldlessPremises)] do
+    let (errors, _, covered, laws) ← audit (· == law) [(law, proof)]
+    unless errors.isEmpty && covered == 1 && laws == 1 do
+      throwError "exact telescope control {law}: {errors}"
   let mut badDiagnostics := #[]
   for (law, witness, diagnostic) in [
-    (``Control.Historical.counterfeitEmptyOk, ``Control.unconditional, "witness does not establish the joint premises"),
-    (``Control.Historical.counterfeitEmptyStore, ``Control.unconditional, "witness does not establish the joint premises"),
-    (``Control.Historical.counterfeitEmptyWildcard, ``Control.unconditional, "witness does not establish the joint premises"),
-    (``Control.Historical.counterfeitTrapBranchEmpty, ``Control.unconditional, "witness does not establish the joint premises"),
-    (``ConcreteSpec.Core.ConstOrderIndependent, ``SpecWitness.constantOrderOuterOnly, "incomplete check"),
-    (``Control.Historical.nonemptyWrongArm, ``Control.unconditional, "witness does not establish the joint premises"),
-    (``Control.vacuousFallback, ``Control.unconditional, "witness does not establish the joint premises"),
+    (``Control.RoundSix.lifted, ``Control.unconditional, "witness does not establish the joint premises"),
+    (``Control.RoundSix.packed, ``Control.RoundSix.packedPrevious, "witness does not establish the joint premises"),
+    (``Control.RoundSix.unequal, ``Control.RoundSix.unequalPrevious, "witness does not establish the joint premises"),
+    (``Control.RoundSix.conditionalPremise, ``Control.RoundSix.conditionalPrevious, "witness does not establish the joint premises"),
+    (``Control.RoundSix.fallback, ``Control.RoundSix.fallbackPremises, "restate with explicit premises"),
+    (``Control.RoundSix.fallback, ``Control.RoundSix.fallbackPrevious, "restate with explicit premises"),
+    (``Control.RoundSix.decidableMatch, ``Control.RoundSix.fallbackPremises, "restate with explicit premises"),
+    (``Control.RoundSix.decideMatch, ``Control.RoundSix.decideMatchPrevious, "restate with explicit premises"),
+    (``Control.Historical.fieldless, ``Control.unconditional, "witness does not establish the joint premises"),
+    (``Control.RoundSix.localImplication, ``Control.unconditional, "restate with explicit premises"),
+    (``Control.Historical.counterfeitEmptyOk, ``Control.unconditional, "restate with explicit premises"),
+    (``Control.Historical.counterfeitEmptyStore, ``Control.unconditional, "restate with explicit premises"),
+    (``Control.Historical.counterfeitEmptyWildcard, ``Control.unconditional, "restate with explicit premises"),
+    (``Control.Historical.counterfeitTrapBranchEmpty, ``Control.unconditional, "restate with explicit premises"),
+    (``ConcreteSpec.Core.ConstOrderIndependent, ``SpecWitness.constantOrderOuterOnly, "witness does not establish the joint premises"),
+    (``Control.Historical.nonemptyWrongArm, ``Control.unconditional, "restate with explicit premises"),
+    (``Control.vacuousFallback, ``Control.unconditional, "restate with explicit premises"),
     (``Control.detached, ``Control.detachedWitness, "witness does not establish the joint premises"),
     (``Control.detachedFunction, ``Control.detachedFunctionWitness, "witness does not establish the joint premises"),
-    (``Control.proofDomain, ``Control.unconditional, "witness does not establish the joint premises"),
-    (``Control.doubleNegated, ``Control.unconditional, "witness does not establish the joint premises"),
-    (``Control.propositionEqualityTrue, ``Control.unconditional, "witness does not establish the joint premises"),
-    (``Control.propositionEquality, ``Control.unconditional, "witness does not establish the joint premises"),
-    (``Control.nestedAnd, ``Control.unconditional, "witness does not establish the joint premises"),
     (``Control.nestedAnd, ``Control.splitAnd, "witness does not establish the joint premises"),
-    (``Control.nestedOr, ``Control.someNat, "witness does not establish the joint premises"),
-    (``Control.nestedStructure, ``Control.unconditional, "unsupported conclusion head"),
-    (``Control.nestedExists, ``Control.unconditional, "witness does not establish the joint premises"),
-    (``Control.nestedIff, ``Control.unconditional, "witness does not establish the joint premises"),
+    (``Control.nestedIff, ``Control.unconditional, "restate with explicit premises"),
     (``Control.contradictory, ``Control.split, "witness does not establish the joint premises"),
     (``Control.Historical.helperGrowth, ``Control.Historical.throughReachableHelper, "unsupported witness axioms"),
     (``Control.Historical.emptyArgument, ``Control.Historical.emptyThroughLet, "unsupported witness axioms"),
     (``Control.Historical.emptyArgument, ``Control.Historical.emptyThroughChain, "unsupported witness axioms"),
     (``Control.contradictory, ``Control.unsound, "unsupported witness axioms"),
-    (``Control.hidden, ``Control.unconditional, "witness does not establish the joint premises"),
-    (``Control.opaqueContract, ``Control.unconditional, "unsupported conclusion head"),
     (``Control.realizable, ``Control.polymorphicWitness, "unsupported witness universe parameters"),
-    (``Control.realizable, `missingWitness, "missing witness theorem")] do
-    let (errors, _, _, _) ← audit (· == law) [(law, witness)]
-    unless errors.size == 1 && (errors[0]?.getD "").contains diagnostic do
+    (``Control.realizable, `missingWitness, "missing witness theorem"),
+    (``Control.realizable, `together, "missing witness theorem")] do
+    let (errors, _, covered, laws) ← audit (· == law) [(law, witness)]
+    unless covered == 0 && laws == 1 && errors.size == 1 &&
+        (errors[0]?.getD "").contains diagnostic do
       badDiagnostics := badDiagnostics.push s!"{law}: {errors}"
   unless badDiagnostics.isEmpty do
     throwError "negative controls: {badDiagnostics}"
-  for (law, witness) in [(``Control.attached, ``Control.attachedWitness),
-      (``Control.reachableIf, ``Control.reachableIfWitness),
-      (``Control.reachableDite, ``Control.reachableDiteWitness),
-      (``Control.branchPremise, ``Control.branchPremiseWitness),
-      (``Control.propositionArgument, ``Control.concreteProposition),
-      (``Control.reachableDisjuncts, ``Control.reachableDisjunctsWitness),
-      (``Control.sharedInput, ``Control.sharedInputWitness),
+  for (law, witness) in [
+      (``Control.realizable, ``Control.together),
       (``Control.Historical.helperGrowth, ``Control.Historical.independentHelperWitness),
-      (``ConcreteSpec.Core.Own.evalArgs_ok_erasure, ``SpecWitness.evalArgsOk),
-      (``ConcreteSpec.Core.Own.evalArgs_trap_erasure, ``SpecWitness.evalArgsTrap),
       (``ConcreteSpec.Core.bitNot_inRange, ``SpecWitness.integer)] do
     let (errors, _, covered, _) ← audit (· == law) [(law, witness)]
     unless errors.isEmpty && covered == 1 do
       throwError "positive applicability control {law}: {errors}"
   let helper := ``Control.Historical.helperGrowth
-  let (errors, _, covered, _) ← audit (· == helper) []
-    [(helper, ``Control.Historical.directHelperApplication)]
+  for proof in [``Control.Historical.directHelperApplication,
+      ``Control.Historical.unrelatedHelperResult] do
+    let (errors, _, covered, _) ← audit (· == helper) [(helper, proof)]
+    unless covered == 0 && errors.size == 1 &&
+        (errors[0]?.getD "").contains "witness does not establish the joint premises" do
+      throwError "result theorem used as a witness: {errors}"
+  let (errors, _, covered, _) ← audit (· == helper)
+    [(helper, ``Control.Historical.contradictoryHelperApplication)]
   unless covered == 0 && errors.size == 1 &&
-      (errors[0]?.getD "").contains "application does not establish the joint premises" do
-    throwError "closed application omitted a nested proof input: {errors}"
-  for (source, diagnostic) in [
-    (``Control.Historical.contradictoryHelperApplication, "unsupported application witness axioms"),
-    (``Control.Historical.unrelatedHelperResult, "no closed call of the Law")] do
-    let (errors, _, covered, _) ← audit (· == helper) [] [(helper, source)]
-    unless covered == 0 && errors.size == 1 && (errors[0]?.getD "").contains diagnostic do
-      throwError "closed application refusal {source}: {errors}"
-  let member := ``ConcreteSpec.Core.KeyConstruct.collectKeysIn_complete
-  let (errors, _, covered, _) ← audit (· == member) [] (applicationWitnesses.filter (·.1 == member))
-  unless errors.isEmpty && covered == 1 do
-    throwError "list membership applicability control: {errors}"
+      (errors[0]?.getD "").contains "witness does not establish the joint premises" do
+    throwError "untrusted result theorem used as a witness: {errors}"
   let invalid := ``Control.lawOnDefinition
   let (errors, _, _, _) ← audit (· == invalid) []
   unless errors.contains s!"Law tag on non-theorem: {invalid}" do
@@ -1677,6 +1355,35 @@ private def controls : MetaM Unit := do
   let (errors, _, covered, _) ← audit (· == growth) [(growth, ``Control.Historical.growthPremises)]
   unless errors.isEmpty && covered == 1 do
     throwError "historical projection telescope control: {errors}"
+  let archived := [
+      ``Control.Historical.Projection.subtype_proj,
+      ``Control.Historical.Projection.packed_and_refl,
+      ``Control.Historical.Projection.pprod_proj,
+      ``Control.Historical.Projection.psigma_proj,
+      ``Control.Historical.Projection.cases_bool,
+      ``Control.Historical.Projection.cases_nat,
+      ``Control.Historical.Projection.matcher,
+      ``Control.Historical.Projection.nested_matcher,
+      ``Control.Historical.Projection.mixed_minors,
+      ``Control.Historical.Projection.recursor_function,
+      ``Control.Historical.Projection.match_carrier,
+      ``Control.Historical.Projection.psum_carrier,
+      ``Control.Historical.Projection.nested_exists_field,
+      ``Control.Historical.Projection.minor_function_application,
+      ``Control.Historical.Projection.recursive_ih_transfer,
+      ``Control.Historical.Projection.cast_let,
+      ``Control.Historical.Projection.iff_field,
+      ``Control.Historical.Projection.exists_carrier,
+      ``Control.Historical.Projection.sigma_carrier]
+  let archivedScope := (`Nonvacuity.Control.Historical.Projection).isPrefixOf
+  let (errors, _, covered, laws) ← audit archivedScope (archived.map fun law => (law, law))
+  unless covered == 0 && laws == archived.length && errors.size == archived.length &&
+      archived.all (fun law => errors.contains s!"{law}: witness does not establish the joint premises") do
+    throwError "archived proof-body probes used as evidence: {errors}"
+  let (errors, _, covered, laws) ← audit archivedScope
+    (archived.map fun law => (law, ``Control.Historical.growthPremises))
+  unless errors.isEmpty && covered == archived.length && laws == archived.length do
+    throwError "archived probes lost their satisfiable telescope: {errors}"
   let excluded := [``Control.helper, ``Control.representation, ``Control.instanceEvidence,
     ``Control.planted]
   let scope := fun n => positiveScope n || excluded.contains n
