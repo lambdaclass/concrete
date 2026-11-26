@@ -1942,8 +1942,9 @@ LeanCompilerBackend.Verified.Source.read.eq_1	propext
 LeanCompilerBackend.Verified.Source.read.eq_2	propext
 LeanCompilerBackend.Verified.Source.step.eq_1	Quot.sound propext
 LeanCompilerBackend.Verified.Source.write.eq_1	propext
-LeanCompilerBackend.Verified.TypedA64.render.eq_1	Classical.choice Quot.sound propext
+LeanCompilerBackend.Verified.TypedA64.renderWithWork.eq_1	Classical.choice Quot.sound propext
 LeanCompilerBackend.Verified.compileFunction.eq_1	Classical.choice Quot.sound propext
+LeanCompilerBackend.Verified.compileFunctionWithWork.eq_1	Classical.choice Quot.sound propext
 Std.Legacy.Range.mk.congr_simp	
 _private.Concrete.Admission.0.Concrete.Admission.Output.mk.inj	
 _private.Concrete.Admission.0.Concrete.Admission.Output.mk.injEq	propext

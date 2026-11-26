@@ -391,7 +391,7 @@ structure Profile where
 /-- The build identity check compares this kernel-reducible pin to Lake's declared
 and resolved revisions. Handoffs also check the imported backend compiler identity. -/
 def pinnedLCBRevision : Option String :=
-  some "4bea4b3ffd8a43a73a0016012d865044067b3275"
+  some "4623fba6fec8439974b7e4ceb9a577b3e6918a22"
 
 def Profile.invocation (profile : Profile) (role : ToolRole) (pin : ToolInvocation) : Prop :=
   profile.tools.filter (·.role == role) = [pin]
@@ -1184,7 +1184,7 @@ theorem answerOrigins : SiteOrigins answerInput.path answerOutput.core answerOut
   with_unfolding_all
     exact ⟨List.nil_sublist _, rfl⟩
 
-private def declaredRevision := "4bea4b3ffd8a43a73a0016012d865044067b3275"
+private def declaredRevision := "4623fba6fec8439974b7e4ceb9a577b3e6918a22"
 
 theorem pinnedRevision : pinnedLCBRevision = some declaredRevision := by
   with_unfolding_all rfl
@@ -1221,22 +1221,31 @@ private theorem assembleMacOS {f : Source.Function} {stack : StackMIR.Function}
     (select : TypedA64.select stack = .ok asm)
     (asmOK : TypedA64.validate asm = .ok ()) :
     ∃ text, LCB.assemble .aarch64Macos f = .ok text := by
-  have render : ∃ text, TypedA64.render asm LCB.bodySymbol = .ok text := by
+  have render : ∃ text lines, TypedA64.renderWithWork asm LCB.bodySymbol = .ok (text, lines) := by
     have symbolOK : (!LCB.bodySymbol.name.isEmpty &&
         LCB.bodySymbol.name.toList.all (fun c => c.toNat < 128 && (c.isAlphanum || c == '_')) &&
         (LCB.bodySymbol.name.toList.head!.isAlpha || LCB.bodySymbol.name.toList.head! == '_')) = true := rfl
     have exported : LCB.bodySymbol.exported = true := rfl
-    simp only [TypedA64.render, asmOK, bind, Except.bind, symbolOK, Bool.not_true,
-      Bool.false_eq_true, ite_false, exported, ite_true, Array.forIn_pure_yield_eq_foldl]
-    exact ⟨_, rfl⟩
-  obtain ⟨text, render⟩ := render
+    simp only [TypedA64.renderWithWork, asmOK, bind, Except.bind, symbolOK, Bool.not_true,
+      Bool.false_eq_true, ite_false, exported, ite_true]
+    exact ⟨_, _, rfl⟩
+  obtain ⟨text, lines, render⟩ := render
+  have checked : ∃ work, validateJobWithWork (LCB.job f) = .ok work := by
+    rw [← validateJobWithWork_result] at jobOK
+    cases h : validateJobWithWork (LCB.job f) with
+    | ok work => exact ⟨work, rfl⟩
+    | error err =>
+      rw [h] at jobOK
+      cases jobOK
+  obtain ⟨work, checked⟩ := checked
   refine ⟨".text\n" ++ text ++ ".subsections_via_symbols\n", ?_⟩
   have requested : ((LCB.job f).requested != EvidenceRequest.none) = false := rfl
   have body : (LCB.job f).code.body = f := rfl
   have layout : (LCB.job f).code.layout = planFrame f := rfl
   have symbol : (LCB.job f).code.symbol = LCB.bodySymbol := rfl
-  simp only [LCB.assemble, compileFunction, jobOK, bind, Except.bind, Except.mapError,
-    requested, Bool.false_eq_true, ite_false, body, layout, lower, stackOK, select, asmOK, symbol, render]
+  simp only [LCB.assemble, compileFunction, compileFunctionWithWork, checked, bind, Except.bind,
+    Except.mapError, requested, Bool.false_eq_true, ite_false, body, layout, lower, stackOK,
+    select, asmOK, symbol, render]
   rfl
 
 
