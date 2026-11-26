@@ -7,10 +7,12 @@ The audit telescopes every binder and generates an existential over the
 whole telescope ending in True, using conjunction for proof premises
 when the rest of the telescope does not depend on the proof. A registered
 kernel-checked theorem must have exactly that type up to definitional
-equality and satisfy the witness axiom policy. The conclusion contributes
-no evidence. Its unreduced head must be a supported propositional former
-or a saturated named predicate. Other residual heads require restating
-the Law with explicit premises.
+equality and satisfy the witness axiom policy. Non-vacuity certifies
+only that the premises are satisfiable and says nothing about how
+representative the witness is. The conclusion contributes no evidence.
+The audit checks the heads of logical connectives and their
+propositional operands, keeping named predicates folded. Unsupported
+forms require restating the Law with explicit premises.
 -/
 
 open Lean Meta
@@ -34,13 +36,26 @@ private partial def exposeConclusion (expr : Expr) : MetaM Expr := withIncRecDep
   | .letE _ _ value body _ => exposeConclusion (body.instantiate1 value)
   | other => pure other
 
--- Accept the built-in propositional formers and saturated named predicates.
--- The declaration's result sort must be literally Prop, so a polymorphic
--- eliminator specialized to Prop cannot qualify as a predicate.
-private def supportedConclusion (conclusion : Expr) : MetaM Bool := do
+-- Expose local syntax at each logical operand without unfolding predicates.
+private partial def supportedConclusion (expr : Expr) : MetaM Bool := withIncRecDepth do
+  let conclusion ← exposeConclusion expr
   let .const name _ := conclusion.getAppFn.consumeMData | return false
-  if [``Eq, ``HEq, ``And, ``Or, ``Not, ``Exists, ``True, ``False].contains name then
-    return true
+  if name == ``And || name == ``Or then
+    let #[left, right] := conclusion.getAppArgs | return false
+    return (← supportedConclusion left) && (← supportedConclusion right)
+  if name == ``Not then
+    let #[operand] := conclusion.getAppArgs | return false
+    return ← supportedConclusion operand
+  if name == ``Exists then
+    let #[domain, predicate] := conclusion.getAppArgs | return false
+    if (← isProp domain) && !(← supportedConclusion domain) then
+      return false
+    return ← withLocalDeclD `witness domain fun witness =>
+      supportedConclusion (mkApp predicate witness)
+  if name == ``Eq || name == ``HEq then
+    return ← conclusion.getAppArgs.allM fun arg => do
+      if ← isProp arg then supportedConclusion arg else pure true
+  if name == ``True || name == ``False then return true
   let env ← getEnv
   let recursorSuffix := match name with
     | .str _ suffix => ["rec", recOnSuffix, brecOnSuffix, casesOnSuffix].contains suffix
@@ -50,6 +65,7 @@ private def supportedConclusion (conclusion : Expr) : MetaM Bool := do
       isMatcherCore env name || isMatcherLikeCore env name then
     return false
   let some info := env.find? name | return false
+  -- A polymorphic eliminator specialized to Prop cannot qualify as a predicate.
   match info with
   | .axiomInfo _ | .defnInfo _ | .opaqueInfo _ | .inductInfo _ =>
     forallTelescope info.type fun params result =>
@@ -58,8 +74,6 @@ private def supportedConclusion (conclusion : Expr) : MetaM Bool := do
 
 private def jointPremises (type : Expr) : MetaM Expr :=
   forallTelescope type.consumeMData fun args conclusion => do
-    -- Expose local syntax without unfolding constants or reducing matches.
-    let conclusion ← exposeConclusion conclusion
     unless ← supportedConclusion conclusion do
       throwError "restate with explicit premises"
     args.foldrM (init := mkConst ``True) fun arg rest => do
@@ -323,9 +337,9 @@ theorem constantOrder :
   all_goals decide
 
 theorem constantOrderOuterOnly :
-    ∃ (U : ConstTypes) (_fuel : Nat) (source first second : List (ConstDecl U))
-      (_ : DependencyOrder U source first) (_ : DependencyOrder U source second), True :=
-  ⟨ConstDemo.U, 3, chainSource, adjacentOrder, separatedOrder, by decide, by decide, trivial⟩
+    ∃ (U : ConstTypes) (_fuel : Nat) (source first second : List (ConstDecl U)),
+      DependencyOrder U source first ∧ DependencyOrder U source second ∧ True :=
+  ⟨ConstDemo.U, 0, [], [], [], ⟨.nil, .nil, trivial⟩, ⟨.nil, .nil, trivial⟩, trivial⟩
 
 open ConcreteSpec.Rep in
 theorem representationRoundtrip :
@@ -1045,6 +1059,12 @@ theorem counterfeitEmptyOk : (match Exec.evalArgs (instrumentOperands erasedOps 
     | _ => False) :=
   @evalArgs_ok_erasure erasedOps ConcreteSpec.Core.Own.Examples.types permitE [(x, 7)] [] ⟨0, initial⟩
 
+/-- Law: a conjunction cannot hide the archived empty-list match. -/
+theorem wrappedEmptyOk : (match Exec.evalArgs (instrumentOperands erasedOps ConcreteSpec.Core.Own.Examples.types permitE) [(x, 7)] ⟨0, initial⟩ [] with
+    | .ok (vs, _t) => Exec.evalArgs erasedOps [(x, 7)] (erase (⟨0, initial⟩ : Store Int)) [] = .ok (vs, 0)
+    | _ => False) ∧ True :=
+  ⟨counterfeitEmptyOk, trivial⟩
+
 /-- Law: recovered counterfeit tested at the applicability boundary. -/
 theorem counterfeitEmptyStore : (match Exec.evalArgs (instrumentOperands erasedOps ConcreteSpec.Core.Own.Examples.types permitE) [(x, 7)] ⟨0, initial⟩ [] with
     | .ok (vs, _t) => Exec.evalArgs erasedOps [(x, 7)] (erase (⟨0, initial⟩ : Store Int)) [] = .ok (vs, 0)
@@ -1329,13 +1349,7 @@ private def controls : MetaM Unit := do
       (``Control.wrappedArgument, ``Control.RoundSix.wrappedPremises),
       (``Control.conditionalProofArgument, ``Control.RoundSix.selectedProofPremises),
       (``Control.contradictoryPairwise, ``Control.RoundSix.emptyListPremises),
-      -- These explicit telescopes contain only a Nat binder, inhabited at zero.
-      (``Control.disjoint, ``Control.someNat),
-      (``Control.competingDisjunct, ``Control.someNat),
       -- These Laws have no explicit binders. Their conclusions earn zero credit.
-      (``Control.trivialDisjunct, ``Control.unconditional),
-      (``Control.detached, ``Control.unconditional),
-      (``Control.detachedFunction, ``Control.unconditional),
       (``Control.subtypeDomain, ``Control.unconditional),
       (``Control.liftedDomain, ``Control.unconditional),
       (``Control.structureDomain, ``Control.unconditional),
@@ -1346,14 +1360,7 @@ private def controls : MetaM Unit := do
       (``Control.carrierInequality, ``Control.unconditional),
       (``Control.heterogeneousCarrierEquality, ``Control.unconditional),
       (``Control.emptyPairwise, ``Control.unconditional),
-      (``Control.proofDomain, ``Control.unconditional),
-      (``Control.doubleNegated, ``Control.unconditional),
-      (``Control.propositionEqualityTrue, ``Control.unconditional),
-      (``Control.propositionEquality, ``Control.unconditional),
-      (``Control.nestedAnd, ``Control.unconditional),
-      (``Control.nestedOr, ``Control.someNat),
       (``Control.nestedStructure, ``Control.unconditional),
-      (``Control.nestedExists, ``Control.unconditional),
       (``Control.hidden, ``Control.unconditional),
       (``Control.opaqueContract, ``Control.unconditional),
       (``Control.RoundSix.lifted, ``Control.RoundSix.liftedPremises),
@@ -1392,12 +1399,25 @@ private def controls : MetaM Unit := do
     (``Control.Historical.counterfeitEmptyStore, ``Control.unconditional, "restate with explicit premises"),
     (``Control.Historical.counterfeitEmptyWildcard, ``Control.unconditional, "restate with explicit premises"),
     (``Control.Historical.counterfeitTrapBranchEmpty, ``Control.unconditional, "restate with explicit premises"),
-    (``ConcreteSpec.Core.ConstOrderIndependent, ``SpecWitness.constantOrderOuterOnly, "witness does not establish the joint premises"),
+    (``Control.Historical.wrappedEmptyOk, ``Control.unconditional, "restate with explicit premises"),
+    (``ConcreteSpec.Core.ConstOrderIndependent, ``SpecWitness.constantOrderOuterOnly, "restate with explicit premises"),
     (``Control.Historical.nonemptyWrongArm, ``Control.unconditional, "restate with explicit premises"),
     (``Control.vacuousFallback, ``Control.unconditional, "restate with explicit premises"),
-    (``Control.detached, ``Control.detachedWitness, "witness does not establish the joint premises"),
-    (``Control.detachedFunction, ``Control.detachedFunctionWitness, "witness does not establish the joint premises"),
-    (``Control.nestedAnd, ``Control.splitAnd, "witness does not establish the joint premises"),
+    (``Control.detached, ``Control.detachedWitness, "restate with explicit premises"),
+    (``Control.detachedFunction, ``Control.detachedFunctionWitness, "restate with explicit premises"),
+    (``Control.nestedAnd, ``Control.splitAnd, "restate with explicit premises"),
+    (``Control.disjoint, ``Control.someNat, "restate with explicit premises"),
+    (``Control.competingDisjunct, ``Control.someNat, "restate with explicit premises"),
+    (``Control.trivialDisjunct, ``Control.unconditional, "restate with explicit premises"),
+    (``Control.detached, ``Control.unconditional, "restate with explicit premises"),
+    (``Control.detachedFunction, ``Control.unconditional, "restate with explicit premises"),
+    (``Control.proofDomain, ``Control.unconditional, "restate with explicit premises"),
+    (``Control.doubleNegated, ``Control.unconditional, "restate with explicit premises"),
+    (``Control.propositionEqualityTrue, ``Control.unconditional, "restate with explicit premises"),
+    (``Control.propositionEquality, ``Control.unconditional, "restate with explicit premises"),
+    (``Control.nestedAnd, ``Control.unconditional, "restate with explicit premises"),
+    (``Control.nestedOr, ``Control.someNat, "restate with explicit premises"),
+    (``Control.nestedExists, ``Control.unconditional, "restate with explicit premises"),
     (``Control.nestedIff, ``Control.unconditional, "restate with explicit premises"),
     (``Control.contradictory, ``Control.split, "witness does not establish the joint premises"),
     (``Control.Historical.helperGrowth, ``Control.Historical.throughReachableHelper, "unsupported witness axioms"),
