@@ -2846,7 +2846,7 @@ ConcreteSpec.Core.SourcePath.wholeLocation.congr_simp
 ConcreteSpec.Core.SourcePath.wholeLocation.eq_1	
 ConcreteSpec.Core.SourcePathSpan.ColumnMatches.eq_1	
 ConcreteSpec.Core.SourcePathSpan.EndInSource.eq_1	
-ConcreteSpec.Core.SourcePathSpan.File.length.eq_1	Quot.sound propext
+ConcreteSpec.Core.SourcePathSpan.File.indexedCoordinate._proof_1	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.File.length_eq	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.File.load._proof_1	
 ConcreteSpec.Core.SourcePathSpan.File.matchesLocation._proof_1	Quot.sound propext
@@ -2855,14 +2855,12 @@ ConcreteSpec.Core.SourcePathSpan.File.mk.inj	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.File.mk.injEq	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.File.mk.sizeOf_spec	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.File.positionAt.congr_simp	Quot.sound propext
-ConcreteSpec.Core.SourcePathSpan.File.positionAt.eq_1	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.File.positionAt_eq	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.LineMatches.eq_1	
 ConcreteSpec.Core.SourcePathSpan.Project.admitted	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.Project.files.eq_1	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.Project.findFile.eq_1	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.Project.findFile_succeeds_iff	Quot.sound propext
-ConcreteSpec.Core.SourcePathSpan.Project.findId.eq_1	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.Project.findId_eq	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.Project.load._proof_1	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.Project.singleton._proof_1	Quot.sound propext
@@ -2878,13 +2876,8 @@ ConcreteSpec.Core.SourcePathSpan.bindSource_safety	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.bindTabSpan	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.columnMatches_guard_iff	
 ConcreteSpec.Core.SourcePathSpan.endInSource_guard_iff	
-ConcreteSpec.Core.SourcePathSpan.fileSpan._proof_1	Quot.sound propext
-ConcreteSpec.Core.SourcePathSpan.fileSpan._proof_2	Quot.sound propext
-ConcreteSpec.Core.SourcePathSpan.fileSpan._proof_3	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.fileSpan.congr_simp	Quot.sound propext
-ConcreteSpec.Core.SourcePathSpan.fileSpan.eq_1	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.fileSpan_location	Quot.sound propext
-ConcreteSpec.Core.SourcePathSpan.fileSpan_location._simp_1_8	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.instDecidableEqFile.decEq._proof_1	
 ConcreteSpec.Core.SourcePathSpan.instDecidableEqFile.decEq._proof_2	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.instDecidableEqFile.decEq._proof_3	Quot.sound propext
@@ -2899,12 +2892,10 @@ ConcreteSpec.Core.SourcePathSpan.matchesLocation_correct	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.missingFile_refuses	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.orderedOffsets_guard_iff	
 ConcreteSpec.Core.SourcePathSpan.projectLocation_correct	Quot.sound propext
-ConcreteSpec.Core.SourcePathSpan.projectSpan.eq_1	Quot.sound propext
-ConcreteSpec.Core.SourcePathSpan.projectSpanAt._proof_1	Quot.sound propext
-ConcreteSpec.Core.SourcePathSpan.projectSpanAt._proof_2	Quot.sound propext
-ConcreteSpec.Core.SourcePathSpan.projectSpanAt.eq_1	Quot.sound propext
+ConcreteSpec.Core.SourcePathSpan.projectSpanAtM._proof_1	Quot.sound propext
+ConcreteSpec.Core.SourcePathSpan.projectSpanAtM._proof_2	Quot.sound propext
+ConcreteSpec.Core.SourcePathSpan.projectSpanAt_eq	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.projectSpan_correct	Quot.sound propext
-ConcreteSpec.Core.SourcePathSpan.projectSpan_correct._simp_1_5	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.projectSpan_progress	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.projectSpan_safety	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.projectTabSpan	Quot.sound propext
@@ -5943,6 +5934,7 @@ _private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.SourcePathSpan.findId_iff
 _private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.SourcePathSpan.findId_iff._simp_1_1	Quot.sound propext
 _private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.SourcePathSpan.findId_iff._simp_1_2	propext
 _private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.SourcePathSpan.findIdx?_hit	Quot.sound propext
+_private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.SourcePathSpan.projectSpan_eq	Quot.sound propext
 _private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.SourceText.positionAt_append	Quot.sound propext
 _private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.SpecializationTable.canonicalize.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.SpecializationTable.canonicalize.match_1.eq_2	
@@ -6391,6 +6383,7 @@ _private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.KeyConstruct.pathAtIn.match
 _private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.KeyConstruct.segment.match_1.eq_1	
 _private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.KeyConstruct.segment.match_1.eq_2	
 _private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.KeyConstruct.segment.match_1.eq_3	
+_private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.File.length_eq_indexSize	Quot.sound propext
 _private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.File.offset_lt_size	Quot.sound propext
 _private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.File.offset_lt_size._simp_1_1	propext
 _private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.File.positions_eq	Quot.sound propext
@@ -6403,14 +6396,11 @@ _private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.PathIndex.in
 _private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.PathIndex.insert.eq_def	
 _private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.PathIndex.insert.match_1.eq_1	
 _private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.PathIndex.insert.match_1.eq_2	
-_private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.PathIndex.lookup.eq_1	
-_private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.PathIndex.lookup.eq_2	
-_private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.PathIndex.lookup.eq_def	
-_private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.PathIndex.lookup.match_1.eq_1	
-_private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.PathIndex.lookup.match_1.eq_2	
+_private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.PathIndex.lookup_cons	
 _private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.PathIndex.lookup_empty	
 _private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.PathIndex.lookup_insert	Quot.sound propext
-_private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.PathIndex.lookup_insert._simp_1_7	propext
+_private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.PathIndex.lookup_insert._simp_1_4	propext
+_private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.PathIndex.lookup_nil	
 _private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.PathIndex.lookup_ofFiles	Quot.sound propext
 _private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.PathIndex.lookup_ofFiles._simp_1_1	propext
 _private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.PathIndex.node.inj	
@@ -6425,7 +6415,16 @@ _private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.ScopedSpan.m
 _private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.ScopedSpan.mk.inj	Quot.sound propext
 _private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.ScopedSpan.mk.injEq	Quot.sound propext
 _private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.ScopedSpan.mk.sizeOf_spec	Quot.sound propext
+_private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.lookupEdgeM_eq	
 _private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.lookup_filter_other	Quot.sound propext
+_private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.scanCoordinate._proof_1	
+_private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.scanCoordinate._proof_2	
+_private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.spanFromPosition._proof_1	Quot.sound propext
+_private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.spanFromPosition._proof_2	Quot.sound propext
+_private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.spanFromPosition._proof_3	Quot.sound propext
+_private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.spanFromPosition.eq_1	Quot.sound propext
+_private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.spanFromPosition_location	Quot.sound propext
+_private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.SourcePathSpan.spanFromPosition_location._simp_1_8	Quot.sound propext
 _private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.instDecidableEqFnId.decEq.match_1.eq_1	
 _private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.instReprConstructName.repr.match_1.eq_1	
 _private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.instReprConstructName.repr.match_1.eq_2	
