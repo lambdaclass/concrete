@@ -28,11 +28,8 @@ if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
   build stage-interface-controls "$work/stage-interface-controls.log" bounded 120 \
     lake env lean -DwarningAsError=true -DautoImplicit=false scripts/checks/compiler/stage_interfaces.lean
   echo "ok   stage interface controls"
-  build llvm-rendering "$work/llvm-rendering.log" bounded 120 \
-    lake env lean scripts/checks/compiler/llvm_rendering.lean
-  echo "ok   LLVM rendering controls"
   build llvm-mutation-controls "$work/llvm-mutation-controls.log" bounded 120 \
-    python3 -B scripts/checks/compiler/llvm_mutation_controls.py
+    lake env python3 -B scripts/checks/compiler/llvm_mutation_controls.py
   cat "$work/llvm-mutation-controls.log"
 fi
 

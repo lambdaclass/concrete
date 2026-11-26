@@ -232,6 +232,8 @@ structure MemoryState (Value : Type) (profile : Profile) where
   live : List PlaceId
   initialized : List PlaceId
   bytes : Mem.Memory
+  /-- Whether the current activation has a caller, including recursive calls to the entry. -/
+  hasCaller : Bool := false
 
 def MemoryState.BytesWF {Value : Type} {profile : Profile} (state : MemoryState Value profile) :
     Prop :=

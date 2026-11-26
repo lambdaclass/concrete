@@ -588,7 +588,7 @@ private def storingMemory (project : Project) : Memory testLowering testProfile 
     [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1⟩)])], [(Exec.Demo.mainF, [(storeRoot, .materialized)])]⟩
 
 private def storeInitial : MemoryRegisters testLanguage testProfile :=
-  ⟨Exec.Demo.mainF, ⟨0⟩, 0, [], [], [], [], Mem.Memory.empty⟩
+  ⟨Exec.Demo.mainF, ⟨0⟩, 0, [], [], [], [], Mem.Memory.empty, false⟩
 
 private def storeBlock : Mem.Block :=
   ⟨⟨0⟩, 1, 1, 1, true, false, [.uninit]⟩
@@ -649,6 +649,85 @@ example (project : Project) (m : LoweringModels testLanguage testLowering testPr
   have bytes := congrArg (fun state => (MemoryState.bytes state).blocks) finish
   exact (show storeBefore.bytes.blocks ≠ storeAfter.bytes.blocks from by decide) bytes
 
+
+private def returningMIR (project : Project) : MIR testLowering testProfile :=
+  ⟨project, Exec.Demo.mainF, [(Exec.Demo.mainF, ⟨[], some ()⟩)],
+    [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[⟨⟨0⟩, [], [], .ret (some ⟨(), .literal ⟨[42]⟩⟩), []⟩]⟩)]⟩
+
+private def returningMemory (project : Project) : Memory testLowering testProfile :=
+  ⟨project, Exec.Demo.mainF, (returningMIR project).signatures,
+    [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[⟨⟨0⟩, [], [], .ret (some ⟨(), .literal ⟨[0]⟩⟩), []⟩]⟩)],
+    [], []⟩
+
+private def returnActions : MemoryActions testLanguage testLowering testProfile :=
+  {storeActions with values := {storeActions.values with
+    literal := fun _ bytes => bytes.head?.map fun byte => .scalar (.int .u8 (Int.ofNat byte.toNat))}}
+
+private def returns42 (A : Type) : Model A Nat where
+  execution := {
+    State := Unit
+    initial := fun _ _ => True
+    initialized := fun _ => ⟨(), trivial⟩
+    step := fun _ _ _ => False
+    result := fun _ _ o => o = .returned 42 ByteArray.empty
+    terminal := fun _ _ _ _ _ h => h
+    safe := fun _ _ => True
+    trace := fun _ _ => []
+    permitted := fun _ _ => False
+    resultTrace := by intro _ _ _ h; cases h; rfl
+    traceGrows := fun _ _ _ h => False.elim h
+  }
+  result := fun _ _ o => o = .returned 42 ByteArray.empty
+  projects := fun _ o legacy => o = .returned 42 ByteArray.empty ∧ legacy = .returned 42 ByteArray.empty
+  terminalExact := by
+    intro _ _ _
+    exact ⟨fun h => ⟨_, rfl, rfl, h⟩, fun ⟨_, _, _, h⟩ => h⟩
+  completeProjection := fun _ _ _ h => ⟨_, h, rfl⟩
+  runtimeExact := by
+    intro _ _ _ h
+    rcases h with ⟨rfl, rfl⟩
+    exact ⟨rfl, rfl⟩
+
+private def falseReturnModels (m : LoweringModels testLanguage testLowering testProfile) :
+    LoweringModels testLanguage testLowering testProfile :=
+  {m with
+    mir := returns42 _
+    memory := returns42 _
+    memoryState := fun _ => storeInitial
+    mirFrame := fun _ => ⟨Exec.Demo.mainF, [], []⟩
+    memoryActions := returnActions}
+
+-- The current return instruction really yields zero.
+example (project : Project) :
+    (returningMemory project).terminalObservation returnActions.values storeInitial =
+      some (.returned 0 ByteArray.empty) := rfl
+
+-- A recursive activation of the entry returns to its caller. A trap in that
+-- activation still reports the fetched terminator's kind and lexical origin.
+example (project : Project) :
+    (returningMemory project).terminalObservation returnActions.values
+      {storeInitial with hasCaller := true} = none := rfl
+
+example (project : Project) :
+    let memory : Memory testLowering testProfile := {returningMemory project with
+      functions := [(Exec.Demo.mainF, [], ⟨⟨0⟩,
+        #[⟨⟨0⟩, [], [], .trap .divisionByZero testOrigin, []⟩]⟩)]}
+    memory.terminalObservation returnActions.values {storeInitial with hasCaller := true} =
+      some (.trapped 134 .divisionByZero testOrigin.lexical
+        (trapDiagnostic project .divisionByZero testOrigin.operation testOrigin.lexical)) := rfl
+
+-- The two models agree on 42, but the full handoff must reject their claim:
+-- the actual Memory terminator returns zero from its initial state.
+example (project : Project) (m : LoweringModels testLanguage testLowering testProfile) :
+    ¬ LowersMemory (falseReturnModels m) (returningMIR project) (returningMemory project) := by
+  intro lowers
+  have terminal := lowers.2.2.2.2.2.2.1.2.2.2 () (.returned 42 ByteArray.empty)
+    ⟨(), trivial, .nil ()⟩
+  have wrong := terminal.mp rfl
+  have status := congrArg (Option.map fun o => match o with
+    | .returned code _ => code
+    | _ => 255) wrong
+  exact (show some (0 : UInt8) ≠ some 42 from by decide) status
 
 -- A fabricated effect cannot accompany a silent Exec transition in the registered Core model.
 example (m : LoweringModels testLanguage testLowering testProfile) (project : Project)

@@ -481,21 +481,24 @@ def InstructionStep (memory : Memory lang profile) (actions : MemoryActions lang
   | .beginLifetime place => ∃ started, memory.Begins state place started ∧ next = started.advance
   | .endLifetime place => ∃ ended, memory.Ends state place ended ∧ next = ended.advance
   | .destructure src bindings =>
-    ∃ destructured, actions.destructure src bindings state destructured ∧ next = destructured.advance
+    ∃ destructured, actions.destructure src bindings state destructured ∧
+      destructured.hasCaller = state.hasCaller ∧ next = destructured.advance
   | .call callee dst args => actions.call memory callee dst args state next
 
 def ControlStep (memory : Memory lang profile) (actions : MemoryActions language lang profile)
     (state next : MemoryRegisters language profile) :
     Terminator (Sigma (MemoryRead _ lang.literal)) (MemoryRead _ lang.literal lang.bool) → Prop
-  | .jump edge => next.frame = state.frame ∧ next.block = edge.target ∧ next.instruction = 0 ∧
+  | .jump edge => next.frame = state.frame ∧ next.hasCaller = state.hasCaller ∧
+    next.block = edge.target ∧ next.instruction = 0 ∧
     actions.transfer memory edge state next
   | .branch test yes no =>
     ∃ value read flag, readValue actions.values state test = some (value, read) ∧
       language.operands.test value = some flag ∧
       let edge := if flag then yes else no
-      next.frame = state.frame ∧ next.block = edge.target ∧ next.instruction = 0 ∧
+      next.frame = state.frame ∧ next.hasCaller = state.hasCaller ∧
+      next.block = edge.target ∧ next.instruction = 0 ∧
       actions.transfer memory edge read next
-  | .ret value => actions.returnToCaller memory value state next
+  | .ret value => state.hasCaller = true ∧ actions.returnToCaller memory value state next
   | .trap .. => False
 
 def Step (memory : Memory lang profile) (actions : MemoryActions language lang profile)
@@ -506,26 +509,43 @@ def Step (memory : Memory lang profile) (actions : MemoryActions language lang p
     | none => state.instruction = block.body.length ∧ memory.ControlStep actions state next block.ending
 
 def Initial (memory : Memory lang profile) (state : MemoryRegisters language profile) : Prop :=
-  state.frame = memory.entry ∧ (∃ graph, memory.graphAt state.frame = some graph ∧
+  state.frame = memory.entry ∧ state.hasCaller = false ∧ (∃ graph, memory.graphAt state.frame = some graph ∧
     graph.entry = state.block) ∧ state.instruction = 0 ∧ state.virtualValues = [] ∧
   state.materialized = [] ∧ state.live = [] ∧ state.initialized = [] ∧ state.bytes = Mem.Memory.empty
 
-def AtTerminal (memory : Memory lang profile) (state : MemoryRegisters language profile) : Prop :=
-  ∃ block, memory.blockAt state = some block ∧ state.instruction = block.body.length ∧
-    match block.ending with
-    | .ret _ | .trap .. => True
-    | _ => False
-
 end Memory
 
-/-- The hosted runtime writes one diagnostic at a terminal trap. This projection
-uses lexical provenance, independently of the compiled trap table and its indices. -/
-def coreTrapDiagnostic {language : CoreLanguage} (core : CoreInput language)
-    (kind : TrapKind) (site : SiteId) : ByteArray := Id.run do
-  let some origin := AList.lookup core.payload.origins site | return ByteArray.empty
-  let span := origin.lexical
-  let some file := core.project.files[span.file.index]? | return ByteArray.empty
+/-- Render the hosted trap diagnostic from the originating source location. -/
+def trapDiagnostic (project : Project) (kind : TrapKind) (site : SiteId)
+    (span : FileSpan) : ByteArray := Id.run do
+  let some file := project.files[span.file.index]? | return ByteArray.empty
   return s!"concrete: trap: {kind.name} at {file.path.render.text}:{span.line}:{span.col} (site {site.id})\n".toUTF8
+
+def coreTrapDiagnostic {language : CoreLanguage} (core : CoreInput language)
+    (kind : TrapKind) (site : SiteId) : ByteArray :=
+  match AList.lookup core.payload.origins site with
+  | some origin => trapDiagnostic core.project kind site origin.lexical
+  | none => ByteArray.empty
+
+/-- A hosted observation comes from the terminator at the current PC. Return
+operands use the same target-indexed reads as instructions. A callee return
+instead steps back to its caller. -/
+def Memory.terminalObservation {language : CoreLanguage} {lang : LoweringLanguage language.operands.Ty}
+    {profile : Profile} (memory : Memory lang profile)
+    (values : MemoryValues language.operands.Ty language.operands.Val)
+    (state : MemoryRegisters language profile) : Option Observation := do
+  let block ← memory.blockAt state
+  if state.instruction != block.body.length then none else
+  match block.ending with
+  | .ret (some ⟨_, operand⟩) => do
+    if state.hasCaller || state.frame != memory.entry then none else
+    let (value, _) ← readValue values state operand
+    let .returned status ← language.hostedResult (.returned value) | none
+    return .returned status ByteArray.empty
+  | .trap kind origin => do
+    let .trapped status kind _ ← language.hostedResult (.trapped kind origin.operation) | none
+    return .trapped status kind origin.lexical (trapDiagnostic memory.project kind origin.operation origin.lexical)
+  | _ => none
 
 def coreRuntimeEvents {language : CoreLanguage} (core : CoreInput language)
     (state : Exec.Config core.payload.machine) : List (ProcessEvent language.operands.Event) :=
@@ -614,8 +634,9 @@ def Memory.ExecutionExact (memory : Memory lang profile)
     memory.Step m.memoryActions (m.memoryState q) (m.memoryState next)) ∧
   (∀ q state, m.memory.execution.finite memory q → memory.Step m.memoryActions (m.memoryState q) state →
     ∃ next, m.memory.execution.step memory q next ∧ m.memoryState next = state) ∧
-  ∀ q result, m.memory.execution.finite memory q → m.memory.result memory q result →
-    memory.AtTerminal (m.memoryState q)
+  ∀ q result, m.memory.execution.finite memory q →
+    (m.memory.result memory q result ↔
+      memory.terminalObservation m.memoryActions.values (m.memoryState q) = some result)
 
 def LowersMemory (m : LoweringModels language lang profile)
     (mir : MIR lang profile) (memory : Memory lang profile) : Prop :=
