@@ -142,7 +142,9 @@ def checkObservation (expected : Expectation) (got : Outcome) (sites : SiteTable
 def lcbProfileStatus (job : LeanCompilerBackend.Verified.FunctionJob)
     (defaultCode : UInt32) : UInt32 :=
   match LeanCompilerBackend.Verified.validateJob job with
-  | .error (.admission (.unsupported _)) | .error (.unsupported _) => 17
+  | .error (.admission (.unsupported _))
+  | .error (.admission (.unsupportedHighMultiplyWidth ..))
+  | .error (.unsupported _) | .error (.unsupportedTarget _) => 17
   | _ => defaultCode
 
 /-- Write the LCB leg: the body assembled in process, the runtime entry as QBE text. -/
@@ -222,6 +224,30 @@ private def checkBackendProfile : IO UInt32 := do
         IO.eprintln s!"{stage}: expected BACKEND-PROFILE (2), got {e.code} ({e.exitCode}): {e.message}"
         return 1
   IO.println "ok   LCB admission: BACKEND-PROFILE (2) across all targets"
+  for (op, name) in [(LeanCompilerBackend.Verified.Source.Binary.mulHighUnsigned, "mulHighUnsigned"),
+      (.mulHighSigned, "mulHighSigned")] do
+    let body (width : LeanCompilerBackend.Width) : LeanCompilerBackend.Verified.Source.Function :=
+      { resultWidth := width, parameters := #[width, width], valueWidths := #[width, width, width]
+        blocks := #[{ phis := #[], terminator := .ret (.local 2)
+                      instructions := #[{ destination := 2, width
+                                          operation := .binary op (.local 0) (.local 1) }] }] }
+    for target in [LCB.Target.x86_64Linux, .aarch64Linux, .aarch64Macos] do
+      match LCB.assemble target (body .word) with
+      | .error (.backendProfile "LCB" _) => pure ()
+      | _ =>
+        IO.eprintln s!"{name}: expected BACKEND-PROFILE (2) for word-width high multiply"
+        return 1
+    for target in [LCB.Target.x86_64Linux, .aarch64Linux] do
+      match LCB.assemble target (body .long) with
+      | .ok _ =>
+        IO.eprintln s!"{name}: Linux compatibility reification emitted assembly"
+        return 1
+      | .error e =>
+        unless e.exitCode == 2 && e.code == "BACKEND-PROFILE" &&
+            e.message == s!"incomplete (LCB backend: compatibility reification does not support {name})" do
+          IO.eprintln s!"{name}: expected BACKEND-PROFILE (2), got {e.code} ({e.exitCode}): {e.message}"
+          return 1
+  IO.println "ok   LCB high multiplies: word width refused on all targets, long width refused on Linux"
   return 0
 
 def emitProgram (name : String) (p : Program) (dir : System.FilePath)

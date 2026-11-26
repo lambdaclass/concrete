@@ -3111,12 +3111,18 @@ _private.Concrete.Stages.0.Concrete.Stages.stages.eq_1	Classical.choice Quot.sou
 _private.Concrete.Stages.0.Except.map.match_1.eq_1	
 _private.Concrete.Stages.0.Except.map.match_1.eq_2	
 _private.Concrete.Theorem.0.Concrete.Backend.LCB.assemble.match_1.eq_1	
-_private.Concrete.Theorem.0.Concrete.Backend.LCB.assemble.match_1.eq_2	
-_private.Concrete.Theorem.0.Concrete.Backend.LCB.assemble.match_1.eq_3	
+_private.Concrete.Theorem.0.Concrete.Backend.LCB.assemble.match_3.eq_1	
+_private.Concrete.Theorem.0.Concrete.Backend.LCB.assemble.match_3.eq_2	
+_private.Concrete.Theorem.0.Concrete.Backend.LCB.assemble.match_3.eq_3	
 _private.Concrete.Theorem.0.Concrete.Backend.lcbTerminal.match_1.eq_1	propext
 _private.Concrete.Theorem.0.Concrete.Backend.lcbTerminal.match_1.eq_2	propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.answerBIRAssembly	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.answerBIRAssembly._proof_1_1	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.answerBIRAssembly._proof_1_2	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.answerBIRAssembly._proof_1_3	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.answerBIRAssembly._proof_1_4	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.answerBIRJob	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.answerBIRJob._proof_1_1	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.assembleMacOS	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.coreTerminates	Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.effectModel._proof_1	
@@ -3141,7 +3147,12 @@ _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.testLLVMAnswerMarker	Cl
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.testLLVMPremises	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.testLLVMTrapMarker	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapBIRAssembly	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapBIRAssembly._proof_1_1	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapBIRAssembly._proof_1_2	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapBIRAssembly._proof_1_3	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapBIRAssembly._proof_1_4	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapBIRJob	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapBIRJob._proof_1_1	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapCore._proof_1	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapStatic	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapTerminates	Classical.choice Quot.sound propext

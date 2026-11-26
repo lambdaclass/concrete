@@ -391,7 +391,7 @@ structure Profile where
 /-- The build identity check compares this kernel-reducible pin to Lake's declared
 and resolved revisions. Handoffs also check the imported backend compiler identity. -/
 def pinnedLCBRevision : Option String :=
-  some "4623fba6fec8439974b7e4ceb9a577b3e6918a22"
+  some "1d2584c0f6cfa9ba10bd918bc62234c5878dd38f"
 
 def Profile.invocation (profile : Profile) (role : ToolRole) (pin : ToolInvocation) : Prop :=
   profile.tools.filter (·.role == role) = [pin]
@@ -1184,7 +1184,7 @@ theorem answerOrigins : SiteOrigins answerInput.path answerOutput.core answerOut
   with_unfolding_all
     exact ⟨List.nil_sublist _, rfl⟩
 
-private def declaredRevision := "4623fba6fec8439974b7e4ceb9a577b3e6918a22"
+private def declaredRevision := "1d2584c0f6cfa9ba10bd918bc62234c5878dd38f"
 
 theorem pinnedRevision : pinnedLCBRevision = some declaredRevision := by
   with_unfolding_all rfl
@@ -1222,12 +1222,7 @@ private theorem assembleMacOS {f : Source.Function} {stack : StackMIR.Function}
     (asmOK : TypedA64.validate asm = .ok ()) :
     ∃ text, LCB.assemble .aarch64Macos f = .ok text := by
   have render : ∃ text lines, TypedA64.renderWithWork asm LCB.bodySymbol = .ok (text, lines) := by
-    have symbolOK : (!LCB.bodySymbol.name.isEmpty &&
-        LCB.bodySymbol.name.toList.all (fun c => c.toNat < 128 && (c.isAlphanum || c == '_')) &&
-        (LCB.bodySymbol.name.toList.head!.isAlpha || LCB.bodySymbol.name.toList.head! == '_')) = true := rfl
-    have exported : LCB.bodySymbol.exported = true := rfl
-    simp only [TypedA64.renderWithWork, asmOK, bind, Except.bind, symbolOK, Bool.not_true,
-      Bool.false_eq_true, ite_false, exported, ite_true]
+    simp only [TypedA64.renderWithWork, asmOK, bind, Except.bind]
     exact ⟨_, _, rfl⟩
   obtain ⟨text, lines, render⟩ := render
   have checked : ∃ work, validateJobWithWork (LCB.job f) = .ok work := by
@@ -1294,8 +1289,11 @@ private theorem trapStatic : ConformanceStatic trapCore := by
 private theorem trapTerminates : SourceTerminates trapInput.path trapCore :=
   coreTerminates _ _ (overflowObservation trapInput.path) 1 rfl (returnAtOne rfl rfl)
 
+-- Check each closed stage in the kernel, then compose its result with
+-- assembleMacOS. This avoids elaborator reduction through the indexed checks
+-- and keeps their equation lemmas out of this module's environment.
 private theorem answerBIRJob : validateJob (LCB.job (testLCBBuild answerBIR answerImage "").source) = .ok () := by
-  with_unfolding_all rfl
+  decide +kernel
 
 private theorem answerBIRAssembly : ∃ text, LCB.assemble .aarch64Macos (testLCBBuild answerBIR answerImage "").source = .ok text := by
   let f := (testLCBBuild answerBIR answerImage "").source
@@ -1303,16 +1301,16 @@ private theorem answerBIRAssembly : ∃ text, LCB.assemble .aarch64Macos (testLC
   let asm := (TypedA64.select stack).toOption.getD ⟨#[], .word, 0, #[]⟩
   apply assembleMacOS answerBIRJob (stack := stack) (asm := asm)
   · dsimp only [f, stack]
-    with_unfolding_all rfl
+    decide +kernel
   · dsimp only [f, stack]
-    with_unfolding_all rfl
+    decide +kernel
   · dsimp only [f, stack, asm]
-    with_unfolding_all rfl
+    decide +kernel
   · dsimp only [f, stack, asm]
-    with_unfolding_all rfl
+    decide +kernel
 
 private theorem trapBIRJob : validateJob (LCB.job (testLCBBuild trapBIR trapImage "").source) = .ok () := by
-  with_unfolding_all rfl
+  decide +kernel
 
 private theorem trapBIRAssembly : ∃ text, LCB.assemble .aarch64Macos (testLCBBuild trapBIR trapImage "").source = .ok text := by
   let f := (testLCBBuild trapBIR trapImage "").source
@@ -1320,13 +1318,13 @@ private theorem trapBIRAssembly : ∃ text, LCB.assemble .aarch64Macos (testLCBB
   let asm := (TypedA64.select stack).toOption.getD ⟨#[], .word, 0, #[]⟩
   apply assembleMacOS trapBIRJob (stack := stack) (asm := asm)
   · dsimp only [f, stack]
-    with_unfolding_all rfl
+    decide +kernel
   · dsimp only [f, stack]
-    with_unfolding_all rfl
+    decide +kernel
   · dsimp only [f, stack, asm]
-    with_unfolding_all rfl
+    decide +kernel
   · dsimp only [f, stack, asm]
-    with_unfolding_all rfl
+    decide +kernel
 
 private theorem firstLLVMByte (bir : BIR.Program) (first : String) (rest : List String)
     (pieces : ((LLVM.moduleItems bir).flatMap LLVM.Item.pieces).map LLVM.Piece.render = first :: rest)
