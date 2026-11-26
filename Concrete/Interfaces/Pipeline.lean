@@ -98,22 +98,30 @@ structure LoweringInvariants (lang : LoweringLanguage language.operands.Ty)
   ssa : SSA lang profile → Prop
   bir : BIR lang profile → Prop
 
-/-- External observations at the two boundaries whose semantics are missing
-from the repository and its pinned dependencies. These are used only in
-named trusted obligations. -/
-structure ExternalBackendExecution (E : Type) (profile : Profile) where
-  llvm : Concrete.Contracts.Semantics ByteArray E
-  linkedLCB : Concrete.Contracts.Semantics (LCBInput profile) E
+/-- Maximal observations of the external LLVM execution. The event type is
+fixed by the source language at this edge. -/
+inductive Behavior (E : Type) where
+  | terminates (result : Concrete.Contracts.Observation) (trace : List (Concrete.Contracts.ProcessEvent E))
+  | diverges (trace : Nat → List (Concrete.Contracts.ProcessEvent E))
+  | wrong
 
-def P_print (external : ExternalBackendExecution language.operands.Event profile)
-    (bir : BIR lang profile) (output : LLVMInput profile) : Prop :=
-  let source := BIR.Execution (language := language)
-  BehaviorRefinement source external.llvm source.result external.llvm.result bir output.moduleBytes
+abbrev LLVMModuleBytes := ByteArray
 
-def P_lcb_link (external : ExternalBackendExecution language.operands.Event profile)
-    (bir : BIR lang profile) (output : LCBInput profile) : Prop :=
+/-- Trusted interpretation boundary for the exact emitted bytes. Lean does not
+interpret LLVM here. The opaque default only supplies an inhabitant. -/
+opaque llvmBehaviors {E : Type} : LLVMModuleBytes → Behavior E → Prop := default
+
+def P_print (bir : BIR lang profile) (output : LLVMInput profile) : Prop :=
   let source := BIR.Execution (language := language)
-  BehaviorRefinement source external.linkedLCB source.result external.linkedLCB.result bir output
+  ProgramSafe source bir →
+    ∀ behavior : Behavior language.operands.Event, llvmBehaviors output.moduleBytes behavior →
+      match behavior with
+      | .terminates result trace =>
+        ∃ p, source.finite bir p ∧ source.result bir p result ∧ source.trace bir p = trace
+      | .diverges trace =>
+        ∃ run, source.diverges bir run ∧
+          Concrete.Contracts.SameInfiniteTrace (fun i => source.trace bir (run i)) trace
+      | .wrong => False
 
 structure Registry {count : Nat} (grammar : SharedGrammar count) (language : CoreLanguage)
     (lang : LoweringLanguage language.operands.Ty) (profile : Profile) where
@@ -137,7 +145,7 @@ def Passes.emitSingleLCB (passes : Passes grammar language lang profile)
 def registry (passes : Passes grammar language lang profile) (front : FrontendSpec (grammar.value grammar.start) language)
     (inv : FrontendInvariants (grammar.value grammar.start) language) (admission : Admission language)
     (lower : LoweringInvariants (language := language) lang profile)
-    (external : ExternalBackendExecution language.operands.Event profile) (fails : LoweringFailures language lang profile) :
+    (fails : LoweringFailures language lang profile) :
     Registry grammar language lang profile where
   lexer := passes.lexer front inv
   parser := passes.parserEntry inv
@@ -157,14 +165,14 @@ def registry (passes : Passes grammar language lang profile) (front : FrontendSp
     BuildsBIR (language := language), fails.ssa, fun _ _ => True⟩
   emitLLVM := ⟨passes.emitLLVM, .namedPremise "P_print",
     fun bir => lower.bir bir ∧ bir.TrapSlotsWF ∧ bir.frameSlots ≤ profile.maxBIRSlots,
-    fun output => ∃ bir : BIR lang profile, LLVMMetadataMatches bir output, LLVMMetadataMatches, fails.llvm, P_print external⟩
+    fun output => ∃ bir : BIR lang profile, LLVMMetadataMatches bir output, LLVMMetadataMatches, fails.llvm, P_print (language := language)⟩
   emitLCB := ⟨passes.emitSingleLCB, .directProof,
     fun bir => lower.bir bir ∧ bir.TrapSlotsWF ∧ bir.frameSlots ≤ profile.maxBIRSlots,
     fun output => ∃ bir : BIR lang profile, EmitsLCB language bir output, EmitsLCB language, fun bir failure =>
       match failure with
       | .lcbLinkingUnavailable => bir.requiresLCBLinking = true
       | _ => fails.lcb bir failure,
-      fun bir output => bir.requiresLCBLinking = true → P_lcb_link external bir output⟩
+      fun _ _ => True⟩
 
 private def Registry.pipeline {Output : Type} (r : Registry grammar language lang profile) (unchecked : Bool)
     (backend : Stage (BIR lang profile) StageFailure Output) :
@@ -239,5 +247,20 @@ theorem Pipeline.endToEnd {A B : Type} {pipeline : Pipeline A B}
       have checked := proof.1 _ _ ready h
       exact ⟨middle, h, checked.1, checked.2, trusted.1 _ _ ready h,
         ih trusted.2 (compatible middle checked.1) ran⟩
+
+/-- The guarded LCB pipeline composes from validation alone. Any program
+that needs linked execution is refused by the registered backend edge. -/
+theorem registeredLCBEndToEnd (passes : Passes grammar language lang profile)
+    (front : FrontendSpec (grammar.value grammar.start) language)
+    (inv : FrontendInvariants (grammar.value grammar.start) language)
+    (admission : Admission language) (lower : LoweringInvariants (language := language) lang profile)
+    (fails : LoweringFailures language lang profile) (unchecked : Bool)
+    {input : Source} {output : LCBInput profile}
+    (validated : ((registry passes front inv admission lower fails).lcbPipeline unchecked).Validated)
+    (ready : ((registry passes front inv admission lower fails).lcbPipeline unchecked).Ready input)
+    (ran : ((registry passes front inv admission lower fails).lcbPipeline unchecked).run input = .ok output) :
+    ((registry passes front inv admission lower fails).lcbPipeline unchecked).Corresponds input output := by
+  refine Pipeline.endToEnd validated ?_ ready ran
+  cases unchecked <;> repeat' first | apply And.intro | exact True.intro | intro
 
 end Concrete.Interfaces

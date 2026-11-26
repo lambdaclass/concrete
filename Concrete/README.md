@@ -13,7 +13,47 @@ LEAN_NUM_THREADS=2 lake build concrete
 
 Set `output` to a build directory. The default writes `llvm.exe` and `lcb.exe` there.
 Use `--backend llvm` or `--backend lcb` for a single executable. The driver uses the pinned
-native build helper and the LCB executable built by Lake.
+native build helper and the LCB executable built by Lake. It compiles and links in a private
+directory beside the destination, checks that the retained link inputs match the generated inputs,
+and replays the retained native build with the pinned reference clang before publishing by
+atomically installing or exchanging the directory. The Lake-built CLI locates its build
+helpers and LCB relative to its own installation. After verification, the CLI writes and
+flushes the selected standalone language-rules version before attempting publication.
+Use exit status 0 to confirm publication.
+Each backend retains a SHA-256 inventory of its inputs, objects and image. The build receipt
+`runtime-premises.txt` identifies the runtime loader and system libraries as unbound environment
+premises.
+
+### Slice 1 driver follow-ups
+
+- R-0576, R-0589 and
+  R-0603 own the project decoder, its approved key spellings and revisions,
+  project and dependency identity resolution, and the CI requirement for a recorded assumption
+  diff. After the delegated Slice 1 decision record lands, point the language-pin rule at its
+  live decision anchor. The current recognizer bounds bytes and decoded nesting in the TOML syntax used by the
+  fixtures. R-0589 owns full TOML conformance, including arrays of tables, indexed key and table
+  lookups, the admission judgment, and correspondence theorems for the driver checks.
+  R-0589 also tracks distinguishing valid TOML outside the supported subset from malformed input
+  in CLI diagnostics. Until then, a present manifest produces a structured driver refusal. The Lean policy checker
+  can exercise typed requirements against slice 0 MIR and returns per-function coverage. It reports
+  missing stack evidence explicitly. Inherited policy conjunction has a regression control.
+  Independent compiler fact derivations and their soundness belong to R-0575.
+  The general inherited-scope proof and registry examples for the remaining clause variants
+  stay under R-0576. Typed assumption identities and set diffs are available for the future
+  revision-aware CI reader.
+- R-0586 owns grant decoding, the authority-backed Core oracle and trace serialization.
+  The authority evaluator can now replay typed launch grants and return their event trace.
+  The Core replay boundary accepts a supplied startup configuration and oracle and returns
+  the evaluator's events, ending and residual state. Compare the same checked
+  slice 1 source through the reference and native paths under R-0698 once the native pipeline
+  accepts the slice 1 constructs and explicit abort. R-0586 also owns validation of grant identity
+  uniqueness before issuing grants.
+- [Q8.6](../docs/decisions.md#decided-2026-11-05-core) requires the full retained dependency
+  closure. R-0505 ([Verified growth](../ROADMAP.md#e-verified-growth)) owns binding and validating the runtime loader and system
+  libraries as part of final-image validation. R-0509 owns the trusted toolchain inventory.
+  The current replay covers the emitted inputs, objects and image. R-0578
+  owns sharing the typed launcher input boundary with LCB. R-0509 also owns coverage of the
+  CLI root in the environment-level axiom and example scans.
 
 Use a dedicated output directory. The CLI resolves ancestor symlinks before processing subsequent
 `..` components and rejects a symlink at the final component, including one spelled with a
@@ -683,8 +723,9 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
    source path, an unknown target reported by the native helper, a failed native helper, and a failed build-input write.
 
    The compiler CLI exits 0 for a successful build or help, 1 for a source refusal
-   (`SYNTAX`, `SLICE-0`, `CORE-CHECK`), 2 for an incomplete build, 3 for `USAGE`, and
-   4 for `INTERNAL`. Incomplete diagnostics use `incomplete (reason)`. This includes
+   (`SYNTAX`, `SLICE-0`, `CORE-CHECK`, or a `MANIFEST-*` refusal), 2 for an incomplete build
+   (including lexer `RESOURCE` limits), 3 for `USAGE`, and 4 for `INTERNAL`.
+   Incomplete diagnostics use `incomplete (reason)`. This includes
    operational failures (`TOOL-FAILURE`) such as an unavailable native tool, a failed link,
    or a failed CLI output write. If stderr cannot carry a diagnostic, the CLI still exits 2.
    Compiler invariant failures use `INTERNAL`.

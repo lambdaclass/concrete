@@ -1249,25 +1249,40 @@ theorem BIR.refinesOfViewEq {ssa : SSA lang profile} {bir : BIR lang profile}
     fun run infinite => ⟨run, infinite, fun _ => Iff.rfl⟩, safe⟩
 
 def BuildsBIR (ssa : SSA lang profile) (bir : BIR lang profile) : Prop :=
-  bir.TrapSlotsWF ∧ bir.TrapsMatch ssa ∧ PreservesOrigins ssa.origins bir.origins ∧
+  bir.project = ssa.project ∧ bir.TrapSlotsWF ∧ bir.TrapsMatch ssa ∧ PreservesOrigins ssa.origins bir.origins ∧
   bir.frameSlots ≤ profile.maxBIRSlots ∧ BIR.EntryMatches (language := language) ssa bir ∧
   BIR.PreservesProgram (language := language) ssa bir
 
 theorem BuildsBIR.refines {ssa : SSA lang profile} {bir : BIR lang profile}
     (built : BuildsBIR (language := language) ssa bir) :
     BIR.PreservesProgram (language := language) ssa bir :=
-  built.2.2.2.2.2
+  built.2.2.2.2.2.2
 
-/-- The pinned job interpreter cannot cross a function boundary. The guard
-checks every block of the entry graph, so even an unresolved call fails closed. -/
+/-- Visit only CFG successors of the entry. Each distinct block is expanded at
+most once. Fuel covers the entry plus at most two queued edges per block. -/
+private def reachableCall (graph : BIRGraph lang) :
+    Nat → List BlockId → List BlockId → Bool
+  | 0, _, _ | _, [], _ => false
+  | fuel + 1, id :: pending, visited =>
+    if visited.contains id then reachableCall graph fuel pending visited
+    else
+      match graph.blocks.find? (·.id == id) with
+      | none => reachableCall graph fuel pending visited
+      | some block =>
+        let hasCall := block.body.any fun op =>
+          match op.instruction with
+          | .call .. => true
+          | _ => false
+        let successors := match block.ending with
+          | .jump edge => [edge.target]
+          | .branch _ yes no => [yes.target, no.target]
+          | .ret _ | .trap _ => []
+        hasCall || reachableCall graph fuel (successors ++ pending) (id :: visited)
+
 def BIR.requiresLCBLinking (bir : BIR lang profile) : Bool :=
   match AList.lookup bir.functions bir.entry with
   | none => false
-  | some (_, graph) => graph.blocks.any fun block =>
-    block.body.any fun op =>
-      match op.instruction with
-      | .call .. => true
-      | _ => false
+  | some (_, graph) => reachableCall graph (2 * graph.blocks.size + 1) [graph.entry] []
 
 def EmitsLCB (language : CoreLanguage) {lang : LoweringLanguage language.operands.Ty}
     {profile : Profile} (bir : BIR lang profile) (output : LCBInput profile) : Prop :=

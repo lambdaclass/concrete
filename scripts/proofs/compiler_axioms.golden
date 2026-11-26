@@ -1190,6 +1190,41 @@ Concrete.Contracts.instDecidableEqDiagnosticSite.decEq._proof_2
 Concrete.Contracts.instDecidableEqDiagnosticSite.decEq._proof_3	
 Concrete.Contracts.runtimePermitted_all	
 Concrete.Contracts.stderrBytes.eq_1	
+Concrete.Driver.Project.Coverage.mk.inj	
+Concrete.Driver.Project.Coverage.mk.injEq	propext
+Concrete.Driver.Project.Coverage.mk.sizeOf_spec	
+Concrete.Driver.Project.Scope._sizeOf_2_eq	
+Concrete.Driver.Project.Scope.brecOn.eq	
+Concrete.Driver.Project.Scope.brecOn_1.eq	
+Concrete.Driver.Project.Scope.resolved.inj	
+Concrete.Driver.Project.Scope.resolved.injEq	propext
+Concrete.Driver.Project.Scope.resolved.sizeOf_spec	
+Concrete.Driver.Project.Scope.unresolved.inj	
+Concrete.Driver.Project.Scope.unresolved.injEq	propext
+Concrete.Driver.Project.Scope.unresolved.sizeOf_spec	
+Concrete.Driver.Project.ScopeRefusal.policy.inj	
+Concrete.Driver.Project.ScopeRefusal.policy.injEq	propext
+Concrete.Driver.Project.ScopeRefusal.policy.sizeOf_spec	
+Concrete.Driver.Project.ScopeRefusal.unresolved.inj	
+Concrete.Driver.Project.ScopeRefusal.unresolved.injEq	propext
+Concrete.Driver.Project.ScopeRefusal.unresolved.sizeOf_spec	
+Concrete.Driver.Reference.Component.admitted	propext
+Concrete.Driver.Reference.Component.mk.inj	propext
+Concrete.Driver.Reference.Component.mk.injEq	propext
+Concrete.Driver.Reference.Component.mk.sizeOf_spec	propext
+Concrete.Driver.Reference.Launcher.mk.inj	propext
+Concrete.Driver.Reference.Launcher.mk.injEq	propext
+Concrete.Driver.Reference.Launcher.mk.sizeOf_spec	propext
+Concrete.Driver.Reference.Replay.executed.inj	
+Concrete.Driver.Reference.Replay.executed.injEq	propext
+Concrete.Driver.Reference.Replay.executed.sizeOf_spec	
+Concrete.Driver.Reference.Replay.startupRefused.sizeOf_spec	
+Concrete.Driver.Reference.Run.mk.inj	
+Concrete.Driver.Reference.Run.mk.injEq	propext
+Concrete.Driver.Reference.Run.mk.sizeOf_spec	
+Concrete.Driver.Reference.instDecidableEqRun.decEq._proof_1	
+Concrete.Driver.Reference.instDecidableEqRun.decEq._proof_2	
+Concrete.Driver.Reference.instDecidableEqRun.decEq._proof_3	
 Concrete.Elab.Output.mk.inj	
 Concrete.Elab.Output.mk.injEq	propext
 Concrete.Elab.Output.mk.sizeOf_spec	
@@ -1353,6 +1388,13 @@ Concrete.Interfaces.BIRTerm.trap.sizeOf_spec
 Concrete.Interfaces.BackendKind.lcb.sizeOf_spec	
 Concrete.Interfaces.BackendKind.llvm.sizeOf_spec	
 Concrete.Interfaces.BackendKind.ofNat_ctorIdx	
+Concrete.Interfaces.Behavior.diverges.inj	
+Concrete.Interfaces.Behavior.diverges.injEq	propext
+Concrete.Interfaces.Behavior.diverges.sizeOf_spec	
+Concrete.Interfaces.Behavior.terminates.inj	
+Concrete.Interfaces.Behavior.terminates.injEq	propext
+Concrete.Interfaces.Behavior.terminates.sizeOf_spec	
+Concrete.Interfaces.Behavior.wrong.sizeOf_spec	
 Concrete.Interfaces.Block.mk.inj	
 Concrete.Interfaces.Block.mk.injEq	propext
 Concrete.Interfaces.Block.mk.sizeOf_spec	
@@ -1379,9 +1421,6 @@ Concrete.Interfaces.CoreInput.Execution._proof_4	Quot.sound propext
 Concrete.Interfaces.ElabRefusal.mk.inj	
 Concrete.Interfaces.ElabRefusal.mk.injEq	propext
 Concrete.Interfaces.ElabRefusal.mk.sizeOf_spec	
-Concrete.Interfaces.ExternalBackendExecution.mk.inj	
-Concrete.Interfaces.ExternalBackendExecution.mk.injEq	propext
-Concrete.Interfaces.ExternalBackendExecution.mk.sizeOf_spec	
 Concrete.Interfaces.FrontendInvariants.mk.inj	Quot.sound propext
 Concrete.Interfaces.FrontendInvariants.mk.injEq	Quot.sound propext
 Concrete.Interfaces.FrontendInvariants.mk.sizeOf_spec	Quot.sound propext
@@ -1625,6 +1664,7 @@ Concrete.Interfaces.instDecidableEqStorageClass._proof_1
 Concrete.Interfaces.instDecidableEqStorageClass._proof_2	
 Concrete.Interfaces.instDecidableEqTrapIndex.decEq._proof_1	
 Concrete.Interfaces.instDecidableEqTrapIndex.decEq._proof_2	
+Concrete.Interfaces.registeredLCBEndToEnd	Classical.choice Quot.sound propext
 Concrete.Lex.Allowed.eq_1	
 Concrete.Lex.ByteError.invalidEscape.inj	
 Concrete.Lex.ByteError.invalidEscape.injEq	propext
@@ -2002,6 +2042,14 @@ Concrete.MIR.lowerUnchecked_correct	Quot.sound propext
 Concrete.MIR.lower_correct	Quot.sound propext
 Concrete.MIR.value.eq_1	
 Concrete.MIR.value.eq_2	
+Concrete.ManifestRefusal.depth.sizeOf_spec	
+Concrete.ManifestRefusal.encoding.sizeOf_spec	
+Concrete.ManifestRefusal.malformed.sizeOf_spec	
+Concrete.ManifestRefusal.read.inj	
+Concrete.ManifestRefusal.read.injEq	propext
+Concrete.ManifestRefusal.read.sizeOf_spec	
+Concrete.ManifestRefusal.schemaPending.sizeOf_spec	
+Concrete.ManifestRefusal.size.sizeOf_spec	
 Concrete.Memory.Layout.mk.inj	
 Concrete.Memory.Layout.mk.injEq	propext
 Concrete.Memory.Layout.mk.sizeOf_spec	
@@ -2066,6 +2114,9 @@ Concrete.Refusal.internal.sizeOf_spec
 Concrete.Refusal.lexerDigitLimit.inj	
 Concrete.Refusal.lexerDigitLimit.injEq	propext
 Concrete.Refusal.lexerDigitLimit.sizeOf_spec	
+Concrete.Refusal.manifest.inj	
+Concrete.Refusal.manifest.injEq	propext
+Concrete.Refusal.manifest.sizeOf_spec	
 Concrete.Refusal.syntaxError.inj	
 Concrete.Refusal.syntaxError.injEq	propext
 Concrete.Refusal.syntaxError.sizeOf_spec	
@@ -2095,6 +2146,38 @@ Concrete.Stages.compile_project	Classical.choice Quot.sound propext
 Concrete.Stages.compile_ssa_correct	Classical.choice Quot.sound propext
 Concrete.Stages.prepareLCB.eq_1	Classical.choice Quot.sound propext
 Concrete.Stages.prepareLCB_of_edges	Classical.choice Quot.sound propext
+Concrete.instDecidableEqManifestRefusal.decEq._proof_1	
+Concrete.instDecidableEqManifestRefusal.decEq._proof_10	
+Concrete.instDecidableEqManifestRefusal.decEq._proof_11	
+Concrete.instDecidableEqManifestRefusal.decEq._proof_12	
+Concrete.instDecidableEqManifestRefusal.decEq._proof_13	
+Concrete.instDecidableEqManifestRefusal.decEq._proof_14	
+Concrete.instDecidableEqManifestRefusal.decEq._proof_15	
+Concrete.instDecidableEqManifestRefusal.decEq._proof_16	
+Concrete.instDecidableEqManifestRefusal.decEq._proof_17	
+Concrete.instDecidableEqManifestRefusal.decEq._proof_18	
+Concrete.instDecidableEqManifestRefusal.decEq._proof_19	
+Concrete.instDecidableEqManifestRefusal.decEq._proof_2	
+Concrete.instDecidableEqManifestRefusal.decEq._proof_20	
+Concrete.instDecidableEqManifestRefusal.decEq._proof_21	
+Concrete.instDecidableEqManifestRefusal.decEq._proof_22	
+Concrete.instDecidableEqManifestRefusal.decEq._proof_23	
+Concrete.instDecidableEqManifestRefusal.decEq._proof_24	
+Concrete.instDecidableEqManifestRefusal.decEq._proof_25	
+Concrete.instDecidableEqManifestRefusal.decEq._proof_26	
+Concrete.instDecidableEqManifestRefusal.decEq._proof_27	
+Concrete.instDecidableEqManifestRefusal.decEq._proof_28	
+Concrete.instDecidableEqManifestRefusal.decEq._proof_29	
+Concrete.instDecidableEqManifestRefusal.decEq._proof_3	
+Concrete.instDecidableEqManifestRefusal.decEq._proof_30	
+Concrete.instDecidableEqManifestRefusal.decEq._proof_31	
+Concrete.instDecidableEqManifestRefusal.decEq._proof_32	
+Concrete.instDecidableEqManifestRefusal.decEq._proof_4	
+Concrete.instDecidableEqManifestRefusal.decEq._proof_5	
+Concrete.instDecidableEqManifestRefusal.decEq._proof_6	
+Concrete.instDecidableEqManifestRefusal.decEq._proof_7	
+Concrete.instDecidableEqManifestRefusal.decEq._proof_8	
+Concrete.instDecidableEqManifestRefusal.decEq._proof_9	
 Concrete.instDecidableEqRefusal.decEq._proof_1	
 Concrete.instDecidableEqRefusal.decEq._proof_10	
 Concrete.instDecidableEqRefusal.decEq._proof_11	
@@ -2114,82 +2197,13 @@ Concrete.instDecidableEqRefusal.decEq._proof_23
 Concrete.instDecidableEqRefusal.decEq._proof_24	
 Concrete.instDecidableEqRefusal.decEq._proof_25	
 Concrete.instDecidableEqRefusal.decEq._proof_26	
-Concrete.instDecidableEqRefusal.decEq._proof_27	
-Concrete.instDecidableEqRefusal.decEq._proof_28	
-Concrete.instDecidableEqRefusal.decEq._proof_29	
 Concrete.instDecidableEqRefusal.decEq._proof_3	
-Concrete.instDecidableEqRefusal.decEq._proof_30	
-Concrete.instDecidableEqRefusal.decEq._proof_31	
-Concrete.instDecidableEqRefusal.decEq._proof_32	
-Concrete.instDecidableEqRefusal.decEq._proof_33	
-Concrete.instDecidableEqRefusal.decEq._proof_34	
-Concrete.instDecidableEqRefusal.decEq._proof_35	
-Concrete.instDecidableEqRefusal.decEq._proof_36	
-Concrete.instDecidableEqRefusal.decEq._proof_37	
-Concrete.instDecidableEqRefusal.decEq._proof_38	
-Concrete.instDecidableEqRefusal.decEq._proof_39	
 Concrete.instDecidableEqRefusal.decEq._proof_4	
-Concrete.instDecidableEqRefusal.decEq._proof_40	
-Concrete.instDecidableEqRefusal.decEq._proof_41	
-Concrete.instDecidableEqRefusal.decEq._proof_42	
-Concrete.instDecidableEqRefusal.decEq._proof_43	
-Concrete.instDecidableEqRefusal.decEq._proof_44	
-Concrete.instDecidableEqRefusal.decEq._proof_45	
-Concrete.instDecidableEqRefusal.decEq._proof_46	
-Concrete.instDecidableEqRefusal.decEq._proof_47	
-Concrete.instDecidableEqRefusal.decEq._proof_48	
-Concrete.instDecidableEqRefusal.decEq._proof_49	
 Concrete.instDecidableEqRefusal.decEq._proof_5	
-Concrete.instDecidableEqRefusal.decEq._proof_50	
-Concrete.instDecidableEqRefusal.decEq._proof_51	
-Concrete.instDecidableEqRefusal.decEq._proof_52	
-Concrete.instDecidableEqRefusal.decEq._proof_53	
-Concrete.instDecidableEqRefusal.decEq._proof_54	
-Concrete.instDecidableEqRefusal.decEq._proof_55	
-Concrete.instDecidableEqRefusal.decEq._proof_56	
-Concrete.instDecidableEqRefusal.decEq._proof_57	
-Concrete.instDecidableEqRefusal.decEq._proof_58	
-Concrete.instDecidableEqRefusal.decEq._proof_59	
 Concrete.instDecidableEqRefusal.decEq._proof_6	
-Concrete.instDecidableEqRefusal.decEq._proof_60	
-Concrete.instDecidableEqRefusal.decEq._proof_61	
-Concrete.instDecidableEqRefusal.decEq._proof_62	
-Concrete.instDecidableEqRefusal.decEq._proof_63	
-Concrete.instDecidableEqRefusal.decEq._proof_64	
-Concrete.instDecidableEqRefusal.decEq._proof_65	
-Concrete.instDecidableEqRefusal.decEq._proof_66	
-Concrete.instDecidableEqRefusal.decEq._proof_67	
-Concrete.instDecidableEqRefusal.decEq._proof_68	
-Concrete.instDecidableEqRefusal.decEq._proof_69	
 Concrete.instDecidableEqRefusal.decEq._proof_7	
-Concrete.instDecidableEqRefusal.decEq._proof_70	
-Concrete.instDecidableEqRefusal.decEq._proof_71	
-Concrete.instDecidableEqRefusal.decEq._proof_72	
-Concrete.instDecidableEqRefusal.decEq._proof_73	
-Concrete.instDecidableEqRefusal.decEq._proof_74	
-Concrete.instDecidableEqRefusal.decEq._proof_75	
-Concrete.instDecidableEqRefusal.decEq._proof_76	
-Concrete.instDecidableEqRefusal.decEq._proof_77	
-Concrete.instDecidableEqRefusal.decEq._proof_78	
-Concrete.instDecidableEqRefusal.decEq._proof_79	
 Concrete.instDecidableEqRefusal.decEq._proof_8	
-Concrete.instDecidableEqRefusal.decEq._proof_80	
-Concrete.instDecidableEqRefusal.decEq._proof_81	
-Concrete.instDecidableEqRefusal.decEq._proof_82	
-Concrete.instDecidableEqRefusal.decEq._proof_83	
-Concrete.instDecidableEqRefusal.decEq._proof_84	
-Concrete.instDecidableEqRefusal.decEq._proof_85	
-Concrete.instDecidableEqRefusal.decEq._proof_86	
-Concrete.instDecidableEqRefusal.decEq._proof_87	
-Concrete.instDecidableEqRefusal.decEq._proof_88	
-Concrete.instDecidableEqRefusal.decEq._proof_89	
 Concrete.instDecidableEqRefusal.decEq._proof_9	
-Concrete.instDecidableEqRefusal.decEq._proof_90	
-Concrete.instDecidableEqRefusal.decEq._proof_91	
-Concrete.instDecidableEqRefusal.decEq._proof_92	
-Concrete.instDecidableEqRefusal.decEq._proof_93	
-Concrete.instDecidableEqRefusal.decEq._proof_94	
-Concrete.instDecidableEqRefusal.decEq._proof_95	
 ConcreteSpec.Core.inRangeOr.eq_1	propext
 ConcreteSpec.Surface0.ByteEscape.eq_1	
 ConcreteSpec.Surface0.DigitsAccepted.eq_1	propext
@@ -2527,6 +2541,9 @@ _private.Concrete.Contracts.0.Concrete.Contracts.Evaluation.events.match_1.eq_2	
 _private.Concrete.Contracts.0.Concrete.Contracts.Steps.append	
 _private.Concrete.Contracts.0.Concrete.Contracts.stderrBytes.match_1.eq_1	
 _private.Concrete.Contracts.0.Concrete.Contracts.stderrBytes.match_1.eq_2	
+_private.Concrete.Driver.Launcher.0.Concrete.Driver.Launcher.LLVMInputs.mk.inj	
+_private.Concrete.Driver.Launcher.0.Concrete.Driver.Launcher.LLVMInputs.mk.injEq	propext
+_private.Concrete.Driver.Launcher.0.Concrete.Driver.Launcher.LLVMInputs.mk.sizeOf_spec	
 _private.Concrete.Elab.0.Concrete.Elab.Rhs.add.inj	
 _private.Concrete.Elab.0.Concrete.Elab.Rhs.add.injEq	propext
 _private.Concrete.Elab.0.Concrete.Elab.Rhs.add.sizeOf_spec	

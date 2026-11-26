@@ -24,6 +24,8 @@ import ConcreteSpec.Spec.Borrow
 import ConcreteSpec.Spec.Brand
 import ConcreteSpec.Spec.Authority
 import ConcreteSpec.Spec.Observation
+import ConcreteSpec.Spec.ProjectPolicy
+import ConcreteSpec.Spec.Manifest
 
 /-!
 # The Concrete specification

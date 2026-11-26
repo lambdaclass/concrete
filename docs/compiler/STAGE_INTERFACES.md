@@ -5,7 +5,8 @@ The frozen declarations are [spec carriers](../../ConcreteSpec/StageInterface.le
 [grammar](../../ConcreteSpec/StageGrammar.lean),
 [behavior refinement](../../Concrete/Interfaces/Behavior.lean), [edge propositions](../../Concrete/Interfaces/Contracts.lean),
 [executable signatures and registry](../../Concrete/Interfaces/Pipeline.lean), and the
-[backend observation adapter](../../Concrete/Backend/Observation.lean).
+[backend observation adapter](../../Concrete/Backend/Observation.lean) and the
+[backend runtime renderer](../../Concrete/Backend/Runtime.lean).
 The root check compares their exact SHA-256 digests with the [recorded manifest](../../scripts/checks/lib/stage_interfaces.sha256). Changing a frozen declaration takes a new interface round. The data modules can be imported by both a pass and its caller without importing the pass implementation.
 
 ## Source → Tokens
@@ -82,6 +83,9 @@ function, preserving the
 identity passed to spec address operations. An unresolved trap slot has neither a
 successor nor a terminal result, including inside a callee. The resolved platform supplies the ISA, byte order and spec memory layout for either backend. Dominance-scoped validation can strengthen the invariant on the same graph before slice 3. Retire SSA's positional site creation and BIR's duplicate diagnostic identity and scalar vocabulary at cutover.
 
+The handoff preserves the exact project used to resolve source locations and
+produce runtime diagnostics, including sites in unreachable blocks.
+
 ## BIR → LLVM
 
 Fix (a) registers the exact emitter and the named LLVM premise. `LLVMInput` carries a target triple, data layout, structured LLVM items and the exact trap table. `LLVMMetadataMatches` checks the target fields and trap table. The trusted-base entry
@@ -95,10 +99,10 @@ bytes and the exact trap table. The verified handoff validates the emitted
 jobs, checks symbol uniqueness, and runs the entry job in the pinned LCB
 semantics. The runtime projection uses the emitted diagnostic table to
 distinguish returning from trapping. The guard rejects calls in the entry
-graph before invoking the emitter. It examines all entry blocks, including
-blocks whose reachability might require analysis. Multi-job execution requires
+graph before invoking the emitter when their blocks are reachable by following
+CFG edges from the entry block. Multi-job execution requires
 a pinned linked semantics and a proof of behavior preservation. The
-[issue ledger](../../ISSUES.tsv) tracks that work under ISS-XXXX.
+[issue ledger](../../ISSUES.tsv) tracks that work under ISS-0105.
 
 ## Correctness notion
 
@@ -139,16 +143,15 @@ need calls across the job boundary receive a typed refusal before emission.
 
 The registry binds each proposition to the function it executes.
 `Pipeline.endToEnd` takes the validated pipeline and its trusted obligations as separate hypotheses.
+The guarded `registeredLCBEndToEnd` theorem takes only validation, readiness and a successful run.
 `Stage.Sound` includes the named behavior-preservation obligations on the
 exact successful invocations, separately from structural checks and refusals.
 The trusted base for the frozen interfaces contains the following obligations.
 
 | Premise | Scope |
 | --- | --- |
-| `P_print` | External observations of the exact rendered LLVM module bytes refine the originating BIR program. |
-| `P_lcb_link` | External observations of the exact linked LCB bundle would refine the originating BIR program. The guarded registry refuses the inputs that would need this premise. |
+| `P_print` | Behaviors of the exact rendered LLVM module bytes under the fixed opaque `llvmBehaviors` interpretation refine the originating BIR program. |
 
-The external execution references occur only at these two trust boundaries.
 Native-image and launch assumptions remain at the production theorem boundary.
 
 ## Writer ownership
@@ -161,7 +164,7 @@ Use separate implementation modules so parallel proof and implementation work ca
 | (d) | `Concrete/Origins.lean`, `ConcreteSpec/Spec/Ident.lean`, `ConcreteSpec/Proofs/Ident.lean` |
 | (c) | `ConcreteSpec/Admission.lean`, `Concrete/Admission.lean`, `Concrete/LowerAdmitted.lean`, `ConcreteSpec/Spec/Slice1Checker.lean`, `ConcreteSpec/Spec/Slice1Ownership.lean`, `ConcreteSpec/Proofs/Checker.lean` |
 | (b) | `Concrete/CFG.lean`, `Concrete/MIR.lean`, `Concrete/Memory.lean`, `Concrete/SSA.lean`, `ConcreteSpec/Layout.lean`, `ConcreteSpec/Spec/Memory.lean`, `ConcreteSpec/Spec/Hybrid.lean`, `ConcreteSpec/Proofs/Memory.lean`, `ConcreteSpec/Proofs/Hybrid.lean` |
-| (a) | `Concrete/BIR.lean`, `Concrete/BIR/`, `Concrete/Stages.lean`, `Concrete/Contracts.lean`, `Concrete/Theorem.lean`, `Concrete/Certificate.lean`, `Concrete/Premises.lean`, `Main.lean`, `Concrete/Backend/` except `Observation.lean`, root imports, proof inventories and cross-stage checks and fixtures |
+| (a) | `Concrete/BIR.lean`, `Concrete/BIR/`, `Concrete/Stages.lean`, `Concrete/Contracts.lean`, `Concrete/Theorem.lean`, `Concrete/Certificate.lean`, `Concrete/Premises.lean`, `Main.lean`, `Concrete/Backend/` except `Observation.lean` and `Runtime.lean`, root imports, proof inventories and cross-stage checks and fixtures |
 | (f) | `Concrete/Lex.lean`, `Concrete/Parse.lean`, `Concrete/LL1.lean`, `ConcreteSpec/Spec/LL1.lean`, `ConcreteSpec/Spec/Surface0.lean`, `ConcreteSpec/Surface1.lean`, `ConcreteSpec/Proofs/Surface0.lean`, `ConcreteSpec/Proofs/Surface1.lean`, `ConcreteSpec/Proofs/LL1.lean` |
 
 When an atomic retirement spans owners, each writer prepares the replacement for its own files. The integration writer applies the coordinated deletion and updates the trusted-base inventories and cross-stage fixtures with the cutover. Frozen paths and the digest manifest belong to the interface round.
