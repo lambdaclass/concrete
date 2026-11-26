@@ -17,11 +17,9 @@ import ConcreteSpec.Proofs.Borrow
 import ConcreteSpec.Diagnostics
 import ConcreteSpec.Proofs.LocalIdentity
 import ConcreteSpec.Proofs.Scalar
-import ConcreteSpec.Diagnostics.ScalarFixtures
 import ConcreteSpec.Proofs.Ident
 import ConcreteSpec.Proofs.Exec
 import ConcreteSpec.Proofs.Const
 import ConcreteSpec.Proofs.Own
 import ConcreteSpec.Proofs.Accounting
 import ConcreteSpec.Proofs.OwnErasure
-import ConcreteSpec.Proofs.OwnErasureEvidence

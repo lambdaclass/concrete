@@ -7,6 +7,12 @@ Status: current toolchain documentation (2026-11-11) and axiom-check design
 The current P/A/G contract remains documented
 in the header of `axioms.sh`, including its full per-theorem golden comparison.
 
+The proof fixtures and planted controls build as `ConcreteSpecEvidence`, which
+imports `ConcreteSpec`. The specification's import boundary excludes evidence.
+The trust and kernel replay jobs check both libraries. The external check exports
+both theorem populations together, and `axioms.sh` keeps a separate golden for
+each library.
+
 The governing owner decisions are 2026-11-08, “yes to 6 things”, item 2 (the
 axioms golden becomes a property check over standard axioms, with only named
 theorems pinned), and 2026-11-09 (exact proof-axiom provenance comes from the

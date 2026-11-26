@@ -1,6 +1,6 @@
 /-
 The proof population of the specification, read from the elaborated environment (not grepped from
-source): every constant the `ConcreteSpec` library declares. The proof-integrity checks
+source): every constant in the selected library. The proof-integrity checks
 (scripts/proofs/axioms.sh, trust_ban.sh, external.sh) all read it from here, so they agree on what
 "every ConcreteSpec theorem" means.
 
@@ -9,8 +9,9 @@ source): every constant the `ConcreteSpec` library declares. The proof-integrity
       EVERY theorem constant is listed: private ones (`_private.…`) and generated ones (`proof_N`,
       `match_N.eq_N`, `eq_N`) included, so none can be dropped from the inventory or the export.
   PROOF_PKG=Concrete …
-      selects compiler constants/imported modules; the default is ConcreteSpec. Both roots are
-      imported explicitly, and an unknown package fails before any row is written.
+      selects compiler constants/imported modules; the default is ConcreteSpec. ConcreteSpecEvidence
+      selects evidence only, and SpecAndEvidence selects both specification and evidence for export.
+      An unknown package fails before any row is written.
   PROOF_MODE=encoded …
       one line per theorem: `<name as Lean writes it>\t<encoded name>` (encoding below). The first is
       what lean4export reads on its command line; the second is what the stream is compared by.
@@ -21,7 +22,7 @@ source): every constant the `ConcreteSpec` library declares. The proof-integrity
   PROOF_MODE=modules …
       the modules that declare at least one theorem of the population, one per line.
   PROOF_MODE=imported …
-      every `ConcreteSpec` module in the import closure of this file (the root `ConcreteSpec`).
+      the selected source modules in the actual import closure of the selected root.
   PROOF_MODE=decls PROOF_NAMES=<file> PROOF_OUT=<out> …
       writes to <out> every constant whose name is listed in <file> (one per line; the declarations
       of a lean4export stream), rendered in the canonical declaration form `export_inventory.py decls` renders from
@@ -46,15 +47,21 @@ belong to the corresponding package population. The checks insert their delibera
 fail; nothing else is ever declared under that namespace.
 -/
 import Lean
-import ConcreteSpec
+import ConcreteSpecEvidence
 import Concrete
 
 open Lean
 
 def inPopulation (env : Environment) (n : Name) (pkg : Name := `ConcreteSpec) : Bool :=
   match env.getModuleIdxFor? n with
-  | some i => (env.header.moduleNames[i.toNat]?.map (·.getRoot)) == some pkg
-  | none => (Name.mkSimple (toString pkg ++ "Control")).isPrefixOf (privateToUserName n)
+  | some i =>
+    let root := env.header.moduleNames[i.toNat]?.map (·.getRoot)
+    if pkg == `SpecAndEvidence then
+      root == some `ConcreteSpec || root == some `ConcreteSpecEvidence
+    else root == some pkg
+  | none =>
+    let controlPkg := if pkg == `SpecAndEvidence then `ConcreteSpec else pkg
+    (Name.mkSimple (toString controlPkg ++ "Control")).isPrefixOf (privateToUserName n)
 
 def nm : Name → String
   | .anonymous => ""
@@ -178,7 +185,7 @@ def rowSafe : Name → Bool
 #eval show CoreM Unit from do
   let env ← getEnv
   let pkgString := (← IO.getEnv "PROOF_PKG").getD "ConcreteSpec"
-  unless ["ConcreteSpec", "Concrete"].contains pkgString do
+  unless ["ConcreteSpec", "ConcreteSpecEvidence", "Concrete", "SpecAndEvidence"].contains pkgString do
     throwError s!"unknown PROOF_PKG '{pkgString}'"
   let pkg := Name.mkSimple pkgString
   let mode := (← IO.getEnv "PROOF_MODE").getD "theorems"
@@ -223,8 +230,12 @@ def rowSafe : Name → Bool
         if s.startsWith "⟪example⟫" then
           rows := rows.push s!"{n}\t{" ".intercalate (((← collectAxioms n).map toString).qsort (· < ·)).toList}"
   else if mode == "imported" then
-    for m in env.header.moduleNames do
-      if m.getRoot == pkg then rows := rows.push (nm m)
+    let root := if pkg == `SpecAndEvidence then `ConcreteSpecEvidence else pkg
+    let closure ← importModules #[{ module := root }] {}
+    for m in closure.header.moduleNames do
+      if m.getRoot == pkg || (pkg == `SpecAndEvidence &&
+          (m.getRoot == `ConcreteSpec || m.getRoot == `ConcreteSpecEvidence)) then
+        rows := rows.push (nm m)
   else
     let consts := env.constants.map₁.toList ++ env.constants.map₂.toList
     for (n, ci) in consts do

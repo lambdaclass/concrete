@@ -21,7 +21,7 @@
 # verification hold TOOLS/.lock; after unlocking only finished tool artifacts are read,
 # never the isolated elan home. Builds publish private trees by rename.
 #
-# INDEPENDENT RE-CHECK: every theorem of the specification exported with lean4export and re-checked
+# INDEPENDENT RE-CHECK: every theorem of the specification and evidence exported with lean4export and re-checked
 # by two checkers that share no code with the Lean kernel or with each other.
 #
 #   con-leche (leanprover/con-leche, Lean): machine-checked consistency proof: an accepted stream has
@@ -110,6 +110,12 @@ nanoda() {
 }
 
 echo "=== I: population ==="
+export PROOF_PKG=SpecAndEvidence
+for pkg in ConcreteSpec ConcreteSpecEvidence; do
+  PROOF_PKG="$pkg" population imported > "$TMP/imported.txt" || { no "$pkg import enumeration failed"; finish; }
+  GAP=$(closure_gap "$TMP/imported.txt" "$pkg")
+  [ -z "$GAP" ] || { no "$pkg modules outside the export root: $GAP"; finish; }
+done
 population theorems > "$TMP/inv.tsv" 2> "$TMP/inv.err" \
   || { no "the enumerator failed: $(head -3 "$TMP/inv.err" | tr '\n' ' ')"; finish; }
 NALL=$(grep -c . "$TMP/inv.tsv")
@@ -128,7 +134,7 @@ EXPORT="$TMP/spec.ndjson"
 # lean4export can panic on a name it cannot resolve and still exit 0, so its stderr must be empty.
 # One argument per name, quoted: a name such as `«foo bar»` holds a space and `«*»` a glob.
 mapfile -t POP < "$TMP/population.txt"
-"$LAKE" env "$EXPORTER" ConcreteSpec -- "${POP[@]}" > "$EXPORT" 2> "$TMP/export.err"; rc=$?
+"$LAKE" env "$EXPORTER" ConcreteSpecEvidence -- "${POP[@]}" > "$EXPORT" 2> "$TMP/export.err"; rc=$?
 [ "$rc" = 0 ] && [ ! -s "$TMP/export.err" ] && ok "lean4export exported the population (no diagnostics)" \
   || { no "lean4export rc=$rc: $(head -3 "$TMP/export.err" | tr '\n' ' ')"; finish; }
 read -r EXP_LEAN EXP_TOOL EXP_FORMAT < <($INV meta "$EXPORT")

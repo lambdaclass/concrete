@@ -13,9 +13,10 @@ import tempfile
 from lean_lex import LexError, module_imports, rename_examples
 
 ROOT = Path(__file__).resolve().parents[2]
-MODULES = {'ConcreteSpec'} | {
+MODULES = {'ConcreteSpec', 'ConcreteSpecEvidence'} | {
     '.'.join(p.relative_to(ROOT).with_suffix('').parts)
-    for p in (ROOT / 'ConcreteSpec').rglob('*.lean')}
+    for pkg in ('ConcreteSpec', 'ConcreteSpecEvidence')
+    for p in (ROOT / pkg).rglob('*.lean')}
 
 
 def run(command):
@@ -95,8 +96,11 @@ def rewrite(source, deps):
 def proof_paths(root):
     paths = sorted((root / 'ConcreteSpec/Proofs').rglob('*.lean'))
     if not paths:
-        raise SystemExit('imports: empty proof-module population')
-    return paths
+        raise SystemExit('imports: empty specification proof-module population')
+    evidence = sorted((root / 'ConcreteSpecEvidence').rglob('*.lean'))
+    if not evidence:
+        raise SystemExit('imports: empty evidence-module population')
+    return paths + evidence
 
 
 def declaring_owner_control(temp):
@@ -205,7 +209,10 @@ def controls(temp):
         nested = root / 'ConcreteSpec/Proofs/Nested/Proof.lean'
         nested.parent.mkdir(parents=True)
         nested.touch()
-        if proof_paths(root) != [nested]:
+        fixture = root / 'ConcreteSpecEvidence/Nested/Proof.lean'
+        fixture.parent.mkdir(parents=True)
+        fixture.touch()
+        if proof_paths(root) != [nested, fixture]:
             raise SystemExit('recursive proof population control failed')
     missing = good.replace('import ConcreteSpec.Spec.Basics', '')
     # Removing just the command retains its trailing comment and legal header.
@@ -218,7 +225,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--write', action='store_true')
     args = parser.parse_args()
-    run(['lake', 'build', 'ConcreteSpec'])
+    run(['lake', 'build', 'ConcreteSpecEvidence'])
     failed = False
     with tempfile.TemporaryDirectory(prefix='spec-imports-') as tmp:
         temp = Path(tmp) / 'Probe.lean'

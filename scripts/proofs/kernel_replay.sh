@@ -8,11 +8,11 @@
 # no axiom at all, so scripts/proofs/axioms.sh cannot see it. Replaying the stored declarations
 # through the kernel can.
 #
-#   P  every module the ConcreteSpec sources declare is in the root's import closure, so replaying
+#   P  every spec or evidence source module is in its library root's import closure, so replaying
 #      the root replays all of them (the closure itself is listed from the environment);
-#   F  `leanchecker --fresh ConcreteSpec`: every constant of the root's closure, Lean core included,
+#   F  `leanchecker --fresh ConcreteSpecEvidence`: every constant of the root's closure, Lean core included,
 #      re-added to an EMPTY kernel environment, in dependency order;
-#   M  `leanchecker ConcreteSpec`: every ConcreteSpec module's own declarations replayed on top of its
+#   M  `leanchecker ConcreteSpec ConcreteSpecEvidence`: each module's own declarations replayed on top of its
 #      imports, module by module (the mode that names the module at fault).
 #
 # THE MODULE LIST COMES FROM THE SOURCES (ISS-0016). Given a prefix, leanchecker replays every .olean
@@ -39,13 +39,20 @@ CHECK_NAME=PROOF-KERNEL-REPLAY
 source scripts/proofs/lib.sh
 
 echo "=== P: population ==="
-population imported > "$TMP/imported.txt" || { no "PROOF_MODE=imported failed"; finish; }
-GAP=$(closure_gap "$TMP/imported.txt")
-[ -z "$GAP" ] && ok "all $(spec_modules | grep -c .) ConcreteSpec source modules are in the closure the replay reads" \
-  || no "source modules outside the import closure of ConcreteSpec: $(echo $GAP)"
+for pkg in ConcreteSpec ConcreteSpecEvidence; do
+  PROOF_PKG="$pkg" population imported > "$TMP/imported.txt" || { no "$pkg import enumeration failed"; finish; }
+  GAP=$(closure_gap "$TMP/imported.txt" "$pkg")
+  [ -z "$GAP" ] && ok "all $pkg source modules are in the closure the replay reads" \
+    || no "$pkg modules outside the import closure: $GAP"
+done
+
+{ spec_modules && evidence_modules; } | sort -u > "$TMP/modules.txt" || { no "source module enumeration failed"; finish; }
+PROOF_PKG=SpecAndEvidence population imported > "$TMP/combined-imports.txt" \
+  || { no "combined import enumeration failed"; finish; }
+GAP=$(comm -23 "$TMP/modules.txt" <(sort -u "$TMP/combined-imports.txt"))
+[ -z "$GAP" ] || { no "source modules outside the fresh replay root: $GAP"; finish; }
 
 echo "=== F/M: replay ==="
-spec_modules > "$TMP/modules.txt"
 PKG_LIB="$ROOT_DIR/.lake/build/lib/lean"
 TOOL_PATH="$("$LAKE" env printenv LEAN_PATH)" || { no "lake env printenv LEAN_PATH failed"; finish; }
 # stage_lib FROM DEST < MODULES: copy each listed module's .olean files (FROM/A/B.olean*, no .hash)
@@ -87,16 +94,16 @@ out="$(stage_lib "$PKG_LIB" "$STAGE" < "$TMP/modules.txt")"
 SPATH="$(staged_path "$STAGE")" || { no "LEAN_PATH ($TOOL_PATH) does not name $PKG_LIB exactly once"; finish; }
 ok "staged the $(grep -c . "$TMP/modules.txt") source modules' .olean files; LEAN_PATH reads the stage, not the build directory"
 t0=$SECONDS
-leancheck "$SPATH" --fresh ConcreteSpec > "$TMP/f.out" 2>&1; rc=$?
-[ "$rc" = 0 ] && ok "leanchecker --fresh ConcreteSpec: the whole closure re-checked from an empty kernel environment ($((SECONDS-t0))s)" \
-  || no "leanchecker --fresh ConcreteSpec failed (rc=$rc): $(tail -5 "$TMP/f.out" | tr '\n' ' ')"
+leancheck "$SPATH" --fresh ConcreteSpecEvidence > "$TMP/f.out" 2>&1; rc=$?
+[ "$rc" = 0 ] && ok "leanchecker --fresh ConcreteSpecEvidence: the whole closure re-checked from an empty kernel environment ($((SECONDS-t0))s)" \
+  || no "leanchecker --fresh ConcreteSpecEvidence failed (rc=$rc): $(tail -5 "$TMP/f.out" | tr '\n' ' ')"
 t0=$SECONDS
-leancheck "$SPATH" --verbose ConcreteSpec > "$TMP/m.out" 2>&1; rc=$?
+leancheck "$SPATH" --verbose ConcreteSpec ConcreteSpecEvidence > "$TMP/m.out" 2>&1; rc=$?
 diff_m="$(replay_problems "$TMP/modules.txt" "$TMP/m.out")"
 NREP=$(grep -c . "$TMP/m.out.set")
 [ "$rc" = 0 ] && [ -z "$diff_m" ] \
-  && ok "leanchecker ConcreteSpec: exactly the $NREP source modules replayed on their imports ($((SECONDS-t0))s)" \
-  || no "leanchecker ConcreteSpec: rc=$rc, $NREP modules replayed; $(echo $diff_m) $(grep -v '^replaying' "$TMP/m.out" | tail -5 | tr '\n' ' ')"
+  && ok "leanchecker ConcreteSpec ConcreteSpecEvidence: exactly the $NREP source modules replayed on their imports ($((SECONDS-t0))s)" \
+  || no "leanchecker ConcreteSpec ConcreteSpecEvidence: rc=$rc, $NREP modules replayed; $(echo $diff_m) $(grep -v '^replaying' "$TMP/m.out" | tail -5 | tr '\n' ' ')"
 
 echo "=== negative control: a declaration added without kernel checking ==="
 C="$TMP/control"; mkdir -p "$C"
@@ -136,12 +143,12 @@ if (cd "$C" && "$LAKE" build ReplayGood ReplayBad > build.out 2>&1); then
   echo "=== orphan control: a build-directory module with no source ==="
   O="$TMP/orphan-lib"; cp -a "$PKG_LIB" "$O"
   cp "$C/.lake/build/lib/lean/ReplayBad.olean" "$O/ConcreteSpec/Spec/OrphanControl.olean"
-  leancheck "$(staged_path "$O")" --verbose ConcreteSpec > "$TMP/o1.out" 2>&1; r1=$?
+  leancheck "$(staged_path "$O")" --verbose ConcreteSpec ConcreteSpecEvidence > "$TMP/o1.out" 2>&1; r1=$?
   [ "$r1" != 0 ] && has_match -F "(kernel) declaration type mismatch, 'ReplayBad.forged'" < "$TMP/o1.out" \
     && ok "control: an unfiltered replay of the build directory replays the planted orphan and fails (rc=$r1)" \
     || no "control: the planted orphan did not fail an unfiltered replay (rc=$r1): $(tail -3 "$TMP/o1.out" | tr '\n' ' ')"
   OS="$TMP/orphan-stage"; out="$(stage_lib "$O" "$OS" < "$TMP/modules.txt")"
-  leancheck "$(staged_path "$OS")" --verbose ConcreteSpec > "$TMP/o2.out" 2>&1; r2=$?
+  leancheck "$(staged_path "$OS")" --verbose ConcreteSpec ConcreteSpecEvidence > "$TMP/o2.out" 2>&1; r2=$?
   [ -z "$out" ] && [ "$r2" = 0 ] && [ -z "$(replay_problems "$TMP/modules.txt" "$TMP/o2.out")" ] \
     && [ ! -e "$OS/ConcreteSpec/Spec/OrphanControl.olean" ] \
     && ok "control: the staged replay of the same directory ignores the orphan and replays exactly the source modules" \

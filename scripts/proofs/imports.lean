@@ -40,7 +40,7 @@ def main (args : List String) : IO Unit := do
     for c in ci.getUsedConstantsAsSet do
       let some j := env.getModuleIdxFor? (owner env c) | continue
       let m := env.header.moduleNames[j.toNat]!
-      if m.getRoot == `ConcreteSpec && m != target.toName then
+      if (m.getRoot == `ConcreteSpec || m.getRoot == `ConcreteSpecEvidence) && m != target.toName then
         all := all.insert m
         if !exampleDecl then named := named.insert m
   for m in all.toList.mergeSort (fun a b => a.toString < b.toString) do

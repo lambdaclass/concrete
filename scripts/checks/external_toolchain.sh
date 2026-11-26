@@ -15,8 +15,8 @@ cp "$ROOT/scripts/proofs/"{external.sh,external.pins,lake_tool.sh,lib.sh,theorem
 cp "$ROOT/scripts/checks/lib/"{gate_env.sh,git_sandbox.sh,has_match.sh,limits.sh} "$TMP/project/scripts/checks/lib/"
 printf '%s\n' leanprover/lean4:v4.35.0 > "$TMP/project/lean-toolchain"
 # lib.sh's project build and orphan-pruning prerequisites remain real code.
-touch "$TMP/project/ConcreteSpec.lean" "$TMP/project/Concrete.lean"
-mkdir "$TMP/project/ConcreteSpec" "$TMP/project/Concrete"
+touch "$TMP/project/ConcreteSpecEvidence.lean" "$TMP/project/ConcreteSpec.lean" "$TMP/project/Concrete.lean"
+mkdir "$TMP/project/ConcreteSpecEvidence" "$TMP/project/ConcreteSpec" "$TMP/project/Concrete"
 git -C "$TMP/source" init -q
 cp "$TMP/project/lean-toolchain" "$TMP/source/lean-toolchain"
 mkdir "$TMP/source/src"
@@ -124,10 +124,11 @@ set -eu
 mkdir -p "$FIXTURE_TOOLS"
 flock -n "$FIXTURE_TOOLS/.lock" true || { echo 'CONTROL: caller lock held' >&2; exit 95; }
 case "$*" in
-  'build ConcreteSpec Concrete') echo project >> "$PHASE_LOG" ;;
+  'build ConcreteSpec ConcreteSpecEvidence Concrete') echo project >> "$PHASE_LOG" ;;
   'env lean '*)
     echo "population-$PROOF_MODE" >> "$PHASE_LOG"
     case "$PROOF_MODE" in
+      imported) printf '%s\n' ConcreteSpec ConcreteSpecEvidence ;;
       theorems) for i in $(seq -w 0 99); do printf 'ConcreteSpec.theorem%03d\t\n' "$((10#$i))"; done ;;
       encoded)
         if [[ "$3" == */control-* ]]; then

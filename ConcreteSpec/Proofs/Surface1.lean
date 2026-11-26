@@ -131,8 +131,9 @@ private abbrev abortOps : Operands where
 
 open Core.Exec in
 private def abortStart : Config abortOps :=
+  let cleanup : Core.FnId := ⟨⟨⟨⟨"exec"⟩, ⟨⟨"0"⟩⟩⟩, [⟨"exec"⟩], by decide⟩, ⟨"log"⟩⟩
   ⟨.exec (.abort abortSite), [(⟨0⟩, slot)], (),
-    [.scope ⟨0⟩ [] [⟨Demo.logF, [], ⟨1⟩⟩]]⟩
+    [.scope ⟨0⟩ [] [⟨cleanup, [], ⟨1⟩⟩]]⟩
 
 open Core.Exec in
 private def abortFinal : Config abortOps := { abortStart with ctrl := .trapped .abort abortSite }

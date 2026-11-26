@@ -110,6 +110,9 @@ end Witness{index}
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'ConcreteSpec/Proofs/Bad.lean'
             path.parent.mkdir(parents=True)
+            evidence = Path(tmp) / 'ConcreteSpecEvidence/Fixture.lean'
+            evidence.parent.mkdir()
+            evidence.write_text('import ConcreteSpec.Spec.Basics\n')
             for body, message in (
                     ('open ConcreteSpec\n example : True := by trivial\n', '3: an `example`'),
                     ('/- unterminated', 'unterminated comment')):

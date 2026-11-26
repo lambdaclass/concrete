@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# AXIOM INVENTORY: every theorem of the specification and compiler depends, transitively, on no axiom beyond
-# propext, Quot.sound and Classical.choice (Q9.17), and the per-theorem inventory equals the golden
-# lists scripts/proofs/axioms.golden and scripts/proofs/compiler_axioms.golden.
+# AXIOM INVENTORY: every theorem of the specification, evidence, and compiler depends transitively
+# on only propext, Quot.sound and Classical.choice (Q9.17). Each library has its own golden.
 #
 #   P  population: every source module in each library is in the root's import closure (a
 #      module outside it is neither built by default nor read here), and every module whose file
@@ -95,8 +94,10 @@ audit_library() {
 }
 
 GOLDEN=scripts/proofs/axioms.golden
+EVIDENCE_GOLDEN=scripts/proofs/evidence_axioms.golden
 COMPILER_GOLDEN=scripts/proofs/compiler_axioms.golden
 audit_library ConcreteSpec "$GOLDEN" "${1:-}"
+audit_library ConcreteSpecEvidence "$EVIDENCE_GOLDEN" "${1:-}"
 audit_library Concrete "$COMPILER_GOLDEN" "${1:-}"
 if [ "${1:-}" = --update ] || [ "$FAIL" != 0 ]; then finish; fi
 

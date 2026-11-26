@@ -163,12 +163,13 @@ def is_example(d):
 
 def module_order(env_mods):
     """The modules of the library: the root, the specification in `Spec.lean`'s import order, then
-    every other module sorted. Every source file under `ConcreteSpec/` must be in the root's import
+    every other module sorted. Every source file under either library must be in the evidence root's import
     closure, or the view would leave it out."""
-    on_disk = set(modules_under('ConcreteSpec')) | {'ConcreteSpec'}
+    roots = {'ConcreteSpec', 'ConcreteSpecEvidence'}
+    on_disk = roots | {module for root in roots for module in modules_under(root)}
     missing = sorted(on_disk - set(env_mods))
     if missing:
-        sys.exit(f'error: source modules outside the import closure of ConcreteSpec: {missing}')
+        sys.exit(f'error: source modules outside the import closure of ConcreteSpecEvidence: {missing}')
     spec_root = open(os.path.join(ROOT, 'ConcreteSpec/Spec.lean')).read()
     first = ['ConcreteSpec', 'ConcreteSpec.Spec'] + re.findall(r'^import (ConcreteSpec\.Spec\.[\w.]+)', spec_root, re.M)
     first = [m for m in first if m in env_mods]

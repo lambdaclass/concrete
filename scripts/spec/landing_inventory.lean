@@ -1,4 +1,4 @@
-import ConcreteSpec
+import ConcreteSpecEvidence
 import Concrete
 import Lean
 
@@ -106,6 +106,7 @@ structure RuleRequirement where
 structure ControlRequirement where
   origin : Name
   theoremName : Name
+  lawOrigin : Name
   law : Name
   contract : Name
   subject : Name
@@ -156,7 +157,7 @@ private def specNamespace (origin namespaceName : Name) : EvidenceNamespace :=
     isProof := (`Proofs).isPrefixOf origin }
 
 private def registryNamespace (namespaceName ruleOrigin : Name) : EvidenceNamespace :=
-  { origin := `ConcreteSpec.Spec.Rules, namespaceName := `ConcreteSpec ++ namespaceName
+  { origin := `ConcreteSpecEvidence.Rules, namespaceName := `ConcreteSpec ++ namespaceName
     ruleOrigin := some (`ConcreteSpec ++ ruleOrigin) }
 
 private def namedEvidence (groups : List Group) : Completion :=
@@ -205,7 +206,7 @@ private def completion : PieceId → Completion
   | .F03b => namedEvidence [
     evidence `ConcreteSpec.Spec.Ident `ConcreteSpec.Core [
       `example_newline_starts_new_based_byte_column],
-    evidence `ConcreteSpec.Proofs.Ident `ConcreteSpec.Core.Vacuity [
+    evidence `ConcreteSpecEvidence.Ident `ConcreteSpec.Core.Vacuity [
       `example_aSource_aTab, `lineAt_zero_example_aSource, `lineAt_zero_planted_aSource_zeroBasedLine,
       `columnAt_zero_example_aSource, `columnAt_zero_planted_aSource_zeroBasedColumn],
     decls `ConcreteSpec.Spec.Ident [`ConcreteSpec.Core.SourceText.ofBytes, `ConcreteSpec.Core.SourceText.toBytes],
@@ -230,7 +231,7 @@ private def completion : PieceId → Completion
         `ConcreteSpec.Core.SourcePathSpan ++ name)).map fun name =>
           ⟨name, `ConcreteSpec.Spec.Ident⟩ }
   | .F04 => namedEvidence [
-    evidence `ConcreteSpec.Proofs.Ident `ConcreteSpec.Core.Vacuity [
+    evidence `ConcreteSpecEvidence.Ident `ConcreteSpec.Core.Vacuity [
       `lookup_renumber_example_siteTable, `lookup_renumber_planted_siteTable_collapseRenumber,
       `nodup_renumber_example_siteTable, `nodup_renumber_planted_siteTable_collapseRenumber,
       `assignProgramTables_outsideEdit_example_bodiesBefore,
@@ -338,12 +339,12 @@ private def completion : PieceId → Completion
       `ConcreteSpec.Core.SpecializationTable.canonicalize_nodup,
       `ConcreteSpec.Core.SpecializationTable.canonicalize_share]]
   | .F04p =>
-    let origin := `ConcreteSpec.Proofs.Ident
+    let origin := `ConcreteSpecEvidence.Ident
     let family := `ConcreteSpec.Core.SourcePathSpan
     let control (law contract subject mutant : Name) : ControlRequirement :=
       let ns := family ++ `Controls
       ⟨origin, ns ++ Name.mkSimple (mutant.toString ++ "_violates_correct"),
-        family ++ law, family ++ contract, family ++ subject, ns ++ mutant⟩
+        `ConcreteSpec.Proofs.Ident, family ++ law, family ++ contract, family ++ subject, ns ++ mutant⟩
     { named := [
     laws `ConcreteSpec.Proofs.Ident [
       `ConcreteSpec.Core.SourcePath.byte_probe_reference,
@@ -387,8 +388,8 @@ private def completion : PieceId → Completion
       `ConcreteSpec.Core.SourcePath.ascii_bytes,
       `ConcreteSpec.Core.SourcePath.render_exact,
       `ConcreteSpec.Core.SourcePath.render_injective,
-      `ConcreteSpec.Core.SourcePath.parseString_render,
-      `ConcreteSpec.Core.SourcePath.LocalControls.admittedBytes_iff],
+      `ConcreteSpec.Core.SourcePath.parseString_render],
+    laws `ConcreteSpecEvidence.Ident [`ConcreteSpec.Core.SourcePath.LocalControls.admittedBytes_iff],
     laws `ConcreteSpec.Proofs.Ident [
       `ConcreteSpec.Core.SourcePath.Project.check_safety,
       `ConcreteSpec.Core.SourcePath.Project.check_progress,
@@ -396,7 +397,7 @@ private def completion : PieceId → Completion
       `ConcreteSpec.Core.SourcePath.Project.check_order_independent,
       `ConcreteSpec.Core.SourcePath.Project.parse_local_first,
       `ConcreteSpec.Core.SourcePath.Project.parse_checks_locally_parsed],
-    evidence `ConcreteSpec.Proofs.Ident `ConcreteSpec.Core.SourcePath.Project.Controls [
+    evidence `ConcreteSpecEvidence.Ident `ConcreteSpec.Core.SourcePath.Project.Controls [
       `ignoreDirectoryCase_violates_safety, `caseSensitive_violates_safety,
       `ignoreFileDirectory_violates_safety, `rejectSharedDirectory_violates_progress,
       `wrongSecondOccurrence_violates_refusal_evidence,
@@ -404,8 +405,11 @@ private def completion : PieceId → Completion
       `prematureProjectCheck_violates_local_first, `ignoreDuplicate_violates_safety,
       `skipProjectCheck_violates_checks_locally_parsed],
     evidence `ConcreteSpec.Proofs.Ident `ConcreteSpec.Core [
-      `Span.pathOk, `Span.locationOk_iff, `tabSpan_location, `tabSpan_otherSource,
-      `tabSpan_badCoordinates, `SourcePath.LocalControls.foldedRenderingChangesIdentity],
+      `Span.pathOk, `Span.locationOk_iff],
+    evidence `ConcreteSpecEvidence.Ident `ConcreteSpec.Core [
+      `tabSpan_location, `tabSpan_otherSource, `tabSpan_badCoordinates],
+    evidence `ConcreteSpecEvidence.Ident `ConcreteSpec.Core.SourcePath.LocalControls [
+      `foldedRenderingChangesIdentity],
     laws `ConcreteSpec.Proofs.Ident [
       `ConcreteSpec.Core.SourcePathSpan.projectSpan_correct,
       `ConcreteSpec.Core.SourcePathSpan.bindSource_correct],
@@ -418,7 +422,8 @@ private def completion : PieceId → Completion
         ⟨``ConcreteSpec.Core.SourcePathSpan.endInSource_guard_iff, ``SpanBridge.endInSource⟩,
         ⟨``ConcreteSpec.Core.SourcePathSpan.lineMatches_guard_iff, ``SpanBridge.lineMatches⟩,
         ⟨``ConcreteSpec.Core.SourcePathSpan.columnMatches_guard_iff, ``SpanBridge.columnMatches⟩]
-      namespaces := [specNamespace `Proofs.Ident `Core.SourcePathSpan]
+      namespaces := [specNamespace `Proofs.Ident `Core.SourcePathSpan,
+        { origin := `ConcreteSpecEvidence.Ident, namespaceName := family ++ `Controls }]
       controls := [
         control `projectSpan_correct `ProjectionCorrect `projectSpan `projectPastEnd,
         control `projectSpan_correct `ProjectionCorrect `projectSpan `projectAtStartOnly,
@@ -428,17 +433,17 @@ private def completion : PieceId → Completion
         control `bindSource_correct `BindingCorrect `bindSource `bindBeforeEof] }
   | .R => namedEvidence [
     decls `ConcreteSpec.Spec.Rules [`ConcreteSpec.Core.registeredRules,
-      `ConcreteSpec.Core.registeredRuleExamples, `ConcreteSpec.Core.RuleAccepted,
-      `ConcreteSpec.Core.RuleRefused]]
+      `ConcreteSpec.Core.RuleAccepted, `ConcreteSpec.Core.RuleRefused],
+    decls `ConcreteSpecEvidence.Rules [`ConcreteSpec.Core.registeredRuleExamples]]
   | .F05 => namedEvidence [
-    evidence `ConcreteSpec.Proofs.Scalar `ConcreteSpec.Core.ScalarEvidence [
+    evidence `ConcreteSpecEvidence.Scalar `ConcreteSpec.Core.ScalarEvidence [
       `typed_eval_range_example_literal, `typed_eval_range_planted_literal_wideEval,
       `machine_operands_example_typed_pair, `machine_operands_planted_typed_pair_wideEval,
       `machine_inRange_example_typed_machine, `machine_inRange_planted_typed_machine_wideEval],
-    evidence `ConcreteSpec.Proofs.Scalar `ConcreteSpec.Core [
+    evidence `ConcreteSpecEvidence.Scalar `ConcreteSpec.Core [
       `checkedNeg_ok_arithmetic_example_signed, `checkedNeg_ok_arithmetic_planted_signed_identityNeg,
       `checkedNeg_error_iff_example_minimum, `checkedNeg_error_iff_planted_minimum_uncheckedNeg],
-    evidence `ConcreteSpec.Proofs.Scalar `ConcreteSpec.Core.ScalarLawEvidence [
+    evidence `ConcreteSpecEvidence.Scalar `ConcreteSpec.Core.ScalarLawEvidence [
       `checked_inRange_example_addition, `checked_inRange_planted_addition_carriedChecked,
       `name_injective_example_concrete, `name_injective_planted_concrete_sameName,
       `trapKind_injective_example_concrete, `trapKind_injective_planted_concrete_sameTrap,
@@ -465,10 +470,10 @@ private def completion : PieceId → Completion
       `machine_plain_eq_exact_example_concrete, `machine_plain_eq_exact_planted_concrete_corruptExact,
       `eval_toExact_example_concrete, `eval_toExact_planted_concrete_eraseExact,
       `lossless_iff_example_same_width, `lossless_iff_planted_same_width_strictLossless],
-    evidence `ConcreteSpec.Proofs.Scalar `ConcreteSpec.Core.ScalarVariableEvidence [
+    evidence `ConcreteSpecEvidence.Scalar `ConcreteSpec.Core.ScalarVariableEvidence [
       `example_Reading_numeric_variable_does_not_merge, `example_Assignment_uses_shared_map_other_number,
       `example_Scope_removal_erases_only_chosen_number],
-    evidence `ConcreteSpec.Proofs.Scalar `ConcreteSpec.Core.CharEvidence [
+    evidence `ConcreteSpecEvidence.Scalar `ConcreteSpec.Core.CharEvidence [
       `charFromCodePoint_map_example_surrogate,
       `charFromCodePoint_map_planted_surrogate_replacementConstructor,
       `charFromCodePoint_roundtrip_example_ascii, `charFromCodePoint_roundtrip_planted_ascii_nextConstructor,
@@ -525,7 +530,7 @@ private def completion : PieceId → Completion
       `ConcreteSpec.Core.wrapping_of_checked]]
   | .F06 =>
     { named := [
-    evidence `ConcreteSpec.Spec.Const `ConcreteSpec.Core.ConstDemo [
+    evidence `ConcreteSpecEvidence.ConstExamples `ConcreteSpec.Core.ConstDemo [
       `example_accepted_rule_ConcreteSpec_Core_ConstsAdmitted_wrapping,
       `example_accepted_rule_ConcreteSpec_Core_ConstsAdmitted_plain,
       `example_accepted_division_and_unused_constant_have,
@@ -567,7 +572,7 @@ private def completion : PieceId → Completion
     decls `ConcreteSpec.Spec.Const [`ConcreteSpec.Core.CExpr, `ConcreteSpec.Core.CExpr.eval]],
       completionRules := [⟨`ConcreteSpec.Core.ConstsPermitted, `ConcreteSpec.Spec.Const⟩] }
   | .F07 => namedEvidence [
-    evidence `ConcreteSpec.Proofs.Const `ConcreteSpec.Core [
+    evidence `ConcreteSpecEvidence.Const `ConcreteSpec.Core [
       `eval_wellTyped_progress_example_div_zero, `eval_wellTyped_progress_planted_div_zero_divisionAsFuel,
       `eval_total_example_wrap, `eval_total_planted_wrap_refuseWrappingAdd,
       `evalConsts_sound_example_division, `evalConsts_sound_planted_division_boolConstValues,
@@ -625,7 +630,7 @@ private def completion : PieceId → Completion
       `ConcreteSpec.Core.typed_constant_closed,
       `ConcreteSpec.Core.typed_evalConsts_refusal]]
   | .F08 => namedEvidence [
-    evidence `ConcreteSpec.Spec.Exec `ConcreteSpec.Core.Exec.Demo [
+    evidence `ConcreteSpecEvidence.ExecExamples `ConcreteSpec.Core.Exec.Demo [
       `example_fn_Fn_ops_vs_List, `example_match_run_O, `example_match_run_O_2,
       `example_go_seq_block_seq_dlog, `example_brief_go_block_seq_dlog, `example_brief_go_block_seq_dlog_2,
       `example_brief_go_block_seq_dlog_3, `example_go_seq_loop_skip_lit, `example_go_seq_bind_x_lit,
@@ -650,7 +655,7 @@ private def completion : PieceId → Completion
       `example_no_relational_label_answer_or_destination, `example_no_relational_label_answer_or_destination_2],
     decls `ConcreteSpec.Spec.Exec [`ConcreteSpec.Core.Exec.Operands, `ConcreteSpec.Core.Exec.Config, `ConcreteSpec.Core.Exec.step, `ConcreteSpec.Core.Exec.runFrom, `ConcreteSpec.Core.Exec.Report]]
   | .F09a => namedEvidence [
-    evidence `ConcreteSpec.Proofs.Exec `ConcreteSpec.Core.Exec.CoreEvidence [
+    evidence `ConcreteSpecEvidence.Exec `ConcreteSpec.Core.Exec.CoreEvidence [
       `lookup_restrict_instance, `lookup_restrict_planted, `restrict_dom_drops_instance,
       `restrict_dom_drops_planted, `steps_request_instance, `steps_request_planted, `step_ret_instance,
       `step_ret_planted, `step_return_caller_instance, `step_return_caller_planted,
@@ -693,7 +698,7 @@ private def completion : PieceId → Completion
       `ConcreteSpec.Core.Exec.two_defers_register,
       `ConcreteSpec.Core.Exec.unwind_runs_plan]]
   | .F09b => namedEvidence [
-    evidence `ConcreteSpec.Proofs.Exec `ConcreteSpec.Core.Exec.CleanupEvidence [
+    evidence `ConcreteSpecEvidence.Exec `ConcreteSpec.Core.Exec.CleanupEvidence [
       `example_Helper_application_ConcreteSpec_Core_Exec_cleanup_runs_exact_plan,
       `example_Helper_application_ConcreteSpec_Core_Exec_planWith_calls,
       `planted_certificate_ConcreteSpec_Core_Exec_planWith_calls_Reversal,
@@ -731,7 +736,7 @@ private def completion : PieceId → Completion
       `ConcreteSpec.Core.Exec.step_trapped,
       `ConcreteSpec.Core.Exec.steps_from_trapped]]
   | .F09c => namedEvidence [
-    evidence `ConcreteSpec.Proofs.Exec `ConcreteSpec.Core.Exec.DeterminismEvidence [
+    evidence `ConcreteSpecEvidence.Exec `ConcreteSpec.Core.Exec.DeterminismEvidence [
       `rules_deterministic_instance, `rules_silent_deterministic_instance, `rules_deterministic_planted,
       `rules_silent_deterministic_planted, `rules_sound_instance, `rules_complete_instance,
       `rules_sound_planted, `rules_complete_planted, `primitive_determinism_instance,
@@ -743,7 +748,7 @@ private def completion : PieceId → Completion
       `ConcreteSpec.Core.Exec.rules_silent_deterministic,
       `ConcreteSpec.Core.Exec.rules_sound]]
   | .F10 => namedEvidence [
-    evidence `ConcreteSpec.Proofs.Exec `ConcreteSpec.Core.Exec.LifecycleEvidence [
+    evidence `ConcreteSpecEvidence.Exec `ConcreteSpec.Core.Exec.LifecycleEvidence [
       `bind_instance, `bind_planted, `assign_instance, `assign_planted, `call_instance, `call_planted,
       `scope_instance, `scope_planted, `exitScope_instance, `exitScope_planted, `exitTest_instance,
       `exitTest_planted, `test_instance, `test_planted, `return_instance, `returnExplicit_planted,
@@ -759,7 +764,7 @@ private def completion : PieceId → Completion
       `primitive_step_accepted, `primitive_deleted, `continuation_accepted, `continuation_deleted,
       `primitive_bind_accepted, `primitive_bind_deleted, `return_destinations_accepted, `false_test_accepted,
       `false_test_deleted],
-    evidence `ConcreteSpec.Proofs.Exec `ConcreteSpec.Core.Exec.DestructionEvidence [
+    evidence `ConcreteSpecEvidence.Exec `ConcreteSpec.Core.Exec.DestructionEvidence [
       `validator_instance, `builder_instance, `enters_instance, `enters_planted, `builder_deleted,
       `sequence_element_instance, `sequence_element_planted, `sequence_storage_instance,
       `sequence_storage_planted, `map_entry_instance, `map_entry_planted, `map_order_planted,
@@ -796,9 +801,9 @@ private def completion : PieceId → Completion
       `example_write_then_read_through_same_pointer, `example_After_release_old_pointer_reaches_nothing,
       `example_Allocation_would_overlap_live_block_fails,
       `example_from_exposed_address_inside_exposed_block_gets],
-    evidence `ConcreteSpec.Proofs.Memory `ConcreteSpec.Core.Mem [
+    evidence `ConcreteSpecEvidence.Memory `ConcreteSpec.Core.Mem [
       `example_Representation_application_checked_view_covers_negative],
-    evidence `ConcreteSpec.Proofs.Memory `ConcreteSpec.Core.Mem.Audit [
+    evidence `ConcreteSpecEvidence.Memory `ConcreteSpec.Core.Mem.Audit [
       `decodeInt_encodeInt_example_i8, `decodeInt_encodeInt_planted_i8_badDecodeInt,
       `decodeInt_encodeInt_planted_i8_badEncodeInt, `decodeInt_inRange_example_i8,
       `decodeInt_inRange_planted_i8_badDecodeIntRange, `empty_wellFormed_example_default,
@@ -887,15 +892,15 @@ private def completion : PieceId → Completion
       `ConcreteSpec.Core.Mem.store_same_block_frame,
       `ConcreteSpec.Core.Mem.store_wellFormed]]
   | .F12 => namedEvidence [
-    evidence `ConcreteSpec.Spec.Hybrid `ConcreteSpec.Core.Hybrid [
+    evidence `ConcreteSpecEvidence.HybridExamples `ConcreteSpec.Core.Hybrid [
       `example_encoding_hold_does_not_hold_decided, `example_Missing_layout_authority_refuses_query_rather,
       `example_integer_is_readable_before_taking_its, `example_Boolean_byte_storage_is_outside_this,
       `materialize_read_example, `example_Sharing_scalar_universe_does_not_infer,
       `example_laws_typed_store_frame_rawWrite_read_typed_write_preserves, `materialize_reuse_example],
-    evidence `ConcreteSpec.Proofs.Hybrid `ConcreteSpec.Core.Hybrid [
+    evidence `ConcreteSpecEvidence.Hybrid `ConcreteSpec.Core.Hybrid [
       `encode_refuses_unadmitted_example, `example_public_query_retains_admitted_integer_encoding,
       `encode_refuses_unadmitted_planted_heldBoolean_sentinelEncode],
-    evidence `ConcreteSpec.Proofs.Hybrid `ConcreteSpec.Core.Hybrid.Audit [
+    evidence `ConcreteSpecEvidence.Hybrid `ConcreteSpec.Core.Hybrid.Audit [
       `rep_roundtrip_example_u8One, `rep_roundtrip_planted_u8One_badRep,
       `rep_roundtrip_planted_u8One_badEncode, `decode_valid_example_u8One,
       `decode_valid_planted_u8One_badDecodeUnit, `read_structured_example_u8One,
@@ -912,7 +917,7 @@ private def completion : PieceId → Completion
       `expose_wellFormed_example_firstExpose, `expose_wellFormed_planted_firstExpose_badExposeStateWf,
       `materialize_read_example_firstMat, `materialize_read_planted_firstMat_badReadStructOnly,
       `rawWrite_read_example_overwrite, `rawWrite_read_planted_overwrite],
-    evidence `ConcreteSpec.Proofs.Hybrid `ConcreteSpec.Core.Hybrid.Audit.Frame [
+    evidence `ConcreteSpecEvidence.Hybrid `ConcreteSpec.Core.Hybrid.Audit.Frame [
       `example_laws_write_frame_materialize_frame_expose_frame_observed_place,
       `write_frame_example_otherPlace, `write_frame_planted_otherPlace_badReadDiff,
       `write_frame_disjoint_example_otherPlace, `write_frame_disjoint_planted_otherPlace_badReadDiff,
@@ -941,7 +946,7 @@ private def completion : PieceId → Completion
       `ConcreteSpec.Core.Hybrid.write_wellFormed]]
   | .F13 =>
     { named := [
-    evidence `ConcreteSpec.Spec.Own `ConcreteSpec.Core.Own.Examples [
+    evidence `ConcreteSpecEvidence.OwnExamples `ConcreteSpec.Core.Own.Examples [
       `example_Accepted_rule_ConcreteSpec_Core_Own_ownerAccess,
       `example_Refused_rule_ConcreteSpec_Core_Own_ownerAccess,
       `example_Refused_shared_loans_also_prevent_moving,
@@ -982,7 +987,7 @@ private def completion : PieceId → Completion
         `DropPermitted, `LeavePermitted].map
           (fun name => ⟨`ConcreteSpec.Core.Own ++ name, `ConcreteSpec.Spec.Own⟩) }
   | .F14 => namedEvidence [
-    evidence `ConcreteSpec.Proofs.Own `ConcreteSpec.Core.Own.PrimitiveWitnesses [
+    evidence `ConcreteSpecEvidence.Own `ConcreteSpec.Core.Own.PrimitiveWitnesses [
       `example_Positive_preservation_progress_instances_use_live, `example_ownership_calculation,
       `example_ownership_calculation_2, `example_ownership_calculation_3, `example_ownership_calculation_4,
       `planted_Malformed_move_access_observations_destroy_owned, `planted_ownership_calculation,
@@ -990,7 +995,7 @@ private def completion : PieceId → Completion
       `planted_Negated_success_each_operational_permission_violated, `planted_ownership_calculation_3,
       `planted_ownership_calculation_4, `planted_ownership_calculation_5, `planted_ownership_calculation_6,
       `planted_ownership_calculation_7],
-    evidence `ConcreteSpec.Proofs.Own `ConcreteSpec.Core.Own.LifecycleWitnesses [
+    evidence `ConcreteSpecEvidence.Own `ConcreteSpec.Core.Own.LifecycleWitnesses [
       `example_Each_lifecycle_loan_ending_law_has, `example_ownership_calculation,
       `example_ownership_calculation_2, `example_ownership_calculation_3, `example_ownership_calculation_4,
       `example_ownership_calculation_5, `example_ownership_calculation_6, `example_ownership_calculation_7,
@@ -1000,12 +1005,12 @@ private def completion : PieceId → Completion
       `planted_endLoan_endLocals_mutation_removes_parent_before,
       `planted_Progress_counterexamples_live_linear_replacement_child, `planted_ownership_calculation,
       `planted_ownership_calculation_2, `planted_ownership_calculation_3],
-    evidence `ConcreteSpec.Proofs.Own `ConcreteSpec.Core.Own.CallWitnesses [
+    evidence `ConcreteSpecEvidence.Own `ConcreteSpec.Core.Own.CallWitnesses [
       `example_ownership_calculation, `example_ownership_calculation_2, `example_ownership_calculation_3,
       `example_ownership_calculation_4, `example_ownership_calculation_5,
       `planted_Malformed_bookkeeping_observations_duplicate_parameters_and, `planted_ownership_calculation,
       `planted_leave_mutation_discard_loans_but_retain],
-    evidence `ConcreteSpec.Proofs.Own `ConcreteSpec.Core.Own.RoundThreeWitnesses [
+    evidence `ConcreteSpecEvidence.Own `ConcreteSpec.Core.Own.RoundThreeWitnesses [
       `example_Observation_projected_owner_loan_issues_identity,
       `planted_Rejection_observation_Wrong_projection_falsifies_existential,
       `example_Observation_child_retains_its_parent_s, `planted_Rejection_observation_Removing_child_s_parent,
@@ -1025,7 +1030,7 @@ private def completion : PieceId → Completion
       `planted_Rejection_observation_Failing_append_requested_suffix,
       `example_Observation_Reborrowing_retains_original_parent_record,
       `planted_Rejection_observation_Removing_parent_now_falsifies],
-    evidence `ConcreteSpec.Proofs.Own `ConcreteSpec.Core.Own.DirectArgumentWitnesses [
+    evidence `ConcreteSpecEvidence.Own `ConcreteSpec.Core.Own.DirectArgumentWitnesses [
       `example_Observation_direct_mutable_argument_coexists_unrelated,
       `planted_Rejection_observation_mutated_direct_loan_reuses,
       `example_Observation_Direct_lending_has_no_caller,
@@ -1040,14 +1045,14 @@ private def completion : PieceId → Completion
       `example_Accepted_deferred_direct_lending_uses_late,
       `example_Observation_call_restores_two_caller_owners,
       `planted_Rejection_observation_Keeping_call_loan_forever],
-    evidence `ConcreteSpec.Proofs.Own `ConcreteSpec.Core.Own.LiveDestinationWitnesses [
+    evidence `ConcreteSpecEvidence.Own `ConcreteSpec.Core.Own.LiveDestinationWitnesses [
       `example_Observation_mutable_loan_and_child_target,
       `planted_Rejection_observation_Targeting_inactive_but_previously,
       `example_Observation_pending_direct_root_becomes_loan,
       `planted_Rejection_observation_Adoption_into_inactive_destination,
       `example_Observation_Return_retains_caller_loan_and,
       `planted_Rejection_observation_Popping_callee_without_ending],
-    evidence `ConcreteSpec.Proofs.Own `ConcreteSpec.Core.Own.PreservationEvidence [
+    evidence `ConcreteSpecEvidence.Own `ConcreteSpec.Core.Own.PreservationEvidence [
       `move_preserves_example_initial, `move_preserves_planted_initial_moveDuplicateSlot,
       `reinitialize_preserves_example_moved, `reinitialize_preserves_planted_moved_reinitializeUnissuedPlace,
       `borrow_preserves_example_shared, `borrow_preserves_planted_shared_borrowNoAdvanceSupply,
@@ -1074,7 +1079,7 @@ private def completion : PieceId → Completion
       `callLife_call_preserves_example_waiting, `callLife_call_preserves_planted_waiting_callLifeKeepPending,
       `passOwner_preserves_example_caller, `passOwner_preserves_planted_caller_passOwnerClearCallRoot,
       `passOwner_call_preserves_example_caller, `passOwner_call_preserves_planted_caller_passOwnerOmitPending],
-    evidence `ConcreteSpec.Proofs.Own `ConcreteSpec.Core.Own.LifetimeEvidence [
+    evidence `ConcreteSpecEvidence.Own `ConcreteSpec.Core.Own.LifetimeEvidence [
       `example_leave_no_local_loan_also_covers_refusal_when_caller, `example_exit_ends_live_local_loan_and,
       `planted_leaveWithLoans_violates_leave_no_local_loan_omitting_only_root,
       `leave_no_activation_slot_example_localLoan, `leave_no_activation_slot_planted_localLoan_leaveKeepSlots,
@@ -1088,26 +1093,26 @@ private def completion : PieceId → Completion
       `planted_ownership_calculation_2, `planted_issued_but_inactive_activation_cannot_retain,
       `planted_callee_cannot_index_caller_s_Copy, `example_Cleanup_removes_every_alias_removed_place,
       `planted_same_omitted_root_check_adds_transition],
-    evidence `ConcreteSpec.Proofs.Own `ConcreteSpec.Core.Own.FinalEvidence [
+    evidence `ConcreteSpecEvidence.Own `ConcreteSpec.Core.Own.FinalEvidence [
       `enter_progress_example_shared, `enter_progress_planted_shared_enterRefuse,
       `directOwner_roundtrip_example_caller, `directOwner_roundtrip_planted_caller_callLifeLeaked,
       `directOwner_roundtrip_planted_caller_passOwnerWrongSupply,
       `example_roundtrip_mutant_succeeds_through_passOwner_enter],
-    evidence `ConcreteSpec.Proofs.Own `ConcreteSpec.Core.Own.SuccessfulInstances [
+    evidence `ConcreteSpecEvidence.Own `ConcreteSpec.Core.Own.SuccessfulInstances [
       `example_preservation_and_lifetime_fixtures_actually_take],
-    evidence `ConcreteSpec.Proofs.Own `ConcreteSpec.Core.Own.RoundTwoEvidence [
+    evidence `ConcreteSpecEvidence.Own `ConcreteSpec.Core.Own.RoundTwoEvidence [
       `example_nonzero_target_is_restored_and_other, `planted_each_wrong_selector_fails_same_populated,
       `example_shared_direct_argument_freezes_owner_writes, `example_return_ends_populated_callRoot_loan_not,
       `planted_callRoot_survives_omitted_cleanup_and_targets,
       `example_issued_but_departed_activation_refuses_reborrowing,
       `planted_same_destination_and_arguments_strand_child],
-    evidence `ConcreteSpec.Proofs.Own `ConcreteSpec.Core.Own.PendingEvidence [
+    evidence `ConcreteSpecEvidence.Own `ConcreteSpec.Core.Own.PendingEvidence [
       `passOwner_call_preserves_example_first, `passOwner_call_preserves_planted_first_passOwnerDuplicate,
       `passDown_call_preserves_example_down, `passDown_call_preserves_planted_down_passDownDuplicate,
       `passDown_call_preserves_example_down_2, `passOwner_call_preserves_example_first_2,
       `example_both_shared_argument_paths_accept_second, `callLife_call_preserves_example_exiting,
       `callLife_call_preserves_planted_exiting_callLifePending],
-    evidence `ConcreteSpec.Proofs.Basics `ConcreteSpec.Core [
+    evidence `ConcreteSpecEvidence.Basics `ConcreteSpec.Core [
       `example_refusal_imposes_no_postcondition_even_impossible,
       `example_successful_result_must_satisfy_its_actual,
       `planted_refusal_case_distinguishes_generic_policy_from,
@@ -1146,7 +1151,7 @@ private def completion : PieceId → Completion
       `ConcreteSpec.Core.Own.reborrow_preserves,
       `ConcreteSpec.Core.Own.reinitialize_preserves]]
   | .F15 => namedEvidence [
-    evidence `ConcreteSpec.Proofs.OwnErasureEvidence `ConcreteSpec.Core.Own.ExecErasureWitnesses [
+    evidence `ConcreteSpecEvidence.OwnErasure `ConcreteSpec.Core.Own.ExecErasureWitnesses [
       `example_Moving_initialized_owner_in_instrumented_operand,
       `example_trapping_operand_in_instrumented_instance_traps,
       `example_Left_right_instrumented_argument_evaluation_erases,
@@ -1164,18 +1169,18 @@ private def completion : PieceId → Completion
       `run_erasure_planted, `step_stuck_iff_of_accepted_example, `step_stuck_iff_of_accepted_planted,
       `runFrom_erasure_of_accepted_example, `runFrom_erasure_of_accepted_planted,
       `run_stuck_iff_of_accepted_example, `run_stuck_iff_of_accepted_planted],
-    evidence `ConcreteSpec.Proofs.OwnErasureEvidence `ConcreteSpec.Core.Own.ArgumentEvidence [
+    evidence `ConcreteSpecEvidence.OwnErasure `ConcreteSpec.Core.Own.ArgumentEvidence [
       `evalArgs_ok_erasure_example, `evalArgs_ok_erasure_planted, `evalArgs_trap_erasure_planted],
-    evidence `ConcreteSpec.Proofs.OwnErasureEvidence `ConcreteSpec.Core.Own.PopulatedErasureEvidence [
+    evidence `ConcreteSpecEvidence.OwnErasure `ConcreteSpec.Core.Own.PopulatedErasureEvidence [
       `example_successful_operand_argument_erasure_exercises_live, `evalArgs_trap_erasure_example,
       `example_silent_erasure_succeeds_on_populated_locals,
       `example_primitive_erasure_exposes_same_argument_state,
       `example_relational_single_step_and_finite_erasure, `example_forward_fuel_and_whole_run_erasure,
       `example_accepted_converse_runs_in_both_directions, `step_stuck_iff_of_accepted_planted,
       `evalArgs_trap_erasure_planted, `step_next_erasure_planted],
-    evidence `ConcreteSpec.Proofs.OwnErasureEvidence `ConcreteSpec.Core.Own.AddedAnswerEvidence [
+    evidence `ConcreteSpecEvidence.OwnErasure `ConcreteSpec.Core.Own.AddedAnswerEvidence [
       `run_stuck_iff_of_accepted_example, `runFrom_erasure_of_accepted_planted],
-    evidence `ConcreteSpec.Proofs.OwnErasureEvidence `ConcreteSpec.Core.Own.RefusalEvidence [
+    evidence `ConcreteSpecEvidence.OwnErasure `ConcreteSpec.Core.Own.RefusalEvidence [
       `eval_refusal_example, `eval_refusal_planted_shared, `evalArgs_refusal_example,
       `evalArgs_refusal_planted, `life_refusal_example, `life_refusal_planted_shared,
       `step_eval_refusal_example, `step_eval_refusal_planted, `step_life_refusal_example,
@@ -1189,11 +1194,11 @@ private def completion : PieceId → Completion
       `evalArgs_trap_iff_of_permitted_planted_2, `evalArgs_ok_erasure_planted, `step_next_erasure_planted,
       `runFrom_erasure_planted, `run_erasure_planted_shared, `evalArgs_stuck_iff_of_permitted_planted_3,
       `evalArgs_trap_iff_of_permitted_planted_3],
-    evidence `ConcreteSpec.Proofs.OwnErasureEvidence `ConcreteSpec.Core.Own.RelationalConverseEvidence [
+    evidence `ConcreteSpecEvidence.OwnErasure `ConcreteSpec.Core.Own.RelationalConverseEvidence [
       `Step_converse_of_accepted_example, `Step_converse_of_accepted_planted,
       `Steps_converse_of_accepted_example, `Steps_converse_of_accepted_planted,
       `Step_converse_of_accepted_example_2, `runFrom_erasure_of_accepted_planted],
-    decls `ConcreteSpec.Proofs.OwnErasureEvidence [`ConcreteSpec.Core.Own.ExecErasureWitnesses.bindReadErasure, `ConcreteSpec.Core.Own.ExecErasureWitnesses.unconditionalRunConverse_refuted],
+    decls `ConcreteSpecEvidence.OwnErasure [`ConcreteSpec.Core.Own.ExecErasureWitnesses.bindReadErasure, `ConcreteSpec.Core.Own.ExecErasureWitnesses.unconditionalRunConverse_refuted],
     laws `ConcreteSpec.Proofs.OwnErasure [
       `ConcreteSpec.Core.Own.Step_converse_of_accepted,
       `ConcreteSpec.Core.Own.Step_erasure,
@@ -1254,9 +1259,9 @@ private def completion : PieceId → Completion
     specNamespace `Proofs.Adequacy `Core.Exec.TerminationAndBlocking]
   | .F26a =>
     { named := [
-    evidence `ConcreteSpec.Spec.Accounting `ConcreteSpec.Core.Leak [
+    evidence `ConcreteSpecEvidence.AccountingExamples `ConcreteSpec.Core.Leak [
       `example_execution_check_evaluating_run_on_allocate, `example_refusal_check_showing_apply_returns_none],
-    evidence `ConcreteSpec.Proofs.Accounting `ConcreteSpec.Core.Leak [
+    evidence `ConcreteSpecEvidence.Accounting `ConcreteSpec.Core.Leak [
       `empty_memory_has_well_formed_account,
       `peak_below_live_is_invalid,
       `setting_account_preserves_other_lineage,
@@ -1272,7 +1277,7 @@ private def completion : PieceId → Completion
       `optional_bound_refuses_underestimate,
       `optional_bound_refuses_missing_fact,
       `report_refuses_wrong_lineage],
-    evidence `ConcreteSpec.Proofs.Accounting `ConcreteSpec.Core.Leak.Audit [
+    evidence `ConcreteSpecEvidence.Accounting `ConcreteSpec.Core.Leak.Audit [
       `alloc_zero_example_accountA, `alloc_zero_planted_accountA_allocInventsByte,
       `same_account_write_preserves_memory,
       `corrupting_setter_changes_memory,
@@ -1411,7 +1416,7 @@ private def plan : List Piece := [
     groups := [
       evidence `ConcreteSpec.Proofs.Ident `ConcreteSpec.Core.SourcePathSpan [
         `ProjectionCorrect, `BindingCorrect],
-      evidence `ConcreteSpec.Proofs.Ident `ConcreteSpec.Core.SourcePathSpan.Controls [
+      evidence `ConcreteSpecEvidence.Ident `ConcreteSpec.Core.SourcePathSpan.Controls [
         `pastEnd, `wrongLine, `wrongColumn, `projectPastEnd, `projectAtStartOnly,
         `bindPastEnd, `bindIgnoringLine, `bindIgnoringColumn, `bindBeforeEof]] },
   added .R "Rule registry, prerequisite of F06, F13 and F17"
@@ -1500,7 +1505,7 @@ private def importClosure (env : Environment) (root : Name) : NameSet := Id.run 
 
 private def evidenceInScope (specModules compilerModules : NameSet) (origin : Name) : Bool :=
   match origin.getRoot with
-  | `ConcreteSpec => specModules.contains origin
+  | `ConcreteSpec | `ConcreteSpecEvidence => specModules.contains origin
   | `Concrete => compilerModules.contains origin
   | _ => false
 
@@ -1554,7 +1559,7 @@ private def readEvidence (env : Environment) (inScope : Name → Bool) :
 -- must negate that same application with only the implementation replaced.
 private def ControlRequirement.hasRefutation (control : ControlRequirement)
     (env : Environment) (observed : EvidenceMetadata) : Bool := Id.run do
-  if observed.laws.find? control.law != some control.origin then return false
+  if observed.laws.find? control.law != some control.lawOrigin then return false
   let some (.thmInfo law) := env.find? control.law | return false
   let some (.thmInfo refutation) := env.find? control.theoremName | return false
   let .app (.const contract contractLevels) (.const subject levels) := law.type | return false
@@ -1587,13 +1592,14 @@ private def EvidenceNamespace.matches (ns : EvidenceNamespace) (origin name : Na
 structure Registry where
   rules : List ConcreteSpec.Core.RuleId := ConcreteSpec.Core.registeredRules
   examples : List ConcreteSpec.Core.RuleExample := ConcreteSpec.Core.registeredRuleExamples
+  exampleOrigin : Name := `ConcreteSpecEvidence.Rules
 
-private def readRegistry (env : Environment) (specModules : NameSet) : CommandElabM Registry := do
+private def readRegistry (env : Environment) (specModules evidenceModules : NameSet) : CommandElabM Registry := do
   -- The rule gate also checks that the linked input reduces to closed concrete data.
   let inScope (name : Name) := (origin? env name).any specModules.contains
   let rules := ConcreteSpec.Core.registeredRules.filter (fun rule => inScope rule.name)
   let examples ← ConcreteSpec.Core.registeredRuleExamples.filterM fun link => do
-    if !inScope link.declaration then return false
+    if !(origin? env link.declaration).any evidenceModules.contains then return false
     let axioms ← collectAxioms link.declaration
     return axioms.all fun name => [`propext, `Classical.choice, `Quot.sound].contains name
   return { rules, examples }
@@ -1611,16 +1617,16 @@ private def exampleRule? (type : Expr) : Option Name := do
   let .const name _ := rule | none
   some name
 
-private def exampleWrapper (env : Environment) (link : ConcreteSpec.Core.RuleExample) : Option Name := do
+private def exampleWrapper (env : Environment) (exampleOrigin : Name) (link : ConcreteSpec.Core.RuleExample) : Option Name := do
   let name := link.declaration
-  if origin? env name != some `ConcreteSpec.Spec.Rules || !isAuthored env name then none else
+  if origin? env name != some exampleOrigin || !isAuthored env name then none else
     let type ← exampleType? env name
     if exampleRule? type == some link.rule then type.getAppFn.constName? else none
 
 private def Registry.hasExample (registry : Registry) (env : Environment)
     (rule wrapper : Name) (cited : Name → Bool) : Bool :=
   registry.examples.any fun link =>
-    link.rule == rule && cited link.declaration && exampleWrapper env link == some wrapper
+    link.rule == rule && cited link.declaration && exampleWrapper env registry.exampleOrigin link == some wrapper
 
 private def Registry.uniqueRule? (registry : Registry) (name : Name) :
     Option ConcreteSpec.Core.RuleId :=
@@ -1669,7 +1675,7 @@ private def Registry.citationErrors (registry : Registry) (env : Environment)
   let some rule := rule
     | return if type.isSome then #[s!"{piece}: {name} must cite a named rule"] else #[]
   if type.isSome && !registry.examples.any (fun link =>
-      link.declaration == name && link.rule == rule && (exampleWrapper env link).isSome) then
+      link.declaration == name && link.rule == rule && (exampleWrapper env registry.exampleOrigin link).isSome) then
     return #[s!"{piece}: {name} is missing its registered example link for {rule}"]
   if let some requirement := (required.deliveredRules ++ required.completionRules).find? (·.name == rule) then
     return registry.errors env piece [requirement]
@@ -1738,12 +1744,15 @@ private def inventory (env : Environment) (inScope : Name → Bool) (observed : 
       unless control.hasRefutation env observed do
         errors := errors.push s!"{piece.id}: {control.theoremName} must refute {control.law} for {control.mutant}"
     for ns in required.namespaces do
-      if ns.origin == `ConcreteSpec.Spec.Rules && ns.ruleOrigin.isNone then
+      if ns.origin == registry.exampleOrigin && ns.ruleOrigin.isNone then
         errors := errors.push s!"{piece.id}: missing rule-defining module for registry reservation under {ns.namespaceName}"
     if claimsLanding then
       errors := errors ++ registry.errors env piece.id required.completionRules
       for ns in required.namespaces do
-        unless completionGroups.any (fun group =>
+        let controls := required.controls.filter fun control => ns.matches control.lawOrigin control.law
+        let controlLaw := controls.any fun control =>
+          observed.laws.find? control.law == some control.lawOrigin
+        unless controlLaw || completionGroups.any (fun group =>
             (group.declarations ++ group.laws).any (ns.matches group.origin)) do
           errors := errors.push s!"{piece.id}: missing completion evidence under {ns.namespaceName} in {ns.origin}"
         if let some ruleOrigin := ns.ruleOrigin then
@@ -1757,12 +1766,11 @@ private def inventory (env : Environment) (inScope : Name → Bool) (observed : 
               ns.matches group.origin name && classified.find? name == some group.origin
           let namedLaw := piece.id == .M09 &&
             required.named.any (fun group => group.laws.any (citesLaw group))
-          let controlLaw := required.controls.any fun control =>
-            ns.matches control.origin control.law &&
-              observed.laws.find? control.law == some control.origin
           unless namedLaw || controlLaw || citesReserved (·.laws) observed.laws do
             errors := errors.push s!"{piece.id}: missing reserved Law theorem under {ns.namespaceName} in {ns.origin}"
-          unless citesReserved (·.declarations) observed.planted do
+          let planted := controls.any fun control =>
+            observed.planted.find? control.theoremName == some control.origin
+          unless planted || citesReserved (·.declarations) observed.planted do
             errors := errors.push s!"{piece.id}: missing reserved planted control under {ns.namespaceName} in {ns.origin}"
     for group in piece.groups do
       for name in group.declarations ++ group.laws do
@@ -1819,13 +1827,13 @@ private def rootErrors (specModules : NameSet) (modules : Array Name) : Array St
       some s!"spec module outside the root import closure: {name}"
     else none).qsort (· < ·)
 
-private def checkRoot (specModules : NameSet) : IO (Array String) := do
-  let files ← (System.FilePath.mk "ConcreteSpec").walkDir
-  let modules := files.filterMap fun file =>
+private def checkRoot (root : Name) (modules : NameSet) : IO (Array String) := do
+  let files ← (System.FilePath.mk root.toString).walkDir
+  let sources := files.filterMap fun file =>
     if file.extension == some "lean" then
       some ((file.withExtension "").components.foldl Name.str .anonymous)
     else none
-  return rootErrors specModules modules
+  return rootErrors modules (sources.push root)
 
 namespace Control
 
@@ -1954,7 +1962,7 @@ def verify (env : Environment) (specModules compilerModules : NameSet) (specEvid
   rejectsBorrowedEvidence .F39 `ConcreteSpec.Spec.Basics `ConcreteSpec.Core.AList.erase
   rejectsBorrowedEvidence .F39 `ConcreteSpec.Spec.Authority `ConcreteSpec.Authority.console
   rejectsBorrowedEvidence .F39 `ConcreteSpec.Spec.Authority `ConcreteSpec.Authority.ProgOk
-  rejectsBorrowedEvidence .F17 `ConcreteSpec.Spec.Rules `ConcreteSpec.Core.Leak.Registry.accountA
+  rejectsBorrowedEvidence .F17 `ConcreteSpecEvidence.Rules `ConcreteSpec.Core.Leak.Registry.accountA
   rejectsBorrowedEvidence .F03p `ConcreteSpec.Spec.Ident `ConcreteSpec.Core.ContractId
   let helper := `ConcreteSpec.Core.SourcePathSpan.inventoryHelper
   let helperOnly := [{ present .F04p "" with groups := [decls origin [helper]] }]
@@ -1963,11 +1971,12 @@ def verify (env : Environment) (specModules compilerModules : NameSet) (specEvid
     reservedEvidence ((completion .F04p).namespaces.map fun ns => { ns with origin })
   let checked := inventory env inScope {} helperOnly #[] withFixtureOrigin
     { rules := [], examples := [] }
-  unless checked.errors.size == 2 &&
+  unless checked.errors.size == 3 &&
+      checked.errors.any (·.startsWith "F04p: missing completion evidence under ConcreteSpec.Core.SourcePathSpan.Controls") &&
       checked.errors.any (·.startsWith "F04p: missing reserved Law theorem") &&
       checked.errors.any (·.startsWith "F04p: missing reserved planted control") &&
       !checked.rows.any (·.startsWith "F04p: landed") do
-    throwError "inventory control: helper-only F04p claim was not refused for missing Law and control"
+    throwError s!"inventory control: helper-only F04p claim was not refused for missing Law and control: {checked.errors}"
   hasError [claim [laws origin [`SpecLanding.Control.newName]]]
     "F01: missing reserved planted control"
   hasError [claim [decls origin [`SpecLanding.Control.retained, `SpecLanding.Control.wrongIncrement]]]
@@ -1986,7 +1995,7 @@ def verify (env : Environment) (specModules compilerModules : NameSet) (specEvid
     inventory env inScope controlEvidence (land .F04p) #[] (fun _ => {
       named := [laws origin [law]]
       namespaces := [⟨origin, `SpecLanding.Control, true, none⟩]
-      controls := [⟨origin, name, law, `SpecLanding.Control.preservesZero,
+      controls := [⟨origin, name, origin, law, `SpecLanding.Control.preservesZero,
         `SpecLanding.Control.keepZero, mutant⟩] })
   let checked := checkRefutation law refutation
   unless checked.errors.isEmpty && checked.rows.any (·.startsWith "F04p: landed") do
@@ -2019,7 +2028,7 @@ def verify (env : Environment) (specModules compilerModules : NameSet) (specEvid
       checked.originalLanded == 0 do
     throwError "inventory control: F06 accepted a rule as a plain declaration"
   for name in [`ConcreteSpec.Core.ConstRegistry.accepted, `ConcreteSpec.Core.ConstRegistry.refused] do
-    let fixture := plainCitation name `ConcreteSpec.Spec.Rules
+    let fixture := plainCitation name `ConcreteSpecEvidence.Rules
     let checked := inventory env inScope {} (land .F06) #[] fixture withoutConstRule
     unless checked.errors == #[s!"F06: {name} is missing its registered example link for {constRule}"] &&
         checked.originalLanded == 0 do
@@ -2137,11 +2146,11 @@ def verify (env : Environment) (specModules compilerModules : NameSet) (specEvid
   -- Use live accounting examples to exercise the registry reservation without inventing grant rules.
   let registryFixture (ruleOrigin : Name) (_ : PieceId) := reservedEvidence [
     registryNamespace `Core.Leak.Registry ruleOrigin]
-  let registryGroup := evidence `ConcreteSpec.Spec.Rules `ConcreteSpec.Core.Leak.Registry
+  let registryGroup := evidence `ConcreteSpecEvidence.Rules `ConcreteSpec.Core.Leak.Registry
   let checkRegistry (ruleOrigin : Name) (names : List Name) (registry : Registry := baseline) :=
     inventory env inScope {} (land .F17 [registryGroup names]) #[] (registryFixture ruleOrigin) registry
   let missingPair (ruleOrigin : Name) :=
-    s!"F17: missing registered rule authored in {ruleOrigin} with cited acceptance and refusal under ConcreteSpec.Core.Leak.Registry in ConcreteSpec.Spec.Rules"
+    s!"F17: missing registered rule authored in {ruleOrigin} with cited acceptance and refusal under ConcreteSpec.Core.Leak.Registry in ConcreteSpecEvidence.Rules"
   let pair := [`accountA, `wfAccepted, `wfRefused]
   let checked := checkRegistry `Spec.Accounting pair
   unless checked.errors.isEmpty && checked.originalLanded == 1 do
@@ -2169,7 +2178,9 @@ def verify (env : Environment) (specModules compilerModules : NameSet) (specEvid
   let rule := `SpecLanding.Control.rulesAuthored
   let accepted := `SpecLanding.Control.rulesAuthoredAccepted
   let refused := `SpecLanding.Control.rulesAuthoredRefused
-  let registry : Registry := { rules := [⟨rule, 1⟩], examples := [⟨rule, accepted⟩, ⟨rule, refused⟩] }
+  let registry : Registry := {
+    rules := [⟨rule, 1⟩], examples := [⟨rule, accepted⟩, ⟨rule, refused⟩]
+    exampleOrigin := rulesModule }
   let ns : EvidenceNamespace := ⟨rulesModule, `SpecLanding.Control, false, some rulesModule⟩
   unless origin? rulesEnv rule == some rulesModule && isAuthored rulesEnv rule &&
       registry.hasExample rulesEnv rule `ConcreteSpec.Core.RuleAccepted (· == accepted) &&
@@ -2208,13 +2219,14 @@ end Control
 
 #eval show CommandElabM Unit from do
   let env ← getEnv
-  let specModules := importClosure env `ConcreteSpec
+  let specRootModules := importClosure env `ConcreteSpec
+  let specModules := importClosure env `ConcreteSpecEvidence
   let compilerModules := importClosure env `Concrete
-  let inSpec (origin : Name) := origin.getRoot == `ConcreteSpec && specModules.contains origin
-  let observed ← readEvidence env inSpec
-  let registry ← readRegistry env specModules
+  let observed ← readEvidence env (evidenceInScope specModules {})
+  let registry ← readRegistry env specRootModules specModules
   let result := inventory env (evidenceInScope specModules compilerModules) observed plan
-    ((← checkRoot specModules) ++ reservationErrors env plan)
+    ((← checkRoot `ConcreteSpec specRootModules) ++ (← checkRoot `ConcreteSpecEvidence specModules) ++
+      reservationErrors env plan)
     completion registry
   for row in result.rows ++ result.errors do
     IO.println row

@@ -3,7 +3,7 @@
 #
 # These checks need Lean, which the gate shell does not carry: CI takes it from elan (lean-action),
 # and a check started without `lake` on PATH refuses (exit 2), never passes. Each check reads the
-# two libraries' built environments, so each first runs `lake build ConcreteSpec Concrete` (a no-op when the
+# three libraries' built environments, so each first builds all three (a no-op when the
 # build is current): `lake env lean` would otherwise read whatever .olean files are there, stale
 # ones included, and judge a library other than the sources.
 #
@@ -11,7 +11,7 @@
 #                                   CONTROL-FILE, the enumerator runs on a temporary copy with that
 #                                   file's declarations inserted at its marker (negative controls).
 #   spec_modules                    every module the ConcreteSpec sources declare (from file paths).
-#   prune_orphans [BUILD-DIR]       delete ConcreteSpec and Concrete build files (.olean, .ilean, .trace, .hash, IR)
+#   prune_orphans [BUILD-DIR]       delete spec, evidence and compiler build files (.olean, .ilean, .trace, .hash, IR)
 #                                   of modules with no source, and print each one (ISS-0016). Run before
 #                                   the build below, so a build directory restored from an older cache
 #                                   cannot carry a deleted or renamed module into any check.
@@ -34,6 +34,7 @@ source_modules() {
   { echo "$1.lean"; find "$1" -name '*.lean'; } | sed -E 's#\.lean$##; s#/#.#g' | sort -u
 }
 spec_modules() { source_modules ConcreteSpec; }
+evidence_modules() { source_modules ConcreteSpecEvidence; }
 
 prune_orphans() {
   local build="${1:-.lake/build}"
@@ -44,6 +45,8 @@ prune_orphans() {
   # Deletion keys on this list, so a partial list must stop the prune before anything is removed:
   # the enumeration must succeed, include the root module, and name only modules whose source exists.
   spec_modules > "$TMP/prune-modules.txt" || { echo "prune_orphans: listing spec modules failed" >&2; return 1; }
+  evidence_modules >> "$TMP/prune-modules.txt" || return 1
+  grep -qxF ConcreteSpecEvidence "$TMP/prune-modules.txt" || return 1
   [ -f Concrete.lean ] && [ -d Concrete ] || return 1
   source_modules Concrete >> "$TMP/prune-modules.txt" \
     || { echo "prune_orphans: listing compiler modules failed" >&2; return 1; }
@@ -52,7 +55,7 @@ prune_orphans() {
   while read -r m; do [ -f "${m//.//}.lean" ] || { echo "prune_orphans: listed module $m has no source" >&2; return 1; }; done < "$TMP/prune-modules.txt"
   for d in "$build/lib/lean" "$build/ir"; do
     [ -d "$d" ] || continue
-    find "$d" -type f \( -path "$d/ConcreteSpec/*" -o -name 'ConcreteSpec.*' -o -path "$d/Concrete/*" -o -name 'Concrete.*' \) > "$TMP/prune-files.txt" || return 1
+    find "$d" -type f \( -path "$d/ConcreteSpec/*" -o -name 'ConcreteSpec.*' -o -path "$d/ConcreteSpecEvidence/*" -o -name 'ConcreteSpecEvidence.*' -o -path "$d/Concrete/*" -o -name 'Concrete.*' \) > "$TMP/prune-files.txt" || return 1
     while read -r f; do
       rel="${f#"$d"/}"; m="$(dirname "$rel")/$(basename "$rel" | cut -d. -f1)"; m="${m#./}"; m="${m//\//.}"
       if ! grep -qxF "$m" "$TMP/prune-modules.txt"; then
@@ -63,8 +66,8 @@ prune_orphans() {
   done
 }
 prune_orphans >&2 || { echo "error: $CHECK_NAME: pruning orphaned build files failed" >&2; exit 2; }
-"$LAKE" build ConcreteSpec Concrete > "$TMP/lake-build.log" 2>&1 \
-  || { tail -20 "$TMP/lake-build.log" >&2; echo "error: $CHECK_NAME: lake build ConcreteSpec Concrete failed" >&2; exit 2; }
+"$LAKE" build ConcreteSpec ConcreteSpecEvidence Concrete > "$TMP/lake-build.log" 2>&1 \
+  || { tail -20 "$TMP/lake-build.log" >&2; echo "error: $CHECK_NAME: lake build of specification, evidence and compiler failed" >&2; exit 2; }
 
 MARKER='-- CONTROL DECLARATIONS (negative controls are inserted here, in a temporary copy only)'
 [ "$(grep -cxF -- "$MARKER" "$ENUMERATOR")" = 1 ] \
@@ -84,4 +87,10 @@ population() {
 
 # closure_gap IMPORTED → the source modules missing from an import closure (PROOF_MODE=imported):
 # a module the root does not import is invisible to every environment check
-closure_gap() { spec_modules | comm -23 - <(sort -u "$1"); }
+closure_gap() {
+  if [ "${2:-ConcreteSpec}" = ConcreteSpec ]; then
+    spec_modules
+  else
+    source_modules "$2"
+  fi | comm -23 - <(sort -u "$1")
+}
