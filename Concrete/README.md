@@ -609,7 +609,11 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
 
    The [LLVM rendering fixtures](../scripts/checks/compiler/llvm_rendering.lean) compare
    full modules byte for byte against the [golden](../tests/golden/slice0_llvm.txt).
-   The corpus includes raw BIR width boundaries and runtime byte escapes.
+   The corpus includes every signed and unsigned integer tag, 64-bit narrowing
+   with high bits set, raw BIR width boundaries and runtime byte escapes.
+   The trusted-base audit records the theorem that LLVM's width mapping agrees
+   with Core for every integer tag. The well-formed width fixture also runs
+   natively and its observation must match the Lean BIR oracle.
    The mutation controls rebuild the modified printer and check the same golden.
    Native controls must disagree with the Lean BIR oracle on the changed exit
    value and on the exact trap line when the runtime routes to the wrong site.

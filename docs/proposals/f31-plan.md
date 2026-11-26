@@ -106,8 +106,10 @@ quoted theorem references appear as elaborated command dependencies.
 ### LLVM printer qualification
 
 A11/D1 retires the LLVM assembly reader and syntactic inventory before B0a
-changes the emitted module. The scalar encoding laws cover width fit and
-round trip for representable values. Exact-output fixtures check
+changes the emitted module. A universal theorem checks that the LLVM width
+mapping agrees with Core. The scalar encoding laws cover width fit and round
+trip for representable values. Exact-output fixtures cover every signed and
+unsigned integer tag, including narrowing from 64 bits with high bits set, and check
 `LLVM.module`, the entire text passed to the native handoff, including
 the runtime and site table. The invalid-word native fixture separately
 exercises the standalone runtime's rejection path. The native gates compare

@@ -122,6 +122,7 @@ theorem Concrete.BIR.ScalarBridge.ofBits axioms: propext
 theorem Concrete.BIR.ScalarBridge.intValue_valid axioms: propext
 theorem Concrete.BIR.hasTy_int_core axioms: propext
 theorem Concrete.Backend.LCB.Proof.enc_int_core axioms: propext
+theorem Concrete.Backend.LLVM.Width.ofCore_bits axioms:
 theorem Concrete.Backend.LLVM.pattern_agrees axioms:
 theorem Concrete.Backend.LLVM.pattern_fits axioms: propext, Quot.sound
 theorem Concrete.Backend.LLVM.pattern_roundTrip axioms: propext, Quot.sound

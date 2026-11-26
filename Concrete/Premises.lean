@@ -19,6 +19,13 @@ import Concrete.Stages
 
 namespace Concrete
 
+/-- The LLVM type mapping preserves the bit width of every Core integer type.
+Keeping the proof in the audit layer lets the printer mutation gate exercise
+the exact-output check independently. -/
+theorem Backend.LLVM.Width.ofCore_bits (t : ConcreteSpec.Core.IntTy) :
+    (Backend.LLVM.Width.ofCore t).bits = t.bits := by
+  cases t <;> rfl
+
 open ConcreteSpec.Surface0 in
 structure FrontendPremises where
   parse : ∀ toks ast, Parse.parse toks = .ok ast → Derives toks ast
@@ -263,6 +270,7 @@ def theorems : List Lean.Name := [
   ``Concrete.BIR.hasTy_int_core,
   ``Concrete.Backend.LCB.Proof.enc_int_core,
   -- F31 scalar immediate encoding.
+  ``Concrete.Backend.LLVM.Width.ofCore_bits,
   ``Concrete.Backend.LLVM.pattern_agrees,
   ``Concrete.Backend.LLVM.pattern_fits,
   ``Concrete.Backend.LLVM.pattern_roundTrip,

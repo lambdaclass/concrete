@@ -804,6 +804,7 @@ Concrete.Backend.LLVM.TypeCode.overflowPair.injEq	propext
 Concrete.Backend.LLVM.TypeCode.overflowPair.sizeOf_spec	
 Concrete.Backend.LLVM.TypeCode.ptr.sizeOf_spec	
 Concrete.Backend.LLVM.TypeCode.void.sizeOf_spec	
+Concrete.Backend.LLVM.Width.ofCore_bits	
 Concrete.Backend.LLVM.Width.ofNat_ctorIdx	
 Concrete.Backend.LLVM.Width.u16.sizeOf_spec	
 Concrete.Backend.LLVM.Width.u32.sizeOf_spec	

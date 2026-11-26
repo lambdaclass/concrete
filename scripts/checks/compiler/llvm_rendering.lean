@@ -107,17 +107,36 @@ private def rawWidths : Program :=
 
 private def oracleCase : Program := ⟨[⟨[], [], .ret (.imm .u8 17)⟩], []⟩
 
+-- Exercise both Core tags at each width. The two narrowing sources have bit
+-- 32 set so a mapping to i32 changes both their spelling and their operands.
+private def widthsAndPhis : Program :=
+  ⟨[⟨[], [.trunc .u64 .u32 0 (.imm .u64 4294967297),
+          .trunc .i64 .i32 1 (.imm .i64 (-4294967295)),
+          .bin .sub .u32 2 (.reg 0) (.imm .u32 1),
+          .bin .mul .i32 3 (.reg 1) (.imm .i32 (-2)),
+          .trunc .i32 .i16 4 (.reg 3),
+          .trunc .i16 .i64 5 (.reg 4),
+          .trunc .u32 .u16 6 (.reg 2),
+          .trunc .u16 .u64 7 (.reg 6),
+          .trunc .i64 .i8 8 (.reg 5),
+          .binOvf .add .i8 9 10 (.reg 8) (.imm .i8 1)],
+        .condbr 10 1 [.reg 10] 2 [.imm .u8 42, .reg 10]⟩,
+    ⟨[(11, .bool)], [], .br 2 [.imm .u8 17, .reg 11]⟩,
+    ⟨[(12, .int .u8), (13, .bool)], [], .ret (.reg 12)⟩], []⟩
+
 example : WF twoSites := by decide
 example : run twoSites 1 = .trapped 1 := by decide
 example : WF oracleCase := by decide
 example : run oracleCase 1 = .exited 17 := by decide
+example : WF widthsAndPhis := by decide
+example : run widthsAndPhis 3 = .exited 42 := by decide
 
 private def fixtures : List (String × Program) :=
   Examples.all ++ [("siblings", siblings), ("two_sites", twoSites),
-    ("raw_widths", rawWidths), ("oracle", oracleCase)]
+    ("raw_widths", rawWidths), ("oracle", oracleCase), ("widths_and_phis", widthsAndPhis)]
 
 private def printObservation (program : Program) : IO Unit :=
-  match run program 1 with
+  match run program program.blocks.length with
   | .exited status => IO.println status
   | .trapped site =>
     match program.sites[site]? with
@@ -136,6 +155,8 @@ def main : List String → IO Unit
        .constant (.site 17) ⟨(List.range 256).toArray.map UInt8.ofNat⟩])
   | ["return-module"] => IO.print (module oracleCase)
   | ["trap-module"] => IO.print (module twoSites)
+  | ["widths-module"] => IO.print (module widthsAndPhis)
   | ["return-observation"] => printObservation oracleCase
   | ["trap-observation"] => printObservation twoSites
+  | ["widths-observation"] => printObservation widthsAndPhis
   | _ => throw (IO.userError "unknown LLVM fixture mode")

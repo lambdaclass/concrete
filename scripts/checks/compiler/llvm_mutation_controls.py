@@ -108,6 +108,18 @@ MUTATIONS = (
         "Label.trapSite (if tbl.length < 2 then i else if i = 0 then 1 else if i = 1 then 0 else i))",
     ),
     (
+        "Core u64 mapped to LLVM i32",
+        IR,
+        "| .u64 | .i64 => .u64",
+        "| .u64 => .u32\n  | .i64 => .u64",
+    ),
+    (
+        "Core i64 mapped to LLVM i32",
+        IR,
+        "| .u64 | .i64 => .u64",
+        "| .u64 => .u64\n  | .i64 => .u32",
+    ),
+    (
         "render i32 as i64",
         IR,
         "  | .integer ty => numbered .integer ty.bits",
@@ -252,6 +264,9 @@ def check_mutation(directory, expected, mutation, oracles, *, benign=False):
 
 
 def main():
+    missing = DIFFERENTIAL.keys() - {description for description, *_ in MUTATIONS}
+    if missing:
+        raise SystemExit(f"differential controls without mutations: {', '.join(sorted(missing))}")
     expected = GOLDEN.read_bytes()
     if not compare_output(emit(), expected):
         raise SystemExit(f"LLVM printer drifted from {GOLDEN}")
@@ -259,10 +274,12 @@ def main():
     with tempfile.TemporaryDirectory() as scratch:
         directory = Path(scratch)
         oracles = {}
-        for fixture in ("return", "trap"):
+        for fixture in ("return", "trap", "widths"):
             status, stderr = emit(f"{fixture}-observation").split(b"\n", 1)
             oracles[fixture] = (int(status), b"", stderr)
-            if observe_native(directory, fixture) != oracles[fixture]:
+            native = directory / fixture
+            native.mkdir()
+            if observe_native(native, fixture) != oracles[fixture]:
                 raise SystemExit(f"unmodified LLVM disagrees with the BIR oracle on {fixture}")
             print(f"ok   unmodified LLVM agrees with the BIR oracle on {fixture}", flush=True)
         for mutation in MUTATIONS:
