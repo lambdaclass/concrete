@@ -10,7 +10,7 @@
 #   root, work (removed on exit), lcb, target, emitter (the Lean emitter command, an array);
 #   expected_timeout CMD...: CMD with its bounded runs logged apart (a control expecting a timeout);
 #   observe EXE OUT SECS RETRY [MEM_MB [ENV...]]: run EXE under bounded_run (and limited_exec.sh
-#     MEM_MB, default 1024) with ENV assignments; OUT.status (status or "incomplete"),
+#     MEM_MB, default 1024) with ENV assignments; OUT.status (exit status, timeout or runner failure),
 #     OUT.stdout, OUT.stderr;
 #   judge EXPECTED_DIR OBS: the observation OBS.* equals the expectation, byte for byte;
 #   build NAME LOG CMD...: run CMD, or print LOG and fail the gate;
@@ -27,7 +27,7 @@ work=$(mktemp -d)
 # gate that would pass with an INCOMPLETE run exits 3 instead (INCOMPLETE is never a pass).
 trap 'rc=$?; bounded_summary || true
   if [ "$rc" = 0 ] && grep -Eqs "^(incomplete|runner-failed)" "${BOUNDED_LOG:-/nonexistent}"; then
-    echo "INCOMPLETE: a bounded run timed out twice; not a pass"; rc=3
+    echo "INCOMPLETE: a bounded run timed out twice or lost its runner; not a pass"; rc=3
   fi
   rm -rf "${work:?}"; exit "$rc"' EXIT
 BOUNDED_PARENT="$work"
@@ -47,7 +47,7 @@ bounded() {
   shift
   bounded_run -i /dev/null "$secs" -- "${capped[@]}" "$@" || rc=$?
   if [ "$rc" != 0 ] && bounded_is_incomplete "$rc"; then
-    echo "slice0: INCOMPLETE (timed out twice): $*" >&2
+    echo "slice0: INCOMPLETE (timed out twice or lost its runner): $*" >&2
   fi
   return "$rc"
 }
@@ -59,7 +59,7 @@ case "$(uname -s)-$(uname -m)" in
   Linux-x86_64) target=x86_64-linux ;;
   Linux-aarch64) target=aarch64-linux ;;
   Darwin-arm64) target=aarch64-macos ;;
-  *) echo "slice0: unsupported host $(uname -s)-$(uname -m)" >&2; exit 2 ;;
+  *) echo "slice0: unsupported host profile $(uname -s)-$(uname -m)" >&2; exit 17 ;;
 esac
 # The time bounds of the emit step (the Lean emitter) and the native step (slice0_native.sh).
 emit_secs=120
@@ -81,11 +81,21 @@ observe() {
   bounded_run -i /dev/null -r "$4" "$3" -- env ${envs[@]+"${envs[@]}"} \
     bash "$root/scripts/checks/lib/limited_exec.sh" "$mem" "$1" \
     >"$2.stdout" 2>"$2.stderr" || rc=$?
-  if bounded_is_incomplete "$rc"; then echo incomplete >"$2.status"; else echo "$rc" >"$2.status"; fi
+  if bounded_is_incomplete "$rc"; then
+    case "$(tail -n 1 "$BOUNDED_LOG")" in
+      "incomplete "*) echo incomplete >"$2.status" ;;
+      *) echo runner-failed >"$2.status" ;;
+    esac
+  else
+    echo "$rc" >"$2.status"
+  fi
 }
 
 judge() {
-  cmp -s "$1/status" "$2.status" && cmp -s "$1/stderr" "$2.stderr" && [ ! -s "$2.stdout" ]
+  local status
+  status=$(cat "$2.status") || return 1
+  [[ "$status" = incomplete || "$status" =~ ^[0-9]+$ ]] &&
+    cmp -s "$1/status" "$2.status" && cmp -s "$1/stderr" "$2.stderr" && [ ! -s "$2.stdout" ]
 }
 
 build() {
