@@ -108,6 +108,7 @@ private def coreEvaluationWith (layout : List Elab.SourceSite)
   | .exit status => .finished (.returned (UInt8.ofNat status) ByteArray.empty)
   | .outOfFuel => .running
   | .stuck _ => .stuck
+  | .aborted _ => .stuck -- The legacy slice-0 carrier cannot express abort.
   | .trap .arithmeticOverflow => Id.run do
     let some index := (List.range core.program.body.length).find? (fun i =>
       match Core.run program (i + 1) with | .trap _ => true | _ => false) | return .stuck

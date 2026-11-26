@@ -1,3 +1,4 @@
+import Concrete.Interfaces.Carriers
 import ConcreteSpec.Proofs.Basics
 import Concrete.Backend.Runtime
 import Concrete.BIR.Progress
@@ -202,17 +203,6 @@ def emit (p : Program) : Except String (Source.Function × SiteTable) := do
   return (f, p.sites)
 
 /-! ## Assembly, in process (inside `P_toolchain[lcb]`) -/
-
-/-- The targets the gate runs LCB's output on. -/
-inductive Target where
-  | x86_64Linux | aarch64Linux | aarch64Macos
-  deriving DecidableEq, Repr
-
-def Target.ofName : String → Option Target
-  | "x86_64-linux" => some .x86_64Linux
-  | "aarch64-linux" => some .aarch64Linux
-  | "aarch64-macos" => some .aarch64Macos
-  | _ => none
 
 /-- The body's symbol: the runtime entry calls `concrete_body`. -/
 def bodySymbol : LeanCompilerBackend.Verified.Symbol := { namespaceName := "concrete", name := "concrete_body", exported := true }

@@ -25,12 +25,8 @@ These effects belong to the target, not to source code: no function gains a perm
 (authority rule 12). A status of 134 alone does not tell a trap from `return 134`; the trap
 message does, and the observation records which trap occurred.
 
-Not modelled here: the bytes of the trap line (OD101's content) and of the startup refusal, and
-the trap's source location, which the decision requires in that line but which needs the
-elaborator's source positions (not yet defined, README); the observation records only which trap
-occurred. A run
-that does not end (here: one that runs out of fuel) has no observation, and neither has a stuck
-run, which a checked program never reaches (`checked_never_stuck`).
+Surface1 supplies the written source position and exact descriptor-2 bytes for abort.
+A fuel-exhausted or stuck run has no observation.
 -/
 
 /-- What the parent process observes. -/
@@ -41,13 +37,14 @@ inductive Observation where
   | exited (code : Nat)
   /-- The run trapped with `k`; the runtime wrote `k`'s message to descriptor 2. -/
   | trapped (k : Trap)
+  | aborted (site : Core.SiteId)
   deriving DecidableEq, Repr
 
 /-- The exit status (Q7.10): 125 for a refused start, the returned code, or 134 for a trap. -/
 def Observation.status : Observation → Nat
   | .startupRefused => 125
   | .exited code => code
-  | .trapped _ => 134
+  | .trapped _ | .aborted _ => 134
 
 /-- The launcher's map from a run's outcome to the observation. `configured` says that every grant
 `main` asks for was configured at launch; if not, `main` never runs. -/
@@ -56,6 +53,7 @@ def observe (configured : Bool) (o : Outcome) : Option Observation :=
     match o with
     | .exit code => some (.exited code)
     | .trap k => some (.trapped k)
+    | .aborted site => some (.aborted site)
     | .stuck _ => none
     | .outOfFuel => none
   else some .startupRefused

@@ -38,6 +38,7 @@ docs/PHILOSOPHY.md
 docs/REVIEW.md
 docs/SELF_HOSTED_RUNNERS.md
 docs/archive
+docs/compiler
 docs/decisions.md
 docs/proposals
 scripts/checks
