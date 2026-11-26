@@ -3,7 +3,9 @@
 Run `LEAN_NUM_THREADS=2 nix develop -c bash scripts/checks/compiler/fuzz_parity.sh [seed [cases]]`
 from the repository root. The default seed is 1 and the default campaign is eight cases per
 mode per slice. The runner bounds seed, case count, individual subprocesses and reduction
-attempts. `CONCRETE_BIR_FUEL` and `CONCRETE_LCB_FUEL` select independent evaluator budgets.
+attempts. `CONCRETE_BIR_FUEL`, `CONCRETE_LCB_FUEL` and `CONCRETE_SLICE1_FUEL` select
+independent campaign budgets (defaults 32, 512 and 4). Controls use fixed budgets.
+Evaluator exhaustion and bounded native timeouts exit 3.
 Use `--require-ready` for the pre-slice-2 readiness check. It reports status 3 until production
 slice-1 parity is available.
 
@@ -11,7 +13,7 @@ slice-1 parity is available.
 |---|---|---|
 | Admitted addition | Sum in 0–255, empty stdout and stderr | Production admission, Lean oracle, BIR and LCB evaluators, LLVM and LCB executables |
 | Unchecked addition | Overflow kind, plus-token site and exact trap line, status 134, empty stdout | Admission refusal followed by unchecked lowering, Lean oracle, BIR and LCB evaluators, LLVM and LCB executables |
-| Refused addition | Current checker refusal constructor and payload | Production admission pipeline |
+| Refused addition | Current checker refusal status, code and payload | Production admission pipeline |
 | Slice-1 spec only | Destructured moves admit; consumed abort has its exact process observation; unused linear binding at abort refuses | Executable Slice1 elaboration, checker and evaluator on generated ASTs, alongside the checked source witnesses in `ConcreteSpec/Proofs/Surface1.lean` |
 
 A failing slice-0 comparison saves its input, independent expectation, observed outputs, seed,

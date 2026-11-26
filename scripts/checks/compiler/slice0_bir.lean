@@ -111,9 +111,9 @@ def writeLcb (dir : System.FilePath) (target : LCB.Target)
   IO.FS.writeFile (dir / "lcb_job.txt") (reprStr job ++ "\n")
   -- On every host, LCB's verified first path (the `aarch64-macos` target) must admit the body.
   if let .error msg := LCB.assemble .aarch64Macos f then
-    IO.eprintln s!"{dir}: LCB first path: {msg}"; return false
+    IO.eprintln s!"{dir}: LCB first path: {msg.message}"; return false
   match LCB.assemble target f with
-  | .error msg => IO.eprintln s!"{dir}: LCB: {msg}"; return false
+  | .error msg => IO.eprintln s!"{dir}: LCB: {msg.message}"; return false
   | .ok asm =>
     IO.FS.writeFile (dir / "lcb_body.s") asm
     IO.FS.writeFile (dir / "lcb_rt.ssa") (Runtime.qbe sites)
@@ -140,6 +140,11 @@ def exhausted (name evaluator : String) (fuel : Nat) : IO UInt32 := do
   IO.eprintln s!"{name}: INCOMPLETE: {evaluator} exhausted evaluation fuel ({fuel})"
   return 3
 
+def mismatch (comparison message : String) : IO UInt32 := do
+  IO.eprintln message
+  IO.eprintln s!"comparison: {comparison}"
+  return 4
+
 def emitArtifact (name : String) (p : Program) (llvm : String)
     (emitted : LeanCompilerBackend.Verified.Source.Function × SiteTable) (dir : System.FilePath)
     (expectation : List String) (target : LCB.Target) : IO UInt32 := do
@@ -150,14 +155,14 @@ def emitArtifact (name : String) (p : Program) (llvm : String)
   let got := run p birFuel
   if got == .outOfFuel then return ← exhausted name "BIR" birFuel
   unless got == expected.outcome do
-    IO.eprintln s!"{name}: expectation mismatch: BIR run gives {repr got}, expected {repr expected.outcome}"; return 4
+    return ← mismatch "bir" s!"{name}: expectation mismatch: BIR run gives {repr got}, expected {repr expected.outcome}"
   let some word := encode expected.outcome | IO.eprintln s!"{name}: no result word"; return 1
   let (f, tbl) := emitted
   let lcbFuel ← readFuel "CONCRETE_LCB_FUEL" 100000
   match LeanCompilerBackend.Verified.Source.evaluateFunction f #[] lcbFuel with
   | .returned (.word w) =>
     unless w.toNat == word do
-      IO.eprintln s!"{name}: LCB's evaluator returns {w.toNat}, BIR's result word is {word}"; return 4
+      return ← mismatch "lcb-evaluator" s!"{name}: LCB's evaluator returns {w.toNat}, BIR's result word is {word}"
   | .exhausted _ => return ← exhausted name "LCB" lcbFuel
   | .stuck fault => IO.eprintln s!"{name}: LCB evaluator stuck: {repr fault}"; return 1
   | .returned _ => IO.eprintln s!"{name}: LCB evaluator returned the wrong word type"; return 1
@@ -167,16 +172,46 @@ def emitArtifact (name : String) (p : Program) (llvm : String)
   | .trapped s => match tbl[s]? with
     | some e =>
       unless expected.trapKind == some e.kind do
-        IO.eprintln s!"{name}: expectation mismatch: trap site {s} has kind {repr e.kind}, expected {expected.trapKindName}"; return 4
+        return ← mismatch "trap-kind" s!"{name}: expectation mismatch: trap site {s} has kind {repr e.kind}, expected {expected.trapKindName}"
       writeExpected dir "134" (Runtime.trapLine e ++ "\n")
     | none => IO.eprintln s!"{name}: no site {s}"; return 1
   | _ => IO.eprintln s!"{name}: no observation"; return 1
   return 0
 
+-- A well-formed BIR program can contain an unreachable cycle. LCB admission
+-- rejects it even though the adapter can represent it.
+private def unreachableCycle : Program :=
+  { blocks := [
+      { params := [], insts := [], term := .ret (.imm .u8 42) },
+      { params := [], insts := [], term := .br 2 [] },
+      { params := [], insts := [], term := .br 1 [] }],
+    sites := [] }
+
+example : WF unreachableCycle := by decide
+
+private def checkBackendProfile : IO UInt32 := do
+  let checks := [
+    ("prepareLCB", (Concrete.Stages.prepareLCB unreachableCycle).map fun _ => ()),
+    ("aarch64-macos", (LCB.artifact .aarch64Macos unreachableCycle).map fun _ => ()),
+    ("aarch64-linux", (LCB.artifact .aarch64Linux unreachableCycle).map fun _ => ()),
+    ("x86_64-linux", (LCB.artifact .x86_64Linux unreachableCycle).map fun _ => ())]
+  for (stage, result) in checks do
+    match result with
+    | .ok _ =>
+      IO.eprintln s!"{stage}: unreachable cycle passed LCB admission"
+      return 1
+    | .error e =>
+      unless e.exitCode == 2 && e.code == "BACKEND-PROFILE" &&
+          e.message == "incomplete (LCB backend: unreachable blocks)" do
+        IO.eprintln s!"{stage}: expected BACKEND-PROFILE (2), got {e.code} ({e.exitCode}): {e.message}"
+        return 1
+  IO.println "ok   LCB admission: BACKEND-PROFILE (2) across all targets"
+  return 0
+
 def emitProgram (name : String) (p : Program) (dir : System.FilePath)
     (expectation : List String) (target : LCB.Target) : IO UInt32 := do
   match LCB.emit p with
-  | .error msg => IO.eprintln s!"{name}: adapter: {msg}"; return 1
+  | .error msg => IO.eprintln s!"{name}: adapter: {msg.message}"; return 1
   | .ok emitted => emitArtifact name p (LLVM.module p) emitted dir expectation target
 
 def emit (name : String) (dir : System.FilePath) (expectation : List String)
@@ -189,27 +224,23 @@ def emitSource (path actual : String) (dir : System.FilePath) (expectation : Lis
     (target : LCB.Target) : IO UInt32 := do
   let input : Concrete.Stages.Input := ⟨path, ← IO.FS.readBinFile actual⟩
   match expectation, Concrete.Stages.compile input with
-  | _, .error (Concrete.Refusal.internal msg) =>
+  | _, .error (.internal msg) =>
     IO.eprintln s!"{path}: compiler failure: {msg}"; return 1
-  | _, .error (e@(.backendResource ..)) =>
-    IO.eprintln s!"{path}: INCOMPLETE: {e.message}"; return 3
-  | "refuse" :: rule :: detail, .error e =>
+  | "refuse" :: status :: rule :: detail, .error e =>
     let message := String.intercalate " " detail
-    if e.code == rule && (detail.isEmpty || e.message == message) then
+    if toString e.exitCode == status && e.code == rule && (detail.isEmpty || e.message == message) then
       IO.println s!"ok   {path}: {e.code}: {e.message}"
       return 0
-    IO.eprintln s!"{path}: expected refusal {rule}{if detail.isEmpty then "" else ": " ++ message}, got {e.code}: {e.message}"
-    return 4
-  | "refuse" :: rule :: _, .ok _ =>
-    IO.eprintln s!"{path}: expected refusal {rule}, but compilation succeeded"
-    return 4
+    return ← mismatch "refusal" s!"{path}: expected refusal {rule} (status {status}){if detail.isEmpty then "" else ": " ++ message}, got {e.code} (status {e.exitCode}): {e.message}"
+  | "refuse" :: _ :: rule :: _, .ok _ =>
+    return ← mismatch "admission" s!"{path}: expected refusal {rule}, but compilation succeeded"
   | "trap" :: _, .error (.checker _) =>
     let .ok tokens := Concrete.Lex.lex input.source | IO.eprintln "lex failed"; return 1
     let .ok ast := Concrete.Parse.parse tokens | IO.eprintln "parse failed"; return 1
     let .ok core := Concrete.Elab.elaborate ast | IO.eprintln "elaboration failed"; return 1
     let p := Concrete.Core.toCore core.program
     unless Concrete.Core.run p (p.body.length + 1) == .trap .arithmeticOverflow do
-      IO.eprintln s!"{path}: Core evaluator did not trap on overflow"; return 4
+      return ← mismatch "core" s!"{path}: Core evaluator did not trap on overflow"
     match Concrete.Stages.unchecked input with
     | .ok bir => emitProgram path bir dir expectation target
     | .error e => IO.eprintln s!"{path}: unchecked lowering: {e.message}"; return 1
@@ -218,18 +249,24 @@ def emitSource (path actual : String) (dir : System.FilePath) (expectation : Lis
     let some expected := parseExpectation expectation | IO.eprintln "invalid source expectation"; return 2
     let .exited n := expected.outcome | IO.eprintln "expected source exit"; return 2
     unless Concrete.Core.run p (p.body.length + 1) == .exit n do
-      IO.eprintln s!"{path}: Core evaluator did not exit with {n}"; return 4
-    unless Concrete.Elab.eval out.ast == .exit n && Concrete.Memory.run out.memory == .exit n do
-      IO.eprintln s!"{path}: AST or memory evaluator did not exit with {n}"; return 4
+      return ← mismatch "core" s!"{path}: Core evaluator did not exit with {n}"
+    unless Concrete.Elab.eval out.ast == .exit n do
+      return ← mismatch "ast" s!"{path}: AST evaluator did not exit with {n}"
+    unless Concrete.Memory.run out.memory == .exit n do
+      return ← mismatch "memory" s!"{path}: memory evaluator did not exit with {n}"
     unless out.bir.sites.isEmpty do
       IO.eprintln s!"{path}: admitted slice-0 additions retained trap sites"; return 1
     match Concrete.Stages.prepareLCB out.bir with
     | .ok lcb => emitArtifact path out.bir (LLVM.module out.bir) (lcb, out.bir.sites) dir expectation target
+    | .error (e@(.backendResource ..)) =>
+      IO.eprintln s!"{path}: INCOMPLETE: {e.message}"; return 3
+    | .error (e@(.backendProfile ..)) =>
+      IO.eprintln s!"{path}: INCOMPLETE: {e.message}"; return 3
     | .error e => IO.eprintln s!"{path}: {e.code}: {e.message}"; return 1
   | _, .error e =>
-    IO.eprintln s!"{path}: unexpected refusal {e.code}: {e.message}"; return 4
+    return ← mismatch "admission" s!"{path}: unexpected refusal {e.code}: {e.message}"
   | "trap" :: _, .ok _ =>
-    IO.eprintln s!"{path}: trapping source passed admission"; return 4
+    return ← mismatch "admission" s!"{path}: trapping source passed admission"
   | _, .ok _ =>
     IO.eprintln s!"{path}: invalid expectation"; return 2
 
@@ -260,12 +297,22 @@ example : behaviour loopBody = .diverges := by
     contradiction
   rw [dite_eq_right noneFinal]
 
+private def checkLoopLCB (f : LeanCompilerBackend.Verified.Source.Function)
+    (fuel : Nat) : IO Bool := do
+  match LeanCompilerBackend.Verified.Source.evaluateFunction f #[] fuel with
+  | .exhausted _ => return true
+  | .returned word => IO.eprintln s!"loop: LCB evaluator returned {repr word}"; return false
+  | .stuck fault => IO.eprintln s!"loop: LCB evaluator stuck: {repr fault}"; return false
+
 def emitLoop (dir : System.FilePath) (target : LCB.Target) : IO UInt32 := do
   unless wf loopBody do
     IO.eprintln "loop: ill-formed control"; return 1
   match LCB.emit loopBody with
-  | .error msg => IO.eprintln s!"loop: adapter: {msg}"; return 1
+  | .error msg => IO.eprintln s!"loop: adapter: {msg.message}"; return 1
   | .ok (f, tbl) =>
+    let fuel ← readFuel "CONCRETE_LCB_FUEL" 100000
+    if fuel == 0 then return ← exhausted "loop" "LCB" fuel
+    unless ← checkLoopLCB f fuel do return 1
     unless ← writeBackends dir target loopBody (LLVM.module loopBody) (f, tbl) do return 1
     writeExpected dir "incomplete" ""
     IO.println "loop: proved self-loop; native timeout is an incomplete observation"
@@ -297,9 +344,19 @@ def main (args : List String) : IO UInt32 := do
   | "emit" :: name :: dir :: t :: expectation => withTarget t (emit name dir expectation)
   | "source" :: path :: actual :: dir :: t :: expectation =>
     withTarget t (emitSource path actual dir expectation)
+  | ["backend-profile"] => checkBackendProfile
+  | ["loop-evaluator-control", fault] => do
+    let some (_, p) := Examples.all.find? (·.1 == "answer") | return 2
+    let .ok (f, _) := LCB.emit p | return 2
+    let candidate ← match fault with
+      | "returned" => pure f
+      | "stuck" => pure { f with blocks := #[] }
+      | _ => throw (IO.userError "expected returned or stuck")
+    let fuel ← readFuel "CONCRETE_LCB_FUEL" 100000
+    if ← checkLoopLCB candidate fuel then return 0 else return 4
   | ["loop", dir, t] => withTarget t (emitLoop dir)
   | ["invalid", dir, t] => withTarget t (emitInvalid dir)
-  | _ => IO.eprintln "usage: slice0_bir.lean list | emit NAME DIR TARGET EXPECT... | source PATH FILE DIR TARGET EXPECT... | (loop | invalid) DIR TARGET"; return 2
+  | _ => IO.eprintln "usage: slice0_bir.lean list | backend-profile | emit NAME DIR TARGET EXPECT... | source PATH FILE DIR TARGET EXPECT... | (loop | invalid) DIR TARGET"; return 2
 
 -- A checked-add continuation must carry the newest write to a reused slot.
 private def overwrittenSlot : Concrete.Memory.Program :=
