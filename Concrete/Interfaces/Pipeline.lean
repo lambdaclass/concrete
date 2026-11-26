@@ -26,7 +26,6 @@ structure Passes {count : Nat} (grammar : SharedGrammar count) (language : CoreL
 
 structure FrontendInvariants (Ast : Type) (language : CoreLanguage) where
   source : Source → Prop
-  tokens : TokenStream → Prop
   ast : Parsed Ast → Prop
   conformance : CoreInput language → Prop
 
@@ -35,7 +34,7 @@ def Passes.lexer (passes : Passes grammar language lang profile) (spec : Fronten
   run := passes.lex
   kind := .directProof
   inputInvariant := inv.source
-  outputInvariant := inv.tokens
+  outputInvariant stream := stream.parserView.WF
   success := Lexes spec
   refusal source
     | .malformed rule span => spec.malformedToken source rule span
@@ -47,7 +46,7 @@ def Passes.parserEntry (passes : Passes grammar language lang profile)
   run stream := (passes.parser.run stream.parserView).2.getD
     (.error (.malformed passes.parser.malformedRule ⟨stream.source.entryFile, 0, 0, 1, 1⟩))
   kind := .directProof
-  inputInvariant _ := True
+  inputInvariant stream := stream.parserView.WF
   outputInvariant := inv.ast
   success stream output := (passes.parser.run stream.parserView).2 = some (.ok output) ∧
     Parses passes.parser stream.parserView output ∧
@@ -62,13 +61,13 @@ def Passes.elaborator (passes : Passes grammar language lang profile) (spec : Fr
   run := passes.elaborate
   kind := .directProof
   inputInvariant := inv.ast
-  outputInvariant input := input.LocationsWF ∧ admission.fragment input.slice input.payload ∧
+  outputInvariant input := input.WF ∧ admission.fragment input.slice input.payload ∧
     inv.conformance input
   success := Elaborates spec
   refusal := spec.elabRefusal
 
 def Admitted.Valid (admission : Admission language) (admitted : Admitted language) : Prop :=
-  admitted.core.LocationsWF ∧ admission.fragment admitted.core.slice admitted.core.payload ∧
+  admitted.core.WF ∧ admission.fragment admitted.core.slice admitted.core.payload ∧
   admission.accepted admitted.core ∧ admission.statics admitted.core ∧
   ValidDischarges admitted.core admitted.discharges
 
@@ -76,7 +75,7 @@ def admissionEntry (admission : Admission language) :
     Stage (CoreInput language) CheckerRefusal (Admitted language) where
   run := check admission
   kind := .directProof
-  inputInvariant input := input.LocationsWF ∧ admission.fragment input.slice input.payload
+  inputInvariant input := input.WF ∧ admission.fragment input.slice input.payload
   outputInvariant := Admitted.Valid admission
   success := Admits admission
   refusal := admission.rejects
@@ -119,7 +118,7 @@ def registry (passes : Passes grammar language lang profile) (front : FrontendSp
   lowerCore := ⟨passes.lowerCore, .directProof, Admitted.Valid admission,
     m.mirInvariant, LowersCore m, fails.core⟩
   lowerUnchecked := ⟨passes.lowerUnchecked, .directProof,
-    fun input => input.LocationsWF ∧ inv.conformance input,
+    fun input => input.WF ∧ inv.conformance input,
     m.mirInvariant, LowersUnchecked m, fails.unchecked⟩
   lowerMemory := ⟨passes.lowerMemory, .directProof, m.mirInvariant,
     m.memoryInvariant, LowersMemory m, fails.mir⟩

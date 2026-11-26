@@ -37,13 +37,17 @@ structure Model (A E : Type) where
   runtimeExact : ∀ a observed legacy, projects a observed legacy →
     observed.SameRuntimeResult legacy
 
+def Model.MatchesResult {A B E : Type} (source : Model A E) (target : Model B E)
+    {a : A} {b : B} (sim : Concrete.Contracts.Simulates source.execution target.execution a b) : Prop :=
+  ∀ p q observed, source.execution.finite a p → target.execution.finite b q →
+    sim.simulation.stateRel p q → target.result b q observed →
+    ∃ p', Concrete.Contracts.Steps (source.execution.step a) p p' ∧
+      source.result a p' observed ∧ source.execution.trace a p' = target.execution.trace b q
+
 def Model.Simulates {A B E : Type} (source : Model A E) (target : Model B E)
     (a : A) (b : B) : Prop :=
   ∃ sim : Concrete.Contracts.Simulates source.execution target.execution a b,
-    ∀ p q observed, source.execution.finite a p → target.execution.finite b q →
-      sim.simulation.stateRel p q → target.result b q observed →
-      ∃ p', Concrete.Contracts.Steps (source.execution.step a) p p' ∧
-        source.result a p' observed ∧ source.execution.trace a p' = target.execution.trace b q
+    source.MatchesResult target sim
 
 /-- An external edge can state refinement directly, with the same exact terminal projection. -/
 def Model.Refines {A B E : Type} (source : Model A E) (target : Model B E)
@@ -100,7 +104,7 @@ structure FrontendSpec (Ast : Type) (language : CoreLanguage) where
 
 def Lexes {Ast : Type} {language : CoreLanguage} (spec : FrontendSpec Ast language)
     (source : Source) (stream : TokenStream) : Prop :=
-  stream.source = source ∧ spec.lexes source stream ∧
+  stream.source = source ∧ spec.lexes source stream ∧ stream.parserView.WF ∧
   stream.trivia.size = stream.tokens.size + 1 ∧
   ∃ file, source.project.files[source.entryFile.index]? = some file ∧
     (spec.reconstruct stream).data.toList = file.source.toBytes
@@ -108,7 +112,7 @@ def Lexes {Ast : Type} {language : CoreLanguage} (spec : FrontendSpec Ast langua
 def Elaborates {Ast : Type} {language : CoreLanguage} (spec : FrontendSpec Ast language)
     (ast : Parsed Ast) (core : CoreInput language) : Prop :=
   core.project = ast.source.project ∧ core.slice = ast.source.slice ∧
-  core.LocationsWF ∧ spec.elaborates ast core.payload
+  core.WF ∧ spec.elaborates ast core.payload
 
 /-- The actual admission entry calls exactly the function supplied by ConcreteSpec. -/
 def check {language : CoreLanguage} (spec : Admission language) (core : CoreInput language) :
@@ -127,7 +131,7 @@ def PreservesOrigins (source target : List Origin) : Prop :=
 def CFG.origins {P I T : Type} (graph : CFG P (LocatedOp I) T)
     (termOrigins : T → List Origin) : List Origin :=
   graph.blocks.toList.flatMap fun block =>
-    block.body.map LocatedOp.origin ++ termOrigins block.ending
+    block.body.map LocatedOp.origin ++ block.boundaryOrigins ++ termOrigins block.ending
 
 def Terminator.origins {A C : Type} : Terminator A C → List Origin
   | .trap _ origin => [origin]
@@ -183,12 +187,15 @@ def ConsumesEvidence {language : CoreLanguage} {lang : LoweringLanguage language
     ∃ conditions, core.payload.ConditionsAt op.origin.operation op.opcode conditions ∧
       (op.checks.map OperationCheck.discriminator).Nodup ∧
       conditions = op.checks.map (fun check => ⟨check.discriminator, check.trap, op.operands⟩) ∧
+      (∀ callee, op.opcode = .call callee →
+        ∃ args, (op.origin.operation, .call callee args) ∈ core.payload.operations ∧
+          args.mapM language.argumentRead = some op.operands) ∧
       ∀ check ∈ op.checks, check.disposition = .discharged →
         ∃ d, discharges.Contains op.origin.operation d ∧ op.Justifies check d) ∧
   (∀ site d, discharges.Contains site d →
     ∃ op ∈ mir.operations, ∃ check ∈ op.checks, op.Justifies check d ∧
       ∀ other ∈ mir.operations, ∀ c ∈ other.checks, other.Justifies c d →
-        other = op ∧ c = check)
+        other = op ∧ c = check) ∧ core.ArgumentsWF
 
 def MIR.origins {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
     (mir : MIR lang profile) : List Origin :=
@@ -236,6 +243,280 @@ def PromotionSound {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
     ∀ place ty, (place, ty) ∈ locals →
       ∃ classes, AList.lookup memory.storage fn = some classes ∧
         ((AList.lookup classes place = some .virtual) ↔ scalar ty ∧ ¬ escapes mir fn place)
+
+/-- The logical MIR frame used to verify Memory's representation of live places. -/
+structure LogicalFrame (Value : Type) where
+  fn : FnId
+  live : List PlaceId
+  values : AList PlaceId Value
+
+/-- The spec supplies typed literal decoding, field projection and active bytes.
+An encoding is a list of offset/byte runs so padding is outside the write footprint. -/
+structure MemoryValues (Ty Value : Type) where
+  literal : Ty → List UInt8 → Option Value
+  field : Value → List FieldId → Option Value
+  replaceField : Value → List FieldId → Value → Option Value
+  fieldRange : (ty : Ty) → List FieldId → Layout → Option (Nat × Layout)
+  encode : Target → Ty → Value → Option (List (Nat × List Mem.MByte))
+  decode : Target → Ty → List Mem.MByte → Option Value
+
+abbrev MemoryRegisters (language : CoreLanguage) (profile : Profile) :=
+  MemoryState language.operands.Val profile
+
+def MemoryRegisters.advance {language : CoreLanguage} {profile : Profile}
+    (state : MemoryRegisters language profile) : MemoryRegisters language profile :=
+  {state with instruction := state.instruction + 1}
+
+namespace Memory
+
+variable {language : CoreLanguage} {lang : LoweringLanguage language.operands.Ty}
+  {profile : Profile}
+
+def graphAt (memory : Memory lang profile) (fn : FnId) : Option (MemoryGraph lang) :=
+  (AList.lookup memory.functions fn).map Prod.snd
+
+def blockAt (memory : Memory lang profile) (state : MemoryRegisters language profile) :
+    Option (MemoryBlock lang) := do
+  let graph ← memory.graphAt state.frame
+  graph.blocks.find? (·.id == state.block)
+
+def classAt (memory : Memory lang profile) (fn : FnId) (place : PlaceId) :
+    Option StorageClass := do
+  let classes ← AList.lookup memory.storage fn
+  AList.lookup classes place
+
+def layoutAt (memory : Memory lang profile) (fn : FnId) (place : PlaceId) : Option Layout := do
+  let layouts ← AList.lookup memory.layouts fn
+  AList.lookup layouts place
+
+def rootRange (memory : Memory lang profile) (state : MemoryRegisters language profile)
+    (place : PlaceId) (range : Hybrid.Range) : Prop :=
+  ∃ layout blockId block,
+    memory.layoutAt state.frame place = some layout ∧ range.extent = layout.size ∧
+    range.align = layout.align ∧ range.ptr.prov = some blockId ∧
+    state.bytes.block blockId = some block ∧ block.live = true ∧
+    block.space = range.ptr.space ∧ block.base = range.ptr.addr ∧
+    block.size = range.extent ∧ block.align = range.align
+
+def rangeAt (values : MemoryValues language.operands.Ty language.operands.Val)
+    (state : MemoryRegisters language profile) {ty : language.operands.Ty} (place : Place _ ty) :
+    Option Hybrid.Range := do
+  let root ← AList.lookup state.materialized place.root
+  if place.path.isEmpty then return root
+  let (offset, field) ← values.fieldRange ty place.path ⟨root.extent, root.align⟩
+  if offset + field.size ≤ root.extent then
+    some ⟨{root.ptr with addr := root.ptr.addr + offset}, field.size, field.align⟩
+  else none
+
+def loadValue (values : MemoryValues language.operands.Ty language.operands.Val)
+    (state : MemoryRegisters language profile) {ty : language.operands.Ty}
+    (place : MemoryPlace _ ty) : Option language.operands.Val := do
+  if !state.initialized.contains place.logical.root then none else
+  match place.storage with
+  | .virtual =>
+    let root ← AList.lookup state.virtualValues place.logical.root
+    if place.logical.path.isEmpty then some root else values.field root place.logical.path
+  | .materialized =>
+    let range ← rangeAt values state place.logical
+    let bytes ← state.bytes.load profile.memoryTarget range.ptr range.extent range.align
+    values.decode profile.memoryTarget ty bytes
+
+private def byteRuns (values : MemoryValues language.operands.Ty language.operands.Val)
+    (target : Target) (ty : language.operands.Ty) (value : language.operands.Val) :
+    Option (List (Nat × List Mem.MByte)) :=
+  match language.valueShape ▸ value with
+  | .scalar scalar => (Hybrid.encode target scalar).map fun bytes => [(0, bytes)]
+  | .other _ => values.encode target ty value
+
+private def StoresValue (values : MemoryValues language.operands.Ty language.operands.Val)
+    (state : MemoryRegisters language profile) {ty : language.operands.Ty}
+    (place : MemoryPlace _ ty) (value : language.operands.Val) : Prop :=
+  loadValue values state place = some value ∧
+  (place.storage = .materialized →
+    ∃ range runs, rangeAt values state place.logical = some range ∧
+      byteRuns values profile.memoryTarget ty value = some runs ∧
+      (0 < range.extent → ∃ offset bytes, (offset, bytes) ∈ runs ∧ bytes ≠ []) ∧
+      ∀ offset bytes, (offset, bytes) ∈ runs →
+        offset + bytes.length ≤ range.extent ∧ (∀ byte ∈ bytes, byte ≠ .uninit) ∧
+        state.bytes.load profile.memoryTarget {range.ptr with addr := range.ptr.addr + offset}
+          bytes.length 1 = some bytes)
+
+def writeValue (values : MemoryValues language.operands.Ty language.operands.Val)
+    (state : MemoryRegisters language profile) {ty : language.operands.Ty}
+    (place : MemoryPlace _ ty) (value : language.operands.Val) :
+    Option (MemoryRegisters language profile) := do
+  let root := place.logical.root
+  if !state.live.contains root then none else
+  let state := if state.initialized.contains root then state
+    else {state with initialized := root :: state.initialized}
+  match place.storage with
+  | .virtual =>
+    let stored ← if place.logical.path.isEmpty then some value else do
+      let before ← AList.lookup state.virtualValues root
+      values.replaceField before place.logical.path value
+    return {state with virtualValues := (root, stored) :: AList.erase state.virtualValues root}
+  | .materialized =>
+    let range ← rangeAt values state place.logical
+    let runs ← byteRuns values profile.memoryTarget ty value
+    let bytes ← runs.foldlM (fun mem (offset, bytes) =>
+      if offset + bytes.length ≤ range.extent then
+        mem.store profile.memoryTarget {range.ptr with addr := range.ptr.addr + offset} bytes 1
+      else none) state.bytes
+    return {state with bytes := bytes}
+
+def readValue (values : MemoryValues language.operands.Ty language.operands.Val)
+    (state : MemoryRegisters language profile) {ty : language.operands.Ty}
+    (read : MemoryRead _ lang.literal ty) :
+    Option (language.operands.Val × MemoryRegisters language profile) := do
+  match read with
+  | .literal value => return (← values.literal ty value.encoding, state)
+  | .copy place => return (← loadValue values state place, state)
+  | .move place => do
+    -- Projected moves require per-field initialization, supplied at their first consumer.
+    if !place.logical.path.isEmpty then none else
+    let value ← loadValue values state place
+    let root := place.logical.root
+    let moved := {state with
+      initialized := state.initialized.erase root
+      virtualValues := AList.erase state.virtualValues root}
+    return (value, moved)
+
+def Writes (memory : Memory lang profile)
+    (values : MemoryValues language.operands.Ty language.operands.Val)
+    (state : MemoryRegisters language profile) {ty : language.operands.Ty}
+    (place : MemoryPlace _ ty) (value : language.operands.Val)
+    (next : MemoryRegisters language profile) : Prop :=
+  memory.classAt state.frame place.logical.root = some place.storage ∧
+  writeValue values state place value = some next ∧
+  StoresValue values next place value
+
+def Represents (memory : Memory lang profile)
+    (values : MemoryValues language.operands.Ty language.operands.Val)
+    (logical : LogicalFrame language.operands.Val) (state : MemoryRegisters language profile) : Prop :=
+  state.BytesWF ∧ logical.fn = state.frame ∧ logical.live = state.live ∧
+  (List.map Prod.fst logical.values).Nodup ∧ (List.map Prod.fst state.materialized).Nodup ∧
+  (List.map Prod.fst state.virtualValues).Nodup ∧
+  (∀ place, place ∈ state.initialized ↔ (AList.lookup logical.values place).isSome) ∧
+  (∀ place value, (place, value) ∈ state.virtualValues →
+    place ∈ state.initialized ∧ memory.classAt state.frame place = some .virtual) ∧
+  (∀ place range, (place, range) ∈ state.materialized →
+    place ∈ state.live ∧ memory.classAt state.frame place = some .materialized ∧
+    memory.rootRange state place range) ∧
+  ∀ place ∈ state.live, ∃ locals graph ty storage,
+    (state.frame, locals, graph) ∈ memory.functions ∧
+    AList.lookup locals place = some ty ∧ memory.classAt state.frame place = some storage ∧
+    (storage = .materialized → (AList.lookup state.materialized place).isSome) ∧
+    ∀ value, AList.lookup logical.values place = some value →
+      StoresValue values state (ty := ty) ⟨⟨place, []⟩, storage⟩ value
+
+end Memory
+
+/-- Slice-specific operation values, function-frame transitions and ownership effects.
+The fixed storage rules below fetch instructions themselves and handle stores and lifetimes. -/
+structure MemoryActions (language : CoreLanguage) (lang : LoweringLanguage language.operands.Ty)
+    (profile : Profile) where
+  values : MemoryValues language.operands.Ty language.operands.Val
+  operation : {opcode : Operator} → {types : List language.operands.Ty} →
+    {ty : language.operands.Ty} → lang.operation opcode types ty →
+    List language.operands.Val → language.operands.Val → Prop
+  destructure : {ty : language.operands.Ty} → MemoryPlace _ ty →
+    List (FieldId × Sigma (MemoryPlace language.operands.Ty)) →
+    MemoryRegisters language profile → MemoryRegisters language profile → Prop
+  call : Memory lang profile → FnId → Option (Sigma (MemoryPlace language.operands.Ty)) →
+    List (Sigma (MemoryRead language.operands.Ty lang.literal)) →
+    MemoryRegisters language profile → MemoryRegisters language profile → Prop
+  transfer : Memory lang profile → CFGEdge (Sigma (MemoryRead _ lang.literal)) →
+    MemoryRegisters language profile → MemoryRegisters language profile → Prop
+  returnToCaller : Memory lang profile → Option (Sigma (MemoryRead _ lang.literal)) →
+    MemoryRegisters language profile → MemoryRegisters language profile → Prop
+
+namespace Memory
+variable {language : CoreLanguage} {lang : LoweringLanguage language.operands.Ty}
+  {profile : Profile}
+
+def readArgs (values : MemoryValues language.operands.Ty language.operands.Val) :
+    {types : List language.operands.Ty} → Args (MemoryRead _ lang.literal) types →
+    MemoryRegisters language profile →
+    Option (List language.operands.Val × MemoryRegisters language profile)
+  | _, .nil, state => some ([], state)
+  | _, .cons read rest, state => do
+    let (value, state) ← readValue values state read
+    let (tail, state) ← readArgs values rest state
+    return (value :: tail, state)
+
+def Begins (memory : Memory lang profile) (state : MemoryRegisters language profile)
+    (place : PlaceId) (next : MemoryRegisters language profile) : Prop :=
+  place ∉ state.live ∧
+  let live := {state with live := place :: state.live}
+  (memory.classAt state.frame place = some .virtual ∧ next = live) ∨
+  (memory.classAt state.frame place = some .materialized ∧
+    ∃ layout space base block bytes,
+      memory.layoutAt state.frame place = some layout ∧
+      state.bytes.alloc profile.memoryTarget space base layout.size layout.align = .ok (block, bytes) ∧
+      next = {live with bytes := bytes, materialized :=
+        (place, ⟨⟨space, base, some block⟩, layout.size, layout.align⟩) :: state.materialized})
+
+def Ends (memory : Memory lang profile) (state : MemoryRegisters language profile)
+    (place : PlaceId) (next : MemoryRegisters language profile) : Prop :=
+  place ∈ state.live ∧
+  let dead := {state with
+    live := state.live.erase place
+    initialized := state.initialized.erase place
+    virtualValues := AList.erase state.virtualValues place
+    materialized := AList.erase state.materialized place}
+  (memory.classAt state.frame place = some .virtual ∧ next = dead) ∨
+  (memory.classAt state.frame place = some .materialized ∧
+    ∃ range block bytes, AList.lookup state.materialized place = some range ∧ range.ptr.prov = some block ∧
+      state.bytes.free block = some bytes ∧ next = {dead with bytes := bytes})
+
+def InstructionStep (memory : Memory lang profile) (actions : MemoryActions language lang profile)
+    (state next : MemoryRegisters language profile) : MemoryInst lang → Prop
+  | .bind dst src | .assign dst src =>
+    ∃ value afterRead stored, readValue actions.values state src = some (value, afterRead) ∧
+      memory.Writes actions.values afterRead dst value stored ∧ next = stored.advance
+  | .op dst op args =>
+    ∃ values afterReads result stored, readArgs actions.values args state = some (values, afterReads) ∧
+      actions.operation op values result ∧ memory.Writes actions.values afterReads dst result stored ∧
+      next = stored.advance
+  | .beginLifetime place => ∃ started, memory.Begins state place started ∧ next = started.advance
+  | .endLifetime place => ∃ ended, memory.Ends state place ended ∧ next = ended.advance
+  | .destructure src bindings =>
+    ∃ destructured, actions.destructure src bindings state destructured ∧ next = destructured.advance
+  | .call callee dst args => actions.call memory callee dst args state next
+
+def ControlStep (memory : Memory lang profile) (actions : MemoryActions language lang profile)
+    (state next : MemoryRegisters language profile) :
+    Terminator (Sigma (MemoryRead _ lang.literal)) (MemoryRead _ lang.literal lang.bool) → Prop
+  | .jump edge => next.frame = state.frame ∧ next.block = edge.target ∧ next.instruction = 0 ∧
+    actions.transfer memory edge state next
+  | .branch test yes no =>
+    ∃ value read flag, readValue actions.values state test = some (value, read) ∧
+      language.operands.test value = some flag ∧
+      let edge := if flag then yes else no
+      next.frame = state.frame ∧ next.block = edge.target ∧ next.instruction = 0 ∧
+      actions.transfer memory edge read next
+  | .ret value => actions.returnToCaller memory value state next
+  | .trap .. => False
+
+def Step (memory : Memory lang profile) (actions : MemoryActions language lang profile)
+    (state next : MemoryRegisters language profile) : Prop :=
+  ∃ block, memory.blockAt state = some block ∧
+    match block.body[state.instruction]? with
+    | some op => memory.InstructionStep actions state next op.instruction
+    | none => state.instruction = block.body.length ∧ memory.ControlStep actions state next block.ending
+
+def Initial (memory : Memory lang profile) (state : MemoryRegisters language profile) : Prop :=
+  state.frame = memory.entry ∧ (∃ graph, memory.graphAt state.frame = some graph ∧
+    graph.entry = state.block) ∧ state.instruction = 0 ∧ state.virtualValues = [] ∧
+  state.materialized = [] ∧ state.live = [] ∧ state.initialized = [] ∧ state.bytes = Mem.Memory.empty
+
+def AtTerminal (memory : Memory lang profile) (state : MemoryRegisters language profile) : Prop :=
+  ∃ block, memory.blockAt state = some block ∧ state.instruction = block.body.length ∧
+    match block.ending with
+    | .ret _ | .trap .. => True
+    | _ => False
+
+end Memory
 
 /-- The hosted runtime writes one diagnostic at a terminal trap. This projection
 uses lexical provenance, independently of the compiled trap table and its indices. -/
@@ -305,8 +586,8 @@ structure LoweringModels (language : CoreLanguage) (lang : LoweringLanguage lang
   ssaInvariant : SSA lang profile → Prop
   birInvariant : BIR lang profile → Prop
   memoryState : memory.execution.State → MemoryState language.operands.Val profile
-  represents : MIR lang profile → Memory lang profile → mir.execution.State →
-    MemoryState language.operands.Val profile → Prop
+  mirFrame : mir.execution.State → LogicalFrame language.operands.Val
+  memoryActions : MemoryActions language lang profile
   scalar : language.operands.Ty → Prop
   escapes : MIR lang profile → FnId → PlaceId → Prop
   llvmHandoff : BIR lang profile → LLVMInput profile → Prop
@@ -326,15 +607,27 @@ def LowersUnchecked (m : LoweringModels language lang profile)
   PreservesOrigins (List.map Prod.snd input.payload.origins) mir.origins ∧
   ConsumesEvidence input [] mir ∧ m.core.model.Simulates m.mir input mir
 
+def Memory.ExecutionExact (memory : Memory lang profile)
+    (m : LoweringModels language lang profile) : Prop :=
+  (∀ q, m.memory.execution.initial memory q → memory.Initial (m.memoryState q)) ∧
+  (∀ q next, m.memory.execution.finite memory q → m.memory.execution.step memory q next →
+    memory.Step m.memoryActions (m.memoryState q) (m.memoryState next)) ∧
+  (∀ q state, m.memory.execution.finite memory q → memory.Step m.memoryActions (m.memoryState q) state →
+    ∃ next, m.memory.execution.step memory q next ∧ m.memoryState next = state) ∧
+  ∀ q result, m.memory.execution.finite memory q → m.memory.result memory q result →
+    memory.AtTerminal (m.memoryState q)
+
 def LowersMemory (m : LoweringModels language lang profile)
     (mir : MIR lang profile) (memory : Memory lang profile) : Prop :=
   memory.project = mir.project ∧ memory.entry = mir.entry ∧
   PreservesOrigins mir.origins memory.origins ∧ LayoutsMatch m.layout memory ∧
-  memory.signatures = mir.signatures ∧
-  PromotionSound m.scalar m.escapes mir memory ∧ m.mir.Simulates m.memory mir memory ∧
-  ∀ q, m.memory.execution.finite memory q →
-    (m.memoryState q).BytesWF ∧
-    ∃ p, m.mir.execution.finite mir p ∧ m.represents mir memory p (m.memoryState q)
+  memory.signatures = mir.signatures ∧ PromotionSound m.scalar m.escapes mir memory ∧
+  memory.ExecutionExact m ∧
+  ∃ sim : Concrete.Contracts.Simulates m.mir.execution m.memory.execution mir memory,
+    m.mir.MatchesResult m.memory sim ∧
+    ∀ p q, m.mir.execution.finite mir p → m.memory.execution.finite memory q →
+      sim.simulation.stateRel p q →
+      memory.Represents m.memoryActions.values (m.mirFrame p) (m.memoryState q)
 
 def BuildsSSA (m : LoweringModels language lang profile)
     (memory : Memory lang profile) (ssa : SSA lang profile) : Prop :=

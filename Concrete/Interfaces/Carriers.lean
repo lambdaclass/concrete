@@ -91,6 +91,9 @@ structure Block (Param Inst Term : Type) where
   params : List Param
   body : List Inst
   ending : Term
+  /-- Origins realized at this control boundary, including eliminated value-only
+  operations. This metadata never executes and cannot carry an instruction check. -/
+  boundaryOrigins : List Origin
 
 structure CFG (Param Inst Term : Type) where
   entry : BlockId
@@ -203,9 +206,14 @@ inductive MemoryInst {Ty : Type} (lang : LoweringLanguage Ty) where
   | call (callee : FnId) (dst : Option (Sigma (MemoryPlace Ty)))
       (args : List (Sigma (MemoryRead Ty lang.literal)))
 
+abbrev MemoryTerm {Ty : Type} (lang : LoweringLanguage Ty) :=
+  Terminator (Sigma (MemoryRead Ty lang.literal)) (MemoryRead Ty lang.literal lang.bool)
+
+abbrev MemoryBlock {Ty : Type} (lang : LoweringLanguage Ty) :=
+  Block (Sigma (MemoryPlace Ty)) (LocatedOp (MemoryInst lang)) (MemoryTerm lang)
+
 abbrev MemoryGraph {Ty : Type} (lang : LoweringLanguage Ty) :=
-  CFG (Sigma (MemoryPlace Ty)) (LocatedOp (MemoryInst lang))
-    (Terminator (Sigma (MemoryRead Ty lang.literal)) (MemoryRead Ty lang.literal lang.bool))
+  CFG (Sigma (MemoryPlace Ty)) (LocatedOp (MemoryInst lang)) (MemoryTerm lang)
 
 structure Memory {Ty : Type} (lang : LoweringLanguage Ty) (profile : Profile) where
   project : Project

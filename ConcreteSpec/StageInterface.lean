@@ -72,6 +72,28 @@ structure ParserView where
   source : Source
   tokens : Array (Located TokenValue)
 
+private def sourcePositions (source : SourceText) : Array (Nat × Nat) :=
+  (source.bytes.foldl (fun (positions, line, column) byte =>
+    let next := if byte == 10 then (line + 1, 1) else (line, column + 1)
+    (positions.push next, next)) (#[ (1, 1) ], 1, 1)).1
+
+/-- Validate source coordinates before grammar execution. Build an indexed position
+table in one pass over the project bytes, including the boundary at EOF. -/
+def ParserView.invalidSpan (input : ParserView) : Option FileSpan :=
+  let files := (input.source.project.files.map (sourcePositions ∘ File.source)).toArray
+  if files[input.source.entryFile.index]?.isNone then
+    some ⟨input.source.entryFile, 0, 0, 1, 1⟩
+  else
+    (input.tokens.find? fun token =>
+      let span := token.span
+      match files[span.file.index]? with
+      | none => true
+      | some positions => !(span.startOffset ≤ span.endOffset && span.endOffset < positions.size &&
+          positions[span.startOffset]? == some (span.line, span.col))).map Located.span
+
+def ParserView.WF (input : ParserView) : Prop :=
+  input.invalidSpan = none
+
 def TokenStream.parserView (stream : TokenStream) : ParserView :=
   ⟨stream.source, stream.tokens⟩
 
@@ -82,6 +104,7 @@ structure Parsed (Ast : Type) where
   tree : Ast
 
 inductive ParseRefusal where
+  | invalidStream (atSpan : FileSpan)
   | malformed (rule : RuleId) (atSpan : FileSpan)
   | unsupported (rule : RuleId) (atSpan : FileSpan) (required : Slice)
 
@@ -116,6 +139,7 @@ inductive CoreOperation (O : Exec.Operands) where
   | expression (expr : O.Expr)
   | call (callee : FnId) (args : List O.Expr)
   | primitive (primitive : O.Prim) (args : List O.Expr)
+  | abort
 
 /-- The semantic operation survives instruction selection. Calls carry their actual callee. -/
 inductive Operator where
@@ -148,6 +172,11 @@ structure CoreLanguage where
   /-- Exact ordered operand reads and trap conditions of the integrated spec operation. -/
   expressionOperator : operands.Expr → Operator
   primitiveOperator : operands.Prim → Operator
+  /-- Arguments are already evaluated reads. A checked computation occurs in its own
+  Core statement before the call, with its own site and result local. -/
+  argumentRead : operands.Expr → Option (operands.Ty × OperandRead)
+  argumentReadNoTrap : ∀ expr, (argumentRead expr).isSome →
+    ∀ locals store kind, operands.eval locals store expr ≠ .trap kind
   OtherValue : Type
   valueShape : operands.Val = CoreValue OtherValue
   safety : CoreOperation operands → List (SafetyCondition operands.Ty)
@@ -158,6 +187,7 @@ def CoreLanguage.opcode (language : CoreLanguage) : CoreOperation language.opera
   | .expression expr => .operator (language.expressionOperator expr)
   | .primitive primitive _ => .operator (language.primitiveOperator primitive)
   | .call callee _ => .call callee
+  | .abort => .operator (.named ⟨"abort"⟩)
 
 inductive HostedResult where
   | returned (status : UInt8)
@@ -243,6 +273,7 @@ def stmtOperations {O : Exec.Operands} : Exec.Stmt O → List (SiteId × CoreOpe
   | .prim _ op args site => [(site, .primitive op args)]
   | .seq first rest => stmtOperations first ++ stmtOperations rest
   | .block _ body => stmtOperations body
+  | .abort site => [(site, .abort)]
   | _ => []
 
 def Payload.operations {language : CoreLanguage} (payload : Payload language) :
@@ -251,7 +282,8 @@ def Payload.operations {language : CoreLanguage} (payload : Payload language) :
     (stmtOperations fn.body).map fun (site, op) => (site, match op with
       | .expression e => .expression e
       | .call fn args => .call fn args
-      | .primitive p args => .primitive p args)
+      | .primitive p args => .primitive p args
+      | .abort => .abort)
 
 def Payload.activeOperation {language : CoreLanguage} (payload : Payload language)
     (state : Exec.Config payload.machine) : Option (SiteId × CoreOperation language.operands) :=
@@ -268,12 +300,26 @@ structure CoreInput (language : CoreLanguage) where
   slice : Slice
   payload : Payload language
 
+def CoreInput.ArgumentsWF {language : CoreLanguage} (input : CoreInput language) : Prop :=
+  ∀ site op, (site, op) ∈ input.payload.operations →
+    match op with
+    | .call _ args | .primitive _ args => ∀ expr ∈ args, (language.argumentRead expr).isSome
+    | _ => True
+
 def CoreInput.LocationsWF {language : CoreLanguage} (input : CoreInput language) : Prop :=
   (List.map Prod.fst input.payload.origins).Nodup ∧
   (List.map Prod.fst input.payload.operations).Nodup ∧
   (List.map (fun (entry : SiteId × Origin) => entry.2.evidenceKey) input.payload.origins).Nodup ∧
+  (∀ site op, (site, op) ∈ input.payload.operations →
+    ∃ origin, AList.lookup input.payload.origins site = some origin) ∧
+  (∀ state events kind site, Exec.Steps input.payload.body input.payload.initial events state →
+    state.final? = some (.trapped kind site) →
+    ∃ origin, AList.lookup input.payload.origins site = some origin) ∧
   ∀ (site : SiteId) (origin : Origin), (site, origin) ∈ input.payload.origins →
     site = origin.operation ∧ ∃ span, origin.lexical.Binds input.project span
+
+def CoreInput.WF {language : CoreLanguage} (input : CoreInput language) : Prop :=
+  input.LocationsWF ∧ input.ArgumentsWF
 
 /-- A discharge identifies an exact operation, ordered typed operands and obligation.
 The enclosing set belongs to the exact Core payload and its checking context. -/
@@ -331,7 +377,7 @@ def ValidDischarges {language : CoreLanguage} (input : CoreInput language)
         next.ctrl ≠ .trapped d.trap site)
 
 def Admission.Sound {language : CoreLanguage} (spec : Admission language) : Prop :=
-  ∀ input, input.LocationsWF → spec.fragment input.slice input.payload →
+  ∀ input, input.WF → spec.fragment input.slice input.payload →
     (spec.accepted input ↔ ∃ discharges, spec.check input = .ok discharges) ∧
     (∀ discharges, spec.check input = .ok discharges →
       spec.statics input ∧ ValidDischarges input discharges) ∧

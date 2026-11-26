@@ -5648,12 +5648,14 @@ ConcreteSpec.StageInterface.CheckerRefusal.mk.sizeOf_spec
 ConcreteSpec.StageInterface.CoreInput.mk.inj	Quot.sound propext
 ConcreteSpec.StageInterface.CoreInput.mk.injEq	Quot.sound propext
 ConcreteSpec.StageInterface.CoreInput.mk.sizeOf_spec	Quot.sound propext
+ConcreteSpec.StageInterface.CoreLanguage.argumentReadNoTrap	
 ConcreteSpec.StageInterface.CoreLanguage.emptyStore._proof_1	
 ConcreteSpec.StageInterface.CoreLanguage.hybridStore	
 ConcreteSpec.StageInterface.CoreLanguage.mk.inj	
 ConcreteSpec.StageInterface.CoreLanguage.mk.injEq	propext
 ConcreteSpec.StageInterface.CoreLanguage.mk.sizeOf_spec	
 ConcreteSpec.StageInterface.CoreLanguage.valueShape	
+ConcreteSpec.StageInterface.CoreOperation.abort.sizeOf_spec	
 ConcreteSpec.StageInterface.CoreOperation.call.inj	
 ConcreteSpec.StageInterface.CoreOperation.call.injEq	propext
 ConcreteSpec.StageInterface.CoreOperation.call.sizeOf_spec	
@@ -5747,6 +5749,9 @@ ConcreteSpec.StageInterface.Operator.read.sizeOf_spec
 ConcreteSpec.StageInterface.Origin.mk.inj	
 ConcreteSpec.StageInterface.Origin.mk.injEq	propext
 ConcreteSpec.StageInterface.Origin.mk.sizeOf_spec	
+ConcreteSpec.StageInterface.ParseRefusal.invalidStream.inj	
+ConcreteSpec.StageInterface.ParseRefusal.invalidStream.injEq	propext
+ConcreteSpec.StageInterface.ParseRefusal.invalidStream.sizeOf_spec	
 ConcreteSpec.StageInterface.ParseRefusal.malformed.inj	
 ConcreteSpec.StageInterface.ParseRefusal.malformed.injEq	propext
 ConcreteSpec.StageInterface.ParseRefusal.malformed.sizeOf_spec	

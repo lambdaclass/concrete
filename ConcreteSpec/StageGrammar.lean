@@ -336,6 +336,8 @@ end
 
 def Parser.run {count : Nat} {g : SharedGrammar count} (parser : Parser g) (input : ParserView) :
     Nat × Option (Except ParseRefusal (Parsed (g.value g.start))) := Id.run do
+  if let some span := input.invalidSpan then
+    return (1, some (.error (.invalidStream span)))
   let (c, value) := parseSymbol parser.table input.tokens g.start
     ⟨0, ⟨0, by decide⟩, none, 0⟩ (parser.bound input)
   let span := (input.tokens[c.offset]? <|> input.tokens.back?).map Located.span |>.getD
@@ -355,9 +357,10 @@ def Parses {count : Nat} {g : SharedGrammar count} (parser : Parser g) (input : 
   output.source = input.source ∧
   ∃ steps, Derives g input.source.slice g.start input.tokens.toList output.tree steps ∧
     Predictive parser.table input.source.slice g.start input.tokens.toList [] output.tree steps ∧
-    steps ≤ (parser.run input).1
+    steps ≤ (parser.run input).1 ∧ input.WF
 
 def Refuses {count : Nat} (g : SharedGrammar count) (input : ParserView) : ParseRefusal → Prop
+  | .invalidStream span => input.invalidSpan = some span
   | .unsupported _ _ required =>
     input.source.slice.val < required.val ∧
     (∃ tree steps, Derives g required g.start input.tokens.toList tree steps) ∧
