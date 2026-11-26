@@ -111,9 +111,9 @@ def writeLcb (dir : System.FilePath) (target : LCB.Target)
   IO.FS.writeFile (dir / "lcb_job.txt") (reprStr job ++ "\n")
   -- On every host, LCB's verified first path (the `aarch64-macos` target) must admit the body.
   if let .error msg := LCB.assemble .aarch64Macos f then
-    IO.eprintln s!"{dir}: LCB first path: {msg}"; return false
+    IO.eprintln s!"{dir}: LCB first path: {msg.message}"; return false
   match LCB.assemble target f with
-  | .error msg => IO.eprintln s!"{dir}: LCB: {msg}"; return false
+  | .error msg => IO.eprintln s!"{dir}: LCB: {msg.message}"; return false
   | .ok asm =>
     IO.FS.writeFile (dir / "lcb_body.s") asm
     IO.FS.writeFile (dir / "lcb_rt.ssa") (Runtime.qbe sites)
@@ -155,10 +155,40 @@ def emitArtifact (name : String) (p : Program) (llvm : String)
   | _ => IO.eprintln s!"{name}: no observation"; return 1
   return 0
 
+-- A well-formed BIR program can contain an unreachable cycle. LCB admission
+-- rejects it even though the adapter can represent it.
+private def unreachableCycle : Program :=
+  { blocks := [
+      { params := [], insts := [], term := .ret (.imm .u8 42) },
+      { params := [], insts := [], term := .br 2 [] },
+      { params := [], insts := [], term := .br 1 [] }],
+    sites := [] }
+
+example : WF unreachableCycle := by decide
+
+private def checkBackendProfile : IO UInt32 := do
+  let checks := [
+    ("prepareLCB", (Concrete.Stages.prepareLCB unreachableCycle).map fun _ => ()),
+    ("aarch64-macos", (LCB.artifact .aarch64Macos unreachableCycle).map fun _ => ()),
+    ("aarch64-linux", (LCB.artifact .aarch64Linux unreachableCycle).map fun _ => ()),
+    ("x86_64-linux", (LCB.artifact .x86_64Linux unreachableCycle).map fun _ => ())]
+  for (stage, result) in checks do
+    match result with
+    | .ok _ =>
+      IO.eprintln s!"{stage}: unreachable cycle passed LCB admission"
+      return 1
+    | .error e =>
+      unless e.exitCode == 2 && e.code == "BACKEND-PROFILE" &&
+          e.message == "incomplete (LCB backend: unreachable blocks)" do
+        IO.eprintln s!"{stage}: expected BACKEND-PROFILE (2), got {e.code} ({e.exitCode}): {e.message}"
+        return 1
+  IO.println "ok   LCB admission: BACKEND-PROFILE (2) across all targets"
+  return 0
+
 def emitProgram (name : String) (p : Program) (dir : System.FilePath)
     (expectation : List String) (target : LCB.Target) : IO UInt32 := do
   match LCB.emit p with
-  | .error msg => IO.eprintln s!"{name}: adapter: {msg}"; return 1
+  | .error msg => IO.eprintln s!"{name}: adapter: {msg.message}"; return 1
   | .ok emitted => emitArtifact name p (LLVM.module p) emitted dir expectation target
 
 def emit (name : String) (dir : System.FilePath) (expectation : List String)
@@ -172,14 +202,14 @@ def emitSource (path actual : String) (dir : System.FilePath) (expectation : Lis
   let .ok input := Concrete.Stages.Input.load path (← IO.FS.readBinFile actual)
     | IO.eprintln s!"invalid project path: {path}"; return 1
   match expectation, Concrete.Stages.compile input with
-  | "refuse" :: rule :: detail, .error e =>
+  | "refuse" :: status :: rule :: detail, .error e =>
     let message := String.intercalate " " detail
-    if e.code == rule && (detail.isEmpty || e.message == message) then
+    if toString e.exitCode == status && e.code == rule && (detail.isEmpty || e.message == message) then
       IO.println s!"ok   {path}: {e.code}: {e.message}"
       return 0
-    IO.eprintln s!"{path}: expected refusal {rule}{if detail.isEmpty then "" else ": " ++ message}, got {e.code}: {e.message}"
+    IO.eprintln s!"{path}: expected refusal {rule} (status {status}){if detail.isEmpty then "" else ": " ++ message}, got {e.code} (status {e.exitCode}): {e.message}"
     return 1
-  | "refuse" :: rule :: _, .ok _ =>
+  | "refuse" :: _ :: rule :: _, .ok _ =>
     IO.eprintln s!"{path}: expected refusal {rule}, but compilation succeeded"
     return 1
   | "trap" :: _, .error (.checker _) =>
@@ -219,7 +249,7 @@ def emitLoop (dir : System.FilePath) (target : LCB.Target) : IO UInt32 := do
   unless wf loopBody && run loopBody 1000 == .outOfFuel do
     IO.eprintln "loop: not a well-formed diverging body"; return 1
   match LCB.emit loopBody with
-  | .error msg => IO.eprintln s!"loop: adapter: {msg}"; return 1
+  | .error msg => IO.eprintln s!"loop: adapter: {msg.message}"; return 1
   | .ok (f, tbl) =>
     if (LCB.evalBody f 10000).isSome then IO.eprintln "loop: LCB's evaluator returns"; return 1
     unless ← writeBackends dir target loopBody (LLVM.module loopBody) (f, tbl) do return 1
@@ -252,9 +282,10 @@ def main (args : List String) : IO UInt32 := do
   | "emit" :: name :: dir :: t :: expectation => withTarget t (emit name dir expectation)
   | "source" :: path :: actual :: dir :: t :: expectation =>
     withTarget t (emitSource path actual dir expectation)
+  | ["backend-profile"] => checkBackendProfile
   | ["loop", dir, t] => withTarget t (emitLoop dir)
   | ["invalid", dir, t] => withTarget t (emitInvalid dir)
-  | _ => IO.eprintln "usage: slice0_bir.lean list | emit NAME DIR TARGET EXPECT... | source PATH FILE DIR TARGET EXPECT... | (loop | invalid) DIR TARGET"; return 2
+  | _ => IO.eprintln "usage: slice0_bir.lean list | backend-profile | emit NAME DIR TARGET EXPECT... | source PATH FILE DIR TARGET EXPECT... | (loop | invalid) DIR TARGET"; return 2
 
 -- A checked-add continuation must carry the newest write to a reused slot.
 private def overwrittenSlot : Concrete.Memory.Program :=
