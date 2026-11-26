@@ -333,3 +333,52 @@ above; the harness owns its commit. Measured source SHA-256 values:
 
 - `local_identity.py`: `b8c482adb88553bfe4d0e951b203fd63c626fde7c12a65f473c763af7d6eef72`
 - `local_identity.lean`: `a7ef755d42ab43c092d87f8295af2066613a1bbd510c00ed254833be73c83a39`
+
+## R-0700 Law applicability recovery
+
+Run `scripts/proofs/nonvacuity.sh` inside `nix develop` for the B0b audit
+or pass `--controls` for the control suite. Witnesses and controls reuse fixtures
+from `ConcreteSpecEvidence`. The census compares the source tree with the
+imported `ConcreteSpec` modules. It reads labels on every declaration
+in those modules, including private and underscore names. Every declaration
+carrying a `Law` label must be a theorem with valid coverage, including
+generated declarations that carry the label.
+Every explicit binder contributes to the witness proposition. For example, a
+Law with binders `(n : Nat) (h : n = 0)` requires a registered theorem of type
+`∃ n : Nat, n = 0 ∧ True`. Dependent proof binders remain existential so
+later domains can refer to the proof. The kernel compares the complete witness
+type by definitional equality. The transitive witness axiom check permits
+`propext` under the existing proof policy.
+
+The final conclusion contributes zero evidence. After exposing local syntax,
+the audit accepts the heads `Eq`, `HEq`, `And`, `Or`, `Not`, `Exists`,
+`True` and `False`, and saturated named relations and predicates whose
+declared result is literally `Prop`. Residual implications, conditionals,
+matchers, recursors, equivalences and other unsupported heads produce
+`restate with explicit premises`. Definitions in the conclusion stay folded. Zero explicit
+premises give the obligation `True`. A Law with satisfiable explicit premises
+can therefore receive credit even when its conclusion or a premise contains
+an internally vacuous proposition. This is a check of joint premise
+satisfiability.
+
+The four archived empty-list counterfeits and their projected variant are
+refused as match conclusions. The recovered projection, matcher and induction
+proof bodies are exercised with two registrations. The conclusion proof
+itself fails the type comparison, and an independent proof of the shared
+satisfiable telescope passes. Its premise is inhabited at zero by
+`Nat.lt_succ_self` and `True.intro`. The packed premise is also inhabited
+by its constructor and a proof of `False → True`. A packed control with an
+explicit contradictory conjunct fails the axiom policy even when the supplied
+witness has the exact generated type. Forged subject metadata leaves the
+obligation unchanged. Census and registration controls reject synthetic example
+spellings, omitted Laws and registrations outside the Law inventory.
+R-0219 owns proof-body, subject and mutant provenance.
+
+The N8a let and helper-chain controls and the reachable joint-helper
+counterfeit supply exact witness types. Their transitive user axioms cause
+refusal. A closed application proof has to supply a separate theorem of the
+required witness type to earn audit credit.
+
+The audit stays outside required CI while coverage is incomplete. Missing,
+mismatched, unsupported or untrusted entries keep the full audit red.
+[ISS-0104](../../ISSUES.tsv) tracks the remaining registrations and B0b wiring.
