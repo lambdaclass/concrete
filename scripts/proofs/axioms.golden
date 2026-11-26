@@ -2219,6 +2219,7 @@ ConcreteSpec.Core.IntTy.bits.eq_5
 ConcreteSpec.Core.IntTy.bits.eq_6	
 ConcreteSpec.Core.IntTy.bits.eq_7	
 ConcreteSpec.Core.IntTy.bits.eq_8	
+ConcreteSpec.Core.IntTy.byteSize.eq_1	
 ConcreteSpec.Core.IntTy.i16.sizeOf_spec	
 ConcreteSpec.Core.IntTy.i32.sizeOf_spec	
 ConcreteSpec.Core.IntTy.i64.sizeOf_spec	
@@ -3748,34 +3749,45 @@ ConcreteSpec.Core.SiteRenumbering.injective
 ConcreteSpec.Core.SiteRenumbering.mk.inj	
 ConcreteSpec.Core.SiteRenumbering.mk.injEq	propext
 ConcreteSpec.Core.SiteRenumbering.mk.sizeOf_spec	
-ConcreteSpec.Core.Slice0Layout.Layout.byte.sizeOf_spec	
-ConcreteSpec.Core.Slice0Layout.Layout.logical.sizeOf_spec	
-ConcreteSpec.Core.Slice0Layout.Layout.ofNat_ctorIdx	
+ConcreteSpec.Core.Slice0Layout.Layout.logical.sizeOf_spec	propext
+ConcreteSpec.Core.Slice0Layout.Layout.stored.inj	propext
+ConcreteSpec.Core.Slice0Layout.Layout.stored.injEq	propext
+ConcreteSpec.Core.Slice0Layout.Layout.stored.sizeOf_spec	propext
+ConcreteSpec.Core.Slice0Layout.Profile.intAlignPow2	propext
+ConcreteSpec.Core.Slice0Layout.Profile.intSizeAligned	propext
+ConcreteSpec.Core.Slice0Layout.Profile.mk.inj	propext
+ConcreteSpec.Core.Slice0Layout.Profile.mk.injEq	propext
+ConcreteSpec.Core.Slice0Layout.Profile.mk.sizeOf_spec	propext
+ConcreteSpec.Core.Slice0Layout.Profile.wellFormed	propext
 ConcreteSpec.Core.Slice0Layout.Shape.integer.inj	
 ConcreteSpec.Core.Slice0Layout.Shape.integer.injEq	propext
 ConcreteSpec.Core.Slice0Layout.Shape.integer.sizeOf_spec	
 ConcreteSpec.Core.Slice0Layout.Shape.logical.sizeOf_spec	
-ConcreteSpec.Core.Slice0Layout.instDecidableEqLayout._proof_1	
-ConcreteSpec.Core.Slice0Layout.instDecidableEqLayout._proof_2	
+ConcreteSpec.Core.Slice0Layout.Storage.alignPow2	propext
+ConcreteSpec.Core.Slice0Layout.Storage.fits	propext
+ConcreteSpec.Core.Slice0Layout.Storage.mk.inj	propext
+ConcreteSpec.Core.Slice0Layout.Storage.mk.injEq	propext
+ConcreteSpec.Core.Slice0Layout.Storage.mk.sizeOf_spec	propext
+ConcreteSpec.Core.Slice0Layout.Storage.positive	propext
+ConcreteSpec.Core.Slice0Layout.Storage.sizeAligned	propext
 ConcreteSpec.Core.Slice0Layout.instDecidableEqShape.decEq._proof_1	
 ConcreteSpec.Core.Slice0Layout.instDecidableEqShape.decEq._proof_2	
 ConcreteSpec.Core.Slice0Layout.instDecidableEqShape.decEq._proof_3	
 ConcreteSpec.Core.Slice0Layout.instDecidableEqShape.decEq._proof_4	
-ConcreteSpec.Core.Slice0Layout.integer_layout	propext
 ConcreteSpec.Core.Slice0Layout.layout_fits	propext
+ConcreteSpec.Core.Slice0Layout.linuxX8664Profile._proof_1	propext
+ConcreteSpec.Core.Slice0Layout.linuxX8664Profile._proof_2	
 ConcreteSpec.Core.Slice0Layout.logical_layout	propext
-ConcreteSpec.Core.Slice0Layout.query._sparseCasesOn_1.else_eq	propext
-ConcreteSpec.Core.Slice0Layout.query.eq_1	propext
-ConcreteSpec.Core.Slice0Layout.query.eq_2	propext
-ConcreteSpec.Core.Slice0Layout.query.eq_3	propext
-ConcreteSpec.Core.Slice0Rules.additionAccepted	
-ConcreteSpec.Core.Slice0Rules.additionRefused	
+ConcreteSpec.Core.Slice0Layout.query._proof_1	propext
+ConcreteSpec.Core.Slice0Rules.additionAccepted	propext
+ConcreteSpec.Core.Slice0Rules.additionInvalidOperands	propext
+ConcreteSpec.Core.Slice0Rules.additionRefused	propext
 ConcreteSpec.Core.Slice0Rules.admissionAccepted	Quot.sound propext
 ConcreteSpec.Core.Slice0Rules.admissionRefused	propext
-ConcreteSpec.Core.Slice0Rules.bodyAccepted	
-ConcreteSpec.Core.Slice0Rules.bodyRefused	
 ConcreteSpec.Core.Slice0Rules.entryAccepted	
 ConcreteSpec.Core.Slice0Rules.entryRefused	
+ConcreteSpec.Core.Slice0Rules.freshAccepted	propext
+ConcreteSpec.Core.Slice0Rules.freshRefused	propext
 ConcreteSpec.Core.Slice0Rules.grammarAccepted	propext
 ConcreteSpec.Core.Slice0Rules.grammarRefused	propext
 ConcreteSpec.Core.Slice0Rules.lexAccepted	Classical.choice Quot.sound propext
@@ -3784,10 +3796,24 @@ ConcreteSpec.Core.Slice0Rules.limitAccepted
 ConcreteSpec.Core.Slice0Rules.limitRefused	
 ConcreteSpec.Core.Slice0Rules.literalAccepted	
 ConcreteSpec.Core.Slice0Rules.literalRefused	
+ConcreteSpec.Core.Slice0Rules.lookupAccepted	propext
+ConcreteSpec.Core.Slice0Rules.lookupRefused	propext
+ConcreteSpec.Core.Slice0Rules.namedAccepted	
+ConcreteSpec.Core.Slice0Rules.namedRefused	
 ConcreteSpec.Core.Slice0Rules.parseAccepted	
 ConcreteSpec.Core.Slice0Rules.parseRefused	
+ConcreteSpec.Core.Slice0Rules.productionAccepted	
+ConcreteSpec.Core.Slice0Rules.productionRefused	
+ConcreteSpec.Core.Slice0Rules.radixAccepted	
+ConcreteSpec.Core.Slice0Rules.radixRefused	
 ConcreteSpec.Core.Slice0Rules.reachAccepted	propext
 ConcreteSpec.Core.Slice0Rules.reachRefused	propext
+ConcreteSpec.Core.Slice0Rules.reservedAccepted	propext
+ConcreteSpec.Core.Slice0Rules.reservedRefused	propext
+ConcreteSpec.Core.Slice0Rules.returnsAccepted	propext
+ConcreteSpec.Core.Slice0Rules.returnsRefused	propext
+ConcreteSpec.Core.Slice0Rules.suffixAccepted	
+ConcreteSpec.Core.Slice0Rules.suffixRefused	
 ConcreteSpec.Core.Slice1Registry.consumeThenAbort	propext
 ConcreteSpec.Core.Slice1Registry.consumeThenReturn	propext
 ConcreteSpec.Core.Slice1Registry.liveLinearAtReturn	propext
@@ -5226,6 +5252,7 @@ ConcreteSpec.Core.refuseWrappingAdd._sparseCasesOn_2.else_eq	propext
 ConcreteSpec.Core.refuseWrappingAdd.eq_1	Classical.choice Quot.sound propext
 ConcreteSpec.Core.refuseWrappingAdd.eq_2	Classical.choice Quot.sound propext
 ConcreteSpec.Core.resultSatisfies_iff	Quot.sound propext
+ConcreteSpec.Core.rulesForSlice._proof_1	
 ConcreteSpec.Core.sameInt._sparseCasesOn_1.else_eq	propext
 ConcreteSpec.Core.sameInt._sparseCasesOn_2.else_eq	propext
 ConcreteSpec.Core.sameInt.eq_1	propext
@@ -7686,9 +7713,6 @@ _private.ConcreteSpec.Spec.Rules.0.ConcreteSpec.Core.SourcePath.probesWith.match
 _private.ConcreteSpec.Spec.Rules.0.ConcreteSpec.Core.SourcePath.probesWith.match_1.eq_2	propext
 _private.ConcreteSpec.Spec.Rules.0.ConcreteSpec.Core.SourcePath.probesWith.match_1.eq_3	propext
 _private.ConcreteSpec.Spec.Rules.0.ConcreteSpec.Core.SourcePath.probesWith.match_1.eq_4	propext
-_private.ConcreteSpec.Spec.Slice0Layout.0.ConcreteSpec.Core.Slice0Layout.query.match_1.eq_1	propext
-_private.ConcreteSpec.Spec.Slice0Layout.0.ConcreteSpec.Core.Slice0Layout.query.match_1.eq_2	propext
-_private.ConcreteSpec.Spec.Slice0Layout.0.ConcreteSpec.Core.Slice0Layout.query.match_1.eq_3	propext
 _private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.DigitsAccepted.match_1.eq_1	propext
 _private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.DigitsAccepted.match_1.eq_2	propext
 _private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.DigitsAccepted.match_1.eq_3	propext

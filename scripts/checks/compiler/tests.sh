@@ -22,9 +22,11 @@ source scripts/checks/lib/has_match.sh
 
 # The emit-only manifest controls exercise only manifest validation.
 if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
+  build rule-layout-dependency "$work/rule-layout-dependency.log" bounded 1800 \
+    lake build ConcreteSpec.Spec.Slice0Layout
   build rule-registry "$work/rule-registry.log" bounded 120 \
     lake env lean scripts/checks/compiler/rule_registry.lean
-  echo "ok   slice-0 rule references, coverage and layout controls"
+  echo "ok   slice-0 rule references and layout controls"
   bash scripts/checks/compiler/f31_census.sh
   build llvm-rendering "$work/llvm-rendering.log" bounded 120 \
     lake env lean scripts/checks/compiler/llvm_rendering.lean

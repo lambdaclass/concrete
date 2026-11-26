@@ -40,7 +40,7 @@ Authority (all in `docs/decisions.md` on main):
 - `decided-project-diagnostics-2026-11-06`, `decided-project-runtime-2026-11-06`:
   rule revisions, spec versions and source positions; `foundation-q10`: byte columns,
   with a tab counting one byte. Byte arithmetic is not a lexer or source-admission policy.
-- `decided-project-vertical-slices-2026-11-06`: slice identities 0–28.
+- `decided-project-vertical-slices-2026-11-06`: slice identities 0–21.
 
 All identity text uses Basics.Name, preserving exact text equality while
 keeping nominal identity distinct from local diagnostic spellings. Numeric routes

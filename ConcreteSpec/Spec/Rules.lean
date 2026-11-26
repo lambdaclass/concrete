@@ -3,6 +3,7 @@ import ConcreteSpec.Spec.Const
 import ConcreteSpec.Spec.Ident
 import ConcreteSpec.Spec.Own
 import ConcreteSpec.Spec.Slice0Rules
+import ConcreteSpec.Spec.Slice1Checker
 
 /-!
 # Diagnostic rule registry
@@ -98,13 +99,60 @@ theorem entryRefused : RuleRefused EntryName "other" := by
   unfold RuleRefused EntryName
   decide
 
-theorem bodyAccepted : RuleAccepted BodyAccepted [returned] := rfl
-theorem bodyRefused : RuleRefused BodyAccepted [] := by
-  unfold RuleRefused BodyAccepted
-  decide
+theorem returnsAccepted : RuleAccepted Returns [returned] := True.intro
+theorem returnsRefused : RuleRefused Returns [] := id
 
 theorem reachAccepted : RuleAccepted ReachableBody [returned] := True.intro
 theorem reachRefused : RuleRefused ReachableBody [returned, returned] := id
+
+theorem suffixAccepted : RuleAccepted ExpectedTypeLiteral none := by
+  unfold RuleAccepted ExpectedTypeLiteral
+  decide
+theorem suffixRefused : RuleRefused ExpectedTypeLiteral (.some .u8) := by
+  unfold RuleRefused ExpectedTypeLiteral
+  decide
+
+theorem lookupAccepted : RuleAccepted LocalBound ("x", ["x"]) := by
+  unfold RuleAccepted LocalBound
+  decide
+theorem lookupRefused : RuleRefused LocalBound ("x", ["y"]) := by
+  unfold RuleRefused LocalBound
+  decide
+
+theorem freshAccepted : RuleAccepted FreshLocal ("x", ["y"]) := by
+  unfold RuleAccepted FreshLocal
+  decide
+theorem freshRefused : RuleRefused FreshLocal ("x", ["x"]) := by
+  unfold RuleRefused FreshLocal
+  decide
+
+theorem reservedAccepted : RuleAccepted UnreservedLocal "x" := by
+  unfold RuleAccepted UnreservedLocal
+  decide
+theorem reservedRefused : RuleRefused UnreservedLocal "abort" := by
+  unfold RuleRefused UnreservedLocal
+  decide
+
+theorem namedAccepted : RuleAccepted NamedBinding "x" := by
+  unfold RuleAccepted NamedBinding
+  decide
+theorem namedRefused : RuleRefused NamedBinding "_" := by
+  unfold RuleRefused NamedBinding
+  decide
+
+theorem radixAccepted : RuleAccepted DecimalLiteral .decimal := by
+  unfold RuleAccepted DecimalLiteral
+  decide
+theorem radixRefused : RuleRefused DecimalLiteral .hexadecimal := by
+  unfold RuleRefused DecimalLiteral
+  decide
+
+theorem productionAccepted : RuleAccepted AdmittedProduction (.more, [.t .plus, .n .product, .n .more]) := by
+  unfold RuleAccepted AdmittedProduction
+  decide
+theorem productionRefused : RuleRefused AdmittedProduction (.more, [.t .minus, .n .product, .n .more]) := by
+  unfold RuleRefused AdmittedProduction
+  decide
 
 theorem literalAccepted : RuleAccepted LiteralTyped 255 := .int rfl
 theorem literalRefused : RuleRefused LiteralTyped 256 := by
@@ -125,10 +173,17 @@ theorem admissionRefused : RuleRefused Admitted ⟨[], .lit 256⟩ := by
     cases typed with
     | int fits => cases fits
 
-theorem additionAccepted : RuleAccepted AdditionFits (200, 55) := rfl
+theorem additionAccepted : RuleAccepted AdditionFits (200, 55) := by
+  unfold RuleAccepted AdditionFits IntTy.InRange
+  decide
+
 theorem additionRefused : RuleRefused AdditionFits (200, 56) := by
-  intro h
-  cases h
+  unfold RuleRefused AdditionFits IntTy.InRange
+  decide
+
+theorem additionInvalidOperands : RuleRefused AdditionFits (300, -100) := by
+  unfold RuleRefused AdditionFits IntTy.InRange
+  decide
 
 theorem limitAccepted : RuleAccepted WithinLimit (10, 10) := by
   unfold RuleAccepted WithinLimit
@@ -139,18 +194,25 @@ theorem limitRefused : RuleRefused WithinLimit (11, 10) := by
 
 end Slice0Rules
 
-/-- Slice 0's rule identities and elaborated conformance examples. -/
-def slice0Rules : List (RuleId × Lean.Name × Lean.Name) :=
-  [(⟨``Slice0Rules.Lexed, 1⟩, ``Slice0Rules.lexAccepted, ``Slice0Rules.lexRefused),
-   (⟨``Slice0Rules.Predictive, 1⟩, ``Slice0Rules.grammarAccepted, ``Slice0Rules.grammarRefused),
-   (⟨``Slice0Rules.Parsed, 1⟩, ``Slice0Rules.parseAccepted, ``Slice0Rules.parseRefused),
-   (⟨``Slice0Rules.EntryName, 1⟩, ``Slice0Rules.entryAccepted, ``Slice0Rules.entryRefused),
-   (⟨``Slice0Rules.BodyAccepted, 1⟩, ``Slice0Rules.bodyAccepted, ``Slice0Rules.bodyRefused),
-   (⟨``Slice0Rules.ReachableBody, 1⟩, ``Slice0Rules.reachAccepted, ``Slice0Rules.reachRefused),
-   (⟨``Slice0Rules.LiteralTyped, 1⟩, ``Slice0Rules.literalAccepted, ``Slice0Rules.literalRefused),
-   (⟨``Slice0Rules.Admitted, 1⟩, ``Slice0Rules.admissionAccepted, ``Slice0Rules.admissionRefused),
-   (⟨``Slice0Rules.AdditionFits, 1⟩, ``Slice0Rules.additionAccepted, ``Slice0Rules.additionRefused),
-   (⟨``Slice0Rules.WithinLimit, 1⟩, ``Slice0Rules.limitAccepted, ``Slice0Rules.limitRefused)]
+/-- Slice 0's required rule identities. Proof links live in the evidence inventory. -/
+def slice0Rules : List RuleId :=
+  [⟨``Slice0Rules.Lexed, 1⟩,
+   ⟨``Slice0Rules.Predictive, 1⟩,
+   ⟨``Slice0Rules.Parsed, 1⟩,
+   ⟨``Slice0Rules.EntryName, 1⟩,
+   ⟨``Slice0Rules.Returns, 1⟩,
+   ⟨``Slice0Rules.ReachableBody, 1⟩,
+   ⟨``Slice0Rules.ExpectedTypeLiteral, 1⟩,
+   ⟨``Slice0Rules.LocalBound, 1⟩,
+   ⟨``Slice0Rules.FreshLocal, 1⟩,
+   ⟨``Slice0Rules.UnreservedLocal, 1⟩,
+   ⟨``Slice0Rules.NamedBinding, 1⟩,
+   ⟨``Slice0Rules.DecimalLiteral, 1⟩,
+   ⟨``Slice0Rules.AdmittedProduction, 1⟩,
+   ⟨``Slice0Rules.LiteralTyped, 1⟩,
+   ⟨``Slice0Rules.Admitted, 1⟩,
+   ⟨``Slice0Rules.AdditionFits, 1⟩,
+   ⟨``Slice0Rules.WithinLimit, 1⟩]
 
 /-- Diagnostic rule identities, in specification order. Each judgment delegates to its owning
 definition; registration adds no language policy. -/
@@ -166,7 +228,7 @@ def registeredRules : List RuleId :=
     SourcePath.Project.Reason.ruleId ++
   [⟨``SourcePathSpan.FilePresent, 1⟩, ⟨``SourcePathSpan.OrderedOffsets, 1⟩,
    ⟨``SourcePathSpan.EndInSource, 1⟩, ⟨``SourcePathSpan.LineMatches, 1⟩,
-   ⟨``SourcePathSpan.ColumnMatches, 1⟩] ++ slice0Rules.map Prod.fst
+   ⟨``SourcePathSpan.ColumnMatches, 1⟩] ++ slice0Rules
 
 /-- A rule reference whose exact name and revision occur in the registry. -/
 abbrev RegisteredRule := { rule : RuleId // rule ∈ registeredRules }
@@ -181,13 +243,17 @@ def referenceRule (name : Lean.Name) : Option RegisteredRule :=
 
 /-- Rule references required for the slice's conformance coverage, in registry order.
 An unregistered slice has no coverage claim. -/
-def rulesForSlice (slice : SliceId) : Option (List RuleId) :=
-  if slice.n.val = 0 then some (slice0Rules.map Prod.fst) else none
+def rulesForSlice (slice : SliceId) : Option (List RegisteredRule) :=
+  if slice.n.val = 0 then
+    some (slice0Rules.attach.map fun entry =>
+      ⟨entry.val, List.mem_append_right _ entry.property⟩)
+  else none
 
 /-- Missing conformance coverage in registry order. Coverage is revision-specific. -/
-def missingRules (slice : SliceId) (exercised : List RegisteredRule) : Option (List RuleId) :=
+def missingRules (slice : SliceId) (exercised : List RegisteredRule) :
+    Option (List RegisteredRule) :=
   (rulesForSlice slice).map fun rules =>
-    rules.filter fun rule => !(exercised.any fun hit => hit.val == rule)
+    rules.filter fun rule => !(exercised.any fun hit => hit.val == rule.val)
 
 namespace ConstRegistry
 
@@ -793,7 +859,40 @@ def registeredRuleExamples : List RuleExample :=
    ⟨``SourcePathSpan.LineMatches, ``SourcePathSpan.Registry.lineRefused⟩,
    ⟨``SourcePathSpan.ColumnMatches, ``SourcePathSpan.Registry.columnAccepted⟩,
    ⟨``SourcePathSpan.ColumnMatches, ``SourcePathSpan.Registry.columnRefused⟩] ++
-  slice0Rules.flatMap fun (rule, accepted, refused) =>
-    [⟨rule.name, accepted⟩, ⟨rule.name, refused⟩]
+  [⟨``Slice0Rules.Lexed, ``Slice0Rules.lexAccepted⟩,
+   ⟨``Slice0Rules.Lexed, ``Slice0Rules.lexRefused⟩,
+   ⟨``Slice0Rules.Predictive, ``Slice0Rules.grammarAccepted⟩,
+   ⟨``Slice0Rules.Predictive, ``Slice0Rules.grammarRefused⟩,
+   ⟨``Slice0Rules.Parsed, ``Slice0Rules.parseAccepted⟩,
+   ⟨``Slice0Rules.Parsed, ``Slice0Rules.parseRefused⟩,
+   ⟨``Slice0Rules.EntryName, ``Slice0Rules.entryAccepted⟩,
+   ⟨``Slice0Rules.EntryName, ``Slice0Rules.entryRefused⟩,
+   ⟨``Slice0Rules.Returns, ``Slice0Rules.returnsAccepted⟩,
+   ⟨``Slice0Rules.Returns, ``Slice0Rules.returnsRefused⟩,
+   ⟨``Slice0Rules.ReachableBody, ``Slice0Rules.reachAccepted⟩,
+   ⟨``Slice0Rules.ReachableBody, ``Slice0Rules.reachRefused⟩,
+   ⟨``Slice0Rules.ExpectedTypeLiteral, ``Slice0Rules.suffixAccepted⟩,
+   ⟨``Slice0Rules.ExpectedTypeLiteral, ``Slice0Rules.suffixRefused⟩,
+   ⟨``Slice0Rules.LocalBound, ``Slice0Rules.lookupAccepted⟩,
+   ⟨``Slice0Rules.LocalBound, ``Slice0Rules.lookupRefused⟩,
+   ⟨``Slice0Rules.FreshLocal, ``Slice0Rules.freshAccepted⟩,
+   ⟨``Slice0Rules.FreshLocal, ``Slice0Rules.freshRefused⟩,
+   ⟨``Slice0Rules.UnreservedLocal, ``Slice0Rules.reservedAccepted⟩,
+   ⟨``Slice0Rules.UnreservedLocal, ``Slice0Rules.reservedRefused⟩,
+   ⟨``Slice0Rules.NamedBinding, ``Slice0Rules.namedAccepted⟩,
+   ⟨``Slice0Rules.NamedBinding, ``Slice0Rules.namedRefused⟩,
+   ⟨``Slice0Rules.DecimalLiteral, ``Slice0Rules.radixAccepted⟩,
+   ⟨``Slice0Rules.DecimalLiteral, ``Slice0Rules.radixRefused⟩,
+   ⟨``Slice0Rules.AdmittedProduction, ``Slice0Rules.productionAccepted⟩,
+   ⟨``Slice0Rules.AdmittedProduction, ``Slice0Rules.productionRefused⟩,
+   ⟨``Slice0Rules.LiteralTyped, ``Slice0Rules.literalAccepted⟩,
+   ⟨``Slice0Rules.LiteralTyped, ``Slice0Rules.literalRefused⟩,
+   ⟨``Slice0Rules.Admitted, ``Slice0Rules.admissionAccepted⟩,
+   ⟨``Slice0Rules.Admitted, ``Slice0Rules.admissionRefused⟩,
+   ⟨``Slice0Rules.AdditionFits, ``Slice0Rules.additionAccepted⟩,
+   ⟨``Slice0Rules.AdditionFits, ``Slice0Rules.additionRefused⟩,
+   ⟨``Slice0Rules.WithinLimit, ``Slice0Rules.limitAccepted⟩,
+   ⟨``Slice0Rules.WithinLimit, ``Slice0Rules.limitRefused⟩,
+   ⟨``Slice0Rules.AdditionFits, ``Slice0Rules.additionInvalidOperands⟩]
 
 end ConcreteSpec.Core

@@ -25,12 +25,17 @@ def Refusal.message : Refusal → String
   | .internal msg => "compiler failure: " ++ msg
 
 /-- The rule citation for a diagnostic is generated from the declaration name. Transport
-readers that already have a name and revision use `validateRule` to reject unknown references. -/
+readers that already have a name and revision use `Refusal.diagnosticAt` to reject unknown references. -/
 structure Diagnostic where
   refusal : Refusal
   rule : ConcreteSpec.Core.RegisteredRule
 
 def Refusal.diagnostic (refusal : Refusal) (rule : Lean.Name) : Option Diagnostic :=
   (ConcreteSpec.Core.referenceRule rule).map fun id => ⟨refusal, id⟩
+
+/-- Check a diagnostic citation from a transport reader against the current registry. -/
+def Refusal.diagnosticAt (refusal : Refusal) (rule : ConcreteSpec.Core.RuleId) :
+    Option Diagnostic :=
+  (ConcreteSpec.Core.validateRule rule).map fun id => ⟨refusal, id⟩
 
 end Concrete
