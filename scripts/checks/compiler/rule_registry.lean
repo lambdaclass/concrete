@@ -12,6 +12,16 @@ example : (refusal.diagnosticAt ⟨`unregistered, 1⟩).isNone = true := by deci
 example : (refusal.diagnosticAt ⟨``Slice0Rules.ReachableBody, 2⟩).isNone = true := by decide
 example : (refusal.diagnosticAt ⟨``Slice0Rules.ReachableBody, 1⟩).isSome = true := by decide
 
+example : (refusal.diagnostic ``Slice0Rules.Lexed).isNone = true := by decide
+example : (refusal.diagnosticAt ⟨``Slice0Rules.Lexed, 1⟩).isNone = true := by decide
+
+example : ((Refusal.syntaxError "invalid source").diagnostic ``Slice0Rules.Lexed).isSome =
+    true := by decide
+
+-- A literal-range or generic admission example cannot stand in for OWN-5.
+example : ((rulesForSlice ⟨0⟩).getD []).any
+    (fun rule => rule.val.name == `ConcreteSpec.Core.Slice0Rules.LocalsUsed) = true := by decide
+
 private def storageFacts (profile : Profile) (ty : IntTy) : Option (Nat × Nat × ByteOrder) :=
   match query profile (.integer ty) with
   | some (.stored storage) => some (storage.byteSize, storage.align, storage.byteOrder)

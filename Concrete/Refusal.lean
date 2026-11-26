@@ -40,18 +40,32 @@ def Refusal.message : Refusal → String
   | .usageError msg => msg
   | .internal msg => "compiler failure: " ++ msg
 
-/-- The rule citation for a diagnostic is generated from the declaration name. Transport
-readers that already have a name and revision use `Refusal.diagnosticAt` to reject unknown references. -/
-structure Diagnostic where
-  refusal : Refusal
-  rule : ConcreteSpec.Core.RegisteredRule
+open ConcreteSpec.Core
 
+/-- The rule citation carries a validated name and revision and matches the refusal category. -/
+structure Diagnostic where
+  private mk ::
+  refusal : Refusal
+  rule : RegisteredRule
+
+private def Refusal.ruleCategory : Refusal → Option RuleRefusalCategory
+  | .syntaxError _ => some .malformed
+  | .unsupported _ => some .unsupported
+  | .checker _ => some .checker
+  | .backendResource .. => some .resource
+  | .internal _ => some .internal
+  | .backendProfile .. | .toolFailure _ | .usageError _ => none
+
+private def Refusal.withRule (refusal : Refusal) (rule : RegisteredRule) : Option Diagnostic := do
+  let category ← refusal.ruleCategory
+  if rule.val.refusalCategory = some category then some ⟨refusal, rule⟩ else none
+
+/-- Generate a diagnostic from the current revision of a rule declaration. -/
 def Refusal.diagnostic (refusal : Refusal) (rule : Lean.Name) : Option Diagnostic :=
-  (ConcreteSpec.Core.referenceRule rule).map fun id => ⟨refusal, id⟩
+  (referenceRule rule).bind refusal.withRule
 
 /-- Check a diagnostic citation from a transport reader against the current registry. -/
-def Refusal.diagnosticAt (refusal : Refusal) (rule : ConcreteSpec.Core.RuleId) :
-    Option Diagnostic :=
-  (ConcreteSpec.Core.validateRule rule).map fun id => ⟨refusal, id⟩
+def Refusal.diagnosticAt (refusal : Refusal) (rule : RuleId) : Option Diagnostic :=
+  (validateRule rule).bind refusal.withRule
 
 end Concrete

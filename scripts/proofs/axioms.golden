@@ -3662,6 +3662,12 @@ ConcreteSpec.Core.RuleExample.mk.sizeOf_spec
 ConcreteSpec.Core.RuleId.mk.inj	
 ConcreteSpec.Core.RuleId.mk.injEq	propext
 ConcreteSpec.Core.RuleId.mk.sizeOf_spec	
+ConcreteSpec.Core.RuleRefusalCategory.checker.sizeOf_spec	
+ConcreteSpec.Core.RuleRefusalCategory.internal.sizeOf_spec	
+ConcreteSpec.Core.RuleRefusalCategory.malformed.sizeOf_spec	
+ConcreteSpec.Core.RuleRefusalCategory.ofNat_ctorIdx	
+ConcreteSpec.Core.RuleRefusalCategory.resource.sizeOf_spec	
+ConcreteSpec.Core.RuleRefusalCategory.unsupported.sizeOf_spec	
 ConcreteSpec.Core.RuleRefused.eq_1	
 ConcreteSpec.Core.ScalarConstDecl.mk.inj	
 ConcreteSpec.Core.ScalarConstDecl.mk.injEq	propext
@@ -3796,6 +3802,8 @@ ConcreteSpec.Core.Slice0Rules.limitAccepted
 ConcreteSpec.Core.Slice0Rules.limitRefused	
 ConcreteSpec.Core.Slice0Rules.literalAccepted	
 ConcreteSpec.Core.Slice0Rules.literalRefused	
+ConcreteSpec.Core.Slice0Rules.localsUsedAccepted	
+ConcreteSpec.Core.Slice0Rules.localsUsedRefused	
 ConcreteSpec.Core.Slice0Rules.lookupAccepted	propext
 ConcreteSpec.Core.Slice0Rules.lookupRefused	propext
 ConcreteSpec.Core.Slice0Rules.namedAccepted	
@@ -5099,6 +5107,8 @@ ConcreteSpec.Core.instDecidableEqRes.decEq._proof_9
 ConcreteSpec.Core.instDecidableEqRuleId.decEq._proof_1	
 ConcreteSpec.Core.instDecidableEqRuleId.decEq._proof_2	
 ConcreteSpec.Core.instDecidableEqRuleId.decEq._proof_3	
+ConcreteSpec.Core.instDecidableEqRuleRefusalCategory._proof_1	
+ConcreteSpec.Core.instDecidableEqRuleRefusalCategory._proof_2	
 ConcreteSpec.Core.instDecidableEqScalarConstDecl.decEq._proof_1	
 ConcreteSpec.Core.instDecidableEqScalarConstDecl.decEq._proof_2	
 ConcreteSpec.Core.instDecidableEqScalarConstDecl.decEq._proof_3	

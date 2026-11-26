@@ -173,6 +173,22 @@ theorem admissionRefused : RuleRefused Admitted ⟨[], .lit 256⟩ := by
     cases typed with
     | int fits => cases fits
 
+private def unusedLocal : ConcreteSpec.Entry :=
+  { ty := .scalar (.int .u8), live := true, used := false, known := some (.int .u8 1) }
+
+private def oneLocal : ConcreteSpec.Ctx := [(ConcreteSpec.Slice0.a₀, unusedLocal)]
+
+theorem localsUsedAccepted : RuleAccepted LocalsUsed (oneLocal, .var ConcreteSpec.Slice0.a₀) := by
+  refine ⟨_, .atom (.copy (e := unusedLocal) rfl rfl rfl), ?_⟩
+  decide
+
+theorem localsUsedRefused : RuleRefused LocalsUsed (oneLocal, .lit 0) := by
+  rintro ⟨_, read, discharged⟩
+  cases read with
+  | atom read =>
+    cases read
+    exact (by decide : ¬ ConcreteSpec.Discharged [] oneLocal) discharged
+
 theorem additionAccepted : RuleAccepted AdditionFits (200, 55) := by
   unfold RuleAccepted AdditionFits IntTy.InRange
   decide
@@ -194,25 +210,38 @@ theorem limitRefused : RuleRefused WithinLimit (11, 10) := by
 
 end Slice0Rules
 
-/-- Slice 0's required rule identities. Proof links live in the evidence inventory. -/
-def slice0Rules : List RuleId :=
-  [⟨``Slice0Rules.Lexed, 1⟩,
-   ⟨``Slice0Rules.Predictive, 1⟩,
-   ⟨``Slice0Rules.Parsed, 1⟩,
-   ⟨``Slice0Rules.EntryName, 1⟩,
-   ⟨``Slice0Rules.Returns, 1⟩,
-   ⟨``Slice0Rules.ReachableBody, 1⟩,
-   ⟨``Slice0Rules.ExpectedTypeLiteral, 1⟩,
-   ⟨``Slice0Rules.LocalBound, 1⟩,
-   ⟨``Slice0Rules.FreshLocal, 1⟩,
-   ⟨``Slice0Rules.UnreservedLocal, 1⟩,
-   ⟨``Slice0Rules.NamedBinding, 1⟩,
-   ⟨``Slice0Rules.DecimalLiteral, 1⟩,
-   ⟨``Slice0Rules.AdmittedProduction, 1⟩,
-   ⟨``Slice0Rules.LiteralTyped, 1⟩,
-   ⟨``Slice0Rules.Admitted, 1⟩,
-   ⟨``Slice0Rules.AdditionFits, 1⟩,
-   ⟨``Slice0Rules.WithinLimit, 1⟩]
+/-- Refusal categories that can cite a slice-0 rule. -/
+inductive RuleRefusalCategory where
+  | malformed | unsupported | checker | resource | internal
+  deriving DecidableEq
+
+/-- Slice 0's required rule identities and the categories that may cite them.
+Proof links live in the evidence inventory. -/
+def slice0RuleEntries : List (RuleId × RuleRefusalCategory) :=
+  [⟨⟨``Slice0Rules.Lexed, 1⟩, .malformed⟩,
+   ⟨⟨``Slice0Rules.Predictive, 1⟩, .internal⟩,
+   ⟨⟨``Slice0Rules.Parsed, 1⟩, .malformed⟩,
+   ⟨⟨``Slice0Rules.EntryName, 1⟩, .unsupported⟩,
+   ⟨⟨``Slice0Rules.Returns, 1⟩, .checker⟩,
+   ⟨⟨``Slice0Rules.ReachableBody, 1⟩, .checker⟩,
+   ⟨⟨``Slice0Rules.ExpectedTypeLiteral, 1⟩, .checker⟩,
+   ⟨⟨``Slice0Rules.LocalBound, 1⟩, .checker⟩,
+   ⟨⟨``Slice0Rules.FreshLocal, 1⟩, .checker⟩,
+   ⟨⟨``Slice0Rules.UnreservedLocal, 1⟩, .checker⟩,
+   ⟨⟨``Slice0Rules.NamedBinding, 1⟩, .unsupported⟩,
+   ⟨⟨``Slice0Rules.DecimalLiteral, 1⟩, .unsupported⟩,
+   ⟨⟨``Slice0Rules.AdmittedProduction, 1⟩, .unsupported⟩,
+   ⟨⟨``Slice0Rules.LiteralTyped, 1⟩, .checker⟩,
+   ⟨⟨``Slice0Rules.Admitted, 1⟩, .checker⟩,
+   ⟨⟨``Slice0Rules.LocalsUsed, 1⟩, .checker⟩,
+   ⟨⟨``Slice0Rules.AdditionFits, 1⟩, .checker⟩,
+   ⟨⟨``Slice0Rules.WithinLimit, 1⟩, .resource⟩]
+
+def slice0Rules : List RuleId := slice0RuleEntries.map Prod.fst
+
+/-- The refusal category of an exact slice-0 rule reference. -/
+def RuleId.refusalCategory (rule : RuleId) : Option RuleRefusalCategory :=
+  (slice0RuleEntries.find? fun entry => entry.1 == rule).map Prod.snd
 
 /-- Diagnostic rule identities, in specification order. Each judgment delegates to its owning
 definition; registration adds no language policy. -/
@@ -889,6 +918,8 @@ def registeredRuleExamples : List RuleExample :=
    ⟨``Slice0Rules.LiteralTyped, ``Slice0Rules.literalRefused⟩,
    ⟨``Slice0Rules.Admitted, ``Slice0Rules.admissionAccepted⟩,
    ⟨``Slice0Rules.Admitted, ``Slice0Rules.admissionRefused⟩,
+   ⟨``Slice0Rules.LocalsUsed, ``Slice0Rules.localsUsedAccepted⟩,
+   ⟨``Slice0Rules.LocalsUsed, ``Slice0Rules.localsUsedRefused⟩,
    ⟨``Slice0Rules.AdditionFits, ``Slice0Rules.additionAccepted⟩,
    ⟨``Slice0Rules.AdditionFits, ``Slice0Rules.additionRefused⟩,
    ⟨``Slice0Rules.WithinLimit, ``Slice0Rules.limitAccepted⟩,

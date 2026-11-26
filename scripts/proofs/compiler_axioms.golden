@@ -1016,9 +1016,6 @@ Concrete.Backend.Runtime.mem_indexed	Quot.sound propext
 Concrete.Backend.Runtime.mem_indexedFrom	Quot.sound propext
 Concrete.Backend.Runtime.mem_indexedFrom._proof_1_5	Quot.sound propext
 Concrete.Backend.Runtime.mem_indexedFrom._simp_1_4	propext
-Concrete.Diagnostic.mk.inj	
-Concrete.Diagnostic.mk.injEq	propext
-Concrete.Diagnostic.mk.sizeOf_spec	
 Concrete.Elab.Output.mk.inj	
 Concrete.Elab.Output.mk.injEq	propext
 Concrete.Elab.Output.mk.sizeOf_spec	
@@ -2596,6 +2593,9 @@ _private.Concrete.Parse.0.Concrete.Parse.Value.tok.inj
 _private.Concrete.Parse.0.Concrete.Parse.Value.tok.injEq	propext
 _private.Concrete.Parse.0.Concrete.Parse.Value.tok.sizeOf_spec	
 _private.Concrete.Parse.0.Concrete.Parse.refusalTable._proof_1	propext
+_private.Concrete.Refusal.0.Concrete.Diagnostic.mk.inj	
+_private.Concrete.Refusal.0.Concrete.Diagnostic.mk.injEq	propext
+_private.Concrete.Refusal.0.Concrete.Diagnostic.mk.sizeOf_spec	
 _private.Concrete.SSA.0.Concrete.BIR.ScalarBridge.toCore.match_1.eq_1	
 _private.Concrete.SSA.0.Concrete.BIR.ScalarBridge.toCore.match_1.eq_2	
 _private.Concrete.SSA.0.Concrete.BIR.ScalarBridge.toCore.match_1.eq_3	

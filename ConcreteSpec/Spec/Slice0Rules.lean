@@ -115,6 +115,13 @@ Decision: Q6.1, docs/decisions.md#decided-project-no-hidden-traps. -/
 def Admitted (program : ConcreteSpec.Slice0.Program) : Prop :=
   ConcreteSpec.Checked (ConcreteSpec.Slice0.toCore program)
 
+/-- OWN-5 requires every named local to have been used at return (OD62,
+docs/decisions.md#od62). In a slice-0 context all locals are Copy, so after accounting
+for the return atom's read, the Core return discharge checks their use. -/
+def LocalsUsed (input : ConcreteSpec.Ctx × ConcreteSpec.Slice0.Atom) : Prop :=
+  ∃ final, ConcreteSpec.Uses [] input.1 (.atom input.2.toCore) final ∧
+    ConcreteSpec.Discharged [] final
+
 /-- Whether a slice-0 checked addition produces an integer result.
 Decision: Q6.1, docs/decisions.md#decided-project-no-hidden-traps. -/
 def AdditionFits (operands : Int × Int) : Prop :=

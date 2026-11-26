@@ -126,19 +126,20 @@ for name, prelude, carrier, value in [
 
 # Keep the real registry and every other link. The exporter must detect the
 # uncovered rule itself, before the transport validator sees a completion record.
-coverage = tmp / 'missing-slice-evidence.lean'
-coverage.write_text(
-    'import ConcreteSpec.Spec.Rules\nimport Lean\nopen Lean Elab Command\n' +
-    exporter.split('-- EXPORTER ENTRY\n', 1)[0] +
-    '#eval exportRules (registeredRuleExamples.filter\n'
-    '  (fun e => e.declaration != ``Slice0Rules.lexRefused))\n')
-check = subprocess.run(['lake', 'env', 'lean', str(coverage)], capture_output=True, text=True)
-assert check.returncode != 0 and (
-    'slice 0 lacks validated conformance for [ConcreteSpec.Core.Slice0Rules.Lexed]'
-    in check.stdout + check.stderr), check
-assert '{"end":true}' not in check.stdout, check
-count += 1
-print('  ok   missing-slice-evidence: refuses missing lexer evidence', flush=True)
+for rule_name, proof_name in [('Lexed', 'lexRefused'), ('LocalsUsed', 'localsUsedRefused')]:
+    coverage = tmp / f'missing-{rule_name}-evidence.lean'
+    coverage.write_text(
+        'import ConcreteSpec.Spec.Rules\nimport Lean\nopen Lean Elab Command\n' +
+        exporter.split('-- EXPORTER ENTRY\n', 1)[0] +
+        '#eval exportRules (registeredRuleExamples.filter\n'
+        f'  (fun e => e.declaration != ``Slice0Rules.{proof_name}))\n')
+    check = subprocess.run(['lake', 'env', 'lean', str(coverage)], capture_output=True, text=True)
+    assert check.returncode != 0 and (
+        f'slice 0 lacks validated conformance for [ConcreteSpec.Core.Slice0Rules.{rule_name}]'
+        in check.stdout + check.stderr), check
+    assert '{"end":true}' not in check.stdout, check
+    count += 1
+    print(f'  ok   missing-{rule_name}-evidence: refuses missing conformance proof', flush=True)
 
 fixture('good')
 fixture('empty', decl='', proof='', reg='[]', evidence='[]')
