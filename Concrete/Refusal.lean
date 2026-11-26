@@ -56,7 +56,7 @@ private def Refusal.ruleCategory : Refusal → Option RuleRefusalCategory
   | .syntaxError _ => some .malformed
   | .unsupported _ => some .unsupported
   | .checker _ => some .checker
-  | .backendResource .. => some .resource
+  | .lexerDigitLimit .. | .backendResource .. => some .resource
   | .internal _ => some .internal
   | .backendProfile .. | .toolFailure _ | .usageError _ => none
 

@@ -48,7 +48,7 @@ namespace Slice0Rules
 
 open ConcreteSpec.Surface0
 
-private def span : Surface0.Span := ⟨0, 1, 1, 1⟩
+private def span : Surface0.Span := ⟨0, 1, 1, 1, ⟨0⟩⟩
 private def returned : Statement := .ret (.integer 0 none span) (statementSpan span span)
 private def parsedProgram : Surface0.Program := ⟨"main", span, [returned]⟩
 private def parsedTokens : List Token :=

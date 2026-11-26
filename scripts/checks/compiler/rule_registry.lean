@@ -18,6 +18,11 @@ example : (refusal.diagnosticAt ⟨``Slice0Rules.Lexed, 1⟩).isNone = true := b
 example : ((Refusal.syntaxError "invalid source").diagnostic ``Slice0Rules.Lexed).isSome =
     true := by decide
 
+example : ((Refusal.lexerDigitLimit 0 1024).diagnostic ``Slice0Rules.WithinLimit).isSome =
+    true := by decide
+example : ((Refusal.lexerDigitLimit 0 1024).diagnostic ``Slice0Rules.Lexed).isNone =
+    true := by decide
+
 -- A literal-range or generic admission example cannot stand in for OWN-5.
 example : ((rulesForSlice ⟨0⟩).getD []).any
     (fun rule => rule.val.name == `ConcreteSpec.Core.Slice0Rules.LocalsUsed) = true := by decide
