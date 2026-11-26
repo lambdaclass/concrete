@@ -2604,7 +2604,7 @@ theorem projectSpan_correct : ProjectionCorrect projectSpan := by
       obtain ⟨file, lookup, exactPath⟩ := (findId_iff project path id).mp found
       obtain ⟨slot, eq⟩ := Array.getElem?_eq_some_iff.mp lookup
       simp only [projectSpan_eq, found, Option.bind, projectSpanAt, projectSpanAtWithWork,
-        dite_eq_left slot, eq] at result
+        readArrayWithWork, dite_eq_left slot, eq] at result
       split at result
       · rename_i ordered
         split at result
@@ -2624,7 +2624,7 @@ theorem projectSpan_correct : ProjectionCorrect projectSpan := by
     have found := (findId_iff project file.path span.fileId).mpr ⟨file, lookup, rfl⟩
     obtain ⟨slot, eq⟩ := Array.getElem?_eq_some_iff.mp lookup
     simp only [projectSpan_eq, found, Option.bind, projectSpanAt, projectSpanAtWithWork,
-      dite_eq_left slot, eq, dite_eq_left orderedGuard, dite_eq_left inBounds, Option.some.injEq]
+      readArrayWithWork, dite_eq_left slot, eq, dite_eq_left orderedGuard, dite_eq_left inBounds, Option.some.injEq]
     apply ScopedSpan.ext
     exact fileSpan_of_location file span.toSpan _ line col
 
@@ -2673,7 +2673,8 @@ theorem projectSpan_progress (project : Project) (path : SourcePath) (start stop
   have found := (findId_iff project path id).mpr ⟨file, atId, exactPath⟩
   obtain ⟨slot, eq⟩ := Array.getElem?_eq_some_iff.mp atId
   obtain ⟨span, result⟩ : ∃ span, projectSpan project path start stop = some span := by
-    simp [projectSpan_eq, found, Option.bind, projectSpanAt, projectSpanAtWithWork, slot, eq, ordered, inBounds]
+    simp [projectSpan_eq, found, Option.bind, projectSpanAt, projectSpanAtWithWork,
+      readArrayWithWork, slot, eq, ordered, inBounds]
   exact ⟨span, result, projectSpan_safety _ _ _ _ _ result⟩
 
 /-- Helper: corollary of `bindSource_correct`. -/
