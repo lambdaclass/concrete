@@ -201,11 +201,12 @@ def residualMIROrigins (mir : MIR.Program) : List Elab.SourceSite :=
     | .add _ _ origin none => some origin
     | _ => none
 
-def LexerContract : EdgeContract (Graph Lex.lex) where
+def LexerContract : EdgeContract
+    (Graph fun (input : ByteArray × ConcreteSpec.Core.FileId) => Lex.lex input.1 input.2) where
   kind := .directProof
   inputInvariant := fun _ => True
-  outputInvariant := fun tokens => ∃ bytes, Lexes bytes tokens
-  correspondence := Lexes
+  outputInvariant := fun tokens => ∃ bytes fileId, Lexes bytes tokens fileId
+  correspondence := fun (bytes, fileId) tokens => Lexes bytes tokens fileId
 
 def ParserContract : EdgeContract (Graph Parse.parse) where
   kind := .namedPremise "P_parse"
@@ -300,14 +301,14 @@ structure SharedSound {target : LCB.Target} (m : SharedModels target) : Prop whe
 
 /-- Exact source-to-admitted-Core derivation recorded in the production output. -/
 def Frontend (input : Stages.Input) (out : Stages.Output) : Prop :=
-  Lexes input.source out.tokens ∧ Derives out.tokens out.ast ∧
+  Lexes input.source out.tokens input.fileId ∧ Derives out.tokens out.ast ∧
   Elaborates out.ast out.core ∧
   ∃ admitted, Admission.check out.core = .ok admitted ∧ admitted.core = out.core ∧
     admitted.tokens = out.evidence ∧ Core.Checked (Core.toCore out.core.program)
 
 /-- Successful production exposes the exact intermediate results of the functions it invokes. -/
 def SharedHandoffs (input : Stages.Input) (out : Stages.Output) : Prop :=
-  Lex.lex input.source = .ok out.tokens ∧ Parse.parse out.tokens = .ok out.ast ∧
+  Lex.lex input.source input.fileId = .ok out.tokens ∧ Parse.parse out.tokens = .ok out.ast ∧
   Elab.elaborate out.ast = .ok out.core ∧
   (∃ admitted, Admission.check out.core = .ok admitted ∧ admitted.tokens = out.evidence ∧
     MIR.lower admitted = .ok out.mir) ∧
@@ -663,12 +664,12 @@ def LCBCorrect {Env : Type} {profile : Profile}
     Compiled input out ∧ ImageCorrect n admittedCoreSemantics input.path out.core build.image
 
 def UncheckedHandoffs (input : Stages.Input) (core : Elab.Output) : Prop :=
-  ∃ tokens ast, Lex.lex input.source = .ok tokens ∧ Parse.parse tokens = .ok ast ∧
+  ∃ tokens ast, Lex.lex input.source input.fileId = .ok tokens ∧ Parse.parse tokens = .ok ast ∧
     Elab.elaborate ast = .ok core
 
 def UncheckedFrontend (input : Stages.Input) (core : Elab.Output) : Prop :=
-  ∃ tokens ast, Lex.lex input.source = .ok tokens ∧ Parse.parse tokens = .ok ast ∧
-    Elab.elaborate ast = .ok core ∧ Lexes input.source tokens ∧ Derives tokens ast ∧
+  ∃ tokens ast, Lex.lex input.source input.fileId = .ok tokens ∧ Parse.parse tokens = .ok ast ∧
+    Elab.elaborate ast = .ok core ∧ Lexes input.source tokens input.fileId ∧ Derives tokens ast ∧
     Elaborates ast core
 
 def UncheckedOrigins (input : Stages.Input) (core : Elab.Output) (bir : BIR.Program) : Prop :=
@@ -792,9 +793,16 @@ structure ProductionDischarge (profile : Profile) : Prop where
 namespace Sanity
 
 def answerInput : Stages.Input :=
-  ⟨"tests/slice0/answer.con", r#"fn main() -> u8 { return 20 + 22; }"#.toUTF8⟩
+  (Stages.Input.load "tests/slice0/answer.con"
+    r#"fn main() -> u8 { return 20 + 22; }"#.toUTF8).toOption.get (by rfl)
 
-private def bindingSpan : Span := ⟨0, 1, 1, 1⟩
+def answerOutput : Stages.Output :=
+  (Stages.compile answerInput).toOption.get (by with_unfolding_all rfl)
+
+theorem answerCompiles : Stages.compile answerInput = .ok answerOutput := by
+  with_unfolding_all rfl
+
+private def bindingSpan : Span := ⟨0, 1, 1, 1, ⟨0⟩⟩
 
 private def parseBinderExample (source : String) : Except Refusal Program := do
   Parse.parse (← Lex.lex source.toUTF8)
@@ -892,16 +900,17 @@ example : ¬ ConformanceStatic ⟨⟨[], .lit 256⟩, []⟩ := by
     change ¬ (256 < 256)
     decide
 
-private def overflowInput (path : String) (comment : String) : Stages.Input :=
-  ⟨path, (comment ++ "\n" ++ r#"fn main() -> u8 { return 200 + 56; }"#).toUTF8⟩
+private def overflowInput (comment : String) : Stages.Input :=
+  (Stages.Input.load "src/a.con"
+    (comment ++ "\n" ++ r#"fn main() -> u8 { return 200 + 56; }"#).toUTF8).toOption.get (by rfl)
 
 private def overflowObservation (path : String) : Observation :=
   .trapped 134 .overflow ⟨⟨0⟩, ⟨path, 2, 30⟩⟩
     (s!"concrete: trap: overflow at {path}:2:30 (site 0)\n".toUTF8)
 
 example : ∃ core bir,
-    UncheckedHandoffs (overflowInput "src/a.con" "// x") core ∧ ConformanceStatic core ∧
-    Stages.unchecked (overflowInput "src/a.con" "// x") = .ok bir ∧
+    UncheckedHandoffs (overflowInput "// x") core ∧ ConformanceStatic core ∧
+    Stages.unchecked (overflowInput "// x") = .ok bir ∧
     coreSemantics.observes ("src/a.con", core) (overflowObservation "src/a.con") ∧
     coreSemantics.observes ("src/b.con", core) (overflowObservation "src/b.con") := by
   with_unfolding_all
@@ -913,8 +922,8 @@ example : ∃ core bir,
 /-- Changing the comment changes the origin byte offsets. Both LLVM artifacts, and the
 process observations projected from the two BIR runs, still agree. -/
 example : ∃ a b,
-    Stages.unchecked (overflowInput "src/a.con" "// x") = .ok a ∧
-    Stages.unchecked (overflowInput "src/a.con" "// longer") = .ok b ∧
+    Stages.unchecked (overflowInput "// x") = .ok a ∧
+    Stages.unchecked (overflowInput "// longer") = .ok b ∧
     a.sites ≠ b.sites ∧ LLVM.module a = LLVM.module b ∧
     birObservation a.sites (BIR.run a 2) = some (overflowObservation "src/a.con") ∧
     birObservation b.sites (BIR.run b 2) = some (overflowObservation "src/a.con") := by
@@ -1013,7 +1022,7 @@ def bytecodeObservation (bytes : ByteArray) : Observation :=
   .returned (bytes.data[0]?.getD 0) ByteArray.empty
 
 def answerCore : Elab.Output :=
-  (Stages.compile answerInput).toOption.map (·.core) |>.getD ⟨⟨[], .lit 0⟩, []⟩
+  answerOutput.core
 
 theorem answerImageRefines : Refines admittedCoreSemantics (instant bytecodeObservation)
     (answerInput.path, answerCore) ⟨#[42]⟩ := by
@@ -1152,15 +1161,6 @@ private theorem lcbToInstant {i : LCBInput} {value : Source.Value}
     · exact ⟨some q, ⟨some s, by simp [lcbSemantics, init]; rfl, lcbSteps steps⟩,
       Or.inr (by rw [result]; rfl), result, by simp [lcbSemantics, result]⟩
 
-def answerOutput : Stages.Output :=
-  match Stages.compile answerInput with
-  | .ok out => out
-  | .error _ => ⟨[], ⟨"", ⟨0, 0, 0, 0⟩, []⟩, answerCore, [], ⟨[], .lit 0⟩,
-    Memory.lower ⟨[], .lit 0⟩, answerBIR⟩
-
-theorem answerCompiles : Stages.compile answerInput = .ok answerOutput := by
-  with_unfolding_all rfl
-
 theorem answerFrontend : Frontend answerInput answerOutput := by
   with_unfolding_all
     refine ⟨Stages.compile_lexes answerCompiles, ?_, ?_, ?_⟩
@@ -1267,11 +1267,11 @@ theorem answerTerminates : SourceTerminates answerInput.path answerOutput.core a
     rw [terminal] at running
     cases running
 
-private def trapInput := overflowInput "src/a.con" "// x"
+private def trapInput := overflowInput "// x"
 
 private def trapCore : Elab.Output :=
-  (do Elab.elaborate (← Parse.parse (← Lex.lex trapInput.source)) :
-    Except Refusal Elab.Output).toOption.getD ⟨⟨[], .lit 0⟩, []⟩
+  (do Elab.elaborate (← Parse.parse (← Lex.lex trapInput.source trapInput.fileId)) :
+    Except Refusal Elab.Output).toOption.get (by rfl)
 
 private def trapBIR : BIR.Program :=
   ⟨[⟨[], [.binOvf .add .u8 0 1 (.imm .u8 200) (.imm .u8 56)], .condbr 1 1 [] 2 [.reg 0]⟩,
@@ -1429,7 +1429,7 @@ example (m : SharedModels sampleProfile.target) :
   exact impossible ▸ ready.1.2
 
 private def trapMIR : MIR.Program :=
-  ⟨[⟨⟨0⟩, .add (.lit 200) (.lit 56) ⟨⟨0⟩, ⟨34, 35, 2, 30⟩⟩ none⟩], .var ⟨0⟩⟩
+  ⟨[⟨⟨0⟩, .add (.lit 200) (.lit 56) ⟨⟨0⟩, ⟨34, 35, 2, 30, trapInput.fileId⟩⟩ none⟩], .var ⟨0⟩⟩
 
 private def evalTrapMIR (input : String × MIR.Program) : Nat → Evaluation
   | 0 => .running
@@ -1456,7 +1456,7 @@ example : EvaluatorAdequacy birSemantics birEvaluation := evaluatorAdequacy _
 
 /-- This is the planted collision: successful lowering alone does not validate an origin list. -/
 example :
-    let planted : Elab.Output := { trapCore with sites := ⟨⟨99⟩, ⟨0, 1, 1, 1⟩⟩ :: trapCore.sites }
+    let planted : Elab.Output := { trapCore with sites := ⟨⟨99⟩, bindingSpan⟩ :: trapCore.sites }
     OriginWellFormed trapCore ∧ ConformanceStatic planted ∧
       MIR.lowerUnchecked planted = MIR.lowerUnchecked trapCore ∧ ¬ OriginWellFormed planted := by
   with_unfolding_all
@@ -1465,8 +1465,8 @@ example :
       change (99 : Nat) = 0 at wrong
       contradiction⟩
 
-private def firstOrigin : Elab.SourceSite := ⟨⟨0⟩, ⟨3, 4, 1, 4⟩⟩
-private def secondOrigin : Elab.SourceSite := ⟨⟨1⟩, ⟨9, 10, 1, 10⟩⟩
+private def firstOrigin : Elab.SourceSite := ⟨⟨0⟩, ⟨3, 4, 1, 4, ⟨0⟩⟩⟩
+private def secondOrigin : Elab.SourceSite := ⟨⟨1⟩, ⟨9, 10, 1, 10, ⟨0⟩⟩⟩
 private def mixedCore : Elab.Output :=
   ⟨⟨[⟨⟨0⟩, .add (.lit 1) (.lit 2)⟩, ⟨⟨1⟩, .add (.lit 200) (.lit 56)⟩], .var ⟨1⟩⟩,
     [firstOrigin, secondOrigin]⟩
