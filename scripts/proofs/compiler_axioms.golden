@@ -1437,6 +1437,17 @@ Concrete.Interfaces.CoreInput.Execution._proof_1	Quot.sound propext
 Concrete.Interfaces.CoreInput.Execution._proof_2	Quot.sound propext
 Concrete.Interfaces.CoreInput.Execution._proof_3	Quot.sound propext
 Concrete.Interfaces.CoreInput.Execution._proof_4	Quot.sound propext
+Concrete.Interfaces.Edge.admission.sizeOf_spec	
+Concrete.Interfaces.Edge.buildBIR.sizeOf_spec	
+Concrete.Interfaces.Edge.buildSSA.sizeOf_spec	
+Concrete.Interfaces.Edge.elaborator.sizeOf_spec	
+Concrete.Interfaces.Edge.emitLCB.sizeOf_spec	
+Concrete.Interfaces.Edge.emitLLVM.sizeOf_spec	
+Concrete.Interfaces.Edge.lexer.sizeOf_spec	
+Concrete.Interfaces.Edge.lowerCore.sizeOf_spec	
+Concrete.Interfaces.Edge.lowerMemory.sizeOf_spec	
+Concrete.Interfaces.Edge.lowerUnchecked.sizeOf_spec	
+Concrete.Interfaces.Edge.parser.sizeOf_spec	
 Concrete.Interfaces.ElabRefusal.diagnostic.inj	
 Concrete.Interfaces.ElabRefusal.diagnostic.injEq	propext
 Concrete.Interfaces.ElabRefusal.diagnostic.sizeOf_spec	
@@ -1559,13 +1570,13 @@ Concrete.Interfaces.Observation.trapped.sizeOf_spec
 Concrete.Interfaces.OperationCheck.mk.inj	
 Concrete.Interfaces.OperationCheck.mk.injEq	propext
 Concrete.Interfaces.OperationCheck.mk.sizeOf_spec	
-Concrete.Interfaces.Passes.mk.inj	Quot.sound propext
-Concrete.Interfaces.Passes.mk.injEq	Quot.sound propext
-Concrete.Interfaces.Passes.mk.sizeOf_spec	Classical.choice Quot.sound propext
+Concrete.Interfaces.PassFunctions.mk.inj	Quot.sound propext
+Concrete.Interfaces.PassFunctions.mk.injEq	Quot.sound propext
+Concrete.Interfaces.PassFunctions.mk.sizeOf_spec	Quot.sound propext
 Concrete.Interfaces.Pipeline.Validated.brecOn	
 Concrete.Interfaces.Pipeline.brecOn.eq	
 Concrete.Interfaces.Pipeline.done.sizeOf_spec	
-Concrete.Interfaces.Pipeline.endToEnd	
+Concrete.Interfaces.Pipeline.endToEnd	Classical.choice Quot.sound propext
 Concrete.Interfaces.Pipeline.next.inj	
 Concrete.Interfaces.Pipeline.next.injEq	propext
 Concrete.Interfaces.Pipeline.next.sizeOf_spec	
@@ -1585,9 +1596,6 @@ Concrete.Interfaces.Read.literal.sizeOf_spec
 Concrete.Interfaces.Read.move.inj	
 Concrete.Interfaces.Read.move.injEq	propext
 Concrete.Interfaces.Read.move.sizeOf_spec	
-Concrete.Interfaces.Registry.mk.inj	Quot.sound propext
-Concrete.Interfaces.Registry.mk.injEq	Quot.sound propext
-Concrete.Interfaces.Registry.mk.sizeOf_spec	Quot.sound propext
 Concrete.Interfaces.SSA.mk.inj	Quot.sound propext
 Concrete.Interfaces.SSA.mk.injEq	Quot.sound propext
 Concrete.Interfaces.SSA.mk.sizeOf_spec	Quot.sound propext
@@ -2561,6 +2569,10 @@ _private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.hostedExecution._pr
 _private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.hostedExecution._proof_2	
 _private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.hostedExecution._proof_3	
 _private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.hostedExecution._proof_4	
+_private.Concrete.Interfaces.Pipeline.0.Concrete.Interfaces.Registry.mk.inj	Quot.sound propext
+_private.Concrete.Interfaces.Pipeline.0.Concrete.Interfaces.Registry.mk.injEq	Quot.sound propext
+_private.Concrete.Interfaces.Pipeline.0.Concrete.Interfaces.Registry.mk.sizeOf_spec	Quot.sound propext
+_private.Concrete.Interfaces.Pipeline.0.Concrete.Interfaces.compose	
 _private.Concrete.Interfaces.SurfaceElaboration.0.Concrete.Elab.Rhs.add.inj	
 _private.Concrete.Interfaces.SurfaceElaboration.0.Concrete.Elab.Rhs.add.injEq	propext
 _private.Concrete.Interfaces.SurfaceElaboration.0.Concrete.Elab.Rhs.add.sizeOf_spec	

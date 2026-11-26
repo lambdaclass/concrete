@@ -327,10 +327,9 @@ private def unsafeDischarge : Discharge testLanguage :=
 
 private def unsafeDischarges : Discharges testLanguage := [(testSite, [unsafeDischarge])]
 
-private def testPasses {profile : Profile} (parser : Parser grammar) (checks : List OperationCheck) :
-    Passes grammar testLanguage testLowering profile where
+private def testPasses {profile : Profile} (checks : List OperationCheck) :
+    PassFunctions grammar testLanguage testLowering profile where
   lex _ := .error (.malformed "control")
-  parser := parser
   elaborate _ := .error (.diagnostic rule span [])
   checkCore _ := .ok unsafeDischarges
   lowerCore input := .ok (testMIR input.core.project checks)
@@ -341,9 +340,22 @@ private def testPasses {profile : Profile} (parser : Parser grammar) (checks : L
   emitLLVM bir := .ok ⟨testProfile.llvmTriple, testProfile.llvmDataLayout, [], bir.sites⟩
   emitLCB _ := .ok testOutput
 
+private structure FixtureEntries (profile : Profile) where
+  lexer : Stage Source LexRefusal TokenStream
+  parser : Stage TokenStream ParseRefusal (Parsed (grammar.value grammar.start))
+  admission : Stage (CoreInput testLanguage) CheckerRefusal (Admitted testLanguage)
+  lowerUnchecked : Stage (CoreInput testLanguage) StageFailure (MIR testLowering profile)
+  emitLLVM : Stage (BIR testLowering profile) StageFailure (LLVMInput profile)
+  emitLCB : Stage (BIR testLowering profile) StageFailure (LCBInput profile)
+
+private def fixtureEntries {profile : Profile} (parser : Parser grammar)
+    (passes : PassFunctions grammar testLanguage testLowering profile) : FixtureEntries profile :=
+  ⟨passes.lexer, parserEntry parser.engine, passes.admissionEntry, passes.lowerUncheckedEntry,
+    passes.emitLLVMEntry, passes.emitLCBEntry⟩
+
 private abbrev r {profile : Profile} (_m : LoweringModels testLanguage testLowering profile)
     (parser : Parser grammar) (checks : List OperationCheck := []) :=
-  registry (testPasses (profile := profile) parser checks)
+  fixtureEntries parser (testPasses (profile := profile) checks)
 
 private def tokenStream (radix : Surface0.Radix)
     (slice : Slice := early) : TokenStream :=
@@ -378,7 +390,7 @@ private def spacedStream : TokenStream :=
 -- Only reconstruction of the retained pieces can distinguish it.
 example :
     let dropped := {spacedStream with trivia := #[#[], #[]]}
-    let mutant := ({testPasses (profile := testProfile) parser [] with
+    let mutant := ({testPasses (profile := testProfile) [] with
       lex := fun _ => .ok dropped}).lexer
     dropped.parserView = spacedStream.parserView ∧
     mutant.success spacedStream.source spacedStream ∧
@@ -397,7 +409,7 @@ example :
 example :
     let wrong := {spacedStream with tokens :=
       #[⟨⟨{span with endOffset := 2}, .integer 43 .decimal none⟩, "42".toUTF8⟩]}
-    let mutant := ({testPasses (profile := testProfile) parser [] with
+    let mutant := ({testPasses (profile := testProfile) [] with
       lex := fun _ => .ok wrong}).lexer
     reconstruct wrong.source.entryFile wrong.tokens wrong.trivia =
       reconstruct spacedStream.source.entryFile spacedStream.tokens spacedStream.trivia ∧
@@ -452,7 +464,7 @@ example (m : LoweringModels testLanguage testLowering testProfile) :
 -- A correct AST does not make a run with more than the permitted transitions sound.
 -- The machine spends five transitions; a two-step-per-token profile permits four.
 example (m : LoweringModels testLanguage testLowering testProfile) :
-    ¬ (r m (testParser verifier size accept 2)).parser.Sound := by
+    ¬ (r m (testParser verifier size accept 2)).parser.Checks := by
   intro sound
   have h := sound.1.1 (tokenStream .decimal)
     ⟨(tokenStream .decimal).source, .inr true⟩ rfl rfl
@@ -479,129 +491,9 @@ private def returnSyntax (n : Nat) : SyntaxTree :=
 private def parsedReturn : Parsed (SyntaxTree ⊕ Bool) :=
   ⟨elaborationSource, .inl (returnSyntax 42)⟩
 
-private def returnRhs : List (Sym Terminal (Fin 1)) :=
-  [.t .fn, .t .ident, .t .lparen, .t .rparen, .t .arrow, .t .u8,
-    .t .lbrace, .t .return_, .t .integer, .t .semi, .t .rbrace]
+private abbrev earlyFixtureLanguage := sliceLanguage slice0
 
-private def returnProduction : Production (fun (_ : Fin 1) => SyntaxTree ⊕ Bool) :=
-  let afterFn := Action.right .input
-  let name := Action.left afterFn
-  let afterName := Action.right afterFn
-  let afterOpen := Action.right afterName
-  let afterClose := Action.right afterOpen
-  let afterArrow := Action.right afterClose
-  let afterType := Action.right afterArrow
-  let afterBrace := Action.right afterType
-  let ret := Action.left afterBrace
-  let afterReturn := Action.right afterBrace
-  let value := Action.left afterReturn
-  let semi := Action.left (.right afterReturn)
-  let body := Action.node .return_ (.cons (.leaf ret) (.cons (.leaf value) (.cons (.leaf semi) (.constant []))))
-  ⟨0, returnRhs, early, .inl (.node .program (.cons (.leaf name)
-    (.cons (.node .body (.cons body (.constant []))) (.constant []))))⟩
-
-private def returnGrammar : SharedGrammar 1 :=
-  { grammar with productions := #[returnProduction] }
-
-private def returnCells : Array (Option Nat) :=
-  (Array.replicate returnGrammar.terminalColumns none).set! (terminalColumn (some .fn)) (some 0)
-
-private def returnTable : CheckedTable returnGrammar where
-  cells := returnCells
-  dimensions := rfl
-  predicts := by
-    intro n look i
-    have hn : n = 0 := Subsingleton.elim _ _
-    subst n
-    have entry : tableLookup returnGrammar.terminalColumns returnCells (0 : Fin 1) look =
-        if look = some Surface0.Terminal.fn then some 0 else none := by
-      cases look with
-      | none => rfl
-      | some t => cases t <;> rfl
-    rw [entry]
-    change _ ↔ Predicts returnGrammar.grammar i look ∧
-      ∃ rhs, [((0 : Fin 1), returnRhs)][i]? = some (0, rhs)
-    cases i with
-    | zero =>
-      simp only [List.getElem?_cons_zero, Option.some.injEq, Prod.mk.injEq, true_and, exists_eq', and_true]
-      constructor
-      · intro hit
-        have h : look = some Surface0.Terminal.fn := by
-          split at hit
-          · assumption
-          · contradiction
-        exact ⟨0, returnRhs, rfl, .inl ⟨.fn, h, [], returnRhs.drop 1,
-          ⟨[], rfl, by simp⟩, .inl rfl⟩⟩
-      · rintro ⟨n, rhs, row, first | ⟨nullable, _⟩⟩
-        · change some ((0 : Fin 1), returnRhs) = some (n, rhs) at row
-          have hr := (Prod.mk.inj (Option.some.inj row)).2
-          subst rhs
-          obtain ⟨a, rfl, pre, post, ⟨xs, rfl, _⟩, same | ⟨_, same, _⟩⟩ := first
-          · cases xs <;> simp_all [returnRhs]
-          · cases xs <;> simp_all [returnRhs]
-        · change some ((0 : Fin 1), returnRhs) = some (n, rhs) at row
-          have hr := (Prod.mk.inj (Option.some.inj row)).2
-          subst rhs
-          obtain ⟨xs, eq, _⟩ := nullable
-          cases xs <;> simp [returnRhs] at eq
-    | succ i => split <;> simp
-  rank _ := 0
-  acyclic := by
-    intro p member before child after rhs _
-    have eq : p = returnProduction := List.mem_singleton.mp member
-    subst p
-    have childMem : Sym.n child ∈ returnRhs := by
-      rw [show returnRhs = before ++ .n child :: after from rhs]
-      exact List.mem_append_right _ (List.mem_cons_self ..)
-    simp [returnRhs] at childMem
-
-private def returnProposal : Array UInt64 :=
-  (Array.replicate returnGrammar.terminalColumns 0).set! (terminalColumn (some .fn)) 1
-
-private abbrev earlyFixtureLanguage : CoreLanguage where
-  operands := {
-    Val := EarlyValue
-    Ty := EarlyTy ⊕ Bool
-    Expr := EarlyExpr ⊕ Bool
-    Prim := EarlyPrim
-    Event := Empty
-    Store := Hybrid.State
-    unitVal := .scalar .unit
-    unitTy := .inl (.scalar .unit)
-    isCopy := fun ty => match ty with | .inl (.scalar _) => true | _ => false
-    eval := fun _ store expr => match expr with
-      | .inl (.read (.literal value)) => .ok (.scalar value, store)
-      | _ => .stuck
-    life := fun _ store => some store
-    test := fun _ => none
-    allows := fun _ _ _ _ => false }
-  hybridStore := rfl
-  Declaration := Bool
-  extraEarlyTypes := Bool
-  extraEarlyExpressions := Bool
-  expressionOperator := fun _ => .read
-  primitiveOperator := fun _ => .named ⟨"destructureEmpty"⟩
-  argumentRead := fun _ => none
-  argumentReadNoTrap := by simp
-  OtherValue := DeclId
-  valueShape := rfl
-  layout := fun _ _ => none
-  scalarType := fun _ => none
-  literal := fun _ _ => none
-  typeDecidableEq := inferInstance
-  fieldType := fun _ _ => none
-  activeFields := fun _ _ => none
-  operation := fun _ _ _ _ _ _ _ _ _ _ => False
-  checkTrap := fun _ _ _ => false
-  field := fun _ _ => none
-  replaceField := fun _ _ _ => none
-  fieldRange := fun _ _ _ => none
-  encodeOther := fun _ _ _ => none
-  decodeOther := fun _ _ _ => none
-  safety := fun _ => []
-  permit := fun _ _ _ own => some own
-
-private theorem fixtureEarly : EarlyCore earlyFixtureLanguage := ⟨rfl, rfl⟩
+private theorem fixtureEarly : EarlyCore earlyFixtureLanguage := sliceEarlyCore slice0
 
 private def returnPayload (n : Nat) : Payload earlyFixtureLanguage :=
   earlyPayload fixtureEarly ⟨[], .lit n, resultSpan⟩
@@ -734,15 +626,31 @@ private def returnView : ParserView :=
     tok 16 17 (.fixed .lbrace rfl), tok 18 24 (.fixed .return_ rfl), tok 25 27 (.integer 42 .decimal none),
     tok 27 28 (.fixed .semi rfl), tok 29 30 (.fixed .rbrace rfl)]⟩
 
--- The checked table and input execute independently of the proposal verifier.
-example : (parseSymbol returnTable returnView.tokens returnGrammar.start
-    ⟨0, slice0, none, 0⟩ 192).2 = .ok parsedReturn.tree := rfl
+private def returnStream : TokenStream :=
+  let bytes := elaborationSourceText.toUTF8
+  let tokens := returnView.tokens.map fun decoded =>
+    (⟨decoded, bytes.extract decoded.span.startOffset decoded.span.endOffset⟩ : RetainedToken)
+  let ends := #[0, 2, 7, 8, 9, 12, 15, 17, 24, 27, 28]
+  let trivia := returnView.tokens.toList.zipIdx.map fun (token, i) =>
+    let stop := token.span.startOffset
+    let start := ends[i]!
+    if start = stop then #[] else
+      #[⟨⟨⟨0⟩, start, stop, 1, start + 1⟩, bytes.extract start stop⟩]
+  ⟨elaborationSource, tokens, trivia.toArray.push #[]⟩
 
-private def returnPasses (frontend : Parser returnGrammar)
-    (elaborate : Parsed (SyntaxTree ⊕ Bool) → Except ElabRefusal (CoreInput earlyFixtureLanguage)) :
-    Passes returnGrammar earlyFixtureLanguage ⟨fun _ _ _ => Unit, .inr false⟩ testProfile where
-  lex _ := .error (.malformed "control")
-  «parser» := frontend
+-- The verifier accepts the fixed proposal and rejects a changed prediction row.
+set_option maxRecDepth 4096 in
+example :
+    let inputs := sliceVerifierInputs slice0
+    let budget := (sliceGrammar slice0).verificationBudget
+    let changed := inputs.proposal.set! (terminalColumn (some .fn)) 0
+    (verifyRun inputs.program ⟨0, inputs.proposal⟩ budget).2 = some true ∧
+    (verifyRun inputs.program ⟨0, changed⟩ budget).2 = some false :=
+  ⟨(sliceVerifierInputs slice0).accepted, by with_unfolding_all rfl⟩
+
+private def returnPasses (elaborate : Parsed (SyntaxTree ⊕ Bool) → Except ElabRefusal (CoreInput earlyFixtureLanguage)) :
+    Passes slice0 testProfile where
+  lex _ := .ok returnStream
   elaborate := elaborate
   checkCore _ := .error ⟨rule, span, [], none⟩
   lowerCore _ := .error (.invalidInput rule)
@@ -756,23 +664,33 @@ private def returnPasses (frontend : Parser returnGrammar)
 -- Read the literal and locations from the grammar's token leaves. The registered
 -- elaborator consumes the AST returned by the same checked parser.
 set_option maxRecDepth 4096 in
-example (verify : TableVerifier returnGrammar) (size : returnProposal.size = verify.words)
-    (accept : (verify.run returnProposal).2 = some true) :
-    let frontend : Parser returnGrammar := ⟨returnTable, verify, returnProposal, size, accept, by decide, 16, rule, rule⟩
-    let good := (returnPasses frontend fixtureElaborate).elaborator
-    let mutant := (returnPasses frontend (fun _ => .ok (elaboratedReturn 43))).elaborator
-    (frontend.run returnView).2 = some (.ok parsedReturn) ∧
-    good.run parsedReturn = .ok (elaboratedReturn 42) ∧
-    good.success parsedReturn (elaboratedReturn 42) ∧ ¬ mutant.Validated := by
-  refine ⟨rfl, rfl, ⟨rfl, rfl, returnedCoreWF 42, returnProgram, rfl, fixtureEarly, rfl⟩, ?_⟩
-  intro validated
-  have matching := (validated.1 parsedReturn _ rfl rfl).2.2.2.2
-  change Elaboration (fun _ => Bool) (fun _ => earlyFixtureLanguage) slice0
-    (.inl (returnSyntax 42)) (.ok (returnPayload 43)) at matching
-  obtain ⟨program, decoded, _, matching⟩ := matching
-  obtain rfl := Option.some.inj (show some returnProgram = some program from decoded)
-  have ops := congrArg (fun result => result.toOption.map Payload.operations) matching
-  cases ops
+example :
+    let good := registry (returnPasses fixtureElaborate)
+    let mutant := registry (returnPasses (fun _ => .ok (elaboratedReturn 43)))
+    let refusing := registry (returnPasses (fun _ => .error (.diagnostic rule span [])))
+    good.lexer.success elaborationSource returnStream ∧
+    good.lexer.run elaborationSource = .ok returnStream ∧
+    good.parser.run returnStream = .ok parsedReturn ∧
+    good.elaborator.run parsedReturn = .ok (elaboratedReturn 42) ∧
+    good.elaborator.success parsedReturn (elaboratedReturn 42) ∧
+    ¬ mutant.elaborator.Validated ∧ ¬ refusing.elaborator.Validated := by
+  refine ⟨?_, rfl, by with_unfolding_all rfl, rfl,
+    ⟨rfl, rfl, returnedCoreWF 42, returnProgram, rfl, rfl⟩, ?_, ?_⟩
+  · refine ⟨rfl, by with_unfolding_all rfl, _, rfl, elaborationSourceText.toUTF8, ?_, rfl, _, rfl, ?_⟩
+    all_goals with_unfolding_all rfl
+  · intro validated
+    have matching := (validated.1 parsedReturn _ ⟨rfl, rfl⟩ rfl).2.2.2.2
+    change SliceElaboration slice0 (.inl (returnSyntax 42)) (.ok (returnPayload 43)) at matching
+    obtain ⟨program, decoded, matching⟩ := matching
+    obtain rfl := Option.some.inj (show some returnProgram = some program from decoded)
+    have ops := congrArg (fun result => result.toOption.map Payload.operations) matching
+    cases ops
+  · intro validated
+    have matching := validated.2 parsedReturn _ ⟨rfl, rfl⟩ rfl
+    change SliceElaboration slice0 (.inl (returnSyntax 42)) (.error (.diagnostic rule span [])) at matching
+    obtain ⟨program, decoded, matching⟩ := matching
+    obtain rfl := Option.some.inj (show some returnProgram = some program from decoded)
+    cases matching
 
 -- The spec admits the reachable return program with no operation discharges.
 -- The same fixed judgment rules out an unconditional checker refusal.
@@ -1536,7 +1454,7 @@ private def macLLVM : Profile := ⟨.llvm, .aarch64Macos, 2, 4096⟩
 -- profile. Handoff and refinement premises cannot make that result sound.
 example (project : Project) (m : LoweringModels testLanguage testLowering macLLVM)
     (eligible : (r m parser).emitLLVM.inputInvariant (testBIR project)) :
-    ¬ (r m parser).emitLLVM.Sound := by
+    ¬ (r m parser).emitLLVM.Checks := by
   intro sound
   have success := (sound.1.1 (testBIR project)
     ⟨testProfile.llvmTriple, testProfile.llvmDataLayout, [], #[]⟩ eligible rfl).2
@@ -1575,7 +1493,7 @@ example (project : Project) (m : LoweringModels testLanguage testLowering testPr
 
 -- The emitter actually returns this body, but its exact job fails validation.
 example (project : Project) (m : LoweringModels testLanguage testLowering testProfile)
-    (valid : (r m parser).emitLCB.inputInvariant (testBIR project)) : ¬ (r m parser).emitLCB.Sound := by
+    (valid : (r m parser).emitLCB.inputInvariant (testBIR project)) : ¬ (r m parser).emitLCB.Checks := by
   intro sound
   have validated := (sound.1.1 (testBIR project) testOutput valid rfl).2.2.1
   have rejected : validateJob (Backend.LCB.job badBody) ≠ .ok () := by
@@ -2435,8 +2353,8 @@ private def llvmReturn (status : Nat) : LLVMInput macLLVM :=
 -- profile. The fixed behavior interpretation distinguishes their bytes.
 set_option maxRecDepth 4096 in
 example (parser : Parser grammar) (project : Project) :
-    let stages (status : Nat) := registry
-      {testPasses parser [] with emitLLVM := fun _ => .ok (llvmReturn status)}
+    let stages (status : Nat) := fixtureEntries parser
+      {testPasses [] with emitLLVM := fun _ => .ok (llvmReturn status)}
     let original := birReturn project false
     let input : BIR testLowering macLLVM :=
       ⟨project, original.entry, original.signatures, original.functions, original.layouts, original.sites⟩
@@ -2448,7 +2366,7 @@ example (parser : Parser grammar) (project : Project) :
         (stages 0).emitLLVM.trust input (llvmReturn 0)) ∧
       (llvmBehaviors (llvmReturn 42).moduleBytes
         (.terminates (.returned 42 ByteArray.empty) ([] : List (Concrete.Contracts.ProcessEvent Nat))) →
-        ¬ (stages 42).emitLLVM.Sound) := by
+        ¬ (stages 42).emitLLVM.Checks) := by
   intro stages original input expected
   let start := BIR.entryState (language := testLanguage) input
   refine ⟨rfl, rfl, ⟨rfl, rfl, rfl, rfl⟩, ?_, ?_⟩
@@ -2700,7 +2618,7 @@ example (parser : Parser grammar) :
       {bundledBIR tabProject with
         functions := [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[callBlock, entry linked]⟩),
           (callee, [], ⟨⟨0⟩, #[birReturnBlock true]⟩)]}
-    let stages := registry {testPasses parser [] with emitLCB := fun _ => .ok (bundledJobs 7)}
+    let stages := fixtureEntries parser {testPasses [] with emitLCB := fun _ => .ok (bundledJobs 7)}
     stages.emitLCB.run (input false) = .ok (bundledJobs 7) ∧
       stages.emitLCB.run (input true) = .error .lcbLinkingUnavailable := by
   with_unfolding_all exact ⟨rfl, rfl⟩
@@ -2711,8 +2629,8 @@ example (m : LoweringModels testLanguage testLowering testProfile) (parser : Par
 
 -- A spurious typed linking refusal cannot validate on the registered edge.
 example (parser : Parser grammar) :
-    let stages := registry
-      {testPasses (profile := testProfile) parser [] with emitLCB := fun _ => .error .lcbLinkingUnavailable}
+    let stages := fixtureEntries parser
+      {testPasses (profile := testProfile) [] with emitLCB := fun _ => .error .lcbLinkingUnavailable}
     ¬ stages.emitLCB.Validated := by
   intro stages valid
   let input := birReturn tabProject false

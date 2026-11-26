@@ -3,6 +3,7 @@ import Concrete.Lex
 import Concrete.Interfaces.Behavior
 import Concrete.Backend.Observation
 import Concrete.Interfaces.SurfaceElaboration
+import ConcreteSpec.StageGrammar
 
 namespace Concrete.Interfaces
 
@@ -54,7 +55,7 @@ def Stage.Validated {A R B : Type} (edge : Stage A R B) : Prop :=
     edge.outputInvariant b ∧ edge.success a b) ∧
   (∀ a r, edge.inputInvariant a → edge.run a = .error r → edge.refusal a r)
 
-def Stage.Sound {A R B : Type} (edge : Stage A R B) : Prop :=
+def Stage.Checks {A R B : Type} (edge : Stage A R B) : Prop :=
   edge.Validated ∧ edge.Trusted
 
 def Stage.Compatible {A R B S C : Type} (left : Stage A R B) (right : Stage B S C) : Prop :=
@@ -142,6 +143,17 @@ def ElaborationRefuses {Ast Extra : Type} (language : CoreLanguage)
     (surface : Ast = SurfaceAST (fun _ => Extra) slice0)
     (ast : Parsed Ast) (failure : ElabRefusal) : Prop :=
   Elaboration (fun _ => Extra) (fun _ => language) ast.source.slice (surface ▸ ast.tree) (.error failure)
+
+/-- The registered judgment uses the canonical embedding at the selected slice. -/
+def SliceElaboration (slice : Slice) (ast : SurfaceAST ConcreteSpec.StageGrammar.sliceASTExtra slice)
+    (result : Except ElabRefusal (Payload (sliceLanguage slice))) : Prop :=
+  if slice = slice0 then
+    match ast with
+    | .inl tree => ∃ program, Concrete.Elab.surfaceProgram tree = some program ∧
+        ((Concrete.Elab.elaborateLocated program).map (earlyPayload (sliceEarlyCore slice))).mapError
+          ElabRefusal.slice0 = result
+    | .inr _ => False
+  else False
 
 /-- Origin maps enumerate emitted copies as well as discharged and residual operations. -/
 def PreservesOrigins (source target : List Origin) : Prop :=

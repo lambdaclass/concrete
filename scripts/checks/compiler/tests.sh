@@ -43,9 +43,13 @@ if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
   bash scripts/checks/compiler/f31_census.sh
   build stage-interfaces "$work/stage-interfaces.log" bounded 120 \
     lake build Concrete.Interfaces.Pipeline ConcreteSpecEvidence.ExecExamples
-  build stage-interface-controls "$work/stage-interface-controls.log" bounded 120 \
+  # The kernel checks the full cross-stage controls in this compilation unit.
+  # At two Lean threads this can exceed the standard build budget.
+  build stage-interface-controls "$work/stage-interface-controls.log" bounded 360 \
     lake env lean -DwarningAsError=true -DautoImplicit=false scripts/checks/compiler/stage_interfaces.lean
-  echo "ok   stage interface controls"
+  build stage-end-to-end-audit "$work/stage-end-to-end-audit.log" bounded 60 \
+    lake env lean -DwarningAsError=true -DautoImplicit=false scripts/checks/compiler/stage_end_to_end_audit.lean
+  echo "ok   stage interface controls and end-to-end semantic parameter audit"
   build slice1-driver "$work/slice1-driver-build.log" bounded 120 \
     lake build ConcreteSpecEvidence.ExecExamples ConcreteSpecEvidence.Rules ConcreteSpec.Spec.Examples
   build slice1-driver-controls "$work/slice1-driver-controls.log" bounded 120 \

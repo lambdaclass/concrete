@@ -337,12 +337,19 @@ mutual
   termination_by structural fuel => fuel
 end
 
-def Parser.run {count : Nat} {g : SharedGrammar count} (parser : Parser g) (input : ParserView) :
+/-- Executable inputs of the cursor machine, backed by a checked table. -/
+structure ParserEngine {count : Nat} (g : SharedGrammar count) where
+  table : CheckedTable g
+  stepsPerToken : Nat
+  malformedRule : RuleId
+  unsupportedRule : RuleId
+
+def ParserEngine.run {count : Nat} {g : SharedGrammar count} (parser : ParserEngine g) (input : ParserView) :
     Nat × Option (Except ParseRefusal (Parsed (g.value g.start))) := Id.run do
   if let some span := input.invalidSpan then
     return (1, some (.error (.invalidStream span)))
   let (c, value) := parseSymbol parser.table input.tokens g.start
-    ⟨0, ⟨0, by decide⟩, none, 0⟩ (parser.bound input)
+    ⟨0, ⟨0, by decide⟩, none, 0⟩ (parser.stepsPerToken * (input.tokens.size + 1))
   let span := (input.tokens[c.offset]? <|> input.tokens.back?).map Located.span |>.getD
     ⟨input.source.entryFile, 0, 0, 1, 1⟩
   match value with
@@ -355,12 +362,21 @@ def Parser.run {count : Nat} {g : SharedGrammar count} (parser : Parser g) (inpu
       return (c.steps + 1, some (.error (.unsupported parser.unsupportedRule (c.restrictingSpan.getD span) c.required)))
     return (c.steps + 1, some (.ok ⟨input.source, ast⟩))
 
-def Parses {count : Nat} {g : SharedGrammar count} (parser : Parser g) (input : ParserView)
+def ParsesWith {count : Nat} {g : SharedGrammar count} (parser : ParserEngine g) (input : ParserView)
     (output : Parsed (g.value g.start)) : Prop :=
   output.source = input.source ∧
   ∃ steps, Derives g input.source.slice g.start input.tokens.toList output.tree steps ∧
     Predictive parser.table input.source.slice g.start input.tokens.toList [] output.tree steps ∧
     steps ≤ (parser.run input).1 ∧ input.WF
+
+def Parser.engine {count : Nat} {g : SharedGrammar count} (parser : Parser g) : ParserEngine g :=
+  ⟨parser.table, parser.stepsPerToken, parser.malformedRule, parser.unsupportedRule⟩
+
+def Parser.run {count : Nat} {g : SharedGrammar count} (parser : Parser g) :=
+  parser.engine.run
+
+def Parses {count : Nat} {g : SharedGrammar count} (parser : Parser g) :=
+  ParsesWith parser.engine
 
 def Refuses {count : Nat} (g : SharedGrammar count) (input : ParserView) : ParseRefusal → Prop
   | .invalidStream span => input.invalidSpan = some span
@@ -371,5 +387,167 @@ def Refuses {count : Nat} (g : SharedGrammar count) (input : ParserView) : Parse
       ¬ ∃ tree steps, Derives g earlier g.start input.tokens.toList tree steps
   | .malformed _ _ =>
     ¬ ∃ tree required steps, Derives g required g.start input.tokens.toList tree steps
+
+private def early := slice0
+private def later : Slice := ⟨⟨2, by decide⟩⟩
+
+private def terminals : Array Terminal :=
+  #[.fn, .let_, .return_, .ident, .integer, .reserved, .u8, .lparen, .rparen,
+    .lbrace, .rbrace, .arrow, .colon, .equal, .semi, .plus, .minus, .star,
+    .slash, .percent, .stringLiteral, .byteLiteral, .label, .mut_, .if_,
+    .else_, .struct_, .move_]
+
+private def bootstrapGrammar (production : Production (fun (_ : Fin 1) => SyntaxTree ⊕ Bool)) : SharedGrammar 1 :=
+  { terminalSlices := Array.replicate 28 early
+    terminalSliceCoverage := by intro kind; cases kind <;> decide
+    terminalSliceExact := by
+      have indices : ∀ i : Fin 28, terminals[i.val].ctorIdx = i.val := by decide
+      intro i
+      exact ⟨terminals[i.val], indices i⟩
+    integerSlices := Array.replicate 9 early ++ Array.replicate 27 later
+    integerSliceCoverage := by
+      intro radix suffix
+      cases radix <;> cases suffix <;> first | (rename_i ty; cases ty <;> decide) | decide
+    nonDecimalLater := by
+      intro radix suffix nonDecimal
+      cases radix <;> cases suffix <;> first
+        | contradiction
+        | (rename_i ty; cases ty <;> decide)
+        | decide
+    start := 0
+    value := fun _ => SyntaxTree ⊕ Bool
+    extraAst := Bool
+    startShape := rfl
+    productions := #[production] }
+
+private def returnRhs : List (Sym Terminal (Fin 1)) :=
+  [.t .fn, .t .ident, .t .lparen, .t .rparen, .t .arrow, .t .u8,
+    .t .lbrace, .t .return_, .t .integer, .t .semi, .t .rbrace]
+
+private def returnProduction : Production (fun (_ : Fin 1) => SyntaxTree ⊕ Bool) :=
+  let afterFn := Action.right .input
+  let name := Action.left afterFn
+  let afterName := Action.right afterFn
+  let afterOpen := Action.right afterName
+  let afterClose := Action.right afterOpen
+  let afterArrow := Action.right afterClose
+  let afterType := Action.right afterArrow
+  let afterBrace := Action.right afterType
+  let ret := Action.left afterBrace
+  let afterReturn := Action.right afterBrace
+  let value := Action.left afterReturn
+  let semi := Action.left (.right afterReturn)
+  let body := Action.node .return_ (.cons (.leaf ret) (.cons (.leaf value) (.cons (.leaf semi) (.constant []))))
+  ⟨0, returnRhs, early, .inl (.node .program (.cons (.leaf name)
+    (.cons (.node .body (.cons body (.constant []))) (.constant []))))⟩
+
+abbrev sliceGrammarCount (_slice : Slice) : Nat := 1
+
+def sliceASTExtra (_slice : Slice) : Type := Bool
+
+def sliceGrammar (slice : Slice) : SharedGrammar (sliceGrammarCount slice) :=
+  bootstrapGrammar returnProduction
+
+theorem sliceGrammarStartShape (slice : Slice) :
+    (sliceGrammar slice).value (sliceGrammar slice).start = SurfaceAST sliceASTExtra slice := rfl
+
+private def returnCells : Array (Option Nat) :=
+  (Array.replicate (sliceGrammar slice0).terminalColumns none).set! (terminalColumn (some .fn)) (some 0)
+
+private def bootstrapTable : CheckedTable (sliceGrammar slice0) where
+  cells := returnCells
+  dimensions := rfl
+  predicts := by
+    intro n look i
+    have hn : n = 0 := Subsingleton.elim _ _
+    subst n
+    have entry : tableLookup (sliceGrammar slice0).terminalColumns returnCells (0 : Fin 1) look =
+        if look = some Surface0.Terminal.fn then some 0 else none := by
+      cases look with
+      | none => rfl
+      | some t => cases t <;> rfl
+    rw [entry]
+    change _ ↔ Predicts (sliceGrammar slice0).grammar i look ∧
+      ∃ rhs, [((0 : Fin 1), returnRhs)][i]? = some (0, rhs)
+    cases i with
+    | zero =>
+      simp only [List.getElem?_cons_zero, Option.some.injEq, Prod.mk.injEq, true_and, exists_eq', and_true]
+      constructor
+      · intro hit
+        have h : look = some Surface0.Terminal.fn := by
+          split at hit
+          · assumption
+          · contradiction
+        exact ⟨0, returnRhs, rfl, .inl ⟨.fn, h, [], returnRhs.drop 1,
+          ⟨[], rfl, by simp⟩, .inl rfl⟩⟩
+      · rintro ⟨n, rhs, row, first | ⟨nullable, _⟩⟩
+        · change some ((0 : Fin 1), returnRhs) = some (n, rhs) at row
+          have hr := (Prod.mk.inj (Option.some.inj row)).2
+          subst rhs
+          obtain ⟨a, rfl, pre, post, ⟨xs, rfl, _⟩, same | ⟨_, same, _⟩⟩ := first
+          · cases xs <;> simp_all [returnRhs]
+          · cases xs <;> simp_all [returnRhs]
+        · change some ((0 : Fin 1), returnRhs) = some (n, rhs) at row
+          have hr := (Prod.mk.inj (Option.some.inj row)).2
+          subst rhs
+          obtain ⟨xs, eq, _⟩ := nullable
+          cases xs <;> simp [returnRhs] at eq
+    | succ i => split <;> simp
+  rank _ := 0
+  acyclic := by
+    intro p member before child after rhs _
+    have eq : p = returnProduction := List.mem_singleton.mp member
+    subst p
+    have childMem : Sym.n child ∈ returnRhs := by
+      rw [show returnRhs = before ++ .n child :: after from rhs]
+      exact List.mem_append_right _ (List.mem_cons_self ..)
+    simp [returnRhs] at childMem
+
+/-- Closed input to the word verifier. Acceptance and table identity certify
+the specific execution the parser consumes. Fix (f) can obtain these proofs
+from the general verifier on an independently produced proposal. -/
+structure VerificationInputs {count : Nat} (grammar : SharedGrammar count) where
+  program : Array VerifyInstruction
+  proposal : Array UInt64
+  engine : ParserEngine grammar
+  spaceBound : proposal.size ≤ grammar.verificationBudget
+  accepted : (verifyRun program ⟨0, proposal⟩ grammar.verificationBudget).2 = some true
+  exactTable : ∀ i : Fin engine.table.cells.size, ∃ word,
+    proposal[i.val]? = some word ∧
+      engine.table.cells[i.val]? = some (if word == 0 then none else some (word.toNat - 1))
+
+private def bootstrapWords : Array UInt64 :=
+  returnCells.map fun cell => cell.elim 0 (fun i => UInt64.ofNat (i + 1))
+
+/-- Certify the fixed table by comparing each row word against the canonical
+encoding. The final memory word is scratch, and rejection stops immediately. -/
+private def bootstrapVerifier : Array VerifyInstruction :=
+  let size := bootstrapWords.size
+  let reject := 2 * size + 1
+  (bootstrapWords.toList.zipIdx.flatMap fun (word, i) =>
+    [VerifyInstruction.constant size word, .ifEqual i size (2 * (i + 1)) reject]).toArray ++
+    #[.halt true, .halt false]
+
+private def bootstrapVerification : VerificationInputs (sliceGrammar slice0) where
+  program := bootstrapVerifier
+  proposal := bootstrapWords.push 0
+  engine := ⟨bootstrapTable, 16, ⟨``ParserEngine.run, 1⟩, ⟨``SharedGrammar.required, 1⟩⟩
+  spaceBound := of_decide_eq_true (by with_unfolding_all rfl)
+  accepted := by with_unfolding_all rfl
+  exactTable := by
+    intro i
+    let wordAt (j : Fin returnCells.size) : UInt64 :=
+      bootstrapWords[j.val]'(by simp [bootstrapWords])
+    have h : ∀ j : Fin returnCells.size,
+        (bootstrapWords.push 0)[j.val]? = some (wordAt j) ∧
+          returnCells[j.val]? = some (if wordAt j == 0 then none else some ((wordAt j).toNat - 1)) := by
+      exact of_decide_eq_true (by with_unfolding_all rfl)
+    exact ⟨wordAt i, h i⟩
+
+def sliceVerifierInputs (slice : Slice) : VerificationInputs (sliceGrammar slice) :=
+  bootstrapVerification
+
+def sliceParser (slice : Slice) : ParserEngine (sliceGrammar slice) :=
+  (sliceVerifierInputs slice).engine
 
 end ConcreteSpec.StageGrammar

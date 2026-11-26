@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.Slice0Layout
 import ConcreteSpec.Spec.Slice0Syntax
 import ConcreteSpec.Spec.Slice1Checker
 import ConcreteSpec.Spec.Hybrid
@@ -319,7 +320,7 @@ inductive EarlyOperand where
 
 inductive EarlyExpr where
   | read (value : EarlyOperand)
-  | add (ty : IntTy) (left right : EarlyOperand)
+  | add (ty : Core.IntTy) (left right : EarlyOperand)
   | constructEmpty (decl : DeclId)
 
 inductive EarlyPrim where
@@ -328,6 +329,134 @@ inductive EarlyPrim where
 structure EarlyCore (language : CoreLanguage) : Prop where
   types : language.operands.Ty = (EarlyTy ⊕ language.extraEarlyTypes)
   expressions : language.operands.Expr = (EarlyExpr ⊕ language.extraEarlyExpressions)
+
+private def earlyRead (locals : AList Var EarlyValue) : EarlyOperand → Option EarlyValue
+  | .literal value => some (.scalar value)
+  | .copy localId => do
+    let .scalar value ← AList.lookup locals localId | none
+    some (.scalar value)
+  | .move _ => none
+
+private def earlyEval (locals : AList Var EarlyValue) : EarlyExpr → Res EarlyValue
+  | .read operand =>
+    match earlyRead locals operand with
+    | some value => .ok value
+    | none => .stuck
+  | .add ty left right =>
+    match earlyRead locals left, earlyRead locals right with
+    | some (.scalar (.int lt l)), some (.scalar (.int rt r)) =>
+      if lt = ty ∧ rt = ty then (plain ty .add l r).map (CoreValue.scalar ∘ CVal.int ty)
+      else .stuck
+    | _, _ => .stuck
+  | .constructEmpty _ => .stuck
+
+private def earlyPermitRead (own : Own.State) : EarlyOperand → Option Own.State
+  | .literal _ => some own
+  | .copy localId => do
+    let frame ← own.frames.head?
+    let root ← AList.lookup frame.locals localId
+    Own.accessOwner own root .shared
+  | .move _ => none
+
+private def earlyIntRead (ty : Core.IntTy) : EarlyOperand → Option (EarlyTy × OperandRead)
+  | .literal (.int actual n) =>
+    if ty = actual then
+      some (.scalar (.int ty), .literal ((Mem.leBytes ty.byteSize (toBits ty n)).map
+        fun b => UInt8.ofNat b.val))
+    else none
+  | .copy localId => some (.scalar (.int ty), .copy ⟨localId.id⟩ [])
+  | _ => none
+
+private def earlyOperation (op : Operator) (types : List (EarlyTy ⊕ Bool))
+    (ty : EarlyTy ⊕ Bool) (values : List EarlyValue) : Res EarlyValue :=
+  match op, types, ty, values with
+  | .read, [.inl (.scalar input)], .inl (.scalar result), [.scalar value] =>
+    if input = result ∧ value.ty = result then .ok (.scalar value) else .stuck
+  | .arithmetic (.plain .add), [.inl (.scalar (.int left)), .inl (.scalar (.int right))],
+      .inl (.scalar (.int result)), [.scalar (.int lt l), .scalar (.int rt r)] =>
+    if left = result ∧ right = result ∧ lt = result ∧ rt = result then
+      (plain result .add l r).map (CoreValue.scalar ∘ CVal.int result)
+    else .stuck
+  | _, _, _, _ => .stuck
+
+/-- Closed semantics for the implemented early fragment. Additional slices
+extend this definition together with their spec semantics. -/
+def sliceLanguage (_slice : Slice) : CoreLanguage where
+  operands := {
+    Val := EarlyValue
+    Ty := EarlyTy ⊕ Bool
+    Expr := EarlyExpr ⊕ Bool
+    Prim := EarlyPrim
+    Event := Empty
+    Store := Hybrid.State
+    unitVal := .scalar .unit
+    unitTy := .inl (.scalar .unit)
+    isCopy := fun ty => match ty with | .inl (.scalar _) => true | _ => false
+    eval := fun locals store expr => match expr with
+      | .inl e => (earlyEval locals e).map fun value => (value, store)
+      | .inr _ => .stuck
+    life := fun _ store => some store
+    test := fun | .scalar (.bool value) => some value | _ => none
+    allows := fun _ _ _ _ => false }
+  hybridStore := rfl
+  Declaration := Bool
+  extraEarlyTypes := Bool
+  extraEarlyExpressions := Bool
+  expressionOperator
+    | .inl (.add ..) => .arithmetic (.plain .add)
+    | .inl (.constructEmpty _) => .named ⟨"constructEmpty"⟩
+    | _ => .read
+  primitiveOperator := fun _ => .named ⟨"destructureEmpty"⟩
+  argumentRead := fun _ => none
+  argumentReadNoTrap := by simp
+  OtherValue := DeclId
+  valueShape := rfl
+  layout target
+    | .inl (.scalar (.int ty)) => do
+      if target ≠ linuxX8664 then none else
+      let .stored storage ← Slice0Layout.query Slice0Layout.linuxX8664Profile (.integer ty) | none
+      some ⟨storage.byteSize, storage.align⟩
+    | _ => none
+  scalarType
+    | .inl (.scalar ty) => some ty
+    | _ => none
+  literal ty bytes :=
+    match ty with
+    | .inl (.scalar (.int intTy)) =>
+      if bytes.length = intTy.byteSize then
+        some (.scalar (.int intTy (ofBits intTy (Mem.leValue (bytes.map UInt8.toFin)))))
+      else none
+    | _ => none
+  typeDecidableEq := inferInstance
+  fieldType := fun _ _ => none
+  activeFields := fun _ _ => none
+  operation := fun op inputs output values _ addresses before result effects after =>
+    addresses = [] ∧ earlyOperation op inputs output values = .ok result ∧
+      effects = [] ∧ before = after
+  checkTrap
+    | .operator (.arithmetic (.plain .add)), 0, [.scalar (.int lt l), .scalar (.int rt r)] =>
+      lt == rt && decide (checked lt .add l r = .error .overflow)
+    | _, _, _ => false
+  field := fun _ _ => none
+  replaceField := fun _ _ _ => none
+  fieldRange := fun _ _ _ => none
+  encodeOther := fun _ _ _ => none
+  decodeOther := fun _ _ _ => none
+  safety
+    | .expression (.inl (.add ty left right)) =>
+      match earlyIntRead ty left, earlyIntRead ty right with
+      | some l, some r => [⟨0, .overflow, [(.inl l.1, l.2), (.inl r.1, r.2)]⟩]
+      | _, _ => []
+    | .abort => [⟨0, .abort, []⟩]
+    | _ => []
+  permit _ _ expr own :=
+    match expr with
+    | .inl (.read read) => earlyPermitRead own read
+    | .inl (.add _ left right) => (earlyPermitRead own left).bind (earlyPermitRead · right)
+    | _ => none
+
+theorem sliceEarlyCore (slice : Slice) : EarlyCore (sliceLanguage slice) := ⟨rfl, rfl⟩
+
 
 structure Payload (language : CoreLanguage) where
   ownership : AList Var Own.Descriptor
