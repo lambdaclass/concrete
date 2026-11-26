@@ -1383,6 +1383,13 @@ Concrete.ImageTheorem.instDecidableEqToolInvocation.decEq._proof_4
 Concrete.ImageTheorem.instDecidableEqToolInvocation.decEq._proof_5	
 Concrete.ImageTheorem.instDecidableEqToolRole._proof_1	
 Concrete.ImageTheorem.instDecidableEqToolRole._proof_2	
+Concrete.IntegratedCore.elaborate.eq_1	Quot.sound propext
+Concrete.IntegratedCore.lcb_return_word	Quot.sound propext
+Concrete.IntegratedCore.lcb_return_word._proof_1_1	Quot.sound propext
+Concrete.IntegratedCore.lcb_trap_word	Quot.sound propext
+Concrete.IntegratedCore.lcb_trap_word._proof_1_1	Quot.sound propext
+Concrete.IntegratedCore.lcb_trap_word._proof_1_2	Quot.sound propext
+Concrete.IntegratedCore.validated	Classical.choice Quot.sound propext
 Concrete.Interfaces.Args.brecOn.eq	
 Concrete.Interfaces.Args.cons.inj	
 Concrete.Interfaces.Args.cons.injEq	propext
@@ -1703,6 +1710,7 @@ Concrete.Interfaces.instDecidableEqStorageClass._proof_2
 Concrete.Interfaces.instDecidableEqTrapIndex.decEq._proof_1	
 Concrete.Interfaces.instDecidableEqTrapIndex.decEq._proof_2	
 Concrete.Interfaces.registeredLCBEndToEnd	Classical.choice Quot.sound propext
+Concrete.Interfaces.trapDiagnostic.eq_1	Quot.sound propext
 Concrete.Lex.Allowed.eq_1	
 Concrete.Lex.ByteError.invalidEscape.inj	
 Concrete.Lex.ByteError.invalidEscape.injEq	propext
@@ -2255,6 +2263,7 @@ Concrete.instDecidableEqRefusal.decEq._proof_9
 ConcreteSpec.Core.SourcePathSpan.Project.fileAt.eq_1	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.SlotResolves.eq_1	Quot.sound propext
 ConcreteSpec.Core.inRangeOr.eq_1	propext
+ConcreteSpec.StageInterface.earlyPayload.congr_simp	propext
 ConcreteSpec.Surface0.ByteEscape.eq_1	
 ConcreteSpec.Surface0.DigitsAccepted.eq_1	propext
 ConcreteSpec.Surface0.DigitsAccepted.eq_2	propext
@@ -2594,6 +2603,23 @@ _private.Concrete.Contracts.0.Concrete.Contracts.stderrBytes.match_1.eq_2
 _private.Concrete.Driver.Launcher.0.Concrete.Driver.Launcher.LLVMInputs.mk.inj	
 _private.Concrete.Driver.Launcher.0.Concrete.Driver.Launcher.LLVMInputs.mk.injEq	propext
 _private.Concrete.Driver.Launcher.0.Concrete.Driver.Launcher.LLVMInputs.mk.sizeOf_spec	
+_private.Concrete.IntegratedCore.0.Concrete.IntegratedCore.corresponds	Classical.choice Quot.sound propext
+_private.Concrete.IntegratedCore.0.Concrete.IntegratedCore.elaboratePayload.match_1.eq_1	
+_private.Concrete.IntegratedCore.0.Concrete.IntegratedCore.elaboratePayload.match_1.eq_2	
+_private.Concrete.IntegratedCore.0.Concrete.IntegratedCore.elaboratePayload.match_3.eq_1	propext
+_private.Concrete.IntegratedCore.0.Concrete.IntegratedCore.elaboratePayload.match_3.eq_2	propext
+_private.Concrete.IntegratedCore.0.Concrete.IntegratedCore.payload_corresponds	Quot.sound propext
+_private.Concrete.IntegratedCore.0.Concrete.IntegratedCore.payload_inFragment	Quot.sound propext
+_private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.returnTokens._proof_1	propext
+_private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.returnTokens._proof_2	propext
+_private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.returnTokens._proof_3	propext
+_private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.returnTokens._proof_4	propext
+_private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.returnTokens._proof_5	propext
+_private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.returnTokens._proof_6	propext
+_private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.returnTokens._proof_7	propext
+_private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.returnTokens._proof_8	propext
+_private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.returnTokens._proof_9	propext
+_private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.slice1._proof_1	
 _private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.Memory.loadBacking._proof_1	
 _private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.Memory.loadBacking.match_3.eq_1	
 _private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.Memory.loadBacking.match_3.eq_2	

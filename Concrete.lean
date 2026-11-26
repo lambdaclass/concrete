@@ -29,3 +29,5 @@ import Concrete.Origins
 import Concrete.Driver.Project
 import Concrete.Driver.Reference
 import Concrete.Driver.Launcher
+import Concrete.IntegratedCore
+import Concrete.IntegratedCore.Controls
