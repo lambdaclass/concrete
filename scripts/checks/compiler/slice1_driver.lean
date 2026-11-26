@@ -71,7 +71,9 @@ private def requireRefusal (clause : Clause) (bad : FunctionFacts) (source : Evi
 
 #eval show IO Unit from do
   let source := "fn main() -> u8 { return 42; }"
-  let .ok out := Concrete.Stages.compile ⟨"answer.con", source.toUTF8⟩
+  let .ok input := Concrete.Stages.Input.load "answer.con" source.toUTF8
+    | throw (IO.userError "fixture source did not load")
+  let .ok out := Concrete.Stages.compile input
     | throw (IO.userError "real source did not compile")
   let actual := Project.mirFacts function out.mir
   let .ok [coverage] := Project.checkScope [] (.resolved (predictable []) [actual] [])

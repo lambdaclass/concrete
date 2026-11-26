@@ -707,8 +707,9 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
    source path, an unknown target reported by the native helper, a failed native helper, and a failed build-input write.
 
    The compiler CLI exits 0 for a successful build or help, 1 for a source refusal
-   (`SYNTAX`, `SLICE-0`, `CORE-CHECK`, or a `MANIFEST-*` refusal), 2 for an incomplete build, 3 for `USAGE`, and
-   4 for `INTERNAL`. Incomplete diagnostics use `incomplete (reason)`. This includes
+   (`SYNTAX`, `SLICE-0`, `CORE-CHECK`, or a `MANIFEST-*` refusal), 2 for an incomplete build
+   (including lexer `RESOURCE` limits), 3 for `USAGE`, and 4 for `INTERNAL`.
+   Incomplete diagnostics use `incomplete (reason)`. This includes
    operational failures (`TOOL-FAILURE`) such as an unavailable native tool, a failed link,
    or a failed CLI output write. If stderr cannot carry a diagnostic, the CLI still exits 2.
    Compiler invariant failures use `INTERNAL`.

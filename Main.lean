@@ -55,7 +55,8 @@ private def buildNative (lib dir : System.FilePath) (backend : Option String)
     if !child.stdout.isEmpty then writeOutput "stdout" IO.getStdout child.stdout
     if !child.stderr.isEmpty then writeOutput "stderr" IO.getStderr child.stderr
     for (name, text) in inputs do
-      unless text == (← toolIO s!"read staged input {name}" (IO.FS.readFile (staging / name))) do
+      let retained ← toolIO s!"read staged input {name}" (IO.FS.readBinFile (staging / name))
+      unless text.toUTF8 == retained do
         throw (.toolFailure s!"staged link input changed during native build: {name}")
     let verified ← toolIO "verify native build"
       (IO.Process.output { cmd := "bash", args := #[helper, "verify"] ++ args })
@@ -67,7 +68,8 @@ private def buildNative (lib dir : System.FilePath) (backend : Option String)
     discard <| outputTransaction lib "publish build outputs"
       (#["publish", dir.toString, staging.toString] ++ names)
   finally
-    -- A first publication moves staging away; an exchange leaves retired files in it.
+    -- The publisher moves a private candidate out of staging on first publication.
+    -- On exchange the retired output remains in staging for cleanup.
     let cleanup : IO Unit := do
       try IO.FS.removeDirAll staging catch _ => pure ()
     cleanup
