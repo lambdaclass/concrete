@@ -1502,9 +1502,6 @@ LeanCompilerBackend.Verified.Source.read.eq_1	propext
 LeanCompilerBackend.Verified.Source.read.eq_2	propext
 LeanCompilerBackend.Verified.Source.step.eq_1	Quot.sound propext
 LeanCompilerBackend.Verified.Source.write.eq_1	propext
-List.lookup.eq_1	
-List.lookup.eq_2	
-List.lookup.eq_def	
 Std.Legacy.Range.mk.congr_simp	
 _private.Concrete.Admission.0.Concrete.Admission.Output.mk.inj	
 _private.Concrete.Admission.0.Concrete.Admission.Output.mk.injEq	propext
