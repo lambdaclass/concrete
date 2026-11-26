@@ -121,9 +121,24 @@ private def testLanguage : CoreLanguage where
   argumentReadNoTrap := by simp
   OtherValue := Empty
   valueShape := rfl
+  layout := fun _ _ => some ⟨1, 1⟩
+  scalarType := fun _ => some (.int .u8)
+  literal := fun _ _ => some (.scalar (.int .u8 42))
+  typeDecidableEq := inferInstance
+  fieldType := fun _ _ => none
+  activeFields := fun _ _ => none
+  addressOperands := fun _ => []
+  operation := fun _ _ _ _ _ _ => False
+  checkTrap := fun _ _ _ => false
+  field := fun _ _ => none
+  replaceField := fun _ _ _ => none
+  fieldRange := fun _ _ _ => none
+  encodeOther := fun _ _ other => nomatch other
+  decodeOther := fun _ _ _ => none
   safety
     | .expression _ | .call _ (_ :: _) =>
       [⟨0, .divisionByZero, [((), .literal [0])]⟩]
+    | .abort => [⟨0, .abort, []⟩]
     | _ => []
   permit := fun _ _ _ own => some own
 
@@ -314,7 +329,7 @@ example (project : Project) (m : LoweringModels testLanguage testLowering testPr
   have consumes := success.2.2.2.1
   have covers := consumes.2.2.1
   let op : MIR.Occurrence Unit := ⟨Exec.Demo.mainF, ⟨1⟩, 0, testOrigin, .operator (.arithmetic (.plain .div)), [((), .literal [0])], []⟩
-  obtain ⟨conditions, ⟨sourceOp, member, _, fromSource⟩, _, fromMIR, _⟩ :=
+  obtain ⟨conditions, ⟨sourceOp, member, _, _, fromSource⟩, _, fromMIR, _⟩ :=
     covers op (List.mem_cons_self ..)
   have eq : sourceOp = .expression () := by
     simpa [op, testOrigin, testCore, Payload.operations, stmtOperations] using member
@@ -331,7 +346,7 @@ example (project : Project) (m : LoweringModels testLanguage testLowering testPr
   intro success
   let op : MIR.Occurrence Unit := ⟨Exec.Demo.mainF, ⟨1⟩, 0, testOrigin,
     .operator (.arithmetic (.plain .sub)), [((), .literal [0])], [residual]⟩
-  obtain ⟨_, ⟨sourceOp, member, opcode, _⟩, _⟩ :=
+  obtain ⟨_, ⟨sourceOp, member, _, opcode, _⟩, _⟩ :=
     success.2.2.2.1.2.2.1 op (List.mem_cons_self ..)
   have eq : sourceOp = .expression () := by
     simpa [op, testOrigin, testCore, Payload.operations, stmtOperations] using member
@@ -348,7 +363,7 @@ example (project : Project) (m : LoweringModels testLanguage testLowering testPr
     .call Exec.Demo.mainF, [((), .literal [0])], []⟩
   have mem : call ∈ (testMIR project [residual] (.arithmetic (.plain .div)) true
     (profile := testProfile)).operations := List.mem_cons_of_mem _ (List.mem_cons_self ..)
-  obtain ⟨_, ⟨sourceOp, member, _, fromSource⟩, _, fromMIR, _⟩ :=
+  obtain ⟨_, ⟨sourceOp, member, _, _, fromSource⟩, _, fromMIR, _⟩ :=
     success.2.2.2.1.2.2.1 call mem
   have eq : sourceOp = .call Exec.Demo.mainF [()] := by
     simpa [call, testOrigin, testCore, Payload.operations, stmtOperations] using member
@@ -452,6 +467,20 @@ private def argLanguage : CoreLanguage where
     · cases h : AList.lookup locals argTemp <;> simp [h]
   OtherValue := Empty
   valueShape := rfl
+  layout := fun _ _ => some ⟨1, 1⟩
+  scalarType := fun _ => some (.int .u8)
+  literal := fun _ bytes => bytes.head?.map fun byte => .scalar (.int .u8 (Int.ofNat byte.toNat))
+  typeDecidableEq := inferInstance
+  fieldType := fun _ _ => none
+  activeFields := fun _ _ => none
+  addressOperands := fun _ => []
+  operation := fun _ _ _ _ _ _ => False
+  checkTrap := fun _ _ _ => false
+  field := fun _ _ => none
+  replaceField := fun _ _ _ => none
+  fieldRange := fun _ _ _ => none
+  encodeOther := fun _ _ other => nomatch other
+  decodeOther := fun _ _ _ => none
   safety
     | .expression false => [⟨0, .divisionByZero, divReads⟩]
     | _ => []
@@ -490,11 +519,11 @@ private def argCallOccurrence : MIR.Occurrence argLanguage.operands.Ty :=
 private theorem argDivInventory (project : Project) :
     (checkedArgCore project).payload.ConditionsAt testSite (.operator divOpcode)
       [⟨0, .divisionByZero, divReads⟩] :=
-  ⟨.expression false, List.mem_cons_self .., rfl, rfl⟩
+  ⟨.expression false, List.mem_cons_self .., trivial, rfl, rfl⟩
 
 private theorem argCallInventory (project : Project) :
     (checkedArgCore project).payload.ConditionsAt callSite (.call callee) [] :=
-  ⟨.call callee [true], List.mem_cons_of_mem _ (List.mem_cons_self ..), rfl, rfl⟩
+  ⟨.call callee [true], List.mem_cons_of_mem _ (List.mem_cons_self ..), trivial, rfl, rfl⟩
 
 -- f(8 / x) is represented by a checked binding followed by a call reading its result.
 -- The division owns its evidence and emitted instruction. The call owns only its own reads.
@@ -505,7 +534,7 @@ example (project : Project) :
   · change ([(Exec.Demo.mainF, (⟨0⟩ : BlockId), 0), (Exec.Demo.mainF, ⟨0⟩, 1)] : List (FnId × BlockId × Nat)).Nodup
     decide
   · intro site opcode conditions source nonempty
-    obtain ⟨op, member, opcodeEq, rfl⟩ := source
+    obtain ⟨op, member, _, opcodeEq, rfl⟩ := source
     change (site, op) ∈ [(testSite, .expression false), (callSite, .call callee [true])] at member
     simp only [List.mem_cons, List.not_mem_nil, or_false] at member
     rcases member with h | h <;> cases h
@@ -565,21 +594,6 @@ private def storeRoot : PlaceId := ⟨0⟩
 private def storePlace : MemoryPlace Unit () := ⟨⟨storeRoot, []⟩, .materialized⟩
 private def storeValue : testLanguage.operands.Val := .scalar (.int .u8 42)
 
-private def storeActions : MemoryActions testLanguage testLowering testProfile where
-  values := {
-    literal := fun _ _ => some storeValue
-    field := fun _ _ => none
-    replaceField := fun _ _ _ => none
-    fieldRange := fun _ _ _ => none
-    encode := fun _ _ _ => none
-    decode := fun target _ bytes => (Hybrid.decode target (.int .u8) bytes).map CoreValue.scalar
-  }
-  operation := fun _ _ _ => False
-  destructure := fun _ _ _ _ => False
-  call := fun _ _ _ _ _ _ => False
-  transfer := fun _ _ _ _ => False
-  returnToCaller := fun _ _ _ _ => False
-
 private def storingMemory (project : Project) : Memory testLowering testProfile :=
   let block : MemoryBlock testLowering := ⟨⟨0⟩, [],
     [⟨testOrigin, .beginLifetime storeRoot⟩, ⟨testOrigin, .bind storePlace (.literal ⟨[42]⟩)⟩],
@@ -588,7 +602,7 @@ private def storingMemory (project : Project) : Memory testLowering testProfile 
     [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1⟩)])], [(Exec.Demo.mainF, [(storeRoot, .materialized)])]⟩
 
 private def storeInitial : MemoryRegisters testLanguage testProfile :=
-  ⟨Exec.Demo.mainF, ⟨0⟩, 0, [], [], [], [], Mem.Memory.empty, false⟩
+  ⟨⟨Exec.Demo.mainF, ⟨0⟩, 0, [], [], [], [], []⟩, Mem.Memory.empty, [], []⟩
 
 private def storeBlock : Mem.Block :=
   ⟨⟨0⟩, 1, 1, 1, true, false, [.uninit]⟩
@@ -609,13 +623,13 @@ private def storeAfter : MemoryRegisters testLanguage testProfile :=
     initialized := [storeRoot]
     bytes := ⟨[(⟨0⟩, {storeBlock with bytes := [.init 42 none]})], 1⟩}
 
-example (project : Project) : (storingMemory project).Step storeActions storeInitial storeBefore := by
+example (project : Project) : (storingMemory project).Step (language := testLanguage) storeInitial storeBefore := by
   refine ⟨_, rfl, {storeBefore with instruction := 0}, ⟨by decide, Or.inr ?_⟩, rfl⟩
-  exact ⟨rfl, ⟨⟨1, 1⟩, ⟨0⟩, 1, ⟨0⟩, storeBefore.bytes, rfl, rfl, rfl⟩⟩
+  exact ⟨rfl, ⟨⟨1, 1⟩, rfl, Or.inr ⟨by decide, ⟨0⟩, 1, ⟨0⟩, storeBefore.bytes, rfl, rfl⟩⟩⟩
 
-example (project : Project) : (storingMemory project).Step storeActions storeBefore storeAfter := by
+example (project : Project) : (storingMemory project).Step (language := testLanguage) storeBefore storeAfter := by
   refine ⟨_, rfl, storeValue, storeBefore, {storeAfter with instruction := 1}, rfl, ?_, rfl⟩
-  refine ⟨rfl, rfl, rfl, fun _ => ⟨storeRange, [(0, [.init 42 none])], rfl, rfl, ?_, ?_⟩⟩
+  refine ⟨⟨rfl, fun _ => rfl⟩, (fun _ => ⟨⟨1, 1⟩, rfl, by decide⟩), rfl, rfl, fun _ => Or.inr ⟨storeRange, [(0, [.init 42 none])], rfl, rfl, ?_, ?_⟩⟩
   · exact fun _ => ⟨0, [.init 42 none], List.mem_cons_self .., by decide⟩
   · intro offset bytes member
     have eq := List.mem_singleton.mp member
@@ -628,7 +642,7 @@ example (project : Project) : (storingMemory project).Step storeActions storeBef
 -- Even with a truthful PC and lifetime, an erased byte write cannot satisfy the
 -- registered Memory success contract. Its projection leaves the allocated byte uninitialized.
 example (project : Project) (m : LoweringModels testLanguage testLowering testProfile)
-    (hActions : m.memoryActions = storeActions) (q next : m.memory.execution.State)
+    (q next : m.memory.execution.State)
     (reachable : m.memory.execution.finite (storingMemory project) q)
     (step : m.memory.execution.step (storingMemory project) q next)
     (before : m.memoryState q = storeBefore)
@@ -636,7 +650,7 @@ example (project : Project) (m : LoweringModels testLanguage testLowering testPr
     ¬ LowersMemory m (testMIR project []) (storingMemory project) := by
   intro lowers
   have exactStep := lowers.2.2.2.2.2.2.1.2.1 q next reachable step
-  rw [hActions, before, erased] at exactStep
+  rw [before, erased] at exactStep
   obtain ⟨block, fetched, instruction⟩ := exactStep
   have eq : (storingMemory project).blockAt storeBefore = some block := fetched
   change some _ = some block at eq
@@ -644,7 +658,7 @@ example (project : Project) (m : LoweringModels testLanguage testLowering testPr
   obtain ⟨value, afterRead, stored, read, write, finish⟩ := instruction
   have eqRead : some (storeValue, storeBefore) = some (value, afterRead) := read
   cases eqRead
-  have eqWrite : some {storeAfter with instruction := 1} = some stored := write.2.1
+  have eqWrite : some {storeAfter with instruction := 1} = some stored := write.2.2.1
   cases eqWrite
   have bytes := congrArg (fun state => (MemoryState.bytes state).blocks) finish
   exact (show storeBefore.bytes.blocks ≠ storeAfter.bytes.blocks from by decide) bytes
@@ -658,10 +672,6 @@ private def returningMemory (project : Project) : Memory testLowering testProfil
   ⟨project, Exec.Demo.mainF, (returningMIR project).signatures,
     [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[⟨⟨0⟩, [], [], .ret (some ⟨(), .literal ⟨[0]⟩⟩), []⟩]⟩)],
     [], []⟩
-
-private def returnActions : MemoryActions testLanguage testLowering testProfile :=
-  {storeActions with values := {storeActions.values with
-    literal := fun _ bytes => bytes.head?.map fun byte => .scalar (.int .u8 (Int.ofNat byte.toNat))}}
 
 private def returns42 (A : Type) : Model A Nat where
   execution := {
@@ -694,25 +704,24 @@ private def falseReturnModels (m : LoweringModels testLanguage testLowering test
     mir := returns42 _
     memory := returns42 _
     memoryState := fun _ => storeInitial
-    mirFrame := fun _ => ⟨Exec.Demo.mainF, [], []⟩
-    memoryActions := returnActions}
+    mirState := fun _ => storeInitial}
 
 -- The current return instruction really yields zero.
 example (project : Project) :
-    (returningMemory project).terminalObservation returnActions.values storeInitial =
+    (returningMemory project).terminalObservation storeInitial =
       some (.returned 0 ByteArray.empty) := rfl
 
 -- A recursive activation of the entry returns to its caller. A trap in that
 -- activation still reports the fetched terminator's kind and lexical origin.
 example (project : Project) :
-    (returningMemory project).terminalObservation returnActions.values
-      {storeInitial with hasCaller := true} = none := rfl
+    (returningMemory project).terminalObservation
+      {storeInitial with callers := [⟨storeInitial.toMemoryFrame, none⟩]} = none := rfl
 
 example (project : Project) :
     let memory : Memory testLowering testProfile := {returningMemory project with
       functions := [(Exec.Demo.mainF, [], ⟨⟨0⟩,
         #[⟨⟨0⟩, [], [], .trap .divisionByZero testOrigin, []⟩]⟩)]}
-    memory.terminalObservation returnActions.values {storeInitial with hasCaller := true} =
+    memory.terminalObservation {storeInitial with callers := [⟨storeInitial.toMemoryFrame, none⟩]} =
       some (.trapped 134 .divisionByZero testOrigin.lexical
         (trapDiagnostic project .divisionByZero testOrigin.operation testOrigin.lexical)) := rfl
 
@@ -728,6 +737,206 @@ example (project : Project) (m : LoweringModels testLanguage testLowering testPr
     | .returned code _ => code
     | _ => 255) wrong
   exact (show some (0 : UInt8) ≠ some 42 from by decide) status
+
+
+-- A structurally correct entry and return cannot carry an extra host effect.
+example (project : Project) (m : LoweringModels testLanguage testLowering testProfile)
+    (q : m.memory.execution.State) (reachable : m.memory.execution.finite (returningMemory project) q)
+    (entry : m.memoryState q = storeInitial)
+    (forged : m.memory.execution.trace (returningMemory project) q = [.effect (show testLanguage.operands.Event from (7 : Nat))]) :
+    ¬ LowersMemory m (returningMIR project) (returningMemory project) := by
+  intro lowers
+  have trace := lowers.2.2.2.2.2.2.1.1.2 q reachable
+  rw [forged, entry] at trace
+  exact (show ([.effect 7] : List (Concrete.Contracts.ProcessEvent Nat)) ≠ [] from nofun) trace
+
+private def twoCallMemory (project : Project) : Memory testLowering testProfile :=
+  let caller : MemoryBlock testLowering :=
+    ⟨⟨0⟩, [], [⟨testOrigin, .call callee none []⟩, ⟨testOrigin, .call callee none []⟩],
+      .ret (some ⟨(), .literal ⟨[0]⟩⟩), []⟩
+  let helper : MemoryBlock testLowering := ⟨⟨0⟩, [], [], .ret none, []⟩
+  ⟨project, Exec.Demo.mainF, [(Exec.Demo.mainF, ⟨[], some ()⟩), (callee, ⟨[], none⟩)],
+    [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[caller]⟩), (callee, [], ⟨⟨0⟩, #[helper]⟩)], [], []⟩
+
+private def resumeAt (index : Nat) : MemoryRegisters testLanguage testProfile :=
+  {storeInitial with instruction := index}
+
+private def helperReturning (index : Nat) : MemoryRegisters testLanguage testProfile :=
+  {storeInitial with frame := callee, callers := [⟨(resumeAt index).toMemoryFrame, none⟩]}
+
+-- Both calls use the same callee PC and byte memory. Each return pops its own
+-- continuation and the second return cannot resume the first call's successor.
+example (project : Project) :
+    let memory := twoCallMemory project
+    memory.Step storeInitial (helperReturning 1) ∧
+    memory.Step (helperReturning 1) (resumeAt 1) ∧
+    memory.Step (resumeAt 1) (helperReturning 2) ∧
+    memory.Step (helperReturning 2) (resumeAt 2) ∧
+    (¬ memory.Step (helperReturning 2) (resumeAt 1)) ∧
+    memory.terminalObservation (resumeAt 2) = some (.returned 0 ByteArray.empty) := by
+  dsimp only
+  refine ⟨?_, ?_, ?_, ?_, ?_, rfl⟩
+  · exact ⟨_, rfl, [], _, _, _, rfl, rfl, rfl, rfl, .nil _⟩
+  · exact ⟨_, rfl, rfl, _, [], [], _, _, rfl, rfl, .nil _, rfl, .nil _⟩
+  · exact ⟨_, rfl, [], _, _, _, rfl, rfl, rfl, rfl, .nil _⟩
+  · exact ⟨_, rfl, rfl, _, [], [], _, _, rfl, rfl, .nil _, rfl, .nil _⟩
+  · rintro ⟨block, fetched, instruction⟩
+    have fetched : some _ = some block := fetched
+    cases fetched
+    obtain ⟨_, caller, rest, values, read, ended, stack, evaluated, released, _, written⟩ :=
+      instruction
+    have stack : _ :: [] = caller :: rest := stack
+    cases stack
+    have evaluated : some ([], helperReturning 2) = some (values, read) := evaluated
+    cases evaluated
+    cases released
+    cases written
+
+private def zeroLanguage : CoreLanguage :=
+  {testLanguage with
+    operands := {testLanguage.operands with isCopy := fun _ => false}
+    safety := fun _ => []
+    layout := fun _ _ => some ⟨0, 1⟩
+    scalarType := fun _ => none
+    literal := fun _ _ => some (.scalar .unit)}
+
+private def zeroMemory (project : Project) : Memory testLowering testProfile :=
+  let block : MemoryBlock testLowering := ⟨⟨0⟩, [],
+    [⟨testOrigin, .beginLifetime storeRoot⟩, ⟨testOrigin, .bind storePlace (.literal ⟨[]⟩)⟩,
+      ⟨testOrigin, .endLifetime storeRoot⟩], .ret none, []⟩
+  {(storingMemory project) with
+    functions := [(Exec.Demo.mainF, [(storeRoot, ())], ⟨⟨0⟩, #[block]⟩)]
+    layouts := [(Exec.Demo.mainF, [(storeRoot, ⟨0, 1⟩)])]}
+
+private def zeroStarted : MemoryRegisters zeroLanguage testProfile :=
+  {storeInitial with instruction := 1, live := [storeRoot]}
+
+private def zeroBound : MemoryRegisters zeroLanguage testProfile :=
+  {zeroStarted with
+    instruction := 2
+    initialized := [storeRoot]
+    zeroValues := [(storeRoot, .scalar .unit)]}
+
+-- A materialized zero-byte value goes through begin, bind, linear move, and
+-- end with empty byte memory throughout. A subsequent move has no value.
+example (project : Project) :
+    let memory := zeroMemory project
+    let moved := {zeroBound with initialized := [], zeroValues := []}
+    memory.Step (language := zeroLanguage) storeInitial zeroStarted ∧
+    memory.Step (language := zeroLanguage) zeroStarted zeroBound ∧
+    memory.readValue (language := zeroLanguage) zeroBound (.move storePlace) = some (.scalar .unit, moved) ∧
+    memory.readValue (language := zeroLanguage) moved (.move storePlace) = none ∧
+    memory.Step (language := zeroLanguage) moved {storeInitial with instruction := 3} := by
+  dsimp only
+  refine ⟨?_, ?_, rfl, rfl, ?_⟩
+  · exact ⟨_, rfl, {zeroStarted with instruction := 0},
+      ⟨by decide, Or.inr ⟨rfl, ⟨0, 1⟩, rfl, Or.inl ⟨rfl, rfl⟩⟩⟩, rfl⟩
+  · refine ⟨_, rfl, _, zeroStarted, {zeroBound with instruction := 1}, rfl, ?_, rfl⟩
+    exact ⟨⟨rfl, nofun⟩, (fun _ => ⟨⟨0, 1⟩, rfl, by decide⟩), rfl, rfl,
+      fun _ => Or.inl ⟨rfl, rfl⟩⟩
+  · exact ⟨_, rfl, {storeInitial with instruction := 2},
+      ⟨⟨by decide, rfl⟩, Or.inr ⟨rfl, Or.inl ⟨⟨0, 1⟩, rfl, rfl, rfl⟩⟩⟩, rfl⟩
+
+private def splitField : FieldId := ⟨.struct ⟨Exec.Demo.mainF.module, ⟨"record"⟩⟩, ⟨"item"⟩⟩
+
+private def splitLanguage : CoreLanguage :=
+  {zeroLanguage with
+    fieldType := fun _ _ => some ()
+    activeFields := fun _ _ => some [splitField]}
+
+-- Destructuring a linear field cannot erase it or create two copies.
+example :
+    Concrete.Interfaces.Memory.DestructureFields splitLanguage () (.scalar .unit) [(splitField, ())] ∧
+    ¬ Concrete.Interfaces.Memory.DestructureFields splitLanguage () (.scalar .unit) [] ∧
+    ¬ Concrete.Interfaces.Memory.DestructureFields splitLanguage () (.scalar .unit)
+      [(splitField, ()), (splitField, ())] := by
+  refine ⟨⟨by decide, [splitField], rfl, ?_, ?_⟩, ?_, ?_⟩
+  · intro binding h
+    cases List.mem_singleton.mp h
+    exact ⟨List.mem_cons_self .., rfl⟩
+  · intro field member absent
+    exact False.elim (absent member)
+  · rintro ⟨_, fields, hfields, _, omitted⟩
+    have hfields : some [splitField] = some fields := hfields
+    cases hfields
+    obtain ⟨_, _, copy⟩ := omitted splitField (List.mem_cons_self ..) (by decide)
+    contradiction
+  · exact fun h => (show ¬ [splitField, splitField].Nodup from by decide) h.1
+
+private def shadowRoot : PlaceId := ⟨1⟩
+
+private def shadowMIR (project : Project) : MIR testLowering testProfile :=
+  let block : MIRGraph testLowering := ⟨⟨0⟩, #[⟨⟨0⟩, [],
+    [⟨testOrigin, .bind (ty := ()) ⟨storeRoot, []⟩ (.literal ⟨[]⟩)⟩], .ret none, []⟩]⟩
+  ⟨project, Exec.Demo.mainF, [], [(Exec.Demo.mainF, [(storeRoot, ())], block)]⟩
+
+private def shadowMemory (project : Project) : Memory testLowering testProfile :=
+  let place : MemoryPlace Unit () := ⟨⟨shadowRoot, []⟩, .virtual⟩
+  let block : MemoryGraph testLowering := ⟨⟨0⟩, #[⟨⟨0⟩, [],
+    [⟨testOrigin, .beginLifetime shadowRoot⟩, ⟨testOrigin, .bind place (.literal ⟨[]⟩)⟩],
+    .ret none, []⟩]⟩
+  {(zeroMemory project) with
+    functions := [(Exec.Demo.mainF, [(storeRoot, ()), (shadowRoot, ())], block)]
+    storage := [(Exec.Demo.mainF, [(storeRoot, .materialized), (shadowRoot, .virtual)])]}
+
+-- A fresh virtual shadow cannot stand in for the required materialized root.
+example (project : Project) (m : LoweringModels zeroLanguage testLowering testProfile) :
+    ¬ LowersMemory m (shadowMIR project) (shadowMemory project) := by
+  intro lowers
+  obtain ⟨ty, locals, _, _, _, source, member, _⟩ :=
+    lowers.2.2.2.2.2.1.2 Exec.Demo.mainF _ shadowRoot
+      (List.mem_cons_self ..) (List.mem_cons_of_mem _ (List.mem_cons_self ..))
+  have falseKey : ((shadowRoot, ty) : PlaceId × Unit) ∉ [(storeRoot, ())] := by
+    cases ty
+    decide
+  have eq : locals = [(storeRoot, ())] := congrArg (fun item => item.2.1) (List.mem_singleton.mp source)
+  exact falseKey (eq ▸ member)
+
+-- Even a proposed semantics that freezes the MIR projection at its entry
+-- must realize the reachable binding and the logical value it initializes.
+example (project : Project) (m : LoweringModels zeroLanguage testLowering testProfile)
+    (p : m.mir.execution.State) (reachable : m.mir.execution.finite (shadowMIR project) p)
+    (erased : ∀ q, m.mirState q = storeInitial) :
+    ¬ (shadowMIR project).ExecutionExact (language := zeroLanguage) m := by
+  intro exact
+  let next : MemoryRegisters zeroLanguage testProfile := {zeroBound with
+    instruction := 1, zeroValues := [], virtualValues := [(storeRoot, .scalar .unit)]}
+  have binding : (shadowMIR project).Step (language := zeroLanguage) storeInitial next := by
+    refine ⟨rfl, _, storeInitial, {next with instruction := 0}, rfl, ?_, rfl⟩
+    let view := (shadowMIR project).logicalView
+    let place : MemoryPlace Unit () := ⟨⟨storeRoot, []⟩, .virtual⟩
+    simp only [ite_true]
+    with_unfolding_all
+      change view.WriteParams (language := zeroLanguage) [⟨(), place⟩]
+        [.scalar .unit] storeInitial {next with instruction := 0}
+    refine Memory.WriteParams.cons (language := zeroLanguage) (started := {storeInitial with live := [storeRoot]}) ?_ ?_ (.nil _)
+    · exact ⟨by decide, Or.inl ⟨rfl, rfl⟩⟩
+    · exact ⟨⟨rfl, nofun⟩, nofun, rfl, rfl, nofun⟩
+  have projected : (shadowMIR project).Step (language := zeroLanguage) (m.mirState p) next := erased p ▸ binding
+  obtain ⟨q, _, hq⟩ := exact.2.2.1 p next reachable projected
+  rw [erased] at hq
+  exact (show (0 : Nat) ≠ 1 from by decide) (congrArg (fun state : MemoryRegisters zeroLanguage testProfile => state.instruction) hq)
+
+private def abortEvidence : Discharge testLanguage :=
+  {unsafeDischarge with trap := .abort, operands := []}
+
+-- The spec instance advertises a purported safety condition at abort.
+-- Execution reaches the trap, so admission must reject the supplied evidence.
+example (project : Project) :
+    let core := testCore project (.abort testSite)
+    (∃ state, Exec.Steps core.payload.body core.payload.initial [] state ∧
+      state.final? = some (.trapped .abort testSite)) ∧
+    ¬ ValidDischarges core [(testSite, [abortEvidence])] := by
+  dsimp only
+  refine ⟨⟨_, .step (l := .silent) (.silent rfl) (.refl _), rfl⟩, ?_⟩
+  intro valid
+  obtain ⟨_, _, ⟨op, member, eligible, _, _⟩, _⟩ :=
+    (valid.2.2.2 testSite abortEvidence
+      ⟨_, List.mem_cons_self .., List.mem_cons_self ..⟩).2.2.2.1
+  have abort : op = .abort := by
+    simpa [testCore, Payload.operations, stmtOperations] using member
+  cases abort
+  exact eligible
 
 -- A fabricated effect cannot accompany a silent Exec transition in the registered Core model.
 example (m : LoweringModels testLanguage testLowering testProfile) (project : Project)

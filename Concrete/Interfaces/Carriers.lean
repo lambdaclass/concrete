@@ -223,7 +223,9 @@ structure Memory {Ty : Type} (lang : LoweringLanguage Ty) (profile : Profile) wh
   layouts : AList FnId (AList PlaceId Layout)
   storage : AList FnId (AList PlaceId StorageClass)
 
-structure MemoryState (Value : Type) (profile : Profile) where
+/-- An activation owns its locals. Suspended activations share byte memory
+with the running activation, but retain their own ranges and logical lifetimes. -/
+structure MemoryFrame (Value : Type) where
   frame : FnId
   block : BlockId
   instruction : Nat
@@ -231,11 +233,19 @@ structure MemoryState (Value : Type) (profile : Profile) where
   materialized : AList PlaceId Hybrid.Range
   live : List PlaceId
   initialized : List PlaceId
-  bytes : Mem.Memory
-  /-- Whether the current activation has a caller, including recursive calls to the entry. -/
-  hasCaller : Bool := false
+  zeroValues : AList PlaceId Value := []
 
-def MemoryState.BytesWF {Value : Type} {profile : Profile} (state : MemoryState Value profile) :
+structure MemoryContinuation (Ty Value : Type) where
+  caller : MemoryFrame Value
+  destination : Option (Sigma (MemoryPlace Ty))
+
+structure MemoryState (Ty Value Event : Type) (profile : Profile) extends MemoryFrame Value where
+  bytes : Mem.Memory
+  callers : List (MemoryContinuation Ty Value) := []
+  effects : List Event := []
+
+def MemoryState.BytesWF {Ty Value Event : Type} {profile : Profile}
+    (state : MemoryState Ty Value Event profile) :
     Prop :=
   state.bytes.WellFormed profile.memoryTarget ∧
     state.live.Nodup ∧ state.initialized.Nodup ∧

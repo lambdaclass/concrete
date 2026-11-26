@@ -1391,12 +1391,18 @@ Concrete.Interfaces.MIRInst.endLifetime.sizeOf_spec
 Concrete.Interfaces.MIRInst.op.inj	
 Concrete.Interfaces.MIRInst.op.injEq	propext
 Concrete.Interfaces.MIRInst.op.sizeOf_spec	
+Concrete.Interfaces.Memory.EndLocals.brecOn	Quot.sound propext
+Concrete.Interfaces.Memory.WriteParams.brecOn	Quot.sound propext
+Concrete.Interfaces.Memory.loadValue._proof_1	
 Concrete.Interfaces.Memory.mk.inj	Quot.sound propext
 Concrete.Interfaces.Memory.mk.injEq	Quot.sound propext
 Concrete.Interfaces.Memory.mk.sizeOf_spec	Quot.sound propext
-Concrete.Interfaces.MemoryActions.mk.inj	Quot.sound propext
-Concrete.Interfaces.MemoryActions.mk.injEq	Quot.sound propext
-Concrete.Interfaces.MemoryActions.mk.sizeOf_spec	Quot.sound propext
+Concrete.Interfaces.MemoryContinuation.mk.inj	
+Concrete.Interfaces.MemoryContinuation.mk.injEq	propext
+Concrete.Interfaces.MemoryContinuation.mk.sizeOf_spec	
+Concrete.Interfaces.MemoryFrame.mk.inj	
+Concrete.Interfaces.MemoryFrame.mk.injEq	propext
+Concrete.Interfaces.MemoryFrame.mk.sizeOf_spec	
 Concrete.Interfaces.MemoryInst.assign.inj	
 Concrete.Interfaces.MemoryInst.assign.injEq	propext
 Concrete.Interfaces.MemoryInst.assign.sizeOf_spec	
@@ -1433,9 +1439,6 @@ Concrete.Interfaces.MemoryRead.move.sizeOf_spec
 Concrete.Interfaces.MemoryState.mk.inj	
 Concrete.Interfaces.MemoryState.mk.injEq	propext
 Concrete.Interfaces.MemoryState.mk.sizeOf_spec	
-Concrete.Interfaces.MemoryValues.mk.inj	
-Concrete.Interfaces.MemoryValues.mk.injEq	propext
-Concrete.Interfaces.MemoryValues.mk.sizeOf_spec	
 Concrete.Interfaces.Model.completeProjection	propext
 Concrete.Interfaces.Model.mk.inj	propext
 Concrete.Interfaces.Model.mk.injEq	propext

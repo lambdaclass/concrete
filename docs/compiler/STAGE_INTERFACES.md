@@ -25,11 +25,27 @@ Fix (c) supplies the single ConcreteSpec traversal. `Admitted` carries the exact
 
 ## Admitted Core → MIR
 
-Fix (c) owns evidence validation and consumption and the empty-evidence entry. Fix (b) owns the typed MIR instruction semantics. Fix (d) owns operation origin transport. `MIR` carries typed places, copy/move reads and explicit lifetime and control transfers. `LowersCore` ties removed checks to exact validated discharges and checks every emitted occurrence against the source condition inventory, indexed operator or exact callee, and ordered typed operand identities. Core calls and primitives take atomic typed reads that cannot trap on operand evaluation. A checked argument computation runs in its own Core operation before the call, with its own origin and result local. MIR checks its discharge at that operation and the call reads the result local. A residual condition is part of the same MIR instruction as the operation it guards and traps at its origin on failure. CFG edges enter blocks, so they cannot enter an instruction after its checks. Each supplied discharge matches exactly one emitted occurrence. `LowersUnchecked` uses the same carrier and checks with no admission discharges. Both preserve origins and terminal observations. Block control boundaries carry origins for returns and other operations that emit no instruction. The boundary metadata cannot satisfy a required MIR check or replace a trap terminator. Replace the linear `MIR.Program` and its token-bearing operators.
+Fix (c) owns evidence validation and consumption and the empty-evidence entry. Fix (b) owns the typed MIR instruction semantics. Fix (d) owns operation origin transport. `MIR` carries typed places, copy/move reads and explicit lifetime and control transfers. `LowersCore` ties removed checks to exact validated discharges and checks every emitted occurrence against the source condition inventory, indexed operator or exact callee, and ordered typed operand identities. Core calls and primitives take atomic typed reads that cannot trap on operand evaluation. A checked argument computation runs in its own Core operation before the call, with its own origin and result local. MIR checks its discharge at that operation and the call reads the result local. A residual condition is part of the same MIR instruction as the operation it guards and traps at its origin on failure. CFG edges enter blocks, so they cannot enter an instruction after its checks. Each supplied discharge matches exactly one emitted occurrence. An unconditional abort cannot supply a discharge condition. `LowersUnchecked` uses the same carrier and checks with no admission discharges. Both preserve origins and terminal observations. Block control boundaries carry origins for returns and other operations that emit no instruction. The boundary metadata cannot satisfy a required MIR check or replace a trap terminator. Replace the linear `MIR.Program` and its token-bearing operators.
 
 ## MIR → Memory
 
-Fix (b) owns the CFG substrate and direct lowering to `Memory`. Both graphs use the same block and terminator families and typed block argument agreement. Memory carries target-derived layouts and a program counter, virtual values, live logical locations, materialized ranges and spec byte memory. Its projection starts at the registered entry and follows the instruction fetched from its CFG. The fixed rules allocate and release with the spec memory operations and execute typed stores on that byte memory. Scalar stores use the spec encoding. At each reachable state, the model reports exactly the observation computed from the fetched terminator. Hosted returns read their operands through the target-indexed Memory rules, while traps use the terminator’s kind and origin. A return to a caller is an execution step. The same MIR-to-Memory simulation relates live places and initialized values to virtual values or live backing ranges and their initialized bytes, including provenance. Zero-byte values have logical lifetime. Replace the erase-to-MIR `Memory.lower` and `Memory.run` proof path.
+Fix (b) owns the CFG substrate and direct lowering to `Memory`. Both graphs use the same
+block and terminator families and check the types of block arguments. The integrated spec
+determines layouts, literal and operation values, field projections and aggregate codecs.
+Integer literals and materialized integer operands use the spec decoder. Each reachable
+projection must execute the instruction fetched at its program counter. Calls push the
+caller’s resume point, destination and suspended locals. Return evaluates the callee operand,
+ends its frame’s lifetimes and writes the result in the restored caller. Hosted observations
+use the fetched return operand or trap kind and origin. The trace records spec operation
+effects and the fetched trap’s diagnostic bytes.
+
+The logical MIR evaluator fetches the MIR instruction, evaluates residual checks and
+holds roots as logical values. The same simulation relates those reachable logical
+activations, including suspended callers, to virtual values or to live backing ranges and
+initialized bytes. Every virtual Memory root has an eligible scalar MIR root. Materialized
+zero-byte roots have a logical lifetime and initialized value. They acquire no byte range,
+and a linear move consumes their stored value. Replace the erase-to-MIR `Memory.lower`
+and `Memory.run` proof path.
 
 ## Memory → SSA
 

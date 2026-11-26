@@ -164,6 +164,14 @@ inductive CoreValue (Other : Type) where
   | scalar (value : CVal)
   | other (value : Other)
 
+/-- Layout is a spec function at the resolved target. A zero extent still has logical lifetime. -/
+structure Layout where
+  size : Nat
+  align : Nat
+  deriving DecidableEq, Repr
+
+abbrev LayoutOf (Ty : Type) := Target → Ty → Option Layout
+
 /-- The operand family is supplied by ConcreteSpec. Control, calls and scoped lifetime use Exec. -/
 structure CoreLanguage where
   operands : Exec.Operands
@@ -179,6 +187,22 @@ structure CoreLanguage where
     ∀ locals store kind, operands.eval locals store expr ≠ .trap kind
   OtherValue : Type
   valueShape : operands.Val = CoreValue OtherValue
+  /-- The integrated spec determines layouts, scalar types and aggregate representation.
+  Aggregate decoding cannot construct a scalar. -/
+  layout : LayoutOf operands.Ty
+  scalarType : operands.Ty → Option Hybrid.Ty
+  literal : (ty : operands.Ty) → List UInt8 → Option operands.Val
+  typeDecidableEq : DecidableEq operands.Ty
+  fieldType : operands.Ty → FieldId → Option operands.Ty
+  activeFields : operands.Ty → operands.Val → Option (List FieldId)
+  addressOperands : Operator → List Nat
+  operation : Operator → List operands.Ty → operands.Ty → List operands.Val → operands.Val → List operands.Event → Prop
+  checkTrap : Opcode → Nat → List operands.Val → Bool
+  field : operands.Val → List FieldId → Option operands.Val
+  replaceField : operands.Val → List FieldId → operands.Val → Option operands.Val
+  fieldRange : operands.Ty → List FieldId → Layout → Option (Nat × Layout)
+  encodeOther : Target → operands.Ty → OtherValue → Option (List (Nat × List Mem.MByte))
+  decodeOther : Target → operands.Ty → List Mem.MByte → Option OtherValue
   safety : CoreOperation operands → List (SafetyCondition operands.Ty)
   permit : AList Var Own.Descriptor → AList Var operands.Val → operands.Expr →
     Own.State → Option Own.State
@@ -353,7 +377,8 @@ structure Admission (language : CoreLanguage) where
 
 def Payload.ConditionsAt {language : CoreLanguage} (payload : Payload language) (site : SiteId)
     (opcode : Opcode) (conditions : List (SafetyCondition language.operands.Ty)) : Prop :=
-  ∃ op, (site, op) ∈ payload.operations ∧ language.opcode op = opcode ∧
+  ∃ op, (site, op) ∈ payload.operations ∧ (match op with | .abort => False | _ => True) ∧
+    language.opcode op = opcode ∧
     conditions = language.safety op
 
 def Discharge.condition {language : CoreLanguage} (d : Discharge language) :
@@ -382,13 +407,5 @@ def Admission.Sound {language : CoreLanguage} (spec : Admission language) : Prop
     (∀ discharges, spec.check input = .ok discharges →
       spec.statics input ∧ ValidDischarges input discharges) ∧
     (∀ refusal, spec.check input = .error refusal → spec.rejects input refusal)
-
-/-- Layout is a spec function at the resolved target. A zero extent still has logical lifetime. -/
-structure Layout where
-  size : Nat
-  align : Nat
-  deriving DecidableEq, Repr
-
-abbrev LayoutOf (Ty : Type) := Target → Ty → Option Layout
 
 end ConcreteSpec.StageInterface
