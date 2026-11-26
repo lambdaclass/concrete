@@ -132,7 +132,7 @@ done
 # Compiler sources obey the same trust-word/option/extension ban. Compiler imports
 # include Lean's premise-reporting API and the pinned backend, so scan their header
 # grammar separately; no compiler file is exempt from the ban.
-mapfile -t COMPILER_SRC < <({ echo Concrete.lean; find Concrete -name '*.lean'; } | sort)
+mapfile -t COMPILER_SRC < <({ printf "%s\n" Concrete.lean Main.lean; find Concrete -name '*.lean'; } | sort)
 W=$(python3 "$PROOFS_DIR/lean_lex.py" scan-compiler "$BANNED_WORD_RE|$EXTENSION_RE" "${COMPILER_SRC[@]}"); RC=$?
 [ "$RC" = 0 ] && [ -z "$W" ] && ok "all compiler sources obey the trust ban" \
   || no "compiler source scan (rc=$RC): $(printf '%s\n' "$W" | head -5 | tr '\n' '|')"

@@ -1,3 +1,5 @@
+import ConcreteSpec.Spec.Manifest
+import ConcreteSpec.Spec.ProjectPolicy
 import ConcreteSpec.Spec.Accounting
 import ConcreteSpec.Spec.Const
 import ConcreteSpec.Spec.Ident
@@ -34,7 +36,9 @@ def registeredRules : List RuleId :=
     SourcePath.Project.Reason.ruleId ++
   [⟨``SourcePathSpan.FilePresent, 2⟩, ⟨``SourcePathSpan.OrderedOffsets, 2⟩,
    ⟨``SourcePathSpan.EndInSource, 2⟩, ⟨``SourcePathSpan.LineMatches, 2⟩,
-   ⟨``SourcePathSpan.ColumnMatches, 2⟩]
+   ⟨``SourcePathSpan.ColumnMatches, 2⟩, Project.languagePinRule, Project.clauseRule,
+   Project.tableVersionRule, Project.Manifest.sizeRule, Project.Manifest.encodingRule,
+   Project.Manifest.depthRule, Project.Manifest.syntaxRule]
 
 /-- Acceptance evidence applies the owning rule's judgment to a concrete input.
 The exporter recognizes this proposition's elaborated type, without unfolding the wrapper. -/
