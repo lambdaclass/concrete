@@ -412,7 +412,9 @@ private def completion : PieceId → Completion
       `foldedRenderingChangesIdentity],
     laws `ConcreteSpec.Proofs.Ident [
       `ConcreteSpec.Core.SourcePathSpan.projectSpan_correct,
-      `ConcreteSpec.Core.SourcePathSpan.bindSource_correct],
+      `ConcreteSpec.Core.SourcePathSpan.bindSource_correct,
+      `ConcreteSpec.Core.SourcePathSpan.projectLocation_correct,
+      `ConcreteSpec.Core.SourcePathSpan.matchesLocation_correct],
     evidence `ConcreteSpec.Proofs.Ident `ConcreteSpec.Core.SourcePathSpan [
       `projectSpan_safety, `projectSpan_progress, `bindSource_safety, `bindSource_progress,
       `missingFile_refuses, `location_guard_iff]],
@@ -425,11 +427,11 @@ private def completion : PieceId → Completion
       namespaces := [specNamespace `Proofs.Ident `Core.SourcePathSpan,
         { origin := `ConcreteSpecEvidence.Ident, namespaceName := family ++ `Controls }]
       controls := [
-        control `projectSpan_correct `ProjectionCorrect `projectSpan `projectPastEnd,
+        control `projectLocation_correct `ProjectionLocationCorrect `projectLocation `projectPastEnd,
         control `projectSpan_correct `ProjectionCorrect `projectSpan `projectAtStartOnly,
-        control `bindSource_correct `BindingCorrect `bindSource `bindPastEnd,
-        control `bindSource_correct `BindingCorrect `bindSource `bindIgnoringLine,
-        control `bindSource_correct `BindingCorrect `bindSource `bindIgnoringColumn,
+        control `matchesLocation_correct `LocationCheckCorrect `File.matchesLocation `bindPastEnd,
+        control `matchesLocation_correct `LocationCheckCorrect `File.matchesLocation `bindIgnoringLine,
+        control `matchesLocation_correct `LocationCheckCorrect `File.matchesLocation `bindIgnoringColumn,
         control `bindSource_correct `BindingCorrect `bindSource `bindBeforeEof] }
   | .R => namedEvidence [
     decls `ConcreteSpec.Spec.Rules [`ConcreteSpec.Core.registeredRules,
@@ -1415,7 +1417,8 @@ private def plan : List Piece := [
   { present .F04p "Source-path admission, span projection and source binding Laws and controls" with
     groups := [
       evidence `ConcreteSpec.Proofs.Ident `ConcreteSpec.Core.SourcePathSpan [
-        `ProjectionCorrect, `BindingCorrect],
+        `ProjectionCorrect, `BindingCorrect, `ProjectionLocationCorrect, `LocationCheckCorrect,
+        `projectLocation],
       evidence `ConcreteSpecEvidence.Ident `ConcreteSpec.Core.SourcePathSpan.Controls [
         `pastEnd, `wrongLine, `wrongColumn, `projectPastEnd, `projectAtStartOnly,
         `bindPastEnd, `bindIgnoringLine, `bindIgnoringColumn, `bindBeforeEof]] },

@@ -3,6 +3,12 @@ import ConcreteSpecEvidence.Rules
 import Lean
 open Lean Elab Command
 
+open ConcreteSpec.Core SourcePathSpan in
+example :
+    [``FilePresent, ``OrderedOffsets, ``EndInSource, ``LineMatches, ``ColumnMatches].map
+      (fun name => (registeredRules.find? (·.name == name)).map (·.rev)) =
+    List.replicate 5 (some 2) := by decide
+
 -- EXPORTER BODY
 /-- Execute the single inspectable-example rule documented on RuleExample.
 Fuel bounds recursive depth; heartbeats bound reduction. All errors fail closed. -/

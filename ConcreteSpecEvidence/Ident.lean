@@ -900,20 +900,22 @@ def offsetLine (_source : SourceText) (offset : Nat) : Nat := offset + 1
 
 /-- Instance (law `ConcreteSpec.Core.SourceText.lineAt_append_newline`, case `ConcreteSpec.Core.Vacuity.aSource`). -/
 theorem lineAt_append_newline_example_aSource : (aSource.push 10).lineAt (aSource.length + 1) = aSource.lineAt aSource.length + 1 :=
-  SourceText.lineAt_append_newline aSource
+  SourceText.lineAt_append_newline aSource (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.SourceText.lineAt_append_newline`, case `ConcreteSpec.Core.Vacuity.aSource`, subject `ConcreteSpec.Core.SourceText.lineAt`, mutant `ConcreteSpec.Core.Vacuity.constantLine`). -/
-theorem lineAt_append_newline_planted_aSource_constantLine : ¬ (constantLine (aSource.push 10) (aSource.length + 1) =
-    constantLine aSource aSource.length + 1) := by decide
+theorem lineAt_append_newline_planted_aSource_constantLine :
+    (aSource.positionAt aSource.length).afterCR = false ∧
+      ¬ (constantLine (aSource.push 10) (aSource.length + 1) =
+        constantLine aSource aSource.length + 1) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.SourceText.lineAt_append_other`, case `ConcreteSpec.Core.Vacuity.aSource`). -/
 theorem lineAt_append_other_example_aSource : (aSource.push 9).lineAt (aSource.length + 1) = aSource.lineAt aSource.length :=
-  SourceText.lineAt_append_other aSource 9 (by decide)
+  SourceText.lineAt_append_other aSource 9 (by decide) (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.SourceText.lineAt_append_other`, case `ConcreteSpec.Core.Vacuity.aSource`, subject `ConcreteSpec.Core.SourceText.lineAt`, mutant `ConcreteSpec.Core.Vacuity.offsetLine`). -/
-theorem lineAt_append_other_planted_aSource_offsetLine : (9 : UInt8) ≠ 10 ∧
+theorem lineAt_append_other_planted_aSource_offsetLine : (9 : UInt8) ≠ 10 ∧ (9 : UInt8) ≠ 13 ∧
     ¬ (offsetLine (aSource.push 9) (aSource.length + 1) = offsetLine aSource aSource.length) :=
-  ⟨by decide, by decide⟩
+  ⟨by decide, by decide, by decide⟩
 
 /-- Mutant column function that counts a tab byte (`9`) as four columns instead of one. -/
 def tabStopFour (source : SourceText) (offset : Nat) : Nat :=
@@ -941,12 +943,14 @@ theorem columnAt_append_newline_planted_aTab_noResetColumn : ¬ (noResetColumn (
 
 /-- Instance (law `ConcreteSpec.Core.SourceText.lineAt_append`, case `ConcreteSpec.Core.Vacuity.aSource`). -/
 theorem lineAt_append_example_aSource : (aSource.push 10).lineAt (aSource.length + 1) =
-    aSource.lineAt aSource.length + if (10 : UInt8) = 10 then 1 else 0 :=
+    aSource.lineAt aSource.length + if (10 : UInt8) = 13 ∨
+      ((10 : UInt8) = 10 ∧ !(aSource.positionAt aSource.length).afterCR) then 1 else 0 :=
   SourceText.lineAt_append aSource 10
 
 /-- Planted (law `ConcreteSpec.Core.SourceText.lineAt_append`, case `ConcreteSpec.Core.Vacuity.aSource`, subject `ConcreteSpec.Core.SourceText.lineAt`, mutant `ConcreteSpec.Core.Vacuity.constantLine`). -/
 theorem lineAt_append_planted_aSource_constantLine : ¬ (constantLine (aSource.push 10) (aSource.length + 1) =
-    constantLine aSource aSource.length + if (10 : UInt8) = 10 then 1 else 0) := by decide
+    constantLine aSource aSource.length + if (10 : UInt8) = 13 ∨
+      ((10 : UInt8) = 10 ∧ !(aSource.positionAt aSource.length).afterCR) then 1 else 0) := by decide
 
 /-- Mutant column function that skips UTF-8 continuation bytes (`128 ≤ b < 192`). -/
 def scalarColumn (source : SourceText) (offset : Nat) : Nat :=
@@ -955,12 +959,12 @@ def scalarColumn (source : SourceText) (offset : Nat) : Nat :=
 
 /-- Instance (law `ConcreteSpec.Core.SourceText.columnAt_append`, case `ConcreteSpec.Core.Vacuity.utf8Prefix`). -/
 theorem columnAt_append_example_utf8Prefix : (utf8Prefix.push 169).columnAt (utf8Prefix.length + 1) =
-    if (169 : UInt8) = 10 then 1 else utf8Prefix.columnAt utf8Prefix.length + 1 :=
+    if (169 : UInt8) = 13 ∨ (169 : UInt8) = 10 then 1 else utf8Prefix.columnAt utf8Prefix.length + 1 :=
   SourceText.columnAt_append utf8Prefix 169
 
 /-- Planted (law `ConcreteSpec.Core.SourceText.columnAt_append`, case `ConcreteSpec.Core.Vacuity.utf8Prefix`, subject `ConcreteSpec.Core.SourceText.columnAt`, mutant `ConcreteSpec.Core.Vacuity.scalarColumn`). -/
 theorem columnAt_append_planted_utf8Prefix_scalarColumn : ¬ (scalarColumn (utf8Prefix.push 169) (utf8Prefix.length + 1) =
-    if (169 : UInt8) = 10 then 1 else scalarColumn utf8Prefix utf8Prefix.length + 1) := by decide
+    if (169 : UInt8) = 13 ∨ (169 : UInt8) = 10 then 1 else scalarColumn utf8Prefix utf8Prefix.length + 1) := by decide
 
 /-- A source `assume`, a package stack assumption, and their wire records. -/
 def sourceAssume : PremiseId :=
@@ -2323,52 +2327,51 @@ namespace Controls
 /-- The original tab range with an end beyond the loaded file. -/
 def pastEnd : Span := { tabSpan with endOffset := 4, range_ok := by decide }
 
-/-- Mutant that projects ordered ranges without checking the end bound. -/
-def projectPastEnd (project : Project) (path : SourcePath) (start stop : Nat) : Option Span := do
-  let file ← project.findFile path
-  if ordered : start ≤ stop then some (spanAt path file.source start stop ordered) else none
-
-/-- Mutant that rejects ranges beginning after the first byte. -/
-def projectAtStartOnly (project : Project) (path : SourcePath) (start stop : Nat) : Option Span :=
-  if start = 0 then projectSpan project path start stop else none
-
 /-- The tab span with only its stored line changed. -/
 def wrongLine : Span := { tabSpan with line := 2, line_pos := by decide }
 
 /-- The tab span with only its stored column changed. -/
 def wrongColumn : Span := { tabSpan with col := 2, col_pos := by decide }
 
+/-- Mutant that projects ordered ranges without checking the end bound. -/
+def projectPastEnd (project : Project) (path : SourcePath) (start stop : Nat) : Option Span := do
+  let id ← project.findId path
+  let file ← project.fileAt id
+  if ordered : start ≤ stop then
+    if bounded : start ≤ file.length then some (fileSpan id file start stop ordered bounded)
+    else none
+  else none
+
+/-- Mutant that rejects ranges beginning after the first byte. -/
+def projectAtStartOnly (project : Project) (path : SourcePath) (start stop : Nat) : Option (ScopedSpan project) :=
+  if start = 0 then projectSpan project path start stop else none
+
 /-- Mutant that skips only the end bound. -/
-def bindPastEnd (project : Project) (span : Span) : Option File := do
-  let file ← project.findFile span.path
-  if span.line = file.source.lineAt span.startOffset ∧
-      span.col = file.source.columnAt span.startOffset ∧ span.source = file.source then some file else none
+def bindPastEnd (file : File) (span : Span) : Bool :=
+  decide (span.line = file.source.lineAt span.startOffset ∧
+    span.col = file.source.columnAt span.startOffset)
 
 /-- Mutant that skips only the line match. -/
-def bindIgnoringLine (project : Project) (span : Span) : Option File := do
-  let file ← project.findFile span.path
-  if span.endOffset ≤ file.source.length ∧
-      span.col = file.source.columnAt span.startOffset ∧ span.source = file.source then some file else none
+def bindIgnoringLine (file : File) (span : Span) : Bool :=
+  decide (span.endOffset ≤ file.source.length ∧ span.col = file.source.columnAt span.startOffset)
 
 /-- Mutant that skips only the column match. -/
-def bindIgnoringColumn (project : Project) (span : Span) : Option File := do
-  let file ← project.findFile span.path
-  if span.endOffset ≤ file.source.length ∧
-      span.line = file.source.lineAt span.startOffset ∧ span.source = file.source then some file else none
+def bindIgnoringColumn (file : File) (span : Span) : Bool :=
+  decide (span.endOffset ≤ file.source.length ∧ span.line = file.source.lineAt span.startOffset)
 
 /-- Mutant that rejects ranges ending exactly at EOF. -/
-def bindBeforeEof (project : Project) (span : Span) : Option File := do
-  let file ← bindSource project span
+def bindBeforeEof (origin project : Project) (span : ScopedSpan origin) : Option File := do
+  let file ← bindSource origin project span
   if span.endOffset < file.source.length then some file else none
 
-/-- Planted (law `ConcreteSpec.Core.SourcePathSpan.projectSpan_correct`,
-case `ConcreteSpec.Core.SourcePathSpan.Controls.pastEnd`, subject `ConcreteSpec.Core.SourcePathSpan.projectSpan`,
+/-- Planted (law `ConcreteSpec.Core.SourcePathSpan.projectLocation_correct`,
+case `ConcreteSpec.Core.SourcePathSpan.Controls.pastEnd`, subject `ConcreteSpec.Core.SourcePathSpan.projectLocation`,
 mutant `ConcreteSpec.Core.SourcePathSpan.Controls.projectPastEnd`). -/
-theorem projectPastEnd_violates_correct : ¬ ProjectionCorrect projectPastEnd := by
+theorem projectPastEnd_violates_correct : ¬ ProjectionLocationCorrect projectPastEnd := by
   intro law
-  obtain ⟨_, _, _, _, file, member, _, ⟨bounds, _, _⟩, _⟩ :=
-    (law tabProject mainSourcePath 2 4 pastEnd).mp (by decide)
-  have eq : file = ⟨mainSourcePath, tabSource⟩ := List.mem_singleton.mp member
+  obtain ⟨file, member, _, bounds, _, _⟩ :=
+    law tabProject mainSourcePath 2 4 pastEnd (by decide)
+  have eq : file = File.load mainSourcePath tabSource := Option.some.inj member.symm
   subst file
   exact (by decide : ¬ pastEnd.endOffset ≤ tabSource.length) bounds
 
@@ -2377,42 +2380,42 @@ case `ConcreteSpec.Core.tabSpan`, subject `ConcreteSpec.Core.SourcePathSpan.proj
 mutant `ConcreteSpec.Core.SourcePathSpan.Controls.projectAtStartOnly`). -/
 theorem projectAtStartOnly_violates_correct : ¬ ProjectionCorrect projectAtStartOnly := by
   intro law
-  have reference := (projectSpan_correct tabProject mainSourcePath 2 3 tabSpan).mp projectTabSpan
-  have result := (law tabProject mainSourcePath 2 3 tabSpan).mpr reference
+  have reference := (projectSpan_correct tabProject mainSourcePath 2 3 scopedTabSpan).mp projectTabSpan
+  have result := (law tabProject mainSourcePath 2 3 scopedTabSpan).mpr reference
   contradiction
 
-/-- Planted (law `ConcreteSpec.Core.SourcePathSpan.bindSource_correct`,
-case `ConcreteSpec.Core.SourcePathSpan.Controls.pastEnd`, subject `ConcreteSpec.Core.SourcePathSpan.bindSource`,
+/-- Planted (law `ConcreteSpec.Core.SourcePathSpan.matchesLocation_correct`,
+case `ConcreteSpec.Core.SourcePathSpan.Controls.pastEnd`, subject `ConcreteSpec.Core.SourcePathSpan.File.matchesLocation`,
 mutant `ConcreteSpec.Core.SourcePathSpan.Controls.bindPastEnd`). -/
-theorem bindPastEnd_violates_correct : ¬ BindingCorrect bindPastEnd := by
+theorem bindPastEnd_violates_correct : ¬ LocationCheckCorrect bindPastEnd := by
   intro law
-  have reference := (law tabProject pastEnd ⟨mainSourcePath, tabSource⟩).mp (by decide)
-  exact (by unfold EndInSource; decide : ¬ EndInSource (tabSource, pastEnd.endOffset)) reference.2.2.1.1
+  exact (by decide : ¬ pastEnd.LocationOk tabSource)
+    ((law (File.load mainSourcePath tabSource) pastEnd).mp (by decide))
 
-/-- Planted (law `ConcreteSpec.Core.SourcePathSpan.bindSource_correct`,
-case `ConcreteSpec.Core.SourcePathSpan.Controls.wrongLine`, subject `ConcreteSpec.Core.SourcePathSpan.bindSource`,
+/-- Planted (law `ConcreteSpec.Core.SourcePathSpan.matchesLocation_correct`,
+case `ConcreteSpec.Core.SourcePathSpan.Controls.wrongLine`, subject `ConcreteSpec.Core.SourcePathSpan.File.matchesLocation`,
 mutant `ConcreteSpec.Core.SourcePathSpan.Controls.bindIgnoringLine`). -/
-theorem bindIgnoringLine_violates_correct : ¬ BindingCorrect bindIgnoringLine := by
+theorem bindIgnoringLine_violates_correct : ¬ LocationCheckCorrect bindIgnoringLine := by
   intro law
-  have reference := (law tabProject wrongLine ⟨mainSourcePath, tabSource⟩).mp (by decide)
-  exact (by unfold LineMatches; decide : ¬ LineMatches (wrongLine, tabSource)) reference.2.2.1.2.1
+  exact (by decide : ¬ wrongLine.LocationOk tabSource)
+    ((law (File.load mainSourcePath tabSource) wrongLine).mp (by decide))
 
-/-- Planted (law `ConcreteSpec.Core.SourcePathSpan.bindSource_correct`,
-case `ConcreteSpec.Core.SourcePathSpan.Controls.wrongColumn`, subject `ConcreteSpec.Core.SourcePathSpan.bindSource`,
+/-- Planted (law `ConcreteSpec.Core.SourcePathSpan.matchesLocation_correct`,
+case `ConcreteSpec.Core.SourcePathSpan.Controls.wrongColumn`, subject `ConcreteSpec.Core.SourcePathSpan.File.matchesLocation`,
 mutant `ConcreteSpec.Core.SourcePathSpan.Controls.bindIgnoringColumn`). -/
-theorem bindIgnoringColumn_violates_correct : ¬ BindingCorrect bindIgnoringColumn := by
+theorem bindIgnoringColumn_violates_correct : ¬ LocationCheckCorrect bindIgnoringColumn := by
   intro law
-  have reference := (law tabProject wrongColumn ⟨mainSourcePath, tabSource⟩).mp (by decide)
-  exact (by unfold ColumnMatches; decide : ¬ ColumnMatches (wrongColumn, tabSource)) reference.2.2.1.2.2
+  exact (by decide : ¬ wrongColumn.LocationOk tabSource)
+    ((law (File.load mainSourcePath tabSource) wrongColumn).mp (by decide))
 
 /-- Planted (law `ConcreteSpec.Core.SourcePathSpan.bindSource_correct`,
 case `ConcreteSpec.Core.tabSpan`, subject `ConcreteSpec.Core.SourcePathSpan.bindSource`,
 mutant `ConcreteSpec.Core.SourcePathSpan.Controls.bindBeforeEof`). -/
 theorem bindBeforeEof_violates_correct : ¬ BindingCorrect bindBeforeEof := by
   intro law
-  have reference := (bindSource_correct tabProject tabSpan _).mp bindTabSpan
-  exact (by decide : bindBeforeEof tabProject tabSpan ≠ some ⟨mainSourcePath, tabSource⟩)
-    ((law tabProject tabSpan _).mpr reference)
+  have reference := (bindSource_correct tabProject tabProject scopedTabSpan _).mp bindTabSpan
+  exact (by decide : bindBeforeEof tabProject tabProject scopedTabSpan ≠ some (File.load mainSourcePath tabSource))
+    ((law tabProject tabProject scopedTabSpan _).mpr reference)
 
 end Controls
 
