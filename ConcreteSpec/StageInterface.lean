@@ -173,6 +173,12 @@ structure Layout where
 
 abbrev LayoutOf (Ty : Type) := Target → Ty → Option Layout
 
+inductive AddressStorage where
+  | logical
+  | zero
+  | bytes
+  deriving DecidableEq
+
 /-- An address operand identifies its pointee even in the logical execution.
 Physical execution also supplies the live, provenance-bearing byte range. -/
 structure OperationAddress (Ty : Type) where
@@ -180,10 +186,14 @@ structure OperationAddress (Ty : Type) where
   root : PlaceId
   fields : List FieldId
   range : Option Hybrid.Range
+  provenance : Hybrid.Place
+  storage : AddressStorage := .bytes
 
-structure OperationStore where
+structure OperationStore (Value : Type) where
   bytes : Mem.Memory
   ownership : Own.State
+  /-- Escaped logical roots, including zero-byte physical roots and suspended callers. -/
+  addressedValues : AList Hybrid.Place Value := []
 
 /-- The operand family is supplied by ConcreteSpec. Control, calls and scoped lifetime use Exec. -/
 structure CoreLanguage where
@@ -209,8 +219,12 @@ structure CoreLanguage where
   fieldType : operands.Ty → FieldId → Option operands.Ty
   activeFields : operands.Ty → operands.Val → Option (List FieldId)
   operation : Operator → List operands.Ty → operands.Ty → List operands.Val →
-    Target → List (OperationAddress operands.Ty) → OperationStore →
-    operands.Val → List operands.Event → OperationStore → Prop
+    Target → List (OperationAddress operands.Ty) → OperationStore operands.Val →
+    operands.Val → List operands.Event → OperationStore operands.Val → Prop
+  /-- Relate logical references to physical values using only the backing ranges of
+  related live allocations. Aggregate instances relate their fields recursively. -/
+  representsValue : Target → AList Hybrid.Place (Option Hybrid.Range) → operands.Ty →
+    operands.Val → operands.Val → Prop := fun _ _ _ logical physical => logical = physical
   checkTrap : Opcode → Nat → List operands.Val → Bool
   field : operands.Val → List FieldId → Option operands.Val
   replaceField : operands.Val → List FieldId → operands.Val → Option operands.Val

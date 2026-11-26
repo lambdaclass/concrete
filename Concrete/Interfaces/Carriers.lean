@@ -235,6 +235,7 @@ structure MemoryFrame (Value : Type) where
   live : List PlaceId
   initialized : List PlaceId
   zeroValues : AList PlaceId Value := []
+  addressIds : AList PlaceId Hybrid.Place := []
 
 structure MemoryContinuation (Ty Value : Type) where
   caller : MemoryFrame Value
@@ -245,6 +246,7 @@ structure MemoryState (Ty Value Event : Type) (profile : Profile) extends Memory
   callers : List (MemoryContinuation Ty Value) := []
   effects : List Event := []
   ownership : Own.State := {}
+  nextAddressId : Nat := 0
 
 def MemoryState.BytesWF {Ty Value Event : Type} {profile : Profile}
     (state : MemoryState Ty Value Event profile) :
@@ -264,6 +266,7 @@ inductive SSARead (Ty : Type) (Literal : Ty → Type) : Ty → Type where
 inductive SSAInst {Ty : Type} (lang : LoweringLanguage Ty) where
   | op {opcode : Operator} {types : List Ty} {ty : Ty} (dst : SSAValue Ty ty) (op : lang.operation opcode types ty)
       (args : Args (SSARead Ty lang.literal) types)
+      (addresses : List (Sigma (Place Ty)) := [])
   | load {ty : Ty} (dst : SSAValue Ty ty) (src : Place Ty ty)
   | store {ty : Ty} (dst : Place Ty ty) (src : SSARead Ty lang.literal ty)
   | beginLifetime (place : PlaceId)

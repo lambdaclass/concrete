@@ -1331,6 +1331,10 @@ Concrete.Interfaces.Args.cons.inj
 Concrete.Interfaces.Args.cons.injEq	propext
 Concrete.Interfaces.Args.cons.sizeOf_spec	
 Concrete.Interfaces.Args.nil.sizeOf_spec	
+Concrete.Interfaces.BIR.Execution._proof_1	Quot.sound propext
+Concrete.Interfaces.BIR.Execution._proof_2	Quot.sound propext
+Concrete.Interfaces.BIR.Execution._proof_3	Quot.sound propext
+Concrete.Interfaces.BIR.Execution._proof_4	Quot.sound propext
 Concrete.Interfaces.BIR.mk.inj	Quot.sound propext
 Concrete.Interfaces.BIR.mk.injEq	Quot.sound propext
 Concrete.Interfaces.BIR.mk.sizeOf_spec	Quot.sound propext

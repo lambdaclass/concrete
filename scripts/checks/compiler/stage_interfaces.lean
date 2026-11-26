@@ -600,7 +600,7 @@ private def storingMemory (project : Project) : Memory testLowering testProfile 
     [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1⟩)])], [(Exec.Demo.mainF, [(storeRoot, .materialized)])]⟩
 
 private def storeInitial : MemoryRegisters testLanguage testProfile :=
-  ⟨⟨Exec.Demo.mainF, ⟨0⟩, 0, [], [], [], [], []⟩, Mem.Memory.empty, [], [], {}⟩
+  ⟨⟨Exec.Demo.mainF, ⟨0⟩, 0, [], [], [], [], [], []⟩, Mem.Memory.empty, [], [], {}, 0⟩
 
 private def storeBlock : Mem.Block :=
   ⟨⟨0⟩, 1, 1, 1, true, false, [.uninit]⟩
@@ -929,7 +929,6 @@ example (project : Project) (m : LoweringModels zeroLanguage testLowering testPr
     refine ⟨rfl, _, storeInitial, {next with instruction := 0}, rfl, ?_, rfl⟩
     let view := (shadowMIR project).logicalView (language := zeroLanguage)
     let place : MemoryPlace Unit () := ⟨⟨storeRoot, []⟩, .virtual⟩
-    simp only [ite_true]
     with_unfolding_all
       change view.WriteParams (language := zeroLanguage) [⟨(), place⟩]
         [.scalar .unit] storeInitial {next with instruction := 0}
@@ -1124,7 +1123,7 @@ private def alternateBacking : MemoryRegisters testLanguage testProfile :=
     bytes := ⟨[(⟨0⟩, {storeBlock with base := 2, bytes := [.init 42 none]})], 1⟩}
 
 private def resolvedStore (range : Hybrid.Range) : OperationAddress Unit :=
-  ⟨(), storeRoot, [], some range⟩
+  ⟨(), storeRoot, [], some range, ⟨0⟩, .bytes⟩
 
 -- Two valid placements of the same initialized value provide different
 -- pointers to the operation. Substituting the first pointer for the second
@@ -1132,9 +1131,9 @@ private def resolvedStore (range : Hybrid.Range) : OperationAddress Unit :=
 example (project : Project) :
     let memory := storingMemory project
     let address := ⟨(), storePlace⟩
-    memory.resolveAddress storeAfter false address = some (resolvedStore storeRange) ∧
-    memory.resolveAddress alternateBacking false address = some (resolvedStore alternateRange) ∧
-    memory.resolveAddress alternateBacking false address ≠ some (resolvedStore storeRange) := by
+    memory.resolveAddress (Memory.prepareAddresses storeAfter [address]) false address = some (resolvedStore storeRange) ∧
+    memory.resolveAddress (Memory.prepareAddresses alternateBacking [address]) false address = some (resolvedStore alternateRange) ∧
+    memory.resolveAddress (Memory.prepareAddresses alternateBacking [address]) false address ≠ some (resolvedStore storeRange) := by
   refine ⟨rfl, rfl, ?_⟩
   intro wrong
   have pointer := congrArg (Option.bind · (fun operand : OperationAddress Unit =>
@@ -1197,23 +1196,6 @@ example (project : Project) :
     exact ⟨rfl, rfl, ⟨[], rfl, rfl⟩, ⟨_, ⟨_, rfl, .nil _⟩, rfl⟩,
       ⟨_, ⟨_, rfl, .nil _⟩, rfl⟩⟩
 
--- The forged BIR and adapter models both say 0, but the emitted valid
--- source job returns 42 under the imported execution.
-example (project : Project) (m : LoweringModels testLanguage testLowering testProfile) :
-    ¬ EmitsLCB {m with
-      bir := returnsStatus _ 0
-      lcb := returnsStatus _ 0
-      lcbHandoff := fun _ _ => True} (testBIR project) (lcbReturnJob 42) := by
-  intro emits
-  have actual : (LCBInput.Execution (profile := testProfile) Nat project).observes
-      (lcbReturnJob 42) (.returned 42 ByteArray.empty) := by
-    with_unfolding_all exact ⟨_, ⟨_, rfl, .nil _⟩, rfl⟩
-  obtain ⟨q, finite, result⟩ := actual
-  obtain ⟨_, _, wrong, _⟩ := emits.2.2.2.2.2.2.1.2.1 q _ finite result
-  have status := congrArg (fun o : Concrete.Contracts.Observation =>
-    match o with | .returned code _ => code | _ => 255) wrong
-  exact (show (42 : UInt8) ≠ 0 from by decide) status
-
 private abbrev erasureLanguage : CoreLanguage :=
   {zeroLanguage with
     operands := testLanguage.operands
@@ -1250,11 +1232,31 @@ private theorem erasureBinding (project : Project) :
     (erasureSource project).Step (language := erasureLanguage) storeInitial erasureBound := by
   with_unfolding_all
     refine ⟨rfl, CoreValue.other (), storeInitial, {erasureBound with instruction := 0}, rfl, ?_, rfl⟩
-  simp only [ite_true]
   refine Memory.WriteParams.cons (language := erasureLanguage)
     (started := {storeInitial with live := [storeRoot]}) ?_ ?_ (.nil _)
   · exact ⟨by decide, Or.inl ⟨rfl, rfl⟩⟩
   · exact ⟨⟨rfl, fun _ => rfl⟩, nofun, rfl, rfl, nofun⟩
+
+private theorem erasureBindingUnique (project : Project)
+    (next : MemoryRegisters erasureLanguage testProfile)
+    (step : (erasureSource project).Step (language := erasureLanguage) storeInitial next) :
+    next = erasureBound := by
+  obtain ⟨_, value, afterRead, stored, read, writes, rfl⟩ := step
+  have readExact : some (CoreValue.other (), storeInitial) = some (value, afterRead) := read
+  cases readExact
+  have params : @Memory.WriteParams erasureLanguage testLowering testProfile (@MIR.logicalView erasureLanguage testLowering testProfile (erasureSource project))
+      [⟨(), ⟨⟨storeRoot, []⟩, .virtual⟩⟩] [CoreValue.other ()] storeInitial stored := by
+    simp only [Bool.true_or, ite_true] at writes
+    with_unfolding_all exact writes
+  cases params with
+  | cons started write rest =>
+    cases rest
+    rcases started.2 with ⟨_, rfl⟩ | ⟨impossible, _, _, _⟩
+    · have written : some {erasureBound with instruction := 0} = some stored := write.2.2.1
+      cases written
+      rfl
+    · have wrong : some StorageClass.virtual = some .materialized := impossible
+      cases wrong
 
 -- Retaining a materialized declaration, its layout and its origin metadata
 -- cannot justify an immediate return with no live target local.
@@ -1272,17 +1274,21 @@ example (project : Project) (m : LoweringModels erasureLanguage testLowering tes
     rw [initial p hp]
     exact erasureBinding project
   have sourceStep := exactSource.2.2.1 p erasureBound reachable step
-  obtain ⟨p', moved, projected⟩ := sourceStep
+  obtain ⟨p', moved, _⟩ := sourceStep
   obtain ⟨sim, _, coversInitial, coversStep, represents⟩ := lowers.2.2.2.2.2.2.2.2.2.2
   obtain ⟨q, hq, relation⟩ := coversInitial p hp
   have targetReachable : (returnsStatus (Memory testLowering testProfile) 0).execution.finite
       (immediateReturn project) q := ⟨q, hq, Concrete.Contracts.Steps.nil q⟩
-  obtain ⟨q', _, related⟩ := coversStep p p' q reachable targetReachable relation moved
+  obtain ⟨covered, q', coveredStep, _, related⟩ :=
+    coversStep p q reachable targetReachable relation ⟨p', moved⟩
   cases q'
-  have sourceReachable : m.mir.execution.finite (erasureSource project) p' :=
-    ⟨p, hp, Concrete.Contracts.Steps.cons moved (.nil p')⟩
-  have physical := (represents p' () sourceReachable ⟨(), trivial, .nil ()⟩ related).1
-  rw [projected] at physical
+  have sourceReachable : m.mir.execution.finite (erasureSource project) covered :=
+    ⟨p, hp, Concrete.Contracts.Steps.cons coveredStep (.nil covered)⟩
+  have exactCovered := exactSource.2.1 p covered reachable coveredStep
+  rw [initial p hp] at exactCovered
+  have physical := (represents covered () sourceReachable ⟨(), trivial, .nil ()⟩ related).1
+  have output := erasureBindingUnique project _ exactCovered
+  rw [output] at physical
   have missing : storeRoot ∈ ([] : List PlaceId) :=
     physical.2.2.1 storeRoot (List.mem_cons_self ..)
   exact List.not_mem_nil missing
@@ -1397,14 +1403,14 @@ example (project : Project) (m : LoweringModels residualLanguage testLowering te
           List.mem_singleton_self _, List.mem_singleton_self _, rfl, noEscape⟩
     · refine ⟨⟨fun _ _ => ?_, fun _ _ => ?_⟩,
         fun _ _ _ h => h.elim, fun _ next _ step => (residualStops project next step).elim, ?_⟩
-      · exact ⟨rfl, rfl, ⟨_, rfl, rfl⟩, ⟨_, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+      · exact ⟨rfl, rfl, ⟨_, rfl, rfl⟩, ⟨_, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
       · with_unfolding_all rfl
       · intro _ _ _
         with_unfolding_all exact ⟨fun h => congrArg some h.symm, fun h => (Option.some.inj h).symm⟩
     · refine ⟨⟨fun _ _ => ?_, fun _ _ => ?_⟩,
         fun _ _ _ h => h.elim, fun _ next _ step => (residualLogicalStops project next step).elim, ?_⟩
       · with_unfolding_all
-          exact ⟨rfl, rfl, ⟨_, rfl, rfl⟩, ⟨_, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+          exact ⟨rfl, rfl, ⟨_, rfl, rfl⟩, ⟨_, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
       · with_unfolding_all rfl
       · intro _ _ _
         with_unfolding_all exact ⟨fun h => congrArg some h.symm, fun h => (Option.some.inj h).symm⟩
@@ -1414,10 +1420,10 @@ example (project : Project) (m : LoweringModels residualLanguage testLowering te
         with_unfolding_all rfl
       exact view.symm ▸ residualTables project
     · refine ⟨terminalSimulation (same := residualSame project), ?_, fun _ _ => ⟨(), trivial, trivial⟩,
-        fun _ _ _ _ _ _ step => step.elim, ?_⟩
+        fun _ _ _ _ _ ⟨_, step⟩ => step.elim, ?_⟩
       · exact fun p _ _ _ _ _ result => ⟨p, .nil _, result, rfl⟩
       · intro _ _ _ _ _
-        refine ⟨?_, rfl, nofun⟩
+        refine ⟨?_, rfl, nofun, ⟨rfl, nofun⟩, List.nodup_nil, rfl, rfl⟩
         change (residualMemory project [runtimeCheck]).RepresentsActivation
           (language := residualLanguage) storeInitial.toMemoryFrame storeInitial.toMemoryFrame Mem.Memory.empty
         exact ⟨⟨⟨nofun, by decide, nofun, nofun, nofun, nofun, nofun, nofun⟩,
@@ -1429,39 +1435,80 @@ example (project : Project) (m : LoweringModels residualLanguage testLowering te
     have impossible : none = some (residualObserved project) := exactTarget.mp rfl
     contradiction
 
+private def abstractStore : OperationAddress Unit :=
+  ⟨(), storeRoot, [], none, ⟨0⟩, .logical⟩
+
+private def emptyStoreAddress : OperationAddress Unit :=
+  ⟨(), storeRoot, [], none, ⟨0⟩, .zero⟩
+
 private abbrev addressLanguage : CoreLanguage :=
   {testLanguage with
-    operation := fun _ _ _ _ _ operands before result effects after =>
-      ∃ (range : Hybrid.Range),
-        operands = [resolvedStore range] ∧
-        result = .scalar (.int .u8 range.ptr.addr) ∧ effects = [] ∧ after = before}
+    operation := fun opcode _ _ args _ operands before result effects after =>
+      match opcode with
+      | .named operation =>
+        if operation = ⟨"address"⟩ then
+          ((∃ (range : Hybrid.Range), operands = [resolvedStore range] ∧
+              result = CoreValue.scalar (.int .u8 range.ptr.addr)) ∨
+            ((operands = [abstractStore] ∨ operands = [emptyStoreAddress]) ∧ result = CoreValue.other ())) ∧
+          effects = [] ∧ after = before
+        else
+          operands = [] ∧ result = storeValue ∧ effects = [] ∧
+          ((args = [CoreValue.other ()] ∧
+            AList.lookup before.addressedValues ⟨0⟩ = some storeValue ∧
+            after = {before with
+              addressedValues := AList.update before.addressedValues ⟨0⟩ (fun _ => CoreValue.scalar (.int .u8 99))}) ∨
+           ∃ ptr bytes, args = [CoreValue.scalar (.int .u8 ptr.addr)] ∧
+             before.bytes.load testProfile.memoryTarget ptr 1 1 = some [.init 42 none] ∧
+             before.bytes.store testProfile.memoryTarget ptr [.init 99 none] 1 = some bytes ∧
+             after = {before with bytes := bytes})
+      | _ => False
+    representsValue := fun _ ranges _ logical physical =>
+      match logical with
+      | .scalar _ => logical = physical
+      | .other () =>
+        match AList.lookup ranges ⟨0⟩ with
+        | some (some range) => physical = CoreValue.scalar (.int .u8 range.ptr.addr)
+        | some none => physical = logical
+        | none => False}
 
 private def addressResultPlace : MemoryPlace Unit () :=
   ⟨⟨shadowRoot, []⟩, .virtual⟩
-
-private def addressMemory (project : Project) : Memory testLowering testProfile :=
-  {(storingMemory project) with
-    functions := List.map (fun (fn, locals, graph) =>
-      (fn, (shadowRoot, ()) :: locals, graph)) (storingMemory project).functions
-    storage := [(Exec.Demo.mainF, [(storeRoot, .materialized), (shadowRoot, .virtual)])]}
 
 private def addressInstruction : MemoryInst testLowering :=
   .op (opcode := .named ⟨"address"⟩) (types := []) (ty := ()) addressResultPlace () .nil []
     [⟨(), storePlace⟩]
 
+private def indirectInstruction : MemoryInst testLowering :=
+  .op (opcode := .named ⟨"indirectReadWrite"⟩) (types := [()]) addressResultPlace ()
+    (.cons (.copy addressResultPlace) .nil)
+
+private def addressBlock : MemoryBlock testLowering :=
+  ⟨⟨0⟩, [],
+    [⟨testOrigin, .beginLifetime storeRoot⟩, ⟨testOrigin, .bind storePlace (.literal ⟨[42]⟩)⟩,
+      ⟨testOrigin, .beginLifetime shadowRoot⟩, ⟨testOrigin, addressInstruction⟩,
+      ⟨testOrigin, indirectInstruction⟩], .ret (some ⟨(), .copy addressResultPlace⟩), []⟩
+
+private def addressMemory (project : Project) : Memory testLowering testProfile :=
+  {(storingMemory project) with
+    signatures := [(Exec.Demo.mainF, ⟨[], some ()⟩)]
+    functions := [(Exec.Demo.mainF, [(storeRoot, ()), (shadowRoot, ())], ⟨⟨0⟩, #[addressBlock]⟩)]
+    storage := [(Exec.Demo.mainF, [(storeRoot, .materialized), (shadowRoot, .virtual)])]}
+
 private def addressReady (base : MemoryRegisters addressLanguage testProfile) :
     MemoryRegisters addressLanguage testProfile :=
-  {base with live := shadowRoot :: base.live}
+  {base with instruction := 3, live := shadowRoot :: base.live}
 
 private def addressWritten (base : MemoryRegisters addressLanguage testProfile) (address : Nat) :
     MemoryRegisters addressLanguage testProfile :=
   {(addressReady base) with
     initialized := shadowRoot :: base.initialized
-    virtualValues := [(shadowRoot, .scalar (.int .u8 address))]}
+    virtualValues := [(shadowRoot, .scalar (.int .u8 address))]
+    addressIds := [(storeRoot, ⟨0⟩)]
+    nextAddressId := 1}
 
 /-- The fixture operation returns the address supplied by the instruction
 judgment, so storage equality cannot make two allocations interchangeable. -/
-example (project : Project) :
+private theorem addressSteps (project : Project) :
     let memory := addressMemory project
     memory.InstructionStep (language := addressLanguage) (addressReady storeAfter)
       (addressWritten storeAfter 1).advance false addressInstruction ∧
@@ -1472,88 +1519,348 @@ example (project : Project) :
   dsimp only
   refine ⟨?_, ?_, ?_⟩
   · refine ⟨[], _, [resolvedStore storeRange], _, [], _, addressWritten storeAfter 1,
-      rfl, rfl, rfl, ⟨storeRange, rfl, rfl, rfl, rfl⟩, ?_, rfl⟩
+      rfl, rfl, rfl, ⟨Or.inl ⟨storeRange, rfl, rfl⟩, rfl, rfl⟩, rfl, ?_, rfl⟩
     exact ⟨⟨rfl, fun _ => rfl⟩, nofun, rfl, rfl, nofun⟩
   · refine ⟨[], _, [resolvedStore alternateRange], _, [], _, addressWritten alternateBacking 2,
-      rfl, rfl, rfl, ⟨alternateRange, rfl, rfl, rfl, rfl⟩, ?_, rfl⟩
+      rfl, rfl, rfl, ⟨Or.inl ⟨alternateRange, rfl, rfl⟩, rfl, rfl⟩, rfl, ?_, rfl⟩
     exact ⟨⟨rfl, fun _ => rfl⟩, nofun, rfl, rfl, nofun⟩
   · rintro ⟨values, afterRead, addresses, result, effects, changed, stored,
-      reads, _, resolved, ⟨range, operands, value, _, unchanged⟩, writes, next⟩
+      reads, _, resolved, operates, _, writes, next⟩
     have readEq : some ([], addressReady alternateBacking) = some (values, afterRead) := reads
     cases readEq
     have resolvedEq : some [resolvedStore alternateRange] = some addresses := resolved
     cases resolvedEq
-    have same : alternateRange = range := by
-      have sameAddress := (List.cons.inj operands).1
-      exact Option.some.inj (congrArg OperationAddress.range sameAddress)
-    subst range
-    subst changed
-    subst result
-    have written : some (addressWritten alternateBacking 2) = some stored := writes.2.2.1
-    cases written
-    have contradictionAtRoot := congrArg
-      (fun state : MemoryRegisters addressLanguage testProfile => state.virtualValues) next
-    cases contradictionAtRoot
+    have meaning : ((∃ range : Hybrid.Range, [resolvedStore alternateRange] = [resolvedStore range] ∧
+          result = CoreValue.scalar (.int .u8 range.ptr.addr)) ∨
+        (([resolvedStore alternateRange] = [abstractStore] ∨
+          [resolvedStore alternateRange] = [emptyStoreAddress]) ∧ result = CoreValue.other ())) ∧
+        effects = [] ∧ changed = Memory.operationStore
+          (Memory.prepareAddresses (addressReady alternateBacking) [⟨(), storePlace⟩]) false := by
+      with_unfolding_all exact operates
+    rcases meaning with ⟨⟨range, operands, value⟩ | ⟨impossible, _⟩, _, unchanged⟩
+    · have same : alternateRange = range := by
+        have sameAddress := (List.cons.inj operands).1
+        exact Option.some.inj (congrArg OperationAddress.range sameAddress)
+      subst range
+      subst changed
+      subst result
+      have written : some (addressWritten alternateBacking 2) = some stored := writes.2.2.1
+      cases written
+      have contradictionAtRoot := congrArg
+        (fun state : MemoryRegisters addressLanguage testProfile => state.virtualValues) next
+      cases contradictionAtRoot
+    · rcases impossible with wrong | wrong
+      all_goals
+        have range := congrArg OperationAddress.range (List.cons.inj wrong).1
+        cases range
 
-private def zeroBIR (project : Project) : BIR testLowering testProfile :=
-  let block : Block _ _ _ := ⟨⟨0⟩, [], [], .ret (some ⟨(), .literal ⟨[0]⟩⟩), []⟩
+private def logicalAddressProgram (project : Project) : MIR testLowering testProfile :=
+  let address : MIRInst testLowering :=
+    .op (opcode := .named ⟨"address"⟩) (ty := ()) ⟨shadowRoot, []⟩ () .nil [] [⟨(), ⟨storeRoot, []⟩⟩]
+  let indirect : MIRInst testLowering :=
+    .op (opcode := .named ⟨"indirectReadWrite"⟩) (types := [()]) (ty := ()) ⟨shadowRoot, []⟩ ()
+      (.cons (.copy ⟨shadowRoot, []⟩) .nil) []
+  ⟨project, Exec.Demo.mainF, (addressMemory project).signatures,
+    [(Exec.Demo.mainF, [(storeRoot, ()), (shadowRoot, ())], ⟨⟨0⟩, #[⟨⟨0⟩, [],
+      [⟨testOrigin, .bind (ty := ()) ⟨storeRoot, []⟩ (.literal ⟨[42]⟩)⟩,
+        ⟨testOrigin, address⟩, ⟨testOrigin, indirect⟩], .ret (some ⟨(), .copy ⟨shadowRoot, []⟩⟩), []⟩]⟩)]⟩
+
+private def logicalAddressBefore : MemoryRegisters addressLanguage testProfile :=
+  {storeInitial with
+    instruction := 1, live := [storeRoot], initialized := [storeRoot]
+    virtualValues := [(storeRoot, storeValue)]}
+
+private def logicalAddressAfter : MemoryRegisters addressLanguage testProfile :=
+  {logicalAddressBefore with
+    instruction := 2, live := [shadowRoot, storeRoot], initialized := [shadowRoot, storeRoot]
+    virtualValues := [(shadowRoot, .other ()), (storeRoot, storeValue)]
+    addressIds := [(storeRoot, ⟨0⟩)], nextAddressId := 1}
+
+-- One logical step serves both physical placements. A pointer to the other
+-- placement fails the value relation even when the pointee bytes coincide.
+private theorem logicalAddressStep (project : Project) :
+    (logicalAddressProgram project).Step (language := addressLanguage)
+      logicalAddressBefore logicalAddressAfter ∧
+    addressLanguage.representsValue testProfile.memoryTarget [(⟨0⟩, some storeRange)] ()
+      (CoreValue.other ()) (CoreValue.scalar (.int .u8 1)) ∧
+    addressLanguage.representsValue testProfile.memoryTarget [(⟨0⟩, some alternateRange)] ()
+      (CoreValue.other ()) (CoreValue.scalar (.int .u8 2)) ∧
+    ¬ addressLanguage.representsValue testProfile.memoryTarget [(⟨0⟩, some alternateRange)] ()
+      (CoreValue.other ()) (CoreValue.scalar (.int .u8 1)) := by
+  refine ⟨?_, rfl, rfl, (show CoreValue.scalar (.int .u8 1) ≠ (CoreValue.scalar (.int .u8 2) : CoreValue Unit) from by intro h; cases h)⟩
+  refine ⟨rfl, [], _, [abstractStore], CoreValue.other (), [], _, {logicalAddressAfter with instruction := 1},
+    rfl, rfl, rfl, ⟨Or.inr ⟨Or.inl rfl, rfl⟩, rfl, rfl⟩, rfl, ?_, rfl⟩
+  with_unfolding_all
+    refine Memory.WriteParams.cons (language := addressLanguage)
+      (started := {logicalAddressBefore with
+        live := [shadowRoot, storeRoot]
+        addressIds := [(storeRoot, ⟨0⟩)], nextAddressId := 1}) ?_ ?_ (.nil _)
+  · exact ⟨by decide, Or.inl ⟨rfl, rfl⟩⟩
+  · exact ⟨⟨rfl, fun _ => rfl⟩, nofun, rfl, rfl, nofun⟩
+
+private def zeroAddressMemory (project : Project) : Memory testLowering testProfile :=
+  {addressMemory project with layouts := (zeroMemory project).layouts}
+
+private def zeroAddressReady : MemoryRegisters addressLanguage testProfile :=
+  {storeInitial with
+    live := [shadowRoot, storeRoot], initialized := [storeRoot], zeroValues := [(storeRoot, storeValue)]}
+
+private def zeroAddressWritten : MemoryRegisters addressLanguage testProfile :=
+  {zeroAddressReady with
+    initialized := [shadowRoot, storeRoot]
+    virtualValues := [(shadowRoot, CoreValue.other ())]
+    addressIds := [(storeRoot, ⟨0⟩)]
+    nextAddressId := 1}
+
+example (project : Project) :
+    let memory := zeroAddressMemory project
+    let address : Sigma (MemoryPlace Unit) := ⟨(), storePlace⟩
+    memory.resolveAddress (Memory.prepareAddresses zeroAddressReady [address]) false address =
+      some emptyStoreAddress ∧
+    memory.InstructionStep (language := addressLanguage) zeroAddressReady
+      {zeroAddressReady with
+        instruction := 1, initialized := [shadowRoot, storeRoot]
+        virtualValues := [(shadowRoot, .other ())], addressIds := [(storeRoot, ⟨0⟩)], nextAddressId := 1}
+      false addressInstruction := by
+  refine ⟨rfl, ?_⟩
+  refine ⟨[], _, [emptyStoreAddress], CoreValue.other (), [], _, zeroAddressWritten, rfl, rfl, rfl,
+    ⟨Or.inr ⟨Or.inr rfl, rfl⟩, rfl, rfl⟩, rfl, ?_, rfl⟩
+  exact ⟨⟨rfl, fun _ => rfl⟩, nofun, rfl, rfl, nofun⟩
+
+private def suspendedAddress : MemoryRegisters addressLanguage testProfile :=
+  {storeInitial with
+    live := [shadowRoot], initialized := [shadowRoot], virtualValues := [(shadowRoot, .other ())]
+    callers := [⟨logicalAddressAfter.toMemoryFrame, none⟩], nextAddressId := 1}
+
+private def updatedSuspendedAddress : MemoryRegisters addressLanguage testProfile :=
+  let caller := {logicalAddressAfter.toMemoryFrame with
+    virtualValues := [(shadowRoot, .other ()), (storeRoot, .scalar (.int .u8 99))]}
+  {suspendedAddress with
+    instruction := 1, virtualValues := [(shadowRoot, storeValue)]
+    callers := [⟨caller, none⟩]}
+
+private def indirectWriteStore : OperationStore (CoreValue Unit) :=
+  {Memory.operationStore (language := addressLanguage) suspendedAddress true with
+    addressedValues := [(⟨0⟩, CoreValue.scalar (.int .u8 99))]}
+
+-- Read an escaped value through a reference and update the suspended frame
+-- that owns it. Plant a lowering that discards the indirect write.
+example (project : Project) :
+    let memory := (logicalAddressProgram project).logicalView (language := addressLanguage)
+    memory.InstructionStep suspendedAddress updatedSuspendedAddress true indirectInstruction ∧
+    ¬ memory.InstructionStep suspendedAddress
+      {updatedSuspendedAddress with callers := suspendedAddress.callers} true indirectInstruction := by
+  dsimp only
+  constructor
+  · refine ⟨[CoreValue.other ()], _, [], storeValue, [], _, {updatedSuspendedAddress with instruction := 0},
+      rfl, rfl, rfl, ⟨rfl, rfl, rfl, Or.inl ⟨rfl, rfl, rfl⟩⟩, rfl, ?_, rfl⟩
+    with_unfolding_all
+      exact Memory.WriteParams.cons (language := addressLanguage) rfl
+        ⟨⟨rfl, fun _ => rfl⟩, nofun, rfl, rfl, nofun⟩ (.nil _)
+  · rintro ⟨values, afterRead, operands, result, effects, changed, stored, reads, _, addresses,
+      operates, _, writes, next⟩
+    have actualRead : some ([CoreValue.other ()], suspendedAddress) = some (values, afterRead) := by
+      with_unfolding_all exact reads
+    cases actualRead
+    have resolved : some [] = some operands := addresses
+    cases resolved
+    have observed : ([] : List (OperationAddress Unit)) = [] ∧ result = storeValue ∧ effects = [] ∧
+        (([CoreValue.other ()] = [CoreValue.other ()] ∧
+          AList.lookup (Memory.operationStore suspendedAddress true).addressedValues ⟨0⟩ = some storeValue ∧
+          changed = indirectWriteStore) ∨
+          ∃ ptr bytes, [CoreValue.other ()] = [CoreValue.scalar (.int .u8 ptr.addr)] ∧
+            suspendedAddress.bytes.load testProfile.memoryTarget ptr 1 1 = some [.init 42 none] ∧
+            suspendedAddress.bytes.store testProfile.memoryTarget ptr [.init 99 none] 1 = some bytes ∧
+            changed = {Memory.operationStore suspendedAddress true with bytes := bytes}) := by
+      with_unfolding_all exact operates
+    obtain ⟨_, rfl, rfl, meaning⟩ := observed
+    rcases meaning with ⟨_, _, rfl⟩ | ⟨_, _, impossible, _⟩
+    · have params : @Memory.WriteParams addressLanguage testLowering testProfile (@MIR.logicalView addressLanguage testLowering testProfile (logicalAddressProgram project))
+          [⟨(), addressResultPlace⟩] [storeValue] (Memory.applyOperation suspendedAddress true indirectWriteStore) stored := by
+        simp only [Bool.true_or, ite_true] at writes
+        with_unfolding_all exact writes
+      cases params with
+      | cons same write rest =>
+        cases rest
+        have before : _ = Memory.applyOperation suspendedAddress true indirectWriteStore := same
+        subst_vars
+        have actualWrite : some {updatedSuspendedAddress with instruction := 0} = some stored := write.2.2.1
+        cases actualWrite
+        have callers := congrArg (fun state : MemoryRegisters addressLanguage testProfile => state.callers) next
+        cases callers
+    · cases impossible
+
+private def suspendedPhysical : MemoryRegisters addressLanguage testProfile :=
+  {storeInitial with
+    live := [shadowRoot], initialized := [shadowRoot]
+    virtualValues := [(shadowRoot, CoreValue.scalar (.int .u8 1))]
+    bytes := storeAfter.bytes
+    callers := [⟨(addressWritten storeAfter 1).toMemoryFrame, none⟩], nextAddressId := 1}
+
+private def updatedSuspendedPhysical : MemoryRegisters addressLanguage testProfile :=
+  {suspendedPhysical with
+    virtualValues := [(shadowRoot, storeValue)]
+    bytes := ⟨[(⟨0⟩, {storeBlock with bytes := [.init 99 none]})], 1⟩}
+
+example (project : Project) :
+    (addressMemory project).InstructionStep (language := addressLanguage)
+      suspendedPhysical updatedSuspendedPhysical.advance false indirectInstruction ∧
+    (Memory.operationStore (language := addressLanguage) updatedSuspendedAddress true).addressedValues =
+      [(⟨0⟩, CoreValue.scalar (.int .u8 99))] ∧
+    updatedSuspendedPhysical.bytes.load testProfile.memoryTarget storeRange.ptr 1 1 =
+      some [.init 99 none] := by
+  refine ⟨?_, rfl, rfl⟩
+  refine ⟨[CoreValue.scalar (.int .u8 1)], _, [], storeValue, [], _, updatedSuspendedPhysical,
+    rfl, rfl, rfl, ⟨rfl, rfl, rfl, Or.inr ⟨storeRange.ptr, _, rfl, rfl, rfl, rfl⟩⟩, rfl, ?_, rfl⟩
+  exact ⟨⟨rfl, fun _ => rfl⟩, nofun, rfl, rfl, nofun⟩
+
+private def logicalAddressFinal : MemoryRegisters addressLanguage testProfile :=
+  {logicalAddressAfter with
+    instruction := 3
+    virtualValues := [(shadowRoot, storeValue), (storeRoot, CoreValue.scalar (.int .u8 99))]}
+
+private def physicalAddressFinal (base : MemoryRegisters addressLanguage testProfile) (address : Nat)
+    (bytes : Mem.Memory) : MemoryRegisters addressLanguage testProfile :=
+  {addressWritten base address with instruction := 5, virtualValues := [(shadowRoot, storeValue)], bytes := bytes}
+
+-- Give the wrong compiler the exact input graph and the other live allocation.
+-- Its substituted result cannot be projected from a certified Memory step.
+example (project : Project) (m : LoweringModels addressLanguage testLowering testProfile)
+    (q next : m.memory.execution.State)
+    (reachable : m.memory.execution.finite (addressMemory project) q)
+    (step : m.memory.execution.step (addressMemory project) q next)
+    (before : m.memoryState q = addressReady alternateBacking)
+    (wrong : m.memoryState next = (addressWritten alternateBacking 1).advance) :
+    ¬ LowersMemory m (logicalAddressProgram project) (addressMemory project) := by
+  intro lowers
+  have tick := lowers.2.2.2.2.2.2.1.2.1 q next reachable step
+  rw [before, wrong] at tick
+  obtain ⟨block, fetched, runs⟩ := tick
+  have fetchedAddress := (addressSteps project).2.2
+  have same : some _ = some block := fetched
+  cases same
+  exact fetchedAddress runs
+
+private def birReturn (project : Project) (alternate : Bool) : BIR testLowering testProfile :=
+  let literal : UInt8 := if alternate then 42 else 0
+  let block : Block _ _ _ := ⟨⟨0⟩, [], [], .ret (some ⟨(), .literal ⟨[literal]⟩⟩), []⟩
   {(testBIR project (profile := testProfile)) with
     functions := [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[block]⟩)]}
 
--- The same contract accepts the valid emitted job whose imported execution
--- yields the source result, with the exact runtime bytes.
-example (project : Project) (m : LoweringModels testLanguage testLowering testProfile) :
-    EmitsLCB {m with
-      bir := returnsStatus _ 0
-      lcb := returnsStatus _ 0
-      lcbHandoff := fun _ _ => True} (zeroBIR project) (lcbReturnJob 0) := by
-  refine ⟨rfl, by with_unfolding_all rfl, nofun, by simp [lcbReturnJob], rfl,
-    ⟨[], rfl, rfl⟩, ?_, trivial, ⟨terminalSimulation (same := (show
-      (Observation.returned 0 ByteArray.empty).SameRuntimeResult (.returned 0 ByteArray.empty)
-      from ⟨rfl, rfl⟩)), ?_⟩⟩
-  · let execution := LCBInput.Execution (profile := testProfile) Nat project
-    let entry : execution.State :=
-      (LeanCompilerBackend.Verified.Source.initial (lcbReturnJob 0).body #[]).toOption
-    have result : execution.result (lcbReturnJob 0) entry (.returned 0 ByteArray.empty) := by
-      with_unfolding_all rfl
-    have only : ∀ p, execution.initial (lcbReturnJob 0) p → p = entry := fun _ h => h
-    have reachable : ∀ q, execution.finite (lcbReturnJob 0) q → q = entry := by
-      intro q
-      rintro ⟨p, initial, steps⟩
-      have atEntry := only p initial
-      subst p
-      cases steps with
-      | nil => rfl
-      | cons step _ => exact (execution.terminal _ _ _ result _ step).elim
-    refine ⟨?_, ?_, ?_, ?_⟩
-    · intro q finite
-      obtain rfl := reachable q finite
-      refine ⟨Or.inr ?_, fun event member => ?_, (), ⟨(), trivial, .nil _⟩, trivial, [], ?_⟩
-      · with_unfolding_all rfl
-      · have impossible : event ∈ ([] : List (Concrete.Contracts.ProcessEvent Nat)) := by
-          with_unfolding_all exact member
-        exact (List.not_mem_nil impossible).elim
-      · with_unfolding_all rfl
-    · intro q o finite observed
-      obtain rfl := reachable q finite
-      have matching : some (Concrete.Contracts.Observation.returned 0 ByteArray.empty) = some o := by
-        with_unfolding_all exact observed
-      refine ⟨(), ⟨(), trivial, .nil _⟩, (Option.some.inj matching).symm, ?_⟩
-      with_unfolding_all rfl
-    · intro run diverges
-      have start := only (run 0) diverges.1
-      have step := diverges.2 0
-      rw [start] at step
-      exact (execution.terminal _ _ _ result _ step).elim
-    · intro q stuck
-      have same := reachable q stuck.1
-      subst q
-      exact stuck.2.2 _ result
-  · exact fun p _ _ _ _ _ result => ⟨p, .nil _, result, rfl⟩
+private abbrev birExecution := BIR.Execution (language := testLanguage)
+  (lang := testLowering) (profile := testProfile)
 
-private theorem storedBytesWF : storeAfter.bytes.WellFormed testProfile.memoryTarget := by
-  let stored := {storeBlock with bytes := [.init 42 none]}
-  have lookup : ∀ block value, storeAfter.bytes.block block = some value →
+private theorem birReturnResult (project : Project) (alternate : Bool) :
+    birExecution.result (birReturn project alternate) (BIR.entryState (birReturn project alternate))
+      (.returned (if alternate then 42 else 0) ByteArray.empty) := by
+  cases alternate <;> with_unfolding_all rfl
+
+private theorem birReturnReachable (project : Project) (alternate : Bool) (state : birExecution.State)
+    (finite : birExecution.finite (birReturn project alternate) state) :
+    state = BIR.entryState (birReturn project alternate) := by
+  obtain ⟨start, initial, steps⟩ := finite
+  change start = BIR.entryState (birReturn project alternate) at initial
+  subst start
+  cases steps with
+  | nil => rfl
+  | cons step _ => exact (birExecution.terminal _ _ _ (birReturnResult project alternate) _ step).elim
+
+private theorem mismatchLCB (project : Project) (alternate : Bool) :
+    ¬ EmitsLCB testLanguage (birReturn project alternate)
+      (lcbReturnJob (if alternate then 0 else 42)) := by
+  intro emits
+  let execution := LCBInput.Execution (profile := testProfile) Nat project
+  have actual : execution.observes (lcbReturnJob (if alternate then 0 else 42))
+      (.returned (if alternate then 0 else 42) ByteArray.empty) := by
+    cases alternate <;> with_unfolding_all exact ⟨_, ⟨_, rfl, .nil _⟩, rfl⟩
+  obtain ⟨q, finite, result⟩ := actual
+  obtain ⟨p, reachable, wrong, _⟩ := emits.2.2.2.2.2.2.2.1 q _ finite result
+  rw [birReturnReachable project alternate p reachable] at wrong
+  have correct := birReturnResult project alternate
+  change BIR.hostedResult _ _ = some _ at wrong correct
+  have status := congrArg (fun o : Concrete.Contracts.Observation =>
+    match o with | .returned code _ => code | _ => 255)
+    (Option.some.inj (correct.symm.trans wrong))
+  cases alternate
+  · exact (show (0 : UInt8) ≠ 42 from by decide) status
+  · exact (show (42 : UInt8) ≠ 0 from by decide) status
+
+-- Independently substitute the emitted job and the source graph.
+example (project : Project) :
+    (¬ EmitsLCB testLanguage (birReturn project false) (lcbReturnJob 42)) ∧
+    (¬ EmitsLCB testLanguage (birReturn project true) (lcbReturnJob 0)) :=
+  ⟨mismatchLCB project false, mismatchLCB project true⟩
+
+example (project : Project) :
+    EmitsLCB testLanguage (birReturn project false) (lcbReturnJob 0) := by
+  refine ⟨rfl, by with_unfolding_all rfl, nofun, by simp [lcbReturnJob], rfl,
+    ⟨[], rfl, rfl⟩, ?_⟩
+  let execution := LCBInput.Execution (profile := testProfile) Nat project
+  let entry : execution.State :=
+    (LeanCompilerBackend.Verified.Source.initial (lcbReturnJob 0).body #[]).toOption
+  have result : execution.result (lcbReturnJob 0) entry (.returned 0 ByteArray.empty) := by
+    with_unfolding_all rfl
+  have only : ∀ p, execution.initial (lcbReturnJob 0) p → p = entry := fun _ h => h
+  have reachable : ∀ q, execution.finite (lcbReturnJob 0) q → q = entry := by
+    intro q
+    rintro ⟨p, initial, steps⟩
+    have atEntry := only p initial
+    subst p
+    cases steps with
+    | nil => rfl
+    | cons step _ => exact (execution.terminal _ _ _ result _ step).elim
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · intro q finite
+    obtain rfl := reachable q finite
+    refine ⟨Or.inr ?_, fun event member => ?_, _, ⟨_, rfl, .nil _⟩, Or.inl ?_, [], ?_⟩
+    · with_unfolding_all rfl
+    · have impossible : event ∈ ([] : List (Concrete.Contracts.ProcessEvent Nat)) := by
+        with_unfolding_all exact member
+      exact (List.not_mem_nil impossible).elim
+    · with_unfolding_all rfl
+    · with_unfolding_all rfl
+  · intro q o finite observed
+    obtain rfl := reachable q finite
+    have matching : some (Concrete.Contracts.Observation.returned 0 ByteArray.empty) = some o := by
+      with_unfolding_all exact observed
+    have same := Option.some.inj matching
+    subst o
+    refine ⟨_, ⟨_, rfl, .nil _⟩, birReturnResult project false, ?_⟩
+    with_unfolding_all rfl
+  · intro run diverges
+    have start := only (run 0) diverges.1
+    have step := diverges.2 0
+    rw [start] at step
+    exact (execution.terminal _ _ _ result _ step).elim
+  · intro q stuck
+    have same := reachable q stuck.1
+    subst q
+    exact stuck.2.2 _ result
+
+private def backingFits (space : AddrSpace) (base : Nat) : Prop :=
+  Mem.Memory.empty.Fits testProfile.memoryTarget (Mem.candidate space base 1 1)
+
+private def backingRange (space : AddrSpace) (base : Nat) : Hybrid.Range :=
+  ⟨⟨space, base, some ⟨0⟩⟩, 1, 1⟩
+
+private def backingBefore (space : AddrSpace) (base : Nat) : MemoryRegisters erasureLanguage testProfile :=
+  {storeBefore with
+    materialized := [(storeRoot, backingRange space base)]
+    bytes := ⟨[(⟨0⟩, Mem.candidate space base 1 1)], 1⟩}
+
+private def backingAfter (space : AddrSpace) (base : Nat) (byte : Fin 256 := 42) : MemoryRegisters erasureLanguage testProfile :=
+  {backingBefore space base with
+    instruction := 2, initialized := [storeRoot]
+    bytes := ⟨[(⟨0⟩, {Mem.candidate space base 1 1 with bytes := [.init byte none]})], 1⟩}
+
+private theorem emptyBytesWF : (Mem.Memory.empty).WellFormed testProfile.memoryTarget :=
+  ⟨nofun, by decide, nofun, nofun, nofun, nofun, nofun, nofun⟩
+
+private theorem storedBytesWF (space : AddrSpace) (base : Nat) (fits : backingFits space base)
+    (byte : Fin 256 := 42) :
+    (backingAfter space base byte).bytes.WellFormed testProfile.memoryTarget := by
+  let stored := {Mem.candidate space base 1 1 with bytes := [.init byte none]}
+  have lookup : ∀ block value, (backingAfter space base byte).bytes.block block = some value →
       block = ⟨0⟩ ∧ value = stored := by
     intro block value found
     change (if (⟨0⟩ : BlockId) = block then some stored else none) = some value at found
@@ -1561,26 +1868,26 @@ private theorem storedBytesWF : storeAfter.bytes.WellFormed testProfile.memoryTa
     · rename_i eq
       exact ⟨eq.symm, (Option.some.inj found).symm⟩
     · contradiction
-  refine ⟨?_, by decide, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨?_, (by simp : [_].Nodup), ?_, ?_, ?_, ?_, ?_, ?_⟩
   · intro entry member
     change entry ∈ [(⟨0⟩, stored)] at member
     cases List.mem_singleton.mp member
     rfl
   · intro block value found
     rcases lookup block value found with ⟨rfl, rfl⟩
-    decide
+    exact Nat.zero_lt_one
   · intro block value found
     rcases lookup block value found with ⟨_, rfl⟩
     rfl
   · intro block value found
     rcases lookup block value found with ⟨_, rfl⟩
-    decide
+    exact fits.2.2.1
   · intro block value found
     rcases lookup block value found with ⟨_, rfl⟩
-    decide
+    exact fits.2.2.2.2.2.2
   · intro block value found
     rcases lookup block value found with ⟨_, rfl⟩
-    decide
+    exact ⟨fits.1, fits.2.1⟩
   · intro b x c y first second distinct _ _
     exact (distinct ((lookup b x first).1.trans (lookup c y second).1.symm)).elim
 
@@ -1591,63 +1898,1287 @@ private def materializedBinding (project : Project) : Memory testLowering testPr
   {(immediateReturn project) with
     functions := [(Exec.Demo.mainF, [(storeRoot, ())], ⟨⟨0⟩, #[block]⟩)]}
 
-private theorem aggregateWrite (project : Project) :
-    (materializedBinding project).Writes (language := erasureLanguage) storeBefore storePlace
-      (.other ()) {storeAfter with instruction := 1} := by
-  refine ⟨⟨rfl, fun _ => rfl⟩, (fun _ => ⟨⟨1, 1⟩, rfl, by decide⟩),
-    rfl, rfl, fun _ => Or.inr ⟨storeRange, [(0, [.init 42 none])], rfl, rfl, ?_, ?_⟩⟩
+private theorem backingAccess (space : AddrSpace) (base : Nat) :
+    (backingBefore space base).bytes.access testProfile.memoryTarget (backingRange space base).ptr 1 1 =
+      some (some (⟨0⟩, 0)) := by
+  simp [backingBefore, backingRange, Mem.Memory.access, Mem.Memory.block, AList.lookup, Mem.candidate, Nat.mod_one]
+
+private theorem aggregateWrite (project : Project) (space : AddrSpace) (base : Nat) :
+    (materializedBinding project).Writes (language := erasureLanguage) (backingBefore space base) storePlace
+      (.other ()) {backingAfter space base with instruction := 1} := by
+  have stored : (backingBefore space base).bytes.store testProfile.memoryTarget
+      (backingRange space base).ptr [.init 42 none] 1 = some (backingAfter space base).bytes := by
+    unfold Mem.Memory.store
+    rw [show ([Mem.MByte.init 42 none]).length = 1 from rfl, backingAccess]
+    simp [backingBefore, backingAfter, Mem.Memory.modify, AList.update, Mem.candidate]
+  have loaded : (backingAfter space base).bytes.load testProfile.memoryTarget
+      (backingRange space base).ptr 1 1 = some [.init 42 none] := by
+    unfold Mem.Memory.load
+    rw [show (backingAfter space base).bytes.access testProfile.memoryTarget
+      (backingRange space base).ptr 1 1 = some (some (⟨0⟩, 0)) by
+        simp [backingAfter, backingBefore, backingRange, Mem.Memory.access, Mem.Memory.block,
+          AList.lookup, Mem.candidate, Nat.mod_one]]
+    rfl
+  refine ⟨⟨rfl, fun _ => rfl⟩, (fun _ => ⟨⟨1, 1⟩, rfl, ⟨nofun, nofun⟩⟩),
+    ?_, ?_, fun _ => Or.inr ⟨backingRange space base, [(0, [.init 42 none])], rfl, rfl, ?_, ?_⟩⟩
+  · simp [Memory.writeValue, Memory.zeroRoot, Memory.rangeAt, Memory.byteRuns,
+      Memory.layoutAt, materializedBinding, immediateReturn, zeroMemory, storePlace,
+      backingBefore, backingAfter, backingRange, storeBefore, storeInitial, storeRoot,
+      Mem.Memory.store, Mem.Memory.access, Mem.Memory.block, Mem.Memory.modify,
+      AList.lookup, AList.update, Mem.candidate, Nat.mod_one, erasureLanguage]
+  · with_unfolding_all
+      change (do
+        let bytes ← (backingAfter space base).bytes.load testProfile.memoryTarget
+          (backingRange space base).ptr 1 1
+        let value ← erasureLanguage.decodeOther testProfile.memoryTarget () bytes
+        pure (CoreValue.other value)) = _
+    rw [loaded]
+    rfl
   · exact fun _ => ⟨0, [.init 42 none], List.mem_cons_self .., by decide⟩
   · intro offset bytes member
     cases List.mem_singleton.mp member
-    refine ⟨by decide, ?_, rfl⟩
+    refine ⟨Nat.le_refl 1, ?_, loaded⟩
     intro byte included
     cases List.mem_singleton.mp included
     decide
 
--- The same binding that the erased lowering omits has a covered execution
--- with live backing bytes, satisfying representation and preserving its return.
-example (project : Project) :
-    let memory := materializedBinding project
-    (erasureSource project).Step (language := erasureLanguage) storeInitial erasureBound ∧
-    Concrete.Contracts.Steps (memory.Step (language := erasureLanguage)) storeInitial storeAfter ∧
-    memory.RepresentsActivation (language := erasureLanguage)
-      erasureBound.toMemoryFrame storeAfter.toMemoryFrame storeAfter.bytes ∧
-    (erasureSource project).terminalObservation (language := erasureLanguage) erasureBound =
-      some (.returned 0 ByteArray.empty) ∧
-    memory.terminalObservation (language := erasureLanguage) storeAfter =
-      some (.returned 0 ByteArray.empty) := by
-  dsimp only
-  refine ⟨erasureBinding project, .cons (b := storeBefore) ?_ (.cons ?_ (.nil _)), ?_, ?_, ?_⟩
-  · refine ⟨_, rfl, {storeBefore with instruction := 0}, ⟨by decide, Or.inr ?_⟩, rfl⟩
-    exact ⟨rfl, ⟨⟨1, 1⟩, rfl, Or.inr ⟨by decide, ⟨0⟩, 1, ⟨0⟩, storeBefore.bytes, rfl, rfl⟩⟩⟩
-  · exact ⟨_, rfl, CoreValue.other (), storeBefore, {storeAfter with instruction := 1},
-      rfl, aggregateWrite project, rfl⟩
-  · refine ⟨⟨storedBytesWF, by decide, by decide, fun _ h => h⟩, rfl, fun _ h => h,
-      by decide, by decide, by decide, by decide, nofun, ?_, ?_, nofun, ?_, ?_⟩
-    · intro place
-      change (place ∈ [storeRoot]) ↔ (AList.lookup [(storeRoot, CoreValue.other ())] place :
-        Option (CoreValue Unit)).isSome = true
-      by_cases equal : storeRoot = place
-      · subst place
-        decide
-      · simp [AList.lookup, equal, Ne.symm equal]
-    · intro place value member
-      exact List.mem_singleton.mpr (congrArg Prod.fst (List.mem_singleton.mp member))
+private theorem materializedRepresents (project : Project) (space : AddrSpace) (base : Nat)
+    (fits : backingFits space base) :
+    (materializedBinding project).RepresentsActivation (language := erasureLanguage)
+      erasureBound.toMemoryFrame (backingAfter space base).toMemoryFrame (backingAfter space base).bytes := by
+  refine ⟨⟨storedBytesWF space base fits, (by simp : [storeRoot].Nodup), (by simp : [storeRoot].Nodup), fun _ h => h⟩, rfl, fun _ h => h,
+    (by simp : [storeRoot].Nodup), (by simp : [storeRoot].Nodup), List.nodup_nil, List.nodup_nil, nofun, ?_, ?_, nofun, ?_, ?_⟩
+  · intro place
+    change (place ∈ [storeRoot]) ↔ (AList.lookup [(storeRoot, CoreValue.other ())] place :
+      Option (CoreValue Unit)).isSome = true
+    by_cases equal : storeRoot = place
+    · subst place
+      decide
+    · simp [AList.lookup, equal, Ne.symm equal]
+  · intro place value member
+    exact List.mem_singleton.mpr (congrArg Prod.fst (List.mem_singleton.mp member))
+  · intro place range member
+    cases List.mem_singleton.mp member
+    exact ⟨List.mem_singleton_self _, rfl,
+      ⟨⟨1, 1⟩, ⟨0⟩, _, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩
+  · intro place member
+    have eq := List.mem_singleton.mp member
+    subst place
+    refine ⟨_, _, (), .materialized, List.mem_singleton_self _, rfl, rfl, ?_, ?_⟩
+    · intro _
+      exact ⟨⟨1, 1⟩, rfl, ⟨nofun, nofun⟩⟩
+    · intro value lookedUp
+      have same : some (CoreValue.other ()) = some value := lookedUp
+      cases same
+      exact ⟨_, rfl, (aggregateWrite project space base).2.2.2⟩
+
+private inductive Materialization where
+  | initial
+  | allocated (space : AddrSpace) (base : Nat) (fits : backingFits space base)
+  | bound (space : AddrSpace) (base : Nat) (fits : backingFits space base)
+
+private def Materialization.state : Materialization → MemoryRegisters erasureLanguage testProfile
+  | .initial => storeInitial
+  | .allocated space base _ => backingBefore space base
+  | .bound space base _ => backingAfter space base
+
+private def Materialization.finished : Materialization → Bool
+  | .bound .. => true
+  | _ => false
+
+private inductive Materialization.Tick : Materialization → Materialization → Prop
+  | allocate (space base) (fits : backingFits space base) : Tick .initial (.allocated space base fits)
+  | bind (space base) (fits : backingFits space base) : Tick (.allocated space base fits) (.bound space base fits)
+
+private def materializedSourceState (done : Bool) : MemoryRegisters erasureLanguage testProfile :=
+  if done then erasureBound else storeInitial
+
+private theorem materializationExact (project : Project) (p : Materialization) (next : MemoryRegisters erasureLanguage testProfile) :
+    (materializedBinding project).Step (language := erasureLanguage) p.state next ↔
+      ∃ q, p.Tick q ∧ q.state = next := by
+  constructor
+  · intro step
+    cases p with
+    | initial =>
+      obtain ⟨block, fetched, tick⟩ := step
+      have same : some _ = some block := fetched
+      cases same
+      with_unfolding_all
+        change ∃ started, (materializedBinding project).Begins
+          (language := erasureLanguage) storeInitial storeRoot started ∧ next = started.advance at tick
+      obtain ⟨started, begins, rfl⟩ := tick
+      rcases begins.2 with ⟨impossible, _⟩ | ⟨_, layout, lookup, isZero | allocated⟩
+      · have wrong : some StorageClass.materialized = some .virtual := impossible
+        cases wrong
+      · have same : some (⟨1, 1⟩ : Layout) = some layout := lookup
+        cases same
+        exact (Nat.one_ne_zero isZero.1).elim
+      · have same : some (⟨1, 1⟩ : Layout) = some layout := lookup
+        cases same
+        obtain ⟨_, space, base, id, bytes, alloc, rfl⟩ := allocated
+        have result : Mem.Memory.empty.alloc testProfile.memoryTarget space base 1 1 = .ok (id, bytes) := alloc
+        unfold Mem.Memory.alloc at result
+        dsimp only at result
+        split at result
+        · rename_i fits
+          cases result
+          exact ⟨.allocated space base fits, .allocate space base fits, rfl⟩
+        · contradiction
+    | allocated space base fits =>
+      obtain ⟨block, fetched, tick⟩ := step
+      have same : some _ = some block := fetched
+      cases same
+      with_unfolding_all
+        change (materializedBinding project).InstructionStep (language := erasureLanguage)
+          (backingBefore space base) next false (.bind storePlace (.literal ⟨[]⟩)) at tick
+      obtain ⟨value, afterRead, stored, read, writes, rfl⟩ := tick
+      have readExact : some (CoreValue.other (), backingBefore space base) = some (value, afterRead) := read
+      cases readExact
+      have writeExact := (aggregateWrite project space base).2.2.1
+      have stores := writeExact.symm.trans writes.2.2.1
+      cases stores
+      exact ⟨.bound space base fits, .bind space base fits, rfl⟩
+    | bound space base fits =>
+      obtain ⟨block, fetched, tick⟩ := step
+      have same : some _ = some block := fetched
+      cases same
+      with_unfolding_all
+        change _ ∧ (materializedBinding project).Return (language := erasureLanguage)
+          (some ⟨(), .literal ⟨[0]⟩⟩) (backingAfter space base) next at tick
+      obtain ⟨_, caller, rest, _, _, _, callers, _⟩ := tick
+      change [] = caller :: rest at callers
+      cases callers
+  · rintro ⟨q, tick, rfl⟩
+    cases tick with
+    | allocate space base fits =>
+      refine ⟨_, rfl, {backingBefore space base with instruction := 0}, ⟨by decide, Or.inr ?_⟩, rfl⟩
+      refine ⟨rfl, ⟨⟨1, 1⟩, rfl, Or.inr ⟨by decide, space, base, ⟨0⟩, _, ?_, rfl⟩⟩⟩
+      change Mem.Memory.empty.alloc testProfile.memoryTarget space base 1 1 = _
+      unfold Mem.Memory.alloc
+      have ok : Mem.Memory.empty.Fits testProfile.memoryTarget (Mem.candidate space base 1 1) := fits
+      simp only [ok, ite_true]
+      rfl
+    | bind space base fits =>
+      exact ⟨_, rfl, .other (), backingBefore space base, {backingAfter space base with instruction := 1},
+        rfl, aggregateWrite project space base, rfl⟩
+
+private def logicalBindingBlock : MemoryBlock testLowering :=
+  ⟨⟨0⟩, [], [⟨testOrigin, .bind (ty := ()) ⟨⟨storeRoot, []⟩, .virtual⟩ (.literal ⟨[]⟩)⟩],
+    .ret (some ⟨(), .literal ⟨[0]⟩⟩), []⟩
+
+private theorem logicalBindingFunctions (project : Project) :
+    ((erasureSource project).logicalView (language := erasureLanguage)).functions =
+      [(Exec.Demo.mainF, [(storeRoot, ())], ⟨⟨0⟩, #[logicalBindingBlock]⟩)] := by
+  with_unfolding_all rfl
+
+private theorem materializedSourceExact (project : Project) (p : Bool)
+    (next : MemoryRegisters erasureLanguage testProfile) :
+    (erasureSource project).Step (language := erasureLanguage) (materializedSourceState p) next ↔
+      ∃ q : Bool, (p = false ∧ q = true) ∧ materializedSourceState q = next := by
+  constructor
+  · intro step
+    cases p
+    · exact ⟨true, ⟨rfl, rfl⟩, (erasureBindingUnique project _ step).symm⟩
+    · obtain ⟨block, fetched, tick⟩ := step
+      have same : some logicalBindingBlock = some block := by with_unfolding_all exact fetched
+      cases same
+      with_unfolding_all
+        change _ ∧ (erasureSource project).logicalView.Return (language := erasureLanguage)
+          (some ⟨(), .literal ⟨[0]⟩⟩) erasureBound next at tick
+      obtain ⟨_, caller, rest, _, _, _, callers, _⟩ := tick
+      change [] = caller :: rest at callers
+      cases callers
+  · rintro ⟨_, ⟨rfl, rfl⟩, rfl⟩
+    exact erasureBinding project
+
+private def finiteReturnModel (A S : Type) (start : S) (step : S → S → Prop)
+    (finished : S → Bool) (continues : ∀ p q, step p q → finished p = false)
+    (status : UInt8 := 0) : Model A Nat where
+  execution := {
+    State := S
+    initial := fun _ p => p = start
+    initialized := fun _ => ⟨start, rfl⟩
+    step := fun _ => step
+    result := fun _ p result => finished p = true ∧ result = .returned status ByteArray.empty
+    terminal := fun _ p _ result q tick => Bool.noConfusion ((continues p q tick).symm.trans result.1)
+    safe := fun _ _ => True
+    trace := fun _ _ => []
+    permitted := fun _ _ => True
+    resultTrace := by rintro _ _ _ ⟨_, rfl⟩; rfl
+    traceGrows := fun _ _ _ _ => ⟨[], rfl⟩
+  }
+  result := fun _ p o => finished p = true ∧ o = .returned status ByteArray.empty
+  projects := fun _ o result => o = .returned status ByteArray.empty ∧ result = .returned status ByteArray.empty
+  terminalExact := by
+    intro _ _ _
+    exact ⟨fun ⟨h, eq⟩ => ⟨_, ⟨h, rfl⟩, rfl, eq⟩, fun ⟨_, ⟨h, _⟩, _, eq⟩ => ⟨h, eq⟩⟩
+  completeProjection := fun _ _ _ h => ⟨_, h.2, rfl⟩
+  runtimeExact := by rintro _ _ _ ⟨rfl, rfl⟩; exact ⟨rfl, rfl⟩
+
+private def materializationModels (m : LoweringModels erasureLanguage testLowering testProfile) :
+    LoweringModels erasureLanguage testLowering testProfile :=
+  {m with
+    mir := finiteReturnModel _ Bool false (fun p q => p = false ∧ q = true) id
+      (fun _ _ h => h.1)
+    mirState := materializedSourceState
+    memory := finiteReturnModel _ Materialization .initial Materialization.Tick Materialization.finished
+      (fun _ _ h => by cases h <;> rfl)
+    memoryState := Materialization.state}
+
+private theorem materializedTables (project : Project) :
+    (materializedBinding project).TablesWF ∧
+      ((erasureSource project).logicalView (language := erasureLanguage)).TablesWF := by
+  constructor
+  all_goals
+    with_unfolding_all
+      refine ⟨(by simp : [_].Nodup), (by simp : [_].Nodup), (by simp : [_].Nodup), ?_, ?_, ?_, ?_⟩
+    · first | exact (by simp : [_].Nodup) | exact List.nodup_nil
+    · intro fn classes h
+      cases List.mem_singleton.mp h
+      exact (by simp : [_].Nodup)
+    · intro fn layouts h
+      first | (cases List.mem_singleton.mp h; exact (by simp : [_].Nodup)) | exact (List.not_mem_nil h).elim
+    · intro fn locals graph member
+      try rw [logicalBindingFunctions] at member
+      cases List.mem_singleton.mp member
+      refine ⟨(by simp : [_].Nodup), ⟨(by simp : [_].Nodup), ⟨_, List.mem_singleton_self _, rfl⟩, ?_⟩,
+        _, rfl, ⟨_, List.mem_singleton_self _, rfl, rfl⟩, ?_⟩
+      · intro block included
+        cases List.mem_singleton.mp included
+        exact fun _ => nofun
+      · intro block included
+        cases List.mem_singleton.mp included
+        refine ⟨rfl, ?_⟩
+        intro op h
+        first
+        | rcases List.mem_cons.mp h with rfl | last
+          · trivial
+          · cases List.mem_singleton.mp last; trivial
+        | cases List.mem_singleton.mp h; trivial
+
+private theorem allocatedBytesWF (space : AddrSpace) (base : Nat) (fits : backingFits space base) :
+    (backingBefore space base).bytes.WellFormed testProfile.memoryTarget := by
+  -- The allocation has the same geometry and live block as the initialized snapshot.
+  let allocated := Mem.candidate space base 1 1
+  have lookup : ∀ block value, (backingBefore space base).bytes.block block = some value →
+      block = ⟨0⟩ ∧ value = allocated := by
+    intro block value found
+    change (if (⟨0⟩ : BlockId) = block then some allocated else none) = some value at found
+    split at found
+    · rename_i eq
+      exact ⟨eq.symm, (Option.some.inj found).symm⟩
+    · contradiction
+  refine ⟨?_, (by simp : [_].Nodup), ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · intro entry member
+    change entry ∈ [(⟨0⟩, allocated)] at member
+    cases List.mem_singleton.mp member
+    rfl
+  · intro block value found
+    rcases lookup block value found with ⟨rfl, rfl⟩
+    exact Nat.zero_lt_one
+  · intro block value found
+    rcases lookup block value found with ⟨_, rfl⟩
+    rfl
+  · intro block value found
+    rcases lookup block value found with ⟨_, rfl⟩
+    exact fits.2.2.1
+  · intro block value found
+    rcases lookup block value found with ⟨_, rfl⟩
+    exact fits.2.2.2.2.2.2
+  · intro block value found
+    rcases lookup block value found with ⟨_, rfl⟩
+    exact ⟨fits.1, fits.2.1⟩
+  · intro b x c y first second distinct _ _
+    exact (distinct ((lookup b x first).1.trans (lookup c y second).1.symm)).elim
+
+private theorem materializationRepresents (project : Project) (q : Materialization) :
+    (materializedBinding project).RepresentsActivation (language := erasureLanguage)
+      (materializedSourceState q.finished).toMemoryFrame q.state.toMemoryFrame q.state.bytes := by
+  cases q with
+  | initial =>
+    exact ⟨⟨emptyBytesWF, List.nodup_nil, List.nodup_nil, nofun⟩,
+      rfl, nofun, List.nodup_nil, List.nodup_nil, List.nodup_nil, List.nodup_nil,
+      nofun, (fun _ => ⟨nofun, nofun⟩), nofun, nofun, nofun, nofun⟩
+  | allocated space base fits =>
+    refine ⟨⟨allocatedBytesWF space base fits, (by simp : [_].Nodup), List.nodup_nil, nofun⟩,
+      rfl, nofun, List.nodup_nil, (by simp : [_].Nodup), List.nodup_nil, List.nodup_nil,
+      nofun, (fun _ => ⟨nofun, nofun⟩), nofun, nofun, ?_, ?_⟩
     · intro place range member
       cases List.mem_singleton.mp member
       exact ⟨List.mem_singleton_self _, rfl,
         ⟨⟨1, 1⟩, ⟨0⟩, _, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩
     · intro place member
-      have eq := List.mem_singleton.mp member
-      subst place
-      refine ⟨_, _, (), .materialized, List.mem_singleton_self _, rfl, rfl, ?_, ?_⟩
-      · intro _
-        exact ⟨⟨1, 1⟩, rfl, ⟨nofun, nofun⟩⟩
-      · intro value lookedUp
-        have same : some (CoreValue.other ()) = some value := lookedUp
+      cases List.mem_singleton.mp member
+      exact ⟨_, _, (), .materialized, List.mem_singleton_self _, rfl, rfl,
+        fun _ => ⟨⟨1, 1⟩, rfl, ⟨nofun, nofun⟩⟩, fun _ => nofun⟩
+  | bound space base fits => exact materializedRepresents project space base fits
+
+-- This witness checks the full contract, including every allowed backing allocation.
+example (project : Project) (m : LoweringModels erasureLanguage testLowering testProfile) :
+    LowersMemory (materializationModels m) (erasureSource project) (materializedBinding project) := by
+  refine ⟨rfl, rfl, ⟨?_, ?_⟩, ?_, rfl, ?_, ?_, ?_,
+    (materializedTables project).1, (materializedTables project).2, ?_⟩
+  · intro x h
+    have member : x ∈ [testOrigin, testOrigin] := h
+    rcases List.mem_cons.mp member with equal | rest
+    · exact List.mem_singleton.mpr equal
+    · exact rest
+  · intro x h
+    have member : x ∈ [testOrigin] := h
+    exact List.mem_cons_of_mem _ member
+  · constructor
+    · intro fn locals graph member place ty localMember
+      cases List.mem_singleton.mp member
+      cases List.mem_singleton.mp localMember
+      exact ⟨_, rfl, Or.inr ⟨rfl, _, _, rfl, rfl, rfl⟩⟩
+    · intro fn layouts place layout member slot
+      cases List.mem_singleton.mp member
+      cases List.mem_singleton.mp slot
+      exact ⟨_, _, (), _, List.mem_singleton_self _, List.mem_singleton_self _, rfl, rfl, rfl⟩
+  · constructor
+    · intro fn locals graph member place ty localMember
+      cases List.mem_singleton.mp member
+      cases List.mem_singleton.mp localMember
+      exact ⟨_, .materialized, rfl, rfl, ⟨nofun, fun h => Bool.noConfusion (show false = true from h.1)⟩⟩
+    · intro fn classes place member localMember
+      cases List.mem_singleton.mp member
+      cases List.mem_singleton.mp localMember
+  · refine ⟨⟨?_, ?_⟩, ?_, ?_, ?_⟩
+    · rintro q (rfl : q = Materialization.initial)
+      exact ⟨rfl, rfl, ⟨_, rfl, rfl⟩, ⟨_, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+    · intro q _
+      cases q <;> with_unfolding_all rfl
+    · intro q next _ tick
+      exact (materializationExact project q next.state).2 ⟨next, tick, rfl⟩
+    · intro q next _ tick
+      exact (materializationExact project q next).1 tick
+    · intro q result _
+      cases q <;> constructor
+      all_goals
+        first
+        | (rintro ⟨_, rfl⟩; with_unfolding_all rfl)
+        | (intro equal; with_unfolding_all exact ⟨rfl, (Option.some.inj equal).symm⟩)
+        | (intro h; exfalso; exact Bool.noConfusion (show false = true from h.1))
+        | (intro h; have impossible : (none : Option Observation) = some result := (by with_unfolding_all exact h); cases impossible)
+  · refine ⟨⟨?_, ?_⟩, ?_, ?_, ?_⟩
+    · rintro p (rfl : p = false)
+      with_unfolding_all exact ⟨rfl, rfl, ⟨_, rfl, rfl⟩, ⟨logicalBindingBlock, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+    · intro p _
+      cases p <;> with_unfolding_all rfl
+    · intro p next _ tick
+      exact (materializedSourceExact project p _).2 ⟨next, tick, rfl⟩
+    · intro p next _ tick
+      exact (materializedSourceExact project p next).1 tick
+    · intro p result _
+      cases p <;> constructor
+      all_goals
+        first
+        | (rintro ⟨_, rfl⟩; with_unfolding_all rfl)
+        | (intro equal; with_unfolding_all exact ⟨rfl, (Option.some.inj equal).symm⟩)
+        | (intro h; exfalso; exact Bool.noConfusion (show false = true from h.1))
+        | (intro h; have impossible : (none : Option Observation) = some result := (by with_unfolding_all exact h); cases impossible)
+  · let start : Materialization := .initial
+    let first := Materialization.allocated ⟨0⟩ 1 (by unfold backingFits; decide)
+    let final := Materialization.bound ⟨0⟩ 1 (by unfold backingFits; decide)
+    have allocate : start.Tick first := .allocate ..
+    have bind : first.Tick final := .bind ..
+    refine ⟨?_, ?_, ?_, ?_, ?_⟩
+    · refine ⟨⟨(fun p q => p = q.finished), (fun _ q => match q with | .initial => 1 | _ => 0), ?_⟩,
+        ?_, ?_, ?_, ?_, ?_⟩
+      · intro p q q' related tick
+        cases tick with
+        | allocate => exact Or.inr ⟨related, Nat.zero_lt_one⟩
+        | bind => exact Or.inl ⟨true, true, ⟨related, rfl⟩, .nil _, rfl⟩
+      · rintro q (rfl : q = Materialization.initial)
+        exact ⟨false, rfl, rfl⟩
+      · exact fun _ _ _ _ _ => ⟨trivial, trivial, fun _ => nofun, [], rfl⟩
+      · intro p q o _ _ related outcome
+        exact ⟨p, .nil _, ⟨related.trans outcome.1, outcome.2⟩, rfl⟩
+      · intro q _
+        cases q with
+        | initial => exact Or.inl ⟨first, allocate⟩
+        | allocated => exact Or.inl ⟨_, .bind ..⟩
+        | bound => exact Or.inr ⟨_, rfl, rfl⟩
+      · intro run infinite
+        have count : ∀ n, (run (n + 1)).state.instruction = (run n).state.instruction + 1 := by
+          intro n
+          have tick := infinite.2 n
+          generalize run n = a, run (n + 1) = b at tick ⊢
+          cases tick <;> rfl
+        have bound (n) : (run n).state.instruction ≤ 2 := by
+          cases run n
+          · exact (by decide : 0 ≤ 2)
+          · exact (by decide : 1 ≤ 2)
+          · exact (by decide : 2 ≤ 2)
+        have zero := count 0
+        have one := count 1
+        have two := count 2
+        have impossible := bound 3
+        simp only [Nat.reduceAdd] at zero one two
+        omega
+    · intro p q o _ _ related outcome
+      exact ⟨p, .nil _, ⟨related.trans outcome.1, outcome.2⟩, rfl⟩
+    · rintro p (rfl : p = false)
+      exact ⟨start, rfl, rfl⟩
+    · intro p q _ _ related tick
+      obtain ⟨_, h : p = false, _⟩ := tick
+      cases q with
+      | initial => exact ⟨true, final, ⟨h, rfl⟩, .cons allocate (.cons bind (.nil _)), rfl⟩
+      | allocated => exact ⟨true, _, ⟨h, rfl⟩, .cons (.bind ..) (.nil _), rfl⟩
+      | bound => exact Bool.noConfusion (related.symm.trans h)
+    · intro p q _ _ related
+      change p = q.finished at related
+      subst p
+      refine ⟨materializationRepresents project q, ?_, ?_, ?_, ?_, ?_, ?_⟩
+      all_goals cases q <;> first | rfl | exact ⟨rfl, nofun⟩ | exact List.nodup_nil | exact nofun
+
+
+private structure AddressAllocation where
+  space : AddrSpace
+  base : Nat
+  fits : backingFits space base
+
+private def AddressAllocation.range (allocation : AddressAllocation) : Hybrid.Range :=
+  backingRange allocation.space allocation.base
+
+private def AddressAllocation.before (allocation : AddressAllocation) :
+    MemoryRegisters addressLanguage testProfile :=
+  backingBefore allocation.space allocation.base
+
+private def AddressAllocation.bound (allocation : AddressAllocation) :
+    MemoryRegisters addressLanguage testProfile :=
+  backingAfter allocation.space allocation.base
+
+private def AddressAllocation.updatedBytes (allocation : AddressAllocation) : Mem.Memory :=
+  ⟨[(⟨0⟩, {Mem.candidate allocation.space allocation.base 1 1 with bytes := [.init 99 none]})], 1⟩
+
+private theorem AddressAllocation.access (allocation : AddressAllocation) (byte : Fin 256) :
+    (⟨[(⟨0⟩, {Mem.candidate allocation.space allocation.base 1 1 with bytes := [.init byte none]})], 1⟩ :
+      Mem.Memory).access testProfile.memoryTarget allocation.range.ptr 1 1 = some (some (⟨0⟩, 0)) := by
+  simp [AddressAllocation.range, backingRange, Mem.Memory.access, Mem.Memory.block, AList.lookup,
+    Mem.candidate, Nat.mod_one]
+
+private theorem AddressAllocation.accessBound (allocation : AddressAllocation) :
+    allocation.bound.bytes.access testProfile.memoryTarget allocation.range.ptr 1 1 = some (some (⟨0⟩, 0)) :=
+  allocation.access 42
+
+private theorem AddressAllocation.loadBound (allocation : AddressAllocation) :
+    allocation.bound.bytes.load testProfile.memoryTarget allocation.range.ptr 1 1 = some [.init 42 none] := by
+  unfold Mem.Memory.load
+  rw [allocation.accessBound]
+  rfl
+
+private theorem AddressAllocation.storeBound (allocation : AddressAllocation) :
+    allocation.bound.bytes.store testProfile.memoryTarget allocation.range.ptr [.init 99 none] 1 =
+      some allocation.updatedBytes := by
+  unfold Mem.Memory.store
+  rw [show ([Mem.MByte.init 99 none]).length = 1 from rfl, allocation.accessBound]
+  rfl
+
+private theorem AddressAllocation.storeScalar (allocation : AddressAllocation) (project : Project) :
+    (addressMemory project).Writes (language := addressLanguage) allocation.before storePlace storeValue
+      {allocation.bound with instruction := 1} := by
+  have encoded : Hybrid.encode testProfile.memoryTarget (.int .u8 42) = some [.init 42 none] := rfl
+  refine ⟨⟨rfl, fun _ => rfl⟩, (fun _ => ⟨⟨1, 1⟩, rfl, ⟨nofun, nofun⟩⟩),
+    ?_, ?_, fun _ => Or.inr ⟨allocation.range, [(0, [.init 42 none])], rfl, rfl, ?_, ?_⟩⟩
+  · simp [Memory.writeValue, Memory.zeroRoot, Memory.rangeAt, Memory.byteRuns, Memory.layoutAt,
+      addressMemory, storingMemory, storePlace, AddressAllocation.before, AddressAllocation.bound,
+      backingBefore, backingAfter, backingRange, storeBefore, storeInitial, storeRoot,
+      Mem.Memory.store, Mem.Memory.access, Mem.Memory.block, Mem.Memory.modify,
+      AList.lookup, AList.update, Mem.candidate, Nat.mod_one, addressLanguage, storeValue, encoded]
+  · change (do
+      let bytes ← allocation.bound.bytes.load testProfile.memoryTarget allocation.range.ptr 1 1
+      let value ← Hybrid.decode testProfile.memoryTarget (.int .u8) bytes
+      pure (CoreValue.scalar value : CoreValue Unit)) = some storeValue
+    rw [allocation.loadBound]
+    rfl
+  · exact fun _ => ⟨0, [.init 42 none], List.mem_cons_self .., by decide⟩
+  · intro offset bytes member
+    cases List.mem_singleton.mp member
+    refine ⟨Nat.le_refl 1, ?_, allocation.loadBound⟩
+    intro byte included
+    cases List.mem_singleton.mp included
+    decide
+
+private inductive AddressSourcePhase where
+  | start | bound | reference | done
+
+private def AddressSourcePhase.state : AddressSourcePhase → MemoryRegisters addressLanguage testProfile
+  | .start => storeInitial
+  | .bound => logicalAddressBefore
+  | .reference => logicalAddressAfter
+  | .done => logicalAddressFinal
+
+private def AddressSourcePhase.next : AddressSourcePhase → Option AddressSourcePhase
+  | .start => some .bound
+  | .bound => some .reference
+  | .reference => some .done
+  | .done => none
+
+private inductive AddressTargetPhase where
+  | start
+  | allocated (allocation : AddressAllocation)
+  | bound (allocation : AddressAllocation)
+  | ready (allocation : AddressAllocation)
+  | reference (allocation : AddressAllocation)
+  | done (allocation : AddressAllocation)
+
+private def AddressTargetPhase.state : AddressTargetPhase → MemoryRegisters addressLanguage testProfile
+  | .start => storeInitial
+  | .allocated allocation => allocation.before
+  | .bound allocation => allocation.bound
+  | .ready allocation => addressReady allocation.bound
+  | .reference allocation => (addressWritten allocation.bound allocation.base).advance
+  | .done allocation => physicalAddressFinal allocation.bound allocation.base allocation.updatedBytes
+
+private def AddressTargetPhase.source : AddressTargetPhase → AddressSourcePhase
+  | .start | .allocated _ => .start
+  | .bound _ | .ready _ => .bound
+  | .reference _ => .reference
+  | .done _ => .done
+
+private inductive AddressTargetPhase.Tick : AddressTargetPhase → AddressTargetPhase → Prop
+  | allocate (a) : Tick .start (.allocated a)
+  | bind (a) : Tick (.allocated a) (.bound a)
+  | beginDestination (a) : Tick (.bound a) (.ready a)
+  | takeAddress (a) : Tick (.ready a) (.reference a)
+  | indirect (a) : Tick (.reference a) (.done a)
+
+private theorem physicalAddressExact (project : Project) (allocation : AddressAllocation)
+    (next : MemoryRegisters addressLanguage testProfile) :
+    (addressMemory project).InstructionStep (language := addressLanguage)
+      (addressReady allocation.bound) next false addressInstruction ↔
+    next = (AddressTargetPhase.reference allocation).state := by
+  have resolved : (addressMemory project).resolveAddress
+      (Memory.prepareAddresses (addressReady allocation.bound) [⟨(), storePlace⟩]) false
+      ⟨(), storePlace⟩ = some (resolvedStore allocation.range) := by
+    with_unfolding_all
+      change (do
+        let _ ← allocation.bound.bytes.access testProfile.memoryTarget allocation.range.ptr 1 1
+        pure (resolvedStore allocation.range)) = _
+    rw [allocation.accessBound]
+    rfl
+  constructor
+  · rintro ⟨values, readState, addresses, result, effects, changed, stored, read, _, fetched, op, _, writes, nextEq⟩
+    have readEq : some ([], addressReady allocation.bound) = some (values, readState) := read
+    cases readEq
+    have fetchedEq : some [resolvedStore allocation.range] = some addresses := by
+      change (do
+        let a ← (addressMemory project).resolveAddress
+          (Memory.prepareAddresses (addressReady allocation.bound) [⟨(), storePlace⟩]) false ⟨(), storePlace⟩
+        pure [a]) = some addresses at fetched
+      rw [resolved] at fetched
+      exact fetched
+    cases fetchedEq
+    have meaning : ((∃ range, [resolvedStore allocation.range] = [resolvedStore range] ∧
+          result = CoreValue.scalar (.int .u8 range.ptr.addr)) ∨
+        (([resolvedStore allocation.range] = [abstractStore] ∨
+          [resolvedStore allocation.range] = [emptyStoreAddress]) ∧ result = CoreValue.other ())) ∧
+        effects = [] ∧ changed = Memory.operationStore
+          (Memory.prepareAddresses (addressReady allocation.bound) [⟨(), storePlace⟩]) false := by
+      with_unfolding_all exact op
+    rcases meaning with ⟨⟨range, operands, rfl⟩ | ⟨impossible, _⟩, rfl, rfl⟩
+    · have same : allocation.range = range :=
+        Option.some.inj (congrArg OperationAddress.range (List.cons.inj operands).1)
+      subst range
+      have written : some (addressWritten allocation.bound allocation.base) = some stored := writes.2.2.1
+      cases written
+      exact nextEq
+    · rcases impossible with wrong | wrong
+      all_goals
+        have range := congrArg OperationAddress.range (List.cons.inj wrong).1
+        cases range
+  · rintro rfl
+    refine ⟨[], _, [resolvedStore allocation.range], CoreValue.scalar (.int .u8 allocation.base), [], _,
+      addressWritten allocation.bound allocation.base, rfl, rfl, ?_,
+      ⟨Or.inl ⟨allocation.range, rfl, rfl⟩, rfl, rfl⟩, rfl, ?_, rfl⟩
+    · change (do
+        let a ← (addressMemory project).resolveAddress
+          (Memory.prepareAddresses (addressReady allocation.bound) [⟨(), storePlace⟩]) false ⟨(), storePlace⟩
+        pure [a]) = _
+      rw [resolved]
+      rfl
+    · exact ⟨⟨rfl, fun _ => rfl⟩, nofun, rfl, rfl, nofun⟩
+
+private theorem logicalWritesUnique (memory : Memory testLowering testProfile)
+    (place : MemoryPlace Unit ()) (value : CoreValue Unit)
+    (before started stored expected : MemoryRegisters addressLanguage testProfile)
+    (unique : ∀ other, (if before.live.contains place.logical.root then other = before
+      else memory.Begins (language := addressLanguage) before place.logical.root other) → other = started)
+    (writes : @Memory.WriteParams addressLanguage testLowering testProfile memory [⟨(), place⟩]
+      [value] before stored)
+    (writing : memory.writeValue (language := addressLanguage) started place value = some expected) :
+    stored = expected := by
+  cases writes with
+  | cons begin write rest =>
+    cases rest
+    have starts := unique _ begin
+    subst_vars
+    exact Option.some.inj (write.2.2.1.symm.trans writing)
+
+
+private abbrev logicalAddressView (project : Project) : Memory testLowering testProfile :=
+  @MIR.logicalView addressLanguage testLowering testProfile (logicalAddressProgram project)
+
+private def logicalAddressBlock : MemoryBlock testLowering :=
+  let root : MemoryPlace Unit () := ⟨⟨storeRoot, []⟩, .virtual⟩
+  let address : MemoryInst testLowering :=
+    .op (opcode := .named ⟨"address"⟩) addressResultPlace () .nil [] [⟨(), root⟩]
+  ⟨⟨0⟩, [], [⟨testOrigin, .bind root (.literal ⟨[42]⟩)⟩, ⟨testOrigin, address⟩,
+    ⟨testOrigin, indirectInstruction⟩], .ret (some ⟨(), .copy addressResultPlace⟩), []⟩
+
+private theorem logicalAddressExact (project : Project) (phase : AddressSourcePhase)
+    (next : MemoryRegisters addressLanguage testProfile) :
+    (logicalAddressProgram project).Step (language := addressLanguage) phase.state next ↔
+      ∃ q, phase.next = some q ∧ q.state = next := by
+  constructor
+  · intro run
+    cases phase with
+    | start =>
+      obtain ⟨_, value, state, stored, read, write, rfl⟩ := run
+      have actual : some (storeValue, storeInitial) = some (value, state) := read
+      cases actual
+      have params : @Memory.WriteParams addressLanguage testLowering testProfile (logicalAddressView project)
+          [⟨(), ⟨⟨storeRoot, []⟩, .virtual⟩⟩] [storeValue] storeInitial stored := by
+        simp only [Bool.true_or, ite_true] at write
+        with_unfolding_all exact write
+      have unique : ∀ state, (logicalAddressView project).Begins
+          (language := addressLanguage) storeInitial storeRoot state →
+          state = {storeInitial with live := [storeRoot]} := by
+        intro state h
+        rcases h.2 with ⟨_, eq⟩ | ⟨bad, _⟩
+        · exact eq
+        · have impossible : some StorageClass.virtual = some .materialized := bad
+          cases impossible
+      have eq := logicalWritesUnique (logicalAddressView project) ⟨⟨storeRoot, []⟩, .virtual⟩
+        storeValue storeInitial {storeInitial with live := [storeRoot]} stored
+        {logicalAddressBefore with instruction := 0} unique params rfl
+      cases eq
+      exact ⟨.bound, rfl, rfl⟩
+    | bound =>
+      obtain ⟨_, values, state, operands, result, effects, changed, stored, read, _, resolved, op, _, write, rfl⟩ := run
+      have actual : some ([], logicalAddressBefore) = some (values, state) := read
+      cases actual
+      have address : some [abstractStore] = some operands := by with_unfolding_all exact resolved
+      cases address
+      have meaning : ((∃ range, [abstractStore] = [resolvedStore range] ∧
+            result = CoreValue.scalar (.int .u8 range.ptr.addr)) ∨
+          (([abstractStore] = [abstractStore] ∨ [abstractStore] = [emptyStoreAddress]) ∧ result = CoreValue.other ())) ∧
+          effects = [] ∧ changed = Memory.operationStore
+            (Memory.prepareAddresses logicalAddressBefore [⟨(), ⟨⟨storeRoot, []⟩, .virtual⟩⟩]) true := by
+        with_unfolding_all exact op
+      rcases meaning with ⟨⟨_, impossible, _⟩ | ⟨_, rfl⟩, rfl, rfl⟩
+      · have range := congrArg OperationAddress.range (List.cons.inj impossible).1
+        cases range
+      · let ready : MemoryRegisters addressLanguage testProfile := {logicalAddressBefore with
+          addressIds := [(storeRoot, ⟨0⟩)]
+          nextAddressId := 1}
+        have params : @Memory.WriteParams addressLanguage testLowering testProfile (logicalAddressView project)
+            [⟨(), addressResultPlace⟩] [CoreValue.other ()] ready stored := by
+          simp only [Bool.true_or, ite_true] at write
+          with_unfolding_all exact write
+        have unique : ∀ state, (logicalAddressView project).Begins
+            (language := addressLanguage) ready shadowRoot state →
+            state = {ready with live := [shadowRoot, storeRoot]} := by
+          intro state h
+          rcases h.2 with ⟨_, eq⟩ | ⟨bad, _⟩
+          · exact eq
+          · have impossible : some StorageClass.virtual = some .materialized := bad
+            cases impossible
+        have eq := logicalWritesUnique (logicalAddressView project) addressResultPlace
+          (CoreValue.other ()) ready {ready with live := [shadowRoot, storeRoot]} stored
+          {logicalAddressAfter with instruction := 1} unique params rfl
+        cases eq
+        exact ⟨.reference, rfl, rfl⟩
+    | reference =>
+      obtain ⟨_, values, state, operands, result, effects, changed, stored, read, _, resolved, op, _, write, rfl⟩ := run
+      have actual : some ([CoreValue.other ()], logicalAddressAfter) = some (values, state) := by
+        with_unfolding_all exact read
+      cases actual
+      have address : some [] = some operands := resolved
+      cases address
+      let modified : OperationStore (CoreValue Unit) :=
+        {Memory.operationStore (language := addressLanguage) logicalAddressAfter true with
+          addressedValues := [(⟨0⟩, CoreValue.scalar (.int .u8 99))]}
+      have meaning : ([] : List (OperationAddress Unit)) = [] ∧ result = storeValue ∧ effects = [] ∧
+          (([CoreValue.other ()] = [CoreValue.other ()] ∧
+            AList.lookup (Memory.operationStore logicalAddressAfter true).addressedValues ⟨0⟩ = some storeValue ∧
+            changed = modified) ∨
+            ∃ ptr bytes, [CoreValue.other ()] = [CoreValue.scalar (.int .u8 ptr.addr)] ∧
+              logicalAddressAfter.bytes.load testProfile.memoryTarget ptr 1 1 = some [.init 42 none] ∧
+              logicalAddressAfter.bytes.store testProfile.memoryTarget ptr [.init 99 none] 1 = some bytes ∧
+              changed = {Memory.operationStore logicalAddressAfter true with bytes := bytes}) := by
+        with_unfolding_all exact op
+      obtain ⟨_, rfl, rfl, meaning⟩ := meaning
+      rcases meaning with ⟨_, _, rfl⟩ | ⟨_, _, impossible, _⟩
+      · let ready := Memory.applyOperation (language := addressLanguage) logicalAddressAfter true modified
+        have params : @Memory.WriteParams addressLanguage testLowering testProfile (logicalAddressView project)
+            [⟨(), addressResultPlace⟩] [storeValue] ready stored := by
+          simp only [Bool.true_or, ite_true] at write
+          with_unfolding_all exact write
+        have eq := logicalWritesUnique (logicalAddressView project) addressResultPlace
+          storeValue ready ready stored {logicalAddressFinal with instruction := 2}
+          (fun _ h => h) params rfl
+        cases eq
+        exact ⟨.done, rfl, rfl⟩
+      · cases impossible
+    | done =>
+      obtain ⟨block, found, step⟩ := run
+      have pulled : some logicalAddressBlock = some block := by with_unfolding_all exact found
+      cases pulled
+      with_unfolding_all
+        change _ ∧ (logicalAddressView project).Return (language := addressLanguage)
+          (some ⟨(), .copy addressResultPlace⟩) logicalAddressFinal next at step
+      obtain ⟨_, caller, rest, _, _, _, callers, _⟩ := step
+      change [] = caller :: rest at callers
+      cases callers
+  · rintro ⟨q, step, rfl⟩
+    cases phase
+    · have same : some AddressSourcePhase.bound = some q := step
+      cases same
+      with_unfolding_all
+        refine ⟨rfl, storeValue, storeInitial, {logicalAddressBefore with instruction := 0}, rfl, ?_, rfl⟩
+      exact Memory.WriteParams.cons (language := addressLanguage)
+        (started := {storeInitial with live := [storeRoot]}) ⟨by decide, Or.inl ⟨rfl, rfl⟩⟩
+        ⟨⟨rfl, fun _ => rfl⟩, nofun, rfl, rfl, nofun⟩ (.nil _)
+    · have same : some AddressSourcePhase.reference = some q := step
+      cases same
+      exact (logicalAddressStep project).1
+    · have same : some AddressSourcePhase.done = some q := step
+      cases same
+      refine ⟨rfl, [CoreValue.other ()], logicalAddressAfter, [], storeValue, [], _,
+        {logicalAddressFinal with instruction := 2}, rfl, rfl, rfl,
+        ⟨rfl, rfl, rfl, Or.inl ⟨rfl, rfl, rfl⟩⟩, rfl, ?_, rfl⟩
+      with_unfolding_all
+        exact Memory.WriteParams.cons (language := addressLanguage) rfl
+          ⟨⟨rfl, fun _ => rfl⟩, nofun, rfl, rfl, nofun⟩ (.nil _)
+    · have impossible : (none : Option AddressSourcePhase) = some q := step
+      cases impossible
+
+
+private theorem AddressAllocation.pointerUnique (a : AddressAllocation) (ptr : Mem.Ptr)
+    (base : ptr.addr = a.base)
+    (load : a.bound.bytes.load testProfile.memoryTarget ptr 1 1 = some [.init 42 none]) :
+    ptr = a.range.ptr := by
+  obtain ⟨space, address, provenance⟩ := ptr
+  change address = a.base at base
+  subst address
+  cases provenance with
+  | none =>
+    have impossible : (none : Option (List Mem.MByte)) = some [.init 42 none] := load
+    cases impossible
+  | some block =>
+    unfold Mem.Memory.load Mem.Memory.access at load
+    simp only [Nat.one_ne_zero, ite_false] at load
+    -- Select the only live byte block in the allocation.
+    by_cases same : (⟨0⟩ : BlockId) = block
+    · subst block
+      by_cases inSpace : a.space = space
+      · subst space
+        rfl
+      · simp [AddressAllocation.bound, backingAfter, backingBefore, Mem.Memory.block,
+          AList.lookup, Mem.candidate, inSpace] at load
+    · simp [AddressAllocation.bound, backingAfter, backingBefore, Mem.Memory.block,
+        AList.lookup, same] at load
+
+private theorem physicalIndirectExact (project : Project) (a : AddressAllocation)
+    (next : MemoryRegisters addressLanguage testProfile) :
+    (addressMemory project).InstructionStep (language := addressLanguage)
+      (AddressTargetPhase.reference a).state next false indirectInstruction ↔
+    next = (AddressTargetPhase.done a).state := by
+  let before := (AddressTargetPhase.reference a).state
+  let storedState : MemoryRegisters addressLanguage testProfile :=
+    {(AddressTargetPhase.done a).state with instruction := 4}
+  constructor
+  · rintro ⟨values, afterRead, operands, result, effects, changed, stored, reads, _, resolves, op, _, writes, ends⟩
+    have read : some ([CoreValue.scalar (.int .u8 a.base)], before) = some (values, afterRead) := reads
+    cases read
+    have resolve : some [] = some operands := resolves
+    cases resolve
+    have meaning : ([] : List (OperationAddress Unit)) = [] ∧ result = storeValue ∧ effects = [] ∧
+        (([CoreValue.scalar (.int .u8 a.base)] = [CoreValue.other ()] ∧
+          AList.lookup (Memory.operationStore before false).addressedValues ⟨0⟩ = some storeValue ∧
+          changed = {Memory.operationStore before false with
+            addressedValues := AList.update (Memory.operationStore before false).addressedValues ⟨0⟩
+              (fun _ => CoreValue.scalar (.int .u8 99))}) ∨
+          ∃ ptr bytes, [(CoreValue.scalar (.int .u8 a.base) : CoreValue Unit)] = [CoreValue.scalar (.int .u8 ptr.addr)] ∧
+            a.bound.bytes.load testProfile.memoryTarget ptr 1 1 = some [.init 42 none] ∧
+            a.bound.bytes.store testProfile.memoryTarget ptr [.init 99 none] 1 = some bytes ∧
+            changed = {Memory.operationStore before false with bytes := bytes}) := by
+      with_unfolding_all exact op
+    obtain ⟨_, rfl, rfl, meaning⟩ := meaning
+    rcases meaning with ⟨impossible, _⟩ | ⟨ptr, bytes, argument, loaded, written, rfl⟩
+    · cases impossible
+    · have addr : ptr.addr = a.base := by
+        have equal := (List.cons.inj argument).1
+        injection equal with el
+        injection el with _ number
+        exact_mod_cast number.symm
+      have actual := a.pointerUnique ptr addr loaded
+      subst ptr
+      have exactBytes := Option.some.inj (a.storeBound.symm.trans written)
+      subst bytes
+      have exactWrite : some storedState = some stored := writes.2.2.1
+      cases exactWrite
+      exact ends
+  · rintro rfl
+    refine ⟨[CoreValue.scalar (.int .u8 a.base)], before, [], storeValue, [], _, storedState,
+      rfl, rfl, rfl, ⟨rfl, rfl, rfl, Or.inr ⟨a.range.ptr, a.updatedBytes, rfl, ?_, ?_, rfl⟩⟩, rfl, ?_, rfl⟩
+    · exact a.loadBound
+    · exact a.storeBound
+    · exact ⟨⟨rfl, fun _ => rfl⟩, nofun, rfl, rfl, nofun⟩
+
+private theorem addressTargetExact (project : Project) (phase : AddressTargetPhase)
+    (next : MemoryRegisters addressLanguage testProfile) :
+    (addressMemory project).Step (language := addressLanguage) phase.state next ↔
+      ∃ q, phase.Tick q ∧ q.state = next := by
+  have block : (addressMemory project).blockAt phase.state = some addressBlock := by
+    cases phase <;> rfl
+  constructor
+  · rintro ⟨actual, fetched, step⟩
+    rw [block] at fetched
+    have equal := Option.some.inj fetched
+    subst actual
+    cases phase with
+    | start =>
+      change (∃ begun, (addressMemory project).Begins (language := addressLanguage)
+        storeInitial storeRoot begun ∧ next = begun.advance) at step
+      obtain ⟨begun, begins, rfl⟩ := step
+      rcases begins.2 with ⟨impossible, _⟩ | ⟨_, layout, found, zero | allocated⟩
+      · have wrong : some StorageClass.materialized = some .virtual := impossible
+        cases wrong
+      · have same : some (⟨1, 1⟩ : Layout) = some layout := found
         cases same
-        exact (aggregateWrite project).2.2.2
-  · with_unfolding_all rfl
-  · with_unfolding_all rfl
+        exact (Nat.one_ne_zero zero.1).elim
+      · have same : some (⟨1, 1⟩ : Layout) = some layout := found
+        cases same
+        obtain ⟨_, space, base, id, bytes, alloc, rfl⟩ := allocated
+        have result : Mem.Memory.empty.alloc testProfile.memoryTarget space base 1 1 = .ok (id, bytes) := alloc
+        unfold Mem.Memory.alloc at result
+        dsimp only at result
+        split at result
+        · rename_i fits
+          cases result
+          exact ⟨.allocated ⟨space, base, fits⟩, .allocate _, rfl⟩
+        · contradiction
+    | allocated a =>
+      change (addressMemory project).InstructionStep (language := addressLanguage)
+        a.before next false (.bind storePlace (.literal ⟨[42]⟩)) at step
+      obtain ⟨value, afterRead, stored, read, write, rfl⟩ := step
+      have same : some (storeValue, a.before) = some (value, afterRead) := read
+      cases same
+      have exactWrite := (a.storeScalar project).2.2.1.symm.trans write.2.2.1
+      cases exactWrite
+      exact ⟨.bound a, .bind _, rfl⟩
+    | bound a =>
+      change (∃ begun, (addressMemory project).Begins (language := addressLanguage)
+        a.bound shadowRoot begun ∧ next = begun.advance) at step
+      obtain ⟨begun, begins, rfl⟩ := step
+      rcases begins.2 with ⟨_, rfl⟩ | ⟨bad, _⟩
+      · exact ⟨.ready a, .beginDestination _, rfl⟩
+      · have impossible : some StorageClass.virtual = some .materialized := bad
+        cases impossible
+    | ready a =>
+      have nextIs := (physicalAddressExact project a next).1 step
+      exact ⟨.reference a, .takeAddress _, nextIs.symm⟩
+    | reference a =>
+      have nextIs := (physicalIndirectExact project a next).1 step
+      exact ⟨.done a, .indirect _, nextIs.symm⟩
+    | done a =>
+      change _ ∧ (addressMemory project).Return (language := addressLanguage)
+        (some ⟨(), .copy addressResultPlace⟩) (AddressTargetPhase.done a).state next at step
+      obtain ⟨_, caller, rest, _, _, _, callers, _⟩ := step
+      change [] = caller :: rest at callers
+      cases callers
+  · rintro ⟨q, tick, rfl⟩
+    refine ⟨addressBlock, block, ?_⟩
+    cases tick with
+    | allocate a =>
+      refine ⟨{a.before with instruction := 0}, ⟨by decide, Or.inr ⟨rfl, ⟨1, 1⟩, rfl, Or.inr ?_⟩⟩, rfl⟩
+      refine ⟨by decide, a.space, a.base, ⟨0⟩, a.before.bytes, ?_, rfl⟩
+      change Mem.Memory.empty.alloc testProfile.memoryTarget a.space a.base 1 1 = _
+      unfold Mem.Memory.alloc
+      have fits : Mem.Memory.empty.Fits testProfile.memoryTarget (Mem.candidate a.space a.base 1 1) := a.fits
+      simp only [fits, ite_true]
+      rfl
+    | bind a => exact ⟨storeValue, a.before, {a.bound with instruction := 1}, rfl, a.storeScalar project, rfl⟩
+    | beginDestination a =>
+      exact ⟨{a.bound with live := [shadowRoot, storeRoot]}, ⟨nofun, Or.inl ⟨rfl, rfl⟩⟩, rfl⟩
+    | takeAddress a => exact (physicalAddressExact project a _).2 rfl
+    | indirect a => exact (physicalIndirectExact project a _).2 rfl
+
+
+private theorem addressStatic (project : Project) :
+    PreservesOrigins (logicalAddressProgram project).origins (addressMemory project).origins ∧
+    LayoutsMatch addressLanguage.layout (addressMemory project) ∧
+    PromotionSound (language := addressLanguage) (logicalAddressProgram project) (addressMemory project) ∧
+    (addressMemory project).TablesWF ∧ (logicalAddressView project).TablesWF := by
+  refine ⟨⟨?_, ?_⟩, ⟨?_, ?_⟩, ?_, ?_, ?_⟩
+  · intro origin member
+    change origin ∈ [testOrigin, testOrigin, testOrigin, testOrigin, testOrigin] at member
+    have equal : origin = testOrigin := by simpa using member
+    exact List.mem_cons.mpr (Or.inl equal)
+  · intro origin member
+    have list : origin ∈ [testOrigin, testOrigin, testOrigin] := member
+    have equal : origin = testOrigin := by simpa using list
+    exact List.mem_cons.mpr (Or.inl equal)
+  · intro fn locals graph included root ty declared
+    cases List.mem_singleton.mp included
+    rcases List.mem_cons.mp declared with h | h
+    · cases h
+      exact ⟨_, rfl, Or.inr ⟨rfl, _, _, rfl, rfl, rfl⟩⟩
+    · cases List.mem_singleton.mp h
+      exact ⟨_, rfl, Or.inl rfl⟩
+  · intro fn slots root layout listed slot
+    cases List.mem_singleton.mp listed
+    cases List.mem_singleton.mp slot
+    exact ⟨_, _, (), _, List.mem_singleton_self _, List.mem_cons_self .., rfl, rfl, rfl⟩
+  · have occurrences : (logicalAddressProgram project).operations =
+        [⟨Exec.Demo.mainF, ⟨0⟩, 1, testOrigin, .operator (.named ⟨"address"⟩),
+          [((), .address storeRoot [])], []⟩,
+         ⟨Exec.Demo.mainF, ⟨0⟩, 2, testOrigin, .operator (.named ⟨"indirectReadWrite"⟩),
+          [((), .copy shadowRoot [])], []⟩] := by with_unfolding_all rfl
+    have escapes : (logicalAddressProgram project).Escapes (language := addressLanguage)
+        Exec.Demo.mainF storeRoot := by
+      refine ⟨_, occurrences ▸ List.mem_cons_self .., rfl, (), [], List.mem_singleton_self _⟩
+    have noEscape : ¬ (logicalAddressProgram project).Escapes (language := addressLanguage)
+        Exec.Demo.mainF shadowRoot := by
+      rintro ⟨op, member, _, ty, path, argument⟩
+      rw [occurrences] at member
+      rcases List.mem_cons.mp member with rfl | rest
+      · have same := congrArg Prod.snd (List.mem_singleton.mp argument)
+        cases same
+      · cases List.mem_singleton.mp rest
+        have same := congrArg Prod.snd (List.mem_singleton.mp argument)
+        cases same
+    constructor
+    · intro fn locals graph known place ty declared
+      cases List.mem_singleton.mp known
+      rcases List.mem_cons.mp declared with h | h
+      · cases h
+        exact ⟨_, .materialized, rfl, rfl, ⟨nofun, fun h => False.elim (h.2 escapes)⟩⟩
+      · cases List.mem_singleton.mp h
+        exact ⟨_, .virtual, rfl, rfl, ⟨fun _ => ⟨rfl, noEscape⟩, fun _ => rfl⟩⟩
+    · intro fn classes place listed declared
+      cases List.mem_singleton.mp listed
+      rcases List.mem_cons.mp declared with h | h
+      · cases h
+      · cases List.mem_singleton.mp h
+        exact ⟨(), _, _, _, _, List.mem_singleton_self _, List.mem_cons_of_mem _ (List.mem_singleton_self _),
+          List.mem_singleton_self _, List.mem_cons_of_mem _ (List.mem_singleton_self _), rfl, noEscape⟩
+  all_goals
+    refine ⟨(by simp : [_].Nodup), (by simp : [_].Nodup), (by simp : [_].Nodup), ?_, ?_, ?_, ?_⟩
+    · first | exact (by simp : [_].Nodup) | exact List.nodup_nil
+    · intro fn classes membership
+      cases List.mem_singleton.mp membership
+      exact (by decide : [storeRoot, shadowRoot].Nodup)
+    · intro fn slots membership
+      first | (cases List.mem_singleton.mp membership; exact (by simp : [_].Nodup)) | exact (List.not_mem_nil membership).elim
+    · intro fn locals graph member
+      have logicalFunctions : (logicalAddressView project).functions =
+          [(Exec.Demo.mainF, [(storeRoot, ()), (shadowRoot, ())], ⟨⟨0⟩, #[logicalAddressBlock]⟩)] := by
+        with_unfolding_all rfl
+      try rw [logicalFunctions] at member
+      cases List.mem_singleton.mp member
+      refine ⟨(by decide : [storeRoot, shadowRoot].Nodup),
+        ⟨(by simp : [_].Nodup), ⟨_, List.mem_singleton_self _, rfl⟩, ?_⟩,
+        _, rfl, ⟨_, List.mem_singleton_self _, rfl, rfl⟩, ?_⟩
+      · intro block included
+        cases List.mem_singleton.mp included
+        exact fun _ => nofun
+      · intro block included
+        cases List.mem_singleton.mp included
+        refine ⟨rfl, ?_⟩
+        intro inst present
+        first
+        | have list : inst ∈ addressBlock.body := present
+          simp only [addressBlock, List.mem_cons, List.mem_nil_iff, or_false] at list
+          rcases list with rfl | rfl | rfl | rfl | rfl <;> trivial
+        | have list : inst ∈ logicalAddressBlock.body := present
+          simp only [logicalAddressBlock, List.mem_cons, List.mem_nil_iff, or_false] at list
+          rcases list with rfl | rfl | rfl <;> trivial
+
+private def AddressSourcePhase.finished : AddressSourcePhase → Bool
+  | .done => true
+  | _ => false
+
+private def AddressTargetPhase.stutterRank : AddressTargetPhase → Nat
+  | .start | .bound _ => 1
+  | _ => 0
+
+private def addressModels (m : LoweringModels addressLanguage testLowering testProfile) :
+    LoweringModels addressLanguage testLowering testProfile :=
+  {m with
+    mir := finiteReturnModel _ AddressSourcePhase .start (fun p q => p.next = some q)
+      AddressSourcePhase.finished (fun p _ h => by cases p <;> first | rfl | cases h) 42
+    mirState := AddressSourcePhase.state
+    memory := finiteReturnModel _ AddressTargetPhase .start AddressTargetPhase.Tick
+      (fun q => q.source.finished) (fun _ _ h => by cases h <;> rfl) 42
+    memoryState := AddressTargetPhase.state}
+
+private def addressSimulation (project : Project)
+    (m : LoweringModels addressLanguage testLowering testProfile) :
+    Concrete.Contracts.Simulates (addressModels m).mir.execution (addressModels m).memory.execution
+      (logicalAddressProgram project) (addressMemory project) where
+  simulation := ⟨fun p q => p = q.source, fun _ q => q.stutterRank, by
+    intro p q q' related tick
+    change p = q.source at related
+    subst p
+    cases tick
+    · exact Or.inr ⟨rfl, Nat.zero_lt_one⟩
+    · exact Or.inl ⟨_, _, rfl, .nil _, rfl⟩
+    · exact Or.inr ⟨rfl, Nat.zero_lt_one⟩
+    · exact Or.inl ⟨_, _, rfl, .nil _, rfl⟩
+    · exact Or.inl ⟨_, _, rfl, .nil _, rfl⟩⟩
+  initialMatch := by
+    rintro _ (rfl : _ = AddressTargetPhase.start)
+    exact ⟨.start, rfl, rfl⟩
+  prefixMatch _ _ _ _ _ := ⟨trivial, trivial, fun _ => nofun, [], rfl⟩
+  resultMatch p _ _ _ _ related result := ⟨p, .nil _, related ▸ result, rfl⟩
+  progress := by
+    intro q _
+    cases q with
+    | start => exact Or.inl ⟨_, .allocate ⟨⟨0⟩, 1, by unfold backingFits; decide⟩⟩
+    | allocated => exact Or.inl ⟨_, .bind _⟩
+    | bound => exact Or.inl ⟨_, .beginDestination _⟩
+    | ready => exact Or.inl ⟨_, .takeAddress _⟩
+    | reference => exact Or.inl ⟨_, .indirect _⟩
+    | done => exact Or.inr ⟨_, rfl, rfl⟩
+  divergentTrace := by
+    intro run infinite
+    have count : ∀ n, (run (n + 1)).state.instruction = (run n).state.instruction + 1 := by
+      intro n
+      have tick := infinite.2 n
+      generalize run n = a, run (n + 1) = b at tick ⊢
+      cases tick <;> rfl
+    have lower (n) : n ≤ (run n).state.instruction := by
+      induction n with
+      | zero => exact Nat.zero_le _
+      | succ n bound => rw [count]; exact Nat.succ_le_succ bound
+    have bound : (run 6).state.instruction ≤ 5 := by
+      cases run 6
+      · exact (by decide : 0 ≤ 5)
+      · exact (by decide : 1 ≤ 5)
+      · exact (by decide : 2 ≤ 5)
+      · exact (by decide : 3 ≤ 5)
+      · exact (by decide : 4 ≤ 5)
+      · exact (by decide : 5 ≤ 5)
+    have impossible := lower 6
+    omega
+
+
+private theorem AddressAllocation.loadUpdated (a : AddressAllocation) :
+    a.updatedBytes.load testProfile.memoryTarget a.range.ptr 1 1 = some [.init 99 none] := by
+  have access : a.updatedBytes.access testProfile.memoryTarget a.range.ptr 1 1 = some (some (⟨0⟩, 0)) :=
+    a.access 99
+  unfold Mem.Memory.load
+  rw [access]
+  rfl
+
+private theorem addressRepresents (project : Project) (q : AddressTargetPhase) :
+    (addressMemory project).RepresentsActivation (language := addressLanguage)
+      q.source.state.toMemoryFrame q.state.toMemoryFrame q.state.bytes q.state.toMemoryFrame.backingRanges := by
+  refine ⟨⟨?_, ?_, ?_, ?_⟩, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · cases q with
+    | start => exact emptyBytesWF
+    | allocated a => exact allocatedBytesWF a.space a.base a.fits
+    | done a => exact storedBytesWF a.space a.base a.fits 99
+    | _ a => exact storedBytesWF a.space a.base a.fits
+  · cases q <;> first
+    | exact List.nodup_nil
+    | exact (by simp : [storeRoot].Nodup)
+    | exact (by decide : [shadowRoot, storeRoot].Nodup)
+  · cases q <;> first
+    | exact List.nodup_nil
+    | exact (by simp : [storeRoot].Nodup)
+    | exact (by decide : [shadowRoot, storeRoot].Nodup)
+  · cases q <;> first
+    | exact fun _ h => (List.not_mem_nil h).elim
+    | exact fun _ h => h
+    | exact fun _ h => List.mem_cons_of_mem _ h
+  · cases q <;> rfl
+  · cases q <;> first
+    | exact fun _ h => h
+    | exact fun _ h => List.mem_cons_of_mem _ h
+  · cases q <;> first
+    | exact List.nodup_nil
+    | exact (by simp : [storeRoot].Nodup)
+    | exact (by decide : [shadowRoot, storeRoot].Nodup)
+  · cases q <;> first | exact List.nodup_nil | exact (by simp : [storeRoot].Nodup)
+  · cases q <;> first | exact List.nodup_nil | exact (by simp : [shadowRoot].Nodup)
+  · cases q <;> exact List.nodup_nil
+  · cases q <;> exact nofun
+  · intro place
+    cases q <;> first
+    | exact ⟨fun h => (List.not_mem_nil h).elim, fun h => Bool.noConfusion (show false = true from h)⟩
+    | (change (place ∈ [storeRoot]) ↔
+          (AList.lookup [(storeRoot, storeValue)] place).isSome = true
+       by_cases equal : storeRoot = place
+       · subst place; exact ⟨fun _ => rfl, fun _ => List.mem_singleton_self _⟩
+       · simp [AList.lookup, equal, Ne.symm equal])
+    | (by_cases eqShadow : shadowRoot = place
+       · subst place; exact ⟨fun _ => rfl, fun _ => List.mem_cons_self ..⟩
+       · by_cases eqRoot : storeRoot = place
+         · subst place; exact ⟨fun _ => rfl, fun _ => List.mem_cons_of_mem _ (List.mem_singleton_self _)⟩
+         · with_unfolding_all
+             simp [AddressSourcePhase.state, AddressTargetPhase.state, AddressTargetPhase.source,
+               logicalAddressAfter, logicalAddressFinal, physicalAddressFinal, addressWritten, addressReady, MemoryRegisters.advance,
+               AddressAllocation.bound, backingAfter, backingBefore,
+               storeBefore, storeInitial, AList.lookup, eqRoot, eqShadow, Ne.symm eqRoot, Ne.symm eqShadow])
+  · intro place value member
+    have live : place ∈ List.map Prod.fst q.source.state.virtualValues :=
+      List.mem_map.mpr ⟨(place, value), member, rfl⟩
+    cases q <;> exact live
+  · intro place value member
+    cases q <;> first
+    | exact (List.not_mem_nil member).elim
+    | (cases List.mem_singleton.mp member
+       exact ⟨List.mem_cons_self .., rfl⟩)
+  · intro place range member
+    cases q
+    · exact (List.not_mem_nil member).elim
+    all_goals
+      cases List.mem_singleton.mp member
+      refine ⟨?_, rfl, ⟨⟨1, 1⟩, ⟨0⟩, _, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩
+      first | exact List.mem_singleton_self _ | exact List.mem_cons_of_mem _ (List.mem_singleton_self _)
+  · intro place member
+    cases q with
+    | start => exact (List.not_mem_nil member).elim
+    | allocated a =>
+      cases List.mem_singleton.mp member
+      exact ⟨_, _, (), .materialized, List.mem_singleton_self _, rfl, rfl,
+        fun _ => ⟨⟨1, 1⟩, rfl, ⟨nofun, nofun⟩⟩, fun _ => nofun⟩
+    | bound a | ready a | reference a | done a =>
+      have membership : place = storeRoot ∨ place = shadowRoot := by
+        first
+        | exact Or.inl (List.mem_singleton.mp member)
+        | rcases List.mem_cons.mp member with eq | tail
+          · exact Or.inr eq
+          · exact Or.inl (List.mem_singleton.mp tail)
+      rcases membership with rfl | rfl
+      all_goals
+        first
+        | (refine ⟨_, _, (), .materialized, List.mem_singleton_self _, rfl, rfl,
+              fun _ => ⟨⟨1, 1⟩, rfl, ⟨nofun, nofun⟩⟩, ?_⟩
+           intro value found
+           first
+           | (have same : some storeValue = some value := found
+              cases same
+              exact ⟨storeValue, rfl, (a.storeScalar project).2.2.2⟩)
+           | (have same : some (CoreValue.scalar (.int .u8 99)) = some value := found
+              cases same
+              refine ⟨CoreValue.scalar (.int .u8 99), rfl, ?_, ?_⟩
+              · change (do
+                  let bytes ← a.updatedBytes.load testProfile.memoryTarget a.range.ptr 1 1
+                  let value ← Hybrid.decode testProfile.memoryTarget (.int .u8) bytes
+                  pure (CoreValue.scalar value : CoreValue Unit)) = some (CoreValue.scalar (.int .u8 99))
+                rw [a.loadUpdated]
+                rfl
+              · intro _
+                refine Or.inr ⟨a.range, [(0, [.init 99 none])], rfl, rfl,
+                  fun _ => ⟨0, [.init 99 none], List.mem_cons_self .., by decide⟩, ?_⟩
+                intro offset bytes written
+                cases List.mem_singleton.mp written
+                refine ⟨Nat.le_refl 1, ?_, a.loadUpdated⟩
+                intro byte included
+                cases List.mem_singleton.mp included
+                decide))
+        | (refine ⟨_, _, (), .virtual, List.mem_singleton_self _, rfl, rfl, nofun, ?_⟩
+           intro value found
+           first
+           | exact (List.not_mem_nil member).elim
+           | (have impossible : (none : Option (CoreValue Unit)) = some value := found; cases impossible)
+           | (have same : some (CoreValue.other ()) = some value := found
+              cases same
+              exact ⟨CoreValue.scalar (.int .u8 a.base), rfl, rfl, nofun⟩)
+           | (have same : some storeValue = some value := found
+              cases same
+              exact ⟨storeValue, rfl, rfl, nofun⟩))
+
+
+-- The full address-taking lowering executes the reference-consuming read and write
+-- under every permitted backing allocation, and returns the value read.
+example (project : Project) (m : LoweringModels addressLanguage testLowering testProfile) :
+    LowersMemory (addressModels m) (logicalAddressProgram project) (addressMemory project) := by
+  have static := addressStatic project
+  refine ⟨rfl, rfl, static.1, static.2.1, rfl, static.2.2.1, ?_, ?_, static.2.2.2.1,
+    static.2.2.2.2, ?_⟩
+  · refine ⟨⟨?_, ?_⟩, ?_, ?_, ?_⟩
+    · rintro _ (rfl : _ = AddressTargetPhase.start)
+      exact ⟨rfl, rfl, ⟨_, rfl, rfl⟩, ⟨addressBlock, rfl, rfl⟩,
+        rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+    · intro p _
+      cases p <;> with_unfolding_all rfl
+    · intro p q _ step
+      exact (addressTargetExact project p q.state).2 ⟨q, step, rfl⟩
+    · intro p q _ step
+      exact (addressTargetExact project p q).1 step
+    · intro p result _
+      cases p <;> constructor
+      all_goals
+        first
+        | (rintro ⟨_, rfl⟩; with_unfolding_all rfl)
+        | (intro equal; with_unfolding_all exact ⟨rfl, (Option.some.inj equal).symm⟩)
+        | (intro h; exfalso; exact Bool.noConfusion (show false = true from h.1))
+        | (intro h; have impossible : (none : Option Observation) = some result := (by with_unfolding_all exact h); cases impossible)
+  · refine ⟨⟨?_, ?_⟩, ?_, ?_, ?_⟩
+    · rintro _ (rfl : _ = AddressSourcePhase.start)
+      with_unfolding_all exact ⟨rfl, rfl, ⟨_, rfl, rfl⟩, ⟨logicalAddressBlock, rfl, rfl⟩,
+        rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+    · intro p _
+      cases p <;> with_unfolding_all rfl
+    · intro p q _ step
+      exact (logicalAddressExact project p q.state).2 ⟨q, step, rfl⟩
+    · intro p q _ step
+      exact (logicalAddressExact project p q).1 step
+    · intro p result _
+      cases p <;> constructor
+      all_goals
+        first
+        | (rintro ⟨_, rfl⟩; with_unfolding_all rfl)
+        | (intro equal; with_unfolding_all exact ⟨rfl, (Option.some.inj equal).symm⟩)
+        | (intro h; exfalso; exact Bool.noConfusion (show false = true from h.1))
+        | (intro h; have impossible : (none : Option Observation) = some result := (by with_unfolding_all exact h); cases impossible)
+  · refine ⟨addressSimulation project m, ?_, ?_, ?_, ?_⟩
+    · intro p q _ _ _ related outcome
+      exact ⟨p, .nil _, related ▸ outcome, rfl⟩
+    · rintro _ (rfl : _ = AddressSourcePhase.start)
+      exact ⟨.start, rfl, rfl⟩
+    · intro p q _ _ relation canStep
+      change p = q.source at relation
+      subst p
+      cases q with
+      | start =>
+        let a : AddressAllocation := ⟨⟨0⟩, 1, by unfold backingFits; decide⟩
+        exact ⟨.bound, .bound a, rfl, .cons (.allocate a) (.cons (.bind a) (.nil _)), rfl⟩
+      | allocated a => exact ⟨.bound, .bound a, rfl, .cons (.bind a) (.nil _), rfl⟩
+      | bound a => exact ⟨.reference, .reference a, rfl, .cons (.beginDestination a) (.cons (.takeAddress a) (.nil _)), rfl⟩
+      | ready a => exact ⟨.reference, .reference a, rfl, .cons (.takeAddress a) (.nil _), rfl⟩
+      | reference a => exact ⟨.done, .done a, rfl, .cons (.indirect a) (.nil _), rfl⟩
+      | done =>
+        obtain ⟨q, impossible⟩ := canStep
+        change (none : Option AddressSourcePhase) = some q at impossible
+        cases impossible
+    · intro p q _ _ relation
+      change p = q.source at relation
+      subst p
+      refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+      · have empty : q.state.callers = [] := by cases q <;> rfl
+        change (addressMemory project).RepresentsActivation (language := addressLanguage)
+          q.source.state.toMemoryFrame q.state.toMemoryFrame q.state.bytes
+          (q.state.toMemoryFrame.backingRanges ++ q.state.callers.flatMap (·.caller.backingRanges))
+        rw [empty, List.flatMap_nil, List.append_nil]
+        exact addressRepresents project q
+      · cases q <;> rfl
+      · cases q <;> exact nofun
+      · cases q <;> first
+        | exact ⟨rfl, fun _ _ h => (List.not_mem_nil h).elim⟩
+        | (refine ⟨rfl, ?_⟩
+           intro root id member
+           cases List.mem_singleton.mp member
+           exact ⟨List.mem_cons_of_mem _ (List.mem_singleton_self _), Or.inr rfl⟩)
+      · cases q <;> first | exact List.nodup_nil | exact (by simp : [(⟨0⟩ : Hybrid.Place)].Nodup)
+      · cases q <;> rfl
+      · cases q <;> rfl
 
 end StageInterfaceControls

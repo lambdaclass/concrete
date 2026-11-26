@@ -5682,6 +5682,10 @@ ConcreteSpec.StageGrammar.VerifyInstruction.write.sizeOf_spec
 ConcreteSpec.StageGrammar.VerifyState.mk.inj	
 ConcreteSpec.StageGrammar.VerifyState.mk.injEq	propext
 ConcreteSpec.StageGrammar.VerifyState.mk.sizeOf_spec	
+ConcreteSpec.StageInterface.AddressStorage.bytes.sizeOf_spec	
+ConcreteSpec.StageInterface.AddressStorage.logical.sizeOf_spec	
+ConcreteSpec.StageInterface.AddressStorage.ofNat_ctorIdx	
+ConcreteSpec.StageInterface.AddressStorage.zero.sizeOf_spec	
 ConcreteSpec.StageInterface.Admission.mk.inj	Quot.sound propext
 ConcreteSpec.StageInterface.Admission.mk.injEq	Quot.sound propext
 ConcreteSpec.StageInterface.Admission.mk.sizeOf_spec	Quot.sound propext
@@ -5849,6 +5853,8 @@ ConcreteSpec.StageInterface.TokenValue.name.sizeOf_spec	propext
 ConcreteSpec.StageInterface.TokenValue.stringLiteral.inj	propext
 ConcreteSpec.StageInterface.TokenValue.stringLiteral.injEq	propext
 ConcreteSpec.StageInterface.TokenValue.stringLiteral.sizeOf_spec	propext
+ConcreteSpec.StageInterface.instDecidableEqAddressStorage._proof_1	
+ConcreteSpec.StageInterface.instDecidableEqAddressStorage._proof_2	
 ConcreteSpec.StageInterface.instDecidableEqEarlyTy.decEq._proof_1	
 ConcreteSpec.StageInterface.instDecidableEqEarlyTy.decEq._proof_2	
 ConcreteSpec.StageInterface.instDecidableEqEarlyTy.decEq._proof_3	

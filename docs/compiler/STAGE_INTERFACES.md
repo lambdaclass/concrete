@@ -44,15 +44,22 @@ effects and the fetched trap’s diagnostic bytes.
 The logical MIR evaluator holds roots as logical values. Both IRs retain residual operation
 and call checks and evaluate them before performing the instruction. The simulation
 relates reachable activations, including suspended callers, to virtual values or live
-backing ranges and initialized bytes. Every related source transition must extend to a
-related target prefix. A target that returns early cannot erase a source materialization
+backing ranges and initialized bytes. When a related source state can step, a compatible
+source successor must have a represented target checkpoint. This allows Memory to commit
+to an allocation before resolving a logical reference. A target that returns early cannot erase a source materialization
 by retaining its declaration and origin metadata.
 
 Address operands name typed places explicitly. Physical execution resolves a live,
 initialized materialized place through its recorded range and passes that range, byte
-memory and ownership state to the spec operation transition. MIR supplies the logical
-place identity. Materialized zero-byte roots keep a logical value that supports field
-reads and replacement without a byte allocation. A linear move consumes root
+memory and ownership state to the spec operation transition. Both executions assign the
+same fresh logical provenance on first address use during a lifetime and keep it across
+calls. MIR uses the logical provenance and field path. The Memory simulation matches
+abstract ownership and checks stored-value correspondence using the live backing ranges
+of all related activations. Operations receive escaped logical values by provenance and
+apply indirect writes to the owning activation, including suspended callers. Physical
+operations use byte memory for nonempty roots. A zero-byte address carries its provenance
+and field path without requiring a byte block. Zero-byte roots keep a logical value for
+direct and indirect reads and writes. A linear move consumes root
 initialization, and field writes require an initialized root. Replace the erase-to-MIR `Memory.lower`
 and `Memory.run` proof path.
 
@@ -62,7 +69,7 @@ Fix (b) supplies the addressable/virtual partition and Fix (a) registers the val
 
 ## SSA → BIR
 
-Fix (a) owns the validated handoff and profile slot check. Fix (d) owns the trap table and its origin proof. `BIR` indexes traps through `TrapIndex`; `BuildsBIR` requires valid lookup, origin preservation, behavioral simulation and the resolved profile's BIR slot ceiling. The count is the largest function's number of BIR definitions, including block parameters and call destinations. The resolved platform supplies the ISA, byte order and spec memory layout for either backend. Dominance-scoped validation can strengthen the invariant on the same graph before slice 3. Retire SSA's positional site creation and BIR's duplicate diagnostic identity and scalar vocabulary at cutover.
+Fix (a) owns the validated handoff and profile slot check. Fix (d) owns the trap table and its origin proof. `BIR` indexes traps through `TrapIndex`; `BuildsBIR` requires valid lookup, origin preservation, simulation against the graph’s execution rules and the resolved profile's BIR slot ceiling. The count is the largest function's number of BIR definitions, including block parameters and call destinations. The resolved platform supplies the ISA, byte order and spec memory layout for either backend. Dominance-scoped validation can strengthen the invariant on the same graph before slice 3. Retire SSA's positional site creation and BIR's duplicate diagnostic identity and scalar vocabulary at cutover.
 
 ## BIR → LLVM
 
@@ -71,7 +78,8 @@ Fix (a) registers the exact emitter and the named LLVM premise. `LLVMInput` carr
 ## BIR → LCB
 
 Fix (a) registers the exact adapter and profile preparation. `LCBInput` carries the actual source function, additional exact jobs for the later call profile, runtime input bytes and the same trap table. `EmitsLCB` requires validation of the exact canonical body job and every additional job, unique emitted symbols and the exact handoff. Its refinement obligation runs the supplied
-body in imported LCB source semantics. The runtime bytes must render the same ordered
+body in imported LCB source semantics and compares it with the execution of the supplied
+BIR graph, including its indexed traps. The runtime bytes must render the same ordered
 diagnostics used by the return-word projection. The proved source adapter and native lowering premises remain separate. The result-word encoding belongs in the backend/runtime projection.
 
 ## Common proof boundary

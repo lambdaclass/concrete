@@ -132,7 +132,7 @@ def registry (passes : Passes grammar language lang profile) (front : FrontendSp
     fun output => ∃ bir, EmitsLLVM m bir output, EmitsLLVM m, fails.llvm⟩
   emitLCB := ⟨passes.emitLCB, .directProof,
     fun bir => m.birInvariant bir ∧ bir.TrapSlotsWF ∧ bir.frameSlots ≤ profile.maxBIRSlots,
-    fun output => ∃ bir, EmitsLCB m bir output, EmitsLCB m, fails.lcb⟩
+    fun output => ∃ bir : BIR lang profile, EmitsLCB language bir output, EmitsLCB language, fails.lcb⟩
 
 private def Registry.pipeline {Output : Type} (r : Registry grammar language lang profile) (unchecked : Bool)
     (backend : Stage (BIR lang profile) StageFailure Output) :
