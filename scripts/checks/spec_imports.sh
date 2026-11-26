@@ -10,16 +10,19 @@ from pathlib import Path
 sys.path.insert(0, str(Path('scripts/proofs').resolve()))
 from lean_lex import module_imports, LexError
 
-modules = {'ConcreteSpec'} | {
-    '.'.join(p.with_suffix('').parts) for p in Path('ConcreteSpec').rglob('*.lean')}
+spec_paths = sorted(Path('ConcreteSpec').rglob('*.lean'))
+evidence_paths = sorted(Path('ConcreteSpecEvidence').rglob('*.lean'))
+modules = {'ConcreteSpec'} | {'.'.join(p.with_suffix('').parts) for p in spec_paths}
+evidence_modules = modules | {'ConcreteSpecEvidence'} | {
+    '.'.join(p.with_suffix('').parts) for p in evidence_paths}
 
-def check(source, basics=False, spec=False, capability_base=False):
-    deps, _, _ = module_imports(source, modules)
+def check(source, basics=False, spec=False, capability_base=False, evidence=False):
+    deps, _, _ = module_imports(source, evidence_modules if evidence else modules)
     if capability_base and deps:
         raise ValueError('capability base must have no imports')
     if spec and any(m.startswith("ConcreteSpec.Proofs.") for m in deps):
         raise ValueError("spec imports proof")
-    if any(m in {'ConcreteSpec', 'ConcreteSpec.Spec'} for m in deps):
+    if any(m in {'ConcreteSpec', 'ConcreteSpec.Spec', 'ConcreteSpecEvidence'} for m in deps):
         raise ValueError('umbrella import')
     if basics and deps != ['ConcreteSpec.Spec.Basics']:
         raise ValueError('Basics must import only ConcreteSpec.Spec.Basics')
@@ -54,12 +57,13 @@ for dep in sorted(modules):
             raise
     else:
         raise SystemExit('spec_imports: capability-base control accepted: ' + dep)
-paths = sorted(Path('ConcreteSpec').rglob('*.lean'))
+paths = spec_paths + evidence_paths
 for path in paths:
+    evidence = path.parts[0] == 'ConcreteSpecEvidence'
     try:
         check(path.read_text(), path == Path('ConcreteSpec/Proofs/Basics.lean'),
               path == Path('ConcreteSpec/Spec.lean') or Path('ConcreteSpec/Spec') in path.parents,
-              path == Path('ConcreteSpec/Spec/CapabilityBase.lean'))
+              path == Path('ConcreteSpec/Spec/CapabilityBase.lean'), evidence=evidence)
         if path == Path('ConcreteSpec/Spec.lean') or Path('ConcreteSpec/Spec') in path.parents:
             try:
                 check('import ConcreteSpec.Proofs.Basics\n' + path.read_text(), spec=True)
@@ -69,13 +73,14 @@ for path in paths:
             else:
                 raise ValueError('spec-to-proof control accepted')
         # Exercise the umbrella control against every current module, including future files.
-        try:
-            check('import ConcreteSpec.Spec\n' + path.read_text())
-        except ValueError as e:
-            if str(e) != 'umbrella import':
-                raise
-        else:
-            raise ValueError('per-module umbrella control accepted')
+        for root in (('ConcreteSpec.Spec', 'ConcreteSpecEvidence') if evidence else ('ConcreteSpec.Spec',)):
+            try:
+                check('import ' + root + '\n' + path.read_text(), evidence=evidence)
+            except ValueError as e:
+                if str(e) != 'umbrella import':
+                    raise
+            else:
+                raise ValueError('per-module umbrella control accepted')
     except (ValueError, LexError) as e:
         raise SystemExit(f'spec_imports: {path}: {e}')
 print(f'spec_imports: {len(paths)} module headers and negative controls pass')

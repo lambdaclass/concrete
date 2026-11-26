@@ -1,3 +1,4 @@
+import ConcreteSpecEvidence.OwnExamples
 import ConcreteSpec.Spec.Basics
 import ConcreteSpec.Spec.Exec
 import ConcreteSpec.Spec.Hybrid

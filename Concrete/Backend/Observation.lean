@@ -43,6 +43,38 @@ def lcbResult (sites : BIR.SiteTable) : Source.Value → Option Observation
     else birObservation sites (.trapped (word.toNat - 256))
   | _ => none
 
+def lcbTerminal (i : LCBInput) (q : Option Source.State) : Option Observation := do
+  let state ← q
+  match Source.step i.1 state with
+  | .ok (.returned value) => lcbResult i.2.1 value
+  | _ => none
+
+/-- Imported initial states and small steps determine prefixes, returns, faults and divergence.
+The body is silent and the runtime projection supplies the terminal diagnostic. -/
+def lcbSemantics : Semantics LCBInput where
+  State := Option Source.State
+  initial i q := q = (Source.initial i.1 #[]).toOption
+  initialized _ := ⟨_, rfl⟩
+  step i q q' := ∃ s t, q = some s ∧ q' = some t ∧ Source.Step i.1 s t
+  result i q o := lcbTerminal i q = some o
+  terminal _ _ _ := by
+    rintro h q' ⟨s, t, rfl, _, hstep⟩
+    unfold Source.Step at hstep
+    simp [lcbTerminal, hstep] at h
+  safe i q := (∃ q', ∃ s t, q = some s ∧ q' = some t ∧ Source.Step i.1 s t) ∨
+    (lcbTerminal i q).isSome = true
+  trace i q := ((lcbTerminal i q).map Observation.events).getD []
+  permitted _ := runtimePermitted
+  resultTrace i q o h := by
+    simp only [h, Option.map_some, Option.getD_some]
+    exact o.stderr_events
+  traceGrows i q q' := by
+    rintro ⟨s, t, rfl, rfl, hstep⟩
+    refine ⟨((lcbTerminal i (some t)).map Observation.events).getD [], ?_⟩
+    unfold Source.Step at hstep
+    rw [show lcbTerminal i (some s) = none by simp [lcbTerminal, hstep]]
+    rfl
+
 /-- Project the actual imported return through the runtime ABI for this input. -/
 def lcbTerminalFor {A : Type} (body : A → Source.Function)
     (project : A → Source.Value → Option Observation) (input : A)
@@ -51,9 +83,6 @@ def lcbTerminalFor {A : Type} (body : A → Source.Function)
   match Source.step (body input) state with
   | .ok (.returned value) => project input value
   | _ => none
-
-def lcbTerminal (i : LCBInput) (q : Option Source.State) : Option Observation :=
-  lcbTerminalFor Prod.fst (fun input => lcbResult input.2.1) i q
 
 /-- Imported initial states and small steps determine prefixes, returns, faults and divergence.
 The body is silent and the runtime projection supplies the terminal diagnostic. -/
@@ -93,8 +122,5 @@ def lcbInvocationSemantics {A E : Type} (body : A → Source.Function)
 def lcbSemanticsFor {A E : Type} (body : A → Source.Function)
     (project : A → Source.Value → Option Observation) : Semantics A E :=
   lcbInvocationSemantics body (fun _ => #[]) project
-
-def lcbSemantics : Semantics LCBInput :=
-  lcbSemanticsFor Prod.fst fun i => lcbResult i.2.1
 
 end Concrete.Backend

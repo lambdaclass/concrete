@@ -37,12 +37,12 @@ if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
   echo "ok   canonical artifact bytes and SHA-256 goldens in two environments, payload substitutions"
   bash scripts/checks/compiler/f31_census.sh
   build stage-interfaces "$work/stage-interfaces.log" bounded 120 \
-    lake build Concrete.Interfaces.Pipeline
+    lake build Concrete.Interfaces.Pipeline ConcreteSpecEvidence.ExecExamples
   build stage-interface-controls "$work/stage-interface-controls.log" bounded 120 \
     lake env lean -DwarningAsError=true -DautoImplicit=false scripts/checks/compiler/stage_interfaces.lean
   echo "ok   stage interface controls"
-  # The scaling fixture uses the project admission proof, outside Concrete's build closure.
-  build span-proof-deps "$work/span-proof-deps.log" bounded 1800 lake build ConcreteSpec.Proofs.Ident
+  # The scaling fixture uses the span controls, outside Concrete's build closure.
+  build span-proof-deps "$work/span-proof-deps.log" bounded 1800 lake build ConcreteSpecEvidence.Ident
   bounded 120 lake env lean --run scripts/checks/compiler/span_scaling.lean
   build lexer-digit-limit "$work/lexer-digit-limit.log" bounded 120 \
     lake env lean --run scripts/checks/compiler/lexer_digit_limit.lean

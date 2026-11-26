@@ -3,7 +3,7 @@
 The frozen declarations are [spec carriers](../../ConcreteSpec/StageInterface.lean),
 [compiler carriers](../../Concrete/Interfaces/Carriers.lean),
 [grammar](../../ConcreteSpec/StageGrammar.lean),
-[edge propositions](../../Concrete/Interfaces/Contracts.lean) and
+[behavior refinement](../../Concrete/Interfaces/Behavior.lean), [edge propositions](../../Concrete/Interfaces/Contracts.lean) and
 [executable signatures and registry](../../Concrete/Interfaces/Pipeline.lean).
 The root check compares their exact SHA-256 digests with the [recorded manifest](../../scripts/checks/lib/stage_interfaces.sha256). Changing a frozen declaration takes a new interface round. The data modules can be imported by both a pass and its caller without importing the pass implementation.
 
@@ -44,12 +44,11 @@ effects and the fetched trap’s diagnostic bytes.
 The logical MIR evaluator holds roots as logical values. Both IRs retain residual operation
 and call checks and evaluate them before performing the instruction. The simulation
 relates reachable activations, including suspended callers, to virtual values or live
-backing ranges and initialized bytes. Each source step on every branch requires a
-represented target checkpoint. A source step without a target step consumes rank.
-Target steps and terminal matches extend the same related execution, checking
-representation at each intermediate source state. Memory can commit to an allocation
-before resolving a logical reference. A silent loop and a terminating branch must
-both be preserved.
+backing ranges and initialized bytes. Target steps and terminal matches extend a related source execution, checking
+representation at each intermediate source state. The source path can follow the
+allocation decisions already made by the target. A target step that makes no
+source progress decreases a natural-valued rank. Complete behavior refinement
+independently requires a matching source execution for any target divergence.
 
 Address operands name typed places explicitly. Physical execution resolves a live,
 initialized materialized place through its recorded range and passes that range, byte
@@ -75,7 +74,7 @@ currently inside `SSA.lower` from its BIR output.
 
 ## SSA → BIR
 
-Fix (a) owns the validated handoff and profile slot check. Fix (d) owns the trap table and its origin proof. `BIR` indexes traps through `TrapIndex`; `BuildsBIR` requires valid lookup, origin preservation, simulation against the graph’s execution rules and the resolved profile's BIR slot ceiling. The count is the largest function's number of BIR definitions, including block parameters,
+Fix (a) owns the validated handoff and profile slot check. BIR formation preserves the decoded linked program, including helpers unreachable from the hosted entry. Both stages run the same interpreter on that program, so the decoded-program check implies backward refinement. Fix (d) owns the trap table and its origin proof. `BIR` indexes traps through `TrapIndex`; `BuildsBIR` requires valid lookup, origin preservation, simulation against the graph’s execution rules and the resolved profile's BIR slot ceiling. The count is the largest function's number of BIR definitions, including block parameters,
 destructure bindings and call destinations. The shared SSA/BIR interpreter reserves
 register storage above the physical place IDs declared or named by lifetime instructions in each
 function, preserving the
@@ -84,7 +83,8 @@ successor nor a terminal result, including inside a callee. The resolved platfor
 
 ## BIR → LLVM
 
-Fix (a) registers the exact emitter and the named LLVM premise. `LLVMInput` carries a target triple, data layout, structured LLVM items and the exact trap table. `EmitsLLVM` checks the target fields against the profile and relates the canonical rendered module to the BIR and projected behavior. The renderer serializes the checked header and the structured body into the actual toolchain bytes. The legacy printer inventory and inverse claim retire in the A11 cutover. Full-image stack, toolchain and launch requirements stay in the theorem's native artifact boundary.
+Fix (a) registers the exact emitter and the named LLVM premise. `LLVMInput` carries a target triple, data layout, structured LLVM items and the exact trap table. `LLVMMetadataMatches` checks the target fields and trap table. The trusted-base entry
+`P_print` covers the meaning of the exact emitted LLVM module. The renderer serializes the checked header and the structured body into the actual toolchain bytes. The legacy printer inventory and inverse claim retire in the A11 cutover. Full-image stack, toolchain and launch requirements stay in the theorem's native artifact boundary.
 
 ## BIR → LCB
 
@@ -96,19 +96,50 @@ the runtime ABI with the emitted diagnostic table. Each auxiliary invocation res
 with every argument tuple in its validated integer ABI and compared with the
 corresponding BIR function running in the full BIR function environment. The
 auxiliary return comparison uses the full ABI value. The pinned LCB verified
-profile admits leaf jobs. [LP0](../../ROADMAP.md#vertical-slices) tracks
-imported call steps, real frames and the multi-frame trap ABI for a profile
-that emits inter-job calls. The proved source adapter and native lowering
+profile admits leaf jobs. The dependency also ships a separate module evaluator
+that resolves calls, with fixed execution budgets. That evaluator consumes a
+different IR from the verified job format. [LP0](../../ROADMAP.md#vertical-slices)
+tracks imported call steps, frames, canonical ABI value encoding and the
+multi-frame trap ABI for a profile that emits inter-job calls. The proved source adapter and native lowering
 premises remain separate.
 
-## Common proof boundary
+## Correctness notion
 
-Executable registry entries own the function and the proof graph uses that function's result. `Pipeline.Sound` requires edge soundness and adjacent invariant implication for the registered fold. The production and unchecked folds differ at admission. Semantic edges use one fuel-free complete-behavior contract over the theorem's
-transition system. It requires matching terminal results and infinite traces in
-both directions, finite-prefix safety and authority, and absence of stuck
-executions on each side. Backend compilation and startup refusals retain their
-typed outcomes. The Memory edge additionally checks live representations along
-the matched execution. The precise terminal projection distinguishes return, trap and startup refusal, including exact stderr and file-scoped lexical sites. The Core trace starts empty and each step appends exactly the events of its Exec label. The Core process projection uses the shared scalar carrier and the spec's hosted status rule. It takes the returned `u8` value as the status and sets a trap's status to 134 with the canonical diagnostic from its lexical origin. Evaluator fuel appears separately in adequacy. Existence of an admitted observation and native-image assumptions remain theorem-level obligations.
+An execution starts in a program's designated initial configuration and follows
+small steps. A program is safe when no reachable state lacks both a successor
+and a terminal result. A terminal result records return, trap or startup
+refusal, with exact stderr and diagnostic sites where applicable. A language
+trap is a defined outcome. Interpreter failure to take a step or report a
+terminal result is going wrong.
+
+`BehaviorRefinement` states safe-source backward inclusion directly. If the
+source is safe, every target termination has a reachable source termination
+with the same result and finite trace, every infinite target path has an
+infinite source path with the same visible trace, and the target has no
+going-wrong behavior. The source can have additional results or infinite paths.
+A target can consequently make an early allocation choice or select the
+terminating path of a source that can also diverge.
+
+This is the conclusion of CompCert's
+[`backward_simulation_same_safe_behavior`](https://compcert.org/doc/html/compcert.common.Behaviors.html).
+Equality of finite trace prefixes on infinite paths accounts for both silent
+divergence and infinitely many events without constraining the timing of
+internal steps. Refinement is stated on the behaviors directly, so it requires
+neither an evaluator fuel bound nor a forward-to-backward simulation theorem.
+Evaluator fuel remains an adequacy obligation.
+
+The CFG interpreters resolve calls through the full function environment.
+Hosted behaviors start at the entry and therefore cannot distinguish changes
+to an unreachable definition. The SSA to BIR handoff checks all decoded graphs
+in addition to hosted behaviors. The current LCB pin supplies individual
+function semantics, so linked inter-job execution remains a dependency of the
+full-program LCB contract.
+
+The registry binds each proposition to the function it actually executes.
+`Pipeline.Sound` checks the registered success and refusal obligations and
+adjacent invariants. LLVM has a structural handoff check and a named trusted
+assumption, `P_print`. Native-image and launch assumptions remain at the theorem
+boundary.
 
 ## Writer ownership
 

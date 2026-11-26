@@ -201,11 +201,12 @@ def residualMIROrigins (mir : MIR.Program) : List Elab.SourceSite :=
     | .add _ _ origin none => some origin
     | _ => none
 
-def LexerContract : EdgeContract (Graph fun (input : Stages.Input) => Lex.lex input.source input.fileId) where
+def LexerContract : EdgeContract
+    (Graph fun (input : ByteArray × ConcreteSpec.Core.FileId) => Lex.lex input.1 input.2) where
   kind := .directProof
   inputInvariant := fun _ => True
   outputInvariant := fun tokens => ∃ bytes fileId, Lexes bytes tokens fileId
-  correspondence := fun input tokens => Lexes input.source tokens input.fileId
+  correspondence := fun (bytes, fileId) tokens => Lexes bytes tokens fileId
 
 def ParserContract : EdgeContract (Graph Parse.parse) where
   kind := .namedPremise "P_parse"
@@ -371,20 +372,21 @@ def lcbPath : LCB.Target → LoweringPath
 /-- Tool slots distinguish invocations even when the same binary serves several roles. -/
 inductive ToolRole where
   | llvmObject | runtimeLowering | bodyAssembler | runtimeAssembler | linker
-  deriving DecidableEq
+  deriving DecidableEq, Repr
 
 structure ToolInvocation where
   role : ToolRole
   tool : String
   revision : String
   arguments : List String
-  deriving DecidableEq
+  deriving DecidableEq, Repr
 
 structure Profile where
   target : LCB.Target
   maxBIRSlots : Nat
   maxImageStackBytes : Nat
   tools : List ToolInvocation
+  deriving Repr
 
 /-- The build identity check compares this kernel-reducible pin to Lake's declared
 and resolved revisions. Handoffs also check the imported backend compiler identity. -/
@@ -416,22 +418,27 @@ structure LCBBuild where
   linkInputs : List ByteArray
   image : ByteArray
 
-/-- Each actual invocation is indexed by its effective revision and argument vector. -/
-structure NativeTools where
-  llvmObject : ToolInvocation → ByteArray → ByteArray → Prop
-  runtimeLowering : ToolInvocation → ByteArray → ByteArray → Prop
-  assemble : ToolInvocation → ByteArray → ByteArray → Prop
-  link : ToolInvocation → List ByteArray → List ByteArray → ByteArray → Prop
+/-- The resolver identifies the exact executable bytes for a tool invocation. -/
+abbrev ToolResolver := ToolInvocation → Option ByteArray
 
-def LLVMHandoffs (profile : Profile) (tools : NativeTools) (bir : BIR.Program)
+/-- Each handoff attests an invocation of the resolved executable on the given inputs. -/
+structure NativeTools where
+  llvmObject : ToolInvocation → ByteArray → ByteArray → ByteArray → Prop
+  runtimeLowering : ToolInvocation → ByteArray → ByteArray → ByteArray → Prop
+  assemble : ToolInvocation → ByteArray → ByteArray → ByteArray → Prop
+  link : ToolInvocation → ByteArray → List ByteArray → List ByteArray → ByteArray → Prop
+
+def LLVMHandoffs (profile : Profile) (tools : NativeTools) (resolve : ToolResolver)
+    (bir : BIR.Program)
     (build : LLVMBuild) : Prop :=
   build.moduleBytes = (LLVM.module bir).toUTF8 ∧
-  (∃ pin, profile.invocation .llvmObject pin ∧
-    tools.llvmObject pin build.moduleBytes build.objectBytes) ∧
-  (∃ pin, profile.invocation .linker pin ∧
-    tools.link pin [build.objectBytes] build.linkInputs build.image)
+  (∃ pin binary, profile.invocation .llvmObject pin ∧ resolve pin = some binary ∧
+    tools.llvmObject pin binary build.moduleBytes build.objectBytes) ∧
+  (∃ pin binary, profile.invocation .linker pin ∧ resolve pin = some binary ∧
+    tools.link pin binary [build.objectBytes] build.linkInputs build.image)
 
-def LCBHandoffs (profile : Profile) (tools : NativeTools) (bir : BIR.Program)
+def LCBHandoffs (profile : Profile) (tools : NativeTools) (resolve : ToolResolver)
+    (bir : BIR.Program)
     (build : LCBBuild) : Prop :=
   pinnedLCBRevision = some build.revision ∧
   build.compilerIdentity = compilerBuildIdentity ∧
@@ -441,14 +448,14 @@ def LCBHandoffs (profile : Profile) (tools : NativeTools) (bir : BIR.Program)
   build.sites = bir.sites ∧ build.runtimeInput = (Runtime.qbe build.sites).toUTF8 ∧
   (∃ assembly, LCB.assemble profile.target build.source = .ok assembly ∧
     build.bodyAssembly = assembly.toUTF8) ∧
-  (∃ pin, profile.invocation .runtimeLowering pin ∧
-    tools.runtimeLowering pin build.runtimeInput build.runtimeAssembly) ∧
-  (∃ pin, profile.invocation .bodyAssembler pin ∧
-    tools.assemble pin build.bodyAssembly build.bodyObject) ∧
-  (∃ pin, profile.invocation .runtimeAssembler pin ∧
-    tools.assemble pin build.runtimeAssembly build.runtimeObject) ∧
-  (∃ pin, profile.invocation .linker pin ∧
-    tools.link pin [build.bodyObject, build.runtimeObject] build.linkInputs build.image)
+  (∃ pin binary, profile.invocation .runtimeLowering pin ∧ resolve pin = some binary ∧
+    tools.runtimeLowering pin binary build.runtimeInput build.runtimeAssembly) ∧
+  (∃ pin binary, profile.invocation .bodyAssembler pin ∧ resolve pin = some binary ∧
+    tools.assemble pin binary build.bodyAssembly build.bodyObject) ∧
+  (∃ pin binary, profile.invocation .runtimeAssembler pin ∧ resolve pin = some binary ∧
+    tools.assemble pin binary build.runtimeAssembly build.runtimeObject) ∧
+  (∃ pin binary, profile.invocation .linker pin ∧ resolve pin = some binary ∧
+    tools.link pin binary [build.bodyObject, build.runtimeObject] build.linkInputs build.image)
 
 /-- Resource and environment predicates for a verifier's selected profile. -/
 structure ExecutionPolicy (Env : Type) where
@@ -646,14 +653,14 @@ def SharedCorrect : Prop :=
 
 def LLVMCorrect {Env : Type} {profile : Profile}
     {platform : TargetReference Env profile.target} (n : NativeModels Env profile platform) (tools : NativeTools) : Prop :=
-  ∀ input out build, Stages.compile input = .ok out → BIRSlotsFit profile out.bir →
-    LLVMHandoffs profile tools out.bir build → LLVMPremises n out.bir build →
+  ∀ input out resolve build, Stages.compile input = .ok out → BIRSlotsFit profile out.bir →
+    LLVMHandoffs profile tools resolve out.bir build → LLVMPremises n out.bir build →
     Compiled input out ∧ ImageCorrect n admittedCoreSemantics input.path out.core build.image
 
 def LCBCorrect {Env : Type} {profile : Profile}
     {platform : TargetReference Env profile.target} (n : NativeModels Env profile platform) (tools : NativeTools) : Prop :=
-  ∀ input out build, Stages.compile input = .ok out → BIRSlotsFit profile out.bir →
-    LCBHandoffs profile tools out.bir build → LCBPremises n build →
+  ∀ input out resolve build, Stages.compile input = .ok out → BIRSlotsFit profile out.bir →
+    LCBHandoffs profile tools resolve out.bir build → LCBPremises n build →
     Compiled input out ∧ ImageCorrect n admittedCoreSemantics input.path out.core build.image
 
 def UncheckedHandoffs (input : Stages.Input) (core : Elab.Output) : Prop :=
@@ -689,49 +696,49 @@ def UncheckedCorrect {Env : Type} {profile : Profile}
   ∀ input core bir, UncheckedHandoffs input core → ConformanceStatic core →
     Stages.unchecked input = .ok bir → BIRSlotsFit profile bir →
     UncheckedCompiled input core bir ∧
-    (∀ build, LLVMHandoffs profile tools bir build → LLVMPremises n bir build →
+    (∀ resolve build, LLVMHandoffs profile tools resolve bir build → LLVMPremises n bir build →
       ImageCorrect n coreSemantics input.path core build.image ∧ ExactTrap n input core build.image) ∧
-    (∀ build, LCBHandoffs profile tools bir build → LCBPremises n build →
+    (∀ resolve build, LCBHandoffs profile tools resolve bir build → LCBPremises n build →
       ImageCorrect n coreSemantics input.path core build.image ∧ ExactTrap n input core build.image)
 
 def LLVMNonvacuous {Env : Type} {profile : Profile}
     {platform : TargetReference Env profile.target} (policy : ExecutionPolicy Env) (n : NativeModels Env profile platform) (tools : NativeTools) : Prop :=
   policy.Anchors n ∧
-  ∃ input out build env o,
+  ∃ input out resolve build env o,
     Stages.compile input = .ok out ∧ BIRSlotsFit profile out.bir ∧
-    LLVMHandoffs profile tools out.bir build ∧ LLVMPremises n out.bir build ∧
+    LLVMHandoffs profile tools resolve out.bir build ∧ LLVMPremises n out.bir build ∧
     RunReady n build.image env ∧ SourceTerminates input.path out.core admittedCoreSemantics ∧
     admittedCoreSemantics.observes (input.path, out.core) o ∧ n.process.observes (build.image, env) o
 
 def LCBNonvacuous {Env : Type} {profile : Profile}
     {platform : TargetReference Env profile.target} (policy : ExecutionPolicy Env) (n : NativeModels Env profile platform) (tools : NativeTools) : Prop :=
   policy.Anchors n ∧
-  ∃ input out build env o,
+  ∃ input out resolve build env o,
     Stages.compile input = .ok out ∧ BIRSlotsFit profile out.bir ∧
-    LCBHandoffs profile tools out.bir build ∧ LCBPremises n build ∧
+    LCBHandoffs profile tools resolve out.bir build ∧ LCBPremises n build ∧
     RunReady n build.image env ∧ SourceTerminates input.path out.core admittedCoreSemantics ∧
     admittedCoreSemantics.observes (input.path, out.core) o ∧ n.process.observes (build.image, env) o
 
 def UncheckedNonvacuous {Env : Type} {profile : Profile} {Build : Type}
     {platform : TargetReference Env profile.target} (policy : ExecutionPolicy Env) (n : NativeModels Env profile platform) (image : Build → ByteArray)
-    (premises : BIR.Program → Build → Prop) : Prop :=
+    (premises : ToolResolver → BIR.Program → Build → Prop) : Prop :=
   policy.Anchors n ∧
-  ∃ input core bir build env status kind site stderr,
+  ∃ input core bir resolve build env status kind site stderr,
     UncheckedHandoffs input core ∧ ConformanceStatic core ∧
-    Stages.unchecked input = .ok bir ∧ BIRSlotsFit profile bir ∧ premises bir build ∧
+    Stages.unchecked input = .ok bir ∧ BIRSlotsFit profile bir ∧ premises resolve bir build ∧
     RunReady n (image build) env ∧ SourceTerminates input.path core ∧
     coreSemantics.observes (input.path, core) (.trapped status kind site stderr) ∧
     n.process.observes (image build, env) (.trapped status kind site stderr)
 
 def LLVMUncheckedNonvacuous {Env : Type} {profile : Profile}
     {platform : TargetReference Env profile.target} (policy : ExecutionPolicy Env) (n : NativeModels Env profile platform) (tools : NativeTools) : Prop :=
-  UncheckedNonvacuous policy n LLVMBuild.image fun bir build =>
-    LLVMHandoffs profile tools bir build ∧ LLVMPremises n bir build
+  UncheckedNonvacuous policy n LLVMBuild.image fun resolve bir build =>
+    LLVMHandoffs profile tools resolve bir build ∧ LLVMPremises n bir build
 
 def LCBUncheckedNonvacuous {Env : Type} {profile : Profile}
     {platform : TargetReference Env profile.target} (policy : ExecutionPolicy Env) (n : NativeModels Env profile platform) (tools : NativeTools) : Prop :=
-  UncheckedNonvacuous policy n LCBBuild.image fun bir build =>
-    LCBHandoffs profile tools bir build ∧ LCBPremises n build
+  UncheckedNonvacuous policy n LCBBuild.image fun resolve bir build =>
+    LCBHandoffs profile tools resolve bir build ∧ LCBPremises n build
 
 /-- Qualification and correctness use the same reference, profile, tools and native models. -/
 def NativeNonvacuous {Env : Type} {profile : Profile}
@@ -753,31 +760,47 @@ private def CompileCorrectWith {Env : Type} {profile : Profile}
     (registry : NativeReferenceRegistry) (m : SharedModels profile.target)
     (reference : TargetReference Env profile.target) (policy : ExecutionPolicy Env)
     (n : NativeModels Env profile reference) (tools : NativeTools) : Prop :=
-  registry profile.target = some ⟨Env, reference⟩ ∧
+  registry profile.target = some ⟨Env, reference⟩ →
     CompileCorrectUnderReference m reference policy n tools
 
-/-- A production proof must establish the composition obligations and match the
-verifier's registered reference. Registration is part of the claim. -/
+/-- Production correctness is conditional on the verifier's registered reference
+for this profile's target. Its conclusion uses that same reference throughout. -/
 def compile_correct {Env : Type} {profile : Profile} (m : SharedModels profile.target)
     (reference : TargetReference Env profile.target) (policy : ExecutionPolicy Env)
     (n : NativeModels Env profile reference) (tools : NativeTools) : Prop :=
   CompileCorrectWith nativeReference m reference policy n tools
 
-theorem compile_correct_requires_registration {Env : Type} {profile : Profile}
-    {m : SharedModels profile.target} {reference : TargetReference Env profile.target}
-    {policy : ExecutionPolicy Env} {n : NativeModels Env profile reference} {tools : NativeTools}
+/-- An empty registry leaves a conditional statement. A caller cannot use
+its conclusion without separately providing a registration. -/
+example {Env : Type} {profile : Profile} (m : SharedModels profile.target)
+    (reference : TargetReference Env profile.target) (policy : ExecutionPolicy Env)
+    (n : NativeModels Env profile reference) (tools : NativeTools)
     (missing : nativeReference profile.target = none) :
-    ¬ compile_correct m reference policy n tools := by
-  intro correct
-  have registered := correct.1
+    compile_correct m reference policy n tools := by
+  intro registered
   rw [missing] at registered
   cases registered
+
+/-- Evidence required to inventory a production profile as discharged. A
+conditional proof alone can be vacuous while the registry is empty. -/
+structure ProductionDischarge (profile : Profile) : Prop where
+  witnessed : ∃ (Env : Type) (reference : TargetReference Env profile.target)
+    (m : SharedModels profile.target) (policy : ExecutionPolicy Env)
+    (n : NativeModels Env profile reference) (tools : NativeTools),
+    nativeReference profile.target = some ⟨Env, reference⟩ ∧
+      compile_correct m reference policy n tools
 
 namespace Sanity
 
 def answerInput : Stages.Input :=
   (Stages.Input.load "tests/slice0/answer.con"
-    r#"fn main() -> u8 { return 20 + 22; }"#.toUTF8).toOption.get (by decide)
+    r#"fn main() -> u8 { return 20 + 22; }"#.toUTF8).toOption.get (by rfl)
+
+def answerOutput : Stages.Output :=
+  (Stages.compile answerInput).toOption.get (by with_unfolding_all rfl)
+
+theorem answerCompiles : Stages.compile answerInput = .ok answerOutput := by
+  with_unfolding_all rfl
 
 private def bindingSpan : Span := ⟨0, 1, 1, 1, ⟨0⟩⟩
 
@@ -878,11 +901,8 @@ example : ¬ ConformanceStatic ⟨⟨[], .lit 256⟩, []⟩ := by
     decide
 
 private def overflowInput (comment : String) : Stages.Input :=
-  let path := (ConcreteSpec.Core.SourcePath.parse
-    (.ofBytes "src/a.con".toUTF8.data.toList)).toOption.get (by decide)
-  let bytes := (comment ++ "\n" ++ r#"fn main() -> u8 { return 200 + 56; }"#).toUTF8
-  let file := ConcreteSpec.Core.SourcePathSpan.File.load path (.ofBytes bytes.data.toList)
-  ⟨.singleton path file.source, ⟨0⟩, file, rfl⟩
+  (Stages.Input.load "src/a.con"
+    (comment ++ "\n" ++ r#"fn main() -> u8 { return 200 + 56; }"#).toUTF8).toOption.get (by rfl)
 
 private def overflowObservation (path : String) : Observation :=
   .trapped 134 .overflow ⟨⟨0⟩, ⟨path, 2, 30⟩⟩
@@ -946,12 +966,16 @@ example : ¬ sampleProfile.invocation .llvmObject { samplePin with arguments := 
   unfold Profile.invocation
   decide
 
+def testResolve : ToolResolver := fun pin => some pin.tool.toUTF8
+
 def testTools : NativeTools where
-  llvmObject p _ _ := p = samplePin
-  runtimeLowering p input output := p = runtimePin ∧ output = input
-  assemble p _ output := p = bodyAssemblerPin ∨
-    (p = runtimeAssemblerPin ∧ output = ⟨#[4]⟩)
-  link p inputs resolved output := p = linkerPin ∧ inputs = resolved ∧ inputs.head? = some output
+  llvmObject p binary _ _ := binary = p.tool.toUTF8 ∧ p = samplePin
+  runtimeLowering p binary input output :=
+    binary = p.tool.toUTF8 ∧ p = runtimePin ∧ output = input
+  assemble p binary _ output := binary = p.tool.toUTF8 ∧
+    (p = bodyAssemblerPin ∨ (p = runtimeAssemblerPin ∧ output = ⟨#[4]⟩))
+  link p binary inputs resolved output :=
+    binary = p.tool.toUTF8 ∧ p = linkerPin ∧ inputs = resolved ∧ inputs.head? = some output
 
 def instant {A : Type} (observe : A → Observation) : Semantics A where
   State := Unit
@@ -991,17 +1015,14 @@ theorem instantRefines {A B : Type} (f : A → Observation) (g : B → Observati
     (a : A) (b : B) (h : f a = g b) : Refines (instant f) (instant g) a b := by
   with_unfolding_all
     apply refinementsToInstant
-    · intro e _
-      cases e with
-      | stderr => trivial
-      | effect impossible => cases impossible
+    · exact fun e _ => runtimePermitted_all e
     · exact ⟨(), ⟨(), trivial, .nil ()⟩, trivial, h, congrArg Observation.events h⟩
 
 def bytecodeObservation (bytes : ByteArray) : Observation :=
   .returned (bytes.data[0]?.getD 0) ByteArray.empty
 
 def answerCore : Elab.Output :=
-  (Stages.compile answerInput).toOption.map (·.core) |>.getD ⟨⟨[], .lit 0⟩, []⟩
+  answerOutput.core
 
 theorem answerImageRefines : Refines admittedCoreSemantics (instant bytecodeObservation)
     (answerInput.path, answerCore) ⟨#[42]⟩ := by
@@ -1010,10 +1031,7 @@ theorem answerImageRefines : Refines admittedCoreSemantics (instant bytecodeObse
       returnAtTwo rfl rfl rfl
     obtain ⟨q, reach, terminal⟩ := obs
     apply refinementsToInstant
-    · intro e _
-      cases e with
-      | stderr => trivial
-      | effect impossible => cases impossible
+    · exact fun e _ => runtimePermitted_all e
     · exact ⟨q, reach, (fun h => by rw [terminal] at h; cases h), terminal,
       show (admittedEvaluation _ q).events = _ by rw [terminal]; rfl⟩
 
@@ -1137,22 +1155,11 @@ private theorem lcbToInstant {i : LCBInput} {value : Source.Value}
     Refines lcbSemantics (instant f) i b := by
   with_unfolding_all
     obtain ⟨s, init, _, q, steps, terminal⟩ := ret
-    have result : lcbTerminalFor (Prod.fst : LCBInput → Source.Function)
-        (fun input => lcbResult input.2.1) i (some q) = some (f b) := by
-      simpa [lcbTerminalFor, terminal]
+    have result : lcbTerminal i (some q) = some (f b) := by simpa [lcbTerminal, terminal]
     apply refinementsToInstant
-    · intro e _
-      cases e with
-      | stderr => trivial
-      | effect impossible => cases impossible
-    · exact ⟨some q, ⟨some s, by simp [lcbSemantics, lcbSemanticsFor, lcbInvocationSemantics, init, Except.toOption], lcbSteps steps⟩,
-      Or.inr (by rw [result]; rfl), result, by simp [lcbSemantics, lcbSemanticsFor, lcbInvocationSemantics, result, Observation.events]⟩
-
-def answerOutput : Stages.Output :=
-  (Stages.compile answerInput).toOption.get (by with_unfolding_all rfl)
-
-theorem answerCompiles : Stages.compile answerInput = .ok answerOutput := by
-  with_unfolding_all rfl
+    · exact fun e _ => runtimePermitted_all e
+    · exact ⟨some q, ⟨some s, by simp [lcbSemantics, init]; rfl, lcbSteps steps⟩,
+      Or.inr (by rw [result]; rfl), result, by simp [lcbSemantics, result]⟩
 
 theorem answerFrontend : Frontend answerInput answerOutput := by
   with_unfolding_all
@@ -1204,8 +1211,8 @@ private theorem testLCBPremises (bir : BIR.Program) (image : ByteArray) (assembl
   image := testImagePremises _ _
 
 theorem testLLVMHandoffs (bir : BIR.Program) (image : ByteArray) :
-    LLVMHandoffs sampleProfile testTools bir (testLLVMBuild bir image) :=
-  ⟨rfl, ⟨samplePin, rfl, rfl⟩, ⟨linkerPin, rfl, rfl, rfl, rfl⟩⟩
+    LLVMHandoffs sampleProfile testTools testResolve bir (testLLVMBuild bir image) :=
+  ⟨rfl, ⟨samplePin, _, rfl, rfl, rfl, rfl⟩, ⟨linkerPin, _, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩
 
 private theorem assembleMacOS {f : Source.Function} {stack : StackMIR.Function}
     {asm : TypedA64.Function} (jobOK : validateJob (LCB.job f) = .ok ())
@@ -1239,10 +1246,10 @@ private theorem testLCBHandoffs (bir : BIR.Program) (image : ByteArray) (assembl
     (job : validateJob (LCB.job (testLCBBuild bir image assembly).source) = .ok ())
     (assembled : LCB.assemble sampleProfile.target (testLCBBuild bir image assembly).source =
       .ok assembly) :
-    LCBHandoffs sampleProfile testTools bir (testLCBBuild bir image assembly) := by
+    LCBHandoffs sampleProfile testTools testResolve bir (testLCBBuild bir image assembly) := by
   exact ⟨pinnedRevision, rfl, sites.symm ▸ emit, job, Stages.prepareLCB_of_edges _ _ emit job, sites,
-    rfl, ⟨assembly, assembled, rfl⟩, ⟨runtimePin, rfl, rfl, rfl⟩, ⟨bodyAssemblerPin, rfl, Or.inl rfl⟩,
-    ⟨runtimeAssemblerPin, rfl, Or.inr ⟨rfl, rfl⟩⟩, ⟨linkerPin, rfl, rfl, rfl, rfl⟩⟩
+    rfl, ⟨assembly, assembled, rfl⟩, ⟨runtimePin, _, rfl, rfl, rfl, rfl, rfl⟩, ⟨bodyAssemblerPin, _, rfl, rfl, rfl, Or.inl rfl⟩,
+    ⟨runtimeAssemblerPin, _, rfl, rfl, rfl, Or.inr ⟨rfl, rfl⟩⟩, ⟨linkerPin, _, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩
 
 private theorem coreTerminates (path : String) (core : Elab.Output) (o : Observation) (fuel : Nat)
     (h : coreEvaluation (path, core) fuel = .finished o)
@@ -1264,7 +1271,7 @@ private def trapInput := overflowInput "// x"
 
 private def trapCore : Elab.Output :=
   (do Elab.elaborate (← Parse.parse (← Lex.lex trapInput.source trapInput.fileId)) :
-    Except Refusal Elab.Output).toOption.getD ⟨⟨[], .lit 0⟩, []⟩
+    Except Refusal Elab.Output).toOption.get (by rfl)
 
 private def trapBIR : BIR.Program :=
   ⟨[⟨[], [.binOvf .add .u8 0 1 (.imm .u8 200) (.imm .u8 56)], .condbr 1 1 [] 2 [.reg 0]⟩,
@@ -1342,7 +1349,7 @@ private theorem llvmWitness : LLVMNonvacuous testExecutionPolicy testNative
     testTools := by
   with_unfolding_all
     refine ⟨testAnchor, ?_⟩
-    exact ⟨answerInput, answerOutput, testLLVMBuild answerBIR answerImage, (), exit42,
+    exact ⟨answerInput, answerOutput, testResolve, testLLVMBuild answerBIR answerImage, (), exit42,
       answerCompiles, by unfold BIRSlotsFit; decide, testLLVMHandoffs _ _,
       testLLVMPremises answerBIR answerImage (by
         exact congrArg trapBytecodeObservation (ite_eq_left testLLVMAnswerMarker))
@@ -1358,7 +1365,7 @@ private theorem lcbWitness : LCBNonvacuous testExecutionPolicy testNative
     let build := testLCBBuild answerBIR answerImage assembly
     have emit : LCB.emit answerBIR = .ok (build.source, build.sites) := rfl
     have adapter := (LCB.Proof.adapter_correct_run (p := answerBIR) rfl (LCB.Proof.emit_ok emit).1).1
-    refine ⟨answerInput, answerOutput, build, (), exit42, answerCompiles, by unfold BIRSlotsFit; decide,
+    refine ⟨answerInput, answerOutput, testResolve, build, (), exit42, answerCompiles, by unfold BIRSlotsFit; decide,
       testLCBHandoffs _ _ assembly rfl rfl jobOK assembled,
       testLCBPremises answerBIR answerImage assembly (by
         exact congrArg trapBytecodeObservation (ite_eq_left testLCBAnswerMarker))
@@ -1373,7 +1380,7 @@ private theorem llvmUncheckedWitness : LLVMUncheckedNonvacuous testExecutionPoli
     testTools := by
   with_unfolding_all
     refine ⟨testAnchor, ?_⟩
-    exact ⟨trapInput, trapCore, trapBIR, testLLVMBuild trapBIR trapImage, (), 134, .overflow,
+    exact ⟨trapInput, trapCore, trapBIR, testResolve, testLLVMBuild trapBIR trapImage, (), 134, .overflow,
       ⟨⟨0⟩, ⟨"src/a.con", 2, 30⟩⟩, (overflowObservation "src/a.con").stderr,
       ⟨_, _, rfl, rfl, rfl⟩, trapStatic, rfl, by unfold BIRSlotsFit; decide,
       ⟨testLLVMHandoffs _ _, testLLVMPremises trapBIR trapImage (by rw [ite_eq_right testLLVMTrapMarker]) (returnAtTwo rfl rfl rfl)⟩,
@@ -1391,7 +1398,7 @@ private theorem lcbUncheckedWitness : LCBUncheckedNonvacuous testExecutionPolicy
     have hRun : BIR.run trapBIR 2 = .trapped 0 := rfl
     have projection : lcbResult build.sites (LCB.word 256) =
         some (trapBytecodeObservation trapImage) := rfl
-    exact ⟨trapInput, trapCore, trapBIR, build, (), 134, .overflow,
+    exact ⟨trapInput, trapCore, trapBIR, testResolve, build, (), 134, .overflow,
       ⟨⟨0⟩, ⟨"src/a.con", 2, 30⟩⟩, (overflowObservation "src/a.con").stderr,
       ⟨_, _, rfl, rfl, rfl⟩, trapStatic, rfl, by unfold BIRSlotsFit; decide,
       ⟨testLCBHandoffs _ _ assembly rfl rfl jobOK assembled,
@@ -1414,14 +1421,15 @@ all admitted environments, even for a registered test reference. -/
 example (m : SharedModels sampleProfile.target) :
     ¬ CompileCorrectWith testRegistry m testReference
       {testExecutionPolicy with launchAdmitted := fun _ _ _ => False} testNative testTools := by
-  intro correct
-  obtain ⟨anchor, _, _, build, env, _, _, _, _, _, ready, _⟩ := correct.2.2.2.2.2.1.1
+  intro conditional
+  have correct := conditional rfl
+  obtain ⟨anchor, _, _, _, build, env, _, _, _, _, _, ready, _⟩ := correct.2.2.2.2.1.1
   have impossible : testNative.launchAdmitted build.image env = False :=
     congrFun (congrFun anchor.2.1 build.image) env
   exact impossible ▸ ready.1.2
 
 private def trapMIR : MIR.Program :=
-  ⟨[⟨⟨0⟩, .add (.lit 200) (.lit 56) ⟨⟨0⟩, ⟨34, 35, 2, 30, ⟨0⟩⟩⟩ none⟩], .var ⟨0⟩⟩
+  ⟨[⟨⟨0⟩, .add (.lit 200) (.lit 56) ⟨⟨0⟩, ⟨34, 35, 2, 30, trapInput.fileId⟩⟩ none⟩], .var ⟨0⟩⟩
 
 private def evalTrapMIR (input : String × MIR.Program) : Nat → Evaluation
   | 0 => .running
@@ -1448,7 +1456,7 @@ example : EvaluatorAdequacy birSemantics birEvaluation := evaluatorAdequacy _
 
 /-- This is the planted collision: successful lowering alone does not validate an origin list. -/
 example :
-    let planted : Elab.Output := { trapCore with sites := ⟨⟨99⟩, ⟨0, 1, 1, 1, ⟨0⟩⟩⟩ :: trapCore.sites }
+    let planted : Elab.Output := { trapCore with sites := ⟨⟨99⟩, bindingSpan⟩ :: trapCore.sites }
     OriginWellFormed trapCore ∧ ConformanceStatic planted ∧
       MIR.lowerUnchecked planted = MIR.lowerUnchecked trapCore ∧ ¬ OriginWellFormed planted := by
   with_unfolding_all

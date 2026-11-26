@@ -20,10 +20,9 @@ base = (root / 'ConcreteSpec/Spec/Rules.lean').read_text().replace(
 base = re.sub(r'def registeredRules : List RuleId :=.*?(?=\n/--)',
               'def registeredRules : List RuleId := []\n', base, flags=re.S)
 base = base.replace('import ConcreteSpec.Spec.Const\n', '').replace('import ConcreteSpec.Spec.Own\n', '')
-base = re.sub(r'namespace ConstRegistry.*?end ConstRegistry\n', '', base, flags=re.S)
-base = re.sub(r'namespace Own.Registry.*?end Own.Registry\n', '', base, flags=re.S)
-base = re.sub(r'def registeredRuleExamples : List RuleExample :=.*?(?=\nend ConcreteSpec.Core)',
-              'def registeredRuleExamples : List RuleExample := []\n', base, flags=re.S)
+base = base.replace('end ConcreteSpec.Core',
+                    '/-- Complete conformance links. -/\n'
+                    'def registeredRuleExamples : List RuleExample := []\n\nend ConcreteSpec.Core')
 exporter = (root / 'scripts/spec/rules.lean').read_text().split('-- EXPORTER BODY\n')[1]
 rows = tmp / 'decisions.md'
 rows.write_text('- **Q9.1** Decided.\nR-0001 is only mentioned.\n'

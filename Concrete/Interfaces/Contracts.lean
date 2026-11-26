@@ -1,5 +1,5 @@
 import Concrete.Interfaces.Carriers
-import Concrete.Contracts
+import Concrete.Interfaces.Behavior
 import Concrete.Backend.Observation
 
 namespace Concrete.Interfaces
@@ -37,65 +37,25 @@ structure Model (A E : Type) where
   runtimeExact : ∀ a observed legacy, projects a observed legacy →
     observed.SameRuntimeResult legacy
 
-open Concrete.Contracts (Steps SameInfiniteTrace)
+open Concrete.Contracts (Steps)
 
-/-- Every source step visits a related checkpoint. Forward stuttering consumes
-rank. In the reverse direction each concrete target step and terminal result
-is matched from the checkpoint reached on that target execution. This keeps
-representation obligations on the very path used to match the result. -/
+/-- Match representation checkpoints along target executions. The source
+can choose a path that follows the target's allocation and control decisions.
+A target step that takes no source steps strictly decreases the rank. -/
 structure CheckpointSimulation {A B E O : Type} (s : Semantics A E) (t : Semantics B E)
     (sourceResult : A → s.State → O → Prop) (targetResult : B → t.State → O → Prop)
     (a : A) (b : B) where
   related : s.State → t.State → Prop
   rank : s.State → t.State → Nat
-  initial : ∀ p, s.initial a p → ∃ q, t.initial b q ∧ related p q
-  advance : ∀ p q p', s.finite a p → t.finite b q → related p q → s.step a p p' →
-    (∃ first q', t.step b q first ∧ Steps (t.step b) first q' ∧ related p' q') ∨
-    (related p' q ∧ rank p' q < rank p q)
-  finish : ∀ p q o, s.finite a p → t.finite b q → related p q → sourceResult a p o →
-    ∃ q', Steps (t.step b) q q' ∧ targetResult b q' o ∧ s.trace a p = t.trace b q'
   targetInitial : ∀ q, t.initial b q → ∃ p, s.initial a p ∧ related p q
   targetAdvance : ∀ p q q', s.finite a p → t.finite b q → related p q → t.step b q q' →
-    ∃ before after p',
-      Steps (fun x y => s.step a x y ∧ related y q) p before ∧
-      (before = after ∨ s.step a before after) ∧ related after q' ∧
-      Steps (fun x y => s.step a x y ∧ related y q') after p'
+    let atOld := fun x y => s.step a x y ∧ related y q
+    (∃ before after, Steps atOld p before ∧ s.step a before after ∧ related after q') ∨
+    (∃ first after, atOld p first ∧ Steps atOld first after ∧ related after q') ∨
+    (related p q' ∧ rank p q' < rank p q)
   targetFinish : ∀ p q o, s.finite a p → t.finite b q → related p q → targetResult b q o →
     ∃ p', Steps (fun x y => s.step a x y ∧ related y q) p p' ∧
       sourceResult a p' o ∧ s.trace a p' = t.trace b q
-
-/-- Complete behaviors include termination, infinite traces and faults.
-The safety clause retains the existing authority and no-target-fault obligations.
-A reachable source fault cannot be turned into a successful target execution. -/
-def BehaviorRefinement {A B E O : Type} (s : Semantics A E) (t : Semantics B E)
-    (sourceResult : A → s.State → O → Prop) (targetResult : B → t.State → O → Prop)
-    (a : A) (b : B) : Prop :=
-  Concrete.Contracts.Refines s t a b ∧
-  (∀ q o, t.finite b q → targetResult b q o →
-    ∃ p, s.finite a p ∧ sourceResult a p o ∧ s.trace a p = t.trace b q) ∧
-  (∀ p o, s.finite a p → sourceResult a p o →
-    ∃ q, t.finite b q ∧ targetResult b q o ∧ s.trace a p = t.trace b q) ∧
-  (∀ run, s.diverges a run → ∃ target, t.diverges b target ∧
-    SameInfiniteTrace (fun i => s.trace a (run i)) (fun i => t.trace b (target i))) ∧
-  (∀ p, ¬ s.stuck a p)
-
-theorem BehaviorRefinement.rejectsEarlyReturn {A B E O : Type}
-    {s : Semantics A E} {t : Semantics B E}
-    {sr : A → s.State → O → Prop} {tr : B → t.State → O → Prop}
-    {a : A} {b : B} (diverges : ∃ run, s.diverges a run)
-    (terminates : ¬ ∃ run, t.diverges b run) : ¬ BehaviorRefinement s t sr tr a b :=
-  fun h => terminates (let ⟨run, infinite⟩ := diverges
-    let ⟨target, path, _⟩ := h.2.2.2.1 run infinite
-    ⟨target, path⟩)
-
-theorem BehaviorRefinement.rejectsIntroducedDivergence {A B E O : Type}
-    {s : Semantics A E} {t : Semantics B E}
-    {sr : A → s.State → O → Prop} {tr : B → t.State → O → Prop}
-    {a : A} {b : B} (terminates : ¬ ∃ run, s.diverges a run)
-    (diverges : ∃ run, t.diverges b run) : ¬ BehaviorRefinement s t sr tr a b :=
-  fun h => terminates (let ⟨run, infinite⟩ := diverges
-    let ⟨source, path, _⟩ := h.1.2.2.1 run infinite
-    ⟨source, path⟩)
 
 def Model.Refines {A B E : Type} (source : Model A E) (target : Model B E)
     (a : A) (b : B) : Prop :=
@@ -985,15 +945,12 @@ structure LoweringModels (language : CoreLanguage) (lang : LoweringLanguage lang
   mir : Model (MIR lang profile) language.operands.Event
   memory : Model (Memory lang profile) language.operands.Event
   ssa : Model (SSA lang profile) language.operands.Event
-  bir : Model (BIR lang profile) language.operands.Event
-  llvm : Model (LLVMInput profile) language.operands.Event
   mirInvariant : MIR lang profile → Prop
   memoryInvariant : Memory lang profile → Prop
   ssaInvariant : SSA lang profile → Prop
   birInvariant : BIR lang profile → Prop
   memoryState : memory.execution.State → MemoryRegisters language profile
   mirState : mir.execution.State → MemoryRegisters language profile
-  llvmHandoff : BIR lang profile → LLVMInput profile → Prop
 
 variable {language : CoreLanguage} {lang : LoweringLanguage language.operands.Ty} {profile : Profile}
 
@@ -1058,9 +1015,8 @@ private def addressIdsMatch (memory : Memory lang profile)
     place ∈ source.live ∧
     (memory.zeroRoot target.frame place = true ∨ (AList.lookup target.materialized place).isSome)
 
-/-- In addition to the common behavior contract, every source step has a
-physical representation checkpoint, including steps on a terminating branch
-of a program that can also diverge. -/
+/-- Each target execution is matched against a source path whose checkpoints
+retain the required physical representations. -/
 def LowersMemory (m : LoweringModels language lang profile)
     (mir : MIR lang profile) (memory : Memory lang profile) : Prop :=
   memory.project = mir.project ∧ memory.entry = mir.entry ∧
@@ -1291,8 +1247,11 @@ def executionFor {A : Type} (graph : A → Memory lang profile)
     exact stderrExact _ _
   traceGrows _ _ _ tick := tick.2.2
 
+private def registerExecution : Semantics (Memory lang profile) language.operands.Event :=
+  executionFor id (fun memory => entryStateFor memory) hostedResultFor
+
 def Execution : Semantics (BIR lang profile) language.operands.Event :=
-  executionFor (memoryView (language := language)) entryState hostedResult
+  registerExecution.onInput (memoryView (language := language))
 
 /-- An auxiliary invocation ends at the selected function's outermost return.
 Nested calls still execute the linked BIR program through the normal frame rules. -/
@@ -1318,11 +1277,12 @@ def leafEntry (bir : BIR lang profile) (values : List language.operands.Val) :
 
 end BIR
 
-def EmitsLLVM (m : LoweringModels language lang profile)
+/-- Structural obligations of the LLVM handoff. Semantic correctness of the
+exact printed module is the trusted-base assumption P_print. -/
+def LLVMMetadataMatches {Ty : Type} {lang : LoweringLanguage Ty}
     (bir : BIR lang profile) (output : LLVMInput profile) : Prop :=
   profile.backend = .llvm ∧ output.triple = profile.llvmTriple ∧
-  output.dataLayout = profile.llvmDataLayout ∧ output.sites = bir.sites ∧ m.llvmHandoff bir output ∧
-  m.bir.execution = BIR.Execution (language := language) ∧ m.bir.Refines m.llvm bir output
+  output.dataLayout = profile.llvmDataLayout ∧ output.sites = bir.sites
 
 def SSA.memoryView (ssa : SSA lang profile) : Memory lang profile :=
   BIR.registerView ssa.project ssa.entry ssa.signatures ssa.functions ssa.layouts fun base ending =>
@@ -1336,9 +1296,7 @@ def SSA.memoryView (ssa : SSA lang profile) : Memory lang profile :=
     | .invalid => .invalid
 
 def SSA.Execution : Semantics (SSA lang profile) language.operands.Event :=
-  BIR.executionFor (SSA.memoryView (language := language))
-    (fun ssa => BIR.entryStateFor (ssa.memoryView (language := language)))
-    (fun ssa => BIR.hostedResultFor (ssa.memoryView (language := language)))
+  BIR.registerExecution.onInput (SSA.memoryView (language := language))
 
 def BuildsSSA (m : LoweringModels language lang profile)
     (memory : Memory lang profile) (ssa : SSA lang profile) : Prop :=
@@ -1347,13 +1305,28 @@ def BuildsSSA (m : LoweringModels language lang profile)
   memory.ExecutionExact m ∧ m.ssa.execution = SSA.Execution (language := language) ∧
   m.memory.Refines m.ssa memory ssa
 
-def BuildsBIR (m : LoweringModels language lang profile)
-    (ssa : SSA lang profile) (bir : BIR lang profile) : Prop :=
-  bir.project = ssa.project ∧ bir.entry = ssa.entry ∧ bir.layouts = ssa.layouts ∧
-  bir.signatures = ssa.signatures ∧ bir.TrapSlotsWF ∧ bir.TrapsMatch ssa ∧ PreservesOrigins ssa.origins bir.origins ∧
-  bir.frameSlots ≤ profile.maxBIRSlots ∧
-  m.ssa.execution = SSA.Execution (language := language) ∧
-  m.bir.execution = BIR.Execution (language := language) ∧ m.ssa.Refines m.bir ssa bir
+/-- The decoded program includes the entry, all function graphs, signatures and
+storage layouts. Resolving trap slots uses the exact emitted site table. -/
+def BIR.PreservesProgram (ssa : SSA lang profile) (bir : BIR lang profile) : Prop :=
+  ssa.memoryView (language := language) = bir.memoryView (language := language)
+
+def BuildsBIR (ssa : SSA lang profile) (bir : BIR lang profile) : Prop :=
+  bir.TrapSlotsWF ∧ bir.TrapsMatch ssa ∧ PreservesOrigins ssa.origins bir.origins ∧
+  bir.frameSlots ≤ profile.maxBIRSlots ∧ BIR.PreservesProgram (language := language) ssa bir
+
+/-- BIR formation re-encodes the program. The shared interpreter therefore
+establishes backward refinement directly from the decoded-program check. -/
+theorem BuildsBIR.refines {ssa : SSA lang profile} {bir : BIR lang profile}
+    (built : BuildsBIR (language := language) ssa bir) :
+    BehaviorRefinement (SSA.Execution (language := language)) (BIR.Execution (language := language))
+      (SSA.Execution (language := language)).result (BIR.Execution (language := language)).result ssa bir := by
+  let exec := BIR.registerExecution (language := language) (lang := lang) (profile := profile)
+  change BehaviorRefinement exec exec exec.result exec.result
+    (ssa.memoryView (language := language)) (bir.memoryView (language := language))
+  rw [built.2.2.2.2]
+  intro safe
+  exact ⟨fun state _ reached result => ⟨state, reached, result, rfl⟩,
+    fun run infinite => ⟨run, infinite, fun _ => Iff.rfl⟩, safe⟩
 
 open LeanCompilerBackend.Verified (FunctionJob)
 

@@ -126,10 +126,10 @@ def registry (passes : Passes grammar language lang profile) (front : FrontendSp
     m.ssaInvariant, BuildsSSA m, fails.memory⟩
   buildBIR := ⟨passes.buildBIR, .provedValidator, m.ssaInvariant,
     fun bir => m.birInvariant bir ∧ bir.TrapSlotsWF ∧ bir.frameSlots ≤ profile.maxBIRSlots,
-    BuildsBIR m, fails.ssa⟩
-  emitLLVM := ⟨passes.emitLLVM, .namedPremise "LLVM printer",
+    BuildsBIR (language := language), fails.ssa⟩
+  emitLLVM := ⟨passes.emitLLVM, .namedPremise "P_print",
     fun bir => m.birInvariant bir ∧ bir.TrapSlotsWF ∧ bir.frameSlots ≤ profile.maxBIRSlots,
-    fun output => ∃ bir, EmitsLLVM m bir output, EmitsLLVM m, fails.llvm⟩
+    fun output => ∃ bir : BIR lang profile, LLVMMetadataMatches bir output, LLVMMetadataMatches, fails.llvm⟩
   emitLCB := ⟨passes.emitLCB, .directProof,
     fun bir => m.birInvariant bir ∧ bir.TrapSlotsWF ∧ bir.frameSlots ≤ profile.maxBIRSlots,
     fun output => ∃ bir : BIR lang profile, EmitsLCB language bir output, EmitsLCB language, fails.lcb⟩
