@@ -261,6 +261,19 @@ theorem KeyConstruct.assignFunctionTable_lookup (f : FnId) (startSite index : Na
   · rintro ⟨indexed, _⟩
     simp [indexed]
 
+/-- A resolved occurrence's persistent key is available in the assigned certificate table
+at some lexical site, for any choice of the starting offset. This lifts path stability laws
+to table lookups even when an edit changes the lexical site. -/
+theorem KeyConstruct.assignFunctionTable_lookup_of_path (f : FnId) (startSite : Nat)
+    (body : List KeyConstruct) (route : Numbers) (key : FunctionRelativeKey)
+    (nonempty : route ≠ []) (found : pathAt body route = some key) :
+    ∃ index, AList.lookup (assignFunctionTable f startSite body) ⟨startSite + index⟩ =
+      some ⟨.function f, key⟩ := by
+  have member := collectKeysIn_complete [] body route key nonempty found
+  obtain ⟨index, indexed⟩ := List.mem_iff_getElem?.mp member
+  exact ⟨index, (assignFunctionTable_lookup f startSite index body key).mpr
+    ⟨indexed, route, nonempty, found⟩⟩
+
 /-- Law (subject `ConcreteSpec.Core.KeyConstruct.assignProgramTables`, `ConcreteSpec.Core.OutsideFunctionEdit`).
 **Per-function syntactic key assignment satisfies `OutsideFunctionEdit`.** Editing `edited`—even
 when that shifts the starting lexical site offsets of every other function—leaves the persistent
@@ -539,6 +552,19 @@ theorem KeyConstruct.collectKeysIn_append (scope before after : List KeyConstruc
   | cons root rest ih =>
     simp only [List.cons_append, collectKeysIn, ih]
     simp [List.append_assoc]
+
+/-- E2 control (R-0615, R-0723, before step 4(d)). The ordinal of an unchanged nested call
+drifts after inserting an earlier call outside its unnamed block, conditional or loop.
+The outer construct keeps its ordinal. The nested call changes from ordinal zero to one.
+The scope rule is an owner decision, so this theorem records the open stability obligation
+without revising that rule. -/
+theorem KeyConstruct.earlier_call_shifts_nested_call (kind : ConstructKind)
+    (hkind : kind ≠ .call) :
+    let call : KeyConstruct := ⟨.call, .unnamed none, []⟩
+    let outer : KeyConstruct := ⟨kind, .unnamed none, [call]⟩
+    pathAt [outer] [0, 0] = some ⟨[⟨kind, .ordinal 0⟩, ⟨.call, .ordinal 0⟩]⟩ ∧
+    pathAt [call, outer] [1, 0] = some ⟨[⟨kind, .ordinal 0⟩, ⟨.call, .ordinal 1⟩]⟩ := by
+  simp [pathAt, pathAtIn, segment, childScope, ConstructName.isUnnamed, Ne.symm hkind]
 
 /-- Law (subject `ConcreteSpec.Core.KeyConstruct.assignFunctionTable`).
 Replacing the outer forest of a named construct preserves its entire ordered assigned subtree:

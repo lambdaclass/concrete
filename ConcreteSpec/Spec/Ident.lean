@@ -40,7 +40,8 @@ Authority (all in `docs/decisions.md` on main):
 - `decided-project-diagnostics-2026-11-06`, `decided-project-runtime-2026-11-06`:
   rule revisions, spec versions and source positions; `foundation-q10`: byte columns,
   with a tab counting one byte. Byte arithmetic is not a lexer or source-admission policy.
-- `decided-project-vertical-slices-2026-11-06`: slice identities 0–28.
+- `decided-project-vertical-slices-2026-11-06`: historical slice order, superseded by
+  the current ROADMAP’s slices 0–21.
 
 All identity text uses Basics.Name, preserving exact text equality while
 keeping nominal identity distinct from local diagnostic spellings. Numeric routes
@@ -52,8 +53,8 @@ Local and project-wide path admission, span projection and source binding are de
 
 namespace ConcreteSpec.Core
 
-/-- A place of safe structured storage. C4 and C5 will relate this identity to their root/projection
-and hybrid-state representations; this C9 base deliberately does not edit or choose that mapping. -/
+/-- A fresh logical place in structured storage, independent of numeric addresses.
+Shared by the hybrid store and ownership roots. -/
 structure PlaceId where
   id : Nat
   deriving DecidableEq, Repr
@@ -1426,9 +1427,9 @@ def Projects (project : Project) (path : SourcePath) (start stop : Nat) (span : 
 end Reference
 end SourcePathSpan
 
-/-- A slice of the language, in the agreed slice order: 0 to 28, concurrency last (2026-11-07). -/
+/-- A slice of the language, in the current ROADMAP order: 0 through 21. -/
 structure SliceId where
-  n : Fin 29
+  n : Fin 22
   deriving DecidableEq, Repr
 
 /-- A rule's identity: the Lean name of the declaration that states it and that rule's own
@@ -1627,7 +1628,7 @@ theorem example_FieldId_mk_variant_ModuleId_mk : FieldId.mk (.variant ⟨⟨Modu
     FieldId.mk (.variant ⟨⟨ModuleId.mk ⟨⟨"p"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"m"⟩] (by decide), ⟨"E"⟩⟩, ⟨"B"⟩⟩) ⟨"value"⟩ := by decide
 
 /-- The first and the last slice. -/
-theorem example_first_and_last_slice : (SliceId.mk 0).n.val = 0 ∧ (SliceId.mk 28).n.val = 28 := ⟨rfl, rfl⟩
+theorem example_first_and_last_slice : (SliceId.mk 0).n.val = 0 ∧ (SliceId.mk 21).n.val = 21 := ⟨rfl, rfl⟩
 
 /-- Bytes for `a`, a tab, and `b`. After the tab, the range starts at line 1, byte column 3. -/
 def tabSource : SourceText := SourceText.ofBytes [97, 9, 98]

@@ -1016,11 +1016,13 @@ private theorem before_disjoint : before.RangesDisjoint ⟨0⟩ ⟨1⟩ := by
   cases hr; cases hs
   exact .inr (.inr (.inr (.inl (by decide))))
 
-/-- Wrong projection lookup: use the newest materialized entry for every byte read.
-Structured entries are skipped, so materializing an unrelated cell can redirect a read. -/
+/-- Wrong projection lookup: prefer another place's materialized entry.
+Materializing an unrelated cell can redirect a read. -/
 def badReadDiff (tgt : Target) (st : State) (q : Place) : Option Value :=
-  match st.cells with
-  | (_, ⟨t, .materialized r⟩) :: _ => do
+  match st.cells.find? (fun (p, c) => p != q && match c.storage with
+    | .structured _ => false
+    | .materialized _ => true) with
+  | some (_, ⟨t, .materialized r⟩) => do
     let n ← sizeof t
     let bs ← st.memory.load tgt r.ptr n r.align
     decode tgt t bs
@@ -1103,12 +1105,10 @@ theorem materialize_read_planted_firstMat_badReadStructOnly : structState.memory
 def rawAfter : State :=
   (matState.rawWrite linuxX8664 matRange.ptr [.init 2 none] 1).getD matState
 
-/-- Wrong rule: keep reading the old value after a raw overwrite. -/
-def staleRead (tgt : Target) (st : State) (p : Place) : Option Value :=
-  match st.cells.find? (fun e => e.1 == p && match e.2.storage with
-    | .structured _ => true
-    | .materialized _ => false) with
-  | some (_, ⟨_, .structured v⟩) => some v
+/-- Wrong rule: consult a cached structured value before reading the current memory. -/
+def staleRead (cached : State) (tgt : Target) (st : State) (p : Place) : Option Value :=
+  match cached.places p with
+  | some ⟨_, .structured v⟩ => some v
   | _ => st.read tgt p
 
 /-- Instance (law `ConcreteSpec.Core.Hybrid.rawWrite_read`, case `overwrite`). -/
@@ -1123,7 +1123,7 @@ theorem rawWrite_read_planted_overwrite : matState.memory.WellFormed linuxX8664 
     matState.places ⟨0⟩ = some ⟨.int .u8, .materialized matRange⟩ ∧
     (sizeof (.int .u8) = some [MByte.init 2 none].length) ∧
     matState.rawWrite linuxX8664 matRange.ptr [.init 2 none] 1 = some rawAfter ∧
-    ¬ (staleRead linuxX8664 rawAfter ⟨0⟩ = decode linuxX8664 (.int .u8) [.init 2 none]) :=
+    ¬ (staleRead structState linuxX8664 rawAfter ⟨0⟩ = decode linuxX8664 (.int .u8) [.init 2 none]) :=
   ⟨(materialize_wellFormed linuxX8664 structState structState_wf ⟨0⟩ ⟨0⟩ 40 1 []).memory,
     rfl, rfl, rfl, by decide⟩
 

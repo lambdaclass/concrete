@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.Ident
 import ConcreteSpec.Spec.Memory
 import ConcreteSpec.Spec.Exec
 import ConcreteSpec.Spec.Rep
@@ -133,9 +134,22 @@ structure Cell where
   deriving Repr
 
 /-- Fresh logical place identities, independent of numeric addresses. -/
-structure Place where
-  id : Nat
-  deriving DecidableEq, Repr
+abbrev Place := PlaceId
+
+namespace Place
+
+/-- Constructor spelling retained for existing hybrid-store callers. -/
+abbrev mk := PlaceId.mk
+
+/-- Projection spelling retained for existing hybrid-store callers. -/
+abbrev id (p : Place) : Nat := PlaceId.id p
+
+end Place
+
+/-- The spec identity can be used directly as a hybrid-store key. -/
+theorem example_place_identity (p : PlaceId) : (Place.mk p.id : Place) = p := by
+  cases p
+  rfl
 
 /-- The hybrid store uses the common finite association list. Byte memory is the sole
 authority for materialized places. -/
@@ -171,13 +185,51 @@ def State.RangesDisjoint (st : State) (p q : Place) : Prop :=
   ∀ c d r s, st.places p = some c → st.places q = some d →
     c.storage = .materialized r → d.storage = .materialized s → r.Disjoint s
 
-/-- Replace a logical place without changing other entries. -/
-def State.set (st : State) (p : Place) (c : Cell) : State :=
-  { st with cells := (p, c) :: st.cells }
+/-- Replace the first binding in place, or add one entry for a missing place. -/
+private def setCell (p : Place) (c : Cell) : AList Place Cell → AList Place Cell
+  | [] => [(p, c)]
+  | (q, old) :: rest =>
+    if q = p then (q, c) :: rest else (q, old) :: setCell p c rest
 
-/-- Representation lemma. Place lookup after State.set reduces to association-list cons. -/
+/-- Replace or insert a logical place without changing other bindings or their order. -/
+def State.set (st : State) (p : Place) (c : Cell) : State :=
+  { st with cells := setCell p c st.cells }
+
+private theorem lookup_setCell (p q : Place) (c : Cell) (cells : AList Place Cell) :
+    AList.lookup (setCell p c cells) q =
+      if p = q then some c else AList.lookup cells q := by
+  induction cells with
+  | nil => rfl
+  | cons entry rest ih =>
+    obtain ⟨key, old⟩ := entry
+    by_cases hp : key = p
+    · subst key
+      by_cases heq : p = q <;> simp [setCell, AList.lookup, heq]
+    · by_cases hq : key = q
+      · subst key
+        simp [setCell, AList.lookup, hp, Ne.symm hp]
+      · simp [setCell, AList.lookup, hp, hq, ih]
+
+/-- Setting a place gives the new cell at that key and frames all other lookups. -/
 @[simp] theorem State.places_set (st : State) (p q : Place) (c : Cell) :
-    (st.set p c).places q = if p = q then some c else st.places q := rfl
+    (st.set p c).places q = if p = q then some c else st.places q :=
+  lookup_setCell p q c st.cells
+
+private theorem length_setCell (p : Place) (c : Cell) (cells : AList Place Cell) :
+    (setCell p c cells).length = cells.length + (if (AList.lookup cells p).isSome then 0 else 1) := by
+  induction cells with
+  | nil => rfl
+  | cons entry rest ih =>
+    obtain ⟨key, old⟩ := entry
+    by_cases hp : key = p
+    · simp [setCell, AList.lookup, hp]
+    · simp [setCell, AList.lookup, hp, ih, Nat.add_right_comm]
+
+/-- R-0723 store bound. A write adds one entry exactly when its place is absent. In particular, repeated writes
+to an existing place never grow the backing list. -/
+theorem State.set_length (st : State) (p : Place) (c : Cell) :
+    (st.set p c).cells.length = st.cells.length + (if (st.places p).isSome then 0 else 1) :=
+  length_setCell p c st.cells
 
 /-- Representation lemma. Updating the byte-memory field preserves place lookup. -/
 @[simp] theorem State.places_memory (st : State) (m : Memory) (p : Place) :

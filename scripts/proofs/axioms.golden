@@ -2098,9 +2098,6 @@ ConcreteSpec.Core.Hybrid.Cell.Projected.eq_1
 ConcreteSpec.Core.Hybrid.Cell.mk.inj	
 ConcreteSpec.Core.Hybrid.Cell.mk.injEq	propext
 ConcreteSpec.Core.Hybrid.Cell.mk.sizeOf_spec	
-ConcreteSpec.Core.Hybrid.Place.mk.inj	
-ConcreteSpec.Core.Hybrid.Place.mk.injEq	propext
-ConcreteSpec.Core.Hybrid.Place.mk.sizeOf_spec	
 ConcreteSpec.Core.Hybrid.Range.mk.inj	
 ConcreteSpec.Core.Hybrid.Range.mk.injEq	propext
 ConcreteSpec.Core.Hybrid.Range.mk.sizeOf_spec	
@@ -2115,8 +2112,9 @@ ConcreteSpec.Core.Hybrid.State.mk.injEq	propext
 ConcreteSpec.Core.Hybrid.State.mk.sizeOf_spec	
 ConcreteSpec.Core.Hybrid.State.places.eq_1	
 ConcreteSpec.Core.Hybrid.State.places_memory	
-ConcreteSpec.Core.Hybrid.State.places_set	
+ConcreteSpec.Core.Hybrid.State.places_set	Quot.sound propext
 ConcreteSpec.Core.Hybrid.State.read.eq_1	propext
+ConcreteSpec.Core.Hybrid.State.set_length	propext
 ConcreteSpec.Core.Hybrid.State.write._proof_1	propext
 ConcreteSpec.Core.Hybrid.State.write.eq_1	propext
 ConcreteSpec.Core.Hybrid.Storage.materialized.inj	
@@ -2153,11 +2151,10 @@ ConcreteSpec.Core.Hybrid.example_Sharing_scalar_universe_does_not_infer	propext
 ConcreteSpec.Core.Hybrid.example_encoding_hold_does_not_hold_decided	
 ConcreteSpec.Core.Hybrid.example_integer_is_readable_before_taking_its	propext
 ConcreteSpec.Core.Hybrid.example_laws_typed_store_frame_rawWrite_read_typed_write_preserves	propext
+ConcreteSpec.Core.Hybrid.example_place_identity	
 ConcreteSpec.Core.Hybrid.example_public_query_retains_admitted_integer_encoding	propext
 ConcreteSpec.Core.Hybrid.expose_frame	Quot.sound propext
 ConcreteSpec.Core.Hybrid.expose_wellFormed	Quot.sound propext
-ConcreteSpec.Core.Hybrid.instDecidableEqPlace.decEq._proof_1	
-ConcreteSpec.Core.Hybrid.instDecidableEqPlace.decEq._proof_2	
 ConcreteSpec.Core.Hybrid.instDecidableStorable._proof_1	
 ConcreteSpec.Core.Hybrid.instDecidableStorable._proof_2	
 ConcreteSpec.Core.Hybrid.instDecidableStorable._proof_3	
@@ -2187,7 +2184,7 @@ ConcreteSpec.Core.Hybrid.rawWrite_read	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Hybrid.rawWrite_wellFormed	Quot.sound propext
 ConcreteSpec.Core.Hybrid.read_structured	propext
 ConcreteSpec.Core.Hybrid.rep_roundtrip	Quot.sound propext
-ConcreteSpec.Core.Hybrid.set_wellFormed	propext
+ConcreteSpec.Core.Hybrid.set_wellFormed	Quot.sound propext
 ConcreteSpec.Core.Hybrid.sizeof.eq_1	
 ConcreteSpec.Core.Hybrid.sizeof.eq_2	
 ConcreteSpec.Core.Hybrid.sizeof.eq_3	
@@ -2243,6 +2240,7 @@ ConcreteSpec.Core.KeyConstruct._sizeOf_2_eq
 ConcreteSpec.Core.KeyConstruct.assignFunctionTable.eq_1	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.assignFunctionTable_descendant_mem	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.assignFunctionTable_lookup	Quot.sound propext
+ConcreteSpec.Core.KeyConstruct.assignFunctionTable_lookup_of_path	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.assignFunctionTable_named_scope	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.assignFunctionTable_occurrences	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.assignFunctionTable_pin	Quot.sound propext
@@ -2280,6 +2278,7 @@ ConcreteSpec.Core.KeyConstruct.descendant_named_ancestor_resets_scope	propext
 ConcreteSpec.Core.KeyConstruct.descendant_pin_other	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.descendant_rename_named	propext
 ConcreteSpec.Core.KeyConstruct.descendant_rename_other	Quot.sound propext
+ConcreteSpec.Core.KeyConstruct.earlier_call_shifts_nested_call	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.key.eq_1	
 ConcreteSpec.Core.KeyConstruct.key_insert_differentKind	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.key_insert_named	Quot.sound propext
@@ -2296,8 +2295,8 @@ ConcreteSpec.Core.KeyConstruct.numberFunctionKeys.eq_1
 ConcreteSpec.Core.KeyConstruct.numberFunctionKeys.eq_2	
 ConcreteSpec.Core.KeyConstruct.numberFunctionKeys.eq_def	
 ConcreteSpec.Core.KeyConstruct.numberFunctionKeys_lookup	Quot.sound propext
-ConcreteSpec.Core.KeyConstruct.numberFunctionKeys_lookup._proof_1_4	Quot.sound propext
-ConcreteSpec.Core.KeyConstruct.numberFunctionKeys_lookup._proof_1_5	Quot.sound propext
+ConcreteSpec.Core.KeyConstruct.numberFunctionKeys_lookup._proof_1_1	Quot.sound propext
+ConcreteSpec.Core.KeyConstruct.numberFunctionKeys_lookup._proof_1_2	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.numberFunctionKeys_snd	propext
 ConcreteSpec.Core.KeyConstruct.pathAt.eq_1	propext
 ConcreteSpec.Core.KeyConstruct.pathAtIn.eq_1	propext
@@ -6945,8 +6944,6 @@ _private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.instReprIntTy.repr.match_1.eq
 _private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.instReprIntTy.repr.match_1.eq_8	
 _private.ConcreteSpec.Proofs.Hybrid.0.Except.toBool.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Hybrid.0.Except.toBool.match_1.eq_2	
-_private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.AList.lookup.match_1.eq_1	
-_private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.AList.lookup.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.ConstructName.pin.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.ConstructName.pin.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.ConstructName.rename.match_1.eq_1	
@@ -7251,8 +7248,6 @@ _private.ConcreteSpec.Proofs.Observe.0.ConcreteSpec.retOutcome.match_1.eq_4	prop
 _private.ConcreteSpec.Proofs.Observe.0.ConcreteSpec.runBody.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Observe.0.ConcreteSpec.runBody.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Observe.0.ConcreteSpec.runBody.match_1.eq_3	
-_private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.AList.lookup.match_1.eq_1	
-_private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.AList.lookup.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.Own.bind.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.Own.bind.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.Own.bind_loans	Quot.sound propext
@@ -7605,6 +7600,15 @@ _private.ConcreteSpec.Spec.Const.0.ConcreteSpec.Core.sortConstsAux.match_3.eq_2
 _private.ConcreteSpec.Spec.Const.0.ConcreteSpec.Core.takeReady.match_1.eq_1	
 _private.ConcreteSpec.Spec.Const.0.ConcreteSpec.Core.takeReady.match_3.eq_1	
 _private.ConcreteSpec.Spec.Const.0.ConcreteSpec.Core.takeReady.match_3.eq_2	
+_private.ConcreteSpec.Spec.Hybrid.0.ConcreteSpec.Core.AList.lookup.match_1.eq_1	
+_private.ConcreteSpec.Spec.Hybrid.0.ConcreteSpec.Core.AList.lookup.match_1.eq_2	
+_private.ConcreteSpec.Spec.Hybrid.0.ConcreteSpec.Core.Hybrid.length_setCell	propext
+_private.ConcreteSpec.Spec.Hybrid.0.ConcreteSpec.Core.Hybrid.lookup_setCell	Quot.sound propext
+_private.ConcreteSpec.Spec.Hybrid.0.ConcreteSpec.Core.Hybrid.setCell.eq_1	
+_private.ConcreteSpec.Spec.Hybrid.0.ConcreteSpec.Core.Hybrid.setCell.eq_2	
+_private.ConcreteSpec.Spec.Hybrid.0.ConcreteSpec.Core.Hybrid.setCell.eq_def	
+_private.ConcreteSpec.Spec.Hybrid.0.ConcreteSpec.Core.Hybrid.setCell.match_1.eq_1	
+_private.ConcreteSpec.Spec.Hybrid.0.ConcreteSpec.Core.Hybrid.setCell.match_1.eq_2	
 _private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.KeyConstruct.collectKeysIn.match_1._arg_pusher	
 _private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.KeyConstruct.collectKeysIn.match_1.eq_1	
 _private.ConcreteSpec.Spec.Ident.0.ConcreteSpec.Core.KeyConstruct.collectKeysIn.match_1.eq_2	
