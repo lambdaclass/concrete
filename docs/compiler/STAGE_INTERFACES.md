@@ -181,17 +181,44 @@ Fix (a)'s production cutover owns the update to the provisional trusted-base
 registry and the removal of test-local model scaffolding after its remaining
 controls exercise the registered contracts directly.
 
-The cutover exit criterion is that the production pass bundle replaces the
-Slice 0 reference bundle in the same registered end-to-end theorem. The
-reference bundle may remain as a test oracle or be deleted. The driver uses
-the production bundle as its sole path.
+No end-to-end correctness claim is made for the compiler before fix (a)
+proves that the production pass bundle satisfies the registered validation
+premise and applies the registered end-to-end theorems to that bundle. The
+cutover requires kernel-checked proofs using only standard axioms, recorded
+in the axiom inventory, for both checked and unchecked chains. Validation
+covers each stage's full input domain, including intermediate inputs that the
+current source grammar cannot produce.
 
-The compiler gate runs the literal-return control through both registered LCB
-routes and checks the emitted job's exit observation. Universal reference
-validation remains open. For example, the gate proves that the frozen SSA
-handoff admits a one-block self-loop with zero frame slots. Every validated
-BIR builder must translate that input and preserve its entry graph. A builder
-that handles only literal returns fails this obligation.
+- **(f) and (e), parser and elaborator.** For each registered slice, a
+  successful parse must supply a tree in the fixed elaboration domain.
+  The grammar and parser must establish this domain, and production
+  elaboration must respect it and retain project-bound locations. The
+  counterexamples were a non-tree start value, a malformed surface tree
+  and an out-of-bounds leaf span on an otherwise decodable return.
+- **(a), unchecked typing.** Prove that the registered typing handoff
+  refuses an ill-typed Core input such as a return of `256` at type
+  `u8` and passes well-typed Core unchanged, including programs whose
+  execution traps.
+- **(b), lowering and SSA.** Establish the registered handoff invariants
+  through SSA, including a designated entry, project-bound origins
+  and exclusion of invalid terminators. A malformed terminator cannot
+  enter BIR formation through the validated SSA handoff. The shared
+  execution must also enforce whole-root loan exclusion for owner
+  writes and for owner copies under a mutable loan.
+- **(a), BIR formation and LCB emission.** Accept well-formed SSA within
+  the frame-slot budget, including a one-block self-loop with zero frame
+  slots, and preserve its entry graph. Establish unique BIR function IDs,
+  the presence of the designated entry, valid trap slots and
+  project-bound trap-site origins. The LCB emitter must establish the
+  registered encoding and job-validation obligations for that domain.
+  Refusals must satisfy the precise resource, profile, linking or encoded
+  job-validation predicates of their respective stages.
+
+The permanent compiler gate runs `return 42` through both checked and
+unchecked registered LCB routes and observes exit 42 with empty stderr in
+the fixed LCB semantics. A planted lowering refusal produces no artifact,
+and an elaborator that changes the literal to `43` fails validation.
+These controls exercise one source through the full chain.
 
 When an atomic retirement spans owners, each writer prepares the replacement for its own files. The integration writer applies the coordinated deletion and updates the trusted-base inventories and cross-stage fixtures with the cutover. Frozen paths and the digest manifest belong to the interface round. Fixes (e) and (f) provide production definitions in their owned modules before the integration writer replaces the bootstrap instance bodies at cutover.
 
