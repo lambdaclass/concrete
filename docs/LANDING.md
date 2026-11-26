@@ -11,7 +11,10 @@ gh pr merge --repo lambdaclass/concrete <PR-number> --auto --match-head-commit <
 
 GitHub queues the PR once it meets the branch requirements. The `merge_group`
 run checks the candidate built on current `main` and any changes ahead of it.
-Missing, failed, cancelled or timed-out checks block the merge. Resolve
+The required **Landing gates** job checks that every gate job and matrix leg listed in
+[required-checks.txt](../required-checks.txt) succeeded in that run attempt.
+A missing, skipped, neutral or otherwise unsuccessful gate blocks the merge.
+If retrying CI, rerun all jobs so the attempt contains every result. Resolve
 conflicts or failures on the WIP branch and requeue once it clears checks and
 review. Use `gh pr checks <PR-number>` for PR checks and
 `gh run list --workflow CI --event merge_group` for queue runs.
@@ -20,9 +23,9 @@ review. Use `gh pr checks <PR-number>` for PR checks and
 
 - Enable **Allow auto-merge**. Protect exactly `main` with **Require a pull
   request before merging**, **Require merge queue**, and **Require status checks
-  to pass**. Select every exact name in [required-checks.txt](../required-checks.txt)
-  with GitHub Actions as the expected source. Remove the retired **Landing
-  record** check if configured.
+  to pass**. Select **Landing gates** with GitHub Actions as the expected
+  source. This replaces the individual gate requirements and the retired
+  **Landing record** check.
 - Use the **Merge** queue method and enable **Only merge non-failing pull
   requests** (called **Require all queue entries to pass required checks** in
   rulesets). Allow merge commits and leave **Require linear history** off.

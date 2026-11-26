@@ -24,18 +24,18 @@ PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `Concret
 namespace ConcreteSpec.Examples
 open ConcreteSpec
 
-theorem add0_ok : BodyOk decls inputCtx add0 (.copy s₂) := bodyOkB_iff.mp (by decide)
+theorem add0_ok : BodyOk decls inputCtx add0 (.ret (.copy s₂)) := bodyOkB_iff.mp (by decide)
 
 /-- For every input value the accepted body `add0` neither gets stuck nor traps: the input is
 bounded only by its type, and that is the evidence that admits the sum. -/
 theorem add0_never_stuck (n : Int) (h : IntTy.u8.inRange n = true) (fuel : Nat) (w : Stuck) :
-    runBody decls fuel (inputEnv n) add0 (.copy s₂) ≠ .stuck w :=
+    runBody decls fuel (inputEnv n) add0 (.ret (.copy s₂)) ≠ .stuck w :=
   runBody_safe add0_ok
     (.cons (fun _ => ⟨_, rfl, .scalar (.int h)⟩) (fun _ hs => by cases hs) (fun _ _ h => by cases h) .nil)
     fuel w
 
 theorem add0_never_traps (n : Int) (h : IntTy.u8.inRange n = true) (fuel : Nat) (k : Trap) :
-    runBody decls fuel (inputEnv n) add0 (.copy s₂) ≠ .trap k :=
+    runBody decls fuel (inputEnv n) add0 (.ret (.copy s₂)) ≠ .trap k :=
   runBody_ne_trap add0_ok
     (.cons (fun _ => ⟨_, rfl, .scalar (.int h)⟩) (fun _ hs => by cases hs) (fun _ _ h => by cases h) .nil)
     fuel k

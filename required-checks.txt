@@ -1,5 +1,7 @@
-# Required GitHub Actions checks for main, one exact check name per line.
-# Apply this list in GitHub settings as described in docs/LANDING.md.
+# Required GitHub status check (configure it as described in docs/LANDING.md).
+Landing gates
+
+# Jobs that must succeed for Landing gates, one exact name per line.
 Root checks
 # Includes Lean-derived spec publication and rule-registry controls.
 Spec build

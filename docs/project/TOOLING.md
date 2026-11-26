@@ -13,16 +13,16 @@ Paths are relative to `scripts/`.
 - `proofs/lake_tool.sh` Builds pinned checker tools in isolation so their identities are reproducible.
 - `proofs/lean_lex.py` Reads Lean tokens so comments and strings cannot fool source checks.
 - `proofs/lib.sh` Shares setup and controls so proof gates use consistent inputs.
-- `proofs/local_identity.lean` Reports Lean toolchain identity for the replay evidence.
-- `proofs/local_identity.py` Verifies the local checker identity used in replay evidence.
+- `proofs/local_identity.lean` Scans Lean declarations for dependence on local variable names and for forbidden diagnostic dependencies.
+- `proofs/local_identity.py` Runs the local-variable identity and diagnostic separation scan and tests that it detects planted violations.
 - `proofs/test_lean_lex.py` Exercises token handling to protect the source checks.
 - `proofs/theorems.lean` Reads theorem and axiom dependencies from the built environment.
 - `proofs/trust_ban.sh` Rejects proof shortcuts such as `sorry` and `native_decide`.
 
 ## Specification
 
-- `spec/f31_census.lean` Exports declaration dependencies for the foundation proof inventory.
-- `spec/f31_census.py` Checks that the foundation inventory matches the built proof declarations.
+- `spec/f31_census.lean` Exports Lean declaration data for the census of the F31 legacy scalar representation migration.
+- `spec/f31_census.py` Inventories the source files and Lean declarations affected by the F31 legacy scalar representation migration.
 - `spec/f31_census_controls.py` Plants census errors to show that the inventory check catches them.
 - `spec/landing_inventory.lean` Lists required spec declarations so missing obligations can be detected.
 - `spec/landing_inventory.sh` Checks that inventory against the built specification.
@@ -30,7 +30,7 @@ Paths are relative to `scripts/`.
 - `spec/lean_site.py` Renders the spec pages and checks their links.
 - `spec/lean_site.sh` Builds the browsable spec from checked Lean sources.
 - `spec/own_control_ranges.lean` Exports ownership control locations so the fixtures can be traced.
-- `spec/own_controls.py` Checks that ownership controls correspond to their declared Lean fixtures.
+- `spec/own_controls.py` Plants ownership mutations in disposable copies of Own.lean and checks that conformance observations reject them.
 - `spec/rules.lean` Exports the rule registry from Lean so other tools see the same rules.
 - `spec/rules.py` Validates the exported rule records against their schema.
 - `spec/rules.sh` Runs the rule export, validation and controls together.
@@ -40,12 +40,12 @@ Paths are relative to `scripts/`.
 
 ## Compiler
 
-- `checks/compiler/build_identity.sh` Checks build identity so a stale binary cannot qualify a new checkout.
-- `checks/compiler/f31_census.sh` Runs the F31 census and controls to check foundation proof coverage.
-- `checks/compiler/llvm_mutation_controls.py` Plants LLVM rendering errors to check that tests catch them.
+- `checks/compiler/build_identity.sh` Records source, toolchain and dependency identity and verifies Lake dependency checkouts against the manifest.
+- `checks/compiler/f31_census.sh` Runs the F31 migration census controls on disposable inputs to verify that census defects are detected.
+- `checks/compiler/llvm_mutation_controls.py` Kernel-checks Lean counterexamples against deliberately mutated LLVM backend definitions.
 - `checks/compiler/llvm_rendering.lean` Exercises LLVM text rendering to catch changes in emitted code.
 - `checks/compiler/slice0_artifacts.sh` Reports native artifact sizes and checks sanitizers and stack bounds.
-- `checks/compiler/slice0_bir.lean` Checks the shared backend representation and its behavior.
+- `checks/compiler/slice0_bir.lean` Validates manifest BIR and LCB expectations and emits LLVM IR, LCB assembly and expected observations for the compiler tests.
 - `checks/compiler/slice0_premise_table.lean` Renders the premise table so documentation can be checked against Lean.
 - `checks/compiler/slice0_repro.sh` Compares independent builds to catch nondeterministic outputs.
 - `checks/compiler/slice0_trusted_base.lean` Prints the compiler premises and axioms for baseline comparison.
@@ -72,7 +72,7 @@ Paths are relative to `scripts/`.
 
 - `checks/archived_references.sh` Checks for retired repository references so tooling uses the live repository.
 - `checks/doc_links.sh` Checks that Markdown files link to existing files and headings.
-- `checks/external_toolchain.sh` Exercises the external checker’s toolchain isolation and cache handling.
+- `checks/external_toolchain.sh` Exercises the external checker’s toolchain isolation, cache handling and call-site scan after relative invocation.
 - `checks/issues.sh` Checks the issue ledger’s structure and IDs so defects stay traceable.
 - `checks/lean_threads.sh` Checks the Lean worker limit so builds respect their resource budget.
 - `checks/legacy_frozen.sh` Checks the frozen tree and retention approvals to protect historical material.
@@ -88,12 +88,13 @@ Paths are relative to `scripts/`.
 - `checks/lib/limits.sh` Shares worker limits so Lean jobs avoid oversubscribing the host.
 - `checks/lib/retention.py` Checks retention rows and resolves which row governs each file.
 - `checks/lib/shell_assignments.py` Parses Bash to catch declarations whose initializers can read stale values.
+- `checks/lib/workflow_checks.py` Matches workflow job names to the gate inventory and requires an explicit success from each landing job.
 - `checks/oracle_fetch.sh` Tests fetch failures so missing or corrupt oracle artifacts block CI.
 - `checks/retention_manifest.sh` Checks that all files have a governing retention row.
 - `checks/root_inventory.sh` Checks the permitted root layout so additions are deliberate.
 - `checks/run.sh` Runs every required root check and reports all failures together.
 - `checks/sandbox_isolation.sh` Tests that disposable Git repositories leave the caller’s repository intact.
 - `checks/shell_assignments.sh` Runs the Bash declaration check with passing and failing controls.
-- `checks/workflow_yaml.sh` Checks workflow syntax so malformed YAML cannot silently stop CI.
+- `checks/workflow_yaml.sh` Checks workflow syntax, the landing job inventory and the controls for the required verdict.
 - `worktree-new.sh` Gives each writer a separate checkout to prevent overlapping edits.
 - `../.githooks/pre-push` Scans WIP commits for conflict markers before backup pushes.

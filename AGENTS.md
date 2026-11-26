@@ -30,15 +30,17 @@ put to the owner by Claude or Codex, with a recommendation reasoned from docs/PH
 record them in the [owner veto list](docs/decisions.md#mechanical-defaults-and-owner-veto-list).
 Core semantics remain owner decisions.
 
-**Owner decisions: never decide one.** The language decisions OD1 – OD157
+**Owner decisions.** Under the [November 25 delegation](docs/decisions.md#decided-2026-11-25-freeze-and-grammar),
+for Slices 0 and 1 a matter that would otherwise require the owner’s approval is decided when
+Claude, Codex and agy all agree. Record the decision with their verdicts and report it to the owner.
+For matters outside that delegation, the language decisions OD1 – OD157
 ([decisions.md](docs/decisions.md#owner-decisions)) are decided only by the project owner. No
 agent, orchestrator or reviewer chooses, encodes, implements or provisionally ships any side of any
 of them, inside a bug fix or anywhere else. Agents present options and a recommendation to the owner
 and wait for an explicit answer. Behaviour already on main that took a side stays as it is, recorded
 as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
-- The coordinator review checks whether a fix picks a side on any owner decision.
-  If a fix would make that choice, stop and ask the owner. An explicit owner
-  answer can be recorded with attribution.
+- The coordinator checks that approval covers any change to an owner decision. See
+  [REVIEW.md](docs/REVIEW.md#owner-decisions-choosing-versus-recording) for provenance checks.
 
 **Bugs.** Record each defect in [ISSUES.tsv](ISSUES.tsv) with evidence, a
 structural cause, an owner and a closure condition. Repair or contain silent
@@ -82,13 +84,16 @@ build blocks. Disputes over mutant, fixture or test construction, helper factori
 out-of-slice edge cases are non-blocking notes, including in `Proofs/`.
 The [November 22 direction](docs/decisions.md#decided-2026-11-22-direction) governs wherever
 the earlier risk rule would block additional findings. See the [roadmap reordering](docs/decisions.md#decided-2026-11-22-roadmap-reordering) for the
-Phase T pause.
+Phase T pause. The [Phase T restart rule](ROADMAP.md#phase-t-restart-rule) governs
+restarts under the [November 25 decision](docs/decisions.md#decided-2026-11-25-freeze-and-grammar).
 
+<a id="review"></a>
 **Review.** The coordinator arranges Codex, Kimi and agy review outside the
-repository and records absences. Clear review before landing. Review the full
-slice first and the delta in subsequent rounds. The caps are two rounds for
-docs and roadmap, three for scripts and five for compiler and spec. Answer
-each finding with a fix or a stated reason.
+repository and records absences. Codex and agy review the grammar, with Gemini
+Neon for agy when available, under the [November 25 decision](docs/decisions.md#decided-2026-11-25-freeze-and-grammar).
+Clear review before landing. Review the full slice first and the delta in
+subsequent rounds. The caps are two rounds for docs and roadmap, three for scripts
+and five for compiler and spec. Answer each finding with a fix or a stated reason.
 
 **Git safety.**
 - Never pipe `git rebase` (or `git merge`, `git cherry-pick`) into anything: a pipe hides the stop.
@@ -157,7 +162,7 @@ remaining work are explicit. Historical commands and machine procedures are omit
 | Keep machine provisioning outside the public repository | Fleet layout and provisioning belong to external operations. Identifying sensitive information in arbitrary prose requires context. |
 | Recheck missed worker exit notifications | Monitoring external jobs and notifications is a coordinator responsibility. |
 | Distinguish mutation kills from toolchain failure and restore pristine binaries | The lesson's harness is frozen. Its checks would matter when an active mutation driver returns. |
-| Negotiate language decisions before implementation | Only the owner can give an explicit disposition. Determining whether an implementation picks a side requires review. |
+| Negotiate language decisions before implementation | Approval comes from the owner or from a recorded decision under the November 25 delegation within Slices 0 and 1. Review checks that the approval covers the implementation. |
 | Prefer one transparent form and keep semantic authority in the Lean spec | Deciding if two forms or descriptions express the same rule requires semantic judgment. |
 | Discuss decisions in text without a popup | This is an interaction preference for tools outside the repository. |
 | Let the owner review every change to language design, syntax or grammar | Identifying a semantic change and its approval scope requires owner process and review. |

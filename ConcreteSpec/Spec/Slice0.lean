@@ -66,7 +66,7 @@ def Stmt.toCore (s : Stmt) : ConcreteSpec.Stmt := .let_ (.name s.x) (.scalar (.i
 
 /-- The slice-1 program a slice-0 program is: no declarations, the same body and return. -/
 def toCore (q : Program) : ConcreteSpec.Program :=
-  { decls := [], body := q.body.map Stmt.toCore, ret := q.ret.toCore }
+  { decls := [], body := q.body.map Stmt.toCore, ending := .ret q.ret.toCore }
 
 /-- A slice-1 program is in slice 0 when it is the Core form of a slice-0 program: no
 declarations, every statement a `let` of a `u8` local from a slice-0 expression, and a slice-0

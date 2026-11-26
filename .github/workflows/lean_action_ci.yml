@@ -1,6 +1,6 @@
 name: CI
 
-# All 17 check runs in required-checks.txt run on the merge group's candidate.
+# Landing gates requires success from each job in required-checks.txt.
 # The checkout defaults to the SHA supplied by GitHub for each event.
 # legacy/ is frozen and its workflows never run.
 on:
@@ -419,3 +419,35 @@ jobs:
           # Both manifests carry the identity and at least one artifact hash.
           for m in "$m1" "$m2"; do grep -q '^compiler_commit=' "$m"; grep -q '/lcb.exe$' "$m"; done
           diff -u "$m1" "$m2"
+
+  landing-gates:
+    name: Landing gates
+    if: ${{ always() }}
+    needs:
+      - root-checks
+      - spec
+      - proof-axioms
+      - proof-trust-ban
+      - kernel-replay
+      - external-recheck
+      - oracle-hosted
+      - tests
+      - artifacts
+      - trusted-base
+      - reproducibility
+      - compare-linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require success from every gate and matrix leg
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api --paginate --slurp \
+            "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" \
+            | python3 -I scripts/checks/lib/workflow_checks.py verdict
