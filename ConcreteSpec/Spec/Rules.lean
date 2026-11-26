@@ -2,7 +2,7 @@ import ConcreteSpec.Spec.Accounting
 import ConcreteSpec.Spec.Const
 import ConcreteSpec.Spec.Ident
 import ConcreteSpec.Spec.Own
-import ConcreteSpec.Spec.Slice1Checker
+import ConcreteSpec.Spec.Slice0Rules
 
 /-!
 # Diagnostic rule registry
@@ -19,22 +19,6 @@ anchor. Example links use Lean declaration names, the identities used by the sit
 -/
 
 namespace ConcreteSpec.Core
-
-/-- Diagnostic rule identities, in specification order. Each judgment delegates to its owning
-definition; registration adds no language policy. -/
-def registeredRules : List RuleId :=
-  [⟨``ConstsPermitted, 1⟩, ⟨``Own.OwnerPermitted, 1⟩, ⟨``Own.LoanPermitted, 1⟩,
-   ⟨``Own.EndPermitted, 1⟩, ⟨``Own.MovePermitted, 1⟩,
-   ⟨``Own.DropPermitted, 1⟩, ⟨``Own.LeavePermitted, 1⟩,
-   ⟨``Leak.Account.WF, 1⟩, ⟨``Leak.ResetConserved, 1⟩, ⟨``Leak.SignedNetSound, 1⟩,
-   ⟨``Leak.ByteBoundSound, 1⟩, ⟨``Leak.ByteBoundSoundOptional, 1⟩, ⟨``Leak.ReportSound, 1⟩,
-   ⟨``AbortReady, 1⟩, ⟨``ProgramPermitted, 1⟩,
-   ⟨``Leak.FiniteActionPermitted, 1⟩, ⟨``Leak.FiniteSequencePermitted, 1⟩] ++ SourcePath.Reason.inOrder.map SourcePath.Reason.ruleId ++
-  [SourcePath.Project.Reason.caseCollision, .fileDirectoryConflict, .duplicate].map
-    SourcePath.Project.Reason.ruleId ++
-  [⟨``SourcePathSpan.FilePresent, 1⟩, ⟨``SourcePathSpan.OrderedOffsets, 1⟩,
-   ⟨``SourcePathSpan.EndInSource, 1⟩, ⟨``SourcePathSpan.LineMatches, 1⟩,
-   ⟨``SourcePathSpan.ColumnMatches, 1⟩]
 
 /-- Acceptance evidence applies the owning rule's judgment to a concrete input.
 The exporter recognizes this proposition's elaborated type, without unfolding the wrapper. -/
@@ -58,6 +42,152 @@ proof bodies do not identify the example. -/
 structure RuleExample where
   rule : Lean.Name
   declaration : Lean.Name
+
+namespace Slice0Rules
+
+open ConcreteSpec.Surface0
+
+private def span : Surface0.Span := ⟨0, 1, 1, 1⟩
+private def returned : Statement := .ret (.integer 0 none span) (statementSpan span span)
+private def parsedProgram : Surface0.Program := ⟨"main", span, [returned]⟩
+private def parsedTokens : List Token :=
+  [⟨.fixed .fn, span⟩, ⟨.name "main", span⟩, ⟨.fixed .lparen, span⟩,
+   ⟨.fixed .rparen, span⟩, ⟨.fixed .arrow, span⟩, ⟨.fixed .u8, span⟩,
+   ⟨.fixed .lbrace, span⟩, ⟨.fixed .return_, span⟩, ⟨.integer 0 .decimal none, span⟩,
+   ⟨.fixed .semi, span⟩, ⟨.fixed .rbrace, span⟩]
+
+theorem lexAccepted : RuleAccepted Lexed ([32], []) :=
+  ⟨[32], .cons (s := 32) (chunk := [32]) (by decide) .nil, by simp,
+    .eof (.whitespace (Or.inl rfl) (.stop [] (by simp) (by simp)))⟩
+
+theorem lexRefused : RuleRefused Lexed ([0], []) := by
+  rintro ⟨cs, hd, good, _⟩
+  change Utf8.Decodes [0] cs at hd
+  generalize he : ([0] : List UInt8) = bytes at hd
+  cases hd with
+  | nil => cases he
+  | @cons c chunk bs cs enc _ =>
+    cases chunk with
+    | nil => exact enc
+    | cons b tail =>
+      simp only [List.cons_append, List.cons.injEq] at he
+      obtain ⟨rfl, htail⟩ := he
+      obtain ⟨rfl, rfl⟩ := List.append_eq_nil_iff.mp htail.symm
+      have hc : c = 0 := enc.2
+      subst c
+      exact (good 0 (by simp)).1 rfl
+
+theorem grammarAccepted : RuleAccepted Predictive grammar0 := grammar0_ll1
+
+theorem grammarRefused : RuleRefused Predictive
+    ⟨.program, [(.program, [.t .fn]), (.program, [.t .fn, .t .ident])]⟩ := by
+  unfold RuleRefused Predictive
+  decide
+
+theorem parseAccepted : RuleAccepted Parsed (parsedTokens, parsedProgram) :=
+  Derives.main span span span span span span span span
+    (.ret span span (.expr (.integer 0 none span) (.nil _)) .nil)
+
+theorem parseRefused : RuleRefused Parsed ([], parsedProgram) := by
+  intro h
+  change Derives [] parsedProgram at h
+  cases h
+
+theorem entryAccepted : RuleAccepted EntryName "main" := rfl
+theorem entryRefused : RuleRefused EntryName "other" := by
+  unfold RuleRefused EntryName
+  decide
+
+theorem bodyAccepted : RuleAccepted BodyAccepted [returned] := rfl
+theorem bodyRefused : RuleRefused BodyAccepted [] := by
+  unfold RuleRefused BodyAccepted
+  decide
+
+theorem reachAccepted : RuleAccepted ReachableBody [returned] := True.intro
+theorem reachRefused : RuleRefused ReachableBody [returned, returned] := id
+
+theorem literalAccepted : RuleAccepted LiteralTyped 255 := .int rfl
+theorem literalRefused : RuleRefused LiteralTyped 256 := by
+  intro h
+  change ConcreteSpec.AtomTy [] (.int .u8 256) (.int .u8) at h
+  cases h with
+  | int fits => cases fits
+
+theorem admissionAccepted : RuleAccepted Admitted ⟨[], .lit 42⟩ :=
+  ⟨by simp [ConcreteSpec.DeclsOk, ConcreteSpec.Slice0.toCore], .ret (.int rfl) (.atom .int) (by simp [ConcreteSpec.Discharged])⟩
+
+theorem admissionRefused : RuleRefused Admitted ⟨[], .lit 256⟩ := by
+  intro h
+  have body := h.2
+  change ConcreteSpec.BodyOk [] [] [] (.ret (.int .u8 256)) at body
+  cases body with
+  | ret typed _ _ =>
+    cases typed with
+    | int fits => cases fits
+
+theorem additionAccepted : RuleAccepted AdditionFits (200, 55) := rfl
+theorem additionRefused : RuleRefused AdditionFits (200, 56) := by
+  intro h
+  cases h
+
+theorem limitAccepted : RuleAccepted WithinLimit (10, 10) := by
+  unfold RuleAccepted WithinLimit
+  decide
+theorem limitRefused : RuleRefused WithinLimit (11, 10) := by
+  unfold RuleRefused WithinLimit
+  decide
+
+end Slice0Rules
+
+/-- Slice 0's rule identities and elaborated conformance examples. -/
+def slice0Rules : List (RuleId × Lean.Name × Lean.Name) :=
+  [(⟨``Slice0Rules.Lexed, 1⟩, ``Slice0Rules.lexAccepted, ``Slice0Rules.lexRefused),
+   (⟨``Slice0Rules.Predictive, 1⟩, ``Slice0Rules.grammarAccepted, ``Slice0Rules.grammarRefused),
+   (⟨``Slice0Rules.Parsed, 1⟩, ``Slice0Rules.parseAccepted, ``Slice0Rules.parseRefused),
+   (⟨``Slice0Rules.EntryName, 1⟩, ``Slice0Rules.entryAccepted, ``Slice0Rules.entryRefused),
+   (⟨``Slice0Rules.BodyAccepted, 1⟩, ``Slice0Rules.bodyAccepted, ``Slice0Rules.bodyRefused),
+   (⟨``Slice0Rules.ReachableBody, 1⟩, ``Slice0Rules.reachAccepted, ``Slice0Rules.reachRefused),
+   (⟨``Slice0Rules.LiteralTyped, 1⟩, ``Slice0Rules.literalAccepted, ``Slice0Rules.literalRefused),
+   (⟨``Slice0Rules.Admitted, 1⟩, ``Slice0Rules.admissionAccepted, ``Slice0Rules.admissionRefused),
+   (⟨``Slice0Rules.AdditionFits, 1⟩, ``Slice0Rules.additionAccepted, ``Slice0Rules.additionRefused),
+   (⟨``Slice0Rules.WithinLimit, 1⟩, ``Slice0Rules.limitAccepted, ``Slice0Rules.limitRefused)]
+
+/-- Diagnostic rule identities, in specification order. Each judgment delegates to its owning
+definition; registration adds no language policy. -/
+def registeredRules : List RuleId :=
+  [⟨``ConstsPermitted, 1⟩, ⟨``Own.OwnerPermitted, 1⟩, ⟨``Own.LoanPermitted, 1⟩,
+   ⟨``Own.EndPermitted, 1⟩, ⟨``Own.MovePermitted, 1⟩,
+   ⟨``Own.DropPermitted, 1⟩, ⟨``Own.LeavePermitted, 1⟩,
+   ⟨``Leak.Account.WF, 1⟩, ⟨``Leak.ResetConserved, 1⟩, ⟨``Leak.SignedNetSound, 1⟩,
+   ⟨``Leak.ByteBoundSound, 1⟩, ⟨``Leak.ByteBoundSoundOptional, 1⟩, ⟨``Leak.ReportSound, 1⟩,
+   ⟨``AbortReady, 1⟩, ⟨``ProgramPermitted, 1⟩,
+   ⟨``Leak.FiniteActionPermitted, 1⟩, ⟨``Leak.FiniteSequencePermitted, 1⟩] ++ SourcePath.Reason.inOrder.map SourcePath.Reason.ruleId ++
+  [SourcePath.Project.Reason.caseCollision, .fileDirectoryConflict, .duplicate].map
+    SourcePath.Project.Reason.ruleId ++
+  [⟨``SourcePathSpan.FilePresent, 1⟩, ⟨``SourcePathSpan.OrderedOffsets, 1⟩,
+   ⟨``SourcePathSpan.EndInSource, 1⟩, ⟨``SourcePathSpan.LineMatches, 1⟩,
+   ⟨``SourcePathSpan.ColumnMatches, 1⟩] ++ slice0Rules.map Prod.fst
+
+/-- A rule reference whose exact name and revision occur in the registry. -/
+abbrev RegisteredRule := { rule : RuleId // rule ∈ registeredRules }
+
+/-- Check an incoming reference, including its revision. -/
+def validateRule (rule : RuleId) : Option RegisteredRule :=
+  if h : rule ∈ registeredRules then some ⟨rule, h⟩ else none
+
+/-- Generate a reference for the current revision of a declaration. -/
+def referenceRule (name : Lean.Name) : Option RegisteredRule :=
+  (registeredRules.find? (fun rule => rule.name == name)).bind validateRule
+
+/-- Rule references required for the slice's conformance coverage, in registry order.
+An unregistered slice has no coverage claim. -/
+def rulesForSlice (slice : SliceId) : Option (List RuleId) :=
+  if slice.n.val = 0 then some (slice0Rules.map Prod.fst) else none
+
+/-- Missing conformance coverage in registry order. Coverage is revision-specific. -/
+def missingRules (slice : SliceId) (exercised : List RegisteredRule) : Option (List RuleId) :=
+  (rulesForSlice slice).map fun rules =>
+    rules.filter fun rule => !(exercised.any fun hit => hit.val == rule)
 
 namespace ConstRegistry
 
@@ -662,6 +792,8 @@ def registeredRuleExamples : List RuleExample :=
    ⟨``SourcePathSpan.LineMatches, ``SourcePathSpan.Registry.lineAccepted⟩,
    ⟨``SourcePathSpan.LineMatches, ``SourcePathSpan.Registry.lineRefused⟩,
    ⟨``SourcePathSpan.ColumnMatches, ``SourcePathSpan.Registry.columnAccepted⟩,
-   ⟨``SourcePathSpan.ColumnMatches, ``SourcePathSpan.Registry.columnRefused⟩]
+   ⟨``SourcePathSpan.ColumnMatches, ``SourcePathSpan.Registry.columnRefused⟩] ++
+  slice0Rules.flatMap fun (rule, accepted, refused) =>
+    [⟨rule.name, accepted⟩, ⟨rule.name, refused⟩]
 
 end ConcreteSpec.Core

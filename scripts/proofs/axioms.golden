@@ -3748,6 +3748,46 @@ ConcreteSpec.Core.SiteRenumbering.injective
 ConcreteSpec.Core.SiteRenumbering.mk.inj	
 ConcreteSpec.Core.SiteRenumbering.mk.injEq	propext
 ConcreteSpec.Core.SiteRenumbering.mk.sizeOf_spec	
+ConcreteSpec.Core.Slice0Layout.Layout.byte.sizeOf_spec	
+ConcreteSpec.Core.Slice0Layout.Layout.logical.sizeOf_spec	
+ConcreteSpec.Core.Slice0Layout.Layout.ofNat_ctorIdx	
+ConcreteSpec.Core.Slice0Layout.Shape.integer.inj	
+ConcreteSpec.Core.Slice0Layout.Shape.integer.injEq	propext
+ConcreteSpec.Core.Slice0Layout.Shape.integer.sizeOf_spec	
+ConcreteSpec.Core.Slice0Layout.Shape.logical.sizeOf_spec	
+ConcreteSpec.Core.Slice0Layout.instDecidableEqLayout._proof_1	
+ConcreteSpec.Core.Slice0Layout.instDecidableEqLayout._proof_2	
+ConcreteSpec.Core.Slice0Layout.instDecidableEqShape.decEq._proof_1	
+ConcreteSpec.Core.Slice0Layout.instDecidableEqShape.decEq._proof_2	
+ConcreteSpec.Core.Slice0Layout.instDecidableEqShape.decEq._proof_3	
+ConcreteSpec.Core.Slice0Layout.instDecidableEqShape.decEq._proof_4	
+ConcreteSpec.Core.Slice0Layout.integer_layout	propext
+ConcreteSpec.Core.Slice0Layout.layout_fits	propext
+ConcreteSpec.Core.Slice0Layout.logical_layout	propext
+ConcreteSpec.Core.Slice0Layout.query._sparseCasesOn_1.else_eq	propext
+ConcreteSpec.Core.Slice0Layout.query.eq_1	propext
+ConcreteSpec.Core.Slice0Layout.query.eq_2	propext
+ConcreteSpec.Core.Slice0Layout.query.eq_3	propext
+ConcreteSpec.Core.Slice0Rules.additionAccepted	
+ConcreteSpec.Core.Slice0Rules.additionRefused	
+ConcreteSpec.Core.Slice0Rules.admissionAccepted	Quot.sound propext
+ConcreteSpec.Core.Slice0Rules.admissionRefused	propext
+ConcreteSpec.Core.Slice0Rules.bodyAccepted	
+ConcreteSpec.Core.Slice0Rules.bodyRefused	
+ConcreteSpec.Core.Slice0Rules.entryAccepted	
+ConcreteSpec.Core.Slice0Rules.entryRefused	
+ConcreteSpec.Core.Slice0Rules.grammarAccepted	propext
+ConcreteSpec.Core.Slice0Rules.grammarRefused	propext
+ConcreteSpec.Core.Slice0Rules.lexAccepted	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Slice0Rules.lexRefused	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Slice0Rules.limitAccepted	
+ConcreteSpec.Core.Slice0Rules.limitRefused	
+ConcreteSpec.Core.Slice0Rules.literalAccepted	
+ConcreteSpec.Core.Slice0Rules.literalRefused	
+ConcreteSpec.Core.Slice0Rules.parseAccepted	
+ConcreteSpec.Core.Slice0Rules.parseRefused	
+ConcreteSpec.Core.Slice0Rules.reachAccepted	propext
+ConcreteSpec.Core.Slice0Rules.reachRefused	propext
 ConcreteSpec.Core.Slice1Registry.consumeThenAbort	propext
 ConcreteSpec.Core.Slice1Registry.consumeThenReturn	propext
 ConcreteSpec.Core.Slice1Registry.liveLinearAtReturn	propext
@@ -5282,6 +5322,8 @@ ConcreteSpec.Core.wrap_inRange	Classical.choice Quot.sound propext
 ConcreteSpec.Core.wrap_of_inRange	Quot.sound propext
 ConcreteSpec.Core.wrapping_of_checked	Quot.sound propext
 ConcreteSpec.Corr.brecOn	
+ConcreteSpec.DeclsOk.eq_1	
+ConcreteSpec.Discharged.eq_1	
 ConcreteSpec.Elaborated.mk.inj	
 ConcreteSpec.Elaborated.mk.injEq	propext
 ConcreteSpec.Elaborated.mk.sizeOf_spec	
@@ -7644,6 +7686,9 @@ _private.ConcreteSpec.Spec.Rules.0.ConcreteSpec.Core.SourcePath.probesWith.match
 _private.ConcreteSpec.Spec.Rules.0.ConcreteSpec.Core.SourcePath.probesWith.match_1.eq_2	propext
 _private.ConcreteSpec.Spec.Rules.0.ConcreteSpec.Core.SourcePath.probesWith.match_1.eq_3	propext
 _private.ConcreteSpec.Spec.Rules.0.ConcreteSpec.Core.SourcePath.probesWith.match_1.eq_4	propext
+_private.ConcreteSpec.Spec.Slice0Layout.0.ConcreteSpec.Core.Slice0Layout.query.match_1.eq_1	propext
+_private.ConcreteSpec.Spec.Slice0Layout.0.ConcreteSpec.Core.Slice0Layout.query.match_1.eq_2	propext
+_private.ConcreteSpec.Spec.Slice0Layout.0.ConcreteSpec.Core.Slice0Layout.query.match_1.eq_3	propext
 _private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.DigitsAccepted.match_1.eq_1	propext
 _private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.DigitsAccepted.match_1.eq_2	propext
 _private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.DigitsAccepted.match_1.eq_3	propext

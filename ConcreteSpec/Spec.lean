@@ -8,6 +8,7 @@ import ConcreteSpec.Spec.Memory
 import ConcreteSpec.Spec.Basics
 import ConcreteSpec.Spec.Ident
 import ConcreteSpec.Spec.Target
+import ConcreteSpec.Spec.Slice0Layout
 import ConcreteSpec.Spec.Outcome
 import ConcreteSpec.Spec.Scalar
 import ConcreteSpec.Spec.Surface0

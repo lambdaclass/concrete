@@ -1,3 +1,5 @@
+import ConcreteSpec.Spec.Rules
+
 namespace Concrete
 
 inductive Refusal where
@@ -21,5 +23,14 @@ def Refusal.message : Refusal → String
   | .backendResource backend resource measured limit =>
     s!"{backend} backend resource refusal: {resource}: {measured} exceeds limit {limit}"
   | .internal msg => "compiler failure: " ++ msg
+
+/-- The rule citation for a diagnostic is generated from the declaration name. Transport
+readers that already have a name and revision use `validateRule` to reject unknown references. -/
+structure Diagnostic where
+  refusal : Refusal
+  rule : ConcreteSpec.Core.RegisteredRule
+
+def Refusal.diagnostic (refusal : Refusal) (rule : Lean.Name) : Option Diagnostic :=
+  (ConcreteSpec.Core.referenceRule rule).map fun id => ⟨refusal, id⟩
 
 end Concrete

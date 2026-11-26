@@ -1426,9 +1426,9 @@ def Projects (project : Project) (path : SourcePath) (start stop : Nat) (span : 
 end Reference
 end SourcePathSpan
 
-/-- A slice of the language, in the agreed slice order: 0 to 28, concurrency last (2026-11-07). -/
+/-- A slice of the language, in the agreed slice order: 0 to 21 (early-work checklist A3(a4)). -/
 structure SliceId where
-  n : Fin 29
+  n : Fin 22
   deriving DecidableEq, Repr
 
 /-- A rule's identity: the Lean name of the declaration that states it and that rule's own
@@ -1627,7 +1627,7 @@ theorem example_FieldId_mk_variant_ModuleId_mk : FieldId.mk (.variant ⟨⟨Modu
     FieldId.mk (.variant ⟨⟨ModuleId.mk ⟨⟨"p"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"m"⟩] (by decide), ⟨"E"⟩⟩, ⟨"B"⟩⟩) ⟨"value"⟩ := by decide
 
 /-- The first and the last slice. -/
-theorem example_first_and_last_slice : (SliceId.mk 0).n.val = 0 ∧ (SliceId.mk 28).n.val = 28 := ⟨rfl, rfl⟩
+theorem example_first_and_last_slice : (SliceId.mk 0).n.val = 0 ∧ (SliceId.mk 21).n.val = 21 := ⟨rfl, rfl⟩
 
 /-- Bytes for `a`, a tab, and `b`. After the tab, the range starts at line 1, byte column 3. -/
 def tabSource : SourceText := SourceText.ofBytes [97, 9, 98]
