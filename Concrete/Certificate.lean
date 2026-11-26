@@ -189,7 +189,7 @@ must verify the exact compiler, spec and external tool binaries. -/
 structure ReplayContext where
   compiler : ByteArray
   spec : ByteArray
-  resolve : ToolInvocation → Option ByteArray
+  resolve : ToolResolver
   commands : List ReplayCommand
   executionTrust : List String
 
@@ -303,8 +303,8 @@ def PreLinkValid (codec : Codec) (ctx : ReplayContext) (tools : NativeTools)
   HasDependencies c.evidenceGraph .toolHandoffs
     (match build with | .llvm _ => [.llvmPrint] | .lcb _ => [.lcbAdapter, .lcbProfile]) ∧
   (match build with
-    | .llvm b => LLVMHandoffs c.profile tools out.bir b
-    | .lcb b => LCBHandoffs c.profile tools out.bir b) ∧
+    | .llvm b => LLVMHandoffs c.profile tools ctx.resolve out.bir b
+    | .lcb b => LCBHandoffs c.profile tools ctx.resolve out.bir b) ∧
   (∀ node ∈ c.evidenceGraph, node.obligation ∈
     [.frontend, .bir, .toolHandoffs] ++
       (match build with | .llvm _ => [.llvmPrint] | .lcb _ => [.lcbAdapter, .lcbProfile]))
@@ -589,7 +589,7 @@ private def testCodec : Codec where
   evidence _ _ := True
 
 private def testContext : ReplayContext :=
-  ⟨"test compiler".toUTF8, "test spec".toUTF8, fun pin => some pin.tool.toUTF8, [], []⟩
+  ⟨"test compiler".toUTF8, "test spec".toUTF8, testResolve, [], []⟩
 
 private def testBuild (image : ByteArray) : ExactBuild := .llvm (testLLVMBuild answerOutput.bir image)
 
@@ -622,6 +622,32 @@ private theorem testPreLinkValid (image : ByteArray) : PreLinkValid testCodec te
     · change 1 ≤ 64
       decide
     all_goals simp [HasDependencies, testPreLink, testBuild]
+
+private def substitutedBinary : ByteArray := "different executable".toUTF8
+
+private def substitutedContext : ReplayContext :=
+  { testContext with resolve := fun _ => some substitutedBinary }
+
+private def substitutedPins : PreLinkCertificate :=
+  { testPreLink answerImage with
+    tools := sampleProfile.tools.map fun pin => ⟨pin, ⟨substitutedBinary⟩⟩ }
+
+/-- Replacing the resolver and the recorded digests together still satisfies the pin check. -/
+example : ToolPinsMatch testCodec substitutedContext substitutedPins := by
+  refine ⟨rfl, ?_⟩
+  intro pin member
+  obtain ⟨invocation, _, rfl⟩ := List.mem_map.mp member
+  exact ⟨substitutedBinary, rfl, rfl⟩
+
+/-- The original handoff cannot attest the substituted executable. -/
+example : ¬ PreLinkValid testCodec substitutedContext testTools
+    answerInput answerOutput (testBuild answerImage) substitutedPins := by
+  rintro ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, handoffs, _⟩
+  obtain ⟨_, ⟨pin, binary, _, resolved, attested, invocation⟩, _⟩ := handoffs
+  have sameBinary : substitutedBinary = pin.tool.toUTF8 :=
+    (Option.some.inj resolved).trans attested
+  rw [invocation] at sameBinary
+  exact (by decide : substitutedBinary ≠ "test-clang".toUTF8) sameBinary
 
 private def testNoteFormat (linked : ByteArray) : NoteFormat where
   read exe note := exe = (note.map (linked ++ ·)).getD linked
