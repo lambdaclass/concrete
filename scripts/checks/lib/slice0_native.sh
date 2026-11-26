@@ -18,6 +18,7 @@ if [ "${1:-}" = control ] && [ "$#" = 2 ]; then control=1; set -- "$2" -; fi
 [ "$#" = 2 ] || { [ "$#" = 3 ] && [[ "$3" = llvm || "$3" = lcb || "$3" = sanitize ]]; } ||
   { echo 'usage: slice0_native.sh DIRECTORY LCB [llvm|lcb|sanitize] | control DIRECTORY | target' >&2; exit 2; }
 lcb=$2
+writer="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/slice0_write.py"
 cd -- "$1"
 # Fixed epoch rather than wall clock or caller environment. No debug data is requested, and
 # prefix maps also cover future debug additions. Separate objects avoid random linker temp names.
@@ -50,7 +51,8 @@ if [ "${3:-}" != lcb ]; then
 fi
 if [ "${3:-}" != llvm ]; then
   "${cc[@]}" -c lcb_body.s -o lcb_body.o
-  "${clean[@]}" "$lcb" -t "$target" lcb_rt.ssa -o lcb_rt.s
+  rm -f -- lcb_rt.s
+  "${clean[@]}" "$lcb" -t "$target" lcb_rt.ssa -o - | python3 "$writer" lcb_rt.s
   "${cc[@]}" -c lcb_rt.s -o lcb_rt.o
   "${cc[@]}" "${link[@]}" lcb_body.o lcb_rt.o -o lcb.exe
 fi
