@@ -1,3 +1,10 @@
+import ConcreteSpec.Spec.Basics
+import ConcreteSpec.Spec.Exec
+import ConcreteSpec.Spec.Hybrid
+import ConcreteSpec.Spec.Ident
+import ConcreteSpec.Spec.Outcome
+import ConcreteSpec.Spec.Scalar
+import ConcreteSpecEvidence.OwnExamples
 import ConcreteSpec.Spec.Own
 import ConcreteSpec.Diagnostics.Types
 
