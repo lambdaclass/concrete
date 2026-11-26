@@ -1,0 +1,2 @@
+[piece 7 of 10: scripts]
+- scripts/checks/compiler/llvm_mutation_controls.py:111: Mapping Core `u64` to LLVM `i32` falsifies the retained `Width.ofCore_bits` theorem, so rebuilding the mutant fails before output comparison. Because `build_mutant` uses `check=True`, this aborts the entire gate instead of qualifying the mutation. The adjacent `i64` mutation has the same problem.
