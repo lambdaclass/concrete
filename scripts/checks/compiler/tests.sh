@@ -718,15 +718,20 @@ fi
 publish_out="$helper_project/out"
 publish_build=(build tests/slice0/answer.con -o "$publish_out" --backend llvm)
 
-# Slice 0 admits only nontrapping programs. In this private project swap in
-# the unchecked trap fixture's LCB inputs after staging. The production helper
-# links them and the production CLI publishes the resulting executable.
+# The unchecked trap fixture supplies valid LCB inputs with the wrong behavior.
+# The CLI must reject their substitution during a native build.
 control="$work/ctl/cli-lcb-body"
 mkdir -p "$control"
 control_manifest="$root/tests/manifest.tsv"
 control_rows=$(bounded 30 python3 -I "$root/scripts/checks/lib/test_manifest.py" rows "$control_manifest")
 trap_row=$(awk -F '\t' '$1 == "source_trap" {print}' <<<"$control_rows")
+answer_row=$(awk -F '\t' '$1 == "source_answer" {print}' <<<"$control_rows")
 IFS=$'\t' read -r _ trap_program trap_expect <<<"$trap_row"
+IFS=$'\t' read -r _ answer_program answer_expect <<<"$answer_row"
+if [[ "$answer_program" != con:tests/slice0/answer.con || "$answer_expect" != "exit "* ]]; then
+  echo "FAIL CLI wrong body control: missing typed source_answer expectation" >&2
+  exit 1
+fi
 if [[ "$trap_program" != con:tests/slice0/trap.con || "$trap_expect" != "trap "* ]]; then
   echo "FAIL CLI wrong body control: missing typed source_trap expectation" >&2
   exit 1
@@ -734,21 +739,33 @@ fi
 emit_slice0_row "$control_manifest" "$trap_program" "$control/trap" "$target" "$trap_expect"
 cat >"$publish_lib/slice0_native.sh" <<'EOF'
 set -euo pipefail
-if [ "$1" != target ]; then
-  cp "$CONTROL_TRAP/lcb_body.s" "$CONTROL_TRAP/lcb_rt.ssa" "$1/"
+if [ "$1" = bound ]; then
+  cp "$CONTROL_TRAP/lcb_body.s" "$CONTROL_TRAP/lcb_rt.ssa" "$2/"
 fi
 exec bash "$CONTROL_NATIVE_HELPER" "$@"
 EOF
-build "CLI control wrong LCB body" "$control/build.log" bounded "$native_secs" \
+check_cli_diagnostic "CLI control changed LCB inputs" "$control/changed" "refuse 2 TOOL-FAILURE" \
   env CONTROL_TRAP="$control/trap" CONTROL_NATIVE_HELPER="$root/scripts/checks/lib/slice0_native.sh" \
+  "${publish_cli[@]}" build tests/slice0/answer.con -o "$control/changed-out"
+if [ -e "$control/changed-out" ] || [ -L "$control/changed-out" ] ||
+    ! has_match -Fx 'TOOL-FAILURE: incomplete (staged link input changed during native build: lcb_body.s)' <"$control/changed.stderr"; then
+  echo "FAIL CLI changed input control: expected a refusal before publication"
+  fail=1
+fi
+cp "$root/scripts/checks/lib/slice0_native.sh" "$publish_lib/"
+
+# Independently qualify the observation check with a wrong executable.
+build "CLI control baseline" "$control/build.log" bounded "$native_secs" \
   "${publish_cli[@]}" build tests/slice0/answer.con -o "$control/wrong"
-printf '42\n' >"$control/status"
-: >"$control/stderr"
-(check_native "CLI wrong body control" "$control" "$control/wrong" 10 20) >"$control/observe.log"
-if has_match -F 'ok   CLI wrong body control [llvm]: status 42' <"$control/observe.log" &&
-    has_match -F 'FAIL CLI wrong body control [lcb]: status 134 (expected 42)' <"$control/observe.log" &&
-    judge "$control/trap" "$control/lcb"; then
-  echo "ok   CLI conformance rejects a published LCB trap in place of the expected exit"
+build "CLI control trap fixture" "$control/trap/build.log" bounded "$native_secs" \
+  bash "$root/scripts/checks/lib/slice0_native.sh" "$control/trap" "$lcb" lcb
+cp "$control/trap/lcb.exe" "$control/wrong/lcb.exe"
+emit_slice0_row "$control_manifest" "$answer_program" "$control/answer" "$target" "$answer_expect"
+(check_native "CLI wrong body control" "$control/answer" "$control/wrong" 10 20) >"$control/observe.log"
+if judge "$control/answer" "$control/answer/llvm" &&
+    has_match -F 'FAIL CLI wrong body control [lcb]:' <"$control/observe.log" &&
+    judge "$control/trap" "$control/answer/lcb"; then
+  echo "ok   CLI conformance rejects a substituted LCB trap in place of the expected exit"
 else
   cat "$control/observe.log"
   echo "FAIL CLI wrong body control: expected a correct LLVM exit and the exact LCB trap"

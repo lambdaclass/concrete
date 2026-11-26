@@ -78,9 +78,9 @@ def runtimeException (n : Name) (reason : String) : Bool :=
 -- File reading and resource management are part of the executable boundary.
 def driverRuntimeException (n : Name) (reason : String) : Bool :=
   match reason with
-  | "extern" => namedRuntimeDependency n #["BaseIO.asTask", "IO.FS.Handle.flush", "IO.FS.Handle.mk", "IO.FS.Handle.putStr", "IO.FS.Handle.read",
+  | "extern" => namedRuntimeDependency n #["BaseIO.asTask", "IO.appPath", "IO.FS.Handle.flush", "IO.FS.Handle.mk", "IO.FS.Handle.putStr", "IO.FS.Handle.read",
     "IO.FS.realPath", "IO.Process.Child.takeStdin", "IO.Process.Child.wait", "IO.Process.spawn",
-    "IO.getStderr", "IO.getStdout", "System.FilePath.metadata", "System.Platform.getIsWindows", "Task.get", "Task.pure"]
+    "IO.getStderr", "IO.getStdout", "System.FilePath.metadata", "System.FilePath.symlinkMetadata", "System.Platform.getIsWindows", "Task.get", "Task.pure"]
   | "opaque" => namedRuntimeDependency n #["IO.FS.Handle", "IO.FS.removeDirAll", "IO.RealWorld.nonemptyType", "Void.nonemptyType",
     "_private.Init.System.IO.0.IO.FS.Handle.readBinToEndInto.loop"]
   | _ => false
@@ -201,7 +201,8 @@ def inspect (env : Environment) (rewrites : Rewrites) (native : NativeDecls)
     let module := if owner.isAnonymous then (ir.map Prod.fst).getD owner else owner
     let fromBackend := if runtimeModule module then inheritedBackend else backendModules.contains module
     let boundedIterator := fromBackend || (runtimeModule module &&
-      (inheritedIterator || (!pureStage && [`System.FilePath.isAbsolute, `System.FilePath.extension].contains n)))
+      (inheritedIterator || (!pureStage &&
+        [`System.FilePath.isAbsolute, `System.FilePath.extension, `System.FilePath.parent].contains n)))
     if seen.contains (n, fromBackend, boundedIterator) then continue
     seen := seen.insert (n, fromBackend, boundedIterator)
     if let some (m, decl) := ir then
@@ -340,11 +341,14 @@ def main (args : List String) : IO UInt32 := do
         (declRangeExt.find? (level := .private) env n).isNone &&
         (declRangeExt.find? (level := .server) env n).isNone then continue
     if m == target.toName then commands := commands.push n
-    if stageModules.contains m && (m.getRoot == `Concrete || m == stage.toName) &&
+    -- Manifest I/O belongs to the invocation boundary. A stage that calls it
+    -- still reaches its effects through the transitive stage walk.
+    let invocation := m == `Concrete.Driver.Invocation
+    if stageModules.contains m && !invocation && (m.getRoot == `Concrete || m == stage.toName) &&
         n != `Concrete.BIR.behaviour then
       stages := stages.push n
-    if driverModules.contains m && !stageModules.contains m && !runtimeModule m &&
-        m != target.toName then
+    if !runtimeModule m && m != target.toName &&
+        (invocation || (driverModules.contains m && !stageModules.contains m)) then
       commands := commands.push n
   if stages.isEmpty || commands.isEmpty then
     throw (IO.userError "empty stage or driver definition population")

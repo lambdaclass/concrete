@@ -17,8 +17,9 @@ private inductive Token where
   | quoted (text : String) (multi : Bool)
   deriving DecidableEq
 
-private def punctuation (c : Char) : Bool :=
-  r"[]{}.,=".contains c
+private def punctuation : Char → Bool
+  | '[' | ']' | '{' | '}' | '.' | ',' | '=' => true
+  | _ => false
 
 private def hex (c : Char) : Option Nat :=
   if '0' ≤ c && c ≤ '9' then some (c.toNat - '0'.toNat)

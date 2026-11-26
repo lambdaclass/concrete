@@ -68,6 +68,14 @@ def Refusal.exitCode : Refusal → UInt32
   | .usageError _ => 3
   | .internal _ => 4
 
+-- Manifest rule IDs name declarations in a fixed namespace. Their identifiers
+-- need no Lean pretty-printer escaping at this diagnostic boundary.
+private def manifestRuleName : Lean.Name → String
+  | .anonymous => ""
+  | .str .anonymous segment => segment
+  | .str parent segment => manifestRuleName parent ++ "." ++ segment
+  | .num parent index => manifestRuleName parent ++ "." ++ toString index
+
 def Refusal.message : Refusal → String
   | .syntaxError msg => msg
   | .unsupported msg => "not supported in slice 0: " ++ msg
@@ -81,7 +89,7 @@ def Refusal.message : Refusal → String
   | .manifest refusal =>
     match refusal.ruleId with
     | none => refusal.message
-    | some rule => s!"{refusal.message} [rule {rule.name}@{rule.rev}]"
+    | some rule => s!"{refusal.message} [rule {manifestRuleName rule.name}@{rule.rev}]"
   | .usageError msg => msg
   | .internal msg => "compiler failure: " ++ msg
 

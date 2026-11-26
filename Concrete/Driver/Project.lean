@@ -1,61 +1,12 @@
-import Concrete.Refusal
+import Concrete.Driver.Invocation
 import Concrete.MIR
 import ConcreteSpec.Spec.ProjectPolicy
 
-/-! Project-file I/O at the compiler boundary. Wire decoding is held until the schema review. -/
+/-! Project policy facts. -/
 
 namespace Concrete.Driver.Project
 open ConcreteSpec.Core (PackageId FnId)
 open ConcreteSpec.Project
-
-def manifestByteLimit : Nat := Manifest.byteLimit
-
-def manifestDepthLimit : Nat := Manifest.depthLimit
-
-/-- Validate the byte envelope before any decoder can inspect it. -/
-def manifestText (bytes : ByteArray) : Except ManifestRefusal String := do
-  if ¬ Manifest.SizeAccepted bytes.size then throw .size
-  let some value := String.fromUTF8? bytes | throw .encoding
-  return value
-
-
-/-- Check the bounded syntax supported by the configuration boundary. -/
-def parseManifest (text : String) : Except ManifestRefusal Unit :=
-  if ¬ Manifest.SizeAccepted text.utf8ByteSize then .error .size
-  else (Manifest.validate manifestDepthLimit text).mapError fun
-    | .malformed => .malformed
-    | .depth => .depth
-
-/-- Only an absent directory entry denotes single-file mode. Symlinks, inaccessible
-entries and special files are refused. -/
-def readManifest (path : System.FilePath) : IO (Except ManifestRefusal (Option String)) := do
-  let metadata ← path.symlinkMetadata.toBaseIO
-  match metadata with
-  | .error (.noFileOrDirectory ..) => return .ok none
-  | .error e => return .error (.read (toString e))
-  | .ok entry =>
-    if entry.type != .file then return .error (.read "expected a regular file")
-    try
-      let handle ← IO.FS.Handle.mk path .read
-      let mut bytes := ByteArray.empty
-      repeat
-        let remaining := manifestByteLimit + 1 - bytes.size
-        if remaining == 0 then return .error .size
-        let block ← handle.read remaining.toUSize
-        if block.isEmpty then break
-        bytes := bytes ++ block
-      return (manifestText bytes).map some
-    catch e =>
-      return .error (.read (toString e))
-
-/-- A present manifest cannot be treated as a single-file build while wire decoding is pending. -/
-def checkInvocation (path : System.FilePath) :
-    IO (Except ManifestRefusal LanguageRulesVersion) := do
-  match ← readManifest path with
-  | .error e => return .error e
-  | .ok none => return (selectLanguage supportedLanguage .standalone).mapError fun _ => .schemaPending
-  | .ok (some text) =>
-    return parseManifest text >>= fun _ => .error .schemaPending
 
 /-- Slice 0 MIR contains a single straight-line function. Classify its operations exhaustively
 so that adding an operation requires revisiting the policy facts. Stack usage requires backend
@@ -80,7 +31,22 @@ inductive Scope where
   | unresolved (package : PackageId)
   | resolved (requirements : List Requirement) (functions : List FunctionFacts)
       (dependencies : List Scope)
-  deriving Repr
+
+-- The recursive diagnostic representation follows the same structural
+-- traversal as the policy check.
+private def Scope.format : Scope → Std.Format
+  | .unresolved package => "Concrete.Driver.Project.Scope.unresolved " ++ reprArg package
+  | .resolved requirements functions dependencies =>
+    "Concrete.Driver.Project.Scope.resolved " ++ reprArg requirements ++ " " ++
+      reprArg functions ++ " " ++ Std.Format.bracket "[" (formatDependencies dependencies) "]"
+where
+  formatDependencies : List Scope → Std.Format
+    | [] => .nil
+    | [dependency] => format dependency
+    | dependency :: rest => format dependency ++ "," ++ Std.Format.line ++ formatDependencies rest
+
+instance : Repr Scope where
+  reprPrec scope precedence := Repr.addAppParen scope.format precedence
 
 inductive ScopeRefusal where
   | unresolved (package : PackageId)

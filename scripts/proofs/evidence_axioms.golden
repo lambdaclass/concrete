@@ -1764,12 +1764,10 @@ List.findFinIdx?.go.eq_2
 List.head?.eq_1	
 List.head?.eq_2	
 List.instBEq.eq_1	
-List.instMembership.eq_1	
 List.minOn?.eq_1	
 List.minOn?.eq_2	
 List.splitOn.eq_1	
 List.splitOnP.eq_1	
-Membership.mem.eq_1	
 Not.eq_1	
 Option.any.eq_1	
 Option.any.eq_2	
@@ -1805,16 +1803,24 @@ _private.ConcreteSpec.Spec.Manifest.0.ConcreteSpec.Project.Manifest.key.eq_1	Cla
 _private.ConcreteSpec.Spec.Manifest.0.ConcreteSpec.Project.Manifest.key.eq_2	Classical.choice Quot.sound propext
 _private.ConcreteSpec.Spec.Manifest.0.ConcreteSpec.Project.Manifest.key.eq_3	Classical.choice Quot.sound propext
 _private.ConcreteSpec.Spec.Manifest.0.ConcreteSpec.Project.Manifest.lex._sparseCasesOn_1.else_eq	propext
-_private.ConcreteSpec.Spec.Manifest.0.ConcreteSpec.Project.Manifest.lex.eq_1	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Spec.Manifest.0.ConcreteSpec.Project.Manifest.lex.eq_2	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Spec.Manifest.0.ConcreteSpec.Project.Manifest.lex.eq_3	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Spec.Manifest.0.ConcreteSpec.Project.Manifest.lex.eq_def	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Spec.Manifest.0.ConcreteSpec.Project.Manifest.lex.eq_1	Quot.sound propext
+_private.ConcreteSpec.Spec.Manifest.0.ConcreteSpec.Project.Manifest.lex.eq_2	Quot.sound propext
+_private.ConcreteSpec.Spec.Manifest.0.ConcreteSpec.Project.Manifest.lex.eq_3	propext
+_private.ConcreteSpec.Spec.Manifest.0.ConcreteSpec.Project.Manifest.lex.eq_def	Quot.sound propext
 _private.ConcreteSpec.Spec.Manifest.0.ConcreteSpec.Project.Manifest.path.eq_1	Classical.choice Quot.sound propext
 _private.ConcreteSpec.Spec.Manifest.0.ConcreteSpec.Project.Manifest.path.eq_2	Classical.choice Quot.sound propext
 _private.ConcreteSpec.Spec.Manifest.0.ConcreteSpec.Project.Manifest.path.eq_3	Classical.choice Quot.sound propext
 _private.ConcreteSpec.Spec.Manifest.0.ConcreteSpec.Project.Manifest.path.eq_4	Classical.choice Quot.sound propext
 _private.ConcreteSpec.Spec.Manifest.0.ConcreteSpec.Project.Manifest.path.eq_def	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Spec.Manifest.0.ConcreteSpec.Project.Manifest.punctuation.eq_1	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Spec.Manifest.0.ConcreteSpec.Project.Manifest.punctuation.eq_1	
+_private.ConcreteSpec.Spec.Manifest.0.ConcreteSpec.Project.Manifest.punctuation.eq_2	
+_private.ConcreteSpec.Spec.Manifest.0.ConcreteSpec.Project.Manifest.punctuation.eq_3	
+_private.ConcreteSpec.Spec.Manifest.0.ConcreteSpec.Project.Manifest.punctuation.eq_4	
+_private.ConcreteSpec.Spec.Manifest.0.ConcreteSpec.Project.Manifest.punctuation.eq_5	
+_private.ConcreteSpec.Spec.Manifest.0.ConcreteSpec.Project.Manifest.punctuation.eq_6	
+_private.ConcreteSpec.Spec.Manifest.0.ConcreteSpec.Project.Manifest.punctuation.eq_7	
+_private.ConcreteSpec.Spec.Manifest.0.ConcreteSpec.Project.Manifest.punctuation.eq_8	
+_private.ConcreteSpec.Spec.Manifest.0.ConcreteSpec.Project.Manifest.punctuation.eq_def	
 _private.ConcreteSpec.Spec.Manifest.0.ConcreteSpec.Project.Manifest.value.eq_1	Classical.choice Quot.sound propext
 _private.ConcreteSpec.Spec.Manifest.0.ConcreteSpec.Project.Manifest.value.eq_2	Classical.choice Quot.sound propext
 _private.ConcreteSpec.Spec.Manifest.0.ConcreteSpec.Project.Manifest.value.eq_3	Classical.choice Quot.sound propext
@@ -2082,6 +2088,14 @@ _private.ConcreteSpecEvidence.Rules.0.ConcreteSpec.Project.Manifest.path.match_3
 _private.ConcreteSpecEvidence.Rules.0.ConcreteSpec.Project.Manifest.path.match_3.eq_2	propext
 _private.ConcreteSpecEvidence.Rules.0.ConcreteSpec.Project.Manifest.path.match_3.eq_3	propext
 _private.ConcreteSpecEvidence.Rules.0.ConcreteSpec.Project.Manifest.path.match_3.eq_4	propext
+_private.ConcreteSpecEvidence.Rules.0.ConcreteSpec.Project.Manifest.punctuation.match_1.eq_1	
+_private.ConcreteSpecEvidence.Rules.0.ConcreteSpec.Project.Manifest.punctuation.match_1.eq_2	
+_private.ConcreteSpecEvidence.Rules.0.ConcreteSpec.Project.Manifest.punctuation.match_1.eq_3	
+_private.ConcreteSpecEvidence.Rules.0.ConcreteSpec.Project.Manifest.punctuation.match_1.eq_4	
+_private.ConcreteSpecEvidence.Rules.0.ConcreteSpec.Project.Manifest.punctuation.match_1.eq_5	
+_private.ConcreteSpecEvidence.Rules.0.ConcreteSpec.Project.Manifest.punctuation.match_1.eq_6	
+_private.ConcreteSpecEvidence.Rules.0.ConcreteSpec.Project.Manifest.punctuation.match_1.eq_7	
+_private.ConcreteSpecEvidence.Rules.0.ConcreteSpec.Project.Manifest.punctuation.match_1.eq_8	
 _private.ConcreteSpecEvidence.Rules.0.ConcreteSpec.Project.Manifest.value.inlineTable.match_3.eq_1	propext
 _private.ConcreteSpecEvidence.Rules.0.ConcreteSpec.Project.Manifest.value.inlineTable.match_3.eq_2	propext
 _private.ConcreteSpecEvidence.Rules.0.ConcreteSpec.Project.Manifest.value.match_1.eq_1	propext

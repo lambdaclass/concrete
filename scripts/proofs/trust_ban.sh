@@ -101,11 +101,17 @@ BACKEND_ROOT="$PWD/.lake/packages/lean-compiler-backend"
 BACKEND_PIN=4bea4b3ffd8a43a73a0016012d865044067b3275
 if ! BACKEND_HEAD=$(git -C "$BACKEND_ROOT" rev-parse HEAD) ||
    ! BACKEND_STATUS=$(git --no-optional-locks -C "$BACKEND_ROOT" status --porcelain --untracked-files=all) ||
-   [ "$BACKEND_HEAD" != "$BACKEND_PIN" ] || [ -n "$BACKEND_STATUS" ]; then
-  no "execution audit requires the clean reviewed backend revision $BACKEND_PIN"
+   [ -n "$BACKEND_STATUS" ]; then
+  no "execution audit requires a clean backend checkout"
   finish
 fi
-if PROOF_TOTALITY_BACKEND="$(realpath "$BACKEND_ROOT")" PROOF_TOTALITY_SOURCES="$TMP/native-sources" driver_lean --run "$PROOFS_DIR/totality.lean" Main Concrete; then
+backend_runtime_root=
+if [ "$BACKEND_HEAD" = "$BACKEND_PIN" ]; then
+  backend_runtime_root=$(realpath "$BACKEND_ROOT") || { no "cannot resolve the reviewed backend checkout"; finish; }
+else
+  no "backend $BACKEND_HEAD has no reviewed execution exception (expected $BACKEND_PIN)"
+fi
+if PROOF_TOTALITY_BACKEND="$backend_runtime_root" PROOF_TOTALITY_SOURCES="$TMP/native-sources" driver_lean --run "$PROOFS_DIR/totality.lean" Main Concrete; then
   ok "compiler and driver execution closure passes totality and stage isolation"
 else
   no "execution closure violates totality or stage isolation"
@@ -380,12 +386,14 @@ EOF
 cat > "$TMP/totality/Stage.lean" <<'EOF'
 import Foreign
 import Concrete.BIR
+import Concrete.Driver.Invocation
 
 inductive PlantedData where
   | mk : importedField → PlantedData
 
 def plantedStage (n : Nat) : Nat := hiddenLoop n
 def plantedIO : IO Unit := IO.println "IO belongs in the driver"
+def plantedManifestIO (path : System.FilePath) := Concrete.Driver.Project.checkInvocation path
 def plantedWhile (n : Nat) : Nat := Id.run do
   let mut value := n
   while value > 0 do
@@ -483,6 +491,7 @@ if (
     'plantedStage reaches (partial|opaque) declaration hiddenLoop' \
     'PlantedData[.][^ ]+ reaches opaque declaration importedField' \
     'reaches stage effect IO' \
+    'Concrete[.]Driver[.]Project[.]readManifest reaches stage effect System[.]FilePath[.]symlinkMetadata' \
     'reaches (implemented_by|opaque|partial) declaration .*repeatM' \
     'reaches (opaque|partial) declaration .*Stream.forIn' \
     'reaches stage effect (runST|ST.mkRef)' \
