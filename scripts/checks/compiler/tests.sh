@@ -178,8 +178,8 @@ check_cli_case() {
   esac
   check_cli_diagnostic "$name" "$d/cli" "$expect" "${cli[@]}" \
     build "$source" -o "$d/out" --backend "$backend"
-  if [ "$program" = cli:native-helper-failure ] && [ -n "$(find "$d/out" -mindepth 1 -print)" ]; then
-    echo "FAIL $name: failed native build left files in the output directory"
+  if [ "$program" = cli:native-helper-failure ] && [ -e "$d/out" ]; then
+    echo "FAIL $name: failed native build created an output directory"
     fail=1
   fi
   if [ "$program" = cli:build-input-write-failure ]; then
@@ -210,7 +210,7 @@ sys.exit(result.returncode)
       fail=1
     fi
     if ! has_match -E '^TOOL-FAILURE: incomplete \(write .*/llvm\.ll: checked writer exited' <"$d/staged.stderr" ||
-        [ ! -d "$d/staged-out" ] || [ -n "$(find "$d/staged-out" -mindepth 1 -print)" ]; then
+        [ -e "$d/staged-out" ] || [ -n "$(find "$d" -maxdepth 1 -name '.concrete-build.*' -print)" ]; then
       echo "FAIL $name: staged write failure did not identify the failed input and clean up"
       fail=1
     fi
@@ -431,6 +431,17 @@ elif fault in ("lookup-mismatch", "lookup-unknown") and sys.argv[1] == "publish"
 
     publisher.linux_lookup_rules = lookup_rules
     publisher.macos_lookup_rules = lookup_rules
+elif fault == "lookup-unknown-new":
+    def unknown_lookup(fd, *_):
+        raise OSError(errno.EIO, "injected first-build lookup probe failure")
+
+    publisher.linux_lookup_rules = unknown_lookup
+    publisher.macos_lookup_rules = unknown_lookup
+
+    def unexpected_staging(*args, **kwargs):
+        raise AssertionError("allocated staging before the lookup probe")
+
+    publisher.tempfile.mkdtemp = unexpected_staging
 elif fault == "exchange":
     def fail_exchange(parent_fd, candidate, output):
         fd = os.open(candidate, os.O_RDONLY | os.O_DIRECTORY, dir_fd=parent_fd)
@@ -483,6 +494,21 @@ if ! diff -r "$work/ctl/previous" "$publish_out"; then
   fail=1
 fi
 
+new_output="$helper_project/new-parent/nested/out"
+log="$work/ctl/publication-lookup-unknown-new"
+cp "$publish_lib/slice0_native.sh" "$work/ctl/native-success.sh"
+printf '%s\n' 'touch native-ran-before-lookup' 'exit 99' >"$publish_lib/slice0_native.sh"
+check_cli_diagnostic "CLI first build with unknown lookup rules" "$log" "refuse 2 TOOL-FAILURE" \
+  env PUBLICATION_CONTROL=lookup-unknown-new "${publish_cli[@]}" \
+  build tests/slice0/answer.con -o "$new_output" --backend llvm
+if [ -e "$helper_project/new-parent" ] ||
+    [ -e "$helper_project/native-ran-before-lookup" ] ||
+    ! has_match -F 'injected first-build lookup probe failure' <"$log.stderr"; then
+  echo "FAIL first build with unknown lookup rules: expected refusal before staging and native build"
+  fail=1
+fi
+mv "$work/ctl/native-success.sh" "$publish_lib/slice0_native.sh"
+
 mv "$publish_lib/publisher.py" "$publish_lib/slice0_publish.py"
 build "CLI atomic rebuild" "$work/ctl/publication-success.log" bounded "$native_secs" \
   "${publish_cli[@]}" "${publish_build[@]}"
@@ -495,6 +521,32 @@ if cmp -s "$work/ctl/previous/llvm.ll" "$publish_out/llvm.ll" ||
   fail=1
 else
   echo "ok   CLI atomic rebuild preserves the unselected backend"
+fi
+
+mkdir -p "$helper_project/target/nested" "$helper_project/target/out"
+ln -s target/nested "$helper_project/link"
+printf '%s\n' requested-old >"$helper_project/target/out/llvm.o"
+printf '%s\n' sibling-old >"$work/ctl/sibling-llvm.o"
+cp "$work/ctl/sibling-llvm.o" "$publish_out/llvm.o"
+build "CLI output through ancestor symlink and dot-dot" "$work/ctl/publication-dot-dot.log" bounded "$native_secs" \
+  "${publish_cli[@]}" build tests/slice0/answer.con -o "$helper_project/link/../out" --backend llvm
+if ! cmp -s "$work/ctl/sibling-llvm.o" "$publish_out/llvm.o" ||
+    [ "$(cat "$helper_project/target/out/llvm.o")" != new-object ]; then
+  echo "FAIL CLI symlink and dot-dot: expected only the requested output to be replaced"
+  fail=1
+else
+  echo "ok   CLI symlink and dot-dot publish to the requested output"
+fi
+
+build "CLI first build with missing ancestors" "$work/ctl/publication-first-build.log" bounded "$native_secs" \
+  "${publish_cli[@]}" build tests/slice0/answer.con -o "$new_output" --backend llvm
+if [ "$(cat "$new_output/llvm.o")" != new-object ] ||
+    [ "$(cat "$new_output/llvm.exe")" != new-executable ] ||
+    [ ! -s "$new_output/llvm.ll" ]; then
+  echo "FAIL CLI first build: expected the full LLVM generation under the new ancestors"
+  fail=1
+else
+  echo "ok   CLI first build publishes the full generation with its missing ancestors"
 fi
 
 build "publication case aliases" "$work/ctl/publication-case.log" bounded 30 \
