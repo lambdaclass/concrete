@@ -7,6 +7,12 @@ Status: current toolchain documentation (2026-11-11) and axiom-check design
 The current P/A/G contract remains documented
 in the header of `axioms.sh`, including its full per-theorem golden comparison.
 
+The proof fixtures and planted controls build as `ConcreteSpecEvidence`, which
+imports `ConcreteSpec`. The specification's import boundary excludes evidence.
+The trust and kernel replay jobs check both libraries. The external check exports
+both theorem populations together, and `axioms.sh` keeps a separate golden for
+each library.
+
 The governing owner decisions are 2026-11-08, “yes to 6 things”, item 2 (the
 axioms golden becomes a property check over standard axioms, with only named
 theorems pinned), and 2026-11-09 (exact proof-axiom provenance comes from the
@@ -190,9 +196,10 @@ by these checks.
 
 The project and Nix official-release archive pin Lean 4.35.0; CI's lean-action
 reads the same `lean-toolchain`. All four Nix asset hashes are the release's
-published SHA-256 digests. The existing LCB revision `4bea4b3` builds with 4.35.0
-as a Lake dependency, so its source pin is retained (its standalone toolchain
-file still declares 4.34.1). No theorem or compiler definition required a change.
+published SHA-256 digests. The migration retained the existing LCB source pin.
+The current LCB pin, `4623fba6fec8439974b7e4ceb9a577b3e6918a22`, builds as a
+Lake dependency with Lean 4.35.0. Its standalone toolchain file declares 4.34.1.
+The toolchain migration required no changes to theorem or compiler definitions.
 
 `external.pins` pins both Lean tools' toolchains as well as their revisions.
 The exporter is now the upstream v4.35.0 revision, matching our olean format.

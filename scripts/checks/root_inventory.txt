@@ -15,6 +15,8 @@ Concrete
 Concrete.lean
 ConcreteSpec
 ConcreteSpec.lean
+ConcreteSpecEvidence
+ConcreteSpecEvidence.lean
 ISSUES.tsv
 LICENSE
 Main.lean
@@ -35,6 +37,7 @@ tests
 docs/LANDING.md
 docs/PHILOSOPHY.md
 docs/REVIEW.md
+docs/grammar
 docs/SELF_HOSTED_RUNNERS.md
 docs/archive
 docs/decisions.md

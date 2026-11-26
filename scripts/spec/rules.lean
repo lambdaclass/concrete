@@ -1,5 +1,5 @@
 -- The gate appends this same exporter body to fixtures after their declarations.
-import ConcreteSpec.Spec.Rules
+import ConcreteSpecEvidence.Rules
 import Lean
 open Lean Elab Command
 
@@ -46,14 +46,23 @@ def concreteData (input : Expr) : MetaM Bool := do
       visit 1024 input true
   catch _ => return false
 
+open ConcreteSpec.Core
+
+/-- A rule is exercised when validated links prove both verdicts for its declaration. -/
+def exercisedRules (accepted refused : NameSet) : List RegisteredRule :=
+  registeredRules.attach.filter fun rule =>
+    accepted.contains rule.val.name && refused.contains rule.val.name
+
 set_option maxHeartbeats 200000 in
-#eval show CommandElabM Unit from do
+def exportRules (examples : List RuleExample) : CommandElabM Unit := do
   let env ← getEnv
   for r in ConcreteSpec.Core.registeredRules do
     let doc := (← findDocString? env r.name).getD ""
     IO.println (Json.compress (Json.mkObj [("kind", "rule"), ("name", toString r.name),
       ("rev", r.rev), ("exists", toJson (env.contains r.name)), ("doc", doc)]))
-  for e in ConcreteSpec.Core.registeredRuleExamples do
+  let mut accepted : NameSet := {}
+  let mut refused : NameSet := {}
+  for e in examples do
     let ci := env.find? e.declaration
     let proved := match ci with
       | some (.thmInfo _) => true
@@ -76,8 +85,20 @@ set_option maxHeartbeats 200000 in
       let linked := args[1]!.isConstOf e.rule
       let concrete ← if trusted then concreteData args[2]! else pure false
       return (if concrete then verdict else "Invalid", linked)
+    if proved && usesRule then
+      if verdict == "Accepted" then accepted := accepted.insert e.rule
+      if verdict == "Refused" then refused := refused.insert e.rule
     IO.println (Json.compress (Json.mkObj [("kind", "example"), ("rule", toString e.rule),
       ("name", toString e.declaration),
       ("verdict", verdict),
       ("elaborated", toJson (proved && trusted)), ("usesRule", toJson usesRule)]))
+  let exercised := exercisedRules accepted refused
+  for i in List.finRange 22 do
+    let slice : SliceId := ⟨i⟩
+    if let some missing := missingRules slice exercised then
+      unless missing.isEmpty do
+        throwError "slice {i} lacks validated conformance for {missing.map (·.val.name)}"
   IO.println (Json.compress (Json.mkObj [("end", toJson true)]))
+
+-- EXPORTER ENTRY
+#eval exportRules registeredRuleExamples

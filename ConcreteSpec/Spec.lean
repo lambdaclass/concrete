@@ -8,6 +8,8 @@ import ConcreteSpec.Spec.Memory
 import ConcreteSpec.Spec.Basics
 import ConcreteSpec.Spec.Ident
 import ConcreteSpec.Spec.Target
+import ConcreteSpec.Spec.Slice0Layout
+import ConcreteSpec.Spec.Slice0Rules
 import ConcreteSpec.Spec.Outcome
 import ConcreteSpec.Spec.Scalar
 import ConcreteSpec.Spec.Surface0
@@ -24,6 +26,8 @@ import ConcreteSpec.Spec.Borrow
 import ConcreteSpec.Spec.Brand
 import ConcreteSpec.Spec.Authority
 import ConcreteSpec.Spec.Observation
+import ConcreteSpec.Spec.ProjectPolicy
+import ConcreteSpec.Spec.Manifest
 
 /-!
 # The Concrete specification

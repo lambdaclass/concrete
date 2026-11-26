@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.Basics
 import ConcreteSpec.Diagnostics.Types
 import ConcreteSpec.Spec.Scalar
 

@@ -21,7 +21,7 @@
 # verification hold TOOLS/.lock; after unlocking only finished tool artifacts are read,
 # never the isolated elan home. Builds publish private trees by rename.
 #
-# INDEPENDENT RE-CHECK: every theorem of the specification exported with lean4export and re-checked
+# INDEPENDENT RE-CHECK: every theorem of the specification and evidence exported with lean4export and re-checked
 # by two checkers that share no code with the Lean kernel or with each other.
 #
 #   con-leche (leanprover/con-leche, Lean): machine-checked consistency proof: an accepted stream has
@@ -32,7 +32,8 @@
 #
 #   P  the three tools are the revisions pinned in scripts/proofs/external.pins, and every con-leche
 #      call goes through one function that passes --verified --jobs=1;
-#   I  population: every theorem scripts/proofs/theorems.lean lists, all of them on the standard
+#   I  population: the combined selection matches the union of the two library inventories by
+#      declaration identity, and every selected theorem is on the standard
 #      axioms (a theorem on any other is refused here, not left out of the export);
 #   A  the export is from this toolchain, holds every theorem of the population, and declares only
 #      the three standard axioms;
@@ -116,6 +117,22 @@ nanoda() {
 }
 
 echo "=== I: population ==="
+export PROOF_PKG=SpecAndEvidence
+for pkg in ConcreteSpec ConcreteSpecEvidence; do
+  PROOF_PKG="$pkg" population imported > "$TMP/imported.txt" || { no "$pkg import enumeration failed"; finish; }
+  GAP=$(closure_gap "$TMP/imported.txt" "$pkg") || { no "$pkg source module comparison failed"; finish; }
+  [ -z "$GAP" ] || { no "$pkg modules outside their library root: $GAP"; finish; }
+done
+PROOF_PKG=SpecAndEvidence population imported > "$TMP/combined-imports.txt" \
+  || { no "combined import enumeration failed"; finish; }
+GAP=$(closure_gap "$TMP/combined-imports.txt" SpecAndEvidence) \
+  || { no "combined source module comparison failed"; finish; }
+[ -z "$GAP" ] || { no "source modules outside the export root: $GAP"; finish; }
+population environment > "$TMP/export-environment.txt" \
+  || { no "export environment module enumeration failed"; finish; }
+GAP=$(closure_gap "$TMP/export-environment.txt" SpecAndEvidence) \
+  || { no "export environment module comparison failed"; finish; }
+[ -z "$GAP" ] || { no "source modules outside the export theorem environment: $GAP"; finish; }
 population theorems > "$TMP/inv.tsv" 2> "$TMP/inv.err" \
   || { no "the enumerator failed: $(head -3 "$TMP/inv.err" | tr '\n' ' ')"; finish; }
 NALL=$(grep -c . "$TMP/inv.tsv")
@@ -125,7 +142,24 @@ NONSTD=$(awk -F'\t' -v std=" $STANDARD_AXIOMS " '{ n = split($2, a, " ")
 # the injective encoding both theorems.lean and export_inventory.py produce (PROOF_MODE=encoded).
 population encoded > "$TMP/encoded.tsv" 2>> "$TMP/inv.err" || { no "PROOF_MODE=encoded failed"; finish; }
 cut -f1 "$TMP/encoded.tsv" > "$TMP/population.txt"
-cut -f2 "$TMP/encoded.tsv" | sort -u > "$TMP/population-enc.txt"
+cut -f2 "$TMP/encoded.tsv" | sort -u > "$TMP/population-enc.txt" \
+  || { no "could not sort the export selection"; finish; }
+# Query each library's theorem inventory separately so a defect in the combined selector
+# cannot shrink both the replay request and the set used to check its completeness.
+for pkg in ConcreteSpec ConcreteSpecEvidence; do
+  PROOF_PKG="$pkg" population encoded > "$TMP/$pkg-encoded.tsv" 2>> "$TMP/inv.err" \
+    || { no "$pkg theorem inventory failed: $(head -3 "$TMP/inv.err" | tr '\n' ' ')"; finish; }
+done
+cut -f2 "$TMP/ConcreteSpec-encoded.tsv" "$TMP/ConcreteSpecEvidence-encoded.tsv" |
+  sort -u > "$TMP/expected-enc.txt" || { no "could not merge the library theorem inventories"; finish; }
+MISSING=$(comm -23 "$TMP/expected-enc.txt" "$TMP/population-enc.txt") \
+  || { no "could not compare the export selection to the theorem inventories"; finish; }
+[ -z "$MISSING" ] \
+  || { no "theorems missing from the export selection: $(head -c 300 <<< "$MISSING")"; finish; }
+EXTRA=$(comm -13 "$TMP/expected-enc.txt" "$TMP/population-enc.txt") \
+  || { no "could not compare the export selection to the theorem inventories"; finish; }
+[ -z "$EXTRA" ] \
+  || { no "theorems outside the library inventories: $(head -c 300 <<< "$EXTRA")"; finish; }
 [ "$NALL" -ge 100 ] && [ -z "$NONSTD" ] && ok "$NALL theorems, all on the standard axioms" \
   || no "population: $NALL theorems; on a non-standard axiom: $(echo $NONSTD | cut -c1-300)"
 
@@ -134,7 +168,7 @@ EXPORT="$TMP/spec.ndjson"
 # lean4export can panic on a name it cannot resolve and still exit 0, so its stderr must be empty.
 # One argument per name, quoted: a name such as `«foo bar»` holds a space and `«*»` a glob.
 mapfile -t POP < "$TMP/population.txt"
-"$LAKE" env "$EXPORTER" ConcreteSpec -- "${POP[@]}" > "$EXPORT" 2> "$TMP/export.err"; rc=$?
+"$LAKE" env "$EXPORTER" ConcreteSpecEvidence -- "${POP[@]}" > "$EXPORT" 2> "$TMP/export.err"; rc=$?
 [ "$rc" = 0 ] && [ ! -s "$TMP/export.err" ] && ok "lean4export exported the population (no diagnostics)" \
   || { no "lean4export rc=$rc: $(head -3 "$TMP/export.err" | tr '\n' ' ')"; finish; }
 read -r EXP_LEAN EXP_TOOL EXP_FORMAT < <($INV meta "$EXPORT")
@@ -143,7 +177,10 @@ read -r EXP_LEAN EXP_TOOL EXP_FORMAT < <($INV meta "$EXPORT")
   || no "export metadata: Lean $EXP_LEAN format $EXP_FORMAT, expected $TOOLCHAIN format $EXPECT_FORMAT"
 $INV theorems "$EXPORT" > "$TMP/exported.txt" \
   || { no "the stream's theorems could not be listed"; finish; }
-MISSING=$(comm -23 "$TMP/population-enc.txt" <(sort -u "$TMP/exported.txt"))
+sort -u "$TMP/exported.txt" > "$TMP/exported-enc.txt" \
+  || { no "could not sort the exported theorems"; finish; }
+MISSING=$(comm -23 "$TMP/expected-enc.txt" "$TMP/exported-enc.txt") \
+  || { no "could not compare the export stream to the theorem inventories"; finish; }
 [ "$(grep -c . "$TMP/population-enc.txt")" = "$NALL" ] && [ -z "$MISSING" ] && ok "every theorem of the population is in the export ($(grep -c . "$TMP/exported.txt") theorems with dependencies)" \
   || no "theorems missing from the export: $(echo $MISSING | cut -c1-300)"
 $INV axioms "$EXPORT" > "$TMP/axioms.txt" \

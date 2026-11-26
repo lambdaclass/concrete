@@ -7,6 +7,7 @@ premise P_rt [implementation] retired-by: a proof of the decoding entry against 
 premise P_trap_site [implementation] retired-by: the same runtime-entry proof (owner, 2026-11-06: a premise now) :: a launch whose body returns 256 + i writes exactly trapLine tbl[i] and a newline on fd 2
 premise P_launch [environment] retired-by: not planned :: an admitted launch of a WF image within the frame bound is never killed, and fd 2 accepts the trap line
 premise P_live [environment] retired-by: not planned :: an admitted launch happens and has a behaviour
+image claim open [LP0 / R-0505]: production reference registration and joint backend non-vacuity witnesses for the same profile, reference, policy, models and tools
 theorem ConcreteSpec.Surface0.grammar0_ll1 axioms: propext
 theorem Concrete.Parse.table0_checked axioms:
 theorem Concrete.Lex.lex_correct axioms: propext, Classical.choice, Quot.sound
@@ -143,4 +144,4 @@ axiom propext : ∀ {a b : Prop}, (a ↔ b) → a = b
 axiom Classical.choice : {α : Sort u} → Nonempty α → α
 axiom Quot.sound : ∀ {α : Sort u} {r : α → α → Prop} {a b : α}, r a b → Quot.mk r a = Quot.mk r b
 lean-toolchain leanprover/lean4:v4.35.0
-pin «lean-compiler-backend» 4bea4b3ffd8a43a73a0016012d865044067b3275
+pin «lean-compiler-backend» 4623fba6fec8439974b7e4ceb9a577b3e6918a22

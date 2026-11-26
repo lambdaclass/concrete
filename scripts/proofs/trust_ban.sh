@@ -4,11 +4,11 @@
 #
 #   I  every proof module, recursively enumerated, imports exactly the modules defining its
 #      directly referenced constants (including anonymous examples); see scripts/proofs/IMPORTS.md.
-#   E  no constant of ANY kind either library declares (definitions, instances and
+#   E  no constant of ANY kind the three libraries declare (definitions, instances and
 #      generated helpers included, not only theorems) depends transitively on sorryAx, on
 #      Lean.ofReduceBool or Lean.ofReduceNat (what native_decide and `decide +native` reduce through),
 #      on Lean.trustCompiler, or on a generated `._native.` axiom;
-#   D  neither library declares an axiom of its own;
+#   D  none of the libraries declares an axiom of its own;
 #   X  every `example`, which the kernel checks and Lean then discards (so E and D never see it),
 #      depends only on the standard axioms: in a copy of the library each `example` becomes a
 #      named declaration (scripts/proofs/lean_lex.py), the copy is built, and its axioms are
@@ -72,22 +72,33 @@ banned() {
 declared() { awk -F'\t' '$2 == "axiom" { print $1 }' "$1"; }
 # scan FILE... → `file:line: text` for every banned word, syntax extension, option, meta command or
 # outside import outside comments; exit 3 when a source cannot be lexed (lean_lex.py)
+scan_evidence() { python3 "$PROOFS_DIR/lean_lex.py" scan-evidence "$BANNED_WORD_RE|$EXTENSION_RE" "$@"; }
 scan() { python3 "$PROOFS_DIR/lean_lex.py" scan "$BANNED_WORD_RE|$EXTENSION_RE" "$@"; }
 
 echo "=== E/D: the environment ==="
-population imported > "$TMP/imported.txt" 2> "$TMP/imported.err" || { no "PROOF_MODE=imported failed"; finish; }
-GAP=$(closure_gap "$TMP/imported.txt")
-[ -z "$GAP" ] && ok "all $(spec_modules | grep -c .) ConcreteSpec source modules are in the environment E and D read" \
-  || no "source modules outside the root's import closure, unseen by E and D: $(echo $GAP)"
-population constants > "$TMP/consts.tsv" 2> "$TMP/consts.err" \
-  || { cat "$TMP/consts.err" >&2; echo "error: the enumerator failed" >&2; exit 2; }
-NC=$(grep -c . "$TMP/consts.tsv")
-B=$(banned "$TMP/consts.tsv")
-[ "$NC" -ge 1000 ] && [ -z "$B" ] \
-  && ok "none of the $NC ConcreteSpec constants depends on sorryAx, ofReduceBool/Nat, trustCompiler or a native axiom" \
-  || no "$NC constants; banned dependencies: $(echo $B | cut -c1-400)"
-A=$(declared "$TMP/consts.tsv")
-[ -z "$A" ] && ok "ConcreteSpec declares no axiom" || no "ConcreteSpec declares axioms: $(echo $A)"
+for pkg in ConcreteSpec ConcreteSpecEvidence; do
+  PROOF_PKG="$pkg" population imported > "$TMP/$pkg-imported.txt" \
+    || { no "$pkg import enumeration failed"; finish; }
+  GAP=$(closure_gap "$TMP/$pkg-imported.txt" "$pkg") \
+    || { no "$pkg root module comparison failed"; finish; }
+  [ -z "$GAP" ] && ok "all $pkg source modules are in the checked import closure" \
+    || no "$pkg source modules outside the checked closure: $GAP"
+  PROOF_PKG="$pkg" population environment > "$TMP/$pkg-environment.txt" \
+    || { no "$pkg environment module enumeration failed"; finish; }
+  GAP=$(closure_gap "$TMP/$pkg-environment.txt" "$pkg") \
+    || { no "$pkg environment module comparison failed"; finish; }
+  [ -z "$GAP" ] || { no "$pkg source modules outside the constant environment: $GAP"; finish; }
+  PROOF_PKG="$pkg" population constants > "$TMP/consts.tsv" \
+    || { no "$pkg constant enumeration failed"; finish; }
+  NC=$(grep -c . "$TMP/consts.tsv")
+  minimum=1
+  [ "$pkg" != ConcreteSpec ] || minimum=1000
+  B=$(banned "$TMP/consts.tsv")
+  A=$(declared "$TMP/consts.tsv")
+  [ "$NC" -ge "$minimum" ] && [ -z "$B$A" ] \
+    && ok "all $NC $pkg constants obey the axiom ban" \
+    || no "$pkg: $NC constants; banned dependencies: $B; declared axioms: $A"
+done
 
 echo "=== S: the sources ==="
 mapfile -t SRC < <({ echo ConcreteSpec.lean; find ConcreteSpec -name '*.lean'; } | sort)
@@ -95,10 +106,33 @@ W=$(scan "${SRC[@]}"); RC=$?
 [ "$RC" = 0 ] && [ "${#SRC[@]}" -ge 10 ] && [ -z "$W" ] && ok "none of the ${#SRC[@]} source files spells a banned word outside comments" \
   || no "the source scan (rc=$RC) of ${#SRC[@]} files: $(printf '%s\n' "$W" | head -5 | tr '\n' '|')"
 
+{ echo ConcreteSpecEvidence.lean && find ConcreteSpecEvidence -name '*.lean'; } > "$TMP/evidence-sources.txt" \
+  || { no "evidence source inventory failed"; finish; }
+mapfile -t EVIDENCE_SRC < "$TMP/evidence-sources.txt"
+[ "${#EVIDENCE_SRC[@]}" -gt 1 ] || { no "evidence source inventory contains only the root"; finish; }
+W=$(scan_evidence "${EVIDENCE_SRC[@]}"); RC=$?
+[ "$RC" = 0 ] && [ -z "$W" ] && ok "all evidence sources obey the trust ban" \
+  || no "evidence source scan (rc=$RC): $(printf '%s\n' "$W" | head -5 | tr '\n' '|')"
+printf '%s\n' 'import ConcreteSpecEvidence' 'def probe : Nat := 0' > "$TMP/reverse-import.lean"
+W=$(scan "$TMP/reverse-import.lean"); RC=$?
+[ "$RC" = 0 ] && [[ "$W" == *'import ConcreteSpecEvidence'* ]] \
+  && ok "control: a specification import of evidence is refused" \
+  || no "the source scan allowed a specification import of evidence"
+
+# Each fixture is scanned through the production evidence entry point.
+for command in 'import Lean' 'import Std' 'import Concrete' 'def bad := sorry' 'set_option maxRecDepth 100000'; do
+  printf '%s\n' 'import ConcreteSpec.Spec.Basics' "$command" > "$TMP/evidence-control.lean"
+  if W=$(scan_evidence "$TMP/evidence-control.lean") && grep -qxF "$TMP/evidence-control.lean:2: $command" <<<"$W"; then
+    ok "control: evidence scan rejects $command"
+  else
+    no "control: evidence scan did not reject $command ($W)"
+  fi
+done
+
 # Compiler sources obey the same trust-word/option/extension ban. Compiler imports
 # include Lean's premise-reporting API and the pinned backend, so scan their header
 # grammar separately; no compiler file is exempt from the ban.
-mapfile -t COMPILER_SRC < <({ echo Concrete.lean; find Concrete -name '*.lean'; } | sort)
+mapfile -t COMPILER_SRC < <({ printf "%s\n" Concrete.lean Main.lean; find Concrete -name '*.lean'; } | sort)
 W=$(python3 "$PROOFS_DIR/lean_lex.py" scan-compiler "$BANNED_WORD_RE|$EXTENSION_RE" "${COMPILER_SRC[@]}"); RC=$?
 [ "$RC" = 0 ] && [ -z "$W" ] && ok "all compiler sources obey the trust ban" \
   || no "compiler source scan (rc=$RC): $(printf '%s\n' "$W" | head -5 | tr '\n' '|')"
@@ -122,11 +156,10 @@ GAP=$(comm -23 "$TMP/compiler-modules.txt" <(sort -u "$TMP/compiler-imported.txt
 
 # lake_options LAKEFILE → empty when the specification library builds from ConcreteSpec.lean and
 # ConcreteSpec/ (Lake's defaults: no srcDir, roots or globs) with warningAsError, and nothing can turn
-# it off. The package holds exactly two libraries, ConcreteSpec and the compiler, Concrete (ROADMAP B0),
-# under the same key allow-list, plus the fixed native CLI entry point. A dependency is a `require` of a git URL pinned to a full commit,
-# which lake-manifest.json (beside the lakefile) records at the same URL and commit: the spec may
-# import nothing outside itself (S), so a dependency reaches only the compiler. This ban's scope is
-# both libraries; the compiler may import from both libraries, Lean, and the pinned backend.
+# it off. All three libraries use the same key allow-list. The fixed compiler executable is checked
+# separately. The compiler's backend dependency must be a git URL pinned to a full commit and
+# recorded with the same URL and commit in lake-manifest.json. The specification and evidence
+# import directions are checked in the source scan.
 lake_options() {
   python3 - "$1" <<'EOF'
 import sys, tomllib
@@ -164,7 +197,7 @@ if reqs:
         if not p or p.get("type") != "git" or p.get("url") != r["git"] or p.get("rev") != r["rev"] or p.get("inputRev") != r["rev"]:
             bad.append(f"lake-manifest.json does not record the require {n} at {r['git']} {r['rev']}")
 libs = cfg.get("lean_lib", [])
-if [l.get("name") for l in libs] != ["ConcreteSpec", "Concrete"]: bad.append(f"libraries {[l.get('name') for l in libs]}")
+if [l.get("name") for l in libs] != ["ConcreteSpec", "ConcreteSpecEvidence", "Concrete"]: bad.append(f"libraries {[l.get('name') for l in libs]}")
 for l in libs:
     extra = set(l) - {"name", "leanOptions"}
     if extra: bad.append(f"the library sets {sorted(extra)}")
@@ -195,9 +228,9 @@ cp lakefile.toml lean-toolchain lake-manifest.json "$EX"/ || { no "could not cop
 [ -d .lake/build ] && mkdir -p "$EX/.lake" && cp -r .lake/build "$EX/.lake/"
 sed -i 's/^warningAsError = true$/warningAsError = false/' "$EX/lakefile.toml"
 cp "$ENUMERATOR" "$TMP/examples-enumerator.lean"
-NEX=$(python3 "$PROOFS_DIR/lean_lex.py" examples . "$EX" "${SRC[@]}" "${COMPILER_SRC[@]}") \
+NEX=$(python3 "$PROOFS_DIR/lean_lex.py" examples . "$EX" "${SRC[@]}" "${EVIDENCE_SRC[@]}" "${COMPILER_SRC[@]}") \
   || { no "the examples could not be rewritten: $NEX"; finish; }
-(cd "$EX" && "$LAKE" build ConcreteSpec Concrete) > "$TMP/ex-build.log" 2>&1 \
+(cd "$EX" && "$LAKE" build ConcreteSpec ConcreteSpecEvidence Concrete) > "$TMP/ex-build.log" 2>&1 \
   || { no "the library with its examples as declarations does not build: $(grep -m3 error "$TMP/ex-build.log" | tr '\n' ' ')"; finish; }
 (cd "$EX" && PROOF_MODE=examples "$LAKE" env lean "$TMP/examples-enumerator.lean") > "$TMP/examples.out" 2> "$TMP/examples.err" \
   || { no "PROOF_MODE=examples failed: $(head -2 "$TMP/examples.err" | tr '\n' ' ')"; finish; }
@@ -209,24 +242,39 @@ nonstandard() {
 }
 NE=$(grep -c . "$TMP/examples.tsv"); X=$(nonstandard "$TMP/examples.tsv")
 [ "$NEX" -ge 100 ] && [ "$NE" = "$NEX" ] && [ -z "$X" ] \
-  && ok "all $NEX spec and compiler examples, kept as declarations, depend only on the standard axioms" \
+  && ok "all $NEX spec, evidence and compiler examples, kept as declarations, depend only on the standard axioms" \
   || no "examples: $NEX rewritten, $NE in the environment; on other axioms: $(echo $X | cut -c1-300)"
 
 echo "=== negative controls ==="
 python3 "$PROOFS_DIR/test_lean_lex.py" > "$TMP/lexer-tests.log" 2>&1; RC=$?
 [ "$RC" = 0 ] && ok "control: literal boundaries, interpolation spoofing and compiler module graph regressions" \
   || { cat "$TMP/lexer-tests.log" >&2; no "lexer regression controls (rc=$RC)"; }
+# Bypass the evidence umbrella to simulate dropping its import of the spec root,
+# while keeping the evidence leaf dependencies available to the enumerator. Isolate
+# the two libraries so compiler import changes do not alter this control.
+awk 'FNR == NR { if ($0 ~ /^import ConcreteSpecEvidence[.]/) imports = imports $0 "\n"; next }
+     $0 == "import ConcreteSpecEvidence" { printf "%s", imports; next }
+     $0 != "import Concrete" { print }' ConcreteSpecEvidence.lean "$ENUMERATOR" > "$TMP/no-umbrella.lean"
+sed '/^import ConcreteSpec$/d' "$TMP/no-umbrella.lean" > "$TMP/no-spec-root.lean"
+if PROOF_PKG=ConcreteSpec PROOF_MODE=environment "$LAKE" env lean "$TMP/no-umbrella.lean" > "$TMP/no-umbrella.txt" &&
+   PROOF_PKG=ConcreteSpec PROOF_MODE=environment "$LAKE" env lean "$TMP/no-spec-root.lean" > "$TMP/no-spec-root.txt" &&
+   whole=$(closure_gap "$TMP/no-umbrella.txt" ConcreteSpec) && [ -z "$whole" ] &&
+   missing=$(closure_gap "$TMP/no-spec-root.txt" ConcreteSpec) && grep -qxF ConcreteSpec <<<"$missing"; then
+  ok "control: the direct spec import keeps the constant environment complete without the evidence umbrella"
+else
+  no "control: bypassing the evidence umbrella did not leave coverage dependent on the direct spec import"
+fi
 # Exercise the compiler CLI itself: these must be reported, even with an otherwise valid header.
-for body in 'import Std' 'import Lean.DoesNotExist' 'def bad : Nat := sorry' 'set_option maxRecDepth 100000'; do
+for body in 'import Std' 'import Lean.DoesNotExist' 'import ConcreteSpecEvidence' 'def bad : Nat := sorry' 'set_option maxRecDepth 100000'; do
   printf 'import Concrete.Lex\n%s\n' "$body" > "$TMP/compiler-bad.lean"
   W=$(python3 "$PROOFS_DIR/lean_lex.py" scan-compiler "$BANNED_WORD_RE|$EXTENSION_RE" "$TMP/compiler-bad.lean"); RC=$?
   [ "$RC" = 0 ] && [[ "$W" == *"$body"* ]] \
     && ok "control: compiler scan reports $body" || no "compiler scan missed $body (rc=$RC): $W"
 done
-# A private synthetic build tests deletion and preservation for both library roots and IR.
+# A private synthetic build tests deletion and preservation for the library roots and IR.
 ORPHAN="$TMP/orphan-build"
 for dir in lib/lean ir; do
-  for pkg in ConcreteSpec Concrete; do
+  for pkg in ConcreteSpec ConcreteSpecEvidence Concrete; do
     mkdir -p "$ORPHAN/$dir/$pkg"
     for ext in olean ilean trace olean.hash c; do
       touch "$ORPHAN/$dir/$pkg/Gone.$ext" "$ORPHAN/$dir/$pkg.$ext"
@@ -238,26 +286,36 @@ done
 prune_orphans "$ORPHAN" > "$TMP/pruned.log"; RC=$?
 REMAIN=$(find "$ORPHAN" -type f -path '*/Concrete*/Gone.*')
 [ "$RC" = 0 ] && [ -z "$REMAIN" ] \
-  && [ -f "$ORPHAN/lib/lean/Concrete.olean" ] && [ -f "$ORPHAN/ir/ConcreteSpec.c" ] \
+  && [ -f "$ORPHAN/lib/lean/ConcreteSpecEvidence.olean" ] && [ -f "$ORPHAN/lib/lean/Concrete.olean" ] && [ -f "$ORPHAN/ir/ConcreteSpec.c" ] \
   && [ -f "$ORPHAN/lib/lean/Concrete/Lex.olean" ] && [ -f "$ORPHAN/ir/Other/Gone.olean" ] \
   && ok "control: orphan spec/compiler artifacts are pruned, live and foreign artifacts retained" \
   || no "orphan pruning control (rc=$RC): remaining $REMAIN"
 
-# control NAME BODY AXIOM-ERE WHAT: the declarations in BODY must be refused at ConcreteSpecControl.NAME
+# control NAME BODY AXIOM-ERE WHAT: the declarations in BODY must be refused at ${PROOF_PKG}Control.NAME
 control() {
   printf '%s\n' "$2" > "$TMP/c-$1.lean"
-  population constants "$TMP/c-$1.lean" > "$TMP/c-$1.tsv" 2> "$TMP/c-$1.err"
-  local got; got=$(banned "$TMP/c-$1.tsv" | grep -F "ConcreteSpecControl.$1 (")
+  local got
+  if ! population constants "$TMP/c-$1.lean" > "$TMP/c-$1.tsv" 2> "$TMP/c-$1.err"; then
+    no "control: $PROOF_PKG constant enumeration failed for $1: $(head -2 "$TMP/c-$1.err")"
+    return
+  fi
+  got=$(banned "$TMP/c-$1.tsv" | grep -F "${PROOF_PKG}Control.$1 (")
   has_match -E "\(($3)\)\$" <<<"$got" \
     && ok "control: $4 is refused ($got)" || no "control: $4 was not refused with $3: '$got' $(head -2 "$TMP/c-$1.err" | tr '\n' ' ')"
 }
-control sorryThm 'theorem ConcreteSpecControl.sorryThm : 1 = 2 := sorry' 'sorryAx' "a theorem proved by sorry"
-control sorryDef 'def ConcreteSpecControl.sorryDef : Nat := sorry' sorryAx "a definition with a sorry body and no theorem about it"
-control nativeThm 'theorem ConcreteSpecControl.nativeThm : 2 + 2 = 4 := by native_decide' 'Lean\.ofReduceBool|.*\._native\..*' "a theorem proved by native_decide"
-printf 'axiom ConcreteSpecControl.ax : 1 = 2\n' > "$TMP/c-ax.lean"
-population constants "$TMP/c-ax.lean" > "$TMP/c-ax.tsv" 2>/dev/null
-[ "$(declared "$TMP/c-ax.tsv")" = ConcreteSpecControl.ax ] \
-  && ok "control: a declared axiom is reported" || no "control: a declared axiom was not reported: '$(declared "$TMP/c-ax.tsv")'"
+environment_controls() {
+  local PROOF_PKG=$1
+  export PROOF_PKG
+  control sorryThm "theorem ${PROOF_PKG}Control.sorryThm : 1 = 2 := sorry" 'sorryAx' "a theorem proved by sorry"
+  control sorryDef "def ${PROOF_PKG}Control.sorryDef : Nat := sorry" sorryAx "a definition with a sorry body and no theorem about it"
+  control nativeThm "theorem ${PROOF_PKG}Control.nativeThm : 2 + 2 = 4 := by native_decide" 'Lean\.ofReduceBool|.*\._native\..*' "a theorem proved by native_decide"
+  printf 'axiom %sControl.ax : 1 = 2\n' "$PROOF_PKG" > "$TMP/c-ax.lean"
+  population constants "$TMP/c-ax.lean" > "$TMP/c-ax.tsv" &&
+    [ "$(declared "$TMP/c-ax.tsv")" = "${PROOF_PKG}Control.ax" ] \
+    && ok "control: a declared axiom is reported" || no "control: a declared axiom was not reported: '$(declared "$TMP/c-ax.tsv")'"
+}
+environment_controls ConcreteSpec
+environment_controls ConcreteSpecEvidence
 # A quoted name holding a tab would shift its row's columns (the axiom kind out of column 2) and
 # hide the axiom from `declared`; theorems.lean refuses every such name before writing a row.
 printf 'axiom ConcreteSpecControl.«a\tb» : 1 = 2\n' > "$TMP/c-tab.lean"
@@ -342,9 +400,9 @@ lake_variant short 'import re; p="lakefile.toml"; s=open(p).read(); r=re.search(
 lake_variant branch 'import re; p="lakefile.toml"; s=open(p).read(); open(p,"w").write(re.sub(r"rev = \"[0-9a-f]+\"", "rev = \"main\"", s))'
 lake_variant drift 'import json; p="lake-manifest.json"; m=json.load(open(p)); m["packages"][0]["rev"]="0"*40; json.dump(m, open(p,"w"))'
 lake_variant subdir 'p="lakefile.toml"; s=open(p).read(); open(p,"w").write(s.replace("[[require]]\n", "[[require]]\nsubDir = \"x\"\n", 1))'
-lake_variant thirdlib 'p="lakefile.toml"; s=open(p).read(); open(p,"w").write(s + "\n[[lean_lib]]\nname = \"Other\"\n")'
+lake_variant extralib 'p="lakefile.toml"; s=open(p).read(); open(p,"w").write(s + "\n[[lean_lib]]\nname = \"Other\"\n")'
 lake_variant extraexe 'p="lakefile.toml"; s=open(p).read(); open(p,"w").write(s + "\n[[lean_exe]]\nname = \"Other\"\n")'
-for v in short:"not pinned to a full commit" branch:"not pinned to a full commit" drift:"does not record the require" subdir:"sets ['subDir']" thirdlib:"libraries ['ConcreteSpec', 'Concrete', 'Other']" extraexe:"the executable configuration differs"; do
+for v in short:"not pinned to a full commit" branch:"not pinned to a full commit" drift:"does not record the require" subdir:"sets ['subDir']" extralib:"libraries ['ConcreteSpec', 'ConcreteSpecEvidence', 'Concrete', 'Other']" extraexe:"the executable configuration differs"; do
   L=$(lake_options "$TMP/lk/${v%%:*}/lakefile.toml")
   case "$L" in *"${v#*:}"*) ok "control: a lakefile whose dependency or library set is changed (${v%%:*}) is refused ($L)" ;;
     *) no "control: the ${v%%:*} lakefile was not refused for '${v#*:}': '$L'" ;; esac
@@ -354,9 +412,15 @@ for f in missing Open Quote Brace; do
   [ "$RC" != 0 ] && ok "control: a source the scan cannot read or lex ($f) fails it (rc=$RC)" \
     || no "control: the scan of $f exited 0"
 done
-head -n 3 "$TMP/imported.txt" > "$TMP/imp-short.txt"
-[ -n "$(closure_gap "$TMP/imp-short.txt")" ] \
-  && ok "control: source modules outside a (truncated) import closure are reported" || no "control: a truncated closure reported no gap"
+for pkg in ConcreteSpec ConcreteSpecEvidence; do
+  removed=$(tail -1 "$TMP/$pkg-imported.txt")
+  sed '$d' "$TMP/$pkg-imported.txt" > "$TMP/imp-short.txt"
+  if [ -n "$removed" ] && GAP=$(closure_gap "$TMP/imp-short.txt" "$pkg") && [ "$GAP" = "$removed" ]; then
+    ok "control: removing $removed from the complete $pkg closure reports exactly that module"
+  else
+    no "control: removing $removed from the $pkg closure reported: $GAP"
+  fi
+done
 # The example leg's own controls: examples rewritten as that leg rewrites them, then enumerated.
 mkdir -p "$TMP/exc-src" "$TMP/exc"
 printf 'example : 2 + 2 = 4 := by decide +native\nexample : 1 = 2 := by stop skip\nexample : 1 = 1 := rfl\ndef w : String := "example"\n' > "$TMP/exc-src/C.lean"

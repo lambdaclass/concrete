@@ -7,7 +7,7 @@ defaultTargets = ["ConcreteSpec"]
 [[require]]
 name = "lean-compiler-backend"
 git = "https://github.com/unbalancedparentheses/lean-compiler-backend"
-rev = "4bea4b3ffd8a43a73a0016012d865044067b3275"
+rev = "4623fba6fec8439974b7e4ceb9a577b3e6918a22"
 
 [leanOptions]
 warningAsError = true
@@ -16,6 +16,11 @@ warningAsError = true
 # Core Lean only; root ConcreteSpec.lean.
 [[lean_lib]]
 name = "ConcreteSpec"
+leanOptions = { autoImplicit = false }
+
+# Kernel-checked proof controls and fixtures. Depends on the specification.
+[[lean_lib]]
+name = "ConcreteSpecEvidence"
 leanOptions = { autoImplicit = false }
 
 # The compiler (ROADMAP B0, slice 0; provisional): Lean code importing ConcreteSpec. Root Concrete.lean;

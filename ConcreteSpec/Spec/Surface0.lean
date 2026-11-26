@@ -792,4 +792,18 @@ inductive Derives : List Token → Program → Prop
                 fixed .arrow arrow, fixed .u8 ty, fixed .lbrace lb] ++ body ++ [fixed .rbrace rb])
         ⟨name, binder, statements⟩
 
+/-- Already decided builtin type spellings, reserved under OD43. The complete later-slice
+reservation catalog belongs to the shared lexical audit. -/
+def builtinTypeNames : List String :=
+  ["i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "bool", "f32", "f64",
+   "char", "String", "Unit", "Option", "Result", "Heap", "HeapArray", "Vec"]
+
+/-- Slice 0 supports named bindings that do not shadow the entry point, an intrinsic,
+a builtin type name or an earlier local. -/
+def BinderLegal (locals : List String) (name : String) : Prop :=
+  name ≠ "_" ∧ name ≠ "main" ∧ name ∉ intrinsicNames ∧ name ∉ builtinTypeNames ∧ name ∉ locals
+
+instance (locals : List String) (name : String) : Decidable (BinderLegal locals name) :=
+  inferInstanceAs (Decidable (name ≠ "_" ∧ name ≠ "main" ∧ name ∉ intrinsicNames ∧ name ∉ builtinTypeNames ∧ name ∉ locals))
+
 end ConcreteSpec.Surface0
