@@ -10,7 +10,7 @@ see `ConcreteSpec/README.md`.
 
 namespace ConcreteSpec
 open Core (AList)
-open Admission (Reason Refusal Discharge)
+open Admission (AtomTypeFailure Reason Refusal Discharge)
 
 /-! ### The checker
 
@@ -30,37 +30,53 @@ instance (Δ : Decls) (Γ : Ctx) : Decidable (Discharged Δ Γ) := by
 instance (Δ : Decls) : Decidable (DeclsOk Δ) := by
   unfold DeclsOk; infer_instance
 
-/-- The scalar type of an atom, if it has one. -/
-def atomTy (Γ : TyCtx) : Atom → Option STy
-  | .int t n => if t.inRange n then some (.int t) else none
-  | .bool _ => some .bool
-  | .copy x => match AList.lookup Γ x with
-    | some (.scalar st) => some st
-    | _ => none
-  | .move x => match AList.lookup Γ x with
-    | some (.scalar st) => some st
-    | _ => none
+/-- Infer an atom's type without erasing the reason it could not be typed. -/
+def inferAtomType (Γ : TyCtx) : Atom → Except AtomTypeFailure Ty
+  | .int t n => if t.inRange n then .ok (.scalar (.int t)) else .error (.outOfRange t n)
+  | .bool _ => .ok (.scalar .bool)
+  | .copy x | .move x => match AList.lookup Γ x with
+    | some ty => .ok ty
+    | none => .error (.unbound x)
 
-/-- The executable form of `FieldsTy`. -/
-def fieldsOkB (Γ : TyCtx) (d : StructDecl) (fs : List (Name × Atom)) : Bool :=
-  decide ((fs.map Prod.fst).Nodup) &&
-  fs.all (fun p => match AList.lookup d.fields p.1 with
-    | some st => atomTy Γ p.2 == some st
-    | none => false) &&
-  d.fields.all (fun q => (AList.lookup fs q.1).isSome)
+def inferAddOperand (Γ : TyCtx) (a : Atom) : Except Reason IntTy :=
+  match inferAtomType Γ a with
+  | .ok (.scalar (.int t)) => .ok t
+  | .ok actual => .error (.additionOperandType a (.wrongType actual))
+  | .error cause => .error (.additionOperandType a (.atomFailure cause))
 
-/-- The type of an expression, if it has one. -/
-def tyOf (Δ : Decls) (Γ : TyCtx) : Expr → Option Ty
-  | .atom (.int t n) => if t.inRange n then some (.scalar (.int t)) else none
-  | .atom (.bool _) => some (.scalar .bool)
-  | .atom (.copy x) => AList.lookup Γ x
-  | .atom (.move x) => AList.lookup Γ x
-  | .add l r => match atomTy Γ l, atomTy Γ r with
-    | some (.int t), some (.int t') => if t = t' then some (.scalar (.int t)) else none
-    | _, _ => none
-  | .mk s fs => match findDecl Δ s with
-    | some d => if fieldsOkB Γ d fs then some (.struct s) else none
-    | none => none
+def checkFieldTypes (Γ : TyCtx) (d : StructDecl) : List (Name × Atom) → Except Reason Unit
+  | [] => .ok ()
+  | (field, atom) :: rest => do
+    let some expected := AList.lookup d.fields field | .error (.unknownStructField d.name field)
+    let actual ← (inferAtomType Γ atom).mapError (fun cause => .structFieldType d.name field atom expected (.atomFailure cause))
+    if actual = .scalar expected then checkFieldTypes Γ d rest
+    else .error (.structFieldType d.name field atom expected (.wrongType actual))
+
+/-- The executable form of `FieldsTy`, with the rejected initializer or shape rule. -/
+def checkFields (Γ : TyCtx) (d : StructDecl) (fs : List (Name × Atom)) : Except Reason Unit :=
+  if (fs.map Prod.fst).Nodup then do
+    checkFieldTypes Γ d fs
+    match d.fields.find? (fun q => (AList.lookup fs q.1).isNone) with
+    | some (field, _) => .error (.missingStructField d.name field)
+    | none => .ok ()
+  else .error (.duplicateStructInitializers d.name (fs.map Prod.fst))
+
+def inferExprType (Δ : Decls) (Γ : TyCtx) : Expr → Except Reason Ty
+  | .atom a => (inferAtomType Γ a).mapError fun
+    | .unbound x => .unknownBinding x
+    | .outOfRange t n => .literalOutOfRange t n
+  | .add l r => do
+    let lt ← inferAddOperand Γ l
+    let rt ← inferAddOperand Γ r
+    if lt = rt then .ok (.scalar (.int lt)) else .error (.additionTypeMismatch l r lt rt)
+  | .mk s fs => do
+    let some d := findDecl Δ s | .error (.unknownStruct s)
+    checkFields Γ d fs
+    .ok (.struct s)
+
+def requireExprType (Δ : Decls) (Γ : TyCtx) (expected : Ty) (e : Expr) : Except Reason Unit := do
+  let actual ← inferExprType Δ Γ e
+  if actual = expected then .ok () else .error (.expressionType expected actual)
 
 /-- Read an atom, distinguishing name, lifetime and read-mode violations. -/
 def useAtom (Δ : Decls) (Γ : Ctx) : Atom → Except Reason Ctx
@@ -84,31 +100,10 @@ def patOkB (d : StructDecl) (pat : List (Name × Binder)) : Bool :=
   pat.all (fun p => (AList.lookup d.fields p.1).isSome) &&
   d.fields.all (fun q => (AList.lookup pat q.1).isSome)
 
-private def literalFailure : List Atom → Option Reason
-  | .int t n :: tail => if t.inRange n then literalFailure tail else some (.literalOutOfRange t n)
-  | _ :: tail => literalFailure tail
-  | [] => none
-
 def Expr.atoms : Expr → List Atom
   | .atom a => [a]
   | .add l r => [l, r]
   | .mk _ fs => fs.map Prod.snd
-
-private def typeFailure (Δ : Decls) (types : TyCtx) (expected : Ty) (actual : Option Ty)
-    (expr : Expr) : Reason :=
-  match actual with
-  | some _ => .expressionType expected actual
-  | none =>
-    match literalFailure expr.atoms with
-    | some reason => reason
-    | none =>
-      match expr with
-      | .atom (.copy x) | .atom (.move x) => .unknownBinding x
-      | .add l r => .additionOperandTypes (atomTy types l) (atomTy types r)
-      | .mk name fields =>
-        if (findDecl Δ name).isSome then .invalidStructFields name (fields.map Prod.fst)
-        else .unknownStruct name
-      | _ => .expressionType expected actual
 
 /-- Read atoms in evaluation order and report the exact rejected read. -/
 def readAtoms (Δ : Decls) (Γ : Ctx) : List Atom → Except Reason Ctx
@@ -117,62 +112,46 @@ def readAtoms (Δ : Decls) (Γ : Ctx) : List Atom → Except Reason Ctx
     | .ok Γ₁ => readAtoms Δ Γ₁ as
     | .error reason => .error reason
 
+/-- Check typing and reads before testing arithmetic evidence in the pre-read context. -/
+def checkStmtExpr (Δ : Decls) (Γ : Ctx) (t : Ty) (e : Expr) : Except Reason Ctx := do
+  requireExprType Δ Γ.tys t e
+  let next ← readAtoms Δ Γ e.atoms
+  if admitted Γ e then .ok next
+  else .error .additionOverflowUnproven
+
 /-- Check one statement, retaining its output context for the next statement. -/
 def checkStmt (Δ : Decls) (Γ : Ctx) : Stmt → Except Reason Ctx
-  | .let_ (.name x) t e =>
-    let actual := tyOf Δ Γ.tys e
-    if actual = some t then
-      if admitted Γ e then
-        match readAtoms Δ Γ e.atoms with
-        | .ok Γ₁ => if Fresh Γ₁ x then
-            .ok ((x, { ty := t, live := true, used := false, known := knownExpr Γ e,
-                       kfields := knownFields Γ e }) :: Γ₁)
-          else .error (.duplicateBinding x)
-        | .error reason => .error reason
-      else .error .additionOverflowUnproven
-    else .error (typeFailure Δ Γ.tys t actual e)
-  | .let_ .wild t e =>
-    let actual := tyOf Δ Γ.tys e
-    if actual = some t then
-      if admitted Γ e then
-        if t.isCopy Δ then readAtoms Δ Γ e.atoms else .error (.discardLinear t)
-      else .error .additionOverflowUnproven
-    else .error (typeFailure Δ Γ.tys t actual e)
-  | .letStruct s pat e =>
-    let actual := tyOf Δ Γ.tys e
-    if actual = some (.struct s) then
-      if admitted Γ e then
-        match findDecl Δ s with
-        | some d => if patOkB d pat then
-            match readAtoms Δ Γ e.atoms with
-            | .ok Γ₁ =>
-              if PatFresh Γ₁ pat then .ok (bindPat d (knownFields Γ e) pat Γ₁)
-              else .error (.conflictingPatternBindings (patNames pat))
-            | .error reason => .error reason
-          else .error (.invalidPattern s (pat.map Prod.fst))
-        | none => .error (.unknownStruct s)
-      else .error .additionOverflowUnproven
-    else .error (typeFailure Δ Γ.tys (.struct s) actual e)
+  | .let_ (.name x) t e => do
+    let next ← checkStmtExpr Δ Γ t e
+    if Fresh next x then
+      .ok ((x, { ty := t, live := true, used := false, known := knownExpr Γ e,
+                 kfields := knownFields Γ e }) :: next)
+    else .error (.duplicateBinding x)
+  | .let_ .wild t e => do
+    let next ← checkStmtExpr Δ Γ t e
+    if t.isCopy Δ then .ok next else .error (.discardLinear t)
+  | .letStruct s pat e => do
+    let next ← checkStmtExpr Δ Γ (.struct s) e
+    let some d := findDecl Δ s | .error (.unknownStruct s)
+    if patOkB d pat then
+      if PatFresh next pat then .ok (bindPat d (knownFields Γ e) pat next)
+      else .error (.conflictingPatternBindings (patNames pat))
+    else .error (.invalidPattern s (pat.map Prod.fst))
 
 /-- Check the obligations that remain at a return or abort. -/
 def finishChecks (Δ : Decls) (atReturn : Bool) : Ctx → Except Reason Unit
   | [] => .ok ()
   | (x, entry) :: rest =>
-    if entry.used then
-      if atReturn && !entry.ty.isCopy Δ && entry.live then .error (.liveLinearBinding x)
-      else finishChecks Δ atReturn rest
+    if atReturn && !entry.ty.isCopy Δ && entry.live then .error (.liveLinearBinding x)
+    else if entry.used then finishChecks Δ atReturn rest
     else .error (.unusedBinding x)
 
 def checkEnd (Δ : Decls) (Γ : Ctx) : Terminator → Except Reason Unit
   | .abort _ => finishChecks Δ false Γ
-  | .ret r =>
-    let expected : Ty := .scalar (.int .u8)
-    let actual := tyOf Δ Γ.tys (.atom r)
-    if actual = some expected then
-      match useAtom Δ Γ r with
-      | .ok Γ₁ => finishChecks Δ true Γ₁
-      | .error reason => .error reason
-    else .error (typeFailure Δ Γ.tys expected actual (.atom r))
+  | .ret r => do
+    requireExprType Δ Γ.tys (.scalar (.int .u8)) (.atom r)
+    let next ← useAtom Δ Γ r
+    finishChecks Δ true next
 
 /-- Successful statement checks establish the typing and safety of this emission.
 Only addition has a dischargeable condition in this fragment. -/

@@ -2,18 +2,33 @@ import ConcreteSpec.Spec.Slice1Ownership
 
 namespace ConcreteSpec.Admission
 
+/-- Why an atom could not provide the type required by its enclosing expression. -/
+inductive AtomTypeFailure where
+  | unbound (binding : Var)
+  | outOfRange (type : IntTy) (value : Int)
+  deriving DecidableEq
+
+inductive OperandTypeFailure where
+  | atomFailure (cause : AtomTypeFailure)
+  | wrongType (actual : Ty)
+  deriving DecidableEq
+
 /-- A violated Core rule. The enclosing refusal identifies the statement or terminator. -/
 inductive Reason where
   | literalOutOfRange (type : IntTy) (value : Int)
-  | expressionType (expected : Ty) (actual : Option Ty)
+  | expressionType (expected : Ty) (actual : Ty)
   | additionOverflowUnproven
   | unknownBinding (binding : Var)
   | movedBinding (binding : Var)
   | copyOfLinear (binding : Var)
   | moveOfCopy (binding : Var)
-  | additionOperandTypes (left right : Option STy)
+  | additionOperandType (operand : Atom) (cause : OperandTypeFailure)
+  | additionTypeMismatch (left right : Atom) (leftType rightType : IntTy)
+  | structFieldType (structName field : Name) (operand : Atom) (expected : STy) (cause : OperandTypeFailure)
+  | unknownStructField (structName field : Name)
+  | missingStructField (structName field : Name)
+  | duplicateStructInitializers (structName : Name) (fields : List Name)
   | unknownStruct (name : Name)
-  | invalidStructFields (structName : Name) (fields : List Name)
   | discardLinear (type : Ty)
   | invalidPattern (structName : Name) (fields : List Name)
   | conflictingPatternBindings (bindings : List Var)

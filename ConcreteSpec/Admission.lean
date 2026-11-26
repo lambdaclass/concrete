@@ -31,34 +31,6 @@ theorem Batch.validates_iff {program : Program} (batch : Batch program) (propose
     batch.validates proposed = true ↔ proposed.Sublist batch.discharges :=
   List.isSublist_iff_sublist
 
-private theorem useAtom_types {Δ : Decls} {Γ Γ' : Ctx} {a : Atom} (h : UseAtom Δ Γ a Γ') :
-    Γ'.tys = Γ.tys := by
-  have mark (x : Var) (moved : Bool) (ctx : Ctx) : (ctxMark ctx x moved).tys = ctx.tys := by
-    induction ctx with
-    | nil => rfl
-    | cons e rest ih =>
-      obtain ⟨y, value⟩ := e
-      simp only [ctxMark, Core.AList.update]
-      split <;> simp_all [Ctx.tys, Core.AList.map, ctxMark, Entry.read]
-  cases h
-  · rfl
-  · rfl
-  · exact mark _ _ _
-  · exact mark _ _ _
-
-private theorem useAtoms_types {Δ : Decls} {Γ Γ' : Ctx} {as : List Atom}
-    (h : UseAtoms Δ Γ as Γ') : Γ'.tys = Γ.tys := by
-  induction h with
-  | nil => rfl
-  | cons ha _ ih => exact ih.trans (useAtom_types ha)
-
-private theorem uses_types {Δ : Decls} {Γ Γ' : Ctx} {e : Expr} (h : Uses Δ Γ e Γ') :
-    Γ'.tys = Γ.tys := by
-  cases h with
-  | atom ha => exact useAtom_types ha
-  | add hl hr => exact (useAtom_types hr).trans (useAtom_types hl)
-  | mk hf => exact useAtoms_types hf
-
 private theorem bindPat_types (d : StructDecl) (facts : List (Name × Option Scalar))
     (pat : List (Name × Binder)) (ctx : Ctx) :
     (bindPat d facts pat ctx).tys = bindTypes d pat ctx.tys := by
@@ -88,13 +60,13 @@ theorem checked_staticallyTyped {program : Program} (h : Checked program) :
       cases hs with
       | let_ ht _ hu _ =>
         apply BodyTyped.letName ht
-        have same := uses_types hu
+        have same := uses_tys hu
         unfold Ctx.tys Core.AList.map at same
         simpa only [Ctx.tys, Core.AList.map, List.map_cons, same] using ih
-      | letWild ht _ _ hu => exact .letWild ht (uses_types hu ▸ ih)
+      | letWild ht _ _ hu => exact .letWild ht (uses_tys hu ▸ ih)
       | letStruct ht _ hd hp hu _ =>
         apply BodyTyped.letStruct ht hd hp
-        simpa only [bindPat_types, uses_types hu] using ih
+        simpa only [bindPat_types, uses_tys hu] using ih
   exact body h.2
 
 theorem Batch.staticallyTyped {program : Program} (batch : Batch program) :
