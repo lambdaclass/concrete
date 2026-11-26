@@ -19,15 +19,17 @@ def command_control(root, work):
     shutil.copyfile(root / "lean-toolchain", repo / "lean-toolchain")
     (repo / "lakefile.toml").write_text(
         'name = "f31-control"\n[[lean_lib]]\nname = "ConcreteSpec"\n'
-        '[[lean_lib]]\nname = "Concrete"\n', encoding="utf-8")
+        '[[lean_lib]]\nname = "Concrete"\n[[lean_lib]]\nname = "ConcreteSpecEvidence"\n', encoding="utf-8")
     (repo / "Concrete.lean").write_text(
         "import ConcreteSpec\ndef f31Consumer : F31Alias := Nat.zero\n", encoding="utf-8")
+    (repo / "ConcreteSpecEvidence.lean").write_text(
+        "import ConcreteSpec\ndef evidenceValue : F31Alias := Nat.zero\n", encoding="utf-8")
     exporter = Path("scripts/spec/f31_census.lean")
     (repo / exporter).parent.mkdir(parents=True)
     shutil.copyfile(root / exporter, repo / exporter)
     for filename, typ in (("Legacy", "F31Alias"), ("Clean", "Nat")):
         (repo / "scripts/spec" / f"{filename}.lean").write_text(
-            f"import ConcreteSpec\ndef probeValue : {typ} := Nat.zero\n#check probeValue\n",
+            f"import ConcreteSpecEvidence\ndef probeValue : {typ} := Nat.zero\n#check probeValue\n",
             encoding="utf-8")
     source = repo / "ConcreteSpec.lean"
     source.write_text("""import Lean
@@ -71,6 +73,8 @@ example : F31Alias := Nat.zero
         assert "F31Alias" in row["via"], row
     consumer = next(row for row in rows if row.get("name") == "f31Consumer")
     assert consumer["via"] == ["F31Alias"], consumer
+    evidence = next(row for row in rows if row.get("name") == "evidenceValue")
+    assert evidence["file"] == "ConcreteSpecEvidence.lean" and evidence["via"] == ["F31Alias"], evidence
     for filename, uses in (("Legacy", ["probeValue"]), ("Clean", [])):
         probe = next(row for row in rows if row["file"] == f"scripts/spec/{filename}.lean"
                      and row.get("kind") == "Lean.Parser.Command.check")

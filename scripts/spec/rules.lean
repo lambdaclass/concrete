@@ -1,5 +1,5 @@
 -- The gate appends this same exporter body to fixtures after their declarations.
-import ConcreteSpec.Spec.Rules
+import ConcreteSpecEvidence.Rules
 import Lean
 open Lean Elab Command
 

@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# AXIOM INVENTORY: every theorem of the specification and compiler depends, transitively, on no axiom beyond
-# propext, Quot.sound and Classical.choice (Q9.17), and the per-theorem inventory equals the golden
-# lists scripts/proofs/axioms.golden and scripts/proofs/compiler_axioms.golden.
+# AXIOM INVENTORY: every theorem of the specification, evidence, and compiler depends transitively
+# on only propext, Quot.sound and Classical.choice (Q9.17). Each library has its own golden.
 #
 #   P  population: every source module in each library is in the root's import closure (a
 #      module outside it is neither built by default nor read here), and every module whose file
@@ -55,10 +54,13 @@ audit_library() {
   echo "=== $pkg: theorem population and axioms ==="
   population theorems > "$inventory" || { cat "$inventory" >&2; no "$pkg theorem enumeration failed"; return; }
   population imported > "$TMP/imported.txt" || { no "$pkg import enumeration failed"; return; }
-  source_modules "$pkg" > "$TMP/source-modules.txt" || { no "$pkg source inventory failed"; return; }
-  gap=$(comm -23 "$TMP/source-modules.txt" <(sort -u "$TMP/imported.txt"))
+  gap=$(closure_gap "$TMP/imported.txt" "$pkg") || { no "$pkg root module comparison failed"; return; }
   [ -z "$gap" ] && ok "all $pkg source modules are in the root's import closure" \
     || no "$pkg modules outside the import closure: $gap"
+
+  population environment > "$TMP/environment.txt" || { no "$pkg environment module enumeration failed"; return; }
+  gap=$(closure_gap "$TMP/environment.txt" "$pkg") || { no "$pkg environment module comparison failed"; return; }
+  [ -z "$gap" ] || { no "$pkg source modules outside the theorem environment: $gap"; return; }
 
   population modules > "$TMP/env-modules.txt" || { no "$pkg theorem module enumeration failed"; return; }
   grep -rlE '^\s*(@\[[^]]*\]\s*)?(private |protected )*theorem ' "$pkg" "$pkg.lean" --include='*.lean' \
@@ -95,69 +97,59 @@ audit_library() {
 }
 
 GOLDEN=scripts/proofs/axioms.golden
+EVIDENCE_GOLDEN=scripts/proofs/evidence_axioms.golden
 COMPILER_GOLDEN=scripts/proofs/compiler_axioms.golden
 audit_library ConcreteSpec "$GOLDEN" "${1:-}"
+audit_library ConcreteSpecEvidence "$EVIDENCE_GOLDEN" "${1:-}"
 audit_library Concrete "$COMPILER_GOLDEN" "${1:-}"
 if [ "${1:-}" = --update ] || [ "$FAIL" != 0 ]; then finish; fi
 
-export PROOF_PKG=ConcreteSpec
 echo "=== negative controls ==="
-cat > "$TMP/c-axiom.lean" <<'EOF'
-axiom ConcreteSpecControl.extra : 1 = 2
-theorem ConcreteSpecControl.usesExtra : 2 = 1 := ConcreteSpecControl.extra.symm
+axiom_controls() {
+  local PROOF_PKG=$1
+  export PROOF_PKG
+  local golden=$2
+  local inventory="$TMP/$PROOF_PKG.tsv"
+  local namespace="${PROOF_PKG}Control"
+  local bad delta first
+  cat > "$TMP/c-axiom.lean" <<EOF
+axiom $namespace.extra : 1 = 2
+theorem $namespace.usesExtra : 2 = 1 := $namespace.extra.symm
 EOF
-population theorems "$TMP/c-axiom.lean" > "$TMP/c-axiom.tsv" 2>"$TMP/c-axiom.err"
-CB=$(nonstandard "$TMP/c-axiom.tsv")
-[ "$CB" = "ConcreteSpecControl.usesExtra (ConcreteSpecControl.extra)" ] \
-  && ok "control: a theorem using a declared axiom is refused, and only it ($CB)" \
-  || no "control: the extra-axiom theorem was not refused alone: '$CB' $(head -2 "$TMP/c-axiom.err")"
-cat > "$TMP/c-clean.lean" <<'EOF'
-theorem ConcreteSpecControl.clean : 1 = 1 := rfl
-private theorem ConcreteSpecControl.hidden : 2 = 2 := rfl
-EOF
-population theorems "$TMP/c-clean.lean" > "$TMP/c-clean.tsv" 2>/dev/null
-# A private name carries the file it was declared in (`_private.<file>.0.…`); the temporary copy's
-# name is random, so it is normalized before the comparison.
-D=$(golden_diff "$TMP/c-clean.tsv" "$GOLDEN" | sed -E 's/^> _private\..*\.0\.ConcreteSpecControl\./> _private.0.ConcreteSpecControl./')
-[ "$D" = "$(printf '> ConcreteSpecControl.clean\t\n> _private.0.ConcreteSpecControl.hidden\t')" ] \
-  && ok "control: a new theorem, even axiom-free and even private, is a golden difference" \
-  || no "control: new public and private theorems gave the diff '$D'"
-FIRST=$(head -1 "$TMP/ConcreteSpec.tsv" | cut -f1)
-awk -F'\t' -v first="$FIRST" '$1 != first' "$GOLDEN" > "$TMP/g-missing"
-[ -n "$(golden_diff "$TMP/ConcreteSpec.tsv" "$TMP/g-missing")" ] \
-  && ok "control: a golden missing a theorem ($FIRST) differs" || no "control: a golden missing $FIRST compared equal"
-awk -F'\t' 'BEGIN{OFS="\t"} !/^#/ && !done && $2 == "" { $2 = "propext"; done = 1 } { print }' "$GOLDEN" > "$TMP/g-axiom"
-! cmp -s "$GOLDEN" "$TMP/g-axiom" && [ -n "$(golden_diff "$TMP/ConcreteSpec.tsv" "$TMP/g-axiom")" ] \
-  && ok "control: a golden recording other axioms for a theorem differs" || no "control: a changed axiom set compared equal"
-printf '%s\n' ConcreteSpec ConcreteSpec.Spec > "$TMP/imp-short.txt"
-[ -n "$(closure_gap "$TMP/imp-short.txt")" ] \
-  && ok "control: source modules outside a (truncated) import closure are reported" || no "control: a truncated closure reported no gap"
-cat > "$TMP/c-compiler.lean" <<'EOF'
-axiom ConcreteControl.extra : 1 = 2
-theorem ConcreteControl.usesExtra : 2 = 1 := ConcreteControl.extra.symm
-EOF
-if PROOF_PKG=Concrete population theorems "$TMP/c-compiler.lean" > "$TMP/c-compiler.tsv"; then
-  if CB=$(standard_only "$TMP/c-compiler.tsv"); then
-    no "control: a compiler theorem using a declared axiom passed"
-  elif [ "$CB" = "ConcreteControl.usesExtra (ConcreteControl.extra)" ]; then
-    ok "control: the compiler theorem using a declared axiom is refused ($CB)"
+  if ! population theorems "$TMP/c-axiom.lean" > "$TMP/c-axiom.tsv" 2>"$TMP/c-axiom.err"; then
+    no "control: $PROOF_PKG axiom enumeration failed: $(head -2 "$TMP/c-axiom.err")"
+  elif bad=$(standard_only "$TMP/c-axiom.tsv") || [ "$bad" != "$namespace.usesExtra ($namespace.extra)" ]; then
+    no "control: $PROOF_PKG extra-axiom theorem was not refused alone: '$bad'"
   else
-    no "control: the compiler axiom check returned '$CB'"
+    ok "control: $PROOF_PKG refuses only the theorem using the declared axiom"
   fi
-else
-  no "control: compiler theorem enumeration failed"
-fi
-cat > "$TMP/c-compiler-private.lean" <<'EOF'
-private theorem ConcreteControl.hidden : 2 = 2 := rfl
+
+  cat > "$TMP/c-clean.lean" <<EOF
+theorem $namespace.clean : 1 = 1 := rfl
+private theorem $namespace.hidden : 2 = 2 := rfl
 EOF
-if PROOF_PKG=Concrete population theorems "$TMP/c-compiler-private.lean" > "$TMP/c-compiler-private.tsv" &&
-    standard_only "$TMP/c-compiler-private.tsv"; then
-  D=$(golden_diff "$TMP/c-compiler-private.tsv" "$COMPILER_GOLDEN" |
-    sed -E 's/^> _private\..*\.0\.ConcreteControl\./> _private.0.ConcreteControl./')
-  [ "$D" = "$(printf '> _private.0.ConcreteControl.hidden\t')" ] \
-    && ok "control: an axiom-free private compiler theorem changes the golden" \
-    || no "control: the private compiler theorem gave the diff '$D'"
-else
-  no "control: axiom-free private compiler theorem enumeration or axiom check failed"
-fi
+  if population theorems "$TMP/c-clean.lean" > "$TMP/c-clean.tsv" && standard_only "$TMP/c-clean.tsv"; then
+    # A private name includes the random filename of the temporary enumerator.
+    delta=$(golden_diff "$TMP/c-clean.tsv" "$golden" |
+      sed -E "s/^> _private\\..*\\.0\\.$namespace\\./> _private.0.$namespace./")
+    [ "$delta" = "$(printf '> %s.clean\t\n> _private.0.%s.hidden\t' "$namespace" "$namespace")" ] \
+      && ok "control: new $PROOF_PKG public and private theorems change the golden" \
+      || no "control: new $PROOF_PKG public and private theorems gave the diff '$delta'"
+  else
+    no "control: $PROOF_PKG axiom-free theorem enumeration or axiom check failed"
+  fi
+
+  first=$(head -1 "$inventory" | cut -f1)
+  awk -F'\t' -v first="$first" '$1 != first' "$golden" > "$TMP/g-missing"
+  [ "$(golden_diff "$inventory" "$TMP/g-missing")" = "> $(head -1 "$inventory")" ] \
+    && ok "control: $PROOF_PKG golden missing $first differs" \
+    || no "control: $PROOF_PKG golden missing $first did not produce the expected difference"
+  awk -F'\t' 'BEGIN{OFS="\t"} !/^#/ && !done && $2 == "" { $2 = "propext"; done = 1 } { print }' "$golden" > "$TMP/g-axiom"
+  [ -n "$(golden_diff "$inventory" "$TMP/g-axiom")" ] \
+    && ok "control: a changed $PROOF_PKG golden axiom set differs" \
+    || no "control: a changed $PROOF_PKG golden axiom set compared equal"
+}
+axiom_controls ConcreteSpec "$GOLDEN"
+axiom_controls ConcreteSpecEvidence "$EVIDENCE_GOLDEN"
+axiom_controls Concrete "$COMPILER_GOLDEN"
 finish

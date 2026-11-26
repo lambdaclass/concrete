@@ -2,20 +2,20 @@
 -- Run from the repository root: `lake env lean scripts/spec/lean_site.lean > decls.jsonl`.
 -- Every fact comes from the elaborated environment: module docs, declarations with their source
 -- ranges, doc comments, types, and the ConcreteSpec constants each one uses.
-import ConcreteSpec
+import ConcreteSpecEvidence
 import Lean
 open Lean Elab Command
 
 def inSpec (env : Environment) (n : Name) : Option Name := do
   let i ← env.getModuleIdxFor? n
   let m := env.header.moduleNames[i.toNat]!
-  if m.getRoot == `ConcreteSpec then some m else none
+  if m.getRoot == `ConcreteSpec || m.getRoot == `ConcreteSpecEvidence then some m else none
 
 #eval show CommandElabM Unit from do
   let env ← getEnv
   -- the modules of the library's import closure, and their docs
   for m in env.header.moduleNames do
-    if m.getRoot == `ConcreteSpec then
+    if m.getRoot == `ConcreteSpec || m.getRoot == `ConcreteSpecEvidence then
       IO.println (Json.compress (Json.mkObj [("kind", "module"), ("module", toString m)]))
       let docs := (getModuleDoc? env m).getD #[]
       for d in docs do
