@@ -1,4 +1,4 @@
-import Concrete.Lex
+import Concrete.Stages
 
 open Concrete ConcreteSpec.Surface0
 
@@ -18,3 +18,15 @@ def main : IO Unit := do
     unless offset == 9 && bound == limit do
       throw (IO.userError "wrong byte offset or reported digit limit")
   | _ => throw (IO.userError "expected a digit resource refusal before malformed-token refusal")
+
+  -- These are otherwise valid digit runs, with and without a radix prefix.
+  for (radixPrefix, digit) in [("", '7'), ("0b", '1'), ("0o", '7'), ("0x", 'f')] do
+    let source := ("// note\r\n" ++ radixPrefix ++ String.ofList (List.replicate (limit + 1) digit)).toUTF8
+    let expected := Refusal.lexerDigitLimit 9 limit
+    match Lex.lexLossless source, Stages.compile ⟨"digit-limit.con", source⟩ with
+    | .error lexer, .error compiler =>
+      unless lexer == expected && compiler == expected && compiler.code == "RESOURCE" &&
+          compiler.exitCode == 2 &&
+          compiler.message == s!"integer digit run at byte 9 exceeds limit {limit}" do
+        throw (IO.userError s!"wrong resource refusal for radix prefix {repr radixPrefix}")
+    | _, _ => throw (IO.userError s!"expected both stages to refuse radix prefix {repr radixPrefix}")
