@@ -926,6 +926,10 @@ Concrete.Backend.Runtime.mem_indexed	Quot.sound propext
 Concrete.Backend.Runtime.mem_indexedFrom	Quot.sound propext
 Concrete.Backend.Runtime.mem_indexedFrom._proof_1_5	Quot.sound propext
 Concrete.Backend.Runtime.mem_indexedFrom._simp_1_4	propext
+Concrete.Backend.lcbInvocationSemantics._proof_1	Quot.sound propext
+Concrete.Backend.lcbInvocationSemantics._proof_2	Quot.sound propext
+Concrete.Backend.lcbInvocationSemantics._proof_3	Quot.sound propext
+Concrete.Backend.lcbInvocationSemantics._proof_4	Quot.sound propext
 Concrete.Backend.lcbSemantics._proof_1	Quot.sound propext
 Concrete.Backend.lcbSemantics._proof_2	Quot.sound propext
 Concrete.Backend.lcbSemantics._proof_3	Quot.sound propext
@@ -934,6 +938,7 @@ Concrete.Backend.lcbSemantics.eq_1	Quot.sound propext
 Concrete.Backend.lcbTerminal._sparseCasesOn_1.else_eq	propext
 Concrete.Backend.lcbTerminal._sparseCasesOn_2.else_eq	propext
 Concrete.Backend.lcbTerminal.eq_1	Quot.sound propext
+Concrete.Backend.lcbTerminalFor.eq_1	Quot.sound propext
 Concrete.Certificate.Backend.lcb.sizeOf_spec	
 Concrete.Certificate.Backend.llvm.sizeOf_spec	
 Concrete.Certificate.Backend.ofNat_ctorIdx	
@@ -1267,6 +1272,25 @@ Concrete.Driver.Reference.Run.mk.sizeOf_spec
 Concrete.Driver.Reference.instDecidableEqRun.decEq._proof_1	
 Concrete.Driver.Reference.instDecidableEqRun.decEq._proof_2	
 Concrete.Driver.Reference.instDecidableEqRun.decEq._proof_3	
+Concrete.Elab.Failure.fallthrough.sizeOf_spec	
+Concrete.Elab.Failure.integerSuffix.inj	
+Concrete.Elab.Failure.integerSuffix.injEq	propext
+Concrete.Elab.Failure.integerSuffix.sizeOf_spec	
+Concrete.Elab.Failure.shadowing.inj	
+Concrete.Elab.Failure.shadowing.injEq	propext
+Concrete.Elab.Failure.shadowing.sizeOf_spec	
+Concrete.Elab.Failure.unexpectedEntry.inj	
+Concrete.Elab.Failure.unexpectedEntry.injEq	propext
+Concrete.Elab.Failure.unexpectedEntry.sizeOf_spec	
+Concrete.Elab.Failure.unknownLocal.inj	
+Concrete.Elab.Failure.unknownLocal.injEq	propext
+Concrete.Elab.Failure.unknownLocal.sizeOf_spec	
+Concrete.Elab.Failure.unreachable.inj	
+Concrete.Elab.Failure.unreachable.injEq	propext
+Concrete.Elab.Failure.unreachable.sizeOf_spec	
+Concrete.Elab.Failure.wildcard.inj	
+Concrete.Elab.Failure.wildcard.injEq	propext
+Concrete.Elab.Failure.wildcard.sizeOf_spec	
 Concrete.Elab.Output.mk.inj	
 Concrete.Elab.Output.mk.injEq	propext
 Concrete.Elab.Output.mk.sizeOf_spec	
@@ -1406,6 +1430,326 @@ Concrete.ImageTheorem.instDecidableEqToolInvocation.decEq._proof_4
 Concrete.ImageTheorem.instDecidableEqToolInvocation.decEq._proof_5	
 Concrete.ImageTheorem.instDecidableEqToolRole._proof_1	
 Concrete.ImageTheorem.instDecidableEqToolRole._proof_2	
+Concrete.Interfaces.Args.brecOn.eq	
+Concrete.Interfaces.Args.cons.inj	
+Concrete.Interfaces.Args.cons.injEq	propext
+Concrete.Interfaces.Args.cons.sizeOf_spec	
+Concrete.Interfaces.Args.nil.sizeOf_spec	
+Concrete.Interfaces.BIR.mk.inj	Quot.sound propext
+Concrete.Interfaces.BIR.mk.injEq	Quot.sound propext
+Concrete.Interfaces.BIR.mk.sizeOf_spec	Quot.sound propext
+Concrete.Interfaces.BIR.refinesOfViewEq	Quot.sound propext
+Concrete.Interfaces.BIRTerm.branch.inj	
+Concrete.Interfaces.BIRTerm.branch.injEq	propext
+Concrete.Interfaces.BIRTerm.branch.sizeOf_spec	
+Concrete.Interfaces.BIRTerm.jump.inj	
+Concrete.Interfaces.BIRTerm.jump.injEq	propext
+Concrete.Interfaces.BIRTerm.jump.sizeOf_spec	
+Concrete.Interfaces.BIRTerm.ret.inj	
+Concrete.Interfaces.BIRTerm.ret.injEq	propext
+Concrete.Interfaces.BIRTerm.ret.sizeOf_spec	
+Concrete.Interfaces.BIRTerm.trap.inj	
+Concrete.Interfaces.BIRTerm.trap.injEq	propext
+Concrete.Interfaces.BIRTerm.trap.sizeOf_spec	
+Concrete.Interfaces.BackendKind.lcb.sizeOf_spec	
+Concrete.Interfaces.BackendKind.llvm.sizeOf_spec	
+Concrete.Interfaces.BackendKind.ofNat_ctorIdx	
+Concrete.Interfaces.Behavior.diverges.inj	
+Concrete.Interfaces.Behavior.diverges.injEq	propext
+Concrete.Interfaces.Behavior.diverges.sizeOf_spec	
+Concrete.Interfaces.Behavior.terminates.inj	
+Concrete.Interfaces.Behavior.terminates.injEq	propext
+Concrete.Interfaces.Behavior.terminates.sizeOf_spec	
+Concrete.Interfaces.Behavior.wrong.sizeOf_spec	
+Concrete.Interfaces.Block.mk.inj	
+Concrete.Interfaces.Block.mk.injEq	propext
+Concrete.Interfaces.Block.mk.sizeOf_spec	
+Concrete.Interfaces.BuildsBIR.refines	Quot.sound propext
+Concrete.Interfaces.CFG.mk.inj	
+Concrete.Interfaces.CFG.mk.injEq	propext
+Concrete.Interfaces.CFG.mk.sizeOf_spec	
+Concrete.Interfaces.CFGEdge.mk.inj	
+Concrete.Interfaces.CFGEdge.mk.injEq	propext
+Concrete.Interfaces.CFGEdge.mk.sizeOf_spec	
+Concrete.Interfaces.CheckDisposition.discharged.sizeOf_spec	
+Concrete.Interfaces.CheckDisposition.ofNat_ctorIdx	
+Concrete.Interfaces.CheckDisposition.residual.sizeOf_spec	
+Concrete.Interfaces.CheckpointSimulation.mk.inj	
+Concrete.Interfaces.CheckpointSimulation.mk.injEq	propext
+Concrete.Interfaces.CheckpointSimulation.mk.sizeOf_spec	
+Concrete.Interfaces.CheckpointSimulation.targetAdvance	
+Concrete.Interfaces.CheckpointSimulation.targetFinish	
+Concrete.Interfaces.CheckpointSimulation.targetInitial	
+Concrete.Interfaces.CoreInput.Execution._proof_1	Quot.sound propext
+Concrete.Interfaces.CoreInput.Execution._proof_2	Quot.sound propext
+Concrete.Interfaces.CoreInput.Execution._proof_3	Quot.sound propext
+Concrete.Interfaces.CoreInput.Execution._proof_4	Quot.sound propext
+Concrete.Interfaces.Edge.admission.sizeOf_spec	
+Concrete.Interfaces.Edge.buildBIR.sizeOf_spec	
+Concrete.Interfaces.Edge.buildSSA.sizeOf_spec	
+Concrete.Interfaces.Edge.elaborator.sizeOf_spec	
+Concrete.Interfaces.Edge.emitLCB.sizeOf_spec	
+Concrete.Interfaces.Edge.emitLLVM.sizeOf_spec	
+Concrete.Interfaces.Edge.lexer.sizeOf_spec	
+Concrete.Interfaces.Edge.lowerCore.sizeOf_spec	
+Concrete.Interfaces.Edge.lowerMemory.sizeOf_spec	
+Concrete.Interfaces.Edge.lowerUnchecked.sizeOf_spec	
+Concrete.Interfaces.Edge.parser.sizeOf_spec	
+Concrete.Interfaces.Edge.typing.sizeOf_spec	
+Concrete.Interfaces.ElabRefusal.diagnostic.inj	
+Concrete.Interfaces.ElabRefusal.diagnostic.injEq	propext
+Concrete.Interfaces.ElabRefusal.diagnostic.sizeOf_spec	
+Concrete.Interfaces.ElabRefusal.slice0.inj	
+Concrete.Interfaces.ElabRefusal.slice0.injEq	propext
+Concrete.Interfaces.ElabRefusal.slice0.sizeOf_spec	
+Concrete.Interfaces.ElabRefusal.unsupportedSlice.inj	
+Concrete.Interfaces.ElabRefusal.unsupportedSlice.injEq	propext
+Concrete.Interfaces.ElabRefusal.unsupportedSlice.sizeOf_spec	
+Concrete.Interfaces.FunctionSignature.mk.inj	
+Concrete.Interfaces.FunctionSignature.mk.injEq	propext
+Concrete.Interfaces.FunctionSignature.mk.sizeOf_spec	
+Concrete.Interfaces.ISA.aarch64.sizeOf_spec	
+Concrete.Interfaces.ISA.ofNat_ctorIdx	
+Concrete.Interfaces.ISA.x86_64.sizeOf_spec	
+Concrete.Interfaces.LCBInput.mk.inj	
+Concrete.Interfaces.LCBInput.mk.injEq	propext
+Concrete.Interfaces.LCBInput.mk.sizeOf_spec	
+Concrete.Interfaces.LLVMInput.mk.inj	
+Concrete.Interfaces.LLVMInput.mk.injEq	propext
+Concrete.Interfaces.LLVMInput.mk.sizeOf_spec	
+Concrete.Interfaces.LexRefusal.digitLimit.inj	
+Concrete.Interfaces.LexRefusal.digitLimit.injEq	propext
+Concrete.Interfaces.LexRefusal.digitLimit.sizeOf_spec	
+Concrete.Interfaces.LexRefusal.malformed.inj	
+Concrete.Interfaces.LexRefusal.malformed.injEq	propext
+Concrete.Interfaces.LexRefusal.malformed.sizeOf_spec	
+Concrete.Interfaces.LexRefusal.missingFile.inj	
+Concrete.Interfaces.LexRefusal.missingFile.injEq	propext
+Concrete.Interfaces.LexRefusal.missingFile.sizeOf_spec	
+Concrete.Interfaces.Literal.mk.inj	
+Concrete.Interfaces.Literal.mk.injEq	propext
+Concrete.Interfaces.Literal.mk.sizeOf_spec	
+Concrete.Interfaces.LocatedOp.mk.inj	
+Concrete.Interfaces.LocatedOp.mk.injEq	propext
+Concrete.Interfaces.LocatedOp.mk.sizeOf_spec	
+Concrete.Interfaces.LogicalFrame.mk.inj	
+Concrete.Interfaces.LogicalFrame.mk.injEq	propext
+Concrete.Interfaces.LogicalFrame.mk.sizeOf_spec	
+Concrete.Interfaces.LoweringLanguage.mk.inj	
+Concrete.Interfaces.LoweringLanguage.mk.injEq	propext
+Concrete.Interfaces.LoweringLanguage.mk.sizeOf_spec	
+Concrete.Interfaces.MIR.Occurrence.mk.inj	
+Concrete.Interfaces.MIR.Occurrence.mk.injEq	propext
+Concrete.Interfaces.MIR.Occurrence.mk.sizeOf_spec	
+Concrete.Interfaces.MIR.mk.inj	Quot.sound propext
+Concrete.Interfaces.MIR.mk.injEq	Quot.sound propext
+Concrete.Interfaces.MIR.mk.sizeOf_spec	Quot.sound propext
+Concrete.Interfaces.MIRInst.assign.inj	
+Concrete.Interfaces.MIRInst.assign.injEq	propext
+Concrete.Interfaces.MIRInst.assign.sizeOf_spec	
+Concrete.Interfaces.MIRInst.bind.inj	
+Concrete.Interfaces.MIRInst.bind.injEq	propext
+Concrete.Interfaces.MIRInst.bind.sizeOf_spec	
+Concrete.Interfaces.MIRInst.call.inj	
+Concrete.Interfaces.MIRInst.call.injEq	propext
+Concrete.Interfaces.MIRInst.call.sizeOf_spec	
+Concrete.Interfaces.MIRInst.destructure.inj	
+Concrete.Interfaces.MIRInst.destructure.injEq	propext
+Concrete.Interfaces.MIRInst.destructure.sizeOf_spec	
+Concrete.Interfaces.MIRInst.endLifetime.inj	
+Concrete.Interfaces.MIRInst.endLifetime.injEq	propext
+Concrete.Interfaces.MIRInst.endLifetime.sizeOf_spec	
+Concrete.Interfaces.MIRInst.op.inj	
+Concrete.Interfaces.MIRInst.op.injEq	propext
+Concrete.Interfaces.MIRInst.op.sizeOf_spec	
+Concrete.Interfaces.Memory.EndLocals.brecOn	Quot.sound propext
+Concrete.Interfaces.Memory.WriteParams.brecOn	Quot.sound propext
+Concrete.Interfaces.Memory.authorizeWrite.eq_1	Quot.sound propext
+Concrete.Interfaces.Memory.canEnd.eq_1	Quot.sound propext
+Concrete.Interfaces.Memory.canEnd_iff	Quot.sound propext
+Concrete.Interfaces.Memory.copyRead_iff	Quot.sound propext
+Concrete.Interfaces.Memory.copyRead_iff._simp_1_5	propext
+Concrete.Interfaces.Memory.mk.inj	Quot.sound propext
+Concrete.Interfaces.Memory.mk.injEq	Quot.sound propext
+Concrete.Interfaces.Memory.mk.sizeOf_spec	Quot.sound propext
+Concrete.Interfaces.Memory.moveRead_iff	Quot.sound propext
+Concrete.Interfaces.Memory.readValue.eq_1	Quot.sound propext
+Concrete.Interfaces.Memory.readValue.eq_2	Quot.sound propext
+Concrete.Interfaces.Memory.readValue.eq_3	Quot.sound propext
+Concrete.Interfaces.Memory.writeValue.eq_1	Quot.sound propext
+Concrete.Interfaces.Memory.write_authorized	Quot.sound propext
+Concrete.Interfaces.MemoryContinuation.mk.inj	
+Concrete.Interfaces.MemoryContinuation.mk.injEq	propext
+Concrete.Interfaces.MemoryContinuation.mk.sizeOf_spec	
+Concrete.Interfaces.MemoryFrame.mk.inj	
+Concrete.Interfaces.MemoryFrame.mk.injEq	propext
+Concrete.Interfaces.MemoryFrame.mk.sizeOf_spec	
+Concrete.Interfaces.MemoryInst.assign.inj	
+Concrete.Interfaces.MemoryInst.assign.injEq	propext
+Concrete.Interfaces.MemoryInst.assign.sizeOf_spec	
+Concrete.Interfaces.MemoryInst.beginLifetime.inj	
+Concrete.Interfaces.MemoryInst.beginLifetime.injEq	propext
+Concrete.Interfaces.MemoryInst.beginLifetime.sizeOf_spec	
+Concrete.Interfaces.MemoryInst.bind.inj	
+Concrete.Interfaces.MemoryInst.bind.injEq	propext
+Concrete.Interfaces.MemoryInst.bind.sizeOf_spec	
+Concrete.Interfaces.MemoryInst.call.inj	
+Concrete.Interfaces.MemoryInst.call.injEq	propext
+Concrete.Interfaces.MemoryInst.call.sizeOf_spec	
+Concrete.Interfaces.MemoryInst.destructure.inj	
+Concrete.Interfaces.MemoryInst.destructure.injEq	propext
+Concrete.Interfaces.MemoryInst.destructure.sizeOf_spec	
+Concrete.Interfaces.MemoryInst.endLifetime.inj	
+Concrete.Interfaces.MemoryInst.endLifetime.injEq	propext
+Concrete.Interfaces.MemoryInst.endLifetime.sizeOf_spec	
+Concrete.Interfaces.MemoryInst.op.inj	
+Concrete.Interfaces.MemoryInst.op.injEq	propext
+Concrete.Interfaces.MemoryInst.op.sizeOf_spec	
+Concrete.Interfaces.MemoryPlace.mk.inj	
+Concrete.Interfaces.MemoryPlace.mk.injEq	propext
+Concrete.Interfaces.MemoryPlace.mk.sizeOf_spec	
+Concrete.Interfaces.MemoryRead.copy.inj	
+Concrete.Interfaces.MemoryRead.copy.injEq	propext
+Concrete.Interfaces.MemoryRead.copy.sizeOf_spec	
+Concrete.Interfaces.MemoryRead.literal.inj	
+Concrete.Interfaces.MemoryRead.literal.injEq	propext
+Concrete.Interfaces.MemoryRead.literal.sizeOf_spec	
+Concrete.Interfaces.MemoryRead.move.inj	
+Concrete.Interfaces.MemoryRead.move.injEq	propext
+Concrete.Interfaces.MemoryRead.move.sizeOf_spec	
+Concrete.Interfaces.MemoryState.mk.inj	
+Concrete.Interfaces.MemoryState.mk.injEq	propext
+Concrete.Interfaces.MemoryState.mk.sizeOf_spec	
+Concrete.Interfaces.Observation.returned.inj	
+Concrete.Interfaces.Observation.returned.injEq	propext
+Concrete.Interfaces.Observation.returned.sizeOf_spec	
+Concrete.Interfaces.Observation.startupRefused.inj	
+Concrete.Interfaces.Observation.startupRefused.injEq	propext
+Concrete.Interfaces.Observation.startupRefused.sizeOf_spec	
+Concrete.Interfaces.Observation.trapped.inj	
+Concrete.Interfaces.Observation.trapped.injEq	propext
+Concrete.Interfaces.Observation.trapped.sizeOf_spec	
+Concrete.Interfaces.OperationCheck.mk.inj	
+Concrete.Interfaces.OperationCheck.mk.injEq	propext
+Concrete.Interfaces.OperationCheck.mk.sizeOf_spec	
+Concrete.Interfaces.PassFunctions.mk.inj	Quot.sound propext
+Concrete.Interfaces.PassFunctions.mk.injEq	Quot.sound propext
+Concrete.Interfaces.PassFunctions.mk.sizeOf_spec	Quot.sound propext
+Concrete.Interfaces.Pipeline.Validated.brecOn	
+Concrete.Interfaces.Pipeline.brecOn.eq	
+Concrete.Interfaces.Pipeline.done.sizeOf_spec	
+Concrete.Interfaces.Pipeline.endToEnd	Classical.choice Quot.sound propext
+Concrete.Interfaces.Pipeline.next.inj	
+Concrete.Interfaces.Pipeline.next.injEq	propext
+Concrete.Interfaces.Pipeline.next.sizeOf_spec	
+Concrete.Interfaces.Place.mk.inj	
+Concrete.Interfaces.Place.mk.injEq	propext
+Concrete.Interfaces.Place.mk.sizeOf_spec	
+Concrete.Interfaces.Profile.mk.inj	
+Concrete.Interfaces.Profile.mk.injEq	propext
+Concrete.Interfaces.Profile.mk.sizeOf_spec	
+Concrete.Interfaces.Profile.targetWF	propext
+Concrete.Interfaces.Read.copy.inj	
+Concrete.Interfaces.Read.copy.injEq	propext
+Concrete.Interfaces.Read.copy.sizeOf_spec	
+Concrete.Interfaces.Read.literal.inj	
+Concrete.Interfaces.Read.literal.injEq	propext
+Concrete.Interfaces.Read.literal.sizeOf_spec	
+Concrete.Interfaces.Read.move.inj	
+Concrete.Interfaces.Read.move.injEq	propext
+Concrete.Interfaces.Read.move.sizeOf_spec	
+Concrete.Interfaces.SSA.mk.inj	Quot.sound propext
+Concrete.Interfaces.SSA.mk.injEq	Quot.sound propext
+Concrete.Interfaces.SSA.mk.sizeOf_spec	Quot.sound propext
+Concrete.Interfaces.SSAAggregate.materialized.inj	
+Concrete.Interfaces.SSAAggregate.materialized.injEq	propext
+Concrete.Interfaces.SSAAggregate.materialized.sizeOf_spec	
+Concrete.Interfaces.SSAAggregate.register.inj	
+Concrete.Interfaces.SSAAggregate.register.injEq	propext
+Concrete.Interfaces.SSAAggregate.register.sizeOf_spec	
+Concrete.Interfaces.SSAInst.beginLifetime.inj	
+Concrete.Interfaces.SSAInst.beginLifetime.injEq	propext
+Concrete.Interfaces.SSAInst.beginLifetime.sizeOf_spec	
+Concrete.Interfaces.SSAInst.call.inj	
+Concrete.Interfaces.SSAInst.call.injEq	propext
+Concrete.Interfaces.SSAInst.call.sizeOf_spec	
+Concrete.Interfaces.SSAInst.destructure.inj	
+Concrete.Interfaces.SSAInst.destructure.injEq	propext
+Concrete.Interfaces.SSAInst.destructure.sizeOf_spec	
+Concrete.Interfaces.SSAInst.endLifetime.inj	
+Concrete.Interfaces.SSAInst.endLifetime.injEq	propext
+Concrete.Interfaces.SSAInst.endLifetime.sizeOf_spec	
+Concrete.Interfaces.SSAInst.load.inj	
+Concrete.Interfaces.SSAInst.load.injEq	propext
+Concrete.Interfaces.SSAInst.load.sizeOf_spec	
+Concrete.Interfaces.SSAInst.op.inj	
+Concrete.Interfaces.SSAInst.op.injEq	propext
+Concrete.Interfaces.SSAInst.op.sizeOf_spec	
+Concrete.Interfaces.SSAInst.store.inj	
+Concrete.Interfaces.SSAInst.store.injEq	propext
+Concrete.Interfaces.SSAInst.store.sizeOf_spec	
+Concrete.Interfaces.SSARead.literal.inj	
+Concrete.Interfaces.SSARead.literal.injEq	propext
+Concrete.Interfaces.SSARead.literal.sizeOf_spec	
+Concrete.Interfaces.SSARead.value.inj	
+Concrete.Interfaces.SSARead.value.injEq	propext
+Concrete.Interfaces.SSARead.value.sizeOf_spec	
+Concrete.Interfaces.SSAValue.mk.inj	
+Concrete.Interfaces.SSAValue.mk.injEq	propext
+Concrete.Interfaces.SSAValue.mk.sizeOf_spec	
+Concrete.Interfaces.Stage.mk.inj	
+Concrete.Interfaces.Stage.mk.injEq	propext
+Concrete.Interfaces.Stage.mk.sizeOf_spec	
+Concrete.Interfaces.StageFailure.invalidInput.inj	
+Concrete.Interfaces.StageFailure.invalidInput.injEq	propext
+Concrete.Interfaces.StageFailure.invalidInput.sizeOf_spec	
+Concrete.Interfaces.StageFailure.invalidLCBJob.inj	
+Concrete.Interfaces.StageFailure.invalidLCBJob.injEq	propext
+Concrete.Interfaces.StageFailure.invalidLCBJob.sizeOf_spec	
+Concrete.Interfaces.StageFailure.lcbLinkingUnavailable.sizeOf_spec	
+Concrete.Interfaces.StageFailure.resource.inj	
+Concrete.Interfaces.StageFailure.resource.injEq	propext
+Concrete.Interfaces.StageFailure.resource.sizeOf_spec	
+Concrete.Interfaces.StageFailure.unsupportedProfile.inj	
+Concrete.Interfaces.StageFailure.unsupportedProfile.injEq	propext
+Concrete.Interfaces.StageFailure.unsupportedProfile.sizeOf_spec	
+Concrete.Interfaces.StorageClass.materialized.sizeOf_spec	
+Concrete.Interfaces.StorageClass.ofNat_ctorIdx	
+Concrete.Interfaces.StorageClass.virtual.sizeOf_spec	
+Concrete.Interfaces.Terminator.branch.inj	
+Concrete.Interfaces.Terminator.branch.injEq	propext
+Concrete.Interfaces.Terminator.branch.sizeOf_spec	
+Concrete.Interfaces.Terminator.invalid.sizeOf_spec	
+Concrete.Interfaces.Terminator.jump.inj	
+Concrete.Interfaces.Terminator.jump.injEq	propext
+Concrete.Interfaces.Terminator.jump.sizeOf_spec	
+Concrete.Interfaces.Terminator.ret.inj	
+Concrete.Interfaces.Terminator.ret.injEq	propext
+Concrete.Interfaces.Terminator.ret.sizeOf_spec	
+Concrete.Interfaces.Terminator.trap.inj	
+Concrete.Interfaces.Terminator.trap.injEq	propext
+Concrete.Interfaces.Terminator.trap.sizeOf_spec	
+Concrete.Interfaces.TrapEntry.mk.inj	
+Concrete.Interfaces.TrapEntry.mk.injEq	propext
+Concrete.Interfaces.TrapEntry.mk.sizeOf_spec	
+Concrete.Interfaces.TrapIndex.mk.inj	
+Concrete.Interfaces.TrapIndex.mk.injEq	propext
+Concrete.Interfaces.TrapIndex.mk.sizeOf_spec	
+Concrete.Interfaces.instDecidableEqBackendKind._proof_1	
+Concrete.Interfaces.instDecidableEqBackendKind._proof_2	
+Concrete.Interfaces.instDecidableEqCheckDisposition._proof_1	
+Concrete.Interfaces.instDecidableEqCheckDisposition._proof_2	
+Concrete.Interfaces.instDecidableEqISA._proof_1	
+Concrete.Interfaces.instDecidableEqISA._proof_2	
+Concrete.Interfaces.instDecidableEqOperationCheck.decEq._proof_1	
+Concrete.Interfaces.instDecidableEqOperationCheck.decEq._proof_2	
+Concrete.Interfaces.instDecidableEqOperationCheck.decEq._proof_3	
+Concrete.Interfaces.instDecidableEqOperationCheck.decEq._proof_4	
+Concrete.Interfaces.instDecidableEqStorageClass._proof_1	
+Concrete.Interfaces.instDecidableEqStorageClass._proof_2	
+Concrete.Interfaces.instDecidableEqTrapIndex.decEq._proof_1	
+Concrete.Interfaces.instDecidableEqTrapIndex.decEq._proof_2	
+Concrete.Interfaces.registeredLCBEndToEnd	Classical.choice Quot.sound propext
 Concrete.Lex.Allowed.eq_1	
 Concrete.Lex.ByteError.invalidEscape.inj	
 Concrete.Lex.ByteError.invalidEscape.injEq	propext
@@ -2575,16 +2919,30 @@ _private.Concrete.Contracts.0.Concrete.Contracts.stderrBytes.match_1.eq_2
 _private.Concrete.Driver.Launcher.0.Concrete.Driver.Launcher.LLVMInputs.mk.inj	
 _private.Concrete.Driver.Launcher.0.Concrete.Driver.Launcher.LLVMInputs.mk.injEq	propext
 _private.Concrete.Driver.Launcher.0.Concrete.Driver.Launcher.LLVMInputs.mk.sizeOf_spec	
-_private.Concrete.Elab.0.Concrete.Elab.Rhs.add.inj	
-_private.Concrete.Elab.0.Concrete.Elab.Rhs.add.injEq	propext
-_private.Concrete.Elab.0.Concrete.Elab.Rhs.add.sizeOf_spec	
-_private.Concrete.Elab.0.Concrete.Elab.Rhs.atom.inj	
-_private.Concrete.Elab.0.Concrete.Elab.Rhs.atom.injEq	propext
-_private.Concrete.Elab.0.Concrete.Elab.Rhs.atom.sizeOf_spec	
-_private.Concrete.Elab.0.Concrete.Elab.State.mk.inj	
-_private.Concrete.Elab.0.Concrete.Elab.State.mk.injEq	propext
-_private.Concrete.Elab.0.Concrete.Elab.State.mk.sizeOf_spec	
-_private.Concrete.Elab.0.Concrete.Elab.bind_fresh	
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.Memory.loadBacking._proof_1	
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.Memory.loadBacking.match_3.eq_1	
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.Memory.loadBacking.match_3.eq_2	
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.Memory.readValue.match_4.eq_1	
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.Memory.readValue.match_4.eq_2	
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.Memory.readValue.match_4.eq_3	
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.hostedExecution._proof_1	
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.hostedExecution._proof_2	
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.hostedExecution._proof_3	
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.hostedExecution._proof_4	
+_private.Concrete.Interfaces.Pipeline.0.Concrete.Interfaces.Registry.mk.inj	Quot.sound propext
+_private.Concrete.Interfaces.Pipeline.0.Concrete.Interfaces.Registry.mk.injEq	Quot.sound propext
+_private.Concrete.Interfaces.Pipeline.0.Concrete.Interfaces.Registry.mk.sizeOf_spec	Quot.sound propext
+_private.Concrete.Interfaces.Pipeline.0.Concrete.Interfaces.compose	
+_private.Concrete.Interfaces.SurfaceElaboration.0.Concrete.Elab.Rhs.add.inj	
+_private.Concrete.Interfaces.SurfaceElaboration.0.Concrete.Elab.Rhs.add.injEq	propext
+_private.Concrete.Interfaces.SurfaceElaboration.0.Concrete.Elab.Rhs.add.sizeOf_spec	
+_private.Concrete.Interfaces.SurfaceElaboration.0.Concrete.Elab.Rhs.atom.inj	
+_private.Concrete.Interfaces.SurfaceElaboration.0.Concrete.Elab.Rhs.atom.injEq	propext
+_private.Concrete.Interfaces.SurfaceElaboration.0.Concrete.Elab.Rhs.atom.sizeOf_spec	
+_private.Concrete.Interfaces.SurfaceElaboration.0.Concrete.Elab.State.mk.inj	
+_private.Concrete.Interfaces.SurfaceElaboration.0.Concrete.Elab.State.mk.injEq	propext
+_private.Concrete.Interfaces.SurfaceElaboration.0.Concrete.Elab.State.mk.sizeOf_spec	
+_private.Concrete.Interfaces.SurfaceElaboration.0.Concrete.Elab.bind_fresh	
 _private.Concrete.Lex.0.Concrete.Lex.LosslessStream.mk.inj	Classical.choice Quot.sound propext
 _private.Concrete.Lex.0.Concrete.Lex.LosslessStream.mk.injEq	Classical.choice Quot.sound propext
 _private.Concrete.Lex.0.Concrete.Lex.LosslessStream.mk.sizeOf_spec	Classical.choice Quot.sound propext

@@ -1,5 +1,5 @@
 -- Emits one JSON object per line describing the ConcreteSpec library, for scripts/spec/lean_site.py.
--- Run from the repository root: `lake env lean scripts/spec/lean_site.lean > decls.jsonl`.
+-- Run from the repository root: `lake lean scripts/spec/lean_site.lean > decls.jsonl`.
 -- Every fact comes from the elaborated environment: module docs, declarations with their source
 -- ranges, doc comments, types, and the ConcreteSpec constants each one uses.
 import ConcreteSpecEvidence

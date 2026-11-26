@@ -1,4 +1,5 @@
 import ConcreteSpec.Spec.Slice1Checker
+import ConcreteSpec.Spec.Slice0Syntax
 
 /-!
 # The slice-0 fragment
@@ -29,40 +30,10 @@ literal or a known sum. So a checked `+` that could overflow is a known violatio
 and an accepted slice-0 program always exits, never traps (`slice0_exits`, `Proofs/Slice0.lean`).
 -/
 
-/-- A slice-0 atom: a decimal `u8` literal (a natural number; whether it fits `u8` is checked,
-ARITH-2) or a read of a local. -/
-inductive Atom where
-  | lit (n : Nat)
-  | var (x : Var)
-  deriving DecidableEq
-
-/-- A slice-0 expression: an atom, or checked `l + r` of two atoms (ARITH-3). -/
-inductive Expr where
-  | atom (a : Atom)
-  | add (l r : Atom)
-  deriving DecidableEq
-
-/-- `let x: u8 = e;` — the only slice-0 statement. -/
-structure Stmt where
-  x : Var
-  e : Expr
-  deriving DecidableEq
-
 /-- `fn main() -> u8 { body; return ret; }` with no structs. -/
 structure Program where
   body : List Stmt
   ret : Atom
-
-/-- An atom in Core: a literal is `u8`, a local is read with `copy` (`u8` is Copy). -/
-def Atom.toCore : Atom → ConcreteSpec.Atom
-  | .lit n => .int .u8 n
-  | .var x => .copy x
-
-def Expr.toCore : Expr → ConcreteSpec.Expr
-  | .atom a => .atom a.toCore
-  | .add l r => .add l.toCore r.toCore
-
-def Stmt.toCore (s : Stmt) : ConcreteSpec.Stmt := .let_ (.name s.x) (.scalar (.int .u8)) s.e.toCore
 
 /-- The slice-1 program a slice-0 program is: no declarations, the same body and return. -/
 def toCore (q : Program) : ConcreteSpec.Program :=

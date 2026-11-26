@@ -3,7 +3,7 @@
 
 Usage: lean_site.py DECLS.jsonl OUT_DIR
 
-DECLS.jsonl comes from `lake env lean scripts/spec/lean_site.lean`. Every page is generated from the
+DECLS.jsonl comes from `lake lean scripts/spec/lean_site.lean`. Every page is generated from the
 Lean sources and the elaborated environment: the module files themselves (doc comments render as
 prose, everything else as code), and for each declaration its statement, what it uses and which
 proofs use it. Nothing here is hand-written prose, so the view cannot drift from the sources. The

@@ -268,13 +268,24 @@ def bind (types : Var → Option Descriptor) (x : Var) (s : State) : Option Stat
       frames := { f with locals := (x, ⟨s.nextPlace⟩) :: f.locals } :: s.frames.tail }
     else none
 
+/-- The lifetime permission on exact owner identities, independent of their local names. -/
+def canDropPlaces (s : State) (ps : List Hybrid.Place) : Bool :=
+  s.slots.all (fun x => decide (x.place ∉ ps) || x.desc.copy || x.status == .moved) &&
+    s.loans.all (fun l => decide (l.root ∉ ps))
+
+/-- Remove ended owner identities and their frame bindings. Callers establish
+`canDropPlaces` before erasing. -/
+def erasePlaces (s : State) (ps : List Hybrid.Place) : State :=
+  {s with
+    slots := s.slots.filter (fun x => decide (x.place ∉ ps))
+    frames := s.frames.map fun f => {f with locals := f.locals.filter (fun e => decide (e.2 ∉ ps))}}
+
 /-- A local can leave scope only after its linear obligation is discharged and all its loans
 end. Copy permits duplication, and does not justify discarding a non-Copy value (Q3.8). -/
 def drop (xs : List Var) (s : State) : Option State := do
   let f ← s.frames.head?
   let ps := List.map Prod.snd (f.locals.filter fun e => decide (e.1 ∈ xs))
-  if s.slots.all (fun x => decide (x.place ∉ ps) || x.desc.copy || x.status == .moved) &&
-      s.loans.all (fun l => decide (l.root ∉ ps)) then
+  if canDropPlaces s ps then
     some { s with
       slots := s.slots.filter (fun x => decide (x.place ∉ ps))
       frames := { f with locals := f.locals.filter (fun e => decide (e.2 ∉ ps)) } :: s.frames.tail }

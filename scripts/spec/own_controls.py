@@ -19,7 +19,7 @@ evidence = re.sub(r"^import [^\n]+", "", evidence, flags=re.M)
 line_offset = source.count("\n")
 source += evidence
 ranges = json.loads(subprocess.check_output(
-    ["lake", "env", "lean", "scripts/spec/own_control_ranges.lean"], text=True))
+    ["lake", "lean", "scripts/spec/own_control_ranges.lean"], text=True))
 namespace = "ConcreteSpec.Core.Own.Examples"
 owner_observations = ["example_immediate_direct_owner_lending_is_live",
                       "example_deferred_registration_leaves_owner_reads_available"]
@@ -56,7 +56,7 @@ with tempfile.TemporaryDirectory(prefix="own-mutants-") as temporary:
         changed = source.replace(old, new)
         path = Path(temporary) / "Own.lean"
         path.write_text(changed)
-        result = subprocess.run(["lake", "env", "lean", str(path)],
+        result = subprocess.run(["lake", "lean", str(path)],
                                 capture_output=True, text=True)
         diagnostics = result.stdout + result.stderr
         errors = {int(line) for line in re.findall(r":(\d+):\d+: error:", diagnostics)}

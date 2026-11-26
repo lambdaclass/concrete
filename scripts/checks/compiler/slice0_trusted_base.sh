@@ -25,7 +25,7 @@ golden=tests/golden/slice0_trusted_base.txt
 # the bounded diagnostics) when Lean fails, times out, or prints more than 1 MiB.
 print_lean() {
   local rc=0
-  bounded_run -i /dev/null 600 -- "${capped[@]}" lake env lean "$1" >"$2.raw" 2>"$2.err" || rc=$?
+  bounded_run -i /dev/null 600 -- "${capped[@]}" lake lean "$1" >"$2.raw" 2>"$2.err" || rc=$?
   if [ "$rc" != 0 ]; then
     bounded_is_incomplete "$rc" && echo "slice0_trusted_base: $1: INCOMPLETE (timed out)" >&2
     head -c 20000 "$2.raw" "$2.err" >&2

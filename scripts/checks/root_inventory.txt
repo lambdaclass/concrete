@@ -40,6 +40,7 @@ docs/REVIEW.md
 docs/grammar
 docs/SELF_HOSTED_RUNNERS.md
 docs/archive
+docs/compiler
 docs/decisions.md
 docs/project
 docs/proposals
