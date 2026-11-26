@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# B0b closure gate. Run from the repository root inside nix develop.
+# B0b closure gate. Run inside nix develop.
 set -euo pipefail
-source scripts/checks/lib/gate_env.sh
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT_DIR/scripts/checks/lib/gate_env.sh"
+cd "$ROOT_DIR"
+command -v lake >/dev/null || { echo "error: nonvacuity needs Lean's lake on PATH" >&2; exit 2; }
 
 if (( $# > 1 )); then
   echo "usage: $0 [--controls]" >&2

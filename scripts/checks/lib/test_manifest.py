@@ -18,6 +18,13 @@ from typing import NamedTuple
 
 HEADER = ["id", "program", "expect", "slice"]
 ID_RE = re.compile(r"[a-z0-9_]+")
+CLI_CASES = {
+    "cli:invalid-backend",
+    "cli:invalid-path",
+    "cli:unknown-target",
+    "cli:native-helper-failure",
+    "cli:build-input-write-failure",
+}
 SLICE_RE = re.compile(r"[a-z0-9_]+")
 RULE_RE = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*(?:@[0-9]+)?")
 TRAP_KIND_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
@@ -57,14 +64,18 @@ def validate_expect(path, line, expect):
             and TRAP_KIND_RE.fullmatch(parts[1]) and re.fullmatch(r"[0-9]+", parts[3])):
         natural(path, line, parts[3])
         return
-    if (len(parts) >= 2 and parts[0] == "refuse" and RULE_RE.fullmatch(parts[1])
-            and all(parts[2:])):
-        return
-    if (len(parts) == 6 and parts[0] == "llvm" and parts[3:5] == ["lcb", "refuse"]
-            and parts[1] == "exit" and RULE_RE.fullmatch(parts[5])):
+    if len(parts) >= 3 and RULE_RE.fullmatch(parts[2]) and all(parts[3:]):
+        if parts[:2] == ["refuse", "1"]:
+            return
+        if parts[0] == "diagnostic" and parts[1] in ("2", "3", "4"):
+            return
+    if len(parts) >= 7 and parts[0:2] == ["llvm", "exit"] and parts[3:5] == ["lcb", "diagnostic"]:
         validate_expect(path, line, " ".join(parts[1:3]))
+        validate_expect(path, line, " ".join(parts[4:]))
         return
-    fail(path, line, f"invalid expect {expect!r}; use exit N, trap KIND site N, refuse CLASS [MESSAGE], or llvm exit N lcb refuse RULE-ID")
+    fail(path, line, f"invalid expect {expect!r}; use exit N, trap KIND site N, "
+         "refuse 1 CODE [MESSAGE], diagnostic STATUS CODE [MESSAGE], "
+         "or llvm exit N lcb diagnostic STATUS CODE [MESSAGE]")
 
 
 def validate_source(path, line, program, seen_sources):
@@ -133,12 +144,14 @@ def parse(path, text):
             seen_bir[name] = line_number
         elif program.startswith("con:"):
             validate_source(path, line_number, program, seen_sources)
-        else:
-            fail(path, line_number, f"invalid program {program!r}; expected bir: or con:")
+        elif program not in CLI_CASES:
+            fail(path, line_number, f"invalid program {program!r}; expected bir:, con: or a known cli: case")
         validate_expect(path, line_number, expect)
         if program.startswith("bir:") and expect.startswith("refuse "):
             fail(path, line_number, f"bir: row {ident!r} cannot use refuse; expected exit or trap")
-        if program.startswith("bir:") and expect.startswith("llvm "):
+        if program.startswith("cli:") != expect.startswith("diagnostic "):
+            fail(path, line_number, "standalone diagnostic expectations require a cli: case")
+        if not program.startswith("con:") and expect.startswith("llvm "):
             fail(path, line_number, "backend-specific CLI expectations require a con: source")
         if not SLICE_RE.fullmatch(slice_name):
             fail(path, line_number, f"invalid slice {slice_name!r}; expected [a-z0-9_]+")
@@ -170,19 +183,25 @@ def self_test():
         (tests / "slice0" / "dangling.con").symlink_to(tests / "slice0" / "missing.con")
         valid = ("id\tprogram\texpect\tslice\n"
                  "a\tbir:answer\texit 42\tslice0\n"
-                 "b\tcon:tests/slice0/ok.con\trefuse SYN-5@1\tslice0\n")
+                 "b\tcon:tests/slice0/ok.con\trefuse 1 SYN-5@1\tslice0\n")
         assert len(parse(tests / "manifest.tsv", valid)) == 2
-        split = valid.replace("refuse SYN-5@1", "llvm exit 42 lcb refuse INTERNAL")
+        split = valid.replace("refuse 1 SYN-5@1", "llvm exit 42 lcb diagnostic 2 BACKEND-LIMIT")
         assert len(parse(tests / "manifest.tsv", split)) == 2
+        cli = "c\tcli:invalid-backend\tdiagnostic 3 USAGE\tslice0\n"
+        assert len(parse(tests / "manifest.tsv", valid + cli)) == 3
         bad = [
+            valid + cli.replace("diagnostic 3", "diagnostic 0"),
+            valid + cli.replace("diagnostic 3 USAGE", "exit 3"),
+            valid + cli.replace("invalid-backend", "unknown-case"),
+            valid.replace("refuse 1", "refuse 2"),
             split.replace("exit 42 lcb", "exit 256 lcb"),
-            valid + "c\tbir:other\tllvm exit 42 lcb refuse INTERNAL\tslice0\n",
+            valid + "c\tbir:other\tllvm exit 42 lcb diagnostic 2 BACKEND-LIMIT\tslice0\n",
             valid + "a\tbir:other\texit 0\tslice0\n",
             valid + "c\tbir:other\texit 256\tslice0\n",
             valid + "c\tbir:other\ttrap foo\tslice0\n",
             valid + "c\tbir:other\ttrap arithmeticOverflow site 0\n",
             valid + "c\tbir:answer\texit 0\tslice0\n",
-            valid + "c\tbir:other\trefuse SYN-5\tslice0\n",
+            valid + "c\tbir:other\trefuse 1 SYN-5\tslice0\n",
             valid + "c\tcon:tests/slice0/missing.con\texit 0\tslice0\n",
             valid + "c\tcon:tests/slice0/link.con\texit 0\tslice0\n",
             valid + "c\tcon:tests/slice0/dangling.con\texit 0\tslice0\n",

@@ -326,3 +326,43 @@ above; the harness owns its commit. Measured source SHA-256 values:
 
 - `local_identity.py`: `b8c482adb88553bfe4d0e951b203fd63c626fde7c12a65f473c763af7d6eef72`
 - `local_identity.lean`: `a7ef755d42ab43c092d87f8295af2066613a1bbd510c00ed254833be73c83a39`
+
+## R-0700 Law applicability recovery
+
+Run `scripts/proofs/nonvacuity.sh` inside `nix develop` for the B0b audit or
+pass `--controls` for the control suite. The audit compares the source tree
+with the imported specification modules, counts authored `Law` theorems, and
+kernel-compares each registered theorem's type with the derived joint
+applicability proposition. It reports missing registrations and refuses shapes
+with no supported applicability interpretation. The full audit is required for
+B0b and remains open in [ISS-0104](../../ISSUES.tsv).
+
+The exact closed empty-list store, wildcard, combined, and trap counterfeits
+from `fixtures/N2-Typed-Contracts.lean` at archived revision
+`8563ea20158be606aad867dac3f798b5dd1ef1b3` are runnable controls in
+`nonvacuity.lean`. Reduction could erase the unselected branch and accept
+`True` as a witness, so applicability checks the original match form and
+reports unsupported branch selection. Nested conjunctions and existentials
+preserve their positive telescopes. A biconditional requires both antecedents
+and their nested premises. Disjunctions with branch premises, conditional
+results and opaque contract shapes require further coverage work.
+
+The old projection fixtures share `∀ n, (n < n + 1 ∧ True) → n < n + 1`.
+Its premises are jointly realizable at `n = 2`. The controls replay the
+archived projection, carrier, cast, matcher and recursive proof terms as
+candidate evidence and reject their types. The control with the explicit
+existential witness for that same telescope passes. Detecting whether the
+Law's own proof obtains its conclusion through the projected premise is a
+separate proof-body provenance obligation under R-0219. The old forged-metadata,
+fieldless-subject and erased-application probes also concern proof or subject
+provenance. The applicability audit derives the obligation from the imported
+Law's type and gives examples, subject metadata and reserved example names no
+authority to change it.
+
+The N8a let and helper-chain controls offer exact existential types and are
+refused because their proofs reach the impossible supplier axiom. For witnesses
+with standard axioms, the audit reports dependencies reachable from the
+statement and any additional theorem dependencies. Overlap between type and proof dependencies leaves exclusive type provenance unresolved.
+Acceptance remains held pending the owner question on primitives. The old
+Law/Planted supplied-contradiction policy and proof-body analysis budgets
+also remain open.
