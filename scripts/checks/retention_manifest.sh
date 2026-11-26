@@ -3,7 +3,7 @@
 #
 # RETENTION.tsv is written before the legacy/ move so that the move, and later deletions under
 # legacy/, cannot drop a corpus, a ledger, the site or an archived service by omission. This gate
-# holds it to that, through scripts/land/retention.py (the one owner of the rule): the header is
+# holds it to that, through scripts/checks/lib/retention.py (the one owner of the rule): the header is
 # exact; every row has six non-empty fields and one of the four dispositions; no path is listed
 # twice (so a specific row inside a broad one governs unambiguously, by longest prefix); and every
 # tracked file of the tree has a governing row. Each leg has a negative control against a mutated
@@ -13,7 +13,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR" || exit 2
 [ -f RETENTION.tsv ] || { echo "FATAL: RETENTION.tsv missing" >&2; exit 2; }
-RP="scripts/land/retention.py"
+RP="scripts/checks/lib/retention.py"
 TMP="$(mktemp -d)" || exit 2
 trap 'rm -rf "$TMP"' EXIT
 PASS=0; FAIL=0

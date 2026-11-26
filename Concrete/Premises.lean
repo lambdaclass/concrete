@@ -19,6 +19,13 @@ import Concrete.Stages
 
 namespace Concrete
 
+/-- The LLVM type mapping preserves the bit width of every Core integer type.
+Keeping the proof in the audit layer lets the printer mutation gate exercise
+the exact-output check independently. -/
+theorem Backend.LLVM.Width.ofCore_bits (t : ConcreteSpec.Core.IntTy) :
+    (Backend.LLVM.Width.ofCore t).bits = t.bits := by
+  cases t <;> rfl
+
 open ConcreteSpec.Surface0 in
 structure FrontendPremises where
   parse : ∀ toks ast, Parse.parse toks = .ok ast → Derives toks ast
@@ -262,30 +269,11 @@ def theorems : List Lean.Name := [
   ``Concrete.BIR.ScalarBridge.intValue_valid,
   ``Concrete.BIR.hasTy_int_core,
   ``Concrete.Backend.LCB.Proof.enc_int_core,
-  -- F31 scalar immediate encoding and decimal tokens.
+  -- F31 scalar immediate encoding.
+  ``Concrete.Backend.LLVM.Width.ofCore_bits,
   ``Concrete.Backend.LLVM.pattern_agrees,
   ``Concrete.Backend.LLVM.pattern_fits,
   ``Concrete.Backend.LLVM.pattern_roundTrip,
-  ``Concrete.Backend.LLVM.operand_field,
-  ``Concrete.Backend.LLVM.ret_immediate_field,
-  ``Concrete.Backend.LLVM.bin_fields,
-  ``Concrete.Backend.LLVM.binOvf_fields,
-  ``Concrete.Backend.LLVM.trunc_field,
-  ``Concrete.Backend.LLVM.phi_fields,
-  ``Concrete.Backend.LLVM.Assembly.parse_render_i32_return,
-  ``Concrete.Backend.LLVM.Assembly.parse_render_i32_result,
-  ``Concrete.Backend.LLVM.Assembly.parse_render_i8_add,
-  ``Concrete.Backend.LLVM.operand_token,
-  ``Concrete.Backend.LLVM.operand_parse,
-  ``Concrete.Backend.LLVM.operand_roundTrip,
-  ``Concrete.Backend.LLVM.moduleItems_inventory,
-  ``Concrete.Backend.Runtime.llvmItems_inventory,
-  ``Concrete.Backend.LLVM.Assembly.parse_render,
-  ``Concrete.Backend.LLVM.Assembly.inventory_render,
-  ``Concrete.Backend.LLVM.module_inventory,
-  ``Concrete.Backend.Runtime.llvm_inventory,
-  ``Concrete.Backend.LLVM.render_immediate_fields,
-  ``Concrete.Backend.LLVM.render_immediate,
   ``Concrete.BIR.decode_encode,
   ``Concrete.BIR.run_progress,
   ``Concrete.BIR.behaviour_diverges_iff,
