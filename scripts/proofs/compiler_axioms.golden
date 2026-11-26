@@ -897,6 +897,7 @@ Concrete.CFG.check.congr_simp	Quot.sound propext
 Concrete.CFG.check.eq_1	propext
 Concrete.CFG.checkSpan.eq_1	Quot.sound propext
 Concrete.CFG.checkSpan_iff	Quot.sound propext
+Concrete.CFG.checkSpan_iff._simp_1_4	Quot.sound propext
 Concrete.CFG.check_iff	Quot.sound propext
 Concrete.CFG.check_iff._simp_1_8	Quot.sound propext
 Concrete.CFG.check_iff._simp_1_9	Quot.sound propext
@@ -2115,12 +2116,12 @@ Concrete.ManifestRefusal.read.injEq	propext
 Concrete.ManifestRefusal.read.sizeOf_spec	
 Concrete.ManifestRefusal.schemaPending.sizeOf_spec	
 Concrete.ManifestRefusal.size.sizeOf_spec	
-Concrete.Memory.Layout.mk.inj	
-Concrete.Memory.Layout.mk.injEq	propext
-Concrete.Memory.Layout.mk.sizeOf_spec	
 Concrete.Memory.MissingLayout.mk.inj	
 Concrete.Memory.MissingLayout.mk.injEq	propext
 Concrete.Memory.MissingLayout.mk.sizeOf_spec	
+Concrete.Memory.PreparedGraphs.mk.inj	
+Concrete.Memory.PreparedGraphs.mk.injEq	propext
+Concrete.Memory.PreparedGraphs.mk.sizeOf_spec	
 Concrete.Memory.Program.mk.inj	
 Concrete.Memory.Program.mk.injEq	propext
 Concrete.Memory.Program.mk.sizeOf_spec	
@@ -2142,10 +2143,7 @@ Concrete.Memory.escapes.eq_1	Quot.sound propext
 Concrete.Memory.escapes_iff	Quot.sound propext
 Concrete.Memory.escapes_iff._simp_1_3	Quot.sound propext
 Concrete.Memory.escapes_iff._simp_1_4	Quot.sound propext
-Concrete.Memory.instDecidableEqLayout.decEq._proof_1	
-Concrete.Memory.instDecidableEqLayout.decEq._proof_2	
-Concrete.Memory.instDecidableEqLayout.decEq._proof_3	
-Concrete.Memory.lower.eq_1	propext
+Concrete.Memory.lower.eq_1	Quot.sound propext
 Concrete.Memory.lower_admitted_correct	Quot.sound propext
 Concrete.Memory.lower_correct	Quot.sound propext
 Concrete.Memory.lower_unchecked_correct	Quot.sound propext
@@ -2297,6 +2295,7 @@ Concrete.instDecidableEqRefusal.decEq._proof_6
 Concrete.instDecidableEqRefusal.decEq._proof_7	
 Concrete.instDecidableEqRefusal.decEq._proof_8	
 Concrete.instDecidableEqRefusal.decEq._proof_9	
+ConcreteSpec.Core.SourcePathSpan.Project.fileAt.eq_1	Quot.sound propext
 ConcreteSpec.Core.inRangeOr.eq_1	propext
 ConcreteSpec.Surface0.ByteEscape.eq_1	
 ConcreteSpec.Surface0.DigitsAccepted.eq_1	propext
@@ -3037,6 +3036,7 @@ _private.Concrete.Memory.0.Concrete.Memory.reinitialize_without_loan	Quot.sound 
 _private.Concrete.Memory.0.Concrete.Memory.runFrom.match_1.eq_1	
 _private.Concrete.Memory.0.Concrete.Memory.runFrom.match_1.eq_2	
 _private.Concrete.Memory.0.Concrete.Memory.takesAddress_iff	Quot.sound propext
+_private.Concrete.Memory.0.Concrete.Memory.u8LayoutQuery_succeeds	Quot.sound propext
 _private.Concrete.Memory.0.Option.bind.match_1.eq_1	
 _private.Concrete.Memory.0.Option.bind.match_1.eq_2	
 _private.Concrete.Memory.Lowering.0.Concrete.Interfaces.Memory.readValue.match_1.eq_1	propext
@@ -3205,7 +3205,7 @@ _private.Concrete.Stages.0.Concrete.Stages.compile.match_3.eq_1	Quot.sound prope
 _private.Concrete.Stages.0.Concrete.Stages.compile.match_3.eq_2	Quot.sound propext
 _private.Concrete.Stages.0.Concrete.Stages.edges_of_run	Classical.choice Quot.sound propext
 _private.Concrete.Stages.0.Concrete.Stages.lex.eq_1	Classical.choice Quot.sound propext
-_private.Concrete.Stages.0.Concrete.Stages.memory.eq_1	propext
+_private.Concrete.Stages.0.Concrete.Stages.memory.eq_1	Quot.sound propext
 _private.Concrete.Stages.0.Concrete.Stages.stages.eq_1	Classical.choice Quot.sound propext
 _private.Concrete.Stages.0.Except.map.match_1.eq_1	
 _private.Concrete.Stages.0.Except.map.match_1.eq_2	

@@ -258,19 +258,3 @@ registered boundary.
 ISS-0114 tracks indexed type-family
 inspection in the semantic-parameter audit. ISS-0115 tracks aligning
 intermediate slice domains with production backend coverage before cutover.
-
-### Fix (b) hand-offs
-
-- ISS-XXXX tracks the MIR-to-Memory execution proof over the prepared typed
-  graph. Complete lifetime placement and prove representation preservation
-  for live roots, initialized subtrees, and the suspended frames used by early
-  calls. Supply the matching termination and divergence arguments before
-  registering the pass.
-- ISS-XXXX tracks deriving materialized nominal layouts from the integrated
-  spec and qualifying empty linear construction and consumption through the
-  full MIR-to-Memory edge.
-- ISS-XXXX tracks standalone SSA construction and execution preservation for
-  promotion, including typed block arguments and retained materialized roots.
-- ISS-XXXX tracks fix (a)'s registration of the Memory and SSA handoff
-  checks and the atomic retirement of their provisional slice-0 entry
-  points and carriers at production cutover.

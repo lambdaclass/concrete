@@ -50,12 +50,12 @@ def checkSpan (project : Project) (span : FileSpan) : Bool :=
   if hr : span.startOffset ≤ span.endOffset then
     if hl : 0 < span.line then
       if hc : 0 < span.col then
-        match project.files[span.file.index]? with
+        match project.fileAt span.file with
         | none => false
         | some file =>
           let specSpan : Span :=
             ⟨span.file, span.startOffset, span.endOffset, hr, span.line, span.col, hl, hc⟩
-          decide (specSpan.LocationOk file.source)
+          file.matchesLocation specSpan
       else false
     else false
   else false
@@ -74,7 +74,8 @@ theorem checkSpan_iff (project : Project) (span : FileSpan) :
           · simp
           · rename_i file lookup
             intro valid
-            exact ⟨_, file, lookup, rfl, of_decide_eq_true valid, rfl, rfl, rfl, rfl⟩
+            refine ⟨_, file, ?_, rfl, (file.matchesLocation_iff _).mp valid, rfl, rfl, rfl, rfl⟩
+            simpa [Project.fileAt, Project.files] using lookup
         · simp
       · simp
     · simp
@@ -82,7 +83,10 @@ theorem checkSpan_iff (project : Project) (span : FileSpan) :
     have hr : span.startOffset ≤ span.endOffset := by rw [start, ending]; exact specSpan.range_ok
     have hl : 0 < span.line := by rw [line]; exact specSpan.line_pos
     have hc : 0 < span.col := by rw [col]; exact specSpan.col_pos
-    simp only [checkSpan, dite_eq_left hr, dite_eq_left hl, dite_eq_left hc, lookup, decide_eq_true_eq]
+    have found : project.fileAt span.file = some file := by
+      simpa [Project.fileAt, Project.files] using lookup
+    simp only [checkSpan, dite_eq_left hr, dite_eq_left hl, dite_eq_left hc, found,
+      File.matchesLocation_iff]
     cases specSpan
     simp_all [Span.LocationOk, EndInSource, LineMatches, ColumnMatches]
 

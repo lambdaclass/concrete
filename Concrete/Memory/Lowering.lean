@@ -103,32 +103,45 @@ private theorem classifyLocals_keys (mir : MIR lang profile) (fn : FnId)
   simp only [classifyLocals, List.map_map]
   rfl
 
-/-- Prepare the physical storage annotations for the typed CFG. Lifetime
-placement and the execution simulation are separate obligations. -/
+/-- Storage-annotated CFGs awaiting lifetime placement. The source MIR
+still owns the project, entry and signatures at this point. -/
+structure PreparedGraphs (lang : LoweringLanguage language.operands.Ty) (profile : Profile) where
+  functions : AList FnId (LocalTypes language.operands.Ty × MemoryGraph lang)
+  storage : AList FnId (AList PlaceId StorageClass)
+  layouts : AList FnId (AList PlaceId ConcreteSpec.StageInterface.Layout)
+
 def prepareGraph (mir : MIR lang profile) :
-    Except (MissingLayout language.operands.Ty) (Interfaces.Memory lang profile) := do
+    Except (MissingLayout language.operands.Ty) (PreparedGraphs lang profile) := do
   let view := mir.logicalView
   let classes := classifyLocals (language := language) mir
   let layouts ← view.functions.mapM fun (fn, locals, _) => do
     return (fn, ← rootLayouts mir fn locals)
-  return {view with
+  return {
     functions := List.map (fun (fn, locals, graph) =>
       (fn, locals, classifyGraph (classes fn locals) graph)) view.functions
     storage := List.map (fun (fn, locals, _) => (fn, classes fn locals)) view.functions
     layouts}
 
-theorem prepareGraph_origins {mir : MIR lang profile} {memory : Interfaces.Memory lang profile}
-    (prepared : prepareGraph (language := language) mir = .ok memory) :
-    memory.origins = mir.logicalView.origins := by
+theorem prepareGraph_origins {mir : MIR lang profile} {graphs : PreparedGraphs lang profile}
+    (prepared : prepareGraph (language := language) mir = .ok graphs) :
+    (graphs.functions.flatMap fun (_, _, graph) => graph.origins Terminator.origins) =
+      mir.logicalView.origins := by
   simp only [prepareGraph, bind, Except.bind] at prepared
   split at prepared
   · contradiction
   · simp only [pure, Except.pure, Except.ok.injEq] at prepared
-    subst memory
+    subst graphs
     simp only [Interfaces.Memory.origins, List.flatMap_map, classifyGraph_origins]
 
-theorem prepareGraph_promotion {mir : MIR lang profile} {memory : Interfaces.Memory lang profile}
-    (prepared : prepareGraph (language := language) mir = .ok memory)
+/-- Lifetime placement can change the instructions without changing the
+declared locals or their classification. These are the only target fields
+the promotion contract reads. -/
+theorem prepareGraph_promotion {mir : MIR lang profile} {graphs : PreparedGraphs lang profile}
+    {memory : Interfaces.Memory lang profile}
+    (prepared : prepareGraph (language := language) mir = .ok graphs)
+    (sameStorage : memory.storage = graphs.storage)
+    (retainsLocals : ∀ fn locals graph, (fn, locals, graph) ∈ graphs.functions →
+      ∃ placed, (fn, locals, placed) ∈ memory.functions)
     (functionsUnique : (List.map Prod.fst mir.functions).Nodup)
     (localsUnique : ∀ fn locals graph, (fn, locals, graph) ∈ mir.functions →
       (List.map Prod.fst locals).Nodup) :
@@ -137,7 +150,9 @@ theorem prepareGraph_promotion {mir : MIR lang profile} {memory : Interfaces.Mem
   split at prepared
   · contradiction
   · simp only [pure, Except.pure, Except.ok.injEq] at prepared
-    subst memory
+    subst graphs
+    unfold PromotionSound
+    rw [sameStorage]
     constructor
     · intro fn locals graph member root ty declared
       let classes := classifyLocals (language := language) mir fn locals
@@ -166,8 +181,10 @@ theorem prepareGraph_promotion {mir : MIR lang profile} {memory : Interfaces.Mem
         rw [AList.map]
         exact ⟨_, List.mem_map_of_mem member⟩
       obtain ⟨logicalGraph, logicalMember⟩ := logicalMember
-      refine ⟨ty, locals, graph, locals, classifyGraph (classifyLocals mir sourceFn locals) logicalGraph,
-        member, declared, List.mem_map_of_mem logicalMember, declared,
+      obtain ⟨placed, placedMember⟩ := retainsLocals sourceFn locals
+        (classifyGraph (classifyLocals mir sourceFn locals) logicalGraph)
+        (List.mem_map_of_mem logicalMember)
+      refine ⟨ty, locals, graph, locals, placed, member, declared, placedMember, declared,
         (storageClass_virtual_iff mir sourceFn sourceRoot ty).mp classified⟩
 
 end
@@ -204,8 +221,36 @@ example : prepareGraph (language := sliceLanguage slice1) nominalRootControl =
 private abbrev controlLang := sliceLoweringLanguage slice1
 private abbrev u8Ty : (sliceLanguage slice1).operands.Ty := .inl (.scalar (.int .u8))
 
+private def controlOrigin : Origin :=
+  ⟨⟨0⟩, ⟨⟨0⟩, 0, 2, 1, 1⟩, ⟨.function controlFn, ⟨[]⟩⟩⟩
+
+private def bindReturnControl : MIR controlLang profileControl :=
+  let root : Place _ u8Ty := ⟨⟨0⟩, []⟩
+  { nominalRootControl with
+    signatures := [(controlFn, ⟨[], some u8Ty⟩)]
+    functions := [(controlFn, [(⟨0⟩, u8Ty)],
+      ⟨⟨0⟩, #[⟨⟨0⟩, [], [⟨controlOrigin, .bind root (.literal ⟨[42]⟩)⟩],
+        .ret (some ⟨u8Ty, .copy root⟩), []⟩]⟩)] }
+
+-- Preparation retains the bind and return, but its success cannot supply a
+-- program to the frozen execution or handoff contracts.
+example : True := by
+  fail_if_success
+    have handoff : Except (MissingLayout (sliceLanguage slice1).operands.Ty)
+        (Interfaces.Memory controlLang profileControl) :=
+      prepareGraph (language := sliceLanguage slice1) bindReturnControl
+  trivial
+
+example :
+    let root : MemoryPlace _ u8Ty := ⟨⟨⟨0⟩, []⟩, .virtual⟩
+    (prepareGraph (language := sliceLanguage slice1) bindReturnControl).map
+      (fun prepared => prepared.functions) =
+      .ok [(controlFn, [(⟨0⟩, u8Ty)],
+        ⟨⟨0⟩, #[⟨⟨0⟩, [], [⟨controlOrigin, .bind root (.literal ⟨[42]⟩)⟩],
+          .ret (some ⟨u8Ty, .copy root⟩), []⟩]⟩)] := by
+  with_unfolding_all rfl
+
 private def layoutControl : MIR controlLang profileControl :=
-  let origin : Origin := ⟨⟨0⟩, ⟨⟨0⟩, 0, 2, 1, 1⟩, ⟨.function controlFn, ⟨[]⟩⟩⟩
   let localRoot : Place _ u8Ty := ⟨⟨0⟩, []⟩
   let addressed : Place _ u8Ty := ⟨⟨1⟩, []⟩
   let probe : MIRInst controlLang := .op (opcode := .read) localRoot () .nil []
@@ -213,13 +258,26 @@ private def layoutControl : MIR controlLang profileControl :=
   { nominalRootControl with
     signatures := [(controlFn, ⟨[], some u8Ty⟩)]
     functions := [(controlFn, [(⟨0⟩, u8Ty), (⟨1⟩, u8Ty)],
-      ⟨⟨0⟩, #[⟨⟨0⟩, [], [⟨origin, probe⟩], .ret (some ⟨u8Ty, .copy localRoot⟩), []⟩]⟩)] }
+      ⟨⟨0⟩, #[⟨⟨0⟩, [], [⟨controlOrigin, probe⟩], .ret (some ⟨u8Ty, .copy localRoot⟩), []⟩]⟩)] }
 
 example :
     (prepareGraph (language := sliceLanguage slice1) layoutControl).map
       (fun memory => (memory.storage, memory.layouts)) =
       .ok ([(controlFn, [(⟨0⟩, .virtual), (⟨1⟩, .materialized)])],
         [(controlFn, [(⟨1⟩, ⟨1, 1⟩)])]) := by with_unfolding_all rfl
+
+example :
+    (prepareGraph (language := sliceLanguage slice1) layoutControl).map
+      (fun prepared => do
+        let (_, _, graph) ← prepared.functions.head?
+        let block ← graph.blocks[0]?
+        let op ← block.body.head?
+        match op.instruction with
+        | .op dst _ _ _ addresses =>
+          some (dst.storage, addresses.map fun address => address.2.storage)
+        | _ => none) =
+      .ok (some (.virtual, [.materialized])) := by
+  with_unfolding_all rfl
 
 /-- A declared nominal root cannot be retained by a valid lowering while the
 frozen spec layout is absent. Promotion cannot supply a virtual fallback. -/

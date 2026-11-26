@@ -5,19 +5,23 @@ import ConcreteSpec.Proofs.Basics
 
 namespace Concrete.Memory
 
-/-- Each place lives in its own logical allocation. Slice 0 stores one byte at offset zero. -/
-structure Layout where
-  size : Nat
-  alignment : Nat
-  deriving DecidableEq, Repr
+private def u8LayoutQuery : Option ConcreteSpec.StageInterface.Layout :=
+  (ConcreteSpec.StageInterface.sliceLanguage ConcreteSpec.StageInterface.slice0).layout
+    ConcreteSpec.Core.linuxX8664 (.inl (.scalar (.int .u8)))
 
-def u8Layout : Layout :=
-  ⟨ConcreteSpec.Core.IntTy.byteSize .u8,
-    ConcreteSpec.Core.Slice0Layout.linuxX8664Profile.intAlign .u8⟩
+private theorem u8LayoutQuery_succeeds : u8LayoutQuery.isSome := by decide
+
+def u8Layout : ConcreteSpec.StageInterface.Layout :=
+  u8LayoutQuery.get u8LayoutQuery_succeeds
+
+example :
+    (ConcreteSpec.StageInterface.sliceLanguage ConcreteSpec.StageInterface.slice0).layout
+      ConcreteSpec.Core.linuxX8664 (.inl (.scalar (.int .u8))) = some u8Layout := by
+  with_unfolding_all rfl
 
 structure Slot where
   id : ConcreteSpec.Var
-  layout : Layout
+  layout : ConcreteSpec.StageInterface.Layout
 
 /-- Store to a complete slot. The local operands of the RHS read their complete slots.
 The addition retains its normal and exceptional outcomes. -/
