@@ -18,11 +18,19 @@ from typing import NamedTuple
 
 HEADER = ["id", "program", "expect", "slice"]
 ID_RE = re.compile(r"[a-z0-9_]+")
+CLI_CASES = {
+    "cli:invalid-backend",
+    "cli:invalid-path",
+    "cli:unknown-target",
+    "cli:native-helper-failure",
+    "cli:build-input-write-failure",
+}
 SLICE_RE = re.compile(r"[a-z0-9_]+")
 RULE_RE = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*@[1-9][0-9]*")
 TRAP_KINDS = frozenset(("arithmeticOverflow", "division_by_zero", "invalid_shift",
                         "out_of_bounds", "invalid_range", "abort"))
 ORIGIN_RE = re.compile(r"([0-9]+):([0-9]+):([1-9][0-9]*):([1-9][0-9]*)")
+CLI_CODE_RE = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*")
 LABEL_RE = re.compile(r"[a-z][a-z0-9_]*")
 REFUSAL_KINDS = frozenset(("unreachable_statement",))
 PENDING_REFUSALS = frozenset(("syntax", "unsupported_form", "checker"))
@@ -124,9 +132,14 @@ def validate_expect(path, line, expect):
                     validate_origin(path, line, location)
         case ["pending-refusal", kind] if kind in PENDING_REFUSALS:
             pass
-        case ["llvm", "exit", status, "lcb", "resource", resource, bound] if (
-                LABEL_RE.fullmatch(resource) and re.fullmatch(r"[1-9][0-9]*", bound)):
-            natural(path, line, bound)
+        case ["diagnostic", status, code, *message] if (
+                status in ("2", "3", "4") and CLI_CODE_RE.fullmatch(code) and all(message)):
+            pass
+        case ["llvm", "exit", status, "lcb", "resource", resource, bound, measured] if (
+                LABEL_RE.fullmatch(resource) and re.fullmatch(r"[1-9][0-9]*", bound)
+                and re.fullmatch(r"[1-9][0-9]*", measured)):
+            if natural(path, line, measured) <= natural(path, line, bound):
+                fail(path, line, "resource measurement must exceed the bound")
             validate_expect(path, line, f"exit {status} -")
         case _:
             fail(path, line, f"invalid expect {expect!r}")
@@ -198,14 +211,16 @@ def parse(path, text):
             seen_bir[name] = line_number
         elif program.startswith("con:"):
             validate_source(path, line_number, program, seen_sources)
-        else:
-            fail(path, line_number, f"invalid program {program!r}; expected bir: or con:")
+        elif program not in CLI_CASES:
+            fail(path, line_number, f"invalid program {program!r}; expected bir:, con: or a known cli: case")
         validate_expect(path, line_number, expect)
         if program.startswith("bir:") and expect.startswith(("refuse ", "pending-refusal ")):
             fail(path, line_number, f"bir: row {ident!r} cannot use refuse; expected exit or trap")
         if expect.startswith("pending-refusal ") and program not in PENDING_SOURCES:
             fail(path, line_number, "pending-refusal is restricted to existing untyped source fixtures")
-        if program.startswith("bir:") and expect.startswith("llvm "):
+        if program.startswith("cli:") != expect.startswith("diagnostic "):
+            fail(path, line_number, "standalone diagnostic expectations require a cli: case")
+        if not program.startswith("con:") and expect.startswith("llvm "):
             fail(path, line_number, "backend-specific CLI expectations require a con: source")
         if not SLICE_RE.fullmatch(slice_name):
             fail(path, line_number, f"invalid slice {slice_name!r}; expected [a-z0-9_]+")
@@ -240,9 +255,16 @@ def self_test():
                  "b\tcon:tests/slice0/ok.con\trefuse unreachable_statement STMT-14@1 0:1:1:1 anchor=2:3:1:3\tslice0\n")
         assert len(parse(tests / "manifest.tsv", valid)) == 2
         refusal = "refuse unreachable_statement STMT-14@1 0:1:1:1 anchor=2:3:1:3"
-        llvm = valid.replace(refusal, "llvm exit 42 lcb resource values 488")
+        llvm = valid.replace(refusal, "llvm exit 42 lcb resource values 488 1924")
         assert len(parse(tests / "manifest.tsv", llvm)) == 2
+        cli = "c\tcli:invalid-backend\tdiagnostic 3 USAGE\tslice0\n"
+        assert len(parse(tests / "manifest.tsv", valid + cli)) == 3
         bad = [
+            valid + cli.replace("diagnostic 3", "diagnostic 0"),
+            valid + cli.replace("diagnostic 3 USAGE", "exit 3 -"),
+            valid + cli.replace("invalid-backend", "unknown-case"),
+            valid.replace(refusal, "diagnostic 3 USAGE"),
+            llvm.replace("488 1924", "488 488"),
             llvm.replace("exit 42 lcb", "exit 256 lcb"),
             llvm.replace("values 488", "values 0"),
             valid.replace(refusal, "pending-refusal checker"),
@@ -257,7 +279,7 @@ def self_test():
             valid.replace("anchor=2:3:1:3", "anchor=2:3:1:3,anchor=0:1:1:1"),
             valid.replace("exit 42 -", "exit 42 0"),
             valid.replace("exit 42 -", "trap overflow 0 0a"),
-            valid.replace("exit 42 -", "llvm exit 42 lcb resource values 488"),
+            valid.replace("exit 42 -", "llvm exit 42 lcb resource values 488 1924"),
             valid + "c\tcon:tests/slice0/link.con\texit 0 -\tslice0\n",
             valid + "c\tcon:tests/slice0/dangling.con\texit 0 -\tslice0\n",
         ]

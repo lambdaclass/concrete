@@ -1,11 +1,13 @@
 # Fields in expect are separated by single spaces. Stderr is lowercase hex, or - for empty.
-# exit STATUS STDERR; trap KIND LEXICAL_SITE STDERR (exit 134).
+# exit STATUS STDERR; trap KIND BIR_INDEX STDERR (exit 134).
 # refuse KIND RULE@REV START:STOP:LINE:COLUMN LABEL=ORIGIN,... (or - for no related origins).
 # Origins are relative to the fixture source, with half-open byte offsets and one-based coordinates.
 # pending-refusal records constructor coverage until 4(c)/4(d)/4(f) expose structured diagnostics.
-# Retire the arithmeticOverflow fixture label with the 4(e) observation cutover.
+# Migrate trap kind and site together with the 4(e) observation cutover.
 # The STMT-14 span covers the second return. The trap bytes follow the runtime line contract.
-# The LCB values bound is from the pinned profile; the source's additions leave 42 unchanged.
+# llvm exit STATUS lcb resource RESOURCE BOUND MEASURED; diagnostic STATUS CODE [MESSAGE] for cli: rows.
+# The LCB bound is from the pinned profile; the measured value count retains the existing CLI fixture.
+# The source's additions leave 42 unchanged.
 id	program	expect	slice
 answer	bir:answer	exit 42 -	slice0
 boundary	bir:boundary	exit 255 -	slice0
@@ -36,8 +38,8 @@ w_u16_mul	bir:w_u16_mul	exit 129 -	slice0
 w_u16_mul_ok	bir:w_u16_mul_ok	exit 255 -	slice0
 widen_u	bir:widen_u	exit 160 -	slice0
 widen_s	bir:widen_s	exit 90 -	slice0
-site1	bir:site1	trap arithmeticOverflow 9 636f6e63726574653a20747261703a206f766572666c6f77206174207372632fc3b1616e64c3ba202278222f6c69622e636f6e3a31373a352028736974652039290a	slice0
-site0	bir:site0	trap arithmeticOverflow 3 636f6e63726574653a20747261703a206f766572666c6f77206174207372632f6d61696e2e636f6e3a313a31312028736974652033290a	slice0
+site1	bir:site1	trap arithmeticOverflow 1 636f6e63726574653a20747261703a206f766572666c6f77206174207372632fc3b1616e64c3ba202278222f6c69622e636f6e3a31373a352028736974652039290a	slice0
+site0	bir:site0	trap arithmeticOverflow 0 636f6e63726574653a20747261703a206f766572666c6f77206174207372632f6d61696e2e636f6e3a313a31312028736974652033290a	slice0
 two_sites_ok	bir:two_sites_ok	exit 42 -	slice0
 source_answer	con:tests/slice0/answer.con	exit 42 -	slice0
 source_overflow	con:tests/slice0/overflow.con	pending-refusal checker	slice0
@@ -76,4 +78,9 @@ source_shadow_wrapping_add	con:tests/slice0/shadow_wrapping_add.con	pending-refu
 source_shadow_saturating_add	con:tests/slice0/shadow_saturating_add.con	pending-refusal checker	slice0
 source_shadow_checked_add	con:tests/slice0/shadow_checked_add.con	pending-refusal checker	slice0
 source_shadow_try_convert	con:tests/slice0/shadow_try_convert.con	pending-refusal checker	slice0
-source_lcb_value_limit	con:tests/slice0/lcb_value_limit.con	llvm exit 42 lcb resource values 488	slice0
+source_lcb_value_limit	con:tests/slice0/lcb_value_limit.con	llvm exit 42 lcb resource values 488 1924	slice0
+cli_invalid_backend	cli:invalid-backend	diagnostic 3 USAGE usage: concrete build SOURCE.con -o OUTPUT-DIRECTORY [--backend llvm|lcb] | concrete help	slice0
+cli_invalid_path	cli:invalid-path	diagnostic 3 USAGE expected a project-relative .con path	slice0
+cli_unknown_target	cli:unknown-target	diagnostic 4 INTERNAL compiler failure: native helper returned an unknown target: invalid-target	slice0
+cli_native_helper_failure	cli:native-helper-failure	diagnostic 2 TOOL-FAILURE incomplete (native build helper exited with status 17: native helper control)	slice0
+cli_build_input_write_failure	cli:build-input-write-failure	diagnostic 2 TOOL-FAILURE	slice0
