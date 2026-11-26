@@ -1,4 +1,5 @@
 import ConcreteSpec.Spec.Manifest
+import ConcreteSpec.Spec.ProjectPolicy
 import ConcreteSpec.Spec.Basics
 import ConcreteSpec.Spec.Hybrid
 import ConcreteSpec.Spec.Scalar

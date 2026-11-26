@@ -4,6 +4,8 @@ import Concrete.Driver.Reference
 import Concrete.Stages
 import ConcreteSpec.Spec.Examples
 import ConcreteSpec.Spec.Rules
+import ConcreteSpecEvidence.ExecExamples
+import ConcreteSpecEvidence.Rules
 
 open ConcreteSpec.Core (PremiseId)
 open ConcreteSpec.Project
