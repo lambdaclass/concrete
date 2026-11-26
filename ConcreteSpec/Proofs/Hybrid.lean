@@ -47,7 +47,7 @@ theorem encode_refuses_unadmitted (tgt : Target) (v : Value) (hv : ¬ v.Storable
 @[simp] theorem encode_length (tgt : Target) (v : Value) (hv : v.Storable) :
     sizeof v.ty = some (encodeAdmitted tgt v hv).length := by
   cases v with
-  | int t n => cases t <;> simp [sizeof, Value.ty, CVal.ty, encodeAdmitted, sliceIntTy, ConcreteSpec.Rep.scalarSize, ConcreteSpec.IntTy.bits, intBytes, IntTy.bits]
+  | int t n => cases t <;> simp [sizeof, Value.ty, CVal.ty, encodeAdmitted, sliceIntTy, ConcreteSpec.Rep.scalarSize, ConcreteSpec.IntTy.bits, intBytes, IntTy.byteSize, IntTy.bits]
   | bool b => exact False.elim (hv.2.2.1 rfl)
   | unit => exact False.elim (hv.2.1 rfl)
   | char c => exact False.elim (hv.2.2.2 rfl)
@@ -87,7 +87,7 @@ theorem decode_agrees_slice (t : IntTy) (bs : List MByte) :
       (decodeInt linuxX8664 t bs).map (ConcreteSpec.Scalar.int (sliceIntTy t)) := by
   cases t <;>
     simp only [ConcreteSpec.Rep.decodeScalar, sliceIntTy, ConcreteSpec.IntTy.bits,
-      List.length_map, decodeInt, intBytes, IntTy.bits, slice_decodeNat]
+      List.length_map, decodeInt, intBytes, IntTy.byteSize, IntTy.bits, slice_decodeNat]
   all_goals split <;> simp_all [ConcreteSpec.Rep.ofBits, ofBits, ordered, linuxX8664,
     ConcreteSpec.IntTy.signed, IntTy.signed, ConcreteSpec.IntTy.bits, IntTy.bits, Option.map_map, Function.comp_def]
 
@@ -647,7 +647,7 @@ theorem materialize_read (tgt : Target) (st st' : State) (hw : st.memory.WellFor
     have hl := store_load tgt m m' ham ⟨space, base, some b⟩ (encodeAdmitted tgt v hv ++ padding) align hm
     have hpos : 0 < (encodeAdmitted tgt v hv).length := by
       cases v with
-      | int t n => cases t <;> simp [encodeAdmitted, encodeInt, intBytes, IntTy.bits, leBytes_length]
+      | int t n => cases t <;> simp [encodeAdmitted, encodeInt, intBytes, IntTy.byteSize, IntTy.bits, leBytes_length]
       | bool b => exact False.elim (hv.2.2.1 rfl)
       | unit => exact False.elim (hv.2.1 rfl)
       | char c => exact False.elim (hv.2.2.2 rfl)

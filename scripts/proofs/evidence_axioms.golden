@@ -1272,6 +1272,43 @@ ConcreteSpec.Core.ScalarLawEvidence.wrapping_of_checked_planted_concrete_subtrac
 ConcreteSpec.Core.ScalarVariableEvidence.example_Assignment_uses_shared_map_other_number	propext
 ConcreteSpec.Core.ScalarVariableEvidence.example_Reading_numeric_variable_does_not_merge	propext
 ConcreteSpec.Core.ScalarVariableEvidence.example_Scope_removal_erases_only_chosen_number	propext
+ConcreteSpec.Core.Slice0Rules.additionAccepted	propext
+ConcreteSpec.Core.Slice0Rules.additionInvalidOperands	propext
+ConcreteSpec.Core.Slice0Rules.additionRefused	propext
+ConcreteSpec.Core.Slice0Rules.admissionAccepted	Quot.sound propext
+ConcreteSpec.Core.Slice0Rules.admissionRefused	propext
+ConcreteSpec.Core.Slice0Rules.entryAccepted	
+ConcreteSpec.Core.Slice0Rules.entryRefused	
+ConcreteSpec.Core.Slice0Rules.freshAccepted	propext
+ConcreteSpec.Core.Slice0Rules.freshRefused	propext
+ConcreteSpec.Core.Slice0Rules.grammarAccepted	propext
+ConcreteSpec.Core.Slice0Rules.grammarRefused	propext
+ConcreteSpec.Core.Slice0Rules.lexAccepted	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Slice0Rules.lexRefused	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Slice0Rules.limitAccepted	
+ConcreteSpec.Core.Slice0Rules.limitRefused	
+ConcreteSpec.Core.Slice0Rules.literalAccepted	
+ConcreteSpec.Core.Slice0Rules.literalRefused	
+ConcreteSpec.Core.Slice0Rules.localsUsedAccepted	
+ConcreteSpec.Core.Slice0Rules.localsUsedRefused	
+ConcreteSpec.Core.Slice0Rules.lookupAccepted	propext
+ConcreteSpec.Core.Slice0Rules.lookupRefused	propext
+ConcreteSpec.Core.Slice0Rules.namedAccepted	
+ConcreteSpec.Core.Slice0Rules.namedRefused	
+ConcreteSpec.Core.Slice0Rules.parseAccepted	
+ConcreteSpec.Core.Slice0Rules.parseRefused	
+ConcreteSpec.Core.Slice0Rules.productionAccepted	
+ConcreteSpec.Core.Slice0Rules.productionRefused	
+ConcreteSpec.Core.Slice0Rules.radixAccepted	
+ConcreteSpec.Core.Slice0Rules.radixRefused	
+ConcreteSpec.Core.Slice0Rules.reachAccepted	propext
+ConcreteSpec.Core.Slice0Rules.reachRefused	propext
+ConcreteSpec.Core.Slice0Rules.reservedAccepted	propext
+ConcreteSpec.Core.Slice0Rules.reservedRefused	propext
+ConcreteSpec.Core.Slice0Rules.returnsAccepted	propext
+ConcreteSpec.Core.Slice0Rules.returnsRefused	propext
+ConcreteSpec.Core.Slice0Rules.suffixAccepted	
+ConcreteSpec.Core.Slice0Rules.suffixRefused	
 ConcreteSpec.Core.Slice1Registry.consumeThenAbort	propext
 ConcreteSpec.Core.Slice1Registry.consumeThenReturn	propext
 ConcreteSpec.Core.Slice1Registry.liveLinearAtReturn	propext
@@ -1744,6 +1781,8 @@ ConcreteSpec.Core.typed_constant_closed_example_division	propext
 ConcreteSpec.Core.typed_constant_closed_planted_unit_binding_unitTypeConsts	propext
 ConcreteSpec.Core.typed_evalConsts_refusal_example_unused_div_zero	Classical.choice Quot.sound propext
 ConcreteSpec.Core.typed_evalConsts_refusal_planted_unused_div_zero_invalidRefusalEvalConsts	Classical.choice Quot.sound propext
+ConcreteSpec.DeclsOk.eq_1	
+ConcreteSpec.Discharged.eq_1	
 ConcreteSpec.Project.Manifest.DepthAccepted._sparseCasesOn_1.else_eq	propext
 ConcreteSpec.Project.Manifest.DepthAccepted._sparseCasesOn_2.else_eq	propext
 ConcreteSpec.Project.Manifest.DepthAccepted.eq_1	Classical.choice Quot.sound propext

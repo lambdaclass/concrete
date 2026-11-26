@@ -271,7 +271,7 @@ def ordered (o : ByteOrder) (bs : List (Fin 256)) : List (Fin 256) :=
   | .big => bs.reverse
 
 /-- The number of bytes an integer type occupies. -/
-def intBytes (t : IntTy) : Nat := t.bits / 8
+def intBytes (t : IntTy) : Nat := t.byteSize
 
 /-- The bytes of integer `n` of type `t`: its two's-complement pattern, in the profile's order, as
 plain initialized bytes. -/
