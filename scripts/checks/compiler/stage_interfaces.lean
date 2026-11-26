@@ -1869,6 +1869,88 @@ example :
       (memory.writeValue (bound true) place (.scalar (.int .u8 25))).isSome = true := by
   with_unfolding_all exact ⟨rfl, rfl, rfl, rfl⟩
 
+private def retainedOwnerCore : CoreInput earlyFixtureLanguage :=
+  ⟨elaborationSource.project, early, earlyPayload fixtureEarly
+    ⟨[(⟨⟨storeRoot.id⟩, .atom (.lit 42)⟩, resultSpan)], .var ⟨storeRoot.id⟩, resultSpan⟩⟩
+
+private def retainedOwnerMIR (substituted : Bool) : MIR ownerFixtureLowering testProfile :=
+  let dst : Place _ ownerFixtureType := ⟨storeRoot, []⟩
+  let origin (site : Nat) := (AList.lookup retainedOwnerCore.payload.origins ⟨site⟩).getD testOrigin
+  let binding : LocatedOp (MIRInst ownerFixtureLowering) := ⟨origin 0, .bind dst (.literal ⟨[42]⟩)⟩
+  let assignment : LocatedOp (MIRInst ownerFixtureLowering) := ⟨origin 0, .assign dst (.literal ⟨[42]⟩)⟩
+  let block : Block _ _ _ := ⟨⟨0⟩, [], binding :: (if substituted then [assignment] else []),
+    .ret (some ⟨ownerFixtureType, .copy dst⟩), [origin 1]⟩
+  ⟨retainedOwnerCore.project, earlyEntry, [(earlyEntry, ⟨[], some ownerFixtureType⟩)],
+    [(earlyEntry, [(storeRoot, ownerFixtureType)], ⟨⟨0⟩, #[block]⟩)],
+    if substituted then [(earlyEntry, [storeRoot])] else []⟩
+
+set_option maxRecDepth 4096 in
+private theorem retainedOwnerAccepted :
+    PreservesOwnerMutability retainedOwnerCore (retainedOwnerMIR false) := by
+  refine ⟨?_, nofun⟩
+  intro fn locals graph member root ty localMember
+  obtain ⟨fnEq, contents⟩ := Prod.mk.inj (List.mem_singleton.mp member)
+  have localsEq : locals = [(storeRoot, ownerFixtureType)] := congrArg Prod.fst contents
+  subst locals
+  have rootEq : root = storeRoot := congrArg Prod.fst (List.mem_singleton.mp localMember)
+  rw [fnEq, rootEq]
+  with_unfolding_all rfl
+
+set_option maxRecDepth 4096 in
+private theorem substitutedOwnerRefused :
+    ¬ PreservesOwnerMutability retainedOwnerCore (retainedOwnerMIR true) := by
+  intro h
+  have incompatible := h.1 earlyEntry _ _ (List.mem_singleton_self _) storeRoot ownerFixtureType
+    (List.mem_singleton_self _)
+  with_unfolding_all change true = false at incompatible
+  contradiction
+
+set_option maxRecDepth 4096 in
+private theorem substitutedOriginsPreserved :
+    PreservesOrigins (List.map Prod.snd retainedOwnerCore.payload.origins) (retainedOwnerMIR true).origins := by
+  let bound := (AList.lookup retainedOwnerCore.payload.origins ⟨0⟩).getD testOrigin
+  let returned := (AList.lookup retainedOwnerCore.payload.origins ⟨1⟩).getD testOrigin
+  with_unfolding_all
+    change PreservesOrigins [bound, returned] [bound, bound, returned]
+  constructor
+  · intro o member
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at member ⊢
+    exact member.elim Or.inl id
+  · intro o member
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at member ⊢
+    exact member.elim Or.inl (fun h => Or.inr (Or.inr h))
+
+set_option maxRecDepth 4096 in
+private theorem substitutedOwnerAssigns :
+    (retainedOwnerMIR true).Step ownerFixtureBound ownerFixtureBound.advance := by
+  with_unfolding_all
+    exact ⟨rfl, _, _, _, rfl, ⟨⟨rfl, fun _ => rfl⟩, nofun, rfl, rfl, nofun⟩, rfl⟩
+
+set_option maxRecDepth 4096 in
+private theorem ownerFixtureObservations (substituted : Bool) :
+    let mir := retainedOwnerMIR substituted
+    let done := if substituted then ownerFixtureBound.advance else ownerFixtureBound
+    mir.terminalObservation done = some (.returned 42 ByteArray.empty) ∧
+      (MIR.Execution (language := earlyFixtureLanguage)).trace mir done = [] := by
+  cases substituted <;> with_unfolding_all exact ⟨rfl, rfl⟩
+
+example :
+    PreservesOwnerMutability retainedOwnerCore (retainedOwnerMIR false) ∧
+    PreservesOrigins (List.map Prod.snd retainedOwnerCore.payload.origins) (retainedOwnerMIR true).origins ∧
+    (retainedOwnerMIR true).Step ownerFixtureBound ownerFixtureBound.advance ∧
+    (retainedOwnerMIR true).terminalObservation ownerFixtureBound.advance =
+      (retainedOwnerMIR false).terminalObservation ownerFixtureBound ∧
+    (MIR.Execution (language := earlyFixtureLanguage)).trace
+        (retainedOwnerMIR true) ownerFixtureBound.advance =
+      (MIR.Execution (language := earlyFixtureLanguage)).trace
+        (retainedOwnerMIR false) ownerFixtureBound ∧
+    ¬ LowersUnchecked retainedOwnerCore (retainedOwnerMIR true) ∧
+    ¬ LowersCore ⟨retainedOwnerCore, []⟩ (retainedOwnerMIR true) :=
+  ⟨retainedOwnerAccepted, substitutedOriginsPreserved, substitutedOwnerAssigns,
+    (ownerFixtureObservations true).1.trans (ownerFixtureObservations false).1.symm,
+    (ownerFixtureObservations true).2.trans (ownerFixtureObservations false).2.symm,
+    fun h => substitutedOwnerRefused h.2.2.2.2.1, fun h => substitutedOwnerRefused h.2.2.2.2.1⟩
+
 -- The residual trap takes place at the same operation in both IRs, with
 -- no synthetic boolean local. Deleting the check loses the observation.
 example (project : Project) :
@@ -2887,7 +2969,10 @@ private theorem literalUnchecked :
     LowersUnchecked (language := earlyFixtureLanguage) literalCore literalMIR := by
   with_unfolding_all
     obtain ⟨reached, finite, result, trace⟩ := literalCoreReaches
-    refine ⟨rfl, rfl, ⟨fun _ h => h, fun _ h => h⟩, literalConsumes, ?_⟩
+    refine ⟨rfl, rfl, ⟨fun _ h => h, fun _ h => h⟩, literalConsumes, ⟨?_, nofun⟩, ?_⟩
+    · intro fn locals graph present
+      cases List.mem_singleton.mp present
+      exact nofun
     apply refinesToTerminal literalCoreExecution literalMIRExecution reached literalRegisters literalResult
       finite result
     · with_unfolding_all rfl
@@ -3331,24 +3416,98 @@ private theorem oversizedLCBRefused (passes : Passes slice0 testProfile)
   change passes.emitSingleLCB bir = .error _
   simp [PassFunctions.emitSingleLCB, over]
 
--- Keep the huge table symbolic in the refusal proof. Only its size is needed.
+private def singletonTrapBIR (sites : TrapTable) (slot : TrapIndex) :
+    BIR returnLowering testProfile :=
+  ⟨tabProject, earlyEntry, [(earlyEntry, ⟨[], none⟩)],
+    [(earlyEntry, [], singleBlockGraph (.trap slot) [])], [], sites, []⟩
+
+private theorem singletonTrapWF (sites : TrapTable) (slot : TrapIndex)
+    (resolves : ∃ entry, sites[slot.index]? = some entry)
+    (locations : ∀ site ∈ sites.toList, ∃ span, site.origin.lexical.Binds tabProject span) :
+    BIR.WF (language := earlyFixtureLanguage) (singletonTrapBIR sites slot) := by
+  obtain ⟨entry, found⟩ := resolves
+  refine ⟨?_, Nat.zero_le _, .cons nofun .nil, List.mem_singleton_self _, locations, ?_⟩
+  · intro fn member block inside index trapped
+    cases List.mem_singleton.mp member
+    cases List.mem_singleton.mp inside
+    cases BIRTerm.trap.inj trapped
+    exact ⟨entry, found⟩
+  · with_unfolding_all
+      refine ⟨.cons nofun .nil, .cons nofun .nil, .cons nofun .nil, .nil, ?_, nofun, ?_⟩
+      · intro fn classes member
+        cases List.mem_singleton.mp member
+        exact .nil
+      · intro fn locals graph member
+        cases List.mem_singleton.mp member
+        refine ⟨.nil, ⟨.cons nofun .nil, ⟨_, List.mem_singleton_self _, rfl⟩, ?_⟩,
+          ⟨_, rfl, ⟨_, List.mem_singleton_self _, rfl, rfl⟩, ?_⟩⟩
+        · intro block inside edge follows
+          cases List.mem_singleton.mp inside
+          change edge ∈ (match sites[slot.index]? with
+            | some site => (.trap site.kind site.origin : MemoryTerm returnLowering)
+            | none => .invalid).successors at follows
+          rw [found] at follows
+          cases follows
+        · intro block inside
+          let terminator : MemoryTerm returnLowering :=
+            match sites[slot.index]? with
+            | some site => .trap site.kind site.origin
+            | none => .invalid
+          let decoded : MemoryBlock returnLowering := ⟨⟨0⟩, [], [], terminator, []⟩
+          have blockEq : block = decoded := List.mem_singleton.mp inside
+          have endingEq : decoded.ending = .trap entry.kind entry.origin := by
+            change terminator = _
+            simp only [terminator, found]
+          rw [blockEq]
+          constructor
+          · rw [endingEq]
+            trivial
+          · exact nofun
+
+-- Prove the table facts for a symbolic length so the kernel never constructs
+-- the oversized array.
+private def syntheticTrapSites (n : Nat) : TrapTable :=
+  (Array.replicate n ⟨.divisionByZero, testOrigin⟩).push ⟨.abort, testOrigin⟩
+
+private theorem syntheticTrapSize (n : Nat) : (syntheticTrapSites n).size = n + 1 := by
+  simp [syntheticTrapSites]
+
+private theorem syntheticTrapWF (n : Nat) :
+    BIR.WF (language := earlyFixtureLanguage) (singletonTrapBIR (syntheticTrapSites n) ⟨n⟩) := by
+  apply singletonTrapWF
+  · change ∃ entry, (syntheticTrapSites n)[n]? = some entry
+    exact ⟨⟨.abort, testOrigin⟩, by
+      simp only [syntheticTrapSites, Array.getElem?_push, Array.size_replicate, ite_true]⟩
+  · intro site member
+    have same : site.origin = testOrigin := by
+      simp only [syntheticTrapSites, Array.toList_push, Array.toList_replicate, List.mem_append,
+        List.mem_singleton] at member
+      rcases member with repeated | rfl
+      · rw [List.eq_of_mem_replicate repeated]
+      · rfl
+    rw [same]
+    let checkedSpan : ConcreteSpec.Core.Span :=
+      ⟨⟨0⟩, 0, 1, by decide, 1, 1, by decide, by decide⟩
+    exact ⟨checkedSpan, _, rfl, rfl, by decide, rfl, rfl, rfl, rfl⟩
+
+private def OversizedTrapGate (n : Nat) : Prop :=
+  let bir := singletonTrapBIR (syntheticTrapSites n) ⟨n⟩
+  let passes := {literalReturnPasses with emitLCB := fun _ => .ok (lcbReturnJob 42)}
+  let edge := (registry passes).emitLCB
+  let failure := StageFailure.resource (LCBInput.trapCapacityRefusal bir.sites.size)
+  bir.sites.size = LCBInput.trapCapacity + 1 ∧ edge.inputInvariant bir ∧
+    edge.run bir = .error failure ∧ edge.refusal bir failure
+
 set_option maxRecDepth 4096 in
-example :
-    let sites : TrapTable :=
-      (Array.replicate LCBInput.trapCapacity ⟨.divisionByZero, testOrigin⟩).push ⟨.abort, testOrigin⟩
-    let trap := singleBlockGraph (.trap ⟨LCBInput.trapCapacity⟩) []
-    let bir : BIR returnLowering testProfile :=
-      ⟨tabProject, earlyEntry, [(earlyEntry, ⟨[], none⟩)], [(earlyEntry, [], trap)], [], sites, []⟩
-    let passes := {literalReturnPasses with emitLCB := fun _ => .ok (lcbReturnJob 42)}
-    let edge := (registry passes).emitLCB
-    let failure := StageFailure.resource (LCBInput.trapCapacityRefusal bir.sites.size)
-    bir.sites.size = LCBInput.trapCapacity + 1 ∧
-      edge.run bir = .error failure ∧ edge.refusal bir failure := by
-  intro sites trap bir passes edge failure
-  have size : bir.sites.size = LCBInput.trapCapacity + 1 := by
-    change sites.size = _
-    simp [sites]
-  exact ⟨size, oversizedLCBRefused passes bir (size.symm ▸ Nat.lt_succ_self _)⟩
+private theorem oversizedTrapGate (n : Nat) (capacity : LCBInput.trapCapacity = n) :
+    OversizedTrapGate n := by
+  unfold OversizedTrapGate
+  intro bir passes edge failure
+  have size : bir.sites.size = LCBInput.trapCapacity + 1 := syntheticTrapSize n |>.trans
+    (congrArg (· + 1) capacity.symm)
+  exact ⟨size, syntheticTrapWF n, oversizedLCBRefused passes bir (size.symm ▸ Nat.lt_succ_self _)⟩
+
+example : OversizedTrapGate LCBInput.trapCapacity := oversizedTrapGate _ rfl
 
 -- A zero-slot self-loop remains a real graph and needs no result slot.
 set_option maxRecDepth 4096 in
@@ -3673,6 +3832,26 @@ example : ownerFieldAccess .shared = some (false, true, true, true) ∧
     ownerFieldAccess .mutable = some (false, false, true, true) :=
   ⟨by with_unfolding_all rfl, by with_unfolding_all rfl⟩
 
+private def partialOwnerOverwrite (mutable : Bool) : Option (Bool × Bool × Bool × Bool) := do
+  let initial := {moveBeforeBorrow with ownership := {moveBeforeBorrow.ownership with
+    slots := [⟨loanRoot, 0, ⟨.int .u8, false, mutable⟩, .owned⟩]}}
+  let (_, moved) ← loanMemory.readValue initial
+    (.move (ty := .inr false) ⟨⟨storeRoot, [splitField]⟩, .virtual⟩)
+  let field : MemoryPlace loanFieldLanguage.operands.Ty (.inl (.scalar (.int .u8))) :=
+    ⟨⟨storeRoot, [secondSplitField]⟩, .virtual⟩
+  let root : MemoryPlace loanFieldLanguage.operands.Ty (.inr false) :=
+    ⟨⟨storeRoot, []⟩, .virtual⟩
+  let surviving := (loanMemory.readValue moved (.copy field)).isSome
+  let direct := (loanMemory.writeValue moved field (.scalar (.int .u8 42))).isSome
+  let whole := (loanMemory.writeValue moved root (.scalar (.int .u8 42))).isSome
+  let realOwner := Own.ownerAccess moved.ownership loanRoot .mutable
+  return (surviving, direct, whole, realOwner)
+
+set_option maxRecDepth 4096 in
+example : partialOwnerOverwrite false = some (true, false, false, false) ∧
+    partialOwnerOverwrite true = some (true, true, true, true) :=
+  ⟨by with_unfolding_all rfl, by with_unfolding_all rfl⟩
+
 -- All moved descendants are cleared on replacement. A surviving linear
 -- sibling still prevents an overwrite.
 example :
@@ -3939,6 +4118,77 @@ example (project : Project) :
   · with_unfolding_all rfl
   · with_unfolding_all rfl
 
+
+private abbrev copySplitLanguage : CoreLanguage :=
+  {twoFieldLanguage with
+    operands := {twoFieldLanguage.operands with isCopy := fun _ => true}
+    safety := fun _ => []}
+
+private def copySplitGraph {T : Type} (ending : T) :
+    CFG (Sigma (SSAValue Unit)) (LocatedOp (SSAInst testLowering)) T :=
+  ⟨⟨0⟩, #[⟨⟨0⟩, [⟨(), ⟨0⟩⟩],
+    [⟨testOrigin, .destructure (.register (ty := ()) ⟨0⟩)
+      [(splitField, ⟨(), ⟨1⟩⟩), (secondSplitField, ⟨(), ⟨2⟩⟩)]⟩], ending, []⟩]⟩
+
+private def copySplitSSA : SSA testLowering testProfile :=
+  ⟨tabProject, Exec.Demo.mainF, [],
+    [(Exec.Demo.mainF, [], copySplitGraph (.ret none))], [], []⟩
+
+private def copySplitBIR : BIR testLowering testProfile :=
+  ⟨tabProject, Exec.Demo.mainF, [],
+    [(Exec.Demo.mainF, [], copySplitGraph (.ret none))], [], #[], []⟩
+
+private def copySplitMIR : MIR testLowering testProfile :=
+  let block : Block _ _ _ := ⟨⟨0⟩, [⟨(), ⟨storeRoot, []⟩⟩],
+    [⟨testOrigin, .destructure (ty := ()) ⟨storeRoot, []⟩
+      [(splitField, ⟨(), ⟨⟨1⟩, []⟩⟩), (secondSplitField, ⟨(), ⟨⟨2⟩, []⟩⟩)]⟩], .ret none, []⟩
+  ⟨tabProject, Exec.Demo.mainF, [],
+    [(Exec.Demo.mainF, [(storeRoot, ()), (⟨1⟩, ()), (⟨2⟩, ())], ⟨⟨0⟩, #[block]⟩)],
+    [(Exec.Demo.mainF, [storeRoot, ⟨1⟩, ⟨2⟩])]⟩
+
+set_option maxRecDepth 4096 in
+example :
+    let memory := copySplitMIR.logicalView (language := copySplitLanguage)
+    let before : MemoryRegisters copySplitLanguage testProfile :=
+      {storeInitial with
+        live := [storeRoot]
+        initialized := [storeRoot]
+        virtualValues := [(storeRoot, .other ())]}
+    ∃ next, copySplitMIR.Step before next ∧ memory.Step before next ∧
+      (SSA.Execution (language := copySplitLanguage)).step copySplitSSA before next ∧
+      (BIR.Execution (language := copySplitLanguage)).step copySplitBIR before next ∧
+      memory.readValue next (.copy (fieldRegister 0)) = some (.other (), next) ∧
+      memory.readValue next (.copy (fieldRegister 1)) = some (.scalar (.int .u8 17), next) ∧
+      memory.readValue next (.copy (fieldRegister 2)) = some (.scalar (.int .u8 25), next) := by
+  intro memory before
+  let first : MemoryRegisters copySplitLanguage testProfile :=
+    {before with
+      live := [⟨1⟩, storeRoot]
+      initialized := [⟨1⟩, storeRoot]
+      virtualValues := (⟨1⟩, .scalar (.int .u8 17)) :: before.virtualValues}
+  let stored : MemoryRegisters copySplitLanguage testProfile :=
+    {first with
+      live := ⟨2⟩ :: first.live
+      initialized := ⟨2⟩ :: first.initialized
+      virtualValues := (⟨2⟩, .scalar (.int .u8 25)) :: first.virtualValues}
+  let dests : List (FieldId × Sigma (MemoryPlace Unit)) :=
+    [(splitField, ⟨(), fieldRegister 1⟩), (secondSplitField, ⟨(), fieldRegister 2⟩)]
+  have tick : memory.InstructionStepWith before stored.advance false false
+      (.destructure (fieldRegister 0) dests) := by
+    refine ⟨.other (), before, [.scalar (.int .u8 17), .scalar (.int .u8 25)], stored,
+      by with_unfolding_all rfl, ?_, by with_unfolding_all rfl, ?_, rfl⟩
+    · exact ⟨splitShape.1, splitShape.2.choose, splitShape.2.choose_spec.1,
+        splitShape.2.choose_spec.2.1, fun _ _ _ => ⟨(), rfl, rfl⟩⟩
+    · apply Memory.WriteParams.cons (started := {before with live := first.live}) (stored := first)
+      · with_unfolding_all exact ⟨nofun, Or.inl ⟨rfl, rfl⟩⟩
+      · with_unfolding_all exact ⟨⟨rfl, nofun⟩, nofun, rfl, rfl, nofun⟩
+      · apply Memory.WriteParams.cons (started := {first with live := stored.live})
+        · with_unfolding_all exact ⟨nofun, Or.inl ⟨rfl, rfl⟩⟩
+        · with_unfolding_all exact ⟨⟨rfl, nofun⟩, nofun, rfl, rfl, nofun⟩
+        · exact .nil _
+  with_unfolding_all
+    exact ⟨stored.advance, ⟨rfl, tick⟩, ⟨_, rfl, tick⟩, ⟨rfl, ⟨_, rfl, tick⟩, [], rfl⟩,
+      ⟨rfl, ⟨_, rfl, tick⟩, [], rfl⟩, rfl, rfl, rfl⟩
 
 -- Each field register is consumed by its first move, even though the original
 -- backing bytes remain allocated until the source root's lifetime ends.
@@ -4380,7 +4630,7 @@ private theorem coreWrongBody : ¬ LowersUnchecked (language := testLanguage) ab
   let target := MIR.Execution (language := testLanguage) (lang := testLowering) (profile := testProfile)
   let answer := Concrete.Contracts.Observation.returned 42 ByteArray.empty
   have returns : target.result wrongCoreMIR storeInitial answer := by with_unfolding_all rfl
-  obtain ⟨q, finite, result, _⟩ := (lowered.2.2.2.2 safe).1 storeInitial answer
+  obtain ⟨q, finite, result, _⟩ := (lowered.2.2.2.2.2 safe).1 storeInitial answer
     ⟨storeInitial, by with_unfolding_all rfl, .nil _⟩ returns
   rcases reached q finite with rfl | rfl
   · have absent : (none : Option Concrete.Contracts.Observation) = some answer := by
@@ -4400,7 +4650,7 @@ private abbrev mirExecution := MIR.Execution (language := testLanguage)
 
 private theorem abortLowering :
     LowersUnchecked (language := testLanguage) abortingCore (abortMIR .abort) := by
-  refine ⟨rfl, rfl, ⟨fun _ h => h, fun _ h => h⟩, ?_, ?_⟩
+  refine ⟨rfl, rfl, ⟨fun _ h => h, fun _ h => h⟩, ?_, ⟨?_, nofun⟩, ?_⟩
   · refine ⟨List.nodup_nil, ?_, nofun, ?_, ?_⟩
     · rintro site _ _ ⟨op, present, notAbort, _, _⟩ _
       have member : (testSite, CoreOperation.abort) = (site, op) := by
@@ -4415,6 +4665,9 @@ private theorem abortLowering :
       have member := List.mem_singleton.mp present
       cases member
       trivial
+  · intro fn locals graph present
+    cases List.mem_singleton.mp present
+    exact nofun
   · intro _
     have terminal : mirExecution.result (abortMIR .abort) storeInitial (helperTrap .abort) := by
       with_unfolding_all rfl
@@ -4631,7 +4884,7 @@ private theorem aggregateWrite (project : Project) (space : AddrSpace) (base : N
     rfl
   refine ⟨⟨rfl, fun _ => rfl⟩, (fun _ => ⟨⟨1, 1⟩, rfl, ⟨nofun, nofun⟩⟩),
     ?_, ?_, fun _ => Or.inr ⟨backingRange space base, [(0, [.init 42 none])], rfl, rfl, ?_, ?_⟩⟩
-  · simp [Memory.writeValue, Memory.mayInitialize, Memory.ownerView, Memory.zeroRoot, Memory.rangeAt, Memory.byteRuns,
+  · simp [Memory.writeValue, Memory.mayInitialize, Memory.authorizeWrite, Memory.writeOwnerView, Memory.ownerView, Memory.zeroRoot, Memory.rangeAt, Memory.byteRuns,
       Memory.layoutAt, materializedBinding, immediateReturn, zeroMemory, storePlace,
       backingBefore, backingAfter, backingRange, storeBefore, storeInitial, storeRoot,
       Mem.Memory.store, Mem.Memory.access, Mem.Memory.block, Mem.Memory.modify,
@@ -5110,7 +5363,7 @@ private theorem AddressAllocation.storeScalar (allocation : AddressAllocation) (
   have encoded : Hybrid.encode testProfile.memoryTarget (.int .u8 42) = some [.init 42 none] := rfl
   refine ⟨⟨rfl, fun _ => rfl⟩, (fun _ => ⟨⟨1, 1⟩, rfl, ⟨nofun, nofun⟩⟩),
     ?_, ?_, fun _ => Or.inr ⟨allocation.range, [(0, [.init 42 none])], rfl, rfl, ?_, ?_⟩⟩
-  · simp [Memory.writeValue, Memory.mayInitialize, Memory.ownerView, Memory.zeroRoot, Memory.rangeAt, Memory.byteRuns, Memory.layoutAt,
+  · simp [Memory.writeValue, Memory.mayInitialize, Memory.authorizeWrite, Memory.writeOwnerView, Memory.ownerView, Memory.zeroRoot, Memory.rangeAt, Memory.byteRuns, Memory.layoutAt,
       addressMemory, storingMemory, storePlace, AddressAllocation.before, AddressAllocation.bound,
       backingBefore, backingAfter, backingRange, storeBefore, storeInitial, storeRoot,
       Mem.Memory.store, Mem.Memory.access, Mem.Memory.block, Mem.Memory.modify,

@@ -28,7 +28,7 @@ Fix (c) supplies the single ConcreteSpec traversal. `Admitted` carries the exact
 
 ## Admitted Core → MIR
 
-Fix (c) owns evidence validation and consumption and the empty-evidence entry. Fix (b) owns the typed MIR instruction semantics. Fix (d) owns operation origin transport. `MIR` carries typed places, copy/move reads and explicit lifetime and control transfers. `LowersCore` ties removed checks to exact validated discharges and checks every emitted occurrence against the source condition inventory, indexed operator or exact callee, and ordered typed operand identities. Core calls and primitives take atomic typed reads that cannot trap on operand evaluation. A checked argument computation runs in its own Core operation before the call, with its own origin and result local. MIR checks its discharge at that operation and the call reads the result local. A residual condition is part of the same MIR instruction as the operation it guards and traps at its origin on failure. CFG edges enter blocks, so they cannot enter an instruction after its checks. Each supplied discharge matches exactly one emitted occurrence. An unconditional abort cannot supply a discharge condition. `LowersUnchecked` uses the same carrier and checks with no admission discharges. The registered typing stage checks the unchanged Core input against the independent static typing judgment before passing it to unchecked lowering. Typing rejects out-of-range literals and does not require the absence of defined execution traps. Both preserve origins and compare the fixed Core and MIR executions on the exact input and emitted graph. Block control boundaries carry origins for returns and other operations that emit no instruction. The boundary metadata cannot satisfy a required MIR check or replace a trap terminator. Replace the linear `MIR.Program` and its token-bearing operators.
+Fix (c) owns evidence validation and consumption and the empty-evidence entry. Fix (b) owns the typed MIR instruction semantics. Fix (d) owns operation origin transport. `MIR` carries typed places, copy/move reads and explicit lifetime and control transfers. `LowersCore` ties removed checks to exact validated discharges and checks every emitted occurrence against the source condition inventory, indexed operator or exact callee, and ordered typed operand identities. Core calls and primitives take atomic typed reads that cannot trap on operand evaluation. A checked argument computation runs in its own Core operation before the call, with its own origin and result local. MIR checks its discharge at that operation and the call reads the result local. A residual condition is part of the same MIR instruction as the operation it guards and traps at its origin on failure. CFG edges enter blocks, so they cannot enter an instruction after its checks. Each supplied discharge matches exactly one emitted occurrence. An unconditional abort cannot supply a discharge condition. `LowersUnchecked` uses the same carrier and checks with no admission discharges. The registered typing stage checks the unchanged Core input against the independent static typing judgment before passing it to unchecked lowering. Typing rejects out-of-range literals and does not require the absence of defined execution traps. Both preserve origins and compare the fixed Core and MIR executions on the exact input and emitted graph. Retained owners keep their fresh Core binding number as their MIR root number within the defining function. Both lowering contracts match each declared root’s mutability to its Core descriptor and require a source binding for every mutable root. Synthetic MIR roots use fresh numbers and are immutable. Block control boundaries carry origins for returns and other operations that emit no instruction. The boundary metadata cannot satisfy a required MIR check or replace a trap terminator. Replace the linear `MIR.Program` and its token-bearing operators.
 
 ## MIR → Memory
 
@@ -74,8 +74,8 @@ Replace the erase-to-MIR `Memory.lower` and `Memory.run` proof path.
 ## Memory → SSA
 
 Fix (b) supplies the addressable/virtual partition and Fix (a) registers the validated SSA lowering. `SSA` has typed value IDs and parallel block arguments. Addressable places and layout remain explicit. SSA promotion records the eliminated virtual binding origins at control boundaries. `BuildsSSA` requires preservation of origins, layouts and observations against the
-exact Memory and SSA semantics. A linear projected load consumes that field in the shared interpreter for SSA and BIR. A destructure consumes a whole materialized or
-promoted root. It simultaneously defines the typed field registers and requires
+exact Memory and SSA semantics. A linear projected load consumes that field in the shared interpreter for SSA and BIR. A destructure reads a whole materialized or promoted root, copying Copy aggregates
+and moving linear aggregates. It simultaneously defines the typed field registers and requires
 each active linear field to have a distinct binding. Split the SSA construction
 currently inside `SSA.lower` from its BIR output. The registered MIR, Memory and SSA handoffs require an entry in the function table and project-bound origins. Memory table validity excludes invalid terminators.
 
@@ -85,7 +85,9 @@ an identity already has a slot. The interpreter projects its selected field
 into the owner slot used for permission while retaining the original root
 for loan exclusion. Copy reads, consuming reads, writes and lifetime ends
 use the corresponding `Own` decisions. Storage initialization and field
-liveness remain separate from those decisions. The registered handoffs
+liveness distinguish a fully moved destination from a partially moved destination
+with surviving fields. Replacing a live remainder requires mutable owner access
+and proof that its remaining fields can be discarded. The registered handoffs
 preserve the declared mutable roots from MIR through BIR. The SSA and BIR
 views also allow Copy replacement in their own synthetic register slots so
 loop iterations can define a register again.

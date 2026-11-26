@@ -450,11 +450,11 @@ private def StoresValue (memory : Memory lang profile)
           bytes.length 1 = some bytes)
 
 /-- Ignore moved subtrees when checking for live linear fields at lifetime end or replacement. -/
-private def canDiscard (language : CoreLanguage) :
+private def canDiscard (language : CoreLanguage) (allowCopy : Bool := true) :
     Nat → language.operands.Ty → language.operands.Val → List (List FieldId) → Bool
   | fuel, ty, value, moved =>
     if moved.contains [] then true
-    else if moved.isEmpty then language.operands.isCopy ty
+    else if moved.isEmpty then allowCopy && language.operands.isCopy ty
     else match fuel with
       | 0 => false
       | n + 1 =>
@@ -465,8 +465,21 @@ private def canDiscard (language : CoreLanguage) :
               | first :: rest => if first == field then some rest else none
               | [] => none
             match language.fieldType ty field, language.field value [field] with
-            | some fieldTy, some fieldValue => canDiscard language n fieldTy fieldValue below
+            | some fieldTy, some fieldValue => canDiscard language allowCopy n fieldTy fieldValue below
             | _, _ => false
+
+private def movedBelow (state : MemoryRegisters language profile)
+    (root : PlaceId) (path : List FieldId) : List (List FieldId) :=
+  state.movedFields.filterMap fun (owner, moved) =>
+    if owner == root && path.isPrefixOf moved then some (moved.drop path.length) else none
+
+private def discardRemainder (memory : Memory lang profile)
+    (state : MemoryRegisters language profile) {ty : language.operands.Ty}
+    (place : MemoryPlace _ ty) (allowCopy : Bool) : Bool :=
+  let moved := movedBelow state place.logical.root place.logical.path
+  !moved.isEmpty && (memory.loadBacking state place).any fun value =>
+    canDiscard language allowCopy (moved.foldl (fun depth suffix => max depth suffix.length) 0)
+      ty value moved
 
 def mayInitialize (memory : Memory lang profile)
     (state : MemoryRegisters language profile) {ty : language.operands.Ty}
@@ -478,12 +491,30 @@ def mayInitialize (memory : Memory lang profile)
   else if state.movedFields.any (fun (owner, moved) =>
       owner == root && moved != path && moved.isPrefixOf path) then false
   else if state.movedFields.contains (root, path) then true
-  else
-    let moved := state.movedFields.filterMap fun (owner, moved) =>
-      if owner == root && path.isPrefixOf moved then some (moved.drop path.length) else none
-    !moved.isEmpty &&
-      (memory.loadBacking state place).any fun value =>
-        canDiscard language (moved.foldl (fun depth suffix => max depth suffix.length) 0) ty value moved
+  else memory.discardRemainder state place true
+
+/-- A write's owner view records whether any active part of the destination
+still holds a value. A partially moved destination can have a discardable
+remainder, but replacing that remainder requires mutable owner access. -/
+def writeOwnerView (memory : Memory lang profile)
+    (state : MemoryRegisters language profile) {ty : language.operands.Ty}
+    (place : MemoryPlace _ ty) : Own.State × Hybrid.Place :=
+  let root := place.logical.root
+  let path := place.logical.path
+  let empty := !state.initialized.contains root ||
+    state.movedFields.any (fun (owner, moved) => owner == root && moved.isPrefixOf path) ||
+    memory.discardRemainder state place false
+  memory.ownerView state root ty (if empty then .moved else .owned)
+
+/-- A normal reinitialization uses the selected slot directly. Replacing a
+live remainder requires both fieldwise discharge and mutable owner access. -/
+def authorizeWrite (memory : Memory lang profile)
+    (state : MemoryRegisters language profile) {ty : language.operands.Ty}
+    (place : MemoryPlace _ ty) : Option Own.State :=
+  let (owners, id) := memory.writeOwnerView state place
+  if memory.discardRemainder state place true && Own.ownerAccess owners id .mutable then
+    some owners
+  else Own.reinitialize owners id
 
 def writeValue (memory : Memory lang profile)
     (state : MemoryRegisters language profile) {ty : language.operands.Ty}
@@ -492,9 +523,7 @@ def writeValue (memory : Memory lang profile)
   let root := place.logical.root
   let path := place.logical.path
   if !state.live.contains root || !memory.mayInitialize state place then none else
-  let status := if initializedAt state root path then .owned else .moved
-  let (owners, id) := memory.ownerView state root ty status
-  let owners ← Own.reinitialize owners id
+  let owners ← memory.authorizeWrite state place
   let state := {state with
     ownership := if path.isEmpty then commitOwner state root owners else state.ownership
     initialized := if state.initialized.contains root then state.initialized else root :: state.initialized
@@ -579,15 +608,20 @@ theorem moveRead_iff (memory : Memory lang profile) (state : MemoryRegisters lan
 theorem write_authorized (memory : Memory lang profile) (state : MemoryRegisters language profile)
     {ty : language.operands.Ty} (place : MemoryPlace _ ty) (value : language.operands.Val) {next} :
     memory.writeValue state place value = some next →
-      let status := if initializedAt state place.logical.root place.logical.path then .owned else .moved
-      let view := memory.ownerView state place.logical.root ty status
-      (Own.reinitialize view.1 view.2).isSome = true := by
+      let (owners, id) := memory.writeOwnerView state place
+      (Own.reinitialize owners id).isSome = true ∨
+        (memory.discardRemainder state place true = true ∧ Own.ownerAccess owners id .mutable = true) := by
   simp only [writeValue]
   split
   · simp
-  · generalize (memory.ownerView state place.logical.root ty
-      (if initializedAt state place.logical.root place.logical.path then .owned else .moved)) = view
-    cases Own.reinitialize view.1 view.2 <;> simp
+  · simp only [authorizeWrite]
+    generalize memory.writeOwnerView state place = view
+    obtain ⟨owners, id⟩ := view
+    dsimp only
+    split
+    · rename_i permitted
+      exact fun _ => Or.inr (Bool.and_eq_true_iff.mp permitted)
+    · cases Own.reinitialize owners id <;> simp
 
 def Writes (memory : Memory lang profile)
     (state : MemoryRegisters language profile) {ty : language.operands.Ty}
@@ -674,7 +708,7 @@ def endOwnerView (memory : Memory lang profile) (state : MemoryRegisters languag
       (!moved.isEmpty &&
         (memory.classAt state.frame place).any fun storage =>
           (memory.loadBacking state (ty := ty) ⟨⟨place, []⟩, storage⟩).any fun value =>
-            canDiscard language (moved.foldl (fun depth path => max depth path.length) 0) ty value moved)
+            canDiscard language true (moved.foldl (fun depth path => max depth path.length) 0) ty value moved)
     memory.ownerView state place ty (if discharged then .moved else .owned)
 
 def canEnd (memory : Memory lang profile) (state : MemoryRegisters language profile)
@@ -895,7 +929,8 @@ def InstructionStepWith (memory : Memory lang profile)
   | .endLifetime place => ∃ ended, memory.Ends state place ended ∧ next = ended.advance
   | @MemoryInst.destructure _ _ ty src bindings =>
     ∃ value afterRead fields stored,
-      memory.readValue state (.move src) = some (value, afterRead) ∧
+      memory.readValue state (if language.operands.isCopy ty then .copy src else .move src) =
+        some (value, afterRead) ∧
       DestructureFields language ty value (bindings.map fun (field, dst) => (field, dst.1)) ∧
       bindings.mapM (fun binding => language.field value [binding.1]) = some fields ∧
       memory.WriteParams (bindings.map Prod.snd) fields afterRead stored ∧ next = stored.advance
@@ -1179,11 +1214,37 @@ def MIR.Execution : Semantics (MIR lang profile) language.operands.Event :=
 def Memory.Execution : Semantics (Memory lang profile) language.operands.Event :=
   graphExecution Memory.Step (fun memory => entryStateFor memory) hostedResultFor
 
+private def bindsOwner {O : Exec.Operands} (owner : ConcreteSpec.Var) : Exec.Stmt O → Bool
+  | .bind var .. => var == owner
+  | .call dst .. | .prim dst .. => dst == some owner
+  | .seq first second | .cond _ first second _ | .loop _ first _ second _ =>
+    bindsOwner owner first || bindsOwner owner second
+  | .block _ body => bindsOwner owner body
+  | _ => false
+
+private def sourceMutable (core : CoreInput language) (fn : FnId) (root : PlaceId) : Bool :=
+  let owner : ConcreteSpec.Var := ⟨root.id⟩
+  ((AList.lookup core.payload.ownership owner).any (·.mutable)) &&
+    (AList.lookup core.payload.body.fns fn).any (fun function =>
+      function.params.any (fun parameter => parameter.1 == owner) || bindsOwner owner function.body)
+
+/-- Retained bindings keep their fresh Core identity as the MIR root number.
+Every mutable root must be declared locally and backed by a mutable binding
+in the corresponding Core function. Synthetic roots are immutable here. -/
+def PreservesOwnerMutability (core : CoreInput language) (mir : MIR lang profile) : Prop :=
+  (∀ fn locals graph, (fn, locals, graph) ∈ mir.functions →
+    ∀ root ty, (root, ty) ∈ locals →
+      ((AList.lookup mir.mutableLocals fn).getD []).contains root = sourceMutable core fn root) ∧
+  ∀ fn roots root, (fn, roots) ∈ mir.mutableLocals → root ∈ roots →
+    sourceMutable core fn root = true ∧
+    ∃ locals graph ty, (fn, locals, graph) ∈ mir.functions ∧ (root, ty) ∈ locals
+
 def LowersCore
     (input : Admitted language) (mir : MIR lang profile) : Prop :=
   mir.project = input.core.project ∧ mir.entry = input.core.payload.entry ∧
   PreservesOrigins (List.map Prod.snd input.core.payload.origins) mir.origins ∧
   ConsumesEvidence input.core input.discharges mir ∧
+  PreservesOwnerMutability input.core mir ∧
   BehaviorRefinement CoreInput.Execution (MIR.Execution (language := language))
     CoreInput.Execution.result (MIR.Execution (language := language)).result input.core mir
 
@@ -1192,6 +1253,7 @@ def LowersUnchecked
   mir.project = input.project ∧ mir.entry = input.payload.entry ∧
   PreservesOrigins (List.map Prod.snd input.payload.origins) mir.origins ∧
   ConsumesEvidence input [] mir ∧
+  PreservesOwnerMutability input mir ∧
   BehaviorRefinement CoreInput.Execution (MIR.Execution (language := language))
     CoreInput.Execution.result (MIR.Execution (language := language)).result input mir
 

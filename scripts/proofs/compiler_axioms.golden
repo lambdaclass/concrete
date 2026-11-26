@@ -1517,6 +1517,7 @@ Concrete.Interfaces.MIRInst.op.injEq	propext
 Concrete.Interfaces.MIRInst.op.sizeOf_spec	
 Concrete.Interfaces.Memory.EndLocals.brecOn	Quot.sound propext
 Concrete.Interfaces.Memory.WriteParams.brecOn	Quot.sound propext
+Concrete.Interfaces.Memory.authorizeWrite.eq_1	Quot.sound propext
 Concrete.Interfaces.Memory.canEnd.eq_1	Quot.sound propext
 Concrete.Interfaces.Memory.canEnd_iff	Quot.sound propext
 Concrete.Interfaces.Memory.copyRead_iff	Quot.sound propext

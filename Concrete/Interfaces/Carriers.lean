@@ -277,7 +277,7 @@ inductive SSARead (Ty : Type) (Literal : Ty → Type) : Ty → Type where
   | value {ty : Ty} (value : SSAValue Ty ty) : SSARead Ty Literal ty
   | literal {ty : Ty} (value : Literal ty) : SSARead Ty Literal ty
 
-/-- A destructure consumes an entire aggregate, whether promoted or byte-backed. -/
+/-- A destructure reads an entire aggregate, whether promoted or byte-backed. -/
 inductive SSAAggregate (Ty : Type) : Ty → Type where
   | register {ty : Ty} (src : SSAValue Ty ty) : SSAAggregate Ty ty
   | materialized {ty : Ty} (src : Place Ty ty) : SSAAggregate Ty ty
