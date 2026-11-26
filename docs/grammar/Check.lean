@@ -63,9 +63,23 @@ def addExpressionLadders (slice : Nat) (rules : List Rule) : List Rule := Id.run
   let tails := ["ProductTail", "SumTail", "ShiftTail", "AndBits", "XorBits", "OrBits",
     "CompareTail", "EqualityTail", "LogicAndTail", "LogicOrTail"]
   let continuation := ("ExprContinuation", tails.map ("@" ++ ·))
-  let bodyRules := rules.filter fun (lhs, rhs) => lhs != "Unary" || rhs.headD "" != "*"
+  let bodyRules := rules.filter fun (lhs, rhs) =>
+    lhs != "Unary" || !["*", "@AttributePrefix"].contains (rhs.headD "")
+  -- A match can continue as a trailing value on a binary-only token. A
+  -- token that also begins a body item takes the statement boundary.
+  let itemStarters := rules.filterMap fun (lhs, rhs) => do
+    let token ← rhs.head?
+    if ["Unary", "NamedBody"].contains lhs && !token.startsWith "@" then
+      some token else none
+  let matchContinuations := tails.zipIdx.flatMap fun (tail, i) =>
+    rules.filterMap fun (lhs, rhs) => do
+      let token ← rhs.head?
+      if lhs == tail && !itemStarters.contains token then
+        some ("MatchEnd", rhs ++ ((tails.drop (i + 1)).map ("@" ++ ·)))
+      else none
   let body := withLeadingOperand "Body" bodyRules ++ [("BodyAtom", ["@CommonAtom"])]
-  let expanded := withExpressionLadder "Head" rules ++ body ++ [continuation]
+  let expanded := withExpressionLadder "Head" rules ++ body ++ [continuation] ++
+    (if slice >= 6 then matchContinuations else [])
   if slice < 8 then return expanded
   let scalarRules := rules.filter fun (lhs, rhs) =>
     lhs != "Unary" || ["-", "!", "BIT_NOT", "@Atom"].contains (rhs.headD "")
@@ -148,7 +162,7 @@ def instantiate (options : Options) (rules : List Rule) : DraftGrammar :=
     !(options.bitNot == "!" && rhs.head? == some "BIT_NOT" &&
       rules.contains (lhs, "!" :: rhs.drop 1))
   let generalAttributes := if options.alternateAttribute then [
-      ("Attrs", ["@[", "IDENT", "@AttrArgs", "]", "@Attrs"])]
+      ("Attribute", ["@[", "IDENT", "@AttrArgs", "]"])]
     else [("ListedEnvelope", ["IDENT", "@AttrArgs"])]
   let rules := rules.filter allows ++ generalAttributes
   let rules := if options.builtinTargetType then withBuiltinTargetType rules else rules
@@ -265,6 +279,16 @@ def examples (slice : Nat) (options : Options) : List Example :=
     ⟨"expression statements and a final expression", fnBody "IDENT ( ) ; IDENT = INTEGER ; IDENT", true⟩,
     ⟨"final expression requires closing brace", fnBody "IDENT return INTEGER ;", false⟩]
   | 4 => [
+    ⟨"termination permission before a loop",
+      fnBody "#[ may_not_terminate ( STRING ) ] while true { }", true⟩,
+    ⟨"termination permission before an expression statement",
+      fnBody "#[ may_not_terminate ( STRING ) ] IDENT ( IDENT ) + IDENT ( ) ;", true⟩,
+    ⟨"termination permission on the right operand of addition",
+      fnBody "return INTEGER + #[ may_not_terminate ( STRING ) ] IDENT ( ) ;", true⟩,
+    ⟨"termination permission consumes a postfix operand at its own precedence",
+      fnBody "return #[ may_not_terminate ( STRING ) ] - INTEGER ;", false⟩,
+    ⟨"termination permission needs an operand after the prefix",
+      fnBody "#[ may_not_terminate ( STRING ) ] + IDENT ( ) ;", false⟩,
     ⟨"listed and general attributes at first use",
       fnBody s!"#[ invariant ( true ) ] {attr} IDENT ( STRING ) ] for {wildcard} from INTEGER until INTEGER \{ } INTEGER", true⟩,
     ⟨"listed attribute uses the listed envelope",
@@ -304,6 +328,14 @@ def examples (slice : Nat) (options : Options) : List Example :=
       fnBody ("match IDENT { " ++ arm wildcard "{ return INTEGER ; }" ++ " }"), true⟩,
     ⟨"unbraced return arm",
       fnBody ("match IDENT { " ++ arm wildcard "return INTEGER" ++ " }"), true⟩,
+    ⟨"match with addition as a trailing value",
+      fnBody s!"match IDENT \{ {arm wildcard "INTEGER"} } + INTEGER", true⟩,
+    ⟨"match with addition cannot become an expression statement",
+      fnBody s!"match IDENT \{ {arm wildcard "INTEGER"} } + INTEGER ;", false⟩,
+    ⟨"unary minus can start the next statement after a match",
+      fnBody s!"match IDENT \{ {arm wildcard "INTEGER"} } - INTEGER ;", true⟩,
+    ⟨"bare match statement refuses a semicolon",
+      fnBody s!"match IDENT \{ {arm wildcard "INTEGER"} } ;", false⟩,
     ⟨"semicolon-free match statement",
       fnBody ("match IDENT { " ++ arm wildcard "INTEGER" ++ " } return INTEGER ;"), true⟩,
     ⟨"bare struct match pattern", fnBody ("match IDENT { " ++ arm "IDENT { IDENT }" "INTEGER" ++ " }"), false⟩,
@@ -465,7 +497,7 @@ def main : IO Unit := do
       -- Duplicate the STRING path only in the alternate envelope. The default
       -- projection cannot see it, and slice 11 replaces the argument grammar.
       let planted := rules ++ [
-        ("Attrs", ["@[", "IDENT", "@PlantedAttrArgs", "]", "@Attrs"]),
+        ("Attribute", ["@[", "IDENT", "@PlantedAttrArgs", "]"]),
         ("PlantedAttrArgs", ["(", "STRING", ")"])]
       let alternate := { representative with alternateAttribute := true }
       let conflicts := (optionsAt slice).filter fun options => !(ll1 (project options planted))
@@ -477,8 +509,8 @@ def main : IO Unit := do
       -- Reintroducing binary continuations at the block boundary collides
       -- with the same spellings at the beginning of the next body item.
       let planted := rules.map fun rule =>
-        if rule == ("Body", ["@BlockStmt", "@Body"]) then
-          ("Body", ["@BlockStmt", "@BlockBoundary"])
+        if rule == ("BlockItem", ["@BlockStmt", "@Body"]) then
+          ("BlockItem", ["@BlockStmt", "@BlockBoundary"])
         else rule
       let planted := planted ++ [
         ("BlockBoundary", ["@Body"]),
@@ -486,6 +518,9 @@ def main : IO Unit := do
         ("BlockBoundary", ["*", "@Unary", "@ExprContinuation"]),
         ("BlockBoundary", ["&", "@Shift", "@ExprContinuation"])]
       requireConflict "operator continuation at block statement boundary" (project representative planted)
+      requireConflict "shared minus at the match boundary" (project representative (rules ++ [
+        ("MatchEnd", ["-", "@Product", "@SumTail", "@ShiftTail", "@AndBits", "@XorBits",
+          "@OrBits", "@CompareTail", "@EqualityTail", "@LogicAndTail", "@LogicOrTail"])]))
     if slice == 9 then
       let g := project representative rules
       requireConflict "unmarked generics" { g with prods := g.prods ++ [("PathTail", [.n "TypeArgs"])] }

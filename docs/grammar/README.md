@@ -20,8 +20,8 @@ consumers and open options.
 | 1 | Empty struct and literal, typed let and destructuring let, named move, standalone abort | Q8.2 and OD65 cover the component and empty structs. Plan v4 step 6 reports Claude, Codex and agy agreement on the slice 1 grammar, `move t` and standalone `abort();` under the recorded November 25 delegation. The raw reviewer verdicts and exact presented delta are missing from this draft's source record. `grammar1` predicts a standalone identifier call; the slice 1 resolver checks that the callee is `abort`. Confirm the exact approved delta and its provenance under E8 before the B1 parser. [November 25 delegation](../decisions.md#decided-2026-11-25-freeze-and-grammar) · [`grammar1`](../../ConcreteSpec/Spec/Surface0.lean) · [Slice 1 source rules](../../ConcreteSpec/Surface1.lean) |
 | 2 | Primitive integers, precedence ladder, unary and binary operations, numeric call shapes | OD99 and the slice 2 schedule supply the integer forms. E1 and E4 still govern primitive classification, bitwise NOT, literal extensions and conversion spelling and target syntax. Precedence grouping in this draft needs the slice 2 grammar approval. [OD99](../decisions.md#od99) · [Vertical slices](../../ROADMAP.md#vertical-slices) |
 | 3 | Logical and comparison operators, value conditionals, mutable lets, assignment, statement and trailing expressions | OD16 and OD34 define the condition head boundary, OD29 the Unit statement rule, OD42 the comparisons, and Q6.5 the Boolean forms. The shared Surface0 projection supplies the semicolon-free conditional precedent. The slice 3 delta still needs approval. The grammar factors assignment through a named place, and the type and ownership checks establish its mutability, the Unit statement rule, and branch-result restrictions. [Surface0 grammar](../../ConcreteSpec/Spec/Surface0.lean) · [OD16](../decisions.md#od16) · [OD34](../decisions.md#od34) · [OD29](../decisions.md#od29) · [OD42](../decisions.md#od42) · [OD77](../decisions.md#od77) · [SYN-9](../../legacy/docs/spec/syntax.md#SYN-9) |
-| 4 | While and counted loops, labels, transfers, loop attributes | OD47–49 and the loop attribute schedule. Label punctuation follows the recorded syntax. The exact general attribute syntax and wildcard token classification remain open. [Loop syntax](../../legacy/docs/spec/syntax.md) · [OD47](../decisions.md#od47) · [Vertical slices](../../ROADMAP.md#vertical-slices) |
-| 5 | Parameters, calls, recursion and function attributes | Parameters and calls follow the slice plan and the OD31/OD138 typing rules. OD82 covers recursion attributes. Attribute placement and exact production delta remain for slice 5. [OD31](../decisions.md#od31) · [OD138](../decisions.md#od138) · [OD82](../decisions.md#od82) |
+| 4 | While and counted loops, labels, transfers, loop and expression attributes | OD47–49 and OD82 supply the loop and attribute forms. Label punctuation follows the recorded syntax. The exact general attribute syntax and wildcard token classification remain open. [Loop syntax](../../legacy/docs/spec/syntax.md) · [OD47](../decisions.md#od47) · [Termination permission](../decisions.md#decided-project-no-hidden-traps) · [Vertical slices](../../ROADMAP.md#vertical-slices) |
+| 5 | Parameters, calls, recursion and function attributes | Parameters and calls follow the slice plan and the OD31/OD138 typing rules. OD82 covers recursion attributes. The exact production delta remains for slice 5. [OD31](../decisions.md#od31) · [OD138](../decisions.md#od138) · [OD82](../decisions.md#od82) |
 | 6 | Named fields and projections, aliases, qualified patterns, enums and match | OD76 separates struct lets from qualified variant patterns. OD25 requires explicit ignores, recovered item 9 requires field labels, OD86 supplies the arm bodies, and OD130 supplies named variants. OD72 requires a variant. SYN-8 governs statement-position matches, and PAT-7 supplies alternative patterns. E1 asks for terminator alternatives alongside the recovered comma record. [OD76](../decisions.md#od76) · [OD25](../decisions.md#od25) · [Field patterns](../decisions.md#recovered-59-9) · [OD86](../decisions.md#od86) · [OD130](../decisions.md#od130) · [Comma record](../decisions.md#recovered-59-48) · [OD41](../decisions.md#od41) · [OD62](../decisions.md#od62) · [OD90](../decisions.md#od90) · [OD128](../decisions.md#od128) · [OD72](../decisions.md#od72) · [SYN-8](../../legacy/docs/spec/syntax.md#SYN-8) · [PAT-7](../../legacy/docs/spec/patterns.md#PAT-7) · [Namespace decision](../decisions.md#decided-2026-11-02-namespace) |
 | 7 | References, dereference, arrays and indexing, scoped views and ranges | OD1–3, OD57–58, Q4.7 and the removal of special `as`. Empty array literals are refused, and OD149 supplies repetition. Borrow keyword, binder and range spellings remain open. Optional borrow extensions remain with their separate owner items. [Empty arrays](../decisions.md#recovered-59-50) · [OD149](../decisions.md#od149) · [OD1](../decisions.md#od1) · [OD3](../decisions.md#od3) · [OD57](../decisions.md#od57) · [OD58](../decisions.md#od58) · [Removed words](../decisions.md#decided-2026-11-08-removed-words) |
 | 8 | Visibility, constants, external modules and import lists | OD33 and OD78 decide `mod X;`. Q6.4 as revised gives the constant initializer restriction. The draft gives initializers a scalar expression ladder and checks the shapes of named primitive applications. Constants and intrinsic names use the identifier token. Resolution must establish constant identity or membership in the closed primitive set. The exact lossless-conversion name and target syntax remain on the ballot. Exact import spelling remains open. [OD33](../decisions.md#od33) · [OD78](../decisions.md#od78) · [Constant initializers](../decisions.md#decided-2026-11-08-constants) · [Imported uses](../decisions.md#decided-2026-11-08-imports-qualified) |
@@ -62,17 +62,30 @@ statements and trailing values, assignment places, patterns and nonempty enum
 declarations, attributes, arrays and scoped borrow, constants and nonempty
 import lists, generic arguments and impl headers, and proof statements.
 
-At the start of a body item, `if`, `match` and scoped borrow use the
-block-statement production. This applies the SYN-8 statement boundary to
-`if` and scoped borrow as a draft choice for slice approval. The next item
-can start with unary `-`, `*` or `&`. In an explicit value context, such as a return, binding initializer or
-parentheses, the value-expression ladder permits an operator after a block
-form. A value `if` requires an `else` throughout its chain. At the end of a
-body, the statement-shaped production also recognizes the token shape of a
-block-form trailing value. This draft checks token recognition. Production AST
-actions and typing must establish the block result, including Unit for an
-`if` without an `else`. [SYN-8](../../legacy/docs/spec/syntax.md#SYN-8) ·
-[SYN-9](../../legacy/docs/spec/syntax.md#SYN-9)
+At the start of a body item, a match shares one production through the closing
+brace. It can end there as a statement, or a binary-only operator such as
+`+` can continue it as a trailing value through the enclosing block's
+closing brace. Both a bare match followed by a semicolon and an
+operator-continued match followed by a semicolon are refused. The draft
+routes tokens that can also begin a body item to the next item (`-` at
+slice 6, joined by `*` and `&` at slice 7). That shared-token choice needs
+slice approval. Grouping the match or using it in an explicit value context
+such as a return or initializer permits the ordinary expression ladder.
+[SYN-8](../../legacy/docs/spec/syntax.md#SYN-8)
+
+The draft applies the semicolon-free statement boundary to body-leading
+`if` and scoped borrow for slice approval. An explicit value context permits
+an operator after those forms. A value `if` requires an `else` throughout
+its chain. A bare block form at the end of a body can have a block result.
+Production AST actions and typing must establish the result, including Unit
+for an `if` without an `else`. [SYN-9](../../legacy/docs/spec/syntax.md#SYN-9)
+
+One shared attribute prefix precedes the body dispatch to a loop or a
+postfix operand. The expression ladder consumes binary operators after
+that operand, so in `#[may_not_terminate("reason")] fp(x) + g()` the
+permission attaches to `fp(x)`. The semantic checker classifies eligible targets
+and checks that the reason is nonempty.
+[Termination permission](../decisions.md#decided-project-no-hidden-traps)
 
 For assignment, the shared prefix begins at a bare binding or, from slice 7,
 the dereference of a named reference. Fields and indices use the same

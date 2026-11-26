@@ -1,7 +1,7 @@
 # Non-normative. @ marks a nonterminal. Empty RHS means epsilon.
 # Sections replace earlier definitions of the same nonterminal.
 # Check.lean derives the Head, Body and Const expression ladders
-# and ExprContinuation from the shared precedence productions.
+# and the ExprContinuation and MatchEnd operator branches from shared precedence rules.
 # See README.md for provenance, alternatives and the checker command.
 [0]
 Program = fn IDENT ( ) -> u8 @Block
@@ -82,7 +82,7 @@ Body = let @LetHead = @Expr ; @Body
 Body = return @Expr ; @Body
 Body = @BodyExpr @ExprEnd
 Body = @NamedBody
-Body = @BlockStmt @Body
+Body = @BlockItem
 Body =
 LetHead = IDENT @LetTail
 LetHead = mut IDENT : @Type
@@ -128,6 +128,7 @@ BodyNameTail = @PlaceTail
 PlaceTail = = @Expr ; @Body
 PlaceTail = @ExprContinuation @ExprEnd
 BlockExpr = if @Head @Block else @ValueElse
+BlockItem = @BlockStmt @Body
 BlockStmt = if @Head @Block @StmtElse
 Group = @Expr
 Group =
@@ -149,12 +150,15 @@ Body = let @LetHead = @Expr ; @Body
 Body = return @Expr ; @Body
 Body = @BodyExpr @ExprEnd
 Body = @NamedBody
-Body = @BlockStmt @Body
+Body = @BlockItem
 Body = @Loop @Body
+Body = @AttributePrefix @AttributedBody
 Body = break @LabelOpt ; @Body
 Body = continue @LabelOpt ; @Body
 Body =
-Loop = @Attrs @LoopLabel @LoopForm
+Loop = @LoopLabel @LoopForm
+AttributedBody = @Loop @Body
+AttributedBody = @Atom @ExprContinuation @ExprEnd
 LoopLabel = LABEL :
 LoopLabel =
 LoopForm = while @Head @Block
@@ -166,7 +170,14 @@ Binder = WILDCARD
 LetHead = IDENT @LetTail
 LetHead = mut IDENT : @Type
 LetHead = WILDCARD : @Type
-Attrs = #[ @ListedEnvelope ] @Attrs
+Attrs = @AttributePrefix
+AttributePrefix = @Attribute @Attrs
+Attribute = #[ @ListedEnvelope ]
+Unary = - @Unary
+Unary = ! @Unary
+Unary = BIT_NOT @Unary
+Unary = @AttributePrefix @Atom
+Unary = @Atom
 ListedEnvelope = @ListedAttr
 ListedAttr = invariant ( @Expr )
 ListedAttr = variant ( @Expr )
@@ -269,7 +280,10 @@ MorePatternFields =
 BlockExpr = if @Head @Block else @ValueElse
 BlockExpr = @Match
 BlockStmt = if @Head @Block @StmtElse
-BlockStmt = @Match
+BlockItem = @BlockStmt @Body
+BlockItem = @Match @MatchEnd
+# Binary continuations ending at the closing brace are synthesized by the checker.
+MatchEnd = @Body
 Match = match @Head { @Arms }
 Arms = @Pattern @PatternAlternatives => @ArmBody ARM_SEPARATOR @Arms
 Arms =
@@ -309,6 +323,7 @@ Unary = * IDENT @Postfix
 NamedBody = IDENT @BodyNameTail
 NamedBody = * IDENT @PlaceTail
 Unary = & @MutOpt @Unary
+Unary = @AttributePrefix @Atom
 Unary = @Atom
 CommonAtom = INTEGER
 CommonAtom = BYTE
@@ -321,7 +336,6 @@ BlockExpr = if @Head @Block else @ValueElse
 BlockExpr = @Match
 BlockExpr = @Borrow
 BlockStmt = if @Head @Block @StmtElse
-BlockStmt = @Match
 BlockStmt = @Borrow
 # The spelling ballot chooses one form before LL(1) qualification.
 Borrow = BORROW_WORD @MutOpt @BorrowForm @Block @BorrowElse
@@ -474,8 +488,9 @@ Body = let @LetHead = @Expr ; @Body
 Body = return @Expr ; @Body
 Body = @BodyExpr @ExprEnd
 Body = @NamedBody
-Body = @BlockStmt @Body
+Body = @BlockItem
 Body = @Loop @Body
+Body = @AttributePrefix @AttributedBody
 Body = break @LabelOpt ; @Body
 Body = continue @LabelOpt ; @Body
 Body = defer @Path ( @Args ) ; @Body
@@ -503,8 +518,9 @@ Body = let @LetHead = @Expr ; @Body
 Body = return @Expr ; @Body
 Body = @BodyExpr @ExprEnd
 Body = @NamedBody
-Body = @BlockStmt @Body
+Body = @BlockItem
 Body = @Loop @Body
+Body = @AttributePrefix @AttributedBody
 Body = break @LabelOpt ; @Body
 Body = continue @LabelOpt ; @Body
 Body = defer @Path ( @Args ) ; @Body

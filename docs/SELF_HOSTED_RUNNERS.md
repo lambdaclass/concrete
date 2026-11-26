@@ -9,7 +9,7 @@ the switch does, how to set up a server, and the security rules for a **public**
 Every Ubuntu job's `runs-on` is:
 
 ```yaml
-runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+runs-on: ${{ ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
 ```
 
 - The repository variable `CONCRETE_SELF_HOSTED` routes the **landing tier** (build, test suites,
@@ -21,7 +21,7 @@ runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED =
   campaign on self-hosted runners would queue landing runs behind it.
   The tiers are listed in [PROMOTION_PIPELINE.md](../legacy/docs/project/PROMOTION_PIPELINE.md#ci-tiers).
 - An unset variable, or any value other than `true`, means GitHub-hosted. That is the default.
-- **A `pull_request` event never runs on a self-hosted runner**, whatever the variables say. See
+- **PR and merge-group events use GitHub-hosted runners**, whatever the variables say. See
   the security section for why this guard alone is not enough.
 - `Build + main tests (macOS)` stays on `macos-latest`. The Pages workflow (`book.yml`) stays on
   GitHub-hosted runners.
@@ -41,9 +41,9 @@ INCOMPLETE and blocks the landing.
 
 | Pool | Where | Limits (set 2026-11-06) | Runs |
 |---|---|---|---|
-| `concrete` | concrete-ci-2 (Hetzner AX102: 32 threads, 125 GB RAM) | 6 runners `gha1`..`gha6`, so at most 6 concurrent jobs; each has `MemoryMax=28G` and no swap, and no per-runner CPU cap | the landing tier when `CONCRETE_SELF_HOSTED=true`; never a `pull_request` |
+| `concrete` | concrete-ci-2 (Hetzner AX102: 32 threads, 125 GB RAM) | 6 runners `gha1`..`gha6`, so at most 6 concurrent jobs; each has `MemoryMax=28G` and no swap, and no per-runner CPU cap | the landing tier when `CONCRETE_SELF_HOSTED=true`; only main pushes and dispatches |
 | `concrete-light` | concrete-ci-2 | 2 runners `gha7`, `gha8` (`LIGHT_RUNNERS` in the dotfiles host file), each `CPUQuota=400%` and `MemoryMax=8G` | branch health only |
-| GitHub-hosted | `ubuntu-latest`, `macos-latest` | GitHub's per-repository concurrency | every landing-tier job when the variable is off; always: `Oracle (GitHub-hosted fetch + smoke)` and `Build + main tests (macOS)`; every `pull_request` |
+| GitHub-hosted | `ubuntu-latest`, `macos-latest` | GitHub's per-repository concurrency | every landing-tier job when the variable is off; always: `Oracle (GitHub-hosted fetch + smoke)` and `Build + main tests (macOS)`; every PR and merge group |
 
 Both pools on concrete-ci-2 run inside `concrete-runners.slice`, capped together at `CPUQuota=2400%`
 (24 of 32 threads), `MemoryMax=96G`, no swap and `TasksMax=16384` (ISS-0007, applied 2026-11-06).
@@ -56,8 +56,7 @@ tailscaled) is reserved. The slice keeps the default CPU weight (100) against
 file (`servers/hosts/concrete-ci-2.env`, `CONCRETE_RUNNERS_*` and `CONCRETE_*RUNNER_*`), and
 `servers/runners.sh` writes them, so a rebuilt host gets the same caps.
 
-Manual heavy work on concrete-ci-2 (train check legs through `land.gatesHost`, `run-at-ref.sh`
-runs, oracle rebuilds) follows the machine-wide rule: at most two full suites, mutation campaigns
+Manual heavy work on concrete-ci-2 (such as oracle rebuilds) follows the machine-wide rule: at most two full suites, mutation campaigns
 or other CPU-heavy checks at once (AGENTS.md, ROADMAP R-0543).
 
 **What runs where on the GitHub-hosted pool.** Every landing-tier job's `runs-on` falls back to
