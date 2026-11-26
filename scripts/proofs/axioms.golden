@@ -5777,6 +5777,7 @@ ConcreteSpec.Surface0.grammar0_ll1	propext
 ConcreteSpec.Surface0.grammar1_ll1	propext
 ConcreteSpec.Surface0.grammar1_predicts_unique	Quot.sound propext
 ConcreteSpec.Surface0.instDecidableBidiControl._proof_1	
+ConcreteSpec.Surface0.instDecidableBinderLegal._proof_1	propext
 ConcreteSpec.Surface0.instDecidableByteEscape._proof_1	
 ConcreteSpec.Surface0.instDecidableByteRaw._proof_1	
 ConcreteSpec.Surface0.instDecidableCommentRaw._proof_1	
