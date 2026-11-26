@@ -437,6 +437,9 @@ jobs:
       - reproducibility
       - compare-linux
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
     timeout-minutes: 5
     permissions:
       actions: read
