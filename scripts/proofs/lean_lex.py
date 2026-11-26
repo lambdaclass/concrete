@@ -212,7 +212,7 @@ def compiler_header():
     backend_surface = (
         "AArch64", "AMD64", "IR", "Validate", "Verified.Admission",
         "Verified.BuildIdentity", "Verified.Canonical", "Verified.Job",
-        "Verified.Plans", "Verified.Source",
+        "Verified.Plans", "Verified.Source", "Verified.StackMIR", "Verified.TypedA64",
     )
     for component in backend_surface:
         module = "LeanCompilerBackend." + component

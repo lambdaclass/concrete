@@ -9,9 +9,9 @@ favor of transitive visibility. Both import gates share the lexer header parser;
 `imports.py --write` preserves comments while updating import commands. Each
 build and elaboration uses the bounded runner and forwards failure diagnostics.
 
-The gate recursively enumerates `ConcreteSpec/Proofs/` and the proof-bearing
-modules in `Concrete/`, including mixed definition and proof files. Both
-populations must be present. Header-only compatibility modules retain their
+The gate recursively enumerates `ConcreteSpec/Proofs/`, `ConcreteSpecEvidence/`,
+and the proof-bearing compiler modules, including mixed definition and proof
+files. Each population must be present. Header-only compatibility modules retain their
 re-exports. For compiler proofs, the gate uses Lean's elaboration info to identify alias
 references and the modules that registered the aliases. It reads Lean's recorded
 extra module uses for resolved declaration quotations. Both dependencies can

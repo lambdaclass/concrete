@@ -1024,8 +1024,8 @@ Concrete.Certificate.StillAccepted.brecOn
 Concrete.Certificate.environmentPremises.eq_1	
 Concrete.Certificate.instDecidableEqBackend._proof_1	
 Concrete.Certificate.instDecidableEqBackend._proof_2	
-Concrete.Certificate.instDecidableEqDigest.decEq._proof_1	
-Concrete.Certificate.instDecidableEqDigest.decEq._proof_2	
+Concrete.Certificate.instDecidableEqDigest._proof_1	propext
+Concrete.Certificate.instDecidableEqDigest._simp_1	propext
 Concrete.Certificate.instDecidableEqDigestDomain._proof_1	
 Concrete.Certificate.instDecidableEqDigestDomain._proof_2	
 Concrete.Certificate.instDecidableEqObligation.decEq._proof_1	
@@ -1274,7 +1274,7 @@ Concrete.ImageTheorem.Sanity.instantRefines	Quot.sound propext
 Concrete.ImageTheorem.Sanity.pinnedRevision	
 Concrete.ImageTheorem.Sanity.refinementsToInstant	Quot.sound propext
 Concrete.ImageTheorem.Sanity.returnAtTwo	Quot.sound propext
-Concrete.ImageTheorem.Sanity.testAnchor	Classical.choice Quot.sound propext
+Concrete.ImageTheorem.Sanity.testAnchor	Quot.sound propext
 Concrete.ImageTheorem.Sanity.testLLVMHandoffs	Classical.choice Quot.sound propext
 Concrete.ImageTheorem.Sanity.testRegistry._proof_1	
 Concrete.ImageTheorem.SharedModels.mk.inj	
@@ -2798,7 +2798,7 @@ _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.llvmWitness	Classical.c
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.overflowInput._proof_1	Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.refusesFirstBinder	
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.returnAtOne	Quot.sound propext
-_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.testImagePremises	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.testImagePremises	Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.testLCBAnswerMarker	propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.testLCBHandoffs	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.testLCBPremises	Classical.choice Quot.sound propext

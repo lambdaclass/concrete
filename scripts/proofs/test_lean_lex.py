@@ -146,6 +146,8 @@ end Witness{index}
         header = lexer.compiler_header()
         for module, allowed in (("Concrete.Lex", True), ("Lean.Meta.Basic", False),
                                 ("LeanCompilerBackend.AMD64", True),
+                                ("LeanCompilerBackend.Verified.StackMIR", True),
+                                ("LeanCompilerBackend.Verified.TypedA64", True),
                                 ("LeanCompilerBackend.Verified.Tests", False),
                                 ("LeanCompilerBackend.Liveness.Report", False),
                                 ("Init.System.IO", False),

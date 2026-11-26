@@ -193,7 +193,6 @@ for command in 'import Lean' 'import Std' 'import Concrete' 'def bad := sorry' '
   fi
 done
 
-
 # Read every compiler constant as well, including declarations not reachable from
 # the headline theorem registry. The compiler root must import every source module.
 PROOF_PKG=Concrete PROOF_MODE=constants "$LAKE" env lean "$ENUMERATOR" > "$TMP/compiler-consts.tsv" \
@@ -216,8 +215,7 @@ GAP=$(comm -23 "$TMP/compiler-modules.txt" <(sort -u "$TMP/compiler-imported.txt
 [ -z "$GAP" ] && ok "all compiler modules are in the checked import closure" \
   || no "compiler modules outside checked closure: $GAP"
 
-# lake_options LAKEFILE → empty when the specification library builds from ConcreteSpec.lean and
-# ConcreteSpec/ (Lake's defaults: no srcDir, roots or globs) with warningAsError, and nothing can turn
+# lake_options LAKEFILE → empty when the audited build configuration is valid.
 # The specification, evidence, compiler and tooling libraries use the same key allow-list.
 # Only tooling has a fixed custom source directory and may import Lean reflection.
 # The source scan checks the specification and evidence import directions.
@@ -338,16 +336,16 @@ if PROOF_PKG=ConcreteSpec PROOF_MODE=environment "$LAKE" env lean "$TMP/no-umbre
 else
   no "control: bypassing the evidence umbrella did not leave coverage dependent on the direct spec import"
 fi
-# Exercise the compiler CLI itself: these must be reported, even with an otherwise valid header.
-for body in 'import Lean.Meta.Basic' 'import Init.System.IO' 'import LeanCompilerBackend.Verified.Tests' 'import ConcreteTooling' 'import Std' 'import ConcreteSpecEvidence' 'import Lean.DoesNotExist' 'def bad : Nat := sorry'; do
+# Exercise driver import and trust-word restrictions through the compiler scanner.
+for body in 'import Lean.Meta.Basic' 'import Init.System.IO' 'import LeanCompilerBackend.Verified.Tests' 'import ConcreteTooling' 'import Std' 'import Lean.DoesNotExist' 'def bad : Nat := sorry'; do
   printf 'import Concrete.Lex\n%s\n' "$body" > "$TMP/Main.lean"
-  W=$(python3 "$PROOFS_DIR/lean_lex.py" scan-compiler "$BANNED_WORD_RE|$EXTENSION_RE" "$TMP/Main.lean"); RC=$?
+  W=$(python3 "$PROOFS_DIR/lean_lex.py" scan-compiler "$BANNED_WORD_RE" "$TMP/Main.lean"); RC=$?
   [ "$RC" = 0 ] && [[ "$W" == *"$body"* ]] \
     && ok "control: compiler scan reports $body" || no "compiler scan missed $body (rc=$RC): $W"
 done
 for body in 'import ConcreteSpecEvidence' 'set_option maxRecDepth 100000'; do
   printf 'import Concrete.Lex\n%s\n' "$body" > "$TMP/compiler-bad.lean"
-  W=$(python3 "$PROOFS_DIR/lean_lex.py" scan-compiler "$BANNED_WORD_RE|$EXTENSION_RE" "$TMP/compiler-bad.lean"); RC=$?
+  W=$(python3 "$PROOFS_DIR/lean_lex.py" scan-totality "$TOTALITY_RE|$EXTENSION_RE" "$TMP/compiler-bad.lean"); RC=$?
   [ "$RC" = 0 ] && [[ "$W" == *"$body"* ]] \
     && ok "control: compiler scan reports $body" || no "compiler scan missed $body (rc=$RC): $W"
 done

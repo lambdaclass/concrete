@@ -51,7 +51,8 @@ def elaborate(source, temp):
 
 
 def dependencies(source, temp, built_module=None, *, dropped=None, compiler_modules=None):
-    module_imports(source, MODULES if compiler_modules is None else compiler_modules)
+    allowed = MODULES if compiler_modules is None else compiler_modules
+    module_imports(source, allowed)
     elaborate(source, temp)
     output = inspect(temp.stem, temp, source=compiler_modules is not None)
     if dropped is not None:
@@ -66,7 +67,10 @@ def dependencies(source, temp, built_module=None, *, dropped=None, compiler_modu
                              f'probe: {named(output)}\nbuilt: {named(built)}')
     deps = sorted(line.removeprefix('IMPORT ') for line in output.splitlines()
                   if line.startswith('IMPORT '))
-    if not deps and (built_module is None or built_module.startswith('ConcreteSpec.')):
+    forbidden = sorted(set(deps) - allowed)
+    if forbidden:
+        raise LexError('direct dependencies outside the approved import graph: ' + ', '.join(forbidden))
+    if not deps and (built_module is None or built_module.startswith(('ConcreteSpec.', 'ConcreteSpecEvidence.'))):
         raise SystemExit('imports: empty dependency population')
     return deps
 
