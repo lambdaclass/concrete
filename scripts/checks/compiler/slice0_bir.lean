@@ -127,29 +127,47 @@ def writeBackends (dir : System.FilePath) (target : LCB.Target) (p : Program) (l
   IO.FS.writeFile (dir / "llvm.ll") llvm
   writeLcb dir target emitted
 
+-- Separate budgets because a BIR block and an LCB evaluator step have different costs.
+def readFuel (name : String) (fallback : Nat) : IO Nat := do
+  match ← IO.getEnv name with
+  | none => return fallback
+  | some value =>
+    match value.toNat? with
+    | some fuel => return fuel
+    | none => throw (IO.userError s!"{name} must be a natural number")
+
+def exhausted (name evaluator : String) (fuel : Nat) : IO UInt32 := do
+  IO.eprintln s!"{name}: INCOMPLETE: {evaluator} exhausted evaluation fuel ({fuel})"
+  return 3
+
 def emitArtifact (name : String) (p : Program) (llvm : String)
     (emitted : LeanCompilerBackend.Verified.Source.Function × SiteTable) (dir : System.FilePath)
     (expectation : List String) (target : LCB.Target) : IO UInt32 := do
   let some expected := parseExpectation expectation
     | IO.eprintln s!"{name}: invalid BIR expectation; use exit N or trap KIND site N"; return 2
   unless wf p do IO.eprintln s!"{name}: not well formed"; return 1
-  let got := run p 1000
+  let birFuel ← readFuel "CONCRETE_BIR_FUEL" 1000
+  let got := run p birFuel
+  if got == .outOfFuel then return ← exhausted name "BIR" birFuel
   unless got == expected.outcome do
-    IO.eprintln s!"{name}: expectation mismatch: BIR run gives {repr got}, expected {repr expected.outcome}"; return 1
+    IO.eprintln s!"{name}: expectation mismatch: BIR run gives {repr got}, expected {repr expected.outcome}"; return 4
   let some word := encode expected.outcome | IO.eprintln s!"{name}: no result word"; return 1
   let (f, tbl) := emitted
-  match LCB.evalBody f 100000 with
-  | some w =>
-    unless w == word do
-      IO.eprintln s!"{name}: LCB's evaluator returns {w}, BIR's result word is {word}"; return 1
-  | none => IO.eprintln s!"{name}: LCB's evaluator does not return"; return 1
+  let lcbFuel ← readFuel "CONCRETE_LCB_FUEL" 100000
+  match LeanCompilerBackend.Verified.Source.evaluateFunction f #[] lcbFuel with
+  | .returned (.word w) =>
+    unless w.toNat == word do
+      IO.eprintln s!"{name}: LCB's evaluator returns {w.toNat}, BIR's result word is {word}"; return 4
+  | .exhausted _ => return ← exhausted name "LCB" lcbFuel
+  | .stuck fault => IO.eprintln s!"{name}: LCB evaluator stuck: {repr fault}"; return 1
+  | .returned _ => IO.eprintln s!"{name}: LCB evaluator returned the wrong word type"; return 1
   unless ← writeBackends dir target p llvm (f, tbl) do return 1
   match expected.outcome with
   | .exited c => writeExpected dir (toString c) ""
   | .trapped s => match tbl[s]? with
     | some e =>
       unless expected.trapKind == some e.kind do
-        IO.eprintln s!"{name}: expectation mismatch: trap site {s} has kind {repr e.kind}, expected {expected.trapKindName}"; return 1
+        IO.eprintln s!"{name}: expectation mismatch: trap site {s} has kind {repr e.kind}, expected {expected.trapKindName}"; return 4
       writeExpected dir "134" (Runtime.trapLine e ++ "\n")
     | none => IO.eprintln s!"{name}: no site {s}"; return 1
   | _ => IO.eprintln s!"{name}: no observation"; return 1
@@ -171,23 +189,27 @@ def emitSource (path actual : String) (dir : System.FilePath) (expectation : Lis
     (target : LCB.Target) : IO UInt32 := do
   let input : Concrete.Stages.Input := ⟨path, ← IO.FS.readBinFile actual⟩
   match expectation, Concrete.Stages.compile input with
+  | _, .error (Concrete.Refusal.internal msg) =>
+    IO.eprintln s!"{path}: compiler failure: {msg}"; return 1
+  | _, .error (e@(.backendResource ..)) =>
+    IO.eprintln s!"{path}: INCOMPLETE: {e.message}"; return 3
   | "refuse" :: rule :: detail, .error e =>
     let message := String.intercalate " " detail
     if e.code == rule && (detail.isEmpty || e.message == message) then
       IO.println s!"ok   {path}: {e.code}: {e.message}"
       return 0
     IO.eprintln s!"{path}: expected refusal {rule}{if detail.isEmpty then "" else ": " ++ message}, got {e.code}: {e.message}"
-    return 1
+    return 4
   | "refuse" :: rule :: _, .ok _ =>
     IO.eprintln s!"{path}: expected refusal {rule}, but compilation succeeded"
-    return 1
+    return 4
   | "trap" :: _, .error (.checker _) =>
     let .ok tokens := Concrete.Lex.lex input.source | IO.eprintln "lex failed"; return 1
     let .ok ast := Concrete.Parse.parse tokens | IO.eprintln "parse failed"; return 1
     let .ok core := Concrete.Elab.elaborate ast | IO.eprintln "elaboration failed"; return 1
     let p := Concrete.Core.toCore core.program
     unless Concrete.Core.run p (p.body.length + 1) == .trap .arithmeticOverflow do
-      IO.eprintln s!"{path}: Core evaluator did not trap on overflow"; return 1
+      IO.eprintln s!"{path}: Core evaluator did not trap on overflow"; return 4
     match Concrete.Stages.unchecked input with
     | .ok bir => emitProgram path bir dir expectation target
     | .error e => IO.eprintln s!"{path}: unchecked lowering: {e.message}"; return 1
@@ -196,33 +218,57 @@ def emitSource (path actual : String) (dir : System.FilePath) (expectation : Lis
     let some expected := parseExpectation expectation | IO.eprintln "invalid source expectation"; return 2
     let .exited n := expected.outcome | IO.eprintln "expected source exit"; return 2
     unless Concrete.Core.run p (p.body.length + 1) == .exit n do
-      IO.eprintln s!"{path}: Core evaluator did not exit with {n}"; return 1
+      IO.eprintln s!"{path}: Core evaluator did not exit with {n}"; return 4
     unless Concrete.Elab.eval out.ast == .exit n && Concrete.Memory.run out.memory == .exit n do
-      IO.eprintln s!"{path}: AST or memory evaluator did not exit with {n}"; return 1
+      IO.eprintln s!"{path}: AST or memory evaluator did not exit with {n}"; return 4
     unless out.bir.sites.isEmpty do
       IO.eprintln s!"{path}: admitted slice-0 additions retained trap sites"; return 1
     match Concrete.Stages.prepareLCB out.bir with
     | .ok lcb => emitArtifact path out.bir (LLVM.module out.bir) (lcb, out.bir.sites) dir expectation target
     | .error e => IO.eprintln s!"{path}: {e.code}: {e.message}"; return 1
   | _, .error e =>
-    IO.eprintln s!"{path}: unexpected refusal {e.code}: {e.message}"; return 1
+    IO.eprintln s!"{path}: unexpected refusal {e.code}: {e.message}"; return 4
+  | "trap" :: _, .ok _ =>
+    IO.eprintln s!"{path}: trapping source passed admission"; return 4
   | _, .ok _ =>
-    IO.eprintln s!"{path}: invalid expectation or trapping source passed admission"; return 1
+    IO.eprintln s!"{path}: invalid expectation"; return 2
 
 /-- A body that branches back to itself forever. -/
 def loopBody : Program :=
   { blocks := [{ params := [], insts := [], term := .br 1 [] },
                { params := [], insts := [], term := .br 1 [] }], sites := [] }
 
+-- The back edge returns to the same configuration. This establishes the loop
+-- independently of how much fuel the native test runner or evaluators receive.
+private theorem loopBackEdge (fuel : Nat) : runBlock loopBody fuel 1 [] = .outOfFuel := by
+  induction fuel with
+  | zero => rfl
+  | succ fuel ih =>
+    change runBlock loopBody fuel 1 [] = .outOfFuel
+    exact ih
+
+private theorem loopRun (fuel : Nat) : run loopBody fuel = .outOfFuel := by
+  cases fuel with
+  | zero => rfl
+  | succ fuel => exact loopBackEdge fuel
+
+example : behaviour loopBody = .diverges := by
+  unfold behaviour
+  have noneFinal : ¬ ∃ n, (run loopBody n).final = true := by
+    rintro ⟨n, h⟩
+    rw [loopRun] at h
+    contradiction
+  rw [dite_eq_right noneFinal]
+
 def emitLoop (dir : System.FilePath) (target : LCB.Target) : IO UInt32 := do
-  unless wf loopBody && run loopBody 1000 == .outOfFuel do
-    IO.eprintln "loop: not a well-formed diverging body"; return 1
+  unless wf loopBody do
+    IO.eprintln "loop: ill-formed control"; return 1
   match LCB.emit loopBody with
   | .error msg => IO.eprintln s!"loop: adapter: {msg}"; return 1
   | .ok (f, tbl) =>
-    if (LCB.evalBody f 10000).isSome then IO.eprintln "loop: LCB's evaluator returns"; return 1
     unless ← writeBackends dir target loopBody (LLVM.module loopBody) (f, tbl) do return 1
     writeExpected dir "incomplete" ""
+    IO.println "loop: proved self-loop; native timeout is an incomplete observation"
     return 0
 
 /-- One site, and a body returning `256 + 1`: past the table, so the word encodes nothing. -/
