@@ -21,6 +21,7 @@ reservations. [Removed words](../decisions.md#decided-2026-11-08-removed-words) 
 | 2 integer types | `i8`, `i16`, `i32`, `i64`, `u16`, `u32`, `u64` | Q1 below. |
 | 2 builtin target-type candidate | `type` | Already reserved on main. E4 option B would first use it here. |
 | 3 conditionals, mutable lets, boolean literals and types | `if`, `else`, `mut`, `true`, `false`, `bool`, `Unit` | Constructs scheduled. Reservation of the first five is proposed. Types are Q1. |
+| 4 exact contract arithmetic | `math` | Reserved-word candidate for the explicit boundary. See the punctuation ballot. |
 | 4 loops, bounds and transfers | `while`, `from`, `until`, `for`, `break`, `continue` | First three reserved on main. Last three decided by OD47–49. |
 | 6 types, patterns and matches | `Copy`, `type`, `enum`, `match` | First two reserved on main. Enum and match constructs are decided. Proposed reservation of the last two requires the slice delta. |
 | 7 scoped borrow | `borrow` or `loan` | Open. Each option reserves that word throughout its candidate revision. `mut` is reused for the exclusive form. |
@@ -41,8 +42,10 @@ Slice placement comes from the [vertical slices](../../ROADMAP.md#vertical-slice
 
 - A. Add keyword tokens like `u8` for `i8`, `i16`, `i32`, `i64`,
   `u16`, `u32`, `u64`, `bool`, `Unit` and `char` at their respective deltas.
-  The draft groups these terminals as `PRIMITIVE` in type positions. Recommended
-  for a uniform primitive spelling rule. `u8` retains its current terminal.
+  The draft groups these keyword terminals as `PRIMITIVE` where they have the
+  same grammar, including as a qualified-call root. `u8` retains its own
+  terminal and also starts a qualified call. Both classifications preserve
+  `char::from_ascii`, `char::from_code_point` and `char::code_point` in slice 11.
 - B. Keep those names as identifier tokens and resolve them as builtin types under
   OD43(c), which prevents user type declarations from taking their names.
 
@@ -88,8 +91,8 @@ before its slice. Rows marked later have no consumer in this draft.
   B. Add a type argument at a builtin-only position. For compatibility testing
   the draft uses `widen(type: u32, x)` and
   `wrapping_add(type: u32, x, y)` as concrete candidate shapes.
-  The refinement applies to the eligible unqualified lossless-conversion and
-  OD99 builtin spellings. The type marker, colon and comma use existing tokens.
+  The draft parses the reserved marker and checks eligibility by the ordinary
+  identifier spelling. E4 still owns the exact eligible builtin catalog. The type marker, colon and comma use existing tokens.
   C. Use per-target builtin identifiers such as `to_u32(x)`, which have the
   ordinary call shape. The exact builtin catalog and the form in B are open.
   The draft checks B as a separate option alongside ordinary calls from slice 2.
@@ -121,19 +124,20 @@ The current [`builtinTypeNames`](../../ConcreteSpec/Surface1.lean) also reserves
 | 2 | `,`, `&`, `\|`, `^`, `<<`, `>>` | Comma first separates the two arguments of numeric builtins. Remaining tokens are bitwise/shift operators. |
 | 2 | `~` or `!` for bitwise NOT | A. `~x` (recommended, keeps `!` boolean-only). B. `!x` distinguished by the operand type from slice 3. This is one prefix grammar alternative under B. |
 | 3 | `==`, `!=`, `<`, `<=`, `>`, `>=`, `&&`, `\|\|`, `!` | Decided comparisons and boolean operators (OD42, Q6.5). Trailing expressions have no semicolon. |
-| 3, 6–7 | Block statement boundary | SYN-8 gives a statement-position `match` its own boundary and permits a match in a trailing value. For slice approval, the draft admits `match x { _ => 40, } + 2` as a trailing value. A token shared with the next body item (`-` in slice 6, also `*` and `&` from slice 7) starts that item. Use `(match x { _ => 40, }) - 2` for subtraction in that position. Reserving shared tokens for binary continuation would require a separate boundary for following unary items. The draft also applies the semicolon-free statement boundary to body-leading `if` and scoped borrow for slice approval. |
+| 3, 6–7 | Block statement boundary | SYN-8 gives a statement-position `match` its own boundary and permits a match in a trailing value. For slice approval, the draft admits `match x { _ => 40, } + 2` as a trailing value. A token shared with the next body item (`-`, `*`, and `&`) is reserved for that item from slice 6. Slice 7 adds the dereference and reference forms that start with `*` and `&`. Use `(match x { _ => 40, }) - 2` for subtraction in that position. Reserving shared tokens for binary continuation would require a separate boundary for following unary items. The draft also applies the semicolon-free statement boundary to body-leading `if` and scoped borrow for slice approval. |
 | 4 | `LABEL :` and `break LABEL;` / `continue LABEL;` | The loop declaration uses a colon. The transfer uses the label alone. |
-| 4–5 | `#[name]`, `#[name(args)]` | Listed forms for `invariant`, `variant`, `may_not_terminate`, `requires`, `ensures` are decided. General attribute syntax is open. A. Keep the same `#[...]` envelope. B. Use `@[...]` for general attributes, preserving the listed `#[...]` forms. Attribute names stay identifiers. The draft checks the identifier spelling directly after the opener and restricts each listed name to its recorded argument form. |
+| 4–5 | `#[name]`, `#[name(args)]` | Listed forms for `invariant`, `variant`, `may_not_terminate`, `requires`, `ensures` are decided. General attribute syntax is open. A. Keep the same `#[...]` envelope. B. Use `@[...]` for general attributes, preserving the listed `#[...]` forms. Attribute names stay identifiers. Both envelopes use the same IDENT argument grammar. A draft check validates the listed name, envelope and argument shape after recognition. |
+| 4 | `math { expr }` | The owner requires an explicit exact-arithmetic boundary. A. Reserve `math` for this candidate, checked in loop and later function contracts. B. Keep `math` as an ordinary identifier with the same braces. B is infeasible in this grammar because `IDENT {` already starts a struct literal. Exact spelling remains open. [Recovered item 10](../decisions.md#recovered-59-10) |
 | 4 | `#[may_not_terminate("reason")]` | Decided. One shared statement prefix branches into a loop or an expression statement under either envelope option. In `#[may_not_terminate("reason")] fp(x) + g()` the permission attaches to `fp(x)`, the immediately following postfix expression. The semantic checker requires an indirect call as the expression target and a nonempty reason. [Termination permission](../decisions.md#decided-project-no-hidden-traps) |
-| 4–6 | `_` | OD62 spelling decided. A. Punctuation token. B. A reserved identifier token distinct from ordinary identifiers. The current slice 1 resolver recognizes a typed wildcard let through the identifier token. The draft first tests the two distinct token classifications at slice 4, then reuses them for parameters and patterns. |
+| 1 | `_` | OD62 spelling decided. A. Punctuation token. B. A reserved identifier token distinct from ordinary identifiers. Both candidates include Slice 1 typed wildcard lets and reuse the classification for later bindings and patterns. Main currently resolves the Slice 1 spelling through an identifier token. |
 | 6 | `.`, `::`, `=>`, `\|` | Field selection, qualified paths, pattern/body arrow, and pattern alternatives. OD128 decides `=>`; PAT-7 supplies `\|` in match patterns. |
 | 6 | `..` in `Variant { .. }` | Explicit ignored payload under [OD25](../decisions.md#od25). |
-| 6 | Match arm terminator | A. `,`, as recorded in [recovered item 48](../decisions.md#recovered-59-48). B. `;`, the isolated alternative requested by E1. Each arm includes its terminator. |
+| 6 | Match arm terminator | A. `,`, as recorded in [recovered item 48](../decisions.md#recovered-59-48). B. `;` is infeasible under the owner’s recorded rule that every arm ends with a comma. |
 | 7 | Prefix `&`, `&mut`, `*`, `[`, `]` | Shared/exclusive borrows and dereference, array types/literals and postfix indexing. `&mut` is two tokens. |
 | 7 | Scoped borrow range | A. `borrow place from lo until hi -> view { … }`. B. `borrow place from lo .. hi -> view { … }`. Either range combines with either borrow keyword and binder delimiter. The upper endpoint uses the same depth-zero block boundary as a condition head. |
-| 7 | Scoped borrow binder | A. `-> view`. B. `: view`. C. Prefix `borrow view = place { … }`, the earlier [recovered item 11](../decisions.md#recovered-59-11) candidate pending the spelling round. C is checked without a range because the recorded example gives no range placement. `as` remains an ordinary identifier. |
+| 7 | Scoped borrow binder | A. `-> view`. B. `: view`. C. Prefix `borrow view = place { … }`, the earlier [recovered item 11](../decisions.md#recovered-59-11) candidate pending the spelling round. C puts the optional range after the place and before the block, such as `borrow view = place from lo until hi { … }`. Both range spellings are checked with this placement. `as` remains an ordinary identifier. |
 | 8 | Import list | A. `import a::b::{x, y};`, as recorded in [recovered item 44](../decisions.md#recovered-59-44). B. `use a::b::{x, y};`. Both use `b::x` at the use site. The later imported-use decision leaves the exact import spelling open. |
-| 9 | `<`, `>`, explicit expression `::<...>` | Declaration and type arguments use angle delimiters. The expression turbofish has a recorded precedent (OD87). A bare expression `<...>` conflicts with comparison, as the planted control shows. [Recovered item 34](../decisions.md#recovered-59-34) specifies longest match with `>>` split only where it closes generics. The draft tests the resulting token stream, including the unsplit shift. The exact lexer/parser interface for contextual splitting needs the slice 9 approval. |
+| 9 | `<`, `>`, explicit expression `::<...>` | Declaration and type arguments use angle delimiters. The expression turbofish has a recorded precedent (OD87). A bare expression `<...>` conflicts with comparison, as the planted control shows. [Recovered item 34](../decisions.md#recovered-59-34) specifies longest match with `>>` split only where it closes generics. The draft tests the source strings `Outer<Inner<u8>>` and `x>>y`, including an adapter-disabled control for the generic closers. The exact lexer/parser interface for contextual splitting needs the slice 9 approval. |
 | 9 | `cap C`, `+`, `{}` | Type parameters and arguments precede capability parameters and arguments. `cap` marks declarations, and sets use unions of names or the empty set. [OD88](../decisions.md#od88) · [recovered item 46](../decisions.md#recovered-59-46) |
 | 10 | Existing `(`, `)`, `;`, `#[`, `]` | Expression-bodied `spec fn … = e;`, `assert(e);`, `assert(e) by lemma(args);`, `assume e;`, proof paths, `#[proof(path)]` and `#[test]`. |
 | 11 | Existing `(`, `)`, `,` | `with(...)` before the return arrow and ordinary call syntax for resource operations. |
