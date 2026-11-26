@@ -1,50 +1,56 @@
-import Lake.Toml.Load
 import Concrete.Driver.Launcher
 import Concrete.Driver.Project
 import Concrete.Driver.Reference
+import Concrete.Stages
 import ConcreteSpec.Spec.Examples
 import ConcreteSpec.Spec.Rules
 
+open ConcreteSpec.Core (PremiseId)
 open ConcreteSpec.Project
 open Concrete.Driver
-open ConcreteSpec.Core.ProjectRegistry (facts supported)
+open ConcreteSpec.Core.ProjectRegistry (facts supported package function)
 
 private def expect (label : String) (condition : Bool) : IO Unit :=
   unless condition do throw (IO.userError s!"slice 1 driver control failed: {label}")
 
-private def parseToml (text : String) : IO (Option Lake.Toml.Table) := do
-  return (← (Lake.Toml.loadToml (Lean.Parser.mkInputContext text "Concrete.toml")).toBaseIO).toOption
+private def premise : PremiseId := ⟨.stack, .package package ⟨⟨"stack"⟩⟩⟩
 
-private def premise : AssumptionId := ⟨.stack, "test stack premise"⟩
-
-private def requireRefusal (clause : Clause) (bad : FunctionFacts) (source : String)
+private def requireRefusal (clause : Clause) (bad : FunctionFacts) (source : EvidenceOrigin)
     (reason : Violation) : IO Unit :=
   match checkClause ⟨clause, []⟩ bad with
   | .ok () => expect "planted policy violation" false
   | .error detail => do
     expect "policy clause" (decide (detail.clause = clause))
-    expect "policy function" (detail.function == bad.name)
-    expect "policy source" (detail.source == source)
+    expect "policy function" (decide (detail.function = bad.name))
+    expect "policy source" (decide (detail.source = source))
     expect "policy reason" (decide (detail.violation = reason))
 
 #eval show IO Unit from do
   let requests := predictable [] ++ [⟨.terminates, []⟩, ⟨.stackBound, []⟩, ⟨.maxStackBytes 32, []⟩]
   expect "all clauses accept established facts" ((Project.checkScope [] (.resolved requests [facts] [])).isOk)
-  requireRefusal .noAlloc {facts with allocates := .established true [] "alloc"} "alloc" .contradicted
-  requireRefusal .noAlloc {facts with allocates := .unknown "alloc"} "alloc" .unknown
-  requireRefusal .noBlocking {facts with blocks := .established true [] "block"} "block" .contradicted
-  requireRefusal .noForeignCalls {facts with callsForeign := .established true [] "ffi"} "ffi" .contradicted
-  requireRefusal .terminates {facts with terminates := .established false [] "term"} "term" .contradicted
-  requireRefusal .stackBound {facts with stackBytes := .unknown "stack"} "stack" .unknown
-  requireRefusal (.maxStackBytes 31) facts "frame analysis" .contradicted
-  let conditional := {facts with stackBytes := .established 32 [premise] "stack"}
-  requireRefusal .stackBound conditional "stack" (.unacceptedAssumption premise)
+  requireRefusal .noAlloc {facts with allocates := .established true [] (.site ⟨0⟩)} (.site ⟨0⟩) .contradicted
+  requireRefusal .noAlloc {facts with allocates := .unknown (.site ⟨0⟩)} (.site ⟨0⟩) .unknown
+  requireRefusal .noBlocking {facts with blocks := .established true [] (.site ⟨1⟩)} (.site ⟨1⟩) .contradicted
+  requireRefusal .noForeignCalls {facts with callsForeign := .established true [] (.site ⟨2⟩)} (.site ⟨2⟩) .contradicted
+  requireRefusal .terminates {facts with terminates := .established false [] (.site ⟨3⟩)} (.site ⟨3⟩) .contradicted
+  requireRefusal .stackBound {facts with stackBytes := .unknown (.site ⟨4⟩)} (.site ⟨4⟩) .unknown
+  requireRefusal (.maxStackBytes 31) facts .function .contradicted
+  let conditional := {facts with stackBytes := .established 32 [premise] (.site ⟨4⟩)}
+  requireRefusal .stackBound conditional (.site ⟨4⟩) (.unacceptedAssumption premise)
   expect "named premise accepted" ((checkClause ⟨.stackBound, [premise]⟩ conditional).isOk)
+  let foreignPremise : PremiseId := ⟨.stack, .package
+    { package with name := ⟨"dependency"⟩ } ⟨⟨"stack"⟩⟩⟩
+  expect "same key in another package cannot discharge a premise"
+    (!(checkClause ⟨.stackBound, [foreignPremise]⟩ conditional).isOk)
   let dep := Project.Scope.resolved [⟨.stackBound, [premise]⟩] [conditional] []
   expect "dependency cannot relax inherited requirement"
     (!(Project.checkScope [] (.resolved [⟨.stackBound, []⟩] [] [.resolved [] [] [dep]])).isOk)
   expect "unresolved dependency refused"
-    (!(Project.checkScope requests (.resolved [] [] [.unresolved "dependency"])).isOk)
+    (!(Project.checkScope requests (.resolved [] [] [.unresolved package])).isOk)
+  expect "duplicate additions are recorded once"
+    (decide (assumptionDiff [] [premise, premise] = ⟨[premise], []⟩))
+  expect "reordering assumptions leaves an empty diff"
+    (decide (assumptionDiff [premise, foreignPremise] [foreignPremise, premise, premise] = ⟨[], []⟩))
   expect "assumption removal is visible"
     (decide (assumptionDiff [premise] [] = ⟨[], [premise]⟩))
   let tables : Tables := ⟨some ⟨1, requests⟩, some ⟨2, [premise]⟩⟩
@@ -60,24 +66,53 @@ private def requireRefusal (clause : Clause) (bad : FunctionFacts) (source : Str
     (decide (selectLanguage supported (.project (some other)) = .error (.unsupported other supported)))
 
 #eval show IO Unit from do
-  let valid ← Project.parseManifest parseToml "[policy]\n[assumptions]\n"
+  let source := "fn main() -> u8 { return 42; }"
+  let .ok out := Concrete.Stages.compile ⟨"answer.con", source.toUTF8⟩
+    | throw (IO.userError "real source did not compile")
+  let actual := Project.mirFacts function out.mir
+  let .ok [coverage] := Project.checkScope [] (.resolved (predictable []) [actual] [])
+    | throw (IO.userError "compiled function did not satisfy predictable")
+  expect "coverage names the function and all checked requirements"
+    (decide (coverage.function = function ∧ coverage.requirements = predictable []))
+  requireRefusal .stackBound actual .function .unknown
+
+#eval show IO Unit from do
+  let valid := Project.parseManifest "[policy]\n[assumptions]\n"
   expect "valid TOML table syntax" valid.isOk
   for text in ["[policy\n", "[policy]\nx = true\nx = false\n"] do
-    match ← Project.parseManifest parseToml text with
+    match Project.parseManifest text with
     | .error .malformed => pure ()
     | _ => expect "malformed or duplicate assignment" false
   let quotes := String.ofList (List.replicate 40 '[')
-  let quoted ← Project.parseManifest parseToml s!"x = \"{quotes}\" # {quotes}\n"
+  let quoted := Project.parseManifest s!"x = \"{quotes}\" # {quotes}\n"
   expect "brackets in quoted values and comments" quoted.isOk
   let arrayAtDepth := fun depth =>
     "x = " ++ String.ofList (List.replicate depth '[') ++
       "true" ++ String.ofList (List.replicate depth ']')
-  let limit ← Project.parseManifest parseToml (arrayAtDepth Project.manifestDepthLimit)
+  let limit := Project.parseManifest (arrayAtDepth (Project.manifestDepthLimit - 1))
   expect "array at depth limit" limit.isOk
-  match ← Project.parseManifest parseToml (arrayAtDepth (Project.manifestDepthLimit + 1)) with
+  match Project.parseManifest (arrayAtDepth Project.manifestDepthLimit) with
   | .error .depth => pure ()
   | _ => expect "excess nesting" false
-  match ← Project.parseManifest parseToml (String.ofList (List.replicate (Project.manifestByteLimit + 1) ' ')) with
+  let segments := fun n => String.intercalate "." (List.replicate n "a")
+  let nested := fun n =>
+    "[" ++ segments 8 ++ "]\n" ++ segments n ++ " = true\n"
+  expect "combined header and dotted path at limit" (Project.parseManifest (nested 8)).isOk
+  expect "combined header and dotted path exceeds limit"
+    (decide (Project.parseManifest (nested 9) = .error .depth))
+  let inlineAt := fun n => "[" ++ segments 8 ++ "]\nx = {" ++ segments n ++ " = true}\n"
+  expect "combined inline table path at limit" (Project.parseManifest (inlineAt 7)).isOk
+  expect "depth includes inline table keys"
+    (decide (Project.parseManifest (inlineAt 8) = .error .depth))
+  expect "quoted dots are one segment"
+    (Project.parseManifest ("\"" ++ segments 20 ++ "\".a = true\n")).isOk
+  expect "duplicate decoded key"
+    (decide (Project.parseManifest "a = true\n\"\\u0061\" = false\n" = .error .malformed))
+  expect "single-line string does not consume following lines"
+    (decide (Project.parseManifest ("a = \"unterminated\n" ++ arrayAtDepth 40) = .error .malformed))
+  expect "multiline string hides delimiters and consumes a closing run"
+    (Project.parseManifest ("a = \"\"\"\n" ++ quotes ++ "\"\"\"\"\"\nb = true\n")).isOk
+  match Project.parseManifest (String.ofList (List.replicate (Project.manifestByteLimit + 1) ' ')) with
   | .error .size => pure ()
   | _ => expect "oversize manifest" false
   expect "invalid UTF-8" (decide (Project.manifestText ⟨#[255]⟩ = .error .encoding))
@@ -93,20 +128,47 @@ private def requireRefusal (clause : Clause) (bad : FunctionFacts) (source : Str
   expect "use after move component refused"
     ((Reference.Component.ofChecked ConcreteSpec.Examples.useAfterMove).isNone)
 
+open ConcreteSpec.Core.Exec in
+#eval show IO Unit from do
+  let config := Demo.start ⟨[], .int, ⟨0⟩, Demo.callLog 42⟩ [] .init
+  let .executed report := Reference.replay Demo.prog (some config) Demo.env 30
+    | throw (IO.userError "configured reference launcher refused")
+  expect "reference replay retains events" (report.events == [42])
+  let .executed silent := Reference.replay Demo.prog (some config) (fun _ _ _ _ _ => none) 30
+    | throw (IO.userError "configured reference launcher refused")
+  expect "silent oracle is distinguished from a successful run"
+    (match silent.ending with | .noAnswer => true | _ => false)
+  expect "absent startup configuration refuses before evaluation"
+    (match Reference.replay Demo.prog none Demo.env 30 with
+     | .startupRefused => true
+     | _ => false)
+
+#eval show IO Unit from do
+  let program := ConcreteSpec.Authority.prog
+  let permitted : ConcreteSpec.Authority.ProgOk ConcreteSpec.Authority.prog := by decide
+  let .ok trace := Reference.replayAuthority program permitted [(.stdout, 99)] 10
+    | throw (IO.userError "configured authority launch refused")
+  expect "authority trace retains both writes on the configured grant"
+    (decide (trace.events = [⟨.writeStdout, 99⟩, ⟨.writeStdout, 99⟩] ∧ trace.complete = true))
+  for grants in [[], [(.stdin, 99)]] do
+    let .error observation := Reference.replayAuthority program permitted grants 10
+      | throw (IO.userError "missing output grant was accepted")
+    expect "missing or mismatched launch grant reports status 125" (observation.status == 125)
+
 #eval IO.FS.withTempDir fun dir => do
   let path := dir / "Concrete.toml"
-  expect "missing directory entry permits standalone" ((← Project.checkInvocation parseToml path).isOk)
+  expect "missing directory entry permits standalone" ((← Project.checkInvocation path).isOk)
   IO.FS.writeFile path "[policy]\n[assumptions]\n"
-  match ← Project.checkInvocation parseToml path with
+  match ← Project.checkInvocation path with
   | .error .schemaPending => pure ()
   | _ => expect "present table awaits approved schema" false
   IO.FS.writeFile path "[policy\n"
-  match ← Project.checkInvocation parseToml path with
+  match ← Project.checkInvocation path with
   | .error .malformed => pure ()
   | _ => expect "malformed project never falls back" false
   IO.FS.removeFile path
   IO.FS.createDir path
-  match ← Project.checkInvocation parseToml path with
+  match ← Project.checkInvocation path with
   | .error (.read _) => pure ()
   | _ => expect "non-file project entry refused" false
 

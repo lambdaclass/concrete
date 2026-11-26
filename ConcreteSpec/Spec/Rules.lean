@@ -3,6 +3,7 @@ import ConcreteSpec.Spec.Accounting
 import ConcreteSpec.Spec.Const
 import ConcreteSpec.Spec.Ident
 import ConcreteSpec.Spec.Own
+import ConcreteSpec.Spec.Slice1Checker
 
 /-!
 # Diagnostic rule registry
@@ -28,13 +29,14 @@ def registeredRules : List RuleId :=
    ⟨``Own.DropPermitted, 1⟩, ⟨``Own.LeavePermitted, 1⟩,
    ⟨``Leak.Account.WF, 1⟩, ⟨``Leak.ResetConserved, 1⟩, ⟨``Leak.SignedNetSound, 1⟩,
    ⟨``Leak.ByteBoundSound, 1⟩, ⟨``Leak.ByteBoundSoundOptional, 1⟩, ⟨``Leak.ReportSound, 1⟩,
+   ⟨``AbortReady, 1⟩, ⟨``ProgramPermitted, 1⟩,
    ⟨``Leak.FiniteActionPermitted, 1⟩, ⟨``Leak.FiniteSequencePermitted, 1⟩] ++ SourcePath.Reason.inOrder.map SourcePath.Reason.ruleId ++
   [SourcePath.Project.Reason.caseCollision, .fileDirectoryConflict, .duplicate].map
     SourcePath.Project.Reason.ruleId ++
   [⟨``SourcePathSpan.FilePresent, 1⟩, ⟨``SourcePathSpan.OrderedOffsets, 1⟩,
    ⟨``SourcePathSpan.EndInSource, 1⟩, ⟨``SourcePathSpan.LineMatches, 1⟩,
    ⟨``SourcePathSpan.ColumnMatches, 1⟩, Project.languagePinRule, Project.clauseRule,
-   Project.tableVersionRule]
+   Project.tableVersionRule, Project.manifestRule]
 
 /-- Acceptance evidence applies the owning rule's judgment to a concrete input.
 The exporter recognizes this proposition's elaborated type, without unfolding the wrapper. -/
@@ -556,22 +558,25 @@ theorem unsupportedPinRefused :
   unfold RuleRefused
   decide
 
+def package : PackageId := ⟨⟨"example"⟩, ⟨⟨"0"⟩⟩⟩
+def function : FnId := ⟨⟨package, [⟨"entry"⟩], by simp⟩, ⟨"main"⟩⟩
+
 def facts : FunctionFacts :=
-  ⟨"main", .established false [] "allocation analysis", .established false [] "blocking analysis",
-    .established false [] "call analysis", .established true [] "termination analysis",
-    .established 32 [] "frame analysis"⟩
+  ⟨function, .established false [] .function, .established false [] .function,
+    .established false [] .function, .established true [] .function,
+    .established 32 [] .function⟩
 
 theorem clauseAccepted : RuleAccepted ClauseAccepted (⟨.noAlloc, []⟩, facts) := by
   unfold RuleAccepted
   decide
 
 theorem allocationRefused : RuleRefused ClauseAccepted
-    (⟨.noAlloc, []⟩, { facts with allocates := .established true [] "allocation analysis" }) := by
+    (⟨.noAlloc, []⟩, { facts with allocates := .established true [] .function }) := by
   unfold RuleRefused
   decide
 
 theorem unknownRefused : RuleRefused ClauseAccepted
-    (⟨.noAlloc, []⟩, { facts with allocates := .unknown "allocation analysis" }) := by
+    (⟨.noAlloc, []⟩, { facts with allocates := .unknown .function }) := by
   unfold RuleRefused
   decide
 
@@ -589,12 +594,64 @@ theorem assumptionsVersionRefused : RuleRefused TableVersionsAccepted (tables, 1
   unfold RuleRefused
   decide
 
+theorem manifestAccepted : RuleAccepted ManifestAdmitted true := by unfold RuleAccepted; decide
+theorem manifestRefused : RuleRefused ManifestAdmitted false := by unfold RuleRefused; decide
+
 end ProjectRegistry
+namespace Slice1Registry
+
+private def sName : Name := ⟨"S"⟩
+private def sTy : Ty := .struct sName
+private def decls : Decls := [⟨sName, false, []⟩]
+private def bindS : Stmt := .let_ (.name ⟨0⟩) sTy (.mk sName [])
+private def takeS : Stmt := .letStruct sName [] (.atom (.move ⟨0⟩))
+private def ret : Terminator := .ret (.int .u8 0)
+
+private def live (used : Bool) : Ctx :=
+  [(⟨0⟩, { ty := sTy, live := true, used, known := none })]
+
+theorem usedAbort : RuleAccepted AbortReady (live true) := by
+  unfold RuleAccepted AbortReady
+  decide
+
+theorem unusedAbort : RuleRefused AbortReady (live false) := by
+  unfold RuleRefused AbortReady
+  decide
+
+theorem consumeThenAbort : RuleAccepted ProgramPermitted ⟨decls, [bindS, takeS], .abort ⟨0⟩⟩ := by
+  unfold RuleAccepted ProgramPermitted
+  decide
+
+theorem consumeThenReturn : RuleAccepted ProgramPermitted ⟨decls, [bindS, takeS], ret⟩ := by
+  unfold RuleAccepted ProgramPermitted
+  decide
+
+theorem liveLinearAtReturn : RuleRefused ProgramPermitted ⟨decls, [bindS], ret⟩ := by
+  unfold RuleRefused ProgramPermitted
+  decide
+
+theorem useAfterMove : RuleRefused ProgramPermitted ⟨decls, [bindS, takeS, takeS], ret⟩ := by
+  unfold RuleRefused ProgramPermitted
+  decide
+
+theorem overflow : RuleRefused ProgramPermitted
+    ⟨[], [.let_ .wild (.scalar (.int .u8)) (.add (.int .u8 200) (.int .u8 56))], ret⟩ := by
+  unfold RuleRefused ProgramPermitted
+  decide
+
+end Slice1Registry
 
 /-- Complete conformance links, populated alongside the owning rules. -/
 def registeredRuleExamples : List RuleExample :=
   [⟨``ConstsPermitted, ``ConstRegistry.accepted⟩,
    ⟨``ConstsPermitted, ``ConstRegistry.refused⟩,
+   ⟨``AbortReady, ``Slice1Registry.usedAbort⟩,
+   ⟨``AbortReady, ``Slice1Registry.unusedAbort⟩,
+   ⟨``ProgramPermitted, ``Slice1Registry.consumeThenAbort⟩,
+   ⟨``ProgramPermitted, ``Slice1Registry.consumeThenReturn⟩,
+   ⟨``ProgramPermitted, ``Slice1Registry.liveLinearAtReturn⟩,
+   ⟨``ProgramPermitted, ``Slice1Registry.useAfterMove⟩,
+   ⟨``ProgramPermitted, ``Slice1Registry.overflow⟩,
    ⟨``Own.OwnerPermitted, ``Own.Registry.ownerAccepted⟩,
    ⟨``Own.OwnerPermitted, ``Own.Registry.ownerRefused⟩,
    ⟨``Own.LoanPermitted, ``Own.Registry.loanAccepted⟩,
@@ -680,6 +737,8 @@ def registeredRuleExamples : List RuleExample :=
    ⟨``Project.ClauseAccepted, ``ProjectRegistry.unknownRefused⟩,
    ⟨``Project.TableVersionsAccepted, ``ProjectRegistry.versionsAccepted⟩,
    ⟨``Project.TableVersionsAccepted, ``ProjectRegistry.policyVersionRefused⟩,
-   ⟨``Project.TableVersionsAccepted, ``ProjectRegistry.assumptionsVersionRefused⟩]
+   ⟨``Project.TableVersionsAccepted, ``ProjectRegistry.assumptionsVersionRefused⟩,
+   ⟨``Project.ManifestAdmitted, ``ProjectRegistry.manifestAccepted⟩,
+   ⟨``Project.ManifestAdmitted, ``ProjectRegistry.manifestRefused⟩]
 
 end ConcreteSpec.Core

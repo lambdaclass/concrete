@@ -14,12 +14,12 @@ if [ "${1:-}" = target ]; then echo "$target"; exit; fi
 # checks' controls (slice0_artifacts.sh) are hand-written assembly built exactly like the examples.
 control=0
 if [ "${1:-}" = control ] && [ "$#" = 2 ]; then control=1; set -- "$2" -; fi
-# `component DIRECTORY` links the separate LLVM component and launcher in a staging directory.
-component=0
-if [ "${1:-}" = component ] && [ "$#" = 2 ]; then component=1; set -- "$2" -; fi
+# The public driver invokes bound mode only inside its private publication staging directory.
+bound=0
+if [ "${1:-}" = bound ]; then bound=1; shift; fi
 # `sanitize` builds only llvm.san.exe: the LLVM example with ASan (README gate 10; no UBSan, see there).
 [ "$#" = 2 ] || { [ "$#" = 3 ] && [[ "$3" = llvm || "$3" = lcb || "$3" = sanitize ]]; } ||
-  { echo 'usage: slice0_native.sh DIRECTORY LCB [llvm|lcb|sanitize] | control DIRECTORY | component DIRECTORY | target' >&2; exit 2; }
+  { echo 'usage: slice0_native.sh DIRECTORY LCB [llvm|lcb|sanitize] | control DIRECTORY | bound STAGING-DIRECTORY LCB [llvm|lcb] | target' >&2; exit 2; }
 lcb=$2
 cd -- "$1"
 # Fixed epoch rather than wall clock or caller environment. No debug data is requested, and
@@ -42,24 +42,41 @@ if [ "${3:-}" = sanitize ]; then
   "${cc[@]}" "${san[@]}" "${link[@]}" llvm.san.o -o llvm.san.exe
   exit
 fi
-if [ "$component" = 1 ]; then
-  "${cc[@]}" -c component.ll -o component.o
-  "${cc[@]}" -c launcher.ll -o launcher.o
-  "${cc[@]}" "${link[@]}" component.o launcher.o -o llvm.exe
-  exit
-fi
 if [ "$control" = 1 ]; then
   "${cc[@]}" -c control.s -o control.o
   "${cc[@]}" "${link[@]}" control.o -o control.exe
   exit
 fi
 if [ "${3:-}" != lcb ]; then
-  "${cc[@]}" -c llvm.ll -o llvm.o
-  "${cc[@]}" "${link[@]}" llvm.o -o llvm.exe
+  if [ "$bound" = 1 ]; then
+    sha256sum component.ll launcher.ll >llvm.link.sha256
+    "${cc[@]}" -c component.ll -o component.o
+    sha256sum component.o >>llvm.link.sha256
+    "${cc[@]}" -c launcher.ll -o launcher.o
+    sha256sum launcher.o >>llvm.link.sha256
+    sha256sum --quiet -c llvm.link.sha256
+    "${cc[@]}" "${link[@]}" component.o launcher.o -o llvm.exe
+    sha256sum --quiet -c llvm.link.sha256
+    sha256sum llvm.exe >>llvm.link.sha256
+  else
+    "${cc[@]}" -c llvm.ll -o llvm.o
+    "${cc[@]}" "${link[@]}" llvm.o -o llvm.exe
+  fi
 fi
 if [ "${3:-}" != llvm ]; then
+  if [ "$bound" = 1 ]; then sha256sum lcb_body.s lcb_rt.ssa >lcb.link.sha256; fi
   "${cc[@]}" -c lcb_body.s -o lcb_body.o
+  if [ "$bound" = 1 ]; then sha256sum lcb_body.o >>lcb.link.sha256; fi
   "${clean[@]}" "$lcb" -t "$target" lcb_rt.ssa -o lcb_rt.s
+  if [ "$bound" = 1 ]; then sha256sum lcb_rt.s >>lcb.link.sha256; fi
   "${cc[@]}" -c lcb_rt.s -o lcb_rt.o
+  if [ "$bound" = 1 ]; then
+    sha256sum lcb_rt.o >>lcb.link.sha256
+    sha256sum --quiet -c lcb.link.sha256
+  fi
   "${cc[@]}" "${link[@]}" lcb_body.o lcb_rt.o -o lcb.exe
+  if [ "$bound" = 1 ]; then
+    sha256sum --quiet -c lcb.link.sha256
+    sha256sum lcb.exe >>lcb.link.sha256
+  fi
 fi

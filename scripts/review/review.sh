@@ -283,16 +283,20 @@ This is $2 (file group: $3; files: $4).
 
 Report correctness findings only: wrong behaviour, logic errors, regressions, unhandled cases, tests that do not check what they claim, and documentation that contradicts the code. Do not report style preferences.
 
-Also answer one question, as a finding when the answer is yes: does this patch pick a side on any owner decision in docs/decisions.md (OD1 - OD157 under "Owner decisions", or an undecided project question), that is, choose, revise, encode, implement, extend or revert what one of them covers without the owner's explicit answer? Only the project owner decides those; a patch that does so must not land. Recording a decision the owner explicitly approved (the recording rule in docs/decisions.md) is permitted and is not picking a side. For such a patch, report as a finding: a recorded answer without its provenance (the owner's answer quoted with its date, or the quoted owner rule that decides it under the recording rule); wording that does not faithfully transcribe that answer; any change beyond its scope; and anything recorded as decided that the owner did not approve.
 EOF
   else
     cat <<EOF
 Please do a routine code review of the source-code patch below. It belongs to a compiler, a program that translates source code into machine code, and to that compiler's tests and documentation. Treat it as ordinary software engineering: look for logic errors and for behaviour that differs from what the code and its comments say. You may read files in the working directory for context.
 
 This is $2 (files: $4). $scope
-Also report as a finding any change that picks a side on an owner decision listed in docs/decisions.md (OD1 - OD157) or an undecided project question without the owner's explicit answer. Writing down a decision the owner explicitly approved is allowed; report it only when it lacks the owner's quoted, dated answer (or the quoted owner rule that decides it under the recording rule in docs/decisions.md), changes that answer's meaning, goes beyond it, or adds something the owner did not approve.
 EOF
   fi
+  cat <<'EOF'
+
+Check whether approval covers any change that chooses, revises, encodes, implements, extends or reverts a language decision (OD1 - OD157) or an important project question in docs/decisions.md. Accept the owner's quoted, dated answer or the quoted owner rule that decides the question under the recording rule. For a matter within Slices 0 and 1, also accept a decision recorded under the November 25 delegation in docs/decisions.md with verdicts showing that Claude, Codex and agy all agree on that decision. Outside Slices 0 and 1, or without all three agreeing verdicts recorded, approval must come from the owner.
+
+Report a finding if approval is missing, the record lacks the required provenance, the wording changes the approved decision's meaning, the patch goes beyond its scope, or it marks any unapproved matter as decided. A patch that needs an unapproved decision must not land.
+EOF
   if [ -n "$PREV_FINDINGS" ]; then
     cat <<EOF
 

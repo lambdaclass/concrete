@@ -30,7 +30,7 @@ if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
   for case_name in answer trap; do
     case_dir="$work/slice1-link/$case_name"
     build "split LLVM $case_name" "$case_dir/build.log" bounded "$native_secs" \
-      bash "$root/scripts/checks/lib/slice0_native.sh" component "$case_dir"
+      bash "$root/scripts/checks/lib/slice0_native.sh" bound "$case_dir" - llvm
     observe "$case_dir/llvm.exe" "$case_dir/native" 10 20
     test ! -s "$case_dir/native.stdout"
     if [ "$case_name" = answer ]; then
@@ -172,17 +172,93 @@ if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" != 1 ]; then
   project_dir="$work/project-control"
   mkdir -p "$project_dir"
   printf 'fn main() -> u8 { return 42; }\n' >"$project_dir/answer.con"
-  printf '[policy]\n[assumptions]\n' >"$project_dir/Concrete.toml"
-  rc=0
-  bounded "$native_secs" bash -c 'cd "$1" && exec "$2" build answer.con -o output --backend llvm' \
-    _ "$project_dir" "$root/.lake/build/bin/concrete" \
-    >"$project_dir/stdout" 2>"$project_dir/stderr" || rc=$?
-  test "$rc" = 1
-  test ! -e "$project_dir/output"
-  test ! -s "$project_dir/stdout"
-  has_match -F 'Concrete.Driver.Project.Refusal.schemaPending@1: Concrete.toml requires an approved manifest schema' \
-    <"$project_dir/stderr"
-  echo "ok   pending project schema refuses before native output"
+  cli=(bash -c 'cd "$1" && shift && exec "$@"' _ "$project_dir" "$root/.lake/build/bin/concrete")
+  for manifest_case in schema malformed depth size encoding directory symlink; do
+    project_file="$project_dir/Concrete.toml"
+    case "$manifest_case" in
+      schema)
+        printf '[policy]\n[assumptions]\n' >"$project_file"
+        expected='Concrete.toml requires an approved manifest schema' ;;
+      malformed)
+        printf 'a = "open\n' >"$project_file"
+        expected='Concrete.toml is malformed' ;;
+      depth)
+        printf '[a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p]\nx = true\n' >"$project_file"
+        expected='Concrete.toml exceeds the nesting limit of 16' ;;
+      size)
+        printf '%65537s' '' >"$project_file"
+        expected='Concrete.toml exceeds 65536 bytes' ;;
+      encoding)
+        printf '\377' >"$project_file"
+        expected='Concrete.toml must be UTF-8' ;;
+      directory)
+        mkdir "$project_file"
+        expected='cannot read Concrete.toml (expected a regular file)' ;;
+      symlink)
+        printf '[policy]\n' >"$project_dir/other.toml"
+        ln -s other.toml "$project_file"
+        expected='cannot read Concrete.toml (expected a regular file)' ;;
+    esac
+    rc=0
+    bounded "$native_secs" "${cli[@]}" build answer.con -o output --backend llvm \
+      >"$project_dir/stdout" 2>"$project_dir/stderr" || rc=$?
+    test "$rc" = 1
+    test ! -e "$project_dir/output"
+    test ! -s "$project_dir/stdout"
+    has_match -Fx "ConcreteSpec.Project.ManifestAdmitted@1: $expected" <"$project_dir/stderr"
+    if [ "$manifest_case" = directory ]; then rmdir "$project_file"; else rm -- "$project_file"; fi
+  done
+  echo "ok   malformed, over-limit, non-file and pending-schema inputs refuse before output"
+  ln -s "$root/scripts" "$project_dir/scripts"
+  build "standalone bound launcher" "$project_dir/build.log" bounded "$native_secs" "${cli[@]}" \
+    build answer.con -o output --backend llvm
+  has_match -Fx 'language-rules version 0.1' <"$project_dir/build.log"
+  (cd "$project_dir/output" && sha256sum -c llvm.link.sha256)
+  observe "$project_dir/output/llvm.exe" "$project_dir/native" 10 20
+  test "$(cat "$project_dir/native.status")" = 42
+  test ! -s "$project_dir/native.stdout"
+  test ! -s "$project_dir/native.stderr"
+
+  cat >"$project_dir/clang-control" <<'EOF'
+#!/usr/bin/env bash
+set -eu
+for arg in "$@"; do
+  if [ "$arg" = launcher.ll ]; then
+    case "$CONTROL" in
+      fail) exit 79 ;;
+      substitute-ir) cp -- "$REPLACEMENT/launcher.ll" launcher.ll ;;
+      substitute-object) cp -- "$REPLACEMENT/component.o" component.o ;;
+    esac
+  fi
+done
+exec "$REAL_CLANG" "$@"
+EOF
+  # The native helper clears the tool environment. Bake control parameters into its
+  # private wrapper rather than relying on ambient flags for the real invocation.
+  for control in fail substitute-ir substitute-object; do
+    wrapper="$project_dir/clang-$control"
+    {
+      printf '#!/usr/bin/env bash\nCONTROL=%q\nREPLACEMENT=%q\nREAL_CLANG=%q\n' \
+        "$control" "$work/slice1-link/trap" "$CONCRETE_SLICE0_CLANG"
+      tail -n +2 "$project_dir/clang-control"
+    } >"$wrapper"
+    chmod +x "$wrapper"
+    rc=0
+    CONCRETE_SLICE0_CLANG="$wrapper" bounded "$native_secs" "${cli[@]}" \
+      build answer.con -o "$control" --backend llvm \
+      >"$project_dir/$control.log" 2>&1 || rc=$?
+    test ! -e "$project_dir/$control"
+    if [ "$control" = fail ]; then
+      test "$rc" = 79
+    else
+      test "$rc" = 1
+      case "$control" in
+        substitute-ir) has_match -F 'launcher.ll: FAILED' <"$project_dir/$control.log" ;;
+        substitute-object) has_match -F 'component.o: FAILED' <"$project_dir/$control.log" ;;
+      esac
+    fi
+  done
+  echo "ok   standalone version, native split build, failure and substitution before publication"
 fi
 while IFS=$'\t' read -r name program expect; do
   d="$work/ex/$name"

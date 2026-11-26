@@ -1,6 +1,6 @@
-import Lake.Toml.Load
 import Concrete.Stages
 import Concrete.Driver.Project
+import Concrete.Driver.Launcher
 
 open Concrete Concrete.Backend
 
@@ -8,14 +8,8 @@ private def usage : String :=
   "usage: concrete build SOURCE.con -o OUTPUT-DIRECTORY [--backend llvm|lcb] | concrete help"
 
 private def report (refusal : Refusal) : IO UInt32 := do
-  let message := match refusal with
-    | .syntaxError detail => "syntax error: " ++ detail
-    | _ => refusal.message
-  IO.eprintln s!"{refusal.code}: {message}"
+  IO.eprintln s!"{refusal.code}: {refusal.message}"
   return 1
-
-private def parseToml (text : String) : IO (Option Lake.Toml.Table) := do
-  return (← (Lake.Toml.loadToml (Lean.Parser.mkInputContext text "Concrete.toml")).toBaseIO).toOption
 
 private def build (source dir : System.FilePath) (backend : Option String) : IO UInt32 := do
   let loc : BIR.Loc := ⟨source.toString, 1, 1⟩
@@ -25,10 +19,12 @@ private def build (source dir : System.FilePath) (backend : Option String) : IO 
   let root ← IO.FS.realPath "."
   unless path == root / source do
     return ← report (.syntaxError "source path must be canonical and project-relative")
-  if let .error refusal ← Driver.Project.checkInvocation parseToml (root / "Concrete.toml") then
-    let rule := refusal.ruleId
-    IO.eprintln s!"{rule.name}@{rule.rev}: {refusal.message}"
-    return 1
+  let version ← match ← Driver.Project.checkInvocation (root / "Concrete.toml") with
+    | .ok version => pure version
+    | .error refusal =>
+      let rule := refusal.ruleId
+      IO.eprintln s!"{rule.name}@{rule.rev}: {refusal.message}"
+      return 1
   let bytes ← IO.FS.readBinFile path
   let compiled : Except Refusal (Stages.Output × Option LeanCompilerBackend.Verified.Source.Function) := do
     let out ← Stages.compile ⟨source.toString, bytes⟩
@@ -48,17 +44,40 @@ private def build (source dir : System.FilePath) (backend : Option String) : IO 
         match LCB.assemble target f with
         | .error e => throw (IO.userError e)
         | .ok text => pure (lcb.toString, some text)
-    IO.FS.createDirAll dir
-    if backend != some "lcb" then
-      IO.FS.writeFile (dir / "llvm.ll") (LLVM.module out.bir)
-    if let some text := asm then
-      IO.FS.writeFile (dir / "lcb_body.s") text
-      IO.FS.writeFile (dir / "lcb_rt.ssa") (Runtime.qbe out.bir.sites)
-    let args := #[helper, dir.toString, lcb] ++ backend.toArray
-    let child ← IO.Process.output { cmd := "bash", args }
-    if !child.stdout.isEmpty then IO.print child.stdout
-    if !child.stderr.isEmpty then IO.eprint child.stderr
-    return child.exitCode
+    let parent := dir.parent.getD "."
+    IO.FS.createDirAll parent
+    let parent ← IO.FS.realPath parent
+    let stage ← IO.Process.run { cmd := "mktemp", args := #["-d", (parent / ".concrete-build.XXXXXXXX").toString] }
+    let stage := System.FilePath.mk stage.trimAscii.toString
+    try
+      let inputs ← if backend == some "lcb" then pure none else
+        match Driver.Launcher.prepareLLVM out.bir with
+        | some inputs => pure (some inputs)
+        | none => throw (IO.userError "invalid LLVM link inputs")
+      if let some pair := inputs then
+        IO.FS.writeFile (stage / "component.ll") pair.component
+        IO.FS.writeFile (stage / "launcher.ll") pair.launcher
+      if let some text := asm then
+        IO.FS.writeFile (stage / "lcb_body.s") text
+        IO.FS.writeFile (stage / "lcb_rt.ssa") (Runtime.qbe out.bir.sites)
+      let args := #[helper, "bound", stage.toString, lcb] ++ backend.toArray
+      let child ← IO.Process.output { cmd := "bash", args }
+      if !child.stdout.isEmpty then IO.print child.stdout
+      if !child.stderr.isEmpty then IO.eprint child.stderr
+      if child.exitCode != 0 then return child.exitCode
+      if let some pair := inputs then
+        unless pair.matches (← IO.FS.readFile (stage / "component.ll"))
+            (← IO.FS.readFile (stage / "launcher.ll")) do
+          return ← report (.internal "LLVM link inputs changed during native build")
+      if let some text := asm then
+        unless text == (← IO.FS.readFile (stage / "lcb_body.s")) &&
+            Runtime.qbe out.bir.sites == (← IO.FS.readFile (stage / "lcb_rt.ssa")) do
+          return ← report (.internal "LCB link inputs changed during native build")
+      IO.FS.rename stage dir
+      IO.println s!"language-rules version {version.major}.{version.minor}"
+      return 0
+    finally
+      if ← stage.pathExists then IO.FS.removeDirAll stage
 
 def main (args : List String) : IO UInt32 := do
   try

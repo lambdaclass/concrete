@@ -11,9 +11,35 @@ LEAN_NUM_THREADS=2 lake build concrete
 .lake/build/bin/concrete build tests/slice0/answer.con -o "$output"
 ```
 
-Set `output` to a build directory. The default writes `llvm.exe` and `lcb.exe` there.
+Set `output` to a new build directory. The default writes `llvm.exe` and `lcb.exe` there.
 Use `--backend llvm` or `--backend lcb` for a single executable. The driver uses the pinned
-native build helper and the LCB executable built by Lake.
+native build helper and the LCB executable built by Lake. It compiles and links in a private
+directory beside the destination, checks that the retained link inputs match the generated inputs,
+and publishes by renaming the directory. The build prints the selected standalone language-rules
+version upon success. Each backend retains a SHA-256 inventory of its inputs, objects and image.
+
+### Slice 1 driver follow-ups
+
+- R-0576, R-0589 and
+  R-0603 own the project decoder, its approved key spellings and revisions,
+  project and dependency identity resolution, and the CI requirement for a recorded assumption
+  diff. The current recognizer bounds bytes and decoded nesting in the TOML syntax used by the
+  fixtures. Project build admission remains closed pending the schema. The Lean policy checker
+  can exercise typed requirements against slice 0 MIR and returns per-function coverage. It reports
+  missing stack evidence explicitly. Inherited policy conjunction has a regression control.
+  The general inherited-scope proof and registry examples for the remaining clause variants
+  stay under R-0576. Typed assumption identities and set diffs are available for the future
+  revision-aware CI reader.
+- R-0586 owns grant decoding, the authority-backed Core oracle and trace serialization.
+  The authority evaluator can now replay typed launch grants and return their event trace.
+  The Core replay boundary accepts a supplied startup configuration and oracle and returns
+  the evaluator's events, ending and residual state. Compare the same checked
+  slice 1 source through the reference and native paths under R-0698 once the native pipeline
+  accepts the slice 1 constructs and explicit abort.
+- [Q8.6](../docs/decisions.md#decided-2026-11-05-core) requires the full retained dependency
+  closure. The current native inventory covers the emitted files and the image. Discovering and
+  binding the loader and host dependency closure, and independently checking the linked image
+  against the build record, are outstanding launcher qualification work.
 
 `scripts/checks/compiler/tests.sh` also compiles the `con:` manifest rows. For trap rows it
 first checks that admission refuses, then runs the same lowering stages without discharged

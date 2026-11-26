@@ -1016,6 +1016,29 @@ Concrete.Backend.Runtime.mem_indexed	Quot.sound propext
 Concrete.Backend.Runtime.mem_indexedFrom	Quot.sound propext
 Concrete.Backend.Runtime.mem_indexedFrom._proof_1_5	Quot.sound propext
 Concrete.Backend.Runtime.mem_indexedFrom._simp_1_4	propext
+Concrete.Driver.Launcher.LLVMInputs.launcher.eq_1	Classical.choice Quot.sound propext
+Concrete.Driver.Launcher.LLVMInputs.launcher_inventory	Classical.choice Quot.sound propext
+Concrete.Driver.Manifest.Error.depth.sizeOf_spec	
+Concrete.Driver.Manifest.Error.malformed.sizeOf_spec	
+Concrete.Driver.Manifest.Error.ofNat_ctorIdx	
+Concrete.Driver.Manifest.instDecidableEqError._proof_1	
+Concrete.Driver.Manifest.instDecidableEqError._proof_2	
+Concrete.Driver.Manifest.instDecidableEqToken.decEq._proof_1	
+Concrete.Driver.Manifest.instDecidableEqToken.decEq._proof_10	
+Concrete.Driver.Manifest.instDecidableEqToken.decEq._proof_11	
+Concrete.Driver.Manifest.instDecidableEqToken.decEq._proof_12	
+Concrete.Driver.Manifest.instDecidableEqToken.decEq._proof_13	
+Concrete.Driver.Manifest.instDecidableEqToken.decEq._proof_2	
+Concrete.Driver.Manifest.instDecidableEqToken.decEq._proof_3	
+Concrete.Driver.Manifest.instDecidableEqToken.decEq._proof_4	
+Concrete.Driver.Manifest.instDecidableEqToken.decEq._proof_5	
+Concrete.Driver.Manifest.instDecidableEqToken.decEq._proof_6	
+Concrete.Driver.Manifest.instDecidableEqToken.decEq._proof_7	
+Concrete.Driver.Manifest.instDecidableEqToken.decEq._proof_8	
+Concrete.Driver.Manifest.instDecidableEqToken.decEq._proof_9	
+Concrete.Driver.Project.Coverage.mk.inj	
+Concrete.Driver.Project.Coverage.mk.injEq	propext
+Concrete.Driver.Project.Coverage.mk.sizeOf_spec	
 Concrete.Driver.Project.Refusal.depth.sizeOf_spec	
 Concrete.Driver.Project.Refusal.encoding.sizeOf_spec	
 Concrete.Driver.Project.Refusal.malformed.sizeOf_spec	
@@ -1078,6 +1101,10 @@ Concrete.Driver.Reference.Component.mk.sizeOf_spec	propext
 Concrete.Driver.Reference.Launcher.mk.inj	propext
 Concrete.Driver.Reference.Launcher.mk.injEq	propext
 Concrete.Driver.Reference.Launcher.mk.sizeOf_spec	propext
+Concrete.Driver.Reference.Replay.executed.inj	
+Concrete.Driver.Reference.Replay.executed.injEq	propext
+Concrete.Driver.Reference.Replay.executed.sizeOf_spec	
+Concrete.Driver.Reference.Replay.startupRefused.sizeOf_spec	
 Concrete.Driver.Reference.Run.mk.inj	
 Concrete.Driver.Reference.Run.mk.injEq	propext
 Concrete.Driver.Reference.Run.mk.sizeOf_spec	
@@ -2386,11 +2413,55 @@ _private.Concrete.Backend.Runtime.0.Concrete.Backend.Runtime.siteBytes.eq_1	prop
 _private.Concrete.Driver.Launcher.0.Concrete.Driver.Launcher.LLVMInputs.mk.inj	
 _private.Concrete.Driver.Launcher.0.Concrete.Driver.Launcher.LLVMInputs.mk.injEq	propext
 _private.Concrete.Driver.Launcher.0.Concrete.Driver.Launcher.LLVMInputs.mk.sizeOf_spec	
-_private.Concrete.Driver.Project.0.Concrete.Driver.Project.Scan.code.sizeOf_spec	
-_private.Concrete.Driver.Project.0.Concrete.Driver.Project.Scan.comment.sizeOf_spec	
-_private.Concrete.Driver.Project.0.Concrete.Driver.Project.Scan.quoted.inj	
-_private.Concrete.Driver.Project.0.Concrete.Driver.Project.Scan.quoted.injEq	propext
-_private.Concrete.Driver.Project.0.Concrete.Driver.Project.Scan.quoted.sizeOf_spec	
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.Token.bare.inj	
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.Token.bare.injEq	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.Token.bare.sizeOf_spec	
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.Token.mark.inj	
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.Token.mark.injEq	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.Token.mark.sizeOf_spec	
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.Token.quoted.inj	
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.Token.quoted.injEq	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.Token.quoted.sizeOf_spec	
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.escape._sparseCasesOn_3.else_eq	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.path._sparseCasesOn_3.else_eq	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.array._mutual._proof_1	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.array._mutual._proof_2	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.array._mutual._proof_3	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.array._mutual._proof_4	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.array._mutual._proof_5	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.array._mutual._proof_6	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.array._mutual.eq_def	Classical.choice Quot.sound propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.array.eq_def	Classical.choice Quot.sound propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.array.match_1.eq_1	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.array.match_1.eq_2	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.array.match_1.eq_3	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.array.match_3._arg_pusher	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.array.match_3.eq_1	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.array.match_3.eq_2	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.array.match_3.eq_3	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.array.match_3.eq_4	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.eq_def	Classical.choice Quot.sound propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.inlineTable._sparseCasesOn_5.else_eq	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.inlineTable.eq_def	Classical.choice Quot.sound propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.inlineTable.match_1.eq_1	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.inlineTable.match_1.eq_2	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.inlineTable.match_1.eq_3	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.inlineTable.match_3.eq_1	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.inlineTable.match_3.eq_2	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.inlineTable.match_5._arg_pusher	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.inlineTable.match_5.eq_1	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.inlineTable.match_5.eq_2	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.inlineTable.match_5.eq_3	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.match_1.eq_1	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.match_1.eq_2	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.match_1.eq_3	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.match_1.eq_4	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.match_1.eq_5	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.match_3._arg_pusher	
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.match_3.eq_1	
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.match_3.eq_2	
+_private.Concrete.Driver.Manifest.0.PSigma.casesOn._arg_pusher	
+_private.Concrete.Driver.Manifest.0.PSum.casesOn._arg_pusher	
 _private.Concrete.Elab.0.Concrete.Elab.Rhs.add.inj	
 _private.Concrete.Elab.0.Concrete.Elab.Rhs.add.injEq	propext
 _private.Concrete.Elab.0.Concrete.Elab.Rhs.add.sizeOf_spec	
