@@ -229,6 +229,8 @@ def jobRefusal : LeanCompilerBackend.Verified.CompileError → Refusal
   | .admission (.resourceLimit resource measured limit) =>
     .backendResource "LCB" resource measured limit
   | .admission (.unsupported feature) => .backendProfile "LCB" feature
+  | .admission (error@(.unsupportedHighMultiplyWidth ..)) =>
+    .backendProfile "LCB" error.message
   | e => .internal s!"LCB job: {repr e}"
 
 /-- The adapted body as assembly text for `target`, computed in process from the value. -/
@@ -240,8 +242,11 @@ def assemble (target : Target) (f : Source.Function) : Except Refusal String :=
     return ".text\n" ++ artifact.code.fragment ++ ".subsections_via_symbols\n"
   | .x86_64Linux | .aarch64Linux => do
     (LeanCompilerBackend.Verified.validateJob (job f)).mapError jobRefusal
-    let m : LeanCompilerBackend.Module :=
-      { functions := #[LeanCompilerBackend.Verified.reify f bodySymbol.name bodySymbol.exported] }
+    let body ← (LeanCompilerBackend.Verified.reify f bodySymbol.name bodySymbol.exported).mapError
+      (fun
+      | .unsupportedBinary op =>
+        .backendProfile "LCB" s!"compatibility reification does not support {op.constructorName}")
+    let m : LeanCompilerBackend.Module := { functions := #[body] }
     (LeanCompilerBackend.validateModule m).mapError
       (fun e => .internal s!"LCB compatibility module: {e}")
     let emitted := match target with

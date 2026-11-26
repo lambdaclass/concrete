@@ -197,7 +197,7 @@ by these checks.
 The project and Nix official-release archive pin Lean 4.35.0; CI's lean-action
 reads the same `lean-toolchain`. All four Nix asset hashes are the release's
 published SHA-256 digests. The migration retained the existing LCB source pin.
-The current LCB pin, `4623fba6fec8439974b7e4ceb9a577b3e6918a22`, builds as a
+The current LCB pin, `1d2584c0f6cfa9ba10bd918bc62234c5878dd38f`, builds as a
 Lake dependency with Lean 4.35.0. Its standalone toolchain file declares 4.34.1.
 The toolchain migration required no changes to theorem or compiler definitions.
 
